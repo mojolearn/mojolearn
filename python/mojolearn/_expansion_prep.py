@@ -32,10 +32,10 @@ from ._array import Array
 from ._buffer import as_f32_c, addr_ro
 from ._labels import flatten_labels, sorted_classes, label_kind
 
-__all__ = ["RobustScaler", "MaxAbsScaler", "OrdinalEncoder", "OneHotEncoder", "TargetEncoder", "SimpleImputer", "KBinsDiscretizer",
+__all__ = ["f_classif", "f_regression", "chi2", "mutual_info_classif", "mutual_info_regression", "RobustScaler", "MaxAbsScaler", "OrdinalEncoder", "OneHotEncoder", "TargetEncoder", "SimpleImputer", "KBinsDiscretizer",
            "GaussianNB", "MultinomialNB", "BernoulliNB",
            "LinearDiscriminantAnalysis", "QuadraticDiscriminantAnalysis",
-           "QuantileTransformer", "PowerTransformer", "Normalizer", "PolynomialFeatures", "SplineTransformer"]
+           "QuantileTransformer", "PowerTransformer", "Normalizer", "PolynomialFeatures", "SplineTransformer", "Binarizer", "LabelEncoder", "LabelBinarizer", "MultiLabelBinarizer", "IterativeImputer", "VarianceThreshold", "SelectKBest", "RFE"]
 
 _BINDING = "_mojolearn_x_prep"
 
@@ -47,7 +47,9 @@ _OPS = dict(
     te_global=20, te_enc=21, te_apply=22, mark_missing=23, fill=24, kbins_edges=25, kbins_codes=26,
     gnb_eps=27, gnb_params=28, gnb_jll=29, class_log_prior=30, mnb_params=31, bnb_params=32, cnb_params=33, cat_params=34, cat_jll=35,
     lda_prep=36, lda_w=37, lda_stage2=38, lda_stage3=39, qda_cov=40, qda_prep=41, qda_dec=42,
-    qt_apply=43, pt_fit=44, pt_apply=45, std_params=46, normalize=47, poly=48, spline_knots=49, spline_apply=50,
+    qt_apply=43, pt_fit=44, pt_apply=45, std_params=46, normalize=47, poly=48, spline_knots=49, spline_apply=50, label_binarize=51, scatter_ones=52,
+    ii_mean=53, ii_gram=54, ii_sub=55, ii_br=56, ii_predict=57, ii_snapshot=58, ii_conv=59, nan_mask=60, gather_cols=61, var_ptp=62, f_classif=63, f_regression=64, chi2=65,
+    mi_colscale=66, mi_noise=67, mi_cc=68, mi_cd=69, mi_reduce=70, sqsum_cols=71,
 )
 _PARAMS = 14
 _NONE = -1
@@ -1540,3 +1542,696 @@ class SplineTransformer(_PrepBase):
             if any(a < b for a, b in zip(lo, self._lo)) or any(a > b for a, b in zip(hi, self._hi)):
                 raise ValueError("mojolearn: X contains values beyond the limits of the knots")
         return pr.get(out, (n, W))
+
+
+class Binarizer(_PrepBase):
+    """sklearn.preprocessing.Binarizer: 1 where X > threshold, else 0 (NaN is
+    kept). Stateless."""
+    _parameters = ("threshold", "copy")
+
+    def __init__(self, *, threshold=0.0, copy=True):
+        self.threshold = threshold
+        self.copy = copy
+
+    def fit(self, X, y=None):
+        self.n_features_in_ = _x2d(X).shape[1]
+        self.numeric_mode_ = _mode()
+        return self
+
+    def transform(self, X, copy=None):
+        self._check_fitted()
+        arr = _x2d(X)
+        self._check_width(arr)
+        n, d = arr.shape
+        pr = _Prog()
+        xo, th = pr.put(arr), pr.put_scalar(self.threshold)
+        out = pr.alloc(n * d)
+        pr.stage("binarize", n * d, xo, n * d, th, out)
+        pr.run(self.numeric_mode_)
+        return pr.get(out, (n, d))
+
+
+# ---------------------------------------------------------------- label transformers
+_F32_EXACT = 2 ** 24
+
+
+def _numeric_labels(values):
+    """The labels as floats when every one is a real number that float32
+    holds exactly (so the device's categories are the labels themselves),
+    else None (str labels, ints beyond 2**24: the Python route)."""
+    import struct
+    out = []
+    for v in values:
+        if isinstance(v, bool) or not isinstance(v, numbers.Real):
+            return None
+        fv = float(v)
+        if fv != fv or struct.unpack("f", struct.pack("f", fv))[0] != fv:
+            return None
+        out.append(fv)
+    return out
+
+
+def _label_classes(mode, values):
+    """(classes list in the reference's order, device categories Array or
+    None). Numeric labels: a device sort and run scan; else sorted()."""
+    nums = _numeric_labels(values)
+    if nums is None or not nums:
+        classes, _ = sorted_classes(values)
+        return classes, None
+    cats = _fit_categories(mode, Array.from_list([[v] for v in nums], "<f4"))[0]
+    ints = all(isinstance(v, numbers.Integral) for v in values)
+    classes = [int(c) if ints else float(c) for c in cats.tolist()]
+    return classes, cats
+
+
+def _label_codes(pr, values, cats):
+    """Stages: each label's index among `cats` (or -1). Returns the codes
+    offset and the unknown-count offset."""
+    arr = Array.from_list([[float(v)] for v in values], "<f4")
+    return _codes(pr, arr, [cats])
+
+
+def _classes_array(classes):
+    kind = label_kind(classes)
+    if kind == "int":
+        return Array.from_list(classes, "<i8")
+    if kind == "float":
+        return Array.from_list(classes, "<f8")
+    return list(classes)
+
+
+class LabelEncoder(_PrepBase):
+    """sklearn.preprocessing.LabelEncoder: classes_ are the sorted distinct
+    labels (numeric labels on the device: sort + run scan; str labels in
+    Python), transform is each label's index (a device binary search),
+    int32. An unseen label is refused, as the reference refuses it."""
+    _parameters = ()
+
+    def fit(self, y):
+        self.numeric_mode_ = _mode()
+        values = flatten_labels(y)
+        self._classes, self._cats = _label_classes(self.numeric_mode_, values)
+        self.classes_ = _classes_array(self._classes)
+        return self
+
+    def fit_transform(self, y):
+        return self.fit(y).transform(y)
+
+    def _check_fitted(self):
+        if not hasattr(self, "_classes"):
+            raise RuntimeError("mojolearn: this LabelEncoder instance is not fitted yet")
+
+    def transform(self, y):
+        self._check_fitted()
+        values = flatten_labels(y)
+        if not values:
+            return Array((0,), "<i4")
+        if self._cats is None or _numeric_labels(values) is None:
+            index = {c: i for i, c in enumerate(self._classes)}
+            missing = [v for v in values if v not in index]
+            if missing:
+                raise ValueError(f"mojolearn: y contains previously unseen labels: {missing[:5]}")
+            return Array.from_list([index[v] for v in values], "<i4")
+        n = len(values)
+        pr = _Prog()
+        codes, neg = _label_codes(pr, values, self._cats)
+        out = pr.alloc(n)
+        pr.stage("f2i", n, codes, out)
+        pr.run(self.numeric_mode_)
+        if pr.values(neg, 1)[0] > 0:
+            raise ValueError("mojolearn: y contains previously unseen labels")
+        return pr.get_i32(out, n)
+
+    def inverse_transform(self, y):
+        self._check_fitted()
+        codes = [int(c) for c in flatten_labels(y)]
+        if any(c < 0 or c >= len(self._classes) for c in codes):
+            raise ValueError("mojolearn: y contains previously unseen labels")
+        return _classes_array([self._classes[c] for c in codes])
+
+
+class LabelBinarizer(_PrepBase):
+    """sklearn.preprocessing.LabelBinarizer for a single-label target: one
+    int32 column per class (one column, the second class, for two classes;
+    a NEG column for one), pos_label / neg_label; an unseen label is a NEG
+    row. Numeric labels take the device route, str labels Python's.
+    Multilabel input, sparse_output and inverse_transform are refused."""
+    _parameters = ("neg_label", "pos_label", "sparse_output")
+
+    def __init__(self, *, neg_label=0, pos_label=1, sparse_output=False):
+        self.neg_label = neg_label
+        self.pos_label = pos_label
+        self.sparse_output = sparse_output
+
+    def fit(self, y):
+        if self.sparse_output:
+            raise NotImplementedError("mojolearn: LabelBinarizer(sparse_output=True) is not implemented")
+        if not (isinstance(self.neg_label, numbers.Integral) and isinstance(self.pos_label, numbers.Integral)
+                and self.neg_label < self.pos_label):
+            raise ValueError("mojolearn: neg_label must be an integer below pos_label")
+        self.numeric_mode_ = _mode()
+        values = flatten_labels(y)
+        self._classes, self._cats = _label_classes(self.numeric_mode_, values)
+        self.classes_ = _classes_array(self._classes)
+        self.y_type_ = "binary" if len(self._classes) <= 2 else "multiclass"
+        return self
+
+    def fit_transform(self, y):
+        return self.fit(y).transform(y)
+
+    def _check_fitted(self):
+        if not hasattr(self, "_classes"):
+            raise RuntimeError("mojolearn: this LabelBinarizer instance is not fitted yet")
+
+    def transform(self, y):
+        self._check_fitted()
+        values = flatten_labels(y)
+        n, K = len(values), len(self._classes)
+        binary = K <= 2
+        W = 1 if binary else K
+        pr = _Prog()
+        if self._cats is None or _numeric_labels(values) is None:
+            index = {c: i for i, c in enumerate(self._classes)}
+            codes = pr.put_list([index.get(v, -1) for v in values])
+        else:
+            codes, _neg = _label_codes(pr, values, self._cats)
+        if K == 1:
+            codes = pr.put_list([-1] * n)
+        out = pr.alloc(n * W)
+        pr.stage("label_binarize", n * W, codes, n, K, 1 if binary else 0, int(self.neg_label),
+                 int(self.pos_label), W, out)
+        pr.run(self.numeric_mode_)
+        return pr.get_i32(out, (n, W))
+
+    def inverse_transform(self, Y, threshold=None):
+        raise NotImplementedError("mojolearn: LabelBinarizer.inverse_transform is not implemented")
+
+
+class MultiLabelBinarizer(_PrepBase):
+    """sklearn.preprocessing.MultiLabelBinarizer: classes_ the sorted union
+    of every sample's labels (or `classes` as given, in that order), transform
+    an int32 indicator matrix; an unseen label is ignored (the reference
+    warns). Numeric labels take the device route (a sort, a binary search, a
+    scatter of ones), str labels Python's. sparse_output is refused."""
+    _parameters = ("classes", "sparse_output")
+
+    def __init__(self, *, classes=None, sparse_output=False):
+        self.classes = classes
+        self.sparse_output = sparse_output
+
+    def fit(self, y):
+        if self.sparse_output:
+            raise NotImplementedError("mojolearn: MultiLabelBinarizer(sparse_output=True) is not implemented")
+        self.numeric_mode_ = _mode()
+        if self.classes is not None:
+            self._classes = list(self.classes)
+            nums = _numeric_labels(self._classes)
+            self._given = True
+            self._cats = None
+        else:
+            flat = [v for row in y for v in row]
+            self._classes, self._cats = _label_classes(self.numeric_mode_, flat) if flat else ([], None)
+            self._given = False
+        self.classes_ = _classes_array(self._classes)
+        return self
+
+    def fit_transform(self, y):
+        y = [list(row) for row in y]
+        return self.fit(y).transform(y)
+
+    def _check_fitted(self):
+        if not hasattr(self, "_classes"):
+            raise RuntimeError("mojolearn: this MultiLabelBinarizer instance is not fitted yet")
+
+    def transform(self, y):
+        self._check_fitted()
+        rows = [list(r) for r in y]
+        n, K = len(rows), len(self._classes)
+        flat = [v for r in rows for v in r]
+        owner = [i for i, r in enumerate(rows) for _ in r]
+        pr = _Prog()
+        if not flat:
+            out = pr.alloc(n * max(K, 1))
+            pr.run(self.numeric_mode_)
+            return pr.get_i32(out, (n, K))
+        if self._cats is None or _numeric_labels(flat) is None:
+            index = {c: i for i, c in enumerate(self._classes)}
+            codes = pr.put_list([index.get(v, -1) for v in flat])
+        else:
+            codes, _neg = _label_codes(pr, flat, self._cats)
+        ro = pr.put_list(owner)
+        out = pr.alloc(n * max(K, 1))
+        pr.stage("scatter_ones", len(flat), codes, ro, K, out)
+        pr.run(self.numeric_mode_)
+        return pr.get_i32(out, (n, K))
+
+    def inverse_transform(self, yt):
+        self._check_fitted()
+        rows = yt.tolist() if hasattr(yt, "tolist") else list(yt)
+        return [tuple(self._classes[j] for j, v in enumerate(r) if v) for r in rows]
+
+
+# ---------------------------------------------------------------- iterative imputer
+class IterativeImputer(_PrepBase):
+    """sklearn.impute.IterativeImputer with its default estimator
+    (BayesianRidge, default priors, max_iter 300, tol 1e-3): initial fill by
+    SimpleImputer(initial_strategy), then rounds over the features in
+    imputation_order ('ascending' default, 'descending', 'roman', 'arabic';
+    fixed by column index on a tie), each feature regressed on all the others
+    over its observed rows and its missing entries predicted and clipped to
+    [min_value, max_value]; stop when max |change| < tol * max|X_observed|.
+    The whole fit is one device program. Another estimator, sample_posterior,
+    n_nearest_features, imputation_order='random' and add_indicator are
+    refused by name."""
+    _parameters = ("estimator", "missing_values", "sample_posterior", "max_iter", "tol", "n_nearest_features",
+                   "initial_strategy", "fill_value", "imputation_order", "skip_complete", "min_value",
+                   "max_value", "verbose", "random_state", "add_indicator", "keep_empty_features")
+
+    def __init__(self, estimator=None, *, missing_values=float("nan"), sample_posterior=False, max_iter=10,
+                 tol=1e-3, n_nearest_features=None, initial_strategy="mean", fill_value=None,
+                 imputation_order="ascending", skip_complete=False, min_value=-float("inf"),
+                 max_value=float("inf"), verbose=0, random_state=None, add_indicator=False,
+                 keep_empty_features=False):
+        self.estimator = estimator
+        self.missing_values = missing_values
+        self.sample_posterior = sample_posterior
+        self.max_iter = max_iter
+        self.tol = tol
+        self.n_nearest_features = n_nearest_features
+        self.initial_strategy = initial_strategy
+        self.fill_value = fill_value
+        self.imputation_order = imputation_order
+        self.skip_complete = skip_complete
+        self.min_value = min_value
+        self.max_value = max_value
+        self.verbose = verbose
+        self.random_state = random_state
+        self.add_indicator = add_indicator
+        self.keep_empty_features = keep_empty_features
+
+    def _refuse(self):
+        if self.estimator is not None or self.sample_posterior or self.n_nearest_features is not None \
+                or self.add_indicator:
+            raise NotImplementedError("mojolearn: IterativeImputer supports its default estimator only, without "
+                                      "sample_posterior, n_nearest_features or add_indicator")
+        if self.imputation_order not in ("ascending", "descending", "roman", "arabic"):
+            raise NotImplementedError(f"mojolearn: imputation_order={self.imputation_order!r} is not implemented")
+
+    def _bounds(self, d):
+        def per(v):
+            vals = list(v) if isinstance(v, (list, tuple)) or hasattr(v, "tolist") else [v] * d
+            vals = vals.tolist() if hasattr(vals, "tolist") else vals
+            return [float(x) for x in vals]
+        lo, hi = per(self.min_value), per(self.max_value)
+        return [v for pair in zip(lo, hi) for v in pair]
+
+    def _prepare(self, pr, arr, Xf):
+        """Arena: the filled block, its missing mask, the per-column bounds."""
+        n, d = arr.shape
+        dk = len(self._keep)
+        xo = _mark_missing(pr, pr.put(arr), n * d, self.missing_values)
+        fo = pr.put(Xf)
+        ko = pr.put_list(self._keep)
+        mo = pr.alloc(n * dk)
+        pr.stage("nan_mask", n * dk, xo, n, d, ko, dk, mo)
+        bo = pr.put_list(self._bounds_k)
+        return fo, mo, bo
+
+    def fit_transform(self, X, y=None):
+        self._refuse()
+        arr = _x2d(X)
+        n, d = arr.shape
+        mode = _mode()
+        self.initial_imputer_ = SimpleImputer(missing_values=self.missing_values, strategy=self.initial_strategy,
+                                              fill_value=self.fill_value,
+                                              keep_empty_features=self.keep_empty_features).fit(arr)
+        Xf = self.initial_imputer_.transform(arr)
+        self._keep = list(self.initial_imputer_._keep)
+        dk = len(self._keep)
+        bounds = self._bounds(d)
+        self._bounds_k = [bounds[2 * c + h] for c in self._keep for h in (0, 1)]
+        # missing counts per kept column, and the tolerance scale, from the device
+        pr = _Prog()
+        fo, mo, bo = self._prepare(pr, arr, Xf)
+        xo = _mark_missing(pr, pr.put(arr), n * d, self.missing_values)
+        st, stm = pr.alloc(6 * d), pr.alloc(6 * dk)
+        pr.stage("col_stats", d, xo, n, d, st)
+        pr.stage("col_stats", dk, mo, n, dk, stm)
+        pr.run(mode)
+        miss = [round(v * n) for v in pr.values(stm + dk, dk)]      # mean of the 0/1 mask
+        scale = max([v for v in pr.values(st + 5 * d, d)] or [0.0])
+        # the reference's orders (a stable argsort of the missing counts;
+        # 'descending' is that order reversed); a feature with nothing missing
+        # is skipped whether or not skip_complete (the reference fits it and
+        # changes nothing)
+        asc = sorted(range(dk), key=lambda j: miss[j])
+        order = {"ascending": asc, "descending": asc[::-1], "roman": list(range(dk)),
+                 "arabic": list(range(dk))[::-1]}[self.imputation_order]
+        order = [j for j in order if miss[j] > 0]
+        self.n_features_with_missing_ = sum(1 for m in miss if m > 0)
+        self.numeric_mode_, self.n_features_in_ = mode, d
+        rounds = int(self.max_iter)
+        pr = _Prog()
+        fo, mo, bo = self._prepare(pr, arr, Xf)
+        tol = pr.put_scalar(float(self.tol) * scale)
+        flag, niter = pr.alloc(1), pr.alloc(1)
+        prev = pr.alloc(n * dk)
+        means, cnt, g = pr.alloc(dk), pr.alloc(1), pr.alloc(dk * dk)
+        p1 = max(dk - 1, 1)
+        gs, eig, vec, w = pr.alloc(p1 * p1), pr.alloc(p1), pr.alloc(p1 * p1), pr.alloc(p1)
+        seq = []
+        for _ in range(rounds):
+            if order:
+                pr.stage("ii_snapshot", n * dk, fo, prev, flag)
+            for j in order:
+                coef, inter = pr.alloc(dk), pr.alloc(1)
+                seq.append((j, coef, inter))
+                pr.stage("ii_mean", dk, fo, n, dk, mo, j, means, cnt, flag)
+                pr.stage("ii_gram", dk * dk, fo, n, dk, mo, j, means, g, flag)
+                if dk > 1:
+                    pr.stage("ii_sub", 1, g, dk, j, gs, flag)
+                    pr.stage("eigh", 1, gs, dk - 1, 0, eig, vec)
+                pr.stage("ii_br", 1, g, dk, j, eig, vec, means, cnt, coef, inter, flag, w)
+                pr.stage("ii_predict", n, fo, n, dk, mo, j, coef, inter, bo, flag)
+            if order:
+                pr.stage("ii_conv", 1, fo, prev, n * dk, tol, flag, niter)
+        pr.run(mode)
+        done = int(pr.values(niter, 1)[0]) if order else 0
+        self.n_iter_ = done if order else min(1, rounds)
+        kept = seq[:done * len(order)]
+        self.imputation_sequence_ = [(j, pr.get(c, dk), pr.get(i, 1)) for j, c, i in kept]
+        return pr.get(fo, (n, dk))
+
+    def fit(self, X, y=None):
+        self.fit_transform(X)
+        return self
+
+    def transform(self, X):
+        if not hasattr(self, "imputation_sequence_"):
+            raise RuntimeError("mojolearn: this IterativeImputer instance is not fitted yet")
+        arr = _x2d(X)
+        self._check_width(arr)
+        n, d = arr.shape
+        dk = len(self._keep)
+        Xf = self.initial_imputer_.transform(arr)
+        pr = _Prog()
+        fo, mo, bo = self._prepare(pr, arr, Xf)
+        for j, coef, inter in self.imputation_sequence_:
+            co, io = pr.put(coef), pr.put(inter)
+            pr.stage("ii_predict", n, fo, n, dk, mo, j, co, io, bo, _NONE)
+        pr.run(self.numeric_mode_)
+        return pr.get(fo, (n, dk))
+
+
+# ---------------------------------------------------------------- feature selection
+class _SelectorMixin(_PrepBase):
+    def get_support(self, indices=False):
+        self._check_fitted()
+        mask = list(self._mask)
+        return [j for j, m in enumerate(mask) if m] if indices else mask
+
+    def transform(self, X):
+        self._check_fitted()
+        arr = _x2d(X)
+        self._check_width(arr)
+        n, d = arr.shape
+        keep = [j for j, m in enumerate(self._mask) if m]
+        if not keep:
+            raise ValueError("mojolearn: no features were selected")
+        pr = _Prog()
+        xo, ko = pr.put(arr), pr.put_list(keep)
+        out = pr.alloc(n * len(keep))
+        pr.stage("gather_cols", n * len(keep), xo, n, d, ko, len(keep), out)
+        pr.run(self.numeric_mode_)
+        return pr.get(out, (n, len(keep)))
+
+
+class VarianceThreshold(_SelectorMixin):
+    """sklearn.feature_selection.VarianceThreshold: population variance per
+    column over the non-NaN entries (and, at threshold 0, min(variance,
+    max - min), so a constant column is exactly 0); keeps the columns whose
+    variance exceeds the threshold."""
+    _parameters = ("threshold",)
+
+    def __init__(self, threshold=0.0):
+        self.threshold = threshold
+
+    def fit(self, X, y=None):
+        arr = _x2d(X)
+        n, d = arr.shape
+        mode = _mode()
+        pr = _Prog()
+        xo = pr.put(arr)
+        st, var = pr.alloc(6 * d), pr.alloc(d)
+        pr.stage("col_stats", d, xo, n, d, st)
+        pr.stage("var_ptp", d, st, d, var, 1 if self.threshold == 0 else 0)
+        pr.run(mode)
+        self.variances_ = pr.get(var, d)
+        self._mask = [v > self.threshold for v in pr.values(var, d)]
+        if not any(self._mask):
+            raise ValueError(f"mojolearn: No feature in X meets the variance threshold {self.threshold:.5f}")
+        self.numeric_mode_, self.n_features_in_ = mode, d
+        return self
+
+
+def _scores_classif(X, y, kind):
+    arr = _x2d(X)
+    n, d = arr.shape
+    classes, codes = encode_labels(y)
+    if codes.size != n:
+        raise ValueError("mojolearn: X and y have different numbers of rows")
+    K = len(classes)
+    pr = _Prog()
+    xo, yo = pr.put(arr), pr.put_codes(codes)
+    cnt, mean, sums = pr.alloc(K), pr.alloc(K * d), pr.alloc(K * d)
+    sc, pv, st = pr.alloc(d), pr.alloc(d), pr.alloc(6 * d)
+    pr.stage("class_stats", K * d, xo, n, d, yo, K, cnt, mean, _NONE, sums)
+    if kind == "chi2":
+        pr.stage("col_stats", d, xo, n, d, st)
+        pr.stage("chi2", d, sums, K, d, cnt, n, sc, pv)
+    else:
+        pr.stage("f_classif", d, xo, n, d, yo, K, cnt, mean, sc, pv)
+    pr.run(_mode())
+    if kind == "chi2" and any(v < 0 for v in pr.values(st + 3 * d, d)):
+        raise ValueError("mojolearn: Input X must be non-negative.")
+    return pr.get(sc, d), pr.get(pv, d)
+
+
+def f_classif(X, y):
+    """sklearn.feature_selection.f_classif: the one-way ANOVA F of each
+    feature against the classes, and its p-value (float32). A constant
+    feature scores 0 with p-value 1 (the reference: NaN)."""
+    return _scores_classif(X, y, "f")
+
+
+def chi2(X, y):
+    """sklearn.feature_selection.chi2 for non-negative X: chi-squared of the
+    class-by-feature sums against their expectation, and its p-value."""
+    return _scores_classif(X, y, "chi2")
+
+
+def f_regression(X, y, *, center=True, force_finite=True):
+    """sklearn.feature_selection.f_regression: F of each feature's Pearson r
+    with y, and its p-value; the force_finite edge values always."""
+    arr = _x2d(X)
+    n, d = arr.shape
+    yv = as_f32_c(y, ndim=1, name="y")[0]
+    if yv.size != n:
+        raise ValueError("mojolearn: X and y have different numbers of rows")
+    pr = _Prog()
+    xo, yo = pr.put(arr), pr.put(yv)
+    sc, pv = pr.alloc(d), pr.alloc(d)
+    pr.stage("f_regression", d, xo, n, d, yo, 1 if center else 0, sc, pv, _NONE)
+    pr.run(_mode())
+    return pr.get(sc, d), pr.get(pv, d)
+
+
+class SelectKBest(_SelectorMixin):
+    """sklearn.feature_selection.SelectKBest: the k highest scores of
+    `score_func` (this module's f_classif, chi2 or f_regression compute on
+    the device; any other callable is called as is), ties broken as the
+    reference's stable argsort does (the later column wins); k='all'."""
+    _parameters = ("score_func", "k")
+
+    def __init__(self, score_func=f_classif, *, k=10):
+        self.score_func = score_func
+        self.k = k
+
+    def fit(self, X, y=None):
+        arr = _x2d(X)
+        d = arr.shape[1]
+        out = self.score_func(arr, y)
+        scores, pvals = out if isinstance(out, (tuple, list)) else (out, None)
+        self.scores_, self.pvalues_ = scores, pvals
+        vals = [float(v) for v in (scores.tolist() if hasattr(scores, "tolist") else scores)]
+        vals = [(-float("inf") if v != v else v) for v in vals]
+        if self.k == "all":
+            self._mask = [True] * d
+        else:
+            k = int(self.k)
+            if not 0 <= k <= d:
+                raise ValueError(f"mojolearn: k should be 0 <= k <= n_features = {d}; got {k}")
+            order = sorted(range(d), key=lambda j: vals[j])       # stable, ascending
+            chosen = set(order[d - k:]) if k else set()
+            self._mask = [j in chosen for j in range(d)]
+        self.numeric_mode_, self.n_features_in_ = _mode(), d
+        return self
+
+    def fit_transform(self, X, y=None, **fit_params):
+        return self.fit(X, y).transform(X)
+
+
+def _mutual_info(X, y, discrete_target, discrete_features, n_neighbors, random_state):
+    if discrete_features not in ("auto", False):
+        raise NotImplementedError("mojolearn: mutual_info with discrete features is not implemented "
+                                  "(dense X: discrete_features='auto' or False)")
+    k = int(n_neighbors)
+    if not 1 <= k <= 32:
+        raise NotImplementedError("mojolearn: mutual_info supports 1 <= n_neighbors <= 32")
+    arr = _x2d(X)
+    n, d = arr.shape
+    seed = 0 if random_state is None else int(random_state) & 0x3FFFFFFF
+    pr = _Prog()
+    xo = pr.put(arr)
+    st, sc, ma, z = pr.alloc(6 * d), pr.alloc(d), pr.alloc(d), pr.alloc(n * d)
+    pr.stage("col_stats", d, xo, n, d, st)
+    pr.stage("mi_colscale", d, xo, n, d, st, sc, ma)
+    pr.stage("mi_noise", n * d, xo, n, d, sc, ma, 2 * seed, z)
+    term, out = pr.alloc(n * d), pr.alloc(d)
+    if discrete_target:
+        classes, codes = encode_labels(y)
+        if codes.size != n:
+            raise ValueError("mojolearn: X and y have different numbers of rows")
+        counts = _class_counts(codes, len(classes))
+        used = sum(c for c in counts if c > 1)
+        yo, lc = pr.put_codes(codes), pr.put_list(counts)
+        pr.stage("mi_cd", n * d, z, n, d, yo, lc, k, term)
+        pr.stage("mi_reduce", d, term, n, d, 1, k, used, out)
+    else:
+        yv = as_f32_c(y, ndim=1, name="y")[0]
+        if yv.size != n:
+            raise ValueError("mojolearn: X and y have different numbers of rows")
+        yo = pr.put(yv)
+        sty, scy, may, zy = pr.alloc(6), pr.alloc(1), pr.alloc(1), pr.alloc(n)
+        pr.stage("col_stats", 1, yo, n, 1, sty)
+        pr.stage("mi_colscale", 1, yo, n, 1, sty, scy, may)
+        pr.stage("mi_noise", n, yo, n, 1, scy, may, 2 * seed + 1, zy)
+        pr.stage("mi_cc", n * d, z, n, d, zy, k, term)
+        pr.stage("mi_reduce", d, term, n, d, 0, k, n, out)
+    pr.run(_mode())
+    return pr.get(out, d)
+
+
+def mutual_info_classif(X, y, *, discrete_features="auto", n_neighbors=3, copy=True, random_state=None,
+                        n_jobs=None):
+    """sklearn.feature_selection.mutual_info_classif for dense continuous X:
+    Ross's k-NN estimator against the classes, float32, brute-force
+    neighbour scans on the device. The tie-breaking noise is drawn from
+    random_state by splitmix64 (the reference draws numpy's)."""
+    return _mutual_info(X, y, True, discrete_features, n_neighbors, random_state)
+
+
+def mutual_info_regression(X, y, *, discrete_features="auto", n_neighbors=3, copy=True, random_state=None,
+                           n_jobs=None):
+    """sklearn.feature_selection.mutual_info_regression for dense continuous
+    X: the Kraskov k-NN estimator, float32, brute-force neighbour scans on
+    the device; noise from random_state by splitmix64."""
+    return _mutual_info(X, y, False, discrete_features, n_neighbors, random_state)
+
+
+def _gather(arr, cols, mode):
+    n, d = arr.shape
+    pr = _Prog()
+    xo, ko = pr.put(arr), pr.put_list(cols)
+    out = pr.alloc(n * len(cols))
+    pr.stage("gather_cols", n * len(cols), xo, n, d, ko, len(cols), out)
+    pr.run(mode)
+    return pr.get(out, (n, len(cols)))
+
+
+def _importances(est, mode):
+    """The squared importance of each column of a fitted estimator: coef_
+    squared (summed over rows when 2-D) on the device, else
+    feature_importances_ as given."""
+    coef = getattr(est, "coef_", None)
+    if coef is None:
+        imp = getattr(est, "feature_importances_", None)
+        if imp is None:
+            raise ValueError("mojolearn: RFE needs an estimator with coef_ or feature_importances_")
+        return [float(v) for v in (imp.tolist() if hasattr(imp, "tolist") else imp)]
+    c = as_f32_c(coef, ndim=None, name="coef_")[0]
+    rows, d = (1, c.shape[0]) if c.ndim == 1 else c.shape
+    pr = _Prog()
+    co = pr.put(c)
+    out = pr.alloc(d)
+    pr.stage("sqsum_cols", d, co, rows, d, out)
+    pr.run(mode)
+    return pr.values(out, d)
+
+
+class RFE(_SelectorMixin):
+    """sklearn.feature_selection.RFE: fit, rank by squared coef_ (summed over
+    classes; or feature_importances_), drop the `step` weakest, repeat.
+    Ties are broken by a STABLE ascending sort (the lower column index is
+    dropped first); the reference's quicksort leaves them unspecified.
+    importance_getter other than 'auto' is refused."""
+    _parameters = ("estimator", "n_features_to_select", "step", "verbose", "importance_getter")
+
+    def __init__(self, estimator, *, n_features_to_select=None, step=1, verbose=0, importance_getter="auto"):
+        self.estimator = estimator
+        self.n_features_to_select = n_features_to_select
+        self.step = step
+        self.verbose = verbose
+        self.importance_getter = importance_getter
+
+    def _clone(self):
+        est = self.estimator
+        return type(est)(**est.get_params()) if hasattr(est, "get_params") else est
+
+    def fit(self, X, y, **fit_params):
+        if self.importance_getter != "auto":
+            raise NotImplementedError("mojolearn: RFE importance_getter other than 'auto' is not implemented")
+        arr = _x2d(X)
+        n, d = arr.shape
+        mode = _mode()
+        nsel = self.n_features_to_select
+        if nsel is None:
+            nsel = d // 2
+        elif isinstance(nsel, float) and 0 < nsel < 1:
+            nsel = int(nsel * d)
+        nsel = max(1, int(nsel))
+        step = int(max(1, self.step * d)) if isinstance(self.step, float) and self.step < 1 else int(self.step)
+        if step <= 0:
+            raise ValueError("mojolearn: step must be > 0")
+        support = [True] * d
+        ranking = [1] * d
+        while sum(support) > nsel:
+            features = [j for j in range(d) if support[j]]
+            est = self._clone().fit(_gather(arr, features, mode), y, **fit_params)
+            imp = _importances(est, mode)
+            ranks = sorted(range(len(features)), key=lambda r: imp[r])
+            threshold = min(step, sum(support) - nsel)
+            for r in ranks[:threshold]:
+                support[features[r]] = False
+            for j in range(d):
+                if not support[j]:
+                    ranking[j] += 1
+        features = [j for j in range(d) if support[j]]
+        self.estimator_ = self._clone().fit(_gather(arr, features, mode), y, **fit_params)
+        self._mask, self.support_ = support, list(support)
+        self.ranking_ = Array.from_list(ranking, "<i8")
+        self.n_features_ = sum(support)
+        self.numeric_mode_, self.n_features_in_ = mode, d
+        return self
+
+    def predict(self, X):
+        return self.estimator_.predict(self.transform(X))
+
+    def predict_proba(self, X):
+        return self.estimator_.predict_proba(self.transform(X))
+
+    def decision_function(self, X):
+        return self.estimator_.decision_function(self.transform(X))
+
+    def score(self, X, y):
+        return self.estimator_.score(self.transform(X), y)

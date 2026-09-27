@@ -9,7 +9,7 @@ from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 
 from x_decomp.api import (
-    cd_rows_py, chol_py, colsum_py, eigh_py, ew_py, gemm_py, lu_py, lu_solve_py, numeric_mode_py, rand_py,
+    cd_rows_py, chol_py, colsum_py, eigh_py, ew_py, gemm_py, lu_py, lu_solve_py, numeric_mode_py, orth_py, rand_py, svd_py,
     rowsum_py, sqdist_py, vendor_py,
 )
 from x_decomp.device import DevExec
@@ -30,6 +30,8 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         m.def_function[chol_py[DevExec]]("x_decomp_chol")
         m.def_function[eigh_py[DevExec]]("x_decomp_eigh")
         m.def_function[cd_rows_py[DevExec]]("x_decomp_cd_rows")
+        m.def_function[orth_py[DevExec]]("x_decomp_orth")
+        m.def_function[svd_py[DevExec]]("x_decomp_svd")
         m.def_function[numeric_mode_py]("x_decomp_numeric_mode")
         m.def_function[vendor_py[DevExec]]("x_decomp_vendor")
         return m.finalize()

@@ -54,6 +54,14 @@ comptime OP_FILL = 12
 comptime OP_COPY = 13
 comptime OP_SEQ_OUT = 14
 comptime OP_SOFTMAX = 15
+comptime OP_STL = 16
+comptime OP_VAR_DESIGN = 17
+comptime OP_COLSCALE = 18
+comptime OP_CHOLSOLVE = 19
+comptime OP_ROWSCALE = 20
+comptime OP_VAR_FORECAST = 21
+comptime OP_SUB = 22
+comptime OP_SCALE = 23
 
 # ------------------------------------------------------------------ cells
 comptime CELL_RNN_TANH = 0
@@ -531,37 +539,3 @@ def op_softmax(t: Int, a: Args):
         s = add(s, ftz(identical_exp(sub(ld(a.p0, base + c), m))))
     for c in range(C):
         st(a.p1, base + c, ftz(identical_div(ftz(identical_exp(sub(ld(a.p0, base + c), m))), s)))
-
-
-@always_inline
-def apply[OP: Int](t: Int, a: Args):
-    comptime if OP == OP_GEMM:
-        op_gemm(t, a)
-    elif OP == OP_BIAS:
-        op_bias(t, a)
-    elif OP == OP_COLSUM:
-        op_colsum(t, a)
-    elif OP == OP_CELL_FWD:
-        op_cell_fwd(t, a)
-    elif OP == OP_CELL_BWD:
-        op_cell_bwd(t, a)
-    elif OP == OP_GATHER_SEQ:
-        op_gather_seq(t, a)
-    elif OP == OP_GATHER_ROWS:
-        op_gather_rows(t, a)
-    elif OP == OP_MSE:
-        op_mse(t, a)
-    elif OP == OP_CE:
-        op_ce(t, a)
-    elif OP == OP_SUM:
-        op_sum(t, a)
-    elif OP == OP_OPT:
-        op_opt(t, a)
-    elif OP == OP_FILL:
-        op_fill(t, a)
-    elif OP == OP_COPY:
-        op_copy(t, a)
-    elif OP == OP_SEQ_OUT:
-        op_seq_out(t, a)
-    elif OP == OP_SOFTMAX:
-        op_softmax(t, a)

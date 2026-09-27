@@ -466,3 +466,58 @@ def fill_unit(t: Int, f: FP, q: IP):
         f.unsafe_store(p(q, 4) + t, raw(f, p(q, 3) + c))
     else:
         f.unsafe_store(p(q, 4) + t, x)
+
+
+def label_binarize_unit(t: Int, f: FP, q: IP):
+    """q = [CODES, n, K, BINARY, NEG, POS, W, OUT]; t = i*W + j. int32 bits:
+    POS where row i's class code is j (BINARY: where it is 1, one column),
+    else NEG; an unknown code (-1) is a NEG row (sklearn `label_binarize`)."""
+    var W = p(q, 6)
+    var i = t // W
+    var j = t % W
+    var code = Int(ld(f, p(q, 0) + i))
+    var hit = code == 1 if p(q, 3) != 0 else code == j
+    sti(f, p(q, 7) + t, p(q, 5) if hit else p(q, 4))
+
+
+def scatter_ones_unit(t: Int, f: FP, q: IP):
+    """q = [CODES, ROWS, W, OUT]; t = entry: int32 1 at OUT[ROWS[t]*W + code]
+    for a known code. Two entries of one row with one code write the same
+    word, so their order cannot matter."""
+    var code = Int(ld(f, p(q, 0) + t))
+    if code < 0:
+        return
+    sti(f, p(q, 3) + Int(ld(f, p(q, 1) + t)) * p(q, 2) + code, 1)
+
+
+def gather_cols_unit(t: Int, f: FP, q: IP):
+    """q = [X, n, d, KEEP, dout, OUT]; t = i*dout + jj: OUT = X[i, KEEP[jj]],
+    bit for bit."""
+    var dout = p(q, 4)
+    var i = t // dout
+    var c = Int(ld(f, p(q, 3) + t % dout))
+    f.unsafe_store(p(q, 5) + t, raw(f, p(q, 0) + i * p(q, 2) + c))
+
+
+def var_ptp_unit(t: Int, f: FP, q: IP):
+    """q = [ST, d, OUT, PTP]; t = column: the variance row of col_stats, or
+    min(variance, max - min) when PTP (VarianceThreshold's threshold == 0
+    rule, so an exactly constant column reads exactly 0)."""
+    var d = p(q, 1)
+    var v = ld(f, p(q, 0) + 2 * d + t)
+    if p(q, 3) != 0:
+        var ptp = sub(ld(f, p(q, 0) + 4 * d + t), ld(f, p(q, 0) + 3 * d + t))
+        if ptp < v:
+            v = ptp
+    st(f, p(q, 2) + t, v)
+
+
+def sqsum_cols_unit(t: Int, f: FP, q: IP):
+    """q = [C, rows, d, OUT]; t = column: sum over rows (ascending) of C[r, c]^2
+    (RFE's squared importance, summed over a multi-row coef_)."""
+    var d = p(q, 2)
+    var s = Float32(0)
+    for r in range(p(q, 1)):
+        var v = ld(f, p(q, 0) + r * d + t)
+        s = add(s, mul(v, v))
+    st(f, p(q, 3) + t, s)

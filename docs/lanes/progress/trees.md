@@ -25,7 +25,10 @@ rf / extratrees entry points, whose sources are untouched.
 | MultiOutputClassifier / MultiOutputRegressor | trees-multioutput | AGREE: compared batch 9, infer 9, train 9 | see git log |
 | OneVsRestClassifier | trees-onevsrest | AGREE: compared batch 9, infer 9, train 9 | see git log |
 | CalibratedClassifierCV (sigmoid, isotonic) | trees-calibrated | AGREE: compared batch 9, infer 9, train 9 | see git log |
-| AdaBoostClassifier back on SAMME sample weights (sklearn's `_boost_discrete`) | trees-adaboost-clf | AGREE: compared batch 9, infer 9, train 9 | this commit |
+| AdaBoostClassifier back on SAMME sample weights (sklearn's `_boost_discrete`) | trees-adaboost-clf | AGREE: compared batch 9, infer 9, train 9 | see git log |
+| TreeExplainer (exact TreeSHAP, forests + DART) | trees-shap-tree | AGREE: compared batch 9, infer 9, train 9 | see git log |
+| KernelExplainer | trees-shap-kernel | AGREE: compared batch 9, infer 9, train 9 | see git log |
+| PermutationExplainer | trees-shap-permutation | AGREE: compared infer 9, train 9 (batch n/a: position-seeded) | this commit |
 
 Pod setup notes (for a fresh agent): the lane check does not build the
 ubiquitous bindings; build `bindings/build.sh` (identical), `build_forest_host.sh`
@@ -46,4 +49,12 @@ rf-reg-poisson, rf-reg-gamma-ig, rf-score-weighted): `python -m mojolearn
 verify` 7/7 VERIFIED on CUDA and on CPU after, 0 cell hashes differ from
 before on either column.
 
-Next: SHAP TreeExplainer, KernelExplainer, PermutationExplainer.
+PASS 2 (proof), in progress:
+- per-seam gate `xtrees/checks/glue_check.mojo` (oracle `glue_oracle.mojo`),
+  DEVIATIONS 5600-5605, IDENTITY_PATHS rows 160-166, six sabotage arms in
+  `xtrees/checks/sabotage/` listed in `tools/identity_lanes/trees.checks`:
+  each FAILS the driver on the H100 pod; all 20 trees lanes AGREE with the
+  driver run first.
+- OWED: AMD column (box), M2 Pro steward, card diff across boxes.
+
+Next: AMD box (`tools/dev_pod.sh up trees 240 --vendor amd`), then the steward, then option parity.

@@ -162,6 +162,117 @@ def _():
     return ok
 
 
+@case("perceptron")
+def _():
+    from sklearn import linear_model as sk
+    X, yr, yc, y3 = _data()
+    ok = True
+    for y in (yc, y3):
+        for pen in (None, "l2"):
+            a = ml.Perceptron(penalty=pen).fit(X, y).score(X, y)
+            b = sk.Perceptron(penalty=pen).fit(X, y).score(X, y)
+            ok &= _close(f"Perceptron k={len(set(y))} penalty={pen} accuracy {a:.3f} vs {b:.3f}", a, b, 0.06)
+    return ok
+
+
+@case("pa")
+def _():
+    from sklearn import linear_model as sk
+    X, yr, yc, y3 = _data()
+    ok = True
+    for y in (yc, y3):
+        for loss in ("hinge", "squared_hinge"):
+            a = ml.PassiveAggressiveClassifier(loss=loss, random_state=0).fit(X, y).score(X, y)
+            b = sk.PassiveAggressiveClassifier(loss=loss, random_state=0).fit(X, y).score(X, y)
+            ok &= _close(f"PAClassifier k={len(set(y))} {loss} accuracy {a:.3f} vs {b:.3f}", a, b, 0.06)
+    for loss in ("epsilon_insensitive", "squared_epsilon_insensitive"):
+        a = ml.PassiveAggressiveRegressor(loss=loss, random_state=0).fit(X, yr).score(X, yr)
+        b = sk.PassiveAggressiveRegressor(loss=loss, random_state=0).fit(X, yr).score(X, yr)
+        ok &= _close(f"PARegressor {loss} R2 {a:.4f} vs {b:.4f}", a, b, 0.02)
+    return ok
+
+
+@case("ocsvm")
+def _():
+    from sklearn import linear_model as sk
+    X, yr, yc, y3 = _data()
+    X = X + 3.0
+    ok = True
+    for nu in (0.1, 0.5):
+        a = ml.SGDOneClassSVM(nu=nu, random_state=0).fit(X)
+        b = sk.SGDOneClassSVM(nu=nu, random_state=0).fit(X)
+        fa_ = float(np.mean(np.asarray(a.predict(X)) == -1))
+        fb_ = float(np.mean(b.predict(X) == -1))
+        ok &= _close(f"nu={nu} outlier fraction {fa_:.3f} vs {fb_:.3f}", fa_, fb_, 0.08)
+    return ok
+
+
+@case("ridge-clf")
+def _():
+    from sklearn import linear_model as sk
+    X, yr, yc, y3 = _data()
+    ok = True
+    for y in (yc, y3):
+        for fi in (True, False):
+            a = ml.RidgeClassifier(alpha=2.0, fit_intercept=fi).fit(X, y)
+            b = sk.RidgeClassifier(alpha=2.0, fit_intercept=fi).fit(X.astype(np.float64), y)
+            ok &= _close(f"k={len(set(y))} fi={fi} coef", a.coef_, b.coef_, 1e-4)
+            ok &= _close(f"k={len(set(y))} fi={fi} intercept", a.intercept_, b.intercept_, 1e-4)
+            ok &= _close(f"k={len(set(y))} fi={fi} predict", np.asarray(a.predict(X)), b.predict(X), 0)
+    return ok
+
+
+@case("ridge-cv")
+def _():
+    from sklearn import linear_model as sk
+    X, yr, yc, y3 = _data(noise=2.0)
+    ok = True
+    for fi in (True, False):
+        alphas = (0.1, 3.0, 30.0, 300.0)
+        a = ml.RidgeCV(alphas=alphas, fit_intercept=fi).fit(X, yr)
+        b = sk.RidgeCV(alphas=alphas, fit_intercept=fi).fit(X.astype(np.float64), yr.astype(np.float64))
+        ok &= _close(f"fi={fi} alpha_ {a.alpha_} vs {b.alpha_}", [a.alpha_], [b.alpha_], 0)
+        ok &= _close(f"fi={fi} best_score_ (relative)", [a.best_score_ / b.best_score_], [1.0], 1e-4)
+        ok &= _close(f"fi={fi} coef", a.coef_, b.coef_, 1e-4)
+    return ok
+
+
+@case("lasso-cv")
+def _():
+    from sklearn import linear_model as sk
+    X, yr, yc, y3 = _data(noise=2.0)
+    X = X.copy()
+    X[:, 5:] *= 0.05
+    ok = True
+    for fi in (True, False):
+        a = ml.LassoCV(fit_intercept=fi).fit(X, yr)
+        b = sk.LassoCV(fit_intercept=fi).fit(X.astype(np.float64), yr.astype(np.float64))
+        print(f"  fi={fi} alpha_ {a.alpha_:.6g} vs {b.alpha_:.6g}")
+        ok &= _close("alphas_ (relative)", np.asarray(a.alphas_) / b.alphas_, np.ones(len(b.alphas_)), 1e-4)
+        ok &= _close("mse_path_ (relative)", np.asarray(a.mse_path_) / b.mse_path_, np.ones(b.mse_path_.shape), 5e-3)
+        ok &= _close("alpha_ (relative)", [a.alpha_ / b.alpha_], [1.0], 1e-3)
+        ok &= _close("coef", a.coef_, b.coef_, 2e-3)
+    return ok
+
+
+@case("enet-cv")
+def _():
+    from sklearn import linear_model as sk
+    X, yr, yc, y3 = _data(noise=2.0)
+    X = X.copy()
+    X[:, 5:] *= 0.05
+    ok = True
+    for l1 in (0.5, [0.1, 0.5, 0.9]):
+        a = ml.ElasticNetCV(l1_ratio=l1, cv=4).fit(X, yr)
+        b = sk.ElasticNetCV(l1_ratio=l1, cv=4).fit(X.astype(np.float64), yr.astype(np.float64))
+        print(f"  l1={l1} alpha_ {a.alpha_:.6g} vs {b.alpha_:.6g}, l1_ratio_ {a.l1_ratio_} vs {b.l1_ratio_}")
+        ok &= _close("alphas_ (relative)", np.asarray(a.alphas_) / b.alphas_, np.ones(np.shape(b.alphas_)), 1e-4)
+        ok &= _close("mse_path_ (relative)", np.asarray(a.mse_path_) / b.mse_path_, np.ones(b.mse_path_.shape), 5e-3)
+        ok &= _close("l1_ratio_", [a.l1_ratio_], [b.l1_ratio_], 1e-6)
+        ok &= _close("coef", a.coef_, b.coef_, 2e-3)
+    return ok
+
+
 def main(argv):
     names = argv or list(CASES)
     bad = []

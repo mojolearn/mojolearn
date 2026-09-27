@@ -98,3 +98,48 @@ def _(ml, X, yc, yr, Xh=None):
     b = _sequence_opt_run(ml, ml.Adagrad, X, lr=5e-2, lr_decay=0.1, weight_decay=1e-2,
                           initial_accumulator_value=0.1)
     return _fit(dict(plain=a["params"], plain_state=a["state"], decayed=b["params"], decayed_state=b["state"]))
+
+
+@lane("sequence-autoarima")
+def _(ml, X, yc, yr, Xh=None):
+    """Four series of 200 observations: two raw fixture columns and two
+    running sums of them (so KPSS splits the batch between d = 0 and d = 1),
+    the search over p, q in {0, 1} (the orders the CPU ARIMA carries) by
+    aicc, the refit and a 12-step forecast."""
+    raw = np.ascontiguousarray(X[:200, 3:5].T, dtype=np.float32)
+    walk = np.cumsum(raw, axis=1, dtype=np.float32)
+    y = np.ascontiguousarray(np.concatenate([raw, walk]), dtype=np.float32)
+    m = ml.AutoARIMA(y).search(d=range(2), p=range(2), q=range(2))
+    m.fit()
+    return _fit(dict(d=_h(m.d_), order=_h(m.order_), ic=_h(m.ic_), forecast=_h(m.forecast(12))))
+
+
+@lane("sequence-stl")
+def _(ml, X, yc, yr, Xh=None):
+    """Three series of 120 observations (a fixture column plus a period-12
+    wave, a running sum, a column alone): the default STL, and a robust one
+    with jumps of 2 and degree-0 seasonal smoothing, both batched."""
+    t = np.arange(120, dtype=np.float32)
+    wave = np.sin(t * np.float32(2 * np.pi / 12)).astype(np.float32) * np.float32(3.0)
+    c = np.ascontiguousarray(X[:120, 5], dtype=np.float32)
+    y = np.ascontiguousarray(np.stack([c + wave, np.cumsum(c, dtype=np.float32) + wave, c]), dtype=np.float32)
+    a = ml.STL(y, period=12).fit()
+    b = ml.STL(y, period=12, robust=True, seasonal_deg=0, seasonal_jump=2, trend_jump=2,
+               low_pass_jump=2).fit()
+    return _fit(dict(seasonal=_h(a.seasonal), trend=_h(a.trend), resid=_h(a.resid),
+                     r_seasonal=_h(b.seasonal), r_trend=_h(b.trend), r_weights=_h(b.weights)))
+
+
+@lane("sequence-var")
+def _(ml, X, yc, yr, Xh=None):
+    """A three-variable VAR(2) with a constant on 300 fixture rows (the
+    columns turned into a stable autoregression by a running filter), and a
+    VAR(1) without one; params, sigma_u, residuals and a 10-step forecast."""
+    e = np.ascontiguousarray(X[:300, 6:9], dtype=np.float32)
+    y = np.zeros_like(e)
+    for t in range(1, 300):
+        y[t] = (np.float32(0.5) * y[t - 1] + e[t]).astype(np.float32)
+    a = ml.VAR(y).fit(maxlags=2)
+    b = ml.VAR(y).fit(maxlags=1, trend="n")
+    return _fit(dict(params=_h(a.params), sigma_u=_h(a.sigma_u), resid=_h(a.resid),
+                     forecast=_h(a.forecast(y, 10)), n_params=_h(b.params), n_forecast=_h(b.forecast(y, 10))))

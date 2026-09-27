@@ -1,0 +1,19 @@
+--- a/xtrees/ops.mojo
++++ b/xtrees/ops.mojo
+@@ -31,6 +31,7 @@
+   DEVIATION 5605  a zero row normalises to uniform 1 / k, never 0 / 0.
+ """
+ from checks.numerics import identical_mul64, identical_exp64, identical_log64, identical_pow64
++from std.math import exp
+ 
+ comptime GOLDEN: UInt64 = 0x9E3779B97F4A7C15
+ 
+@@ -289,7 +290,7 @@
+     var s: Float64 = 0.0
+     if not last:
+         # DEVIATION 5603: the pinned exp.
+-        var boost = identical_exp64(alpha)
++        var boost = exp(alpha)  # SABOTAGE 5603
+         for i in range(n):
+             if pred[unsafe_offset=i] != y[unsafe_offset=i] and w[unsafe_offset=i] > 0.0:
+                 w[unsafe_offset=i] = identical_mul64(w[unsafe_offset=i], boost)

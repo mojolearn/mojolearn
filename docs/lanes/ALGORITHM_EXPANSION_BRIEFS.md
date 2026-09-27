@@ -88,20 +88,16 @@ cuvs-v26.08.00, raft-v26.08.00, lightgbm, xgboost and catboost.
      # each sabotage arm: a SOURCE patch, git apply, rerun the check, it must FAIL, git apply -R
      python3 tools/identity_trace_diff.py <box A>/<name>.card <box B>/<name>.card             # cross-box
      ```
-     List every check driver of your lane, one repo-relative path per line,
-     in `tools/identity_lanes/<lane>.checks` (a file you own; pixi.toml is
-     shared, so no per-lane pixi task). `tools/algos_lane_check.sh` runs each
-     listed driver under `tools/with_identical_mode.sh` before its GPU/CPU
-     diff and fails if any exits nonzero; the diff stays the Python-level
-     end-to-end check on top. **The `.checks` file is REQUIRED from the
-     first algorithm you register**: the tool today only prints a note when
-     it is missing (plan, R2), so the orchestrator refuses to merge a lane
-     whose fragment registers an identity lane and has no `.checks` listing,
-     or whose listing does not name a driver for every seam in its ledger
-     rows. The per-seam sabotage arms are yours to run (one patch each,
-     above) and to REPORT at each commit, by patch name and result; no tool
-     runs them yet (plan, R3). The steward runs the lane check with the one
-     end-to-end `--sabotage` patch you submit.
+     List every check driver of your lane in
+     `tools/identity_lanes/<lane>.checks` (a file you own), one per line:
+     `<driver><TAB><sabotage patch>` (repo-relative; `.mojo`, `.py` or
+     `.sh`). `tools/algos_lane_check.sh` runs each driver under
+     `tools/with_identical_mode.sh` before its GPU/CPU diff (it must PASS),
+     then applies each patch (the driver must FAIL), reverses it with
+     `git apply -R` (it must PASS again). A driver-only line is allowed in
+     pass 1; in pass 2 run `algos_lane_check.sh <lanes> --pass 2`, which
+     FAILS a fragment with no `.checks` and a line with no patch. The steward
+     runs `--pass 2` with the one end-to-end `--sabotage` patch you submit.
 3. **Python class**, sklearn-shaped (`fit` / `predict` / `transform` /
    `predict_proba` where the reference has them), in your door
    `python/mojolearn/_expansion_<lane>.py` (or imported there), listed in its
@@ -294,7 +290,16 @@ Machinery to reuse: `cluster/` (KMeans, k-means++), `kde/`, `dbscan/`,
 
 **Additions (2026-09-27, after the table):** BayesianGaussianMixture
 (sklearn `mixture/_bayesian_mixture.py`; reuse `mixture/`, whose
-`NOT_IMPLEMENTED.tsv` already carries the row).
+`NOT_IMPLEMENTED.tsv` already carries the row). Birch (sklearn
+`cluster/_birch.py`; Andrew, 2026-09-27): the CF-tree build is a CPU pass
+by construction (one insertion at a time, order-dependent by definition),
+entered under CONTRIBUTING's "CPU-only algorithms" paragraph because its
+global clustering step over the subcluster centroids runs on our GPU
+AgglomerativeClustering (`hierarchy/`); `n_clusters=None` returns the
+subclusters, an int or an estimator runs the global step. `partial_fit`
+is in scope (it is the reason the algorithm exists). The support-matrix
+row says CPU for the fit; the identity contract is across CPU hosts, the
+verifier lane and sabotage as for everything else.
 
 ## Lane 3: neighbors + kernel
 

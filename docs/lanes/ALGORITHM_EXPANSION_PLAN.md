@@ -4,6 +4,12 @@ Lanes merge origin/main before every merge, so this section reaches every
 worktree. The orchestrator changes lane instructions HERE instead of
 messaging lanes. Newest items are at the top.
 
+0. **AMD boxes are live (main 6c9572e4e):** `tools/dev_pod.sh up <lane> 240 --vendor amd`
+   (state key `<lane>-amd`; RunPod MI300X first, Hot Aisle 2x MI300X
+   fallback). Grab one when you enter pass 2 and hold it. The lane check now
+   builds every base binding itself, and `.checks` takes `<driver>\t<patch>`
+   pairs, enforced with `--pass 2`. Before your next merge, run
+   `tools/test_lane_select.py` on your pod; your lane must not break it.
 1. **Order per lane:** (a) every algorithm in the lane table and Additions
    (PASS 1); (b) proof on every column, holding an AMD box (PASS 2 items
    1-2); (c) **option parity** (item 2 below); (d) speed, IDENTICAL and
@@ -362,14 +368,14 @@ to widen into.
 
 | # | finding | what to do | status |
 |---|---|---|---|
-| R1 | **A submitted commit never reaches the cloud Macs.** `apple_steward.py submit` ships the request and patch over ssh, then the Mac's `process` runs `git fetch origin` and checks out the sha. But a cloud Mac's `origin` is the bare repo the laptop pushes to (`cloudmac.sh bootstrap`), and neither `submit`, `flush-deferred`, nor the brief's step 7 pushes the sha there. Every request would fail at "checkout of <sha>". | Until the tool does it, the lane runs `tools/cloudmac.sh push m2pro <sha>` before `submit` (brief step 7, revised). The tool fix: `submit` pushes to each non-deferred Mac and `flush-deferred` pushes before it ships; or `process` fetches the sha from GitHub over https (the repo is public). | **OWED: tool fix. The brief carries the workaround.** |
-| R2 | **Seam checks are optional in the gate.** `algos_lane_check.py` prints a note and continues when a fragment has no `tools/identity_lanes/<lane>.checks`. A lane could register identity lanes, pass the GPU == CPU diff and never run an oracle: the "light" hole the brief closes in prose only. | Make a missing `.checks` a FAIL once the fragment registers any lane. Until then the orchestrator refuses to merge a lane whose fragment registers lanes and has no `.checks` listing (brief step 2, revised). | **OWED: tool fix. The brief carries the rule.** |
-| R3 | **Per-seam sabotage arms are unverified by any tool.** The steward runs the one end-to-end `--sabotage` patch; the per-seam arms the brief requires live only in the lane's evidence directory. | Extend the `.checks` line format to `<driver>\t<sabotage patch>` and have the lane check run each pair (must FAIL under the patch, PASS after `git apply -R`). Until then, the lane's report at each commit names every seam patch and its result, and the orchestrator reads them. | **OWED: tool fix.** |
+| R1 | **A submitted commit never reaches the cloud Macs.** `apple_steward.py submit` ships the request and patch over ssh, then the Mac's `process` runs `git fetch origin` and checks out the sha. But a cloud Mac's `origin` is the bare repo the laptop pushes to (`cloudmac.sh bootstrap`), and neither `submit`, `flush-deferred`, nor the brief's step 7 pushes the sha there. Every request would fail at "checkout of <sha>". | Until the tool does it, the lane runs `tools/cloudmac.sh push m2pro <sha>` before `submit` (brief step 7, revised). The tool fix: `submit` pushes to each non-deferred Mac and `flush-deferred` pushes before it ships; or `process` fetches the sha from GitHub over https (the repo is public). | **DONE 2026-09-27 (lane/algos-tools): `submit` and `flush-deferred` push the sha (`cloudmac.sh push`), `process` fetches `refs/steward/*`.** |
+| R2 | **Seam checks are optional in the gate.** `algos_lane_check.py` prints a note and continues when a fragment has no `tools/identity_lanes/<lane>.checks`. A lane could register identity lanes, pass the GPU == CPU diff and never run an oracle: the "light" hole the brief closes in prose only. | Make a missing `.checks` a FAIL once the fragment registers any lane. Until then the orchestrator refuses to merge a lane whose fragment registers lanes and has no `.checks` listing (brief step 2, revised). | **DONE 2026-09-27: `algos_lane_check.sh --pass 2` fails a fragment with no `.checks`; the steward runs `--pass 2` by default.** |
+| R3 | **Per-seam sabotage arms are unverified by any tool.** The steward runs the one end-to-end `--sabotage` patch; the per-seam arms the brief requires live only in the lane's evidence directory. | Extend the `.checks` line format to `<driver>\t<sabotage patch>` and have the lane check run each pair (must FAIL under the patch, PASS after `git apply -R`). Until then, the lane's report at each commit names every seam patch and its result, and the orchestrator reads them. | **DONE 2026-09-27: `.checks` lines are `<driver>` or `<driver><TAB><patch>`; the check runs each driver (PASS), each patch (FAIL, then PASS after `git apply -R`); `--pass 2` requires a patch on every line.** |
 | R4 | **main was rewritten today.** The fetch that preceded the review showed a forced update on `origin/main` (`3cf7ae22...b35580c3`). Nine lanes pushing `HEAD:main` fast-forward cannot survive another one. | Turn on force-push protection for `main` for the duration of the fan-out. | **OWED: Andrew, in the GitHub settings.** |
 | R5 | **The proof dummy ran on one vendor.** The A40 pod proved x86 CPU == NVIDIA through the whole loop. Nothing has run `algos_lane_check.sh` on a Mac with Metal, and that is the path every steward request takes. | Re-create the `x-prep-dummy` lane on a throwaway branch (its two commits are on main; `git revert ff4e81c0` on the branch), push it to the M2 Pro, and run it through `apple_steward.py work --once` before any lane submits. Then delete the branch. | **OWED: orchestrator, before the first submit.** |
-| R6 | **Pod bootstrap is manual.** The brief tells each lane to `git init` and fetch on the pod so `git apply` works; `sync` does not check that the pod tree is at the worktree's base commit, so a patch that applies on the laptop can fail on the pod for a stale-tree reason. | `dev_pod.sh up` seeds the git tree at the lane's base sha itself; `sync` refuses when the pod's HEAD is not the worktree's merge base with origin/main. | **OWED: tool fix. Brief step "Your setup" carries the manual form.** |
+| R6 | **Pod bootstrap is manual.** The brief tells each lane to `git init` and fetch on the pod so `git apply` works; `sync` does not check that the pod tree is at the worktree's base commit, so a patch that applies on the laptop can fail on the pod for a stale-tree reason. | `dev_pod.sh up` seeds the git tree at the lane's base sha itself; `sync` refuses when the pod's HEAD is not the worktree's merge base with origin/main. | **DONE 2026-09-27: `up` seeds the tree at origin/main; `sync` moves HEAD and the index to the worktree's merge base and refuses otherwise.** |
 | R7 | The prep shipped `sequence` and `cnn` identical only (`host_surface.EXPANSION_IDENTICAL_ONLY`), against FINAL DECISIONS (FAST and IDENTICAL everywhere). | The tuple is now empty: all nine expansion bindings build FAST and IDENTICAL and join `_CLASSICAL_FAST`; the briefs say so. Separate, not a lane's: a FAST tier for the four existing neural bindings (`build_sets.sh` IDENTICAL_ONLY lists, `_backend` tier table, their build scripts). | **DONE 2026-09-27 for the nine lanes. The existing neural bindings' FAST tier is OWED to the orchestrator, off the lanes' path.** |
-| R8 | A fragment may bind a key twice; the second `FAMILIES = ...` silently wins (`host_surface._read_expansion_fragment`). | Refuse a key bound twice. | **OWED: one-line tool fix. The brief says "each once".** |
+| R8 | A fragment may bind a key twice; the second `FAMILIES = ...` silently wins (`host_surface._read_expansion_fragment`). | Refuse a key bound twice. | **DONE 2026-09-27: refused.** |
 | R9 | A dirty steward worktree (an unreversed sabotage) fails the request that finds it, and every later one, until someone logs in. | After a reversal fails, `process` should `git checkout -- .` the worktree, log that it did, and go on. Judgment call; the failing request still reads FAIL. | **OWED: tool fix, low priority.** |
 
 ## What holds, restated
@@ -447,9 +453,9 @@ reasons that are about the algorithm and not about effort.
 | Prophet-style forecaster | **IN.** Piecewise-linear trend with changepoints, Fourier seasonality, holiday regressors, MAP fit by L-BFGS. Parity with the `prophet` package is at a tolerance only (their fit is Stan); identity is ours. Reference: `prophet/forecaster.py` and `stan/prophet.stan` for the model. | sequence (after STL and VAR) | +1, M |
 | sparse variational GP (SVGP) | **IN.** Inducing points, a variational posterior, GEMM and Cholesky bound: a clear GPU win. Upgrades the named refusal in `gaussian_process/NOT_IMPLEMENTED.tsv` the way row 12 upgraded RF's log criteria. Reference: GPflow `gpflow/models/svgp.py`. | neighbors + kernel (GP kernels live beside `kernel_methods/`) | +1, M/H |
 | HNSW | **IN, as CAGRA's CPU-serving form (Andrew, 2026-09-27).** It is a CPU algorithm by construction (a hierarchical graph walked one hop at a time), and that is exactly how the field uses it: build the graph on the GPU, serve queries on CPU boxes. cuVS's own entry is `hnsw::from_cagra`. So it is the second half of CAGRA, not a competitor to it. The "no CPU path" rule the IVF lane cited did not exist in CONTRIBUTING; CONTRIBUTING now says when a CPU-only algorithm may enter ("CPU-only algorithms"), and the refusal in `ivf_refuse_algorithm` and `ivf/NOT_IMPLEMENTED.tsv` is corrected to NOT IMPLEMENTED, assigned. Identity: a search over a fixed graph is deterministic given the graph and an index tie-break, and the same across every CPU host. Reference: cuVS `cpp/src/neighbors/hnsw.cpp`, hnswlib `hnswalg.h` for the layout and search. | ann, after CAGRA | +1, M |
-| Birch | **OUT, unless asked.** It inserts points one at a time into a CF tree and the result depends on insertion order by definition, so it has no GPU form and no GPU partner: its one composition in scikit-learn is as a pre-clustering step whose subclusters feed AgglomerativeClustering, which this library already runs on the GPU directly. Its practical use is small-memory streaming clustering, which a GPU library does not need. One line from Andrew puts it in lane 2 as a CPU-only estimator under the CONTRIBUTING rule. | -- | -- |
+| Birch | **IN (Andrew, 2026-09-27), as a CPU fit that feeds a GPU step.** The CF-tree build inserts points one at a time and depends on insertion order by definition, so it is a CPU pass with no parallel form. Its global clustering step over the subcluster centroids (scikit-learn's default is AgglomerativeClustering) runs on this library's GPU agglomerative clustering, which is the pairing CONTRIBUTING's "CPU-only algorithms" paragraph asks for. Identity: sequential, deterministic given input order, every seam a fixed-order compare or a squared-norm update. Support-matrix row says CPU for the fit. Reference: scikit-learn `cluster/_birch.py`. | cluster | +1, E |
 
-So the long tail is +86, not +78, and the target is about 193 on top of 57
+So the long tail is +88, not +78, and the target is about 195 on top of 57
 if every lane finishes both of its tables.
 
 ---
@@ -515,3 +521,81 @@ fix, with the same gate as its own work: AGREE, a sabotage for any numeric
 change, and existing lanes' bits unchanged (verify them against the
 reference before and after). Merge origin/main often. Never rebuild a
 shared `.so` that another job is using. Tooling gaps go to the tools lane.
+
+## Pass-2 tooling (lane/algos-tools, 2026-09-27)
+
+- **AMD dev boxes:** `tools/dev_pod.sh up <lane> [minutes] --vendor amd`
+  (key `<lane>-amd`; `sync`/`run`/`extend`/`down <lane> --vendor amd` or
+  `<lane>-amd`). RunPod MI300X, then a Hot Aisle MI300X VM. On AMD compare
+  numbers, never `.so` digests (cold-cache gfx942 codegen varies; see the
+  script's header).
+- **Per-seam proof:** `tools/identity_lanes/<lane>.checks`, one
+  `<driver><TAB><sabotage patch>` per seam; `algos_lane_check.sh <lanes> --pass 2`.
+- **Apple speed jobs:** `apple_steward.py submit --kind speed --lane <l>
+  --commit <sha> --builds bindings/build_x.sh[,...] --cmd '<timing>' [--mode
+  fast|identical]`, M3 Ultra only, spooled while it is deferred.
+- **Stewards as daemons:** `tools/cloudmac.sh steward <mac> install|restart|status`.
+
+---
+
+# Phase 3: CPU speed (Andrew, 2026-09-27)
+
+The library is already CPU and GPU: every algorithm ships a CPU host
+binding with the GPU's bits, CPU-only installs train and predict, and the
+bench board has an `ours-cpu` arm. What it is not is FAST on a CPU. The host
+kernels are the same Mojo source compiled for the CPU, written to prove
+identity; a few host oracles use the parallel primitives and most run one
+core. Phase 3 makes the CPU path fast, without moving a bit.
+
+## Why
+
+- **Train on the GPU, serve on the CPU, no drift.** The same-bits contract
+  is what makes it safe to fit on one box and run on another. A fast CPU
+  inference path for the forests, GBDT, kNN, the neural blocks and HNSW
+  (lane 9) is the serving half of that story for every algorithm.
+- Development and CI without a GPU; edge boxes.
+- Not a reason to train on a CPU when a GPU is there. Training speed on
+  the CPU is second.
+
+## The rule
+
+The same as GPU speed work. A multithreaded fold reorders sums unless it
+is pinned, so every thread split is a PIN (partial count a function of
+the shape, never of the core count: IDENTITY_PATHS row 7) and every
+partial fold is `pinned_block_sum`'s host twin. SIMD width is a PIN too
+(a 4-wide and an 8-wide fold are two summation orders). No CPU-specific
+numerics: `ftz`, `identical_mul_add`, the portable transcendentals and the
+composite-key selectors are the same code on every column. Every CPU
+speed commit re-runs the identity check (GPU == CPU, bit for bit) and the
+sabotage, exactly as step 5 and 6 of the COMMON BRIEF.
+
+## Scope and order
+
+1. **Inference first**, per family: forests and GBDT prediction, kNN and
+   the IVF/CAGRA/HNSW search, the neural blocks' forward pass, the
+   transformers' `transform`. Judged on the bench board's `ours-cpu` arm
+   against scikit-learn, LightGBM, XGBoost, FAISS-CPU, hnswlib and PyTorch
+   CPU on all cores, 1M+ rows or the family's realistic shape.
+2. **Training second**, where the CPU case is real: GBDT and forests
+   (LightGBM and XGBoost on all cores are the opponents), linear models,
+   k-means, the preprocessors.
+3. What stays one core: anything sequential by construction (Birch's tree
+   build, OPTICS's ordering loop, LARS's steps).
+
+## Lanes and machines
+
+One lane per family, after that family's identity and GPU speed work is
+merged; never in the same window as the GPU speed wave, which already
+sends every commit through one Metal queue. CPU lanes need no GPU: a
+many-core CPU pod (RunPod CPU instances or an EC2 c7i/c8g) is enough for
+the x86 column, and the Arm column is the cloud Macs' CPUs through the
+same steward. Each lane's brief is the COMMON BRIEF with step 9 reading
+"CPU" and the opponents above.
+
+## Not in this fan-out
+
+Phase 3 starts when Andrew says so, after the identity wave and the GPU
+speed wave. It is written here so the target is on the record and so no
+lane in phases 1 and 2 designs a host kernel that cannot be parallelized
+later (keep the fold shape explicit; never bake a sequential order into a
+seam that a pinned tree would also satisfy).

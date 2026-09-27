@@ -101,3 +101,54 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("transform", "score_samples", sl=slice(0, 256)), "x-decomp-factor-analysis")
+
+
+@lane("x-decomp-spectral-rbf")
+def _(ml, X, yc, yr, Xh=None):
+    # per-column scale to [-1, 1] (elementwise IEEE division, the same bytes on
+    # every box) so the `wide` fixture's 1e4 columns do not underflow every
+    # off-diagonal affinity to zero
+    S = (X[:300] / (np.abs(X[:300]).max(axis=0) + np.float32(1))).astype(np.float32)
+    m = ml.SpectralEmbedding(n_components=3, affinity="rbf", gamma=0.5).fit(S)
+    d = ml.SpectralEmbedding(n_components=2, affinity="rbf").fit(S[:200])
+    return _fit(dict(emb=_h(m.embedding_), aff=_h(m.affinity_matrix_), demb=_h(d.embedding_)))
+
+
+@lane("x-decomp-lu")
+def _(ml, X, yc, yr, Xh=None):
+    n = X.shape[1]
+    A = np.ascontiguousarray(X[:n, :n])
+    B = np.ascontiguousarray(X[n:n + 24, :n].T)
+    lu, piv = ml.lu_factor(A)
+    x = ml.lu_solve((lu, piv), B)
+    v = ml.lu_solve((lu, piv), np.ascontiguousarray(X[200, :n]))
+    s = ml.solve(np.ascontiguousarray(X[300:300 + n, :n].T), np.ascontiguousarray(X[400, :n]))
+    return _fit(dict(lu=_h(lu), piv=_h(piv), x=_h(x), v=_h(v), s=_h(s)))
+
+
+@lane("x-decomp-lstsq-rsvd")
+def _(ml, X, yc, yr, Xh=None):
+    U, s, Vt = ml.randomized_svd(X[:4000], 4, random_state=0)
+    Ut, st, Vtt = ml.randomized_svd(np.ascontiguousarray(X[:12].T), 3, n_iter=2, random_state=1)
+    x, res, rank, sv = ml.lstsq(X[:600], yr[:600])
+    xm, resm, rankm, _ = ml.lstsq(X[:300], np.ascontiguousarray(X[300:600, :3]))
+    return _fit(dict(U=_h(U), s=_h(s), Vt=_h(Vt), Ut=_h(Ut), st=_h(st), Vtt=_h(Vtt), x=_h(x), res=_h(res),
+                     rank=_h(np.int32(rank)), sv=_h(sv), xm=_h(xm), resm=_h(resm), rankm=_h(np.int32(rankm))))
+
+
+@lane("x-decomp-pls")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.PLSRegression(n_components=3).fit(X[:2000], yr[:2000])
+    Y2 = np.ascontiguousarray(np.stack([yr[:2000], X[:2000, 3]], axis=1))
+    c = ml.PLSCanonical(n_components=2).fit(X[:2000, :10], np.ascontiguousarray(X[:2000, 10:14]))
+    a = ml.CCA(n_components=2, max_iter=100).fit(X[:1000, :8], np.ascontiguousarray(X[:1000, 8:12]))
+    m2 = ml.PLSRegression(n_components=2, scale=False).fit(X[:2000], Y2)
+    return _fit(dict(coef=_h(m.coef_), xw=_h(m.x_weights_), xr=_h(m.x_rotations_), pred=_h(m.predict(X[:256])),
+                     T=_h(m.transform(X[:256])), it=_h(np.int32(m.n_iter_)), c_xr=_h(c.x_rotations_),
+                     c_yr=_h(c.y_rotations_), c_T=_h(*c.transform(X[:256, :10], np.ascontiguousarray(X[:256, 10:14]))),
+                     a_xr=_h(a.x_rotations_), a_yr=_h(a.y_rotations_), a_it=_h(np.int32(a.n_iter_)),
+                     m2=_h(m2.coef_, m2.predict(X[:256]))),
+                m, lambda e: (e.predict(Xh[:256]), e.transform(Xh[:256])))
+
+
+_batch_decl(_rows_calls("predict", "transform", sl=slice(0, 256)), "x-decomp-pls")

@@ -9,7 +9,8 @@ from std.python import PythonObject
 
 from checks.numerics import ftz, identical_mul
 from sequence.exec import Exec
-from sequence.ops import FP, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD
+from sequence.ops import FP, OP_STL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD
+from sequence.recurrent import gemm
 from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, opt_step, rnn_fit, rnn_predict
 
 
@@ -177,3 +178,176 @@ def opt_advance(cfg: OptConfig, mut st: OptState) -> Int:
         st.pw1 = ftz(identical_mul(st.pw1, cfg.f1))
         st.pw2 = ftz(identical_mul(st.pw2, cfg.f2))
     return 0
+
+
+def stl_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
+    """STL over a batch of series (`sequence/stl.mojo`).
+    addrs = [y (B, n), season, trend, weights, resid (each B, n, written)];
+    ip = [B, n, period, seasonal, trend, low_pass, degrees (s + 2 t + 4 l),
+    seasonal_jump, trend_jump, low_pass_jump, inner_iter, outer_iter]."""
+    if len(addrs) != 5 or len(ip) != 12:
+        raise Error("stl: requires 5 addresses and 12 integer parameters")
+    var B = ival(ip, 0)
+    var n = ival(ip, 1)
+    var np_ = ival(ip, 2)
+    if B < 1 or n < 1:
+        raise Error("stl: at least one series of at least one observation")
+    if np_ < 2:
+        raise Error("stl: period must be a positive integer >= 2")
+    for k in range(3, 6):
+        var v = ival(ip, k)
+        if v < 3 or v % 2 == 0:
+            raise Error("stl: seasonal, trend and low_pass must be odd integers >= 3")
+    if ival(ip, 4) <= np_ or ival(ip, 5) <= np_:
+        raise Error("stl: trend and low_pass must exceed the period")
+    var degs = ival(ip, 6)
+    if degs < 0 or degs > 7:
+        raise Error("stl: every degree must be 0 or 1")
+    for k in range(7, 10):
+        if ival(ip, k) < 1:
+            raise Error("stl: every jump must be a positive integer")
+    if ival(ip, 10) < 1 or ival(ip, 11) < 0:
+        raise Error("stl: inner_iter must be >= 1 and outer_iter >= 0")
+    var n2 = n + 2 * np_
+    var y = ex.alloc(B * n)
+    ex.upload(y, fptr(addrs[0], "y"), B * n)
+    var outs = List[FP]()
+    for _ in range(4):
+        outs.append(ex.alloc(B * n))
+    var work = ex.alloc(B * 5 * n2)
+    var sortbuf = ex.alloc(B * n)
+    var a = Args()
+    a.p0 = y
+    a.p1 = outs[0]
+    a.p2 = outs[1]
+    a.p3 = outs[2]
+    a.p4 = outs[3]
+    a.p5 = work
+    a.p6 = sortbuf
+    a.i0 = n
+    a.i1 = np_
+    a.i2 = ival(ip, 3)
+    a.i3 = ival(ip, 4)
+    a.i4 = ival(ip, 5)
+    a.i5 = degs
+    a.i6 = ival(ip, 7)
+    a.i7 = ival(ip, 8)
+    a.i8 = ival(ip, 9)
+    a.i9 = ival(ip, 10)
+    a.i10 = ival(ip, 11)
+    ex.launch[OP_STL](a, B)
+    ex.sync()
+    for k in range(4):
+        ex.download(fptr(addrs[k + 1], "output"), outs[k], B * n)
+    return PythonObject(B * n)
+
+
+def var_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
+    """VAR(p) by OLS (`sequence/vecar.mojo`). addrs = [y (n, K), params (m, K),
+    sigma_u (K, K), resid (n - p, K)], each output written; ip = [n, K, p,
+    k_trend]. Returns 0, or 1 + the design column whose Cholesky pivot was
+    not positive (nothing is written then)."""
+    if len(addrs) != 4 or len(ip) != 4:
+        raise Error("var_fit: requires 4 addresses and 4 integer parameters")
+    var n = ival(ip, 0)
+    var K = ival(ip, 1)
+    var p = ival(ip, 2)
+    var kt = ival(ip, 3)
+    if K < 1 or p < 1 or kt < 0 or kt > 1:
+        raise Error("var_fit: K >= 1, p >= 1 and k_trend 0 or 1")
+    var R = n - p
+    var m = kt + K * p
+    if R - m < 1:
+        raise Error("var_fit: too few observations for the lag order (need n - p > k_trend + K p)")
+    var y = ex.alloc(n * K)
+    ex.upload(y, fptr(addrs[0], "y"), n * K)
+    var Z = ex.alloc(R * m)
+    var Ys = ex.alloc(R * K)
+    var sc = ex.alloc(m)
+    var G = ex.alloc(m * m)
+    var Bm = ex.alloc(m * K)
+    var F = ex.alloc(R * K)
+    var Rs = ex.alloc(R * K)
+    var S = ex.alloc(K * K)
+    var status = ex.alloc(1)
+    var a = Args()
+    a.p0 = y
+    a.p1 = Z
+    a.p2 = Ys
+    a.i0 = K
+    a.i1 = p
+    a.i2 = kt
+    a.i3 = m
+    ex.launch[OP_VAR_DESIGN](a, R * m)
+    var b = Args()
+    b.p0 = Z
+    b.p1 = sc
+    b.i0 = R
+    b.i1 = m
+    ex.launch[OP_COLSCALE](b, m)
+    gemm(ex, Z, Z, G, m, m, R, 1, m, m, 1, False, m)
+    gemm(ex, Z, Ys, Bm, m, K, R, 1, m, K, 1, False, K)
+    var c = Args()
+    c.p0 = G
+    c.p1 = Bm
+    c.p2 = status
+    c.i0 = m
+    c.i1 = K
+    ex.launch[OP_CHOLSOLVE](c, 1)
+    ex.sync()
+    var st = List[Float32](length=1, fill=Float32(0.0))
+    ex.download(FP(unsafe_from_address=Int(st.unsafe_ptr())), status, 1)
+    var code = Int(st[0])
+    if code != 0:
+        return PythonObject(code)
+    gemm(ex, Z, Bm, F, R, K, m, m, 1, K, 1, False, K)
+    var d = Args()
+    d.p0 = Ys
+    d.p1 = F
+    d.p2 = Rs
+    ex.launch[OP_SUB](d, R * K)
+    gemm(ex, Rs, Rs, S, K, K, R, 1, K, K, 1, False, K)
+    var e = Args()
+    e.p0 = S
+    e.f0 = Float32(1.0) / Float32(R - m)
+    ex.launch[OP_SCALE](e, K * K)
+    var f = Args()
+    f.p0 = Bm
+    f.p1 = sc
+    f.i1 = K
+    ex.launch[OP_ROWSCALE](f, m * K)
+    ex.sync()
+    ex.download(fptr(addrs[1], "params"), Bm, m * K)
+    ex.download(fptr(addrs[2], "sigma_u"), S, K * K)
+    ex.download(fptr(addrs[3], "resid"), Rs, R * K)
+    return PythonObject(0)
+
+
+def var_forecast_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
+    """addrs = [y_last (p, K), params (m, K), out (h, K)]; ip = [K, p, k_trend, h]."""
+    if len(addrs) != 3 or len(ip) != 4:
+        raise Error("var_forecast: requires 3 addresses and 4 integer parameters")
+    var K = ival(ip, 0)
+    var p = ival(ip, 1)
+    var kt = ival(ip, 2)
+    var h = ival(ip, 3)
+    if K < 1 or p < 1 or kt < 0 or kt > 1 or h < 1:
+        raise Error("var_forecast: K, p, h >= 1 and k_trend 0 or 1")
+    var m = kt + K * p
+    var y = ex.alloc(p * K)
+    ex.upload(y, fptr(addrs[0], "y"), p * K)
+    var P = ex.alloc(m * K)
+    ex.upload(P, fptr(addrs[1], "params"), m * K)
+    var out = ex.alloc(h * K)
+    var a = Args()
+    a.p0 = y
+    a.p1 = P
+    a.p2 = out
+    a.i0 = K
+    a.i1 = p
+    a.i2 = kt
+    a.i3 = h
+    ex.launch[OP_VAR_FORECAST](a, 1)
+    ex.sync()
+    ex.download(fptr(addrs[2], "out"), out, h * K)
+    return PythonObject(h * K)

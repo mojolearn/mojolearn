@@ -251,3 +251,117 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-spline-transformer")
+
+
+@lane("x-prep-binarizer")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.Binarizer(threshold=0.3).fit(X)
+    parts = dict(transform=_h(m.transform(X[:256])), zero=_h(ml.Binarizer().fit(X).transform(X[:256])))
+    return _fit(parts, m, lambda e: (e.transform(Xh[:256]),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-binarizer")
+
+
+def _prep_labels(X):
+    """Integer labels with gaps and ties, from the fixture's first column."""
+    return (np.clip(np.floor(X[:, 0] * 3), -9, 9) * 7).astype(np.int64)
+
+
+@lane("x-prep-label-encoder")
+def _(ml, X, yc, yr, Xh=None):
+    y, yh = _prep_labels(X), _prep_labels(Xh)
+    m = ml.LabelEncoder().fit(y)
+    parts = dict(classes=_h(m.classes_), transform=_h(m.transform(y[:256])),
+                 floats=_h(ml.LabelEncoder().fit_transform(yr[:256])))
+    known = np.isin(yh, np.asarray(m.classes_))
+    return _fit(parts, m, lambda e: (e.transform(yh[known][:256]),))
+
+
+@lane("x-prep-label-binarizer")
+def _(ml, X, yc, yr, Xh=None):
+    y, yh = _prep_labels(X), _prep_labels(Xh)
+    m = ml.LabelBinarizer(neg_label=-1, pos_label=2).fit(y)
+    parts = dict(classes=_h(m.classes_), transform=_h(m.transform(y[:256])),
+                 binary=_h(ml.LabelBinarizer().fit(yc).transform(yc[:256])))
+    return _fit(parts, m, lambda e: (e.transform(yh[:256]),))
+
+
+def _prep_multilabel(X):
+    """Rows of 0..3 labels each (columns 0-2 over a threshold give labels
+    from column 5's integer part), so empty rows, repeats and unseen labels occur."""
+    base = np.clip(np.floor(X[:, 5] * 2), -3, 3).astype(np.int64)
+    return [[int(base[i]) + j for j in range(3) if X[i, j] > 0.2] for i in range(X.shape[0])]
+
+
+@lane("x-prep-multilabel-binarizer")
+def _(ml, X, yc, yr, Xh=None):
+    ys, yhs = _prep_multilabel(X), _prep_multilabel(Xh)
+    m = ml.MultiLabelBinarizer().fit(ys)
+    parts = dict(classes=_h(m.classes_), transform=_h(m.transform(ys[:256])))
+    return _fit(parts, m, lambda e: (e.transform(yhs[:256]),))
+
+
+@lane("x-prep-iterative-imputer")
+def _(ml, X, yc, yr, Xh=None):
+    Xm, Xhm = _prep_with_nan(X[:3000, :8]), _prep_with_nan(Xh[:3000, :8])
+    m = ml.IterativeImputer(max_iter=4, min_value=-5.0, max_value=5.0)
+    out = m.fit_transform(Xm)
+    md = ml.IterativeImputer(max_iter=2, imputation_order="descending", initial_strategy="median")
+    parts = dict(fit=_h(out), n_iter=_h(np.array([m.n_iter_])), desc=_h(md.fit_transform(Xm)))
+    return _fit(parts, m, lambda e: (e.transform(Xhm[:256]),))
+
+
+def _prep_nan_first_eight(X):
+    return _prep_with_nan(X[:, :8])
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_prep_nan_first_eight), "x-prep-iterative-imputer")
+
+
+@lane("x-prep-variance-threshold")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.VarianceThreshold().fit(X)
+    mt = ml.VarianceThreshold(threshold=0.3).fit(X)
+    parts = dict(var=_h(m.variances_), transform=_h(m.transform(X[:256])), t=_h(np.array(mt.get_support())))
+    return _fit(parts, m, lambda e: (e.transform(Xh[:256]),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-variance-threshold")
+
+
+@lane("x-prep-select-kbest")
+def _(ml, X, yc, yr, Xh=None):
+    y3 = _prep_three_class(X, yr)
+    fc, pc = ml.f_classif(X, y3)
+    fr, prv = ml.f_regression(X, yr)
+    c2, pc2 = ml.chi2(np.abs(X), y3)
+    m = ml.SelectKBest(k=5).fit(X, y3)
+    parts = dict(fc=_h(fc, pc), fr=_h(fr, prv), c2=_h(c2, pc2), support=_h(np.array(m.get_support())),
+                 transform=_h(m.transform(X[:256])))
+    return _fit(parts, m, lambda e: (e.transform(Xh[:256]),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-select-kbest")
+
+
+@lane("x-prep-mutual-info")
+def _(ml, X, yc, yr, Xh=None):
+    Xs, y3 = X[:1500], _prep_three_class(X, yr)[:1500]
+    mc = ml.mutual_info_classif(Xs, y3, random_state=4)
+    mr = ml.mutual_info_regression(Xs, yr[:1500], random_state=4, n_neighbors=5)
+    m = ml.SelectKBest(ml.mutual_info_regression, k=4).fit(Xs, yr[:1500])
+    parts = dict(classif=_h(mc), regression=_h(mr), support=_h(np.array(m.get_support())))
+    return _fit(parts, m, lambda e: (e.transform(Xh[:256]),))
+
+
+@lane("x-prep-rfe")
+def _(ml, X, yc, yr, Xh=None):
+    y3 = _prep_three_class(X, yr)
+    m = ml.RFE(ml.LinearDiscriminantAnalysis(), n_features_to_select=5, step=3).fit(X, y3)
+    parts = dict(ranking=_h(m.ranking_), support=_h(np.array(m.support_)), predict=_h(m.predict(X[:256])),
+                 transform=_h(m.transform(X[:256])))
+    return _fit(parts, m, lambda e: (e.predict(Xh[:256]), e.transform(Xh[:256])))
+
+
+_batch_decl(_rows_calls("predict", "transform", sl=slice(0, 256)), "x-prep-rfe")
