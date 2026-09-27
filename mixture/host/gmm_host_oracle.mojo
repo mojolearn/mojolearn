@@ -59,6 +59,7 @@ initialization.
 
 from std.memory import bitcast
 from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 
 from checks.numerics import (
     ftz,
@@ -529,7 +530,7 @@ def gmmh_e_step(
     if component_tasks == 1:
         _components(0)
     else:
-        sync_parallelize(_components, component_tasks)
+        host_parallelize(_components, component_tasks)
 
     var d_log_2pi = ftz(
         identical_mul(Float32(d), bitcast[DType.float32](GMMH_LOG_2PI_BITS))

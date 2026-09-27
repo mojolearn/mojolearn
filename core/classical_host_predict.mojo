@@ -108,6 +108,7 @@ from std.sys.compile import is_defined
 from std.math import sqrt
 
 from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 
 from checks.numerics import (
     ftz,
@@ -205,7 +206,7 @@ def host_gemm_nt_into(
     if t == 1:
         _rows(0)
     else:
-        sync_parallelize(_rows, t)
+        host_parallelize(_rows, t)
 
 
 def host_gemm_nt(
@@ -342,7 +343,7 @@ def host_qn_sigmoid_into(
     if t == 1:
         _rows(0)
     else:
-        sync_parallelize(_rows, t)
+        host_parallelize(_rows, t)
 
 
 def host_qn_decision_multi(
@@ -440,7 +441,7 @@ def host_qn_softmax_into(
     if t == 1:
         _rows(0)
     else:
-        sync_parallelize(_rows, t)
+        host_parallelize(_rows, t)
 
 
 def host_center(
@@ -526,7 +527,7 @@ def host_pca_transform_into(
     if t == 1:
         _rows(0)
     else:
-        sync_parallelize(_rows, t)
+        host_parallelize(_rows, t)
 
 
 def host_tsvd_transform(

@@ -64,6 +64,7 @@ from std.memory import bitcast
 from std.sys.compile import is_defined
 
 from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 
 from gemm.host.identical_gemm import (
     contract_leaf_size,
@@ -751,7 +752,7 @@ def smo_oracle_fit[
             if update_tasks == 1:
                 _update_f(0)
             else:
-                sync_parallelize(_update_f, update_tasks)
+                host_parallelize(_update_f, update_tasks)
         # CheckStoppingCondition
         if Float64(diff) > Float64(diff_prev) * 1.5 and n_outer_iter > 0:
             n_increased_diff += 1
@@ -1041,7 +1042,7 @@ def smo_oracle_decision_into(
     if task_count == 1:
         _rows(0)
     else:
-        sync_parallelize(_rows, task_count)
+        host_parallelize(_rows, task_count)
     for c in range(task_count):
         if failed[c] != 0:
             raise Error("svm host: decision row chunk " + String(c) + " raised")

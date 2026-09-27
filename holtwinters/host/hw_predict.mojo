@@ -29,6 +29,7 @@ prediction is NaN before `d + s*D`.
 from std.memory import bitcast
 
 from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 
 from checks.numerics import ftz, identical_mul_add
 from core.host_predict_threads import (
@@ -143,7 +144,7 @@ def hw_forecast_from_state_ptr(
     if tasks == 1:
         _cells(0)
     else:
-        sync_parallelize(_cells, tasks)
+        host_parallelize(_cells, tasks)
     return out^
 
 
@@ -232,5 +233,5 @@ def hw_predict_in_sample_ptr(
     if tasks == 1:
         _steps(0)
     else:
-        sync_parallelize(_steps, tasks)
+        host_parallelize(_steps, tasks)
     return out^

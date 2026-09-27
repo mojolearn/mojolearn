@@ -68,6 +68,7 @@ from std.sys.compile import is_defined
 from std.sys.info import num_physical_cores
 
 from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 
 from checks.numerics import (
     ftz,
@@ -189,7 +190,7 @@ def host_rms_row_sumsq(x: List[Float32], m: Int, dm: Int) -> List[Float32]:
     if tasks == 1:
         _rows(0)
     else:
-        sync_parallelize(_rows, tasks)
+        host_parallelize(_rows, tasks)
     return sumsq^
 
 
@@ -228,7 +229,7 @@ def host_samba_rms_norm_forward(
     if tasks == 1:
         _rows(0)
     else:
-        sync_parallelize(_rows, tasks)
+        host_parallelize(_rows, tasks)
     return y^
 
 
@@ -312,7 +313,7 @@ def host_samba_rms_norm_backward(
     if tasks == 1:
         _rows(0)
     else:
-        sync_parallelize(_rows, tasks)
+        host_parallelize(_rows, tasks)
     var ones = List[Float32](length=m, fill=Float32(1.0))
     var dw = gemm_oracle(ones, dprod, OP_NN, 1, dm, m)
     _ = dh^

@@ -83,6 +83,7 @@ from gbdt.overfitting_detector.overfitting_detector import (
 from gbdt.gpu_util.kernel.radix_sort import DeviceFloatSorter
 from std.memory import memcpy
 from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 from gbdt.data.permutation import TRandom
 from gbdt.gpu_data.feature_sampling import check_feature_fraction
 from std.sys.compile import is_defined
@@ -548,7 +549,7 @@ def _build_cindex_from_columns(
                             v = sub
                         dst.unsafe_store(r, v)
 
-            sync_parallelize(_stage_task, width)
+            host_parallelize(_stage_task, width)
             # the tasks read these planes; they must outlive the join
             _ = len(active)
             _ = len(treats)
@@ -2404,7 +2405,7 @@ def _quantize_training_columns(
                     pd.unsafe_store(k * sn, Float32(0.0) / Float32(0.0))
                 flg.unsafe_store(k, 1)
 
-        sync_parallelize(_draw_task, n_float_prescan)
+        host_parallelize(_draw_task, n_float_prescan)
         _ = flags^
         _ = sample_idx^
         _ = len(cps)  # DEVIATION 2550: the task read `cps`; past the join
@@ -2577,7 +2578,7 @@ def _quantize_training_columns(
             except:
                 ocp.unsafe_store(k, -1)
 
-        sync_parallelize(_dp_task, n_float)
+        host_parallelize(_dp_task, n_float)
         # ==================== THE STEP-33 RACE, FOUND =====================
         # The plane the tasks read must outlive the JOIN, not its last
         # textual use: `sfp2 = predrawn.unsafe_ptr()` above was

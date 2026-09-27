@@ -50,6 +50,7 @@ happens to it:
 from std.math import isfinite
 from std.memory import bitcast
 from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 
 
 comptime C_SVC = 0
@@ -300,7 +301,7 @@ def check_finite_ptr(
                 hi = n
             fp.unsafe_store(s, _first_nonfinite_span(values, lo, hi))
 
-        sync_parallelize(_span_task, spans)
+        host_parallelize(_span_task, spans)
         # `firsts` is read past the join, so it outlives every task.
         for s in range(spans):
             if firsts[s] >= 0:

@@ -127,6 +127,7 @@ from std.math import exp, floor, fma, isfinite, log, log2, sqrt
 from std.memory import bitcast
 from std.sys.compile import is_defined
 from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
@@ -835,7 +836,7 @@ def gbdt_host_grid(
     # Border searches own disjoint output slots and share only immutable X
     # and sample indices.  Keep small fits serial to avoid pool overhead.
     if n_features > 1 and n_rows * n_features >= (1 << 18):
-        sync_parallelize(_grid_column, n_features)
+        host_parallelize(_grid_column, n_features)
     else:
         for f in range(n_features):
             _grid_column(f)

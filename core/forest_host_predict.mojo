@@ -35,6 +35,7 @@ The restatement is a prediction until measured. tools/forest_host_gate.py is
 the measurement.
 """
 from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 from std.os import getenv
 from std.sys.compile import is_defined
 from std.sys.info import num_physical_cores
@@ -263,7 +264,7 @@ def rf_host_predict(
     if tasks == 1:
         _rows_task(0)
     else:
-        sync_parallelize(_rows_task, tasks)
+        host_parallelize(_rows_task, tasks)
     for c in range(tasks):
         if failed[c] != 0:
             raise Error("forest host: the walk of row task " + String(c) + " raised")
@@ -358,7 +359,7 @@ def et_host_predict(
     if tasks == 1:
         _rows_task(0)
     else:
-        sync_parallelize(_rows_task, tasks)
+        host_parallelize(_rows_task, tasks)
     for c in range(tasks):
         if failed[c] != 0:
             raise Error("forest host: the walk of row task " + String(c) + " raised")

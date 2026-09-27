@@ -80,6 +80,7 @@ refused for the model before the NaN, where the old loops refused the NaN
 first; both are refusals.
 """
 from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 from std.sys.compile import is_defined
 
 from core.forest_host_predict import host_task_count, host_worker_count
@@ -758,7 +759,7 @@ def gbdt_host_predict(
     if tasks == 1:
         _rows_task(0)
     else:
-        sync_parallelize(_rows_task, tasks)
+        host_parallelize(_rows_task, tasks)
     _raise_first_failure(failed, tasks)
     # the tasks read `plan`, `x_colmajor` and wrote `out` through pointers;
     # a use after the join keeps every owner alive past it

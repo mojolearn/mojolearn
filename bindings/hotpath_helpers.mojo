@@ -46,6 +46,7 @@ from std.python._cpython import GILReleased
 from std.sys.compile import is_defined
 
 from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 
@@ -197,7 +198,7 @@ def _cast_run[src: DType, dst: DType](src_addr: Int, dst_addr: Int, n: Int) rais
         if tasks == 1:
             _range(0)
         else:
-            sync_parallelize(_range, tasks)
+            host_parallelize(_range, tasks)
     _ = len(flags)
     for c in range(tasks):
         if flags[c] != 0:
@@ -389,7 +390,7 @@ def _equal[dt: DType](a_addr: Int, b_addr: Int, n: Int, dst_addr: Int) raises:
         if tasks == 1:
             _range(0)
         else:
-            sync_parallelize(_range, tasks)
+            host_parallelize(_range, tasks)
 
 
 def equal_elements_binding(
@@ -594,7 +595,7 @@ def gather_i32_binding(
             if tasks == 1:
                 _range(0)
             else:
-                sync_parallelize(_range, tasks)
+                host_parallelize(_range, tasks)
     if bad:
         raise Error("gather_i32: code out of range")
     return PythonObject(0)

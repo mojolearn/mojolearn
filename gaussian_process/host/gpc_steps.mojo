@@ -82,6 +82,7 @@ from std.math import fma, sqrt
 from std.memory import bitcast
 
 from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 
 from checks.numerics import (
     ftz,
@@ -474,5 +475,5 @@ def gpc_proba(mean: List[Float32], variance: List[Float32]) raises -> List[Float
     if tasks == 1:
         _rows(0)
     else:
-        sync_parallelize(_rows, tasks)
+        host_parallelize(_rows, tasks)
     return out^

@@ -79,6 +79,7 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from std.sys.compile import is_defined
 from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 
 from bindings.hostptr import i32_ptr
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
@@ -386,7 +387,7 @@ def bpe_encode_batch_binding(
         if tasks == 1:
             _documents(0)
         else:
-            sync_parallelize(_documents, tasks)
+            host_parallelize(_documents, tasks)
         for k in range(n_docs):
             if failed[k] != 0:
                 raise Error("bpe_encode_batch: internal document encode failed")

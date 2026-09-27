@@ -86,6 +86,7 @@ measurement.
 from std.math import fma
 from std.memory import bitcast
 from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 
 from checks.numerics import ftz, identical_div, identical_log, portable_sqrtf
 from core.knn_host_predict import host_knn_search
@@ -262,7 +263,7 @@ def host_regression_error_ptr(
     if tasks == 1:
         _chunks(0)
     else:
-        sync_parallelize(_chunks, tasks)
+        host_parallelize(_chunks, tasks)
     var total = Float32(0.0)
     for c in range(chunks):
         total = ftz(total + partials[c])
@@ -354,7 +355,7 @@ def host_confusion_counts_ptr(
     if tasks == 1:
         _rows(0)
     else:
-        sync_parallelize(_rows, tasks)
+        host_parallelize(_rows, tasks)
     var counts = List[Int32](length=width, fill=Int32(0))
     for task in range(tasks):
         for i in range(width):

@@ -99,6 +99,7 @@ from checks.numerics import (
 from ensemble.host_layout import colmajor_ftz_from_rowmajor_f32
 from std.os import getenv
 from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 from metrics.checks.device_io import upload_i32
 
 
@@ -1134,7 +1135,7 @@ def _fit_tree_shards(ctx: DeviceContext, input_colmajor: List[Float32],
     if active == 1:
         task(0)
     else:
-        sync_parallelize(task, active)
+        host_parallelize(task, active)
     for rank in range(active):
         if failures[rank] != 0:
             raise Error("IsolationForest tree shard failed: " + String(rank))
