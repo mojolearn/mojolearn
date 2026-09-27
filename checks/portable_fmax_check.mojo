@@ -107,12 +107,20 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl
     range_key,
 )
 from mamba.checks.mamba_oracle import pinned_mul as pinned_mul_oracle
-from mamba.impl.ops.selective_scan_interface import (
-    pinned_mul as pinned_mul_scan,
-)
-from mamba.impl.modeling.modeling_mamba import (
-    pinned_mul as pinned_mul_block,
-)
+from mamba.checks.mamba2_oracle import pinned_mul as pinned_mul_oracle2
+from mamba.checks.mamba3_oracle import pinned_mul as pinned_mul_oracle3
+from mamba.impl.modeling.modeling_mamba import pinned_mul as pinned_mul_block
+from mamba.impl.ops.selective_scan_interface import pinned_mul as pinned_mul_scan
+from mamba.impl.ops.mamba3_siso import pinned_mul as pinned_mul_siso3
+from mamba.impl.modules.ssd_minimal import pinned_mul as pinned_mul_ssd
+from mamba.impl.modules.mamba2 import pinned_mul as pinned_mul_m2
+from mamba.impl.modules.mamba3 import pinned_mul as pinned_mul_m3
+from mamba.host.gen.modeling_mamba import pinned_mul as pinned_mul_gen_block
+from mamba.host.gen.selective_scan_interface import pinned_mul as pinned_mul_gen_scan
+from mamba.host.gen.mamba3_siso import pinned_mul as pinned_mul_gen_siso3
+from mamba.host.gen.ssd_minimal import pinned_mul as pinned_mul_gen_ssd
+from mamba.host.gen.mamba2 import pinned_mul as pinned_mul_gen_m2
+from mamba.host.gen.mamba3 import pinned_mul as pinned_mul_gen_m3
 
 comptime N = 1 << 20
 comptime BLOCK = 256
@@ -769,36 +777,92 @@ def check_identical_mul_signed_zero() raises:
         raise Error("identical_mul(-1.0, -0.0) is not +0.0 BY SIGN BIT")
     if _bits(identical_mul(_f(PZ), _f(NZ))) != NZ:
         raise Error("identical_mul(+0.0, -0.0) is not -0.0 BY SIGN BIT")
-    var drift_o = 0
-    var drift_s = 0
-    var drift_b = 0
+    # lane/dedupe-pinned-mul: ALL FIFTEEN `pinned_mul` copies (nine written by
+    # hand, six by tools/mamba_host_gen.py), EXACT bits (no NaN canonicalizing),
+    # over the 65,536 hashed pairs plus the 16x16 planted classes (both zeros,
+    # both infinities, NaN of both payload signs, subnormals, FLT_MIN/MAX), and
+    # composed as `p + c` with `c = -(a*b) + tiny`, the fixture that separates
+    # a fused product (one rounding) from an unfused one (two).
+    comptime NCOPY = 15
+    var names: List[String] = ["mamba.checks.mamba_oracle", "mamba.checks.mamba2_oracle", "mamba.checks.mamba3_oracle", "mamba.impl.modeling.modeling_mamba", "mamba.impl.ops.selective_scan_interface", "mamba.impl.ops.mamba3_siso", "mamba.impl.modules.ssd_minimal", "mamba.impl.modules.mamba2", "mamba.impl.modules.mamba3", "mamba.host.gen.modeling_mamba", "mamba.host.gen.selective_scan_interface", "mamba.host.gen.mamba3_siso", "mamba.host.gen.ssd_minimal", "mamba.host.gen.mamba2", "mamba.host.gen.mamba3"]
+    var drift = List[Int](length=NCOPY, fill=0)
+    var drift_fused = List[Int](length=NCOPY, fill=0)
     var vs_product = 0
-    for i in range(1 << 16):
-        var h1 = _splitmix(UInt64(31 * i + 5))
-        var h2 = _splitmix(UInt64(31 * i + 17))
-        var a = _f(UInt32(h1 & UInt64(0xFFFFFFFF)))
-        var b = _f(UInt32(h2 & UInt64(0xFFFFFFFF)))
+    var fused_ctl = 0
+    var npairs = 0
+    for i in range((1 << 16) + NCLASS * NCLASS):
+        var a: Float32
+        var b: Float32
+        if i < NCLASS * NCLASS:
+            a = _f(_class_value(i // NCLASS))
+            b = _f(_class_value(i % NCLASS))
+        else:
+            var h1 = _splitmix(UInt64(31 * (i - NCLASS * NCLASS) + 5))
+            var h2 = _splitmix(UInt64(31 * (i - NCLASS * NCLASS) + 17))
+            a = _f(UInt32(h1 & UInt64(0xFFFFFFFF)))
+            b = _f(UInt32(h2 & UInt64(0xFFFFFFFF)))
+        npairs += 1
         var m = identical_mul(a, b)
-        if _canon(_bits(m)) != _canon(_bits(pinned_mul_oracle(a, b))):
-            drift_o += 1
-        if _canon(_bits(m)) != _canon(_bits(pinned_mul_scan(a, b))):
-            drift_s += 1
-        if _canon(_bits(m)) != _canon(_bits(pinned_mul_block(a, b))):
-            drift_b += 1
-        if _canon(_bits(m)) != _canon(_bits(a * b)):
+        var mb = _bits(m)
+        # c ~ -(a*b): a fused a*b+c keeps the product's low bits, a pinned one
+        # rounds them away first, so the two answers differ on almost every pair.
+        var c = _f(_bits(Float32(0.0) - m) ^ UInt32(1))
+        var mc = _bits(m + c)
+        if _bits(a * b + c) != mc:
+            fused_ctl += 1
+        var got = List[UInt32](length=NCOPY, fill=0)
+        var gotc = List[UInt32](length=NCOPY, fill=0)
+        got[0] = _bits(pinned_mul_oracle(a, b))
+        gotc[0] = _bits(pinned_mul_oracle(a, b) + c)
+        got[1] = _bits(pinned_mul_oracle2(a, b))
+        gotc[1] = _bits(pinned_mul_oracle2(a, b) + c)
+        got[2] = _bits(pinned_mul_oracle3(a, b))
+        gotc[2] = _bits(pinned_mul_oracle3(a, b) + c)
+        got[3] = _bits(pinned_mul_block(a, b))
+        gotc[3] = _bits(pinned_mul_block(a, b) + c)
+        got[4] = _bits(pinned_mul_scan(a, b))
+        gotc[4] = _bits(pinned_mul_scan(a, b) + c)
+        got[5] = _bits(pinned_mul_siso3(a, b))
+        gotc[5] = _bits(pinned_mul_siso3(a, b) + c)
+        got[6] = _bits(pinned_mul_ssd(a, b))
+        gotc[6] = _bits(pinned_mul_ssd(a, b) + c)
+        got[7] = _bits(pinned_mul_m2(a, b))
+        gotc[7] = _bits(pinned_mul_m2(a, b) + c)
+        got[8] = _bits(pinned_mul_m3(a, b))
+        gotc[8] = _bits(pinned_mul_m3(a, b) + c)
+        got[9] = _bits(pinned_mul_gen_block(a, b))
+        gotc[9] = _bits(pinned_mul_gen_block(a, b) + c)
+        got[10] = _bits(pinned_mul_gen_scan(a, b))
+        gotc[10] = _bits(pinned_mul_gen_scan(a, b) + c)
+        got[11] = _bits(pinned_mul_gen_siso3(a, b))
+        gotc[11] = _bits(pinned_mul_gen_siso3(a, b) + c)
+        got[12] = _bits(pinned_mul_gen_ssd(a, b))
+        gotc[12] = _bits(pinned_mul_gen_ssd(a, b) + c)
+        got[13] = _bits(pinned_mul_gen_m2(a, b))
+        gotc[13] = _bits(pinned_mul_gen_m2(a, b) + c)
+        got[14] = _bits(pinned_mul_gen_m3(a, b))
+        gotc[14] = _bits(pinned_mul_gen_m3(a, b) + c)
+        for j in range(NCOPY):
+            if got[j] != mb:
+                drift[j] += 1
+            if gotc[j] != mc:
+                drift_fused[j] += 1
+        if _canon(mb) != _canon(_bits(a * b)):
             vs_product += 1
-    if drift_o != 0 or drift_s != 0 or drift_b != 0:
-        raise Error(
-            "identical_mul has DRIFTED from its DEVIATION 720 copies:"
-            + " mamba_oracle " + String(drift_o)
-            + ", selective_scan_interface " + String(drift_s)
-            + ", modeling_mamba " + String(drift_b)
-        )
+    var bad = 0
+    for j in range(NCOPY):
+        print("  pinned_mul copy", names[j], "differs on", drift[j], "of", npairs,
+              "pairs; composed p + c differs on", drift_fused[j])
+        bad += drift[j] + drift_fused[j]
+    if bad != 0:
+        raise Error("identical_mul has DRIFTED from a DEVIATION 720 `pinned_mul` copy (see the lines above)")
+    print("  CONTROL: a plain `a * b + c` differs from the pinned composition on",
+          fused_ctl, "of", npairs, "pairs (non-zero where the host fuses)")
     print("check_identical_mul_signed_zero: Float32(-0.0) is 0x80000000;")
-    print("  the signed-zero products are right BY SIGN BIT; and all three")
+    print("  the signed-zero products are right BY SIGN BIT; and all fifteen")
     print("  DEVIATION 720 `pinned_mul` copies agree bit for bit over 65,536")
-    print("  hashed pairs")
-    print("  RECORDED:", vs_product, "of 65536 pairs where identical_mul")
+    print("  hashed pairs plus 256 planted class pairs")
+    print("  RECORDED:", vs_product, "of", npairs, "pairs where identical_mul")
     print("  differs from a plain `a * b` (the pin is supposed to be the")
     print("  correctly rounded product, so 0 is the expected number)")
 
