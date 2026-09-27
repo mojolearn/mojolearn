@@ -42,6 +42,7 @@ from checks.fixture_rng import (
     splitmix64,
     splitmix64_finalizer,
     splitmix64_fold,
+    splitmix64_next,
     murmur3_fmix64,
     murmur3_fmix32,
     seeded_fmix32,
@@ -221,6 +222,9 @@ from checks.radix_sort_check import hashed as c_checks_radix_sort_check__hashed
 from checks.segmented_scan_check import hashed as c_checks_segmented_scan_check__hashed
 from ensemble.checks.quantiles_check import hashed as c_ensemble_checks_quantiles_check__hashed
 from checks.sym_arms_check import mix as c_checks_sym_arms_check__mix
+
+# stateful stream copies (checked by _check_splitmix64_next)
+from x_linear.checks.seams_oracle import splitmix as c_x_linear_checks_seams_oracle__splitmix
 
 # ---- end of copies ----
 
@@ -1459,6 +1463,24 @@ def _check_xorshift32_of_pair(t: _Inputs, mut v: _Verdict):
     v.copy("checks/sym_arms_check.mojo::mix", "xorshift32_of_pair", t.rows(), bad[0], first[0], False)
 
 
+def _check_splitmix64_next(t: _Inputs, mut v: _Verdict):
+    """1 stateful copy against `fixture_rng.splitmix64_next`: the returned
+    word AND the advanced state must match, over three steps per row."""
+    var bad = 0
+    var first = -1
+    for r in range(t.rows()):
+        var s_copy = t.a(r)
+        var s_canon = t.a(r)
+        for _ in range(3):
+            var got = c_x_linear_checks_seams_oracle__splitmix(s_copy)
+            var want = splitmix64_next(s_canon)
+            if got != want or s_copy != s_canon:
+                bad += 1
+                if first < 0:
+                    first = r
+    v.copy("x_linear/checks/seams_oracle.mojo::splitmix", "splitmix64_next", t.rows(), bad, first, False)
+
+
 def main() raises:
     var t = _Inputs()
     if t.rows() < 65536:
@@ -1495,6 +1517,7 @@ def main() raises:
     _check_splitmix64(t, v)
     _check_splitmix64_finalizer(t, v)
     _check_splitmix64_fold(t, v)
+    _check_splitmix64_next(t, v)
     _check_splitmix64_of_sum(t, v)
     _check_splitmix_low31(t, v)
     _check_splitmix_pair(t, v)

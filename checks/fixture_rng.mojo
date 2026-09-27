@@ -52,6 +52,14 @@ def splitmix64_fold(h: UInt64, v: UInt64) -> UInt64:
     return splitmix64_finalizer(h ^ v)
 
 
+def splitmix64_next(mut state: UInt64) -> UInt64:
+    """The splitmix64 STREAM: advance `state` by the golden increment, then
+    return the finalizer of the new state. `splitmix64_next(s)` returns
+    `splitmix64(s_before)` and leaves `s = s_before + GOLDEN`."""
+    state = state + UInt64(0x9E3779B97F4A7C15)
+    return splitmix64_finalizer(state)
+
+
 def murmur3_fmix64(x: UInt64) -> UInt64:
     """Murmur3's 64-bit finalizer (33/33/33 shifts). NOT splitmix64."""
     var h = x
