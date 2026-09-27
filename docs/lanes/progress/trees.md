@@ -132,8 +132,9 @@ CatBoost models, Permutation link).
 PRIORITY (main, 2026-09-27): THE M3 ULTRA RF DIVERGENCE. Steward request
 1790526750361 (pass 2, 20 trees lanes) FAILED on m3ultra: 17 lanes that fit
 through the RF device builder (DT, Bagging, DART, Voting, Stacking,
-MultiOutput, OneVsRest, Calibrated, rf-weighted, SHAP) DISAGREE; AdaBoost
-(also DT?) no: adaboost-clf/reg and random-embedding (ET builder) AGREE.
+MultiOutput, OneVsRest, Calibrated, rf-weighted, SHAP) DISAGREE, while
+adaboost-clf/reg (shallow DT learners: check their depth, a clue) and
+random-embedding (ET builder) AGREE.
 Cell table for trees-dt-clf (commit 77e0b3a8d): M3 CPU == M2 Metal == M2
 CPU on EVERY cell; M3 METAL is the outlier on base, hashed, wide, denormal,
 denormal_ftz, dupes, odd, negative; ONLY `ties` (few distinct values)
