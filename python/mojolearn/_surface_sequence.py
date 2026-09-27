@@ -21,10 +21,10 @@ FAMILIES = (
         routes="_mojolearn_x_sequence",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("sequence-lstm",),
+        training_lanes=("sequence-lstm", "sequence-gru"),
         inference_lanes=(),
         forest_kinds=(),
-        classes=("LSTMRegressor", "LSTMClassifier"),
+        classes=("LSTMRegressor", "LSTMClassifier", "GRURegressor", "GRUClassifier"),
         display="the sequence lane's recurrent networks and optimizers",
         host_modules=("sequence/ops.mojo", "sequence/exec.mojo", "sequence/recurrent.mojo",
                       "sequence/pyapi.mojo"),
@@ -41,5 +41,6 @@ FAMILIES = (
         ships_in_wheel=True,
     ),
 )
-TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier"}
-PUBLIC_PENDING_LANES = {"sequence-lstm": "no reference"}
+TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
+                       "sequence-gru": "GRURegressor / GRUClassifier"}
+PUBLIC_PENDING_LANES = {"sequence-lstm": "no reference", "sequence-gru": "no reference"}
