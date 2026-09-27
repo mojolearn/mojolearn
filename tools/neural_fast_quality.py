@@ -382,6 +382,11 @@ def cmd_blocks(args):
             if st is None or not (case / "x.f32").is_file():
                 cases.append(dict(rec, skipped=f"no {stage} stage or no x.f32"))
                 continue
+            if "init_states" in case.name:
+                # its reference starts from a planted state this zero-state
+                # forward does not load
+                cases.append(dict(rec, skipped="needs the case's initial state"))
+                continue
             B, L, dm = m["B"], m["L"], m["d_model"]
             try:
                 kw = {}
@@ -550,8 +555,9 @@ def main():
           "mlp-torch": cmd_mlp_torch, "blocks": cmd_blocks}[args.cmd]
     record = fn(args)
     args.out.parent.mkdir(parents=True, exist_ok=True)
+    text = json.dumps(record, indent=1, allow_nan=False) + "\n"
     with args.out.open("x") as fh:
-        fh.write(json.dumps(record, indent=1, allow_nan=False) + "\n")
+        fh.write(text)
     print(json.dumps(dict(out=str(args.out), heldout_after=record.get("heldout_after"))), flush=True)
     return 0
 
