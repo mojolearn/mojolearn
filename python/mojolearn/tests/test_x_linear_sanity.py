@@ -175,6 +175,23 @@ def _():
     return ok
 
 
+@case("pa")
+def _():
+    from sklearn import linear_model as sk
+    X, yr, yc, y3 = _data()
+    ok = True
+    for y in (yc, y3):
+        for loss in ("hinge", "squared_hinge"):
+            a = ml.PassiveAggressiveClassifier(loss=loss, random_state=0).fit(X, y).score(X, y)
+            b = sk.PassiveAggressiveClassifier(loss=loss, random_state=0).fit(X, y).score(X, y)
+            ok &= _close(f"PAClassifier k={len(set(y))} {loss} accuracy {a:.3f} vs {b:.3f}", a, b, 0.06)
+    for loss in ("epsilon_insensitive", "squared_epsilon_insensitive"):
+        a = ml.PassiveAggressiveRegressor(loss=loss, random_state=0).fit(X, yr).score(X, yr)
+        b = sk.PassiveAggressiveRegressor(loss=loss, random_state=0).fit(X, yr).score(X, yr)
+        ok &= _close(f"PARegressor {loss} R2 {a:.4f} vs {b:.4f}", a, b, 0.02)
+    return ok
+
+
 def main(argv):
     names = argv or list(CASES)
     bad = []
