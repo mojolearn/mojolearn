@@ -300,3 +300,20 @@ def _(ml, X, yc, yr, Xh=None):
     m = ml.MultiLabelBinarizer().fit(ys)
     parts = dict(classes=_h(m.classes_), transform=_h(m.transform(ys[:256])))
     return _fit(parts, m, lambda e: (e.transform(yhs[:256]),))
+
+
+@lane("x-prep-iterative-imputer")
+def _(ml, X, yc, yr, Xh=None):
+    Xm, Xhm = _prep_with_nan(X[:3000, :8]), _prep_with_nan(Xh[:3000, :8])
+    m = ml.IterativeImputer(max_iter=4, min_value=-5.0, max_value=5.0)
+    out = m.fit_transform(Xm)
+    md = ml.IterativeImputer(max_iter=2, imputation_order="descending", initial_strategy="median")
+    parts = dict(fit=_h(out), n_iter=_h(np.array([m.n_iter_])), desc=_h(md.fit_transform(Xm)))
+    return _fit(parts, m, lambda e: (e.transform(Xhm[:256]),))
+
+
+def _prep_nan_first_eight(X):
+    return _prep_with_nan(X[:, :8])
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_prep_nan_first_eight), "x-prep-iterative-imputer")
