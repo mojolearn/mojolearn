@@ -69,6 +69,9 @@ def cross_val_score(estimator, X, y, *, devices, cv=None, scoring=None,
         raise NotImplementedError(
             'parallel cross-validation requires CUDA or HIP GPU workers, '
             'Metal devices=(0,), or a CPU-only install where one worker is one process')
+    if isinstance(scoring, str):
+        from .model_selection import get_scorer
+        scoring = get_scorer(scoring)   # lane/metrics: scikit-learn's scorer names
     X, y, folds = _prepare_folds(estimator, X, y, cv, scoring, groups, error_score)
     prototype = _clone(estimator)
     params = prototype.get_params(deep=True)

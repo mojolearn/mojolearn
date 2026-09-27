@@ -1,11 +1,11 @@
 --- a/x_prep/mutual_info.mojo
 +++ b/x_prep/mutual_info.mojo
-@@ -84,7 +84,7 @@
- def _within(dist: Float32, r: Float32) -> Bool:
-     """DEVIATION 5407: within nextafter(r, 0) is dist < r (dist == 0 at r == 0)."""
-     if r > Float32(0):
--        return dist < r
-+        return dist <= r  # SABOTAGE 5407
-     return dist == Float32(0)
+@@ -126,7 +126,7 @@
+         return dp < rp
+     if rp == Float32(0) and rs == Float32(0):
+         return ds == Float32(0)
+-    return ds < rs
++    return ds <= rs  # SABOTAGE 5407
  
  
+ def mi_cc_unit(t: Int, f: FP, q: IP):

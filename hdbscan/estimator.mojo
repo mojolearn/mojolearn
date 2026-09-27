@@ -26,13 +26,11 @@ WHAT IS REFUSED, AND WHERE
   metric != L2SqrtExpanded (1)          `fit_hdbscan`, their RAFT_EXPECTS
   build_algo != BRUTE_FORCE_KNN         `fit_hdbscan` (NN_DESCENT, rung 2)
   cluster_selection_method not in {0,1} `fit_hdbscan`
-  cluster_selection_epsilon != 0.0      `select_clusters` (rung 2)
   min_samples < 1, min_samples > n_rows `runner.mojo`
   min_cluster_size < 2 or > n_rows      `build_condensed_hierarchy`
   alpha <= 0 or non-finite              `build_mr_linkage`
   n_rows < 2, n_rows > 46340            `build_mr_linkage`
   a NaN or infinite anywhere            DEVIATION 1607
-  `probabilities_`                      `hdbscan_probabilities_host` below
   the SPARSE mutual reachability graph  `reachability.mojo` (DEVIATION 1600)
 """
 
@@ -285,26 +283,3 @@ def n_rows_leaves(m: Int) -> Int:
     return m
 
 
-def hdbscan_probabilities_host(n_rows: Int) raises:
-    """`Membership::get_probabilities` (`membership.cuh:39-98`) and
-    `probabilities_` at the Python surface. NOT IMPLEMENTED; raises by name.
-
-    DEVIATION 1610. It is a CUB segmented MAX over the same condensed-tree
-    CSR `compute_stabilities` already builds (`deaths[c]`), followed by
-    `min(child_lambda, cluster_death) / cluster_death` per point
-    (`kernels/membership.cuh:44-52`). The reason it is deferred is scope,
-    not difficulty: the segmented max is DEVIATION 1604's fold with the
-    comparison reversed, and closing it is a day's work inside this lane.
-    Returning zeros or ones instead would be a NUMBER NOBODY COMPUTED
-    sitting in a field a caller will plot.
-    """
-    raise Error(
-        "hdbscan.probabilities: NOT IMPLEMENTED (DEVIATION 1610), refused by"
-        " name for " + String(n_rows) + " points. Their"
-        " Membership::get_probabilities (membership.cuh:39-98) is a CUB"
-        " segmented Max over the condensed tree's parent CSR plus a"
-        " per-point ratio. To close this refusal, add a `deaths` fold"
-        " beside DEVIATION 1604's `births` fold in"
-        " hdbscan/impl/detail/stabilities.mojo (same segments,"
-        " reversed comparison) and a per-edge epilogue"
-    )

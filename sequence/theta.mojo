@@ -30,6 +30,7 @@ def div(a: Float32, b: Float32) -> Float32:
     return ftz(identical_div(a, b))
 
 
+@always_inline
 def theta_run(
     y: FP, n: Int, model: Int, level0: Float32, alpha: Float32, theta: Float32, states: FP, e: FP,
 ) -> Float32:
@@ -103,6 +104,7 @@ def theta_run(
     return div(sse, mean_y)
 
 
+@always_inline
 def theta_forecast(n: Int, h: Int, model: Int, alpha: Float32, theta: Float32, states: FP, f: FP):
     """`forecast`: h updates past row n - 1 with y = mu."""
     var dyn = model == DSTM or model == DOTM
@@ -150,6 +152,7 @@ struct ThetaObj(Objective):
     var states: FP
     var e: FP
 
+    @always_inline
     def __init__(out self, y: FP, n: Int, model: Int, ol: Bool, oa: Bool, ot: Bool,
                  level: Float32, alpha: Float32, theta: Float32, states: FP, e: FP):
         self.y = y
@@ -164,6 +167,7 @@ struct ThetaObj(Objective):
         self.states = states
         self.e = e
 
+    @always_inline
     def params(self, x: FP) -> Tuple[Float32, Float32, Float32]:
         var j = 0
         var l = self.level
@@ -179,12 +183,14 @@ struct ThetaObj(Objective):
             t = ld(x, j)
         return (l, a, t)
 
+    @always_inline
     def eval(mut self, x: FP) -> Float32:
         var p = self.params(x)
         var mse = theta_run(self.y, self.n, self.model, p[0], p[1], p[2], self.states, self.e)
         return mse if mse > Float32(-1e10) else Float32(-1e10)
 
 
+@always_inline
 def _acf_decide(y: FP, n: Int, m: Int) -> Bool:
     """auto_theta's seasonal test: statsmodels acf (demeaned, / n, no FFT)
     at lags 1..m; |r_m| / sqrt((1 + 2 sum_{k<m} r_k^2) / n) > 1.6448536."""
@@ -213,6 +219,7 @@ def _acf_decide(y: FP, n: Int, m: Int) -> Bool:
     return div(abs(rm), stat) > Float32(1.6448536269514722)
 
 
+@always_inline
 def _decompose(y: FP, n: Int, m: Int, mult: Bool, trend: FP, seas: FP):
     """statsmodels seasonal_decompose(model, period=m), two-sided filter
     ([.5, 1, ..., 1, .5] / m for even m, ones / m for odd): seas[0:m] is the

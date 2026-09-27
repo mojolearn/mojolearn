@@ -7,14 +7,21 @@ next, report to main, and STOP.** Main starts a fresh agent for the next
 phase. A new session trusts the progress file and never re-runs a check it
 records as passed.
 
-| phase | done when, for EVERY algorithm in the family |
+| session type (ONE per session) | done when, for EVERY algorithm in the family (existing + new), on NVIDIA, AMD and Apple (plus CPU) |
 |---|---|
-| 1. **Verification** | it has a verifier lane with CPU and GPU paths; each numeric seam has a host oracle, a separating fixture, a sabotage that builds, runs and bites, a DEVIATION and a card stage; and the lane check AGREEs on NVIDIA (pod), AMD (do-amd steward or your AMD box) and Apple (m2pro or m3ultra steward) |
-| 2. **Option parity** | every option its reference and bench opponents have is implemented, or refused by name for an identity reason |
-| 3. **FAST speed** | it is faster on NVIDIA, AMD and Apple under FAST, with quality never worse (a paired check against the reference at 5+ seeds on 2+ datasets) |
-| 4. **IDENTICAL speed** | it is faster on NVIDIA, AMD and Apple under IDENTICAL, with the same bits, re-proven on every column |
-| 5. **CPU speed** | its CPU path is faster (threads, SIMD, cache blocking), with bits identical at every thread count and equal to the GPU |
+| **A. Verification** | it has a verifier lane with CPU and GPU paths; each numeric seam has a host oracle, a separating fixture, a sabotage that builds, runs and bites, a DEVIATION and a card stage; it AGREEs on NVIDIA (pod), AMD and Apple (stewards, post-merge); and every entry point survives repeated calls in one process |
+| **B. Features** | every option its reference and bench opponents have is implemented, or refused by name for an identity reason; verified the same way on all three vendors |
+| **C. GPU speed, FAST and IDENTICAL** | it is faster on NVIDIA, AMD and Apple. FAST: quality never worse (a paired check at 5+ seeds on 2+ datasets). IDENTICAL: the same bits, re-proven on every column. If a family is large, split C into C-FAST and C-IDENTICAL sessions |
+| **D. CPU speed, FAST and IDENTICAL** | the CPU path is faster (threads, SIMD, cache blocking) under both modes, with IDENTICAL bits identical at every thread count and equal to the GPU |
 
+**EVERY session covers all three GPU vendors (NVIDIA, AMD, Apple) plus
+CPU:**
+- NVIDIA: the lane's pod.
+- AMD: `apple_steward.py submit --target do-amd`, or a `<lane>-amd` box.
+- Apple: the 6-Mac steward fleet, with `--kind speed` for timing.
+
+The session order is A, B, C, D. When a family finishes D, it loops back
+to any algorithm or option that was added or refused along the way.
 Speed is measured at realistic large shapes on R2 data, before and after on
 the same box. Apple and AMD timing jobs use
 `tools/apple_steward.py submit --kind speed --target m4pro|do-amd|both` (Apple:
@@ -57,6 +64,11 @@ machine (EC2 Mac or any provider), add Apple host-hours, or call a provider
 API to do so. Only Andrew's express, specific permission allows it. If Apple
 capacity is a bottleneck, report it; never act on it. All six current Mac
 hosts are released at their 24 h marks unless Andrew says to keep one.
+
+**Pod sync is a patch now (main eca161fc1):** `tools/dev_pod.sh sync`
+ships `git diff` over the merge base (KB, seconds) instead of an 800 MB tar.
+Merge origin/main to get it. `MOJOLEARN_DEVPOD_FULL_SYNC=1` keeps the old
+behavior.
 
 
 Lanes merge origin/main before every merge, so this section reaches every

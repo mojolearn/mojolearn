@@ -1,0 +1,11 @@
+--- a/x_cluster/device_ops.mojo
++++ b/x_cluster/device_ops.mojo
+@@ -50,7 +50,7 @@
+ def _nearest_kernel(a: FPtr, na: Int32, b: FPtr, nb: Int32, d: Int32, labels: IPtr, dist: FPtr):
+     var t = _tid()
+     if t < Int(na):
+-        nearest_row(a, b, Int(nb), Int(d), labels, dist, t)
++        nearest_row(a, b, Int(nb) - 1, Int(d), labels, dist, t)
+ 
+ 
+ def _sqrt_kernel(x: FPtr, n: Int32):

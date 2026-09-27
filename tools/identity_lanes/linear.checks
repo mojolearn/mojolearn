@@ -5,7 +5,7 @@ x_linear/checks/seams_check.mojo	x_linear/checks/sabotage/seam_5002_cholesky_ord
 x_linear/checks/seams_check.mojo	x_linear/checks/sabotage/seam_5003_jacobi_order.patch
 x_linear/checks/seams_check.mojo	x_linear/checks/sabotage/seam_5004_shuffle_map.patch
 x_linear/checks/seams_check.mojo	x_linear/checks/sabotage/seam_5005_last_max.patch
-x_linear/checks/seams_check.mojo	x_linear/checks/sabotage/seam_5006_computed_nan.patch
+x_linear/checks/seams_check.mojo	x_linear/checks/sabotage/seam_5006_host_nan.patch
 x_linear/checks/seams_check.mojo	x_linear/checks/sabotage/seam_5007_intercept_first.patch
 x_linear/checks/seams_check.mojo	x_linear/checks/sabotage/seam_5008_libm_exp.patch
 x_linear/checks/seams_check.mojo	x_linear/checks/sabotage/seam_5009_grid_logspace.patch

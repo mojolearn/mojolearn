@@ -265,7 +265,8 @@ _batch_decl(_rows_calls("predict", sl=np.s_[:256, :8]), "x-cluster-minibatch-par
 def _(ml, X, yc, yr, Xh=None):
     """GaussianMixture option parity, routed to the cluster lane's mixture
     driver in plain mode: covariance_type tied/diag/spherical, init
-    'k-means++' with n_init 2, means_init and weights_init, and warm_start.
+    'k-means++' with n_init 2, means_init and weights_init, precisions_init,
+    and warm_start.
     The default GaussianMixture fit is the mixture lane's and is not here."""
     Z = X[:1500, 1:5]
     parts = {}
@@ -283,6 +284,10 @@ def _(ml, X, yc, yr, Xh=None):
                            random_state=3).fit(Z)
     parts["init_means"] = _h(m.means_)
     parts["init_weights"] = _h(m.weights_)
+    P = np.stack([np.eye(4, dtype=np.float32) * s for s in (1.0, 2.0, 0.5)])
+    m = ml.GaussianMixture(n_components=3, precisions_init=P, max_iter=25, random_state=3).fit(Z)
+    parts["pinit_means"] = _h(m.means_)
+    parts["pinit_prec"] = _h(m.precisions_cholesky_)
     m = ml.GaussianMixture(n_components=3, covariance_type="diag", warm_start=True, max_iter=5, random_state=3)
     m.fit(Z)
     m.fit(Z)
@@ -291,3 +296,89 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("score_samples", "predict", sl=np.s_[:256, 1:5]), "x-cluster-gmm-options")
+
+
+def _cluster_cosine_rows(A):
+    """Columns 0-3 clipped and shifted off the origin: a zero row has no
+    cosine distance and is refused by name (DEVIATION 5113)."""
+    return np.ascontiguousarray(np.clip(A[:, :4], -50, 50) + np.float32(3.0), dtype=np.float32)
+
+
+@lane("x-cluster-dbscan-metrics")
+def _(ml, X, yc, yr, Xh=None):
+    """DBSCAN option parity (dbscan/NOT_IMPLEMENTED.tsv): metric='cosine'
+    (DEVIATION 5113: unit rows scaled on the host, the L2 kernel against
+    2 * eps) with predict, and metric='precomputed' (DEVIATION 5114) on an
+    exact integer L1 distance matrix, so pairs sit exactly at eps and the
+    `<=` is reached. Rows are shifted off the origin for cosine (a zero row
+    is refused by name)."""
+    Z = _cluster_cosine_rows(X[:3000])
+    m = ml.DBSCAN(eps=0.002, min_samples=5, metric="cosine", algorithm="brute",
+                  prediction_data=True).fit(Z)
+    parts = dict(cos_labels=_h(m.labels_), cos_core=_h(m.core_sample_indices_))
+    Q = np.floor(np.clip(X[:1500, :3], -50, 50) * 2).astype(np.float64)
+    D = (np.abs(Q[:, None, 0] - Q[None, :, 0]) + np.abs(Q[:, None, 1] - Q[None, :, 1])
+         + np.abs(Q[:, None, 2] - Q[None, :, 2])).astype(np.float32)
+    p = ml.DBSCAN(eps=2.0, min_samples=6, metric="precomputed").fit(np.ascontiguousarray(D))
+    parts["pre_labels"] = _h(p.labels_)
+    return _fit(parts, m, lambda e: (e.predict(_cluster_cosine_rows(Xh)[:256]),))
+
+
+_batch_decl(_rows_calls("predict", prep=_cluster_cosine_rows, sl=np.s_[:64]), "x-cluster-dbscan-metrics")
+
+
+@lane("x-cluster-hdbscan-epsilon")
+def _(ml, X, yc, yr, Xh=None):
+    """HDBSCAN option parity (hdbscan/NOT_IMPLEMENTED.tsv):
+    cluster_selection_epsilon, cuML's epsilon search run on the host by the
+    one function both routes call (DEVIATION 5115). The thresholds are
+    multiples of the plain fit's median core distance, so the search merges
+    clusters on every fixture's scale; eom, and leaf with
+    allow_single_cluster (the walk's root arm and, at the largest, the
+    labelling's epsilon branch, extract.cuh:148-153); probabilities_
+    (DEVIATION 5116) on every eom fit."""
+    Z = X[:2000, :4]
+    base = ml.HDBSCAN(min_cluster_size=5).fit(Z)
+    med = float(np.median(np.asarray(base.core_distances_, dtype=np.float32)))
+    parts = dict(base_labels=_h(base.labels_), base_probs=_h(base.probabilities_))
+    last = None
+    for k in (1.0, 3.0, 30.0):
+        e = float(np.float32(k * med))
+        m = ml.HDBSCAN(min_cluster_size=5, cluster_selection_epsilon=e, prediction_data=True).fit(Z)
+        parts[f"eom{k:g}_labels"] = _h(m.labels_)
+        parts[f"eom{k:g}_probs"] = _h(m.probabilities_)
+        parts[f"eom{k:g}_n"] = _h(np.asarray([m.n_clusters_, m.n_outliers_], dtype=np.int64))
+        last = m
+        lf = ml.HDBSCAN(min_cluster_size=8, min_samples=3, cluster_selection_method="leaf",
+                        allow_single_cluster=True, cluster_selection_epsilon=e).fit(Z)
+        parts[f"leaf{k:g}_labels"] = _h(lf.labels_)
+    return _fit(parts, last, lambda e: tuple(ml.hdbscan.approximate_predict(e, Xh[:256, :4])))
+
+
+_batch_decl(_batch_hdbscan, "x-cluster-hdbscan-epsilon")
+
+
+def _cluster_first_rows(X, k, random_state=None):
+    """A callable init (scikit-learn's signature): the first k rows."""
+    return np.ascontiguousarray(np.asarray(X)[:k], dtype=np.float32)
+
+
+@lane("x-cluster-kmeans-init")
+def _(ml, X, yc, yr, Xh=None):
+    """KMeans and MiniBatchKMeans option parity: init as an array of
+    centers and init as a callable (called once on the host, its centers
+    then take the array path; python/mojolearn/_expansion_cluster.py
+    `_callable_init`)."""
+    Z = X[:3000, :8]
+    c0 = np.ascontiguousarray(Z[100:106], dtype=np.float32)
+    ka = ml.KMeans(n_clusters=6, init=c0, max_iter=50).fit(Z)
+    kc = ml.KMeans(n_clusters=6, init=_cluster_first_rows, max_iter=50).fit(Z)
+    mb = ml.MiniBatchKMeans(n_clusters=6, init=_cluster_first_rows, batch_size=256, max_iter=5,
+                            random_state=3).fit(Z)
+    parts = dict(arr_centers=_h(ka.cluster_centers_), arr_labels=_h(ka.labels_),
+                 call_centers=_h(kc.cluster_centers_), call_labels=_h(kc.labels_),
+                 mb_centers=_h(mb.cluster_centers_), mb_labels=_h(mb.labels_))
+    return _fit(parts, kc, lambda e: (e.predict(Xh[:256, :8]),))
+
+
+_batch_decl(_rows_calls("predict", sl=np.s_[:256, :8]), "x-cluster-kmeans-init")

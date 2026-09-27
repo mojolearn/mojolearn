@@ -34,6 +34,7 @@ from hdbscan.impl.condensed_hierarchy import (
     pack_parent_child,
 )
 from hierarchy.impl.sparse.op.sort import merge_sort_u64_with_index
+from checks.numerics import identical_div
 
 
 def sorted_rows_to_indptr(rows: List[Int32], n_rows: Int) raises -> List[Int32]:
@@ -151,3 +152,89 @@ def select_parent_csr(tree: CondensedHierarchy) raises -> List[Int32]:
     for k in range(tree.n_edges):
         rows.append(tree.parents[idx[k]])
     return sorted_rows_to_indptr(rows, tree.n_clusters)
+
+
+def cluster_epsilon_search_host(
+    cluster_tree: CondensedHierarchy,
+    mut is_cluster: List[Int32],
+    n_clusters: Int,
+    cluster_selection_epsilon: Float32,
+    allow_single_cluster: Bool,
+) raises:
+    """`select.cuh:301-363` + `kernels/select.cuh:47-104`, DEVIATION 5115
+    (the cluster lane): the epsilon search on the HOST, one source for the
+    GPU route (`select.mojo::select_clusters`) and the CPU oracle
+    (`hdbscan_host_oracle.mojo::hdbh_select`).
+
+    Theirs sorts `(parents, lambdas)` BY CHILD in place (`:328-329`) so
+    that `child_idx = child - 1` indexes them; a cluster tree has every
+    non-root cluster as a child exactly once, so this builds that map
+    directly (`parent_of[c]`, `lambda_of[c]`) without touching the tree.
+    Each selected cluster whose `eps = 1 / lambda` (`identical_div`) is
+    below the threshold walks up while the parent's eps is `<=` it and
+    selects where it stops (the root only under `allow_single_cluster`,
+    else itself: `kernels/select.cuh:70-94`); every other selected cluster
+    goes on the frontier (`:100-102`). Then `perform_bfs` with
+    `propagate_cluster_negation_kernel` deselects every descendant of the
+    frontier (`:357-362`), serially: every write in both is a constant, so
+    the processing order cannot move a bit (the kernel's own argument).
+    Theirs agrees with scikit-learn's `epsilon_search` (`_tree.pyx`,
+    `traverse_upwards`).
+    """
+    var parent_of = List[Int32](length=n_clusters, fill=Int32(-1))
+    var eps_of = List[Float32](length=n_clusters, fill=Float32(0))
+    for i in range(cluster_tree.n_edges):
+        var c = Int(cluster_tree.children[i])
+        if c <= 0 or c >= n_clusters:
+            raise Error(
+                "hdbscan.cluster_epsilon_search: cluster-tree child "
+                + String(c) + " at edge " + String(i) + " is outside [1, "
+                + String(n_clusters) + ")"
+            )
+        parent_of[c] = cluster_tree.parents[i]
+        # `:330-334` eps = 1 / x
+        eps_of[c] = identical_div(Float32(1.0), cluster_tree.lambdas[i])
+    var selected = List[Int]()
+    for c in range(n_clusters):
+        if is_cluster[c] != Int32(0):
+            selected.append(c)
+    var frontier = List[Int32](length=n_clusters, fill=Int32(0))
+    for s in range(len(selected)):
+        var child = selected[s]
+        # `:66` the root takes no part.
+        if child == 0:
+            continue
+        if eps_of[child] < cluster_selection_epsilon:
+            var parent = 0
+            while True:
+                parent = Int(parent_of[child])
+                if parent == 0:
+                    if not allow_single_cluster:
+                        parent = child
+                    break
+                child = parent
+                var parent_eps = eps_of[child]
+                if not (parent_eps <= cluster_selection_epsilon):
+                    break
+            frontier[parent] = Int32(1)
+            is_cluster[parent] = Int32(1)
+        else:
+            frontier[child] = Int32(1)
+    # `perform_bfs` over `select_parent_csr` (`:354-362`).
+    var indptr = select_parent_csr(cluster_tree)
+    var n_left = 0
+    for i in range(n_clusters):
+        n_left += Int(frontier[i])
+    while n_left > 0:
+        var next_frontier = List[Int32](length=n_clusters, fill=Int32(0))
+        for cluster in range(n_clusters):
+            if frontier[cluster] == Int32(0):
+                continue
+            for i in range(Int(indptr[cluster]), Int(indptr[cluster + 1])):
+                var ch = Int(cluster_tree.children[i])
+                next_frontier[ch] = Int32(1)
+                is_cluster[ch] = Int32(0)
+        frontier = next_frontier^
+        n_left = 0
+        for i in range(n_clusters):
+            n_left += Int(frontier[i])
