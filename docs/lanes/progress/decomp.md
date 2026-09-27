@@ -49,10 +49,15 @@ Next: PASS 2: AMD box (requested, RunPod out of stock, retrying), per-seam check
   registrations; MOJOLEARN_HOST_SABOTAGE moves HostExec.gemm; 196 passed.
 - AMD: no box (RunPod MI300X and Hot Aisle both out of stock all session);
   AMD identity goes through the do-amd steward (`apple_steward.py submit`).
+- Directive 000 (DONE, never repeat): the 18 seam arms (5300-5317) re-run on
+  the fixed lane check (box `tools/algos_lane_check.py` md5 = origin/main's,
+  A40, /root/pass2b.log 18:15-18:43Z, tree with the speed commits): every arm
+  BUILDS, RUNS and FAILS under its patch, PASSES after reversal; no BROKEN arm.
 - Stewards: request 1790531301235 at 16ae279cc FAILED on m2pro and do-amd only
-  because the end-to-end patch was stale; regenerated
-  (`x_decomp/checks/sabotage/e2e_host_sqdist.patch`) and RESUBMIT at the
-  speed merge (see below).
+  because the end-to-end patch was stale. The old sqdist-only patch could not
+  reach every lane (LU, pca never call sqdist), so it is replaced by
+  `x_decomp/checks/sabotage/e2e_host_ulp.patch` (host gemm, ew, sqdist and LU
+  results each move by one ulp).
 
 ## GPU speed (started 2026-09-27; NVIDIA A40, higgs 1M x 28 from R2, IDENTICAL)
 
