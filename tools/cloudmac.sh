@@ -92,6 +92,8 @@ steward)
         # DRAINS: it claims nothing new and writes `drained` once its request
         # is done. An older one is booted out the first moment nothing runs.
         # The wait is a laptop-side poll; an interrupted restart removes the drain.
+        # (Under zsh nullglob an empty `ls glob` lists the cwd and succeeds:
+        # count the matches instead.)
         SQ='~/mojolearn-evidence/apple-steward'
         if cm "$n" "sudo launchctl print system/mojolearn.steward >/dev/null 2>&1" 2>/dev/null; then
             if cm "$n" "grep -q DRAIN_FILE ~/mojolearn/tools/apple_steward.py"; then
@@ -101,7 +103,7 @@ steward)
                 until cm "$n" "test -f $SQ/drained" 2>/dev/null; do sleep 20; done
             else
                 echo "$n: the steward predates the drain file: booting it out the first moment nothing runs"
-                until cm "$n" "setopt nullglob 2>/dev/null || true; ls $SQ/working/[0-9]*.json >/dev/null 2>&1 || {
+                until cm "$n" "setopt nullglob 2>/dev/null || true; set -- $SQ/working/[0-9]*.json; [ \$# -gt 0 ] || {
                         sudo launchctl bootout system/mojolearn.steward 2>/dev/null
                         for f in $SQ/working/[0-9]*.json; do [ -f \"\$f\" ] || continue; b=\$(basename \"\$f\"); mv \"\$f\" $SQ/queue/\${b%%.*}.json; echo \"requeued \$b\"; done
                         echo STOPPED; }" 2>/dev/null | tee /dev/stderr | grep -qx STOPPED; do sleep 5; done
