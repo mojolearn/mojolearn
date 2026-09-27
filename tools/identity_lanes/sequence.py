@@ -305,3 +305,18 @@ def _(ml, X, yc, yr, Xh=None):
     d = ml.DynamicOptimizedTheta(season_length=12, alpha=0.3).fit(y)
     fd = d.predict(18)["mean"]
     return _fit(dict(auto=_h(fa), auto_info=_h(a.info_), dotm=_h(fd), dotm_info=_h(d.info_)))
+
+
+@lane("sequence-croston")
+def _(ml, X, yc, yr, Xh=None):
+    """Six intermittent series of 120 observations (fixture columns kept
+    where they exceed a threshold, one all-zero, one with negative events):
+    the classic, optimized and SBA forecasts."""
+    c = np.ascontiguousarray(X[:120, :6].T, dtype=np.float32)
+    y = np.where(c > np.float32(0.8), c + np.float32(1.0), np.float32(0.0)).astype(np.float32)
+    y[4] = np.float32(0.0)
+    y[5] = np.where(c[5] < np.float32(-1.0), c[5], y[5]).astype(np.float32)
+    out = {}
+    for k, cls in (("classic", ml.CrostonClassic), ("optimized", ml.CrostonOptimized), ("sba", ml.CrostonSBA)):
+        out[k] = _h(cls().fit(y).predict(4)["mean"])
+    return _fit(out)

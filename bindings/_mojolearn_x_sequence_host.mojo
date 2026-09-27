@@ -16,7 +16,7 @@ from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from sequence.exec import HostExec
 from sequence.ops import SEQUENCE_HOST_SABOTAGE
-from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py, layer_norm_py, theta_py
+from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py, layer_norm_py, theta_py, croston_py
 
 
 def host_numeric_mode_binding() raises -> PythonObject:
@@ -106,6 +106,11 @@ def theta_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raise
     return theta_py(ex, addrs, ip, fp)
 
 
+def croston_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
+    var ex = HostExec()
+    return croston_py(ex, addrs, ip)
+
+
 @export
 def PyInit__mojolearn_x_sequence_host() abi("C") -> PythonObject:
     try:
@@ -129,6 +134,7 @@ def PyInit__mojolearn_x_sequence_host() abi("C") -> PythonObject:
         m.def_function[lamb_step_binding]("lamb_step")
         m.def_function[layer_norm_binding]("layer_norm")
         m.def_function[theta_binding]("theta")
+        m.def_function[croston_binding]("croston")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_sequence_host: ", e))

@@ -10,7 +10,7 @@ from std.python import PythonObject
 from std.math import sqrt
 from checks.numerics import ftz, identical_div, identical_mul, identical_mul_add, identical_pow64, identical_sqrt
 from sequence.exec import Exec
-from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_ROW, OP_AF_COL, OP_AF_RMEAN, OP_AF_UPDATE_MAT, OP_AF_VEC, OP_AF_DENOM, OP_AF_APPLY, OP_SEG_SUMSQ, OP_LAMB_UPD, OP_LAMB_RATIO, OP_LAMB_APPLY, OP_LN_FWD, OP_LN_BWD_X, OP_LN_BWD_W, OP_THETA, OP_DIVS, OP_FILL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD, OPT_NADAM
+from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_ROW, OP_AF_COL, OP_AF_RMEAN, OP_AF_UPDATE_MAT, OP_AF_VEC, OP_AF_DENOM, OP_AF_APPLY, OP_SEG_SUMSQ, OP_LAMB_UPD, OP_LAMB_RATIO, OP_LAMB_APPLY, OP_LN_FWD, OP_LN_BWD_X, OP_LN_BWD_W, OP_THETA, OP_CROSTON, OP_DIVS, OP_FILL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD, OPT_NADAM
 from sequence.recurrent import gemm
 from sequence.mlp_fit import MLPNet, mlp_fit, mlp_predict
 from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, opt_scalars, opt_step, rnn_fit, rnn_predict
@@ -736,3 +736,29 @@ def theta_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: Pyth
     ex.download(fptr(addrs[1], "forecast"), F, B * h)
     ex.download(fptr(addrs[2], "info"), I, B * 8)
     return PythonObject(B * h)
+
+
+def croston_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
+    """addrs = [y (B, n), mean (B) out]; ip = [B, n, variant]
+    (`sequence/croston.mojo`)."""
+    if len(addrs) != 2 or len(ip) != 3:
+        raise Error("croston: requires 2 addresses and 3 integer parameters")
+    var B = ival(ip, 0)
+    var n = ival(ip, 1)
+    var v = ival(ip, 2)
+    if B < 1 or n < 1 or v < 0 or v > 2:
+        raise Error("croston: B, n >= 1 and variant 0 (classic), 1 (optimized) or 2 (SBA)")
+    var Y = ex.alloc(B * n)
+    ex.upload(Y, fptr(addrs[0], "y"), B * n)
+    var M = ex.alloc(B)
+    var S = ex.alloc(B * 2 * n)
+    var a = Args()
+    a.p0 = Y
+    a.p1 = M
+    a.p2 = S
+    a.i0 = n
+    a.i1 = v
+    ex.launch[OP_CROSTON](a, B)
+    ex.sync()
+    ex.download(fptr(addrs[1], "mean"), M, B)
+    return PythonObject(B)
