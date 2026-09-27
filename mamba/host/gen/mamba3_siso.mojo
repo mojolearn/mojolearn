@@ -112,6 +112,7 @@ from std.memory import stack_allocation
 from checks.kernel_matrix import COLUMN_AMD, COLUMN_NVIDIA, TARGET_COLUMN, column_max_block_size, lib_smem_page_fits_for
 
 from checks.numerics import (
+    identical_mul,
     ftz,
     identical_div,
     identical_exp,
@@ -140,20 +141,8 @@ def m3_phase_tick(ctx: DeviceContext, mut tick: Int, name: String) raises:
         tick = now
 
 
-def pinned_mul(a: Float32, b: Float32) -> Float32:
-    """DEVIATION 720's construction (the oracle's `pinned_mul`), spelled
-    here so this file shares only `checks/numerics.mojo` with the host
-    side."""
-    # `identical_mul` is the pinned product (`pinned_mul_f32` under IDENTICAL);
-    # `fma(a, b, -0.0)` was not: LLVM folds it into a contractable product
-    # (lane/pinned-mul-contract-free, 2026-09-26).
-    from checks.numerics import identical_mul
-
-    return identical_mul(a, b)
-
-
 def m3_mod_2pi(x: Float32) -> Float32:
-    """DEVIATION 829's composed mod: `ftz(x - pinned_mul(2pi,
+    """DEVIATION 829's composed mod: `ftz(x - identical_mul(2pi,
     floor(identical_div(x, 2pi))))`, floor exact, 2pi the pinned bits
     (0x40C90FDB). This file's own transcription of the composition, the
     pinned_mul rule."""
@@ -313,7 +302,7 @@ def m3_pre_kernel(gid_: Int,
     dt_work.unsafe_store(widx, dtv)  # copy, not a seam
     adt_work.unsafe_store(
         widx,
-        ftz(pinned_mul(ftz(a_new.unsafe_load(mm * nh + hh)), ftz(dtv))),
+        ftz(identical_mul(ftz(a_new.unsafe_load(mm * nh + hh)), ftz(dtv))),
     )
     sig_work.unsafe_store(
         widx,
@@ -353,7 +342,7 @@ def m3_scale_kernel(gid_: Int,
     var t = rem // nh
     var hh = rem - t * nh
     var g = ftz(
-        pinned_mul(
+        identical_mul(
             ftz(dt_work.unsafe_load(cell)), ftz(sig_work.unsafe_load(cell))
         )
     )
@@ -361,7 +350,7 @@ def m3_scale_kernel(gid_: Int,
     if t + 1 < t_work:
         var nxt = (bb * t_work + t + 1) * nh + hh
         bp = ftz(
-            pinned_mul(
+            identical_mul(
                 ftz(dt_work.unsafe_load(nxt)),
                 ftz(Float32(1.0) - ftz(sig_work.unsafe_load(nxt))),
             )
@@ -383,7 +372,7 @@ def m3_scale_kernel(gid_: Int,
 
 def m3_angle_rate(raw: Float32) -> Float32:
     """Shared S10 rate, so diagnostic captures use the exact forward operand."""
-    return ftz(pinned_mul(identical_tanh(ftz(raw)), M3_PI))
+    return ftz(identical_mul(identical_tanh(ftz(raw)), M3_PI))
 
 
 comptime M3_PARALLEL_ANGLE_INCREMENT = not is_defined["MOJOLEARN_MAMBA3_LEGACY_ANGLE_INCREMENT"]()
@@ -412,7 +401,7 @@ def m3_angle_increment_kernel(gid_: Int,
     var hh = (cell // r_ang) % nh
     var r = cell % r_ang
     var a = m3_angle_rate(in_proj.unsafe_load(mm * Int(dip_in) + Int(c_ang_in) + r))
-    var inc = ftz(pinned_mul(a, ftz(dt_work.unsafe_load((bb * (q0 + l) + q0 + li) * nh + hh))))
+    var inc = ftz(identical_mul(a, ftz(dt_work.unsafe_load((bb * (q0 + l) + q0 + li) * nh + hh))))
     increments.unsafe_store(cell, inc)
 
 
@@ -454,7 +443,7 @@ def m3_angle_kernel(gid_: Int,
         else:
             var a = m3_angle_rate(in_proj.unsafe_load(mm * dip + c_ang + r))
             inc = ftz(
-                pinned_mul(
+                identical_mul(
                     a, ftz(dt_work.unsafe_load((bb * t_work + q0 + li) * nh + hh))
                 )
             )
@@ -563,19 +552,19 @@ def m3_rot_kernel(gid_: Int,
         var sv = ftz(portable_sinf(th))
         rotq_work.unsafe_store(
             base + e0,
-            ftz(ftz(pinned_mul(q0v, cv)) - ftz(pinned_mul(q1v, sv))),
+            ftz(ftz(identical_mul(q0v, cv)) - ftz(identical_mul(q1v, sv))),
         )
         rotq_work.unsafe_store(
             base + e1,
-            ftz(ftz(pinned_mul(q0v, sv)) + ftz(pinned_mul(q1v, cv))),
+            ftz(ftz(identical_mul(q0v, sv)) + ftz(identical_mul(q1v, cv))),
         )
         rotk_work.unsafe_store(
             base + e0,
-            ftz(ftz(pinned_mul(k0v, cv)) - ftz(pinned_mul(k1v, sv))),
+            ftz(ftz(identical_mul(k0v, cv)) - ftz(identical_mul(k1v, sv))),
         )
         rotk_work.unsafe_store(
             base + e1,
-            ftz(ftz(pinned_mul(k0v, sv)) + ftz(pinned_mul(k1v, cv))),
+            ftz(ftz(identical_mul(k0v, sv)) + ftz(identical_mul(k1v, cv))),
         )
     else:
         # STRUCTURAL identity: never-computed trig (DEVIATION 828 --
@@ -634,7 +623,7 @@ def m3_qkdot_kernel(gid_: Int,
     qkdot.unsafe_store(
         mm * nh + hh,
         ftz(
-            pinned_mul(
+            identical_mul(
                 ftz(acc),
                 gamma_work.unsafe_load((bb * t_work + q0 + li) * nh + hh),
             )
@@ -668,7 +657,7 @@ def m3_kscale_kernel(gid_: Int,
     else:
         sc = scale_work.unsafe_load(row)
     kscale_work.unsafe_store(
-        cell, ftz(pinned_mul(ftz(rotk_work.unsafe_load(cell)), sc))
+        cell, ftz(identical_mul(ftz(rotk_work.unsafe_load(cell)), sc))
     )
 
 
@@ -802,8 +791,8 @@ def m3_seg_l_kernel(gid_: Int,
 
 # ===========================================================================
 # S22 -- the pending Input_States correction: the NORMATIVE reference's
-# scalar-first association (fwd_ref :266-267), `c = pinned_mul(dt_1,
-# ftz(1 - sigma_1))`, `t = pinned_mul(pinned_mul(v_st, k_st), c)`,
+# scalar-first association (fwd_ref :266-267), `c = identical_mul(dt_1,
+# ftz(1 - sigma_1))`, `t = identical_mul(identical_mul(v_st, k_st), c)`,
 # `h0 = ftz(h_in + t)`. dt_1/sigma_1 are the call's FIRST token's (the
 # state guard makes a pending call fresh, so q0 = 0). One thread per
 # (b, h, p, n). Owns RESUME_KERNEL_ASSOC (the kernel's fwd:371
@@ -841,7 +830,7 @@ def m3_resume_kernel(gid_: Int,
         Float32(1.0) - ftz(sig_work.unsafe_load((bb * t_work + 0) * nh + hh))
     )
     var vk = ftz(
-        pinned_mul(
+        identical_mul(
             ftz(pend_v.unsafe_load((bb * nh + hh) * p_dim + p)),
             ftz(pend_k.unsafe_load((bb * nh + hh) * n_state + n)),
         )
@@ -850,10 +839,10 @@ def m3_resume_kernel(gid_: Int,
     comptime if SAB3_RESUME_KERNEL_ASSOC:
         # SABOTAGE: the kernel's association -- ((v*k)*dt)*(1-sigma),
         # fwd:371 -- where the profile folds the scalar FIRST.
-        tv = ftz(pinned_mul(ftz(pinned_mul(vk, dt1)), om))
+        tv = ftz(identical_mul(ftz(identical_mul(vk, dt1)), om))
     else:
-        var csc = ftz(pinned_mul(dt1, om))
-        tv = ftz(pinned_mul(vk, csc))
+        var csc = ftz(identical_mul(dt1, om))
+        tv = ftz(identical_mul(vk, csc))
     h_state.unsafe_store(cell, ftz(ftz(h_state.unsafe_load(cell)) + tv))
 
 
@@ -928,7 +917,7 @@ def m3_state_increment_kernel(gid_: Int,
         var ksv = Float32(0.0)
         if c0 + j < t_work:
             var e = decay.unsafe_load(dbase + j)
-            vsv = ftz(pinned_mul(
+            vsv = ftz(identical_mul(
                 ftz(v_work.unsafe_load(((bb * t_work + c0 + j) * nh + hh) * p_dim + p)), e,
             ))
             ksv = ftz(kscale_work.unsafe_load(((bb * t_work + c0 + j) * nh + hh) * n_state + n))
@@ -1055,7 +1044,7 @@ def m3_statepass_kernel(gid_: Int,
                 )
                 var e = ftz(identical_exp(drev))
                 vsv = ftz(
-                    pinned_mul(
+                    identical_mul(
                         ftz(
                             v_work.unsafe_load(
                                 ((bb * t_work + c0 + j) * nh + hh) * p_dim
@@ -1206,7 +1195,7 @@ def m3_yintra_kernel(gid_: Int,
         var m_ij = Float32(0.0)
         if jj < ii:
             m_ij = ftz(
-                pinned_mul(
+                identical_mul(
                     ftz(qk_s.unsafe_load(sbase + jj)),
                     ftz(seg_l.unsafe_load(sbase + jj)),
                 )
@@ -1292,14 +1281,14 @@ def m3_ystate_kernel(gid_: Int,
         comptime if SAB3_STATE_TERM_SCALE_FIRST:
             # SABOTAGE: decay into q BEFORE the contraction (contract 8f).
             acc = ftz(
-                identical_mul_add(ftz(pinned_mul(qv2, e_i)), hv, acc)
+                identical_mul_add(ftz(identical_mul(qv2, e_i)), hv, acc)
             )
         else:
             acc = ftz(identical_mul_add(qv2, hv, acc))
     comptime if SAB3_STATE_TERM_SCALE_FIRST:
         ystate.unsafe_store(cell, ftz(acc))
     else:
-        ystate.unsafe_store(cell, ftz(pinned_mul(ftz(acc), e_i)))
+        ystate.unsafe_store(cell, ftz(identical_mul(ftz(acc), e_i)))
 
 
 # ===========================================================================
@@ -1396,8 +1385,8 @@ def m3_skip_gate_kernel(gid_: Int,
             dp = ftz(identical_mul_add(qv, kv, dp))
         var widx = (bb * t_work + t) * nh + hh
         var d_ref = ftz(
-            ftz(pinned_mul(ftz(dr), scale_work.unsafe_load(widx)))
-            - ftz(pinned_mul(ftz(dp), betap_work.unsafe_load(widx)))
+            ftz(identical_mul(ftz(dr), scale_work.unsafe_load(widx)))
+            - ftz(identical_mul(ftz(dp), betap_work.unsafe_load(widx)))
         )
         tval = ftz(ftz(d_skip.unsafe_load(hh)) + d_ref)
     else:
@@ -1406,7 +1395,7 @@ def m3_skip_gate_kernel(gid_: Int,
             + ftz(qkdot.unsafe_load(mm * nh + hh))
         )
     var pv = ftz(
-        pinned_mul(
+        identical_mul(
             tval,
             ftz(
                 v_work.unsafe_load(((bb * t_work + t) * nh + hh) * p_dim + p)
@@ -1417,7 +1406,7 @@ def m3_skip_gate_kernel(gid_: Int,
     skip_out.unsafe_store(cell, sk)
     var zv = ftz(in_proj.unsafe_load(mm * dip + c_z + hh * p_dim + p))
     gate_out.unsafe_store(
-        cell, ftz(pinned_mul(ftz(sk), ftz(identical_silu(zv))))
+        cell, ftz(identical_mul(ftz(sk), ftz(identical_silu(zv))))
     )
 
 

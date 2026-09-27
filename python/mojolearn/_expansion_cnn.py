@@ -1086,14 +1086,17 @@ class GCNConv(_Layer):
 
 class SAGEConv(_Layer):
     """PyG `torch_geometric.nn.SAGEConv` (aggr 'mean', 'sum' or 'max',
-    root_weight, normalize, project=False): out = lin_l(aggr_{j->i} x_j) +
+    root_weight, normalize, project): out = lin_l(aggr_{j->i} p(x_j)) +
     lin_r(x_i), lin_l with the bias, then an optional row L2 normalization.
+    p is the identity, or with project=True relu(lin(x)) for a biased
+    in_channels -> in_channels Linear (PyG applies it to the source
+    features only; the root term keeps the unprojected x_i).
     The mean is the fixed-order CSR sum divided by the in-degree; the max
     splits its gradient evenly among tied entries (scatter_reduce 'amax');
     an isolated node aggregates +0.0."""
 
     def __init__(self, in_channels, out_channels, aggr="mean", normalize=False, root_weight=True, bias=True,
-                 random_state=0, numeric_mode=None):
+                 project=False, random_state=0, numeric_mode=None):
         np = _np()
         if aggr not in ("mean", "sum", "add", "max"):
             raise NotImplementedError(f"mojolearn: SAGEConv aggr={aggr!r} is not implemented (NOT_IMPLEMENTED.tsv)")
@@ -1107,6 +1110,13 @@ class SAGEConv(_Layer):
         if not self.bias:
             self.lin_l.bias_[:] = 0
         self.weight_r_ = _kaiming_uniform(rng, (self.out_channels, self.in_channels), self.in_channels)
+        # drawn last, so project=False keeps every earlier draw
+        self.project = bool(project)
+        self.lin = None
+        if self.project:
+            self.lin = _Linear(self.in_channels, self.in_channels, random_state=rng.integers(2 ** 31),
+                               numeric_mode=numeric_mode)
+            self._relu_p = _ReLU(numeric_mode)
 
     def forward(self, x, edge_index):
         np = _np()
@@ -1115,13 +1125,17 @@ class SAGEConv(_Layer):
         b = self._binding()
         src, dst = _edges(edge_index, n)
         g = _Graph(src, dst, n)
+        xs = x
+        if self.project:
+            xs = self._relu_p.forward(self.lin.forward(x))
+        self._xs = xs
         if self.aggr == "max":
-            agg = np.empty_like(x)
-            self._max_aux = np.zeros(2 * x.size, np.float32)
-            b.x_cnn_graph_op(x.ctypes.data, x.ctypes.data, self._max_aux.ctypes.data, agg.ctypes.data,
-                             g.csr_f.ctypes.data, [n, x.shape[1], g.nnz, 0])
+            agg = np.empty_like(xs)
+            self._max_aux = np.zeros(2 * xs.size, np.float32)
+            b.x_cnn_graph_op(xs.ctypes.data, xs.ctypes.data, self._max_aux.ctypes.data, agg.ctypes.data,
+                             g.csr_f.ctypes.data, [n, xs.shape[1], g.nnz, 0])
         else:
-            agg = g.spmm(b, np.ones(g.nnz, np.float32), x, 1 if self.aggr == "mean" else 0)
+            agg = g.spmm(b, np.ones(g.nnz, np.float32), xs, 1 if self.aggr == "mean" else 0)
         out = self.lin_l.forward(agg)
         if self.root_weight:
             out = _add(b, out, _gemm(b, x, self.weight_r_, n, self.out_channels, self.in_channels, 1))
@@ -1152,15 +1166,17 @@ class SAGEConv(_Layer):
         if not self.bias:
             self.lin_l.grad_bias_[:] = 0
         if self.aggr == "max":
-            dx = np.empty_like(self._x)
+            dx = np.empty_like(self._xs)
             dagg = np.ascontiguousarray(dagg)
-            b.x_cnn_graph_op(self._x.ctypes.data, dagg.ctypes.data, self._max_aux.ctypes.data, dx.ctypes.data,
+            b.x_cnn_graph_op(self._xs.ctypes.data, dagg.ctypes.data, self._max_aux.ctypes.data, dx.ctypes.data,
                              g.csr_t.ctypes.data, [n, dagg.shape[1], g.nnz, 1])
         elif self.aggr == "mean":
             deg = np.bincount(g.dst, minlength=n).astype(np.float32)
             dx = g.spmm(b, np.ascontiguousarray(deg[g.dst[g.order_t]]), dagg, 2, transposed=True)
         else:
             dx = g.spmm(b, np.ones(g.nnz, np.float32), dagg, 0, transposed=True)
+        if self.project:
+            dx = self.lin.backward(self._relu_p.backward(dx))
         if self.root_weight:
             self.grad_weight_r_ = _gemm(b, G, self._x, self.out_channels, self.in_channels, n, 2)
             dx = _add(b, _gemm(b, G, self.weight_r_, n, self.in_channels, self.out_channels, 0), dx)

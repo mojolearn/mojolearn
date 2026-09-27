@@ -1475,7 +1475,7 @@ def masked_negative_zero_count(
 
     A masked cell is one whose key index `j` exceeds the query's absolute
     position `pos0 + t`. At such a cell the pinned mask backward is the
-    exact identity, so `dS` is `pinned_mul(y_j, dy_j - z)` with `y_j`
+    exact identity, so `dS` is `identical_mul(y_j, dy_j - z)` with `y_j`
     exactly `+0.0` -- a signed zero whose sign is `sign(dy_j - z)`. The arm
     writes `+0.0` there instead, so it moves exactly the cells whose pinned
     value is `-0.0` and no others. **This is what makes the arm a
@@ -3125,7 +3125,7 @@ def clause_e(ctx: DeviceContext, k: Int) raises:
             + String(other)
             + " masked cells of bwd.d_attn_scores are NOT a signed zero."
             + " Plan 5.1(ii) proves y_j is exactly +0.0 at a masked cell, so"
-            + " dS_j = pinned_mul(+0.0, dy_j - z) must be +-0.0 and nothing"
+            + " dS_j = identical_mul(+0.0, dy_j - z) must be +-0.0 and nothing"
             + " else. A masked cell holding a NORMAL is the masked-tail"
             + " theorem failing, and every length- and chunk-invariance"
             + " claim in this lane rests on it."

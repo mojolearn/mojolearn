@@ -541,7 +541,7 @@ def test_the_new_narrow_answers_are_narrow_for_the_right_reason():
     own sentence."""
     ref = "HEAD"
     sel = lane_select.select(["tools/identity_break.py"], ref=ref)
-    assert "harness diff touches only these lane bodies" in sel["reasons"]["tools/identity_break.py"] \
+    assert "harness diff reaches only these lanes" in sel["reasons"]["tools/identity_break.py"] \
         or "docstrings and comments only" in sel["reasons"]["tools/identity_break.py"], \
         f"unexpected reason: {sel['reasons']['tools/identity_break.py']}"
     assert not sel["unattributed"], "the harness against its own HEAD was refused"
@@ -1746,3 +1746,32 @@ def test_a_name_on_a_foreign_object_does_not_seed_a_package_file():
     names = lane_select._seed_names(ib.LANES["gbdt-binary-columns"], vars(ib))
     assert "digest" not in names
     assert "digest" in lane_select._code_names(ib.LANES["gbdt-binary-columns"], vars(ib))
+
+
+def test_the_pinned_product_has_one_definition():
+    """lane/dedupe-pinned-mul (DEVIATION 5904): `identical_mul` is defined ONCE,
+    in checks/numerics.mojo, and no `pinned_mul` exists anywhere. Fifteen
+    copies once stood beside it (nine by hand, six generated into
+    mamba/host/gen/), of which three were compared with anything; a copy that
+    drifted would have sent a card diff hunting through fifteen files. Every
+    tracked Mojo file is read, generated ones included."""
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    files = subprocess.check_output(
+        ["git", "ls-files", "*.mojo", "*.🔥"], cwd=repo, text=True).split()
+    pat = re.compile(r"^\s*(?:@\w+\s+)*(?:def|fn)\s+(pinned_mul|identical_mul)\s*[\[(]",
+                     re.M)
+    found = {}
+    for rel in files:
+        try:
+            with open(os.path.join(repo, rel), encoding="utf-8", errors="replace") as fh:
+                text = fh.read()
+        except FileNotFoundError:
+            continue
+        for m in pat.finditer(text):
+            found.setdefault(m.group(1), []).append(rel)
+    assert "pinned_mul" not in found, (
+        "a `pinned_mul` definition came back; call checks.numerics.identical_mul: "
+        + ", ".join(found["pinned_mul"]))
+    assert found.get("identical_mul") == ["checks/numerics.mojo"], (
+        "identical_mul must be defined once, in checks/numerics.mojo: "
+        + repr(found.get("identical_mul")))

@@ -45,7 +45,30 @@ def test_cross_fit_uses_fold_encodings():
         np.testing.assert_allclose(out[te], r.transform(X[te]), rtol=2e-4, atol=2e-5)
 
 
+def test_stratified_folds_unshuffled_are_the_reference():
+    from sklearn.model_selection import StratifiedKFold
+    from mojolearn._expansion_prep import _stratified_assignment
+    X, y = _data(4)
+    yb = (y > 0.8).astype(np.int64)
+    ym = np.digitize(y, [0.0, 1.0]).astype(np.int64)[::-1].copy()
+    for t in (yb, ym):
+        want = np.empty(len(t), dtype=int)
+        for k, (_tr, te) in enumerate(StratifiedKFold(5).split(X, t)):
+            want[te] = k
+        np.testing.assert_array_equal(np.asarray(_stratified_assignment(t.tolist(), 5, 0, False)), want)
+        got = np.asarray(ml.TargetEncoder(shuffle=False).fit_transform(X, t))
+        np.testing.assert_allclose(got, SkTE(shuffle=False).fit_transform(X, t), rtol=2e-4, atol=2e-5)
+    np.testing.assert_allclose(np.asarray(ml.TargetEncoder(shuffle=False).fit_transform(X, y)),
+                               SkTE(shuffle=False).fit_transform(X, y), rtol=2e-4, atol=2e-5)
+    # shuffled: every class spread over the folds as evenly as the reference's allocation
+    f = np.asarray(_stratified_assignment(ym.tolist(), 5, 11, True))
+    for c in np.unique(ym):
+        cnt = np.bincount(f[ym == c], minlength=5)
+        assert cnt.max() - cnt.min() <= 1
+
+
 if __name__ == "__main__":
     test_fit_transform_like_reference()
     test_cross_fit_uses_fold_encodings()
+    test_stratified_folds_unshuffled_are_the_reference()
     print("PASS test_x_prep_target_encoder")
