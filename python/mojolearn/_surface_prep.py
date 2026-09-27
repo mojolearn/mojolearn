@@ -34,6 +34,8 @@ FAMILIES = (
             "x-prep-spline-transformer",
             "x-prep-binarizer",
             "x-prep-label-encoder",
+            "x-prep-label-binarizer",
+            "x-prep-multilabel-binarizer",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -49,6 +51,8 @@ FAMILIES = (
             "SplineTransformer",
             "Binarizer",
             "LabelEncoder",
+            "LabelBinarizer",
+            "MultiLabelBinarizer",
         ),
         display="preprocessing additions, naive Bayes and discriminant analysis",
         host_modules=(
@@ -86,6 +90,8 @@ TRAINING_LANE_NAMES = {
     "x-prep-spline-transformer": "SplineTransformer",
     "x-prep-binarizer": "Binarizer",
     "x-prep-label-encoder": "LabelEncoder",
+    "x-prep-label-binarizer": "LabelBinarizer",
+    "x-prep-multilabel-binarizer": "MultiLabelBinarizer",
 }
 PUBLIC_PENDING_LANES = {
     "x-prep-robust-scaler": "no reference",
@@ -107,4 +113,6 @@ PUBLIC_PENDING_LANES = {
     "x-prep-spline-transformer": "no reference",
     "x-prep-binarizer": "no reference",
     "x-prep-label-encoder": "no reference",
+    "x-prep-label-binarizer": "no reference",
+    "x-prep-multilabel-binarizer": "no reference",
 }

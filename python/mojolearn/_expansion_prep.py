@@ -35,7 +35,7 @@ from ._labels import flatten_labels, sorted_classes, label_kind
 __all__ = ["RobustScaler", "MaxAbsScaler", "OrdinalEncoder", "OneHotEncoder", "TargetEncoder", "SimpleImputer", "KBinsDiscretizer",
            "GaussianNB", "MultinomialNB", "BernoulliNB",
            "LinearDiscriminantAnalysis", "QuadraticDiscriminantAnalysis",
-           "QuantileTransformer", "PowerTransformer", "Normalizer", "PolynomialFeatures", "SplineTransformer", "Binarizer", "LabelEncoder"]
+           "QuantileTransformer", "PowerTransformer", "Normalizer", "PolynomialFeatures", "SplineTransformer", "Binarizer", "LabelEncoder", "LabelBinarizer", "MultiLabelBinarizer"]
 
 _BINDING = "_mojolearn_x_prep"
 
@@ -1666,3 +1666,124 @@ class LabelEncoder(_PrepBase):
         if any(c < 0 or c >= len(self._classes) for c in codes):
             raise ValueError("mojolearn: y contains previously unseen labels")
         return _classes_array([self._classes[c] for c in codes])
+
+
+class LabelBinarizer(_PrepBase):
+    """sklearn.preprocessing.LabelBinarizer for a single-label target: one
+    int32 column per class (one column, the second class, for two classes;
+    a NEG column for one), pos_label / neg_label; an unseen label is a NEG
+    row. Numeric labels take the device route, str labels Python's.
+    Multilabel input, sparse_output and inverse_transform are refused."""
+    _parameters = ("neg_label", "pos_label", "sparse_output")
+
+    def __init__(self, *, neg_label=0, pos_label=1, sparse_output=False):
+        self.neg_label = neg_label
+        self.pos_label = pos_label
+        self.sparse_output = sparse_output
+
+    def fit(self, y):
+        if self.sparse_output:
+            raise NotImplementedError("mojolearn: LabelBinarizer(sparse_output=True) is not implemented")
+        if not (isinstance(self.neg_label, numbers.Integral) and isinstance(self.pos_label, numbers.Integral)
+                and self.neg_label < self.pos_label):
+            raise ValueError("mojolearn: neg_label must be an integer below pos_label")
+        self.numeric_mode_ = _mode()
+        values = flatten_labels(y)
+        self._classes, self._cats = _label_classes(self.numeric_mode_, values)
+        self.classes_ = _classes_array(self._classes)
+        self.y_type_ = "binary" if len(self._classes) <= 2 else "multiclass"
+        return self
+
+    def fit_transform(self, y):
+        return self.fit(y).transform(y)
+
+    def _check_fitted(self):
+        if not hasattr(self, "_classes"):
+            raise RuntimeError("mojolearn: this LabelBinarizer instance is not fitted yet")
+
+    def transform(self, y):
+        self._check_fitted()
+        values = flatten_labels(y)
+        n, K = len(values), len(self._classes)
+        binary = K <= 2
+        W = 1 if binary else K
+        pr = _Prog()
+        if self._cats is None or _numeric_labels(values) is None:
+            index = {c: i for i, c in enumerate(self._classes)}
+            codes = pr.put_list([index.get(v, -1) for v in values])
+        else:
+            codes, _neg = _label_codes(pr, values, self._cats)
+        if K == 1:
+            codes = pr.put_list([-1] * n)
+        out = pr.alloc(n * W)
+        pr.stage("label_binarize", n * W, codes, n, K, 1 if binary else 0, int(self.neg_label),
+                 int(self.pos_label), W, out)
+        pr.run(self.numeric_mode_)
+        return pr.get_i32(out, (n, W))
+
+    def inverse_transform(self, Y, threshold=None):
+        raise NotImplementedError("mojolearn: LabelBinarizer.inverse_transform is not implemented")
+
+
+class MultiLabelBinarizer(_PrepBase):
+    """sklearn.preprocessing.MultiLabelBinarizer: classes_ the sorted union
+    of every sample's labels (or `classes` as given, in that order), transform
+    an int32 indicator matrix; an unseen label is ignored (the reference
+    warns). Numeric labels take the device route (a sort, a binary search, a
+    scatter of ones), str labels Python's. sparse_output is refused."""
+    _parameters = ("classes", "sparse_output")
+
+    def __init__(self, *, classes=None, sparse_output=False):
+        self.classes = classes
+        self.sparse_output = sparse_output
+
+    def fit(self, y):
+        if self.sparse_output:
+            raise NotImplementedError("mojolearn: MultiLabelBinarizer(sparse_output=True) is not implemented")
+        self.numeric_mode_ = _mode()
+        if self.classes is not None:
+            self._classes = list(self.classes)
+            nums = _numeric_labels(self._classes)
+            self._given = True
+            self._cats = None
+        else:
+            flat = [v for row in y for v in row]
+            self._classes, self._cats = _label_classes(self.numeric_mode_, flat) if flat else ([], None)
+            self._given = False
+        self.classes_ = _classes_array(self._classes)
+        return self
+
+    def fit_transform(self, y):
+        y = [list(row) for row in y]
+        return self.fit(y).transform(y)
+
+    def _check_fitted(self):
+        if not hasattr(self, "_classes"):
+            raise RuntimeError("mojolearn: this MultiLabelBinarizer instance is not fitted yet")
+
+    def transform(self, y):
+        self._check_fitted()
+        rows = [list(r) for r in y]
+        n, K = len(rows), len(self._classes)
+        flat = [v for r in rows for v in r]
+        owner = [i for i, r in enumerate(rows) for _ in r]
+        pr = _Prog()
+        if not flat:
+            out = pr.alloc(n * max(K, 1))
+            pr.run(self.numeric_mode_)
+            return pr.get_i32(out, (n, K))
+        if self._cats is None or _numeric_labels(flat) is None:
+            index = {c: i for i, c in enumerate(self._classes)}
+            codes = pr.put_list([index.get(v, -1) for v in flat])
+        else:
+            codes, _neg = _label_codes(pr, flat, self._cats)
+        ro = pr.put_list(owner)
+        out = pr.alloc(n * max(K, 1))
+        pr.stage("scatter_ones", len(flat), codes, ro, K, out)
+        pr.run(self.numeric_mode_)
+        return pr.get_i32(out, (n, K))
+
+    def inverse_transform(self, yt):
+        self._check_fitted()
+        rows = yt.tolist() if hasattr(yt, "tolist") else list(yt)
+        return [tuple(self._classes[j] for j, v in enumerate(r) if v) for r in rows]

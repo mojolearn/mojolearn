@@ -10,6 +10,7 @@ from std.python.bindings import PythonModuleBuilder
 
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr
 from checks.numerics import identical_log64
+from xtrees.shap import node_cover, tree_shap, expected_value, mask_expand, block_mean, kernel_solve
 from xtrees.ops import (
     sample_indices, weighted_sample, gather_f32, gather_i32, accumulate,
     accumulate_onehot, accumulate_cols, argmax_rows, argmax_rows_f32, scale_f64, softmax_rows, scale_to_f32, put_f32,
@@ -366,6 +367,83 @@ def isotonic_predict_binding(
     return PythonObject(n)
 
 
+def node_cover_binding(
+    offsets: PythonObject, colid: PythonObject, quesval: PythonObject, left: PythonObject,
+    x: PythonObject, cover: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """params = [n, d, n_trees]; cover float64 per node, zeroed."""
+    _need(params, 3, "x_trees_node_cover")
+    var n = _count(_i(params, 0), "x_trees_node_cover")
+    if n > 0:
+        node_cover(i32_ptr(Int(py=offsets)), i32_ptr(Int(py=colid)), f32_ptr(Int(py=quesval)), i32_ptr(Int(py=left)),
+                   f32_ptr(Int(py=x)), n, _i(params, 1), _i(params, 2), f64_ptr(Int(py=cover)))
+    return PythonObject(n)
+
+
+def tree_shap_binding(
+    forest: PythonObject, cover: PythonObject, x: PythonObject, phi: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """forest = [offsets, colid, quesval, left, leaves] addresses;
+    params = [n, d, n_trees, k, scale]; phi float64 n*d*k, accumulated."""
+    _need(params, 5, "x_trees_tree_shap")
+    _need(forest, 5, "x_trees_tree_shap forest")
+    var n = _count(_i(params, 0), "x_trees_tree_shap")
+    if n > 0:
+        tree_shap(i32_ptr(_i(forest, 0)), i32_ptr(_i(forest, 1)), f32_ptr(_i(forest, 2)), i32_ptr(_i(forest, 3)),
+                  f32_ptr(_i(forest, 4)), f64_ptr(Int(py=cover)), f32_ptr(Int(py=x)), n, _i(params, 1),
+                  _i(params, 2), _i(params, 3), _f(params, 4), f64_ptr(Int(py=phi)))
+    return PythonObject(n)
+
+
+def expected_value_binding(
+    offsets: PythonObject, left: PythonObject, leaves: PythonObject, cover: PythonObject, res: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """params = [n_trees, k, scale]; res float64[k], accumulated."""
+    _need(params, 3, "x_trees_expected_value")
+    expected_value(i32_ptr(Int(py=offsets)), i32_ptr(Int(py=left)), f32_ptr(Int(py=leaves)), f64_ptr(Int(py=cover)),
+                   _i(params, 0), _i(params, 1), _f(params, 2), f64_ptr(Int(py=res)))
+    return PythonObject(_i(params, 1))
+
+
+def mask_expand_binding(
+    x: PythonObject, bg: PythonObject, masks: PythonObject, res: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """params = [nb, d, m]; res float32 (m * nb) * d."""
+    _need(params, 3, "x_trees_mask_expand")
+    var m = _count(_i(params, 2), "x_trees_mask_expand")
+    if m > 0:
+        mask_expand(f32_ptr(Int(py=x)), f32_ptr(Int(py=bg)), _i(params, 0), _i(params, 1), i32_ptr(Int(py=masks)), m,
+                    f32_ptr(Int(py=res)))
+    return PythonObject(m)
+
+
+def block_mean_binding(y: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [m, nb, k]."""
+    _need(params, 3, "x_trees_block_mean")
+    var m = _count(_i(params, 0), "x_trees_block_mean")
+    var nb = _i(params, 1)
+    if nb < 1:
+        raise Error("x_trees_block_mean: nb must be >= 1")
+    if m > 0:
+        block_mean(f32_ptr(Int(py=y)), m, nb, _i(params, 2), f64_ptr(Int(py=res)))
+    return PythonObject(m)
+
+
+def kernel_solve_binding(
+    masks: PythonObject, w: PythonObject, ey: PythonObject, fx: PythonObject, fnull: PythonObject,
+    phi: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """params = [m, d, k]; phi float64 d*k."""
+    _need(params, 3, "x_trees_kernel_solve")
+    var d = _i(params, 1)
+    if d < 1:
+        raise Error("x_trees_kernel_solve: d must be >= 1")
+    kernel_solve(i32_ptr(Int(py=masks)), f64_ptr(Int(py=w)), _count(_i(params, 0), "x_trees_kernel_solve"), d,
+                 f64_ptr(Int(py=ey)), _i(params, 2), f64_ptr(Int(py=fx)), f64_ptr(Int(py=fnull)), f64_ptr(Int(py=phi)))
+    return PythonObject(d)
+
+
 def register(mut m: PythonModuleBuilder) raises:
     """The shared export list; both bindings call this."""
     m.def_function[sample_indices_binding]("x_trees_sample_indices")
@@ -398,3 +476,9 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[platt_apply_binding]("x_trees_platt_apply")
     m.def_function[isotonic_fit_binding]("x_trees_isotonic_fit")
     m.def_function[isotonic_predict_binding]("x_trees_isotonic_predict")
+    m.def_function[node_cover_binding]("x_trees_node_cover")
+    m.def_function[tree_shap_binding]("x_trees_tree_shap")
+    m.def_function[expected_value_binding]("x_trees_expected_value")
+    m.def_function[mask_expand_binding]("x_trees_mask_expand")
+    m.def_function[block_mean_binding]("x_trees_block_mean")
+    m.def_function[kernel_solve_binding]("x_trees_kernel_solve")

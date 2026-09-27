@@ -276,3 +276,27 @@ def _(ml, X, yc, yr, Xh=None):
                  floats=_h(ml.LabelEncoder().fit_transform(yr[:256])))
     known = np.isin(yh, np.asarray(m.classes_))
     return _fit(parts, m, lambda e: (e.transform(yh[known][:256]),))
+
+
+@lane("x-prep-label-binarizer")
+def _(ml, X, yc, yr, Xh=None):
+    y, yh = _prep_labels(X), _prep_labels(Xh)
+    m = ml.LabelBinarizer(neg_label=-1, pos_label=2).fit(y)
+    parts = dict(classes=_h(m.classes_), transform=_h(m.transform(y[:256])),
+                 binary=_h(ml.LabelBinarizer().fit(yc).transform(yc[:256])))
+    return _fit(parts, m, lambda e: (e.transform(yh[:256]),))
+
+
+def _prep_multilabel(X):
+    """Rows of 0..3 labels each (columns 0-2 over a threshold give labels
+    from column 5's integer part), so empty rows, repeats and unseen labels occur."""
+    base = np.clip(np.floor(X[:, 5] * 2), -3, 3).astype(np.int64)
+    return [[int(base[i]) + j for j in range(3) if X[i, j] > 0.2] for i in range(X.shape[0])]
+
+
+@lane("x-prep-multilabel-binarizer")
+def _(ml, X, yc, yr, Xh=None):
+    ys, yhs = _prep_multilabel(X), _prep_multilabel(Xh)
+    m = ml.MultiLabelBinarizer().fit(ys)
+    parts = dict(classes=_h(m.classes_), transform=_h(m.transform(ys[:256])))
+    return _fit(parts, m, lambda e: (e.transform(yhs[:256]),))
