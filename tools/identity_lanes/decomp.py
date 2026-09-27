@@ -124,3 +124,13 @@ def _(ml, X, yc, yr, Xh=None):
     v = ml.lu_solve((lu, piv), np.ascontiguousarray(X[200, :n]))
     s = ml.solve(np.ascontiguousarray(X[300:300 + n, :n].T), np.ascontiguousarray(X[400, :n]))
     return _fit(dict(lu=_h(lu), piv=_h(piv), x=_h(x), v=_h(v), s=_h(s)))
+
+
+@lane("x-decomp-lstsq-rsvd")
+def _(ml, X, yc, yr, Xh=None):
+    U, s, Vt = ml.randomized_svd(X[:4000], 4, random_state=0)
+    Ut, st, Vtt = ml.randomized_svd(np.ascontiguousarray(X[:12].T), 3, n_iter=2, random_state=1)
+    x, res, rank, sv = ml.lstsq(X[:600], yr[:600])
+    xm, resm, rankm, _ = ml.lstsq(X[:300], np.ascontiguousarray(X[300:600, :3]))
+    return _fit(dict(U=_h(U), s=_h(s), Vt=_h(Vt), Ut=_h(Ut), st=_h(st), Vtt=_h(Vtt), x=_h(x), res=_h(res),
+                     rank=_h(np.int32(rank)), sv=_h(sv), xm=_h(xm), resm=_h(resm), rankm=_h(np.int32(rankm))))

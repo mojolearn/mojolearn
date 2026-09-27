@@ -174,6 +174,15 @@ def cd_rows_py[E: Exec](
     return PythonObject(n)
 
 
+def orth_py[E: Exec](a: PythonObject, p: PythonObject) raises -> PythonObject:
+    var m = _n(p, 0)
+    var l = _n(p, 1)
+    var pa = _f(a)
+    with GILReleased(Python()):
+        E.orth(pa, m, l)
+    return PythonObject(l)
+
+
 def numeric_mode_py() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 

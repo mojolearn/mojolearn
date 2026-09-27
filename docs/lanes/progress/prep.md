@@ -31,7 +31,10 @@ Sanity tests need scikit-learn: on the pod it is in /root/skl
 | Binarizer | 5a893acab | x-prep-binarizer | batch 9, infer 9, train 9; cuda H100 vs CPU |
 | LabelEncoder | e62864c81 | x-prep-label-encoder | infer 9, train 9; cuda H100 vs CPU |
 | LabelBinarizer | 87df7824e | x-prep-label-binarizer | infer 9, train 9; cuda H100 vs CPU |
-| MultiLabelBinarizer | (this commit) | x-prep-multilabel-binarizer | infer 9, train 9; cuda H100 vs CPU |
+| MultiLabelBinarizer | 3c46f0142 | x-prep-multilabel-binarizer | infer 9, train 9; cuda H100 vs CPU |
+| IterativeImputer | 77e436512 | x-prep-iterative-imputer | batch 9, infer 9, train 9; cuda H100 vs CPU |
+| VarianceThreshold | 9a474af44 | x-prep-variance-threshold | batch 9, infer 9, train 9; cuda H100 vs CPU |
+| SelectKBest with f_classif, chi2, f_regression | (this commit) | x-prep-select-kbest | batch 9, infer 9, train 9; cuda H100 vs CPU |
 
 ## Next
 Main table DONE. Additions in order: QuantileTransformer, PowerTransformer,
