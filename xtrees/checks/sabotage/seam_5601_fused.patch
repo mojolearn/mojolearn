@@ -1,14 +1,14 @@
 --- a/xtrees/ops.mojo
 +++ b/xtrees/ops.mojo
-@@ -31,6 +31,7 @@
-   DEVIATION 5605  a zero row normalises to uniform 1 / k, never 0 / 0.
+@@ -32,6 +32,7 @@
  """
+ from std.sys.compile import is_defined
  from checks.numerics import identical_mul64, identical_exp64, identical_log64, identical_pow64
 +from std.math import fma
  
- comptime GOLDEN: UInt64 = 0x9E3779B97F4A7C15
- 
-@@ -156,7 +157,7 @@
+ #: The host gate's negative control (`-D MOJOLEARN_HOST_SABOTAGE=1`, host builds
+ #: only): `scale_f64` divides by a perturbed divisor, so every vote average moves.
+@@ -161,7 +162,7 @@
      """acc[i] += weight * x[i], the product pinned (never fused into the add)."""
      for i in range(n):
          # DEVIATION 5601: the product is pinned, never fused into the add.
