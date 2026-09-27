@@ -327,7 +327,7 @@ def fourier_fit(y: FP, n: Int, m: Int, qa: FP) -> Tuple[Float32, Float32]:
             for i in range(j, n):
                 var w = ld(qa, 4 * i + c) if c < 4 else ld(rhs, i)
                 dot = fma3(ld(qa, 4 * i + j), w, dot)
-            var f = div(dot, vtv)
+            var f = div(add(dot, dot), vtv)     # H = I - 2 v v' / v'v
             for i in range(j, n):
                 var v = ld(qa, 4 * i + j)
                 if c < 4:
@@ -536,3 +536,46 @@ def op_ets(t: Int, a: Args):
     st(info, 7, Float32(k))
     st(info, 8, u[2])
     st(info, 9, Float32(0.0))
+
+
+def op_ets_lik(t: Int, a: Args):
+    """The seam probe for 5517 (and the recursion): series t's Calc at given
+    parameters. p0 y [B, n]; p1 parameters [B, 6 + m] (alpha, beta, gamma,
+    phi, l0, b0, the m seasonal states); p2 out [B, 3 + m] (lik, final
+    level, final trend, the final seasonal states in order); p3 ring
+    scratch [B, m]. i0 n, i2 error, i3 trend (0 N, 1 A), i6 season, i7 m."""
+    var n = a.i0
+    var season = a.i6
+    var m = a.i7 if season != SEAS_N else 1
+    var y = a.p0 + t * n
+    var pr = a.p1 + t * (6 + m)
+    var ring = a.p3 + t * m
+    for j in range(m):
+        st(ring, j, ld(pr, 6 + j))
+    var r = ets_lik(y, n, a.i2, a.i3 == 1, season, m, ring, ld(pr, 0), ld(pr, 1), ld(pr, 2), ld(pr, 3),
+                    ld(pr, 4), ld(pr, 5))
+    var o = a.p2 + t * (3 + m)
+    st(o, 0, r[0])
+    st(o, 1, r[1])
+    st(o, 2, r[2])
+    for j in range(m):
+        var ix = r[3] + j
+        if ix >= m:
+            ix -= m
+        st(o, 3 + j, ld(ring, ix) if season != SEAS_N else Float32(0.0))
+
+
+def op_ets_init(t: Int, a: Args):
+    """The seam probe for 5518 / 5519: series t's initstate. p0 y [B, n];
+    p1 out [B, 1 + m] (l0, b0, the m - 1 free seasonal states); p3 scratch
+    [B, i8] (6n + 8). i0 n, i3 trend, i6 season, i7 m."""
+    var n = a.i0
+    var season = a.i6
+    var m = a.i7 if season != SEAS_N else 1
+    var y = a.p0 + t * n
+    var o = a.p1 + t * (1 + m)
+    var seas = a.p3 + t * a.i8
+    var qa = seas + n
+    var r = ets_init_state(y, n, a.i3 == 1, season, m, o + 2, seas, qa)
+    st(o, 0, r[0])
+    st(o, 1, r[1])
