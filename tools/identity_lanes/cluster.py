@@ -60,3 +60,21 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("predict", sl=np.s_[:256, 1:4]), "x-cluster-meanshift")
+
+
+@lane("x-cluster-optics")
+def _(ml, X, yc, yr, Xh=None):
+    """OPTICS (python/mojolearn/_expansion_cluster.py): 1500 rows of
+    columns 1-4, xi extraction with predecessor correction, then the same
+    graph cut by the dbscan extraction at a finite max_eps (the inf branches
+    and the eps cut both reached). Transductive: no infer."""
+    m = ml.OPTICS(min_samples=8).fit(X[:1500, 1:5])
+    parts = dict(order=_h(m.ordering_), core=_h(m.core_distances_), reach=_h(m.reachability_),
+                 pred=_h(m.predecessor_), labels=_h(m.labels_), hierarchy=_h(m.cluster_hierarchy_))
+    eps = float(np.median(np.asarray(m.core_distances_)))
+    m2 = ml.OPTICS(min_samples=8, max_eps=eps * 3, cluster_method="dbscan", eps=eps).fit(X[:1500, 1:5])
+    parts.update(dbscan_labels=_h(m2.labels_), dbscan_reach=_h(m2.reachability_))
+    return _fit(parts, m, "n/a:transductive (OPTICS has no predict, in the reference and in scikit-learn alike)")
+
+
+_batch_decl("n/a:transductive (OPTICS labels the fitted rows only)", "x-cluster-optics")

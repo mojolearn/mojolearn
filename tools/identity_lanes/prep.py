@@ -188,3 +188,29 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("predict", "predict_proba", sl=slice(0, 256)), "x-prep-lda", "x-prep-qda")
+
+
+@lane("x-prep-quantile-transformer")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.QuantileTransformer(n_quantiles=200, random_state=5).fit(X)
+    mn = ml.QuantileTransformer(n_quantiles=64, output_distribution="normal", subsample=4000,
+                                random_state=5).fit(X)
+    parts = dict(q=_h(m.quantiles_), transform=_h(m.transform(X[:256])), qn=_h(mn.quantiles_),
+                 normal=_h(mn.transform(X[:256])))
+    return _fit(parts, mn, lambda e: (e.transform(Xh[:256]),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-quantile-transformer")
+
+
+@lane("x-prep-power-transformer")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.PowerTransformer().fit(X[:2000])
+    Xp = np.abs(X[:2000]) + np.float32(0.5)
+    mb = ml.PowerTransformer(method="box-cox", standardize=False).fit(Xp)
+    parts = dict(lam=_h(m.lambdas_), transform=_h(m.transform(X[:256])), lam_bc=_h(mb.lambdas_),
+                 bc=_h(mb.transform(Xp[:256])))
+    return _fit(parts, m, lambda e: (e.transform(Xh[:256]),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-power-transformer")

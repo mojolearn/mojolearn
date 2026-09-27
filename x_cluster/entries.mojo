@@ -11,6 +11,7 @@ from x_cluster.common import distances_to, nearest_all
 from x_cluster.meanshift import meanshift_fit
 from x_cluster.minibatch import MiniBatchParams, minibatch_fit
 from x_cluster.ops import ClusterOps
+from x_cluster.optics import optics_dbscan_labels, optics_graph, optics_xi_clusters, optics_xi_labels
 from x_cluster.out import ClusterOut
 
 
@@ -129,6 +130,42 @@ def meanshift_entry[O: ClusterOps](
     return out^
 
 
+def _i32(v: List[Int]) -> List[Int32]:
+    var out = List[Int32](capacity=len(v))
+    for t in v:
+        out.append(Int32(t))
+    return out^
+
+
+def optics_entry[O: ClusterOps](mut ops: O, x: List[Float32], ip: List[Int], fp: List[Float64]) raises -> ClusterOut:
+    """ip = [n, d, min_samples, min_cluster_size, method (0 xi, 1 dbscan),
+    predecessor_correction]; fp = [max_eps, xi, eps]. f = [core_distances,
+    reachability], i = [ordering, predecessor, labels, clusters (start, end)
+    flattened]."""
+    var n = ip[0]
+    var d = ip[1]
+    var ordering = List[Int]()
+    var core = List[Float32]()
+    var reach = List[Float32]()
+    var pred = List[Int]()
+    optics_graph(ops, x, n, d, ip[2], Float32(fp[0]), ordering, core, reach, pred)
+    var labels: List[Int32]
+    var clusters = List[Int]()
+    if ip[4] == 0:
+        clusters = optics_xi_clusters(reach, pred, ordering, fp[1], ip[2], ip[3], ip[5] != 0)
+        labels = optics_xi_labels(ordering, clusters)
+    else:
+        labels = optics_dbscan_labels(reach, core, ordering, Float32(fp[2]))
+    var out = ClusterOut()
+    out.f.append(core^)
+    out.f.append(reach^)
+    out.i.append(_i32(ordering))
+    out.i.append(_i32(pred))
+    out.i.append(labels^)
+    out.i.append(_i32(clusters))
+    return out^
+
+
 # ---------------------------------------------------------------- dispatcher
 comptime ENTRY_NEAREST = 0
 comptime ENTRY_DISTANCES = 1
@@ -136,6 +173,7 @@ comptime ENTRY_MINIBATCH = 2
 comptime ENTRY_BISECT = 3
 comptime ENTRY_BISECT_PREDICT = 4
 comptime ENTRY_MEANSHIFT = 5
+comptime ENTRY_OPTICS = 6
 
 
 def run_entry[O: ClusterOps](
@@ -155,4 +193,6 @@ def run_entry[O: ClusterOps](
         return bisect_predict_entry(ops, x, a, ip)
     if which == ENTRY_MEANSHIFT:
         return meanshift_entry(ops, x, a, ip, fp)
+    if which == ENTRY_OPTICS:
+        return optics_entry(ops, x, ip, fp)
     raise Error("x_cluster: unknown entry " + String(which))

@@ -34,7 +34,8 @@ from ._labels import flatten_labels, sorted_classes, label_kind
 
 __all__ = ["RobustScaler", "MaxAbsScaler", "OrdinalEncoder", "OneHotEncoder", "TargetEncoder", "SimpleImputer", "KBinsDiscretizer",
            "GaussianNB", "MultinomialNB", "BernoulliNB",
-           "LinearDiscriminantAnalysis", "QuadraticDiscriminantAnalysis"]
+           "LinearDiscriminantAnalysis", "QuadraticDiscriminantAnalysis",
+           "QuantileTransformer", "PowerTransformer"]
 
 _BINDING = "_mojolearn_x_prep"
 
@@ -46,6 +47,7 @@ _OPS = dict(
     te_global=20, te_enc=21, te_apply=22, mark_missing=23, fill=24, kbins_edges=25, kbins_codes=26,
     gnb_eps=27, gnb_params=28, gnb_jll=29, class_log_prior=30, mnb_params=31, bnb_params=32, cnb_params=33, cat_params=34, cat_jll=35,
     lda_prep=36, lda_w=37, lda_stage2=38, lda_stage3=39, qda_cov=40, qda_prep=41, qda_dec=42,
+    qt_apply=43, pt_fit=44, pt_apply=45, std_params=46,
 )
 _PARAMS = 14
 _NONE = -1
@@ -1235,3 +1237,140 @@ class QuadraticDiscriminantAnalysis(_Classifier):
             q.run(self.numeric_mode_)
             return q.get(out, n)
         return pr.get(o["jll"], (n, K))
+
+
+# ---------------------------------------------------------------- additions: transformers
+def _draw_without_replacement(n, k, seed):
+    """k distinct rows of n, from a splitmix64 partial Fisher-Yates (integer
+    arithmetic, the same on every machine); the reference draws numpy's."""
+    perm = list(range(n))
+    state = int(seed) & 0xFFFFFFFFFFFFFFFF
+    for i in range(k):
+        state, z = _splitmix64(state)
+        j = i + z % (n - i)
+        perm[i], perm[j] = perm[j], perm[i]
+    return sorted(perm[:k])
+
+
+class QuantileTransformer(_PrepBase):
+    """sklearn.preprocessing.QuantileTransformer: per-column numpy linear
+    percentiles of the non-NaN entries at n_quantiles evenly spaced
+    references, then the reference's two-sided interpolation; output
+    'uniform' or 'normal' (Acklam's inverse normal CDF, float32, clipped at
+    the reference's +-5.1993). Above `subsample` rows the fit uses a
+    without-replacement draw from `random_state` by splitmix64. NaN is kept.
+    inverse_transform and sparse input are refused."""
+    _parameters = ("n_quantiles", "output_distribution", "ignore_implicit_zeros", "subsample", "random_state",
+                   "copy")
+
+    def __init__(self, *, n_quantiles=1000, output_distribution="uniform", ignore_implicit_zeros=False,
+                 subsample=10_000, random_state=None, copy=True):
+        self.n_quantiles = n_quantiles
+        self.output_distribution = output_distribution
+        self.ignore_implicit_zeros = ignore_implicit_zeros
+        self.subsample = subsample
+        self.random_state = random_state
+        self.copy = copy
+
+    def fit(self, X, y=None):
+        if self.output_distribution not in ("uniform", "normal"):
+            raise ValueError(f"mojolearn: invalid output_distribution {self.output_distribution!r}")
+        arr = _x2d(X)
+        n, d = arr.shape
+        if self.subsample is not None and n > self.subsample:
+            arr = _gather_rows(arr, _draw_without_replacement(
+                n, int(self.subsample), 0 if self.random_state is None else int(self.random_state)))
+            n = arr.shape[0]
+        nq = max(1, min(int(self.n_quantiles), n))
+        refs = [i / (nq - 1) if nq > 1 else 0.0 for i in range(nq)]
+        mode = _mode()
+        pr = _Prog()
+        xo = pr.put(arr)
+        so, st, qf = pr.alloc(n * d), pr.alloc(6 * d), pr.put_list(refs)
+        qo = pr.alloc(nq * d)
+        pr.stage("sort_cols", d, xo, n, d, so, 0)
+        pr.stage("col_stats", d, xo, n, d, st)
+        pr.stage("quantile", nq * d, so, n, d, qf, nq, qo, st)
+        pr.run(mode)
+        self._q = pr.get(qo, nq * d)
+        flat = pr.values(qo, nq * d)
+        self.quantiles_ = Array.from_list([[flat[c * nq + j] for c in range(d)] for j in range(nq)], "<f4")
+        self.references_ = pr.get(qf, nq)
+        self.n_quantiles_, self.numeric_mode_, self.n_features_in_ = nq, mode, d
+        return self
+
+    def transform(self, X):
+        self._check_fitted()
+        arr = _x2d(X)
+        self._check_width(arr)
+        n, d = arr.shape
+        pr = _Prog()
+        xo, qo, ro = pr.put(arr), pr.put(self._q), pr.put(self.references_)
+        out = pr.alloc(n * d)
+        pr.stage("qt_apply", n * d, xo, n, d, qo, self.n_quantiles_, ro,
+                 1 if self.output_distribution == "normal" else 0, out)
+        pr.run(self.numeric_mode_)
+        return pr.get(out, (n, d))
+
+    def inverse_transform(self, X):
+        raise NotImplementedError("mojolearn: QuantileTransformer.inverse_transform is not implemented")
+
+
+class PowerTransformer(_PrepBase):
+    """sklearn.preprocessing.PowerTransformer: 'yeo-johnson' (default) or
+    'box-cox' (strictly positive input), then StandardScaler when
+    `standardize`. Each column's lambda maximises the reference's
+    log-likelihood by a fixed-step golden-section search over [-8, 8]
+    (the reference: scipy's Brent from the bracket (-2, 2)), float32. NaN is
+    ignored in fit and kept. inverse_transform is refused."""
+    _parameters = ("method", "standardize", "copy")
+
+    def __init__(self, method="yeo-johnson", *, standardize=True, copy=True):
+        self.method = method
+        self.standardize = standardize
+        self.copy = copy
+
+    def fit(self, X, y=None):
+        if self.method not in ("yeo-johnson", "box-cox"):
+            raise ValueError(f"mojolearn: invalid method {self.method!r}")
+        arr = _x2d(X)
+        n, d = arr.shape
+        method = 1 if self.method == "box-cox" else 0
+        mode = _mode()
+        pr = _Prog()
+        xo = pr.put(arr)
+        st, lam = pr.alloc(6 * d), pr.alloc(d)
+        pr.stage("col_stats", d, xo, n, d, st)
+        pr.stage("pt_fit", d, xo, n, d, method, st, lam)
+        mean, scale = pr.alloc(d), pr.alloc(d)
+        if self.standardize:
+            tx, st2 = pr.alloc(n * d), pr.alloc(6 * d)
+            pr.stage("pt_apply", n * d, xo, n, d, lam, method, _NONE, _NONE, tx)
+            pr.stage("col_stats", d, tx, n, d, st2)
+            pr.stage("std_params", d, st2, d, mean, scale)
+        pr.run(mode)
+        if method == 1 and any(v <= 0 for v in pr.values(st + 3 * d, d)):
+            raise ValueError("mojolearn: The Box-Cox transformation can only be applied to strictly positive data")
+        self.lambdas_ = pr.get(lam, d)
+        self._mean = pr.get(mean, d) if self.standardize else None
+        self._scale = pr.get(scale, d) if self.standardize else None
+        self._method = method
+        self.numeric_mode_, self.n_features_in_ = mode, d
+        return self
+
+    def transform(self, X):
+        self._check_fitted()
+        arr = _x2d(X)
+        self._check_width(arr)
+        n, d = arr.shape
+        pr = _Prog()
+        xo, lo = pr.put(arr), pr.put(self.lambdas_)
+        mo = pr.put(self._mean) if self.standardize else _NONE
+        so = pr.put(self._scale) if self.standardize else _NONE
+        out = pr.alloc(n * d)
+        pr.stage("pt_apply", n * d, xo, n, d, lo, self._method, mo, so, out)
+        pr.run(self.numeric_mode_)
+        return pr.get(out, (n, d))
+
+    def inverse_transform(self, X):
+        raise NotImplementedError("mojolearn: PowerTransformer.inverse_transform is not implemented")
