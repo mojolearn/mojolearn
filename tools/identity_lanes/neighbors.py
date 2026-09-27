@@ -265,6 +265,27 @@ def _(ml, X, yc, yr, Xh=None):
                      s_dual=_h(s.dual_coef_), s_predict=_h(s.predict(X[512:768]))),
                 p, lambda e: (e.predict(Xh[:256]),))
 
+@lane("x-neighbors-svc-multiclass")
+def _(ml, X, yc, yr, Xh=None):
+    """SVC with four classes: one-vs-one over the binary solver (six pair
+    machines on their rows, gamma on the whole X), scikit-learn's layout
+    and orientation (_svm_impl.SVC._fit_ovo); decision_function 'ovo' and
+    'ovr', predict by vote and with break_ties, class_weight and
+    sample_weight cut to each pair's rows, a linear coef_ per pair."""
+    y4 = (yc[:384] + 2 * (X[:384, 5] > 0).astype(np.int32)).astype(np.int32)
+    w = (0.5 + 0.5 * (np.arange(384) % 4)).astype(np.float64)
+    m = ml.SVC(C=1.0, kernel="rbf", gamma=0.05, max_iter=200).fit(X[:384], y4)
+    r = ml.SVC(C=1.0, kernel="rbf", gamma="scale", max_iter=200, decision_function_shape="ovr",
+               break_ties=True, class_weight="balanced").fit(X[:384], y4, sample_weight=w)
+    li = ml.SVC(C=0.5, kernel="linear", max_iter=200).fit(X[:384], y4)
+    return _fit(dict(dual=_h(m.dual_coef_), support=_h(m.support_), intercept=_h(m.intercept_),
+                     n_support=_h(m.n_support_), ovo=_h(m.decision_function(X[384:640])),
+                     predict=_h(m.predict(X[384:640])),
+                     ovr_dual=_h(r.dual_coef_), ovr=_h(r.decision_function(X[384:640])),
+                     ovr_predict=_h(r.predict(X[384:640])),
+                     coef=_h(li.coef_), linear_predict=_h(li.predict(X[384:640]))),
+                r, lambda e: (e.decision_function(Xh[:256]), e.predict(Xh[:256])))
+
 _batch_decl(_rows_calls("score_samples", "predict", sl=slice(0, 256)), "x-neighbors-lof")
 _batch_decl(_rows_calls("predict", "decision_function", "predict_proba", sl=slice(0, 256)), "x-neighbors-nearest-centroid")
 _batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "x-neighbors-ocsvm")
@@ -278,4 +299,4 @@ _batch_decl(_rows_calls("predict_proba", "predict", sl=slice(0, 128)),
 _batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_neighbors_holes), "x-neighbors-knn-imputer")
 _batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-neighbors-svgp", "x-neighbors-svr-kernels")
 _batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "x-neighbors-gamma-scale", "x-neighbors-svm-weights",
-            "x-neighbors-svc-sigmoid")
+            "x-neighbors-svc-sigmoid", "x-neighbors-svc-multiclass")

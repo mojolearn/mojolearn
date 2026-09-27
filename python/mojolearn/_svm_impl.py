@@ -44,6 +44,7 @@ That property belongs to `MOJOLEARN_NUMERIC_MODE=identical`. The FAST
 build, which is the default, makes no cross-vendor claim at all.
 """
 
+import array
 import importlib.machinery
 import importlib.util
 import os
@@ -56,7 +57,7 @@ from . import _backend
 from . import _serialize
 from ._array import Array
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, empty, zeros
-from ._labels import classes_from_member, classes_member, decode_labels, sorted_classes
+from ._labels import argmax_rows, classes_from_member, classes_member, decode_labels, sorted_classes
 from ._mode import NumericModeMixin
 from ._scale_gamma import scale_gamma
 from .linear_model import (
@@ -181,15 +182,14 @@ def _as_labels(y):
             "vendor-specific payload and cannot sit in a hashed stage)"
         )
     classes, _codes = sorted_classes(labels)
-    if len(classes) != 2:
-        raise NotImplementedError(
-            "mojolearn SVC: only binary classification is implemented, got "
-            f"{len(classes)} classes {classes!r}. cuML's own C++ "
-            "asserts the same thing (svc_impl.cuh: 'Only binary "
-            "classification is implemented at the moment'); their multiclass "
-            "is a Python-layer one-vs-one/one-vs-rest wrapper and is not "
-            "implemented (svm/NOT_IMPLEMENTED.tsv)"
+    if len(classes) < 2:
+        raise ValueError(
+            f"mojolearn SVC: y has {len(classes)} class; at least two are needed"
         )
+    if len(classes) > 2:
+        # One-vs-one over the binary solver (`SVC._fit_ovo`): the caller
+        # forms each pair's 0.0 / 1.0 labels from these codes.
+        return None, classes, _codes
     if not all(isinstance(c, numbers.Real) for c in classes):
         # String (or other non-numeric) labels: the solver sees each row's
         # dense code, 0.0 or 1.0, so `classes_[1]` still maps to +1 and the
@@ -283,8 +283,8 @@ def _dual_times_sv(dual_coef, support_vectors):
 
 
 class SVC(NumericModeMixin):
-    """Binary C-support vector classification, backed by an SMO
-    solver and GPU kernel matrices (`svm/`, DEVIATIONS 630-637;
+    """C-support vector classification, binary and one-vs-one multiclass,
+    backed by an SMO solver and GPU kernel matrices (`svm/`, DEVIATIONS 630-637;
     `svm/README.md`), the scikit-learn surface.
 
     WHAT IS HONORED, WHAT IS REFUSED, AND WHY -- one line per parameter,
@@ -330,14 +330,25 @@ class SVC(NumericModeMixin):
                                   in the reference (CUML_LOG_DEBUG); this implementation
                                   prints none, so accepting it would be
                                   accepting-and-ignoring
-        random_state    refused   anything but None. The binary C-SVC solver
-                                  draws no random numbers; cuML threads
-                                  `random_state` only into its multiclass
-                                  wrapper, which is not implemented
-        decision_       refused   anything but 'ovo'. It picks between
-          function_shape          cuML's one-vs-one and one-vs-rest
-                                  multiclass wrappers; there is no
-                                  multiclass here to shape
+        random_state    refused   anything but None. The solver and its
+                                  one-vs-one multiclass draw no random
+                                  numbers; scikit-learn reads it only for
+                                  probability=True, which is refused
+        decision_       honored   'ovo' (the default here, cuML's) or 'ovr'
+          function_shape          (scikit-learn's): with more than two
+                                  classes, decision_function's pairwise
+                                  (n, K(K-1)/2) or voted (n, K) form. No
+                                  effect on two classes, as in scikit-learn
+        break_ties      honored   with 'ovr' and more than two classes,
+                                  predict is the argmax of the 'ovr'
+                                  decision_function; refused with 'ovo'
+                                  (scikit-learn's ValueError)
+        multiclass      honored   one-vs-one, libsvm's scheme: one binary
+                                  machine per class pair (i < j) on the
+                                  rows of those two classes, gamma resolved
+                                  on the whole X, the per-row bounds cut to
+                                  the pair's rows; prediction by vote, ties
+                                  to the lowest class (`_fit_ovo`)
         probability     refused   Platt scaling is not in cuML's C++ surface
                                   at all (svm/NOT_IMPLEMENTED.tsv)
         output_type     refused   a cuML-internal array-type selector; this
@@ -385,8 +396,8 @@ class SVC(NumericModeMixin):
 
     Attributes
     ----------
-    classes_ : list (2,)
-        The two distinct labels, sorted ascending, as Python scalars under
+    classes_ : list (K,)
+        The distinct labels, sorted ascending, as Python scalars under
         the package-wide order rule (`_labels.sorted_classes`, DEVIATION
         2340; it was an ndarray in `y`'s dtype). `predict` returns an
         int64 / float64 Array for int / float labels and a Python list
@@ -399,12 +410,17 @@ class SVC(NumericModeMixin):
     dual_coef_ : Array (1, n_SV) float32
         scikit-learn's 2-D layout of cuML's 1-D `dual_coefs`.
     intercept_ : Array (1,) float32
-    n_support_ : int
-        cuML's scalar count. scikit-learn's attribute of this name is a
-        per-class array; this one is not, and the difference is here
-        rather than in a surprise.
-    n_iter_ : int
-        Total inner SMO iterations.
+    n_support_ : int, or Array (K,) int32 for K > 2
+        Two classes: cuML's scalar count (scikit-learn's is a per-class
+        array; this one is not, and the difference is here rather than in
+        a surprise). More: scikit-learn's per-class counts.
+    n_iter_ : int, or Array (K(K-1)/2,) int32 for K > 2
+        Total inner SMO iterations, per pair for more than two classes.
+
+    MULTICLASS LAYOUT (K > 2) is scikit-learn's, in its orientation (a
+    pair's decision positive toward its LOWER class): `support_` grouped
+    by class, ascending within a class; `dual_coef_` (K - 1, n_SV);
+    `intercept_` (K(K-1)/2,); `coef_` (K(K-1)/2, n_features) for 'linear'.
     coef_ : Array (1, n_features) float32
         `dual_coef_ @ support_vectors_`, and only for `kernel='linear'`;
         raises AttributeError otherwise, as scikit-learn does.
@@ -440,6 +456,7 @@ class SVC(NumericModeMixin):
         class_weight=None,
         decision_function_shape="ovo",
         probability=False,
+        break_ties=False,
     ):
         if not isinstance(kernel, str):
             raise ValueError("mojolearn SVC: kernel is a name")
@@ -561,22 +578,26 @@ class SVC(NumericModeMixin):
             )
         if random_state is not None:
             raise NotImplementedError(
-                "mojolearn SVC: random_state is refused; the binary C-SVC "
-                "solver draws no random numbers, and cuML threads this "
-                "parameter only into its multiclass wrapper, which is not "
-                "implemented"
+                "mojolearn SVC: random_state is refused; the C-SVC solver and "
+                "its one-vs-one multiclass draw no random numbers, and "
+                "scikit-learn reads it only for probability=True, which is "
+                "refused"
             )
         if class_weight is not None and not isinstance(class_weight, (dict, str)):
             raise ValueError(
                 "mojolearn SVC: class_weight is a dict, 'balanced' or None, "
                 f"got {type(class_weight).__name__}"
             )
-        if decision_function_shape != "ovo":
-            raise NotImplementedError(
-                f"mojolearn SVC: decision_function_shape="
-                f"{decision_function_shape!r} is refused; it picks between "
-                "cuML's one-vs-one and one-vs-rest multiclass wrappers and "
-                "there is no multiclass here to shape"
+        if decision_function_shape not in ("ovo", "ovr"):
+            raise ValueError(
+                "mojolearn SVC: decision_function_shape is 'ovo' or 'ovr', got "
+                f"{decision_function_shape!r}"
+            )
+        break_ties = bool(break_ties)
+        if break_ties and decision_function_shape == "ovo":
+            raise ValueError(
+                "mojolearn SVC: break_ties must be False when "
+                "decision_function_shape is 'ovo' (scikit-learn's rule)"
             )
         if probability:
             raise NotImplementedError(
@@ -596,8 +617,9 @@ class SVC(NumericModeMixin):
         self.output_type = None
         self.random_state = None
         self.class_weight = class_weight
-        self.decision_function_shape = "ovo"
+        self.decision_function_shape = decision_function_shape
         self.probability = False
+        self.break_ties = break_ties
 
     def _resolve_gamma(self, x):
         """cuML's `_get_gamma`. 'auto' is `1 / n_cols`, exact for every
@@ -611,19 +633,13 @@ class SVC(NumericModeMixin):
             return scale_gamma(x.ravel().tolist(), x.shape[1])
         return float(self.gamma)
 
-    def fit(self, X, y, sample_weight=None):
-        x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
-        labels, classes, pair = _as_labels(y)
+    def _solve(self, x, labels, gamma, c_rows):
+        """ONE binary C-SVC solve through the binding: `labels` float32 with
+        two distinct values, `c_rows` the per-row bounds or None. Returns
+        (n_support, dual, support, sv, info) with the worst-case buffers
+        uncut."""
         n_rows, n_cols = x.shape
-        if labels.shape[0] != n_rows:
-            raise ValueError(
-                f"mojolearn SVC: y has {labels.shape[0]} entries, X has "
-                f"{n_rows} rows"
-            )
-        gamma = self._resolve_gamma(x)
-        c_rows = _c_rows(self.C, n_rows, sample_weight, getattr(self, "class_weight", None), y, "SVC")
         tail = [] if c_rows is None else [addr_ro(c_rows, name="C * sample_weight")]
-
         dual = empty((n_rows,), "<f4")
         support = empty((n_rows,), "<i4")
         sv = empty((n_rows * n_cols,), "<f4")
@@ -641,7 +657,23 @@ class SVC(NumericModeMixin):
             [n_rows, n_cols, _SVC_KERNELS[self.kernel], gamma, self.C, self.tol,
              self.max_iter, self.nochange_steps, int(self.degree), float(self.coef0)] + tail,
         )
-        n_support = int(n_support)
+        return int(n_support), dual, support, sv, info
+
+    def fit(self, X, y, sample_weight=None):
+        x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
+        labels, classes, pair = _as_labels(y)
+        n_rows, n_cols = x.shape
+        n_y = len(pair) if labels is None else labels.shape[0]
+        if n_y != n_rows:
+            raise ValueError(
+                f"mojolearn SVC: y has {n_y} entries, X has {n_rows} rows"
+            )
+        gamma = self._resolve_gamma(x)
+        c_rows = _c_rows(self.C, n_rows, sample_weight, getattr(self, "class_weight", None), y, "SVC")
+        if labels is None:
+            return self._fit_ovo(x, classes, pair, gamma, c_rows)
+        self.__dict__.pop("_pairs", None)
+        n_support, dual, support, sv, info = self._solve(x, labels, gamma, c_rows)
         # `np.float32(...)`: one rounding of the float64 slot to binary32.
         b = _round_f32(info[0])
         label0 = _round_f32(info[3])
@@ -675,6 +707,103 @@ class SVC(NumericModeMixin):
         self._label1 = label1
         return self
 
+    def _fit_ovo(self, x, classes, codes, gamma, c_rows):
+        """MULTICLASS: one-vs-one, libsvm's (and scikit-learn's SVC's)
+        scheme, over the binary solver. For each class pair (i, j), i < j
+        in `classes_` order, the rows of class i or j are copied out in
+        their original order (exact bytes), class j is the solver's +1
+        (label 1.0, class i label 0.0), the per-row bounds are the full
+        fit's `_c_rows` cut to the same rows, and gamma is the one resolved
+        on the WHOLE X (scikit-learn's `_get_gamma` runs once, before the
+        pairs). Every number is the binary solver's; what is added here is
+        exact bookkeeping (row selection, index remapping, negation).
+
+        The public attributes are scikit-learn's multiclass layout, in its
+        orientation (a pair's decision is positive toward class i, the
+        negation of this solver's, which is exact): `support_` grouped by
+        class, ascending index within a class; `dual_coef_` (K - 1, n_SV);
+        `intercept_` (K (K - 1) / 2,); `n_support_` per class; `n_iter_`
+        per pair."""
+        n_rows, n_cols = x.shape
+        k = len(classes)
+        row_bytes = 4 * n_cols
+        raw = x.tobytes()
+        cb = None if c_rows is None else c_rows.tolist()
+        pairs = []
+        for i in range(k):
+            for j in range(i + 1, k):
+                idx = [r for r in range(n_rows) if codes[r] == i or codes[r] == j]
+                store = array.array("f")
+                store.frombytes(b"".join(raw[r * row_bytes:(r + 1) * row_bytes] for r in idx))
+                sub = Array._owned(store, (len(idx), n_cols), "<f4", "C")
+                lab = Array.from_list([1.0 if codes[r] == j else 0.0 for r in idx], "<f4")
+                sub_c = None if cb is None else Array.from_list([cb[r] for r in idx], "<f4")
+                n_sv, dual, support, sv, info = self._solve(sub, lab, gamma, sub_c)
+                if _round_f32(info[3]) != 0.0 or _round_f32(info[4]) != 1.0:
+                    raise RuntimeError(
+                        "mojolearn SVC: the solver's label pair for classes "
+                        f"({classes[i]!r}, {classes[j]!r}) is not (0.0, 1.0); "
+                        "the class mapping cannot be trusted")
+                local = support[:n_sv].tolist()
+                pairs.append(dict(
+                    i=i, j=j,
+                    dual=dual[:n_sv].reshape((1, n_sv)),
+                    sv=sv[:n_sv * n_cols].reshape((n_sv, n_cols)),
+                    support=[idx[s] for s in local],
+                    b=_round_f32(info[0]),
+                    n_iter=int(info[2]),
+                ))
+        self._set_ovo(classes, pairs, x, n_cols)
+        self._gamma = gamma
+        self._label0 = 0.0
+        self._label1 = 1.0
+        return self
+
+    def _set_ovo(self, classes, pairs, x, n_cols):
+        """scikit-learn's multiclass attributes from the per-pair machines
+        (also `load`'s path, where `x` is None and the rows come from each
+        pair's own support vectors)."""
+        k = len(classes)
+        per_class = [dict() for _ in range(k)]          # orig index -> row bytes
+        for p in pairs:
+            rows = p["sv"].tolist()
+            d = p["dual"].tolist()[0]
+            for pos, r in enumerate(p["support"]):
+                # the class of a support vector is its pair side: this
+                # solver's dual is +alpha on class j, -alpha on class i, and
+                # a returned support vector has alpha > 0
+                side = p["i"] if d[pos] < 0.0 else p["j"]
+                per_class[side][r] = rows[pos]
+        support, sv_rows, n_support, col_of = [], [], [], {}
+        for c in range(k):
+            keys = sorted(per_class[c])
+            n_support.append(len(keys))
+            for r in keys:
+                col_of[r] = len(support)
+                support.append(r)
+                sv_rows.append(per_class[c][r])
+        n_sv = len(support)
+        dual = [[0.0] * n_sv for _ in range(k - 1)]
+        for p in pairs:
+            i, j = p["i"], p["j"]
+            d = p["dual"].tolist()[0]
+            for pos, r in enumerate(p["support"]):
+                side = i if d[pos] < 0.0 else j
+                # a class-i vector's coefficient for pair (i, j) sits in
+                # row j - 1, a class-j vector's in row i; negated into
+                # scikit-learn's orientation
+                dual[j - 1 if side == i else i][col_of[r]] = -d[pos]
+        self.classes_ = classes
+        self.n_features_in_ = n_cols
+        self._pairs = pairs
+        self.support_ = Array.from_list(support, "<i4")
+        self.support_vectors_ = (Array.from_list(sv_rows, "<f4") if n_sv
+                                 else zeros((0, n_cols), "<f4"))
+        self.dual_coef_ = Array.from_list(dual, "<f4") if n_sv else zeros((k - 1, 0), "<f4")
+        self.intercept_ = Array.from_list([-p["b"] for p in pairs], "<f4")
+        self.n_support_ = Array.from_list(n_support, "<i4")
+        self.n_iter_ = Array.from_list([p["n_iter"] for p in pairs], "<i4")
+
     @property
     def coef_(self):
         if not hasattr(self, "dual_coef_"):
@@ -683,11 +812,22 @@ class SVC(NumericModeMixin):
             raise AttributeError(
                 "mojolearn SVC: coef_ is only available for kernel='linear'"
             )
+        pairs = self.__dict__.get("_pairs")
+        if pairs is not None:
+            # one row per pair in scikit-learn's orientation: the negation
+            # of each pair machine's own dual_coef_ @ support_vectors_
+            rows = []
+            for p in pairs:
+                if p["dual"].shape[1] == 0:
+                    rows.append([0.0] * self.n_features_in_)
+                else:
+                    rows.append([-v for v in _dual_times_sv(p["dual"], p["sv"]).tolist()[0]])
+            return Array.from_list(rows, "<f4")
         if self.n_support_ == 0:
             return zeros((1, self.n_features_in_), "<f4")
         return _dual_times_sv(self.dual_coef_, self.support_vectors_)
 
-    def _run(self, X, predict_class):
+    def _query(self, X):
         if not hasattr(self, "dual_coef_"):
             raise ValueError("mojolearn SVC: call fit() first")
         q, _ = as_f32_c(X, ndim=2, name="X")
@@ -696,41 +836,110 @@ class SVC(NumericModeMixin):
                 f"mojolearn SVC: X has {q.shape[1]} features, fit saw "
                 f"{self.n_features_in_}"
             )
+        return q
+
+    def _machine(self, q, dual, sv, n_support, b, label0, label1, predict_class):
         n_rows = q.shape[0]
         out = empty((n_rows,), "<f4")
         # Kept in locals so the arrays outlive the call; the Mojo side
         # borrows these addresses and owns nothing (`_buffer.py`).
-        dual = self.dual_coef_
-        sv = self.support_vectors_
         self._bind(_EXT_NAME).svc_predict(
             addr_ro(q, name="q"),
-            addr_ro(dual, name="dual") if self.n_support_ > 0 else 0,
-            addr_ro(sv, name="sv") if self.n_support_ > 0 else 0,
+            addr_ro(dual, name="dual") if n_support > 0 else 0,
+            addr_ro(sv, name="sv") if n_support > 0 else 0,
             addr(out, name="out"),
             # ORDER MATCHES bindings/_mojolearn_svm.mojo::svc_predict_binding.
             # n_rows, n_features, n_support, b, classes[0], classes[1],
             # kernel, gamma, predict_class, cache_size_mib, degree, coef0
-            [n_rows, self.n_features_in_, self.n_support_,
-             float(self.intercept_[0]), float(self._label0),
-             float(self._label1), _SVC_KERNELS[self.kernel], self._gamma,
+            [n_rows, self.n_features_in_, n_support,
+             float(b), float(label0), float(label1),
+             _SVC_KERNELS[self.kernel], self._gamma,
              1 if predict_class else 0, self.cache_size,
              int(self.degree), float(self.coef0)],
         )
         return out
 
+    def _run(self, X, predict_class):
+        q = self._query(X)
+        return self._machine(q, self.dual_coef_, self.support_vectors_, self.n_support_,
+                             self.intercept_[0], self._label0, self._label1, predict_class)
+
+    def _pair_decisions(self, X):
+        """Each pair machine's raw decision on X (this solver's
+        orientation: >= 0 toward class j), as lists of float32 values."""
+        q = self._query(X)
+        return [self._machine(q, p["dual"], p["sv"], p["dual"].shape[1], p["b"],
+                              0.0, 1.0, False).tolist() for p in self._pairs]
+
+    def _ovr_scores(self, decisions, n_rows):
+        """scikit-learn's `_ovr_decision_function(dec < 0, -dec, K)` on the
+        one-vs-one decisions `dec` (= -d here): votes plus the summed
+        confidences squashed into (-1/3, 1/3), in binary64, accumulated in
+        pair order. Pure host arithmetic in one written order."""
+        k = len(self.classes_)
+        out = []
+        for r in range(n_rows):
+            votes = [0.0] * k
+            conf = [0.0] * k
+            for p, d in zip(self._pairs, decisions):
+                v = d[r]
+                i, j = p["i"], p["j"]
+                conf[i] -= v
+                conf[j] += v
+                if v > 0.0:
+                    votes[j] += 1.0
+                else:
+                    votes[i] += 1.0
+            out.append([votes[c] + conf[c] / (3.0 * (abs(conf[c]) + 1.0)) for c in range(k)])
+        return out
+
     def decision_function(self, X):
-        """The raw `sum_j K(x, sv_j) dual_j + b`, one value per row.
-        scikit-learn returns the same shape for a binary problem."""
-        return self._run(X, False)
+        """Binary: the raw `sum_j K(x, sv_j) dual_j + b`, one value per row.
+        Multiclass: `decision_function_shape='ovo'` gives (n, K (K - 1) / 2)
+        float32, each pair's decision in scikit-learn's orientation
+        (positive toward the lower class of the pair); 'ovr' gives (n, K)
+        float64, scikit-learn's vote-plus-confidence transform of those."""
+        if self.__dict__.get("_pairs") is None:
+            return self._run(X, False)
+        decisions = self._pair_decisions(X)
+        n_rows = len(decisions[0])
+        if self.decision_function_shape == "ovo":
+            return Array.from_list(
+                [[-d[r] for d in decisions] for r in range(n_rows)], "<f4")
+        return Array.from_list(self._ovr_scores(decisions, n_rows), "<f8")
 
     def predict(self, X):
-        """cuML's `applyPrediction` epilogue, ON THE DEVICE: the label is
-        chosen there by `val + b < 0 ? classes_[0] : classes_[1]` and this
-        maps the float32 label it wrote back into `classes_`'s dtype."""
-        raw = self._run(X, True)
-        label1 = self._label1
-        return decode_labels(self.classes_,
-                             [1 if v == label1 else 0 for v in raw.tolist()])
+        """Binary: cuML's `applyPrediction` epilogue, ON THE DEVICE: the
+        label is chosen there by `val + b < 0 ? classes_[0] :
+        classes_[1]` and this maps the float32 label it wrote back into
+        `classes_`'s dtype. Multiclass: libsvm's vote (a pair's decision
+        < 0 here votes class i, otherwise class j, the binary epilogue's
+        rule), the most votes winning and ties to the lowest class; with
+        `break_ties=True` (shape 'ovr') the argmax of the 'ovr'
+        decision_function instead, first maximum winning."""
+        pairs = self.__dict__.get("_pairs")
+        if pairs is None:
+            raw = self._run(X, True)
+            label1 = self._label1
+            return decode_labels(self.classes_,
+                                 [1 if v == label1 else 0 for v in raw.tolist()])
+        decisions = self._pair_decisions(X)
+        n_rows = len(decisions[0])
+        if self.break_ties:
+            return decode_labels(self.classes_,
+                                 argmax_rows(Array.from_list(self._ovr_scores(decisions, n_rows), "<f8")))
+        k = len(self.classes_)
+        codes = []
+        for r in range(n_rows):
+            votes = [0] * k
+            for p, d in zip(pairs, decisions):
+                votes[p["j"] if d[r] >= 0.0 else p["i"]] += 1
+            best = 0
+            for c in range(1, k):
+                if votes[c] > votes[best]:
+                    best = c
+            codes.append(best)
+        return decode_labels(self.classes_, codes)
 
     def predict_proba(self, X):
         raise NotImplementedError(
@@ -772,15 +981,36 @@ class SVC(NumericModeMixin):
                 [float(self.C), float(self.tol), float(self.cache_size), float(self._gamma)],
                 "<f8",
             ),
-            "meta": Array.from_list(
+        }
+        if self.__dict__.get("_pairs") is None:
+            arrays["meta"] = Array.from_list(
                 [int(self.n_features_in_), int(self.n_support_), int(self.n_iter_),
                  int(self.max_iter), int(self.nochange_steps), int(self.degree)],
                 "<i8",
-            ),
-        }
+            )
         if self.kernel in ("poly", "sigmoid"):
             # Only for poly and sigmoid, so every linear and rbf file keeps its bytes.
             arrays["coef0"] = Array.from_list([float(self.coef0)], "<f8")
+        pairs = self.__dict__.get("_pairs")
+        if pairs is not None:
+            # MULTICLASS ONLY, so every binary file keeps its bytes: the
+            # one-vs-one machines themselves, concatenated in pair order
+            # ([i, j, n_support, n_iter] per pair), from which `load`
+            # rebuilds the public attributes exactly as `fit` built them.
+            nf = int(self.n_features_in_)
+            arrays["meta"] = Array.from_list(
+                [nf, len(self.support_.tolist()), sum(p["n_iter"] for p in pairs),
+                 int(self.max_iter), int(self.nochange_steps), int(self.degree)], "<i8")
+            arrays["labels"] = Array.from_list([0.0, 1.0], "<f8")
+            arrays["shape"] = str(self.decision_function_shape)
+            arrays["break_ties"] = Array.from_list([1 if self.break_ties else 0], "<i8")
+            arrays["pair_meta"] = Array.from_list(
+                [v for p in pairs for v in (p["i"], p["j"], p["dual"].shape[1], p["n_iter"])], "<i8")
+            arrays["pair_b"] = Array.from_list([p["b"] for p in pairs], "<f4")
+            arrays["pair_support"] = Array.from_list([r for p in pairs for r in p["support"]], "<i4")
+            arrays["pair_dual"] = Array.from_list([v for p in pairs for v in p["dual"].tolist()[0]], "<f4")
+            arrays["pair_sv"] = Array.from_list(
+                [v for p in pairs for row in p["sv"].tolist() for v in row], "<f4")
         return _serialize.write_npz(path, arrays)
 
     @classmethod
@@ -816,6 +1046,8 @@ class SVC(NumericModeMixin):
         )
         _restore_mode(obj, arrays)
         nf, n_support = int(meta[0]), int(meta[1])
+        if "pair_meta" in arrays:
+            return cls._load_ovo(obj, arrays, path, nf, hyper)
         dual = _serialize.exact(arrays, "dual_coef", "<f4")
         if dual.ndim != 2 or tuple(dual.shape) != (1, n_support):
             raise ValueError(f"mojolearn: {path!r} dual_coef shape {tuple(dual.shape)} is not (1, {n_support})")
@@ -844,6 +1076,46 @@ class SVC(NumericModeMixin):
         obj._gamma = float(hyper[3])
         obj._label0 = float(labels[0])
         obj._label1 = float(labels[1])
+        return obj
+
+    @classmethod
+    def _load_ovo(cls, obj, arrays, path, nf, hyper):
+        """The multiclass half of `load`: the per-pair machines, then the
+        public attributes through `_set_ovo`, as `fit` sets them."""
+        classes = classes_from_member(arrays["classes"])
+        k = len(classes)
+        pm = _serialize.exact(arrays, "pair_meta", "<i8").tolist()
+        n_pairs = k * (k - 1) // 2
+        if k < 3 or len(pm) != 4 * n_pairs:
+            raise ValueError(f"mojolearn: {path!r} pair_meta does not hold {n_pairs} pairs")
+        pb = _serialize.exact(arrays, "pair_b", "<f4").tolist()
+        ps = _serialize.exact(arrays, "pair_support", "<i4").tolist()
+        pd = _serialize.exact(arrays, "pair_dual", "<f4").tolist()
+        pv = _serialize.exact(arrays, "pair_sv", "<f4").tolist()
+        total = sum(pm[4 * q + 2] for q in range(n_pairs))
+        if len(pb) != n_pairs or len(ps) != total or len(pd) != total or len(pv) != total * nf:
+            raise ValueError(f"mojolearn: {path!r} pair arrays do not match pair_meta")
+        pairs, at, q = [], 0, 0
+        for i in range(k):
+            for j in range(i + 1, k):
+                pi, pj, n_sv, n_iter = pm[4 * q:4 * q + 4]
+                if (pi, pj) != (i, j):
+                    raise ValueError(f"mojolearn: {path!r} pair {q} is ({pi}, {pj}), not ({i}, {j})")
+                pairs.append(dict(
+                    i=i, j=j,
+                    dual=Array.from_list([pd[at:at + n_sv]], "<f4").reshape((1, n_sv)),
+                    sv=Array.from_list(pv[at * nf:(at + n_sv) * nf], "<f4").reshape((n_sv, nf)),
+                    support=ps[at:at + n_sv], b=pb[q], n_iter=int(n_iter)))
+                at += n_sv
+                q += 1
+        shape = _serialize.scalar_str(arrays, "shape")
+        ties = bool(_serialize.exact(arrays, "break_ties", "<i8").tolist()[0])
+        obj.decision_function_shape = "ovo" if shape == "ovo" else "ovr"
+        obj.break_ties = ties and obj.decision_function_shape == "ovr"
+        obj._set_ovo(classes, pairs, None, nf)
+        obj._gamma = float(hyper[3])
+        obj._label0 = 0.0
+        obj._label1 = 1.0
         return obj
 
 
