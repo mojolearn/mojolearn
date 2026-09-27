@@ -40,6 +40,8 @@ __all__ = [
     "BaggingRegressor",
     "AdaBoostClassifier",
     "AdaBoostRegressor",
+    "DARTRegressor",
+    "DARTClassifier",
 ]
 
 
@@ -712,3 +714,213 @@ class AdaBoostRegressor(_AdaBoostBase):
         b.x_trees_weighted_median(addr_ro(preds, name="preds"), addr_ro(weights, name="weights"),
                                   addr(out, name="median"), [n, m])
         return out
+
+
+# --------------------------------------------------------------------- DART
+# Reference: LightGBM `src/boosting/dart.hpp` (DART::DroppingTrees,
+# ::Normalize, ::TrainOneIter) over `gbdt.cpp`'s boosting loop, with
+# `regression_objective.hpp` (L2) and `binary_objective.hpp` (logloss,
+# sigmoid 1) for the gradients. Carried: drop_rate, max_drop, skip_drop,
+# uniform_drop, xgboost_dart_mode, drop_seed, the tree weights and their
+# normalisation, Newton leaf values -sum(g) / (sum(h) + reg_lambda).
+# DEVIATIONS: each iteration's tree is the forest builder's (level-order,
+# quantile bins, `num_leaves` as cuML's `max_leaves` cap) fitted by squared
+# error to -g, where LightGBM grows leaf-wise on the g/h histogram gain; the
+# leaf VALUES are then LightGBM's Newton step on the rows that reach them. The
+# drop draws come from the lane's counter RNG seeded by drop_seed, not
+# LightGBM's LCG; the average/log-odds start is a constant outside the trees
+# (never dropped), where LightGBM folds it into tree 0's bias. Multiclass is
+# refused by name.
+class _DARTBase(_TreesEnsembleBase):
+    _KIND = 0
+
+    def __init__(self, n_estimators, learning_rate, num_leaves, max_depth, min_child_samples, reg_lambda,
+                 max_bin, drop_rate, max_drop, skip_drop, xgboost_dart_mode, uniform_drop, drop_seed,
+                 random_state):
+        if int(n_estimators) < 1:
+            raise ValueError("n_estimators must be >= 1")
+        if not float(learning_rate) > 0:
+            raise ValueError("learning_rate must be > 0")
+        if not 0.0 <= float(drop_rate) <= 1.0 or not 0.0 <= float(skip_drop) <= 1.0:
+            raise ValueError("drop_rate and skip_drop must be in [0, 1]")
+        if float(reg_lambda) < 0:
+            raise ValueError("reg_lambda must be >= 0")
+        self.n_estimators = n_estimators
+        self.learning_rate = learning_rate
+        self.num_leaves = num_leaves
+        self.max_depth = max_depth
+        self.min_child_samples = min_child_samples
+        self.reg_lambda = reg_lambda
+        self.max_bin = max_bin
+        self.drop_rate = drop_rate
+        self.max_drop = max_drop
+        self.skip_drop = skip_drop
+        self.xgboost_dart_mode = xgboost_dart_mode
+        self.uniform_drop = uniform_drop
+        self.drop_seed = drop_seed
+        self.random_state = random_state
+        _trees_seed(random_state)
+        _trees_seed(drop_seed)
+
+    def _tree_nodes(self, tree, Xa):
+        n, d = Xa.shape
+        out = empty((n,), "<i4")
+        self._bind().x_trees_apply(addr_ro(tree._offsets, name="offsets"), addr_ro(tree._colid, name="colid"),
+                                   addr_ro(tree._quesval, name="quesval"), addr_ro(tree._left_child, name="left"),
+                                   addr_ro(Xa, name="X"), addr(out, name="nodes"), [n, d, 0, 1])
+        return out
+
+    def _add(self, score, nodes, values, weight):
+        self._bind().x_trees_tree_score_add(addr_ro(nodes, name="nodes"), addr_ro(values, name="values"),
+                                            addr(score, name="score"), [len(nodes), float(weight)])
+
+    def _boost(self, Xa, y32):
+        n, d = Xa.shape
+        b = self._bind()
+        seed = _trees_seed(self.random_state)
+        drop_seed = _trees_seed(self.drop_seed)
+        yv = y32.tolist()
+        if self._KIND == 0:
+            init = math.fsum(yv) / n
+        else:
+            p = math.fsum(yv) / n
+            if not 0.0 < p < 1.0:
+                raise ValueError("y must hold both classes")
+            init = float(b.x_trees_log64(p / (1.0 - p)))
+        self.init_score_ = init
+        score = full((n,), init, "<f8")
+        g, h, target = empty((n,), "<f8"), empty((n,), "<f8"), empty((n,), "<f4")
+        lr = float(self.learning_rate)
+        self.trees_, self.tree_values_, self.tree_coefs_, self.tree_weights_ = [], [], [], []
+        train_nodes = []
+        sum_w = 0.0
+        max_depth = None if self.max_depth is None or int(self.max_depth) <= 0 else int(self.max_depth)
+        for it in range(int(self.n_estimators)):
+            t = len(self.trees_)
+            u = empty((1 + t,), "<f8")
+            b.x_trees_uniform(addr(u, name="u"), [1 + t, drop_seed, it])
+            uv = u.tolist()
+            drop = []
+            if t and not uv[0] < float(self.skip_drop):
+                rate = float(self.drop_rate)
+                if not self.uniform_drop:
+                    inv_avg = t / sum_w if sum_w > 0 else 0.0
+                    if int(self.max_drop) > 0 and sum_w > 0:
+                        rate = min(rate, int(self.max_drop) * inv_avg / sum_w)
+                    drop = [i for i in range(t) if uv[1 + i] < rate * self.tree_weights_[i] * inv_avg]
+                else:
+                    if int(self.max_drop) > 0:
+                        rate = min(rate, int(self.max_drop) / t)
+                    drop = [i for i in range(t) if uv[1 + i] < rate]
+            for i in drop:
+                self._add(score, train_nodes[i], self.tree_values_[i], -self.tree_coefs_[i])
+            k = len(drop)
+            if not self.xgboost_dart_mode:
+                shrink = lr / (1.0 + k)
+            else:
+                shrink = lr if k == 0 else lr / (lr + k)
+            b.x_trees_gradients(addr_ro(score, name="score"), addr_ro(y32, name="y"), addr(g, name="g"),
+                                addr(h, name="h"), addr(target, name="target"), [n, self._KIND])
+            tree = RandomForestRegressor(
+                n_estimators=1, bootstrap=False, max_features=1.0, max_depth=max_depth,
+                max_leaves=int(self.num_leaves), min_samples_leaf=int(self.min_child_samples),
+                n_bins=int(self.max_bin), random_state=_trees_sub_seed(seed, it), n_streams=1,
+                numeric_mode=self.numeric_mode).fit(Xa, target)
+            nodes = self._tree_nodes(tree, Xa)
+            n_nodes = int(tree._offsets.tolist()[1])
+            values = empty((n_nodes,), "<f4")
+            b.x_trees_leaf_newton(addr_ro(nodes, name="nodes"), addr_ro(g, name="g"), addr_ro(h, name="h"),
+                                  addr(values, name="values"), [n, n_nodes, float(self.reg_lambda)])
+            self._add(score, nodes, values, shrink)
+            for i in drop:
+                if not self.xgboost_dart_mode:
+                    factor, wdiv = k / (k + 1.0), 1.0 / (k + 1.0)
+                else:
+                    factor, wdiv = k / (k + lr), 1.0 / (k + lr)
+                self.tree_coefs_[i] *= factor
+                self._add(score, train_nodes[i], self.tree_values_[i], self.tree_coefs_[i])
+                if not self.uniform_drop:
+                    sum_w -= self.tree_weights_[i] * wdiv
+                    self.tree_weights_[i] *= factor
+            self.trees_.append(tree)
+            self.tree_values_.append(values)
+            self.tree_coefs_.append(shrink)
+            self.tree_weights_.append(shrink)
+            sum_w += shrink
+            train_nodes.append(nodes)
+        self.n_features_in_ = d
+        return self
+
+    def _raw(self, X):
+        if not hasattr(self, "trees_"):
+            raise RuntimeError("this estimator is not fitted yet")
+        Xa, _ = as_f32_c(X, ndim=2, name="X")
+        if Xa.shape[1] != self.n_features_in_:
+            raise ValueError(f"X has {Xa.shape[1]} features, fit saw {self.n_features_in_}")
+        score = full((Xa.shape[0],), self.init_score_, "<f8")
+        for tree, values, coef in zip(self.trees_, self.tree_values_, self.tree_coefs_):
+            self._add(score, self._tree_nodes(tree, Xa), values, coef)
+        return score
+
+
+class DARTRegressor(_DARTBase):
+    """LightGBM's `boosting='dart'` with the L2 objective. `predict` is the
+    raw score, float64."""
+    _estimator_type = "regressor"
+    _KIND = 0
+
+    def __init__(self, *, n_estimators=100, learning_rate=0.1, num_leaves=31, max_depth=-1,
+                 min_child_samples=20, reg_lambda=0.0, max_bin=255, drop_rate=0.1, max_drop=50,
+                 skip_drop=0.5, xgboost_dart_mode=False, uniform_drop=False, drop_seed=4, random_state=None):
+        super().__init__(n_estimators, learning_rate, num_leaves, max_depth, min_child_samples, reg_lambda,
+                         max_bin, drop_rate, max_drop, skip_drop, xgboost_dart_mode, uniform_drop, drop_seed,
+                         random_state)
+
+    def fit(self, X, y):
+        Xa, _ = as_f32_c(X, ndim=2, name="X")
+        y32, _ = as_f32_c(y, ndim=1, name="y")
+        if len(y32) != Xa.shape[0]:
+            raise ValueError(f"y has {len(y32)} rows, X has {Xa.shape[0]}")
+        return self._boost(Xa, y32)
+
+    def predict(self, X):
+        return self._raw(X)
+
+
+class DARTClassifier(_DARTBase):
+    """LightGBM's `boosting='dart'` with the binary logloss objective.
+    `predict_proba` is [1 - p, p] with p the sigmoid of the raw score (a
+    two-column softmax of [0, raw]); multiclass is refused by name."""
+    _estimator_type = "classifier"
+    _KIND = 1
+
+    def __init__(self, *, n_estimators=100, learning_rate=0.1, num_leaves=31, max_depth=-1,
+                 min_child_samples=20, reg_lambda=0.0, max_bin=255, drop_rate=0.1, max_drop=50,
+                 skip_drop=0.5, xgboost_dart_mode=False, uniform_drop=False, drop_seed=4, random_state=None):
+        super().__init__(n_estimators, learning_rate, num_leaves, max_depth, min_child_samples, reg_lambda,
+                         max_bin, drop_rate, max_drop, skip_drop, xgboost_dart_mode, uniform_drop, drop_seed,
+                         random_state)
+
+    def fit(self, X, y):
+        Xa, _ = as_f32_c(X, ndim=2, name="X")
+        self.classes_, codes = encode_labels(y)
+        if len(self.classes_) != 2:
+            _refuse("DARTClassifier with %d classes" % len(self.classes_), "pass 1 carries the binary"
+                    " objective only (multiclass needs one tree per class per iteration).")
+        if len(codes) != Xa.shape[0]:
+            raise ValueError(f"y has {len(codes)} rows, X has {Xa.shape[0]}")
+        y32, _ = as_f32_c(codes, ndim=1, name="y")
+        return self._boost(Xa, y32)
+
+    def decision_function(self, X):
+        return self._raw(X)
+
+    def predict_proba(self, X):
+        raw = self._raw(X).tolist()
+        acc = Array.from_list([v for r in raw for v in (0.0, r)], "<f8")
+        self._bind().x_trees_softmax_rows(addr(acc, name="proba"), [len(raw), 2])
+        return acc.reshape((len(raw), 2))
+
+    def predict(self, X):
+        raw = self._raw(X).tolist()
+        return decode_labels(self.classes_, Array.from_list([1 if r > 0 else 0 for r in raw], "<i4"))

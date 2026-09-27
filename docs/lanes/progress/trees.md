@@ -17,7 +17,8 @@ rf / extratrees entry points, whose sources are untouched.
 |---|---|---|---|
 | DecisionTreeClassifier / DecisionTreeRegressor | trees-dt-clf, trees-dt-reg | AGREE: compared batch 9, infer 9, model 9, train 9 (each lane) | see git log |
 | BaggingClassifier / BaggingRegressor | trees-bagging-clf, trees-bagging-reg | AGREE: compared batch 9, infer 9, train 9 (each lane) | see git log |
-| AdaBoostClassifier (SAMME) / AdaBoostRegressor (R2) | trees-adaboost-clf, trees-adaboost-reg | AGREE: compared batch 9, infer 9, train 9 (each lane) | this commit |
+| AdaBoostClassifier (SAMME) / AdaBoostRegressor (R2) | trees-adaboost-clf, trees-adaboost-reg | AGREE: compared batch 9, infer 9, train 9 (each lane) | see git log |
+| DART (DARTRegressor L2 / DARTClassifier binary) | trees-dart-reg, trees-dart-clf | AGREE: compared batch 9, infer 9, train 9 (each lane) | this commit |
 
 Pod setup notes (for a fresh agent): the lane check does not build the
 ubiquitous bindings; build `bindings/build.sh` (identical), `build_forest_host.sh`
@@ -32,4 +33,4 @@ Known gaps (reported to main):
   binding refuses it by name) and AdaBoostClassifier fits weighted bootstraps
   instead of weighted trees.
 
-Next: DART.
+Next: RandomTreesEmbedding.

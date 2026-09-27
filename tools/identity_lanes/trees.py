@@ -80,3 +80,26 @@ def _(ml, X, yc, yr, Xh=None):
 
 _batch_decl(_rows_calls("predict", "predict_proba"), "trees-adaboost-clf")
 _batch_decl(_rows_calls("predict"), "trees-adaboost-reg")
+
+
+@lane("trees-dart-reg")
+def _(ml, X, yc, yr, Xh=None):
+    """DART, L2: drops forced often (skip_drop 0, drop_rate 0.5), Newton leaves."""
+    m = ml.DARTRegressor(n_estimators=8, num_leaves=15, max_depth=5, min_child_samples=5, drop_rate=0.5,
+                         skip_drop=0.0, reg_lambda=1.0, drop_seed=3, random_state=7).fit(X, yr)
+    return _fit(dict(predict=_h(m.predict(X)), coefs=_h(np.asarray(m.tree_coefs_, dtype=np.float64))),
+                m, lambda e: (e.predict(Xh),))
+
+
+@lane("trees-dart-clf")
+def _(ml, X, yc, yr, Xh=None):
+    """DART, binary logloss (yc folded to two classes), xgboost_dart_mode, uniform_drop."""
+    y2 = (np.asarray(yc) % 2).astype(np.int64)
+    m = ml.DARTClassifier(n_estimators=8, num_leaves=15, max_depth=5, min_child_samples=5, drop_rate=0.5,
+                          skip_drop=0.0, xgboost_dart_mode=True, uniform_drop=True, random_state=7).fit(X, y2)
+    return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X))),
+                m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+
+
+_batch_decl(_rows_calls("predict", "predict_proba"), "trees-dart-clf")
+_batch_decl(_rows_calls("predict"), "trees-dart-reg")

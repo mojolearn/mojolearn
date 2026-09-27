@@ -102,3 +102,17 @@ def test_adaboost_regressor():
     ref = AdaBoostRegressor(DecisionTreeRegressor(max_depth=4), n_estimators=30, random_state=0).fit(Xa, ya)
     a, r = r2_score(yb, np.asarray(ours.predict(Xb))), r2_score(yb, ref.predict(Xb))
     assert a >= r - 0.05, (a, r)
+
+
+def test_dart():
+    lightgbm = pytest.importorskip("lightgbm")
+    Xa, Xb, ya, yb = _reg()
+    ours = ml.DARTRegressor(n_estimators=60, learning_rate=0.1, random_state=0).fit(Xa, ya)
+    ref = lightgbm.LGBMRegressor(boosting_type="dart", n_estimators=60, learning_rate=0.1, verbose=-1).fit(Xa, ya)
+    a, r = r2_score(yb, np.asarray(ours.predict(Xb))), r2_score(yb, ref.predict(Xb))
+    assert a >= r - 0.08, (a, r)
+    Xa, Xb, ya, yb = _clf(n_classes=2)
+    ours = ml.DARTClassifier(n_estimators=60, random_state=0).fit(Xa, ya)
+    ref = lightgbm.LGBMClassifier(boosting_type="dart", n_estimators=60, verbose=-1).fit(Xa, ya)
+    a, r = accuracy_score(yb, np.asarray(ours.predict(Xb))), accuracy_score(yb, ref.predict(Xb))
+    assert a >= r - 0.05, (a, r)
