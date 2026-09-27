@@ -18,6 +18,7 @@ from x_linear.quantile import quantile_fit
 from x_linear.ridge import ridge_fit
 from x_linear.cd import enetcv_fit
 from x_linear.logcv import logcv_fit
+from x_linear.isotonic import isotonic_fit, isotonic_predict
 
 comptime ALGO_SGD = 1
 comptime ALGO_GLM = 2
@@ -30,6 +31,7 @@ comptime ALGO_RIDGE = 8
 comptime ALGO_ENETCV = 9
 comptime ALGO_LOGCV = 10
 comptime ALGO_ISOTONIC = 11
+comptime ALGO_ISOTONIC_PREDICT = 12
 
 comptime LINK_IDENTITY = 0
 comptime LINK_EXP = 1
@@ -57,6 +59,10 @@ def fit_dispatch(algo: Int, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: F
         enetcv_fit(x, y, n, d, ip, fp, res, fw, iw)
     elif algo == ALGO_LOGCV:
         logcv_fit(x, y, n, d, ip, fp, res, fw, iw)
+    elif algo == ALGO_ISOTONIC:
+        isotonic_fit(x, y, n, d, ip, fp, res, fw, iw)
+    elif algo == ALGO_ISOTONIC_PREDICT:
+        isotonic_predict(x, y, n, d, ip, fp, res, fw, iw)
 
 
 def decision_one(x: FP, i: Int, d: Int, wb: FP, c: Int, link: Int) -> Float32:

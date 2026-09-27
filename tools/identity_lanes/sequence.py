@@ -165,3 +165,34 @@ def _(ml, X, yc, yr, Xh=None):
                      c_coefs=_h(*c.coefs_, *c.intercepts_), c_proba=_h(c.predict_proba(Xm)),
                      b_proba=_h(b.predict_proba(Xm))),
                 r, lambda e: (e.predict(Xhm),))
+
+
+@lane("sequence-rnn")
+def _(ml, X, yc, yr, Xh=None):
+    """A two-layer tanh RNN regressor (Adam) and a one-layer relu RNN
+    classifier (AdamW), the LSTM lane's data and batches."""
+    Xs = _sequence_seq(X)
+    ycs, yrs = _sequence_targets(yc, yr)
+    r = ml.RNNRegressor(hidden_size=12, num_layers=2, learning_rate=1e-2, batch_size=32, max_epochs=2,
+                        random_state=7).fit(Xs, yrs)
+    c = ml.RNNClassifier(hidden_size=10, nonlinearity="relu", optimizer="adamw", learning_rate=1e-2,
+                         batch_size=32, max_epochs=2, random_state=8).fit(Xs, ycs)
+    Xhs = _sequence_seq(Xh)
+    return _fit(dict(r_loss=_h(r.loss_curve_), r_params=_h(r.params_), r_pred=_h(r.predict(Xs)),
+                     r_seq=_h(r.hidden_sequence(Xs[:16])),
+                     c_loss=_h(c.loss_curve_), c_params=_h(c.params_), c_proba=_h(c.predict_proba(Xs))),
+                r, lambda e: (e.predict(Xhs),))
+
+
+@lane("sequence-lion")
+def _(ml, X, yc, yr, Xh=None):
+    """Lion at the paper's defaults and with weight decay and other betas,
+    and an LSTM regressor trained by it."""
+    a = _sequence_opt_run(ml, ml.Lion, X, lr=1e-3)
+    b = _sequence_opt_run(ml, ml.Lion, X, lr=3e-3, betas=(0.95, 0.98), weight_decay=0.1)
+    Xs = _sequence_seq(X)
+    ycs, yrs = _sequence_targets(yc, yr)
+    r = ml.LSTMRegressor(hidden_size=8, optimizer="lion", learning_rate=1e-3, batch_size=32, max_epochs=1,
+                         random_state=9).fit(Xs, yrs)
+    return _fit(dict(plain=a["params"], plain_state=a["state"], wd=b["params"], wd_state=b["state"],
+                     lstm=_h(r.params_, r.loss_curve_)))
