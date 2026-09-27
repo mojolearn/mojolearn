@@ -12,6 +12,7 @@ from std.python.bindings import PythonModuleBuilder
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_ann.abi import check_search, in_f32, in_i32, out_f32, out_i32, p_int
 from x_ann.ivf_pq_core import pq_len_of
+from x_ann.host.cagra_host import cagra_build_host, cagra_search_host
 from x_ann.host.tsne_host import tsne_fit_host
 from x_ann.host.ivf_pq_host import X_ANN_HOST_SABOTAGE, ivf_pq_build_host, ivf_pq_search_host
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
@@ -91,6 +92,49 @@ def tsne_fit_binding(addrs: PythonObject, params: PythonObject) raises -> Python
     return PythonObject(n)
 
 
+def cagra_build_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """addrs: x, graph_out. params: n, d, intermediate_graph_degree, graph_degree."""
+    var n = p_int(params, 0)
+    var d = p_int(params, 1)
+    var kdeg = p_int(params, 2)
+    var deg = p_int(params, 3)
+    if n < 2 or d <= 0 or kdeg < 1 or kdeg > n - 1 or deg < 1 or deg > kdeg:
+        raise Error("CAGRA: need 1 <= graph_degree <= intermediate_graph_degree <= n - 1")
+    var x = in_f32(addrs, 0, n * d)
+    var g = List[Int32]()
+    with GILReleased(Python()):
+        g = cagra_build_host(x, n, d, kdeg, deg)
+    out_i32(g, addrs, 1)
+    return PythonObject(n)
+
+
+def cagra_search_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """addrs: x, graph, queries, out_d, out_i.
+    params: n, d, graph_degree, m, k, itopk_size, search_width, max_iterations, n_seeds."""
+    var n = p_int(params, 0)
+    var d = p_int(params, 1)
+    var deg = p_int(params, 2)
+    var m = p_int(params, 3)
+    var k = p_int(params, 4)
+    var L = p_int(params, 5)
+    var width = p_int(params, 6)
+    var max_iter = p_int(params, 7)
+    var n_seeds = p_int(params, 8)
+    if m <= 0 or k <= 0 or L < k or width < 1 or max_iter < 1 or n_seeds < 1 or n_seeds > n:
+        raise Error("CAGRA search: need k >= 1, itopk_size >= k, search_width >= 1, max_iterations >= 1, 1 <= n_seeds <= n")
+    var x = in_f32(addrs, 0, n * d)
+    var g = in_i32(addrs, 1, n * deg)
+    for e in range(n * deg):
+        if Int(g[e]) < 0 or Int(g[e]) >= n:
+            raise Error("CAGRA search: the graph names a row outside the dataset")
+    var q = in_f32(addrs, 2, m * d)
+    var od = List[Float32]()
+    var oi = List[Int32]()
+    with GILReleased(Python()):
+        cagra_search_host(x, n, d, g, deg, q, m, k, L, width, max_iter, n_seeds, od, oi)
+    out_f32(od, addrs, 3)
+    out_i32(oi, addrs, 4)
+    return PythonObject(m)
 
 
 def numeric_mode_binding() raises -> PythonObject:
@@ -117,6 +161,8 @@ def PyInit__mojolearn_x_ann_host() abi("C") -> PythonObject:
         m.def_function[ivf_pq_build_binding]("x_ann_ivf_pq_build")
         m.def_function[ivf_pq_search_binding]("x_ann_ivf_pq_search")
         m.def_function[tsne_fit_binding]("x_ann_tsne_fit")
+        m.def_function[cagra_build_binding]("x_ann_cagra_build")
+        m.def_function[cagra_search_binding]("x_ann_cagra_search")
         m.def_function[numeric_mode_binding]("x_ann_numeric_mode")
         m.def_function[vendor_binding]("x_ann_vendor")
         m.def_function[numeric_mode_binding]("x_ann_host_numeric_mode")

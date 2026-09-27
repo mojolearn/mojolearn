@@ -17,7 +17,7 @@ first imported, after the package, so both may rely on every module existing:
 from ._buffer import addr, addr_ro, as_f32_c, empty
 from ._mode import NumericModeMixin
 
-__all__ = ["IVFPQIndex", "TSNE"]
+__all__ = ["IVFPQIndex", "TSNE", "CagraIndex"]
 
 
 def _ann_int(owner, name, v):
@@ -201,3 +201,82 @@ class TSNE(NumericModeMixin):
     def fit_transform(self, X, y=None):
         return self.fit(X).embedding_
 
+
+class CagraIndex(NumericModeMixin):
+    """CAGRA graph index, build then search (reference: cuVS `cagra`),
+    IDENTICAL by construction (x_ann/cagra_core.mojo): an exact k-NN
+    intermediate graph, cuVS's rank-based detour pruning, reverse edges in
+    (rank, source id) order, and a greedy itopk search with fixed seeds, an
+    exact visited set and (distance, id) ties.
+
+    Parameters
+    ----------
+    graph_degree : int, default 32
+    intermediate_graph_degree : int, default 64
+    n_neighbors : int, default 8
+    itopk_size : int, default 64
+    search_width : int, default 1
+    max_iterations : int, default 0 (auto: itopk_size)
+    n_seeds : int, default 0
+        Evenly spaced start nodes; 0 is cuVS's pick-up count, itopk_size +
+        search_width * graph_degree (their random seeds are refused: the
+        seed set here is a function of n alone).
+
+    `search(queries)` returns squared L2 distances float32 `(m, k)` and int32
+    ids `(m, k)`; the index keeps a copy of the dataset, as cuVS's does.
+    """
+
+    _BINDING = "_mojolearn_x_ann"
+
+    def __init__(self, graph_degree=32, intermediate_graph_degree=64, n_neighbors=8, itopk_size=64,
+                 search_width=1, max_iterations=0, n_seeds=0):
+        self.graph_degree = graph_degree
+        self.intermediate_graph_degree = intermediate_graph_degree
+        self.n_neighbors = n_neighbors
+        self.itopk_size = itopk_size
+        self.search_width = search_width
+        self.max_iterations = max_iterations
+        self.n_seeds = n_seeds
+
+    def _p(self, name):
+        return _ann_int("CagraIndex", name, getattr(self, name))
+
+    def fit(self, X, y=None):
+        x, _ = as_f32_c(X, ndim=2, name="X")
+        n, d = (int(s) for s in x.shape)
+        kdeg = min(self._p("intermediate_graph_degree"), n - 1)
+        deg = min(self._p("graph_degree"), kdeg)
+        graph = empty((n * deg,), "<i4")
+        self._bind().x_ann_cagra_build(
+            # x, graph_out
+            [addr_ro(x, name="X"), addr(graph, name="graph_")],
+            # n, d, intermediate_graph_degree, graph_degree
+            [n, d, kdeg, deg],
+        )
+        self.dataset_ = x
+        self.graph_ = graph.reshape((n, deg))
+        self.n_features_in_, self.n_rows_, self.graph_degree_ = d, n, deg
+        return self
+
+    def search(self, queries):
+        if not hasattr(self, "graph_"):
+            raise ValueError("mojolearn CagraIndex: call fit before search")
+        q, _ = as_f32_c(queries, ndim=2, name="queries")
+        m, d = (int(s) for s in q.shape)
+        if d != self.n_features_in_:
+            raise ValueError(f"mojolearn CagraIndex: queries have {d} features, the index has {self.n_features_in_}")
+        k, L = self._p("n_neighbors"), self._p("itopk_size")
+        max_iter = self._p("max_iterations") or L
+        n_seeds = self._p("n_seeds") or (L + self._p("search_width") * self.graph_degree_)
+        n_seeds = min(n_seeds, self.n_rows_)
+        dist = empty((m * k,), "<f4")
+        idx = empty((m * k,), "<i4")
+        n, deg = self.n_rows_, self.graph_degree_
+        self._bind().x_ann_cagra_search(
+            # x, graph, queries, out_d, out_i
+            [addr_ro(self.dataset_, name="dataset_"), addr_ro(self.graph_.reshape((n * deg,)), name="graph_"),
+             addr_ro(q, name="queries"), addr(dist, name="distances"), addr(idx, name="indices")],
+            # n, d, graph_degree, m, k, itopk_size, search_width, max_iterations, n_seeds
+            [n, d, deg, m, k, L, self._p("search_width"), max_iter, n_seeds],
+        )
+        return dist.reshape((m, k)), idx.reshape((m, k))

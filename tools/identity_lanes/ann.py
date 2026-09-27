@@ -55,3 +55,20 @@ def _(ml, X, yc, yr, Xh=None):
 
 _batch_decl("n/a:whole-set (t-SNE embeds the whole set jointly; no row of it is computed alone)", "x-ann-tsne")
 
+
+@lane("x-ann-cagra")
+def _(ml, X, yc, yr, Xh=None):
+    """CagraIndex over 2048 rows: exact 32-NN graph, pruned to 16 with
+    reverse edges, then a 32-wide itopk search of 64 queries from 16 fixed
+    seeds. Train hashes the graph and the search's distances and ids."""
+    m = ml.CagraIndex(graph_degree=16, intermediate_graph_degree=32, n_neighbors=8, itopk_size=32,
+                      n_seeds=16).fit(X[:2048])
+    d, i = m.search(X[2048:2112])
+    return _fit(dict(graph=_h(m.graph_), dist=_h(d), idx=_h(i)), m, lambda e: e.search(Xh[:64]))
+
+
+def _ann_batch_cagra(ml, e, Xh):
+    return [_BatchRows("search", Xh[:64], lambda r: e.search(r))]
+
+
+_batch_decl(_ann_batch_cagra, "x-ann-cagra")
