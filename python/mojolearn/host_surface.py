@@ -685,6 +685,14 @@ TRAINING_LANE_NAMES = {
     # cells on the M4's CPU column (one core) before the gate ran, and the
     # sabotage build DIVERGENT on all 27.
     "pca-full-whiten": "whitened PCA through the full SVD",
+    # lane cpu (2026-09-27): the inverse transforms, which refused on a
+    # CPU-only install until the estimators host binding exported
+    # `inverse_transform` (core/classical_host_predict.mojo::
+    # host_inverse_transform_into); the whitened one was exported and never
+    # hashed.
+    "pca-inverse": "PCA's inverse transform",
+    "pca-whiten-inverse": "whitened PCA's inverse transform",
+    "tsvd-inverse": "truncated SVD's inverse transform",
     # The metrics-classification lane (lane/cpu-training-metrics-classification,
     # 2026-09-14): precision, recall and F1 under every average, the
     # zero-division arms, the log loss, the ROC AUC, the confusion matrix, the
@@ -1788,6 +1796,8 @@ FAMILIES = (
             "logistic-unpenalized-no-intercept", "dbscan-weighted", "logistic-l1",
             "logistic-elasticnet", "logistic-multiclass", "pca-full-whiten",
             "par-queries-kde",
+            # lane cpu (2026-09-27)
+            "pca-inverse", "pca-whiten-inverse", "tsvd-inverse",
             # lane/expose-qn-objectives (2026-09-20)
             "linear-svc", "linear-svc-squared-hinge", "linear-svr",
             "linear-svr-squared", "qn-squared", "qn-absolute",
@@ -1848,6 +1858,10 @@ FAMILIES = (
             "dbscan_fit_core", "labeled_reference_predict",
             "ols_predict", "tsvd_transform", "pca_transform",
             "pca_whiten_transform", "pca_whiten_inverse_transform",
+            # lane cpu (2026-09-27): PCA (whiten=False) and TruncatedSVD
+            # inverse_transform refused on a CPU-only install; the
+            # pca-inverse and tsvd-inverse lanes hash them
+            "inverse_transform",
             "qn_decision_function", "qn_predict_binary", "qn_sigmoid", "qn_softmax",
             "standard_transform", "minmax_transform", "cd_predict",
             "kernel_ridge_predict", "nystroem_transform", "rbf_sampler_transform",
@@ -3532,6 +3546,10 @@ PUBLIC_PENDING_LANES = {
     # k-means++, so these two lanes' IDENTICAL bits moved past the shipped
     # table on purpose (LANE_REVISIONS classic-kmeanspp-init-1). They leave
     # this table when the 0.8.23 record regenerates the reference.
+    # lane cpu (2026-09-27): new lanes, no release record carries them yet
+    "pca-inverse": "no reference",
+    "pca-whiten-inverse": "no reference",
+    "tsvd-inverse": "no reference",
     "gmm": "stale reference",
     "gmm-sample": "stale reference",
 }

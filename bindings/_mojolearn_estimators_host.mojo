@@ -66,6 +66,7 @@ from checks.kernel_matrix import (
 from checks.numerics import GLOBAL_NUMERIC_MODE, ftz
 from core.classical_host_predict import (
     CLASSICAL_HOST_SABOTAGE,
+    host_inverse_transform_into,
     host_ols_predict_into,
     host_pca_transform_into,
     host_pca_whiten_inverse_transform_into,
@@ -739,6 +740,43 @@ def pca_transform_binding(
     return PythonObject(0)
 
 
+def inverse_transform_binding(
+    scores_addr: PythonObject,
+    components_addr: PythonObject,
+    mean_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`PCA.inverse_transform` (whiten=False) and
+    `TruncatedSVD.inverse_transform` on the host, the GPU binding's arity,
+    argument order and params (n_rows, n_features, n_components, add_mean):
+    `out = scores . components`, plus `mean_` when add_mean, by
+    `host_inverse_transform`. The mean is read only when add_mean is set
+    (TruncatedSVD passes its components as the unused mean address, as it
+    does on the GPU). Returns 0."""
+    if len(params) != 4:
+        raise Error("inverse_transform: params must contain 4 values")
+    var z_address = _index(scores_addr)
+    var c_address = _index(components_addr)
+    var m_address = _index(mean_addr)
+    var op = f32_ptr(_index(out_addr))
+    var nr = _index(params[0])
+    var nf = _index(params[1])
+    var nc = _index(params[2])
+    var add_mean = _index(params[3]) != 0
+    with GILReleased(Python()):
+        _positive(nr, "n_rows")
+        _positive(nf, "n_features")
+        _positive(nc, "n_components")
+        var components = read_f32(c_address, nc * nf)
+        var mu = read_f32(m_address, nf) if add_mean else List[Float32]()
+        host_inverse_transform_into(
+            f32_ptr(z_address), components, mu, op, nr, nf, nc, add_mean,
+            host_predict_task_count(nr),
+        )
+    return PythonObject(0)
+
+
 def _whiten_finite(values: List[Float32], what: String) raises:
     """`_pca_whiten_finite` of the GPU binding, over the copy this side
     reads, with the GPU binding's sentence."""
@@ -1288,6 +1326,7 @@ def PyInit__mojolearn_estimators_host() abi("C") -> PythonObject:
         module.def_function[pca_transform_binding]("pca_transform")
         module.def_function[pca_whiten_transform_binding]("pca_whiten_transform")
         module.def_function[pca_whiten_inverse_transform_binding]("pca_whiten_inverse_transform")
+        module.def_function[inverse_transform_binding]("inverse_transform")
         module.def_function[qn_decision_function_binding]("qn_decision_function")
         module.def_function[qn_predict_binary_binding]("qn_predict_binary")
         module.def_function[qn_sigmoid_binding]("qn_sigmoid")
