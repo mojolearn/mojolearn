@@ -19,7 +19,7 @@ import sys
 
 from . import _backend, _mojolearn_solver, _serialize
 from ._array import Array
-from ._buffer import addr, addr_ro, as_f32_c, empty, zeros
+from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_i32_c, empty, zeros
 from .density import _check_queries
 from .linear_model import _check_saved_by, _restore_mode, _saved_mode
 
@@ -34,6 +34,9 @@ DISTANCE_L2_SQRT_EXPANDED = 1
 DISTANCE_COSINE_EXPANDED = 2
 DISTANCE_L1 = 3
 
+#: `x_cluster/entries.mojo::ENTRY_AGGLO`.
+_E_AGGLO = 11
+
 # Only the two the implementation carries. cuML maps "euclidean" and "l2" to
 # L2SqrtExpanded; nothing in their table maps to L2Expanded, so no name for
 # it is invented here.
@@ -41,6 +44,15 @@ _METRICS = {
     "euclidean": DISTANCE_L2_SQRT_EXPANDED,
     "l2": DISTANCE_L2_SQRT_EXPANDED,
 }
+
+#: scikit-learn's metric names on the x_cluster route (`x_cluster/agglo.mojo`):
+#: -1 euclidean through the squared distance, 1 manhattan, 4 cosine
+#: (`bodies.pdist_cell`, DEVIATION 5111), 5 precomputed.
+_ALL_METRICS = {"euclidean": -1, "l2": -1, "l1": 1, "manhattan": 1, "cityblock": 1,
+                "cosine": 4, "precomputed": 5}
+
+#: `bodies.LINK_*`.
+_LINKAGES = {"ward": 0, "complete": 1, "average": 2, "single": 3}
 
 # `cuvs/cluster/agglomerative.hpp::Linkage`, as cuML's Python spells it.
 _CONNECTIVITIES = {"pairwise": 0, "knn": 1}
@@ -185,49 +197,48 @@ class AgglomerativeClustering:
                  memory=None, compute_full_tree="auto",
                  distance_threshold=None, compute_distances=False,
                  prediction_data=False):
-        # cuML's own guards, in their order and with their messages
-        # (`agglomerative.pyx:157-173`), so a script that catches theirs
-        # catches these.
-        if linkage != "single":
+        # scikit-learn's linkages (lane/algos-cluster option parity,
+        # 2026-09-27). 'single' with the euclidean metric, no connectivity
+        # matrix and no per-merge distances stays on cuML's Boruvka route
+        # (`_mojolearn_solver.linkage_fit`, bits unchanged); everything
+        # else takes the x_cluster route (`x_cluster/agglo.mojo`).
+        if linkage not in _LINKAGES:
             raise ValueError(
-                "Only single linkage clustering is supported currently")
+                f"linkage must be one of {sorted(_LINKAGES)}, got {linkage!r}")
         if connectivity is None:
             # scikit-learn's spelling of "no connectivity constraint", which
             # is the full dense graph, which is cuML's 'pairwise'.
             connectivity = "pairwise"
-        if not isinstance(connectivity, str):
-            raise NotImplementedError(
-                "mojolearn AgglomerativeClustering: a connectivity MATRIX "
-                "(scikit-learn's meaning of this parameter) is refused; "
-                "there is no arm that takes one. Pass 'pairwise' or None "
-                "for the full dense graph"
-            )
-        if connectivity not in _CONNECTIVITIES:
-            raise ValueError(
-                "'connectivity' can only be one of {'knn', 'pairwise'}")
-        if connectivity == "knn":
-            raise NotImplementedError(
-                "mojolearn AgglomerativeClustering: connectivity='knn' is "
-                "REFUSED BY NAME. The Linkage::KNN_GRAPH specialization "
-                "(connectivities.cuh:49), the cross-component fix-up its "
-                "forest MST needs (connect_knn_graph, mst.cuh:67 and :131) "
-                "and merge_msts are rung 2 and NOT IMPLEMENTED -- and their host "
-                "overload picks a RANDOM vertex per component from "
-                "std::mt19937(std::random_device()), which would have to be "
-                "pinned first. Use connectivity='pairwise' (cuML's C++ "
-                "default and scikit-learn's dense tree). See "
-                "hierarchy/NOT_IMPLEMENTED.tsv"
-            )
-        if metric not in _METRICS:
+        if isinstance(connectivity, str):
+            if connectivity not in _CONNECTIVITIES:
+                raise ValueError(
+                    "'connectivity' can only be one of {'knn', 'pairwise'}, "
+                    "a connectivity matrix or a callable")
+            if connectivity == "knn":
+                raise NotImplementedError(
+                    "mojolearn AgglomerativeClustering: connectivity='knn' is "
+                    "REFUSED BY NAME. The Linkage::KNN_GRAPH specialization "
+                    "(connectivities.cuh:49), the cross-component fix-up its "
+                    "forest MST needs (connect_knn_graph, mst.cuh:67 and :131) "
+                    "and merge_msts are rung 2 and NOT IMPLEMENTED -- and their host "
+                    "overload picks a RANDOM vertex per component from "
+                    "std::mt19937(std::random_device()), which would have to be "
+                    "pinned first. Use connectivity='pairwise' (cuML's C++ "
+                    "default and scikit-learn's dense tree), or pass the k-NN "
+                    "graph itself as a connectivity matrix (scikit-learn's "
+                    "kneighbors_graph). See hierarchy/NOT_IMPLEMENTED.tsv"
+                )
+        if metric not in _ALL_METRICS:
             raise NotImplementedError(
                 f"mojolearn AgglomerativeClustering: metric={metric!r} is "
-                f"refused by name; only {sorted(_METRICS)} are implemented (both "
-                "map to cuML's L2SqrtExpanded). cuML maps 'l1'/'cityblock'/"
-                "'manhattan' to DistanceType.L1 and 'cosine' to "
-                "CosineExpanded (agglomerative.pyx:36-43), and neither "
-                "kernel is in this implementation; 'precomputed' has no arm at all. "
-                "See hierarchy/NOT_IMPLEMENTED.tsv"
+                f"refused by name; one of {sorted(_ALL_METRICS)}. A callable "
+                "metric would compute the dissimilarities outside every "
+                "identity column. See x_cluster/NOT_IMPLEMENTED.tsv"
             )
+        if linkage == "ward" and metric not in ("euclidean", "l2"):
+            raise ValueError(
+                f"{metric} was provided as metric. Ward can only work with "
+                "euclidean distances (i.e. 'euclidean' and 'l2').")
         if c != 15:
             raise NotImplementedError(
                 f"mojolearn AgglomerativeClustering: c={c!r} is refused. It "
@@ -242,38 +253,34 @@ class AgglomerativeClustering:
                 "scikit-learn's joblib cache for a host tree build and there "
                 "is no host tree here"
             )
-        if compute_full_tree not in ("auto", True):
-            raise NotImplementedError(
-                "mojolearn AgglomerativeClustering: compute_full_tree="
-                f"{compute_full_tree!r} is refused. The full dendrogram is "
-                "always built (children_ is always (n_rows - 1, 2)), so "
-                "there is no partial arm to select"
-            )
-        if distance_threshold is not None:
-            raise NotImplementedError(
-                "mojolearn AgglomerativeClustering: distance_threshold is "
-                "NOT IMPLEMENTED. It needs the per-merge distances (out_delta), "
-                "which build_dendrogram_host produces but the implemented "
-                "single_linkage entry does not hand back; "
-                "hierarchy/README.md lists it under 'What is left'. Pass "
-                "n_clusters instead"
-            )
-        if compute_distances:
-            raise NotImplementedError(
-                "mojolearn AgglomerativeClustering: compute_distances is NOT "
-                "IMPLEMENTED; distances_ would come from the same out_delta the "
-                "entry does not return (hierarchy/README.md)"
-            )
+        if compute_full_tree not in ("auto", True, False):
+            raise ValueError(
+                "compute_full_tree must be 'auto', True or False, got "
+                f"{compute_full_tree!r}")
+        if not ((n_clusters is None) ^ (distance_threshold is None)):
+            raise ValueError(
+                "Exactly one of n_clusters and distance_threshold has to be "
+                "set, and the other needs to be None.")
+        if distance_threshold is not None and not compute_full_tree:
+            raise ValueError(
+                "compute_full_tree must be True if distance_threshold is set.")
         self.n_clusters = n_clusters
         self.metric = metric
         self.connectivity = connectivity
-        self.linkage = "single"
+        self.linkage = linkage
         self.c = 15
         self.memory = None
         self.compute_full_tree = compute_full_tree
-        self.distance_threshold = None
-        self.compute_distances = False
+        self.distance_threshold = distance_threshold
+        self.compute_distances = bool(compute_distances)
         self.prediction_data = prediction_data
+
+    def _legacy_route(self):
+        """cuML's single-linkage Boruvka route: the recorded `agglomerative`
+        lanes' bits. Everything else is the x_cluster route."""
+        return (self.linkage == "single" and self.metric in _METRICS
+                and isinstance(self.connectivity, str)
+                and self.distance_threshold is None and not self.compute_distances)
 
     def _bind(self, name=None):
         return _backend.binding(name or self._BINDING, getattr(self, "numeric_mode", None))
@@ -284,6 +291,8 @@ class AgglomerativeClustering:
                 "mojolearn AgglomerativeClustering: prediction_data must be a "
                 f"bool, got {type(self.prediction_data).__name__}"
             )
+        if not self._legacy_route():
+            return self._fit_x(X)
         if hasattr(X, "toarray") or hasattr(X, "tocsr"):
             raise NotImplementedError(
                 "mojolearn AgglomerativeClustering: sparse X is refused; the "
@@ -350,6 +359,121 @@ class AgglomerativeClustering:
         self._fit_X = (x if self.input_copied_ else x.copy()) if self.prediction_data else None
         return self
 
+    def _predicts(self):
+        """predict (DEVIATION 2740) is the nearest training row's cluster:
+        single linkage's own criterion under the euclidean metric only."""
+        return self.linkage == "single" and self.metric in _METRICS
+
+    def _connectivity_edges(self, X, n):
+        """The connectivity matrix (dense, sparse with `tocoo()`, or a
+        callable of X) as flat (row, col) pairs of its stored nonzero
+        entries, as exact floats; scikit-learn's `_fix_connectivity`
+        symmetrizes it (`connectivity + connectivity.T`) and drops the
+        diagonal, which `x_cluster/agglo.mojo` does."""
+        conn = self.connectivity
+        if callable(conn):
+            conn = conn(X)
+        tocoo = getattr(conn, "tocoo", None)
+        if callable(tocoo):
+            coo = tocoo()
+            shape = tuple(coo.shape)
+            rows, _ = as_i32_c(coo.row, ndim=1, name="connectivity rows")
+            cols, _ = as_i32_c(coo.col, ndim=1, name="connectivity cols")
+            vals, _ = as_f32_c(coo.data, ndim=1, name="connectivity values")
+            triples = zip(rows.tolist(), cols.tolist(), vals.tolist())
+        else:
+            dense, _ = as_f32_c(conn, ndim=2, name="connectivity")
+            shape = tuple(dense.shape)
+            flat = dense.tolist()
+            triples = ((i, j, flat[i][j]) for i in range(shape[0]) for j in range(shape[1]))
+        if shape != (n, n):
+            raise ValueError(
+                f"Wrong shape for connectivity matrix: {shape} when X has {n} samples")
+        edges = []
+        for r, c, v in triples:
+            if v != 0 and r != c:
+                edges.append(float(r))
+                edges.append(float(c))
+        return edges
+
+    def _fit_x(self, X):
+        """The x_cluster route (`x_cluster/agglo.mojo`, ENTRY_AGGLO): every
+        linkage, metric, connectivity matrix and the per-merge distances,
+        with scikit-learn's `_fit` bookkeeping around it."""
+        import warnings
+        if hasattr(X, "toarray") or hasattr(X, "tocsr"):
+            raise NotImplementedError(
+                "mojolearn AgglomerativeClustering: sparse X is refused; the "
+                "dissimilarities are a dense float32 matrix")
+        x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
+        n, d = (int(v) for v in x.shape)
+        if n < 2:
+            raise ValueError(
+                f"mojolearn AgglomerativeClustering: n_rows={n} < 2; a tree "
+                "needs at least two points")
+        if not all_finite(x):
+            raise ValueError("mojolearn AgglomerativeClustering: X contains NaN or infinity")
+        metric = _ALL_METRICS[self.metric]
+        if metric == 5 and n != d:
+            raise ValueError(f"Distance matrix should be square, got matrix of shape {(n, d)}")
+        if metric == 4:
+            flat = x.tolist()
+            if any(not any(row) for row in flat):
+                raise ValueError("Cosine affinity cannot be used when X contains zero vectors")
+        if self.n_clusters is not None:
+            k = int(self.n_clusters)
+            if k < 1 or k > n:
+                raise ValueError(
+                    f"Cannot extract more clusters than samples: {k} clusters "
+                    f"were given for a tree with {n} leaves.")
+        constrained = not isinstance(self.connectivity, str)
+        full = True
+        if constrained:
+            full = self.compute_full_tree
+            if full == "auto":
+                full = (self.distance_threshold is not None
+                        or int(self.n_clusters) < max(100, 0.02 * n))
+        n_merges = n - 1 if full else n - int(self.n_clusters)
+        edges = self._connectivity_edges(x, n) if constrained else []
+        aux = (Array.from_list(edges, "<f4") if edges else None)
+        b = _backend.binding("_mojolearn_x_cluster", getattr(self, "numeric_mode", None))
+        ip = [n, d, _LINKAGES[self.linkage], metric, len(edges) // 2 if constrained else -1, n_merges]
+        f, i, sc = b.x_cluster_call(
+            _E_AGGLO, addr_ro(x, name="X"), x.size,
+            addr_ro(aux, name="connectivity") if aux is not None else 0,
+            aux.size if aux is not None else 0, ip, [2.0])
+        children = i[0]
+        self.children_ = Array._from_flat(children, (n_merges, 2), "<i4")
+        self.n_leaves_ = n
+        self.n_connected_components_ = int(sc[0])
+        if constrained and self.n_connected_components_ > 1:
+            warnings.warn(
+                "the number of connected components of the connectivity matrix "
+                f"is {self.n_connected_components_} > 1. Completing it to avoid "
+                "stopping the tree early.", stacklevel=2)
+        distances = f[0]
+        if self.distance_threshold is not None or self.compute_distances:
+            self.distances_ = Array._from_flat(distances, (n_merges,), "<f4")
+        else:
+            self.__dict__.pop("distances_", None)
+        if self.distance_threshold is not None:
+            thr = float(self.distance_threshold)
+            self.n_clusters_ = sum(1 for v in distances if v >= thr) + 1
+        else:
+            self.n_clusters_ = int(self.n_clusters)
+        pairs = [(children[2 * t], children[2 * t + 1]) for t in range(n_merges)]
+        if full:
+            labels = _hc_cut(self.n_clusters_, pairs, n)
+        else:
+            labels = _heads(pairs, n)
+        self.labels_ = Array._from_flat(labels, (n,), "<i4")
+        self.n_boruvka_rounds_ = -1
+        self.n_features_in_ = d
+        self._fit_X = None
+        if self.prediction_data and self._predicts():
+            self._fit_X = x if self.input_copied_ else x.copy()
+        return self
+
     def fit_predict(self, X, y=None):
         return self.fit(X).labels_
 
@@ -399,6 +523,12 @@ class AgglomerativeClustering:
                 "mojolearn AgglomerativeClustering.predict: this instance is not "
                 "fitted yet; call fit first"
             )
+        if not self._predicts():
+            raise NotImplementedError(
+                f"mojolearn AgglomerativeClustering.predict: linkage={self.linkage!r}, "
+                f"metric={self.metric!r} has no predict rule; DEVIATION 2740 is single "
+                "linkage's own criterion (the nearest training row's cluster) under "
+                "the euclidean metric only")
         if getattr(self, "_fit_X", None) is None:
             raise ValueError(
                 "mojolearn AgglomerativeClustering.predict: prediction data was not "
@@ -435,6 +565,10 @@ class AgglomerativeClustering:
         `_mojolearn_estimators_host.labeled_reference_predict`."""
         if not hasattr(self, "labels_"):
             raise RuntimeError("this estimator is not fitted yet")
+        if not self._predicts():
+            raise NotImplementedError(
+                f"mojolearn AgglomerativeClustering.save: linkage={self.linkage!r}, "
+                f"metric={self.metric!r} has no predict rule to save (DEVIATION 2740)")
         if getattr(self, "_fit_X", None) is None:
             raise ValueError(
                 "mojolearn AgglomerativeClustering.save: prediction data was not "
@@ -477,3 +611,44 @@ class AgglomerativeClustering:
         obj.n_leaves_ = n_leaves
         obj.n_features_in_ = nf
         return obj
+
+
+def _hc_cut(n_clusters, children, n_leaves):
+    """scikit-learn `_agglomerative.py::_hc_cut`, the same heap operations,
+    so the label numbering is scikit-learn's for the same children."""
+    from heapq import heappush, heappushpop
+    if n_clusters > n_leaves:
+        raise ValueError(
+            "Cannot extract more clusters than samples: "
+            f"{n_clusters} clusters were given for a tree with {n_leaves} leaves.")
+    nodes = [-(max(children[-1]) + 1)]
+    for _ in range(n_clusters - 1):
+        these = children[-nodes[0] - n_leaves]
+        heappush(nodes, -these[0])
+        heappushpop(nodes, -these[1])
+    label = [0] * n_leaves
+    for i, node in enumerate(nodes):
+        stack = [-node]
+        while stack:
+            v = stack.pop()
+            if v < n_leaves:
+                label[v] = i
+            else:
+                stack.extend(children[v - n_leaves])
+    return label
+
+
+def _heads(children, n_leaves):
+    """A partial tree's labels (scikit-learn `hc_get_heads` then
+    `searchsorted(unique(heads), heads)`): each leaf's root, numbered by
+    ascending root id."""
+    parent = list(range(n_leaves + len(children)))
+    for t, (a, b) in enumerate(children):
+        parent[a] = parent[b] = n_leaves + t
+    heads = []
+    for v in range(n_leaves):
+        while parent[v] != v:
+            v = parent[v]
+        heads.append(v)
+    rank = {h: r for r, h in enumerate(sorted(set(heads)))}
+    return [rank[h] for h in heads]

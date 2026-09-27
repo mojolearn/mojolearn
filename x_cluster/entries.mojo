@@ -7,6 +7,7 @@ their Python arguments, call ONE of these with their own `ClusterOps`, and
 hand the `ClusterOut` back. The integer and float parameter lists are
 documented per entry and mirrored in `python/mojolearn/_x_cluster_impl.py`."""
 from x_cluster.affinity import affinity_fit
+from x_cluster.agglo import agglo_tree
 from x_cluster.bgmm import BgmmPriors, BgmmState, bgmm_constants, bgmm_fit, bgmm_score, bgmm_weights
 from x_cluster.bisect import BisectTree, bisect_fit, bisect_predict
 from checks.numerics import identical_mul64
@@ -438,6 +439,25 @@ def minibatch_partial_entry[O: ClusterOps](
     return out^
 
 
+def agglo_entry[O: ClusterOps](
+    mut ops: O, x: List[Float32], edges: List[Float32], ip: List[Int], fp: List[Float64]
+) raises -> ClusterOut:
+    """ip = [n, d, linkage (0 ward, 1 complete, 2 average, 3 single), metric
+    (-1 euclidean, 0-4 bodies.pdist_cell, 5 precomputed), n_edges (-1: no
+    connectivity), n_merges]; fp = [minkowski p]; `edges` = the n_edges
+    (row, col) pairs. i = [children (n_merges x 2)], f = [distances],
+    s = [n_connected_components]."""
+    var children = List[Int32]()
+    var dist = List[Float32]()
+    var n_cc = 1
+    agglo_tree(ops, x, ip[0], ip[1], ip[2], ip[3], Float32(fp[0]), edges, ip[4], ip[5], children, dist, n_cc)
+    var out = ClusterOut()
+    out.i.append(children^)
+    out.f.append(dist^)
+    out.s.append(Float64(n_cc))
+    return out^
+
+
 # ---------------------------------------------------------------- dispatcher
 comptime ENTRY_NEAREST = 0
 comptime ENTRY_DISTANCES = 1
@@ -450,6 +470,7 @@ comptime ENTRY_AFFINITY = 7
 comptime ENTRY_BGMM = 8
 comptime ENTRY_BGMM_SCORE = 9
 comptime ENTRY_MINIBATCH_PARTIAL = 10
+comptime ENTRY_AGGLO = 11
 
 
 def run_entry[O: ClusterOps](
@@ -479,4 +500,6 @@ def run_entry[O: ClusterOps](
         return bgmm_score_entry(ops, x, a, ip)
     if which == ENTRY_MINIBATCH_PARTIAL:
         return minibatch_partial_entry(ops, x, a, ip, fp)
+    if which == ENTRY_AGGLO:
+        return agglo_entry(ops, x, a, ip, fp)
     raise Error("x_cluster: unknown entry " + String(which))
