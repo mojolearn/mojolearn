@@ -25,11 +25,11 @@ FAMILIES = (
                         "sequence-autoarima", "sequence-stl", "sequence-var",
                         "sequence-mlp", "sequence-rnn", "sequence-lion",
                         "sequence-adafactor", "sequence-lamb",
-                        "sequence-adamax"),
+                        "sequence-adamax", "sequence-nadam"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("LSTMRegressor", "LSTMClassifier", "GRURegressor", "GRUClassifier", "RMSprop", "Adagrad", "AutoARIMA", "STL", "VAR", "MLPClassifier",
-                 "MLPRegressor", "RNNRegressor", "RNNClassifier", "Lion", "Adafactor", "LAMB", "Adamax"),
+                 "MLPRegressor", "RNNRegressor", "RNNClassifier", "Lion", "Adafactor", "LAMB", "Adamax", "NAdam"),
         display="the sequence lane's recurrent networks and optimizers",
         host_modules=("sequence/ops.mojo", "sequence/exec.mojo", "sequence/recurrent.mojo",
                       "sequence/pyapi.mojo", "sequence/stl.mojo", "sequence/dispatch.mojo", "sequence/vecar.mojo", "sequence/mlp.mojo",
@@ -59,7 +59,8 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
                        "sequence-lion": "Lion",
                        "sequence-adafactor": "Adafactor",
                        "sequence-lamb": "LAMB",
-                       "sequence-adamax": "Adamax"}
+                       "sequence-adamax": "Adamax",
+                       "sequence-nadam": "NAdam"}
 PUBLIC_PENDING_LANES = {"sequence-lstm": "no reference", "sequence-gru": "no reference",
                         "sequence-rmsprop": "no reference",
                         "sequence-adagrad": "no reference",
@@ -71,4 +72,5 @@ PUBLIC_PENDING_LANES = {"sequence-lstm": "no reference", "sequence-gru": "no ref
                         "sequence-lion": "no reference",
                         "sequence-adafactor": "no reference",
                         "sequence-lamb": "no reference",
-                        "sequence-adamax": "no reference"}
+                        "sequence-adamax": "no reference",
+                        "sequence-nadam": "no reference"}

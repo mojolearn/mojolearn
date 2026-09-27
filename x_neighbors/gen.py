@@ -109,6 +109,22 @@ OPS = [
     ("knn_impute", "items", "knn_impute_item", "n * d",
      [("x", "fin", "n * d"), ("fx", "fin", "m * d"), ("best_d", "fscr", "n * d * k"), ("best_i", "iscr", "n * d * k"),
       ("res", "fout", "n * d"), ("n", "int"), ("m", "int"), ("d", "int"), ("k", "int"), ("weights", "int")]),
+    ("pagerank_step", "items", "pagerank_step_item", "n",
+     [("q", "fin", "n * n"), ("x", "fin", "n"), ("p", "fin", "n"), ("dangling", "iin", "n"), ("res", "fout", "n"),
+      ("n", "int"), ("alpha", "float")]),
+    ("cc_step", "items", "cc_step_item", "n",
+     [("a", "fin", "n * n"), ("lab", "iin", "n"), ("res", "iout", "n"), ("n", "int")]),
+    ("louvain", "items", "louvain_item", "1",
+     [("a", "fin", "n * n"), ("labels", "iout", "n"), ("info", "fout", "2"), ("w", "fscr", "n * n"), ("w2", "fscr", "n * n"),
+      ("comm", "iscr", "n"), ("node_of", "iscr", "n"), ("deg", "fscr", "n"), ("stot", "fscr", "n"), ("k2c", "fscr", "n"),
+      ("tmp", "fscr", "n"), ("n", "int"), ("max_level", "int"), ("resolution", "float"), ("threshold", "float")]),
+    ("svgp", "items", "svgp_item", "1",
+     [("kuu", "fin", "m * m"), ("bmat", "fin", "m * m"), ("b", "fin", "m"), ("y", "fin", "n"), ("alpha", "fout", "m"),
+      ("cmat", "fout", "m * m"), ("qmu", "fout", "m"), ("qsqrt", "fout", "m * m"), ("info", "fout", "2"),
+      ("luu", "fscr", "m * m"), ("ls", "fscr", "m * m"), ("e", "fscr", "m"), ("col", "fscr", "m"),
+      ("m", "int"), ("n", "int"), ("noise", "float"), ("jitter", "float"), ("kdiag", "float")]),
+    ("svgp_var", "items", "svgp_var_item", "n",
+     [("ksu", "fin", "n * m"), ("cmat", "fin", "m * m"), ("res", "fout", "n"), ("n", "int"), ("m", "int"), ("kdiag", "float")]),
 ]
 
 HDR = "# SPDX-License-Identifier: Apache-2.0\n# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632\n"
