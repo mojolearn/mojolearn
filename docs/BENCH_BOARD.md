@@ -315,7 +315,10 @@ clock for a float64 NumPy quality pass in the conductor) with two additions:
   (`fit`, `fit_predict`, an index build, a forward + backward, the optimizer
   steps) and, where the lane has one, the inference call (predict /
   transform / search / forward / forecast) on the held-out rows. The
-  inference timings become the race's inference cells.
+  inference timings become the race's inference cells. Time series lanes
+  time fit + forecast together on every arm (statsforecast and the
+  per-series libraries forecast in the same call), and ALS is judged from
+  its factors, so those lanes have no separate inference cell.
 - **SKIPPED: not built yet.** Our side calls the public class by name,
   `mojolearn.<Name>`, the first of the lane's candidate names that the
   INSTALLED wheel exports. Until a lane merges its class, our arms answer
