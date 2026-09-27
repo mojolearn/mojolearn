@@ -541,7 +541,7 @@ def test_the_new_narrow_answers_are_narrow_for_the_right_reason():
     own sentence."""
     ref = "HEAD"
     sel = lane_select.select(["tools/identity_break.py"], ref=ref)
-    assert "harness diff touches only these lane bodies" in sel["reasons"]["tools/identity_break.py"] \
+    assert "harness diff reaches only these lanes" in sel["reasons"]["tools/identity_break.py"] \
         or "docstrings and comments only" in sel["reasons"]["tools/identity_break.py"], \
         f"unexpected reason: {sel['reasons']['tools/identity_break.py']}"
     assert not sel["unattributed"], "the harness against its own HEAD was refused"
@@ -1530,16 +1530,27 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
       forest_inference     26 -> 46  the same twenty lanes, through the rf
                                      binding that imports it
 
+    REMEASURED 2026-09-27 (lane/algos-trees, option parity):
+      forest_host_predict  80 -> 84  trees-dt-random (DecisionTree
+                                     splitter='random'), trees-dart-options
+                                     (DART's LightGBM options, multiclass),
+                                     trees-oob-cv-link (Bagging oob_score, cv
+                                     splitter objects, Kernel SHAP logit) and
+                                     trees-et-deviance (ExtraTreesRegressor
+                                     poisson / gamma / inverse_gaussian): the
+                                     same RF/ET predict route; no old lane moved
+      forest_inference     46 -> 50  the same four lanes
+
     REMEASURED 2026-09-27 (lane/algos-neighbors, found red on main):
-      forest_host_predict  80 -> 81  trees-dt-random (00d0138d5), one tree
-                                     through the ExtraTrees classes whose
-                                     predict routes here; no old lane moved
-      forest_inference     46 -> 47  the same lane, through the rf binding"""
+      kmeans_oracle        63 -> 70  the seven x-ann-* lanes (IVF-PQ, IVF-SQ,
+                                     RaBitQ, refine, filter, CAGRA, t-SNE),
+                                     whose coarse quantizer is this library's
+                                     KMeans; no old lane moved"""
     rev = lane_select.reverse_map()
-    for rel, want in (("cluster/host/kmeans_oracle.mojo", 63),
+    for rel, want in (("cluster/host/kmeans_oracle.mojo", 70),
                       ("core/gbdt_host_predict.mojo", 49),
-                      ("core/forest_host_predict.mojo", 81),
-                      ("core/forest_inference.mojo", 47),
+                      ("core/forest_host_predict.mojo", 84),
+                      ("core/forest_inference.mojo", 50),
                       ("python/mojolearn/neural_inference.py", 41)):
         got = len(rev.get(rel, set()))
         assert got == want, f"{rel} answers {got} lanes, not {want}"

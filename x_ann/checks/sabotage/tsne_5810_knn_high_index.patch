@@ -1,0 +1,11 @@
+--- a/x_ann/tsne_core.mojo
++++ b/x_ann/tsne_core.mojo
+@@ -63,7 +63,7 @@
+         while s > 0:
+             var pd = nn_d.unsafe_load(base + s - 1)
+             var pi = Int(nn_i.unsafe_load(base + s - 1))
+-            if dist < pd or (dist == pd and j < pi):
++            if dist < pd or (dist == pd and j > pi):
+                 nn_d.unsafe_store(base + s, pd)
+                 nn_i.unsafe_store(base + s, Int32(pi))
+                 s -= 1

@@ -1,0 +1,12 @@
+--- a/x_ann/cagra_core.mojo
++++ b/x_ann/cagra_core.mojo
+@@ -171,7 +171,8 @@
+         cg_insert(L, base, cg_dist(queries, q_off, x, v, d), Int32(v), bd, bi, bx)
+     for _ in range(max_iter):
+         var taken = 0
+-        for s in range(L):
++        for ss in range(L):
++            var s = L - 1 - ss
+             if taken == width:
+                 break
+             var p = Int(bi.unsafe_load(base + s))

@@ -1,0 +1,13 @@
+diff --git a/arima/impl/batched_kalman.mojo b/arima/impl/batched_kalman.mojo
+index 4c087e351..0a0df78f1 100644
+--- a/arima/impl/batched_kalman.mojo
++++ b/arima/impl/batched_kalman.mojo
+@@ -608,7 +608,7 @@ def batched_kalman_loop_kernel[
+         # 4. alpha = T*alpha + K*vs + c
+         _mv(rd, Float32(1.0), l_T, l_alpha, l_v)
+         for i in range(rd):
+-            l_alpha[i] = ftz(identical_mul_add(l_K[i], vs_it, l_v[i]))
++            l_alpha[i] = ftz(l_v[i] + ftz(l_K[i] * vs_it))
+         l_alpha[n_diff] = ftz(l_alpha[n_diff] + mu)
+ 
+         # 5. L = T - K*Z

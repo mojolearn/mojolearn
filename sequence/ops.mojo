@@ -460,8 +460,10 @@ def op_sum(t: Int, a: Args):
 
 
 @always_inline
-def _lerp(s: Float32, e: Float32, w: Float32) -> Float32:
-    """torch.lerp: s + w (e - s) for w < 0.5, else e - (e - s)(1 - w)."""
+def lerp(s: Float32, e: Float32, w: Float32) -> Float32:
+    """torch.lerp: s + w (e - s) for w < 0.5, else e - (e - s)(1 - w)
+    (DEVIATION 5507: the two-branch form, one body for Adamax, NAdam and
+    Adafactor)."""
     if w < Float32(0.5):
         return fma3(w, sub(e, s), s)
     return sub(e, mul(sub(e, s), sub(Float32(1.0), w)))
@@ -580,7 +582,7 @@ def op_opt(t: Int, a: Args):
         # p += -clr m / u, clr = lr / (1 - b1^t) (f5)
         if wd != Float32(0.0):
             g = fma3(wd, p, g)
-        var m = _lerp(ld(a.p2, t), g, sub(Float32(1.0), a.f1))
+        var m = lerp(ld(a.p2, t), g, sub(Float32(1.0), a.f1))
         var ub = mul(a.f2, ld(a.p3, t))
         var ga = add(abs(g), a.f3)
         var u = ub if ub > ga else ga
@@ -596,7 +598,7 @@ def op_opt(t: Int, a: Args):
                 p = mul(p, sub(Float32(1.0), mul(lr, wd)))
             else:
                 g = fma3(wd, p, g)
-        var m = _lerp(ld(a.p2, t), g, sub(Float32(1.0), a.f1))
+        var m = lerp(ld(a.p2, t), g, sub(Float32(1.0), a.f1))
         var v = fma3(a.f2, ld(a.p3, t), mul(mul(sub(Float32(1.0), a.f2), g), g))
         st(a.p2, t, m)
         st(a.p3, t, v)

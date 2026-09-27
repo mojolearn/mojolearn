@@ -1,0 +1,14 @@
+diff --git a/arima/impl/linalg/batched/least_squares.mojo b/arima/impl/linalg/batched/least_squares.mojo
+index a5d6caf55..42d0ae38f 100644
+--- a/arima/impl/linalg/batched/least_squares.mojo
++++ b/arima/impl/linalg/batched/least_squares.mojo
+@@ -134,7 +134,8 @@ def householder_qr_solve(
+     for j in range(n):
+         # column norm of A[j:m, j], serial ascending
+         var sigma = Float32(0.0)
+-        for i in range(j, m):
++        for ii in range(j, m):
++            var i = m - 1 - (ii - j)
+             var v = ftz(a.unsafe_load(a_base + i + j * m))
+             sigma = ftz(identical_mul_add(v, v, sigma))
+         if sigma == Float32(0.0):

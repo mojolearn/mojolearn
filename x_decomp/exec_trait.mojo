@@ -100,5 +100,13 @@ trait Exec:
         ...
 
     @staticmethod
+    def absmax_sign(a: F32Ptr, dst: F32Ptr, n: Int, d: Int, by_col: Bool) raises:
+        ...
+
+    @staticmethod
+    def qr_r(a: F32Ptr, m: Int, n: Int, r: F32Ptr) raises:
+        ...
+
+    @staticmethod
     def vendor() -> String:
         ...

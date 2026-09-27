@@ -458,9 +458,11 @@ __all__ = [
 # that two doors both export, is refused at import BY NAME rather than one
 # silently shadowing the other, which is what a bare `import *` would do.
 from . import (_expansion_linear, _expansion_cluster, _expansion_neighbors, _expansion_decomp,
-               _expansion_prep, _expansion_sequence, _expansion_trees, _expansion_cnn, _expansion_ann)
+               _expansion_prep, _expansion_sequence, _expansion_trees, _expansion_cnn, _expansion_ann,
+               _expansion_metrics)
 for _door in (_expansion_linear, _expansion_cluster, _expansion_neighbors, _expansion_decomp,
-              _expansion_prep, _expansion_sequence, _expansion_trees, _expansion_cnn, _expansion_ann):
+              _expansion_prep, _expansion_sequence, _expansion_trees, _expansion_cnn, _expansion_ann,
+              _expansion_metrics):
     for _name in _door.__all__:
         if _name in __all__ or _name in globals():
             raise ImportError(f"mojolearn: {_door.__name__} exports {_name!r}, which is already public "

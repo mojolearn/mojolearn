@@ -1,8 +1,8 @@
 diff --git a/x_decomp/cells.mojo b/x_decomp/cells.mojo
-index b8537db32..90f66f845 100644
+index 4b4c2cedf..02e120e39 100644
 --- a/x_decomp/cells.mojo
 +++ b/x_decomp/cells.mojo
-@@ -814,7 +814,7 @@ def lu_serial(a: F32Ptr, piv: I32Ptr, n: Int, info: F32Ptr):
+@@ -867,7 +867,7 @@ def lu_serial(a: F32Ptr, piv: I32Ptr, n: Int, info: F32Ptr):
          var best = abs(ftz(a.unsafe_load(k * n + k)))
          for i in range(k + 1, n):
              var v = abs(ftz(a.unsafe_load(i * n + k)))
