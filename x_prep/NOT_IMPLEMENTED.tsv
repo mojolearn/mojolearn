@@ -3,16 +3,15 @@
 sklearn OneHotEncoder / OrdinalEncoder categories=<list>	NOT IMPLEMENTED	user categories replace the device sort + run scan; the lookup unit takes any sorted category block
 sklearn OneHotEncoder / OrdinalEncoder min_frequency, max_categories (infrequent categories)	NOT IMPLEMENTED	per-category counts (a run-length unit beside unique_cols) and a regrouping of the codes
 sklearn OneHotEncoder handle_unknown='infrequent_if_exist'	NOT IMPLEMENTED	needs the infrequent categories above
-sklearn OrdinalEncoder encoded_missing_value	NOT IMPLEMENTED	NaN is coded as its category index (the one quiet NaN word sorts last); the reference writes encoded_missing_value (NaN by default)
 sklearn OneHotEncoder / KBinsDiscretizer / LabelBinarizer / MultiLabelBinarizer sparse output	NOT IMPLEMENTED -- REFUSED BY NAME	there is no sparse Array; output is dense float32 (OneHotEncoder ignores sparse_output and says so in its docstring)
 sklearn TargetEncoder categories=<list>, cv=<splitter object>	NOT IMPLEMENTED	integer cv only; folds are a splitmix64 permutation from random_state
 sklearn TargetEncoder stratified folds for a classification target	NOT IMPLEMENTED	KFold for every target type; StratifiedKFold's per-class round robin over the same permutation would go in _kfold_assignment
 sklearn SimpleImputer callable strategy	NOT IMPLEMENTED	a callable runs in Python and is not a device path
-sklearn KBinsDiscretizer sample_weight, quantile_method other than 'averaged_inverted_cdf' / 'linear', inverse_transform	NOT IMPLEMENTED	the other numpy methods are further integer splits of the same rational position in kbins_edges_unit
-sklearn QuantileTransformer.inverse_transform, PowerTransformer.inverse_transform	NOT IMPLEMENTED	np.interp the other way (the interp helper) and the inverse power map
+sklearn KBinsDiscretizer sample_weight, quantile_method other than 'averaged_inverted_cdf' / 'linear'	NOT IMPLEMENTED	the other numpy methods are further integer splits of the same rational position in kbins_edges_unit
 sklearn PolynomialFeatures order='F'	NOT IMPLEMENTED	a column-major output layout of the same products
 sklearn SplineTransformer knots=<array>, extrapolation='linear' / 'periodic', sample_weight	NOT IMPLEMENTED	linear needs the boundary derivative (the degree-1 basis at the edge span); periodic wraps the knot vector
-sklearn LabelBinarizer multilabel y, inverse_transform	NOT IMPLEMENTED	multilabel is MultiLabelBinarizer's scatter; the inverse is an argmax / threshold
+sklearn LabelBinarizer multilabel y	NOT IMPLEMENTED	multilabel is MultiLabelBinarizer's scatter
 sklearn IterativeImputer estimator=<any>, sample_posterior, n_nearest_features, imputation_order='random', add_indicator	NOT IMPLEMENTED	the default BayesianRidge is the device path; another estimator would be a Python loop over mojolearn estimators
 sklearn mutual_info_* discrete_features=True / array	NOT IMPLEMENTED	discrete features need the contingency-table mutual information (mutual_info_score)
 sklearn RFE importance_getter=<str/callable>	NOT IMPLEMENTED	coef_ or feature_importances_ only
+sklearn OrdinalEncoder / OneHotEncoder inverse_transform None for an unknown row	DIFFERS BY NAME	the reference returns an object array with None; there is no object Array, so the row's value is NaN

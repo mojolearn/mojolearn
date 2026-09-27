@@ -34,6 +34,12 @@ def test_label_binarizer():
             m, r = ml.LabelBinarizer(**kw).fit(y), skp.LabelBinarizer(**kw).fit(y)
             np.testing.assert_array_equal(np.asarray(m.classes_), r.classes_)
             np.testing.assert_array_equal(np.asarray(m.transform(y)), r.transform(y))
+            Y = r.transform(y).astype(np.float64)
+            Y2 = Y + rng.standard_normal(Y.shape) * 0.3
+            for Z in (Y, Y2):
+                np.testing.assert_array_equal(np.asarray(m.inverse_transform(Z)), r.inverse_transform(Z))
+            np.testing.assert_array_equal(np.asarray(m.inverse_transform(Y2, threshold=0.4)),
+                                          r.inverse_transform(Y2, threshold=0.4))
 
 
 def test_multilabel_binarizer():
