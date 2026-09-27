@@ -85,7 +85,7 @@ Option parity gate (SAGEConv project=True), RTX 4090 pod, 2026-09-27:
 RESULT: PASS (every seam arm bites; 15 lanes AGREE, DISAGREE under the e2e arm, AGREE restored).
 Existing bits unchanged: x-cnn-gnn-options parts mx/mxn/mnn + infer on all 9 fixtures,
 and x-cnn-sage train/infer, equal to the 02b63f107 and 25b570476 lane-check JSONs (36/36 equal).
-test_x_cnn_gnn 0 failures; test_host_surface 196 passed; test_lane_select: see the merge commit.
+test_x_cnn_gnn 0 failures; test_host_surface 196 passed; test_lane_select `OK: 0 failure(s)`.
 PASSED: do not re-run. OPTION PARITY PHASE DONE (every NOT_IMPLEMENTED.tsv row is implemented,
 carried, or refused by name).
 
