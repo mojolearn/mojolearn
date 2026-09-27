@@ -60,7 +60,9 @@ NAdam and Adafactor.
 - End-to-end CPU-column sabotage for the stewards:
   `sequence/checks/sabotage/e2e_host_download_bit.patch` (21 lanes: HostExec
   download flips the low bit) and `e2e_arima_host_param_bit.patch`
-  (sequence-autoarima: the ARIMA host binding's params).
+  (sequence-autoarima: the ARIMA host binding's params). Both proven on the
+  A40: AGREE, DISAGREE under the patch on every lane, AGREE after reversal.
+- Merge gate on the A40: test_host_surface 196 passed; tools/test_lane_select.py OK, 0 failures.
 - Steward requests at d5a849bb5 (m2pro + do-amd; m3ultra spooled):
   1790537359123-sequence-d5a849bb57 (21 lanes), 1790537368020-sequence-d5a849bb57
   (autoarima). STATUS: see `python3 tools/apple_steward.py status`.
