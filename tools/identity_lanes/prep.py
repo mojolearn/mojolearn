@@ -239,3 +239,15 @@ def _prep_first_six(X):
 
 
 _batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_prep_first_six), "x-prep-polynomial-features")
+
+
+@lane("x-prep-spline-transformer")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.SplineTransformer().fit(X)
+    mq = ml.SplineTransformer(n_knots=6, degree=2, knots="quantile", extrapolation="continue",
+                              include_bias=False).fit(X)
+    parts = dict(knots=_h(*m.bsplines_), transform=_h(m.transform(X[:256])), q=_h(mq.transform(X[:256])))
+    return _fit(parts, m, lambda e: (e.transform(Xh[:256]),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-spline-transformer")

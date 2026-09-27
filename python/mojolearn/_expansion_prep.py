@@ -35,7 +35,7 @@ from ._labels import flatten_labels, sorted_classes, label_kind
 __all__ = ["RobustScaler", "MaxAbsScaler", "OrdinalEncoder", "OneHotEncoder", "TargetEncoder", "SimpleImputer", "KBinsDiscretizer",
            "GaussianNB", "MultinomialNB", "BernoulliNB",
            "LinearDiscriminantAnalysis", "QuadraticDiscriminantAnalysis",
-           "QuantileTransformer", "PowerTransformer", "Normalizer", "PolynomialFeatures"]
+           "QuantileTransformer", "PowerTransformer", "Normalizer", "PolynomialFeatures", "SplineTransformer"]
 
 _BINDING = "_mojolearn_x_prep"
 
@@ -47,7 +47,7 @@ _OPS = dict(
     te_global=20, te_enc=21, te_apply=22, mark_missing=23, fill=24, kbins_edges=25, kbins_codes=26,
     gnb_eps=27, gnb_params=28, gnb_jll=29, class_log_prior=30, mnb_params=31, bnb_params=32, cnb_params=33, cat_params=34, cat_jll=35,
     lda_prep=36, lda_w=37, lda_stage2=38, lda_stage3=39, qda_cov=40, qda_prep=41, qda_dec=42,
-    qt_apply=43, pt_fit=44, pt_apply=45, std_params=46, normalize=47, poly=48,
+    qt_apply=43, pt_fit=44, pt_apply=45, std_params=46, normalize=47, poly=48, spline_knots=49, spline_apply=50,
 )
 _PARAMS = 14
 _NONE = -1
@@ -1459,3 +1459,84 @@ class PolynomialFeatures(_PrepBase):
         pr.stage("poly", n * nout, xo, n, d, io, so, nout, out)
         pr.run(self.numeric_mode_)
         return pr.get(out, (n, nout))
+
+
+class SplineTransformer(_PrepBase):
+    """sklearn.preprocessing.SplineTransformer: per feature, B-splines of
+    `degree` on `n_knots` base knots ('uniform' over the training range, or
+    'quantile': numpy linear percentiles), extended by `degree` knots at each
+    end at the edge spacing; extrapolation 'constant' (the boundary values),
+    'continue' or 'error'. Dense float32 output. Explicit knot arrays,
+    'linear' and 'periodic' extrapolation and sparse output are refused."""
+    _parameters = ("n_knots", "degree", "knots", "extrapolation", "include_bias", "order", "handle_missing",
+                   "sparse_output")
+
+    def __init__(self, n_knots=5, degree=3, *, knots="uniform", extrapolation="constant", include_bias=True,
+                 order="C", handle_missing="error", sparse_output=False):
+        self.n_knots = n_knots
+        self.degree = degree
+        self.knots = knots
+        self.extrapolation = extrapolation
+        self.include_bias = include_bias
+        self.order = order
+        self.handle_missing = handle_missing
+        self.sparse_output = sparse_output
+
+    def fit(self, X, y=None, sample_weight=None):
+        if not isinstance(self.knots, str) or self.knots not in ("uniform", "quantile"):
+            raise NotImplementedError("mojolearn: SplineTransformer knots must be 'uniform' or 'quantile'")
+        if self.extrapolation not in ("constant", "continue", "error"):
+            raise NotImplementedError(f"mojolearn: SplineTransformer extrapolation={self.extrapolation!r} "
+                                      "is not implemented")
+        if sample_weight is not None or self.sparse_output or self.order != "C":
+            raise NotImplementedError("mojolearn: SplineTransformer sample_weight, sparse_output and "
+                                      "order='F' are not implemented")
+        nk, k = int(self.n_knots), int(self.degree)
+        if nk < 2 or k < 0 or k > 7:
+            raise ValueError("mojolearn: SplineTransformer needs n_knots >= 2 and 0 <= degree <= 7")
+        arr = _x2d(X)
+        n, d = arr.shape
+        mode = _mode()
+        pr = _Prog()
+        xo = pr.put(arr)
+        so, st = pr.alloc(n * d), pr.alloc(6 * d)
+        base = pr.alloc(d * nk)
+        knots = pr.alloc(d * (nk + 2 * k))
+        pr.stage("col_stats", d, xo, n, d, st)
+        if self.knots == "quantile":
+            qf = pr.put_list([i / (nk - 1) for i in range(nk)])
+            pr.stage("sort_cols", d, xo, n, d, so, 0)
+            pr.stage("quantile", d * nk, so, n, d, qf, nk, base, _NONE)
+        pr.stage("spline_knots", d, base, nk, d, k, knots, 1 if self.knots == "uniform" else 0, st)
+        pr.run(mode)
+        self._knots = pr.get(knots, d * (nk + 2 * k))
+        flat = pr.values(knots, d * (nk + 2 * k))
+        w = nk + 2 * k
+        self.bsplines_ = [Array.from_list(flat[c * w:(c + 1) * w], "<f4") for c in range(d)]
+        self._lo, self._hi = pr.values(st + 3 * d, d), pr.values(st + 4 * d, d)
+        self._nk, self._k = nk, k
+        nspl = nk + k - 1
+        self.n_features_out_ = d * (nspl if self.include_bias else nspl - 1)
+        self.numeric_mode_, self.n_features_in_ = mode, d
+        return self
+
+    def transform(self, X):
+        self._check_fitted()
+        arr = _x2d(X)
+        self._check_width(arr)
+        n, d = arr.shape
+        W = self.n_features_out_
+        pr = _Prog()
+        xo, ko = pr.put(arr), pr.put(self._knots)
+        out = pr.alloc(n * W)
+        st = pr.alloc(6 * d)
+        if self.extrapolation == "error":
+            pr.stage("col_stats", d, xo, n, d, st)
+        pr.stage("spline_apply", n * d, xo, n, d, ko, self._nk, self._k,
+                 1 if self.extrapolation == "continue" else 0, W, 1 if self.include_bias else 0, out)
+        pr.run(self.numeric_mode_)
+        if self.extrapolation == "error":
+            lo, hi = pr.values(st + 3 * d, d), pr.values(st + 4 * d, d)
+            if any(a < b for a, b in zip(lo, self._lo)) or any(a > b for a, b in zip(hi, self._hi)):
+                raise ValueError("mojolearn: X contains values beyond the limits of the knots")
+        return pr.get(out, (n, W))
