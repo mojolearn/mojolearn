@@ -51,6 +51,15 @@ HA_SLOT_PREFIX=${MOJOLEARN_HOTAISLE_SLOT_PREFIX:-/tmp/mojolearn-hotaisle-slot}
 HA_CREATE_LOCK=${MOJOLEARN_HOTAISLE_CREATE_LOCK:-/tmp/mojolearn-hotaisle-create.lock}
 HA_POLL=${MOJOLEARN_HOTAISLE_POLL_SECONDS:-5}
 HA_SPEC_WANT=${MOJOLEARN_HOTAISLE_RELEASE_SPEC:-auto}
+# THE RESOURCE KIND (2026-09-27): virtual_machines (every runner so far) or
+# bare_metal (tools/dev_pod.sh host up: ONE 8x MI300X server shared by lanes as
+# GPU slots). Same guards; the API paths, the stock listing (bare_metal/available/),
+# the team limit (maximum_bare_metal_servers, no Mac slot directories), the
+# create body ({"specs": ...}) and readiness (os_status.os_install_status ==
+# installed instead of state/ == running) differ. Bare metal bills an 8-hour
+# minimum up front (the swagger's reserve text); a force DELETE refunds nothing.
+HA_RES=${HA_RES:-virtual_machines}
+HA_SSH_USERS=${MOJOLEARN_HOTAISLE_SSH_USERS:-hotaisle ubuntu root}
 : "${HA_STOCK_WAIT_MINUTES:=${MOJOLEARN_HOTAISLE_STOCK_WAIT_MINUTES:-0}}"
 : "${HA_SLOT_WAIT_MINUTES:=${MOJOLEARN_HOTAISLE_SLOT_WAIT_MINUTES:-0}}"
 HA_MIN_BALANCE_CENTS=500
@@ -125,10 +134,11 @@ what, a = sys.argv[2], sys.argv[3:]
 if what == "teams":
     for t in d or []:
         if t.get("handle") == a[0]:
-            print("yes" if "operator" in (t.get("effective_roles") or []) else "no", t.get("maximum_virtual_machines", 0))
+            print("yes" if "operator" in (t.get("effective_roles") or []) else "no", t.get("maximum_virtual_machines", 0),
+                  t.get("maximum_bare_metal_servers", 0))
             break
     else:
-        print("absent 0")
+        print("absent 0 0")
 elif what == "balance":
     print(d.get("available_balance", -1) if isinstance(d, dict) else -1)
 elif what == "sshkey":
@@ -146,13 +156,13 @@ elif what == "pick":  # <want: 1gpu|2gpu|auto> <specs out>
         if g and all(x.get("model") == "MI300X" for x in g):
             return sum(x.get("count") or 0 for x in g)
         return 0
-    order = {"1gpu": [1], "2gpu": [2], "auto": [1, 2]}[a[0]]
+    order = {"1gpu": [1], "2gpu": [2], "auto": [1, 2], "8gpu": [8]}[a[0]]
     for n in order:
         found = [e for e in d or [] if gpus(e) == n and (e.get("Quantity") or 0) > 0]
         if found:
             found.sort(key=lambda e: (-(e.get("Quantity") or 0), e.get("OnDemandPrice") or 0))
             best = found[0]
-            json.dump(best["Specs"], open(a[1], "w"))
+            json.dump({"specs": best["Specs"]} if n == 8 else best["Specs"], open(a[1], "w"))
             print("found", "%dgpu" % n, best.get("Quantity") or 0, best.get("OnDemandPrice") or 0,
                   best.get("MinimumReservationMinutes") or 0, (best.get("Specs") or {}).get("cpu_cores") or 0)
             break
@@ -167,6 +177,8 @@ elif what == "desc":
     print((d.get("description") or "") if isinstance(d, dict) else "")
 elif what == "state":
     print(d.get("state", "unknown") if isinstance(d, dict) else "unknown")
+elif what == "osstate":   # a bare-metal server's OS install stage
+    print(((d.get("os_status") or {}).get("os_install_status") or "unknown") if isinstance(d, dict) else "unknown")
 elif what == "count":
     print(len(d) if isinstance(d, list) else -1)
 elif what == "inlist":
@@ -233,7 +245,7 @@ ref=""
 if [ -z "$ref" ]; then echo "mac_deadman_fired no VM ref recorded" >> '@RECORD@'; rm -f "$D/curlrc"; exit 0; fi
 want=""
 [ -s "$D/desc.txt" ] && want="$(cat "$D/desc.txt")"
-c=$(curl -K "$D/curlrc" --max-time 60 -o "$D/vm.json" -w '%{http_code}' "@API@/teams/@TEAM@/virtual_machines/$ref/" 2>> "$L")
+c=$(curl -K "$D/curlrc" --max-time 60 -o "$D/vm.json" -w '%{http_code}' "@API@/teams/@TEAM@/@RES@/$ref/" 2>> "$L")
 if [ "$c" = 200 ]; then
     d=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("description") or "")' "$D/vm.json" 2>/dev/null)
     if [ -n "$d" ] && [ "$d" != "$want" ]; then
@@ -241,7 +253,7 @@ if [ "$c" = 200 ]; then
     fi
     n=1
     while [ "$n" -le 6 ]; do
-        c=$(curl -K "$D/curlrc" --max-time 900 -o /dev/null -w '%{http_code}' -X DELETE "@API@/teams/@TEAM@/virtual_machines/$ref/?force=true" 2>> "$L")
+        c=$(curl -K "$D/curlrc" --max-time 900 -o /dev/null -w '%{http_code}' -X DELETE "@API@/teams/@TEAM@/@RES@/$ref/?force=true" 2>> "$L")
         echo "$(date -u +%FT%TZ) DELETE $ref attempt $n -> $c" >> "$L"
         case "$c" in 2*|404) break ;; esac
         sleep 15; n=$((n + 1))
@@ -250,7 +262,7 @@ fi
 echo "mac_deadman_fired $(date -u +%FT%TZ) ref=$ref last_http=$c" >> '@RECORD@'
 rm -f "$D/curlrc"
 DM_EOF
-    sed -i.bak -e "s|@DEADLINE@|$2|g" -e "s|@RECORD@|$3|g" -e "s|@API@|$HA_API|g" -e "s|@TEAM@|$HA_TEAM|g" "$1/deadman.sh"
+    sed -i.bak -e "s|@DEADLINE@|$2|g" -e "s|@RECORD@|$3|g" -e "s|@API@|$HA_API|g" -e "s|@TEAM@|$HA_TEAM|g" -e "s|@RES@|$HA_RES|g" "$1/deadman.sh"
     rm -f "$1/deadman.sh.bak"
     if grep -q '@[A-Z0-9]*@' "$1/deadman.sh"; then return 1; fi
     sh -n "$1/deadman.sh"
@@ -281,14 +293,14 @@ while [ "$(date +%s)" -lt "$T" ]; do sleep 10; done
 n=1
 while [ "$n" -le 20 ]; do
     code=$(curl -K "$G/curlrc" --max-time 900 -o "$G/watchdog.body" -w '%{http_code}' \
-        -X DELETE '@API@/teams/@TEAM@/virtual_machines/@REF@/?force=true')
+        -X DELETE '@API@/teams/@TEAM@/@RES@/@REF@/?force=true')
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) DELETE @REF@ attempt $n -> $code" >> "$G/watchdog.out"
     case "$code" in 2*|404) exit 0 ;; esac
     sleep 15
     n=$((n + 1))
 done
 WD_EOF
-    sed -i.bak -e "s|@GUARD@|$2|g" -e "s|@SECS@|$3|g" -e "s|@REF@|$4|g" -e "s|@API@|$HA_API|g" -e "s|@TEAM@|$HA_TEAM|g" "$1"
+    sed -i.bak -e "s|@GUARD@|$2|g" -e "s|@SECS@|$3|g" -e "s|@REF@|$4|g" -e "s|@API@|$HA_API|g" -e "s|@TEAM@|$HA_TEAM|g" -e "s|@RES@|$HA_RES|g" "$1"
     rm -f "$1.bak"
     if grep -q '@[A-Z0-9]*@' "$1"; then return 1; fi
     sh -n "$1"
@@ -306,8 +318,8 @@ HA_SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogL
 
 # ---------------------------------------------------------------- gone, delete
 ha_gone() {  # <ref> [<other ref>]: prints the reading; 0 when gone (GET 404, or absent from a 200 listing)
-    ha_call GET "teams/$HA_TEAM/virtual_machines/$1/"; _g=$HA_CODE
-    ha_call GET "teams/$HA_TEAM/virtual_machines/"; _l=$HA_CODE
+    ha_call GET "teams/$HA_TEAM/$HA_RES/$1/"; _g=$HA_CODE
+    ha_call GET "teams/$HA_TEAM/$HA_RES/"; _l=$HA_CODE
     _in=unknown; [ "$_l" = 200 ] && _in=$(ha_py inlist "$1" "${2:-}")
     if [ "$_g" = 404 ] || { [ "$_l" = 200 ] && [ "$_in" = no ]; }; then printf 'yes get=%s list=%s listed=%s' "$_g" "$_l" "$_in"; return 0; fi
     printf 'no get=%s list=%s listed=%s' "$_g" "$_l" "$_in"; return 1
@@ -317,7 +329,7 @@ ha_delete_verify() {  # <ref> <other ref> <verify seconds>; sets HA_GONE_LINE; 0
     if _line=$(ha_gone "$1" "$2"); then
         HA_GONE_LINE="verified_gone ref=$1 $_line utc=$(ha_utc) (already gone, no DELETE sent)"; ha_rec "$HA_GONE_LINE"; return 0
     fi
-    ha_call GET "teams/$HA_TEAM/virtual_machines/$1/"
+    ha_call GET "teams/$HA_TEAM/$HA_RES/$1/"
     if [ "$HA_CODE" = 200 ]; then
         _d=$(ha_py desc)
         if [ -n "$_d" ] && [ "$_d" != "$HA_DESC" ]; then
@@ -327,7 +339,7 @@ ha_delete_verify() {  # <ref> <other ref> <verify seconds>; sets HA_GONE_LINE; 0
         fi
     fi
     for _i in 1 2 3 4; do
-        ha_call DELETE "teams/$HA_TEAM/virtual_machines/$1/?force=true" "" 900
+        ha_call DELETE "teams/$HA_TEAM/$HA_RES/$1/?force=true" "" 900
         say "DELETE $1 ?force=true -> HTTP $HA_CODE"
         ha_rec "delete ref=$1 attempt $_i -> HTTP $HA_CODE utc=$(ha_utc)"
         case "$HA_CODE" in 2*|404) break ;; esac
@@ -347,7 +359,7 @@ ha_delete_verify() {  # <ref> <other ref> <verify seconds>; sets HA_GONE_LINE; 0
     return 1
 }
 ha_adopt_new_vm() {  # a VM absent from the pre-create snapshot, when exactly one
-    ha_call GET "teams/$HA_TEAM/virtual_machines/"
+    ha_call GET "teams/$HA_TEAM/$HA_RES/"
     [ "$HA_CODE" = 200 ] || return 1
     _new=$(ha_py ids | while read -r _id _nm; do grep -qx "$_id" "$TMPD/ha_pre_ids.txt" 2>/dev/null || echo "$_id $_nm"; done)
     [ "$(printf '%s' "$_new" | grep -c .)" = 1 ] || return 1
@@ -375,12 +387,14 @@ ha_refuse() {  # nothing was created: undo what was taken, say why, return 1
 ha_rent() {
     _lane=$1; _lease=$2; _cap=$3; HA_RECORD=$4; HA_GUARD=$5; _out=$6
     case "$_lane" in ''|*[!A-Za-z0-9_.-]*) die "Hot Aisle lane '$_lane': letters, digits and _.- only" ;; esac
-    case "$HA_SPEC_WANT" in 1gpu|2gpu|auto) ;; *) die "MOJOLEARN_HOTAISLE_RELEASE_SPEC must be 1gpu, 2gpu or auto" ;; esac
+    case "$HA_SPEC_WANT" in 1gpu|2gpu|auto|8gpu) ;; *) die "MOJOLEARN_HOTAISLE_RELEASE_SPEC must be 1gpu, 2gpu, auto or 8gpu" ;; esac
+    case "$HA_RES:$HA_SPEC_WANT" in virtual_machines:8gpu|bare_metal:[12a]*) die "spec $HA_SPEC_WANT does not fit $HA_RES" ;; esac
     _why=$(ha_key_hygiene) || { ha_refuse "no usable Hot Aisle key: $_why"; return 1; }
     ha_load_key || { ha_refuse "the Hot Aisle key file $HA_KEYFILE is empty or malformed"; return 1; }
     ha_call GET "teams/"
     [ "$HA_CODE" = 200 ] || { ha_refuse "GET teams/ -> HTTP $HA_CODE"; return 1; }
-    read -r _op HA_TEAM_MAX <<< "$(ha_py teams "$HA_TEAM")"
+    read -r _op HA_TEAM_MAX _bm_max <<< "$(ha_py teams "$HA_TEAM")"
+    [ "$HA_RES" = virtual_machines ] || HA_TEAM_MAX=${_bm_max:-0}
     [ "$_op" = yes ] || { ha_refuse "the key lacks the operator role on $HA_TEAM (create and DELETE need it)"; return 1; }
     ha_call GET "teams/$HA_TEAM/balance/"
     HA_BAL_BEFORE=$(ha_py balance); HA_BAL_BEFORE=${HA_BAL_BEFORE:--1}
@@ -391,9 +405,16 @@ ha_rent() {
         || { ha_refuse "the ssh key $HA_SSH_KEY_FP is not registered on the account (HTTP $HA_CODE)"; return 1; }
     # a. the slot
     _t0=$(date +%s)
-    while :; do
+    while [ "$HA_RES" = bare_metal ]; do   # no Mac slot directories: the team's server limit only
+        ha_call GET "teams/$HA_TEAM/$HA_RES/"
+        if [ "$HA_CODE" = 200 ] && [ "$(ha_py count)" -lt "$HA_TEAM_MAX" ]; then break; fi
+        [ $(( $(date +%s) - _t0 )) -lt $(( HA_SLOT_WAIT_MINUTES * 60 )) ] \
+            || { ha_refuse "the team already holds $(ha_py count) of $HA_TEAM_MAX bare-metal servers (HTTP $HA_CODE)"; return 1; }
+        sleep 60
+    done
+    while [ "$HA_RES" = virtual_machines ]; do
         if ha_try_take_slot "$_lane" "$_out"; then
-            ha_call GET "teams/$HA_TEAM/virtual_machines/"
+            ha_call GET "teams/$HA_TEAM/$HA_RES/"
             if [ "$HA_CODE" = 200 ] && [ "$(ha_py count)" -lt "$HA_TEAM_MAX" ]; then break; fi
             say "slot taken but the team already runs $(ha_py count) of $HA_TEAM_MAX VMs; releasing it"
             ha_release_slot
@@ -406,7 +427,7 @@ ha_rent() {
     # b. stock, and the price of the whole horizon
     _t0=$(date +%s)
     while :; do
-        ha_call GET "teams/$HA_TEAM/virtual_machines/available/"
+        ha_call GET "teams/$HA_TEAM/$HA_RES/available/"
         cp "$TMPD/ha.body" "$_out/hotaisle_offering.json" 2>/dev/null
         read -r _f HA_SPEC_USED _q HA_PRICE HA_MINRES HA_CORES <<< "$(ha_py pick "$HA_SPEC_WANT" "$TMPD/ha_create.json")"
         [ "$HA_CODE" = 200 ] && [ "$_f" = found ] && break
@@ -454,14 +475,14 @@ ha_rent() {
     done
     HA_CREATE_LOCK_HELD=1
     { echo "nonce=$HA_NONCE"; echo "pid=$$"; echo "lane=$_lane"; echo "utc=$(ha_utc)"; } > "$HA_CREATE_LOCK/owner"
-    ha_call GET "teams/$HA_TEAM/virtual_machines/"
+    ha_call GET "teams/$HA_TEAM/$HA_RES/"
     [ "$HA_CODE" = 200 ] || { ha_refuse "the pre-create listing answered HTTP $HA_CODE"; return 1; }
     ha_py ids | awk '{print $1}' > "$TMPD/ha_pre_ids.txt"
     cp "$TMPD/ha_create.json" "$_out/hotaisle_create_request.json"
     say "creating the Hot Aisle $HA_SPEC_USED MI300X VM. THE BILL STARTS HERE."
     HA_CREATE_ATTEMPTED=1
     HA_T_CREATE=$(date +%s)
-    ha_call POST "teams/$HA_TEAM/virtual_machines/" "$TMPD/ha_create.json" 300
+    ha_call POST "teams/$HA_TEAM/$HA_RES/" "$TMPD/ha_create.json" 300
     _cc=$HA_CODE
     cp "$TMPD/ha.body" "$_out/hotaisle_create_response.json"; ha_redact "$_out/hotaisle_create_response.json"
     ha_rec "create_http=$_cc create_utc=$(ha_utc)"
@@ -475,7 +496,7 @@ ha_rent() {
                 401|402|403|404|428)
                     # the API refused the create (limit, balance, stock, ssh key); only a
                     # 200 listing with nothing new in it proves nothing is billing
-                    ha_call GET "teams/$HA_TEAM/virtual_machines/"
+                    ha_call GET "teams/$HA_TEAM/$HA_RES/"
                     if [ "$HA_CODE" = 200 ] && [ -z "$(ha_py ids | while read -r _id _nm; do grep -qx "$_id" "$TMPD/ha_pre_ids.txt" || echo "$_id"; done)" ]; then
                         HA_CREATE_ATTEMPTED=0
                         ha_refuse "the create was refused by the API (HTTP $_cc: $(head -c 200 "$_out/hotaisle_create_response.json")) and the listing shows no new VM"
@@ -496,8 +517,8 @@ ha_rent() {
     printf '{"description":"%s"}\n' "$HA_DESC" > "$TMPD/ha_patch.json"
     _tagged=0
     for _i in 1 2 3 4 5; do
-        ha_call PATCH "teams/$HA_TEAM/virtual_machines/$HA_VMREF/" "$TMPD/ha_patch.json"
-        ha_call GET "teams/$HA_TEAM/virtual_machines/$HA_VMREF/"
+        ha_call PATCH "teams/$HA_TEAM/$HA_RES/$HA_VMREF/" "$TMPD/ha_patch.json"
+        ha_call GET "teams/$HA_TEAM/$HA_RES/$HA_VMREF/"
         if [ "$HA_CODE" = 200 ] && [ "$(ha_py desc)" = "$HA_DESC" ]; then _tagged=1; break; fi
         sleep 5
     done
@@ -505,31 +526,42 @@ ha_rent() {
     [ "$_tagged" = 1 ] || die "the Hot Aisle description PATCH never landed; deleting the VM unused"
     ha_rec "description=$HA_DESC"
     say "VM $HA_VMNAME deployment_id $HA_VMREF, description $HA_DESC"
-    # running, then ssh as hotaisle, three consecutive successes, passwordless sudo
-    _t0=$(date +%s); _st=unknown
+    # running (a VM) or installed (bare metal), then ssh, three consecutive successes, passwordless sudo
+    _t0=$(date +%s); _st=unknown; _want=running
+    [ "$HA_RES" = bare_metal ] && _want=installed
     while [ $(( $(date +%s) - _t0 )) -lt "$HA_READY_SECONDS" ]; do
-        ha_call GET "teams/$HA_TEAM/virtual_machines/$HA_VMREF/state/"
-        [ "$HA_CODE" = 200 ] && _st=$(ha_py state)
-        [ "$_st" = running ] && break
+        if [ "$HA_RES" = bare_metal ]; then
+            ha_call GET "teams/$HA_TEAM/$HA_RES/$HA_VMREF/"
+            [ "$HA_CODE" = 200 ] && _st=$(ha_py osstate)
+            [ "$_st" = failed ] && die "the bare-metal OS install failed"
+        else
+            ha_call GET "teams/$HA_TEAM/$HA_RES/$HA_VMREF/state/"
+            [ "$HA_CODE" = 200 ] && _st=$(ha_py state)
+        fi
+        [ "$_st" = "$_want" ] && break
         sleep "$HA_POLL"
     done
-    [ "$_st" = running ] || die "the Hot Aisle VM never reached running (last state $_st)"
-    ha_call GET "teams/$HA_TEAM/virtual_machines/$HA_VMREF/"
+    [ "$_st" = "$_want" ] || die "the Hot Aisle $HA_RES box never reached $_want (last state $_st)"
+    ha_call GET "teams/$HA_TEAM/$HA_RES/$HA_VMREF/"
     cp "$TMPD/ha.body" "$_out/hotaisle_vm.json"; ha_redact "$_out/hotaisle_vm.json"
     IFS=$'\t' read -r _n _id HA_SSH_IP HA_SSH_PORT <<< "$(ha_py vm)"
     [ -n "$HA_SSH_IP" ] && [ "$HA_SSH_IP" != - ] || die "the Hot Aisle VM has no ssh address"
     case "$HA_SSH_PORT" in ''|*[!0-9]*) HA_SSH_PORT=22 ;; esac
-    HA_TARGET="-p $HA_SSH_PORT -i $HA_SSH_KEY -o IdentitiesOnly=yes hotaisle@$HA_SSH_IP"
-    ha_rec "ssh=hotaisle@$HA_SSH_IP:$HA_SSH_PORT running_after_seconds=$(( $(date +%s) - HA_T_CREATE ))"
     _ok=0
     while [ $(( $(date +%s) - _t0 )) -lt "$HA_READY_SECONDS" ]; do
-        # shellcheck disable=SC2086
-        if with_timeout 40 ssh $HA_SSH_OPTS $HA_TARGET true < /dev/null 2>/dev/null; then _ok=$((_ok + 1)); [ "$_ok" -ge 3 ] && break; else _ok=0; fi
+        for _u in $HA_SSH_USERS; do   # a VM logs in as hotaisle; bare metal may differ
+            HA_TARGET="-p $HA_SSH_PORT -i $HA_SSH_KEY -o IdentitiesOnly=yes $_u@$HA_SSH_IP"
+            # shellcheck disable=SC2086
+            if with_timeout 40 ssh $HA_SSH_OPTS $HA_TARGET true < /dev/null 2>/dev/null; then _ok=$((_ok + 1)); break; fi
+            _ok=0
+        done
+        [ "$_ok" -ge 3 ] && break
         sleep "$HA_POLL"
     done
+    ha_rec "ssh=${HA_TARGET##* }:$HA_SSH_PORT running_after_seconds=$(( $(date +%s) - HA_T_CREATE ))"
     [ "$_ok" -ge 3 ] || die "ssh never settled on the Hot Aisle VM ($HA_SSH_IP:$HA_SSH_PORT)"
     ha_ssh 60 'echo SUDO_OK' < /dev/null 2>&1 | grep -q SUDO_OK || die "passwordless sudo is not available for hotaisle; deleting unused"
-    say "ssh settled as hotaisle@$HA_SSH_IP:$HA_SSH_PORT after $(( $(date +%s) - HA_T_CREATE ))s"
+    say "ssh settled as ${HA_TARGET##* } after $(( $(date +%s) - HA_T_CREATE ))s"
     # e. the on-box watchdog, before any work
     _wd_secs=$(( HA_T_CREATE + _lease * 60 - $(date +%s) )); [ "$_wd_secs" -ge 120 ] || _wd_secs=120
     ha_write_watchdog "$TMPD/ha_watchdog.sh" "$HA_GUARD" "$_wd_secs" "$HA_VMREF" || die "the on-box watchdog did not compose; deleting unused"
@@ -545,8 +577,8 @@ fi
 i=0; while [ \$i -lt 15 ] && [ ! -s $HA_GUARD/watchdog.pid ]; do sleep 1; i=\$((i + 1)); done
 p=\$(cat $HA_GUARD/watchdog.pid 2>/dev/null)
 if [ -n \"\$p\" ] && kill -0 \"\$p\" 2>/dev/null; then echo WATCHDOG_ALIVE pid=\$p; else echo WATCHDOG_DEAD; fi
-echo REF_BAKED_IN=\$(grep -c 'virtual_machines/$HA_VMREF/?force=true' $HA_GUARD/watchdog.sh)
-echo TOKEN_GET_HTTP=\$(curl -K $HA_GUARD/curlrc --max-time 30 -o $HA_GUARD/self.json -w '%{http_code}' '$HA_API/teams/$HA_TEAM/virtual_machines/$HA_VMREF/')
+echo REF_BAKED_IN=\$(grep -c '$HA_RES/$HA_VMREF/?force=true' $HA_GUARD/watchdog.sh)
+echo TOKEN_GET_HTTP=\$(curl -K $HA_GUARD/curlrc --max-time 30 -o $HA_GUARD/self.json -w '%{http_code}' '$HA_API/teams/$HA_TEAM/$HA_RES/$HA_VMREF/')
 if grep -q '\"description\": *\"$HA_DESC\"' $HA_GUARD/self.json; then echo DESC_MATCH; else echo DESC_MISMATCH; fi" \
         < /dev/null > "$_out/hotaisle_watchdog_check.txt" 2>&1
     _wpid=$(sed -n 's/^WATCHDOG_ALIVE pid=//p' "$_out/hotaisle_watchdog_check.txt" | tr -d '\r' | head -1)
@@ -561,8 +593,20 @@ if grep -q '\"description\": *\"$HA_DESC\"' $HA_GUARD/self.json; then echo DESC_
     HA_WATCHDOG_OK=1
     ha_rec "watchdog_seconds=$_wd_secs watchdog_verified=1"
     say "on-box watchdog ARMED and verified (pid $_wpid in two sessions, ref $HA_VMREF, GET 200, description matches, ${_wd_secs}s)"
+    # bare metal: ROCm may not be on the fresh image; install it before the device check
+    if [ "$HA_RES" = bare_metal ]; then
+        ha_ssh 3600 'export PATH=/opt/rocm/bin:$PATH DEBIAN_FRONTEND=noninteractive
+if command -v rocminfo > /dev/null; then echo ROCM_PRESENT; exit 0; fi
+. /etc/os-release; cd /tmp
+curl -fsSLO "https://repo.radeon.com/amdgpu-install/6.4.1/ubuntu/$VERSION_CODENAME/amdgpu-install_6.4.60401-1_all.deb" &&
+apt-get -o DPkg::Lock::Timeout=600 install -y -qq ./amdgpu-install_6.4.60401-1_all.deb > /dev/null &&
+apt-get -o DPkg::Lock::Timeout=600 update -qq > /dev/null &&
+apt-get -o DPkg::Lock::Timeout=600 install -y -qq rocm > /tmp/rocm-install.log 2>&1 && echo ROCM_INSTALLED' \
+            < /dev/null > "$_out/hotaisle_rocm.txt" 2>&1 || true
+        sed 's/^/    [box] /' "$_out/hotaisle_rocm.txt" | tail -3
+    fi
     # the device: /dev/kfd and gfx942 from rocminfo's agent Name: field
-    ha_ssh 90 'test -e /dev/kfd && echo KFD_PRESENT; rocminfo 2>/dev/null | awk '"'"'$1 == "Name:" && $2 ~ /^gfx[0-9a-f]+$/ {print "GFX=" $2}'"'"'; echo "GPU_AGENTS=$(rocminfo 2>/dev/null | awk '"'"'$1 == "Name:" && $2 ~ /^gfx[0-9a-f]+$/'"'"' | wc -l | tr -d " ")"; rocm-smi --showproductname 2>&1 | grep -i "card series" | head -4' \
+    ha_ssh 90 'export PATH=/opt/rocm/bin:$PATH; test -e /dev/kfd && echo KFD_PRESENT; rocminfo 2>/dev/null | awk '"'"'$1 == "Name:" && $2 ~ /^gfx[0-9a-f]+$/ {print "GFX=" $2}'"'"'; echo "GPU_AGENTS=$(rocminfo 2>/dev/null | awk '"'"'$1 == "Name:" && $2 ~ /^gfx[0-9a-f]+$/'"'"' | wc -l | tr -d " ")"; rocm-smi --showproductname 2>&1 | grep -i "card series" | head -4' \
         < /dev/null > "$_out/hotaisle_device.txt" 2>&1
     sed 's/^/    [box] /' "$_out/hotaisle_device.txt"
     grep -q '^KFD_PRESENT' "$_out/hotaisle_device.txt" || die "/dev/kfd is absent on the Hot Aisle VM; deleting"
@@ -582,7 +626,7 @@ ha_teardown() {
             [ -n "$HA_VMREF" ] && printf '%s\n' "$HA_VMREF" > "$HA_DEADMAN_DIR/vm_ref.txt" 2>/dev/null
         fi
         if [ -z "$HA_VMREF" ]; then
-            ha_call GET "teams/$HA_TEAM/virtual_machines/"
+            ha_call GET "teams/$HA_TEAM/$HA_RES/"
             if [ "$HA_CODE" = 200 ] && [ -z "$(ha_py ids | while read -r _id _nm; do grep -qx "$_id" "$TMPD/ha_pre_ids.txt" || echo "$_id"; done)" ]; then
                 ha_rec "verified_gone ref=none: the 200 listing shows no VM absent from the pre-create snapshot utc=$(ha_utc)"
                 HA_GONE=1

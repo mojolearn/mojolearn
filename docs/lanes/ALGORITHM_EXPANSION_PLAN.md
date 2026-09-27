@@ -15,6 +15,13 @@ messaging lanes. Newest items are at the top.
    one Hot Aisle MI300X per algorithm lane and renews every dev box hourly.
    If `tools/dev_pod.sh list` shows `<lane>-amd`, that box is yours: use it
    with `--vendor amd` on sync/run/extend. Don't request a second one.
+   A `<lane>-amd` box may be a GPU slot on a shared 8x MI300X host
+   (`tools/dev_pod.sh host status`): use only sync/run/extend with `--vendor
+   amd`, never touch other `/root/mojolearn-*` dirs or GPUs on it. Until a lane
+   has its own AMD box, it submits AMD identity checks to the `do-amd` steward:
+   `tools/apple_steward.py submit` ships identity requests there too while
+   `tools/do_amd_steward.sh` has it up (push the commit to origin first), and
+   a merge then needs m2pro PASS AND do-amd PASS (`apple_steward.py status`).
 1. **Order per lane:** (a) every algorithm in the lane table and Additions
    (PASS 1); (b) proof on every column, holding an AMD box (PASS 2 items
    1-2); (c) **option parity** (item 2 below); (d) **GPU speed**, IDENTICAL
@@ -621,3 +628,33 @@ speed wave. It is written here so the target is on the record and so no
 lane in phases 1 and 2 designs a host kernel that cannot be parallelized
 later (keep the fold shape explicit; never bake a sequential order into a
 seam that a pinned tree would also satisfy).
+
+---
+
+# CONSOLIDATION PASS (Andrew, 2026-09-27)
+
+Measured: the numeric seams are NOT duplicated. Every identity helper lives
+once, except `pinned_mul` (the dedupe lane) and the ledger's row-20 twins
+(`pinned_block_sum`, `twiddle_in`). The duplication is in scaffolding. The
+one piece that matters is the **fixture RNG**: about 80 copies of `_mix`,
+`splitmix`, `_splitmix`, `_u01` and `_hashed` generate the data every check
+runs on. If one copy differs, a cross-lane or cross-vendor comparison
+silently compares fixtures instead of kernels.
+
+**Now (conflict-free: new files only):** lane `consolidate` adds
+`checks/fixture_rng.mojo` and `checks/scaffold.mojo` (grid, hash printing,
+upload/download, pointer helpers, `run_case`/`card_path` shape) plus a
+binding prelude. It also adds a gate proving every existing fixture-RNG copy
+agrees bit for bit with the canonical one over a hashed input set. After
+that merges, CURRENT DIRECTIVES tells lanes to use these in all new code.
+
+**After the lanes quiet (on its own branch, merging main regularly, landing
+in one merge):**
+1. Delete the fixture-RNG copies. The gate ran first, so this is bit-inert.
+2. Migrate the check and binding scaffolding to the shared files.
+3. Split `tools/identity_break.py` (12,878 lines) into per-family fragments,
+   using the prep's mechanism.
+4. Rename the `x_` directories once their lanes are certified.
+
+**Never:** split the big certified kernel files (fused attention, the
+identical GEMM). One file per contract is deliberate.
