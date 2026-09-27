@@ -46,6 +46,8 @@ _ALGORITHMS = {
 
 DBSCAN_METRIC_L2 = 0
 DBSCAN_METRIC_L1 = 1
+DBSCAN_METRIC_COSINE = 2
+DBSCAN_METRIC_PRECOMPUTED = 3
 
 #: scikit-learn's spellings for the two metrics this implementation serves, mapped to
 #: the codes `bindings/_mojolearn_estimators.mojo` slot 7 carries. 'l1',
@@ -58,6 +60,8 @@ _METRICS = {
     "manhattan": DBSCAN_METRIC_L1,
     "l1": DBSCAN_METRIC_L1,
     "cityblock": DBSCAN_METRIC_L1,
+    "cosine": DBSCAN_METRIC_COSINE,
+    "precomputed": DBSCAN_METRIC_PRECOMPUTED,
 }
 
 #: The metric each algorithm arm can serve. The ball cover computes Euclidean
@@ -66,8 +70,8 @@ _METRICS = {
 #: arm serves both. Stated as data rather than as an `if` so the error
 #: message below can list the arm that DOES serve what was asked.
 _ARM_METRICS = {
-    "rbc": (DBSCAN_METRIC_L2,),
-    "brute": (DBSCAN_METRIC_L2, DBSCAN_METRIC_L1),
+    "rbc": (DBSCAN_METRIC_L2, DBSCAN_METRIC_PRECOMPUTED),
+    "brute": (DBSCAN_METRIC_L2, DBSCAN_METRIC_L1, DBSCAN_METRIC_COSINE, DBSCAN_METRIC_PRECOMPUTED),
 }
 
 
@@ -112,9 +116,18 @@ class DBSCAN(NumericModeMixin):
                                        Its per-pair arithmetic follows RAFT's
                                        l1.cuh:49 and its threshold is NOT
                                        squared, because an L1 sum has no
-                                       squared form (DEVIATION 27). 'cosine'
-                                       and 'precomputed' are still refused BY
-                                       NAME.
+                                       squared form (DEVIATION 27).
+                                       'cosine' (algorithm='brute'): cuML's
+                                       CosineExpanded, every row scaled to
+                                       unit length on the host and the L2
+                                       kernel run against 2 * eps (DEVIATION
+                                       5113); a zero row is refused by name.
+                                       'precomputed': X is the n x n
+                                       distance matrix and a pair is a
+                                       neighbor when its entry is <= eps
+                                       (DEVIATION 5114); there is no search,
+                                       so `algorithm` does not apply to it
+                                       (scikit-learn ignores it too).
         sample_weight        honored   in fit() and fit_predict(). A point is
                                        core when the SUM OF WEIGHTS in its
                                        eps-neighborhood reaches min_samples,
@@ -146,8 +159,9 @@ class DBSCAN(NumericModeMixin):
                                        `components_` (the core rows,
                                        float32) and their labels, which
                                        `predict` and `save` need
-        core_sample_indices_ with prediction_data=True only (cuML does
-                                       not return theirs, dbscan.cuh:171-173)
+        core_sample_indices_ on every fit (int32), with components_, as
+                                       scikit-learn and cuML's Python default
+                                       (calc_core_sample_indices=True)
         predict              NEW       DEVIATION 2740; neither cuML nor
                                        scikit-learn has one. See `predict`
 
@@ -238,9 +252,9 @@ class DBSCAN(NumericModeMixin):
                 f"must be one of {sorted(_METRICS)}. 'euclidean'/'l2' is the "
                 "implemented cuML arm; 'manhattan'/'l1'/'cityblock' is this "
                 "library's own L1 arm (DEVIATION 27, dbscan/impl/neighbors/"
-                "epsilon_neighborhood.mojo). 'cosine' and 'precomputed' are "
-                "cuML's other two (dbscan.pyx:110-115) and are not built "
-                "here yet"
+                "epsilon_neighborhood.mojo); 'cosine' and 'precomputed' "
+                "are cuML's other two (dbscan.pyx:110-115, DEVIATIONS 5113 "
+                "and 5114)"
             )
         metric = _METRICS[metric_key]
         if self.algorithm not in _ALGORITHMS:
@@ -264,12 +278,21 @@ class DBSCAN(NumericModeMixin):
                 f"algorithm={self.algorithm!r} is refused. The ball cover "
                 "computes Euclidean distances for its landmark radii and "
                 "its three pruning bounds (neighbors/impl/"
-                "ball_cover/), so it serves 'euclidean' only. Pass "
+                "ball_cover/) against the radius itself, so it serves "
+                "'euclidean' only ('cosine' compares unit rows against "
+                "2 * eps, a threshold the index does not take). Pass "
                 "algorithm='brute', which serves this metric. This is a "
                 "scope boundary and not a property of the algorithm: the "
                 "ball cover's pruning rests on the triangle inequality, "
                 "which L1 satisfies, so an L1 index is reachable work in "
                 "that lane"
+            )
+        if metric == DBSCAN_METRIC_PRECOMPUTED and self.prediction_data:
+            raise ValueError(
+                "mojolearn DBSCAN: prediction_data=True with "
+                "metric='precomputed' is refused by name: predict needs each "
+                "query's distances to the core samples, which a distance "
+                "matrix over the training rows does not give"
             )
         if float(self.eps) <= 0:
             raise ValueError("mojolearn DBSCAN eps must be positive")
@@ -290,6 +313,17 @@ class DBSCAN(NumericModeMixin):
                 "non-finite row has no distance to any other, so it is "
                 "refused by name"
             )
+        if metric == DBSCAN_METRIC_PRECOMPUTED:
+            if x.shape[0] != x.shape[1]:
+                raise ValueError(
+                    "mojolearn DBSCAN: metric='precomputed' needs a square "
+                    f"distance matrix, got shape {tuple(x.shape)}"
+                )
+            if float(x.min()) < 0:
+                raise ValueError(
+                    "mojolearn DBSCAN: metric='precomputed' refuses a "
+                    "negative distance, as scikit-learn does"
+                )
         labels = empty((x.shape[0],), "<i4")
         budget = 0 if self.max_mbytes_per_batch is None else int(self.max_mbytes_per_batch)
         if budget < 0:
@@ -323,29 +357,26 @@ class DBSCAN(NumericModeMixin):
         # ORDER MATCHES bindings/_mojolearn_estimators.mojo::dbscan_fit_binding.
         # n_rows, n_features, eps, min_samples, budget_mb, max_iter,
         # eps_nn_method, metric
+        # precomputed has no neighborhood search; it takes the brute arm's
+        # adjacency path whatever `algorithm` names (DEVIATION 5114).
+        method = EPS_NN_BRUTE_FORCE if metric == DBSCAN_METRIC_PRECOMPUTED else _ALGORITHMS[self.algorithm]
         params = [x.shape[0], x.shape[1], float(self.eps), int(self.min_samples),
-                  budget, cap, _ALGORITHMS[self.algorithm], metric]
+                  budget, cap, method, metric]
         binding = self._bind("_mojolearn_estimators")
-        core = None
-        if self.prediction_data:
-            # dbscan_fit_core_binding: the same call, plus n_rows uint8 core flags.
-            core = zeros((x.shape[0],), "<u1")
-            self.n_iter_ = binding.dbscan_fit_core(
-                addr_ro(x, name="x"), addr(labels, name="labels"), weight_addr,
-                addr(core, name="core"), params,
-            )
-        else:
-            self.n_iter_ = binding.dbscan_fit(
-                addr_ro(x, name="x"), addr(labels, name="labels"), weight_addr, params,
-            )
+        # dbscan_fit_core_binding: the same call, plus n_rows uint8 core
+        # flags, on EVERY fit: core_sample_indices_ and components_ are
+        # scikit-learn's attributes and cuML's default output
+        # (runner.cuh:419-442, dbscan.pyx:304).
+        core = zeros((x.shape[0],), "<u1")
+        self.n_iter_ = binding.dbscan_fit_core(
+            addr_ro(x, name="x"), addr(labels, name="labels"), weight_addr,
+            addr(core, name="core"), params,
+        )
         del w
         self.labels_ = labels
         self.n_features_in_ = x.shape[1]
         self.n_samples_fit_ = x.shape[0]
-        for name in ("core_sample_indices_", "components_", "_core_labels"):
-            self.__dict__.pop(name, None)
-        if core is not None:
-            self._store_core(x, labels, core)
+        self._store_core(x, labels, core)
         return self
 
     def _store_core(self, x, labels, core):
@@ -407,7 +438,7 @@ class DBSCAN(NumericModeMixin):
         """
         if not hasattr(self, "labels_"):
             raise ValueError("mojolearn DBSCAN.predict: this DBSCAN instance is not fitted yet; call fit first")
-        if getattr(self, "components_", None) is None:
+        if not self.prediction_data or getattr(self, "components_", None) is None:
             raise ValueError(
                 "mojolearn DBSCAN.predict: prediction data was not stored. Fit with "
                 "DBSCAN(prediction_data=True), which keeps the core samples this "
@@ -441,7 +472,7 @@ class DBSCAN(NumericModeMixin):
         `_mojolearn_estimators_host.labeled_reference_predict`."""
         if not hasattr(self, "labels_"):
             raise RuntimeError("this estimator is not fitted yet")
-        if getattr(self, "components_", None) is None:
+        if not self.prediction_data or getattr(self, "components_", None) is None:
             raise ValueError(
                 "mojolearn DBSCAN.save: prediction data was not stored; fit with "
                 "DBSCAN(prediction_data=True). A model without it can label no new "

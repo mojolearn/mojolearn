@@ -106,7 +106,8 @@ def default_hdbscan_params() -> HDBSCANParams:
 struct HDBSCANOutput(Movable):
     """`hdbscan.hpp:203-...`'s `hdbscan_output` plus
     `robust_single_linkage_output`, reduced to what rung 1 produces.
-    `probabilities` is absent by DEVIATION 1610."""
+    `probabilities` is computed from it by the bindings
+    (`extract.mojo::probabilities_from_labels`, DEVIATION 5116)."""
 
     var n_clusters: Int
     var n_outliers: Int

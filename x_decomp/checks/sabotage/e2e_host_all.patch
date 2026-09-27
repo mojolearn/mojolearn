@@ -1,7 +1,6 @@
-diff --git a/x_decomp/host.mojo b/x_decomp/host.mojo
 --- a/x_decomp/host.mojo
 +++ b/x_decomp/host.mojo
-@@ -6,6 +6,7 @@ compiled into the CPU host binding."""
+@@ -6,6 +6,7 @@
  from std.memory import bitcast
  from std.sys.compile import is_defined
  
@@ -9,7 +8,16 @@ diff --git a/x_decomp/host.mojo b/x_decomp/host.mojo
  from decomposition.checks.jacobi_eigh_device import JACOBI_SWEEPS, JACOBI_TOL
  from decomposition.host.linalg_public import host_eigh, host_qr_r
  from decomposition.host.pca_full_oracle import host_one_sided_jacobi_svd, host_qr_factor
-@@ -113,7 +114,13 @@ struct HostExec(Exec):
+@@ -62,7 +63,7 @@
+         for i in range(m):
+             for j in range(n):
+                 var v = fold_cell(pp, i * n + j, nb, m * n) if nb > 1 else gemm_cell(a, b, i, j, m, k, n, ta, tb)
+-                comptime if X_DECOMP_HOST_SABOTAGE:
++                comptime if True:  # SABOTAGE (end to end): the host gemm moves by one ulp
+                     # the gate's negative control (-D MOJOLEARN_HOST_SABOTAGE=1):
+                     # the host column's every product moves by one unit in the
+                     # last place; the GPU binding never defines it
+@@ -114,7 +115,13 @@
      def sqdist(a: F32Ptr, b: F32Ptr, dst: F32Ptr, na: Int, nb: Int, d: Int, kind: Int = 0, pw: Float32 = Float32(2)) raises:
          for i in range(na):
              for j in range(nb):
@@ -24,3 +32,13 @@ diff --git a/x_decomp/host.mojo b/x_decomp/host.mojo
  
      @staticmethod
      def rand(dst: F32Ptr, count: Int, seed: UInt32, stream: UInt32, kind: Int) raises:
+@@ -124,6 +131,9 @@
+     @staticmethod
+     def lu(a: F32Ptr, piv: I32Ptr, info: F32Ptr, n: Int) raises:
+         lu_serial(a, piv, n, info)
++        # SABOTAGE (end to end): the host LU's last pivot moves by one ulp
++        var e = a.unsafe_load(n * n - 1)
++        a.unsafe_store(n * n - 1, bitcast[DType.float32](bitcast[DType.uint32](e) ^ UInt32(1)))
+ 
+     @staticmethod
+     def lu_solve(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int, trans: Int = 0) raises:

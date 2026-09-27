@@ -136,7 +136,6 @@ from hdbscan.impl.detail.select import (
     CLUSTER_SELECTION_EOM,
     CLUSTER_SELECTION_LEAF,
     SELECT_TPB,
-    cluster_epsilon_search,
 )
 from hdbscan.impl.detail.stabilities import (
     STAB_TPB,
@@ -405,13 +404,6 @@ def check_hdbscan_refusals() raises:
     except e:
         _expect_raise("mutual_reachability_graph", String(e), "connect_knn_graph")
         n_ok += 1
-    # The epsilon search (rung 2).
-    try:
-        cluster_epsilon_search(Float32(0.5))
-        raise Error("cluster_epsilon_search did not raise")
-    except e:
-        _expect_raise("cluster_epsilon_search", String(e), "NOT IMPLEMENTED")
-        n_ok += 1
 
     # Parameters, one fit each.
     var trace = IdentityTrace.disabled()
@@ -435,15 +427,6 @@ def check_hdbscan_refusals() raises:
         raise Error("build_algo=NN_DESCENT did not raise")
     except e:
         _expect_raise("build_algo=NN_DESCENT", String(e), "NN_DESCENT")
-        n_ok += 1
-
-    var p_eps = _params_for(fix)
-    p_eps.cluster_selection_epsilon = Float32(0.25)
-    try:
-        _ = _fit(ctx, vals, m, d, p_eps, trace)
-        raise Error("cluster_selection_epsilon != 0 did not raise")
-    except e:
-        _expect_raise("cluster_selection_epsilon", String(e), "NOT IMPLEMENTED")
         n_ok += 1
 
     var p_ms0 = _params_for(fix)
