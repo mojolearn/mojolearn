@@ -399,3 +399,15 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("predict", "predict_proba", sl=slice(0, 256), prep=_prep_cat_codes), "x-prep-categorical-nb")
+
+
+@lane("x-prep-priors")
+def _(ml, X, yc, yr, Xh=None):
+    y3 = _prep_three_class(X, yr)
+    g = ml.GaussianNB(priors=[0.2, 0.5, 0.3]).fit(X, y3)
+    mn = ml.MultinomialNB(class_prior=[0.1, 0.6, 0.3]).fit(_prep_abs(X), y3)
+    lda = ml.LinearDiscriminantAnalysis(priors=[1.0, 2.0, 1.0]).fit(X, y3)
+    qda = ml.QuadraticDiscriminantAnalysis(priors=[0.25, 0.25, 0.5], reg_param=0.01).fit(X, y3)
+    parts = dict(g=_h(g.predict_proba(X[:256])), mn=_h(mn.class_log_prior_, mn.predict_proba(_prep_abs(X[:256]))),
+                 lda=_h(lda.priors_, lda.coef_, lda.predict_proba(X[:256])), qda=_h(qda.predict_proba(X[:256])))
+    return _fit(parts, lda, lambda e: (e.predict_proba(Xh[:256]),))

@@ -125,6 +125,58 @@ def _(ml, X, yc, yr, Xh=None):
                 w, lambda e: (e.transform(_neighbors_holes(Xh[:256])),))
 
 
+def _neighbors_graph(X, n=128, directed=False, ring=True):
+    """A graph built from exact comparisons of fixture values only: an edge
+    joins two rows whose column-3 value falls in the same half-unit bin,
+    weighted 1 + (i * j) % 3; `ring` adds i -> i+1 so the components join."""
+    q = np.floor(X[:n, 3] * np.float32(2)).astype(np.int64)
+    i = np.arange(n)
+    A = ((q[:, None] == q[None, :]) & (i[:, None] != i[None, :])).astype(np.float32)
+    A *= (1 + (i[:, None] * i[None, :]) % 3).astype(np.float32)
+    if ring:
+        A[i[:-1], i[1:]] = np.float32(1)
+        if not directed:
+            A[i[1:], i[:-1]] = np.float32(1)
+    if directed:
+        A = np.triu(A).astype(np.float32)
+        A[::17] = np.float32(0)                          # dangling rows
+    return np.ascontiguousarray(A, dtype=np.float32)
+
+
+@lane("x-neighbors-pagerank")
+def _(ml, X, yc, yr, Xh=None):
+    A = _neighbors_graph(X, directed=True)
+    m = ml.PageRank(alpha=0.85, tol=1e-6).fit(A)
+    pers = (1 + np.arange(128) % 5).astype(np.float32)
+    p = ml.PageRank(alpha=0.7, personalization=pers).fit(A)
+    return _fit(dict(pr=_h(m.pagerank_), it=_h(np.int64(m.n_iter_)), pers=_h(p.pagerank_)), m,
+                lambda e: (ml.PageRank(alpha=0.85).fit(_neighbors_graph(Xh, directed=True)).pagerank_,))
+
+
+@lane("x-neighbors-connected-components")
+def _(ml, X, yc, yr, Xh=None):
+    k, lab = ml.connected_components(_neighbors_graph(X, ring=False), directed=False)
+    kd, labd = ml.connected_components(_neighbors_graph(X, directed=True, ring=False), directed=True, connection="weak")
+    return _fit(dict(k=_h(np.int64(k)), lab=_h(lab), kd=_h(np.int64(kd)), labd=_h(labd)))
+
+
+@lane("x-neighbors-louvain")
+def _(ml, X, yc, yr, Xh=None):
+    A = _neighbors_graph(X)
+    m = ml.Louvain(resolution=1.0).fit(A)
+    r = ml.Louvain(resolution=0.5, max_level=1).fit(A)
+    return _fit(dict(lab=_h(m.labels_), q=_h(np.float32(m.modularity_)), lv=_h(np.int64(m.n_levels_)),
+                     lab_r=_h(r.labels_), q_r=_h(np.float32(r.modularity_))))
+
+
+@lane("x-neighbors-svgp")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.SVGP(n_inducing=24, kernel_variance=2.0, lengthscale=3.0, noise_variance=0.5).fit(X[:512], yr[:512])
+    mean, var = m.predict_f(X[:256])
+    return _fit(dict(mean=_h(mean), var=_h(var), qmu=_h(m.q_mu_), qsqrt=_h(m.q_sqrt_), elbo=_h(np.float32(m.elbo_))),
+                m, lambda e: e.predict_y(Xh[:256]))
+
+
 _batch_decl(_rows_calls("score_samples", "predict", sl=slice(0, 256)), "x-neighbors-lof")
 _batch_decl(_rows_calls("predict", "decision_function", "predict_proba", sl=slice(0, 256)), "x-neighbors-nearest-centroid")
 _batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "x-neighbors-ocsvm")
@@ -136,3 +188,4 @@ _batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=lambda Xh: np.abs(Xh
 _batch_decl(_rows_calls("predict_proba", "predict", sl=slice(0, 128)),
             "x-neighbors-label-propagation", "x-neighbors-label-spreading")
 _batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_neighbors_holes), "x-neighbors-knn-imputer")
+_batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-neighbors-svgp")

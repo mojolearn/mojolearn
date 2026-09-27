@@ -16,7 +16,7 @@ from x_prep.target import te_global_unit, te_enc_unit, te_apply_unit
 from x_prep.kbins import kbins_edges_unit, kbins_codes_unit
 from naive_bayes.nb import (
     gnb_eps_unit, gnb_params_unit, gnb_jll_unit, class_log_prior_unit, mnb_params_unit,
-    bnb_params_unit, cnb_params_unit, cat_params_unit, cat_jll_unit,
+    bnb_params_unit, cnb_params_unit, cat_params_unit, cat_jll_unit, log_unit,
 )
 from x_prep.transform import qt_apply_unit, pt_fit_unit, pt_apply_unit, std_params_unit, normalize_unit, poly_unit
 from x_prep.spline import spline_knots_unit, spline_apply_unit
@@ -30,7 +30,7 @@ from naive_bayes.da import (
     lda_prep_unit, lda_w_unit, lda_stage2_unit, lda_stage3_unit, qda_cov_unit, qda_prep_unit, qda_dec_unit,
 )
 
-comptime N_OPS = 72
+comptime N_OPS = 73
 
 
 @always_inline
@@ -179,3 +179,5 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
         mi_reduce_unit(t, f, q)
     comptime if OP == 71:
         sqsum_cols_unit(t, f, q)
+    comptime if OP == 72:
+        log_unit(t, f, q)

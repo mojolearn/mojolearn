@@ -28,7 +28,8 @@ __all__ = ["IncrementalPCA", "GaussianRandomProjection", "SparseRandomProjection
            "lu_factor", "lu_solve", "solve", "lstsq", "randomized_svd",
            "PLSRegression", "PLSCanonical", "CCA",
            "DictionaryLearning", "MiniBatchDictionaryLearning", "SparsePCA", "MiniBatchSparsePCA", "sparse_encode",
-           "LatentDirichletAllocation", "Isomap", "MDS", "ClassicalMDS", "LocallyLinearEmbedding"]
+           "LatentDirichletAllocation", "Isomap", "MDS", "ClassicalMDS", "LocallyLinearEmbedding",
+           "MinCovDet", "EllipticEnvelope", "AlternatingLeastSquares"]
 
 _BINDING = "_mojolearn_x_decomp"
 
@@ -323,6 +324,15 @@ class _Kit:
         W, flags = _M.zeros(n, k), _M.zeros(n, 1)
         self.b.x_decomp_barycenter_rows(X.addr, Y.addr, idx.addr, W.addr, flags.addr, [n, Y.r, X.c, k], float(reg))
         return W
+
+    def als(self, C, Y, reg):
+        """One implicit least_squares half-sweep: every row's factor from the
+        confidences C (n x m) and the other side's factors Y (m x f)."""
+        n, f = C.r, Y.c
+        YtY = self.mm(Y, Y, ta=True)
+        X, flags = _M.zeros(n, f), _M.zeros(n, 1)
+        self.b.x_decomp_als_rows(C.addr, Y.addr, YtY.addr, X.addr, flags.addr, [n, C.c, f], float(reg))
+        return X
 
     def chol(self, A):
         L = A.copy()
@@ -2663,3 +2673,378 @@ class LocallyLinearEmbedding(_Base):
             r = k.mm(Wb.rows(i, i + 1), E)
             out.s[i * out.c:(i + 1) * out.c] = r.s
         return out.out()
+
+
+# ================================================================ robust covariance
+def _pinvh(k, A):
+    """scipy.linalg.pinvh: V diag(1/w) V^T over |w| > max|w| * n * float32 eps."""
+    w, V = k.eigh(A)
+    wmax = max(abs(v) for v in w.s) if w.c else 0.0
+    cut = _f32(wmax * A.r * _F32_EPS)
+    keep = k.ew("recip", w)
+    inv = _M.of([keep.s[j] if abs(w.s[j]) > cut else 0.0 for j in range(w.c)], 1, w.c)
+    return k.mm(k.ew("mul", V, inv), V, tb=True)
+
+
+def _slogdet(k, A):
+    """(sign, log|det|) from the LU factorization (getrf; sums ascending)."""
+    n = A.r
+    lu, piv, info = k.lu(A)
+    diag = _M.of([lu.s[i * n + i] for i in range(n)], 1, n)
+    if any(v == 0 for v in diag.s):
+        return 0.0, -math.inf
+    neg = sum(1 for v in diag.s if v < 0) + sum(1 for i, p in enumerate(piv) if p != i)
+    ld = k.total(k.ew("logs", k.ew("abs", diag), s=1.1754943508222875e-38)).s[0]
+    return (-1.0 if neg % 2 else 1.0), ld
+
+
+def _fast_logdet(k, A):
+    sign, ld = _slogdet(k, A)
+    return ld if sign > 0 else -math.inf
+
+
+def _emp_cov(k, Xs, assume_centered=False):
+    """sklearn empirical_covariance: (X - mean)^T (X - mean) / n."""
+    if assume_centered:
+        return k.ew("scale", k.mm(Xs, Xs, ta=True), s=1.0 / Xs.r)
+    Xc = k.ew("sub", Xs, k.colmean(Xs))
+    return k.ew("scale", k.mm(Xc, Xc, ta=True), s=1.0 / Xs.r)
+
+
+def _mahal(k, X, loc, P):
+    Xc = k.ew("sub", X, loc)
+    return k.rowsum(k.ew("mul", k.mm(Xc, P), Xc))
+
+
+def _chi2_cdf(k, dof, m):
+    """P(chi2_dof <= m): the regularized lower incomplete gamma P(dof/2, m/2),
+    its series summed in float64 and its prefactor x^a e^-x / Gamma(a + 1)
+    through the cells' exp, log and lgamma."""
+    a = dof / 2.0
+    x = m / 2.0
+    if x <= 0:
+        return 0.0
+    pref = k.ew("exp", k.const(_f32(a * k.ew("logs", k.const(x), s=1e-30).s[0] - x
+                                     - k.ew("lgamma", k.const(a + 1)).s[0]))).s[0]
+    term, tot, n = 1.0, 1.0, 1
+    while n < 4000:
+        term *= x / (a + n)
+        tot += term
+        if term < 1e-17 * tot:
+            break
+        n += 1
+    return pref * tot
+
+
+def _chi2_quantile(k, dof, upper):
+    """The point m with P(chi2_dof > m) = upper (scipy chi2.isf), by bisection."""
+    target = 1.0 - upper
+    lo, hi = 0.0, max(1.0, 4.0 * dof + 40.0)
+    for _ in range(80):
+        mid = 0.5 * (lo + hi)
+        if _chi2_cdf(k, dof, mid) < target:
+            lo = mid
+        else:
+            hi = mid
+    return _f32(0.5 * (lo + hi))
+
+
+def _consistency_factor(k, p, alpha):
+    """sklearn `_robust_covariance.py::_consistency_factor` (Pison 2002):
+    alpha / chi2.cdf(chi2.ppf(alpha, p), p + 2)."""
+    q = _chi2_quantile(k, p, 1.0 - alpha)
+    return _f32(alpha / _chi2_cdf(k, p + 2, q))
+
+
+class MinCovDet(_Base):
+    """sklearn.covariance.MinCovDet (reference: scikit-learn
+    `covariance/_robust_covariance.py`: `c_step`/`_c_step`,
+    `select_candidates`, `fast_mcd`, `MinCovDet.fit`, `correct_covariance`,
+    `reweight_covariance`). The random subsets are Philox permutations (a
+    sort of counter draws, ties to the lower index) and every argsort breaks
+    ties by index. chi2 quantiles by bisection of the incomplete gamma.
+    REFUSED BY NAME: one feature (sklearn's 1-D shortcut)."""
+    _parameters = ("store_precision", "assume_centered", "support_fraction", "random_state", "numeric_mode")
+
+    def __init__(self, *, store_precision=True, assume_centered=False, support_fraction=None, random_state=None,
+                 numeric_mode=None):
+        self.store_precision, self.assume_centered = store_precision, assume_centered
+        self.support_fraction, self.random_state, self.numeric_mode = support_fraction, random_state, numeric_mode
+
+    # ---- randomness
+    def _perm(self, k, n):
+        self._draws += 1
+        u = k.rand(1, n, self._seed, 1000 + self._draws, 0).s
+        return sorted(range(n), key=lambda i: (u[i], i))
+
+    # ---- the C-step
+    def _c_step(self, k, X, h, iters, init=None):
+        n = X.r
+        dist = None
+        if init is None:
+            sel = self._perm(k, n)[:h]
+        else:
+            loc0, cov0 = init
+            P0 = _pinvh(k, cov0)
+            dist = _mahal(k, X, loc0, P0)
+            sel = sorted(range(n), key=lambda i: (dist.s[i], i))[:h]
+        sel = sorted(sel)
+        Xs = X.take_rows(sel)
+        loc = k.colmean(Xs)
+        cov = _emp_cov(k, Xs)
+        det = _fast_logdet(k, cov)
+        P = _pinvh(k, cov) if det == -math.inf else None
+        prev_det = math.inf
+        prev = None
+        while det < prev_det and iters > 0 and det != -math.inf:
+            prev = (loc, cov, det, sel, dist)
+            prev_det = det
+            P = _pinvh(k, cov)
+            dist = _mahal(k, X, loc, P)
+            sel = sorted(sorted(range(n), key=lambda i: (dist.s[i], i))[:h])
+            Xs = X.take_rows(sel)
+            loc = k.colmean(Xs)
+            cov = _emp_cov(k, Xs)
+            det = _fast_logdet(k, cov)
+            iters -= 1
+        prev_dist = dist
+        dist = _mahal(k, X, loc, P)
+        # sklearn's four checks in its order, the LAST one that fires wins
+        res = (loc, cov, det, sel, dist)
+        if prev is not None and det > prev_det:
+            res = (prev[0], prev[1], prev[2], prev[3], prev_dist)
+        if iters == 0:
+            res = (loc, cov, det, sel, dist)
+        return res
+
+    def _select(self, k, X, h, trials, select, n_iter=30):
+        if isinstance(trials, int):
+            est = [self._c_step(k, X, h, n_iter) for _ in range(trials)]
+        else:
+            est = [self._c_step(k, X, h, n_iter, init=t) for t in trials]
+        order = sorted(range(len(est)), key=lambda j: (est[j][2], j))[:select]
+        return [est[j] for j in order]
+
+    def _fast_mcd(self, k, X):
+        n, p = X.r, X.c
+        h = int(math.ceil(0.5 * (n + p + 1))) if self.support_fraction is None else int(self.support_fraction * n)
+        if p == 1:
+            raise NotImplementedError("MinCovDet: the one-feature shortcut is not carried; pass two or more features")
+        if n > 500:
+            n_sub = n // 300
+            n_ss = n // n_sub
+            shuf = self._perm(k, n)
+            h_sub = int(math.ceil(n_ss * (h / float(n))))
+            n_trials = max(10, 500 // n_sub)
+            pool = []
+            for i in range(n_sub):
+                cur = X.take_rows(shuf[i * n_ss:(i + 1) * n_ss])
+                pool += [(e[0], e[1]) for e in self._select(k, cur, h_sub, n_trials, 10, n_iter=2)]
+            n_m = min(1500, n)
+            h_m = int(math.ceil(n_m * (h / float(n))))
+            n_best_m = 10 if n > 1500 else 1
+            selection = self._perm(k, n)[:n_m]
+            merged = self._select(k, X.take_rows(selection), h_m, pool, n_best_m)
+            if n < 1500:
+                loc, cov, _, sup_sel, d = merged[0]
+                support = [False] * n
+                dist = [0.0] * n
+                for a, idx in enumerate(selection):
+                    dist[idx] = d.s[a]
+                for a in sup_sel:
+                    support[selection[a]] = True
+                return loc, cov, support, _M.of(dist, n, 1)
+            full = self._select(k, X, h, [(e[0], e[1]) for e in merged], 1)
+        else:
+            best = self._select(k, X, h, 30, 10, n_iter=2)
+            full = self._select(k, X, h, [(e[0], e[1]) for e in best], 1)
+        loc, cov, _, sup_sel, d = full[0]
+        support = [False] * n
+        for a in sup_sel:
+            support[a] = True
+        return loc, cov, support, d
+
+    def fit(self, X, y=None):
+        self.numeric_mode_ = _mode(self.numeric_mode)
+        k = self._kit()
+        M = _M.from_input(X)
+        n, p = M.r, M.c
+        self._seed = _seed_of(self.random_state)
+        self._draws = 0
+        loc, cov, support, dist = self._fast_mcd(k, M)
+        if self.assume_centered:
+            loc = _M.zeros(1, p)
+            cov = _emp_cov(k, M.take_rows([i for i in range(n) if support[i]]), assume_centered=True)
+            dist = k.rowsum(k.ew("mul", k.mm(M, _pinvh(k, cov)), M))
+        self.raw_location_m_, self.raw_covariance_m_ = loc, cov
+        self.raw_location_ = loc.out((p,))
+        self.raw_covariance_ = cov.out()
+        self.raw_support_ = support
+        # correct_covariance: consistency at the normal model (the corrected
+        # matrix is returned by sklearn and not kept; dist_ is rescaled)
+        n_support = sum(1 for v in support if v)
+        corr = _consistency_factor(k, p, n_support / n)
+        dist = k.ew("scale", dist, s=1.0 / corr)
+        # reweight_covariance
+        thr = _chi2_quantile(k, p, 0.025)
+        mask = [v < thr for v in dist.s]
+        Xm = M.take_rows([i for i in range(n) if mask[i]])
+        locr = _M.zeros(1, p) if self.assume_centered else k.colmean(Xm)
+        covr = k.ew("scale", _emp_cov(k, Xm, assume_centered=self.assume_centered),
+                    s=_consistency_factor(k, p, 0.975))
+        self.location_m_, self.covariance_m_ = locr, covr
+        self.precision_m_ = _pinvh(k, covr)
+        self.location_ = locr.out((p,))
+        self.covariance_ = covr.out()
+        self.precision_ = self.precision_m_.out() if self.store_precision else None
+        self.support_ = mask
+        self.dist_m_ = _mahal(k, M, locr, self.precision_m_)
+        self.dist_ = self.dist_m_.out((n,))
+        self.n_features_in_ = p
+        return self
+
+    def mahalanobis(self, X):
+        if not hasattr(self, "precision_m_"):
+            raise RuntimeError("MinCovDet is not fitted; call fit first")
+        k = self._kit()
+        d = _mahal(k, _M.from_input(X), self.location_m_, self.precision_m_)
+        return d.out((d.r,))
+
+    def get_precision(self):
+        return self.precision_m_.out()
+
+    def score(self, X, y=None):
+        """sklearn EmpiricalCovariance.score: the Gaussian log-likelihood of
+        X under location_ and covariance_ (X's own empirical covariance)."""
+        k = self._kit()
+        M = _M.from_input(X)
+        cov = _emp_cov(k, k.ew("sub", M, self.location_m_), assume_centered=True)
+        tr = k.total(k.ew("mul", cov, self.precision_m_)).s[0]
+        _, ld = _slogdet(k, self.precision_m_)
+        p = M.c
+        return -(p * _LOG_2PI) / 2.0 - 0.5 * tr + 0.5 * ld
+
+
+class EllipticEnvelope(MinCovDet):
+    """sklearn.covariance.EllipticEnvelope: MinCovDet, then offset_ the
+    `contamination` percentile of -dist_ (linear interpolation, float64)."""
+    _parameters = ("store_precision", "assume_centered", "support_fraction", "contamination", "random_state",
+                   "numeric_mode")
+
+    def __init__(self, *, store_precision=True, assume_centered=False, support_fraction=None, contamination=0.1,
+                 random_state=None, numeric_mode=None):
+        super().__init__(store_precision=store_precision, assume_centered=assume_centered,
+                         support_fraction=support_fraction, random_state=random_state, numeric_mode=numeric_mode)
+        self.contamination = contamination
+
+    def fit(self, X, y=None):
+        if not 0 < self.contamination <= 0.5:
+            raise ValueError("contamination must be in (0, 0.5]")
+        super().fit(X)
+        v = sorted(-d for d in self.dist_m_.s)
+        q = 100.0 * self.contamination / 100.0 * (len(v) - 1)
+        lo = int(math.floor(q))
+        hi = min(lo + 1, len(v) - 1)
+        self.offset_ = v[lo] + (v[hi] - v[lo]) * (q - lo)
+        return self
+
+    def score_samples(self, X):
+        k = self._kit()
+        d = _mahal(k, _M.from_input(X), self.location_m_, self.precision_m_)
+        return k.ew("scale", d, s=-1.0).out((d.r,))
+
+    def decision_function(self, X):
+        k = self._kit()
+        d = _mahal(k, _M.from_input(X), self.location_m_, self.precision_m_)
+        return k.ew("adds", k.ew("scale", d, s=-1.0), s=-self.offset_).out((d.r,))
+
+    def predict(self, X):
+        vals = self.decision_function(X)
+        from ._buffer import frombytes as _fb
+        out = array.array("i", [1 if v >= 0 else -1 for v in vals])
+        return _fb(out.tobytes(), "<i4", (len(out),))
+
+    def fit_predict(self, X, y=None):
+        return self.fit(X).predict(X)
+
+    def score(self, X, y, sample_weight=None):
+        raise NotImplementedError("EllipticEnvelope.score (accuracy) is not carried; use predict")
+
+
+# ================================================================ implicit ALS
+class AlternatingLeastSquares(_Base):
+    """Implicit-feedback matrix factorization by alternating least squares
+    (Hu, Koren and Volinsky 2008; reference: the `implicit` library's
+    `als.py` and `cpu/_als.pyx::least_squares`, the exact solver): the
+    confidence matrix is alpha * user_items, factors start as uniform draws
+    * 0.01 (the Philox stream), and each iteration solves every user row
+    and then every item row as one batched Cholesky per row (one thread per
+    row, sums in a fixed order). The input is a DENSE users x items array
+    (0 = no interaction). REFUSED BY NAME: use_cg=True's conjugate-gradient
+    solver (the exact solve is carried), calculate_training_loss."""
+    _parameters = ("factors", "regularization", "alpha", "iterations", "random_state", "numeric_mode")
+
+    def __init__(self, factors=100, regularization=0.01, alpha=1.0, iterations=15, use_cg=False,
+                 calculate_training_loss=False, random_state=None, numeric_mode=None):
+        if use_cg:
+            raise NotImplementedError("AlternatingLeastSquares: use_cg=True is not carried; the exact solve runs")
+        if calculate_training_loss:
+            raise NotImplementedError("AlternatingLeastSquares: calculate_training_loss is not carried")
+        self.factors, self.regularization, self.alpha, self.iterations = factors, regularization, alpha, iterations
+        self.use_cg, self.calculate_training_loss = use_cg, calculate_training_loss
+        self.random_state, self.numeric_mode = random_state, numeric_mode
+
+    def fit(self, user_items, show_progress=False):
+        self.numeric_mode_ = _mode(self.numeric_mode)
+        k = self._kit()
+        R = _M.from_input(user_items, "user_items")
+        n, m = R.r, R.c
+        C = R if self.alpha == 1.0 else k.ew("scale", R, s=self.alpha)
+        Ct = C.T
+        seed = _seed_of(self.random_state)
+        f = int(self.factors)
+        X = k.ew("scale", k.rand(n, f, seed, 80, 0), s=0.01)
+        Y = k.ew("scale", k.rand(m, f, seed, 81, 0), s=0.01)
+        for _ in range(int(self.iterations)):
+            X = k.als(C, Y, self.regularization)
+            Y = k.als(Ct, X, self.regularization)
+        self.user_factors_m_, self.item_factors_m_ = X, Y
+        self.user_factors, self.item_factors = X.out(), Y.out()
+        self.components_m_ = Y
+        return self
+
+    def _check_fit(self):
+        if not hasattr(self, "user_factors_m_"):
+            raise RuntimeError("AlternatingLeastSquares is not fitted; call fit first")
+
+    def recommend(self, userid, user_items, N=10, filter_already_liked_items=True):
+        """(ids, scores) of the N best items for one user: x_u . y_i, ties to
+        the lower item id; items the user interacted with (row `userid` of
+        user_items, or user_items itself when it is one row) are skipped."""
+        self._check_fit()
+        k = self._kit()
+        U = self.user_factors_m_.rows(userid, userid + 1)
+        sc = k.mm(U, self.item_factors_m_, tb=True).s
+        liked = set()
+        if filter_already_liked_items and user_items is not None:
+            R = _M.from_input(user_items, "user_items")
+            row = R.row(0 if R.r == 1 else userid)
+            liked = {i for i, v in enumerate(row) if v != 0}
+        order = sorted((i for i in range(len(sc)) if i not in liked), key=lambda i: (-sc[i], i))[:N]
+        from ._buffer import frombytes as _fb
+        return (_fb(array.array("i", order).tobytes(), "<i4", (len(order),)),
+                _fb(array.array("f", [sc[i] for i in order]).tobytes(), "<f4", (len(order),)))
+
+    def similar_items(self, itemid, N=10):
+        """(ids, scores) of the N items whose factors have the largest cosine
+        with item `itemid` (itself included, as implicit returns it)."""
+        self._check_fit()
+        k = self._kit()
+        Y = self.item_factors_m_
+        nrm = k.ew("sqrt", k.rowsum(k.ew("sq", Y)))
+        Yn = k.ew("div", Y, nrm)
+        sc = k.mm(Yn.rows(itemid, itemid + 1), Yn, tb=True).s
+        order = sorted(range(len(sc)), key=lambda i: (-sc[i], i))[:N]
+        from ._buffer import frombytes as _fb
+        return (_fb(array.array("i", order).tobytes(), "<i4", (len(order),)),
+                _fb(array.array("f", [sc[i] for i in order]).tobytes(), "<f4", (len(order),)))

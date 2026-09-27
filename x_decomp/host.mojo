@@ -19,6 +19,7 @@ from x_decomp.cells import (
     colsum_cell,
     ew_cell,
     gemm_cell,
+    als_row,
     barycenter_row,
     dijkstra_row,
     gamma_cell,
@@ -168,6 +169,14 @@ struct HostExec(Exec):
         var ps = F32Ptr(unsafe_from_address=Int(s.unsafe_ptr()))
         for i in range(n):
             flags.unsafe_store(i, barycenter_row(x, y, nbr, wt, ps, i, d, k, reg))
+        _ = s^
+
+    @staticmethod
+    def als_rows(c: F32Ptr, y: F32Ptr, yty: F32Ptr, x: F32Ptr, flags: F32Ptr, n: Int, m: Int, f: Int, reg: Float32) raises:
+        var s = List[Float32](length=n * (f * f + f) if n > 0 else 1, fill=Float32(0))
+        var ps = F32Ptr(unsafe_from_address=Int(s.unsafe_ptr()))
+        for u in range(n):
+            flags.unsafe_store(u, als_row(c, y, yty, x, ps, u, m, f, reg))
         _ = s^
 
     @staticmethod
