@@ -66,8 +66,8 @@ permutation_test, monte_carlo_integrate; python/mojolearn/resample.py). Their pa
 - Steward: two requests per commit (sum lanes + e2e_host_branch, store lanes + e2e_store_branch;
   lane lists in ~/mojolearn-evidence/algos-prep/{sum_lanes,store_lanes}.txt, which include every lane
   so far). Merge gate (CURRENT DIRECTIVES 0000b): (m2pro OR m3ultra) PASS and do-amd PASS.
-  NOT YET MERGED (branch lane/algos-prep2): score edges / encoder categories / order F (requests
-  1790537091369 / 1790537100516 at 23b11a7ba5) and the parity batch (requests 1790542790533 /
+  MERGED to main (f2f66525a): score edges / encoder categories / order F (requests 1790537091369 /
+  1790537100516 at 23b11a7ba5, m2pro + do-amd PASS). NOT YET MERGED (branch lane/algos-prep2): the parity batch (requests 1790542790533 /
   1790542801200 at bf2bc9f081; the later requests cover every lane, so their PASS is enough). Next session: run
   `apple_steward.py status`; when 1790542790533 and 1790542801200 pass the gate, `git fetch origin && git
   merge origin/main && git push origin HEAD:main`; on FAIL fix at the root and resubmit.
