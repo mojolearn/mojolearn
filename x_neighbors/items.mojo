@@ -592,3 +592,257 @@ def softmax_item(t: Int, x: FP, res: FP, n: Int, c: Int):
         acc = _add(acc, e)
     for j in range(c):
         res.unsafe_store(t * c + j, ftz(identical_div(res.unsafe_load(t * c + j), acc)))
+
+
+# ------------------------------------------------------------------ kernel approximation
+def pcs_item(
+    t: Int, x: FP, hidx: IP, hbit: IP, res: FP, scr: FP,
+    n: Int, d_in: Int, nf: Int, nc: Int, degree: Int, gamma: Float32, coef0: Float32,
+):
+    """sklearn PolynomialCountSketch.transform for row t: X_gamma = sqrt(gamma) x
+    (and a last feature sqrt(coef0) when nf = d_in + 1), one count sketch per
+    degree (features ascending, the +/-1 bit applied exactly), and their
+    CIRCULAR CONVOLUTION, which is what their fft / product / real(ifft)
+    computes, here as the direct sum (ascending shift index) with no FFT
+    (DEVIATION 5203). `scr` holds 2*nc floats per row."""
+    var sg = ftz(identical_sqrt(gamma))
+    var sc = ftz(identical_sqrt(coef0))
+    var acc_row = scr + t * 2 * nc          # the running product
+    var sk = scr + t * 2 * nc + nc          # this degree's sketch
+    for p in range(degree):
+        for h in range(nc):
+            sk.unsafe_store(h, Float32(0))
+        for j in range(nf):
+            var v: Float32
+            if j < d_in:
+                v = ftz(identical_mul(sg, ftz(x.unsafe_load(t * d_in + j))))
+            else:
+                v = sc
+            if Int(hbit.unsafe_load(p * nf + j)) < 0:
+                v = -v
+            var h = Int(hidx.unsafe_load(p * nf + j))
+            sk.unsafe_store(h, _add(sk.unsafe_load(h), v))
+        if p == 0:
+            for h in range(nc):
+                acc_row.unsafe_store(h, sk.unsafe_load(h))
+        else:
+            for h in range(nc):
+                var s = Float32(0)
+                for a in range(nc):
+                    var b = h - a
+                    if b < 0:
+                        b += nc
+                    s = ftz(identical_mul_add(acc_row.unsafe_load(a), sk.unsafe_load(b), s))
+                res.unsafe_store(t * nc + h, s)
+            for h in range(nc):
+                acc_row.unsafe_store(h, res.unsafe_load(t * nc + h))
+    for h in range(nc):
+        res.unsafe_store(t * nc + h, acc_row.unsafe_load(h))
+
+
+comptime PI_F32 = Float32(3.14159265358979323846)
+
+
+def _coshf(z: Float32) -> Float32:
+    return ftz(identical_mul(Float32(0.5), _add(ftz(identical_exp(z)), ftz(identical_exp(-z)))))
+
+
+def achi2_item(t: Int, x: FP, res: FP, n: Int, d: Int, steps: Int, interval: Float32):
+    """sklearn AdditiveChi2Sampler._transform_dense for one input cell (t =
+    i*d + f): sqrt(x L) into block 0, and for j = 1..steps-1
+    sqrt(2 x L / cosh(pi j L)) * cos / sin(j L log x) into blocks 2j-1, 2j.
+    A zero input writes zeros everywhere, as their `non_zero` mask."""
+    var i = t // d
+    var f = t - i * d
+    var w = d * (2 * steps - 1)
+    var xv = ftz(x.unsafe_load(t))
+    if xv == Float32(0):
+        for b in range(2 * steps - 1):
+            res.unsafe_store(i * w + b * d + f, Float32(0))
+        return
+    res.unsafe_store(i * w + f, ftz(identical_sqrt(ftz(identical_mul(xv, interval)))))
+    var log_step = ftz(identical_mul(interval, ftz(identical_log(xv))))
+    var step = ftz(identical_mul(ftz(identical_mul(Float32(2), xv)), interval))
+    for j in range(1, steps):
+        var ch = _coshf(ftz(identical_mul(ftz(identical_mul(PI_F32, Float32(j))), interval)))
+        var factor = ftz(identical_sqrt(ftz(identical_div(step, ch))))
+        var arg = ftz(identical_mul(Float32(j), log_step))
+        res.unsafe_store(i * w + (2 * j - 1) * d + f, ftz(identical_mul(factor, ftz(identical_cos(arg)))))
+        res.unsafe_store(i * w + (2 * j) * d + f, ftz(identical_mul(factor, ftz(identical_sin(arg)))))
+
+
+def skew_weights_item(t: Int, z: FP, res: FP, count: Int):
+    """SkewedChi2Sampler's inverse sech CDF: (1/pi) log(tan(z)), z = pi/2 u."""
+    var zv = ftz(z.unsafe_load(t))
+    var tn = ftz(identical_div(ftz(identical_sin(zv)), ftz(identical_cos(zv))))
+    res.unsafe_store(t, ftz(identical_mul(ftz(identical_div(Float32(1), PI_F32)), ftz(identical_log(tn)))))
+
+
+def skew_transform_item(t: Int, lx: FP, w: FP, off: FP, res: FP, n: Int, d: Int, nc: Int):
+    """cos(log(X + skewedness) @ W + offset) * sqrt(2) / sqrt(n_components),
+    t = i*nc + c; the log was taken by the unary op, features ascending."""
+    var i = t // nc
+    var c = t - i * nc
+    var acc = Float32(0)
+    for f in range(d):
+        acc = ftz(identical_mul_add(ftz(lx.unsafe_load(i * d + f)), ftz(w.unsafe_load(f * nc + c)), acc))
+    var p = _add(acc, off.unsafe_load(c))
+    var scale = ftz(identical_div(ftz(identical_sqrt(Float32(2))), ftz(identical_sqrt(Float32(nc)))))
+    res.unsafe_store(t, ftz(identical_mul(ftz(identical_cos(p)), scale)))
+
+
+# ------------------------------------------------------------------ label propagation / spreading
+def absdiff_sum_item(t: Int, a: FP, b: FP, res: FP, count: Int):
+    """sum |a - b| over every element, ascending, ONE item."""
+    var acc = Float32(0)
+    for i in range(count):
+        acc = _add(acc, abs(_sub(a.unsafe_load(i), b.unsafe_load(i))))
+    res.unsafe_store(0, acc)
+
+
+def row_normalize_item(t: Int, a: FP, res: FP, n: Int, m: Int):
+    """a / rowsum (a zero row sum divides by 1, as their `normalizer == 0`)."""
+    var s = Float32(0)
+    for j in range(m):
+        s = _add(s, a.unsafe_load(t * m + j))
+    if s == Float32(0):
+        s = Float32(1)
+    for j in range(m):
+        res.unsafe_store(t * m + j, ftz(identical_div(ftz(a.unsafe_load(t * m + j)), s)))
+
+
+def lp_clamp_item(t: Int, ld: FP, ystatic: FP, unlabeled: IP, res: FP, n: Int, c: Int):
+    """LabelPropagation's step after the product: normalize the row, then a
+    labeled row takes its static distribution back."""
+    if Int(unlabeled.unsafe_load(t)) == 0:
+        for j in range(c):
+            res.unsafe_store(t * c + j, ystatic.unsafe_load(t * c + j))
+        return
+    row_normalize_item(t, ld, res, n, c)
+
+
+def ls_clamp_item(t: Int, ld: FP, ystatic: FP, res: FP, count: Int, alpha: Float32):
+    """LabelSpreading's clamp: alpha * ld + y_static (their multiply, then add)."""
+    res.unsafe_store(t, _add(ftz(identical_mul(alpha, ftz(ld.unsafe_load(t)))), ystatic.unsafe_load(t)))
+
+
+def ls_laplacian_item(t: Int, a: FP, res: FP, n: Int):
+    """-csgraph.laplacian(A, normed=True) with the diagonal zeroed (sklearn
+    LabelSpreading._build_graph): degrees are IN-degrees (column sums, scipy's
+    default) with the diagonal excluded, w = sqrt(degree) (1 where the degree
+    is 0), entry A_ij / w_j / w_i in scipy's order. t = i*n + j."""
+    var i = t // n
+    var j = t - i * n
+    if i == j:
+        res.unsafe_store(t, Float32(0))
+        return
+    var di = Float32(0)
+    var dj = Float32(0)
+    for k in range(n):
+        if k != i:
+            di = _add(di, a.unsafe_load(k * n + i))
+        if k != j:
+            dj = _add(dj, a.unsafe_load(k * n + j))
+    var wi = ftz(identical_sqrt(di)) if di != Float32(0) else Float32(1)
+    var wj = ftz(identical_sqrt(dj)) if dj != Float32(0) else Float32(1)
+    var v = ftz(identical_div(ftz(a.unsafe_load(t)), wj))
+    res.unsafe_store(t, ftz(identical_div(v, wi)))
+
+
+def knn_graph_item(t: Int, idx: IP, res: FP, n: Int, m: Int, k: Int):
+    """Row t of the connectivity graph: 1 at each of the row's k neighbors."""
+    for j in range(m):
+        res.unsafe_store(t * m + j, Float32(0))
+    for s in range(k):
+        var j = Int(idx.unsafe_load(t * k + s))
+        if j >= 0:
+            res.unsafe_store(t * m + j, Float32(1))
+
+
+# ------------------------------------------------------------------ KNNImputer
+def knn_impute_item(
+    t: Int, x: FP, fx: FP, best_d: FP, best_i: IP, res: FP,
+    n: Int, m: Int, d: Int, k: Int, weights: Int,
+):
+    """sklearn KNNImputer.transform for cell t = r*d + c: a present value is
+    copied; a missing one is the (weighted) mean of column c over the k
+    nearest donors (fit rows with column c present) by nan_euclidean
+    distance, nearest first and the lower donor index on a tie; donors at no
+    finite distance are skipped (their weight 0). No donor at a finite
+    distance: the masked column mean of the fit data. weights: 0 uniform,
+    1 distance (1/d; any zero distance: the zero-distance donors only).
+    best_d / best_i are k slots of scratch per cell."""
+    var r = t // d
+    var c = t - r * d
+    var v = x.unsafe_load(t)
+    if v == v:
+        res.unsafe_store(t, v)
+        return
+    var inf = bitcast[DType.float32](UInt32(0x7F800000))
+    var bd = best_d + t * k
+    var bi = best_i + t * k
+    for s in range(k):
+        bd.unsafe_store(s, inf)
+        bi.unsafe_store(s, Int32(-1))
+    var n_donors = 0
+    for j in range(m):
+        var dv = fx.unsafe_load(j * d + c)
+        if dv != dv:
+            continue
+        n_donors += 1
+        var acc = Float32(0)
+        var present = 0
+        for f in range(d):
+            var a = x.unsafe_load(r * d + f)
+            var b = fx.unsafe_load(j * d + f)
+            if a != a or b != b:
+                continue
+            present += 1
+            var df = _sub(a, b)
+            acc = ftz(identical_mul_add(df, df, acc))
+        if present == 0:
+            continue
+        var sq = ftz(identical_mul(ftz(identical_div(acc, Float32(present))), Float32(d)))
+        var dist = ftz(identical_sqrt(sq))
+        if not (dist < bd.unsafe_load(k - 1)):
+            continue
+        var s = k - 1
+        while s > 0 and dist < bd.unsafe_load(s - 1):
+            bd.unsafe_store(s, bd.unsafe_load(s - 1))
+            bi.unsafe_store(s, bi.unsafe_load(s - 1))
+            s -= 1
+        bd.unsafe_store(s, dist)
+        bi.unsafe_store(s, Int32(j))
+    var kk = k if k < n_donors else n_donors
+    var found = 0
+    for s in range(kk):
+        if Int(bi.unsafe_load(s)) >= 0:
+            found += 1
+    if found == 0:
+        var acc = Float32(0)
+        var cnt = 0
+        for j in range(m):
+            var dv = fx.unsafe_load(j * d + c)
+            if dv == dv:
+                acc = _add(acc, dv)
+                cnt += 1
+        res.unsafe_store(t, ftz(identical_div(acc, Float32(cnt))) if cnt > 0 else Float32(0))
+        return
+    var any_zero = False
+    for s in range(found):
+        if bd.unsafe_load(s) == Float32(0):
+            any_zero = True
+    var num = Float32(0)
+    var den = Float32(0)
+    for s in range(found):
+        var w = Float32(1)
+        if weights == 1:
+            if any_zero:
+                w = Float32(1) if bd.unsafe_load(s) == Float32(0) else Float32(0)
+            else:
+                w = ftz(identical_div(Float32(1), bd.unsafe_load(s)))
+        var val = fx.unsafe_load(Int(bi.unsafe_load(s)) * d + c)
+        num = ftz(identical_mul_add(ftz(val), w, num))
+        den = _add(den, w)
+    res.unsafe_store(t, ftz(identical_div(num, den)))
+
