@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """THE CNN LANE ON THE DEVICE: x_cnn/ops.mojo's element functions, one
-thread per element, and the pinned GEMM (`identical_gemm`, full FP32, never
+thread per element, and the pinned GEMM (`identical_gemm_into`, full FP32, never
 the vendor route) for every contraction. The `*_into` entries take the
 caller's host addresses in and out (the binding's path, DEVIATION 5716); the
 List-returning forms wrap them for the seam check. Every entry runs on the
