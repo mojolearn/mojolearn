@@ -268,3 +268,21 @@ def _(ml, X, yc, yr, Xh=None):
     for k in range(5):
         opt.step([np.ascontiguousarray(X[16 + 16 * k:32 + 16 * k, 4:8], dtype=np.float32)])
     return _fit(dict(bits=_h(bits), lstm=_h(r.params_, r.loss_curve_), nadam=_h(p1)))
+
+
+@lane("sequence-layernorm")
+def _(ml, X, yc, yr, Xh=None):
+    """LayerNorm over the 16 columns of 512 rows with a fixture-derived
+    weight and bias, forward and backward (dy from further rows), and the
+    functional form without affine over a (2, 8) normalized shape."""
+    x = np.ascontiguousarray(X[:512], dtype=np.float32)
+    ln = ml.LayerNorm(x.shape[1])
+    ln.weight[:] = np.float32(1.0) + np.float32(0.125) * np.ascontiguousarray(X[512, :x.shape[1]], dtype=np.float32)
+    ln.bias[:] = np.ascontiguousarray(X[513, :x.shape[1]], dtype=np.float32)
+    y = ln(x)
+    dx = ln.backward(np.ascontiguousarray(X[1024:1536], dtype=np.float32))
+    x3 = np.ascontiguousarray(X[:256, :16], dtype=np.float32).reshape(256, 2, 8)
+    y3 = ml.layer_norm_forward(x3, (2, 8), eps=1e-3)
+    Xh3 = np.ascontiguousarray(Xh[:256, :x.shape[1]], dtype=np.float32)
+    return _fit(dict(y=_h(y), dx=_h(dx), dw=_h(ln.weight_grad), db=_h(ln.bias_grad), y3=_h(y3)),
+                ln, lambda e: (e.forward(Xh3),))

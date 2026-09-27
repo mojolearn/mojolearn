@@ -1,0 +1,12 @@
+--- a/x_cnn/ops.mojo	2026-09-27 12:16:05
++++ b/x_cnn/ops.mojo	2026-09-27 12:16:05
+@@ -451,7 +451,8 @@
+             rowloss.unsafe_store(i, Float32(0) if ftz(logits.unsafe_load(base + y)) == inf else inf)
+         return
+     var s = Float32(0)
+-    for j in range(k):
++    for a in range(k):
++        var j = k - 1 - a
+         s = ftz(s + ftz(identical_exp(ftz(ftz(logits.unsafe_load(base + j)) - mx))))
+     for j in range(k):
+         var e = ftz(identical_exp(ftz(ftz(logits.unsafe_load(base + j)) - mx)))

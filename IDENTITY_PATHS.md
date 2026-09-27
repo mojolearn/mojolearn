@@ -707,7 +707,20 @@ AMD and Apple columns for 160-166: OWED (the AMD box and the M2 Pro steward are 
 
 ### `cnn`: rows 170-179
 
-(no rows yet)
+| number | what | hazard | move | status |
+|---|---|---|---|---|
+| 170 | **col2im, the backward pass's scatter** (`x_cnn/ops.mojo::col2im_at`, DEVIATION 5700; Conv1d/Conv2d, the ResNet block, CNNClassifier) | the reference scatter-adds overlapping receptive fields with atomics, in the scheduler's order | REPLACE: a gather per input pixel over (kh, kw) ascending, one thread per pixel, the same element function on the device and the host | CHECK, arm `seam_5700_col2im_order.patch` bites; NVIDIA == CPU 2026-09-27; AMD, Apple OWED |
+| 171 | **the convolution weight gradient** (`x_cnn/device.mojo::conv2d_backward_device`, DEVIATION 5701; also db and every linear layer's gradients) | a split-K or atomic reduction over the N*OH*OW rows | PIN: GEMM TN under mojolearn.identical.gemm.fp32.v1 (`identical_gemm[allow_vendor=False]` / `gemm_oracle`) | CHECK, arm `seam_5701_dw_serial.patch` bites; NVIDIA == CPU; AMD, Apple OWED |
+| 172 | **BatchNorm's per-channel statistics** (`bn_stats_at`, `bn_bwd_red_at`, DEVIATION 5702) | Welford or block partials whose count follows the launch | PIN: one sequential fold per channel over (n, hw), partial count 1 for every shape and core count (row 7's rule) | CHECK, arm `seam_5702_bn_fold_order.patch` bites; NVIDIA == CPU; AMD, Apple OWED |
+| 173 | **Dropout2d's channel mask** (`dropout2d_at`, DEVIATION 5703) | a per-vendor RNG stream, a float threshold | PIN: Philox4x32-10 at counter n*C + c under (seed, call), word 0 against round(p * 2^32) as integers | CHECK, arm `seam_5703_dropout_counter.patch` bites; NVIDIA == CPU; AMD, Apple OWED |
+| 174 | **the graph SpMM** (`spmm_at`, `gcn_deg_at`, DEVIATION 5704; GCNConv, SAGEConv) | PyG scatter-adds messages with atomics | REPLACE: CSR rows (targets forward, sources backward), entries folded in ascending column order, one thread per output | CHECK, arm `seam_5704_spmm_order.patch` bites; NVIDIA == CPU; AMD, Apple OWED |
+| 175 | **NaN out of the trainer path** (`canon`, `softmax_xent_row_at`, DEVIATION 5705; Clause B) | a softmax row with +inf logits computes inf - inf; NaN payloads are per vendor (NVIDIA 0x7FFFFFFF, x86 0xFFC00000); seen as DISAGREE on the `wide` fixture | REPLACE: the +inf limit (equal split), then every stored NaN is 0x7FC00000 | CHECK, arm `seam_5705_inf_limit.patch` bites; NVIDIA == CPU; AMD, Apple OWED |
+| 176 | **pooling's tie and divisor** (`maxpool_fwd_at`, `avgpool_fwd_at`, DEVIATIONS 5706, 5707) | `>` vs `>=` picks a different winner on a tie; sum * (1/div) vs sum / div | PIN: the first maximum in (kh, kw) order, a NaN wins; one correctly rounded division | CHECK, arms `seam_5706_maxpool_last.patch`, `seam_5707_avg_reciprocal.patch` bite; NVIDIA == CPU; AMD, Apple OWED |
+| 177 | **softmax cross entropy's exp-sum** (`softmax_xent_row_at`, DEVIATION 5708) | the reduction order over the classes | PIN: column order, one thread per row; the loss mean a row-order fold (`seq_mean`) | CHECK, arm `seam_5708_softmax_fold.patch` bites; NVIDIA == CPU; AMD, Apple OWED |
+| 178 | **SGD with momentum** (`sgd_at`, DEVIATION 5709) | momentum*v + d (and lr*v) contracted into an FMA on some backends | PIN: `identical_mul` for every product, one flushed add | CHECK, arm `seam_5709_sgd_fma.patch` bites; NVIDIA == CPU; AMD, Apple OWED |
+| 179 | **GCN normalization** (`gcn_norm_at`, DEVIATION 5710) | the association of dis[src] * w * dis[dst] | PIN: left to right, PyG's spelling | CHECK, arm `seam_5710_gcn_norm_order.patch` bites; NVIDIA == CPU; AMD, Apple OWED |
+
+Every row's check is `x_cnn/checks/seams_check.mojo` (oracle `x_cnn/checks/oracle.mojo`; each fixture first shown to separate the two spellings; the card stage is `x_cnn.<seam>`); the arms are listed in `tools/identity_lanes/cnn.checks`.
 
 
 

@@ -1,0 +1,20 @@
+--- a/x_cnn/host/ops_host.mojo	2026-09-27 12:16:05
++++ b/x_cnn/host/ops_host.mojo	2026-09-27 12:16:05
+@@ -5,7 +5,7 @@
+ x_cnn/ops.mojo's, called in a loop; every contraction is `gemm_oracle`, the
+ CPU implementation of mojolearn.identical.gemm.fp32.v1."""
+ from std.sys.compile import is_defined
+-from gemm.host.identical_gemm import gemm_oracle, OP_NN, OP_NT, OP_TN
++from gemm.host.identical_gemm import gemm_oracle, gemm_oracle_serial, OP_NN, OP_NT, OP_TN
+ from x_cnn.ops import (
+     FP, IP, ElemFn, CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW, CP_REV,
+     im2col_at, conv_out_at, dout_rows_at, col2im_at,
+@@ -83,7 +83,7 @@
+     run[im2col_at](hp(xs), hp(cols), hp(cols), hp(cols), hi(ps), hi(ps), rows * ckk)
+     run[dout_rows_at](hp(ds), hp(g), hp(g), hp(g), hi(ps), hi(ps), rows * OC)
+     var ones = List[Float32](length=rows, fill=Float32(1))
+-    var gw = gemm_oracle(g, cols, OP_TN, OC, ckk, rows)
++    var gw = gemm_oracle_serial(g, cols, OP_TN, OC, ckk, rows)
+     var gb = gemm_oracle(g, ones, OP_TN, OC, 1, rows)
+     var dcols = gemm_oracle(g, w, OP_NN, rows, ckk, OC)
+     var gx = zeros(nx)
