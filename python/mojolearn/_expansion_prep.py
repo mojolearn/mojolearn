@@ -26,13 +26,14 @@ integer bookkeeping and IEEE basic operations on scalar parameters.
 import array
 import ctypes
 import numbers
+import operator
 
 from . import _backend
 from ._array import Array
 from ._buffer import as_f32_c, addr_ro
 from ._labels import flatten_labels, sorted_classes, label_kind
 
-__all__ = ["f_classif", "f_regression", "chi2", "mutual_info_classif", "mutual_info_regression", "RobustScaler", "MaxAbsScaler", "OrdinalEncoder", "OneHotEncoder", "TargetEncoder", "SimpleImputer", "KBinsDiscretizer",
+__all__ = ["f_classif", "f_regression", "r_regression", "chi2", "mutual_info_classif", "mutual_info_regression", "RobustScaler", "MaxAbsScaler", "OrdinalEncoder", "OneHotEncoder", "TargetEncoder", "SimpleImputer", "KBinsDiscretizer",
            "GaussianNB", "MultinomialNB", "BernoulliNB",
            "LinearDiscriminantAnalysis", "QuadraticDiscriminantAnalysis",
            "QuantileTransformer", "PowerTransformer", "Normalizer", "PolynomialFeatures", "SplineTransformer", "Binarizer", "LabelEncoder", "LabelBinarizer", "MultiLabelBinarizer", "IterativeImputer", "VarianceThreshold", "SelectKBest", "RFE", "ComplementNB", "CategoricalNB"]
@@ -2440,20 +2441,21 @@ def _scores_classif(X, y, kind):
 
 def f_classif(X, y):
     """sklearn.feature_selection.f_classif: the one-way ANOVA F of each
-    feature against the classes, and its p-value (float32). A constant
-    feature scores 0 with p-value 1 (the reference: NaN)."""
+    feature against the classes, and its p-value (float32). As the
+    reference: a constant feature (or a single class) scores NaN with p-value
+    NaN, a feature constant within every class but not across them +inf with
+    p-value 0."""
     return _scores_classif(X, y, "f")
 
 
 def chi2(X, y):
     """sklearn.feature_selection.chi2 for non-negative X: chi-squared of the
-    class-by-feature sums against their expectation, and its p-value."""
+    class-by-feature sums against their expectation, and its p-value; an
+    all-zero feature is NaN with p-value NaN, as the reference."""
     return _scores_classif(X, y, "chi2")
 
 
-def f_regression(X, y, *, center=True, force_finite=True):
-    """sklearn.feature_selection.f_regression: F of each feature's Pearson r
-    with y, and its p-value; the force_finite edge values always."""
+def _pearson(X, y, center, force_finite):
     arr = _x2d(X)
     n, d = arr.shape
     yv = as_f32_c(y, ndim=1, name="y")[0]
@@ -2461,10 +2463,26 @@ def f_regression(X, y, *, center=True, force_finite=True):
         raise ValueError("mojolearn: X and y have different numbers of rows")
     pr = _Prog()
     xo, yo = pr.put(arr), pr.put(yv)
-    sc, pv = pr.alloc(d), pr.alloc(d)
-    pr.stage("f_regression", d, xo, n, d, yo, 1 if center else 0, sc, pv, _NONE)
+    sc, pv, co = pr.alloc(d), pr.alloc(d), pr.alloc(d)
+    pr.stage("f_regression", d, xo, n, d, yo, 1 if center else 0, sc, pv, co, 1 if force_finite else 0)
     pr.run(_mode())
-    return pr.get(sc, d), pr.get(pv, d)
+    return pr.get(sc, d), pr.get(pv, d), pr.get(co, d)
+
+
+def f_regression(X, y, *, center=True, force_finite=True):
+    """sklearn.feature_selection.f_regression: F of each feature's Pearson r
+    with y, and its p-value. force_finite=True (the default) gives the
+    reference's edge values (F 0, p 1 for a constant feature or target;
+    float32 max, p 0 for |r| = 1); force_finite=False its raw NaN and +inf."""
+    sc, pv, _ = _pearson(X, y, center, force_finite)
+    return sc, pv
+
+
+def r_regression(X, y, *, center=True, force_finite=True):
+    """sklearn.feature_selection.r_regression: each feature's Pearson r with
+    y (float32); a constant feature or target is 0 with force_finite, NaN
+    without it."""
+    return _pearson(X, y, center, force_finite)[2]
 
 
 class SelectKBest(_SelectorMixin):
@@ -2570,12 +2588,18 @@ def _gather(arr, cols, mode):
     return pr.get(out, (n, len(cols)))
 
 
-def _importances(est, mode):
+def _importances(est, mode, getter="auto"):
     """The squared importance of each column of a fitted estimator: coef_
     squared (summed over rows when 2-D) on the device, else
-    feature_importances_ as given."""
-    coef = getattr(est, "coef_", None)
-    if coef is None:
+    feature_importances_ as given (a monotone stand-in for its square).
+    A str getter (a dotted attribute path, as operator.attrgetter) or a
+    callable picks the importances instead; they are squared (summed over
+    rows when 2-D) on the device, as the reference's transform_func='square'."""
+    if getter != "auto":
+        coef = operator.attrgetter(getter)(est) if isinstance(getter, str) else getter(est)
+    else:
+        coef = getattr(est, "coef_", None)
+    if coef is None and getter == "auto":
         imp = getattr(est, "feature_importances_", None)
         if imp is None:
             raise ValueError("mojolearn: RFE needs an estimator with coef_ or feature_importances_")
@@ -2595,7 +2619,8 @@ class RFE(_SelectorMixin):
     classes; or feature_importances_), drop the `step` weakest, repeat.
     Ties are broken by a STABLE ascending sort (the lower column index is
     dropped first); the reference's quicksort leaves them unspecified.
-    importance_getter other than 'auto' is refused."""
+    importance_getter 'auto', a dotted attribute path or a callable, as the
+    reference."""
     _parameters = ("estimator", "n_features_to_select", "step", "verbose", "importance_getter")
 
     def __init__(self, estimator, *, n_features_to_select=None, step=1, verbose=0, importance_getter="auto"):
@@ -2610,8 +2635,9 @@ class RFE(_SelectorMixin):
         return type(est)(**est.get_params()) if hasattr(est, "get_params") else est
 
     def fit(self, X, y, **fit_params):
-        if self.importance_getter != "auto":
-            raise NotImplementedError("mojolearn: RFE importance_getter other than 'auto' is not implemented")
+        g = self.importance_getter
+        if not (callable(g) or isinstance(g, str)):
+            raise ValueError("mojolearn: RFE importance_getter must be 'auto', a str or a callable")
         arr = _x2d(X)
         n, d = arr.shape
         mode = _mode()
@@ -2629,7 +2655,7 @@ class RFE(_SelectorMixin):
         while sum(support) > nsel:
             features = [j for j in range(d) if support[j]]
             est = self._clone().fit(_gather(arr, features, mode), y, **fit_params)
-            imp = _importances(est, mode)
+            imp = _importances(est, mode, self.importance_getter)
             ranks = sorted(range(len(features)), key=lambda r: imp[r])
             threshold = min(step, sum(support) - nsel)
             for r in ranks[:threshold]:

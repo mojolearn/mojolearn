@@ -12,5 +12,5 @@ sklearn SplineTransformer knots=<array>, extrapolation='linear' / 'periodic', sa
 sklearn LabelBinarizer multilabel y	NOT IMPLEMENTED	multilabel is MultiLabelBinarizer's scatter
 sklearn IterativeImputer estimator=<any>, sample_posterior, n_nearest_features, imputation_order='random', add_indicator	NOT IMPLEMENTED	the default BayesianRidge is the device path; another estimator would be a Python loop over mojolearn estimators
 sklearn mutual_info_* discrete_features=True / array	NOT IMPLEMENTED	discrete features need the contingency-table mutual information (mutual_info_score)
-sklearn RFE importance_getter=<str/callable>	NOT IMPLEMENTED	coef_ or feature_importances_ only
+sklearn RFE ties between equal importances	DIFFERS BY NAME	the reference ranks with np.argsort's default kind, an unstable introsort (a SIMD sort on some CPUs), so which of two equal importances is dropped first is unspecified and can differ by machine; mojolearn's order is a stable ascending sort (the lower column index is dropped first) on every column
 sklearn OrdinalEncoder / OneHotEncoder inverse_transform None for an unknown row	DIFFERS BY NAME	the reference returns an object array with None; there is no object Array, so the row's value is NaN

@@ -494,6 +494,35 @@ def _(ml, X, yc, yr, Xh=None):
 _batch_decl(_rows_calls("predict", "transform", sl=slice(0, 256)), "x-prep-rfe")
 
 
+@lane("x-prep-score-edges")
+def _(ml, X, yc, yr, Xh=None):
+    """The reference's NaN / +inf score edges (f_classif of a constant and of
+    a within-class-constant feature, chi2 of an all-zero feature),
+    f_regression / r_regression with force_finite on and off, and RFE with
+    importance_getter as a dotted path and as a callable."""
+    y3 = _prep_three_class(X, yr)
+    Xe = np.array(X[:, :6], dtype=np.float32)
+    Xe[:, 1] = 2.5
+    Xe[:, 2] = y3.astype(np.float32)
+    Xz = np.abs(Xe)
+    Xz[:, 4] = 0
+    Xr = Xe.copy()
+    Xr[:, 3] = yr * 2
+    parts = dict(fc=_h(*ml.f_classif(Xe, y3)), c2=_h(*ml.chi2(Xz, y3)),
+                 kbest=_h(np.array(ml.SelectKBest(k=3).fit(Xe, y3).get_support())))
+    for ff in (True, False):
+        parts[f"fr{int(ff)}"] = _h(*ml.f_regression(Xr, yr, force_finite=ff))
+        parts[f"rr{int(ff)}"] = _h(ml.r_regression(Xe, yr, force_finite=ff))
+    for j, g in enumerate(("coef_", lambda e: e.coef_[0])):
+        m = ml.RFE(ml.LinearDiscriminantAnalysis(), n_features_to_select=5, step=3,
+                   importance_getter=g).fit(X, y3)
+        parts[f"rfe{j}"] = _h(m.ranking_, m.transform(X[:256]))
+    return _fit(parts, m, lambda e: (e.predict(Xh[:256]), e.transform(Xh[:256])))
+
+
+_batch_decl(_rows_calls("predict", "transform", sl=slice(0, 256)), "x-prep-score-edges")
+
+
 @lane("x-prep-complement-nb")
 def _(ml, X, yc, yr, Xh=None):
     y3 = _prep_three_class(X, yr)
