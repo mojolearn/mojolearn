@@ -80,7 +80,7 @@ from cholesky.checks.chol_sabotage import (
     sabotage_trsm_lower_kernel,
     sabotage_trsm_upper_kernel,
 )
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_div, identical_mul_add
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul_add
 from std.sys.info import has_apple_gpu_accelerator
 from cholesky.checks.fast_trsm import fast_cho_solve
 
@@ -204,6 +204,22 @@ comptime CHOL_SWEEP_NT = 1024
 comptime CHOL_SWEEP_SLOTS = 32
 comptime CHOL_BACK_NT = 256
 comptime CHOL_BACK_CH = 2048
+#: Operands of this many back-substitution steps are loaded before the
+#: steps run (execution only; `-D MOJOLEARN_CHOL_BACK_UNROLL_OFF` = 1).
+#: On Apple the step's `ftz` is the identity: the M4's fp32 FMA never
+#: returns a subnormal (`gemm/checks/apple_simdgroup_probe.mojo`, kinds 6-8:
+#: 0 subnormal outputs over 4.19M cells each; the attention kernels rely on
+#: the same fact), and every operand here is already flushed. Dropping it
+#: takes an integer test and select off the serial chain; the stored words
+#: are unchanged. `-D MOJOLEARN_CHOL_BACK_FTZ_ON` keeps it.
+comptime CHOL_BACK_FMA_NO_FTZ = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_CHOL_BACK_FTZ_ON"]()
+)
+comptime CHOL_BACK_UNROLL = 1 if is_defined["MOJOLEARN_CHOL_BACK_UNROLL_OFF"]() else (
+    64 if is_defined["MOJOLEARN_CHOL_BACK_U64"]() else (16 if is_defined["MOJOLEARN_CHOL_BACK_U16"]() else 32)
+)
 
 
 def trsm_lower_sweep_kernel(
@@ -296,8 +312,30 @@ def trsm_upper_staged_kernel(
                 lk[q] = ftz(l.unsafe_load((k + q) * ld + i))
             barrier()
             if tid == 0:
-                for q in range(cnt):
-                    t = ftz(identical_mul_add(-lk[q], ftz(b.unsafe_load((k + q) * nrhs + j)), t))
+                comptime if CHOL_BACK_UNROLL > 1:
+                    # The same steps in the same order; the operands of the
+                    # next CHOL_BACK_UNROLL steps are loaded first so the
+                    # chain waits on arithmetic, not on each global load.
+                    comptime U = CHOL_BACK_UNROLL
+                    var q = 0
+                    while q + U <= cnt:
+                        var lv = SIMD[DType.float32, U](0.0)
+                        var xv = SIMD[DType.float32, U](0.0)
+                        comptime for u in range(U):
+                            lv[u] = lk[q + u]
+                            xv[u] = b.unsafe_load((k + q + u) * nrhs + j)
+                        comptime for u in range(U):
+                            comptime if CHOL_BACK_FMA_NO_FTZ:
+                                t = identical_mul_add(-lv[u], ftz(xv[u]), t)
+                            else:
+                                t = ftz(identical_mul_add(-lv[u], ftz(xv[u]), t))
+                        q += U
+                    while q < cnt:
+                        t = ftz(identical_mul_add(-lk[q], ftz(b.unsafe_load((k + q) * nrhs + j)), t))
+                        q += 1
+                else:
+                    for q in range(cnt):
+                        t = ftz(identical_mul_add(-lk[q], ftz(b.unsafe_load((k + q) * nrhs + j)), t))
             barrier()
             k += cnt
         if tid == 0:

@@ -1489,6 +1489,7 @@ def potrf_lower(
     var ts = 0
     var tt = 0
     var tq = 0
+    var tu = 0
     var tk = Int(perf_counter_ns())
     while j0 < n:
         var w = nb
@@ -1501,6 +1502,10 @@ def potrf_lower(
             tk = Int(perf_counter_ns())
         if left_mode and p > 0:
             _chol_left_update(ctx, a, n, j0, w, p)
+            if ctim:
+                ctx.synchronize()
+                tu += Int(perf_counter_ns()) - tk
+                tk = Int(perf_counter_ns())
 
         # ---- the panel ------------------------------------------------
         if chol_sabotage_is_kernel_arm(sabotage):
@@ -1746,7 +1751,7 @@ def potrf_lower(
         j0 += nb
 
     if ctim:
-        print("CHOL_TIMING n=" + String(n) + " nb=" + String(nb) + " factor+info_sync_ms=" + String(Float64(tf) / 1e6)
+        print("CHOL_TIMING n=" + String(n) + " nb=" + String(nb) + " left_update_ms=" + String(Float64(tu) / 1e6) + " factor+info_sync_ms=" + String(Float64(tf) / 1e6)
               + " panel_solve_ms=" + String(Float64(ts) / 1e6) + " trailing_ms=" + String(Float64(tt) / 1e6)
               + " trace+sync_ms=" + String(Float64(tq) / 1e6))
     if info == 0:
