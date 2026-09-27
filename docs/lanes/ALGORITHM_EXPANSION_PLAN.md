@@ -33,7 +33,9 @@ messaging lanes. Newest items are at the top.
    never repeat it.
 00. **End your session at every checkpoint (saves tokens; Andrew,
    2026-09-27).** The checkpoints are:
-   - each phase merged: pass-2 proof, option parity, GPU speed, CPU speed
+   - each phase merged (ONE PHASE PER SESSION, Andrew 2026-09-27): (1) proof,
+     (2) option parity, (3) FAST GPU speed, (4) IDENTICAL GPU speed,
+     (5) CPU speed. Finish a phase, merge, update the progress file, STOP.
    - or roughly every 10 merged items
    - or whenever your conversation has grown long
    At a checkpoint: make `docs/lanes/progress/<lane>.md` say exactly where
@@ -70,13 +72,18 @@ messaging lanes. Newest items are at the top.
    `tools/apple_steward.py submit` ships identity requests there too while
    `tools/do_amd_steward.sh` has it up (push the commit to origin first), and
    a merge then needs m2pro PASS AND do-amd PASS (`apple_steward.py status`).
-1. **Order per lane:** (a) every algorithm in the lane table and Additions
-   (PASS 1); (b) proof on every column, holding an AMD box (PASS 2 items
-   1-2); (c) **option parity** (item 2 below); (d) **GPU speed**, IDENTICAL
-   and FAST, on NVIDIA, AMD and Apple; (e) **CPU speed, LAST** (Andrew,
-   2026-09-27): threads, vectorization and cache blocking of the CPU host
-   path, after all GPU work is done. Every change is re-proven bitwise on
-   every column.
+1. **Order per lane, one phase per session:**
+   - (a) every algorithm in the lane table and Additions (PASS 1)
+   - (b) **proof** on every column (per-seam, `--pass 2`, both stewards)
+   - (c) **option parity** (item 2)
+   - (d) **FAST GPU speed:** a faster schedule, bits may differ, quality
+     never (5+ seeds, 2+ datasets vs the reference); NVIDIA, AMD, Apple
+   - (e) **IDENTICAL GPU speed:** faster with the SAME bits, re-proven
+     bitwise on every column; NVIDIA, AMD, Apple
+   - (f) **CPU speed, LAST:** threads, vectorization and cache blocking of
+     the CPU host path, re-proven bitwise
+   Each of (b)-(f) is its own session: finish it, merge, STOP. The
+   orchestrator relaunches you for the next phase.
 1b. **Done means ALL of this, per algorithm (Andrew, 2026-09-27):**
    - **Both modes work:** IDENTICAL (bitwise across every column) and FAST
      (a faster schedule, allowed to differ in bits, never in quality: a
