@@ -163,9 +163,11 @@ _add("sgd-clf", xlane="linear", ours="SGDClassifier", task="clf", block="cls",
      sk="sklearn.linear_model:SGDClassifier", params=dict(_SGD, loss="hinge"),
      cuml="cuml.linear_model:MBSGDClassifier",
      cuml_params=dict(loss="hinge", penalty="l2", alpha=1e-4, epochs=20, batch_size=4096,
-                      learning_rate="optimal", tol=0.0, shuffle=True),
+                      learning_rate="constant", eta0=0.001, tol=0.0, shuffle=True),
      mism=["cuML MBSGD is mini-batch SGD (batch_size 4096); scikit-learn and ours are "
-           "per-sample SGD (the reference)", "cuML reads epochs, not max_iter"])
+           "per-sample SGD (the reference)", "cuML reads epochs, not max_iter",
+           "learning rate: scikit-learn and ours 'optimal' (1 / (alpha (t + t0))); cuML has no "
+           "'optimal' schedule and runs 'constant' eta0=0.001 (its default)"])
 _add("sgd-reg", xlane="linear", ours="SGDRegressor", task="reg", block="reg",
      sk="sklearn.linear_model:SGDRegressor", params=dict(_SGD, loss="squared_error"),
      cuml="cuml.linear_model:MBSGDRegressor",
@@ -421,9 +423,12 @@ for _slug, _cls, _kw, _blk, _cu in (
         ("ordinal", "OrdinalEncoder", dict(handle_unknown="use_encoded_value", unknown_value=-1),
          "cat", False),
         ("variance-threshold", "VarianceThreshold", dict(threshold=0.01), "raw", False)):
+    _cukw = {k: v for k, v in _kw.items() if k != "subsample"}
+    if _cls == "QuantileTransformer":
+        _cukw["subsample"] = 10 ** 9      # cuML takes no None: every row, as scikit-learn's None
     _add(_slug, xlane="prep", ours=_cls, task="transform", block=_blk, quality="vs-sklearn",
          sk=("sklearn.feature_selection:" if _cls == "VarianceThreshold" else "sklearn.preprocessing:")
-         + _cls, params=_kw, cuml=(_CUP + _cls) if _cu else None,
+         + _cls, params=_kw, cuml=(_CUP + _cls) if _cu else None, cuml_params=_cukw,
          notes=(["the first 16 columns (PolynomialFeatures of Istella's 220 would be 24,000+ "
                  "columns)"] if _blk == "raw16" else []))
 _add("target-encoder", xlane="prep", ours="TargetEncoder", task="transform", block="cat", supervised=True,
@@ -587,7 +592,8 @@ _add("adaboost-reg", xlane="trees", ours="AdaBoostRegressor", task="reg", block=
      sk="sklearn.ensemble:AdaBoostRegressor",
      params=dict(estimator=_E("DecisionTreeRegressor", max_depth=3), n_estimators=50,
                  learning_rate=1.0, loss="linear", random_state=SEED))
-_add("dart", xlane="trees", ours=("DARTClassifier", "DartClassifier"), task="clf", block="cls",
+_add("dart", xlane="trees", ours=("DARTClassifier", "DartClassifier"), kind="dart", task="clf",
+     block="cls",
      params=dict(n_estimators=200, learning_rate=0.1, max_depth=8, drop_rate=0.1, skip_drop=0.5,
                  random_state=SEED),
      other={"lightgbm-cpu": "lightgbm", "xgboost-cpu": "xgboost", "xgboost-gpu": "xgboost"},
@@ -639,13 +645,13 @@ _add("tree-shap", xlane="trees", ours="TreeExplainer", kind="shap", task="tree-s
             "on the same rows; timed = the SHAP values of 10,000 rows; shap-cpu is the shap "
             "package over the XGBoost model, xgboost-* its pred_contribs (GPUTreeShap on CUDA)"])
 _add("kernel-shap", xlane="trees", ours="KernelExplainer", kind="shap", task="kernel-shap",
-     block="reg", sub={"X": SUB["mid"], "Xq": 500},
+     block="reg", sub={"X": SUB["mid"], "Xq": 100},
      params=dict(n_background=100, nsamples=2048),
      other={"shap-cpu": "shap", "cuml-gpu": "cuml"},
      notes=["the model is a ridge fit before the clock (its exact SHAP values are known: "
             "w_j (x_j - E x_j)); background = 100 stride rows"])
 _add("permutation-shap", xlane="trees", ours="PermutationExplainer", kind="shap",
-     task="permutation-shap", block="reg", sub={"X": SUB["mid"], "Xq": 500},
+     task="permutation-shap", block="reg", sub={"X": SUB["mid"], "Xq": 100},
      params=dict(n_background=100, npermutations=10),
      other={"shap-cpu": "shap", "cuml-gpu": "cuml"},
      notes=["the ridge model as kernel-shap"])
@@ -711,7 +717,7 @@ _add("tsne", xlane="ann", ours="TSNE", task="embed", block="manifold",
      sk_params=dict(n_components=2, perplexity=30.0, max_iter=1000, learning_rate="auto",
                     init="pca", random_state=SEED, n_jobs=-1, method="barnes_hut"),
      cuml="cuml.manifold:TSNE",
-     cuml_params=dict(n_components=2, perplexity=30.0, n_iter=1000, learning_rate_method="adaptive",
+     cuml_params=dict(n_components=2, perplexity=30.0, max_iter=1000, learning_rate_method="adaptive",
                       init="random", random_state=SEED, method="fft"),
      mism=["gradients: ours exact or FFT (no Barnes-Hut atomics under IDENTICAL); scikit-learn "
            "Barnes-Hut; cuML FFT with random init (its only init)"])
@@ -797,14 +803,15 @@ def block_of(lane):
 
 def has_infer(lane):
     s = LANES[lane]
-    if s["kind"] in ("layer", "ann", "als", "svgp"):
+    if s["kind"] in ("layer", "ann", "svgp"):
         return True
-    if s["kind"] == "est":
+    if s["kind"] in ("est", "dart"):
         if s.get("fit_predict") or s["task"] in ("embed", "covariance", "select"):
             return False
         return True
-    if s["kind"] == "ts":
-        return s["task"] in ("forecast", "var", "garch")
+    # time series: the libraries fit and forecast in one call (statsforecast's
+    # forecast(), one joblib task per series), so the forecast is inside the
+    # fit clock on every arm; ALS: quality from the factors, no inference call
     return False
 
 
@@ -886,7 +893,7 @@ def fit_text(lane):
     if k == "linalg":
         return {"lu": "LU factor + solve", "lstsq": "least squares", "rsvd": "randomized SVD"}[t]
     if k == "ts":
-        return "fit of every series"
+        return "fit + forecast (or decomposition) of every series"
     if k == "shap":
         return "SHAP values of Xq (model fit before the clock)"
     if s.get("fit_predict"):
@@ -1089,6 +1096,8 @@ def _cap(n, cap, floor=0):
 
 def _imp(path):
     mod, _, cls = path.partition(":")
+    if cls == "IterativeImputer":
+        importlib.import_module("sklearn.experimental.enable_iterative_imputer")
     return getattr(importlib.import_module(mod), cls)
 
 
@@ -1474,7 +1483,8 @@ def lane_arrays(lane, B):
     if t in ("labels", "multilabel"):
         col = int(np.argmax([len(np.unique(D["X"][:, j])) for j in range(D["X"].shape[1])]))
         D["lab"] = D["X"][:, col].astype(np.int64)
-        D["labq"] = D["Xq"][:, col].astype(np.int64)
+        labq = D["Xq"][:, col].astype(np.int64)
+        D["labq"] = np.ascontiguousarray(labq[np.isin(labq, D["lab"])])   # seen labels only
     if s.get("iso"):
         Xc = D["X"].astype(np.float64)
         yc = D["y"].astype(np.float64)
@@ -1509,6 +1519,9 @@ def _derived_params(lane, D, params):
         p["bandwidth"] = float(np.quantile(dd[np.triu_indices(A.shape[0], 1)], 0.3))
     if lane == "poly-count-sketch":
         p["gamma"] = 1.0 / d
+    if lane == "categorical-nb":
+        p["min_categories"] = (np.maximum(X.max(axis=0), D["Xq"].max(axis=0)).astype(np.int64)
+                               + 1).tolist()
     return p
 
 
@@ -1616,11 +1629,11 @@ def _host(a):
 
 def _arr(a, dtype=None):
     np = _np()
+    if hasattr(a, "to_numpy") and not hasattr(a, "get"):   # cudf / pandas first
+        a = a.to_numpy()
     a = _host(a)
     if hasattr(a, "toarray"):
         a = a.toarray()
-    if hasattr(a, "to_numpy"):
-        a = a.to_numpy()
     return np.asarray(a, dtype=dtype) if dtype else np.asarray(a)
 
 
@@ -1632,7 +1645,7 @@ def _cuml_up(arrays):
 
 def build(lane, arm, D):
     kind = LANES[lane]["kind"]
-    fn = {"est": _build_est, "ts": _build_ts, "graph": _build_graph, "ann": _build_ann,
+    fn = {"est": _build_est, "dart": _build_dart, "ts": _build_ts, "graph": _build_graph, "ann": _build_ann,
           "layer": _build_layer, "optim": _build_optim, "linalg": _build_linalg,
           "als": _build_als, "shap": _build_shap, "svgp": _build_svgp}[kind]
     if arm in OURS_ARMS:
@@ -1669,6 +1682,7 @@ def _est_factory(lane, arm, D):
     if arm == "cuml-gpu":
         cls = _imp(s["cuml"])
         params = _derived_params(lane, D, s.get("cuml_params", s["params"]))
+        params.pop("min_categories", None)        # cuML CategoricalNB has no such option
         return (lambda: cls(**params)), s["cuml"], params
     raise SystemExit("no arm %r for lane %r" % (arm, lane))
 
@@ -1794,6 +1808,47 @@ def _build_est(lane, arm, D):
     return Runner(info, fit, outputs, infer if has_infer(lane) else None, sync)
 
 
+# ---- DART -----------------------------------------------------------------
+
+def _build_dart(lane, arm, D):
+    np = _np()
+    s = LANES[lane]
+    p = s["params"]
+    X, y, Xq = D["X"], D["y"], D["Xq"]
+    S = {}
+    if arm in OURS_ARMS:
+        return _build_est(lane, arm, D)
+    if arm == "lightgbm-cpu":
+        import lightgbm as lgb
+        kw = dict(boosting_type="dart", n_estimators=p["n_estimators"], learning_rate=p["learning_rate"],
+                  max_depth=p["max_depth"], num_leaves=255, drop_rate=p["drop_rate"],
+                  skip_drop=p["skip_drop"], random_state=SEED, n_jobs=-1, verbose=-1)
+        make = lambda: lgb.LGBMClassifier(**kw)  # noqa: E731
+        info = {"library": "lightgbm", "version": lgb.__version__, "device": "cpu"}
+    else:
+        import xgboost as xgb
+        gpu = arm == "xgboost-gpu"
+        kw = dict(booster="dart", n_estimators=p["n_estimators"], learning_rate=p["learning_rate"],
+                  max_depth=p["max_depth"], rate_drop=p["drop_rate"], skip_drop=p["skip_drop"],
+                  tree_method="hist", device="cuda" if gpu else "cpu", random_state=SEED, n_jobs=-1)
+        make = lambda: xgb.XGBClassifier(**kw)  # noqa: E731
+        info = {"library": "xgboost", "version": xgb.__version__, "device": "gpu" if gpu else "cpu"}
+    info.update(pre_clock_fit=False, input_home="host",
+                config="%s(%s)" % (arm, ", ".join("%s=%r" % kv for kv in sorted(kw.items()))))
+    yi = y.astype(np.int32)
+
+    def fit():
+        S["m"] = make().fit(X, yi)
+
+    def infer():
+        S["proba"] = S["m"].predict_proba(Xq)
+
+    def outputs():
+        P = np.asarray(S["proba"], dtype=np.float64)
+        return {"pred": (P[:, 1] >= 0.5).astype(np.float64), "proba1": P[:, 1]}
+    return Runner(info, fit, outputs, infer)
+
+
 # ---- time series ----------------------------------------------------------
 
 def _joblib_map(fn, rows):
@@ -1870,14 +1925,12 @@ def _build_ts(lane, arm, D):
             if t == "garch":
                 o["llf"] = _arr(S["est"].loglikelihood_, np.float64).reshape(-1)
             return o
-        if t == "decompose":
-            fit0 = fit
+        fit0 = fit
 
-            def fit():
-                fit0()
-                infer()
-            return Runner(info, fit, outputs, None)
-        return Runner(info, fit, outputs, infer)
+        def fit():                        # the forecast is inside the clock, as for every arm
+            fit0()
+            infer()
+        return Runner(info, fit, outputs, None)
     lib = s["other"][arm]
     if lib == "statsforecast":
         import statsforecast
@@ -1906,11 +1959,8 @@ def _build_ts(lane, arm, D):
             m.search(s=1, d=range(0, 2), p=range(0, 4), q=range(0, 4), P=range(1), D=range(1),
                      Q=range(1), ic="aicc")
             m.fit()
-            S["m"] = m
-
-        def infer():
-            S["fc"] = S["m"].forecast(h)
-        return Runner(info, fit, lambda: {"forecast": _arr(S["fc"], np.float64).T}, infer, sync)
+            S["fc"] = m.forecast(h)
+        return Runner(info, fit, lambda: {"forecast": _arr(S["fc"], np.float64).T}, None, sync)
     import importlib as il
     modname = {"statsmodels": "statsmodels", "arch": "arch", "prophet": "prophet"}[lib]
     mod = il.import_module(modname)
@@ -1922,12 +1972,9 @@ def _build_ts(lane, arm, D):
         info["config"] = "statsmodels VAR(Y[:16].T).fit(maxlags=%d)" % p["maxlags"]
 
         def fit():
-            S["r"] = VAR(Y[:16].T).fit(maxlags=p["maxlags"])
-
-        def infer():
-            r = S["r"]
+            r = VAR(Y[:16].T).fit(maxlags=p["maxlags"])
             S["fc"] = r.forecast(Y[:16].T[-r.k_ar:], h).T
-        return Runner(info, fit, lambda: {"forecast": S["fc"]}, infer)
+        return Runner(info, fit, lambda: {"forecast": S["fc"]}, None)
     task = "decompose" if t == "decompose" else "forecast"
 
     def fit():
@@ -2047,6 +2094,17 @@ def _build_ann(lane, arm, D):
             kw.update(n_lists=nlist, n_probes=nprobe)
         if t in ("ivf-pq", "ivf-refine"):
             kw["pq_dim"] = _pq_dim(d)
+        # the refine step and the sample filter are options of an index that
+        # may already exist: until the option does, the race is not built yet
+        import inspect
+        need = {"ivf-refine": (cls, "refine_ratio"), "ivf-filter": (cls.search, "filter")}.get(t)
+        if need:
+            try:
+                params = inspect.signature(need[0]).parameters
+            except (TypeError, ValueError):
+                params = {}
+            if need[1] not in params and not any(v.kind == v.VAR_KEYWORD for v in params.values()):
+                raise Skipped("SKIPPED: not built yet (mojolearn.%s has no %s= option)" % (name, need[1]))
         info["config"] = "mojolearn.%s(%s)" % (name, kw)
 
         def fit():
@@ -2550,7 +2608,9 @@ def _build_als(lane, arm, D):
             raise RuntimeError("REFUSED: the pinned implicit wheel was built without CUDA "
                                "(implicit.gpu.HAS_CUDA is False)")
     from implicit.als import AlternatingLeastSquares
-    info = {"library": "implicit", "version": implicit.__version__, "device": "gpu" if gpu else "cpu",
+    from threadpoolctl import threadpool_limits
+    threadpool_limits(1, "blas")          # implicit's documented setting: its own threads, BLAS at 1
+    info = {"library": "implicit", "env": dict(ARM_ENV[arm]), "version": implicit.__version__, "device": "gpu" if gpu else "cpu",
             "pre_clock_fit": False, "input_home": "host",
             "config": "implicit AlternatingLeastSquares(factors=64, regularization=0.01, alpha=1.0, "
                       "iterations=15, random_state=7, use_gpu=%s)" % gpu}
@@ -3069,7 +3129,7 @@ def quality(lane, D, outs):
                 P = o["pred"]
                 e["output_columns"] = int(P.shape[1])
                 e["nonzeros_per_row"] = float((P != 0).sum(1).mean())
-            elif qk.startswith("kernel-"):
+            elif qk.startswith("kernel-") and qk != "kernel-shap":
                 K = _kernel_exact(qk, D["Xq"], D)
                 Z = o["pred"]
                 e["kernel_rel_error"] = float(np.linalg.norm(Z @ Z.T - K) / np.linalg.norm(K))
@@ -3157,8 +3217,17 @@ def quality(lane, D, outs):
 # race: the conductor for one (lane, dataset)
 # ---------------------------------------------------------------------------
 
+#: Per-arm environment a library documents as its own setting. implicit asks
+#: for a single-threaded BLAS (its CPU solver threads itself); with OpenBLAS
+#: on a box with more cores than its build limit its fit otherwise aborts.
+ARM_ENV = {"implicit-cpu": {"OPENBLAS_NUM_THREADS": "1", "MKL_NUM_THREADS": "1"},
+           "implicit-gpu": {"OPENBLAS_NUM_THREADS": "1", "MKL_NUM_THREADS": "1"}}
+
+
 def _worker_env(arm):
-    return _tool("bench_board_more")._worker_env(arm)
+    env = _tool("bench_board_more")._worker_env(arm)
+    env.update(ARM_ENV.get(arm, {}))
+    return env
 
 
 def race(args):
