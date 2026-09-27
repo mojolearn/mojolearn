@@ -172,3 +172,20 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_ann_batch_search, "x-ann-ivf-rabitq")
+
+
+@lane("ivf-filter")
+def _(ml, X, yc, yr, Xh=None):
+    """IVFIndex.search(filter=) (DEVIATION 5863), the `ivf` lane's index (16
+    lists, 4 probes, 4096 rows, random_state 3): every third row removed
+    before it is scored or counted; 64 queries. Train hashes the distances,
+    the ids and the candidate counts; the probe searches 64 held-out rows
+    under the same filter."""
+    keep = (np.arange(4096) % 3) != 0
+    m = ml.IVFIndex(n_lists=16, n_probes=4, n_neighbors=8, random_state=3).fit(X[:4096])
+    d, i = m.search(X[4096:4160], filter=keep)
+    return _fit(dict(dist=_h(d), idx=_h(i), cand=_h(m.n_candidates_)),
+                m, lambda e: e.search(Xh[:64], filter=keep) + (e.n_candidates_,))
+
+
+_batch_decl(_ann_batch_filter, "ivf-filter")
