@@ -12,31 +12,27 @@ from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_cnn.ops import CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW, conv_params
 from x_cnn.ops import PP_N, PP_C, PP_H, PP_W, PP_OH, PP_OW, pool_params
-from x_cnn.device import conv2d_forward_device as conv2d_forward_impl
-from x_cnn.device import conv2d_backward_device as conv2d_backward_impl
-from x_cnn.device import gemm_device as gemm_impl
-from x_cnn.device import adam_device as adam_impl
+from x_cnn.ops import FP, IP
+from x_cnn.device import (
+    gemm_into, conv2d_forward_into, conv2d_backward_into, maxpool2d_forward_into, maxpool2d_backward_into,
+    avgpool2d_forward_into, avgpool2d_backward_into, relu_forward_into, relu_backward_into, add_into, mul_into,
+    linear_forward_into, linear_backward_into, softmax_xent_into, sgd_into, adam_into,
+    batchnorm_forward_into, batchnorm_backward_into, dropout2d_into, spmm_into, pad2d_forward_into,
+    pad2d_backward_into, conv_block_forward_into, conv_block_backward_into,
+)
 from x_cnn.device import graph_op_device as graph_op_impl
 from x_cnn.device import adaptive_pool_device as adaptive_pool_impl
-from x_cnn.device import pad2d_forward_device as pad2d_forward_impl
-from x_cnn.device import pad2d_backward_device as pad2d_backward_impl
-from x_cnn.device import spmm_device as spmm_impl
 from x_cnn.device import gcn_norm_device as gcn_norm_impl
-from x_cnn.device import dropout2d_device as dropout2d_impl
-from x_cnn.device import mul_device as mul_impl
-from x_cnn.device import batchnorm_forward_device as batchnorm_forward_impl
-from x_cnn.device import batchnorm_backward_device as batchnorm_backward_impl
-from x_cnn.device import relu_forward_device as relu_forward_impl
-from x_cnn.device import relu_backward_device as relu_backward_impl
-from x_cnn.device import add_device as add_impl
-from x_cnn.device import linear_forward_device as linear_forward_impl
-from x_cnn.device import linear_backward_device as linear_backward_impl
-from x_cnn.device import softmax_xent_device as softmax_xent_impl
-from x_cnn.device import sgd_device as sgd_impl
-from x_cnn.device import maxpool2d_forward_device as maxpool2d_forward_impl
-from x_cnn.device import maxpool2d_backward_device as maxpool2d_backward_impl
-from x_cnn.device import avgpool2d_forward_device as avgpool2d_forward_impl
-from x_cnn.device import avgpool2d_backward_device as avgpool2d_backward_impl
+
+
+def _fp(addr: PythonObject) raises -> FP:
+    """The caller's float32 array, by address (DEVIATION 5716: the device
+    entries copy straight to and from it)."""
+    return f32_ptr(Int(py=addr)).unsafe_origin_cast[MutAnyOrigin]()
+
+
+def _ip(addr: PythonObject) raises -> IP:
+    return i32_ptr(Int(py=addr)).unsafe_origin_cast[MutAnyOrigin]()
 
 
 def _ints(params: PythonObject) raises -> List[Int]:
@@ -53,12 +49,11 @@ def gemm_binding(a_addr: PythonObject, b_addr: PythonObject, c_addr: PythonObjec
     var op = Int(py=params[3])
     if m <= 0 or n <= 0 or k <= 0 or op < 0 or op > 2:
         raise Error("x_cnn gemm: positive m, n, k and op in {0, 1, 2} required")
-    var a = read_f32(Int(py=a_addr), m * k)
-    var b = read_f32(Int(py=b_addr), n * k)
-    var output = f32_ptr(Int(py=c_addr))
+    var a = _fp(a_addr)
+    var b = _fp(b_addr)
+    var c = _fp(c_addr)
     with GILReleased(Python()):
-        var c = gemm_impl(a, b, m, n, k, op)
-        copy_f32(c.unsafe_ptr(), output, m * n)
+        gemm_into(a, b, c, m, n, k, op)
     return PythonObject(m * n)
 
 
@@ -66,16 +61,13 @@ def conv2d_forward_binding(
     x_addr: PythonObject, w_addr: PythonObject, b_addr: PythonObject, out_addr: PythonObject, params: PythonObject
 ) raises -> PythonObject:
     var prm = conv_params(_ints(params))
-    var N = Int(prm[CP_N]); var C = Int(prm[CP_C]); var OC = Int(prm[CP_OC])
-    var ckk = C * Int(prm[CP_KH]) * Int(prm[CP_KW])
-    var x = read_f32(Int(py=x_addr), N * C * Int(prm[CP_H]) * Int(prm[CP_W]))
-    var w = read_f32(Int(py=w_addr), OC * ckk)
-    var b = read_f32(Int(py=b_addr), OC)
-    var total = N * OC * Int(prm[CP_OH]) * Int(prm[CP_OW])
-    var output = f32_ptr(Int(py=out_addr))
+    var total = Int(prm[CP_N]) * Int(prm[CP_OC]) * Int(prm[CP_OH]) * Int(prm[CP_OW])
+    var x = _fp(x_addr)
+    var w = _fp(w_addr)
+    var b = _fp(b_addr)
+    var out = _fp(out_addr)
     with GILReleased(Python()):
-        var y = conv2d_forward_impl(x, w, b, prm)
-        copy_f32(y.unsafe_ptr(), output, total)
+        conv2d_forward_into(x, w, b, prm, out)
     return PythonObject(total)
 
 
@@ -84,22 +76,69 @@ def conv2d_backward_binding(
     dw_addr: PythonObject, db_addr: PythonObject, params: PythonObject,
 ) raises -> PythonObject:
     var prm = conv_params(_ints(params))
-    var N = Int(prm[CP_N]); var C = Int(prm[CP_C]); var OC = Int(prm[CP_OC])
-    var ckk = C * Int(prm[CP_KH]) * Int(prm[CP_KW])
-    var nx = N * C * Int(prm[CP_H]) * Int(prm[CP_W])
-    var x = read_f32(Int(py=x_addr), nx)
-    var w = read_f32(Int(py=w_addr), OC * ckk)
-    var dout = read_f32(Int(py=dout_addr), N * OC * Int(prm[CP_OH]) * Int(prm[CP_OW]))
-    var pdx = f32_ptr(Int(py=dx_addr))
-    var pdw = f32_ptr(Int(py=dw_addr))
-    var pdb = f32_ptr(Int(py=db_addr))
+    var nx = Int(prm[CP_N]) * Int(prm[CP_C]) * Int(prm[CP_H]) * Int(prm[CP_W])
+    var x = _fp(x_addr)
+    var w = _fp(w_addr)
+    var dout = _fp(dout_addr)
+    var pdx = _fp(dx_addr)
+    var pdw = _fp(dw_addr)
+    var pdb = _fp(db_addr)
     with GILReleased(Python()):
-        var r = conv2d_backward_impl(x, w, dout, prm)
-        var base = r.unsafe_ptr()
-        copy_f32(base, pdx, nx)
-        copy_f32(base + nx, pdw, OC * ckk)
-        copy_f32(base + nx + OC * ckk, pdb, OC)
+        conv2d_backward_into(x, w, dout, prm, pdx, pdw, pdb)
     return PythonObject(nx)
+
+def _block_prms(conv_params_obj: PythonObject, pool_params_obj: PythonObject) raises -> Tuple[List[Int32], List[Int32], Bool]:
+    """The conv block's two parameter blocks; an empty pool list is no pool."""
+    var cprm = conv_params(_ints(conv_params_obj))
+    var pool = Int(py=len(pool_params_obj)) > 0
+    var pprm = pool_params(_ints(pool_params_obj)) if pool else List[Int32]()
+    if pool:
+        if (Int(pprm[PP_N]) != Int(cprm[CP_N]) or Int(pprm[PP_C]) != Int(cprm[CP_OC])
+                or Int(pprm[PP_H]) != Int(cprm[CP_OH]) or Int(pprm[PP_W]) != Int(cprm[CP_OW])):
+            raise Error("x_cnn conv block: the pool's input is not the conv's output")
+    return (cprm^, pprm^, pool)
+
+
+def conv_block_forward_binding(
+    x_addr: PythonObject, w_addr: PythonObject, b_addr: PythonObject, out_addr: PythonObject, idx_addr: PythonObject,
+    conv_prm: PythonObject, pool_prm: PythonObject,
+) raises -> PythonObject:
+    """Conv2d -> ReLU -> MaxPool2d (CNNClassifier's block) in one call; out
+    and idx are the pool's (idx unused without a pool)."""
+    var t = _block_prms(conv_prm, pool_prm)
+    var x = _fp(x_addr)
+    var w = _fp(w_addr)
+    var b = _fp(b_addr)
+    var po = _fp(out_addr)
+    var pi = _ip(idx_addr)
+    with GILReleased(Python()):
+        conv_block_forward_into(x, w, b, t[0], t[1], t[2], po, pi)
+    return PythonObject(0)
+
+
+def conv_block_backward_binding(
+    x_addr: PythonObject, w_addr: PythonObject, b_addr: PythonObject, g_addr: PythonObject, idx_addr: PythonObject,
+    outs: PythonObject, conv_prm: PythonObject, pool_prm: PythonObject,
+) raises -> PythonObject:
+    """The block's backward from its output gradient g: outs = [dx address
+    (0: not wanted, the first block's), dW address, db address]."""
+    var t = _block_prms(conv_prm, pool_prm)
+    var dx_addr = outs[0]
+    var dw_addr = outs[1]
+    var db_addr = outs[2]
+    var need_dx = Int(py=dx_addr) != 0
+    var want = need_dx
+    var x = _fp(x_addr)
+    var w = _fp(w_addr)
+    var b = _fp(b_addr)
+    var g = _fp(g_addr)
+    var pi = _ip(idx_addr)
+    var pdx = _fp(dx_addr) if want else _fp(db_addr)
+    var pdw = _fp(dw_addr)
+    var pdb = _fp(db_addr)
+    with GILReleased(Python()):
+        conv_block_backward_into(x, w, b, g, pi, t[0], t[1], t[2], want, pdx, pdw, pdb)
+    return PythonObject(0)
 
 
 def conv_shape_binding(params: PythonObject) raises -> PythonObject:
@@ -124,49 +163,42 @@ def pool_shape_binding(params: PythonObject) raises -> PythonObject:
 def maxpool2d_forward_binding(x_addr: PythonObject, out_addr: PythonObject, idx_addr: PythonObject, params: PythonObject) raises -> PythonObject:
     var prm = _pool_prm(params)
     var c = _pool_counts(prm)
-    var x = read_f32(Int(py=x_addr), c[0])
-    var po = f32_ptr(Int(py=out_addr))
-    var pi = i32_ptr(Int(py=idx_addr))
+    var x = _fp(x_addr)
+    var po = _fp(out_addr)
+    var pi = _ip(idx_addr)
     with GILReleased(Python()):
-        var idx = List[Int32]()
-        var y = maxpool2d_forward_impl(x, prm, idx)
-        copy_f32(y.unsafe_ptr(), po, c[1])
-        for k in range(c[1]):
-            pi.unsafe_store(k, idx[k])
+        maxpool2d_forward_into(x, prm, po, pi)
     return PythonObject(c[1])
 
 
 def maxpool2d_backward_binding(dout_addr: PythonObject, idx_addr: PythonObject, dx_addr: PythonObject, params: PythonObject) raises -> PythonObject:
     var prm = _pool_prm(params)
     var c = _pool_counts(prm)
-    var dout = read_f32(Int(py=dout_addr), c[1])
-    var idx = read_i32(Int(py=idx_addr), c[1])
-    var pd = f32_ptr(Int(py=dx_addr))
+    var dout = _fp(dout_addr)
+    var idx = _ip(idx_addr)
+    var pd = _fp(dx_addr)
     with GILReleased(Python()):
-        var g = maxpool2d_backward_impl(dout, idx, prm)
-        copy_f32(g.unsafe_ptr(), pd, c[0])
+        maxpool2d_backward_into(dout, idx, prm, pd)
     return PythonObject(c[0])
 
 
 def avgpool2d_forward_binding(x_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
     var prm = _pool_prm(params)
     var c = _pool_counts(prm)
-    var x = read_f32(Int(py=x_addr), c[0])
-    var po = f32_ptr(Int(py=out_addr))
+    var x = _fp(x_addr)
+    var po = _fp(out_addr)
     with GILReleased(Python()):
-        var y = avgpool2d_forward_impl(x, prm)
-        copy_f32(y.unsafe_ptr(), po, c[1])
+        avgpool2d_forward_into(x, prm, po)
     return PythonObject(c[1])
 
 
 def avgpool2d_backward_binding(dout_addr: PythonObject, dx_addr: PythonObject, params: PythonObject) raises -> PythonObject:
     var prm = _pool_prm(params)
     var c = _pool_counts(prm)
-    var dout = read_f32(Int(py=dout_addr), c[1])
-    var pd = f32_ptr(Int(py=dx_addr))
+    var dout = _fp(dout_addr)
+    var pd = _fp(dx_addr)
     with GILReleased(Python()):
-        var g = avgpool2d_backward_impl(dout, prm)
-        copy_f32(g.unsafe_ptr(), pd, c[0])
+        avgpool2d_backward_into(dout, prm, pd)
     return PythonObject(c[0])
 
 
@@ -179,33 +211,30 @@ def _count(params: PythonObject) raises -> Int:
 
 def relu_forward_binding(x_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
     var n = _count(params)
-    var x = read_f32(Int(py=x_addr), n)
-    var po = f32_ptr(Int(py=out_addr))
+    var x = _fp(x_addr)
+    var po = _fp(out_addr)
     with GILReleased(Python()):
-        var y = relu_forward_impl(x)
-        copy_f32(y.unsafe_ptr(), po, n)
+        relu_forward_into(x, n, po)
     return PythonObject(n)
 
 
 def relu_backward_binding(x_addr: PythonObject, g_addr: PythonObject, dx_addr: PythonObject, params: PythonObject) raises -> PythonObject:
     var n = _count(params)
-    var x = read_f32(Int(py=x_addr), n)
-    var g = read_f32(Int(py=g_addr), n)
-    var po = f32_ptr(Int(py=dx_addr))
+    var x = _fp(x_addr)
+    var g = _fp(g_addr)
+    var po = _fp(dx_addr)
     with GILReleased(Python()):
-        var y = relu_backward_impl(x, g)
-        copy_f32(y.unsafe_ptr(), po, n)
+        relu_backward_into(x, g, n, po)
     return PythonObject(n)
 
 
 def add_binding(a_addr: PythonObject, b_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
     var n = _count(params)
-    var a = read_f32(Int(py=a_addr), n)
-    var b = read_f32(Int(py=b_addr), n)
-    var po = f32_ptr(Int(py=out_addr))
+    var a = _fp(a_addr)
+    var b = _fp(b_addr)
+    var po = _fp(out_addr)
     with GILReleased(Python()):
-        var y = add_impl(a, b)
-        copy_f32(y.unsafe_ptr(), po, n)
+        add_into(a, b, n, po)
     return PythonObject(n)
 
 
@@ -220,13 +249,12 @@ def _lin(params: PythonObject) raises -> Tuple[Int, Int, Int]:
 
 def linear_forward_binding(x_addr: PythonObject, w_addr: PythonObject, b_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
     var s = _lin(params)
-    var x = read_f32(Int(py=x_addr), s[0] * s[1])
-    var w = read_f32(Int(py=w_addr), s[2] * s[1])
-    var b = read_f32(Int(py=b_addr), s[2])
-    var po = f32_ptr(Int(py=out_addr))
+    var x = _fp(x_addr)
+    var w = _fp(w_addr)
+    var b = _fp(b_addr)
+    var po = _fp(out_addr)
     with GILReleased(Python()):
-        var y = linear_forward_impl(x, w, b, s[0], s[1], s[2])
-        copy_f32(y.unsafe_ptr(), po, s[0] * s[2])
+        linear_forward_into(x, w, b, s[0], s[1], s[2], po)
     return PythonObject(s[0] * s[2])
 
 
@@ -235,22 +263,15 @@ def linear_backward_binding(
     dw_addr: PythonObject, db_addr: PythonObject, params: PythonObject,
 ) raises -> PythonObject:
     var s = _lin(params)
-    var n = s[0]
-    var d_in = s[1]
-    var d_out = s[2]
-    var x = read_f32(Int(py=x_addr), n * d_in)
-    var w = read_f32(Int(py=w_addr), d_out * d_in)
-    var g = read_f32(Int(py=g_addr), n * d_out)
-    var pdx = f32_ptr(Int(py=dx_addr))
-    var pdw = f32_ptr(Int(py=dw_addr))
-    var pdb = f32_ptr(Int(py=db_addr))
+    var x = _fp(x_addr)
+    var w = _fp(w_addr)
+    var g = _fp(g_addr)
+    var pdx = _fp(dx_addr)
+    var pdw = _fp(dw_addr)
+    var pdb = _fp(db_addr)
     with GILReleased(Python()):
-        var r = linear_backward_impl(x, w, g, n, d_in, d_out)
-        var base = r.unsafe_ptr()
-        copy_f32(base, pdx, n * d_in)
-        copy_f32(base + n * d_in, pdw, d_out * d_in)
-        copy_f32(base + n * d_in + d_out * d_in, pdb, d_out)
-    return PythonObject(n)
+        linear_backward_into(x, w, g, s[0], s[1], s[2], pdx, pdw, pdb)
+    return PythonObject(s[0])
 
 
 def softmax_xent_binding(
@@ -262,20 +283,16 @@ def softmax_xent_binding(
     var k = Int(py=params[1])
     if n <= 0 or k <= 0:
         raise Error("x_cnn softmax: positive rows and classes required")
-    var logits = read_f32(Int(py=logits_addr), n * k)
-    var labels = read_i32(Int(py=labels_addr), n)
+    var py_labels = _ip(labels_addr)
     for i in range(n):
-        if Int(labels[i]) >= k:
+        if Int(py_labels[i]) >= k:
             raise Error("x_cnn softmax: a label is not a class index")
-    var pg = f32_ptr(Int(py=grad_addr))
-    var pp = f32_ptr(Int(py=proba_addr))
+    var logits = _fp(logits_addr)
+    var pg = _fp(grad_addr)
+    var pp = _fp(proba_addr)
     var loss = Float32(0)
     with GILReleased(Python()):
-        var r = softmax_xent_impl(logits, labels, n, k)
-        var base = r.unsafe_ptr()
-        copy_f32(base, pg, n * k)
-        copy_f32(base + n * k, pp, n * k)
-        loss = r[2 * n * k]
+        loss = softmax_xent_into(logits, py_labels, n, k, pg, pp)
     return PythonObject(Float64(loss))
 
 
@@ -290,15 +307,11 @@ def sgd_binding(w_addr: PythonObject, g_addr: PythonObject, v_addr: PythonObject
         raise Error("x_cnn sgd: hyper is [lr, momentum, weight_decay(, dampening, nesterov, first)]")
     for k in range(6):
         h.append(Float32(Float64(py=hyper[k])) if k < nh else Float32(0))
-    var w = read_f32(Int(py=w_addr), n)
-    var g = read_f32(Int(py=g_addr), n)
-    var v = read_f32(Int(py=v_addr), n)
-    var pw = f32_ptr(Int(py=w_addr))
-    var pv = f32_ptr(Int(py=v_addr))
+    var pw = _fp(w_addr)
+    var g = _fp(g_addr)
+    var pv = _fp(v_addr)
     with GILReleased(Python()):
-        var r = sgd_impl(w, g, v, h)
-        copy_f32(r.unsafe_ptr(), pw, n)
-        copy_f32(r.unsafe_ptr() + n, pv, n)
+        sgd_into(pw, g, pv, h, n)
     return PythonObject(n)
 
 
@@ -323,17 +336,12 @@ def batchnorm_forward_binding(
     if training and N * HW < 2:
         raise Error("x_cnn batchnorm: expected more than 1 value per channel when training")
     var total = N * C * HW
-    var x = read_f32(Int(py=x_addr), total)
-    var running = read_f32(Int(py=running_addr), 2 * C)
-    var aux = read_f32(Int(py=aux_addr), 2 + 7 * C)
-    var pyo = f32_ptr(Int(py=y_addr))
-    var pr = f32_ptr(Int(py=running_addr))
-    var pa = f32_ptr(Int(py=aux_addr))
+    var x = _fp(x_addr)
+    var pyo = _fp(y_addr)
+    var pr = _fp(running_addr)
+    var pa = _fp(aux_addr)
     with GILReleased(Python()):
-        var r = batchnorm_forward_impl(x, running, aux, prm, training)
-        copy_f32(r.unsafe_ptr(), pyo, total)
-        copy_f32(r.unsafe_ptr() + total, pr, 2 * C)
-        copy_f32(r.unsafe_ptr() + total + 2 * C, pa, 2 + 7 * C)
+        batchnorm_forward_into(x, pr, pa, prm, training, pyo)
     return PythonObject(total)
 
 
@@ -343,17 +351,13 @@ def batchnorm_backward_binding(
     """params = [N, C, HW, training]; aux updates in place (sum_g, sum_gx)."""
     var prm = _bn_prm(params)
     var training = Int(py=params[3]) != 0
-    var C = Int(prm[1])
-    var total = Int(prm[0]) * C * Int(prm[2])
-    var x = read_f32(Int(py=x_addr), total)
-    var g = read_f32(Int(py=g_addr), total)
-    var aux = read_f32(Int(py=aux_addr), 2 + 7 * C)
-    var pd = f32_ptr(Int(py=dx_addr))
-    var pa = f32_ptr(Int(py=aux_addr))
+    var total = Int(prm[0]) * Int(prm[1]) * Int(prm[2])
+    var x = _fp(x_addr)
+    var g = _fp(g_addr)
+    var pd = _fp(dx_addr)
+    var pa = _fp(aux_addr)
     with GILReleased(Python()):
-        var r = batchnorm_backward_impl(x, g, aux, prm, training)
-        copy_f32(r.unsafe_ptr(), pd, total)
-        copy_f32(r.unsafe_ptr() + total, pa, 2 + 7 * C)
+        batchnorm_backward_into(x, g, pa, prm, training, pd)
     return PythonObject(total)
 
 
@@ -373,24 +377,21 @@ def dropout2d_binding(x_addr: PythonObject, y_addr: PythonObject, mask_addr: Pyt
         prm.append(Int32(Int64(v) - Int64(4294967296)) if v > 2147483647 else Int32(v))
     var h: List[Float32] = [Float32(Float64(py=drop_p))]
     var total = N * C * HW
-    var x = read_f32(Int(py=x_addr), total)
-    var pyo = f32_ptr(Int(py=y_addr))
-    var pm = f32_ptr(Int(py=mask_addr))
+    var x = _fp(x_addr)
+    var pyo = _fp(y_addr)
+    var pm = _fp(mask_addr)
     with GILReleased(Python()):
-        var r = dropout2d_impl(x, prm, h)
-        copy_f32(r.unsafe_ptr(), pyo, total)
-        copy_f32(r.unsafe_ptr() + total, pm, total)
+        dropout2d_into(x, total, prm, h, pyo, pm)
     return PythonObject(total)
 
 
 def mul_binding(a_addr: PythonObject, b_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
     var n = _count(params)
-    var a = read_f32(Int(py=a_addr), n)
-    var b = read_f32(Int(py=b_addr), n)
-    var po = f32_ptr(Int(py=out_addr))
+    var a = _fp(a_addr)
+    var b = _fp(b_addr)
+    var po = _fp(out_addr)
     with GILReleased(Python()):
-        var y = mul_impl(a, b)
-        copy_f32(y.unsafe_ptr(), po, n)
+        mul_into(a, b, n, po)
     return PythonObject(n)
 
 
@@ -423,12 +424,11 @@ def spmm_binding(vals_addr: PythonObject, h_addr: PythonObject, out_addr: Python
     var n = Int(t[1][0])
     var F = Int(t[1][1])
     var nnz = Int(t[1][2])
-    var vals = read_f32(Int(py=vals_addr), nnz if nnz > 0 else 1) if nnz > 0 else List[Float32](length=1, fill=Float32(0))
-    var h = read_f32(Int(py=h_addr), n * F)
-    var po = f32_ptr(Int(py=out_addr))
+    var vals = _fp(vals_addr) if nnz > 0 else _fp(h_addr)
+    var h = _fp(h_addr)
+    var po = _fp(out_addr)
     with GILReleased(Python()):
-        var y = spmm_impl(vals, h, t[0], t[1])
-        copy_f32(y.unsafe_ptr(), po, n * F)
+        spmm_into(vals, nnz, h, t[0], t[1], po)
     return PythonObject(n * F)
 
 
@@ -467,26 +467,21 @@ def pad2d_forward_binding(x_addr: PythonObject, out_addr: PythonObject, params: 
     """params = [N, C, H, W, top, bottom, left, right, mode (0 zeros, 1 reflect, 2 replicate, 3 circular)]."""
     var prm = _pad_prm(params)
     var nc = Int(prm[0]) * Int(prm[1])
-    var nx = nc * Int(prm[2]) * Int(prm[3])
     var no = nc * (Int(prm[2]) + Int(prm[4]) + Int(prm[5])) * (Int(prm[3]) + Int(prm[6]) + Int(prm[7]))
-    var x = read_f32(Int(py=x_addr), nx)
-    var po = f32_ptr(Int(py=out_addr))
+    var x = _fp(x_addr)
+    var po = _fp(out_addr)
     with GILReleased(Python()):
-        var y = pad2d_forward_impl(x, prm)
-        copy_f32(y.unsafe_ptr(), po, no)
+        pad2d_forward_into(x, prm, po)
     return PythonObject(no)
 
 
 def pad2d_backward_binding(g_addr: PythonObject, dx_addr: PythonObject, params: PythonObject) raises -> PythonObject:
     var prm = _pad_prm(params)
-    var nc = Int(prm[0]) * Int(prm[1])
-    var nx = nc * Int(prm[2]) * Int(prm[3])
-    var ng = nc * (Int(prm[2]) + Int(prm[4]) + Int(prm[5])) * (Int(prm[3]) + Int(prm[6]) + Int(prm[7]))
-    var g = read_f32(Int(py=g_addr), ng)
-    var po = f32_ptr(Int(py=dx_addr))
+    var nx = Int(prm[0]) * Int(prm[1]) * Int(prm[2]) * Int(prm[3])
+    var g = _fp(g_addr)
+    var po = _fp(dx_addr)
     with GILReleased(Python()):
-        var y = pad2d_backward_impl(g, prm)
-        copy_f32(y.unsafe_ptr(), po, nx)
+        pad2d_backward_into(g, prm, po)
     return PythonObject(nx)
 
 
@@ -562,15 +557,11 @@ def adam_binding(w_addr: PythonObject, g_addr: PythonObject, mv_addr: PythonObje
     var h = List[Float32]()
     for k in range(9):
         h.append(Float32(Float64(py=hyper[k])))
-    var w = read_f32(Int(py=w_addr), n)
-    var g = read_f32(Int(py=g_addr), n)
-    var mv = read_f32(Int(py=mv_addr), 2 * n)
-    var pw = f32_ptr(Int(py=w_addr))
-    var pm = f32_ptr(Int(py=mv_addr))
+    var pw = _fp(w_addr)
+    var g = _fp(g_addr)
+    var pm = _fp(mv_addr)
     with GILReleased(Python()):
-        var r = adam_impl(w, g, mv, h)
-        copy_f32(r.unsafe_ptr(), pw, n)
-        copy_f32(r.unsafe_ptr() + n, pm, 2 * n)
+        adam_into(pw, g, pm, h, n)
     return PythonObject(n)
 
 
@@ -590,6 +581,8 @@ def PyInit__mojolearn_x_cnn() abi("C") -> PythonObject:
         m.def_function[conv2d_forward_binding]("x_cnn_conv2d_forward")
         m.def_function[conv2d_backward_binding]("x_cnn_conv2d_backward")
         m.def_function[conv_shape_binding]("x_cnn_conv_shape")
+        m.def_function[conv_block_forward_binding]("x_cnn_conv_block_forward")
+        m.def_function[conv_block_backward_binding]("x_cnn_conv_block_backward")
         m.def_function[pool_shape_binding]("x_cnn_pool_shape")
         m.def_function[maxpool2d_forward_binding]("x_cnn_maxpool2d_forward")
         m.def_function[maxpool2d_backward_binding]("x_cnn_maxpool2d_backward")
