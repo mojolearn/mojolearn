@@ -41,3 +41,36 @@ oracle and host == oracle bit for bit. One sabotage arm per seam,
 | 5514 | MoE top-k routing | strict `>`, ties to the lower expert | ties to the higher expert |
 | 5515 | LayerNorm statistics | mean columns ascending, then centred squares | mean columns descending |
 | 5516 | SES recursion (Croston) | `alpha x + (1 - alpha) f`, one fma | `f + alpha (x - f)` |
+
+## ARIMA, ExponentialSmoothing (Holt-Winters) and KPSS
+
+These are the family's earlier algorithms (`arima/`, `holtwinters/`, `tsa/`),
+with their own DEVIATIONS (ARIMA 670, 673-679, 687 and `arima/SEAMS.tsv`;
+Holt-Winters 660-665, 697-699, 930, 2717; KPSS 671-672), their own host
+oracles and check drivers, and their own identity cards
+(`arima.identical.card`, `arima.fit.identical.card`, the Holt-Winters and
+KPSS cards). Pass 2 lists those drivers in `tools/identity_lanes/sequence.checks`
+with one source sabotage per seam; each moves the DEVICE spelling only, so
+the driver's device-vs-oracle gate must fail:
+
+| arm | seam (DEVIATION) | driver | the edit |
+|---|---|---|---|
+| 5520 | Kalman `MM_l` fold (SEAMS.tsv `MM_l inner`, 670) | `arima/checks/arima_check.mojo` | k descending |
+| 5521 | Kalman `Mv_l` fold (SEAMS.tsv `Mv_l inner`) | `arima_check.mojo` | j descending |
+| 5522 | Jones transform contraction (SEAMS.tsv, the audit's arm d) | `arima_check.mojo` | `fma(sign*a, x, t)` instead of `fma(sign, round(a*x), t)` |
+| 5523 | likelihood `s2` (SEAMS.tsv `likelihood s2`) | `arima_check.mojo` | `vs * (vs / F)` instead of `(vs*vs) / F` |
+| 5524 | state update `alpha = tmp + K vs` (SEAMS.tsv `alpha update`) | `arima_check.mojo` | unfused |
+| 5525 | x0 Householder QR column norm (678) | `arima/checks/fit_check.mojo` | rows descending |
+| 5527 | HW level / trend / season mix (660) | `holtwinters/checks/hw_check.mojo` | the other product fused |
+| 5528 | HW decompose conv1d order (660) | `hw_check.mojo` | filter sum rotated by launch geometry |
+| 5529 | HW zero search direction guard (662) | `hw_check.mojo` | guard off |
+| 5530 | HW signed-zero clamp (663) | `hw_check.mojo` | `>=` lower test |
+| 5531 | HW line-search acceptance tie (697) | `hw_check.mojo` | `>=` |
+| 5532 | HW stop-criterion order (698) | `hw_check.mojo` | swapped |
+| 5533 | HW line-search limit keeps the best trial (2717) | `hw_check.mojo` | keeps the last |
+| 5534 | KPSS sum of squares (671) | `tsa/checks/stationarity_check.mojo` | unfused |
+| 5535 | KPSS long-run variance accumulator (671) | `stationarity_check.mojo` | unfused |
+
+Seams with no separating spelling are not armed: `F = Z P Z'` (Z is a 0/1
+selection vector, so every association rounds the same) and the Jones
+inverse's `fma(sign, prod, x)` (sign is +-1, so fused and unfused agree).

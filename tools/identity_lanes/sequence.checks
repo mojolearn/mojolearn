@@ -1,4 +1,4 @@
-# the sequence lane's seam check and one sabotage patch per seam (pass 2; DEVIATIONS 5500-5516; docs/lanes/progress/sequence.md)
+# the sequence lane's seam checks, one sabotage patch per seam (pass 2; docs/lanes/progress/sequence.md): 5500-5516 the expansion items (sequence/checks/seams_check.mojo), 5520-5535 ARIMA, Holt-Winters and KPSS (their own drivers; sequence/README.md)
 sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5500_gemm_k_order.patch
 sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5501_colsum_order.patch
 sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5502_lstm_cell.patch
@@ -16,3 +16,18 @@ sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5513_nm_tie_order
 sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5514_moe_route_tie.patch
 sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5515_layernorm_stats.patch
 sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5516_ses_recursion.patch
+arima/checks/arima_check.mojo	sequence/checks/sabotage/seam_5520_arima_mm_k_order.patch
+arima/checks/arima_check.mojo	sequence/checks/sabotage/seam_5521_arima_mv_j_order.patch
+arima/checks/arima_check.mojo	sequence/checks/sabotage/seam_5522_arima_jones_contraction.patch
+arima/checks/arima_check.mojo	sequence/checks/sabotage/seam_5523_arima_ll_s2.patch
+arima/checks/arima_check.mojo	sequence/checks/sabotage/seam_5524_arima_alpha_update.patch
+arima/checks/fit_check.mojo	sequence/checks/sabotage/seam_5525_arima_qr_norm_order.patch
+holtwinters/checks/hw_check.mojo	sequence/checks/sabotage/seam_5527_hw_swap_fma.patch
+holtwinters/checks/hw_check.mojo	sequence/checks/sabotage/seam_5528_hw_rotate_conv.patch
+holtwinters/checks/hw_check.mojo	sequence/checks/sabotage/seam_5529_hw_zero_dir_guard.patch
+holtwinters/checks/hw_check.mojo	sequence/checks/sabotage/seam_5530_hw_clamp_ge.patch
+holtwinters/checks/hw_check.mojo	sequence/checks/sabotage/seam_5531_hw_ls_tie.patch
+holtwinters/checks/hw_check.mojo	sequence/checks/sabotage/seam_5532_hw_crit_order.patch
+holtwinters/checks/hw_check.mojo	sequence/checks/sabotage/seam_5533_hw_ls_last.patch
+tsa/checks/stationarity_check.mojo	sequence/checks/sabotage/seam_5534_kpss_sq_unfused.patch
+tsa/checks/stationarity_check.mojo	sequence/checks/sabotage/seam_5535_kpss_s2b_unfused.patch

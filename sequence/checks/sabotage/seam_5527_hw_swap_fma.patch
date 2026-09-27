@@ -1,0 +1,13 @@
+diff --git a/holtwinters/impl/internal/hw_utils.mojo b/holtwinters/impl/internal/hw_utils.mojo
+index ef27b542b..bf73a92e2 100644
+--- a/holtwinters/impl/internal/hw_utils.mojo
++++ b/holtwinters/impl/internal/hw_utils.mojo
+@@ -92,7 +92,7 @@ comptime SAB_CLAMP_GE = is_defined["MOJOLEARN_HW_SABOTAGE_CLAMP_GE"]()
+ #: the eval's level update with the OTHER product fused (`fma((1-a), lt,
+ #: a*x)` instead of `fma(a, x, (1-a)*lt)`): a different contraction
+ #: spelling. MUST FAIL device-vs-oracle (the oracle keeps the pinned one).
+-comptime SAB_SWAP_FMA = is_defined["MOJOLEARN_HW_SABOTAGE_SWAP_FMA"]()
++comptime SAB_SWAP_FMA = True
+ #: THE OPTIMIZER'S TIE-BREAK, arm 1: the line-search acceptance test
+ #: loosened from `loss > loss_ref + step * cauchy` to `>=`. On an EXACT tie
+ #: -- and a tie is not exotic here: a flat or exactly-recovered series has
