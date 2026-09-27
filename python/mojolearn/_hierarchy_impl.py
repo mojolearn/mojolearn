@@ -17,7 +17,7 @@ whoever owns that file decides the public namespace.
 
 import sys
 
-from . import _backend, _mojolearn_solver, _serialize
+from . import _backend, _expansion_cluster, _mojolearn_solver, _serialize
 from ._array import Array
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_i32_c, empty, zeros
 from .density import _check_queries
@@ -436,7 +436,9 @@ class AgglomerativeClustering:
         n_merges = n - 1 if full else n - int(self.n_clusters)
         edges = self._connectivity_edges(x, n) if constrained else []
         aux = (Array.from_list(edges, "<f4") if edges else None)
-        b = _backend.binding("_mojolearn_x_cluster", getattr(self, "numeric_mode", None))
+        # the cluster lane's binding, named by its door (a name here would
+        # make this file a whole-surface registry to tools/lane_select.py)
+        b = _backend.binding(_expansion_cluster._XCluster._BINDING, getattr(self, "numeric_mode", None))
         ip = [n, d, _LINKAGES[self.linkage], metric, len(edges) // 2 if constrained else -1, n_merges]
         f, i, sc = b.x_cluster_call(
             _E_AGGLO, addr_ro(x, name="X"), x.size,
