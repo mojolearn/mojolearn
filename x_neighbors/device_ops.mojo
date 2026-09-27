@@ -4,7 +4,7 @@
 """The neighbors lane's GPU drivers (see x_neighbors/gen.py)."""
 from std.gpu import block_idx, block_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
-from x_neighbors.items import FP, IP, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, group_mean_item, take_rows_item, take_cols_item, variance_item, ocsvm_smo_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_item, nc_decision_item, softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_sum_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item
+from x_neighbors.items import FP, IP, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, group_mean_item, take_rows_item, take_cols_item, variance_item, ocsvm_smo_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_item, nc_decision_item, softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_sum_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item, pagerank_step_item, cc_step_item, louvain_item, svgp_item, svgp_var_item
 
 comptime BLOCK = 128
 
@@ -924,4 +924,174 @@ def op_knn_impute(x: Int, fx: Int, res: Int, n: Int, m: Int, d: Int, k: Int, wei
     _ = d_fx^
     _ = d_best_d^
     _ = d_best_i^
+    _ = d_res^
+
+
+def pagerank_step_kernel(q: FP, x: FP, p: FP, dangling: IP, res: FP, n_: Int64, alpha_: Float32):
+    var n = Int(n_)
+    var alpha = alpha_
+    var t = _tid()
+    if t < n:
+        pagerank_step_item(t, q, x, p, dangling, res, n, alpha)
+
+
+def op_pagerank_step(q: Int, x: Int, p: Int, dangling: Int, res: Int, n: Int, alpha: Float32) raises:
+    var ctx = DeviceContext()
+    var d_q = _buf(ctx, q, n * n, True)
+    var d_x = _buf(ctx, x, n, True)
+    var d_p = _buf(ctx, p, n, True)
+    var d_dangling = _buf_i(ctx, dangling, n, True)
+    var d_res = _buf(ctx, res, n, False)
+    ctx.enqueue_function[pagerank_step_kernel](
+        d_q.unsafe_ptr(), d_x.unsafe_ptr(), d_p.unsafe_ptr(), d_dangling.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n), alpha,
+        grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
+    )
+    _down(ctx, d_res, res, n)
+    ctx.synchronize()
+    _ = d_q^
+    _ = d_x^
+    _ = d_p^
+    _ = d_dangling^
+    _ = d_res^
+
+
+def cc_step_kernel(a: FP, lab: IP, res: IP, n_: Int64):
+    var n = Int(n_)
+    var t = _tid()
+    if t < n:
+        cc_step_item(t, a, lab, res, n)
+
+
+def op_cc_step(a: Int, lab: Int, res: Int, n: Int) raises:
+    var ctx = DeviceContext()
+    var d_a = _buf(ctx, a, n * n, True)
+    var d_lab = _buf_i(ctx, lab, n, True)
+    var d_res = _buf_i(ctx, res, n, False)
+    ctx.enqueue_function[cc_step_kernel](
+        d_a.unsafe_ptr(), d_lab.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n),
+        grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
+    )
+    _down_i(ctx, d_res, res, n)
+    ctx.synchronize()
+    _ = d_a^
+    _ = d_lab^
+    _ = d_res^
+
+
+def louvain_kernel(a: FP, labels: IP, info: FP, w: FP, w2: FP, comm: IP, node_of: IP, deg: FP, stot: FP, k2c: FP, tmp: FP, n_: Int64, max_level_: Int64, resolution_: Float32, threshold_: Float32):
+    var n = Int(n_)
+    var max_level = Int(max_level_)
+    var resolution = resolution_
+    var threshold = threshold_
+    var t = _tid()
+    if t < 1:
+        louvain_item(t, a, labels, info, w, w2, comm, node_of, deg, stot, k2c, tmp, n, max_level, resolution, threshold)
+
+
+def op_louvain(a: Int, labels: Int, info: Int, n: Int, max_level: Int, resolution: Float32, threshold: Float32) raises:
+    var ctx = DeviceContext()
+    var d_a = _buf(ctx, a, n * n, True)
+    var d_labels = _buf_i(ctx, labels, n, False)
+    var d_info = _buf(ctx, info, 2, False)
+    var d_w = _buf(ctx, 0, n * n, False)
+    var d_w2 = _buf(ctx, 0, n * n, False)
+    var d_comm = _buf_i(ctx, 0, n, False)
+    var d_node_of = _buf_i(ctx, 0, n, False)
+    var d_deg = _buf(ctx, 0, n, False)
+    var d_stot = _buf(ctx, 0, n, False)
+    var d_k2c = _buf(ctx, 0, n, False)
+    var d_tmp = _buf(ctx, 0, n, False)
+    ctx.enqueue_function[louvain_kernel](
+        d_a.unsafe_ptr(), d_labels.unsafe_ptr(), d_info.unsafe_ptr(), d_w.unsafe_ptr(), d_w2.unsafe_ptr(), d_comm.unsafe_ptr(), d_node_of.unsafe_ptr(), d_deg.unsafe_ptr(), d_stot.unsafe_ptr(), d_k2c.unsafe_ptr(), d_tmp.unsafe_ptr(), Int64(n), Int64(max_level), resolution, threshold,
+        grid_dim=_grid(1), block_dim=(BLOCK if 1 > 1 else 1),
+    )
+    _down_i(ctx, d_labels, labels, n)
+    _down(ctx, d_info, info, 2)
+    ctx.synchronize()
+    _ = d_a^
+    _ = d_labels^
+    _ = d_info^
+    _ = d_w^
+    _ = d_w2^
+    _ = d_comm^
+    _ = d_node_of^
+    _ = d_deg^
+    _ = d_stot^
+    _ = d_k2c^
+    _ = d_tmp^
+
+
+def svgp_kernel(kuu: FP, bmat: FP, b: FP, y: FP, alpha: FP, cmat: FP, qmu: FP, qsqrt: FP, info: FP, luu: FP, ls: FP, e: FP, col: FP, m_: Int64, n_: Int64, noise_: Float32, jitter_: Float32, kdiag_: Float32):
+    var m = Int(m_)
+    var n = Int(n_)
+    var noise = noise_
+    var jitter = jitter_
+    var kdiag = kdiag_
+    var t = _tid()
+    if t < 1:
+        svgp_item(t, kuu, bmat, b, y, alpha, cmat, qmu, qsqrt, info, luu, ls, e, col, m, n, noise, jitter, kdiag)
+
+
+def op_svgp(kuu: Int, bmat: Int, b: Int, y: Int, alpha: Int, cmat: Int, qmu: Int, qsqrt: Int, info: Int, m: Int, n: Int, noise: Float32, jitter: Float32, kdiag: Float32) raises:
+    var ctx = DeviceContext()
+    var d_kuu = _buf(ctx, kuu, m * m, True)
+    var d_bmat = _buf(ctx, bmat, m * m, True)
+    var d_b = _buf(ctx, b, m, True)
+    var d_y = _buf(ctx, y, n, True)
+    var d_alpha = _buf(ctx, alpha, m, False)
+    var d_cmat = _buf(ctx, cmat, m * m, False)
+    var d_qmu = _buf(ctx, qmu, m, False)
+    var d_qsqrt = _buf(ctx, qsqrt, m * m, False)
+    var d_info = _buf(ctx, info, 2, False)
+    var d_luu = _buf(ctx, 0, m * m, False)
+    var d_ls = _buf(ctx, 0, m * m, False)
+    var d_e = _buf(ctx, 0, m, False)
+    var d_col = _buf(ctx, 0, m, False)
+    ctx.enqueue_function[svgp_kernel](
+        d_kuu.unsafe_ptr(), d_bmat.unsafe_ptr(), d_b.unsafe_ptr(), d_y.unsafe_ptr(), d_alpha.unsafe_ptr(), d_cmat.unsafe_ptr(), d_qmu.unsafe_ptr(), d_qsqrt.unsafe_ptr(), d_info.unsafe_ptr(), d_luu.unsafe_ptr(), d_ls.unsafe_ptr(), d_e.unsafe_ptr(), d_col.unsafe_ptr(), Int64(m), Int64(n), noise, jitter, kdiag,
+        grid_dim=_grid(1), block_dim=(BLOCK if 1 > 1 else 1),
+    )
+    _down(ctx, d_alpha, alpha, m)
+    _down(ctx, d_cmat, cmat, m * m)
+    _down(ctx, d_qmu, qmu, m)
+    _down(ctx, d_qsqrt, qsqrt, m * m)
+    _down(ctx, d_info, info, 2)
+    ctx.synchronize()
+    _ = d_kuu^
+    _ = d_bmat^
+    _ = d_b^
+    _ = d_y^
+    _ = d_alpha^
+    _ = d_cmat^
+    _ = d_qmu^
+    _ = d_qsqrt^
+    _ = d_info^
+    _ = d_luu^
+    _ = d_ls^
+    _ = d_e^
+    _ = d_col^
+
+
+def svgp_var_kernel(ksu: FP, cmat: FP, res: FP, n_: Int64, m_: Int64, kdiag_: Float32):
+    var n = Int(n_)
+    var m = Int(m_)
+    var kdiag = kdiag_
+    var t = _tid()
+    if t < n:
+        svgp_var_item(t, ksu, cmat, res, n, m, kdiag)
+
+
+def op_svgp_var(ksu: Int, cmat: Int, res: Int, n: Int, m: Int, kdiag: Float32) raises:
+    var ctx = DeviceContext()
+    var d_ksu = _buf(ctx, ksu, n * m, True)
+    var d_cmat = _buf(ctx, cmat, m * m, True)
+    var d_res = _buf(ctx, res, n, False)
+    ctx.enqueue_function[svgp_var_kernel](
+        d_ksu.unsafe_ptr(), d_cmat.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n), Int64(m), kdiag,
+        grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
+    )
+    _down(ctx, d_res, res, n)
+    ctx.synchronize()
+    _ = d_ksu^
+    _ = d_cmat^
     _ = d_res^
