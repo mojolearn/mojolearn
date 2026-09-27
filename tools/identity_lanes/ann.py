@@ -48,12 +48,27 @@ def _(ml, X, yc, yr, Xh=None):
     repulsion and the gains optimizer. Train hashes the embedding and the KL.
     t-SNE has no transform of new rows, so the probe re-fits the held-out
     rows (n/a:no-save)."""
-    m = ml.TSNE(perplexity=10.0, max_iter=300, random_state=5).fit(X[:400])
-    return _fit(dict(embedding=_h(m.embedding_), kl=_h(np.float32(m.kl_divergence_))),
-                m, lambda e: (ml.TSNE(perplexity=10.0, max_iter=300, random_state=5).fit(Xh[:400]).embedding_,))
+    m = ml.TSNE(perplexity=10.0, max_iter=300, init="random", random_state=5).fit(X[:400])
+    return _fit(dict(embedding=_h(m.embedding_), kl=_h(np.float32(m.kl_divergence_)),
+                     n_iter=_h(np.int32(m.n_iter_))),
+                m, lambda e: (ml.TSNE(perplexity=10.0, max_iter=300, init="random",
+                                      random_state=5).fit(Xh[:400]).embedding_,))
 
 
-_batch_decl("n/a:whole-set (t-SNE embeds the whole set jointly; no row of it is computed alone)", "x-ann-tsne")
+@lane("x-ann-tsne-options")
+def _(ml, X, yc, yr, Xh=None):
+    """TSNE's sklearn options: three components (Student-t dof 2), the exact
+    method (P over all pairs), init='pca' (mojolearn PCA), 260 steps across
+    the phase change with its update/gains reset, and a min_grad_norm stop."""
+    kw = dict(n_components=3, method="exact", init="pca", perplexity=8.0, max_iter=260, min_grad_norm=1e-3)
+    m = ml.TSNE(**kw).fit(X[:200])
+    return _fit(dict(embedding=_h(m.embedding_), kl=_h(np.float32(m.kl_divergence_)),
+                     n_iter=_h(np.int32(m.n_iter_))),
+                m, lambda e: (ml.TSNE(**kw).fit(Xh[:200]).embedding_,))
+
+
+_batch_decl("n/a:whole-set (t-SNE embeds the whole set jointly; no row of it is computed alone)",
+            "x-ann-tsne", "x-ann-tsne-options")
 
 
 @lane("x-ann-cagra")

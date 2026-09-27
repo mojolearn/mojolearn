@@ -1,7 +1,7 @@
 --- a/x_ann/tsne_core.mojo
 +++ b/x_ann/tsne_core.mojo
-@@ -221,7 +221,10 @@
-     var c = e % 2
+@@ -237,7 +237,10 @@
+     var c = e % nc
      var yi = ftz(y.unsafe_load(e))
      var attr = Float32(0.0)
 -    for s in range(Int(indptr.unsafe_load(i)), Int(indptr.unsafe_load(i + 1))):
@@ -10,5 +10,5 @@
 +    for ss in range(s_lo, s_hi):
 +        var s = s_hi - 1 - (ss - s_lo)
          var j = Int(indices.unsafe_load(s))
-         var pq = ftz(identical_mul(ftz(values.unsafe_load(s)), ts_q(y, i, j)))
-         attr = ftz(attr + ftz(identical_mul(pq, ftz(yi - ftz(y.unsafe_load(2 * j + c))))))
+         var pq = ftz(identical_mul(ftz(values.unsafe_load(s)), ts_q(y, i, j, nc, dof)))
+         attr = ftz(attr + ftz(identical_mul(pq, ftz(yi - ftz(y.unsafe_load(j * nc + c))))))
