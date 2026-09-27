@@ -137,7 +137,8 @@ def test_dry_run_counts_inference_cells(env, capsys):
     text = capsys.readouterr().out
     # trees: 12 races, arms (ours, ours-ab + opponents) x 2 batches; classical:
     # kmeans/pca/ols/svc x 2 datasets, every arm once.
-    trees = sum(2 * (2 + len(v)) for v in bb.TREE_OPPONENTS["apple"].values()) * 2
+    trees = sum(2 * (2 + len(v)) * len(bb.tree_task_datasets(l, bb.DATASETS))
+                for l, v in bb.TREE_OPPONENTS["apple"].items())
     classical = sum(2 + len(bb.CLASSICAL_OPPONENTS["apple"][l]) for l in inf.CLASSICAL_INFER_LANES) * 2
     assert "INFER cells=%d (classical %d, trees %d;" % (trees + classical, classical, trees) in text
     assert bb.main(["--dry-run", "--vendor", "apple", "--no-infer"] + env["base"]) == 0

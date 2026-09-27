@@ -13,7 +13,8 @@ full contract. In short:
 | AMD | `identical` | XGBoost ROCm where the image has it, otherwise the CPU learners on all cores (scikit-learn, umap-learn, statsmodels, faiss-cpu included); torch ROCm |
 
 - Families: trees (`gbdt-symmetric`, `gbdt-depthwise`, `gbdt-lossguide`, `rf`,
-  `et`, `iforest`) and classical (`kmeans`, `pca`, `ols`, `knn`, `kde`, `svc`,
+  `et`, `iforest`, and the GBDT task lanes `gbdt-rank-yetirank`,
+  `gbdt-rank-pairlogit`, `gbdt-multiclass`, `gbdt-categorical`, below) and classical (`kmeans`, `pca`, `ols`, `knn`, `kde`, `svc`,
   `dbscan`, `hdbscan`) on taxi and Istella-S, classical2 (23 lanes, below) on
   taxi and Istella-S or seeded synthetic series, and neural (16 lanes,
   below) on inputs the driver builds from seed 7.
@@ -29,14 +30,17 @@ full contract. In short:
   (`--skip-failed` turns that off). A resume on a different box or a
   different wheel is refused.
 - Data is never downloaded. taxi and Istella-S come from R2
-  (`docs/REMOTE_DATA_R2.md`). Without them the script refuses and prints the
-  staging command. A neural-only run (`--families neural`) needs no dataset.
+  (`docs/REMOTE_DATA_R2.md`), and the ranking lanes also read
+  `gbm-bench/istella/istella_rank.npz` (the query ids). Without them the
+  script refuses and prints the staging command. A neural-only run
+  (`--families neural`) needs no dataset.
 - Always check the plan first: `python3 tools/bench_board.py --dry-run
-  --vendor apple` (or `nvidia`, `amd`). The current plan has 88 races on
-  every vendor (44 of them classical2, 16 neural). That comes to 312 cells on
-  Apple, 261 on NVIDIA and 246 on AMD (classical2 alone: 134, 94 and 90;
-  neural alone: 76, 95 and 76).
-  Inference adds 122 cells on Apple, 84 on NVIDIA and 100 on AMD (below);
+  --vendor apple` (or `nvidia`, `amd`). The current plan has 93 races on
+  every vendor (44 of them classical2, 16 neural, 5 GBDT task races). That
+  comes to 336 cells on Apple, 280 on NVIDIA and 270 on AMD (classical2
+  alone: 134, 94 and 90; neural alone: 76, 95 and 76; the task lanes alone:
+  24, 19 and 24).
+  Inference adds 170 cells on Apple, 122 on NVIDIA and 148 on AMD (below);
   `--no-infer` times training only.
 
 ## Inference
@@ -85,11 +89,81 @@ every arm (on `ours-fast` it is the FAST against IDENTICAL check). kNN
 (`kneighbors`) and KDE (`score_samples`) already time inference as their race;
 DBSCAN and HDBSCAN have no predict.
 
-Not covered yet: categorical (criteo) frames in the trees inference phase; a
-single-row latency batch; ONNX, Treelite and other export paths; the
+The GBDT task lanes time inference the same way: the whole probability
+matrix on `gbdt-multiclass` (quality `mlogloss` and `accuracy`), raw scores
+on `gbdt-rank-*` (NDCG@10, NDCG@5 and MAP on the test batch), and P(class 1)
+on `gbdt-categorical`, where CatBoost and XGBoost predict from the frame kind
+their fit took (int64 categorical columns; a pandas `CategoricalDtype`
+frame through `XGBClassifier.predict_proba`), built inside the clock as the
+fit clock builds it.
+
+Not covered yet: a single-row latency batch; ONNX, Treelite and other export paths; the
 classical2 family's predict calls as separate inference cells (its lanes
 define their own clocks in `tools/bench_board_more.py`); svc
 `decision_function`.
+
+## The GBDT task lanes
+
+Four trees lanes race the public `GradientBoosting` on tasks beyond binary
+and regression, through the same driver (`bench/speed/forest_speed_arm.py`),
+the same interleaving, FAST and IDENTICAL on Apple and IDENTICAL on NVIDIA
+and AMD, with inference timed after the fit rounds. The shared knobs are the
+gbdt lanes' own: 100 trees, depth 6, learning rate 0.1, L2 1.0, 254 borders
+(255 bins), no bagging, Plain boosting, seed 7. Each lane's objectives and
+every mismatch (one line each, with its reason) are `TASK_LANES` in
+`tools/speed_gbdt_arm.py`; the board copies them into the race's
+`settings.lane_config` and the driver prints them as `FSPEED-NOTE
+metric=mismatch` lines.
+
+| lane | board dataset (driver dataset) | ours | CatBoost | XGBoost | LightGBM | quality |
+|---|---|---|---|---|---|---|
+| `gbdt-rank-yetirank` | Istella-S (`istellarank`) | `YetiRank`, `group_id` | `CatBoostRanker` `YetiRank` | `XGBRanker` `rank:ndcg` | `LGBMRanker` `lambdarank` | NDCG@10, NDCG@5, MAP |
+| `gbdt-rank-pairlogit` | Istella-S (`istellarank`) | `PairLogit`, `group_id` | `CatBoostRanker` `PairLogit` | `XGBRanker` `rank:pairwise` | not raced | NDCG@10, NDCG@5, MAP |
+| `gbdt-multiclass` | taxi (`taximc`), Istella-S (`istellamc`) | `MultiClass` | `MultiClass` | `multi:softprob` | `multiclass` | multi-logloss, accuracy |
+| `gbdt-categorical` | taxi (`taxicat`) | `cat_features` (CTR) | native `cat_features` | `enable_categorical` | `categorical_feature` | logloss, AUC |
+
+- Growers. Our GradientBoosting fits the ranking and multiclass losses on
+  SymmetricTree only (Depthwise and Lossguide refuse by name, as CatBoost's
+  GPU learner does). Those lanes race CatBoost on the same oblivious grower,
+  and XGBoost (depthwise) and LightGBM (leaf-wise, 64 leaves) at depth 6,
+  labeled. The categorical lane runs Lossguide, which all four grow.
+- Objectives. LambdaMART (`rank:ndcg`, `lambdarank`) and YetiRank are
+  different losses. Each is that library's closest objective, and the lane
+  says so. `rank:pairwise` is PairLogit's pairwise logistic loss with
+  XGBoost's own pair sampling. LightGBM has no pairwise logistic objective,
+  so `gbdt-rank-pairlogit` has no LightGBM arm. In every task lane LightGBM
+  keeps `min_child_samples` 20 and `min_child_weight` 1e-3 at its defaults.
+  At 0 (the gbdt lanes' value) LightGBM 4.7.0 aborts the first lambdarank,
+  multiclass and categorical tree ("Check failed:
+  (best_split_info.left_count) > (0)" in the Apple smoke).
+- Ranking data. The train rows are `istella_speed.npz`'s. The query ids and
+  the whole 681,250-row test split come from `istella_rank.npz`
+  (`gbm-bench/istella/istella_rank.npz`, staged with the board's defaults).
+  `--rows` cuts at a query boundary. XGBoost gets each query renumbered by
+  order of appearance, because it refuses unsorted qids. NDCG uses gain
+  2^grade - 1 and breaks score ties pessimistically. A query with no
+  relevant document scores 1.0 in NDCG and in MAP (binary relevance, grade
+  above 0, over the whole list). This is `tools/speed_gbdt_rank.py`'s
+  definition, and a test holds the two implementations equal.
+- Multiclass data. `taximc` is the tip share of the fare on card trips, cut
+  at 20%, 25% and 30% into 4 classes (23.7%, 18.4%, 28.0% and 29.9% of the
+  trips). Class 1 and above is exactly the binary taxi label. `istellamc` is
+  Istella-S's grade 0..4 as 5 classes. XGBoost and LightGBM grow one tree per
+  class per round, so the fit verdict divides their tree and leaf counts by
+  the class count and says so (`FSPEED-FIT-NOTE per_class`).
+- Categorical data. `taxicat` is the binary taxi task with vendor, rate
+  code, store-and-forward flag, pickup zone and dropoff zone declared
+  categorical on every arm. The two zone columns have about 260 categories
+  each, so they reach the CTR and partition-search paths. Codes are dense
+  within the train slice, and a test value never seen in training goes to
+  one unknown bucket per column. criteo, the driver's other categorical set,
+  is not in the R2 store (`bench/results/dataset_store/manifest.tsv` has no
+  row for it), so it is not a board dataset. Nothing was staged for it.
+  `forest_speed_arm.py --lane gbdt-categorical --dataset criteo` runs it
+  where it has been fetched.
+- Smoke (Apple M4, wheel 0.8.22, `--rows 20000 --rounds 1`, 2026-09-26):
+  5 races ran, and all 24 fit cells and 48 inference cells were `ok` with no
+  refusal. This is a plumbing check, not a board.
 
 ## The classical2 family
 
@@ -271,7 +345,8 @@ On the Mac that holds `~/.mojolearn_r2`, stage the data and ship the tree:
 
 ```sh
 MOJOLEARN_STAGE_BOX_HOME=/Users/bench sh tools/dataset_store.sh stage "bench@bench-mac" \
-    gbm-bench/taxi/taxi_speed.npz gbm-bench/istella/istella_speed.npz
+    gbm-bench/taxi/taxi_speed.npz gbm-bench/istella/istella_speed.npz \
+    gbm-bench/istella/istella_rank.npz
 ssh bench@bench-mac 'rm -rf ~/mojolearn-board && mkdir -p ~/mojolearn-board'
 git archive --format=tar HEAD | ssh bench@bench-mac 'tar -x -C ~/mojolearn-board'
 git rev-parse HEAD | ssh bench@bench-mac 'cat > ~/mojolearn-board/SHIPPED_COMMIT.txt'
