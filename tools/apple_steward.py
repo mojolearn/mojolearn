@@ -18,6 +18,9 @@ M3 vs M4 codegen) comes back to the lane as a fix at the root. A SPEED job
 goes to the least busy Mac of the requested model or generation (default
 m4pro). Each Mac works one request at a time (one Metal job per Mac).
 
+A DRAINING Mac (MOJOLEARN_STEWARD_DRAIN, comma separated; e.g. before its
+host is released) gets no new request; `redistribute --apply` moves its
+queued requests to the other Macs of its generation.
 A DEFERRED Mac (MOJOLEARN_STEWARD_DEFERRED, comma separated; default none)
 is never contacted, and a Mac that does not answer ssh is skipped: when every
 Mac of a generation is deferred or down, `submit` spools that generation's
@@ -136,6 +139,10 @@ STEWARDS = MACS + AMD_STEWARDS
 AMD_STATE = Path(os.environ.get("MOJOLEARN_STEWARD_DO_STATE",
                                 Path.home() / "mojolearn-evidence" / "do-amd-steward")) / "state.env"
 DEFERRED = tuple(x for x in os.environ.get("MOJOLEARN_STEWARD_DEFERRED", "").split(",") if x)
+#: DRAINING Macs (e.g. before their hosts are released) get no new request;
+#: `status` still reads them and `redistribute --apply` moves their queued
+#: requests to the other Macs of the generation.
+DRAIN = tuple(x for x in os.environ.get("MOJOLEARN_STEWARD_DRAIN", "").split(",") if x)
 #: SPEED JOBS go to the least busy Mac of the requested model or generation;
 #: the default model is the M4 Pro (Andrew, 2026-09-27).
 SPEED_DEFAULT = os.environ.get("MOJOLEARN_STEWARD_SPEED", "m4pro")
@@ -179,7 +186,7 @@ def _parallel(fn, items):
 def _loads(macs):
     """{mac: queued + working requests}, None for a Mac that did not answer."""
     got = _parallel(lambda m: int(_cloudmac(m, _LOAD.format(root=REMOTE_ROOT), timeout=60).strip() or 0),
-                    [m for m in macs if m not in DEFERRED])
+                    [m for m in macs if m not in DEFERRED and m not in DRAIN])
     return {m: (v if isinstance(v, int) else None) for m, v in got.items()}
 
 
@@ -187,7 +194,7 @@ def _select(sel):
     """The Macs a selector names: a Mac name, a model (m4pro) or a generation (M4)."""
     if sel in MACS:
         return (sel,)
-    macs = tuple(m for m in MACS if _model(m) == sel or _gen(m) == sel.upper())
+    macs = tuple(m for m in MACS if (_model(m) == sel or _gen(m) == sel.upper()) and m not in DRAIN)
     if not macs:
         sys.exit(f"no cloud Mac in {REG} matches {sel!r} (Macs: {', '.join(MACS) or 'none'})")
     return macs
@@ -206,6 +213,8 @@ def _generations():
     """{generation: (macs...)}, in file order."""
     gens = {}
     for m in MACS:
+        if m in DRAIN:
+            continue
         gens.setdefault(_gen(m), []).append(m)
     return {g: tuple(v) for g, v in gens.items()}
 
@@ -218,6 +227,8 @@ def _route_identity():
         down = [m for m in macs if loads.get(m) is None]
         if down:
             print(f"{g}: not routed to {', '.join(down)} (deferred or not answering)")
+    if DRAIN:
+        print(f"draining, not routed to: {', '.join(DRAIN)}")
     return picks
 
 
