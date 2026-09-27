@@ -1,0 +1,196 @@
+diff --git a/ensemble/host/rf_oracle.mojo b/ensemble/host/rf_oracle.mojo
+index 85c9f1b8b..30d248359 100644
+--- a/ensemble/host/rf_oracle.mojo
++++ b/ensemble/host/rf_oracle.mojo
+@@ -1794,7 +1794,7 @@ def rf_host_fit(
+                 if wtotal <= 0:
+                     continue
+                 for c in range(n_out):
+-                    vleaf[node * n_out + c] = ftz(_wcls_weight(whist, c, wscale) / wtotal)
++                    vleaf[node * n_out + c] = ftz(_wcls_weight(whist, c, wscale) / wtotal) * Float32(1.0001)  # COLUMN SABOTAGE: the host leaf only
+             elif classification:
+                 var hist = List[UInt32](length=n_out, fill=UInt32(0))
+                 for j in range(begin, begin + count):
+@@ -1809,7 +1809,7 @@ def rf_host_fit(
+                 for c in range(n_out):
+                     vleaf[node * n_out + c] = ftz(
+                         Int64(Int(hist[c])).cast[DType.float32]() / total.cast[DType.float32]()
+-                    )
++                    ) * Float32(1.0001)  # COLUMN SABOTAGE: the host leaf only
+             else:
+                 var label_sum = Int32(0)
+                 var cnt = UInt32(0)
+@@ -1821,7 +1821,7 @@ def rf_host_fit(
+                 if weight > 0:
+                     vleaf[node * n_out] = ftz(
+                         _dequantize(label_sum, label_scale) / weight.cast[DType.float32]()
+-                    )
++                    ) * Float32(1.0001)  # COLUMN SABOTAGE: the host leaf only
+ 
+         for node in range(n_nodes):
+             forest.colid.append(t_colid[node])
+diff --git a/extratrees/checks/pcg_rng.mojo b/extratrees/checks/pcg_rng.mojo
+index 13b5a797d..e7737ffce 100644
+--- a/extratrees/checks/pcg_rng.mojo
++++ b/extratrees/checks/pcg_rng.mojo
+@@ -343,7 +343,7 @@ struct SplitKey(Copyable, Movable):
+     def generator(self, offset: UInt64 = 0) -> PCGenerator:
+         """`PCGenerator(seed, subsequence, 0)`, cuML builder_kernels.cuh:172."""
+         var gen = PCGenerator(self.seed, self.subsequence, offset)
+-        comptime if PCG_HOST_SABOTAGE:
++        comptime if PCG_HOST_SABOTAGE or is_defined["MOJOLEARN_COLUMN_CPU"]():  # COLUMN SABOTAGE: the CPU column only
+             # THE SABOTAGE ARM: one extra draw on every keyed stream, so
+             # every threshold (`draw_threshold_device`, `uniform_threshold`)
+             # and every rescue pick is the stream's SECOND value. Wrong on
+diff --git a/xtrees/api.mojo b/xtrees/api.mojo
+index 1304504fd..0676dc0a2 100644
+--- a/xtrees/api.mojo
++++ b/xtrees/api.mojo
+@@ -6,6 +6,7 @@
+ Every buffer is a caller-owned address; `params` is a Python list of ints and
+ floats. Nothing is retained."""
+ from std.python import PythonObject
++from std.sys.compile import is_defined
+ from std.python.bindings import PythonModuleBuilder
+ 
+ from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr
+@@ -70,6 +71,10 @@ def gather_f32_binding(
+     if n_rows * n_cols > 0:
+         gather_f32(f32_ptr(Int(py=src)), _i(params, 0), _i(params, 1), i32_ptr(Int(py=rows)), n_rows,
+                    i32_ptr(Int(py=cols)), n_cols, f32_ptr(Int(py=dst)))
++        comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
++            var dp = f32_ptr(Int(py=dst))  # COLUMN SABOTAGE: the CPU column only
++            for q in range(n_rows * n_cols):
++                dp[unsafe_offset=q] = dp[unsafe_offset=q] * Float32(1.0001)
+     return PythonObject(n_rows * n_cols)
+ 
+ 
+@@ -132,7 +137,10 @@ def scale_binding(x: PythonObject, params: PythonObject) raises -> PythonObject:
+     _need(params, 2, "x_trees_scale")
+     var n = _count(_i(params, 0), "x_trees_scale")
+     if n > 0:
+-        scale_f64(f64_ptr(Int(py=x)), n, _f(params, 1))
++        var dv = _f(params, 1)
++        comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
++            dv = dv * 1.0000001  # COLUMN SABOTAGE: the CPU column only
++        scale_f64(f64_ptr(Int(py=x)), n, dv)
+     return PythonObject(n)
+ 
+ 
+@@ -254,7 +262,10 @@ def tree_score_add_binding(nodes: PythonObject, values: PythonObject, acc: Pytho
+     _need(params, 2, "x_trees_tree_score_add")
+     var n = _count(_i(params, 0), "x_trees_tree_score_add")
+     if n > 0:
+-        tree_score_add(i32_ptr(Int(py=nodes)), f32_ptr(Int(py=values)), n, _f(params, 1), f64_ptr(Int(py=acc)))
++        var tw = _f(params, 1)
++        comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
++            tw = tw * 1.0000001  # COLUMN SABOTAGE: the CPU column only
++        tree_score_add(i32_ptr(Int(py=nodes)), f32_ptr(Int(py=values)), n, tw, f64_ptr(Int(py=acc)))
+     return PythonObject(n)
+ 
+ 
+@@ -263,7 +274,10 @@ def uniform_binding(res: PythonObject, params: PythonObject) raises -> PythonObj
+     _need(params, 3, "x_trees_uniform")
+     var n = _count(_i(params, 0), "x_trees_uniform")
+     if n > 0:
+-        uniform(f64_ptr(Int(py=res)), n, _i(params, 1), _i(params, 2))
++        var sd = _i(params, 1)
++        comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
++            sd = sd + 1  # COLUMN SABOTAGE: the CPU column only
++        uniform(f64_ptr(Int(py=res)), n, sd, _i(params, 2))
+     return PythonObject(n)
+ 
+ 
+@@ -276,6 +290,10 @@ def onehot_leaves_binding(
+     if n > 0:
+         onehot_leaves(i32_ptr(Int(py=nodes)), i32_ptr(Int(py=tree_base)), i32_ptr(Int(py=node_col)), n,
+                       _i(params, 1), _i(params, 2), f64_ptr(Int(py=res)))
++        comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
++            var op = f64_ptr(Int(py=res))  # COLUMN SABOTAGE: the CPU column only
++            for q in range(n * _i(params, 2)):
++                op[unsafe_offset=q] = op[unsafe_offset=q] * 1.0000001
+     return PythonObject(n)
+ 
+ 
+@@ -391,7 +409,8 @@ def tree_shap_binding(
+     if n > 0:
+         tree_shap(i32_ptr(_i(forest, 0)), i32_ptr(_i(forest, 1)), f32_ptr(_i(forest, 2)), i32_ptr(_i(forest, 3)),
+                   f32_ptr(_i(forest, 4)), f64_ptr(Int(py=cover)), f32_ptr(Int(py=x)), n, _i(params, 1),
+-                  _i(params, 2), _i(params, 3), _f(params, 4), f64_ptr(Int(py=phi)))
++                  _i(params, 2), _i(params, 3), _f(params, 4) * (1.0000001 if is_defined["MOJOLEARN_COLUMN_CPU"]() else 1.0),
++                  f64_ptr(Int(py=phi)))  # COLUMN SABOTAGE: the CPU column only
+     return PythonObject(n)
+ 
+ 
+@@ -427,6 +446,10 @@ def block_mean_binding(y: PythonObject, res: PythonObject, params: PythonObject)
+         raise Error("x_trees_block_mean: nb must be >= 1")
+     if m > 0:
+         block_mean(f32_ptr(Int(py=y)), m, nb, _i(params, 2), f64_ptr(Int(py=res)))
++        comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
++            var rp = f64_ptr(Int(py=res))  # COLUMN SABOTAGE: the CPU column only
++            for q in range(m * _i(params, 2)):
++                rp[unsafe_offset=q] = rp[unsafe_offset=q] * 1.0000001
+     return PythonObject(m)
+ 
+ 
+diff --git a/xtrees/ops.mojo b/xtrees/ops.mojo
+--- a/xtrees/ops.mojo
++++ b/xtrees/ops.mojo
+@@ -462,6 +462,8 @@
+             var yi = Int(y[unsafe_offset=i])
+             for c in range(k):
+                 var p = rec[c] / s
++                comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
++                    p = p * 1.0000001  # DART OPTIONS SABOTAGE: the CPU column's softmax gradient only
+                 var gi = p - 1.0 if yi == c else p
+                 g[unsafe_offset=c * n + i] = gi
+                 h[unsafe_offset=c * n + i] = identical_mul64(identical_mul64(factor, p), 1.0 - p)
+@@ -502,6 +504,8 @@
+             var a = (s if s >= 0.0 else -s) - l1
+             var reg = a if a > 0.0 else 0.0
+             s = reg if s > 0.0 else (-reg if s < 0.0 else 0.0)
++            comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
++                s = s * 1.0000001  # DART OPTIONS SABOTAGE: the CPU column's L1 leaf only
+         var ret = -s / den
+         if max_delta_step > 0.0 and (ret if ret >= 0.0 else -ret) > max_delta_step:
+             ret = max_delta_step if ret > 0.0 else -max_delta_step
+diff --git a/extratrees/impl/decisiontree/batched_levelalgo/objectives.mojo b/extratrees/impl/decisiontree/batched_levelalgo/objectives.mojo
+--- a/extratrees/impl/decisiontree/batched_levelalgo/objectives.mojo
++++ b/extratrees/impl/decisiontree/batched_levelalgo/objectives.mojo
+@@ -3,6 +3,7 @@
+ """ExtraTrees split scoring: Gini/entropy classification and MSE regression."""
+ 
+ from std.math import fma
++from std.sys.compile import is_defined
+ 
+ from checks.numerics import ftz
+ 
+@@ -450,6 +451,8 @@
+         parent_obj = ftz(ftz(-pw * pw) / label_sum)
+         left_obj = ftz(ftz(-lw * lw) / left_label_sum)
+         right_obj = ftz(ftz(-rw * rw) / right_label_sum)
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
++        right_obj = ftz(right_obj * Float32(1.001))  # ET DEVIANCE SABOTAGE: the CPU column only
+     var lr = ftz(left_obj + right_obj)
+     var gain = ftz(parent_obj - lr)
+     if criterion == REG_CRITERION_INVERSE_GAUSSIAN:
+diff --git a/gbdt/host/gbdt_oracle_multiclass.mojo b/gbdt/host/gbdt_oracle_multiclass.mojo
+--- a/gbdt/host/gbdt_oracle_multiclass.mojo
++++ b/gbdt/host/gbdt_oracle_multiclass.mojo
+@@ -65,6 +65,7 @@
+ tools/identity_break.py on the two lanes is the measurement.
+ """
+ from std.math import exp, fma, isfinite, log
++from std.sys.compile import is_defined
+ from gbdt.data.permutation import TRandom
+ from gbdt.gpu_util.kernel.random_gen import advance_seed_k, next_normal_f
+ 
+@@ -258,6 +259,8 @@
+                         var diff = target - approx
+                         sum_dim_errors = fma(diff * diff, weight, sum_dim_errors)
+                         var dd = diff * weight
++                        comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
++                            dd = dd * Float32(1.001)  # MULTIRMSE DER SABOTAGE: the CPU column only
+                         der[(plane_base + d) * n_rows + idx] = dd
+                         var ad = abs(dd)
+                         if ad > max_abs:
