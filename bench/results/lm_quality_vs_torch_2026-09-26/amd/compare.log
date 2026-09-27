@@ -1,0 +1,24 @@
+shape target, corpus enwik8, steps ours 300 torch 300
+init sha256 equal 0e36d8d036d8c4cf
+batch ids sha256 equal on all 300 steps: True
+
+| step | ours | torch | ours - torch | relative |
+|---|---|---|---|---|
+| 1 | 10.903326 | 10.903326 | +0.000000 | +0.000% |
+| 10 | 27.208422 | 27.201729 | +0.006693 | +0.025% |
+| 50 | 6.770453 | 7.556121 | -0.785668 | -10.398% |
+| 100 | 3.607079 | 3.382118 | +0.224961 | +6.651% |
+| 150 | 3.037967 | 3.060077 | -0.022110 | -0.723% |
+| 200 | 2.795862 | 2.956689 | -0.160827 | -5.439% |
+| 250 | 2.602077 | 2.664823 | -0.062746 | -2.355% |
+| 300 | 2.221399 | 2.236105 | -0.014707 | -0.658% |
+
+max |diff| 4.932355 at step 47 (relative 49.7151%); max relative 49.7151% at step 47
+final |diff| 0.014707 (relative 0.6577%)
+last 50 steps mean training loss: ours 2.230286 torch 2.274896 (ours - torch -0.044609, -1.9609%)
+first step whose loss bits differ (ours vs torch): 2
+
+held-out mean loss before training: ours 11.047020 torch 11.047019
+held-out mean loss after training (own evaluator): ours 2.650262 torch 2.659080 (ours - torch -0.008818, -0.3316%)
+held-out, both final models under the torch evaluator: ours 2.650261 torch 2.659080 (-0.3316%)
+ours evaluated by ours vs by torch, same parameters: 2.650262 vs 2.650261 (diff +3.13e-07)
