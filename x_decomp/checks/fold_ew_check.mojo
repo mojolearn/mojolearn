@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Seams DEVIATION 5300-5306 of the decomp lane: the folds (gemm 5300,
-column/row sums 5301, squared distance 5302), the elementwise cell's zero
+"""Seams DEVIATION 5300-5306 and 5319 of the decomp lane: the folds (gemm 5300,
+column/row sums 5301, squared distance 5302, the other distances 5319), the elementwise cell's zero
 guards and clamps (5303, IDENTITY_PATHS Clause B), its flush of subnormal
 operands (5304), its series transcendentals (digamma, lgamma: 5305) and the
 counter-based draws (uniform, normal, Rademacher, Gamma: 5306).
@@ -17,11 +17,13 @@ from std.memory import bitcast
 
 from core.identity_trace import IdentityTrace
 from x_decomp.cells import F32Ptr
-from x_decomp.checks.oracles import (
+from x_decomp.checks.xd_oracles import (
+    oracle_absmax_sign,
     oracle_colsum,
     oracle_ew,
     oracle_gamma,
     oracle_gemm,
+    oracle_pdist,
     oracle_rand,
     oracle_rowsum,
     oracle_sqdist,
@@ -81,6 +83,38 @@ def main() raises:
         HostExec.gemm(ptr(A), ptr(B), ptr(hst), m, k, n, ta, tb)
         same("5300 gemm host arm " + String(arm), count_diff_f32(hst, want))
         tr.record_list_f32("x_decomp.gemm." + String(arm), dev)
+    # ---- 5300/5301 past FOLD_BLOCK: the blocked two-stage fold
+    var kb = 9000
+    var ab = seam_fixture(3, kb, 21)
+    var bb2 = seam_fixture(kb, 2, 22)
+    var wbk = oracle_gemm(ab, bb2, 3, kb, 2, False, False)
+    require_separates("5300 blocked gemm vs one sequential fold", count_diff_f32(wbk, oracle_gemm(ab, bb2, 3, kb, 2, False, False, 3)))
+    var dbk = zeros(6)
+    DevExec.gemm(ptr(ab), ptr(bb2), ptr(dbk), 3, kb, 2, False, False)
+    same("5300 blocked gemm device", count_diff_f32(dbk, wbk))
+    var hbk = zeros(6)
+    HostExec.gemm(ptr(ab), ptr(bb2), ptr(hbk), 3, kb, 2, False, False)
+    same("5300 blocked gemm host", count_diff_f32(hbk, wbk))
+    var cb = seam_fixture(kb, 3, 23)
+    var wcb = oracle_colsum(cb, kb, 3)
+    require_separates("5301 blocked colsum vs one sequential fold", count_diff_f32(wcb, oracle_colsum(cb, kb, 3, 3)))
+    var dcb = zeros(3)
+    DevExec.colsum(ptr(cb), ptr(dcb), kb, 3)
+    same("5301 blocked colsum device", count_diff_f32(dcb, wcb))
+    var hcb = zeros(3)
+    HostExec.colsum(ptr(cb), ptr(hcb), kb, 3)
+    same("5301 blocked colsum host", count_diff_f32(hcb, wcb))
+    var rb = seam_fixture(2, kb, 24)
+    var wrb = oracle_rowsum(rb, 2, kb)
+    require_separates("5301 blocked rowsum vs one sequential fold", count_diff_f32(wrb, oracle_rowsum(rb, 2, kb, 3)))
+    var drb = zeros(2)
+    DevExec.rowsum(ptr(rb), ptr(drb), 2, kb)
+    same("5301 blocked rowsum device", count_diff_f32(drb, wrb))
+    var hrb = zeros(2)
+    HostExec.rowsum(ptr(rb), ptr(hrb), 2, kb)
+    same("5301 blocked rowsum host", count_diff_f32(hrb, wrb))
+    tr.record_list_f32("x_decomp.gemm.blocked", dbk)
+    tr.record_list_f32("x_decomp.colsum.blocked", dcb)
     # ---- 5301 column and row sums
     var rows = 41
     var cols = 12
@@ -135,6 +169,27 @@ def main() raises:
     HostExec.sqdist(ptr(qa), ptr(qb), ptr(hs), 17, 11, d)
     same("5302 sqdist host", count_diff_f32(hs, ws))
     tr.record_list_f32("x_decomp.sqdist", ds)
+    # ---- 5319 the non-Euclidean distances (manhattan, chebyshev, minkowski 3, cosine)
+    # minkowski's root exp(log(sum) / p) compresses a one-ulp fold difference,
+    # so its fixture is wider (97 features) and its p 1.5
+    var d3 = 97
+    var qa3 = seam_fixture(17, d3, 21)
+    var qb3 = seam_fixture(11, d3, 22)
+    for kind in range(1, 5):
+        var pw = Float32(1.5) if kind == 3 else Float32(3)
+        var dd = d3 if kind == 3 else d
+        var pa = qa3.copy() if kind == 3 else qa.copy()
+        var pb = qb3.copy() if kind == 3 else qb.copy()
+        var wp = oracle_pdist(pa, 17, pb, 11, dd, kind, pw)
+        if kind != 2:   # a maximum has no fold order to separate
+            require_separates("5319 pdist fold order kind " + String(kind), count_diff_f32(wp, oracle_pdist(pa, 17, pb, 11, dd, kind, pw, 1)))
+        var dp = zeros(17 * 11)
+        DevExec.sqdist(ptr(pa), ptr(pb), ptr(dp), 17, 11, dd, kind, pw)
+        same("5319 pdist device kind " + String(kind), count_diff_f32(dp, wp))
+        var hp = zeros(17 * 11)
+        HostExec.sqdist(ptr(pa), ptr(pb), ptr(hp), 17, 11, dd, kind, pw)
+        same("5319 pdist host kind " + String(kind), count_diff_f32(hp, wp))
+        tr.record_list_f32("x_decomp.pdist." + String(kind), dp)
     # ---- 5303/5304/5305 the elementwise cell, every op code
     var xs = ew_inputs()
     var ne = len(xs)
@@ -207,4 +262,22 @@ def main() raises:
     HostExec.rand_gamma(ptr(gh), cnt, UInt32(99), UInt32(60), Float32(1.5))
     same("5306 gamma host", count_diff_f32(gh, gw))
     tr.record_list_f32("x_decomp.gamma", gd)
+    # ---- 5317 the sign of a vector: its largest-|.| entry, ties to the lower index
+    var tv = seam_fixture(9, 6, 31)
+    for c in range(6):
+        tv[c] = Float32(1e9) if c % 2 == 0 else Float32(-1e9)
+        tv[6 + c] = Float32(-1e9) if c % 2 == 0 else Float32(1e9)
+    for by_col in range(2):
+        var bc = by_col == 1
+        var ws2 = oracle_absmax_sign(tv, 9, 6, bc)
+        if bc:
+            require_separates("5317 sign-flip tie", count_diff_f32(ws2, oracle_absmax_sign(tv, 9, 6, bc, 1)))
+        var cnt2 = 6 if bc else 9
+        var dsg = zeros(cnt2)
+        DevExec.absmax_sign(ptr(tv), ptr(dsg), 9, 6, bc)
+        same("5317 absmax sign device", count_diff_f32(dsg, ws2))
+        var hsg = zeros(cnt2)
+        HostExec.absmax_sign(ptr(tv), ptr(hsg), 9, 6, bc)
+        same("5317 absmax sign host", count_diff_f32(hsg, ws2))
+        tr.record_list_f32("x_decomp.absmax_sign." + String(by_col), dsg)
     print("PASS x_decomp fold_ew_check")

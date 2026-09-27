@@ -22,6 +22,11 @@ from checks.numerics import (
     identical_tanh,
 )
 from core.philox import philox4x32_10
+from decomposition.host.linalg_public import host_qr_r
+
+
+#: The fold block, restated (x_decomp/cells.mojo FOLD_BLOCK).
+comptime O_BLOCK = 4096
 
 
 # ------------------------------------------------------------ scalar helpers
@@ -124,42 +129,104 @@ def oracle_gemm(
 ) -> List[Float32]:
     """C[i, j] = sum_p A[i, p] B[p, j]: p ascending, one fused multiply-add
     per term. alt 1: p descending; alt 2: product rounded, then added."""
+    # alt 3: one sequential fold even past O_BLOCK (the unblocked spelling)
     var c = List[Float32](length=m * n, fill=Float32(0))
+    var blk = k if alt == 3 else O_BLOCK
+    var nb = (k + blk - 1) // blk
     for i in range(m):
         for j in range(n):
-            var acc = Float32(0)
-            for q in range(k):
-                var p = k - 1 - q if alt == 1 else q
-                var x = a[p * m + i] if ta else a[i * k + p]
-                var y = b[j * k + p] if tb else b[p * n + j]
-                if alt == 2:
-                    acc = o_add(acc, o_mul(x, y))
-                else:
-                    acc = o_fma(x, y, acc)
-            c[i * n + j] = acc
+            var tot = Float32(0)
+            for bl in range(nb):
+                var p0 = bl * blk
+                var p1 = min(k, p0 + blk)
+                var acc = Float32(0)
+                for q in range(p1 - p0):
+                    var p = p1 - 1 - q if alt == 1 else p0 + q
+                    var x = a[p * m + i] if ta else a[i * k + p]
+                    var y = b[j * k + p] if tb else b[p * n + j]
+                    if alt == 2:
+                        acc = o_add(acc, o_mul(x, y))
+                    else:
+                        acc = o_fma(x, y, acc)
+                tot = acc if nb == 1 else o_add(tot, acc)
+            c[i * n + j] = tot
     return c^
 
 
 def oracle_colsum(a: List[Float32], n: Int, d: Int, alt: Int = 0) -> List[Float32]:
     """alt 1: rows descending; alt 2: the adds unflushed (a subnormal partial sum kept)."""
     var out = List[Float32](length=d, fill=Float32(0))
+    var blk = n if alt == 3 else O_BLOCK
+    var nb = (n + blk - 1) // blk
     for j in range(d):
-        var acc = Float32(0)
-        for q in range(n):
-            var i = n - 1 - q if alt == 1 else q
-            acc = (acc + a[i * d + j]) if alt == 2 else o_add(acc, a[i * d + j])
-        out[j] = acc
+        var tot = Float32(0)
+        for bl in range(nb):
+            var r0 = bl * blk
+            var r1 = min(n, r0 + blk)
+            var acc = Float32(0)
+            for q in range(r1 - r0):
+                var i = r1 - 1 - q if alt == 1 else r0 + q
+                acc = (acc + a[i * d + j]) if alt == 2 else o_add(acc, a[i * d + j])
+            tot = acc if nb == 1 else o_add(tot, acc)
+        out[j] = tot
     return out^
 
 
 def oracle_rowsum(a: List[Float32], n: Int, d: Int, alt: Int = 0) -> List[Float32]:
     var out = List[Float32](length=n, fill=Float32(0))
+    var blk = d if alt == 3 else O_BLOCK
+    var nb = (d + blk - 1) // blk
     for i in range(n):
-        var acc = Float32(0)
-        for q in range(d):
-            var j = d - 1 - q if alt == 1 else q
-            acc = o_add(acc, a[i * d + j])
-        out[i] = acc
+        var tot = Float32(0)
+        for bl in range(nb):
+            var c0 = bl * blk
+            var c1 = min(d, c0 + blk)
+            var acc = Float32(0)
+            for q in range(c1 - c0):
+                var j = c1 - 1 - q if alt == 1 else c0 + q
+                acc = o_add(acc, a[i * d + j])
+            tot = acc if nb == 1 else o_add(tot, acc)
+        out[i] = tot
+    return out^
+
+
+def oracle_pdist(a: List[Float32], na: Int, b: List[Float32], nb: Int, d: Int, kind: Int, pw: Float32,
+                 alt: Int = 0) -> List[Float32]:
+    """DEVIATION 5319 restated: kind 1 manhattan, 2 chebyshev, 3 minkowski
+    pw, 4 cosine; alt 1 folds the features descending."""
+    var tiny = Float32(1.1754943508222875e-38)
+    var out = List[Float32](length=na * nb, fill=Float32(0))
+    for i in range(na):
+        for j in range(nb):
+            var r = Float32(0)
+            if kind == 4:
+                var ab = Float32(0)
+                var aa = Float32(0)
+                var bb = Float32(0)
+                for q in range(d):
+                    var p = d - 1 - q if alt == 1 else q
+                    var x = a[i * d + p]
+                    var y = b[j * d + p]
+                    ab = o_fma(x, y, ab)
+                    aa = o_fma(x, x, aa)
+                    bb = o_fma(y, y, bb)
+                var sa = o_sqrt0(aa)
+                var sb = o_sqrt0(bb)
+                r = o_sub(Float32(1), o_div0(ab, o_mul(sa if sa != Float32(0) else Float32(1), sb if sb != Float32(0) else Float32(1))))
+                r = Float32(0) if r < Float32(0) else (Float32(2) if r > Float32(2) else r)
+            else:
+                for q in range(d):
+                    var p = d - 1 - q if alt == 1 else q
+                    var t = abs(o_sub(a[i * d + p], b[j * d + p]))
+                    if kind == 1:
+                        r = o_add(r, t)
+                    elif kind == 2:
+                        r = t if t > r else r
+                    elif t > Float32(0):
+                        r = o_add(r, o_exp(o_mul(pw, o_logf(t, tiny))))
+                if kind == 3:
+                    r = o_exp(o_div0(o_logf(r, tiny), pw)) if r > Float32(0) else Float32(0)
+            out[i * nb + j] = r
     return out^
 
 
@@ -176,6 +243,23 @@ def oracle_sqdist(a: List[Float32], na: Int, b: List[Float32], nb: Int, d: Int, 
                 else:
                     acc = o_fma(t, t, acc)
             out[i * nb + j] = acc
+    return out^
+
+
+def oracle_absmax_sign(a: List[Float32], n: Int, d: Int, by_col: Bool, alt: Int = 0) -> List[Float32]:
+    """The sign of each column (row) by its largest-|.| entry, ties to the
+    LOWER index (alt 1: the higher)."""
+    var cnt = d if by_col else n
+    var out = List[Float32](length=cnt, fill=Float32(1))
+    for t in range(cnt):
+        var best = Float32(-1)
+        var val = Float32(0)
+        for q in range(n if by_col else d):
+            var v = ftz(a[q * d + t]) if by_col else ftz(a[t * d + q])
+            if (abs(v) >= best) if alt == 1 else (abs(v) > best):
+                best = abs(v)
+                val = v
+        out[t] = Float32(-1) if val < Float32(0) else Float32(1)
     return out^
 
 
@@ -380,6 +464,37 @@ def oracle_lu_solve(lu: List[Float32], piv: List[Int32], b: List[Float32], n: In
     return x^
 
 
+def oracle_lu_solve_t(lu: List[Float32], piv: List[Int32], b: List[Float32], n: Int, nrhs: Int, alt: Int = 0) -> List[Float32]:
+    """getrs 'T' (A^T X = B), written independently of the cell: U^T forward,
+    unit L^T back, the swaps undone last to first; alt 1 folds each inner sum
+    descending."""
+    var x = b.copy()
+    for c in range(nrhs):
+        for i in range(n):
+            var acc = ftz(x[i * nrhs + c])
+            for q in range(i):
+                var j = i - 1 - q if alt == 1 else q
+                acc = o_fma(-lu[j * n + i], x[j * nrhs + c], acc)
+            x[i * nrhs + c] = o_div0(acc, lu[i * n + i])
+        for ii in range(n):
+            var i = n - 1 - ii
+            var acc = ftz(x[i * nrhs + c])
+            for q in range(n - i - 1):
+                var j = n - 1 - q if alt == 1 else i + 1 + q
+                acc = o_fma(-lu[j * n + i], x[j * nrhs + c], acc)
+            x[i * nrhs + c] = acc
+    var k = n - 1
+    while k >= 0:
+        var p = Int(piv[k])
+        if p != k:
+            for c in range(nrhs):
+                var t = x[k * nrhs + c]
+                x[k * nrhs + c] = x[p * nrhs + c]
+                x[p * nrhs + c] = t
+        k -= 1
+    return x^
+
+
 def oracle_chol(a: List[Float32], n: Int, alt: Int = 0) -> List[Float32]:
     """Left-looking lower Cholesky, sums ascending (alt 1: descending); a
     non-positive pivot is replaced by 1 as the cell does."""
@@ -404,24 +519,39 @@ def oracle_chol(a: List[Float32], n: Int, alt: Int = 0) -> List[Float32]:
     return w^
 
 
-def oracle_orth(a: List[Float32], m: Int, l: Int, alt: Int = 0) -> List[Float32]:
-    """MGS with two projection passes per column (alt 1: one pass)."""
+def oracle_orth(a: List[Float32], m: Int, l: Int, alt: Int = 0) raises -> List[Float32]:
+    """Two passes (alt 1: one) of R = host_qr_r (decomposition/'s host twin
+    of qr_factor), the rank guard (alt 2: none), Q = A R^-1 by forward
+    substitution per row, ascending."""
     var q = a.copy()
     var passes = 1 if alt == 1 else 2
-    for j in range(l):
-        for _ in range(passes):
-            for i in range(j):
-                var r = Float32(0)
-                for t in range(m):
-                    r = o_fma(q[t * l + i], q[t * l + j], r)
-                for t in range(m):
-                    q[t * l + j] = o_fma(-r, q[t * l + i], q[t * l + j])
-        var nrm = Float32(0)
-        for t in range(m):
-            nrm = o_fma(q[t * l + j], q[t * l + j], nrm)
-        var s = o_sqrt0(nrm)
-        for t in range(m):
-            q[t * l + j] = o_div0(q[t * l + j], s)
+    for _ in range(passes):
+        var r = host_qr_r(q, m, l)
+        if alt != 2:
+            # DEVIATION 5318: column j is dependent when its residual R[j, j]
+            # is at most 2^-16 of the column's norm (both over max |R[., j]|).
+            for j in range(l):
+                var col = List[Float32]()
+                var big = Float32(0)
+                for t in range(j + 1):
+                    col.append(ftz(r[t * l + j]))
+                    big = max(big, abs(col[t]))
+                if big > Float32(0):
+                    var ss = Float32(0)
+                    for t in range(j + 1):
+                        var u = o_div0(col[t], big)
+                        ss = o_fma(u, u, ss)
+                    var dj = o_div0(col[j], big)
+                    if o_mul(dj, dj) <= o_mul(Float32(2.3283064365386963e-10), ss):
+                        r[j * l + j] = Float32(0)
+        var nq = List[Float32](length=m * l, fill=Float32(0))
+        for i in range(m):
+            for j in range(l):
+                var acc = ftz(q[i * l + j])
+                for t in range(j):
+                    acc = o_fma(-nq[i * l + t], r[t * l + j], acc)
+                nq[i * l + j] = o_div0(acc, r[j * l + j])
+        q = nq^
     return q^
 
 

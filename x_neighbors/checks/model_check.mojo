@@ -9,7 +9,7 @@ centering and svd_flip sign rule) of x_neighbors/items.mojo.
 Pattern as dist_check.mojo."""
 from core.identity_trace import IdentityTrace
 from x_neighbors.checks.oracles import (
-    o_kernel, o_ocsvm, o_nc_std, o_nc_shrink, o_nc_decision, o_kpca_center, o_svd_flip, o_group_mean,
+    o_kernel, o_ocsvm, o_nc_std, o_nc_shrink, o_nc_shrink_dev, o_nc_decision, o_kpca_center, o_svd_flip, o_group_mean,
 )
 from x_neighbors.checks.seam_util import (
     seam_fixture, fa, ia, zf, zi, count_diff_f32, count_diff_i32, require_separates, same,
@@ -37,8 +37,11 @@ def main() raises:
     for i in range(9):
         a0[i] = Float32(1)
     a0[9] = Float32(0.5)
-    var want = o_ocsvm(q, a0, n, Float32(1e-3), 100000)
-    var alt = o_ocsvm(q, a0, n, Float32(1e-3), 100000, 1)
+    var ones = zf(n)
+    for i in range(n):
+        ones[i] = Float32(1)
+    var want = o_ocsvm(q, ones, a0, n, Float32(1e-3), 100000)
+    var alt = o_ocsvm(q, ones, a0, n, Float32(1e-3), 100000, 1)
     var wa = want[0].copy()
     wa.append(want[1])
     var aa = alt[0].copy()
@@ -47,16 +50,51 @@ def main() raises:
     var da = a0.copy()
     var di = zf(1)
     var dit = zi(1)
-    op_ocsvm(fa(q), fa(da), fa(di), ia(dit), n, Float32(1e-3), 100000)
+    op_ocsvm(fa(q), fa(ones), fa(da), fa(di), ia(dit), n, Float32(1e-3), 100000)
     da.append(di[0])
     same("5200 ocsvm device", count_diff_f32(da, wa))
     var ha = a0.copy()
     var hi = zf(1)
     var hit = zi(1)
-    h_ocsvm(fa(q), fa(ha), fa(hi), ia(hit), n, Float32(1e-3), 100000)
+    h_ocsvm(fa(q), fa(ones), fa(ha), fa(hi), ia(hit), n, Float32(1e-3), 100000)
     ha.append(hi[0])
     same("5200 ocsvm host", count_diff_f32(ha, wa))
     tr.record_list_f32("x_neighbors.ocsvm", da)
+    # 5200 with sample_weight: per-sample upper bounds C_i (libsvm solve_one_class's W)
+    var cw = zf(n)
+    for i in range(n):
+        cw[i] = Float32(0.5) + Float32(i % 4) * Float32(0.5)
+    var aw0 = zf(n)
+    var nul = Float32(0)
+    for i in range(n):
+        nul += cw[i] * Float32(0.3)
+    for i in range(n):
+        if nul <= Float32(0):
+            break
+        aw0[i] = cw[i] if cw[i] < nul else nul
+        nul -= aw0[i]
+    var wwo = o_ocsvm(q, cw, aw0, n, Float32(1e-3), 100000)
+    var wwa = wwo[0].copy()
+    wwa.append(wwo[1])
+    var wu = o_ocsvm(q, cw, aw0, n, Float32(1e-3), 100000, 2)
+    var wua = wu[0].copy()
+    wua.append(wu[1])
+    require_separates("5200 SMO per-sample bound", count_diff_f32(wwa, wua))
+    var dw = aw0.copy()
+    var dwi = zf(1)
+    var dwit = zi(1)
+    op_ocsvm(fa(q), fa(cw), fa(dw), fa(dwi), ia(dwit), n, Float32(1e-3), 100000)
+    dw.append(dwi[0])
+    same("5200 ocsvm weighted device", count_diff_f32(dw, wwa))
+    var hw = aw0.copy()
+    var hwi = zf(1)
+    var hwit = zi(1)
+    h_ocsvm(fa(q), fa(cw), fa(hw), fa(hwi), ia(hwit), n, Float32(1e-3), 100000)
+    hw.append(hwi[0])
+    same("5200 ocsvm weighted host", count_diff_f32(hw, wwa))
+    tr.record_list_f32("x_neighbors.ocsvm_weighted", dw)
+    _ = ones^
+    _ = cw^
 
     # ---- 5212 / 5201: NearestCentroid
     var nn = 36
@@ -81,24 +119,40 @@ def main() raises:
     var shrink = Float32(0.1)
     var wsh = o_nc_shrink(xc, cent, nk, ws, nn, dd, 3, med, shrink)
     require_separates("5212 shrink dataset-centroid fold", count_diff_f32(wsh, o_nc_shrink(xc, cent, nk, ws, nn, dd, 3, med, shrink, 1)))
+    var wdv = o_nc_shrink_dev(xc, cent, nk, ws, nn, dd, 3, med, shrink)[1].copy()
+    require_separates("5212 deviations_ thresholded", count_diff_f32(wdv, o_nc_shrink_dev(xc, cent, nk, ws, nn, dd, 3, med, shrink, 2)[1].copy()))
     var dsh = zf(3 * dd)
-    op_nc_shrink(fa(xc), fa(cent), fa(nk), fa(ws), fa(dsh), nn, dd, 3, 1, med, shrink)
+    var ddv = zf(3 * dd)
+    op_nc_shrink(fa(xc), fa(cent), fa(nk), fa(ws), fa(dsh), fa(ddv), nn, dd, 3, 1, med, shrink)
     same("5212/5201 nc_shrink device", count_diff_f32(dsh, wsh))
+    same("5212/5201 nc deviations_ device", count_diff_f32(ddv, wdv))
     var hsh = zf(3 * dd)
-    h_nc_shrink(fa(xc), fa(cent), fa(nk), fa(ws), fa(hsh), nn, dd, 3, 1, med, shrink)
+    var hdv = zf(3 * dd)
+    h_nc_shrink(fa(xc), fa(cent), fa(nk), fa(ws), fa(hsh), fa(hdv), nn, dd, 3, 1, med, shrink)
     same("5212/5201 nc_shrink host", count_diff_f32(hsh, wsh))
+    same("5212/5201 nc deviations_ host", count_diff_f32(hdv, wdv))
+    var wns = o_nc_shrink_dev(xc, cent, nk, ws, nn, dd, 3, med, shrink, 0, False)
+    var dns = zf(3 * dd)
+    var dnd = zf(3 * dd)
+    op_nc_shrink(fa(xc), fa(cent), fa(nk), fa(ws), fa(dns), fa(dnd), nn, dd, 3, 0, med, shrink)
+    same("5212 nc no-shrink device", count_diff_f32(dns, wns[0]) + count_diff_f32(dnd, wns[1]))
+    var hns = zf(3 * dd)
+    var hnd = zf(3 * dd)
+    h_nc_shrink(fa(xc), fa(cent), fa(nk), fa(ws), fa(hns), fa(hnd), nn, dd, 3, 0, med, shrink)
+    same("5212 nc no-shrink host", count_diff_f32(hns, wns[0]) + count_diff_f32(hnd, wns[1]))
+    tr.record_list_f32("x_neighbors.nc_deviations", ddv)
     var prior = zf(3)
     prior[0] = Float32(0.5)
     prior[1] = Float32(0.3)
     prior[2] = Float32(0.2)
-    var wd = o_nc_decision(xc, cent, ws, prior, nn, dd, 3)
-    require_separates("5212 discriminant fold", count_diff_f32(wd, o_nc_decision(xc, cent, ws, prior, nn, dd, 3, 1)))
+    var wdd = o_nc_decision(xc, cent, ws, prior, nn, dd, 3)
+    require_separates("5212 discriminant fold", count_diff_f32(wdd, o_nc_decision(xc, cent, ws, prior, nn, dd, 3, 1)))
     var ddec = zf(nn * 3)
     op_nc_decision(fa(xc), fa(cent), fa(ws), fa(prior), fa(ddec), nn, dd, 3)
-    same("5212 nc_decision device", count_diff_f32(ddec, wd))
+    same("5212 nc_decision device", count_diff_f32(ddec, wdd))
     var hdec = zf(nn * 3)
     h_nc_decision(fa(xc), fa(cent), fa(ws), fa(prior), fa(hdec), nn, dd, 3)
-    same("5212 nc_decision host", count_diff_f32(hdec, wd))
+    same("5212 nc_decision host", count_diff_f32(hdec, wdd))
     tr.record_list_f32("x_neighbors.nc", ddec)
 
     # ---- 5202: centering and the svd_flip sign rule (column 1 plants a |max| tie of opposite signs)

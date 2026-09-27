@@ -1,8 +1,8 @@
 diff --git a/x_decomp/cells.mojo b/x_decomp/cells.mojo
-index b8537db32..d46e3db94 100644
+index 4b4c2cedf..99582bcc8 100644
 --- a/x_decomp/cells.mojo
 +++ b/x_decomp/cells.mojo
-@@ -747,7 +747,8 @@ def als_row(
+@@ -800,7 +800,8 @@ def als_row(
      for j in range(f):
          S.unsafe_store(ab + j * f + j, add(S.unsafe_load(ab + j * f + j), reg))
          S.unsafe_store(bb + j, Float32(0))

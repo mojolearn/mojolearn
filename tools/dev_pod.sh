@@ -474,7 +474,28 @@ sync)
     # sync refuses. seed_git brings it there (a lane that merged main moves it).
     base=$(git -C "$wt" merge-base HEAD origin/main) || die "no merge base of $wt with origin/main"
     seed_git "$base"
-    # A file that was in the LAST sync's manifest but not in this one is deleted
+    if [ "${MOJOLEARN_DEVPOD_FULL_SYNC:-0}" != 1 ]; then
+        # PATCH SYNC (default, 2026-09-27; the metrics lane's psync idea): ship
+        # only `git diff --binary <merge base>` of the worktree, not the whole
+        # tree (the tar was ~800 MB). New files are marked intent-to-add in a
+        # COPY of the index, so the lane's real index is never touched. On the
+        # box: reset to the base, remove the files the previous patch added
+        # (so a dropped file never lingers) and this patch's added files, then
+        # apply. Untracked build outputs (.so, .pixi) are left alone.
+        _idx="$TMPD/sync.index"; cp "$(git -C "$wt" rev-parse --path-format=absolute --git-path index)" "$_idx"
+        ( cd "$wt" && git ls-files -z -o --exclude-standard | { grep -zvE '\.(so|dylib|metallib)$' || true; } \
+            | GIT_INDEX_FILE="$_idx" xargs -0 -r git add -N -- ) || die "could not mark new files"
+        ( cd "$wt" && GIT_INDEX_FILE="$_idx" git diff --binary "$base" ) > "$TMPD/sync.patch" || die "diff failed"
+        ( cd "$wt" && GIT_INDEX_FILE="$_idx" git diff --name-only --diff-filter=A "$base" ) > "$TMPD/sync.added"
+        bx 60 "mkdir -p $BOX_DIR && cat > $BOX_DIR/.git/devpod_added.new" < "$TMPD/sync.added" || die "added-list upload failed"
+        bx 900 "cd $BOX_DIR && git reset -q --hard $base && { [ ! -f .devpod_manifest ] || { git ls-files -o --exclude-standard | grep -Fxf .devpod_manifest | grep -vE '\\.(so|dylib|metallib)\$' | xargs -r rm -f --; rm -f .devpod_manifest .devpod_manifest.prev; }; } && { [ ! -f .git/devpod_added ] || xargs -r rm -f -- < .git/devpod_added; } && xargs -r rm -f -- < .git/devpod_added.new && cat > /tmp/devpod_sync.patch && { [ ! -s /tmp/devpod_sync.patch ] || git apply --whitespace=nowarn /tmp/devpod_sync.patch; } && mv .git/devpod_added.new .git/devpod_added" \
+            < "$TMPD/sync.patch" || die "patch sync failed (retry with MOJOLEARN_DEVPOD_FULL_SYNC=1)"
+        _head=$(bx 60 "cd $BOX_DIR && git rev-parse HEAD" < /dev/null | tr -d '\r')
+        [ "$_head" = "$base" ] || die "the box's HEAD ($_head) is not the worktree's merge base ($base)"
+        say "patch-synced $(cd "$wt" && git rev-parse --short HEAD)+worktree -> $POD_ID:$BOX_DIR ($(wc -c < "$TMPD/sync.patch" | tr -d ' ') bytes over merge base $(git -C "$wt" rev-parse --short "$base"))"
+        exit 0
+    fi
+    # FULL SYNC (MOJOLEARN_DEVPOD_FULL_SYNC=1). A file that was in the LAST sync's manifest but not in this one is deleted
     # on the box, so a moved or deleted source never lingers there to mask a result.
     ( cd "$wt" && git ls-files -c -o --exclude-standard | grep -vE '\.(so|dylib|metallib)$' ) > "$TMPD/manifest" || die "no file list"
     bx 60 "mkdir -p $BOX_DIR && cd $BOX_DIR && { [ ! -f .devpod_manifest ] || mv .devpod_manifest .devpod_manifest.prev; } && cat > .devpod_manifest" < "$TMPD/manifest" \

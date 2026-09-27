@@ -97,13 +97,17 @@ def sqdist_py[E: Exec](a: PythonObject, b: PythonObject, dst: PythonObject, p: P
     var na = _n(p, 0)
     var nb = _n(p, 1)
     var d = _n(p, 2)
+    # optional: the distance kind (x_decomp/cells.mojo PD_*; 0 = squared
+    # Euclidean) and the Minkowski p, a float rounded once to float32
+    var kind = _n(p, 3) if len(p) > 3 else 0
+    var pw = Float32(Float64(py=p[4])) if len(p) > 4 else Float32(2)
     if na * nb > 2147483647:
         raise Error("x_decomp: sqdist exceeds the Int32 index bound")
     var pa = _f(a)
     var pb = _f(b)
     var po = _f(dst)
     with GILReleased(Python()):
-        E.sqdist(pa, pb, po, na, nb, d)
+        E.sqdist(pa, pb, po, na, nb, d, kind, pw)
     return PythonObject(na * nb)
 
 
@@ -131,11 +135,12 @@ def lu_py[E: Exec](a: PythonObject, piv: PythonObject, info: PythonObject, p: Py
 def lu_solve_py[E: Exec](lu: PythonObject, piv: PythonObject, b: PythonObject, p: PythonObject) raises -> PythonObject:
     var n = _n(p, 0)
     var nrhs = _n(p, 1)
+    var trans = _n(p, 2) if len(p) > 2 else 0
     var pl = _f(lu)
     var pp = _i(piv)
     var pb = _f(b)
     with GILReleased(Python()):
-        E.lu_solve(pl, pp, pb, n, nrhs)
+        E.lu_solve(pl, pp, pb, n, nrhs, trans)
     return PythonObject(n)
 
 
@@ -318,6 +323,28 @@ def als_rows_py[E: Exec](
     var pf = _f(flags)
     with GILReleased(Python()):
         E.als_rows(pc, py_, pg, px, pf, n, m, f, r)
+    return PythonObject(n)
+
+
+def absmax_sign_py[E: Exec](a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
+    var n = _n(p, 0)
+    var d = _n(p, 1)
+    var by_col = Int(py=p[2]) != 0
+    var pa = _f(a)
+    var pd = _f(dst)
+    with GILReleased(Python()):
+        E.absmax_sign(pa, pd, n, d, by_col)
+    return PythonObject(d if by_col else n)
+
+
+def qr_r_py[E: Exec](a: PythonObject, r: PythonObject, p: PythonObject) raises -> PythonObject:
+    var m = _n(p, 0)
+    var n = _n(p, 1)
+    if n <= 0 or m < n:
+        raise Error("x_decomp: qr_r needs m >= n >= 1")
+    var pa = _f(a)
+    var pr = _f(r)
+    E.qr_r(pa, m, n, pr)
     return PythonObject(n)
 
 
