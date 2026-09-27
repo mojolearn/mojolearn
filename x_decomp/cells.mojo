@@ -357,8 +357,13 @@ def fold_cell(p: F32Ptr, t: Int, nb: Int, stride: Int) -> Float32:
 
 @always_inline
 def rowsum_cell(a: F32Ptr, i: Int, d: Int) -> Float32:
+    return rowsum_part_cell(a, i, d, 0, d)
+
+
+@always_inline
+def rowsum_part_cell(a: F32Ptr, i: Int, d: Int, c0: Int, c1: Int) -> Float32:
     var acc = Float32(0)
-    for j in range(d):
+    for j in range(c0, c1):
         acc = add(acc, a.unsafe_load(i * d + j))
     return acc
 
