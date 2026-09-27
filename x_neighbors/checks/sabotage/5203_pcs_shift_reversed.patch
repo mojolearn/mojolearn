@@ -1,0 +1,14 @@
+diff --git a/x_neighbors/items.mojo b/x_neighbors/items.mojo
+index bc04f5c16..e59192392 100644
+--- a/x_neighbors/items.mojo
++++ b/x_neighbors/items.mojo
+@@ -628,7 +628,8 @@ def pcs_item(
+         else:
+             for h in range(nc):
+                 var s = Float32(0)
+-                for a in range(nc):
++                for aa in range(nc):
++                    var a = nc - 1 - aa
+                     var b = h - a
+                     if b < 0:
+                         b += nc

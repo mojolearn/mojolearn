@@ -1,0 +1,13 @@
+diff --git a/x_neighbors/items.mojo b/x_neighbors/items.mojo
+index bc04f5c16..89524e63d 100644
+--- a/x_neighbors/items.mojo
++++ b/x_neighbors/items.mojo
+@@ -129,7 +129,7 @@ def kernel_item(
+     elif kind == K_RBF:
+         var acc = Float32(0)
+         for f in range(d):
+-            var df = _sub(x.unsafe_load(i * d + f), y.unsafe_load(j * d + f))
++            var df = _sub(x.unsafe_load(i * d + (d - 1 - f)), y.unsafe_load(j * d + (d - 1 - f)))
+             acc = ftz(identical_mul_add(df, df, acc))
+         r = ftz(identical_exp(ftz(identical_mul(-gamma, acc))))
+     elif kind == K_LAPLACIAN:

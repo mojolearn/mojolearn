@@ -1,0 +1,14 @@
+diff --git a/x_neighbors/items.mojo b/x_neighbors/items.mojo
+index bc04f5c16..b3e270aed 100644
+--- a/x_neighbors/items.mojo
++++ b/x_neighbors/items.mojo
+@@ -509,7 +509,8 @@ def nc_std_item(t: Int, x: FP, lab: IP, cent: FP, std: FP, n: Int, d: Int, n_cla
+     rows ascending. n == C stores 0 (theirs divides by zero)."""
+     var f = t
+     var ss = Float32(0)
+-    for i in range(n):
++    for ii in range(n):
++        var i = n - 1 - ii
+         var df = _sub(x.unsafe_load(i * d + f), cent.unsafe_load(Int(lab.unsafe_load(i)) * d + f))
+         ss = ftz(identical_mul_add(df, df, ss))
+     if n - n_classes <= 0:
