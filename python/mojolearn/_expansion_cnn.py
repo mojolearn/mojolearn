@@ -645,7 +645,7 @@ class CNNClassifier(_Layer):
         for (conv, pool), (prm, pprm, _, _), out, idx in zip(self._blocks, plans, a["out"], a["idx"]):
             b.x_cnn_conv_block_forward_r(src, self._rw[id(conv)][0], self._rw[id(conv)][1], out, idx, prm, pprm)
             src = out
-        hw, hb = self._rw[id(self.head_)]
+        hw, hb = self._rw[id(self.head_)][:2]
         b.x_cnn_linear_forward_r(src, hw, hb, a["logits"], [n, self._flat, len(self.classes_)])
         return plans
 
