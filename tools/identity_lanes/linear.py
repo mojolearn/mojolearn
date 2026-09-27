@@ -71,3 +71,16 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-glm-poisson", "x-glm-gamma", "x-glm-tweedie")
+
+
+@lane("x-huber")
+def _(ml, X, yc, yr, Xh=None):
+    y = yr[:2000].copy()
+    y[::17] = y[::17] + np.float32(25.0)  # planted outliers
+    m = ml.HuberRegressor(max_iter=30).fit(X[:2000], y)
+    f = _linear_reg_fit(m, X, yr, Xh)
+    f["scale"] = _h(np.asarray([m.scale_], dtype=np.float32))
+    return f
+
+
+_batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-huber")

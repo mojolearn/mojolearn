@@ -222,6 +222,10 @@ struct DeviceOps(ClusterOps):
             w.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), 0,
             max_iter=max_iter, tol=tol, seed=seed, n_init=n_init, init=init, metric=METRIC_L2_EXPANDED,
         )
+        # the fit's last copies into these host arrays may still be queued
+        self.ctx.synchronize()
+        _ = xc^
+        _ = w^
         labels = List[Int32](capacity=n)
         for t in range(n):
             labels.append(Int32(lab[t]))

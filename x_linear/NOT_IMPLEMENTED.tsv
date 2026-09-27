@@ -9,3 +9,5 @@ _sgd_fast.pyx.tp SequentialDataset.shuffle (MT19937)	replaced	splitmix64 Fisher-
 glm.py solver=lbfgs	replaced	Newton-Cholesky (their newton-cholesky form) for every solver value; same minimizer
 glm.py sample_weight, warm_start	refused / absent	pass 2
 TweedieRegressor power<0 or 0<power<1, identity link with power>0	refused at the API	pass 2
+_huber.py L-BFGS-B with sigma >= 10*eps bound	replaced	sigma = exp(s), unconstrained L-BFGS (x_linear/lbfgs.mojo); same minimizer
+_huber.py sample_weight, warm_start	refused / absent	pass 2

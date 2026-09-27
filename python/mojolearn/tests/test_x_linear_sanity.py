@@ -87,6 +87,22 @@ def _():
     return ok
 
 
+@case("huber")
+def _():
+    from sklearn import linear_model as sk
+    X, yr, yc, y3 = _data()
+    y = yr.copy()
+    y[::13] += 20.0
+    ok = True
+    for fi in (True, False):
+        a = ml.HuberRegressor(fit_intercept=fi).fit(X, y)
+        b = sk.HuberRegressor(fit_intercept=fi).fit(X.astype(np.float64), y.astype(np.float64))
+        ok &= _close(f"fit_intercept={fi} coef", a.coef_, b.coef_, 5e-3)
+        ok &= _close(f"fit_intercept={fi} intercept", [a.intercept_], [b.intercept_], 5e-3)
+        ok &= _close(f"fit_intercept={fi} scale", [a.scale_], [b.scale_], 5e-3 * max(1, b.scale_))
+    return ok
+
+
 def main(argv):
     names = argv or list(CASES)
     bad = []

@@ -12,7 +12,7 @@ linear percentile) for the quantile unit.
 """
 from std.memory import bitcast
 from checks.numerics import ftz, identical_mul, identical_div, identical_sqrt, identical_exp, identical_log
-from x_prep.common import FP, IP, p, ld, raw, st, ldi, sti, is_nan, canon, key, heap_sort, X_PREP_HOST_SABOTAGE
+from x_prep.common import FP, IP, p, ld, raw, st, ldi, sti, is_nan, canon, canonical_nan, key, heap_sort, X_PREP_HOST_SABOTAGE
 
 #: float32 machine epsilon; `_handle_zeros_in_scale` maps scale < 10 * eps to 1.
 comptime F32_EPS = Float32(1.1920929e-07)
@@ -231,7 +231,7 @@ def mode_cols_unit(t: Int, f: FP, q: IP):
         if is_nan(v):
             break
         valid += 1
-        if i > 0 and key(v) == key(raw(f, S + c * n + i - 1)):
+        if i > 0 and ftz(v) == ftz(raw(f, S + c * n + i - 1)):   # -0.0 joins 0.0's run
             run += 1
         else:
             run = 1
@@ -441,3 +441,28 @@ def where_neg_unit(t: Int, f: FP, q: IP):
     negative (an unknown category), else the code."""
     var v = ld(f, p(q, 0) + t)
     st(f, p(q, 3) + t, ld(f, p(q, 2)) if v < Float32(0) else v)
+
+
+def mark_missing_unit(t: Int, f: FP, q: IP):
+    """q = [X, count, VAL, OUT]; t = element: the one quiet NaN word where X
+    equals VAL (the imputer's numeric `missing_values`), else X's bits."""
+    var x = raw(f, p(q, 0) + t)
+    if not is_nan(x) and ftz(x) == ld(f, p(q, 2)):
+        f.unsafe_store(p(q, 3) + t, canonical_nan())
+    else:
+        f.unsafe_store(p(q, 3) + t, x)
+
+
+def fill_unit(t: Int, f: FP, q: IP):
+    """q = [X, n, d, STAT, OUT, KEEP, dout]; t = i*dout + jj. Output column jj
+    is input column KEEP[jj]; a NaN entry becomes STAT[column], anything else
+    is copied bit for bit."""
+    var dout = p(q, 6)
+    var i = t // dout
+    var jj = t % dout
+    var c = Int(ld(f, p(q, 5) + jj))
+    var x = raw(f, p(q, 0) + i * p(q, 2) + c)
+    if is_nan(x):
+        f.unsafe_store(p(q, 4) + t, raw(f, p(q, 3) + c))
+    else:
+        f.unsafe_store(p(q, 4) + t, x)
