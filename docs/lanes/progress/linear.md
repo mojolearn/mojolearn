@@ -61,6 +61,9 @@ VERDICT: both PASS on m2pro and do-amd (m3ultra deferred, spooled). The 21
 expansion algorithms and their 11 option lanes are proven on CPU, NVIDIA,
 AMD and Apple.
 
+Merged to main per directive 0000b (pod gates: test_host_surface 196 passed
+on the full tree, test_lane_select OK: 0 failure(s)).
+
 Still in phase 1 (LANE CHARTER, main 3af84e8a0): the family also covers the
 EXISTING models (LinearRegression, Ridge, Lasso, ElasticNet,
 LogisticRegression, LinearSVC/SVR). Audit each against the phase-1 bar (lane
