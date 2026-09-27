@@ -133,6 +133,26 @@ def test_dart():
     assert a >= r - 0.05, (a, r)
 
 
+def test_dart_options():
+    lightgbm = pytest.importorskip("lightgbm")
+    Xa, Xb, ya, yb = _clf(n_classes=3)
+    kw = dict(n_estimators=60, reg_alpha=0.5, max_delta_step=0.7, colsample_bytree=0.8, subsample=0.8,
+              subsample_freq=1)
+    ours = ml.DARTClassifier(random_state=0, **kw).fit(Xa, ya)
+    ref = lightgbm.LGBMClassifier(boosting_type="dart", verbose=-1, **kw).fit(Xa, ya)
+    a, r = accuracy_score(yb, np.asarray(ours.predict(Xb))), accuracy_score(yb, ref.predict(Xb))
+    assert a >= r - 0.06, (a, r)
+    p = np.asarray(ours.predict_proba(Xb))
+    assert p.shape == (len(yb), 3) and np.allclose(p.sum(axis=1), 1.0)
+    Xa, Xb, ya, yb = _reg()
+    kw = dict(n_estimators=60, reg_alpha=2.0, max_delta_step=40.0, colsample_bytree=0.6, subsample=0.7,
+              subsample_freq=2)
+    ours = ml.DARTRegressor(random_state=0, **kw).fit(Xa, ya)
+    ref = lightgbm.LGBMRegressor(boosting_type="dart", verbose=-1, **kw).fit(Xa, ya)
+    a, r = r2_score(yb, np.asarray(ours.predict(Xb))), r2_score(yb, ref.predict(Xb))
+    assert a >= r - 0.08, (a, r)
+
+
 def test_random_trees_embedding():
     from sklearn.linear_model import LogisticRegression
     Xa, Xb, ya, yb = _clf()
@@ -322,3 +342,58 @@ def test_permutation_explainer():
     pp = np.asarray(pe.shap_values(Xb[:5], npermutations=300))
     np.testing.assert_allclose(pp.sum(1) + pe.expected_value, f(Xb[:5]), rtol=1e-6, atol=1e-5)
     assert np.abs(pp - exact).max() <= 0.15 * np.abs(exact).max() + 1e-6
+
+
+def test_kernel_explainer_logit():
+    shap = pytest.importorskip("shap")
+    Xa, Xb, ya, yb = _clf(n_classes=2)
+    Xa, Xb = Xa[:, :6].copy(), Xb[:, :6].copy()
+    m = ml.DARTClassifier(n_estimators=20, random_state=0).fit(Xa, ya)
+    bg = Xa[:20]
+    ke = ml.KernelExplainer(m, bg, link="logit")
+    phi = np.asarray(ke.shap_values(Xb[:4]))
+    f = lambda X: np.asarray(m.predict_proba(np.asarray(X, dtype=np.float32)), dtype=np.float64)  # noqa: E731
+    ref = shap.KernelExplainer(f, bg.astype(np.float64), link="logit").shap_values(Xb[:4].astype(np.float64),
+                                                                                    silent=True)
+    ref = np.asarray(ref)
+    if ref.ndim == 3 and ref.shape[0] == 2:
+        ref = np.moveaxis(ref, 0, -1)
+    np.testing.assert_allclose(phi, ref, rtol=1e-6, atol=1e-6)
+    p = f(Xb[:4])
+    np.testing.assert_allclose(phi.sum(1) + np.asarray(ke.expected_value), np.log(p / (1 - p)), atol=1e-5)
+
+
+def test_bagging_oob_score():
+    from sklearn.ensemble import BaggingClassifier, BaggingRegressor
+    from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
+    Xa, Xb, ya, yb = _clf()
+    ours = ml.BaggingClassifier(ml.DecisionTreeClassifier(max_depth=8), n_estimators=20, oob_score=True,
+                                random_state=0).fit(Xa, ya)
+    ref = BaggingClassifier(DecisionTreeClassifier(max_depth=8), n_estimators=20, oob_score=True,
+                            random_state=0).fit(Xa, ya)
+    assert abs(ours.oob_score_ - ref.oob_score_) < 0.05, (ours.oob_score_, ref.oob_score_)
+    assert np.allclose(np.asarray(ours.oob_decision_function_).sum(1), 1.0)
+    Xa, Xb, ya, yb = _reg()
+    ours = ml.BaggingRegressor(ml.DecisionTreeRegressor(max_depth=8), n_estimators=20, oob_score=True,
+                               random_state=0).fit(Xa, ya)
+    ref = BaggingRegressor(DecisionTreeRegressor(max_depth=8), n_estimators=20, oob_score=True,
+                           random_state=0).fit(Xa, ya)
+    assert abs(ours.oob_score_ - ref.oob_score_) < 0.06, (ours.oob_score_, ref.oob_score_)
+    with pytest.raises(ValueError):
+        ml.BaggingRegressor(oob_score=True, bootstrap=False)
+
+
+def test_cv_splitter_objects():
+    from sklearn.model_selection import KFold, StratifiedKFold
+    Xa, Xb, ya, yb = _clf()
+    est = [("dt", ml.DecisionTreeClassifier(max_depth=4))]
+    a = ml.StackingClassifier(est, final_estimator=ml.DecisionTreeClassifier(max_depth=3), cv=3).fit(Xa, ya)
+    b = ml.StackingClassifier(est, final_estimator=ml.DecisionTreeClassifier(max_depth=3),
+                              cv=StratifiedKFold(3)).fit(Xa, ya)
+    np.testing.assert_array_equal(np.asarray(a.transform(Xb)), np.asarray(b.transform(Xb)))
+    pairs = list(KFold(4, shuffle=True, random_state=0).split(Xa))
+    c = ml.CalibratedClassifierCV(ml.DecisionTreeClassifier(max_depth=4), cv=pairs).fit(Xa, ya)
+    assert len(c.calibrated_classifiers_) == 4
+    d = ml.CalibratedClassifierCV(ml.DecisionTreeClassifier(max_depth=4), cv=KFold(3, shuffle=True, random_state=1),
+                                  method="isotonic", ensemble=False).fit(Xa, ya)
+    assert accuracy_score(yb, np.asarray(d.predict(Xb))) > 0.5

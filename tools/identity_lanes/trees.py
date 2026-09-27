@@ -118,6 +118,26 @@ _batch_decl(_rows_calls("predict", "predict_proba"), "trees-dart-clf")
 _batch_decl(_rows_calls("predict"), "trees-dart-reg")
 
 
+@lane("trees-dart-options")
+def _(ml, X, yc, yr, Xh=None):
+    """DART's LightGBM options: L1 and max_delta_step leaves, per-tree feature
+    sampling, row bagging; multiclass softmax (one tree per class) and its TreeSHAP."""
+    r = ml.DARTRegressor(n_estimators=8, num_leaves=15, max_depth=5, min_child_samples=5, drop_rate=0.5,
+                         skip_drop=0.0, reg_lambda=1.0, reg_alpha=2.0, max_delta_step=40.0, colsample_bytree=0.6,
+                         subsample=0.7, subsample_freq=2, random_state=7).fit(X, yr)
+    m = ml.DARTClassifier(n_estimators=6, num_leaves=15, max_depth=5, min_child_samples=5, drop_rate=0.5,
+                          skip_drop=0.0, reg_alpha=0.5, max_delta_step=0.7, colsample_bytree=0.8, subsample=0.8,
+                          subsample_freq=1, random_state=7).fit(X, yc)
+    e = ml.TreeExplainer(m, data=X[:128])
+    return _fit(dict(reg=_h(r.predict(X)), predict=_h(m.predict(X)), proba=_h(m.predict_proba(X)),
+                     raw=_h(m.decision_function(X)), shap=_h(e.shap_values(X[:32])),
+                     ev=_h(np.asarray(e.expected_value))),
+                m, lambda x: (x.predict(Xh), x.predict_proba(Xh)))
+
+
+_batch_decl(_rows_calls("predict", "predict_proba"), "trees-dart-options")
+
+
 @lane("trees-random-embedding")
 def _(ml, X, yc, yr, Xh=None):
     """Random uniform targets, ExtraTrees with one feature per split, the leaf one-hot."""
@@ -211,6 +231,46 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("predict", "predict_proba"), "trees-calibrated")
+
+
+class _trees_Shuffled3:
+    """A splitter object (sklearn's `split(X, y)` protocol): three folds of a
+    fixed row permutation, so the cv-object path runs without sklearn."""
+
+    def split(self, X, y=None):
+        n = len(X)
+        perm = np.random.RandomState(11).permutation(n)
+        for f in range(3):
+            te = np.sort(perm[f::3])
+            yield np.setdiff1d(np.arange(n), te), te
+
+
+@lane("trees-oob-cv-link")
+def _(ml, X, yc, yr, Xh=None):
+    """Bagging oob_score (classifier and regressor), cv as a splitter object and
+    as (train, test) pairs (stacking, calibration), Kernel SHAP with link='logit'."""
+    bc = ml.BaggingClassifier(ml.DecisionTreeClassifier(max_depth=5), n_estimators=6, max_features=0.8,
+                              oob_score=True, random_state=7).fit(X, yc)
+    br = ml.BaggingRegressor(ml.DecisionTreeRegressor(max_depth=5), n_estimators=6, max_samples=0.8,
+                             oob_score=True, random_state=7).fit(X, yr)
+    n = len(X)
+    pairs = [(np.arange(n)[np.arange(n) % 2 != f], np.arange(n)[np.arange(n) % 2 == f]) for f in (0, 1)]
+    st = ml.StackingRegressor([("dt", ml.DecisionTreeRegressor(max_depth=4))],
+                              final_estimator=ml.DecisionTreeRegressor(max_depth=3), cv=pairs).fit(X, yr)
+    ca = ml.CalibratedClassifierCV(ml.DecisionTreeClassifier(max_depth=4), method="isotonic",
+                                   cv=_trees_Shuffled3(), ensemble=False).fit(X, yc)
+    y2 = (np.asarray(yc) % 2).astype(np.int64)
+    X6 = np.ascontiguousarray(X[:, :6])
+    dm = ml.DARTClassifier(n_estimators=4, num_leaves=7, max_depth=3, min_child_samples=5, random_state=7).fit(X6, y2)
+    ke = ml.KernelExplainer(dm, X6[:10], link="logit")
+    return _fit(dict(oob_c=_h(np.float64(bc.oob_score_)), oob_df=_h(bc.oob_decision_function_),
+                     oob_r=_h(np.float64(br.oob_score_)), oob_p=_h(br.oob_prediction_),
+                     bag=_h(bc.predict_proba(X)), stack=_h(st.predict(X)), cal=_h(ca.predict_proba(X)),
+                     shap=_h(ke.shap_values(X6[:3])), ev=_h(np.asarray(ke.expected_value))),
+                ca, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+
+
+_batch_decl(_rows_calls("predict", "predict_proba"), "trees-oob-cv-link")
 
 
 @lane("trees-rf-weighted")
