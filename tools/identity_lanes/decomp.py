@@ -116,7 +116,13 @@ def _(ml, X, yc, yr, Xh=None):
     S = (X[:300] / (np.abs(X[:300]).max(axis=0) + np.float32(1))).astype(np.float32)
     m = ml.SpectralEmbedding(n_components=3, affinity="rbf", gamma=0.5).fit(S)
     d = ml.SpectralEmbedding(n_components=2, affinity="rbf").fit(S[:200])
-    return _fit(dict(emb=_h(m.embedding_), aff=_h(m.affinity_matrix_), demb=_h(d.embedding_)))
+    # a distance matrix from the lane's own (identical) affinity: 1 - aff is
+    # one IEEE subtraction per entry, the same bytes on every box
+    dist = (np.float32(1) - np.asarray(m.affinity_matrix_)).astype(np.float32)
+    p = ml.SpectralEmbedding(n_components=2, affinity="precomputed_nearest_neighbors", n_neighbors=12,
+                             eigen_solver="lobpcg").fit(dist)
+    return _fit(dict(emb=_h(m.embedding_), aff=_h(m.affinity_matrix_), demb=_h(d.embedding_),
+                     pemb=_h(p.embedding_), paff=_h(p.affinity_matrix_)))
 
 
 @lane("x-decomp-lu")
@@ -173,7 +179,8 @@ def _(ml, X, yc, yr, Xh=None):
                                         transform_algorithm="lasso_lars").fit(X[:600])
     sc = ml.SparseCoder(m.components_, transform_algorithm="lasso_cd", transform_alpha=0.2)
     sct = ml.SparseCoder(m.components_, transform_algorithm="threshold", transform_alpha=0.1, split_sign=True)
-    return _fit(dict(sc=_h(sc.transform(S[:128]), sct.transform(S[:128])), code=_h(code), D=_h(m.components_), err=_h(np.float64(m.error_)), T=_h(m.transform(S[:128])),
+    scl = ml.SparseCoder(m.components_, transform_algorithm="lars", transform_n_nonzero_coefs=3)
+    return _fit(dict(sc=_h(sc.transform(S[:128]), sct.transform(S[:128])), scl=_h(scl.transform(S[:32])), code=_h(code), D=_h(m.components_), err=_h(np.float64(m.error_)), T=_h(m.transform(S[:128])),
                      cD=_h(c.components_), cT=_h(c.transform(S[:128])), tT=_h(t.transform(S[:128]), t.components_),
                      mbD=_h(mb.components_), mbT=_h(mb.transform(S[:128])), mbn=_h(np.int32(mb.n_steps_))),
                 m, lambda e: (e.transform(Xh[:256]),))
@@ -221,9 +228,20 @@ def _(ml, X, yc, yr, Xh=None):
     mc = ml.MDS(n_components=2, init="classical_mds", max_iter=30).fit(S[:100])
     lle = ml.LocallyLinearEmbedding(n_neighbors=10, n_components=2).fit(S)
     lt = ml.LocallyLinearEmbedding(n_neighbors=8, n_components=2, method="ltsa").fit(S[:80])
+    he = ml.LocallyLinearEmbedding(n_neighbors=10, n_components=2, method="hessian").fit(S[:80])
+    mo = ml.LocallyLinearEmbedding(n_neighbors=10, n_components=2, method="modified").fit(S[:80])
+    # the radius is a quarter of the largest kNN geodesic (this lane's own
+    # identical output, one exact float64 product)
+    rad = float(np.max(iso.dist_matrix_)) * 0.25
+    ir = ml.Isomap(n_neighbors=None, radius=rad, n_components=2, path_method="FW").fit(S[:100])
+    nm = ml.MDS(n_components=2, metric_mds=False, init="random", max_iter=25, random_state=1)
+    nemb = nm.fit_transform(S[:60])
     return _fit(dict(iso=_h(iso.embedding_), isod=_h(iso.dist_matrix_), isoT=_h(iso.transform(Xh[:64])),
                      cm=_h(cm.embedding_), md=_h(emb), mds=_h(np.float64(md.stress_)), mc=_h(mc.embedding_),
-                     lle=_h(lle.embedding_), lleT=_h(lle.transform(Xh[:64])), lt=_h(lt.embedding_)),
+                     lle=_h(lle.embedding_), lleT=_h(lle.transform(Xh[:64])), lt=_h(lt.embedding_),
+                     he=_h(he.embedding_), mo=_h(mo.embedding_, np.float64(mo.reconstruction_error_)),
+                     ir=_h(ir.embedding_, ir.dist_matrix_, ir.transform(S[:32])),
+                     nm=_h(nemb, np.float64(nm.stress_), np.int32(nm.n_iter_))),
                 iso, lambda e: (e.transform(Xh[:128]),))
 
 
@@ -236,9 +254,11 @@ def _(ml, X, yc, yr, Xh=None):
     m = ml.MinCovDet(random_state=0).fit(S)
     e = ml.EllipticEnvelope(contamination=0.05, random_state=1, support_fraction=0.7).fit(S)
     one = ml.MinCovDet().fit(np.ascontiguousarray(X[:300, 5:6]))
+    lab = np.where(X[:128, 0] > 0, 1, -1).astype(np.int32)
+    esc = np.float64([e.score(S[:128], lab), e.score(S[:128], lab, sample_weight=np.abs(X[:128, 1]))])
     return _fit(dict(loc=_h(m.location_), cov=_h(m.covariance_), rloc=_h(m.raw_location_), rcov=_h(m.raw_covariance_),
                      sup=_h(np.asarray(m.support_, dtype=np.int8)), dist=_h(m.dist_), maha=_h(m.mahalanobis(S[:128])),
-                     eoff=_h(np.float64(e.offset_)), one=_h(one.location_, one.covariance_, one.dist_), edec=_h(e.decision_function(S[:128])), epred=_h(e.predict(S[:128]))),
+                     eoff=_h(np.float64(e.offset_)), esc=_h(esc), one=_h(one.location_, one.covariance_, one.dist_), edec=_h(e.decision_function(S[:128])), epred=_h(e.predict(S[:128]))),
                 e, lambda est: (est.decision_function(np.ascontiguousarray(Xh[:256, :6])),
                                 est.predict(np.ascontiguousarray(Xh[:256, :6]))))
 
@@ -253,7 +273,10 @@ def _(ml, X, yc, yr, Xh=None):
     m = ml.AlternatingLeastSquares(factors=6, regularization=0.05, alpha=2.0, iterations=4, random_state=0).fit(R)
     ids, sc = m.recommend(3, R, N=5)
     sid, ssc = m.similar_items(2, N=4)
-    return _fit(dict(U=_h(m.user_factors), V=_h(m.item_factors), rid=_h(ids), rsc=_h(sc), sid=_h(sid), ssc=_h(ssc)))
+    lo = ml.AlternatingLeastSquares(factors=4, regularization=0.1, iterations=3, calculate_training_loss=True,
+                                    random_state=2).fit(R[:120])
+    return _fit(dict(U=_h(m.user_factors), V=_h(m.item_factors), rid=_h(ids), rsc=_h(sc), sid=_h(sid), ssc=_h(ssc),
+                     loss=_h(np.float64(lo.training_loss_), lo.user_factors)))
 
 
 @lane("x-decomp-pca-randomized")
@@ -262,11 +285,16 @@ def _(ml, X, yc, yr, Xh=None):
     w = ml.PCA(n_components=3, svd_solver="randomized", whiten=True, iterated_power=2).fit(X[:2000])
     t = ml.TruncatedSVD(n_components=5, algorithm="randomized", random_state=1).fit(X[:4000])
     f = ml.PCA(n_components=0.8, svd_solver="full").fit(X[:3000])
+    a = ml.PCA(n_components=3, svd_solver="arpack").fit(X[:3000])
+    mle = ml.PCA(n_components="mle", svd_solver="full").fit(X[:3000])
+    ta = ml.TruncatedSVD(n_components=4, algorithm="arpack").fit(X[:4000])
     return _fit(dict(pc=_h(p.components_), pev=_h(p.explained_variance_, p.explained_variance_ratio_, p.singular_values_),
                      pnv=_h(np.float64(p.noise_variance_)), pT=_h(p.transform(X[:256])), wT=_h(w.transform(X[:256])),
                      tc=_h(t.components_, t.singular_values_, t.explained_variance_ratio_), tT=_h(t.transform(X[:256])),
                      fc=_h(f.components_, f.explained_variance_), fnv=_h(np.float64(f.noise_variance_)),
-                     fT=_h(f.transform(X[:256]))),
+                     fT=_h(f.transform(X[:256])), ac=_h(a.components_, a.explained_variance_, a.transform(X[:256])),
+                     mle=_h(np.int32(mle.n_components_), mle.components_, np.float64(mle.noise_variance_)),
+                     ta=_h(ta.components_, ta.singular_values_)),
                 p, lambda e: (e.transform(Xh[:256]),))
 
 
