@@ -696,6 +696,70 @@ def barycenter_row(
     return Float32(0)
 
 
+def als_row(
+    C: F32Ptr, Y: F32Ptr, YtY: F32Ptr, X: F32Ptr, S: F32Ptr, u: Int, m: Int, f: Int, reg: Float32
+) -> Float32:
+    """implicit's `cpu/_als.pyx::least_squares` for ONE user u: A = YtY +
+    reg I + sum_i (c_ui - 1) y_i y_i^T and b = sum_{c_ui > 0} c_ui y_i over
+    the items i with c_ui != 0 (ascending; a negative confidence enters A
+    with its magnitude and b not at all), then x_u = A^-1 b by Cholesky
+    (posv). C is the dense n x m confidence matrix (0 = no interaction), Y
+    the m x f item factors. S is per-row scratch of f*f + f floats. Returns
+    1 if the Cholesky met a non-positive pivot (x_u is then 0), else 0."""
+    var ab = u * (f * f + f)
+    var bb = ab + f * f
+    for j in range(f * f):
+        S.unsafe_store(ab + j, YtY.unsafe_load(j))
+    for j in range(f):
+        S.unsafe_store(ab + j * f + j, add(S.unsafe_load(ab + j * f + j), reg))
+        S.unsafe_store(bb + j, Float32(0))
+    for i in range(m):
+        var conf = ftz(C.unsafe_load(u * m + i))
+        if conf == Float32(0):
+            continue
+        if conf > Float32(0):
+            for j in range(f):
+                S.unsafe_store(bb + j, ftz(identical_mul_add(conf, ftz(Y.unsafe_load(i * f + j)), ftz(S.unsafe_load(bb + j)))))
+        else:
+            conf = -conf
+        var cm1 = sub(conf, Float32(1))
+        for j in range(f):
+            var t = mul(cm1, Y.unsafe_load(i * f + j))
+            for l in range(f):
+                S.unsafe_store(ab + j * f + l, ftz(identical_mul_add(t, ftz(Y.unsafe_load(i * f + l)), ftz(S.unsafe_load(ab + j * f + l)))))
+    # Cholesky (lower, left-looking, sums ascending), then the two solves
+    for j in range(f):
+        var acc = ftz(S.unsafe_load(ab + j * f + j))
+        for p in range(j):
+            var l = ftz(S.unsafe_load(ab + j * f + p))
+            acc = ftz(identical_mul_add(-l, l, acc))
+        if not (acc > Float32(0)):
+            for q in range(f):
+                X.unsafe_store(u * f + q, Float32(0))
+            return Float32(1)
+        var dj = sqrt0(acc)
+        S.unsafe_store(ab + j * f + j, dj)
+        for r in range(j + 1, f):
+            var s = ftz(S.unsafe_load(ab + r * f + j))
+            for p in range(j):
+                s = ftz(identical_mul_add(-ftz(S.unsafe_load(ab + r * f + p)), ftz(S.unsafe_load(ab + j * f + p)), s))
+            S.unsafe_store(ab + r * f + j, div0(s, dj))
+    for a in range(f):
+        var acc = ftz(S.unsafe_load(bb + a))
+        for p in range(a):
+            acc = ftz(identical_mul_add(-ftz(S.unsafe_load(ab + a * f + p)), ftz(S.unsafe_load(bb + p)), acc))
+        S.unsafe_store(bb + a, div0(acc, S.unsafe_load(ab + a * f + a)))
+    for aa in range(f):
+        var a = f - 1 - aa
+        var acc = ftz(S.unsafe_load(bb + a))
+        for p in range(a + 1, f):
+            acc = ftz(identical_mul_add(-ftz(S.unsafe_load(ab + p * f + a)), ftz(S.unsafe_load(bb + p)), acc))
+        S.unsafe_store(bb + a, div0(acc, S.unsafe_load(ab + a * f + a)))
+    for q in range(f):
+        X.unsafe_store(u * f + q, S.unsafe_load(bb + q))
+    return Float32(0)
+
+
 # ------------------------------------------------------------------ serial
 # Small dense routines run by ONE thread on the device (a single-thread
 # kernel) and by the host loop: the same function body both ways.
