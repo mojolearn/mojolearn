@@ -81,6 +81,17 @@ def test_lstm_classifier():
     assert set(m.predict(X)) <= {0, 1}
 
 
+def test_gru_regressor():
+    check_cls(ml.GRURegressor)
+
+
+def test_gru_classifier():
+    X, y = _data()
+    m = ml.GRUClassifier(hidden_size=5, learning_rate=5e-2, batch_size=16, max_epochs=10).fit(X, (y > 0).astype(np.int64))
+    np.testing.assert_allclose(m.hidden_sequence(X), reference_forward(m, X), atol=2e-5)
+    assert m.loss_curve_[-1] < m.loss_curve_[0]
+
+
 def test_state_dict_round_trip():
     X, y = _data()
     m = ml.LSTMRegressor(hidden_size=4, max_epochs=1).fit(X, y)

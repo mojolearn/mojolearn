@@ -24,7 +24,7 @@ from . import _backend
 from ._buffer import as_f32_c, frombytes
 
 __all__ = ["IncrementalPCA", "GaussianRandomProjection", "SparseRandomProjection", "johnson_lindenstrauss_min_dim",
-           "NMF"]
+           "NMF", "FastICA", "FactorAnalysis"]
 
 _BINDING = "_mojolearn_x_decomp"
 
@@ -881,3 +881,366 @@ class NMF(_Base):
     def inverse_transform(self, X):
         self._check()
         return self._kit().mm(_M.from_input(X, "W"), self.components_m_).out()
+
+
+# ================================================================ FastICA
+def _sym_decorrelation(k, W):
+    """sklearn `_fastica.py::_sym_decorrelation`: (W W^T)^(-1/2) W through
+    eigh, eigenvalues clipped at float32 tiny."""
+    w, u = k.eigh(k.mm(W, W, tb=True))
+    w = k.ew("maxs", w, s=1.1754943508222875e-38)
+    ui = k.ew("mul", u, k.ew("recip", k.ew("sqrt", w)))
+    return k.mm(k.mm(ui, u, tb=True), W)
+
+
+class FastICA(_Base):
+    """sklearn.decomposition.FastICA (reference: scikit-learn
+    `decomposition/_fastica.py`: `_fit_transform`, `_ica_par`, `_ica_def`,
+    `_sym_decorrelation`, `_gs_decorrelation`, `_logcosh`, `_exp`, `_cube`).
+
+    The whitening SVD is the eigendecomposition of X^T X (both of sklearn's
+    whiten_solver values take this route); a singular value below 10 float32
+    eps is clamped there, as sklearn's 'eigh' solver clamps it. w_init
+    defaults to a draw from the lane's Philox stream, not numpy's.
+    REFUSED BY NAME: a callable `fun`."""
+    _parameters = ("n_components", "algorithm", "whiten", "fun", "fun_args", "max_iter", "tol", "w_init",
+                   "whiten_solver", "random_state", "numeric_mode")
+
+    def __init__(self, n_components=None, *, algorithm="parallel", whiten="unit-variance", fun="logcosh",
+                 fun_args=None, max_iter=200, tol=1e-4, w_init=None, whiten_solver="svd", random_state=None,
+                 numeric_mode=None):
+        self.n_components, self.algorithm, self.whiten, self.fun = n_components, algorithm, whiten, fun
+        self.fun_args, self.max_iter, self.tol, self.w_init = fun_args, max_iter, tol, w_init
+        self.whiten_solver, self.random_state, self.numeric_mode = whiten_solver, random_state, numeric_mode
+
+    def _g(self, k, Y):
+        if self.fun == "logcosh":
+            alpha = (self.fun_args or {}).get("alpha", 1.0)
+            if not 1 <= alpha <= 2:
+                raise ValueError("alpha must be in [1,2]")
+            gx = k.ew("tanh", k.ew("scale", Y, s=alpha))
+            gp = k.ew("scale", k.ew("onemsq", gx), s=alpha)
+        elif self.fun == "exp":
+            gx, gp = k.ew("expg", Y), k.ew("expgp", Y)
+        elif self.fun == "cube":
+            gx, gp = k.ew("cube", Y), k.ew("cubep", Y)
+        else:
+            raise ValueError("fun must be 'logcosh', 'exp' or 'cube' (a callable is not carried)")
+        return gx, k.ew("scale", k.rowsum(gp), s=1.0 / Y.c)
+
+    def _par(self, k, X1, W):
+        W = _sym_decorrelation(k, W)
+        p = X1.c
+        it = 0
+        for it in range(1, self.max_iter + 1):
+            gx, gp = self._g(k, k.mm(W, X1))
+            W1 = _sym_decorrelation(k, k.ew("sub", k.ew("scale", k.mm(gx, X1, tb=True), s=1.0 / p),
+                                            k.ew("mul", W, gp)))
+            dots = k.rowsum(k.ew("mul", W1, W))
+            lim = max(k.ew("abs", k.ew("adds", k.ew("abs", dots), s=-1.0)).s)
+            W = W1
+            if lim < self.tol:
+                break
+        return W, it
+
+    def _def(self, k, X1, Winit):
+        nc = Winit.r
+        p = X1.c
+        rows = []
+        its = []
+        for j in range(nc):
+            w = Winit.rows(j, j + 1)
+            if rows:
+                Wp = _vstack(*rows)
+                w = k.ew("sub", w, k.mm(k.mm(w, Wp, tb=True), Wp))
+            w = k.ew("scale", w, s=1.0 / _norm(k, w) if _norm(k, w) else 0.0)
+            it = 0
+            for it in range(1, self.max_iter + 1):
+                gx, gp = self._g(k, k.mm(w, X1))
+                w1 = k.ew("sub", k.ew("scale", k.mm(gx, X1, tb=True), s=1.0 / p), k.ew("mul", w, gp))
+                if rows:
+                    Wp = _vstack(*rows)
+                    w1 = k.ew("sub", w1, k.mm(k.mm(w1, Wp, tb=True), Wp))
+                nw = _norm(k, w1)
+                w1 = k.ew("scale", w1, s=1.0 / nw if nw else 0.0)
+                lim = abs(abs(k.total(k.ew("mul", w1, w)).s[0]) - 1)
+                w = w1
+                if lim < self.tol:
+                    break
+            its.append(it)
+            rows.append(w)
+        return _vstack(*rows), max(its)
+
+    def fit_transform(self, X, y=None):
+        return self._fit(X, True).out()
+
+    def fit(self, X, y=None):
+        self._fit(X, False)
+        return self
+
+    def _fit(self, X, sources):
+        self.numeric_mode_ = _mode(self.numeric_mode)
+        k = self._kit()
+        M = _M.from_input(X)
+        n, d = M.r, M.c
+        if self.algorithm not in ("parallel", "deflation"):
+            raise ValueError("algorithm must be 'parallel' or 'deflation'")
+        whiten = self.whiten
+        if whiten not in (False, "unit-variance", "arbitrary-variance"):
+            raise ValueError(f"whiten={whiten!r} is not supported")
+        nc = self.n_components
+        if not whiten and nc is not None:
+            nc = None
+        if nc is None:
+            nc = min(n, d)
+        if nc > min(n, d):
+            nc = min(n, d)
+        if whiten:
+            mean = k.colmean(M)
+            Xc = k.ew("sub", M, mean)
+            ev, u = k.eigh(k.mm(Xc, Xc, ta=True))
+            order = list(range(d - 1, -1, -1))
+            ev = k.ew("maxs", ev.take_cols(order), s=_F32_EPS * 10)
+            sv = k.ew("sqrt", ev)
+            u = u.take_cols(order)
+            u = u.neg_cols([v < 0 for v in u.row(0)])
+            K = k.ew("div", u, sv).T.rows(0, nc)
+            X1 = k.ew("scale", k.mm(K, Xc, tb=True), s=math.sqrt(n))
+        else:
+            Xc = M
+            X1 = M.T
+        if self.w_init is None:
+            Winit = k.rand(nc, nc, _seed_of(self.random_state), 20, 1)
+        else:
+            Winit = _M.from_input(self.w_init, "w_init")
+            if (Winit.r, Winit.c) != (nc, nc):
+                raise ValueError(f"w_init has invalid shape -- should be {(nc, nc)}")
+        W, it = (self._par if self.algorithm == "parallel" else self._def)(k, X1, Winit)
+        self.n_iter_ = it
+        S = None
+        if whiten:
+            WK = k.mm(W, K)
+            S = k.mm(Xc, WK, tb=True)
+            if whiten == "unit-variance":
+                smean = k.colmean(S)
+                std = k.ew("sqrt", k.ew("scale", k.colsum(k.ew("sqdiff", S, smean)), s=1.0 / n))
+                S = k.ew("div", S, std)
+                W = k.ew("div", W, std.T)
+            comp = k.mm(W, K)
+            self.whitening_m_ = K
+            self.whitening_ = K.out()
+            self.mean_m_ = mean
+            self.mean_ = mean.out((d,))
+        else:
+            S = k.mm(M, W, tb=True)
+            comp = W
+        self.components_m_ = comp
+        self.components_ = comp.out()
+        self.mixing_m_ = _pinv_rows(k, comp)
+        self.mixing_ = self.mixing_m_.out()
+        self._whiten = whiten
+        self.n_features_in_ = d
+        return S
+
+    def transform(self, X, copy=True):
+        self._check()
+        k = self._kit()
+        M = _M.from_input(X)
+        if self._whiten:
+            M = k.ew("sub", M, self.mean_m_)
+        return k.mm(M, self.components_m_, tb=True).out()
+
+    def inverse_transform(self, X, copy=True):
+        self._check()
+        k = self._kit()
+        Y = k.mm(_M.from_input(X), self.mixing_m_, tb=True)
+        if self._whiten:
+            Y = k.ew("add", Y, self.mean_m_)
+        return Y.out()
+
+
+# ================================================================ FactorAnalysis
+_LOG_2PI = 1.8378770664093453
+
+
+def _dsum(values):
+    """Sequential float64 sum (IEEE adds, ascending): the same on every box."""
+    t = 0.0
+    for v in values:
+        t += v
+    return t
+
+
+def _inv(k, A):
+    """A^-1 through the LU solve against the identity (getrf + getrs)."""
+    lu, piv, info = k.lu(A)
+    if info:
+        raise ValueError("singular matrix")
+    return k.lu_solve(lu, piv, _eye(A.r))
+
+
+def _eye(n):
+    E = _M.zeros(n, n)
+    for i in range(n):
+        E.s[i * n + i] = 1.0
+    return E
+
+
+def _logdet(k, A):
+    """log|det A| from the LU diagonal (sum ascending); sign ignored."""
+    lu, piv, info = k.lu(A)
+    diag = _M.of([lu.s[i * A.r + i] for i in range(A.r)], 1, A.r)
+    return k.total(k.ew("logs", k.ew("abs", diag), s=1.1754943508222875e-38)).s[0]
+
+
+def _polar(k, A):
+    """U V^T of the SVD of a square A, and the sum of its singular values:
+    A V S^-1 V^T through the eigh of A^T A."""
+    w, V = k.eigh(k.mm(A, A, ta=True))
+    sv = k.ew("sqrt", w)
+    AV = k.ew("div", k.mm(A, V), sv)
+    return k.mm(AV, V, tb=True), k.total(sv).s[0]
+
+
+def _ortho_rotation(k, C, method, tol=1e-6, max_iter=100):
+    """sklearn `_factor_analysis.py::_ortho_rotation`; C is n_features x n_components."""
+    nrow, ncol = C.r, C.c
+    R = _eye(ncol)
+    var = 0.0
+    for _ in range(max_iter):
+        cr = k.mm(C, R)
+        if method == "varimax":
+            tmp = k.ew("mul", cr, k.ew("scale", k.colsum(k.ew("sq", cr)), s=1.0 / nrow))
+            target = k.ew("sub", k.ew("cube", cr), tmp)
+        else:
+            target = k.ew("cube", cr)
+        R, var_new = _polar(k, k.mm(C, target, ta=True))
+        if var != 0 and var_new < var * (1 + tol):
+            break
+        var = var_new
+    return k.mm(C, R).T
+
+
+class FactorAnalysis(_Base):
+    """sklearn.decomposition.FactorAnalysis (reference: scikit-learn
+    `decomposition/_factor_analysis.py`: `fit`, `transform`,
+    `get_covariance`, `get_precision`, `score_samples`, `_ortho_rotation`).
+
+    Each iteration's SVD of the scaled data is the eigh of its d x d Gram
+    matrix: the squared singular values sklearn uses ARE its eigenvalues.
+    svd_method='randomized' takes the same exact route (sklearn's randomized
+    SVD is an approximation of it). `rotation` in {None, 'varimax',
+    'quartimax'}."""
+    _parameters = ("n_components", "tol", "copy", "max_iter", "noise_variance_init", "svd_method",
+                   "iterated_power", "rotation", "random_state", "numeric_mode")
+
+    def __init__(self, n_components=None, *, tol=1e-2, copy=True, max_iter=1000, noise_variance_init=None,
+                 svd_method="randomized", iterated_power=3, rotation=None, random_state=0, numeric_mode=None):
+        self.n_components, self.tol, self.copy, self.max_iter = n_components, tol, copy, max_iter
+        self.noise_variance_init, self.svd_method, self.iterated_power = noise_variance_init, svd_method, iterated_power
+        self.rotation, self.random_state, self.numeric_mode = rotation, random_state, numeric_mode
+
+    def fit(self, X, y=None):
+        self.numeric_mode_ = _mode(self.numeric_mode)
+        if self.svd_method not in ("lapack", "randomized"):
+            raise ValueError("svd_method must be 'lapack' or 'randomized'")
+        if self.rotation not in (None, "varimax", "quartimax"):
+            raise ValueError("rotation must be None, 'varimax' or 'quartimax'")
+        k = self._kit()
+        M = _M.from_input(X)
+        n, d = M.r, M.c
+        nc = self.n_components or d
+        mean = k.colmean(M)
+        Xc = k.ew("sub", M, mean)
+        nsqrt = math.sqrt(n)
+        llconst = d * _LOG_2PI + nc
+        var = k.ew("scale", k.colsum(k.ew("sq", Xc)), s=1.0 / n)
+        if self.noise_variance_init is None:
+            psi = k.const(1.0, 1, d)
+        else:
+            psi = _M.of([float(v) for v in self.noise_variance_init], 1, len(self.noise_variance_init))
+            if psi.c != d:
+                raise ValueError(f"noise_variance_init dimension does not match the number of features : {psi.c} != {d}")
+        SMALL = 1e-12
+        old_ll = -math.inf
+        loglike = []
+        it = 0
+        W = None
+        for it in range(1, self.max_iter + 1):
+            sqrt_psi = k.ew("adds", k.ew("sqrt", psi), s=SMALL)
+            Z = k.ew("scale", k.ew("div", Xc, sqrt_psi), s=1.0 / nsqrt)
+            ev, V = k.eigh(k.mm(Z, Z, ta=True))
+            order = list(range(d - 1, -1, -1))
+            s2 = k.ew("maxs", ev.take_cols(order), s=0.0)
+            Vt = V.take_cols(order).T.rows(0, nc)
+            sk = s2.cols(0, nc)
+            # the log-likelihood is accumulated in Python float64 (IEEE adds,
+            # sequential): at float32 its step falls under tol=1e-2 early
+            unexp = _dsum(s2.cols(nc, d).s) if nc < d else 0.0
+            W = k.ew("mul", Vt, k.ew("sqrt", k.ew("maxs", k.ew("adds", sk, s=-1.0), s=0.0)).T)
+            W = k.ew("mul", W, sqrt_psi)
+            slog = _dsum(k.ew("logs", sk, s=1.1754943508222875e-38).s)
+            plog = _dsum(k.ew("logs", psi, s=1.1754943508222875e-38).s)
+            ll = (llconst + slog + unexp + plog) * (-n / 2.0)
+            loglike.append(ll)
+            if (ll - old_ll) < self.tol:
+                break
+            old_ll = ll
+            psi = k.ew("maxs", k.ew("sub", var, k.colsum(k.ew("sq", W))), s=SMALL)
+        if self.rotation is not None:
+            W = _ortho_rotation(k, W.T, self.rotation).rows(0, nc)
+        self.components_m_ = W
+        self.components_ = W.out()
+        self.noise_variance_m_ = psi
+        self.noise_variance_ = psi.out((d,))
+        self.mean_m_ = mean
+        self.mean_ = mean.out((d,))
+        self.loglike_ = loglike
+        self.n_iter_ = it
+        self.n_features_in_ = d
+        return self
+
+    def transform(self, X):
+        self._check()
+        k = self._kit()
+        M = k.ew("sub", _M.from_input(X), self.mean_m_)
+        W = self.components_m_
+        Wpsi = k.ew("div", W, self.noise_variance_m_)
+        cov_z = _inv(k, k.ew("add", _eye(W.r), k.mm(Wpsi, W, tb=True)))
+        return k.mm(k.mm(M, Wpsi, tb=True), cov_z).out()
+
+    def _cov(self, k):
+        W = self.components_m_
+        C = k.mm(W, W, ta=True)
+        d = C.r
+        for i in range(d):
+            C.s[i * d + i] = _f32(C.s[i * d + i] + self.noise_variance_m_.s[i])
+        return C
+
+    def get_covariance(self):
+        self._check()
+        return self._cov(self._kit()).out()
+
+    def get_precision(self):
+        self._check()
+        k = self._kit()
+        return _inv(k, self._cov(k)).out()
+
+    def score_samples(self, X):
+        v = self._ss(X)
+        return v.out((v.r,))
+
+    def _ss(self, X):
+        self._check()
+        k = self._kit()
+        Xr = k.ew("sub", _M.from_input(X), self.mean_m_)
+        C = self._cov(k)
+        P = _inv(k, C)
+        ld = _logdet(k, P)
+        q = k.rowsum(k.ew("mul", Xr, k.mm(Xr, P)))
+        return k.ew("adds", k.ew("scale", q, s=-0.5), s=-0.5 * (Xr.c * _LOG_2PI - ld))
+
+    def score(self, X, y=None):
+        k = self._kit()
+        v = self._ss(X)
+        return k.ew("scale", k.total(v), s=1.0 / v.r).s[0]

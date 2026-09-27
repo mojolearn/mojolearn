@@ -70,3 +70,34 @@ def _(ml, X, yc, yr, Xh=None):
                      it=_h(np.int32(m.n_iter_)), T=_h(m.transform(A[:128])), Wu=_h(Wu), Hu=_h(u.components_),
                      Tu=_h(u.transform(A[:128])), Ha=_h(a.components_)),
                 m, lambda e: (e.transform(np.abs(Xh[:128])),))
+
+
+@lane("x-decomp-fastica")
+def _(ml, X, yc, yr, Xh=None):
+    S = X[:3000]
+    m = ml.FastICA(n_components=5, random_state=2, max_iter=60)
+    src = m.fit_transform(S)
+    e = ml.FastICA(n_components=3, fun="exp", algorithm="deflation", whiten="arbitrary-variance",
+                   random_state=4, max_iter=40).fit(S)
+    c = ml.FastICA(fun="cube", random_state=6, max_iter=30).fit(S[:1000])
+    return _fit(dict(src=_h(src), comp=_h(m.components_), mix=_h(m.mixing_), white=_h(m.whitening_),
+                     it=_h(np.int32(m.n_iter_)), ecomp=_h(e.components_), et=_h(e.transform(S[:64])),
+                     ccomp=_h(c.components_), inv=_h(m.inverse_transform(src[:64]))),
+                m, lambda e: (e.transform(Xh[:256]),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-decomp-fastica")
+
+
+@lane("x-decomp-factor-analysis")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.FactorAnalysis(n_components=4, max_iter=60).fit(X[:5000])
+    v = ml.FactorAnalysis(n_components=3, rotation="varimax", max_iter=40).fit(X[:2000])
+    q = ml.FactorAnalysis(n_components=3, rotation="quartimax", max_iter=40).fit(X[:2000])
+    return _fit(dict(comp=_h(m.components_), psi=_h(m.noise_variance_), ll=_h(np.float64(m.loglike_)),
+                     T=_h(m.transform(X[:256])), cov=_h(m.get_covariance()), prec=_h(m.get_precision()),
+                     ss=_h(m.score_samples(X[:256])), vcomp=_h(v.components_), qcomp=_h(q.components_)),
+                m, lambda e: (e.transform(Xh[:256]), e.score_samples(Xh[:256])))
+
+
+_batch_decl(_rows_calls("transform", "score_samples", sl=slice(0, 256)), "x-decomp-factor-analysis")

@@ -35,7 +35,7 @@ _OPT_DEFAULTS = {
 
 
 def binding(numeric_mode=None):
-    return _backend.binding(_BINDING, numeric_mode)
+    return _backend.binding("_mojolearn_x_sequence", numeric_mode)
 
 
 def optimizer_arguments(name, options):
@@ -245,3 +245,15 @@ class LSTMClassifier(_RecurrentClassifier):
     """LSTM layers (`nn.LSTM`, batch_first) under a linear head, softmax
     cross-entropy, trained by BPTT on the GPU."""
     _CELL = "lstm"
+
+
+class GRURegressor(_RecurrentRegressor):
+    """GRU layers (`nn.GRU`, batch_first; gates r, z, n and
+    h' = n + z (h - n)) under a linear head, mean squared error."""
+    _CELL = "gru"
+
+
+class GRUClassifier(_RecurrentClassifier):
+    """GRU layers (`nn.GRU`, batch_first) under a linear head, softmax
+    cross-entropy."""
+    _CELL = "gru"

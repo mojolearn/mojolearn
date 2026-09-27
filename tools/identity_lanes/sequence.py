@@ -48,3 +48,43 @@ def _(ml, X, yc, yr, Xh=None):
                      r_seq=_h(r.hidden_sequence(Xs[:16])),
                      c_loss=_h(c.loss_curve_), c_params=_h(c.params_), c_proba=_h(c.predict_proba(Xs))),
                 r, lambda e: (e.predict(Xhs),))
+
+
+@lane("sequence-gru")
+def _(ml, X, yc, yr, Xh=None):
+    """A two-layer GRU regressor (RMSprop, centered, momentum) and a
+    one-layer GRU classifier (Adagrad), the LSTM lane's data and batches."""
+    Xs = _sequence_seq(X)
+    ycs, yrs = _sequence_targets(yc, yr)
+    r = ml.GRURegressor(hidden_size=12, num_layers=2, optimizer="rmsprop", learning_rate=1e-2,
+                        batch_size=32, max_epochs=2, random_state=5,
+                        optimizer_options=dict(momentum=0.5, centered=True)).fit(Xs, yrs)
+    c = ml.GRUClassifier(hidden_size=10, optimizer="adagrad", learning_rate=5e-2, batch_size=32,
+                         max_epochs=2, random_state=6).fit(Xs, ycs)
+    Xhs = _sequence_seq(Xh)
+    return _fit(dict(r_loss=_h(r.loss_curve_), r_params=_h(r.params_), r_pred=_h(r.predict(Xs)),
+                     r_seq=_h(r.hidden_sequence(Xs[:16])),
+                     c_loss=_h(c.loss_curve_), c_params=_h(c.params_), c_proba=_h(c.predict_proba(Xs))),
+                r, lambda e: (e.predict(Xhs),))
+
+
+def _sequence_opt_run(ml, cls, X, steps=6, **kw):
+    """Two float32 tensors cut from the fixture, `steps` updates with
+    gradients cut from further fixture rows; the params and the state after."""
+    p1 = np.ascontiguousarray(X[:32, :8], dtype=np.float32).copy()
+    p2 = np.ascontiguousarray(X[32:40, 0], dtype=np.float32).copy()
+    opt = cls([p1, p2], **kw)
+    for k in range(steps):
+        base = 40 + 48 * k
+        g1 = np.ascontiguousarray(X[base:base + 32, 8:16], dtype=np.float32) * np.float32(0.5)
+        g2 = np.ascontiguousarray(X[base + 32:base + 40, 1], dtype=np.float32)
+        opt.step([g1, g2])
+    return dict(params=_h(p1, p2), state=_h(*opt.state))
+
+
+@lane("sequence-rmsprop")
+def _(ml, X, yc, yr, Xh=None):
+    """RMSprop at torch's defaults and centered with momentum and weight decay."""
+    a = _sequence_opt_run(ml, ml.RMSprop, X, lr=1e-2)
+    b = _sequence_opt_run(ml, ml.RMSprop, X, lr=3e-3, centered=True, momentum=0.7, weight_decay=1e-2)
+    return _fit(dict(plain=a["params"], plain_state=a["state"], centered=b["params"], centered_state=b["state"]))
