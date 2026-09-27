@@ -15,6 +15,13 @@ messaging lanes. Newest items are at the top.
    one Hot Aisle MI300X per algorithm lane and renews every dev box hourly.
    If `tools/dev_pod.sh list` shows `<lane>-amd`, that box is yours: use it
    with `--vendor amd` on sync/run/extend. Don't request a second one.
+   A `<lane>-amd` box may be a GPU slot on a shared 8x MI300X host
+   (`tools/dev_pod.sh host status`): use only sync/run/extend with `--vendor
+   amd`, never touch other `/root/mojolearn-*` dirs or GPUs on it. Until a lane
+   has its own AMD box, it submits AMD identity checks to the `do-amd` steward:
+   `tools/apple_steward.py submit` ships identity requests there too while
+   `tools/do_amd_steward.sh` has it up (push the commit to origin first), and
+   a merge then needs m2pro PASS AND do-amd PASS (`apple_steward.py status`).
 1. **Order per lane:** (a) every algorithm in the lane table and Additions
    (PASS 1); (b) proof on every column, holding an AMD box (PASS 2 items
    1-2); (c) **option parity** (item 2 below); (d) **GPU speed**, IDENTICAL
