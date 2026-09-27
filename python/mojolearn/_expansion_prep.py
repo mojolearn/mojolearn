@@ -53,6 +53,8 @@ _OPS = dict(
     mi_colscale=66, mi_noise=67, mi_cc=68, mi_cd=69, mi_reduce=70, sqsum_cols=71, log=72, robust_uv=73,
     qt_inverse=74, pt_inverse=75, block_argmax=76, ord_inverse=77, cat_gather=78, where_code=79, kbins_inverse=80,
     da_shrink=81, da_pool=82, sym_fn=83, da_intercept=84, evr=85, class_stats_w=86,
+    indicator=87, code_counts=88, remap_codes=89, add_arrays=90, gnb_merge=91, cat_counts=92, cat_flp=93,
+    mi_dc=94, mi_dd=95,
 )
 _PARAMS = 14
 _NONE = -1
@@ -377,19 +379,136 @@ def _codes(pr, arr, categories):
     return codes, neg
 
 
-def _inverse_codes(pr, arr, categories, missing, emv, unknown):
+def _inverse_codes(pr, arr, categories, missing, emv, unknown, ncat=None, back=None):
     """OrdinalEncoder-style inverse: stages that turn codes back into category
     values. Returns (values offset, codes offset); a code of -2 is invalid,
-    -1 unknown (the reference's None, written as NaN)."""
+    -1 unknown (the reference's None, written as NaN). With infrequent
+    categories, `ncat` is each column's grouped cardinality and `back` the
+    (MAP, MSTRIDE, NMAP) grouped -> category index table (the infrequent code
+    maps to -3, written as NaN)."""
     n, d = arr.shape
     xo = pr.put(arr)
     mo = pr.put_list(missing)
     eo = pr.put_scalar(emv)
     uo = pr.put_scalar(0.0 if unknown is None else unknown)
-    no = pr.put_list([c.size for c in categories])
+    no = pr.put_list(ncat if ncat is not None else [c.size for c in categories])
     codes = pr.alloc(n * d)
     pr.stage("ord_inverse", n * d, xo, n, d, mo, eo, 0 if unknown is None else 1, uo, no, codes)
+    if back is not None:
+        codes = _remap(pr, codes, n, d, back, _NONE)
     return _gather_categories(pr, codes, n, d, categories), codes
+
+
+def _check_infrequent_params(est):
+    """The reference's parameter constraints; True when grouping is on."""
+    mf, mc = est.min_frequency, est.max_categories
+    if mf is not None:
+        ok = (isinstance(mf, numbers.Integral) and not isinstance(mf, bool) and mf >= 1) or \
+            (isinstance(mf, numbers.Real) and not isinstance(mf, numbers.Integral) and 0 < mf < 1)
+        if not ok:
+            raise ValueError(f"mojolearn: min_frequency must be an int >= 1 or a float in (0, 1), got {mf!r}")
+    if mc is not None and not (isinstance(mc, numbers.Integral) and not isinstance(mc, bool) and mc >= 1):
+        raise ValueError(f"mojolearn: max_categories must be an int >= 1, got {mc!r}")
+    return mc is not None or mf is not None
+
+
+def _category_counts(mode, arr, categories):
+    """Per column, how many training rows hold each category (the device's
+    lookup and a per-column count, integers)."""
+    n, d = arr.shape
+    pr = _Prog()
+    codes, _neg = _codes(pr, arr, categories)
+    kmax = max(c.size for c in categories)
+    out = pr.alloc(d * kmax)
+    pr.stage("code_counts", d, codes, n, d, kmax, out)
+    pr.run(mode)
+    flat = pr.get_i32(out, d * kmax).tolist()
+    return [flat[j * kmax:j * kmax + c.size] for j, c in enumerate(categories)]
+
+
+def _identify_infrequent(counts, n, min_frequency, max_categories):
+    """sklearn `_identify_infrequent`: the sorted infrequent indices, or None.
+    Integer counts; the fractional threshold is n * min_frequency in float64."""
+    if min_frequency is None:
+        mask = [False] * len(counts)
+    elif isinstance(min_frequency, numbers.Integral):
+        mask = [c < min_frequency for c in counts]
+    else:
+        lim = n * float(min_frequency)
+        mask = [c < lim for c in counts]
+    current = len(counts) - sum(mask) + 1
+    if max_categories is not None and max_categories < current:
+        keep = max_categories - 1
+        if keep == 0:
+            mask = [True] * len(counts)
+        else:
+            order = sorted(range(len(counts)), key=lambda i: counts[i])   # stable, as mergesort
+            for i in order[:-keep]:
+                mask[i] = True
+    idx = [i for i, m in enumerate(mask) if m]
+    return idx or None
+
+
+def _fit_infrequent(est, mode, arr, ignore_missing):
+    """Sets est._infrequent (per column: sorted infrequent indices or None)
+    and est._grouping (per column: category index -> grouped code, or None),
+    as the reference's `_fit_infrequent_category_mapping`. With
+    ignore_missing (OrdinalEncoder) a trailing NaN category is left out of
+    the grouping."""
+    counts = _category_counts(mode, arr, est.categories_)
+    n = arr.shape[0]
+    est._infrequent, est._grouping = [], []
+    for cats, cnt in zip(est.categories_, counts):
+        if ignore_missing and cats.size and _is_nan_value(cats.tolist()[-1]):
+            cnt = cnt[:-1]
+        inf = _identify_infrequent(cnt, n, est.min_frequency, est.max_categories)
+        est._infrequent.append(inf)
+        if inf is None:
+            est._grouping.append(None)
+            continue
+        infset = set(inf)
+        nf = len(cnt) - len(inf)
+        mapping, g = [], 0
+        for i in range(len(cnt)):
+            if i in infset:
+                mapping.append(nf)
+            else:
+                mapping.append(g)
+                g += 1
+        est._grouping.append(mapping)
+    est.infrequent_categories_ = [None if inf is None else Array.from_list([c.tolist()[i] for i in inf], "<f4")
+                                  for c, inf in zip(est.categories_, est._infrequent)]
+
+
+def _grouping_table(pr, grouping, inverse=False):
+    """(MAP, MSTRIDE, NMAP) for remap_codes: category -> grouped code, or
+    (inverse) grouped code -> category index with the infrequent code -> -3."""
+    tables = []
+    for g in grouping:
+        if g is None:
+            tables.append([])
+        elif not inverse:
+            tables.append(list(g))
+        else:
+            nf = max(g)
+            back = [0] * (nf + 1)
+            for i, v in enumerate(g):
+                if v < nf:
+                    back[v] = i
+            back[nf] = -3
+            tables.append(back)
+    stride = max(1, max(len(t) for t in tables))
+    flat = []
+    for t in tables:
+        flat.extend(t + [0] * (stride - len(t)))
+    return pr.put_list(flat), stride, pr.put_list([len(t) for t in tables])
+
+
+def _remap(pr, codes, n, d, table, neg):
+    mo, stride, no = table
+    out = pr.alloc(n * d)
+    pr.stage("remap_codes", n * d, codes, n * d, d, mo, stride, no, neg, out)
+    return out
 
 
 def _gather_categories(pr, codes, n, d, categories):
@@ -431,8 +550,12 @@ class OrdinalEncoder(_PrepBase):
     (NaN by default). handle_unknown 'error' or 'use_encoded_value'.
     inverse_transform maps codes back (an unknown_value row is NaN where the
     reference writes None: there is no object Array). categories='auto' or
-    one sorted numeric list per column (as the reference); min_frequency and
-    max_categories are refused."""
+    one sorted numeric list per column (as the reference). min_frequency /
+    max_categories group infrequent categories into one code after the
+    frequent ones (the reference's rule, a NaN category left out of it);
+    inverse_transform writes that code as NaN (the reference's
+    'infrequent_sklearn' string: there is no object Array), and
+    unknown_value may not equal it (the reference lets it collide)."""
     _parameters = ("categories", "dtype", "handle_unknown", "unknown_value", "encoded_missing_value",
                    "min_frequency", "max_categories")
 
@@ -447,8 +570,7 @@ class OrdinalEncoder(_PrepBase):
         self.max_categories = max_categories
 
     def fit(self, X, y=None):
-        if self.min_frequency is not None or self.max_categories is not None:
-            raise NotImplementedError("mojolearn: OrdinalEncoder min_frequency and max_categories are not implemented")
+        grouping = _check_infrequent_params(self)
         if self.handle_unknown not in ("error", "use_encoded_value"):
             raise ValueError(f"mojolearn: invalid handle_unknown {self.handle_unknown!r}")
         if self.handle_unknown == "use_encoded_value" and not isinstance(self.unknown_value, numbers.Real):
@@ -461,7 +583,12 @@ class OrdinalEncoder(_PrepBase):
                             _given_categories(self.categories, arr, mode, self.handle_unknown == "error",
                                               "OrdinalEncoder"))
         self._missing = [c.size - 1 if c.size and _is_nan_value(c.tolist()[-1]) else -1 for c in self.categories_]
+        self._infrequent = self._grouping = None
+        if grouping:
+            _fit_infrequent(self, mode, arr, True)
         cards = [c.size - (1 if m >= 0 else 0) for c, m in zip(self.categories_, self._missing)]
+        if grouping:
+            cards = [k if g is None else max(g) + 1 for k, g in zip(cards, self._grouping)]
         if self.handle_unknown == "use_encoded_value" and not _is_nan_value(self.unknown_value):
             if any(0 <= self.unknown_value < k for k in cards):
                 raise ValueError(f"mojolearn: the used value for unknown_value {self.unknown_value} is one of the "
@@ -483,10 +610,12 @@ class OrdinalEncoder(_PrepBase):
         pr = _Prog()
         codes, neg = _codes(pr, arr, self.categories_)
         out = codes
+        if self._grouping is not None:
+            out = _remap(pr, codes, n, d, _grouping_table(pr, self._grouping), _NONE)
         if self.handle_unknown == "use_encoded_value":
             val = pr.put_scalar(self.unknown_value)
-            out = pr.alloc(n * d)
-            pr.stage("where_neg", n * d, codes, n * d, val, out)
+            src, out = out, pr.alloc(n * d)
+            pr.stage("where_neg", n * d, src, n * d, val, out)
         if any(m >= 0 for m in self._missing):
             src, out = out, pr.alloc(n * d)
             pr.stage("where_code", n * d, codes, n, d, pr.put_list(self._missing),
@@ -503,7 +632,12 @@ class OrdinalEncoder(_PrepBase):
         n, d = arr.shape
         pr = _Prog()
         unknown = self.unknown_value if self.handle_unknown == "use_encoded_value" else None
-        out, codes = _inverse_codes(pr, arr, self.categories_, self._missing, self.encoded_missing_value, unknown)
+        ncat = back = None
+        if self._grouping is not None:
+            ncat = [c.size if g is None else max(g) + 1 for c, g in zip(self.categories_, self._grouping)]
+            back = _grouping_table(pr, self._grouping, inverse=True)
+        out, codes = _inverse_codes(pr, arr, self.categories_, self._missing, self.encoded_missing_value, unknown,
+                                    ncat, back)
         pr.run(self.numeric_mode_)
         bad = _bad_codes(pr, codes, n, d, -2)
         if bad:
@@ -519,8 +653,13 @@ class OneHotEncoder(_PrepBase):
     reference's per-block argmax (an all-zero block is the dropped category,
     or unknown: an error for handle_unknown='error', NaN where the reference
     writes None for 'ignore'). categories='auto' or one sorted numeric list
-    per column (as the reference); min_frequency and max_categories are
-    refused."""
+    per column (as the reference). drop may also be one category per
+    feature. min_frequency / max_categories group infrequent categories
+    into one last column per feature (the reference's rule);
+    handle_unknown 'infrequent_if_exist' and 'warn' send an unknown value to
+    that column when the feature has one (else an all-zero block).
+    inverse_transform writes the infrequent column as NaN (the reference's
+    'infrequent_sklearn' string: there is no object Array)."""
     _parameters = ("categories", "drop", "sparse_output", "dtype", "handle_unknown", "min_frequency",
                    "max_categories", "feature_name_combiner")
 
@@ -536,30 +675,82 @@ class OneHotEncoder(_PrepBase):
         self.feature_name_combiner = feature_name_combiner
 
     def fit(self, X, y=None):
-        if self.min_frequency is not None or self.max_categories is not None:
-            raise NotImplementedError("mojolearn: OneHotEncoder min_frequency and max_categories are not implemented")
-        if self.handle_unknown not in ("error", "ignore"):
-            raise NotImplementedError(f"mojolearn: OneHotEncoder handle_unknown={self.handle_unknown!r} "
-                                      "is not implemented ('error' or 'ignore')")
-        if self.drop not in (None, "first", "if_binary"):
-            raise NotImplementedError("mojolearn: OneHotEncoder drop must be None, 'first' or 'if_binary'")
+        grouping = _check_infrequent_params(self)
+        if self.handle_unknown not in ("error", "ignore", "infrequent_if_exist", "warn"):
+            raise ValueError(f"mojolearn: OneHotEncoder handle_unknown={self.handle_unknown!r} is not valid")
+        if isinstance(self.drop, str) and self.drop not in ("first", "if_binary"):
+            raise ValueError("mojolearn: OneHotEncoder drop must be None, 'first', 'if_binary' or one category "
+                             "per feature")
         arr = _finite_2d(X, "OneHotEncoder")
         mode = _mode()
         self.categories_ = (_fit_categories(mode, arr) if _is_auto(self.categories) else
                             _given_categories(self.categories, arr, mode, self.handle_unknown == "error",
                                               "OneHotEncoder"))
-        if self.drop == "first":
-            self.drop_idx_ = [0 for _ in self.categories_]
-        elif self.drop == "if_binary":
-            self.drop_idx_ = [0 if c.size == 2 else None for c in self.categories_]
-        else:
-            self.drop_idx_ = None
+        self._infrequent = self._grouping = None
+        if grouping:
+            _fit_infrequent(self, mode, arr, False)
+        self._set_drop_idx()
         self.numeric_mode_, self.n_features_in_ = mode, arr.shape[1]
         return self
 
+    def _grouped_sizes(self):
+        return [c.size if (self._grouping is None or g is None) else max(g) + 1
+                for c, g in zip(self.categories_, self._grouping or [None] * len(self.categories_))]
+
+    def _set_drop_idx(self):
+        """The reference's `_set_drop_idx`: `_drop_after` in grouped codes,
+        drop_idx_ in category indices."""
+        sizes = self._grouped_sizes()
+        grouping = self._grouping or [None] * len(sizes)
+        if self.drop is None:
+            after = None
+        elif self.drop == "first":
+            after = [0] * len(sizes)
+        elif self.drop == "if_binary":
+            after = [0 if k == 2 else None for k in sizes]
+        else:
+            vals = list(self.drop.tolist() if hasattr(self.drop, "tolist") else self.drop)
+            if len(vals) != len(sizes):
+                raise ValueError(f"mojolearn: `drop` should have length equal to the number of features "
+                                 f"({len(sizes)}), got {len(vals)}")
+            after, missing = [], []
+            for j, (v, cats) in enumerate(zip(vals, self.categories_)):
+                cl = cats.tolist()
+                if _is_nan_value(v):
+                    hit = [cats.size - 1] if cl and _is_nan_value(cl[-1]) else []
+                else:
+                    fv = array.array("f", [float(v)])[0]
+                    hit = [i for i, c in enumerate(cl) if c == fv]
+                if not hit:
+                    missing.append((j, v))
+                    continue
+                i = hit[0]
+                if grouping[j] is not None:
+                    if i in self._infrequent[j]:
+                        raise ValueError(f"mojolearn: Unable to drop category {cl[i]!r} from feature {j} "
+                                         "because it is infrequent")
+                    i = grouping[j][i]
+                after.append(i)
+            if missing:
+                raise ValueError("mojolearn: The following categories were supposed to be dropped, but were not "
+                                 "found in the training data.\n" + "\n".join(
+                                     f"Category: {v}, Feature: {j}" for j, v in missing))
+        self._drop_after = after
+        if after is None:
+            self.drop_idx_ = None
+        else:
+            self.drop_idx_ = [a if (a is None or g is None) else g.index(a) for a, g in zip(after, grouping)]
+
     def _widths(self):
-        drops = self.drop_idx_ or [None] * len(self.categories_)
-        return [c.size - (0 if dr is None else 1) for c, dr in zip(self.categories_, drops)], drops
+        drops = self._drop_after or [None] * len(self.categories_)
+        return [k - (0 if dr is None else 1) for k, dr in zip(self._grouped_sizes(), drops)], drops
+
+    def _unknown_to(self):
+        """Per column, the grouped code an unknown value takes: the infrequent
+        one under 'infrequent_if_exist' / 'warn' when the column has it, else -1."""
+        if self._grouping is None or self.handle_unknown not in ("infrequent_if_exist", "warn"):
+            return None
+        return [-1 if g is None else max(g) for g in self._grouping]
 
     def transform(self, X):
         self._check_fitted()
@@ -571,6 +762,10 @@ class OneHotEncoder(_PrepBase):
         W = sum(widths)
         pr = _Prog()
         codes, neg = _codes(pr, arr, self.categories_)
+        if self._grouping is not None:
+            unk = self._unknown_to()
+            codes = _remap(pr, codes, n, d, _grouping_table(pr, self._grouping),
+                           _NONE if unk is None else pr.put_list(unk))
         so = pr.put_list(starts)
         do = pr.put_list([-1 if dr is None else dr for dr in drops])
         out = pr.alloc(n * W)
@@ -578,6 +773,15 @@ class OneHotEncoder(_PrepBase):
         pr.run(self.numeric_mode_)
         if self.handle_unknown == "error":
             _raise_unknown(pr, neg, d, "OneHotEncoder")
+        elif self.handle_unknown == "warn" or (self.drop is not None and
+                                               self.handle_unknown in ("ignore", "infrequent_if_exist")):
+            bad = [j for j, v in enumerate(pr.values(neg, d)) if v > 0]
+            if bad:
+                import warnings
+                where = ("encoded as the infrequent category" if self.handle_unknown != "ignore"
+                         else "encoded as all zeros")
+                warnings.warn(f"Found unknown categories in columns {bad} during transform. These unknown "
+                              f"categories will be {where}.", UserWarning)
         return pr.get(out, (n, W))
 
     def inverse_transform(self, X):
@@ -589,10 +793,19 @@ class OneHotEncoder(_PrepBase):
             raise ValueError(f"mojolearn: X has {W} columns, expected {sum(widths)}")
         pr = _Prog()
         codes = _block_argmax(pr, arr, widths, [-1 if dr is None else dr for dr in drops], True)
+        grouped = codes
+        if self._grouping is not None:
+            codes = _remap(pr, codes, n, d, _grouping_table(pr, self._grouping, inverse=True), _NONE)
         out = _gather_categories(pr, codes, n, d, self.categories_)
         pr.run(self.numeric_mode_)
-        bad = _bad_codes(pr, codes, n, d, -1)
-        if bad and self.handle_unknown == "error":
+        # an all-zero block is unknown (NaN) under 'ignore', and under
+        # 'infrequent_if_exist' / 'warn' for a column with no infrequent
+        # category; anywhere else it cannot be inverted
+        strict = [self.handle_unknown == "error" or (self.handle_unknown != "ignore" and self._infrequent is not None
+                                                      and self._infrequent[j] is not None) for j in range(d)]
+        vals = pr.values(grouped, n * d)
+        bad = sorted({i // d for i, v in enumerate(vals) if v == -1 and strict[i % d]})
+        if bad:
             raise ValueError(f"mojolearn: samples {bad[:10]} can not be inverted when drop=None and "
                              "handle_unknown='error' because they contain all zeros")
         return pr.get(out, (n, d))
@@ -691,8 +904,14 @@ class TargetEncoder(_PrepBase):
     Bayes) or a float. `fit_transform` cross-fits over `cv` folds, as the
     reference: KFold for a continuous target, StratifiedKFold for a binary or
     multiclass one; the shuffle comes from `random_state` (splitmix64; the
-    reference draws numpy's). Float32 throughout.
-    categories other than 'auto' and CV splitter objects are refused."""
+    reference draws numpy's). `cv` may also be a splitter object (its
+    `split(X, y)`) or an iterable of (train, test) index pairs, as the
+    reference: the test folds must cover every row exactly once, and each
+    fold's training rows must be every other row. categories='auto' or one
+    sorted numeric list per column (as the encoders). Float32 throughout.
+    A training value outside a given list is excluded from every category's
+    statistics (it still counts in the target mean); the reference codes it
+    as the first category, see x_prep/NOT_IMPLEMENTED.tsv."""
     _parameters = ("categories", "target_type", "smooth", "cv", "shuffle", "random_state")
 
     def __init__(self, categories="auto", target_type="auto", smooth="auto", cv=5, shuffle=True,
@@ -705,14 +924,14 @@ class TargetEncoder(_PrepBase):
         self.random_state = random_state
 
     def _check(self):
-        if self.categories != "auto":
-            raise NotImplementedError("mojolearn: TargetEncoder supports categories='auto' only")
+        if not _is_auto(self.categories) and not isinstance(self.categories, (list, tuple)):
+            raise ValueError("mojolearn: TargetEncoder categories must be 'auto' or a list of lists")
         if self.target_type not in ("auto", "binary", "continuous", "multiclass"):
             raise ValueError(f"mojolearn: invalid target_type {self.target_type!r}")
         if not (self.smooth == "auto" or (isinstance(self.smooth, numbers.Real) and self.smooth >= 0)):
             raise ValueError(f"mojolearn: invalid smooth {self.smooth!r}")
-        if not isinstance(self.cv, numbers.Integral) or self.cv < 2:
-            raise NotImplementedError("mojolearn: TargetEncoder cv must be an integer >= 2")
+        if isinstance(self.cv, numbers.Integral) and self.cv < 2:
+            raise ValueError("mojolearn: TargetEncoder cv must be an integer >= 2, a splitter or an iterable")
 
     def _run(self, arr, y, folds, n_folds, apply_rows_folds):
         n, d = arr.shape
@@ -720,7 +939,8 @@ class TargetEncoder(_PrepBase):
         if len(yflat) != n * T:
             raise ValueError("mojolearn: X and y have different numbers of rows")
         mode = _mode()
-        cats = _fit_categories(mode, arr)
+        cats = (_fit_categories(mode, arr) if _is_auto(self.categories) else
+                _given_categories(self.categories, arr, mode, False, "TargetEncoder"))
         cmax = max(c.size for c in cats)
         F = n_folds
         pr = _Prog()
@@ -754,22 +974,48 @@ class TargetEncoder(_PrepBase):
         self._run(_x2d(X), y, None, 0, False)
         return self
 
+    def _splitter_folds(self, X, y, n):
+        """Row -> fold from a splitter object or (train, test) iterable."""
+        splits = list(self.cv.split(X, y) if hasattr(self.cv, "split") else self.cv)
+        idx = lambda a: [int(i) for i in (a.tolist() if hasattr(a, "tolist") else a)]
+        fold = [-1] * n
+        for k, (_train, test) in enumerate(splits):
+            for i in idx(test):
+                if not 0 <= i < n or fold[i] != -1:
+                    fold = None
+                    break
+                fold[i] = k
+            if fold is None:
+                break
+        if fold is None or -1 in fold or len(splits) < 1:
+            raise ValueError("mojolearn: Validation indices from `cv` must cover each sample index exactly once "
+                             "with no overlap. Pass a splitter with non-overlapping validation folds as `cv`.")
+        for k, (train, _test) in enumerate(splits):
+            if sorted(idx(train)) != [i for i in range(n) if fold[i] != k]:
+                raise NotImplementedError("mojolearn: TargetEncoder cv folds whose training rows are not every "
+                                          "row outside the test fold are not implemented")
+        return fold, len(splits)
+
     def fit_transform(self, X, y):
         self._check()
         arr = _x2d(X)
         n = arr.shape[0]
-        if n < self.cv:
-            raise ValueError(f"mojolearn: cv={self.cv} folds need at least {self.cv} rows")
+        if self.cv is not None and not isinstance(self.cv, numbers.Integral):
+            folds, F = self._splitter_folds(X, y, n)
+            return self._run(arr, y, folds, F, True)
+        cv = 5 if self.cv is None else int(self.cv)
+        if n < cv:
+            raise ValueError(f"mojolearn: cv={cv} folds need at least {cv} rows")
         seed = 0 if self.random_state is None else int(self.random_state)
         kind, _classes, _yflat, _T = _target_kind(y, self.target_type)
         if kind == "continuous":
-            folds = _kfold_assignment(n, int(self.cv), seed, bool(self.shuffle))
+            folds = _kfold_assignment(n, cv, seed, bool(self.shuffle))
         else:
             labels = flatten_labels(y)
             if len(labels) != n:
                 raise ValueError("mojolearn: X and y have different numbers of rows")
-            folds = _stratified_assignment(labels, int(self.cv), seed, bool(self.shuffle))
-        return self._run(arr, y, folds, int(self.cv), True)
+            folds = _stratified_assignment(labels, cv, seed, bool(self.shuffle))
+        return self._run(arr, y, folds, cv, True)
 
     def transform(self, X):
         self._check_fitted()
@@ -814,8 +1060,12 @@ class SimpleImputer(_PrepBase):
     from the output unless `keep_empty_features` (its statistic is NaN, as in
     the reference; with keep_empty_features it is 0, or fill_value).
     add_indicator appends MissingIndicator's columns (the features with a
-    missing value in fit, 1.0 where missing). Callable strategies are
-    refused."""
+    missing value in fit, 1.0 where missing). A callable strategy is the
+    reference's: statistics_[j] = float(strategy(v)) over column j's
+    non-missing float32 values v in row order (a 1-D Array); it runs in
+    Python, on the host, and a NaN statistic drops the column unless
+    keep_empty_features, as the reference. The fill itself runs on the
+    device like every other strategy."""
     _parameters = ("missing_values", "strategy", "fill_value", "copy", "add_indicator", "keep_empty_features")
 
     def __init__(self, *, missing_values=float("nan"), strategy="mean", fill_value=None, copy=True,
@@ -828,8 +1078,8 @@ class SimpleImputer(_PrepBase):
         self.keep_empty_features = keep_empty_features
 
     def fit(self, X, y=None):
-        if self.strategy not in ("mean", "median", "most_frequent", "constant"):
-            raise NotImplementedError(f"mojolearn: SimpleImputer strategy {self.strategy!r} is not implemented")
+        if not callable(self.strategy) and self.strategy not in ("mean", "median", "most_frequent", "constant"):
+            raise ValueError(f"mojolearn: SimpleImputer strategy {self.strategy!r} is not valid")
         if self.strategy == "constant" and self.fill_value is not None and \
                 not isinstance(self.fill_value, numbers.Real):
             raise TypeError("mojolearn: SimpleImputer fill_value must be numeric")
@@ -852,6 +1102,8 @@ class SimpleImputer(_PrepBase):
         pr.run(mode)
         counts = [int(v) for v in pr.values(st, d)]
         empty = [c == 0 for c in counts]
+        if callable(self.strategy):
+            return self._fit_callable(pr.get(xo, (n, d)), counts, mode)
         if self.strategy == "constant":
             fv = 0.0 if self.fill_value is None else float(self.fill_value)
             stats = [fv] * d
@@ -874,6 +1126,22 @@ class SimpleImputer(_PrepBase):
             self.statistics_ = pr.get(src, d)
             self._fill = self.statistics_
         self._keep = [j for j in range(d) if self.keep_empty_features or not empty[j]]
+        self._indicator = [j for j in range(d) if counts[j] < n] if self.add_indicator else []
+        self.numeric_mode_, self.n_features_in_ = mode, d
+        return self
+
+    def _fit_callable(self, marked, counts, mode):
+        """strategy=<callable>: the reference's `strategy(masked_X[:, j].compressed())`
+        per column over the missing-marked X (NaN = missing)."""
+        n, d = marked.shape
+        cols = [list(c) for c in zip(*marked.tolist())]
+        stats = []
+        for j in range(d):
+            v = Array.from_list([x for x in cols[j] if x == x], "<f4") if counts[j] else Array((0,), "<f4")
+            stats.append(float(self.strategy(v)))
+        self.statistics_ = Array.from_list(stats, "<f4")
+        self._fill = self.statistics_
+        self._keep = [j for j in range(d) if self.keep_empty_features or stats[j] == stats[j]]
         self._indicator = [j for j in range(d) if counts[j] < n] if self.add_indicator else []
         self.numeric_mode_, self.n_features_in_ = mode, d
         return self
@@ -926,7 +1194,9 @@ def _gather_rows(arr, rows):
 
 class KBinsDiscretizer(_PrepBase):
     """sklearn.preprocessing.KBinsDiscretizer: strategy 'uniform', 'quantile'
-    (quantile_method 'averaged_inverted_cdf', the default, or 'linear') or
+    (every numpy quantile_method: 'averaged_inverted_cdf', the default,
+    'inverted_cdf', 'closest_observation', 'interpolated_inverted_cdf',
+    'hazen', 'weibull', 'linear', 'median_unbiased', 'normal_unbiased') or
     'kmeans' (1-D Lloyd from the uniform bin centres); encode 'onehot' (dense:
     there is no sparse Array), 'onehot-dense' or 'ordinal'. A constant column
     is one bin with edges (-inf, inf). Above `subsample` rows the fit uses a
@@ -952,9 +1222,11 @@ class KBinsDiscretizer(_PrepBase):
             raise ValueError(f"mojolearn: invalid encode {self.encode!r}")
         strat = {"uniform": 0, "kmeans": 3}.get(self.strategy)
         if self.strategy == "quantile":
-            strat = {"averaged_inverted_cdf": 1, "linear": 2}.get(self.quantile_method)
+            strat = {"averaged_inverted_cdf": 1, "linear": 2, "inverted_cdf": 4, "closest_observation": 5,
+                     "interpolated_inverted_cdf": 6, "hazen": 7, "weibull": 8, "median_unbiased": 9,
+                     "normal_unbiased": 10}.get(self.quantile_method)
             if strat is None:
-                raise NotImplementedError(f"mojolearn: quantile_method {self.quantile_method!r} is not implemented")
+                raise ValueError(f"mojolearn: invalid quantile_method {self.quantile_method!r}")
         if strat is None:
             raise ValueError(f"mojolearn: invalid strategy {self.strategy!r}")
         arr = _x2d(X)
@@ -1132,6 +1404,38 @@ def _given_priors(values, K, who, check_sum=False):
     return vals
 
 
+def _partial_codes(est, y, classes, n):
+    """sklearn `_check_partial_fit_first_call` and the batch's class codes:
+    the first call (no classes_ yet) needs `classes`, later ones may repeat
+    them only unchanged; a label outside classes_ is refused."""
+    first = getattr(est, "classes_", None) is None
+    if first and classes is None:
+        raise ValueError("mojolearn: classes must be passed on the first call to partial_fit.")
+    if classes is not None:
+        cl, _ = sorted_classes(flatten_labels(classes))
+        if not first and list(cl) != list(est.classes_):
+            raise ValueError(f"mojolearn: `classes={cl}` is not the same as on last call to partial_fit, was: "
+                             f"{est.classes_}")
+        if first:
+            est.classes_ = cl
+    labels = flatten_labels(y)
+    if len(labels) != n:
+        raise ValueError("mojolearn: X and y have different numbers of rows")
+    index = {c: i for i, c in enumerate(est.classes_)}
+    bad = sorted({repr(v) for v in labels if v not in index})
+    if bad:
+        raise ValueError(f"mojolearn: The target label(s) {bad} in y do not exist in the initial classes "
+                         f"{est.classes_}")
+    return first, Array.from_list([index[v] for v in labels], "<i4")
+
+
+def _copy_block(pr, src, rows, cols):
+    """A bit-for-bit copy of a (rows, cols) block (gather_cols over every column)."""
+    out = pr.alloc(rows * cols)
+    pr.stage("gather_cols", rows * cols, src, rows, cols, pr.put_list(list(range(cols))), cols, out)
+    return out
+
+
 def _check_alpha(est):
     if not isinstance(est.alpha, numbers.Real) or not est.alpha > 0:
         raise NotImplementedError(f"mojolearn: {type(est).__name__} needs alpha > 0 "
@@ -1143,7 +1447,12 @@ class GaussianNB(_Classifier):
     predict_log_proba): per-class mean and population variance plus
     var_smoothing * the largest feature variance, float32; `priors` as the
     reference checks them; sample_weight weights the class means, variances
-    and counts (numpy `average`), as the reference. partial_fit is refused."""
+    and counts (numpy `average`), as the reference. partial_fit merges each
+    batch into the running counts, means and variances (the reference's
+    `_update_mean_variance`, Chan's pairwise rule) and adds the batch's
+    epsilon to the merged variance; the running variance is kept without
+    epsilon (the reference subtracts the NEW batch's epsilon from a variance
+    that holds the old one, see naive_bayes/NOT_IMPLEMENTED.tsv)."""
     _parameters = ("priors", "var_smoothing")
 
     def __init__(self, *, priors=None, var_smoothing=1e-9):
@@ -1167,6 +1476,7 @@ class GaussianNB(_Classifier):
         pr.stage("col_stats", d, xo, n, d, st)
         pr.stage("gnb_eps", 1, st + 2 * d, d, eps, vs)
         _class_stats(pr, wo, K * d, xo, n, d, yo, K, cnt, theta, var, _NONE)
+        raw = _copy_block(pr, var, K, d)
         given = _NONE
         if self.priors is not None:
             given = pr.put_list(_given_priors(self.priors, K, "GaussianNB", check_sum=True))
@@ -1181,11 +1491,53 @@ class GaussianNB(_Classifier):
         self.class_count_, self.class_prior_ = pr.get(cnt, K), pr.get(prior, K)
         self.epsilon_ = pr.values(eps, 1)[0]
         self._const = pr.get(const, K)
+        self._raw_var = pr.get(raw, (K, d))
         self.numeric_mode_, self.n_features_in_ = mode, d
         return self
 
     def partial_fit(self, X, y, classes=None, sample_weight=None):
-        raise NotImplementedError("mojolearn: GaussianNB.partial_fit is not implemented")
+        arr = _x2d(X)
+        n, d = arr.shape
+        first, codes = _partial_codes(self, y, classes, n)
+        K = len(self.classes_)
+        if first:
+            mode = _mode()
+            zk, zkd = [0.0] * K, [0.0] * (K * d)
+        else:
+            self._check_width(arr)
+            mode = self.numeric_mode_
+            zk, zkd = None, None
+        pr = _Prog()
+        xo = pr.put(arr)
+        yo = pr.put_codes(codes)
+        st = pr.alloc(6 * d)
+        vs = pr.put_scalar(self.var_smoothing)
+        eps = pr.alloc(1)
+        bc, bm, bv = pr.alloc(K), pr.alloc(K * d), pr.alloc(K * d)
+        wo = _nb_weights(pr, sample_weight, n)
+        pr.stage("col_stats", d, xo, n, d, st)
+        pr.stage("gnb_eps", 1, st + 2 * d, d, eps, vs)
+        _class_stats(pr, wo, K * d, xo, n, d, yo, K, bc, bm, bv, _NONE)
+        oc = pr.put_list(zk) if first else pr.put(self.class_count_)
+        om = pr.put_list(zkd) if first else pr.put(self.theta_)
+        ov = pr.put_list(zkd) if first else pr.put(self._raw_var)
+        cnt, theta, raw = pr.alloc(K), pr.alloc(K * d), pr.alloc(K * d)
+        pr.stage("gnb_merge", K * d, oc, om, ov, bc, bm, bv, K, d, cnt, theta, raw)
+        var = _copy_block(pr, raw, K, d)
+        if self.priors is not None:
+            given = pr.put_list(_given_priors(self.priors, K, "GaussianNB", check_sum=True))
+        else:
+            given = pr.alloc(K)
+            pr.stage("lda_prep", 1, cnt, theta, K, d, n, given, pr.alloc(d), 2, cnt)
+        prior, const = pr.alloc(K), pr.alloc(K)
+        pr.stage("gnb_params", K, cnt, var, K, d, 1, eps, prior, const, 1, given)
+        pr.run(mode)
+        self.theta_, self.var_ = pr.get(theta, (K, d)), pr.get(var, (K, d))
+        self.class_count_, self.class_prior_ = pr.get(cnt, K), pr.get(prior, K)
+        self.epsilon_ = pr.values(eps, 1)[0]
+        self._const, self._raw_var = pr.get(const, K), pr.get(raw, (K, d))
+        self.numeric_mode_, self.n_features_in_ = mode, d
+        return self
 
     def _jll_stages(self, pr, xo, n, d, out):
         K = len(self.classes_)
@@ -1219,6 +1571,54 @@ class _DiscreteNB(_Classifier):
         clp = pr.alloc(K)
         pr.stage("col_stats", d, xo, n, d, st)
         _class_stats(pr, wo, K * d, xo, n, d, yo, K, cnt, _NONE, _NONE, fc)
+        self._prior_stages(pr, K, cnt, clp)
+        return pr, mode, n, d, K, st, cnt, fc, clp
+
+    def _finish_counts(self, pr, mode, d, K, cnt, fc, clp):
+        self.class_count_, self.feature_count_ = pr.get(cnt, K), pr.get(fc, (K, d))
+        self.class_log_prior_ = pr.get(clp, K)
+        self.numeric_mode_, self.n_features_in_ = mode, d
+
+    def fit(self, X, y, sample_weight=None):
+        _check_alpha(self)
+        return self._params(*self._fit_counts(X, y, getattr(self, "binarize", None), sample_weight))
+
+    def partial_fit(self, X, y, classes=None, sample_weight=None):
+        """The reference's `_BaseDiscreteNB.partial_fit`: the batch's class and
+        feature counts added to the running ones, then the log probabilities
+        and the class log prior recomputed from the sums."""
+        _check_alpha(self)
+        arr = _x2d(X)
+        n, d = arr.shape
+        first, codes = _partial_codes(self, y, classes, n)
+        K = len(self.classes_)
+        if first:
+            mode = _mode()
+        else:
+            self._check_width(arr)
+            mode = self.numeric_mode_
+        pr = _Prog()
+        xo = pr.put(arr)
+        wo = _nb_weights(pr, sample_weight, n)
+        if getattr(self, "binarize", None) is not None:
+            xb = pr.alloc(n * d)
+            pr.stage("binarize", n * d, xo, n * d, pr.put_scalar(self.binarize), xb)
+            xo = xb
+        yo = pr.put_codes(codes)
+        st = pr.alloc(6 * d)
+        cnt, fc, clp = pr.alloc(K), pr.alloc(K * d), pr.alloc(K)
+        pr.stage("col_stats", d, xo, n, d, st)
+        if first:
+            _class_stats(pr, wo, K * d, xo, n, d, yo, K, cnt, _NONE, _NONE, fc)
+        else:
+            bc, bf = pr.alloc(K), pr.alloc(K * d)
+            _class_stats(pr, wo, K * d, xo, n, d, yo, K, bc, _NONE, _NONE, bf)
+            pr.stage("add_arrays", K, pr.put(self.class_count_), bc, cnt)
+            pr.stage("add_arrays", K * d, pr.put(self.feature_count_), bf, fc)
+        self._prior_stages(pr, K, cnt, clp)
+        return self._params(pr, mode, n, d, K, st, cnt, fc, clp)
+
+    def _prior_stages(self, pr, K, cnt, clp):
         if getattr(self, "class_prior", None) is not None:
             po = pr.put_list(_given_priors(self.class_prior, K, type(self).__name__))
             pr.stage("log", K, po, clp)
@@ -1227,21 +1627,12 @@ class _DiscreteNB(_Classifier):
         else:
             ones = pr.put_list([1.0] * K)
             pr.stage("class_log_prior", K, ones, K, clp)
-        return pr, mode, n, d, K, st, cnt, fc, clp
-
-    def _finish_counts(self, pr, mode, d, K, cnt, fc, clp):
-        self.class_count_, self.feature_count_ = pr.get(cnt, K), pr.get(fc, (K, d))
-        self.class_log_prior_ = pr.get(clp, K)
-        self.numeric_mode_, self.n_features_in_ = mode, d
-
-    def partial_fit(self, X, y, classes=None, sample_weight=None):
-        raise NotImplementedError(f"mojolearn: {type(self).__name__}.partial_fit is not implemented")
 
 
 class MultinomialNB(_DiscreteNB):
     """sklearn.naive_bayes.MultinomialNB, float32; alpha > 0 required.
     class_prior as given (its log); sample_weight weights the counts, as the
-    reference; partial_fit is refused."""
+    reference; partial_fit adds each batch's counts, as the reference."""
     _parameters = ("alpha", "force_alpha", "fit_prior", "class_prior")
 
     def __init__(self, *, alpha=1.0, force_alpha=True, fit_prior=True, class_prior=None):
@@ -1250,9 +1641,7 @@ class MultinomialNB(_DiscreteNB):
         self.fit_prior = fit_prior
         self.class_prior = class_prior
 
-    def fit(self, X, y, sample_weight=None):
-        _check_alpha(self)
-        pr, mode, n, d, K, st, cnt, fc, clp = self._fit_counts(X, y, sample_weight=sample_weight)
+    def _params(self, pr, mode, n, d, K, st, cnt, fc, clp):
         a = pr.put_scalar(self.alpha)
         flp = pr.alloc(K * d)
         pr.stage("mnb_params", K, fc, K, d, a, flp)
@@ -1271,7 +1660,8 @@ class MultinomialNB(_DiscreteNB):
 class BernoulliNB(_DiscreteNB):
     """sklearn.naive_bayes.BernoulliNB, float32 (X binarized at `binarize`
     unless it is None); alpha > 0 required; class_prior as given (its log);
-    sample_weight weights the counts, as the reference. partial_fit is refused."""
+    sample_weight weights the counts, as the reference; partial_fit adds each
+    batch's counts, as the reference."""
     _parameters = ("alpha", "force_alpha", "binarize", "fit_prior", "class_prior")
 
     def __init__(self, *, alpha=1.0, force_alpha=True, binarize=0.0, fit_prior=True, class_prior=None):
@@ -1281,9 +1671,7 @@ class BernoulliNB(_DiscreteNB):
         self.fit_prior = fit_prior
         self.class_prior = class_prior
 
-    def fit(self, X, y, sample_weight=None):
-        _check_alpha(self)
-        pr, mode, n, d, K, st, cnt, fc, clp = self._fit_counts(X, y, self.binarize, sample_weight)
+    def _params(self, pr, mode, n, d, K, st, cnt, fc, clp):
         a = pr.put_scalar(self.alpha)
         flp, w, bias = pr.alloc(K * d), pr.alloc(K * d), pr.alloc(K)
         pr.stage("bnb_params", K, fc, cnt, K, d, a, clp, flp, w, bias)
@@ -1336,9 +1724,39 @@ def _shrinkage_value(shrinkage):
     return float(shrinkage)
 
 
-def _lda_cov_blocks(pr, xo, n, d, yo, K, mean, var, cnt, shr):
+def _estimator_covs(est, arr, codes, K, who):
+    """covariance_estimator: the reference's `_cov(X_k, covariance_estimator=est)`
+    for each class k (codes None: every row, one block). `est.fit` runs in
+    Python on the class's float32 rows (a mojolearn Array); its covariance_
+    is read as float32. Returns the (K, d, d) blocks as one flat list."""
+    n, d = arr.shape
+    code_list = [0] * n if codes is None else [int(c) for c in codes.tolist()]
+    out = []
+    for k in range(K):
+        rows = [i for i, c in enumerate(code_list) if c == k]
+        est.fit(_gather_rows(arr, rows))
+        if not hasattr(est, "covariance_"):
+            raise ValueError(f"mojolearn: {type(est).__name__} does not have a covariance_ attribute")
+        cov = est.covariance_
+        flat = flatten_labels(cov.tolist() if hasattr(cov, "tolist") else cov)
+        if len(flat) != d * d:
+            raise ValueError(f"mojolearn: {who}: covariance_ of {type(est).__name__} is not ({d}, {d})")
+        out.extend(float(v) for v in flat)
+    return out
+
+
+def _check_estimator_shrinkage(est, shrinkage):
+    if est is not None and shrinkage is not None and shrinkage != 0:
+        raise ValueError("mojolearn: covariance_estimator and shrinkage parameters are not None. "
+                         "Only one of the two can be set.")
+
+
+def _lda_cov_blocks(pr, xo, n, d, yo, K, mean, var, cnt, shr, given=None):
     """K class covariances (divisor the class count), shrunk as the reference's
-    `_cov(X_k, shrinkage)`. Returns the (K, d, d) offset."""
+    `_cov(X_k, shrinkage)`, or the covariance_estimator's blocks as `given`.
+    Returns the (K, d, d) offset."""
+    if given is not None:
+        return pr.put_list(given)
     cov = pr.alloc(K * d * d)
     pr.stage("qda_cov", K * d * d, xo, n, d, yo, mean, cnt, cov)
     if shr is not None:
@@ -1346,9 +1764,9 @@ def _lda_cov_blocks(pr, xo, n, d, yo, K, mean, var, cnt, shr):
     return cov
 
 
-def _lda_class_cov(pr, xo, n, d, yo, K, mean, cnt, priors, shr, var=_NONE):
+def _lda_class_cov(pr, xo, n, d, yo, K, mean, cnt, priors, shr, var=_NONE, given=None):
     """The reference's `_class_cov`: sum_k priors_k _cov(X_k, shrinkage). Returns the (d, d) offset."""
-    cov = _lda_cov_blocks(pr, xo, n, d, yo, K, mean, var, cnt, shr)
+    cov = _lda_cov_blocks(pr, xo, n, d, yo, K, mean, var, cnt, shr, given)
     sw = pr.alloc(d * d)
     pr.stage("da_pool", d * d, cov, K, d, priors, sw, _NONE, _NONE)
     return sw
@@ -1374,7 +1792,10 @@ class LinearDiscriminantAnalysis(_Classifier):
     as Sw^-1/2 Sb Sw^-1/2), both with shrinkage None, 'auto' (Ledoit-Wolf on
     standardised classes, as the reference) or a constant; store_covariance.
     Float32; priors as the reference takes them (renormalised when they do
-    not sum to 1). covariance_estimator (any object) is refused by name."""
+    not sum to 1). covariance_estimator (solver 'lsqr' / 'eigen', as the
+    reference): any object with `fit` and `covariance_`, fitted in Python on
+    each class's rows (and, for 'eigen', on every row for the total scatter);
+    its covariances enter the device solve as float32."""
     _parameters = ("solver", "shrinkage", "priors", "n_components", "store_covariance", "tol",
                    "covariance_estimator")
 
@@ -1393,9 +1814,10 @@ class LinearDiscriminantAnalysis(_Classifier):
             raise ValueError(f"mojolearn: invalid solver {self.solver!r}")
         if self.solver == "svd" and self.shrinkage is not None:
             raise NotImplementedError("mojolearn: shrinkage not supported with 'svd' solver.")
-        if self.covariance_estimator is not None:
-            raise NotImplementedError("mojolearn: LinearDiscriminantAnalysis covariance_estimator is not implemented")
-        shr = _shrinkage_value(self.shrinkage)
+        if self.covariance_estimator is not None and self.solver == "svd":
+            raise ValueError("mojolearn: covariance estimator is not supported with svd solver. Try another solver")
+        _check_estimator_shrinkage(self.covariance_estimator, self.shrinkage)
+        shr = None if self.covariance_estimator is not None else _shrinkage_value(self.shrinkage)
         arr = _x2d(X)
         n, d = arr.shape
         codes = self._encode_y(y, n)
@@ -1470,14 +1892,17 @@ class LinearDiscriminantAnalysis(_Classifier):
             gflag, gofs = (2 if abs(sum(pv) - 1.0) > 1e-5 else 1), pr.put_list(pv)
         pr.stage("lda_prep", 1, cnt, mean, K, d, n, priors, xbar, gflag, gofs)
         eigen = self.solver == "eigen"
+        est = self.covariance_estimator
         tot = None
         if eigen:
             y0 = pr.put_list([0.0] * n)
             c1, m1 = pr.alloc(1), pr.alloc(d)
             v1 = pr.alloc(d) if shr is not None else _NONE
             pr.stage("class_stats", d, xo, n, d, y0, 1, c1, m1, v1, _NONE)
-            tot = _lda_cov_blocks(pr, xo, n, d, y0, 1, m1, v1, c1, shr)
-        sw = _lda_class_cov(pr, xo, n, d, yo, K, mean, cnt, priors, shr, var)
+            gt = None if est is None else _estimator_covs(est, arr, None, 1, "LinearDiscriminantAnalysis")
+            tot = _lda_cov_blocks(pr, xo, n, d, y0, 1, m1, v1, c1, shr, gt)
+        gk = None if est is None else _estimator_covs(est, arr, codes, K, "LinearDiscriminantAnalysis")
+        sw = _lda_class_cov(pr, xo, n, d, yo, K, mean, cnt, priors, shr, var, gk)
         sb = pr.alloc(d * d) if eigen else None
         if eigen:
             pr.stage("da_pool", d * d, sw, 1, d, pr.put_list([1.0]), pr.alloc(d * d), tot, sb)
@@ -1578,7 +2003,9 @@ class QuadraticDiscriminantAnalysis(_Classifier):
     reg_param, as the reference does. A class whose scalings are not all
     above `tol` is refused, as the reference refuses it. store_covariance
     keeps covariance_ (svd: V diag(scalings) V^T, as the reference forms it).
-    Float32; priors as given. covariance_estimator is refused by name."""
+    Float32; priors as given. covariance_estimator (solver 'eigen' only, as
+    the reference): any object with `fit` and `covariance_`, fitted in Python
+    on each class's rows; its covariances enter the device eigh as float32."""
     _parameters = ("solver", "shrinkage", "priors", "reg_param", "store_covariance", "tol", "covariance_estimator")
 
     def __init__(self, *, solver="svd", shrinkage=None, priors=None, reg_param=0.0, store_covariance=False,
@@ -1596,10 +2023,12 @@ class QuadraticDiscriminantAnalysis(_Classifier):
             raise ValueError(f"mojolearn: invalid solver {self.solver!r}")
         if self.solver == "svd" and self.shrinkage is not None:
             raise NotImplementedError("mojolearn: shrinkage not supported with 'svd' solver.")
-        if self.covariance_estimator is not None:
-            raise NotImplementedError("mojolearn: QuadraticDiscriminantAnalysis covariance_estimator is not "
-                                      "implemented")
-        shr = _shrinkage_value(self.shrinkage)
+        if self.covariance_estimator is not None and self.solver == "svd":
+            raise ValueError("mojolearn: covariance_estimator is not supported with solver='svd'. "
+                             "Try solver='eigen' instead.")
+        _check_estimator_shrinkage(self.covariance_estimator, self.shrinkage)
+        est = self.covariance_estimator
+        shr = None if est is not None else _shrinkage_value(self.shrinkage)
         eigen = self.solver == "eigen"
         arr = _x2d(X)
         n, d = arr.shape
@@ -1623,7 +2052,10 @@ class QuadraticDiscriminantAnalysis(_Classifier):
         if self.priors is not None:
             gflag, gofs = 1, pr.put_list(_given_priors(self.priors, K, "QuadraticDiscriminantAnalysis"))
         pr.stage("lda_prep", 1, cnt, mean, K, d, n, priors, xbar, gflag, gofs)
-        pr.stage("qda_cov", K * d * d, xo, n, d, yo, mean, cnt, cov)
+        if est is not None:
+            cov = pr.put_list(_estimator_covs(est, arr, codes, K, "QuadraticDiscriminantAnalysis"))
+        else:
+            pr.stage("qda_cov", K * d * d, xo, n, d, yo, mean, cnt, cov)
         if shr is not None:
             pr.stage("da_shrink", K, xo, n, d, yo, mean, var, cnt, cov, pr.put_scalar(shr), pr.alloc(K))
         keep = pr.alloc(K * d * d) if (self.store_covariance and eigen) else None
@@ -2065,6 +2497,36 @@ def _classes_array(classes):
     return list(classes)
 
 
+def _multilabel_indicator(y):
+    """y as a float32 (n, K) Array when it is the reference's
+    `multilabel-indicator` (`type_of_target`): two-dimensional, more than one
+    column, at most two distinct values, all integral. A 2-D y of more
+    distinct values is `multiclass-multioutput`, refused as the reference
+    refuses it; anything else (1-D, one column) is None."""
+    shape = getattr(y, "shape", None)
+    if shape is not None:
+        if len(shape) != 2:
+            return None
+        rows = y.tolist()
+    elif isinstance(y, (list, tuple)) and y and all(isinstance(r, (list, tuple)) for r in y):
+        rows = [list(r) for r in y]
+    else:
+        return None
+    if not rows or len(rows[0]) < 2:
+        return None
+    if any(len(r) != len(rows[0]) for r in rows):
+        raise ValueError("mojolearn: y rows have different lengths")
+    distinct = set()
+    for r in rows:
+        for v in r:
+            if isinstance(v, bool) or not isinstance(v, numbers.Real) or v != v or float(v) != int(float(v)):
+                raise ValueError("mojolearn: Multioutput target data is not supported with label binarization")
+            distinct.add(float(v))
+    if len(distinct) > 2:
+        raise ValueError("mojolearn: Multioutput target data is not supported with label binarization")
+    return _x2d(Array.from_list([[float(v) for v in r] for r in rows], "<f4"), "y")
+
+
 class LabelEncoder(_PrepBase):
     """sklearn.preprocessing.LabelEncoder: classes_ are the sorted distinct
     labels (numeric labels on the device: sort + run scan; str labels in
@@ -2121,7 +2583,11 @@ class LabelBinarizer(_PrepBase):
     a NEG column for one), pos_label / neg_label; an unseen label is a NEG
     row. Numeric labels take the device route, str labels Python's.
     inverse_transform is the reference's (argmax for multiclass, the
-    threshold for binary). Multilabel input and sparse_output are refused."""
+    threshold for binary and multilabel). A multilabel indicator y (2-D,
+    more than one column, at most two distinct integral values) is the
+    reference's `multilabel-indicator`: classes_ are the column indices, a
+    nonzero entry is pos_label and a zero neg_label. sparse_output is
+    refused."""
     _parameters = ("neg_label", "pos_label", "sparse_output")
 
     def __init__(self, *, neg_label=0, pos_label=1, sparse_output=False):
@@ -2136,6 +2602,12 @@ class LabelBinarizer(_PrepBase):
                 and self.neg_label < self.pos_label):
             raise ValueError("mojolearn: neg_label must be an integer below pos_label")
         self.numeric_mode_ = _mode()
+        ind = _multilabel_indicator(y)
+        if ind is not None:
+            self._classes, self._cats = list(range(ind.shape[1])), None
+            self.classes_ = Array.from_list(self._classes, "<i8")
+            self.y_type_ = "multilabel-indicator"
+            return self
         values = flatten_labels(y)
         self._classes, self._cats = _label_classes(self.numeric_mode_, values)
         self.classes_ = _classes_array(self._classes)
@@ -2151,6 +2623,21 @@ class LabelBinarizer(_PrepBase):
 
     def transform(self, y):
         self._check_fitted()
+        ind = _multilabel_indicator(y)
+        if ind is not None or self.y_type_ == "multilabel-indicator":
+            if self.y_type_ != "multilabel-indicator":
+                raise ValueError("mojolearn: The object was not fitted with multilabel input.")
+            if ind is None:
+                raise ValueError("mojolearn: y is not a multilabel indicator; the binarizer was fitted with one")
+            n, K = ind.shape
+            if K != len(self._classes):
+                raise ValueError(f"mojolearn: classes {self._classes} mismatch with the {K} label columns in y")
+            pr = _Prog()
+            out = pr.alloc(n * K)
+            pr.stage("indicator", n * K, pr.put(ind), n * K, 0, _NONE, int(self.neg_label), int(self.pos_label),
+                     out)
+            pr.run(self.numeric_mode_)
+            return pr.get_i32(out, (n, K))
         values = flatten_labels(y)
         n, K = len(values), len(self._classes)
         binary = K <= 2
@@ -2175,6 +2662,15 @@ class LabelBinarizer(_PrepBase):
         n, W = arr.shape
         K = len(self._classes)
         pr = _Prog()
+        if self.y_type_ == "multilabel-indicator":
+            if W != K:
+                raise ValueError(f"mojolearn: Y has {W} columns, expected {K}")
+            if threshold is None:
+                threshold = (self.pos_label + self.neg_label) / 2.0
+            out = pr.alloc(n * W)
+            pr.stage("indicator", n * W, pr.put(arr), n * W, 1, pr.put_scalar(threshold), 0, 1, out)
+            pr.run(self.numeric_mode_)
+            return pr.get_i32(out, (n, W))
         if self.y_type_ == "multiclass":
             if W != K:
                 raise ValueError(f"mojolearn: Y has {W} columns, expected {K}")
@@ -2568,61 +3064,141 @@ class SelectKBest(_SelectorMixin):
         return self.fit(X, y).transform(X)
 
 
+def _mi_discrete_mask(discrete_features, d):
+    """The reference's discrete_features: 'auto' (dense X: none), a bool for
+    every column, a bool mask of length d, or column indices (negative ones
+    count from the end)."""
+    if isinstance(discrete_features, str):
+        if discrete_features != "auto":
+            raise ValueError("mojolearn: Invalid string value for discrete_features.")
+        return [False] * d
+    if isinstance(discrete_features, bool) or type(discrete_features).__name__ == "bool_":
+        return [bool(discrete_features)] * d
+    vals = discrete_features.tolist() if hasattr(discrete_features, "tolist") else list(discrete_features)
+    if isinstance(vals, bool):
+        return [vals] * d
+    if vals and all(isinstance(v, bool) for v in vals):
+        if len(vals) != d:
+            raise ValueError(f"mojolearn: discrete_features mask has {len(vals)} entries; X has {d} features")
+        return list(vals)
+    mask = [False] * d
+    for v in vals:
+        if isinstance(v, bool) or not isinstance(v, numbers.Integral):
+            raise ValueError("mojolearn: discrete_features must be 'auto', a bool, a bool mask or indices")
+        j = int(v)
+        if not -d <= j < d:
+            raise IndexError(f"mojolearn: discrete_features index {j} is out of bounds for {d} features")
+        mask[j % d] = True
+    return mask
+
+
 def _mutual_info(X, y, discrete_target, discrete_features, n_neighbors, random_state):
-    if discrete_features not in ("auto", False):
-        raise NotImplementedError("mojolearn: mutual_info with discrete features is not implemented "
-                                  "(dense X: discrete_features='auto' or False)")
+    """The reference's `_estimate_mi`: continuous columns are scaled and
+    noised (row-major over the continuous columns only, as the reference's
+    draw of shape (n, n_continuous)), the 1e-10-scaled noise kept as a
+    second word that breaks exact ties as the reference's float64 sum does
+    (DEVIATION 5407); each column then takes the estimator
+    its kinds name: Kraskov (continuous x, continuous y), Ross (one side
+    discrete: the classes, or a discrete feature's categories against the
+    noised target) or the contingency table (both discrete)."""
     k = int(n_neighbors)
     if not 1 <= k <= 32:
         raise NotImplementedError("mojolearn: mutual_info supports 1 <= n_neighbors <= 32")
     arr = _x2d(X)
     n, d = arr.shape
+    mask = _mi_discrete_mask(discrete_features, d)
+    cont = [j for j in range(d) if not mask[j]]
+    disc = [j for j in range(d) if mask[j]]
+    mode = _mode()
     seed = 0 if random_state is None else int(random_state) & 0x3FFFFFFF
     pr = _Prog()
-    xo = pr.put(arr)
-    st, sc, ma, z = pr.alloc(6 * d), pr.alloc(d), pr.alloc(d), pr.alloc(n * d)
-    pr.stage("col_stats", d, xo, n, d, st)
-    pr.stage("mi_colscale", d, xo, n, d, st, sc, ma)
-    pr.stage("mi_noise", n * d, xo, n, d, sc, ma, 2 * seed, z)
-    term, out = pr.alloc(n * d), pr.alloc(d)
     if discrete_target:
         classes, codes = encode_labels(y)
         if codes.size != n:
             raise ValueError("mojolearn: X and y have different numbers of rows")
         counts = _class_counts(codes, len(classes))
-        used = sum(c for c in counts if c > 1)
+        if cont and max(counts) < 2:
+            raise ValueError("mojolearn: mutual_info: every class has one sample (the reference's "
+                             "neighbour search over the classes with more than one finds 0 samples)")
         yo, lc = pr.put_codes(codes), pr.put_list(counts)
-        pr.stage("mi_cd", n * d, z, n, d, yo, lc, k, term)
-        pr.stage("mi_reduce", d, term, n, d, 1, k, used, out)
     else:
         yv = as_f32_c(y, ndim=1, name="y")[0]
         if yv.size != n:
             raise ValueError("mojolearn: X and y have different numbers of rows")
+    outc = outd = None
+    if cont:
+        dc = len(cont)
+        xo = pr.put(arr if not disc else _gather(arr, cont, mode))
+        st, sc, ma, z, zs = pr.alloc(6 * dc), pr.alloc(dc), pr.alloc(dc), pr.alloc(n * dc), pr.alloc(n * dc)
+        pr.stage("col_stats", dc, xo, n, dc, st)
+        pr.stage("mi_colscale", dc, xo, n, dc, st, sc, ma)
+        pr.stage("mi_noise", n * dc, xo, n, dc, sc, ma, 2 * seed, z, zs + 1)
+    if not discrete_target:
         yo = pr.put(yv)
-        sty, scy, may, zy = pr.alloc(6), pr.alloc(1), pr.alloc(1), pr.alloc(n)
+        sty, scy, may, zy, zys = pr.alloc(6), pr.alloc(1), pr.alloc(1), pr.alloc(n), pr.alloc(n)
         pr.stage("col_stats", 1, yo, n, 1, sty)
         pr.stage("mi_colscale", 1, yo, n, 1, sty, scy, may)
-        pr.stage("mi_noise", n, yo, n, 1, scy, may, 2 * seed + 1, zy)
-        pr.stage("mi_cc", n * d, z, n, d, zy, k, term)
-        pr.stage("mi_reduce", d, term, n, d, 0, k, n, out)
-    pr.run(_mode())
-    return pr.get(out, d)
+        pr.stage("mi_noise", n, yo, n, 1, scy, may, 2 * seed + 1, zy, zys + 1)
+    if cont:
+        term, outc = pr.alloc(n * dc), pr.alloc(dc)
+        if discrete_target:
+            used = sum(c for c in counts if c > 1)
+            pr.stage("mi_cd", n * dc, z, n, dc, yo, lc, k, term, zs + 1)
+            pr.stage("mi_reduce", dc, term, n, dc, 1, k, used, outc)
+        else:
+            pr.stage("mi_cc", n * dc, z, n, dc, zy, k, term, zs + 1, zys + 1)
+            pr.stage("mi_reduce", dc, term, n, dc, 0, k, n, outc)
+    if disc:
+        dd = len(disc)
+        xd = _gather(arr, disc, mode)
+        cats = _fit_categories(mode, xd)
+        kx = [c.size for c in cats]
+        kmax = max(kx)
+        if not discrete_target and n in kx:
+            raise ValueError(f"mojolearn: mutual_info: discrete feature {disc[kx.index(n)]} has one sample per "
+                             "value (the reference's neighbour search finds 0 samples)")
+        xc, _neg = _codes(pr, xd, cats)
+        outd = pr.alloc(dd)
+        if discrete_target:
+            ky = len(classes)
+            stride = kmax * ky + kmax + ky
+            tb = pr.alloc(dd * stride)
+            pr.stage("mi_dd", dd, xc, n, dd, yo, ky, pr.put_list(kx), tb, stride, outd)
+        else:
+            cnti, cntf, term = pr.alloc(dd * kmax), pr.alloc(dd * kmax), pr.alloc(n * dd)
+            pr.stage("code_counts", dd, xc, n, dd, kmax, cnti)
+            pr.stage("i2f", dd * kmax, cnti, cntf)
+            pr.stage("mi_dc", n * dd, zy, n, dd, xc, cntf, kmax, k, term, zys + 1)
+            pr.stage("mi_reduce", dd, term, n, dd, 2, k, 0, outd, cntf, kmax)
+    pr.run(mode)
+    if not disc:
+        return pr.get(outc, d)
+    vals = [0.0] * d
+    for j, v in zip(cont, pr.values(outc, len(cont)) if cont else []):
+        vals[j] = v
+    for j, v in zip(disc, pr.values(outd, len(disc))):
+        vals[j] = v
+    return Array.from_list(vals, "<f4")
 
 
 def mutual_info_classif(X, y, *, discrete_features="auto", n_neighbors=3, copy=True, random_state=None,
                         n_jobs=None):
-    """sklearn.feature_selection.mutual_info_classif for dense continuous X:
-    Ross's k-NN estimator against the classes, float32, brute-force
-    neighbour scans on the device. The tie-breaking noise is drawn from
-    random_state by splitmix64 (the reference draws numpy's)."""
+    """sklearn.feature_selection.mutual_info_classif for dense X: Ross's
+    k-NN estimator against the classes for a continuous feature, the
+    contingency mutual information for a discrete one (discrete_features),
+    float32, brute-force neighbour scans on the device. The tie-breaking
+    noise is drawn from random_state by splitmix64 (the reference draws
+    numpy's)."""
     return _mutual_info(X, y, True, discrete_features, n_neighbors, random_state)
 
 
 def mutual_info_regression(X, y, *, discrete_features="auto", n_neighbors=3, copy=True, random_state=None,
                            n_jobs=None):
-    """sklearn.feature_selection.mutual_info_regression for dense continuous
-    X: the Kraskov k-NN estimator, float32, brute-force neighbour scans on
-    the device; noise from random_state by splitmix64."""
+    """sklearn.feature_selection.mutual_info_regression for dense X: the
+    Kraskov k-NN estimator for a continuous feature, Ross's estimator with
+    the feature's categories as the classes for a discrete one
+    (discrete_features), float32, brute-force neighbour scans on the
+    device; noise from random_state by splitmix64."""
     return _mutual_info(X, y, False, discrete_features, n_neighbors, random_state)
 
 
@@ -2737,7 +3313,7 @@ class ComplementNB(_DiscreteNB):
     counts, their log share (negated, or normalised when `norm`); the class
     prior enters only with a single class, as in the reference. alpha > 0
     required; class_prior as given (its log); sample_weight weights the counts, as the
-    reference; partial_fit is refused."""
+    reference; partial_fit adds each batch's counts, as the reference."""
     _parameters = ("alpha", "force_alpha", "fit_prior", "class_prior", "norm")
 
     def __init__(self, *, alpha=1.0, force_alpha=True, fit_prior=True, class_prior=None, norm=False):
@@ -2747,9 +3323,7 @@ class ComplementNB(_DiscreteNB):
         self.class_prior = class_prior
         self.norm = norm
 
-    def fit(self, X, y, sample_weight=None):
-        _check_alpha(self)
-        pr, mode, n, d, K, st, cnt, fc, clp = self._fit_counts(X, y, sample_weight=sample_weight)
+    def _params(self, pr, mode, n, d, K, st, cnt, fc, clp):
         a = pr.put_scalar(self.alpha)
         flp = pr.alloc(K * d)
         pr.stage("cnb_params", K, fc, K, d, a, 1 if self.norm else 0, flp)
@@ -2772,7 +3346,11 @@ class CategoricalNB(_DiscreteNB):
     class's rows. A category index outside the fitted range at predict time
     is refused, as the reference refuses it; class_prior as given (its log);
     min_categories floors n_categories_; sample_weight weights the counts,
-    as the reference. partial_fit is refused."""
+    as the reference. partial_fit adds each batch's category counts to the
+    running ones (category_count_, widened as new categories appear) and
+    recomputes the log probabilities; n_categories_ is the counts' width
+    (the reference narrows it to the last batch's, see
+    naive_bayes/NOT_IMPLEMENTED.tsv)."""
     _parameters = ("alpha", "force_alpha", "fit_prior", "class_prior", "min_categories")
 
     def __init__(self, *, alpha=1.0, force_alpha=True, fit_prior=True, class_prior=None, min_categories=None):
@@ -2785,16 +3363,32 @@ class CategoricalNB(_DiscreteNB):
     def fit(self, X, y, sample_weight=None):
         _check_alpha(self)
         arr = _x2d(X)
+        codes = self._encode_y(y, arr.shape[0])
+        return self._cat_fit(arr, codes, sample_weight, _mode(), False)
+
+    def partial_fit(self, X, y, classes=None, sample_weight=None):
+        _check_alpha(self)
+        arr = _x2d(X)
+        first, codes = _partial_codes(self, y, classes, arr.shape[0])
+        if first:
+            return self._cat_fit(arr, codes, sample_weight, _mode(), False)
+        self._check_width(arr)
+        return self._cat_fit(arr, codes, sample_weight, self.numeric_mode_, True)
+
+    def _cat_fit(self, arr, codes, sample_weight, mode, merge):
         n, d = arr.shape
-        codes = self._encode_y(y, n)
         K = len(self.classes_)
-        mode = _mode()
         pr = _Prog()
         xo, yo = pr.put(arr), pr.put_codes(codes)
         st, cnt, clp = pr.alloc(6 * d), pr.alloc(K), pr.alloc(K)
         wo = _nb_weights(pr, sample_weight, n)
         pr.stage("col_stats", d, xo, n, d, st)
-        _class_stats(pr, wo, K, xo, n, 1, yo, K, cnt, _NONE, _NONE, _NONE)
+        if merge:
+            bc = pr.alloc(K)
+            _class_stats(pr, wo, K, xo, n, 1, yo, K, bc, _NONE, _NONE, _NONE)
+            pr.stage("add_arrays", K, pr.put(self.class_count_), bc, cnt)
+        else:
+            _class_stats(pr, wo, K, xo, n, 1, yo, K, cnt, _NONE, _NONE, _NONE)
         if self.class_prior is not None:
             pr.stage("log", K, pr.put_list(_given_priors(self.class_prior, K, "CategoricalNB")), clp)
         else:
@@ -2812,14 +3406,29 @@ class CategoricalNB(_DiscreteNB):
                 raise ValueError(f"mojolearn: 'min_categories' should have shape ({d},) when an array-like "
                                  f"is provided. Got {len(mcs)} entries instead.")
             ncat = [max(a, b) for a, b in zip(ncat, mcs)]
+        if merge:
+            ncat = [max(a, b) for a, b in zip(ncat, self.n_categories_.tolist())]
         cmax = max(ncat)
         q = _Prog()
         xo, yo = q.put(arr), q.put_codes(codes)
         no, co, a = q.put_list(ncat), q.put(pr.get(cnt, K)), q.put_scalar(self.alpha)
         wq = _nb_weights(q, sample_weight, n)
+        cc = q.alloc(d * K * cmax)
+        q.stage("cat_counts", d * K * cmax, xo, n, d, yo, K, no, cmax, _NONE if wq is None else wq, cc)
+        if merge:
+            old, oc = self._cc.tolist(), self._cmax
+            pad = [0.0] * (d * K * cmax)
+            for jk in range(d * K):
+                pad[jk * cmax:jk * cmax + oc] = old[jk * oc:(jk + 1) * oc]
+            src, cc = cc, q.alloc(d * K * cmax)
+            q.stage("add_arrays", d * K * cmax, q.put_list(pad), src, cc)
         flp = q.alloc(d * K * cmax)
-        q.stage("cat_params", d * K * cmax, xo, n, d, yo, K, no, cmax, co, a, flp, _NONE if wq is None else wq)
+        q.stage("cat_flp", d * K * cmax, cc, K, no, cmax, co, a, flp)
         q.run(mode)
+        self._cc = q.get(cc, d * K * cmax)
+        self.category_count_ = [Array.from_list(
+            [[q.values(cc + (j * K + k) * cmax, ncat[j])[v] for v in range(ncat[j])] for k in range(K)], "<f4")
+            for j in range(d)]
         self.n_categories_ = Array.from_list(ncat, "<i8")
         self._flp, self._cmax = q.get(flp, d * K * cmax), cmax
         self.feature_log_prob_ = [Array.from_list(

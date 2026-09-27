@@ -39,6 +39,7 @@ from x_decomp.cells import (
     trsm_row,
     rand_cell,
     rowsum_cell,
+    pdist_cell,
     sqdist_cell,
 )
 from x_decomp.exec_trait import Exec
@@ -110,10 +111,10 @@ struct HostExec(Exec):
             dst.unsafe_store(i, fold_cell(pp, i, nb, n))
 
     @staticmethod
-    def sqdist(a: F32Ptr, b: F32Ptr, dst: F32Ptr, na: Int, nb: Int, d: Int) raises:
+    def sqdist(a: F32Ptr, b: F32Ptr, dst: F32Ptr, na: Int, nb: Int, d: Int, kind: Int = 0, pw: Float32 = Float32(2)) raises:
         for i in range(na):
             for j in range(nb):
-                dst.unsafe_store(i * nb + j, sqdist_cell(a, b, i, j, d))
+                dst.unsafe_store(i * nb + j, sqdist_cell(a, b, i, j, d) if kind == 0 else pdist_cell(a, b, i, j, d, kind, pw))
 
     @staticmethod
     def rand(dst: F32Ptr, count: Int, seed: UInt32, stream: UInt32, kind: Int) raises:
@@ -125,8 +126,8 @@ struct HostExec(Exec):
         lu_serial(a, piv, n, info)
 
     @staticmethod
-    def lu_solve(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int) raises:
-        lu_solve_serial(lu, piv, b, n, nrhs)
+    def lu_solve(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int, trans: Int = 0) raises:
+        lu_solve_serial(lu, piv, b, n, nrhs, trans)
 
     @staticmethod
     def chol(a: F32Ptr, info: F32Ptr, n: Int) raises:

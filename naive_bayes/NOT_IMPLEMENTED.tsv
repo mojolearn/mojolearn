@@ -1,5 +1,5 @@
 # their_thing	status	why / where it would go
 # "Theirs" is scikit-learn 1.9.1 (sklearn/naive_bayes.py, sklearn/discriminant_analysis.py), the semantics reference for the 13th family. Every row is refused by name at the API.
-sklearn *NB.partial_fit	NOT IMPLEMENTED	the running counts are the same units over a batch plus the stored sums
 sklearn *NB alpha = 0 (force_alpha)	NOT IMPLEMENTED -- REFUSED BY NAME	log(0) terms make -inf joint likelihoods and, through them, the reference's NaN probabilities (IDENTITY_PATHS Clause B)
-sklearn LinearDiscriminantAnalysis / QuadraticDiscriminantAnalysis covariance_estimator=<estimator>	NOT IMPLEMENTED	an arbitrary estimator object's fit runs in Python; the device path forms the empirical / shrunk covariance itself
+sklearn GaussianNB.partial_fit epsilon	DIFFERS BY NAME	the reference removes epsilon from the running variance with the NEW batch's epsilon (`self.var_[:, :] -= self.epsilon_` after recomputing it), which is not the one it added; mojolearn keeps the running variance without epsilon and adds the current batch's
+sklearn CategoricalNB.partial_fit n_categories_	DIFFERS BY NAME	the reference sets n_categories_ from the LAST batch's maximum (it can shrink) while category_count_ keeps every column; mojolearn's n_categories_ is category_count_'s width
