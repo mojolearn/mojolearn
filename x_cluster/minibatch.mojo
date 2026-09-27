@@ -18,7 +18,7 @@ Not scikit-learn's Mersenne Twister stream, so a fit agrees with sklearn's
 at a tolerance, never bit for bit (NOT_IMPLEMENTED.tsv)."""
 from checks.numerics import ftz, identical_div, identical_mul, identical_mul64
 from x_cluster.bodies import SplitMix64
-from x_cluster.common import gather_rows, greedy_kmeans_pp, nearest_all, sum_f64
+from x_cluster.common import gather_rows, greedy_kmeans_pp, nearest_all, sum_f64, weighted_draw
 from x_cluster.ops import ClusterOps
 
 
@@ -34,6 +34,7 @@ struct MiniBatchParams(Copyable, Movable):
     var reassignment_ratio: Float64
     var seed: UInt64
     var has_init: Bool  # centers passed in (init array): n_init is 1
+    var init_random: Bool  # init='random': k distinct rows of the init subset
 
 
 @fieldwise_init
@@ -46,9 +47,24 @@ struct MiniBatchResult(Copyable, Movable):
 def minibatch_fit[O: ClusterOps](
     mut ops: O, x: List[Float32], n: Int, d: Int, p: MiniBatchParams,
     mut centers: List[Float32], mut labels: List[Int32], mut counts: List[Float32],
+    weights: List[Float32] = List[Float32](),
 ) raises -> MiniBatchResult:
     """Fit; `centers` holds the init array when `p.has_init`, and is
-    overwritten with the fitted centers."""
+    overwritten with the fitted centers. `weights` (empty: unit) are
+    sklearn's sample_weight: they weigh the k-means++ potentials, the
+    validation inertia and the batch draw (`choice(p=w / sum(w))`); the batch
+    itself updates with unit weights, as sklearn's `unit_sample_weight`."""
+    var weighted = len(weights) > 0
+    var cum_w = List[Float64]()
+    if weighted:
+        var acc = Float64(0)
+        for t in range(n):
+            if not (weights[t] >= Float32(0)):
+                raise Error("MiniBatchKMeans: sample_weight must be non-negative")
+            acc = acc + Float64(weights[t])
+            cum_w.append(acc)
+        if not (acc > 0):
+            raise Error("MiniBatchKMeans: sample_weight must have a positive sum")
     var k = p.k
     if k < 1 or k > n:
         raise Error("MiniBatchKMeans: n_samples=" + String(n) + " should be >= n_clusters=" + String(k))
@@ -85,11 +101,38 @@ def minibatch_fit[O: ClusterOps](
             var iidx = List[Int](capacity=init_size)
             for _t in range(init_size):
                 iidx.append(rng.below(n))
-            cand = greedy_kmeans_pp(ops, gather_rows(x, d, iidx), init_size, d, k, rng)
+            var wi = List[Float32]()
+            if weighted:
+                for t in iidx:
+                    wi.append(weights[t])
+            if p.init_random:
+                # choice(init_size, k, replace=False, p=w/sum(w)): sequential
+                # weighted draws over the rows not yet taken (unit: uniform)
+                var taken = List[Bool](length=init_size, fill=False)
+                var picks = List[Int]()
+                for _c in range(k):
+                    var cum = List[Float64](capacity=init_size)
+                    var acc = Float64(0)
+                    for t in range(init_size):
+                        if not taken[t]:
+                            acc = acc + (Float64(wi[t]) if weighted else Float64(1))
+                        cum.append(acc)
+                    if not (acc > 0):
+                        raise Error("MiniBatchKMeans: fewer positive-weight rows than n_clusters in the init sample")
+                    var r = weighted_draw(cum, rng)
+                    taken[r] = True
+                    picks.append(iidx[r])
+                cand = gather_rows(x, d, picks)
+            else:
+                cand = greedy_kmeans_pp(ops, gather_rows(x, d, iidx), init_size, d, k, rng, wi)
         var vl = List[Int32]()
         var vd = List[Float32]()
         nearest_all(ops, vslot, init_size, cand, k, d, vl, vd)
         var inertia = sum_f64(vd, init_size)
+        if weighted:
+            inertia = Float64(0)
+            for t in range(init_size):
+                inertia = inertia + identical_mul64(Float64(weights[vidx[t]]), Float64(vd[t]))
         if it == 0 or inertia < best_inertia:
             best_inertia = inertia
             best = cand^
@@ -111,7 +154,10 @@ def minibatch_fit[O: ClusterOps](
     for step in range(n_steps):
         var bidx = List[Int](capacity=batch)
         for _t in range(batch):
-            bidx.append(rng.below(n))
+            if weighted:
+                bidx.append(weighted_draw(cum_w, rng))
+            else:
+                bidx.append(rng.below(n))
         var bx = gather_rows(x, d, bidx)
         # _random_reassign(): counted BEFORE the step, as sklearn evaluates the argument
         since_reassign += batch
@@ -123,86 +169,11 @@ def minibatch_fit[O: ClusterOps](
         if any_empty or since_reassign >= 10 * k:
             since_reassign = 0
             reassign = True
-        ops.set(bslot, bx)
-        ops.set(cslot, c)
-        ops.nearest(bslot, batch, cslot, k, d, lslot, dslot)
-        var bl = ops.get_i(lslot, batch)
-        var bd = ops.get(dslot, batch)
-        var batch_inertia = sum_f64(bd, batch)
-        # update_center_dense, per center
-        var c_new = c.copy()
-        for j in range(k):
-            var wsum = Float32(0)
-            for t in range(batch):
-                if Int(bl[t]) == j:
-                    wsum = ftz(wsum + Float32(1))
-            if wsum > Float32(0):
-                for f in range(d):
-                    c_new[j * d + f] = ftz(identical_mul(c[j * d + f], w[j]))
-                for t in range(batch):
-                    if Int(bl[t]) == j:
-                        for f in range(d):
-                            c_new[j * d + f] = ftz(c_new[j * d + f] + ftz(bx[t * d + f]))
-                w[j] = ftz(w[j] + wsum)
-                var alpha = ftz(identical_div(Float32(1), w[j]))
-                for f in range(d):
-                    c_new[j * d + f] = ftz(identical_mul(c_new[j * d + f], alpha))
-        if reassign and p.reassignment_ratio > 0:
-            var wmax = w[0]
-            for j in range(1, k):
-                if w[j] > wmax:
-                    wmax = w[j]
-            var thr = identical_mul64(Float64(p.reassignment_ratio), Float64(wmax))
-            var to = List[Bool](length=k, fill=False)
-            var nre = 0
-            for j in range(k):
-                if Float64(w[j]) < thr:
-                    to[j] = True
-                    nre += 1
-            var half = batch // 2
-            if 2 * nre > batch:
-                # np.argsort(weight_sums)[half:] stay: a stable ascending sort by weight
-                var order = List[Int](capacity=k)
-                for j in range(k):
-                    order.append(j)
-                for a in range(1, k):
-                    var b = a
-                    while b > 0 and w[order[b - 1]] > w[order[b]]:
-                        var tmp = order[b - 1]
-                        order[b - 1] = order[b]
-                        order[b] = tmp
-                        b -= 1
-                for q in range(half, k):
-                    to[order[q]] = False
-                nre = 0
-                for j in range(k):
-                    if to[j]:
-                        nre += 1
-            if nre > 0:
-                # choice(batch, nre, replace=False): a partial Fisher-Yates
-                var pool = List[Int](capacity=batch)
-                for t in range(batch):
-                    pool.append(t)
-                var picked = List[Int](capacity=nre)
-                for q in range(nre):
-                    var r = q + rng.below(batch - q)
-                    var tmp = pool[q]
-                    pool[q] = pool[r]
-                    pool[r] = tmp
-                    picked.append(pool[q])
-                var q = 0
-                var wmin = Float32(0)
-                var have = False
-                for j in range(k):
-                    if not to[j] and (not have or w[j] < wmin):
-                        wmin = w[j]
-                        have = True
-                for j in range(k):
-                    if to[j]:
-                        for f in range(d):
-                            c_new[j * d + f] = bx[picked[q] * d + f]
-                        q += 1
-                        w[j] = wmin
+        var c_new = List[Float32]()
+        var batch_inertia = minibatch_step(
+            ops, bx, List[Float32](), batch, k, d, c, w, rng, reassign, p.reassignment_ratio,
+            bslot, cslot, lslot, dslot, c_new,
+        )
         var diff = Float64(0)
         if p.tol > 0:
             for t in range(k * d):
@@ -238,4 +209,187 @@ def minibatch_fit[O: ClusterOps](
     centers = c^
     counts = w^
     var n_iter = (steps_done * batch + n - 1) // n
-    return MiniBatchResult(sum_f64(dist, n), steps_done, n_iter)
+    var inertia = sum_f64(dist, n)
+    if weighted:
+        inertia = Float64(0)
+        for t in range(n):
+            inertia = inertia + identical_mul64(Float64(weights[t]), Float64(dist[t]))
+    return MiniBatchResult(inertia, steps_done, n_iter)
+
+
+def minibatch_step[O: ClusterOps](
+    mut ops: O, bx: List[Float32], bw: List[Float32], batch: Int, k: Int, d: Int,
+    c: List[Float32], mut w: List[Float32], mut rng: SplitMix64, reassign: Bool, ratio: Float64,
+    bslot: Int, cslot: Int, lslot: Int, dslot: Int, mut c_new: List[Float32],
+) raises -> Float64:
+    """sklearn `_mini_batch_step` on the batch `bx` (weights `bw`, empty:
+    unit): the device assignment, `update_center_dense` per center, then the
+    random reassignment of low-count centers when `reassign`. Returns the
+    batch inertia (unweighted, as the fit's early stop reads it); `c_new` is
+    the updated centers, `w` the counts, updated in place."""
+    var bweighted = len(bw) > 0
+    ops.set(bslot, bx)
+    ops.set(cslot, c)
+    ops.nearest(bslot, batch, cslot, k, d, lslot, dslot)
+    var bl = ops.get_i(lslot, batch)
+    var bd = ops.get(dslot, batch)
+    var batch_inertia = sum_f64(bd, batch)
+    # update_center_dense, per center
+    c_new = c.copy()
+    for j in range(k):
+        var wsum = Float32(0)
+        for t in range(batch):
+            if Int(bl[t]) == j:
+                wsum = ftz(wsum + (bw[t] if bweighted else Float32(1)))
+        if wsum > Float32(0):
+            for f in range(d):
+                c_new[j * d + f] = ftz(identical_mul(c[j * d + f], w[j]))
+            for t in range(batch):
+                if Int(bl[t]) == j:
+                    for f in range(d):
+                        if bweighted:
+                            c_new[j * d + f] = ftz(c_new[j * d + f] + ftz(identical_mul(ftz(bx[t * d + f]), bw[t])))
+                        else:
+                            c_new[j * d + f] = ftz(c_new[j * d + f] + ftz(bx[t * d + f]))
+            w[j] = ftz(w[j] + wsum)
+            var alpha = ftz(identical_div(Float32(1), w[j]))
+            for f in range(d):
+                c_new[j * d + f] = ftz(identical_mul(c_new[j * d + f], alpha))
+    if reassign and ratio > 0:
+        var wmax = w[0]
+        for j in range(1, k):
+            if w[j] > wmax:
+                wmax = w[j]
+        var thr = identical_mul64(Float64(ratio), Float64(wmax))
+        var to = List[Bool](length=k, fill=False)
+        var nre = 0
+        for j in range(k):
+            if Float64(w[j]) < thr:
+                to[j] = True
+                nre += 1
+        var half = batch // 2
+        if 2 * nre > batch:
+            # np.argsort(weight_sums)[half:] stay: a stable ascending sort by weight
+            var order = List[Int](capacity=k)
+            for j in range(k):
+                order.append(j)
+            for a in range(1, k):
+                var b = a
+                while b > 0 and w[order[b - 1]] > w[order[b]]:
+                    var tmp = order[b - 1]
+                    order[b - 1] = order[b]
+                    order[b] = tmp
+                    b -= 1
+            for q in range(half, k):
+                to[order[q]] = False
+            nre = 0
+            for j in range(k):
+                if to[j]:
+                    nre += 1
+        if nre > 0:
+            # choice(batch, nre, replace=False): a partial Fisher-Yates
+            var pool = List[Int](capacity=batch)
+            for t in range(batch):
+                pool.append(t)
+            var picked = List[Int](capacity=nre)
+            for q in range(nre):
+                var r = q + rng.below(batch - q)
+                var tmp = pool[q]
+                pool[q] = pool[r]
+                pool[r] = tmp
+                picked.append(pool[q])
+            var q = 0
+            var wmin = Float32(0)
+            var have = False
+            for j in range(k):
+                if not to[j] and (not have or w[j] < wmin):
+                    wmin = w[j]
+                    have = True
+            for j in range(k):
+                if to[j]:
+                    for f in range(d):
+                        c_new[j * d + f] = bx[picked[q] * d + f]
+                    q += 1
+                    w[j] = wmin
+    return batch_inertia
+
+
+def minibatch_partial[O: ClusterOps](
+    mut ops: O, x: List[Float32], n: Int, d: Int, k: Int, weights: List[Float32],
+    first: Bool, init_mode: Int, init_size: Int, batch_eff: Int, ratio: Float64,
+    mut rng: SplitMix64, mut since_reassign: Int,
+    mut centers: List[Float32], mut counts: List[Float32], mut labels: List[Int32],
+) raises -> Float64:
+    """sklearn `MiniBatchKMeans.partial_fit` (cluster/_kmeans.py): on the
+    first call the centers start from `_init_centroids` on at most
+    `init_size` drawn rows (init_mode 0 k-means++, 1 random, 2 the array
+    already in `centers`) and the counts at zero; then ONE `_mini_batch_step`
+    on all of `x` with its sample weights, the reassignment counter advanced
+    by the fit's batch size; then the labels and the weighted inertia of `x`.
+    The stream `rng` and the counter carry over between calls."""
+    from checks.numerics import identical_mul64
+
+    var weighted = len(weights) > 0
+    if first:
+        if k < 1 or k > n:
+            raise Error("MiniBatchKMeans: n_samples=" + String(n) + " should be >= n_clusters=" + String(k))
+        if init_mode != 2:
+            var m = init_size if init_size < n else n
+            var iidx = List[Int](capacity=m)
+            if m < n:
+                for _t in range(m):
+                    iidx.append(rng.below(n))
+            else:
+                for t in range(n):
+                    iidx.append(t)
+            var wi = List[Float32]()
+            if weighted:
+                for t in iidx:
+                    wi.append(weights[t])
+            if init_mode == 1:
+                var taken = List[Bool](length=m, fill=False)
+                var picks = List[Int]()
+                for _c in range(k):
+                    var cum = List[Float64](capacity=m)
+                    var acc = Float64(0)
+                    for t in range(m):
+                        if not taken[t]:
+                            acc = acc + (Float64(wi[t]) if weighted else Float64(1))
+                        cum.append(acc)
+                    if not (acc > 0):
+                        raise Error("MiniBatchKMeans: fewer positive-weight rows than n_clusters in the init sample")
+                    var r = weighted_draw(cum, rng)
+                    taken[r] = True
+                    picks.append(iidx[r])
+                centers = gather_rows(x, d, picks)
+            else:
+                centers = greedy_kmeans_pp(ops, gather_rows(x, d, iidx), m, d, k, rng, wi)
+        counts = List[Float32](length=k, fill=Float32(0))
+        since_reassign = 0
+    # _random_reassign()
+    since_reassign += batch_eff
+    var any_empty = False
+    for j in range(k):
+        if counts[j] == Float32(0):
+            any_empty = True
+    var reassign = False
+    if any_empty or since_reassign >= 10 * k:
+        since_reassign = 0
+        reassign = True
+    var bslot = ops.zeros(n * d)
+    var cslot = ops.zeros(k * d)
+    var lslot = ops.zeros_i(n)
+    var dslot = ops.zeros(n)
+    var c_new = List[Float32]()
+    _ = minibatch_step(ops, x, weights, n, k, d, centers, counts, rng, reassign, ratio, bslot, cslot, lslot, dslot, c_new)
+    centers = c_new^
+    var xs = ops.put(x)
+    var dist = List[Float32]()
+    nearest_all(ops, xs, n, centers, k, d, labels, dist)
+    var inertia = Float64(0)
+    for t in range(n):
+        if weighted:
+            inertia = inertia + identical_mul64(Float64(weights[t]), Float64(dist[t]))
+        else:
+            inertia = inertia + Float64(dist[t])
+    return inertia

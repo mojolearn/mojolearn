@@ -52,6 +52,7 @@ from sequence.ops import (
     OP_THETA,
     OP_CROSTON,
     OP_ETS,
+    OP_GARCH,
     op_gemm,
     op_bias,
     op_colsum,
@@ -75,6 +76,7 @@ from sequence.stl import op_stl
 from sequence.theta import op_theta
 from sequence.croston import op_croston
 from sequence.ets import op_ets
+from sequence.garch import op_garch
 from sequence.vecar import op_cholsolve, op_colscale, op_rowscale, op_scale, op_sub, op_var_design, op_var_forecast
 
 
@@ -176,3 +178,5 @@ def apply[OP: Int](t: Int, a: Args):
         op_croston(t, a)
     elif OP == OP_ETS:
         op_ets(t, a)
+    elif OP == OP_GARCH:
+        op_garch(t, a)

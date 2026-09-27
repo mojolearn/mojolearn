@@ -1509,6 +1509,15 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
                                      spectral and their par- twins: k-means
                                      is their initialization or quantizer)
 
+    REMEASURED 2026-09-27 (lane/algos-cluster):
+      kmeans_oracle        47 -> 63  fifteen x-cluster-* lanes (the cluster
+                                     expansion's host binding runs this
+                                     library's KMeans for BisectingKMeans and
+                                     the mixture starts, so it imports the
+                                     oracle) and x-decomp-spectral-rbf (the
+                                     decomp lane's spectral door); no old lane
+                                     moved
+
     REMEASURED 2026-09-27 (lane/algos-trees, the trees expansion lanes):
       forest_host_predict  60 -> 80  the twenty trees-* lanes (DecisionTree,
                                      Bagging, AdaBoost, DART, RandomTrees-
@@ -1521,7 +1530,7 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
       forest_inference     26 -> 46  the same twenty lanes, through the rf
                                      binding that imports it"""
     rev = lane_select.reverse_map()
-    for rel, want in (("cluster/host/kmeans_oracle.mojo", 47),
+    for rel, want in (("cluster/host/kmeans_oracle.mojo", 63),
                       ("core/gbdt_host_predict.mojo", 49),
                       ("core/forest_host_predict.mojo", 80),
                       ("core/forest_inference.mojo", 46),

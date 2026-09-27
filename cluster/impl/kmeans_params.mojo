@@ -209,3 +209,39 @@ def get_centroids_batch_size(batch_centroids: Int, n_local_clusters: Int) -> Int
     """`getCentroidsBatchSize`, `detail/kmeans_common.cuh:183-188`."""
     var min_val = min(batch_centroids, n_local_clusters)
     return n_local_clusters if min_val == 0 else min_val
+
+
+def weighted_sum_scale_cap(
+    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    w_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_samples: Int,
+    n_features: Int,
+) raises -> Float64:
+    """THE WEIGHTED CENTROID SUM'S OWN BOUND (2026-09-27, lane/algos-cluster;
+    DEVIATION 5112, IDENTITY_PATHS row 110's lane).
+
+    The Lloyd accumulator quantizes `x * w * sum_scale` per cell
+    (`cluster/checks/reduce_by_key.mojo`, `host_accumulate`), but
+    `plan_sum_scale` bounds `sum |x|` alone. With sample weights above one
+    the cell sums outgrow that bound and wrap Int32: measured on 2,000 blob
+    rows with weights `|x0| + 0.5` (up to about 10), KMeans ran all 300
+    iterations and returned inertia 1.75e6 against scikit-learn's 3.97e4.
+    This is `choose_scale` of the worst column of `sum_r |x_rf| * |w_r|`
+    (one ascending Float64 chain per column, the product pinned); the fit
+    takes the SMALLER of it and the unweighted scale, so a weight vector that
+    never outgrows the unweighted bound keeps the scale, and the bits, it
+    always had."""
+    from checks.fixed_point import choose_scale
+    from checks.numerics import identical_mul64
+
+    var totals = List[Float64](length=n_features, fill=Float64(0.0))
+    for r in range(n_samples):
+        var w = Float64(abs(w_ptr.unsafe_load(r)))
+        var row = r * n_features
+        for f in range(n_features):
+            totals[f] = totals[f] + identical_mul64(Float64(abs(x_ptr.unsafe_load(row + f))), w)
+    var worst = Float64(0.0)
+    for f in range(n_features):
+        if totals[f] > worst:
+            worst = totals[f]
+    return choose_scale(worst, n_samples)

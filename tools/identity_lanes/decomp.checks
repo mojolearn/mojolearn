@@ -1,0 +1,21 @@
+# the decomp lane's per-seam check drivers and their sabotage arms (pass 2;
+# docs/lanes/progress/decomp.md). Each patch edits x_decomp/cells.mojo, the one
+# source both columns run, so the driver's device AND host columns must leave
+# its independent oracle.
+x_decomp/checks/fold_ew_check.mojo	x_decomp/checks/sabotage/5300_gemm_order.patch
+x_decomp/checks/fold_ew_check.mojo	x_decomp/checks/sabotage/5301_sum_order.patch
+x_decomp/checks/fold_ew_check.mojo	x_decomp/checks/sabotage/5302_sqdist_order.patch
+x_decomp/checks/fold_ew_check.mojo	x_decomp/checks/sabotage/5303_zero_guard.patch
+x_decomp/checks/fold_ew_check.mojo	x_decomp/checks/sabotage/5304_add_flush.patch
+x_decomp/checks/fold_ew_check.mojo	x_decomp/checks/sabotage/5305_series_recurrence.patch
+x_decomp/checks/fold_ew_check.mojo	x_decomp/checks/sabotage/5306_draw_mapping.patch
+x_decomp/checks/dense_check.mojo	x_decomp/checks/sabotage/5307_pivot_tie.patch
+x_decomp/checks/dense_check.mojo	x_decomp/checks/sabotage/5308_getrs_order.patch
+x_decomp/checks/dense_check.mojo	x_decomp/checks/sabotage/5309_mgs_passes.patch
+x_decomp/checks/rows_check.mojo	x_decomp/checks/sabotage/5310_cd_order.patch
+x_decomp/checks/rows_check.mojo	x_decomp/checks/sabotage/5311_lasso_order.patch
+x_decomp/checks/rows_check.mojo	x_decomp/checks/sabotage/5312_omp_tie.patch
+x_decomp/checks/rows_check.mojo	x_decomp/checks/sabotage/5313_lda_order.patch
+x_decomp/checks/graph_check.mojo	x_decomp/checks/sabotage/5314_edge_weight.patch
+x_decomp/checks/graph_check.mojo	x_decomp/checks/sabotage/5315_bary_reg.patch
+x_decomp/checks/rows_check.mojo	x_decomp/checks/sabotage/5316_als_order.patch
