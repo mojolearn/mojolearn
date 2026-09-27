@@ -20,10 +20,10 @@ from . import _backend, _buffer
 from ._array import Array
 from ._mode import NumericModeMixin
 
-__all__ = ["MiniBatchKMeans", "BisectingKMeans", "MeanShift"]
+__all__ = ["MiniBatchKMeans", "BisectingKMeans", "MeanShift", "OPTICS"]
 
 # x_cluster/entries.mojo: the entry numbers of `x_cluster_call`
-_E_NEAREST, _E_DISTANCES, _E_MINIBATCH, _E_BISECT, _E_BISECT_PREDICT, _E_MEANSHIFT = 0, 1, 2, 3, 4, 5
+_E_NEAREST, _E_DISTANCES, _E_MINIBATCH, _E_BISECT, _E_BISECT_PREDICT, _E_MEANSHIFT, _E_OPTICS = 0, 1, 2, 3, 4, 5, 6
 
 
 def _f32(X, name="X"):
@@ -297,6 +297,80 @@ class MeanShift(_XCluster):
     def predict(self, X):
         self._check_fitted("cluster_centers_")
         return self._nearest(self._input_like_fit(X), self.cluster_centers_)[0]
+
+    def fit_predict(self, X, y=None):
+        return self.fit(X).labels_
+
+
+class OPTICS(_XCluster):
+    """OPTICS. Reference: scikit-learn `cluster/_optics.py`.
+
+    Euclidean only (metric 'minkowski' with p=2, or 'euclidean'). The n x n
+    distances and the core distances are the device's; the ordering loop is
+    the reference's sequential one with the lowest index on a reachability
+    tie; the xi and dbscan extractions are the reference's. Float32
+    throughout, and without the reference's rounding of the distances to
+    float precision, so reachability agrees at a tolerance. Transductive:
+    no predict, as in scikit-learn."""
+
+    def __init__(self, *, min_samples=5, max_eps=float("inf"), metric="minkowski", p=2,
+                 metric_params=None, cluster_method="xi", eps=None, xi=0.05,
+                 predecessor_correction=True, min_cluster_size=None, algorithm="auto",
+                 leaf_size=30, memory=None, n_jobs=None):
+        self.min_samples = min_samples
+        self.max_eps = max_eps
+        self.metric = metric
+        self.p = p
+        self.metric_params = metric_params
+        self.cluster_method = cluster_method
+        self.eps = eps
+        self.xi = xi
+        self.predecessor_correction = predecessor_correction
+        self.min_cluster_size = min_cluster_size
+        self.algorithm = algorithm
+        self.leaf_size = leaf_size
+        self.memory = memory
+        self.n_jobs = n_jobs
+
+    @staticmethod
+    def _size(v, n, name):
+        if isinstance(v, bool) or v is None:
+            raise ValueError(f"{name} must be an int >= 2 or a float in (0, 1]")
+        if isinstance(v, int) or (isinstance(v, float) and v > 1):
+            if int(v) != v or v < 2 or v > n:
+                raise ValueError(f"{name} must be no greater than the number of samples ({n}) and >= 2, got {v}")
+            return int(v)
+        if not 0 < v <= 1:
+            raise ValueError(f"{name} must be in (0, 1], got {v}")
+        return max(2, int(v * n))
+
+    def fit(self, X, y=None):
+        if not (self.metric == "euclidean" or (self.metric == "minkowski" and self.p == 2)):
+            raise NotImplementedError(f"mojolearn OPTICS: metric={self.metric!r} p={self.p!r} is not "
+                                      "implemented; euclidean only (x_cluster/NOT_IMPLEMENTED.tsv)")
+        if self.cluster_method not in ("xi", "dbscan"):
+            raise ValueError(f"cluster_method must be 'xi' or 'dbscan', got {self.cluster_method!r}")
+        x = _f32(X)
+        n, d = x.shape
+        ms = self._size(self.min_samples, n, "min_samples")
+        mcs = ms if self.min_cluster_size is None else self._size(self.min_cluster_size, n, "min_cluster_size")
+        max_eps = float(self.max_eps)
+        eps = max_eps if self.eps is None else float(self.eps)
+        if self.cluster_method == "dbscan" and eps > max_eps:
+            raise ValueError(f"Specify an epsilon smaller than {max_eps}. Got {eps}.")
+        if not 0 <= float(self.xi) <= 1:
+            raise ValueError("xi must be in [0, 1]")
+        ip = [n, d, ms, mcs, 0 if self.cluster_method == "xi" else 1, 1 if self.predecessor_correction else 0]
+        f, i, _ = self._call(_E_OPTICS, x, None, ip, [max_eps, float(self.xi), eps])
+        self.core_distances_ = Array._from_flat(f[0], (n,), "<f4")
+        self.reachability_ = Array._from_flat(f[1], (n,), "<f4")
+        self.ordering_ = Array._from_flat(i[0], (n,), "<i4")
+        self.predecessor_ = Array._from_flat(i[1], (n,), "<i4")
+        self.labels_ = Array._from_flat(i[2], (n,), "<i4")
+        if self.cluster_method == "xi":
+            self.cluster_hierarchy_ = Array._from_flat(i[3], (len(i[3]) // 2, 2), "<i4")
+        self.n_features_in_ = d
+        return self
 
     def fit_predict(self, X, y=None):
         return self.fit(X).labels_
