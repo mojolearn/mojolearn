@@ -31,7 +31,7 @@ Next: PASS 2: AMD box (requested, RunPod out of stock, retrying), per-seam check
 
 - Per-seam proof: `x_decomp/checks/{fold_ew,dense,rows,graph}_check.mojo` hold
   the device (DevExec) and CPU (HostExec) columns to independent host oracles
-  (`x_decomp/checks/oracles.mojo`) bit for bit, each fixture first shown to
+  (`x_decomp/checks/xd_oracles.mojo`) bit for bit, each fixture first shown to
   separate the pinned spelling; card stages through IdentityTrace.
   `tools/identity_lanes/decomp.checks` pairs each of the 17 seams (DEVIATIONS
   5300-5316, annotated in `x_decomp/cells.mojo`) with a sabotage patch under

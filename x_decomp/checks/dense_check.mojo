@@ -7,7 +7,7 @@ two-pass modified Gram-Schmidt (5309).
     tools/with_identical_mode.sh pixi run mojo run -I . x_decomp/checks/dense_check.mojo
 """
 from core.identity_trace import IdentityTrace
-from x_decomp.checks.oracles import oracle_chol, oracle_lu, oracle_lu_solve, oracle_orth
+from x_decomp.checks.xd_oracles import oracle_chol, oracle_lu, oracle_lu_solve, oracle_orth
 from x_decomp.checks.seam_util import (
     count_diff_f32,
     count_diff_i32,

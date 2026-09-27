@@ -17,7 +17,7 @@ from std.memory import bitcast
 
 from core.identity_trace import IdentityTrace
 from x_decomp.cells import F32Ptr
-from x_decomp.checks.oracles import (
+from x_decomp.checks.xd_oracles import (
     oracle_absmax_sign,
     oracle_colsum,
     oracle_ew,
