@@ -89,20 +89,51 @@ input, RandomState instances, get_feature_names_out) plus new seam arms
 5212_nc_deviations_unthresholded, 5216_pagerank_dangling_follows_p.
 `x_neighbors/NOT_IMPLEMENTED.tsv` rows updated to IMPLEMENTED.
 
+NVIDIA H100 pod, 2026-09-27, merged tree 82ee9be8d + worktree:
+`tools/algos_lane_check.sh <the 14 lanes> --pass 2 --sabotage
+x_neighbors/checks/sabotage/e2e_device_only.patch`: seam arms 21/21 bite
+(PASS, FAIL under the arm, PASS after reversal); every lane AGREE, DISAGREE
+under the e2e arm (connected_components now on 9 of 9 fixtures), AGREE after
+reversal: RESULT PASS. Apple / AMD: request 1790537199548-neighbors-689ddc2561
+(m2pro + do-amd).
+
+### Existing family (neighbors/, kernel_methods/, svm/, gaussian_process/)
+
+- DONE: gamma='scale' for SVC, SVR and RBFSampler (DEVIATION 870 revised:
+  `_portable_math.scale_gamma`, the exact variance of the float32 cells, the
+  reciprocal rounded once; no fold, so every host reads the same bits).
+  Lane `x-neighbors-gamma-scale`; sabotage
+  `x_neighbors/checks/sabotage/870_gamma_scale_device_column.patch` (the
+  device column reads gamma one ulp off). Defaults stay 'auto'.
+- kernel_methods/NOT_IMPLEMENTED.tsv: the samplers and one-class SVM rows now
+  point at x_neighbors.
+- OWED, in this order (each: AGREE + a sabotage + existing bits unchanged):
+  1. SVC / SVR sample_weight and SVC class_weight: the weighted InitPenalty
+     (C_vec = C * w, one float32 rounding, formed on the host) on the device
+     (svm/impl/smosolver.mojo `initialize` fills C_vec) AND the host oracle
+     (svm/host/smo_oracle.mojo uses a scalar C in `_select_ws`,
+     `_block_solve`, the b average): per-sample C there too. Zero weight drops
+     the sample as libsvm.
+  2. SVC / SVR kernel='sigmoid' (kernel_methods already has identical_tanh,
+     lane kernel-ridge-sigmoid), SVR kernel='poly' (SVC has it).
+  3. SVC multiclass (one-vs-one over the binary solver, host bookkeeping),
+     decision_function_shape 'ovr' / 'ovo', break_ties.
+  4. kernel='precomputed' for SVC / SVR / KernelRidge / Nystroem.
+  5. KernelRidge sample_weight (sqrt(w) scaling of K and y, dual *= sqrt(w)).
+  6. cosine / chi2 / additive_chi2 pairwise kernels (KernelRidge, Nystroem).
+  7. GaussianProcessRegressor predict(return_cov=True); RationalQuadratic,
+     ExpSineSquared, DotProduct kernels.
+  8. Sparse input (densified exactly, as x_neighbors `_dense`) for SVC, SVR,
+     KernelRidge, Nystroem, RBFSampler, the k-NN classes.
+  9. The distance metrics neighbors/NOT_IMPLEMENTED.tsv refuses by name.
+  SVC probability (Platt with libsvm's internal 5-fold CV) needs a seeded
+  fold assignment; decide after 1-3.
+
 ## NEXT (a fresh session starts here)
 
-1. `python3 tools/apple_steward.py status`: m2pro (gating) and do-amd
-   verdicts for request 1790533314520-neighbors-799d1f0d31. On PASS record it
-   here; on FAIL fix and resubmit only the failing lanes.
-2. If an AMD dev box is up (`tools/dev_pod.sh list`), run
-   `sh tools/algos_lane_check.sh <the 14 lanes>` there once (numbers, not .so
-   digests) unless do-amd already recorded AGREE.
-3. Option parity (CURRENT DIRECTIVES 2): work `x_neighbors/NOT_IMPLEMENTED.tsv`
-   rows marked NOT IMPLEMENTED (sparse input, deviations_, PageRank nstart,
-   ...), then the family's EXISTING algorithms (neighbors/, kernel_methods/,
-   svm/) against sklearn/cuML options; each option: AGREE + a sabotage arm,
-   merged as it passes.
-4. Speed (PASS 2 item 3): IDENTICAL and FAST on NVIDIA/AMD/Apple/CPU at
-   realistic shapes from R2. The n x n dense paths (kernel matrices, the knn
-   distance matrix, label propagation's per-iteration upload) are the first
-   targets; `x_neighbors/gen.py` drivers upload/download per op.
+Phase (c) OPTION PARITY is in progress (one phase per session).
+1. `python3 tools/apple_steward.py status`: request
+   1790537199548-neighbors-689ddc2561 (14 lanes, e2e arm) and any
+   x-neighbors-gamma-scale request; record the verdicts above.
+2. Continue the OWED list under "Existing family" from item 1.
+3. When the list is done: merge, set NEXT to phase (d) FAST GPU speed, STOP.
