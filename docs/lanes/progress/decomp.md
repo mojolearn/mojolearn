@@ -85,12 +85,18 @@ Next: PASS 2: AMD box (requested, RunPod out of stock, retrying), per-seam check
     perturbation of the INPUT converges everywhere (Isomap, ClassicalMDS, LLE,
     LTSA on both columns), so that was the patch's artifact; ew is not in it.
   - test_lane_select: OK (0 failures) at ac05911b5, whose Mojo imports are
-    this merge's. test_host_surface: see the merge line below.
+    this branch's. test_host_surface: 196 passed after merging origin/main
+    (3af84e8a0) into the branch.
   - Stewards: 1790542293471-decomp-3c73fcee93 (16 lanes, e2e_host_ulp) and
     the spectral-rbf request (e2e_host_sqdist) queued on m2pro and do-amd.
     PHASE 1 IS DONE when both PASS on both (`python3 tools/apple_steward.py
     status | grep decomp`). A FAIL: fix, re-prove on the pod, resubmit only the
     affected lanes.
+  - NOT MERGED TO MAIN YET: directive 0a makes a merge wait for m2pro PASS and
+    do-amd PASS, and the steward queue was ~18 requests deep. lane/algos-decomp
+    is pushed and holds everything (the speed commits and the orth fix; main
+    never had the orth defect). On both PASS: `git fetch origin && git merge
+    origin/main && git push origin HEAD:main`, test_host_surface first.
 
 ## IDENTICAL GPU speed, NVIDIA only so far (phase 4 work done early; NVIDIA A40, higgs 1M x 28 from R2)
 
@@ -110,8 +116,8 @@ call).
 
 ## NEXT (LANE CHARTER phases; one phase per session)
 
-1. Phase 1 (verification): collect the two steward verdicts above; nothing
-   else is owed for the 17 x-decomp lanes. The family's existing algorithms
+1. Phase 1 (verification): collect the two steward verdicts above, then
+   merge; nothing else is owed for the 17 x-decomp lanes. The family's existing algorithms
    (PCA, TruncatedSVD, UMAP, SpectralEmbedding, linalg matmul / cholesky / qr
    / eigh / svdvals) carry their certified verifier lanes.
 2. Phase 2 (option parity): `x_decomp/NOT_IMPLEMENTED.tsv`, plus rows for the
