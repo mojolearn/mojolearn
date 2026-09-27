@@ -1,9 +1,9 @@
 # the metrics lane's per-seam check drivers and sabotage arms (DEVIATIONS 6100-6108; docs/lanes/progress/metrics.md)
-x_metrics/seams/metrics_check.mojo	x_metrics/seams/sabotage/seam_6100_fold_shape.patch
-x_metrics/seams/metrics_check.mojo	x_metrics/seams/sabotage/seam_6101_sort_key.patch
-x_metrics/seams/metrics_check.mojo	x_metrics/seams/sabotage/seam_6102_group_order.patch
-x_metrics/seams/metrics_check.mojo	x_metrics/seams/sabotage/seam_6103_nan_guard.patch
-x_metrics/seams/metrics_check.mojo	x_metrics/seams/sabotage/seam_6104_operand_ftz.patch
-x_metrics/seams/metrics_check.mojo	x_metrics/seams/sabotage/seam_6105_contraction.patch
-x_metrics/seams/metrics_check.mojo	x_metrics/seams/sabotage/seam_6107_prefix.patch
-x_metrics/seams/metrics_check.mojo	x_metrics/seams/sabotage/seam_6108_rng_mapping.patch
+x_metrics/seams/x_metrics_check.mojo	x_metrics/seams/sabotage/seam_6100_fold_shape.patch
+x_metrics/seams/x_metrics_check.mojo	x_metrics/seams/sabotage/seam_6101_sort_key.patch
+x_metrics/seams/x_metrics_check.mojo	x_metrics/seams/sabotage/seam_6102_group_order.patch
+x_metrics/seams/x_metrics_check.mojo	x_metrics/seams/sabotage/seam_6103_nan_guard.patch
+x_metrics/seams/x_metrics_check.mojo	x_metrics/seams/sabotage/seam_6104_operand_ftz.patch
+x_metrics/seams/x_metrics_check.mojo	x_metrics/seams/sabotage/seam_6105_contraction.patch
+x_metrics/seams/x_metrics_check.mojo	x_metrics/seams/sabotage/seam_6107_prefix.patch
+x_metrics/seams/x_metrics_check.mojo	x_metrics/seams/sabotage/seam_6108_rng_mapping.patch

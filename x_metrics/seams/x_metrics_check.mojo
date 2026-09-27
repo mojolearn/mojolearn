@@ -5,10 +5,10 @@
 SEPARATES the pinned spelling from the unpinned one (else VACUOUS, a
 failure), then run the SHIPPED unit through the host runner and, when this
 box has an accelerator, through the device runner, and require both to equal
-the pinned oracle (x_metrics/seams/metrics_oracle.mojo) bit for bit; the
+the pinned oracle (x_metrics.seams.x_metrics_oracle.mojo) bit for bit; the
 shipped outputs go on the card.
 
-    tools/with_identical_mode.sh pixi run mojo run -I . x_metrics/seams/metrics_check.mojo
+    tools/with_identical_mode.sh pixi run mojo run -I . x_metrics/seams/x_metrics_check.mojo
 
 The card goes to $MOJOLEARN_XMETRICS_CARD (default /tmp/x_metrics_seams.card);
 `python3 tools/identity_trace_diff.py a.card b.card` compares two boxes.
@@ -20,7 +20,7 @@ from core.identity_trace import IdentityTrace
 from x_metrics.common import STAGE_INTS, LEAF
 from x_metrics.host.program import run_program_host_ptr
 from x_metrics.device import run_program_device_ptr
-from x_metrics.seams.metrics_oracle import (
+from x_metrics.seams.x_metrics_oracle import (
     seq_sum, pair_sum, argsort_key, argsort_value, pinned_dot_add, fused_dot_add,
     seq_prefix, refold_prefix, key_permutation, fisher_yates,
 )

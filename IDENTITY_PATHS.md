@@ -784,8 +784,8 @@ regression terms, the percentile, ranking curves, per-sample scores, the
 centroid distances, the splitters' permutation) is ONE function run by the
 device runner (a thread per unit) and by the host runner (a loop), so CPU ==
 GPU is by construction; the rows below are the seams inside the units. One
-check driver, `x_metrics/seams/metrics_check.mojo` (oracles in
-`metrics_oracle.mojo`), runs each seam's shipped unit on the host AND the
+check driver, `x_metrics/seams/x_metrics_check.mojo` (oracles in
+`x_metrics_oracle.mojo`), runs each seam's shipped unit on the host AND the
 device after showing its fixture separates the pinned spelling from the
 unpinned one; one sabotage patch per seam under `x_metrics/seams/sabotage/`
 (listed in `tools/identity_lanes/metrics.checks`). The existing metrics

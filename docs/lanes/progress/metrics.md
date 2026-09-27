@@ -71,7 +71,7 @@ targets, sparse contingency, numpy RandomState / scipy distributions, n_jobs>1).
 | lanes | verdict |
 |---|---|
 | x-metrics-classification, -regression, -ranking, -cluster, -splitters, -search | AGREE, train 9 fixtures, cuda RTX 4090 vs CPU (Ryzen 7950X), 2026-09-27 |
-| seams 6100-6108 (`x_metrics/seams/metrics_check.mojo`, 8 seams host+device) | PASS on RTX 4090; `--pass 2` arms: see below |
+| seams 6100-6108 (`x_metrics/seams/x_metrics_check.mojo`, 8 seams host+device) | PASS on RTX 4090; `--pass 2` arms: see below |
 
 (pass-2 results, steward verdicts and merge commit are appended below as they land)
 
