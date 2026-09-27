@@ -20,6 +20,10 @@ messaging lanes. Newest items are at the top.
    `refs/wip/<lane>/*` backups (`git fetch origin 'refs/wip/*:refs/wip/*'`),
    and fold anything useful into your branch. The orchestrator also
    snapshots every worktree's uncommitted work to `refs/wip/` periodically.
+   **Owed option parity found by bench (b186bad01), each for its lane's
+   parity phase:** ann: t-SNE `init='pca'` (scikit-learn's default; ours
+   refuses it). prep: CategoricalNB `min_categories`. sequence: seasonal
+   ETS (the damped-ETS race runs non-seasonal until it lands).
    **Owed from the 2026-09-27 stop:** Apple and AMD reference columns for
    `byte-lm-host-train` (revision weight-decay-default-0.01-1), recorded
    with identity_break on each.
