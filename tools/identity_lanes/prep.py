@@ -31,13 +31,20 @@ def _(ml, X, yc, yr, Xh=None):
     return _prep_transformer(m, X, Xh, attrs=("center_", "scale_"))
 
 
+@lane("x-prep-robust-scaler-unit-variance")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.RobustScaler(unit_variance=True, quantile_range=(10.0, 90.0)).fit(X)
+    return _prep_transformer(m, X, Xh, attrs=("center_", "scale_"))
+
+
 @lane("x-prep-maxabs-scaler")
 def _(ml, X, yc, yr, Xh=None):
     m = ml.MaxAbsScaler().fit(X)
     return _prep_transformer(m, X, Xh, attrs=("scale_",))
 
 
-_batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-robust-scaler", "x-prep-maxabs-scaler")
+_batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-robust-scaler", "x-prep-maxabs-scaler",
+            "x-prep-robust-scaler-unit-variance")
 
 
 def _prep_categorical(X):
