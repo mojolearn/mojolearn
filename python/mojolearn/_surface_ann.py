@@ -21,20 +21,20 @@ FAMILIES = (
         routes="_mojolearn_x_ann",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("x-ann-ivf-pq",),
+        training_lanes=("x-ann-ivf-pq", "x-ann-tsne"),
         inference_lanes=(),
         forest_kinds=(),
-        classes=("IVFPQIndex",),
-        display="the ann lane (IVF-PQ)",
-        host_modules=("x_ann/host/ivf_pq_host.mojo",),
+        classes=("IVFPQIndex", "TSNE"),
+        display="the ann lane (IVF-PQ, t-SNE)",
+        host_modules=("x_ann/host/ivf_pq_host.mojo", "x_ann/host/tsne_host.mojo"),
         exports=(
             "x_ann_host_numeric_mode", "x_ann_host_vendor", "x_ann_host_column", "x_ann_host_sabotage",
-            "x_ann_ivf_pq_build", "x_ann_ivf_pq_search", "x_ann_numeric_mode", "x_ann_vendor",
+            "x_ann_ivf_pq_build", "x_ann_ivf_pq_search", "x_ann_tsne_fit", "x_ann_numeric_mode", "x_ann_vendor",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
-        wheel_note="Ships: the ann lane's CPU route (IVF-PQ build and search).",
+        wheel_note="Ships: the ann lane's CPU route (IVF-PQ build and search, t-SNE).",
         ships_in_wheel=True,
     ),
 )
-TRAINING_LANE_NAMES = {"x-ann-ivf-pq": "the IVF-PQ index"}
-PUBLIC_PENDING_LANES = {"x-ann-ivf-pq": "no reference"}
+TRAINING_LANE_NAMES = {"x-ann-ivf-pq": "the IVF-PQ index", "x-ann-tsne": "t-SNE"}
+PUBLIC_PENDING_LANES = {"x-ann-ivf-pq": "no reference", "x-ann-tsne": "no reference"}

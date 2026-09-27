@@ -17,7 +17,7 @@ first imported, after the package, so both may rely on every module existing:
 from ._buffer import addr, addr_ro, as_f32_c, empty
 from ._mode import NumericModeMixin
 
-__all__ = ["IVFPQIndex"]
+__all__ = ["IVFPQIndex", "TSNE"]
 
 
 def _ann_int(owner, name, v):
@@ -127,4 +127,77 @@ class IVFPQIndex(NumericModeMixin):
         )
         self.n_candidates_ = cand
         return dist.reshape((m, k)), idx.reshape((m, k))
+
+
+class TSNE(NumericModeMixin):
+    """t-SNE (reference: scikit-learn `TSNE`, cuML `TSNE`), IDENTICAL by
+    construction (x_ann/tsne_core.mojo): exact k-NN affinities with the
+    reference's perplexity bisection, attractive term over the sparse P,
+    EXACT repulsion (no Barnes-Hut atomics), sklearn's gains/momentum
+    optimizer for exactly `max_iter` steps.
+
+    Parameters
+    ----------
+    n_components : 2 (only)
+    perplexity : float, default 30.0
+    early_exaggeration : float, default 12.0
+    learning_rate : float or 'auto', default 'auto'
+        'auto' is sklearn's max(n / early_exaggeration / 4, 50).
+    max_iter : int, default 1000
+    init : 'random' (only; sklearn's 'pca' is refused by name), the start is
+        uniform(-5e-5, 5e-5) from numpy's default_rng(random_state), whose
+        integer-to-double draw is exact on every platform.
+    random_state : int, default 0
+    """
+
+    _BINDING = "_mojolearn_x_ann"
+    _EXPLORATION_MAX_ITER = 250
+
+    def __init__(self, n_components=2, perplexity=30.0, early_exaggeration=12.0, learning_rate="auto",
+                 max_iter=1000, init="random", random_state=0):
+        self.n_components = n_components
+        self.perplexity = perplexity
+        self.early_exaggeration = early_exaggeration
+        self.learning_rate = learning_rate
+        self.max_iter = max_iter
+        self.init = init
+        self.random_state = random_state
+
+    def fit(self, X, y=None):
+        import numpy as np
+        x, _ = as_f32_c(X, ndim=2, name="X")
+        n, d = (int(s) for s in x.shape)
+        if self.n_components != 2:
+            raise ValueError("mojolearn TSNE: n_components must be 2 (the only arm implemented)")
+        if self.init != "random":
+            raise ValueError("mojolearn TSNE: init='pca' is not implemented; pass init='random'")
+        max_iter = _ann_int("TSNE", "max_iter", self.max_iter)
+        seed = _ann_int("TSNE", "random_state", self.random_state)
+        perplexity = float(self.perplexity)
+        if not 0.0 < perplexity < n:
+            raise ValueError(f"mojolearn TSNE: perplexity must be in (0, {n}), got {perplexity}")
+        exag = float(self.early_exaggeration)
+        if self.learning_rate == "auto":
+            lr = max(n / exag / 4.0, 50.0)
+        else:
+            lr = float(self.learning_rate)
+        exploration = min(self._EXPLORATION_MAX_ITER, max_iter)
+        y0 = ((np.random.default_rng(seed).random((n, 2)) - 0.5) * 1e-4).astype(np.float32)
+        emb = empty((n * 2,), "<f4")
+        kl = empty((1,), "<f4")
+        self._bind().x_ann_tsne_fit(
+            # x, y0, y_out, kl_out
+            [addr_ro(x, name="X"), addr_ro(y0, name="init"), addr(emb, name="embedding_"), addr(kl, name="kl")],
+            # n, d, max_iter, exploration_iters, perplexity, early_exaggeration, learning_rate
+            [n, d, max_iter, exploration, perplexity, exag, lr],
+        )
+        self.embedding_ = emb.reshape((n, 2))
+        self.kl_divergence_ = float(np.asarray(kl)[0])
+        self.n_iter_ = max_iter
+        self.learning_rate_ = lr
+        self.n_features_in_ = d
+        return self
+
+    def fit_transform(self, X, y=None):
+        return self.fit(X).embedding_
 

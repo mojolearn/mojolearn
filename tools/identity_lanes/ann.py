@@ -40,3 +40,18 @@ def _ann_batch_search(ml, e, Xh):
 
 _batch_decl(_ann_batch_search, "x-ann-ivf-pq")
 
+
+@lane("x-ann-tsne")
+def _(ml, X, yc, yr, Xh=None):
+    """TSNE on 400 rows, perplexity 10, 300 steps (250 exaggerated): the
+    k-NN affinities, the perplexity bisection, the symmetrized P, the exact
+    repulsion and the gains optimizer. Train hashes the embedding and the KL.
+    t-SNE has no transform of new rows, so the probe re-fits the held-out
+    rows (n/a:no-save)."""
+    m = ml.TSNE(perplexity=10.0, max_iter=300, random_state=5).fit(X[:400])
+    return _fit(dict(embedding=_h(m.embedding_), kl=_h(np.float32(m.kl_divergence_))),
+                m, lambda e: (ml.TSNE(perplexity=10.0, max_iter=300, random_state=5).fit(Xh[:400]).embedding_,))
+
+
+_batch_decl("n/a:whole-set (t-SNE embeds the whole set jointly; no row of it is computed alone)", "x-ann-tsne")
+

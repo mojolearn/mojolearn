@@ -12,6 +12,7 @@ from std.python.bindings import PythonModuleBuilder
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_ann.abi import check_search, in_f32, in_i32, out_f32, out_i32, p_int
 from x_ann.ivf_pq_core import pq_len_of
+from x_ann.host.tsne_host import tsne_fit_host
 from x_ann.host.ivf_pq_host import X_ANN_HOST_SABOTAGE, ivf_pq_build_host, ivf_pq_search_host
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 
@@ -69,6 +70,26 @@ def ivf_pq_search_binding(addrs: PythonObject, params: PythonObject) raises -> P
     return PythonObject(m)
 
 
+def tsne_fit_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """addrs: x, y0, y_out, kl_out (one float32).
+    params: n, d, max_iter, exploration_iters, perplexity, early_exaggeration, learning_rate."""
+    var n = p_int(params, 0)
+    var d = p_int(params, 1)
+    var max_iter = p_int(params, 2)
+    var exploration = p_int(params, 3)
+    var perplexity = Float32(Float64(py=params[4]))
+    var exaggeration = Float32(Float64(py=params[5]))
+    var lr = Float32(Float64(py=params[6]))
+    var x = in_f32(addrs, 0, n * d)
+    var y0 = in_f32(addrs, 1, n * 2)
+    var y = List[Float32]()
+    var kl = Float32(0.0)
+    with GILReleased(Python()):
+        tsne_fit_host(x, n, d, y0, perplexity, exaggeration, lr, max_iter, exploration, y, kl)
+    out_f32(y, addrs, 2)
+    out_f32([kl], addrs, 3)
+    return PythonObject(n)
+
 
 
 
@@ -95,6 +116,7 @@ def PyInit__mojolearn_x_ann_host() abi("C") -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_x_ann_host")
         m.def_function[ivf_pq_build_binding]("x_ann_ivf_pq_build")
         m.def_function[ivf_pq_search_binding]("x_ann_ivf_pq_search")
+        m.def_function[tsne_fit_binding]("x_ann_tsne_fit")
         m.def_function[numeric_mode_binding]("x_ann_numeric_mode")
         m.def_function[vendor_binding]("x_ann_vendor")
         m.def_function[numeric_mode_binding]("x_ann_host_numeric_mode")
