@@ -11,6 +11,12 @@ messaging lanes. Newest items are at the top.
    (in the CPU gate) fails on a NEW fixture-RNG definition
    (`tools/fixture_rng_census.py`) and on any existing copy that differs
    from its canonical behavior bit for bit.
+0000b. **Steward merge gate (Andrew wants speed; 2026-09-27):** a lane may
+   merge once **one Apple steward (m2pro OR m3ultra) PASSES and do-amd
+   PASSES**. Every request still runs on both Macs. A later FAIL from the
+   other Mac, especially M2 vs M4/M3 codegen differences, comes back to
+   the lane as a fix at the root. Don't wait on a queue that is behind:
+   keep working on the next item while verdicts arrive.
 0000a. **Commit and push your branch at every meaningful step, not only at
    merges (Andrew, 2026-09-27, after the weekly usage limit killed every
    agent mid-work).** Commit WIP to your own branch (`lane/<name>`) and
