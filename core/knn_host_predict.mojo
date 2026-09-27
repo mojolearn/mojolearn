@@ -175,11 +175,13 @@ from neighbors.impl.distance.detail.distance_ops import (
     DIST_LP_UNEXPANDED,
     cosine_epilog,
     cosine_zero_norm_row,
+    extra_metric_cell,
     inner_product_core,
     l1_core,
     linf_core,
     lp_unexp_core,
     lp_unexp_epilog,
+    metric_is_extra,
     validate_metric_arg,
 )
 from neighbors.impl.ball_cover.common import (
@@ -256,6 +258,7 @@ def host_resolve_metric(metric: Int, is_sqrt: Bool) raises -> Int:
         or metric == DIST_LINF
         or metric == DIST_LP_UNEXPANDED
         or metric == DIST_COSINE_EXPANDED
+        or metric_is_extra(metric)
     ):
         return metric
     raise Error(
@@ -338,6 +341,15 @@ def host_metric_cell_ptr(
     THE SABOTAGE ARM walks the feature chain DESCENDING for L1, Lp and
     cosine (a float fold in the other order), and for Chebyshev, whose
     running max is order-free, returns the next float32 above the maximum."""
+    if metric_is_extra(metric):
+        # the five added metrics: the device's own cell function
+        var cell = extra_metric_cell(
+            rebind[MutPointer[Float32, MutAnyOrigin]](q), row,
+            rebind[MutPointer[Float32, MutAnyOrigin]](y), col, d, metric,
+        )
+        comptime if KNN_HOST_SABOTAGE:
+            cell = host_sabotage_value_flip(cell)
+        return cell
     var acc = Float32(0.0)
     if metric == DIST_LINF:
         for f in range(d):

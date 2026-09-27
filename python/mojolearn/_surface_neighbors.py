@@ -19,7 +19,7 @@ FAMILIES = (
             "x-neighbors-pagerank", "x-neighbors-connected-components", "x-neighbors-louvain", "x-neighbors-svgp",
             "x-neighbors-gamma-scale", "x-neighbors-svm-weights", "x-neighbors-svc-sigmoid", "x-neighbors-svc-multiclass",
             "x-neighbors-krr-options", "x-neighbors-svm-precomputed", "x-neighbors-km-kernels",
-            "x-neighbors-gp-cov",
+            "x-neighbors-gp-cov", "x-neighbors-metrics",
             "x-neighbors-svr-kernels",
         ),
         inference_lanes=(),
@@ -108,6 +108,7 @@ TRAINING_LANE_NAMES = {
     "x-neighbors-svm-precomputed": "SVC / SVR kernel='precomputed'",
     "x-neighbors-km-kernels": "KernelRidge / Nystroem cosine, chi2, additive_chi2",
     "x-neighbors-gp-cov": "GaussianProcessRegressor predict(return_cov=True)",
+    "x-neighbors-metrics": "k-NN canberra, braycurtis, correlation, jensenshannon, inner_product",
 }
 PUBLIC_PENDING_LANES = {
     "x-neighbors-lof": "no reference",
@@ -133,4 +134,5 @@ PUBLIC_PENDING_LANES = {
     "x-neighbors-svm-precomputed": "no reference",
     "x-neighbors-km-kernels": "no reference",
     "x-neighbors-gp-cov": "no reference",
+    "x-neighbors-metrics": "no reference",
 }

@@ -369,6 +369,29 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(mean=_h(mean), cov=_h(cov), n_mean=_h(nmean), n_cov=_h(ncov)),
                 m, lambda e: e.predict(Xh[:64, :4], return_cov=True))
 
+@lane("x-neighbors-metrics")
+def _(ml, X, yc, yr, Xh=None):
+    """Brute-force k-NN under canberra, braycurtis, correlation,
+    jensenshannon and inner_product (distance_ops.mojo::extra_metric_cell on
+    the device and the host); jensenshannon on |X|, whose logs need x >= 0.
+    kneighbors for each, a classifier vote and a distance-weighted
+    regressor."""
+    A = np.abs(X[:512]).astype(np.float32)
+    A[::9, 3] = np.float32(0.0)                          # log(0) := 0 cells
+    out = {}
+    for metric in ("canberra", "braycurtis", "correlation", "jensenshannon", "inner_product"):
+        base = A if metric == "jensenshannon" else X[:512]
+        q = np.abs(X[512:640]).astype(np.float32) if metric == "jensenshannon" else X[512:640]
+        nn = ml.NearestNeighbors(n_neighbors=5, metric=metric).fit(base)
+        d, i = nn.kneighbors(q)
+        out[metric + "_d"] = _h(d)
+        out[metric + "_i"] = _h(i)
+    c = ml.KNeighborsClassifier(n_neighbors=7, metric="canberra").fit(X[:512], yc[:512])
+    r = ml.KNeighborsRegressor(n_neighbors=7, metric="correlation", weights="distance").fit(X[:512], yr[:512])
+    out["clf"] = _h(c.predict(X[512:640]))
+    out["reg"] = _h(r.predict(X[512:640]))
+    return _fit(out, c, lambda e: (e.predict(Xh[:128]),))
+
 _batch_decl(_rows_calls("score_samples", "predict", sl=slice(0, 256)), "x-neighbors-lof")
 _batch_decl(_rows_calls("predict", "decision_function", "predict_proba", sl=slice(0, 256)), "x-neighbors-nearest-centroid")
 _batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "x-neighbors-ocsvm")
