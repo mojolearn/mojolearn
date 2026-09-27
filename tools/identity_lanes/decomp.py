@@ -17,3 +17,18 @@
 # own lanes (to LANES and the per-lane registries); rebind no existing name;
 # prefix your own helpers with `_decomp_`. No imports are needed: np, _h,
 # _fit, _rows_calls and the rest are this module's.
+
+
+@lane("x-decomp-ipca")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.IncrementalPCA(n_components=6, batch_size=4000).fit(X)
+    w = ml.IncrementalPCA(n_components=4, whiten=True, batch_size=5000).fit(X[:10000])
+    return _fit(dict(components=_h(m.components_), sv=_h(m.singular_values_), mean=_h(m.mean_),
+                     var=_h(m.var_), ev=_h(m.explained_variance_), evr=_h(m.explained_variance_ratio_),
+                     noise=_h(np.float32(m.noise_variance_)), transform=_h(m.transform(X[:256])),
+                     inverse=_h(m.inverse_transform(m.transform(X[:64]))),
+                     white=_h(w.transform(X[:256]), w.inverse_transform(w.transform(X[:64])))),
+                m, lambda e: (e.transform(Xh[:256]),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-decomp-ipca")
