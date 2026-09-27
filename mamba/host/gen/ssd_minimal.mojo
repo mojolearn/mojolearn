@@ -74,24 +74,12 @@ from mamba.host.device_shim import launch_count
 from std.sys.compile import is_defined
 from mamba.host.device_shim import DeviceBuffer, DeviceContext
 
-from checks.numerics import ftz, identical_exp, identical_mul_add
+from checks.numerics import ftz, identical_exp, identical_mul_add, identical_mul
 from mamba.checks.mamba2_fixture import (
     M2_CHUNK_SIZE,
     M2_D_STATE,
     M2_HEADDIM,
 )
-
-
-def pinned_mul(a: Float32, b: Float32) -> Float32:
-    """DEVIATION 720's construction (the oracle's `pinned_mul`), spelled
-    here so this file shares only `checks/numerics.mojo` with the host
-    side."""
-    # `identical_mul` is the pinned product (`pinned_mul_f32` under IDENTICAL);
-    # `fma(a, b, -0.0)` was not: LLVM folds it into a contractable product
-    # (lane/pinned-mul-contract-free, 2026-09-26).
-    from checks.numerics import identical_mul
-
-    return identical_mul(a, b)
 
 
 # ===========================================================================
@@ -205,7 +193,7 @@ def m2_discretize_kernel(gid_: Int,
     # dA = dt * A: dt binds to A (789). PAIR_DT_B does not move this
     # product -- the fused chain agrees about dA.
     da.unsafe_store(
-        cell, ftz(pinned_mul(dtv, ftz(a_out.unsafe_load(hh))))
+        cell, ftz(identical_mul(dtv, ftz(a_out.unsafe_load(hh))))
     )
     for p in range(M2_HEADDIM):
         var xv = ftz(xbc.unsafe_load(t * cd + hh * M2_HEADDIM + p))
@@ -218,7 +206,7 @@ def m2_discretize_kernel(gid_: Int,
             xd.unsafe_store(cell * M2_HEADDIM + p, xv)
         else:
             xd.unsafe_store(
-                cell * M2_HEADDIM + p, ftz(pinned_mul(xv, dtv))
+                cell * M2_HEADDIM + p, ftz(identical_mul(xv, dtv))
             )
 
 
@@ -457,7 +445,7 @@ def m2_ydiag_kernel(gid_: Int,
         var m_ij: Float32
         if jj <= i:
             m_ij = ftz(
-                pinned_mul(
+                identical_mul(
                     ftz(cb_g.unsafe_load(gbase + jj)),
                     ftz(seg_l.unsafe_load(lbase + jj)),
                 )
@@ -466,7 +454,7 @@ def m2_ydiag_kernel(gid_: Int,
                 # SABOTAGE: the fused chain scales the CB block by dt[j]
                 # (dt bound to the B side) since X_d carries no dt.
                 m_ij = ftz(
-                    pinned_mul(
+                    identical_mul(
                         m_ij,
                         ftz(
                             dt.unsafe_load(
@@ -600,11 +588,11 @@ def m2_cstate_kernel(gid_: Int,
                 decay.unsafe_load(((bb * nh + hh) * nc + c) * qv + i)
             )
             bd = ftz(
-                pinned_mul(ftz(xbc.unsafe_load(ti * cd + di + n)), dec)
+                identical_mul(ftz(xbc.unsafe_load(ti * cd + di + n)), dec)
             )
             comptime if SAB_PAIR_DT_B:
                 bd = ftz(
-                    pinned_mul(bd, ftz(dt.unsafe_load(ti * nh + hh)))
+                    identical_mul(bd, ftz(dt.unsafe_load(ti * nh + hh)))
                 )
             xv = ftz(
                 xd.unsafe_load((ti * nh + hh) * M2_HEADDIM + p)
@@ -743,7 +731,7 @@ def m2_statepass_kernel(gid_: Int,
         )
         comptime if SAB_STATEPASS_UNFUSED:
             # SABOTAGE: two roundings where the profile has one.
-            var prod = ftz(pinned_mul(scale, h))
+            var prod = ftz(identical_mul(scale, h))
             h = ftz(prod + cs)
         else:
             h = ftz(identical_mul_add(scale, h, cs))
@@ -818,7 +806,7 @@ def m2_yoff_y_kernel(gid_: Int,
             ftz(dacs.unsafe_load(((bb * nh + hh) * nc + c) * qv + i))
         )
     )
-    var yo = ftz(pinned_mul(acc, sc))
+    var yo = ftz(identical_mul(acc, sc))
     yoff.unsafe_store(cell, yo)
     y_out.unsafe_store(cell, ftz(ftz(ydiag.unsafe_load(cell)) + yo))
 

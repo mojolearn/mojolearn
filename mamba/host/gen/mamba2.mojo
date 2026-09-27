@@ -76,6 +76,7 @@ from mamba.host.device_shim import identical_gemm
 from gemm.checks.gemm_oracle import OP_NT
 
 from checks.numerics import (
+    identical_mul,
     ftz,
     identical_clamp,
     identical_exp,
@@ -109,16 +110,6 @@ from mamba.host.gen.modeling_mamba import (
     _refuse_nonfinite_named,
     residual_add_kernel,
 )
-
-
-def pinned_mul(a: Float32, b: Float32) -> Float32:
-    """DEVIATION 720's construction; see the oracle."""
-    # `identical_mul` is the pinned product (`pinned_mul_f32` under IDENTICAL);
-    # `fma(a, b, -0.0)` was not: LLVM folds it into a contractable product
-    # (lane/pinned-mul-contract-free, 2026-09-26).
-    from checks.numerics import identical_mul
-
-    return identical_mul(a, b)
 
 
 def _grid(n: Int) -> Int:
@@ -645,7 +636,7 @@ def m2_skip_kernel(gid_: Int,
     var xv = ftz(
         silu_out.unsafe_load((bb * l + li) * cd + hh * M2_HEADDIM + p)
     )
-    var prod = ftz(pinned_mul(xv, ftz(d_skip.unsafe_load(hh))))
+    var prod = ftz(identical_mul(xv, ftz(d_skip.unsafe_load(hh))))
     var y = ftz(
         y_work.unsafe_load(
             (((bb * t_work) + (q0 + li)) * nh + hh) * M2_HEADDIM + p
@@ -682,7 +673,7 @@ def m2_gate_kernel(gid_: Int,
     gate_out.unsafe_store(
         cell,
         ftz(
-            pinned_mul(
+            identical_mul(
                 ftz(y_in.unsafe_load(cell)), ftz(identical_silu(z))
             )
         ),
@@ -729,21 +720,21 @@ def m2_step_upstream_kernel(gid_: Int,
     # dt = softplus(dt_raw + bias) -- NO clamp in their step (:313).
     var raw = ftz(in_proj.unsafe_load(bb * dip + di + cd + hh))
     var dtv = ftz(identical_softplus(ftz(raw + ftz(dt_bias.unsafe_load(hh)))))
-    var dav = ftz(identical_exp(ftz(pinned_mul(dtv, ftz(a_out.unsafe_load(hh))))))
+    var dav = ftz(identical_exp(ftz(identical_mul(dtv, ftz(a_out.unsafe_load(hh))))))
     var xv = ftz(silu_out.unsafe_load(bb * cd + hh * M2_HEADDIM + p))
     var acc = Float32(0.0)
     for n in range(n_state):
         var bv = ftz(silu_out.unsafe_load(bb * cd + di + n))
-        var db = ftz(pinned_mul(dtv, bv))  # (dt * B) first (:277)
-        var dbx = ftz(pinned_mul(db, xv))  # ... then * x
+        var db = ftz(identical_mul(dtv, bv))  # (dt * B) first (:277)
+        var dbx = ftz(identical_mul(db, xv))  # ... then * x
         var hidx = ((bb * nh + hh) * M2_HEADDIM + p) * n_state + n
         var hprev = ftz(h_state.unsafe_load(hidx))
         # h*dA + dBx, TWO roundings (torch's mul then add).
-        var hnew = ftz(ftz(pinned_mul(hprev, dav)) + dbx)
+        var hnew = ftz(ftz(identical_mul(hprev, dav)) + dbx)
         h_state.unsafe_store(hidx, hnew)
         var cv = ftz(silu_out.unsafe_load(bb * cd + di + n_state + n))
         acc = ftz(identical_mul_add(cv, hnew, acc))
-    var prod = ftz(pinned_mul(xv, ftz(d_skip.unsafe_load(hh))))
+    var prod = ftz(identical_mul(xv, ftz(d_skip.unsafe_load(hh))))
     skip_out.unsafe_store(cell, ftz(ftz(acc) + prod))
 
 

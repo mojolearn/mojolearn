@@ -88,39 +88,26 @@ from checks.numerics import (
     _total_order_key,
     identical_mul,
     identical_mul_add,
+    pinned_mul_f32,
     portable_fmaxf,
     numeric_mode_name,
 )
 
-# DEVIATION 947's cross-file arm. These four imports are the only reason
-# this gate depends on anything outside `checks/`, and they are here
-# because DEVIATION 826 names four copies of one arithmetic as "the good
-# case and also the fragile one". `range_key` is DEVIATION 204's original,
-# which `_total_order_key` is a deliberate second copy of; the three
-# `pinned_mul`s are DEVIATION 720's copies of `identical_mul`.
+# DEVIATION 947's cross-file arm. This import is the only reason this gate
+# depends on anything outside `checks/`. `range_key` is DEVIATION 204's
+# original, which `_total_order_key` is a deliberate second copy of. The
+# fifteen `pinned_mul` copies (DEVIATION 720) that stood beside
+# `identical_mul` were deleted by lane/dedupe-pinned-mul: every site now calls
+# `identical_mul` itself, and `tools/test_lane_select.py` refuses a second
+# definition of either name.
 #
-# IF THE MAMBA OR EXTRATREES TREES ARE MID-EDIT AND THIS GATE WILL NOT
-# BUILD, these five imports and the two checks that use them are the first
-# thing to lift out -- they are drift detectors for other lanes' files, not
-# claims about `numerics.mojo` itself.
+# IF THE EXTRATREES TREE IS MID-EDIT AND THIS GATE WILL NOT BUILD, this
+# import and the check that uses it are the first thing to lift out -- it is
+# a drift detector for another lane's file, not a claim about
+# `numerics.mojo` itself.
 from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import (
     range_key,
 )
-from mamba.checks.mamba_oracle import pinned_mul as pinned_mul_oracle
-from mamba.checks.mamba2_oracle import pinned_mul as pinned_mul_oracle2
-from mamba.checks.mamba3_oracle import pinned_mul as pinned_mul_oracle3
-from mamba.impl.modeling.modeling_mamba import pinned_mul as pinned_mul_block
-from mamba.impl.ops.selective_scan_interface import pinned_mul as pinned_mul_scan
-from mamba.impl.ops.mamba3_siso import pinned_mul as pinned_mul_siso3
-from mamba.impl.modules.ssd_minimal import pinned_mul as pinned_mul_ssd
-from mamba.impl.modules.mamba2 import pinned_mul as pinned_mul_m2
-from mamba.impl.modules.mamba3 import pinned_mul as pinned_mul_m3
-from mamba.host.gen.modeling_mamba import pinned_mul as pinned_mul_gen_block
-from mamba.host.gen.selective_scan_interface import pinned_mul as pinned_mul_gen_scan
-from mamba.host.gen.mamba3_siso import pinned_mul as pinned_mul_gen_siso3
-from mamba.host.gen.ssd_minimal import pinned_mul as pinned_mul_gen_ssd
-from mamba.host.gen.mamba2 import pinned_mul as pinned_mul_gen_m2
-from mamba.host.gen.mamba3 import pinned_mul as pinned_mul_gen_m3
 
 comptime N = 1 << 20
 comptime BLOCK = 256
@@ -754,10 +741,10 @@ def check_identical_mul_signed_zero() raises:
         literal; this is that rule applied to the one literal that matters.
     (b) `identical_mul(-1.0, 0.0)` and `identical_mul(1.0, -0.0)` are
         `-0.0` BY SIGN BIT.
-    (c) `identical_mul` agrees BIT FOR BIT with all three `pinned_mul`
-        copies (DEVIATION 720) over a scattered fixture. Four copies of one
-        arithmetic have four chances to drift, and this is the assertion
-        that catches the fourth."""
+    (c) `identical_mul` agrees BIT FOR BIT with `pinned_mul_f32` under
+        IDENTICAL, over a scattered fixture plus planted classes, alone and
+        composed into an add. The DEVIATION 720 copies it used to compare
+        against are gone (lane/dedupe-pinned-mul)."""
     comptime PZ = UInt32(0x00000000)
     comptime NZ = UInt32(0x80000000)
     if _bits(Float32(-0.0)) != NZ:
@@ -777,14 +764,17 @@ def check_identical_mul_signed_zero() raises:
         raise Error("identical_mul(-1.0, -0.0) is not +0.0 BY SIGN BIT")
     if _bits(identical_mul(_f(PZ), _f(NZ))) != NZ:
         raise Error("identical_mul(+0.0, -0.0) is not -0.0 BY SIGN BIT")
-    # lane/dedupe-pinned-mul: ALL FIFTEEN `pinned_mul` copies (nine written by
-    # hand, six by tools/mamba_host_gen.py), EXACT bits (no NaN canonicalizing),
+    # lane/dedupe-pinned-mul: before the fifteen `pinned_mul` copies (nine
+    # written by hand, six by tools/mamba_host_gen.py) were deleted, this loop
+    # compared each of them against `identical_mul` (all fifteen: 0 of 65,792
+    # differ, pairs and composed). Now it compares `identical_mul` against
+    # the helper it wraps under IDENTICAL (a plain product under FAST), EXACT bits (no NaN canonicalizing),
     # over the 65,536 hashed pairs plus the 16x16 planted classes (both zeros,
     # both infinities, NaN of both payload signs, subnormals, FLT_MIN/MAX), and
     # composed as `p + c` with `c = -(a*b) + tiny`, the fixture that separates
     # a fused product (one rounding) from an unfused one (two).
-    comptime NCOPY = 15
-    var names: List[String] = ["mamba.checks.mamba_oracle", "mamba.checks.mamba2_oracle", "mamba.checks.mamba3_oracle", "mamba.impl.modeling.modeling_mamba", "mamba.impl.ops.selective_scan_interface", "mamba.impl.ops.mamba3_siso", "mamba.impl.modules.ssd_minimal", "mamba.impl.modules.mamba2", "mamba.impl.modules.mamba3", "mamba.host.gen.modeling_mamba", "mamba.host.gen.selective_scan_interface", "mamba.host.gen.mamba3_siso", "mamba.host.gen.ssd_minimal", "mamba.host.gen.mamba2", "mamba.host.gen.mamba3"]
+    comptime NCOPY = 1
+    var names: List[String] = ["checks.numerics.pinned_mul_f32 (identical_mul's IDENTICAL arm)"]
     var drift = List[Int](length=NCOPY, fill=0)
     var drift_fused = List[Int](length=NCOPY, fill=0)
     var vs_product = 0
@@ -812,36 +802,12 @@ def check_identical_mul_signed_zero() raises:
             fused_ctl += 1
         var got = List[UInt32](length=NCOPY, fill=0)
         var gotc = List[UInt32](length=NCOPY, fill=0)
-        got[0] = _bits(pinned_mul_oracle(a, b))
-        gotc[0] = _bits(pinned_mul_oracle(a, b) + c)
-        got[1] = _bits(pinned_mul_oracle2(a, b))
-        gotc[1] = _bits(pinned_mul_oracle2(a, b) + c)
-        got[2] = _bits(pinned_mul_oracle3(a, b))
-        gotc[2] = _bits(pinned_mul_oracle3(a, b) + c)
-        got[3] = _bits(pinned_mul_block(a, b))
-        gotc[3] = _bits(pinned_mul_block(a, b) + c)
-        got[4] = _bits(pinned_mul_scan(a, b))
-        gotc[4] = _bits(pinned_mul_scan(a, b) + c)
-        got[5] = _bits(pinned_mul_siso3(a, b))
-        gotc[5] = _bits(pinned_mul_siso3(a, b) + c)
-        got[6] = _bits(pinned_mul_ssd(a, b))
-        gotc[6] = _bits(pinned_mul_ssd(a, b) + c)
-        got[7] = _bits(pinned_mul_m2(a, b))
-        gotc[7] = _bits(pinned_mul_m2(a, b) + c)
-        got[8] = _bits(pinned_mul_m3(a, b))
-        gotc[8] = _bits(pinned_mul_m3(a, b) + c)
-        got[9] = _bits(pinned_mul_gen_block(a, b))
-        gotc[9] = _bits(pinned_mul_gen_block(a, b) + c)
-        got[10] = _bits(pinned_mul_gen_scan(a, b))
-        gotc[10] = _bits(pinned_mul_gen_scan(a, b) + c)
-        got[11] = _bits(pinned_mul_gen_siso3(a, b))
-        gotc[11] = _bits(pinned_mul_gen_siso3(a, b) + c)
-        got[12] = _bits(pinned_mul_gen_ssd(a, b))
-        gotc[12] = _bits(pinned_mul_gen_ssd(a, b) + c)
-        got[13] = _bits(pinned_mul_gen_m2(a, b))
-        gotc[13] = _bits(pinned_mul_gen_m2(a, b) + c)
-        got[14] = _bits(pinned_mul_gen_m3(a, b))
-        gotc[14] = _bits(pinned_mul_gen_m3(a, b) + c)
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+            got[0] = _bits(pinned_mul_f32(a, b))
+            gotc[0] = _bits(pinned_mul_f32(a, b) + c)
+        else:
+            got[0] = _bits(a * b)
+            gotc[0] = mc
         for j in range(NCOPY):
             if got[j] != mb:
                 drift[j] += 1
@@ -851,16 +817,16 @@ def check_identical_mul_signed_zero() raises:
             vs_product += 1
     var bad = 0
     for j in range(NCOPY):
-        print("  pinned_mul copy", names[j], "differs on", drift[j], "of", npairs,
+        print("  reference", names[j], "differs on", drift[j], "of", npairs,
               "pairs; composed p + c differs on", drift_fused[j])
         bad += drift[j] + drift_fused[j]
     if bad != 0:
-        raise Error("identical_mul has DRIFTED from a DEVIATION 720 `pinned_mul` copy (see the lines above)")
+        raise Error("identical_mul has DRIFTED from its pinned arm (see the lines above)")
     print("  CONTROL: a plain `a * b + c` differs from the pinned composition on",
           fused_ctl, "of", npairs, "pairs (non-zero where the host fuses)")
     print("check_identical_mul_signed_zero: Float32(-0.0) is 0x80000000;")
-    print("  the signed-zero products are right BY SIGN BIT; and all fifteen")
-    print("  DEVIATION 720 `pinned_mul` copies agree bit for bit over 65,536")
+    print("  the signed-zero products are right BY SIGN BIT; and identical_mul")
+    print("  agrees bit for bit with its pinned arm over 65,536")
     print("  hashed pairs plus 256 planted class pairs")
     print("  RECORDED:", vs_product, "of", npairs, "pairs where identical_mul")
     print("  differs from a plain `a * b` (the pin is supposed to be the")
