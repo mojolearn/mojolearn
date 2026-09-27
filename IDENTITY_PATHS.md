@@ -541,6 +541,32 @@ moved. The census is an OPT-IN release rehearsal step
 families, about an hour); the full comparison is run by hand before a
 release that touches IDENTICAL arithmetic.
 
+**DEVIATION 5904 (2026-09-27, lane/dedupe-pinned-mul), DEVIATION 826's
+unfinished half: one definition of the pinned product.** DEVIATION 826 put
+`identical_mul` in `checks/numerics.mojo` and left DEVIATION 720's
+`pinned_mul` copies standing. By this date there were fifteen: nine written by
+hand (the three Mamba oracles, `modeling_mamba`, `selective_scan_interface`,
+`mamba3_siso`, `ssd_minimal`, `mamba2`, `mamba3`) and six that
+`tools/mamba_host_gen.py` writes into `mamba/host/gen/`. They were called from
+35 files in the Mamba and transformer lanes, and `portable_fmax_check`
+compared only three of them with anything. Every copy's body was
+`return identical_mul(a, b)`, so the copies were mode-gated like
+`identical_mul`: pinned under IDENTICAL and a plain product under FAST. Before
+this change they were never unconditional (`identical_mul_add(a, b, -0.0)`
+before 9cbf4edc6 was gated too). Before deletion, `portable_fmax_check`
+compared all fifteen against `identical_mul` on exact bits: 65,536 hashed
+pairs, plus 256 planted class pairs (both zeros, both infinities, NaN of both
+payload signs, subnormals, FLT_MIN/MAX), plus the composed `p + c` with
+`c = -(a*b) + 1 ulp`, the pattern that separates a fused product from an
+unfused one. Then every call site was switched to `identical_mul`, the copies
+were deleted, and `mamba/host/gen/` was regenerated from the edited sources.
+Both modes keep their bits by construction. Whether Mamba's FAST products
+should be pinned is a separate decision and is not made here.
+`test_the_pinned_product_has_one_definition` in `tools/test_lane_select.py`
+fails if a second `identical_mul`, or any `pinned_mul`, is defined in a
+tracked Mojo file. `portable_fmax_check` now compares `identical_mul` with
+`pinned_mul_f32`, the arm it wraps under IDENTICAL.
+
 
 ## Row-number registry, assigned 2026-09-01
 

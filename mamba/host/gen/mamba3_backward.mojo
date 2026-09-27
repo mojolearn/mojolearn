@@ -6,10 +6,8 @@
 from mamba.host.device_shim import launch_count
 from mamba.host.device_shim import DeviceBuffer, DeviceContext
 
-from checks.numerics import ftz, identical_div, identical_exp, identical_mul_add, identical_rsqrt, identical_sigmoid, identical_silu, identical_tanh, portable_cosf, portable_sinf
+from checks.numerics import ftz, identical_div, identical_exp, identical_mul_add, identical_rsqrt, identical_sigmoid, identical_silu, identical_tanh, portable_cosf, portable_sinf, identical_mul
 from mamba.checks.mamba3_fixture import M3_A_FLOOR, M3_D_STATE, M3_HEADDIM, M3_NUM_ROPE_ANGLES, M3_PI, M3_RMS_EPS, Mamba3Dims
-from mamba.host.gen.modeling_mamba import pinned_mul
-
 comptime M3_BWD_TPB = 128
 
 
@@ -60,13 +58,13 @@ def mamba3_gate_skip_backward_kernel(gid_: Int,
         var v = ftz(in_proj.unsafe_load(token * dip + x_col + head * M3_HEADDIM + p))
         var dg = ftz(d_gate.unsafe_load(cell))
         var sk = ftz(skip.unsafe_load(cell))
-        var ds = ftz(pinned_mul(dg, ftz(identical_silu(z))))
+        var ds = ftz(identical_mul(dg, ftz(identical_silu(z))))
         d_skip.unsafe_store(cell, ds)
         var sig = ftz(identical_sigmoid(z))
         var middle = ftz(identical_mul_add(z, ftz(Float32(1.0) - sig), Float32(1.0)))
-        var prime = ftz(pinned_mul(sig, middle))
-        d_z.unsafe_store(cell, ftz(pinned_mul(ftz(pinned_mul(dg, sk)), prime)))
-        d_v.unsafe_store(cell, ftz(pinned_mul(ds, tq)))
+        var prime = ftz(identical_mul(sig, middle))
+        d_z.unsafe_store(cell, ftz(identical_mul(ftz(identical_mul(dg, sk)), prime)))
+        d_v.unsafe_store(cell, ftz(identical_mul(ds, tq)))
         dq = ftz(identical_mul_add(ds, v, dq))
         dd = ftz(identical_mul_add(ds, v, dd))
     d_qkdot.unsafe_store(th, dq)
@@ -127,22 +125,22 @@ def mamba3_qkdot_backward_kernel(gid_: Int,
         var q = ftz(ftz(bcc.unsafe_load(token * M3_D_STATE + n)) + ftz(c_bias.unsafe_load(head * M3_D_STATE + n)))
         var k = ftz(ftz(bcb.unsafe_load(token * M3_D_STATE + n)) + ftz(b_bias.unsafe_load(head * M3_D_STATE + n)))
         dot = ftz(identical_mul_add(q, k, dot))
-        var common = ftz(pinned_mul(incoming, gam))
-        var db = ftz(pinned_mul(common, q))
-        var dc = ftz(pinned_mul(common, k))
+        var common = ftz(identical_mul(incoming, gam))
+        var db = ftz(identical_mul(common, q))
+        var dc = ftz(identical_mul(common, k))
         var cell = (token * nh + head) * M3_D_STATE + n
         d_b.unsafe_store(cell, db)
         d_c.unsafe_store(cell, dc)
         d_b_bias.unsafe_store(cell, db)
         d_c_bias.unsafe_store(cell, dc)
-    var dgam = ftz(pinned_mul(incoming, dot))
+    var dgam = ftz(identical_mul(incoming, dot))
     d_gamma.unsafe_store(th, dgam)
     var sig = ftz(sigma.unsafe_load(th))
-    d_dt.unsafe_store(th, ftz(pinned_mul(dgam, sig)))
-    var dsig = ftz(pinned_mul(dgam, ftz(dt.unsafe_load(th))))
+    d_dt.unsafe_store(th, ftz(identical_mul(dgam, sig)))
+    var dsig = ftz(identical_mul(dgam, ftz(dt.unsafe_load(th))))
     d_trap.unsafe_store(
         th,
-        ftz(pinned_mul(ftz(pinned_mul(dsig, sig)), ftz(Float32(1.0) - sig))),
+        ftz(identical_mul(ftz(identical_mul(dsig, sig)), ftz(Float32(1.0) - sig))),
     )
 
 
@@ -201,7 +199,7 @@ def mamba3_s16_qkv_backward_kernel(gid_: Int,
                     var lv = ftz(seg_l.unsafe_load((((bb * ((l + qs - 1) // qs) + chunk) * nh + h) * qs + inner) * qs + j))
                     var kv = ftz(k.unsafe_load(((bb * l + tj) * nh + h) * M3_D_STATE + n))
                     var vv = ftz(v.unsafe_load(((bb * l + tj) * nh + h) * M3_HEADDIM + p))
-                    dq = ftz(identical_mul_add(dy_i, ftz(pinned_mul(ftz(pinned_mul(kv, lv)), vv)), dq))
+                    dq = ftz(identical_mul_add(dy_i, ftz(identical_mul(ftz(identical_mul(kv, lv)), vv)), dq))
             for i in range(inner + 1, qs):
                 var ti = chunk * qs + i
                 if ti < l:
@@ -209,7 +207,7 @@ def mamba3_s16_qkv_backward_kernel(gid_: Int,
                     var lv2 = ftz(seg_l.unsafe_load((((bb * ((l + qs - 1) // qs) + chunk) * nh + h) * qs + i) * qs + inner))
                     var qv = ftz(q.unsafe_load(((bb * l + ti) * nh + h) * M3_D_STATE + n))
                     var vv2 = ftz(v.unsafe_load(((bb * l + token) * nh + h) * M3_HEADDIM + p))
-                    dk = ftz(identical_mul_add(dy, ftz(pinned_mul(ftz(pinned_mul(qv, lv2)), vv2)), dk))
+                    dk = ftz(identical_mul_add(dy, ftz(identical_mul(ftz(identical_mul(qv, lv2)), vv2)), dk))
         d_q.unsafe_store(cell, dq); d_k.unsafe_store(cell, dk)
     if cell < v_cells:
         var p = cell % M3_HEADDIM
@@ -223,7 +221,7 @@ def mamba3_s16_qkv_backward_kernel(gid_: Int,
                 for n in range(M3_D_STATE):
                     dot = ftz(identical_mul_add(ftz(q.unsafe_load(((bb*l+ti)*nh+h)*M3_D_STATE+n)), ftz(k.unsafe_load(((bb*l+token)*nh+h)*M3_D_STATE+n)), dot))
                 var lv = ftz(seg_l.unsafe_load((((bb*((l+qs-1)//qs)+chunk)*nh+h)*qs+i)*qs+inner))
-                dv = ftz(identical_mul_add(ftz(d_y.unsafe_load(((bb*l+ti)*nh+h)*M3_HEADDIM+p)), ftz(pinned_mul(dot, lv)), dv))
+                dv = ftz(identical_mul_add(ftz(d_y.unsafe_load(((bb*l+ti)*nh+h)*M3_HEADDIM+p)), ftz(identical_mul(dot, lv)), dv))
         d_v.unsafe_store(cell, dv)
 
 
@@ -237,7 +235,7 @@ def mamba3_s15_backward_kernel(gid_: Int,
     var acc = Float32(0.0); var sc = ftz(scale.unsafe_load(row))
     for n in range(M3_D_STATE):
         var cell = row * M3_D_STATE + n; var dk = ftz(d_kscaled.unsafe_load(cell)); var kr = ftz(krot.unsafe_load(cell))
-        d_krot.unsafe_store(cell, ftz(pinned_mul(dk, sc)))
+        d_krot.unsafe_store(cell, ftz(identical_mul(dk, sc)))
         acc = ftz(identical_mul_add(dk, kr, acc))
     d_scale.unsafe_store(row, acc)
 
@@ -297,19 +295,19 @@ def mamba3_rotary_backward_kernel(gid_: Int,
         d_kraw.unsafe_store(base+e0,dk0); d_kraw.unsafe_store(base+e1,dk1); return
     var th = ftz(theta.unsafe_load(rowh*M3_NUM_ROPE_ANGLES+pair))
     var c = ftz(portable_cosf(th)); var s = ftz(portable_sinf(th))
-    d_qraw.unsafe_store(base+e0,ftz(ftz(pinned_mul(dq0,c))+ftz(pinned_mul(dq1,s))))
-    d_qraw.unsafe_store(base+e1,ftz(ftz(pinned_mul(dq1,c))-ftz(pinned_mul(dq0,s))))
-    d_kraw.unsafe_store(base+e0,ftz(ftz(pinned_mul(dk0,c))+ftz(pinned_mul(dk1,s))))
-    d_kraw.unsafe_store(base+e1,ftz(ftz(pinned_mul(dk1,c))-ftz(pinned_mul(dk0,s))))
+    d_qraw.unsafe_store(base+e0,ftz(ftz(identical_mul(dq0,c))+ftz(identical_mul(dq1,s))))
+    d_qraw.unsafe_store(base+e1,ftz(ftz(identical_mul(dq1,c))-ftz(identical_mul(dq0,s))))
+    d_kraw.unsafe_store(base+e0,ftz(ftz(identical_mul(dk0,c))+ftz(identical_mul(dk1,s))))
+    d_kraw.unsafe_store(base+e1,ftz(ftz(identical_mul(dk1,c))-ftz(identical_mul(dk0,s))))
     var q0 = ftz(ftz(bcc.unsafe_load(token*M3_D_STATE+e0))+ftz(c_bias.unsafe_load(h*M3_D_STATE+e0)))
     var q1 = ftz(ftz(bcc.unsafe_load(token*M3_D_STATE+e1))+ftz(c_bias.unsafe_load(h*M3_D_STATE+e1)))
     var k0 = ftz(ftz(bcb.unsafe_load(token*M3_D_STATE+e0))+ftz(b_bias.unsafe_load(h*M3_D_STATE+e0)))
     var k1 = ftz(ftz(bcb.unsafe_load(token*M3_D_STATE+e1))+ftz(b_bias.unsafe_load(h*M3_D_STATE+e1)))
     var dt = Float32(0.0)
-    dt = ftz(identical_mul_add(dq0,ftz(-ftz(pinned_mul(q0,s))-ftz(pinned_mul(q1,c))),dt))
-    dt = ftz(identical_mul_add(dq1,ftz(ftz(pinned_mul(q0,c))-ftz(pinned_mul(q1,s))),dt))
-    dt = ftz(identical_mul_add(dk0,ftz(-ftz(pinned_mul(k0,s))-ftz(pinned_mul(k1,c))),dt))
-    dt = ftz(identical_mul_add(dk1,ftz(ftz(pinned_mul(k0,c))-ftz(pinned_mul(k1,s))),dt))
+    dt = ftz(identical_mul_add(dq0,ftz(-ftz(identical_mul(q0,s))-ftz(identical_mul(q1,c))),dt))
+    dt = ftz(identical_mul_add(dq1,ftz(ftz(identical_mul(q0,c))-ftz(identical_mul(q1,s))),dt))
+    dt = ftz(identical_mul_add(dk0,ftz(-ftz(identical_mul(k0,s))-ftz(identical_mul(k1,c))),dt))
+    dt = ftz(identical_mul_add(dk1,ftz(ftz(identical_mul(k0,c))-ftz(identical_mul(k1,s))),dt))
     d_theta.unsafe_store(rowh*M3_NUM_ROPE_ANGLES+pair,dt)
 
 
@@ -355,14 +353,14 @@ def mamba3_beta_join_kernel(gid_: Int,
     # branch and the off-diagonal scale branch reach dt and trap_raw.
     var sig=ftz(sigma.unsafe_load(i));var dtv=ftz(dt.unsafe_load(i))
     var ds_gamma=ftz(scale_gamma.unsafe_load(i))
-    var ddt=ftz(ftz(qk_dt.unsafe_load(i))+ftz(pinned_mul(ds_gamma,sig)))
-    var scale_trap=ftz(pinned_mul(ftz(pinned_mul(ftz(pinned_mul(ds_gamma,dtv)),sig)),ftz(Float32(1.0)-sig)))
+    var ddt=ftz(ftz(qk_dt.unsafe_load(i))+ftz(identical_mul(ds_gamma,sig)))
+    var scale_trap=ftz(identical_mul(ftz(identical_mul(ftz(identical_mul(ds_gamma,dtv)),sig)),ftz(Float32(1.0)-sig)))
     var dtr=ftz(ftz(qk_trap.unsafe_load(i))+scale_trap)
     if li>0:
         var db=ftz(d_beta.unsafe_load(i-nh))
-        ddt=ftz(ddt+ftz(pinned_mul(db,ftz(Float32(1.0)-sig))))
-        var ds=ftz(-ftz(pinned_mul(db,dtv)))
-        dtr=ftz(dtr+ftz(pinned_mul(ftz(pinned_mul(ds,sig)),ftz(Float32(1.0)-sig))))
+        ddt=ftz(ddt+ftz(identical_mul(db,ftz(Float32(1.0)-sig))))
+        var ds=ftz(-ftz(identical_mul(db,dtv)))
+        dtr=ftz(dtr+ftz(identical_mul(ftz(identical_mul(ds,sig)),ftz(Float32(1.0)-sig))))
     out_gamma.unsafe_store(i,ftz(ftz(qk_gamma.unsafe_load(i))+ftz(scale_gamma.unsafe_load(i))))
     out_dt.unsafe_store(i,ddt);out_trap.unsafe_store(i,dtr)
 
@@ -393,7 +391,7 @@ def mamba3_theta_reverse_kernel(gid_: Int,
     for rev in range(l):
         var t=l-1-rev;var rowh=(bb*l+t)*nh+h
         carry=ftz(carry+ftz(d_theta.unsafe_load(rowh*M3_NUM_ROPE_ANGLES+r)))
-        d_rate.unsafe_store(rowh*M3_NUM_ROPE_ANGLES+r,ftz(pinned_mul(carry,ftz(dt.unsafe_load(rowh)))))
+        d_rate.unsafe_store(rowh*M3_NUM_ROPE_ANGLES+r,ftz(identical_mul(carry,ftz(dt.unsafe_load(rowh)))))
 
 
 def mamba3_angle_reduce_kernel(gid_: Int, 
@@ -410,12 +408,12 @@ def mamba3_angle_reduce_kernel(gid_: Int,
             var dr=ftz(d_rate.unsafe_load((token*nh+h)*M3_NUM_ROPE_ANGLES+r))
             acc=ftz(acc+dr)
         var raw=ftz(angle_raw.unsafe_load(token*dip+ca+r));var tv=ftz(identical_tanh(raw))
-        var prime=ftz(pinned_mul(M3_PI,ftz(Float32(1.0)-ftz(pinned_mul(tv,tv)))))
-        d_angle.unsafe_store(cell,ftz(pinned_mul(acc,prime)))
+        var prime=ftz(identical_mul(M3_PI,ftz(Float32(1.0)-ftz(identical_mul(tv,tv)))))
+        d_angle.unsafe_store(cell,ftz(identical_mul(acc,prime)))
     if cell<m*nh:
         var token=cell//nh;var h=cell%nh;var bb=token//l;var li=token%l;var accdt=Float32(0.0)
         for r in range(M3_NUM_ROPE_ANGLES):
-            var raw=ftz(angle_raw.unsafe_load(token*dip+ca+r));var rate=ftz(pinned_mul(ftz(identical_tanh(raw)),M3_PI))
+            var raw=ftz(angle_raw.unsafe_load(token*dip+ca+r));var rate=ftz(identical_mul(ftz(identical_tanh(raw)),M3_PI))
             var carry=Float32(0.0)
             for u in range(li,l):
                 carry=ftz(carry+ftz(d_theta.unsafe_load(((bb*l+u)*nh+h)*M3_NUM_ROPE_ANGLES+r)))
@@ -459,7 +457,7 @@ def mamba3_dt_softplus_partial_kernel(gid_: Int,
     var prime=Float32(1.0)
     if pre<=Float32(20.0):
         prime=ftz(identical_sigmoid(pre))
-    var draw=ftz(pinned_mul(total,prime))
+    var draw=ftz(identical_mul(total,prime))
     d_dt_raw.unsafe_store(cell,draw)
     d_dt_bias_rows.unsafe_store(cell,draw)
 
@@ -493,7 +491,7 @@ def mamba3_s16_dseg_kernel(gid_: Int,
     var acc=Float32(0.0)
     for p in range(M3_HEADDIM):
         var dy=ftz(d_y.unsafe_load(((bb*l+ti)*nh+h)*M3_HEADDIM+p));var vv=ftz(v.unsafe_load(((bb*l+tj)*nh+h)*M3_HEADDIM+p))
-        acc=ftz(identical_mul_add(dy,ftz(pinned_mul(dot,vv)),acc))
+        acc=ftz(identical_mul_add(dy,ftz(identical_mul(dot,vv)),acc))
     d_seg.unsafe_store(cell,acc)
 
 
@@ -534,7 +532,7 @@ def mamba3_adt_product_backward_kernel(gid_: Int,
     var cell = gid_
     if cell>=Int(cells_in):return
     var da_dt=ftz(d_adt.unsafe_load(cell));var av=ftz(a.unsafe_load(cell));var dtv=ftz(dt.unsafe_load(cell))
-    var da=ftz(pinned_mul(da_dt,dtv));var ddt=ftz(pinned_mul(da_dt,av))
+    var da=ftz(identical_mul(da_dt,dtv));var ddt=ftz(identical_mul(da_dt,av))
     d_a.unsafe_store(cell,da);d_dt_from_adt.unsafe_store(cell,ddt)
     d_dt_with_seg.unsafe_store(cell,ftz(ftz(d_dt_available.unsafe_load(cell))+ddt))
 
@@ -555,11 +553,11 @@ def mamba3_a_heavy_tail_backward_kernel(gid_: Int, d_raw:MutPointer[Float32,MutA
     if raw>=Float32(0.0):
         ht=ftz(Float32(1.0)+raw)
     else:
-        var den=ftz(Float32(1.0)-raw);ht=ftz(identical_div(Float32(1.0),den));prime=ftz(pinned_mul(ht,ht))
+        var den=ftz(Float32(1.0)-raw);ht=ftz(identical_div(Float32(1.0),den));prime=ftz(identical_mul(ht,ht))
     if -ht> -M3_A_FLOOR:
         d_raw.unsafe_store(cell,Float32(0.0))
     else:
-        d_raw.unsafe_store(cell,ftz(-ftz(pinned_mul(ftz(d_a.unsafe_load(cell)),prime))))
+        d_raw.unsafe_store(cell,ftz(-ftz(identical_mul(ftz(d_a.unsafe_load(cell)),prime))))
 
 
 def mamba3_backward_a_heavy_tail_into(ctx:DeviceContext,mut d_raw:DeviceBuffer[DType.float32],mut d_a:DeviceBuffer[DType.float32],mut in_proj:DeviceBuffer[DType.float32],m:Int,dims:Mamba3Dims) raises:
@@ -579,13 +577,13 @@ def mamba3_bcnorm_backward_kernel(gid_: Int, dx:MutPointer[Float32,MutAnyOrigin]
     for n in range(M3_D_STATE):
         var g=Float32(0.0)
         for h in range(Int(nh_in)):g=ftz(g+ftz(dy.unsafe_load((t*Int(nh_in)+h)*M3_D_STATE+n)))
-        var x=ftz(raw.unsafe_load(t*Int(dip_in)+Int(col_in)+n));var gw=ftz(pinned_mul(g,ftz(weight.unsafe_load(n))))
-        dwrow.unsafe_store(t*M3_D_STATE+n,ftz(pinned_mul(g,ftz(pinned_mul(x,r)))));dot=ftz(identical_mul_add(gw,x,dot))
-    var corr=ftz(pinned_mul(ftz(pinned_mul(r,r)),ftz(identical_div(dot,Float32(M3_D_STATE)))))
+        var x=ftz(raw.unsafe_load(t*Int(dip_in)+Int(col_in)+n));var gw=ftz(identical_mul(g,ftz(weight.unsafe_load(n))))
+        dwrow.unsafe_store(t*M3_D_STATE+n,ftz(identical_mul(g,ftz(identical_mul(x,r)))));dot=ftz(identical_mul_add(gw,x,dot))
+    var corr=ftz(identical_mul(ftz(identical_mul(r,r)),ftz(identical_div(dot,Float32(M3_D_STATE)))))
     for n in range(M3_D_STATE):
         var g=Float32(0.0)
         for h in range(Int(nh_in)):g=ftz(g+ftz(dy.unsafe_load((t*Int(nh_in)+h)*M3_D_STATE+n)))
-        var x=ftz(raw.unsafe_load(t*Int(dip_in)+Int(col_in)+n));dx.unsafe_store(t*M3_D_STATE+n,ftz(pinned_mul(r,ftz(ftz(pinned_mul(g,ftz(weight.unsafe_load(n))))-ftz(pinned_mul(x,corr))))))
+        var x=ftz(raw.unsafe_load(t*Int(dip_in)+Int(col_in)+n));dx.unsafe_store(t*M3_D_STATE+n,ftz(identical_mul(r,ftz(ftz(identical_mul(g,ftz(weight.unsafe_load(n))))-ftz(identical_mul(x,corr))))))
 
 
 def mamba3_backward_bcnorm_into(ctx:DeviceContext,mut dx:DeviceBuffer[DType.float32],mut dwrow:DeviceBuffer[DType.float32],mut dy:DeviceBuffer[DType.float32],mut raw:DeviceBuffer[DType.float32],mut weight:DeviceBuffer[DType.float32],m:Int,dims:Mamba3Dims,col:Int) raises:
@@ -682,26 +680,26 @@ def mamba3_block_norm_backward_kernel(gid_: Int,
     var dot = Float32(0.0)
     for col in range(width):
         var cell = row * width + col
-        var weighted = ftz(pinned_mul(
+        var weighted = ftz(identical_mul(
             ftz(dy.unsafe_load(cell)), ftz(weight.unsafe_load(col))
         ))
         dot = ftz(identical_mul_add(
             weighted, ftz(x.unsafe_load(cell)), dot
         ))
-    var correction = ftz(pinned_mul(
-        ftz(pinned_mul(rstd, rstd)),
+    var correction = ftz(identical_mul(
+        ftz(identical_mul(rstd, rstd)),
         ftz(identical_div(dot, Float32(width))),
     ))
     for col in range(width):
         var cell = row * width + col
         var xv = ftz(x.unsafe_load(cell))
         var dyv = ftz(dy.unsafe_load(cell))
-        var weighted = ftz(pinned_mul(dyv, ftz(weight.unsafe_load(col))))
-        dx.unsafe_store(cell, ftz(pinned_mul(
-            rstd, ftz(weighted - ftz(pinned_mul(xv, correction)))
+        var weighted = ftz(identical_mul(dyv, ftz(weight.unsafe_load(col))))
+        dx.unsafe_store(cell, ftz(identical_mul(
+            rstd, ftz(weighted - ftz(identical_mul(xv, correction)))
         )))
-        dw_rows.unsafe_store(cell, ftz(pinned_mul(
-            dyv, ftz(pinned_mul(xv, rstd))
+        dw_rows.unsafe_store(cell, ftz(identical_mul(
+            dyv, ftz(identical_mul(xv, rstd))
         )))
 
 
@@ -755,11 +753,11 @@ def mamba3_s17_reverse_state_kernel(gid_: Int,
                 var dy=ftz(d_y.unsafe_load(((bb*l+t)*nh+h)*M3_HEADDIM+p))
                 var qv=ftz(q.unsafe_load(((bb*l+t)*nh+h)*M3_D_STATE+n))
                 var ev=ftz(identical_exp(ftz(dacs.unsafe_load(((bb*nh+h)*nc+c)*qs+i))))
-                direct=ftz(identical_mul_add(dy,ftz(pinned_mul(qv,ev)),direct))
+                direct=ftz(identical_mul_add(dy,ftz(identical_mul(qv,ev)),direct))
         var idx=((((bb*nc+c)*nh+h)*M3_HEADDIM+p)*M3_D_STATE+n)
         d_state_direct.unsafe_store(idx,direct)
         var last=ftz(dacs.unsafe_load(((bb*nh+h)*nc+c)*qs+(qs-1)))
-        var total=ftz(direct+ftz(pinned_mul(carry,ftz(identical_exp(last)))))
+        var total=ftz(direct+ftz(identical_mul(carry,ftz(identical_exp(last)))))
         d_state_total.unsafe_store(idx,total);carry=total
     d_initial.unsafe_store(((bb*nh+h)*M3_HEADDIM+p)*M3_D_STATE+n,carry)
 
@@ -791,9 +789,9 @@ def mamba3_s17_operands_kernel(gid_: Int,
         for p in range(M3_HEADDIM):
             var dy=ftz(d_y.unsafe_load(th*M3_HEADDIM+p));var hs=ftz(states.unsafe_load((((bb*nc+c)*nh+h)*M3_HEADDIM+p)*M3_D_STATE+n))
             dq=ftz(identical_mul_add(dy,hs,dq))
-        d_q_read.unsafe_store(th*M3_D_STATE+n,ftz(pinned_mul(dq,ev)))
+        d_q_read.unsafe_store(th*M3_D_STATE+n,ftz(identical_mul(dq,ev)))
         read_scalar=ftz(identical_mul_add(ftz(q.unsafe_load(th*M3_D_STATE+n)),dq,read_scalar))
-    d_dacs_read.unsafe_store(th,ftz(pinned_mul(read_scalar,ev)))
+    d_dacs_read.unsafe_store(th,ftz(identical_mul(read_scalar,ev)))
     var last=ftz(dacs.unsafe_load(((bb*nh+h)*nc+c)*qs+(qs-1)));var dec=ftz(identical_exp(ftz(last-ftz(dacs.unsafe_load(dcidx)))))
     var rec_scalar=Float32(0.0)
     for n in range(M3_D_STATE):
@@ -802,14 +800,14 @@ def mamba3_s17_operands_kernel(gid_: Int,
             var carry=Float32(0.0)
             if c+1<nc:carry=ftz(d_states.unsafe_load((((bb*nc+c+1)*nh+h)*M3_HEADDIM+p)*M3_D_STATE+n))
             dk=ftz(identical_mul_add(carry,ftz(v.unsafe_load(th*M3_HEADDIM+p)),dk))
-        d_k_rec.unsafe_store(th*M3_D_STATE+n,ftz(pinned_mul(dk,dec)))
+        d_k_rec.unsafe_store(th*M3_D_STATE+n,ftz(identical_mul(dk,dec)))
     for p in range(M3_HEADDIM):
         var dv=Float32(0.0)
         for n in range(M3_D_STATE):
             var carry=Float32(0.0)
             if c+1<nc:carry=ftz(d_states.unsafe_load((((bb*nc+c+1)*nh+h)*M3_HEADDIM+p)*M3_D_STATE+n))
             dv=ftz(identical_mul_add(carry,ftz(k.unsafe_load(th*M3_D_STATE+n)),dv))
-        var outv=ftz(pinned_mul(dv,dec));d_v_rec.unsafe_store(th*M3_HEADDIM+p,outv)
+        var outv=ftz(identical_mul(dv,dec));d_v_rec.unsafe_store(th*M3_HEADDIM+p,outv)
         rec_scalar=ftz(identical_mul_add(outv,ftz(v.unsafe_load(th*M3_HEADDIM+p)),rec_scalar))
     var dr=ftz(-rec_scalar)
     if inner==qs-1 or token==l-1:
@@ -822,13 +820,13 @@ def mamba3_s17_operands_kernel(gid_: Int,
                     for n in range(M3_D_STATE):
                         var carry=Float32(0.0)
                         if c+1<nc:carry=ftz(d_states.unsafe_load((((bb*nc+c+1)*nh+h)*M3_HEADDIM+p)*M3_D_STATE+n))
-                        add=ftz(identical_mul_add(carry,ftz(pinned_mul(ftz(pinned_mul(ftz(v.unsafe_load(((bb*l+tj)*nh+h)*M3_HEADDIM+p)),ftz(k.unsafe_load(((bb*l+tj)*nh+h)*M3_D_STATE+n)))),de)),add))
+                        add=ftz(identical_mul_add(carry,ftz(identical_mul(ftz(identical_mul(ftz(v.unsafe_load(((bb*l+tj)*nh+h)*M3_HEADDIM+p)),ftz(k.unsafe_load(((bb*l+tj)*nh+h)*M3_D_STATE+n)))),de)),add))
         for p in range(M3_HEADDIM):
             for n in range(M3_D_STATE):
                 var carry=Float32(0.0)
                 if c+1<nc:carry=ftz(d_states.unsafe_load((((bb*nc+c+1)*nh+h)*M3_HEADDIM+p)*M3_D_STATE+n))
                 var hs=ftz(states.unsafe_load((((bb*nc+c)*nh+h)*M3_HEADDIM+p)*M3_D_STATE+n))
-                add=ftz(identical_mul_add(carry,ftz(pinned_mul(hs,ftz(identical_exp(last)))),add))
+                add=ftz(identical_mul_add(carry,ftz(identical_mul(hs,ftz(identical_exp(last)))),add))
         dr=ftz(dr+add)
     d_dacs_rec.unsafe_store(th,dr)
 

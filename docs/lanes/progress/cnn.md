@@ -74,13 +74,37 @@ Lane 8 (docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md). Pass 1: build + sanity +
 | BatchNorm momentum=None, track_running_stats=False | x-cnn-bn-options | 1e-10 |
 | SAGEConv aggr='max' (ties split, 5713), normalize=True (5714) | x-cnn-gnn-options | == scatter_reduce amax, except torch 2.4 also counts the zero-initialized output as a tie when the max is exactly 0.0 (not carried: a reference quirk) |
 | CNNClassifier optimizer adam/adamw (5715), SGD dampening/nesterov | x-cnn-trainer-options | 9 steps vs torch.optim: loss 2.4e-7, weights 4.5e-8 |
-| still NOT IMPLEMENTED: SAGEConv project=True | | |
+| SAGEConv project=True (ba1eaeffe; lane evaluation-order fix e6d526e51) | x-cnn-gnn-options parts prj, prjx | vs torch float64: y 8e-8, dx 1.9e-7 |
 
 Gate for the merge of dd3d15068 + 0e2798963: `algos_lane_check.sh <15 x-cnn lanes> --pass 2 --sabotage x_cnn/checks/sabotage/e2e_host_output_bit.patch` on the RTX 4090 pod, then `tools/test_lane_select.py` (registries changed). Result (RTX 4090 pod, 2026-09-27): all 16 seam arms FAIL under their patch with the driver's own FAIL and PASS after reversal; all 15 lanes AGREE clean, DISAGREE under the end-to-end arm, AGREE restored (`RESULT: PASS`); test_lane_select `OK: 0 failure(s)`. PASSED: do not re-run.
 
-OWED (pass 2 item 2): M2 Pro steward PASS and do-amd PASS on the merged commit (SUBMITTED for main 6bb49c82205f6af4f101594e3c44f08e1dfa3657, 15 lanes, the e2e arm: check `python3 tools/apple_steward.py status`) (submit with `--sabotage x_cnn/checks/sabotage/e2e_host_output_bit.patch`); there is no `cnn-amd` dev box, do-amd is the AMD column.
+DONE (pass 2 item 2): steward request 1790534359123-cnn-6bb49c8220 on main 6bb49c822: m2pro PASS, do-amd PASS (15 lanes + the e2e arm). Was: (SUBMITTED for main 6bb49c82205f6af4f101594e3c44f08e1dfa3657, 15 lanes, the e2e arm: check `python3 tools/apple_steward.py status`) (submit with `--sabotage x_cnn/checks/sabotage/e2e_host_output_bit.patch`); there is no `cnn-amd` dev box, do-amd is the AMD column.
 
-## Next
+Option parity gate (SAGEConv project=True), RTX 4090 pod, 2026-09-27:
+`algos_lane_check.sh <15 x-cnn lanes> --pass 2 --sabotage x_cnn/checks/sabotage/e2e_host_output_bit.patch`
+RESULT: PASS (every seam arm bites; 15 lanes AGREE, DISAGREE under the e2e arm, AGREE restored).
+Existing bits unchanged: x-cnn-gnn-options parts mx/mxn/mnn + infer on all 9 fixtures,
+and x-cnn-sage train/infer, equal to the 02b63f107 and 25b570476 lane-check JSONs (36/36 equal).
+test_x_cnn_gnn 0 failures; test_host_surface 196 passed; test_lane_select `OK: 0 failure(s)`.
+PASSED: do not re-run. OPTION PARITY PHASE DONE (every NOT_IMPLEMENTED.tsv row is implemented,
+carried, or refused by name).
+
+OWED: steward request 1790537166338-cnn-18f9b4d233 (x-cnn-gnn-options, x-cnn-sage, the e2e arm)
+on m2pro + do-amd: check `python3 tools/apple_steward.py status`; fix any FAIL at the root and
+resubmit only the affected lanes.
+
+## Next (phase d: FAST GPU speed, its own session)
+
+1. Collect steward 1790537166338-cnn-18f9b4d233 (above).
+2. FAST GPU speed (directive 1(d)): a FAST schedule for the cnn binding (vendor GEMM route
+   allowed, tiled direct conv, tensors resident across a trainer step), bits may differ,
+   quality never: paired check vs torch at 5+ seeds on 2+ datasets (R2 data only). NVIDIA,
+   AMD (do-amd), Apple (`apple_steward.py submit --kind speed`). Realistic shape, e.g.
+   N 256, 3x32x32, 64 channels.
+3. Then phase e (IDENTICAL GPU speed, same bits, re-proven every column), phase f (CPU speed).
+
+## Earlier next list (history)
+
 
 1. The gate above PASSED and was merged. Steward: `tools/cloudmac.sh push m2pro <sha>` and `python3 tools/apple_steward.py
    submit --lane cnn --commit <sha> --verify-lanes <15 x-cnn lanes>
