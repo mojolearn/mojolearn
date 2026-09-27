@@ -190,7 +190,9 @@ TIERED = frozenset({'_mojolearn_gbdt', '_mojolearn_rf', '_mojolearn_trees'})
 CLASSICAL_FAST = frozenset({'_mojolearn' + suffix for suffix in (
     '', '_estimators', '_svm', '_solver', '_metrics', '_preprocessing', '_tsa',
     '_linalg', '_arima', '_gp', '_kernel_methods', '_mixture', '_hdbscan',
-    '_resample', '_ivf')})
+    '_resample', '_ivf',
+    # the neural blocks (lane neural, 2026-09-27)
+    '_training', '_mamba', '_transformer', '_embedding')})
 # The expansion lanes' GPU bindings, appended and never spelled here:
 # packaging/check_ext_lists.py holds the literal sets above to _backend's
 # literals and this reader to the manifest (lane/algos-prep, 2026-09-27).

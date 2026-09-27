@@ -91,6 +91,30 @@ def gpu_backend():
     raise Fail("no GPU on this box (no nvidia-smi, no rocminfo, not macOS); the check needs one")
 
 
+def gpu_arch():
+    """This box's one GPU target (sm_NN from nvidia-smi's compute capability,
+    gfxNNN from rocminfo), for the build scripts that need it named
+    (bindings/build_byte_lm.sh on Linux); None on a Mac or when unreadable."""
+    try:
+        backend = gpu_backend()
+    except Fail:
+        return None
+    try:
+        if backend == "cuda":
+            r = subprocess.run(["nvidia-smi", "--query-gpu=compute_cap", "--format=csv,noheader"],
+                               capture_output=True, text=True, timeout=60)
+            cap = r.stdout.split()[0].strip() if r.returncode == 0 and r.stdout.split() else ""
+            return "sm_" + cap.replace(".", "") if cap.replace(".", "").isdigit() else None
+        if backend == "hip":
+            r = subprocess.run(["rocminfo"], capture_output=True, text=True, timeout=60)
+            for tok in r.stdout.split():
+                if tok.startswith("gfx") and tok[3:].isalnum():
+                    return tok
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return None
+
+
 def load_harness():
     import importlib.util
     spec = importlib.util.spec_from_file_location("algos_lane_check_harness", HARNESS)
@@ -167,6 +191,10 @@ def build(binding, log):
     import binding_stamps
     script, so = script_for(binding), output_for(binding)
     env = dict(os.environ, MOJOLEARN_NUMERIC_MODE="identical")
+    if script == "build_byte_lm.sh" and sys.platform != "darwin" and not env.get("MOJOLEARN_GPU_ARCHS"):
+        arch = gpu_arch()        # the script refuses a Linux build without one named target
+        if arch:
+            env["MOJOLEARN_GPU_ARCHS"] = arch
     if binding.endswith("_host") and so.exists():
         so.unlink()                      # build_host_family.sh never overwrites an output
     say(f"build {binding} (bindings/{script})")
