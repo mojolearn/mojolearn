@@ -24,7 +24,8 @@ def _data(seed=0, n=301, d=6):
 
 def test_robust_scaler():
     X = _data()
-    for kw in ({}, dict(quantile_range=(10.0, 90.0)), dict(with_centering=False)):
+    for kw in ({}, dict(quantile_range=(10.0, 90.0)), dict(with_centering=False),
+               dict(unit_variance=True), dict(unit_variance=True, quantile_range=(5.0, 80.0))):
         m = ml.RobustScaler(**kw).fit(X)
         r = sk.RobustScaler(**kw).fit(X.astype(np.float64))
         if r.center_ is not None and m.center_ is not None:

@@ -94,6 +94,7 @@ EVAL_ROWS = 100_000
 SUB = {"quad": 10_000, "cubic": 3_000, "knn": 200_000, "mid": 100_000, "small": 20_000,
        "tiny": 5_000}
 GRAPH_NODES = 100_000
+GRAPH_SMALL = 20_000          # the graph-algorithm races: ours takes a dense adjacency
 TS_H = 48                     # held-out hours / points per series
 TS_SERIES = 64
 TEXT_DOC_BYTES = 2048
@@ -292,19 +293,22 @@ _add("knn-imputer", xlane="neighbors", ours="KNNImputer", task="impute", block="
      sub={"X": SUB["mid"], "Xq": SUB["small"]}, sk="sklearn.impute:KNNImputer",
      params=dict(n_neighbors=5, weights="uniform"),
      notes=["10% of the cells of X and Xq set to NaN by a seed-7 mask; quality on those cells"])
+_GRAPH_MISM = ("ours takes a dense adjacency matrix (its class's contract), built from the CSR "
+               "graph before the clock; networkx and cuGraph take the graph itself")
 _add("pagerank", xlane="neighbors", ours=("PageRank",), kind="graph", task="pagerank",
-     block="graph", params=dict(alpha=0.85, tol=1e-6, max_iter=100),
-     other={"networkx-cpu": "networkx", "cugraph-gpu": "cugraph"},
+     block="graphs", params=dict(alpha=0.85, tol=1e-6, max_iter=100),
+     other={"networkx-cpu": "networkx", "cugraph-gpu": "cugraph"}, mism=[_GRAPH_MISM],
      notes=["graph: the symmetric 10-nearest-neighbour graph of %d stride rows of the cls block "
-            "(float64 brute force in prep), unweighted" % GRAPH_NODES])
-_add("connected-components", xlane="neighbors", ours=("ConnectedComponents",), kind="graph",
-     task="components", block="graph", other={"networkx-cpu": "networkx", "cugraph-gpu": "cugraph"},
+            "(float64 brute force in prep), unweighted" % GRAPH_SMALL])
+_add("connected-components", xlane="neighbors", ours=("connected_components", "ConnectedComponents"),
+     kind="graph", task="components", block="graphs",
+     other={"networkx-cpu": "networkx", "cugraph-gpu": "cugraph"}, mism=[_GRAPH_MISM],
      notes=["the kNN graph with k=2 (sparse enough to have more than one component)"])
-_add("louvain", xlane="neighbors", ours=("Louvain",), kind="graph", task="louvain", block="graph",
-     params=dict(resolution=1.0, max_level=100, random_state=SEED),
+_add("louvain", xlane="neighbors", ours=("Louvain",), kind="graph", task="louvain", block="graphs",
+     params=dict(resolution=1.0, seed=SEED),
      other={"networkx-cpu": "networkx", "cugraph-gpu": "cugraph"},
-     mism=["networkx louvain_communities(seed=7) and cuGraph louvain are order-dependent; ours "
-           "pins the vertex sweep (lowest id first)"])
+     mism=["networkx louvain_communities(seed=7) and cuGraph louvain (max_level=100) are "
+           "order-dependent; ours pins the vertex sweep (lowest id first)", _GRAPH_MISM])
 _add("svgp", xlane="neighbors", ours=("SVGP", "SparseVariationalGP"), kind="svgp", task="reg",
      block="reg", sub={"X": SUB["mid"], "Xq": SUB["small"]},
      params=dict(n_inducing=512, n_iter=200, batch_size=4096, learning_rate=0.01),
@@ -522,7 +526,8 @@ for _cell in ("LSTM", "GRU", "RNN"):
                     "Adam lr 1e-3, batch 256, 2 epochs, a seed-7 shuffle per epoch" % _cell],
              mism=["each library initializes its own weights (ours from random_state=7, torch "
                    "from torch.manual_seed(7))"])
-_add("layernorm", xlane="sequence", ours="LayerNorm", kind="layer", task="layernorm",
+_add("layernorm", xlane="sequence", ours=("LayerNorm", "layer_norm_forward"), kind="layer",
+     task="layernorm",
      block="tensor", datasets=("synthetic",), torch=True,
      params=dict(normalized_shape=1024, eps=1e-5),
      notes=["x (16384, 1024) N(0,1) seed 7"])
@@ -1041,6 +1046,7 @@ BLOCK_ROWS = {
     "manifold": "20,000 stride rows, %s" % _STD,
     "ivf": "400,000 index rows, 4,000 queries, raw",
     "graph": "%d nodes, symmetric 10-NN graph, node features and labels" % GRAPH_NODES,
+    "graphs": "%d nodes, symmetric 10-NN graph (and a 2-NN graph)" % GRAPH_SMALL,
     "ts": "%d series x 1,440 points, the last %d held out" % (TS_SERIES, TS_H),
     "tsi": "%d intermittent series x 1,440 points, the last %d held out" % (TS_SERIES, TS_H),
     "tsr": "%d return series x 1,439 points, the last %d held out" % (TS_SERIES, TS_H),
@@ -1175,7 +1181,7 @@ def _stride(a, m):
 
 #: this family's block -> the classical2 block it is (or is derived from)
 MORE_BLOCK = {"cls": "cls", "reg": "reg", "manifold": "manifold", "tsvd": "tsvd", "ivf": "ivf",
-              "nonneg": "cls", "graph": "cls", "countclf": "cls"}
+              "nonneg": "cls", "graph": "cls", "graphs": "cls", "countclf": "cls"}
 MORE_LANE_OF = {"cls": "logreg", "reg": "ridge", "manifold": "umap", "tsvd": "tsvd", "ivf": "ivf"}
 
 
@@ -1192,7 +1198,7 @@ def block_file(lane, dataset):
         return "text"                      # the labelled document counts
     if dataset == "taxi-zones":
         return "zones"
-    if b in ("bytes", "graph"):
+    if b in ("bytes", "graph", "graphs"):
         return "%s-%s" % (b, dataset)
     if b in ("raw16", "raw32"):
         return "raw-%s" % dataset
@@ -1464,13 +1470,13 @@ def prep(args):
                 raise SystemExit("REFUSING: %s missing (R2 key %s)" % (p, CORPUS_KEYS["enwik8"]))
             raw = np.fromfile(p, dtype=np.uint8, count=64 * 256 * 4)
             ctd._write_block(args.data, name, {"bytes": raw}, dict(base, block="bytes", dataset=ds))
-        elif b == "graph" and ds in TAB:
-            name = "graph-%s" % ds
+        elif b in ("graph", "graphs") and ds in TAB:
+            name = "%s-%s" % (b, ds)
             if have(name):
                 continue
             with np.load(os.path.join(args.data, "cls-%s.npz" % ds)) as z:
                 X, y = z["X"], z["y"]
-            n = _cap(GRAPH_NODES, cap, 512)
+            n = _cap(GRAPH_NODES if b == "graph" else GRAPH_SMALL, cap, 512)
             X, y = _stride(X, n), _stride(y, n)
             indptr, indices = knn_graph(X, KNN_K)
             ip2, ix2 = knn_graph(X, 2)
@@ -2305,15 +2311,25 @@ def _build_graph(lane, arm, D):
     if arm in OURS_ARMS:
         name, cls = _ours_class(lane)
         info = _ours_info(lane)
-        info["config"] = "mojolearn.%s(%s).fit(indptr, indices)" % (name, p)
+        A = np.zeros((n, n), dtype=np.float32)            # before the clock (named mismatch)
+        A[np.repeat(np.arange(n), np.diff(ip)), ix] = 1.0
+        info["pre_clock_fit"] = False
+        info["config"] = "mojolearn.%s(%s) on the dense adjacency (%d x %d)" % (name, p, n, n)
 
         def fit():
-            S["e"] = cls(**p).fit(ip, ix)
+            if t == "components":
+                S["lab"] = cls(A, directed=False)[1]
+            else:
+                S["e"] = cls(**p).fit(A)
 
         def outputs():
+            if t == "components":
+                return {"labels": _arr(S["lab"], np.int64)}
             e = S["e"]
-            return ({"scores": _arr(e.scores_, np.float64)} if t == "pagerank"
-                    else {"labels": _arr(e.labels_, np.int64)})
+            sc = getattr(e, "pagerank_", None)
+            if t == "pagerank":
+                return {"scores": _arr(sc if sc is not None else e.scores_, np.float64)}
+            return {"labels": _arr(e.labels_, np.int64)}
         return Runner(info, fit, outputs)
     lib = s["other"][arm]
     if lib == "networkx":
@@ -2357,7 +2373,7 @@ def _build_graph(lane, arm, D):
         elif t == "components":
             S["df"] = cugraph.connected_components(G)
         else:
-            S["df"], _ = cugraph.louvain(G, resolution=p["resolution"], max_level=p["max_level"])
+            S["df"], _ = cugraph.louvain(G, resolution=p["resolution"], max_level=100)
 
     def outputs():
         df = S["df"].to_pandas().sort_values("vertex")
@@ -2673,6 +2689,26 @@ def _build_layer(lane, arm, D):
         name, cls = _ours_class(lane)
         info = _ours_info(lane)
         kw = dict(s["params"])
+        if name == "layer_norm_forward":      # the functional form: F.layer_norm and its backward
+            import mojolearn as ml
+            bwd = getattr(ml, "layer_norm_backward", None)
+            x = x_cpu.detach().numpy()
+            w_, b_ = state["weight"], state["bias"]
+            info["config"] = "mojolearn.layer_norm_forward / layer_norm_backward, eps %g" % kw["eps"]
+            info["weights_loaded"] = info["output_comparable"] = True
+            dyh = {}
+
+            def fit():
+                y = cls(x, None, w_, b_, kw["eps"])
+                if "dy" not in dyh:
+                    dyh["dy"] = torch.randn(tuple(np.shape(y)), generator=g).numpy()
+                if bwd is None:
+                    raise RuntimeError("CONTRACT: mojolearn has no layer_norm_backward")
+                bwd(dyh["dy"], x, None, w_, b_, kw["eps"])
+
+            def infer():
+                S["y"] = cls(x, None, w_, b_, kw["eps"])
+            return Runner(info, fit, lambda: {"y": _arr(S["y"], np.float32)}, infer)
         if s["task"] in ("gcn", "sage"):
             kw["in_channels"] = x_cpu.shape[1]
         import inspect
