@@ -214,3 +214,13 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-power-transformer")
+
+
+@lane("x-prep-normalizer")
+def _(ml, X, yc, yr, Xh=None):
+    parts = {nm: _h(ml.Normalizer(norm=nm).fit(X).transform(X[:256])) for nm in ("l1", "l2", "max")}
+    m = ml.Normalizer().fit(X)
+    return _fit(parts, m, lambda e: (e.transform(Xh[:256]),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-normalizer")

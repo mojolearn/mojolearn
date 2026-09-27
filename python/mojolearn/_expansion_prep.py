@@ -35,7 +35,7 @@ from ._labels import flatten_labels, sorted_classes, label_kind
 __all__ = ["RobustScaler", "MaxAbsScaler", "OrdinalEncoder", "OneHotEncoder", "TargetEncoder", "SimpleImputer", "KBinsDiscretizer",
            "GaussianNB", "MultinomialNB", "BernoulliNB",
            "LinearDiscriminantAnalysis", "QuadraticDiscriminantAnalysis",
-           "QuantileTransformer", "PowerTransformer"]
+           "QuantileTransformer", "PowerTransformer", "Normalizer"]
 
 _BINDING = "_mojolearn_x_prep"
 
@@ -47,7 +47,7 @@ _OPS = dict(
     te_global=20, te_enc=21, te_apply=22, mark_missing=23, fill=24, kbins_edges=25, kbins_codes=26,
     gnb_eps=27, gnb_params=28, gnb_jll=29, class_log_prior=30, mnb_params=31, bnb_params=32, cnb_params=33, cat_params=34, cat_jll=35,
     lda_prep=36, lda_w=37, lda_stage2=38, lda_stage3=39, qda_cov=40, qda_prep=41, qda_dec=42,
-    qt_apply=43, pt_fit=44, pt_apply=45, std_params=46,
+    qt_apply=43, pt_fit=44, pt_apply=45, std_params=46, normalize=47, poly=48,
 )
 _PARAMS = 14
 _NONE = -1
@@ -1374,3 +1374,33 @@ class PowerTransformer(_PrepBase):
 
     def inverse_transform(self, X):
         raise NotImplementedError("mojolearn: PowerTransformer.inverse_transform is not implemented")
+
+
+class Normalizer(_PrepBase):
+    """sklearn.preprocessing.Normalizer: each row divided by its 'l1', 'l2'
+    or 'max' norm (columns summed in ascending order); a zero row is left
+    as it is. Stateless."""
+    _parameters = ("norm", "copy")
+
+    def __init__(self, norm="l2", *, copy=True):
+        self.norm = norm
+        self.copy = copy
+
+    def fit(self, X, y=None):
+        if self.norm not in ("l1", "l2", "max"):
+            raise ValueError(f"mojolearn: invalid norm {self.norm!r}")
+        self.n_features_in_ = _x2d(X).shape[1]
+        self.numeric_mode_ = _mode()
+        return self
+
+    def transform(self, X, copy=None):
+        self._check_fitted()
+        arr = _x2d(X)
+        self._check_width(arr)
+        n, d = arr.shape
+        pr = _Prog()
+        xo = pr.put(arr)
+        out = pr.alloc(n * d)
+        pr.stage("normalize", n, xo, n, d, {"l1": 0, "l2": 1, "max": 2}[self.norm], out)
+        pr.run(self.numeric_mode_)
+        return pr.get(out, (n, d))
