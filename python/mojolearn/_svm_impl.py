@@ -56,7 +56,7 @@ import numbers
 from . import _backend
 from . import _serialize
 from ._array import Array
-from ._buffer import addr, addr_ro, all_finite, as_f32_c, empty, zeros
+from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_f32_dense_c, empty, zeros
 from ._labels import argmax_rows, classes_from_member, classes_member, decode_labels, sorted_classes
 from ._mode import NumericModeMixin
 from ._scale_gamma import scale_gamma
@@ -400,9 +400,10 @@ class SVC(NumericModeMixin):
         sample_weight   honored   in fit(): the weighted `InitPenalty` arm,
                                   per-row bounds C * w formed in binary64 and
                                   rounded once to float32 (`_c_rows`)
-        sparse X        refused   `svcFitSparse` / `svcPredictSparse` and
-                                  every CSR arm are unimplemented; dense
-                                  row-major float32 only
+        sparse X        honored   densified exactly (`as_f32_dense_c`: the
+                                  implicit entries are zeros), so it takes
+                                  its dense twin's path and bits; cuML's
+                                  CSR solver arms are not implemented
 
     Non-finite cells of `X` are refused by name inside the Mojo entry
     (DEVIATION 636), naming the flat index, rather than being fitted.
@@ -704,7 +705,7 @@ class SVC(NumericModeMixin):
         return int(n_support), dual, support, sv, info
 
     def fit(self, X, y, sample_weight=None):
-        x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
+        x, self.input_copied_ = as_f32_dense_c(X, ndim=2, name="X")
         labels, classes, pair = _as_labels(y)
         n_rows, n_cols = x.shape
         n_y = len(pair) if labels is None else labels.shape[0]
@@ -889,7 +890,7 @@ class SVC(NumericModeMixin):
     def _query(self, X):
         if not hasattr(self, "dual_coef_"):
             raise ValueError("mojolearn SVC: call fit() first")
-        q, _ = as_f32_c(X, ndim=2, name="X")
+        q, _ = as_f32_dense_c(X, ndim=2, name="X")
         if q.shape[1] != self.n_features_in_:
             raise ValueError(
                 f"mojolearn SVC: X has {q.shape[1]} features, fit saw "
@@ -1293,9 +1294,9 @@ class SVR(NumericModeMixin):
         sample_weight   honored   in fit(): the weighted `InitPenalty` arm,
                                   row i's bound C * w_i at alpha_i and
                                   alpha*_i (`_c_rows`)
-        sparse X        refused   `svrFitSparse` and every CSR arm are
-                                  unimplemented; dense row-major float32 only.
-                                  `_buffer.py::as_f32_c` is what refuses
+        sparse X        honored   densified exactly (`as_f32_dense_c`), its
+                                  dense twin's path and bits; cuML's CSR
+                                  arms are not implemented
         non-finite X    refused   `svm/impl/svr_impl.mojo` at fit and
                                   `svm/impl/svc_impl.mojo` at predict
                                   name the flat index (DEVIATION 636)
@@ -1544,7 +1545,7 @@ class SVR(NumericModeMixin):
         return head + kt
 
     def fit(self, X, y, sample_weight=None):
-        x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
+        x, self.input_copied_ = as_f32_dense_c(X, ndim=2, name="X")
         n_rows, n_cols = x.shape
         targets = _as_targets(y, n_rows)
         if self.kernel == "precomputed" and n_cols != n_rows:
@@ -1617,7 +1618,7 @@ class SVR(NumericModeMixin):
         """
         if not hasattr(self, "dual_coef_"):
             raise ValueError("mojolearn SVR: call fit() first")
-        q, _ = as_f32_c(X, ndim=2, name="X")
+        q, _ = as_f32_dense_c(X, ndim=2, name="X")
         if q.shape[1] != self.n_features_in_:
             raise ValueError(
                 f"mojolearn SVR: X has {q.shape[1]} features, fit saw "

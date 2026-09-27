@@ -13,7 +13,7 @@ from . import _portable_math as math
 
 from . import _mojolearn, _serialize
 from ._array import Array
-from ._buffer import addr, addr_ro, as_f32_c, as_i64_c, empty
+from ._buffer import addr, addr_ro, as_f32_c, as_f32_dense_c, as_i64_c, empty
 from ._labels import sorted_classes
 from ._mode import NumericModeMixin
 from .linear_model import (
@@ -685,7 +685,7 @@ class NearestNeighbors(NumericModeMixin):
         # and a new array of the same shape can land at a freed address, so
         # a key match after a refit would serve the old bytes.
         self._release_resident_index()
-        idx, _ = as_f32_c(X, ndim=2, name="X")
+        idx, _ = as_f32_dense_c(X, ndim=2, name="X")
         # Held on the instance so the memory outlives this call: the Mojo side
         # borrows the address at `kneighbors` time and owns nothing.
         self._index = idx
@@ -721,7 +721,7 @@ class NearestNeighbors(NumericModeMixin):
         if self._index is None:
             raise ValueError("mojolearn: call fit before kneighbors")
         k = self.n_neighbors if n_neighbors is None else n_neighbors
-        q, _ = as_f32_c(X, ndim=2, name="X")
+        q, _ = as_f32_dense_c(X, ndim=2, name="X")
         if q.shape[1] != self.n_features_in_:
             raise ValueError(
                 f"mojolearn: X has {q.shape[1]} features, index has "
@@ -1010,7 +1010,7 @@ class KNeighborsClassifier(NearestNeighbors):
     def _predict(self, X, want_proba):
         if self._index is None or self._y_cols is None:
             raise ValueError("mojolearn: call fit before predict")
-        q, _ = as_f32_c(X, ndim=2, name="X")
+        q, _ = as_f32_dense_c(X, ndim=2, name="X")
         if q.shape[1] != self.n_features_in_:
             raise ValueError(
                 f"mojolearn: X has {q.shape[1]} features, index has "
@@ -1237,7 +1237,7 @@ class KNeighborsRegressor(NearestNeighbors):
         `(n_queries, n_outputs)` for a 2-D `y`. float32."""
         if self._index is None or self._y_cols is None:
             raise ValueError("mojolearn: call fit before predict")
-        q, _ = as_f32_c(X, ndim=2, name="X")
+        q, _ = as_f32_dense_c(X, ndim=2, name="X")
         if q.shape[1] != self.n_features_in_:
             raise ValueError(
                 f"mojolearn: X has {q.shape[1]} features, index has "
@@ -1398,7 +1398,7 @@ class RadiusNeighbors(NumericModeMixin):
         in. `neighbors/estimator.mojo`'s RADIUS NEIGHBOURS banner records it.
         """
         self._check_refusals()
-        idx, _ = as_f32_c(X, ndim=2, name="X")
+        idx, _ = as_f32_dense_c(X, ndim=2, name="X")
         self._index = idx
         self.n_samples_fit_ = idx.shape[0]
         self.n_features_in_ = idx.shape[1]
@@ -1499,7 +1499,7 @@ class RadiusNeighbors(NumericModeMixin):
         if X is None:
             q = idx
         else:
-            q, _ = as_f32_c(X, ndim=2, name="X")
+            q, _ = as_f32_dense_c(X, ndim=2, name="X")
             if q.shape[1] != idx.shape[1]:
                 raise ValueError(
                     f"mojolearn RadiusNeighbors: X has {q.shape[1]} features "

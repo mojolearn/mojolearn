@@ -30,7 +30,7 @@ from ._portable_math import sqrt as _sqrt
 from . import _backend, _serialize
 from ._scale_gamma import scale_gamma
 from ._array import Array
-from ._buffer import addr, addr_ro, as_f32_c, empty
+from ._buffer import addr, addr_ro, as_f32_c, as_f32_dense_c, empty
 from ._mode import NumericModeMixin
 
 #: The saved-model formats (lane/inference-linear-svm, 2026-09-15):
@@ -263,7 +263,7 @@ class KernelRidge(_KernelMethodBase):
         arm: `sw = sqrt(w)` (binary64, rounded once to float32 here),
         `y * sw`, `K * outer(sw, sw)`, then `dual_coef * sw` (float32 on
         both columns, DEVIATION 1688)."""
-        x, _ = as_f32_c(X, ndim=2, name="X")
+        x, _ = as_f32_dense_c(X, ndim=2, name="X")
         n, d = x.shape
         yy, _ = as_f32_c(y, ndim=None, name="y")
         if yy.ndim == 1:
@@ -311,7 +311,7 @@ class KernelRidge(_KernelMethodBase):
         `y` was."""
         if not hasattr(self, "dual_coef_"):
             raise ValueError(f"mojolearn {self._WHERE}: call fit before predict")
-        xq, _ = as_f32_c(X, ndim=2, name="X")
+        xq, _ = as_f32_dense_c(X, ndim=2, name="X")
         q, d = xq.shape
         if d != self.n_features_in_:
             raise ValueError(
@@ -419,7 +419,7 @@ class Nystroem(_KernelMethodBase):
         self.random_state = random_state
 
     def fit(self, X, y=None):
-        x, _ = as_f32_c(X, ndim=2, name="X")
+        x, _ = as_f32_dense_c(X, ndim=2, name="X")
         n, d = x.shape
         kernel = _kernel_code(self.kernel, self._WHERE)
         if isinstance(self.degree, bool) or not isinstance(self.degree, int):
@@ -462,7 +462,7 @@ class Nystroem(_KernelMethodBase):
         """`K(X, components_) @ normalization_.T`, float32 `(m, n_components)`."""
         if not hasattr(self, "components_"):
             raise ValueError(f"mojolearn {self._WHERE}: call fit before transform")
-        x, _ = as_f32_c(X, ndim=2, name="X")
+        x, _ = as_f32_dense_c(X, ndim=2, name="X")
         m, d = x.shape
         if d != self.n_features_in_:
             raise ValueError(
@@ -565,7 +565,7 @@ class RBFSampler(_KernelMethodBase):
     def fit(self, X, y=None):
         """Reads `X.shape[1]` (and, for gamma='scale', the variance of X), as
         scikit-learn's does."""
-        x, _ = as_f32_c(X, ndim=2, name="X")
+        x, _ = as_f32_dense_c(X, ndim=2, name="X")
         _, d = x.shape
         if isinstance(self.gamma, str) and self.gamma == "scale":
             # scikit-learn's 1 / (n_features * X.var()), 1.0 at zero
@@ -607,7 +607,7 @@ class RBFSampler(_KernelMethodBase):
         """`scale_ * cos(X . random_weights_ + random_offset_)`, float32."""
         if not hasattr(self, "random_weights_"):
             raise ValueError(f"mojolearn {self._WHERE}: call fit before transform")
-        x, _ = as_f32_c(X, ndim=2, name="X")
+        x, _ = as_f32_dense_c(X, ndim=2, name="X")
         m, d = x.shape
         if d != self.n_features_in_:
             raise ValueError(
