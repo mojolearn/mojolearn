@@ -180,11 +180,12 @@ def pq_insert(k: Int, base: Int, d: Float32, id: Int32, out_d: F32P, out_i: I32P
 def pq_search_cell(
     qi: Int, queries: F32P, dim: Int, centers: F32P, n_lists: Int, offsets: I32P,
     list_indices: I32P, codes: I32P, cb: F32P, pq_dim: Int, pq_len: Int, n_codes: Int,
-    k: Int, n_probes: Int, out_d: F32P, out_i: I32P, out_n: I32P,
+    k: Int, n_probes: Int, mask: I32P, out_d: F32P, out_i: I32P, out_n: I32P,
 ):
     """One query: the n_probes nearest lists under (distance, list id), then
     every row in them scored by its code sum, top-k under (distance, id).
-    Short rows are filled with (+inf, -1)."""
+    Short rows are filled with (+inf, -1). `mask[row] == 0` removes the row
+    (cuVS's sample filter, evaluated before the row is scored)."""
     var base = qi * k
     var q_off = qi * dim
     for s in range(k):
@@ -211,6 +212,8 @@ def pq_search_cell(
         var stop = Int(offsets.unsafe_load(best_l + 1))
         for slot in range(start, stop):
             var row = Int(list_indices.unsafe_load(slot))
+            if mask.unsafe_load(row) == 0:
+                continue
             var total = Float32(0.0)
             for j in range(pq_dim):
                 var code = Int(codes.unsafe_load(row * pq_dim + j))

@@ -17,4 +17,16 @@ imports `ivf/host/ivf_host.mojo` next to new code hangs the Mojo compiler
 |---|---|---|---|---|
 | IVF-PQ (`IVFPQIndex`) | x-ann-ivf-pq | e7ccc453d | AGREE: compared batch 9, infer 9, train 9 | recall@10 0.639 vs faiss IndexIVFPQ 0.595 (64 lists, 8 probes, pq 8x8, 20000x32) |
 | t-SNE (`TSNE`) | x-ann-tsne | d0c17101c | AGREE: compared infer 9, train 9 (batch n/a: whole-set) | trustworthiness@10 0.9824 vs sklearn 0.9823; KL 1.021 vs 1.039 (1500x20 blobs, perplexity 30, 1000 steps) |
-| CAGRA (`CagraIndex`) | x-ann-cagra | "CAGRA: ..." (see git log) | AGREE: compared batch 9, infer 9, train 9 | recall@10 0.999 vs exact (20000x32, degree 32/64, itopk 64); cuVS reports >= 0.95 at these settings |
+| CAGRA (`CagraIndex`) | x-ann-cagra | ccff5796b | AGREE: compared batch 9, infer 9, train 9 | recall@10 0.999 vs exact (20000x32, degree 32/64, itopk 64); cuVS reports >= 0.95 at these settings |
+| IVF-SQ (`IVFSQIndex`) | x-ann-ivf-sq | Additions commit (see git log) | AGREE: batch 9, infer 9, train 9 | recall@10 0.9815 vs faiss IVF-SQ8 residual 0.982 |
+| IVF-RaBitQ (`IVFRaBitQIndex`) | x-ann-ivf-rabitq | Additions commit | AGREE: batch 9, infer 9, train 9 | recall@10 0.408 vs faiss IndexIVFRaBitQ 0.3675; refined from 40: 0.79 |
+| refine (`refine`) | x-ann-refine | Additions commit | AGREE: batch 9, train 9 (a function: infer n/a) | IVF-PQ top-40 refined to 10: recall 0.9615 |
+| sample filter (`filter=` on IVF-PQ/SQ/RaBitQ search) | x-ann-filter | Additions commit | AGREE: batch 9, infer 9, train 9 | 0 removed rows returned; filtered recall 0.978 vs filtered exact |
+
+All seven re-gated together on the merged tree (H100, driver 580, Xeon 8480
+CPU column): RESULT: PASS (AGREE on all seven). The four Additions share the
+IVF files, so they are ONE commit, not four.
+
+Pass-1 status: DONE (IVF-PQ, t-SNE, CAGRA, IVF-SQ, IVF-RaBitQ, refine,
+sample filter). Next: PASS 2 (docs/lanes/ALGORITHM_EXPANSION_PLAN.md
+"CURRENT DIRECTIVES"): AMD box, per-seam proof, option parity, speed.

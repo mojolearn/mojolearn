@@ -13,3 +13,8 @@ TSNE exact method's dense P over all pairs	NOT IMPLEMENTED	P is the k-NN sparse 
 CAGRA build_algo IVF_PQ + refine and NN_DESCENT for the intermediate graph	REPLACED	Exact k-NN intermediate graph; NN-descent stays refused (hdbscan/NOT_IMPLEMENTED.tsv)
 CAGRA random seed sampling (rand_xor_mask, num_random_samplings), the probabilistic visited hashmap, multi-CTA and multi-kernel search	REPLACED	Evenly spaced seeds (itopk_size + search_width * graph_degree by default), an exact visited bitset, single-thread-per-query search
 CAGRA guarantee_connectivity (MST), compression (VPQ), extend, merge, serialize, filtered search	NOT IMPLEMENTED
+ivf_sq max_train_points_per_cluster / trained-on-a-subset SQ range	NOT IMPLEMENTED	The range comes from every residual (so the 5% margin is kept but never needed for clipping on the build rows); half-precision datasets not taken
+ivf_rabitq dense random orthogonal rotation	REPLACED	A randomized Hadamard transform (hashed +-1 signs, fixed butterfly order, 1/sqrt(D) scale); a dense random rotation is a GEMM in the library's reduction order
+ivf_rabitq ex_bits (extended codes), 4-bit query quantization and the bit-op fast scan	NOT IMPLEMENTED	1-bit codes, float32 query residual; the fast scan is a FAST-tier schedule for pass 2
+sample filter on CAGRA search (bitset_filter in the single-CTA search)	NOT IMPLEMENTED	The filter is on IVF-PQ, IVF-SQ and IVF-RaBitQ search (a removed row is skipped before scoring)
+refine with a metric other than squared L2, and refine on host-resident (mdspan host) inputs as a separate path	NOT IMPLEMENTED	One entry, squared L2; the host binding is the CPU path

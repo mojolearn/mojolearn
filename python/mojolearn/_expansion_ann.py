@@ -17,7 +17,19 @@ first imported, after the package, so both may rely on every module existing:
 from ._buffer import addr, addr_ro, as_f32_c, empty
 from ._mode import NumericModeMixin
 
-__all__ = ["IVFPQIndex", "TSNE", "CagraIndex"]
+__all__ = ["IVFPQIndex", "TSNE", "CagraIndex", "IVFSQIndex", "IVFRaBitQIndex", "refine"]
+
+
+def _ann_mask(owner, filter, n):
+    """cuVS's sample filter as one int32 per row (1 keeps the row, 0 removes
+    it); None keeps every row."""
+    import numpy as np
+    if filter is None:
+        return np.ones(n, dtype=np.int32)
+    f = np.asarray(filter)
+    if f.shape != (n,) or f.dtype != np.bool_:
+        raise ValueError(f"mojolearn {owner}: filter must be a boolean array of shape ({n},), one flag per indexed row")
+    return np.ascontiguousarray(f.astype(np.int32))
 
 
 def _ann_int(owner, name, v):
@@ -103,7 +115,9 @@ class IVFPQIndex(NumericModeMixin):
         self.pq_dim_, self.pq_bits_, self.pq_len_ = pq_dim, pq_bits, pq_len
         return self
 
-    def search(self, queries):
+    def search(self, queries, filter=None):
+        """`filter`: optional boolean array over the indexed rows; a False row
+        is never returned (cuVS's sample filter, applied before scoring)."""
         if not hasattr(self, "codes_"):
             raise ValueError("mojolearn IVFPQIndex: call fit before search")
         q, _ = as_f32_c(queries, ndim=2, name="queries")
@@ -115,13 +129,15 @@ class IVFPQIndex(NumericModeMixin):
         dist = empty((m * k,), "<f4")
         idx = empty((m * k,), "<i4")
         cand = empty((m,), "<i4")
+        mask = _ann_mask("IVFPQIndex", filter, n)  # held: the binding reads it after this line
         self._bind().x_ann_ivf_pq_search(
             # centers, offsets, list_indices, codebooks, codes, queries, out_d, out_i, out_n
             [addr_ro(self.centers_.reshape((self.n_lists_ * dim,)), name="centers_"),
              addr_ro(self.list_offsets_, name="list_offsets_"), addr_ro(self.list_indices_, name="list_indices_"),
              addr_ro(self.codebooks_.reshape((pq_dim * (1 << self.pq_bits_) * self.pq_len_,)), name="codebooks_"),
              addr_ro(self.codes_.reshape((n * pq_dim,)), name="codes_"), addr_ro(q, name="queries"),
-             addr(dist, name="distances"), addr(idx, name="indices"), addr(cand, name="n_candidates_")],
+             addr(dist, name="distances"), addr(idx, name="indices"), addr(cand, name="n_candidates_"),
+             addr_ro(mask, name="filter")],
             # n, dim, n_lists, pq_dim, pq_bits, m, k, n_probes
             [n, dim, self.n_lists_, pq_dim, self.pq_bits_, m, k, n_probes],
         )
@@ -280,3 +296,194 @@ class CagraIndex(NumericModeMixin):
             [n, d, deg, m, k, L, self._p("search_width"), max_iter, n_seeds],
         )
         return dist.reshape((m, k)), idx.reshape((m, k))
+
+
+class IVFSQIndex(NumericModeMixin):
+    """IVF-SQ build, then search (reference: cuVS `ivf_sq`): the IVF-PQ
+    coarse quantizer, residuals quantized to 8 bits per dimension (cuVS's
+    per-dimension range with a 5% margin), a scan of the decoded residuals.
+    IDENTICAL by construction (x_ann/ivf_sq_core.mojo).
+
+    Parameters: n_lists, n_probes (required), n_neighbors=8,
+    kmeans_n_iters=20, random_state=0. `search(queries, filter=None)` as
+    `IVFPQIndex.search`."""
+
+    _BINDING = "_mojolearn_x_ann"
+
+    def __init__(self, n_lists, n_probes, n_neighbors=8, kmeans_n_iters=20, random_state=0):
+        self.n_lists = n_lists
+        self.n_probes = n_probes
+        self.n_neighbors = n_neighbors
+        self.kmeans_n_iters = kmeans_n_iters
+        self.random_state = random_state
+
+    def _p(self, name):
+        return _ann_int("IVFSQIndex", name, getattr(self, name))
+
+    def fit(self, X, y=None):
+        x, _ = as_f32_c(X, ndim=2, name="X")
+        n, dim = (int(s) for s in x.shape)
+        n_lists = self._p("n_lists")
+        if not 1 <= n_lists <= n:
+            raise ValueError(f"mojolearn IVFSQIndex: n_lists must be in [1, {n}], got {n_lists}")
+        centers = empty((n_lists * dim,), "<f4")
+        offsets = empty((n_lists + 1,), "<i4")
+        indices = empty((n,), "<i4")
+        vmin = empty((dim,), "<f4")
+        delta = empty((dim,), "<f4")
+        codes = empty((n * dim,), "<i4")
+        self._bind().x_ann_ivf_sq_build(
+            # x, centers, offsets, list_indices, vmin, delta, codes
+            [addr_ro(x, name="X"), addr(centers, name="centers_"), addr(offsets, name="list_offsets_"),
+             addr(indices, name="list_indices_"), addr(vmin, name="sq_vmin_"), addr(delta, name="sq_delta_"),
+             addr(codes, name="codes_")],
+            # n, dim, n_lists, kmeans_n_iters, seed
+            [n, dim, n_lists, self._p("kmeans_n_iters"), self._p("random_state")],
+        )
+        self.centers_ = centers.reshape((n_lists, dim))
+        self.list_offsets_, self.list_indices_ = offsets, indices
+        self.sq_vmin_, self.sq_delta_ = vmin, delta
+        self.codes_ = codes.reshape((n, dim))
+        self.n_features_in_, self.n_rows_, self.n_lists_ = dim, n, n_lists
+        return self
+
+    def search(self, queries, filter=None):
+        if not hasattr(self, "codes_"):
+            raise ValueError("mojolearn IVFSQIndex: call fit before search")
+        q, _ = as_f32_c(queries, ndim=2, name="queries")
+        m, dim = (int(s) for s in q.shape)
+        if dim != self.n_features_in_:
+            raise ValueError(f"mojolearn IVFSQIndex: queries have {dim} features, the index has {self.n_features_in_}")
+        k, n = self._p("n_neighbors"), self.n_rows_
+        dist = empty((m * k,), "<f4")
+        idx = empty((m * k,), "<i4")
+        cand = empty((m,), "<i4")
+        mask = _ann_mask("IVFSQIndex", filter, n)  # held: the binding reads it after this line
+        self._bind().x_ann_ivf_sq_search(
+            # centers, offsets, list_indices, vmin, delta, codes, mask, queries, out_d, out_i, out_n
+            [addr_ro(self.centers_.reshape((self.n_lists_ * dim,)), name="centers_"),
+             addr_ro(self.list_offsets_, name="list_offsets_"), addr_ro(self.list_indices_, name="list_indices_"),
+             addr_ro(self.sq_vmin_, name="sq_vmin_"), addr_ro(self.sq_delta_, name="sq_delta_"),
+             addr_ro(self.codes_.reshape((n * dim,)), name="codes_"),
+             addr_ro(mask, name="filter"), addr_ro(q, name="queries"),
+             addr(dist, name="distances"), addr(idx, name="indices"), addr(cand, name="n_candidates_")],
+            # n, dim, n_lists, m, k, n_probes
+            [n, dim, self.n_lists_, m, k, self._p("n_probes")],
+        )
+        self.n_candidates_ = cand
+        return dist.reshape((m, k)), idx.reshape((m, k))
+
+
+class IVFRaBitQIndex(NumericModeMixin):
+    """IVF-RaBitQ build, then search (reference: cuVS `ivf_rabitq`, RaBitQ
+    of Gao & Long): the IVF coarse quantizer, each residual rotated by a
+    randomized Hadamard transform and kept as sign bits plus its norm and
+    <x_bar, o> factor; search returns the RaBitQ distance ESTIMATES, top-k
+    under (estimate, id). IDENTICAL by construction
+    (x_ann/ivf_rabitq_core.mojo). Pair with `refine` for exact distances.
+
+    Parameters: n_lists, n_probes (required), n_neighbors=8,
+    kmeans_n_iters=20, random_state=0 (the coarse init and the rotation's
+    signs). `search(queries, filter=None)` as `IVFPQIndex.search`."""
+
+    _BINDING = "_mojolearn_x_ann"
+
+    def __init__(self, n_lists, n_probes, n_neighbors=8, kmeans_n_iters=20, random_state=0):
+        self.n_lists = n_lists
+        self.n_probes = n_probes
+        self.n_neighbors = n_neighbors
+        self.kmeans_n_iters = kmeans_n_iters
+        self.random_state = random_state
+
+    def _p(self, name):
+        return _ann_int("IVFRaBitQIndex", name, getattr(self, name))
+
+    def fit(self, X, y=None):
+        x, _ = as_f32_c(X, ndim=2, name="X")
+        n, dim = (int(s) for s in x.shape)
+        n_lists = self._p("n_lists")
+        if not 1 <= n_lists <= n:
+            raise ValueError(f"mojolearn IVFRaBitQIndex: n_lists must be in [1, {n}], got {n_lists}")
+        D = 1
+        while D < dim:
+            D *= 2
+        words = (D + 31) // 32
+        centers = empty((n_lists * dim,), "<f4")
+        offsets = empty((n_lists + 1,), "<i4")
+        indices = empty((n,), "<i4")
+        codes = empty((n * words,), "<i4")
+        norms = empty((n,), "<f4")
+        ips = empty((n,), "<f4")
+        self._bind().x_ann_ivf_rabitq_build(
+            # x, centers, offsets, list_indices, codes, norms, ips
+            [addr_ro(x, name="X"), addr(centers, name="centers_"), addr(offsets, name="list_offsets_"),
+             addr(indices, name="list_indices_"), addr(codes, name="codes_"), addr(norms, name="norms_"),
+             addr(ips, name="ip_factors_")],
+            # n, dim, n_lists, kmeans_n_iters, seed
+            [n, dim, n_lists, self._p("kmeans_n_iters"), self._p("random_state")],
+        )
+        self.centers_ = centers.reshape((n_lists, dim))
+        self.list_offsets_, self.list_indices_ = offsets, indices
+        self.codes_ = codes.reshape((n, words))
+        self.norms_, self.ip_factors_ = norms, ips
+        self.n_features_in_, self.n_rows_, self.n_lists_, self.seed_ = dim, n, n_lists, self._p("random_state")
+        return self
+
+    def search(self, queries, filter=None):
+        if not hasattr(self, "codes_"):
+            raise ValueError("mojolearn IVFRaBitQIndex: call fit before search")
+        q, _ = as_f32_c(queries, ndim=2, name="queries")
+        m, dim = (int(s) for s in q.shape)
+        if dim != self.n_features_in_:
+            raise ValueError(f"mojolearn IVFRaBitQIndex: queries have {dim} features, the index has {self.n_features_in_}")
+        k, n = self._p("n_neighbors"), self.n_rows_
+        dist = empty((m * k,), "<f4")
+        idx = empty((m * k,), "<i4")
+        cand = empty((m,), "<i4")
+        words = int(self.codes_.shape[1])
+        mask = _ann_mask("IVFRaBitQIndex", filter, n)  # held: the binding reads it after this line
+        self._bind().x_ann_ivf_rabitq_search(
+            # centers, offsets, list_indices, codes, norms, ips, mask, queries, out_d, out_i, out_n
+            [addr_ro(self.centers_.reshape((self.n_lists_ * dim,)), name="centers_"),
+             addr_ro(self.list_offsets_, name="list_offsets_"), addr_ro(self.list_indices_, name="list_indices_"),
+             addr_ro(self.codes_.reshape((n * words,)), name="codes_"), addr_ro(self.norms_, name="norms_"),
+             addr_ro(self.ip_factors_, name="ip_factors_"),
+             addr_ro(mask, name="filter"), addr_ro(q, name="queries"),
+             addr(dist, name="distances"), addr(idx, name="indices"), addr(cand, name="n_candidates_")],
+            # n, dim, n_lists, seed, m, k, n_probes
+            [n, dim, self.n_lists_, self.seed_, m, k, self._p("n_probes")],
+        )
+        self.n_candidates_ = cand
+        return dist.reshape((m, k)), idx.reshape((m, k))
+
+
+def refine(dataset, queries, candidates, k, numeric_mode=None):
+    """Exact re-ranking of candidate neighbors (reference: cuVS `refine`):
+    squared L2 from each query to each of its candidate rows, the k smallest
+    under (distance, id). `candidates` is int (m, k0); an id < 0 is padding.
+    Returns `(distances, indices)`, float32 and int32 `(m, k)`; a query with
+    fewer than k valid candidates gets `(inf, -1)` fill."""
+    import numpy as np
+    from . import _backend
+    x, _ = as_f32_c(dataset, ndim=2, name="dataset")
+    q, _ = as_f32_c(queries, ndim=2, name="queries")
+    n, d = (int(s) for s in x.shape)
+    m = int(q.shape[0])
+    if int(q.shape[1]) != d:
+        raise ValueError(f"mojolearn refine: queries have {q.shape[1]} features, the dataset has {d}")
+    c = np.asarray(candidates)
+    if c.ndim != 2 or c.shape[0] != m or not np.issubdtype(c.dtype, np.integer):
+        raise ValueError(f"mojolearn refine: candidates must be an integer array of shape ({m}, k0)")
+    k0 = int(c.shape[1])
+    k = _ann_int("refine", "k", k)
+    c32 = np.ascontiguousarray(np.where((c >= 0) & (c < n), c, -1).astype(np.int32))
+    dist = empty((m * k,), "<f4")
+    idx = empty((m * k,), "<i4")
+    _backend.binding("_mojolearn_x_ann", numeric_mode).x_ann_refine(
+        # dataset, queries, candidates, out_d, out_i
+        [addr_ro(x, name="dataset"), addr_ro(q, name="queries"), addr_ro(c32, name="candidates"),
+         addr(dist, name="distances"), addr(idx, name="indices")],
+        # n, d, m, k0, k
+        [n, d, m, k0, k],
+    )
+    return dist.reshape((m, k)), idx.reshape((m, k))
