@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 import mojolearn
-from mojolearn import _backend
+from mojolearn import _backend, host_surface
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -60,11 +60,9 @@ def test_backend_registers_both_places():
     for name, (script, _) in NEW.items():
         assert name in _backend._MODULES, name
         assert _backend._build_script(name) == script, (name, _backend._build_script(name))
-        if name == "_mojolearn_embedding":
-            assert name in _backend._IDENTICAL_ONLY, name + " (neural) must be identical only"
-        else:
-            assert name in _backend._CLASSICAL_FAST, name + " (classical) ships fast"
-            assert not _backend._offers(name, "deterministic"), name
+        # classical, and since 2026-09-27 (lane neural) the embedding too
+        assert name in _backend._CLASSICAL_FAST, name + " ships fast"
+        assert not _backend._offers(name, "deterministic"), name
     assert mojolearn._NOT_YET == {}, sorted(mojolearn._NOT_YET)
 
 
@@ -77,6 +75,9 @@ def test_packaging_lists_agree():
         if ident:
             # every-tier + classical fast-and-identical + identical-only
             got = got | how(path, ident) | how(path, c.CLASSICAL_VAR)
+        # The expansion lanes' bindings are appended from the manifest at run
+        # time, never spelled in these literals (check_ext_lists.EXPANSION_READERS).
+        got = got | set(host_surface.expansion_gpu_bindings())
         assert got == want, (path, sorted(want ^ got))
     smoke = _read("packaging/linux/smoke.py")
     for name in NEW:
@@ -124,8 +125,10 @@ def test_build_scripts_exist_and_name_their_binding():
         if name in _backend._IDENTICAL_ONLY:
             assert "MOJOLEARN_NUMERIC_MODE=identical only" in text or "identical only" in text, script
         else:
-            # classical: fast and identical build, deterministic refuses by name
-            assert '!= deterministic ]' in text and "classical bindings build" in text, script
+            # classical (and the embedding, lane neural 2026-09-27): fast and
+            # identical build, deterministic refuses by name
+            assert '!= deterministic ]' in text and ("classical bindings build" in text
+                                                     or "this binding builds" in text), script
 
 
 def test_classes_exported():

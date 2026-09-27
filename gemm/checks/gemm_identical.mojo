@@ -133,7 +133,8 @@ from max.gpu.sync import barrier
 from std.sys import llvm_intrinsic
 from std.sys.compile import is_defined
 from std.sys.defines import get_defined_int
-from std.sys.info import is_amd_gpu, _accelerator_arch
+from std.sys.info import is_amd_gpu
+from core.apple_air import simdgroup_load_legacy_air
 from std.ffi import external_call
 from std.time import perf_counter_ns
 
@@ -3472,8 +3473,7 @@ def _amma_load_t(
 ) -> _AMMA_M64:
     """Fragment M[r][c] = p[c * stride + r]. The load's AIR signature depends
     on the target (see `fast_mma_knn._sg_load_t`)."""
-    comptime arch = _accelerator_arch()
-    comptime if "metal:1" in arch or "metal:2" in arch or "metal:3" in arch:
+    comptime if simdgroup_load_legacy_air():
         return external_call["air.simdgroup_matrix_8x8_load.v64f32.p3f32", _AMMA_M64](
             p, Int64(stride), _AMMA_V2(0, 0), True
         )
