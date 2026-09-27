@@ -39,7 +39,9 @@ scikit-learn shaped unless a line below says otherwise)
   forecasters  Cls(**params).fit(Y) with Y (n_series, n_obs) float32, then
                .predict(h)["mean"] -> (n_series, h)   (statsforecast's shape:
                Theta, CrostonClassic, ETS); AutoARIMA is cuML's shape,
-               Cls(Y).search(...); .fit(); .forecast(h)
+               Cls(Y).search(...); .fit(); .forecast(h); GARCH is arch's
+               shape, Cls(p, q, mean, dist).fit(Y, horizon=h), .forecast(h)
+               (variances), .loglikelihood_ (per series)
   graph        Cls(**params).fit(indptr, indices) of a symmetric CSR graph,
                then .scores_ (PageRank) or .labels_ (components, Louvain)
   ANN          Cls(**params).fit(index).search(queries) -> (dist, ind), the
@@ -591,7 +593,10 @@ _add("damped-ets", xlane="sequence", ours=("ETS",), kind="ts", task="forecast",
 _add("garch", xlane="sequence", ours="GARCH", kind="ts", task="garch", block="tsr", datasets=_TS,
      params=dict(p=1, q=1, mean="Constant", dist="normal"), other={"arch-cpu": "arch"},
      notes=["taxi-hourly: first differences of log(1 + count); synthetic: GARCH(1,1) returns "
-            "omega 0.1 alpha 0.1 beta 0.8, seed 7"])
+            "omega 0.1 alpha 0.1 beta 0.8, seed 7",
+            "arch_model(vol='GARCH', p=1, o=0, q=1, mean='Constant', dist='normal', "
+            "rescale=False) per series (ours refuses rescaling); the forecast is the "
+            "conditional variance, h steps"])
 _add("prophet", xlane="sequence", ours=("Prophet", "ProphetForecaster"), kind="ts",
      task="forecast", block="ts", datasets=_TS,
      params=dict(n_changepoints=25, daily_seasonality=True, weekly_seasonality=True,
@@ -2216,6 +2221,8 @@ def _build_ts(lane, arm, D):
                 S["est"] = cls(Y32, period=p["period"], robust=p["robust"]).fit()
             elif lane == "var":               # statsmodels' shape: VAR(endog (n_obs, K)).fit(maxlags)
                 S["est"] = cls(np.ascontiguousarray(Y32[:16].T)).fit(maxlags=p["maxlags"])
+            elif t == "garch":                # arch's shape; the variance forecast horizon is fixed at fit
+                S["est"] = cls(**p).fit(Y32, horizon=h)
             else:
                 S["est"] = cls(**p).fit(Y32)
 
@@ -2231,7 +2238,7 @@ def _build_ts(lane, arm, D):
             elif lane == "var":
                 S["fc"] = _arr(e.forecast(np.ascontiguousarray(Y32[:16].T[-e.k_ar:]), h), np.float64).T
             else:
-                if lane == "autoarima":
+                if lane == "autoarima" or t == "garch":
                     fc = e.forecast(h)
                 else:                          # statsforecast's shape: predict(h) -> {"mean": ...}
                     fc = e.predict(h)

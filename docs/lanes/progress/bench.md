@@ -73,9 +73,21 @@ new algorithm, measure nothing. Worktree `~/mojolearn-wt/algos-bench`, branch
   statsforecast / statsmodels / faiss arm of the four races ran; ours-cpu
   bits equal ours on all. Lane check on the pod: sequence-theta,
   sequence-croston, sequence-ets, x-ann-filter AGREE.
-  test_host_surface: 195 pass, 1 fails (x_decomp manifest, not bench).
-  test_lane_select: same single failure as merge 3 (kmeans_oracle 54 vs 47).
-- Still guessed (classes not merged): GARCH, Prophet, the MoE block.
+  GARCH (merged 5baf7a3f3): the race calls arch's shape as exported,
+  `GARCH(p=1, q=1, mean="Constant", dist="normal").fit(Y, horizon=h)`,
+  `.forecast(h)`, `.loglikelihood_`; smoke `smoke_s2_garch.log` (ours,
+  ours-cpu bits equal, arch-cpu all ran; sequence-garch AGREE on the pod).
+  On the merged tree (main 3a7d5e185): bench tests 62 pass, test_host_surface
+  196 pass; dry run of the 93 existing races byte-identical on apple, nvidia,
+  amd (`drydiff_s2m5.log`). test_lane_select skipped per CURRENT DIRECTIVES
+  item 0 (bench-only diff); last run: the single kmeans_oracle 54 vs 47
+  failure of merge 3, not bench.
+- Still guessed (classes not merged): Prophet, the MoE block. When the
+  sequence lane merges them: read the class, fix the `prophet` / `moe`
+  entries in LANES and their builders (`_build_ts`, the layer builder), build
+  with `tools/algos_lane_check.sh <lane>` on the pod and smoke with
+  `~/mojolearn-evidence/algos-bench/smoke_s2.py` (OURS=/root/ourspy runs the
+  source tree; `drydiff.sh` is the before/after plan diff).
 
 ## Next
 
