@@ -128,3 +128,18 @@ def _(ml, X, yc, yr, Xh=None):
                low_pass_jump=2).fit()
     return _fit(dict(seasonal=_h(a.seasonal), trend=_h(a.trend), resid=_h(a.resid),
                      r_seasonal=_h(b.seasonal), r_trend=_h(b.trend), r_weights=_h(b.weights)))
+
+
+@lane("sequence-var")
+def _(ml, X, yc, yr, Xh=None):
+    """A three-variable VAR(2) with a constant on 300 fixture rows (the
+    columns turned into a stable autoregression by a running filter), and a
+    VAR(1) without one; params, sigma_u, residuals and a 10-step forecast."""
+    e = np.ascontiguousarray(X[:300, 6:9], dtype=np.float32)
+    y = np.zeros_like(e)
+    for t in range(1, 300):
+        y[t] = (np.float32(0.5) * y[t - 1] + e[t]).astype(np.float32)
+    a = ml.VAR(y).fit(maxlags=2)
+    b = ml.VAR(y).fit(maxlags=1, trend="n")
+    return _fit(dict(params=_h(a.params), sigma_u=_h(a.sigma_u), resid=_h(a.resid),
+                     forecast=_h(a.forecast(y, 10)), n_params=_h(b.params), n_forecast=_h(b.forecast(y, 10))))

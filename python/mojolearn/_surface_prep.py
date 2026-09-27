@@ -37,6 +37,10 @@ FAMILIES = (
             "x-prep-label-binarizer",
             "x-prep-multilabel-binarizer",
             "x-prep-iterative-imputer",
+            "x-prep-variance-threshold",
+            "x-prep-select-kbest",
+            "x-prep-mutual-info",
+            "x-prep-rfe",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -55,13 +59,16 @@ FAMILIES = (
             "LabelBinarizer",
             "MultiLabelBinarizer",
             "IterativeImputer",
+            "VarianceThreshold",
+            "SelectKBest",
+            "RFE",
         ),
         display="preprocessing additions, naive Bayes and discriminant analysis",
         host_modules=(
             "x_prep/host/program.mojo", "x_prep/common.mojo", "x_prep/prims.mojo", "x_prep/eigh.mojo",
             "x_prep/units.mojo", "x_prep/target.mojo", "x_prep/kbins.mojo",
             "naive_bayes/nb.mojo", "naive_bayes/da.mojo",
-            "x_prep/transform.mojo", "x_prep/spline.mojo", "x_prep/iterative.mojo",
+            "x_prep/transform.mojo", "x_prep/spline.mojo", "x_prep/iterative.mojo", "x_prep/stats.mojo", "x_prep/mutual_info.mojo",
         ),
         exports=(
             "x_prep_host_numeric_mode", "x_prep_host_vendor", "x_prep_host_column", "x_prep_host_sabotage",
@@ -95,6 +102,10 @@ TRAINING_LANE_NAMES = {
     "x-prep-label-binarizer": "LabelBinarizer",
     "x-prep-multilabel-binarizer": "MultiLabelBinarizer",
     "x-prep-iterative-imputer": "IterativeImputer",
+    "x-prep-variance-threshold": "VarianceThreshold",
+    "x-prep-select-kbest": "SelectKBest",
+    "x-prep-mutual-info": "mutual_info_classif / mutual_info_regression",
+    "x-prep-rfe": "RFE",
 }
 PUBLIC_PENDING_LANES = {
     "x-prep-robust-scaler": "no reference",
@@ -119,4 +130,8 @@ PUBLIC_PENDING_LANES = {
     "x-prep-label-binarizer": "no reference",
     "x-prep-multilabel-binarizer": "no reference",
     "x-prep-iterative-imputer": "no reference",
+    "x-prep-variance-threshold": "no reference",
+    "x-prep-select-kbest": "no reference",
+    "x-prep-mutual-info": "no reference",
+    "x-prep-rfe": "no reference",
 }

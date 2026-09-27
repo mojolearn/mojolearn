@@ -9,7 +9,8 @@ from std.python import PythonObject
 
 from checks.numerics import ftz, identical_mul
 from sequence.exec import Exec
-from sequence.ops import FP, OP_STL, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD
+from sequence.ops import FP, OP_STL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD
+from sequence.recurrent import gemm
 from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, opt_step, rnn_fit, rnn_predict
 
 
@@ -239,3 +240,114 @@ def stl_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> 
     for k in range(4):
         ex.download(fptr(addrs[k + 1], "output"), outs[k], B * n)
     return PythonObject(B * n)
+
+
+def var_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
+    """VAR(p) by OLS (`sequence/vecar.mojo`). addrs = [y (n, K), params (m, K),
+    sigma_u (K, K), resid (n - p, K)], each output written; ip = [n, K, p,
+    k_trend]. Returns 0, or 1 + the design column whose Cholesky pivot was
+    not positive (nothing is written then)."""
+    if len(addrs) != 4 or len(ip) != 4:
+        raise Error("var_fit: requires 4 addresses and 4 integer parameters")
+    var n = ival(ip, 0)
+    var K = ival(ip, 1)
+    var p = ival(ip, 2)
+    var kt = ival(ip, 3)
+    if K < 1 or p < 1 or kt < 0 or kt > 1:
+        raise Error("var_fit: K >= 1, p >= 1 and k_trend 0 or 1")
+    var R = n - p
+    var m = kt + K * p
+    if R - m < 1:
+        raise Error("var_fit: too few observations for the lag order (need n - p > k_trend + K p)")
+    var y = ex.alloc(n * K)
+    ex.upload(y, fptr(addrs[0], "y"), n * K)
+    var Z = ex.alloc(R * m)
+    var Ys = ex.alloc(R * K)
+    var sc = ex.alloc(m)
+    var G = ex.alloc(m * m)
+    var Bm = ex.alloc(m * K)
+    var F = ex.alloc(R * K)
+    var Rs = ex.alloc(R * K)
+    var S = ex.alloc(K * K)
+    var status = ex.alloc(1)
+    var a = Args()
+    a.p0 = y
+    a.p1 = Z
+    a.p2 = Ys
+    a.i0 = K
+    a.i1 = p
+    a.i2 = kt
+    a.i3 = m
+    ex.launch[OP_VAR_DESIGN](a, R * m)
+    var b = Args()
+    b.p0 = Z
+    b.p1 = sc
+    b.i0 = R
+    b.i1 = m
+    ex.launch[OP_COLSCALE](b, m)
+    gemm(ex, Z, Z, G, m, m, R, 1, m, m, 1, False, m)
+    gemm(ex, Z, Ys, Bm, m, K, R, 1, m, K, 1, False, K)
+    var c = Args()
+    c.p0 = G
+    c.p1 = Bm
+    c.p2 = status
+    c.i0 = m
+    c.i1 = K
+    ex.launch[OP_CHOLSOLVE](c, 1)
+    ex.sync()
+    var st = List[Float32](length=1, fill=Float32(0.0))
+    ex.download(FP(unsafe_from_address=Int(st.unsafe_ptr())), status, 1)
+    var code = Int(st[0])
+    if code != 0:
+        return PythonObject(code)
+    gemm(ex, Z, Bm, F, R, K, m, m, 1, K, 1, False, K)
+    var d = Args()
+    d.p0 = Ys
+    d.p1 = F
+    d.p2 = Rs
+    ex.launch[OP_SUB](d, R * K)
+    gemm(ex, Rs, Rs, S, K, K, R, 1, K, K, 1, False, K)
+    var e = Args()
+    e.p0 = S
+    e.f0 = Float32(1.0) / Float32(R - m)
+    ex.launch[OP_SCALE](e, K * K)
+    var f = Args()
+    f.p0 = Bm
+    f.p1 = sc
+    f.i1 = K
+    ex.launch[OP_ROWSCALE](f, m * K)
+    ex.sync()
+    ex.download(fptr(addrs[1], "params"), Bm, m * K)
+    ex.download(fptr(addrs[2], "sigma_u"), S, K * K)
+    ex.download(fptr(addrs[3], "resid"), Rs, R * K)
+    return PythonObject(0)
+
+
+def var_forecast_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
+    """addrs = [y_last (p, K), params (m, K), out (h, K)]; ip = [K, p, k_trend, h]."""
+    if len(addrs) != 3 or len(ip) != 4:
+        raise Error("var_forecast: requires 3 addresses and 4 integer parameters")
+    var K = ival(ip, 0)
+    var p = ival(ip, 1)
+    var kt = ival(ip, 2)
+    var h = ival(ip, 3)
+    if K < 1 or p < 1 or kt < 0 or kt > 1 or h < 1:
+        raise Error("var_forecast: K, p, h >= 1 and k_trend 0 or 1")
+    var m = kt + K * p
+    var y = ex.alloc(p * K)
+    ex.upload(y, fptr(addrs[0], "y"), p * K)
+    var P = ex.alloc(m * K)
+    ex.upload(P, fptr(addrs[1], "params"), m * K)
+    var out = ex.alloc(h * K)
+    var a = Args()
+    a.p0 = y
+    a.p1 = P
+    a.p2 = out
+    a.i0 = K
+    a.i1 = p
+    a.i2 = kt
+    a.i3 = h
+    ex.launch[OP_VAR_FORECAST](a, 1)
+    ex.sync()
+    ex.download(fptr(addrs[2], "out"), out, h * K)
+    return PythonObject(h * K)

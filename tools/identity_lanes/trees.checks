@@ -1,0 +1,6 @@
+xtrees/checks/glue_check.mojo	xtrees/checks/sabotage/seam_5600_rng.patch
+xtrees/checks/glue_check.mojo	xtrees/checks/sabotage/seam_5601_fused.patch
+xtrees/checks/glue_check.mojo	xtrees/checks/sabotage/seam_5602_order.patch
+xtrees/checks/glue_check.mojo	xtrees/checks/sabotage/seam_5603_libm_exp.patch
+xtrees/checks/glue_check.mojo	xtrees/checks/sabotage/seam_5604_last_max.patch
+xtrees/checks/glue_check.mojo	xtrees/checks/sabotage/seam_5605_nan.patch
