@@ -114,14 +114,66 @@ speed`), device-resident matrices (every kit call still uploads and downloads;
 `ew` over 1M x 28 is ~12 ms of copies), the Jacobi eigh's fixed cost (~60 ms a
 call).
 
-## NEXT (LANE CHARTER phases; one phase per session)
+## PHASE 1: MERGED to main 025c7a921 (2026-09-27, directive 0000b: merge on
+NVIDIA + CPU; the Apple / AMD steward verdicts of 1790542293471 and
+1790542727482 are post-merge release gates, a FAIL comes back as a fix).
 
-1. Phase 1 (verification): collect the two steward verdicts above, then
-   merge; nothing else is owed for the 17 x-decomp lanes. The family's existing algorithms
-   (PCA, TruncatedSVD, UMAP, SpectralEmbedding, linalg matmul / cholesky / qr
-   / eigh / svdvals) carry their certified verifier lanes.
-2. Phase 2 (option parity): `x_decomp/NOT_IMPLEMENTED.tsv`, plus rows for the
-   existing PCA / TSVD / UMAP / SpectralEmbedding / linalg options against
-   sklearn, cuML and umap-learn.
-3. Phase 3 FAST speed, 4 IDENTICAL speed (the table above is NVIDIA only),
-   5 CPU speed.
+## PHASE 2 (option parity), session 4 (2026-09-27)
+
+Done on lane/algos-decomp (each: sklearn/scipy sanity on the A40, lane AGREE
+CUDA == CPU, a sabotage that bites, old part hashes unchanged):
+
+| option | route | proof |
+|---|---|---|
+| Isomap radius (n_neighbors=None), path_method 'FW' (DIVERGENT: Dijkstra) | closed radius on the float32 distance; transform min over in-radius rows | sklearn 8e-6 |
+| Isomap / MDS / ClassicalMDS metric: manhattan, chebyshev, minkowski p, cosine | NEW cell `pdist_cell` (DEVIATION 5319, oracle `oracle_pdist`, fixture separates, arm 5319_pdist_order bites) through x_decomp_sqdist's optional kind/p | pairwise_distances 2e-7; Isomap 2e-5 |
+| MDS metric_mds=False (Kruskal non-metric) | linear lane's IsotonicRegression (out_of_bounds='clip') inside `_single` | sklearn 5e-6, same stress/n_iter |
+| LocallyLinearEmbedding 'hessian', 'modified' | stacked factor B (M = B^T B), SVD null space; complement / null bases DIVERGENT (tsv) | sklearn 2e-5 |
+| sparse_encode / SparseCoder / DictionaryLearning transform 'lars' | linear lane's Lars(fit_intercept=False) per row | sklearn 2e-6 |
+| lu_solve trans=1/2 | getrs 'T' in lu_solve_serial; oracle_lu_solve_t; 5308 arm extended | scipy 2e-7 |
+| EllipticEnvelope.score | accuracy (weighted), IEEE double | exact |
+| AlternatingLeastSquares calculate_training_loss | `training_loss_` per iteration through the cells | numpy restatement 1e-8 |
+| IncrementalPCA / LDA / ALS / every x_decomp input: scipy.sparse | densified exactly (IPCA per batch) | bitwise == dense |
+| PCA svd_solver='arpack', TruncatedSVD algorithm='arpack' (DIVERGENT: exact arms), tol, copy | 'full' arm / Gram arm, n_components < min(shape) | sklearn 8e-7 |
+| PCA n_components='mle' | `_pca_mle_rank` (logs, gammaln in the cells) | sklearn rank equal, 4 seeds |
+| TruncatedSVD explained_variance_ / _ratio_ (Gram / arpack arms) | `_tsvd_explained` through the cells (IDENTICAL cells in FAST too) | sklearn 9e-7 |
+| PCA / TruncatedSVD scipy.sparse input | densified exactly | |
+| SpectralEmbedding affinity='precomputed_nearest_neighbors'; eigen_solver arpack/lobpcg/amg (DIVERGENT: Lanczos); eigen_tol='auto', n_jobs, verbose accepted | Python data movement, then the precomputed route | sklearn affinity exact, embedding subspace cos 1 - 1e-11 |
+| linalg.eigh UPLO | chosen triangle mirrored (strided copies) | |
+| directive (x_* context): x_decomp keeps ONE process-lifetime DeviceContext (`xd_ctx`); decomposition's device_qr_r / device_eigh take a caller's context | python/mojolearn/tests/test_x_decomp_repeat.py (every entry twice, GPU and host, bytes equal) | |
+
+Pod runs (A40 + x86 CPU, /root/mojolearn-evidence/lane-check/p2d-*):
+- p2d-sab: x-decomp-manifold, -dict-learning, -als, -robust-cov,
+  -pca-randomized, -spectral-rbf `--pass 2 --sabotage
+  x_decomp/checks/sabotage/e2e_p2_options.patch` (the new option paths moved on
+  the CPU column only): RESULT PASS (AGREE, DISAGREE, AGREE); all 20 seam arms
+  (5300-5319) build, run, bite. Old part hashes vs s7-x: 918 compared, 0 moved.
+
+## NEXT: PHASE 2 REMAINDER (start here; the rows above are done, never re-run)
+
+Each item gets the gate: lane AGREE on the pod (`tools/algos_lane_check.sh`,
+only the lanes `lane_select.py --changed-since origin/main` names), a
+sabotage for a numeric change, old part hashes unchanged
+(`/root/oldbits.py <new out> <old out>` on the pod), test_host_surface;
+merge each as it passes (directive 0000b), one batched steward request per
+hour.
+
+1. UMAP option parity (umap-learn + cuML; `python/mojolearn/_umap_impl.py`
+   refuses them in `_parameters`): init 'random' / 'pca' / an array (route: a
+   `umap_fit_transform` variant that takes the initial embedding; 'random' is
+   umap-learn's uniform(-10, 10) on a Philox stream, 'pca' the x_decomp PCA
+   scaled to 10 plus noise); metric (the pdist_cell kinds, DEVIATION 5319,
+   into umap/graph.mojo's kNN); local_connectivity != 1 (the rho
+   interpolation in smooth_knn_dist); n_components > 3 (the optimizer is
+   2D/3D only); supervised y (target_metric / target_weight); a, b given
+   directly; densmap (refuse by name if not written).
+2. linalg Q: numpy.linalg.qr mode 'reduced' / 'complete' / 'raw' and
+   numpy.linalg.svd (U, S, Vt): a Householder QR that keeps its reflectors
+   (geqrf's (h, tau) = 'raw') and an orgqr; svd's U = Q U_R. Wide inputs
+   (LQ of the transpose). Rows in decomposition/NOT_IMPLEMENTED.tsv.
+3. SpectralEmbedding eigen_tol float: one more params entry into
+   spectral_embedding_graph / _dataset (bindings/_mojolearn_metrics.mojo),
+   the Lanczos config SpectralClustering already exposes.
+4. AlternatingLeastSquares use_cg=True: implicit's 3 CG steps per row from the
+   previous factors, a row cell beside als_row (new DEVIATION + arm).
+5. Then PHASE 3 (FAST speed on NVIDIA / AMD / Apple), per the LANE CHARTER.
