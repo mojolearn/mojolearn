@@ -107,7 +107,10 @@ them out of every queue (an atomic mv; one a steward claimed first runs as
 submitted) and merges them into the new request: the union of verify lanes,
 the new commit (an earlier request whose commit is not an ancestor of it is
 left alone), this submit's one end-to-end sabotage patch, and the oldest
-request's place in the FIFO. `status` shows a merged request as COALESCED
+request's place in the FIFO. Only a request carrying the SAME sabotage patch
+(byte for byte) is taken: another patch proves other lanes (a lane's store
+lanes under e2e_store_branch never DISAGREE under e2e_host_branch), so a
+request with a different patch stays queued and runs as submitted. `status` shows a merged request as COALESCED
 (into the new name) and ends with the queue depth per steward and per lane.
 --no-coalesce queues beside it instead.
 
@@ -349,12 +352,15 @@ def _is_ancestor(old, new):
     return r.returncode == 0
 
 
-def _coalesce_take(lane, commit):
+def _coalesce_take(lane, commit, patch_bytes):
     """COALESCE (one queued identity request per lane per steward): take
     every QUEUED (not yet started) identity request of `lane`, on every
     steward and in the laptop spool, out of its queue by an atomic mv (one the
     steward claimed first stays and runs). Only a request whose commit is an
-    ancestor of (or equal to) `commit` is taken; another is left queued.
+    ancestor of (or equal to) `commit` AND whose sabotage patch is
+    byte-identical to `patch_bytes` is taken; another is left queued (a
+    different patch proves different lanes: merging it under this patch made
+    every lane it proved read "sabotage not seen", prep 1790537100517).
     Returns (taken: {old name: [(mac, state)]}, their verify lanes, their names' timestamps)."""
     stewards = [m for m in MACS if m not in DEFERRED] + list(_amd_live())
     listed = _parallel(_queued_names, stewards)
@@ -378,9 +384,13 @@ def _coalesce_take(lane, commit):
             if got is None:
                 print(f"{n}: {m} claimed it before the coalesce; it runs as submitted")
                 continue
-            body, _ = got
+            body, old_patch = got
             req = json.loads(body)
             old_commit = req["commit"]
+            if (old_patch or None) != (patch_bytes or None):
+                _restore(m, n, st)
+                print(f"{n}: its sabotage patch differs from this submit's; left queued on {m}")
+                continue
             if not _is_ancestor(old_commit, commit):
                 _restore(m, n, st)
                 print(f"{n}: its commit {old_commit[:10]} is not an ancestor of {commit[:10]}; left queued on {m}")
@@ -404,7 +414,8 @@ def submit(a):
                               capture_output=True, text=True)
         if full.returncode:
             sys.exit(f"{a.commit} is not a commit in {TOOLS.parent} (fetch the lane's branch first)")
-        taken, old_lanes, stamps = _coalesce_take(a.lane, full.stdout.strip())
+        patch_bytes = Path(a.sabotage).resolve().read_bytes() if a.sabotage and Path(a.sabotage).is_file() else None
+        taken, old_lanes, stamps = _coalesce_take(a.lane, full.stdout.strip(), patch_bytes)
         if taken:
             new_lanes = [x for x in (a.verify_lanes or "").split(",") if x]
             added = [x for x in old_lanes if x not in new_lanes]
@@ -412,8 +423,8 @@ def submit(a):
             # the merged request keeps the oldest one's place in every FIFO
             name = f"{min(stamps) + 1}-{a.lane}-{a.commit[:10]}"
             print(f"COALESCED {', '.join(sorted(taken))} into {name}: verify lanes {a.verify_lanes}"
-                  + (f" ({', '.join(added)} from the earlier request; THIS submit's sabotage patch must make them "
-                     "DISAGREE too)" if added else "") + f", commit {a.commit[:10]}, this submit's sabotage patch")
+                  + (f" ({', '.join(added)} from the earlier request, which carried this same sabotage patch)"
+                     if added else "") + f", commit {a.commit[:10]}, this submit's sabotage patch")
     try:
         _submit(a, name, taken)
     except BaseException:
