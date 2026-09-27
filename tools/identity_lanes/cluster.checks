@@ -11,3 +11,5 @@ x_cluster/checks/gauss_check.mojo	x_cluster/checks/sabotage/5108_gauss_fold.patc
 x_cluster/checks/gauss_check.mojo	x_cluster/checks/sabotage/5109_lse_order.patch
 x_cluster/checks/moments_check.mojo	x_cluster/checks/sabotage/5110_moments_fold.patch
 x_cluster/checks/pdist_check.mojo	x_cluster/checks/sabotage/5111_pdist_fold.patch
+x_cluster/checks/agglo_check.mojo	x_cluster/checks/sabotage/5117_lance_williams.patch
+x_cluster/checks/agglo_check.mojo	x_cluster/checks/sabotage/5118_merge_tie.patch

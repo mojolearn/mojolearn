@@ -351,7 +351,7 @@ def oracle_agglo(
             var dak = Float64(d[ba * n + k])
             var dbk = Float64(d[bb * n + k])
             var nk = size[k]
-            var v = Float32(0)
+            var v: Float32
             if linkage == 0:
                 var w: Float64
                 if scipy_spelling:
@@ -379,7 +379,7 @@ def oracle_agglo(
                 v = ftz(Float32((identical_mul64(na, dak) + identical_mul64(nb, dbk)) / (na + nb)))
             d[ba * n + k] = v
             d[k * n + ba] = v
-            if constrained:
+            if constrained and (ha or hb):
                 adj[ba * n + k] = True
                 adj[k * n + ba] = True
         live[bb] = False
