@@ -78,10 +78,28 @@ check compares NUMBERS (CPU == AMD); never .so digests.
 ON EACH CLOUD MAC (a launchd daemon, tools/cloudmac.sh steward <mac> install):
   apple_steward.py work --steward <mac> [--once]
       works ITS OWN queue, one request at a time (one Metal job per Mac)
-  on do-amd (the systemd service): identity requests run up to
-      MOJOLEARN_STEWARD_AMD_PARALLEL (6) at a time, one worktree each
-      (steward-do-amd, steward-do-amd-1 .. -5); a speed job at the head of the
-      FIFO waits for them to finish and runs alone
+  on do-amd (the systemd service): BUILD ONCE, RUN MANY. One builder thread
+      builds each distinct (commit, lanes) once, in its own worktree
+      (steward-do-amd-build), into the shared store $MOJOLEARN_STEWARD_ROOT/builds
+      (tools/steward_build.py: bindings keyed by their source-closure digest,
+      READY markers per commit and lane); identity requests whose builds are
+      done run up to MOJOLEARN_STEWARD_AMD_PARALLEL (6) at a time, one worktree
+      each (steward-do-amd, steward-do-amd-1 .. -5), oldest first, so a build
+      never holds a slot and requests at one commit share one build. A speed
+      job at the head of the FIFO waits for the slots and the builder and runs
+      alone. Every steward (the Macs too, one Metal job at a time) seeds its
+      worktree from the store before a check and publishes what it built
+      clean, so a commit is built once per box.
+
+COALESCING (one queued request per lane per steward): an identity `submit`
+from a lane that already has QUEUED (not yet started) identity requests takes
+them out of every queue (an atomic mv; one a steward claimed first runs as
+submitted) and merges them into the new request: the union of verify lanes,
+the new commit (an earlier request whose commit is not an ancestor of it is
+left alone), this submit's one end-to-end sabotage patch, and the oldest
+request's place in the FIFO. `status` shows a merged request as COALESCED
+(into the new name) and ends with the queue depth per steward and per lane.
+--no-coalesce queues beside it instead.
 
 For each request the steward, in a private worktree at the commit
 ($HOME/mojolearn-wt/steward-<name>, from the clone at $MOJOLEARN_STEWARD_REPO,
@@ -153,6 +171,9 @@ ROOT = Path(os.environ.get("MOJOLEARN_STEWARD_ROOT",
 REPO = Path(os.environ.get("MOJOLEARN_STEWARD_REPO", Path.home() / "mojolearn"))
 TOOLS = Path(__file__).resolve().parent
 Q, WORK, DONE, PATCHES = ROOT / "queue", ROOT / "working", ROOT / "done", ROOT / "patches"
+#: BUILD ONCE, RUN MANY (tools/steward_build.py): built bindings keyed by
+#: their source-closure digest, and per-commit READY markers per lane.
+STORE = ROOT / "builds"
 SPOOL = ROOT / "deferred"            # on the laptop: requests for a deferred Mac
 
 
@@ -291,12 +312,114 @@ def _push_commit(mac, commit):
     print(f"{mac}: pushed {full[:12]} to its bare repo and fetched it into {STEWARD_CLONE}")
 
 
+def _name_lane(name):
+    """(kind, lane) from a request name <ms>-[speed-]<lane>-<sha10>"""
+    body = name.split("-", 1)[1].rsplit("-", 1)[0] if name.count("-") >= 2 else ""
+    return ("speed", body[len("speed-"):]) if body.startswith("speed-") else ("identity", body)
+
+
+_QUEUED = (f"setopt nullglob 2>/dev/null || true; cd {REMOTE_ROOT} 2>/dev/null || exit 0; "
+           "for f in queue/[0-9]*.json; do [ -f \"$f\" ] && echo \"$f\"; done; true")
+
+
+def _queued_names(mac):
+    return [Path(x).stem for x in _cloudmac(mac, _QUEUED, timeout=60).split() if x.startswith("queue/")]
+
+
+def _is_ancestor(old, new):
+    r = subprocess.run(["git", "-C", str(TOOLS.parent), "merge-base", "--is-ancestor", old, new],
+                       capture_output=True)
+    return r.returncode == 0
+
+
+def _coalesce_take(lane, commit):
+    """COALESCE (one queued identity request per lane per steward): take
+    every QUEUED (not yet started) identity request of `lane`, on every
+    steward and in the laptop spool, out of its queue by an atomic mv (one the
+    steward claimed first stays and runs). Only a request whose commit is an
+    ancestor of (or equal to) `commit` is taken; another is left queued.
+    Returns (taken: {old name: [(mac, state)]}, their verify lanes, their names' timestamps)."""
+    stewards = [m for m in MACS if m not in DEFERRED] + list(_amd_live())
+    listed = _parallel(_queued_names, stewards)
+    where = {}
+    for m, names in listed.items():
+        if not isinstance(names, list):
+            print(f"{m}: did not answer ({str(names)[:160]}); its queued requests are not coalesced", file=sys.stderr)
+            continue
+        for n in names:
+            if _name_lane(n) == ("identity", lane):
+                where.setdefault(n, []).append((m, "queue"))
+    for m, spooled in _spooled().items():
+        for n in spooled:
+            if _name_lane(n) == ("identity", lane):
+                where.setdefault(n, []).append((m, "deferred (spooled)"))
+    taken, lanes, stamps = {}, [], []
+    for n, holders in sorted(where.items()):
+        old_commit = None
+        for m, st in holders:
+            got = _withdraw(m, n, st)
+            if got is None:
+                print(f"{n}: {m} claimed it before the coalesce; it runs as submitted")
+                continue
+            body, _ = got
+            req = json.loads(body)
+            old_commit = req["commit"]
+            if not _is_ancestor(old_commit, commit):
+                _restore(m, n, st)
+                print(f"{n}: its commit {old_commit[:10]} is not an ancestor of {commit[:10]}; left queued on {m}")
+                continue
+            taken.setdefault(n, []).append((m, st))
+            for x in req.get("verify_lanes") or []:
+                if x not in lanes:
+                    lanes.append(x)
+        if n in taken:
+            stamps.append(int(n.split("-", 1)[0]))
+    return taken, lanes, stamps
+
+
 def submit(a):
     if not all(c in "0123456789abcdef" for c in a.commit) or len(a.commit) < 7:
         sys.exit(f"--commit must be a hex sha pushed to origin, not {a.commit!r}")
     name = f"{int(time.time() * 1000)}-{'speed-' if a.kind == 'speed' else ''}{a.lane}-{a.commit[:10]}"
+    taken = {}
+    if a.kind == "identity" and not a.no_coalesce:
+        full = subprocess.run(["git", "-C", str(TOOLS.parent), "rev-parse", "--verify", f"{a.commit}^{{commit}}"],
+                              capture_output=True, text=True)
+        if full.returncode:
+            sys.exit(f"{a.commit} is not a commit in {TOOLS.parent} (fetch the lane's branch first)")
+        taken, old_lanes, stamps = _coalesce_take(a.lane, full.stdout.strip())
+        if taken:
+            new_lanes = [x for x in (a.verify_lanes or "").split(",") if x]
+            added = [x for x in old_lanes if x not in new_lanes]
+            a.verify_lanes = ",".join(new_lanes + added)
+            # the merged request keeps the oldest one's place in every FIFO
+            name = f"{min(stamps) + 1}-{a.lane}-{a.commit[:10]}"
+            print(f"COALESCED {', '.join(sorted(taken))} into {name}: verify lanes {a.verify_lanes}"
+                  + (f" ({', '.join(added)} from the earlier request; THIS submit's sabotage patch must make them "
+                     "DISAGREE too)" if added else "") + f", commit {a.commit[:10]}, this submit's sabotage patch")
+    try:
+        _submit(a, name, taken)
+    except BaseException:
+        for n, holders in taken.items():      # nothing shipped: the earlier requests go back where they were
+            for m, st in holders:
+                if st != "deferred (spooled)":
+                    _restore(m, n, st)
+        if taken:
+            print(f"the submit failed; {', '.join(taken)} restored to their queues", file=sys.stderr)
+        raise
+    for n, holders in taken.items():
+        for m, st in holders:
+            if st == "deferred (spooled)":
+                _settle(m, n, st, None)
+            else:
+                _cloudmac(m, f"cd {REMOTE_ROOT} && mv moved/{n}.json moved/{n}.json.coalesced-into-{name}")
+
+
+def _submit(a, name, taken):
     req = {"name": name, "kind": a.kind, "lane": a.lane, "commit": a.commit,
            "submitted": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+    if taken:
+        req["coalesced"] = sorted(taken)
     patch = None
     if a.kind == "identity":
         if not (a.verify_lanes and a.sabotage):
@@ -386,7 +509,7 @@ def flush_deferred(a):
 
 
 REQ_KEYS = ("name", "kind", "lane", "commit", "submitted", "verify_lanes", "pass", "sabotage", "builds", "cmd",
-            "mode", "stewards")
+            "mode", "stewards", "coalesced")
 
 
 def _req_bytes(mac, name, state):
@@ -450,7 +573,8 @@ def redistribute(a):
     for mac, spooled in _spooled().items():
         for name, st in spooled.items():
             per.setdefault(mac, {})[name] = st
-    pending = sorted({n for m in per for n, st in per[m].items() if not isinstance(st, dict)})
+    merged = {n for m in per for n, st in per[m].items() if isinstance(st, str) and st.startswith("coalesced")}
+    pending = sorted({n for m in per for n, st in per[m].items() if not isinstance(st, dict)} - merged)
     plan = []          # (name, gen, action, source mac, source state, dest)
     for g, gmacs in _generations().items():
         gmacs = [m for m in gmacs if m not in DEFERRED]
@@ -528,6 +652,7 @@ def redistribute(a):
 # the cloud Macs' login shell is zsh, where an unmatched glob is an error
 _REMOTE_LIST = (f"setopt nullglob 2>/dev/null || true; cd {REMOTE_ROOT} 2>/dev/null || exit 0; "
                 "for f in queue/[0-9]*.json working/[0-9]*.json; do [ -f \"$f\" ] && echo \"STATE $f\"; done; "
+                "for f in moved/*.json.coalesced-into-*; do [ -f \"$f\" ] && echo \"COALESCED $f\"; done; "
                 "for f in done/*/verdict.json; do [ -f \"$f\" ] && { echo \"VERDICT $f\"; cat \"$f\"; echo; }; done; true")
 
 
@@ -541,6 +666,10 @@ def _collect(mac):
         if line.startswith("STATE "):
             path = line.split(" ", 1)[1]
             out[Path(path).name.split(".")[0]] = path.split("/")[0]
+            pos = nl + 1 if nl >= 0 else len(text)
+        elif line.startswith("COALESCED "):
+            fname = Path(line.split(" ", 1)[1]).name
+            out.setdefault(fname.split(".")[0], "coalesced into " + fname.split(".coalesced-into-", 1)[1])
             pos = nl + 1 if nl >= 0 else len(text)
         elif line.startswith("VERDICT "):
             path = line.split(" ", 1)[1]
@@ -585,12 +714,16 @@ def status(a):
         # the stewards that hold a copy (queued, working, done or spooled)
         states = {m: per[m][name] for m in per if name in per[m]}
         verdicts = {m: s for m, s in states.items() if isinstance(s, dict)}
-        amd = [m for m in states if m in AMD_STEWARDS]
-        apple = [m for m in states if m not in AMD_STEWARDS]
         passed = {m for m, v in verdicts.items() if v.get("result") == "PASS"}
-        if any(v.get("result") == "FAIL" for v in verdicts.values()):
+        into = sorted({s.split(" ", 2)[2] for s in states.values() if isinstance(s, str) and s.startswith("coalesced")})
+        states_live = {m: s for m, s in states.items() if not (isinstance(s, str) and s.startswith("coalesced"))}
+        amd = [m for m in states_live if m in AMD_STEWARDS]
+        apple = [m for m in states_live if m not in AMD_STEWARDS]
+        if into:
+            result = "COALESCED"     # its lanes run in the request it was merged into
+        elif any(v.get("result") == "FAIL" for v in verdicts.values()):
             result = "FAIL"
-        elif speed and states and set(states) <= passed:
+        elif speed and states_live and set(states_live) <= passed:
             result = "PASS"
         elif not speed and any(m in passed for m in apple) and all(m in passed for m in amd):
             result = "PASS"          # the merge gate: one Apple PASS + do-amd PASS; the rest follow
@@ -606,20 +739,36 @@ def status(a):
                 out += f" (builds {t.get('builds_wall_s')}s, cmd {t.get('cmd_wall_s')}s, stdout {s.get('stdout')})"
             return f"{m}: {out}"
         detail = "; ".join(one(m, s) for m, s in states.items())
-        rows.append(dict(request=name, kind="speed" if speed else "identity", result=result, stewards=states))
+        rows.append(dict(request=name, kind="speed" if speed else "identity", result=result, stewards=states,
+                         **({"coalesced_into": into} if into else {})))
         if not a.json:
             print(f"{result:8} {name}  ({detail})")
     if a.json:
         print(json.dumps(rows, indent=1))
+        return
+    # QUEUE DEPTHS: per steward, and per lane (coalescing keeps one queued
+    # identity request per lane per steward; a 2 here is a submit that raced)
+    print("\nsteward     queued working  lanes queued (identity)")
+    for m in sorted(per):
+        q = [n for n, st in per[m].items() if st in ("queue", "deferred (spooled)")]
+        w = sum(1 for st in per[m].values() if st == "working")
+        by = {}
+        for n in q:
+            k, lane = _name_lane(n)
+            if k == "identity":
+                by[lane] = by.get(lane, 0) + 1
+        lanes = ", ".join(f"{k}{'' if v == 1 else ' x' + str(v)}" for k, v in sorted(by.items()))
+        print(f"{m:11} {len(q):6} {w:7}  {lanes}")
 
 
 # --------------------------------------------------------------- a cloud Mac
-def _run(cmd, cwd, log, timeout):
+def _run(cmd, cwd, log, timeout, env=None):
     with open(log, "a") as f:
         f.write(f"\n$ {' '.join(cmd)}\n")
         f.flush()
         try:
-            return subprocess.run(cmd, cwd=cwd, stdout=f, stderr=subprocess.STDOUT, timeout=timeout).returncode
+            return subprocess.run(cmd, cwd=cwd, stdout=f, stderr=subprocess.STDOUT, timeout=timeout,
+                                  env=env).returncode
         except subprocess.TimeoutExpired:
             f.write(f"TIMEOUT after {timeout}s\n")
             return 124
@@ -642,6 +791,26 @@ def _worktree(steward, slot=0):
     return Path.home() / "mojolearn-wt" / (f"steward-{steward}" + (f"-{slot}" if slot else ""))
 
 
+def _fetch(steward, commit, log):
+    """the laptop pushes a submitted sha as refs/steward/<sha> (cloudmac.sh push);
+    the default refspec fetches only branches, so name that namespace too"""
+    if steward in AMD_STEWARDS:   # a shallow tree: the sha itself, from GitHub
+        for _ in range(40):   # a laptop `submit` may hold shallow.lock for a moment
+            if not _run(["git", "fetch", "-q", "--depth=1", "origin", commit], REPO, log, 900):
+                break
+            time.sleep(3)
+    else:
+        _run(["git", "fetch", "-q", "origin", "+refs/heads/*:refs/remotes/origin/*", "+refs/steward/*:refs/steward/*"],
+             REPO, log, 600)
+
+
+def _store_helper(sub, wt, log, *extra, timeout=4 * 3600):
+    """tools/steward_build.py (THIS steward's copy) against worktree `wt`, in
+    the tree's pixi default environment; returns the exit status."""
+    return _run([_pixi(), "run", "-e", "default", "python", "-u", str(TOOLS / "steward_build.py"), sub,
+                 "--root", str(wt), "--store", str(STORE), *extra], wt, log, timeout)
+
+
 def process(req_path, steward, slot=0):
     req = json.loads(req_path.read_text())
     out = DONE / req["name"]
@@ -659,16 +828,7 @@ def process(req_path, steward, slot=0):
         req_path.unlink(missing_ok=True)
         print(f"{req['name']}: {result}{' at ' + step if step else ''}", flush=True)
 
-    # the laptop pushes a submitted sha as refs/steward/<sha> (cloudmac.sh push);
-    # the default refspec fetches only branches, so name that namespace too
-    if steward in AMD_STEWARDS:   # a shallow tree: the sha itself, from GitHub
-        for _ in range(40):   # a laptop `submit` may hold shallow.lock for a moment
-            if not _run(["git", "fetch", "-q", "--depth=1", "origin", req["commit"]], REPO, log, 900):
-                break
-            time.sleep(3)
-    else:
-        _run(["git", "fetch", "-q", "origin", "+refs/heads/*:refs/remotes/origin/*", "+refs/steward/*:refs/steward/*"],
-             REPO, log, 600)
+    _fetch(steward, req["commit"], log)
     if wt.exists():
         dirty = subprocess.run(["git", "status", "--porcelain", "--untracked-files=no"], cwd=wt,
                                capture_output=True, text=True).stdout.strip()
@@ -687,7 +847,22 @@ def process(req_path, steward, slot=0):
            "--out", str(out / "check")]
     if req.get("pass"):
         cmd += ["--pass", str(req["pass"])]
-    rc = _run(cmd, wt, log, 6 * 3600)
+    # BUILD ONCE, RUN MANY: the bindings this tree's sources already built on
+    # this box (do-amd's prebuild, or an earlier request) are copied in, so the
+    # check finds them fresh; a lane check that knows the store also takes the
+    # restored stage's bindings from it and publishes what it builds clean.
+    t0 = time.time()
+    seeded = _store_helper("seed", wt, log, timeout=1800)
+    verdict["store"] = {"seed_rc": seeded, "seed_s": round(time.time() - t0, 1),
+                        "seeded": _last_line(log, "SEEDED ")}
+    env = dict(os.environ, MOJOLEARN_LANE_CHECK_STORE=str(STORE))
+    t0 = time.time()
+    rc = _run(cmd, wt, log, 6 * 3600, env=env)
+    verdict["check_wall_s"] = round(time.time() - t0, 1)
+    clean = not subprocess.run(["git", "status", "--porcelain", "--untracked-files=no"], cwd=wt,
+                               capture_output=True, text=True).stdout.strip()
+    if clean:     # an older lane check does not publish itself: what it built clean goes to the store
+        _store_helper("publish", wt, log, timeout=1800)
     last = [line for line in log.read_text(errors="replace").splitlines() if line.startswith("RESULT:")]
     verdict["check"] = last[-1] if last else "no RESULT line"
     if rc == 0 and last and last[-1].startswith("RESULT: PASS"):
@@ -695,9 +870,15 @@ def process(req_path, steward, slot=0):
     return finish("FAIL", last[-1][len("RESULT: "):] if last else f"the lane check exited {rc}")
 
 
+def _last_line(log, prefix):
+    lines = [x for x in Path(log).read_text(errors="replace").splitlines() if x.startswith(prefix)]
+    return lines[-1][len(prefix):] if lines else None
+
+
 #: A process whose command line holds one of these is another Metal (or
 #: heavy CPU) job; a speed job never times beside one.
-FOREIGN = ("lm_segment", "algos_lane_check", "identity_break.py", "mac_slot.sh", "apple_steward.py work",
+FOREIGN = ("lm_segment", "algos_lane_check", "steward_build.py", "identity_break.py", "mac_slot.sh",
+           "apple_steward.py work",
            "/mojo ", "mojo build", "mojo run", "verify_all", "bench_board")
 
 
@@ -813,15 +994,73 @@ def _head_is_speed():
     return bool(heads) and _is_speed(heads[0].stem)
 
 
+def _build_state(commit, lanes):
+    """READY when every lane's bindings for this commit are in the store (or
+    the prebuild could not build them: NOBUILD, and the run builds and reports
+    itself), else None."""
+    c = STORE / "commits" / commit
+    if all((c / "lanes" / x).is_file() or (c / "nobuild" / x).is_file() for x in lanes):
+        return "READY"
+    return None
+
+
+def _build_worktree(steward):
+    return Path.home() / "mojolearn-wt" / f"steward-{steward}-build"
+
+
+def _prebuild(steward, commit, lanes):
+    """THE ONE BUILD for (commit, lanes) on this box, in its own worktree that
+    no sabotage ever touches; marks each lane READY or NOBUILD in the store.
+    Any failure here marks the lanes NOBUILD: their runs then build as before
+    and report the real error, so a broken prebuild never decides a verdict."""
+    cdir = STORE / "commits" / commit
+    cdir.mkdir(parents=True, exist_ok=True)
+    log = cdir / "steward-prebuild.log"
+    wt = _build_worktree(steward)
+    t0 = time.time()
+    try:
+        _fetch(steward, commit, log)
+        if wt.exists():
+            rc = _run(["git", "checkout", "-q", "--detach", "-f", commit], wt, log, 300)
+        else:
+            rc = _run(["git", "worktree", "add", "-q", "--detach", str(wt), commit], REPO, log, 900)
+        if not rc:
+            rc = _store_helper("build", wt, log, "--commit", commit, "--lanes", ",".join(sorted(lanes)))
+    except Exception as exc:          # noqa: BLE001 - recorded, the runs build themselves
+        rc = f"steward error {exc!r}"
+    for lane in lanes:
+        if not ((cdir / "lanes" / lane).is_file() or (cdir / "nobuild" / lane).is_file()):
+            (cdir / "nobuild").mkdir(exist_ok=True)
+            (cdir / "nobuild" / lane).write_text(f"the prebuild ended ({rc}) without building it; see {log}\n")
+    print(f"prebuild {commit[:10]} {','.join(sorted(lanes))}: done in {time.time() - t0:.0f}s (rc {rc})", flush=True)
+
+
+def _claim_one(p, steward):
+    dst = WORK / f"{p.stem}.{steward}.json"
+    try:
+        p.rename(dst)
+        return dst
+    except FileNotFoundError:
+        return None
+
+
 def _work_parallel(a):
-    """do-amd: FIFO; identity requests fill free slots, a speed job at the
-    head of the queue drains the slots and then runs alone."""
+    """do-amd: BUILD ONCE, RUN MANY. One builder thread builds each distinct
+    (commit, lanes) once into the store (tools/steward_build.py); up to
+    AMD_PARALLEL identity slots run requests whose builds are done, oldest
+    first, so a build never holds a slot or the FIFO: a request whose build
+    is running waits while later requests with finished builds run. Requests
+    at one commit share one build. A speed job at the head of the queue waits
+    for every slot and the builder to finish and runs alone."""
     import threading
     running = {}                         # slot -> thread
+    builder = {"t": None, "key": None}
 
     def reap():
         for n in [n for n, t in running.items() if not t.is_alive()]:
             del running[n]
+        if builder["t"] is not None and not builder["t"].is_alive():
+            builder["t"], builder["key"] = None, None
 
     def one(req, n):
         try:
@@ -831,10 +1070,14 @@ def _work_parallel(a):
             if req.exists():
                 req.rename(Q / f"{req.name.split('.')[0]}.json")
 
+    last_prune = 0.0
     while True:
         reap()
+        if time.time() - last_prune > 3600 and builder["t"] is None:
+            subprocess.run([sys.executable, str(TOOLS / "steward_build.py"), "prune", "--store", str(STORE)])
+            last_prune = time.time()
         if _head_is_speed():
-            if running:                  # nothing new starts; the speed job waits for the slots
+            if running or builder["t"] is not None:   # nothing new starts; the speed job waits for the box
                 time.sleep(10)
                 continue
             req = _claim(a.steward)
@@ -847,19 +1090,46 @@ def _work_parallel(a):
                     time.sleep(60)
             continue
         free = [n for n in range(max(1, AMD_PARALLEL)) if n not in running]
-        req = _claim(a.steward) if free else None
-        if req and _is_speed(req.stem) and running:   # a speed job raced in at the head
-            req.rename(Q / f"{req.name.split('.')[0]}.json")
+        want = {}                        # commit -> lanes still to build, oldest request first
+        started = False
+        for p in sorted(Q.glob("[0-9]*.json")):
+            if _is_speed(p.stem):
+                break                    # FIFO: nothing passes a speed job
+            try:
+                req = json.loads(p.read_text())
+            except (OSError, ValueError):
+                continue
+            lanes = req.get("verify_lanes") or []
+            if _build_state(req["commit"], lanes) == "READY":
+                if not free:
+                    continue
+                got = _claim_one(p, a.steward)
+                if got:
+                    n = free.pop(0)
+                    t = threading.Thread(target=one, args=(got, n), daemon=True)
+                    running[n] = t
+                    t.start()
+                    started = True
+                    print(f"{got.stem}: started in slot {n} ({len(running)} running; build shared from the store)",
+                          flush=True)
+                continue
+            key = builder["key"]
+            if key and key[0] == req["commit"] and set(lanes) <= key[1]:
+                continue                 # its build is running now
+            want.setdefault(req["commit"], set()).update(lanes)
+        if builder["t"] is None and want:
+            commit, lanes = next(iter(want.items()))
+            builder["key"] = (commit, set(lanes))
+            builder["t"] = threading.Thread(target=_prebuild, args=(a.steward, commit, sorted(lanes)), daemon=True)
+            builder["t"].start()
+            print(f"prebuild {commit[:10]} {','.join(sorted(lanes))}: started ({len(running)} slots running)",
+                  flush=True)
+            started = True
+        if started:
             continue
-        if req:
-            t = threading.Thread(target=one, args=(req, free[0]), daemon=True)
-            running[free[0]] = t
-            t.start()
-            print(f"{req.stem}: started in slot {free[0]} ({len(running)} running)", flush=True)
-            continue
-        if a.once and not running and not any(Q.glob("[0-9]*.json")):
+        if a.once and not running and builder["t"] is None and not any(Q.glob("[0-9]*.json")):
             return
-        time.sleep(10 if running else 30)
+        time.sleep(5 if (running or builder["t"] is not None) else 30)
 
 
 def work(a):
@@ -868,7 +1138,11 @@ def work(a):
         sys.exit(f"no clone at {REPO} (set MOJOLEARN_STEWARD_REPO)")
     if a.steward in AMD_STEWARDS and AMD_PARALLEL > 1:
         return _work_parallel(a)
+    last_prune = 0.0
     while True:
+        if time.time() - last_prune > 3600:
+            subprocess.run([sys.executable, str(TOOLS / "steward_build.py"), "prune", "--store", str(STORE)])
+            last_prune = time.time()
         req = _claim(a.steward)
         if req:
             try:
@@ -898,6 +1172,8 @@ def main(argv=None):
                         "or speed (--target)")
     s.add_argument("--verify-lanes", help="identity: comma separated identity lanes")
     s.add_argument("--sabotage", help="identity: a SOURCE patch that must make the check DISAGREE")
+    s.add_argument("--no-coalesce", action="store_true",
+                   help="identity: queue beside this lane's queued request instead of merging into it")
     s.add_argument("--pass", dest="pass_no", type=int, choices=(1, 2), default=2,
                    help="identity: the lane check's --pass (default 2: the steward is a pass-2 step, so every "
                         "fragment needs its .checks with a sabotage patch per driver)")
