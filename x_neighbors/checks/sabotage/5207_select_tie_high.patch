@@ -1,0 +1,13 @@
+diff --git a/x_neighbors/items.mojo b/x_neighbors/items.mojo
+index bc04f5c16..de8d742c7 100644
+--- a/x_neighbors/items.mojo
++++ b/x_neighbors/items.mojo
+@@ -246,7 +246,7 @@ def knn_select_item(t: Int, dmat: FP, dist: FP, idx: IP, n: Int, m: Int, k: Int,
+         if not (v < dist.unsafe_load(t * k + k - 1)):
+             continue
+         var s = k - 1
+-        while s > 0 and v < dist.unsafe_load(t * k + s - 1):
++        while s > 0 and v <= dist.unsafe_load(t * k + s - 1):
+             dist.unsafe_store(t * k + s, dist.unsafe_load(t * k + s - 1))
+             idx.unsafe_store(t * k + s, idx.unsafe_load(t * k + s - 1))
+             s -= 1

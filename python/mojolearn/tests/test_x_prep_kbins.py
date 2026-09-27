@@ -34,6 +34,10 @@ def test_strategies():
             assert int(np.asarray(m.n_bins_)[j]) == int(r.n_bins_[j])
         got, want = np.asarray(m.transform(X))[:, cols], r.transform(X.astype(np.float64))[:, cols]
         assert np.mean(got == want) > 0.995, (kw, np.mean(got == want))
+        # inverse_transform: the bin centres of the reference's own codes
+        Z = r.transform(X.astype(np.float64))
+        a, b = np.asarray(m.inverse_transform(Z)), r.inverse_transform(Z)
+        np.testing.assert_allclose(a[:, cols], b[:, cols], rtol=1e-4, atol=1e-4)
 
 
 def test_onehot():
@@ -42,6 +46,9 @@ def test_onehot():
     r = SkKB(n_bins=4, encode="onehot-dense", strategy="uniform").fit(X.astype(np.float64))
     got, want = np.asarray(m.transform(X)), r.transform(X.astype(np.float64))
     assert got.shape == want.shape and np.mean(got == want) > 0.995
+    a, b = np.asarray(m.inverse_transform(want)), r.inverse_transform(want)
+    np.testing.assert_array_equal(np.isnan(a), np.isnan(b))
+    np.testing.assert_allclose(a, b, rtol=1e-5, atol=1e-5)
 
 
 if __name__ == "__main__":

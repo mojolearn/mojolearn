@@ -74,6 +74,36 @@ _batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_prep_categorical),
             "x-prep-ordinal-encoder", "x-prep-onehot-encoder")
 
 
+def _prep_categorical_nan(X):
+    """The categorical fixture with NaN every 9th entry of column 0."""
+    Xq = _prep_categorical(X)
+    Xq[::9, 0] = np.nan
+    return Xq
+
+
+@lane("x-prep-encoder-options")
+def _(ml, X, yc, yr, Xh=None):
+    """OrdinalEncoder encoded_missing_value and inverse_transform,
+    OneHotEncoder inverse_transform (drop, unknown blocks)."""
+    Xq, Xhq = _prep_categorical_nan(X), _prep_categorical_nan(Xh)
+    parts = {}
+    for j, kw in enumerate((dict(), dict(encoded_missing_value=-3),
+                            dict(handle_unknown="use_encoded_value", unknown_value=-1))):
+        m = ml.OrdinalEncoder(**kw).fit(Xq[:1000])
+        Z = m.transform(Xq[:256] if j < 2 else Xhq[:256])
+        parts[f"ord{j}"] = _h(Z, m.inverse_transform(Z))
+    for j, kw in enumerate((dict(handle_unknown="ignore"), dict(drop="first"),
+                            dict(drop="if_binary", handle_unknown="ignore"))):
+        m = ml.OneHotEncoder(**kw).fit(Xq[:1000])
+        Z = m.transform(Xq[:256] if j == 1 else Xhq[:256])
+        parts[f"ohe{j}"] = _h(m.inverse_transform(Z))
+    m = ml.OrdinalEncoder(handle_unknown="use_encoded_value", unknown_value=-1, encoded_missing_value=-2).fit(Xq)
+    return _fit(parts, m, lambda e: (e.transform(Xhq[:256]),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_prep_categorical_nan), "x-prep-encoder-options")
+
+
 @lane("x-prep-target-encoder")
 def _(ml, X, yc, yr, Xh=None):
     Xq, Xhq = _prep_categorical(X), _prep_categorical(Xh)
@@ -229,6 +259,41 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-power-transformer")
+
+
+@lane("x-prep-inverse-transforms")
+def _(ml, X, yc, yr, Xh=None):
+    """inverse_transform of QuantileTransformer (uniform, normal) and
+    PowerTransformer (yeo-johnson standardized, box-cox raw), on each one's
+    own transform output and on a grid through the bounds."""
+    grid = np.linspace(-6, 6, 97, dtype=np.float32)
+    G = np.tile(grid[:, None], (1, X.shape[1]))
+    G[::7, 0] = np.nan
+    mu = ml.QuantileTransformer(n_quantiles=200, random_state=5).fit(X)
+    mn = ml.QuantileTransformer(n_quantiles=64, output_distribution="normal", random_state=5).fit(X)
+    my = ml.PowerTransformer().fit(X[:2000])
+    Xp = np.abs(X[:2000]) + np.float32(0.5)
+    mb = ml.PowerTransformer(method="box-cox", standardize=False).fit(Xp)
+    Gu = np.clip(G, 0, 1) * np.float32(1.0)
+    parts = dict(qu=_h(mu.inverse_transform(mu.transform(X[:256]))), qu_grid=_h(mu.inverse_transform(Gu)),
+                 qn=_h(mn.inverse_transform(mn.transform(X[:256]))), qn_grid=_h(mn.inverse_transform(G)),
+                 yj=_h(my.inverse_transform(my.transform(X[:256]))), yj_grid=_h(my.inverse_transform(G)),
+                 bc=_h(mb.inverse_transform(mb.transform(Xp[:256]))), bc_grid=_h(mb.inverse_transform(G)))
+    kb = ml.KBinsDiscretizer(n_bins=6, encode="ordinal", strategy="kmeans").fit(X[:2000])
+    parts["kbins"] = _h(kb.inverse_transform(kb.transform(X[:256])))
+    ko = ml.KBinsDiscretizer(n_bins=5, encode="onehot-dense").fit(X)
+    parts["kbins_onehot"] = _h(ko.inverse_transform(ko.transform(X[:256])))
+    y, yh = _prep_labels(X), _prep_labels(Xh)
+    lb = ml.LabelBinarizer(neg_label=-1, pos_label=2).fit(y)
+    K = np.asarray(lb.classes_).size
+    Y = np.tile(X[:256], (1, K // X.shape[1] + 1))[:, :K]
+    parts["labels"] = _h(lb.inverse_transform(lb.transform(y[:256])), lb.inverse_transform(Y))
+    lb2 = ml.LabelBinarizer().fit(yc)
+    parts["labels_binary"] = _h(lb2.inverse_transform(X[:256, :1]), lb2.inverse_transform(X[:256, :1], threshold=0.3))
+    return _fit(parts, mn, lambda e: (e.inverse_transform(Xh[:256]),))
+
+
+_batch_decl(_rows_calls("inverse_transform", sl=slice(0, 256)), "x-prep-inverse-transforms")
 
 
 @lane("x-prep-normalizer")
