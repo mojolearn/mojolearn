@@ -90,3 +90,47 @@ def test_reference_matches_torch():
             if training:
                 np.testing.assert_allclose(m.weight.grad.numpy(), rdg, rtol=1e-9, atol=1e-9)
                 np.testing.assert_allclose(m.bias.grad.numpy(), rdb, rtol=1e-9, atol=1e-9)
+
+
+def test_batchnorm_options():
+    import mojolearn as ml
+    shape = (5, 3, 4, 4)
+    # momentum=None: the cumulative average over the batches seen
+    bn = ml.BatchNorm2d(3, momentum=None)
+    rm, rv = np.zeros(3), np.ones(3)
+    for step in range(3):
+        x, g = _data(20 + step, shape), _data(30 + step, shape)
+        bn.forward(x)
+        _, _, _, _, rm, rv = ref_bn(x, bn.weight_, bn.bias_, rm, rv, True, 1.0 / (step + 1), 1e-5, g)
+        np.testing.assert_allclose(bn.running_mean_, rm, rtol=1e-5, atol=1e-6)
+        np.testing.assert_allclose(bn.running_var_, rv, rtol=1e-5, atol=1e-6)
+    # track_running_stats=False: batch statistics in eval mode as well
+    bn = ml.BatchNorm2d(3, track_running_stats=False).eval()
+    x, g = _data(40, shape), _data(41, shape)
+    y = bn.forward(x)
+    dx = bn.backward(g)
+    ry, rdx, _, _, _, _ = ref_bn(x, bn.weight_, bn.bias_, np.zeros(3), np.ones(3), True, 0.1, 1e-5, g)
+    np.testing.assert_allclose(y, ry, rtol=1e-4, atol=1e-5)
+    np.testing.assert_allclose(dx, rdx, rtol=1e-4, atol=1e-4)
+    assert bn.running_mean_ is None
+
+
+def test_options_reference_matches_torch():
+    torch = pytest.importorskip("torch")
+    shape = (5, 3, 4, 4)
+    m = torch.nn.BatchNorm2d(3, momentum=None).double()
+    rm, rv = np.zeros(3), np.ones(3)
+    for step in range(3):
+        x, g = _data(20 + step, shape), _data(30 + step, shape)
+        m(torch.tensor(x, dtype=torch.float64))
+        _, _, _, _, rm, rv = ref_bn(x, np.ones(3), np.zeros(3), rm, rv, True, 1.0 / (step + 1), 1e-5, g)
+        np.testing.assert_allclose(m.running_mean.numpy(), rm, rtol=1e-10, atol=1e-12)
+        np.testing.assert_allclose(m.running_var.numpy(), rv, rtol=1e-10, atol=1e-12)
+    m = torch.nn.BatchNorm2d(3, track_running_stats=False).double().eval()
+    x, g = _data(40, shape), _data(41, shape)
+    tx = torch.tensor(x, dtype=torch.float64, requires_grad=True)
+    out = m(tx)
+    out.backward(torch.tensor(g, dtype=torch.float64))
+    ry, rdx, _, _, _, _ = ref_bn(x, np.ones(3), np.zeros(3), np.zeros(3), np.ones(3), True, 0.1, 1e-5, g)
+    np.testing.assert_allclose(out.detach().numpy(), ry, rtol=1e-9, atol=1e-9)
+    np.testing.assert_allclose(tx.grad.numpy(), rdx, rtol=1e-9, atol=1e-9)

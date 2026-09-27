@@ -10,7 +10,7 @@ from std.python import PythonObject
 from std.math import sqrt
 from checks.numerics import ftz, identical_div, identical_mul, identical_mul_add, identical_pow64, identical_sqrt
 from sequence.exec import Exec
-from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_ROW, OP_AF_COL, OP_AF_RMEAN, OP_AF_UPDATE_MAT, OP_AF_VEC, OP_AF_DENOM, OP_AF_APPLY, OP_SEG_SUMSQ, OP_LAMB_UPD, OP_LAMB_RATIO, OP_LAMB_APPLY, OP_LN_FWD, OP_LN_BWD_X, OP_LN_BWD_W, OP_THETA, OP_CROSTON, OP_ETS, OP_GARCH, OP_DIVS, OP_FILL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD, OPT_NADAM
+from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_ROW, OP_AF_COL, OP_AF_RMEAN, OP_AF_UPDATE_MAT, OP_AF_VEC, OP_AF_DENOM, OP_AF_APPLY, OP_SEG_SUMSQ, OP_LAMB_UPD, OP_LAMB_RATIO, OP_LAMB_APPLY, OP_LN_FWD, OP_LN_BWD_X, OP_LN_BWD_W, OP_THETA, OP_CROSTON, OP_ETS, OP_GARCH, OP_PROPHET_FEATURES, OP_PROPHET_FIT, OP_PROPHET_PREDICT, OP_MOE_ROUTE, OP_MOE_HIDDEN, OP_MOE_OUT, OP_DIVS, OP_FILL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD, OPT_NADAM
 from sequence.recurrent import gemm
 from sequence.mlp_fit import MLPNet, mlp_fit, mlp_predict
 from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, opt_scalars, opt_step, rnn_fit, rnn_predict
@@ -848,3 +848,195 @@ def garch_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -
     ex.download(fptr(addrs[3], "sigma"), Sg, B * n)
     ex.download(fptr(addrs[4], "forecast"), F, B * h)
     return PythonObject(B)
+
+
+def _prophet_X[E: Exec](mut ex: E, frac_addr: PythonObject, orders_addr: PythonObject, h_addr: PythonObject,
+                        N: Int, ns: Int, nh: Int, K: Int) raises -> FP:
+    var X = ex.alloc(N * K)
+    var Fr = ex.alloc(N * max(ns, 1))
+    var Od = ex.alloc(max(ns, 1))
+    var H = ex.alloc(N * max(nh, 1))
+    if ns > 0:
+        ex.upload(Fr, fptr(frac_addr, "frac"), N * ns)
+        ex.upload(Od, fptr(orders_addr, "orders"), ns)
+    if nh > 0:
+        ex.upload(H, fptr(h_addr, "holidays"), N * nh)
+    var a = Args()
+    a.p0 = Fr
+    a.p1 = Od
+    a.p2 = H
+    a.p3 = X
+    a.i0 = ns
+    a.i1 = nh
+    a.i2 = K
+    if K > 0:
+        ex.launch[OP_PROPHET_FEATURES](a, N)
+    return X
+
+
+def prophet_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
+    """The Prophet-style fit over a batch of series sharing t
+    (`sequence/prophet.mojo`). addrs = [y (B, N), t (N, scaled), frac (N, ns),
+    orders (ns, as floats), holidays (N, nh), changepoints (S, scaled),
+    prior scales (K), params (B, 3 + S + K) out, info (B, 4) out];
+    ip = [B, N, ns, nh, K, S, multiplicative, max_iter]; fp = [tau]."""
+    if len(addrs) != 9 or len(ip) != 8 or len(fp) != 1:
+        raise Error("prophet_fit: requires 9 addresses, 8 integer and 1 float parameters")
+    var B = ival(ip, 0)
+    var N = ival(ip, 1)
+    var ns = ival(ip, 2)
+    var nh = ival(ip, 3)
+    var K = ival(ip, 4)
+    var S = ival(ip, 5)
+    if B < 1 or N < 2 or ns < 0 or nh < 0 or K < 0 or S < 0:
+        raise Error("prophet_fit: B >= 1, N >= 2 and nonnegative counts")
+    var P = 3 + S + K
+    var stride = N + P + (6 + 2 * 5) * P + 2 * 5
+    var X = _prophet_X(ex, addrs[2], addrs[3], addrs[4], N, ns, nh, K)
+    var Y = ex.alloc(B * N)
+    ex.upload(Y, fptr(addrs[0], "y"), B * N)
+    var T = ex.alloc(N)
+    ex.upload(T, fptr(addrs[1], "t"), N)
+    var C = ex.alloc(max(S, 1))
+    if S > 0:
+        ex.upload(C, fptr(addrs[5], "changepoints"), S)
+    var Sg = ex.alloc(max(K, 1))
+    if K > 0:
+        ex.upload(Sg, fptr(addrs[6], "prior scales"), K)
+    var Pm = ex.alloc(B * P)
+    var I = ex.alloc(B * 4)
+    var W = ex.alloc(B * stride)
+    var a = Args()
+    a.p0 = Y
+    a.p1 = T
+    a.p2 = X
+    a.p3 = C
+    a.p4 = Sg
+    a.p5 = Pm
+    a.p6 = I
+    a.p7 = W
+    a.i0 = N
+    a.i1 = K
+    a.i2 = S
+    a.i3 = ival(ip, 6)
+    a.i4 = stride
+    a.i5 = ival(ip, 7)
+    a.f0 = fval(fp, 0)
+    ex.launch[OP_PROPHET_FIT](a, B)
+    ex.sync()
+    ex.download(fptr(addrs[7], "params"), Pm, B * P)
+    ex.download(fptr(addrs[8], "info"), I, B * 4)
+    return PythonObject(B)
+
+
+def prophet_predict_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
+    """addrs = [params (B, P), info (B, 4), t (M, scaled), frac (M, ns),
+    orders (ns), holidays (M, nh), changepoints (S), yhat (B, M) out,
+    trend (B, M) out]; ip = [B, M, ns, nh, K, S, multiplicative]."""
+    if len(addrs) != 9 or len(ip) != 7:
+        raise Error("prophet_predict: requires 9 addresses and 7 integer parameters")
+    var B = ival(ip, 0)
+    var M = ival(ip, 1)
+    var ns = ival(ip, 2)
+    var nh = ival(ip, 3)
+    var K = ival(ip, 4)
+    var S = ival(ip, 5)
+    if B < 1 or M < 1:
+        raise Error("prophet_predict: B, M >= 1")
+    var P = 3 + S + K
+    var X = _prophet_X(ex, addrs[3], addrs[4], addrs[5], M, ns, nh, K)
+    var Pm = ex.alloc(B * P)
+    ex.upload(Pm, fptr(addrs[0], "params"), B * P)
+    var I = ex.alloc(B * 4)
+    ex.upload(I, fptr(addrs[1], "info"), B * 4)
+    var T = ex.alloc(M)
+    ex.upload(T, fptr(addrs[2], "t"), M)
+    var C = ex.alloc(max(S, 1))
+    if S > 0:
+        ex.upload(C, fptr(addrs[6], "changepoints"), S)
+    var Yh = ex.alloc(B * M)
+    var Tr = ex.alloc(B * M)
+    var a = Args()
+    a.p0 = Pm
+    a.p1 = I
+    a.p2 = T
+    a.p3 = X
+    a.p4 = C
+    a.p5 = Yh
+    a.p6 = Tr
+    a.i0 = M
+    a.i1 = K
+    a.i2 = S
+    a.i3 = ival(ip, 6)
+    ex.launch[OP_PROPHET_PREDICT](a, B * M)
+    ex.sync()
+    ex.download(fptr(addrs[7], "yhat"), Yh, B * M)
+    ex.download(fptr(addrs[8], "trend"), Tr, B * M)
+    return PythonObject(B * M)
+
+
+def moe_forward_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
+    """The Mixtral sparse MoE block forward (`sequence/moe.mojo`).
+    addrs = [x (T, D), router (E, D), gate_up (E, 2F, D), down (E, D, F),
+    y (T, D) out, logits (T, E) out, selected (T, k) out as floats,
+    weights (T, k) out]; ip = [T, D, F, E, k, renormalise]."""
+    if len(addrs) != 8 or len(ip) != 6:
+        raise Error("moe_forward: requires 8 addresses and 6 integer parameters")
+    var T = ival(ip, 0)
+    var D = ival(ip, 1)
+    var F = ival(ip, 2)
+    var En = ival(ip, 3)
+    var k = ival(ip, 4)
+    if T < 1 or D < 1 or F < 1 or En < 1 or k < 1 or k > En:
+        raise Error("moe_forward: T, D, F, E >= 1 and 1 <= k <= E")
+    var X = ex.alloc(T * D)
+    ex.upload(X, fptr(addrs[0], "x"), T * D)
+    var Wg = ex.alloc(En * D)
+    ex.upload(Wg, fptr(addrs[1], "router"), En * D)
+    var Gu = ex.alloc(En * 2 * F * D)
+    ex.upload(Gu, fptr(addrs[2], "gate_up_proj"), En * 2 * F * D)
+    var Dn = ex.alloc(En * D * F)
+    ex.upload(Dn, fptr(addrs[3], "down_proj"), En * D * F)
+    var Y = ex.alloc(T * D)
+    var L = ex.alloc(T * En)
+    var Sel = ex.alloc(T * k)
+    var W = ex.alloc(T * k)
+    var Pr = ex.alloc(T * En)
+    var H = ex.alloc(T * k * F)
+    var a = Args()
+    a.p0 = X
+    a.p1 = Wg
+    a.p2 = L
+    a.p3 = Sel
+    a.p4 = W
+    a.p5 = Pr
+    a.i0 = D
+    a.i1 = En
+    a.i2 = k
+    a.i3 = ival(ip, 5)
+    ex.launch[OP_MOE_ROUTE](a, T)
+    var b = Args()
+    b.p0 = X
+    b.p1 = Gu
+    b.p2 = Sel
+    b.p3 = H
+    b.i0 = D
+    b.i1 = F
+    b.i2 = k
+    ex.launch[OP_MOE_HIDDEN](b, T * k * F)
+    var c = Args()
+    c.p0 = H
+    c.p1 = Dn
+    c.p2 = Sel
+    c.p3 = W
+    c.p4 = Y
+    c.i0 = D
+    c.i1 = F
+    c.i2 = k
+    ex.launch[OP_MOE_OUT](c, T * D)
+    ex.sync()
+    ex.download(fptr(addrs[4], "y"), Y, T * D)
+    ex.download(fptr(addrs[5], "logits"), L, T * En)
+    ex.download(fptr(addrs[6], "selected"), Sel, T * k)
+    ex.download(fptr(addrs[7], "weights"), W, T * k)
+    return PythonObject(T * D)
