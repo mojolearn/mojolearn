@@ -1053,6 +1053,7 @@ price-linalg-identity = "sh tools/price_linalg_identity.sh"
 # reachable only by someone who already knows it is there.
 check-gemm-identity = "mojo run -I . core/gemm_identity_check.mojo"
 check-column-stats-identity = "mojo run -I . core/column_stats_identity_check.mojo"
+check-host-parallel = "mojo run -I . core/host_parallel_check.mojo"
 
 # THE COLUMN MAY NOT REACH THE PRODUCT (IDENTITY_PATHS rows 27-28). Compiles
 # bench/linalg_trace_main.mojo against the APPLE, NVIDIA and AMD comptime
