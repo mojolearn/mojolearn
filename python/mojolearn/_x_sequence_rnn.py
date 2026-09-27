@@ -35,7 +35,7 @@ _OPT_DEFAULTS = {
 
 
 def binding(numeric_mode=None):
-    return _backend.binding(_BINDING, numeric_mode)
+    return _backend.binding("_mojolearn_x_sequence", numeric_mode)
 
 
 def optimizer_arguments(name, options):
