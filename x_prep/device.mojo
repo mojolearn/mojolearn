@@ -18,8 +18,12 @@ def prep_kernel[OP: Int](f: FP, q: IP, total: Int32):
 
 
 def run_program_device(arena_addr: Int, arena_len: Int, prog_addr: Int, stages: Int) raises:
-    var host_f = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=arena_addr)
-    var host_q = MutPointer[Int32, MutAnyOrigin](unsafe_from_address=prog_addr)
+    run_program_device_ptr(
+        FP(unsafe_from_address=arena_addr), arena_len, IP(unsafe_from_address=prog_addr), stages
+    )
+
+
+def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int) raises:
     for s in range(stages):
         var op = Int(host_q.unsafe_load(s * STAGE_INTS))
         if op < 0 or op >= N_OPS:

@@ -646,7 +646,29 @@ yet)` line with its table rows, in the ledger's columns.
 
 ### `prep`: rows 140-149
 
-(no rows yet)
+Every prep and naive Bayes / discriminant analysis unit (`x_prep/*.mojo`,
+`naive_bayes/*.mojo`) is ONE function run by the device runner (a thread per
+unit) and by the host runner (a loop), so CPU == GPU is by construction; the
+rows below are the seams inside the units. One check driver,
+`x_prep/seams/prep_check.mojo` (oracles in `prep_oracle.mojo`), runs each
+seam's shipped unit on the host AND the device, after showing its fixture
+separates the pinned spelling from the unpinned one; one sabotage patch per
+seam under `x_prep/seams/sabotage/` (listed in `tools/identity_lanes/prep.checks`).
+
+| row | pathway | what moves bits | move | status |
+|---|---|---|---|---|
+| 140 | **folds** (every sum in a unit: `col_stats_unit`, `class_stats_unit`, `matmul_unit`, the NB/DA/iterative/statistics units) | pairwise or vendor-reduction order of a float sum | PIN, DEVIATION 5400: rows ascending inside one unit, one rounding per add | `check_fold_order` (2^60, 1, -2^60, 1 separates ascending from descending), arm `seam_5400_fold.patch` RED; 28 lanes CPU == CUDA (H100, 2026-09-27) |
+| 141 | **products meeting an add** (`matmul_unit` and every `add(mul(..))` in the lane) | an FMA contraction of `acc + a*b` | PIN, DEVIATION 5401: `identical_mul` rounds the product first | `check_contraction` (fixture separates fused from pinned), arm `seam_5401_contraction.patch` RED |
+| 142 | **sort order** (`heap_sort` by `key`: encoders' categories, quantiles, medians, KBins, QuantileTransformer, SplineTransformer knots) | -0.0 vs +0.0 and NaN placement under a value compare | PIN, DEVIATION 5402: a total order on the words (-0.0 < +0.0, NaN last) | `check_sort_key`, arm `seam_5402_sort_key.patch` RED |
+| 143 | **empty and zero-width statistics** (`col_stats_unit` all-NaN column, `zero_to_one`, the spline's 0/0 knot span, `row_softmax_unit`'s all -inf row) | 0/0: a NaN with the vendor's payload (Clause B) | REPLACE, DEVIATION 5403: the reference's value (0, 1, de Boor's 0/0 = 0, uniform) by test, never computed | `check_empty_guard`, arm `seam_5403_empty_guard.patch` RED |
+| 144 | **ties** (`row_argmax_unit` predict, `mode_cols_unit`, the eigenpair sort, SelectKBest/RFE in Python) | first vs last maximum | PIN, DEVIATION 5404: the lower index wins | `check_first_max`, arm `seam_5404_first_max.patch` RED |
+| 145 | **eigenvector sign** (`eigh_unit`: LDA scalings / transform, QDA rotations, IterativeImputer's BayesianRidge) | an SVD/eigensolver's arbitrary sign per vector | PIN, DEVIATION 5405: cyclic Jacobi in fixed sweep order; the largest-magnitude component (first on a tie) positive | `check_eigen_sign`, arm `seam_5405_eigen_sign.patch` RED |
+| 146 | **the noise draw** (`gauss`: mutual_info's tie-breaking noise) | the RNG family and its uniform mapping | PIN, DEVIATION 5406: splitmix64 of (seed, element), top 24 bits, Box-Muller with the portable log / cos | `check_gauss_mapping` (fixture separates top from low 24 bits), arm `seam_5406_rng_mapping.patch` RED |
+| 147 | **neighbour-radius counts** (`mi_cc_unit`, `mi_cd_unit`) | `<= nextafter(r, 0)` spelled `<= r` | PIN, DEVIATION 5407: `dist < r`, `dist == 0` at r == 0 | `check_radius_boundary`, arm `seam_5407_radius.patch` RED |
+| 148 | **operand flush** (`ld` in every unit) | a subnormal read raw on one column and flushed on another | PIN, DEVIATION 5408: every float operand through `ftz` at load | `check_operand_ftz` (a negative subnormal loads as -0.0), arm `seam_5408_operand_ftz.patch` RED |
+| 149 | **percentile interpolation** (`quantile_unit`: RobustScaler, SimpleImputer median, QuantileTransformer, spline quantile knots; `kbins_edges_unit` linear) | `a + (b - a) g` vs numpy's two-sided `_lerp` | PIN, DEVIATION 5409: numpy's spelling (`b - (b - a)(1 - g)` from g >= 0.5) | `check_lerp` (fixture separates the two), arm `seam_5409_lerp.patch` RED |
+
+AMD and Apple columns for 140-149: OWED (the AMD box is being acquired; the M2 Pro steward is submitted after).
 
 
 

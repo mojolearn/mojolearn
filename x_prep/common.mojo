@@ -41,6 +41,7 @@ def p(q: IP, k: Int) -> Int:
 
 @always_inline
 def ld(f: FP, i: Int) -> Float32:
+    """DEVIATION 5408: every float operand a unit loads is flushed."""
     return ftz(f.unsafe_load(i))
 
 
@@ -88,7 +89,8 @@ def canon(x: Float32) -> Float32:
 
 @always_inline
 def key(x: Float32) -> UInt32:
-    """A total order on float32 words: negatives below positives, NaN last."""
+    """A total order on float32 words: negatives below positives, -0.0 below
+    +0.0, NaN last (DEVIATION 5402: every sort in the lane orders by it)."""
     if x != x:
         return UInt32(0xFFFFFFFF)
     var b = bitcast[DType.uint32](x)
