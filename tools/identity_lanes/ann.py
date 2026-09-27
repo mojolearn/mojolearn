@@ -189,3 +189,24 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_ann_batch_filter, "ivf-filter")
+
+
+@lane("x-ann-cagra-filter")
+def _(ml, X, yc, yr, Xh=None):
+    """CagraIndex.search(filter=): the x-ann-cagra index (2048 rows, degree
+    16, itopk 32), every third row removed after the traversal over the
+    itopk buffer; 64 queries. Train hashes the graph and the filtered
+    distances and ids."""
+    keep = (np.arange(2048) % 3) != 0
+    m = ml.CagraIndex(graph_degree=16, intermediate_graph_degree=32, n_neighbors=8, itopk_size=32,
+                      n_seeds=16).fit(X[:2048])
+    d, i = m.search(X[2048:2112], filter=keep)
+    return _fit(dict(graph=_h(m.graph_), dist=_h(d), idx=_h(i)), m, lambda e: e.search(Xh[:64], filter=keep))
+
+
+def _ann_batch_cagra_filter(ml, e, Xh):
+    keep = (np.arange(2048) % 3) != 0
+    return [_BatchRows("search", Xh[:64], lambda r: e.search(r, filter=keep))]
+
+
+_batch_decl(_ann_batch_cagra_filter, "x-ann-cagra-filter")

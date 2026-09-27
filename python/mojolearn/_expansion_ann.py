@@ -367,14 +367,28 @@ class CagraIndex(_AnnSaved, NumericModeMixin):
         self.n_features_in_, self.n_rows_, self.graph_degree_ = d, n, deg
         return self
 
-    def search(self, queries):
+    def search(self, queries, filter=None):
+        """`filter`: optional boolean array over the indexed rows; a False row
+        is never returned (cuVS's CAGRA sample filter, applied as cuVS's
+        single-CTA search applies it: after the traversal, over the whole
+        itopk buffer). A removed row still guides the walk. The answer is the
+        first `n_neighbors` kept entries of the itopk buffer in its order
+        (distance, then id); a query with fewer kept entries is padded with
+        (+inf, -1), the IVF filters' padding. Integer selection only: every
+        returned distance is a buffer entry the unfiltered search computes."""
         if not hasattr(self, "graph_"):
             raise ValueError("mojolearn CagraIndex: call fit before search")
+        if filter is not None:
+            return self._search_filtered(queries, filter)
+        return self._search_k(queries, self._p("n_neighbors"))
+
+    def _search_k(self, queries, k):
+        """The traversal, returning the first `k` itopk entries."""
         q, _ = as_f32_c(queries, ndim=2, name="queries")
         m, d = (int(s) for s in q.shape)
         if d != self.n_features_in_:
             raise ValueError(f"mojolearn CagraIndex: queries have {d} features, the index has {self.n_features_in_}")
-        k, L = self._p("n_neighbors"), self._p("itopk_size")
+        L = self._p("itopk_size")
         max_iter = self._p("max_iterations") or L
         n_seeds = self._p("n_seeds") or (L + self._p("search_width") * self.graph_degree_)
         n_seeds = min(n_seeds, self.n_rows_)
@@ -389,6 +403,28 @@ class CagraIndex(_AnnSaved, NumericModeMixin):
             [n, d, deg, m, k, L, self._p("search_width"), max_iter, n_seeds],
         )
         return dist.reshape((m, k)), idx.reshape((m, k))
+
+    def _search_filtered(self, queries, filter):
+        import numpy as np
+        keep = _ann_mask("CagraIndex", filter, self.n_rows_) != 0
+        k = self._p("n_neighbors")
+        bd, bi = self._search_k(queries, self._p("itopk_size"))
+        bd = np.asarray(bd)
+        bi = np.asarray(bi)
+        m = bd.shape[0]
+        dist = np.full((m, k), np.inf, dtype=np.float32)
+        idx = np.full((m, k), -1, dtype=np.int32)
+        for q in range(m):
+            o = 0
+            for s in range(bd.shape[1]):
+                if o == k:
+                    break
+                v = int(bi[q, s])
+                if v >= 0 and keep[v]:
+                    dist[q, o] = bd[q, s]
+                    idx[q, o] = v
+                    o += 1
+        return dist, idx
 
 
 class IVFSQIndex(_AnnSaved, NumericModeMixin):
