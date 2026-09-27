@@ -191,7 +191,8 @@ def flush_deferred(a):
         print(f"flushed {name} to {a.steward}")
 
 
-_REMOTE_LIST = (f"cd {REMOTE_ROOT} 2>/dev/null || exit 0; "
+# the cloud Macs' login shell is zsh, where an unmatched glob is an error
+_REMOTE_LIST = (f"setopt nullglob 2>/dev/null || true; cd {REMOTE_ROOT} 2>/dev/null || exit 0; "
                 "for f in queue/[0-9]*.json working/[0-9]*.json; do [ -f \"$f\" ] && echo \"STATE $f\"; done; "
                 "for f in done/*/verdict.json; do [ -f \"$f\" ] && { echo \"VERDICT $f\"; cat \"$f\"; echo; }; done; true")
 
