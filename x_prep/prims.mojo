@@ -510,3 +510,14 @@ def var_ptp_unit(t: Int, f: FP, q: IP):
         if ptp < v:
             v = ptp
     st(f, p(q, 2) + t, v)
+
+
+def sqsum_cols_unit(t: Int, f: FP, q: IP):
+    """q = [C, rows, d, OUT]; t = column: sum over rows (ascending) of C[r, c]^2
+    (RFE's squared importance, summed over a multi-row coef_)."""
+    var d = p(q, 2)
+    var s = Float32(0)
+    for r in range(p(q, 1)):
+        var v = ld(f, p(q, 0) + r * d + t)
+        s = add(s, mul(v, v))
+    st(f, p(q, 3) + t, s)

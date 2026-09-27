@@ -353,3 +353,15 @@ def _(ml, X, yc, yr, Xh=None):
     m = ml.SelectKBest(ml.mutual_info_regression, k=4).fit(Xs, yr[:1500])
     parts = dict(classif=_h(mc), regression=_h(mr), support=_h(np.array(m.get_support())))
     return _fit(parts, m, lambda e: (e.transform(Xh[:256]),))
+
+
+@lane("x-prep-rfe")
+def _(ml, X, yc, yr, Xh=None):
+    y3 = _prep_three_class(X, yr)
+    m = ml.RFE(ml.LinearDiscriminantAnalysis(), n_features_to_select=5, step=3).fit(X, y3)
+    parts = dict(ranking=_h(m.ranking_), support=_h(np.array(m.support_)), predict=_h(m.predict(X[:256])),
+                 transform=_h(m.transform(X[:256])))
+    return _fit(parts, m, lambda e: (e.predict(Xh[:256]), e.transform(Xh[:256])))
+
+
+_batch_decl(_rows_calls("predict", "transform", sl=slice(0, 256)), "x-prep-rfe")
