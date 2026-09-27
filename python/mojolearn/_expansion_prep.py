@@ -32,7 +32,7 @@ from ._array import Array
 from ._buffer import as_f32_c, addr_ro
 from ._labels import encode_labels, decode_labels
 
-__all__ = ["RobustScaler", "MaxAbsScaler", "OrdinalEncoder", "OneHotEncoder"]
+__all__ = ["RobustScaler", "MaxAbsScaler", "OrdinalEncoder", "OneHotEncoder", "TargetEncoder"]
 
 _BINDING = "_mojolearn_x_prep"
 
@@ -41,6 +41,7 @@ _OPS = dict(
     sort_cols=0, col_stats=1, quantile=2, affine=3, scale_params=4, unique_cols=5, mode_cols=6,
     lookup=7, count_neg=8, onehot=9, i2f=10, f2i=11, binarize=12, matmul=13, row_softmax=14,
     row_argmax=15, class_stats=16, center_rows=17, eigh=18, where_neg=19,
+    te_global=20, te_enc=21, te_apply=22,
 )
 _PARAMS = 14
 _NONE = -1
@@ -421,3 +422,147 @@ class OneHotEncoder(_PrepBase):
         if self.handle_unknown == "error":
             _raise_unknown(pr, neg, d, "OneHotEncoder")
         return pr.get(out, (n, W))
+
+
+# ---------------------------------------------------------------- target encoder
+def _splitmix64(state):
+    state = (state + 0x9E3779B97F4A7C15) & 0xFFFFFFFFFFFFFFFF
+    z = state
+    z = ((z ^ (z >> 30)) * 0xBF58476D1CE4E5B9) & 0xFFFFFFFFFFFFFFFF
+    z = ((z ^ (z >> 27)) * 0x94D049BB133111EB) & 0xFFFFFFFFFFFFFFFF
+    return state, z ^ (z >> 31)
+
+
+def _kfold_assignment(n, n_folds, seed, shuffle=True):
+    """Row -> fold for a shuffled K-fold: a Fisher-Yates permutation drawn
+    from splitmix64(seed) in integer arithmetic (the same on every machine),
+    then numpy KFold's split of the permuted order (the first n % k folds one
+    row longer)."""
+    perm = list(range(n))
+    state = int(seed) & 0xFFFFFFFFFFFFFFFF
+    for i in range(n - 1, 0, -1) if shuffle else ():
+        state, z = _splitmix64(state)
+        j = z % (i + 1)
+        perm[i], perm[j] = perm[j], perm[i]
+    fold = [0] * n
+    start = 0
+    for k in range(n_folds):
+        size = n // n_folds + (1 if k < n % n_folds else 0)
+        for r in perm[start:start + size]:
+            fold[r] = k
+        start += size
+    return fold
+
+
+def _target_kind(y, target_type):
+    """(kind, classes, Y rows as a flat float list with T columns, T)."""
+    from ._labels import flatten_labels
+    labels = flatten_labels(y)
+    if target_type == "continuous" or (target_type == "auto" and labels and all(
+            isinstance(v, numbers.Real) and not isinstance(v, bool) for v in labels)
+            and any(float(v) != int(float(v)) for v in labels)):
+        return "continuous", None, [float(v) for v in labels], 1
+    classes, codes = encode_labels(labels)
+    codes = [int(c) for c in codes]
+    if target_type == "binary" or (target_type == "auto" and len(classes) <= 2):
+        return "binary", classes, [float(c) for c in codes], 1
+    K = len(classes)
+    flat = [0.0] * (len(codes) * K)
+    for i, c in enumerate(codes):
+        flat[i * K + c] = 1.0
+    return "multiclass", classes, flat, K
+
+
+class TargetEncoder(_PrepBase):
+    """sklearn.preprocessing.TargetEncoder over numeric category columns:
+    binary, continuous and multiclass targets, smooth 'auto' (empirical
+    Bayes) or a float. `fit_transform` cross-fits over `cv` shuffled K folds
+    whose order comes from `random_state` (a splitmix64 permutation; the
+    reference draws numpy's). KFold is used for every target type (the
+    reference stratifies a classification target). Float32 throughout.
+    categories other than 'auto' and CV splitter objects are refused."""
+    _parameters = ("categories", "target_type", "smooth", "cv", "shuffle", "random_state")
+
+    def __init__(self, categories="auto", target_type="auto", smooth="auto", cv=5, shuffle=True,
+                 random_state=None):
+        self.categories = categories
+        self.target_type = target_type
+        self.smooth = smooth
+        self.cv = cv
+        self.shuffle = shuffle
+        self.random_state = random_state
+
+    def _check(self):
+        if self.categories != "auto":
+            raise NotImplementedError("mojolearn: TargetEncoder supports categories='auto' only")
+        if self.target_type not in ("auto", "binary", "continuous", "multiclass"):
+            raise ValueError(f"mojolearn: invalid target_type {self.target_type!r}")
+        if not (self.smooth == "auto" or (isinstance(self.smooth, numbers.Real) and self.smooth >= 0)):
+            raise ValueError(f"mojolearn: invalid smooth {self.smooth!r}")
+        if not isinstance(self.cv, numbers.Integral) or self.cv < 2:
+            raise NotImplementedError("mojolearn: TargetEncoder cv must be an integer >= 2")
+
+    def _run(self, arr, y, folds, n_folds, apply_rows_folds):
+        n, d = arr.shape
+        kind, classes, yflat, T = _target_kind(y, self.target_type)
+        if len(yflat) != n * T:
+            raise ValueError("mojolearn: X and y have different numbers of rows")
+        mode = _mode()
+        cats = _fit_categories(mode, arr)
+        cmax = max(c.size for c in cats)
+        F = n_folds
+        pr = _Prog()
+        codes, _neg = _codes(pr, arr, cats)
+        yo = pr.put_list(yflat)
+        fo = pr.put_list(folds if folds is not None else [-1] * n)
+        nco = pr.put_list([c.size for c in cats])
+        meta = pr.alloc(2 * (F + 1) * T)
+        smo = pr.put_scalar(-1.0 if self.smooth == "auto" else float(self.smooth))
+        enc = pr.alloc((F + 1) * d * cmax * T)
+        pr.stage("te_global", (F + 1) * T, yo, n, T, fo, meta)
+        pr.stage("te_enc", (F + 1) * d * cmax * T, codes, n, d, yo, T, fo, cmax, nco, meta, smo, enc)
+        out = _NONE
+        if apply_rows_folds:
+            out = pr.alloc(n * d * T)
+            pr.stage("te_apply", n * d * T, codes, n, d, T, fo, enc, cmax, meta, F, out)
+        pr.run(mode)
+        self.categories_, self.target_type_, self.numeric_mode_, self.n_features_in_ = cats, kind, mode, d
+        self.classes_ = classes
+        self._T, self._cmax = T, cmax
+        full = F * d * cmax * T
+        self._enc = pr.get(enc + full, d * cmax * T)
+        self._meta = pr.get(meta + 2 * F * T, 2 * T)
+        self.encodings_ = [pr.get(enc + full + (j * cmax) * T, cats[j].size * T) for j in range(d)]
+        means = pr.values(meta + 2 * F * T, 2 * T)[0::2]
+        self.target_mean_ = pr.get(meta + 2 * F * T, 1) if T == 1 else Array.from_list(means, "<f4")
+        return pr.get(out, (n, d * T)) if apply_rows_folds else None
+
+    def fit(self, X, y):
+        self._check()
+        self._run(_x2d(X), y, None, 0, False)
+        return self
+
+    def fit_transform(self, X, y):
+        self._check()
+        arr = _x2d(X)
+        n = arr.shape[0]
+        if n < self.cv:
+            raise ValueError(f"mojolearn: cv={self.cv} folds need at least {self.cv} rows")
+        seed = 0 if self.random_state is None else int(self.random_state)
+        folds = _kfold_assignment(n, int(self.cv), seed, bool(self.shuffle))
+        return self._run(arr, y, folds, int(self.cv), True)
+
+    def transform(self, X):
+        self._check_fitted()
+        arr = _x2d(X)
+        self._check_width(arr)
+        n, d = arr.shape
+        T, cmax = self._T, self._cmax
+        pr = _Prog()
+        codes, _neg = _codes(pr, arr, self.categories_)
+        enc = pr.put(self._enc)
+        meta = pr.put(self._meta)
+        out = pr.alloc(n * d * T)
+        pr.stage("te_apply", n * d * T, codes, n, d, T, _NONE, enc, cmax, meta, 0, out)
+        pr.run(self.numeric_mode_)
+        return pr.get(out, (n, d * T))
