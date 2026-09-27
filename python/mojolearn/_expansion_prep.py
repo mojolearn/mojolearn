@@ -54,6 +54,7 @@ _OPS = dict(
     qt_inverse=74, pt_inverse=75, block_argmax=76, ord_inverse=77, cat_gather=78, where_code=79, kbins_inverse=80,
     da_shrink=81, da_pool=82, sym_fn=83, da_intercept=84, evr=85, class_stats_w=86,
     indicator=87, code_counts=88, remap_codes=89, add_arrays=90, gnb_merge=91, cat_counts=92, cat_flp=93,
+    mi_dc=94, mi_dd=95,
 )
 _PARAMS = 14
 _NONE = -1
@@ -3063,61 +3064,141 @@ class SelectKBest(_SelectorMixin):
         return self.fit(X, y).transform(X)
 
 
+def _mi_discrete_mask(discrete_features, d):
+    """The reference's discrete_features: 'auto' (dense X: none), a bool for
+    every column, a bool mask of length d, or column indices (negative ones
+    count from the end)."""
+    if isinstance(discrete_features, str):
+        if discrete_features != "auto":
+            raise ValueError("mojolearn: Invalid string value for discrete_features.")
+        return [False] * d
+    if isinstance(discrete_features, bool) or type(discrete_features).__name__ == "bool_":
+        return [bool(discrete_features)] * d
+    vals = discrete_features.tolist() if hasattr(discrete_features, "tolist") else list(discrete_features)
+    if isinstance(vals, bool):
+        return [vals] * d
+    if vals and all(isinstance(v, bool) for v in vals):
+        if len(vals) != d:
+            raise ValueError(f"mojolearn: discrete_features mask has {len(vals)} entries; X has {d} features")
+        return list(vals)
+    mask = [False] * d
+    for v in vals:
+        if isinstance(v, bool) or not isinstance(v, numbers.Integral):
+            raise ValueError("mojolearn: discrete_features must be 'auto', a bool, a bool mask or indices")
+        j = int(v)
+        if not -d <= j < d:
+            raise IndexError(f"mojolearn: discrete_features index {j} is out of bounds for {d} features")
+        mask[j % d] = True
+    return mask
+
+
 def _mutual_info(X, y, discrete_target, discrete_features, n_neighbors, random_state):
-    if discrete_features not in ("auto", False):
-        raise NotImplementedError("mojolearn: mutual_info with discrete features is not implemented "
-                                  "(dense X: discrete_features='auto' or False)")
+    """The reference's `_estimate_mi`: continuous columns are scaled and
+    noised (row-major over the continuous columns only, as the reference's
+    draw of shape (n, n_continuous)), the 1e-10-scaled noise kept as a
+    second word that breaks exact ties as the reference's float64 sum does
+    (DEVIATION 5407); each column then takes the estimator
+    its kinds name: Kraskov (continuous x, continuous y), Ross (one side
+    discrete: the classes, or a discrete feature's categories against the
+    noised target) or the contingency table (both discrete)."""
     k = int(n_neighbors)
     if not 1 <= k <= 32:
         raise NotImplementedError("mojolearn: mutual_info supports 1 <= n_neighbors <= 32")
     arr = _x2d(X)
     n, d = arr.shape
+    mask = _mi_discrete_mask(discrete_features, d)
+    cont = [j for j in range(d) if not mask[j]]
+    disc = [j for j in range(d) if mask[j]]
+    mode = _mode()
     seed = 0 if random_state is None else int(random_state) & 0x3FFFFFFF
     pr = _Prog()
-    xo = pr.put(arr)
-    st, sc, ma, z = pr.alloc(6 * d), pr.alloc(d), pr.alloc(d), pr.alloc(n * d)
-    pr.stage("col_stats", d, xo, n, d, st)
-    pr.stage("mi_colscale", d, xo, n, d, st, sc, ma)
-    pr.stage("mi_noise", n * d, xo, n, d, sc, ma, 2 * seed, z)
-    term, out = pr.alloc(n * d), pr.alloc(d)
     if discrete_target:
         classes, codes = encode_labels(y)
         if codes.size != n:
             raise ValueError("mojolearn: X and y have different numbers of rows")
         counts = _class_counts(codes, len(classes))
-        used = sum(c for c in counts if c > 1)
+        if cont and max(counts) < 2:
+            raise ValueError("mojolearn: mutual_info: every class has one sample (the reference's "
+                             "neighbour search over the classes with more than one finds 0 samples)")
         yo, lc = pr.put_codes(codes), pr.put_list(counts)
-        pr.stage("mi_cd", n * d, z, n, d, yo, lc, k, term)
-        pr.stage("mi_reduce", d, term, n, d, 1, k, used, out)
     else:
         yv = as_f32_c(y, ndim=1, name="y")[0]
         if yv.size != n:
             raise ValueError("mojolearn: X and y have different numbers of rows")
+    outc = outd = None
+    if cont:
+        dc = len(cont)
+        xo = pr.put(arr if not disc else _gather(arr, cont, mode))
+        st, sc, ma, z, zs = pr.alloc(6 * dc), pr.alloc(dc), pr.alloc(dc), pr.alloc(n * dc), pr.alloc(n * dc)
+        pr.stage("col_stats", dc, xo, n, dc, st)
+        pr.stage("mi_colscale", dc, xo, n, dc, st, sc, ma)
+        pr.stage("mi_noise", n * dc, xo, n, dc, sc, ma, 2 * seed, z, zs + 1)
+    if not discrete_target:
         yo = pr.put(yv)
-        sty, scy, may, zy = pr.alloc(6), pr.alloc(1), pr.alloc(1), pr.alloc(n)
+        sty, scy, may, zy, zys = pr.alloc(6), pr.alloc(1), pr.alloc(1), pr.alloc(n), pr.alloc(n)
         pr.stage("col_stats", 1, yo, n, 1, sty)
         pr.stage("mi_colscale", 1, yo, n, 1, sty, scy, may)
-        pr.stage("mi_noise", n, yo, n, 1, scy, may, 2 * seed + 1, zy)
-        pr.stage("mi_cc", n * d, z, n, d, zy, k, term)
-        pr.stage("mi_reduce", d, term, n, d, 0, k, n, out)
-    pr.run(_mode())
-    return pr.get(out, d)
+        pr.stage("mi_noise", n, yo, n, 1, scy, may, 2 * seed + 1, zy, zys + 1)
+    if cont:
+        term, outc = pr.alloc(n * dc), pr.alloc(dc)
+        if discrete_target:
+            used = sum(c for c in counts if c > 1)
+            pr.stage("mi_cd", n * dc, z, n, dc, yo, lc, k, term, zs + 1)
+            pr.stage("mi_reduce", dc, term, n, dc, 1, k, used, outc)
+        else:
+            pr.stage("mi_cc", n * dc, z, n, dc, zy, k, term, zs + 1, zys + 1)
+            pr.stage("mi_reduce", dc, term, n, dc, 0, k, n, outc)
+    if disc:
+        dd = len(disc)
+        xd = _gather(arr, disc, mode)
+        cats = _fit_categories(mode, xd)
+        kx = [c.size for c in cats]
+        kmax = max(kx)
+        if not discrete_target and n in kx:
+            raise ValueError(f"mojolearn: mutual_info: discrete feature {disc[kx.index(n)]} has one sample per "
+                             "value (the reference's neighbour search finds 0 samples)")
+        xc, _neg = _codes(pr, xd, cats)
+        outd = pr.alloc(dd)
+        if discrete_target:
+            ky = len(classes)
+            stride = kmax * ky + kmax + ky
+            tb = pr.alloc(dd * stride)
+            pr.stage("mi_dd", dd, xc, n, dd, yo, ky, pr.put_list(kx), tb, stride, outd)
+        else:
+            cnti, cntf, term = pr.alloc(dd * kmax), pr.alloc(dd * kmax), pr.alloc(n * dd)
+            pr.stage("code_counts", dd, xc, n, dd, kmax, cnti)
+            pr.stage("i2f", dd * kmax, cnti, cntf)
+            pr.stage("mi_dc", n * dd, zy, n, dd, xc, cntf, kmax, k, term, zys + 1)
+            pr.stage("mi_reduce", dd, term, n, dd, 2, k, 0, outd, cntf, kmax)
+    pr.run(mode)
+    if not disc:
+        return pr.get(outc, d)
+    vals = [0.0] * d
+    for j, v in zip(cont, pr.values(outc, len(cont)) if cont else []):
+        vals[j] = v
+    for j, v in zip(disc, pr.values(outd, len(disc))):
+        vals[j] = v
+    return Array.from_list(vals, "<f4")
 
 
 def mutual_info_classif(X, y, *, discrete_features="auto", n_neighbors=3, copy=True, random_state=None,
                         n_jobs=None):
-    """sklearn.feature_selection.mutual_info_classif for dense continuous X:
-    Ross's k-NN estimator against the classes, float32, brute-force
-    neighbour scans on the device. The tie-breaking noise is drawn from
-    random_state by splitmix64 (the reference draws numpy's)."""
+    """sklearn.feature_selection.mutual_info_classif for dense X: Ross's
+    k-NN estimator against the classes for a continuous feature, the
+    contingency mutual information for a discrete one (discrete_features),
+    float32, brute-force neighbour scans on the device. The tie-breaking
+    noise is drawn from random_state by splitmix64 (the reference draws
+    numpy's)."""
     return _mutual_info(X, y, True, discrete_features, n_neighbors, random_state)
 
 
 def mutual_info_regression(X, y, *, discrete_features="auto", n_neighbors=3, copy=True, random_state=None,
                            n_jobs=None):
-    """sklearn.feature_selection.mutual_info_regression for dense continuous
-    X: the Kraskov k-NN estimator, float32, brute-force neighbour scans on
-    the device; noise from random_state by splitmix64."""
+    """sklearn.feature_selection.mutual_info_regression for dense X: the
+    Kraskov k-NN estimator for a continuous feature, Ross's estimator with
+    the feature's categories as the classes for a discrete one
+    (discrete_features), float32, brute-force neighbour scans on the
+    device; noise from random_state by splitmix64."""
     return _mutual_info(X, y, False, discrete_features, n_neighbors, random_state)
 
 

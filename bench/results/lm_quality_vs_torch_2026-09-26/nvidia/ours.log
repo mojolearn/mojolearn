@@ -1,0 +1,21 @@
+1426 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x111b80000000, nodemask=1)
+1426 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x111bc0000000, nodemask=1)
+1426 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x111c00000000, nodemask=1)
+{"event": "heldout_before", "mean": 11.04702016711235}
+{"event": "step", "step": 1, "loss": 10.903326034545898, "loss_f32": "412e7406", "seconds": 1.2554620737209916, "ids_sha256": "c9cfaa8fb1358fb7f7b5a53eebd59b9abd169288153d3a4099b30d6703b5fef3"}
+{"event": "step", "step": 2, "loss": 8.291571617126465, "loss_f32": "4104aa47", "seconds": 0.15563360136002302, "ids_sha256": "c0566cdf476743cf528117d89154c53504817a0fc378832117107db6fbdc8e94"}
+{"event": "step", "step": 3, "loss": 57.92415237426758, "loss_f32": "4267b255", "seconds": 0.16098134219646454, "ids_sha256": "7c488589d936ac1c2188a74d02f7a03a667a61a49fa91edac40f621dfb1381c5"}
+{"event": "step", "step": 25, "loss": 10.63044261932373, "loss_f32": "412a164b", "seconds": 0.1599507723003626, "ids_sha256": "a7cb0482770e28cb07c9637cb5b296c6995471f5fb2e2ac68cd2ac2956fa4ea4"}
+{"event": "step", "step": 50, "loss": 6.770452976226807, "loss_f32": "40d8a78d", "seconds": 0.15616371762007475, "ids_sha256": "ab5cad35d955c2a7b76f9ae66408872679190cb9dbf046203a48453b99b64d2b"}
+{"event": "step", "step": 75, "loss": 2.8222320079803467, "loss_f32": "40349f73", "seconds": 0.1561367940157652, "ids_sha256": "4385a957efd2fd1158bc0b77f3edb12e02389f0aaebd040c0bdf8fec1031b43c"}
+{"event": "step", "step": 100, "loss": 3.6070785522460938, "loss_f32": "4066da60", "seconds": 0.15640635136514902, "ids_sha256": "a107463c61d7ab916f5638e01696af2b879a3437b093fe6e3d4eacb36d450e51"}
+{"event": "step", "step": 125, "loss": 2.504613161087036, "loss_f32": "40204b95", "seconds": 0.15745826344937086, "ids_sha256": "60bf055351993f7de7e3f88d55d348c2203a800e822569597396e96a84605242"}
+{"event": "step", "step": 150, "loss": 3.0379672050476074, "loss_f32": "40426e0e", "seconds": 0.1562319053336978, "ids_sha256": "bbfa6da14ae84c38d4e10be87a5d11159ee950fc34192a8dcd1c2a633e0c4f01"}
+{"event": "step", "step": 175, "loss": 3.4609155654907227, "loss_f32": "405d7fa4", "seconds": 0.1565341828390956, "ids_sha256": "dab7f9208e31f139ee71965f501fb3376ff5631d8d38d5ed0232a5d16b85eb57"}
+{"event": "step", "step": 200, "loss": 2.7958619594573975, "loss_f32": "4032ef67", "seconds": 0.15551793482154608, "ids_sha256": "e97bb9e4ba7a1fdb6fdf0dc3ad02e8b5d01aa14a9f1aca248cf7bc24a3d621d9"}
+{"event": "step", "step": 225, "loss": 2.7418696880340576, "loss_f32": "402f7acb", "seconds": 0.1556629966944456, "ids_sha256": "3064887d86373537f107b707b27e3cbf992e260c50435ab37f7d8cf5edbabfe9"}
+{"event": "step", "step": 250, "loss": 2.6020774841308594, "loss_f32": "40268870", "seconds": 0.15591521374881268, "ids_sha256": "d2cecfafeac6df753fc073ea6709856edb4893fd5d07bf1ba97084e0f3a02131"}
+{"event": "step", "step": 275, "loss": 1.8825263977050781, "loss_f32": "3ff0f6a0", "seconds": 0.1560856755822897, "ids_sha256": "b604d5b7c2c60eb960da698510698bd42a4f669e499d2b53993881c97af78aad"}
+{"event": "step", "step": 300, "loss": 2.2213988304138184, "loss_f32": "400e2b66", "seconds": 0.15631997399032116, "ids_sha256": "891e2e8bbf0630a425ee675a6341f70bb356bfc76ed27808e5b457729c5f7977"}
+{"event": "heldout_after", "mean": 2.6502616852521896}
+{"event": "result", "side": "ours", "out": "/root/gemm_leg_out/lmq/ours.json", "final_loss": 2.2213988304138184, "heldout_after": 2.6502616852521896}

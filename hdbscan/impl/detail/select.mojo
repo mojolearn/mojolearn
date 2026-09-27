@@ -7,8 +7,8 @@ Reference: `cuml-v26.08.00/cpp/src/hdbscan/detail/select.cuh`
 `leaf` (`:264-286`) and `select_clusters` (`:379-452`), plus
 `detail/kernels/select.cuh::propagate_cluster_negation_kernel`
 (`:24-45`). `cluster_epsilon_search` (`:301-363`) and its kernel
-(`:47-104`) are NOT IMPLEMENTED and raise by name; `hdbscan/NOT_IMPLEMENTED.tsv` has
-the row. `Select::parent_csr` (`:103-130`) lives in `detail/utils.mojo`
+(`:47-104`) run on the host (DEVIATION 5115,
+`utils.mojo::cluster_epsilon_search_host`, shared with the CPU oracle). `Select::parent_csr` (`:103-130`) lives in `detail/utils.mojo`
 beside its twin, which is the one rename this file makes and
 
 
@@ -16,8 +16,8 @@ EXCESS OF MASS IS THE DEFAULT AND IS THE ONE THIS LANE SHIPS
 (`hdbscan.hpp:197`, `cluster_selection_method = EOM`). LEAF is implemented too
 because it is nine lines of integer work and CONTRIBUTING.md (Non-default paths) is
 explicit that a switch with an unexercised side is an unchecked path:
-`check_hdbscan_selection_leaf` runs it, and the same rule is why
-`cluster_selection_epsilon` is REFUSED rather than quietly ignored.
+`check_hdbscan_selection_leaf` runs it; `cluster_selection_epsilon` is run by
+the verifier lane x-cluster-hdbscan-epsilon.
 
 ======================================================================
 DEVIATION BLOCK -- DEVIATION 1605. THE EXCESS-OF-MASS LOOP RUNS ON THE
@@ -113,7 +113,11 @@ from hdbscan.checks.hdbscan_sabotage import (
     HDB_SAB_NONE,
 )
 from hdbscan.impl.condensed_hierarchy import CondensedHierarchy
-from hdbscan.impl.detail.utils import make_cluster_tree, select_parent_csr
+from hdbscan.impl.detail.utils import (
+    cluster_epsilon_search_host,
+    make_cluster_tree,
+    select_parent_csr,
+)
 from checks.numerics import ftz, identical_mul_add
 
 
@@ -374,28 +378,6 @@ def leaf(
     _ = h^
 
 
-def cluster_epsilon_search(cluster_selection_epsilon: Float32) raises:
-    """`select.cuh:301-363` and `kernels/select.cuh:47-104`. NOT IMPLEMENTED;
-    raises by name."""
-    raise Error(
-        "hdbscan.cluster_epsilon_search: cluster_selection_epsilon="
-        + String(cluster_selection_epsilon)
-        + " refused by name; the epsilon search is NOT IMPLEMENTED (rung 2)."
-        " It re-sorts the cluster tree's parents and lambdas BY CHILD in"
-        " place (select.cuh:328-329), then walks each selected cluster"
-        " toward the root in a do/while whose index arithmetic depends on"
-        " that re-sort (kernels/select.cuh:70-100, the `child = child_idx +"
-        " 1` offset), and upstream's own comment at select.cuh:418-419"
-        " records a confirmed reference-implementation bug in the"
-        " neighbouring LEAF branch (scikit-learn-contrib/hdbscan#476) that"
-        " is commented out rather than fixed. Implementing it means deciding"
-        " which of two behaviors is the algorithm, which is a question for"
-        " a reading of their tree, not for this rung. Use"
-        " cluster_selection_epsilon=0.0, which is their default"
-        " (hdbscan.hpp:136)"
-    )
-
-
 def select_clusters(
     ctx: DeviceContext,
     condensed_tree: CondensedHierarchy,
@@ -440,9 +422,7 @@ def select_clusters(
         if h_isc[i] != Int32(0):
             n_selected_clusters += 1
 
-    # `:429-451` the epsilon search. Refused by name rather than skipped,
-    # so a caller who sets the parameter learns that it does nothing here
-    # instead of getting a silently different partition.
+    # `:429-451` the epsilon search (DEVIATION 5115).
     if cluster_selection_epsilon != Float32(0.0) and cluster_tree.n_edges > 0:
         var epsilon_search = True
         # `:431` no epsilon search if no clusters were selected
@@ -454,7 +434,20 @@ def select_clusters(
                 if h_isc[0] != Int32(0) and allow_single_cluster:
                     epsilon_search = False
         if epsilon_search:
-            cluster_epsilon_search(cluster_selection_epsilon)
+            # DEVIATION 5115: the search on the host, the same function the
+            # CPU oracle calls, over the selection just downloaded.
+            cluster_epsilon_search_host(
+                cluster_tree, h_isc, n_clusters, cluster_selection_epsilon,
+                allow_single_cluster,
+            )
+            var up = h_isc.copy()
+            ctx.enqueue_copy(dst_buf=is_cluster, src_ptr=up.unsafe_ptr())
+            ctx.synchronize()
+            _ = up^
+            n_selected_clusters = 0
+            for i in range(n_clusters):
+                if h_isc[i] != Int32(0):
+                    n_selected_clusters += 1
     _ = cluster_tree^
     return n_selected_clusters
 

@@ -57,25 +57,19 @@ Sanity tests need scikit-learn: on the pod it is in /root/skl
 | option parity (on lane/algos-prep2, steward pending): PolynomialFeatures order='F' (same bits, column-major), OrdinalEncoder / OneHotEncoder categories=<list> | (this commit) | x-prep-encoder-categories AGREE (--pass 2), DISAGREE under e2e_store_branch; x-prep-polynomial-features SAME BITS |
 | steward: 1790529624248 / 1790529633391 (4de76eb6e1) PASS m2pro + do-amd; 1790530038647 (x-prep-simple-imputer-indicator) PASS; 1790535515159 / 1790535524761 (d2e61ed9d3: LDA/QDA solvers, NB sample_weight, stratified TargetEncoder folds, seam 5401 fix) PASS | - | PASS |
 | option parity (on lane/algos-prep2, steward pending): OneHotEncoder / OrdinalEncoder min_frequency, max_categories, handle_unknown 'infrequent_if_exist' / 'warn', OneHotEncoder drop=<list>; LabelBinarizer multilabel y; SimpleImputer strategy=<callable>; LDA / QDA covariance_estimator; TargetEncoder categories=<list>, cv=<splitter> / (train, test) pairs; partial_fit for GaussianNB, MultinomialNB, ComplementNB, BernoulliNB, CategoricalNB (category_count_ exposed); KBinsDiscretizer every numpy quantile_method. New units indicator, code_counts, remap_codes, add_arrays, gnb_merge, cat_counts, cat_flp (ops 87-93). New lanes x-prep-user-objects, x-prep-nb-partial (sum), x-prep-infrequent, x-prep-label-binarizer-multilabel, x-prep-kbins-methods (store) | (this commit) | the 43 selected lanes AGREE (--pass 2, H100, evidence run-parity2); the 5 new lanes DISAGREE under e2e_host_branch / e2e_store_branch and AGREE after reversal; the 38 existing lanes SAME BITS vs run-edges; test_x_prep_parity PASS on GPU and CPU (scikit-learn 1.9.1); test_host_surface 196 passed; test_lane_select OK |
+| option parity: mutual_info discrete_features=True / mask / indices (contingency MI unit mi_dd; Ross with a feature's categories against the noised target, unit mi_dc); FIX at the root: the reference's 1e-10 tie-breaking noise vanished in the float32 add (tied columns read MI 0), now kept as a second word and every distance compared as a (primary, noise) pair (DEVIATION 5407 widened, IDENTITY_PATHS row 147, seam arm 5407 regenerated); singleton classes / categories refused as the reference | (this commit) | 44 selected lanes AGREE (--pass 2 with the seam arms, H100, evidence run-mi); x-prep-mi-discrete and x-prep-mutual-info DISAGREE under e2e_host_branch, AGREE after reversal (sab-mi); every other lane SAME BITS vs run-parity2; x-prep-mutual-info moved only on its tie fixtures (intended); test_x_prep_selection PASS on GPU and CPU |
 
 ## Next
 PHASE: option parity (2 in the LANE CHARTER at the top of docs/lanes/ALGORITHM_EXPANSION_PLAN.md), still open.
 The charter makes the family include the EXISTING members too: StandardScaler, MinMaxScaler
 (python/mojolearn/preprocessing.py, binding _mojolearn_preprocessing) and resampling (bootstrap,
 permutation_test, monte_carlo_integrate; python/mojolearn/resample.py). Their parity is owed.
-- Steward: two requests per commit (sum lanes + e2e_host_branch, store lanes + e2e_store_branch;
-  lane lists in ~/mojolearn-evidence/algos-prep/{sum_lanes,store_lanes}.txt, which include every lane
-  so far). Merge gate (CURRENT DIRECTIVES 0000b): (m2pro OR m3ultra) PASS and do-amd PASS.
-  MERGED to main (f2f66525a): score edges / encoder categories / order F (requests 1790537091369 /
-  1790537100516 at 23b11a7ba5, m2pro + do-amd PASS). NOT YET MERGED (branch lane/algos-prep2): the parity batch (requests 1790542790533 /
-  1790542801200 at bf2bc9f081; the later requests cover every lane, so their PASS is enough). Next session: run
-  `apple_steward.py status`; when 1790542790533 and 1790542801200 pass the gate, `git fetch origin && git
-  merge origin/main && git push origin HEAD:main`; on FAIL fix at the root and resubmit.
+- Merge gate (CURRENT DIRECTIVES 0000b, 2026-09-27): the pod only (lane check AGREE CPU == NVIDIA, sabotage
+  bites, existing bits unchanged, test_host_surface, test_lane_select when its inputs change). Steward
+  verdicts are post-merge: ONE batched request per lane per hour (sum lanes + e2e_host_branch; store lanes +
+  e2e_store_branch; lists in ~/mojolearn-evidence/algos-prep/{sum_lanes,store_lanes}.txt). A FAIL is a fix commit.
+  The parity batch (bf2bc9f08) and mutual_info discrete are MERGED (this commit).
 - Option parity still NOT IMPLEMENTED (x_prep/NOT_IMPLEMENTED.tsv), in order:
-  1. mutual_info discrete_features=True / mask / indices: discrete x + discrete y is the contingency
-     MI (sklearn mutual_info_score; a new unit over per-column codes from _fit_categories + lookup);
-     discrete x + continuous y is mi_cd with the roles swapped (labels = the feature's codes, Z = the
-     noised y), needing a per-column NUSED in mi_reduce; discrete columns get no scaling or noise.
   2. KBinsDiscretizer sample_weight: quantile with averaged_inverted_cdf / inverted_cdf only (others
      ValueError, as the reference): the weighted percentile over DISTINCT values with their summed
      weights (equivalent to sklearn `_weighted_percentile`; zero-weight groups skipped, the p = 0 level
