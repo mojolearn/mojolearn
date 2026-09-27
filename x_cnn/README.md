@@ -18,7 +18,10 @@ Dropout2d, BasicBlock, CNNClassifier, GCNConv, SAGEConv.
   5702 BatchNorm folds, 5703 Dropout2d Philox mask, 5704 SpMM row folds,
   5705 NaN canon and the softmax +inf limit, 5706 max-pool tie,
   5707 avg-pool division, 5708 softmax exp-sum order, 5709 SGD without FMA,
-  5710 GCN normalization order.
+  5710 GCN normalization order, 5711 pad backward gather order,
+  5712 adaptive average pooling backward gather order, 5713 SAGE max
+  backward (ties split, targets ascending), 5714 row L2 normalize fold,
+  5715 Adam/AdamW without FMA.
 - Check: `tools/with_identical_mode.sh pixi run mojo run -I . x_cnn/checks/seams_check.mojo`;
   sabotage arms `checks/sabotage/seam_57xx_*.patch`; the lane check
   `tools/algos_lane_check.sh <x-cnn lanes> --pass 2`.

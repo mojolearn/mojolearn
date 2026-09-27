@@ -10,7 +10,7 @@ from std.python import PythonObject
 from std.math import sqrt
 from checks.numerics import ftz, identical_div, identical_mul, identical_mul_add, identical_pow64, identical_sqrt
 from sequence.exec import Exec
-from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_ROW, OP_AF_COL, OP_AF_RMEAN, OP_AF_UPDATE_MAT, OP_AF_VEC, OP_AF_DENOM, OP_AF_APPLY, OP_SEG_SUMSQ, OP_LAMB_UPD, OP_LAMB_RATIO, OP_LAMB_APPLY, OP_LN_FWD, OP_LN_BWD_X, OP_LN_BWD_W, OP_THETA, OP_CROSTON, OP_ETS, OP_GARCH, OP_PROPHET_FEATURES, OP_PROPHET_FIT, OP_PROPHET_PREDICT, OP_DIVS, OP_FILL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD, OPT_NADAM
+from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_ROW, OP_AF_COL, OP_AF_RMEAN, OP_AF_UPDATE_MAT, OP_AF_VEC, OP_AF_DENOM, OP_AF_APPLY, OP_SEG_SUMSQ, OP_LAMB_UPD, OP_LAMB_RATIO, OP_LAMB_APPLY, OP_LN_FWD, OP_LN_BWD_X, OP_LN_BWD_W, OP_THETA, OP_CROSTON, OP_ETS, OP_GARCH, OP_PROPHET_FEATURES, OP_PROPHET_FIT, OP_PROPHET_PREDICT, OP_MOE_ROUTE, OP_MOE_HIDDEN, OP_MOE_OUT, OP_DIVS, OP_FILL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD, OPT_NADAM
 from sequence.recurrent import gemm
 from sequence.mlp_fit import MLPNet, mlp_fit, mlp_predict
 from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, opt_scalars, opt_step, rnn_fit, rnn_predict
@@ -973,3 +973,70 @@ def prophet_predict_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject
     ex.download(fptr(addrs[7], "yhat"), Yh, B * M)
     ex.download(fptr(addrs[8], "trend"), Tr, B * M)
     return PythonObject(B * M)
+
+
+def moe_forward_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
+    """The Mixtral sparse MoE block forward (`sequence/moe.mojo`).
+    addrs = [x (T, D), router (E, D), gate_up (E, 2F, D), down (E, D, F),
+    y (T, D) out, logits (T, E) out, selected (T, k) out as floats,
+    weights (T, k) out]; ip = [T, D, F, E, k, renormalise]."""
+    if len(addrs) != 8 or len(ip) != 6:
+        raise Error("moe_forward: requires 8 addresses and 6 integer parameters")
+    var T = ival(ip, 0)
+    var D = ival(ip, 1)
+    var F = ival(ip, 2)
+    var En = ival(ip, 3)
+    var k = ival(ip, 4)
+    if T < 1 or D < 1 or F < 1 or En < 1 or k < 1 or k > En:
+        raise Error("moe_forward: T, D, F, E >= 1 and 1 <= k <= E")
+    var X = ex.alloc(T * D)
+    ex.upload(X, fptr(addrs[0], "x"), T * D)
+    var Wg = ex.alloc(En * D)
+    ex.upload(Wg, fptr(addrs[1], "router"), En * D)
+    var Gu = ex.alloc(En * 2 * F * D)
+    ex.upload(Gu, fptr(addrs[2], "gate_up_proj"), En * 2 * F * D)
+    var Dn = ex.alloc(En * D * F)
+    ex.upload(Dn, fptr(addrs[3], "down_proj"), En * D * F)
+    var Y = ex.alloc(T * D)
+    var L = ex.alloc(T * En)
+    var Sel = ex.alloc(T * k)
+    var W = ex.alloc(T * k)
+    var Pr = ex.alloc(T * En)
+    var H = ex.alloc(T * k * F)
+    var a = Args()
+    a.p0 = X
+    a.p1 = Wg
+    a.p2 = L
+    a.p3 = Sel
+    a.p4 = W
+    a.p5 = Pr
+    a.i0 = D
+    a.i1 = En
+    a.i2 = k
+    a.i3 = ival(ip, 5)
+    ex.launch[OP_MOE_ROUTE](a, T)
+    var b = Args()
+    b.p0 = X
+    b.p1 = Gu
+    b.p2 = Sel
+    b.p3 = H
+    b.i0 = D
+    b.i1 = F
+    b.i2 = k
+    ex.launch[OP_MOE_HIDDEN](b, T * k * F)
+    var c = Args()
+    c.p0 = H
+    c.p1 = Dn
+    c.p2 = Sel
+    c.p3 = W
+    c.p4 = Y
+    c.i0 = D
+    c.i1 = F
+    c.i2 = k
+    ex.launch[OP_MOE_OUT](c, T * D)
+    ex.sync()
+    ex.download(fptr(addrs[4], "y"), Y, T * D)
+    ex.download(fptr(addrs[5], "logits"), L, T * En)
+    ex.download(fptr(addrs[6], "selected"), Sel, T * k)
+    ex.download(fptr(addrs[7], "weights"), W, T * k)
+    return PythonObject(T * D)

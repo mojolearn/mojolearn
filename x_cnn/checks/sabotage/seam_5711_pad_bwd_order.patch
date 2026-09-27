@@ -1,0 +1,12 @@
+--- a/x_cnn/ops.mojo	2026-09-27 12:42:54
++++ b/x_cnn/ops.mojo	2026-09-27 12:42:54
+@@ -773,7 +773,8 @@
+     var h = t % H
+     var nc = t // H
+     var acc = Float32(0)
+-    for hp in range(Hp):
++    for a in range(Hp):
++        var hp = Hp - 1 - a
+         if _pad_src(hp, top, H, mode) != h:
+             continue
+         for wp in range(Wp):

@@ -11,6 +11,18 @@ messaging lanes. Newest items are at the top.
    (in the CPU gate) fails on a NEW fixture-RNG definition
    (`tools/fixture_rng_census.py`) and on any existing copy that differs
    from its canonical behavior bit for bit.
+0000a. **Commit and push your branch at every meaningful step, not only at
+   merges (Andrew, 2026-09-27, after the weekly usage limit killed every
+   agent mid-work).** Commit WIP to your own branch (`lane/<name>`) and
+   `git push origin HEAD` after each working edit, each passing check and
+   before any long pod run. Commits on your branch are cheap. Work that
+   exists only on disk is at risk. On restart, also look for
+   `refs/wip/<lane>/*` backups (`git fetch origin 'refs/wip/*:refs/wip/*'`),
+   and fold anything useful into your branch. The orchestrator also
+   snapshots every worktree's uncommitted work to `refs/wip/` periodically.
+   **Owed from the 2026-09-27 stop:** Apple and AMD reference columns for
+   `byte-lm-host-train` (revision weight-decay-default-0.01-1), recorded
+   with identity_break on each.
 000. **Re-prove seam arms ONCE on the fixed lane check (main 02b63f107).**
    Before 3084ca09c, a sabotage arm that FAILED TO BUILD counted as a bite.
    If your lane recorded `--pass 2` seam bites before 02b63f107, re-run ONLY
