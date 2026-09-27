@@ -308,8 +308,9 @@ def test_plan_apple_carries_fast_and_identical_arms():
     races = bb.plan_races("apple", bb.modes_for("apple"), cpu_arm=False)
     more = sum(len([d for d in bb.MORE.datasets_of(l) if d in bb.DATASETS]) or 1
                for l in bb.MORE_LANES)
+    tasks = sum(len(bb.tree_task_datasets(l, bb.DATASETS)) for l in bb.TREE_TASK_LANES)
     assert len(races) == ((len(bb.TREE_LANES) + len(bb.CLASSICAL_LANES)) * len(bb.DATASETS)
-                          + len(bb.NEURAL_LANES) + more)
+                          + len(bb.NEURAL_LANES) + more + tasks)
     for r in races:
         if r["family"] == "neural":
             assert r["our_arms"] == {"ours": "identical"}, r["id"]
@@ -387,7 +388,7 @@ def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
     rc = bb.main(["--dry-run", "--vendor", "apple"] + env["base"])
     assert rc == 0
     text = capsys.readouterr().out
-    assert "TOTAL races=88 cells=312" in text
+    assert "TOTAL races=93 cells=336" in text
     assert "ours-cpu: off (--no-cpu-arm)" in text
     assert "family neural     races=16 cells=76" in text
     assert "ours-ab[fast]" in text and "ours-fast[fast]" in text
@@ -600,13 +601,13 @@ def test_fast_refused_for_neural_by_name(env):
     assert _calls(env) == []
 
 
-@pytest.mark.parametrize("vendor,cells,more,neural", [("apple", 312, 134, 76),
-                                                      ("nvidia", 261, 94, 95),
-                                                      ("amd", 246, 90, 76)])
+@pytest.mark.parametrize("vendor,cells,more,neural", [("apple", 336, 134, 76),
+                                                      ("nvidia", 280, 94, 95),
+                                                      ("amd", 270, 90, 76)])
 def test_dry_run_counts_per_vendor(vendor, cells, more, neural, capsys):
     assert bb.main(["--dry-run", "--vendor", vendor, "--no-cpu-arm"]) == 0
     text = capsys.readouterr().out
-    assert "TOTAL races=88 cells=%d" % cells in text
+    assert "TOTAL races=93 cells=%d" % cells in text
     assert "family classical2 races=44 cells=%d" % more in text
     assert "family neural     races=16 cells=%d" % neural in text
     assert "neural: IDENTICAL only" in text

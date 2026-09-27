@@ -137,6 +137,16 @@ OUR_ENTRY_POINTS = {
           " -> extratrees/ via _mojolearn_trees",
     "iforest": "mojolearn.IsolationForest()"
                " -> isolation_forest/ via _mojolearn_svm",
+    "gbdt-rank-yetirank": "mojolearn.GradientBoosting(loss='YetiRank',"
+                          " grow_policy='SymmetricTree').fit(X, y, group_id=qid)"
+                          " -> gbdt/ via _mojolearn_gbdt",
+    "gbdt-rank-pairlogit": "mojolearn.GradientBoosting(loss='PairLogit',"
+                           " grow_policy='SymmetricTree').fit(X, y, group_id=qid)"
+                           " -> gbdt/ via _mojolearn_gbdt",
+    "gbdt-multiclass": "mojolearn.GradientBoosting(loss='MultiClass',"
+                       " grow_policy='SymmetricTree') -> gbdt/ via _mojolearn_gbdt",
+    "gbdt-categorical": "mojolearn.GradientBoosting(grow_policy='Lossguide',"
+                        " cat_features=[...]) -> gbdt/ via _mojolearn_gbdt",
 }
 
 
@@ -187,7 +197,12 @@ def our_gbdt_arm(lane, cfg, data, extra=None):
     silently fitting a different problem than the CatBoost arm beside it."""
     import mojolearn
 
-    if data.task == "multiclass":
+    # The task lanes (speed_gbdt_arm.TASK_LANES) name their loss: YetiRank or
+    # PairLogit on query groups, MultiClass, Logloss with categorical columns.
+    # MultiClass is on the public surface now (0.8.22), so the refusal below
+    # binds the original binary/regression lanes only.
+    task_loss = cfg.get("loss")
+    if data.task == "multiclass" and task_loss != "MultiClass":
         raise RuntimeError(
             "mojolearn.GradientBoosting has no MultiClass on the Python "
             "surface (ensemble.py's _UNREACHABLE_LOSSES); run --dataset "
@@ -202,7 +217,7 @@ def our_gbdt_arm(lane, cfg, data, extra=None):
         random_state=cfg["seed"],
         bootstrap_type="No",                 # DEVIATION 1833
         grow_policy=cfg["grow_policy"],
-        loss="RMSE" if data.task == "regression" else "Logloss",
+        loss=task_loss or ("RMSE" if data.task == "regression" else "Logloss"),
     )
     if cfg["grow_policy"] == "Lossguide":
         params["max_leaves"] = cfg["max_leaves"]
@@ -233,6 +248,16 @@ def our_gbdt_arm(lane, cfg, data, extra=None):
     def make():
         return mojolearn.GradientBoosting(**params)
 
+    if data.task == "ranking":
+        # `group_id` is the query id per row; the run lengths are formed
+        # inside fit, inside the clock, as CatBoost's Pool is on its arm.
+        def fit(model, d):
+            return model.fit(d._ours_X, d._ours_y, group_id=d.qid_train)
+
+        def score(model, d):
+            return spec.score_ranking(model.predict(d._ours_Xtest), d)
+
+        return spec.Arm("ours", make, fit, score, sync=_our_sync, library="mojolearn")
     return spec.Arm("ours", make, _our_fit, _our_score,
                     sync=_our_sync, library="mojolearn")
 
@@ -399,6 +424,10 @@ class _TestView(object):
 
 
 OUR_BUILDERS = {
+    "gbdt-rank-yetirank": our_gbdt_arm,
+    "gbdt-rank-pairlogit": our_gbdt_arm,
+    "gbdt-multiclass": our_gbdt_arm,
+    "gbdt-categorical": our_gbdt_arm,
     "gbdt-symmetric": our_gbdt_arm,
     "gbdt-depthwise": our_gbdt_arm,
     "gbdt-lossguide": our_gbdt_arm,
@@ -510,7 +539,12 @@ def _vec(raw):
     return np.ascontiguousarray(np.asarray(raw, dtype=np.float64).reshape(-1))
 
 
-def infer_spec(arm_name, lane, task, model, n_features=None):
+def _mat(raw):
+    """A multiclass probability matrix, (rows, n_classes) float64."""
+    return np.ascontiguousarray(np.asarray(raw, dtype=np.float64))
+
+
+def infer_spec(arm_name, lane, task, model, n_features=None, frame=None):
     """(call(X) -> raw, post(raw) -> float64 vector, call text) for one arm.
     `call` is what the clock covers; `post` (a host dtype view) runs outside
     it. The call text names the path and why it is the library's fastest
@@ -520,9 +554,16 @@ def infer_spec(arm_name, lane, task, model, n_features=None):
     if hasattr(model, "board_infer_spec"):
         # a board arm in another process (forest_board_arms.py, `--ours-cpu`)
         return model.board_infer_spec(lane, task, _INFER_DATA[0])
-    if task not in ("binary", "regression") and not iforest:
-        raise RuntimeError("inference timing covers binary and regression tasks; %s is %s"
-                           % (lane, task))
+    if task not in ("binary", "regression", "multiclass", "ranking") and not iforest:
+        raise RuntimeError("inference timing covers binary, regression, multiclass and "
+                           "ranking tasks; %s is %s" % (lane, task))
+    if task in ("multiclass", "ranking"):
+        return _task_infer_spec(arm_name, task, model, n_features)
+    if frame is not None:
+        # gbdt-categorical: CatBoost and XGBoost predict from the frame kind
+        # their fit took, built from the host rows INSIDE the clock (as the
+        # fit clock builds it); ours and LightGBM take the float32 codes.
+        return _categorical_infer_spec(arm_name, model, frame)
     if arm_name in ("ours", "ours-ab"):
         if iforest:
             return (model.score_samples, _vec,
@@ -603,6 +644,100 @@ def infer_spec(arm_name, lane, task, model, n_features=None):
     raise RuntimeError("no inference path wired for arm %s" % arm_name)
 
 
+def _task_infer_spec(arm_name, task, model, n_features):
+    """Inference for the multiclass and ranking lanes: the probability
+    matrix (multiclass) or the raw ranking scores, each library's own call."""
+    multi = task == "multiclass"
+    post = _mat if multi else _vec
+    what = "the (rows, n_classes) probability matrix" if multi else "raw ranking scores"
+    if arm_name in ("ours", "ours-ab"):
+        fn = model.predict_proba if multi else model.predict
+        return (fn, post, "mojolearn GradientBoosting.%s(X), %s"
+                % ("predict_proba" if multi else "predict", what))
+    if arm_name.startswith("catboost-") and not multi:
+        # CatBoostRanker.predict takes no task_type (catboost 1.2.10): its
+        # apply runs on the host whatever device trained it.
+        return ((lambda X: model.predict(X, thread_count=-1)), post,
+                "catboost CatBoostRanker.predict(X, thread_count -1) (no task_type on the "
+                "ranker: a host apply on every box), %s" % what)
+    if arm_name.startswith("catboost-"):
+        tt = "GPU" if arm_name.endswith("-gpu") else "CPU"
+        note = ""
+        if tt == "GPU":
+            try:
+                probe = np.zeros((2, n_features or model.n_features_in_), dtype=np.float32)
+                model.predict_proba(probe, task_type="GPU")
+            except Exception as exc:              # noqa: BLE001
+                tt = "CPU"
+                note = " (task_type GPU refused: %s)" % " ".join(str(exc).split())[:80]
+        return ((lambda X: model.predict_proba(X, task_type=tt)), post,
+                "catboost predict_proba(X, task_type %s)%s, %s"
+                % (tt, note.replace("=", ":"), what))
+    if arm_name.startswith("xgboost-"):
+        booster = model.get_booster()
+        if arm_name.endswith("-gpu"):
+            try:
+                import cupy
+            except ImportError:
+                return (booster.inplace_predict, post,
+                        "xgboost Booster.inplace_predict(host X) on a CUDA booster (no cupy), %s"
+                        % what)
+            return ((lambda X: cupy.asnumpy(booster.inplace_predict(cupy.asarray(X)))), post,
+                    "xgboost Booster.inplace_predict(cupy.asarray(X)) then cupy.asnumpy, %s"
+                    % what)
+        return (booster.inplace_predict, post,
+                "xgboost Booster.inplace_predict(X) (no DMatrix), %s" % what)
+    if arm_name.startswith("lightgbm-"):
+        return (model.booster_.predict, post,
+                "lightgbm Booster.predict(X) (on the CPU whatever device trained it), %s" % what)
+    raise RuntimeError("no inference path wired for arm %s" % arm_name)
+
+
+def _categorical_infer_spec(arm_name, model, frame):
+    """Inference for the categorical lane: P(class 1) from each library's
+    own call on its own frame kind (`frame(X)`, built inside the clock)."""
+    if arm_name in ("ours", "ours-ab"):
+        return (model.predict_proba, _p1,
+                "mojolearn GradientBoosting.predict_proba(X) on the float32 codes, column 1")
+    if arm_name.startswith("catboost-"):
+        tt = "GPU" if arm_name.endswith("-gpu") else "CPU"
+        return ((lambda X: model.predict_proba(frame("catboost", X), task_type=tt)), _p1,
+                "catboost predict_proba(int64 categorical frame built in the clock, task_type %s), "
+                "column 1" % tt)
+    if arm_name.startswith("xgboost-"):
+        return ((lambda X: model.predict_proba(frame("xgboost", X))), _p1,
+                "xgboost XGBClassifier.predict_proba(pandas CategoricalDtype frame built in the "
+                "clock; inplace_predict takes no category frame here), column 1")
+    if arm_name.startswith("lightgbm-"):
+        return (model.booster_.predict, _vec,
+                "lightgbm Booster.predict(X) on the float32 codes (its categorical columns are "
+                "recorded in the model), probability")
+    raise RuntimeError("no inference path wired for arm %s" % arm_name)
+
+
+def _categorical_frame(data):
+    """`frame(library, X)` for the categorical lane's inference: CatBoost's
+    int64 object matrix and XGBoost's category frame, the kinds their fit and
+    scorer build (tools/speed_gbdt_arm.py catboost_arms, xgboost_arms)."""
+    cat_idx = list(data.cat_idx)
+    levels = {j: int(max(float(np.max(data.X_train[:, j])),
+                         float(np.max(data.X_test[:, j])))) + 1 for j in cat_idx}
+
+    def frame(library, x):
+        if library == "catboost":
+            out = x.astype(object)
+            for j in cat_idx:
+                out[:, j] = x[:, j].astype(np.int64)
+            return out
+        import pandas as pd
+        from pandas.api.types import CategoricalDtype
+        df = pd.DataFrame(x)
+        for j in cat_idx:
+            df[j] = df[j].astype("int64").astype(CategoricalDtype(categories=list(range(levels[j]))))
+        return df
+    return frame
+
+
 def emit_infer(head, lane, fields):
     print("%s lane=%s %s" % (head, lane, " ".join("%s=%s" % kv for kv in fields)), flush=True)
 
@@ -617,6 +752,11 @@ def infer_metrics(lane, data, vec):
     predictions."""
     if lane == "iforest":
         return [("auc", spec.auc(data.y_anom, -vec))]
+    if data.task == "ranking":
+        return spec.ranking_metrics(data.bounds_test, data.y_test, vec)
+    if data.task == "multiclass":
+        return [("mlogloss", spec.mlogloss(data.y_test, vec)),
+                ("accuracy", spec.accuracy(data.y_test, np.argmax(vec, axis=1)))]
     if data.task == "regression":
         return [("rmse", spec.rmse(data.y_test, vec))]
     return [("logloss", spec.logloss(data.y_test, vec)), ("auc", spec.auc(data.y_test, vec))]
@@ -630,6 +770,9 @@ def run_inference(lane, arms, models, data, n_rounds, large_rows, deadline):
     xl = np.ascontiguousarray(data.X_train[:n_large], dtype=np.float32)
     batches = [("test", data._ours_Xtest, data.X_test), ("large", xl, xl)]
     specs = {}
+    # categorical frames (lane gbdt-categorical, criteo): CatBoost and XGBoost
+    # predict from the frame kind their fit took, built inside the clock
+    frame = _categorical_frame(data) if data.cat_idx and data.task == "binary" else None
     for arm in arms:
         model = models.get(arm.name)
         if model is None:
@@ -637,14 +780,9 @@ def run_inference(lane, arms, models, data, n_rounds, large_rows, deadline):
                        [("arm", arm.name), ("batch", "all"),
                         ("reason", "no fitted model from the fit rounds")])
             continue
-        if data.cat_idx and arm.library in ("catboost", "xgboost"):
-            emit_infer("FSPEED-INFER-REFUSED", lane,
-                       [("arm", arm.name), ("batch", "all"),
-                        ("reason", "categorical frames are not wired for inference timing")])
-            continue
         try:
             call, post, text = infer_spec(arm.name, lane, data.task, model,
-                                          n_features=data.X_train.shape[1])
+                                          n_features=data.X_train.shape[1], frame=frame)
         except Exception as exc:                   # noqa: BLE001
             emit_infer("FSPEED-INFER-REFUSED", lane,
                        [("arm", arm.name), ("batch", "all"),
@@ -808,7 +946,7 @@ def main(argv=None):
     dataset = args.dataset or spec.LANE_DEFAULT_DATASET[lane]
     devices, devices_auto = spec.resolve_devices(args.devices, lane)
 
-    if lane.startswith("gbdt-") and dataset == "covtype":
+    if lane.startswith("gbdt-") and dataset == "covtype" and lane != "gbdt-multiclass":
         # DEVIATION 1838. Refuse the 7-class task by name and move to the
         # derived binary one, which every arm can run, rather than quietly
         # swapping the problem under the reader.
@@ -835,6 +973,27 @@ def main(argv=None):
 
     data = spec.load_with_fallback(dataset, size, args.rows)
     cfg = spec.lane_config(lane, size)
+    task = spec.task_of(lane)
+    if task:
+        # A task lane runs its own task only: a dataset of another task would
+        # time a different problem under the lane's name.
+        if data.task != task["task"]:
+            spec.emit_refused(lane, "all", "dataset %s is a %s task; lane %s races %s "
+                              "(its datasets: %s)" % (data.name, data.task, lane, task["task"],
+                                                     ",".join(task["datasets"])))
+            return 1
+        if task["task"] == "binary" and not data.cat_idx:
+            spec.emit_refused(lane, "all", "dataset %s declares no categorical column; lane %s "
+                              "races the categorical path (its datasets: %s)"
+                              % (data.name, lane, ",".join(task["datasets"])))
+            return 1
+        if data.task == "multiclass":
+            cfg["n_classes"] = data.n_classes
+        # every mismatch the lane could not remove, one line each, on the card
+        for i, why in enumerate(task["mismatches"]):
+            spec.emit_note(lane, ["*"], "mismatch", float(i + 1), why)
+        spec.emit_note(lane, ["*"], "objectives", float(len(task["objectives"])),
+                       "; ".join("%s %s" % kv for kv in sorted(task["objectives"].items())))
     spec.prepare_cuml_labels(data)
     spec.prepare_anomaly_labels(lane, data)
     prepare_our_inputs(data)

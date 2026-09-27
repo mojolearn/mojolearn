@@ -3174,6 +3174,16 @@ def identical_gemm_splitk_fits(m: Int, n: Int, k: Int) -> Bool:
     )
 
 
+#: Apple IDENTICAL: skinny shapes (a tiny output, or one output dimension
+#: <= 4) on PLAN_SPLITK / PLAN_FLAT instead of the tile dispatcher's pick.
+#: Execution plan only; `-D MOJOLEARN_APPLE_GEMM_SKINNY_OFF` reverts.
+comptime APPLE_GEMM_SKINNY = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and TARGET_COLUMN == COLUMN_APPLE
+    and not is_defined["MOJOLEARN_APPLE_GEMM_SKINNY_OFF"]()
+)
+
+
 def choose_gemm_plan(m: Int, n: Int, k: Int) -> Int:
     """The shipped dispatcher: Apple's simdgroup matrix plan
     (`PLAN_APPLE_MMA`) wherever it applies to a shape the tile dispatcher
@@ -3181,6 +3191,22 @@ def choose_gemm_plan(m: Int, n: Int, k: Int) -> Int:
     whether a shape takes the 128x128 tile read `choose_gemm_plan_tiles`:
     they predate the matrix plan, and on every other column the two agree."""
     var tiles = choose_gemm_plan_tiles(m, n, k)
+    comptime if APPLE_GEMM_SKINNY:
+        # Skinny shapes on Apple (lane/apple-identical-neural, M4 measured,
+        # every plan's bits equal): a tiny output with many leaves takes
+        # PLAN_SPLITK (a 1 x 1 x 100k dot 413 -> 49 us, 20 x 1 x 100k 815 ->
+        # 132 us); a GEMV-shaped output takes PLAN_FLAT (100k x 1 x 20 1273
+        # -> 116 us, 3 x 100k x 20 1242 -> 385 us, 4096 x 1 x 4096 5264 ->
+        # 1131 us). P >= 4 keeps the P = 3 fixtures on their plans.
+        if m > 0 and n > 0 and k > 0:
+            if (
+                contract_partition(k)[1] >= 4
+                and m * n <= 1024
+                and identical_gemm_splitk_fits(m, n, k)
+            ):
+                return PLAN_SPLITK
+            if min(m, n) <= 4 and m * n >= 2048:
+                return PLAN_FLAT
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE:
         if (
             tiles == PLAN_TUNED_64_4X4

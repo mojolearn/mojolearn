@@ -17,8 +17,10 @@ it:
                         estimator.mojo::gmm_initial_resp: the k-means one-hot
                         through cluster/host/kmeans_oracle.mojo::
                         host_kmeans_fit (the core host binding's k-means, at
-                        kmeans_fit's defaults: k-means||, L2 expanded, 300
-                        iterations, tol 1e-4, one init), or the
+                        the device path's settings: the CLASSIC greedy
+                        k-means++ seeding, oversampling_factor 0.0,
+                        DEVIATION 3133; L2 expanded, 300 iterations, tol
+                        1e-4, one init), or the
                         position-mapped Philox uniforms (DEVIATION 1733),
                         which are host code on the device path too
     the log of them     estimator.mojo::_safe_log
@@ -91,6 +93,9 @@ comptime GMMH_NEG_INF_BITS: UInt32 = 0xFF800000
 comptime GMMH_POS_INF_BITS: UInt32 = 0x7F800000
 #: `estimator.mojo::GMM_TWO_POW_M24_BITS`.
 comptime GMMH_TWO_POW_M24_BITS: UInt32 = 0x33800000
+#: `estimator.mojo::GMM_KMEANS_OVERSAMPLING` (DEVIATION 3133): the classic
+#: greedy k-means++ seeding, never host_kmeans_fit's k-means|| default.
+comptime GMMH_KMEANS_OVERSAMPLING = Float64(0.0)
 
 
 def _neg_inf() -> Float32:
@@ -309,6 +314,7 @@ def gmmh_initial_resp(
             x, n, d, ncomp, centroids, labels, no_weights, 0,
             300, Float64(1.0e-4), params.random_state, 1,
             INIT_KMEANS_PLUS_PLUS, METRIC_L2_EXPANDED,
+            GMMH_KMEANS_OVERSAMPLING,
         )
         _ = r
         for i in range(n):

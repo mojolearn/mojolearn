@@ -169,6 +169,72 @@ TREE_OPPONENTS = {
 }
 
 
+# ---------------------------------------------------------------------------
+# THE GBDT TASK LANES (lane bench-board-gbdt-tasks). Ranking, multiclass and
+# categorical fits of the public GradientBoosting, raced in the trees family
+# through the same driver. Each lane runs only the board datasets it has a
+# task for, mapped to the driver's dataset name; the objectives and every
+# mismatch are tools/speed_gbdt_arm.py's TASK_LANES (the race's lane_config).
+# ---------------------------------------------------------------------------
+
+TREE_TASK_LANES = ("gbdt-rank-yetirank", "gbdt-rank-pairlogit", "gbdt-multiclass",
+                   "gbdt-categorical")
+
+#: board dataset -> the driver's --dataset, per task lane. Istella-S is the
+#: learning-to-rank set (query ids from istella_rank.npz); multiclass is
+#: taxi's tip-share band (4 classes) and Istella-S's grade (5 classes);
+#: categorical is taxi with its id columns declared categorical. criteo, the
+#: categorical set the driver also knows, is not in the R2 store, so it is
+#: not a board dataset (docs/BENCH_BOARD.md, "The GBDT task lanes").
+TREE_TASK_DATASETS = {
+    "gbdt-rank-yetirank": {"istella": "istellarank"},
+    "gbdt-rank-pairlogit": {"istella": "istellarank"},
+    "gbdt-multiclass": {"taxi": "taximc", "istella": "istellamc"},
+    "gbdt-categorical": {"taxi": "taxicat"},
+}
+
+#: data files a driver dataset reads beyond its board dataset's own cache
+#: (keys of DATA_FILES).
+TREE_TASK_EXTRA_DATA = {"istellarank": ("istella-rank",)}
+
+#: The rosters. The libraries run each lane's closest objective (TASK_LANES);
+#: LightGBM has no pairwise logistic objective, so gbdt-rank-pairlogit has no
+#: LightGBM arm. Same device policy as the gbdt lanes.
+_TASK_APPLE = ("catboost-cpu", "xgboost-cpu", "lightgbm-cpu")
+_TASK_NVIDIA = ("catboost-gpu", "xgboost-gpu", "lightgbm-cuda")
+_TASK_AMD = ("catboost-cpu", "xgboost-gpu", "xgboost-cpu", "lightgbm-cpu")
+
+
+def _no_lgbm(arms):
+    return tuple(a for a in arms if not a.startswith("lightgbm-"))
+
+
+for _v, _arms in (("apple", _TASK_APPLE), ("nvidia", _TASK_NVIDIA), ("amd", _TASK_AMD)):
+    for _lane in TREE_TASK_LANES:
+        TREE_OPPONENTS[_v][_lane] = _no_lgbm(_arms) if _lane == "gbdt-rank-pairlogit" else _arms
+DATA_FILES["istella-rank"] = "istella/istella_rank.npz"
+R2_KEYS["istella-rank"] = "gbm-bench/istella/istella_rank.npz"
+
+
+def tree_task_datasets(lane, datasets):
+    """The board datasets a trees lane runs: every requested one for the
+    original lanes, only those with a task for a task lane."""
+    table = TREE_TASK_DATASETS.get(lane)
+    return list(datasets) if table is None else [d for d in datasets if d in table]
+
+
+def tree_driver_dataset(lane, dataset):
+    return TREE_TASK_DATASETS.get(lane, {}).get(dataset, dataset)
+
+
+def race_data_keys(race):
+    """DATA_FILES keys a race needs (its dataset and any side file)."""
+    keys = [race["dataset"]]
+    if race["family"] == "trees":
+        keys += list(TREE_TASK_EXTRA_DATA.get(tree_driver_dataset(race["lane"], race["dataset"]), ()))
+    return keys
+
+
 def tree_devices(vendor, lane):
     """forest_speed_arm.py --devices for this vendor and lane."""
     if vendor == "apple":
@@ -213,7 +279,8 @@ CLASSICAL_OPPONENTS = {
 }
 
 def family_lanes(fam):
-    return {"trees": TREE_LANES, "classical": CLASSICAL_LANES, "classical2": MORE_LANES,
+    return {"trees": TREE_LANES + TREE_TASK_LANES, "classical": CLASSICAL_LANES,
+            "classical2": MORE_LANES,
             "neural": NEURAL_LANES}[fam]
 
 
@@ -473,7 +540,7 @@ def plan_races(vendor, modes, families=FAMILIES, lanes=None, datasets=DATASETS, 
                         "opponents": list(opp), "arms": list(ours) + list(opp),
                     })
                 continue
-            for ds in datasets:
+            for ds in (tree_task_datasets(lane, datasets) if fam == "trees" else datasets):
                 opp = (TREE_OPPONENTS if fam == "trees" else CLASSICAL_OPPONENTS)[vendor][lane]
                 ours = our_arms(fam, modes, lane, cpu_arm)
                 races.append({
@@ -947,7 +1014,7 @@ def tree_cmd(ctx, race):
     ours = race["our_arms"]
     primary = ours["ours"]
     cmd = [ctx["python"], "-u", ctx["tree_driver"], "--lane", race["lane"],
-           "--dataset", race["dataset"]]
+           "--dataset", tree_driver_dataset(race["lane"], race["dataset"])]
     if race["rows"]:
         cmd += ["--rows", str(int(race["rows"]))]
     if race["opponents"]:
@@ -1528,6 +1595,8 @@ QUALITY_NOTE = {
     "rmse": "lower is better", "r2": "higher is better", "inertia": "lower is better",
     "explained_variance_ratio_sum": "higher is better", "recall_at_10": "higher is better",
     "mean_log_likelihood": "higher is better",
+    "ndcg10": "higher is better", "ndcg5": "higher is better", "map": "higher is better",
+    "mlogloss": "lower is better",
     "loss_first_step": "same init and batches on every arm",
     "loss_last_step": "same init and batches on every arm",
     "loss_last_abs_diff_vs_ours": "0 is our value exactly",
@@ -2012,7 +2081,8 @@ def main(argv=None):
         raise SystemExit("bench_board: no Metal, nvidia-smi or rocm-smi found; pass --vendor")
     modes = modes_for(vendor, args.modes)
     families = _csv(args.families, FAMILIES, "family")
-    lanes = (_csv(args.lanes, TREE_LANES + CLASSICAL_LANES + MORE_LANES + NEURAL_LANES, "lane")
+    lanes = (_csv(args.lanes, TREE_LANES + TREE_TASK_LANES + CLASSICAL_LANES + MORE_LANES
+                  + NEURAL_LANES, "lane")
              if args.lanes else None)
     datasets = _csv(args.datasets, DATASETS, "dataset")
     rows = parse_rows(args.rows)
@@ -2022,6 +2092,8 @@ def main(argv=None):
     # run needs no R2 data.
     needed = [ds for ds in datasets if any(r["dataset"] == ds for r in races
                                            if r["family"] != "neural")]
+    needed += sorted({k for r in races if r["family"] == "trees"
+                      for k in race_data_keys(r) if k not in needed})
     data = data_status(os.path.abspath(os.path.expanduser(args.data_root)), needed)
 
     if args.dry_run:

@@ -37,7 +37,11 @@ CLASSICAL_CALL = {"kmeans": "predict", "pca": "transform", "ols": "predict", "sv
 #: docs (the driver's FSPEED-INFER-PATH line is the run's own record).
 TREE_PATHS = {
     "ours": "predict_proba(X) column 1 (gbdt, rf, et); score_samples(X) (iforest, which "
-            "rebuilds its forest inside every scoring call, DEVIATION 874)",
+            "rebuilds its forest inside every scoring call, DEVIATION 874); the task lanes: "
+            "predict_proba(X) whole matrix (gbdt-multiclass), predict(X) raw scores "
+            "(gbdt-rank-*), predict_proba(X) column 1 on the float32 codes (gbdt-categorical, "
+            "where CatBoost and XGBoost predict from the frame kind their fit took, built "
+            "inside the clock)",
     "catboost": "predict_proba(X, task_type GPU on the -gpu arm, CPU otherwise)",
     "xgboost": "Booster.inplace_predict (no DMatrix); on a CUDA booster the rows go up as a "
                "cupy array and the result comes back inside the clock",
@@ -48,8 +52,7 @@ TREE_PATHS = {
 }
 
 NOT_COVERED = (
-    "Inference, trees: categorical (criteo) frames are not wired into the inference phase; "
-    "a single-row latency batch is not timed (the batches are the held-out split and 1,000,000 "
+    "Inference, trees: a single-row latency batch is not timed (the batches are the held-out split and 1,000,000 "
     "training rows); ONNX, Treelite and other export paths are not raced.",
     "Inference, classical: the classical2 family's predict calls (the linear models, "
     "GaussianMixture, SVR, KernelRidge and others in tools/bench_board_more.py) are timed as "
