@@ -15,9 +15,11 @@
 # npz keys land under /root/datasets/gbm-bench, which is GBM_BENCH_DATA's
 # default on a box, so tools/speed_gbdt_arm.py returns early without a fetch.
 #
-#   keys                  default: the board's four
+#   keys                  default: the board's five
 #                           gbm-bench/taxi/taxi_speed.npz
 #                           gbm-bench/istella/istella_speed.npz
+#                           gbm-bench/istella/istella_rank.npz (the query
+#                             ids of the board's gbdt-rank-* lanes, 624 MB)
 #                           corpus/enwik8/input.txt
 #                           corpus/pile_github/input.txt
 #                         MOJOLEARN_STAGE_KEYS="" (empty, set) stages nothing.
@@ -66,7 +68,7 @@ if [ "$#" -gt 0 ]; then
 elif [ "${MOJOLEARN_STAGE_KEYS+set}" = set ]; then
     KEYS="$MOJOLEARN_STAGE_KEYS"
 else
-    KEYS="gbm-bench/taxi/taxi_speed.npz gbm-bench/istella/istella_speed.npz corpus/enwik8/input.txt corpus/pile_github/input.txt"
+    KEYS="gbm-bench/taxi/taxi_speed.npz gbm-bench/istella/istella_speed.npz gbm-bench/istella/istella_rank.npz corpus/enwik8/input.txt corpus/pile_github/input.txt"
 fi
 [ -n "$KEYS" ] || { echo "R2 STAGED 0 key(s) (MOJOLEARN_STAGE_KEYS is empty)"; exit 0; }
 R2FILE="${MOJOLEARN_R2_FILE:-$HOME/.mojolearn_r2}"
