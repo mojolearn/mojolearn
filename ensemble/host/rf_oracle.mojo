@@ -86,9 +86,21 @@ act only through the row draw (`randomforest.mojo:2570-2582`):
 `prepare_weights`' Float64 CDF and the Philox `uniform<double>` draws read
 through `upper_bound` (`:2098-2135`).
 
-WHAT IS REFUSED BY NAME: class weights WITHOUT bootstrap (the weighted
-objective, `WeightedClassificationBin`), and `max_n_bins > 1024` (their own
-refusal). OOB scoring never crosses the GPU binding either.
+ADDED 2026-09-27 (lane/algos-trees): class weights WITHOUT bootstrap, the
+weighted objective (`WeightedClassificationBin`, `bins.mojo:410-497`): the
+rows are the nonzero-weight rows in order (`prepare_weights`,
+`randomforest.mojo:2040-2100`, the root count is theirs); each row adds one
+count and `Int32(weight * weight_scale)` (`_quantize`, a Float32 product
+truncated) to its class plane; the scale is `choose_scale(sum of weights,
+n_rows)` (`bindings/_mojolearn_rf.mojo:439-443`); `Weight()` is
+`Float32(raw) / scale`; `WeightAt` folds the class planes in class order
+through `ftz`; Gini and entropy read those Float32 weights
+(`objectives.mojo:548-700`) while node length, `min_samples_leaf` and the
+purity test read the counts; the leaf is `SetLeafVector` over the weights
+(`objectives.mojo:814-847`).
+
+WHAT IS REFUSED BY NAME: `max_n_bins > 1024` (their own refusal). OOB
+scoring never crosses the GPU binding either.
 
 THE NEGATIVE CONTROL. `-D MOJOLEARN_HOST_SABOTAGE=1` draws every bootstrap
 row, weighted or not, from the NEXT Philox subsequence (`i + 1` in place of
@@ -107,6 +119,7 @@ from std.builtin.sort import sort
 from std.sys.compile import is_defined
 from max.algorithm import sync_parallelize
 
+from checks.fixed_point import choose_scale
 from checks.numerics import ftz, identical_log, identical_mul_add
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from ensemble.host_layout import RF_NAN_REFUSAL, has_nan_f32_threaded
@@ -809,6 +822,95 @@ def host_entropy_gain(hist: List[UInt32], i: Int, n_bins: Int, n_classes: Int) -
     return gain
 
 
+def _wcls_weight(wraw: List[Int32], off: Int, wscale: Float32) -> Float32:
+    """`WeightedClassificationBin.Weight`, `bins.mojo:479-482`: the raw
+    fixed-point weight over the scale (a power of two, so exact)."""
+    return Float32(Int(wraw[off])) / wscale
+
+
+def _wcls_weight_at(wraw: List[Int32], i: Int, n_bins: Int, n_classes: Int, wscale: Float32) -> Float32:
+    """`WeightAt`, `objectives.mojo:548-570`, on the weighted bin: Float32,
+    each partial through `ftz`, class order."""
+    var weight = Float32(0)
+    for j in range(n_classes):
+        weight = ftz(weight + _wcls_weight(wraw, n_bins * j + i, wscale))
+    return weight
+
+
+def host_weighted_gini_gain(
+    wraw: List[Int32], i: Int, n_bins: Int, n_classes: Int, wscale: Float32
+) -> Float32:
+    """`GiniGain`, `objectives.mojo:572-634`, on the weighted bin."""
+    var one = Float32(1.0)
+    var total_weight = _wcls_weight_at(wraw, n_bins - 1, n_bins, n_classes, wscale)
+    var left_weight = _wcls_weight_at(wraw, i, n_bins, n_classes, wscale)
+    var right_weight = total_weight - left_weight
+    if total_weight <= 0 or left_weight <= 0 or right_weight <= 0:
+        return RF_SPLIT_MIN
+    var inv_len = ftz(one / total_weight)
+    var inv_left = ftz(one / left_weight)
+    var inv_right = ftz(one / right_weight)
+    var gain = Float32(0.0)
+    for j in range(n_classes):
+        var val_i = Float32(0)
+        var lval_i = _wcls_weight(wraw, n_bins * j + i, wscale)
+        var lval = ftz(lval_i)
+        var l1 = ftz(lval * inv_left)
+        var l2 = ftz(l1 * lval)
+        gain = identical_mul_add(l2, inv_len, gain)
+        val_i += lval_i
+        var total_sum = _wcls_weight(wraw, n_bins * j + n_bins - 1, wscale)
+        var rval_i = total_sum - lval_i
+        var rval = ftz(rval_i)
+        var r1 = ftz(rval * inv_right)
+        var r2 = ftz(r1 * rval)
+        gain = identical_mul_add(r2, inv_len, gain)
+        val_i += rval_i
+        var val = ftz(val_i * inv_len)
+        gain = identical_mul_add(-val, val, gain)
+    return gain
+
+
+def host_weighted_entropy_gain(
+    wraw: List[Int32], i: Int, n_bins: Int, n_classes: Int, wscale: Float32
+) -> Float32:
+    """`EntropyGain`, `objectives.mojo:636-715`, on the weighted bin."""
+    var total_weight = _wcls_weight_at(wraw, n_bins - 1, n_bins, n_classes, wscale)
+    var left_weight = _wcls_weight_at(wraw, i, n_bins, n_classes, wscale)
+    var right_weight = total_weight - left_weight
+    if total_weight <= 0 or left_weight <= 0 or right_weight <= 0:
+        return RF_SPLIT_MIN
+    var gain = Float32(0.0)
+    var inv_left = ftz(Float32(1.0) / left_weight)
+    var inv_right = ftz(Float32(1.0) / right_weight)
+    var inv_len = ftz(Float32(1.0) / total_weight)
+    for c in range(n_classes):
+        var val_i = Float32(0)
+        var lval_i = _wcls_weight(wraw, n_bins * c + i, wscale)
+        if lval_i != 0:
+            var lval = ftz(lval_i)
+            var larg = ftz(lval * inv_left)
+            var l1 = ftz(identical_log(larg) / identical_log(Float32(2)))
+            var l2 = ftz(l1 * lval)
+            gain = identical_mul_add(l2, inv_len, gain)
+        val_i += lval_i
+        var total_sum = _wcls_weight(wraw, n_bins * c + n_bins - 1, wscale)
+        var rval_i = total_sum - lval_i
+        if rval_i != 0:
+            var rval = ftz(rval_i)
+            var rarg = ftz(rval * inv_right)
+            var r1 = ftz(identical_log(rarg) / identical_log(Float32(2)))
+            var r2 = ftz(r1 * rval)
+            gain = identical_mul_add(r2, inv_len, gain)
+        val_i += rval_i
+        if val_i != 0:
+            var val = ftz(val_i * inv_len)
+            var v1 = ftz(val * identical_log(val))
+            var v2 = ftz(v1 / identical_log(Float32(2)))
+            gain = ftz(gain - v2)
+    return gain
+
+
 def _dequantize(raw: Int32, scale: Float32) -> Float32:
     """`_dequantize`, `bins.mojo:193-197`."""
     return Float32(Int(raw)) / scale
@@ -1265,6 +1367,8 @@ def _node_best_split(
     tree_id: Int,
     k: Int,
     sample_offset: Int,
+    weights: List[Float32] = List[Float32](),
+    wscale: Float32 = Float32(0),
 ) raises -> HostSplit:
     """One node of one sampling round: `phase_setup_kernel`'s column sample,
     then per sampled column `build_histograms_kernel`, `pdf_to_cdf`,
@@ -1282,6 +1386,9 @@ def _node_best_split(
         var planes = n_classes if classification else 1
         var counts = List[UInt32](length=nb * planes, fill=UInt32(0))
         var label_sums = List[Int32](length=nb, fill=Int32(0))
+        # The weighted bin's fixed-point weight plane (empty when unweighted).
+        var weighted = wscale > Float32(0)
+        var wraw = List[Int32](length=nb * planes if weighted else 0, fill=Int32(0))
         # `_histogram_inner_loop_binned` (`builder_kernels_impl.mojo:2099-2146`)
         # with `IncrementHistogram` (`bins.mojo:341-358`, `:521-544`).
         for j in range(item.begin, item.begin + item.count):
@@ -1290,6 +1397,9 @@ def _node_best_split(
             if classification:
                 var off = Int(labels_i[row]) * nb + b
                 counts[off] = counts[off] + UInt32(1)
+                if weighted:
+                    # `_quantize` (`bins.mojo:251-260`): a Float32 product, truncated.
+                    wraw[off] = wraw[off] + Int32(weights[row] * wscale)
             else:
                 label_sums[b] = label_sums[b] + Int32(labels_f[row] * label_scale)
                 counts[b] = counts[b] + UInt32(1)
@@ -1299,6 +1409,9 @@ def _node_best_split(
         for pl in range(planes):
             for b in range(1, nb):
                 counts[pl * nb + b] = counts[pl * nb + b] + counts[pl * nb + b - 1]
+            if weighted:
+                for b in range(1, nb):
+                    wraw[pl * nb + b] = wraw[pl * nb + b] + wraw[pl * nb + b - 1]
             var class_count = Int64(Int(counts[pl * nb + nb - 1]))
             if class_count > max_class_count:
                 max_class_count = class_count
@@ -1326,7 +1439,12 @@ def _node_best_split(
                 var msl = Int64(p.min_samples_leaf)
                 if n_left >= msl and n_right >= msl:
                     var gain: Float32
-                    if classification:
+                    if classification and weighted:
+                        if criterion == RF_ENTROPY:
+                            gain = host_weighted_entropy_gain(wraw, i, nb, n_classes, wscale)
+                        else:
+                            gain = host_weighted_gini_gain(wraw, i, nb, n_classes, wscale)
+                    elif classification:
                         if criterion == RF_ENTROPY:
                             gain = host_entropy_gain(counts, i, nb, n_classes)
                         else:
@@ -1427,13 +1545,11 @@ def rf_host_fit(
         x.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), len(x)
     ):
         raise Error(RF_NAN_REFUSAL)
-    if len(weights) > 0 and not p.bootstrap:
-        raise Error(
-            "rf host: class weights without bootstrap reach the weighted"
-            " objective (WeightedClassificationBin), which has no host"
-            " restatement (ensemble/host/rf_oracle.mojo); a CPU-only install"
-            " refuses it by name rather than fitting a different forest"
-        )
+    # The weighted objective: class weights WITHOUT bootstrap
+    # (`bindings/_mojolearn_rf.mojo:437-447`, classifier only).
+    var weighted_obj = len(weights) > 0 and not p.bootstrap
+    if weighted_obj and not classification:
+        raise Error("rf host: row weights reach the classifier only")
     # `Builder.__init__`'s criterion resolution (`builder.mojo:1224-1228`).
     var criterion = p.criterion
     if criterion == RF_CRITERION_END:
@@ -1478,8 +1594,27 @@ def rf_host_fit(
     # `fit_forest` calls `prepare_weights` before the first tree
     # (`randomforest.mojo:2567-2568`).
     var weight_cdf = List[Float64]()
+    var wscale = Float32(0)
+    var weighted_rows = List[Int32]()
     if len(weights) > 0:
+        # Their two refusals by value (`prepare_weights`), both arms.
         weight_cdf = host_weight_cdf(weights, n_rows)
+    if weighted_obj:
+        # `bindings/_mojolearn_rf.mojo:375-389, 439-443`: the Float64 total in
+        # row order, `choose_scale(total, n_rows)`, its Float32 range check.
+        var total = Float64(0)
+        for i in range(n_rows):
+            total += Float64(weights[i])
+        var scale = choose_scale(total, n_rows)
+        if scale < Float64(1.1754943508222875e-38) or scale > Float64(3.4028234663852886e38):
+            raise Error("class weights exceed Float32 fixed-point scale range")
+        wscale = Float32(scale)
+        # `prepare_weights`' copy_if (`randomforest.mojo:2084-2100`): the
+        # nonzero-weight rows in order, at most n_sampled of them.
+        for i in range(n_rows):
+            if weights[i] != Float32(0.0) and len(weighted_rows) < n_sampled:
+                weighted_rows.append(Int32(i))
+        weight_cdf = List[Float64]()
 
     # `Builder.__init__` (`builder.mojo:1230-1242`): `n_sampled_cols_for`.
     var original_cols = Int(Float32(n_cols) * p.max_features)
@@ -1498,7 +1633,13 @@ def rf_host_fit(
     forest.offsets.append(Int32(0))
     for t in range(p.n_trees):
         var tree_id = tree_start + t
-        var row_ids = host_sampled_rows(p.seed, tree_id, p.bootstrap, n_rows, n_sampled, weight_cdf)
+        var row_ids: List[Int32]
+        var n_root = n_sampled
+        if weighted_obj:
+            row_ids = weighted_rows.copy()
+            n_root = len(weighted_rows)
+        else:
+            row_ids = host_sampled_rows(p.seed, tree_id, p.bootstrap, n_rows, n_sampled, weight_cdf)
 
         # `NodeQueue.__init__` (`builder.mojo:197-232`).
         var t_colid = List[Int32]()
@@ -1511,13 +1652,13 @@ def rf_host_fit(
         t_colid.append(Int32(0))
         t_quesval.append(Float32(0.0))
         t_left.append(Int32(-1))
-        t_count.append(Int32(n_sampled))
+        t_count.append(Int32(n_root))
         r_begin.append(0)
-        r_count.append(n_sampled)
+        r_count.append(n_root)
         var work = List[HostWorkItem]()
         var head = 0
-        if _is_expandable(n_sampled, 0, leaf_counter, p):
-            work.append(HostWorkItem(0, 0, 0, n_sampled))
+        if _is_expandable(n_root, 0, leaf_counter, p):
+            work.append(HostWorkItem(0, 0, 0, n_root))
 
         while len(work) - head > 0:
             # `pop` (`:239-260`).
@@ -1543,6 +1684,7 @@ def rf_host_fit(
                         items[orig], row_ids, q, labels_i, labels_f,
                         classification, n_classes, n_rows, n_cols, p.max_n_bins,
                         p, criterion, label_scale, tree_id, k, sample_offset,
+                        weights, wscale,
                     )
                     # `_read_splits` (`builder.mojo:1733-1763`): a pure node
                     # is a leaf whatever its slot holds.
@@ -1637,7 +1779,23 @@ def rf_host_fit(
                 continue
             var begin = r_begin[node]
             var count = r_count[node]
-            if classification:
+            if classification and weighted_obj:
+                # `leaf_kernel` over `WeightedClassificationBin`, then
+                # `SetLeafVector` (`objectives.mojo:814-847`) on the Float32
+                # weights: the total through `ftz` in class order.
+                var whist = List[Int32](length=n_out, fill=Int32(0))
+                for j in range(begin, begin + count):
+                    var row = Int(row_ids[j])
+                    var lab = Int(labels_i[row])
+                    whist[lab] = whist[lab] + Int32(weights[row] * wscale)
+                var wtotal = Float32(0)
+                for c in range(n_out):
+                    wtotal = ftz(wtotal + _wcls_weight(whist, c, wscale))
+                if wtotal <= 0:
+                    continue
+                for c in range(n_out):
+                    vleaf[node * n_out + c] = ftz(_wcls_weight(whist, c, wscale) / wtotal)
+            elif classification:
                 var hist = List[UInt32](length=n_out, fill=UInt32(0))
                 for j in range(begin, begin + count):
                     var lab = Int(labels_i[Int(row_ids[j])])

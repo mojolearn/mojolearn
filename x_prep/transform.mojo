@@ -268,3 +268,41 @@ def std_params_unit(t: Int, f: FP, q: IP):
     var d = p(q, 1)
     st(f, p(q, 2) + t, ld(f, p(q, 0) + d + t))
     st(f, p(q, 3) + t, zero_to_one(sqrtf(ld(f, p(q, 0) + 2 * d + t))))
+
+
+def normalize_unit(t: Int, f: FP, q: IP):
+    """q = [X, n, d, NORM, OUT]; t = row. NORM 0 l1, 1 l2, 2 max (sklearn
+    `normalize`, columns ascending); a zero norm leaves the row unchanged."""
+    var d = p(q, 2)
+    var X = p(q, 0) + t * d
+    var kind = p(q, 3)
+    var s = Float32(0)
+    for c in range(d):
+        var v = ld(f, X + c)
+        if kind == 0:
+            s = add(s, abs(v))
+        elif kind == 1:
+            s = add(s, mul(v, v))
+        elif abs(v) > s:
+            s = abs(v)
+    if kind == 1:
+        s = sqrtf(s)
+    if s == Float32(0):
+        s = Float32(1)
+    for c in range(d):
+        st(f, p(q, 4) + t * d + c, div(ld(f, X + c), s))
+
+
+def poly_unit(t: Int, f: FP, q: IP):
+    """q = [X, n, d, IDX, START, nout, OUT]; t = i*nout + o. Output column o is
+    the product of the input columns IDX[START[o] : START[o+1]], left to right
+    (an empty product, the bias, is 1)."""
+    var nout = p(q, 5)
+    var i = t // nout
+    var o = t % nout
+    var a = Int(ld(f, p(q, 4) + o))
+    var b = Int(ld(f, p(q, 4) + o + 1))
+    var v = Float32(1)
+    for k in range(a, b):
+        v = mul(v, ld(f, p(q, 0) + i * p(q, 2) + Int(ld(f, p(q, 3) + k))))
+    st(f, p(q, 6) + t, v)

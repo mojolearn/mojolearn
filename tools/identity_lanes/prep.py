@@ -214,3 +214,28 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-power-transformer")
+
+
+@lane("x-prep-normalizer")
+def _(ml, X, yc, yr, Xh=None):
+    parts = {nm: _h(ml.Normalizer(norm=nm).fit(X).transform(X[:256])) for nm in ("l1", "l2", "max")}
+    m = ml.Normalizer().fit(X)
+    return _fit(parts, m, lambda e: (e.transform(Xh[:256]),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-normalizer")
+
+
+@lane("x-prep-polynomial-features")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.PolynomialFeatures(degree=3).fit(X[:, :6])
+    mi = ml.PolynomialFeatures(degree=(2, 3), interaction_only=True, include_bias=False).fit(X)
+    parts = dict(transform=_h(m.transform(X[:256, :6])), powers=_h(m.powers_), inter=_h(mi.transform(X[:256])))
+    return _fit(parts, m, lambda e: (e.transform(Xh[:256, :6]),))
+
+
+def _prep_first_six(X):
+    return X[:, :6]
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_prep_first_six), "x-prep-polynomial-features")

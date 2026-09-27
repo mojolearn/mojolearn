@@ -198,3 +198,19 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("predict", "predict_proba"), "trees-calibrated")
+
+
+@lane("trees-rf-weighted")
+def _(ml, X, yc, yr, Xh=None):
+    """The RF weighted objective (class weights without bootstrap): a balanced
+    entropy forest on column samples, and a gini tree on per-row sample weights
+    that zero some rows out."""
+    f = ml.RandomForestClassifier(n_estimators=4, max_depth=6, random_state=7, class_weight="balanced",
+                                  bootstrap=False, criterion="entropy", max_features=0.6).fit(X, yc)
+    w = np.array([(1.0, 2.5, 0.0, 0.75)[i % 4] for i in range(len(X))], dtype=np.float32)
+    t = ml.DecisionTreeClassifier(max_depth=7, min_samples_leaf=2).fit(X, yc, sample_weight=w)
+    return _fit(dict(forest=_h(f.predict_proba(X)), tree=_h(t.predict_proba(X)), predict=_h(t.predict(X))),
+                t, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+
+
+_batch_decl(_rows_calls("predict", "predict_proba"), "trees-rf-weighted")
