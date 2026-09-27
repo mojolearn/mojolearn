@@ -219,6 +219,63 @@ CLASSICAL_MIRRORS = [
     ("tools/verify_linux_surface_qualification.py", "CLASSICAL_FAST"),
 ]
 
+#: THE EXPANSION LANES' GPU BINDINGS (lane/algos-prep, 2026-09-27) ARE NOT A
+#: LIST EITHER. Each lane declares its one GPU binding in its own fragment,
+#: python/mojolearn/_surface_<lane>.py, and host_surface.expansion_gpu_bindings()
+#: is the one declaration; every file that names GPU bindings APPENDS it to
+#: its literal list at run time, exactly as the host readers above read
+#: wheel_bindings(). (path, the token that proves the file reads it.) The
+#: literal lists above are still held to _backend's literals, and the two
+#: together to _MODULES as the running library sees it. No reader may spell
+#: an expansion binding by hand (EXPANSION_LITERAL).
+EXPANSION_READERS = [
+    ("python/mojolearn/_backend.py", "host_surface.expansion_gpu_bindings()"),
+    ("python/mojolearn/_backend.py", 'host_surface.expansion_gpu_bindings("classical")'),
+    ("packaging/linux/pack_wheel.py", 'host_surface.expansion_gpu_bindings("classical")'),
+    ("packaging/linux/pack_wheel.py", 'host_surface.expansion_gpu_bindings("identical-only")'),
+    ("packaging/linux/smoke.py", "_manifest.expansion_gpu_bindings()"),
+    ("tools/release_linux_smoke.py", "_manifest.expansion_gpu_bindings()"),
+    ("packaging/linux/build_sets.sh", "host_surface.py --expansion-gpu-bindings classical"),
+    ("packaging/linux/build_sets.sh", "host_surface.py --expansion-gpu-scripts classical"),
+    ("packaging/linux/build_sets.sh", "host_surface.py --expansion-gpu-bindings identical-only"),
+    ("packaging/linux/build_sets.sh", "host_surface.py --expansion-gpu-scripts identical-only"),
+    ("packaging/macos/build_release_wheel.sh", "host_surface.py --expansion-gpu-bindings classical"),
+    ("packaging/macos/build_release_wheel.sh", "host_surface.py --expansion-gpu-scripts classical"),
+    ("packaging/macos/build_release_wheel.sh", "host_surface.py --expansion-gpu-bindings identical-only"),
+    ("packaging/macos/build_release_wheel.sh", "host_surface.py --expansion-gpu-scripts identical-only"),
+    ("packaging/macos/smoke.py", "_hs_manifest.expansion_gpu_bindings()"),
+    ("tools/verify_linux_surface_qualification.py", "expansion_gpu_bindings('all')"),
+    ("tools/verify_linux_surface_qualification.py", "expansion_gpu_bindings('classical')"),
+]
+EXPANSION_LITERAL = re.compile(r"_mojolearn_x_[a-z]")
+
+
+def expansion_problems(read):
+    """Every expansion reader that does not read the manifest, or spells an
+    expansion binding of its own, as printable lines."""
+    hs = _manifest()
+    print(f"expansion manifest: {len(hs.expansion_gpu_bindings())} GPU binding(s) declared "
+          f"({', '.join(hs.expansion_gpu_bindings()) or 'none yet'})")
+    out = []
+    for rel, token in EXPANSION_READERS:
+        text = read(rel)
+        if text is None or token not in text:
+            out.append(f"  MISSING   {rel} does not read the expansion bindings by {token!r}")
+        else:
+            print(f"  OK        {rel} reads the expansion bindings: {token!r}")
+    for rel in sorted({r for r, _ in EXPANSION_READERS} | {r for r, *_ in SOURCES}):
+        text = read(rel) or ""
+        for m in EXPANSION_LITERAL.finditer(text):
+            line = text.count("\n", 0, m.start()) + 1
+            out.append(f"  LITERAL   {rel}:{line}: spells an expansion binding by hand")
+    for lane in hs.EXPANSION_LANES:
+        for b in hs._EXPANSION[lane]["GPU_BINDINGS"]:
+            script = ROOT / "bindings" / f"build_{b[len('_mojolearn_'):]}.sh"
+            if not script.is_file():
+                out.append(f"  MISSING   {b} is declared by _surface_{lane}.py but {script.relative_to(ROOT)} "
+                           "does not exist")
+    return out
+
 
 #: THE GPU PLUGIN TABLE (2026-09-25): python/mojolearn/gpu_plugins.py says
 #: which PyPI project ships which vendor directory. (path, the token that
@@ -300,6 +357,9 @@ def main():
         print("FAIL profile-only binding disappeared from backend")
         return 1
     want -= profile_only
+    hs_manifest = _manifest()
+    expansion = set(hs_manifest.expansion_gpu_bindings())
+    want |= expansion
     print(f"source of truth: python/mojolearn/_backend.py _MODULES "
           f"({len(want)} extensions)")
     bad = 0
@@ -314,7 +374,8 @@ def main():
             bad += 1
         else:
             print(f"  OK        {path} {var} ({len(got)}) == _backend._TIERED")
-    classical = set(_backend_classical_fast())
+    classical_literal = set(_backend_classical_fast())
+    classical = classical_literal | set(hs_manifest.expansion_gpu_bindings("classical"))
     for path, var in CLASSICAL_MIRRORS:
         vs = importlib.util.spec_from_file_location("check_ext_lists_classical", ROOT / path)
         vm = importlib.util.module_from_spec(vs)
@@ -362,12 +423,15 @@ def main():
                 print(f"  MISMATCH  {path} {var} ({len(got)}) is not _backend._TIERED")
                 print(f"              every-tier list must be exactly: {', '.join(sorted(tiered))}")
             fastc = how(path, CLASSICAL_VAR)
-            if fastc != classical:
+            if fastc != classical_literal:
                 bad += 1
                 print(f"  MISMATCH  {path} {CLASSICAL_VAR} ({0 if fastc is None else len(fastc)}) is not _backend._CLASSICAL_FAST")
                 fastc = fastc or set()
             got = got | ident | fastc
             label = f"{var} + {CLASSICAL_VAR} + {ident_var}"
+        # The file appends the expansion bindings from the manifest at run
+        # time (EXPANSION_READERS, checked below), never in its literal.
+        got = got | expansion
         text = (ROOT / path).read_text()
         for name in profile_only:
             if name not in text:
@@ -390,6 +454,10 @@ def main():
     if host_bad:
         print("\n".join(host_bad))
         bad += len(host_bad)
+    expansion_bad = expansion_problems(_read_tree)
+    if expansion_bad:
+        print("\n".join(expansion_bad))
+        bad += len(expansion_bad)
     plugin_bad = plugin_problems()
     if plugin_bad:
         print("\n".join(plugin_bad))

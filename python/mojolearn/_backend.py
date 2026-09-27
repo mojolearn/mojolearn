@@ -288,6 +288,13 @@ _MODULES = (
     "_mojolearn_ivf",
     "_mojolearn_embedding",
 )
+# THE EXPANSION LANES' GPU BINDINGS (lane/algos-prep, 2026-09-27): read from
+# the per-lane fragments host_surface.py merges (`_surface_<lane>.py`), so a
+# lane adds its binding in its own file and never here. Kept out of the literal
+# above, which packaging/check_ext_lists.py reads as the base inventory; every
+# other list appends the same `expansion_gpu_bindings()` and the checker holds
+# each of them to it. Empty until a lane declares one.
+_MODULES += tuple(host_surface.expansion_gpu_bindings())
 
 #: ONE RULE FOR TIERS (DEVIATION 2490, 2026-09-10): THE TREE LANES SHIP
 #: THREE TIERS, EVERYTHING ELSE SHIPS IDENTICAL ONLY.
@@ -350,6 +357,9 @@ _CLASSICAL_FAST = frozenset({
     "_mojolearn_resample",
     "_mojolearn_ivf",
 })
+# The classical expansion lanes build FAST too; `sequence` and `cnn` are
+# identical only (host_surface.EXPANSION_IDENTICAL_ONLY).
+_CLASSICAL_FAST |= frozenset(host_surface.expansion_gpu_bindings("classical"))
 _FAST_TIERED = _TIERED | _CLASSICAL_FAST
 _IDENTICAL_ONLY = frozenset(_MODULES) - _FAST_TIERED
 

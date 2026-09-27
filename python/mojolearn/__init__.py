@@ -449,6 +449,27 @@ __all__ = [
     "gpu_arch_how",
 ]
 
+# THE ALGORITHM EXPANSION'S DOORS (lane/algos-prep, 2026-09-27;
+# docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md, "Shared registries"). Nine lanes
+# add public algorithms in parallel and none of them edits this file: each
+# owns `_expansion_<lane>.py`, whose `__all__` is what it makes public. They
+# are imported here in lane order (host_surface.EXPANSION_LANES) and their
+# names bound and appended to `__all__`. A name that is already public, or
+# that two doors both export, is refused at import BY NAME rather than one
+# silently shadowing the other, which is what a bare `import *` would do.
+from . import (_expansion_linear, _expansion_cluster, _expansion_neighbors, _expansion_decomp,
+               _expansion_prep, _expansion_sequence, _expansion_trees, _expansion_cnn, _expansion_ann)
+for _door in (_expansion_linear, _expansion_cluster, _expansion_neighbors, _expansion_decomp,
+              _expansion_prep, _expansion_sequence, _expansion_trees, _expansion_cnn, _expansion_ann):
+    for _name in _door.__all__:
+        if _name in __all__ or _name in globals():
+            raise ImportError(f"mojolearn: {_door.__name__} exports {_name!r}, which is already public "
+                              "or already bound; choose another name")
+        globals()[_name] = getattr(_door, _name)
+        __all__.append(_name)
+del _door
+globals().pop("_name", None)
+
 # Named absences. Importing one of these raises with a reason rather than an
 # AttributeError, because "why is X missing" is a question the answer to is
 # interesting and short. Each value names the thing that EXISTS and where it

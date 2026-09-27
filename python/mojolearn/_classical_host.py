@@ -481,6 +481,36 @@ _FORMATS = {
     # else on `_mojolearn_gp_host`.
     _GPC_FORMAT: {"GaussianProcessClassifier": HostGaussianProcessClassifier},
 }
+
+
+def _merge_expansion_doors():
+    """THE EXPANSION LANES' SAVED-MODEL ROUTES (lane/algos-prep, 2026-09-27;
+    docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md). Each lane's door,
+    `_expansion_<lane>.py`, may carry `CLASSICAL_HOST_BASENAMES` (its GPU
+    binding -> its host binding) and `classical_host_formats()` (format ->
+    {estimator: host class}), called here once this module is complete so
+    its host classes can subclass `_HostBound`. A format or family already
+    routed is refused by name. This module is imported lazily (by
+    `host_model`), after the package, so every door is complete by now."""
+    # By name, not by a static import: tools/lane_select.py follows static
+    # imports, and a static edge here would hand every lane that reaches a
+    # saved-model route every expansion lane's door and bindings.
+    import importlib
+    from . import host_surface
+    for lane in host_surface.EXPANSION_LANES:
+        door = importlib.import_module(f"{__package__}._expansion_{lane}")
+        for family, basename in getattr(door, "CLASSICAL_HOST_BASENAMES", {}).items():
+            if family in _HOST_BASENAMES:
+                raise RuntimeError(f"mojolearn: {door.__name__} reroutes {family}")
+            _HOST_BASENAMES[family] = basename
+        formats = getattr(door, "classical_host_formats", None)
+        for fmt, estimators in (formats() if formats else {}).items():
+            if fmt in _FORMATS:
+                raise RuntimeError(f"mojolearn: {door.__name__} redeclares the saved format {fmt!r}")
+            _FORMATS[fmt] = dict(estimators)
+
+
+_merge_expansion_doors()
 CLASSICAL_FORMATS = tuple(_FORMATS)
 
 

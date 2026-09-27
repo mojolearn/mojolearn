@@ -220,6 +220,7 @@ def _trim(text, head=24, tail=8):
 
 
 def main():
+    global ALL_BINDINGS, IDENTICAL_ONLY_BINDINGS, CLASSICAL_FAST_BINDINGS
     ap = argparse.ArgumentParser()
     ap.add_argument("--vendor", required=True, choices=("cuda", "hip", "metal"))
     ap.add_argument("--arch", default="", help="the architecture the set was "
@@ -294,6 +295,14 @@ def main():
             failures.append(f"gpu_plugin() is {plugin.get('distribution')} {plugin.get('version')}, "
                             f"want {want} {ml.__version__}")
 
+    # THE EXPANSION LANES' GPU BINDINGS (lane/algos-prep, 2026-09-27), from the
+    # installed manifest's per-lane fragments: each is loaded and read back
+    # like solver's, through `_backend.binding(name)`. Empty until a lane
+    # declares one; packaging/check_ext_lists.py holds this reader to it.
+    from mojolearn import host_surface as _manifest
+    ALL_BINDINGS = ALL_BINDINGS + tuple(_manifest.expansion_gpu_bindings())
+    IDENTICAL_ONLY_BINDINGS = IDENTICAL_ONLY_BINDINGS | frozenset(_manifest.expansion_gpu_bindings("identical-only"))
+    CLASSICAL_FAST_BINDINGS = CLASSICAL_FAST_BINDINGS | frozenset(_manifest.expansion_gpu_bindings("classical"))
     if frozenset(_backend._IDENTICAL_ONLY) != IDENTICAL_ONLY_BINDINGS:
         failures.append(
             "IDENTICAL_ONLY_BINDINGS in this smoke != _backend._IDENTICAL_ONLY "

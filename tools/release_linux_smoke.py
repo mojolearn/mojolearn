@@ -220,6 +220,7 @@ def _trim(text, head=24, tail=8):
 
 
 def main():
+    global ALL_BINDINGS, IDENTICAL_ONLY_BINDINGS, CLASSICAL_FAST_BINDINGS
     ap = argparse.ArgumentParser()
     ap.add_argument("--vendor", required=True, choices=("cuda", "hip", "metal"))
     ap.add_argument("--arch", default="", help="the architecture the set was "
@@ -275,6 +276,12 @@ def main():
             f"gpu_arch() read back {_backend.gpu_arch()!r} "
             f"({_backend.gpu_arch_how()}), the leg built {a.arch!r}")
 
+    # THE EXPANSION LANES' GPU BINDINGS (lane/algos-prep, 2026-09-27), from
+    # the installed manifest's per-lane fragments, as packaging/linux/smoke.py.
+    from mojolearn import host_surface as _manifest
+    ALL_BINDINGS = ALL_BINDINGS + tuple(_manifest.expansion_gpu_bindings())
+    IDENTICAL_ONLY_BINDINGS = IDENTICAL_ONLY_BINDINGS | frozenset(_manifest.expansion_gpu_bindings("identical-only"))
+    CLASSICAL_FAST_BINDINGS = CLASSICAL_FAST_BINDINGS | frozenset(_manifest.expansion_gpu_bindings("classical"))
     if frozenset(getattr(_backend, "_CLASSICAL_FAST", ())) != CLASSICAL_FAST_BINDINGS:
         failures.append(
             "CLASSICAL_FAST_BINDINGS in this smoke != _backend._CLASSICAL_FAST in the installed package")

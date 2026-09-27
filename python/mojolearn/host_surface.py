@@ -87,8 +87,150 @@ and `python3 -m mojolearn.host_surface ...` says the same thing on a box
 where the package imports.
 """
 import argparse
+import ast
 import json
+import os
 import sys
+
+# ------------------------------------------------ the algorithm expansion
+#: THE NINE EXPANSION LANES (lane/algos-prep, 2026-09-27;
+#: docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md, "Shared registries"). Nine lanes
+#: add algorithms in parallel, and this manifest would be the file every one
+#: of them edits. So none of them edits it: each lane owns ONE file beside
+#: this one, `_surface_<lane>.py`, holding only literal data, and the
+#: registries below merge it at import. A lane's fragment may name only its
+#: own host family (`x_<lane>`), its own host binding
+#: (`_mojolearn_x_<lane>_host`) and its own GPU binding (`_mojolearn_x_<lane>`),
+#: and a lane or family name already declared anywhere else is refused by
+#: name, so two lanes can never collide here and a fragment can never move an
+#: existing family. With every fragment empty the manifest is byte for byte
+#: what it was.
+EXPANSION_LANES = ("linear", "cluster", "neighbors", "decomp", "prep", "sequence", "trees", "cnn", "ann")
+#: The expansion lanes whose GPU binding builds IDENTICAL ONLY, like every
+#: neural binding (`_backend._IDENTICAL_ONLY`). The other seven build FAST and
+#: IDENTICAL, as classical ML does since 2026-09-25 (`_backend._CLASSICAL_FAST`).
+#: NOTE FOR THE ORCHESTRATOR: the plan (Option B, 2026-09-27) wants FAST on
+#: neural too. That is a policy change to the neural IDENTICAL_ONLY rule, made
+#: once, for the existing neural bindings and these two together; it is NOT
+#: made here. When it is, this tuple is the only expansion line that moves.
+EXPANSION_IDENTICAL_ONLY = ("sequence", "cnn")
+#: The only names a fragment may bind, each a literal.
+EXPANSION_KEYS = ("GPU_BINDINGS", "FAMILIES", "TRAINING_LANE_NAMES", "PUBLIC_PENDING_LANES")
+
+
+def expansion_gpu_binding(lane):
+    """The one GPU binding `lane` may add."""
+    return f"_mojolearn_x_{lane}"
+
+
+def expansion_host_family(lane):
+    """The one host family `lane` may add; its binding is
+    `_mojolearn_<family>_host`, built by `bindings/build_<family>_host.sh`."""
+    return f"x_{lane}"
+
+
+def expansion_fragment_path(lane):
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), f"_surface_{lane}.py")
+
+
+def _read_expansion_fragment(lane):
+    """One lane's fragment as a dict of EXPANSION_KEYS, refused unless it is
+    literal data binding only its own names."""
+    path = expansion_fragment_path(lane)
+    if not os.path.isfile(path):
+        raise RuntimeError(f"host_surface: the {lane} lane's fragment {path} is missing; "
+                           "every expansion lane ships one, empty until the lane declares something")
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    tree = ast.parse(text, filename=path)
+    out = {"GPU_BINDINGS": (), "FAMILIES": (), "TRAINING_LANE_NAMES": {}, "PUBLIC_PENDING_LANES": {}}
+    for k, node in enumerate(tree.body):
+        if k == 0 and isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant):
+            continue  # the docstring
+        if not (isinstance(node, ast.Assign) and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name) and node.targets[0].id in EXPANSION_KEYS):
+            raise RuntimeError(f"host_surface: {path}:{getattr(node, 'lineno', '?')}: a fragment binds only "
+                               f"{', '.join(EXPANSION_KEYS)}, each once, as literal data")
+        # `dict(key=value, ...)` is the manifest's own spelling of a family;
+        # nothing else is callable in a fragment.
+        for sub in ast.walk(node.value):
+            if isinstance(sub, ast.Call) and not (isinstance(sub.func, ast.Name) and sub.func.id == "dict"):
+                raise RuntimeError(f"host_surface: {path}:{sub.lineno}: only dict(...) may be called in a fragment")
+            if isinstance(sub, ast.Name) and sub.id != "dict":
+                raise RuntimeError(f"host_surface: {path}:{sub.lineno}: a fragment names nothing but literals "
+                                   f"({sub.id!r})")
+        out[node.targets[0].id] = eval(compile(ast.Expression(node.value), path, "eval"),  # noqa: S307
+                                       {"__builtins__": {"dict": dict}})
+    gpu, family = expansion_gpu_binding(lane), expansion_host_family(lane)
+    if not isinstance(out["GPU_BINDINGS"], tuple) or set(out["GPU_BINDINGS"]) - {gpu}:
+        raise RuntimeError(f"host_surface: {path}: GPU_BINDINGS may hold only {gpu!r}")
+    if not isinstance(out["FAMILIES"], tuple) or len(out["FAMILIES"]) > 1:
+        raise RuntimeError(f"host_surface: {path}: FAMILIES is a tuple of at most one family, {family!r}")
+    for f in out["FAMILIES"]:
+        if not isinstance(f, dict) or f.get("family") != family or f.get("binding") != f"_mojolearn_{family}_host":
+            raise RuntimeError(f"host_surface: {path}: the lane's family is family={family!r}, "
+                               f"binding='_mojolearn_{family}_host'")
+        if f.get("routes") not in (None, gpu):
+            raise RuntimeError(f"host_surface: {path}: {family} may route only {gpu!r} (or None)")
+    for key in ("TRAINING_LANE_NAMES", "PUBLIC_PENDING_LANES"):
+        if not isinstance(out[key], dict) or not all(isinstance(n, str) and isinstance(v, str)
+                                                     for n, v in out[key].items()):
+            raise RuntimeError(f"host_surface: {path}: {key} is a dict of lane name -> sentence")
+    return out
+
+
+_EXPANSION = {lane: _read_expansion_fragment(lane) for lane in EXPANSION_LANES}
+
+
+def _merge_expansion(key, base):
+    """`base` (a tuple of families or a dict keyed by lane) with every lane's
+    fragment `key` added, refusing any name that is already declared."""
+    if isinstance(base, tuple):
+        seen = {f["family"] for f in base} | {f["binding"] for f in base}
+        added = []
+        for lane in EXPANSION_LANES:
+            for f in _EXPANSION[lane][key]:
+                if f["family"] in seen or f["binding"] in seen:
+                    raise RuntimeError(f"host_surface: _surface_{lane}.py redeclares {f['family']}")
+                seen |= {f["family"], f["binding"]}
+                added.append(f)
+        return base + tuple(added)
+    out = dict(base)
+    for lane in EXPANSION_LANES:
+        for name, value in _EXPANSION[lane][key].items():
+            if name in out:
+                raise RuntimeError(f"host_surface: _surface_{lane}.py redeclares {key}[{name!r}]")
+            out[name] = value
+    return out
+
+
+def expansion_gpu_bindings(tier="all"):
+    """The GPU bindings the expansion lanes declare, in lane order. `tier`:
+    'all'; 'classical' (FAST and IDENTICAL, `_backend._CLASSICAL_FAST`);
+    'identical-only' (`EXPANSION_IDENTICAL_ONLY`). Every packaging list that
+    names GPU bindings appends this, so a lane's binding enters the wheel,
+    the builds and the smokes from its fragment alone
+    (packaging/check_ext_lists.py holds every reader to it)."""
+    if tier not in ("all", "classical", "identical-only"):
+        raise ValueError(f"tier must be all, classical or identical-only, not {tier!r}")
+    return [b for lane in EXPANSION_LANES for b in _EXPANSION[lane]["GPU_BINDINGS"]
+            if tier == "all" or (tier == "identical-only") == (lane in EXPANSION_IDENTICAL_ONLY)]
+
+
+def expansion_gpu_scripts(tier="all"):
+    """The build script of each `expansion_gpu_bindings(tier)` binding:
+    `_mojolearn_x_<lane>` builds through `bindings/build_x_<lane>.sh`."""
+    return [f"build_{b[len('_mojolearn_'):]}.sh" for b in expansion_gpu_bindings(tier)]
+
+
+def expansion_lane_of(name):
+    """The expansion lane that owns binding or family `name`, or None."""
+    for lane in EXPANSION_LANES:
+        fam = expansion_host_family(lane)
+        if name in (expansion_gpu_binding(lane), fam, f"_mojolearn_{fam}_host"):
+            return lane
+    return None
+
 
 #: Where this manifest lives, recorded into every CPU column.
 SOURCE = "python/mojolearn/host_surface.py"
@@ -1062,6 +1204,8 @@ TRAINING_LANE_NAMES = {
     "lowbit-conversions": "the bf16 and int8 weight-storage conversions",
     "grad-accumulation": "gradient accumulation across microbatches",
 }
+# The expansion lanes' covered lanes (`_surface_<lane>.py`; see EXPANSION_LANES).
+TRAINING_LANE_NAMES = _merge_expansion("TRAINING_LANE_NAMES", TRAINING_LANE_NAMES)
 
 #: The saved models the CTR table lanes load on a CPU column, one
 #: `<lane>.<fixture>.npz` per lane and fixture, each written by the Apple M4
@@ -2828,6 +2972,8 @@ FAMILIES = (
         ships_in_wheel=True,
     ),
 )
+# The expansion lanes' host families (`_surface_<lane>.py`; see EXPANSION_LANES).
+FAMILIES = _merge_expansion("FAMILIES", FAMILIES)
 
 
 def families():
@@ -3380,6 +3526,8 @@ PUBLIC_PENDING_LANES = {
     "gmm": "stale reference",
     "gmm-sample": "stale reference",
 }
+# The expansion lanes' pending lanes (`_surface_<lane>.py`; see EXPANSION_LANES).
+PUBLIC_PENDING_LANES = _merge_expansion("PUBLIC_PENDING_LANES", PUBLIC_PENDING_LANES)
 
 
 def public_reference_lanes():
@@ -4040,6 +4188,11 @@ def main(argv=None):
     g.add_argument("--gbdt-ctr-models", action="store_true", help="the saved-model directory the CTR table lanes load on a CPU column")
     g.add_argument("--sabotage-build-defines", metavar="FAMILY", default=None,
                    help="MOJOLEARN_BUILD_EXTRA_DEFINES of FAMILY in the gate's sabotage host set")
+    g.add_argument("--expansion-gpu-bindings", choices=("all", "classical", "identical-only"), default=None,
+                   help="the GPU bindings the expansion lanes' fragments declare, for one tier set "
+                        "(every packaging list appends these; empty until a lane declares one)")
+    g.add_argument("--expansion-gpu-scripts", choices=("all", "classical", "identical-only"), default=None,
+                   help="the bindings/ build script of each --expansion-gpu-bindings binding")
     p.add_argument("--sep", default=None, help="separator for list output (default: comma for lanes and kinds, space otherwise)")
     args = p.parse_args(argv)
     if args.sabotage_build_defines is not None:
@@ -4047,6 +4200,11 @@ def main(argv=None):
         return 0
     if args.gbdt_ctr_models:
         print(GBDT_CTR_MODELS_DIR)
+        return 0
+    if args.expansion_gpu_bindings or args.expansion_gpu_scripts:
+        items = (expansion_gpu_bindings(args.expansion_gpu_bindings) if args.expansion_gpu_bindings
+                 else expansion_gpu_scripts(args.expansion_gpu_scripts))
+        print((args.sep if args.sep is not None else " ").join(items))
         return 0
     if args.public_reference_lanes:
         print(",".join(public_reference_lanes()))

@@ -93,6 +93,12 @@ def test_registry_count_comes_from_the_import():
 
     harness = os.path.join(lane_select.ROOT, lane_select.HARNESS)
     text = open(harness, encoding="utf-8").read()
+    # The expansion lanes' fragments (tools/identity_lanes/, lane/algos-prep)
+    # are the harness's own lanes, executed in its namespace.
+    fragments = os.path.join(lane_select.ROOT, lane_select.IDENTITY_FRAGMENTS)
+    for name in sorted(os.listdir(fragments)) if os.path.isdir(fragments) else ():
+        if name.endswith(".py") and not name.startswith("_"):
+            text += "\n" + open(os.path.join(fragments, name), encoding="utf-8").read()
     by_decorator = set(re.findall(r'@lane\(\s*"([A-Za-z0-9_.\-]+)"', text))
     assert by_decorator, "the decorator regex matched nothing: it, not the registry, is broken"
 

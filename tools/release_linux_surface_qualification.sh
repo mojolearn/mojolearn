@@ -128,6 +128,10 @@ getters = {'_mojolearn': 'mojolearn_numeric_mode', '_mojolearn_gbdt': 'gbdt_nume
            '_mojolearn_resample': 'resample_numeric_mode',
            '_mojolearn_ivf': 'ivf_numeric_mode',
            '_mojolearn_embedding': 'embedding_numeric_mode'}
+# The expansion lanes' GPU bindings (lane/algos-prep, 2026-09-27) export
+# `x_<lane>_numeric_mode` by convention (host_surface.expansion_gpu_binding).
+getters.update({n: n[len('_mojolearn_'):] + '_numeric_mode'
+                for n in _backend._MODULES if n.startswith('_mojolearn_x_')})
 if release_profile and mojolearn.numeric_mode() == 'identical':  # DEVIATION 2290
     getters['_mojolearn_byte_lm'] = 'byte_lm_numeric_mode'
 # Read the same complete, tier-specific inventory required by admission.

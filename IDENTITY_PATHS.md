@@ -564,8 +564,22 @@ sized to the count that lane asked for:
 | `kernel_methods` | 67-74 (collided) | **78-85** | 8 |
 | `mixture` | 67-72 (collided) | **86-91** | 6 |
 | `mamba` (mamba2 + mamba3 compositions) | -- | **92-93** (taken 2026-09-01, rows above) | 2 |
+| algorithm expansion `linear` (2026-09-27, lane/algos-prep) | -- | **100-109** | 10 |
+| algorithm expansion `cluster` | -- | **110-119** | 10 |
+| algorithm expansion `neighbors` | -- | **120-129** | 10 |
+| algorithm expansion `decomp` | -- | **130-139** | 10 |
+| algorithm expansion `prep` | -- | **140-149** | 10 |
+| algorithm expansion `sequence` | -- | **150-159** | 10 |
+| algorithm expansion `trees` | -- | **160-169** | 10 |
+| algorithm expansion `cnn` | -- | **170-179** | 10 |
+| algorithm expansion `ann` | -- | **180-189** | 10 |
 
-Next free row after this table is **94**. A lane takes a range by editing this
+Next free row after this table is **190** (97-99 are unassigned; the
+expansion ranges start at 100 so the nine lanes of
+docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md never meet anyone already writing
+at 97). Each expansion lane writes its rows ONLY in its own section of
+"Algorithm expansion rows" at the end of this file, so nine lanes merging
+at once never edit the same lines. A lane takes a range by editing this
 table, not by writing numbers into its own README and hoping.
 
 **COLLISION NOTED 2026-09-01 (the mamba lane, while taking 92-93): row 64
@@ -587,3 +601,62 @@ each lane updates its own two lines to the assignment above.
 Apple against AMD, byte-identical, 13 card stages at `221aa141`
 (`bench/results/e1/CERT_2026-08-31.md`). It should have one, and it is not
 assigned a number here because the row text has to come from the lane.
+
+## Algorithm expansion rows (2026-09-27)
+
+One section per lane of docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md, in its
+registered range. A lane edits its own section only: replace its `(no rows
+yet)` line with its table rows, in the ledger's columns.
+
+
+### `linear`: rows 100-109
+
+(no rows yet)
+
+
+
+### `cluster`: rows 110-119
+
+(no rows yet)
+
+
+
+### `neighbors`: rows 120-129
+
+(no rows yet)
+
+
+
+### `decomp`: rows 130-139
+
+(no rows yet)
+
+
+
+### `prep`: rows 140-149
+
+(no rows yet)
+
+
+
+### `sequence`: rows 150-159
+
+(no rows yet)
+
+
+
+### `trees`: rows 160-169
+
+(no rows yet)
+
+
+
+### `cnn`: rows 170-179
+
+(no rows yet)
+
+
+
+### `ann`: rows 180-189
+
+(no rows yet)

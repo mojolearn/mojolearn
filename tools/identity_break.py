@@ -12775,5 +12775,104 @@ def main():
     return run(args)
 
 
+# ------------------------------------------------ the algorithm expansion's lanes
+#: THE EXPANSION LANES' IDENTITY LANES (lane/algos-prep, 2026-09-27;
+#: docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md, "Shared registries"). Nine lanes
+#: add algorithms in parallel, and this file would be the one every one of
+#: them edits. So none of them edits it: each owns ONE fragment,
+#: `tools/identity_lanes/<lane>.py`, written against this module's own API
+#: (`@lane("x")`, `_fit`, `_h`, `_batch_decl`, `_batchgrad_decl`, ...), and it
+#: is executed HERE, in this module's namespace, after every helper and
+#: registry above exists. A wheel carries each fragment beside the harness copy
+#: as `mojolearn/_identity_lane_<lane>.py` (packaging/linux/pack_wheel.py,
+#: packaging/macos/build_release_wheel.sh).
+#:
+#: A FRAGMENT MAY ADD ITS OWN LANES AND NOTHING ELSE, and that is checked, not
+#: trusted, because tools/lane_select.py attributes a change to a fragment to
+#: exactly the lanes that fragment registers:
+#:   * it rebinds no module-level name that already exists (`_`, the throwaway
+#:     name every lane body is defined under, excepted), so it cannot shadow a
+#:     helper another lane calls, or another fragment's helper;
+#:   * it mutates no module-level list, dict or set, except that the per-lane
+#:     registries below may gain keys that are lanes THIS fragment registered;
+#:   * every lane it registers is new, and is spelled literally, `lane("x")` or
+#:     `@lane("x")`, so a reader of the text (tools/lane_accounting.py, the
+#:     selector's history reads) sees exactly what the import sees.
+#: With every fragment empty the harness is byte for byte what it was.
+LANE_FRAGMENTS = {}
+#: The per-lane registries a fragment may add ITS OWN lanes to.
+#: LANE_REVISIONS is not among them: a revision marks input that moved after
+#: a record was taken, and an expansion lane has no record yet.
+_FRAGMENT_REGISTRIES = ("LANES", "BATCH", "BATCHGRAD", "BATCHSCALE", "RAGGED", "STEPFULL", "RLPAIR",
+                        "GPU_ONLY_LANES")
+
+
+def lane_fragment_paths(here=None):
+    """(fragment id, path) for every expansion fragment, in id order: the
+    checkout's `identity_lanes/<id>.py` beside tools/identity_break.py, else a
+    wheel's `_identity_lane_<id>.py` beside mojolearn/_identity_break.py. A
+    harness copied somewhere on its own (a sabotage test's temp copy) has
+    neither, and loads no fragment."""
+    here = here or os.path.dirname(os.path.abspath(__file__))
+    tree = os.path.join(here, "identity_lanes")
+    if os.path.isdir(tree):
+        return [(p.stem, str(p)) for p in sorted(Path(tree).glob("*.py")) if not p.stem.startswith("_")]
+    return [(p.stem[len("_identity_lane_"):], str(p)) for p in sorted(Path(here).glob("_identity_lane_*.py"))]
+
+
+def _container_state(obj):
+    if isinstance(obj, dict):
+        return ("dict", tuple((k, id(v)) for k, v in obj.items()))
+    if isinstance(obj, list):
+        return ("list", tuple(id(v) for v in obj))
+    if isinstance(obj, set):
+        return ("set", frozenset(id(v) for v in obj))
+    return None
+
+
+def _load_lane_fragments():
+    g = globals()
+    registered = re.compile(r'''(?:^@lane|\blane)\(\s*["']([a-z0-9][a-z0-9-]*)["']\s*\)''', re.M)
+    for fid, path in lane_fragment_paths():
+        if fid in LANE_FRAGMENTS:
+            raise RuntimeError(f"identity_break: two lane fragments named {fid!r}")
+        before = dict(g)
+        state = {n: _container_state(v) for n, v in before.items()
+                 if n not in _FRAGMENT_REGISTRIES and _container_state(v) is not None}
+        snap = {r: dict(g[r]) for r in _FRAGMENT_REGISTRIES}
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        exec(compile(text, path, "exec"), g)  # noqa: S102 -- the fragment is this module's own source
+        why = f"identity_break: lane fragment {path}"
+        for name, obj in before.items():
+            if name != "_" and (name not in g or g[name] is not obj):
+                raise RuntimeError(f"{why} rebinds or deletes the module-level name {name!r}; "
+                                   "prefix a fragment's own helpers with its lane id")
+        for name, st in state.items():
+            if _container_state(g[name]) != st:
+                raise RuntimeError(f"{why} mutates the module-level {name!r}; a fragment may only add "
+                                   f"its own lanes to {', '.join(_FRAGMENT_REGISTRIES)}")
+        new = [n for n in LANES if n not in snap["LANES"]]
+        literal = set(registered.findall(text))
+        for n in new:
+            if n not in literal:
+                raise RuntimeError(f"{why} registers {n!r} by a computed name; spell it lane({n!r})")
+            code = getattr(LANES[n], "__code__", None)
+            if code is None or os.path.abspath(code.co_filename) != os.path.abspath(path):
+                raise RuntimeError(f"{why}: lane {n!r} must be a function defined in the fragment")
+        for r in _FRAGMENT_REGISTRIES:
+            old, now = snap[r], g[r]
+            for k in old:
+                if k not in now or now[k] is not old[k]:
+                    raise RuntimeError(f"{why} changes {r}[{k!r}], which it does not own")
+            for k in now:
+                if k not in old and k not in new:
+                    raise RuntimeError(f"{why} adds {r}[{k!r}]: not a lane this fragment registered")
+        LANE_FRAGMENTS[fid] = tuple(new)
+
+
+_load_lane_fragments()
+
+
 if __name__ == "__main__":
     sys.exit(main())

@@ -48,6 +48,17 @@ def _read(rel):
     return (ROOT / rel).read_text(encoding="utf-8")
 
 
+def _harness_text():
+    """tools/identity_break.py and, after it, every expansion lane fragment
+    it executes (tools/identity_lanes/<lane>.py, lane/algos-prep 2026-09-27):
+    their lanes are the harness's lanes, registered in the same spellings."""
+    text = _read("tools/identity_break.py")
+    for path in sorted((ROOT / "tools" / "identity_lanes").glob("*.py")):
+        if not path.name.startswith("_"):
+            text += "\n" + path.read_text(encoding="utf-8")
+    return text
+
+
 def _exports_in_source(name):
     return DEF_FUNCTION.findall(_read(host_surface.binding_source(name)))
 
@@ -239,7 +250,7 @@ def _gpu_only_lanes():
 
 
 def test_covered_lanes_are_identity_break_lanes():
-    text = _read("tools/identity_break.py")
+    text = _harness_text()
     defined = set(re.findall(r'^@lane\("([a-z0-9-]+)"\)', text, re.M))
     assert defined, "no @lane registrations found in tools/identity_break.py"
     # Module-level call registrations, `lane("gmm-sample")(_gmm_sample_lane("kmeans"))`
@@ -674,7 +685,7 @@ def test_public_reference_candidates_meet_every_condition_to_be_promoted():
         # retire the only assertion standing behind eighteen public claims.
         return
 
-    text = _read("tools/identity_break.py")
+    text = _harness_text()
     defined = set(re.findall(r'^@lane\("([a-z0-9-]+)"\)', text, re.M))
     defined |= set(re.findall(r'^lane\("([a-z0-9-]+)"\)\(', text, re.M))
     defined |= _loop_registered_lanes(text)
@@ -756,7 +767,7 @@ def test_saved_model_inference_owed_names_real_lanes_and_remaining_debt():
         record = ROOT / "bench/results/classical_host/2026-09-18-apple-kernel-variants/saved-models" / lane / lane
         assert len(list(record.glob("*/expected.json"))) == 9, lane
         assert len(list(record.glob("*/model.npz"))) == 9, lane
-    text = _read("tools/identity_break.py")
+    text = _harness_text()
     defined = set(re.findall(r'^@lane\("([a-z0-9-]+)"\)', text, re.M))
     defined |= set(re.findall(r'^lane\("([a-z0-9-]+)"\)\(', text, re.M))
     defined |= _loop_registered_lanes(text)

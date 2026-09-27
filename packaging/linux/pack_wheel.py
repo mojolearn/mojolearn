@@ -287,6 +287,11 @@ _hs_spec = importlib.util.spec_from_file_location("mojolearn_host_surface", PY_D
 host_surface = importlib.util.module_from_spec(_hs_spec)
 sys.modules[_hs_spec.name] = host_surface
 _hs_spec.loader.exec_module(host_surface)
+# THE EXPANSION LANES' GPU BINDINGS (lane/algos-prep, 2026-09-27), from the
+# per-lane fragments the manifest merges; empty until a lane declares one.
+# packaging/check_ext_lists.py holds this reader to the manifest.
+FAST_CLASSICAL_NAMES += tuple(host_surface.expansion_gpu_bindings("classical"))
+IDENTICAL_ONLY_NAMES += tuple(host_surface.expansion_gpu_bindings("identical-only"))
 
 
 def split_release_slots(vendors):
@@ -1071,6 +1076,10 @@ def main(argv=None, _gates=True):
     # in this checkout; the wheel has no second implementation of anything.
     entries["mojolearn/_identity_trace_diff.py"] = REPO / "tools" / "identity_trace_diff.py"
     entries["mojolearn/_identity_break.py"] = REPO / "tools" / "identity_break.py"
+    # The expansion lanes' identity lanes (lane/algos-prep, 2026-09-27): the
+    # harness copy loads `_identity_lane_<lane>.py` beside itself.
+    for fragment in sorted((REPO / "tools" / "identity_lanes").glob("*.py")):
+        entries[f"mojolearn/_identity_lane_{fragment.stem}.py"] = fragment
     for card in sorted((PKG / "reference_cards").iterdir()):
         if card.is_file():
             entries[f"mojolearn/reference_cards/{card.name}"] = card
