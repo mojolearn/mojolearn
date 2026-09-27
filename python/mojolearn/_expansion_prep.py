@@ -35,7 +35,7 @@ from ._labels import flatten_labels, sorted_classes, label_kind
 __all__ = ["RobustScaler", "MaxAbsScaler", "OrdinalEncoder", "OneHotEncoder", "TargetEncoder", "SimpleImputer", "KBinsDiscretizer",
            "GaussianNB", "MultinomialNB", "BernoulliNB",
            "LinearDiscriminantAnalysis", "QuadraticDiscriminantAnalysis",
-           "QuantileTransformer"]
+           "QuantileTransformer", "PowerTransformer"]
 
 _BINDING = "_mojolearn_x_prep"
 
@@ -47,7 +47,7 @@ _OPS = dict(
     te_global=20, te_enc=21, te_apply=22, mark_missing=23, fill=24, kbins_edges=25, kbins_codes=26,
     gnb_eps=27, gnb_params=28, gnb_jll=29, class_log_prior=30, mnb_params=31, bnb_params=32, cnb_params=33, cat_params=34, cat_jll=35,
     lda_prep=36, lda_w=37, lda_stage2=38, lda_stage3=39, qda_cov=40, qda_prep=41, qda_dec=42,
-    qt_apply=43,
+    qt_apply=43, pt_fit=44, pt_apply=45, std_params=46,
 )
 _PARAMS = 14
 _NONE = -1
@@ -1314,3 +1314,63 @@ class QuantileTransformer(_PrepBase):
 
     def inverse_transform(self, X):
         raise NotImplementedError("mojolearn: QuantileTransformer.inverse_transform is not implemented")
+
+
+class PowerTransformer(_PrepBase):
+    """sklearn.preprocessing.PowerTransformer: 'yeo-johnson' (default) or
+    'box-cox' (strictly positive input), then StandardScaler when
+    `standardize`. Each column's lambda maximises the reference's
+    log-likelihood by a fixed-step golden-section search over [-8, 8]
+    (the reference: scipy's Brent from the bracket (-2, 2)), float32. NaN is
+    ignored in fit and kept. inverse_transform is refused."""
+    _parameters = ("method", "standardize", "copy")
+
+    def __init__(self, method="yeo-johnson", *, standardize=True, copy=True):
+        self.method = method
+        self.standardize = standardize
+        self.copy = copy
+
+    def fit(self, X, y=None):
+        if self.method not in ("yeo-johnson", "box-cox"):
+            raise ValueError(f"mojolearn: invalid method {self.method!r}")
+        arr = _x2d(X)
+        n, d = arr.shape
+        method = 1 if self.method == "box-cox" else 0
+        mode = _mode()
+        pr = _Prog()
+        xo = pr.put(arr)
+        st, lam = pr.alloc(6 * d), pr.alloc(d)
+        pr.stage("col_stats", d, xo, n, d, st)
+        pr.stage("pt_fit", d, xo, n, d, method, st, lam)
+        mean, scale = pr.alloc(d), pr.alloc(d)
+        if self.standardize:
+            tx, st2 = pr.alloc(n * d), pr.alloc(6 * d)
+            pr.stage("pt_apply", n * d, xo, n, d, lam, method, _NONE, _NONE, tx)
+            pr.stage("col_stats", d, tx, n, d, st2)
+            pr.stage("std_params", d, st2, d, mean, scale)
+        pr.run(mode)
+        if method == 1 and any(v <= 0 for v in pr.values(st + 3 * d, d)):
+            raise ValueError("mojolearn: The Box-Cox transformation can only be applied to strictly positive data")
+        self.lambdas_ = pr.get(lam, d)
+        self._mean = pr.get(mean, d) if self.standardize else None
+        self._scale = pr.get(scale, d) if self.standardize else None
+        self._method = method
+        self.numeric_mode_, self.n_features_in_ = mode, d
+        return self
+
+    def transform(self, X):
+        self._check_fitted()
+        arr = _x2d(X)
+        self._check_width(arr)
+        n, d = arr.shape
+        pr = _Prog()
+        xo, lo = pr.put(arr), pr.put(self.lambdas_)
+        mo = pr.put(self._mean) if self.standardize else _NONE
+        so = pr.put(self._scale) if self.standardize else _NONE
+        out = pr.alloc(n * d)
+        pr.stage("pt_apply", n * d, xo, n, d, lo, self._method, mo, so, out)
+        pr.run(self.numeric_mode_)
+        return pr.get(out, (n, d))
+
+    def inverse_transform(self, X):
+        raise NotImplementedError("mojolearn: PowerTransformer.inverse_transform is not implemented")

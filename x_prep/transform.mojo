@@ -14,9 +14,9 @@ P. J. Acklam's inverse normal CDF (the rational approximation, one Halley
 refinement) for `scipy.stats.norm.ppf`.
 """
 from std.memory import bitcast
-from checks.numerics import ftz
+from checks.numerics import ftz, identical_log1p
 from x_prep.common import FP, IP, p, ld, raw, st, is_nan
-from x_prep.prims import add, sub, mul, div, logf, expf, sqrtf
+from x_prep.prims import add, sub, mul, div, logf, expf, sqrtf, zero_to_one
 
 #: norm.ppf(1e-7 - eps) and its mirror: QuantileTransformer's normal clip.
 comptime QT_CLIP = Float32(5.1993375)
@@ -142,3 +142,129 @@ def qt_apply_unit(t: Int, f: FP, q: IP):
                 if y > QT_CLIP:
                     y = QT_CLIP
     st(f, p(q, 7) + t, y)
+
+
+@always_inline
+def log1pf(x: Float32) -> Float32:
+    return ftz(identical_log1p(ftz(x)))
+
+
+def yeo_johnson(x: Float32, lam: Float32) -> Float32:
+    """scipy.stats.yeojohnson's transform of one value (x not NaN)."""
+    if x >= Float32(0):
+        if lam == Float32(0):
+            return log1pf(x)
+        return div(sub(expf(mul(lam, log1pf(x))), Float32(1)), lam)
+    var l2 = sub(Float32(2), lam)
+    if l2 == Float32(0):
+        return sub(Float32(0), log1pf(sub(Float32(0), x)))
+    return sub(Float32(0), div(sub(expf(mul(l2, log1pf(sub(Float32(0), x)))), Float32(1)), l2))
+
+
+def box_cox(x: Float32, lam: Float32) -> Float32:
+    """scipy.special.boxcox of one value (x > 0)."""
+    if lam == Float32(0):
+        return logf(x)
+    return div(sub(expf(mul(lam, logf(x))), Float32(1)), lam)
+
+
+def power(x: Float32, lam: Float32, method: Int) -> Float32:
+    if method == 1:
+        return box_cox(x, lam)
+    return yeo_johnson(x, lam)
+
+
+def _neg_llf(f: FP, X: Int, n: Int, d: Int, c: Int, lam: Float32, method: Int) -> Float32:
+    """Minus scipy's yeojohnson_llf / boxcox_llf over the non-NaN entries:
+    n/2 log var(T(x)) - (lam - 1) sum J(x), J = sign(x) log1p|x| or log x."""
+    var cnt = 0
+    var s = Float32(0)
+    var sj = Float32(0)
+    for i in range(n):
+        var x = ld(f, X + i * d + c)
+        if is_nan(x):
+            continue
+        s = add(s, power(x, lam, method))
+        if method == 1:
+            sj = add(sj, logf(x))
+        elif x >= Float32(0):
+            sj = add(sj, log1pf(x))
+        else:
+            sj = sub(sj, log1pf(sub(Float32(0), x)))
+        cnt += 1
+    if cnt == 0:
+        return Float32(0)
+    var mean = div(s, Float32(cnt))
+    var ss = Float32(0)
+    for i in range(n):
+        var x = ld(f, X + i * d + c)
+        if is_nan(x):
+            continue
+        var e = sub(power(x, lam, method), mean)
+        ss = add(ss, mul(e, e))
+    var var_ = div(ss, Float32(cnt))
+    return sub(mul(mul(Float32(0.5), Float32(cnt)), logf(var_)), mul(sub(lam, Float32(1)), sj))
+
+
+comptime PT_LO = Float32(-8)
+comptime PT_HI = Float32(8)
+comptime PT_ITERS = 48
+#: (3 - sqrt 5) / 2
+comptime GOLDEN = Float32(0.381966)
+
+
+def pt_fit_unit(t: Int, f: FP, q: IP):
+    """q = [X, n, d, METHOD, ST, LAMBDA]; t = column. The lambda minimising
+    the negative log-likelihood by a golden-section search over [-8, 8] with
+    a fixed step count (the reference runs scipy's Brent from the bracket
+    (-2, 2)); a constant column is lambda 1 for yeo-johnson (METHOD 0)."""
+    var n = p(q, 1)
+    var d = p(q, 2)
+    var method = p(q, 3)
+    var c = t
+    if method == 0 and ld(f, p(q, 4) + 2 * d + c) == Float32(0):
+        st(f, p(q, 5) + c, Float32(1))
+        return
+    var a = PT_LO
+    var b = PT_HI
+    var x1 = add(a, mul(GOLDEN, sub(b, a)))
+    var x2 = sub(b, mul(GOLDEN, sub(b, a)))
+    var f1 = _neg_llf(f, p(q, 0), n, d, c, x1, method)
+    var f2 = _neg_llf(f, p(q, 0), n, d, c, x2, method)
+    for _ in range(PT_ITERS):
+        if f1 <= f2 or f2 != f2:
+            b = x2
+            x2 = x1
+            f2 = f1
+            x1 = add(a, mul(GOLDEN, sub(b, a)))
+            f1 = _neg_llf(f, p(q, 0), n, d, c, x1, method)
+        else:
+            a = x1
+            x1 = x2
+            f1 = f2
+            x2 = sub(b, mul(GOLDEN, sub(b, a)))
+            f2 = _neg_llf(f, p(q, 0), n, d, c, x2, method)
+    st(f, p(q, 5) + c, mul(add(a, b), Float32(0.5)))
+
+
+def pt_apply_unit(t: Int, f: FP, q: IP):
+    """q = [X, n, d, LAMBDA, METHOD, MEAN, SCALE, OUT]; t = element. The power
+    transform, then (MEAN >= 0) standardisation; NaN is copied."""
+    var d = p(q, 2)
+    var c = t % d
+    var x = raw(f, p(q, 0) + t)
+    if is_nan(x):
+        f.unsafe_store(p(q, 7) + t, x)
+        return
+    var v = power(ftz(x), ld(f, p(q, 3) + c), p(q, 4))
+    if p(q, 5) >= 0:
+        v = div(sub(v, ld(f, p(q, 5) + c)), ld(f, p(q, 6) + c))
+    st(f, p(q, 7) + t, v)
+
+
+def std_params_unit(t: Int, f: FP, q: IP):
+    """q = [ST, d, MEAN, SCALE]; t = column: StandardScaler's mean and
+    scale (population std, `_handle_zeros_in_scale`) from col_stats rows."""
+    var d = p(q, 1)
+    st(f, p(q, 2) + t, ld(f, p(q, 0) + d + t))
+    st(f, p(q, 3) + t, zero_to_one(sqrtf(ld(f, p(q, 0) + 2 * d + t))))
