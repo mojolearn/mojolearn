@@ -10,7 +10,7 @@ from std.python import PythonObject
 from std.math import sqrt
 from checks.numerics import ftz, identical_div, identical_mul, identical_mul_add, identical_pow64, identical_sqrt
 from sequence.exec import Exec
-from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_ROW, OP_AF_COL, OP_AF_RMEAN, OP_AF_UPDATE_MAT, OP_AF_VEC, OP_AF_DENOM, OP_AF_APPLY, OP_SEG_SUMSQ, OP_LAMB_UPD, OP_LAMB_RATIO, OP_LAMB_APPLY, OP_LN_FWD, OP_LN_BWD_X, OP_LN_BWD_W, OP_DIVS, OP_FILL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD, OPT_NADAM
+from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_ROW, OP_AF_COL, OP_AF_RMEAN, OP_AF_UPDATE_MAT, OP_AF_VEC, OP_AF_DENOM, OP_AF_APPLY, OP_SEG_SUMSQ, OP_LAMB_UPD, OP_LAMB_RATIO, OP_LAMB_APPLY, OP_LN_FWD, OP_LN_BWD_X, OP_LN_BWD_W, OP_THETA, OP_DIVS, OP_FILL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD, OPT_NADAM
 from sequence.recurrent import gemm
 from sequence.mlp_fit import MLPNet, mlp_fit, mlp_predict
 from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, opt_scalars, opt_step, rnn_fit, rnn_predict
@@ -693,3 +693,46 @@ def layer_norm_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp:
     ex.sync()
     ex.download(fptr(addrs[3], "y"), Y, M * D)
     return PythonObject(M * D)
+
+
+def theta_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
+    """statsforecast's Theta family over a batch of series (`sequence/theta.mojo`).
+    addrs = [y (B, n), forecast (B, h) out, info (B, 8) out];
+    ip = [B, n, h, season_length, model (-1 auto, 0 STM, 1 OTM, 2 DSTM,
+    3 DOTM), decomposition (0 multiplicative, 1 additive), fixed mask];
+    fp = [initial_smoothed, alpha, theta] (read where fixed)."""
+    if len(addrs) != 3 or len(ip) != 7 or len(fp) != 3:
+        raise Error("theta: requires 3 addresses, 7 integer and 3 float parameters")
+    var B = ival(ip, 0)
+    var n = ival(ip, 1)
+    var h = ival(ip, 2)
+    var m = ival(ip, 3)
+    var model = ival(ip, 4)
+    if B < 1 or n <= 3 or h < 1 or m < 1 or model < -1 or model > 3:
+        raise Error("theta: B >= 1, n > 3 (the reference refuses tiny series), h >= 1, season_length >= 1")
+    var stride = n + n + m + 5 * (n + h) + n + 64 + 12 + h
+    var Y = ex.alloc(B * n)
+    ex.upload(Y, fptr(addrs[0], "y"), B * n)
+    var F = ex.alloc(B * h)
+    var I = ex.alloc(B * 8)
+    var S = ex.alloc(B * stride)
+    var a = Args()
+    a.p0 = Y
+    a.p1 = F
+    a.p2 = I
+    a.p3 = S
+    a.i0 = n
+    a.i1 = h
+    a.i2 = m
+    a.i3 = model
+    a.i4 = ival(ip, 5)
+    a.i5 = ival(ip, 6)
+    a.i6 = stride
+    a.f0 = fval(fp, 0)
+    a.f1 = fval(fp, 1)
+    a.f2 = fval(fp, 2)
+    ex.launch[OP_THETA](a, B)
+    ex.sync()
+    ex.download(fptr(addrs[1], "forecast"), F, B * h)
+    ex.download(fptr(addrs[2], "info"), I, B * 8)
+    return PythonObject(B * h)
