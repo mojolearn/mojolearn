@@ -33,7 +33,7 @@ __all__ = ["SGDClassifier", "SGDRegressor", "PoissonRegressor", "GammaRegressor"
            "Perceptron", "PassiveAggressiveClassifier",
            "PassiveAggressiveRegressor", "SGDOneClassSVM",
            "RidgeClassifier", "RidgeCV",
-           "LassoCV"]
+           "LassoCV", "ElasticNetCV"]
 
 _BINDING = "_mojolearn_x_linear"
 ALGO_SGD, ALGO_GLM, ALGO_HUBER, ALGO_BAYES, ALGO_ARD = 1, 2, 3, 4, 5
@@ -916,7 +916,8 @@ def _enetcv_fit(est, X, y, l1_ratios):
         est.mse_path_ = Array.from_list(
             [[ms[(l * grid + k) * folds:(l * grid + k + 1) * folds] for k in range(grid)] for l in range(L)], "<f4")
     est.n_features_in_ = d
-    return l1_best
+    # the user's own value (the kernel carried it as float32)
+    return min(l1_ratios, key=lambda r: abs(r - l1_best))
 
 
 class LassoCV(_LinearRegressorMixin, NumericModeMixin):
@@ -935,4 +936,24 @@ class LassoCV(_LinearRegressorMixin, NumericModeMixin):
 
     def fit(self, X, y):
         _enetcv_fit(self, X, y, [1.0])
+        return self
+
+
+class ElasticNetCV(_LinearRegressorMixin, NumericModeMixin):
+    """Elastic net with (l1_ratio, alpha) chosen by K-fold cross-validation
+    (scikit-learn's ElasticNetCV; cv None or an int, unshuffled KFold)."""
+
+    _BINDING = _BINDING
+
+    def __init__(self, *, l1_ratio=0.5, eps=1e-3, n_alphas="deprecated", alphas=100, fit_intercept=True,
+                 precompute="auto", max_iter=1000, tol=1e-4, cv=None, copy_X=True, verbose=0,
+                 n_jobs=None, positive=False, random_state=None, selection="cyclic"):
+        self.l1_ratio, self.eps, self.n_alphas, self.alphas = l1_ratio, eps, n_alphas, alphas
+        self.fit_intercept, self.precompute, self.max_iter, self.tol = fit_intercept, precompute, max_iter, tol
+        self.cv, self.copy_X, self.verbose, self.n_jobs = cv, copy_X, verbose, n_jobs
+        self.positive, self.random_state, self.selection = positive, random_state, selection
+
+    def fit(self, X, y):
+        ratios = list(self.l1_ratio) if hasattr(self.l1_ratio, "__len__") else [self.l1_ratio]
+        self.l1_ratio_ = _enetcv_fit(self, X, y, [float(r) for r in ratios])
         return self
