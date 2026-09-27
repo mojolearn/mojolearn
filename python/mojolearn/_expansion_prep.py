@@ -3095,7 +3095,9 @@ def _mi_discrete_mask(discrete_features, d):
 def _mutual_info(X, y, discrete_target, discrete_features, n_neighbors, random_state):
     """The reference's `_estimate_mi`: continuous columns are scaled and
     noised (row-major over the continuous columns only, as the reference's
-    draw of shape (n, n_continuous)); each column then takes the estimator
+    draw of shape (n, n_continuous)), the 1e-10-scaled noise kept as a
+    second word that breaks exact ties as the reference's float64 sum does
+    (DEVIATION 5407); each column then takes the estimator
     its kinds name: Kraskov (continuous x, continuous y), Ross (one side
     discrete: the classes, or a discrete feature's categories against the
     noised target) or the contingency table (both discrete)."""
@@ -3115,6 +3117,9 @@ def _mutual_info(X, y, discrete_target, discrete_features, n_neighbors, random_s
         if codes.size != n:
             raise ValueError("mojolearn: X and y have different numbers of rows")
         counts = _class_counts(codes, len(classes))
+        if cont and max(counts) < 2:
+            raise ValueError("mojolearn: mutual_info: every class has one sample (the reference's "
+                             "neighbour search over the classes with more than one finds 0 samples)")
         yo, lc = pr.put_codes(codes), pr.put_list(counts)
     else:
         yv = as_f32_c(y, ndim=1, name="y")[0]
@@ -3124,24 +3129,24 @@ def _mutual_info(X, y, discrete_target, discrete_features, n_neighbors, random_s
     if cont:
         dc = len(cont)
         xo = pr.put(arr if not disc else _gather(arr, cont, mode))
-        st, sc, ma, z = pr.alloc(6 * dc), pr.alloc(dc), pr.alloc(dc), pr.alloc(n * dc)
+        st, sc, ma, z, zs = pr.alloc(6 * dc), pr.alloc(dc), pr.alloc(dc), pr.alloc(n * dc), pr.alloc(n * dc)
         pr.stage("col_stats", dc, xo, n, dc, st)
         pr.stage("mi_colscale", dc, xo, n, dc, st, sc, ma)
-        pr.stage("mi_noise", n * dc, xo, n, dc, sc, ma, 2 * seed, z)
+        pr.stage("mi_noise", n * dc, xo, n, dc, sc, ma, 2 * seed, z, zs + 1)
     if not discrete_target:
         yo = pr.put(yv)
-        sty, scy, may, zy = pr.alloc(6), pr.alloc(1), pr.alloc(1), pr.alloc(n)
+        sty, scy, may, zy, zys = pr.alloc(6), pr.alloc(1), pr.alloc(1), pr.alloc(n), pr.alloc(n)
         pr.stage("col_stats", 1, yo, n, 1, sty)
         pr.stage("mi_colscale", 1, yo, n, 1, sty, scy, may)
-        pr.stage("mi_noise", n, yo, n, 1, scy, may, 2 * seed + 1, zy)
+        pr.stage("mi_noise", n, yo, n, 1, scy, may, 2 * seed + 1, zy, zys + 1)
     if cont:
         term, outc = pr.alloc(n * dc), pr.alloc(dc)
         if discrete_target:
             used = sum(c for c in counts if c > 1)
-            pr.stage("mi_cd", n * dc, z, n, dc, yo, lc, k, term)
+            pr.stage("mi_cd", n * dc, z, n, dc, yo, lc, k, term, zs + 1)
             pr.stage("mi_reduce", dc, term, n, dc, 1, k, used, outc)
         else:
-            pr.stage("mi_cc", n * dc, z, n, dc, zy, k, term)
+            pr.stage("mi_cc", n * dc, z, n, dc, zy, k, term, zs + 1, zys + 1)
             pr.stage("mi_reduce", dc, term, n, dc, 0, k, n, outc)
     if disc:
         dd = len(disc)
@@ -3149,6 +3154,9 @@ def _mutual_info(X, y, discrete_target, discrete_features, n_neighbors, random_s
         cats = _fit_categories(mode, xd)
         kx = [c.size for c in cats]
         kmax = max(kx)
+        if not discrete_target and n in kx:
+            raise ValueError(f"mojolearn: mutual_info: discrete feature {disc[kx.index(n)]} has one sample per "
+                             "value (the reference's neighbour search finds 0 samples)")
         xc, _neg = _codes(pr, xd, cats)
         outd = pr.alloc(dd)
         if discrete_target:
@@ -3160,7 +3168,7 @@ def _mutual_info(X, y, discrete_target, discrete_features, n_neighbors, random_s
             cnti, cntf, term = pr.alloc(dd * kmax), pr.alloc(dd * kmax), pr.alloc(n * dd)
             pr.stage("code_counts", dd, xc, n, dd, kmax, cnti)
             pr.stage("i2f", dd * kmax, cnti, cntf)
-            pr.stage("mi_dc", n * dd, zy, n, dd, xc, cntf, kmax, k, term)
+            pr.stage("mi_dc", n * dd, zy, n, dd, xc, cntf, kmax, k, term, zys + 1)
             pr.stage("mi_reduce", dd, term, n, dd, 2, k, 0, outd, cntf, kmax)
     pr.run(mode)
     if not disc:
