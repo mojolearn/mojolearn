@@ -84,7 +84,8 @@ def test_manifest_covers_the_lane():
     (dict(kernel="polynomial"), NotImplementedError, "poly"),
     (dict(kernel="rbf", degree=2), NotImplementedError, "read only by kernel='poly'"),
     (dict(kernel="linear", coef0=1.0), NotImplementedError, "read only by kernel='poly'"),
-    (dict(kernel="sigmoid"), NotImplementedError, "TANH"),
+    (dict(kernel="tanh"), NotImplementedError, "sigmoid"),
+    (dict(kernel="sigmoid", coef0=float("nan")), ValueError, "finite"),
 ])
 def test_refusals_by_name(kw, error, match):
     with pytest.raises(error, match=match):

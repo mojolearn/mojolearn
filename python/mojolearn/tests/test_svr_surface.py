@@ -400,9 +400,12 @@ def arm_refusals(rep):
                SVR, shrinking=True)
 
     # --- the Python-side fit and predict guards
-    rep.raises(arm, NotImplementedError, "sample_weight",
-               "sample_weight is refused in fit()",
-               SVR(kernel="linear").fit, x, y, np.ones(PLANT_N))
+    rep.raises(arm, ValueError, "sample_weight has",
+               "a sample_weight of the wrong length is refused in fit()",
+               SVR(kernel="linear").fit, x, y, np.ones(PLANT_N + 1))
+    rep.raises(arm, ValueError, "finite and >= 0",
+               "a negative sample_weight is refused in fit()",
+               SVR(kernel="linear").fit, x, y, -np.ones(PLANT_N))
     rep.raises(arm, ValueError, "must be 1-D",
                "a 2-D y is refused",
                SVR(kernel="linear").fit, x, y.reshape(-1, 1))

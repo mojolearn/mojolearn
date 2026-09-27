@@ -105,9 +105,9 @@ _REFUSED_KERNELS = {
         "this kernel 'poly'"
     ),
     "sigmoid": (
-        "TANH is not implemented in rung 1: there is no identical_tanh in "
-        "checks/numerics.mojo, so the kernel has no bit-pinned spelling "
-        "yet (svm/NOT_IMPLEMENTED.tsv)"
+        "TANH is not implemented for SVR: SVC carries it (kernel_methods' "
+        "identical_tanh epilogue), but the SVR binding takes no coef0 yet "
+        "(svm/NOT_IMPLEMENTED.tsv)"
     ),
     "tanh": (
         "TANH is not implemented in rung 1 (svm/NOT_IMPLEMENTED.tsv); cuML spells this "
