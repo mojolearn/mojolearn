@@ -14,6 +14,14 @@ one whole series. `exec.mojo::HostExec` loops over those bodies on the CPU;
 element, on ONE process-lifetime DeviceContext. Both bindings export the
 address contract of `pyapi.mojo`, so the two columns run the same statements.
 
+Two Apple constraints shape the device side (found on the M2 Pro steward,
+2026-09-27): `seq_kernel` passes its twelve integers and eight floats
+packed two to an Int64 word (bit-exact; integers checked to fit Int32),
+because Metal binds each kernel argument to its own buffer slot and has 31;
+and every helper the Nelder-Mead forecasters (Theta, ETS, GARCH) call is
+`@always_inline`, because Apple's `air-lld` segfaults
+(`LazyLinker::LinkDefinition`) linking those as separate functions.
+
 ## Seams (IDENTITY_PATHS.md rows 150-159)
 
 Each seam's host oracle is in `checks/oracle.mojo`, written from the reference

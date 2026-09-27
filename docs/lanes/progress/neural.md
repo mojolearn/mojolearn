@@ -96,7 +96,12 @@ clip_grad_norm_). Bindings `_mojolearn_{training,mamba,transformer,embedding}`
   merge (merge gate 0000b: stewards are post-merge release gates). Its RESULT
   will read FAIL for the seven lanes the sabotage cannot reach; read its
   CLEAN rows (Metal / gfx942 vs CPU AGREE) as the Apple/AMD proof and treat
-  any CLEAN DISAGREE as a real fix.
+  any CLEAN DISAGREE as a real fix. m2pro came back FAIL on an
+  INFRASTRUCTURE error, not a verdict: every training-primitives batchgrad
+  cell REFUSED with `Failed to create compute pipeline state ...
+  XPC_ERROR_CONNECTION_INTERRUPTED` (the Metal compiler service on that
+  Mac). m4-a, m3ultra and do-amd were still queued/working at merge;
+  the next session reads them.
 
 ## Next phases (one per session)
 
