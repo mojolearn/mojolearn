@@ -498,3 +498,15 @@ insertion and search queue are the parts that need a rank-based rewrite
 (cuVS `ivf_sq/`, `ivf_rabitq/`; quantization arms on the same index), the
 refine step (cuVS `refine.cuh`), and the sample filter (both already rows
 in `ivf/NOT_IMPLEMENTED.tsv`).
+
+**HNSW, after CAGRA (Andrew, 2026-09-27):** the CPU-serving form of the
+CAGRA graph, the way cuVS ships it (`cpp/src/neighbors/hnsw.cpp`,
+`hnsw::from_cagra`; hnswlib `hnswalg.h` for the layout and the search
+loop). The GPU builds the graph; the CPU serves queries. It is the one
+CPU-only algorithm in this expansion and enters under CONTRIBUTING's
+"CPU-only algorithms" paragraph: identity across every CPU host (a search
+over a fixed graph is deterministic given the graph and an index
+tie-break), the verifier lane, and a support-matrix entry that says CPU.
+`ivf_refuse_algorithm("hnsw")` and the `hnsw` row of `ivf/NOT_IMPLEMENTED.tsv`
+were corrected to NOT IMPLEMENTED, assigned to you; retire the refusal in
+the commit that lands it.
