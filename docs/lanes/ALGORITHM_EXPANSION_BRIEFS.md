@@ -290,7 +290,16 @@ Machinery to reuse: `cluster/` (KMeans, k-means++), `kde/`, `dbscan/`,
 
 **Additions (2026-09-27, after the table):** BayesianGaussianMixture
 (sklearn `mixture/_bayesian_mixture.py`; reuse `mixture/`, whose
-`NOT_IMPLEMENTED.tsv` already carries the row).
+`NOT_IMPLEMENTED.tsv` already carries the row). Birch (sklearn
+`cluster/_birch.py`; Andrew, 2026-09-27): the CF-tree build is a CPU pass
+by construction (one insertion at a time, order-dependent by definition),
+entered under CONTRIBUTING's "CPU-only algorithms" paragraph because its
+global clustering step over the subcluster centroids runs on our GPU
+AgglomerativeClustering (`hierarchy/`); `n_clusters=None` returns the
+subclusters, an int or an estimator runs the global step. `partial_fit`
+is in scope (it is the reason the algorithm exists). The support-matrix
+row says CPU for the fit; the identity contract is across CPU hosts, the
+verifier lane and sabotage as for everything else.
 
 ## Lane 3: neighbors + kernel
 
