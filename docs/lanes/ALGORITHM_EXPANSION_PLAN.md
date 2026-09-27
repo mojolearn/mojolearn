@@ -417,8 +417,8 @@ reasons that are about the algorithm and not about effort.
 | mixture-of-experts block | **IN, as a block.** Top-k routing with an index tie-break plus expert GEMMs; the routing tie is the seam. Reference: HF `modeling_mixtral.py::MixtralSparseMoeBlock`. | sequence (it owns the neural additions) | +1, M |
 | Prophet-style forecaster | **IN.** Piecewise-linear trend with changepoints, Fourier seasonality, holiday regressors, MAP fit by L-BFGS. Parity with the `prophet` package is at a tolerance only (their fit is Stan); identity is ours. Reference: `prophet/forecaster.py` and `stan/prophet.stan` for the model. | sequence (after STL and VAR) | +1, M |
 | sparse variational GP (SVGP) | **IN.** Inducing points, a variational posterior, GEMM and Cholesky bound: a clear GPU win. Upgrades the named refusal in `gaussian_process/NOT_IMPLEMENTED.tsv` the way row 12 upgraded RF's log criteria. Reference: GPflow `gpflow/models/svgp.py`. | neighbors + kernel (GP kernels live beside `kernel_methods/`) | +1, M/H |
-| HNSW | **OUT.** By construction it is a CPU algorithm: a hierarchical graph walked one hop at a time with pointer chasing, and cuVS's own "hnsw" is a CAGRA graph converted for CPU search through hnswlib. `ivf/NOT_IMPLEMENTED.tsv` refuses it permanently under CONTRIBUTING's "no CPU-only path". The GPU answer to the same question is CAGRA, lane 9. | -- | -- |
-| Birch | **OUT.** It inserts points one at a time into a CF tree, and the result depends on insertion order by definition. A one-thread GPU kernel is not a GPU path, and scikit-learn's own docs send large data to MiniBatchKMeans, which lane 2 has. | -- | -- |
+| HNSW | **IN, as CAGRA's CPU-serving form (Andrew, 2026-09-27).** It is a CPU algorithm by construction (a hierarchical graph walked one hop at a time), and that is exactly how the field uses it: build the graph on the GPU, serve queries on CPU boxes. cuVS's own entry is `hnsw::from_cagra`. So it is the second half of CAGRA, not a competitor to it. The "no CPU path" rule the IVF lane cited did not exist in CONTRIBUTING; CONTRIBUTING now says when a CPU-only algorithm may enter ("CPU-only algorithms"), and the refusal in `ivf_refuse_algorithm` and `ivf/NOT_IMPLEMENTED.tsv` is corrected to NOT IMPLEMENTED, assigned. Identity: a search over a fixed graph is deterministic given the graph and an index tie-break, and the same across every CPU host. Reference: cuVS `cpp/src/neighbors/hnsw.cpp`, hnswlib `hnswalg.h` for the layout and search. | ann, after CAGRA | +1, M |
+| Birch | **OUT, unless asked.** It inserts points one at a time into a CF tree and the result depends on insertion order by definition, so it has no GPU form and no GPU partner: its one composition in scikit-learn is as a pre-clustering step whose subclusters feed AgglomerativeClustering, which this library already runs on the GPU directly. Its practical use is small-memory streaming clustering, which a GPU library does not need. One line from Andrew puts it in lane 2 as a CPU-only estimator under the CONTRIBUTING rule. | -- | -- |
 
 So the long tail is +86, not +78, and the target is about 193 on top of 57
 if every lane finishes both of its tables.
@@ -444,3 +444,38 @@ and then speed. Lanes do NOT submit to the Apple steward in pass 1.
 Order inside a lane: main table first, then Additions. One commit per
 algorithm. Progress file: `docs/lanes/progress/<lane>.md`, updated at each
 merge, so a fresh agent continues where the last one stopped.
+
+---
+
+# PASS 2 — EVERYTHING AT ONCE, per lane, as soon as its pass-1 list is merged (Andrew, 2026-09-27)
+
+Each lane holds its machines for its whole session; set-up and teardown are
+the cost being avoided. All data comes from R2 (`tools/dataset_store.sh stage`).
+
+1. **Machines.** Keep the NVIDIA pod. Add an AMD box with
+   `tools/dev_pod.sh up <lane> 240 --vendor amd` (RunPod MI300X, else Hot
+   Aisle; it retries while there is no stock) and hold it. If the tool
+   doesn't have `--vendor amd` yet, keep working on NVIDIA and CPU and try
+   again after the next algorithm. Apple: identity through the M2 Pro
+   steward; Apple timing through `apple_steward.py submit --kind speed`,
+   routed to the M3 Ultra once its GPT-3 segment ends.
+2. **Proof, per algorithm** (the COMMON BRIEF's per-seam discipline):
+   - a host oracle and a separating fixture per seam
+   - a sabotage arm per seam, in `.checks`, that bites
+   - a DEVIATION number and a card stage from the lane's ranges
+   - an IDENTITY_PATHS row
+   - the verifier lane with CPU and GPU paths
+   - `algos_lane_check.sh` AGREE on NVIDIA **and** on AMD
+   - an M2 Pro steward PASS
+   The lane then moves out of PENDING, per the verifier's admission rules.
+3. **Speed, after an algorithm's proof passes:**
+   - IDENTICAL and FAST on NVIDIA, AMD and Apple, plus the CPU path
+     (threads, vectorization), at 1M+ rows or the family's realistic
+     large shape, on R2 data.
+   - Every IDENTICAL speed change re-passes step 2 on every column.
+   - Every FAST change passes the quality rule (paired check against the
+     reference, at least 5 seeds, at least 2 datasets).
+   - Before/after on the same box. No opponent claims; those go through
+     the bench board later.
+4. Merge each step as it passes, the same way as pass 1. Keep the progress
+   file current.

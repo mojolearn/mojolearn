@@ -278,11 +278,14 @@ def ivf_refuse_algorithm(name: String) raises:
     """
     if name == "hnsw":
         raise Error(
-            "hnsw: REFUSED PERMANENTLY in this repository. cuVS's"
-            " cpp/include/cuvs/neighbors/hnsw.hpp dispatches to the hnswlib"
-            " CPU graph; it is not a GPU algorithm and CONTRIBUTING.md"
-            " 0b-ii says there is no CPU path here. This is a refusal, not"
-            " an unimplemented item, and it does not become one later."
+            "hnsw: NOT IMPLEMENTED HERE. cuVS's"
+            " cpp/include/cuvs/neighbors/hnsw.hpp is a CPU search over a"
+            " graph built on the GPU (hnsw::from_cagra). It is assigned to"
+            " the ann expansion lane as CAGRA's CPU-serving form"
+            " (docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md, Lane 9). The"
+            " sentence that stood here, that CONTRIBUTING.md forbids a CPU"
+            " path, was wrong: CONTRIBUTING has no such rule, and CPU-only"
+            " installs train and predict (corrected 2026-09-27)."
         )
     if name == "ivf_pq" or name == "ivfpq":
         raise Error(
