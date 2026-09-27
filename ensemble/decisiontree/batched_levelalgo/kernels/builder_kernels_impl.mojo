@@ -469,14 +469,31 @@ comptime SAMPLE_PER_NODE_DEFAULT = (
 each node's 24-key bijection once instead of `k` times. Same columns.
 `-D MOJOLEARN_RF_FAST_SAMPLE_PER_COLUMN` restores the per-column arm."""
 
-comptime HIST_SPLIT_CANDIDATES_DEFAULT = BUILD_MODE == NUMERIC_FAST and (
-    is_defined["MOJOLEARN_RF_SPLIT_CANDIDATES"]()
-    or (
-        has_apple_gpu_accelerator()
-        and not is_defined["MOJOLEARN_RF_SPLIT_CANDIDATES_OFF"]()
+comptime HIST_SPLIT_CANDIDATES_DEFAULT = BUILD_MODE == NUMERIC_IDENTICAL or (
+    BUILD_MODE == NUMERIC_FAST
+    and (
+        is_defined["MOJOLEARN_RF_SPLIT_CANDIDATES"]()
+        or (
+            has_apple_gpu_accelerator()
+            and not is_defined["MOJOLEARN_RF_SPLIT_CANDIDATES_OFF"]()
+        )
     )
 )
-"""FAST only: each `find_best_splits` block stores its winner in its own
+"""IDENTICAL, EVERY VENDOR (DEVIATION 5611, 2026-09-27): the node's split
+is merged from per-block candidate slots by `merge_split_candidates_kernel`
+after the split kernel returns, never through the node's device mutex. The
+mutex merge reads and writes the node's `Split` with PLAIN loads and stores
+inside the critical section, which is correct only where a plain load after
+the acquire sees another threadgroup's plain store. The M3 GPU (m3ultra,
+m3ultra-b) broke that: 17 trees lanes DISAGREE there, `denormal` and
+`denormal_ftz` (the same flushed X) gave DIFFERENT forests on one Mac, while
+M2, M4, CUDA, HIP and CPU agree and a one-column-per-node forest
+(RandomTreesEmbedding) agrees on M3. A lost candidate is a wrong tree. The
+candidate fold uses `update`, the same total order over (gain, colid) with
+distinct columns per block, so the bits equal a correct mutex merge's on
+every other column.
+
+FAST: each `find_best_splits` block stores its winner in its own
 candidate slot and `merge_split_candidates_kernel` folds a node's slots
 with `Split.update` (a total order), instead of every block spinning on
 the node's device mutex. Same winner. OPT-IN (`-D
@@ -3084,7 +3101,18 @@ def find_best_splits_kernel[
     # no warp primitives), the reference warp-shuffle reduction under
     # FAST. At `WARP_SIZE == 32` the two arms are the same function --
     # `builder_kernels_check.mojo`'s arm C-pinned holds that per cell.
-    comptime if candidates:
+    comptime if candidates and pinned_reduce:
+        # DEVIATION 5611: the pinned reduction, then this block's own
+        # slot; no mutex, no payload crossing threadgroups in-kernel.
+        sp.eval_best_split_pinned_to_candidate(
+            split_scratch,
+            cand.unsafe_offset(
+                Int(nid) * Int(grid_dim.y) + Int(block_idx.y)
+            ),
+            quantiles_for_split,
+            n_bins,
+        )
+    elif candidates:
         # HIST_SPLIT_CANDIDATES_DEFAULT: this block's own slot, no mutex.
         sp.eval_best_split_to_candidate(
             split_scratch,

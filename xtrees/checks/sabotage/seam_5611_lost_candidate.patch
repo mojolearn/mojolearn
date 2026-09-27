@@ -1,0 +1,13 @@
+diff --git a/ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo b/ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo
+index 9f2817460..89a6a7aa1 100644
+--- a/ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo
++++ b/ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo
+@@ -3512,7 +3512,7 @@ def merge_split_candidates_kernel[
+         return
+     var reg = splits[unsafe_offset=nid].copy()
+     var changed = False
+-    for y in range(Int(n_cand)):
++    for y in range(max(Int(n_cand) - 1, 1)):  # SABOTAGE: the last column block's candidate is lost
+         var c = cand[unsafe_offset = nid * Int(n_cand) + y].copy()
+         if not c.IsValid():
+             continue
