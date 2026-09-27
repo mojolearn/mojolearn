@@ -34,6 +34,7 @@ FAMILIES = (
             "trees-stacking-clf",
             "trees-stacking-reg",
             "trees-multioutput",
+            "trees-onevsrest",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -51,6 +52,7 @@ FAMILIES = (
             "StackingRegressor",
             "MultiOutputClassifier",
             "MultiOutputRegressor",
+            "OneVsRestClassifier",
         ),
         display="the trees expansion lane's ensemble glue",
         host_modules=("xtrees/ops.mojo", "xtrees/api.mojo"),
@@ -84,6 +86,7 @@ TRAINING_LANE_NAMES = {
     "trees-stacking-clf": "StackingClassifier",
     "trees-stacking-reg": "StackingRegressor",
     "trees-multioutput": "MultiOutputRegressor",
+    "trees-onevsrest": "OneVsRestClassifier",
 }
 PUBLIC_PENDING_LANES = {
     "trees-dt-clf": "no reference",
@@ -100,4 +103,5 @@ PUBLIC_PENDING_LANES = {
     "trees-stacking-clf": "no reference",
     "trees-stacking-reg": "no reference",
     "trees-multioutput": "no reference",
+    "trees-onevsrest": "no reference",
 }

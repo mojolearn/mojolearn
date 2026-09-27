@@ -199,3 +199,14 @@ def test_multioutput():
     c = ml.MultiOutputClassifier(ml.DecisionTreeClassifier(max_depth=6)).fit(Xa, np.stack([ya, ya % 2], 1))
     Pc = np.asarray(c.predict(Xb))
     assert Pc.shape == (len(Xb), 2) and accuracy_score(yb, Pc[:, 0]) > 0.5
+
+
+def test_onevsrest():
+    from sklearn.multiclass import OneVsRestClassifier
+    from sklearn.tree import DecisionTreeClassifier
+    Xa, Xb, ya, yb = _clf()
+    ours = ml.OneVsRestClassifier(ml.DecisionTreeClassifier(max_depth=6)).fit(Xa, ya)
+    ref = OneVsRestClassifier(DecisionTreeClassifier(max_depth=6, random_state=0)).fit(Xa, ya)
+    a, r = accuracy_score(yb, np.asarray(ours.predict(Xb))), accuracy_score(yb, ref.predict(Xb))
+    assert a >= r - 0.05, (a, r)
+    np.testing.assert_allclose(np.asarray(ours.predict_proba(Xb)).sum(1), 1.0, rtol=1e-9)

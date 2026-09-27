@@ -49,6 +49,7 @@ __all__ = [
     "StackingRegressor",
     "MultiOutputClassifier",
     "MultiOutputRegressor",
+    "OneVsRestClassifier",
 ]
 
 
@@ -1494,3 +1495,83 @@ class MultiOutputClassifier(_TreesWrapperBase):
             self._acc_cols(acc, e.predict_proba(Xa), _trees_sub_cols(e), n, len(c))
             out.append(acc.reshape((n, len(c))))
         return out
+
+
+# --------------------------------------------------------------- OneVsRest
+# Reference: scikit-learn `sklearn/multiclass.py` OneVsRestClassifier (fit
+# :330, one binary clone per class -- a single one for two classes --;
+# predict :420 argmax of decision_function, else of predict_proba[:, 1];
+# predict_proba :470 each class's positive probability, rows normalised in
+# the multiclass case). DEVIATION: a row whose scores sum to 0 is uniform,
+# where sklearn divides 0 / 0.
+class OneVsRestClassifier(_TreesWrapperBase):
+    _estimator_type = "classifier"
+
+    def __init__(self, estimator, *, n_jobs=None, verbose=0):
+        if n_jobs is not None or verbose:
+            _refuse("n_jobs/verbose", "the classes fit one after another.")
+        self.estimator = estimator
+        self.n_jobs = n_jobs
+        self.verbose = verbose
+
+    def fit(self, X, y):
+        Xa, _ = as_f32_c(X, ndim=2, name="X")
+        self.classes_, codes = encode_labels(y)
+        k = len(self.classes_)
+        if k < 2:
+            raise ValueError("y has fewer than 2 classes")
+        cl = codes.tolist()
+        targets = [codes] if k == 2 else [Array.from_list([1 if c == j else 0 for c in cl], "<i4") for j in range(k)]
+        self.estimators_ = []
+        for t in targets:
+            e = _trees_clone(self.estimator)
+            e.fit(Xa, t)
+            self.estimators_.append(e)
+        self.n_features_in_ = Xa.shape[1]
+        self._fitted = True
+        return self
+
+    def _positive(self, e, Xa):
+        """The estimator's score for class 1, float32 (n,): decision_function
+        when it has one, else predict_proba's column for code 1."""
+        n = Xa.shape[0]
+        if hasattr(e, "decision_function"):
+            return as_f32_c(e.decision_function(Xa), ndim=1, name="score")[0]
+        p = _trees_output_2d(e.predict_proba(Xa), n)
+        subs = [int(c) for c in e.classes_]
+        if 1 not in subs:
+            return as_f32_c(zeros((n,), "<f8"), ndim=1, name="score")[0]
+        return self._gather(p, _trees_arange(n), Array.from_list([subs.index(1)], "<i4")).reshape((n,))
+
+    def _proba_positive(self, e, Xa):
+        n = Xa.shape[0]
+        p = _trees_output_2d(e.predict_proba(Xa), n)
+        subs = [int(c) for c in e.classes_]
+        if 1 not in subs:
+            return as_f32_c(zeros((n,), "<f8"), ndim=1, name="p")[0]
+        return self._gather(p, _trees_arange(n), Array.from_list([subs.index(1)], "<i4")).reshape((n,))
+
+    def predict(self, X):
+        Xa = self._check_X(X)
+        n, k = Xa.shape[0], len(self.classes_)
+        if k == 2:
+            codes = as_i32_c(self.estimators_[0].predict(Xa), ndim=1, name="codes")[0]
+            return decode_labels(self.classes_, codes)
+        acc = zeros((n * k,), "<f8")
+        rows = _trees_arange(n)
+        for j, e in enumerate(self.estimators_):
+            self._place(acc, n, k, self._positive(e, Xa), rows, j)
+        return decode_labels(self.classes_, self._argmax(acc, n, k))
+
+    def predict_proba(self, X):
+        Xa = self._check_X(X)
+        n, k = Xa.shape[0], len(self.classes_)
+        acc = zeros((n * k,), "<f8")
+        rows = _trees_arange(n)
+        if k == 2:
+            p = self._proba_positive(self.estimators_[0], Xa).tolist()
+            return Array.from_list([[1.0 - v, v] for v in p], "<f8")
+        for j, e in enumerate(self.estimators_):
+            self._place(acc, n, k, self._proba_positive(e, Xa), rows, j)
+        self._bind().x_trees_normalize_rows(addr(acc, name="proba"), [n, k])
+        return acc.reshape((n, k))

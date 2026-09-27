@@ -175,3 +175,13 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("predict"), "trees-multioutput")
+
+
+@lane("trees-onevsrest")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.OneVsRestClassifier(ml.DecisionTreeClassifier(max_depth=4)).fit(X, yc)
+    return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X))),
+                m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+
+
+_batch_decl(_rows_calls("predict", "predict_proba"), "trees-onevsrest")
