@@ -33,11 +33,13 @@ __all__ = ["SGDClassifier", "SGDRegressor", "PoissonRegressor", "GammaRegressor"
            "Perceptron", "PassiveAggressiveClassifier",
            "PassiveAggressiveRegressor", "SGDOneClassSVM",
            "RidgeClassifier", "RidgeCV",
-           "LassoCV", "ElasticNetCV", "LogisticRegressionCV"]
+           "LassoCV", "ElasticNetCV", "LogisticRegressionCV",
+           "IsotonicRegression"]
 
 _BINDING = "_mojolearn_x_linear"
 ALGO_SGD, ALGO_GLM, ALGO_HUBER, ALGO_BAYES, ALGO_ARD = 1, 2, 3, 4, 5
 ALGO_LARS, ALGO_QUANTILE, ALGO_RIDGE, ALGO_ENETCV, ALGO_LOGCV, ALGO_ISOTONIC = 6, 7, 8, 9, 10, 11
+ALGO_ISOTONIC_PREDICT = 12
 LINK_IDENTITY, LINK_EXP, LINK_SIGMOID = 0, 1, 2
 
 
@@ -1064,3 +1066,95 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
             s = sum(e)
             out.append([v / s for v in e])
         return Array.from_list(out, "<f4")
+
+
+# --------------------------------------------------------------- Isotonic
+# Reference: scikit-learn sklearn/isotonic.py and sklearn/_isotonic.pyx;
+# kernel x_linear/isotonic.mojo (sequential PAVA; interp1d-linear predict).
+
+def _column(X, name="X"):
+    a, _ = as_f32_c(X, ndim=None, name=name)
+    if a.ndim == 2 and a.shape[1] == 1:
+        a = a.reshape((a.shape[0],))
+    if a.ndim != 1:
+        raise ValueError(f"mojolearn IsotonicRegression: {name} must be 1-D or of shape (n, 1)")
+    if a.shape[0] == 0:
+        raise ValueError(f"mojolearn IsotonicRegression: {name} is empty")
+    return a
+
+
+class IsotonicRegression(NumericModeMixin):
+    """Isotonic regression (scikit-learn's IsotonicRegression)."""
+
+    _BINDING = _BINDING
+    _estimator_type = "regressor"
+
+    def __init__(self, *, y_min=None, y_max=None, increasing=True, out_of_bounds="nan"):
+        self.y_min, self.y_max, self.increasing, self.out_of_bounds = y_min, y_max, increasing, out_of_bounds
+
+    def fit(self, X, y, sample_weight=None):
+        if self.out_of_bounds not in ("nan", "clip", "raise"):
+            raise ValueError("mojolearn IsotonicRegression: out_of_bounds must be 'nan', 'clip' or 'raise'")
+        xs = _column(X).tolist()
+        n = len(xs)
+        ys = _vector(y, n).tolist()
+        ws = [1.0] * n if sample_weight is None else _vector(sample_weight, n, "sample_weight").tolist()
+        if self.increasing == "auto":
+            self.increasing_ = _spearman_sign(xs, ys) >= 0
+        else:
+            self.increasing_ = bool(self.increasing)
+        keep = [i for i in range(n) if ws[i] > 0]
+        order = sorted(keep, key=lambda i: (xs[i], ys[i]))
+        m = len(order)
+        xa = Array.from_list([[xs[i]] for i in order], "<f4")
+        yy = Array.from_list([ys[i] for i in order] + [ws[i] for i in order], "<f4")
+        ip = [int(self.increasing_), int(self.y_min is not None), int(self.y_max is not None)]
+        fp = [0.0 if self.y_min is None else self.y_min, 0.0 if self.y_max is None else self.y_max]
+        vals = _run(self, ALGO_ISOTONIC, xa, m, 1, yy, ip, fp, 3 + 2 * m, 3 * m, m)
+        k = int(vals[0])
+        self.X_min_, self.X_max_ = float(vals[1]), float(vals[2])
+        self.X_thresholds_ = Array.from_list(vals[3:3 + k], "<f4")
+        self.y_thresholds_ = Array.from_list(vals[3 + m:3 + m + k], "<f4")
+        self.n_features_in_ = 1
+        return self
+
+    def predict(self, T):
+        return self.transform(T)
+
+    def transform(self, T):
+        if not hasattr(self, "X_thresholds_"):
+            raise RuntimeError("mojolearn IsotonicRegression: call fit first")
+        t = _column(T, "T")
+        vals = t.tolist()
+        if self.out_of_bounds == "raise" and any(v < self.X_min_ or v > self.X_max_ for v in vals):
+            raise ValueError("A value in x_new is below/above the interpolation range.")
+        n = len(vals)
+        k = len(self.X_thresholds_)
+        thr = Array.from_list(self.X_thresholds_.tolist() + self.y_thresholds_.tolist(), "<f4")
+        q = t.reshape((n, 1))
+        out = _run(self, ALGO_ISOTONIC_PREDICT, q, n, 1, thr, [k, 1 if self.out_of_bounds == "clip" else 0],
+                   [self.X_min_, self.X_max_], n, 1, 1)
+        return Array.from_list(out, "<f4")
+
+    def fit_transform(self, X, y, sample_weight=None):
+        return self.fit(X, y, sample_weight).transform(X)
+
+
+def _spearman_sign(x, y):
+    """The sign of Spearman's rho (scikit-learn's check_increasing), with
+    average ranks for ties, in float64 Python."""
+    def ranks(v):
+        order = sorted(range(len(v)), key=lambda i: v[i])
+        r = [0.0] * len(v)
+        i = 0
+        while i < len(order):
+            j = i
+            while j + 1 < len(order) and v[order[j + 1]] == v[order[i]]:
+                j += 1
+            for t in range(i, j + 1):
+                r[order[t]] = (i + j) / 2.0
+            i = j + 1
+        return r
+    rx, ry = ranks(x), ranks(y)
+    mx, my = sum(rx) / len(rx), sum(ry) / len(ry)
+    return sum((a - mx) * (b - my) for a, b in zip(rx, ry))
