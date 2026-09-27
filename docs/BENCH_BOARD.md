@@ -338,7 +338,7 @@ and IDENTICAL). Opponents, fastest real implementation per box:
 | DART classifier and regressor | LightGBM (`boosting='dart'`) CPU, XGBoost (`booster='dart'`) CPU, and CUDA on NVIDIA |
 | SHAP | shap (TreeExplainer, KernelExplainer, PermutationExplainer), XGBoost/LightGBM `pred_contribs` (GPUTreeShap on CUDA), cuML's Kernel and Permutation explainers; our TreeExplainer explains our RandomForestRegressor of the same size (it takes RF, ExtraTrees, DecisionTree and DART models) |
 | IVF-PQ, IVF-SQ, IVF-RaBitQ, refine, sample filter, CAGRA | faiss-cpu (HNSW for CAGRA), cuVS on NVIDIA |
-| PageRank, connected components, Louvain | networkx, cuGraph on NVIDIA |
+| PageRank, connected components, Louvain | networkx, cuGraph on NVIDIA, on the 10-NN graph of 20,000 rows (ours takes a dense adjacency, its class's contract, built before the clock) |
 | LSTM, GRU, RNN classifiers and regressors | torch `nn.LSTM`/`nn.GRU`/`nn.RNN` + a linear head trained with Adam for the same epochs and batch size, at every fast setting of the box, on 24-step windows of taxi-hourly and synthetic series |
 | LayerNorm, MoE block, Conv1d/2d, pooling, BatchNorm, Dropout2d, ResNet block, GCN, GraphSAGE | torch at every fast setting of the box (eager/compile x fp32/TF32/bf16, TF32 on NVIDIA only; PyG for GCN and SAGE), the same weights loaded into every arm (ours through `load_state_dict` or `set_weights`) |
 | RMSprop, Adagrad, Adamax, NAdam, Adafactor | `torch.optim` eager and compiled step, fp32 |
