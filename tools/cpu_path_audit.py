@@ -152,6 +152,224 @@ def recipe(*names):
     return deco
 
 
+_LABEL_PAIR = ("rand_score", "adjusted_rand_score", "mutual_info_score", "fowlkes_mallows_score",
+               "homogeneity_score", "completeness_score", "v_measure_score",
+               "homogeneity_completeness_v_measure", "accuracy_score", "precision_score",
+               "recall_score", "f1_score", "confusion_matrix")
+
+
+def _pred_labels(F):
+    import numpy as np
+    p = F["yc"].copy()
+    p[::7] = 1 - p[::7]
+    return p
+
+
+@recipe(*("metrics." + n for n in _LABEL_PAIR))
+def _r_label_pair(ml, F):
+    fn = resolve(ml, _r_label_pair.name)
+    return {"call": lambda: fn(F["yc"], _pred_labels(F))}
+
+
+@recipe("metrics.entropy")
+def _r_entropy(ml, F):
+    return {"call": lambda: ml.metrics.entropy(F["yc"])}
+
+
+@recipe("metrics.r2_score", "metrics.mean_squared_error", "metrics.mean_absolute_error",
+        "metrics.root_mean_squared_error")
+def _r_reg_pair(ml, F):
+    pred = F["yr"] + F["X"][:, 0] * 0.25
+    return {"call": lambda: getattr(ml.metrics, _r_reg_pair.name.split(".")[1])(F["yr"], pred)}
+
+
+@recipe("metrics.kl_divergence")
+def _r_kl(ml, F):
+    import numpy as np
+    P = np.abs(F["X"][:20]) + 0.1
+    Q = np.abs(F["Xh"][:20]) + 0.1
+    P = (P / P.sum(1, keepdims=True)).astype(np.float32)
+    Q = (Q / Q.sum(1, keepdims=True)).astype(np.float32)
+    return {"call": lambda: ml.metrics.kl_divergence(P, Q)}
+
+
+@recipe("metrics.silhouette_score", "metrics.silhouette_samples")
+def _r_sil(ml, F):
+    return {"call": lambda: getattr(ml.metrics, _r_sil.name.split(".")[1])(F["X"], F["yc"])}
+
+
+@recipe("metrics.trustworthiness")
+def _r_trust(ml, F):
+    return {"call": lambda: ml.metrics.trustworthiness(F["X"], F["X"][:, :2].copy(), n_neighbors=5)}
+
+
+@recipe("metrics.log_loss", "metrics.roc_auc_score", "metrics.precision_recall_curve")
+def _r_prob(ml, F):
+    import numpy as np
+    s = (1.0 / (1.0 + np.exp(-F["yr"] / 4.0))).astype(np.float64)
+    return {"call": lambda: getattr(ml.metrics, _r_prob.name.split(".")[1])(F["yc"], s)}
+
+
+@recipe("linalg.matmul", "linalg.matmul_bf16", "matmul")
+def _r_matmul(ml, F):
+    fn = resolve(ml, _r_matmul.name)
+    return {"call": lambda: fn(F["X"], F["Xh"].T.copy())}
+
+
+@recipe("linalg.matmul_int8")
+def _r_matmul_int8(ml, F):
+    return {"call": lambda: ml.linalg.matmul_int8(F["X"], F["Xh"].T.copy())}
+
+
+@recipe("linalg.qr", "linalg.svdvals")
+def _r_qr(ml, F):
+    fn = resolve(ml, _r_qr.name)
+    return {"call": lambda: fn(F["X"][:24].copy())}
+
+
+@recipe("linalg.eigh")
+def _r_eigh(ml, F):
+    a = (F["X"].T @ F["X"]).astype(F["X"].dtype)
+    return {"call": lambda: ml.linalg.eigh(a)}
+
+
+@recipe("linalg.Cholesky", "Cholesky")
+def _r_chol(ml, F):
+    import numpy as np
+    a = (F["X"].T @ F["X"] + 6 * np.eye(6)).astype(np.float32)
+    st = {}
+
+    def fit():
+        st["c"] = ml.Cholesky()
+        return st["c"].fit(a)
+    return {"fit": fit, "solve": lambda: st["c"].solve(F["X"][:6].T.copy())}
+
+
+@recipe("linalg.to_bf16", "linalg.quantize_int8")
+def _r_quant(ml, F):
+    fn = resolve(ml, _r_quant.name)
+    return {"call": lambda: fn(F["X"])}
+
+
+@recipe("linalg.from_bf16")
+def _r_from_bf16(ml, F):
+    return {"call": lambda: ml.linalg.from_bf16(ml.linalg.to_bf16(F["X"]))}
+
+
+@recipe("linalg.dequantize_int8")
+def _r_dequant(ml, F):
+    return {"call": lambda: ml.linalg.dequantize_int8(*ml.linalg.quantize_int8(F["X"]))}
+
+
+@recipe("resample.bootstrap")
+def _r_boot(ml, F):
+    return {"call": lambda: ml.resample.bootstrap(F["yr"], n_resamples=199)}
+
+
+@recipe("resample.permutation_test")
+def _r_perm(ml, F):
+    return {"call": lambda: ml.resample.permutation_test(F["yr"][:80], F["yr"][80:], n_resamples=199)}
+
+
+@recipe("resample.monte_carlo_integrate")
+def _r_mc(ml, F):
+    return {"call": lambda: ml.resample.monte_carlo_integrate("product", [0.0, 0.0], [1.0, 2.0], 4096)}
+
+
+@recipe("hdbscan.approximate_predict", "hdbscan.membership_vector", "hdbscan.all_points_membership_vectors")
+def _r_hdb_fn(ml, F):
+    st = {}
+    fn = resolve(ml, _r_hdb_fn.name)
+
+    def fit():
+        st["c"] = ml.HDBSCAN(min_cluster_size=8, prediction_data=True)
+        return st["c"].fit(F["X"]).labels_
+    call = (lambda: fn(st["c"])) if _r_hdb_fn.name.endswith("all_points_membership_vectors") \
+        else (lambda: fn(st["c"], F["Xh"]))
+    return {"fit": fit, "call": call}
+
+
+@recipe("kpss_test")
+def _r_kpss(ml, F):
+    return {"call": lambda: ml.kpss_test(F["series"][None, :].copy())}
+
+
+@recipe("select_d")
+def _r_select_d(ml, F):
+    return {"call": lambda: ml.select_d(F["series"][None, :].copy())}
+
+
+@recipe("ExponentialSmoothing")
+def _r_es(ml, F):
+    st = {}
+
+    def fit():
+        st["m"] = ml.ExponentialSmoothing(F["series"], seasonal_periods=12)
+        st["m"].fit()
+        return st["m"].forecast(1)
+    return {"fit": fit, "forecast": lambda: st["m"].forecast(6),
+            "predict": lambda: st["m"].predict(0, 100)}
+
+
+@recipe("ARIMA")
+def _r_arima(ml, F):
+    st = {}
+
+    def fit():
+        st["m"] = ml.ARIMA(order=(1, 1, 1))
+        return st["m"].fit(F["series"])
+    return {"fit": fit, "forecast": lambda: st["m"].forecast(6),
+            "predict": lambda: st["m"].predict(0, 100)}
+
+
+@recipe("Embedding")
+def _r_emb(ml, F):
+    import numpy as np
+    ids = (np.arange(40) * 7 % 13).astype(np.int64)
+    st = {}
+
+    def fit():
+        w = F["rng"].standard_normal((13, 8)).astype(np.float32)
+        st["e"] = ml.Embedding.from_pretrained(w)
+        return st["e"].forward(ids)
+    return {"forward": fit,
+            "backward": lambda: st["e"].backward(ids, np.ones((40, 8), np.float32))}
+
+
+@recipe("IVFIndex")
+def _r_ivf(ml, F):
+    st = {}
+
+    def fit():
+        st["i"] = ml.IVFIndex(n_lists=4, n_probes=2, n_neighbors=5)
+        return st["i"].fit(F["X"])
+    return {"fit": fit, "search": lambda: st["i"].search(F["Xh"])}
+
+
+@recipe("manifold.spectral_embedding")
+def _r_spec(ml, F):
+    return {"call": lambda: ml.manifold.spectral_embedding(F["X"], n_components=2, random_state=0,
+                                                           n_neighbors=10)}
+
+
+@recipe("cross_val_score", "model_selection.cross_val_score", "parallel_model_selection.cross_val_score")
+def _r_cvs(ml, F):
+    fn = resolve(ml, _r_cvs.name)
+    return {"call": lambda: fn(ml.Ridge(), F["X"], F["yr"], cv=3)}
+
+
+def _named_recipes():
+    """Bind each recipe to the name it was looked up under (several names
+    share one recipe body)."""
+    out = {}
+    for n, fn in RECIPES.items():
+        def make(ml, F, n=n, fn=fn):
+            fn.name = n
+            return fn(ml, F)
+        out[n] = make
+    return out
+
+
 def _generic(ml, name, F):
     import numpy as np
     obj = resolve(ml, name)
@@ -217,6 +435,7 @@ def run_child(names, out):
     import mojolearn as ml
     from mojolearn import _backend
     F = fixtures()
+    recipes = _named_recipes()
     with open(out, "a") as fh:
         for name in names:
             fh.write(json.dumps({"start": name}) + "\n"); fh.flush()
@@ -229,7 +448,7 @@ def run_child(names, out):
                     row["kind"] = "not an algorithm"
                     stages = {}
                 else:
-                    make = RECIPES.get(name)
+                    make = recipes.get(name)
                     stages = make(ml, F) if make else _generic(ml, name, F)
                     row["kind"] = "recipe" if make else "generic"
                     if stages is None:
