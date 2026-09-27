@@ -390,11 +390,11 @@ key, fields and every file's sha256 verify. `build-provenance.json` records per
 binary whether it was built or taken, its key, and the commit whose build
 compiled it. `--no-bincache` builds everything from source.
 
-## 2d. The GitHub build route: opt-in only (`--build-backend github`)
+## 2d. The GitHub build route: the default (`--build-backend github`)
 
 The same CPU build route as 2c, on GitHub's free `ubuntu-24.04` runners (4
 vCPU, 16 GB) instead of a rented pod. Nothing is rented and no repository
-secret is needed.
+secret is needed. It is the default since 2026-09-27; `--build-backend gpu-legs` rents GPU boxes to build instead.
 
 ```sh
 pixi run release <v> --build-backend github          # the three legs, detached

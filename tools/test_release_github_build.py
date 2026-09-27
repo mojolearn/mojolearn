@@ -151,9 +151,9 @@ class Shard(unittest.TestCase):
 
 
 class Backend(unittest.TestCase):
-    def test_github_is_opt_in_with_the_cpu_box_layout(self):
+    def test_github_is_the_default_with_the_cpu_box_layout(self):
         self.assertIs(rel.BUILD_BACKENDS["github"], rel.github_legs)
-        self.assertIn('ap.add_argument("--build-backend", default="gpu-legs"', (HERE / "release.py").read_text())
+        self.assertIn('ap.add_argument("--build-backend", default="github"', (HERE / "release.py").read_text())
         ctx = argparse.Namespace(rel=Path(tempfile.mkdtemp()), commit=C)
         legs = rel.github_legs(ctx)
         self.assertEqual([l.name for l in legs], ["cuda-sm_90a", "cuda-sm_89", "hip-gfx942"])
