@@ -88,20 +88,16 @@ cuvs-v26.08.00, raft-v26.08.00, lightgbm, xgboost and catboost.
      # each sabotage arm: a SOURCE patch, git apply, rerun the check, it must FAIL, git apply -R
      python3 tools/identity_trace_diff.py <box A>/<name>.card <box B>/<name>.card             # cross-box
      ```
-     List every check driver of your lane, one repo-relative path per line,
-     in `tools/identity_lanes/<lane>.checks` (a file you own; pixi.toml is
-     shared, so no per-lane pixi task). `tools/algos_lane_check.sh` runs each
-     listed driver under `tools/with_identical_mode.sh` before its GPU/CPU
-     diff and fails if any exits nonzero; the diff stays the Python-level
-     end-to-end check on top. **The `.checks` file is REQUIRED from the
-     first algorithm you register**: the tool today only prints a note when
-     it is missing (plan, R2), so the orchestrator refuses to merge a lane
-     whose fragment registers an identity lane and has no `.checks` listing,
-     or whose listing does not name a driver for every seam in its ledger
-     rows. The per-seam sabotage arms are yours to run (one patch each,
-     above) and to REPORT at each commit, by patch name and result; no tool
-     runs them yet (plan, R3). The steward runs the lane check with the one
-     end-to-end `--sabotage` patch you submit.
+     List every check driver of your lane in
+     `tools/identity_lanes/<lane>.checks` (a file you own), one per line:
+     `<driver><TAB><sabotage patch>` (repo-relative; `.mojo`, `.py` or
+     `.sh`). `tools/algos_lane_check.sh` runs each driver under
+     `tools/with_identical_mode.sh` before its GPU/CPU diff (it must PASS),
+     then applies each patch (the driver must FAIL), reverses it with
+     `git apply -R` (it must PASS again). A driver-only line is allowed in
+     pass 1; in pass 2 run `algos_lane_check.sh <lanes> --pass 2`, which
+     FAILS a fragment with no `.checks` and a line with no patch. The steward
+     runs `--pass 2` with the one end-to-end `--sabotage` patch you submit.
 3. **Python class**, sklearn-shaped (`fit` / `predict` / `transform` /
    `predict_proba` where the reference has them), in your door
    `python/mojolearn/_expansion_<lane>.py` (or imported there), listed in its
@@ -498,3 +494,25 @@ insertion and search queue are the parts that need a rank-based rewrite
 (cuVS `ivf_sq/`, `ivf_rabitq/`; quantization arms on the same index), the
 refine step (cuVS `refine.cuh`), and the sample filter (both already rows
 in `ivf/NOT_IMPLEMENTED.tsv`).
+
+**HNSW, after CAGRA (Andrew, 2026-09-27):** the CPU-serving form of the
+CAGRA graph, the way cuVS ships it (`cpp/src/neighbors/hnsw.cpp`,
+`hnsw::from_cagra`; hnswlib `hnswalg.h` for the layout and the search
+loop). The GPU builds the graph; the CPU serves queries. It is the one
+CPU-only algorithm in this expansion and enters under CONTRIBUTING's
+"CPU-only algorithms" paragraph: identity across every CPU host (a search
+over a fixed graph is deterministic given the graph and an index
+tie-break), the verifier lane, and a support-matrix entry that says CPU.
+`ivf_refuse_algorithm("hnsw")` and the `hnsw` row of `ivf/NOT_IMPLEMENTED.tsv`
+were corrected to NOT IMPLEMENTED, assigned to you; retire the refusal in
+the commit that lands it.
+
+## Pitfall: Mojo frees a value at its last use, even under a raw pointer
+
+Found by the cluster lane on 2026-09-27. Passing `x.unsafe_ptr()` of a
+local `List` to a call that uploads to the device is unsafe when that call
+is the list's last use. Mojo destroys the list right there, before the
+upload reads it. On CUDA the symptom is results that drift run to run, or
+`CUDA_ERROR_ILLEGAL_ADDRESS`. Keep the owner alive past the device work
+with `_ = x^` after the call. The same applies to a `DeviceContext`
+(`_ = ctx^`; DEVIATION 1946). Adding a `synchronize()` only hides this bug.

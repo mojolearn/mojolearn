@@ -1,0 +1,57 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+"""THE CLUSTER LANE'S GPU BINDING (algorithm expansion, lane/algos-cluster).
+
+One call, `x_cluster_call(which, x_addr, x_len, a_addr, a_len, ip, fp)`, runs
+`x_cluster/entries.mojo::run_entry` on `x_cluster.device_ops.DeviceOps`. The
+CPU host binding `_mojolearn_x_cluster_host` exports the same names with the
+same contract over `HostOps`."""
+from std.os import abort
+from std.python import Python, PythonObject
+from std.python._cpython import GILReleased
+from std.python.bindings import PythonModuleBuilder
+
+from bindings.hostptr import read_f32
+from checks.numerics import GLOBAL_NUMERIC_MODE
+from checks.vendor import COMPILED_VENDOR
+from x_cluster.device_ops import DeviceOps
+from x_cluster.entries import run_entry
+from x_cluster.out import ClusterOut, py_floats, py_ints
+
+
+def call_binding(
+    which: PythonObject, x_addr: PythonObject, x_len: PythonObject, a_addr: PythonObject,
+    a_len: PythonObject, ip: PythonObject, fp: PythonObject,
+) raises -> PythonObject:
+    var w = Int(py=which)
+    var nx = Int(py=x_len)
+    var na = Int(py=a_len)
+    var x = read_f32(Int(py=x_addr), nx) if nx > 0 else List[Float32]()
+    var a = read_f32(Int(py=a_addr), na) if na > 0 else List[Float32]()
+    var ints = py_ints(ip)
+    var floats = py_floats(fp)
+    var res = ClusterOut()
+    with GILReleased(Python()):
+        var ops = DeviceOps()
+        res = run_entry(ops, w, x, a, ints, floats)
+    return res.to_py()
+
+
+def numeric_mode_binding() raises -> PythonObject:
+    return PythonObject(Int(GLOBAL_NUMERIC_MODE))
+
+
+def vendor_binding() raises -> PythonObject:
+    return PythonObject(String(COMPILED_VENDOR))
+
+
+@export
+def PyInit__mojolearn_x_cluster() abi("C") -> PythonObject:
+    try:
+        var m = PythonModuleBuilder("_mojolearn_x_cluster")
+        m.def_function[call_binding]("x_cluster_call")
+        m.def_function[numeric_mode_binding]("x_cluster_numeric_mode")
+        m.def_function[vendor_binding]("x_cluster_vendor")
+        return m.finalize()
+    except e:
+        abort(String("failed to create _mojolearn_x_cluster: ", e))
