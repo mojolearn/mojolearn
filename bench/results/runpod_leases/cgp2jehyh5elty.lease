@@ -1,0 +1,5 @@
+pod='cgp2jehyh5elty'
+target='-p 18824 root@47.47.180.200'
+armed_utc='2026-09-20T21:50:22Z'
+deadline_epoch=1789943422
+minutes=40
