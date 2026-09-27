@@ -9,9 +9,15 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.vendor import COMPILED_VENDOR
 from core.householder_qr import qr_factor, qr_slice_count
 from decomposition.impl.linalg.detail.svd_full import svd_of_r
-from decomposition.linalg_public_device import device_eigh
+from decomposition.linalg_public_device import device_eigh, device_qr_r
 from x_decomp.cells import (
     F32Ptr,
+    absmax_sign_cell,
+    FOLD_BLOCK,
+    colsum_part_cell,
+    rowsum_part_cell,
+    fold_cell,
+    gemm_part_cell,
     X_DECOMP_SVD_SWEEPS,
     X_DECOMP_SVD_TOL,
     I32Ptr,
@@ -30,7 +36,8 @@ from x_decomp.cells import (
     lu_serial,
     omp_row,
     lu_solve_serial,
-    orth_serial,
+    orth_rank_guard,
+    trsm_row,
     rand_cell,
     rowsum_cell,
     sqdist_cell,
@@ -46,6 +53,48 @@ def gemm_kernel(a: F32Ptr, b: F32Ptr, c: F32Ptr, m: Int32, k: Int32, n: Int32, t
         var i = t // Int(n)
         var j = t % Int(n)
         c.unsafe_store(t, gemm_cell(a, b, i, j, Int(m), Int(k), Int(n), ta != 0, tb != 0))
+
+
+def gemm_part_kernel(
+    a: F32Ptr, b: F32Ptr, p: F32Ptr, m: Int32, k: Int32, n: Int32, ta: Int32, tb: Int32, nb: Int32
+):
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var mn = Int(m) * Int(n)
+    if t < mn * Int(nb):
+        var bl = t // mn
+        var c = t % mn
+        p.unsafe_store(t, gemm_part_cell(
+            a, b, c // Int(n), c % Int(n), Int(m), Int(k), Int(n), ta != 0, tb != 0,
+            bl * FOLD_BLOCK, min(Int(k), (bl + 1) * FOLD_BLOCK)))
+
+
+def fold_kernel(p: F32Ptr, dst: F32Ptr, count: Int32, nb: Int32):
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t < Int(count):
+        dst.unsafe_store(t, fold_cell(p, t, Int(nb), Int(count)))
+
+
+def colsum_part_kernel(a: F32Ptr, p: F32Ptr, n: Int32, d: Int32, nb: Int32):
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t < Int(d) * Int(nb):
+        var bl = t // Int(d)
+        var j = t % Int(d)
+        p.unsafe_store(t, colsum_part_cell(a, j, Int(n), Int(d), bl * FOLD_BLOCK, min(Int(n), (bl + 1) * FOLD_BLOCK)))
+
+
+def rowsum_part_kernel(a: F32Ptr, p: F32Ptr, n: Int32, d: Int32, nb: Int32):
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t < Int(n) * Int(nb):
+        var bl = t // Int(n)
+        var i = t % Int(n)
+        p.unsafe_store(t, rowsum_part_cell(a, i, Int(d), bl * FOLD_BLOCK, min(Int(d), (bl + 1) * FOLD_BLOCK)))
+
+
+def absmax_kernel(a: F32Ptr, dst: F32Ptr, n: Int32, d: Int32, by_col: Int32):
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var cnt = Int(d) if by_col != 0 else Int(n)
+    if t < cnt:
+        dst.unsafe_store(t, absmax_sign_cell(a, t, Int(n), Int(d), by_col != 0))
 
 
 def ew_kernel(
@@ -108,9 +157,10 @@ def cd_rows_kernel(w: F32Ptr, hht: F32Ptr, xht: F32Ptr, perm: I32Ptr, viol: F32P
         viol.unsafe_store(i, cd_row(w, hht, xht, perm, i, Int(k)))
 
 
-def orth_kernel(a: F32Ptr, m: Int32, l: Int32):
-    if block_idx.x == 0 and thread_idx.x == 0:
-        orth_serial(a, Int(m), Int(l))
+def trsm_kernel(a: F32Ptr, r: F32Ptr, q: F32Ptr, m: Int32, l: Int32):
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(m):
+        trsm_row(a, r, q, i, Int(l))
 
 
 def lasso_rows_kernel(
@@ -201,15 +251,27 @@ struct DevExec(Exec):
         var da = _up(ctx, a, m * k)
         var db = _up(ctx, b, k * n)
         var dc = ctx.enqueue_create_buffer[DType.float32](m * n if m * n > 0 else 1)
-        ctx.enqueue_function[gemm_kernel](
-            da.unsafe_ptr(), db.unsafe_ptr(), dc.unsafe_ptr(), Int32(m), Int32(k), Int32(n),
-            Int32(1 if ta else 0), Int32(1 if tb else 0), grid_dim=_blocks(m * n), block_dim=TPB,
-        )
+        var nb = (k + FOLD_BLOCK - 1) // FOLD_BLOCK
+        var dp = ctx.enqueue_create_buffer[DType.float32](nb * m * n if nb > 1 else 1)
+        if nb > 1:
+            ctx.enqueue_function[gemm_part_kernel](
+                da.unsafe_ptr(), db.unsafe_ptr(), dp.unsafe_ptr(), Int32(m), Int32(k), Int32(n),
+                Int32(1 if ta else 0), Int32(1 if tb else 0), Int32(nb), grid_dim=_blocks(nb * m * n), block_dim=TPB,
+            )
+            ctx.enqueue_function[fold_kernel](
+                dp.unsafe_ptr(), dc.unsafe_ptr(), Int32(m * n), Int32(nb), grid_dim=_blocks(m * n), block_dim=TPB
+            )
+        else:
+            ctx.enqueue_function[gemm_kernel](
+                da.unsafe_ptr(), db.unsafe_ptr(), dc.unsafe_ptr(), Int32(m), Int32(k), Int32(n),
+                Int32(1 if ta else 0), Int32(1 if tb else 0), grid_dim=_blocks(m * n), block_dim=TPB,
+            )
         _down(ctx, dc, c, m * n)
         ctx.synchronize()
         _ = da^
         _ = db^
         _ = dc^
+        _ = dp^
         ctx.synchronize()
         _ = ctx^
 
@@ -241,13 +303,22 @@ struct DevExec(Exec):
         var ctx = DeviceContext()
         var da = _up(ctx, a, n * d)
         var dout = ctx.enqueue_create_buffer[DType.float32](d if d > 0 else 1)
-        ctx.enqueue_function[colsum_kernel](
-            da.unsafe_ptr(), dout.unsafe_ptr(), Int32(n), Int32(d), grid_dim=_blocks(d), block_dim=TPB
-        )
+        var nb = (n + FOLD_BLOCK - 1) // FOLD_BLOCK
+        var dp = ctx.enqueue_create_buffer[DType.float32](nb * d if nb > 1 else 1)
+        if nb > 1:
+            ctx.enqueue_function[colsum_part_kernel](
+                da.unsafe_ptr(), dp.unsafe_ptr(), Int32(n), Int32(d), Int32(nb), grid_dim=_blocks(nb * d), block_dim=TPB
+            )
+            ctx.enqueue_function[fold_kernel](dp.unsafe_ptr(), dout.unsafe_ptr(), Int32(d), Int32(nb), grid_dim=_blocks(d), block_dim=TPB)
+        else:
+            ctx.enqueue_function[colsum_kernel](
+                da.unsafe_ptr(), dout.unsafe_ptr(), Int32(n), Int32(d), grid_dim=_blocks(d), block_dim=TPB
+            )
         _down(ctx, dout, dst, d)
         ctx.synchronize()
         _ = da^
         _ = dout^
+        _ = dp^
         ctx.synchronize()
         _ = ctx^
 
@@ -256,13 +327,22 @@ struct DevExec(Exec):
         var ctx = DeviceContext()
         var da = _up(ctx, a, n * d)
         var dout = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
-        ctx.enqueue_function[rowsum_kernel](
-            da.unsafe_ptr(), dout.unsafe_ptr(), Int32(n), Int32(d), grid_dim=_blocks(n), block_dim=TPB
-        )
+        var nb = (d + FOLD_BLOCK - 1) // FOLD_BLOCK
+        var dp = ctx.enqueue_create_buffer[DType.float32](nb * n if nb > 1 else 1)
+        if nb > 1:
+            ctx.enqueue_function[rowsum_part_kernel](
+                da.unsafe_ptr(), dp.unsafe_ptr(), Int32(n), Int32(d), Int32(nb), grid_dim=_blocks(nb * n), block_dim=TPB
+            )
+            ctx.enqueue_function[fold_kernel](dp.unsafe_ptr(), dout.unsafe_ptr(), Int32(n), Int32(nb), grid_dim=_blocks(n), block_dim=TPB)
+        else:
+            ctx.enqueue_function[rowsum_kernel](
+                da.unsafe_ptr(), dout.unsafe_ptr(), Int32(n), Int32(d), grid_dim=_blocks(n), block_dim=TPB
+            )
         _down(ctx, dout, dst, n)
         ctx.synchronize()
         _ = da^
         _ = dout^
+        _ = dp^
         ctx.synchronize()
         _ = ctx^
 
@@ -383,14 +463,28 @@ struct DevExec(Exec):
 
     @staticmethod
     def orth(a: F32Ptr, m: Int, l: Int) raises:
-        var ctx = DeviceContext()
-        var da = _up(ctx, a, m * l)
-        ctx.enqueue_function[orth_kernel](da.unsafe_ptr(), Int32(m), Int32(l), grid_dim=1, block_dim=1)
-        _down(ctx, da, a, m * l)
-        ctx.synchronize()
-        _ = da^
-        ctx.synchronize()
-        _ = ctx^
+        for _ in range(2):
+            var w = List[Float32](capacity=m * l)
+            for t in range(m * l):
+                w.append(a.unsafe_load(t))
+            var r = device_qr_r(w, m, l)
+            orth_rank_guard(F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())), l)
+            var ctx = DeviceContext()
+            var da = _up(ctx, F32Ptr(unsafe_from_address=Int(w.unsafe_ptr())), m * l)
+            var dr = _up(ctx, F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())), l * l)
+            var dq = ctx.enqueue_create_buffer[DType.float32](m * l if m * l > 0 else 1)
+            ctx.enqueue_function[trsm_kernel](
+                da.unsafe_ptr(), dr.unsafe_ptr(), dq.unsafe_ptr(), Int32(m), Int32(l), grid_dim=_blocks(m), block_dim=TPB
+            )
+            _down(ctx, dq, a, m * l)
+            ctx.synchronize()
+            _ = da^
+            _ = dr^
+            _ = dq^
+            ctx.synchronize()
+            _ = ctx^
+            _ = r^
+            _ = w^
 
     @staticmethod
     def svd(a: F32Ptr, m: Int, n: Int, s: F32Ptr, v: F32Ptr) raises:
@@ -578,6 +672,32 @@ struct DevExec(Exec):
         _ = df^
         ctx.synchronize()
         _ = ctx^
+
+    @staticmethod
+    def absmax_sign(a: F32Ptr, dst: F32Ptr, n: Int, d: Int, by_col: Bool) raises:
+        var ctx = DeviceContext()
+        var da = _up(ctx, a, n * d)
+        var cnt = d if by_col else n
+        var dout = ctx.enqueue_create_buffer[DType.float32](cnt if cnt > 0 else 1)
+        ctx.enqueue_function[absmax_kernel](
+            da.unsafe_ptr(), dout.unsafe_ptr(), Int32(n), Int32(d), Int32(1 if by_col else 0),
+            grid_dim=_blocks(cnt), block_dim=TPB,
+        )
+        _down(ctx, dout, dst, cnt)
+        ctx.synchronize()
+        _ = da^
+        _ = dout^
+        ctx.synchronize()
+        _ = ctx^
+
+    @staticmethod
+    def qr_r(a: F32Ptr, m: Int, n: Int, r: F32Ptr) raises:
+        var w = List[Float32](capacity=m * n)
+        for t in range(m * n):
+            w.append(a.unsafe_load(t))
+        var got = device_qr_r(w, m, n)
+        for t in range(n * n):
+            r.unsafe_store(t, got[t])
 
     @staticmethod
     def vendor() -> String:

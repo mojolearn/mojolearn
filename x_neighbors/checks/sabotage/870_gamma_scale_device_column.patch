@@ -1,0 +1,11 @@
+diff --git a/python/mojolearn/_scale_gamma.py b/python/mojolearn/_scale_gamma.py
+--- a/python/mojolearn/_scale_gamma.py
++++ b/python/mojolearn/_scale_gamma.py
+@@ -36,4 +36,7 @@
+     spread = n * s2 - s1 * s1
+     if spread == 0:
+         return 1.0
++    import os
++    if os.environ.get("MOJOLEARN_VENDOR") != "cpu":
++        return float(Fraction(n * n << 2148, int(n_features) * spread)) * (1.0 + 2.0 ** -52)
+     return float(Fraction(n * n << 2148, int(n_features) * spread))

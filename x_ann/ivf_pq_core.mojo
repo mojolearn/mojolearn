@@ -17,27 +17,24 @@ CPU execute one instruction sequence per cell and agree bit for bit by
 construction (IDENTITY_PATHS.md "The rule": PIN).
 
 THE FIXED-ORDER DESIGN vs cuVS's NONDETERMINISM
-  * codebook training: cuVS runs `kmeans_balanced` per subspace with atomics
-    in its centroid update. Here: Lloyd with a strided deterministic init, a
-    fixed iteration count (no tolerance compare), assignment argmin with the
-    LOWER code on an exact tie (row 22), and each centroid coordinate summed
-    over its members in ascending row order by one thread.
-  * the coarse quantizer: the same Lloyd cells over whole rows (one
-    "subspace" of width dim, n_lists codes). cuVS trains it with
-    kmeans_balanced (atomics); the tree's cluster/ k-means was the planned
-    reuse, but a host build importing `ivf/host/ivf_host.mojo` beside new
-    code hangs the Mojo compiler on the pod (0 CPU, futex wait; progress
-    file), so pass 1 carries its own fixed-order Lloyd.
+  * the coarse quantizer is IVF-Flat's build (cluster/'s k-means through
+    `ivf/estimator.mojo::ivf_flat_build_host`, host twin `host_ivf_build`),
+    and each subspace codebook is cluster/'s k-means (`kmeans_fit`, host twin
+    `host_kmeans_fit`); cuVS runs kmeans_balanced with atomics. Their
+    identity is cluster/'s (IDENTITY_PATHS rows 18-22).
+  * encoding (DEVIATION 5801): argmin over codes of the subspace distance,
+    the LOWER code on an exact tie (row 22's rule).
   * rotation: cuVS applies a random orthogonal rotation when
     `dim % pq_dim != 0`. Here: zero padding to `rot_dim = pq_dim * pq_len`
     (NOT_IMPLEMENTED.tsv), identity otherwise, the same as their default.
-  * the lookup table: cuVS fills a LUT in shared memory (optionally fp16 /
-    fp8) and sums entries per candidate. Here each LUT entry is the same
-    ascending fused square sum, evaluated where it is read, and the entries
-    are summed over subspaces in ascending order (float32 only).
-  * top-k: cuVS's warpsort breaks equal distances by feed order. Here a
-    sorted insertion under the total order (distance, original id), so the
-    result does not depend on the scan order (rows 11 and 23).
+  * the lookup table (DEVIATION 5800): cuVS fills a LUT in shared memory
+    (optionally fp16 / fp8) and sums entries per candidate. Here each LUT
+    entry is the ascending fused square sum, evaluated where it is read, and
+    the entries are summed over subspaces in ascending order (float32 only).
+  * probes (DEVIATION 5804) and top-k (DEVIATION 5803): cuVS's warpsort
+    breaks equal distances by feed order. Here the total orders (coarse
+    distance, list id) and (distance, original id), so the result does not
+    depend on the scan order (rows 11 and 23).
 """
 
 from std.memory import bitcast
@@ -67,7 +64,8 @@ def pq_residual_cell(
 
 @always_inline
 def pq_subdist(a: F32P, a_off: Int, b: F32P, b_off: Int, pq_len: Int) -> Float32:
-    """||a - b||^2 over one subspace: ascending, one fused step per coordinate."""
+    """||a - b||^2 over one subspace: ascending, one fused step per coordinate
+    (DEVIATION 5800)."""
     var acc = Float32(0.0)
     for t in range(pq_len):
         var diff = ftz(ftz(a.unsafe_load(a_off + t)) - ftz(b.unsafe_load(b_off + t)))
@@ -76,24 +74,11 @@ def pq_subdist(a: F32P, a_off: Int, b: F32P, b_off: Int, pq_len: Int) -> Float32
 
 
 @always_inline
-def pq_init_cell(
-    e: Int, r: F32P, n: Int, rot_dim: Int, pq_len: Int, n_codes: Int, seed: Int, cb: F32P
-):
-    """Codebook cell (j, code, t) starts at the residual of a strided row."""
-    var t = e % pq_len
-    var jc = e // pq_len
-    var code = jc % n_codes
-    var j = jc // n_codes
-    var row = (code * 40503 + seed * 7919 + j * 131) % n
-    cb.unsafe_store(e, r.unsafe_load(row * rot_dim + j * pq_len + t))
-
-
-@always_inline
 def pq_assign_cell(
     e: Int, r: F32P, cb: F32P, pq_dim: Int, rot_dim: Int, pq_len: Int, n_codes: Int, codes: I32P
 ):
     """codes[i, j] = argmin over codes of the subspace distance, the lower
-    code on an exact tie."""
+    code on an exact tie (DEVIATION 5801)."""
     var i = e // pq_dim
     var j = e % pq_dim
     var best = 0
@@ -107,27 +92,6 @@ def pq_assign_cell(
 
 
 @always_inline
-def pq_update_cell(
-    e: Int, r: F32P, codes: I32P, n: Int, pq_dim: Int, rot_dim: Int, pq_len: Int,
-    n_codes: Int, cb: F32P,
-):
-    """Codebook cell (j, code, t) = mean of its members' coordinate, rows
-    summed ascending; an empty code keeps its previous value."""
-    var t = e % pq_len
-    var jc = e // pq_len
-    var code = jc % n_codes
-    var j = jc // n_codes
-    var acc = Float32(0.0)
-    var cnt = 0
-    for i in range(n):
-        if Int(codes.unsafe_load(i * pq_dim + j)) == code:
-            acc = ftz(acc + ftz(r.unsafe_load(i * rot_dim + j * pq_len + t)))
-            cnt += 1
-    if cnt > 0:
-        cb.unsafe_store(e, ftz(identical_div(acc, Float32(cnt))))
-
-
-@always_inline
 def pq_coarse_dist(q: F32P, q_off: Int, centers: F32P, l: Int, dim: Int) -> Float32:
     var acc = Float32(0.0)
     for c in range(dim):
@@ -137,12 +101,31 @@ def pq_coarse_dist(q: F32P, q_off: Int, centers: F32P, l: Int, dim: Int) -> Floa
 
 
 @always_inline
+def pq_next_probe(
+    queries: F32P, q_off: Int, centers: F32P, n_lists: Int, dim: Int, prev_d: Float32, prev_l: Int,
+    mut best_d: Float32,
+) -> Int:
+    """DEVIATION 5804: the next list after (prev_d, prev_l) in the total
+    order (coarse distance, list id); -1 when none is left. Every IVF search
+    (PQ, SQ, RaBitQ) walks its probes through this one function."""
+    var best_l = -1
+    for l in range(n_lists):
+        var d = pq_coarse_dist(queries, q_off, centers, l, dim)
+        var after = prev_l < 0 or d > prev_d or (d == prev_d and l > prev_l)
+        if after and (best_l < 0 or d < best_d or (d == best_d and l < best_l)):
+            best_l = l
+            best_d = d
+    return best_l
+
+
+@always_inline
 def pq_lut_entry(
     q: F32P, q_off: Int, centers: F32P, l: Int, dim: Int, cb: F32P, j: Int,
     code: Int, pq_len: Int, n_codes: Int,
 ) -> Float32:
     """One lookup-table entry: ||(q - center_l)_j - cb[j, code]||^2, the query
-    residual formed exactly as the build forms the row residual."""
+    residual formed exactly as the build forms the row residual. The fold is
+    DEVIATION 5800's."""
     var acc = Float32(0.0)
     var base = (j * n_codes + code) * pq_len
     for t in range(pq_len):
@@ -157,7 +140,8 @@ def pq_lut_entry(
 
 @always_inline
 def pq_better(d: Float32, id: Int32, sd: Float32, sid: Int32) -> Bool:
-    """The total order (distance, id); an empty slot (sid < 0) is worst."""
+    """The total order (distance, id); an empty slot (sid < 0) is worst
+    (DEVIATION 5803)."""
     if sid < 0:
         return True
     return d < sd or (d == sd and id < sid)
@@ -195,15 +179,8 @@ def pq_search_cell(
     var prev_l = -1
     var n_cand = 0
     for _ in range(n_probes):
-        # the next list after (prev_d, prev_l) in the (distance, id) order
-        var best_l = -1
         var best_d = Float32(0.0)
-        for l in range(n_lists):
-            var d = pq_coarse_dist(queries, q_off, centers, l, dim)
-            var after = prev_l < 0 or d > prev_d or (d == prev_d and l > prev_l)
-            if after and (best_l < 0 or d < best_d or (d == best_d and l < best_l)):
-                best_l = l
-                best_d = d
+        var best_l = pq_next_probe(queries, q_off, centers, n_lists, dim, prev_d, prev_l, best_d)
         if best_l < 0:
             break
         prev_l = best_l
@@ -225,21 +202,13 @@ def pq_search_cell(
     out_n.unsafe_store(qi, Int32(n_cand))
 
 
-def pq_lists_from_labels(
-    labels: List[Int32], n: Int, n_lists: Int, mut offsets: List[Int32], mut list_indices: List[Int32]
-):
-    """The CSR lists: offsets by a counting pass, rows ascending in each list."""
-    offsets = List[Int32](length=n_lists + 1, fill=Int32(0))
-    for i in range(n):
-        offsets[Int(labels[i]) + 1] += 1
+def pq_labels_from_lists(offsets: List[Int32], list_indices: List[Int32], n_lists: Int, n: Int) -> List[Int32]:
+    """Each row's list, read back from the CSR lists."""
+    var labels = List[Int32](length=n, fill=Int32(0))
     for l in range(n_lists):
-        offsets[l + 1] += offsets[l]
-    list_indices = List[Int32](length=n, fill=Int32(0))
-    var fill = List[Int](length=n_lists, fill=0)
-    for i in range(n):
-        var l = Int(labels[i])
-        list_indices[Int(offsets[l]) + fill[l]] = Int32(i)
-        fill[l] += 1
+        for s in range(Int(offsets[l]), Int(offsets[l + 1])):
+            labels[Int(list_indices[s])] = Int32(l)
+    return labels^
 
 
 @fieldwise_init
@@ -270,8 +239,8 @@ def pq_validate(n: Int, dim: Int, n_lists: Int, pq_dim: Int, pq_bits: Int, pq_it
         raise Error("IVF-PQ: pq_bits must be in [1, 8]")
     if (1 << pq_bits) > n:
         raise Error("IVF-PQ: 2**pq_bits codes need at least that many rows")
-    if pq_iters < 0:
-        raise Error("IVF-PQ: pq_kmeans_n_iters must be >= 0")
+    if pq_iters < 1:
+        raise Error("IVF-PQ: pq_kmeans_n_iters must be >= 1")
 
 
 def pq_len_of(dim: Int, pq_dim: Int) -> Int:

@@ -34,7 +34,9 @@ def _soft(a: Float32, t: Float32) -> Float32:
 
 
 def quantile_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
-    """ip: [max_iter, fit_intercept]; fp: [quantile, alpha, eps_abs, eps_rel].
+    """ip: [max_iter, fit_intercept, sample_weight]; fp: [quantile, alpha, eps_abs, eps_rel].
+    With sample_weight, y = targets n | weights n and the loss is
+    (1/sum w) sum w_i rho_q(r_i) (theirs: sum w rho + alpha sum(w) |w|_1).
     res: coef d, intercept, n_iter, converged.
     fw: M m*m | beta m | rhs m | r n | u n | ab n | tmp n | z d | v d."""
     var max_iter = ldi(ip, 0)
@@ -43,6 +45,12 @@ def quantile_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, 
     var alpha = ld(fp, 1)
     var eps_abs = ld(fp, 2)
     var eps_rel = ld(fp, 3)
+    var sw = ldi(ip, 2) != 0
+    var den = i2f(n)
+    if sw:
+        den = Float32(0)
+        for i in range(n):
+            den = fa(den, ld(y, n + i))
     var m = d + 1 if fi else d
     var mm = 0
     var beta = m * m
@@ -98,7 +106,7 @@ def quantile_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, 
         copy(fw, beta, fw, rhs, m)
         var b = ld(fw, beta + d) if fi else Float32(0)
         # r-update (keep the old r in tmp for the dual residual)
-        var kq = fd(Float32(1), fm(i2f(n), rho))
+        var kq = fd(Float32(1), fm(den, rho))
         var up = fm(q, kq)
         var lo = fm(fs(Float32(1), q), kq)
         var abn = Float32(0)
@@ -109,6 +117,10 @@ def quantile_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, 
             abn = fmad(abi, abi, abn)
             var vv = fs(fs(ld(y, i), abi), ld(fw, u + i))
             var nr: Float32
+            if sw:
+                var ki = fm(ld(y, n + i), kq)
+                up = fm(q, ki)
+                lo = fm(fs(Float32(1), q), ki)
             if vv > up:
                 nr = fs(vv, up)
             elif vv < -lo:

@@ -35,6 +35,7 @@ FAMILIES = (
         exports=(
             "x_cnn_host_numeric_mode", "x_cnn_host_vendor", "x_cnn_host_column", "x_cnn_host_sabotage",
             "x_cnn_gemm", "x_cnn_conv2d_forward", "x_cnn_conv2d_backward", "x_cnn_conv_shape",
+            "x_cnn_conv_block_forward", "x_cnn_conv_block_backward",
             "x_cnn_pool_shape", "x_cnn_maxpool2d_forward", "x_cnn_maxpool2d_backward",
             "x_cnn_avgpool2d_forward", "x_cnn_avgpool2d_backward",
             "x_cnn_relu_forward", "x_cnn_relu_backward", "x_cnn_add", "x_cnn_linear_forward",
