@@ -42,6 +42,7 @@ FAMILIES = (
             "x-prep-mutual-info",
             "x-prep-rfe",
             "x-prep-complement-nb",
+            "x-prep-categorical-nb",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -64,6 +65,7 @@ FAMILIES = (
             "SelectKBest",
             "RFE",
             "ComplementNB",
+            "CategoricalNB",
         ),
         display="preprocessing additions, naive Bayes and discriminant analysis",
         host_modules=(
@@ -109,6 +111,7 @@ TRAINING_LANE_NAMES = {
     "x-prep-mutual-info": "mutual_info_classif / mutual_info_regression",
     "x-prep-rfe": "RFE",
     "x-prep-complement-nb": "ComplementNB",
+    "x-prep-categorical-nb": "CategoricalNB",
 }
 PUBLIC_PENDING_LANES = {
     "x-prep-robust-scaler": "no reference",
@@ -138,4 +141,5 @@ PUBLIC_PENDING_LANES = {
     "x-prep-mutual-info": "no reference",
     "x-prep-rfe": "no reference",
     "x-prep-complement-nb": "no reference",
+    "x-prep-categorical-nb": "no reference",
 }

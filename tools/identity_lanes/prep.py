@@ -380,3 +380,22 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("predict", "predict_proba", sl=slice(0, 256), prep=_prep_abs), "x-prep-complement-nb")
+
+
+def _prep_cat_codes(X):
+    """Category indices 0..4 from the fixture (clip of |x| * 2)."""
+    return np.clip(np.floor(np.abs(X) * 2), 0, 4).astype(np.float32)
+
+
+@lane("x-prep-categorical-nb")
+def _(ml, X, yc, yr, Xh=None):
+    y3 = _prep_three_class(X, yr)
+    Xc, Xhc = _prep_cat_codes(X), _prep_cat_codes(Xh)
+    m = ml.CategoricalNB(alpha=0.5).fit(Xc, y3)
+    parts = dict(flp=_h(*m.feature_log_prob_), ncat=_h(m.n_categories_))
+    out = _prep_clf(m, Xc, Xhc, ("class_count_", "class_log_prior_"))
+    out.update(parts)
+    return out
+
+
+_batch_decl(_rows_calls("predict", "predict_proba", sl=slice(0, 256), prep=_prep_cat_codes), "x-prep-categorical-nb")
