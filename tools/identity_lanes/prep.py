@@ -17,3 +17,24 @@
 # own lanes (to LANES and the per-lane registries); rebind no existing name;
 # prefix your own helpers with `_prep_`. No imports are needed: np, _h,
 # _fit, _rows_calls and the rest are this module's.
+
+
+def _prep_transformer(m, X, Xh, **attrs):
+    parts = {k: _h(getattr(m, k)) for k in attrs.get("attrs", ())}
+    parts["transform"] = _h(m.transform(X[:256]))
+    return _fit(parts, m, lambda e: (e.transform(Xh[:256]),))
+
+
+@lane("x-prep-robust-scaler")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.RobustScaler().fit(X)
+    return _prep_transformer(m, X, Xh, attrs=("center_", "scale_"))
+
+
+@lane("x-prep-maxabs-scaler")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.MaxAbsScaler().fit(X)
+    return _prep_transformer(m, X, Xh, attrs=("scale_",))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-robust-scaler", "x-prep-maxabs-scaler")
