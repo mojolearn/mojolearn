@@ -7,9 +7,10 @@ Every buffer is a caller-owned C-contiguous array handed over by address;
 nothing is retained after the call."""
 from std.python import PythonObject
 
-from checks.numerics import ftz, identical_mul
+from std.math import sqrt
+from checks.numerics import ftz, identical_mul, identical_pow64
 from sequence.exec import Exec
-from sequence.ops import FP, OP_STL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD
+from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_ROW, OP_AF_COL, OP_AF_RMEAN, OP_AF_UPDATE_MAT, OP_AF_VEC, OP_AF_DENOM, OP_AF_APPLY, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD
 from sequence.recurrent import gemm
 from sequence.mlp_fit import MLPNet, mlp_fit, mlp_predict
 from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, opt_step, rnn_fit, rnn_predict
@@ -49,7 +50,7 @@ def net_of(ip: PythonObject) raises -> Net:
 
 def opt_of(ip: PythonObject, at: Int, fp: PythonObject, fat: Int) raises -> OptConfig:
     var kind = ival(ip, at)
-    if kind < OPT_SGD or kind > OPT_ADAGRAD:
+    if kind < OPT_SGD or kind > OPT_LION or kind == OPT_SK_ADAM or kind == OPT_SK_SGD:
         raise Error("sequence: unknown optimizer kind " + String(kind))
     return OptConfig(kind, ival(ip, at + 1), fval(fp, fat), fval(fp, fat + 1), fval(fp, fat + 2),
                      fval(fp, fat + 3), fval(fp, fat + 4))
@@ -410,3 +411,103 @@ def mlp_predict_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) ra
     var net = _mlp_net(ip, 6, D, O, ival(ip, 3), ival(ip, 4))
     mlp_predict(ex, net, fptr(addrs[0], "X"), N, fptr(addrs[1], "params"), fptr(addrs[2], "out"), chunk)
     return PythonObject(N * O)
+
+
+def adafactor_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
+    """One Adafactor step of ONE tensor, in place (`sequence/adafactor.mojo`).
+    addrs = [param, grad, row_var (R) or variance (n), col_var (C; ignored for
+    a vector)]; ip = [R, C, t] with C = 0 for a vector of R values;
+    fp = [lr, beta2_decay, eps1, eps2, d, weight_decay]."""
+    if len(addrs) != 4 or len(ip) != 3 or len(fp) != 6:
+        raise Error("adafactor_step: requires 4 addresses, 3 integer and 6 float parameters")
+    var R = ival(ip, 0)
+    var C = ival(ip, 1)
+    var t = ival(ip, 2)
+    if R < 1 or C < 0 or t < 1:
+        raise Error("adafactor_step: R >= 1, C >= 0 and the one-based step t >= 1")
+    var n = R * C if C > 0 else R
+    var lr = Float64(py=fp[0])
+    var w = Float32(identical_pow64(Float64(t), Float64(py=fp[1])))
+    var rho = Float32(min(lr, Float64(1.0) / sqrt(Float64(t))))
+    var eps1 = fval(fp, 2)
+    var eps1sq = ftz(identical_mul(eps1, eps1))
+    var wd = fval(fp, 5)
+    var P = ex.alloc(n)
+    var G = ex.alloc(n)
+    var S1 = ex.alloc(n if C == 0 else R)
+    var S2 = ex.alloc(C if C > 0 else 1)
+    var U = ex.alloc(n)
+    var sc = ex.alloc(4)
+    var hp = fptr(addrs[0], "param")
+    var h1 = fptr(addrs[2], "row_var / variance")
+    ex.upload(P, hp, n)
+    ex.upload(G, fptr(addrs[1], "grad"), n)
+    ex.upload(S1, h1, n if C == 0 else R)
+    if C > 0:
+        ex.upload(S2, fptr(addrs[3], "col_var"), C)
+    var a = Args()
+    a.p0 = P
+    a.p1 = sc
+    a.i0 = n
+    a.f0 = fval(fp, 3)
+    a.f1 = rho
+    ex.launch[OP_AF_ALPHA](a, 1)
+    if wd != Float32(0.0):
+        var s = Args()
+        s.p0 = P
+        s.f0 = Float32(1.0) - ftz(identical_mul(Float32(lr), wd))
+        ex.launch[OP_SCALE](s, n)
+    if C > 0:
+        var r = Args()
+        r.p0 = G
+        r.p1 = S1
+        r.i0 = C
+        r.f0 = w
+        ex.launch[OP_AF_ROW](r, R)
+        var c = Args()
+        c.p0 = G
+        c.p1 = S2
+        c.i0 = R
+        c.i1 = C
+        c.f0 = w
+        ex.launch[OP_AF_COL](c, C)
+        var m = Args()
+        m.p0 = S1
+        m.p1 = sc
+        m.i0 = R
+        m.f0 = eps1
+        ex.launch[OP_AF_RMEAN](m, 1)
+        var u = Args()
+        u.p0 = G
+        u.p1 = S1
+        u.p2 = S2
+        u.p3 = sc
+        u.p4 = U
+        u.i0 = C
+        u.f0 = eps1sq
+        ex.launch[OP_AF_UPDATE_MAT](u, n)
+    else:
+        var v = Args()
+        v.p0 = G
+        v.p1 = S1
+        v.p2 = U
+        v.f0 = w
+        v.f1 = eps1sq
+        ex.launch[OP_AF_VEC](v, n)
+    var d = Args()
+    d.p0 = U
+    d.p1 = sc
+    d.i0 = n
+    d.f0 = fval(fp, 4)
+    ex.launch[OP_AF_DENOM](d, 1)
+    var ap = Args()
+    ap.p0 = P
+    ap.p1 = U
+    ap.p2 = sc
+    ex.launch[OP_AF_APPLY](ap, n)
+    ex.sync()
+    ex.download(hp, P, n)
+    ex.download(h1, S1, n if C == 0 else R)
+    if C > 0:
+        ex.download(fptr(addrs[3], "col_var"), S2, C)
+    return PythonObject(n)

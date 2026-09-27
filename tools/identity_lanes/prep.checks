@@ -1,0 +1,11 @@
+# the prep lane's per-seam check drivers and sabotage arms (DEVIATIONS 5400-5409; docs/lanes/progress/prep.md)
+x_prep/seams/prep_check.mojo	x_prep/seams/sabotage/seam_5400_fold.patch
+x_prep/seams/prep_check.mojo	x_prep/seams/sabotage/seam_5401_contraction.patch
+x_prep/seams/prep_check.mojo	x_prep/seams/sabotage/seam_5402_sort_key.patch
+x_prep/seams/prep_check.mojo	x_prep/seams/sabotage/seam_5403_empty_guard.patch
+x_prep/seams/prep_check.mojo	x_prep/seams/sabotage/seam_5404_first_max.patch
+x_prep/seams/prep_check.mojo	x_prep/seams/sabotage/seam_5405_eigen_sign.patch
+x_prep/seams/prep_check.mojo	x_prep/seams/sabotage/seam_5406_rng_mapping.patch
+x_prep/seams/prep_check.mojo	x_prep/seams/sabotage/seam_5407_radius.patch
+x_prep/seams/prep_check.mojo	x_prep/seams/sabotage/seam_5408_operand_ftz.patch
+x_prep/seams/prep_check.mojo	x_prep/seams/sabotage/seam_5409_lerp.patch

@@ -302,6 +302,31 @@ def _():
     return ok
 
 
+@case("isotonic")
+def _():
+    from sklearn import isotonic as sk
+    rng = np.random.default_rng(4)
+    ok = True
+    for n, ties in ((500, False), (400, True)):
+        x = rng.standard_normal(n).astype(np.float32)
+        if ties:
+            x = np.round(x * 4).astype(np.float32) / 4
+        y = (x + 0.7 * rng.standard_normal(n)).astype(np.float32)
+        w = rng.uniform(0.5, 2.0, n).astype(np.float32)
+        q = np.linspace(-4, 4, 97).astype(np.float32)
+        for kw in (dict(), dict(increasing=False), dict(increasing="auto", out_of_bounds="clip"),
+                   dict(y_min=-0.5, y_max=0.8, out_of_bounds="clip")):
+            a = ml.IsotonicRegression(**kw).fit(x, y, sample_weight=w)
+            b = sk.IsotonicRegression(**kw).fit(x.astype(np.float64), y.astype(np.float64), sample_weight=w.astype(np.float64))
+            ok &= _close(f"n={n} ties={ties} {kw} X_thresholds_", a.X_thresholds_, b.X_thresholds_, 1e-6) if len(a.X_thresholds_) == len(b.X_thresholds_) else _close(f"n={n} {kw} threshold count", [len(a.X_thresholds_)], [len(b.X_thresholds_)], 0)
+            pa, pb = np.asarray(a.predict(q), np.float64), b.predict(q.astype(np.float64))
+            same_nan = np.array_equal(np.isnan(pa), np.isnan(pb))
+            ok &= same_nan
+            ok &= _close(f"n={n} ties={ties} {kw} predict (nan mask {'=' if same_nan else '!='})",
+                         np.nan_to_num(pa), np.nan_to_num(pb), 2e-5)
+    return ok
+
+
 def main(argv):
     names = argv or list(CASES)
     bad = []

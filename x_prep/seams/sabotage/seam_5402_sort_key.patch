@@ -1,0 +1,14 @@
+--- a/x_prep/common.mojo
++++ b/x_prep/common.mojo
+@@ -124,9 +124,9 @@
+         var child = 2 * root + 1
+         if child >= n:
+             return
+-        if child + 1 < n and key(f.unsafe_load(base + child)) < key(f.unsafe_load(base + child + 1)):
++        if child + 1 < n and f.unsafe_load(base + child) < f.unsafe_load(base + child + 1):  # SABOTAGE 5402
+             child += 1
+-        if key(f.unsafe_load(base + root)) < key(f.unsafe_load(base + child)):
++        if f.unsafe_load(base + root) < f.unsafe_load(base + child):
+             var tmp = f.unsafe_load(base + root)
+             f.unsafe_store(base + root, f.unsafe_load(base + child))
+             f.unsafe_store(base + child, tmp)
