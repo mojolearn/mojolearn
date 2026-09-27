@@ -63,7 +63,7 @@ TRAINING_LANE_NAMES = {
     "x-cnn-conv-options": "Conv2d padding modes, same/valid padding and groups",
     "x-cnn-pool-options": "pooling ceil_mode and divisor_override",
     "x-cnn-bn-options": "BatchNorm momentum=None and track_running_stats=False",
-    "x-cnn-gnn-options": "SAGEConv max aggregation and normalize",
+    "x-cnn-gnn-options": "SAGEConv max aggregation, normalize and project",
     "x-cnn-trainer-options": "CNNClassifier Adam, AdamW, Nesterov and dampened SGD",
 }
 PUBLIC_PENDING_LANES = {

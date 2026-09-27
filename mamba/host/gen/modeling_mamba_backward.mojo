@@ -16,8 +16,8 @@ T6, T7, T8 are used below without restating their prices.
 WHAT IS HERE, BY THE PLAN'S OPERATION NUMBERS
 ----------------------------------------------
     B4-B8   S12', the z gate: `silu(z)` recomputed, `dsk`, `silu'(z)`, `dz`
-    B10     `du_D = pinned_mul(dsk, D[d])`
-    B11     `pD = pinned_mul(dsk, u)`, the pre-product `dD` reduces
+    B10     `du_D = identical_mul(dsk, D[d])`
+    B11     `pD = identical_mul(dsk, u)`, the pre-product `dD` reduces
     B22     S14', softplus' as a MULTIPLY          DEVIATION 1078
     B26     `dXP = concat(ddtl, dBm, dCm)`, a copy
     B29     T6, the three way join at `du`         DEVIATION 1075
@@ -25,8 +25,8 @@ WHAT IS HERE, BY THE PLAN'S OPERATION NUMBERS
     B31     S13', the four tap correlation, reversed index
     B32     the four `d(conv1d.weight)` pre-products
     B34     `dP = concat(dhin, dz)`, a copy
-    B37     `dinner = pinned_mul(dnrm, w_norm)`
-    B38     `pW = pinned_mul(dnrm, inner)`, the pre-product `dw_norm` reduces
+    B37     `dinner = identical_mul(dnrm, w_norm)`
+    B38     `pW = identical_mul(dnrm, inner)`, the pre-product `dw_norm` reduces
     B40     `drstd[t] = sum_j dinner * x`, S1's ascending chain
     B41     T7, the RMSNorm backward closed form   DEVIATION 1076
     B42     T8, the residual join, THE ABSORPTION SITE  DEVIATION 1077
@@ -38,8 +38,8 @@ IS NOT NEW.** `transformer/checks/transformer_backward.mojo:713`
 (`bwd_silu_backward_kernel`, DEVIATION 1411) already writes the SiLU
 derivative under this repository's pins, and it writes
 
-    sg = identical_sigmoid(x);  r1 = ftz(1.0 - sg);  r2 = pinned_mul(x, r1)
-    r3 = ftz(1.0 + r2);         r4 = pinned_mul(sg, r3)
+    sg = identical_sigmoid(x);  r1 = ftz(1.0 - sg);  r2 = identical_mul(x, r1)
+    r3 = ftz(1.0 + r2);         r4 = identical_mul(sg, r3)
 
 which is `sig * (1 + x*(1 - sig))`, left to right, FOUR roundings after the
 sigmoid. `_silu_prime` below is that function, taken from that file
@@ -120,6 +120,7 @@ from mamba.host.device_shim import DeviceBuffer, DeviceContext
 
 from mamba.checks.mamba_fixture import D_CONV, D_STATE, MambaDims, RMS_EPS
 from checks.numerics import (
+    identical_mul,
     ftz,
     identical_div,
     identical_exp,
@@ -139,7 +140,6 @@ from checks.numerics import (
 from mamba.host.gen.modeling_mamba import (
     SAB_S12_MUL_SIGMOID,
     SAB_S14_THRESHOLD_10,
-    pinned_mul,
 )
 
 
@@ -316,9 +316,9 @@ def _silu_prime(x: Float32) -> Float32:
 
         sg = identical_sigmoid(x)      DEVIATION 743, portable_sigmoidf
         r1 = ftz(1.0 - sg)             SUBTRACT
-        r2 = pinned_mul(x, r1)         PRODUCT
+        r2 = identical_mul(x, r1)         PRODUCT
         r3 = ftz(1.0 + r2)             UNFUSED ADD
-        r4 = pinned_mul(sg, r3)        PRODUCT
+        r4 = identical_mul(sg, r3)        PRODUCT
 
     **`sg` IS COMPUTED FROM `x`, NEVER RECONSTRUCTED FROM `silu(x)`.**
     `silu(x) = x * sigmoid(x)` is true in the reals and FALSE in Float32
@@ -347,12 +347,12 @@ def _silu_prime(x: Float32) -> Float32:
     comptime if SAB_BWD_SILU_DERIV_ALT_ASSOC:
         # SABOTAGE: `sig + x*sig*(1-sig)`. Equal in the reals, different in
         # the last bit, five operations instead of four.
-        var p1 = ftz(pinned_mul(x, sg))
-        var p2 = ftz(pinned_mul(p1, r1))
+        var p1 = ftz(identical_mul(x, sg))
+        var p2 = ftz(identical_mul(p1, r1))
         return ftz(ftz(sg) + ftz(p2))
-    var r2 = ftz(pinned_mul(x, r1))
+    var r2 = ftz(identical_mul(x, r1))
     var r3 = ftz(ftz(Float32(1.0)) + ftz(r2))
-    return ftz(pinned_mul(sg, r3))
+    return ftz(identical_mul(sg, r3))
 
 
 def _silu_recomputed(z: Float32) -> Float32:
@@ -378,7 +378,7 @@ def _silu_recomputed(z: Float32) -> Float32:
                 Float32(1.0), ftz(Float32(1.0) + ftz(identical_exp(-z)))
             )
         )
-        return ftz(pinned_mul(z, s))
+        return ftz(identical_mul(z, s))
     return ftz(identical_silu(z))
 
 
@@ -400,15 +400,15 @@ def mamba_bwd_gate_kernel(gid_: Int,
     m_in: Int32,
     di_in: Int32,
 ):
-    """S12 is `gate.out = pinned_mul(skip.out, silu(z))`, so its backward is
+    """S12 is `gate.out = identical_mul(skip.out, silu(z))`, so its backward is
     two products, and S11's `out = y + u*D` adds two more. One thread per
     `[M, d_inner]` cell, four outputs.
 
         silu_z = identical_silu(z)                       B4, S12's own call
-        dsk    = ftz(pinned_mul(dg, silu_z))             B5
-        dz     = ftz(pinned_mul(ftz(pinned_mul(dg, sk)), silu'(z)))   B8
-        du_D   = ftz(pinned_mul(dsk, D[d]))              B10
-        pD     = ftz(pinned_mul(dsk, u))                 B11, a PRE-PRODUCT
+        dsk    = ftz(identical_mul(dg, silu_z))             B5
+        dz     = ftz(identical_mul(ftz(identical_mul(dg, sk)), silu'(z)))   B8
+        du_D   = ftz(identical_mul(dsk, D[d]))              B10
+        pD     = ftz(identical_mul(dsk, u))                 B11, a PRE-PRODUCT
 
     `dy = dsk` IS A COPY (B9) and gets no buffer and no instruction: the scan
     backward takes `dsk` as its `dy`.
@@ -443,7 +443,7 @@ def mamba_bwd_gate_kernel(gid_: Int,
 
     # B4 then B5.
     var silu_z = _silu_recomputed(z)
-    var dskv = ftz(pinned_mul(dgv, silu_z))
+    var dskv = ftz(identical_mul(dgv, silu_z))
     dsk_ptr.unsafe_store(i, dskv)
 
     # B6 and B7 inside `_silu_prime`, then B8.
@@ -451,18 +451,18 @@ def mamba_bwd_gate_kernel(gid_: Int,
     var skv = ftz(sk_ptr.unsafe_load(i))
     comptime if SAB_BWD_S12B_ASSOC:
         # SABOTAGE: `dg * (sk * silu')`.
-        var q = ftz(pinned_mul(skv, sp))
-        dz_ptr.unsafe_store(i, ftz(pinned_mul(dgv, q)))
+        var q = ftz(identical_mul(skv, sp))
+        dz_ptr.unsafe_store(i, ftz(identical_mul(dgv, q)))
     else:
-        var p1 = ftz(pinned_mul(dgv, skv))
-        dz_ptr.unsafe_store(i, ftz(pinned_mul(p1, sp)))
+        var p1 = ftz(identical_mul(dgv, skv))
+        dz_ptr.unsafe_store(i, ftz(identical_mul(p1, sp)))
 
     # B10 and B11.
     du_d_ptr.unsafe_store(
-        i, ftz(pinned_mul(dskv, ftz(d_skip_ptr.unsafe_load(d))))
+        i, ftz(identical_mul(dskv, ftz(d_skip_ptr.unsafe_load(d))))
     )
     pd_ptr.unsafe_store(
-        i, ftz(pinned_mul(dskv, ftz(u_ptr.unsafe_load(i))))
+        i, ftz(identical_mul(dskv, ftz(u_ptr.unsafe_load(i))))
     )
 
 
@@ -571,7 +571,7 @@ def mamba_bwd_ddtp_kernel(gid_: Int,
             )
         else:
             ddtp_ptr.unsafe_store(
-                i, ftz(pinned_mul(dv, ftz(identical_sigmoid(biased))))
+                i, ftz(identical_mul(dv, ftz(identical_sigmoid(biased))))
             )
     else:
         # `softplus(x) = x` above the guard, so the derivative is exactly
@@ -618,7 +618,7 @@ def mamba_bwd_du_join_kernel(gid_: Int,
     """T6 then B30, one thread per `[M, d_inner]` cell.
 
         du    = ftz(ftz(ftz(du_D) + du_s) + du_x)      THREE flushed adds
-        dconv = ftz(pinned_mul(du, silu'(conv.out)))
+        dconv = ftz(identical_mul(du, silu'(conv.out)))
 
     **THE ORDER IS D-SKIP, THEN SCAN, THEN X_PROJ, AND IT IS STATED ONCE AND
     NEVER A SCHEDULER'S CHOICE.** It follows the forward's own data flow:
@@ -659,7 +659,7 @@ def mamba_bwd_du_join_kernel(gid_: Int,
     du_ptr.unsafe_store(i, duv)
 
     var sp = _silu_prime(ftz(conv_ptr.unsafe_load(i)))
-    dconv_ptr.unsafe_store(i, ftz(pinned_mul(duv, sp)))
+    dconv_ptr.unsafe_store(i, ftz(identical_mul(duv, sp)))
 
 
 def mamba_bwd_du_join_into(
@@ -860,7 +860,7 @@ def mamba_bwd_conv_tap_product_kernel(gid_: Int,
     p_ptr.unsafe_store(
         (bb * l + li) * di + d,
         ftz(
-            pinned_mul(
+            identical_mul(
                 ftz(dconv_ptr.unsafe_load((bb * l + li) * di + d)), ftz(xv)
             )
         ),
@@ -1053,14 +1053,14 @@ def mamba_bwd_norm_kernel(gid_: Int,
     """B37, B38, B40, T7 and T8 for one token row.
 
         rstd  = ftz(identical_rsqrt(ftz(identical_div(sumsq, dm) + eps)))
-        dinner_j = ftz(pinned_mul(dnrm_j, w_j))                   B37
+        dinner_j = ftz(identical_mul(dnrm_j, w_j))                   B37
         drstd = fold over j ASCENDING of fma(dinner_j, x_j, acc)  B40
-        c3    = ftz(pinned_mul(ftz(pinned_mul(rstd, rstd)), rstd))
+        c3    = ftz(identical_mul(ftz(identical_mul(rstd, rstd)), rstd))
         s     = ftz(identical_div(c3, dm))            HOISTED, once per row
-        inner_j = ftz(pinned_mul(x_j, rstd))          a recompute of S3
-        pW_j  = ftz(pinned_mul(dnrm_j, inner_j))                  B38
-        t2    = ftz(pinned_mul(ftz(pinned_mul(s, x_j)), drstd))
-        t1    = ftz(pinned_mul(rstd, dinner_j))
+        inner_j = ftz(identical_mul(x_j, rstd))          a recompute of S3
+        pW_j  = ftz(identical_mul(dnrm_j, inner_j))                  B38
+        t2    = ftz(identical_mul(ftz(identical_mul(s, x_j)), drstd))
+        t1    = ftz(identical_mul(rstd, dinner_j))
         dx_norm = ftz(ftz(t1) - ftz(t2))              UNFUSED                T7
         dx    = ftz(ftz(dres_j) + ftz(dx_norm))       ONE add, dres LEFT     T8
 
@@ -1073,7 +1073,7 @@ def mamba_bwd_norm_kernel(gid_: Int,
     a different number, and `0/0` at a zero weight.
 
     **THE SUBTRACTION IS UNFUSED AND EACH OPERAND IS SEPARATELY FLUSHED AND
-    STORED.** That is not decoration. `pinned_mul(a,b)` is
+    STORED.** That is not decoration. `identical_mul(a,b)` is
     `identical_mul_add(a, b, -0.0)`, which is mathematically `a*b`, so a
     backend is free to simplify it and then re-contract `a*b - c*d` into a
     single fused multiply-add -- ONE rounding where the profile asks for
@@ -1116,7 +1116,7 @@ def mamba_bwd_norm_kernel(gid_: Int,
         for jj in range(dm):
             var jd = dm - 1 - jj
             var dind = ftz(
-                pinned_mul(
+                identical_mul(
                     ftz(dnrm_ptr.unsafe_load(t * dm + jd)),
                     ftz(w_ptr.unsafe_load(jd)),
                 )
@@ -1129,7 +1129,7 @@ def mamba_bwd_norm_kernel(gid_: Int,
     else:
         for j in range(dm):
             var din = ftz(
-                pinned_mul(
+                identical_mul(
                     ftz(dnrm_ptr.unsafe_load(t * dm + j)),
                     ftz(w_ptr.unsafe_load(j)),
                 )
@@ -1147,8 +1147,8 @@ def mamba_bwd_norm_kernel(gid_: Int,
         # bit identical -- DEVIATION 1086).
         c3 = ftz(identical_pow(rstd, Float32(3.0)))
     else:
-        var r2 = ftz(pinned_mul(rstd, rstd))
-        c3 = ftz(pinned_mul(r2, rstd))
+        var r2 = ftz(identical_mul(rstd, rstd))
+        c3 = ftz(identical_mul(r2, rstd))
     var s = ftz(identical_div(c3, Float32(dm)))
 
     # ---- B38, T7 and T8, per cell -------------------------------------
@@ -1156,7 +1156,7 @@ def mamba_bwd_norm_kernel(gid_: Int,
         var xj = ftz(x_ptr.unsafe_load(t * dm + j))
         var dnv = ftz(dnrm_ptr.unsafe_load(t * dm + j))
         var wj = ftz(w_ptr.unsafe_load(j))
-        var dinner = ftz(pinned_mul(dnv, wj))
+        var dinner = ftz(identical_mul(dnv, wj))
 
         var inner: Float32
         comptime if SAB_BWD_INNER_FROM_NRM:
@@ -1167,15 +1167,15 @@ def mamba_bwd_norm_kernel(gid_: Int,
                 identical_div(ftz(nrm_ptr.unsafe_load(t * dm + j)), wj)
             )
         else:
-            inner = ftz(pinned_mul(xj, rstd))
-        pw_ptr.unsafe_store(t * dm + j, ftz(pinned_mul(dnv, inner)))
+            inner = ftz(identical_mul(xj, rstd))
+        pw_ptr.unsafe_store(t * dm + j, ftz(identical_mul(dnv, inner)))
 
         # THE INNER FLUSHES BELOW ARE LOAD BEARING. Each product is formed,
         # flushed and STORED before the subtraction sees it, so no backend
         # can re-contract `a*b - c*d` into one fused multiply-add.
-        var sx = ftz(pinned_mul(s, xj))
-        var t2 = ftz(pinned_mul(sx, c))
-        var t1 = ftz(pinned_mul(rstd, dinner))
+        var sx = ftz(identical_mul(s, xj))
+        var t2 = ftz(identical_mul(sx, c))
+        var t1 = ftz(identical_mul(rstd, dinner))
         var dxn = ftz(ftz(t1) - ftz(t2))
 
         dx_ptr.unsafe_store(
