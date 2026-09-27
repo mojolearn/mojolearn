@@ -61,6 +61,10 @@ check compares NUMBERS (CPU == AMD); never .so digests.
 ON EACH CLOUD MAC (started by the orchestrator, one per Mac):
   apple_steward.py work --steward m2pro [--once]
       works ITS OWN queue, one request at a time (one Metal job per Mac)
+  on do-amd (the systemd service): identity requests run up to
+      MOJOLEARN_STEWARD_AMD_PARALLEL (3) at a time, one worktree each
+      (steward-do-amd, steward-do-amd-1, -2); a speed job at the head of the
+      FIFO waits for them to finish and runs alone
 
 For each request the steward, in a private worktree at the commit
 ($HOME/mojolearn-wt/steward-<name>, from the clone at $MOJOLEARN_STEWARD_REPO,
@@ -349,12 +353,18 @@ def _claim(steward):
     return None
 
 
-def process(req_path, steward):
+def _worktree(steward, slot=0):
+    """Slot 0 is the steward's one worktree; do-amd's parallel identity slots
+    1..AMD_PARALLEL-1 each have their own (steward-do-amd-<n>)."""
+    return Path.home() / "mojolearn-wt" / (f"steward-{steward}" + (f"-{slot}" if slot else ""))
+
+
+def process(req_path, steward, slot=0):
     req = json.loads(req_path.read_text())
     out = DONE / req["name"]
     out.mkdir(parents=True, exist_ok=True)
     log = out / "steward.log"
-    wt = Path.home() / "mojolearn-wt" / f"steward-{steward}"
+    wt = _worktree(steward, slot)
     verdict = {**req, "steward": steward, "host": os.uname().nodename}
 
     def finish(result, step=None):
@@ -508,10 +518,73 @@ def speed(req, wt, out, log, verdict, finish):
     return finish("PASS")
 
 
+#: do-amd runs IDENTITY requests up to this many at a time (one worktree
+#: each; the MI325X has 256 GB and the check is deterministic whatever else
+#: runs). A SPEED job is exclusive: it waits for the running identity jobs to
+#: finish, and nothing starts until it is done. The Macs stay at one Metal job.
+AMD_PARALLEL = int(os.environ.get("MOJOLEARN_STEWARD_AMD_PARALLEL", "3"))
+
+
+def _head_is_speed():
+    heads = sorted(Q.glob("[0-9]*.json"))
+    return bool(heads) and _is_speed(heads[0].stem)
+
+
+def _work_parallel(a):
+    """do-amd: FIFO; identity requests fill free slots, a speed job at the
+    head of the queue drains the slots and then runs alone."""
+    import threading
+    running = {}                         # slot -> thread
+
+    def reap():
+        for n in [n for n, t in running.items() if not t.is_alive()]:
+            del running[n]
+
+    def one(req, n):
+        try:
+            process(req, a.steward, n)
+        except Exception as exc:        # a crash must not strand the request in working/
+            print(f"{req.name}: steward error {exc!r}", flush=True)
+            if req.exists():
+                req.rename(Q / f"{req.name.split('.')[0]}.json")
+
+    while True:
+        reap()
+        if _head_is_speed():
+            if running:                  # nothing new starts; the speed job waits for the slots
+                time.sleep(10)
+                continue
+            req = _claim(a.steward)
+            if req:
+                try:
+                    process(req, a.steward, 0)
+                except Busy as exc:
+                    req.rename(Q / f"{req.name.split('.')[0]}.json")
+                    print(f"{req.name}: GPU not quiet ({exc.args[0][:2]}); requeued", flush=True)
+                    time.sleep(60)
+            continue
+        free = [n for n in range(max(1, AMD_PARALLEL)) if n not in running]
+        req = _claim(a.steward) if free else None
+        if req and _is_speed(req.stem) and running:   # a speed job raced in at the head
+            req.rename(Q / f"{req.name.split('.')[0]}.json")
+            continue
+        if req:
+            t = threading.Thread(target=one, args=(req, free[0]), daemon=True)
+            running[free[0]] = t
+            t.start()
+            print(f"{req.stem}: started in slot {free[0]} ({len(running)} running)", flush=True)
+            continue
+        if a.once and not running and not any(Q.glob("[0-9]*.json")):
+            return
+        time.sleep(10 if running else 30)
+
+
 def work(a):
     _dirs()
     if not (REPO / ".git").exists():
         sys.exit(f"no clone at {REPO} (set MOJOLEARN_STEWARD_REPO)")
+    if a.steward in AMD_STEWARDS and AMD_PARALLEL > 1:
+        return _work_parallel(a)
     while True:
         req = _claim(a.steward)
         if req:
