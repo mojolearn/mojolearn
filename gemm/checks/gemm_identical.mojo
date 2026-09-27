@@ -3195,13 +3195,16 @@ def choose_gemm_plan(m: Int, n: Int, k: Int) -> Int:
         # Skinny shapes on Apple (lane/apple-identical-neural, M4 measured,
         # every plan's bits equal): a tiny output with many leaves takes
         # PLAN_SPLITK (a 1 x 1 x 100k dot 413 -> 49 us, 20 x 1 x 100k 815 ->
-        # 132 us); a GEMV-shaped output takes PLAN_FLAT (100k x 1 x 20 1273
-        # -> 116 us, 3 x 100k x 20 1242 -> 385 us, 4096 x 1 x 4096 5264 ->
-        # 1131 us). P >= 4 keeps the P = 3 fixtures on their plans.
+        # 132 us, 4 x 4 x 1M 4.5 -> 1.9 ms); a GEMV-shaped output takes
+        # PLAN_FLAT (100k x 1 x 20 1273 -> 116 us, 3 x 100k x 20 1242 -> 385
+        # us, 4096 x 1 x 4096 5264 -> 1131 us). PLAN_SPLITK reloads both
+        # operands per cell, so past ~24 cells it LOSES (8 x 8 x 1M 5 -> 35
+        # ms, GMM's M-step): the bound is measured, keep it small. P >= 4
+        # keeps the P = 3 fixtures on their plans.
         if m > 0 and n > 0 and k > 0:
             if (
                 contract_partition(k)[1] >= 4
-                and m * n <= 1024
+                and m * n <= 24
                 and identical_gemm_splitk_fits(m, n, k)
             ):
                 return PLAN_SPLITK
