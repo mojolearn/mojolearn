@@ -70,25 +70,23 @@ messaging lanes. Newest items are at the top.
    (in the CPU gate) fails on a NEW fixture-RNG definition
    (`tools/fixture_rng_census.py`) and on any existing copy that differs
    from its canonical behavior bit for bit.
-0000b. **Steward fleet and merge gate (Andrew wants speed; 2026-09-27):**
-   the Apple stewards are the six cloud Macs in
-   `~/mojolearn-evidence/cloudmacs.tsv`: M2 `m2pro`; M3 `m3ultra`,
-   `m3ultra-b`; M4 `m4pro-a`, `m4pro-b` (M4 Pro), `m4-a` (M4). Each works
-   one request at a time (one Metal job per Mac). `apple_steward.py submit`
-   sends an identity request to ONE Mac per generation, the least busy one
-   (M2, M3, M4), plus do-amd. A lane may merge once **any one Apple steward
-   PASSES and do-amd PASSES** (`apple_steward.py status` reads PASS). The
-   other generations' verdicts follow; a later FAIL, especially M2 vs M3 vs
-   M4 codegen, comes back to the lane as a fix at the root. Speed jobs go to
-   the least busy Mac of the requested model (default M4 Pro; `--target
-   m4pro-a` pins one box). `apple_steward.py redistribute --apply` spreads a
-   pending backlog over the fleet without losing or duplicating a request.
-   The four new hosts (m4pro-a, m4pro-b, m4-a, m3ultra-b, allocated
-   2026-09-27 21:11Z) are released after their 24 h minimum (plan:
-   `~/mojolearn-evidence/cloudmac-release-plan.md`); after that the fleet is
-   m2pro + m3ultra again, and the tsv rows go with the hosts. Don't wait on
-   a queue that is behind: keep working on the next item while verdicts
-   arrive.
+0000b. **MERGE GATE = NVIDIA + CPU ONLY (Andrew, 2026-09-27; replaces
+   the steward gate).** The steward gate stalled main: about 110 lane
+   commits sat unmerged while the stewards were saturated.
+   - Merge as soon as your pod passes: the lane check AGREEs (CPU ==
+     NVIDIA), every sabotage bites, existing bits are unchanged, and
+     test_host_surface passes (plus test_lane_select if its inputs changed).
+   - Apple and AMD verdicts are POST-MERGE checks. They gate RELEASE
+     admission (leaving PENDING), not merging. A steward FAIL comes back to
+     the lane as a FIX COMMIT, fixed at the root, before its next item.
+   - **Batch steward requests: ONE request per lane per hour**, covering
+     every lane merged since the last request, with one end-to-end
+     sabotage. Never one request per commit.
+   - **Seam re-proofs:** one batched request per lane, never one per seam.
+   - Stewards: 6 Macs (each request goes to one Mac per chip generation:
+     M2 m2pro; M3 m3ultra/m3ultra-b; M4 m4pro-a/m4pro-b/m4-a) plus do-amd
+     (6 slots). `tools/apple_steward.py submit` routes it. Main owns the
+     steward pipeline; lanes never wait on it.
 0000a. **Commit and push your branch at every meaningful step, not only at
    merges (Andrew, 2026-09-27, after the weekly usage limit killed every
    agent mid-work).** Commit WIP to your own branch (`lane/<name>`) and
