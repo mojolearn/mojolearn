@@ -52,5 +52,9 @@ trait Exec:
         ...
 
     @staticmethod
+    def cd_rows(w: F32Ptr, hht: F32Ptr, xht: F32Ptr, perm: I32Ptr, viol: F32Ptr, n: Int, k: Int) raises:
+        ...
+
+    @staticmethod
     def vendor() -> String:
         ...

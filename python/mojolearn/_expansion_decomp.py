@@ -23,12 +23,14 @@ import math
 from . import _backend
 from ._buffer import as_f32_c, frombytes
 
-__all__ = ["IncrementalPCA", "GaussianRandomProjection", "SparseRandomProjection", "johnson_lindenstrauss_min_dim"]
+__all__ = ["IncrementalPCA", "GaussianRandomProjection", "SparseRandomProjection", "johnson_lindenstrauss_min_dim",
+           "NMF"]
 
 _BINDING = "_mojolearn_x_decomp"
 
 # x_decomp/cells.mojo op codes
 _OP = dict(
+    muz=36,
     add=0, sub=1, mul=2, div=3, axpy=4, maxs=5, mu=6, sqrt=7, sq=8, exp=9, logs=10, tanh=11,
     onemsq=12, abs=13, scale=14, fma=15, recip=16, soft=17, submul=18, mins=19, copyb=20,
     sqdiff=21, adds=22, gts=23, digamma=24, expg=25, expgp=26, cube=27, cubep=28, max=30,
@@ -246,6 +248,15 @@ class _Kit:
         out = B.copy()
         self.b.x_decomp_lu_solve(lu.addr, piv.buffer_info()[0], out.addr, [lu.r, B.c])
         return out
+
+    def cd_rows(self, W, HHt, XHt, perm):
+        """One sklearn `_update_cdnmf_fast` sweep over every row of W, in
+        place; returns the total violation (rows ascending)."""
+        n, kc = W.r, W.c
+        viol = _M.zeros(n, 1)
+        p = array.array("i", perm)
+        self.b.x_decomp_cd_rows(W.addr, HHt.addr, XHt.addr, p.buffer_info()[0], viol.addr, [n, kc])
+        return self.total(viol).s[0]
 
     def chol(self, A):
         L = A.copy()
@@ -558,3 +569,315 @@ class SparseRandomProjection(_RandomProjection):
             return sgn
         # u < density keeps the signed value, else 0 (select: x > s -> y else z)
         return k.ew("select", u, _M.zeros(1, 1), sgn, s=dens - 2.0 ** -25)
+
+
+# ================================================================ graph helpers
+def _knn_order(D, i, k, include_self=True):
+    """The k smallest entries of row i of a distance matrix, ascending, ties
+    broken by the LOWER column index (comparisons of float32 values only)."""
+    row = D.row(i)
+    idx = sorted(range(len(row)), key=lambda j: (row[j], j))
+    if not include_self:
+        idx = [j for j in idx if j != i]
+    return idx[:k]
+
+
+def _knn_connectivity(k, X, n_neighbors, include_self=True):
+    """sklearn `kneighbors_graph(mode='connectivity')` as a dense n x n 0/1 matrix."""
+    D = k.sqdist(X, X)
+    n = X.r
+    A = array.array("f", bytes(4 * n * n))
+    for i in range(n):
+        for j in _knn_order(D, i, n_neighbors, include_self):
+            A[i * n + j] = 1.0
+    return _M(A, n, n), D
+
+
+def _symmetrize(k, A):
+    """0.5 * (A + A^T)."""
+    return k.ew("scale", k.ew("add", A, A.T), s=0.5)
+
+
+def _normed_laplacian(k, A):
+    """scipy `csgraph.laplacian(normed=True, return_diag=True)` on a dense
+    adjacency: the diagonal is ignored, dd = sqrt(degree) (1 for an isolated
+    node), L = I - D^-1/2 A D^-1/2 with the diagonal set to 1 (sklearn
+    `_set_diag`)."""
+    n = A.r
+    A0 = A.copy()
+    for i in range(n):
+        A0.s[i * n + i] = 0.0
+    deg = k.rowsum(A0)
+    dd = k.ew("sqrt", deg)
+    dd = _M.of([v if v > 0 else 1.0 for v in dd.s], n, 1)
+    scaled = k.ew("div", k.ew("div", A0, dd), dd.T)
+    L = k.ew("scale", scaled, s=-1.0)
+    for i in range(n):
+        L.s[i * n + i] = 1.0
+    return L, dd
+
+
+def _sign_flip_rows(U):
+    """sklearn `_deterministic_vector_sign_flip`: each row signed so its
+    largest-|.| entry (first on a tie) is positive."""
+    return _svd_flip_v(U)
+
+
+# ================================================================ thin SVD
+def _thin_svd(k, X, nc, u_based=True):
+    """(U n x nc, S 1 x nc, Vt nc x d) of X through the eigendecomposition of
+    the smaller Gram matrix, singular values descending, then sklearn's
+    `svd_flip` (u_based: the largest-|.| entry of each COLUMN of U positive;
+    else of each ROW of Vt). U (or Vt) is recovered as X V / S (X^T U / S);
+    a zero singular value gives a zero vector."""
+    n, d = X.r, X.c
+    if d <= n:
+        S, Vt = _gram_svd(k, X)
+        S, Vt = S.cols(0, nc), Vt.rows(0, nc)
+        U = k.ew("div", k.mm(X, Vt, tb=True), S)
+    else:
+        S, Ut = _gram_svd(k, X.T)
+        S, Ut = S.cols(0, nc), Ut.rows(0, nc)
+        U = Ut.T
+        Vt = k.ew("div", k.mm(U, X, ta=True), S.T)
+    if u_based:
+        Ut = U.T
+        fl = []
+        for i in range(Ut.r):
+            row = Ut.row(i)
+            best, arg = -1.0, 0
+            for j, v in enumerate(row):
+                if abs(v) > best:
+                    best, arg = abs(v), j
+            fl.append(row[arg] < 0)
+        U, Vt = U.neg_cols(fl), Vt.neg_rows(fl)
+    else:
+        fl = []
+        for i in range(Vt.r):
+            row = Vt.row(i)
+            best, arg = -1.0, 0
+            for j, v in enumerate(row):
+                if abs(v) > best:
+                    best, arg = abs(v), j
+            fl.append(row[arg] < 0)
+        U, Vt = U.neg_cols(fl), Vt.neg_rows(fl)
+    return U, S, Vt
+
+
+def _norm(k, v):
+    return k.ew("sqrt", k.total(k.ew("sq", v))).s[0]
+
+
+# ================================================================ NMF
+_F32_EPS = 1.1920928955078125e-07
+
+
+class NMF(_Base):
+    """sklearn.decomposition.NMF (reference: scikit-learn
+    `decomposition/_nmf.py`: `_initialize_nmf`, `_fit_multiplicative_update`
+    with `_multiplicative_update_w/_h` for beta_loss='frobenius', and
+    `_fit_coordinate_descent` with `_cdnmf_fast.pyx::_update_cdnmf_fast`).
+
+    solver 'cd' (the default) and 'mu'; init 'random' (the lane's Philox
+    stream, not numpy's), 'nndsvd', 'nndsvda', 'nndsvdar' (the SVD is exact,
+    through the Gram eigh, where sklearn calls randomized_svd), 'custom'.
+    REFUSED BY NAME: beta_loss other than 'frobenius', shuffle=True."""
+    _parameters = ("n_components", "init", "solver", "beta_loss", "tol", "max_iter", "random_state",
+                   "alpha_W", "alpha_H", "l1_ratio", "verbose", "shuffle", "numeric_mode")
+
+    def __init__(self, n_components="auto", *, init=None, solver="cd", beta_loss="frobenius", tol=1e-4,
+                 max_iter=200, random_state=None, alpha_W=0.0, alpha_H="same", l1_ratio=0.0, verbose=0,
+                 shuffle=False, numeric_mode=None):
+        self.n_components, self.init, self.solver, self.beta_loss = n_components, init, solver, beta_loss
+        self.tol, self.max_iter, self.random_state = tol, max_iter, random_state
+        self.alpha_W, self.alpha_H, self.l1_ratio = alpha_W, alpha_H, l1_ratio
+        self.verbose, self.shuffle, self.numeric_mode = verbose, shuffle, numeric_mode
+
+    # ---- setup
+    def _validate(self, M):
+        if self.beta_loss not in ("frobenius", 2, 2.0):
+            raise ValueError("beta_loss other than 'frobenius' is not carried")
+        if self.solver not in ("cd", "mu"):
+            raise ValueError(f"Invalid solver parameter: got {self.solver!r} instead of one of {{'cd', 'mu'}}")
+        if self.shuffle:
+            raise ValueError("shuffle=True is not carried (the coordinate order is the identity)")
+        for v in M.s:
+            if v < 0:
+                raise ValueError("Negative values in data passed to NMF (input X)")
+
+    def _reg(self, n, d):
+        aH = self.alpha_W if self.alpha_H == "same" else self.alpha_H
+        aW = self.alpha_W
+        return (d * aW * self.l1_ratio, n * aH * self.l1_ratio,
+                d * aW * (1.0 - self.l1_ratio), n * aH * (1.0 - self.l1_ratio))
+
+    def _init(self, k, M, nc, init):
+        n, d = M.r, M.c
+        seed = _seed_of(self.random_state)
+        xmean = k.ew("scale", k.total(M), s=1.0 / (n * d)).s[0]
+        if init == "random":
+            avg = math.sqrt(xmean / nc)
+            H = k.ew("scale", k.ew("abs", k.rand(nc, d, seed, 10, 1)), s=avg)
+            W = k.ew("scale", k.ew("abs", k.rand(n, nc, seed, 11, 1)), s=avg)
+            return W, H
+        U, S, Vt = _thin_svd(k, M, nc, u_based=(n >= d))
+        Wc, Hr = [], []
+        for j in range(nc):
+            x, y = U.cols(j, j + 1), Vt.rows(j, j + 1)
+            sj = S.s[j]
+            if j == 0:
+                r = math.sqrt(sj)
+                Wc.append(k.ew("scale", k.ew("abs", x), s=r))
+                Hr.append(k.ew("scale", k.ew("abs", y), s=r))
+                continue
+            xp, yp = k.ew("maxs", x, s=0.0), k.ew("maxs", y, s=0.0)
+            xn, yn = k.ew("abs", k.ew("mins", x, s=0.0)), k.ew("abs", k.ew("mins", y, s=0.0))
+            xpn, ypn, xnn, ynn = _norm(k, xp), _norm(k, yp), _norm(k, xn), _norm(k, yn)
+            mp = _f32(_f32(xpn) * _f32(ypn))
+            mn = _f32(_f32(xnn) * _f32(ynn))
+            if mp > mn:
+                u, v, sigma = k.ew("scale", xp, s=1.0 / xpn if xpn else 0.0), k.ew("scale", yp, s=1.0 / ypn if ypn else 0.0), mp
+            else:
+                u, v, sigma = k.ew("scale", xn, s=1.0 / xnn if xnn else 0.0), k.ew("scale", yn, s=1.0 / ynn if ynn else 0.0), mn
+            lbd = math.sqrt(_f32(sj * sigma))
+            Wc.append(k.ew("scale", u, s=lbd))
+            Hr.append(k.ew("scale", v, s=lbd))
+        W, H = _hstack(*Wc), _vstack(*Hr)
+        z = _M.zeros(1, 1)
+        W = k.ew("select", W, W, z, s=1e-6 - 1e-13)
+        H = k.ew("select", H, H, z, s=1e-6 - 1e-13)
+        if init == "nndsvda":
+            W = k.ew("select", W, W, k.const(xmean), s=0.0)
+            H = k.ew("select", H, H, k.const(xmean), s=0.0)
+        elif init == "nndsvdar":
+            rw = k.ew("scale", k.ew("abs", k.rand(n, nc, seed, 12, 1)), s=abs(xmean) / 100)
+            rh = k.ew("scale", k.ew("abs", k.rand(nc, d, seed, 13, 1)), s=abs(xmean) / 100)
+            W = k.ew("select", W, W, rw, s=0.0)
+            H = k.ew("select", H, H, rh, s=0.0)
+        return W, H
+
+    def _err(self, k, M, W, H):
+        return k.ew("sqrt", k.total(k.ew("sqdiff", M, k.mm(W, H)))).s[0]
+
+    # ---- solvers
+    def _mu(self, k, M, W, H, update_H, regs):
+        l1W, l1H, l2W, l2H = regs
+        err0 = self._err(k, M, W, H)
+        prev = err0
+        it = 0
+        for it in range(1, self.max_iter + 1):
+            num = k.mm(M, H, tb=True)
+            den = k.mm(W, k.mm(H, H, tb=True))
+            if l1W > 0:
+                den = k.ew("adds", den, s=l1W)
+            if l2W > 0:
+                den = k.ew("axpy", den, W, s=l2W)
+            W = k.ew("muz", W, num, den, s=_F32_EPS)
+            if update_H:
+                num = k.mm(W, M, ta=True)
+                den = k.mm(k.mm(W, W, ta=True), H)
+                if l1H > 0:
+                    den = k.ew("adds", den, s=l1H)
+                if l2H > 0:
+                    den = k.ew("axpy", den, H, s=l2H)
+                H = k.ew("muz", H, num, den, s=_F32_EPS)
+            if self.tol > 0 and it % 10 == 0:
+                err = self._err(k, M, W, H)
+                if (prev - err) / err0 < self.tol:
+                    break
+                prev = err
+        return W, H, it
+
+    def _cd_side(self, k, M, W, Ht, l1, l2, perm, trans):
+        HHt = k.mm(Ht, Ht, ta=True)
+        XHt = k.mm(M, Ht, ta=trans)
+        if l2:
+            HHt = HHt.copy()
+            for t in range(HHt.r):
+                HHt.s[t * HHt.c + t] = _f32(HHt.s[t * HHt.c + t] + l2)
+        if l1:
+            XHt = k.ew("adds", XHt, s=-l1)
+        return k.cd_rows(W, HHt, XHt, perm)
+
+    def _cd(self, k, M, W, H, update_H, regs):
+        l1W, l1H, l2W, l2H = regs
+        perm = list(range(W.c))
+        Ht = H.T
+        W = W.copy()
+        v_init = None
+        it = 0
+        for it in range(1, self.max_iter + 1):
+            viol = self._cd_side(k, M, W, Ht, l1W, l2W, perm, False)
+            if update_H:
+                viol += self._cd_side(k, M, Ht, W, l1H, l2H, perm, True)
+            if v_init is None:
+                v_init = viol
+            if v_init == 0:
+                break
+            if viol / v_init <= self.tol:
+                break
+        return W, Ht.T if update_H else H, it
+
+    def _fit_transform(self, M, H=None, update_H=True):
+        k = self._kit()
+        n, d = M.r, M.c
+        regs = self._reg(n, d)
+        if update_H:
+            nc = self.n_components
+            if nc in (None, "auto"):
+                nc = d if self.init != "custom" else None
+            nc = int(nc)
+            init = self.init or ("nndsvda" if nc <= min(n, d) else "random")
+            if init not in ("random", "nndsvd", "nndsvda", "nndsvdar"):
+                raise ValueError(f"init={init!r} is not supported here (random, nndsvd, nndsvda, nndsvdar)")
+            if init.startswith("nndsvd") and nc > min(n, d):
+                raise ValueError("init = 'nndsvd' can only be used when n_components <= min(n_samples, n_features)")
+            W, H = self._init(k, M, nc, init)
+        else:
+            nc = H.r
+            if self.solver == "mu":
+                xmean = k.ew("scale", k.total(M), s=1.0 / (n * d)).s[0]
+                W = k.const(math.sqrt(xmean / nc), n, nc)
+            else:
+                W = _M.zeros(n, nc)
+        solve = self._cd if self.solver == "cd" else self._mu
+        W, H, it = solve(k, M, W, H, update_H, regs)
+        return W, H, it, nc
+
+    def fit_transform(self, X, y=None, W=None, H=None):
+        self.numeric_mode_ = _mode(self.numeric_mode)
+        M = _M.from_input(X)
+        self._validate(M)
+        if self.init == "custom":
+            k = self._kit()
+            Wm, Hm = _M.from_input(W, "W"), _M.from_input(H, "H")
+            regs = self._reg(M.r, M.c)
+            solve = self._cd if self.solver == "cd" else self._mu
+            Wm, Hm, it = solve(k, M, Wm, Hm, True, regs)
+            nc = Hm.r
+        else:
+            Wm, Hm, it, nc = self._fit_transform(M)
+        self.components_m_ = Hm
+        self.components_ = Hm.out()
+        self.n_components_ = nc
+        self.n_iter_ = it
+        self.n_features_in_ = M.c
+        self.reconstruction_err_ = self._err(self._kit(), M, Wm, Hm)
+        return Wm.out()
+
+    def fit(self, X, y=None, **params):
+        self.fit_transform(X, **params)
+        return self
+
+    def transform(self, X):
+        self._check()
+        M = _M.from_input(X)
+        if M.c != self.n_features_in_:
+            raise ValueError(f"X has {M.c} features, but NMF is expecting {self.n_features_in_}")
+        self._validate(M)
+        W, _, _, _ = self._fit_transform(M, H=self.components_m_, update_H=False)
+        return W.out()
+
+    def inverse_transform(self, X):
+        self._check()
+        return self._kit().mm(_M.from_input(X, "W"), self.components_m_).out()

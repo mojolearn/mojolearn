@@ -159,6 +159,21 @@ def eigh_py[E: Exec](a: PythonObject, w: PythonObject, v: PythonObject, p: Pytho
     return PythonObject(n)
 
 
+def cd_rows_py[E: Exec](
+    w: PythonObject, hht: PythonObject, xht: PythonObject, perm: PythonObject, viol: PythonObject, p: PythonObject
+) raises -> PythonObject:
+    var n = _n(p, 0)
+    var k = _n(p, 1)
+    var pw = _f(w)
+    var ph = _f(hht)
+    var px = _f(xht)
+    var pp = _i(perm)
+    var pv = _f(viol)
+    with GILReleased(Python()):
+        E.cd_rows(pw, ph, px, pp, pv, n, k)
+    return PythonObject(n)
+
+
 def numeric_mode_py() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 
