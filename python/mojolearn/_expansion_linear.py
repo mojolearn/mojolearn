@@ -25,7 +25,7 @@ from ._buffer import addr, addr_ro, as_f32_c, empty, zeros
 from ._labels import decode_labels, encode_labels
 from ._mode import NumericModeMixin
 
-__all__ = ["SGDClassifier", "SGDRegressor"]
+__all__ = ["SGDClassifier", "SGDRegressor", "PoissonRegressor", "GammaRegressor", "TweedieRegressor"]
 
 _BINDING = "_mojolearn_x_linear"
 ALGO_SGD, ALGO_GLM, ALGO_HUBER, ALGO_BAYES, ALGO_ARD = 1, 2, 3, 4, 5
@@ -290,3 +290,110 @@ class SGDRegressor(_LinearRegressorMixin, NumericModeMixin):
         self.intercept_ = intercept
         return self
 
+
+# ---------------------------------------------------------------------- GLMs
+# Reference: scikit-learn sklearn/linear_model/_glm/glm.py; kernel
+# x_linear/glm.mojo (Newton-Cholesky with an Armijo line search).
+
+class _GLMBase(_LinearRegressorMixin, NumericModeMixin):
+    _BINDING = _BINDING
+    _power = 0.0
+
+    def _check_y(self, y):
+        return None
+
+    def _link_code(self):
+        return 1
+
+    def fit(self, X, y):
+        if self.solver not in ("lbfgs", "newton-cholesky"):
+            raise ValueError(f"mojolearn {type(self).__name__}: solver must be 'lbfgs' or 'newton-cholesky'")
+        if self.warm_start:
+            raise ValueError(f"mojolearn {type(self).__name__}: warm_start is not implemented")
+        if not self.alpha >= 0:
+            raise ValueError(f"mojolearn {type(self).__name__}: alpha must be >= 0")
+        a, n, d = _matrix(X)
+        yv = _vector(y, n)
+        self._check_y(yv.tolist())
+        link = self._link_code()
+        m = d + 1
+        vals = _run(self, ALGO_GLM, a, n, d, yv, [self.max_iter, int(bool(self.fit_intercept)), link],
+                    [self._power_value(), self.alpha, self.tol], d + 3, n + m * m + 3 * m, 1)
+        self.coef_ = Array.from_list(vals[:d], "<f4")
+        self.intercept_ = float(vals[d])
+        self.n_iter_ = int(vals[d + 1])
+        self.n_features_in_ = d
+        self._link = LINK_EXP if link == 1 else LINK_IDENTITY
+        return self
+
+    def _power_value(self):
+        return self._power
+
+
+def _glm_init(self, alpha, fit_intercept, solver, max_iter, tol, warm_start, verbose):
+    self.alpha, self.fit_intercept, self.solver = alpha, fit_intercept, solver
+    self.max_iter, self.tol, self.warm_start, self.verbose = max_iter, tol, warm_start, verbose
+
+
+class PoissonRegressor(_GLMBase):
+    """Poisson GLM with log link (scikit-learn's PoissonRegressor)."""
+    _power = 1.0
+
+    def __init__(self, *, alpha=1.0, fit_intercept=True, solver="lbfgs", max_iter=100, tol=1e-4,
+                 warm_start=False, verbose=0):
+        _glm_init(self, alpha, fit_intercept, solver, max_iter, tol, warm_start, verbose)
+
+    def _check_y(self, y):
+        if min(y) < 0 or sum(y) <= 0:
+            raise ValueError("Some value(s) of y are out of the valid range of the loss 'HalfPoissonLoss'.")
+
+
+class GammaRegressor(_GLMBase):
+    """Gamma GLM with log link (scikit-learn's GammaRegressor)."""
+    _power = 2.0
+
+    def __init__(self, *, alpha=1.0, fit_intercept=True, solver="lbfgs", max_iter=100, tol=1e-4,
+                 warm_start=False, verbose=0):
+        _glm_init(self, alpha, fit_intercept, solver, max_iter, tol, warm_start, verbose)
+
+    def _check_y(self, y):
+        if min(y) <= 0:
+            raise ValueError("Some value(s) of y are out of the valid range of the loss 'HalfGammaLoss'.")
+
+
+class TweedieRegressor(_GLMBase):
+    """Tweedie GLM (scikit-learn's TweedieRegressor). power 0 (normal),
+    1 (Poisson), (1, 2) (compound Poisson-Gamma), 2 (Gamma), > 2; link
+    'auto' is identity for power 0 and log otherwise. power < 0 and
+    power in (0, 1) are refused (x_linear/NOT_IMPLEMENTED.tsv), as is the
+    identity link with power > 0."""
+
+    def __init__(self, *, power=0.0, alpha=1.0, fit_intercept=True, link="auto", solver="lbfgs",
+                 max_iter=100, tol=1e-4, warm_start=False, verbose=0):
+        self.power, self.link = power, link
+        _glm_init(self, alpha, fit_intercept, solver, max_iter, tol, warm_start, verbose)
+
+    def _power_value(self):
+        return float(self.power)
+
+    def _link_code(self):
+        p = float(self.power)
+        if p < 0 or 0 < p < 1:
+            raise ValueError(f"mojolearn TweedieRegressor: power={p} is not implemented (power 0 or >= 1)")
+        link = self.link
+        if link == "auto":
+            return 0 if p == 0 else 1
+        if link == "identity":
+            if p != 0:
+                raise ValueError("mojolearn TweedieRegressor: the identity link is implemented for power=0 only")
+            return 0
+        if link == "log":
+            return 1
+        raise ValueError("mojolearn TweedieRegressor: link must be 'auto', 'identity' or 'log'")
+
+    def _check_y(self, y):
+        p = float(self.power)
+        if 1 <= p < 2 and (min(y) < 0 or sum(y) <= 0):
+            raise ValueError("Some value(s) of y are out of the valid range of the loss 'HalfTweedieLoss'.")
+        if p >= 2 and min(y) <= 0:
+            raise ValueError("Some value(s) of y are out of the valid range of the loss 'HalfTweedieLoss'.")

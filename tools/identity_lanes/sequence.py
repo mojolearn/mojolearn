@@ -48,3 +48,21 @@ def _(ml, X, yc, yr, Xh=None):
                      r_seq=_h(r.hidden_sequence(Xs[:16])),
                      c_loss=_h(c.loss_curve_), c_params=_h(c.params_), c_proba=_h(c.predict_proba(Xs))),
                 r, lambda e: (e.predict(Xhs),))
+
+
+@lane("sequence-gru")
+def _(ml, X, yc, yr, Xh=None):
+    """A two-layer GRU regressor (RMSprop, centered, momentum) and a
+    one-layer GRU classifier (Adagrad), the LSTM lane's data and batches."""
+    Xs = _sequence_seq(X)
+    ycs, yrs = _sequence_targets(yc, yr)
+    r = ml.GRURegressor(hidden_size=12, num_layers=2, optimizer="rmsprop", learning_rate=1e-2,
+                        batch_size=32, max_epochs=2, random_state=5,
+                        optimizer_options=dict(momentum=0.5, centered=True)).fit(Xs, yrs)
+    c = ml.GRUClassifier(hidden_size=10, optimizer="adagrad", learning_rate=5e-2, batch_size=32,
+                         max_epochs=2, random_state=6).fit(Xs, ycs)
+    Xhs = _sequence_seq(Xh)
+    return _fit(dict(r_loss=_h(r.loss_curve_), r_params=_h(r.params_), r_pred=_h(r.predict(Xs)),
+                     r_seq=_h(r.hidden_sequence(Xs[:16])),
+                     c_loss=_h(c.loss_curve_), c_params=_h(c.params_), c_proba=_h(c.predict_proba(Xs))),
+                r, lambda e: (e.predict(Xhs),))

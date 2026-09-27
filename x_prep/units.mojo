@@ -10,8 +10,9 @@ from x_prep.prims import (
     class_stats_unit, center_rows_unit, where_neg_unit,
 )
 from x_prep.eigh import eigh_unit
+from x_prep.target import te_global_unit, te_enc_unit, te_apply_unit
 
-comptime N_OPS = 20
+comptime N_OPS = 23
 
 
 @always_inline
@@ -56,3 +57,9 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
         eigh_unit(t, f, q)
     comptime if OP == 19:
         where_neg_unit(t, f, q)
+    comptime if OP == 20:
+        te_global_unit(t, f, q)
+    comptime if OP == 21:
+        te_enc_unit(t, f, q)
+    comptime if OP == 22:
+        te_apply_unit(t, f, q)

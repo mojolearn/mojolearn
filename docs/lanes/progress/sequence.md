@@ -11,7 +11,8 @@ bindings export). Python: `python/mojolearn/_x_sequence_rnn.py`.
 
 | # | algorithm | lane | commit | AGREE line | sanity |
 |---|---|---|---|---|---|
-| 1 | LSTM (LSTMRegressor, LSTMClassifier) | sequence-lstm | (the commit adding this row) | CLEAN: sequence-lstm: AGREE: compared infer 9, train 9 (cuda column vs CPU column) | torch nn.LSTM, 5 full-batch steps, float64 torch: max param diff SGD 4e-8, Adam(2 layers) 1e-6, CE Adam 8e-7, RMSprop(centered, momentum) 2e-5, Adagrad 2e-7, AdamW 1e-6 |
+| 1 | LSTM (LSTMRegressor, LSTMClassifier) | sequence-lstm | bb6a93893 | CLEAN: sequence-lstm: AGREE: compared infer 9, train 9 (cuda column vs CPU column) | torch nn.LSTM, 5 full-batch steps, float64 torch: max param diff SGD 4e-8, Adam(2 layers) 1e-6, CE Adam 8e-7, RMSprop(centered, momentum) 2e-5, Adagrad 2e-7, AdamW 1e-6 |
+| 2 | GRU (GRURegressor, GRUClassifier) | sequence-gru | (the commit adding this row) | CLEAN: sequence-gru: AGREE: compared infer 9, train 9 | torch nn.GRU: SGD 5e-8, Adam 2 layers 1e-6, CE Adam 8e-7, RMSprop centered 2e-5 |
 
-Next: GRU, then RNN (addition, after LSTM per the brief), RMSprop, Adagrad,
+Next: RMSprop, Adagrad,
 AutoARIMA, STL, VAR, then the Additions in order.
