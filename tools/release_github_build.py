@@ -352,7 +352,22 @@ def verify_tree(release_build, vendor, arch, commit):
         p = rb / "build" / "sets" / Path(*parts[1:])
         if not p.is_file() or sha256(p) != digest:
             return False, f"{name} is missing or not the proof's bytes"
-    return True, f"{len(proof['extensions'])} set binaries + {len(proof.get('host_extension') or {})} host, all as proved"
+    # The runtime closure (.libs/) is not in the proof; the set's manifest
+    # names every staged library and its sha256 (an artifact upload that
+    # drops dot-directories loses it silently).
+    set_dir = rb / "build" / "sets" / vendor / arch
+    try:
+        staged = json.loads((set_dir / "manifest.json").read_text()).get("staged_libs") or []
+    except (OSError, ValueError):
+        return False, "no manifest.json in the set"
+    if not staged:
+        return False, "the manifest names no staged runtime library"
+    for lib in staged:
+        p = set_dir / ".libs" / lib["name"]
+        if not p.is_file() or sha256(p) != lib["sha256"]:
+            return False, f".libs/{lib['name']} is missing or not the manifest's bytes"
+    return True, (f"{len(proof['extensions'])} set binaries + {len(proof.get('host_extension') or {})} host"
+                  f" + {len(staged)} runtime libraries, all as proved")
 
 
 def promote(out, creds):

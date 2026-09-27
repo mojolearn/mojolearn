@@ -183,6 +183,8 @@ jobs:
         with:
           name: shard-${{ matrix.arch }}-${{ matrix.shard }}
           path: ${{ runner.temp }}/w/art
+          # the runtime closure is sets/<vendor>/<arch>/.libs/
+          include-hidden-files: true
           retention-days: 7
           if-no-files-found: warn
 
@@ -282,5 +284,7 @@ jobs:
         with:
           name: release-${{ matrix.arch == 'gfx942' && 'hip' || 'cuda' }}-${{ matrix.arch }}
           path: ${{ runner.temp }}/w/art
+          # the runtime closure is sets/<vendor>/<arch>/.libs/
+          include-hidden-files: true
           retention-days: 14
           if-no-files-found: error

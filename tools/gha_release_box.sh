@@ -134,7 +134,7 @@ tail -40 "$G/route.log"
 kill $SAMPLER 2>/dev/null
 cat "$G/memory.sampled" > "$G/memory.txt" 2>/dev/null
 echo "cgroup_peak_bytes=$(cat /sys/fs/cgroup/memory.peak 2>/dev/null || echo unavailable)" >> "$G/memory.txt"
-echo "mem_total_bytes=$(awk '/^MemTotal:/{print $2*1024}' /proc/meminfo)" >> "$G/memory.txt"
+echo "mem_total_bytes=$(awk '/^MemTotal:/{printf "%d\n", $2*1024}' /proc/meminfo)" >> "$G/memory.txt"
 echo "nproc=$(nproc)" >> "$G/memory.txt"
 df -B1 /root | tail -1 | awk '{print "disk_used_bytes=" $3 "\ndisk_free_bytes=" $4}' >> "$G/memory.txt"
 RB="$OUT/release/$VENDOR-$ARCH/release-build"

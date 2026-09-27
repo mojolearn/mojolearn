@@ -37,6 +37,7 @@ WF = ROOT / ".github/workflows/release-linux-build.yml"
 class Workflow(unittest.TestCase):
     def test_manual_only_and_never_interpolates_the_map_url(self):
         text = WF.read_text()
+        self.assertEqual(text.count("include-hidden-files: true"), 2)
         on = text.split("\non:\n", 1)[1].split("\npermissions:", 1)[0]
         self.assertIn("workflow_dispatch:", on)
         for trigger in ("push:", "pull_request", "schedule:"):
@@ -196,6 +197,10 @@ class Run(unittest.TestCase):
         sets = art / "cuda-sm_89/release-build/build/sets/cuda/sm_89"
         (sets / "identical").mkdir(parents=True)
         (sets / "identical/_mojolearn_x.so").write_bytes(b"x")
+        (sets / ".libs").mkdir()
+        (sets / ".libs/libR.so").write_bytes(b"r")
+        (sets / "manifest.json").write_text(json.dumps({"staged_libs": [
+            {"name": "libR.so", "sha256": hashlib.sha256(b"r").hexdigest()}]}))
         proof = dict(complete=True, build_exit=0, source_commit=C,
                      extensions={"mojolearn/cuda/sm_89/identical/_mojolearn_x.so": hashlib.sha256(b"x").hexdigest()},
                      host_extension={})
@@ -241,6 +246,11 @@ class Run(unittest.TestCase):
         (Path(self.env["STUB_ART"]) / "cuda-sm_89/release-build/build/sets/cuda/sm_89/identical/_mojolearn_x.so").write_bytes(b"y")
         self.assertEqual(self.run_(), 1)
         self.assertIn("TREE REFUSED", (self.d / "out/GHA/summary.txt").read_text())
+
+    def test_a_set_without_its_runtime_closure_is_refused(self):
+        (Path(self.env["STUB_ART"]) / "cuda-sm_89/release-build/build/sets/cuda/sm_89/.libs/libR.so").unlink()
+        self.assertEqual(self.run_(), 1)
+        self.assertIn(".libs/libR.so", (self.d / "out/GHA/summary.txt").read_text())
 
     def test_no_artifact_names_the_failed_job(self):
         os.environ["STUB_NO_ARTIFACT"] = "1"
