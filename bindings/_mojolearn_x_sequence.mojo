@@ -11,7 +11,7 @@ from std.python.bindings import PythonModuleBuilder
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 from sequence.exec_device import DeviceExec
-from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py
+from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py
 
 
 def numeric_mode_binding() raises -> PythonObject:
@@ -46,6 +46,16 @@ def stl_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
     return stl_py(ex, addrs, ip)
 
 
+def var_fit_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
+    var ex = DeviceExec()
+    return var_fit_py(ex, addrs, ip)
+
+
+def var_forecast_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
+    var ex = DeviceExec()
+    return var_forecast_py(ex, addrs, ip)
+
+
 @export
 def PyInit__mojolearn_x_sequence() abi("C") -> PythonObject:
     try:
@@ -57,6 +67,8 @@ def PyInit__mojolearn_x_sequence() abi("C") -> PythonObject:
         m.def_function[rnn_n_params_binding]("rnn_n_params")
         m.def_function[optimizer_step_binding]("optimizer_step")
         m.def_function[stl_binding]("stl")
+        m.def_function[var_fit_binding]("var_fit")
+        m.def_function[var_forecast_binding]("var_forecast")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_sequence: ", e))

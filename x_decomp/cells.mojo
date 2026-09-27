@@ -34,6 +34,18 @@ from checks.numerics import (
 )
 from core.philox import philox4x32_10
 
+#: The one-sided Jacobi SVD's sweep budget in this lane (x_decomp svd):
+#: decomposition/'s JACOBI_SWEEPS (15, RAFT's) stops short on the `wide`
+#: fixture's 1e-4..1e4 column scales; the solver is the same, the refusal of
+#: an unconverged answer is kept, only the budget is larger.
+comptime X_DECOMP_SVD_SWEEPS = 60
+#: ... and its rotation threshold: |apq| > tol * sqrt(app * aqq). JACOBI_TOL
+#: (1e-7) sits under float32 epsilon (1.19e-7), so on an ill-conditioned
+#: matrix one rotation per sweep can fire forever (a rounding limit cycle,
+#: measured on the `wide` fixture through FactorAnalysis). 8 epsilon is the
+#: usual float32 one-sided Jacobi threshold (LAPACK sgesvj uses m*eps).
+comptime X_DECOMP_SVD_TOL = Float32(9.5367431640625e-07)
+
 comptime F32Ptr = MutPointer[Float32, MutAnyOrigin]
 comptime I32Ptr = MutPointer[Int32, MutAnyOrigin]
 

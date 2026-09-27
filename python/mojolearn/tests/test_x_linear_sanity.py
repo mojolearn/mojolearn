@@ -237,6 +237,42 @@ def _():
     return ok
 
 
+@case("lasso-cv")
+def _():
+    from sklearn import linear_model as sk
+    X, yr, yc, y3 = _data(noise=2.0)
+    X = X.copy()
+    X[:, 5:] *= 0.05
+    ok = True
+    for fi in (True, False):
+        a = ml.LassoCV(fit_intercept=fi).fit(X, yr)
+        b = sk.LassoCV(fit_intercept=fi).fit(X.astype(np.float64), yr.astype(np.float64))
+        print(f"  fi={fi} alpha_ {a.alpha_:.6g} vs {b.alpha_:.6g}")
+        ok &= _close("alphas_ (relative)", np.asarray(a.alphas_) / b.alphas_, np.ones(len(b.alphas_)), 1e-4)
+        ok &= _close("mse_path_ (relative)", np.asarray(a.mse_path_) / b.mse_path_, np.ones(b.mse_path_.shape), 5e-3)
+        ok &= _close("alpha_ (relative)", [a.alpha_ / b.alpha_], [1.0], 1e-3)
+        ok &= _close("coef", a.coef_, b.coef_, 2e-3)
+    return ok
+
+
+@case("enet-cv")
+def _():
+    from sklearn import linear_model as sk
+    X, yr, yc, y3 = _data(noise=2.0)
+    X = X.copy()
+    X[:, 5:] *= 0.05
+    ok = True
+    for l1 in (0.5, [0.1, 0.5, 0.9]):
+        a = ml.ElasticNetCV(l1_ratio=l1, cv=4).fit(X, yr)
+        b = sk.ElasticNetCV(l1_ratio=l1, cv=4).fit(X.astype(np.float64), yr.astype(np.float64))
+        print(f"  l1={l1} alpha_ {a.alpha_:.6g} vs {b.alpha_:.6g}, l1_ratio_ {a.l1_ratio_} vs {b.l1_ratio_}")
+        ok &= _close("alphas_ (relative)", np.asarray(a.alphas_) / b.alphas_, np.ones(np.shape(b.alphas_)), 1e-4)
+        ok &= _close("mse_path_ (relative)", np.asarray(a.mse_path_) / b.mse_path_, np.ones(b.mse_path_.shape), 5e-3)
+        ok &= _close("l1_ratio_", [a.l1_ratio_], [b.l1_ratio_], 1e-6)
+        ok &= _close("coef", a.coef_, b.coef_, 2e-3)
+    return ok
+
+
 def main(argv):
     names = argv or list(CASES)
     bad = []

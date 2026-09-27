@@ -22,17 +22,17 @@ FAMILIES = (
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=("sequence-lstm", "sequence-gru", "sequence-rmsprop", "sequence-adagrad",
-                        "sequence-autoarima", "sequence-stl"),
+                        "sequence-autoarima", "sequence-stl", "sequence-var"),
         inference_lanes=(),
         forest_kinds=(),
-        classes=("LSTMRegressor", "LSTMClassifier", "GRURegressor", "GRUClassifier", "RMSprop", "Adagrad", "AutoARIMA", "STL"),
+        classes=("LSTMRegressor", "LSTMClassifier", "GRURegressor", "GRUClassifier", "RMSprop", "Adagrad", "AutoARIMA", "STL", "VAR"),
         display="the sequence lane's recurrent networks and optimizers",
         host_modules=("sequence/ops.mojo", "sequence/exec.mojo", "sequence/recurrent.mojo",
-                      "sequence/pyapi.mojo", "sequence/stl.mojo", "sequence/dispatch.mojo"),
+                      "sequence/pyapi.mojo", "sequence/stl.mojo", "sequence/dispatch.mojo", "sequence/vecar.mojo"),
         exports=(
             "x_sequence_host_numeric_mode", "x_sequence_host_vendor", "x_sequence_host_column",
             "x_sequence_host_sabotage", "x_sequence_numeric_mode", "x_sequence_vendor",
-            "rnn_fit", "rnn_predict", "rnn_n_params", "optimizer_step", "stl",
+            "rnn_fit", "rnn_predict", "rnn_n_params", "optimizer_step", "stl", "var_fit", "var_forecast",
         ),
         gate="tools/algos_lane_check.sh (pass 1: CPU == GPU bitwise)",
         wheel_note=(
@@ -47,9 +47,11 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
                        "sequence-rmsprop": "RMSprop",
                        "sequence-adagrad": "Adagrad",
                        "sequence-autoarima": "AutoARIMA",
-                       "sequence-stl": "STL"}
+                       "sequence-stl": "STL",
+                       "sequence-var": "VAR"}
 PUBLIC_PENDING_LANES = {"sequence-lstm": "no reference", "sequence-gru": "no reference",
                         "sequence-rmsprop": "no reference",
                         "sequence-adagrad": "no reference",
                         "sequence-autoarima": "no reference",
-                        "sequence-stl": "no reference"}
+                        "sequence-stl": "no reference",
+                        "sequence-var": "no reference"}

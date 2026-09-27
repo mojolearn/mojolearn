@@ -192,3 +192,25 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-ridge-cv")
+
+
+@lane("x-lasso-cv")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.LassoCV(alphas=12, cv=3, max_iter=100).fit(X[:1500], yr[:1500])
+    f = _linear_reg_fit(m, X, yr, Xh)
+    f["path"] = _h(m.mse_path_, m.alphas_)
+    return f
+
+
+_batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-lasso-cv")
+
+
+@lane("x-enet-cv")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.ElasticNetCV(l1_ratio=[0.2, 0.7], alphas=8, cv=3, max_iter=100).fit(X[:1500], yr[:1500])
+    f = _linear_reg_fit(m, X, yr, Xh)
+    f["path"] = _h(m.mse_path_, m.alphas_, np.asarray([m.alpha_, m.l1_ratio_], dtype=np.float32))
+    return f
+
+
+_batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-enet-cv")

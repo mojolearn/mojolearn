@@ -20,6 +20,13 @@ from sequence.ops import (
     OP_SEQ_OUT,
     OP_SOFTMAX,
     OP_STL,
+    OP_VAR_DESIGN,
+    OP_COLSCALE,
+    OP_CHOLSOLVE,
+    OP_ROWSCALE,
+    OP_VAR_FORECAST,
+    OP_SUB,
+    OP_SCALE,
     op_gemm,
     op_bias,
     op_colsum,
@@ -37,6 +44,7 @@ from sequence.ops import (
     op_softmax,
 )
 from sequence.stl import op_stl
+from sequence.vecar import op_cholsolve, op_colscale, op_rowscale, op_scale, op_sub, op_var_design, op_var_forecast
 
 
 @always_inline
@@ -73,3 +81,17 @@ def apply[OP: Int](t: Int, a: Args):
         op_softmax(t, a)
     elif OP == OP_STL:
         op_stl(t, a)
+    elif OP == OP_VAR_DESIGN:
+        op_var_design(t, a)
+    elif OP == OP_COLSCALE:
+        op_colscale(t, a)
+    elif OP == OP_CHOLSOLVE:
+        op_cholsolve(t, a)
+    elif OP == OP_ROWSCALE:
+        op_rowscale(t, a)
+    elif OP == OP_VAR_FORECAST:
+        op_var_forecast(t, a)
+    elif OP == OP_SUB:
+        op_sub(t, a)
+    elif OP == OP_SCALE:
+        op_scale(t, a)
