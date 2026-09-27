@@ -3190,6 +3190,12 @@ def identical_gemm_splitk_fits(m: Int, n: Int, k: Int) -> Bool:
 #: Apple IDENTICAL: skinny shapes (a tiny output, or one output dimension
 #: <= 4) on PLAN_SPLITK / PLAN_FLAT instead of the tile dispatcher's pick.
 #: Execution plan only; `-D MOJOLEARN_APPLE_GEMM_SKINNY_OFF` reverts.
+#: Apple IDENTICAL: outputs with a side in [8, 64) and >= 16384 cells on
+#: PLAN_APPLE_MMA. `-D MOJOLEARN_APPLE_GEMM_NARROW_MMA_OFF` reverts.
+comptime APPLE_GEMM_NARROW_MMA = (
+    APPLE_MMA
+    and not is_defined["MOJOLEARN_APPLE_GEMM_NARROW_MMA_OFF"]()
+)
 comptime APPLE_GEMM_SKINNY = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and TARGET_COLUMN == COLUMN_APPLE
@@ -3223,6 +3229,18 @@ def choose_gemm_plan(m: Int, n: Int, k: Int) -> Int:
                 return PLAN_SPLITK
             if min(m, n) <= 4 and m * n >= 2048:
                 return PLAN_FLAT
+    comptime if APPLE_GEMM_NARROW_MMA:
+        # Narrow outputs (lane/apple-identical-neural, 2026-09-27, M4, every
+        # pair hash-equal): one output side in [8, 64) with a large output
+        # also runs faster on the matrix plan than on the tile plan it got,
+        # 1M x 16 x 16 (GMM's E-step) 20.7 -> 4.1 ms, 16 x 200k x 32 5.0 ->
+        # 1.2 ms, 10k x 16 x 16 210 -> 63 us. It needs no workspace, so a
+        # caller sized for the old pick cannot overflow.
+        if (
+            m >= 8 and n >= 8 and m * n >= 16384
+            and apple_mma_applies(m, n, k)
+        ):
+            return PLAN_APPLE_MMA
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE:
         if (
             tiles == PLAN_TUNED_64_4X4

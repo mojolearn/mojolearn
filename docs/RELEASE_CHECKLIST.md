@@ -21,7 +21,8 @@ FOUR PIPELINES AT ONCE, each publishing as soon as its own gates pass:
   release's recorded NVIDIA and AMD columns on this machine (seconds, nothing
   rented); a DIVERGENT or MOVED cell holds the macOS publish unless
   `--accept-moved` says the release changes those bits on purpose.
-- **core-linux**: linux-builds (the legs of step 2, launched together,
+- **core-linux**: cross-compile (step 0b, beside the rehearsal; it gates
+  linux-builds, the first rental), linux-builds (the legs of step 2, launched together,
   detached), linux-wait, linux-assemble, linux-pack (step 3: the core and both
   plugins, 3b), linux-joint-diff, publish-core-linux (last, after both plugins).
 - **nvidia**: gpu-column-nvidia (the expanded smoke plus the column, one rented
@@ -145,6 +146,29 @@ audit over the package staged as the wheel ships it (with the
 the NVIDIA and AMD release legs. Each of these failed 0.8.12 after boxes were
 rented or after a 16-minute macOS compile. `--list` prints the steps; `--only`
 reruns some of them.
+
+## 0b. Cross-compile on GitHub (the release does this; nothing is rented)
+
+The `cross-compile` step of `pixi run release` dispatches
+`.github/workflows/cross-compile-check.yml` on the frozen commit, diffed
+against the previous release's source commit (the reuse plan's base), and
+waits for it (`gh run watch --exit-status`). The plan job runs
+`tools/cross_compile_check.py --list-json` (the same selection as the local
+`pixi run cross-compile-check`), and every changed Linux GPU binding x tier x
+arch (sm_90a, sm_89, gfx942) compiles on its own free standard runner, in
+parallel, with the release flags. The summary job fails on any FAIL, TIMEOUT,
+STALLED or MISSING job and names it; the release step then stops the Linux
+pipelines by name before linux-builds rents a box (the macOS pipeline goes
+on). The workflow is `workflow_dispatch` only and never runs on a merge. By
+hand:
+
+```sh
+gh workflow run cross-compile-check.yml --ref main -f ref=<previous release commit> -f commit=<sha>
+```
+
+`MOJOLEARN_XCC_WORKFLOW_REF` names the branch whose workflow file is
+dispatched (default `main`; GitHub dispatches a workflow only once its file is on the default branch). Measured 2026-09-27 on the 0.8.22 diff: 96 jobs
+(32 per arch), 1 to 5 minutes each (median 2), compiler peak RSS 2.0 GB, 20 runners at a time, 19 minutes wall, all PASS; the same run with the b055fe72e potrf gate reverted failed by name on gp, kernel_methods and mixture (gfx942, both tiers).
 
 Five steps, one finish line: the file is on PyPI and installs. The longer
 runbook (`docs/PYPI_RELEASE.md`) is background for when a step refuses. They are not a longer version of

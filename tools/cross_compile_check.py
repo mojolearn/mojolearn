@@ -7,6 +7,15 @@ GPU box (2026-09-25).
     pixi run cross-compile-check                         # vs the last v* tag
     python3 tools/cross_compile_check.py --ref v0.8.15 [--limit 3] [--archs sm_89]
     python3 tools/cross_compile_check.py --only _mojolearn_svm --tiers fast
+    python3 tools/cross_compile_check.py --ref v0.8.22 --list-json plan.json   # the job list only
+    python3 tools/cross_compile_check.py --summarize results/ --plan plan.json  # merge job results
+
+ON GITHUB FOR A RELEASE. .github/workflows/cross-compile-check.yml runs the
+same selection (--list-json, one source of truth) and then one standard
+runner per binding x tier x arch (--only/--tiers/--archs), in parallel;
+--summarize merges their result files into one verdict table. `pixi run
+release` dispatches it on the frozen commit (tools/release.py, the
+cross-compile step). The local task is unchanged.
 
 WHY. 0.8.19's `fast` svm binding never finished compiling for NVPTX or AMDGPU:
 every Linux leg sat on it for more than 33 minutes and was killed by its build
@@ -193,6 +202,83 @@ def run_one(cmd, out, timeout, stall, cwd=ROOT, poll=2.0, cpu_probe=group_cpu_se
     return verdict, secs, tail
 
 
+# ---------------------------------------------------------------- GitHub matrix
+def job_key(name, tier, arch):
+    return f"{name}-{tier}-{arch}"
+
+
+def write_matrix(path, ref, jobs):
+    """{ref, count, include: [{name, script, tier, arch, key}]}: the matrix the
+    workflow fans out, from plan_jobs (the same selection the local run uses)."""
+    include = [dict(name=n, script=s, tier=t, arch=x, key=job_key(n, t, x)) for n, s, t, x in jobs]
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    Path(path).write_text(json.dumps(dict(ref=ref, count=len(include), include=include), indent=1) + "\n")
+    return include
+
+
+def max_rss_mb(time_file):
+    """GNU `time -v` "Maximum resident set size (kbytes)" in MB, or None."""
+    try:
+        for ln in Path(time_file).read_text().splitlines():
+            if "Maximum resident set size" in ln:
+                return round(int(ln.rsplit(":", 1)[1]) / 1024)
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def summarize(plan, results_dir, summary_md=""):
+    """One verdict per planned job from the result files (`--json` output,
+    one per job, anywhere under results_dir, a GNU time -v file beside each).
+    A planned job with no result is MISSING (its runner died before writing
+    one). Exit 0 only when every planned job PASSed."""
+    planned = json.loads(Path(plan).read_text())["include"] if plan else []
+    got = {}
+    for f in sorted(Path(results_dir).rglob("*.json")):
+        try:
+            doc = json.loads(f.read_text())
+        except (OSError, ValueError):
+            continue
+        for r in doc.get("results", []):
+            r = dict(r, max_rss_mb=max_rss_mb(f.parent / "time.txt"))
+            got[job_key(r["name"], r["tier"], r["arch"])] = r
+    keys = [p["key"] for p in planned] or sorted(got)
+    rows = []
+    for k in keys:
+        r = got.get(k)
+        if r is None:
+            p = next(p for p in planned if p["key"] == k)
+            r = dict(name=p["name"], tier=p["tier"], arch=p["arch"], verdict="MISSING", seconds=None,
+                     detail=["no result: the job died before writing one (see its log)"], max_rss_mb=None)
+        rows.append(r)
+    bad = [r for r in rows if r["verdict"] != "PASS"]
+    lines = ["| verdict | binding | tier | arch | seconds | max RSS MB |", "|---|---|---|---|---|---|"]
+    for r in rows:
+        lines.append(f"| {r['verdict']} | {r['name']} | {r['tier']} | {r['arch']} | "
+                     f"{'' if r['seconds'] is None else r['seconds']} | {r.get('max_rss_mb') or ''} |")
+        print(f"  {r['verdict']:8s} {r['name']:34s} {r['tier']:13s} {r['arch']:7s} "
+              f"{'' if r['seconds'] is None else r['seconds']:>7} s  rss {r.get('max_rss_mb') or '?'} MB")
+    head = (f"cross-compile-check: {len(rows) - len(bad)} of {len(rows)} PASS"
+            + ("" if not bad else "; NOT PASS: " + ", ".join(
+                f"{r['name']} {r['tier']} {r['arch']} {r['verdict']}" for r in bad)))
+    print(head)
+    for r in bad:
+        for ln in r.get("detail") or []:
+            print(f"    {r['name']} {r['tier']} {r['arch']}: {ln[:240]}")
+    if summary_md:
+        with open(summary_md, "a") as fh:
+            fh.write("## Cross-compile check\n\n" + head + "\n\n" + "\n".join(lines) + "\n")
+            if bad:
+                fh.write("\n### Not passed\n\n")
+                for r in bad:
+                    fh.write(f"- **{r['name']} {r['tier']} {r['arch']}**: {r['verdict']}\n")
+                    for ln in r.get("detail") or []:
+                        fh.write(f"  - `{ln[:240]}`\n")
+    if not rows:
+        print("cross-compile-check: nothing was planned")
+    return 1 if bad else 0
+
+
 # ---------------------------------------------------------------- main
 def last_tag(root=ROOT):
     return subprocess.run(["git", "-C", str(root), "describe", "--tags", "--abbrev=0", "--match", "v*"],
@@ -213,7 +299,15 @@ def main(argv=None):
     ap.add_argument("--cache", default="", help="identity cache (default <evidence>/release/identities)")
     ap.add_argument("--json", default="", help="write the results here")
     ap.add_argument("--dry-run", action="store_true", help="print the jobs, compile nothing")
+    ap.add_argument("--list-json", default="",
+                    help="write the selected jobs as a GitHub Actions matrix to this file, compile nothing")
+    ap.add_argument("--summarize", default="",
+                    help="merge the per-job result files under this directory against --plan; no selection")
+    ap.add_argument("--plan", default="", help="the --list-json file --summarize checks for completeness")
+    ap.add_argument("--summary-md", default="", help="--summarize also appends a markdown table here")
     a = ap.parse_args(argv)
+    if a.summarize:
+        return summarize(a.plan, a.summarize, a.summary_md)
 
     import bincache
     import release_reuse
@@ -234,6 +328,8 @@ def main(argv=None):
                      only=set(filter(None, a.only.split(","))), limit=a.limit)
     if not jobs:
         print("no changed Linux GPU binding: nothing to cross-compile")
+        if a.list_json:
+            write_matrix(a.list_json, ref, [])
         return 0
     plans = {}
     for script in sorted({j[1] for j in jobs}):
@@ -244,6 +340,10 @@ def main(argv=None):
             print(f"REFUSED: bindings/{s}: its compile line cannot be read literally (one root .mojo); "
                   f"fix the script or tools/bincache.py script_plan, nothing was compiled")
         return 2
+    if a.list_json:
+        write_matrix(a.list_json, ref, jobs)
+        print(f"cross-compile-check: {len(jobs)} job(s) written to {a.list_json}")
+        return 0
     mojo = a.mojo.split()
     results = []
     scratch = Path(tempfile.mkdtemp(prefix="mojolearn-xcc-"))
