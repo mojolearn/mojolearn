@@ -84,6 +84,19 @@ Unarmable seams, written down there: `F = Z P Z'` and the Jones inverse's
 - E2E steward sabotages: `e2e_arima_host_param_bit.patch` (the five arima
   lanes), `e2e_tsa_host_bits.patch` (holtwinters x2, kpss).
 
+### Apple build fix (m2pro FAIL on d5a849bb5, both requests: the Metal build)
+
+`seq_kernel` had 33 arguments (Metal binds each to a buffer slot, 31 max):
+the 12 ints and 8 floats now travel packed two per Int64 (bit-exact, ints
+checked to fit Int32). Theta, ETS and GARCH then segfaulted Apple's air-lld
+(`LazyLinker::LinkDefinition`): their helpers (and nm.mojo's) are now
+`@always_inline`. Bisected on the M2 Pro (`~/seqdbg`, compile only): all 55
+operations and seams_check build for Metal. A40 re-check after the fix
+(e71c8f66a): all 32 arms bite, all 22 sequence lanes AGREE. DONE.
+One batched steward request per hour covers the family; its end-to-end
+sabotage is `sequence/checks/sabotage/e2e_family_host_bits.patch` (the three
+e2e patches in one).
+
 NEXT (a fresh session starts here), per CURRENT DIRECTIVES (one phase per session):
 1. If the steward requests above are not both PASS on m2pro and do-amd:
    read the failing step, fix, resubmit only the affected lanes.
