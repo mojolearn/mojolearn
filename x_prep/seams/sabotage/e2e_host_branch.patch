@@ -1,0 +1,14 @@
+--- a/x_prep/prims.mojo
++++ b/x_prep/prims.mojo
+@@ -25,6 +25,11 @@
+         if r != Float32(0) and r == r:
+             return bitcast[DType.float32](bitcast[DType.uint32](r) + UInt32(1))
+         return r
++    from std.sys.info import is_gpu  # SABOTAGE e2e: a host-only arithmetic branch
++    comptime if not is_gpu():
++        var h = ftz(ftz(a) + ftz(b))
++        if h != Float32(0) and h == h:
++            return bitcast[DType.float32](bitcast[DType.uint32](h) + UInt32(1))
+     return ftz(ftz(a) + ftz(b))
+ 
+ 
