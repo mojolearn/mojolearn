@@ -453,3 +453,27 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl("n/a:transductive (AgglomerativeClustering labels the fitted rows only)", "x-cluster-agglo-connectivity")
+
+
+@lane("x-cluster-spectral-affinities")
+def _(ml, X, yc, yr, Xh=None):
+    """SpectralClustering option parity (python/mojolearn/_spectral_impl.py):
+    scikit-learn's default affinity='rbf' (the x_decomp identical cells, then
+    the precomputed route) at the default gamma and at 0.5, and
+    'precomputed_nearest_neighbors' on a distance matrix built from the rbf
+    fit's own affinity; affinity_matrix_ hashed for both."""
+    # per-column scale to [-1, 1] (elementwise IEEE division) so the wide
+    # fixture's large columns do not underflow every affinity to zero
+    S = (X[:300] / (np.abs(X[:300]).max(axis=0) + np.float32(1))).astype(np.float32)
+    m = ml.SpectralClustering(n_clusters=4, affinity="rbf", random_state=3).fit(S)
+    g = ml.SpectralClustering(n_clusters=3, affinity="rbf", gamma=0.5, random_state=3).fit(S[:200])
+    dist = (np.float32(1) - np.asarray(m.affinity_matrix_)).astype(np.float32)
+    p = ml.SpectralClustering(n_clusters=4, affinity="precomputed_nearest_neighbors", n_neighbors=12,
+                              random_state=3).fit(dist)
+    return _fit(dict(labels=_h(m.labels_), emb=_h(m.embedding_), aff=_h(m.affinity_matrix_),
+                     glabels=_h(g.labels_), gemb=_h(g.embedding_),
+                     plabels=_h(p.labels_), pemb=_h(p.embedding_), paff=_h(p.affinity_matrix_)),
+                m, "n/a:transductive (predict carries the nearest_neighbors and precomputed affinities only)")
+
+
+_batch_decl("n/a:transductive (SpectralClustering with rbf labels the fitted rows only)", "x-cluster-spectral-affinities")
