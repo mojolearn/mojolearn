@@ -138,3 +138,26 @@ def _(ml, X, yc, yr, Xh=None):
 
 _batch_decl(_rows_calls("predict", "predict_proba"), "trees-voting-clf")
 _batch_decl(_rows_calls("predict"), "trees-voting-reg")
+
+
+@lane("trees-stacking-clf")
+def _(ml, X, yc, yr, Xh=None):
+    """Three stratified folds of held-out probabilities, passthrough, a tree on top."""
+    m = ml.StackingClassifier([("dt", ml.DecisionTreeClassifier(max_depth=4)),
+                               ("rf", ml.RandomForestClassifier(n_estimators=3, max_depth=4, random_state=3))],
+                              final_estimator=ml.DecisionTreeClassifier(max_depth=3), cv=3,
+                              passthrough=True).fit(X, yc)
+    return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X)), meta=_h(m.transform(X))),
+                m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+
+
+@lane("trees-stacking-reg")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.StackingRegressor([("dt", ml.DecisionTreeRegressor(max_depth=4)),
+                              ("rf", ml.RandomForestRegressor(n_estimators=3, max_depth=4, random_state=3))],
+                             final_estimator=ml.DecisionTreeRegressor(max_depth=3), cv=3).fit(X, yr)
+    return _fit(dict(predict=_h(m.predict(X))), m, lambda e: (e.predict(Xh),))
+
+
+_batch_decl(_rows_calls("predict", "predict_proba"), "trees-stacking-clf")
+_batch_decl(_rows_calls("predict"), "trees-stacking-reg")

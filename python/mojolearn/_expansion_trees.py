@@ -45,6 +45,8 @@ __all__ = [
     "RandomTreesEmbedding",
     "VotingClassifier",
     "VotingRegressor",
+    "StackingClassifier",
+    "StackingRegressor",
 ]
 
 
@@ -1253,3 +1255,155 @@ class VotingRegressor(_TreesWrapperBase):
         for j, e in enumerate(self.estimators_):
             self._place(out, n, m, as_f32_c(e.predict(Xa), ndim=1, name="p")[0], rows, j)
         return out.reshape((n, m))
+
+
+# ---------------------------------------------------------------- Stacking
+# Reference: scikit-learn `sklearn/ensemble/_stacking.py` (_BaseStacking.fit
+# :150 -- every member refitted on all rows, the meta features from
+# cross_val_predict --, _concatenate_predictions :80 -- a binary
+# predict_proba keeps only its second column --, stack_method 'auto' =
+# predict_proba, decision_function, predict). cv is an int of unshuffled
+# folds (StratifiedKFold for the classifier, KFold for the regressor).
+# DEVIATION: the default final estimators are this library's
+# LogisticRegression and Ridge (sklearn: LogisticRegression, RidgeCV).
+class _StackingBase(_TreesWrapperBase):
+    def __init__(self, estimators, final_estimator, cv, stack_method, n_jobs, passthrough, verbose):
+        if n_jobs is not None or verbose:
+            _refuse("n_jobs/verbose", "the members fit one after another.")
+        if stack_method not in ("auto", "predict_proba", "decision_function", "predict"):
+            raise ValueError("stack_method must be auto, predict_proba, decision_function or predict")
+        self.estimators = estimators
+        self.final_estimator = final_estimator
+        self.cv = cv
+        self.stack_method = stack_method
+        self.n_jobs = n_jobs
+        self.passthrough = passthrough
+        self.verbose = verbose
+        _trees_cv(cv)
+
+    def _method(self, est):
+        if self.stack_method != "auto":
+            return self.stack_method
+        for m in (("predict_proba", "decision_function", "predict") if self._estimator_type == "classifier"
+                  else ("predict",)):
+            if hasattr(est, m):
+                return m
+        return "predict"
+
+    def _out(self, est, method, Xs):
+        out = getattr(est, method)(Xs)
+        if method == "predict_proba" and self._binary:
+            n = Xs.shape[0]
+            p = _trees_output_2d(out, n)
+            return self._gather(p, _trees_arange(n), Array.from_list([1], "<i4"))
+        return out
+
+    def _widths(self, Xa, y_fit):
+        return None
+
+    def _fit_stack(self, X, y_fit, folds, final):
+        Xa, _ = as_f32_c(X, ndim=2, name="X")
+        n, d = Xa.shape
+        active = _trees_estimators(self.estimators)
+        self.estimators_ = []
+        for _, est in active:
+            e = _trees_clone(est)
+            e.fit(Xa, y_fit(None))
+            self.estimators_.append(e)
+        self.stack_method_ = [self._method(e) for e in self.estimators_]
+        widths = []
+        for e, m in zip(self.estimators_, self.stack_method_):
+            widths.append(_trees_output_2d(self._out(e, m, Xa[0:2]), 2).shape[1])
+        width = sum(widths) + (d if self.passthrough else 0)
+        meta = zeros((n * width,), "<f8")
+        n_splits = max(folds) + 1
+        cols = _trees_arange(d)
+        for i in range(n_splits):
+            tr, te = _trees_fold_rows(folds, i)
+            col0 = 0
+            for (_, est), m, w in zip(active, self.stack_method_, widths):
+                e = _trees_clone(est)
+                e.fit(self._gather(Xa, tr, cols), y_fit(tr))
+                got = self._place(meta, n, width, self._out(e, m, self._gather(Xa, te, cols)), te, col0)
+                if got != w:
+                    raise ValueError("a member's output width changed between folds (a class missing from a fold)")
+                col0 += w
+        if self.passthrough:
+            self._place(meta, n, width, Xa, _trees_arange(n), sum(widths))
+        self._widths_ = widths
+        self.named_estimators_ = dict((nm, e) for (nm, _), e in zip(active, self.estimators_))
+        self.final_estimator_ = _trees_clone(final)
+        self.final_estimator_.fit(as_f32_c(meta.reshape((n, width)), ndim=2, name="meta")[0], y_fit(None))
+        self.n_features_in_ = d
+        self._fitted = True
+        return self
+
+    def transform(self, X):
+        Xa = self._check_X(X)
+        n, d = Xa.shape
+        width = sum(self._widths_) + (d if self.passthrough else 0)
+        meta = zeros((n * width,), "<f8")
+        rows, col0 = _trees_arange(n), 0
+        for e, m in zip(self.estimators_, self.stack_method_):
+            col0 += self._place(meta, n, width, self._out(e, m, Xa), rows, col0)
+        if self.passthrough:
+            self._place(meta, n, width, Xa, rows, col0)
+        return meta.reshape((n, width))
+
+    def _meta32(self, X):
+        return as_f32_c(self.transform(X), ndim=2, name="meta")[0]
+
+
+class StackingClassifier(_StackingBase):
+    _estimator_type = "classifier"
+
+    def __init__(self, estimators, final_estimator=None, *, cv=None, stack_method="auto", n_jobs=None,
+                 passthrough=False, verbose=0):
+        super().__init__(estimators, final_estimator, cv, stack_method, n_jobs, passthrough, verbose)
+
+    def fit(self, X, y, sample_weight=None):
+        if sample_weight is not None:
+            _refuse("StackingClassifier sample_weight", "not carried in pass 1.")
+        self.classes_, codes = encode_labels(y)
+        self._binary = len(self.classes_) == 2
+        folds = _trees_stratified_folds(codes.tolist(), _trees_cv(self.cv))
+        final = self.final_estimator
+        if final is None:
+            from .linear_model import LogisticRegression
+            final = LogisticRegression()
+        return self._fit_stack(X, lambda rows: codes if rows is None else self._gather_codes(codes, rows),
+                               folds, final)
+
+    def predict(self, X):
+        codes = as_i32_c(self.final_estimator_.predict(self._meta32(X)), ndim=1, name="codes")[0]
+        return decode_labels(self.classes_, codes)
+
+    def predict_proba(self, X):
+        k = len(self.classes_)
+        Xm = self._meta32(X)
+        n = Xm.shape[0]
+        acc = zeros((n * k,), "<f8")
+        self._acc_cols(acc, self.final_estimator_.predict_proba(Xm), _trees_sub_cols(self.final_estimator_), n, k)
+        return acc.reshape((n, k))
+
+
+class StackingRegressor(_StackingBase):
+    _estimator_type = "regressor"
+    _binary = False
+
+    def __init__(self, estimators, final_estimator=None, *, cv=None, n_jobs=None, passthrough=False, verbose=0):
+        super().__init__(estimators, final_estimator, cv, "auto", n_jobs, passthrough, verbose)
+
+    def fit(self, X, y, sample_weight=None):
+        if sample_weight is not None:
+            _refuse("StackingRegressor sample_weight", "not carried in pass 1.")
+        y32, _ = as_f32_c(y, ndim=1, name="y")
+        folds = _trees_kfolds(len(y32), _trees_cv(self.cv))
+        final = self.final_estimator
+        if final is None:
+            from .linear_model import Ridge
+            final = Ridge()
+        return self._fit_stack(X, lambda rows: y32 if rows is None else self._gather_vec(y32, rows), folds, final)
+
+    def predict(self, X):
+        return self.final_estimator_.predict(self._meta32(X))

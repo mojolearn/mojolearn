@@ -151,3 +151,38 @@ def test_voting():
                            ("b", DecisionTreeRegressor(max_depth=8, random_state=0))], weights=[1, 2]).fit(Xa, ya)
     a, r = r2_score(yb, np.asarray(ours.predict(Xb))), r2_score(yb, ref.predict(Xb))
     assert a >= r - 0.05, (a, r)
+
+
+def test_stacking_folds_match_sklearn():
+    from sklearn.model_selection import StratifiedKFold, KFold
+    from mojolearn._expansion_trees import _trees_stratified_folds, _trees_kfolds
+    y = np.random.RandomState(0).randint(0, 4, size=103)
+    ours = _trees_stratified_folds(y.tolist(), 5)
+    for i, (_, te) in enumerate(StratifiedKFold(5).split(np.zeros((103, 1)), y)):
+        assert sorted(te.tolist()) == [r for r, f in enumerate(ours) if f == i]
+    ours = _trees_kfolds(103, 4)
+    for i, (_, te) in enumerate(KFold(4).split(np.zeros((103, 1)))):
+        assert te.tolist() == [r for r, f in enumerate(ours) if f == i]
+
+
+def test_stacking():
+    from sklearn.ensemble import StackingClassifier, StackingRegressor
+    from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
+    Xa, Xb, ya, yb = _clf()
+    ours = ml.StackingClassifier([("a", ml.DecisionTreeClassifier(max_depth=4)),
+                                  ("b", ml.BaggingClassifier(ml.DecisionTreeClassifier(max_depth=8), random_state=0))],
+                                 final_estimator=ml.DecisionTreeClassifier(max_depth=4)).fit(Xa, ya)
+    ref = StackingClassifier([("a", DecisionTreeClassifier(max_depth=4, random_state=0)),
+                              ("b", DecisionTreeClassifier(max_depth=8, random_state=0))],
+                             final_estimator=DecisionTreeClassifier(max_depth=4, random_state=0)).fit(Xa, ya)
+    a, r = accuracy_score(yb, np.asarray(ours.predict(Xb))), accuracy_score(yb, ref.predict(Xb))
+    assert a >= r - 0.06, (a, r)
+    Xa, Xb, ya, yb = _reg()
+    ours = ml.StackingRegressor([("a", ml.DecisionTreeRegressor(max_depth=4)),
+                                 ("b", ml.DecisionTreeRegressor(max_depth=8))],
+                                final_estimator=ml.DecisionTreeRegressor(max_depth=4)).fit(Xa, ya)
+    ref = StackingRegressor([("a", DecisionTreeRegressor(max_depth=4, random_state=0)),
+                             ("b", DecisionTreeRegressor(max_depth=8, random_state=0))],
+                            final_estimator=DecisionTreeRegressor(max_depth=4, random_state=0)).fit(Xa, ya)
+    a, r = r2_score(yb, np.asarray(ours.predict(Xb))), r2_score(yb, ref.predict(Xb))
+    assert a >= r - 0.08, (a, r)
