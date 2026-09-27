@@ -1,0 +1,4508 @@
+{
+ "commit": "b1d2c8a85e87e95b81bb012862a8bda824432cb1",
+ "files": {
+  "bindings/_mojolearn.mojo": {
+   "bytes": 78539,
+   "kind": "file",
+   "sha256": "a47eae67a31362f7f87bca01e2d336212abc5bc9f3ba98e082b6c240a55dd0bf"
+  },
+  "bindings/_mojolearn_arima.mojo": {
+   "bytes": 17199,
+   "kind": "file",
+   "sha256": "d8e1a63707d508776bc81aedcb995c7d7e1c91c0d853b3811898c861e5686661"
+  },
+  "bindings/_mojolearn_arima_host.mojo": {
+   "bytes": 10959,
+   "kind": "file",
+   "sha256": "03288d38ae36b01d36cbd4fba8a69ea0b9ba4104b7477c7d122157f9daba2b1e"
+  },
+  "bindings/_mojolearn_byte_lm.mojo": {
+   "bytes": 82391,
+   "kind": "file",
+   "sha256": "736eb1b6c97616934ff8b0bf6b784b01d28948155c42f0d7130eeaed980f8b53"
+  },
+  "bindings/_mojolearn_byte_lm_host.mojo": {
+   "bytes": 17071,
+   "kind": "file",
+   "sha256": "19ebc05e3c3541d235e7bcc1258939d365d23a92160ba1b39c1b4edc5041316b"
+  },
+  "bindings/_mojolearn_core_host.mojo": {
+   "bytes": 54643,
+   "kind": "file",
+   "sha256": "9707f3a0c7a6ab981c91ab23dbc67b6caba119f23f5f2d52972ee8c3d14647c9"
+  },
+  "bindings/_mojolearn_embedding.mojo": {
+   "bytes": 11333,
+   "kind": "file",
+   "sha256": "5ffdd5bc7ca17b518f0ed1f0599157df2c526b5f24d3b0a025f348d7ffd72259"
+  },
+  "bindings/_mojolearn_embedding_host.mojo": {
+   "bytes": 7125,
+   "kind": "file",
+   "sha256": "54962db04d7712b988030c1172345e467455daaf9aed62e0b5c7647bc6677e65"
+  },
+  "bindings/_mojolearn_embedding_infer_host.mojo": {
+   "bytes": 3985,
+   "kind": "file",
+   "sha256": "b67b702567353e301b388fe9b5a87ab821113d638c0afb79e1a7615aadcd48ab"
+  },
+  "bindings/_mojolearn_estimators.mojo": {
+   "bytes": 32823,
+   "kind": "file",
+   "sha256": "be488d0aea315c7e2f227fb516d6d3cdd7b3f2e7018d1725b1b81fd50bbeaabb"
+  },
+  "bindings/_mojolearn_estimators_host.mojo": {
+   "bytes": 54190,
+   "kind": "file",
+   "sha256": "bcd27b705243bab3c77706d44f45cc1a6c1eb33cb14193d790e2ff92458c8d1f"
+  },
+  "bindings/_mojolearn_forecast_host.mojo": {
+   "bytes": 6507,
+   "kind": "file",
+   "sha256": "5366002b00f5b1af298d168a23c71c40b75cab4bdb80f5d0b4e78fdf6e7070af"
+  },
+  "bindings/_mojolearn_forest_host.mojo": {
+   "bytes": 28203,
+   "kind": "file",
+   "sha256": "b922c7b90d887d47e7815d6647d4a4bbe9ad763f6ccc3c725ebc8b8d592d8dcc"
+  },
+  "bindings/_mojolearn_gbdt.mojo": {
+   "bytes": 36569,
+   "kind": "file",
+   "sha256": "11c64b6e52c4087c8f3c818ede973de0486c4a067c8313189cb9ef3ae290ac68"
+  },
+  "bindings/_mojolearn_gbdt_host.mojo": {
+   "bytes": 104943,
+   "kind": "file",
+   "sha256": "0135247886634379b354c58d0001696f816e93a1488da8ff62eebeb0710e8b2d"
+  },
+  "bindings/_mojolearn_gp.mojo": {
+   "bytes": 48114,
+   "kind": "file",
+   "sha256": "006061ff8c8c8ca1850ee238ef9db11c5b92639637f2a16641371b3c2d61aa3f"
+  },
+  "bindings/_mojolearn_gp_host.mojo": {
+   "bytes": 22204,
+   "kind": "file",
+   "sha256": "20bc02dd5bdb6120bd3b36eec5aaf6a1272f175dce8c7d26b51c804f370e13e8"
+  },
+  "bindings/_mojolearn_gp_infer_host.mojo": {
+   "bytes": 3590,
+   "kind": "file",
+   "sha256": "ced8cd424b62753cfdd740127edbebb661af3ebd1d844b40e26556bc27b72497"
+  },
+  "bindings/_mojolearn_hdbscan.mojo": {
+   "bytes": 23090,
+   "kind": "file",
+   "sha256": "d64b4ac53387e5e3b94524258a058a6f0d5113ac036970462a56bd41ba749d0c"
+  },
+  "bindings/_mojolearn_hdbscan_host.mojo": {
+   "bytes": 10909,
+   "kind": "file",
+   "sha256": "81c0aafafaf48f834356cc09b3ed957baba3519079e112627fa88c175bdaea66"
+  },
+  "bindings/_mojolearn_hdbscan_infer_host.mojo": {
+   "bytes": 3897,
+   "kind": "file",
+   "sha256": "9ad737353d3c54194c0f98f5e9cd42b7e1b30fa63aca270017068e18c188f562"
+  },
+  "bindings/_mojolearn_ivf.mojo": {
+   "bytes": 13278,
+   "kind": "file",
+   "sha256": "2c8a3ac695a2bea902e0254626bc5abde0ca1c6b5d2295dbeb529aab4cff2610"
+  },
+  "bindings/_mojolearn_ivf_host.mojo": {
+   "bytes": 7331,
+   "kind": "file",
+   "sha256": "366afc3af43fc78d819a8f0b04844b2e5a2098e4e3749560a1385988e19023dd"
+  },
+  "bindings/_mojolearn_ivf_search_host.mojo": {
+   "bytes": 4281,
+   "kind": "file",
+   "sha256": "245c2dde32fcb57e9c67bda9be24a0ed95beedacc9e5f44c3f3e30a558e504d7"
+  },
+  "bindings/_mojolearn_kernel_methods.mojo": {
+   "bytes": 20444,
+   "kind": "file",
+   "sha256": "37e1fa6253a324aa39e3ca2ed1996148b51e3fc955e4013d4621a6eaa37348ef"
+  },
+  "bindings/_mojolearn_kernel_methods_host.mojo": {
+   "bytes": 16586,
+   "kind": "file",
+   "sha256": "5bffe84a6403a08cfed9616f369c1d7c7513ef95bdcef0648cd17423a9ec3ac5"
+  },
+  "bindings/_mojolearn_linalg.mojo": {
+   "bytes": 27979,
+   "kind": "file",
+   "sha256": "7a4a77accd880a60f07e96af4823582491de439b4bcde867271b87853150a95e"
+  },
+  "bindings/_mojolearn_linalg_host.mojo": {
+   "bytes": 24845,
+   "kind": "file",
+   "sha256": "084c26ee02ae7076108de7c5b890afe94458a0d7b9aa52d91096ac5348dd242f"
+  },
+  "bindings/_mojolearn_mamba.mojo": {
+   "bytes": 66228,
+   "kind": "file",
+   "sha256": "acf07fbf572f931ffbe9e1122d9b255718617385979ac67055dc8e97a27e5fd3"
+  },
+  "bindings/_mojolearn_mamba_host.mojo": {
+   "bytes": 23212,
+   "kind": "file",
+   "sha256": "c3b03ec5df11b0a524090e0dc99af14dd1ff271deeefe732bb7d216a11832377"
+  },
+  "bindings/_mojolearn_metrics.mojo": {
+   "bytes": 48706,
+   "kind": "file",
+   "sha256": "22deb444ba6b6b60126840530eaf2a836dcd9725d2734efcf113dcf813215ef2"
+  },
+  "bindings/_mojolearn_metrics_host.mojo": {
+   "bytes": 55702,
+   "kind": "file",
+   "sha256": "3dc96d2aababf2eb293f02cf91ad728805a9130dcde1e2856c1ee93782b3573a"
+  },
+  "bindings/_mojolearn_mixture.mojo": {
+   "bytes": 14332,
+   "kind": "file",
+   "sha256": "a42fe8842150c663b1b3b07f901142648b70ee2a45bb5e96e7ea2ca8d87a8d0a"
+  },
+  "bindings/_mojolearn_mixture_host.mojo": {
+   "bytes": 7416,
+   "kind": "file",
+   "sha256": "19accfad72b29ef56e987e8ec6829759ded45cb475e13a3a07b2e9941b52144f"
+  },
+  "bindings/_mojolearn_mixture_infer_host.mojo": {
+   "bytes": 3996,
+   "kind": "file",
+   "sha256": "b808618a55d01eb4eb17ff8a18d9c35c8384f07d6e210c3308b5a4c242f7ac15"
+  },
+  "bindings/_mojolearn_neural_host.mojo": {
+   "bytes": 40014,
+   "kind": "file",
+   "sha256": "2fcf930f7ba02bd7dfe962120f4e600ebb64af933ae6ec8caa4383f6a0e26da1"
+  },
+  "bindings/_mojolearn_preprocessing.mojo": {
+   "bytes": 5086,
+   "kind": "file",
+   "sha256": "c726859c16b451148471ae9ea3498e891d35999ff1873c023ba499cbdaf41a44"
+  },
+  "bindings/_mojolearn_preprocessing_host.mojo": {
+   "bytes": 11676,
+   "kind": "file",
+   "sha256": "4dd658d2ef41d5875861e6c2157619f5c5d27d3ce7b8c74548f0995780b441b6"
+  },
+  "bindings/_mojolearn_resample.mojo": {
+   "bytes": 13682,
+   "kind": "file",
+   "sha256": "2eef128ae2ffd8d33b38415b3d9a76373e45a1faad4d272290a2ca15c6e2174e"
+  },
+  "bindings/_mojolearn_resample_host.mojo": {
+   "bytes": 15054,
+   "kind": "file",
+   "sha256": "8c42425dd8f25c1c23fe7632dbb762217b1d97f7296b2855322b4cae2d61bc11"
+  },
+  "bindings/_mojolearn_rf.mojo": {
+   "bytes": 42805,
+   "kind": "file",
+   "sha256": "ede1160439e271dd5d222df73c5f81fd34a72049ababd00e1deb104a29752c89"
+  },
+  "bindings/_mojolearn_rf_host.mojo": {
+   "bytes": 26859,
+   "kind": "file",
+   "sha256": "b2846208bd82fcb1b11f6b0119246368978438812ebf77c1fdf9d50d17a18d08"
+  },
+  "bindings/_mojolearn_solver.mojo": {
+   "bytes": 9543,
+   "kind": "file",
+   "sha256": "b8b7c26760725b9fc6d4fbb0dafb167d1bd1276e94423e1acb2ab2ce6a6494c3"
+  },
+  "bindings/_mojolearn_solver_host.mojo": {
+   "bytes": 18134,
+   "kind": "file",
+   "sha256": "52eeb4dcf9a9276f33a51263858273aa166acbebbe14c93f63f913e03b5ff7e7"
+  },
+  "bindings/_mojolearn_svm.mojo": {
+   "bytes": 23929,
+   "kind": "file",
+   "sha256": "e625d9104d91a17c061335219b428fde1400fd809493782f3b88dd1f0914781f"
+  },
+  "bindings/_mojolearn_svm_host.mojo": {
+   "bytes": 34536,
+   "kind": "file",
+   "sha256": "92076e633953d6b7c412c8ebe8df228494798b1c20303a7eef37e01762b2bf86"
+  },
+  "bindings/_mojolearn_tokenizer_host.mojo": {
+   "bytes": 26787,
+   "kind": "file",
+   "sha256": "5dc29e1ab099eb71deb3a1997cc52a6e1c9ea73b74d7f8512032480bb348d89e"
+  },
+  "bindings/_mojolearn_training.mojo": {
+   "bytes": 31753,
+   "kind": "file",
+   "sha256": "fe2fb46b8a681dd314a21f4c75655b7b614bfeeff34a60e62de9332ebce4a2d7"
+  },
+  "bindings/_mojolearn_training_host.mojo": {
+   "bytes": 32996,
+   "kind": "file",
+   "sha256": "749739f04a115030a261f85478b5a48ba4ae202eb3bfd08c4b0ec723b20e322f"
+  },
+  "bindings/_mojolearn_transformer.mojo": {
+   "bytes": 75163,
+   "kind": "file",
+   "sha256": "85434475cc89c1318c0f5c8a8a75a83011a73f48887639ff628c0215c851f82a"
+  },
+  "bindings/_mojolearn_transformer_host.mojo": {
+   "bytes": 18276,
+   "kind": "file",
+   "sha256": "32324cdf278c4b54eb85d76ec5d50ff104e3804b23ebf5221a8c393d563f2afd"
+  },
+  "bindings/_mojolearn_trees.mojo": {
+   "bytes": 29469,
+   "kind": "file",
+   "sha256": "2ee0a30a13c23a893313446354228e3ed22d9fe71d78a216ac1b541a4846c2a5"
+  },
+  "bindings/_mojolearn_trees_host.mojo": {
+   "bytes": 24134,
+   "kind": "file",
+   "sha256": "3f60f3fd4e9b26dac32038b4b52ab3325f12e5d7572c1525d955d5c105c9ae37"
+  },
+  "bindings/_mojolearn_tsa.mojo": {
+   "bytes": 11901,
+   "kind": "file",
+   "sha256": "8b454d20bb02d8314d3bc239cbdfba1c2ffaa9ea8228046da5373650671005e3"
+  },
+  "bindings/_mojolearn_tsa_host.mojo": {
+   "bytes": 11904,
+   "kind": "file",
+   "sha256": "f1bba0cba014e6e7dbeb22fff31f442abfafdeec656407b5a97fe8a85621d181"
+  },
+  "bindings/arima_exog_layout.mojo": {
+   "bytes": 3056,
+   "kind": "file",
+   "sha256": "81915e2a81728a09c9d4aa51dbaa4126a65574765dc0d81556dc297311608ff8"
+  },
+  "bindings/arima_host_predict.mojo": {
+   "bytes": 10268,
+   "kind": "file",
+   "sha256": "cc8293ce5bf09e2e04827be95a4cda853eb8a32ba241dc82dcc1f0459dd249ef"
+  },
+  "bindings/build.sh": {
+   "bytes": 24114,
+   "kind": "file",
+   "sha256": "3e7c239356d4d38f6f1837d8afcb440c21049991d00dfc57944d27c4cb473118"
+  },
+  "bindings/build_arima.sh": {
+   "bytes": 23273,
+   "kind": "file",
+   "sha256": "268dedfb9c05c56c74a18ecbcfa3d5542eee92723e3c4dcf95827660ad02063f"
+  },
+  "bindings/build_arima_host.sh": {
+   "bytes": 71,
+   "kind": "file",
+   "sha256": "8ed72f9d59054ec70f9d45dd9d7a443dc51b1ce629ae8544dba4fa6b5d5d1654"
+  },
+  "bindings/build_byte_lm.sh": {
+   "bytes": 4438,
+   "kind": "file",
+   "sha256": "7c6dede466e15304c245b0f01fa39701a539964555ff17b5f50ca63a437e09d9"
+  },
+  "bindings/build_byte_lm_host.sh": {
+   "bytes": 73,
+   "kind": "file",
+   "sha256": "78c7a283dae77c69595609d9434210bc23e00952ec43d19238896b9334f09f41"
+  },
+  "bindings/build_core_host.sh": {
+   "bytes": 70,
+   "kind": "file",
+   "sha256": "bee7c480bb97cf1be919f3d667b9903206796856faa4536e4602f3febcbcc18e"
+  },
+  "bindings/build_embedding.sh": {
+   "bytes": 15045,
+   "kind": "file",
+   "sha256": "2f86463b45c4b6e2adf6c50598be2e9f9c13e775a5b92ec25e110756acdbac95"
+  },
+  "bindings/build_embedding_host.sh": {
+   "bytes": 75,
+   "kind": "file",
+   "sha256": "ec6f0fc50f6856aa91f96c95de4ffad314050db8feadc4a8f186fe19ab2cda67"
+  },
+  "bindings/build_embedding_infer_host.sh": {
+   "bytes": 81,
+   "kind": "file",
+   "sha256": "2c5f50d31422abf6f06c2d30ffbfb543d001f83d69033189ffdc992d09601ecf"
+  },
+  "bindings/build_estimators.sh": {
+   "bytes": 13530,
+   "kind": "file",
+   "sha256": "04c8e7927b0c9368508f89014e8315af34e50fc78b1c06d8dec6e9cb408f1264"
+  },
+  "bindings/build_estimators_host.sh": {
+   "bytes": 76,
+   "kind": "file",
+   "sha256": "63186124f84916d52e6f3a6fa84592de4cd38dbdc519fb1188dc1539def79406"
+  },
+  "bindings/build_forecast_host.sh": {
+   "bytes": 74,
+   "kind": "file",
+   "sha256": "4e0b1420dec6989be71c39586ca2cd0049d4d23c3641c815db43005d3079f814"
+  },
+  "bindings/build_forest_host.sh": {
+   "bytes": 72,
+   "kind": "file",
+   "sha256": "82c67e2ce9f231611fd3fd4b757e4a4f2c1287cf83bd47ca9d46d66c54b3e7df"
+  },
+  "bindings/build_gbdt.sh": {
+   "bytes": 25274,
+   "kind": "file",
+   "sha256": "73eff57407c6760c4ab4cd57371c68b6313de9bc48a160d82147ea17c46eb19d"
+  },
+  "bindings/build_gbdt_host.sh": {
+   "bytes": 70,
+   "kind": "file",
+   "sha256": "7490f93e0889635ce2eedc9677e8be722fd50306dac2d923282c8f80357aa472"
+  },
+  "bindings/build_gp.sh": {
+   "bytes": 21574,
+   "kind": "file",
+   "sha256": "f2d9462cc2c7d8d7d5d072723de22e95a72a8ec9e3c8b8deabc68576ecca917d"
+  },
+  "bindings/build_gp_host.sh": {
+   "bytes": 68,
+   "kind": "file",
+   "sha256": "e42cffcf198e78ec12e99a23f50b833f3b304a3ffc7388b11f975fcc22afe390"
+  },
+  "bindings/build_gp_infer_host.sh": {
+   "bytes": 74,
+   "kind": "file",
+   "sha256": "839833dd7b565a0e2bd960babf3595d2efef3d5edf02cee13fd2a8b396a77c1b"
+  },
+  "bindings/build_hdbscan.sh": {
+   "bytes": 15124,
+   "kind": "file",
+   "sha256": "47a89f1ea893d556b2c27607e3ab994979dba2f24bb37834aae35e4423a8572d"
+  },
+  "bindings/build_hdbscan_host.sh": {
+   "bytes": 73,
+   "kind": "file",
+   "sha256": "5fa6dbb08d53cb8518be71ebe3c3985110831d7ee934559a52acfd33f28dcfeb"
+  },
+  "bindings/build_hdbscan_infer_host.sh": {
+   "bytes": 79,
+   "kind": "file",
+   "sha256": "5a805c710fa6dbfe6d014ff6d667fa7522598fb10370213c9b513beaa5ad700f"
+  },
+  "bindings/build_host_family.sh": {
+   "bytes": 6190,
+   "kind": "file",
+   "sha256": "6ca0ebc957012be2988f0c5003360f331168ad47563a5b0dc8efad43063eef3c"
+  },
+  "bindings/build_ivf.sh": {
+   "bytes": 15118,
+   "kind": "file",
+   "sha256": "e4d92d565f0cb4d246dfadc1933ef82b394e98b6e8070c65086f99078ef6024c"
+  },
+  "bindings/build_ivf_host.sh": {
+   "bytes": 69,
+   "kind": "file",
+   "sha256": "a168ea84dc94dc06846e33cabda0b113ba4eda2a279df9a01a78217bd1bc5680"
+  },
+  "bindings/build_ivf_search_host.sh": {
+   "bytes": 76,
+   "kind": "file",
+   "sha256": "3c7c3cfe06c471357b68b9e12b7aaafe4e41f92f6bd7762d2bdb86893a736d70"
+  },
+  "bindings/build_kernel_methods.sh": {
+   "bytes": 15643,
+   "kind": "file",
+   "sha256": "0a25904ede4349e6018ba0306f24e1795cb73dfc6e94db57bd2cc4620780e364"
+  },
+  "bindings/build_kernel_methods_host.sh": {
+   "bytes": 80,
+   "kind": "file",
+   "sha256": "2e2463fe0eac10309375dfc38dff20677776ff9ca5487147ecead9b851c15597"
+  },
+  "bindings/build_linalg.sh": {
+   "bytes": 22428,
+   "kind": "file",
+   "sha256": "f52a478ad1f063bf5715268623ca28f3220da6076b604d064ec0e461bfbaa1d1"
+  },
+  "bindings/build_linalg_host.sh": {
+   "bytes": 72,
+   "kind": "file",
+   "sha256": "b57f5c0920035fcd7a601b85a0634376d19911a4e42b4cd3a0f3888d3f4cce39"
+  },
+  "bindings/build_mamba.sh": {
+   "bytes": 22723,
+   "kind": "file",
+   "sha256": "c601c3224b0b4cf10b072c62d9392603f2f3d79b2d6f0ead81488fb37a133614"
+  },
+  "bindings/build_mamba_host.sh": {
+   "bytes": 71,
+   "kind": "file",
+   "sha256": "e3b2325d9852c455b4748fe6f9b85e75d4e8310e40b7b17beef3423f3eae64c1"
+  },
+  "bindings/build_metrics.sh": {
+   "bytes": 20535,
+   "kind": "file",
+   "sha256": "e991ce84ddea318881f90433ac87d8a3ed3f0e158ac4ecc03585316f782bb637"
+  },
+  "bindings/build_metrics_host.sh": {
+   "bytes": 73,
+   "kind": "file",
+   "sha256": "5ed5e212c055f68a19efa0f9ded2c9635e32dac8a41e2a8d2da2e1de989e8dfe"
+  },
+  "bindings/build_mixture.sh": {
+   "bytes": 15477,
+   "kind": "file",
+   "sha256": "93beb0f7f319332b6dd30f09a77b69e93187223b75071373b552ba7cda7e6603"
+  },
+  "bindings/build_mixture_host.sh": {
+   "bytes": 73,
+   "kind": "file",
+   "sha256": "7a5045b139dc2f335f1020309e038c5b80c4060748b0eff3d0d2b6181bf92939"
+  },
+  "bindings/build_mixture_infer_host.sh": {
+   "bytes": 79,
+   "kind": "file",
+   "sha256": "01ade520740cfabf556f5e02f93cf0f4cdd3e1855bc594b2485138b8f8ef7b4f"
+  },
+  "bindings/build_neural_host.sh": {
+   "bytes": 72,
+   "kind": "file",
+   "sha256": "35441ca948f5494344dca4fe91dcb31d41720b82d338bade5287ac4384519228"
+  },
+  "bindings/build_preprocessing.sh": {
+   "bytes": 5250,
+   "kind": "file",
+   "sha256": "ecc4858f0a1a1a78db7b2f7f27f0cf8ada157f37cfc2cef0af7360ffa0b8dcfd"
+  },
+  "bindings/build_preprocessing_host.sh": {
+   "bytes": 79,
+   "kind": "file",
+   "sha256": "ff03fbb485ffc0f78d86837ad397e3a0294043b7ef4592f52d32d7d1186fd6e0"
+  },
+  "bindings/build_resample.sh": {
+   "bytes": 15437,
+   "kind": "file",
+   "sha256": "78aa0b569579ff3419d6d6b5be04f188e959e403ef287dc0e9f7bbe5419decb1"
+  },
+  "bindings/build_resample_host.sh": {
+   "bytes": 74,
+   "kind": "file",
+   "sha256": "dea353a4673fa4e6dcd90004b91ab4552a68464db2d4ed11af3c0c785f68670d"
+  },
+  "bindings/build_rf.sh": {
+   "bytes": 13249,
+   "kind": "file",
+   "sha256": "5014f4ef98fab137cc2791baaeecb094c257e6af5e036ad39ac7ed3e45655250"
+  },
+  "bindings/build_rf_host.sh": {
+   "bytes": 68,
+   "kind": "file",
+   "sha256": "4f56c5937368352cb67569cebf77292b54a7d673216389b4e6670fdb6914f503"
+  },
+  "bindings/build_solver.sh": {
+   "bytes": 19402,
+   "kind": "file",
+   "sha256": "3ffec6fb9b92a846df2aceb63556f4d4ccee83f523f528bcae54da5a056baba3"
+  },
+  "bindings/build_solver_host.sh": {
+   "bytes": 72,
+   "kind": "file",
+   "sha256": "c05a81e1b1570bf7cd7b4b6bde5f7f619b8a4a4a643f54e2b0b1449630e1c98c"
+  },
+  "bindings/build_svm.sh": {
+   "bytes": 22075,
+   "kind": "file",
+   "sha256": "070607eb136850687b08604099d41df8caf745259e6b2efa76347fa21326d6a4"
+  },
+  "bindings/build_svm_host.sh": {
+   "bytes": 69,
+   "kind": "file",
+   "sha256": "59a83fb8cb180f9d19f4789bc67a28e1475cc1cbb7fd5f0d623a8a4ff6b81807"
+  },
+  "bindings/build_tokenizer_host.sh": {
+   "bytes": 75,
+   "kind": "file",
+   "sha256": "23e05e4ad63247e52abd2bfedc26e4a96f47f48f1012300cb194f794213d3a9e"
+  },
+  "bindings/build_training.sh": {
+   "bytes": 20433,
+   "kind": "file",
+   "sha256": "9f9cfc56831ab20ad7ac94303a93b464c3236ca07271bd26bfa66b2d46e0174f"
+  },
+  "bindings/build_training_host.sh": {
+   "bytes": 74,
+   "kind": "file",
+   "sha256": "063a5f463bca7d65d6c63f3759eab6673750e174d7a7eeccca8fc925dc3a61f1"
+  },
+  "bindings/build_transformer.sh": {
+   "bytes": 20189,
+   "kind": "file",
+   "sha256": "d9637c1966e69b6ad6a688df67f9ed6df5eaa8c86bb3fa67fdc3ce6b1a48dc45"
+  },
+  "bindings/build_transformer_host.sh": {
+   "bytes": 77,
+   "kind": "file",
+   "sha256": "feed4b42c55d6e10131d49d8dcf34eb04f196e2e10f3218168849be212bb1b6a"
+  },
+  "bindings/build_trees.sh": {
+   "bytes": 13867,
+   "kind": "file",
+   "sha256": "2ff6eaa77b1957db9773e11512011a70521b722fe01cedf17f3edd19d019534c"
+  },
+  "bindings/build_trees_host.sh": {
+   "bytes": 71,
+   "kind": "file",
+   "sha256": "e57d78cc9f3e91b3ae236325185eb14a5cb5e62f220c319d8b162fba35377845"
+  },
+  "bindings/build_tsa.sh": {
+   "bytes": 15081,
+   "kind": "file",
+   "sha256": "32641005056644949328aa179e03df0d23f9122461e97089edbbbea50ab3542e"
+  },
+  "bindings/build_tsa_host.sh": {
+   "bytes": 69,
+   "kind": "file",
+   "sha256": "4916ee562acf8e4670e7346036e37644a6cfe342875b7a3547286770522fabdb"
+  },
+  "bindings/embedding_host_forward.mojo": {
+   "bytes": 3123,
+   "kind": "file",
+   "sha256": "5a6e4f2c8a660c1b6dab184fe90d241ef373ede84489d01a83315f51e4bfcbe6"
+  },
+  "bindings/forest_export_binding.mojo": {
+   "bytes": 4301,
+   "kind": "file",
+   "sha256": "98e71f1337f910a889d5cb992946eb5a197dc3447a98410c93dd1e663bd54943"
+  },
+  "bindings/forest_host_groves_binding.mojo": {
+   "bytes": 5316,
+   "kind": "file",
+   "sha256": "11d4444b77a06a4d7b3c398673d81998b98585df04282d2cfed173df413461f7"
+  },
+  "bindings/forest_inference_binding.mojo": {
+   "bytes": 6986,
+   "kind": "file",
+   "sha256": "257da34a1dae365693bfc27aafa0341ad1a2f93b9378615754145e5827f47afa"
+  },
+  "bindings/gp_host_predict.mojo": {
+   "bytes": 11966,
+   "kind": "file",
+   "sha256": "aad35950297a6346019a0399a9b3c743dec5620383bc77aa8b9417544a3e7104"
+  },
+  "bindings/hdbscan_host_predict.mojo": {
+   "bytes": 7835,
+   "kind": "file",
+   "sha256": "38c37b0d3601b7abbcf139b946a9b6b80657675933524f30f6c17ee243730793"
+  },
+  "bindings/holtwinters_host_predict.mojo": {
+   "bytes": 7945,
+   "kind": "file",
+   "sha256": "32d8f6b55bffadbf88f1e7c4fbd534100ae2c1a25571facf01107d1a83ce21a4"
+  },
+  "bindings/host_helpers.mojo": {
+   "bytes": 17492,
+   "kind": "file",
+   "sha256": "2e0420ea91d90e6fa79ea27c2f1bf7a14228f29d7952697f20d47c01b1cc66bb"
+  },
+  "bindings/hostptr.mojo": {
+   "bytes": 3675,
+   "kind": "file",
+   "sha256": "46839d43f4ab9f0de3250a6a8b43acae82bcfa4334b059a761d8db1445a5e2c3"
+  },
+  "bindings/hotpath_helpers.mojo": {
+   "bytes": 32318,
+   "kind": "file",
+   "sha256": "e2f0ac1b5313392cebc1fb266ae5764ac4d627de91c9d2657356444fad53dc19"
+  },
+  "bindings/ivf_host_search.mojo": {
+   "bytes": 5503,
+   "kind": "file",
+   "sha256": "cdfcab89acbc9a00a2a6eac99d4f00d81801bd7a0b11d110a983f1e5e4720301"
+  },
+  "bindings/ivf_index_arrays.mojo": {
+   "bytes": 10530,
+   "kind": "file",
+   "sha256": "c4d5169d843e4897b1ffa9d5e17a64b65f1a339cab34da346ef6f5c5aceddc54"
+  },
+  "bindings/kpss_host_test.mojo": {
+   "bytes": 5842,
+   "kind": "file",
+   "sha256": "88b130ee4d9c381fa9457bbedb1fa51ab1ac3d8bd4372462b34ad690e7c3f4dc"
+  },
+  "bindings/mixture_host_scoring.mojo": {
+   "bytes": 7317,
+   "kind": "file",
+   "sha256": "5b8be8f96869a9474900146865282000997a8b95fa8edad65a51e17c7382cc5b"
+  },
+  "checks/__init__.mojo": {
+   "bytes": 269,
+   "kind": "file",
+   "sha256": "8e96670fd648e97153dfb9fc3a5ff53b1cb4d6c463551e5675074c7904904d9f"
+  },
+  "checks/batch_invariance_check.mojo": {
+   "bytes": 54143,
+   "kind": "file",
+   "sha256": "888712ba5982e76383de3024d6573ae70b98bc82fb2da3cd4ec46a4ad43fdd05"
+  },
+  "checks/bin_order_check.mojo": {
+   "bytes": 11144,
+   "kind": "file",
+   "sha256": "bea0d1bd81cb1d05094a7d5eff2c0193396794bc6efde084fdd1ae39edce4241"
+  },
+  "checks/binarization_check.mojo": {
+   "bytes": 4131,
+   "kind": "file",
+   "sha256": "cfffe6c204a74b453dbc271a6093904c86061682124be71edb9a28e235ef7d32"
+  },
+  "checks/binary_ranking_smoke.py": {
+   "bytes": 2945,
+   "kind": "file",
+   "sha256": "3a033ea85d7580f7874b33f721fce26fac4a9d446d2a2e2e2614a92bc7925046"
+  },
+  "checks/boosting_check.mojo": {
+   "bytes": 12424,
+   "kind": "file",
+   "sha256": "2c7b7da635db14a6a89b9915805580be8a81b333bd4d2fc6e1afe54a632d5cdd"
+  },
+  "checks/boosting_hist_check.mojo": {
+   "bytes": 26516,
+   "kind": "file",
+   "sha256": "165c9ce4ad6dd94ea82676f50d9752897e61649e74894b36115b206288fcfe22"
+  },
+  "checks/bootstrap_check.mojo": {
+   "bytes": 21245,
+   "kind": "file",
+   "sha256": "fe436585218d33cfdd06600bb6108fa006002f3d040540e16f5c076af805dc26"
+  },
+  "checks/bootstrap_delta_probe.mojo": {
+   "bytes": 5368,
+   "kind": "file",
+   "sha256": "648873f6a34b06faa22ce0d0f0fc4bceddd87ed8979dcea8f5020228e78b60c9"
+  },
+  "checks/border_types_check.mojo": {
+   "bytes": 5050,
+   "kind": "file",
+   "sha256": "08501c4641be988ee1ffb4b2f2dee0d1df3c1680a166d88044f64f0985d73422"
+  },
+  "checks/catboost_apply_check.mojo": {
+   "bytes": 10178,
+   "kind": "file",
+   "sha256": "30c0f83eb1e4bd1caa6ec48b5338a2f444fbc9b891a7491017cf44bebcf32564"
+  },
+  "checks/cindex_packing_check.mojo": {
+   "bytes": 7008,
+   "kind": "file",
+   "sha256": "c42ac76667e1e101431cfb11925fa32552b2ddb33c1d43091c9a73202b6f9111"
+  },
+  "checks/cityhash_check.mojo": {
+   "bytes": 5973,
+   "kind": "file",
+   "sha256": "2a311b320af8a6fa6ac9e15d986b066753e4ddb5073de4ed68af857e2310f9f5"
+  },
+  "checks/classification_forest_scoring.py": {
+   "bytes": 2783,
+   "kind": "file",
+   "sha256": "ee877e1256710cd7fec42ca13a2dd4ddccfd3b2efb02a99969e9bc4109477ed0"
+  },
+  "checks/classification_metrics_binding.py": {
+   "bytes": 11287,
+   "kind": "file",
+   "sha256": "a65ddfc6a37d95ac836de0f557085c42e1d8900c55953a96b15f878119ecf9fa"
+  },
+  "checks/copy_histograms_check.mojo": {
+   "bytes": 5105,
+   "kind": "file",
+   "sha256": "3ce4ed3d6904cafd2c641da11362c19563b73e728ae933fd195a3595671671f1"
+  },
+  "checks/ctr_apply_check.mojo": {
+   "bytes": 99891,
+   "kind": "file",
+   "sha256": "6a3d0a6babb19e7fbc210661b5284cd289939d5a4ae8350f54af916e253f34b0"
+  },
+  "checks/ctr_check.mojo": {
+   "bytes": 27960,
+   "kind": "file",
+   "sha256": "6d696467face2ca23f94aa535b9fab708abafdf44bb6d1d872694bfe324afa9b"
+  },
+  "checks/ctr_device_check.mojo": {
+   "bytes": 35527,
+   "kind": "file",
+   "sha256": "d52666b33eaa9fbce33775ffde054965c0ee21e405079444384bf73cca0110b8"
+  },
+  "checks/ctr_kernels_check.mojo": {
+   "bytes": 21500,
+   "kind": "file",
+   "sha256": "2826c9915b50b0d6a9157713bbe04550377a0f6be0184ce5ac443fbc7883292d"
+  },
+  "checks/ctr_permutation_check.mojo": {
+   "bytes": 16333,
+   "kind": "file",
+   "sha256": "772caa49558ef27337022ba6ee43e69b3eb35b790196a8f3a31b86599e4d7b80"
+  },
+  "checks/ctr_train_check.mojo": {
+   "bytes": 20261,
+   "kind": "file",
+   "sha256": "f5f93970bd265acaf974a8646d1510f353a98a3019be2139ae713766a701ce9f"
+  },
+  "checks/density_probe.mojo": {
+   "bytes": 8126,
+   "kind": "file",
+   "sha256": "a3aa3dc4a1303efc8ffccdafeb04b756daa821bfd4b964d21845cd94c5be66eb"
+  },
+  "checks/depthwise_check.mojo": {
+   "bytes": 47779,
+   "kind": "file",
+   "sha256": "c24a42159c2f6d6db0ba804a882898f5604be676998e0fbb2944ee346337193a"
+  },
+  "checks/depthwise_trace_probe.mojo": {
+   "bytes": 8550,
+   "kind": "file",
+   "sha256": "3db0f55e980d65d9ec64c1e93ff0abcc076f1b06ff02b16bce5b431da9ab6f9a"
+  },
+  "checks/determinism_soak.mojo": {
+   "bytes": 11596,
+   "kind": "file",
+   "sha256": "f61feb8126b576c68bac87a715be5f670509ded42b5d4f73d405ea48bad4244e"
+  },
+  "checks/device_context_queue_repro.mojo": {
+   "bytes": 3408,
+   "kind": "file",
+   "sha256": "c4bd1794efc730b4c51d991956ec7b6276fb767e93b8c0672f84fed1a0177a51"
+  },
+  "checks/divergent_barrier_probe.mojo": {
+   "bytes": 5965,
+   "kind": "file",
+   "sha256": "cdf7d79fc30ccd866546b0e53862f99262b2171b76900facd4b2773e24c5fe4e"
+  },
+  "checks/division_check.mojo": {
+   "bytes": 22027,
+   "kind": "file",
+   "sha256": "9e37dfeb8cde9b2667efdfedd8234c94bae0a6761e56d3ff2bd3f0f7dfce1e92"
+  },
+  "checks/dynamic_boosting_folds_check.mojo": {
+   "bytes": 46983,
+   "kind": "file",
+   "sha256": "3172fe0cbb328a9a34f947c97fdb9db9a64c5181cbbacb0fe42d65edf9ea684a"
+  },
+  "checks/e2_growth_cards.mojo": {
+   "bytes": 16980,
+   "kind": "file",
+   "sha256": "52cb5dfa4ac1a1a96d7784561e32ca163bc18834c7933ac1be727021ebc34923"
+  },
+  "checks/early_stop_check.mojo": {
+   "bytes": 8183,
+   "kind": "file",
+   "sha256": "e9ed29d4f4558326b1a6c215f4f458a5debab34556ab8f599d381bbc8c6a2118"
+  },
+  "checks/estimation_bench.mojo": {
+   "bytes": 6067,
+   "kind": "file",
+   "sha256": "5b478b6cf46edff1b3bd5e3ccd7ac9d17d426f2fe3b20fad377c0e5e416d4729"
+  },
+  "checks/exact_estimation_check.mojo": {
+   "bytes": 18191,
+   "kind": "file",
+   "sha256": "5d2317d66973ed8c865b760c3bbcbe756337ecff3bc6c84657340217f907f75a"
+  },
+  "checks/extratrees_gpu_only_binding_smoke.py": {
+   "bytes": 1204,
+   "kind": "file",
+   "sha256": "43af4615808aba22fe6d0f10527b368fb717cd60a81078d6e60a6ed3634c2dd8"
+  },
+  "checks/feature_parallel_identity_check.mojo": {
+   "bytes": 22743,
+   "kind": "file",
+   "sha256": "8e30656117066892f981cc5ee518d3617e03e70e26574e9b956b571e62acbf9b"
+  },
+  "checks/feature_tensor_check.mojo": {
+   "bytes": 48383,
+   "kind": "file",
+   "sha256": "06476c4d18b9e1ef8edee236db0cfbbe87589abb61725644745d55289a5ba1db"
+  },
+  "checks/fit_pointwise_check.mojo": {
+   "bytes": 10113,
+   "kind": "file",
+   "sha256": "8789c57507deb32647d70c5394815a42d343e4253d55ddcf89a0c6fdca95bf34"
+  },
+  "checks/fixed_point.mojo": {
+   "bytes": 8438,
+   "kind": "file",
+   "sha256": "ae4b5471247f4a479a2e0abfc1c3fadd9e7db95822ebb558e0ef4ad164e6e6aa"
+  },
+  "checks/fold_tasks_check.mojo": {
+   "bytes": 12370,
+   "kind": "file",
+   "sha256": "6709dd87de1a42ad3e828f5b58eb91455364b9855ed2a08308413e8a8dec875c"
+  },
+  "checks/forest_export_protocol.mojo": {
+   "bytes": 2050,
+   "kind": "file",
+   "sha256": "9793dead20ef3c561ea9a2211caaa45750dce83a26fa39d9869e1e07a38c92c9"
+  },
+  "checks/forest_export_public.py": {
+   "bytes": 3150,
+   "kind": "file",
+   "sha256": "9ec86d614b82c23708538ac4a42d86abba8a8acc5c5efd28c97d3fde650b97cf"
+  },
+  "checks/forest_inference_gpu.mojo": {
+   "bytes": 9055,
+   "kind": "file",
+   "sha256": "b3b5b761c45e0507a31a9b8ee0f021e03393ce79ace55b9195ee01d8176f6bd3"
+  },
+  "checks/forest_inference_model.mojo": {
+   "bytes": 14321,
+   "kind": "file",
+   "sha256": "5779c4cac2e80b09e0f7103dfb65b463b00d22d3f792b00444f760a295e687be"
+  },
+  "checks/forest_inference_public.py": {
+   "bytes": 5320,
+   "kind": "file",
+   "sha256": "a16545809a5c8ed93fb114facf0dd90c8f3105a3b3bb721a895c3c455870ab3b"
+  },
+  "checks/forest_ordered_resident_policy.mojo": {
+   "bytes": 2120,
+   "kind": "file",
+   "sha256": "e651746e0e38e72d6c06efb7831388538f5e62ed59ffac899f5863eea12da112"
+  },
+  "checks/forest_protocol_binding.py": {
+   "bytes": 2745,
+   "kind": "file",
+   "sha256": "092894151ce46aed8384813d5614fda0b899cac48007e12eb03ef98ad7bf696a"
+  },
+  "checks/freq_ctr_device_check.mojo": {
+   "bytes": 6699,
+   "kind": "file",
+   "sha256": "59e7094ab2d4debe4fcc1b8b4919d8e71d6fcdc5e9c04af20e96cab0fd9ac3eb"
+  },
+  "checks/gbdt_adapters_protocol_smoke.py": {
+   "bytes": 3178,
+   "kind": "file",
+   "sha256": "72a59c50c84845a32045c2e45a2711c85db999ac224ce49dfaab7f1721e90111"
+  },
+  "checks/gbdt_adapters_smoke.py": {
+   "bytes": 3926,
+   "kind": "file",
+   "sha256": "d7ef0ecb319f36609e614f34445e4b075c87be63851a61fe5929237947d0d6e0"
+  },
+  "checks/gbdt_binary_prediction_smoke.py": {
+   "bytes": 1264,
+   "kind": "file",
+   "sha256": "56b77178e33709c75a1b0fddd6e70ee6a7e149c7a972cdf99daba45ed03f384a"
+  },
+  "checks/gbdt_cindex_staging_check.mojo": {
+   "bytes": 3852,
+   "kind": "file",
+   "sha256": "e6d62afe88bf6a1b28e8dfaf3146e410b0b21416acee9bfd3de2852cf7a605eb"
+  },
+  "checks/gbdt_feature_fraction_ab.py": {
+   "bytes": 5690,
+   "kind": "file",
+   "sha256": "5cc39f4d2b9e8654d50930f5fc645aeeb921d317bf54cd37b99cabf5e1e5aa83"
+  },
+  "checks/gbdt_feature_fraction_binding.py": {
+   "bytes": 4838,
+   "kind": "file",
+   "sha256": "cc69680905ad39ac7fd62547db50ecc23eea49cc72521bb0688c16138538efe5"
+  },
+  "checks/gbdt_fused_fit_check.mojo": {
+   "bytes": 2833,
+   "kind": "file",
+   "sha256": "861f44b7ddab7f628bff8c7445bea29c8338a95898115f04aa190e7ac836e24c"
+  },
+  "checks/gbdt_fused_move_check.mojo": {
+   "bytes": 6486,
+   "kind": "file",
+   "sha256": "97b8966cdd7ecb3e2aa12794d465f0f2e16d8459972651dcbf7f02aeb2e41e98"
+  },
+  "checks/gbdt_large_partition_check.mojo": {
+   "bytes": 4818,
+   "kind": "file",
+   "sha256": "1792e29048fbcc53cd59892f2dfc81a1d760b9035cc81a33394d9e866e8740fc"
+  },
+  "checks/gbdt_partition_cache_bench.mojo": {
+   "bytes": 2534,
+   "kind": "file",
+   "sha256": "9337f48471ce21d11d56da06a35ee465eb0d6d4a8501cd2ff50f6b387b14f2f9"
+  },
+  "checks/gbdt_partition_cache_check.mojo": {
+   "bytes": 4420,
+   "kind": "file",
+   "sha256": "d35279f3b61fbf443ace3b8165031fc750c6766dd4b5550e69d118646ca9d848"
+  },
+  "checks/gbdt_partition_route_check.mojo": {
+   "bytes": 1444,
+   "kind": "file",
+   "sha256": "aeb9d2444fbd23b0f3cc0e1ee2bf15cc3f351ffe618d4dcc431f3fd6441b1516"
+  },
+  "checks/gbdt_per_round_check.mojo": {
+   "bytes": 10293,
+   "kind": "file",
+   "sha256": "15b0698ece328509c3966b89bf89c32110f0e547cd0c394def85b48cb01cfc79"
+  },
+  "checks/gbdt_prepared_check.mojo": {
+   "bytes": 6113,
+   "kind": "file",
+   "sha256": "e3566e3361a35bfc3b0a4dcda7a3183b9bde74babbb40ce8235f2d479579cf6f"
+  },
+  "checks/gbdt_sub_byte_identity_check.py": {
+   "bytes": 8425,
+   "kind": "file",
+   "sha256": "793ea0194b6a15b8146fb8e368281f71e9e6d92d703716e38c8602b30df610ba"
+  },
+  "checks/gbdt_sym_ridx_ab.py": {
+   "bytes": 3693,
+   "kind": "file",
+   "sha256": "f1fe201d1e59e1cada2227593c487ba8b6fbab20d6dbf53ed0b505c5e57f60d4"
+  },
+  "checks/gbdt_sym_ridx_fit_check.mojo": {
+   "bytes": 4018,
+   "kind": "file",
+   "sha256": "b1fee8d405d247766285e29982cf53ff391ecc786a51a8db2a182d9296a0a921"
+  },
+  "checks/gpu_lib_check.mojo": {
+   "bytes": 8326,
+   "kind": "file",
+   "sha256": "1e4dbde087160f6aa7e784bcf58728ab0f0c16a6edff51abd91563d95cac9001"
+  },
+  "checks/gpu_lib_worker_check.mojo": {
+   "bytes": 11929,
+   "kind": "file",
+   "sha256": "6fc5361be647b3566f2f80eb433283bd32cb8064279ce3b621321fd2553dded9"
+  },
+  "checks/gram_splitk_check.mojo": {
+   "bytes": 39029,
+   "kind": "file",
+   "sha256": "a3a68bbe2e2fc41ce9c8dc8c605fc57520cd0187017467fe59251665e3cfc504"
+  },
+  "checks/greedy_log_sum_check.mojo": {
+   "bytes": 3131,
+   "kind": "file",
+   "sha256": "a5d6059d30a03b0c256490b54f2618bed91f18b6587b64059b6a30b32796af3a"
+  },
+  "checks/grow_policy_check.mojo": {
+   "bytes": 16046,
+   "kind": "file",
+   "sha256": "12910d0d656aac26dd8b520a78354d16518d81bf377359b5603b49efb6952205"
+  },
+  "checks/hardware_matrix.mojo": {
+   "bytes": 16645,
+   "kind": "file",
+   "sha256": "caffa4909c69f87a2adda2ddb90ed372b0ff9e58cc70501db084039aaa510aea"
+  },
+  "checks/hardware_matrix_check.mojo": {
+   "bytes": 27731,
+   "kind": "file",
+   "sha256": "1c394d4446f3288dc35562f0dff376ef4019a839b084670c66e94c27727f8f37"
+  },
+  "checks/hist2_check.mojo": {
+   "bytes": 63715,
+   "kind": "file",
+   "sha256": "c012fd27a1471d6c6aafb182418bb01a2315d493de5e69c06d2536e20ed19138"
+  },
+  "checks/hist_check.mojo": {
+   "bytes": 75151,
+   "kind": "file",
+   "sha256": "1b4148459858c294fdeb83050e96ecb2c798af61a57b56045e76f83bb2033d9b"
+  },
+  "checks/hist_dump_check.mojo": {
+   "bytes": 9682,
+   "kind": "file",
+   "sha256": "2a7b0b8ad2fc4f98d9f9e6ee6886e34ff6bc5415ab1fa5a58f43b0d0b6d530e9"
+  },
+  "checks/histograms_helper_check.mojo": {
+   "bytes": 8420,
+   "kind": "file",
+   "sha256": "f4fb3cdda5c57730a7dde43df747e2604a2eafc8645b4dd851237b5fc69e0ca9"
+  },
+  "checks/hostptr_check.mojo": {
+   "bytes": 2852,
+   "kind": "file",
+   "sha256": "97aa9a1b3c9d33d433d23e17d61045e8513dd6a8f15883da8d4f659394c3676c"
+  },
+  "checks/identity_trace_check.mojo": {
+   "bytes": 17997,
+   "kind": "file",
+   "sha256": "0aecd9bd700f0940ab174b2b5aa3d42a969570a721b73d1af3a448ed722726b1"
+  },
+  "checks/ieee_arith_check.mojo": {
+   "bytes": 33574,
+   "kind": "file",
+   "sha256": "e1085fd662b3a9542fce22db1737265b90b23bdba6db46bc2894cc2b4de98e3b"
+  },
+  "checks/interleaved.mojo": {
+   "bytes": 3208,
+   "kind": "file",
+   "sha256": "eb3a34fd6d244998c77f29b602e3af01b81d2c7e616d7c3f6c0049ae41dd9935"
+  },
+  "checks/kernel_matrix.mojo": {
+   "bytes": 131693,
+   "kind": "file",
+   "sha256": "3bb93f03fd5739c151866e2d56df640b67e1667b795dffda2ce7a5708586fa38"
+  },
+  "checks/launch_probe.mojo": {
+   "bytes": 9356,
+   "kind": "file",
+   "sha256": "44068aec4653fe67d949d2ce3ee7c681b339bbf0c65b89aae7de2291142a2bb6"
+  },
+  "checks/layout_check.mojo": {
+   "bytes": 9133,
+   "kind": "file",
+   "sha256": "fb645ff0752b6c844b4361aae71b82efba98462dae598e8a52fcab5aea7bf118"
+  },
+  "checks/leaf_partition_check.mojo": {
+   "bytes": 12480,
+   "kind": "file",
+   "sha256": "cd72aecf0c5e4dc98433abaf0cc4440165263c3cc15fdc60f36afbe596195998"
+  },
+  "checks/leafwise_scores_check.mojo": {
+   "bytes": 26766,
+   "kind": "file",
+   "sha256": "d8da986918ce26a3ec26ed7721bd5864861ef907ce682ea51ba3b3999aad3ddd"
+  },
+  "checks/level_bench.mojo": {
+   "bytes": 51287,
+   "kind": "file",
+   "sha256": "cd3c9aca73944f28a820acafe3d4bfc2580f9583b254b37ec7a42ad22983b523"
+  },
+  "checks/level_check.mojo": {
+   "bytes": 17093,
+   "kind": "file",
+   "sha256": "2868894d4f3cebe0bde5fe8dee45a938c2671706cb8b98f19bca20b69d2223dd"
+  },
+  "checks/log_loss_smoke.py": {
+   "bytes": 1457,
+   "kind": "file",
+   "sha256": "b388b19da98eff13ed51ba7d81311bc54f25574621c80289ec16a781fee9a927"
+  },
+  "checks/logloss_estimator_check.mojo": {
+   "bytes": 11179,
+   "kind": "file",
+   "sha256": "6af7ab974a4e4c92a18cabc2233da86bfee55a24949491b1a1fb109c7a8acfd0"
+  },
+  "checks/logloss_leaf_oracle_check.mojo": {
+   "bytes": 39669,
+   "kind": "file",
+   "sha256": "4e5248e0f3b7299393ddf9f9923985879389286c7f4616d95b681ae4ea8d413e"
+  },
+  "checks/logloss_target_check.mojo": {
+   "bytes": 16351,
+   "kind": "file",
+   "sha256": "8f0ee198deb976a4e4b6a89356e397e26efab43d8b62acf0990701c412e514ae"
+  },
+  "checks/logloss_train_check.mojo": {
+   "bytes": 7911,
+   "kind": "file",
+   "sha256": "3d7d3e207774a9a0110f4122c4dcbe409443c116682a743aa80106375cc4d43c"
+  },
+  "checks/loss_oracle_check.mojo": {
+   "bytes": 35649,
+   "kind": "file",
+   "sha256": "9313e6976c4ae35a8fc7adba654a7c35e244f9b2b7b58d54cad62fa7423f7f98"
+  },
+  "checks/lossguide_check.mojo": {
+   "bytes": 12123,
+   "kind": "file",
+   "sha256": "440a813e7bcf36396801503514817be7feba195a098197277d21cad2be6d99bd"
+  },
+  "checks/lossguide_policy_check.mojo": {
+   "bytes": 31103,
+   "kind": "file",
+   "sha256": "4464a15e5f372f8a0faf5696f185373e4b60c2369b0ec74bce717ff862804407"
+  },
+  "checks/min_child_hessian_binding.py": {
+   "bytes": 4320,
+   "kind": "file",
+   "sha256": "be103857dcb3480e0d8760d1262386d499b03781f222407067214b9ee5fb936e"
+  },
+  "checks/min_child_hessian_check.mojo": {
+   "bytes": 7163,
+   "kind": "file",
+   "sha256": "7753dc4436f2b001bea613a85e1eb9b55de010b74a91075a1eb8e952e510c103"
+  },
+  "checks/min_child_hessian_python.sh": {
+   "bytes": 407,
+   "kind": "file",
+   "sha256": "edbcdf5f471a7211408e3e110dce2db3f1f63a8420d0bec0f97717f581d58b87"
+  },
+  "checks/min_entropy_check.mojo": {
+   "bytes": 4841,
+   "kind": "file",
+   "sha256": "e20e759e4495800876f66d3b38bbbc5a63e626e49a683cead1eb347c5e15a01d"
+  },
+  "checks/min_split_gain_binding.py": {
+   "bytes": 2795,
+   "kind": "file",
+   "sha256": "039f5d462aa6ee6ac0e5837ff869f3d2ffac08951509f68b10f59b614fd160fc"
+  },
+  "checks/min_split_gain_check.mojo": {
+   "bytes": 3251,
+   "kind": "file",
+   "sha256": "4bc9bb33126b50103a4c9ea1d95a421f89e4696114dd5202475351df4c108b6c"
+  },
+  "checks/minmax_scaler_protocol_smoke.py": {
+   "bytes": 1893,
+   "kind": "file",
+   "sha256": "692a55011dbedcd6107dc416707ed8edbe4ff52cd0c201d62f65b4b29fa4b0b6"
+  },
+  "checks/minmax_scaler_smoke.py": {
+   "bytes": 3372,
+   "kind": "file",
+   "sha256": "dacb6a8c5f27901b710cf7e191687bdd364211a3ed0f8dfea3a9dfcc9053ae2a"
+  },
+  "checks/mixed_hist_probe.mojo": {
+   "bytes": 8732,
+   "kind": "file",
+   "sha256": "d456010cafe9856a8e6416927b18fa7471cdeca164da51330351f03d7db05a41"
+  },
+  "checks/model_io_check.mojo": {
+   "bytes": 50383,
+   "kind": "file",
+   "sha256": "61fd051b3399ec376e21c99d7b488c7a40a8fbf58882b8fe41e3e72d2818c908"
+  },
+  "checks/model_selection_kfold_perf.py": {
+   "bytes": 2143,
+   "kind": "file",
+   "sha256": "1be3cc4464bdd167afbdfe1d0e9cc38f47ea4cd5e891c1adac103b9f6b5a034f"
+  },
+  "checks/model_selection_smoke.py": {
+   "bytes": 2589,
+   "kind": "file",
+   "sha256": "2071146873326355bdb6a102b4a1910d4d3b38c722b966f44d8a983c28570d81"
+  },
+  "checks/multiclass_oracle_check.mojo": {
+   "bytes": 14595,
+   "kind": "file",
+   "sha256": "60c46fa59dd46574f5f069e0c005584729e209db350ecaa47f5992ce52419d4e"
+  },
+  "checks/multiclass_score_check.mojo": {
+   "bytes": 11623,
+   "kind": "file",
+   "sha256": "f699e647201e182671ee9b82582eeb42756240adabc1d5c9bb13d1059cdce6c1"
+  },
+  "checks/multiclass_train_check.mojo": {
+   "bytes": 17853,
+   "kind": "file",
+   "sha256": "c338088b162c83e1c89bf2d938d01e99054130c14917a9fdaca0dbdb3590b180"
+  },
+  "checks/multilogit_check.mojo": {
+   "bytes": 35369,
+   "kind": "file",
+   "sha256": "bd8cef7ab87ccf6cd978a3181c631ecaaa319ef03c00ed6c8538b956e41d11dd"
+  },
+  "checks/nan_forbidden_host_check.mojo": {
+   "bytes": 1057,
+   "kind": "file",
+   "sha256": "c2f4cb6f965005fae24837634cf904891185e9e79acc0d6723b8c20bf0599b26"
+  },
+  "checks/nan_mode_check.mojo": {
+   "bytes": 11477,
+   "kind": "file",
+   "sha256": "2718e17d0da967df18f77d154000f306c0ef382e4de99ddcbafa60f9075790ac"
+  },
+  "checks/newton_walker_check.mojo": {
+   "bytes": 14656,
+   "kind": "file",
+   "sha256": "54cdd0aa7af61032b9d4a4075f407c4ac648d1c59a552be3404bc21832f7ed4f"
+  },
+  "checks/numerics.mojo": {
+   "bytes": 47087,
+   "kind": "file",
+   "sha256": "c169ccf1f1859693e7b89eff3ccd9dc86aeffe9fb646952074d4d54de89efa12"
+  },
+  "checks/one_hot_cardinality_check.mojo": {
+   "bytes": 11336,
+   "kind": "file",
+   "sha256": "b391674cc3e8dfe616dadc30d949df3a805c86d8828f390f9be3b699d1f78fad"
+  },
+  "checks/one_hot_check.mojo": {
+   "bytes": 6264,
+   "kind": "file",
+   "sha256": "894ddc5a4e45a5a2d0f9e25c7e67128a49f49b1a0b68ddc70b5b53c1ac21178a"
+  },
+  "checks/one_hot_flags_check.mojo": {
+   "bytes": 6644,
+   "kind": "file",
+   "sha256": "db2f0cdf3f56c9c4a21a3113ac1308988bcf063df99775c43500d99b0bf77c94"
+  },
+  "checks/onebyte_reach_check.mojo": {
+   "bytes": 17492,
+   "kind": "file",
+   "sha256": "e11d046b3fc62de77ecf7698d5006854d1d6027ade37f40d5b7429483e239e80"
+  },
+  "checks/options_check.mojo": {
+   "bytes": 8937,
+   "kind": "file",
+   "sha256": "a5e9802baba605b276e31ff20248f4435971e0d6521282544b1d0e7c3d0b88bb"
+  },
+  "checks/oracle_check.mojo": {
+   "bytes": 39711,
+   "kind": "file",
+   "sha256": "fae9a2c9f9f5607c85d01e5dd16e7e4d27875da1879bd1def6f5dd33871cd42d"
+  },
+  "checks/oracle_sweep_main.mojo": {
+   "bytes": 10068,
+   "kind": "file",
+   "sha256": "465d38c8cdab2ff9ec402b993f52c582662bdee92889cad53096de4044ddc798"
+  },
+  "checks/ordered_boosting_check.mojo": {
+   "bytes": 42132,
+   "kind": "file",
+   "sha256": "389f97aa9fb7fe3c3707f0f33d1f0dd66a310095b0dadfcedc8443a79fc50675"
+  },
+  "checks/ordered_rmse_check.mojo": {
+   "bytes": 13113,
+   "kind": "file",
+   "sha256": "73c07dcd0dccdba2633c7cdb42f21409c7c44725bc16dbca8bac9ec7412f2f8f"
+  },
+  "checks/overfitting_detector_check.mojo": {
+   "bytes": 20309,
+   "kind": "file",
+   "sha256": "1cf6670866536dea9f5a7cae93c68e9d260d19af395705f50236ccaf32cb9b6e"
+  },
+  "checks/pack_check.mojo": {
+   "bytes": 3929,
+   "kind": "file",
+   "sha256": "8046328827c6038ae18081663f1334965413db426f408538b705df32260f2d2c"
+  },
+  "checks/partition_reducer_probe.mojo": {
+   "bytes": 5433,
+   "kind": "file",
+   "sha256": "3d4e1b415c631404e3cf6e42f4b3d978196332a0ca649ae49683e1078d259b6e"
+  },
+  "checks/partitions_reduce_check.mojo": {
+   "bytes": 30652,
+   "kind": "file",
+   "sha256": "8093f9a83d5cd0fc6445485481759a68d11149717f51977de77f87b398ef86be"
+  },
+  "checks/permutation_count_check.mojo": {
+   "bytes": 9328,
+   "kind": "file",
+   "sha256": "4b8b1c149dc6240d06016f133c8c7dffaa4709fd8a8e0f4b1d692b1268a48b02"
+  },
+  "checks/permuted_ids_check.mojo": {
+   "bytes": 12071,
+   "kind": "file",
+   "sha256": "ca6895ab55276718aa05a52e46e905e7898a9bbf5e5688c055e42ef16da5a37b"
+  },
+  "checks/pipeline_python.sh": {
+   "bytes": 375,
+   "kind": "file",
+   "sha256": "869c0349ac0b086fe3a1ec09d4e69cd3276b23397bc63300340a6aa39f38ea10"
+  },
+  "checks/plan_fusion_check.mojo": {
+   "bytes": 16879,
+   "kind": "file",
+   "sha256": "4e3ca98e1c490275b0e55e7459f7b2671b2638e8277be802db12df198932e098"
+  },
+  "checks/pointwise_default_probe.mojo": {
+   "bytes": 5540,
+   "kind": "file",
+   "sha256": "1c991095598d8f8965bca8dc7bd0b385bf78e095bcd4377e595951bd0bde887d"
+  },
+  "checks/pointwise_dispatch_check.mojo": {
+   "bytes": 49952,
+   "kind": "file",
+   "sha256": "08d4a6dc77e07bfd87acf5b20812a1b838aca9cbd0d57f33379eff3587916f71"
+  },
+  "checks/pointwise_driver_check.mojo": {
+   "bytes": 25338,
+   "kind": "file",
+   "sha256": "8d9531b489c0e794364485859dc50034d6820d1668e041bb709e50c27adbf6aa"
+  },
+  "checks/pointwise_hist2_8bit_check.mojo": {
+   "bytes": 16680,
+   "kind": "file",
+   "sha256": "76c6a42e874ba3f264e94a58252cbae78e52cf3cf6457976a933aa6dadeb419a"
+  },
+  "checks/pointwise_hist2_check.mojo": {
+   "bytes": 19033,
+   "kind": "file",
+   "sha256": "6dee1c21acdc9fea3219f15d2048176012ca583b4b4cdc37a3d7d3a9125a9954"
+  },
+  "checks/pointwise_hist2_half_byte_check.mojo": {
+   "bytes": 14114,
+   "kind": "file",
+   "sha256": "01f4be8b676fa81af3e5516feb5c9b8a9abfa2b5fb28ed7f498a56b70148cfea"
+  },
+  "checks/pointwise_identical_multiplier_check.mojo": {
+   "bytes": 14493,
+   "kind": "file",
+   "sha256": "8de15f08c213937af4ae094c6787ad95a293027d529155518d41ce9f2d6f295d"
+  },
+  "checks/pointwise_loop_check.mojo": {
+   "bytes": 25823,
+   "kind": "file",
+   "sha256": "f18361a3b8e14c86e9412c63265cb1a822b0525cc57dbcbe328705446e2a38a2"
+  },
+  "checks/pointwise_offsets_check.mojo": {
+   "bytes": 15247,
+   "kind": "file",
+   "sha256": "51a534048e239b743a43e56d434adec6ddf1ce1d12b2969d1467b73c7a4251bf"
+  },
+  "checks/pointwise_pool_check.mojo": {
+   "bytes": 13954,
+   "kind": "file",
+   "sha256": "5ee96297983abd7d65985678a6d8542146f7c6a5bf4c4091d4855bb9aa69d2f3"
+  },
+  "checks/pointwise_resolve_check.mojo": {
+   "bytes": 14203,
+   "kind": "file",
+   "sha256": "51a78e624a2a8442cd1d8189e7c618d4d91c1b37cdef20244225c07f127050b5"
+  },
+  "checks/pointwise_scores_check.mojo": {
+   "bytes": 58439,
+   "kind": "file",
+   "sha256": "4c00a2f9c827023d1eadd76462efedc2d6e4563a06748c989c77574fa10fb8d1"
+  },
+  "checks/pointwise_small_bin_driver_check.mojo": {
+   "bytes": 14391,
+   "kind": "file",
+   "sha256": "c7fc9dfd645f920b619ee6396d48953d36701c36eec13bba0bc43d40e06d5ef5"
+  },
+  "checks/pointwise_subsets_check.mojo": {
+   "bytes": 64285,
+   "kind": "file",
+   "sha256": "7921e6eea288b27eebec805c03758b5a95268e556f89a225aa7acd045666e960"
+  },
+  "checks/pointwise_target_check.mojo": {
+   "bytes": 28973,
+   "kind": "file",
+   "sha256": "ca160fb4b9f016d7e6d5a285f4925a89167097b3f328a4c306800e27499b7dc6"
+  },
+  "checks/pointwise_vs_greedy_check.mojo": {
+   "bytes": 9275,
+   "kind": "file",
+   "sha256": "fbc9479a28d5d5d347aff8d0f4d97da80c3c8d72ff04f2c8ac34aa0893387f54"
+  },
+  "checks/portable_fmax_check.mojo": {
+   "bytes": 50096,
+   "kind": "file",
+   "sha256": "46b8eece07d341c0a761f983280041ff89c17b4ca60256c985e72c8a395503ed"
+  },
+  "checks/portable_gelu_check.mojo": {
+   "bytes": 65403,
+   "kind": "file",
+   "sha256": "62cbd3ba24bf951467e9372429f0aaf9d41ff43280c74dcccd04e20e02c4934f"
+  },
+  "checks/portable_log2_64_check.mojo": {
+   "bytes": 5308,
+   "kind": "file",
+   "sha256": "d5f0416cdb31d75055929b8e4256b445d6b923db2241e2cc8ce2168f310de8d1"
+  },
+  "checks/portable_log64_check.mojo": {
+   "bytes": 4330,
+   "kind": "file",
+   "sha256": "5047d65b2fd3bd225ba81caed5058fc6da69f3fd3605b152dca66cdb4408525c"
+  },
+  "checks/portable_nn_check.mojo": {
+   "bytes": 26291,
+   "kind": "file",
+   "sha256": "24da0af725160256736701e668936b06a6e7c058b0f94726705422eeb9d29f61"
+  },
+  "checks/portable_pow64_check.mojo": {
+   "bytes": 8423,
+   "kind": "file",
+   "sha256": "8517f14cd03b161e66f561b115c0f18bcb5776e03bf570c2d156066d0ddb4217"
+  },
+  "checks/portable_sqrtcos_check.mojo": {
+   "bytes": 12956,
+   "kind": "file",
+   "sha256": "0f16efe96ab9259a9aa4f3b2b1a2c22a83cb7e052902a5e1a3c8a3099bada3bd"
+  },
+  "checks/portable_translog_check.mojo": {
+   "bytes": 9022,
+   "kind": "file",
+   "sha256": "c88553e980cf77c4c37949915018445fac923c38bb52db127895bb96c5e896f1"
+  },
+  "checks/portable_trig_check.mojo": {
+   "bytes": 54870,
+   "kind": "file",
+   "sha256": "03a20b205f7c5b91404529ef58fe9144b92e14c97c3737c5e6275787fdf5972a"
+  },
+  "checks/probes/rf_stream_api.mojo": {
+   "bytes": 1101,
+   "kind": "file",
+   "sha256": "9ec55b180b730140193c95db1033686d29af8ac302bfcb6a515e525245050e61"
+  },
+  "checks/quantize_cost_probe.mojo": {
+   "bytes": 6041,
+   "kind": "file",
+   "sha256": "5a2f7c39ac8ea2dbb1936ed4f17f5673f8254cc8acaf8dcc9ebb9091a076ea17"
+  },
+  "checks/radix_sort_check.mojo": {
+   "bytes": 10082,
+   "kind": "file",
+   "sha256": "a2133187d1dfb209c4ec50f7ae149091c2e9571ad42c4b6d8124d8da37919947"
+  },
+  "checks/random_strength_check.mojo": {
+   "bytes": 22808,
+   "kind": "file",
+   "sha256": "e6298aca67a9f4053897a2dda54fea3a7b423609d4b3f8ea1233f5abc8d78895"
+  },
+  "checks/regression_errors_binding.py": {
+   "bytes": 5243,
+   "kind": "file",
+   "sha256": "f6abb075a9c109b5a5dd4c253f03f16aaaf4e998adc2d682b967adebf847c1f8"
+  },
+  "checks/reorder_check.mojo": {
+   "bytes": 4754,
+   "kind": "file",
+   "sha256": "c4ad060f8642a390a5cc9c1c82d4229c35b935abe8bdad6082dfa1af6eaa1b64"
+  },
+  "checks/replicated_half_byte_check.mojo": {
+   "bytes": 25409,
+   "kind": "file",
+   "sha256": "d7700b959d91f1d289eb33bf96d1ed90dc7e7e331d2e18e9a452df7519982129"
+  },
+  "checks/rf_class_weight_smoke.py": {
+   "bytes": 3383,
+   "kind": "file",
+   "sha256": "f3b04405f475418c12f0763229d96493dca53a259b56c7a4d89f7bd1da7c892f"
+  },
+  "checks/rtf_seam.mojo": {
+   "bytes": 5268,
+   "kind": "file",
+   "sha256": "9eab7398a1bc60b31fa2b22f523374954187d4c96d4f400ffd525c004cf16761"
+  },
+  "checks/sample_indices_check.mojo": {
+   "bytes": 6346,
+   "kind": "file",
+   "sha256": "1df9562f4b7fcfe91076b8218d0b96c429e2538d02dc17fa053e49bbde716c92"
+  },
+  "checks/sample_quantile_unweighted_check.mojo": {
+   "bytes": 2140,
+   "kind": "file",
+   "sha256": "ddf445ce6f39bdfa394d671127eaf764a59e80ac92ffc56fa66ca32fa27efb7c"
+  },
+  "checks/searcher_parity_covtype_check.mojo": {
+   "bytes": 8097,
+   "kind": "file",
+   "sha256": "f106a3b25b20a7d67e1745e37cebb83793c3c443cf47f6dbdbf58c9f976ab7ea"
+  },
+  "checks/second_der_weights_check.mojo": {
+   "bytes": 17582,
+   "kind": "file",
+   "sha256": "f555f638e21454015625fec149aab1974fcba03fd0c690bcef2d883ff5111b52"
+  },
+  "checks/segmented_scan_check.mojo": {
+   "bytes": 13883,
+   "kind": "file",
+   "sha256": "49fe0428e512ac51f031516e93b8ded133a9a274e5c26871363058fb255d6d0f"
+  },
+  "checks/shape_sweep.mojo": {
+   "bytes": 7197,
+   "kind": "file",
+   "sha256": "b1e6a3097690f3c3a420529757b94f3b9cdd172f3237df02494a05bb90d9a12c"
+  },
+  "checks/shared_pointer_probe.mojo": {
+   "bytes": 3733,
+   "kind": "file",
+   "sha256": "01ba23a4b59ee36d1896337890060461dbf626f23c099abb35277ca36fc3897e"
+  },
+  "checks/sibling_tiebreak_check.mojo": {
+   "bytes": 27762,
+   "kind": "file",
+   "sha256": "4e62c1461e40e6780ad54dc6bb272db7dfa793353dd229afd15906ab04085080"
+  },
+  "checks/standard_scaler_protocol_smoke.py": {
+   "bytes": 1127,
+   "kind": "file",
+   "sha256": "052990105dad54d833a2e173d55a96c0939cf3223bcb53a35cca52e6122ca13b"
+  },
+  "checks/standard_scaler_smoke.py": {
+   "bytes": 4888,
+   "kind": "file",
+   "sha256": "95cba600aa61a08703961255062c0acbe695b640e2a52a4c9d3817eda46f7c64"
+  },
+  "checks/sym_arms_check.mojo": {
+   "bytes": 19043,
+   "kind": "file",
+   "sha256": "5af61b6a5575bc935501b923f17d8f3d52729b4e76a4fb795dc10f46edf946bc"
+  },
+  "checks/sync_price.mojo": {
+   "bytes": 1051,
+   "kind": "file",
+   "sha256": "9753719999007f7ffaf499e343a8d06220a0127d44c160fcc7b038707ef68f8e"
+  },
+  "checks/tensor_sync_state_check.mojo": {
+   "bytes": 1487,
+   "kind": "file",
+   "sha256": "f311f9f77b08d78aa905fcd898907cfa006980e1baf6b72c51cf521a9ed627f5"
+  },
+  "checks/train_api_check.mojo": {
+   "bytes": 4685,
+   "kind": "file",
+   "sha256": "9626c820a5735213a76965f25d45167f1c1330a0bc6f26d88d683806debff21a"
+  },
+  "checks/tree_benchmark_order.py": {
+   "bytes": 3129,
+   "kind": "file",
+   "sha256": "dc47dae4f66da66ed1d913e88120b476b6f6525aea291cfa1198dcbdc7b979eb"
+  },
+  "checks/tree_ctr_slice_check.mojo": {
+   "bytes": 37576,
+   "kind": "file",
+   "sha256": "da1d909a2b1b8eeaa1f563edc86f66c5b92a77860700f25a78a1fad0aced7005"
+  },
+  "checks/vendor.mojo": {
+   "bytes": 3422,
+   "kind": "file",
+   "sha256": "88c31f57307d38354935005c21efda7456f48342b2261edf02963c2f904977bc"
+  },
+  "checks/vendor_correctness_check.mojo": {
+   "bytes": 100846,
+   "kind": "file",
+   "sha256": "e9b8e00e778cac277d4aef75576a6a7b300778cb9814f8ea910f21369095fcfb"
+  },
+  "core/__init__.mojo": {
+   "bytes": 129,
+   "kind": "file",
+   "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+  },
+  "core/block_reduce.mojo": {
+   "bytes": 11468,
+   "kind": "file",
+   "sha256": "54560e1bd56318a940d49f12ee5f0bb216d61451e77007ab10c6e7f1bf286481"
+  },
+  "core/block_scan.mojo": {
+   "bytes": 15865,
+   "kind": "file",
+   "sha256": "b8d71c49aa00378fca974fe02326e2c53a75958a84ae3f097cd28ff508af06f8"
+  },
+  "core/classical_host_predict.mojo": {
+   "bytes": 29680,
+   "kind": "file",
+   "sha256": "e35f8f208b0c24d2180d2aa0ba756d5bc065a28e34f572ec5875a02b209d6720"
+  },
+  "core/column_stats.mojo": {
+   "bytes": 21434,
+   "kind": "file",
+   "sha256": "2623f9cd44e45e50ea7f6880341339062fd34974645011e3063064474a694988"
+  },
+  "core/column_stats_identity_check.mojo": {
+   "bytes": 37640,
+   "kind": "file",
+   "sha256": "6b04ad43ff5f2a692136f9df803c909055735cee8fdc10df342c3ddfb43148fd"
+  },
+  "core/device_liveness.mojo": {
+   "bytes": 8836,
+   "kind": "file",
+   "sha256": "77b320fee6a48df1dd7b8e032c12ef12fea3b19e50cd303fbca0e4c0cb8fd69a"
+  },
+  "core/device_mutex.mojo": {
+   "bytes": 9074,
+   "kind": "file",
+   "sha256": "d50703bfdb6b5faf11a2b2f173b5b880399abd1c72ba2396d2d7a5932d3b5327"
+  },
+  "core/device_mutex_check.mojo": {
+   "bytes": 5738,
+   "kind": "file",
+   "sha256": "2d3dd8470b6dcd31c749dc73877d1bf41cfb79bcefd7fe005cbb6396f8ebd249"
+  },
+  "core/device_scan.mojo": {
+   "bytes": 17991,
+   "kind": "file",
+   "sha256": "fc61df73e55cc055677e683cd61ecccaf83643640fe4f958f0e19c0058e7c4ce"
+  },
+  "core/device_scan_batch_check.mojo": {
+   "bytes": 3658,
+   "kind": "file",
+   "sha256": "bb2f876a9626b5ebd39dd436f16c9bb48c5bdef8876db0d72e54356c3708fcdb"
+  },
+  "core/device_scan_check.mojo": {
+   "bytes": 9707,
+   "kind": "file",
+   "sha256": "7830f5dcf1b40a1ca97e4b50b894871a2392cce6d1fba52c2c3b7c969c6a41de"
+  },
+  "core/device_zero.mojo": {
+   "bytes": 6790,
+   "kind": "file",
+   "sha256": "e0c3adc9a639e1b822c2fc936f20af1cb314a4e717efe8c1a20f3201bb2a6220"
+  },
+  "core/device_zero_check.mojo": {
+   "bytes": 6276,
+   "kind": "file",
+   "sha256": "72c2d1941a9b0295fe9b8053246f39a2e694b396f41842ef730c6ecd520a4ddd"
+  },
+  "core/expand_distances.mojo": {
+   "bytes": 2208,
+   "kind": "file",
+   "sha256": "1cc7f1c105b6875ee77a246fd991886fbf3cc59c551896366ec94769f3158079"
+  },
+  "core/forest_host_groves.mojo": {
+   "bytes": 14093,
+   "kind": "file",
+   "sha256": "5f6f6d511321fcb0057a009b405842b8c279b58c0ea3f8ee0249a6a14055a771"
+  },
+  "core/forest_host_predict.mojo": {
+   "bytes": 16042,
+   "kind": "file",
+   "sha256": "c27ef25e001254cfb7bc2884939d23b6fd6c283ab2926370e9f314ad148b7b3c"
+  },
+  "core/forest_inference.mojo": {
+   "bytes": 32153,
+   "kind": "file",
+   "sha256": "80e785b7fc40cb543391bd720495b228b8ba795125c2e8b819ffce58234374cd"
+  },
+  "core/forest_inference_model.mojo": {
+   "bytes": 28071,
+   "kind": "file",
+   "sha256": "5e59a2bb660d5bf1be119257e6de567d7474f7cad6ed30d5149bb8e2ed10fbe0"
+  },
+  "core/forest_inference_pool.mojo": {
+   "bytes": 16024,
+   "kind": "file",
+   "sha256": "aa887662437f9efaeab7708cec9f7151846f464dd35b96e974112a9aa081b777"
+  },
+  "core/gbdt_host_ctr.mojo": {
+   "bytes": 8062,
+   "kind": "file",
+   "sha256": "18f8a42495888f72dddc7bc40df8428495da64f09343bf150ef2ea8834fc58db"
+  },
+  "core/gbdt_host_predict.mojo": {
+   "bytes": 33891,
+   "kind": "file",
+   "sha256": "0618049cc57e352d8af8941d80efb67e3fd778b1bd887780c5eb82aafb3bcb60"
+  },
+  "core/gemm.mojo": {
+   "bytes": 10332,
+   "kind": "file",
+   "sha256": "f550ae2f756da0ef7c19f61fe754d08d5722b9e9d2ffac013186532a2921689e"
+  },
+  "core/gemm_identity_check.mojo": {
+   "bytes": 31205,
+   "kind": "file",
+   "sha256": "f42a646106bfcf93522d4ee6fca57c51bfcd090edff9627db1dc817f0e466698"
+  },
+  "core/gemv_serial_layout_candidate.mojo": {
+   "bytes": 4009,
+   "kind": "file",
+   "sha256": "8071d2b9bb45b177c2abe329e8242dec1e709367126610d36ff09edaed75a9c5"
+  },
+  "core/gram_multi_gpu.mojo": {
+   "bytes": 5331,
+   "kind": "file",
+   "sha256": "4c6ec3f6e37fe70973f9d63599027582d48ad9129da3865e546a2a67d13cc2ae"
+  },
+  "core/gram_splitk.mojo": {
+   "bytes": 57001,
+   "kind": "file",
+   "sha256": "a55047e630aa8ceb7a52fe9f475c8e5e2d4585e1b0e961be09757e236999bce7"
+  },
+  "core/host_predict_threads.mojo": {
+   "bytes": 5069,
+   "kind": "file",
+   "sha256": "1057635362bd509e2a6caedaac0b4fac15b15335b5394e5ccc0c119e92504ee2"
+  },
+  "core/householder_qr.mojo": {
+   "bytes": 25922,
+   "kind": "file",
+   "sha256": "4ccc3c405f371cec1ee20992b3493f9972ba7668f05d56cd4a1cef71fd5d3e70"
+  },
+  "core/identity_trace.mojo": {
+   "bytes": 20136,
+   "kind": "file",
+   "sha256": "ddfb0e3b0ce7fd1bae586d3fbd69e06d2f6b69e419e33dd816a40d15765a8d3a"
+  },
+  "core/knn_host_predict.mojo": {
+   "bytes": 47471,
+   "kind": "file",
+   "sha256": "8e43564507a11f27e25050cfda0153eea8ee503b40b87a9219670e63deb16b78"
+  },
+  "core/labeled_reference_host_predict.mojo": {
+   "bytes": 6388,
+   "kind": "file",
+   "sha256": "3c32aa4ef3aba46904379ecacb6d1dd8d41f7b3354dfcf3766f01c5ae2c4f143"
+  },
+  "core/labeled_reference_predict.mojo": {
+   "bytes": 7478,
+   "kind": "file",
+   "sha256": "cd0400adec89750672c90d3daef65cb0f5612c191803cbcd9da001a0ad459009"
+  },
+  "core/launch_log.mojo": {
+   "bytes": 3043,
+   "kind": "file",
+   "sha256": "a47621f25a84c15fcf1ea08004889da1debd5b1a8a2c66d98ef5114ce0342323"
+  },
+  "core/multi_gpu.mojo": {
+   "bytes": 4863,
+   "kind": "file",
+   "sha256": "3cca7637cdc30024dcb9be51c17c3227fa8d4355ebca5110a2d9293d51cd71c5"
+  },
+  "core/philox.mojo": {
+   "bytes": 13657,
+   "kind": "file",
+   "sha256": "a13da8489816a36115fe7ef3a56474d25516cc3795e2fb1db37ed14ec824bcc1"
+  },
+  "core/philox_neural.mojo": {
+   "bytes": 9322,
+   "kind": "file",
+   "sha256": "d7eba41aafa40257c55dcac7cd949f1e1298aba7844ad3cec4be629f519a0285"
+  },
+  "core/pinned_reduce.mojo": {
+   "bytes": 11279,
+   "kind": "file",
+   "sha256": "9e67a03fc76db85dc6f3cbbd432b7222bf67c3cfc03ed27a34b71c5a07de91b4"
+  },
+  "core/row_norms.mojo": {
+   "bytes": 5611,
+   "kind": "file",
+   "sha256": "f176a71f1615d812a06750ae9faea9b4edfc7e62c15711700c2936d554b448e8"
+  },
+  "core/scan_by_key.mojo": {
+   "bytes": 25324,
+   "kind": "file",
+   "sha256": "dba677aa2f42678391167cd7ede38bcf7cc8579500757680b78b1f286e30b31c"
+  },
+  "core/segmented_sort.mojo": {
+   "bytes": 15195,
+   "kind": "file",
+   "sha256": "dc42cae5cf36c39db2a66ea97ebad29dfba26ca1d6e1bbf5a426376bed2770e0"
+  },
+  "core/shuffle_iterator.mojo": {
+   "bytes": 14970,
+   "kind": "file",
+   "sha256": "ea02f0a3954cac8d659a919a9335aeb37daadbee979f7ff9bad0e1c4ee6247e2"
+  },
+  "core/step_glue.mojo": {
+   "bytes": 9926,
+   "kind": "file",
+   "sha256": "07224b61900d4bacfdcf6533b23681d887f3a5a736d98871126e6731d30c01d2"
+  },
+  "core/step_phase.mojo": {
+   "bytes": 8204,
+   "kind": "file",
+   "sha256": "6078e6117cbb6890bb6c386dff2519a5c8c962df513e6693f4336df25c50eba3"
+  },
+  "core/tree_math.mojo": {
+   "bytes": 1228,
+   "kind": "file",
+   "sha256": "9b712677c5aab82920dbb89bc553f54ab5d92676e91b5ed933a09344420542f7"
+  },
+  "gemm/IDENTICAL_FP32_CONTRACT.md": {
+   "bytes": 46763,
+   "kind": "file",
+   "sha256": "15c80de280b85d95ba248b5c34cfabc41191e8cd2f3ea6db0c9b5c6974ab029f"
+  },
+  "gemm/IDENTICAL_LOWBIT_CONTRACT.md": {
+   "bytes": 10812,
+   "kind": "file",
+   "sha256": "6b8a05784385f3a96eb27c4d3ad1862aee4e25a0a88700b99bae1325e7abb505"
+  },
+  "gemm/NOT_IMPLEMENTED.tsv": {
+   "bytes": 5247,
+   "kind": "file",
+   "sha256": "1309fe297c48bf0aef1eb2da195841fb4a83a7d760208202a92c73782cca4d16"
+  },
+  "gemm/README.md": {
+   "bytes": 577,
+   "kind": "file",
+   "sha256": "45bc000dd1cbf1a2684a236930400d54be19ee775c9cf58e60ff25943fac81fb"
+  },
+  "gemm/__init__.mojo": {
+   "bytes": 129,
+   "kind": "file",
+   "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+  },
+  "gemm/checks/__init__.mojo": {
+   "bytes": 129,
+   "kind": "file",
+   "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+  },
+  "gemm/checks/gemm_537_reach_probe.mojo": {
+   "bytes": 4213,
+   "kind": "file",
+   "sha256": "6338d6106082f2f7b5cb83e79577eabbde86d6df939466e9a8bd8895a9ec2936"
+  },
+  "gemm/checks/gemm_backward.mojo": {
+   "bytes": 27191,
+   "kind": "file",
+   "sha256": "dcea21f55a2f626375682eeeab39c8cd0acc4594afae02935bb2e09483eb2b1c"
+  },
+  "gemm/checks/gemm_backward_check.mojo": {
+   "bytes": 147453,
+   "kind": "file",
+   "sha256": "e0100641866507609c001c106dff73b119361f47917a9eb1a55cd95a5c4d2d6f"
+  },
+  "gemm/checks/gemm_device_check.mojo": {
+   "bytes": 70458,
+   "kind": "file",
+   "sha256": "5b80ef9963b0386b34fe2cd67874eb7911964e097667f46c144fad6ca4b32e6e"
+  },
+  "gemm/checks/gemm_gather_ftz_check.mojo": {
+   "bytes": 8184,
+   "kind": "file",
+   "sha256": "2d0706eaed6c995f11b4d45edd584f33889f41190936c8ddf87a7a97e06a84de"
+  },
+  "gemm/checks/gemm_identical.mojo": {
+   "bytes": 300313,
+   "kind": "file",
+   "sha256": "ff874cfb044615e8df0165985fa1fc345335bbf8ee351b404193240a21918941"
+  },
+  "gemm/checks/gemm_int8_mma.mojo": {
+   "bytes": 16466,
+   "kind": "file",
+   "sha256": "24212daee4eca1f5ebd609e79afe17d7eb95eeb97c5b93038a6cb7d2c212fad5"
+  },
+  "gemm/checks/gemm_lowbit.mojo": {
+   "bytes": 21561,
+   "kind": "file",
+   "sha256": "88f18fea9f37fd8a2222d05e40600effaff97c37af765b829d21e9a9d274cc8b"
+  },
+  "gemm/checks/gemm_lowbit_check.mojo": {
+   "bytes": 31801,
+   "kind": "file",
+   "sha256": "635653d2ee9e738a704c157f89834a5f3c67c9de8f30289b92a8849b890cd238"
+  },
+  "gemm/checks/gemm_oracle.mojo": {
+   "bytes": 1188,
+   "kind": "file",
+   "sha256": "1f72df00180e9c3229c336a39f8af310f898530d4b9800cb6b26577ad9477970"
+  },
+  "gemm/checks/gemm_oracle_check.mojo": {
+   "bytes": 103106,
+   "kind": "file",
+   "sha256": "2b9ac8c34f2b8ea1a8f749ec43c6c427623f47c97cf1c913b3c11dd1d9db6754"
+  },
+  "gemm/checks/gemm_production_dispatch_check.mojo": {
+   "bytes": 2170,
+   "kind": "file",
+   "sha256": "4c02710aa8c0b0d7b49d784ae670e9ab7bee66cd1f7fc2ee26437d754b13c202"
+  },
+  "gemm/checks/gemm_rtf_boundary_check.mojo": {
+   "bytes": 7981,
+   "kind": "file",
+   "sha256": "62552750eec363451f124d30cefbbc2e09cdfb1668302d53ad6a2a2135fe2085"
+  },
+  "gemm/checks/gemm_seam_probe.mojo": {
+   "bytes": 11331,
+   "kind": "file",
+   "sha256": "670b25128a330feafd94b7272bdef78baa59b77e45625c2f10a76369c5efd36b"
+  },
+  "gemm/checks/gemm_stage_ftz_check.mojo": {
+   "bytes": 5176,
+   "kind": "file",
+   "sha256": "7889419d32c97b863fa236f96fe17c481785d006ec75a25f54deedc6c0a761d4"
+  },
+  "gemm/checks/gemm_step_arms.mojo": {
+   "bytes": 10157,
+   "kind": "file",
+   "sha256": "276396edf75096f3d59bfe4247c70272f4d7c106e48fdda4ed13d8b94dadeebd"
+  },
+  "gemm/checks/gemm_step_arms_check.mojo": {
+   "bytes": 82473,
+   "kind": "file",
+   "sha256": "02d1fab0047d590263f7aeeaa7fddcd9a3c2658e65ce42e5c5db399009fbf360"
+  },
+  "gemm/checks/gemm_tuned_probe.mojo": {
+   "bytes": 10215,
+   "kind": "file",
+   "sha256": "1b36251c5ba38faad962e12f8e3cfc55bd11a78bb57d269b0cc9f134600a6042"
+  },
+  "gemm/checks/gemm_unpinned.mojo": {
+   "bytes": 37409,
+   "kind": "file",
+   "sha256": "f67e1d4f18950268f89cb3012c5f81e8f3d79b8d17357e9480199882d214dfad"
+  },
+  "gemm/checks/gemm_unpinned_price.mojo": {
+   "bytes": 21518,
+   "kind": "file",
+   "sha256": "04064f1084c6cf7a21e089ffce4ec9954a2e953a53d3a68f900aef8b105395cf"
+  },
+  "gemm/checks/gemm_wide_split_probe.mojo": {
+   "bytes": 3079,
+   "kind": "file",
+   "sha256": "fd6deffab602add863c4724099cdaf5e4487defe4d014f3ba21c1784cf74a3e5"
+  },
+  "gemm/checks/gemm_workspace_check.mojo": {
+   "bytes": 3520,
+   "kind": "file",
+   "sha256": "93325ad27e9c2b530726f5c05ff83babfdb302cea9738eb1fb513220e9f2317e"
+  },
+  "gemm/checks/gemm_workspace_reuse_check.mojo": {
+   "bytes": 4317,
+   "kind": "file",
+   "sha256": "0120b85ef38bc725cc11f280ecfe259b0878e2a455920cdd785c721d46c84658"
+  },
+  "gemm/host/__init__.mojo": {
+   "bytes": 470,
+   "kind": "file",
+   "sha256": "4d9f9558a0342ed5cef03721dce40b8995cffc0b9dd57fef34700b5b7bccf17c"
+  },
+  "gemm/host/gemm_lowbit_oracle.mojo": {
+   "bytes": 10320,
+   "kind": "file",
+   "sha256": "59dd7d09407315ca95bf806b61ba5d438ce140b6dcf7b8eaae6720a7f9fbe224"
+  },
+  "gemm/host/gemm_oracle.mojo": {
+   "bytes": 32737,
+   "kind": "file",
+   "sha256": "34d67709707f9359eb64e371182d55c4dc23820df9ae318b9cee190a72a43909"
+  },
+  "gemm/host/identical_gemm.mojo": {
+   "bytes": 1566,
+   "kind": "file",
+   "sha256": "31924037bad442610218b63bca07ddebc46fcd7e20cb33ebbf7ca68bb795eb32"
+  },
+  "gemm/host_entry.mojo": {
+   "bytes": 5556,
+   "kind": "file",
+   "sha256": "19ba6fc0fe00371f36b0a98f0a483d4202aa745783d4c6eed46e3896e0e3cbec"
+  },
+  "gemm/impl/__init__.mojo": {
+   "bytes": 129,
+   "kind": "file",
+   "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+  },
+  "gemm/impl/linalg/__init__.mojo": {
+   "bytes": 129,
+   "kind": "file",
+   "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+  },
+  "gemm/impl/linalg/contractions.mojo": {
+   "bytes": 10768,
+   "kind": "file",
+   "sha256": "0ef1cabdbe1360356e0c0d2041e62071b0bfa7a976008210789dbd51529a772c"
+  },
+  "pixi.lock": {
+   "bytes": 513685,
+   "kind": "file",
+   "sha256": "718430ce1d0fad1a86ca9d01758428e04412697e6a89b709f9abcdc636759139"
+  },
+  "pixi.toml": {
+   "bytes": 112823,
+   "kind": "file",
+   "sha256": "297a4f57a897843f4496ed11bc18997fd9ea084bc772e33dbfc4b297d9841168"
+  },
+  "python/mojolearn/ALPHA_API.md": {
+   "bytes": 15839,
+   "kind": "file",
+   "sha256": "e17d896246c41cdf98c1544201a32e2b11089bc4df5964d5c18191751bb993a2"
+  },
+  "python/mojolearn/Hendel_2026_bitwise_identical_gpu_ml_preprint.pdf": {
+   "bytes": 293460,
+   "kind": "file",
+   "sha256": "c7de0ba6e3395d63d9f66b757d19035d77435e6e774c1f9361a290724eba2f71"
+  },
+  "python/mojolearn/NUMPY_FREE_CONTRACT.md": {
+   "bytes": 8408,
+   "kind": "file",
+   "sha256": "503a042c57163332b6fe98b219c3658219a6f4abfa724d27b6b05901bf8857a1"
+  },
+  "python/mojolearn/__init__.py": {
+   "bytes": 22458,
+   "kind": "file",
+   "sha256": "6f33ed9ff3aa43d43a7ff6e1ba254cbeb8ab9ed3976cf08b9380a049cce28959"
+  },
+  "python/mojolearn/__main__.py": {
+   "bytes": 36807,
+   "kind": "file",
+   "sha256": "b869628152fc3fe2751821ff3b5e95fa1b1845502fc6b3ab347ad0e02ef85ca5"
+  },
+  "python/mojolearn/_arima_impl.py": {
+   "bytes": 49409,
+   "kind": "file",
+   "sha256": "692ea9185c76c783d7d375021b8baf1a0c4cb7614146a37bdf1806a9c5925222"
+  },
+  "python/mojolearn/_array.py": {
+   "bytes": 35988,
+   "kind": "file",
+   "sha256": "70e176904f12fc1e0644d191676342783cecb1834b09a65a78857e9abfff4e2c"
+  },
+  "python/mojolearn/_arrays.py": {
+   "bytes": 1997,
+   "kind": "file",
+   "sha256": "248e4d00186439f723a211c39ef32872e075367db7805b62c2af7e4ded875451"
+  },
+  "python/mojolearn/_backend.py": {
+   "bytes": 87315,
+   "kind": "file",
+   "sha256": "abed139a4acadb4a66c3d7f552189361aea5e9aa72791f07ef4d20847b81b171"
+  },
+  "python/mojolearn/_bpe_trainer.py": {
+   "bytes": 22083,
+   "kind": "file",
+   "sha256": "c8dd928f032096b40f79d4999b3f3476dc04802d0c87918eea777826fe49dbae"
+  },
+  "python/mojolearn/_bufcheck.py": {
+   "bytes": 8177,
+   "kind": "file",
+   "sha256": "5f976477d9b094a90cf8af0995dd177df7d56192e72f8acf78467a14ab6d77ba"
+  },
+  "python/mojolearn/_buffer.py": {
+   "bytes": 37306,
+   "kind": "file",
+   "sha256": "00422dd10649e42230739fb0c01c42729c8908c161d0f05952db4acf6ab38260"
+  },
+  "python/mojolearn/_byte_lm_checkpoint.py": {
+   "bytes": 12296,
+   "kind": "file",
+   "sha256": "a89519fe2ec4d9bc3e50e0262866be0bee73f3cb977ca97d8417fb794512c5c4"
+  },
+  "python/mojolearn/_byte_lm_config.py": {
+   "bytes": 4212,
+   "kind": "file",
+   "sha256": "c9cb374bbbe97266ca08f2e3d0b185fc80b707ae45ec4ba425d793d261304acc"
+  },
+  "python/mojolearn/_byte_lm_host.py": {
+   "bytes": 22576,
+   "kind": "file",
+   "sha256": "056f74f64bc083288b79e6383ff3eeec9459a334bc69e2f05be28a44ff0660a2"
+  },
+  "python/mojolearn/_byte_lm_impl.py": {
+   "bytes": 70633,
+   "kind": "file",
+   "sha256": "238dde896e6543e79ae0c6bfb967bda042854794ea0a1a283e29f2e1d6ed0a25"
+  },
+  "python/mojolearn/_byte_lm_trainer_host.py": {
+   "bytes": 23849,
+   "kind": "file",
+   "sha256": "378c28c15cd607aac3f21b960517c8a44821d3a280e969b3e535eb36f712c7fc"
+  },
+  "python/mojolearn/_causal_lm_fixtures.py": {
+   "bytes": 8143,
+   "kind": "file",
+   "sha256": "7bf80d6d9820228bf609e1e33d26f35c665ec34b3b9422148c41664450692aa0"
+  },
+  "python/mojolearn/_causal_lm_worker.py": {
+   "bytes": 2915,
+   "kind": "file",
+   "sha256": "8941bec51561b7367f852a645e88a716bb9f3670efc7186bf9fdf7e238d97f61"
+  },
+  "python/mojolearn/_cholesky_impl.py": {
+   "bytes": 15302,
+   "kind": "file",
+   "sha256": "8ddfc21246a199c66299dc9aaa49fade8eb0b1adbd3be2ac9e9582bbdd75fc32"
+  },
+  "python/mojolearn/_classical_host.py": {
+   "bytes": 22344,
+   "kind": "file",
+   "sha256": "aeda9d78032bbba26c7ec1bf5659ca3f7e9cd7dbe037d51f6618ebd1a2710bb4"
+  },
+  "python/mojolearn/_conformance.py": {
+   "bytes": 45894,
+   "kind": "file",
+   "sha256": "37953729a6143f0cff0e629ca8469173a1f3f48be44b266cbe18e50a3dc9a583"
+  },
+  "python/mojolearn/_cpu_reference.py": {
+   "bytes": 907,
+   "kind": "file",
+   "sha256": "5fefaf2a6e30102a1cda9c8ff76c603c0d1f032f683ff84e947106e86bfa48b6"
+  },
+  "python/mojolearn/_crossvendor_coverage.py": {
+   "bytes": 8409,
+   "kind": "file",
+   "sha256": "d6cf53103a38e3caf241d2986aed0bad10db81e38b68582be4b2b5b00cbecc1c"
+  },
+  "python/mojolearn/_forest_host.py": {
+   "bytes": 17944,
+   "kind": "file",
+   "sha256": "dd7f75456e9c6c9fd2ce04cb7145a1607f996589b7e55d70352352af9a589ca0"
+  },
+  "python/mojolearn/_forest_protocol.py": {
+   "bytes": 19673,
+   "kind": "file",
+   "sha256": "2fb96fed343f592a725aba0021359e10e1a79712be2da76682fe6f7082cd6a84"
+  },
+  "python/mojolearn/_gbdt_adapters.py": {
+   "bytes": 12202,
+   "kind": "file",
+   "sha256": "df9cdba4ba36396df55a36e4121b8f442714a880763cc916c9e615260091a485"
+  },
+  "python/mojolearn/_gbdt_host.py": {
+   "bytes": 39128,
+   "kind": "file",
+   "sha256": "cfce66af347475ecf3a24ecc7347dcbfd0105a19d0b3ee61463711147ca86b86"
+  },
+  "python/mojolearn/_gp_impl.py": {
+   "bytes": 57615,
+   "kind": "file",
+   "sha256": "a64c0e41302892a39d529b30f542906bd1bf3bebba97b344e200e3833667af85"
+  },
+  "python/mojolearn/_gp_optimizer.py": {
+   "bytes": 7611,
+   "kind": "file",
+   "sha256": "665a251c7a73fc1497dc08e3ea3776138e5272222f1af37f03117dbc653202f2"
+  },
+  "python/mojolearn/_gpc_impl.py": {
+   "bytes": 28568,
+   "kind": "file",
+   "sha256": "bb7206a1c866dd8166f5d0d16d339c8485646ac42d76e0a7f7aea1f77d56f84b"
+  },
+  "python/mojolearn/_gpu_witness.py": {
+   "bytes": 11157,
+   "kind": "file",
+   "sha256": "2ba69ec5c6a525c2b2ca66977b70730da95a3d183f2a676a49be3f299b4f6c30"
+  },
+  "python/mojolearn/_hierarchy_impl.py": {
+   "bytes": 25011,
+   "kind": "file",
+   "sha256": "9a15cda1cd9ddcab041a8c2f0b5cb2a5fed2d451c0a3d307cbfff76195048fb9"
+  },
+  "python/mojolearn/_identity.py": {
+   "bytes": 19147,
+   "kind": "file",
+   "sha256": "d417c81b276d12513c0c1e5690e5ee58e6cf297f3ea03fbe75a75c3a9380c3b8"
+  },
+  "python/mojolearn/_iforest_impl.py": {
+   "bytes": 22158,
+   "kind": "file",
+   "sha256": "acbba2c4f9e19ae925ccc722d27c87d5181788f8fcb240b38fdc822f6ebc1e5e"
+  },
+  "python/mojolearn/_ivf_impl.py": {
+   "bytes": 17561,
+   "kind": "file",
+   "sha256": "55b49b81715ee42f9c46ad1d364b3c660d8c45d77f5275dc5b28a7b3c73e140f"
+  },
+  "python/mojolearn/_labels.py": {
+   "bytes": 20007,
+   "kind": "file",
+   "sha256": "9fb7b051684a54bf2132199406216139b3c46a4f6287ee9f94a8830019b7a4f5"
+  },
+  "python/mojolearn/_linalg_impl.py": {
+   "bytes": 44679,
+   "kind": "file",
+   "sha256": "b1916384947fe1207b8c1411d94eec57c71f930e76c97378aef85287c408eeca"
+  },
+  "python/mojolearn/_mamba_impl.py": {
+   "bytes": 75983,
+   "kind": "file",
+   "sha256": "0d316a4cef504e03f2cec5ef1faa7a5ea62018dab76a8e0aea59253b1021403c"
+  },
+  "python/mojolearn/_metrics_impl.py": {
+   "bytes": 70176,
+   "kind": "file",
+   "sha256": "f3f9736d84031df8d830bdd449e26cc6160d3e498a7989f7522fc608277c8f57"
+  },
+  "python/mojolearn/_mlp_impl.py": {
+   "bytes": 27072,
+   "kind": "file",
+   "sha256": "761b21da44407d4298713cffe12e82d629aca14a95057d731543d25ab1b913c0"
+  },
+  "python/mojolearn/_mode.py": {
+   "bytes": 6975,
+   "kind": "file",
+   "sha256": "2bcbb11d2a593b6c5ab933551d9c6117055efa5b35e4715daa0dcecba94a700c"
+  },
+  "python/mojolearn/_parallel_cv_witness.py": {
+   "bytes": 4331,
+   "kind": "file",
+   "sha256": "0b4a523769f21e4df9a29b5b94fe2fdc9d1d218ceb7f1c49c1c3d0e16f0cad74"
+  },
+  "python/mojolearn/_parallel_pool.py": {
+   "bytes": 18514,
+   "kind": "file",
+   "sha256": "353772a48323863d389a3badf3086bcb73785d17a72238d1b1ec95bdc5ffcee3"
+  },
+  "python/mojolearn/_parallel_worker.py": {
+   "bytes": 22376,
+   "kind": "file",
+   "sha256": "4f3458e8c8355614d5d6f8acf039fd1062b2dc343876cac95ea3e255d725ff85"
+  },
+  "python/mojolearn/_portable_math.py": {
+   "bytes": 5090,
+   "kind": "file",
+   "sha256": "32fa972f2e7fdc397384add2ce61f03c8b1bfc2c8a549b91f4316b024b97f445"
+  },
+  "python/mojolearn/_ragged.py": {
+   "bytes": 7945,
+   "kind": "file",
+   "sha256": "87f3e3eeb283cec711a491022bd4af8cf76b76a2ce82fdf0df706ac5316589c2"
+  },
+  "python/mojolearn/_samba_checkpoint.py": {
+   "bytes": 8709,
+   "kind": "file",
+   "sha256": "223ff6b23b2a20b805b94b58f3a954babdda65e9cb3752bbc1a353ab0c526d79"
+  },
+  "python/mojolearn/_samba_impl.py": {
+   "bytes": 34206,
+   "kind": "file",
+   "sha256": "d904f31de20e98af40f9d87248ae50fee7e733c59fdafca5cdd1c1296b1beb80"
+  },
+  "python/mojolearn/_serialize.py": {
+   "bytes": 16483,
+   "kind": "file",
+   "sha256": "6b80e1ea8f422c38762456b3517a6b39598593186d600f0f3ef619807df5afd5"
+  },
+  "python/mojolearn/_solver_impl.py": {
+   "bytes": 24897,
+   "kind": "file",
+   "sha256": "c9b622d89f69f69a7c43524f5698e3b41e76cd81e80d717f126214f4ba381840"
+  },
+  "python/mojolearn/_spectral_impl.py": {
+   "bytes": 51152,
+   "kind": "file",
+   "sha256": "7197c7c754454ba32cfe4f19b3ac1ca0152fe671fd8bdfaf4ca9ca6df6a93c1c"
+  },
+  "python/mojolearn/_svm_impl.py": {
+   "bytes": 64072,
+   "kind": "file",
+   "sha256": "a6e294d9d42658327d5e540f377209269c1bd38757a5cbc424fa9d8ca7282594"
+  },
+  "python/mojolearn/_tokenizer_synthetic.py": {
+   "bytes": 12437,
+   "kind": "file",
+   "sha256": "2e9dfb6639065125156f888bec03c6fc9a52b627e0fcbc913e9ca140865f751b"
+  },
+  "python/mojolearn/_training_impl.py": {
+   "bytes": 95677,
+   "kind": "file",
+   "sha256": "5f625df301591781f7fbb21ee548a957c9d960e30c68108048967adf1d5fb92e"
+  },
+  "python/mojolearn/_transformer_impl.py": {
+   "bytes": 74648,
+   "kind": "file",
+   "sha256": "d0f88c5cb3ecac9f18f46d4668447ad3d5dfcb789eb420c3b7b0fc8b98311eb2"
+  },
+  "python/mojolearn/_tsa_impl.py": {
+   "bytes": 42156,
+   "kind": "file",
+   "sha256": "0d6dc1cff397ccd4ef947c35e7415c6d03213aed29f4401243249ba6a9fb7fc4"
+  },
+  "python/mojolearn/_umap_impl.py": {
+   "bytes": 15801,
+   "kind": "file",
+   "sha256": "9ba73e90ee15b86dcde9fc23a5834dcaa49b6e3f1dbd8afcfc072e6c870f27e8"
+  },
+  "python/mojolearn/_verification_catalog.py": {
+   "bytes": 44905,
+   "kind": "file",
+   "sha256": "42eebd216eeefb4499b909c96cd011289af1ad799095689b6eba3c6110953bad"
+  },
+  "python/mojolearn/_verification_coverage.py": {
+   "bytes": 14419,
+   "kind": "file",
+   "sha256": "c55f6a8f5a61ee19b2caeea976c229fa8308bf70c28df0814b006da7e37fd1c4"
+  },
+  "python/mojolearn/_verification_ctr_models.py": {
+   "bytes": 2983,
+   "kind": "file",
+   "sha256": "278194740929c5b2904973ca8dc48dc7ea385f36b1551e620e3405545595e35c"
+  },
+  "python/mojolearn/_verification_evidence_data.py": {
+   "bytes": 6613074,
+   "kind": "file",
+   "sha256": "3f764fc8eadc2d3fe9dcb5ba7f19f8b8bc41eb6e5a7cb86d45981e3600733597"
+  },
+  "python/mojolearn/_verify.py": {
+   "bytes": 67984,
+   "kind": "file",
+   "sha256": "d4d302b1cec72b1ca214d37c27adc1aae8ca9a4756751e9493f04582fa7d9137"
+  },
+  "python/mojolearn/_verify_all.py": {
+   "bytes": 215089,
+   "kind": "file",
+   "sha256": "660be986e44e17a703fc992523294a91ca92c5adba1da1048f0b0a9d4f9bc27c"
+  },
+  "python/mojolearn/_verify_causal_lm.py": {
+   "bytes": 9352,
+   "kind": "file",
+   "sha256": "53d205629777c36f321936e9d2ea538330838804c74fb72d24774ddec7e0fe82"
+  },
+  "python/mojolearn/_verify_distributed.py": {
+   "bytes": 19717,
+   "kind": "file",
+   "sha256": "e19d3ce905f9bfdce10f90f12fccb0bf08083f27ecc95476eacbc639ec927223"
+  },
+  "python/mojolearn/_verify_par.py": {
+   "bytes": 44453,
+   "kind": "file",
+   "sha256": "a036c0cbb5ece03579c1d257330e3ff1c9a76206810edfee87750e9d4c0aa6d0"
+  },
+  "python/mojolearn/_verify_parallel_cv.py": {
+   "bytes": 14775,
+   "kind": "file",
+   "sha256": "c1f8f977352a4a47fd2baa10ed14aa9250720a380455926bc702c75b5f0059ca"
+  },
+  "python/mojolearn/_verify_reference.py": {
+   "bytes": 39204,
+   "kind": "file",
+   "sha256": "2f0ac77e54c5cf0c5e6a0c857dda8d87f51fa20ae64dc3f5c0cd350e4660452d"
+  },
+  "python/mojolearn/_verify_resources.py": {
+   "bytes": 2610,
+   "kind": "file",
+   "sha256": "968fa3740a3f7ceaabb81491ecf12aaeaa97dbb8646999e02583f88b3ffdabc1"
+  },
+  "python/mojolearn/_verify_small.py": {
+   "bytes": 5728,
+   "kind": "file",
+   "sha256": "dcc0e37e4408e97b181e89d134c098bd5c2f3bc9a9a787c90f9b5290de37594c"
+  },
+  "python/mojolearn/_version.py": {
+   "bytes": 275,
+   "kind": "file",
+   "sha256": "2a0e5fe572420a1b80dbb20d4e32443cd04016e94b846fe8263773320040b67f"
+  },
+  "python/mojolearn/cluster.py": {
+   "bytes": 22956,
+   "kind": "file",
+   "sha256": "2c9035fcc17080bfed988887971cedd5df9e3a547b64a40b864baea38262285c"
+  },
+  "python/mojolearn/decomposition.py": {
+   "bytes": 34362,
+   "kind": "file",
+   "sha256": "14e8821a5967ca05a8bd427f9d811e3c2c153a5852e77bc8e758465ee814a049"
+  },
+  "python/mojolearn/density.py": {
+   "bytes": 44340,
+   "kind": "file",
+   "sha256": "e55ed56980f95c255bc61e9ea9686b09e6f603f33bd085080f4ea8ea170ab7f8"
+  },
+  "python/mojolearn/embedding.py": {
+   "bytes": 13033,
+   "kind": "file",
+   "sha256": "599231a486f0e6abbb5e10126379eb56afc087725619ae4617da933e19f30ab4"
+  },
+  "python/mojolearn/ensemble.py": {
+   "bytes": 148234,
+   "kind": "file",
+   "sha256": "aaf3de3ef709a89eb29782f188de903f019bebbd14f10c1b4211d808a897f573"
+  },
+  "python/mojolearn/extratrees.py": {
+   "bytes": 26855,
+   "kind": "file",
+   "sha256": "4bb06e5d54e9d30ec33a642db77c79fb040beca2a082bee245a7fde624689e28"
+  },
+  "python/mojolearn/hdbscan.py": {
+   "bytes": 26896,
+   "kind": "file",
+   "sha256": "8d97e5dbd5c34f78b1a21f250935d8c7461d99f2fc77636ff848c065b81b09cf"
+  },
+  "python/mojolearn/host_surface.py": {
+   "bytes": 242218,
+   "kind": "file",
+   "sha256": "8449234fab5f5f1a81e5a5546d1541d95a73493976fafdeec401ce6750764202"
+  },
+  "python/mojolearn/kernel_methods.py": {
+   "bytes": 27076,
+   "kind": "file",
+   "sha256": "d5627d7c476ba24add74aa5e3c59e991083a0a059f9c7536c96ddd0c6787f74f"
+  },
+  "python/mojolearn/language_model.py": {
+   "bytes": 1808,
+   "kind": "file",
+   "sha256": "4e84ad0955cfc7b7dc0c884d1abcae7f59943d93bee337ac4a16b92be9718925"
+  },
+  "python/mojolearn/linalg.py": {
+   "bytes": 2114,
+   "kind": "file",
+   "sha256": "fdf289e94c3fa7a76c703b502590ae2ed847aeedcfd3395568bc970e62978a89"
+  },
+  "python/mojolearn/linear_model.py": {
+   "bytes": 66142,
+   "kind": "file",
+   "sha256": "ade895967191a8ba5e5e9afcff9d5c0fe762a25d56e05ab71b5865eab66ec06f"
+  },
+  "python/mojolearn/lm_corpus.py": {
+   "bytes": 27490,
+   "kind": "file",
+   "sha256": "9acde5f9fc900d79f72eae27f875150ac3540eb41f2f9bfbd668f18ffdefa5aa"
+  },
+  "python/mojolearn/lowbit.py": {
+   "bytes": 18696,
+   "kind": "file",
+   "sha256": "1687883c6923c3557967d670d8d1663872e00dfb8a17e81d079f224e3ae04ab3"
+  },
+  "python/mojolearn/mamba.py": {
+   "bytes": 2282,
+   "kind": "file",
+   "sha256": "8c3cb96303f0fa4df9ea929d0464e49e9cc23a1b4f54a95e104c36ef2642aac4"
+  },
+  "python/mojolearn/manifold.py": {
+   "bytes": 363,
+   "kind": "file",
+   "sha256": "424d2829a0f78f444b1e24b9f9bd44ccbfc36382250e5cf5e14d4384b88d339a"
+  },
+  "python/mojolearn/mixture.py": {
+   "bytes": 18507,
+   "kind": "file",
+   "sha256": "e7cf8d928e32920799c34b05b44ee57ecfcd13ba9baa2f2ae7604817b579f9fb"
+  },
+  "python/mojolearn/model_pool_training.py": {
+   "bytes": 4957,
+   "kind": "file",
+   "sha256": "42d389b1612c07613da952f32e3c709f4b43fc54124c9a1c39ed37f31a07fcf3"
+  },
+  "python/mojolearn/model_selection.py": {
+   "bytes": 27058,
+   "kind": "file",
+   "sha256": "bc737df5e213ebf1c863e20d79a95a455351d8137552c7064185d1f0dcbc21c4"
+  },
+  "python/mojolearn/models/README.md": {
+   "bytes": 10228,
+   "kind": "file",
+   "sha256": "21113e057b0003c4f15658bb00dda5bc563170b720f3e7bbe97fcdd4ecd37715"
+  },
+  "python/mojolearn/models/__init__.py": {
+   "bytes": 2224,
+   "kind": "file",
+   "sha256": "727ad15eb10141101ae1c3ac929556913c11abe94d001f5a6afdc580b6bebe5d"
+  },
+  "python/mojolearn/models/causal_lm.py": {
+   "bytes": 27220,
+   "kind": "file",
+   "sha256": "556fbf29db0aba841d9ca86dd3386e08c434a8f97469c8a33b428139828c5cb9"
+  },
+  "python/mojolearn/models/config.py": {
+   "bytes": 22901,
+   "kind": "file",
+   "sha256": "51e5c2b3dadf42a802592499a53edce635b52b325cc4fe71bad137fa31c19a3a"
+  },
+  "python/mojolearn/models/parallel_causal_lm.py": {
+   "bytes": 9554,
+   "kind": "file",
+   "sha256": "cbcd3a1d0f777a00e7d3741bdfeb96e0713f4ce7edafc3073a23992604a53d02"
+  },
+  "python/mojolearn/models/safetensors.py": {
+   "bytes": 15184,
+   "kind": "file",
+   "sha256": "d681e2c7d1fb32fcc737bc375b12d8bdafab69290810d22bb14b3bfc2fb6e235"
+  },
+  "python/mojolearn/models/tokenizer.py": {
+   "bytes": 28069,
+   "kind": "file",
+   "sha256": "2dce73a0edfddb4ff83e1d9d7c9c3a5583c5baf3f9e7be0c790bea82d82a5b32"
+  },
+  "python/mojolearn/neighbors.py": {
+   "bytes": 73435,
+   "kind": "file",
+   "sha256": "47fb9f71ededfabd197cd0aa39e921e4c87306f4f9e4720f96a210656472b564"
+  },
+  "python/mojolearn/neural_inference.py": {
+   "bytes": 21029,
+   "kind": "file",
+   "sha256": "6ed69a1e4c9bc8a19d5da2648d9239abbf9104ea49c2a6b995daf0786398e577"
+  },
+  "python/mojolearn/neural_network.py": {
+   "bytes": 160,
+   "kind": "file",
+   "sha256": "dc156fa008fafa7b125fef185a9624e64d4a1baaacfe164bb6537ed387ba8029"
+  },
+  "python/mojolearn/offload_training.py": {
+   "bytes": 4114,
+   "kind": "file",
+   "sha256": "7a0c9f7281291f6cceccf3bc94d6f40abe1320ee4f739d4f8100f26e6f73d303"
+  },
+  "python/mojolearn/parallel_classical.py": {
+   "bytes": 24506,
+   "kind": "file",
+   "sha256": "ade384e4dff6f9e8b8805cb18cadac6b411b794f2f331c652fc53295b07117bd"
+  },
+  "python/mojolearn/parallel_ensemble.py": {
+   "bytes": 12640,
+   "kind": "file",
+   "sha256": "a902002c38144ee1d2c10851c6d5bff205856b13007dfde4824538c801868b26"
+  },
+  "python/mojolearn/parallel_forecasting.py": {
+   "bytes": 7558,
+   "kind": "file",
+   "sha256": "f7dd67fb1a810c90375ef6fc98655471f93f87ffc2c62da763c5a2d9816db147"
+  },
+  "python/mojolearn/parallel_gaussian_process.py": {
+   "bytes": 4852,
+   "kind": "file",
+   "sha256": "e785bd7a36b02b93430b5b24e9df1df993c5b72af75fcbeb66a9bb2a1b16d18a"
+  },
+  "python/mojolearn/parallel_graph.py": {
+   "bytes": 2719,
+   "kind": "file",
+   "sha256": "c757edea510c8968b46815970c01be54099d8e5ecc731ce413dcd2ede57e3eda"
+  },
+  "python/mojolearn/parallel_ivf.py": {
+   "bytes": 8320,
+   "kind": "file",
+   "sha256": "af614fe755620f8e0c92d6b6df45801c920b7bdecad40b6d1b119ddc687fdd1d"
+  },
+  "python/mojolearn/parallel_model_selection.py": {
+   "bytes": 5781,
+   "kind": "file",
+   "sha256": "e110fc5bd2b276142cb0a83adcf581feb8fb8a31cad730a1196e7f35def04f89"
+  },
+  "python/mojolearn/parallel_neighbors.py": {
+   "bytes": 4803,
+   "kind": "file",
+   "sha256": "2e4e7d9766af2a57cf576766c43069a8441c9a0a5bfaa5c9f24169bd3f2d7e45"
+  },
+  "python/mojolearn/parallel_neighbors_reference.py": {
+   "bytes": 11308,
+   "kind": "file",
+   "sha256": "b1286bfd8a1141b6a9778fa17f642686078c7cefc620bddb38ada29c14b2286b"
+  },
+  "python/mojolearn/parallel_preprocessing.py": {
+   "bytes": 4143,
+   "kind": "file",
+   "sha256": "7c29b47286f95081e8a543f4a13d6faeecd75d7cd0b3c07cbecd4bf361e43c6a"
+  },
+  "python/mojolearn/parallel_training.py": {
+   "bytes": 16229,
+   "kind": "file",
+   "sha256": "28de9d7724f273322b30ef1b1c3f4bc97b560ffc53dabe3f8685da097525bece"
+  },
+  "python/mojolearn/preprocessing.py": {
+   "bytes": 19199,
+   "kind": "file",
+   "sha256": "6f37f8c76c454f56d008debe602514c8cd77d48ba3378cfb9398b3a48b35aa46"
+  },
+  "python/mojolearn/randomforest.py": {
+   "bytes": 39620,
+   "kind": "file",
+   "sha256": "990392ebec13a43cb1852c9784cbcafbb865493eae4b01f2f0bdf8534936be96"
+  },
+  "python/mojolearn/reference_cards/kmeans.identical.fp32.v1.card.PLACEHOLDER": {
+   "bytes": 2702,
+   "kind": "file",
+   "sha256": "95424b198497595ea62714d319be60efa9dcb96b21bca4df1f1b4ef1afe208b1"
+  },
+  "python/mojolearn/resample.py": {
+   "bytes": 10484,
+   "kind": "file",
+   "sha256": "2eb32cfeaaefdc41aef9b8ca65ce23a0b5d764478bd8d5f8f71d7de30528a409"
+  },
+  "python/mojolearn/svm.py": {
+   "bytes": 11266,
+   "kind": "file",
+   "sha256": "67a87df1476e3a65e099c239ea7e69fd837d66f5947c8fd09488feca7514a167"
+  },
+  "python/mojolearn/tests/__init__.py": {
+   "bytes": 1070,
+   "kind": "file",
+   "sha256": "33ced17e7de1350cd77d6f1758d22a2466b3ff9a8409dfe3d527c77589020f61"
+  },
+  "python/mojolearn/tests/_expose_d_harness.py": {
+   "bytes": 2941,
+   "kind": "file",
+   "sha256": "95065a8bdae8a891865669c7dac4c068b2af9e7a4495d149efa53bafefc9a276"
+  },
+  "python/mojolearn/tests/test_arima_exog.py": {
+   "bytes": 10435,
+   "kind": "file",
+   "sha256": "0dc1d19b12569696347be08dac8d0cb63de11c2ef156b8116af340f86eeb08fd"
+  },
+  "python/mojolearn/tests/test_arima_surface.py": {
+   "bytes": 47243,
+   "kind": "file",
+   "sha256": "394210adb90a133a8ff2030afac180d9b9a4712c1ad0c32efcbaaddc8e5a19b9"
+  },
+  "python/mojolearn/tests/test_backend_owned_types.py": {
+   "bytes": 1578,
+   "kind": "file",
+   "sha256": "7fc4944d76a7ab3db46d37ea72816c565e73dc38f9c33d4b963fc750bba44c68"
+  },
+  "python/mojolearn/tests/test_binding_mode_guard.py": {
+   "bytes": 3383,
+   "kind": "file",
+   "sha256": "d41ea0dff451150d761486f4076f52639c17d9263e1bd2d9f9bf6a55da9af27c"
+  },
+  "python/mojolearn/tests/test_byte_lm_checkpoint_binary.py": {
+   "bytes": 9939,
+   "kind": "file",
+   "sha256": "da8d02d1fee135e0e36a99e388bf1875f69545cb3dc38b31c9b067cdfb5b3b39"
+  },
+  "python/mojolearn/tests/test_byte_lm_host.py": {
+   "bytes": 9985,
+   "kind": "file",
+   "sha256": "4833888779f0edd8ae8ade8fe4c6317785f2b9cd5826625fb16765d1b8f9d828"
+  },
+  "python/mojolearn/tests/test_byte_lm_host_trainer.py": {
+   "bytes": 12370,
+   "kind": "file",
+   "sha256": "84045fb065a49470f8de853264ab595bec50ab06088ae7d44305da97f2c11118"
+  },
+  "python/mojolearn/tests/test_byte_lm_runtime_shape.py": {
+   "bytes": 8104,
+   "kind": "file",
+   "sha256": "4d543ed0573bd711965fc06817a7476dc009f1aad4f47f6f53b7439baee8a108"
+  },
+  "python/mojolearn/tests/test_byte_lm_session.py": {
+   "bytes": 10692,
+   "kind": "file",
+   "sha256": "d7459921b8f812ad84aedc91968a4c7493bbca5a4bb11461b25c7c2c438f40c9"
+  },
+  "python/mojolearn/tests/test_byte_lm_surface.py": {
+   "bytes": 24512,
+   "kind": "file",
+   "sha256": "53a8c7256ac595ece35ff341e25572ffc9031a1edbe9d505b0ff9a418921138b"
+  },
+  "python/mojolearn/tests/test_byte_lm_trainer_logits.py": {
+   "bytes": 11585,
+   "kind": "file",
+   "sha256": "e81a02a3608619649d8511a58c83dd47c6abc49fe784d0d6c94ffd1163bdef5a"
+  },
+  "python/mojolearn/tests/test_causal_lm_cli.py": {
+   "bytes": 2093,
+   "kind": "file",
+   "sha256": "0e6d631a6fb45af6f148c9f0e4a809192da8e5ece2653bbed53420f146db7402"
+  },
+  "python/mojolearn/tests/test_cholesky_cpu_inference.py": {
+   "bytes": 6951,
+   "kind": "file",
+   "sha256": "a090329bab3dd7fb2dd39eb9a38057d5e36ad8f591148a336bdded53611d01d4"
+  },
+  "python/mojolearn/tests/test_cholesky_surface.py": {
+   "bytes": 5600,
+   "kind": "file",
+   "sha256": "ac5af461f80e42ca7c13a5c6fd1769aca1d8ead035b3ab02b6602c4bee519f36"
+  },
+  "python/mojolearn/tests/test_classical_partition_native.py": {
+   "bytes": 3370,
+   "kind": "file",
+   "sha256": "58598dbf2e54fedd2e3a0df0c6cf958d0c86c0fe4014722e56d0292cea909473"
+  },
+  "python/mojolearn/tests/test_classification_metrics.py": {
+   "bytes": 8581,
+   "kind": "file",
+   "sha256": "fd11bf263938b90cc977a294cd47cf8b0d40aeba88ca2dd272f86f0f76cbc587"
+  },
+  "python/mojolearn/tests/test_cpu_inference_boundary.py": {
+   "bytes": 1327,
+   "kind": "file",
+   "sha256": "dac1743d8eeff92536f48d893956342c9fcf55d8c324d77f627756d0b8e57c73"
+  },
+  "python/mojolearn/tests/test_cpu_kernel_variants.py": {
+   "bytes": 4521,
+   "kind": "file",
+   "sha256": "b6a88aeaab141a02da8544a1b51f53b3fe28c68eb84540915eb29f8e1502f2ad"
+  },
+  "python/mojolearn/tests/test_cpu_parallel_rbf_sampler.py": {
+   "bytes": 4637,
+   "kind": "file",
+   "sha256": "092c7c6925f50619ce703e02b2addb62fae808a986c1b4a165346fe2aa7f713f"
+  },
+  "python/mojolearn/tests/test_cpu_training_arima.py": {
+   "bytes": 9644,
+   "kind": "file",
+   "sha256": "833250faadca17cd23d751694eeefe9d0c59ad949667838ed7d9108dcd81c77d"
+  },
+  "python/mojolearn/tests/test_cpu_training_d.py": {
+   "bytes": 12982,
+   "kind": "file",
+   "sha256": "f66ba89ecee39d0c62b1303d61c06368b88ecdd3586cc14a711feebc9b63241d"
+  },
+  "python/mojolearn/tests/test_cpu_training_e.py": {
+   "bytes": 9759,
+   "kind": "file",
+   "sha256": "f7636757eb12100af42bf4d5555a03cc1f27f33f4d2760f183cc68fe6600766f"
+  },
+  "python/mojolearn/tests/test_cpu_training_e2.py": {
+   "bytes": 20771,
+   "kind": "file",
+   "sha256": "28b78eb1eed104385c31a7723bb7b7e86de53d99d858468f31c0442ef2414ccc"
+  },
+  "python/mojolearn/tests/test_cpu_training_e3.py": {
+   "bytes": 8140,
+   "kind": "file",
+   "sha256": "e28844a3ab8992f3ccafa0284e185488e131512e63b9f7cf9bb615f6a66b1c8d"
+  },
+  "python/mojolearn/tests/test_cpu_training_e3_gbdt.py": {
+   "bytes": 13030,
+   "kind": "file",
+   "sha256": "779af71449ed3729fbcb8774e8a786d74d172147101e0a7ee032f30c9c8772c5"
+  },
+  "python/mojolearn/tests/test_cpu_training_e3_gbdt_rmse.py": {
+   "bytes": 7572,
+   "kind": "file",
+   "sha256": "e4eb16d45602efa6930f02cef2993a46932171c12b17c97b2937cd56008559d6"
+  },
+  "python/mojolearn/tests/test_cpu_training_e3_gbdt_trees.py": {
+   "bytes": 8736,
+   "kind": "file",
+   "sha256": "a46ca2c2f796a7ae67e1fdfa1aed92324f8def81a554268c1868f85b0f4c7dd9"
+  },
+  "python/mojolearn/tests/test_cpu_training_embedding_ivf.py": {
+   "bytes": 18697,
+   "kind": "file",
+   "sha256": "4ae0e8c7ca8525b5cd53915cb24a284929bbab10bcdc17cdce461d9c69f627e1"
+  },
+  "python/mojolearn/tests/test_cpu_training_forest_variants.py": {
+   "bytes": 9751,
+   "kind": "file",
+   "sha256": "5e2e42ae682819ea4993bd1a02157da0b6749c311f65465ef2c51c9dc4c786cf"
+  },
+  "python/mojolearn/tests/test_cpu_training_gbdt_losses.py": {
+   "bytes": 10952,
+   "kind": "file",
+   "sha256": "87e947817e98d0217e3428855b0c1db462cb3e0eadf4054b8071b1451722f137"
+  },
+  "python/mojolearn/tests/test_cpu_training_gbdt_ordered.py": {
+   "bytes": 14143,
+   "kind": "file",
+   "sha256": "ef22eb8b57bd1fe7161eaafa19b9fee13e30e21af45f6c4afb20cff5f86f65ec"
+  },
+  "python/mojolearn/tests/test_cpu_training_gp.py": {
+   "bytes": 10093,
+   "kind": "file",
+   "sha256": "31b2ff1f8b6872cf1b48702556fc7ad6a63a495922bc9cafcdc5699c4d4d97c5"
+  },
+  "python/mojolearn/tests/test_cpu_training_mamba.py": {
+   "bytes": 6704,
+   "kind": "file",
+   "sha256": "d1a7c42c013d9821e01bec4fef75281cf89388593cf8516878e1cf64ea31b20c"
+  },
+  "python/mojolearn/tests/test_cpu_training_misc.py": {
+   "bytes": 20462,
+   "kind": "file",
+   "sha256": "667fce916038a29a0c64e29c3c21c47c880a8a2f678726bcbc238801162406e7"
+  },
+  "python/mojolearn/tests/test_cpu_training_par_classical.py": {
+   "bytes": 24106,
+   "kind": "file",
+   "sha256": "076468bf907f2e740f87838ec37c1757d6d2ea41f019b42993c4057c653471e8"
+  },
+  "python/mojolearn/tests/test_cpu_training_samba.py": {
+   "bytes": 8643,
+   "kind": "file",
+   "sha256": "f9eda649a2de915a763ad68775d2ca534668c9c40526594af904adb7c7708c1e"
+  },
+  "python/mojolearn/tests/test_cpu_training_transformer.py": {
+   "bytes": 9732,
+   "kind": "file",
+   "sha256": "4457ff74eab284cfdaa909cd5f2ed342fdae7d5c16ff99290eb65c4362d4355e"
+  },
+  "python/mojolearn/tests/test_cpu_training_umap.py": {
+   "bytes": 7593,
+   "kind": "file",
+   "sha256": "007e0541a754846f3387015ee842a030e39f28f4ba5a8a42d53ef6ee75bf6a7a"
+  },
+  "python/mojolearn/tests/test_crossvendor_coverage.py": {
+   "bytes": 9098,
+   "kind": "file",
+   "sha256": "8b633f30e52824129138150b1b53c8d1180ce253d10c7a612679cf52b67a01c1"
+  },
+  "python/mojolearn/tests/test_decode_sessions_cpu_route.py": {
+   "bytes": 10557,
+   "kind": "file",
+   "sha256": "ed5ca9d2b72bc1b4a62c3d1b0d934d7ab2239341025a1889d03d874252a57cd0"
+  },
+  "python/mojolearn/tests/test_device_array_refusal.py": {
+   "bytes": 5995,
+   "kind": "file",
+   "sha256": "6303bfbbd8bcda95bf54b170b95ff9914608b5e10c39aa34efbc41d7baee2843"
+  },
+  "python/mojolearn/tests/test_devicepool_visibility.py": {
+   "bytes": 4546,
+   "kind": "file",
+   "sha256": "29087a0a8602368006addc2ffdf3f0759f9e15964abb53bdd06270e55e352ffd"
+  },
+  "python/mojolearn/tests/test_distributed_cli.py": {
+   "bytes": 2108,
+   "kind": "file",
+   "sha256": "7e975bbbccb58922c219c21adcf42ff022fa70c6037e361a2f763f29d0512b00"
+  },
+  "python/mojolearn/tests/test_distributed_ivf.py": {
+   "bytes": 8903,
+   "kind": "file",
+   "sha256": "45768f1fcf3baf14cef50b90fdbc47216760b7aa9e5eb7bc7b400d26bb2019f8"
+  },
+  "python/mojolearn/tests/test_embedding_surface.py": {
+   "bytes": 8753,
+   "kind": "file",
+   "sha256": "62c4b016ca2ff142e1b104d3d6865220c922a48cfa985802bf57fb9423fc36b2"
+  },
+  "python/mojolearn/tests/test_estimators_host_borrowed_buffers.py": {
+   "bytes": 2230,
+   "kind": "file",
+   "sha256": "1d62e4c690ac22bcc6f450041bce012b66bea5c3b0bd37094cb9ae44cd722109"
+  },
+  "python/mojolearn/tests/test_expose_d_manifest.py": {
+   "bytes": 8928,
+   "kind": "file",
+   "sha256": "82ba0877e544c26c69112dc7dc8f6f77067924d6298eeff41205d2519a7f0ee4"
+  },
+  "python/mojolearn/tests/test_extratrees_gpu_only.py": {
+   "bytes": 1604,
+   "kind": "file",
+   "sha256": "412b680ff2a5d6d44f032a6c07caff93b38d9e4d45166f8bcad33575f0671dc1"
+  },
+  "python/mojolearn/tests/test_feature_freq_experimental_surface.py": {
+   "bytes": 3280,
+   "kind": "file",
+   "sha256": "703614b80a3540692c3005a8669fed31749ade1216dc2acb3b71c8051cc48e39"
+  },
+  "python/mojolearn/tests/test_forest_export_protocol.py": {
+   "bytes": 4756,
+   "kind": "file",
+   "sha256": "9da39b9463b007fb1ef7c3643d581e3a64fdaaa93725371f9962413029f4d949"
+  },
+  "python/mojolearn/tests/test_forest_fit_mode.py": {
+   "bytes": 3778,
+   "kind": "file",
+   "sha256": "ea7f48af1bee9e38bcc34221f5b1aedd4ee387f28c941d4cf04e1bc703d453fc"
+  },
+  "python/mojolearn/tests/test_forest_inference_engine.py": {
+   "bytes": 13093,
+   "kind": "file",
+   "sha256": "189e5da342482ff58cb913524cade31b652de54a6924655ba244589e7f650398"
+  },
+  "python/mojolearn/tests/test_forest_protocol.py": {
+   "bytes": 7060,
+   "kind": "file",
+   "sha256": "93ad2c46dce3edb40fe8a1f6743dac5ebf2758fc7937c1324db9d33daaf7ce50"
+  },
+  "python/mojolearn/tests/test_fowlkes_mallows_score.py": {
+   "bytes": 3939,
+   "kind": "file",
+   "sha256": "8abcb05814f069848277094ef8c25129d04b29af3146e7cb756c18bc3ef9412d"
+  },
+  "python/mojolearn/tests/test_gbdt_catboost_defaults.py": {
+   "bytes": 14159,
+   "kind": "file",
+   "sha256": "8c77691caa3420fe82970749ca6c393d01b18cf89c3cfa866f48ae30a2da0caa"
+  },
+  "python/mojolearn/tests/test_gbdt_fast_binary_classes.py": {
+   "bytes": 2353,
+   "kind": "file",
+   "sha256": "41eb6cdab309e41995c317aaf60e4f658be0fd2a06a98e7dda9b293d5923be63"
+  },
+  "python/mojolearn/tests/test_gbdt_feature_fraction.py": {
+   "bytes": 3676,
+   "kind": "file",
+   "sha256": "30766072e9a3c319056c2fde4854c0228ab82e520bebaeb16b05facb4646ca9d"
+  },
+  "python/mojolearn/tests/test_gbdt_group_id.py": {
+   "bytes": 6583,
+   "kind": "file",
+   "sha256": "ffd411dfda9a905f587a9cf147095e2cea003e13c071c841b3f97c52bcabaac0"
+  },
+  "python/mojolearn/tests/test_gbdt_host_ctr.py": {
+   "bytes": 7047,
+   "kind": "file",
+   "sha256": "fafb1c59556ddbb833894e24206310297f68492c85512413581aa918ccbfcbe5"
+  },
+  "python/mojolearn/tests/test_gbdt_host_modes.py": {
+   "bytes": 8463,
+   "kind": "file",
+   "sha256": "e8df74b3e3ffb5765f1faaa0bb878755690dafd8e7e49faf41f3cf184f6077d0"
+  },
+  "python/mojolearn/tests/test_gbdt_input_safety.py": {
+   "bytes": 2439,
+   "kind": "file",
+   "sha256": "deabfd05fea96be3bdc9a43ab5d5e76fa8b6fb5653aebc557ee287c2894c29db"
+  },
+  "python/mojolearn/tests/test_gbdt_mode_serialization.py": {
+   "bytes": 5369,
+   "kind": "file",
+   "sha256": "92c2248865e34f356211cd6bdbc79377d7535468d26e384eac2860044b422044"
+  },
+  "python/mojolearn/tests/test_gbdt_multiclass_stochastic.py": {
+   "bytes": 2040,
+   "kind": "file",
+   "sha256": "7aa9842bfeff96b9f67ba6ed83e8919308e32dfa5c6e8b6ad50f7874f284cba2"
+  },
+  "python/mojolearn/tests/test_gbdt_pair_logit.py": {
+   "bytes": 5145,
+   "kind": "file",
+   "sha256": "bd29981d8526ed17d691746b7e09efaa2611a75d27d23a7784ff0fad2b088879"
+  },
+  "python/mojolearn/tests/test_gbdt_query_rmse.py": {
+   "bytes": 3642,
+   "kind": "file",
+   "sha256": "3794a701546ffa5688b5db9c3d5220624ecd410dcc825fdc03a59805ec8f33eb"
+  },
+  "python/mojolearn/tests/test_gbdt_ranking_bootstrap.py": {
+   "bytes": 2194,
+   "kind": "file",
+   "sha256": "73ce829f62f3f394137bd30bf0d018087b1b0dc1852b1113e8d3966aa49f9615"
+  },
+  "python/mojolearn/tests/test_gbdt_release_parity.py": {
+   "bytes": 1920,
+   "kind": "file",
+   "sha256": "cd181cc0c7d400d4689725cd5d07db1e9d1a89b347792aae6d71ee6b7ea05b19"
+  },
+  "python/mojolearn/tests/test_gbdt_search_option_guards.py": {
+   "bytes": 3433,
+   "kind": "file",
+   "sha256": "2cea429960e1a05e6e53b9152848308e6c1f1c595da6eac8485819eff4dc654e"
+  },
+  "python/mojolearn/tests/test_gbdt_tree_metadata.py": {
+   "bytes": 2120,
+   "kind": "file",
+   "sha256": "dc0398effc702329e550f58d4030c6d92f1b96fc8f5b8ea1244c3e55714e38e1"
+  },
+  "python/mojolearn/tests/test_gbdt_yeti_rank.py": {
+   "bytes": 4156,
+   "kind": "file",
+   "sha256": "2c6cc2fe89ae00c09892db95bc44bba0086824b1cc4477db4545ec0c9e134b33"
+  },
+  "python/mojolearn/tests/test_gmm_sample.py": {
+   "bytes": 5532,
+   "kind": "file",
+   "sha256": "0c205a3ce3c9775d9de5e98bf1e6314cfa5ce4e774ca65be0c25f81754c9e489"
+  },
+  "python/mojolearn/tests/test_gp_normalize_y.py": {
+   "bytes": 3376,
+   "kind": "file",
+   "sha256": "bf8500f3017e1106f20a356bc111a53bc720c90c5d5fb39edb65811039875d80"
+  },
+  "python/mojolearn/tests/test_gp_optimizer.py": {
+   "bytes": 11642,
+   "kind": "file",
+   "sha256": "be557cb47a735f19e5842e1685e553db2ab394cf3a85cfd22e5baec74463f5f9"
+  },
+  "python/mojolearn/tests/test_gp_sample_y.py": {
+   "bytes": 6819,
+   "kind": "file",
+   "sha256": "2568c1c3346b1fe05134db034eb469676096d6cc78ab043733316c327bc77c73"
+  },
+  "python/mojolearn/tests/test_gp_surface.py": {
+   "bytes": 13413,
+   "kind": "file",
+   "sha256": "29bc01d59eb58b9034666ac339dbe0463852b5491b3c5f1980315e787c6f0294"
+  },
+  "python/mojolearn/tests/test_gpc_surface.py": {
+   "bytes": 10009,
+   "kind": "file",
+   "sha256": "5e89aba507490ad333982505cbadcadccff5647d4db9c0310e53b4ef90ecd0eb"
+  },
+  "python/mojolearn/tests/test_gpu_witness.py": {
+   "bytes": 4913,
+   "kind": "file",
+   "sha256": "b590878c0939fdbe52fc9513d361ffe0aa91119303a473898abda8a3fe4e5d28"
+  },
+  "python/mojolearn/tests/test_hdbscan_host_lifetime.py": {
+   "bytes": 1726,
+   "kind": "file",
+   "sha256": "bf726b40185eff1a751ff96d4743ac8121273e86aa669d812f37b686b9c30bdd"
+  },
+  "python/mojolearn/tests/test_hdbscan_surface.py": {
+   "bytes": 17060,
+   "kind": "file",
+   "sha256": "da42478cf6531e9b580568ce4f33e6e4a9b20ddb956ce218f17697a6dd7c99b6"
+  },
+  "python/mojolearn/tests/test_holtwinters_inference.py": {
+   "bytes": 8393,
+   "kind": "file",
+   "sha256": "2f67d3de68e74cf0b2bd515d6b5140777fd2610f7793d3fdf1167c82006eb838"
+  },
+  "python/mojolearn/tests/test_host_model_kmeans.py": {
+   "bytes": 15212,
+   "kind": "file",
+   "sha256": "4cac1a45a77bf47332aaca5f4cc82811c5159eec04dd238e1afe8a23c1ab1e9b"
+  },
+  "python/mojolearn/tests/test_host_model_linear_kernel.py": {
+   "bytes": 4452,
+   "kind": "file",
+   "sha256": "2b33f6de6cd3a936ac7df48aa28724ce1fe8320b713d508a9f92ee918b6ff60c"
+  },
+  "python/mojolearn/tests/test_host_model_svm.py": {
+   "bytes": 3896,
+   "kind": "file",
+   "sha256": "59b514e344a11cbb17bb4fb42575ff54a7a3c375e2727b4f534b27a422d07af5"
+  },
+  "python/mojolearn/tests/test_host_only_verifier.py": {
+   "bytes": 2544,
+   "kind": "file",
+   "sha256": "905e6bc6d1233423db518c1eb3bba2aab6d54480511a4776146bfa3f5ddbee80"
+  },
+  "python/mojolearn/tests/test_host_path_resolution.py": {
+   "bytes": 9278,
+   "kind": "file",
+   "sha256": "ae04443b379a8360a4b671784892d51ce75cd88bcbf04140ecd2485a7e9f2a6a"
+  },
+  "python/mojolearn/tests/test_host_surface.py": {
+   "bytes": 70559,
+   "kind": "file",
+   "sha256": "a09152eb05311d2c9dba2ec5bf39a6fce44aaaaf0b9248f684cd94ec3ce4f625"
+  },
+  "python/mojolearn/tests/test_hotpath_native.py": {
+   "bytes": 30689,
+   "kind": "file",
+   "sha256": "1716684046ab07f56a234c459184a053887101eb05be50c1e8054234ad781ad8"
+  },
+  "python/mojolearn/tests/test_iforest_output_boundary.py": {
+   "bytes": 1456,
+   "kind": "file",
+   "sha256": "d9514ba6c688555a2122a5dab7cf3d61f0e51535bcfdeef147d379ad4122cebf"
+  },
+  "python/mojolearn/tests/test_ivf_embedding_cpu_inference.py": {
+   "bytes": 14425,
+   "kind": "file",
+   "sha256": "48a3ba81cf32c8a5e79d45f1f3a444712cf8cea4e7e0b2a9f19d99e62d1ac980"
+  },
+  "python/mojolearn/tests/test_ivf_surface.py": {
+   "bytes": 6745,
+   "kind": "file",
+   "sha256": "5627c8f42e643e95a2aee7a0acdd1746f55697be2c23642683a83a1648e461fe"
+  },
+  "python/mojolearn/tests/test_kde_fused_fast.py": {
+   "bytes": 6405,
+   "kind": "file",
+   "sha256": "fc35a07a5780af5546a69c4f638ec0479437fafab216fde10ac29b3dc8085311"
+  },
+  "python/mojolearn/tests/test_kernel_methods_surface.py": {
+   "bytes": 8650,
+   "kind": "file",
+   "sha256": "3f8ee8c730ca69b1a46e231252f167eacccf2e9b201a052b2ec0e728053d8155"
+  },
+  "python/mojolearn/tests/test_kmeans_metric_surface.py": {
+   "bytes": 6319,
+   "kind": "file",
+   "sha256": "d64f2e5643242dca3895844867c7c6f88663f36c0bed8c6f612709cde5e7589d"
+  },
+  "python/mojolearn/tests/test_kmeans_predict.py": {
+   "bytes": 6526,
+   "kind": "file",
+   "sha256": "508bd926b19adc50a909da8e916772aa0a7656da41d5c58ea89e8921569ff82f"
+  },
+  "python/mojolearn/tests/test_kmeans_transform.py": {
+   "bytes": 6599,
+   "kind": "file",
+   "sha256": "baf6e110986fe5aba52a2dd3a55a0f719d3083ccf7972a2138e9ebc9efce94a1"
+  },
+  "python/mojolearn/tests/test_labels_native.py": {
+   "bytes": 5794,
+   "kind": "file",
+   "sha256": "b7079817b9e9f212d915dd25e9f6cece7177faace1994515a34b1e4bf9fd63bc"
+  },
+  "python/mojolearn/tests/test_linalg_decompositions.py": {
+   "bytes": 11154,
+   "kind": "file",
+   "sha256": "0d0314aaf21478ef69fb9546ba639a9b81dda236c78454816367028804246027"
+  },
+  "python/mojolearn/tests/test_linalg_identity.py": {
+   "bytes": 61804,
+   "kind": "file",
+   "sha256": "90191c0ba4547b267fe63ec960db56d8aac8e991c336941c4e13c8e3228c84ae"
+  },
+  "python/mojolearn/tests/test_linalg_lowbit.py": {
+   "bytes": 6518,
+   "kind": "file",
+   "sha256": "17b4e90877df1c8e4c2d6807cfd9073ac2d6be2e095732adb2a359d104f670e2"
+  },
+  "python/mojolearn/tests/test_linear_serialization_reads.py": {
+   "bytes": 1162,
+   "kind": "file",
+   "sha256": "2fc40edfdd6369aa887230d545849a9af91ccdd8d4609c284704ac2d89c9871a"
+  },
+  "python/mojolearn/tests/test_logistic_multiclass_surface.py": {
+   "bytes": 7074,
+   "kind": "file",
+   "sha256": "fa500543b1768b938ef609b53e2f3243d3edbe715b15d420104291b312b352e5"
+  },
+  "python/mojolearn/tests/test_logistic_native_predict.py": {
+   "bytes": 1824,
+   "kind": "file",
+   "sha256": "5e172e7cab3b07f69436674bee38f05a4f4717e84f91a26e43a761ef91f7335f"
+  },
+  "python/mojolearn/tests/test_lowbit_weights.py": {
+   "bytes": 12352,
+   "kind": "file",
+   "sha256": "c38bb62d19f367e5fed426593382b06f228a011b74d2e6b222f264876a7318a9"
+  },
+  "python/mojolearn/tests/test_mamba1_backward_surface.py": {
+   "bytes": 6569,
+   "kind": "file",
+   "sha256": "f605da840421902d616010fadb8f492d2f3e54c4d6e3158e22e5d935f2c1449d"
+  },
+  "python/mojolearn/tests/test_mamba23_backward_surface.py": {
+   "bytes": 11146,
+   "kind": "file",
+   "sha256": "7eca89160ba30e64990ea8ada89d3eb6bc4ee626117e0f4925a410ecad34530b"
+  },
+  "python/mojolearn/tests/test_mamba_surface.py": {
+   "bytes": 35319,
+   "kind": "file",
+   "sha256": "16aa21906011b7d3beba1b2c924f8d0a0575a89da68a98d9845403620267ae64"
+  },
+  "python/mojolearn/tests/test_min_child_hessian.py": {
+   "bytes": 3324,
+   "kind": "file",
+   "sha256": "8deb70979ef36810f1a5be10c432cbd37b3591101d4c1ec87bdabeb054345df6"
+  },
+  "python/mojolearn/tests/test_min_split_gain.py": {
+   "bytes": 1570,
+   "kind": "file",
+   "sha256": "702e7bab1289394f9895ea2454995792c74d6fb21b6ab4b31a38f7f1a1e8a9e0"
+  },
+  "python/mojolearn/tests/test_mixture_surface.py": {
+   "bytes": 8027,
+   "kind": "file",
+   "sha256": "979afa3b2e3e395dabf951e3512cde3a541396ebbfeb448baba494ada9bebc4d"
+  },
+  "python/mojolearn/tests/test_mode_readback.py": {
+   "bytes": 1459,
+   "kind": "file",
+   "sha256": "d94695a2d1c72c915523b9e9aabbcae2617a521c94c8e756f4275650e4fc4c7c"
+  },
+  "python/mojolearn/tests/test_model_selection_numpy_free.py": {
+   "bytes": 10030,
+   "kind": "file",
+   "sha256": "b4606f56e7a0aaa816092852da74b34cff76cc4a86e4e072a4ad4b46eda3f306"
+  },
+  "python/mojolearn/tests/test_models_loader.py": {
+   "bytes": 35355,
+   "kind": "file",
+   "sha256": "3591aa3a07294f4faa97daec6ad9d1f249b0b890d3e34e839c1d62f5a297f53f"
+  },
+  "python/mojolearn/tests/test_multiclass_ova_surface.py": {
+   "bytes": 4347,
+   "kind": "file",
+   "sha256": "48ba09bfb16dab9e1956dea6004a8407d029c628e14ff8f10def2930498287f1"
+  },
+  "python/mojolearn/tests/test_native_convert.py": {
+   "bytes": 16745,
+   "kind": "file",
+   "sha256": "def7af89ddc01c54aed44080338dd9d6bf6919ce5e1a6c0ff74d0384657d2eea"
+  },
+  "python/mojolearn/tests/test_native_helpers.py": {
+   "bytes": 19473,
+   "kind": "file",
+   "sha256": "dd1caf6cd96ed4adb4bd1045e5e2950e71abb4e00db004c5b29ad5409bfe6a3f"
+  },
+  "python/mojolearn/tests/test_native_nonzero.py": {
+   "bytes": 8171,
+   "kind": "file",
+   "sha256": "86cf1df6455cf542636ccf9db56fb6063493e1f8039ca85f4b08320d35d5dd46"
+  },
+  "python/mojolearn/tests/test_neighbors_output_buffers.py": {
+   "bytes": 1511,
+   "kind": "file",
+   "sha256": "a4c8d157bae28282cf5d5cbfce8fc878c437b697b78c8a4fa76bd67553a0d264"
+  },
+  "python/mojolearn/tests/test_neighbors_weighted_largek.py": {
+   "bytes": 5152,
+   "kind": "file",
+   "sha256": "717c6785e85ec0d4cdb5a000123563e3f9dcd351bb6d4ef5cbeeb96dcee50ee4"
+  },
+  "python/mojolearn/tests/test_neural_inference.py": {
+   "bytes": 20155,
+   "kind": "file",
+   "sha256": "e0e811d32b7f1d9dffeb8254c3965247e511837337cc35e054f36ad1cb7e30aa"
+  },
+  "python/mojolearn/tests/test_neural_numpy_free_merge.py": {
+   "bytes": 4064,
+   "kind": "file",
+   "sha256": "3422932d9b83b836be07943fe97e514b1453efad300715c56aaca310df082d5c"
+  },
+  "python/mojolearn/tests/test_numpy_free_core.py": {
+   "bytes": 30262,
+   "kind": "file",
+   "sha256": "92c8dbef387f58d169949d931ab716e1e5bb4b137d79c3c3ea52e0ca9d3d12fc"
+  },
+  "python/mojolearn/tests/test_numpy_free_features.py": {
+   "bytes": 5376,
+   "kind": "file",
+   "sha256": "20180af8ba1ff96e22e8d0588f594a9d42705fa4b2fe5d2afed54891a2a0bdce"
+  },
+  "python/mojolearn/tests/test_ordered_rmse_surface.py": {
+   "bytes": 3802,
+   "kind": "file",
+   "sha256": "08e46372b4ea082b2581bc233ff60771dcdeaf5deb915809bc9cd46701ede7ba"
+  },
+  "python/mojolearn/tests/test_parallel_arima_serialization.py": {
+   "bytes": 2542,
+   "kind": "file",
+   "sha256": "03f397b0a7f2e29cbf5247aad8b3569efe4b409f960e39cbff11fd736a5bb906"
+  },
+  "python/mojolearn/tests/test_parallel_causal_lm.py": {
+   "bytes": 8954,
+   "kind": "file",
+   "sha256": "e463c548340c0bfbf310698245ed4d042420d11a30beeae14b671fbf50e7381a"
+  },
+  "python/mojolearn/tests/test_parallel_forecasting.py": {
+   "bytes": 4516,
+   "kind": "file",
+   "sha256": "b028bf593a865064b31b02d2bc38e1c7672ca68c602c964635779a70c17bb467"
+  },
+  "python/mojolearn/tests/test_parallel_gaussian_process.py": {
+   "bytes": 3810,
+   "kind": "file",
+   "sha256": "c5570cdb83911f3d7f10cb614d45d4c157ce1186934026355fd0067d90857f3a"
+  },
+  "python/mojolearn/tests/test_parallel_model_selection.py": {
+   "bytes": 15051,
+   "kind": "file",
+   "sha256": "4092699af2ea94c00dc35ca08afc2c5da7be65ca655ca7f1922ea7776b07dd24"
+  },
+  "python/mojolearn/tests/test_pca_full_surface.py": {
+   "bytes": 4841,
+   "kind": "file",
+   "sha256": "e45f9b012391a7e18ebf64e9fec234d7d7066fa01454f42a1f5a7b4a80b3d0d9"
+  },
+  "python/mojolearn/tests/test_pca_whitening_surface.py": {
+   "bytes": 7909,
+   "kind": "file",
+   "sha256": "dd4b0411bd35fb62f435b153316df8aa77042763314883dcd7914f726759aa4d"
+  },
+  "python/mojolearn/tests/test_portable_kernel_models.py": {
+   "bytes": 1693,
+   "kind": "file",
+   "sha256": "edddcfa77d65b5ce20d9543f4a30898e257ce633f821a981f8e6aab3699f979e"
+  },
+  "python/mojolearn/tests/test_public_aliases.py": {
+   "bytes": 8523,
+   "kind": "file",
+   "sha256": "7be71b6a07ef2616d9f6510a05aec8ff93db8fd1020fb1302be2aeb7b9935d53"
+  },
+  "python/mojolearn/tests/test_qn_objectives_surface.py": {
+   "bytes": 7899,
+   "kind": "file",
+   "sha256": "012a885f7204188b22f91d2bdb0aaa7bece0c1686e947dee63c275cae72e5352"
+  },
+  "python/mojolearn/tests/test_ragged_lengths.py": {
+   "bytes": 10132,
+   "kind": "file",
+   "sha256": "4cc4e07f854903c29c512fde25e1b1ac4515296c8eafcdced4200c867ea78110"
+  },
+  "python/mojolearn/tests/test_refuse_ignored_knobs.py": {
+   "bytes": 6834,
+   "kind": "file",
+   "sha256": "8535ff6a5ca6221f1fff1baec2621c4828e75ba1d298c6b4e468bdc6551c21a0"
+  },
+  "python/mojolearn/tests/test_regression_metrics.py": {
+   "bytes": 8115,
+   "kind": "file",
+   "sha256": "c696d3f43f367aa55b5bfb3c1285b137f7fbcc14d279a99e8320c00d1293abc7"
+  },
+  "python/mojolearn/tests/test_resample_surface.py": {
+   "bytes": 8282,
+   "kind": "file",
+   "sha256": "07f97a5b4d3d57fdc949b34fe5546e9e166b26b2c04ae54c263a51bcdf17af6e"
+  },
+  "python/mojolearn/tests/test_rf_class_weight.py": {
+   "bytes": 2815,
+   "kind": "file",
+   "sha256": "aba976d0b4ed59547bdfc6678b696dfcc62369926e315253489015635c828c43"
+  },
+  "python/mojolearn/tests/test_rf_leaf_budget.py": {
+   "bytes": 32349,
+   "kind": "file",
+   "sha256": "a47b4d228c08f92b8d81b28c4e807f68423b20aa473b9e1f9df2fd16cc61d367"
+  },
+  "python/mojolearn/tests/test_samba_attention_wiring.py": {
+   "bytes": 7405,
+   "kind": "file",
+   "sha256": "685d207ccae4e719890ff95e430c7eb82b5917044605e1707bdc1b3654953739"
+  },
+  "python/mojolearn/tests/test_samba_surface.py": {
+   "bytes": 22250,
+   "kind": "file",
+   "sha256": "99f94a5173fb8077dca58fad353f3fbe019e57b1847f625352ec882dda349e51"
+  },
+  "python/mojolearn/tests/test_small_mlp_numerical_edges.py": {
+   "bytes": 9297,
+   "kind": "file",
+   "sha256": "e4cf90d1144474d9d9d205c0dd8f0c54ea7d3b3d11af259dfa87715ce8035bf8"
+  },
+  "python/mojolearn/tests/test_small_mlp_surface.py": {
+   "bytes": 13434,
+   "kind": "file",
+   "sha256": "3d4de3a77ae5bc17109249292c339456874a92736a5ae09e2853f7344299675a"
+  },
+  "python/mojolearn/tests/test_spectral_embedding.py": {
+   "bytes": 3853,
+   "kind": "file",
+   "sha256": "9bec535446a58db5a2b30e3f26b8ef0b08d11a9f4150db815fcfffa19dd1596a"
+  },
+  "python/mojolearn/tests/test_spectral_no_dependencies.py": {
+   "bytes": 974,
+   "kind": "file",
+   "sha256": "19f44adcca3cc4a9262d63f189d88dc9bea96f877ab19f7b27c105e1ad8731be"
+  },
+  "python/mojolearn/tests/test_spectral_predict.py": {
+   "bytes": 12275,
+   "kind": "file",
+   "sha256": "ec2ea8c05f484396f272e14486f48656ff10e7a48522413e2b093c13b8a4aa14"
+  },
+  "python/mojolearn/tests/test_svc_poly.py": {
+   "bytes": 5188,
+   "kind": "file",
+   "sha256": "69a09e0c5fa9bac496930cde9d409e642055ae7072f017dd05b33ef71fa75aaf"
+  },
+  "python/mojolearn/tests/test_svr_surface.py": {
+   "bytes": 39462,
+   "kind": "file",
+   "sha256": "ebb70f0b4e4706149617bf52984db6b9541d5f90741c262ff97e57f1ac7b1e32"
+  },
+  "python/mojolearn/tests/test_tokenizer_manifest.py": {
+   "bytes": 8663,
+   "kind": "file",
+   "sha256": "0b63ed46e19e9fdddc306434f15644d236461aecfa99728b5e022e1bd747e188"
+  },
+  "python/mojolearn/tests/test_tokenizer_surface.py": {
+   "bytes": 18558,
+   "kind": "file",
+   "sha256": "9deee0bfd74735ffda21538e1202e9bdf74330cbcd7aa65ac86bb195fa4a84d4"
+  },
+  "python/mojolearn/tests/test_training_primitives_surface.py": {
+   "bytes": 6860,
+   "kind": "file",
+   "sha256": "83f96e63422f75c4e1c7992294f905dbfdbdb8c23524ccde0f4f764ec5ca95a6"
+  },
+  "python/mojolearn/tests/test_training_surface.py": {
+   "bytes": 43638,
+   "kind": "file",
+   "sha256": "1fc1507595524dfc345a09990d1a40473687b5365e13b7324ba84ef6429f3b4e"
+  },
+  "python/mojolearn/tests/test_transductive_predict.py": {
+   "bytes": 14099,
+   "kind": "file",
+   "sha256": "ac7901f18d23a8ee055565b048241ced66c97bb5056183cb8a9ee27ab529fe65"
+  },
+  "python/mojolearn/tests/test_transformer_hd128.py": {
+   "bytes": 3537,
+   "kind": "file",
+   "sha256": "0ecb10a9676e2938a1ad586d36d7662af5a046bb40bd46a07c27a936ff41493a"
+  },
+  "python/mojolearn/tests/test_transformer_options.py": {
+   "bytes": 23271,
+   "kind": "file",
+   "sha256": "b8d554c47ee19e48887f109cc87e0c7ebb30a656d247cb06c785fbd8b1cdc83c"
+  },
+  "python/mojolearn/tests/test_transformer_surface.py": {
+   "bytes": 44497,
+   "kind": "file",
+   "sha256": "8596a547b94993b2292c608f694638834377b92278e891288903fc86f140d67e"
+  },
+  "python/mojolearn/tests/test_tree_input_layout.py": {
+   "bytes": 2436,
+   "kind": "file",
+   "sha256": "86c65851b31be5a283759252387d79be07faa8d2f80dac5d9888520d86158366"
+  },
+  "python/mojolearn/tests/test_umap_surface.py": {
+   "bytes": 9266,
+   "kind": "file",
+   "sha256": "a24b08a92dab58ce9901c1a2c64312454fef3ecd1fc0edd0b5f770d3c564b6db"
+  },
+  "python/mojolearn/tests/test_umap_transform.py": {
+   "bytes": 4988,
+   "kind": "file",
+   "sha256": "97e0f6e56ee64d8c2bc35c6d3c161d722ace745da3b3d89523cc52661002a7bc"
+  },
+  "python/mojolearn/tests/test_verification_coverage.py": {
+   "bytes": 21237,
+   "kind": "file",
+   "sha256": "b8c782c5c892b9f762a4dab43cb6cee332ed85e88df681ef09d0bd07371b302f"
+  },
+  "python/mojolearn/tests/test_verify_all.py": {
+   "bytes": 74395,
+   "kind": "file",
+   "sha256": "72bfd9d2d598da307d3870e051acf5dfd81d56d4dca8644d03dafeacd8483cec"
+  },
+  "python/mojolearn/tests/test_verify_causal_lm.py": {
+   "bytes": 2518,
+   "kind": "file",
+   "sha256": "5f477fbc8b15d534d3bb24cd58cebe32f7f823d275a3b93f3479274568658745"
+  },
+  "python/mojolearn/tests/test_verify_compare_challenge.py": {
+   "bytes": 40272,
+   "kind": "file",
+   "sha256": "0f23889053fd8815b9eeaaea2f75c2a9916d6513f40aa8321172b73bfb6ff0e0"
+  },
+  "python/mojolearn/tests/test_verify_compare_commitment.py": {
+   "bytes": 38934,
+   "kind": "file",
+   "sha256": "5e7d1a46a1b9dc36409baef6b0264211e61cbfae18fcfb8fc168878a981a2646"
+  },
+  "python/mojolearn/tests/test_verify_ctr_model_roles.py": {
+   "bytes": 2935,
+   "kind": "file",
+   "sha256": "831e2e18c12f11f13e7c4e94960cb16d177f464633a1f5a7958ff2abc23d2734"
+  },
+  "python/mojolearn/tests/test_verify_distributed.py": {
+   "bytes": 6294,
+   "kind": "file",
+   "sha256": "ef02716c30ccf3ffdae524064c770f0daff4499f7b05fa66a6e2c6ade5c34973"
+  },
+  "python/mojolearn/tests/test_verify_environment_json.py": {
+   "bytes": 753,
+   "kind": "file",
+   "sha256": "1853f46945c938779ae03e6d6b046af38a7fc4f36f505a4a05690f552d2a7d2f"
+  },
+  "python/mojolearn/tests/test_verify_par.py": {
+   "bytes": 29194,
+   "kind": "file",
+   "sha256": "53d5239dc7b9fe17b65cfeebd325ea9dade2086a95fba3da8ed3a3c8bc77fde7"
+  },
+  "python/mojolearn/tests/test_verify_pending.py": {
+   "bytes": 5308,
+   "kind": "file",
+   "sha256": "77040ef0d3a1e8cfc426794725cc7ad379395394ee15b2229df3ca121bb18036"
+  },
+  "python/mojolearn/tests/test_verify_reference_admit.py": {
+   "bytes": 16883,
+   "kind": "file",
+   "sha256": "f4ff09e7b0c07dcb93eb19d929d4126b3ab742a503d899c0d29223abc17ab768"
+  },
+  "python/mojolearn/tests/test_verify_resources.py": {
+   "bytes": 3032,
+   "kind": "file",
+   "sha256": "0653608919bfd015a70153fab33cf3147d86e5aec97b47ce86bb13f400f52a39"
+  },
+  "python/mojolearn/tests/test_verify_small.py": {
+   "bytes": 6204,
+   "kind": "file",
+   "sha256": "6419188e71dfa78436a2628a5d30c6fee3f390c934398637333bc320caa9a8d9"
+  },
+  "python/mojolearn/tests/test_verify_worktree_commit.py": {
+   "bytes": 976,
+   "kind": "file",
+   "sha256": "37582b50f4c236a00e0e1f1f931252a3bc0f4da6e9db9360f6f171d049fe4b26"
+  },
+  "python/mojolearn/tests/test_weighted_score.py": {
+   "bytes": 4180,
+   "kind": "file",
+   "sha256": "cd195e589c321a04008b08e5a2671a00f43af8b04f2c665f2da02071e92ef80a"
+  },
+  "python/mojolearn/tokenizer.py": {
+   "bytes": 30902,
+   "kind": "file",
+   "sha256": "e8ea8ef6c35fa3344d56bb0ccb839b10e97b56a8dbc0254d44b69a586d430649"
+  },
+  "python/mojolearn/training.py": {
+   "bytes": 3041,
+   "kind": "file",
+   "sha256": "f0e8221058a29bff967a7bfbcf9726f4378550bb1bdefb10cc55d9218d63c5c1"
+  },
+  "python/mojolearn/transformer.py": {
+   "bytes": 3088,
+   "kind": "file",
+   "sha256": "e6440ea560581e299d8dcb5bb08350698445758319d0d17aa155317557f22855"
+  },
+  "python/mojolearn/umap.py": {
+   "bytes": 461,
+   "kind": "file",
+   "sha256": "7d59dd152c34071945aa002a34ddef3a34cdd143d438afc25613cea829e6b57a"
+  },
+  "python/mojolearn/verify_reference/models/gbdt-symmetric.base.npz": {
+   "bytes": 79675,
+   "kind": "file",
+   "sha256": "ee776c33f052679aaf6ee7a7b699cac603e1b1c411c12f67e04ea4354c4fa135"
+  },
+  "python/mojolearn/verify_reference/models/kernel-ridge-laplacian.base.npz": {
+   "bytes": 2812,
+   "kind": "file",
+   "sha256": "8c222a5b89d0f520cf90f5e6a04c8821b56d5ce2f7e4e63f7b258cb19ea68792"
+  },
+  "python/mojolearn/verify_reference/models/kernel-ridge-laplacian.denormal.npz": {
+   "bytes": 2812,
+   "kind": "file",
+   "sha256": "047872cc9d57b9790e82525516c633a3fc4f9d9fa8e249924fdd3b5656763334"
+  },
+  "python/mojolearn/verify_reference/models/kernel-ridge-laplacian.denormal_ftz.npz": {
+   "bytes": 2812,
+   "kind": "file",
+   "sha256": "6638b7e5a05a1f08b1328ad77ebe7a6ddf02cf748f6afa9d6b2b043751f7edd6"
+  },
+  "python/mojolearn/verify_reference/models/kernel-ridge-laplacian.dupes.npz": {
+   "bytes": 2812,
+   "kind": "file",
+   "sha256": "a0632a87ef34d73732543e16a98e60d7efde4c3660b457812e9caf334588ba5e"
+  },
+  "python/mojolearn/verify_reference/models/kernel-ridge-laplacian.hashed.npz": {
+   "bytes": 2812,
+   "kind": "file",
+   "sha256": "ecdd20a18fddcfac123298142ebfbda40ea00fb311df296b0d5b284da6ddab94"
+  },
+  "python/mojolearn/verify_reference/models/kernel-ridge-laplacian.negative.npz": {
+   "bytes": 2812,
+   "kind": "file",
+   "sha256": "6a51f60e14cbc0dd04f6ca36436b056b67ed8cdac503463aa4d48f09f2fc106f"
+  },
+  "python/mojolearn/verify_reference/models/kernel-ridge-laplacian.odd.npz": {
+   "bytes": 2812,
+   "kind": "file",
+   "sha256": "242d6365ce89e18583cb1b00268a1cc54b879edd6db4af20c1f1becc7a39e517"
+  },
+  "python/mojolearn/verify_reference/models/kernel-ridge-laplacian.ties.npz": {
+   "bytes": 2812,
+   "kind": "file",
+   "sha256": "857ab7ff0c67b9cade527de3cc6f38740a1f71c70925e65671b6bbd57ac9cb48"
+  },
+  "python/mojolearn/verify_reference/models/kernel-ridge-laplacian.wide.npz": {
+   "bytes": 2812,
+   "kind": "file",
+   "sha256": "95b734acb147fe053456b72989653989e5231134c1a8b662fb80fbf57c5c1578"
+  },
+  "python/mojolearn/verify_reference/models/kernel-ridge-poly.base.npz": {
+   "bytes": 2812,
+   "kind": "file",
+   "sha256": "3cb5b554392b9c64ba8f16c720ac347f16c2433dc5cec2d54a4b9b2567596d3e"
+  },
+  "python/mojolearn/verify_reference/models/kernel-ridge-poly.denormal.npz": {
+   "bytes": 2812,
+   "kind": "file",
+   "sha256": "c85c95edb51db53bbec6f29f3c59d12009cabc7069cfc2bd02502f81d5815a38"
+  },
+  "python/mojolearn/verify_reference/models/kernel-ridge-poly.denormal_ftz.npz": {
+   "bytes": 2812,
+   "kind": "file",
+   "sha256": "bc72cd423aa823cbe7539511a5bb2bbb949efbf5c5d6ffb6d0101e86efdaadf9"
+  },
+  "python/mojolearn/verify_reference/models/kernel-ridge-poly.dupes.npz": {
+   "bytes": 2812,
+   "kind": "file",
+   "sha256": "a610160c984b5da81e52cb895249a124ad05ee1fe34f25c0236e9c089962812c"
+  },
+  "python/mojolearn/verify_reference/models/kernel-ridge-poly.hashed.npz": {
+   "bytes": 2812,
+   "kind": "file",
+   "sha256": "8ccf3282e056fb095bae49b9e47bdf67d842ffb5d8f0f4067075c25da8fd7cbd"
+  },
+  "python/mojolearn/verify_reference/models/kernel-ridge-poly.negative.npz": {
+   "bytes": 2812,
+   "kind": "file",
+   "sha256": "73a9bc6f72a67956e8c627a3451eb06af5b7b5692e80cdcaf8609016d138a2f2"
+  },
+  "python/mojolearn/verify_reference/models/kernel-ridge-poly.odd.npz": {
+   "bytes": 2812,
+   "kind": "file",
+   "sha256": "bbf78f551ba29cfba1a42a3121a12302b1965d33d67e2bc0b4338a965561ad9a"
+  },
+  "python/mojolearn/verify_reference/models/kernel-ridge-poly.ties.npz": {
+   "bytes": 2812,
+   "kind": "file",
+   "sha256": "c35c2c5ce99c3456a61e161fa6cc41b56711803767c8d0086a4d4f663b55e725"
+  },
+  "python/mojolearn/verify_reference/models/kernel-ridge-poly.wide.npz": {
+   "bytes": 2812,
+   "kind": "file",
+   "sha256": "4c784ab3dfa17581305a9c8665cb6fc2f9602f00f06d2d0b1a24410c94b454ae"
+  },
+  "python/mojolearn/verify_reference/models/kernel-ridge-sigmoid.base.npz": {
+   "bytes": 2812,
+   "kind": "file",
+   "sha256": "01b80bafa79d7e11b90f26f5a8fbb2de272a83f629e4ed1f3be479111f748c89"
+  },
+  "python/mojolearn/verify_reference/models/kernel-ridge-sigmoid.denormal.npz": {
+   "bytes": 2812,
+   "kind": "file",
+   "sha256": "aee11d8e159b5d062decae94ea4aa6dea1236046f8a747b5921c5c9bfff8673c"
+  },
+  "python/mojolearn/verify_reference/models/kernel-ridge-sigmoid.denormal_ftz.npz": {
+   "bytes": 2812,
+   "kind": "file",
+   "sha256": "738eadecea28822362fee475c4d5598b80ba823f3d44b8a317a618a00f45e6ba"
+  },
+  "python/mojolearn/verify_reference/models/kernel-ridge-sigmoid.dupes.npz": {
+   "bytes": 2812,
+   "kind": "file",
+   "sha256": "7be40ded64a7232a4f55a27a6d7eef6b594adc0fe97326b6251cb051115e5221"
+  },
+  "python/mojolearn/verify_reference/models/kernel-ridge-sigmoid.hashed.npz": {
+   "bytes": 2812,
+   "kind": "file",
+   "sha256": "9076208aa14e62d9fce787e8101f9446d43de83f1483ba66d4f67433c4e6a403"
+  },
+  "python/mojolearn/verify_reference/models/kernel-ridge-sigmoid.negative.npz": {
+   "bytes": 2812,
+   "kind": "file",
+   "sha256": "6d37208bc261fb79303141420a5249f4d9d9a4255344ec224dd6f93301418f1b"
+  },
+  "python/mojolearn/verify_reference/models/kernel-ridge-sigmoid.odd.npz": {
+   "bytes": 2812,
+   "kind": "file",
+   "sha256": "a5c31068bb72f550736da654e232699548fd333c992f70a2849af99ea507ae2c"
+  },
+  "python/mojolearn/verify_reference/models/kernel-ridge-sigmoid.ties.npz": {
+   "bytes": 2812,
+   "kind": "file",
+   "sha256": "445dbc32d4e9611c6ce08eaf10a4df1ba0e475ddb52cf10ef8fd8f6a76fa8f97"
+  },
+  "python/mojolearn/verify_reference/models/kernel-ridge-sigmoid.wide.npz": {
+   "bytes": 2812,
+   "kind": "file",
+   "sha256": "b49cbf31b328ac080c9c486033d9b16f62afb5a161c3be609bec45bda5f10ca0"
+  },
+  "python/mojolearn/verify_reference/models/models.json": {
+   "bytes": 44278,
+   "kind": "file",
+   "sha256": "2f353ffc9c58cedc78c422f3df9fcdde9233174baba99d9b82f18d16d2b8db4d"
+  },
+  "python/mojolearn/verify_reference/models/nystroem-laplacian.base.npz": {
+   "bytes": 3256,
+   "kind": "file",
+   "sha256": "28f4695cd4465bfd1f334970aebac5f0f8a5a9b52e7d3bd5acf27fa47fda63d5"
+  },
+  "python/mojolearn/verify_reference/models/nystroem-laplacian.denormal.npz": {
+   "bytes": 3256,
+   "kind": "file",
+   "sha256": "36e7097286c2bb978db81bae46c85dc82d7e535a50d8f91f337df9c0afd01143"
+  },
+  "python/mojolearn/verify_reference/models/nystroem-laplacian.denormal_ftz.npz": {
+   "bytes": 3256,
+   "kind": "file",
+   "sha256": "837c24b153316e6f32c14722f2ed5a50364740dc776660d3133f7a9a5ed1f8ea"
+  },
+  "python/mojolearn/verify_reference/models/nystroem-laplacian.dupes.npz": {
+   "bytes": 3256,
+   "kind": "file",
+   "sha256": "28f4695cd4465bfd1f334970aebac5f0f8a5a9b52e7d3bd5acf27fa47fda63d5"
+  },
+  "python/mojolearn/verify_reference/models/nystroem-laplacian.hashed.npz": {
+   "bytes": 3256,
+   "kind": "file",
+   "sha256": "539991c19e8790934c7beee16062a73949516131cef829efd32ba41e86fab642"
+  },
+  "python/mojolearn/verify_reference/models/nystroem-laplacian.negative.npz": {
+   "bytes": 3256,
+   "kind": "file",
+   "sha256": "bded433ad62b94439abdbf990c412f5881f069b399871867b8eda5a486c2f0e6"
+  },
+  "python/mojolearn/verify_reference/models/nystroem-laplacian.odd.npz": {
+   "bytes": 3256,
+   "kind": "file",
+   "sha256": "96704e86af8cc3d6d3bdf6af524b8a3c2839332430a261f3095c13553d13996c"
+  },
+  "python/mojolearn/verify_reference/models/nystroem-laplacian.ties.npz": {
+   "bytes": 3256,
+   "kind": "file",
+   "sha256": "bff3c6ddc9eb1bcb474a437d1e4fe16e5eb1d512f6e58e0eac57c22b261a6567"
+  },
+  "python/mojolearn/verify_reference/models/nystroem-laplacian.wide.npz": {
+   "bytes": 3256,
+   "kind": "file",
+   "sha256": "dff8bbac56c9b8dba50c5d3fc75ce854faf8dd18c3d555c855769018cf8a6629"
+  },
+  "python/mojolearn/verify_reference/models/nystroem-poly.base.npz": {
+   "bytes": 3256,
+   "kind": "file",
+   "sha256": "c774abd983d4c17ea35b7a5ca0d2c5de77990984e15cf271e95a54287461dfeb"
+  },
+  "python/mojolearn/verify_reference/models/nystroem-poly.denormal.npz": {
+   "bytes": 3256,
+   "kind": "file",
+   "sha256": "60625a8079a65c6507729272f1e44c7309f9da5f87e96464d3602727d7a26b7a"
+  },
+  "python/mojolearn/verify_reference/models/nystroem-poly.denormal_ftz.npz": {
+   "bytes": 3256,
+   "kind": "file",
+   "sha256": "bae6fd03176179824a5fa798a770fe41b0107b675403a4157bd59045884336c4"
+  },
+  "python/mojolearn/verify_reference/models/nystroem-poly.dupes.npz": {
+   "bytes": 3256,
+   "kind": "file",
+   "sha256": "c774abd983d4c17ea35b7a5ca0d2c5de77990984e15cf271e95a54287461dfeb"
+  },
+  "python/mojolearn/verify_reference/models/nystroem-poly.hashed.npz": {
+   "bytes": 3256,
+   "kind": "file",
+   "sha256": "6a75a46ca93a2495ea53a0316bb1b3ba18b6043e406724219d5ec0c00c2bd128"
+  },
+  "python/mojolearn/verify_reference/models/nystroem-poly.negative.npz": {
+   "bytes": 3256,
+   "kind": "file",
+   "sha256": "f3f717a18d4b83739a40e8842db4990c7e208dded0f6b33ea15ce1799b49cd9b"
+  },
+  "python/mojolearn/verify_reference/models/nystroem-poly.odd.npz": {
+   "bytes": 3256,
+   "kind": "file",
+   "sha256": "710ec4027aef65f9ba13a6fb7a1b560d7fbf305a1e26cabaf4e92288915e8527"
+  },
+  "python/mojolearn/verify_reference/models/nystroem-poly.ties.npz": {
+   "bytes": 3256,
+   "kind": "file",
+   "sha256": "83fbe7988b4088564a80f178cbb32b2e6597b26d47cc04937089d251ff7a99b6"
+  },
+  "python/mojolearn/verify_reference/models/nystroem-poly.wide.npz": {
+   "bytes": 3256,
+   "kind": "file",
+   "sha256": "b31eacfe0fee330801bb2ee746700c8b90bf7d7592a1bc43fe262df4878e0f21"
+  },
+  "python/mojolearn/verify_reference/models/nystroem-sigmoid.base.npz": {
+   "bytes": 3256,
+   "kind": "file",
+   "sha256": "b606536588020728d6e2acf46226fed413cb6e70cd6c708f9c62c1f5cf5686d5"
+  },
+  "python/mojolearn/verify_reference/models/nystroem-sigmoid.denormal.npz": {
+   "bytes": 3256,
+   "kind": "file",
+   "sha256": "4bfa400514d0ecbff5e7ae0ec5e109f0bf2cff05f1cb64745fe7416da10b4ca0"
+  },
+  "python/mojolearn/verify_reference/models/nystroem-sigmoid.denormal_ftz.npz": {
+   "bytes": 3256,
+   "kind": "file",
+   "sha256": "9c9e1a298930db2dc3318294756d648a64e51ef643a5cc9b79f310bdff52428b"
+  },
+  "python/mojolearn/verify_reference/models/nystroem-sigmoid.dupes.npz": {
+   "bytes": 3256,
+   "kind": "file",
+   "sha256": "b606536588020728d6e2acf46226fed413cb6e70cd6c708f9c62c1f5cf5686d5"
+  },
+  "python/mojolearn/verify_reference/models/nystroem-sigmoid.hashed.npz": {
+   "bytes": 3256,
+   "kind": "file",
+   "sha256": "020a40e03b55280959bd5d54c8054e878ebd7802df2a40d7eab31ca173e8e14a"
+  },
+  "python/mojolearn/verify_reference/models/nystroem-sigmoid.negative.npz": {
+   "bytes": 3256,
+   "kind": "file",
+   "sha256": "290324d689ccdd956052e508fc8549b2e719cdb0d458adfc7fdbb9c5e27501cb"
+  },
+  "python/mojolearn/verify_reference/models/nystroem-sigmoid.odd.npz": {
+   "bytes": 3256,
+   "kind": "file",
+   "sha256": "e21103395c9be9d13c5fcefd0d51e197325734b9209bf99d2777b948f98ea5d0"
+  },
+  "python/mojolearn/verify_reference/models/nystroem-sigmoid.ties.npz": {
+   "bytes": 3256,
+   "kind": "file",
+   "sha256": "535f23122efa5fa9c15b0401f92f37fdeaaf6c0c4851cef542e8ec4bcc5b7b33"
+  },
+  "python/mojolearn/verify_reference/models/nystroem-sigmoid.wide.npz": {
+   "bytes": 3256,
+   "kind": "file",
+   "sha256": "0f1765d6855a61a92166f6cf3878180855746998ef8ad57524761591b431e178"
+  },
+  "python/mojolearn/verify_reference/models/ols.base.npz": {
+   "bytes": 1642,
+   "kind": "file",
+   "sha256": "a84289377ea9180fa5dd230f29d4c01dd89e648e7890d0998c95f0722fb68e60"
+  },
+  "python/mojolearn/verify_reference/models/pca.base.npz": {
+   "bytes": 3138,
+   "kind": "file",
+   "sha256": "b41a408ef6ffb8c971dc339a4640ef6e7e4deb257ffccb728f0b923ac897a19d"
+  },
+  "python/mojolearn/verify_reference/models/rf-clf.base.npz": {
+   "bytes": 94660,
+   "kind": "file",
+   "sha256": "ed1592a2b0ab165868803217a904ac0107fcac457e66191353018211b6608438"
+  },
+  "python/mojolearn/verify_reference/table.json": {
+   "bytes": 1835820,
+   "kind": "file",
+   "sha256": "e95fbbb863933bbd611fcb8a2e4722efdd3bf33f7d7cc78f179882c3abd0b7c9"
+  },
+  "tools/lm_fold_specialize_body.sh": {
+   "bytes": 7545,
+   "kind": "file",
+   "sha256": "e03d34d3e6c621eae326e42a57e39d5cc304e34adf37b73abc9efece55c73364"
+  },
+  "tools/lm_fold_specialize_probe.py": {
+   "bytes": 14507,
+   "kind": "file",
+   "sha256": "de6bc7a24ec6b551f47dca0a4b4074774b745b0a2e58f699bfdb68cbefa8168e"
+  },
+  "tools/lm_step_memory_probe.py": {
+   "bytes": 39322,
+   "kind": "file",
+   "sha256": "edd528137cd61a30fc54fc620401ba20487b0c4bf1dec1f0d44133becf4fccad"
+  },
+  "tools/trial_source_manifest.py": {
+   "bytes": 4486,
+   "kind": "file",
+   "sha256": "46231a7c4a964aecf0f48d61fa78c92623ae6393c9da4ca2fd191e63ee92fb9c"
+  },
+  "training/BYTE_LM_COMPACT_HANDOFF.md": {
+   "bytes": 7455,
+   "kind": "file",
+   "sha256": "cf9bc33726d985ccbde5f83d070d01d8618c1b07fbee0f0d348937dbc598120a"
+  },
+  "training/BYTE_LM_GRADIENT_ORACLE.md": {
+   "bytes": 5781,
+   "kind": "file",
+   "sha256": "e00c7a529b1f110147002e0e2958f0979e5ed390a7e394f7ee589bb8c854b3c5"
+  },
+  "training/BYTE_LM_IMPLEMENTATION.md": {
+   "bytes": 10718,
+   "kind": "file",
+   "sha256": "c976c2fa0ea94465a816ac33bb91a24d7f347e4c372d2abeb65e0519f2fb8930"
+  },
+  "training/BYTE_LM_REAL_TEXT_CAPTURE.md": {
+   "bytes": 14545,
+   "kind": "file",
+   "sha256": "91f63cee86ca25b38042f1a11dca3205e89caf12c098668c7601f276b9d2fbae"
+  },
+  "training/BYTE_LM_RESUME_SERIAL.md": {
+   "bytes": 9309,
+   "kind": "file",
+   "sha256": "3188d2245f28ea0609c245a6e58afcc01a7821d94ac50211cd9b4728b93db84c"
+  },
+  "training/CHECKPOINT_FORMAT.md": {
+   "bytes": 43013,
+   "kind": "file",
+   "sha256": "722ef6b415408dada37f4adb31d4ccb7d430b0637640ef8105498d3aee7b3fb0"
+  },
+  "training/CHUNKED_LM_HEAD_V2.md": {
+   "bytes": 4603,
+   "kind": "file",
+   "sha256": "cf55d02749cae694cdc2086d0e34c84f39bc3137fa1fbe28c66180dc0819ffe6"
+  },
+  "training/IDENTICAL_LOSS_CONTRACT.md": {
+   "bytes": 52837,
+   "kind": "file",
+   "sha256": "c1610c8fc4861355cfdff872d66a97afd0c607b5ce7388de97508bfc20abba2e"
+  },
+  "training/IDENTICAL_OPTIMIZER_CONTRACT.md": {
+   "bytes": 51639,
+   "kind": "file",
+   "sha256": "a9af0c903f6fa381778d65a0669f9d9e8099ae276f7e2ae67d965cfed5be886e"
+  },
+  "training/PUBLIC_TRAINING_IMPLEMENTATION_PLAN.md": {
+   "bytes": 19955,
+   "kind": "file",
+   "sha256": "ec1c15cea5d787fd01acb90739b224594131f1da1a44a39a6a018907311a3f22"
+  },
+  "training/PUBLIC_TRAINING_RESUME_COMMANDS.md": {
+   "bytes": 12180,
+   "kind": "file",
+   "sha256": "4971b06822fb12d6d475c7d98f74c5cd3adc47761bfd046aad215c631d4b5d27"
+  },
+  "training/TRAINING_RESUME_SERIAL.md": {
+   "bytes": 3491,
+   "kind": "file",
+   "sha256": "94ad6823c2b7904a9af1931244dd32b6a3cdaca95bb3aa9efa88d027e93809f9"
+  },
+  "training/__init__.mojo": {
+   "bytes": 129,
+   "kind": "file",
+   "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+  },
+  "training/accumulate_multi_gpu.mojo": {
+   "bytes": 3590,
+   "kind": "file",
+   "sha256": "f1f754dd2dbf46c60c83de23c05b38b7310919d990c7b6e081a22c8ad1c84596"
+  },
+  "training/byte_lm.mojo": {
+   "bytes": 85925,
+   "kind": "file",
+   "sha256": "5e191e29aec14720bc99bc0b1a02f69887c83ccffe8572b85ccd4c429d046f48"
+  },
+  "training/byte_lm_block_copy.mojo": {
+   "bytes": 5330,
+   "kind": "file",
+   "sha256": "a3dadde2704db44e4922eb897e75d650d880559ba22a64d4b9fd9f4182962e4d"
+  },
+  "training/byte_lm_config.mojo": {
+   "bytes": 6594,
+   "kind": "file",
+   "sha256": "753c00494553dd9c17a7eb082b75a6fab97f9d2b2272aaa848a4d8eae95cfbb2"
+  },
+  "training/byte_lm_host.mojo": {
+   "bytes": 21211,
+   "kind": "file",
+   "sha256": "c67fb0a07afaa3e5fb0a89b4957a74f165994e9d1ec662a4a10fd5ac1a1bda27"
+  },
+  "training/byte_lm_host_backward.mojo": {
+   "bytes": 12657,
+   "kind": "file",
+   "sha256": "04698e03e74357bda2c5b1f4cdb267cbafb87cdefae00ebc4738288e1ab615e3"
+  },
+  "training/byte_lm_host_kernels.mojo": {
+   "bytes": 40518,
+   "kind": "file",
+   "sha256": "d0a9811ed1b30ee674238e30f6b17393477d7eeb5d793ebcafaa833de6f98fcf"
+  },
+  "training/byte_lm_init.mojo": {
+   "bytes": 6876,
+   "kind": "file",
+   "sha256": "91cf3732b276900b17ff14c4e519dfdeecab5be15d07e6c70c2ee0e928b5ffe8"
+  },
+  "training/byte_lm_layer_pool.mojo": {
+   "bytes": 11605,
+   "kind": "file",
+   "sha256": "8260cf37362041db088cdfed55ba71a90543bff4a4c454c66809cc2970cfdde2"
+  },
+  "training/byte_lm_logits.mojo": {
+   "bytes": 14787,
+   "kind": "file",
+   "sha256": "043da3724e3792fb9a14881aefd3d0cc3daaa53135f0248f3c2a483e4a968893"
+  },
+  "training/byte_lm_model_pool.mojo": {
+   "bytes": 16093,
+   "kind": "file",
+   "sha256": "aafbacd97724628df79f80c2c5c1900457c36919b94859d031cd5fee8eeb6c72"
+  },
+  "training/byte_lm_offload.mojo": {
+   "bytes": 16592,
+   "kind": "file",
+   "sha256": "538ae24dfd22d4aecfe804326a9cfd277afe872a882b85a576070fc56401e2d8"
+  },
+  "training/byte_lm_optimizer_pool.mojo": {
+   "bytes": 4271,
+   "kind": "file",
+   "sha256": "eebc1d6d000be32f4aebca8ecdce6efbcc2393800b0f0bc2702c17a37a1b4b38"
+  },
+  "training/byte_lm_parallel.mojo": {
+   "bytes": 16437,
+   "kind": "file",
+   "sha256": "d3e60ec324473c18b794d1d495c13d5a9b2395c6720d668c289a63c7b1e14c31"
+  },
+  "training/byte_lm_pooled_head.mojo": {
+   "bytes": 5157,
+   "kind": "file",
+   "sha256": "99c02a131df8b7214e9c05d0854779c3527a951046a03ac0cf91ff9f5e9a800e"
+  },
+  "training/checkpoint.mojo": {
+   "bytes": 56561,
+   "kind": "file",
+   "sha256": "2d64fa19f3ad2a1aea5b9d1952befad92e1b7a3203d7a45f8da13c4ef442c6b6"
+  },
+  "training/checks/__init__.mojo": {
+   "bytes": 129,
+   "kind": "file",
+   "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+  },
+  "training/checks/byte_lm_block_copy_check.mojo": {
+   "bytes": 9283,
+   "kind": "file",
+   "sha256": "7676df8579156228ef69d69b29e56505d0b45ef8e5705521e3b120a8335ffaf5"
+  },
+  "training/checks/byte_lm_config_check.mojo": {
+   "bytes": 4796,
+   "kind": "file",
+   "sha256": "253dea177ce3ae8e643e865376f1f2d3de71714a5e7d868fa35518d0ac1a4088"
+  },
+  "training/checks/byte_lm_head_v2_integration_check.mojo": {
+   "bytes": 3802,
+   "kind": "file",
+   "sha256": "0ee7f324f4f5b9a26de64bccc1959d2f58b71c3b526efde88b03630710472a2b"
+  },
+  "training/checks/byte_lm_host_bwd_probe.mojo": {
+   "bytes": 2464,
+   "kind": "file",
+   "sha256": "675b3288faa0128c7a062d5163dc71b8fdd4af295bd9309efbae315498a77cc7"
+  },
+  "training/checks/byte_lm_host_exp_check.mojo": {
+   "bytes": 3723,
+   "kind": "file",
+   "sha256": "aef8f40f7cc80dbcb944ca9ade9a25a0dc1f6a8cf89c1b5678ae59e9988fd171"
+  },
+  "training/checks/byte_lm_host_kernels_check.mojo": {
+   "bytes": 13754,
+   "kind": "file",
+   "sha256": "5e68892f0039ce8d56299682d66337accb97361dc9ff75bc5319afcaa0b19ba1"
+  },
+  "training/checks/byte_lm_layer_pool_check.mojo": {
+   "bytes": 7614,
+   "kind": "file",
+   "sha256": "12de7d6f4ea3a22c622cfd73434e65a5a22e9edca9c6e83c5bbf15c942d2a4a7"
+  },
+  "training/checks/byte_lm_length_sweep_check.mojo": {
+   "bytes": 4035,
+   "kind": "file",
+   "sha256": "8fb199ee87ab1b2d074b2b73deb0b6abe71a5946df63d2a77e21a076c1b537c7"
+  },
+  "training/checks/byte_lm_model_pool_check.mojo": {
+   "bytes": 5244,
+   "kind": "file",
+   "sha256": "6454591a41758035bac9bf2a202f64f4a47df9e0a295d2aee04b878f33e40ee4"
+  },
+  "training/checks/byte_lm_offload_check.mojo": {
+   "bytes": 4816,
+   "kind": "file",
+   "sha256": "b408b0fcaaa72af5fd7a4f2140564c9e378e50f940dbbb4605654913ff02b495"
+  },
+  "training/checks/checkpoint_check.mojo": {
+   "bytes": 62674,
+   "kind": "file",
+   "sha256": "1bdcccaef9295581a32f4039af28c34fd5a03fcdaa708f78ba2dda93c82715d2"
+  },
+  "training/checks/cholesky_parallel_check.mojo": {
+   "bytes": 6332,
+   "kind": "file",
+   "sha256": "fa67ca4d919eaf1c21cf4aa30b3f6b58729edf17460eacc2508bf558ac8abdb9"
+  },
+  "training/checks/chunked_lm_head_check.mojo": {
+   "bytes": 4717,
+   "kind": "file",
+   "sha256": "a1c5eb9c9b3b79c0ee94aa1d76d4e55527159c1a1f1605ef2b7ff671ddbd8391"
+  },
+  "training/checks/chunked_lm_head_device_check.mojo": {
+   "bytes": 5190,
+   "kind": "file",
+   "sha256": "e6b4ead05d508900115b46bf93b62bc41177c3b91c20cac39e05c2f2c1d1faf5"
+  },
+  "training/checks/chunked_lm_head_oracle.mojo": {
+   "bytes": 6333,
+   "kind": "file",
+   "sha256": "135f32b391d935e360c6f007c38d1a11f5a0361539920ea4fb4a0849edd85a44"
+  },
+  "training/checks/cross_vendor_resume.mojo": {
+   "bytes": 8608,
+   "kind": "file",
+   "sha256": "c05f38f076ab2fa1b8782f7b136eaf4f0184f60009dd79b813ded9c72f03cf5e"
+  },
+  "training/checks/dbscan_parallel_check.mojo": {
+   "bytes": 969,
+   "kind": "file",
+   "sha256": "4905b2674fd9b0a6cc9e623ac4d7d6bda65e1cdfa077278aff83f6aa9e459062"
+  },
+  "training/checks/dbscan_rows_check.mojo": {
+   "bytes": 6051,
+   "kind": "file",
+   "sha256": "75463d84c827086514bb38706fbcadc00948048eff51d6c6d25d56f4e30d9942"
+  },
+  "training/checks/dot_parallel_check.mojo": {
+   "bytes": 2232,
+   "kind": "file",
+   "sha256": "db1e7261a8756af80f54db6e31219342a86946e365ebcd01c408cf464395cef2"
+  },
+  "training/checks/forest_pool_check.mojo": {
+   "bytes": 8746,
+   "kind": "file",
+   "sha256": "38d25eb0d4518e2fb9c62299653eef9f756296aa959c678cb61fc1857eef84d8"
+  },
+  "training/checks/gmm_parallel_check.mojo": {
+   "bytes": 10605,
+   "kind": "file",
+   "sha256": "42cce15a3583f2ba00680e02affa82117fa024fa41ff0ce66b2b77a70364d8b8"
+  },
+  "training/checks/gp_parallel_check.mojo": {
+   "bytes": 2614,
+   "kind": "file",
+   "sha256": "78af8f2989fdfc0f5e2c6dd1f49252a0acc6f534b8aa729a480a6f0b487cee39"
+  },
+  "training/checks/gram_outputs_parallel_check.mojo": {
+   "bytes": 2983,
+   "kind": "file",
+   "sha256": "eb27b5861177d19bdec9380d1f017a07f3f570c0b7e4835a4558f5a4ec97b98b"
+  },
+  "training/checks/gram_parallel_check.mojo": {
+   "bytes": 3296,
+   "kind": "file",
+   "sha256": "42671a7f66d9aa1cb3ca5b9865bb070255f0051089fe0b57d45fa671d9d732ff"
+  },
+  "training/checks/graph_rows_check.mojo": {
+   "bytes": 3846,
+   "kind": "file",
+   "sha256": "d329ba9704004de2842b5b010a2a11121591992d4553a4ffb9528dae744d82e7"
+  },
+  "training/checks/iforest_parallel_check.mojo": {
+   "bytes": 6979,
+   "kind": "file",
+   "sha256": "3dfc89aa0ffcfdfda00f910b444e10f28f3bfe5bb1c804a8d71fd5aa1a9f7de6"
+  },
+  "training/checks/loss.mojo": {
+   "bytes": 72330,
+   "kind": "file",
+   "sha256": "5c9a5ba5ded93eca729bfb4894d91e6222b24c244995b5860d58a03a1ee20862"
+  },
+  "training/checks/loss_check.mojo": {
+   "bytes": 163142,
+   "kind": "file",
+   "sha256": "612588964bbb9b59d7eec085062c8150c023fd35550533ed088124d46f65e41b"
+  },
+  "training/checks/loss_fixture.mojo": {
+   "bytes": 67883,
+   "kind": "file",
+   "sha256": "044b2f17d9f53b3ee2b9964a5a93778cbc4aaef23bae3a9bfb4d3684b8010841"
+  },
+  "training/checks/loss_oracle.mojo": {
+   "bytes": 21368,
+   "kind": "file",
+   "sha256": "8a8edd11ff5d02ea2a6be9a44252612556d6238dec309d2c4ceb65ce47c568e5"
+  },
+  "training/checks/metal_launch_probe.mojo": {
+   "bytes": 7173,
+   "kind": "file",
+   "sha256": "d6d05ec98876d50d514ba2d2b0a7fa66313c46dca7d04a94bb5b9ce6531fc9fc"
+  },
+  "training/checks/neural_stage_init.mojo": {
+   "bytes": 6632,
+   "kind": "file",
+   "sha256": "324e3be2eb7c949a018bb6f5a5798a5f6dfd5b1cbd1c36496322c1ef704db292"
+  },
+  "training/checks/optimizer.mojo": {
+   "bytes": 65805,
+   "kind": "file",
+   "sha256": "831bd8462587219cdc73c6017e1ac97d4b32d970df4c0bbe0cd833724f212085"
+  },
+  "training/checks/optimizer_check.mojo": {
+   "bytes": 145005,
+   "kind": "file",
+   "sha256": "72396bd2f62f26d2aa69f2e41787093e32d6057719665d6bb3e6892045be3c5a"
+  },
+  "training/checks/optimizer_fixture.mojo": {
+   "bytes": 62044,
+   "kind": "file",
+   "sha256": "55ce48e04e2a353c417f2fa5a90be76f90df2d09748f67d54468aa9dfe2a0ff4"
+  },
+  "training/checks/optimizer_oracle.mojo": {
+   "bytes": 16073,
+   "kind": "file",
+   "sha256": "1bb0b96d96dffe2277d4037d1d7a0da14970edac245ec0fb9792b4691fed350d"
+  },
+  "training/checks/ordered_gradient_check.mojo": {
+   "bytes": 1593,
+   "kind": "file",
+   "sha256": "52596e8243011b0f8146ca9a597cc8c8c66cf1cd81013fc0864b4537c39cda77"
+  },
+  "training/checks/peer_copy_check.mojo": {
+   "bytes": 28517,
+   "kind": "file",
+   "sha256": "fa544d18b7c76c28becdedde537a8fe326862d1745ff0ca5fefaa42be7d9b257"
+  },
+  "training/checks/pointwise_parallel_check.mojo": {
+   "bytes": 5603,
+   "kind": "file",
+   "sha256": "fd46088302f25630d49f6b7dc35f771d378d08d75da37699f56654a421f39fd7"
+  },
+  "training/checks/qr_parallel_check.mojo": {
+   "bytes": 2240,
+   "kind": "file",
+   "sha256": "ec18dc6ca16d12c6aff4668e2e74664a64b3d23926b7c18ac840c3cd05d2452f"
+  },
+  "training/checks/resample_parallel_check.mojo": {
+   "bytes": 8441,
+   "kind": "file",
+   "sha256": "57c48bdee9318974103db04eec2d32e1bdb079eb0c3728a81f3f04d23a273aae"
+  },
+  "training/checks/step_glue_check.mojo": {
+   "bytes": 29933,
+   "kind": "file",
+   "sha256": "4670a93f8c21cf77bd44631dbf4db4ffd6d0859cb97608f56f8c4e5c7d2a5cfc"
+  },
+  "training/checks/svm_parallel_check.mojo": {
+   "bytes": 2904,
+   "kind": "file",
+   "sha256": "b5eb80806453a7c1303c7eb2f8185fa5916198614e721d67ea3f69895c6c4d21"
+  },
+  "training/checks/train_gradient_capture.mojo": {
+   "bytes": 5615,
+   "kind": "file",
+   "sha256": "56dd393a02f94b35abf89d485115dc80d10e337b17528b2ecd07e986fa24a8bf"
+  },
+  "training/checks/train_loop.mojo": {
+   "bytes": 77184,
+   "kind": "file",
+   "sha256": "38920b21203be78853c6ba3dcee443e7197ddf11c49ab6cd302e316356074ad7"
+  },
+  "training/checks/train_step_check.mojo": {
+   "bytes": 57834,
+   "kind": "file",
+   "sha256": "0ff42a8753684cfd665d634172b1b642fdc029b48f93aa322eb7ee9382bff111"
+  },
+  "training/chunked_lm_head_v2.mojo": {
+   "bytes": 22871,
+   "kind": "file",
+   "sha256": "811b7d8bf51caa711bba00129d58b709d7b7362149c782dd909ea1631e006b24"
+  },
+  "training/clip_multi_gpu.mojo": {
+   "bytes": 5822,
+   "kind": "file",
+   "sha256": "1dd4be29f4801a1b3afe04535a32aeb12de55967ad5a9268de1b9e849a624061"
+  },
+  "training/corpus/cpython312_lib/.gitignore": {
+   "bytes": 210,
+   "kind": "file",
+   "sha256": "a8e810e68ea84b525860d50ab35e056b93901aa4a1b140a604a4093f642ff886"
+  },
+  "training/corpus/cpython312_lib/README.md": {
+   "bytes": 1702,
+   "kind": "file",
+   "sha256": "2ae7c1a832a9051e87720f2a88ebb9e197e5f0f300608df248225e448703f9db"
+  },
+  "training/corpus/cpython312_lib/manifest.json": {
+   "bytes": 1173,
+   "kind": "file",
+   "sha256": "f978f221bc2f053df116752b73b70129418bfffa3b5defaee776dc770f93da4b"
+  },
+  "training/corpus/enwik8/.gitignore": {
+   "bytes": 217,
+   "kind": "file",
+   "sha256": "3b10b783e3ec820978c0cd4d018964d3150d1b21d6dd41fcf23a801a2ce9ce96"
+  },
+  "training/corpus/enwik8/README.md": {
+   "bytes": 2263,
+   "kind": "file",
+   "sha256": "279a22349f192d42e4b11fe5cc8f34cade157e66681ade57695a14f7ae04741a"
+  },
+  "training/corpus/enwik8/manifest.json": {
+   "bytes": 1674,
+   "kind": "file",
+   "sha256": "c65094a4d6a494d2882d972c20138015b4a258b310d662d4be05fb7ba2e9b423"
+  },
+  "training/corpus/pile_github/.gitignore": {
+   "bytes": 215,
+   "kind": "file",
+   "sha256": "ee6cd05f1eb51243cb37190ddcd629c4656ae5cd0716f527793ec9ac3197b71a"
+  },
+  "training/corpus/pile_github/README.md": {
+   "bytes": 2498,
+   "kind": "file",
+   "sha256": "5241aff41c5fb9dbed0f5c3bc0463b39a9d3f1eea59b6bd1e9ff91ac3c8d0ee4"
+  },
+  "training/corpus/pile_github/manifest.json": {
+   "bytes": 1984,
+   "kind": "file",
+   "sha256": "e3f46ca3870913aabd179647f5ab7e66b829c30c3cbcbf4b2862e2790d94cda5"
+  },
+  "training/corpus/tinyshakespeare/README.md": {
+   "bytes": 1886,
+   "kind": "file",
+   "sha256": "83d2fd13647b44288928fe6442ad1461f13209b450013e4d054f1673f8432a6d"
+  },
+  "training/corpus/tinyshakespeare/input.txt": {
+   "bytes": 1115394,
+   "kind": "file",
+   "sha256": "86c4e6aa9db7c042ec79f339dcb96d42b0075e16b8fc2e86bf0ca57e2dc565ed"
+  },
+  "training/corpus/tinyshakespeare/manifest-b4-l32.json": {
+   "bytes": 1437,
+   "kind": "file",
+   "sha256": "678e297051cbca7ce71a5dc4d80115550c8e584a5e99c7b33a91439e5649b9f5"
+  },
+  "training/corpus/tinyshakespeare/manifest.json": {
+   "bytes": 1082,
+   "kind": "file",
+   "sha256": "62104076baccf809e986aba08c1c4fae644896de7c995d542c0f757001065dc3"
+  },
+  "training/estimator.mojo": {
+   "bytes": 34241,
+   "kind": "file",
+   "sha256": "c4a132694ce96c52a7492a43248505612c3c37a14fa29e9333a6cb253c88d0bc"
+  },
+  "training/host/__init__.mojo": {
+   "bytes": 356,
+   "kind": "file",
+   "sha256": "8d9d79901e76a471b2af85c13dec5d08944b90bef189e3f79c865baec2cb942e"
+  },
+  "training/host/mlp_oracle.mojo": {
+   "bytes": 4947,
+   "kind": "file",
+   "sha256": "3c1925e8c052622306f64ef4bfd0b376eeee6d217c0b0b4fed0298e886ace69f"
+  },
+  "training/host/samba_ops_oracle.mojo": {
+   "bytes": 17049,
+   "kind": "file",
+   "sha256": "1258ad427c0025749aa9806eaba7915818a9d4c7872bf5d5920346ed8dd01ae3"
+  },
+  "training/mlp_ops.mojo": {
+   "bytes": 5609,
+   "kind": "file",
+   "sha256": "6ef88f796ffc5379aada67ec7dd5ce004d782a2e473da88f7eebf69e0ef67718"
+  },
+  "training/optimizer_multi_gpu.mojo": {
+   "bytes": 7483,
+   "kind": "file",
+   "sha256": "26d4bb10202bf3416f1bde0ab31e3c3deb5136a6414b5e1023f8b2d9d4395626"
+  },
+  "training/samba_ops.mojo": {
+   "bytes": 16410,
+   "kind": "file",
+   "sha256": "6d1b15215e557e0a0b62a7acb5299fea0f658c4fd06d159b5c0f3fcb8d344c12"
+  },
+  "transformer/ATTENTION_V2_CONTRACT.md": {
+   "bytes": 2724,
+   "kind": "file",
+   "sha256": "ffb6c2f9c2ae67fc1b6cb8f820f0c481c57b8f66d11dea8a802f74468b4cbe47"
+  },
+  "transformer/IDENTICAL_TRANSFORMER_CONTRACT.md": {
+   "bytes": 60454,
+   "kind": "file",
+   "sha256": "4872421ed91203927d08cad9b8e0165021149e1e4db3869ed081cf89c15f08a4"
+  },
+  "transformer/NOT_IMPLEMENTED.tsv": {
+   "bytes": 8530,
+   "kind": "file",
+   "sha256": "2e0acfc0cc537b363f992214448aeb6cde81d4be5eba81b20f9233f61e737a0e"
+  },
+  "transformer/README.md": {
+   "bytes": 488,
+   "kind": "file",
+   "sha256": "166a4cf37cf10f9efd6e4ad1fd119ab0f5409f53749103f4e8a1e3a45e7cd945"
+  },
+  "transformer/__init__.mojo": {
+   "bytes": 129,
+   "kind": "file",
+   "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+  },
+  "transformer/bench_window_timing.py": {
+   "bytes": 9152,
+   "kind": "file",
+   "sha256": "3ca47ed141525f4a160e9c4b4338e19ac92c2e972065f0c95db0a6e0418f8b67"
+  },
+  "transformer/block_options.mojo": {
+   "bytes": 20171,
+   "kind": "file",
+   "sha256": "818891d93c627769cc2b3a5fdac5e4f01e028c3b13724c751a04f7c04b287cb0"
+  },
+  "transformer/checks/__init__.mojo": {
+   "bytes": 129,
+   "kind": "file",
+   "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+  },
+  "transformer/checks/attention_fma_boundary_check.mojo": {
+   "bytes": 3485,
+   "kind": "file",
+   "sha256": "96499b877e14faa83396ff2933e81c990c632f97c93eb26b7f7c7050f8735aa9"
+  },
+  "transformer/checks/attention_masked_tail_check.mojo": {
+   "bytes": 7840,
+   "kind": "file",
+   "sha256": "516937f7190570a10073801f3fa534f21784f215e859b3dd45f3b18222bb180f"
+  },
+  "transformer/checks/attention_tail_guard_check.mojo": {
+   "bytes": 4199,
+   "kind": "file",
+   "sha256": "48715722e18dcf819c9c2d641beb19a3abff5d28d4a08c8214117e393f438369"
+  },
+  "transformer/checks/attention_v1_memory_profile_check.mojo": {
+   "bytes": 1034,
+   "kind": "file",
+   "sha256": "723f8fc0233f34cb2275a99b29e8c62be63fbcb324004c07bb12945307ba97fb"
+  },
+  "transformer/checks/attention_v2_backward_bench.mojo": {
+   "bytes": 4024,
+   "kind": "file",
+   "sha256": "80507e79e0eba30cb2b7575e018833392e27a9e926d1739472fbd94c1a528014"
+  },
+  "transformer/checks/attention_v2_backward_check.mojo": {
+   "bytes": 3776,
+   "kind": "file",
+   "sha256": "4f97640aad39ee6ddf5a4235737ab2277db3b40a469a04a1f9f63c0caf7ad268"
+  },
+  "transformer/checks/attention_v2_forward_bench.mojo": {
+   "bytes": 2553,
+   "kind": "file",
+   "sha256": "eaf49392138a4074ced1312a06bdf9cb515ebaba7b68fd4934b1adbc78daa5ea"
+  },
+  "transformer/checks/attention_v2_forward_check.mojo": {
+   "bytes": 3890,
+   "kind": "file",
+   "sha256": "fd9b88692a14288de45704934407311f14e9f9e21077616ecdf1aee72d257eb9"
+  },
+  "transformer/checks/attention_wait_check.mojo": {
+   "bytes": 2888,
+   "kind": "file",
+   "sha256": "d67d14ac88adb86f0afd2d744de10c6a3559067b310e781e63a2536ce3415a09"
+  },
+  "transformer/checks/attention_zdot_routing_check.mojo": {
+   "bytes": 1609,
+   "kind": "file",
+   "sha256": "4de8fa98377dee75a23113af8bbd578247692f717afba0f5f71c12ec72c0daf7"
+  },
+  "transformer/checks/backward_readback_check.mojo": {
+   "bytes": 3979,
+   "kind": "file",
+   "sha256": "00323ee9f3e59f5669afebd010caf09d7aa5af9e014e39edda71fa57ae647ded"
+  },
+  "transformer/checks/backward_wait_check.mojo": {
+   "bytes": 5795,
+   "kind": "file",
+   "sha256": "714898ab1205a5f68e4fa2b5b8541e5483dda7c0a10123d3822597b001a358ec"
+  },
+  "transformer/checks/forward_readback_check.mojo": {
+   "bytes": 4871,
+   "kind": "file",
+   "sha256": "32334fd5ab2a48b401df8779fc90c31544f16adecf85ff52775e2f020a8ad9ff"
+  },
+  "transformer/checks/metal_reuse_validation.mojo": {
+   "bytes": 5628,
+   "kind": "file",
+   "sha256": "dc8fdbc5a302b82a30f868e7d016c2d06501848708ef7d04afd70cf4aa9f8898"
+  },
+  "transformer/checks/transformer_attention_arms_check.mojo": {
+   "bytes": 36845,
+   "kind": "file",
+   "sha256": "e10afdfa3df0d174d6560c23bdca876c3b224806fc8ec3dc044fbef91d1eeb7c"
+  },
+  "transformer/checks/transformer_backward.mojo": {
+   "bytes": 143282,
+   "kind": "file",
+   "sha256": "c212f2c8d23f7e289c26b72c11471f047898ef6392bcbc79d92275cbe6413c74"
+  },
+  "transformer/checks/transformer_backward_check.mojo": {
+   "bytes": 186149,
+   "kind": "file",
+   "sha256": "edc4a1ca236ccf8629d4f9672a9e2c2edee3dc118bde6b9df6b1f9c57b33efcd"
+  },
+  "transformer/checks/transformer_backward_oracle.mojo": {
+   "bytes": 73390,
+   "kind": "file",
+   "sha256": "d9491e05c5ae322be7934adef4afbb1be3642e5dc80c21c4c8b775df45b57eb8"
+  },
+  "transformer/checks/transformer_check.mojo": {
+   "bytes": 147651,
+   "kind": "file",
+   "sha256": "6d43d7dd3643bb2f6c2d68df1392877b9eafb3c66431a1eec780ddeb2a2f2ff0"
+  },
+  "transformer/checks/transformer_fixture.mojo": {
+   "bytes": 22477,
+   "kind": "file",
+   "sha256": "f2bc7c4e8640f4669d62c9e2a2cae50e6d4dcd5c783a187da365fdb14a958697"
+  },
+  "transformer/checks/transformer_fused_check.mojo": {
+   "bytes": 23842,
+   "kind": "file",
+   "sha256": "7790b705a78564c51b67007f5d4c95e19081726abdaee7517a608b7b72ebabdc"
+  },
+  "transformer/checks/transformer_options_check.mojo": {
+   "bytes": 37102,
+   "kind": "file",
+   "sha256": "c4b5ed0606d9f39342711cc6ee62a14a4d4c81b0edace65c50c9583cd3d5d2f3"
+  },
+  "transformer/checks/transformer_oracle.mojo": {
+   "bytes": 93847,
+   "kind": "file",
+   "sha256": "f238e1345a24823eeee6217802a241b17537345797872ef0a6fee435c8cee963"
+  },
+  "transformer/checks/transformer_rope_admission_probe.mojo": {
+   "bytes": 1374,
+   "kind": "file",
+   "sha256": "6c93b0ef0d3cee59743921948a2168a660ae2a136780db7bf3baa2d8763a46b4"
+  },
+  "transformer/checks/weight_validation_check.mojo": {
+   "bytes": 2055,
+   "kind": "file",
+   "sha256": "2da30fe62e13fa732c4cb68d041a7af1e6a69aa891c105d3b316687da0e2c8ca"
+  },
+  "transformer/corpus/README.md": {
+   "bytes": 6718,
+   "kind": "file",
+   "sha256": "cd205c86c4696b69dc6e519b12c9ba4274b6b6b3daf4bb5c4e4eb79d0577e55c"
+  },
+  "transformer/corpus/gen_corpus.py": {
+   "bytes": 85508,
+   "kind": "file",
+   "sha256": "35c81b2b5edae3cea7aadf57ca4b00fa9d92522710f39f323072850b84c9bf11"
+  },
+  "transformer/host/__init__.mojo": {
+   "bytes": 429,
+   "kind": "file",
+   "sha256": "f5325df3b043e2e4c9f774410208eb0e8968e75546cd08b012adcbcf6b666d68"
+  },
+  "transformer/host/transformer_block_host.mojo": {
+   "bytes": 11834,
+   "kind": "file",
+   "sha256": "6060f1e800fbfd65957122127bc834d92ce67692d93cb71db838861ba4d91cd8"
+  },
+  "transformer/impl/__init__.mojo": {
+   "bytes": 129,
+   "kind": "file",
+   "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+  },
+  "transformer/impl/llama/__init__.mojo": {
+   "bytes": 129,
+   "kind": "file",
+   "sha256": "0788311453bc963a1293dcff637d6b863058c536e751b30bb67b301f408ff95f"
+  },
+  "transformer/impl/llama/attention_v2.mojo": {
+   "bytes": 17025,
+   "kind": "file",
+   "sha256": "fdb55a6c21eb3d279e7f9be970c50e74cccb9cda43b3b6e73f3d7ce2056fd53d"
+  },
+  "transformer/impl/llama/fused_attention.mojo": {
+   "bytes": 358307,
+   "kind": "file",
+   "sha256": "dba11aec9df69804fbee5290ab11b038bedade0ae50d44c7d3743a76087e2d67"
+  },
+  "transformer/impl/llama/modeling_llama.mojo": {
+   "bytes": 211080,
+   "kind": "file",
+   "sha256": "29555f521ef5e6c7db3351132fc307285de442a365325a909e239f5d4a7343b4"
+  }
+ },
+ "git_tree": "6cc3861051e0533021085c01c955dc631cbc03cb",
+ "schema": "mojolearn.clean-detached-source.v1",
+ "scopes": [
+  "bindings",
+  "gemm",
+  "training",
+  "transformer",
+  "checks",
+  "core",
+  "python/mojolearn",
+  "tools/lm_step_memory_probe.py",
+  "tools/lm_fold_specialize_probe.py",
+  "tools/lm_fold_specialize_body.sh",
+  "tools/trial_source_manifest.py",
+  "pixi.toml",
+  "pixi.lock"
+ ],
+ "tracked_status": "clean"
+}
