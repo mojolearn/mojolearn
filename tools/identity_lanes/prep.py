@@ -251,3 +251,52 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-spline-transformer")
+
+
+@lane("x-prep-binarizer")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.Binarizer(threshold=0.3).fit(X)
+    parts = dict(transform=_h(m.transform(X[:256])), zero=_h(ml.Binarizer().fit(X).transform(X[:256])))
+    return _fit(parts, m, lambda e: (e.transform(Xh[:256]),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-binarizer")
+
+
+def _prep_labels(X):
+    """Integer labels with gaps and ties, from the fixture's first column."""
+    return (np.clip(np.floor(X[:, 0] * 3), -9, 9) * 7).astype(np.int64)
+
+
+@lane("x-prep-label-encoder")
+def _(ml, X, yc, yr, Xh=None):
+    y, yh = _prep_labels(X), _prep_labels(Xh)
+    m = ml.LabelEncoder().fit(y)
+    parts = dict(classes=_h(m.classes_), transform=_h(m.transform(y[:256])),
+                 floats=_h(ml.LabelEncoder().fit_transform(yr[:256])))
+    known = np.isin(yh, np.asarray(m.classes_))
+    return _fit(parts, m, lambda e: (e.transform(yh[known][:256]),))
+
+
+@lane("x-prep-label-binarizer")
+def _(ml, X, yc, yr, Xh=None):
+    y, yh = _prep_labels(X), _prep_labels(Xh)
+    m = ml.LabelBinarizer(neg_label=-1, pos_label=2).fit(y)
+    parts = dict(classes=_h(m.classes_), transform=_h(m.transform(y[:256])),
+                 binary=_h(ml.LabelBinarizer().fit(yc).transform(yc[:256])))
+    return _fit(parts, m, lambda e: (e.transform(yh[:256]),))
+
+
+def _prep_multilabel(X):
+    """Rows of 0..3 labels each (columns 0-2 over a threshold give labels
+    from column 5's integer part), so empty rows, repeats and unseen labels occur."""
+    base = np.clip(np.floor(X[:, 5] * 2), -3, 3).astype(np.int64)
+    return [[int(base[i]) + j for j in range(3) if X[i, j] > 0.2] for i in range(X.shape[0])]
+
+
+@lane("x-prep-multilabel-binarizer")
+def _(ml, X, yc, yr, Xh=None):
+    ys, yhs = _prep_multilabel(X), _prep_multilabel(Xh)
+    m = ml.MultiLabelBinarizer().fit(ys)
+    parts = dict(classes=_h(m.classes_), transform=_h(m.transform(ys[:256])))
+    return _fit(parts, m, lambda e: (e.transform(yhs[:256]),))
