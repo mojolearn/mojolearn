@@ -11,6 +11,9 @@ from x_cnn.ops import (
     im2col_at, conv_out_at, dout_rows_at, col2im_at,
     PP_N, PP_C, PP_H, PP_W, PP_OH, PP_OW, PP_REV,
     maxpool_fwd_at, maxpool_bwd_at, avgpool_fwd_at, avgpool_bwd_at,
+    relu_fwd_at, relu_bwd_at, add_at, bias_rows_at, softmax_xent_row_at, seq_mean, sgd_at,
+    bn_stats_at, bn_eval_stats_at, bn_apply_at, bn_running_at, bn_bwd_red_at, bn_bwd_dx_at, bn_bwd_eval_dx_at,
+    dropout2d_at, mul_at,
 )
 
 #: The host family's negative control (host_surface sabotage_define): the
@@ -156,3 +159,144 @@ def avgpool2d_backward_host(dout: List[Float32], prm: List[Int32]) raises -> Lis
     _ = ds^
     _ = ps^
     return gx^
+
+
+def map2_host[f: ElemFn](a: List[Float32], b: List[Float32], n_out: Int, prm: List[Int32]) raises -> List[Float32]:
+    var sa = a.copy()
+    var sb = b.copy()
+    var ps = prm.copy()
+    var out = zeros(n_out)
+    run[f](hp(sa), hp(sb), hp(out), hp(out), hi(ps), hi(ps), n_out)
+    _ = sa^
+    _ = sb^
+    _ = ps^
+    return out^
+
+
+def relu_forward_host(x: List[Float32]) raises -> List[Float32]:
+    var prm: List[Int32] = [0, 0, 0]
+    return map2_host[relu_fwd_at](x, x, len(x), prm)
+
+
+def relu_backward_host(x: List[Float32], g: List[Float32]) raises -> List[Float32]:
+    var prm: List[Int32] = [0, 0, 0]
+    return map2_host[relu_bwd_at](x, g, len(x), prm)
+
+
+def add_host(a: List[Float32], b: List[Float32]) raises -> List[Float32]:
+    var prm: List[Int32] = [0, 0, 0]
+    return map2_host[add_at](a, b, len(a), prm)
+
+
+def linear_forward_host(x: List[Float32], w: List[Float32], bias: List[Float32], n: Int, d_in: Int, d_out: Int) raises -> List[Float32]:
+    var y = gemm_oracle(x, w, OP_NT, n, d_out, d_in)
+    var prm: List[Int32] = [Int32(n), Int32(d_in), Int32(d_out)]
+    return map2_host[bias_rows_at](y, bias, n * d_out, prm)
+
+
+def linear_backward_host(x: List[Float32], w: List[Float32], g: List[Float32], n: Int, d_in: Int, d_out: Int) raises -> List[Float32]:
+    var ones = List[Float32](length=n, fill=Float32(1))
+    var gw = gemm_oracle(g, x, OP_TN, d_out, d_in, n)
+    var gb = gemm_oracle(g, ones, OP_TN, d_out, 1, n)
+    var gx = gemm_oracle(g, w, OP_NN, n, d_in, d_out)
+    gx.extend(gw^)
+    gx.extend(gb^)
+    return gx^
+
+
+def softmax_xent_host(logits: List[Float32], labels: List[Int32], n: Int, k: Int) raises -> List[Float32]:
+    var sl = logits.copy()
+    var sy = labels.copy()
+    var prm: List[Int32] = [Int32(n), Int32(k)]
+    var grad = zeros(n * k)
+    var proba = zeros(n * k)
+    var rl = zeros(n)
+    run[softmax_xent_row_at](hp(sl), hp(grad), hp(proba), hp(rl), hi(sy), hi(prm), n)
+    _ = sl^
+    _ = sy^
+    _ = prm^
+    var loss = seq_mean(rl, n)
+    grad.extend(proba^)
+    grad.append(loss)
+    return grad^
+
+
+def sgd_host(w: List[Float32], g: List[Float32], v: List[Float32], hyper: List[Float32]) raises -> List[Float32]:
+    var n = len(w)
+    var sw = w.copy()
+    var sg = g.copy()
+    var sv = v.copy()
+    var sh = hyper.copy()
+    var prm: List[Int32] = [Int32(n)]
+    run[sgd_at](hp(sw), hp(sg), hp(sv), hp(sh), hi(prm), hi(prm), n)
+    _ = sg^
+    _ = sh^
+    _ = prm^
+    sw.extend(sv^)
+    return sw^
+
+
+def batchnorm_forward_host(
+    x: List[Float32], running: List[Float32], aux: List[Float32], prm: List[Int32], training: Bool
+) raises -> List[Float32]:
+    var total = len(x)
+    var C = Int(prm[1])
+    var sx = x.copy()
+    var sr = running.copy()
+    var sa = aux.copy()
+    var ps = prm.copy()
+    var out = zeros(total)
+    if training:
+        run[bn_stats_at](hp(sx), hp(sa), hp(sa), hp(sa), hi(ps), hi(ps), C)
+    else:
+        run[bn_eval_stats_at](hp(sr), hp(sa), hp(sa), hp(sa), hi(ps), hi(ps), C)
+    run[bn_apply_at](hp(sx), hp(sa), hp(out), hp(out), hi(ps), hi(ps), total)
+    if training:
+        run[bn_running_at](hp(sr), hp(sa), hp(sa), hp(sa), hi(ps), hi(ps), C)
+    _ = sx^
+    _ = ps^
+    out.extend(sr^)
+    out.extend(sa^)
+    return out^
+
+
+def batchnorm_backward_host(
+    x: List[Float32], g: List[Float32], aux: List[Float32], prm: List[Int32], training: Bool
+) raises -> List[Float32]:
+    var total = len(x)
+    var C = Int(prm[1])
+    var sx = x.copy()
+    var sg = g.copy()
+    var sa = aux.copy()
+    var ps = prm.copy()
+    var out = zeros(total)
+    run[bn_bwd_red_at](hp(sx), hp(sg), hp(sa), hp(sa), hi(ps), hi(ps), C)
+    if training:
+        run[bn_bwd_dx_at](hp(sx), hp(sg), hp(sa), hp(out), hi(ps), hi(ps), total)
+    else:
+        run[bn_bwd_eval_dx_at](hp(sx), hp(sg), hp(sa), hp(out), hi(ps), hi(ps), total)
+    _ = sx^
+    _ = sg^
+    _ = ps^
+    out.extend(sa^)
+    return out^
+
+
+def dropout2d_host(x: List[Float32], prm: List[Int32], hyper: List[Float32]) raises -> List[Float32]:
+    var n = len(x)
+    var sx = x.copy()
+    var ps = prm.copy()
+    var sh = hyper.copy()
+    var mask = zeros(n)
+    var out = zeros(n)
+    run[dropout2d_at](hp(sx), hp(mask), hp(out), hp(sh), hi(ps), hi(ps), n)
+    _ = sx^
+    _ = ps^
+    _ = sh^
+    out.extend(mask^)
+    return out^
+
+
+def mul_host(a: List[Float32], b: List[Float32]) raises -> List[Float32]:
+    var prm: List[Int32] = [0, 0, 0]
+    return map2_host[mul_at](a, b, len(a), prm)

@@ -16,7 +16,8 @@ first imported, after the package, so both may rely on every module existing:
 """
 from . import _backend
 
-__all__ = ["Conv2d", "Conv1d", "MaxPool2d", "AvgPool2d", "MaxPool1d", "AvgPool1d"]
+__all__ = ["Conv2d", "Conv1d", "MaxPool2d", "AvgPool2d", "MaxPool1d", "AvgPool1d", "CNNClassifier", "BatchNorm2d", "BatchNorm1d",
+           "Dropout2d", "AdaptiveAvgPool2d", "AdaptiveMaxPool2d", "BasicBlock"]
 
 _BINDING = "_mojolearn_x_cnn"
 
@@ -325,3 +326,492 @@ class AvgPool1d(_Pool1dMixin, AvgPool2d):
         s = k if stride is None else _one(stride)
         super().__init__((1, k), (1, s), (0, _one(padding)), ceil_mode, count_include_pad, None,
                          input_shape, numeric_mode)
+
+
+class _ReLU(_Layer):
+    def __init__(self, numeric_mode=None):
+        self.numeric_mode = numeric_mode
+
+    def forward(self, x):
+        np = _np()
+        x = _f32(x, "x")
+        out = np.empty_like(x)
+        self._binding().x_cnn_relu_forward(x.ctypes.data, out.ctypes.data, [x.size])
+        self._x = x
+        return out
+
+    def backward(self, grad_out):
+        np = _np()
+        g = _f32(grad_out, "grad_out")
+        dx = np.empty_like(self._x)
+        self._binding().x_cnn_relu_backward(self._x.ctypes.data, g.ctypes.data, dx.ctypes.data, [g.size])
+        return dx
+
+
+class _Linear(_Layer):
+    """y = x W^T + b on the pinned GEMM (PyTorch nn.Linear, default init)."""
+
+    def __init__(self, in_features, out_features, random_state=0, numeric_mode=None):
+        np = _np()
+        self.in_features, self.out_features = int(in_features), int(out_features)
+        self.numeric_mode = numeric_mode
+        rng = np.random.default_rng(random_state)
+        self.weight_ = _kaiming_uniform(rng, (self.out_features, self.in_features), self.in_features)
+        self.bias_ = _kaiming_uniform(rng, (self.out_features,), self.in_features)
+
+    def forward(self, x):
+        np = _np()
+        x = _f32(x, "x")
+        out = np.empty((x.shape[0], self.out_features), np.float32)
+        self._binding().x_cnn_linear_forward(x.ctypes.data, self.weight_.ctypes.data, self.bias_.ctypes.data,
+                                             out.ctypes.data, [x.shape[0], self.in_features, self.out_features])
+        self._x = x
+        return out
+
+    def backward(self, grad_out):
+        np = _np()
+        g = _f32(grad_out, "grad_out")
+        dx = np.empty_like(self._x)
+        dw = np.empty_like(self.weight_)
+        db = np.empty_like(self.bias_)
+        self._binding().x_cnn_linear_backward(self._x.ctypes.data, self.weight_.ctypes.data, g.ctypes.data,
+                                              dx.ctypes.data, dw.ctypes.data, db.ctypes.data,
+                                              [g.shape[0], self.in_features, self.out_features])
+        self.grad_weight_, self.grad_bias_ = dw, db
+        return dx
+
+
+def _softmax_xent(binding, logits, labels):
+    """(mean loss, grad of the mean loss w.r.t. logits, proba)."""
+    np = _np()
+    logits = _f32(logits, "logits")
+    labels = np.ascontiguousarray(labels, dtype=np.int32)
+    grad = np.empty_like(logits)
+    proba = np.empty_like(logits)
+    loss = binding.x_cnn_softmax_xent(logits.ctypes.data, labels.ctypes.data, grad.ctypes.data, proba.ctypes.data,
+                                      list(logits.shape))
+    return float(loss), grad, proba
+
+
+def _sgd(binding, param, grad, buf, lr, momentum, weight_decay):
+    """In place: PyTorch SGD's step on `param` and its momentum buffer."""
+    binding.x_cnn_sgd(param.ctypes.data, _f32(grad, "grad").ctypes.data, buf.ctypes.data, [param.size],
+                      [float(lr), float(momentum), float(weight_decay)])
+
+
+class CNNClassifier(_Layer):
+    """A small CNN image classifier, sklearn-shaped: for each entry of
+    `conv_channels` a Conv2d (kernel_size, 'same' zero padding for odd
+    kernels) -> ReLU -> MaxPool2d(pool_size) block (the pool is skipped once
+    the map is smaller than the window), then one Linear layer to the
+    classes; softmax cross entropy (mean); PyTorch SGD with momentum and
+    weight decay. Every step runs on `_mojolearn_x_cnn` (the GPU, or the CPU
+    host twin), IDENTICAL across columns. X is (n, C*H*W) rows with
+    `input_shape=(C, H, W)`, or (n, C, H, W)."""
+
+    def __init__(self, input_shape, conv_channels=(8,), kernel_size=3, pool_size=2, learning_rate=0.01,
+                 momentum=0.9, weight_decay=0.0, batch_size=32, max_iter=10, shuffle=True, random_state=0,
+                 numeric_mode=None):
+        self.input_shape = tuple(int(v) for v in input_shape)
+        self.conv_channels = tuple(int(c) for c in conv_channels)
+        self.kernel_size = int(kernel_size)
+        self.pool_size = int(pool_size)
+        self.learning_rate = float(learning_rate)
+        self.momentum = float(momentum)
+        self.weight_decay = float(weight_decay)
+        self.batch_size = int(batch_size)
+        self.max_iter = int(max_iter)
+        self.shuffle = bool(shuffle)
+        self.random_state = random_state
+        self.numeric_mode = numeric_mode
+
+    def _images(self, X):
+        X = _f32(X, "X")
+        if X.ndim == 2:
+            return np_reshape(X, (X.shape[0],) + self.input_shape)
+        if X.shape[1:] != self.input_shape:
+            raise ValueError(f"mojolearn: images of shape {X.shape[1:]}, the model {self.input_shape}")
+        return X
+
+    def _build(self, n_classes):
+        seed = 0 if self.random_state is None else int(self.random_state)
+        c, h, w = self.input_shape
+        layers = []
+        for i, oc in enumerate(self.conv_channels):
+            layers.append(Conv2d(c, oc, self.kernel_size, padding=self.kernel_size // 2, random_state=seed + 101 * i,
+                                 numeric_mode=self.numeric_mode))
+            h = h + 2 * (self.kernel_size // 2) - self.kernel_size + 1
+            w = w + 2 * (self.kernel_size // 2) - self.kernel_size + 1
+            layers.append(_ReLU(self.numeric_mode))
+            if h >= self.pool_size and w >= self.pool_size and self.pool_size > 1:
+                layers.append(MaxPool2d(self.pool_size, numeric_mode=self.numeric_mode))
+                h, w = h // self.pool_size, w // self.pool_size
+            c = oc
+        self._flat = c * h * w
+        self.head_ = _Linear(self._flat, n_classes, random_state=seed + 997, numeric_mode=self.numeric_mode)
+        self.layers_ = layers
+
+    def _forward(self, x):
+        for layer in self.layers_:
+            x = layer.forward(x)
+        self._shape = x.shape
+        return self.head_.forward(x.reshape(x.shape[0], -1))
+
+    def _backward(self, g):
+        g = self.head_.backward(g).reshape(self._shape)
+        for layer in reversed(self.layers_):
+            g = layer.backward(g)
+
+    def _params(self):
+        out = []
+        for layer in self.layers_ + [self.head_]:
+            if hasattr(layer, "weight_"):
+                out.append((layer, "weight_", "grad_weight_"))
+                out.append((layer, "bias_", "grad_bias_"))
+        return out
+
+    def fit(self, X, y):
+        np = _np()
+        x = self._images(X)
+        y = np.asarray(y)
+        self.classes_, yi = np.unique(y, return_inverse=True)
+        yi = yi.astype(np.int32)
+        self._build(len(self.classes_))
+        b = self._binding()
+        bufs = {id(getattr(l, a)): np.zeros_like(getattr(l, a)) for l, a, _ in self._params()}
+        self._bufs = [bufs[id(getattr(l, a))] for l, a, _ in self._params()]
+        rng = np.random.default_rng(self.random_state)
+        n = x.shape[0]
+        self.losses_, self.loss_curve_ = [], []
+        for _ in range(self.max_iter):
+            order = rng.permutation(n) if self.shuffle else np.arange(n)
+            epoch = []
+            for s in range(0, n, self.batch_size):
+                idx = order[s:s + self.batch_size]
+                xb = np.ascontiguousarray(x[idx])
+                loss, g, _ = _softmax_xent(b, self._forward(xb), yi[idx])
+                self._backward(g)
+                for (layer, a, ga), buf in zip(self._params(), self._bufs):
+                    _sgd(b, getattr(layer, a), getattr(layer, ga), buf, self.learning_rate, self.momentum,
+                         self.weight_decay)
+                epoch.append(loss)
+            self.losses_.extend(epoch)
+            self.loss_curve_.append(sum(epoch) / len(epoch))
+        self.n_features_in_ = int(np.prod(self.input_shape))
+        return self
+
+    def predict_proba(self, X):
+        np = _np()
+        x = self._images(X)
+        logits = self._forward(x)
+        _, _, proba = _softmax_xent(self._binding(), logits, np.full(x.shape[0], -1, np.int32))
+        return proba
+
+    def predict(self, X):
+        np = _np()
+        return self.classes_[np.argmax(self.predict_proba(X), axis=1)]
+
+    def weights(self):
+        """Every trained array, in layer order: [w0, b0, w1, b1, ...]."""
+        return [getattr(l, a) for l, a, _ in self._params()]
+
+
+def np_reshape(X, shape):
+    return _np().ascontiguousarray(X).reshape(shape)
+
+
+class BatchNorm2d(_Layer):
+    """PyTorch `nn.BatchNorm2d` (affine, track_running_stats): training mode
+    normalizes by the batch statistics and updates running_mean_/running_var_
+    (momentum, the unbiased variance); eval mode (`.eval()`) uses the running
+    statistics. Each channel's statistics are one fixed-order fold.
+    `backward` returns grad_x and sets grad_weight_ (gamma), grad_bias_ (beta).
+    `BatchNorm1d` is the same over (N, C) or (N, C, L)."""
+
+    def __init__(self, num_features, eps=1e-5, momentum=0.1, affine=True, track_running_stats=True,
+                 input_shape=None, numeric_mode=None):
+        np = _np()
+        if momentum is None:
+            raise NotImplementedError("mojolearn: momentum=None (cumulative average) is not implemented "
+                                      "(NOT_IMPLEMENTED.tsv)")
+        if not track_running_stats:
+            raise NotImplementedError("mojolearn: track_running_stats=False is not implemented (NOT_IMPLEMENTED.tsv)")
+        self.num_features = int(num_features)
+        self.eps, self.momentum, self.affine = float(eps), float(momentum), bool(affine)
+        self.input_shape = input_shape
+        self.numeric_mode = numeric_mode
+        self.weight_ = np.ones(self.num_features, np.float32)
+        self.bias_ = np.zeros(self.num_features, np.float32)
+        self.running_mean_ = np.zeros(self.num_features, np.float32)
+        self.running_var_ = np.ones(self.num_features, np.float32)
+        self.training = True
+
+    def train(self, mode=True):
+        self.training = bool(mode)
+        return self
+
+    def eval(self):
+        return self.train(False)
+
+    def _nchw(self, x):
+        x = _f32(x, "x")
+        shape = x.shape
+        if x.ndim == 2:
+            x = x[:, :, None]
+        n, c = x.shape[:2]
+        if c != self.num_features:
+            raise ValueError(f"mojolearn: input has {c} channels, the layer {self.num_features}")
+        return np_reshape(x, (n, c, -1)), shape
+
+    def forward(self, x):
+        np = _np()
+        x3, shape = self._nchw(x)
+        n, c, hw = x3.shape
+        C = self.num_features
+        aux = np.zeros(2 + 7 * C, np.float32)
+        aux[0], aux[1] = np.float32(self.eps), np.float32(self.momentum)
+        aux[2 + 5 * C:2 + 6 * C] = self.weight_
+        aux[2 + 6 * C:2 + 7 * C] = self.bias_
+        running = np.concatenate([self.running_mean_, self.running_var_]).astype(np.float32)
+        y = np.empty_like(x3)
+        self._binding().x_cnn_batchnorm_forward(x3.ctypes.data, y.ctypes.data, running.ctypes.data, aux.ctypes.data,
+                                                [n, c, hw, 1 if self.training else 0])
+        if self.training:
+            self.running_mean_, self.running_var_ = running[:C].copy(), running[C:].copy()
+        self._x, self._aux, self._shape, self._mode = x3, aux, shape, self.training
+        return y.reshape(shape) if len(shape) != 2 else y[:, :, 0]
+
+    def backward(self, grad_out):
+        np = _np()
+        g = _f32(grad_out, "grad_out")
+        g3 = np_reshape(g if g.ndim != 2 else g[:, :, None], self._x.shape)
+        n, c, hw = self._x.shape
+        C = self.num_features
+        aux = self._aux.copy()
+        dx = np.empty_like(self._x)
+        self._binding().x_cnn_batchnorm_backward(self._x.ctypes.data, g3.ctypes.data, dx.ctypes.data,
+                                                 aux.ctypes.data, [n, c, hw, 1 if self._mode else 0])
+        self.grad_bias_ = aux[2 + 3 * C:2 + 4 * C].copy()
+        self.grad_weight_ = aux[2 + 4 * C:2 + 5 * C].copy()
+        if not self.affine:
+            self.grad_weight_[:] = 0
+            self.grad_bias_[:] = 0
+        return dx.reshape(self._shape) if len(self._shape) != 2 else dx[:, :, 0]
+
+    def _rows(self, X):
+        X = _f32(X, "X")
+        if X.ndim == 2 and self.input_shape is not None:
+            return X.reshape((X.shape[0],) + tuple(self.input_shape))
+        return X
+
+    def transform(self, X):
+        out = self.forward(self._rows(X))
+        return out.reshape(out.shape[0], -1)
+
+    def fit(self, X, y=None):
+        """One training-mode pass over X (updates the running statistics)."""
+        was = self.training
+        self.training = True
+        self.forward(self._rows(X))
+        self.training = was
+        return self
+
+
+class BatchNorm1d(BatchNorm2d):
+    """PyTorch `nn.BatchNorm1d` over (N, C) or (N, C, L)."""
+
+
+class Dropout2d(_Layer):
+    """PyTorch `nn.Dropout2d`: in training mode each (n, c) channel is zeroed
+    with probability `p` and the rest scaled by 1/(1-p); eval mode is the
+    identity. The mask is Philox4x32-10 of (random_state, the call count)
+    at the channel index, compared as an integer: the same mask on every
+    column (not torch's stream). `mask_` holds the last scale per element."""
+
+    def __init__(self, p=0.5, random_state=0, input_shape=None, numeric_mode=None):
+        if not 0.0 <= float(p) <= 1.0:
+            raise ValueError(f"mojolearn: dropout probability has to be between 0 and 1, but got {p}")
+        self.p = float(p)
+        self.random_state = int(random_state or 0)
+        self.input_shape = input_shape
+        self.numeric_mode = numeric_mode
+        self.training = True
+        self.calls_ = 0
+
+    def train(self, mode=True):
+        self.training = bool(mode)
+        return self
+
+    def eval(self):
+        return self.train(False)
+
+    def forward(self, x):
+        np = _np()
+        x = _f32(x, "x")
+        if not self.training:
+            self.mask_ = None
+            return x.copy()
+        if x.ndim not in (3, 4):
+            raise ValueError("mojolearn: Dropout2d.forward takes (N, C, H, W) or (C, H, W)")
+        x4 = x[None] if x.ndim == 3 else x
+        n, c = x4.shape[:2]
+        hw = int(np.prod(x4.shape[2:]))
+        thresh = min(int(round(self.p * 2 ** 32)), 2 ** 32)
+        seed_lo = self.random_state & 0x7FFFFFFF
+        seed_hi = ((self.random_state >> 31) * 1000003 + self.calls_) & 0x7FFFFFFF
+        self.calls_ += 1
+        y = np.empty_like(x4)
+        mask = np.empty_like(x4)
+        x4 = np.ascontiguousarray(x4)
+        self._binding().x_cnn_dropout2d(x4.ctypes.data, y.ctypes.data, mask.ctypes.data,
+                                        [n, c, hw, seed_lo, seed_hi, thresh >> 16, thresh & 0xFFFF], self.p)
+        self.mask_ = mask.reshape(x.shape)
+        return y.reshape(x.shape)
+
+    def backward(self, grad_out):
+        np = _np()
+        g = _f32(grad_out, "grad_out")
+        if self.mask_ is None:
+            return g.copy()
+        dx = np.empty_like(g)
+        self._binding().x_cnn_mul(g.ctypes.data, np.ascontiguousarray(self.mask_).ctypes.data, dx.ctypes.data, [g.size])
+        return dx
+
+    def transform(self, X):
+        out = self.forward(BatchNorm2d._rows(self, X))
+        return out.reshape(out.shape[0], -1)
+
+    def fit(self, X, y=None):
+        return self
+
+
+class _AdaptivePool(_Layer):
+    def __init__(self, output_size=1, input_shape=None, numeric_mode=None):
+        self.output_size = _pair(output_size, "output_size")
+        self.input_shape = input_shape
+        self.numeric_mode = numeric_mode
+
+    def _inner(self, shape):
+        h, w = shape[2], shape[3]
+        oh, ow = self.output_size
+        if h % oh or w % ow:
+            raise NotImplementedError("mojolearn: adaptive pooling to an output size that does not divide the input "
+                                      "is not implemented (NOT_IMPLEMENTED.tsv)")
+        k = (h // oh, w // ow)
+        return self._pool(k)
+
+    def forward(self, x):
+        x = _f32(x, "x")
+        if x.ndim != 4:
+            raise ValueError(f"mojolearn: {type(self).__name__}.forward takes (N, C, H, W)")
+        self._layer = self._inner(x.shape)
+        return self._layer.forward(x)
+
+    def backward(self, grad_out):
+        return self._layer.backward(grad_out)
+
+    def transform(self, X):
+        out = self.forward(BatchNorm2d._rows(self, X))
+        return out.reshape(out.shape[0], -1)
+
+    def fit(self, X, y=None):
+        return self
+
+
+class AdaptiveAvgPool2d(_AdaptivePool):
+    """PyTorch `nn.AdaptiveAvgPool2d` for output sizes that divide the input
+    (global average pooling is `AdaptiveAvgPool2d(1)`): AvgPool2d with
+    kernel = stride = input / output, the window summed in (h, w) order."""
+
+    def _pool(self, k):
+        return AvgPool2d(k, stride=k, numeric_mode=self.numeric_mode)
+
+
+class AdaptiveMaxPool2d(_AdaptivePool):
+    """PyTorch `nn.AdaptiveMaxPool2d` for output sizes that divide the input
+    (global max pooling is `AdaptiveMaxPool2d(1)`)."""
+
+    def _pool(self, k):
+        return MaxPool2d(k, stride=k, numeric_mode=self.numeric_mode)
+
+
+def _add(binding, a, b):
+    np = _np()
+    a, b = _f32(a, "a"), _f32(b, "b")
+    out = np.empty_like(a)
+    binding.x_cnn_add(a.ctypes.data, b.ctypes.data, out.ctypes.data, [a.size])
+    return out
+
+
+class BasicBlock(_Layer):
+    """torchvision.models.resnet.BasicBlock: conv3x3(stride) -> BN -> ReLU ->
+    conv3x3 -> BN, plus the identity (or conv1x1(stride) -> BN when the
+    shape changes), then ReLU. Convolutions carry no bias, as torchvision's.
+    `forward` / `backward` over (N, C, H, W); `parameters()` lists
+    (layer, weight attr, grad attr) for an optimizer."""
+    expansion = 1
+
+    def __init__(self, inplanes, planes, stride=1, downsample=None, random_state=0, input_shape=None,
+                 numeric_mode=None):
+        s = int(random_state or 0)
+        self.numeric_mode = numeric_mode
+        self.input_shape = input_shape
+        self.conv1 = Conv2d(inplanes, planes, 3, stride=stride, padding=1, bias=False, random_state=s,
+                            numeric_mode=numeric_mode)
+        self.bn1 = BatchNorm2d(planes, numeric_mode=numeric_mode)
+        self.relu1 = _ReLU(numeric_mode)
+        self.conv2 = Conv2d(planes, planes, 3, padding=1, bias=False, random_state=s + 1, numeric_mode=numeric_mode)
+        self.bn2 = BatchNorm2d(planes, numeric_mode=numeric_mode)
+        self.relu2 = _ReLU(numeric_mode)
+        if downsample is None and (stride != 1 or inplanes != planes):
+            downsample = True
+        self.downsample = None
+        if downsample:
+            self.downsample = [Conv2d(inplanes, planes, 1, stride=stride, bias=False, random_state=s + 2,
+                                      numeric_mode=numeric_mode), BatchNorm2d(planes, numeric_mode=numeric_mode)]
+        self.training = True
+
+    def _bns(self):
+        return [self.bn1, self.bn2] + ([self.downsample[1]] if self.downsample else [])
+
+    def train(self, mode=True):
+        self.training = bool(mode)
+        for bn in self._bns():
+            bn.train(mode)
+        return self
+
+    def eval(self):
+        return self.train(False)
+
+    def forward(self, x):
+        x = _f32(x, "x")
+        out = self.relu1.forward(self.bn1.forward(self.conv1.forward(x)))
+        out = self.bn2.forward(self.conv2.forward(out))
+        identity = x
+        if self.downsample:
+            identity = self.downsample[1].forward(self.downsample[0].forward(x))
+        return self.relu2.forward(_add(self._binding(), out, identity))
+
+    def backward(self, grad_out):
+        g = self.relu2.backward(grad_out)
+        gm = self.conv1.backward(self.bn1.backward(self.relu1.backward(self.conv2.backward(self.bn2.backward(g)))))
+        gi = g
+        if self.downsample:
+            gi = self.downsample[0].backward(self.downsample[1].backward(g))
+        return _add(self._binding(), gm, gi)
+
+    def parameters(self):
+        out = []
+        layers = [self.conv1, self.bn1, self.conv2, self.bn2] + (self.downsample or [])
+        for layer in layers:
+            out.append((layer, "weight_", "grad_weight_"))
+            if isinstance(layer, BatchNorm2d):
+                out.append((layer, "bias_", "grad_bias_"))
+        return out
+
+    def transform(self, X):
+        out = self.forward(BatchNorm2d._rows(self, X))
+        return out.reshape(out.shape[0], -1)
+
+    def fit(self, X, y=None):
+        return self
