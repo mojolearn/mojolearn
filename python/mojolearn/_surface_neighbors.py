@@ -18,7 +18,7 @@ FAMILIES = (
             "x-neighbors-label-propagation", "x-neighbors-label-spreading", "x-neighbors-knn-imputer",
             "x-neighbors-pagerank", "x-neighbors-connected-components", "x-neighbors-louvain", "x-neighbors-svgp",
             "x-neighbors-gamma-scale", "x-neighbors-svm-weights", "x-neighbors-svc-sigmoid", "x-neighbors-svc-multiclass",
-            "x-neighbors-krr-options", "x-neighbors-svm-precomputed",
+            "x-neighbors-krr-options", "x-neighbors-svm-precomputed", "x-neighbors-km-kernels",
             "x-neighbors-svr-kernels",
         ),
         inference_lanes=(),
@@ -105,6 +105,7 @@ TRAINING_LANE_NAMES = {
     "x-neighbors-svc-multiclass": "SVC one-vs-one multiclass",
     "x-neighbors-krr-options": "KernelRidge sample_weight, kernel='precomputed'",
     "x-neighbors-svm-precomputed": "SVC / SVR kernel='precomputed'",
+    "x-neighbors-km-kernels": "KernelRidge / Nystroem cosine, chi2, additive_chi2",
 }
 PUBLIC_PENDING_LANES = {
     "x-neighbors-lof": "no reference",
@@ -128,4 +129,5 @@ PUBLIC_PENDING_LANES = {
     "x-neighbors-svc-multiclass": "no reference",
     "x-neighbors-krr-options": "no reference",
     "x-neighbors-svm-precomputed": "no reference",
+    "x-neighbors-km-kernels": "no reference",
 }

@@ -132,8 +132,10 @@ from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_FAST,
     ftz,
+    identical_div,
     identical_exp,
     identical_mul,
+    identical_sqrt,
 )
 from core.gemm import gemm_nt
 from svm.impl.distance.kernel_matrices import (
@@ -174,7 +176,14 @@ comptime KM_KERNEL_PRECOMPUTED = KERNEL_PRECOMPUTED
 #: through `kernel_op`.
 comptime KM_KERNEL_LAPLACIAN = 5
 
-comptime KM_KERNEL_COUNT = 6
+#: scikit-learn's `cosine`, `chi2` and `additive_chi2` pairwise kernels
+#: (2026-09-27, lane x-neighbors-km-kernels). Legal input to
+#: `km_kernel_matrix` only, as the laplacian is.
+comptime KM_KERNEL_COSINE = 6
+comptime KM_KERNEL_CHI2 = 7
+comptime KM_KERNEL_ADDITIVE_CHI2 = 8
+
+comptime KM_KERNEL_COUNT = 9
 
 #: SCHEDULING: the block width for this lane's own elementwise kernels.
 comptime KM_TPB = 256
@@ -193,6 +202,12 @@ def km_kernel_name(kernel: Int) -> String:
         return String("precomputed")
     if kernel == KM_KERNEL_LAPLACIAN:
         return String("laplacian")
+    if kernel == KM_KERNEL_COSINE:
+        return String("cosine")
+    if kernel == KM_KERNEL_CHI2:
+        return String("chi2")
+    if kernel == KM_KERNEL_ADDITIVE_CHI2:
+        return String("additive_chi2")
     return String("unknown")
 
 
@@ -214,6 +229,12 @@ def km_kernel_from_name(name: String) raises -> Int:
         return KM_KERNEL_SIGMOID
     if name == "laplacian":
         return KM_KERNEL_LAPLACIAN
+    if name == "cosine":
+        return KM_KERNEL_COSINE
+    if name == "chi2":
+        return KM_KERNEL_CHI2
+    if name == "additive_chi2":
+        return KM_KERNEL_ADDITIVE_CHI2
     raise Error(
         "kernel_methods: unsupported kernel '"
         + name
@@ -273,6 +294,9 @@ def km_validate_kernel_params(kp: KernelParams, what: String) raises:
         and kp.kernel != KM_KERNEL_RBF
         and kp.kernel != KM_KERNEL_SIGMOID
         and kp.kernel != KM_KERNEL_LAPLACIAN
+        and kp.kernel != KM_KERNEL_COSINE
+        and kp.kernel != KM_KERNEL_CHI2
+        and kp.kernel != KM_KERNEL_ADDITIVE_CHI2
     ):
         raise Error(
             what
@@ -299,6 +323,7 @@ def km_validate_kernel_params(kp: KernelParams, what: String) raises:
         or kp.kernel == KM_KERNEL_RBF
         or kp.kernel == KM_KERNEL_SIGMOID
         or kp.kernel == KM_KERNEL_LAPLACIAN
+        or kp.kernel == KM_KERNEL_CHI2
     )
     if needs_gamma and not (kp.gamma > 0.0):
         raise Error(
@@ -421,6 +446,67 @@ def laplacian_epilogue_kernel(
         return
     var d = ftz(inout_k.unsafe_load(tid))
     inout_k.unsafe_store(tid, ftz(identical_exp(ftz(identical_mul(gain, d)))))
+
+
+def chi2_cell_kernel(
+    out: MutPointer[Float32, MutAnyOrigin],
+    a: MutPointer[Float32, MutAnyOrigin],
+    b: MutPointer[Float32, MutAnyOrigin],
+    m_in: Int32,
+    n_in: Int32,
+    k_in: Int32,
+    gain: Float32,
+    exp_it: Int32,
+):
+    """scikit-learn's `_chi2_kernel_fast`: `res = sum_k (x - y)^2 / (x + y)`
+    over the features where `x + y != 0`, ascending, one thread per cell;
+    `additive_chi2` writes `-res`, `chi2` writes `exp(gain * res)` with the
+    caller's `gain = -gamma` (their `K = -res; K *= gamma; exp(K)`). Every
+    operation rounds once (ftz, identical_mul / identical_div /
+    identical_exp); `km_host_oracle.mojo::kmh_chi2_cell` is the same line."""
+    var n = Int(n_in)
+    var k = Int(k_in)
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= Int(m_in) * n:
+        return
+    var i = t // n
+    var j = t - i * n
+    var acc = Float32(0.0)
+    for c in range(k):
+        var x = ftz(a.unsafe_load(i * k + c))
+        var y = ftz(b.unsafe_load(j * k + c))
+        var s = ftz(x + y)
+        if s != Float32(0.0):
+            var d = ftz(x - y)
+            acc = ftz(acc + ftz(identical_div(ftz(identical_mul(d, d)), s)))
+    if exp_it != 0:
+        out.unsafe_store(t, ftz(identical_exp(ftz(identical_mul(gain, acc)))))
+    else:
+        out.unsafe_store(t, -acc)
+
+
+def cosine_rows_kernel(
+    dst: MutPointer[Float32, MutAnyOrigin],
+    src: MutPointer[Float32, MutAnyOrigin],
+    norms_sq: MutPointer[Float32, MutAnyOrigin],
+    rows_in: Int32,
+    k_in: Int32,
+):
+    """scikit-learn's `normalize(X)` inside `cosine_similarity`: each row
+    divided by its l2 norm, `ftz(x / ftz(sqrt(ftz(norm^2))))` with the
+    squared norm from `row_norms_l2sq`'s ascending chain; a zero-norm row is
+    left as it is (their `norms[norms == 0] = 1`). One thread per cell."""
+    var k = Int(k_in)
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= Int(rows_in) * k:
+        return
+    var r = t // k
+    var v = ftz(src.unsafe_load(t))
+    var q = ftz(norms_sq.unsafe_load(r))
+    if q == Float32(0.0):
+        dst.unsafe_store(t, v)
+    else:
+        dst.unsafe_store(t, ftz(identical_div(v, ftz(identical_sqrt(q)))))
 
 
 # ===========================================================================
@@ -592,6 +678,43 @@ def km_kernel_matrix(
             grid_dim=(grid_all, 1, 1),
             block_dim=(elem_tpb, 1, 1),
         )
+        return
+
+    if kp.kernel == KM_KERNEL_CHI2 or kp.kernel == KM_KERNEL_ADDITIVE_CHI2:
+        ctx.enqueue_memset(norm_a, Float32(0.0))
+        ctx.enqueue_memset(norm_b, Float32(0.0))
+        ctx.enqueue_function[chi2_cell_kernel](
+            out.unsafe_ptr(), a.unsafe_ptr(), b.unsafe_ptr(),
+            Int32(m), Int32(n), Int32(k), Float32(-kp.gamma),
+            Int32(1) if kp.kernel == KM_KERNEL_CHI2 else Int32(0),
+            grid_dim=(grid_all, 1, 1),
+            block_dim=(elem_tpb, 1, 1),
+        )
+        return
+
+    if kp.kernel == KM_KERNEL_COSINE:
+        # normalize both operands, then the pinned GEMM of the normalized
+        # rows (`cosine_similarity` = normalize(X) . normalize(Y)^T).
+        row_norms_l2sq(ctx, norm_a, a, m, k)
+        row_norms_l2sq(ctx, norm_b, b, n, k)
+        var an = ctx.enqueue_create_buffer[DType.float32](m * k)
+        var bn = ctx.enqueue_create_buffer[DType.float32](n * k)
+        ctx.enqueue_function[cosine_rows_kernel](
+            an.unsafe_ptr(), a.unsafe_ptr(), norm_a.unsafe_ptr(), Int32(m), Int32(k),
+            grid_dim=((m * k + elem_tpb - 1) // elem_tpb, 1, 1),
+            block_dim=(elem_tpb, 1, 1),
+        )
+        ctx.enqueue_function[cosine_rows_kernel](
+            bn.unsafe_ptr(), b.unsafe_ptr(), norm_b.unsafe_ptr(), Int32(n), Int32(k),
+            grid_dim=((n * k + elem_tpb - 1) // elem_tpb, 1, 1),
+            block_dim=(elem_tpb, 1, 1),
+        )
+        var dot_only = KernelParams(KM_KERNEL_LINEAR, kp.degree, kp.gamma, kp.coef0)
+        _svm_kernel_op(ctx, dot_only, out, an, bn, m, n, k, norm_a, norm_b, ws)
+        # the normalized copies are this call's own: drain before they go
+        ctx.synchronize()
+        _ = an^
+        _ = bn^
         return
 
     # Every remaining kernel starts from `a . b^T`. `row_norms_l2sq` is

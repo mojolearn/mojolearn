@@ -111,6 +111,9 @@ comptime KMH_KERNEL_RBF = 2
 comptime KMH_KERNEL_SIGMOID = 3
 comptime KMH_KERNEL_PRECOMPUTED = 4
 comptime KMH_KERNEL_LAPLACIAN = 5
+comptime KMH_KERNEL_COSINE = 6
+comptime KMH_KERNEL_CHI2 = 7
+comptime KMH_KERNEL_ADDITIVE_CHI2 = 8
 # Same bound as impl/distance/kernel_matrices.mojo, without importing GPU code.
 comptime KMH_MAX_DEGREE = 32
 
@@ -129,6 +132,12 @@ def kmh_kernel_name(kernel: Int) -> String:
         return String("precomputed")
     if kernel == KMH_KERNEL_LAPLACIAN:
         return String("laplacian")
+    if kernel == KMH_KERNEL_COSINE:
+        return String("cosine")
+    if kernel == KMH_KERNEL_CHI2:
+        return String("chi2")
+    if kernel == KMH_KERNEL_ADDITIVE_CHI2:
+        return String("additive_chi2")
     return String("unknown")
 
 
@@ -179,7 +188,7 @@ def kmh_validate_kernel(
     """The device's five kernel kinds and polynomial degree contract."""
     if kernel == KMH_KERNEL_PRECOMPUTED:
         raise Error(what + ": kernel='precomputed' is refused by name (DEVIATION 1683)")
-    if kernel < 0 or kernel > KMH_KERNEL_LAPLACIAN:
+    if kernel < 0 or kernel > KMH_KERNEL_ADDITIVE_CHI2:
         raise Error(what + ": unknown kernel value " + String(kernel))
     if kernel == KMH_KERNEL_POLYNOMIAL:
         if degree < 0 or degree > KMH_MAX_DEGREE:
@@ -188,7 +197,7 @@ def kmh_validate_kernel(
         raise Error(what + ": gamma is NaN")
     if coef0 != coef0:
         raise Error(what + ": coef0 is NaN")
-    if kernel != KMH_KERNEL_LINEAR and not (gamma > 0.0):
+    if kernel != KMH_KERNEL_LINEAR and kernel != KMH_KERNEL_COSINE and kernel != KMH_KERNEL_ADDITIVE_CHI2 and not (gamma > 0.0):
         raise Error(
             what
             + ": the " + kmh_kernel_name(kernel) + " kernel needs a POSITIVE gamma; got a value that is"
@@ -205,6 +214,21 @@ def kmh_row_norms(x: List[Float32], n_rows: Int, k: Int) -> List[Float32]:
             var v = ftz(x[i * k + c])
             acc = ftz(identical_mul_add(v, v, acc))
         out.append(ftz(acc))
+    return out^
+
+
+def _kmh_cosine_rows(x: List[Float32], rows: Int, k: Int) -> List[Float32]:
+    """`cosine_rows_kernel`: each row over its l2 norm, a zero row as is."""
+    var norms = kmh_row_norms(x, rows, k)
+    var out = List[Float32](capacity=rows * k)
+    for r in range(rows):
+        var q = ftz(norms[r])
+        for c in range(k):
+            var v = ftz(x[r * k + c])
+            if q == Float32(0.0):
+                out.append(v)
+            else:
+                out.append(ftz(identical_div(v, ftz(identical_sqrt(q)))))
     return out^
 
 
@@ -255,6 +279,28 @@ def kmh_kernel_matrix(
         else:
             sync_parallelize(_rows, tasks)
         return out^
+    if kernel == KMH_KERNEL_CHI2 or kernel == KMH_KERNEL_ADDITIVE_CHI2:
+        # chi2_cell_kernel, cell by cell, the same line
+        var out = List[Float32](length=m * n, fill=Float32(0.0))
+        var gain = Float32(-gamma)
+        for i in range(m):
+            for j in range(n):
+                var acc = Float32(0.0)
+                for c in range(k):
+                    var x = ftz(a[i * k + c])
+                    var y = ftz(b[j * k + c])
+                    var s = ftz(x + y)
+                    if s != Float32(0.0):
+                        var d = ftz(x - y)
+                        acc = ftz(acc + ftz(identical_div(ftz(identical_mul(d, d)), s)))
+                if kernel == KMH_KERNEL_CHI2:
+                    out[i * n + j] = ftz(identical_exp(ftz(identical_mul(gain, acc))))
+                else:
+                    out[i * n + j] = -acc
+        return out^
+    if kernel == KMH_KERNEL_COSINE:
+        # cosine_rows_kernel on both operands, then the pinned GEMM
+        return gemm_oracle(_kmh_cosine_rows(a, m, k), _kmh_cosine_rows(b, n, k), OP_NT, m, n, k)
     var dot = gemm_oracle(a, b, OP_NT, m, n, k)
     if kernel == KMH_KERNEL_LINEAR:
         return dot^

@@ -81,6 +81,9 @@ KERNEL_RBF = 2
 KERNEL_SIGMOID = 3
 KERNEL_PRECOMPUTED = 4
 KERNEL_LAPLACIAN = 5
+KERNEL_COSINE = 6
+KERNEL_CHI2 = 7
+KERNEL_ADDITIVE_CHI2 = 8
 
 _KERNELS = {
     "linear": KERNEL_LINEAR,
@@ -89,6 +92,9 @@ _KERNELS = {
     "rbf": KERNEL_RBF,
     "sigmoid": KERNEL_SIGMOID,
     "laplacian": KERNEL_LAPLACIAN,
+    "cosine": KERNEL_COSINE,
+    "chi2": KERNEL_CHI2,
+    "additive_chi2": KERNEL_ADDITIVE_CHI2,
 }
 
 #: Kernels that read gamma. Under 'linear' it is ignored on both sides,
@@ -129,11 +135,21 @@ def _real(v, name, where):
     return float(v)
 
 
-def _gamma_for(gamma, n_features, where):
-    """scikit-learn's `gamma=None` is `1 / n_features`."""
+def _gamma_for(gamma, n_features, where, kernel=None):
+    """scikit-learn's `gamma=None` is `1 / n_features`, except for
+    `chi2_kernel`, whose own default is `gamma=1.0`."""
+    if gamma is None and kernel == KERNEL_CHI2:
+        return 1.0
     if gamma is None:
         return 1.0 / float(n_features)
     return _real(gamma, "gamma", where)
+
+
+def _check_chi2_input(x, kernel, where):
+    """scikit-learn's chi2 kernels refuse negative input ("X contains
+    negative values"); so do these, before any device work."""
+    if kernel in (KERNEL_CHI2, KERNEL_ADDITIVE_CHI2) and x.size and float(x.min()) < 0.0:
+        raise ValueError(f"mojolearn {where}: X contains negative values (the chi2 kernels need x >= 0)")
 
 
 def _sqrt_weights(sample_weight, n, where):
@@ -192,7 +208,11 @@ class KernelRidge(_KernelMethodBase):
         (inside scikit-learn's own interval). A kernel matrix that does
         not factor at the given alpha is refused by name, never solved by
         a least-squares fallback (DEVIATION 1662).
-    kernel : {'linear', 'poly', 'rbf', 'sigmoid', 'laplacian', 'precomputed'}, default 'linear'
+    kernel : {'linear', 'poly', 'rbf', 'sigmoid', 'laplacian', 'cosine', 'chi2',
+              'additive_chi2', 'precomputed'}, default 'linear'
+        cosine, chi2 and additive_chi2 are scikit-learn's pairwise kernels
+        (chi2's gamma=None is its own default 1.0; both chi2 kernels refuse
+        negative X, as theirs do), each cell one pinned chain
         'precomputed': X is the n x n kernel matrix at fit and the
         q x n cross-kernel at predict, taken as given (scikit-learn's
         contract; nothing validates symmetry, and a matrix K + alpha I
@@ -233,7 +253,7 @@ class KernelRidge(_KernelMethodBase):
                 f"mojolearn {self._WHERE}: degree must be an int, got "
                 f"{type(self.degree).__name__}"
             )
-        return k, int(self.degree), _gamma_for(self.gamma, n_features, self._WHERE), _real(self.coef0, "coef0", self._WHERE)
+        return k, int(self.degree), _gamma_for(self.gamma, n_features, self._WHERE, k), _real(self.coef0, "coef0", self._WHERE)
 
     def fit(self, X, y, sample_weight=None):
         """Form `K`, ridge it, factor it, solve it (`kernel_ridge_fit_host`).
@@ -257,6 +277,7 @@ class KernelRidge(_KernelMethodBase):
                 f"mojolearn {self._WHERE}: y has {yy.shape[0]} rows, X has {n}"
             )
         kernel, degree, gamma, coef0 = self._kp(d)
+        _check_chi2_input(x, kernel, self._WHERE)
         if kernel == KERNEL_PRECOMPUTED and d != n:
             raise ValueError(
                 f"mojolearn {self._WHERE}: kernel='precomputed' needs the square "
@@ -298,6 +319,7 @@ class KernelRidge(_KernelMethodBase):
             )
         n, t = self.X_fit_.shape[0], self.n_targets_
         kernel, degree, gamma, coef0, alpha = self._kernel_params
+        _check_chi2_input(xq, kernel, self._WHERE)
         flat_dual = self.dual_coef_.reshape((n * t,))
         out = empty((q * t,), "<f4")
         self._extension().kernel_ridge_predict(
@@ -357,7 +379,8 @@ class Nystroem(_KernelMethodBase):
 
     Parameters
     ----------
-    kernel : {'linear', 'poly', 'rbf', 'sigmoid', 'laplacian'}, default 'rbf'
+    kernel : {'linear', 'poly', 'rbf', 'sigmoid', 'laplacian', 'cosine', 'chi2',
+              'additive_chi2'}, default 'rbf'
     gamma : float or None, default None
         None is scikit-learn's `1 / n_features`.
     degree : int, default 3
@@ -406,7 +429,8 @@ class Nystroem(_KernelMethodBase):
         q = int(self.n_components)
         if q < 1:
             raise ValueError(f"mojolearn {self._WHERE}: n_components must be positive, got {q}")
-        gamma = _gamma_for(self.gamma, d, self._WHERE)
+        gamma = _gamma_for(self.gamma, d, self._WHERE, kernel)
+        _check_chi2_input(x, kernel, self._WHERE)
         coef0 = _real(self.coef0, "coef0", self._WHERE)
         seed = int(self.random_state)
         components = empty((q * d,), "<f4")
@@ -446,6 +470,7 @@ class Nystroem(_KernelMethodBase):
             )
         q = self.components_.shape[0]
         kernel, degree, gamma, coef0, seed = self._kernel_params
+        _check_chi2_input(x, kernel, self._WHERE)
         out = empty((m * q,), "<f4")
         flat_c = self.components_.reshape((q * d,))
         flat_n = self.normalization_.reshape((q * q,))

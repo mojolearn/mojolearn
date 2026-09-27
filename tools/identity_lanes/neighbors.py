@@ -334,6 +334,26 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: (e.decision_function(_neighbors_int_gram(Xh[:128], X[:256])),
                               e.predict(_neighbors_int_gram(Xh[:128], X[:256]))))
 
+@lane("x-neighbors-km-kernels")
+def _(ml, X, yc, yr, Xh=None):
+    """KernelRidge and Nystroem with scikit-learn's cosine, chi2 and
+    additive_chi2 kernels (kernel_matrix.mojo's chi2_cell_kernel and
+    cosine_rows_kernel then the pinned GEMM; km_host_oracle restates them).
+    The chi2 kernels take |X| (they refuse negative input)."""
+    A = np.abs(X[:256]).astype(np.float32)
+    A[::5, 1] = np.float32(0.0)                        # x + y == 0 cells take the skip branch
+    Aq = np.abs(X[256:384]).astype(np.float32)
+    c = ml.KernelRidge(alpha=1.0, kernel="cosine").fit(X[:256], yr[:256])
+    h = ml.KernelRidge(alpha=1.0, kernel="chi2", gamma=0.1).fit(A, yr[:256])
+    a = ml.KernelRidge(alpha=1.0e4, kernel="additive_chi2").fit(A[:64], yr[:64])
+    n = ml.Nystroem(kernel="chi2", n_components=32, random_state=2).fit(A)
+    nc = ml.Nystroem(kernel="cosine", n_components=32, random_state=2).fit(X[:256])
+    return _fit(dict(cos_dual=_h(c.dual_coef_), cos_predict=_h(c.predict(X[256:384])),
+                     chi2_dual=_h(h.dual_coef_), chi2_predict=_h(h.predict(Aq)),
+                     add_dual=_h(a.dual_coef_), add_predict=_h(a.predict(Aq)),
+                     ny_chi2=_h(n.transform(Aq)), ny_cos=_h(nc.transform(X[256:384]))),
+                c, lambda e: (e.predict(Xh[:128]),))
+
 _batch_decl(_rows_calls("score_samples", "predict", sl=slice(0, 256)), "x-neighbors-lof")
 _batch_decl(_rows_calls("predict", "decision_function", "predict_proba", sl=slice(0, 256)), "x-neighbors-nearest-centroid")
 _batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "x-neighbors-ocsvm")
@@ -346,6 +366,6 @@ _batch_decl(_rows_calls("predict_proba", "predict", sl=slice(0, 128)),
             "x-neighbors-label-propagation", "x-neighbors-label-spreading")
 _batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_neighbors_holes), "x-neighbors-knn-imputer")
 _batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-neighbors-svgp", "x-neighbors-svr-kernels")
-_batch_decl(_rows_calls("predict", sl=slice(0, 128)), "x-neighbors-krr-options")
+_batch_decl(_rows_calls("predict", sl=slice(0, 128)), "x-neighbors-krr-options", "x-neighbors-km-kernels")
 _batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "x-neighbors-gamma-scale", "x-neighbors-svm-weights",
             "x-neighbors-svc-sigmoid", "x-neighbors-svc-multiclass")
