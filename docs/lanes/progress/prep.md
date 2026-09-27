@@ -49,30 +49,32 @@ Sanity tests need scikit-learn: on the pod it is in /root/skl
 | option parity: priors / class_prior (GaussianNB, the discrete NBs, LDA incl. renormalisation, QDA) | (this commit) | x-prep-priors AGREE (infer 9, train 9); existing NB/DA lanes' cells SAME BITS vs the pass-2 run |
 | seam proof on NVIDIA: 10 seams (DEVIATIONS 5400-5409, IDENTITY_PATHS rows 140-149), `x_prep/seams/prep_check.mojo` host AND device vs oracle, 10 sabotage arms RED, all 28 lanes AGREE with `--pass 2` | (this commit) | PASS on H100 (`algos_lane_check.sh <28 lanes> --pass 2`) |
 | option parity: inverse_transform of QuantileTransformer, PowerTransformer, KBinsDiscretizer, LabelBinarizer, OrdinalEncoder, OneHotEncoder; OrdinalEncoder encoded_missing_value (the reference default: a NaN category is written NaN, not its index) and the unknown_value / encoded_missing_value collision checks | (this commit) | x-prep-inverse-transforms AGREE, DISAGREE under e2e_host_branch; x-prep-encoder-options AGREE, DISAGREE under e2e_store_branch; the 31 earlier lanes SAME BITS (H100) |
+| seam arms re-proved on the fixed lane check (CURRENT DIRECTIVES 000): seam_5401_contraction.patch was a BROKEN ARM (an import inside a loop: it never built); fixed, and all 10 arms now build, run and FAIL | (this commit) | PASS on H100 (`--pass 2`); done, never repeat |
+| option parity: TargetEncoder StratifiedKFold folds for a binary / multiclass target (the reference's `_make_test_folds`, shuffle by splitmix64) | (this commit) | x-prep-target-encoder AGREE; its cross-fit cells MOVED (18, intended: the folds are now stratified); unshuffled folds equal sklearn's exactly (test) |
+| option parity: LinearDiscriminantAnalysis solver 'lsqr' / 'eigen', shrinkage None / 'auto' (Ledoit-Wolf) / constant, store_covariance; QuadraticDiscriminantAnalysis solver 'eigen' + shrinkage, store_covariance | (this commit) | x-prep-da-solvers AGREE, DISAGREE under e2e_host_branch |
+| option parity: sample_weight for GaussianNB / MultinomialNB / ComplementNB / BernoulliNB / CategoricalNB; CategoricalNB min_categories | (this commit) | x-prep-nb-weights AGREE, DISAGREE under e2e_host_branch; every other prep lane (and par-gpc-predict, which the selector picks) AGREE, SAME BITS |
+| option parity (on lane/algos-prep2, steward pending): the reference's score edges (f_classif NaN for a constant feature / single class, +inf for a within-class-constant one; chi2 NaN for an all-zero feature; canonical NaN word), f_regression force_finite=False, r_regression (new), RFE importance_getter str / callable; RFE tie rule written as DIFFERS BY NAME (numpy's unstable argsort) | (this commit) | x-prep-score-edges AGREE (--pass 2), DISAGREE under e2e_host_branch; every other prep lane AGREE and SAME BITS vs inv3 except x-prep-select-kbest/dupes (intended: that fixture's constant and all-zero columns now score NaN, as the reference) (H100) |
+| option parity (on lane/algos-prep2, steward pending): PolynomialFeatures order='F' (same bits, column-major), OrdinalEncoder / OneHotEncoder categories=<list> | (this commit) | x-prep-encoder-categories AGREE (--pass 2), DISAGREE under e2e_store_branch; x-prep-polynomial-features SAME BITS |
+| steward: 1790529624248 / 1790529633391 (4de76eb6e1) PASS m2pro + do-amd; 1790530038647 (x-prep-simple-imputer-indicator) PASS; 1790535515159 / 1790535524761 (d2e61ed9d3: LDA/QDA solvers, NB sample_weight, stratified TargetEncoder folds, seam 5401 fix) PASS | - | PASS |
 
 ## Next
-- Apple + AMD identity: `tools/apple_steward.py submit` goes to m2pro AND do-amd (the
-  shared DigitalOcean MI325X; no own AMD box, per the orchestrator). The end-to-end
-  sabotage `x_prep/seams/sabotage/e2e_host_branch.patch` (a host-only branch in `add`)
-  only moves lanes that sum floats, so steward requests are split: all lanes WITHOUT
-  sabotage (clean AGREE), and ~/mojolearn-evidence/algos-prep/sum_lanes.txt WITH it.
-  The first request (310afeee0) FAILED only because it put the sabotage on every lane.
-  The 8 lanes without float sums (~/mojolearn-evidence/algos-prep/store_lanes.txt) take
-  `e2e_store_branch.patch` (a host-only branch in every nonzero store): DISAGREE on all 8
-  on the H100. So two steward requests per commit: sum_lanes + e2e_host_branch,
-  store_lanes + e2e_store_branch (every lane covered, with x-prep-robust-scaler-unit-variance
-  in sum_lanes).
-- Option parity: work down x_prep/NOT_IMPLEMENTED.tsv and naive_bayes/NOT_IMPLEMENTED.tsv
-  (done: priors/class_prior, RobustScaler unit_variance, SimpleImputer add_indicator, the inverse_transforms,
-  OrdinalEncoder encoded_missing_value).
-- Steward requests pending at hand-off (`tools/apple_steward.py status`): 1790529624248-prep-4de76eb6e1
-  (sum lanes + e2e_host_branch) and 1790529633391-prep-4de76eb6e1 (store lanes + e2e_store_branch);
-  merge gating is m2pro PASS + do-amd PASS. x-prep-simple-imputer-indicator (c73e49116) still
-  needs a steward request.
-- Next options, in order: QuantileTransformer / PowerTransformer inverse_transform, OrdinalEncoder
-  encoded_missing_value, LabelBinarizer inverse_transform, KBins inverse_transform, TargetEncoder
-  stratified folds, LDA lsqr/eigen + shrinkage, sample_weight for the NBs.
-- Then speed (IDENTICAL/FAST, NVIDIA, Apple via `--kind speed`, CPU; AMD last).
+PHASE: option parity (c), still open. One phase per session; next session continues it.
+- Steward: two requests per commit (sum lanes + e2e_host_branch, store lanes + e2e_store_branch;
+  lane lists in ~/mojolearn-evidence/algos-prep/{sum_lanes,store_lanes}.txt, which now include
+  x-prep-score-edges and x-prep-encoder-categories). Merge gate: m2pro PASS + do-amd PASS.
+  Merged to main: everything through d2e61ed9d3 (steward PASS). NOT YET MERGED: the score edges,
+  encoder categories=<list> and PolynomialFeatures order='F' rows (branch lane/algos-prep2,
+  commit 23b11a7ba5 and later), waiting on steward requests 1790537091369 / 1790537100516
+  (m2pro + do-amd). Next session: `apple_steward.py status`; on PASS merge lane/algos-prep2 to
+  main; on FAIL fix and resubmit.
+- Option parity rows still NOT IMPLEMENTED, in order (x_prep/NOT_IMPLEMENTED.tsv, naive_bayes/NOT_IMPLEMENTED.tsv):
+  TargetEncoder categories=<list> (unknown training values must code -1 in te_enc) and cv=<splitter>;
+  OneHot/Ordinal min_frequency, max_categories, handle_unknown='infrequent_if_exist';
+  SplineTransformer knots=<array>, extrapolation 'linear' / 'periodic', sample_weight;
+  KBinsDiscretizer sample_weight and the other quantile_methods; mutual_info discrete_features;
+  IterativeImputer options; LabelBinarizer multilabel y; *NB.partial_fit; SimpleImputer callable;
+  LDA/QDA covariance_estimator. Sparse output stays REFUSED BY NAME (no sparse Array).
+- Then: FAST GPU speed (d), IDENTICAL GPU speed (e), CPU speed (f), one phase per session.
 Helper scripts (not in the repo): ~/mojolearn-evidence/algos-prep/{qsync,gate,commit,mkpatches,addlane,samebits}.sh|py;
 qsync sends every file differing from ~/mojolearn-evidence/algos-prep/pod_base; the pass-2
 reference columns for "same bits" checks are on the pod in /root/mojolearn-evidence/algos-prep/pass2-nvidia.

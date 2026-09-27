@@ -1025,8 +1025,8 @@ def rms_norm_into(
             ONE FOLD PER ROW, no block fold and no tree.
         S2  mean = ftz(identical_div(acc, d_model))
             rstd = ftz(identical_rsqrt(ftz(mean + eps)))
-        S3  inner = pinned_mul(x_j, rstd)
-        S4  out   = pinned_mul(w_j, inner)
+        S3  inner = identical_mul(x_j, rstd)
+        S4  out   = identical_mul(w_j, inner)
 
     Four things about this that are decisions rather than transcription.
 
@@ -1112,8 +1112,8 @@ def norm_into(
     ftz(fma(dev_j, dev_j, acc2))`; the recorded `norm*.sumsq` stage IS
     `acc2` (the sum of squared deviations; the mean is an internal);
     `rstd = ftz(identical_rsqrt(ftz(var + eps)))` with `var =
-    ftz(identical_div(acc2, d))`; `inner = pinned_mul(dev_j, rstd)`;
-    `y = pinned_mul(w_j, inner)`; with a bias `y = ftz(ftz(y) + ftz(b_j))`,
+    ftz(identical_div(acc2, d))`; `inner = identical_mul(dev_j, rstd)`;
+    `y = identical_mul(w_j, inner)`; with a bias `y = ftz(ftz(y) + ftz(b_j))`,
     one plain add of two rounded values. Two serial folds per row, no
     tree, one thread per row on the device. The two-pass (mean, then
     deviations) form is chosen over `E[x^2] - E[x]^2` because the latter
@@ -1209,8 +1209,8 @@ def apply_rope_into(
 
         ci   = j if j < d/2 else j - d/2      the DEDUPLICATED table column
         rot  = -a[j + d/2] if j < d/2 else a[j - d/2]
-        S9a  = pinned_mul(a[j], cos[p, ci])
-        S9b  = pinned_mul(rot,  sin[p, ci])
+        S9a  = identical_mul(a[j], cos[p, ci])
+        S9b  = identical_mul(rot,  sin[p, ci])
         S10  = ftz(ftz(S9a) + ftz(S9b))       **UNFUSED**
 
     **S10 IS UNFUSED AND THAT IS THE ONE DECISION HERE.** DEVIATION 811. The

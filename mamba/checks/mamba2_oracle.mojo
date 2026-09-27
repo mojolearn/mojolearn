@@ -64,6 +64,7 @@ double precision. It is a TOLERANCE instrument, never a bitwise one.
 """
 
 from checks.numerics import (
+    identical_mul,
     ftz,
     identical_clamp,
     identical_div,
@@ -90,23 +91,6 @@ from mamba.checks.mamba2_fixture import (
     Mamba2Dims,
     Mamba2Weights,
 )
-
-
-def pinned_mul(a: Float32, b: Float32) -> Float32:
-    """DEVIATION 720's construction, the Mamba-1 oracle's copy: a MULTIPLY
-    no codegen may contract into a neighboring add, spelled
-    `identical_mul_add(a, b, -0.0)` (bit-equal to the correctly rounded
-    product at every input including both zero signs; the `+0.0` addend
-    would launder a `-0.0` product, gemm F6a). Used at every seam the
-    contract marks PRODUCT: S3's two products, S10's two discretizations,
-    S13, S15's `B ⊙ decay`, S18's decay scale, S20's `x * D`, S21's gate
-    and products."""
-    # `identical_mul` is the pinned product (`pinned_mul_f32` under IDENTICAL);
-    # `fma(a, b, -0.0)` was not: LLVM folds it into a contractable product
-    # (lane/pinned-mul-contract-free, 2026-09-26).
-    from checks.numerics import identical_mul
-
-    return identical_mul(a, b)
 
 
 def m2_refuse_bad_inputs(
@@ -355,13 +339,13 @@ def ssd_core_oracle(
                 for hh in range(nh):
                     var dtv = ftz(dt_work[(bb * t_work + t) * nh + hh])
                     da[hh * q + i] = ftz(
-                        pinned_mul(dtv, ftz(a_out[hh]))
+                        identical_mul(dtv, ftz(a_out[hh]))
                     )
                     for p in range(p_dim):
                         var xv = ftz(
                             xbc_work[(bb * t_work + t) * cd + hh * p_dim + p]
                         )
-                        var v = ftz(pinned_mul(xv, dtv))
+                        var v = ftz(identical_mul(xv, dtv))
                         xd[(hh * q + i) * p_dim + p] = v
                         st.xd_out[
                             ((bb * t_work + t) * nh + hh) * p_dim + p
@@ -458,7 +442,7 @@ def ssd_core_oracle(
                 for i in range(real):
                     for j in range(i + 1):
                         m_mat[i * q + j] = ftz(
-                            pinned_mul(
+                            identical_mul(
                                 ftz(g_mat[i * q + j]),
                                 ftz(st.seg_l[lbase + i * q + j]),
                             )
@@ -512,7 +496,7 @@ def ssd_core_oracle(
                     if i < real:
                         for n in range(n_state):
                             bd[i * n_state + n] = ftz(
-                                pinned_mul(ftz(bmat[i * n_state + n]), dec)
+                                identical_mul(ftz(bmat[i * n_state + n]), dec)
                             )
                     # padded rows: B is +0.0, so B_decay stays +0.0 and the
                     # S16 fold sees exact zeros.
@@ -554,7 +538,7 @@ def ssd_core_oracle(
                     var dacs_i = st.dacs_out[((bb * nh + hh) * nc + c) * q + i]
                     var sc = ftz(identical_exp(ftz(dacs_i)))
                     for p in range(p_dim):
-                        var yo = ftz(pinned_mul(ftz(ch[i * p_dim + p]), sc))
+                        var yo = ftz(identical_mul(ftz(ch[i * p_dim + p]), sc))
                         st.yoff_out[
                             ((bb * t_work + t) * nh + hh) * p_dim + p
                         ] = yo
@@ -642,8 +626,8 @@ def mamba2_block_oracle(
         var mean = ftz(identical_div(acc, Float32(dm)))
         var rstd = ftz(identical_rsqrt(ftz(mean + M2_RMS_EPS)))
         for j in range(dm):
-            var inner = ftz(pinned_mul(ftz(x[t * dm + j]), rstd))
-            st.norm_out.append(ftz(pinned_mul(ftz(w.norm_w[j]), inner)))
+            var inner = ftz(identical_mul(ftz(x[t * dm + j]), rstd))
+            st.norm_out.append(ftz(identical_mul(ftz(w.norm_w[j]), inner)))
 
     # ---- in_proj (mamba2.py:211; Linear, bias=False), S4: gemm v1 OP_NT,
     #      k = d_model. Columns z | xBC | dt_raw (:211-215 order).
@@ -804,7 +788,7 @@ def mamba2_block_oracle(
         for hh in range(nh):
             for p in range(p_dim):
                 var xv = ftz(st.silu_out[t * cd + hh * p_dim + p])
-                var prod = ftz(pinned_mul(xv, ftz(w.d_skip[hh])))
+                var prod = ftz(identical_mul(xv, ftz(w.d_skip[hh])))
                 st.skip_out.append(
                     ftz(st.scan_y[(t * nh + hh) * p_dim + p] + prod)
                 )
@@ -817,7 +801,7 @@ def mamba2_block_oracle(
             var z = ftz(st.in_proj[t * dip + j])
             st.gnorm_gate.append(
                 ftz(
-                    pinned_mul(
+                    identical_mul(
                         ftz(st.skip_out[t * di + j]), ftz(identical_silu(z))
                     )
                 )
@@ -831,8 +815,8 @@ def mamba2_block_oracle(
         var mean = ftz(identical_div(acc, Float32(di)))
         var rstd = ftz(identical_rsqrt(ftz(mean + M2_RMS_EPS)))
         for j in range(di):
-            var inner = ftz(pinned_mul(ftz(st.gnorm_gate[t * di + j]), rstd))
-            st.gnorm_out.append(ftz(pinned_mul(ftz(w.gnorm_w[j]), inner)))
+            var inner = ftz(identical_mul(ftz(st.gnorm_gate[t * di + j]), rstd))
+            st.gnorm_out.append(ftz(identical_mul(ftz(w.gnorm_w[j]), inner)))
 
     # ---- out_proj (mamba2.py:275), S4: gemm v1 OP_NT, k = d_inner.
     st.out_proj = gemm_oracle(st.gnorm_out, w.w_out, OP_NT, m, dm, di)

@@ -48,6 +48,8 @@ FAMILIES = (
             "x-prep-simple-imputer-indicator",
             "x-prep-inverse-transforms",
             "x-prep-encoder-options",
+            "x-prep-da-solvers",
+            "x-prep-nb-weights",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -122,6 +124,8 @@ TRAINING_LANE_NAMES = {
     "x-prep-simple-imputer-indicator": "SimpleImputer(add_indicator=True)",
     "x-prep-inverse-transforms": "inverse_transform of QuantileTransformer, PowerTransformer, KBinsDiscretizer and LabelBinarizer",
     "x-prep-encoder-options": "OrdinalEncoder encoded_missing_value and inverse_transform, OneHotEncoder inverse_transform",
+    "x-prep-da-solvers": "LinearDiscriminantAnalysis lsqr / eigen with shrinkage, QuadraticDiscriminantAnalysis eigen with shrinkage, store_covariance",
+    "x-prep-nb-weights": "naive Bayes sample_weight, CategoricalNB min_categories",
 }
 PUBLIC_PENDING_LANES = {
     "x-prep-robust-scaler": "no reference",
@@ -157,4 +161,6 @@ PUBLIC_PENDING_LANES = {
     "x-prep-simple-imputer-indicator": "no reference",
     "x-prep-inverse-transforms": "no reference",
     "x-prep-encoder-options": "no reference",
+    "x-prep-da-solvers": "no reference",
+    "x-prep-nb-weights": "no reference",
 }
