@@ -148,6 +148,14 @@ Pod runs (A40 + x86 CPU, /root/mojolearn-evidence/lane-check/p2d-*):
   x_decomp/checks/sabotage/e2e_p2_options.patch` (the new option paths moved on
   the CPU column only): RESULT PASS (AGREE, DISAGREE, AGREE); all 20 seam arms
   (5300-5319) build, run, bite. Old part hashes vs s7-x: 918 compared, 0 moved.
+- p2d-rest: the other 11 x-decomp lanes AGREE; old part hashes vs s7-x: 1692
+  compared, 0 moved.
+- p2d-old: pca, pca-full-whiten, pca-whiten, tsvd, spectral,
+  spectral-embedding, spectral-precomputed, linalg-qr, linalg-eigh,
+  linalg-svdvals AGREE; vs s3-o 324 parts compared, 0 moved.
+- pytest test_x_decomp_repeat (GPU ran, not skipped), test_spectral_embedding,
+  test_linalg_decompositions: 33 passed. test_lane_select (box worktree at
+  13ffd2f1): OK, 0 failures.
 
 ## NEXT: PHASE 2 REMAINDER (start here; the rows above are done, never re-run)
 
