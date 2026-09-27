@@ -422,3 +422,25 @@ reasons that are about the algorithm and not about effort.
 
 So the long tail is +86, not +78, and the target is about 193 on top of 57
 if every lane finishes both of its tables.
+
+---
+
+# PASS 1 — CODE FIRST, TODAY (Andrew, 2026-09-27): overrides the gates above
+
+All ten lanes start now. For every algorithm, pass 1's gate is only:
+
+1. It builds on the lane's pod.
+2. The sklearn/reference sanity check agrees within a tolerance.
+3. `tools/algos_lane_check.sh <lanes>` reads **AGREE**: CPU == NVIDIA,
+   bitwise, NOTHING COMPARED counts as a failure.
+
+Then it merges at once as a PENDING lane (never counted in the paper).
+
+**Pass 2, after the code exists, is a sweep:** per-seam host oracles,
+separating fixtures, per-seam sabotage, DEVIATION numbers, card stages,
+IDENTITY_PATHS rows, the Apple steward checks (M2 Pro, then the M3 Ultra),
+and then speed. Lanes do NOT submit to the Apple steward in pass 1.
+
+Order inside a lane: main table first, then Additions. One commit per
+algorithm. Progress file: `docs/lanes/progress/<lane>.md`, updated at each
+merge, so a fresh agent continues where the last one stopped.
