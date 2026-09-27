@@ -10,7 +10,7 @@ what is mirrored and what is refused.
 
 WHAT IS REFUSED, AND WHERE (the estimator's header):
     metric other than euclidean          here by name, and on the Mojo host
-    cluster_selection_epsilon != 0.0     Mojo host (rung 2)
+    cluster_selection_epsilon < 0 or non-finite   here, by name
     min_samples < 1 or > n_rows          Mojo host
     min_cluster_size < 2 or > n_rows     Mojo host
     alpha <= 0 or non-finite             Mojo host
@@ -84,8 +84,10 @@ class HDBSCAN(NumericModeMixin):
     min_samples : int or None, default None
         None means `min_cluster_size`, cuML's and scikit-learn's rule.
     cluster_selection_epsilon : float, default 0.0
-        Only 0.0 is implemented; anything else is refused by name on the
-        Mojo host.
+        cuML's epsilon search (`select.cuh:301-363`), run on the host by one
+        function both routes call (DEVIATION 5115): a selected cluster
+        born below this distance is merged upward to the first ancestor
+        born above it. 0.0 disables it.
     max_cluster_size : int, default 0
         0 means no cap.
     metric : {'euclidean'}, default 'euclidean'
@@ -196,6 +198,12 @@ class HDBSCAN(NumericModeMixin):
             v = getattr(self, name)
             if isinstance(v, bool) or not isinstance(v, (int, float)):
                 raise TypeError(f"mojolearn HDBSCAN: {name} must be a real number")
+        cse = float(self.cluster_selection_epsilon)
+        if not (cse >= 0.0) or cse == float("inf"):
+            raise ValueError(
+                "mojolearn HDBSCAN: cluster_selection_epsilon must be a finite "
+                f"number >= 0, got {self.cluster_selection_epsilon!r} (scikit-learn's range)"
+            )
         if not isinstance(self.prediction_data, bool):
             raise TypeError("mojolearn HDBSCAN: prediction_data must be a bool")
         want_pd = self.prediction_data

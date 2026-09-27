@@ -22,7 +22,7 @@ FAMILIES = (
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=("x-cluster-minibatch-kmeans", "x-cluster-bisecting-kmeans", "x-cluster-meanshift", "x-cluster-optics", "x-cluster-affinity-propagation", "x-cluster-bgmm",
-                        "x-cluster-minibatch-options", "x-cluster-bisecting-options", "x-cluster-meanshift-binned", "x-cluster-optics-metrics", "x-cluster-ap-precomputed", "x-cluster-bgmm-inits", "x-cluster-bgmm-covtypes", "x-cluster-minibatch-partial", "x-cluster-gmm-options", "x-cluster-dbscan-metrics"),
+                        "x-cluster-minibatch-options", "x-cluster-bisecting-options", "x-cluster-meanshift-binned", "x-cluster-optics-metrics", "x-cluster-ap-precomputed", "x-cluster-bgmm-inits", "x-cluster-bgmm-covtypes", "x-cluster-minibatch-partial", "x-cluster-gmm-options", "x-cluster-dbscan-metrics", "x-cluster-hdbscan-epsilon"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("MiniBatchKMeans", "BisectingKMeans", "MeanShift", "OPTICS", "AffinityPropagation", "BayesianGaussianMixture"),
@@ -56,7 +56,8 @@ TRAINING_LANE_NAMES = {"x-cluster-minibatch-kmeans": "MiniBatchKMeans",
                        "x-cluster-bgmm-covtypes": "BayesianGaussianMixture covariance types",
                        "x-cluster-minibatch-partial": "MiniBatchKMeans partial_fit",
                        "x-cluster-gmm-options": "GaussianMixture options",
-                       "x-cluster-dbscan-metrics": "DBSCAN cosine and precomputed metrics"}
+                       "x-cluster-dbscan-metrics": "DBSCAN cosine and precomputed metrics",
+                       "x-cluster-hdbscan-epsilon": "HDBSCAN cluster_selection_epsilon"}
 PUBLIC_PENDING_LANES = {"x-cluster-minibatch-kmeans": "no reference",
                         "x-cluster-bisecting-kmeans": "no reference",
                         "x-cluster-meanshift": "no reference",
@@ -72,4 +73,5 @@ PUBLIC_PENDING_LANES = {"x-cluster-minibatch-kmeans": "no reference",
                         "x-cluster-bgmm-covtypes": "no reference",
                         "x-cluster-minibatch-partial": "no reference",
                         "x-cluster-gmm-options": "no reference",
-                        "x-cluster-dbscan-metrics": "no reference"}
+                        "x-cluster-dbscan-metrics": "no reference",
+                        "x-cluster-hdbscan-epsilon": "no reference"}

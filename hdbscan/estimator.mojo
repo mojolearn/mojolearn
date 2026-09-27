@@ -26,7 +26,6 @@ WHAT IS REFUSED, AND WHERE
   metric != L2SqrtExpanded (1)          `fit_hdbscan`, their RAFT_EXPECTS
   build_algo != BRUTE_FORCE_KNN         `fit_hdbscan` (NN_DESCENT, rung 2)
   cluster_selection_method not in {0,1} `fit_hdbscan`
-  cluster_selection_epsilon != 0.0      `select_clusters` (rung 2)
   min_samples < 1, min_samples > n_rows `runner.mojo`
   min_cluster_size < 2 or > n_rows      `build_condensed_hierarchy`
   alpha <= 0 or non-finite              `build_mr_linkage`

@@ -320,3 +320,31 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("predict", prep=_cluster_cosine_rows, sl=np.s_[:64]), "x-cluster-dbscan-metrics")
+
+
+@lane("x-cluster-hdbscan-epsilon")
+def _(ml, X, yc, yr, Xh=None):
+    """HDBSCAN option parity (hdbscan/NOT_IMPLEMENTED.tsv):
+    cluster_selection_epsilon, cuML's epsilon search run on the host by the
+    one function both routes call (DEVIATION 5115). The thresholds are
+    multiples of the plain fit's median core distance, so the search merges
+    clusters on every fixture's scale; eom, and leaf with
+    allow_single_cluster (the walk's root arm)."""
+    Z = X[:2000, :4]
+    base = ml.HDBSCAN(min_cluster_size=5).fit(Z)
+    med = float(np.median(np.asarray(base.core_distances_, dtype=np.float32)))
+    parts = dict(base_labels=_h(base.labels_))
+    last = None
+    for k in (1.0, 3.0):
+        e = float(np.float32(k * med))
+        m = ml.HDBSCAN(min_cluster_size=5, cluster_selection_epsilon=e, prediction_data=True).fit(Z)
+        parts[f"eom{k:g}_labels"] = _h(m.labels_)
+        parts[f"eom{k:g}_n"] = _h(np.asarray([m.n_clusters_, m.n_outliers_], dtype=np.int64))
+        last = m
+        lf = ml.HDBSCAN(min_cluster_size=8, min_samples=3, cluster_selection_method="leaf",
+                        allow_single_cluster=True, cluster_selection_epsilon=e).fit(Z)
+        parts[f"leaf{k:g}_labels"] = _h(lf.labels_)
+    return _fit(parts, last, lambda e: tuple(ml.hdbscan.approximate_predict(e, Xh[:256, :4])))
+
+
+_batch_decl(_batch_hdbscan, "x-cluster-hdbscan-epsilon")
