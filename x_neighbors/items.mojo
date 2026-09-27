@@ -51,6 +51,7 @@ def _add(a: Float32, b: Float32) -> Float32:
 
 
 # ------------------------------------------------------------------ distances
+# DEVIATION 5206 (IDENTITY_PATHS row 120)
 def sqdist_item(t: Int, x: FP, y: FP, res: FP, n: Int, m: Int, d: Int):
     """Squared euclidean distance of x row i and y row j, t = i*m + j,
     features folded in ascending order through the pinned fma."""
@@ -63,6 +64,7 @@ def sqdist_item(t: Int, x: FP, y: FP, res: FP, n: Int, m: Int, d: Int):
     res.unsafe_store(t, acc)
 
 
+# DEVIATION 5206 (row 120)
 def nan_sqdist_item(t: Int, x: FP, y: FP, res: FP, n: Int, m: Int, d: Int):
     """sklearn `nan_euclidean_distances(squared=True)`: the sum over the
     coordinates present in BOTH rows, divided by the present count and
@@ -99,6 +101,7 @@ comptime K_CHI2 = 6
 comptime K_ADDITIVE_CHI2 = 7
 
 
+# DEVIATION 5208 (row 122)
 def kernel_item(
     t: Int, x: FP, y: FP, res: FP, n: Int, m: Int, d: Int,
     kind: Int, gamma: Float32, coef0: Float32, degree: Int,
@@ -171,6 +174,7 @@ def kernel_item(
 
 
 # ------------------------------------------------------------------ dense algebra
+# DEVIATION 5209 (row 123)
 def matmul_item(t: Int, a: FP, b: FP, res: FP, n: Int, k: Int, m: Int):
     """C = A (n x k) B (k x m), t = i*m + j, ascending p, pinned fma."""
     var i = t // m
@@ -181,6 +185,7 @@ def matmul_item(t: Int, a: FP, b: FP, res: FP, n: Int, k: Int, m: Int):
     res.unsafe_store(t, acc)
 
 
+# DEVIATION 5209 (row 123)
 def rowsum_item(t: Int, a: FP, res: FP, n: Int, m: Int):
     var acc = Float32(0)
     for j in range(m):
@@ -188,6 +193,7 @@ def rowsum_item(t: Int, a: FP, res: FP, n: Int, m: Int):
     res.unsafe_store(t, acc)
 
 
+# DEVIATION 5209 (row 123)
 def colsum_item(t: Int, a: FP, res: FP, n: Int, m: Int):
     var acc = Float32(0)
     for i in range(n):
@@ -229,6 +235,7 @@ def unary_item(t: Int, x: FP, res: FP, count: Int, op: Int, a: Float32, b: Float
 
 
 # ------------------------------------------------------------------ selection
+# DEVIATION 5207 (row 121)
 def knn_select_item(t: Int, dmat: FP, dist: FP, idx: IP, n: Int, m: Int, k: Int, exclude_self: Int):
     """Row t's k smallest entries of the n x m distance matrix, ascending by
     (value, column): a candidate enters only when STRICTLY smaller than the
@@ -254,6 +261,7 @@ def knn_select_item(t: Int, dmat: FP, dist: FP, idx: IP, n: Int, m: Int, k: Int,
         idx.unsafe_store(t * k + s, Int32(j))
 
 
+# DEVIATION 5209 (row 123)
 def group_mean_item(t: Int, x: FP, labels: IP, res: FP, n: Int, d: Int, n_groups: Int):
     """Mean of the rows labelled g, feature f, t = g*d + f: rows in ascending
     order, one division. An empty group stores 0."""
@@ -275,6 +283,7 @@ def group_mean_item(t: Int, x: FP, labels: IP, res: FP, n: Int, d: Int, n_groups
 comptime SMO_TAU = Float32(1e-12)
 
 
+# DEVIATION 5200 (row 125)
 def ocsvm_smo_item(t: Int, q: FP, alpha: FP, g: FP, info: FP, iters: IP, n: Int, eps: Float32, max_iter: Int):
     """libsvm's `Solver::Solve` for the one-class problem (sklearn
     `svm/src/libsvm/svm.cpp`: `solve_one_class`, `Solver::Solve`,
@@ -407,6 +416,7 @@ def take_cols_item(t: Int, src: FP, cols: IP, res: FP, n: Int, src_c: Int, c: In
     res.unsafe_store(t, src.unsafe_load(i * src_c + Int(cols.unsafe_load(k))))
 
 
+# DEVIATION 5209 (row 123)
 def variance_item(t: Int, x: FP, res: FP, count: Int):
     """numpy's `X.var()` over every element, ONE item: the mean by an
     ascending fold and one division, then the ascending fold of squared
@@ -423,6 +433,7 @@ def variance_item(t: Int, x: FP, res: FP, count: Int):
 
 
 # ------------------------------------------------------------------ LocalOutlierFactor
+# DEVIATION 5210 (row 124)
 def lof_lrd_item(t: Int, dist: FP, idx: IP, fit_dist: FP, lrd: FP, k: Int, n: Int, n_fit: Int):
     """sklearn `_lof.py` `_local_reachability_density`: reach = max(dist,
     the neighbor's own k-distance), lrd = 1 / (mean(reach) + 1e-10); the
@@ -437,6 +448,7 @@ def lof_lrd_item(t: Int, dist: FP, idx: IP, fit_dist: FP, lrd: FP, k: Int, n: In
     lrd.unsafe_store(t, ftz(identical_div(Float32(1), _add(mean, Float32(1e-10)))))
 
 
+# DEVIATION 5210 (row 124)
 def lof_score_item(t: Int, idx: IP, fit_lrd: FP, lrd: FP, score: FP, k: Int, n: Int, n_fit: Int):
     """-mean(lrd[neighbors] / lrd[t]): the ratios folded ascending by rank."""
     var own = lrd.unsafe_load(t)
@@ -447,6 +459,7 @@ def lof_score_item(t: Int, idx: IP, fit_lrd: FP, lrd: FP, score: FP, k: Int, n: 
 
 
 # ------------------------------------------------------------------ distances, L1
+# DEVIATION 5206 (row 120)
 def l1dist_item(t: Int, x: FP, y: FP, res: FP, n: Int, m: Int, d: Int):
     var i = t // m
     var j = t - i * m
@@ -457,6 +470,7 @@ def l1dist_item(t: Int, x: FP, y: FP, res: FP, n: Int, m: Int, d: Int):
 
 
 # ------------------------------------------------------------------ KernelPCA
+# DEVIATION 5202 (row 126)
 def kpca_center_item(t: Int, k: FP, fit_cols: FP, pred_rows: FP, fit_all: FP, res: FP, n: Int, m: Int):
     """sklearn KernelCenterer: K - K_fit_rows_[j] - K_pred_cols[i] + K_fit_all_,
     in their order (two subtractions, then the addition)."""
@@ -471,6 +485,7 @@ def scale_div_item(t: Int, x: FP, res: FP, count: Int, s: Float32):
     res.unsafe_store(t, ftz(identical_div(ftz(x.unsafe_load(t)), s)))
 
 
+# DEVIATION 5202 (row 126)
 def svd_flip_item(t: Int, v: FP, n: Int, c: Int):
     """sklearn `svd_flip(u, None)` on column t of the n x c matrix: the FIRST
     row of largest |value| decides, and a negative one flips the column."""
@@ -504,6 +519,7 @@ def kpca_alpha_scale_item(t: Int, v: FP, w: FP, res: FP, n: Int, c: Int, divide:
 
 
 # ------------------------------------------------------------------ NearestCentroid
+# DEVIATION 5212 (row 126)
 def nc_std_item(t: Int, x: FP, lab: IP, cent: FP, std: FP, n: Int, d: Int, n_classes: Int):
     """`within_class_std_dev_[f]` = sqrt(sum_i (x_if - centroid_{y_i f})^2 / (n - C)),
     rows ascending. n == C stores 0 (theirs divides by zero)."""
@@ -518,6 +534,7 @@ def nc_std_item(t: Int, x: FP, lab: IP, cent: FP, std: FP, n: Int, d: Int, n_cla
     std.unsafe_store(f, ftz(identical_sqrt(ftz(identical_div(ss, Float32(n - n_classes))))))
 
 
+# DEVIATION 5212 / 5201 (row 126)
 def nc_shrink_item(
     t: Int, x: FP, cent: FP, nk: FP, std: FP, res: FP,
     n: Int, d: Int, n_classes: Int, do_shrink: Int, med: Float32, shrink: Float32,
@@ -556,6 +573,7 @@ def nc_shrink_item(
     res.unsafe_store(t, _add(dsc, ftz(identical_mul(ms, dev))))
 
 
+# DEVIATION 5212 (row 126)
 def nc_decision_item(t: Int, q: FP, cent: FP, std: FP, prior: FP, res: FP, n: Int, d: Int, n_classes: Int):
     """The discriminant -||x/sigma - c/sigma||^2 + 2 log(prior_k) (features
     with sigma == 0 left unscaled), t = i*C + k; the distance is square-rooted
@@ -578,6 +596,7 @@ def nc_decision_item(t: Int, q: FP, cent: FP, std: FP, prior: FP, res: FP, n: In
     res.unsafe_store(t, _add(-d2, lp))
 
 
+# DEVIATION 5209 (row 123)
 def softmax_item(t: Int, x: FP, res: FP, n: Int, c: Int):
     """Row t: exp(x - max) / sum, the sum ascending."""
     var mx = x.unsafe_load(t * c)
@@ -595,6 +614,7 @@ def softmax_item(t: Int, x: FP, res: FP, n: Int, c: Int):
 
 
 # ------------------------------------------------------------------ kernel approximation
+# DEVIATION 5203 (row 127)
 def pcs_item(
     t: Int, x: FP, hidx: IP, hbit: IP, res: FP, scr: FP,
     n: Int, d_in: Int, nf: Int, nc: Int, degree: Int, gamma: Float32, coef0: Float32,
@@ -647,6 +667,7 @@ def _coshf(z: Float32) -> Float32:
     return ftz(identical_mul(Float32(0.5), _add(ftz(identical_exp(z)), ftz(identical_exp(-z)))))
 
 
+# DEVIATION 5213 (row 127)
 def achi2_item(t: Int, x: FP, res: FP, n: Int, d: Int, steps: Int, interval: Float32):
     """sklearn AdditiveChi2Sampler._transform_dense for one input cell (t =
     i*d + f): sqrt(x L) into block 0, and for j = 1..steps-1
@@ -671,6 +692,7 @@ def achi2_item(t: Int, x: FP, res: FP, n: Int, d: Int, steps: Int, interval: Flo
         res.unsafe_store(i * w + (2 * j) * d + f, ftz(identical_mul(factor, ftz(identical_sin(arg)))))
 
 
+# DEVIATION 5213 (row 127)
 def skew_weights_item(t: Int, z: FP, res: FP, count: Int):
     """SkewedChi2Sampler's inverse sech CDF: (1/pi) log(tan(z)), z = pi/2 u."""
     var zv = ftz(z.unsafe_load(t))
@@ -678,6 +700,7 @@ def skew_weights_item(t: Int, z: FP, res: FP, count: Int):
     res.unsafe_store(t, ftz(identical_mul(ftz(identical_div(Float32(1), PI_F32)), ftz(identical_log(tn)))))
 
 
+# DEVIATION 5213 (row 127)
 def skew_transform_item(t: Int, lx: FP, w: FP, off: FP, res: FP, n: Int, d: Int, nc: Int):
     """cos(log(X + skewedness) @ W + offset) * sqrt(2) / sqrt(n_components),
     t = i*nc + c; the log was taken by the unary op, features ascending."""
@@ -692,6 +715,7 @@ def skew_transform_item(t: Int, lx: FP, w: FP, off: FP, res: FP, n: Int, d: Int,
 
 
 # ------------------------------------------------------------------ label propagation / spreading
+# DEVIATION 5209 (row 123)
 def absdiff_sum_item(t: Int, a: FP, b: FP, res: FP, count: Int):
     """sum |a - b| over every element, ascending, ONE item."""
     var acc = Float32(0)
@@ -700,6 +724,7 @@ def absdiff_sum_item(t: Int, a: FP, b: FP, res: FP, count: Int):
     res.unsafe_store(0, acc)
 
 
+# DEVIATION 5209 (row 123)
 def row_normalize_item(t: Int, a: FP, res: FP, n: Int, m: Int):
     """a / rowsum (a zero row sum divides by 1, as their `normalizer == 0`)."""
     var s = Float32(0)
@@ -711,6 +736,7 @@ def row_normalize_item(t: Int, a: FP, res: FP, n: Int, m: Int):
         res.unsafe_store(t * m + j, ftz(identical_div(ftz(a.unsafe_load(t * m + j)), s)))
 
 
+# DEVIATION 5214 (row 128)
 def lp_clamp_item(t: Int, ld: FP, ystatic: FP, unlabeled: IP, res: FP, n: Int, c: Int):
     """LabelPropagation's step after the product: normalize the row, then a
     labeled row takes its static distribution back."""
@@ -721,11 +747,13 @@ def lp_clamp_item(t: Int, ld: FP, ystatic: FP, unlabeled: IP, res: FP, n: Int, c
     row_normalize_item(t, ld, res, n, c)
 
 
+# DEVIATION 5214 (row 128)
 def ls_clamp_item(t: Int, ld: FP, ystatic: FP, res: FP, count: Int, alpha: Float32):
     """LabelSpreading's clamp: alpha * ld + y_static (their multiply, then add)."""
     res.unsafe_store(t, _add(ftz(identical_mul(alpha, ftz(ld.unsafe_load(t)))), ystatic.unsafe_load(t)))
 
 
+# DEVIATION 5214 (row 128)
 def ls_laplacian_item(t: Int, a: FP, res: FP, n: Int):
     """-csgraph.laplacian(A, normed=True) with the diagonal zeroed (sklearn
     LabelSpreading._build_graph): degrees are IN-degrees (column sums, scipy's
@@ -760,6 +788,7 @@ def knn_graph_item(t: Int, idx: IP, res: FP, n: Int, m: Int, k: Int):
 
 
 # ------------------------------------------------------------------ KNNImputer
+# DEVIATION 5215 (row 121)
 def knn_impute_item(
     t: Int, x: FP, fx: FP, best_d: FP, best_i: IP, res: FP,
     n: Int, m: Int, d: Int, k: Int, weights: Int,
@@ -848,6 +877,7 @@ def knn_impute_item(
 
 
 # ------------------------------------------------------------------ graphs
+# DEVIATION 5216 (row 129)
 def pagerank_step_item(t: Int, q: FP, x: FP, p: FP, dangling: IP, res: FP, n: Int, alpha: Float32):
     """One power-iteration step for node t (networkx `_pagerank_scipy`;
     cuGraph cpp/src/link_analysis/pagerank_impl.cuh): alpha * (x @ Q +
@@ -865,6 +895,7 @@ def pagerank_step_item(t: Int, q: FP, x: FP, p: FP, dangling: IP, res: FP, n: In
     res.unsafe_store(t, ftz(identical_mul_add(alpha, inner, teleport)))
 
 
+# DEVIATION 5217 (row 129)
 def cc_step_item(t: Int, a: FP, lab: IP, res: IP, n: Int):
     """Weak connectivity as a product (DBSCAN's weak_cc; cuGraph
     weakly_connected_components_impl.cuh): the smallest label among the node
@@ -906,6 +937,7 @@ def _louvain_modularity(w: FP, comm: IP, n: Int, m: Float32, resolution: Float32
     return q
 
 
+# DEVIATION 5204 (row 129)
 def louvain_item(
     t: Int, a: FP, labels: IP, info: FP, w: FP, w2: FP, comm: IP, node_of: IP, deg: FP, stot: FP, k2c: FP, tmp: FP,
     n: Int, max_level: Int, resolution: Float32, threshold: Float32,
@@ -1031,6 +1063,7 @@ def louvain_item(
 
 
 # ------------------------------------------------------------------ SVGP
+# DEVIATION 5205 (row 129)
 def _chol_inplace(a: FP, m: Int) -> Bool:
     """Lower Cholesky of the m x m row-major a, in place (upper triangle
     zeroed), columns left to right, each fold ascending. False when a pivot
@@ -1076,6 +1109,7 @@ def _log_diag_sum(l: FP, m: Int) -> Float32:
     return s
 
 
+# DEVIATION 5205 (row 129)
 def svgp_item(
     t: Int, kuu: FP, bmat: FP, b: FP, y: FP, alpha: FP, cmat: FP, qmu: FP, qsqrt: FP, info: FP,
     luu: FP, ls: FP, e: FP, col: FP,
@@ -1169,6 +1203,7 @@ def svgp_item(
     info.unsafe_store(1, Float32(1) if ok3 else Float32(0))
 
 
+# DEVIATION 5205 (row 129)
 def svgp_var_item(t: Int, ksu: FP, cmat: FP, res: FP, n: Int, m: Int, kdiag: Float32):
     """Predictive variance of f at row t: k** - K*u C Ku*, the inner fold
     per row of C ascending, then the outer ascending."""

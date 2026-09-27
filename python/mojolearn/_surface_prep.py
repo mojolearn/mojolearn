@@ -46,6 +46,8 @@ FAMILIES = (
             "x-prep-priors",
             "x-prep-robust-scaler-unit-variance",
             "x-prep-simple-imputer-indicator",
+            "x-prep-inverse-transforms",
+            "x-prep-encoder-options",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -118,6 +120,8 @@ TRAINING_LANE_NAMES = {
     "x-prep-priors": "the priors / class_prior option of the naive Bayes and discriminant classifiers",
     "x-prep-robust-scaler-unit-variance": "RobustScaler(unit_variance=True)",
     "x-prep-simple-imputer-indicator": "SimpleImputer(add_indicator=True)",
+    "x-prep-inverse-transforms": "inverse_transform of QuantileTransformer, PowerTransformer, KBinsDiscretizer and LabelBinarizer",
+    "x-prep-encoder-options": "OrdinalEncoder encoded_missing_value and inverse_transform, OneHotEncoder inverse_transform",
 }
 PUBLIC_PENDING_LANES = {
     "x-prep-robust-scaler": "no reference",
@@ -151,4 +155,6 @@ PUBLIC_PENDING_LANES = {
     "x-prep-priors": "no reference",
     "x-prep-robust-scaler-unit-variance": "no reference",
     "x-prep-simple-imputer-indicator": "no reference",
+    "x-prep-inverse-transforms": "no reference",
+    "x-prep-encoder-options": "no reference",
 }

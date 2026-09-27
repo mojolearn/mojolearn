@@ -525,3 +525,107 @@ def sqsum_cols_unit(t: Int, f: FP, q: IP):
         var v = ld(f, p(q, 0) + r * d + t)
         s = add(s, mul(v, v))
     st(f, p(q, 3) + t, s)
+
+
+# ---------------------------------------------------------------- inverses
+def block_argmax_unit(t: Int, f: FP, q: IP):
+    """q = [X, n, W, d, START, WIDTH, DROP, CHECK, OUT]; t = i*d + c: the
+    reference's one-hot inverse (OneHotEncoder, KBinsDiscretizer's onehot,
+    LabelBinarizer's multiclass). Over row i's block X[i*W + START[c] :
+    + WIDTH[c]]: numpy's argmax (first max wins, the first NaN wins over
+    everything), shifted past the dropped category DROP[c] (DROP < 0: none).
+    With CHECK, a block summing (ascending) to exactly 0 is the dropped
+    category, or -1 (unknown) when none was dropped; a zero-width block is
+    the dropped category. Written as a float code."""
+    var d = p(q, 3)
+    var i = t // d
+    var c = t % d
+    var w = Int(ld(f, p(q, 5) + c))
+    var drop = -1
+    if p(q, 6) >= 0:
+        drop = Int(ld(f, p(q, 6) + c))
+    if w == 0:
+        st(f, p(q, 8) + t, Float32(drop))
+        return
+    var R = p(q, 0) + i * p(q, 2) + Int(ld(f, p(q, 4) + c))
+    var bv = ld(f, R)
+    var best = 0
+    var nan_hit = bv != bv
+    var s = bv
+    for k in range(1, w):
+        var v = ld(f, R + k)
+        s = add(s, v)
+        if not nan_hit:
+            if v != v:
+                best = k
+                nan_hit = True
+            elif v > bv:
+                bv = v
+                best = k
+    var code = best
+    if drop >= 0 and code >= drop:
+        code += 1
+    if p(q, 7) != 0 and s == Float32(0):
+        code = drop
+    st(f, p(q, 8) + t, Float32(code))
+
+
+@always_inline
+def _matches(x: Float32, v: Float32) -> Bool:
+    """sklearn `_get_mask`: NaN matches NaN, anything else by value."""
+    if is_nan(v):
+        return is_nan(x)
+    return not is_nan(x) and ftz(x) == ftz(v)
+
+
+def ord_inverse_unit(t: Int, f: FP, q: IP):
+    """q = [X, n, d, MISS, EMV, UNK_ON, UNK, NCAT, OUT]; t = element: an
+    ordinal code back to a category index (OrdinalEncoder, KBinsDiscretizer
+    ordinal). A value matching EMV (NaN matches NaN) in a column with a
+    missing category MISS[c] >= 0 is MISS[c]; else (UNK_ON) a value matching
+    UNK is -1 (unknown); else numpy's astype(int64), truncation, which must
+    land in [0, NCAT[c]) or the code is -2 (invalid)."""
+    var d = p(q, 2)
+    var c = t % d
+    var x = raw(f, p(q, 0) + t)
+    var miss = Int(ld(f, p(q, 3) + c))
+    var code: Int
+    if miss >= 0 and _matches(x, raw(f, p(q, 4))):
+        code = miss
+    elif p(q, 5) != 0 and _matches(x, raw(f, p(q, 6))):
+        code = -1
+    elif is_nan(x):
+        code = -2
+    else:
+        var v = ftz(x)
+        if v <= Float32(-1) or v >= ld(f, p(q, 7) + c):
+            code = -2
+        else:
+            code = Int(v)
+    st(f, p(q, 8) + t, Float32(code))
+
+
+def cat_gather_unit(t: Int, f: FP, q: IP):
+    """q = [CODES, n, d, CATS, kmax, OUT]; t = element: column c's category
+    CATS[c*kmax + code] bit for bit (the NaN category is the canonical NaN),
+    or the canonical NaN for a negative code."""
+    var d = p(q, 2)
+    var c = t % d
+    var code = Int(ld(f, p(q, 0) + t))
+    if code < 0:
+        f.unsafe_store(p(q, 5) + t, canonical_nan())
+        return
+    f.unsafe_store(p(q, 5) + t, raw(f, p(q, 3) + c * p(q, 4) + code))
+
+
+def where_code_unit(t: Int, f: FP, q: IP):
+    """q = [CODES, n, d, MISS, VAL, SRC, OUT]; t = element: VAL (bit for bit)
+    where CODES[t] is column c's missing category MISS[c] >= 0
+    (OrdinalEncoder's encoded_missing_value), else SRC[t] bit for bit."""
+    var d = p(q, 2)
+    var c = t % d
+    var miss = Int(ld(f, p(q, 3) + c))
+    if miss >= 0 and Int(ld(f, p(q, 0) + t)) == miss:
+        f.unsafe_store(p(q, 6) + t, raw(f, p(q, 4)))
+        return
+    f.unsafe_store(p(q, 6) + t, raw(f, p(q, 5) + t))
