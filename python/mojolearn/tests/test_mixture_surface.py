@@ -109,6 +109,53 @@ def arm_refusals(rep):
     rep.raises("REFUSE", ValueError, "features", "predict with the wrong feature count", m.predict, x[:, :1])
 
 
+def _degenerate(seed, n=600):
+    """Few-valued data like the taxi reg block's (lane/gmm-degenerate-data,
+    2026-09-26): five binary columns (two of them rare), one four-valued
+    column and two heavy-tailed ones, standardized. Components collapse onto
+    subspaces where a column is constant, and only `reg_covar` keeps them
+    invertible."""
+    rng = np.random.default_rng(seed)
+    cols = [rng.random(n) < p for p in (0.5, 0.2, 0.05, 0.3, 0.1)]
+    cols.append(rng.integers(0, 4, n))
+    cols += [rng.lognormal(0, 1.5, n) for _ in range(2)]
+    x = np.stack(cols, 1).astype(np.float64)
+    x = (x - x.mean(0)) / x.std(0)
+    return np.ascontiguousarray(x.astype(np.float32))
+
+
+def arm_degenerate(rep):
+    """DEVIATION 3133: `init_params='kmeans'` seeds with the CLASSIC greedy
+    k-means++ (scikit-learn's `KMeans` default), not k-means||.
+
+    (1) WIRING, exact: at `max_iter=0` the model is the initial M-step, so
+    `means_` are the per-cluster means of the k-means labels, and they must
+    be those of `KMeans(oversampling_factor=0.0)` at the same seed.
+    (2) THE REGRESSION: on two degenerate sets the k-means|| start (0.8.22)
+    stopped at a training lower bound of 3.97 and 4.32 where scikit-learn
+    1.7.2 reached 13.90 and 12.10 and the classic start reaches 16.96 and
+    15.80 (Apple M4, both tiers, 2026-09-26). The bound asserted is 10, far
+    from both sides."""
+    from mojolearn import KMeans
+    k = 6
+    for seed in (12, 4):
+        x = _degenerate(seed)
+        m0 = GaussianMixture(n_components=k, max_iter=0, random_state=0).fit(x)
+        lab = np.asarray(KMeans(n_clusters=k, random_state=0, oversampling_factor=0.0).fit(x).labels_).astype(int)
+        want = np.stack([x[lab == c].astype(np.float64).mean(0) for c in range(k)])
+        got = np.asarray(m0.means_).astype(np.float64)
+        err = float(np.max(np.abs(got - want)))
+        rep.check("DEGENERATE", err < 1e-4,
+                  "seed %d: max_iter=0 means_ are the classic k-means++ clusters' means (DEVIATION 3133)" % seed, err)
+        lab_par = np.asarray(KMeans(n_clusters=k, random_state=0).fit(x).labels_).astype(int)
+        rep.report_only("DEGENERATE", np.array_equal(lab_par, lab),
+                        "seed %d: the k-means|| start gives the same labels" % seed)
+        m = GaussianMixture(n_components=k, max_iter=100, random_state=0).fit(x)
+        rep.check("DEGENERATE", np.isfinite(m.lower_bound_) and m.lower_bound_ > 10.0,
+                  "seed %d: the fit on few-valued columns reaches a lower bound above 10 (the k-means|| start stopped near 4)" % seed,
+                  m.lower_bound_)
+
+
 def arm_provenance(rep):
     rep.check("PROVENANCE", "GaussianMixture" in mojolearn.__all__ and "mixture" in mojolearn.__all__, "GaussianMixture and mojolearn.mixture exported")
     rep.check("PROVENANCE", GaussianMixture().numeric_mode_used() == mode(), "numeric_mode_used() is the process default")
@@ -117,7 +164,7 @@ def arm_provenance(rep):
 def main(out=sys.stdout):
     bind_or_exit("_mojolearn_mixture", "build_mixture.sh")
     rep = Report("test_mixture_surface")
-    return run("test_mixture_surface", [("FIT", arm_fit), ("REFUSE", arm_refusals), ("PROVENANCE", arm_provenance)], rep, out)
+    return run("test_mixture_surface", [("FIT", arm_fit), ("REFUSE", arm_refusals), ("DEGENERATE", arm_degenerate), ("PROVENANCE", arm_provenance)], rep, out)
 
 
 if __name__ == "__main__":
