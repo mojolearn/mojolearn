@@ -167,8 +167,20 @@ def build(binding, log):
     import binding_stamps
     script, so = script_for(binding), output_for(binding)
     env = dict(os.environ, MOJOLEARN_NUMERIC_MODE="identical")
-    if binding.endswith("_host") and so.exists():
-        so.unlink()                      # build_host_family.sh never overwrites an output
+    if binding.endswith("_host"):
+        # build_host_family.sh refuses any GPU arch: a CPU build takes none.
+        env.pop("MOJOLEARN_GPU_ARCHS", None)
+    elif binding == "_mojolearn_byte_lm" and sys.platform != "darwin" and not env.get("MOJOLEARN_GPU_ARCHS"):
+        # build_byte_lm.sh needs exactly one explicit sm_NN / gfxNNN target on
+        # Linux (and refuses one on macOS). The arch is the box's own, as the
+        # binding cache reads it (bincache.device_arch).
+        import bincache
+        arch = bincache.device_arch()
+        if arch == "none":
+            raise Fail("bindings/build_byte_lm.sh needs MOJOLEARN_GPU_ARCHS and this box reports no GPU arch")
+        env["MOJOLEARN_GPU_ARCHS"] = arch
+    if (binding.endswith("_host") or binding == "_mojolearn_byte_lm") and so.exists():
+        so.unlink()                      # these scripts never overwrite an output
     say(f"build {binding} (bindings/{script})")
     started = time.time()
     with open(log, "a") as fh:
