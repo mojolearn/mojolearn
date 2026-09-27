@@ -78,6 +78,7 @@ from svm.impl.svm_parameter import (
     KERNEL_LINEAR,
     KERNEL_POLYNOMIAL,
     KERNEL_RBF,
+    KERNEL_TANH,
     KernelParams,
     SvmModel,
     SvmParameter,
@@ -118,11 +119,10 @@ struct SvcFitOutputs(Copyable, Movable):
 def _kernel_params(
     kernel: Int, gamma: Float64, degree: Int = 3, coef0: Float64 = 0.0
 ) raises -> KernelParams:
-    """`ML::matrix::KernelParams` for the two implemented kernels. `degree` and
-    `coef0` are their constructor defaults (3 and 0); both are read only by
-    POLYNOMIAL and TANH, which `check_rung1_scope` refuses by name, so
-    there is no value a caller could pass that would reach a kernel."""
-    if kernel != KERNEL_LINEAR and kernel != KERNEL_RBF and kernel != KERNEL_POLYNOMIAL:
+    """`ML::matrix::KernelParams` for the implemented kernels (LINEAR, RBF,
+    POLYNOMIAL, TANH). `degree` and `coef0` default to their constructor
+    values (3 and 0); POLYNOMIAL reads both, TANH reads coef0."""
+    if kernel != KERNEL_LINEAR and kernel != KERNEL_RBF and kernel != KERNEL_POLYNOMIAL and kernel != KERNEL_TANH:
         raise Error(
             "svm: kernel=" + String(kernel) + " is not implemented in rung 1;"
             + " only LINEAR (" + String(KERNEL_LINEAR) + ") and RBF ("
@@ -230,6 +230,7 @@ def svc_fit_host_borrowed(
     nochange_steps: Int,
     degree: Int = 3,
     coef0: Float64 = 0.0,
+    c_rows: List[Float32] = List[Float32](),
 ) raises -> SvcFitOutputs:
     """`svc_fit_host` on the caller's borrowed row-major `n_rows x n_cols`
     float32 buffer (DEVIATION 2665, 2026-09-11), what the binding calls. No
@@ -270,7 +271,7 @@ def svc_fit_host_borrowed(
         + " nochange_steps=" + String(nochange_steps)
     )
     var trace = SmoTrace()
-    var model = svc_fit_borrowed(ctx, x_ptr, labels, n_rows, n_cols, param, kp, card, trace)
+    var model = svc_fit_borrowed(ctx, x_ptr, labels, n_rows, n_cols, param, kp, card, trace, c_rows)
 
     var out = SvcFitOutputs()
     out.n_support = model.n_support
@@ -412,6 +413,9 @@ def svr_fit_host(
     tol: Float64,
     max_iter: Int,
     nochange_steps: Int,
+    c_rows: List[Float32] = List[Float32](),
+    degree: Int = 3,
+    coef0: Float64 = 0.0,
 ) raises -> SvrFitOutputs:
     """`SVR(C, epsilon, kernel, gamma, tol, max_iter, nochange_steps).fit(X,
     y)`, one shot. `x` is ROW-MAJOR `n_rows x n_cols` (theirs is
@@ -476,7 +480,7 @@ def svr_fit_host(
             "svr_fit_host: y has " + String(len(targets)) + " values, n_rows is "
             + String(n_rows)
         )
-    var kp = _kernel_params(kernel, gamma)
+    var kp = _kernel_params(kernel, gamma, degree, coef0)
     var param = SvmParameter.default()
     param.C = C
     param.tol = tol
@@ -500,7 +504,7 @@ def svr_fit_host(
         + " nochange_steps=" + String(nochange_steps)
     )
     var trace = SmoTrace()
-    var model = svr_fit(ctx, x, targets, n_rows, n_cols, param, kp, card, trace)
+    var model = svr_fit(ctx, x, targets, n_rows, n_cols, param, kp, card, trace, c_rows=c_rows)
 
     var out = SvrFitOutputs()
     out.n_support = model.n_support
@@ -526,6 +530,8 @@ def svr_predict_host(
     kernel: Int,
     gamma: Float64,
     buffer_size_mib: Float64,
+    degree: Int = 3,
+    coef0: Float64 = 0.0,
 ) raises -> List[Float32]:
     """`SVR::predict` on a model rebuilt from `svr_fit_host`'s output. One
     float32 per row, `sum_j K(x, sv_j) dual_j + b`.
@@ -571,7 +577,7 @@ def svr_predict_host(
             "svr_predict_host: the predict buffer (cache_size) must be a"
             " positive number of MiB, got " + String(buffer_size_mib)
         )
-    var kp = _kernel_params(kernel, gamma)
+    var kp = _kernel_params(kernel, gamma, degree, coef0)
 
     var model = SvmModel()
     model.n_support = n_support

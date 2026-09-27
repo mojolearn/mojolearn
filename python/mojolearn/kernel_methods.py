@@ -26,6 +26,7 @@ by name here and on the Mojo host. `gamma=None` is scikit-learn's
 NO SPEED CLAIM. The lane has no published number and this door adds none.
 """
 from . import _backend, _serialize
+from ._scale_gamma import scale_gamma
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, empty
 from ._mode import NumericModeMixin
@@ -468,11 +469,10 @@ class RBFSampler(_KernelMethodBase):
 
     Parameters
     ----------
-    gamma : float, default 1.0
-        Must be positive (refused by name on the Mojo host).
-        scikit-learn's `gamma='scale'` is NOT implemented: it is a host
-        variance over the data, a fold in front of every draw
-        (`kernel_methods/NOT_IMPLEMENTED.tsv`).
+    gamma : float or 'scale', default 1.0
+        Must be positive (refused by name on the Mojo host). 'scale' is
+        scikit-learn's `1 / (n_features * X.var())` from the EXACT variance
+        of X's float32 cells, rounded once (`_scale_gamma.scale_gamma`).
     n_components : int, default 100
         Refused by name when not positive, before any buffer is made.
     random_state : int, default 0
@@ -495,16 +495,18 @@ class RBFSampler(_KernelMethodBase):
         self.random_state = random_state
 
     def fit(self, X, y=None):
-        """Reads `X.shape[1]` and nothing else of X, as scikit-learn's does."""
+        """Reads `X.shape[1]` (and, for gamma='scale', the variance of X), as
+        scikit-learn's does."""
         x, _ = as_f32_c(X, ndim=2, name="X")
         _, d = x.shape
-        if self.gamma == "scale":
-            raise ValueError(
-                f"mojolearn {self._WHERE}: gamma='scale' is not implemented; it is "
-                "a host variance over the data in front of every draw "
-                "(kernel_methods/NOT_IMPLEMENTED.tsv). Pass a positive float."
-            )
-        gamma = _real(self.gamma, "gamma", self._WHERE)
+        if isinstance(self.gamma, str) and self.gamma == "scale":
+            # scikit-learn's 1 / (n_features * X.var()), 1.0 at zero
+            # variance: the EXACT variance of the float32 cells, the
+            # reciprocal rounded once (`_scale_gamma.scale_gamma`), so every
+            # host draws from the same gamma bits.
+            gamma = scale_gamma(x.ravel().tolist(), d)
+        else:
+            gamma = _real(self.gamma, "gamma", self._WHERE)
         if isinstance(self.n_components, bool) or not isinstance(self.n_components, int):
             raise TypeError(f"mojolearn {self._WHERE}: n_components must be an int")
         q = int(self.n_components)

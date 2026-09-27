@@ -10,14 +10,15 @@ from x_prep.prims import (
     class_stats_unit, center_rows_unit, where_neg_unit, mark_missing_unit, fill_unit,
     label_binarize_unit, scatter_ones_unit, gather_cols_unit, var_ptp_unit,
     sqsum_cols_unit, block_argmax_unit, ord_inverse_unit, cat_gather_unit, where_code_unit,
-    class_stats_w_unit,
+    class_stats_w_unit, indicator_unit, code_counts_unit, remap_codes_unit, add_arrays_unit,
 )
 from x_prep.eigh import eigh_unit
 from x_prep.target import te_global_unit, te_enc_unit, te_apply_unit
-from x_prep.kbins import kbins_edges_unit, kbins_codes_unit, kbins_inverse_unit
+from x_prep.kbins import kbins_edges_unit, kbins_codes_unit, kbins_inverse_unit, kbins_gw_unit, kbins_wq_unit, kbins_wkm_unit
 from naive_bayes.nb import (
     gnb_eps_unit, gnb_params_unit, gnb_jll_unit, class_log_prior_unit, mnb_params_unit,
     bnb_params_unit, cnb_params_unit, cat_params_unit, cat_jll_unit, log_unit,
+    gnb_merge_unit, cat_counts_unit, cat_flp_unit,
 )
 from x_prep.transform import (
     qt_apply_unit, pt_fit_unit, pt_apply_unit, std_params_unit, normalize_unit, poly_unit, robust_uv_unit,
@@ -26,16 +27,16 @@ from x_prep.transform import (
 from x_prep.spline import spline_knots_unit, spline_apply_unit
 from x_prep.iterative import (
     ii_mean_unit, ii_gram_unit, ii_sub_unit, ii_br_unit, ii_predict_unit, ii_snapshot_unit, ii_conv_unit,
-    nan_mask_unit,
+    nan_mask_unit, ii_sigma_unit, ii_post_unit,
 )
 from x_prep.stats import f_classif_unit, f_regression_unit, chi2_unit
-from x_prep.mutual_info import mi_colscale_unit, mi_noise_unit, mi_cc_unit, mi_cd_unit, mi_reduce_unit
+from x_prep.mutual_info import mi_colscale_unit, mi_noise_unit, mi_cc_unit, mi_cd_unit, mi_reduce_unit, mi_dc_unit, mi_dd_unit
 from naive_bayes.da import (
     lda_prep_unit, lda_w_unit, lda_stage2_unit, lda_stage3_unit, qda_cov_unit, qda_prep_unit, qda_dec_unit,
     da_shrink_unit, da_pool_unit, sym_fn_unit, da_intercept_unit, evr_unit,
 )
 
-comptime N_OPS = 87
+comptime N_OPS = 101
 
 
 @always_inline
@@ -214,3 +215,31 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
         evr_unit(t, f, q)
     comptime if OP == 86:
         class_stats_w_unit(t, f, q)
+    comptime if OP == 87:
+        indicator_unit(t, f, q)
+    comptime if OP == 88:
+        code_counts_unit(t, f, q)
+    comptime if OP == 89:
+        remap_codes_unit(t, f, q)
+    comptime if OP == 90:
+        add_arrays_unit(t, f, q)
+    comptime if OP == 91:
+        gnb_merge_unit(t, f, q)
+    comptime if OP == 92:
+        cat_counts_unit(t, f, q)
+    comptime if OP == 93:
+        cat_flp_unit(t, f, q)
+    comptime if OP == 94:
+        mi_dc_unit(t, f, q)
+    comptime if OP == 95:
+        mi_dd_unit(t, f, q)
+    comptime if OP == 96:
+        kbins_gw_unit(t, f, q)
+    comptime if OP == 97:
+        kbins_wq_unit(t, f, q)
+    comptime if OP == 98:
+        kbins_wkm_unit(t, f, q)
+    comptime if OP == 99:
+        ii_sigma_unit(t, f, q)
+    comptime if OP == 100:
+        ii_post_unit(t, f, q)

@@ -6,8 +6,7 @@ A separate extension module, for `bindings/_mojolearn_gp.mojo`'s reason.
 `hdbscan/estimator.mojo::hdbscan_fit_host` is reached and nothing is
 re-decided: its header lists every refusal and where each is raised
 (metric, build algorithm, selection method and epsilon, min_samples,
-min_cluster_size, alpha, the row bounds, a non-finite cell, and
-`probabilities_`, DEVIATION 1610). This file refuses a null address and a
+min_cluster_size, alpha, the row bounds and a non-finite cell). This file refuses a null address and a
 list of the wrong length and nothing else.
 
 THE ABI IS THE GP'S: two length-checked lists, orders written out below
@@ -37,6 +36,7 @@ from hdbscan.estimator import (
     hdbscan_fit_host_output,
 )
 from hdbscan.impl.prediction_data import generate_prediction_data
+from hdbscan.impl.detail.extract import probabilities_from_labels
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -77,6 +77,8 @@ def _hdbscan_fit_run(
     tlp: MutPointer[Float32, MutUntrackedOrigin],
     tsp: MutPointer[Int32, MutUntrackedOrigin],
     invp: MutPointer[Int32, MutUntrackedOrigin],
+    want_probs: Bool,
+    pp: MutPointer[Float32, MutUntrackedOrigin],
     n: Int,
     d: Int,
     min_samples: Int,
@@ -127,6 +129,12 @@ def _hdbscan_fit_run(
             tsp.unsafe_store(e, out.condensed.sizes[e])
         for c in range(out.n_clusters):
             invp.unsafe_store(c, out.inverse_label_map[c])
+    if want_probs:
+        var probs = probabilities_from_labels(
+            out.condensed, out.labels, out.inverse_label_map, n
+        )
+        for i in range(n):
+            pp.unsafe_store(i, probs[i])
     var n_clusters = out.n_clusters
     _ = out^
     # DEVIATION 1946: the context dies LAST, after every value built on it.
@@ -159,8 +167,8 @@ def hdbscan_fit_binding(
         5  alpha                       (float)
         6  allow_single_cluster        (0/1)
         7  cluster_selection_method    (0 eom, 1 leaf)
-        8  cluster_selection_epsilon   (float; only 0.0 is implemented,
-                                        refused by name otherwise)
+        8  cluster_selection_epsilon   (float; 0.0 disables the epsilon
+                                        search, DEVIATION 5115)
         9  metric                      (1 L2SqrtExpanded, the only one)
 
     `prediction_data=True` passes NINE addresses: the four above (info_out
@@ -171,13 +179,19 @@ def hdbscan_fit_binding(
         6  tree_lambdas_out   2 * n float32, WRITTEN
         7  tree_sizes_out     2 * n int32, WRITTEN
         8  inverse_label_map_out  n int32, WRITTEN (first n_clusters)
+
+    Either list may end with ONE more address, `probabilities_out` (n
+    float32, WRITTEN): `probabilities_`, cuML's `get_probabilities`
+    (DEVIATION 5116, `extract.mojo::probabilities_from_labels`).
     """
-    if len(addrs) != 4 and len(addrs) != 9:
+    var n_addrs = len(addrs)
+    if n_addrs != 4 and n_addrs != 5 and n_addrs != 9 and n_addrs != 10:
         raise Error(
             "hdbscan_fit: addrs must contain 4 addresses (x, labels_out,"
             " core_dists_out, info_out) or 9 (plus the condensed tree's"
-            " parents, children, lambdas, sizes and inverse_label_map), got "
-            + String(len(addrs))
+            " parents, children, lambdas, sizes and inverse_label_map),"
+            " either one followed by probabilities_out, got "
+            + String(n_addrs)
         )
     if len(params) != 10:
         raise Error(
@@ -201,7 +215,12 @@ def hdbscan_fit_binding(
     var method = Int(py=params[7])
     var eps = Float32(Float64(py=params[8]))
     var metric = Int(py=params[9])
-    var want_tree = len(addrs) == 9
+    var want_tree = n_addrs >= 9
+    # DEVIATION 5116: probabilities_out (n float32) is the LAST address.
+    var want_probs = n_addrs == 5 or n_addrs == 10
+    var pp = cp
+    if want_probs:
+        pp = _f32_ptr(Int(py=addrs[n_addrs - 1]))
     var tpp = lp
     var tcp = lp
     var tlp = cp
@@ -226,6 +245,8 @@ def hdbscan_fit_binding(
             tlp,
             tsp,
             invp,
+            want_probs,
+            pp,
             n,
             d,
             min_samples,

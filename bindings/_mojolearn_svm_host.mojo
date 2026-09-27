@@ -93,6 +93,7 @@ from svm.impl.svm_parameter import (
     KERNEL_LINEAR,
     KERNEL_POLYNOMIAL,
     KERNEL_RBF,
+    KERNEL_TANH,
     KernelParams,
     SvmParameter,
     check_finite_list,
@@ -164,7 +165,7 @@ def _kernel_params(
     """`svm/estimator.mojo::_kernel_params`, the same refusal and the same
     constructor defaults (degree 3, coef0 0, read by no implemented
     kernel)."""
-    if kernel != KERNEL_LINEAR and kernel != KERNEL_RBF and kernel != KERNEL_POLYNOMIAL:
+    if kernel != KERNEL_LINEAR and kernel != KERNEL_RBF and kernel != KERNEL_POLYNOMIAL and kernel != KERNEL_TANH:
         raise Error(
             "svm: kernel=" + String(kernel) + " is not implemented in rung 1;"
             + " only LINEAR (" + String(KERNEL_LINEAR) + ") and RBF ("
@@ -172,6 +173,20 @@ def _kernel_params(
         )
     return KernelParams(kernel, degree, gamma, coef0)
 
+
+
+def _c_rows(params: PythonObject, slot: Int, n_rows: Int) raises -> List[Float32]:
+    """The OPTIONAL per-row bounds `C * sample_weight` at the address in
+    `params[slot]` (absent or 0: the unweighted arm), as the device binding
+    reads them; `smo_oracle_fit` checks them."""
+    var out = List[Float32]()
+    if len(params) <= slot:
+        return out^
+    var a = _index(params[slot])
+    if a == 0:
+        return out^
+    out = read_f32(a, n_rows)
+    return out^
 
 def svc_fit_binding(
     x_addr: PythonObject,
@@ -205,9 +220,9 @@ def svc_fit_binding(
     `n_support * n_features`) are written. `info_addr` is FIVE float64:
     b, n_support, n_iter, classes[0] (the SMALLER sorted distinct label),
     classes[1] (the LARGER, mapped to +1)."""
-    if len(params) != 10:
+    if len(params) != 10 and len(params) != 11:
         raise Error(
-            "svc_fit: params must contain 10 values, got " + String(len(params))
+            "svc_fit: params must contain 10 values (11 with the per-row bounds), got " + String(len(params))
         )
     var xp = f32_ptr(_index(x_addr))
     var y_address = _index(y_addr)
@@ -228,6 +243,7 @@ def svc_fit_binding(
     if n_rows <= 0 or n_cols <= 0:
         raise Error("svc_fit: n_rows and n_features must both be positive")
     var labels = read_f32(y_address, max(0, n_rows))
+    var c_rows = _c_rows(params, 10, n_rows)
     var n_support = 0
     with GILReleased(Python()):
         # `svc_fit_host_borrowed`'s guards and parameter pins, in its order.
@@ -271,7 +287,7 @@ def svc_fit_binding(
             y.append(Float32(1.0) if labels[i] == label1 else Float32(-1.0))
         var x = read_f32(Int(xp), n_rows * n_cols)
         # THE ONE CALL THAT COMPUTES ANYTHING.
-        var res = smo_oracle_fit[DType.float32](x, y, n_rows, n_cols, param, kp)
+        var res = smo_oracle_fit[DType.float32](x, y, n_rows, n_cols, param, kp, c_rows=c_rows)
         if isnan(res.b):
             # DEVIATION 637, the device's refusal in its words.
             raise Error(
@@ -421,9 +437,10 @@ def svr_fit_binding(
     the oracle as on the device. `info_addr` is THREE float64: b, n_support,
     n_iter. The guards are `svr_fit_host`'s, then `svr_fit`'s
     (`svm/estimator.mojo`, `svm/impl/svr_impl.mojo`), in their order."""
-    if len(params) != 9:
+    if len(params) != 9 and len(params) != 10 and len(params) != 12:
         raise Error(
-            "svr_fit: params must contain 9 values, got " + String(len(params))
+            "svr_fit: params must contain 9 values (10 with the per-row bounds, 12 with"
+            " degree and coef0), got " + String(len(params))
         )
     var xp = f32_ptr(_index(x_addr))
     var y_address = _index(y_addr)
@@ -443,6 +460,12 @@ def svr_fit_binding(
     if n_rows <= 0 or n_cols <= 0:
         raise Error("svr_fit: n_rows and n_features must both be positive")
     var targets = read_f32(y_address, max(0, n_rows))
+    var c_rows = _c_rows(params, 9, n_rows)
+    var degree = 3
+    var coef0 = 0.0
+    if len(params) == 12:
+        degree = _index(params[10])
+        coef0 = Float64(py=params[11])
     var n_support = 0
     with GILReleased(Python()):
         # `svr_fit_host`'s guards and parameter pins, in its order.
@@ -455,7 +478,7 @@ def svr_fit_binding(
                 "svr_fit_host: y has " + String(len(targets)) + " values, n_rows is "
                 + String(n_rows)
             )
-        var kp = _kernel_params(kernel, gamma)
+        var kp = _kernel_params(kernel, gamma, degree, coef0)
         var param = SvmParameter.default()
         param.C = c
         param.tol = tol
@@ -475,7 +498,7 @@ def svr_fit_binding(
         # THE ONE CALL THAT COMPUTES ANYTHING. `y` is the regression
         # targets; the oracle builds the +-1 label vector and the gradient
         # as `SvrInit` does.
-        var res = smo_oracle_fit[DType.float32](x, targets, n_rows, n_cols, param, kp)
+        var res = smo_oracle_fit[DType.float32](x, targets, n_rows, n_cols, param, kp, c_rows=c_rows)
         if isnan(res.b):
             # DEVIATION 637, the device's refusal in its words.
             raise Error(
@@ -524,9 +547,10 @@ def svr_predict_binding(
         5  gamma           (float; the gamma the FIT resolved)
         6  cache_size_mib  (float; launch-invariant on the device, only its
                             positivity is checked here, as there)"""
-    if len(params) != 7:
+    if len(params) != 7 and len(params) != 9:
         raise Error(
-            "svr_predict: params must contain 7 values, got " + String(len(params))
+            "svr_predict: params must contain 7 values (9 with degree and coef0), got "
+            + String(len(params))
         )
     var x_address = _index(x_addr)
     var op = f32_ptr(_index(out_addr))
@@ -537,6 +561,11 @@ def svr_predict_binding(
     var kernel = _index(params[4])
     var gamma = Float64(py=params[5])
     var buffer_mib = Float64(py=params[6])
+    var degree = 3
+    var coef0 = 0.0
+    if len(params) == 9:
+        degree = _index(params[7])
+        coef0 = Float64(py=params[8])
     if n_rows <= 0 or n_cols <= 0:
         raise Error("svr_predict: n_rows and n_features must both be positive")
     if n_support < 0:
@@ -557,7 +586,7 @@ def svr_predict_binding(
                 "svr_predict_host: the predict buffer (cache_size) must be a"
                 " positive number of MiB, got " + String(buffer_mib)
             )
-        var kp = _kernel_params(kernel, gamma)
+        var kp = _kernel_params(kernel, gamma, degree, coef0)
         if n_support == 0:
             for i in range(n_rows):
                 op[i] = b

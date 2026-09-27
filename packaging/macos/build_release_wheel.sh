@@ -100,10 +100,14 @@ EXT_NAMES="_mojolearn_gbdt _mojolearn_rf _mojolearn_trees"
 # CLASSICAL ML (2026-09-25): fast and identical, never deterministic. They
 # build in the identical tier and, when MODES names it, the fast tier; the
 # build scripts refuse deterministic by name.
-FAST_CLASSICAL_SCRIPTS="build.sh build_estimators.sh build_svm.sh build_solver.sh build_metrics.sh build_preprocessing.sh build_tsa.sh build_linalg.sh build_arima.sh build_gp.sh build_kernel_methods.sh build_mixture.sh build_hdbscan.sh build_resample.sh build_ivf.sh"
-FAST_CLASSICAL_NAMES="_mojolearn _mojolearn_estimators _mojolearn_svm _mojolearn_solver _mojolearn_metrics _mojolearn_preprocessing _mojolearn_tsa _mojolearn_linalg _mojolearn_arima _mojolearn_gp _mojolearn_kernel_methods _mojolearn_mixture _mojolearn_hdbscan _mojolearn_resample _mojolearn_ivf"
-IDENTICAL_ONLY_SCRIPTS="build_training.sh build_mamba.sh build_transformer.sh build_embedding.sh"
-IDENTICAL_ONLY_NAMES="_mojolearn_training _mojolearn_mamba _mojolearn_transformer _mojolearn_embedding"
+FAST_CLASSICAL_SCRIPTS="build.sh build_estimators.sh build_svm.sh build_solver.sh build_metrics.sh build_preprocessing.sh build_tsa.sh build_linalg.sh build_arima.sh build_gp.sh build_kernel_methods.sh build_mixture.sh build_hdbscan.sh build_resample.sh build_ivf.sh build_training.sh build_mamba.sh build_transformer.sh build_embedding.sh"
+FAST_CLASSICAL_NAMES="_mojolearn _mojolearn_estimators _mojolearn_svm _mojolearn_solver _mojolearn_metrics _mojolearn_preprocessing _mojolearn_tsa _mojolearn_linalg _mojolearn_arima _mojolearn_gp _mojolearn_kernel_methods _mojolearn_mixture _mojolearn_hdbscan _mojolearn_resample _mojolearn_ivf _mojolearn_training _mojolearn_mamba _mojolearn_transformer _mojolearn_embedding"
+# THE NEURAL BLOCKS (training, mamba, transformer, embedding) moved to the
+# FAST_CLASSICAL lists above on 2026-09-27 (lane neural): fast and identical,
+# never deterministic. The two lists below are empty until an expansion lane
+# declares an identical-only binding.
+IDENTICAL_ONLY_SCRIPTS=""
+IDENTICAL_ONLY_NAMES=""
 # THE EXPANSION LANES' GPU BINDINGS (lane/algos-prep, 2026-09-27), read from
 # the per-lane fragments python/mojolearn/host_surface.py merges; empty until
 # a lane declares one, and then appended to the four lists above. Never spell

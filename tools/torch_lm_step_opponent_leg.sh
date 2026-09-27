@@ -65,6 +65,8 @@
 #                  source code (the Pile's GitHub component,
 #                  tools/fetch_corpus_pile_github.sh), each verified against
 #                  its manifest. The harness checks both sha256 again.
+#                  MOJOLEARN_TORCH_LM_CORPORA (space separated) narrows the list
+#                  (tools/lm_quality_vs_torch_leg.sh passes enwik8).
 #   <column>-<corpus>  tools/torch_lm_step_opponent.py --shape target, 2
 #                  warmups then 7 timed steps, one process each under
 #                  `timeout 300` (124 is the deadline). eager_fp32 (THE ROW)
@@ -90,7 +92,7 @@ set -u
 ROOT=${MOJOLEARN_TORCH_LM_ROOT:-/root/mojolearn}
 OUT=${MOJOLEARN_TORCH_LM_OUT:-/root/gemm_leg_out/torch-lm-step}
 COLUMNS=${MOJOLEARN_TORCH_LM_COLUMNS:-eager_fp32,eager_tf32,eager_bf16,compile_fp32,compile_tf32,compile_bf16}
-CORPORA="enwik8 pile_github"
+CORPORA=${MOJOLEARN_TORCH_LM_CORPORA:-enwik8 pile_github}
 SHAPE=${MOJOLEARN_TORCH_LM_SHAPE:-target}
 WARMUP=${MOJOLEARN_TORCH_LM_WARMUP:-2}
 STEPS=${MOJOLEARN_TORCH_LM_STEPS:-7}
@@ -363,8 +365,9 @@ PY
 fi
 
 # ---- the two corpora -----------------------------------------------------------
-run corpus-enwik8 sh tools/fetch_corpus_enwik8.sh
-run corpus-pile-github sh tools/fetch_corpus_pile_github.sh
+for corpus in $CORPORA; do
+    run "corpus-$(echo "$corpus" | tr _ -)" sh "tools/fetch_corpus_$corpus.sh"
+done
 
 # ---- the columns, one process each ---------------------------------------------
 if [ -n "$PY" ]; then
