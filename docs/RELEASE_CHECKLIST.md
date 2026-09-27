@@ -167,8 +167,8 @@ gh workflow run cross-compile-check.yml --ref main -f ref=<previous release comm
 ```
 
 `MOJOLEARN_XCC_WORKFLOW_REF` names the branch whose workflow file is
-dispatched (default `main`). Measured 2026-09-27 on the 0.8.22 diff: 96 jobs
-(32 per arch), about 1 to 3 minutes each on a runner, 20 at a time.
+dispatched (default `main`; GitHub dispatches a workflow only once its file is on the default branch). Measured 2026-09-27 on the 0.8.22 diff: 96 jobs
+(32 per arch), 1 to 5 minutes each (median 2), compiler peak RSS 2.0 GB, 20 runners at a time, 19 minutes wall, all PASS; the same run with the b055fe72e potrf gate reverted failed by name on gp, kernel_methods and mixture (gfx942, both tiers).
 
 Five steps, one finish line: the file is on PyPI and installs. The longer
 runbook (`docs/PYPI_RELEASE.md`) is background for when a step refuses. They are not a longer version of
