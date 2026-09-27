@@ -19,6 +19,9 @@
 #
 # The hosts live in the mambik AWS account (profile `mambik`), us-east-1d.
 # Its org policy refuses RunInstances without `lane` and `owner` tags.
+# HARD RULE (Andrew, 2026-09-27): this tool must NEVER allocate, launch or
+# extend a Mac, and no one may add Apple hosts or hours without Andrew's
+# express permission. It only manages hosts that already exist.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 REG="${MOJOLEARN_CLOUDMAC_REG:-$HOME/mojolearn-evidence/cloudmacs.tsv}"   # name  instance  host  ip

@@ -51,11 +51,12 @@ DeviceContext (x_cnn `_Global` pattern) and add a test that calls every
 entry point at least twice in one process on GPU and CPU. Fix it before
 your next phase item.
 
-**HARD RULE (Andrew, 2026-09-27): NEVER add Macs.** No lane, tool or agent
-may allocate, launch or request a Mac (AWS EC2 Mac or any provider) for any
-reason. If Apple capacity is a bottleneck, report it to main; never act on
-it. The fleet is what exists now, and the 4 hosts added by mistake on Sep
-27 are released after their paid 24 hours.
+**HARD RULE (Andrew, 2026-09-27): NO APPLE ANYTHING WITHOUT EXPRESS PERMISSION.**
+No lane, tool or agent may add, allocate, rent, launch or extend an Apple
+machine (EC2 Mac or any provider), add Apple host-hours, or call a provider
+API to do so. Only Andrew's express, specific permission allows it. If Apple
+capacity is a bottleneck, report it; never act on it. All six current Mac
+hosts are released at their 24 h marks unless Andrew says to keep one.
 
 
 Lanes merge origin/main before every merge, so this section reaches every
