@@ -1,0 +1,13 @@
+diff --git a/x_decomp/cells.mojo b/x_decomp/cells.mojo
+index b8537db32..d04578773 100644
+--- a/x_decomp/cells.mojo
++++ b/x_decomp/cells.mojo
+@@ -97,7 +97,7 @@ def mul(a: Float32, b: Float32) -> Float32:
+ # through ftz; arm 5304_add_flush.
+ @always_inline
+ def add(a: Float32, b: Float32) -> Float32:
+-    return ftz(ftz(a) + ftz(b))
++    return a + b  # SABOTAGE 5304: subnormal operands and results kept
+ 
+ 
+ @always_inline

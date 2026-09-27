@@ -210,12 +210,23 @@ class PCA(NumericModeMixin):
     #: not: scikit-learn's meaning is the one this signature copies.
     _DENSE_SOLVERS = ("full",)
 
-    _SOLVERS = _COV_SOLVERS + _DENSE_SOLVERS
+    #: The randomized arm (lane/algos-decomp, 2026-09-27): scikit-learn's
+    #: `_fit_truncated` through `mojolearn.randomized_svd` (the decomp lane's
+    #: identical cells: a Philox Gaussian sketch, MGS2 power iterations, the
+    #: exact small SVD; IDENTITY_PATHS rows 130, 133, 134).
+    _RANDOM_SOLVERS = ("randomized",)
 
-    def __init__(self, n_components=None, *, whiten=False, svd_solver="auto"):
+    _SOLVERS = _COV_SOLVERS + _DENSE_SOLVERS + _RANDOM_SOLVERS
+
+    def __init__(self, n_components=None, *, whiten=False, svd_solver="auto", iterated_power="auto",
+                 n_oversamples=10, power_iteration_normalizer="auto", random_state=None):
         self.n_components = n_components
         self.whiten = whiten
         self.svd_solver = svd_solver
+        self.iterated_power = iterated_power
+        self.n_oversamples = n_oversamples
+        self.power_iteration_normalizer = power_iteration_normalizer
+        self.random_state = random_state
 
     def _whiten_binding(self):
         """The binding, checked for the whitened pair.
@@ -307,6 +318,8 @@ class PCA(NumericModeMixin):
             )
         if self.whiten:
             self._whiten_binding()
+        if self.svd_solver in self._RANDOM_SOLVERS:
+            return self._fit_randomized(X)
         dense = self.svd_solver in self._DENSE_SOLVERS
         if dense:
             binding = self._dense_binding()
@@ -332,7 +345,18 @@ class PCA(NumericModeMixin):
                 "substituting it here would be the substitution this class "
                 "refuses to make for the solver name itself"
             )
-        nc = _component_count(self.n_components, x.shape)
+        frac = None
+        if isinstance(self.n_components, float) and not isinstance(self.n_components, bool):
+            # scikit-learn's variance fraction (lane/algos-decomp, 2026-09-27):
+            # fit every component, keep the fewest whose cumulative explained
+            # variance ratio EXCEEDS the fraction (searchsorted side='right'),
+            # the cumulative sum in float64 on the host (sequential IEEE adds).
+            if not 0.0 < self.n_components < 1.0:
+                raise ValueError("mojolearn PCA: a float n_components must be in (0, 1)")
+            frac = float(self.n_components)
+            nc = min(x.shape)
+        else:
+            nc = _component_count(self.n_components, x.shape)
         if dense and nc > min(x.shape):
             raise ValueError("full SVD n_components cannot exceed min(n_samples, n_features)")
         self.components_ = empty((nc, x.shape[1]), "<f4")
@@ -346,6 +370,64 @@ class PCA(NumericModeMixin):
             addr(self.explained_variance_, name="explained_variance_"), addr(self.explained_variance_ratio_, name="explained_variance_ratio_"),
             addr(self.singular_values_, name="singular_values_"), [x.shape[0], x.shape[1], nc],
         ))
+        if frac is not None:
+            ratios = list(self.explained_variance_ratio_)
+            cum, keep = 0.0, len(ratios)
+            for i, r in enumerate(ratios):
+                cum += float(r)
+                if cum > frac:
+                    keep = i + 1
+                    break
+            keep = min(keep, nc)
+            ev = [float(v) for v in self.explained_variance_]
+            rest = ev[keep:]
+            tail = 0.0
+            for v in rest:
+                tail += v
+            import array as _arr
+            from ._buffer import frombytes
+            self.noise_variance_ = float(_arr.array("f", [tail / len(rest)])[0]) if rest else 0.0
+            d = x.shape[1]
+            comp = _arr.array("f")
+            comp.frombytes(self.components_.tobytes()[:4 * keep * d])
+            self.components_ = frombytes(comp.tobytes(), "<f4", (keep, d))
+            for name in ("explained_variance_", "explained_variance_ratio_", "singular_values_"):
+                setattr(self, name, frombytes(getattr(self, name).tobytes()[:4 * keep], "<f4", (keep,)))
+            nc = keep
+        self.n_components_ = nc
+        self.n_features_in_ = x.shape[1]
+        self.n_samples_ = x.shape[0]
+        if self.whiten:
+            self._validate_whiten_state()
+        return self
+
+    def _fit_randomized(self, X):
+        """svd_solver='randomized' (scikit-learn `_pca.py::_fit_truncated`):
+        the centered data through `mojolearn.randomized_svd`, then
+        svd_flip on Vt; explained variance S^2 / (n - 1), the ratio against
+        the total sample variance, the noise variance the mean of what is
+        left. random_state None means seed 0 (the Philox stream)."""
+        from ._expansion_decomp import _randomized_decompose
+        x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
+        if x.shape[0] < 2 or x.shape[1] < 2:
+            raise ValueError("mojolearn PCA requires at least 2 rows and 2 features")
+        nc = _component_count(self.n_components, x.shape)
+        if nc >= min(x.shape):
+            raise ValueError("svd_solver='randomized' needs n_components < min(n_samples, n_features)")
+        n_iter = self.iterated_power
+        if n_iter == "auto":
+            n_iter = 7 if nc < 0.1 * min(x.shape) else 4
+        got = _randomized_decompose(
+            x, nc, center=True, n_oversamples=self.n_oversamples, n_iter=n_iter,
+            power_iteration_normalizer=self.power_iteration_normalizer, random_state=self.random_state,
+            numeric_mode=self.numeric_mode_used(),
+            binding=_backend.binding("_mojolearn_x_decomp", self.numeric_mode_used()))
+        self.components_ = got["components"]
+        self.mean_ = got["mean"]
+        self.explained_variance_ = got["explained_variance"]
+        self.explained_variance_ratio_ = got["explained_variance_ratio"]
+        self.singular_values_ = got["singular_values"]
+        self.noise_variance_ = float(got["noise_variance"])
         self.n_components_ = nc
         self.n_features_in_ = x.shape[1]
         self.n_samples_ = x.shape[0]
@@ -527,13 +609,38 @@ class TruncatedSVD(NumericModeMixin):
     _BINDING = "_mojolearn_estimators"
 
     #: The two names for the ONE arm this class runs; see `PCA._SOLVERS`.
-    _ALGORITHMS = ("covariance_eigh", "jacobi")
+    _ALGORITHMS = ("covariance_eigh", "jacobi", "randomized")
 
-    def __init__(self, n_components=2, *, algorithm="covariance_eigh"):
+    def __init__(self, n_components=2, *, algorithm="covariance_eigh", n_iter=5, n_oversamples=10,
+                 power_iteration_normalizer="auto", random_state=None):
         self.n_components = n_components
         self.algorithm = algorithm
+        self.n_iter = n_iter
+        self.n_oversamples = n_oversamples
+        self.power_iteration_normalizer = power_iteration_normalizer
+        self.random_state = random_state
 
     def fit(self, X, y=None):
+        if self.algorithm == "randomized":
+            # scikit-learn `_truncated_svd.py` algorithm='randomized' through
+            # `mojolearn.randomized_svd` (lane/algos-decomp, 2026-09-27)
+            from ._expansion_decomp import _randomized_decompose
+            x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
+            if x.shape[0] < 2 or x.shape[1] < 2:
+                raise ValueError("mojolearn TruncatedSVD requires at least 2 rows and 2 features")
+            nc = _component_count(self.n_components, x.shape)
+            got = _randomized_decompose(
+                x, nc, center=False, n_oversamples=self.n_oversamples, n_iter=self.n_iter,
+                power_iteration_normalizer=self.power_iteration_normalizer, random_state=self.random_state,
+                numeric_mode=self.numeric_mode_used(),
+                binding=_backend.binding("_mojolearn_x_decomp", self.numeric_mode_used()))
+            self.components_ = got["components"]
+            self.singular_values_ = got["singular_values"]
+            self.explained_variance_ = got["explained_variance"]
+            self.explained_variance_ratio_ = got["explained_variance_ratio"]
+            self.n_components_ = nc
+            self.n_features_in_ = x.shape[1]
+            return self
         if self.algorithm not in self._ALGORITHMS:
             raise NotImplementedError(
                 f"mojolearn TruncatedSVD: algorithm={self.algorithm!r} is not "

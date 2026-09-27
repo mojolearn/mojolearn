@@ -1,0 +1,54 @@
+--- a/x_cluster/device_ops.mojo
++++ b/x_cluster/device_ops.mojo
+@@ -42,13 +42,13 @@
+ def _sqdist_kernel(a: FPtr, na: Int32, b: FPtr, nb: Int32, d: Int32, dst: FPtr):
+     var t = _tid()
+     if t < Int(na) * Int(nb):
+-        sqdist_cell(a, Int(na), b, Int(nb), Int(d), dst, t)
++        sqdist_cell[True](a, Int(na), b, Int(nb), Int(d), dst, t)
+ 
+ 
+ def _nearest_kernel(a: FPtr, na: Int32, b: FPtr, nb: Int32, d: Int32, labels: IPtr, dist: FPtr):
+     var t = _tid()
+     if t < Int(na):
+-        nearest_row(a, b, Int(nb), Int(d), labels, dist, t)
++        nearest_row[True](a, b, Int(nb), Int(d), labels, dist, t)
+ 
+ 
+ def _sqrt_kernel(x: FPtr, n: Int32):
+@@ -69,7 +69,7 @@
+ ):
+     var t = _tid()
+     if t < Int(ns):
+-        meanshift_seed(x, Int(n), Int(d), bw, stop, Int(max_iter), centers, scratch, intensity, iters, t)
++        meanshift_seed[True](x, Int(n), Int(d), bw, stop, Int(max_iter), centers, scratch, intensity, iters, t)
+ 
+ 
+ def _ap_r_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
+@@ -81,7 +81,7 @@
+ def _ap_a_kernel(r: FPtr, a: FPtr, n: Int32, damping: Float32):
+     var t = _tid()
+     if t < Int(n):
+-        ap_availability_col(r, a, Int(n), damping, t)
++        ap_availability_col[True](r, a, Int(n), damping, t)
+ 
+ 
+ def _ap_e_kernel(a: FPtr, r: FPtr, n: Int32, e: IPtr):
+@@ -93,7 +93,7 @@
+ def _gauss_q_kernel(x: FPtr, n: Int32, d: Int32, means: FPtr, pchol: FPtr, kc: Int32, dst: FPtr):
+     var t = _tid()
+     if t < Int(n) * Int(kc):
+-        gauss_q_cell(x, Int(d), means, pchol, Int(kc), dst, t)
++        gauss_q_cell[True](x, Int(d), means, pchol, Int(kc), dst, t)
+ 
+ 
+ def _resp_kernel(q: FPtr, c: FPtr, n: Int32, kc: Int32, lpn: FPtr):
+@@ -129,7 +129,7 @@
+ def _pdist_kernel(a: FPtr, na: Int32, b: FPtr, nb: Int32, d: Int32, metric: Int32, p: Float32, dst: FPtr):
+     var t = _tid()
+     if t < Int(na) * Int(nb):
+-        pdist_cell(a, Int(na), b, Int(nb), Int(d), Int(metric), p, dst, t)
++        pdist_cell[True](a, Int(na), b, Int(nb), Int(d), Int(metric), p, dst, t)
+ 
+ 
+ def _descend_kernel(x: FPtr, n: Int32, d: Int32, centers: FPtr, nodes: IPtr, labels: IPtr):

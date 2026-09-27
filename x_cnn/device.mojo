@@ -8,7 +8,9 @@ entry owns its DeviceContext and synchronizes before it returns.
 The host twin is x_cnn/host/ops_host.mojo: the same element functions in a
 loop and `gemm_oracle` for the contractions."""
 from std.gpu import block_idx, block_dim, thread_idx
+from std.ffi import _Global
 from max.gpu.host import DeviceBuffer, DeviceContext
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from gemm.checks.gemm_identical import identical_gemm
 from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN
 from metrics.checks.device_io import upload_f32, upload_i32, download_f32, download_i32
@@ -20,9 +22,37 @@ from x_cnn.ops import (
     relu_fwd_at, relu_bwd_at, add_at, bias_rows_at, softmax_xent_row_at, seq_mean, sgd_at,
     bn_stats_at, bn_eval_stats_at, bn_apply_at, bn_running_at, bn_bwd_red_at, bn_bwd_dx_at, bn_bwd_eval_dx_at,
     dropout2d_at, mul_at, spmm_at, gcn_deg_at, gcn_norm_at,
+    pad_fwd_at, pad_bwd_at, adapt_avg_fwd_at, adapt_avg_bwd_at, adapt_max_fwd_at, adapt_max_bwd_at,
+    sage_max_fwd_at, sage_max_bwd_at, l2norm_fwd_at, l2norm_bwd_at, adam_at,
 )
 
 comptime TPB = 256
+
+
+struct _CnnContext(Defaultable, Movable):
+    """ONE process-lifetime DeviceContext for every x_cnn entry. A context
+    per call exhausted Metal's per-process command queues on the M2 Pro
+    ("Failed to create Metal command queue for context") within one trainer
+    fit (memory: METAL QUEUE LIMIT IS PER-PROCESS). Storage is
+    `std.ffi._Global` (the pattern of the trees, RF and byte LM bindings),
+    one slot per numeric tier so a FAST and an IDENTICAL .so in one process
+    never share it."""
+    var ctx: Optional[DeviceContext]
+
+    def __init__(out self):
+        self.ctx = Optional[DeviceContext]()
+
+
+comptime _CTX_NAME = "MojoXCnnContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXCnnContextFast"
+comptime X_CNN_CONTEXT = _Global[StorageType=_CnnContext, name=_CTX_NAME, init_fn=_CnnContext.__init__]
+
+
+def cnn_ctx() raises -> DeviceContext:
+    """The shared context, created on first use."""
+    var slot = X_CNN_CONTEXT.get_or_create_ptr()
+    if not slot[].ctx:
+        slot[].ctx = DeviceContext()
+    return slot[].ctx.value().copy()
 
 
 def elem_kernel[f: ElemFn](a: FP, b: FP, c: FP, d: FP, q: IP, p: IP, total: Int32):
@@ -58,7 +88,7 @@ def device_gemm(
 
 
 def gemm_device(a: List[Float32], b: List[Float32], m: Int, n: Int, k: Int, op: Int) raises -> List[Float32]:
-    var ctx = DeviceContext()
+    var ctx = cnn_ctx()
     var da = upload_f32(ctx, a)
     var db = upload_f32(ctx, b)
     var dc = ctx.enqueue_create_buffer[DType.float32](m * n)
@@ -77,7 +107,7 @@ def conv2d_forward_device(
     var N = Int(prm[CP_N]); var C = Int(prm[CP_C]); var OC = Int(prm[CP_OC])
     var ckk = C * Int(prm[CP_KH]) * Int(prm[CP_KW])
     var rows = N * Int(prm[CP_OH]) * Int(prm[CP_OW])
-    var ctx = DeviceContext()
+    var ctx = cnn_ctx()
     var dx = upload_f32(ctx, x)
     var dw = upload_f32(ctx, w)
     var dbias = upload_f32(ctx, bias)
@@ -108,7 +138,7 @@ def conv2d_backward_device(
     var ckk = C * Int(prm[CP_KH]) * Int(prm[CP_KW])
     var rows = N * Int(prm[CP_OH]) * Int(prm[CP_OW])
     var nx = N * C * Int(prm[CP_H]) * Int(prm[CP_W])
-    var ctx = DeviceContext()
+    var ctx = cnn_ctx()
     var dxin = upload_f32(ctx, x)
     var dw = upload_f32(ctx, w)
     var ddout = upload_f32(ctx, dout)
@@ -159,7 +189,7 @@ def _pool_sizes(prm: List[Int32]) -> Tuple[Int, Int]:
 def maxpool2d_forward_device(x: List[Float32], prm: List[Int32], mut idx: List[Int32]) raises -> List[Float32]:
     var sizes = _pool_sizes(prm)
     var no = sizes[1]
-    var ctx = DeviceContext()
+    var ctx = cnn_ctx()
     var dx = upload_f32(ctx, x)
     var dp = upload_i32(ctx, prm)
     var out = ctx.enqueue_create_buffer[DType.float32](no)
@@ -178,7 +208,7 @@ def maxpool2d_forward_device(x: List[Float32], prm: List[Int32], mut idx: List[I
 def maxpool2d_backward_device(dout: List[Float32], idx: List[Int32], prm: List[Int32]) raises -> List[Float32]:
     var sizes = _pool_sizes(prm)
     var nx = sizes[0]
-    var ctx = DeviceContext()
+    var ctx = cnn_ctx()
     var dd = upload_f32(ctx, dout)
     var di = upload_i32(ctx, idx)
     var dp = upload_i32(ctx, prm)
@@ -196,7 +226,7 @@ def maxpool2d_backward_device(dout: List[Float32], idx: List[Int32], prm: List[I
 def avgpool2d_forward_device(x: List[Float32], prm: List[Int32]) raises -> List[Float32]:
     var sizes = _pool_sizes(prm)
     var no = sizes[1]
-    var ctx = DeviceContext()
+    var ctx = cnn_ctx()
     var dx = upload_f32(ctx, x)
     var dp = upload_i32(ctx, prm)
     var out = ctx.enqueue_create_buffer[DType.float32](no)
@@ -212,7 +242,7 @@ def avgpool2d_forward_device(x: List[Float32], prm: List[Int32]) raises -> List[
 def avgpool2d_backward_device(dout: List[Float32], prm: List[Int32]) raises -> List[Float32]:
     var sizes = _pool_sizes(prm)
     var nx = sizes[0]
-    var ctx = DeviceContext()
+    var ctx = cnn_ctx()
     var dd = upload_f32(ctx, dout)
     var dp = upload_i32(ctx, prm)
     var gx = ctx.enqueue_create_buffer[DType.float32](nx)
@@ -227,7 +257,7 @@ def avgpool2d_backward_device(dout: List[Float32], prm: List[Int32]) raises -> L
 
 def map2_device[f: ElemFn](a: List[Float32], b: List[Float32], n_out: Int, prm: List[Int32]) raises -> List[Float32]:
     """dst[i] = f(a, b) for i < n_out (slots a, b, dst)."""
-    var ctx = DeviceContext()
+    var ctx = cnn_ctx()
     var da = upload_f32(ctx, a)
     var db = upload_f32(ctx, b)
     var dp = upload_i32(ctx, prm)
@@ -259,7 +289,7 @@ def add_device(a: List[Float32], b: List[Float32]) raises -> List[Float32]:
 
 def linear_forward_device(x: List[Float32], w: List[Float32], bias: List[Float32], n: Int, d_in: Int, d_out: Int) raises -> List[Float32]:
     """y = x W^T + b: the pinned GEMM NT, then one add per element."""
-    var ctx = DeviceContext()
+    var ctx = cnn_ctx()
     var dx = upload_f32(ctx, x)
     var dw = upload_f32(ctx, w)
     var db = upload_f32(ctx, bias)
@@ -283,7 +313,7 @@ def linear_forward_device(x: List[Float32], w: List[Float32], bias: List[Float32
 def linear_backward_device(x: List[Float32], w: List[Float32], g: List[Float32], n: Int, d_in: Int, d_out: Int) raises -> List[Float32]:
     """[dx | dW | db]: dW = G^T X and db = G^T 1 (GEMM TN over the rows,
     the pinned fold), dx = G W (GEMM NN)."""
-    var ctx = DeviceContext()
+    var ctx = cnn_ctx()
     var dx = upload_f32(ctx, x)
     var dw = upload_f32(ctx, w)
     var dg = upload_f32(ctx, g)
@@ -313,7 +343,7 @@ def linear_backward_device(x: List[Float32], w: List[Float32], g: List[Float32],
 
 def softmax_xent_device(logits: List[Float32], labels: List[Int32], n: Int, k: Int) raises -> List[Float32]:
     """[grad (n*k) | proba (n*k) | mean loss (1)]."""
-    var ctx = DeviceContext()
+    var ctx = cnn_ctx()
     var dl = upload_f32(ctx, logits)
     var dy = upload_i32(ctx, labels)
     var prm: List[Int32] = [Int32(n), Int32(k)]
@@ -342,7 +372,7 @@ def softmax_xent_device(logits: List[Float32], labels: List[Int32], n: Int, k: I
 def sgd_device(w: List[Float32], g: List[Float32], v: List[Float32], hyper: List[Float32]) raises -> List[Float32]:
     """[w' | v']."""
     var n = len(w)
-    var ctx = DeviceContext()
+    var ctx = cnn_ctx()
     var dw = upload_f32(ctx, w)
     var dg = upload_f32(ctx, g)
     var dv = upload_f32(ctx, v)
@@ -368,7 +398,7 @@ def batchnorm_forward_device(
     """[y | running' | aux'] (aux carries the statistics the backward reads)."""
     var total = len(x)
     var C = Int(prm[1])
-    var ctx = DeviceContext()
+    var ctx = cnn_ctx()
     var dx = upload_f32(ctx, x)
     var dr = upload_f32(ctx, running)
     var da = upload_f32(ctx, aux)
@@ -401,7 +431,7 @@ def batchnorm_backward_device(
     """[dx | aux'] (aux' carries sum_g = dbeta and sum_gx = dgamma)."""
     var total = len(x)
     var C = Int(prm[1])
-    var ctx = DeviceContext()
+    var ctx = cnn_ctx()
     var dx = upload_f32(ctx, x)
     var dg = upload_f32(ctx, g)
     var da = upload_f32(ctx, aux)
@@ -427,7 +457,7 @@ def batchnorm_backward_device(
 def dropout2d_device(x: List[Float32], prm: List[Int32], hyper: List[Float32]) raises -> List[Float32]:
     """[y | mask]."""
     var n = len(x)
-    var ctx = DeviceContext()
+    var ctx = cnn_ctx()
     var dx = upload_f32(ctx, x)
     var dp = upload_i32(ctx, prm)
     var dh = upload_f32(ctx, hyper)
@@ -453,7 +483,7 @@ def mul_device(a: List[Float32], b: List[Float32]) raises -> List[Float32]:
 
 def spmm_device(vals: List[Float32], h: List[Float32], csr: List[Int32], prm: List[Int32]) raises -> List[Float32]:
     var total = Int(prm[0]) * Int(prm[1])
-    var ctx = DeviceContext()
+    var ctx = cnn_ctx()
     var dv = upload_f32(ctx, vals)
     var dh = upload_f32(ctx, h)
     var dq = upload_i32(ctx, csr)
@@ -473,7 +503,7 @@ def spmm_device(vals: List[Float32], h: List[Float32], csr: List[Int32], prm: Li
 def gcn_norm_device(w: List[Float32], csr: List[Int32], prm: List[Int32]) raises -> List[Float32]:
     var n = Int(prm[0])
     var nnz = Int(prm[2])
-    var ctx = DeviceContext()
+    var ctx = cnn_ctx()
     var dw = upload_f32(ctx, w)
     var dq = upload_i32(ctx, csr)
     var dp = upload_i32(ctx, prm)
@@ -489,3 +519,106 @@ def gcn_norm_device(w: List[Float32], csr: List[Int32], prm: List[Int32]) raises
     _ = vals^
     _ = ctx^
     return result^
+
+
+def pad2d_forward_device(x: List[Float32], prm: List[Int32]) raises -> List[Float32]:
+    var nc = Int(prm[0]) * Int(prm[1])
+    var n_out = nc * (Int(prm[2]) + Int(prm[4]) + Int(prm[5])) * (Int(prm[3]) + Int(prm[6]) + Int(prm[7]))
+    return map2_device[pad_fwd_at](x, x, n_out, prm)
+
+
+def pad2d_backward_device(g: List[Float32], prm: List[Int32]) raises -> List[Float32]:
+    var n_out = Int(prm[0]) * Int(prm[1]) * Int(prm[2]) * Int(prm[3])
+    return map2_device[pad_bwd_at](g, g, n_out, prm)
+
+
+def adaptive_device[f: ElemFn](a: List[Float32], idx: List[Int32], n_out: Int, prm: List[Int32], mut idx_out: List[Int32]) raises -> List[Float32]:
+    """One adaptive-pool element function over n_out outputs; `idx` in, `idx_out` out (max pooling)."""
+    var ctx = cnn_ctx()
+    var da = upload_f32(ctx, a)
+    var di = upload_i32(ctx, idx)
+    var dp = upload_i32(ctx, prm)
+    var out = ctx.enqueue_create_buffer[DType.float32](n_out)
+    launch[f](ctx, fp(da), fp(da), fp(out), fp(out), ip(di), ip(dp), n_out)
+    var result = download_f32(ctx, out, n_out)
+    idx_out = download_i32(ctx, di, len(idx))
+    _ = da^
+    _ = di^
+    _ = dp^
+    _ = out^
+    _ = ctx^
+    return result^
+
+
+def adaptive_pool_device(x: List[Float32], idx: List[Int32], prm: List[Int32], kind: Int, mut idx_out: List[Int32]) raises -> List[Float32]:
+    """kind 0 avg forward, 1 avg backward, 2 max forward (idx_out = winners), 3 max backward (idx = winners)."""
+    var nc = Int(prm[0]) * Int(prm[1])
+    var nin = nc * Int(prm[2]) * Int(prm[3])
+    var nout = nc * Int(prm[4]) * Int(prm[5])
+    if kind == 0:
+        return adaptive_device[adapt_avg_fwd_at](x, idx, nout, prm, idx_out)
+    if kind == 1:
+        return adaptive_device[adapt_avg_bwd_at](x, idx, nin, prm, idx_out)
+    if kind == 2:
+        var slots = List[Int32](length=nout, fill=Int32(0))
+        return adaptive_device[adapt_max_fwd_at](x, slots, nout, prm, idx_out)
+    return adaptive_device[adapt_max_bwd_at](x, idx, nin, prm, idx_out)
+
+
+def graph4_device[f: ElemFn](a: List[Float32], b: List[Float32], aux: List[Float32], csr: List[Int32], prm: List[Int32], total: Int, n_out: Int) raises -> List[Float32]:
+    """[dst (n_out) | aux'] of one element function over `total` items (slots a, b, aux, dst)."""
+    var ctx = cnn_ctx()
+    var da = upload_f32(ctx, a)
+    var db = upload_f32(ctx, b)
+    var dx = upload_f32(ctx, aux)
+    var dq = upload_i32(ctx, csr)
+    var dp = upload_i32(ctx, prm)
+    var out = ctx.enqueue_create_buffer[DType.float32](n_out)
+    launch[f](ctx, fp(da), fp(db), fp(dx), fp(out), ip(dq), ip(dp), total)
+    var result = download_f32(ctx, out, n_out)
+    var raux = download_f32(ctx, dx, len(aux))
+    _ = da^
+    _ = db^
+    _ = dx^
+    _ = dq^
+    _ = dp^
+    _ = out^
+    _ = ctx^
+    result.extend(raux^)
+    return result^
+
+
+def graph_op_device(a: List[Float32], b: List[Float32], aux: List[Float32], csr: List[Int32], prm: List[Int32], kind: Int) raises -> List[Float32]:
+    """kind 0 sage max forward, 1 sage max backward, 2 l2 normalize forward, 3 its backward; [dst | aux']."""
+    var n = Int(prm[0])
+    var F = Int(prm[1])
+    if kind == 0:
+        return graph4_device[sage_max_fwd_at](a, b, aux, csr, prm, n * F, n * F)
+    if kind == 1:
+        return graph4_device[sage_max_bwd_at](a, b, aux, csr, prm, n * F, n * F)
+    if kind == 2:
+        return graph4_device[l2norm_fwd_at](a, b, aux, csr, prm, n, n * F)
+    return graph4_device[l2norm_bwd_at](a, b, aux, csr, prm, n, n * F)
+
+
+def adam_device(w: List[Float32], g: List[Float32], mv: List[Float32], hyper: List[Float32]) raises -> List[Float32]:
+    """[w' | mv']."""
+    var n = len(w)
+    var ctx = cnn_ctx()
+    var dw = upload_f32(ctx, w)
+    var dg = upload_f32(ctx, g)
+    var dm = upload_f32(ctx, mv)
+    var dh = upload_f32(ctx, hyper)
+    var prm: List[Int32] = [Int32(n)]
+    var dp = upload_i32(ctx, prm)
+    launch[adam_at](ctx, fp(dw), fp(dg), fp(dm), fp(dh), ip(dp), ip(dp), n)
+    var rw = download_f32(ctx, dw, n)
+    var rm = download_f32(ctx, dm, 2 * n)
+    _ = dw^
+    _ = dg^
+    _ = dm^
+    _ = dh^
+    _ = dp^
+    _ = ctx^
+    rw.extend(rm^)
+    return rw^

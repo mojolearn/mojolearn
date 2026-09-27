@@ -1,0 +1,11 @@
+--- a/x_cluster/bodies.mojo
++++ b/x_cluster/bodies.mojo
+@@ -221,7 +221,7 @@
+         v = identical_sqrt(sq_dist_rows[REV](a, i, b, j, d))
+     elif metric == METRIC_MANHATTAN:
+         for ff in range(d):
+-            var f = d - 1 - ff if REV else ff
++            var f = ff if REV else d - 1 - ff
+             v = ftz(v + abs(ftz(ftz(a[i * d + f]) - ftz(b[j * d + f]))))
+     elif metric == METRIC_CHEBYSHEV:
+         for f in range(d):

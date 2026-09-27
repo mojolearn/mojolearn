@@ -84,6 +84,16 @@ comptime OP_LAMB_APPLY = 42
 comptime OP_LN_FWD = 43
 comptime OP_LN_BWD_X = 44
 comptime OP_LN_BWD_W = 45
+comptime OP_THETA = 46
+comptime OP_CROSTON = 47
+comptime OP_ETS = 48
+comptime OP_GARCH = 49
+comptime OP_PROPHET_FEATURES = 50
+comptime OP_PROPHET_FIT = 51
+comptime OP_PROPHET_PREDICT = 52
+comptime OP_MOE_ROUTE = 53
+comptime OP_MOE_HIDDEN = 54
+comptime OP_MOE_OUT = 55
 
 # ------------------------------------------------------------------ cells
 comptime CELL_RNN_TANH = 0

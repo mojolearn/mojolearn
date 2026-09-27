@@ -1,0 +1,12 @@
+--- a/x_linear/ops.mojo
++++ b/x_linear/ops.mojo
+@@ -179,7 +179,8 @@
+     inner sum k ascending, products rounded on their own."""
+     for j in range(m):
+         var s = ld(a, aoff + j * m + j)
+-        for k in range(j):
++        for kk in range(j):
++            var k = j - 1 - kk  # SABOTAGE 5002
+             var l = ld(a, aoff + j * m + k)
+             s = fs(s, fm(l, l))
+         if not (s > 0):

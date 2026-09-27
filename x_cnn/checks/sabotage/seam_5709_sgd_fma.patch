@@ -1,0 +1,11 @@
+--- a/x_cnn/ops.mojo	2026-09-27 13:40:43
++++ b/x_cnn/ops.mojo	2026-09-27 13:40:43
+@@ -520,7 +520,7 @@
+             vi = d  # torch: the first step's buffer is a clone of d, undamped
+         else:
+             var dd = d if damp == Float32(0) else ftz(identical_mul(ftz(Float32(1) - damp), d))
+-            vi = ftz(ftz(identical_mul(mom, ftz(v.unsafe_load(i)))) + dd)
++            vi = ftz(fma(mom, ftz(v.unsafe_load(i)), dd))
+         v.unsafe_store(i, canon(vi))
+         if nesterov:
+             vi = ftz(d + ftz(identical_mul(mom, vi)))

@@ -4,24 +4,86 @@ Lanes merge origin/main before every merge, so this section reaches every
 worktree. The orchestrator changes lane instructions HERE instead of
 messaging lanes. Newest items are at the top.
 
+0000. **Fixture RNG and scaffolding are shared (lane consolidate, main
+   4618ca187).** New check and binding code uses checks/fixture_rng.mojo,
+   checks/scaffold.mojo and the binding prelude (checks/binding_prelude.mojo);
+   never add another copy of those helpers. `pixi run check-fixture-rng`
+   (in the CPU gate) fails on a NEW fixture-RNG definition
+   (`tools/fixture_rng_census.py`) and on any existing copy that differs
+   from its canonical behavior bit for bit.
+0000a. **Commit and push your branch at every meaningful step, not only at
+   merges (Andrew, 2026-09-27, after the weekly usage limit killed every
+   agent mid-work).** Commit WIP to your own branch (`lane/<name>`) and
+   `git push origin HEAD` after each working edit, each passing check and
+   before any long pod run. Commits on your branch are cheap. Work that
+   exists only on disk is at risk. On restart, also look for
+   `refs/wip/<lane>/*` backups (`git fetch origin 'refs/wip/*:refs/wip/*'`),
+   and fold anything useful into your branch. The orchestrator also
+   snapshots every worktree's uncommitted work to `refs/wip/` periodically.
+   **Owed from the 2026-09-27 stop:** Apple and AMD reference columns for
+   `byte-lm-host-train` (revision weight-decay-default-0.01-1), recorded
+   with identity_break on each.
+000. **Re-prove seam arms ONCE on the fixed lane check (main 02b63f107).**
+   Before 3084ca09c, a sabotage arm that FAILED TO BUILD counted as a bite.
+   If your lane recorded `--pass 2` seam bites before 02b63f107, re-run ONLY
+   your seam arms (the `.checks` patches, not the clean lane runs) once on
+   your pod with the fixed tool, and record the result in your progress
+   file. A BROKEN ARM means fix that patch, then resubmit only the affected
+   lanes to the stewards. A lane that passes this rerun is done with it:
+   never repeat it.
+00. **End your session at every checkpoint (saves tokens; Andrew,
+   2026-09-27).** The checkpoints are:
+   - each phase merged (ONE PHASE PER SESSION, Andrew 2026-09-27): (1) proof,
+     (2) option parity, (3) FAST GPU speed, (4) IDENTICAL GPU speed,
+     (5) CPU speed. Finish a phase, merge, update the progress file, STOP.
+   - or roughly every 10 merged items
+   - or whenever your conversation has grown long
+   At a checkpoint: make `docs/lanes/progress/<lane>.md` say exactly where
+   you are and what comes next, merge, then STOP with a short report. Don't
+   run `dev_pod.sh down`; your pods stay up. The orchestrator relaunches a
+   fresh agent for your lane immediately, and it continues from the
+   progress file.
+   **A new session trusts the progress file.** Never re-run a check the
+   file records as passed. Only check what you change next.
 0. **AMD boxes are live (main 6c9572e4e):** `tools/dev_pod.sh up <lane> 240 --vendor amd`
    (state key `<lane>-amd`; RunPod MI300X first, Hot Aisle 2x MI300X
    fallback). Grab one when you enter pass 2 and hold it. The lane check now
    builds every base binding itself, and `.checks` takes `<driver>\t<patch>`
-   pairs, enforced with `--pass 2`. Before EVERY merge, run
-   `tools/test_lane_select.py` AND `python/mojolearn/tests/test_host_surface.py`
-   on your pod after merging origin/main; both must pass.
+   pairs, enforced with `--pass 2`. **Check only what your change touches, once (Andrew, 2026-09-27):**
+   - The lane check runs ONLY on the lanes your diff affects:
+     `python3 tools/lane_select.py --changed-since origin/main`. Never
+     re-run lanes your change can't reach.
+   - `python/mojolearn/tests/test_host_surface.py` (under a second) runs
+     before every merge.
+   - `tools/test_lane_select.py` (about 15 minutes) runs ONLY when your diff
+     can affect it: files under `tools/identity_lanes/`,
+     `python/mojolearn/_surface_*.py`, `_expansion_*.py`,
+     `tools/classical_host_lanes/`, `tools/lane_select.py` or
+     `host_surface.py`, or a Mojo file added, deleted or renamed, or whose
+     `from`/`import` lines changed. Otherwise skip it.
 0a. **AMD boxes are allocated for you (2026-09-27).** The orchestrator keeps
    one Hot Aisle MI300X per algorithm lane and renews every dev box hourly.
    If `tools/dev_pod.sh list` shows `<lane>-amd`, that box is yours: use it
    with `--vendor amd` on sync/run/extend. Don't request a second one.
-1. **Order per lane:** (a) every algorithm in the lane table and Additions
-   (PASS 1); (b) proof on every column, holding an AMD box (PASS 2 items
-   1-2); (c) **option parity** (item 2 below); (d) **GPU speed**, IDENTICAL
-   and FAST, on NVIDIA, AMD and Apple; (e) **CPU speed, LAST** (Andrew,
-   2026-09-27): threads, vectorization and cache blocking of the CPU host
-   path, after all GPU work is done. Every change is re-proven bitwise on
-   every column.
+   A `<lane>-amd` box may be a GPU slot on a shared 8x MI300X host
+   (`tools/dev_pod.sh host status`): use only sync/run/extend with `--vendor
+   amd`, never touch other `/root/mojolearn-*` dirs or GPUs on it. Until a lane
+   has its own AMD box, it submits AMD identity checks to the `do-amd` steward:
+   `tools/apple_steward.py submit` ships identity requests there too while
+   `tools/do_amd_steward.sh` has it up (push the commit to origin first), and
+   a merge then needs m2pro PASS AND do-amd PASS (`apple_steward.py status`).
+1. **Order per lane, one phase per session:**
+   - (a) every algorithm in the lane table and Additions (PASS 1)
+   - (b) **proof** on every column (per-seam, `--pass 2`, both stewards)
+   - (c) **option parity** (item 2)
+   - (d) **FAST GPU speed:** a faster schedule, bits may differ, quality
+     never (5+ seeds, 2+ datasets vs the reference); NVIDIA, AMD, Apple
+   - (e) **IDENTICAL GPU speed:** faster with the SAME bits, re-proven
+     bitwise on every column; NVIDIA, AMD, Apple
+   - (f) **CPU speed, LAST:** threads, vectorization and cache blocking of
+     the CPU host path, re-proven bitwise
+   Each of (b)-(f) is its own session: finish it, merge, STOP. The
+   orchestrator relaunches you for the next phase.
 1b. **Done means ALL of this, per algorithm (Andrew, 2026-09-27):**
    - **Both modes work:** IDENTICAL (bitwise across every column) and FAST
      (a faster schedule, allowed to differ in bits, never in quality: a
@@ -621,3 +683,33 @@ speed wave. It is written here so the target is on the record and so no
 lane in phases 1 and 2 designs a host kernel that cannot be parallelized
 later (keep the fold shape explicit; never bake a sequential order into a
 seam that a pinned tree would also satisfy).
+
+---
+
+# CONSOLIDATION PASS (Andrew, 2026-09-27)
+
+Measured: the numeric seams are NOT duplicated. Every identity helper lives
+once, except `pinned_mul` (the dedupe lane) and the ledger's row-20 twins
+(`pinned_block_sum`, `twiddle_in`). The duplication is in scaffolding. The
+one piece that matters is the **fixture RNG**: about 80 copies of `_mix`,
+`splitmix`, `_splitmix`, `_u01` and `_hashed` generate the data every check
+runs on. If one copy differs, a cross-lane or cross-vendor comparison
+silently compares fixtures instead of kernels.
+
+**Now (conflict-free: new files only):** lane `consolidate` adds
+`checks/fixture_rng.mojo` and `checks/scaffold.mojo` (grid, hash printing,
+upload/download, pointer helpers, `run_case`/`card_path` shape) plus a
+binding prelude. It also adds a gate proving every existing fixture-RNG copy
+agrees bit for bit with the canonical one over a hashed input set. After
+that merges, CURRENT DIRECTIVES tells lanes to use these in all new code.
+
+**After the lanes quiet (on its own branch, merging main regularly, landing
+in one merge):**
+1. Delete the fixture-RNG copies. The gate ran first, so this is bit-inert.
+2. Migrate the check and binding scaffolding to the shared files.
+3. Split `tools/identity_break.py` (12,878 lines) into per-family fragments,
+   using the prep's mechanism.
+4. Rename the `x_` directories once their lanes are certified.
+
+**Never:** split the big certified kernel files (fused attention, the
+identical GEMM). One file per contract is deliberate.

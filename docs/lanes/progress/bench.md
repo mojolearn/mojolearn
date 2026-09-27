@@ -7,17 +7,18 @@ new algorithm, measure nothing. Worktree `~/mojolearn-wt/algos-bench`, branch
 ## Where it stands
 
 - NEW family `algos` (`tools/bench_board_algos.py`, wired into
-  `tools/bench_board.py`, in the default families): 156 algorithm lanes, 295
+  `tools/bench_board.py`, in the default families): 162 algorithm lanes, 303
   races (taxi + Istella-S, or the lane's own data: text, taxi-hourly,
-  taxi-zones, synthetic). Before: 93 races on every vendor. After: 388 races
-  (Apple 1,704 fit cells, NVIDIA 1,496, AMD 1,343). Merge 1 (861bd78ea): 375
-  races; merge 2 aligned the board to the classes the lanes exported
-  (solve/lstsq/randomized_svd, LSTM/GRU/RNN Classifier/Regressor, AutoARIMA
-  search/fit, STL/VAR statsmodels shapes, Conv forward/backward/set_weights,
-  explainers, DARTRegressor, PLSCanonical, SelectKBest/RFE support); 207 of
-  the 295 races find their class in the source tree at that merge. The existing
-  93 races' plan lines are unchanged (dry-run diff before/after, evidence
-  `before_*.txt` / `after_*.txt`).
+  taxi-zones, synthetic). Before: 93 races on every vendor. After: 396 races
+  (Apple 1,748 fit cells, NVIDIA 1,540, AMD 1,379). Merges: 1 (861bd78ea) 375
+  races; 2 (b3d708c85) 388, the board aligned to the classes the lanes
+  exported; 3: 396, races for MaxPool1d/AvgPool1d/BatchNorm1d/CNNClassifier/
+  ClassicalMDS/MiniBatchDictionaryLearning, `mojolearn.refine` in the refine
+  race, and the cuVS host-copy fix (`classical_two_datasets._to_host` read a
+  pylibraft device_ndarray as garbage: every cuvs-gpu recall, the classical2
+  `ivf` lane's included, read ~0; now copy_to_host). 288 of 303 races find
+  their class in the source tree at merge 3. The existing 93 races' plan is
+  unchanged at every merge (`before_*.txt` vs `after_existing_*.txt`).
 - Our arms on every algos race: `ours` (IDENTICAL), `ours-fast` (Apple),
   `ours-cpu`. A class the installed wheel does not export reads
   `SKIPPED: not built yet` (worker event `skipped`, cell status
@@ -41,10 +42,78 @@ new algorithm, measure nothing. Worktree `~/mojolearn-wt/algos-bench`, branch
   2,000-row Istella (collapsed / duplicate rows); cuML AutoARIMA exceeded the
   smoke's 900 s round cap.
 
+- `tools/test_lane_select.py` on the pod before merge 3: 59 pass, 1 fails
+  (`test_the_wider_mojo_walk_did_not_widen_the_narrow_answers`:
+  cluster/host/kmeans_oracle.mojo answers 54 lanes, not 47). Not this lane:
+  this branch differs from origin/main only in the three bench files; told
+  main.
+
+- Merge 4: graph races on the dense-adjacency PageRank / connected_components
+  / Louvain (20,000-node graph), LayerNorm through layer_norm_forward/backward.
+  Pre-merge on the pod: bench tests 96 pass; test_host_surface (run with a
+  stub `mojolearn` package, no binaries on this pod) 192 pass, 4 fail in
+  x_decomp / x_trees manifests and trees-dt-clf pending (not bench files);
+  told main.
+
+- Session 2, merge 5: the forecast races call the classes as exported
+  (statsforecast's shape: `Cls(**params).fit(Y).predict(h)["mean"]`; AutoARIMA
+  keeps cuML's `forecast(h)`). theta -> `Theta(season_length=24,
+  decomposition_type="multiplicative")`; croston -> `CrostonClassic`;
+  damped-ets -> `ETS(season_length=1, model="AAN", damped=True)` with every
+  arm on the non-seasonal damped model (ours refuses seasonal ETS; statsforecast
+  AutoETS(model="AAN", damped=True), statsmodels ExponentialSmoothing(
+  trend="add", damped_trend=True, seasonal=None)). ivf-filter -> `IVFPQIndex.
+  search(filter=)` (IVFIndex has no filter) against faiss IndexIVFPQ +
+  IDSelectorBatch; cuVS dropped from that race by name (its Python IVF-PQ
+  search takes no filter, only IVF-Flat/CAGRA/brute force do). Plan: 396 races,
+  Apple 1,748 fit cells, NVIDIA 1,538, AMD 1,379; the 93 existing races' dry
+  run is byte-identical on apple, nvidia and amd (`drydiff.sh`,
+  `drydiff_s2m1.log`). Plumbing smoke with the bindings built on the pod
+  (A40, `smoke_s2_ours.log`, `smoke_s2_rapids.log`): every ours / ours-cpu /
+  statsforecast / statsmodels / faiss arm of the four races ran; ours-cpu
+  bits equal ours on all. Lane check on the pod: sequence-theta,
+  sequence-croston, sequence-ets, x-ann-filter AGREE.
+  GARCH (merged 5baf7a3f3): the race calls arch's shape as exported,
+  `GARCH(p=1, q=1, mean="Constant", dist="normal").fit(Y, horizon=h)`,
+  `.forecast(h)`, `.loglikelihood_`; smoke `smoke_s2_garch.log` (ours,
+  ours-cpu bits equal, arch-cpu all ran; sequence-garch AGREE on the pod).
+  On the merged tree (main 3a7d5e185): bench tests 62 pass, test_host_surface
+  196 pass; dry run of the 93 existing races byte-identical on apple, nvidia,
+  amd (`drydiff_s2m5.log`). test_lane_select skipped per CURRENT DIRECTIVES
+  item 0 (bench-only diff); last run: the single kmeans_oracle 54 vs 47
+  failure of merge 3, not bench.
+- Session 3, merge 6: the `prophet` and `moe` races call the classes as
+  exported: `ProphetForecaster(...).fit(ds, Y).predict(future ds)` (ds hourly
+  from 2024-01-01, max_iter=10000 = prophet's Stan iter) vs prophet-cpu;
+  `MoEBlock(hidden_size, intermediate_size, num_experts, top_k,
+  norm_topk_prob)` loading torch's weights in HF's fused layout, forward only
+  on every arm, vs the six torch arms. Dry run of the 93 existing races
+  byte-identical on apple, nvidia, amd (`drydiff_s3.log`). Lane check on the
+  pod: sequence-prophet, sequence-moe AGREE (`lanecheck_s3.log`). Plumbing
+  smoke (`smoke_s3.log`; OURS=/root/ourspy for prophet, OURS=/root/ourstorchpy
+  and THEIRS=/usr/bin/python3 for moe, since /root/opp has no torch): every
+  arm of both races ran, ours-cpu bits equal ours. On the merged tree: bench
+  tests 62 pass; test_host_surface 196 pass after fixing main's
+  byte-lm-host-train revision (72a64f8b9 named no size; now in
+  NON_SIZE_REVISIONS of tools/identity_break.py). test_lane_select skipped
+  (bench-only diff plus identity_break.py, not a trigger path).
+- Every algos class is now in the source tree; no race is guessed.
+- damped-ets stays non-seasonal on every arm: main's ETS still refuses
+  seasonal components (`_x_sequence_ets.py`). When sequence adds them, restore
+  `season_length=24` with a seasonal model on ours, statsforecast AutoETS and
+  statsmodels ExponentialSmoothing(seasonal="add", seasonal_periods=24).
+- Pod note: run `tools/dev_pod.sh sync bench ~/mojolearn-wt/algos-bench` with
+  `MOJOLEARN_DEVPOD_ALLOW_SELF=1` when running the tool from this worktree.
+
 ## Next
 
-- As lanes add classes or options (option parity), align `LANES` params and
-  the ours adapters; re-read CURRENT DIRECTIVES in the plan after each merge.
+- Option parity (item 3 of the bench task): lanes prep and cnn merged
+  option parity (b2de7bf0e, 0e2798963) and more lanes follow. Next session:
+  for each lane's option-parity merge, read the new constructor options and
+  set in `LANES` only those that make the race's settings match the
+  opponent's (defaults that differ between ours and theirs), one merge per
+  batch; keep the 93 existing races' dry run byte-identical and smoke only
+  the changed races.
 
 ## Adding a class name or contract
 

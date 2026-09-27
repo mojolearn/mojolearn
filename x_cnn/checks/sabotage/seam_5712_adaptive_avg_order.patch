@@ -1,0 +1,12 @@
+--- a/x_cnn/ops.mojo	2026-09-27 13:05:19
++++ b/x_cnn/ops.mojo	2026-09-27 13:05:19
+@@ -846,7 +846,8 @@
+     var h = t % H
+     var nc = t // H
+     var acc = Float32(0)
+-    for oh in range(OH):
++    for a in range(OH):
++        var oh = OH - 1 - a
+         var hs = _astart(oh, OH, H); var he = _aend(oh, OH, H)
+         if h < hs or h >= he:
+             continue

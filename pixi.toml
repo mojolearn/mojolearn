@@ -225,6 +225,15 @@ check-bootstrap = "mojo run -I . checks/bootstrap_check.mojo"
 check-copy-histograms = "mojo run -I . checks/copy_histograms_check.mojo"
 check-early-stop = "mojo run -I . checks/early_stop_check.mojo"
 check-gram-splitk = "mojo run -I . checks/gram_splitk_check.mojo"
+# The fixture-RNG gate (lane consolidate, 2026-09-27): the census fails on a
+# NEW copy of a fixture-RNG function (tools/fixture_rng_census.py, with its
+# own planted-copy self test), then every existing copy must equal its
+# canonical counterpart in checks/fixture_rng.mojo bit for bit, after a
+# planted one-constant variant has been shown to fail. Runs in the CPU gate.
+check-fixture-rng = "python3 tools/fixture_rng_census.py --self-test && python3 tools/fixture_rng_census.py && mojo run -I . checks/fixture_rng_gate.mojo"
+# The same gate with the planted variant standing in for splitmix64: MUST fail.
+check-fixture-rng-planted = "mojo run -D FIXTURE_RNG_PLANT=1 -I . checks/fixture_rng_gate.mojo"
+check-scaffold = "mojo run -I . checks/scaffold_check.mojo"
 check-hardware-matrix = "mojo run -I . checks/hardware_matrix_check.mojo"
 check-sub-byte-layout = "tools/with_build_lock.sh pixi run mojo run -I . gbdt/methods/greedy_subsets_searcher/kernel/sub_byte_layout_gate.mojo"
 check-min-child-hessian = "sh tools/check_min_child_hessian.sh"

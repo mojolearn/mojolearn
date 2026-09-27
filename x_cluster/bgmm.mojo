@@ -22,6 +22,7 @@ from std.math import sqrt
 from checks.numerics import identical_log64, identical_mul64
 from cluster.impl.kmeans_params import INIT_KMEANS_PLUS_PLUS
 from x_cluster.bodies import SplitMix64
+from x_cluster.common import greedy_kmeans_pp_indices
 from x_cluster.ops import ClusterOps
 
 comptime LOG2 = 0.6931471805599453
@@ -95,6 +96,17 @@ struct BgmmPriors(Copyable, Movable):
     var mean_prior: List[Float64]
     var dofp: Float64
     var cov_prior: List[Float64]
+    var cov_type: Int
+    var variational: Bool
+    """False: the PLAIN EM GaussianMixture (sklearn `_gaussian_mixture.py`)
+    on the same machinery: weights nk / n, means xk, the covariances by type,
+    the lower bound the mean log-likelihood of the E-step. The priors above
+    are then unused.
+
+    cov_type: 0 full, 1 tied, 2 diag, 3 spherical. The state always holds FULL d x d
+    matrices per component (diag embedded, spherical as s * I, tied repeated),
+    so one Cholesky and one device Mahalanobis kernel serve every type; the
+    zeros off the diagonal add exactly nothing."""
 
 
 def _precision_cholesky(cov: List[Float64], kc: Int, d: Int) raises -> List[Float64]:
@@ -127,13 +139,17 @@ def _precision_cholesky(cov: List[Float64], kc: Int, d: Int) raises -> List[Floa
 
 
 def _m_step_host(
-    pr: BgmmPriors, reg_nk: List[Float32], xk32: List[Float32], sk32: List[Float32], mut st: BgmmState
+    pr: BgmmPriors, reg_nk: List[Float32], xk32: List[Float32], sk32: List[Float32], mut st: BgmmState,
+    reg: Float64 = 0,
 ) raises:
     var kc = pr.kc
     var d = pr.d
     st.nk = List[Float64](capacity=kc)
     for k in range(kc):
         st.nk.append(Float64(reg_nk[k]))
+    if not pr.variational:
+        _m_step_plain(pr, xk32, sk32, st, reg)
+        return
     # weights
     st.wc0 = List[Float64](capacity=kc)
     st.wc1 = List[Float64](capacity=kc)
@@ -160,20 +176,125 @@ def _m_step_host(
             st.means.append(
                 (identical_mul64(pr.mpp, pr.mean_prior[a]) + identical_mul64(st.nk[k], Float64(xk32[k * d + a]))) / mp
             )
-    # Wishart, full
+    # Wishart: sklearn `_estimate_wishart_{full,tied,diag,spherical}`
     st.dof = List[Float64](capacity=kc)
     st.cov = List[Float64](length=kc * d * d, fill=0)
-    for k in range(kc):
-        var dof = pr.dofp + st.nk[k]
-        st.dof.append(dof)
-        var coef = identical_mul64(st.nk[k], pr.mpp) / st.mean_prec[k]
+    var fd = Float64(d)
+    if pr.cov_type == 0:
+        for k in range(kc):
+            var dof = pr.dofp + st.nk[k]
+            st.dof.append(dof)
+            var coef = identical_mul64(st.nk[k], pr.mpp) / st.mean_prec[k]
+            for a in range(d):
+                var da = Float64(xk32[k * d + a]) - pr.mean_prior[a]
+                for b in range(d):
+                    var db = Float64(xk32[k * d + b]) - pr.mean_prior[b]
+                    var v = pr.cov_prior[a * d + b] + identical_mul64(st.nk[k], Float64(sk32[k * d * d + a * d + b]))
+                    v = v + identical_mul64(coef, identical_mul64(da, db))
+                    st.cov[k * d * d + a * d + b] = v / dof
+    elif pr.cov_type == 1:
+        # the tied sk: sum_k nk_k (S_k - reg I) / sum(nk) + reg I from the device's per-component S_k
+        var ntot = Float64(0)
+        for k in range(kc):
+            ntot = ntot + st.nk[k]
+        var sk = List[Float64](length=d * d, fill=0)
         for a in range(d):
-            var da = Float64(xk32[k * d + a]) - pr.mean_prior[a]
             for b in range(d):
-                var db = Float64(xk32[k * d + b]) - pr.mean_prior[b]
-                var v = pr.cov_prior[a * d + b] + identical_mul64(st.nk[k], Float64(sk32[k * d * d + a * d + b]))
-                v = v + identical_mul64(coef, identical_mul64(da, db))
-                st.cov[k * d * d + a * d + b] = v / dof
+                var acc = Float64(0)
+                for k in range(kc):
+                    var v = Float64(sk32[k * d * d + a * d + b])
+                    if a == b:
+                        v = v - reg
+                    acc = acc + identical_mul64(st.nk[k], v)
+                sk[a * d + b] = acc / ntot + (reg if a == b else Float64(0))
+        var dof = pr.dofp + ntot / Float64(kc)
+        var cov = List[Float64](length=d * d, fill=0)
+        for a in range(d):
+            for b in range(d):
+                var acc = Float64(0)
+                for k in range(kc):
+                    var da = Float64(xk32[k * d + a]) - pr.mean_prior[a]
+                    var db = Float64(xk32[k * d + b]) - pr.mean_prior[b]
+                    acc = acc + identical_mul64(st.nk[k] / st.mean_prec[k], identical_mul64(da, db))
+                var v = pr.cov_prior[a * d + b] + identical_mul64(sk[a * d + b], ntot / Float64(kc))
+                v = v + identical_mul64(pr.mpp / Float64(kc), acc)
+                cov[a * d + b] = v / dof
+        for k in range(kc):
+            st.dof.append(dof)
+            for t in range(d * d):
+                st.cov[k * d * d + t] = cov[t]
+    else:
+        for k in range(kc):
+            var dof = pr.dofp + st.nk[k]
+            st.dof.append(dof)
+            var ratio = pr.mpp / st.mean_prec[k]
+            if pr.cov_type == 2:
+                for a in range(d):
+                    var da = Float64(xk32[k * d + a]) - pr.mean_prior[a]
+                    var v = Float64(sk32[k * d * d + a * d + a]) + identical_mul64(ratio, identical_mul64(da, da))
+                    v = pr.cov_prior[a * d + a] + identical_mul64(st.nk[k], v)
+                    st.cov[k * d * d + a * d + a] = v / dof
+            else:
+                var skm = Float64(0)
+                var dm = Float64(0)
+                for a in range(d):
+                    var da = Float64(xk32[k * d + a]) - pr.mean_prior[a]
+                    skm = skm + Float64(sk32[k * d * d + a * d + a])
+                    dm = dm + identical_mul64(da, da)
+                var v = skm / fd + identical_mul64(ratio, dm / fd)
+                v = (pr.cov_prior[0] + identical_mul64(st.nk[k], v)) / dof
+                for a in range(d):
+                    st.cov[k * d * d + a * d + a] = v
+    st.pchol = _precision_cholesky(st.cov, kc, d)
+
+
+def _m_step_plain(pr: BgmmPriors, xk32: List[Float32], sk32: List[Float32], mut st: BgmmState, reg: Float64) raises:
+    """sklearn GaussianMixture._m_step: weights nk / sum(nk), means xk, the
+    covariances of `_estimate_gaussian_covariances_{full,tied,diag,spherical}`
+    (the tied one pooled from the device's per-component moments), each as a
+    full d x d matrix."""
+    var kc = pr.kc
+    var d = pr.d
+    var tot = Float64(0)
+    for k in range(kc):
+        tot = tot + st.nk[k]
+    st.wc0 = List[Float64](capacity=kc)
+    st.wc1 = List[Float64]()
+    st.mean_prec = List[Float64](length=kc, fill=1)
+    st.dof = List[Float64](length=kc, fill=0)
+    st.means = List[Float64](capacity=kc * d)
+    for k in range(kc):
+        st.wc0.append(st.nk[k] / tot)
+        for a in range(d):
+            st.means.append(Float64(xk32[k * d + a]))
+    st.cov = List[Float64](length=kc * d * d, fill=0)
+    if pr.cov_type == 0:
+        for t in range(kc * d * d):
+            st.cov[t] = Float64(sk32[t])
+    elif pr.cov_type == 1:
+        for a in range(d):
+            for b in range(d):
+                var acc = Float64(0)
+                for k in range(kc):
+                    var v = Float64(sk32[k * d * d + a * d + b])
+                    if a == b:
+                        v = v - reg
+                    acc = acc + identical_mul64(st.nk[k], v)
+                var v = acc / tot + (reg if a == b else Float64(0))
+                for k in range(kc):
+                    st.cov[k * d * d + a * d + b] = v
+    elif pr.cov_type == 2:
+        for k in range(kc):
+            for a in range(d):
+                st.cov[k * d * d + a * d + a] = Float64(sk32[k * d * d + a * d + a])
+    else:
+        for k in range(kc):
+            var acc = Float64(0)
+            for a in range(d):
+                acc = acc + Float64(sk32[k * d * d + a * d + a])
+            var v = acc / Float64(d)
+            for a in range(d):
+                st.cov[k * d * d + a * d + a] = v
     st.pchol = _precision_cholesky(st.cov, kc, d)
 
 
@@ -211,9 +332,14 @@ def bgmm_constants(pr: BgmmPriors, st: BgmmState) -> List[Float32]:
     var kc = pr.kc
     var d = pr.d
     var fd = Float64(d)
-    var lw = _log_weights(pr, st)
     var ld = _log_det_pchol(st, kc, d)
     var out = List[Float32](capacity=kc)
+    if not pr.variational:
+        for k in range(kc):
+            var c = _ln(st.wc0[k]) - identical_mul64(0.5, identical_mul64(fd, LOG_2PI)) + ld[k]
+            out.append(Float32(c))
+        return out^
+    var lw = _log_weights(pr, st)
     for k in range(kc):
         var log_lambda = identical_mul64(fd, LOG2)
         for j in range(d):
@@ -262,6 +388,8 @@ def _lower_bound(pr: BgmmPriors, st: BgmmState, resp: List[Float32], lr: List[Fl
 
 def bgmm_weights(pr: BgmmPriors, st: BgmmState) -> List[Float64]:
     var kc = pr.kc
+    if not pr.variational:
+        return st.wc0.copy()
     var w = List[Float64](capacity=kc)
     var tot = Float64(0)
     if pr.dp:
@@ -296,9 +424,14 @@ struct BgmmFit(Copyable, Movable):
 
 def bgmm_fit[O: ClusterOps](
     mut ops: O, x: List[Float32], n: Int, d: Int, pr: BgmmPriors, reg: Float32, tol: Float64,
-    max_iter: Int, n_init: Int, init_random: Bool, seed: UInt64,
+    max_iter: Int, n_init: Int, init_mode: Int, seed: UInt64,
     mut best: BgmmState, mut labels: List[Int32],
+    warm: Bool = False, warm_lb: Float64 = 0,
+    w_init: List[Float64] = List[Float64](), m_init: List[Float64] = List[Float64](),
+    p_init: List[Float64] = List[Float64](),
 ) raises -> BgmmFit:
+    """init_mode: 0 'kmeans', 1 'random', 2 'k-means++' (one-hot at the greedy
+    k-means++ picks), 3 'random_from_data' (one-hot at k distinct rows)."""
     var kc = pr.kc
     if kc < 1 or kc > n:
         raise Error("Expected n_samples >= n_components but got n_components = " + String(kc) + ", n_samples = " + String(n))
@@ -317,10 +450,30 @@ def bgmm_fit[O: ClusterOps](
     var have_best = False
     var best_iter = 0
     var converged_best = False
-    for _init in range(n_init):
+    var runs = 1 if warm else n_init
+    for _init in range(runs):
         # the start: one-hot k-means labels or normalized uniforms
         var resp0 = List[Float32](length=n * kc, fill=Float32(0))
-        if init_random:
+        if warm:
+            pass
+        elif init_mode == 2 or init_mode == 3:
+            var picks: List[Int]
+            if init_mode == 2:
+                picks = greedy_kmeans_pp_indices(ops, x, n, d, kc, rng)
+            else:
+                var pool = List[Int](capacity=n)
+                for t in range(n):
+                    pool.append(t)
+                picks = List[Int](capacity=kc)
+                for q in range(kc):
+                    var r = q + rng.below(n - q)
+                    var t = pool[q]
+                    pool[q] = pool[r]
+                    pool[r] = t
+                    picks.append(pool[q])
+            for k in range(kc):
+                resp0[picks[k] * kc + k] = Float32(1)
+        elif init_mode == 1:
             for i in range(n):
                 var row = List[Float64](capacity=kc)
                 var s = Float64(0)
@@ -336,12 +489,34 @@ def bgmm_fit[O: ClusterOps](
             _ = ops.kmeans(x, n, d, kc, 300, 1e-4, rng.next() >> 1, 1, INIT_KMEANS_PLUS_PLUS, c, l)
             for i in range(n):
                 resp0[i * kc + Int(l[i])] = Float32(1)
-        ops.set(rs, resp0)
-        ops.moments(rs, xs, n, d, kc, reg, nks, xks, sks)
         var st = BgmmState()
-        _m_step_host(pr, ops.get(nks, kc), ops.get(xks, kc * d), ops.get(sks, kc * d * d), st)
         var lb = Float64(0)
         var have_lb = False
+        if warm:
+            st = best.copy()
+            lb = warm_lb
+            have_lb = True
+        else:
+            ops.set(rs, resp0)
+            ops.moments(rs, xs, n, d, kc, reg, nks, xks, sks)
+            _m_step_host(pr, ops.get(nks, kc), ops.get(xks, kc * d), ops.get(sks, kc * d * d), st, Float64(reg))
+            # sklearn GaussianMixture._initialize: weights_init, means_init and
+            # precisions_init replace what the start responsibilities gave
+            if len(w_init) > 0:
+                st.wc0 = w_init.copy()
+            if len(m_init) > 0:
+                st.means = m_init.copy()
+            if len(p_init) > 0:
+                # the precisions' inverse as covariances, then the usual factor
+                var u = _precision_cholesky(p_init, kc, d)
+                for k in range(kc):
+                    for a in range(d):
+                        for b in range(d):
+                            var acc = Float64(0)
+                            for q in range(d):
+                                acc = acc + identical_mul64(u[k * d * d + a * d + q], u[k * d * d + b * d + q])
+                            st.cov[k * d * d + a * d + b] = acc
+                st.pchol = _precision_cholesky(st.cov, kc, d)
         var converged = False
         var n_iter = 0
         for it in range(1, max_iter + 1):
@@ -356,8 +531,16 @@ def bgmm_fit[O: ClusterOps](
             ops.exp(qs, rs, n * kc)
             # M-step
             ops.moments(rs, xs, n, d, kc, reg, nks, xks, sks)
-            _m_step_host(pr, ops.get(nks, kc), ops.get(xks, kc * d), ops.get(sks, kc * d * d), st)
-            lb = _lower_bound(pr, st, ops.get(rs, n * kc), ops.get(qs, n * kc), n)
+            _m_step_host(pr, ops.get(nks, kc), ops.get(xks, kc * d), ops.get(sks, kc * d * d), st, Float64(reg))
+            if pr.variational:
+                lb = _lower_bound(pr, st, ops.get(rs, n * kc), ops.get(qs, n * kc), n)
+            else:
+                # sklearn GaussianMixture: the mean log-likelihood of THIS E-step
+                var lp = ops.get(lpn, n)
+                var acc = Float64(0)
+                for t in range(n):
+                    acc = acc + Float64(lp[t])
+                lb = acc / Float64(n)
             if have_lb:
                 var change = lb - prev
                 if abs(change) < tol:

@@ -45,12 +45,14 @@ from gbdt.methods.kernel.pointwise_split_resolve import (
 )
 
 
-def _mix(x: UInt64) -> UInt64:
-    """splitmix64's finalizer -- distinct planted values everywhere."""
-    var z = x + UInt64(0x9E3779B97F4A7C15)
-    z = (z ^ (z >> 30)) * UInt64(0xBF58476D1CE4E5B9)
-    z = (z ^ (z >> 27)) * UInt64(0x94D4914D82CE2B49)
-    return z ^ (z >> 31)
+# DEVIATION 5941 (lane consolidate, 2026-09-27): the fixture hash is the
+# canonical splitmix64 (`checks/fixture_rng.mojo`). The private copy that
+# stood here said "splitmix64's finalizer" but carried 0x94D4914D82CE2B49
+# for the last multiplier (splitmix64's is 0x94D049BB133111EB), so it was a
+# different function from the one it named; `checks/fixture_rng_gate.mojo`
+# found it. Nothing is recorded from this check (device fold vs host fold on
+# the same planted records), so no recorded value moves.
+from checks.fixture_rng import splitmix64 as _mix
 
 
 struct HelperRecords(Copyable, Movable):

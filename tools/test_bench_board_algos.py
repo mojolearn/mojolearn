@@ -50,7 +50,7 @@ def test_tables_are_complete_and_stdlib_only():
                 assert not any(a in A._NVIDIA_ONLY for a in opp), (v, lane)
         # two datasets of different kind, or its own named data
         tab = [d for d in s["datasets"] if d in A.TAB]
-        assert len(s["datasets"]) >= 2 or s["block"] in ("tensor", "optim", "dense", "bytes"), lane
+        assert len(s["datasets"]) >= 2 or s["block"] in ("tensor", "optim", "dense", "images"), lane
         assert not tab or set(tab) == set(A.TAB), lane
     # torch.optim has no Lion and no LAMB: those race ours alone, named in not_planned
     assert alone == {"lion", "lamb"}
@@ -222,3 +222,20 @@ def test_quality_by_kind():
     # a quality function that raises is recorded by name, never fatal
     q = A.quality("perceptron", {"yq": yq}, {"x": {}})
     assert "error" in q["x"]
+
+
+def test_device_ndarray_is_copied_to_host():
+    """cuVS returns pylibraft device_ndarray; np.array() of it is garbage, so
+    the host copy must go through copy_to_host (the classical2 ivf cuvs arm
+    and every algos cuvs arm read their neighbours through it)."""
+    class Dev(object):
+        __module__ = "pylibraft.common.device_ndarray"
+
+        def copy_to_host(self):
+            return np.arange(6).reshape(2, 3)
+
+        def __array__(self, dtype=None, copy=None):
+            return np.full((2, 3), -1)
+    ctd = _load("classical_two_datasets")
+    assert ctd._to_host(Dev()).tolist() == [[0, 1, 2], [3, 4, 5]]
+    assert A._arr(Dev(), np.int64).tolist() == [[0, 1, 2], [3, 4, 5]]

@@ -15,6 +15,11 @@ from x_cnn.ops import PP_N, PP_C, PP_H, PP_W, PP_OH, PP_OW, pool_params
 from x_cnn.device import conv2d_forward_device as conv2d_forward_impl
 from x_cnn.device import conv2d_backward_device as conv2d_backward_impl
 from x_cnn.device import gemm_device as gemm_impl
+from x_cnn.device import adam_device as adam_impl
+from x_cnn.device import graph_op_device as graph_op_impl
+from x_cnn.device import adaptive_pool_device as adaptive_pool_impl
+from x_cnn.device import pad2d_forward_device as pad2d_forward_impl
+from x_cnn.device import pad2d_backward_device as pad2d_backward_impl
 from x_cnn.device import spmm_device as spmm_impl
 from x_cnn.device import gcn_norm_device as gcn_norm_impl
 from x_cnn.device import dropout2d_device as dropout2d_impl
@@ -275,11 +280,16 @@ def softmax_xent_binding(
 
 
 def sgd_binding(w_addr: PythonObject, g_addr: PythonObject, v_addr: PythonObject, params: PythonObject, hyper: PythonObject) raises -> PythonObject:
-    """In place: w and the momentum buffer v. hyper = [lr, momentum, weight_decay]."""
+    """In place: w and the momentum buffer v. hyper = [lr, momentum,
+    weight_decay, dampening, nesterov (0/1), first step (0/1)]; the last
+    three default to 0."""
     var n = _count(params)
     var h = List[Float32]()
-    for k in range(3):
-        h.append(Float32(Float64(py=hyper[k])))
+    var nh = Int(py=len(hyper))
+    if nh < 3 or nh > 6:
+        raise Error("x_cnn sgd: hyper is [lr, momentum, weight_decay(, dampening, nesterov, first)]")
+    for k in range(6):
+        h.append(Float32(Float64(py=hyper[k])) if k < nh else Float32(0))
     var w = read_f32(Int(py=w_addr), n)
     var g = read_f32(Int(py=g_addr), n)
     var v = read_f32(Int(py=v_addr), n)
@@ -386,10 +396,10 @@ def mul_binding(a_addr: PythonObject, b_addr: PythonObject, out_addr: PythonObje
 
 def _csr(csr_addr: PythonObject, params: PythonObject) raises -> Tuple[List[Int32], List[Int32]]:
     """Validate a CSR block [rowptr | col | row] against params [n, F, nnz, mode]."""
-    var n = Int(py=params[0])
-    var F = Int(py=params[1])
-    var nnz = Int(py=params[2])
-    var mode = Int(py=params[3])
+    return _csr_ints(csr_addr, Int(py=params[0]), Int(py=params[1]), Int(py=params[2]), Int(py=params[3]))
+
+
+def _csr_ints(csr_addr: PythonObject, n: Int, F: Int, nnz: Int, mode: Int) raises -> Tuple[List[Int32], List[Int32]]:
     if n <= 0 or F <= 0 or nnz < 0 or mode < 0 or mode > 2:
         raise Error("x_cnn spmm: positive n and F, nnz >= 0, mode in {0, 1, 2}")
     var csr = read_i32(Int(py=csr_addr), n + 1 + 2 * nnz)
@@ -436,6 +446,134 @@ def gcn_norm_binding(w_addr: PythonObject, vals_addr: PythonObject, csr_addr: Py
     return PythonObject(nnz)
 
 
+def _pad_prm(params: PythonObject) raises -> List[Int32]:
+    var out = List[Int32]()
+    for k in range(9):
+        var v = Int(py=params[k])
+        if v < 0:
+            raise Error("x_cnn pad: negative parameter")
+        out.append(Int32(v))
+    var N = Int(out[0]); var C = Int(out[1]); var H = Int(out[2]); var W = Int(out[3])
+    if N <= 0 or C <= 0 or H <= 0 or W <= 0 or Int(out[8]) > 3:
+        raise Error("x_cnn pad: positive N, C, H, W and a mode in 0..3 required")
+    if Int(out[8]) == 1 and (Int(out[4]) >= H or Int(out[5]) >= H or Int(out[6]) >= W or Int(out[7]) >= W):
+        raise Error("x_cnn pad: reflect padding must be smaller than the input dimension")
+    if Int(out[8]) == 3 and (Int(out[4]) > H or Int(out[5]) > H or Int(out[6]) > W or Int(out[7]) > W):
+        raise Error("x_cnn pad: circular padding can wrap around at most once")
+    return out^
+
+
+def pad2d_forward_binding(x_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [N, C, H, W, top, bottom, left, right, mode (0 zeros, 1 reflect, 2 replicate, 3 circular)]."""
+    var prm = _pad_prm(params)
+    var nc = Int(prm[0]) * Int(prm[1])
+    var nx = nc * Int(prm[2]) * Int(prm[3])
+    var no = nc * (Int(prm[2]) + Int(prm[4]) + Int(prm[5])) * (Int(prm[3]) + Int(prm[6]) + Int(prm[7]))
+    var x = read_f32(Int(py=x_addr), nx)
+    var po = f32_ptr(Int(py=out_addr))
+    with GILReleased(Python()):
+        var y = pad2d_forward_impl(x, prm)
+        copy_f32(y.unsafe_ptr(), po, no)
+    return PythonObject(no)
+
+
+def pad2d_backward_binding(g_addr: PythonObject, dx_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    var prm = _pad_prm(params)
+    var nc = Int(prm[0]) * Int(prm[1])
+    var nx = nc * Int(prm[2]) * Int(prm[3])
+    var ng = nc * (Int(prm[2]) + Int(prm[4]) + Int(prm[5])) * (Int(prm[3]) + Int(prm[6]) + Int(prm[7]))
+    var g = read_f32(Int(py=g_addr), ng)
+    var po = f32_ptr(Int(py=dx_addr))
+    with GILReleased(Python()):
+        var y = pad2d_backward_impl(g, prm)
+        copy_f32(y.unsafe_ptr(), po, nx)
+    return PythonObject(nx)
+
+
+def adaptive_pool_binding(in_addr: PythonObject, out_addr: PythonObject, idx_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [N, C, H, W, OH, OW, kind]: kind 0 avg forward (in x, out y),
+    1 avg backward (in g, out dx), 2 max forward (in x, out y, idx written),
+    3 max backward (in g, out dx, idx read)."""
+    var prm = List[Int32]()
+    for k in range(6):
+        var v = Int(py=params[k])
+        if v <= 0:
+            raise Error("x_cnn adaptive pool: positive N, C, H, W, OH, OW required")
+        prm.append(Int32(v))
+    var kind = Int(py=params[6])
+    if kind < 0 or kind > 3:
+        raise Error("x_cnn adaptive pool: kind in 0..3")
+    var nc = Int(prm[0]) * Int(prm[1])
+    var nin = nc * Int(prm[2]) * Int(prm[3])
+    var nout = nc * Int(prm[4]) * Int(prm[5])
+    var n_read = nin if kind == 0 or kind == 2 else nout
+    var n_write = nout if kind == 0 or kind == 2 else nin
+    var src = read_f32(Int(py=in_addr), n_read)
+    var idx = read_i32(Int(py=idx_addr), nout) if kind == 3 else List[Int32](length=nout, fill=Int32(0))
+    var po = f32_ptr(Int(py=out_addr))
+    var pi = i32_ptr(Int(py=idx_addr))
+    with GILReleased(Python()):
+        var idx_out = List[Int32]()
+        var y = adaptive_pool_impl(src, idx, prm, kind, idx_out)
+        copy_f32(y.unsafe_ptr(), po, n_write)
+        if kind == 2:
+            for k in range(nout):
+                pi.unsafe_store(k, idx_out[k])
+    return PythonObject(n_write)
+
+
+def graph_op_binding(
+    a_addr: PythonObject, b_addr: PythonObject, aux_addr: PythonObject, out_addr: PythonObject, csr_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """params = [n, F, nnz, kind]: kind 0 SAGE max forward (a = h; aux 2nF
+    written), 1 its backward (a = h, b = g, aux read; the TRANSPOSED csr),
+    2 row L2 normalize forward (a = x; aux n written), 3 its backward
+    (a = y, b = g, aux read). A kind with no graph passes nnz 0 and a
+    rowptr of zeros."""
+    var kind = Int(py=params[3])
+    if kind < 0 or kind > 3:
+        raise Error("x_cnn graph op: kind in 0..3")
+    var n = Int(py=params[0])
+    var F = Int(py=params[1])
+    var nnz = Int(py=params[2])
+    var t = _csr_ints(csr_addr, n, F, nnz, 0)
+    var naux = 2 * n * F if kind < 2 else n
+    var a = read_f32(Int(py=a_addr), n * F)
+    var b = read_f32(Int(py=b_addr), n * F) if kind == 1 or kind == 3 else a.copy()
+    var aux = read_f32(Int(py=aux_addr), naux)
+    var po = f32_ptr(Int(py=out_addr))
+    var pa = f32_ptr(Int(py=aux_addr))
+    with GILReleased(Python()):
+        var r = graph_op_impl(a, b, aux, t[0], t[1], kind)
+        copy_f32(r.unsafe_ptr(), po, n * F)
+        copy_f32(r.unsafe_ptr() + n * F, pa, naux)
+    _ = nnz
+    return PythonObject(n * F)
+
+
+def adam_binding(w_addr: PythonObject, g_addr: PythonObject, mv_addr: PythonObject, params: PythonObject, hyper: PythonObject) raises -> PythonObject:
+    """In place: w and mv = [m (n) | v (n)]. hyper = [step_size, 1 - beta1,
+    beta2, 1 - beta2, eps, sqrt(bias_correction2), weight_decay, adamw (0/1),
+    1 - lr * weight_decay] (x_cnn/ops.mojo adam_at)."""
+    var n = _count(params)
+    if Int(py=len(hyper)) != 9:
+        raise Error("x_cnn adam: hyper has 9 entries")
+    var h = List[Float32]()
+    for k in range(9):
+        h.append(Float32(Float64(py=hyper[k])))
+    var w = read_f32(Int(py=w_addr), n)
+    var g = read_f32(Int(py=g_addr), n)
+    var mv = read_f32(Int(py=mv_addr), 2 * n)
+    var pw = f32_ptr(Int(py=w_addr))
+    var pm = f32_ptr(Int(py=mv_addr))
+    with GILReleased(Python()):
+        var r = adam_impl(w, g, mv, h)
+        copy_f32(r.unsafe_ptr(), pw, n)
+        copy_f32(r.unsafe_ptr() + n, pm, 2 * n)
+    return PythonObject(n)
+
+
 def numeric_mode_binding() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 
@@ -464,12 +602,17 @@ def PyInit__mojolearn_x_cnn() abi("C") -> PythonObject:
         m.def_function[linear_backward_binding]("x_cnn_linear_backward")
         m.def_function[softmax_xent_binding]("x_cnn_softmax_xent")
         m.def_function[sgd_binding]("x_cnn_sgd")
+        m.def_function[adam_binding]("x_cnn_adam")
         m.def_function[batchnorm_forward_binding]("x_cnn_batchnorm_forward")
         m.def_function[batchnorm_backward_binding]("x_cnn_batchnorm_backward")
         m.def_function[dropout2d_binding]("x_cnn_dropout2d")
         m.def_function[mul_binding]("x_cnn_mul")
         m.def_function[spmm_binding]("x_cnn_spmm")
         m.def_function[gcn_norm_binding]("x_cnn_gcn_norm")
+        m.def_function[pad2d_forward_binding]("x_cnn_pad2d_forward")
+        m.def_function[pad2d_backward_binding]("x_cnn_pad2d_backward")
+        m.def_function[adaptive_pool_binding]("x_cnn_adaptive_pool")
+        m.def_function[graph_op_binding]("x_cnn_graph_op")
         m.def_function[numeric_mode_binding]("x_cnn_numeric_mode")
         m.def_function[vendor_binding]("x_cnn_vendor")
         return m.finalize()

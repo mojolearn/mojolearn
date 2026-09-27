@@ -1,0 +1,16 @@
+diff --git a/x_neighbors/items.mojo b/x_neighbors/items.mojo
+index bc04f5c16..39cb3401c 100644
+--- a/x_neighbors/items.mojo
++++ b/x_neighbors/items.mojo
+@@ -429,9 +429,9 @@ def lof_lrd_item(t: Int, dist: FP, idx: IP, fit_dist: FP, lrd: FP, k: Int, n: In
+     k reach distances folded ascending by neighbor rank."""
+     var acc = Float32(0)
+     for j in range(k):
+-        var nb = Int(idx.unsafe_load(t * k + j))
++        var nb = Int(idx.unsafe_load(t * k + (k - 1 - j)))
+         var kd = fit_dist.unsafe_load(nb * k + k - 1)
+-        var dv = dist.unsafe_load(t * k + j)
++        var dv = dist.unsafe_load(t * k + (k - 1 - j))
+         acc = _add(acc, dv if dv > kd else kd)
+     var mean = ftz(identical_div(acc, Float32(k)))
+     lrd.unsafe_store(t, ftz(identical_div(Float32(1), _add(mean, Float32(1e-10)))))

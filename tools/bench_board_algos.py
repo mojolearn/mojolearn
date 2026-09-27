@@ -37,7 +37,11 @@ scikit-learn shaped unless a line below says otherwise)
                fit_predict / fit_transform as scikit-learn names them; fitted
                attributes with scikit-learn's names (components_, means_, ...)
   forecasters  Cls(**params).fit(Y) with Y (n_series, n_obs) float32, then
-               .forecast(h) -> (n_series, h)   (the ARIMA/ETS classes' shape)
+               .predict(h)["mean"] -> (n_series, h)   (statsforecast's shape:
+               Theta, CrostonClassic, ETS); AutoARIMA is cuML's shape,
+               Cls(Y).search(...); .fit(); .forecast(h); GARCH is arch's
+               shape, Cls(p, q, mean, dist).fit(Y, horizon=h), .forecast(h)
+               (variances), .loglikelihood_ (per series)
   graph        Cls(**params).fit(indptr, indices) of a symmetric CSR graph,
                then .scores_ (PageRank) or .labels_ (components, Louvain)
   ANN          Cls(**params).fit(index).search(queries) -> (dist, ind), the
@@ -94,6 +98,7 @@ EVAL_ROWS = 100_000
 SUB = {"quad": 10_000, "cubic": 3_000, "knn": 200_000, "mid": 100_000, "small": 20_000,
        "tiny": 5_000}
 GRAPH_NODES = 100_000
+GRAPH_SMALL = 20_000          # the graph-algorithm races: ours takes a dense adjacency
 TS_H = 48                     # held-out hours / points per series
 TS_SERIES = 64
 TEXT_DOC_BYTES = 2048
@@ -292,19 +297,22 @@ _add("knn-imputer", xlane="neighbors", ours="KNNImputer", task="impute", block="
      sub={"X": SUB["mid"], "Xq": SUB["small"]}, sk="sklearn.impute:KNNImputer",
      params=dict(n_neighbors=5, weights="uniform"),
      notes=["10% of the cells of X and Xq set to NaN by a seed-7 mask; quality on those cells"])
+_GRAPH_MISM = ("ours takes a dense adjacency matrix (its class's contract), built from the CSR "
+               "graph before the clock; networkx and cuGraph take the graph itself")
 _add("pagerank", xlane="neighbors", ours=("PageRank",), kind="graph", task="pagerank",
-     block="graph", params=dict(alpha=0.85, tol=1e-6, max_iter=100),
-     other={"networkx-cpu": "networkx", "cugraph-gpu": "cugraph"},
+     block="graphs", params=dict(alpha=0.85, tol=1e-6, max_iter=100),
+     other={"networkx-cpu": "networkx", "cugraph-gpu": "cugraph"}, mism=[_GRAPH_MISM],
      notes=["graph: the symmetric 10-nearest-neighbour graph of %d stride rows of the cls block "
-            "(float64 brute force in prep), unweighted" % GRAPH_NODES])
-_add("connected-components", xlane="neighbors", ours=("ConnectedComponents",), kind="graph",
-     task="components", block="graph", other={"networkx-cpu": "networkx", "cugraph-gpu": "cugraph"},
+            "(float64 brute force in prep), unweighted" % GRAPH_SMALL])
+_add("connected-components", xlane="neighbors", ours=("connected_components", "ConnectedComponents"),
+     kind="graph", task="components", block="graphs",
+     other={"networkx-cpu": "networkx", "cugraph-gpu": "cugraph"}, mism=[_GRAPH_MISM],
      notes=["the kNN graph with k=2 (sparse enough to have more than one component)"])
-_add("louvain", xlane="neighbors", ours=("Louvain",), kind="graph", task="louvain", block="graph",
-     params=dict(resolution=1.0, max_level=100, random_state=SEED),
+_add("louvain", xlane="neighbors", ours=("Louvain",), kind="graph", task="louvain", block="graphs",
+     params=dict(resolution=1.0, seed=SEED),
      other={"networkx-cpu": "networkx", "cugraph-gpu": "cugraph"},
-     mism=["networkx louvain_communities(seed=7) and cuGraph louvain are order-dependent; ours "
-           "pins the vertex sweep (lowest id first)"])
+     mism=["networkx louvain_communities(seed=7) and cuGraph louvain (max_level=100) are "
+           "order-dependent; ours pins the vertex sweep (lowest id first)", _GRAPH_MISM])
 _add("svgp", xlane="neighbors", ours=("SVGP", "SparseVariationalGP"), kind="svgp", task="reg",
      block="reg", sub={"X": SUB["mid"], "Xq": SUB["small"]},
      params=dict(n_inducing=512, n_iter=200, batch_size=4096, learning_rate=0.01),
@@ -383,6 +391,18 @@ _add("lda", xlane="decomp", ours="LatentDirichletAllocation", task="transform", 
      params=dict(n_components=16, learning_method="batch", max_iter=20, random_state=SEED),
      sk_params=dict(n_components=16, learning_method="batch", max_iter=20, random_state=SEED,
                     n_jobs=-1))
+_add("classical-mds", xlane="decomp", ours="ClassicalMDS", task="embed", block="manifold",
+     sub={"X": SUB["tiny"]}, sk="sklearn.manifold:ClassicalMDS", params=dict(n_components=2),
+     notes=["scikit-learn 1.7.2 has no ClassicalMDS: its arm is the same algorithm assembled from "
+            "scikit-learn, KernelPCA(kernel='precomputed', eigen_solver='dense') on -0.5 D^2 "
+            "(double-centred inside KernelPCA), unless the installed scikit-learn exports it"])
+_add("mb-dict-learning", xlane="decomp", ours="MiniBatchDictionaryLearning", task="transform",
+     block="cls", sub={"X": SUB["mid"], "Xq": SUB["tiny"]}, quality="recon",
+     sk="sklearn.decomposition:MiniBatchDictionaryLearning",
+     params=dict(n_components=16, alpha=1.0, batch_size=256, max_iter=10,
+                 transform_algorithm="lasso_cd", random_state=SEED),
+     sk_params=dict(n_components=16, alpha=1.0, batch_size=256, max_iter=10,
+                    transform_algorithm="lasso_cd", random_state=SEED, n_jobs=-1))
 _add("isomap", xlane="decomp", ours="Isomap", task="embed", block="manifold",
      sub={"X": SUB["quad"]}, sk="sklearn.manifold:Isomap",
      params=dict(n_neighbors=10, n_components=2), sk_params=dict(n_neighbors=10, n_components=2,
@@ -510,15 +530,21 @@ for _cell in ("LSTM", "GRU", "RNN"):
                     "Adam lr 1e-3, batch 256, 2 epochs, a seed-7 shuffle per epoch" % _cell],
              mism=["each library initializes its own weights (ours from random_state=7, torch "
                    "from torch.manual_seed(7))"])
-_add("layernorm", xlane="sequence", ours="LayerNorm", kind="layer", task="layernorm",
+_add("layernorm", xlane="sequence", ours=("LayerNorm", "layer_norm_forward"), kind="layer",
+     task="layernorm",
      block="tensor", datasets=("synthetic",), torch=True,
      params=dict(normalized_shape=1024, eps=1e-5),
      notes=["x (16384, 1024) N(0,1) seed 7"])
-_add("moe", xlane="sequence", ours=("MoEBlock", "SparseMoeBlock", "MixtureOfExperts"), kind="layer",
-     task="moe", block="tensor", datasets=("synthetic",), torch=True,
-     params=dict(hidden_size=1024, ffn_size=2816, num_experts=8, top_k=2),
+_add("moe", xlane="sequence", ours=("MoEBlock",), kind="layer",
+     task="moe", block="tensor", datasets=("synthetic",), torch=True, forward_only=True,
+     params=dict(hidden_size=1024, intermediate_size=2816, num_experts=8, top_k=2,
+                 norm_topk_prob=True),
      notes=["x (8192, 1024); the torch arm is a transcription of HF MixtralSparseMoeBlock.forward "
-            "(softmax router, top-2, renormalized weights, SwiGLU experts)"])
+            "(softmax router, top-2, renormalized weights, SwiGLU experts)",
+            "forward only on every arm (ours exports no MoEBlock backward, "
+            "sequence/NOT_IMPLEMENTED.tsv): the fit column times one forward, torch under "
+            "no_grad; ours loads torch's weights in HF's fused layout (router (E, D), "
+            "gate_up_proj (E, 2F, D) = [w1; w3], down_proj (E, D, F) = w2)"])
 for _slug, _cls, _torch in (("rmsprop", "RMSprop", "RMSprop"), ("adagrad", "Adagrad", "Adagrad"),
                             ("adamax", "Adamax", "Adamax"), ("nadam", "NAdam", "NAdam"),
                             ("adafactor", "Adafactor", "Adafactor"), ("lion", "Lion", None),
@@ -552,29 +578,40 @@ _add("stl", xlane="sequence", ours="STL", kind="ts", task="decompose", block="ts
 _add("var", xlane="sequence", ours="VAR", kind="ts", task="var", block="ts", datasets=_TS,
      params=dict(maxlags=2), other={"statsmodels-cpu": "statsmodels"},
      notes=[_TSNOTE, "one VAR over 16 series jointly (the first 16), lag order 2"])
-_add("theta", xlane="sequence", ours=("Theta", "ThetaForecaster"), kind="ts", task="forecast",
-     block="ts", datasets=_TS, params=dict(season_length=24),
+_add("theta", xlane="sequence", ours=("Theta",), kind="ts", task="forecast",
+     block="ts", datasets=_TS, params=dict(season_length=24, decomposition_type="multiplicative"),
      other={"statsforecast-cpu": "statsforecast", "statsmodels-cpu": "statsmodels"},
-     notes=[_TSNOTE])
-_add("croston", xlane="sequence", ours=("Croston", "CrostonClassic"), kind="ts", task="forecast",
+     notes=[_TSNOTE, "statsforecast Theta (the standard theta model, STM) on both sides; "
+                     "statsmodels-cpu is ThetaModel(period=24), its own theta method"])
+_add("croston", xlane="sequence", ours=("CrostonClassic",), kind="ts", task="forecast",
      block="tsi", datasets=("taxi-hourly", "synthetic"), params={},
      other={"statsforecast-cpu": "statsforecast"},
      notes=["intermittent series: taxi-hourly's 64 pickup zones with 30-70% zero hours; "
             "synthetic Bernoulli(0.3) x Poisson(3) demand, seed 7"])
-_add("damped-ets", xlane="sequence", ours=("ETS", "DampedETS"), kind="ts", task="forecast",
-     block="ts", datasets=_TS, params=dict(trend="add", damped_trend=True, seasonal="add",
-                                            seasonal_periods=24),
+_add("damped-ets", xlane="sequence", ours=("ETS",), kind="ts", task="forecast",
+     block="ts", datasets=_TS, params=dict(season_length=1, model="AAN", damped=True),
      other={"statsmodels-cpu": "statsmodels", "statsforecast-cpu": "statsforecast"},
-     notes=[_TSNOTE])
+     notes=[_TSNOTE, "ETS(A,Ad,N), Holt's damped additive trend, no season: ours refuses seasonal "
+                     "ETS by name, so every arm fits the non-seasonal model; statsforecast "
+                     "AutoETS(model='AAN', damped=True), statsmodels ExponentialSmoothing("
+                     "trend='add', damped_trend=True, seasonal=None)"])
 _add("garch", xlane="sequence", ours="GARCH", kind="ts", task="garch", block="tsr", datasets=_TS,
      params=dict(p=1, q=1, mean="Constant", dist="normal"), other={"arch-cpu": "arch"},
      notes=["taxi-hourly: first differences of log(1 + count); synthetic: GARCH(1,1) returns "
-            "omega 0.1 alpha 0.1 beta 0.8, seed 7"])
-_add("prophet", xlane="sequence", ours=("Prophet", "ProphetForecaster"), kind="ts",
+            "omega 0.1 alpha 0.1 beta 0.8, seed 7",
+            "arch_model(vol='GARCH', p=1, o=0, q=1, mean='Constant', dist='normal', "
+            "rescale=False) per series (ours refuses rescaling); the forecast is the "
+            "conditional variance, h steps"])
+_add("prophet", xlane="sequence", ours=("ProphetForecaster",), kind="ts",
      task="forecast", block="ts", datasets=_TS,
      params=dict(n_changepoints=25, daily_seasonality=True, weekly_seasonality=True,
-                 yearly_seasonality=False),
-     other={"prophet-cpu": "prophet"}, notes=[_TSNOTE],
+                 yearly_seasonality=False, max_iter=10000),
+     other={"prophet-cpu": "prophet"},
+     notes=[_TSNOTE, "prophet's shape on both sides: fit(ds, y), predict(future ds), ds hourly "
+                     "from 2024-01-01; ours fits the batch of series at once, prophet one "
+                     "series per job; linear growth, additive seasonality, 25 changepoints over "
+                     "the first 80%, daily (order 4) and weekly (order 3) seasonality, no "
+                     "yearly; the iteration cap is prophet's (Stan iter=1e4) on both"],
      mism=["prophet fits by Stan's L-BFGS (MAP); ours by its own L-BFGS; parity is at a "
            "tolerance, the forecast RMSE is the comparable number"])
 
@@ -697,6 +734,26 @@ _add("maxpool2d", xlane="cnn", ours="MaxPool2d", kind="layer", task="maxpool2d",
 _add("avgpool2d", xlane="cnn", ours="AvgPool2d", kind="layer", task="avgpool2d", block="tensor",
      datasets=("synthetic",), torch=True, params=dict(kernel_size=2, stride=2),
      notes=["x (64, 64, 112, 112), " + _CNN])
+_add("maxpool1d", xlane="cnn", ours="MaxPool1d", kind="layer", task="maxpool1d", block="tensor",
+     datasets=("synthetic",), torch=True, params=dict(kernel_size=2, stride=2),
+     notes=["x (64, 64, 4096), " + _CNN])
+_add("avgpool1d", xlane="cnn", ours="AvgPool1d", kind="layer", task="avgpool1d", block="tensor",
+     datasets=("synthetic",), torch=True, params=dict(kernel_size=2, stride=2),
+     notes=["x (64, 64, 4096), " + _CNN])
+_add("batchnorm1d", xlane="cnn", ours="BatchNorm1d", kind="layer", task="batchnorm1d",
+     block="tensor", datasets=("synthetic",), torch=True, params=dict(num_features=256),
+     notes=["x (64, 256, 1024), training-mode statistics, " + _CNN])
+_add("cnn-clf", xlane="cnn", ours="CNNClassifier", kind="cnnclf", task="clf", block="images",
+     datasets=("synthetic",), torch=True,
+     params=dict(input_shape=(1, 28, 28), conv_channels=(8, 16), kernel_size=3, pool_size=2,
+                 learning_rate=0.01, momentum=0.9, weight_decay=0.0, batch_size=128, max_iter=2,
+                 shuffle=True, random_state=SEED),
+     notes=["seed-7 synthetic 1 x 28 x 28 images of 10 classes (a class template plus N(0, 1) "
+            "noise), 20,000 fit and 5,000 held out: the R2 store holds no image set, so this is "
+            "the one kind",
+            "torch arm: the same net (Conv2d-ReLU-MaxPool2d per entry of conv_channels, then "
+            "Linear), SGD momentum 0.9, cross entropy, the same epochs and batch size"],
+     mism=["each library initializes its own weights"])
 _add("batchnorm2d", xlane="cnn", ours="BatchNorm2d", kind="layer", task="batchnorm2d",
      block="tensor", datasets=("synthetic",), torch=True, params=dict(num_features=64),
      notes=["x (64, 64, 56, 56), training-mode statistics, " + _CNN])
@@ -758,11 +815,13 @@ _add("ivf-refine", xlane="ann", ours=("IVFPQIndex",), kind="ann", task="ivf-refi
                  refine_ratio=4, random_state=SEED),
      other={"faiss-cpu": "faiss", "cuvs-gpu": "cuvs"},
      notes=[_ANN, "IVF-PQ search of 4k candidates then an exact re-rank to k"])
-_add("ivf-filter", xlane="ann", ours=("IVFIndex",), kind="ann", task="ivf-filter", block="ivf",
-     params=dict(n_lists=1024, n_probes=32, n_neighbors=10, kmeans_n_iters=20, random_state=SEED),
-     other={"faiss-cpu": "faiss", "cuvs-gpu": "cuvs"},
-     notes=[_ANN, "IVF-Flat search with a sample filter: every odd index row is excluded; "
-            "recall against the filtered brute force"])
+_add("ivf-filter", xlane="ann", ours=("IVFPQIndex",), kind="ann", task="ivf-filter", block="ivf",
+     params=dict(n_lists=1024, n_probes=32, n_neighbors=10, pq_bits=8, kmeans_n_iters=20,
+                 random_state=SEED),
+     other={"faiss-cpu": "faiss"},
+     notes=[_ANN, "IVF-PQ search with a sample filter (ours search(filter=), faiss "
+            "IDSelectorBatch): every odd index row is excluded; recall against the filtered "
+            "brute force"])
 
 LANE_ORDER = tuple(LANES)
 
@@ -794,7 +853,7 @@ _NVIDIA_ONLY = ("cuml-gpu", "cuvs-gpu", "cugraph-gpu", "cupy-gpu", "implicit-gpu
 def opponents(vendor, lane):
     s = LANES[lane]
     arms = []
-    if s["kind"] in ("layer", "seqmodel"):
+    if s["kind"] in ("layer", "seqmodel", "cnnclf"):
         arms = ["torch-" + t for t in TORCH_GPU[vendor]]
         if s["task"] == "dropout2d":
             arms = [a for a in arms if "bf16" not in a]
@@ -828,7 +887,7 @@ def block_of(lane):
 
 def has_infer(lane):
     s = LANES[lane]
-    if s["kind"] in ("layer", "ann", "svgp", "seqmodel"):
+    if s["kind"] in ("layer", "ann", "svgp", "seqmodel", "cnnclf"):
         return True
     if s["kind"] in ("est", "dart"):
         if s.get("fit_predict") or s["task"] in ("embed", "covariance", "select"):
@@ -850,7 +909,7 @@ def infer_call(lane):
         return "recommend top-10 for every user row"
     if s["kind"] == "ts":
         return "forecast(%d)" % TS_H
-    if s["kind"] in ("svgp", "seqmodel"):
+    if s["kind"] in ("svgp", "seqmodel", "cnnclf"):
         return "predict(Xq)"
     t = s["task"]
     if t in ("clf", "reg", "semi", "outlier", "multiclf", "multireg", "gmm"):
@@ -871,6 +930,10 @@ def not_planned(vendor):
                "torch-*-tf32: no matmul in an optimizer step")
     out.append("openTSNE and hnswlib: not pinned; scikit-learn/cuML t-SNE and FAISS HNSW stand in")
     out.append("pmdarima: statsforecast AutoARIMA (compiled) is the CPU AutoARIMA arm")
+    if vendor == "nvidia":
+        out.append("cuVS on ivf-filter: cuVS's Python IVF-PQ search takes no sample filter (only "
+                   "IVF-Flat, CAGRA and brute force do); ours filters IVF-PQ, so faiss-cpu "
+                   "IndexIVFPQ with an IDSelectorBatch is the matched arm")
     for name, why in NOT_RACED.items():
         out.append("%s: %s" % (name, why))
     return out
@@ -911,6 +974,8 @@ def fit_text(lane):
         return "forward + backward(dy)"
     if k == "seqmodel":
         return "fit(X (n, T, 1), y): 2 epochs"
+    if k == "cnnclf":
+        return "fit(X (n, 1, 28, 28), y): 2 epochs"
     if k == "optim":
         return "10 optimizer steps"
     if k == "ann":
@@ -987,8 +1052,6 @@ def quality_kind(lane):
         return "layer"
     if s["kind"] in ("optim", "ann", "als"):
         return s["kind"]
-    if s["kind"] in ("svgp", "seqmodel"):
-        return s["task"]
     return s["task"]
 
 
@@ -1009,6 +1072,7 @@ BLOCK_ROWS = {
     "manifold": "20,000 stride rows, %s" % _STD,
     "ivf": "400,000 index rows, 4,000 queries, raw",
     "graph": "%d nodes, symmetric 10-NN graph, node features and labels" % GRAPH_NODES,
+    "graphs": "%d nodes, symmetric 10-NN graph (and a 2-NN graph)" % GRAPH_SMALL,
     "ts": "%d series x 1,440 points, the last %d held out" % (TS_SERIES, TS_H),
     "tsi": "%d intermittent series x 1,440 points, the last %d held out" % (TS_SERIES, TS_H),
     "tsr": "%d return series x 1,439 points, the last %d held out" % (TS_SERIES, TS_H),
@@ -1016,6 +1080,7 @@ BLOCK_ROWS = {
     "countclf": "count features with a class label, every 10th row held out",
     "bytes": "64 x 256 bytes of enwik8",
     "tensor": "a seeded tensor (see notes)",
+    "images": "20,000 fit + 5,000 held-out seeded 1 x 28 x 28 images, 10 classes",
     "seqwin": "64 series -> windows of 24 steps, fit = the first 80% of time", "optim": "16,777,216 parameters x 10 steps",
     "dense": "8192 x 8192 system, 64 right-hand sides",
 }
@@ -1142,14 +1207,14 @@ def _stride(a, m):
 
 #: this family's block -> the classical2 block it is (or is derived from)
 MORE_BLOCK = {"cls": "cls", "reg": "reg", "manifold": "manifold", "tsvd": "tsvd", "ivf": "ivf",
-              "nonneg": "cls", "graph": "cls", "countclf": "cls"}
+              "nonneg": "cls", "graph": "cls", "graphs": "cls", "countclf": "cls"}
 MORE_LANE_OF = {"cls": "logreg", "reg": "ridge", "manifold": "umap", "tsvd": "tsvd", "ivf": "ivf"}
 
 
 def block_file(lane, dataset):
     """The npz/json basename a (lane, dataset) reads."""
     b = block_of(lane)
-    if b in ("dense", "tensor", "optim"):
+    if b in ("dense", "tensor", "optim", "images"):
         return None
     if b == "seqwin":
         return "ts-%s" % dataset
@@ -1159,7 +1224,7 @@ def block_file(lane, dataset):
         return "text"                      # the labelled document counts
     if dataset == "taxi-zones":
         return "zones"
-    if b in ("bytes", "graph"):
+    if b in ("bytes", "graph", "graphs"):
         return "%s-%s" % (b, dataset)
     if b in ("raw16", "raw32"):
         return "raw-%s" % dataset
@@ -1431,13 +1496,13 @@ def prep(args):
                 raise SystemExit("REFUSING: %s missing (R2 key %s)" % (p, CORPUS_KEYS["enwik8"]))
             raw = np.fromfile(p, dtype=np.uint8, count=64 * 256 * 4)
             ctd._write_block(args.data, name, {"bytes": raw}, dict(base, block="bytes", dataset=ds))
-        elif b == "graph" and ds in TAB:
-            name = "graph-%s" % ds
+        elif b in ("graph", "graphs") and ds in TAB:
+            name = "%s-%s" % (b, ds)
             if have(name):
                 continue
             with np.load(os.path.join(args.data, "cls-%s.npz" % ds)) as z:
                 X, y = z["X"], z["y"]
-            n = _cap(GRAPH_NODES, cap, 512)
+            n = _cap(GRAPH_NODES if b == "graph" else GRAPH_SMALL, cap, 512)
             X, y = _stride(X, n), _stride(y, n)
             indptr, indices = knn_graph(X, KNN_K)
             ip2, ix2 = knn_graph(X, 2)
@@ -1462,6 +1527,11 @@ def lane_arrays(lane, B):
     if b in ("ts", "tsi", "tsr"):
         Y = B["Y"]
         return {"Yfit": np.ascontiguousarray(Y[:, :-TS_H]), "Yhold": np.ascontiguousarray(Y[:, -TS_H:])}
+    if b == "images":
+        cap = B.get("_cap") or os.environ.get("MOJOLEARN_ALGOS_SMOKE_ROWS")
+        n_fit, n_q = (min(20_000, int(cap)), min(5_000, int(cap))) if cap else (20_000, 5_000)
+        X, y = synthetic_images(n_fit + n_q)
+        return {"X": X[:n_fit], "y": y[:n_fit], "Xq": X[n_fit:], "yq": y[n_fit:]}
     if b == "seqwin":
         Y = B["Y"].astype(np.float64)
         n = Y.shape[1]
@@ -1665,6 +1735,25 @@ def _resolve(v, lib):
     return v
 
 
+class _SkClassicalMDS(object):
+    """Classical MDS from scikit-learn parts: -0.5 D^2 double-centred and its
+    top eigenpairs (KernelPCA precomputed, dense eigh); for a scikit-learn
+    without ClassicalMDS."""
+
+    def __init__(self, n_components=2):
+        self.n_components = n_components
+
+    def fit_transform(self, X):
+        from sklearn.decomposition import KernelPCA
+        from sklearn.metrics import pairwise_distances
+        D2 = pairwise_distances(X, metric="sqeuclidean", n_jobs=-1)
+        return KernelPCA(n_components=self.n_components, kernel="precomputed",
+                         eigen_solver="dense").fit_transform(-0.5 * D2)
+
+    def __repr__(self):
+        return "sklearn KernelPCA(precomputed) on -0.5 D^2 (ClassicalMDS)"
+
+
 SK_BASE = {"LogisticRegression": "sklearn.linear_model:LogisticRegression",
            "Ridge": "sklearn.linear_model:Ridge", "Lasso": "sklearn.linear_model:Lasso",
            "GaussianNB": "sklearn.naive_bayes:GaussianNB",
@@ -1694,7 +1783,8 @@ def _cuml_up(arrays):
 
 def build(lane, arm, D):
     kind = LANES[lane]["kind"]
-    fn = {"est": _build_est, "dart": _build_dart, "seqmodel": _build_seqmodel, "ts": _build_ts, "graph": _build_graph, "ann": _build_ann,
+    fn = {"est": _build_est, "dart": _build_dart, "seqmodel": _build_seqmodel,
+          "cnnclf": _build_cnnclf, "ts": _build_ts, "graph": _build_graph, "ann": _build_ann,
           "layer": _build_layer, "optim": _build_optim, "linalg": _build_linalg,
           "als": _build_als, "shap": _build_shap, "svgp": _build_svgp}[kind]
     if arm in OURS_ARMS:
@@ -1719,7 +1809,12 @@ def _est_factory(lane, arm, D):
             params["score_func"] = getattr(ml, s["score_func"])
         return (lambda: cls(**params)), "mojolearn." + name, params
     if arm == "sklearn-cpu":
-        cls = _imp(s["sk"])
+        try:
+            cls = _imp(s["sk"])
+        except (ImportError, AttributeError):
+            if lane != "classical-mds":
+                raise
+            cls = _SkClassicalMDS
         params = _derived_params(lane, D, s.get("sk_params", s["params"]))
         params.update(s.get("sk_extra", {}))
         params = {k: _resolve(v, "sklearn") for k, v in params.items()}
@@ -1872,6 +1967,85 @@ def _build_est(lane, arm, D):
 
 # ---- LSTM / GRU / RNN estimators -------------------------------------------
 
+def synthetic_images(n, n_classes=10, shape=(1, 28, 28), seed=SEED):
+    """(X (n, C, H, W) float32, y) : a seed-7 template per class plus N(0, 1) noise."""
+    np = _np()
+    rng = np.random.default_rng(seed)
+    templates = rng.standard_normal((n_classes,) + shape).astype(np.float32)
+    y = rng.integers(0, n_classes, size=n)
+    X = templates[y] + rng.standard_normal((n,) + shape).astype(np.float32)
+    return np.ascontiguousarray(X, dtype=np.float32), y.astype(np.float32)
+
+
+def _build_cnnclf(lane, arm, D):
+    np = _np()
+    s = LANES[lane]
+    p = s["params"]
+    X, y, Xq = D["X"], D["y"], D["Xq"]
+    if arm in OURS_ARMS:
+        return _build_est(lane, arm, D)
+    import torch
+    nn = torch.nn
+    setting = arm[len("torch-"):]
+    mode, prec = setting.split("-")
+    dev = _torch_device(torch)
+    torch.backends.cuda.matmul.allow_tf32 = prec == "tf32"
+    torch.backends.cudnn.allow_tf32 = prec == "tf32"
+    dt = torch.bfloat16 if prec == "bf16" else None
+    Xt, Xqt = torch.from_numpy(X).to(dev), torch.from_numpy(Xq).to(dev)
+    yt = torch.from_numpy(y.astype(np.int64)).to(dev)
+    rng = np.random.default_rng(SEED)
+    orders = [torch.from_numpy(rng.permutation(X.shape[0])).to(dev) for _ in range(p["max_iter"])]
+    S = {}
+
+    def net():
+        c, h, w = p["input_shape"]
+        layers = []
+        for co in p["conv_channels"]:
+            layers += [nn.Conv2d(c, co, p["kernel_size"], padding=p["kernel_size"] // 2), nn.ReLU()]
+            if h >= p["pool_size"] and w >= p["pool_size"]:
+                layers.append(nn.MaxPool2d(p["pool_size"]))
+                h, w = h // p["pool_size"], w // p["pool_size"]
+            c = co
+        return nn.Sequential(*layers, nn.Flatten(), nn.Linear(c * h * w, 10))
+
+    info = {"library": "torch", "version": torch.__version__, "device": "gpu" if dev != "cpu" else "cpu",
+            "pre_clock_fit": False, "input_home": "device", "setting": setting,
+            "config": "Conv2d-ReLU-MaxPool2d x %s + Linear, SGD lr %g momentum %g, batch %d, %d "
+                      "epochs, %s %s on %s" % (p["conv_channels"], p["learning_rate"], p["momentum"],
+                                                p["batch_size"], p["max_iter"], mode, prec, dev)}
+    lossf = nn.CrossEntropyLoss()
+
+    def run(m, x):
+        if dt is not None:
+            with torch.autocast(device_type=dev, dtype=dt):
+                return m(x)
+        return m(x)
+
+    def fit():
+        torch.manual_seed(SEED)
+        m = net().to(dev)
+        fwd = torch.compile(m) if mode == "compile" else m
+        opt = torch.optim.SGD(m.parameters(), lr=p["learning_rate"], momentum=p["momentum"],
+                              weight_decay=p["weight_decay"])
+        bs = p["batch_size"]
+        for order in orders:
+            for st in range(0, X.shape[0], bs):
+                b = order[st:st + bs]
+                opt.zero_grad(set_to_none=True)
+                lossf(run(fwd, Xt[b]).float(), yt[b]).backward()
+                opt.step()
+        _torch_sync(torch, dev)
+        S["fwd"] = fwd
+
+    def infer():
+        with torch.no_grad():
+            out = torch.cat([run(S["fwd"], Xqt[i:i + 4096]).float() for i in range(0, Xqt.shape[0], 4096)])
+        S["pred"] = out.argmax(1).double()
+        _torch_sync(torch, dev)
+    return Runner(info, fit, lambda: {"pred": S["pred"].cpu().numpy()}, infer)
+
+
 def _build_seqmodel(lane, arm, D):
     np = _np()
     s = LANES[lane]
@@ -2004,10 +2178,9 @@ def _ts_one(lib, task, params, y, h):
             from statsmodels.tsa.seasonal import STL
             r = STL(y, period=params["period"], robust=params["robust"]).fit()
             return np.asarray(r.trend + r.seasonal)
-        if task == "forecast" and "trend" in params:
+        if task == "forecast" and "damped" in params:
             from statsmodels.tsa.holtwinters import ExponentialSmoothing
-            m = ExponentialSmoothing(y, trend="add", damped_trend=True, seasonal="add",
-                                     seasonal_periods=params["seasonal_periods"],
+            m = ExponentialSmoothing(y, trend="add", damped_trend=True, seasonal=None,
                                      initialization_method="estimated").fit()
             return np.asarray(m.forecast(h))
         from statsmodels.tsa.forecasting.theta import ThetaModel
@@ -2046,6 +2219,8 @@ def _build_ts(lane, arm, D):
         info = _ours_info(lane)
         info["config"] = "mojolearn.%s(%s).fit(Y (%d, %d))" % (name, p, Y.shape[0], Y.shape[1])
         Y32 = D["Yfit"]
+        # prophet's time axis, as the prophet arm builds it: hourly from 2024-01-01
+        ds = np.datetime64("2024-01-01T00", "h") + np.arange(Y32.shape[1] + h).astype("timedelta64[h]")
 
         def fit():
             if lane == "autoarima":           # the cuML shape: construct on the batch, search, fit
@@ -2058,6 +2233,10 @@ def _build_ts(lane, arm, D):
                 S["est"] = cls(Y32, period=p["period"], robust=p["robust"]).fit()
             elif lane == "var":               # statsmodels' shape: VAR(endog (n_obs, K)).fit(maxlags)
                 S["est"] = cls(np.ascontiguousarray(Y32[:16].T)).fit(maxlags=p["maxlags"])
+            elif t == "garch":                # arch's shape; the variance forecast horizon is fixed at fit
+                S["est"] = cls(**p).fit(Y32, horizon=h)
+            elif lane == "prophet":           # prophet's shape: fit(ds, y), then predict(future ds)
+                S["est"] = cls(**p).fit(ds[:Y32.shape[1]], Y32)
             else:
                 S["est"] = cls(**p).fit(Y32)
 
@@ -2073,7 +2252,15 @@ def _build_ts(lane, arm, D):
             elif lane == "var":
                 S["fc"] = _arr(e.forecast(np.ascontiguousarray(Y32[:16].T[-e.k_ar:]), h), np.float64).T
             else:
-                fc = _arr(e.forecast(h), np.float64)
+                if lane == "autoarima" or t == "garch":
+                    fc = e.forecast(h)
+                elif lane == "prophet":
+                    fc = e.predict(ds[Y32.shape[1]:])
+                else:                          # statsforecast's shape: predict(h) -> {"mean": ...}
+                    fc = e.predict(h)
+                    if isinstance(fc, dict):
+                        fc = fc["mean"]
+                fc = _arr(fc, np.float64)
                 if fc.ndim == 2 and fc.shape[0] == h and fc.shape[1] == Y32.shape[0] != h:
                     fc = fc.T                  # (h, batch), cuML's layout
                 S["fc"] = fc
@@ -2099,7 +2286,7 @@ def _build_ts(lane, arm, D):
         mk = {"autoarima": lambda: sfm.AutoARIMA(season_length=1, max_p=3, max_q=3, max_d=1),
               "theta": lambda: sfm.Theta(season_length=24),
               "croston": lambda: sfm.CrostonClassic(),
-              "damped-ets": lambda: sfm.AutoETS(season_length=24, model="AAA", damped=True)}[lane]
+              "damped-ets": lambda: sfm.AutoETS(season_length=1, model="AAN", damped=True)}[lane]
         info["config"] = repr(mk())
 
         def one(y):
@@ -2163,15 +2350,25 @@ def _build_graph(lane, arm, D):
     if arm in OURS_ARMS:
         name, cls = _ours_class(lane)
         info = _ours_info(lane)
-        info["config"] = "mojolearn.%s(%s).fit(indptr, indices)" % (name, p)
+        A = np.zeros((n, n), dtype=np.float32)            # before the clock (named mismatch)
+        A[np.repeat(np.arange(n), np.diff(ip)), ix] = 1.0
+        info["pre_clock_fit"] = False
+        info["config"] = "mojolearn.%s(%s) on the dense adjacency (%d x %d)" % (name, p, n, n)
 
         def fit():
-            S["e"] = cls(**p).fit(ip, ix)
+            if t == "components":
+                S["lab"] = cls(A, directed=False)[1]
+            else:
+                S["e"] = cls(**p).fit(A)
 
         def outputs():
+            if t == "components":
+                return {"labels": _arr(S["lab"], np.int64)}
             e = S["e"]
-            return ({"scores": _arr(e.scores_, np.float64)} if t == "pagerank"
-                    else {"labels": _arr(e.labels_, np.int64)})
+            sc = getattr(e, "pagerank_", None)
+            if t == "pagerank":
+                return {"scores": _arr(sc if sc is not None else e.scores_, np.float64)}
+            return {"labels": _arr(e.labels_, np.int64)}
         return Runner(info, fit, outputs)
     lib = s["other"][arm]
     if lib == "networkx":
@@ -2215,7 +2412,7 @@ def _build_graph(lane, arm, D):
         elif t == "components":
             S["df"] = cugraph.connected_components(G)
         else:
-            S["df"], _ = cugraph.louvain(G, resolution=p["resolution"], max_level=p["max_level"])
+            S["df"], _ = cugraph.louvain(G, resolution=p["resolution"], max_level=100)
 
     def outputs():
         df = S["df"].to_pandas().sort_values("vertex")
@@ -2251,12 +2448,19 @@ def _build_ann(lane, arm, D):
         kw = dict(p)
         if "n_lists" in kw:
             kw.update(n_lists=nlist, n_probes=nprobe)
-        if t in ("ivf-pq", "ivf-refine"):
+        if t in ("ivf-pq", "ivf-refine", "ivf-filter"):
             kw["pq_dim"] = _pq_dim(d)
         # the refine step and the sample filter are options of an index that
         # may already exist: until the option does, the race is not built yet
         import inspect
+        import mojolearn as ml
+        refine_fn = getattr(ml, "refine", None) if t == "ivf-refine" else None
+        if refine_fn is not None:          # search k x ratio candidates, then the exact re-rank
+            kw.pop("refine_ratio", None)
+            kw["n_neighbors"] = k * p["refine_ratio"]
         need = {"ivf-refine": (cls, "refine_ratio"), "ivf-filter": (cls.search, "filter")}.get(t)
+        if refine_fn is not None:
+            need = None
         if need:
             try:
                 params = inspect.signature(need[0]).parameters
@@ -2272,6 +2476,9 @@ def _build_ann(lane, arm, D):
         def infer():
             if t == "ivf-filter":
                 S["ind"] = S["e"].search(Q, filter=allowed)[1]
+            elif refine_fn is not None:
+                cand = S["e"].search(Q)[1]
+                S["ind"] = refine_fn(X, Q, cand, k)[1]
             else:
                 S["ind"] = S["e"].search(Q)[1]
         return Runner(info, fit, lambda: {"ind": _arr(S["ind"], np.int64)}, infer)
@@ -2285,7 +2492,7 @@ def _build_ann(lane, arm, D):
             if t == "cagra":
                 idx = faiss.IndexHNSWFlat(d, 32)
                 idx.hnsw.efConstruction = 128
-            elif t in ("ivf-pq", "ivf-refine"):
+            elif t in ("ivf-pq", "ivf-refine", "ivf-filter"):
                 idx = faiss.IndexIVFPQ(quant, d, nlist, _pq_dim(d), 8)
             elif t == "ivf-sq":
                 idx = faiss.IndexIVFScalarQuantizer(quant, d, nlist, faiss.ScalarQuantizer.QT_8bit)
@@ -2353,14 +2560,6 @@ def _build_ann(lane, arm, D):
         elif t == "ivf-sq":
             from cuvs.neighbors import ivf_sq
             S["ind"] = ivf_sq.search(ivf_sq.SearchParams(n_probes=nprobe), S["i"], dev["queries"], k)[1]
-        elif t == "ivf-filter":
-            import cupy as cp
-            from cuvs.neighbors import filters
-            bits = np.packbits(allowed, bitorder="little").view(np.uint32) if n % 32 == 0 else \
-                np.packbits(np.concatenate([allowed, np.zeros(-n % 32, bool)]), bitorder="little").view(np.uint32)
-            flt = filters.from_bitset(cp.asarray(bits))
-            S["ind"] = ivf_flat.search(ivf_flat.SearchParams(n_probes=nprobe), S["i"], dev["queries"],
-                                       k, filter=flt)[1]
         else:
             S["ind"] = ivf_flat.search(ivf_flat.SearchParams(n_probes=nprobe), S["i"], dev["queries"], k)[1]
     info["config"] = "cuvs %s nlist=%d nprobe=%d k=%d" % (t, nlist, nprobe, k)
@@ -2412,6 +2611,12 @@ def _layer_inputs(lane, D, torch):
     elif t == "conv2d":
         x = torch.randn(nb, p["in_channels"], 56, 56, generator=g)
         make = lambda: nn.Conv2d(**p)  # noqa: E731
+    elif t in ("maxpool1d", "avgpool1d"):
+        x = torch.randn(nb, 64, 4096, generator=g)
+        make = lambda: (nn.MaxPool1d if t == "maxpool1d" else nn.AvgPool1d)(**p)  # noqa: E731
+    elif t == "batchnorm1d":
+        x = torch.randn(nb, p["num_features"], 1024, generator=g)
+        make = lambda: nn.BatchNorm1d(**p)  # noqa: E731
     elif t in ("maxpool2d", "avgpool2d"):
         x = torch.randn(nb, 64, 112, 112, generator=g)
         make = lambda: (nn.MaxPool2d if t == "maxpool2d" else nn.AvgPool2d)(**p)  # noqa: E731
@@ -2445,7 +2650,8 @@ def _layer_inputs(lane, D, torch):
     return make, x, extra
 
 
-def _MoE(torch, hidden_size, ffn_size, num_experts, top_k):
+def _MoE(torch, hidden_size, intermediate_size, num_experts, top_k, norm_topk_prob):
+    ffn_size = intermediate_size
     nn = torch.nn
     F = torch.nn.functional
 
@@ -2471,7 +2677,9 @@ def _MoE(torch, hidden_size, ffn_size, num_experts, top_k):
             logits = self.gate(h)
             w = F.softmax(logits, dim=1, dtype=torch.float)
             w, sel = torch.topk(w, top_k, dim=-1)
-            w = (w / w.sum(dim=-1, keepdim=True)).to(h.dtype)
+            if norm_topk_prob:
+                w = w / w.sum(dim=-1, keepdim=True)
+            w = w.to(h.dtype)
             out = torch.zeros_like(h)
             mask = F.one_hot(sel, num_classes=num_experts).permute(2, 1, 0)
             for e in range(num_experts):
@@ -2515,14 +2723,47 @@ def _build_layer(lane, arm, D):
         name, cls = _ours_class(lane)
         info = _ours_info(lane)
         kw = dict(s["params"])
+        if name == "layer_norm_forward":      # the functional form: F.layer_norm and its backward
+            import mojolearn as ml
+            bwd = getattr(ml, "layer_norm_backward", None)
+            x = x_cpu.detach().numpy()
+            w_, b_ = state["weight"], state["bias"]
+            info["config"] = "mojolearn.layer_norm_forward / layer_norm_backward, eps %g" % kw["eps"]
+            info["weights_loaded"] = info["output_comparable"] = True
+            dyh = {}
+
+            def fit():
+                y = cls(x, None, w_, b_, kw["eps"])
+                if "dy" not in dyh:
+                    dyh["dy"] = torch.randn(tuple(np.shape(y)), generator=g).numpy()
+                if bwd is None:
+                    raise RuntimeError("CONTRACT: mojolearn has no layer_norm_backward")
+                bwd(dyh["dy"], x, None, w_, b_, kw["eps"])
+
+            def infer():
+                S["y"] = cls(x, None, w_, b_, kw["eps"])
+            return Runner(info, fit, lambda: {"y": _arr(S["y"], np.float32)}, infer)
         if s["task"] in ("gcn", "sage"):
             kw["in_channels"] = x_cpu.shape[1]
-        if s["task"] in ("conv1d", "conv2d"):
-            kw["random_state"] = SEED
+        import inspect
+        try:
+            if "random_state" in inspect.signature(cls).parameters:
+                kw["random_state"] = SEED
+        except (TypeError, ValueError):
+            pass
         layer = cls(**kw)
         info["config"] = "mojolearn.%s(%s)" % (name, kw)
         info["weights_loaded"] = False
-        if hasattr(layer, "load_state_dict"):
+        if s["task"] == "moe":                # HF's fused layout from the per-expert transcription
+            E = kw["num_experts"]
+            layer.load_state_dict({
+                "router": state["gate.weight"],
+                "gate_up_proj": np.stack([np.concatenate([state["experts.%d.w1.weight" % e],
+                                                          state["experts.%d.w3.weight" % e]])
+                                          for e in range(E)]),
+                "down_proj": np.stack([state["experts.%d.w2.weight" % e] for e in range(E)])})
+            info["weights_loaded"] = True
+        elif hasattr(layer, "load_state_dict"):
             layer.load_state_dict(state)
             info["weights_loaded"] = True
         elif hasattr(layer, "set_weights") and "weight" in state:
@@ -2546,6 +2787,8 @@ def _build_layer(lane, arm, D):
             nonlocal dy
             y = fwd(x, *extra)
             y = y[0] if isinstance(y, tuple) else y
+            if s.get("forward_only"):
+                return
             if dy is None:
                 dy = torch.randn(tuple(np.shape(y)), generator=g).numpy()
             if not hasattr(layer, "backward"):
@@ -2556,7 +2799,13 @@ def _build_layer(lane, arm, D):
         def infer():
             y = fwd(x, *extra)
             S["y"] = y[0] if isinstance(y, tuple) else y
-        out = (lambda: {"y": _arr(S["y"], np.float32)}) if info["weights_loaded"] else (lambda: {})
+        # a layer with no trained parameters (pooling, BatchNorm's default affine, LayerNorm)
+        # starts equal to torch's; one with random weights is compared only when they loaded
+        comparable = info["weights_loaded"] or not any(
+            k.endswith("weight") and not k.startswith(("bn", "norm")) and s["task"] not in (
+                "batchnorm1d", "batchnorm2d", "layernorm") for k in state)
+        info["output_comparable"] = bool(comparable)
+        out = (lambda: {"y": _arr(S["y"], np.float32)}) if comparable else (lambda: {})
         return Runner(info, fit, out, infer)
     setting = arm[len("torch-"):]
     mode, prec = setting.split("-")
@@ -2573,7 +2822,7 @@ def _build_layer(lane, arm, D):
     mod.load_state_dict({k: torch.from_numpy(v) for k, v in state.items()})
     mod = mod.to(dev)
     x = x_cpu.to(dev)
-    if s["task"] not in ("gcn", "sage"):
+    if s["task"] not in ("gcn", "sage") and not s.get("forward_only"):
         x.requires_grad_(True)             # backward computes dx, as ours' backward returns it
     extra = tuple(e.to(dev) for e in extra_cpu)
     run = torch.compile(mod) if mode == "compile" else mod
@@ -2590,6 +2839,11 @@ def _build_layer(lane, arm, D):
         return y[0] if isinstance(y, tuple) else y
 
     def fit():
+        if s.get("forward_only"):
+            with torch.no_grad():
+                forward()
+            _torch_sync(torch, dev)
+            return
         y = forward()
         if "dy" not in dyh:
             dyh["dy"] = torch.randn(tuple(y.shape), generator=g).to(dev)
@@ -3413,6 +3667,8 @@ def race(args):
     arms = [a for a in args.arms.split(",") if a]
     os.makedirs(args.out, exist_ok=True)
     os.makedirs(args.work, exist_ok=True)
+    if args.smoke_rows:           # the conductor builds the same seeded arrays as its workers
+        os.environ["MOJOLEARN_ALGOS_SMOKE_ROWS"] = str(args.smoke_rows)
     B, rec = _load_block(lane, ds, args.data)
     D = lane_arrays(lane, B)
     shape = "; ".join("%s %s" % (k, "x".join(str(s) for s in np.shape(v)))
