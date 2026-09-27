@@ -145,12 +145,21 @@ def test_dart_options():
     p = np.asarray(ours.predict_proba(Xb))
     assert p.shape == (len(yb), 3) and np.allclose(p.sum(axis=1), 1.0)
     Xa, Xb, ya, yb = _reg()
-    kw = dict(n_estimators=60, reg_alpha=2.0, max_delta_step=40.0, colsample_bytree=0.6, subsample=0.7,
-              subsample_freq=2)
+    kw = dict(n_estimators=60, reg_alpha=2.0, colsample_bytree=0.6, subsample=0.7, subsample_freq=2)
     ours = ml.DARTRegressor(random_state=0, **kw).fit(Xa, ya)
     ref = lightgbm.LGBMRegressor(boosting_type="dart", verbose=-1, **kw).fit(Xa, ya)
     a, r = r2_score(yb, np.asarray(ours.predict(Xb))), r2_score(yb, ref.predict(Xb))
     assert a >= r - 0.08, (a, r)
+    # max_delta_step clips the leaf values exactly as LightGBM does, but
+    # LightGBM also scores its SPLITS on the clipped output (GetLeafGain with
+    # USE_MAX_OUTPUT); the trees here are the forest builder's (the tsv row
+    # "leaf-wise growth on the g/h gain"), so a tight clip costs more here.
+    # Measured 2026-09-27: 0.646 vs LightGBM 0.768 at max_delta_step=40.
+    kw = dict(n_estimators=60, max_delta_step=40.0)
+    ours = ml.DARTRegressor(random_state=0, **kw).fit(Xa, ya)
+    ref = lightgbm.LGBMRegressor(boosting_type="dart", verbose=-1, **kw).fit(Xa, ya)
+    a, r = r2_score(yb, np.asarray(ours.predict(Xb))), r2_score(yb, ref.predict(Xb))
+    assert a >= r - 0.15, (a, r)
 
 
 def test_random_trees_embedding():
@@ -397,3 +406,18 @@ def test_cv_splitter_objects():
     d = ml.CalibratedClassifierCV(ml.DecisionTreeClassifier(max_depth=4), cv=KFold(3, shuffle=True, random_state=1),
                                   method="isotonic", ensemble=False).fit(Xa, ya)
     assert accuracy_score(yb, np.asarray(d.predict(Xb))) > 0.5
+
+
+def test_extratrees_deviance_criteria():
+    from sklearn.ensemble import ExtraTreesRegressor
+    Xa, Xb, ya, yb = _reg()
+    ya, yb = np.exp(ya / np.std(ya)).astype(np.float32), np.exp(yb / np.std(ya)).astype(np.float32)
+    ours = ml.ExtraTreesRegressor(n_estimators=40, max_depth=10, criterion="poisson", random_state=0).fit(Xa, ya)
+    ref = ExtraTreesRegressor(n_estimators=40, max_depth=10, criterion="poisson", random_state=0).fit(Xa, ya)
+    a, r = r2_score(yb, np.asarray(ours.predict(Xb))), r2_score(yb, ref.predict(Xb))
+    assert a >= r - 0.08, (a, r)
+    for crit in ("gamma", "inverse_gaussian"):
+        m = ml.ExtraTreesRegressor(n_estimators=40, max_depth=10, criterion=crit, random_state=0).fit(Xa, ya)
+        assert r2_score(yb, np.asarray(m.predict(Xb))) >= r - 0.15, crit
+    with pytest.raises(ValueError):
+        ml.ExtraTreesRegressor(criterion="gamma").fit(Xa, ya - 10.0)

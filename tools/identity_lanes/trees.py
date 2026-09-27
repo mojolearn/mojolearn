@@ -289,6 +289,24 @@ def _(ml, X, yc, yr, Xh=None):
 _batch_decl(_rows_calls("predict", "predict_proba"), "trees-rf-weighted")
 
 
+@lane("trees-et-deviance")
+def _(ml, X, yc, yr, Xh=None):
+    """ExtraTreesRegressor on cuML's deviance criteria (Poisson, Gamma,
+    InverseGaussian) over a strictly positive target; one bootstrap forest,
+    one best-first."""
+    y = _pos(yr)
+    p = ml.ExtraTreesRegressor(n_estimators=8, max_depth=8, random_state=7, criterion="poisson").fit(X, y)
+    g = ml.ExtraTreesRegressor(n_estimators=6, max_depth=7, random_state=7, criterion="gamma",
+                               bootstrap=True, max_samples=0.7).fit(X, y)
+    i = ml.ExtraTreesRegressor(n_estimators=4, max_leaf_nodes=24, random_state=7,
+                               criterion="inverse_gaussian").fit(X, y)
+    return _fit(dict(poisson=_h(p.predict(X)), gamma=_h(g.predict(X)), ig=_h(i.predict(X))),
+                p, lambda e: (e.predict(Xh),))
+
+
+_batch_decl(_rows_calls("predict"), "trees-et-deviance")
+
+
 @lane("trees-shap-tree")
 def _(ml, X, yc, yr, Xh=None):
     """Exact TreeSHAP over a classifier forest (three outputs) and a DART model."""

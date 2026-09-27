@@ -148,20 +148,24 @@ def main() raises:
         assert_true(not accepts(p), "min_samples_split < 2 must refuse")
         refused += 1
 
-    # --- the criteria: three accepted, four refused, BY NAME ---------------
+    # --- the criteria: six accepted, one refused, BY NAME ----------------
     # ENTROPY moved from the refused list to the accepted one with DEVIATION
-    # 459 (2026-08-23).
-    for ok in [CRITERION_GINI, CRITERION_ENTROPY, CRITERION_MSE, CRITERION_END]:
+    # 459 (2026-08-23); POISSON, GAMMA and INVERSE_GAUSSIAN with DEVIATION
+    # 5610 (2026-09-27).
+    for ok in [
+        CRITERION_GINI,
+        CRITERION_ENTROPY,
+        CRITERION_MSE,
+        CRITERION_POISSON,
+        CRITERION_GAMMA,
+        CRITERION_INVERSE_GAUSSIAN,
+        CRITERION_END,
+    ]:
         var p = DecisionTreeParams()
         p.split_criterion = Int32(ok)
         assert_true(accepts(p), "a implemented criterion must pass")
         accepted += 1
-    for bad in [
-        CRITERION_MAE,
-        CRITERION_POISSON,
-        CRITERION_GAMMA,
-        CRITERION_INVERSE_GAUSSIAN,
-    ]:
+    for bad in [CRITERION_MAE]:
         var p = DecisionTreeParams()
         p.split_criterion = Int32(bad)
         assert_true(

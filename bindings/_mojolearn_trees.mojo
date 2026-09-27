@@ -55,7 +55,10 @@ from extratrees.estimator import (
 from extratrees.impl.decisiontree.decisiontree import (
     CRITERION_ENTROPY,
     CRITERION_GINI,
+    CRITERION_GAMMA,
+    CRITERION_INVERSE_GAUSSIAN,
     CRITERION_MSE,
+    CRITERION_POISSON,
 )
 from extratrees.impl.decisiontree.flatnode import (
     SparseTreeNode,
@@ -411,9 +414,11 @@ def _et_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
     if Float64(py=params[20]) != Float64(1):
         raise Error("Extra Trees training is GPU-only; device (slot 20) must be 1")
     var config = _config_from(params, ExtraTreesConfig().for_regression())
-    if config.criterion != CRITERION_MSE:
+    if config.criterion != CRITERION_MSE and config.criterion != CRITERION_POISSON and (
+        config.criterion != CRITERION_GAMMA and config.criterion != CRITERION_INVERSE_GAUSSIAN
+    ):
         raise Error(
-            "et_regressor_fit: criterion (slot 21) must be MSE (2); got "
+            "et_regressor_fit: criterion (slot 21) must be MSE (2), POISSON (4), GAMMA (5) or INVERSE_GAUSSIAN (6); got "
             + String(config.criterion)
         )
     # DEVIATION 2480: optional host boundary attribution, no added drains.

@@ -122,7 +122,10 @@ from extratrees.checks.fixed_point import ceil_log2, choose_scale, quantize
 from extratrees.impl.decisiontree.decisiontree import (
     CRITERION_ENTROPY,
     CRITERION_GINI,
+    CRITERION_GAMMA,
+    CRITERION_INVERSE_GAUSSIAN,
     CRITERION_MSE,
+    CRITERION_POISSON,
     DecisionTreeParams,
     validity_check,
 )
@@ -674,12 +677,17 @@ def regressor_plan(
     call this and nothing else before their trainer, so neither arm has a line
     of policy of its own and a refusal cannot reach one and miss the other.
     """
-    if config.criterion != CRITERION_MSE:
+    if not _is_regression_criterion(config.criterion):
         raise Error(
-            "the regression criterion must be squared_error; the others are"
-            " refused by validity_check"
+            "the regression criterion must be squared_error, poisson, gamma or"
+            " inverse_gaussian; the others are refused by validity_check"
         )
     return resolve(config, Int(n_rows), Int(n_features))
+
+
+def _is_regression_criterion(c: Int32) -> Bool:
+    """MSE and DEVIATION 5610's three deviances."""
+    return c == CRITERION_MSE or c == CRITERION_POISSON or c == CRITERION_GAMMA or c == CRITERION_INVERSE_GAUSSIAN
 
 
 def quantize_labels(
