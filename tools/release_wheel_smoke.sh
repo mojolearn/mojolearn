@@ -347,7 +347,11 @@ done
 fi
 QUALIFY_SHA=$(shasum -a 256 "$QUALIFY" | cut -d' ' -f1)
 STAMP=$(date -u +%Y%m%d-%H%M%S)
-POD_NAME="mojolearn-smoke-$(printf '%s' "$VERSION" | tr -c 'a-z0-9\n' '-')-$STAMP"
+# The vendor and this process's pid are in the name: the release launches the
+# NVIDIA and AMD columns in the same second, and 0.8.24's two legs shared one
+# name, so the AMD leg's "create response unparsed, pod exists by name"
+# recovery found and deleted the NVIDIA leg's RTX 4090 pod.
+POD_NAME="mojolearn-smoke-$VENDOR-$(printf '%s' "$VERSION" | tr -c 'a-z0-9\n' '-')-$STAMP-$$"
 if [ -n "$FROM_INDEX" ]; then
     # tools/index_install_check.sh starts both vendors in the same second: the
     # vendor in the name keeps the two boxes (and their name-keyed dead-men) apart.
