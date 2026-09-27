@@ -93,7 +93,7 @@ import os
 import sys
 
 # ------------------------------------------------ the algorithm expansion
-#: THE NINE EXPANSION LANES (lane/algos-prep, 2026-09-27;
+#: THE EXPANSION LANES (lane/algos-prep, 2026-09-27; `metrics` joined the same day, lane/metrics;
 #: docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md, "Shared registries"). Nine lanes
 #: add algorithms in parallel, and this manifest would be the file every one
 #: of them edits. So none of them edits it: each lane owns ONE file beside
