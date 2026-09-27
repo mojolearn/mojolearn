@@ -21,10 +21,10 @@ FAMILIES = (
         routes="_mojolearn_x_decomp",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("x-decomp-ipca", "x-decomp-grp", "x-decomp-srp", "x-decomp-nmf", "x-decomp-fastica"),
+        training_lanes=("x-decomp-ipca", "x-decomp-grp", "x-decomp-srp", "x-decomp-nmf", "x-decomp-fastica", "x-decomp-factor-analysis"),
         inference_lanes=(),
         forest_kinds=(),
-        classes=("IncrementalPCA", "GaussianRandomProjection", "SparseRandomProjection", "NMF", "FastICA"),
+        classes=("IncrementalPCA", "GaussianRandomProjection", "SparseRandomProjection", "NMF", "FastICA", "FactorAnalysis"),
         display="the decomposition and linear algebra expansion",
         host_modules=("x_decomp/host.mojo", "x_decomp/cells.mojo", "x_decomp/api.mojo", "x_decomp/exec_trait.mojo"),
         exports=(
@@ -38,6 +38,6 @@ FAMILIES = (
         ships_in_wheel=True,
     ),
 )
-TRAINING_LANE_NAMES = {"x-decomp-fastica": "FastICA", "x-decomp-nmf": "NMF", "x-decomp-ipca": "IncrementalPCA", "x-decomp-grp": "GaussianRandomProjection",
+TRAINING_LANE_NAMES = {"x-decomp-factor-analysis": "FactorAnalysis", "x-decomp-fastica": "FastICA", "x-decomp-nmf": "NMF", "x-decomp-ipca": "IncrementalPCA", "x-decomp-grp": "GaussianRandomProjection",
                        "x-decomp-srp": "SparseRandomProjection"}
-PUBLIC_PENDING_LANES = {"x-decomp-fastica": "no reference", "x-decomp-nmf": "no reference", "x-decomp-ipca": "no reference", "x-decomp-grp": "no reference", "x-decomp-srp": "no reference"}
+PUBLIC_PENDING_LANES = {"x-decomp-factor-analysis": "no reference", "x-decomp-fastica": "no reference", "x-decomp-nmf": "no reference", "x-decomp-ipca": "no reference", "x-decomp-grp": "no reference", "x-decomp-srp": "no reference"}

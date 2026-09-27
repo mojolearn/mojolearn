@@ -24,7 +24,7 @@ from . import _backend
 from ._buffer import as_f32_c, frombytes
 
 __all__ = ["IncrementalPCA", "GaussianRandomProjection", "SparseRandomProjection", "johnson_lindenstrauss_min_dim",
-           "NMF", "FastICA"]
+           "NMF", "FastICA", "FactorAnalysis"]
 
 _BINDING = "_mojolearn_x_decomp"
 
@@ -1057,3 +1057,190 @@ class FastICA(_Base):
         if self._whiten:
             Y = k.ew("add", Y, self.mean_m_)
         return Y.out()
+
+
+# ================================================================ FactorAnalysis
+_LOG_2PI = 1.8378770664093453
+
+
+def _dsum(values):
+    """Sequential float64 sum (IEEE adds, ascending): the same on every box."""
+    t = 0.0
+    for v in values:
+        t += v
+    return t
+
+
+def _inv(k, A):
+    """A^-1 through the LU solve against the identity (getrf + getrs)."""
+    lu, piv, info = k.lu(A)
+    if info:
+        raise ValueError("singular matrix")
+    return k.lu_solve(lu, piv, _eye(A.r))
+
+
+def _eye(n):
+    E = _M.zeros(n, n)
+    for i in range(n):
+        E.s[i * n + i] = 1.0
+    return E
+
+
+def _logdet(k, A):
+    """log|det A| from the LU diagonal (sum ascending); sign ignored."""
+    lu, piv, info = k.lu(A)
+    diag = _M.of([lu.s[i * A.r + i] for i in range(A.r)], 1, A.r)
+    return k.total(k.ew("logs", k.ew("abs", diag), s=1.1754943508222875e-38)).s[0]
+
+
+def _polar(k, A):
+    """U V^T of the SVD of a square A, and the sum of its singular values:
+    A V S^-1 V^T through the eigh of A^T A."""
+    w, V = k.eigh(k.mm(A, A, ta=True))
+    sv = k.ew("sqrt", w)
+    AV = k.ew("div", k.mm(A, V), sv)
+    return k.mm(AV, V, tb=True), k.total(sv).s[0]
+
+
+def _ortho_rotation(k, C, method, tol=1e-6, max_iter=100):
+    """sklearn `_factor_analysis.py::_ortho_rotation`; C is n_features x n_components."""
+    nrow, ncol = C.r, C.c
+    R = _eye(ncol)
+    var = 0.0
+    for _ in range(max_iter):
+        cr = k.mm(C, R)
+        if method == "varimax":
+            tmp = k.ew("mul", cr, k.ew("scale", k.colsum(k.ew("sq", cr)), s=1.0 / nrow))
+            target = k.ew("sub", k.ew("cube", cr), tmp)
+        else:
+            target = k.ew("cube", cr)
+        R, var_new = _polar(k, k.mm(C, target, ta=True))
+        if var != 0 and var_new < var * (1 + tol):
+            break
+        var = var_new
+    return k.mm(C, R).T
+
+
+class FactorAnalysis(_Base):
+    """sklearn.decomposition.FactorAnalysis (reference: scikit-learn
+    `decomposition/_factor_analysis.py`: `fit`, `transform`,
+    `get_covariance`, `get_precision`, `score_samples`, `_ortho_rotation`).
+
+    Each iteration's SVD of the scaled data is the eigh of its d x d Gram
+    matrix: the squared singular values sklearn uses ARE its eigenvalues.
+    svd_method='randomized' takes the same exact route (sklearn's randomized
+    SVD is an approximation of it). `rotation` in {None, 'varimax',
+    'quartimax'}."""
+    _parameters = ("n_components", "tol", "copy", "max_iter", "noise_variance_init", "svd_method",
+                   "iterated_power", "rotation", "random_state", "numeric_mode")
+
+    def __init__(self, n_components=None, *, tol=1e-2, copy=True, max_iter=1000, noise_variance_init=None,
+                 svd_method="randomized", iterated_power=3, rotation=None, random_state=0, numeric_mode=None):
+        self.n_components, self.tol, self.copy, self.max_iter = n_components, tol, copy, max_iter
+        self.noise_variance_init, self.svd_method, self.iterated_power = noise_variance_init, svd_method, iterated_power
+        self.rotation, self.random_state, self.numeric_mode = rotation, random_state, numeric_mode
+
+    def fit(self, X, y=None):
+        self.numeric_mode_ = _mode(self.numeric_mode)
+        if self.svd_method not in ("lapack", "randomized"):
+            raise ValueError("svd_method must be 'lapack' or 'randomized'")
+        if self.rotation not in (None, "varimax", "quartimax"):
+            raise ValueError("rotation must be None, 'varimax' or 'quartimax'")
+        k = self._kit()
+        M = _M.from_input(X)
+        n, d = M.r, M.c
+        nc = self.n_components or d
+        mean = k.colmean(M)
+        Xc = k.ew("sub", M, mean)
+        nsqrt = math.sqrt(n)
+        llconst = d * _LOG_2PI + nc
+        var = k.ew("scale", k.colsum(k.ew("sq", Xc)), s=1.0 / n)
+        if self.noise_variance_init is None:
+            psi = k.const(1.0, 1, d)
+        else:
+            psi = _M.of([float(v) for v in self.noise_variance_init], 1, len(self.noise_variance_init))
+            if psi.c != d:
+                raise ValueError(f"noise_variance_init dimension does not match the number of features : {psi.c} != {d}")
+        SMALL = 1e-12
+        old_ll = -math.inf
+        loglike = []
+        it = 0
+        W = None
+        for it in range(1, self.max_iter + 1):
+            sqrt_psi = k.ew("adds", k.ew("sqrt", psi), s=SMALL)
+            Z = k.ew("scale", k.ew("div", Xc, sqrt_psi), s=1.0 / nsqrt)
+            ev, V = k.eigh(k.mm(Z, Z, ta=True))
+            order = list(range(d - 1, -1, -1))
+            s2 = k.ew("maxs", ev.take_cols(order), s=0.0)
+            Vt = V.take_cols(order).T.rows(0, nc)
+            sk = s2.cols(0, nc)
+            # the log-likelihood is accumulated in Python float64 (IEEE adds,
+            # sequential): at float32 its step falls under tol=1e-2 early
+            unexp = _dsum(s2.cols(nc, d).s) if nc < d else 0.0
+            W = k.ew("mul", Vt, k.ew("sqrt", k.ew("maxs", k.ew("adds", sk, s=-1.0), s=0.0)).T)
+            W = k.ew("mul", W, sqrt_psi)
+            slog = _dsum(k.ew("logs", sk, s=1.1754943508222875e-38).s)
+            plog = _dsum(k.ew("logs", psi, s=1.1754943508222875e-38).s)
+            ll = (llconst + slog + unexp + plog) * (-n / 2.0)
+            loglike.append(ll)
+            if (ll - old_ll) < self.tol:
+                break
+            old_ll = ll
+            psi = k.ew("maxs", k.ew("sub", var, k.colsum(k.ew("sq", W))), s=SMALL)
+        if self.rotation is not None:
+            W = _ortho_rotation(k, W.T, self.rotation).rows(0, nc)
+        self.components_m_ = W
+        self.components_ = W.out()
+        self.noise_variance_m_ = psi
+        self.noise_variance_ = psi.out((d,))
+        self.mean_m_ = mean
+        self.mean_ = mean.out((d,))
+        self.loglike_ = loglike
+        self.n_iter_ = it
+        self.n_features_in_ = d
+        return self
+
+    def transform(self, X):
+        self._check()
+        k = self._kit()
+        M = k.ew("sub", _M.from_input(X), self.mean_m_)
+        W = self.components_m_
+        Wpsi = k.ew("div", W, self.noise_variance_m_)
+        cov_z = _inv(k, k.ew("add", _eye(W.r), k.mm(Wpsi, W, tb=True)))
+        return k.mm(k.mm(M, Wpsi, tb=True), cov_z).out()
+
+    def _cov(self, k):
+        W = self.components_m_
+        C = k.mm(W, W, ta=True)
+        d = C.r
+        for i in range(d):
+            C.s[i * d + i] = _f32(C.s[i * d + i] + self.noise_variance_m_.s[i])
+        return C
+
+    def get_covariance(self):
+        self._check()
+        return self._cov(self._kit()).out()
+
+    def get_precision(self):
+        self._check()
+        k = self._kit()
+        return _inv(k, self._cov(k)).out()
+
+    def score_samples(self, X):
+        v = self._ss(X)
+        return v.out((v.r,))
+
+    def _ss(self, X):
+        self._check()
+        k = self._kit()
+        Xr = k.ew("sub", _M.from_input(X), self.mean_m_)
+        C = self._cov(k)
+        P = _inv(k, C)
+        ld = _logdet(k, P)
+        q = k.rowsum(k.ew("mul", Xr, k.mm(Xr, P)))
+        return k.ew("adds", k.ew("scale", q, s=-0.5), s=-0.5 * (Xr.c * _LOG_2PI - ld))
+
+    def score(self, X, y=None):
+        k = self._kit()
+        v = self._ss(X)
+        return k.ew("scale", k.total(v), s=1.0 / v.r).s[0]

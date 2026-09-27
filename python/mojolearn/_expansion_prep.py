@@ -30,9 +30,10 @@ import numbers
 from . import _backend
 from ._array import Array
 from ._buffer import as_f32_c, addr_ro
-from ._labels import encode_labels, decode_labels
+from ._labels import flatten_labels, sorted_classes, label_kind
 
-__all__ = ["RobustScaler", "MaxAbsScaler", "OrdinalEncoder", "OneHotEncoder", "TargetEncoder", "SimpleImputer", "KBinsDiscretizer"]
+__all__ = ["RobustScaler", "MaxAbsScaler", "OrdinalEncoder", "OneHotEncoder", "TargetEncoder", "SimpleImputer", "KBinsDiscretizer",
+           "GaussianNB", "MultinomialNB", "BernoulliNB"]
 
 _BINDING = "_mojolearn_x_prep"
 
@@ -42,6 +43,7 @@ _OPS = dict(
     lookup=7, count_neg=8, onehot=9, i2f=10, f2i=11, binarize=12, matmul=13, row_softmax=14,
     row_argmax=15, class_stats=16, center_rows=17, eigh=18, where_neg=19,
     te_global=20, te_enc=21, te_apply=22, mark_missing=23, fill=24, kbins_edges=25, kbins_codes=26,
+    gnb_eps=27, gnb_params=28, gnb_jll=29, class_log_prior=30, mnb_params=31, bnb_params=32, cnb_params=33, cat_params=34, cat_jll=35,
 )
 _PARAMS = 14
 _NONE = -1
@@ -128,6 +130,28 @@ class _Prog:
 
 def _mode():
     return _backend.default_mode()
+
+
+def encode_labels(y):
+    """(classes, int32 codes) under `_labels`' order rule, in Python: the
+    base binding's native encoder is not on the CPU route of this lane."""
+    classes, codes = sorted_classes(flatten_labels(y))
+    return classes, Array.from_list(codes, "<i4")
+
+
+def decode_labels(classes, codes):
+    """Codes back to labels: int classes an int64 Array, real classes a
+    float64 Array, anything else a list (`_labels.decode_labels`' contract)."""
+    values = [classes[int(c)] for c in codes.tolist()]
+    kind = label_kind(classes)
+    try:
+        if kind == "int":
+            return Array.from_list([int(v) for v in values], "<i8")
+        if kind == "float":
+            return Array.from_list([float(v) for v in values], "<f8")
+    except (OverflowError, TypeError):
+        pass
+    return values
 
 
 def _x2d(X, name="X"):
@@ -456,7 +480,6 @@ def _kfold_assignment(n, n_folds, seed, shuffle=True):
 
 def _target_kind(y, target_type):
     """(kind, classes, Y rows as a flat float list with T columns, T)."""
-    from ._labels import flatten_labels
     labels = flatten_labels(y)
     if target_type == "continuous" or (target_type == "auto" and labels and all(
             isinstance(v, numbers.Real) and not isinstance(v, bool) for v in labels)
@@ -772,3 +795,225 @@ class KBinsDiscretizer(_PrepBase):
         pr.stage("onehot", n * d, codes, n, d, so, _NONE, W, out)
         pr.run(self.numeric_mode_)
         return pr.get(out, (n, W))
+
+
+# ---------------------------------------------------------------- naive Bayes
+class _Classifier(_PrepBase):
+    """predict / predict_proba / predict_log_proba from a subclass's joint
+    log likelihood stages (`_jll_stages`), normalised on the device."""
+
+    def _encode_y(self, y, n):
+        classes, codes = encode_labels(y)
+        if codes.size != n:
+            raise ValueError("mojolearn: X and y have different numbers of rows")
+        self.classes_ = classes
+        return codes
+
+    def _scores(self, X, want):
+        self._check_fitted()
+        arr = _x2d(X)
+        self._check_width(arr)
+        n, d = arr.shape
+        K = len(self.classes_)
+        pr = _Prog()
+        xo = pr.put(arr)
+        jll = pr.alloc(n * K)
+        self._jll_stages(pr, xo, n, d, jll)
+        lp = pr.alloc(n * K) if "log" in want else _NONE
+        pp = pr.alloc(n * K) if "proba" in want else _NONE
+        am = pr.alloc(n) if "predict" in want else _NONE
+        if lp != _NONE or pp != _NONE:
+            pr.stage("row_softmax", n, jll, n, K, lp, pp)
+        if am != _NONE:
+            pr.stage("row_argmax", n, jll, n, K, am)
+        pr.run(self.numeric_mode_)
+        return pr, n, K, dict(jll=jll, log=lp, proba=pp, predict=am)
+
+    def predict(self, X):
+        pr, n, K, o = self._scores(X, ("predict",))
+        return decode_labels(self.classes_, pr.get_i32(o["predict"], n))
+
+    def predict_proba(self, X):
+        pr, n, K, o = self._scores(X, ("proba",))
+        return pr.get(o["proba"], (n, K))
+
+    def predict_log_proba(self, X):
+        pr, n, K, o = self._scores(X, ("log",))
+        return pr.get(o["log"], (n, K))
+
+    def predict_joint_log_proba(self, X):
+        pr, n, K, o = self._scores(X, ())
+        return pr.get(o["jll"], (n, K))
+
+    def score(self, X, y):
+        pred = self.predict(X)
+        truth = list(y.tolist() if hasattr(y, "tolist") else y)
+        pred = list(pred.tolist() if hasattr(pred, "tolist") else pred)
+        return sum(1 for a, b in zip(pred, truth) if a == b) / max(len(truth), 1)
+
+
+def _refuse_nb(est, sample_weight):
+    if sample_weight is not None:
+        raise NotImplementedError(f"mojolearn: {type(est).__name__} sample_weight is not implemented")
+    if getattr(est, "class_prior", None) is not None or getattr(est, "priors", None) is not None:
+        raise NotImplementedError(f"mojolearn: {type(est).__name__} explicit class priors are not implemented")
+
+
+def _check_alpha(est):
+    if not isinstance(est.alpha, numbers.Real) or not est.alpha > 0:
+        raise NotImplementedError(f"mojolearn: {type(est).__name__} needs alpha > 0 "
+                                  "(alpha = 0 makes log(0) terms)")
+
+
+class GaussianNB(_Classifier):
+    """sklearn.naive_bayes.GaussianNB (fit, predict, predict_proba,
+    predict_log_proba): per-class mean and population variance plus
+    var_smoothing * the largest feature variance, float32. priors,
+    sample_weight and partial_fit are refused."""
+    _parameters = ("priors", "var_smoothing")
+
+    def __init__(self, *, priors=None, var_smoothing=1e-9):
+        self.priors = priors
+        self.var_smoothing = var_smoothing
+
+    def fit(self, X, y, sample_weight=None):
+        _refuse_nb(self, sample_weight)
+        arr = _x2d(X)
+        n, d = arr.shape
+        codes = self._encode_y(y, n)
+        K = len(self.classes_)
+        mode = _mode()
+        pr = _Prog()
+        xo = pr.put(arr)
+        yo = pr.put_codes(codes)
+        st = pr.alloc(6 * d)
+        vs = pr.put_scalar(self.var_smoothing)
+        eps = pr.alloc(1)
+        cnt, theta, var, prior, const = pr.alloc(K), pr.alloc(K * d), pr.alloc(K * d), pr.alloc(K), pr.alloc(K)
+        pr.stage("col_stats", d, xo, n, d, st)
+        pr.stage("gnb_eps", 1, st + 2 * d, d, eps, vs)
+        pr.stage("class_stats", K * d, xo, n, d, yo, K, cnt, theta, var, _NONE)
+        pr.stage("gnb_params", K, cnt, var, K, d, n, eps, prior, const)
+        pr.run(mode)
+        self.theta_, self.var_ = pr.get(theta, (K, d)), pr.get(var, (K, d))
+        self.class_count_, self.class_prior_ = pr.get(cnt, K), pr.get(prior, K)
+        self.epsilon_ = pr.values(eps, 1)[0]
+        self._const = pr.get(const, K)
+        self.numeric_mode_, self.n_features_in_ = mode, d
+        return self
+
+    def partial_fit(self, X, y, classes=None, sample_weight=None):
+        raise NotImplementedError("mojolearn: GaussianNB.partial_fit is not implemented")
+
+    def _jll_stages(self, pr, xo, n, d, out):
+        K = len(self.classes_)
+        th, va, co = pr.put(self.theta_), pr.put(self.var_), pr.put(self._const)
+        pr.stage("gnb_jll", n * K, xo, n, d, th, va, co, K, out)
+
+
+def _check_nonnegative(pr_values, who):
+    if any(v < 0 for v in pr_values):
+        raise ValueError(f"mojolearn: Negative values in data passed to {who}")
+
+
+class _DiscreteNB(_Classifier):
+    def _fit_counts(self, X, y, binarize=None):
+        arr = _x2d(X)
+        n, d = arr.shape
+        codes = self._encode_y(y, n)
+        K = len(self.classes_)
+        mode = _mode()
+        pr = _Prog()
+        xo = pr.put(arr)
+        if binarize is not None:
+            thr = pr.put_scalar(binarize)
+            xb = pr.alloc(n * d)
+            pr.stage("binarize", n * d, xo, n * d, thr, xb)
+            xo = xb
+        yo = pr.put_codes(codes)
+        st = pr.alloc(6 * d)
+        cnt, fc = pr.alloc(K), pr.alloc(K * d)
+        clp = pr.alloc(K)
+        pr.stage("col_stats", d, xo, n, d, st)
+        pr.stage("class_stats", K * d, xo, n, d, yo, K, cnt, _NONE, _NONE, fc)
+        if self.fit_prior:
+            pr.stage("class_log_prior", K, cnt, K, clp)
+        else:
+            ones = pr.put_list([1.0] * K)
+            pr.stage("class_log_prior", K, ones, K, clp)
+        return pr, mode, n, d, K, st, cnt, fc, clp
+
+    def _finish_counts(self, pr, mode, d, K, cnt, fc, clp):
+        self.class_count_, self.feature_count_ = pr.get(cnt, K), pr.get(fc, (K, d))
+        self.class_log_prior_ = pr.get(clp, K)
+        self.numeric_mode_, self.n_features_in_ = mode, d
+
+    def partial_fit(self, X, y, classes=None, sample_weight=None):
+        raise NotImplementedError(f"mojolearn: {type(self).__name__}.partial_fit is not implemented")
+
+
+class MultinomialNB(_DiscreteNB):
+    """sklearn.naive_bayes.MultinomialNB, float32; alpha > 0 required.
+    class_prior, sample_weight and partial_fit are refused."""
+    _parameters = ("alpha", "force_alpha", "fit_prior", "class_prior")
+
+    def __init__(self, *, alpha=1.0, force_alpha=True, fit_prior=True, class_prior=None):
+        self.alpha = alpha
+        self.force_alpha = force_alpha
+        self.fit_prior = fit_prior
+        self.class_prior = class_prior
+
+    def fit(self, X, y, sample_weight=None):
+        _refuse_nb(self, sample_weight)
+        _check_alpha(self)
+        pr, mode, n, d, K, st, cnt, fc, clp = self._fit_counts(X, y)
+        a = pr.put_scalar(self.alpha)
+        flp = pr.alloc(K * d)
+        pr.stage("mnb_params", K, fc, K, d, a, flp)
+        pr.run(mode)
+        _check_nonnegative(pr.values(st + 3 * d, d), "MultinomialNB (input X)")
+        self._finish_counts(pr, mode, d, K, cnt, fc, clp)
+        self.feature_log_prob_ = pr.get(flp, (K, d))
+        return self
+
+    def _jll_stages(self, pr, xo, n, d, out):
+        K = len(self.classes_)
+        w, b = pr.put(self.feature_log_prob_), pr.put(self.class_log_prior_)
+        pr.stage("matmul", n * K, xo, d, 1, w, 1, d, out, K, d, b, _NONE)
+
+
+class BernoulliNB(_DiscreteNB):
+    """sklearn.naive_bayes.BernoulliNB, float32 (X binarized at `binarize`
+    unless it is None); alpha > 0 required. class_prior, sample_weight and
+    partial_fit are refused."""
+    _parameters = ("alpha", "force_alpha", "binarize", "fit_prior", "class_prior")
+
+    def __init__(self, *, alpha=1.0, force_alpha=True, binarize=0.0, fit_prior=True, class_prior=None):
+        self.alpha = alpha
+        self.force_alpha = force_alpha
+        self.binarize = binarize
+        self.fit_prior = fit_prior
+        self.class_prior = class_prior
+
+    def fit(self, X, y, sample_weight=None):
+        _refuse_nb(self, sample_weight)
+        _check_alpha(self)
+        pr, mode, n, d, K, st, cnt, fc, clp = self._fit_counts(X, y, self.binarize)
+        a = pr.put_scalar(self.alpha)
+        flp, w, bias = pr.alloc(K * d), pr.alloc(K * d), pr.alloc(K)
+        pr.stage("bnb_params", K, fc, cnt, K, d, a, clp, flp, w, bias)
+        pr.run(mode)
+        self._finish_counts(pr, mode, d, K, cnt, fc, clp)
+        self.feature_log_prob_ = pr.get(flp, (K, d))
+        self._w, self._bias = pr.get(w, (K, d)), pr.get(bias, K)
+        return self
+
+    def _jll_stages(self, pr, xo, n, d, out):
+        K = len(self.classes_)
+        if self.binarize is not None:
+            thr = pr.put_scalar(self.binarize)
+            xb = pr.alloc(n * d)
+            pr.stage("binarize", n * d, xo, n * d, thr, xb)
+            xo = xb
+        w, b = pr.put(self._w), pr.put(self._bias)
+        pr.stage("matmul", n * K, xo, d, 1, w, 1, d, out, K, d, b, _NONE)

@@ -510,3 +510,13 @@ tie-break), the verifier lane, and a support-matrix entry that says CPU.
 `ivf_refuse_algorithm("hnsw")` and the `hnsw` row of `ivf/NOT_IMPLEMENTED.tsv`
 were corrected to NOT IMPLEMENTED, assigned to you; retire the refusal in
 the commit that lands it.
+
+## Pitfall: Mojo frees a value at its last use, even under a raw pointer
+
+Found by the cluster lane on 2026-09-27. Passing `x.unsafe_ptr()` of a
+local `List` to a call that uploads to the device is unsafe when that call
+is the list's last use. Mojo destroys the list right there, before the
+upload reads it. On CUDA the symptom is results that drift run to run, or
+`CUDA_ERROR_ILLEGAL_ADDRESS`. Keep the owner alive past the device work
+with `_ = x^` after the call. The same applies to a `DeviceContext`
+(`_ = ctx^`; DEVIATION 1946). Adding a `synchronize()` only hides this bug.
