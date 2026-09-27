@@ -91,6 +91,9 @@ comptime OP_GARCH = 49
 comptime OP_PROPHET_FEATURES = 50
 comptime OP_PROPHET_FIT = 51
 comptime OP_PROPHET_PREDICT = 52
+comptime OP_MOE_ROUTE = 53
+comptime OP_MOE_HIDDEN = 54
+comptime OP_MOE_OUT = 55
 
 # ------------------------------------------------------------------ cells
 comptime CELL_RNN_TANH = 0

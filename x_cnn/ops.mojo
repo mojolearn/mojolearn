@@ -21,9 +21,10 @@ as a GATHER per input pixel over (kh, kw) ascending (the one atomic hazard
 of the backward pass, DEVIATION 5700). The weight-gradient reduction is the
 pinned GEMM's (TN over the N*OH*OW rows, DEVIATION 5701).
 """
+from std.math import fma  # only a sabotage arm (seam 5709) spells the fused form
 from std.memory import bitcast
 from core.philox import philox4x32_10
-from checks.numerics import ftz, identical_div, identical_mul, identical_exp, identical_log, identical_rsqrt
+from checks.numerics import ftz, identical_div, identical_mul, identical_exp, identical_log, identical_rsqrt, identical_sqrt
 
 comptime FP = MutPointer[Float32, MutAnyOrigin]
 comptime IP = MutPointer[Int32, MutAnyOrigin]
@@ -211,11 +212,25 @@ comptime PP_OW = 13
 comptime PP_INCPAD = 14
 #: 1 reverses the backward gathers' (kh) order (sabotage only).
 comptime PP_REV = 15
-comptime PP_LEN = 16
+#: ceil_mode (PyTorch's output-size rule; the last window must start inside
+#: the input or its left padding).
+comptime PP_CEIL = 16
+#: AvgPool2d divisor_override (0: none).
+comptime PP_DIVOVR = 17
+comptime PP_LEN = 18
+
+
+def _pool_out(size: Int, k: Int, pad: Int, stride: Int, dil: Int, ceil: Bool) -> Int:
+    """aten/src/ATen/native/Pool.h pooling_output_shape_pad_lr."""
+    var num = size + 2 * pad - dil * (k - 1) - 1 + ((stride - 1) if ceil else 0)
+    var out = num // stride + 1
+    if ceil and (out - 1) * stride >= size + pad:
+        out -= 1
+    return out
 
 
 def pool_params(raw: List[Int]) raises -> List[Int32]:
-    """Validate and fill OH, OW (floor mode; ceil_mode is refused at the API)."""
+    """Validate and fill OH, OW (PyTorch's pooling_output_shape, floor or ceil mode)."""
     if len(raw) < PP_INCPAD + 1:
         raise Error("x_cnn: pool params need 15 entries")
     for k in range(PP_OH):
@@ -227,10 +242,13 @@ def pool_params(raw: List[Int]) raises -> List[Int32]:
             raise Error("x_cnn: pool dimensions, stride and dilation must be positive")
     if 2 * raw[PP_PH] > raw[PP_KH] or 2 * raw[PP_PW] > raw[PP_KW]:
         raise Error("x_cnn: pad should be at most half of the kernel size (PyTorch's rule)")
-    var oh = (raw[PP_H] + 2 * raw[PP_PH] - raw[PP_DH] * (raw[PP_KH] - 1) - 1) // raw[PP_SH] + 1
-    var ow = (raw[PP_W] + 2 * raw[PP_PW] - raw[PP_DW] * (raw[PP_KW] - 1) - 1) // raw[PP_SW] + 1
+    var ceil = len(raw) > PP_CEIL and raw[PP_CEIL] != 0
+    var oh = _pool_out(raw[PP_H], raw[PP_KH], raw[PP_PH], raw[PP_SH], raw[PP_DH], ceil)
+    var ow = _pool_out(raw[PP_W], raw[PP_KW], raw[PP_PW], raw[PP_SW], raw[PP_DW], ceil)
     if oh <= 0 or ow <= 0:
         raise Error("x_cnn: the pooling window does not fit the padded input")
+    if len(raw) > PP_DIVOVR and raw[PP_DIVOVR] < 0:
+        raise Error("x_cnn: divisor_override must be positive")
     var out = List[Int32](capacity=PP_LEN)
     for k in range(PP_LEN):
         out.append(Int32(raw[k]) if k < len(raw) else Int32(0))
@@ -314,6 +332,8 @@ def maxpool_bwd_at(i: Int, dout: FP, dx: FP, f2: FP, f3: FP, idx: IP, p: IP):
 def _avg_divisor(oh: Int, ow: Int, p: IP) -> Int:
     """PyTorch AvgPool2d's divisor (floor mode): the window clipped to the
     padded input, or to the input itself when count_include_pad is 0."""
+    if _g(p, PP_DIVOVR) > 0:
+        return _g(p, PP_DIVOVR)
     var H = _g(p, PP_H); var W = _g(p, PP_W)
     var PH = _g(p, PP_PH); var PW = _g(p, PP_PW)
     var hs = oh * _g(p, PP_SH) - PH
@@ -487,15 +507,61 @@ def sgd_at(i: Int, w: FP, g: FP, v: FP, hyper: FP, q: IP, p: IP):
     var lr = hyper.unsafe_load(0)
     var mom = hyper.unsafe_load(1)
     var wd = hyper.unsafe_load(2)
+    var damp = hyper.unsafe_load(3)
+    var nesterov = hyper.unsafe_load(4) != Float32(0)
+    var first = hyper.unsafe_load(5) != Float32(0)
     var wi = ftz(w.unsafe_load(i))
     var d = ftz(g.unsafe_load(i))
     if wd != Float32(0):
         d = ftz(d + ftz(identical_mul(wd, wi)))
     var vi = d
     if mom != Float32(0):
-        vi = ftz(ftz(identical_mul(mom, ftz(v.unsafe_load(i)))) + d)
+        if damp != Float32(0) and first:
+            vi = d  # torch: the first step's buffer is a clone of d, undamped
+        else:
+            var dd = d if damp == Float32(0) else ftz(identical_mul(ftz(Float32(1) - damp), d))
+            vi = ftz(ftz(identical_mul(mom, ftz(v.unsafe_load(i)))) + dd)
         v.unsafe_store(i, canon(vi))
+        if nesterov:
+            vi = ftz(d + ftz(identical_mul(mom, vi)))
     w.unsafe_store(i, canon(ftz(wi - ftz(identical_mul(lr, vi)))))
+
+
+@always_inline
+def adam_at(i: Int, w: FP, g: FP, mv: FP, hyper: FP, q: IP, p: IP):
+    """torch.optim.Adam (amsgrad False, maximize False), one element; mv =
+    [m (n) | v (n)], hyper = [step_size, 1 - beta1, beta2, 1 - beta2, eps,
+    sqrt(bias_correction2), weight_decay, adamw] with the step's scalars
+    computed by the caller in double as torch does:
+      g += wd*w (Adam) or w *= hyper[8] = 1 - lr*wd (AdamW, in double)
+      m = m + (1 - b1)(g - m)   (torch's lerp_)
+      v = b2 v + (1 - b2) g g
+      w = w - step_size * m / (sqrt(v) / sqrt(bc2) + eps)
+    every product pinned (DEVIATION 5715)."""
+    var n = _g(p, 0)
+    var step = hyper.unsafe_load(0)
+    var c1 = hyper.unsafe_load(1)
+    var b2 = hyper.unsafe_load(2)
+    var c2 = hyper.unsafe_load(3)
+    var eps = hyper.unsafe_load(4)
+    var bc2s = hyper.unsafe_load(5)
+    var wd = hyper.unsafe_load(6)
+    var decoupled = hyper.unsafe_load(7) != Float32(0)
+    var wi = ftz(w.unsafe_load(i))
+    var gi = ftz(g.unsafe_load(i))
+    if wd != Float32(0):
+        if decoupled:
+            wi = ftz(identical_mul(wi, hyper.unsafe_load(8)))
+        else:
+            gi = ftz(gi + ftz(identical_mul(wd, wi)))
+    var m = ftz(mv.unsafe_load(i))
+    var v = ftz(mv.unsafe_load(n + i))
+    m = ftz(m + ftz(identical_mul(c1, ftz(gi - m))))
+    v = ftz(ftz(identical_mul(b2, v)) + ftz(identical_mul(c2, ftz(identical_mul(gi, gi)))))
+    var denom = ftz(ftz(identical_div(ftz(identical_sqrt(v)), bc2s)) + eps)
+    mv.unsafe_store(i, canon(m))
+    mv.unsafe_store(n + i, canon(v))
+    w.unsafe_store(i, canon(ftz(wi - ftz(identical_mul(step, ftz(identical_div(m, denom)))))))
 
 
 
@@ -712,3 +778,250 @@ def gcn_norm_at(e: Int, w: FP, dis: FP, vals: FP, f3: FP, q: IP, p: IP):
     var dst = _g(q, n + 1 + nnz + e)
     var t = ftz(identical_mul(ftz(dis.unsafe_load(src)), ftz(w.unsafe_load(e))))
     vals.unsafe_store(e, ftz(identical_mul(t, ftz(dis.unsafe_load(dst)))))
+
+
+
+# ---------------------------------------------------------------- padding
+# p = [N, C, H, W, top, bottom, left, right, mode]; mode 0 zeros, 1 reflect,
+# 2 replicate, 3 circular (torch.nn.functional.pad, 2-D).
+comptime PAD_ZEROS = 0
+comptime PAD_REFLECT = 1
+comptime PAD_REPLICATE = 2
+comptime PAD_CIRCULAR = 3
+
+
+@always_inline
+def _pad_src(hp: Int, before: Int, size: Int, mode: Int) -> Int:
+    """The source index of padded position hp, or -1 (zeros outside)."""
+    var h = hp - before
+    if h >= 0 and h < size:
+        return h
+    if mode == PAD_ZEROS:
+        return -1
+    if mode == PAD_REFLECT:
+        return -h if h < 0 else 2 * (size - 1) - h
+    if mode == PAD_REPLICATE:
+        return 0 if h < 0 else size - 1
+    return (h % size + size) % size
+
+
+@always_inline
+def pad_fwd_at(i: Int, x: FP, f1: FP, dst: FP, f3: FP, q: IP, p: IP):
+    var H = _g(p, 2); var W = _g(p, 3)
+    var Hp = H + _g(p, 4) + _g(p, 5)
+    var Wp = W + _g(p, 6) + _g(p, 7)
+    var mode = _g(p, 8)
+    var wp = i % Wp
+    var t = i // Wp
+    var hp = t % Hp
+    var nc = t // Hp
+    var h = _pad_src(hp, _g(p, 4), H, mode)
+    var w = _pad_src(wp, _g(p, 6), W, mode)
+    var v = Float32(0)
+    if h >= 0 and w >= 0:
+        v = ftz(x.unsafe_load((nc * H + h) * W + w))
+    dst.unsafe_store(i, v)
+
+
+@always_inline
+def pad_bwd_at(i: Int, g: FP, f1: FP, dx: FP, f3: FP, q: IP, p: IP):
+    """dx[n, c, h, w] = the sum of the padded gradient over every padded
+    position that reads this pixel, gathered in (hp, wp) ascending order
+    from +0.0 (DEVIATION 5711; the reference's reflect/replicate backward
+    kernels scatter with atomics)."""
+    var H = _g(p, 2); var W = _g(p, 3)
+    var top = _g(p, 4); var left = _g(p, 6)
+    var Hp = H + top + _g(p, 5)
+    var Wp = W + left + _g(p, 7)
+    var mode = _g(p, 8)
+    var w = i % W
+    var t = i // W
+    var h = t % H
+    var nc = t // H
+    var acc = Float32(0)
+    for hp in range(Hp):
+        if _pad_src(hp, top, H, mode) != h:
+            continue
+        for wp in range(Wp):
+            if _pad_src(wp, left, W, mode) != w:
+                continue
+            acc = ftz(acc + ftz(g.unsafe_load((nc * Hp + hp) * Wp + wp)))
+    dx.unsafe_store(i, acc)
+
+
+
+# ---------------------------------------------------------------- adaptive pooling
+# p = [N, C, H, W, OH, OW]; output cell (oh, ow) reads rows
+# [floor(oh*H/OH), ceil((oh+1)*H/OH)) and the columns likewise
+# (aten/src/ATen/native/AdaptivePooling.h start_index / end_index).
+
+
+@always_inline
+def _astart(a: Int, osize: Int, isize: Int) -> Int:
+    return (a * isize) // osize
+
+
+@always_inline
+def _aend(a: Int, osize: Int, isize: Int) -> Int:
+    return ((a + 1) * isize + osize - 1) // osize
+
+
+@always_inline
+def adapt_avg_fwd_at(i: Int, x: FP, f1: FP, dst: FP, f3: FP, q: IP, p: IP):
+    """The window's sum in (h, w) order, then one division by its size."""
+    var H = _g(p, 2); var W = _g(p, 3); var OH = _g(p, 4); var OW = _g(p, 5)
+    var ow = i % OW
+    var t = i // OW
+    var oh = t % OH
+    var nc = t // OH
+    var hs = _astart(oh, OH, H); var he = _aend(oh, OH, H)
+    var ws = _astart(ow, OW, W); var we = _aend(ow, OW, W)
+    var acc = Float32(0)
+    for h in range(hs, he):
+        for w in range(ws, we):
+            acc = ftz(acc + ftz(x.unsafe_load((nc * H + h) * W + w)))
+    dst.unsafe_store(i, ftz(identical_div(acc, Float32((he - hs) * (we - ws)))))
+
+
+@always_inline
+def adapt_avg_bwd_at(i: Int, g: FP, f1: FP, dx: FP, f3: FP, q: IP, p: IP):
+    """dx[n, c, h, w] = the sum over the windows holding the pixel of
+    g / window size, gathered in (oh, ow) ascending order (DEVIATION 5712)."""
+    var H = _g(p, 2); var W = _g(p, 3); var OH = _g(p, 4); var OW = _g(p, 5)
+    var w = i % W
+    var t = i // W
+    var h = t % H
+    var nc = t // H
+    var acc = Float32(0)
+    for oh in range(OH):
+        var hs = _astart(oh, OH, H); var he = _aend(oh, OH, H)
+        if h < hs or h >= he:
+            continue
+        for ow in range(OW):
+            var ws = _astart(ow, OW, W); var we = _aend(ow, OW, W)
+            if w < ws or w >= we:
+                continue
+            var gv = ftz(g.unsafe_load((nc * OH + oh) * OW + ow))
+            acc = ftz(acc + ftz(identical_div(gv, Float32((he - hs) * (we - ws)))))
+    dx.unsafe_store(i, acc)
+
+
+@always_inline
+def adapt_max_fwd_at(i: Int, x: FP, f1: FP, dst: FP, f3: FP, idx: IP, p: IP):
+    """The first maximum in (h, w) order wins, a NaN wins (DEVIATION 5706's tie)."""
+    var H = _g(p, 2); var W = _g(p, 3); var OH = _g(p, 4); var OW = _g(p, 5)
+    var ow = i % OW
+    var t = i // OW
+    var oh = t % OH
+    var nc = t // OH
+    var best = Float32(0)
+    var bi = -1
+    for h in range(_astart(oh, OH, H), _aend(oh, OH, H)):
+        for w in range(_astart(ow, OW, W), _aend(ow, OW, W)):
+            var v = ftz(x.unsafe_load((nc * H + h) * W + w))
+            if bi < 0 or v > best or v != v:
+                best = v
+                bi = h * W + w
+    dst.unsafe_store(i, best)
+    idx.unsafe_store(i, Int32(bi))
+
+
+@always_inline
+def adapt_max_bwd_at(i: Int, g: FP, f1: FP, dx: FP, f3: FP, idx: IP, p: IP):
+    var H = _g(p, 2); var W = _g(p, 3); var OH = _g(p, 4); var OW = _g(p, 5)
+    var w = i % W
+    var t = i // W
+    var h = t % H
+    var nc = t // H
+    var me = Int32(h * W + w)
+    var acc = Float32(0)
+    for oh in range(OH):
+        if h < _astart(oh, OH, H) or h >= _aend(oh, OH, H):
+            continue
+        for ow in range(OW):
+            if w < _astart(ow, OW, W) or w >= _aend(ow, OW, W):
+                continue
+            var o = (nc * OH + oh) * OW + ow
+            if idx.unsafe_load(o) == me:
+                acc = ftz(acc + ftz(g.unsafe_load(o)))
+    dx.unsafe_store(i, acc)
+
+
+
+# ---------------------------------------------------------------- SAGE max, L2 normalize
+@always_inline
+def sage_max_fwd_at(i: Int, h: FP, f1: FP, aux: FP, dst: FP, q: IP, p: IP):
+    """PyG MaxAggregation (torch.scatter_reduce 'amax', include_self=False):
+    the max over row r's entries in column order (a NaN wins), +0.0 for an
+    empty row; aux[i] = the max, aux[n*F + i] = how many entries equal it
+    (the backward splits the gradient evenly among them, as amax's does)."""
+    var n = _g(p, 0); var F = _g(p, 1)
+    var r = i // F
+    var f = i - r * F
+    var lo = _g(q, r)
+    var hi = _g(q, r + 1)
+    var mx = Float32(0)
+    var cnt = 0
+    for e in range(lo, hi):
+        var v = ftz(h.unsafe_load(_g(q, n + 1 + e) * F + f))
+        if e == lo or v > mx or v != v:
+            mx = v
+            cnt = 1 if v == v else 0
+        elif v == mx:
+            cnt += 1
+    aux.unsafe_store(i, mx)
+    aux.unsafe_store(n * F + i, Float32(cnt))
+    dst.unsafe_store(i, mx)
+
+
+@always_inline
+def sage_max_bwd_at(i: Int, h: FP, g: FP, aux: FP, dst: FP, q: IP, p: IP):
+    """dx[s, f] = the sum over s's outgoing entries (the TRANSPOSED CSR,
+    targets ascending) whose value is the target's max of g[t, f] / count,
+    gathered in order (DEVIATION 5713; the reference scatters)."""
+    var n = _g(p, 0); var F = _g(p, 1)
+    var r = i // F
+    var f = i - r * F
+    var v = ftz(h.unsafe_load(i))
+    var acc = Float32(0)
+    for e in range(_g(q, r), _g(q, r + 1)):
+        var t = _g(q, n + 1 + e)
+        var o = t * F + f
+        if v == aux.unsafe_load(o) and aux.unsafe_load(n * F + o) > Float32(0):
+            acc = ftz(acc + ftz(identical_div(ftz(g.unsafe_load(o)), aux.unsafe_load(n * F + o))))
+    dst.unsafe_store(i, acc)
+
+
+@always_inline
+def l2norm_fwd_at(r: Int, x: FP, f1: FP, aux: FP, dst: FP, q: IP, p: IP):
+    """torch.nn.functional.normalize(p=2, dim=-1, eps=1e-12) of row r: the
+    squares folded in column order, one sqrt, the division by max(norm, eps).
+    aux[r] = that denominator."""
+    var F = _g(p, 1)
+    var sq = Float32(0)
+    for f in range(F):
+        var v = ftz(x.unsafe_load(r * F + f))
+        sq = ftz(sq + ftz(identical_mul(v, v)))
+    var norm = ftz(identical_sqrt(sq))
+    var den = norm if norm > Float32(1e-12) else Float32(1e-12)
+    aux.unsafe_store(r, den)
+    for f in range(F):
+        dst.unsafe_store(r * F + f, ftz(identical_div(ftz(x.unsafe_load(r * F + f)), den)))
+
+
+@always_inline
+def l2norm_bwd_at(r: Int, y: FP, g: FP, aux: FP, dst: FP, q: IP, p: IP):
+    """dx = (g - y * sum(g * y)) / den when the norm cleared eps, else g / eps
+    (the clamp's derivative is zero); the dot folded in column order."""
+    var F = _g(p, 1)
+    var den = aux.unsafe_load(r)
+    if den == Float32(1e-12):
+        for f in range(F):
+            dst.unsafe_store(r * F + f, ftz(identical_div(ftz(g.unsafe_load(r * F + f)), den)))
+        return
+    var dot = Float32(0)
+    for f in range(F):
+        dot = ftz(dot + ftz(identical_mul(ftz(g.unsafe_load(r * F + f)), ftz(y.unsafe_load(r * F + f)))))
+    for f in range(F):
+        var t = ftz(ftz(g.unsafe_load(r * F + f)) - ftz(identical_mul(ftz(y.unsafe_load(r * F + f)), dot)))
+        dst.unsafe_store(r * F + f, ftz(identical_div(t, den)))

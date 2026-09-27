@@ -1,0 +1,11 @@
+--- a/x_cnn/ops.mojo	2026-09-27 13:41:41
++++ b/x_cnn/ops.mojo	2026-09-27 13:41:41
+@@ -557,7 +557,7 @@
+     var m = ftz(mv.unsafe_load(i))
+     var v = ftz(mv.unsafe_load(n + i))
+     m = ftz(m + ftz(identical_mul(c1, ftz(gi - m))))
+-    v = ftz(ftz(identical_mul(b2, v)) + ftz(identical_mul(c2, ftz(identical_mul(gi, gi)))))
++    v = ftz(fma(b2, v, ftz(identical_mul(c2, ftz(identical_mul(gi, gi))))))
+     var denom = ftz(ftz(identical_div(ftz(identical_sqrt(v)), bc2s)) + eps)
+     mv.unsafe_store(i, canon(m))
+     mv.unsafe_store(n + i, canon(v))

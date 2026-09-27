@@ -1,19 +1,21 @@
 # Options of the PyTorch reference the CNN lane does not carry, and why.
 # their_thing	status	why / where it would go
-nn.Conv1d/Conv2d groups!=1	refused (not exposed)	grouped/depthwise conv: one GEMM per group over the im2col slice
-nn.Conv1d/Conv2d padding_mode!=zeros	refused (not exposed)	reflect/replicate/circular padding: an im2col index remap
-nn.Conv1d/Conv2d padding="same"/"valid" strings	refused (ints only)	the caller computes the padding
-nn.MaxPool/AvgPool ceil_mode=True	refused by name (NotImplementedError)	the output size rule and the divisor clip
-nn.AvgPool2d divisor_override	refused by name (NotImplementedError)	a constant divisor in _avg_divisor
+nn.Conv1d/Conv2d groups	IMPLEMENTED (option parity)	one pinned-GEMM conv per group over its channel slice
+nn.Conv1d/Conv2d padding_mode reflect/replicate/circular	IMPLEMENTED (option parity)	an explicit pad (pad_fwd_at) and its gather backward (pad_bwd_at, DEVIATION 5711), then an unpadded conv
+nn.Conv1d/Conv2d padding="same"/"valid"	IMPLEMENTED (option parity)	PyTorch's split (left = total // 2); asymmetric pads go through the explicit pad
+nn.MaxPool/AvgPool ceil_mode=True	IMPLEMENTED (option parity)	pooling_output_shape's rule in pool_params; the divisor clip in _avg_divisor
+nn.AvgPool2d divisor_override	IMPLEMENTED (option parity)	PP_DIVOVR
 nn.MaxPool return_indices	carried as MaxPool2d.indices_	flat h*W+w per output, PyTorch values
-nn.BatchNorm momentum=None (cumulative moving average)	refused by name (NotImplementedError)	a count-based momentum in bn_running_at
-nn.BatchNorm track_running_stats=False	refused by name (NotImplementedError)	batch statistics in eval mode too
+nn.BatchNorm momentum=None (cumulative moving average)	IMPLEMENTED (option parity)	the factor 1/num_batches_tracked, rounded once to float32
+nn.BatchNorm track_running_stats=False	IMPLEMENTED (option parity)	batch statistics in eval mode too; running_mean_ is None
 nn.Dropout2d generator stream	not reproduced (by design)	the mask is Philox4x32-10 of (seed, call, channel), the same on every column, not torch's stream
-nn.AdaptiveAvgPool2d/AdaptiveMaxPool2d non-dividing output sizes	refused by name (NotImplementedError)	variable windows start=floor(i*H/oh), end=ceil((i+1)*H/oh)
+nn.AdaptiveAvgPool2d/AdaptiveMaxPool2d non-dividing output sizes	IMPLEMENTED (option parity)	adapt_*_at, the backward a gather (DEVIATION 5712)
 nn.AdaptiveMaxPool2d return_indices	carried through the inner MaxPool2d (indices_)	
 torchvision BasicBlock groups/base_width/dilation!=defaults	refused (not exposed)	torchvision refuses them too for BasicBlock
 torchvision BasicBlock norm_layer other than BatchNorm2d	refused (not exposed)	
-PyG GCNConv cached=True	not carried	the normalization is recomputed per call (same values)
+PyG GCNConv cached=True	not carried (by design)	the normalization is recomputed per call; the values are the same
 PyG GCNConv sparse (SparseTensor) adjacency	not carried	edge_index (2, E) only
-PyG SAGEConv aggr max/lstm/other	refused by name (NotImplementedError)	max: a gather with first-max ties, as MaxPool
-PyG SAGEConv normalize=True, project=True	refused by name (NotImplementedError)	L2 row normalization after the layer
+PyG SAGEConv aggr max	IMPLEMENTED (option parity)	sage_max_fwd_at; the backward splits among ties as scatter_reduce 'amax' (DEVIATION 5713)
+PyG SAGEConv aggr lstm/softmax/other Aggregation modules	refused by name (NotImplementedError)	
+PyG SAGEConv normalize=True	IMPLEMENTED (option parity)	l2norm_fwd_at / l2norm_bwd_at
+PyG SAGEConv project=True	NOT IMPLEMENTED	a Linear + ReLU on the source features before aggregation

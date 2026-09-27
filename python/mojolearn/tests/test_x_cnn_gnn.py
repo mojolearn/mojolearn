@@ -90,3 +90,78 @@ def test_sage(aggr):
     np.testing.assert_allclose(conv.lin_l.grad_weight_, rdwl, rtol=1e-5, atol=1e-5)
     np.testing.assert_allclose(conv.lin_l.grad_bias_, rdbl, rtol=1e-5, atol=1e-5)
     np.testing.assert_allclose(conv.grad_weight_r_, rdwr, rtol=1e-5, atol=1e-5)
+
+
+def ref_sage_max_norm(x, ei, Wl, bl, Wr, normalize, g):
+    n, F = x.shape
+    src, dst = ei
+    x64 = x.astype(np.float64)
+    agg = np.zeros((n, F))
+    cnt = np.zeros((n, F))
+    for t in range(n):
+        m = src[dst == t]
+        if len(m):
+            vals = x64[m]
+            agg[t] = vals.max(0)
+            cnt[t] = (vals == agg[t]).sum(0)
+    pre = agg @ Wl.T + bl + x64 @ Wr.T
+    if normalize:
+        den = np.maximum(np.linalg.norm(pre, axis=1, keepdims=True), 1e-12)
+        y = pre / den
+        G = (g - y * (g * y).sum(1, keepdims=True)) / den
+    else:
+        y, G = pre, g
+    dagg = G @ Wl
+    dx = G @ Wr
+    for e in range(len(src)):
+        s_, t = src[e], dst[e]
+        hit = x64[s_] == agg[t]
+        dx[s_] += np.where(hit, dagg[t] / np.maximum(cnt[t], 1), 0)
+    return y, dx
+
+
+@pytest.mark.parametrize("normalize", [False, True])
+def test_sage_max_normalize(normalize):
+    import mojolearn as ml
+    rng = np.random.default_rng(6)
+    n = 30
+    x = rng.integers(-2, 3, size=(n, 5)).astype(np.float32)  # ties inside the max
+    ei = _graph(n, 7)
+    conv = ml.SAGEConv(5, 4, aggr="max", normalize=normalize, random_state=8)
+    y = conv.forward(x, ei)
+    g = rng.standard_normal(y.shape).astype(np.float32)
+    dx = conv.backward(g)
+    ry, rdx = ref_sage_max_norm(x, ei, conv.lin_l.weight_, conv.lin_l.bias_, conv.weight_r_, normalize,
+                                g.astype(np.float64))
+    np.testing.assert_allclose(y, ry, rtol=1e-5, atol=1e-5)
+    np.testing.assert_allclose(dx, rdx, rtol=1e-4, atol=1e-5)
+
+
+def test_max_reference_matches_torch():
+    torch = pytest.importorskip("torch")
+    rng = np.random.default_rng(6)
+    n = 30
+    # values kept away from 0.0: torch's amax backward (2.4) also counts the
+    # zero-initialized output as a tied candidate when include_self=False, so a
+    # maximum of exactly 0.0 gets half its gradient. That is not carried.
+    x = rng.integers(1, 5, size=(n, 5)).astype(np.float64)
+    ei = _graph(n, 7)
+    tx = torch.tensor(x, requires_grad=True)
+    src, dst = torch.tensor(ei[0]), torch.tensor(ei[1])
+    out = torch.zeros(n, 5, dtype=torch.float64).scatter_reduce(0, dst[:, None].expand(-1, 5), tx[src], "amax",
+                                                                include_self=False)
+    g = rng.standard_normal((n, 5))
+    out.backward(torch.tensor(g))
+    Wl, Wr = np.eye(5), np.zeros((5, 5))
+    ry, rdx = ref_sage_max_norm(x.astype(np.float32), ei, Wl, np.zeros(5), Wr, False, g)
+    np.testing.assert_allclose(out.detach().numpy(), ry, atol=1e-12)
+    np.testing.assert_allclose(tx.grad.numpy(), rdx, atol=1e-12)
+    y = torch.tensor(rng.standard_normal((4, 6)), requires_grad=True)
+    z = torch.nn.functional.normalize(y, p=2, dim=-1)
+    g2 = rng.standard_normal((4, 6))
+    z.backward(torch.tensor(g2))
+    yy = y.detach().numpy()
+    den = np.maximum(np.linalg.norm(yy, axis=1, keepdims=True), 1e-12)
+    zz = yy / den
+    np.testing.assert_allclose(z.detach().numpy(), zz, atol=1e-12)
+    np.testing.assert_allclose(y.grad.numpy(), (g2 - zz * (g2 * zz).sum(1, keepdims=True)) / den, atol=1e-12)

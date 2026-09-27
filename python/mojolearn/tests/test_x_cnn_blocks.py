@@ -84,3 +84,55 @@ def test_basic_block():
         else:
             rdx = rdx + gp
         np.testing.assert_allclose(dx, rdx, rtol=1e-3, atol=1e-3)
+
+
+def _ref_adaptive(x, g, osize, is_max):
+    n, c, h, w = x.shape
+    oh, ow = osize
+    out = np.zeros((n, c, oh, ow))
+    dx = np.zeros(x.shape)
+    for i in range(oh):
+        hs, he = (i * h) // oh, -(-((i + 1) * h) // oh)
+        for j in range(ow):
+            ws, we = (j * w) // ow, -(-((j + 1) * w) // ow)
+            win = x[:, :, hs:he, ws:we].astype(np.float64).reshape(n, c, -1)
+            if is_max:
+                t = win.argmax(2)
+                out[:, :, i, j] = win.max(2)
+                for a in range(n):
+                    for b in range(c):
+                        dx[a, b, hs + t[a, b] // (we - ws), ws + t[a, b] % (we - ws)] += g[a, b, i, j]
+            else:
+                out[:, :, i, j] = win.mean(2)
+                dx[:, :, hs:he, ws:we] += g[:, :, i:i + 1, j:j + 1] / ((he - hs) * (we - ws))
+    return out, dx
+
+
+def test_adaptive_non_dividing():
+    import mojolearn as ml
+    x = _x((2, 3, 7, 5), 8)
+    for cls, is_max in ((ml.AdaptiveAvgPool2d, False), (ml.AdaptiveMaxPool2d, True)):
+        for osize in ((3, 2), (4, 4), (2, 5)):
+            m = cls(osize)
+            y = m.forward(x)
+            g = _x(y.shape, 9)
+            ry, rdx = _ref_adaptive(x, g, osize, is_max)
+            np.testing.assert_allclose(y, ry, rtol=1e-5, atol=1e-6)
+            np.testing.assert_allclose(m.backward(g), rdx, rtol=1e-5, atol=1e-6)
+
+
+def test_adaptive_reference_matches_torch():
+    import pytest
+    torch = pytest.importorskip("torch")
+    F = torch.nn.functional
+    x = _x((2, 3, 7, 5), 8)
+    for fn, is_max in ((F.adaptive_avg_pool2d, False), (F.adaptive_max_pool2d, True)):
+        for osize in ((3, 2), (4, 4), (2, 5)):
+            tx = torch.tensor(x, dtype=torch.float64, requires_grad=True)
+            y = fn(tx, osize)
+            g = _x(tuple(y.shape), 9)
+            y.backward(torch.tensor(g, dtype=torch.float64))
+            ry, rdx = _ref_adaptive(x, g, osize, is_max)
+            # torch's avg-pool backward rounds through float32 somewhere (2e-8 absolute)
+            np.testing.assert_allclose(y.detach().numpy(), ry, rtol=1e-6, atol=1e-7)
+            np.testing.assert_allclose(tx.grad.numpy(), rdx, rtol=1e-6, atol=1e-7)
