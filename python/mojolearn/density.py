@@ -159,8 +159,9 @@ class DBSCAN(NumericModeMixin):
                                        `components_` (the core rows,
                                        float32) and their labels, which
                                        `predict` and `save` need
-        core_sample_indices_ with prediction_data=True only (cuML does
-                                       not return theirs, dbscan.cuh:171-173)
+        core_sample_indices_ on every fit (int32), with components_, as
+                                       scikit-learn and cuML's Python default
+                                       (calc_core_sample_indices=True)
         predict              NEW       DEVIATION 2740; neither cuML nor
                                        scikit-learn has one. See `predict`
 
@@ -362,26 +363,20 @@ class DBSCAN(NumericModeMixin):
         params = [x.shape[0], x.shape[1], float(self.eps), int(self.min_samples),
                   budget, cap, method, metric]
         binding = self._bind("_mojolearn_estimators")
-        core = None
-        if self.prediction_data:
-            # dbscan_fit_core_binding: the same call, plus n_rows uint8 core flags.
-            core = zeros((x.shape[0],), "<u1")
-            self.n_iter_ = binding.dbscan_fit_core(
-                addr_ro(x, name="x"), addr(labels, name="labels"), weight_addr,
-                addr(core, name="core"), params,
-            )
-        else:
-            self.n_iter_ = binding.dbscan_fit(
-                addr_ro(x, name="x"), addr(labels, name="labels"), weight_addr, params,
-            )
+        # dbscan_fit_core_binding: the same call, plus n_rows uint8 core
+        # flags, on EVERY fit: core_sample_indices_ and components_ are
+        # scikit-learn's attributes and cuML's default output
+        # (runner.cuh:419-442, dbscan.pyx:304).
+        core = zeros((x.shape[0],), "<u1")
+        self.n_iter_ = binding.dbscan_fit_core(
+            addr_ro(x, name="x"), addr(labels, name="labels"), weight_addr,
+            addr(core, name="core"), params,
+        )
         del w
         self.labels_ = labels
         self.n_features_in_ = x.shape[1]
         self.n_samples_fit_ = x.shape[0]
-        for name in ("core_sample_indices_", "components_", "_core_labels"):
-            self.__dict__.pop(name, None)
-        if core is not None:
-            self._store_core(x, labels, core)
+        self._store_core(x, labels, core)
         return self
 
     def _store_core(self, x, labels, core):
@@ -443,7 +438,7 @@ class DBSCAN(NumericModeMixin):
         """
         if not hasattr(self, "labels_"):
             raise ValueError("mojolearn DBSCAN.predict: this DBSCAN instance is not fitted yet; call fit first")
-        if getattr(self, "components_", None) is None:
+        if not self.prediction_data or getattr(self, "components_", None) is None:
             raise ValueError(
                 "mojolearn DBSCAN.predict: prediction data was not stored. Fit with "
                 "DBSCAN(prediction_data=True), which keeps the core samples this "
@@ -477,7 +472,7 @@ class DBSCAN(NumericModeMixin):
         `_mojolearn_estimators_host.labeled_reference_predict`."""
         if not hasattr(self, "labels_"):
             raise RuntimeError("this estimator is not fitted yet")
-        if getattr(self, "components_", None) is None:
+        if not self.prediction_data or getattr(self, "components_", None) is None:
             raise ValueError(
                 "mojolearn DBSCAN.save: prediction data was not stored; fit with "
                 "DBSCAN(prediction_data=True). A model without it can label no new "
