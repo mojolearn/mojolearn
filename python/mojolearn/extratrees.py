@@ -95,7 +95,7 @@ from ._array import Array
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_f32_colmajor, as_f32_forest_layout, empty
 from ._labels import (
     argmax_rows, classes_from_member, classes_member, decode_labels,
-    encode_labels, flatten_labels, is_bool, sorted_classes,
+    encode_labels, flat_view, flatten_labels, is_bool, sorted_classes,
 )
 from ._mode import NumericModeMixin
 from ._forest_protocol import (ForestProtocol, forest_estimator,
@@ -114,6 +114,20 @@ _MF_ALL = -3
 _CRITERION_GINI = 0
 _CRITERION_ENTROPY = 1
 _CRITERION_MSE = 2
+_CRITERION_POISSON = 4
+_CRITERION_GAMMA = 5
+_CRITERION_INVERSE_GAUSSIAN = 6
+
+# The regressor's criteria -> the code. sklearn names `poisson`; `gamma` and
+# `inverse_gaussian` are cuML's (RandomForestRegressor spells them the same
+# way here). DEVIATION 5610: the three deviances rank on the scaled
+# fixed-point label sums (objectives.mojo::regression_deviance_gain).
+_REGRESSOR_CRITERIA = {
+    "squared_error": _CRITERION_MSE,
+    "poisson": _CRITERION_POISSON,
+    "gamma": _CRITERION_GAMMA,
+    "inverse_gaussian": _CRITERION_INVERSE_GAUSSIAN,
+}
 
 # sklearn's classifier criteria -> the code; 'log_loss' is sklearn's alias
 # of 'entropy' (the same Entropy criterion object, _classes.py).
@@ -129,8 +143,6 @@ _UNSUPPORTED_CRITERIA = {
                      " splitter it serves is the ensemble/ lane"),
     "absolute_error": ("regressor", "NOT_IMPLEMENTED.tsv row 7: MAE needs an order"
                        " statistic per candidate, a different kernel shape"),
-    "poisson": ("regressor", "NOT_IMPLEMENTED.tsv row 12: cuML objectives.cuh"
-                ":267-346, marked 'not yet'"),
 }
 
 
@@ -558,15 +570,15 @@ class ExtraTreesRegressor(_ExtraTreesBase):
     ):
         super().__init__(device)
         _refuse_forest_knobs(n_jobs, verbose)
-        if criterion != "squared_error":
+        if criterion not in _REGRESSOR_CRITERIA:
             reason = _UNSUPPORTED_CRITERIA.get(criterion)
             raise NotImplementedError(
                 f"criterion={criterion!r} is not implemented"
                 + (f" ({reason[1]})" if reason else "")
-                + "; only 'squared_error' is."
+                + "; 'squared_error', 'poisson', 'gamma' and 'inverse_gaussian' are."
             )
         self.criterion = criterion
-        self._criterion_code = _CRITERION_MSE
+        self._criterion_code = _REGRESSOR_CRITERIA[criterion]
         self._cfg = dict(
             n_estimators=n_estimators,
             max_depth=max_depth,
@@ -598,6 +610,22 @@ class ExtraTreesRegressor(_ExtraTreesBase):
         self._refresh_config()
         self._capture_fit_mode()
         ya, _ = as_f32_c(y, ndim=1, name="y")
+        code = self._criterion_code
+        if code == _CRITERION_POISSON:
+            yv = flat_view(ya, "f")
+            if not all_finite(ya) or min(yv) < 0 or not max(yv) > 0:
+                raise ValueError(
+                    "criterion='poisson' requires y >= 0 with a positive sum: the"
+                    " Poisson gain is -max() for a non-positive label sum"
+                    " (objectives.cuh:251-253), which would fit a stump silently"
+                )
+        elif code in (_CRITERION_GAMMA, _CRITERION_INVERSE_GAUSSIAN):
+            if not all_finite(ya) or min(flat_view(ya, "f")) <= 0:
+                raise ValueError(
+                    f"criterion={self.criterion!r} requires y > 0: its gain is"
+                    " -max() for a non-positive label sum, which would fit a stump"
+                    " silently"
+                )
         if tree_start is not None:
             binding = self._bind('_mojolearn_trees')
             if not callable(getattr(binding, 'et_regressor_fit_shard', None)):
