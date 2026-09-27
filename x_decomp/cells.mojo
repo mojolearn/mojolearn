@@ -861,31 +861,18 @@ def lu_solve_serial(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int):
             b.unsafe_store(i * nrhs + c, div0(acc, lu.unsafe_load(i * n + i)))
 
 
-# DEVIATION 5309 (PIN; row 134): MGS with exactly two projection passes per
-# column (not LAPACK geqrf's Householder Q); arm 5309_mgs_passes.
-def orth_serial(a: F32Ptr, m: Int, l: Int):
-    """In-place orthonormalization of the l columns of a row-major m x l
-    matrix: modified Gram-Schmidt, each column projected against the
-    earlier ones TWICE (MGS2), every dot product rows ascending; a column
-    whose remaining norm is 0 becomes 0."""
+# DEVIATION 5309 (PIN; row 134): the orthonormal basis of a tall A is two
+# passes of {R = the Householder QR's R of decomposition/ (qr_factor, TSQR
+# slices a function of the shape); Q = A R^-1, one thread per row}; not
+# LAPACK's orgqr; arm 5309_orth_passes.
+def trsm_row(A: F32Ptr, R: F32Ptr, Q: F32Ptr, i: Int, l: Int):
+    """Row i of Q = A R^-1 (R upper l x l): q_j = (a_j - sum_{t<j} q_t R[t, j])
+    / R[j, j], j ascending, t ascending; a zero diagonal gives 0."""
     for j in range(l):
-        for _ in range(2):
-            for i in range(j):
-                var r = Float32(0)
-                for t in range(m):
-                    r = ftz(identical_mul_add(ftz(a.unsafe_load(t * l + i)), ftz(a.unsafe_load(t * l + j)), r))
-                for t in range(m):
-                    a.unsafe_store(
-                        t * l + j,
-                        ftz(identical_mul_add(-r, ftz(a.unsafe_load(t * l + i)), ftz(a.unsafe_load(t * l + j)))),
-                    )
-        var nrm = Float32(0)
-        for t in range(m):
-            var v = ftz(a.unsafe_load(t * l + j))
-            nrm = ftz(identical_mul_add(v, v, nrm))
-        var s = sqrt0(nrm)
-        for t in range(m):
-            a.unsafe_store(t * l + j, div0(a.unsafe_load(t * l + j), s))
+        var acc = ftz(A.unsafe_load(i * l + j))
+        for t in range(j):
+            acc = ftz(identical_mul_add(-ftz(Q.unsafe_load(i * l + t)), ftz(R.unsafe_load(t * l + j)), acc))
+        Q.unsafe_store(i * l + j, div0(acc, R.unsafe_load(j * l + j)))
 
 
 def chol_serial(a: F32Ptr, n: Int, info: F32Ptr):
