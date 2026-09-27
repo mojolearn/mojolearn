@@ -70,9 +70,9 @@ only the EXISTING members remain (item 5 below). Items 1-4 are merged (see the P
   bites, existing bits unchanged, test_host_surface, test_lane_select when its inputs change). Steward
   verdicts are post-merge: ONE batched request per lane per hour (sum lanes + e2e_host_branch; store lanes +
   e2e_store_branch; lists in ~/mojolearn-evidence/algos-prep/{sum_lanes,store_lanes}.txt). A FAIL is a fix
-  commit at the root. Last request: 1790537100517 (main 0afaab704, sum lanes + x-prep-mi-discrete).
-  Check it with `apple_steward.py status`; the next batched request covers x-prep-kbins-weights,
-  x-prep-spline-options, x-prep-iterative-options (sum lanes, e2e_host_branch) and the re-proved seam 5407 arm.
+  commit at the root. Post-merge requests: 1790537100517 (main 0afaab704: sum lanes + x-prep-mi-discrete) and
+  1790549984236 (main cb81abbf0: sum lanes + the three option lanes, e2e_host_branch). Check both with
+  `apple_steward.py status` first; a FAIL is the next session's first item.
 - test_host_surface and test_lane_select on a merge: the pod copy must be a git checkout (test_lane_select
   reads HEAD) and hold the export-ignored bench/results files (git archive drops them): archive + `git
   ls-files bench/results | tar`, link the pod's built .so files, `git init && git add . && git commit`.
