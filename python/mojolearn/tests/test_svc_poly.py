@@ -92,9 +92,11 @@ def test_refusals_by_name(kw, error, match):
         SVC(**kw)
 
 
-def test_svr_still_refuses_poly():
+def test_svr_carries_poly_and_sigmoid():
+    assert SVR(kernel="poly", degree=2).degree == 2
+    assert SVR(kernel="sigmoid", coef0=-0.5).coef0 == -0.5
     with pytest.raises(NotImplementedError, match="poly"):
-        SVR(kernel="poly")
+        SVR(kernel="polynomial")
 
 
 def test_poly_fit_repeats_bitwise_and_tracks_sklearn():

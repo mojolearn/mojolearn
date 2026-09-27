@@ -253,6 +253,18 @@ def _(ml, X, yc, yr, Xh=None):
                      z_dual=_h(z.dual_coef_), z_decision=_h(z.decision_function(X[512:768]))),
                 m, lambda e: (e.decision_function(Xh[:256]), e.predict(Xh[:256])))
 
+
+@lane("x-neighbors-svr-kernels")
+def _(ml, X, yc, yr, Xh=None):
+    """SVR(kernel='poly') and SVR(kernel='sigmoid'): the SVC's linear Gram
+    and epilogues (DEVIATION 1663's repeated product, identical_tanh), with
+    degree and coef0 through the bindings' optional trailing params."""
+    p = ml.SVR(C=1.0, kernel="poly", degree=2, gamma=0.05, coef0=1.0, epsilon=0.1, max_iter=200).fit(X[:512], yr[:512])
+    s = ml.SVR(C=1.0, kernel="sigmoid", gamma=0.02, coef0=-0.5, epsilon=0.1, max_iter=200).fit(X[:512], yr[:512])
+    return _fit(dict(p_dual=_h(p.dual_coef_), p_support=_h(p.support_), p_predict=_h(p.predict(X[512:768])),
+                     s_dual=_h(s.dual_coef_), s_predict=_h(s.predict(X[512:768]))),
+                p, lambda e: (e.predict(Xh[:256]),))
+
 _batch_decl(_rows_calls("score_samples", "predict", sl=slice(0, 256)), "x-neighbors-lof")
 _batch_decl(_rows_calls("predict", "decision_function", "predict_proba", sl=slice(0, 256)), "x-neighbors-nearest-centroid")
 _batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "x-neighbors-ocsvm")
@@ -264,6 +276,6 @@ _batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=lambda Xh: np.abs(Xh
 _batch_decl(_rows_calls("predict_proba", "predict", sl=slice(0, 128)),
             "x-neighbors-label-propagation", "x-neighbors-label-spreading")
 _batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_neighbors_holes), "x-neighbors-knn-imputer")
-_batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-neighbors-svgp")
+_batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-neighbors-svgp", "x-neighbors-svr-kernels")
 _batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "x-neighbors-gamma-scale", "x-neighbors-svm-weights",
             "x-neighbors-svc-sigmoid")

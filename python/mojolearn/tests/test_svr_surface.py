@@ -345,12 +345,13 @@ def arm_refusals(rep):
     x, y, _, _ = planted()
 
     # --- the Python-side constructor guards
-    rep.raises(arm, NotImplementedError, "POLYNOMIAL",
-               "kernel='poly' is refused by name",
-               SVR, kernel="poly")
-    rep.raises(arm, NotImplementedError, "TANH",
-               "kernel='sigmoid' is refused by name",
-               SVR, kernel="sigmoid")
+    rep.check(arm, SVR(kernel="poly", degree=2, coef0=1.0).kernel == "poly",
+              "kernel='poly' is accepted (the SVC Gram and epilogue)")
+    rep.check(arm, SVR(kernel="sigmoid", coef0=-0.5).kernel == "sigmoid",
+              "kernel='sigmoid' is accepted (the TANH epilogue)")
+    rep.raises(arm, NotImplementedError, "'sigmoid'",
+               "kernel='tanh' is refused, naming cuML's spelling",
+               SVR, kernel="tanh")
     rep.raises(arm, NotImplementedError, "PRECOMPUTED",
                "kernel='precomputed' is refused by name",
                SVR, kernel="precomputed")
@@ -365,11 +366,11 @@ def arm_refusals(rep):
     rep.raises(arm, ValueError, "finite and >= 0",
                "a negative gamma is refused",
                SVR, gamma=-1.0)
-    rep.raises(arm, NotImplementedError, "POLYNOMIAL",
-               "degree is refused, naming the kernel that would read it",
+    rep.raises(arm, NotImplementedError, "kernel='poly'",
+               "degree is refused with rbf, naming the kernel that would read it",
                SVR, degree=4)
-    rep.raises(arm, NotImplementedError, "POLYNOMIAL and TANH",
-               "coef0 is refused, naming the kernels that would read it",
+    rep.raises(arm, NotImplementedError, "kernel='sigmoid'",
+               "coef0 is refused with rbf, naming the kernels that would read it",
                SVR, coef0=1.0)
     rep.raises(arm, ValueError, "C must be positive",
                "a non-positive C is refused",

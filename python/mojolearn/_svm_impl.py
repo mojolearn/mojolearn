@@ -130,6 +130,17 @@ _SVC_REFUSED_KERNELS["polynomial"] = (
     "cuML and scikit-learn spell this kernel 'poly', which SVC implements"
 )
 
+# SVR carries the same kernels (2026-09-27): its bindings take degree and
+# coef0 as optional trailing params, so every linear / rbf call is unchanged.
+_SVR_KERNELS = _SVC_KERNELS
+_SVR_REFUSED_KERNELS = dict(_SVC_REFUSED_KERNELS)
+_SVR_REFUSED_KERNELS["polynomial"] = (
+    "cuML and scikit-learn spell this kernel 'poly', which SVR implements"
+)
+_SVR_REFUSED_KERNELS["tanh"] = (
+    "cuML and scikit-learn spell this kernel 'sigmoid', which SVR implements"
+)
+
 _EXT_NAME = "_mojolearn_svm"
 _PKG = __name__.rsplit(".", 1)[0]
 
@@ -896,18 +907,16 @@ class SVR(NumericModeMixin):
                                   finite, and negative -- stay reachable
                                   from this surface. They fire before any
                                   device context exists
-        kernel          honored   'linear' and 'rbf' only. 'poly',
-                                  'sigmoid' and 'precomputed' are cuML's
-                                  other three and each is REFUSED BY NAME
-                                  by `_svm_impl.py` with what is missing
+        kernel          honored   'linear', 'rbf', 'poly' and 'sigmoid', the
+                                  SVC's Gram and epilogues (DEVIATION 1663,
+                                  identical_tanh). 'precomputed' is REFUSED
+                                  BY NAME with what is missing
         gamma           honored   a finite float >= 0, or the string 'auto'
                                   (= 1 / n_features, cuML's `_get_gamma`).
                                   'scale' is resolved exactly, DEVIATION
                                   870 below (theirs is the default)
-        degree          refused   `_svm_impl.py`. Read only by POLYNOMIAL,
-                                  which is refused
-        coef0           refused   `_svm_impl.py`. Read only by POLYNOMIAL
-                                  and TANH, both refused
+        degree          honored   with kernel='poly': an integer in [0, 32]
+        coef0           honored   with 'poly' and 'sigmoid': a finite float
         tol             honored   the stopping tolerance. Refused if not
                                   finite or not positive, by `_svm_impl.py`
                                   and `svm/impl/svm_parameter.mojo`
@@ -1055,16 +1064,16 @@ class SVR(NumericModeMixin):
         # The caller's own string object when it is already lower case, so
         # `get_params` hands `clone` back the object it was given.
         k = kernel if kernel == kernel.lower() else kernel.lower()
-        if k in _REFUSED_KERNELS:
+        if k in _SVR_REFUSED_KERNELS:
             raise NotImplementedError(
                 f"mojolearn SVR: kernel={kernel!r} is refused; "
-                + _REFUSED_KERNELS[k]
+                + _SVR_REFUSED_KERNELS[k]
             )
-        if k not in _KERNELS:
+        if k not in _SVR_KERNELS:
             raise ValueError(
                 f"mojolearn SVR: kernel={kernel!r} is not a kernel name; "
-                f"this implementation carries {sorted(_KERNELS)} and refuses cuML's "
-                f"other three by name ({sorted(_REFUSED_KERNELS)})"
+                f"this implementation carries {sorted(_SVR_KERNELS)} and refuses "
+                f"the others by name ({sorted(_SVR_REFUSED_KERNELS)})"
             )
         if isinstance(gamma, str):
             g = gamma.lower()
@@ -1082,18 +1091,34 @@ class SVR(NumericModeMixin):
                     f"kernel, got {gamma!r} (DEVIATION 636; scikit-learn's own "
                     "constraint is gamma >= 0)"
                 )
-        if degree != 3:
+        if k == "poly":
+            if isinstance(degree, bool) or not isinstance(degree, numbers.Integral):
+                raise TypeError(
+                    f"mojolearn SVR: degree={degree!r} must be an integer; the "
+                    "polynomial power is an ascending repeated product (DEVIATION 1663)"
+                )
+            degree = int(degree)
+            if not 0 <= degree <= _MAX_POLY_DEGREE:
+                raise ValueError(
+                    f"mojolearn SVR: degree must be in [0, {_MAX_POLY_DEGREE}], got "
+                    f"{degree!r} (DEVIATION 1663)"
+                )
+        elif degree != 3:
             raise NotImplementedError(
-                f"mojolearn SVR: degree={degree!r} is refused; it is read only "
-                "by the POLYNOMIAL kernel, which is not implemented. Passing it "
-                "with a implemented kernel would be a parameter accepted and "
-                "ignored"
+                f"mojolearn SVR: degree={degree!r} is refused with kernel={k!r}; it "
+                "is read only by kernel='poly'. Passing it with another kernel "
+                "would be a parameter accepted and ignored"
             )
-        if coef0 != 0.0:
+        if k in ("poly", "sigmoid"):
+            coef0 = float(coef0)
+            if not math.isfinite(coef0):
+                raise ValueError(
+                    f"mojolearn SVR: coef0 must be finite, got {coef0!r} (DEVIATION 636)"
+                )
+        elif coef0 != 0.0:
             raise NotImplementedError(
-                f"mojolearn SVR: coef0={coef0!r} is refused; it is read only "
-                "by the POLYNOMIAL and TANH kernels, neither of which is "
-                "implemented"
+                f"mojolearn SVR: coef0={coef0!r} is refused with kernel={k!r}; it "
+                "is read only by kernel='poly' and kernel='sigmoid'"
             )
         C = float(C)
         if not math.isfinite(C):
@@ -1162,13 +1187,29 @@ class SVR(NumericModeMixin):
 
     _resolve_gamma = SVC._resolve_gamma
 
+    def _kernel_tail(self):
+        """degree and coef0 as the bindings' optional trailing params: only
+        for 'poly' and 'sigmoid', so every linear and rbf call keeps its
+        exact params list."""
+        if self.kernel in ("poly", "sigmoid"):
+            return [int(self.degree), float(self.coef0)]
+        return []
+
+    def _fit_tail(self, c_rows):
+        """svr_fit's optional slots: 9 the per-row bounds' address (0 = the
+        unweighted arm), then 10 degree and 11 coef0."""
+        kt = self._kernel_tail()
+        if c_rows is None and not kt:
+            return []
+        head = [0 if c_rows is None else addr_ro(c_rows, name="C * sample_weight")]
+        return head + kt
+
     def fit(self, X, y, sample_weight=None):
         x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
         n_rows, n_cols = x.shape
         targets = _as_targets(y, n_rows)
         gamma = self._resolve_gamma(x)
         c_rows = _c_rows(self.C, n_rows, sample_weight, who="SVR")
-        tail = [] if c_rows is None else [addr_ro(c_rows, name="C * sample_weight")]
 
         # WORST-CASE OUTPUT BUFFERS, AND `n_rows` IS THE WORST CASE.
         # The solver's domain is `2 * n_rows` (alpha+ and alpha-), but
@@ -1192,8 +1233,8 @@ class SVR(NumericModeMixin):
             # ORDER MATCHES bindings/_mojolearn_svm.mojo::svr_fit_binding.
             # n_rows, n_features, kernel, gamma, C, epsilon, tol, max_iter,
             # nochange_steps[, the per-row bounds' address]
-            [n_rows, n_cols, _KERNELS[self.kernel], gamma, self.C,
-             self.epsilon, self.tol, self.max_iter, self.nochange_steps] + tail,
+            [n_rows, n_cols, _SVR_KERNELS[self.kernel], gamma, self.C,
+             self.epsilon, self.tol, self.max_iter, self.nochange_steps] + self._fit_tail(c_rows),
         )
         n_support = int(n_support)
         b = _round_f32(info[0])
@@ -1253,8 +1294,8 @@ class SVR(NumericModeMixin):
             # n_rows, n_features, n_support, b, kernel, gamma,
             # cache_size_mib
             [n_rows, self.n_features_in_, self.n_support_,
-             float(self.intercept_[0]), _KERNELS[self.kernel], self._gamma,
-             self.cache_size],
+             float(self.intercept_[0]), _SVR_KERNELS[self.kernel], self._gamma,
+             self.cache_size] + self._kernel_tail(),
         )
         return out
 
@@ -1318,6 +1359,9 @@ class SVR(NumericModeMixin):
                  int(self.max_iter), int(self.nochange_steps)],
                 "<i8",
             ),
+            # Only for poly and sigmoid, so every linear and rbf file keeps its bytes.
+            **({"kernel_params": Array.from_list([float(self.degree), float(self.coef0)], "<f8")}
+               if self.kernel in ("poly", "sigmoid") else {}),
         })
 
     @classmethod
@@ -1333,10 +1377,19 @@ class SVR(NumericModeMixin):
         if hyper.size != 5:
             raise ValueError(f"mojolearn: {path!r} hyper holds {hyper.size} fields, 5 are needed")
         gamma_setting = _serialize.scalar_str(arrays, "gamma")
+        kernel_setting = _serialize.scalar_str(arrays, "kernel")
+        degree, coef0 = 3, 0.0
+        if kernel_setting in ("poly", "sigmoid"):
+            kpar = _serialize.exact(arrays, "kernel_params", "<f8")
+            if kpar.size != 2:
+                raise ValueError(f"mojolearn: {path!r} kernel_params must hold degree and coef0")
+            degree, coef0 = int(kpar[0]), float(kpar[1])
         obj = cls(
             C=float(hyper[0]),
             epsilon=float(hyper[1]),
-            kernel=_serialize.scalar_str(arrays, "kernel"),
+            kernel=kernel_setting,
+            degree=degree,
+            coef0=coef0,
             gamma=gamma_setting if gamma_setting in ("auto", "scale") else float(gamma_setting),
             tol=float(hyper[2]),
             cache_size=float(hyper[3]),

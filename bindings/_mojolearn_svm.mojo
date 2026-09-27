@@ -332,9 +332,10 @@ def svr_fit_binding(
     Python layer does (`svm_base.pyx:371`), and -1 resolves over the DOUBLED
     `n_train`.
     """
-    if len(params) != 9 and len(params) != 10:
+    if len(params) != 9 and len(params) != 10 and len(params) != 12:
         raise Error(
-            "svr_fit: params must contain 9 values (10 with the per-row bounds), got " + String(len(params))
+            "svr_fit: params must contain 9 values (10 with the per-row bounds, 12 with"
+            " degree and coef0), got " + String(len(params))
         )
     var xp = _f32_ptr(Int(py=x_addr))
     var yp = _f32_ptr(Int(py=y_addr))
@@ -358,11 +359,16 @@ def svr_fit_binding(
     x = read_f32(Int(xp), max(0, n_rows * n_cols))
     y = read_f32(Int(yp), max(0, n_rows))
     var c_rows = _c_rows(params, 9, n_rows, "svr_fit")
+    var degree = 3
+    var coef0 = 0.0
+    if len(params) == 12:
+        degree = Int(py=params[10])
+        coef0 = Float64(py=params[11])
     var res = SvrFitOutputs()
     with GILReleased(Python()):
         res = svr_fit_host(
             x, y, n_rows, n_cols, kernel, gamma, c, epsilon, tol, max_iter,
-            nochange_steps, c_rows,
+            nochange_steps, c_rows, degree, coef0,
         )
     copy_f32(res.dual_coefs.unsafe_ptr(), dp, res.n_support)
     for i in range(res.n_support):
@@ -409,9 +415,10 @@ def svr_predict_binding(
     stores it as `_gamma` at fit and passes that, which is what cuML does
     (`svm_base.pyx:464, 532`).
     """
-    if len(params) != 7:
+    if len(params) != 7 and len(params) != 9:
         raise Error(
-            "svr_predict: params must contain 7 values, got " + String(len(params))
+            "svr_predict: params must contain 7 values (9 with degree and coef0), got "
+            + String(len(params))
         )
     var xp = _f32_ptr(Int(py=x_addr))
     var op = _f32_ptr(Int(py=out_addr))
@@ -422,6 +429,11 @@ def svr_predict_binding(
     var kernel = Int(py=params[4])
     var gamma = Float64(py=params[5])
     var buffer_mib = Float64(py=params[6])
+    var degree = 3
+    var coef0 = 0.0
+    if len(params) == 9:
+        degree = Int(py=params[7])
+        coef0 = Float64(py=params[8])
     if n_rows <= 0 or n_cols <= 0:
         raise Error("svr_predict: n_rows and n_features must both be positive")
     if n_support < 0:
@@ -439,7 +451,7 @@ def svr_predict_binding(
     with GILReleased(Python()):
         out = svr_predict_host(
             x, n_rows, n_cols, support, dual, n_support, b, kernel, gamma,
-            buffer_mib,
+            buffer_mib, degree, coef0,
         )
     copy_f32(out.unsafe_ptr(), op, n_rows)
     return PythonObject(n_rows)

@@ -414,6 +414,8 @@ def svr_fit_host(
     max_iter: Int,
     nochange_steps: Int,
     c_rows: List[Float32] = List[Float32](),
+    degree: Int = 3,
+    coef0: Float64 = 0.0,
 ) raises -> SvrFitOutputs:
     """`SVR(C, epsilon, kernel, gamma, tol, max_iter, nochange_steps).fit(X,
     y)`, one shot. `x` is ROW-MAJOR `n_rows x n_cols` (theirs is
@@ -478,7 +480,7 @@ def svr_fit_host(
             "svr_fit_host: y has " + String(len(targets)) + " values, n_rows is "
             + String(n_rows)
         )
-    var kp = _kernel_params(kernel, gamma)
+    var kp = _kernel_params(kernel, gamma, degree, coef0)
     var param = SvmParameter.default()
     param.C = C
     param.tol = tol
@@ -528,6 +530,8 @@ def svr_predict_host(
     kernel: Int,
     gamma: Float64,
     buffer_size_mib: Float64,
+    degree: Int = 3,
+    coef0: Float64 = 0.0,
 ) raises -> List[Float32]:
     """`SVR::predict` on a model rebuilt from `svr_fit_host`'s output. One
     float32 per row, `sum_j K(x, sv_j) dual_j + b`.
@@ -573,7 +577,7 @@ def svr_predict_host(
             "svr_predict_host: the predict buffer (cache_size) must be a"
             " positive number of MiB, got " + String(buffer_size_mib)
         )
-    var kp = _kernel_params(kernel, gamma)
+    var kp = _kernel_params(kernel, gamma, degree, coef0)
 
     var model = SvmModel()
     model.n_support = n_support
