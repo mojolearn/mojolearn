@@ -152,3 +152,70 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("predict", "transform", sl=slice(0, 256)), "x-decomp-pls")
+
+
+@lane("x-decomp-dict-learning")
+def _(ml, X, yc, yr, Xh=None):
+    S = X[:300]
+    m = ml.DictionaryLearning(n_components=6, alpha=0.5, max_iter=8, random_state=0)
+    code = m.fit_transform(S)
+    c = ml.DictionaryLearning(n_components=5, alpha=0.3, max_iter=6, fit_algorithm="cd",
+                              transform_algorithm="lasso_cd", split_sign=True, random_state=1).fit(S)
+    t = ml.DictionaryLearning(n_components=4, alpha=0.2, max_iter=5, transform_algorithm="threshold",
+                              transform_alpha=0.1, positive_dict=True, positive_code=True).fit(S[:200])
+    mb = ml.MiniBatchDictionaryLearning(n_components=5, alpha=0.4, batch_size=64, max_iter=3, random_state=2,
+                                        transform_algorithm="lasso_lars").fit(X[:600])
+    return _fit(dict(code=_h(code), D=_h(m.components_), err=_h(np.float64(m.error_)), T=_h(m.transform(S[:128])),
+                     cD=_h(c.components_), cT=_h(c.transform(S[:128])), tT=_h(t.transform(S[:128]), t.components_),
+                     mbD=_h(mb.components_), mbT=_h(mb.transform(S[:128])), mbn=_h(np.int32(mb.n_steps_))),
+                m, lambda e: (e.transform(Xh[:256]),))
+
+
+@lane("x-decomp-sparse-pca")
+def _(ml, X, yc, yr, Xh=None):
+    S = X[:300]
+    m = ml.SparsePCA(n_components=4, alpha=1, max_iter=8, random_state=0).fit(S)
+    c = ml.SparsePCA(n_components=3, alpha=0.5, max_iter=6, method="cd").fit(S)
+    b = ml.MiniBatchSparsePCA(n_components=3, alpha=1, max_iter=4, batch_size=4, random_state=3).fit(X[:200])
+    return _fit(dict(comp=_h(m.components_), T=_h(m.transform(S[:128])), err=_h(np.float64(m.error_)),
+                     ccomp=_h(c.components_), bcomp=_h(b.components_), bT=_h(b.transform(S[:128]))),
+                m, lambda e: (e.transform(Xh[:256]),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-decomp-dict-learning", "x-decomp-sparse-pca")
+
+
+@lane("x-decomp-lda")
+def _(ml, X, yc, yr, Xh=None):
+    # counts: |X| rounded down to integers (elementwise, the same bytes on every box)
+    C = np.floor(np.abs(X[:400]) * np.float32(3)).astype(np.float32)
+    C = np.minimum(C, np.float32(50))
+    m = ml.LatentDirichletAllocation(n_components=4, max_iter=5, random_state=0).fit(C)
+    o = ml.LatentDirichletAllocation(n_components=3, learning_method="online", batch_size=100, max_iter=2,
+                                     random_state=1).fit(C)
+    return _fit(dict(comp=_h(m.components_), bound=_h(np.float32(m.bound_)), T=_h(m.transform(C[:128])),
+                     score=_h(np.float64(m.score(C[:128]))), ocomp=_h(o.components_), oT=_h(o.transform(C[:128]))),
+                m, lambda e: (e.transform(np.minimum(np.floor(np.abs(Xh[:256]) * np.float32(3)), np.float32(50)).astype(np.float32)),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256),
+                        prep=lambda Xh: np.minimum(np.floor(np.abs(Xh) * np.float32(3)), np.float32(50)).astype(np.float32)),
+            "x-decomp-lda")
+
+
+@lane("x-decomp-manifold")
+def _(ml, X, yc, yr, Xh=None):
+    S = X[:160]
+    iso = ml.Isomap(n_neighbors=8, n_components=3).fit(S)
+    cm = ml.ClassicalMDS(n_components=2).fit(S)
+    md = ml.MDS(n_components=2, init="random", n_init=2, max_iter=40, random_state=0)
+    emb = md.fit_transform(S[:100])
+    mc = ml.MDS(n_components=2, init="classical_mds", max_iter=30).fit(S[:100])
+    lle = ml.LocallyLinearEmbedding(n_neighbors=10, n_components=2).fit(S)
+    return _fit(dict(iso=_h(iso.embedding_), isod=_h(iso.dist_matrix_), isoT=_h(iso.transform(Xh[:64])),
+                     cm=_h(cm.embedding_), md=_h(emb), mds=_h(np.float64(md.stress_)), mc=_h(mc.embedding_),
+                     lle=_h(lle.embedding_), lleT=_h(lle.transform(Xh[:64]))),
+                iso, lambda e: (e.transform(Xh[:128]),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 128)), "x-decomp-manifold")
