@@ -22,6 +22,11 @@ from checks.numerics import (
     identical_tanh,
 )
 from core.philox import philox4x32_10
+from decomposition.host.linalg_public import host_qr_r
+
+
+#: The fold block, restated (x_decomp/cells.mojo FOLD_BLOCK).
+comptime O_BLOCK = 4096
 
 
 # ------------------------------------------------------------ scalar helpers
@@ -124,42 +129,64 @@ def oracle_gemm(
 ) -> List[Float32]:
     """C[i, j] = sum_p A[i, p] B[p, j]: p ascending, one fused multiply-add
     per term. alt 1: p descending; alt 2: product rounded, then added."""
+    # alt 3: one sequential fold even past O_BLOCK (the unblocked spelling)
     var c = List[Float32](length=m * n, fill=Float32(0))
+    var blk = k if alt == 3 else O_BLOCK
+    var nb = (k + blk - 1) // blk
     for i in range(m):
         for j in range(n):
-            var acc = Float32(0)
-            for q in range(k):
-                var p = k - 1 - q if alt == 1 else q
-                var x = a[p * m + i] if ta else a[i * k + p]
-                var y = b[j * k + p] if tb else b[p * n + j]
-                if alt == 2:
-                    acc = o_add(acc, o_mul(x, y))
-                else:
-                    acc = o_fma(x, y, acc)
-            c[i * n + j] = acc
+            var tot = Float32(0)
+            for bl in range(nb):
+                var p0 = bl * blk
+                var p1 = min(k, p0 + blk)
+                var acc = Float32(0)
+                for q in range(p1 - p0):
+                    var p = p1 - 1 - q if alt == 1 else p0 + q
+                    var x = a[p * m + i] if ta else a[i * k + p]
+                    var y = b[j * k + p] if tb else b[p * n + j]
+                    if alt == 2:
+                        acc = o_add(acc, o_mul(x, y))
+                    else:
+                        acc = o_fma(x, y, acc)
+                tot = acc if nb == 1 else o_add(tot, acc)
+            c[i * n + j] = tot
     return c^
 
 
 def oracle_colsum(a: List[Float32], n: Int, d: Int, alt: Int = 0) -> List[Float32]:
     """alt 1: rows descending; alt 2: the adds unflushed (a subnormal partial sum kept)."""
     var out = List[Float32](length=d, fill=Float32(0))
+    var blk = n if alt == 3 else O_BLOCK
+    var nb = (n + blk - 1) // blk
     for j in range(d):
-        var acc = Float32(0)
-        for q in range(n):
-            var i = n - 1 - q if alt == 1 else q
-            acc = (acc + a[i * d + j]) if alt == 2 else o_add(acc, a[i * d + j])
-        out[j] = acc
+        var tot = Float32(0)
+        for bl in range(nb):
+            var r0 = bl * blk
+            var r1 = min(n, r0 + blk)
+            var acc = Float32(0)
+            for q in range(r1 - r0):
+                var i = r1 - 1 - q if alt == 1 else r0 + q
+                acc = (acc + a[i * d + j]) if alt == 2 else o_add(acc, a[i * d + j])
+            tot = acc if nb == 1 else o_add(tot, acc)
+        out[j] = tot
     return out^
 
 
 def oracle_rowsum(a: List[Float32], n: Int, d: Int, alt: Int = 0) -> List[Float32]:
     var out = List[Float32](length=n, fill=Float32(0))
+    var blk = d if alt == 3 else O_BLOCK
+    var nb = (d + blk - 1) // blk
     for i in range(n):
-        var acc = Float32(0)
-        for q in range(d):
-            var j = d - 1 - q if alt == 1 else q
-            acc = o_add(acc, a[i * d + j])
-        out[i] = acc
+        var tot = Float32(0)
+        for bl in range(nb):
+            var c0 = bl * blk
+            var c1 = min(d, c0 + blk)
+            var acc = Float32(0)
+            for q in range(c1 - c0):
+                var j = c1 - 1 - q if alt == 1 else c0 + q
+                acc = o_add(acc, a[i * d + j])
+            tot = acc if nb == 1 else o_add(tot, acc)
+        out[i] = tot
     return out^
 
 
@@ -176,6 +203,23 @@ def oracle_sqdist(a: List[Float32], na: Int, b: List[Float32], nb: Int, d: Int, 
                 else:
                     acc = o_fma(t, t, acc)
             out[i * nb + j] = acc
+    return out^
+
+
+def oracle_absmax_sign(a: List[Float32], n: Int, d: Int, by_col: Bool, alt: Int = 0) -> List[Float32]:
+    """The sign of each column (row) by its largest-|.| entry, ties to the
+    LOWER index (alt 1: the higher)."""
+    var cnt = d if by_col else n
+    var out = List[Float32](length=cnt, fill=Float32(1))
+    for t in range(cnt):
+        var best = Float32(-1)
+        var val = Float32(0)
+        for q in range(n if by_col else d):
+            var v = ftz(a[q * d + t]) if by_col else ftz(a[t * d + q])
+            if (abs(v) >= best) if alt == 1 else (abs(v) > best):
+                best = abs(v)
+                val = v
+        out[t] = Float32(-1) if val < Float32(0) else Float32(1)
     return out^
 
 
@@ -404,24 +448,21 @@ def oracle_chol(a: List[Float32], n: Int, alt: Int = 0) -> List[Float32]:
     return w^
 
 
-def oracle_orth(a: List[Float32], m: Int, l: Int, alt: Int = 0) -> List[Float32]:
-    """MGS with two projection passes per column (alt 1: one pass)."""
+def oracle_orth(a: List[Float32], m: Int, l: Int, alt: Int = 0) raises -> List[Float32]:
+    """Two passes (alt 1: one) of R = host_qr_r (decomposition/'s host twin
+    of qr_factor), Q = A R^-1 by forward substitution per row, ascending."""
     var q = a.copy()
     var passes = 1 if alt == 1 else 2
-    for j in range(l):
-        for _ in range(passes):
-            for i in range(j):
-                var r = Float32(0)
-                for t in range(m):
-                    r = o_fma(q[t * l + i], q[t * l + j], r)
-                for t in range(m):
-                    q[t * l + j] = o_fma(-r, q[t * l + i], q[t * l + j])
-        var nrm = Float32(0)
-        for t in range(m):
-            nrm = o_fma(q[t * l + j], q[t * l + j], nrm)
-        var s = o_sqrt0(nrm)
-        for t in range(m):
-            q[t * l + j] = o_div0(q[t * l + j], s)
+    for _ in range(passes):
+        var r = host_qr_r(q, m, l)
+        var nq = List[Float32](length=m * l, fill=Float32(0))
+        for i in range(m):
+            for j in range(l):
+                var acc = ftz(q[i * l + j])
+                for t in range(j):
+                    acc = o_fma(-nq[i * l + t], r[t * l + j], acc)
+                nq[i * l + j] = o_div0(acc, r[j * l + j])
+        q = nq^
     return q^
 
 

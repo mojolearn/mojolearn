@@ -7,10 +7,16 @@ from std.memory import bitcast
 from std.sys.compile import is_defined
 
 from decomposition.checks.jacobi_eigh_device import JACOBI_SWEEPS, JACOBI_TOL
-from decomposition.host.linalg_public import host_eigh
+from decomposition.host.linalg_public import host_eigh, host_qr_r
 from decomposition.host.pca_full_oracle import host_one_sided_jacobi_svd, host_qr_factor
 from x_decomp.cells import (
     F32Ptr,
+    absmax_sign_cell,
+    FOLD_BLOCK,
+    colsum_part_cell,
+    rowsum_part_cell,
+    fold_cell,
+    gemm_part_cell,
     X_DECOMP_SVD_SWEEPS,
     X_DECOMP_SVD_TOL,
     I32Ptr,
@@ -29,7 +35,7 @@ from x_decomp.cells import (
     lu_serial,
     omp_row,
     lu_solve_serial,
-    orth_serial,
+    trsm_row,
     rand_cell,
     rowsum_cell,
     sqdist_cell,
@@ -43,9 +49,17 @@ comptime X_DECOMP_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 struct HostExec(Exec):
     @staticmethod
     def gemm(a: F32Ptr, b: F32Ptr, c: F32Ptr, m: Int, k: Int, n: Int, ta: Bool, tb: Bool) raises:
+        var nb = (k + FOLD_BLOCK - 1) // FOLD_BLOCK
+        var part = List[Float32](length=nb * m * n if nb > 1 else 1, fill=Float32(0))
+        var pp = F32Ptr(unsafe_from_address=Int(part.unsafe_ptr()))
+        if nb > 1:
+            for bl in range(nb):
+                for t in range(m * n):
+                    pp.unsafe_store(bl * m * n + t, gemm_part_cell(
+                        a, b, t // n, t % n, m, k, n, ta, tb, bl * FOLD_BLOCK, min(k, (bl + 1) * FOLD_BLOCK)))
         for i in range(m):
             for j in range(n):
-                var v = gemm_cell(a, b, i, j, m, k, n, ta, tb)
+                var v = fold_cell(pp, i * n + j, nb, m * n) if nb > 1 else gemm_cell(a, b, i, j, m, k, n, ta, tb)
                 comptime if X_DECOMP_HOST_SABOTAGE:
                     # the gate's negative control (-D MOJOLEARN_HOST_SABOTAGE=1):
                     # the host column's every product moves by one unit in the
@@ -66,13 +80,33 @@ struct HostExec(Exec):
 
     @staticmethod
     def colsum(a: F32Ptr, dst: F32Ptr, n: Int, d: Int) raises:
+        var nb = (n + FOLD_BLOCK - 1) // FOLD_BLOCK
+        if nb <= 1:
+            for j in range(d):
+                dst.unsafe_store(j, colsum_cell(a, j, n, d))
+            return
+        var part = List[Float32](length=nb * d, fill=Float32(0))
+        var pp = F32Ptr(unsafe_from_address=Int(part.unsafe_ptr()))
+        for bl in range(nb):
+            for j in range(d):
+                pp.unsafe_store(bl * d + j, colsum_part_cell(a, j, n, d, bl * FOLD_BLOCK, min(n, (bl + 1) * FOLD_BLOCK)))
         for j in range(d):
-            dst.unsafe_store(j, colsum_cell(a, j, n, d))
+            dst.unsafe_store(j, fold_cell(pp, j, nb, d))
 
     @staticmethod
     def rowsum(a: F32Ptr, dst: F32Ptr, n: Int, d: Int) raises:
+        var nb = (d + FOLD_BLOCK - 1) // FOLD_BLOCK
+        if nb <= 1:
+            for i in range(n):
+                dst.unsafe_store(i, rowsum_cell(a, i, d))
+            return
+        var part = List[Float32](length=nb * n, fill=Float32(0))
+        var pp = F32Ptr(unsafe_from_address=Int(part.unsafe_ptr()))
+        for bl in range(nb):
+            for i in range(n):
+                pp.unsafe_store(bl * n + i, rowsum_part_cell(a, i, d, bl * FOLD_BLOCK, min(d, (bl + 1) * FOLD_BLOCK)))
         for i in range(n):
-            dst.unsafe_store(i, rowsum_cell(a, i, d))
+            dst.unsafe_store(i, fold_cell(pp, i, nb, n))
 
     @staticmethod
     def sqdist(a: F32Ptr, b: F32Ptr, dst: F32Ptr, na: Int, nb: Int, d: Int) raises:
@@ -115,7 +149,16 @@ struct HostExec(Exec):
 
     @staticmethod
     def orth(a: F32Ptr, m: Int, l: Int) raises:
-        orth_serial(a, m, l)
+        for _ in range(2):
+            var w = List[Float32](capacity=m * l)
+            for t in range(m * l):
+                w.append(a.unsafe_load(t))
+            var r = host_qr_r(w, m, l)
+            var pr = F32Ptr(unsafe_from_address=Int(r.unsafe_ptr()))
+            for i in range(m):
+                trsm_row(F32Ptr(unsafe_from_address=Int(w.unsafe_ptr())), pr, a, i, l)
+            _ = r^
+            _ = w^
 
     @staticmethod
     def svd(a: F32Ptr, m: Int, n: Int, s: F32Ptr, v: F32Ptr) raises:
@@ -185,6 +228,20 @@ struct HostExec(Exec):
         for u in range(n):
             flags.unsafe_store(u, als_row(c, y, yty, x, ps, u, m, f, reg))
         _ = s^
+
+    @staticmethod
+    def absmax_sign(a: F32Ptr, dst: F32Ptr, n: Int, d: Int, by_col: Bool) raises:
+        for t in range(d if by_col else n):
+            dst.unsafe_store(t, absmax_sign_cell(a, t, n, d, by_col))
+
+    @staticmethod
+    def qr_r(a: F32Ptr, m: Int, n: Int, r: F32Ptr) raises:
+        var w = List[Float32](capacity=m * n)
+        for t in range(m * n):
+            w.append(a.unsafe_load(t))
+        var got = host_qr_r(w, m, n)
+        for t in range(n * n):
+            r.unsafe_store(t, got[t])
 
     @staticmethod
     def vendor() -> String:

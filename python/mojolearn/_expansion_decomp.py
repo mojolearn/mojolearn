@@ -59,7 +59,7 @@ class _M:
 
     @classmethod
     def zeros(cls, r, c):
-        return cls(array.array("f", bytes(4 * r * c)), r, c)
+        return cls(array.array("f", [0.0]) * (r * c), r, c)
 
     @classmethod
     def of(cls, values, r, c):
@@ -72,10 +72,19 @@ class _M:
             raise ValueError(f"{name}: a nonempty two-dimensional input is required")
         s = array.array("f")
         s.frombytes(a.tobytes())
-        for v in s:
-            if v != v or v in (math.inf, -math.inf):
-                raise ValueError(f"{name}: input must be finite; NaN/inf are unsupported")
-        return cls(s, a.shape[0], a.shape[1])
+        m = cls(s, a.shape[0], a.shape[1])
+        m._check_finite(name)
+        return m
+
+    def _check_finite(self, name):
+        """NaN/inf refused, through the cells: every x * 0 summed is 0 for a
+        finite input and NaN if any value is NaN or infinite."""
+        if not len(self.s):
+            return
+        k = _Kit(_backend.default_mode())
+        t = k.total(k.ew("scale", self, s=0.0)).s[0]
+        if t != t:
+            raise ValueError(f"{name}: input must be finite; NaN/inf are unsupported")
 
     @property
     def addr(self):
@@ -104,20 +113,21 @@ class _M:
         return _M(out, len(idx), self.c)
 
     def cols(self, a, b):
-        out = array.array("f")
-        for i in range(self.r):
-            out.extend(self.s[i * self.c + a:i * self.c + b])
-        return _M(out, self.r, b - a)
+        return self.take_cols(range(a, b))
 
     def take_cols(self, idx):
-        out = array.array("f")
-        for i in range(self.r):
-            base = i * self.c
-            out.extend(self.s[base + j] for j in idx)
-        return _M(out, self.r, len(idx))
+        """Data movement by strided slices: one C-level copy per column."""
+        idx = list(idx)
+        w = len(idx)
+        out = array.array("f", [0.0]) * (self.r * w)
+        for t, j in enumerate(idx):
+            out[t::w] = self.s[j::self.c]
+        return _M(out, self.r, w)
 
     @property
     def T(self):
+        if self.r == 1 or self.c == 1:
+            return _M(self.s, self.c, self.r)
         out = array.array("f")
         for j in range(self.c):
             out.extend(self.s[j::self.c])
@@ -127,27 +137,31 @@ class _M:
         return _M(self.s, r, c)
 
     def neg_rows(self, flags):
-        """Exact sign flip of the rows whose flag is set."""
-        out = array.array("f", self.s)
-        for i, f in enumerate(flags):
-            if f:
-                for j in range(i * self.c, (i + 1) * self.c):
-                    out[j] = -out[j]
-        return _M(out, self.r, self.c)
+        """Exact sign flip of the rows whose flag is set (a sign bit only)."""
+        if not any(flags):
+            return self
+        k = _Kit(_backend.default_mode())
+        return k.ew("mul", self, _M.of([-1.0 if f else 1.0 for f in flags], self.r, 1))
 
     def neg_cols(self, flags):
-        out = array.array("f", self.s)
-        for j, f in enumerate(flags):
-            if f:
-                for i in range(self.r):
-                    out[i * self.c + j] = -out[i * self.c + j]
-        return _M(out, self.r, self.c)
+        if not any(flags):
+            return self
+        k = _Kit(_backend.default_mode())
+        return k.ew("mul", self, _M.of([-1.0 if f else 1.0 for f in flags], 1, self.c))
 
     def list(self):
         return list(self.s)
 
 
 _M._one = _M(array.array("f", [0.0]), 1, 1)
+
+
+def _any_negative(M):
+    """Whether any value is < 0, through the cells (x < 0 counted as ones)."""
+    if not len(M.s):
+        return False
+    k = _Kit(_backend.default_mode())
+    return k.total(k.ew("gts", k.ew("scale", M, s=-1.0), s=0.0)).s[0] > 0
 
 
 def _vstack(*ms):
@@ -158,11 +172,15 @@ def _vstack(*ms):
 
 
 def _hstack(*ms):
-    s = array.array("f")
-    for i in range(ms[0].r):
-        for m in ms:
-            s.extend(m.s[i * m.c:(i + 1) * m.c])
-    return _M(s, ms[0].r, sum(m.c for m in ms))
+    r = ms[0].r
+    w = sum(m.c for m in ms)
+    s = array.array("f", [0.0]) * (r * w)
+    off = 0
+    for m in ms:
+        for j in range(m.c):
+            s[off + j::w] = m.s[j::m.c]
+        off += m.c
+    return _M(s, r, w)
 
 
 class _Kit:
@@ -274,7 +292,8 @@ class _Kit:
         return s.take_cols(order), v.take_cols(order).T
 
     def orth(self, A):
-        """A copy of A with its columns orthonormalized (MGS2)."""
+        """A copy of A with its columns orthonormalized: two passes of the
+        Householder R and a row-parallel A R^-1 (DEVIATION 5309)."""
         Q = A.copy()
         self.b.x_decomp_orth(Q.addr, [A.r, A.c])
         return Q
@@ -334,6 +353,22 @@ class _Kit:
         self.b.x_decomp_als_rows(C.addr, Y.addr, YtY.addr, X.addr, flags.addr, [n, C.c, f], float(reg))
         return X
 
+    def qr_r(self, A):
+        """R (n x n) of the Householder QR of a tall A (decomposition/'s TSQR)."""
+        R = _M.zeros(A.c, A.c)
+        self.b.x_decomp_qr_r(A.addr, R.addr, [A.r, A.c])
+        return R
+
+    def absmax_flags(self, A, by_col):
+        """Per column (by_col) or row of A: True when its largest-|.| entry
+        (ties to the lower index) is negative (x_decomp/cells.mojo
+        `absmax_sign_cell`, DEVIATION 5317)."""
+        cnt = A.c if by_col else A.r
+        out = _M.zeros(1, cnt)
+        if cnt and len(A.s):
+            self.b.x_decomp_absmax_sign(A.addr, out.addr, [A.r, A.c, 1 if by_col else 0])
+        return [v < 0 for v in out.s]
+
     def chol(self, A):
         L = A.copy()
         info = _M.zeros(1, 1)
@@ -355,15 +390,7 @@ def _mode(numeric_mode):
 def _svd_flip_v(Vt):
     """sklearn `svd_flip(u_based_decision=False)`: each row of Vt signed so its
     largest-|.| entry (first on a tie) is positive. Exact sign flips."""
-    flags = []
-    for i in range(Vt.r):
-        row = Vt.row(i)
-        best, arg = -1.0, 0
-        for j, v in enumerate(row):
-            if abs(v) > best:
-                best, arg = abs(v), j
-        flags.append(row[arg] < 0)
-    return Vt.neg_rows(flags)
+    return Vt.neg_rows(_Kit(_backend.default_mode()).absmax_flags(Vt, False))
 
 
 def _gram_svd(k, Z):
@@ -716,27 +743,8 @@ def _thin_svd(k, X, nc, u_based=True):
         S, Ut = S.cols(0, nc), Ut.rows(0, nc)
         U = Ut.T
         Vt = k.ew("div", k.mm(U, X, ta=True), S.T)
-    if u_based:
-        Ut = U.T
-        fl = []
-        for i in range(Ut.r):
-            row = Ut.row(i)
-            best, arg = -1.0, 0
-            for j, v in enumerate(row):
-                if abs(v) > best:
-                    best, arg = abs(v), j
-            fl.append(row[arg] < 0)
-        U, Vt = U.neg_cols(fl), Vt.neg_rows(fl)
-    else:
-        fl = []
-        for i in range(Vt.r):
-            row = Vt.row(i)
-            best, arg = -1.0, 0
-            for j, v in enumerate(row):
-                if abs(v) > best:
-                    best, arg = abs(v), j
-            fl.append(row[arg] < 0)
-        U, Vt = U.neg_cols(fl), Vt.neg_rows(fl)
+    fl = k.absmax_flags(U, True) if u_based else k.absmax_flags(Vt, False)
+    U, Vt = U.neg_cols(fl), Vt.neg_rows(fl)
     return U, S, Vt
 
 
@@ -785,9 +793,8 @@ class NMF(_Base):
             raise ValueError("Invalid beta_loss parameter: solver 'cd' does not handle beta_loss other than 'frobenius'")
         if self.solver not in ("cd", "mu"):
             raise ValueError(f"Invalid solver parameter: got {self.solver!r} instead of one of {{'cd', 'mu'}}")
-        for v in M.s:
-            if v < 0:
-                raise ValueError("Negative values in data passed to NMF (input X)")
+        if _any_negative(M):
+            raise ValueError("Negative values in data passed to NMF (input X)")
 
     def _reg(self, n, d):
         aH = self.alpha_W if self.alpha_H == "same" else self.alpha_H
@@ -1332,17 +1339,20 @@ class FactorAnalysis(_Base):
             if psi.c != d:
                 raise ValueError(f"noise_variance_init dimension does not match the number of features : {psi.c} != {d}")
         SMALL = 1e-12
+        # Xc = Q R once; the scaled data Xc D / sqrt(n) then has the singular
+        # values and right vectors of the d x d R D / sqrt(n) (Q orthogonal)
+        Rx = k.qr_r(Xc) if n >= d else None
         old_ll = -math.inf
         loglike = []
         it = 0
         W = None
         for it in range(1, self.max_iter + 1):
             sqrt_psi = k.ew("adds", k.ew("sqrt", psi), s=SMALL)
-            Z = k.ew("scale", k.ew("div", Xc, sqrt_psi), s=1.0 / nsqrt)
             if n >= d:
-                sv, Vt = k.svd(Z)
+                sv, Vt = k.svd(k.ew("scale", k.ew("div", Rx, sqrt_psi), s=1.0 / nsqrt))
                 s2 = k.ew("sq", sv)
             else:
+                Z = k.ew("scale", k.ew("div", Xc, sqrt_psi), s=1.0 / nsqrt)
                 ev, V = k.eigh(k.mm(Z, Z, ta=True))
                 order = list(range(d - 1, -1, -1))
                 s2 = k.ew("maxs", ev.take_cols(order), s=0.0)
@@ -1477,24 +1487,16 @@ def _row_of(b):
 
 # ================================================================ lstsq / randomized SVD
 def _orthonormal_cols(k, A):
-    """An orthonormal basis of A's columns (m x l, m >= l): modified
-    Gram-Schmidt with one re-orthogonalization pass (x_decomp/cells.mojo
-    `orth_serial`), stable where a Cholesky QR of an ill-conditioned A is not."""
+    """An orthonormal basis of A's columns (m x l, m >= l): two passes of the
+    Householder QR's R (decomposition/'s TSQR) and Q = A R^-1 one row per
+    thread (x_decomp/cells.mojo `trsm_row`)."""
     return k.orth(A)
 
 
 def _flip_u(U, Vt):
     """sklearn svd_flip(u_based_decision=True): each column of U signed so its
     largest-|.| entry (first on a tie) is positive; Vt's rows follow."""
-    fl = []
-    Ut = U.T
-    for i in range(Ut.r):
-        row = Ut.row(i)
-        best, arg = -1.0, 0
-        for j, v in enumerate(row):
-            if abs(v) > best:
-                best, arg = abs(v), j
-        fl.append(row[arg] < 0)
+    fl = _Kit(_backend.default_mode()).absmax_flags(U, True)
     return U.neg_cols(fl), Vt.neg_rows(fl)
 
 
@@ -1503,7 +1505,7 @@ def randomized_svd(M, n_components, *, n_oversamples=10, n_iter="auto", power_it
     """sklearn.utils.extmath.randomized_svd (Halko et al.; RAFT
     `linalg/rsvd.cuh` is the same scheme). The Gaussian test matrix is the
     lane's Philox stream (random_state None means 0). Every power iteration
-    re-orthonormalizes by MGS2 whatever `power_iteration_normalizer`
+    re-orthonormalizes by the two-pass Householder-R solve whatever `power_iteration_normalizer`
     says: 'LU', 'QR' and 'none' span the same subspace, only the rounding of
     the basis differs. The small SVD of Q^T M is exact (Gram eigh).
     Returns (U, s, Vt)."""
@@ -2266,9 +2268,8 @@ class LatentDirichletAllocation(_Base):
 
     def _check_X(self, X, whom):
         M = _M.from_input(X)
-        for v in M.s:
-            if v < 0:
-                raise ValueError(f"Negative values in data passed to {whom}")
+        if _any_negative(M):
+            raise ValueError(f"Negative values in data passed to {whom}")
         return M
 
     def _init(self, k, d):
@@ -2457,15 +2458,7 @@ def _top_eig(k, A, nc):
     n = A.r
     order = list(range(n - 1, n - 1 - nc, -1))
     w, V = w.take_cols(order), V.take_cols(order)
-    fl = []
-    for j in range(nc):
-        col = V.cols(j, j + 1).s
-        best, arg = -1.0, 0
-        for i, v in enumerate(col):
-            if abs(v) > best:
-                best, arg = abs(v), i
-        fl.append(col[arg] < 0)
-    return w, V.neg_cols(fl)
+    return w, V.neg_cols(k.absmax_flags(V, True))
 
 
 def _fix_components(k, X, Wg):
@@ -3254,14 +3247,7 @@ def _randomized_decompose(X, nc, *, center, n_oversamples, n_iter, power_iterati
     Um, Sm, Vm = _rsvd_core(k, A, nc, n_oversamples, n_iter, power_iteration_normalizer, "auto", False,
                             random_state)
     # svd_flip(u_based_decision=False): each row of Vt, U's columns follow
-    fl = []
-    for i in range(Vm.r):
-        row = Vm.row(i)
-        best, arg = -1.0, 0
-        for j, v in enumerate(row):
-            if abs(v) > best:
-                best, arg = abs(v), j
-        fl.append(row[arg] < 0)
+    fl = k.absmax_flags(Vm, False)
     Vm, Um = Vm.neg_rows(fl), Um.neg_cols(fl)
     out = dict(components=Vm.out(), singular_values=Sm.out((nc,)), mean=mean.out((d,)))
     if center:

@@ -18,6 +18,7 @@ from std.memory import bitcast
 from core.identity_trace import IdentityTrace
 from x_decomp.cells import F32Ptr
 from x_decomp.checks.oracles import (
+    oracle_absmax_sign,
     oracle_colsum,
     oracle_ew,
     oracle_gamma,
@@ -81,6 +82,38 @@ def main() raises:
         HostExec.gemm(ptr(A), ptr(B), ptr(hst), m, k, n, ta, tb)
         same("5300 gemm host arm " + String(arm), count_diff_f32(hst, want))
         tr.record_list_f32("x_decomp.gemm." + String(arm), dev)
+    # ---- 5300/5301 past FOLD_BLOCK: the blocked two-stage fold
+    var kb = 9000
+    var ab = seam_fixture(3, kb, 21)
+    var bb2 = seam_fixture(kb, 2, 22)
+    var wbk = oracle_gemm(ab, bb2, 3, kb, 2, False, False)
+    require_separates("5300 blocked gemm vs one sequential fold", count_diff_f32(wbk, oracle_gemm(ab, bb2, 3, kb, 2, False, False, 3)))
+    var dbk = zeros(6)
+    DevExec.gemm(ptr(ab), ptr(bb2), ptr(dbk), 3, kb, 2, False, False)
+    same("5300 blocked gemm device", count_diff_f32(dbk, wbk))
+    var hbk = zeros(6)
+    HostExec.gemm(ptr(ab), ptr(bb2), ptr(hbk), 3, kb, 2, False, False)
+    same("5300 blocked gemm host", count_diff_f32(hbk, wbk))
+    var cb = seam_fixture(kb, 3, 23)
+    var wcb = oracle_colsum(cb, kb, 3)
+    require_separates("5301 blocked colsum vs one sequential fold", count_diff_f32(wcb, oracle_colsum(cb, kb, 3, 3)))
+    var dcb = zeros(3)
+    DevExec.colsum(ptr(cb), ptr(dcb), kb, 3)
+    same("5301 blocked colsum device", count_diff_f32(dcb, wcb))
+    var hcb = zeros(3)
+    HostExec.colsum(ptr(cb), ptr(hcb), kb, 3)
+    same("5301 blocked colsum host", count_diff_f32(hcb, wcb))
+    var rb = seam_fixture(2, kb, 24)
+    var wrb = oracle_rowsum(rb, 2, kb)
+    require_separates("5301 blocked rowsum vs one sequential fold", count_diff_f32(wrb, oracle_rowsum(rb, 2, kb, 3)))
+    var drb = zeros(2)
+    DevExec.rowsum(ptr(rb), ptr(drb), 2, kb)
+    same("5301 blocked rowsum device", count_diff_f32(drb, wrb))
+    var hrb = zeros(2)
+    HostExec.rowsum(ptr(rb), ptr(hrb), 2, kb)
+    same("5301 blocked rowsum host", count_diff_f32(hrb, wrb))
+    tr.record_list_f32("x_decomp.gemm.blocked", dbk)
+    tr.record_list_f32("x_decomp.colsum.blocked", dcb)
     # ---- 5301 column and row sums
     var rows = 41
     var cols = 12
@@ -207,4 +240,22 @@ def main() raises:
     HostExec.rand_gamma(ptr(gh), cnt, UInt32(99), UInt32(60), Float32(1.5))
     same("5306 gamma host", count_diff_f32(gh, gw))
     tr.record_list_f32("x_decomp.gamma", gd)
+    # ---- 5317 the sign of a vector: its largest-|.| entry, ties to the lower index
+    var tv = seam_fixture(9, 6, 31)
+    for c in range(6):
+        tv[c] = Float32(1e9) if c % 2 == 0 else Float32(-1e9)
+        tv[6 + c] = Float32(-1e9) if c % 2 == 0 else Float32(1e9)
+    for by_col in range(2):
+        var bc = by_col == 1
+        var ws2 = oracle_absmax_sign(tv, 9, 6, bc)
+        if bc:
+            require_separates("5317 sign-flip tie", count_diff_f32(ws2, oracle_absmax_sign(tv, 9, 6, bc, 1)))
+        var cnt2 = 6 if bc else 9
+        var dsg = zeros(cnt2)
+        DevExec.absmax_sign(ptr(tv), ptr(dsg), 9, 6, bc)
+        same("5317 absmax sign device", count_diff_f32(dsg, ws2))
+        var hsg = zeros(cnt2)
+        HostExec.absmax_sign(ptr(tv), ptr(hsg), 9, 6, bc)
+        same("5317 absmax sign host", count_diff_f32(hsg, ws2))
+        tr.record_list_f32("x_decomp.absmax_sign." + String(by_col), dsg)
     print("PASS x_decomp fold_ew_check")

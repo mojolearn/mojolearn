@@ -1,8 +1,8 @@
 diff --git a/x_decomp/cells.mojo b/x_decomp/cells.mojo
-index b8537db32..dfba67fca 100644
+index 4b4c2cedf..66476401d 100644
 --- a/x_decomp/cells.mojo
 +++ b/x_decomp/cells.mojo
-@@ -647,8 +647,7 @@ def dijkstra_row(W: F32Ptr, dist: F32Ptr, done: F32Ptr, i: Int, n: Int) -> Float
+@@ -700,8 +700,7 @@ def dijkstra_row(W: F32Ptr, dist: F32Ptr, done: F32Ptr, i: Int, n: Int) -> Float
              var a = ftz(W.unsafe_load(u * n + v))
              var b = ftz(W.unsafe_load(v * n + u))
              var w = a

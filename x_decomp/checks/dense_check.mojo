@@ -112,7 +112,7 @@ def main() raises:
         # nearly dependent columns: column 1 = column 0 + a small perturbation
         q[t * l + 1] = q[t * l + 0] + Float32(1e-3) * q[t * l + 2]
     var wq = oracle_orth(q, mm, l)
-    require_separates("5309 MGS passes (two vs one)", count_diff_f32(wq, oracle_orth(q, mm, l, 1)))
+    require_separates("5309 orth passes (two vs one)", count_diff_f32(wq, oracle_orth(q, mm, l, 1)))
     var qd = q.copy()
     DevExec.orth(ptr(qd), mm, l)
     same("5309 orth device", count_diff_f32(qd, wq))

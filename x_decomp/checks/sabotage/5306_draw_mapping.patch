@@ -1,8 +1,8 @@
 diff --git a/x_decomp/cells.mojo b/x_decomp/cells.mojo
-index b8537db32..d5e90f1ce 100644
+index 4b4c2cedf..45ba62cf6 100644
 --- a/x_decomp/cells.mojo
 +++ b/x_decomp/cells.mojo
-@@ -362,7 +362,7 @@ def rand_cell(i: Int, seed: UInt32, stream: UInt32, kind: Int) -> Float32:
+@@ -415,7 +415,7 @@ def rand_cell(i: Int, seed: UInt32, stream: UInt32, kind: Int) -> Float32:
      )
      var grid = Float32(5.9604644775390625e-08)  # 2^-24
      if kind == 0:
