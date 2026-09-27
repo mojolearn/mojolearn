@@ -516,6 +516,15 @@ def _to_host(a):
 
 # ---- ours ----------------------------------------------------------------
 
+def _probe():
+    """tools/bench_board_probe.py (memory per round, the ours-cpu readback)."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import bench_board_probe
+    return bench_board_probe
+
+
 def _ours_module():
     os.environ.setdefault("MOJOLEARN_NUMERIC_MODE", "identical")
     import mojolearn
@@ -538,6 +547,8 @@ def _ours_info(ml, est):
         except Exception as exc:  # noqa: BLE001
             info[name] = "unavailable (%r)" % (exc,)
     info["device"] = "gpu"
+    # an ours-cpu worker: the wheel must have loaded its CPU set (refuses by name)
+    info.update(_probe().ours_cpu_check(ml))
     # Which mojolearn answered: the installed wheel or an in-repo tree.
     info["module_path"] = getattr(ml, "__file__", None)
     # Ours fits INSIDE its clock: the public call is what is timed, upload and
@@ -1577,6 +1588,10 @@ for _lane in LANES:
         # MOJOLEARN_NUMERIC_MODE=fast (`_worker_env`), so the Apple board
         # interleaves FAST beside IDENTICAL round by round in one race.
         BUILDERS[(_lane, "ours-fast")] = BUILDERS[(_lane, "ours")]
+        # `ours-cpu`: the SAME estimator in a worker started under
+        # MOJOLEARN_VENDOR=cpu (the wheel's public CPU switch,
+        # tools/bench_board_probe.py), IDENTICAL, read back as vendor cpu.
+        BUILDERS[(_lane, "ours-cpu")] = BUILDERS[(_lane, "ours")]
 for _lane in LANES:
     # Same for a lane with no scikit-learn arm: there is
     # nothing to wrap in the CPU quota.
@@ -1804,6 +1819,8 @@ def worker(args):
         say({"event": "error", "stage": "ready", "error": repr(exc)})
         return 1
     say({"event": "ready", "info": runner.info, "pid": os.getpid()})
+    # peak memory per round, reset and read OUTSIDE the clock
+    mem = _probe().MemProbe((runner.info or {}).get("device", "gpu"))
     inf = None
     for line in sys.stdin:
         parts = line.split()
@@ -1812,17 +1829,19 @@ def worker(args):
         if parts[0] == "round":
             r = int(parts[1])
             try:
+                mem.start()
                 t0 = time.perf_counter()
                 runner.call()
                 runner.sync()
                 ms = (time.perf_counter() - t0) * 1000.0
+                m = mem.stop()
                 digest = _digest(runner.outputs())
             except Exception as exc:  # noqa: BLE001
                 import traceback
                 traceback.print_exc()
                 say({"event": "error", "stage": "round %d" % r, "error": repr(exc)})
                 return 1
-            say({"event": "round", "round": r, "ms": ms, "digest": digest})
+            say({"event": "round", "round": r, "ms": ms, "digest": digest, "mem": m})
         elif parts[0] == "infer":
             # `race --infer` only. An inference failure is reported and the
             # worker stays up: its fit outputs still have to be saved.
@@ -1830,10 +1849,12 @@ def worker(args):
             try:
                 if inf is None:
                     inf = infer_runner(args.lane, runner, data)
+                mem.start()
                 t0 = time.perf_counter()
                 inf.call()
                 inf.sync()
                 ms = (time.perf_counter() - t0) * 1000.0
+                m = mem.stop()
                 digest = _digest(inf.outputs())
             except Exception as exc:  # noqa: BLE001
                 import traceback
@@ -1841,7 +1862,7 @@ def worker(args):
                 say({"event": "infer_error", "stage": "infer %d" % r, "error": repr(exc)})
                 continue
             say({"event": "infer", "round": r, "ms": ms, "digest": digest,
-                 "call": inf.desc, "info": inf.info})
+                 "call": inf.desc, "info": inf.info, "mem": m})
         elif parts[0] == "infer_save":
             try:
                 path = parts[1]
@@ -1947,8 +1968,10 @@ def _worker_env(arm, root):
     env = dict(os.environ)
     for k in THREAD_ENV:
         env.pop(k, None)
-    if arm in ("ours", "ours-base", "ours-fast"):
+    if arm in ("ours", "ours-base", "ours-fast", "ours-cpu"):
         env["MOJOLEARN_NUMERIC_MODE"] = "fast" if arm == "ours-fast" else "identical"
+        if arm == "ours-cpu":
+            _probe().ours_cpu_env(env)
         tree = os.path.join(root, "python")
         if arm == "ours-base":
             tree = os.environ.get("MOJOLEARN_CTD_BASE_PY", "")
@@ -2214,7 +2237,7 @@ def infer_phase(args, lane, ds, arms, workers, result):
     infer = {"call": INFER_CALL[lane], "batch": "Xq", "rows": (xq or [None])[0], "arms": {}}
     eligible = [a for a in arms if workers[a].alive and len(result["arms"][a]["ms"]) == args.rounds]
     for arm in arms:
-        infer["arms"][arm] = {"warmup_ms": None, "ms": [], "digests": [],
+        infer["arms"][arm] = {"warmup_ms": None, "ms": [], "digests": [], "mem": [],
                               "status": "ok" if arm in eligible else "no_fit"}
     for r in range(args.rounds + 1):
         live = [a for a in eligible if workers[a].alive and infer["arms"][a]["status"] == "ok"]
@@ -2235,6 +2258,7 @@ def infer_phase(args, lane, ds, arms, workers, result):
                 print("CTD-INFER-REFUSED lane=%s dataset=%s arm=%s stage=infer%d detail=%s"
                       % (lane, ds, arm, r, json.dumps(msg)), flush=True)
                 continue
+            rec["mem"].append(msg.get("mem"))
             if r == 0:
                 rec["warmup_ms"] = msg["ms"]
                 rec["call_text"] = msg.get("call")
@@ -2280,13 +2304,14 @@ def race(args):
     tag = "%s-%s" % (lane, ds)
     workers = {}
     for arm in arms:
-        py = args.ours_python if arm in ("ours", "ours-base", "ours-fast") else args.theirs_python
+        py = args.ours_python if arm in ("ours", "ours-base", "ours-fast", "ours-cpu") \
+            else args.theirs_python
         cmd = shlex.split(py) + [os.path.abspath(__file__), "worker", "--arm", arm,
                                  "--lane", lane, "--dataset", ds, "--data", args.data]
         workers[arm] = Worker(arm, cmd, _worker_env(arm, args.root),
                               os.path.join(args.out, "%s-%s.log" % (tag, arm)), args.root)
         result["arms"][arm] = {"command": cmd, "warmup_ms": None, "ms": [],
-                               "digests": [], "status": "ok"}
+                               "digests": [], "mem": [], "status": "ok"}
     # Ready, in parallel: each worker loads its data and its library.
     for arm, w in workers.items():
         msg = w.read(args.ready_seconds)
@@ -2325,6 +2350,7 @@ def race(args):
             else:
                 result["arms"][arm]["ms"].append(msg["ms"])
             result["arms"][arm]["digests"].append(msg["digest"])
+            result["arms"][arm]["mem"].append(msg.get("mem"))
             print("CTD-ROUND lane=%s dataset=%s arm=%s round=%d ms=%.3f digest=%s"
                   % (lane, ds, arm, r, msg["ms"], msg["digest"]), flush=True)
             time.sleep(args.pause)
@@ -2362,6 +2388,10 @@ def race(args):
         with np.load(block + ".npz") as z:
             data = {k: z[k] for k in z.files}
         result["quality"] = quality(lane, data, outs, rec)
+        # our CPU tier against our GPU IDENTICAL, bit for bit (the promise)
+        if "ours-cpu" in outs and "ours" in outs:
+            result["quality"].setdefault("ours-cpu", {})["bits_equal_vs_ours_identical"] = \
+                _probe().bits_equal(outs["ours-cpu"], outs["ours"])
     except Exception as exc:  # noqa: BLE001
         result["quality"] = {"error": repr(exc)}
         data = None

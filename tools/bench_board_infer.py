@@ -127,7 +127,9 @@ def parse_tree_infer(path):
             elif head == "FSPEED-INFER-REFUSED" and arm:
                 out["refused"][(arm, batch or "all")] = f.get("reason", "")[:200]
             elif head == "FSPEED-INFER-AGREE" and batch:
-                out["agree"][batch] = f
+                # keyed by (batch, the arm compared with ours): ours-ab or ours-cpu
+                other = (f.get("arms") or "ours,ours-ab").split(",")[-1]
+                out["agree"][(batch, other)] = f
             elif head == "FSPEED-INFER-NOTE":
                 out["notes"].append(rest[:300])
     return out
@@ -160,8 +162,8 @@ def tree_cells(bb, ctx, race, log_path, fit_cells):
     cells = []
     names = list(race["arms"]) + sorted({a for a, _ in p["rounds"]} - set(race["arms"]))
     for batch in TREE_BATCHES:
-        agree = p["agree"].get(batch) or {}
         for arm in names:
+            agree = p["agree"].get((batch, arm)) or {}
             mode = race["our_arms"].get(arm)
             cell = bb.base_cell(ctx, race, arm, mode)
             cell.update(phase="infer", batch=batch, call=p["paths"].get(arm))
@@ -181,7 +183,7 @@ def tree_cells(bb, ctx, race, log_path, fit_cells):
                 fv = fit_q.get(arm, {}).get(m)
                 if isinstance(fv, (int, float)):
                     q["%s_matches_fit" % m] = abs(fv - v) <= 1e-6 * max(1.0, abs(fv))
-            if arm == "ours-ab" and agree:
+            if arm in ("ours-ab", "ours-cpu") and agree:
                 q["bits_equal_vs_ours_identical"] = agree.get("bits_equal") == "yes"
                 try:
                     q["max_abs_diff_vs_ours_identical"] = float(agree.get("max_abs_diff"))
@@ -245,14 +247,15 @@ def render_race(bb, rr):
         return []
     L = ["", "Inference (each arm predicts with its own model from the fit rounds above):", "",
          "| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | "
-         "ours FAST / arm | quality | hash stable | comparability | status |",
-         "|---|---|---|---|---|---|---|---|---|---|---|---|"]
+         "ours FAST / arm | ours CPU / arm | quality | hash stable | comparability | status |",
+         "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for c in ic:
-        L.append("| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |" % (
+        L.append("| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |" % (
             bb._arm_label(c), c.get("batch"), bb._f(c.get("batch_rows")), bb._f(c["median_ms"]),
             "%s..%s" % (bb._f(c["min_ms"]), bb._f(c["max_ms"])) if c["min_ms"] is not None else "-",
             c["rounds"], bb._f(c.get("ratio_ours_identical_over"), 3),
-            bb._f(c.get("ratio_ours_fast_over"), 3), bb._q(c.get("quality")),
+            bb._f(c.get("ratio_ours_fast_over"), 3), bb._f(c.get("ratio_ours_cpu_over"), 3),
+            bb._q(c.get("quality")),
             bb._f(c.get("hash_stable")), bb.clean(c.get("verdict")), bb.clean(c["status"])))
     calls = []
     for c in ic:
@@ -273,19 +276,26 @@ def render_glance(bb, races):
         ic = races[rid].get("infer_cells") or []
         for batch in sorted({c["batch"] for c in ic}, key=lambda b: (b != "test", b)):
             g = [c for c in ic if c["batch"] == batch]
-            fast = next((c for c in g if c["library"] == "mojolearn" and c["mode"] == "fast"), None)
-            ident = next((c for c in g if c["library"] == "mojolearn" and c["mode"] == "identical"), None)
+            fast = bb.ours_of(g, "fast")
+            ident = bb.ours_of(g, "identical")
+            cpu = bb.ours_of(g, "cpu")
+            cpu_bits = "-"
+            if cpu is not None:
+                q = cpu.get("quality") or {}
+                v = q.get("bits_equal_vs_ours_identical", q.get("bits_equal_vs_ours"))
+                cpu_bits = bb._f(v) if v is not None else "-"
             agree = "-"
             if fast is not None:
                 q = fast.get("quality") or {}
                 v = q.get("bits_equal_vs_ours_identical", q.get("bits_equal_vs_ours"))
                 agree = bb._f(v) if v is not None else "-"
             opps = [c for c in g if c["library"] != "mojolearn"]
-            rows.append("| %s | %s | %s | %s | %s | %s | %s | %s | %s |" % (
+            rows.append("| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |" % (
                 races[rid]["family"], races[rid]["lane"], races[rid]["dataset"], batch,
                 bb._f((ident or fast or {}).get("batch_rows")),
                 bb._f(fast["median_ms"]) if fast else "-",
                 bb._f(ident["median_ms"]) if ident else "-", agree,
+                bb._f(cpu["median_ms"]) if cpu else "-", cpu_bits,
                 "; ".join("%s %s ms (IDENTICAL/arm %s)" % (
                     c["arm"], bb._f(c["median_ms"]), bb._f(c.get("ratio_ours_identical_over"), 3))
                     for c in opps) or "-"))
@@ -293,10 +303,11 @@ def render_glance(bb, races):
         return []
     return ["## Inference at a glance", "",
             "Batch prediction, each arm with its own fitted model from the same race; medians in "
-            "ms. `FAST = IDENTICAL bits` compares our two tiers' predictions on the same rows.", "",
+            "ms. `FAST = IDENTICAL bits` compares our two tiers' predictions on the same rows; "
+            "`CPU = IDENTICAL bits` compares our CPU tier's with our GPU IDENTICAL arm's.", "",
             "| family | lane | dataset | batch | rows | ours FAST ms | ours IDENTICAL ms | "
-            "FAST = IDENTICAL bits | opponents |",
-            "|---|---|---|---|---|---|---|---|---|"] + rows + [""]
+            "FAST = IDENTICAL bits | ours CPU ms | CPU = IDENTICAL bits | opponents |",
+            "|---|---|---|---|---|---|---|---|---|---|---|"] + rows + [""]
 
 
 def coverage(races):

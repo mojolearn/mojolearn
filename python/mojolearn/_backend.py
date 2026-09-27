@@ -918,6 +918,17 @@ def _layout():
     if not present:
         # macOS, or a Linux source checkout. The vendor is whatever the
         # binaries say; `vendor()` reads it after `select()` has loaded them.
+        if forced == "cpu":
+            # MOJOLEARN_VENDOR=cpu IS THE ONE CPU SWITCH ON EVERY LAYOUT. Until
+            # 2026-09-26 the flat layout (the macOS wheel) returned before the
+            # variable was read, so a Mac user who asked for the CPU got the
+            # Metal set with no word said: a switch accepted and ignored. It
+            # now refuses the GPU set exactly as the split core does, and
+            # select() installs the CPU-only set when the host bindings are
+            # built (they ship in the macOS wheel), else re-raises this.
+            raise ImportError(
+                "mojolearn: MOJOLEARN_VENDOR=cpu; no GPU set is loaded, on request "
+                "(flat layout)")
         _LAYOUT = ("flat", pkg)
         _VENDOR_HOW = "flat layout; read from the loaded binaries"
         return _LAYOUT

@@ -524,6 +524,8 @@ def build_ours(lane, cfg, data, name="ours", extra=None):
 # --------------------------------------------------------------------------
 
 INFER_LARGE_ROWS = 1_000_000
+#: the dataset of this process's inference phase, for a proxy arm's batch
+_INFER_DATA = [None]
 
 
 def _p1(raw):
@@ -549,6 +551,9 @@ def infer_spec(arm_name, lane, task, model, n_features=None, frame=None):
     documented one. It never contains '=' (the lines are key=value)."""
     iforest = lane == "iforest"
     binary = task == "binary"
+    if hasattr(model, "board_infer_spec"):
+        # a board arm in another process (forest_board_arms.py, `--ours-cpu`)
+        return model.board_infer_spec(lane, task, _INFER_DATA[0])
     if task not in ("binary", "regression", "multiclass", "ranking") and not iforest:
         raise RuntimeError("inference timing covers binary, regression, multiclass and "
                            "ranking tasks; %s is %s" % (lane, task))
@@ -760,6 +765,7 @@ def infer_metrics(lane, data, vec):
 def run_inference(lane, arms, models, data, n_rounds, large_rows, deadline):
     """The inference phase. `models` holds each arm's last fitted model."""
     budget = spec.per_arm_budget_s()
+    _INFER_DATA[0] = data
     n_large = int(min(large_rows, data.X_train.shape[0]))
     xl = np.ascontiguousarray(data.X_train[:n_large], dtype=np.float32)
     batches = [("test", data._ours_Xtest, data.X_test), ("large", xl, xl)]
@@ -843,13 +849,14 @@ def run_inference(lane, arms, models, data, n_rounds, large_rows, deadline):
                     emit_infer("FSPEED-INFER-REFUSED", lane, [("arm", name), ("batch", batch),
                                ("reason", "%s while scoring: %s" % (exc.__class__.__name__,
                                                                     _one_line(exc)))])
-        # FAST (ours-ab on the Apple board) against IDENTICAL (ours): the
-        # same rows through two tiers' models, compared bit for bit.
-        if "ours" in last and "ours-ab" in last:
-            a, b = last["ours"], last["ours-ab"]
+        # FAST (ours-ab on the Apple board) and our CPU tier (ours-cpu)
+        # against IDENTICAL (ours): the same rows through two models,
+        # compared bit for bit.
+        for other in [o for o in ("ours-ab", "ours-cpu") if "ours" in last and o in last]:
+            a, b = last["ours"], last[other]
             same_shape = a.shape == b.shape
             emit_infer("FSPEED-INFER-AGREE", lane, [
-                ("batch", batch), ("arms", "ours,ours-ab"), ("rows", rows),
+                ("batch", batch), ("arms", "ours," + other), ("rows", rows),
                 ("bits_equal", "yes" if same_shape and a.tobytes() == b.tobytes() else "no"),
                 ("max_abs_diff", ("%.6g" % float(np.max(np.abs(a - b)))) if same_shape and a.size
                  else "-")])
@@ -918,6 +925,13 @@ def build_parser():
                         "predicts with its own last fitted model on the held-out rows "
                         "and on a large batch (FSPEED-INFER lines). Off by default; "
                         "without it the output is unchanged")
+    p.add_argument("--ours-cpu", action="store_true",
+                   help="add `ours-cpu`: the same ours estimator in a worker process under "
+                        "MOJOLEARN_VENDOR=cpu (the wheel's CPU tier, IDENTICAL), in the "
+                        "round-robin beside the other arms (bench/speed/forest_board_arms.py)")
+    p.add_argument("--mem", action="store_true",
+                   help="print FSPEED-MEM: each arm's peak host memory per round (and the "
+                        "process's GPU figure), read outside the clock (forest_board_arms.py)")
     p.add_argument("--infer-large-rows", type=int, default=INFER_LARGE_ROWS,
                    help="rows of the `large` inference batch (the first N training "
                         "rows; default 1,000,000, capped at the training rows)")
@@ -1019,6 +1033,12 @@ def main(argv=None):
               "estimator default)" % (lane, key.strip(), value), flush=True)
         arms.extend(build_ours(lane, cfg, data, name="ours-ab",
                                extra={key.strip(): value}))
+    proxies = []
+    if args.ours_cpu:
+        import forest_board_arms
+        proxies = forest_board_arms.build_cpu_arm(lane, dataset, args.rows, args.infer_large_rows,
+                                                  spec.emit_refused)
+        arms.extend(proxies)
     if not args.ours_only:
         if not args.opponents_first:
             opponents = spec.build_opponents(lane, cfg, data, devices)
@@ -1055,12 +1075,18 @@ def main(argv=None):
                 models[_name] = model
                 return out
             arm.fit = _fit
-    live = spec.run(lane, arms, data, spec.rounds(), size, cfg=cfg)
+    fit_context = None
+    if args.mem:
+        import forest_board_arms
+        fit_context = forest_board_arms.TreeMem(lane, proxies).context
+    live = spec.run(lane, arms, data, spec.rounds(), size, cfg=cfg, fit_context=fit_context)
     if args.infer:
         names = {a.name for a in live}
         run_inference(lane, [a for a in arms if a.name in names],
                       models, data, spec.rounds(), args.infer_large_rows,
                       started + spec.process_deadline_s())
+    for proxy in proxies:
+        proxy.close()
     return 0
 
 
