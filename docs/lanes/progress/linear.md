@@ -57,10 +57,15 @@ in a3156303f): submitted at 7be5da1e3 to m2pro + do-amd:
 - 1790535754001-linear-7be5da1e3d: the 31 lanes other than x-isotonic, sabotage e2e_device_fold.patch
 - 1790535762888-linear-7be5da1e3d: x-isotonic, sabotage e2e_device_pava.patch
 
-Phase now: (1) proof, waiting on those two verdicts
-(`python3 tools/apple_steward.py status | grep linear-7be5da1e3d`). PASS on
-m2pro and do-amd for both = proof phase done: merge, then STOP.
-A FAIL: fix the cause, resubmit only the affected lanes.
+VERDICT: both PASS on m2pro and do-amd (m3ultra deferred, spooled). The 21
+expansion algorithms and their 11 option lanes are proven on CPU, NVIDIA,
+AMD and Apple.
+
+Still in phase 1 (LANE CHARTER, main 3af84e8a0): the family also covers the
+EXISTING models (LinearRegression, Ridge, Lasso, ElasticNet,
+LogisticRegression, LinearSVC/SVR). Audit each against the phase-1 bar (lane
+with CPU+GPU paths; per-seam host oracle, separating fixture, biting sabotage,
+DEVIATION, card stage; AGREE on NVIDIA, AMD, Apple) and close the gaps.
 Next phase: (2) option parity. Remaining NOT IMPLEMENTED rows in
 x_linear/NOT_IMPLEMENTED.tsv (SGD early_stopping/average/warm_start/partial_fit,
 GLM/Huber warm_start, Tweedie power ranges, Bayes compute_score/return_std,
