@@ -13,7 +13,33 @@ The names this lane may declare are its own:
   TRAINING_LANE_NAMES   {lane: "the name the docs use"} for the family's training_lanes
   PUBLIC_PENDING_LANES  {lane: "no reference"} until a release record admits it
 """
-GPU_BINDINGS = ()
-FAMILIES = ()
-TRAINING_LANE_NAMES = {}
-PUBLIC_PENDING_LANES = {}
+GPU_BINDINGS = ("_mojolearn_x_sequence",)
+FAMILIES = (
+    dict(
+        family="x_sequence",
+        binding="_mojolearn_x_sequence_host",
+        routes="_mojolearn_x_sequence",
+        loaded_by="_backend._HOST_MODULES",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=("sequence-lstm",),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("LSTMRegressor", "LSTMClassifier"),
+        display="the sequence lane's recurrent networks and optimizers",
+        host_modules=("sequence/ops.mojo", "sequence/exec.mojo", "sequence/recurrent.mojo",
+                      "sequence/pyapi.mojo"),
+        exports=(
+            "x_sequence_host_numeric_mode", "x_sequence_host_vendor", "x_sequence_host_column",
+            "x_sequence_host_sabotage", "x_sequence_numeric_mode", "x_sequence_vendor",
+            "rnn_fit", "rnn_predict", "rnn_n_params", "optimizer_step",
+        ),
+        gate="tools/algos_lane_check.sh (pass 1: CPU == GPU bitwise)",
+        wheel_note=(
+            "Ships: the recurrent fits and predictions and the optimizer step, the GPU "
+            "binding's element bodies looped on the host."
+        ),
+        ships_in_wheel=True,
+    ),
+)
+TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier"}
+PUBLIC_PENDING_LANES = {"sequence-lstm": "no reference"}
