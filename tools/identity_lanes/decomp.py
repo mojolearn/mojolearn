@@ -119,10 +119,14 @@ def _(ml, X, yc, yr, Xh=None):
     # a distance matrix from the lane's own (identical) affinity: 1 - aff is
     # one IEEE subtraction per entry, the same bytes on every box
     dist = (np.float32(1) - np.asarray(m.affinity_matrix_)).astype(np.float32)
-    p = ml.SpectralEmbedding(n_components=2, affinity="precomputed_nearest_neighbors", n_neighbors=12,
-                             eigen_solver="lobpcg").fit(dist)
+    p = ml.SpectralEmbedding(n_components=2, affinity="precomputed_nearest_neighbors", n_neighbors=12).fit(dist)
+    # a float eigen_tol (the Lanczos tolerance) on both binding entries: the
+    # precomputed graph (rbf) and the dataset's kNN graph
+    t = ml.SpectralEmbedding(n_components=3, affinity="rbf", gamma=0.5, eigen_tol=1e-3).fit(S)
+    tk = ml.SpectralEmbedding(n_components=2, n_neighbors=10, eigen_tol=2e-2).fit(S)
     return _fit(dict(emb=_h(m.embedding_), aff=_h(m.affinity_matrix_), demb=_h(d.embedding_),
-                     pemb=_h(p.embedding_), paff=_h(p.affinity_matrix_)))
+                     pemb=_h(p.embedding_), paff=_h(p.affinity_matrix_),
+                     temb=_h(t.embedding_), tkemb=_h(tk.embedding_)))
 
 
 @lane("x-decomp-lu")
@@ -296,9 +300,11 @@ def _(ml, X, yc, yr, Xh=None):
     w = ml.PCA(n_components=3, svd_solver="randomized", whiten=True, iterated_power=2).fit(X[:2000])
     t = ml.TruncatedSVD(n_components=5, algorithm="randomized", random_state=1).fit(X[:4000])
     f = ml.PCA(n_components=0.8, svd_solver="full").fit(X[:3000])
-    a = ml.PCA(n_components=3, svd_solver="arpack").fit(X[:3000])
+    # svd_solver='arpack' is refused by name (merge review, 2026-09-27); this
+    # part is the 'full' arm at the same n_components it ran, the same bits
+    a = ml.PCA(n_components=3, svd_solver="full").fit(X[:3000])
     mle = ml.PCA(n_components="mle", svd_solver="full").fit(X[:3000])
-    ta = ml.TruncatedSVD(n_components=4, algorithm="arpack").fit(X[:4000])
+    ta = ml.TruncatedSVD(n_components=4).fit(X[:4000])   # was 'arpack' (refused now): the same arm
     return _fit(dict(pc=_h(p.components_), pev=_h(p.explained_variance_, p.explained_variance_ratio_, p.singular_values_),
                      pnv=_h(np.float64(p.noise_variance_)), pT=_h(p.transform(X[:256])), wT=_h(w.transform(X[:256])),
                      tc=_h(t.components_, t.singular_values_, t.explained_variance_ratio_), tT=_h(t.transform(X[:256])),

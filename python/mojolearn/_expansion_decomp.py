@@ -1476,6 +1476,20 @@ def _tsvd_explained(x, components, mode):
     return ev.out((ev.c,)), k.ew("div", ev, full).out((ev.c,))
 
 
+def _exact_eigen_solver(name, who):
+    """Isomap's and LLE's eigen_solver: 'auto' and 'dense' name an exact
+    solve, which is what runs. 'arpack' (a Lanczos) is a different algorithm
+    and is refused by name rather than run as the exact solve (a silent
+    substitution; x_decomp/NOT_IMPLEMENTED.tsv)."""
+    if name == "arpack":
+        raise NotImplementedError(
+            f"{who}: eigen_solver='arpack' is not implemented; the exact solve "
+            "runs for 'auto' and 'dense', and running it under ARPACK's name "
+            "would be a silent substitution (x_decomp/NOT_IMPLEMENTED.tsv)")
+    if name not in ("auto", "dense"):
+        raise ValueError(f"{who}: eigen_solver must be 'auto', 'dense' or 'arpack', got {name!r}")
+
+
 # ================================================================ PCA n_components='mle'
 _LOG2, _LOGPI, _LOG2PI_D = 0.6931471805599453, 1.1447298858494002, 1.8378770664093453
 
@@ -2703,6 +2717,7 @@ class Isomap(_Base):
             raise ValueError("Isomap: radius must be >= 0")
         if self.path_method not in ("auto", "FW", "D"):
             raise ValueError("path_method must be 'auto', 'FW' or 'D'")
+        _exact_eigen_solver(self.eigen_solver, "Isomap")
         kind, pw = _metric_spec(self.metric, self.p, self.metric_params, "Isomap")
         self._kind, self._pw = kind, pw
         k = self._kit()
@@ -2978,6 +2993,7 @@ class LocallyLinearEmbedding(_Base):
         self.numeric_mode_ = _mode(self.numeric_mode)
         if self.method not in ("standard", "hessian", "modified", "ltsa"):
             raise ValueError(f"LocallyLinearEmbedding: unrecognized method {self.method!r}")
+        _exact_eigen_solver(self.eigen_solver, "LocallyLinearEmbedding")
         k = self._kit()
         M = _M.from_input(X)
         n = M.r

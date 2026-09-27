@@ -840,8 +840,14 @@ def spectral_embedding_dataset_binding(
         5  norm_laplacian (0 or 1)
         6  drop_first     (0 or 1)
         7  seed
+        8  eigen_tol      (optional float, the Lanczos tolerance; absent
+                           means cuVS's 1e-5)
     """
-    _want(String("spectral_embedding_dataset"), params, 8)
+    if len(params) != 9:
+        _want(String("spectral_embedding_dataset"), params, 8)
+    var tolerance = Float32(1e-5)
+    if len(params) == 9:
+        tolerance = Float32(Float64(py=params[8]))
     var n_samples = Int(py=params[0])
     var n_features = Int(py=params[1])
     var n_lanczos = Int(py=params[2])
@@ -857,7 +863,7 @@ def spectral_embedding_dataset_binding(
     with GILReleased(Python()):
         n_out = spectral_embedding_dataset_host(
             x, n_samples, n_features, n_lanczos, n_neighbors, norm_laplacian,
-            drop_first, seed, embedding,
+            drop_first, seed, embedding, tolerance,
         )
     _guard_embedding_output(embedding, n_samples, n_out, n_cols)
     for i in range(len(embedding)):
@@ -885,8 +891,14 @@ def spectral_embedding_graph_binding(
         4  norm_laplacian (0 or 1)
         5  drop_first     (0 or 1)
         6  seed
+        7  eigen_tol      (optional float, the Lanczos tolerance; absent
+                           means cuVS's 1e-5)
     """
-    _want(String("spectral_embedding_graph"), params, 7)
+    if len(params) != 8:
+        _want(String("spectral_embedding_graph"), params, 7)
+    var tolerance = Float32(1e-5)
+    if len(params) == 8:
+        tolerance = Float32(Float64(py=params[7]))
     var n_samples = Int(py=params[0])
     var nnz = Int(py=params[1])
     var n_lanczos = Int(py=params[2])
@@ -903,7 +915,7 @@ def spectral_embedding_graph_binding(
     with GILReleased(Python()):
         n_out = spectral_embedding_graph_host(
             rows, cols, vals, n_samples, n_lanczos, norm_laplacian,
-            drop_first, seed, embedding,
+            drop_first, seed, embedding, tolerance,
         )
     _guard_embedding_output(embedding, n_samples, n_out, n_cols)
     for i in range(len(embedding)):

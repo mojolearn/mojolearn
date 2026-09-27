@@ -2,6 +2,12 @@
 
 All notable changes to mojolearn are recorded here, newest first, in the style of Keep a Changelog.
 
+## Unreleased
+
+### Changed
+- `mojolearn.linalg.eigh(a, UPLO="L")` reads ONE triangle of `a`, as `numpy.linalg.eigh` does: the lower (the default) or, with `UPLO="U"`, the upper triangle mirrored across the diagonal; the other triangle is never read. Through 0.8.24 it fed the whole matrix to the Jacobi, so a NON-symmetric input returned a different answer from numpy's. Symmetric inputs return the same bits as before.
+- `SpectralEmbedding(eigen_tol=<float>)` sets the Lanczos tolerance (a positive float; `'auto'` is cuVS's 1e-5). `PCA(svd_solver="arpack")`, `TruncatedSVD(algorithm="arpack")`, a nonzero `tol` on either, `SpectralEmbedding(eigen_solver=...)` other than None, and `Isomap` / `LocallyLinearEmbedding(eigen_solver="arpack")` are refused by name: those solvers are not implemented, and running an exact solver under their names would be a silent substitution.
+
 ## 0.8.24 (published 2026-09-27)
 
 ### Fixed

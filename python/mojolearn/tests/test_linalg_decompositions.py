@@ -94,6 +94,30 @@ def test_eigh_is_ascending_like_numpy_and_solves_its_own_equation():
 
 
 @needs_host
+def test_eigh_reads_one_triangle_like_numpy():
+    """numpy's `eigh(a, UPLO)` reads ONE triangle: 'L' (the default) the
+    lower, 'U' the upper; the other triangle is never read. A non-symmetric
+    input therefore decomposes the mirrored triangle, and garbage in the
+    unread triangle changes nothing (lane/algos-decomp, 2026-09-27)."""
+    a = _matrix(64, 5)
+    sym = a.T @ a
+    sym = np.ascontiguousarray(((sym + sym.T) * np.float32(0.5)).astype(np.float32))
+    lower_only = np.ascontiguousarray(np.tril(sym) + np.triu(np.full_like(sym, 7.25), 1))
+    upper_only = np.ascontiguousarray(np.triu(sym) + np.tril(np.full_like(sym, -3.5), -1))
+    w_sym, v_sym = linalg.eigh(sym)
+    for m, uplo in ((lower_only, "L"), (upper_only, "U")):
+        w, v = linalg.eigh(m, UPLO=uplo)
+        assert np.asarray(w).tobytes() == np.asarray(w_sym).tobytes(), uplo
+        assert np.asarray(v).tobytes() == np.asarray(v_sym).tobytes(), uplo
+        ref = np.linalg.eigvalsh(m.astype(np.float64), UPLO=uplo)
+        assert np.allclose(np.asarray(w), ref, rtol=1e-4, atol=1e-4), uplo
+    w_default, _ = linalg.eigh(lower_only)
+    assert np.asarray(w_default).tobytes() == np.asarray(w_sym).tobytes(), "UPLO defaults to 'L'"
+    with pytest.raises(ValueError):
+        linalg.eigh(sym, UPLO="X")
+
+
+@needs_host
 def test_eigh_of_a_diagonal_matrix_is_that_diagonal_sorted():
     """The sweep performs no rotation at all here, so the answer is the input
     ordered. It is the arm that catches an ordering permutation applied
