@@ -16,7 +16,8 @@ Sanity tests need scikit-learn: on the pod it is in /root/skl
 ## Merged (pass 1: builds, sklearn sanity, CPU == NVIDIA AGREE)
 | algorithm | commit | lanes | verdict |
 |---|---|---|---|
-| RobustScaler, MaxAbsScaler | (this commit) | x-prep-robust-scaler, x-prep-maxabs-scaler | AGREE (batch 9, infer 9, train 9; cuda H100 vs CPU) |
+| RobustScaler, MaxAbsScaler | merged | x-prep-robust-scaler, x-prep-maxabs-scaler | AGREE (batch 9, infer 9, train 9; cuda H100 vs CPU) |
+| OneHotEncoder, OrdinalEncoder | (this commit) | x-prep-ordinal-encoder,x-prep-onehot-encoder | batch 9, infer 9, train 9; cuda H100 vs CPU |
 
 ## Next
 OneHotEncoder / OrdinalEncoder, TargetEncoder, SimpleImputer, KBinsDiscretizer,
