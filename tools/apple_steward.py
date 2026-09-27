@@ -62,8 +62,8 @@ ON EACH CLOUD MAC (started by the orchestrator, one per Mac):
   apple_steward.py work --steward m2pro [--once]
       works ITS OWN queue, one request at a time (one Metal job per Mac)
   on do-amd (the systemd service): identity requests run up to
-      MOJOLEARN_STEWARD_AMD_PARALLEL (3) at a time, one worktree each
-      (steward-do-amd, steward-do-amd-1, -2); a speed job at the head of the
+      MOJOLEARN_STEWARD_AMD_PARALLEL (6) at a time, one worktree each
+      (steward-do-amd, steward-do-amd-1 .. -5); a speed job at the head of the
       FIFO waits for them to finish and runs alone
 
 For each request the steward, in a private worktree at the commit
@@ -522,7 +522,7 @@ def speed(req, wt, out, log, verdict, finish):
 #: each; the MI325X has 256 GB and the check is deterministic whatever else
 #: runs). A SPEED job is exclusive: it waits for the running identity jobs to
 #: finish, and nothing starts until it is done. The Macs stay at one Metal job.
-AMD_PARALLEL = int(os.environ.get("MOJOLEARN_STEWARD_AMD_PARALLEL", "3"))
+AMD_PARALLEL = int(os.environ.get("MOJOLEARN_STEWARD_AMD_PARALLEL", "6"))
 
 
 def _head_is_speed():
