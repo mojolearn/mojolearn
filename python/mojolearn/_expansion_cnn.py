@@ -612,8 +612,8 @@ class CNNClassifier(_Layer):
         return out
 
     def _plan(self, n):
-        """Per block (conv params, pool params or [], input size, output size)
-        at batch size n, and the flattened width."""
+        """Per block (conv params, pool params or [], input size, output size,
+        im2col size, conv output size) at batch size n, and the final shape."""
         plans = []
         shape = (n,) + self.input_shape
         for conv, pool in self._blocks:
@@ -621,12 +621,16 @@ class CNNClassifier(_Layer):
             cshape = conv._out_shape(shape)
             pprm = pool._params(cshape) if pool is not None else []
             oshape = pool._out_shape(cshape) if pool is not None else cshape
-            plans.append((prm, pprm, int(_np().prod(shape)), int(_np().prod(oshape))))
+            ny = int(_np().prod(cshape))
+            plans.append((prm, pprm, int(_np().prod(shape)), int(_np().prod(oshape)),
+                          ny // conv.out_channels * conv.weight_[0].size, ny))
             shape = oshape
         return plans, shape
 
-    def _resident(self, R, n):
-        """The step's resident arrays at batch capacity n (DEVIATION 5718)."""
+    def _resident(self, R, n, save=False):
+        """The step's resident arrays at batch capacity n (DEVIATION 5718);
+        `save` keeps each block's im2col matrix and conv output for its
+        backward."""
         plans, shape = self._plan(n)
         k = len(self.classes_)
         a = dict(x=R.new(plans[0][2] if plans else n * self._flat), y=R.new(n),
@@ -634,6 +638,7 @@ class CNNClassifier(_Layer):
         a["out"] = [R.new(p[3]) for p in plans]
         a["idx"] = [R.new(p[3]) for p in plans]
         a["gout"] = [R.new(p[3]) for p in plans]
+        a["saved"] = [[R.new(p[4]), R.new(p[5])] if save else [] for p in plans]
         if not plans:  # the head's input gradient, never read, kept apart from glog
             a["ghead"] = R.new(n * self._flat)
         return a
@@ -642,8 +647,8 @@ class CNNClassifier(_Layer):
         """Logits of the n rows in a["x"], every array on the binding's side."""
         plans, _ = self._plan(n)
         src = a["x"]
-        for (conv, pool), (prm, pprm, _, _), out, idx in zip(self._blocks, plans, a["out"], a["idx"]):
-            b.x_cnn_conv_block_forward_r(src, self._rw[id(conv)][0], self._rw[id(conv)][1], out, idx, prm, pprm)
+        for (conv, pool), p, out, idx, sv in zip(self._blocks, plans, a["out"], a["idx"], a["saved"]):
+            b.x_cnn_conv_block_forward_r(src, self._rw[id(conv)][0], self._rw[id(conv)][1], out, idx, p[0], p[1], sv)
             src = out
         hw, hb = self._rw[id(self.head_)][:2]
         b.x_cnn_linear_forward_r(src, hw, hb, a["logits"], [n, self._flat, len(self.classes_)])
@@ -681,7 +686,16 @@ class CNNClassifier(_Layer):
             for i, (layer, attr, _) in enumerate(params):
                 if attr == "weight_":
                     self._rw[id(layer)] = (hp[i], hp[i + 1], hg[i], hg[i + 1])
-            a = self._resident(R, cap)
+            a = self._resident(R, cap, save=True)
+            # the whole X and its labels resident once when they fit a GiB:
+            # each step then gathers its rows on the binding's side (a word
+            # copy) instead of uploading them
+            whole = x.nbytes <= (1 << 30)
+            if whole:
+                row = int(np.prod(self.input_shape))
+                xall, yall = R.new(x.size), R.new(n)
+                R.put(xall, x)
+                R.put(yall, yi)
             step = 0
             for _ in range(self.max_iter):
                 order = rng.permutation(n) if self.shuffle else np.arange(n)
@@ -689,8 +703,13 @@ class CNNClassifier(_Layer):
                 for s in range(0, n, self.batch_size):
                     idx = order[s:s + self.batch_size]
                     m = len(idx)
-                    R.put(a["x"], np.ascontiguousarray(x[idx]))
-                    R.put(a["y"], np.ascontiguousarray(yi[idx]))
+                    if whole:
+                        rows = np.ascontiguousarray(idx, dtype=np.int32)
+                        b.x_cnn_res_gather(a["x"], xall, rows.ctypes.data, [m, row])
+                        b.x_cnn_res_gather(a["y"], yall, rows.ctypes.data, [m, 1])
+                    else:
+                        R.put(a["x"], np.ascontiguousarray(x[idx]))
+                        R.put(a["y"], np.ascontiguousarray(yi[idx]))
                     plans = self._forward_r(b, a, m)
                     loss = float(b.x_cnn_softmax_xent_r(a["logits"], a["y"], a["glog"], a["proba"], [m, k]))
                     hw, _, hgw, hgb = self._rw[id(self.head_)]
@@ -699,11 +718,12 @@ class CNNClassifier(_Layer):
                     b.x_cnn_linear_backward_r(last, hw, a["glog"], glast, hgw, hgb, [m, self._flat, k])
                     for j in range(len(self._blocks) - 1, -1, -1):
                         conv = self._blocks[j][0]
-                        prm, pprm, _, _ = plans[j]
+                        prm, pprm = plans[j][:2]
                         w_, b_, gw_, gb_ = self._rw[id(conv)]
                         src = a["out"][j - 1] if j > 0 else a["x"]
                         dx = a["gout"][j - 1] if j > 0 else 0
-                        b.x_cnn_conv_block_backward_r(src, w_, b_, a["gout"][j], a["idx"][j], [dx, gw_, gb_], prm, pprm)
+                        b.x_cnn_conv_block_backward_r(src, w_, b_, a["gout"][j], a["idx"][j], [dx, gw_, gb_], prm, pprm,
+                                                      a["saved"][j])
                     step += 1
                     for (layer, attr, _), p_, g_, buf in zip(params, hp, hg, hbuf):
                         size = getattr(layer, attr).size

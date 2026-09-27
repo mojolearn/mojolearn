@@ -19,7 +19,7 @@ from x_cnn.device import (
     linear_forward_into, linear_backward_into, softmax_xent_into, sgd_into, adam_into,
     batchnorm_forward_into, batchnorm_backward_into, dropout2d_into, spmm_into, pad2d_forward_into,
     pad2d_backward_into, conv_block_forward_into, conv_block_backward_into,
-    res_alloc, res_free, res_upload, res_download,
+    res_alloc, res_free, res_upload, res_download, res_gather,
 )
 from x_cnn.device import graph_op_device as graph_op_impl
 from x_cnn.device import adaptive_pool_device as adaptive_pool_impl
@@ -117,6 +117,33 @@ def conv_block_forward_binding[resident: Bool = False](
     return PythonObject(0)
 
 
+def _saved(saved: PythonObject) raises -> Tuple[Int, Int]:
+    """[cols address, conv output address] of a resident block, or [] for none."""
+    if Int(py=len(saved)) == 0:
+        return (0, 0)
+    if Int(py=len(saved)) != 2:
+        raise Error("x_cnn conv block: saved is [] or [cols, conv output]")
+    return (Int(py=saved[0]), Int(py=saved[1]))
+
+
+def conv_block_forward_r_binding(
+    x_addr: PythonObject, w_addr: PythonObject, b_addr: PythonObject, out_addr: PythonObject, idx_addr: PythonObject,
+    conv_prm: PythonObject, pool_prm: PythonObject, saved: PythonObject,
+) raises -> PythonObject:
+    """The resident block forward; `saved` = [cols, conv output] resident
+    arrays the backward reads (DEVIATION 5718), or []."""
+    var t = _block_prms(conv_prm, pool_prm)
+    var sv = _saved(saved)
+    var x = _fp(x_addr)
+    var w = _fp(w_addr)
+    var b = _fp(b_addr)
+    var po = _fp(out_addr)
+    var pi = _ip(idx_addr)
+    with GILReleased(Python()):
+        conv_block_forward_into[True](x, w, b, t[0], t[1], t[2], po, pi, sv[0], sv[1])
+    return PythonObject(0)
+
+
 def conv_block_backward_binding[resident: Bool = False](
     x_addr: PythonObject, w_addr: PythonObject, b_addr: PythonObject, g_addr: PythonObject, idx_addr: PythonObject,
     outs: PythonObject, conv_prm: PythonObject, pool_prm: PythonObject,
@@ -139,6 +166,28 @@ def conv_block_backward_binding[resident: Bool = False](
     var pdb = _fp(db_addr)
     with GILReleased(Python()):
         conv_block_backward_into[resident](x, w, b, g, pi, t[0], t[1], t[2], want, pdx, pdw, pdb)
+    return PythonObject(0)
+
+
+def conv_block_backward_r_binding(
+    x_addr: PythonObject, w_addr: PythonObject, b_addr: PythonObject, g_addr: PythonObject, idx_addr: PythonObject,
+    outs: PythonObject, conv_prm: PythonObject, pool_prm: PythonObject, saved: PythonObject,
+) raises -> PythonObject:
+    """The resident block backward; `saved` as the forward's."""
+    var t = _block_prms(conv_prm, pool_prm)
+    var sv = _saved(saved)
+    var dx_addr = outs[0]
+    var want = Int(py=dx_addr) != 0
+    var x = _fp(x_addr)
+    var w = _fp(w_addr)
+    var b = _fp(b_addr)
+    var g = _fp(g_addr)
+    var pi = _ip(idx_addr)
+    var pdx = _fp(dx_addr) if want else _fp(outs[2])
+    var pdw = _fp(outs[1])
+    var pdb = _fp(outs[2])
+    with GILReleased(Python()):
+        conv_block_backward_into[True](x, w, b, g, pi, t[0], t[1], t[2], want, pdx, pdw, pdb, sv[0], sv[1])
     return PythonObject(0)
 
 
@@ -591,6 +640,18 @@ def res_upload_binding(h: PythonObject, src_addr: PythonObject, n: PythonObject)
     return PythonObject(nn)
 
 
+def res_gather_binding(dst: PythonObject, src: PythonObject, rows_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    """Resident dst rows = resident src rows[r] (int32 host indices); params = [n, row words]."""
+    var n = Int(py=params[0])
+    var row = Int(py=params[1])
+    var d = Int(py=dst)
+    var sr = Int(py=src)
+    var rp = _ip(rows_addr)
+    with GILReleased(Python()):
+        res_gather(d, sr, rp, n, row)
+    return PythonObject(n)
+
+
 def res_download_binding(h: PythonObject, dst_addr: PythonObject, n: PythonObject) raises -> PythonObject:
     var dst = _fp(dst_addr)
     var nn = Int(py=n)
@@ -647,8 +708,9 @@ def PyInit__mojolearn_x_cnn() abi("C") -> PythonObject:
         m.def_function[res_free_binding]("x_cnn_res_free")
         m.def_function[res_upload_binding]("x_cnn_res_upload")
         m.def_function[res_download_binding]("x_cnn_res_download")
-        m.def_function[conv_block_forward_binding[True]]("x_cnn_conv_block_forward_r")
-        m.def_function[conv_block_backward_binding[True]]("x_cnn_conv_block_backward_r")
+        m.def_function[conv_block_forward_r_binding]("x_cnn_conv_block_forward_r")
+        m.def_function[conv_block_backward_r_binding]("x_cnn_conv_block_backward_r")
+        m.def_function[res_gather_binding]("x_cnn_res_gather")
         m.def_function[linear_forward_binding[True]]("x_cnn_linear_forward_r")
         m.def_function[linear_backward_binding[True]]("x_cnn_linear_backward_r")
         m.def_function[softmax_xent_binding[True]]("x_cnn_softmax_xent_r")

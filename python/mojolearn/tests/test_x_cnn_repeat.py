@@ -105,17 +105,25 @@ def test_resident_entries_match_address_entries():
     dx, dw, db = np.empty(x.shape, np.float32), np.empty(conv.weight_.shape, np.float32), np.empty(4, np.float32)
     b.x_cnn_conv_block_backward(x.ctypes.data, conv.weight_.ctypes.data, conv.bias_.ctypes.data, g.ctypes.data,
                                 idx.ctypes.data, [dx.ctypes.data, dw.ctypes.data, db.ctypes.data], prm, pprm)
-    for _ in range(2):
+    for _ in (0, 1):
         with _Res(b) as R:
             h = {k: R.new(v.size) for k, v in dict(x=x, w=conv.weight_, b=conv.bias_, out=out, idx=idx, g=g, dx=dx,
                                                   dw=dw, db=db).items()}
             for k, v in dict(x=x, w=conv.weight_, b=conv.bias_, g=g).items():
                 R.put(h[k], v)
-            b.x_cnn_conv_block_forward_r(h["x"], h["w"], h["b"], h["out"], h["idx"], prm, pprm)
+            cols, yconv = R.new(6 * 8 * 8 * 27), R.new(6 * 4 * 8 * 8)
+            sv = [cols, yconv] if _ else []  # the second round with the saved arrays
+            b.x_cnn_conv_block_forward_r(h["x"], h["w"], h["b"], h["out"], h["idx"], prm, pprm, sv)
             b.x_cnn_conv_block_backward_r(h["x"], h["w"], h["b"], h["g"], h["idx"], [h["dx"], h["dw"], h["db"]],
-                                          prm, pprm)
+                                          prm, pprm, sv)
             _same(R.get(h["out"], out.shape), out)
             _same(R.get(h["idx"], idx.shape).view(np.int32), idx)
             _same(R.get(h["dx"], dx.shape), dx)
             _same(R.get(h["dw"], dw.shape), dw)
             _same(R.get(h["db"], db.shape), db)
+        rows = np.array([5, 0, 3], np.int32)
+        with _Res(b) as R:
+            src, dst = R.new(x.size), R.new(3 * 192)
+            R.put(src, x)
+            b.x_cnn_res_gather(dst, src, rows.ctypes.data, [3, 192])
+            _same(R.get(dst, (3, 3, 8, 8)), x[rows])

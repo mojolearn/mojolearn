@@ -28,7 +28,7 @@ from x_cnn.ops import (
     bn_stats_at, bn_eval_stats_at, bn_apply_at, bn_running_at, bn_bwd_red_at, bn_bwd_dx_at, bn_bwd_eval_dx_at,
     dropout2d_at, mul_at, spmm_at, gcn_deg_at, gcn_norm_at,
     pad_fwd_at, pad_bwd_at, adapt_avg_fwd_at, adapt_avg_bwd_at, adapt_max_fwd_at, adapt_max_bwd_at,
-    sage_max_fwd_at, sage_max_bwd_at, l2norm_fwd_at, l2norm_bwd_at, adam_at,
+    sage_max_fwd_at, sage_max_bwd_at, l2norm_fwd_at, l2norm_bwd_at, adam_at, gather_rows_at,
 )
 
 comptime TPB = 256
@@ -318,6 +318,27 @@ def res_upload(addr: Int, src: FP, n: Int) raises:
     ctx.enqueue_copy(dst_buf=b, src_ptr=src)
     ctx.synchronize()
     _ = b^
+    _ = ctx^
+
+
+def res_gather(dst_addr: Int, src_addr: Int, rows: IP, n: Int, row: Int) raises:
+    """Resident dst[r] = resident src[rows[r]] for r < n, `row` 4-byte words
+    each (a word copy; host `rows` are the indices)."""
+    if n <= 0 or row <= 0:
+        return
+    var ctx = cnn_ctx()
+    var di = put_i[False](ctx, 0, rows, n)
+    var prm: List[Int32] = [Int32(row)]
+    var dp = put_prm(ctx, 1, prm)
+    var src = view(ctx, FP(unsafe_from_address=src_addr), 1)
+    var dst = view(ctx, FP(unsafe_from_address=dst_addr), n * row)
+    launch[gather_rows_at](ctx, fp(src), fp(dst), fp(dst), fp(dst), ip(di), ip(dp), n * row)
+    ctx.synchronize()
+    _ = prm^
+    _ = di^
+    _ = dp^
+    _ = src^
+    _ = dst^
     _ = ctx^
 
 
@@ -1030,9 +1051,13 @@ def _conv_relu_on_device(
 
 
 def conv_block_forward_into[resident: Bool = False](
-    x: FP, w: FP, bias: FP, cprm: List[Int32], pprm: List[Int32], pool: Bool, dst: FP, idx_out: IP
+    x: FP, w: FP, bias: FP, cprm: List[Int32], pprm: List[Int32], pool: Bool, dst: FP, idx_out: IP,
+    save_cols: Int = 0, save_y: Int = 0,
 ) raises:
-    """dst = maxpool(relu(conv(x))) (idx_out its winners), or relu(conv(x)) when `pool` is False."""
+    """dst = maxpool(relu(conv(x))) (idx_out its winners), or relu(conv(x)) when `pool` is False.
+    Resident with `save_cols` and `save_y` (device addresses, rows*C*KH*KW and
+    N*OC*OH*OW floats): the im2col matrix and the conv output are written
+    there for the backward to read instead of recomputing them."""
     var N = Int(cprm[CP_N]); var C = Int(cprm[CP_C]); var OC = Int(cprm[CP_OC])
     var ckk = C * Int(cprm[CP_KH]) * Int(cprm[CP_KW])
     var rows = N * Int(cprm[CP_OH]) * Int(cprm[CP_OW])
@@ -1043,9 +1068,10 @@ def conv_block_forward_into[resident: Bool = False](
     var dw = put[resident](ctx, 1, w, OC * ckk)
     var dbias = put[resident](ctx, 2, bias, OC)
     var dp = put_prm(ctx, 3, cprm)
-    var cols = ws(ctx, 4, rows * ckk)
+    var saved = resident and save_cols != 0 and save_y != 0
+    var cols = view(ctx, FP(unsafe_from_address=save_cols), rows * ckk) if saved else ws(ctx, 4, rows * ckk)
     var y2 = ws(ctx, 5, ny)
-    var yconv = ws(ctx, 6, ny)
+    var yconv = view(ctx, FP(unsafe_from_address=save_y), ny) if saved else ws(ctx, 6, ny)
     _conv_relu_on_device(ctx, dx, dw, dbias, dp, cols, y2, yconv, rows, OC, ckk)
     # the block's output: the pool's, or the ReLU's when there is no pool
     var pout = outb[resident](ctx, 7, dst, no)
@@ -1078,9 +1104,12 @@ def conv_block_forward_into[resident: Bool = False](
 
 def conv_block_backward_into[resident: Bool = False](
     x: FP, w: FP, bias: FP, g: FP, idx: IP, cprm: List[Int32], pprm: List[Int32], pool: Bool, need_dx: Bool,
-    gx_out: FP, gw_out: FP, gb_out: FP,
+    gx_out: FP, gw_out: FP, gb_out: FP, save_cols: Int = 0, save_y: Int = 0,
 ) raises:
-    """From the gradient of the block's output `g`: dx (when `need_dx`), dW, db."""
+    """From the gradient of the block's output `g`: dx (when `need_dx`), dW, db.
+    Resident with `save_cols` and `save_y`: the forward's im2col matrix and
+    conv output, read instead of recomputed (the same kernels on the same
+    inputs produced them, so the values are the recomputation's)."""
     var N = Int(cprm[CP_N]); var C = Int(cprm[CP_C]); var OC = Int(cprm[CP_OC])
     var ckk = C * Int(cprm[CP_KH]) * Int(cprm[CP_KW])
     var rows = N * Int(cprm[CP_OH]) * Int(cprm[CP_OW])
@@ -1093,11 +1122,13 @@ def conv_block_backward_into[resident: Bool = False](
     var dbias = put[resident](ctx, 2, bias, OC)
     var dgo = put[resident](ctx, 3, g, no)
     var dp = put_prm(ctx, 5, cprm)
-    var cols = ws(ctx, 7, rows * ckk)
+    var saved = resident and save_cols != 0 and save_y != 0
+    var cols = view(ctx, FP(unsafe_from_address=save_cols), rows * ckk) if saved else ws(ctx, 7, rows * ckk)
     var y2 = ws(ctx, 8, ny)
-    var yconv = ws(ctx, 9, ny)
+    var yconv = view(ctx, FP(unsafe_from_address=save_y), ny) if saved else ws(ctx, 9, ny)
     var gy = ws(ctx, 11, ny)
-    _conv_relu_on_device(ctx, dx, dw, dbias, dp, cols, y2, yconv, rows, OC, ckk)
+    if not saved:
+        _conv_relu_on_device(ctx, dx, dw, dbias, dp, cols, y2, yconv, rows, OC, ckk)
     if pool:
         var di = put_i[resident](ctx, 4, idx, no)
         var dpp = put_prm(ctx, 6, pprm)

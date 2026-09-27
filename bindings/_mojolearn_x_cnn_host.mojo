@@ -5,10 +5,10 @@ the GPU binding's export names and address contract, the work is
 x_cnn/host/ops_host.mojo."""
 from bindings.hostptr import f32_ptr, i32_ptr, read_f32, read_i32, copy_f32
 from std.os import abort
-from std.memory import alloc, memcpy, memset_zero
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from std.memory import alloc, memcpy, memset_zero
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_cnn.ops import CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW, conv_params
@@ -706,6 +706,34 @@ def res_download_binding(h: PythonObject, dst_addr: PythonObject, n: PythonObjec
     return PythonObject(nn)
 
 
+def conv_block_forward_r_binding(
+    x_addr: PythonObject, w_addr: PythonObject, b_addr: PythonObject, out_addr: PythonObject, idx_addr: PythonObject,
+    conv_prm: PythonObject, pool_prm: PythonObject, saved: PythonObject,
+) raises -> PythonObject:
+    """The GPU binding's resident block forward: `saved` only spares the
+    device a recomputation, so the CPU twin runs its ordinary entry."""
+    return conv_block_forward_binding(x_addr, w_addr, b_addr, out_addr, idx_addr, conv_prm, pool_prm)
+
+
+def conv_block_backward_r_binding(
+    x_addr: PythonObject, w_addr: PythonObject, b_addr: PythonObject, g_addr: PythonObject, idx_addr: PythonObject,
+    outs: PythonObject, conv_prm: PythonObject, pool_prm: PythonObject, saved: PythonObject,
+) raises -> PythonObject:
+    return conv_block_backward_binding(x_addr, w_addr, b_addr, g_addr, idx_addr, outs, conv_prm, pool_prm)
+
+
+def res_gather_binding(dst: PythonObject, src: PythonObject, rows_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    """dst rows = src rows[r] (int32 host indices), `row` 4-byte words each."""
+    var n = Int(py=params[0])
+    var row = Int(py=params[1])
+    var d = f32_ptr(Int(py=dst))
+    var sr = f32_ptr(Int(py=src))
+    var rp = i32_ptr(Int(py=rows_addr))
+    for r in range(n):
+        memcpy(dest=d + r * row, src=sr + Int(rp[r]) * row, count=row)
+    return PythonObject(n)
+
+
 def numeric_mode_binding() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 
@@ -757,8 +785,9 @@ def PyInit__mojolearn_x_cnn_host() abi("C") -> PythonObject:
         m.def_function[res_free_binding]("x_cnn_res_free")
         m.def_function[res_upload_binding]("x_cnn_res_upload")
         m.def_function[res_download_binding]("x_cnn_res_download")
-        m.def_function[conv_block_forward_binding]("x_cnn_conv_block_forward_r")
-        m.def_function[conv_block_backward_binding]("x_cnn_conv_block_backward_r")
+        m.def_function[conv_block_forward_r_binding]("x_cnn_conv_block_forward_r")
+        m.def_function[conv_block_backward_r_binding]("x_cnn_conv_block_backward_r")
+        m.def_function[res_gather_binding]("x_cnn_res_gather")
         m.def_function[linear_forward_binding]("x_cnn_linear_forward_r")
         m.def_function[linear_backward_binding]("x_cnn_linear_backward_r")
         m.def_function[softmax_xent_binding]("x_cnn_softmax_xent_r")
