@@ -9,6 +9,11 @@
 #   tools/cloudmac.sh bootstrap <name>     disk, Xcode/Metal toolchain check, pixi,
 #                                          bare repo + push of origin/main, pixi install
 #   tools/cloudmac.sh push <name|all> <ref>...   laptop -> the Mac's bare repo
+#   tools/cloudmac.sh steward <name> install|restart|status
+#                                          the Apple steward as a launchd daemon
+#                                          (Label mojolearn.steward): install/restart
+#                                          push origin/main, move ~/mojolearn to it,
+#                                          write the plist, bootstrap or kickstart -k
 #   tools/cloudmac.sh stop-all             TERMINATE instances and RELEASE hosts
 #                                          (hosts can only be released after 24 h)
 #
@@ -62,6 +67,55 @@ push)
         GIT_SSH_COMMAND="ssh ${SSH_OPTS[*]}" git -C "$ROOT" push -q -f "ec2-user@$ip:mojolearn.git" "${specs[@]}" && echo "$m: pushed $*"
     done
     ;;
+steward)
+    # A steward started by nohup or screen dies when macOS sshd closes the
+    # session, so it runs as a system launchd daemon as ec2-user, KeepAlive,
+    # under caffeinate, logging to ~/mojolearn-evidence/steward-<name>.log.
+    # A Mac listed in MOJOLEARN_STEWARD_DEFERRED (default m3ultra, busy with a
+    # GPT-3 segment) is refused: it must not be contacted until it is free.
+    n="${2:?name}"; act="${3:?install|restart|status}"
+    case ",${MOJOLEARN_STEWARD_DEFERRED-m3ultra}," in *",$n,"*)
+        die "$n is deferred (MOJOLEARN_STEWARD_DEFERRED); clear it once the Mac is free" ;; esac
+    case "$act" in
+    status)
+        cm "$n" 'sudo launchctl print system/mojolearn.steward 2>/dev/null | grep -E "state =|pid =|last exit" || echo "mojolearn.steward: not loaded";
+                 cd ~/mojolearn && echo "clone at $(git log -1 --format=%h)"; tail -5 ~/mojolearn-evidence/steward-'"$n"'.log 2>/dev/null' ;;
+    install|restart)
+        # never kill a steward mid-request: its request would be stranded in working/
+        busy=$(cm "$n" 'setopt nullglob 2>/dev/null || true; ls ~/mojolearn-evidence/apple-steward/working/ 2>/dev/null | grep -c json || true')
+        [ "${busy:-0}" = 0 ] || [ "${MOJOLEARN_STEWARD_FORCE:-0}" = 1 ] \
+            || die "$n is working a request (~/mojolearn-evidence/apple-steward/working/); retry when it is done (MOJOLEARN_STEWARD_FORCE=1 overrides)"
+        git -C "$ROOT" fetch -q origin main
+        "$0" push "$n" origin/main
+        cm "$n" 'set -e; cd ~/mojolearn && git fetch -q origin && git checkout -q --detach origin/main && echo "clone at $(git log -1 --format=%h)"'
+        plist=$(cat <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>Label</key><string>mojolearn.steward</string>
+<key>UserName</key><string>ec2-user</string>
+<key>WorkingDirectory</key><string>/Users/ec2-user/mojolearn</string>
+<key>EnvironmentVariables</key><dict><key>HOME</key><string>/Users/ec2-user</string><key>PATH</key><string>/Users/ec2-user/.pixi/bin:/usr/bin:/bin:/usr/sbin:/sbin</string></dict>
+<key>ProgramArguments</key><array><string>/usr/bin/caffeinate</string><string>-i</string><string>/usr/bin/python3</string><string>tools/apple_steward.py</string><string>work</string><string>--steward</string><string>$n</string></array>
+<key>KeepAlive</key><true/><key>RunAtLoad</key><true/>
+<key>StandardOutPath</key><string>/Users/ec2-user/mojolearn-evidence/steward-$n.log</string>
+<key>StandardErrorPath</key><string>/Users/ec2-user/mojolearn-evidence/steward-$n.log</string>
+</dict></plist>
+PLIST
+)
+        printf '%s\n' "$plist" | cm "$n" 'set -e; mkdir -p ~/mojolearn-evidence; cat > /tmp/mojolearn.steward.plist; plutil -lint /tmp/mojolearn.steward.plist >/dev/null;
+            P=/Library/LaunchDaemons/mojolearn.steward.plist
+            if [ -f $P ] && cmp -s /tmp/mojolearn.steward.plist $P && sudo launchctl print system/mojolearn.steward >/dev/null 2>&1; then
+                sudo launchctl kickstart -k system/mojolearn.steward && echo "kickstarted (plist unchanged)"
+            else
+                sudo launchctl bootout system/mojolearn.steward 2>/dev/null || true
+                sudo install -m 644 -o root -g wheel /tmp/mojolearn.steward.plist $P
+                sudo launchctl bootstrap system $P && echo "bootstrapped $P"
+            fi
+            sleep 3; sudo launchctl print system/mojolearn.steward | grep -E "state =|pid =" ' ;;
+    *) die "steward <name> install|restart|status" ;;
+    esac
+    ;;
 stop-all)
     while read -r n inst host ip; do
         [ -n "$n" ] || continue
@@ -70,5 +124,5 @@ stop-all)
         echo "  aws ec2 release-hosts --profile mambik --region us-east-1 --host-ids $host"
     done < "$REG"
     ;;
-*) sed -n 2,14p "$0"; exit 2 ;;
+*) sed -n 2,19p "$0"; exit 2 ;;
 esac

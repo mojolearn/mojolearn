@@ -849,6 +849,13 @@ def enumerator_files():
     if _ENUMERATORS is None:
         out = set()
         for rel in _python_files():
+            # AN EXPANSION LANE'S DOOR IS NEVER A REGISTRY (trees lane,
+            # 2026-09-27): a door that wraps several existing bindings named
+            # more than ENUMERATOR_MAX_BINDINGS, became a sink, and hid every
+            # binding of that lane from selection. A door is one lane's own
+            # file; its bindings are evidence for the lanes that reach it.
+            if EXPANSION_DOOR_RE.match(rel.replace(os.sep, "/")):
+                continue
             named = {b for b in set(_BINDING_RE.findall(_read(rel)))
                      if os.path.exists(os.path.join(ROOT, "bindings", b + ".mojo"))}
             if len(named) > ENUMERATOR_MAX_BINDINGS:
