@@ -444,3 +444,38 @@ and then speed. Lanes do NOT submit to the Apple steward in pass 1.
 Order inside a lane: main table first, then Additions. One commit per
 algorithm. Progress file: `docs/lanes/progress/<lane>.md`, updated at each
 merge, so a fresh agent continues where the last one stopped.
+
+---
+
+# PASS 2 — EVERYTHING AT ONCE, per lane, as soon as its pass-1 list is merged (Andrew, 2026-09-27)
+
+Each lane holds its machines for its whole session; set-up and teardown are
+the cost being avoided. All data comes from R2 (`tools/dataset_store.sh stage`).
+
+1. **Machines.** Keep the NVIDIA pod. Add an AMD box with
+   `tools/dev_pod.sh up <lane> 240 --vendor amd` (RunPod MI300X, else Hot
+   Aisle; it retries while there is no stock) and hold it. If the tool
+   doesn't have `--vendor amd` yet, keep working on NVIDIA and CPU and try
+   again after the next algorithm. Apple: identity through the M2 Pro
+   steward; Apple timing through `apple_steward.py submit --kind speed`,
+   routed to the M3 Ultra once its GPT-3 segment ends.
+2. **Proof, per algorithm** (the COMMON BRIEF's per-seam discipline):
+   - a host oracle and a separating fixture per seam
+   - a sabotage arm per seam, in `.checks`, that bites
+   - a DEVIATION number and a card stage from the lane's ranges
+   - an IDENTITY_PATHS row
+   - the verifier lane with CPU and GPU paths
+   - `algos_lane_check.sh` AGREE on NVIDIA **and** on AMD
+   - an M2 Pro steward PASS
+   The lane then moves out of PENDING, per the verifier's admission rules.
+3. **Speed, after an algorithm's proof passes:**
+   - IDENTICAL and FAST on NVIDIA, AMD and Apple, plus the CPU path
+     (threads, vectorization), at 1M+ rows or the family's realistic
+     large shape, on R2 data.
+   - Every IDENTICAL speed change re-passes step 2 on every column.
+   - Every FAST change passes the quality rule (paired check against the
+     reference, at least 5 seeds, at least 2 datasets).
+   - Before/after on the same box. No opponent claims; those go through
+     the bench board later.
+4. Merge each step as it passes, the same way as pass 1. Keep the progress
+   file current.
