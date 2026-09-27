@@ -1,6 +1,5 @@
 # their_thing	status	why / where it would go
 # "Theirs" is scikit-learn 1.9.1, the semantics reference for the prep lane's preprocessing, imputation and feature-selection classes (python/mojolearn/_expansion_prep.py). Every row is refused by name at the API. Option parity (docs/lanes/ALGORITHM_EXPANSION_PLAN.md, CURRENT DIRECTIVES item 2) works down this file.
-sklearn RobustScaler(unit_variance=True)	NOT IMPLEMENTED	scale /= norm.ppf(q_max/100) - norm.ppf(q_min/100); x_prep/transform.mojo already has the float32 inverse normal CDF (QuantileTransformer)
 sklearn OneHotEncoder / OrdinalEncoder categories=<list>	NOT IMPLEMENTED	user categories replace the device sort + run scan; the lookup unit takes any sorted category block
 sklearn OneHotEncoder / OrdinalEncoder min_frequency, max_categories (infrequent categories)	NOT IMPLEMENTED	per-category counts (a run-length unit beside unique_cols) and a regrouping of the codes
 sklearn OneHotEncoder handle_unknown='infrequent_if_exist'	NOT IMPLEMENTED	needs the infrequent categories above

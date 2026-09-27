@@ -28,6 +28,20 @@ Skipped from the table: LinearSVC / LinearSVR are already public
 | LassoCV | 0f6bad966 | x-lasso-cv | sanity PASS (same alpha_, mse_path_ within 1.2e-6 relative); RESULT: PASS (AGREE) |
 | ElasticNetCV | 468117252 | x-enet-cv | sanity PASS (same alpha_ and l1_ratio_, mse_path_ within 1e-6 relative); RESULT: PASS (AGREE) |
 | LogisticRegressionCV | 3b545850a | x-logistic-cv (and x-huber re-gated: lbfgs.mojo line search changed) | sanity PASS (StratifiedKFold ids equal, same C_, proba within 2e-4); RESULT: PASS (AGREE on x-logistic-cv, x-huber) |
-| IsotonicRegression | (the commit that adds this row) | x-isotonic | sanity PASS (thresholds equal to sklearn, predict within 3e-7, same NaN mask); RESULT: PASS (AGREE) |
+| IsotonicRegression | 7e02a9bc4 | x-isotonic | sanity PASS (thresholds equal to sklearn, predict within 3e-7, same NaN mask); RESULT: PASS (AGREE) |
 
-Next: PASS 1 COMPLETE. Pass 2 per docs/lanes/ALGORITHM_EXPANSION_PLAN.md CURRENT DIRECTIVES: (b) proof on every column with an AMD box, (c) option parity (x_linear/NOT_IMPLEMENTED.tsv rows), (d) speed (parallel fit schedules first: every fit is one device thread today).
+## Pass 2
+
+Seam ledger: DEVIATIONS 5000-5009, IDENTITY_PATHS rows 100-109, x_linear/README.md.
+Check driver x_linear/checks/seams_check.mojo (oracle seams_oracle.mojo), ten
+arms in tools/identity_lanes/linear.checks. End-to-end sabotage for the
+stewards: x_linear/checks/sabotage/e2e_device_fold.patch (every lane but
+x-isotonic) and e2e_device_pava.patch (x-isotonic; the interp arm did not bite, replaced): device-only source edits.
+
+| step | commit | result |
+|---|---|---|
+| seams + ledger | 0e7290fb4 (isotonic e2e arm swapped in 406335b92) | NVIDIA RTX 4090: `algos_lane_check.sh <all 21> --pass 2` RESULT: PASS, all 10 arms FAIL under their patch and PASS after reversal, 21 lanes AGREE |
+| option: GLM sample_weight (Poisson/Gamma/Tweedie) | (the commit that adds this row) | sanity PASS (weighted coef within 1.2e-4 of sklearn); lanes x-glm-* AGREE, x-glm-poisson-sw AGREE; opt_glm_sample_weight.patch (device drops weights) DISAGREE then AGREE; x-glm-poisson/gamma/tweedie hashes UNCHANGED vs the pass-2 run |
+
+Next: AMD box (Hot Aisle fallback running), AGREE on AMD for all 21 lanes;
+M2 Pro steward submissions; then option parity; then speed.

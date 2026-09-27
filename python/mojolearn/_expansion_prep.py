@@ -49,7 +49,7 @@ _OPS = dict(
     lda_prep=36, lda_w=37, lda_stage2=38, lda_stage3=39, qda_cov=40, qda_prep=41, qda_dec=42,
     qt_apply=43, pt_fit=44, pt_apply=45, std_params=46, normalize=47, poly=48, spline_knots=49, spline_apply=50, label_binarize=51, scatter_ones=52,
     ii_mean=53, ii_gram=54, ii_sub=55, ii_br=56, ii_predict=57, ii_snapshot=58, ii_conv=59, nan_mask=60, gather_cols=61, var_ptp=62, f_classif=63, f_regression=64, chi2=65,
-    mi_colscale=66, mi_noise=67, mi_cc=68, mi_cd=69, mi_reduce=70, sqsum_cols=71, log=72,
+    mi_colscale=66, mi_noise=67, mi_cc=68, mi_cd=69, mi_reduce=70, sqsum_cols=71, log=72, robust_uv=73,
 )
 _PARAMS = 14
 _NONE = -1
@@ -214,8 +214,8 @@ class RobustScaler(_PrepBase):
     """sklearn.preprocessing.RobustScaler: center by the median, scale by the
     quantile range (numpy's linear percentile over the non-NaN entries; NaN is
     ignored in fit and kept in transform). Float32 throughout; a scale below
-    10 * float32 eps is one (`_handle_zeros_in_scale`). `unit_variance=True`
-    is refused by name."""
+    10 * float32 eps is one (`_handle_zeros_in_scale`); unit_variance divides
+    the scale by norm.ppf(q_max) - norm.ppf(q_min) (Acklam, float32)."""
     _parameters = ("with_centering", "with_scaling", "quantile_range", "copy", "unit_variance")
 
     def __init__(self, *, with_centering=True, with_scaling=True, quantile_range=(25.0, 75.0), copy=True,
@@ -227,11 +227,12 @@ class RobustScaler(_PrepBase):
         self.unit_variance = unit_variance
 
     def fit(self, X, y=None):
-        if self.unit_variance:
-            raise NotImplementedError("mojolearn: RobustScaler(unit_variance=True) is not implemented")
         lo, hi = (float(v) for v in self.quantile_range)
         if not 0 <= lo <= hi <= 100:
             raise ValueError(f"mojolearn: invalid quantile range {self.quantile_range!r}")
+        if self.unit_variance and not 0 < lo < hi < 100:
+            raise ValueError("mojolearn: RobustScaler(unit_variance=True) needs 0 < q_min < q_max < 100 "
+                             "(norm.ppf of 0 or 1 is infinite)")
         arr = _x2d(X)
         n, d = arr.shape
         mode = _mode()
@@ -247,6 +248,8 @@ class RobustScaler(_PrepBase):
         pr.stage("col_stats", d, xo, n, d, st)
         pr.stage("quantile", 3 * d, so, n, d, qf, 3, q, st)
         pr.stage("scale_params", d, q, 3, d, center, scale, 0, 0, 2, 1)
+        if self.unit_variance:
+            pr.stage("robust_uv", d, scale, qf)
         pr.run(mode)
         self.center_ = pr.get(center, d) if self.with_centering else None
         self.scale_ = pr.get(scale, d) if self.with_scaling else None

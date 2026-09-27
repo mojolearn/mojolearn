@@ -286,3 +286,55 @@ def _(ml, X, yc, yr, Xh=None):
     Xh3 = np.ascontiguousarray(Xh[:256, :x.shape[1]], dtype=np.float32)
     return _fit(dict(y=_h(y), dx=_h(dx), dw=_h(ln.weight_grad), db=_h(ln.bias_grad), y3=_h(y3)),
                 ln, lambda e: (e.forward(Xh3),))
+
+
+@lane("sequence-theta")
+def _(ml, X, yc, yr, Xh=None):
+    """Four series of 96 observations: a positive seasonal series (period 12,
+    multiplicative after the ACF test), the same minus its minimum (additive),
+    a random walk and a fixture column. AutoTheta over the batch and a
+    DynamicOptimizedTheta with a fixed alpha; 18-step forecasts."""
+    t = np.arange(96, dtype=np.float32)
+    wave = np.sin(t * np.float32(2 * np.pi / 12)).astype(np.float32)
+    c = np.ascontiguousarray(X[:96, 7], dtype=np.float32)
+    y = np.stack([np.float32(20.0) + np.float32(4.0) * wave + np.float32(0.3) * c + np.float32(0.05) * t,
+                  np.float32(4.0) * wave + np.float32(0.3) * c,
+                  np.cumsum(c, dtype=np.float32), c]).astype(np.float32)
+    a = ml.AutoTheta(season_length=12).fit(y)
+    fa = a.predict(18)["mean"]
+    d = ml.DynamicOptimizedTheta(season_length=12, alpha=0.3).fit(y)
+    fd = d.predict(18)["mean"]
+    return _fit(dict(auto=_h(fa), auto_info=_h(a.info_), dotm=_h(fd), dotm_info=_h(d.info_)))
+
+
+@lane("sequence-croston")
+def _(ml, X, yc, yr, Xh=None):
+    """Six intermittent series of 120 observations (fixture columns kept
+    where they exceed a threshold, one all-zero, one with negative events):
+    the classic, optimized and SBA forecasts."""
+    c = np.ascontiguousarray(X[:120, :6].T, dtype=np.float32)
+    y = np.where(c > np.float32(0.8), c + np.float32(1.0), np.float32(0.0)).astype(np.float32)
+    y[4] = np.float32(0.0)
+    y[5] = np.where(c[5] < np.float32(-1.0), c[5], y[5]).astype(np.float32)
+    out = {}
+    for k, cls in (("classic", ml.CrostonClassic), ("optimized", ml.CrostonOptimized), ("sba", ml.CrostonSBA)):
+        out[k] = _h(cls().fit(y).predict(4)["mean"])
+    return _fit(out)
+
+
+@lane("sequence-ets")
+def _(ml, X, yc, yr, Xh=None):
+    """Four series of 80 observations (a trend plus a fixture column, a
+    random walk, a positive level series, a fixture column): damped
+    ETS(A,Ad,N), ETS(M,Ad,N) on the positive rows, undamped AAN and simple
+    ANN; 12-step forecasts."""
+    t = np.arange(80, dtype=np.float32)
+    c = np.ascontiguousarray(X[:80, 9], dtype=np.float32)
+    y = np.stack([np.float32(5.0) + np.float32(0.3) * t + c, np.cumsum(c, dtype=np.float32),
+                  np.float32(40.0) + c, c]).astype(np.float32)
+    pos = np.ascontiguousarray(y[:1] + np.float32(10.0) - np.minimum(y[:1].min(), np.float32(0.0)))
+    out = dict(damped=_h(ml.DampedETS().fit(y).predict(12)["mean"]),
+               mult=_h(ml.DampedETS(error="M").fit(pos).predict(12)["mean"]),
+               aan=_h(ml.ETS(model="AAN", damped=False).fit(y).predict(12)["mean"]),
+               ann=_h(ml.ETS(model="ANN", damped=False).fit(y).predict(12)["mean"]))
+    return _fit(out)
