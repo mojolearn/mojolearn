@@ -7,7 +7,7 @@ _stochastic_gradient.py class_weight, sample_weight	refused / absent	pass 2
 _stochastic_gradient.py warm_start, partial_fit, coef_init, intercept_init	refused / absent	pass 2
 _sgd_fast.pyx.tp SequentialDataset.shuffle (MT19937)	replaced	splitmix64 Fisher-Yates (x_linear/ops.mojo); quality parity, not bit parity
 glm.py solver=lbfgs	replaced	Newton-Cholesky (their newton-cholesky form) for every solver value; same minimizer
-glm.py sample_weight, warm_start	refused / absent	pass 2
+glm.py warm_start	refused	pass 2 (sample_weight implemented)
 TweedieRegressor power<0 or 0<power<1, identity link with power>0	refused at the API	pass 2
 _huber.py L-BFGS-B with sigma >= 10*eps bound	replaced	sigma = exp(s), unconstrained L-BFGS (x_linear/lbfgs.mojo); same minimizer
 _huber.py sample_weight, warm_start	refused / absent	pass 2
@@ -24,3 +24,7 @@ _ridge.py RidgeCV cv (k-fold), scoring, alpha_per_target, multi-target y, gcv_mo
 _cd_fast.pyx gap-safe screening (do_screening)	not applied	it only skips coordinates; pass 2 speed
 _coordinate_descent.py LassoCV/ElasticNetCV cv splitters other than None/int, shuffle, positive, selection=random, sample_weight, precompute arrays	refused	pass 2
 _coordinate_descent.py refit with precompute=False	replaced	Gram CD refit, same minimizer
+_logistic.py LogisticRegressionCV penalty l1/elasticnet, dual, scoring, class_weight, refit=False, sample_weight, cv splitters	refused	pass 2
+_logistic.py refit warm start from the folds mean coef	replaced	refit from zero (convex; same minimizer)
+isotonic.py parallel PAVA (prefix-scan form, per the brief)	pass 2	pass 1 is their sequential single-pass PAVA
+isotonic.py increasing=auto	Python	Spearman sign computed in Python float64 (a boolean decision)

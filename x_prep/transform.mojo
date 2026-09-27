@@ -306,3 +306,10 @@ def poly_unit(t: Int, f: FP, q: IP):
     for k in range(a, b):
         v = mul(v, ld(f, p(q, 0) + i * p(q, 2) + Int(ld(f, p(q, 3) + k))))
     st(f, p(q, 6) + t, v)
+
+
+def robust_uv_unit(t: Int, f: FP, q: IP):
+    """q = [SCALE, QF]; t = column: RobustScaler(unit_variance=True),
+    SCALE /= norm.ppf(QF[2]) - norm.ppf(QF[0]) (the quantile fractions)."""
+    var adjust = sub(norm_ppf(ld(f, p(q, 1) + 2)), norm_ppf(ld(f, p(q, 1))))
+    st(f, p(q, 0) + t, div(ld(f, p(q, 0) + t), adjust))

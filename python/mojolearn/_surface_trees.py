@@ -22,6 +22,9 @@ FAMILIES = (
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=(
+            "trees-dt-clf",
+            "trees-dt-reg",
+            "trees-rf-weighted",
             "trees-bagging-clf",
             "trees-bagging-reg",
             "trees-adaboost-clf",
@@ -43,6 +46,8 @@ FAMILIES = (
         inference_lanes=(),
         forest_kinds=(),
         classes=(
+            "DecisionTreeClassifier",
+            "DecisionTreeRegressor",
             "BaggingClassifier",
             "BaggingRegressor",
             "AdaBoostClassifier",
@@ -83,6 +88,9 @@ FAMILIES = (
     ),
 )
 TRAINING_LANE_NAMES = {
+    "trees-dt-clf": "DecisionTreeClassifier",
+    "trees-dt-reg": "DecisionTreeRegressor",
+    "trees-rf-weighted": "RandomForestClassifier weighted objective",
     "trees-bagging-clf": "BaggingClassifier",
     "trees-bagging-reg": "BaggingRegressor",
     "trees-adaboost-clf": "AdaBoostClassifier",

@@ -81,6 +81,50 @@ OPS = [
       ("res", "fout", "n * n_classes"), ("n", "int"), ("d", "int"), ("n_classes", "int")]),
     ("softmax", "items", "softmax_item", "n",
      [("x", "fin", "n * c"), ("res", "fout", "n * c"), ("n", "int"), ("c", "int")]),
+    ("pcs", "items", "pcs_item", "n",
+     [("x", "fin", "n * d_in"), ("hidx", "iin", "degree * nf"), ("hbit", "iin", "degree * nf"), ("res", "fout", "n * nc"),
+      ("scr", "fscr", "n * 2 * nc"), ("n", "int"), ("d_in", "int"), ("nf", "int"), ("nc", "int"), ("degree", "int"),
+      ("gamma", "float"), ("coef0", "float")]),
+    ("achi2", "items", "achi2_item", "n * d",
+     [("x", "fin", "n * d"), ("res", "fout", "n * d * (2 * steps - 1)"), ("n", "int"), ("d", "int"), ("steps", "int"),
+      ("interval", "float")]),
+    ("skew_weights", "items", "skew_weights_item", "count",
+     [("z", "fin", "count"), ("res", "fout", "count"), ("count", "int")]),
+    ("skew_transform", "items", "skew_transform_item", "n * nc",
+     [("lx", "fin", "n * d"), ("w", "fin", "d * nc"), ("off", "fin", "nc"), ("res", "fout", "n * nc"),
+      ("n", "int"), ("d", "int"), ("nc", "int")]),
+    ("absdiff_sum", "items", "absdiff_sum_item", "1",
+     [("a", "fin", "count"), ("b", "fin", "count"), ("res", "fout", "1"), ("count", "int")]),
+    ("row_normalize", "items", "row_normalize_item", "n",
+     [("a", "fin", "n * m"), ("res", "fout", "n * m"), ("n", "int"), ("m", "int")]),
+    ("lp_clamp", "items", "lp_clamp_item", "n",
+     [("ld", "fin", "n * c"), ("ystatic", "fin", "n * c"), ("unlabeled", "iin", "n"), ("res", "fout", "n * c"),
+      ("n", "int"), ("c", "int")]),
+    ("ls_clamp", "items", "ls_clamp_item", "count",
+     [("ld", "fin", "count"), ("ystatic", "fin", "count"), ("res", "fout", "count"), ("count", "int"), ("alpha", "float")]),
+    ("ls_laplacian", "items", "ls_laplacian_item", "n * n",
+     [("a", "fin", "n * n"), ("res", "fout", "n * n"), ("n", "int")]),
+    ("knn_graph", "items", "knn_graph_item", "n",
+     [("idx", "iin", "n * k"), ("res", "fout", "n * m"), ("n", "int"), ("m", "int"), ("k", "int")]),
+    ("knn_impute", "items", "knn_impute_item", "n * d",
+     [("x", "fin", "n * d"), ("fx", "fin", "m * d"), ("best_d", "fscr", "n * d * k"), ("best_i", "iscr", "n * d * k"),
+      ("res", "fout", "n * d"), ("n", "int"), ("m", "int"), ("d", "int"), ("k", "int"), ("weights", "int")]),
+    ("pagerank_step", "items", "pagerank_step_item", "n",
+     [("q", "fin", "n * n"), ("x", "fin", "n"), ("p", "fin", "n"), ("dangling", "iin", "n"), ("res", "fout", "n"),
+      ("n", "int"), ("alpha", "float")]),
+    ("cc_step", "items", "cc_step_item", "n",
+     [("a", "fin", "n * n"), ("lab", "iin", "n"), ("res", "iout", "n"), ("n", "int")]),
+    ("louvain", "items", "louvain_item", "1",
+     [("a", "fin", "n * n"), ("labels", "iout", "n"), ("info", "fout", "2"), ("w", "fscr", "n * n"), ("w2", "fscr", "n * n"),
+      ("comm", "iscr", "n"), ("node_of", "iscr", "n"), ("deg", "fscr", "n"), ("stot", "fscr", "n"), ("k2c", "fscr", "n"),
+      ("tmp", "fscr", "n"), ("n", "int"), ("max_level", "int"), ("resolution", "float"), ("threshold", "float")]),
+    ("svgp", "items", "svgp_item", "1",
+     [("kuu", "fin", "m * m"), ("bmat", "fin", "m * m"), ("b", "fin", "m"), ("y", "fin", "n"), ("alpha", "fout", "m"),
+      ("cmat", "fout", "m * m"), ("qmu", "fout", "m"), ("qsqrt", "fout", "m * m"), ("info", "fout", "2"),
+      ("luu", "fscr", "m * m"), ("ls", "fscr", "m * m"), ("e", "fscr", "m"), ("col", "fscr", "m"),
+      ("m", "int"), ("n", "int"), ("noise", "float"), ("jitter", "float"), ("kdiag", "float")]),
+    ("svgp_var", "items", "svgp_var_item", "n",
+     [("ksu", "fin", "n * m"), ("cmat", "fin", "m * m"), ("res", "fout", "n"), ("n", "int"), ("m", "int"), ("kdiag", "float")]),
 ]
 
 HDR = "# SPDX-License-Identifier: Apache-2.0\n# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632\n"
@@ -154,12 +198,12 @@ def _down_i(ctx: DeviceContext, buf: DeviceBuffer[DType.int32], addr: Int, count
         call = ", ".join(["t"] + [b[0] for b in bufs] + [p[0] for p in scal])
         s.append(f"\n\ndef {name}_kernel({', '.join(kp)}):\n{conv}    var t = _tid()\n    if t < {count}:\n        {item}({call})\n")
         # driver
-        dp = [f"{b[0]}: Int" for b in bufs if b[1] != "fscr"]
+        dp = [f"{b[0]}: Int" for b in bufs if b[1] not in ("fscr", "iscr")]
         dp += [f"{p[0]}: {'Int' if p[1] == 'int' else 'Float32'}" for p in scal]
         body = "    var ctx = DeviceContext()\n"
         for b in bufs:
             up = "True" if b[1] in ("fin", "finout", "iin", "iinout") else "False"
-            addr = "0" if b[1] == "fscr" else b[0]
+            addr = "0" if b[1] in ("fscr", "iscr") else b[0]
             fn = "_buf_i" if is_int_buf(b[1]) else "_buf"
             body += f"    var d_{b[0]} = {fn}(ctx, {addr}, {b[2]}, {up})\n"
         args = [f"d_{b[0]}.unsafe_ptr()" for b in bufs] + [f"Int64({p[0]})" if p[1] == "int" else p[0] for p in scal]
@@ -194,16 +238,20 @@ def _i(addr: Int) -> IP:
 """]
     for name, mod, item, count, params in OPS:
         bufs, scal = split(params)
-        dp = [f"{b[0]}: Int" for b in bufs if b[1] != "fscr"]
+        dp = [f"{b[0]}: Int" for b in bufs if b[1] not in ("fscr", "iscr")]
         dp += [f"{p[0]}: {'Int' if p[1] == 'int' else 'Float32'}" for p in scal]
         body = ""
         for b in bufs:
             if b[1] == "fscr":
                 body += f"    var s_{b[0]} = List[Float32](length=({b[2]}) if ({b[2]}) > 0 else 1, fill=Float32(0))\n"
+            if b[1] == "iscr":
+                body += f"    var s_{b[0]} = List[Int32](length=({b[2]}) if ({b[2]}) > 0 else 1, fill=Int32(0))\n"
         ptrs = []
         for b in bufs:
             if b[1] == "fscr":
                 ptrs.append(f"FP(unsafe_from_address=Int(s_{b[0]}.unsafe_ptr()))")
+            elif b[1] == "iscr":
+                ptrs.append(f"IP(unsafe_from_address=Int(s_{b[0]}.unsafe_ptr()))")
             else:
                 ptrs.append(f"_i({b[0]})" if is_int_buf(b[1]) else f"_f({b[0]})")
         call = ", ".join(["t"] + ptrs + [p[0] for p in scal])
@@ -213,7 +261,7 @@ def _i(addr: Int) -> IP:
             b = outs[0]
             body += f"    comptime if X_NEIGHBORS_HOST_SABOTAGE:\n        if ({b[2]}) > 0:\n            _f({b[0]}).unsafe_store(0, _f({b[0]}).unsafe_load(0) + Float32(1e-3))\n"
         for b in bufs:
-            if b[1] == "fscr":
+            if b[1] in ("fscr", "iscr"):
                 body += f"    _ = s_{b[0]}^\n"
         s.append(f"\n\ndef op_{name}({', '.join(dp)}) raises:\n{body}")
     return "".join(s)
@@ -261,7 +309,7 @@ def x_neighbors_numeric_mode_binding() raises -> PythonObject:
         lines = []
         ai = 0
         for b in bufs:
-            if b[1] == "fscr":
+            if b[1] in ("fscr", "iscr"):
                 continue
             lines.append(f"    var v_{b[0]} = _a(a_, {ai})")
             ai += 1
@@ -273,7 +321,7 @@ def x_neighbors_numeric_mode_binding() raises -> PythonObject:
             else:
                 lines.append(f"    var v_{p[0]} = _f(f_, {fi})")
                 fi += 1
-        args = ["v_" + b[0] for b in bufs if b[1] != "fscr"] + ["v_" + p[0] for p in scal]
+        args = ["v_" + b[0] for b in bufs if b[1] not in ("fscr", "iscr")] + ["v_" + p[0] for p in scal]
         body = "\n".join(lines)
         s.append(f"\n\ndef {name}_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:\n"
                  f"{body}\n    with GILReleased(Python()):\n        op_{name}({', '.join(args)})\n    return PythonObject(None)\n")

@@ -60,22 +60,27 @@ def _unit(power: Float32, link: Int, y: Float32, eta: Float32, what: Int) -> Flo
 
 
 def _objective(x: FP, y: FP, n: Int, d: Int, fi: Bool, power: Float32, link: Int, alpha: Float32,
-               theta: FP, toff: Int, eta: FP) -> Float32:
+               theta: FP, toff: Int, eta: FP, sw: Bool, den: Float32) -> Float32:
     var b = ld(theta, toff + d) if fi else Float32(0)
     var acc = Float32(0)
     for i in range(n):
         var e = fa(row_dot(x, i, d, theta, toff), b)
         st(eta, i, e)
-        acc = fa(acc, _unit(power, link, ld(y, i), e, 0))
+        var l = _unit(power, link, ld(y, i), e, 0)
+        if sw:
+            l = fm(ld(y, n + i), l)
+        acc = fa(acc, l)
     var reg = Float32(0)
     for j in range(d):
         var w = ld(theta, toff + j)
         reg = fmad(w, w, reg)
-    return fa(fd(acc, i2f(n)), fm(fm(Float32(0.5), alpha), reg))
+    return fa(fd(acc, den), fm(fm(Float32(0.5), alpha), reg))
 
 
 def glm_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
-    """ip: [max_iter, fit_intercept, link]; fp: [power, alpha, tol].
+    """ip: [max_iter, fit_intercept, link, sample_weight]; fp: [power, alpha, tol].
+    With sample_weight, y = targets n | weights n and the objective is
+    (1 / sum w) sum w_i loss_i + alpha/2 |w|^2 (theirs, glm.py).
     res: coef d, intercept 1, n_iter 1, converged 1.
     fw: eta n | grad m | H m*m | step m | trial m (m = d + 1)."""
     var max_iter = ldi(ip, 0)
@@ -84,6 +89,12 @@ def glm_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: I
     var power = ld(fp, 0)
     var alpha = ld(fp, 1)
     var tol = ld(fp, 2)
+    var sw = ldi(ip, 3) != 0
+    var den = i2f(n)
+    if sw:
+        den = Float32(0)
+        for i in range(n):
+            den = fa(den, ld(y, n + i))
     var m = d + 1 if fi else d
     var eta = fw
     var g = fw + n
@@ -93,10 +104,15 @@ def glm_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: I
     fill(res, 0, d + 3, Float32(0))
     if fi:
         var ym = mean_of(y, n)
+        if sw:
+            var acc = Float32(0)
+            for i in range(n):
+                acc = fmad(ld(y, n + i), ld(y, i), acc)
+            ym = fd(acc, den)
         st(res, d, flog(ym) if link == GLM_LINK_LOG else ym)
     var iters = 0
     var converged = False
-    var f = _objective(x, y, n, d, fi, power, link, alpha, res, 0, eta)
+    var f = _objective(x, y, n, d, fi, power, link, alpha, res, 0, eta, sw, den)
     for it in range(max_iter):
         # gradient and Hessian at res (eta holds the current linear predictor)
         fill(g, 0, m, Float32(0))
@@ -105,6 +121,9 @@ def glm_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: I
             var e = ld(eta, i)
             var gi = _unit(power, link, ld(y, i), e, 1)
             var hi = fmax(Float32(0), _unit(power, link, ld(y, i), e, 2))
+            if sw:
+                gi = fm(ld(y, n + i), gi)
+                hi = fm(ld(y, n + i), hi)
             for j in range(d):
                 var xj = ld(x, i * d + j)
                 st(g, j, fmad(gi, xj, ld(g, j)))
@@ -116,7 +135,7 @@ def glm_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: I
                 for k in range(d):
                     st(h, d * m + k, fmad(hi, ld(x, i * d + k), ld(h, d * m + k)))
                 st(h, d * m + d, fa(ld(h, d * m + d), hi))
-        var inv_n = fd(Float32(1), i2f(n))
+        var inv_n = fd(Float32(1), den)
         var gmax = Float32(0)
         for j in range(m):
             var gj = fm(ld(g, j), inv_n)
@@ -150,7 +169,7 @@ def glm_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: I
         for _ in range(40):
             for j in range(m):
                 st(trial, j, fmad(t, ld(step, j), ld(res, j)))
-            var ft = _objective(x, y, n, d, fi, power, link, alpha, trial, 0, eta)
+            var ft = _objective(x, y, n, d, fi, power, link, alpha, trial, 0, eta, sw, den)
             if ft == ft and ft <= fa(f, fm(fm(Float32(1e-4), t), slope)):
                 copy(res, 0, trial, 0, m)
                 f = ft
@@ -159,7 +178,7 @@ def glm_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: I
             t = fm(t, Float32(0.5))
         if not accepted:
             # no decrease at float32 resolution: the fit has converged as far as it can
-            f = _objective(x, y, n, d, fi, power, link, alpha, res, 0, eta)
+            f = _objective(x, y, n, d, fi, power, link, alpha, res, 0, eta, sw, den)
             break
     if not fi:
         st(res, d, Float32(0))

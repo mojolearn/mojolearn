@@ -1,0 +1,13 @@
+--- a/x_linear/dispatch.mojo
++++ b/x_linear/dispatch.mojo
+@@ -68,7 +68,9 @@
+ def decision_one(x: FP, i: Int, d: Int, wb: FP, c: Int, link: Int) -> Float32:
+     var woff = c * (d + 1)
+     # DEVIATION 5007 (IDENTITY_PATHS row 107): the fold first, the intercept last
+-    var z = fa(row_dot(x, i, d, wb, woff), ld(wb, woff + d))
++    var z = ld(wb, woff + d)  # SABOTAGE 5007
++    for j in range(d):
++        z = fmad(ld(x, i * d + j), ld(wb, woff + j), z)
+     if link == LINK_EXP:
+         return fexp(z)
+     if link == LINK_SIGMOID:

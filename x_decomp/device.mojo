@@ -21,7 +21,14 @@ from x_decomp.cells import (
     colsum_cell,
     ew_cell,
     gemm_cell,
+    als_row,
+    barycenter_row,
+    dijkstra_row,
+    gamma_cell,
+    lasso_row,
+    lda_doc_row,
     lu_serial,
+    omp_row,
     lu_solve_serial,
     orth_serial,
     rand_cell,
@@ -104,6 +111,58 @@ def cd_rows_kernel(w: F32Ptr, hht: F32Ptr, xht: F32Ptr, perm: I32Ptr, viol: F32P
 def orth_kernel(a: F32Ptr, m: Int32, l: Int32):
     if block_idx.x == 0 and thread_idx.x == 0:
         orth_serial(a, Int(m), Int(l))
+
+
+def lasso_rows_kernel(
+    g: F32Ptr, q: F32Ptr, w: F32Ptr, h: F32Ptr, its: F32Ptr, n: Int32, k: Int32, alpha: Float32,
+    max_iter: Int32, tol: Float32, positive: Int32,
+):
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n):
+        its.unsafe_store(i, lasso_row(g, q, w, h, i, Int(k), alpha, Int(max_iter), tol, positive != 0))
+
+
+def omp_rows_kernel(g: F32Ptr, q: F32Ptr, w: F32Ptr, s: F32Ptr, na: F32Ptr, n: Int32, k: Int32, nnz: Int32):
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n):
+        na.unsafe_store(i, omp_row(g, q, w, s, i, Int(k), Int(nnz)))
+
+
+def gamma_kernel(dst: F32Ptr, count: Int32, seed: UInt32, stream: UInt32, shape: Float32):
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(count):
+        dst.unsafe_store(i, gamma_cell(i, seed, stream, shape))
+
+
+def lda_rows_kernel(
+    x: F32Ptr, ew: F32Ptr, d: F32Ptr, e: F32Ptr, s: F32Ptr, its: F32Ptr, n: Int32, k: Int32, v: Int32,
+    prior: Float32, max_iter: Int32, tol: Float32,
+):
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n):
+        its.unsafe_store(i, lda_doc_row(x, ew, d, e, s, i, Int(k), Int(v), prior, Int(max_iter), tol))
+
+
+def dijkstra_kernel(w: F32Ptr, dist: F32Ptr, done: F32Ptr, reached: F32Ptr, n: Int32):
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n):
+        reached.unsafe_store(i, dijkstra_row(w, dist, done, i, Int(n)))
+
+
+def barycenter_kernel(
+    x: F32Ptr, y: F32Ptr, nbr: F32Ptr, wt: F32Ptr, s: F32Ptr, flags: F32Ptr, n: Int32, d: Int32, k: Int32, reg: Float32
+):
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n):
+        flags.unsafe_store(i, barycenter_row(x, y, nbr, wt, s, i, Int(d), Int(k), reg))
+
+
+def als_kernel(
+    c: F32Ptr, y: F32Ptr, yty: F32Ptr, x: F32Ptr, s: F32Ptr, flags: F32Ptr, n: Int32, m: Int32, f: Int32, reg: Float32
+):
+    var u = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if u < Int(n):
+        flags.unsafe_store(u, als_row(c, y, yty, x, s, u, Int(m), Int(f), reg))
 
 
 def _blocks(count: Int) -> Int:
@@ -353,6 +412,170 @@ struct DevExec(Exec):
         _ = r_buf^
         _ = v_buf^
         _ = s_buf^
+        ctx.synchronize()
+        _ = ctx^
+
+    @staticmethod
+    def lasso_rows(
+        g: F32Ptr, q: F32Ptr, w: F32Ptr, h: F32Ptr, its: F32Ptr, n: Int, k: Int, alpha: Float32,
+        max_iter: Int, tol: Float32, positive: Bool,
+    ) raises:
+        var ctx = DeviceContext()
+        var dg = _up(ctx, g, k * k)
+        var dq = _up(ctx, q, n * k)
+        var dw = _up(ctx, w, n * k)
+        var dh = ctx.enqueue_create_buffer[DType.float32](n * k if n * k > 0 else 1)
+        var di = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
+        ctx.enqueue_function[lasso_rows_kernel](
+            dg.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), dh.unsafe_ptr(), di.unsafe_ptr(), Int32(n), Int32(k),
+            alpha, Int32(max_iter), tol, Int32(1 if positive else 0), grid_dim=_blocks(n), block_dim=TPB,
+        )
+        _down(ctx, dw, w, n * k)
+        _down(ctx, di, its, n)
+        ctx.synchronize()
+        _ = dg^
+        _ = dq^
+        _ = dw^
+        _ = dh^
+        _ = di^
+        ctx.synchronize()
+        _ = ctx^
+
+    @staticmethod
+    def omp_rows(g: F32Ptr, q: F32Ptr, w: F32Ptr, s: F32Ptr, na: F32Ptr, n: Int, k: Int, nnz: Int) raises:
+        var ctx = DeviceContext()
+        var per = k * k + 3 * k
+        var dg = _up(ctx, g, k * k)
+        var dq = _up(ctx, q, n * k)
+        var dw = ctx.enqueue_create_buffer[DType.float32](n * k if n * k > 0 else 1)
+        var ds = ctx.enqueue_create_buffer[DType.float32](n * per if n * per > 0 else 1)
+        var dn = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
+        ctx.enqueue_function[omp_rows_kernel](
+            dg.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), ds.unsafe_ptr(), dn.unsafe_ptr(), Int32(n), Int32(k),
+            Int32(nnz), grid_dim=_blocks(n), block_dim=TPB,
+        )
+        _down(ctx, dw, w, n * k)
+        _down(ctx, dn, na, n)
+        ctx.synchronize()
+        _ = dg^
+        _ = dq^
+        _ = dw^
+        _ = ds^
+        _ = dn^
+        ctx.synchronize()
+        _ = ctx^
+
+    @staticmethod
+    def rand_gamma(dst: F32Ptr, count: Int, seed: UInt32, stream: UInt32, shape: Float32) raises:
+        var ctx = DeviceContext()
+        var dout = ctx.enqueue_create_buffer[DType.float32](count if count > 0 else 1)
+        ctx.enqueue_function[gamma_kernel](
+            dout.unsafe_ptr(), Int32(count), seed, stream, shape, grid_dim=_blocks(count), block_dim=TPB
+        )
+        _down(ctx, dout, dst, count)
+        ctx.synchronize()
+        _ = dout^
+        ctx.synchronize()
+        _ = ctx^
+
+    @staticmethod
+    def lda_rows(
+        x: F32Ptr, ew: F32Ptr, d: F32Ptr, e: F32Ptr, s: F32Ptr, its: F32Ptr, n: Int, k: Int, v: Int,
+        prior: Float32, max_iter: Int, tol: Float32,
+    ) raises:
+        var ctx = DeviceContext()
+        var dx = _up(ctx, x, n * v)
+        var dw = _up(ctx, ew, k * v)
+        var dd = _up(ctx, d, n * k)
+        var de = _up(ctx, e, n * k)
+        var ds = ctx.enqueue_create_buffer[DType.float32](n * (v + k) if n > 0 else 1)
+        var di = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
+        ctx.enqueue_function[lda_rows_kernel](
+            dx.unsafe_ptr(), dw.unsafe_ptr(), dd.unsafe_ptr(), de.unsafe_ptr(), ds.unsafe_ptr(), di.unsafe_ptr(),
+            Int32(n), Int32(k), Int32(v), prior, Int32(max_iter), tol, grid_dim=_blocks(n), block_dim=TPB,
+        )
+        _down(ctx, dd, d, n * k)
+        _down(ctx, de, e, n * k)
+        _down(ctx, di, its, n)
+        ctx.synchronize()
+        _ = dx^
+        _ = dw^
+        _ = dd^
+        _ = de^
+        _ = ds^
+        _ = di^
+        ctx.synchronize()
+        _ = ctx^
+
+    @staticmethod
+    def dijkstra_rows(w: F32Ptr, dist: F32Ptr, reached: F32Ptr, n: Int) raises:
+        var ctx = DeviceContext()
+        var dw = _up(ctx, w, n * n)
+        var dd = ctx.enqueue_create_buffer[DType.float32](n * n if n > 0 else 1)
+        var dn = ctx.enqueue_create_buffer[DType.float32](n * n if n > 0 else 1)
+        var dr = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
+        ctx.enqueue_function[dijkstra_kernel](
+            dw.unsafe_ptr(), dd.unsafe_ptr(), dn.unsafe_ptr(), dr.unsafe_ptr(), Int32(n), grid_dim=_blocks(n), block_dim=TPB
+        )
+        _down(ctx, dd, dist, n * n)
+        _down(ctx, dr, reached, n)
+        ctx.synchronize()
+        _ = dw^
+        _ = dd^
+        _ = dn^
+        _ = dr^
+        ctx.synchronize()
+        _ = ctx^
+
+    @staticmethod
+    def barycenter_rows(
+        x: F32Ptr, y: F32Ptr, nbr: F32Ptr, wt: F32Ptr, flags: F32Ptr, n: Int, ny: Int, d: Int, k: Int, reg: Float32
+    ) raises:
+        var ctx = DeviceContext()
+        var dx = _up(ctx, x, n * d)
+        var dy = _up(ctx, y, ny * d)
+        var dnb = _up(ctx, nbr, n * k)
+        var dwt = ctx.enqueue_create_buffer[DType.float32](n * k if n * k > 0 else 1)
+        var ds = ctx.enqueue_create_buffer[DType.float32](n * (k * k + k * d) if n > 0 else 1)
+        var df = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
+        ctx.enqueue_function[barycenter_kernel](
+            dx.unsafe_ptr(), dy.unsafe_ptr(), dnb.unsafe_ptr(), dwt.unsafe_ptr(), ds.unsafe_ptr(), df.unsafe_ptr(),
+            Int32(n), Int32(d), Int32(k), reg, grid_dim=_blocks(n), block_dim=TPB,
+        )
+        _down(ctx, dwt, wt, n * k)
+        _down(ctx, df, flags, n)
+        ctx.synchronize()
+        _ = dx^
+        _ = dy^
+        _ = dnb^
+        _ = dwt^
+        _ = ds^
+        _ = df^
+        ctx.synchronize()
+        _ = ctx^
+
+    @staticmethod
+    def als_rows(c: F32Ptr, y: F32Ptr, yty: F32Ptr, x: F32Ptr, flags: F32Ptr, n: Int, m: Int, f: Int, reg: Float32) raises:
+        var ctx = DeviceContext()
+        var dc = _up(ctx, c, n * m)
+        var dy = _up(ctx, y, m * f)
+        var dg = _up(ctx, yty, f * f)
+        var dx = ctx.enqueue_create_buffer[DType.float32](n * f if n * f > 0 else 1)
+        var ds = ctx.enqueue_create_buffer[DType.float32](n * (f * f + f) if n > 0 else 1)
+        var df = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
+        ctx.enqueue_function[als_kernel](
+            dc.unsafe_ptr(), dy.unsafe_ptr(), dg.unsafe_ptr(), dx.unsafe_ptr(), ds.unsafe_ptr(), df.unsafe_ptr(),
+            Int32(n), Int32(m), Int32(f), reg, grid_dim=_blocks(n), block_dim=TPB,
+        )
+        _down(ctx, dx, x, n * f)
+        _down(ctx, df, flags, n)
+        ctx.synchronize()
+        _ = dc^
+        _ = dy^
+        _ = dg^
+        _ = dx^
+        _ = ds^
+        _ = df^
         ctx.synchronize()
         _ = ctx^
 

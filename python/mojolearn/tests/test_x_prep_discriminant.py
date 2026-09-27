@@ -61,3 +61,26 @@ if __name__ == "__main__":
     test_lda()
     test_qda()
     print("PASS test_x_prep_discriminant")
+
+
+def test_priors():
+    X, y = _data(4, k=3)
+    Xh, _ = _data(5, k=3)
+    import sklearn.naive_bayes as sknb
+    pairs = ((ml.GaussianNB(priors=[0.2, 0.5, 0.3]), sknb.GaussianNB(priors=[0.2, 0.5, 0.3]), X),
+             (ml.MultinomialNB(class_prior=[0.1, 0.6, 0.3]), sknb.MultinomialNB(class_prior=[0.1, 0.6, 0.3]), np.abs(X)),
+             (ml.LinearDiscriminantAnalysis(priors=[1.0, 2.0, 1.0]), skda.LinearDiscriminantAnalysis(priors=[1.0, 2.0, 1.0]), X),
+             (ml.QuadraticDiscriminantAnalysis(priors=[0.25, 0.25, 0.5]), skda.QuadraticDiscriminantAnalysis(priors=[0.25, 0.25, 0.5]), X))
+    for m, r, Xa in pairs:
+        m.fit(Xa, y)
+        r.fit(Xa.astype(np.float64), y)
+        Xt = np.abs(Xh) if Xa is not X else Xh
+        a, b = np.asarray(m.predict_proba(Xt)), r.predict_proba(Xt.astype(np.float64))
+        # float32 against float64: a point far out on a thin class covariance
+        # can move; hold 99% of the probabilities to the tolerance
+        assert np.mean(np.abs(a - b) <= 3e-3) > 0.99, (type(m).__name__, np.mean(np.abs(a - b) <= 3e-3))
+
+
+if __name__ == "__main__":
+    test_priors()
+    print("PASS test_x_prep_discriminant (priors)")

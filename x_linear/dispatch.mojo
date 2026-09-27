@@ -7,7 +7,7 @@ CPU and the GPU binding calls it from a one-thread kernel, so both columns run
 this same source. `decision_one` is the shared scoring of one (row, output)
 pair: link(b_c + sum_j x_ij w_cj), j ascending, the intercept added last.
 """
-from x_linear.ops import FP, IP, fa, fexp, ld, st, row_dot
+from x_linear.ops import FP, IP, fa, fmad, fexp, ld, st, row_dot
 from checks.numerics import identical_sigmoid, ftz
 from x_linear.sgd import sgd_fit
 from x_linear.glm import glm_fit
@@ -17,6 +17,8 @@ from x_linear.lars import lars_fit
 from x_linear.quantile import quantile_fit
 from x_linear.ridge import ridge_fit
 from x_linear.cd import enetcv_fit
+from x_linear.logcv import logcv_fit
+from x_linear.isotonic import isotonic_fit, isotonic_predict
 
 comptime ALGO_SGD = 1
 comptime ALGO_GLM = 2
@@ -29,6 +31,7 @@ comptime ALGO_RIDGE = 8
 comptime ALGO_ENETCV = 9
 comptime ALGO_LOGCV = 10
 comptime ALGO_ISOTONIC = 11
+comptime ALGO_ISOTONIC_PREDICT = 12
 
 comptime LINK_IDENTITY = 0
 comptime LINK_EXP = 1
@@ -54,10 +57,17 @@ def fit_dispatch(algo: Int, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: F
         ridge_fit(x, y, n, d, ip, fp, res, fw, iw)
     elif algo == ALGO_ENETCV:
         enetcv_fit(x, y, n, d, ip, fp, res, fw, iw)
+    elif algo == ALGO_LOGCV:
+        logcv_fit(x, y, n, d, ip, fp, res, fw, iw)
+    elif algo == ALGO_ISOTONIC:
+        isotonic_fit(x, y, n, d, ip, fp, res, fw, iw)
+    elif algo == ALGO_ISOTONIC_PREDICT:
+        isotonic_predict(x, y, n, d, ip, fp, res, fw, iw)
 
 
 def decision_one(x: FP, i: Int, d: Int, wb: FP, c: Int, link: Int) -> Float32:
     var woff = c * (d + 1)
+    # DEVIATION 5007 (IDENTITY_PATHS row 107): the fold first, the intercept last
     var z = fa(row_dot(x, i, d, wb, woff), ld(wb, woff + d))
     if link == LINK_EXP:
         return fexp(z)

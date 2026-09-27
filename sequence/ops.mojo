@@ -62,6 +62,31 @@ comptime OP_ROWSCALE = 20
 comptime OP_VAR_FORECAST = 21
 comptime OP_SUB = 22
 comptime OP_SCALE = 23
+comptime OP_ACT = 24
+comptime OP_ACT_BWD = 25
+comptime OP_MLP_ROWLOSS = 26
+comptime OP_SUMSQ = 27
+comptime OP_MLP_BLOSS = 28
+comptime OP_L2GRAD = 29
+comptime OP_DIVS = 30
+comptime OP_AF_ALPHA = 31
+comptime OP_AF_ROW = 32
+comptime OP_AF_COL = 33
+comptime OP_AF_RMEAN = 34
+comptime OP_AF_UPDATE_MAT = 35
+comptime OP_AF_VEC = 36
+comptime OP_AF_DENOM = 37
+comptime OP_AF_APPLY = 38
+comptime OP_SEG_SUMSQ = 39
+comptime OP_LAMB_UPD = 40
+comptime OP_LAMB_RATIO = 41
+comptime OP_LAMB_APPLY = 42
+comptime OP_LN_FWD = 43
+comptime OP_LN_BWD_X = 44
+comptime OP_LN_BWD_W = 45
+comptime OP_THETA = 46
+comptime OP_CROSTON = 47
+comptime OP_ETS = 48
 
 # ------------------------------------------------------------------ cells
 comptime CELL_RNN_TANH = 0
@@ -75,6 +100,11 @@ comptime OPT_ADAM = 1
 comptime OPT_ADAMW = 2
 comptime OPT_RMSPROP = 3
 comptime OPT_ADAGRAD = 4
+comptime OPT_SK_ADAM = 5
+comptime OPT_SK_SGD = 6
+comptime OPT_LION = 7
+comptime OPT_ADAMAX = 8
+comptime OPT_NADAM = 9
 
 
 def gates_of(cell: Int) -> Int:
@@ -422,6 +452,14 @@ def op_sum(t: Int, a: Args):
     st(a.p1, a.i0, mul(acc, a.f0))
 
 
+@always_inline
+def _lerp(s: Float32, e: Float32, w: Float32) -> Float32:
+    """torch.lerp: s + w (e - s) for w < 0.5, else e - (e - s)(1 - w)."""
+    if w < Float32(0.5):
+        return fma3(w, sub(e, s), s)
+    return sub(e, mul(sub(e, s), sub(Float32(1.0), w)))
+
+
 def op_opt(t: Int, a: Args):
     """One optimizer update of parameter t, PyTorch's rules.
     p0 param, p1 grad, p2 s1, p3 s2, p4 s3; i0 kind, i1 step (1-based),
@@ -493,6 +531,71 @@ def op_opt(t: Int, a: Args):
             st(a.p0, t, fma3(-lr, buf, p))
         else:
             st(a.p0, t, fma3(-lr, ftz(identical_div(g, avg)), p))
+    elif kind == OPT_SK_ADAM:
+        # sklearn AdamOptimizer: m, v as Adam; p += -lr_t m / (sqrt(v) + eps),
+        # lr_t = lr sqrt(1 - b2^t) / (1 - b1^t) a host scalar (f5)
+        var b1 = a.f1
+        var b2 = a.f2
+        var m = fma3(b1, ld(a.p2, t), mul(sub(Float32(1.0), b1), g))
+        var v = fma3(b2, ld(a.p3, t), mul(sub(Float32(1.0), b2), mul(g, g)))
+        st(a.p2, t, m)
+        st(a.p3, t, v)
+        var den = add(ftz(identical_sqrt(v)), a.f3)
+        st(a.p0, t, add(p, ftz(identical_div(mul(-a.f5, m), den))))
+    elif kind == OPT_SK_SGD:
+        # sklearn SGDOptimizer: vel = mu vel - lr g; nesterov: the step is
+        # mu vel - lr g with the new vel, else vel; p += step
+        var mu = a.f1
+        var lg = mul(lr, g)
+        var vel = fma3(mu, ld(a.p2, t), -lg)
+        st(a.p2, t, vel)
+        var step = vel
+        if (a.i2 & 1) != 0:
+            step = fma3(mu, vel, -lg)
+        st(a.p0, t, add(p, step))
+    elif kind == OPT_LION:
+        # Lion (Chen et al. 2023; lion-pytorch): p *= 1 - lr wd;
+        # p -= lr sign(b1 m + (1 - b1) g); m = b2 m + (1 - b2) g
+        var b1 = a.f1
+        var b2 = a.f2
+        var pd = mul(p, sub(Float32(1.0), mul(lr, wd)))
+        var m = ld(a.p2, t)
+        var c = fma3(b1, m, mul(sub(Float32(1.0), b1), g))
+        var u = Float32(0.0)
+        if c > Float32(0.0):
+            u = Float32(1.0)
+        elif c < Float32(0.0):
+            u = Float32(-1.0)
+        st(a.p0, t, fma3(-lr, u, pd))
+        st(a.p2, t, fma3(b2, m, mul(sub(Float32(1.0), b2), g)))
+    elif kind == OPT_ADAMAX:
+        # torch Adamax: m.lerp_(g, 1 - b1); u = max(b2 u, |g| + eps);
+        # p += -clr m / u, clr = lr / (1 - b1^t) (f5)
+        if wd != Float32(0.0):
+            g = fma3(wd, p, g)
+        var m = _lerp(ld(a.p2, t), g, sub(Float32(1.0), a.f1))
+        var ub = mul(a.f2, ld(a.p3, t))
+        var ga = add(abs(g), a.f3)
+        var u = ub if ub > ga else ga
+        st(a.p2, t, m)
+        st(a.p3, t, u)
+        st(a.p0, t, fma3(-a.f5, ftz(identical_div(m, u)), p))
+    elif kind == OPT_NADAM:
+        # torch NAdam: m.lerp_(g, 1 - b1); v = b2 v + (1 - b2) g g;
+        # den = sqrt(v / bc2) + eps; p += c1 g / den; p += c2 m / den
+        # (f5 bc2, f6 c1, f7 c2; flags bit0 decoupled weight decay)
+        if wd != Float32(0.0):
+            if (a.i2 & 1) != 0:
+                p = mul(p, sub(Float32(1.0), mul(lr, wd)))
+            else:
+                g = fma3(wd, p, g)
+        var m = _lerp(ld(a.p2, t), g, sub(Float32(1.0), a.f1))
+        var v = fma3(a.f2, ld(a.p3, t), mul(mul(sub(Float32(1.0), a.f2), g), g))
+        st(a.p2, t, m)
+        st(a.p3, t, v)
+        var den = add(ftz(identical_sqrt(ftz(identical_div(v, a.f5)))), a.f3)
+        var p1 = fma3(a.f6, ftz(identical_div(g, den)), p)
+        st(a.p0, t, fma3(a.f7, ftz(identical_div(m, den)), p1))
     elif kind == OPT_ADAGRAD:
         # torch.optim.Adagrad: clr = lr / (1 + (t - 1) lr_decay) (f5, host);
         # sum += g^2; p -= clr g / (sqrt(sum) + eps)

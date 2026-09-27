@@ -31,13 +31,20 @@ def _(ml, X, yc, yr, Xh=None):
     return _prep_transformer(m, X, Xh, attrs=("center_", "scale_"))
 
 
+@lane("x-prep-robust-scaler-unit-variance")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.RobustScaler(unit_variance=True, quantile_range=(10.0, 90.0)).fit(X)
+    return _prep_transformer(m, X, Xh, attrs=("center_", "scale_"))
+
+
 @lane("x-prep-maxabs-scaler")
 def _(ml, X, yc, yr, Xh=None):
     m = ml.MaxAbsScaler().fit(X)
     return _prep_transformer(m, X, Xh, attrs=("scale_",))
 
 
-_batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-robust-scaler", "x-prep-maxabs-scaler")
+_batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-robust-scaler", "x-prep-maxabs-scaler",
+            "x-prep-robust-scaler-unit-variance")
 
 
 def _prep_categorical(X):
@@ -102,7 +109,15 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(parts, m, lambda e: (e.transform(Xhm[:256]),))
 
 
-_batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_prep_with_nan), "x-prep-simple-imputer")
+@lane("x-prep-simple-imputer-indicator")
+def _(ml, X, yc, yr, Xh=None):
+    Xm, Xhm = _prep_with_nan(X), _prep_with_nan(Xh)
+    m = ml.SimpleImputer(strategy="mean", add_indicator=True).fit(Xm)
+    return _fit(dict(transform=_h(m.transform(Xm[:256]))), m, lambda e: (e.transform(Xhm[:256]),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_prep_with_nan), "x-prep-simple-imputer",
+            "x-prep-simple-imputer-indicator")
 
 
 @lane("x-prep-kbins")
@@ -365,3 +380,49 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("predict", "transform", sl=slice(0, 256)), "x-prep-rfe")
+
+
+@lane("x-prep-complement-nb")
+def _(ml, X, yc, yr, Xh=None):
+    y3 = _prep_three_class(X, yr)
+    m = ml.ComplementNB(alpha=0.7).fit(_prep_abs(X), y3)
+    mn = ml.ComplementNB(norm=True).fit(_prep_abs(X), yc)
+    parts = dict(flp=_h(m.feature_log_prob_), norm=_h(mn.feature_log_prob_),
+                 norm_proba=_h(mn.predict_proba(_prep_abs(X[:256]))))
+    out = _prep_clf(m, _prep_abs(X), _prep_abs(Xh), ("feature_count_", "class_log_prior_"))
+    out.update(parts)
+    return out
+
+
+_batch_decl(_rows_calls("predict", "predict_proba", sl=slice(0, 256), prep=_prep_abs), "x-prep-complement-nb")
+
+
+def _prep_cat_codes(X):
+    """Category indices 0..4 from the fixture (clip of |x| * 2)."""
+    return np.clip(np.floor(np.abs(X) * 2), 0, 4).astype(np.float32)
+
+
+@lane("x-prep-categorical-nb")
+def _(ml, X, yc, yr, Xh=None):
+    y3 = _prep_three_class(X, yr)
+    Xc, Xhc = _prep_cat_codes(X), _prep_cat_codes(Xh)
+    m = ml.CategoricalNB(alpha=0.5).fit(Xc, y3)
+    parts = dict(flp=_h(*m.feature_log_prob_), ncat=_h(m.n_categories_))
+    out = _prep_clf(m, Xc, Xhc, ("class_count_", "class_log_prior_"))
+    out.update(parts)
+    return out
+
+
+_batch_decl(_rows_calls("predict", "predict_proba", sl=slice(0, 256), prep=_prep_cat_codes), "x-prep-categorical-nb")
+
+
+@lane("x-prep-priors")
+def _(ml, X, yc, yr, Xh=None):
+    y3 = _prep_three_class(X, yr)
+    g = ml.GaussianNB(priors=[0.2, 0.5, 0.3]).fit(X, y3)
+    mn = ml.MultinomialNB(class_prior=[0.1, 0.6, 0.3]).fit(_prep_abs(X), y3)
+    lda = ml.LinearDiscriminantAnalysis(priors=[1.0, 2.0, 1.0]).fit(X, y3)
+    qda = ml.QuadraticDiscriminantAnalysis(priors=[0.25, 0.25, 0.5], reg_param=0.01).fit(X, y3)
+    parts = dict(g=_h(g.predict_proba(X[:256])), mn=_h(mn.class_log_prior_, mn.predict_proba(_prep_abs(X[:256]))),
+                 lda=_h(lda.priors_, lda.coef_, lda.predict_proba(X[:256])), qda=_h(qda.predict_proba(X[:256])))
+    return _fit(parts, lda, lambda e: (e.predict_proba(Xh[:256]),))

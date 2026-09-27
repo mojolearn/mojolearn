@@ -92,6 +92,11 @@ def test_gru_classifier():
     assert m.loss_curve_[-1] < m.loss_curve_[0]
 
 
+def test_rnn_tanh_and_relu():
+    check_cls(ml.RNNRegressor)
+    check_cls(ml.RNNRegressor, nonlinearity="relu")
+
+
 def test_state_dict_round_trip():
     X, y = _data()
     m = ml.LSTMRegressor(hidden_size=4, max_epochs=1).fit(X, y)

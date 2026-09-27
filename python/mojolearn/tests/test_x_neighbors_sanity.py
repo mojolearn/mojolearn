@@ -83,3 +83,135 @@ def test_kernel_pca(kernel):
     np.testing.assert_allclose(np.abs(Za), np.abs(Zb), rtol=2e-3, atol=2e-3)
     Xh = _data(20, seed=3)
     np.testing.assert_allclose(np.abs(np.asarray(a.transform(Xh))), np.abs(b.transform(Xh)), rtol=2e-3, atol=2e-3)
+
+
+def test_polynomial_count_sketch():
+    from sklearn.kernel_approximation import PolynomialCountSketch as R
+    X = _data(60)
+    a = ml.PolynomialCountSketch(degree=3, gamma=0.5, coef0=1.0, n_components=32, random_state=7).fit(X)
+    b = R(degree=3, gamma=0.5, coef0=1.0, n_components=32, random_state=7).fit(X)
+    np.testing.assert_array_equal(np.asarray(a.indexHash_), b.indexHash_)
+    np.testing.assert_array_equal(np.asarray(a.bitHash_), b.bitHash_)
+    np.testing.assert_allclose(np.asarray(a.transform(X)), b.transform(X), rtol=1e-3, atol=1e-3)
+
+
+@pytest.mark.parametrize("steps", [1, 2, 3])
+def test_additive_chi2(steps):
+    from sklearn.kernel_approximation import AdditiveChi2Sampler as R
+    X = np.abs(_data(40))
+    X[::5, 1] = 0
+    np.testing.assert_allclose(np.asarray(ml.AdditiveChi2Sampler(sample_steps=steps).fit_transform(X)),
+                               R(sample_steps=steps).fit_transform(X), rtol=1e-5, atol=1e-6)
+
+
+def test_skewed_chi2():
+    from sklearn.kernel_approximation import SkewedChi2Sampler as R
+    X = np.abs(_data(40))
+    a = ml.SkewedChi2Sampler(skewedness=0.5, n_components=50, random_state=4).fit(X)
+    b = R(skewedness=0.5, n_components=50, random_state=4).fit(X)
+    np.testing.assert_allclose(np.asarray(a.random_weights_), b.random_weights_, rtol=1e-4, atol=1e-5)
+    np.testing.assert_allclose(np.asarray(a.random_offset_), b.random_offset_, rtol=1e-6)
+    np.testing.assert_allclose(np.asarray(a.transform(X)), b.transform(X), rtol=1e-3, atol=2e-4)
+
+
+@pytest.mark.parametrize("cls,kw", [("LabelPropagation", dict(kernel="rbf", gamma=0.2)),
+                                    ("LabelPropagation", dict(kernel="knn", n_neighbors=5)),
+                                    ("LabelSpreading", dict(kernel="rbf", gamma=0.2, alpha=0.3)),
+                                    ("LabelSpreading", dict(kernel="knn", n_neighbors=5))])
+def test_label_propagation(cls, kw):
+    import sklearn.semi_supervised as S
+    X = _data(120)
+    y = (X[:, 0] > 0).astype(int)
+    y[::3] = -1
+    a = getattr(ml, cls)(**kw).fit(X, y)
+    b = getattr(S, cls)(**kw).fit(X, y)
+    np.testing.assert_allclose(np.asarray(a.label_distributions_), b.label_distributions_, rtol=2e-3, atol=2e-4)
+    assert (np.asarray(a.transduction_) == b.transduction_).mean() > 0.98
+    Xh = _data(30, seed=5)
+    np.testing.assert_allclose(np.asarray(a.predict_proba(Xh)), b.predict_proba(Xh), rtol=2e-3, atol=2e-4)
+
+
+@pytest.mark.parametrize("kw", [dict(), dict(weights="distance", n_neighbors=3), dict(add_indicator=True)])
+def test_knn_imputer(kw):
+    from sklearn.impute import KNNImputer as R
+    X = _data(80)
+    X[::4, 2] = np.nan
+    X[1::5, 0] = np.nan
+    X[7, :] = np.nan
+    np.testing.assert_allclose(np.asarray(ml.KNNImputer(**kw).fit_transform(X)), R(**kw).fit_transform(X),
+                               rtol=1e-4, atol=1e-5)
+
+
+def _graph(n=60, seed=0, directed=False):
+    rng = np.random.default_rng(seed)
+    A = (rng.random((n, n)) < 0.08).astype(np.float32) * rng.integers(1, 4, (n, n)).astype(np.float32)
+    np.fill_diagonal(A, 0)
+    if not directed:
+        A = np.triu(A)
+        A = A + A.T
+    return A
+
+
+def test_pagerank():
+    nx = pytest.importorskip("networkx")
+    A = _graph(directed=True)
+    A[3] = 0                                            # a dangling node
+    ref = nx.pagerank(nx.from_numpy_array(A, create_using=nx.DiGraph), alpha=0.85, tol=1e-6)
+    ours = np.asarray(ml.PageRank(alpha=0.85, tol=1e-6).fit(A).pagerank_)
+    np.testing.assert_allclose(ours, [ref[i] for i in range(len(A))], rtol=2e-4, atol=1e-6)
+
+
+def test_connected_components():
+    from scipy.sparse.csgraph import connected_components as R
+    A = _graph(80)
+    A[:, 70:] = 0
+    A[70:, :] = 0
+    k, lab = ml.connected_components(A, directed=False)
+    rk, rl = R(A, directed=False)
+    assert k == rk
+    np.testing.assert_array_equal(np.asarray(lab), rl)
+
+
+def test_louvain():
+    nx = pytest.importorskip("networkx")
+    A = _graph(80)
+    G = nx.from_numpy_array(A)
+    m = ml.Louvain().fit(A)
+    comms = {}
+    for i, c in enumerate(np.asarray(m.labels_)):
+        comms.setdefault(int(c), set()).add(i)
+    q_ours = nx.community.modularity(G, list(comms.values()))
+    assert abs(q_ours - m.modularity_) < 1e-4
+    q_ref = max(nx.community.modularity(G, nx.community.louvain_communities(G, seed=s)) for s in range(5))
+    assert q_ours > q_ref - 0.03, (q_ours, q_ref)
+
+
+def test_svgp():
+    X = _data(150, 3)
+    y = np.sin(X[:, 0]) + 0.1 * X[:, 1]
+    Z = X[::10]
+    kv, ls, nv = 1.5, 1.2, 0.2
+    m = ml.SVGP(inducing_points=Z, kernel_variance=kv, lengthscale=ls, noise_variance=nv, jitter=1e-6).fit(X, y)
+    X64, Z64, y64 = X.astype(np.float64), Z.astype(np.float64), y.astype(np.float64)
+
+    def k(a, b):
+        d = ((a[:, None, :] - b[None, :, :]) ** 2).sum(-1)
+        return kv * np.exp(-d / (2 * ls * ls))
+    Kuu = k(Z64, Z64) + 1e-6 * np.eye(len(Z64))
+    Kuf = k(Z64, X64)
+    S = Kuu + Kuf @ Kuf.T / nv
+    alpha = np.linalg.solve(S, Kuf @ y64) / nv
+    Xs = _data(20, 3, seed=9).astype(np.float64)
+    Ksu = k(Xs, Z64)
+    mean = Ksu @ alpha
+    var = kv - np.einsum("ij,jk,ik->i", Ksu, np.linalg.inv(Kuu) - np.linalg.inv(S), Ksu)
+    a_mean, a_var = m.predict_f(Xs.astype(np.float32))
+    np.testing.assert_allclose(np.asarray(a_mean), mean, rtol=2e-3, atol=2e-3)
+    np.testing.assert_allclose(np.asarray(a_var), var, rtol=5e-2, atol=5e-3)
+    n = len(X64)
+    Qff = Kuf.T @ np.linalg.solve(Kuu, Kuf)
+    C = Qff + nv * np.eye(n)
+    _, logdet = np.linalg.slogdet(C)
+    elbo = (-0.5 * n * np.log(2 * np.pi) - 0.5 * logdet - 0.5 * y64 @ np.linalg.solve(C, y64)
+            - 0.5 / nv * (n * kv - np.trace(Qff)))
+    assert abs(m.elbo_ - elbo) < 1e-3 * abs(elbo) + 0.05, (m.elbo_, elbo)

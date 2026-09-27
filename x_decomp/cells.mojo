@@ -85,6 +85,7 @@ comptime OP_SIGN = 33
 comptime OP_LE = 34
 comptime OP_SELECT = 35
 comptime OP_MUZ = 36
+comptime OP_LGAMMA = 37
 
 
 @always_inline
@@ -162,6 +163,31 @@ def digamma(a: Float32) -> Float32:
     r = add(r, log_floor(x, Float32(0)))
     r = sub(r, mul(Float32(0.5), inv))
     return sub(r, t)
+
+
+def lgamma(a: Float32) -> Float32:
+    """log Gamma(x) for x > 0 (0 otherwise): the recurrence up to 6 (the
+    logs of the shifted factors summed ascending), then Stirling's series
+    (x - 1/2) log x - x + log(2 pi)/2 + 1/(12x) - 1/(360x^3) + 1/(1260x^5)."""
+    var x = ftz(a)
+    if not (x > Float32(0)):
+        return Float32(0)
+    var shift = Float32(0)
+    while x < Float32(6):
+        shift = add(shift, log_floor(x, Float32(0)))
+        x = add(x, Float32(1))
+    var inv = div0(Float32(1), x)
+    var inv2 = mul(inv, inv)
+    var t = mul(inv2, Float32(0.0007936507936507937))
+    t = sub(Float32(0.002777777777777778), t)
+    t = mul(inv2, t)
+    t = sub(Float32(0.08333333333333333), t)
+    t = mul(inv, t)
+    var r = mul(sub(x, Float32(0.5)), log_floor(x, Float32(0)))
+    r = sub(r, x)
+    r = add(r, Float32(0.9189385332046727))
+    r = add(r, t)
+    return sub(r, shift)
 
 
 def ew_cell(op: Int, x_in: Float32, y_in: Float32, z_in: Float32, s_in: Float32) -> Float32:
@@ -244,6 +270,8 @@ def ew_cell(op: Int, x_in: Float32, y_in: Float32, z_in: Float32, s_in: Float32)
         r = Float32(1) if x <= y else Float32(0)
     elif op == OP_SELECT:
         r = y if x > s else z
+    elif op == OP_LGAMMA:
+        r = lgamma(x)
     elif op == OP_MUZ:
         # sklearn NMF multiplicative update: x * (y / z), a zero z replaced by s
         r = mul(x, div0(y, z if z != Float32(0) else s))
@@ -346,6 +374,390 @@ def cd_row(W: F32Ptr, HHt: F32Ptr, XHt: F32Ptr, perm: I32Ptr, i: Int, k: Int) ->
             var nw = sub(w, div0(grad, hess))
             W.unsafe_store(i * k + t, nw if nw > Float32(0) else Float32(0))
     return viol
+
+
+def lasso_row(
+    G: F32Ptr, Q: F32Ptr, W: F32Ptr, H: F32Ptr, i: Int, k: Int, alpha: Float32, max_iter: Int,
+    tol: Float32, positive: Bool,
+) -> Float32:
+    """sklearn `_cd_fast.pyx::enet_coordinate_descent_gram` (beta 0) for ONE
+    row i: minimize 1/2 ||x - D^T w||^2 + alpha ||w||_1 given the Gram
+    G = D D^T (k x k) and q = D x (row i of Q, n x k); w (row i of W) is the
+    warm start and the answer; H (row i) is scratch holding G w. Coordinates
+    ascending; a sweep whose largest update is at most tol times the largest
+    |w| (or leaves every w at 0) ends it. Returns the sweeps run."""
+    var base = i * k
+    for j in range(k):
+        var acc = Float32(0)
+        for l in range(k):
+            acc = ftz(identical_mul_add(ftz(G.unsafe_load(j * k + l)), ftz(W.unsafe_load(base + l)), acc))
+        H.unsafe_store(base + j, acc)
+    var it = 0
+    for _ in range(max_iter):
+        it += 1
+        var w_max = Float32(0)
+        var d_w_max = Float32(0)
+        for j in range(k):
+            var gjj = ftz(G.unsafe_load(j * k + j))
+            if gjj == Float32(0):
+                continue
+            var w_j = ftz(W.unsafe_load(base + j))
+            if w_j != Float32(0):
+                for l in range(k):
+                    H.unsafe_store(base + l, ftz(identical_mul_add(-w_j, ftz(G.unsafe_load(l * k + j)), ftz(H.unsafe_load(base + l)))))
+            var tmp = sub(Q.unsafe_load(base + j), H.unsafe_load(base + j))
+            var nw = Float32(0)
+            if positive:
+                if tmp > Float32(0):
+                    var m = sub(tmp, alpha)
+                    nw = div0(m, gjj) if m > Float32(0) else Float32(0)
+            else:
+                var m = sub(abs(tmp), alpha)
+                if m > Float32(0):
+                    nw = div0(m if tmp > Float32(0) else -m, gjj)
+            W.unsafe_store(base + j, nw)
+            if nw != Float32(0):
+                for l in range(k):
+                    H.unsafe_store(base + l, ftz(identical_mul_add(nw, ftz(G.unsafe_load(l * k + j)), ftz(H.unsafe_load(base + l)))))
+            var dw = abs(sub(nw, w_j))
+            if dw > d_w_max:
+                d_w_max = dw
+            if abs(nw) > w_max:
+                w_max = abs(nw)
+        if w_max == Float32(0) or d_w_max <= mul(tol, w_max):
+            break
+    return Float32(it)
+
+
+def omp_row(G: F32Ptr, Q: F32Ptr, W: F32Ptr, S: F32Ptr, i: Int, k: Int, nnz: Int) -> Float32:
+    """Orthogonal matching pursuit on the Gram (sklearn `_omp.py::_gram_omp`,
+    tol None) for ONE row: greedily add the atom with the largest |Xy - G_S
+    gamma| (ties to the LOWER index; stop if it is already active or its
+    square is under float32 eps), refit gamma on the active set by the
+    Cholesky of G[S, S] (sums ascending), until nnz atoms. W's row gets gamma
+    scattered to the active atoms. S is per-row scratch of k*k + 3k floats.
+    Returns the number of active atoms."""
+    var sb = i * (k * k + 3 * k)
+    var L = sb                    # k x k Cholesky of G[S, S]
+    var act = sb + k * k          # active indices (as floats, exact)
+    var gam = act + k             # gamma
+    var tmp = gam + k             # triangular-solve scratch
+    var base = i * k
+    for j in range(k):
+        W.unsafe_store(base + j, Float32(0))
+    var na = 0
+    var eps = Float32(1.1920928955078125e-07)
+    while na < nnz:
+        # residual correlations alpha = Xy - G[:, S] gamma
+        var lam = 0
+        var best = Float32(-1)
+        for j in range(k):
+            var acc = ftz(Q.unsafe_load(base + j))
+            for t in range(na):
+                var a = Int(S.unsafe_load(act + t))
+                acc = ftz(identical_mul_add(-ftz(G.unsafe_load(j * k + a)), ftz(S.unsafe_load(gam + t)), acc))
+            if abs(acc) > best:
+                best = abs(acc)
+                lam = j
+        var already = False
+        for t in range(na):
+            if Int(S.unsafe_load(act + t)) == lam:
+                already = True
+        if already or mul(best, best) < eps:
+            break
+        # extend the Cholesky factor by one row
+        for t in range(na):
+            var a = Int(S.unsafe_load(act + t))
+            var acc = ftz(G.unsafe_load(lam * k + a))
+            for u in range(t):
+                acc = ftz(identical_mul_add(-ftz(S.unsafe_load(L + na * k + u)), ftz(S.unsafe_load(L + t * k + u)), acc))
+            S.unsafe_store(L + na * k + t, div0(acc, S.unsafe_load(L + t * k + t)))
+        var v = Float32(0)
+        for t in range(na):
+            var x = ftz(S.unsafe_load(L + na * k + t))
+            v = ftz(identical_mul_add(x, x, v))
+        var lkk = sub(G.unsafe_load(lam * k + lam), v)
+        if not (lkk > eps):
+            break
+        S.unsafe_store(L + na * k + na, sqrt0(lkk))
+        S.unsafe_store(act + na, Float32(lam))
+        na += 1
+        # gamma = (L L^T)^-1 Xy[S]: forward then back substitution
+        for t in range(na):
+            var acc = ftz(Q.unsafe_load(base + Int(S.unsafe_load(act + t))))
+            for u in range(t):
+                acc = ftz(identical_mul_add(-ftz(S.unsafe_load(L + t * k + u)), ftz(S.unsafe_load(tmp + u)), acc))
+            S.unsafe_store(tmp + t, div0(acc, S.unsafe_load(L + t * k + t)))
+        for tt in range(na):
+            var t = na - 1 - tt
+            var acc = ftz(S.unsafe_load(tmp + t))
+            for u in range(t + 1, na):
+                acc = ftz(identical_mul_add(-ftz(S.unsafe_load(L + u * k + t)), ftz(S.unsafe_load(gam + u)), acc))
+            S.unsafe_store(gam + t, div0(acc, S.unsafe_load(L + t * k + t)))
+    for t in range(na):
+        W.unsafe_store(base + Int(S.unsafe_load(act + t)), S.unsafe_load(gam + t))
+    return Float32(na)
+
+
+def gamma_cell(i: Int, seed: UInt32, stream: UInt32, shape: Float32) -> Float32:
+    """Gamma(shape, 1) for shape >= 1 by Marsaglia and Tsang (2000): attempt
+    j draws a normal and a uniform from Philox counter (i, stream, j); the
+    first accepted attempt is the answer (at most 64; the last attempt's
+    proposal is returned if none is, which at shape 100 has probability
+    below 1e-80)."""
+    var d = sub(shape, Float32(0.3333333333333333))
+    var c = div0(Float32(1), sqrt0(mul(Float32(9), d)))
+    var grid = Float32(5.9604644775390625e-08)
+    var last = d
+    for j in range(64):
+        var r = philox4x32_10(
+            SIMD[DType.uint32, 4](UInt32(i & 0xFFFFFFFF), stream, UInt32(j), UInt32(0x6A33)),
+            SIMD[DType.uint32, 2](seed, UInt32(0x5EED)),
+        )
+        var u1 = mul(Float32((r[0] >> 8) + 1), grid)
+        var u2 = mul(Float32(r[1] >> 8), grid)
+        var x = mul(sqrt0(mul(Float32(-2), log_floor(u1, Float32(0)))), ftz(identical_cos(mul(Float32(6.2831854820251465), u2))))
+        var v = add(Float32(1), mul(c, x))
+        if not (v > Float32(0)):
+            continue
+        v = mul(mul(v, v), v)
+        var u = mul(Float32((r[2] >> 8) + 1), grid)
+        last = mul(d, v)
+        var x2 = mul(x, x)
+        if u < sub(Float32(1), mul(Float32(0.0331), mul(x2, x2))):
+            return last
+        var rhs = add(mul(Float32(0.5), x2), mul(d, add(sub(Float32(1), v), log_floor(v, Float32(0)))))
+        if log_floor(u, Float32(0)) < rhs:
+            return last
+    return last
+
+
+def lda_doc_row(
+    X: F32Ptr, EW: F32Ptr, D: F32Ptr, E: F32Ptr, S: F32Ptr, i: Int, k: Int, v: Int, prior: Float32,
+    max_iter: Int, tol: Float32,
+) -> Float32:
+    """sklearn `_lda.py::_update_doc_distribution` for ONE document i (row i
+    of X, n x v): doc_topic D (n x k) and its exp-Dirichlet expectation E
+    (n x k) are the start and the answer, EW (k x v) is exp(E[log beta]).
+    Per iteration: norm_phi_w = sum_t E_t EW_tw + EPS (t ascending); new
+    D_t = E_t * sum_w (X_w / norm_phi_w) EW_tw (w ascending, zero counts
+    skipped); `_dirichlet_expectation_1d` (D_t += prior; E_t = exp(psi(D_t)
+    - psi(sum D))); stop when mean |last - D| < tol. S is per-row scratch of
+    v + k floats. Returns the iterations run."""
+    var base = i * k
+    var sb = i * (v + k)
+    var eps = Float32(2.220446049250313e-16)
+    var it = 0
+    for _ in range(max_iter):
+        it += 1
+        for t in range(k):
+            S.unsafe_store(sb + v + t, D.unsafe_load(base + t))
+        for w in range(v):
+            var xw = ftz(X.unsafe_load(i * v + w))
+            if xw == Float32(0):
+                continue
+            var acc = Float32(0)
+            for t in range(k):
+                acc = ftz(identical_mul_add(ftz(E.unsafe_load(base + t)), ftz(EW.unsafe_load(t * v + w)), acc))
+            S.unsafe_store(sb + w, div0(xw, add(acc, eps)))
+        var total = Float32(0)
+        for t in range(k):
+            var acc = Float32(0)
+            for w in range(v):
+                if ftz(X.unsafe_load(i * v + w)) == Float32(0):
+                    continue
+                acc = ftz(identical_mul_add(ftz(S.unsafe_load(sb + w)), ftz(EW.unsafe_load(t * v + w)), acc))
+            var dt = add(mul(E.unsafe_load(base + t), acc), prior)
+            D.unsafe_store(base + t, dt)
+            total = add(total, dt)
+        var psi_total = digamma(total)
+        var change = Float32(0)
+        for t in range(k):
+            var dt = D.unsafe_load(base + t)
+            E.unsafe_store(base + t, exp_c(sub(digamma(dt), psi_total)))
+            change = add(change, abs(sub(S.unsafe_load(sb + v + t), dt)))
+        if div0(change, Float32(k)) < tol:
+            break
+    return Float32(it)
+
+
+def dijkstra_row(W: F32Ptr, dist: F32Ptr, done: F32Ptr, i: Int, n: Int) -> Float32:
+    """Single-source shortest paths from node i on a dense UNDIRECTED graph
+    (scipy `shortest_path(directed=False)`): W (n x n) holds edge weights,
+    0 meaning no edge, and edge u-v weighs the smaller nonzero of W[u, v] and
+    W[v, u]. Dijkstra with the next node the unfinished one of least
+    distance, ties to the LOWER index; an unreachable node keeps -1 (never
+    inf). dist and done are row i of n x n outputs/scratch. Returns the
+    number of nodes reached."""
+    var base = i * n
+    for v in range(n):
+        dist.unsafe_store(base + v, Float32(-1))
+        done.unsafe_store(base + v, Float32(0))
+    dist.unsafe_store(base + i, Float32(0))
+    var reached = 0
+    for _ in range(n):
+        var u = -1
+        var best = Float32(0)
+        for v in range(n):
+            if done.unsafe_load(base + v) != Float32(0):
+                continue
+            var dv = dist.unsafe_load(base + v)
+            if dv < Float32(0):
+                continue
+            if u < 0 or dv < best:
+                u = v
+                best = dv
+        if u < 0:
+            break
+        done.unsafe_store(base + u, Float32(1))
+        reached += 1
+        for v in range(n):
+            if done.unsafe_load(base + v) != Float32(0):
+                continue
+            var a = ftz(W.unsafe_load(u * n + v))
+            var b = ftz(W.unsafe_load(v * n + u))
+            var w = a
+            if w == Float32(0) or (b != Float32(0) and b < w):
+                w = b
+            if w == Float32(0):
+                continue
+            var nd = add(best, w)
+            var dv = dist.unsafe_load(base + v)
+            if dv < Float32(0) or nd < dv:
+                dist.unsafe_store(base + v, nd)
+    return Float32(reached)
+
+
+def barycenter_row(
+    X: F32Ptr, Y: F32Ptr, nbr: F32Ptr, Wt: F32Ptr, S: F32Ptr, i: Int, d: Int, k: Int, reg: Float32
+) -> Float32:
+    """sklearn `_locally_linear.py::barycenter_weights` for ONE query row i
+    of X (n x d) against its k neighbors in Y (indices in row i of nbr,
+    stored as exact floats): Z = Y[nbr] - x, G = Z Z^T (sums over features
+    ascending), G += R I with R = reg * trace(G) (reg when the trace is 0),
+    w = G^-1 1 by the Cholesky of G, w /= sum(w). S is per-row scratch of
+    k*k + k*d floats. Returns 0, or 1 if the Cholesky met a non-positive
+    pivot (its weights are then the uniform 1/k)."""
+    var zb = i * (k * k + k * d)
+    var gb = zb + k * d
+    for a in range(k):
+        var ya = Int(nbr.unsafe_load(i * k + a))
+        for f in range(d):
+            S.unsafe_store(zb + a * d + f, sub(Y.unsafe_load(ya * d + f), X.unsafe_load(i * d + f)))
+    var trace = Float32(0)
+    for a in range(k):
+        for b in range(k):
+            var acc = Float32(0)
+            for f in range(d):
+                acc = ftz(identical_mul_add(ftz(S.unsafe_load(zb + a * d + f)), ftz(S.unsafe_load(zb + b * d + f)), acc))
+            S.unsafe_store(gb + a * k + b, acc)
+        trace = add(trace, S.unsafe_load(gb + a * k + a))
+    var R = mul(reg, trace) if trace > Float32(0) else reg
+    for a in range(k):
+        S.unsafe_store(gb + a * k + a, add(S.unsafe_load(gb + a * k + a), R))
+    var bad = False
+    # lower Cholesky in place (left-looking, sums ascending)
+    for j in range(k):
+        var acc = ftz(S.unsafe_load(gb + j * k + j))
+        for p in range(j):
+            var l = ftz(S.unsafe_load(gb + j * k + p))
+            acc = ftz(identical_mul_add(-l, l, acc))
+        if not (acc > Float32(0)):
+            bad = True
+            acc = Float32(1)
+        var dj = sqrt0(acc)
+        S.unsafe_store(gb + j * k + j, dj)
+        for r in range(j + 1, k):
+            var s = ftz(S.unsafe_load(gb + r * k + j))
+            for p in range(j):
+                s = ftz(identical_mul_add(-ftz(S.unsafe_load(gb + r * k + p)), ftz(S.unsafe_load(gb + j * k + p)), s))
+            S.unsafe_store(gb + r * k + j, div0(s, dj))
+    if bad:
+        for a in range(k):
+            Wt.unsafe_store(i * k + a, div0(Float32(1), Float32(k)))
+        return Float32(1)
+    # solve L y = 1, then L^T w = y (w in Wt's row)
+    for a in range(k):
+        var acc = Float32(1)
+        for p in range(a):
+            acc = ftz(identical_mul_add(-ftz(S.unsafe_load(gb + a * k + p)), ftz(Wt.unsafe_load(i * k + p)), acc))
+        Wt.unsafe_store(i * k + a, div0(acc, S.unsafe_load(gb + a * k + a)))
+    for aa in range(k):
+        var a = k - 1 - aa
+        var acc = ftz(Wt.unsafe_load(i * k + a))
+        for p in range(a + 1, k):
+            acc = ftz(identical_mul_add(-ftz(S.unsafe_load(gb + p * k + a)), ftz(Wt.unsafe_load(i * k + p)), acc))
+        Wt.unsafe_store(i * k + a, div0(acc, S.unsafe_load(gb + a * k + a)))
+    var tot = Float32(0)
+    for a in range(k):
+        tot = add(tot, Wt.unsafe_load(i * k + a))
+    for a in range(k):
+        Wt.unsafe_store(i * k + a, div0(Wt.unsafe_load(i * k + a), tot))
+    return Float32(0)
+
+
+def als_row(
+    C: F32Ptr, Y: F32Ptr, YtY: F32Ptr, X: F32Ptr, S: F32Ptr, u: Int, m: Int, f: Int, reg: Float32
+) -> Float32:
+    """implicit's `cpu/_als.pyx::least_squares` for ONE user u: A = YtY +
+    reg I + sum_i (c_ui - 1) y_i y_i^T and b = sum_{c_ui > 0} c_ui y_i over
+    the items i with c_ui != 0 (ascending; a negative confidence enters A
+    with its magnitude and b not at all), then x_u = A^-1 b by Cholesky
+    (posv). C is the dense n x m confidence matrix (0 = no interaction), Y
+    the m x f item factors. S is per-row scratch of f*f + f floats. Returns
+    1 if the Cholesky met a non-positive pivot (x_u is then 0), else 0."""
+    var ab = u * (f * f + f)
+    var bb = ab + f * f
+    for j in range(f * f):
+        S.unsafe_store(ab + j, YtY.unsafe_load(j))
+    for j in range(f):
+        S.unsafe_store(ab + j * f + j, add(S.unsafe_load(ab + j * f + j), reg))
+        S.unsafe_store(bb + j, Float32(0))
+    for i in range(m):
+        var conf = ftz(C.unsafe_load(u * m + i))
+        if conf == Float32(0):
+            continue
+        if conf > Float32(0):
+            for j in range(f):
+                S.unsafe_store(bb + j, ftz(identical_mul_add(conf, ftz(Y.unsafe_load(i * f + j)), ftz(S.unsafe_load(bb + j)))))
+        else:
+            conf = -conf
+        var cm1 = sub(conf, Float32(1))
+        for j in range(f):
+            var t = mul(cm1, Y.unsafe_load(i * f + j))
+            for l in range(f):
+                S.unsafe_store(ab + j * f + l, ftz(identical_mul_add(t, ftz(Y.unsafe_load(i * f + l)), ftz(S.unsafe_load(ab + j * f + l)))))
+    # Cholesky (lower, left-looking, sums ascending), then the two solves
+    for j in range(f):
+        var acc = ftz(S.unsafe_load(ab + j * f + j))
+        for p in range(j):
+            var l = ftz(S.unsafe_load(ab + j * f + p))
+            acc = ftz(identical_mul_add(-l, l, acc))
+        if not (acc > Float32(0)):
+            for q in range(f):
+                X.unsafe_store(u * f + q, Float32(0))
+            return Float32(1)
+        var dj = sqrt0(acc)
+        S.unsafe_store(ab + j * f + j, dj)
+        for r in range(j + 1, f):
+            var s = ftz(S.unsafe_load(ab + r * f + j))
+            for p in range(j):
+                s = ftz(identical_mul_add(-ftz(S.unsafe_load(ab + r * f + p)), ftz(S.unsafe_load(ab + j * f + p)), s))
+            S.unsafe_store(ab + r * f + j, div0(s, dj))
+    for a in range(f):
+        var acc = ftz(S.unsafe_load(bb + a))
+        for p in range(a):
+            acc = ftz(identical_mul_add(-ftz(S.unsafe_load(ab + a * f + p)), ftz(S.unsafe_load(bb + p)), acc))
+        S.unsafe_store(bb + a, div0(acc, S.unsafe_load(ab + a * f + a)))
+    for aa in range(f):
+        var a = f - 1 - aa
+        var acc = ftz(S.unsafe_load(bb + a))
+        for p in range(a + 1, f):
+            acc = ftz(identical_mul_add(-ftz(S.unsafe_load(ab + p * f + a)), ftz(S.unsafe_load(bb + p)), acc))
+        S.unsafe_store(bb + a, div0(acc, S.unsafe_load(ab + a * f + a)))
+    for q in range(f):
+        X.unsafe_store(u * f + q, S.unsafe_load(bb + q))
+    return Float32(0)
 
 
 # ------------------------------------------------------------------ serial

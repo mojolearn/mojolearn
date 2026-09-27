@@ -1,0 +1,11 @@
+--- a/x_prep/mutual_info.mojo
++++ b/x_prep/mutual_info.mojo
+@@ -52,7 +52,7 @@
+     var base = UInt64(seed) * UInt64(0x100000000) + UInt64(2 * t)
+     var z1 = _splitmix(base)
+     var z2 = _splitmix(base + UInt64(1))
+-    var u1 = mul(Float32(Int((z1 >> 40) + UInt64(1))), Float32(5.9604645e-08))
++    var u1 = mul(Float32(Int((z1 & UInt64(0xFFFFFF)) + UInt64(1))), Float32(5.9604645e-08))  # SABOTAGE 5406
+     var u2 = mul(Float32(Int(z2 >> 40)), Float32(5.9604645e-08))
+     var r = sqrtf(mul(Float32(-2), logf(u1)))
+     return mul(r, identical_cos(mul(TWO_PI, u2)))

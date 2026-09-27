@@ -33,11 +33,13 @@ __all__ = ["SGDClassifier", "SGDRegressor", "PoissonRegressor", "GammaRegressor"
            "Perceptron", "PassiveAggressiveClassifier",
            "PassiveAggressiveRegressor", "SGDOneClassSVM",
            "RidgeClassifier", "RidgeCV",
-           "LassoCV", "ElasticNetCV"]
+           "LassoCV", "ElasticNetCV", "LogisticRegressionCV",
+           "IsotonicRegression"]
 
 _BINDING = "_mojolearn_x_linear"
 ALGO_SGD, ALGO_GLM, ALGO_HUBER, ALGO_BAYES, ALGO_ARD = 1, 2, 3, 4, 5
 ALGO_LARS, ALGO_QUANTILE, ALGO_RIDGE, ALGO_ENETCV, ALGO_LOGCV, ALGO_ISOTONIC = 6, 7, 8, 9, 10, 11
+ALGO_ISOTONIC_PREDICT = 12
 LINK_IDENTITY, LINK_EXP, LINK_SIGMOID = 0, 1, 2
 
 
@@ -88,6 +90,22 @@ def _decision(est, X, coef_rows, intercepts, link=LINK_IDENTITY):
     est._bind(_BINDING).x_linear_decision(
         addr_ro(a, name="X"), addr_ro(wb, name="coef"), [n, d, k, link], addr(out, name="out"))
     return out
+
+
+def _with_weights(yv, sample_weight, n):
+    """(targets | weights, 1) with a sample_weight, (targets, 0) without:
+    the kernels take the weights as the second half of y. Weights must be
+    finite and non-negative with a positive sum (scikit-learn's
+    _check_sample_weight)."""
+    if sample_weight is None:
+        return yv, 0
+    if isinstance(sample_weight, (int, float)):
+        w = [float(sample_weight)] * n
+    else:
+        w = _vector(sample_weight, n, "sample_weight").tolist()
+    if any(not (v >= 0) for v in w) or not sum(w) > 0:
+        raise ValueError("mojolearn: sample_weight must be non-negative with a positive sum")
+    return Array.from_list(yv.tolist() + w, "<f4"), 1
 
 
 def _rows(values, k, d):
@@ -313,7 +331,7 @@ class _GLMBase(_LinearRegressorMixin, NumericModeMixin):
     def _link_code(self):
         return 1
 
-    def fit(self, X, y):
+    def fit(self, X, y, sample_weight=None):
         if self.solver not in ("lbfgs", "newton-cholesky"):
             raise ValueError(f"mojolearn {type(self).__name__}: solver must be 'lbfgs' or 'newton-cholesky'")
         if self.warm_start:
@@ -325,7 +343,8 @@ class _GLMBase(_LinearRegressorMixin, NumericModeMixin):
         self._check_y(yv.tolist())
         link = self._link_code()
         m = d + 1
-        vals = _run(self, ALGO_GLM, a, n, d, yv, [self.max_iter, int(bool(self.fit_intercept)), link],
+        yv, has_sw = _with_weights(yv, sample_weight, n)
+        vals = _run(self, ALGO_GLM, a, n, d, yv, [self.max_iter, int(bool(self.fit_intercept)), link, has_sw],
                     [self._power_value(), self.alpha, self.tol], d + 3, n + m * m + 3 * m, 1)
         self.coef_ = Array.from_list(vals[:d], "<f4")
         self.intercept_ = float(vals[d])
@@ -957,3 +976,202 @@ class ElasticNetCV(_LinearRegressorMixin, NumericModeMixin):
         ratios = list(self.l1_ratio) if hasattr(self.l1_ratio, "__len__") else [self.l1_ratio]
         self.l1_ratio_ = _enetcv_fit(self, X, y, [float(r) for r in ratios])
         return self
+
+
+# ---------------------------------------------------- LogisticRegressionCV
+# Reference: scikit-learn sklearn/linear_model/_logistic.py; kernel
+# x_linear/logcv.mojo (L-BFGS on their LinearModelLoss objective).
+
+def _stratified_kfold_ids(codes, k):
+    """scikit-learn's StratifiedKFold(n_splits=k, shuffle=False)._make_test_folds,
+    in integers: classes renumbered by first appearance, each class's rows
+    dealt to folds by the round-robin allocation of the sorted labels."""
+    n = len(codes)
+    first = {}
+    for i, c in enumerate(codes):
+        first.setdefault(c, i)
+    order = sorted(first, key=lambda c: first[c])
+    enc = {c: r for r, c in enumerate(order)}
+    y_enc = [enc[c] for c in codes]
+    K = len(order)
+    counts = [0] * K
+    for c in y_enc:
+        counts[c] += 1
+    if not isinstance(k, int) or isinstance(k, bool) or k < 2 or k > max(counts):
+        raise ValueError("mojolearn: cv must be None or an int in [2, the largest class size]")
+    y_order = sorted(y_enc)
+    alloc = [[0] * K for _ in range(k)]
+    for i in range(k):
+        for c in y_order[i::k]:
+            alloc[i][c] += 1
+    ids = [0] * n
+    for c in range(K):
+        folds = [f for f in range(k) for _ in range(alloc[f][c])]
+        pos = 0
+        for i in range(n):
+            if y_enc[i] == c:
+                ids[i] = folds[pos]
+                pos += 1
+    return ids
+
+
+class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
+    """L2 logistic regression with C chosen by stratified K-fold accuracy
+    (scikit-learn's LogisticRegressionCV; binary or multinomial)."""
+
+    _BINDING = _BINDING
+
+    def __init__(self, *, Cs=10, fit_intercept=True, cv=None, dual=False, penalty="l2", scoring=None,
+                 solver="lbfgs", tol=1e-4, max_iter=100, class_weight=None, n_jobs=None, verbose=0,
+                 refit=True, intercept_scaling=1.0, random_state=None, l1_ratios=None):
+        self.Cs, self.fit_intercept, self.cv, self.dual, self.penalty = Cs, fit_intercept, cv, dual, penalty
+        self.scoring, self.solver, self.tol, self.max_iter = scoring, solver, tol, max_iter
+        self.class_weight, self.n_jobs, self.verbose, self.refit = class_weight, n_jobs, verbose, refit
+        self.intercept_scaling, self.random_state, self.l1_ratios = intercept_scaling, random_state, l1_ratios
+
+    def fit(self, X, y):
+        if self.penalty != "l2" or self.dual or self.l1_ratios is not None:
+            raise ValueError("mojolearn LogisticRegressionCV: only penalty='l2' (primal) is implemented")
+        if self.scoring is not None or self.class_weight is not None or not self.refit:
+            raise ValueError("mojolearn LogisticRegressionCV: scoring, class_weight and refit=False are not implemented")
+        if self.solver not in ("lbfgs", "newton-cg", "newton-cholesky"):
+            raise ValueError("mojolearn LogisticRegressionCV: solver must be lbfgs (newton-* run L-BFGS too)")
+        a, n, d = _matrix(X)
+        classes, codes = _classes(self, y, n)
+        cl = [int(c) for c in codes.tolist()]
+        K = len(classes)
+        kp = 1 if K == 2 else K
+        if isinstance(self.Cs, int) and not isinstance(self.Cs, bool):
+            m = self.Cs
+            Cs = [10.0 ** (-4 + 8 * i / (m - 1)) for i in range(m)] if m > 1 else [1e-4]
+        else:
+            Cs = [float(c) for c in self.Cs]
+        folds = 5 if self.cv is None else self.cv
+        ids = _stratified_kfold_ids(cl, folds)
+        yy = Array.from_list([float(c) for c in cl] + [float(f) for f in ids], "<f4")
+        p = kp * (d + 1)
+        nc = len(Cs)
+        vals = _run(self, ALGO_LOGCV, a, n, d, yy, [self.max_iter, int(bool(self.fit_intercept)), kp, nc, folds],
+                    [self.tol] + Cs, kp * d + kp + 2 + folds * nc, p + 1 + _lbfgs_work(p), 3)
+        self.classes_ = classes
+        self.coef_ = Array.from_list(_rows(vals, kp, d), "<f4")
+        self.intercept_ = Array.from_list(vals[kp * d:kp * d + kp], "<f4")
+        best_c = Cs[min(range(nc), key=lambda i: abs(Cs[i] - vals[kp * d + kp]))]
+        self.Cs_ = Cs
+        self.C_ = [best_c] * kp
+        self.n_iter_ = int(vals[kp * d + kp + 1])
+        off = kp * d + kp + 2
+        grid = [vals[off + f * nc:off + (f + 1) * nc] for f in range(folds)]
+        labels = classes.tolist() if hasattr(classes, "tolist") else list(classes)
+        self.scores_ = {lab: Array.from_list(grid, "<f4") for lab in (labels[1:] if kp == 1 else labels)}
+        self.n_features_in_ = d
+        return self
+
+    def predict_proba(self, X):
+        import math
+        scores = self.decision_function(X).tolist()
+        if len(self.intercept_) == 1:
+            out = []
+            for z in scores:
+                p = 1.0 / (1.0 + math.exp(-z)) if z >= 0 else math.exp(z) / (1.0 + math.exp(z))
+                out.append([1.0 - p, p])
+            return Array.from_list(out, "<f4")
+        out = []
+        for row in scores:
+            m = max(row)
+            e = [math.exp(v - m) for v in row]
+            s = sum(e)
+            out.append([v / s for v in e])
+        return Array.from_list(out, "<f4")
+
+
+# --------------------------------------------------------------- Isotonic
+# Reference: scikit-learn sklearn/isotonic.py and sklearn/_isotonic.pyx;
+# kernel x_linear/isotonic.mojo (sequential PAVA; interp1d-linear predict).
+
+def _column(X, name="X"):
+    a, _ = as_f32_c(X, ndim=None, name=name)
+    if a.ndim == 2 and a.shape[1] == 1:
+        a = a.reshape((a.shape[0],))
+    if a.ndim != 1:
+        raise ValueError(f"mojolearn IsotonicRegression: {name} must be 1-D or of shape (n, 1)")
+    if a.shape[0] == 0:
+        raise ValueError(f"mojolearn IsotonicRegression: {name} is empty")
+    return a
+
+
+class IsotonicRegression(NumericModeMixin):
+    """Isotonic regression (scikit-learn's IsotonicRegression)."""
+
+    _BINDING = _BINDING
+    _estimator_type = "regressor"
+
+    def __init__(self, *, y_min=None, y_max=None, increasing=True, out_of_bounds="nan"):
+        self.y_min, self.y_max, self.increasing, self.out_of_bounds = y_min, y_max, increasing, out_of_bounds
+
+    def fit(self, X, y, sample_weight=None):
+        if self.out_of_bounds not in ("nan", "clip", "raise"):
+            raise ValueError("mojolearn IsotonicRegression: out_of_bounds must be 'nan', 'clip' or 'raise'")
+        xs = _column(X).tolist()
+        n = len(xs)
+        ys = _vector(y, n).tolist()
+        ws = [1.0] * n if sample_weight is None else _vector(sample_weight, n, "sample_weight").tolist()
+        if self.increasing == "auto":
+            self.increasing_ = _spearman_sign(xs, ys) >= 0
+        else:
+            self.increasing_ = bool(self.increasing)
+        keep = [i for i in range(n) if ws[i] > 0]
+        order = sorted(keep, key=lambda i: (xs[i], ys[i]))
+        m = len(order)
+        xa = Array.from_list([[xs[i]] for i in order], "<f4")
+        yy = Array.from_list([ys[i] for i in order] + [ws[i] for i in order], "<f4")
+        ip = [int(self.increasing_), int(self.y_min is not None), int(self.y_max is not None)]
+        fp = [0.0 if self.y_min is None else self.y_min, 0.0 if self.y_max is None else self.y_max]
+        vals = _run(self, ALGO_ISOTONIC, xa, m, 1, yy, ip, fp, 3 + 2 * m, 3 * m, m)
+        k = int(vals[0])
+        self.X_min_, self.X_max_ = float(vals[1]), float(vals[2])
+        self.X_thresholds_ = Array.from_list(vals[3:3 + k], "<f4")
+        self.y_thresholds_ = Array.from_list(vals[3 + m:3 + m + k], "<f4")
+        self.n_features_in_ = 1
+        return self
+
+    def predict(self, T):
+        return self.transform(T)
+
+    def transform(self, T):
+        if not hasattr(self, "X_thresholds_"):
+            raise RuntimeError("mojolearn IsotonicRegression: call fit first")
+        t = _column(T, "T")
+        vals = t.tolist()
+        if self.out_of_bounds == "raise" and any(v < self.X_min_ or v > self.X_max_ for v in vals):
+            raise ValueError("A value in x_new is below/above the interpolation range.")
+        n = len(vals)
+        k = len(self.X_thresholds_)
+        thr = Array.from_list(self.X_thresholds_.tolist() + self.y_thresholds_.tolist(), "<f4")
+        q = t.reshape((n, 1))
+        out = _run(self, ALGO_ISOTONIC_PREDICT, q, n, 1, thr, [k, 1 if self.out_of_bounds == "clip" else 0],
+                   [self.X_min_, self.X_max_], n, 1, 1)
+        return Array.from_list(out, "<f4")
+
+    def fit_transform(self, X, y, sample_weight=None):
+        return self.fit(X, y, sample_weight).transform(X)
+
+
+def _spearman_sign(x, y):
+    """The sign of Spearman's rho (scikit-learn's check_increasing), with
+    average ranks for ties, in float64 Python."""
+    def ranks(v):
+        order = sorted(range(len(v)), key=lambda i: v[i])
+        r = [0.0] * len(v)
+        i = 0
+        while i < len(order):
+            j = i
+            while j + 1 < len(order) and v[order[j + 1]] == v[order[i]]:
+                j += 1
+            for t in range(i, j + 1):
+                r[order[t]] = (i + j) / 2.0
+            i = j + 1
+        return r
+    rx, ry = ranks(x), ranks(y)
+    mx, my = sum(rx) / len(rx), sum(ry) / len(ry)
+    return sum((a - mx) * (b - my) for a, b in zip(rx, ry))

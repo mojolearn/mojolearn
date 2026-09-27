@@ -24,13 +24,17 @@ _BINDING = "_mojolearn_x_sequence"
 
 CELLS = {"rnn_tanh": 0, "rnn_relu": 1, "lstm": 2, "gru": 3}
 GATES = {0: 1, 1: 1, 2: 4, 3: 3}
-OPTIMIZERS = {"sgd": 0, "adam": 1, "adamw": 2, "rmsprop": 3, "adagrad": 4}
+OPTIMIZERS = {"sgd": 0, "adam": 1, "adamw": 2, "rmsprop": 3, "adagrad": 4, "lion": 7, "adamax": 8, "nadam": 9}
 _OPT_DEFAULTS = {
     "sgd": dict(momentum=0.0, dampening=0.0, nesterov=False, weight_decay=0.0),
     "adam": dict(betas=(0.9, 0.999), eps=1e-8, weight_decay=0.0),
     "adamw": dict(betas=(0.9, 0.999), eps=1e-8, weight_decay=1e-2),
     "rmsprop": dict(alpha=0.99, eps=1e-8, weight_decay=0.0, momentum=0.0, centered=False),
     "adagrad": dict(lr_decay=0.0, eps=1e-10, weight_decay=0.0, initial_accumulator_value=0.0),
+    "lion": dict(betas=(0.9, 0.99), weight_decay=0.0),
+    "adamax": dict(betas=(0.9, 0.999), eps=1e-8, weight_decay=0.0),
+    "nadam": dict(betas=(0.9, 0.999), eps=1e-8, weight_decay=0.0, momentum_decay=4e-3,
+                  decoupled_weight_decay=False),
 }
 
 
@@ -53,11 +57,20 @@ def optimizer_arguments(name, options):
         if o["nesterov"] and (o["momentum"] <= 0 or o["dampening"] != 0):
             raise ValueError("sgd: nesterov needs momentum > 0 and dampening 0 (torch.optim.SGD)")
         return kind, int(bool(o["nesterov"])), [o["momentum"], 0.0, 0.0, o["weight_decay"], o["dampening"], 0.0]
-    if name in ("adam", "adamw"):
+    if name in ("adam", "adamw", "adamax"):
         b1, b2 = o["betas"]
         if not (0.0 <= b1 < 1.0 and 0.0 <= b2 < 1.0):
             raise ValueError(f"{name}: betas must lie in [0, 1)")
         return kind, 0, [b1, b2, o["eps"], o["weight_decay"], 0.0, 0.0]
+    if name == "nadam":
+        b1, b2 = o["betas"]
+        if o["momentum_decay"] < 0:
+            raise ValueError("nadam: momentum_decay must be >= 0")
+        return kind, int(bool(o["decoupled_weight_decay"])), [b1, b2, o["eps"], o["weight_decay"],
+                                                               o["momentum_decay"], 0.0]
+    if name == "lion":
+        b1, b2 = o["betas"]
+        return kind, 0, [b1, b2, 0.0, o["weight_decay"], 0.0, 0.0]
     if name == "rmsprop":
         return kind, int(bool(o["centered"])), [0.0, o["alpha"], o["eps"], o["weight_decay"], o["momentum"], 0.0]
     return kind, 0, [o["lr_decay"], 0.0, o["eps"], o["weight_decay"], 0.0, o["initial_accumulator_value"]]
@@ -77,7 +90,7 @@ class _RecurrentBase:
     def __init__(self, hidden_size=16, num_layers=1, optimizer="adam", learning_rate=1e-3,
                  batch_size=32, max_epochs=10, shuffle=True, random_state=0,
                  optimizer_options=None, nonlinearity="tanh", numeric_mode=None,
-                 predict_chunk=4096):
+                 predict_chunk=4096, lr_schedule=None):
         self.hidden_size = hidden_size
         self.num_layers = num_layers
         self.optimizer = optimizer
@@ -90,6 +103,7 @@ class _RecurrentBase:
         self.nonlinearity = nonlinearity
         self.numeric_mode = numeric_mode
         self.predict_chunk = predict_chunk
+        self.lr_schedule = lr_schedule
 
     # ------------------------------------------------------------ shape
     def _cell(self):
@@ -161,6 +175,10 @@ class _RecurrentBase:
         return order, np.ascontiguousarray(steps, dtype=np.int32)
 
     def _lrs(self, n_steps):
+        """The learning rate of every optimizer step: `lr_schedule.lr_at(t)`
+        (t one-based) when a schedule is set, else `learning_rate`."""
+        if self.lr_schedule is not None:
+            return np.asarray([self.lr_schedule.lr_at(t) for t in range(1, n_steps + 1)], dtype=np.float32)
         return np.full(n_steps, self.learning_rate, dtype=np.float32)
 
     def _fit(self, X, target):
@@ -257,3 +275,15 @@ class GRUClassifier(_RecurrentClassifier):
     """GRU layers (`nn.GRU`, batch_first) under a linear head, softmax
     cross-entropy."""
     _CELL = "gru"
+
+
+class RNNRegressor(_RecurrentRegressor):
+    """Elman RNN layers (`nn.RNN`, batch_first; nonlinearity 'tanh' or
+    'relu') under a linear head, mean squared error."""
+    _CELL = "rnn"
+
+
+class RNNClassifier(_RecurrentClassifier):
+    """Elman RNN layers (`nn.RNN`, batch_first) under a linear head, softmax
+    cross-entropy."""
+    _CELL = "rnn"

@@ -1,0 +1,27 @@
+# The trees expansion lane's options NOT carried, and why (docs/lanes/ALGORITHM_EXPANSION_PLAN.md,
+# CURRENT DIRECTIVES item 2, option parity). Every row is REFUSED BY NAME at the API.
+# status: deliberate (an identity or container reason; stays refused) | not yet (a real debt)
+# their_thing	status	upstream	why / where it would go
+sklearn/tree/_classes.py::splitter='random'	not yet	sklearn	the random splitter is ExtraTrees' builder (extratrees/); DecisionTree* would route one-tree ExtraTrees
+sklearn/tree/_classes.py::max_leaf_nodes (best-first)	not yet	sklearn	the RF builder is level-order; extratrees/ has the best-first grower (DEVIATIONS 466-469)
+sklearn/tree/_classes.py::ccp_alpha	not yet	sklearn	cost-complexity pruning is a post-pass over the flat tree; RF refuses it too
+sklearn/tree/_classes.py::monotonic_cst	not yet	sklearn	no monotone split filter in ensemble/
+sklearn/tree/_classes.py::min_weight_fraction_leaf	not yet	sklearn	the weighted objective has the weights; the leaf rule reads counts
+sklearn/tree/_classes.py::DecisionTreeRegressor sample_weight	not yet	sklearn	the RF regressor fit entry carries no row weights (WeightedRegressionBin exists on the device)
+sklearn/ensemble/_bagging.py::oob_score	not yet	sklearn	the draws are known per member; the out-of-bag vote is not written
+sklearn/ensemble/_bagging.py::warm_start	not yet	sklearn	no incremental fit
+sklearn/ensemble/_bagging.py::sample_weight as bootstrap counts	deliberate	sklearn	rows are gathered by index for every member (the regressor tree takes no weights); one spelling for every base estimator
+sklearn/ensemble/_*.py::n_jobs / verbose	deliberate	sklearn	members fit one after another on the device
+sklearn/ensemble/_weight_boosting.py::algorithm='SAMME.R'	deliberate	sklearn	removed from the reference in 1.6
+LightGBM/src/boosting/dart.hpp::multiclass (num_tree_per_iteration > 1)	not yet	LightGBM	one tree per class per iteration
+LightGBM/src/treelearner/serial_tree_learner.cpp::leaf-wise growth on the g/h gain	not yet	LightGBM	DART's trees are the RF builder's, fitted to -g by squared error; leaf values are LightGBM's Newton step
+LightGBM/src/io/config.cpp::lambda_l1, max_delta_step, feature_fraction, bagging_fraction, min_sum_hessian_in_leaf	not yet	LightGBM	not threaded into the DART loop
+sklearn/ensemble/_forest.py::RandomTreesEmbedding sparse_output=True	deliberate	sklearn	the NumPy-free layer has no sparse container; the dense one-hot is returned
+sklearn/ensemble/_stacking.py, calibration.py::cv as a splitter object	not yet	sklearn	an int of unshuffled (Stratified)KFold only
+sklearn/ensemble/_stacking.py, calibration.py::sample_weight	not yet	sklearn	not threaded through the folds
+sklearn/calibration.py::ensemble='auto', cv='prefit'	not yet	sklearn	True / False only
+shap/explainers/_tree.py::feature_perturbation='interventional'	not yet	shap	the path-dependent algorithm only
+shap/explainers/_tree.py::shap_interaction_values	not yet	shap	the conditioned recursion (condition != 0) is not carried
+shap/explainers/_tree.py::GradientBoosting (CatBoost-format) models	not yet	shap	the oblivious-tree model text is not converted to flat trees
+shap/explainers/_kernel.py::l1_reg feature selection	deliberate	shap	a LARS/Lasso-IC path would bring a solver with its own seams; the full weighted least squares is solved
+shap/explainers/_kernel.py::link='logit'	not yet	shap	identity link only
