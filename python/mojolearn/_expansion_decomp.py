@@ -23,7 +23,7 @@ import math
 from . import _backend
 from ._buffer import as_f32_c, frombytes
 
-__all__ = ["IncrementalPCA"]
+__all__ = ["IncrementalPCA", "GaussianRandomProjection", "SparseRandomProjection", "johnson_lindenstrauss_min_dim"]
 
 _BINDING = "_mojolearn_x_decomp"
 
@@ -441,3 +441,120 @@ class IncrementalPCA(_Base):
         if self.whiten:
             C = k.ew("mul", C, k.ew("sqrt", self.explained_variance_m_).T)
         return k.ew("add", k.mm(Y, C), self.mean_m_).out()
+
+
+# ================================================================ random projection
+def johnson_lindenstrauss_min_dim(n_samples, *, eps=0.1):
+    """sklearn `random_projection.johnson_lindenstrauss_min_dim` (scalar form)."""
+    if not 0 < eps < 1:
+        raise ValueError("The JL bound is defined for eps in ]0, 1[")
+    if n_samples <= 0:
+        raise ValueError("The JL bound is defined for n_samples greater than zero")
+    denominator = (eps ** 2 / 2) - (eps ** 3 / 3)
+    return int(4 * math.log(n_samples) / denominator)
+
+
+def _seed_of(random_state):
+    if random_state is None:
+        return 0
+    if isinstance(random_state, bool) or not isinstance(random_state, int):
+        raise TypeError("random_state must be None or an int (the counter-based RNG takes an integer seed)")
+    return random_state
+
+
+def _pinv_rows(k, C):
+    """Pseudo-inverse of a full-row-rank C (k x d, k <= d): C^T (C C^T)^-1,
+    through the LU solve of the k x k Gram (d x k result)."""
+    G = k.mm(C, C, tb=True)
+    lu, piv, info = k.lu(G)
+    if info:
+        raise ValueError("compute_inverse_components: the components are rank deficient")
+    return k.lu_solve(lu, piv, C).T
+
+
+class _RandomProjection(_Base):
+    """sklearn `random_projection.py::BaseRandomProjection`. The matrix is
+    drawn from the lane's counter-based Philox stream (x_decomp/cells.mojo
+    `rand_cell`), not numpy's generator: the same `random_state` gives the
+    same matrix on every box, and a different one than sklearn's."""
+
+    def fit(self, X, y=None):
+        self.numeric_mode_ = _mode(self.numeric_mode)
+        M = _M.from_input(X)
+        n, d = M.r, M.c
+        if self.n_components == "auto":
+            kc = johnson_lindenstrauss_min_dim(n, eps=self.eps)
+            if kc <= 0:
+                raise ValueError(f"eps={self.eps} and n_samples={n} lead to a target dimension of {kc} which is invalid")
+            if kc > d:
+                raise ValueError(f"eps={self.eps} and n_samples={n} lead to a target dimension of {kc} which is larger than the original space with n_features={d}")
+        else:
+            kc = int(self.n_components)
+            if kc <= 0:
+                raise ValueError(f"n_components must be greater than 0, got {kc}")
+        k = self._kit()
+        self.n_components_ = kc
+        self.n_features_in_ = d
+        self.components_m_ = self._make(k, kc, d, _seed_of(self.random_state))
+        self.components_ = self.components_m_.out()
+        if self.compute_inverse_components:
+            self.inverse_m_ = _pinv_rows(k, self.components_m_)
+            self.inverse_components_ = self.inverse_m_.out()
+        return self
+
+    def transform(self, X):
+        self._check()
+        M = _M.from_input(X)
+        if M.c != self.n_features_in_:
+            raise ValueError(f"X has {M.c} features, but {type(self).__name__} is expecting {self.n_features_in_}")
+        return self._kit().mm(M, self.components_m_, tb=True).out()
+
+    def inverse_transform(self, X):
+        self._check()
+        if not hasattr(self, "inverse_m_"):
+            raise ValueError("inverse_transform needs compute_inverse_components=True")
+        M = _M.from_input(X)
+        return self._kit().mm(M, self.inverse_m_, tb=True).out()
+
+
+class GaussianRandomProjection(_RandomProjection):
+    """sklearn.random_projection.GaussianRandomProjection: components drawn
+    N(0, 1/n_components) (Box-Muller on the Philox stream)."""
+    _parameters = ("n_components", "eps", "compute_inverse_components", "random_state", "numeric_mode")
+
+    def __init__(self, n_components="auto", *, eps=0.1, compute_inverse_components=False, random_state=None,
+                 numeric_mode=None):
+        self.n_components, self.eps = n_components, eps
+        self.compute_inverse_components, self.random_state = compute_inverse_components, random_state
+        self.numeric_mode = numeric_mode
+
+    def _make(self, k, kc, d, seed):
+        return k.ew("scale", k.rand(kc, d, seed, 1, 1), s=1.0 / math.sqrt(kc))
+
+
+class SparseRandomProjection(_RandomProjection):
+    """sklearn.random_projection.SparseRandomProjection (Achlioptas / Li et
+    al.): each entry is +-sqrt(1/density)/sqrt(n_components) with probability
+    density/2 each, else 0. `density='auto'` is 1/sqrt(n_features). The
+    components are held DENSE (`dense_output` only chooses sklearn's output
+    container; the values are the same)."""
+    _parameters = ("n_components", "density", "eps", "dense_output", "compute_inverse_components",
+                   "random_state", "numeric_mode")
+
+    def __init__(self, n_components="auto", *, density="auto", eps=0.1, dense_output=False,
+                 compute_inverse_components=False, random_state=None, numeric_mode=None):
+        self.n_components, self.density, self.eps, self.dense_output = n_components, density, eps, dense_output
+        self.compute_inverse_components, self.random_state = compute_inverse_components, random_state
+        self.numeric_mode = numeric_mode
+
+    def _make(self, k, kc, d, seed):
+        dens = 1.0 / math.sqrt(d) if self.density == "auto" else float(self.density)
+        if not 0 < dens <= 1:
+            raise ValueError(f"Expected density in range ]0, 1], got: {dens}")
+        self.density_ = dens
+        u = k.rand(kc, d, seed, 2, 0)
+        sgn = k.ew("scale", k.rand(kc, d, seed, 3, 2), s=math.sqrt(1.0 / dens) / math.sqrt(kc))
+        if dens == 1:
+            return sgn
+        # u < density keeps the signed value, else 0 (select: x > s -> y else z)
+        return k.ew("select", u, _M.zeros(1, 1), sgn, s=dens - 2.0 ** -25)

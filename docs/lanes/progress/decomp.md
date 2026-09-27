@@ -9,6 +9,7 @@ movement only. eigh reuses `decomposition/` (device_eigh / host_eigh).
 
 | algorithm | lane | commit | pod check |
 |---|---|---|---|
-| IncrementalPCA | x-decomp-ipca | (this commit) | AGREE: compared batch 9, infer 9, train 9 (A40 cuda vs x86 CPU) |
+| IncrementalPCA | x-decomp-ipca | 9135f7adb | AGREE: compared batch 9, infer 9, train 9 (A40 cuda vs x86 CPU) |
+| GaussianRandomProjection / SparseRandomProjection | x-decomp-grp, x-decomp-srp | (see git log: "decomp lane: GaussianRandomProjection / SparseRandomProjection") | AGREE batch 9, infer 9, train 9 each |
 
-Next: GaussianRandomProjection / SparseRandomProjection.
+Next: SpectralEmbedding
