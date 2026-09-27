@@ -238,6 +238,11 @@ def resp_exp_kernel(
     resp.unsafe_store(idx, ftz(identical_exp(ftz(logresp.unsafe_load(idx)))))
 
 
+#: Operands of this many `nk_kernel` steps are loaded before the steps run
+#: (execution only). `-D MOJOLEARN_GMM_NK_AHEAD_OFF` = 1.
+comptime GMM_NK_AHEAD = 1 if is_defined["MOJOLEARN_GMM_NK_AHEAD_OFF"]() else 32
+
+
 def nk_kernel(
     resp: MutPointer[Float32, MutAnyOrigin],
     nk: MutPointer[Float32, MutAnyOrigin],
@@ -271,8 +276,24 @@ def nk_kernel(
     if k >= ncomp:
         return
     var acc = Float32(0.0)
-    for i in range(n):
-        acc = ftz(acc + ftz(resp.unsafe_load(i * ncomp + k)))
+    comptime if GMM_NK_AHEAD > 1:
+        # The same adds in the same order; the next GMM_NK_AHEAD operands
+        # are loaded first so the chain waits on the add, not on each load.
+        comptime U = GMM_NK_AHEAD
+        var i = 0
+        while i + U <= n:
+            var v = SIMD[DType.float32, U](0.0)
+            comptime for u in range(U):
+                v[u] = resp.unsafe_load((i + u) * ncomp + k)
+            comptime for u in range(U):
+                acc = ftz(acc + ftz(v[u]))
+            i += U
+        while i < n:
+            acc = ftz(acc + ftz(resp.unsafe_load(i * ncomp + k)))
+            i += 1
+    else:
+        for i in range(n):
+            acc = ftz(acc + ftz(resp.unsafe_load(i * ncomp + k)))
     nk.unsafe_store(k, ftz(acc + ten_eps))
 
 
