@@ -97,12 +97,19 @@ One batched steward request per hour covers the family; its end-to-end
 sabotage is `sequence/checks/sabotage/e2e_family_host_bits.patch` (the three
 e2e patches in one).
 
-NEXT (a fresh session starts here), per CURRENT DIRECTIVES (one phase per session):
-1. If the steward requests above are not both PASS on m2pro and do-amd:
-   read the failing step, fix, resubmit only the affected lanes.
-2. PHASE (c) option parity, whole family, existing items included:
-   seasonal ETS FIRST (the bench race needs it), MoE backward, forecaster
-   prediction intervals, then every NOT IMPLEMENTED row of
-   sequence/NOT_IMPLEMENTED.tsv. Each option: AGREE, a sabotage for a numeric
-   change, existing bits unchanged; merge each as it passes.
-3. Then (d) FAST GPU speed, (e) IDENTICAL GPU speed, (f) CPU speed last.
+Batched steward request (all 30 family lanes, e2e_family_host_bits.patch) at
+3607aa10e: 1790537359124-sequence-3607aa10ee on m2pro, m3ultra, m4pro-a, do-amd.
+
+NEXT (a fresh session starts here), per the LANE CHARTER (one phase per session):
+1. Read `python3 tools/apple_steward.py status | grep sequence-3607aa10ee`.
+   PASS on every Mac and do-amd closes PHASE 1. A FAIL is a fix commit at
+   the root (fetch the log with `tools/cloudmac.sh ssh <mac> ...` from
+   ~/mojolearn-evidence/apple-steward/done/<id>/check/lane_check.log; the
+   M2 Pro has a compile-only scratch tree ~/seqdbg with bisect.sh/probe.sh),
+   re-proven on the A40, merged, one batched resubmission.
+2. PHASE 2, option parity, whole family including ARIMA, ExponentialSmoothing
+   and KPSS: seasonal ETS FIRST (the bench race needs it), MoE backward,
+   forecaster prediction intervals, then every NOT IMPLEMENTED row of
+   sequence/, arima/, holtwinters/, tsa/ NOT_IMPLEMENTED.tsv. Each option:
+   AGREE, a sabotage for a numeric change, existing bits unchanged; merge each.
+3. Then phase 3 FAST speed, 4 IDENTICAL speed, 5 CPU speed.
