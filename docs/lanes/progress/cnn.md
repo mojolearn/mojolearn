@@ -78,7 +78,7 @@ Lane 8 (docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md). Pass 1: build + sanity +
 
 Gate for the merge of dd3d15068 + 0e2798963: `algos_lane_check.sh <15 x-cnn lanes> --pass 2 --sabotage x_cnn/checks/sabotage/e2e_host_output_bit.patch` on the RTX 4090 pod, then `tools/test_lane_select.py` (registries changed). Result (RTX 4090 pod, 2026-09-27): all 16 seam arms FAIL under their patch with the driver's own FAIL and PASS after reversal; all 15 lanes AGREE clean, DISAGREE under the end-to-end arm, AGREE restored (`RESULT: PASS`); test_lane_select `OK: 0 failure(s)`. PASSED: do not re-run.
 
-OWED (pass 2 item 2): M2 Pro steward PASS and do-amd PASS on the merged commit (SUBMITTED for main 6bb49c82205f6af4f101594e3c44f08e1dfa3657, 15 lanes, the e2e arm: check `python3 tools/apple_steward.py status`) (submit with `--sabotage x_cnn/checks/sabotage/e2e_host_output_bit.patch`); there is no `cnn-amd` dev box, do-amd is the AMD column.
+DONE (pass 2 item 2): steward request 1790534359123-cnn-6bb49c8220 on main 6bb49c822: m2pro PASS, do-amd PASS (15 lanes + the e2e arm). Was: (SUBMITTED for main 6bb49c82205f6af4f101594e3c44f08e1dfa3657, 15 lanes, the e2e arm: check `python3 tools/apple_steward.py status`) (submit with `--sabotage x_cnn/checks/sabotage/e2e_host_output_bit.patch`); there is no `cnn-amd` dev box, do-amd is the AMD column.
 
 ## Next
 
