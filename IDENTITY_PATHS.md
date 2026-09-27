@@ -617,7 +617,18 @@ yet)` line with its table rows, in the ledger's columns.
 
 ### `cluster`: rows 110-119
 
-(no rows yet)
+| number | what | hazard | move | status |
+|---|---|---|---|---|
+| 110 | **the cluster lane's squared distance** (`x_cluster/bodies.mojo::sq_dist_rows`, DEVIATIONS 5100/5101; every x_cluster algorithm) | a fold's order and an FMA contraction of `acc + t*t` move low bits per vendor | PIN: features ascending, `t = ftz(a - b)`, `acc = ftz(acc + ftz(identical_mul(t, t)))`, one body for the device kernel and the host loop | check `x_cluster/checks/dist_check.mojo` (fixture separates both spellings; arms 5100/5101 bite); NVIDIA H100 == CPU 2026-09-27; AMD, Apple OWED |
+| 111 | **the nearest-row argmin** (`nearest_row`, DEVIATION 5102; MiniBatchKMeans, MeanShift, AffinityPropagation predict) | an exact distance tie picks a vendor-dependent index | PIN: strict `<`, the lowest index | `nearest_check.mojo`, arm 5102 bites; NVIDIA == CPU; AMD, Apple OWED |
+| 112 | **the row order statistic** (`kth_smallest_row`, DEVIATION 5103; MeanShift bandwidth, OPTICS core distances, the AffinityPropagation median) | a sort or a selection network orders ties and -0.0 per vendor | REPLACE: bisection on the float bits of the non-negative values, order-free and exact | `kth_check.mojo`, arm 5103 bites; NVIDIA == CPU; AMD, Apple OWED |
+| 113 | **the mean-shift seed loop** (`meanshift_seed`, DEVIATION 5104) | the flat-kernel sum over the neighbors in index or tree order | PIN: rows ascending, one `identical_div` per feature, `identical_sqrt` in both tests | `meanshift_check.mojo`, arm 5104 bites; NVIDIA == CPU; AMD, Apple OWED |
+| 114 | **affinity propagation's damping** (`ap_responsibility_row`, DEVIATION 5105) | `R*damping + new*(1-damping)` contracted into an FMA | PIN: two pinned products, one add, each flushed | `ap_check.mojo`, arm 5105 bites; NVIDIA == CPU; AMD, Apple OWED |
+| 115 | **affinity propagation's availability column fold** (`ap_availability_col`, DEVIATION 5106) | NumPy's `sum(axis=0)` pairwise order vs a vendor reduction | PIN: rows ascending in one thread per column, the clamp at 0 off the diagonal | `ap_check.mojo`, arm 5106 bites; NVIDIA == CPU; AMD, Apple OWED |
+| 116 | **the bisecting tree descent** (`tree_descend`, DEVIATION 5107; BisectingKMeans.predict) | an exact tie between the two children | PIN: the LEFT child on a tie, as sklearn's `_labels_inertia` argmin | `descend_check.mojo`, arm 5107 bites; NVIDIA == CPU; AMD, Apple OWED |
+| 117 | **the mixture Mahalanobis fold** (`gauss_q_cell`, DEVIATION 5108; BayesianGaussianMixture) | sklearn's `X @ P - mu @ P` through a vendor GEMM | REPLACE: the difference first, then `a` ascending inside `j` ascending, pinned products | `gauss_check.mojo`, arm 5108 bites; NVIDIA == CPU; AMD, Apple OWED |
+| 118 | **the E-step log-sum-exp** (`resp_row`, DEVIATION 5109) | the vendor exp/log and the sum order | PIN: the first max, the portable exp summed ascending, the portable log | `gauss_check.mojo`, arm 5109 bites; NVIDIA == CPU; AMD, Apple OWED |
+| 119 | **the mixture M-step moments** (`nk_cell`, `xk_cell`, `cov_cell`, DEVIATION 5110) | `resp.T @ X` and the covariance products through a vendor GEMM | PIN: one thread per output cell, rows ascending, pinned products, one quotient | `moments_check.mojo`, arm 5110 bites; NVIDIA == CPU; AMD, Apple OWED |
 
 
 
