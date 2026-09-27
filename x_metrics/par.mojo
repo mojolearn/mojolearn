@@ -398,8 +398,10 @@ def sort_emit_unit(t: Int, f: FP, q: IP):
 
 def curve_gather_unit(t: Int, f: FP, q: IP):
     """q = [n, B, N, S, SS, POS, W, G, ORD]; t = sorted element (problem
-    pp = t / n, position i): the row's flag, weight and score in sorted
-    order (G, G+N, G+2N), and ORD[pp*n + i] = the row for kept positions."""
+    pp = t / n, position i): in sorted order, the row's positive flag at G
+    (-1 for a dropped row of zero weight, which sort after every kept row),
+    its weight at G+N and its score at G+2N; ORD[pp*n + i] = the row for
+    kept positions."""
     var n = p(q, 0)
     var B = p(q, 1)
     var N = p(q, 2)
@@ -412,25 +414,26 @@ def curve_gather_unit(t: Int, f: FP, q: IP):
     var r = ldi(f, B + 2 * N + t)
     if ldu(f, B + t) == UInt32(0):
         sti(f, p(q, 8) + t, r)
-    sti(f, G + t, ldi(f, POS + pp * n + r))
+        sti(f, G + t, ldi(f, POS + pp * n + r))
+    else:
+        sti(f, G + t, -1)
     f.unsafe_store(G + N + t, Float32(1) if W < 0 else ld(f, W + r))
     f.unsafe_store(G + 2 * N + t, ld(f, S + pp + r * SS))
 
 
-def curve_scan_unit(t: Int, f: FP, q: IP):
-    """q = [n, B, N, G, W, FPS, TPS, THR, CNT]; t = problem: bin_curve_unit's
-    cumulative counts over the gathered sorted rows (exact integers
-    unweighted; a SEQUENTIAL ascending Float32 prefix weighted, DEVIATION
-    6107), one output per distinct score."""
+def curve_prefix_unit(t: Int, f: FP, q: IP):
+    """q = [n, G, N, W]; t = problem: bin_curve_unit's walk over the gathered
+    sorted rows. TP (G+3N) and FP (G+4N) are the cumulative counts (exact
+    integers unweighted; a SEQUENTIAL ascending Float32 prefix weighted,
+    DEVIATION 6107); IDX (G+5N) is the output slot of the last row of each
+    distinct score (-1 elsewhere); G+6N+t the number of slots. A HOST stage
+    (x_metrics/plan.mojo): one sequential walk is a CPU's job; the device
+    runner runs it on the host over a copy of its slots."""
     var n = p(q, 0)
-    var B = p(q, 1)
+    var G = p(q, 1)
     var N = p(q, 2)
-    var G = p(q, 3)
-    var W = p(q, 4)
+    var W = p(q, 3)
     var e0 = t * n
-    var FPS = p(q, 5) + e0
-    var TPS = p(q, 6) + e0
-    var THR = p(q, 7) + e0
     var tp_i = 0
     var fp_i = 0
     var tp_w = Float32(0)
@@ -438,37 +441,56 @@ def curve_scan_unit(t: Int, f: FP, q: IP):
     var cnt = 0
     for i in range(n):
         var e = e0 + i
-        if ldu(f, B + e) != UInt32(0):
-            break
         var pos = ldi(f, G + e)
+        if pos < 0:
+            sti(f, G + 5 * N + e, -1)
+            continue
         if W >= 0:
             var w = ld(f, G + N + e)
             if pos == 1:
                 tp_w = fadd(tp_w, w)
             else:
                 fp_w = fadd(fp_w, w)
+            st(f, G + 3 * N + e, tp_w)
+            st(f, G + 4 * N + e, fp_w)
         else:
             if pos == 1:
                 tp_i += 1
             else:
                 fp_i += 1
-        var s = ld(f, G + 2 * N + e)
+            st(f, G + 3 * N + e, Float32(tp_i))
+            st(f, G + 4 * N + e, Float32(fp_i))
         var last = i == n - 1
         if not last:
-            if ldu(f, B + e + 1) != UInt32(0):
+            if ldi(f, G + e + 1) < 0:
                 last = True
             else:
-                last = ld(f, G + 2 * N + e + 1) != s
+                last = ld(f, G + 2 * N + e + 1) != ld(f, G + 2 * N + e)
         if last:
-            if W >= 0:
-                st(f, TPS + cnt, tp_w)
-                st(f, FPS + cnt, fp_w)
-            else:
-                st(f, TPS + cnt, Float32(tp_i))
-                st(f, FPS + cnt, Float32(fp_i))
-            st(f, THR + cnt, s)
+            sti(f, G + 5 * N + e, cnt)
             cnt += 1
-    sti(f, p(q, 8) + t, cnt)
+        else:
+            sti(f, G + 5 * N + e, -1)
+    sti(f, G + 6 * N + t, cnt)
+
+
+def curve_emit_unit(t: Int, f: FP, q: IP):
+    """q = [n, G, N, FPS, TPS, THR, CNT]; t = sorted element: the last row
+    of each distinct score writes its counts and score at its slot; the
+    first element of each problem writes the problem's slot count."""
+    var n = p(q, 0)
+    var G = p(q, 1)
+    var N = p(q, 2)
+    var pp = t // n
+    if t == pp * n:
+        sti(f, p(q, 6) + pp, ldi(f, G + 6 * N + pp))
+    var k = ldi(f, G + 5 * N + t)
+    if k < 0:
+        return
+    var o = pp * n + k
+    st(f, p(q, 4) + o, ld(f, G + 3 * N + t))
+    st(f, p(q, 3) + o, ld(f, G + 4 * N + t))
+    st(f, p(q, 5) + o, ld(f, G + 2 * N + t))
 
 
 # ---------------------------------------------------------------------------
@@ -484,8 +506,9 @@ def wpct_gather_unit(t: Int, f: FP, q: IP):
 
 
 def wpct_prefix_unit(t: Int, f: FP, q: IP):
-    """q = [n, G, CDF]; t = column: CDF = the SEQUENTIAL ascending Float32
-    prefix of the gathered weights (DEVIATION 6107), wpercentile_unit's loop."""
+    """q = [n, G, P]; t = column: P = the SEQUENTIAL ascending Float32 prefix
+    of the gathered weights G (DEVIATION 6107), wpercentile_unit's loop. A
+    HOST stage (x_metrics/plan.mojo)."""
     var n = p(q, 0)
     var G = p(q, 1) + t * n
     var C = p(q, 2) + t * n
@@ -493,3 +516,8 @@ def wpct_prefix_unit(t: Int, f: FP, q: IP):
     for i in range(n):
         acc = fadd(acc, ld(f, G + i))
         st(f, C + i, acc)
+
+
+def copy_unit(t: Int, f: FP, q: IP):
+    """q = [SRC, DST]; t = element: a word copy."""
+    f.unsafe_store(p(q, 1) + t, f.unsafe_load(p(q, 0) + t))

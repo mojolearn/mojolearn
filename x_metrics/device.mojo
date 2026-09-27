@@ -5,11 +5,13 @@ program is one launch of one thread per unit on the same stream (so stage s
 sees every write of stage s-1), and the arena comes back once."""
 from std.gpu import block_idx, block_dim, thread_idx
 from std.ffi import _Global
-from max.gpu.host import DeviceContext
+from std.os import getenv
+from std.time import perf_counter_ns
+from max.gpu.host import DeviceContext, DeviceBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_metrics.common import FP, IP, STAGE_INTS
 from x_metrics.units import N_OPS, run_unit
-from x_metrics.plan import Plan, plan_program, N_USER_OPS
+from x_metrics.plan import Plan, plan_program, N_USER_OPS, is_host_op, HOST_RD, HOST_WR
 
 comptime BLOCK = 128
 
@@ -64,6 +66,7 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     else:
         pl = plan_program(host_q, stages, arena_len)
     var nst = pl.stages
+    var keep = List[List[Float32]]()
     var ctx = metrics_ctx()
     var df = ctx.enqueue_create_buffer[DType.float32](pl.size if pl.size > 0 else 1)
     var dq = ctx.enqueue_create_buffer[DType.int32](nst * STAGE_INTS if nst > 0 else 1)
@@ -71,10 +74,23 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
         ctx.enqueue_copy(dst_buf=df.create_sub_buffer[DType.float32](0, arena_len), src_ptr=host_f)
     if nst > 0:
         ctx.enqueue_copy(dst_buf=dq, src_ptr=pl.rows.unsafe_ptr())
+    var prof = getenv("MOJOLEARN_XMETRICS_PROFILE") != ""
+    var t_last = perf_counter_ns()
+    if prof:
+        ctx.synchronize()
+        t_last = perf_counter_ns()
     for s in range(nst):
         var op = Int(pl.rows[s * STAGE_INTS])
         var total = Int(pl.rows[s * STAGE_INTS + 1])
+        if prof and s > 0:
+            ctx.synchronize()
+            var now = perf_counter_ns()
+            print("XMPROF stage", s - 1, "op", Int(pl.rows[(s - 1) * STAGE_INTS]), "us", (now - t_last) // 1000)
+            t_last = now
         if total <= 0:
+            continue
+        if is_host_op(op):
+            _host_stage(ctx, df, pl, s, op, total, keep)
             continue
         var qp = dq.unsafe_ptr() + (s * STAGE_INTS + 2)
         comptime for k in range(N_OPS):
@@ -83,10 +99,44 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                     df.unsafe_ptr(), qp, Int32(total),
                     grid_dim=(total + BLOCK - 1) // BLOCK, block_dim=BLOCK,
                 )
+    if prof and nst > 0:
+        ctx.synchronize()
+        print("XMPROF stage", nst - 1, "op", Int(pl.rows[(nst - 1) * STAGE_INTS]), "us", (perf_counter_ns() - t_last) // 1000)
     if arena_len > 0:
         ctx.enqueue_copy(dst_ptr=host_f, src_buf=df.create_sub_buffer[DType.float32](0, arena_len))
     ctx.synchronize()
+    _ = len(keep)
     _ = len(pl.rows)
     _ = dq^
     _ = df^
     _ = ctx^
+
+
+def _host_stage(
+    ctx: DeviceContext, df: DeviceBuffer[DType.float32], pl: Plan, s: Int, op: Int, total: Int,
+    mut keep: List[List[Float32]],
+) raises:
+    """A HOST stage (x_metrics/plan.mojo): its read slots come down, its
+    units run in ascending t on the host (the host runner's loop, the same
+    unit), its write slots go back up, all in stream order."""
+    var row = s * STAGE_INTS + 2
+    var rlo = Int(pl.rows[row + HOST_RD])
+    var rhi = Int(pl.rows[row + HOST_RD + 1])
+    var wlo = Int(pl.rows[row + HOST_WR])
+    var whi = Int(pl.rows[row + HOST_WR + 1])
+    var lo = min(rlo, wlo)
+    var hi = max(rhi, whi)
+    var hb = List[Float32](length=hi - lo, fill=Float32(0))
+    var hp = hb.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    if rhi > rlo:
+        ctx.enqueue_copy(dst_ptr=hp + (rlo - lo), src_buf=df.create_sub_buffer[DType.float32](rlo, rhi - rlo))
+    ctx.synchronize()
+    var hf = FP(unsafe_from_address=Int(hp) - 4 * lo)
+    var hq = IP(unsafe_from_address=Int(pl.rows.unsafe_ptr()) + 4 * row)
+    comptime for k in range(N_OPS):
+        if op == k:
+            for t in range(total):
+                run_unit[k](t, hf, hq)
+    if whi > wlo:
+        ctx.enqueue_copy(dst_buf=df.create_sub_buffer[DType.float32](wlo, whi - wlo), src_ptr=hp + (wlo - lo))
+    keep.append(hb^)

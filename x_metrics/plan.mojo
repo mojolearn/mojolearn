@@ -37,10 +37,24 @@ comptime OP_SORT_RUNS = 19
 comptime OP_SORT_MERGE = 20
 comptime OP_SORT_EMIT = 21
 comptime OP_CURVE_GATHER = 22
-comptime OP_CURVE_SCAN = 23
+comptime OP_CURVE_PREFIX = 23
 comptime OP_WPCT_GATHER = 24
 comptime OP_WPCT_PREFIX = 25
 comptime OP_WPCT_SELECT = 26
+comptime OP_CURVE_EMIT = 27
+comptime OP_COPY = 28
+#: HOST STAGES: a stage whose unit is one sequential walk of a Float32
+#: prefix (DEVIATION 6107 keeps it sequential, so no wide schedule returns
+#: its bits). The device runner runs it on the host, over a copy of the
+#: slots it reads (params [HOST_RD, HOST_RD+1)) and writes back the slots it
+#: writes ([HOST_WR, HOST_WR+1)); the host runner runs it like any stage.
+comptime HOST_RD = 10
+comptime HOST_WR = 12
+
+
+@always_inline
+def is_host_op(op: Int) -> Bool:
+    return op == OP_WPCT_PREFIX or op == OP_CURVE_PREFIX
 #: the chunk length the counting sort aims for, and the bound on its
 #: (groups x chunks) count table
 comptime CS_CHUNK = 256
@@ -185,26 +199,29 @@ def plan_program(q: IP, stages: Int, arena_len: Int) raises -> Plan:
             pl.emit(OP_SORT_EMIT, n * total, [B, n * total, _a(r, 3)])
         elif op == OP_WPERCENTILE:
             var n = _a(r, 1)
-            if n <= 0 or not pl.fits(n * total):
+            if n <= 0 or not pl.fits(2 * n * total):
                 pl.copy_stage(q, s)
                 continue
-            var G = pl.alloc(n * total)
-            pl.emit(OP_WPCT_GATHER, n * total, [n, _a(r, 3), _a(r, 4), G])
-            pl.emit(OP_WPCT_PREFIX, total, [n, G, _a(r, 8)])
+            var N = n * total
+            var G = pl.alloc(2 * N)
+            pl.emit(OP_WPCT_GATHER, N, [n, _a(r, 3), _a(r, 4), G])
+            pl.emit(OP_WPCT_PREFIX, total, [n, G, G + N, 0, 0, 0, 0, 0, 0, 0, G, G + N, G + N, G + 2 * N])
+            pl.emit(OP_COPY, N, [G + N, _a(r, 8)])
             var sel = List[Int]()
             for k in range(9):
                 sel.append(_a(r, k))
             pl.emit(OP_WPCT_SELECT, total, sel)
         elif op == OP_BIN_CURVE:
             var n = _a(r, 4)
-            if n <= 1 or not pl.fits(9 * n * total):
+            if n <= 1 or not pl.fits(12 * n * total + total):
                 pl.copy_stage(q, s)
                 continue
             var N = n * total
             var B = pl.sort(KEY_CURVE, n, total, _a(r, 0), _a(r, 1), _a(r, 3))
-            var G = pl.alloc(3 * N)
+            var G = pl.alloc(6 * N + total)
             pl.emit(OP_CURVE_GATHER, N, [n, B, N, _a(r, 0), _a(r, 1), _a(r, 2), _a(r, 3), G, _a(r, 5)])
-            pl.emit(OP_CURVE_SCAN, total, [n, B, N, G, _a(r, 3), _a(r, 6), _a(r, 7), _a(r, 8), _a(r, 9)])
+            pl.emit(OP_CURVE_PREFIX, total, [n, G, N, _a(r, 3), 0, 0, 0, 0, 0, 0, G, G + 3 * N, G + 3 * N, G + 6 * N + total])
+            pl.emit(OP_CURVE_EMIT, N, [n, G, N, _a(r, 6), _a(r, 7), _a(r, 8), _a(r, 9)])
         elif op == OP_PERMUTE:
             var n = _a(r, 0)
             if n <= 1 or not pl.fits(6 * n):
