@@ -1539,10 +1539,13 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
                                      trees-et-deviance (ExtraTreesRegressor
                                      poisson / gamma / inverse_gaussian): the
                                      same RF/ET predict route; no old lane moved
-      forest_inference     46 -> 50  the same four lanes"""
+      forest_inference     46 -> 50  the same four lanes
+      gbdt_host_predict    49 -> 50  trees-gbdt-multirmse (GradientBoosting
+                                     MultiRMSE), through the gbdt predict
+                                     route; no old lane moved"""
     rev = lane_select.reverse_map()
     for rel, want in (("cluster/host/kmeans_oracle.mojo", 63),
-                      ("core/gbdt_host_predict.mojo", 49),
+                      ("core/gbdt_host_predict.mojo", 50),
                       ("core/forest_host_predict.mojo", 84),
                       ("core/forest_inference.mojo", 50),
                       ("python/mojolearn/neural_inference.py", 41)):
