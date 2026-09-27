@@ -976,24 +976,23 @@ class TargetEncoder(_PrepBase):
     def _splitter_folds(self, X, y, n):
         """Row -> fold from a splitter object or (train, test) iterable."""
         splits = list(self.cv.split(X, y) if hasattr(self.cv, "split") else self.cv)
+        idx = lambda a: [int(i) for i in (a.tolist() if hasattr(a, "tolist") else a)]
         fold = [-1] * n
-        for k, (train, test) in enumerate(splits):
-            test = [int(i) for i in (test.tolist() if hasattr(test, "tolist") else test)]
-            for i in test:
+        for k, (_train, test) in enumerate(splits):
+            for i in idx(test):
                 if not 0 <= i < n or fold[i] != -1:
                     fold = None
                     break
                 fold[i] = k
             if fold is None:
                 break
-            train = sorted(int(i) for i in (train.tolist() if hasattr(train, "tolist") else train))
-            tset = set(test)
-            if train != [i for i in range(n) if i not in tset]:
-                raise NotImplementedError("mojolearn: TargetEncoder cv folds whose training rows are not every "
-                                          "row outside the test fold are not implemented")
         if fold is None or -1 in fold or len(splits) < 1:
             raise ValueError("mojolearn: Validation indices from `cv` must cover each sample index exactly once "
                              "with no overlap. Pass a splitter with non-overlapping validation folds as `cv`.")
+        for k, (train, _test) in enumerate(splits):
+            if sorted(idx(train)) != [i for i in range(n) if fold[i] != k]:
+                raise NotImplementedError("mojolearn: TargetEncoder cv folds whose training rows are not every "
+                                          "row outside the test fold are not implemented")
         return fold, len(splits)
 
     def fit_transform(self, X, y):
