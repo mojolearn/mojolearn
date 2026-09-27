@@ -18,6 +18,7 @@ Skipped from the table: LinearSVC / LinearSVR are already public
 | PoissonRegressor / GammaRegressor / TweedieRegressor | 273ecb094 | x-glm-poisson, x-glm-gamma, x-glm-tweedie | sanity PASS (coef within 2e-4 of sklearn); RESULT: PASS (AGREE on all three) |
 | HuberRegressor | b81926452 | x-huber | sanity PASS (coef within 2e-5 of sklearn); RESULT: PASS (AGREE on x-huber) |
 | BayesianRidge / ARDRegression | 762aa5ef9 | x-bayes-ridge, x-ard | sanity PASS (coef within 2e-6 of sklearn); RESULT: PASS (AGREE on both) |
-| Lars / LassoLars | (the commit that adds this row) | x-lars, x-lasso-lars | sanity PASS (coef within 2e-6 of sklearn); RESULT: PASS (AGREE on both) |
+| Lars / LassoLars | 90634cac4 | x-lars, x-lasso-lars | sanity PASS (coef within 2e-6 of sklearn); RESULT: PASS (AGREE on both) |
+| QuantileRegressor | (the commit that adds this row) | x-quantile | sanity PASS (objective within 3e-7 relative of sklearn's LP optimum); RESULT: PASS (AGREE) |
 
-Next: QuantileRegressor.
+Next: Additions: Perceptron, PassiveAggressiveClassifier/Regressor, SGDOneClassSVM (SGD variants).

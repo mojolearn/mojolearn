@@ -28,7 +28,8 @@ from ._mode import NumericModeMixin
 __all__ = ["SGDClassifier", "SGDRegressor", "PoissonRegressor", "GammaRegressor", "TweedieRegressor",
            "HuberRegressor",
            "BayesianRidge", "ARDRegression",
-           "Lars", "LassoLars"]
+           "Lars", "LassoLars",
+           "QuantileRegressor"]
 
 _BINDING = "_mojolearn_x_linear"
 ALGO_SGD, ALGO_GLM, ALGO_HUBER, ALGO_BAYES, ALGO_ARD = 1, 2, 3, 4, 5
@@ -578,3 +579,38 @@ class LassoLars(_LinearRegressorMixin, NumericModeMixin):
         if not self.alpha >= 0:
             raise ValueError("mojolearn LassoLars: alpha must be >= 0")
         return _lars_fit(self, X, y, self.max_iter, True, self.alpha)
+
+
+# ----------------------------------------------------------------- Quantile
+# Reference problem: scikit-learn sklearn/linear_model/_quantile.py; the
+# solver is ADMM (x_linear/quantile.mojo), not their linear program.
+
+class QuantileRegressor(_LinearRegressorMixin, NumericModeMixin):
+    """L1-penalized quantile regression (scikit-learn's QuantileRegressor
+    problem). `solver` accepts their names and always runs ADMM; `max_iter`
+    and `tol` (ADMM's relative tolerance, eps_abs = tol / 100) are this
+    implementation's own keywords."""
+
+    _BINDING = _BINDING
+
+    def __init__(self, *, quantile=0.5, alpha=1.0, fit_intercept=True, solver="highs",
+                 solver_options=None, max_iter=5000, tol=1e-4):
+        self.quantile, self.alpha, self.fit_intercept = quantile, alpha, fit_intercept
+        self.solver, self.solver_options, self.max_iter, self.tol = solver, solver_options, max_iter, tol
+
+    def fit(self, X, y):
+        if not 0 < self.quantile < 1:
+            raise ValueError("mojolearn QuantileRegressor: quantile must be strictly between 0 and 1")
+        if not self.alpha >= 0:
+            raise ValueError("mojolearn QuantileRegressor: alpha must be >= 0")
+        a, n, d = _matrix(X)
+        yv = _vector(y, n)
+        m = d + 1
+        vals = _run(self, ALGO_QUANTILE, a, n, d, yv, [self.max_iter, int(bool(self.fit_intercept))],
+                    [self.quantile, self.alpha, self.tol / 100.0, self.tol], d + 3,
+                    m * m + 2 * m + 4 * n + 2 * d, 1)
+        self.coef_ = Array.from_list(vals[:d], "<f4")
+        self.intercept_ = float(vals[d])
+        self.n_iter_ = int(vals[d + 1])
+        self.n_features_in_ = d
+        return self

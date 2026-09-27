@@ -143,6 +143,25 @@ def _():
     return ok
 
 
+@case("quantile")
+def _():
+    from sklearn import linear_model as sk
+    X, yr, yc, y3 = _data(noise=1.0)
+    ok = True
+    for q, alpha, fi in ((0.5, 0.01, True), (0.8, 0.05, True), (0.3, 0.0, False), (0.5, 1.0, True)):
+        a = ml.QuantileRegressor(quantile=q, alpha=alpha, fit_intercept=fi).fit(X, yr)
+        b = sk.QuantileRegressor(quantile=q, alpha=alpha, fit_intercept=fi).fit(X.astype(np.float64), yr.astype(np.float64))
+
+        def obj(coef, icpt):
+            r = yr - X.astype(np.float64) @ np.asarray(coef, np.float64) - icpt
+            return np.mean(np.where(r >= 0, q * r, (q - 1) * r)) + alpha * np.abs(coef).sum()
+        oa, ob = obj(a.coef_, a.intercept_), obj(b.coef_, b.intercept_)
+        print(f"  q={q} alpha={alpha} fi={fi} n_iter={a.n_iter_} objective {oa:.6f} vs {ob:.6f}")
+        ok &= _close("objective (relative)", [oa / ob], [1.0], 2e-3)
+        ok &= _close("coef", a.coef_, b.coef_, 3e-2)
+    return ok
+
+
 def main(argv):
     names = argv or list(CASES)
     bad = []
