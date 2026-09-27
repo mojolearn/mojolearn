@@ -1,0 +1,15 @@
+diff --git a/x_neighbors/items.mojo b/x_neighbors/items.mojo
+--- a/x_neighbors/items.mojo
++++ b/x_neighbors/items.mojo
+@@ -630,8 +630,9 @@
+             mx = v
+     var acc = Float32(0)
+     for j in range(c):
+-        var l = _sub(x.unsafe_load(t * c + j), mx)
+-        res.unsafe_store(t * c + j, l)
++        var l = _sub(x.unsafe_load(t * c + (c - 1 - j)), mx)
++        res.unsafe_store(t * c + (c - 1 - j), l)
++
+         acc = _add(acc, ftz(identical_exp(l)))
+     var ls = ftz(identical_log(acc))
+     for j in range(c):

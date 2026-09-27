@@ -2,8 +2,12 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`DeviceExec`: the lane's operations on the GPU, one thread per element,
 over `sequence/ops.mojo::apply`, the body `HostExec` loops over on the CPU."""
+from std.ffi import _Global
+from std.memory import bitcast
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
+
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 from sequence.exec import Exec
 from sequence.dispatch import apply
@@ -12,21 +16,80 @@ from sequence.ops import FP, Args
 comptime TPB = 128
 
 
+struct _SeqContext(Defaultable, Movable):
+    """ONE process-lifetime DeviceContext for every `DeviceExec`. A context
+    per binding call exhausts Metal's per-process command queues within one
+    fit (memory: METAL QUEUE LIMIT IS PER-PROCESS; the cnn lane's M2 Pro
+    finding). Storage is `std.ffi._Global`, one slot per numeric tier so a
+    FAST and an IDENTICAL .so in one process never share it."""
+    var ctx: Optional[DeviceContext]
+
+    def __init__(out self):
+        self.ctx = Optional[DeviceContext]()
+
+
+comptime _CTX_NAME = "MojoXSequenceContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXSequenceContextFast"
+comptime X_SEQUENCE_CONTEXT = _Global[StorageType=_SeqContext, name=_CTX_NAME, init_fn=_SeqContext.__init__]
+
+
+def sequence_ctx() raises -> DeviceContext:
+    """The shared context, created on first use."""
+    var slot = X_SEQUENCE_CONTEXT.get_or_create_ptr()
+    if not slot[].ctx:
+        slot[].ctx = DeviceContext()
+    return slot[].ctx.value().copy()
+
+
+@always_inline
+def _pack_ii(lo: Int, hi: Int) -> Int64:
+    """Two Int32 values in one Int64 word (lo in the low half)."""
+    return Int64(Int(UInt32(Int32(lo))) | (Int(UInt32(Int32(hi))) << 32))
+
+
+@always_inline
+def _lo(w: Int64) -> Int:
+    return Int(Int32(w & 0xFFFFFFFF))
+
+
+@always_inline
+def _hi(w: Int64) -> Int:
+    return Int(Int32((w >> 32) & 0xFFFFFFFF))
+
+
+@always_inline
+def _pack_ff(lo: Float32, hi: Float32) -> Int64:
+    """Two floats' bit patterns in one Int64 word (exact)."""
+    return Int64(Int(bitcast[DType.uint32](lo)) | (Int(bitcast[DType.uint32](hi)) << 32))
+
+
+@always_inline
+def _flo(w: Int64) -> Float32:
+    return bitcast[DType.float32](UInt32(w & 0xFFFFFFFF))
+
+
+@always_inline
+def _fhi(w: Int64) -> Float32:
+    return bitcast[DType.float32](UInt32((w >> 32) & 0xFFFFFFFF))
+
+
 def seq_kernel[OP: Int](
     p0: FP, p1: FP, p2: FP, p3: FP, p4: FP, p5: FP,
     p6: FP, p7: FP, p8: FP, p9: FP, p10: FP, p11: FP,
-    i0: Int64, i1: Int64, i2: Int64, i3: Int64, i4: Int64, i5: Int64,
-    i6: Int64, i7: Int64, i8: Int64, i9: Int64, i10: Int64, i11: Int64,
-    f0: Float32, f1: Float32, f2: Float32, f3: Float32,
-    f4: Float32, f5: Float32, f6: Float32, f7: Float32,
+    i01: Int64, i23: Int64, i45: Int64, i67: Int64, i89: Int64, i1011: Int64,
+    f01: Int64, f23: Int64, f45: Int64, f67: Int64,
     n: Int64,
 ):
+    """One thread per element. The twelve integers and eight floats travel
+    packed two to an Int64 word (bit-exact): Metal binds every kernel
+    argument to its own buffer slot and has 31, so the unpacked 33-argument
+    signature failed to compile on Apple."""
     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if t < Int(n):
         var a = Args(p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11,
-                     Int(i0), Int(i1), Int(i2), Int(i3), Int(i4), Int(i5),
-                     Int(i6), Int(i7), Int(i8), Int(i9), Int(i10), Int(i11),
-                     f0, f1, f2, f3, f4, f5, f6, f7)
+                     _lo(i01), _hi(i01), _lo(i23), _hi(i23), _lo(i45), _hi(i45),
+                     _lo(i67), _hi(i67), _lo(i89), _hi(i89), _lo(i1011), _hi(i1011),
+                     _flo(f01), _fhi(f01), _flo(f23), _fhi(f23),
+                     _flo(f45), _fhi(f45), _flo(f67), _fhi(f67))
         apply[OP](t, a)
 
 
@@ -37,7 +100,7 @@ struct DeviceExec(Exec):
     var size: List[Int]
 
     def __init__(out self) raises:
-        self.ctx = DeviceContext()
+        self.ctx = sequence_ctx()
         self.bufs = List[DeviceBuffer[DType.float32]]()
         self.base = List[Int]()
         self.size = List[Int]()
@@ -51,6 +114,14 @@ struct DeviceExec(Exec):
         self.size.append(count)
         self.bufs.append(buf^)
         return p
+
+    def __deinit__(deinit self):
+        # The context outlives this Exec: drain its queue before the buffers
+        # go, so no queued kernel reads a freed buffer.
+        try:
+            self.ctx.synchronize()
+        except:
+            pass
 
     def _find(self, p: FP, n: Int) raises -> Tuple[Int, Int]:
         var addr = Int(p)
@@ -89,11 +160,15 @@ struct DeviceExec(Exec):
     def launch[OP: Int](mut self, a: Args, n: Int) raises:
         if n <= 0:
             return
+        comptime I32_MAX = 2147483647
+        for v in [a.i0, a.i1, a.i2, a.i3, a.i4, a.i5, a.i6, a.i7, a.i8, a.i9, a.i10, a.i11]:
+            if v > I32_MAX or v < -I32_MAX - 1:
+                raise Error("sequence DeviceExec: an integer argument does not fit Int32 (" + String(v) + ")")
         self.ctx.enqueue_function[seq_kernel[OP]](
             a.p0, a.p1, a.p2, a.p3, a.p4, a.p5, a.p6, a.p7, a.p8, a.p9, a.p10, a.p11,
-            Int64(a.i0), Int64(a.i1), Int64(a.i2), Int64(a.i3), Int64(a.i4), Int64(a.i5),
-            Int64(a.i6), Int64(a.i7), Int64(a.i8), Int64(a.i9), Int64(a.i10), Int64(a.i11),
-            a.f0, a.f1, a.f2, a.f3, a.f4, a.f5, a.f6, a.f7,
+            _pack_ii(a.i0, a.i1), _pack_ii(a.i2, a.i3), _pack_ii(a.i4, a.i5),
+            _pack_ii(a.i6, a.i7), _pack_ii(a.i8, a.i9), _pack_ii(a.i10, a.i11),
+            _pack_ff(a.f0, a.f1), _pack_ff(a.f2, a.f3), _pack_ff(a.f4, a.f5), _pack_ff(a.f6, a.f7),
             Int64(n),
             grid_dim=((n + TPB - 1) // TPB, 1, 1),
             block_dim=(TPB, 1, 1),

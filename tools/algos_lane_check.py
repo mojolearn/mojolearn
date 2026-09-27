@@ -94,6 +94,30 @@ def gpu_backend():
     raise Fail("no GPU on this box (no nvidia-smi, no rocminfo, not macOS); the check needs one")
 
 
+def gpu_arch():
+    """This box's one GPU target (sm_NN from nvidia-smi's compute capability,
+    gfxNNN from rocminfo), for the build scripts that need it named
+    (bindings/build_byte_lm.sh on Linux); None on a Mac or when unreadable."""
+    try:
+        backend = gpu_backend()
+    except Fail:
+        return None
+    try:
+        if backend == "cuda":
+            r = subprocess.run(["nvidia-smi", "--query-gpu=compute_cap", "--format=csv,noheader"],
+                               capture_output=True, text=True, timeout=60)
+            cap = r.stdout.split()[0].strip() if r.returncode == 0 and r.stdout.split() else ""
+            return "sm_" + cap.replace(".", "") if cap.replace(".", "").isdigit() else None
+        if backend == "hip":
+            r = subprocess.run(["rocminfo"], capture_output=True, text=True, timeout=60)
+            for tok in r.stdout.split():
+                if tok.startswith("gfx") and tok[3:].isalnum():
+                    return tok
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return None
+
+
 def load_harness():
     import importlib.util
     spec = importlib.util.spec_from_file_location("algos_lane_check_harness", HARNESS)
@@ -170,8 +194,16 @@ def build(binding, log):
     import binding_stamps
     script, so = script_for(binding), output_for(binding)
     env = dict(os.environ, MOJOLEARN_NUMERIC_MODE="identical")
-    if binding.endswith("_host") and so.exists():
-        so.unlink()                      # build_host_family.sh never overwrites an output
+    if binding.endswith("_host"):
+        # build_host_family.sh refuses any GPU arch: a CPU build takes none.
+        env.pop("MOJOLEARN_GPU_ARCHS", None)
+    elif script == "build_byte_lm.sh" and sys.platform != "darwin" and not env.get("MOJOLEARN_GPU_ARCHS"):
+        arch = gpu_arch()        # the script refuses a Linux build without one named target
+        if not arch:
+            raise Fail("bindings/build_byte_lm.sh needs MOJOLEARN_GPU_ARCHS and this box reports no GPU arch")
+        env["MOJOLEARN_GPU_ARCHS"] = arch
+    if (binding.endswith("_host") or script == "build_byte_lm.sh") and so.exists():
+        so.unlink()                      # these scripts never overwrite an output
     say(f"build {binding} (bindings/{script})")
     started = time.time()
     with open(log, "a") as fh:
@@ -213,13 +245,40 @@ def ensure_portable_math(log):
     stamp.write_text(h.hexdigest() + "\n")
 
 
-def ensure_built(bindings, log):
+#: THE STEWARDS' SHARED BINDING STORE (tools/steward_build.py): when set, a
+#: stale binding is first looked up there by its source-closure digest (a
+#: steward's prebuild, or an earlier request's build of the same sources),
+#: and a binding built on the clean or restored tree is published to it. A
+#: stored .so lands only when its stamp's digest is THIS tree's, so the
+#: sabotaged stage can never be answered from the store.
+STORE = os.environ.get("MOJOLEARN_LANE_CHECK_STORE", "")
+
+
+def _store_tree():
+    if not STORE:
+        return None
+    import steward_build
+    return steward_build.Tree(ROOT)
+
+
+def ensure_built(bindings, log, publish=False):
     ensure_portable_math(log)
+    tree = None
     for b in sorted(bindings):
         why = stale(b)
         if why:
+            if STORE:
+                import steward_build
+                tree = tree or _store_tree()
+                if steward_build.import_one(tree, STORE, b):
+                    say(f"{b}: {why}; taken from the store {STORE} (same source closure)")
+                    continue
             say(f"{b}: {why}")
             build(b, log)
+            if STORE and publish:
+                import steward_build
+                tree = tree or _store_tree()
+                steward_build.publish_one(tree, STORE, b)
 
 
 # ------------------------------------------------------------ one lane
@@ -459,7 +518,7 @@ def prove_arm(driver, patch, log, where="seam check"):
 
 def check(ib, lanes, needed, backend, fixtures, out, stage, log, pass_no=1):
     """Build what is stale, run both arms per lane, return {lane: verdict}."""
-    ensure_built(set().union(*needed.values()), log)
+    ensure_built(set().union(*needed.values()), log, publish=stage != "sabotaged")
     if stage == "clean":
         seam_checks(ib, lanes, log, pass_no)
     verdicts = {}

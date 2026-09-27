@@ -91,7 +91,7 @@ class Mamba23BackwardHostSurface(unittest.TestCase):
         for family, cls in ((2, Mamba2Block), (3, Mamba3Block)):
             weights, x = fixture(family)
             dy = cotangent(x)
-            for mode in ("fast", "deterministic"):
+            for mode in ("deterministic",):  # FAST runs the backward since 2026-09-27 (lane neural)
                 block = cls(weights, numeric_mode=mode)
                 with patch.object(block, "_extension", side_effect=AssertionError("unexpected native load")):
                     with self.assertRaisesRegex(NotImplementedError, "IDENTICAL"):

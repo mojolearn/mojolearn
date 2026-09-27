@@ -1,0 +1,2 @@
+column	corpus	median_seconds	tokens_per_second	sdpa_selected	sdpa_observed
+eager_fp32	enwik8	0.061766	33157.1	efficient	efficient

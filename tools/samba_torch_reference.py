@@ -93,7 +93,10 @@ class Mamba3(nn.Module):
         cs = torch.cumsum(adt, dim=1)                                # (b,l,h)
         seg = cs.unsqueeze(2) - cs.unsqueeze(1)                      # (b,i,j,h)
         mask = torch.tril(torch.ones(l, l, device=x.device, dtype=torch.bool), -1)
-        decay = torch.exp(seg) * mask.view(1, l, l, 1)
+        # Mask BEFORE the exp: above the diagonal seg is positive and exp()
+        # overflows to inf, and inf * 0 is NaN (lane neural, 2026-09-27: every
+        # L = 128 run at lr 3e-3 went NaN).
+        decay = torch.exp(seg.masked_fill(~mask.view(1, l, l, 1), float("-inf")))
         sc = torch.einsum("bihn,bjhn->bijh", q_rot, k_scaled) * decay
         y = torch.einsum("bijh,bjhp->bihp", sc, v)
         y = y + (self.D + qk_dot).unsqueeze(-1) * v

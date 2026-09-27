@@ -1,0 +1,13 @@
+diff --git a/x_metrics/regression.mojo b/x_metrics/regression.mojo
+index 2da19fdba..dad64816d 100644
+--- a/x_metrics/regression.mojo
++++ b/x_metrics/regression.mojo
+@@ -75,7 +75,7 @@ def reg_term_unit(t: Int, f: FP, q: IP):
+         v = identical_mul(d, d)
+     elif kind == TERM_APE:
+         var ay = abs(y)
+-        v = identical_div(abs(ftz(pr - y)), ay if ay > EPS64 else EPS64)
++        v = identical_div(abs(ftz(pr - y)), ay)  # SABOTAGE 6103
+     elif kind == TERM_PINBALL:
+         var a = ld(f, S)
+         var d = ftz(y - pr)

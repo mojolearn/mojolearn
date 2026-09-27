@@ -170,7 +170,9 @@ from std.memory import stack_allocation
 from checks.numerics import ftz
 from core.pinned_reduce import pinned_block_sum
 from dbscan.impl.neighbors.epsilon_neighborhood import (
+    DBSCAN_METRIC_COSINE,
     DBSCAN_METRIC_L1,
+    DBSCAN_METRIC_PRECOMPUTED,
     DBSCAN_METRIC_L2,
     dbscan_metric_threshold,
     eps_unexp_neighborhood,
@@ -249,6 +251,17 @@ def vertex_deg_dispatch(
     """
     if metric == DBSCAN_METRIC_L1:
         vertex_deg_run[DBSCAN_METRIC_L1](
+            ctx, adj, vd, x, start_vertex_id, n_points, n_rows, n_features,
+            eps,
+        )
+    elif metric == DBSCAN_METRIC_COSINE:
+        # DEVIATION 5113: the L2 kernel on unit rows, the cosine threshold.
+        vertex_deg_run[DBSCAN_METRIC_COSINE](
+            ctx, adj, vd, x, start_vertex_id, n_points, n_rows, n_features,
+            eps,
+        )
+    elif metric == DBSCAN_METRIC_PRECOMPUTED:
+        vertex_deg_run[DBSCAN_METRIC_PRECOMPUTED](
             ctx, adj, vd, x, start_vertex_id, n_points, n_rows, n_features,
             eps,
         )

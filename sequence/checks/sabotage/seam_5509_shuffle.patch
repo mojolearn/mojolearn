@@ -1,0 +1,16 @@
+diff --git a/sequence/mlp.mojo b/sequence/mlp.mojo
+index dbc7e31ec..108f3328b 100644
+--- a/sequence/mlp.mojo
++++ b/sequence/mlp.mojo
+@@ -165,10 +165,8 @@ struct SplitMix(Movable):
+ 
+ def fisher_yates(mut rng: SplitMix, mut perm: List[Float32]):
+     var n = len(perm)
+-    var i = n - 1
+-    while i > 0:
++    for i in range(1, n):
+         var j = rng.below(i + 1)
+         var t = perm[i]
+         perm[i] = perm[j]
+         perm[j] = t
+-        i -= 1

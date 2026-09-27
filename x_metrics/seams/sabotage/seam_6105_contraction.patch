@@ -1,0 +1,23 @@
+diff --git a/x_metrics/group.mojo b/x_metrics/group.mojo
+index 24c1c4d75..235c4e728 100644
+--- a/x_metrics/group.mojo
++++ b/x_metrics/group.mojo
+@@ -12,6 +12,7 @@ them exactly as integers when there is neither a value nor a weight.
+ """
+ from x_metrics.common import FP, IP, PairSum, p, ld, st, ldi, sti
+ from checks.numerics import identical_mul
++from std.math import fma  # SABOTAGE 6105
+ 
+ 
+ def group_sort_unit(t: Int, f: FP, q: IP):
+@@ -71,7 +72,9 @@ def group_sum_unit(t: Int, f: FP, q: IP):
+         var r = ldi(f, ORD + i)
+         var v = Float32(1) if V < 0 else ld(f, V + r * VS + c)
+         if W >= 0:
+-            v = identical_mul(v, ld(f, W + r))
++            acc.leaf = fma(v, ld(f, W + r), acc.leaf)  # SABOTAGE 6105
++            acc.nleaf += 1
++            continue
+         acc.add(v)
+     st(f, OUT + t, acc.result())
+ 
