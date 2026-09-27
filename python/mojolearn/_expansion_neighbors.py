@@ -30,7 +30,7 @@ from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty
 from ._mode import NumericModeMixin
 
-__all__ = ["LocalOutlierFactor", "NearestCentroid"]
+__all__ = ["LocalOutlierFactor", "NearestCentroid", "OneClassSVM"]
 
 # x_neighbors/items.mojo's codes
 _KERNELS = {"linear": 0, "poly": 1, "polynomial": 1, "rbf": 2, "sigmoid": 3, "laplacian": 4,
@@ -414,4 +414,83 @@ def _resolve_gamma(gamma, kernel, X, est):
         var = est._variance(X)
         return 1.0 / (d * var) if var != 0 else 1.0
     return float(gamma)
+
+
+# ====================================================================== OneClassSVM
+class OneClassSVM(_XNeighbors):
+    """Unsupervised outlier detection, the nu one-class SVM.
+
+    Reference: scikit-learn `svm/_classes.py` (OneClassSVM) over libsvm
+    `svm.cpp` (`solve_one_class`, `Solver::Solve` with WSS3 working-set
+    selection, `calculate_rho`). The dual is solved in ONE sequential Mojo
+    item (x_neighbors/items.mojo `ocsvm_smo_item`) over the kernel matrix,
+    in float32 with the pinned spellings (DEVIATION 5200; libsvm is double).
+    `shrinking` and `cache_size` are accepted and change nothing (no
+    shrinking, the whole kernel matrix is formed). max_iter=-1 caps at
+    10_000_000 iterations. kernel='precomputed' and callables are refused.
+    """
+
+    def __init__(self, *, kernel="rbf", degree=3, gamma="scale", coef0=0.0, tol=1e-3, nu=0.5,
+                 shrinking=True, cache_size=200, verbose=False, max_iter=-1):
+        self.kernel = kernel
+        self.degree = degree
+        self.gamma = gamma
+        self.coef0 = coef0
+        self.tol = tol
+        self.nu = nu
+        self.shrinking = shrinking
+        self.cache_size = cache_size
+        self.verbose = verbose
+        self.max_iter = max_iter
+
+    def fit(self, X, y=None, sample_weight=None):
+        if sample_weight is not None:
+            raise NotImplementedError("OneClassSVM: sample_weight is not implemented")
+        if self.kernel not in ("linear", "poly", "rbf", "sigmoid"):
+            raise NotImplementedError(f"OneClassSVM: kernel={self.kernel!r} is not implemented")
+        if not (0.0 < float(self.nu) <= 1.0):
+            raise ValueError("nu must be in (0, 1]")
+        X = _f32(X)
+        n, d = X.shape
+        self._gamma = _f32_scalar(_resolve_gamma(self.gamma, self.kernel, X, self))
+        Q = self._kernel(X, X, self.kernel, self._gamma, self.coef0, self.degree)
+        nl = float(self.nu) * n
+        whole = int(math.floor(nl))
+        init = [1.0] * min(whole, n) + [0.0] * (n - min(whole, n))
+        if whole < n:
+            init[whole] = nl - whole
+        alpha = Array.from_list(init, "<f4")
+        info = empty((1,), "<f4")
+        iters = empty((1,), "<i4")
+        cap = 10_000_000 if int(self.max_iter) < 0 else int(self.max_iter)
+        self._op("ocsvm", [(Q, 0), (alpha, 1), (info, 1), (iters, 1)], (n, cap), (_f32_scalar(self.tol),), )
+        # the op's scalar order is (n, eps, max_iter): ints (n, max_iter), floats (eps,)
+        rho = info.tolist()[0]
+        a = alpha.tolist()
+        support = [i for i in range(n) if a[i] > 0]
+        self.support_ = Array.from_list(support, "<i4")
+        self.support_vectors_ = self._take_rows(X, support)
+        self.dual_coef_ = Array.from_list([[a[i] for i in support]], "<f4")
+        self.intercept_ = Array.from_list([-rho], "<f4")
+        self.offset_ = rho
+        self.n_iter_ = iters.tolist()[0]
+        self.n_features_in_ = d
+        self.fit_status_ = 0
+        return self
+
+    def score_samples(self, X):
+        Q = _f32(X)
+        K = self._kernel(Q, self.support_vectors_, self.kernel, self._gamma, self.coef0, self.degree)
+        coef = Array.from_list([[v] for v in self.dual_coef_.tolist()[0]], "<f4")
+        s = self._matmul(K, coef)
+        return s.reshape((Q.shape[0],))
+
+    def decision_function(self, X):
+        return self._unary(self.score_samples(X), _U_IDENTITY, 1.0, -self.offset_)
+
+    def predict(self, X):
+        return Array.from_list([1 if v > 0 else -1 for v in self.decision_function(X).tolist()], "<i8")
+
+    def fit_predict(self, X, y=None):
+        return self.fit(X).predict(X)
 

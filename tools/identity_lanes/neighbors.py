@@ -43,7 +43,15 @@ def _(ml, X, yc, yr, Xh=None):
                 s, lambda e: (e.predict(Xh[:256]), e.decision_function(Xh[:256])))
 
 
+@lane("x-neighbors-ocsvm")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.OneClassSVM(nu=0.2).fit(X[:256])
+    return _fit(dict(dual=_h(m.dual_coef_), support=_h(m.support_), intercept=_h(m.intercept_),
+                     decision=_h(m.decision_function(X[:256]))),
+                m, lambda e: (e.decision_function(Xh[:256]), e.predict(Xh[:256])))
+
 
 
 _batch_decl(_rows_calls("score_samples", "predict", sl=slice(0, 256)), "x-neighbors-lof")
 _batch_decl(_rows_calls("predict", "decision_function", "predict_proba", sl=slice(0, 256)), "x-neighbors-nearest-centroid")
+_batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "x-neighbors-ocsvm")

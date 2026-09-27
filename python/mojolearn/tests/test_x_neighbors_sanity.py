@@ -47,3 +47,25 @@ def test_nearest_centroid(kw):
     if kw.get("metric", "euclidean") == "euclidean":
         np.testing.assert_allclose(np.asarray(a.decision_function(X)), b.decision_function(X), rtol=1e-3, atol=1e-3)
         np.testing.assert_allclose(np.asarray(a.predict_proba(X)), b.predict_proba(X), rtol=1e-3, atol=1e-4)
+
+
+@pytest.mark.parametrize("kernel", ["rbf", "linear", "poly", "sigmoid"])
+def test_ocsvm(kernel):
+    from sklearn.svm import OneClassSVM as R
+    X = _data(150)
+    if kernel == "linear":
+        X = X + np.float32(2.0)       # centred data makes the linear problem degenerate (decision ~ 0)
+    kw = dict(kernel=kernel, nu=0.3, gamma=0.1 if kernel != "rbf" else "scale")
+    if kernel == "sigmoid":
+        kw["coef0"] = 0.0
+    if kernel == "poly":
+        kw["tol"] = 1e-5              # the cubic kernel on the scaled rows is ill conditioned: at 1e-3
+        #                               both solvers stop KKT-feasible but 12% apart; they meet as tol drops
+    a = ml.OneClassSVM(**kw).fit(X)
+    b = R(**kw).fit(X)
+    da = np.asarray(a.decision_function(X))
+    db = b.decision_function(X)
+    scale = np.abs(db).max()
+    assert np.abs(da - db).max() < 2e-2 * scale, (np.abs(da - db).max(), scale)
+    clear = np.abs(db) > 2e-2 * scale  # margin rows (free support vectors) sit at decision ~ 0 on both
+    assert (np.asarray(a.predict(X)) == b.predict(X))[clear].mean() > 0.97
