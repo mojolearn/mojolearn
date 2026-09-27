@@ -88,3 +88,13 @@ def _(ml, X, yc, yr, Xh=None):
     a = _sequence_opt_run(ml, ml.RMSprop, X, lr=1e-2)
     b = _sequence_opt_run(ml, ml.RMSprop, X, lr=3e-3, centered=True, momentum=0.7, weight_decay=1e-2)
     return _fit(dict(plain=a["params"], plain_state=a["state"], centered=b["params"], centered_state=b["state"]))
+
+
+@lane("sequence-adagrad")
+def _(ml, X, yc, yr, Xh=None):
+    """Adagrad at torch's defaults and with lr decay, weight decay and an
+    initial accumulator."""
+    a = _sequence_opt_run(ml, ml.Adagrad, X, lr=1e-2)
+    b = _sequence_opt_run(ml, ml.Adagrad, X, lr=5e-2, lr_decay=0.1, weight_decay=1e-2,
+                          initial_accumulator_value=0.1)
+    return _fit(dict(plain=a["params"], plain_state=a["state"], decayed=b["params"], decayed_state=b["state"]))

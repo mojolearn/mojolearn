@@ -30,9 +30,11 @@ import numbers
 from . import _backend
 from ._array import Array
 from ._buffer import as_f32_c, addr_ro
-from ._labels import encode_labels, decode_labels
+from ._labels import flatten_labels, sorted_classes, label_kind
 
-__all__ = ["RobustScaler", "MaxAbsScaler", "OrdinalEncoder", "OneHotEncoder", "TargetEncoder", "SimpleImputer", "KBinsDiscretizer"]
+__all__ = ["RobustScaler", "MaxAbsScaler", "OrdinalEncoder", "OneHotEncoder", "TargetEncoder", "SimpleImputer", "KBinsDiscretizer",
+           "GaussianNB", "MultinomialNB", "BernoulliNB",
+           "LinearDiscriminantAnalysis", "QuadraticDiscriminantAnalysis"]
 
 _BINDING = "_mojolearn_x_prep"
 
@@ -42,6 +44,8 @@ _OPS = dict(
     lookup=7, count_neg=8, onehot=9, i2f=10, f2i=11, binarize=12, matmul=13, row_softmax=14,
     row_argmax=15, class_stats=16, center_rows=17, eigh=18, where_neg=19,
     te_global=20, te_enc=21, te_apply=22, mark_missing=23, fill=24, kbins_edges=25, kbins_codes=26,
+    gnb_eps=27, gnb_params=28, gnb_jll=29, class_log_prior=30, mnb_params=31, bnb_params=32, cnb_params=33, cat_params=34, cat_jll=35,
+    lda_prep=36, lda_w=37, lda_stage2=38, lda_stage3=39, qda_cov=40, qda_prep=41, qda_dec=42,
 )
 _PARAMS = 14
 _NONE = -1
@@ -128,6 +132,28 @@ class _Prog:
 
 def _mode():
     return _backend.default_mode()
+
+
+def encode_labels(y):
+    """(classes, int32 codes) under `_labels`' order rule, in Python: the
+    base binding's native encoder is not on the CPU route of this lane."""
+    classes, codes = sorted_classes(flatten_labels(y))
+    return classes, Array.from_list(codes, "<i4")
+
+
+def decode_labels(classes, codes):
+    """Codes back to labels: int classes an int64 Array, real classes a
+    float64 Array, anything else a list (`_labels.decode_labels`' contract)."""
+    values = [classes[int(c)] for c in codes.tolist()]
+    kind = label_kind(classes)
+    try:
+        if kind == "int":
+            return Array.from_list([int(v) for v in values], "<i8")
+        if kind == "float":
+            return Array.from_list([float(v) for v in values], "<f8")
+    except (OverflowError, TypeError):
+        pass
+    return values
 
 
 def _x2d(X, name="X"):
@@ -456,7 +482,6 @@ def _kfold_assignment(n, n_folds, seed, shuffle=True):
 
 def _target_kind(y, target_type):
     """(kind, classes, Y rows as a flat float list with T columns, T)."""
-    from ._labels import flatten_labels
     labels = flatten_labels(y)
     if target_type == "continuous" or (target_type == "auto" and labels and all(
             isinstance(v, numbers.Real) and not isinstance(v, bool) for v in labels)
@@ -772,3 +797,441 @@ class KBinsDiscretizer(_PrepBase):
         pr.stage("onehot", n * d, codes, n, d, so, _NONE, W, out)
         pr.run(self.numeric_mode_)
         return pr.get(out, (n, W))
+
+
+# ---------------------------------------------------------------- naive Bayes
+class _Classifier(_PrepBase):
+    """predict / predict_proba / predict_log_proba from a subclass's joint
+    log likelihood stages (`_jll_stages`), normalised on the device."""
+
+    def _encode_y(self, y, n):
+        classes, codes = encode_labels(y)
+        if codes.size != n:
+            raise ValueError("mojolearn: X and y have different numbers of rows")
+        self.classes_ = classes
+        return codes
+
+    def _scores(self, X, want):
+        self._check_fitted()
+        arr = _x2d(X)
+        self._check_width(arr)
+        n, d = arr.shape
+        K = len(self.classes_)
+        pr = _Prog()
+        xo = pr.put(arr)
+        jll = pr.alloc(n * K)
+        self._jll_stages(pr, xo, n, d, jll)
+        lp = pr.alloc(n * K) if "log" in want else _NONE
+        pp = pr.alloc(n * K) if "proba" in want else _NONE
+        am = pr.alloc(n) if "predict" in want else _NONE
+        if lp != _NONE or pp != _NONE:
+            pr.stage("row_softmax", n, jll, n, K, lp, pp)
+        if am != _NONE:
+            pr.stage("row_argmax", n, jll, n, K, am)
+        pr.run(self.numeric_mode_)
+        return pr, n, K, dict(jll=jll, log=lp, proba=pp, predict=am)
+
+    def predict(self, X):
+        pr, n, K, o = self._scores(X, ("predict",))
+        return decode_labels(self.classes_, pr.get_i32(o["predict"], n))
+
+    def predict_proba(self, X):
+        pr, n, K, o = self._scores(X, ("proba",))
+        return pr.get(o["proba"], (n, K))
+
+    def predict_log_proba(self, X):
+        pr, n, K, o = self._scores(X, ("log",))
+        return pr.get(o["log"], (n, K))
+
+    def predict_joint_log_proba(self, X):
+        pr, n, K, o = self._scores(X, ())
+        return pr.get(o["jll"], (n, K))
+
+    def score(self, X, y):
+        pred = self.predict(X)
+        truth = list(y.tolist() if hasattr(y, "tolist") else y)
+        pred = list(pred.tolist() if hasattr(pred, "tolist") else pred)
+        return sum(1 for a, b in zip(pred, truth) if a == b) / max(len(truth), 1)
+
+
+def _refuse_nb(est, sample_weight):
+    if sample_weight is not None:
+        raise NotImplementedError(f"mojolearn: {type(est).__name__} sample_weight is not implemented")
+    if getattr(est, "class_prior", None) is not None or getattr(est, "priors", None) is not None:
+        raise NotImplementedError(f"mojolearn: {type(est).__name__} explicit class priors are not implemented")
+
+
+def _check_alpha(est):
+    if not isinstance(est.alpha, numbers.Real) or not est.alpha > 0:
+        raise NotImplementedError(f"mojolearn: {type(est).__name__} needs alpha > 0 "
+                                  "(alpha = 0 makes log(0) terms)")
+
+
+class GaussianNB(_Classifier):
+    """sklearn.naive_bayes.GaussianNB (fit, predict, predict_proba,
+    predict_log_proba): per-class mean and population variance plus
+    var_smoothing * the largest feature variance, float32. priors,
+    sample_weight and partial_fit are refused."""
+    _parameters = ("priors", "var_smoothing")
+
+    def __init__(self, *, priors=None, var_smoothing=1e-9):
+        self.priors = priors
+        self.var_smoothing = var_smoothing
+
+    def fit(self, X, y, sample_weight=None):
+        _refuse_nb(self, sample_weight)
+        arr = _x2d(X)
+        n, d = arr.shape
+        codes = self._encode_y(y, n)
+        K = len(self.classes_)
+        mode = _mode()
+        pr = _Prog()
+        xo = pr.put(arr)
+        yo = pr.put_codes(codes)
+        st = pr.alloc(6 * d)
+        vs = pr.put_scalar(self.var_smoothing)
+        eps = pr.alloc(1)
+        cnt, theta, var, prior, const = pr.alloc(K), pr.alloc(K * d), pr.alloc(K * d), pr.alloc(K), pr.alloc(K)
+        pr.stage("col_stats", d, xo, n, d, st)
+        pr.stage("gnb_eps", 1, st + 2 * d, d, eps, vs)
+        pr.stage("class_stats", K * d, xo, n, d, yo, K, cnt, theta, var, _NONE)
+        pr.stage("gnb_params", K, cnt, var, K, d, n, eps, prior, const)
+        pr.run(mode)
+        self.theta_, self.var_ = pr.get(theta, (K, d)), pr.get(var, (K, d))
+        self.class_count_, self.class_prior_ = pr.get(cnt, K), pr.get(prior, K)
+        self.epsilon_ = pr.values(eps, 1)[0]
+        self._const = pr.get(const, K)
+        self.numeric_mode_, self.n_features_in_ = mode, d
+        return self
+
+    def partial_fit(self, X, y, classes=None, sample_weight=None):
+        raise NotImplementedError("mojolearn: GaussianNB.partial_fit is not implemented")
+
+    def _jll_stages(self, pr, xo, n, d, out):
+        K = len(self.classes_)
+        th, va, co = pr.put(self.theta_), pr.put(self.var_), pr.put(self._const)
+        pr.stage("gnb_jll", n * K, xo, n, d, th, va, co, K, out)
+
+
+def _check_nonnegative(pr_values, who):
+    if any(v < 0 for v in pr_values):
+        raise ValueError(f"mojolearn: Negative values in data passed to {who}")
+
+
+class _DiscreteNB(_Classifier):
+    def _fit_counts(self, X, y, binarize=None):
+        arr = _x2d(X)
+        n, d = arr.shape
+        codes = self._encode_y(y, n)
+        K = len(self.classes_)
+        mode = _mode()
+        pr = _Prog()
+        xo = pr.put(arr)
+        if binarize is not None:
+            thr = pr.put_scalar(binarize)
+            xb = pr.alloc(n * d)
+            pr.stage("binarize", n * d, xo, n * d, thr, xb)
+            xo = xb
+        yo = pr.put_codes(codes)
+        st = pr.alloc(6 * d)
+        cnt, fc = pr.alloc(K), pr.alloc(K * d)
+        clp = pr.alloc(K)
+        pr.stage("col_stats", d, xo, n, d, st)
+        pr.stage("class_stats", K * d, xo, n, d, yo, K, cnt, _NONE, _NONE, fc)
+        if self.fit_prior:
+            pr.stage("class_log_prior", K, cnt, K, clp)
+        else:
+            ones = pr.put_list([1.0] * K)
+            pr.stage("class_log_prior", K, ones, K, clp)
+        return pr, mode, n, d, K, st, cnt, fc, clp
+
+    def _finish_counts(self, pr, mode, d, K, cnt, fc, clp):
+        self.class_count_, self.feature_count_ = pr.get(cnt, K), pr.get(fc, (K, d))
+        self.class_log_prior_ = pr.get(clp, K)
+        self.numeric_mode_, self.n_features_in_ = mode, d
+
+    def partial_fit(self, X, y, classes=None, sample_weight=None):
+        raise NotImplementedError(f"mojolearn: {type(self).__name__}.partial_fit is not implemented")
+
+
+class MultinomialNB(_DiscreteNB):
+    """sklearn.naive_bayes.MultinomialNB, float32; alpha > 0 required.
+    class_prior, sample_weight and partial_fit are refused."""
+    _parameters = ("alpha", "force_alpha", "fit_prior", "class_prior")
+
+    def __init__(self, *, alpha=1.0, force_alpha=True, fit_prior=True, class_prior=None):
+        self.alpha = alpha
+        self.force_alpha = force_alpha
+        self.fit_prior = fit_prior
+        self.class_prior = class_prior
+
+    def fit(self, X, y, sample_weight=None):
+        _refuse_nb(self, sample_weight)
+        _check_alpha(self)
+        pr, mode, n, d, K, st, cnt, fc, clp = self._fit_counts(X, y)
+        a = pr.put_scalar(self.alpha)
+        flp = pr.alloc(K * d)
+        pr.stage("mnb_params", K, fc, K, d, a, flp)
+        pr.run(mode)
+        _check_nonnegative(pr.values(st + 3 * d, d), "MultinomialNB (input X)")
+        self._finish_counts(pr, mode, d, K, cnt, fc, clp)
+        self.feature_log_prob_ = pr.get(flp, (K, d))
+        return self
+
+    def _jll_stages(self, pr, xo, n, d, out):
+        K = len(self.classes_)
+        w, b = pr.put(self.feature_log_prob_), pr.put(self.class_log_prior_)
+        pr.stage("matmul", n * K, xo, d, 1, w, 1, d, out, K, d, b, _NONE)
+
+
+class BernoulliNB(_DiscreteNB):
+    """sklearn.naive_bayes.BernoulliNB, float32 (X binarized at `binarize`
+    unless it is None); alpha > 0 required. class_prior, sample_weight and
+    partial_fit are refused."""
+    _parameters = ("alpha", "force_alpha", "binarize", "fit_prior", "class_prior")
+
+    def __init__(self, *, alpha=1.0, force_alpha=True, binarize=0.0, fit_prior=True, class_prior=None):
+        self.alpha = alpha
+        self.force_alpha = force_alpha
+        self.binarize = binarize
+        self.fit_prior = fit_prior
+        self.class_prior = class_prior
+
+    def fit(self, X, y, sample_weight=None):
+        _refuse_nb(self, sample_weight)
+        _check_alpha(self)
+        pr, mode, n, d, K, st, cnt, fc, clp = self._fit_counts(X, y, self.binarize)
+        a = pr.put_scalar(self.alpha)
+        flp, w, bias = pr.alloc(K * d), pr.alloc(K * d), pr.alloc(K)
+        pr.stage("bnb_params", K, fc, cnt, K, d, a, clp, flp, w, bias)
+        pr.run(mode)
+        self._finish_counts(pr, mode, d, K, cnt, fc, clp)
+        self.feature_log_prob_ = pr.get(flp, (K, d))
+        self._w, self._bias = pr.get(w, (K, d)), pr.get(bias, K)
+        return self
+
+    def _jll_stages(self, pr, xo, n, d, out):
+        K = len(self.classes_)
+        if self.binarize is not None:
+            thr = pr.put_scalar(self.binarize)
+            xb = pr.alloc(n * d)
+            pr.stage("binarize", n * d, xo, n * d, thr, xb)
+            xo = xb
+        w, b = pr.put(self._w), pr.put(self._bias)
+        pr.stage("matmul", n * K, xo, d, 1, w, 1, d, out, K, d, b, _NONE)
+
+
+# ---------------------------------------------------------------- discriminant analysis
+def _binary_difference(pr, src, rows, K, d_cols, out):
+    """out[i, j] = src[i*? ...]: row 1 minus row 0 of a (2 x d_cols) block
+    (rows=1) or column 1 minus column 0 of an (rows x 2) block, as one
+    matmul with the vector [-1, 1] (-a + b is b - a exactly)."""
+    w = pr.put_list([-1.0, 1.0])
+    if rows == 1:
+        pr.stage("matmul", d_cols, w, 0, 1, src, d_cols, 1, out, d_cols, 2, _NONE, _NONE)
+    else:
+        pr.stage("matmul", rows, src, K, 1, w, 1, 0, out, 1, 2, _NONE, _NONE)
+
+
+def _class_counts(codes, K):
+    counts = [0] * K
+    for c in codes.tolist():
+        counts[c] += 1
+    return counts
+
+
+class LinearDiscriminantAnalysis(_Classifier):
+    """sklearn.discriminant_analysis.LinearDiscriminantAnalysis, solver 'svd'
+    (the default): the reference's two SVDs are symmetric eigendecompositions
+    of the Gram matrices (cyclic Jacobi, x_prep/eigh.mojo), so `scalings_` and
+    `transform` match the reference up to each component's sign and the
+    decision function matches it outright. Float32. Other solvers, shrinkage,
+    priors, covariance_estimator and store_covariance are refused by name."""
+    _parameters = ("solver", "shrinkage", "priors", "n_components", "store_covariance", "tol",
+                   "covariance_estimator")
+
+    def __init__(self, solver="svd", shrinkage=None, priors=None, n_components=None, store_covariance=False,
+                 tol=1e-4, covariance_estimator=None):
+        self.solver = solver
+        self.shrinkage = shrinkage
+        self.priors = priors
+        self.n_components = n_components
+        self.store_covariance = store_covariance
+        self.tol = tol
+        self.covariance_estimator = covariance_estimator
+
+    def fit(self, X, y):
+        if self.solver != "svd" or self.shrinkage is not None or self.covariance_estimator is not None:
+            raise NotImplementedError("mojolearn: LinearDiscriminantAnalysis supports solver='svd' without "
+                                      "shrinkage or covariance_estimator")
+        if self.priors is not None or self.store_covariance:
+            raise NotImplementedError("mojolearn: LinearDiscriminantAnalysis priors and store_covariance "
+                                      "are not implemented")
+        arr = _x2d(X)
+        n, d = arr.shape
+        codes = self._encode_y(y, n)
+        K = len(self.classes_)
+        if K < 2 or n <= K:
+            raise ValueError("mojolearn: LinearDiscriminantAnalysis needs at least two classes and more "
+                             "samples than classes")
+        maxc = min(K - 1, d)
+        if self.n_components is not None and self.n_components > maxc:
+            raise ValueError("mojolearn: n_components cannot be larger than min(n_features, n_classes - 1)")
+        mode = _mode()
+        pr = _Prog()
+        xo = pr.put(arr)
+        yo = pr.put_codes(codes)
+        cnt, mean, priors, xbar = pr.alloc(K), pr.alloc(K * d), pr.alloc(K), pr.alloc(d)
+        z, stz, std, w, z2 = pr.alloc(n * d), pr.alloc(6 * d), pr.alloc(d), pr.alloc(d), pr.alloc(n * d)
+        g, e1, v1 = pr.alloc(d * d), pr.alloc(d), pr.alloc(d * d)
+        meta = pr.put_list([self.tol, 0.0, 0.0])
+        scal1, g2, ms = pr.alloc(d * d), pr.alloc(d * d), pr.alloc(K * d)
+        e2, v2 = pr.alloc(d), pr.alloc(d * d)
+        scal, coef, inter, evr, tmp = pr.alloc(d * d), pr.alloc(K * d), pr.alloc(K), pr.alloc(d), pr.alloc(K * d)
+        pr.stage("class_stats", K * d, xo, n, d, yo, K, cnt, mean, _NONE, _NONE)
+        pr.stage("lda_prep", 1, cnt, mean, K, d, n, priors, xbar)
+        pr.stage("center_rows", n * d, xo, n, d, mean, yo, _NONE, z)
+        pr.stage("col_stats", d, z, n, d, stz)
+        pr.stage("lda_w", d, stz + 2 * d, d, n, K, std, w)
+        pr.stage("center_rows", n * d, xo, n, d, mean, yo, w, z2)
+        pr.stage("matmul", d * d, z2, 1, d, z2, d, 1, g, d, n, _NONE, _NONE)
+        pr.stage("eigh", 1, g, d, 0, e1, v1)
+        pr.stage("lda_stage2", 1, e1, v1, std, mean, xbar, priors, K, d, n, meta, scal1, g2, ms)
+        pr.stage("eigh", 1, g2, d, 0, e2, v2)
+        pr.stage("lda_stage3", 1, e2, v2, scal1, mean, xbar, priors, K, d, meta, scal, coef, inter, evr, tmp)
+        cd, ci = pr.alloc(d), pr.alloc(1)
+        if K == 2:
+            _binary_difference(pr, coef, 1, K, d, cd)
+            pr.stage("matmul", 1, pr.put_list([-1.0, 1.0]), 0, 1, inter, 1, 0, ci, 1, 2, _NONE, _NONE)
+        pr.run(mode)
+        rank2 = int(pr.values(meta + 2, 1)[0])
+        self._rank = rank2
+        self.means_, self.priors_, self.xbar_ = pr.get(mean, (K, d)), pr.get(priors, K), pr.get(xbar, d)
+        full = pr.get(scal, (d, d))
+        self._scal_full = full
+        self.scalings_ = Array.from_list([row[:rank2] for row in full.tolist()], "<f4") if rank2 else \
+            Array((d, 0), "<f4")
+        self._coef, self._inter = pr.get(coef, (K, d)), pr.get(inter, K)
+        if K == 2:
+            self.coef_, self.intercept_ = pr.get(cd, (1, d)), pr.get(ci, 1)
+        else:
+            self.coef_, self.intercept_ = self._coef, self._inter
+        self._max_components = maxc if self.n_components is None else int(self.n_components)
+        self.explained_variance_ratio_ = pr.get(evr, self._max_components)
+        self.numeric_mode_, self.n_features_in_ = mode, d
+        return self
+
+    def _jll_stages(self, pr, xo, n, d, out):
+        K = len(self.classes_)
+        c, b = pr.put(self._coef), pr.put(self._inter)
+        pr.stage("matmul", n * K, xo, d, 1, c, 1, d, out, K, d, b, _NONE)
+
+    def decision_function(self, X):
+        pr, n, K, o = self._scores(X, ())
+        if K == 2:
+            return self._pair(X, o, pr, n)
+        return pr.get(o["jll"], (n, K))
+
+    def _pair(self, X, o, pr, n):
+        arr = _x2d(X)
+        q = _Prog()
+        xo = q.put(arr)
+        c, b = q.put(self.coef_), q.put(self.intercept_)
+        out = q.alloc(n)
+        q.stage("matmul", n, xo, arr.shape[1], 1, c, 1, 0, out, 1, arr.shape[1], b, _NONE)
+        q.run(self.numeric_mode_)
+        return q.get(out, n)
+
+    def transform(self, X):
+        self._check_fitted()
+        arr = _x2d(X)
+        self._check_width(arr)
+        n, d = arr.shape
+        mc = min(self._max_components, self._rank)
+        pr = _Prog()
+        xo = pr.put(arr)
+        xb, sc = pr.put(self.xbar_), pr.put(self._scal_full)
+        cen, out = pr.alloc(n * d), pr.alloc(n * max(mc, 1))
+        pr.stage("center_rows", n * d, xo, n, d, xb, _NONE, _NONE, cen)
+        pr.stage("matmul", n * mc, cen, d, 1, sc, d, 1, out, mc, d, _NONE, _NONE)
+        pr.run(self.numeric_mode_)
+        return pr.get(out, (n, mc))
+
+    def fit_transform(self, X, y):
+        return self.fit(X, y).transform(X)
+
+
+class QuadraticDiscriminantAnalysis(_Classifier):
+    """sklearn.discriminant_analysis.QuadraticDiscriminantAnalysis (1.9): per
+    class, the eigendecomposition of the class covariance (divisor n_k) stands
+    in for the reference's SVD of the centred class rows (same S^2 / n_k,
+    vectors up to sign). A class whose regularised scalings are not all above
+    `tol` is refused, as the reference refuses it. Float32. priors and
+    store_covariance are refused by name."""
+    _parameters = ("solver", "shrinkage", "priors", "reg_param", "store_covariance", "tol", "covariance_estimator")
+
+    def __init__(self, *, solver="svd", shrinkage=None, priors=None, reg_param=0.0, store_covariance=False,
+                 tol=1e-4, covariance_estimator=None):
+        self.solver = solver
+        self.shrinkage = shrinkage
+        self.priors = priors
+        self.reg_param = reg_param
+        self.store_covariance = store_covariance
+        self.tol = tol
+        self.covariance_estimator = covariance_estimator
+
+    def fit(self, X, y):
+        if self.solver != "svd" or self.shrinkage is not None or self.covariance_estimator is not None:
+            raise NotImplementedError("mojolearn: QuadraticDiscriminantAnalysis supports solver='svd' only")
+        if self.priors is not None or self.store_covariance:
+            raise NotImplementedError("mojolearn: QuadraticDiscriminantAnalysis priors and store_covariance "
+                                      "are not implemented")
+        arr = _x2d(X)
+        n, d = arr.shape
+        codes = self._encode_y(y, n)
+        K = len(self.classes_)
+        if K < 2:
+            raise ValueError("mojolearn: QuadraticDiscriminantAnalysis needs at least two classes")
+        if min(_class_counts(codes, K)) < 2:
+            raise ValueError("mojolearn: y has only 1 sample in a class, covariance is ill defined")
+        mode = _mode()
+        pr = _Prog()
+        xo = pr.put(arr)
+        yo = pr.put_codes(codes)
+        cnt, mean, priors, xbar = pr.alloc(K), pr.alloc(K * d), pr.alloc(K), pr.alloc(d)
+        cov, ev, evec = pr.alloc(K * d * d), pr.alloc(K * d), pr.alloc(K * d * d)
+        reg = pr.put_scalar(self.reg_param)
+        rot, logc, s2 = pr.alloc(K * d * d), pr.alloc(K), pr.alloc(K * d)
+        pr.stage("class_stats", K * d, xo, n, d, yo, K, cnt, mean, _NONE, _NONE)
+        pr.stage("lda_prep", 1, cnt, mean, K, d, n, priors, xbar)
+        pr.stage("qda_cov", K * d * d, xo, n, d, yo, mean, cnt, cov)
+        pr.stage("eigh", K, cov, d, d * d, ev, evec)
+        pr.stage("qda_prep", K, ev, evec, K, d, reg, cnt, n, rot, logc, s2)
+        pr.run(mode)
+        s2v = pr.values(s2, K * d)
+        for k in range(K):
+            if sum(1 for v in s2v[k * d:(k + 1) * d] if v > self.tol) < d:
+                raise ValueError(f"mojolearn: the covariance matrix of class {self.classes_[k]!r} is not full "
+                                 "rank. Increase the value of `reg_param` to reduce the collinearity.")
+        self.means_, self.priors_ = pr.get(mean, (K, d)), pr.get(priors, K)
+        self.rotations_ = [pr.get(evec + k * d * d, (d, d)) for k in range(K)]
+        self.scalings_ = [pr.get(s2 + k * d, d) for k in range(K)]
+        self._rot, self._logc = pr.get(rot, K * d * d), pr.get(logc, K)
+        self.numeric_mode_, self.n_features_in_ = mode, d
+        return self
+
+    def _jll_stages(self, pr, xo, n, d, out):
+        K = len(self.classes_)
+        m, r, lc = pr.put(self.means_), pr.put(self._rot), pr.put(self._logc)
+        pr.stage("qda_dec", n * K, xo, n, d, m, r, lc, K, out)
+
+    def decision_function(self, X):
+        pr, n, K, o = self._scores(X, ())
+        if K == 2:
+            q = _Prog()
+            src = q.put(pr.get(o["jll"], (n, K)))
+            out = q.alloc(n)
+            _binary_difference(q, src, n, K, 1, out)
+            q.run(self.numeric_mode_)
+            return q.get(out, n)
+        return pr.get(o["jll"], (n, K))

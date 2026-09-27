@@ -20,7 +20,9 @@ Sanity tests need scikit-learn: on the pod it is in /root/skl
 | OneHotEncoder, OrdinalEncoder | a8d0e06b8 | x-prep-ordinal-encoder,x-prep-onehot-encoder | batch 9, infer 9, train 9; cuda H100 vs CPU |
 | TargetEncoder | d0ca493f6 | x-prep-target-encoder | batch 9, infer 9, train 9; cuda H100 vs CPU |
 | SimpleImputer | 2ba3a6c0d | x-prep-simple-imputer | batch 9, infer 9, train 9; cuda H100 vs CPU |
-| KBinsDiscretizer | (this commit) | x-prep-kbins | batch 9, infer 9, train 9; cuda H100 vs CPU |
+| KBinsDiscretizer | afa14e9dd | x-prep-kbins | batch 9, infer 9, train 9; cuda H100 vs CPU |
+| GaussianNB, MultinomialNB, BernoulliNB | ae2cee425 | x-prep-gaussian-nb,x-prep-multinomial-nb,x-prep-bernoulli-nb | batch 9, infer 9, train 9; cuda H100 vs CPU |
+| LinearDiscriminantAnalysis, QuadraticDiscriminantAnalysis | (this commit) | x-prep-lda,x-prep-qda | batch 9, infer 9, train 9; cuda H100 vs CPU |
 
 ## Next
 OneHotEncoder / OrdinalEncoder, TargetEncoder, SimpleImputer, KBinsDiscretizer,

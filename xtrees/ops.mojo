@@ -498,3 +498,251 @@ def transpose_f32(
     for i in range(n):
         for j in range(d):
             dst[unsafe_offset=j * n + i] = src[unsafe_offset=i * d + j]
+
+
+# ------------------------------------------------------ wrappers' helpers
+def normalize_rows(x: MutPointer[Float64, MutUntrackedOrigin], n: Int, k: Int):
+    """x[i, :] /= sum (class order); a row summing to 0 becomes uniform 1/k
+    (sklearn's calibration rule; OneVsRest would divide 0/0, refused here
+    as a computed NaN)."""
+    for i in range(n):
+        var s: Float64 = 0.0
+        for c in range(k):
+            s = s + x[unsafe_offset=i * k + c]
+        for c in range(k):
+            if s > 0.0:
+                x[unsafe_offset=i * k + c] = x[unsafe_offset=i * k + c] / s
+            else:
+                x[unsafe_offset=i * k + c] = 1.0 / Float64(k)
+
+
+def scatter(
+    dst: MutPointer[Float64, MutUntrackedOrigin], n_dst_cols: Int,
+    src: MutPointer[Float32, MutUntrackedOrigin], m: Int, c: Int,
+    rows: MutPointer[Int32, MutUntrackedOrigin], col0: Int,
+):
+    """dst[rows[r], col0 + j] = src[r, j]: a sub-model's output block placed
+    into the stacked matrix. A copy."""
+    for r in range(m):
+        var i = Int(rows[unsafe_offset=r])
+        for j in range(c):
+            dst[unsafe_offset=i * n_dst_cols + col0 + j] = Float64(src[unsafe_offset=r * c + j])
+
+
+@always_inline
+def _log1pexp(x: Float64) -> Float64:
+    """log(1 + exp(x)) without overflow: x + log(1 + exp(-x)) for x >= 0."""
+    if x >= 0.0:
+        return x + identical_log64(1.0 + identical_exp64(-x))
+    return identical_log64(1.0 + identical_exp64(x))
+
+
+def _platt_value(f: MutPointer[Float64, MutUntrackedOrigin], t: List[Float64], n: Int, a: Float64, b: Float64) -> Float64:
+    var v: Float64 = 0.0
+    for i in range(n):
+        var z = identical_mul64(f[unsafe_offset=i], a) + b
+        # -T log p - (1 - T) log(1 - p), p = 1 / (1 + exp(z))
+        v = v + identical_mul64(t[i], _log1pexp(z)) + identical_mul64(1.0 - t[i], _log1pexp(-z))
+    return v
+
+
+def platt_fit(
+    f: MutPointer[Float64, MutUntrackedOrigin], y: MutPointer[Int32, MutUntrackedOrigin], n: Int,
+    ab: MutPointer[Float64, MutUntrackedOrigin],
+):
+    """Platt scaling (sklearn calibration.py `_sigmoid_calibration`: the
+    targets T = (N+ + 1)/(N+ + 2) and 1/(N- + 2), the start B =
+    log((N- + 1)/(N+ + 1))), minimised by Newton with backtracking (Lin, Lin,
+    Weng 2007) where sklearn runs L-BFGS on the same objective. Writes
+    ab = [A, B]; P(y=1 | f) = 1 / (1 + exp(A f + B))."""
+    var prior1: Float64 = 0.0
+    for i in range(n):
+        if y[unsafe_offset=i] > 0:
+            prior1 = prior1 + 1.0
+    var prior0 = Float64(n) - prior1
+    var hi = (prior1 + 1.0) / (prior1 + 2.0)
+    var lo = 1.0 / (prior0 + 2.0)
+    var t = List[Float64](length=n, fill=0.0)
+    for i in range(n):
+        t[i] = hi if y[unsafe_offset=i] > 0 else lo
+    var a: Float64 = 0.0
+    var b = identical_log64((prior0 + 1.0) / (prior1 + 1.0))
+    var fval = _platt_value(f, t, n, a, b)
+    for _ in range(100):
+        var h11: Float64 = 1e-12
+        var h22: Float64 = 1e-12
+        var h21: Float64 = 0.0
+        var g1: Float64 = 0.0
+        var g2: Float64 = 0.0
+        for i in range(n):
+            var fi = f[unsafe_offset=i]
+            var z = identical_mul64(fi, a) + b
+            var p: Float64
+            var q: Float64
+            if z >= 0.0:
+                var e = identical_exp64(-z)
+                p = e / (1.0 + e)
+                q = 1.0 / (1.0 + e)
+            else:
+                var e = identical_exp64(z)
+                p = 1.0 / (1.0 + e)
+                q = e / (1.0 + e)
+            var d2 = identical_mul64(p, q)
+            h11 = h11 + identical_mul64(identical_mul64(fi, fi), d2)
+            h22 = h22 + d2
+            h21 = h21 + identical_mul64(fi, d2)
+            var d1 = t[i] - p
+            g1 = g1 + identical_mul64(fi, d1)
+            g2 = g2 + d1
+        if abs(g1) < 1e-5 and abs(g2) < 1e-5:
+            break
+        var det = identical_mul64(h11, h22) - identical_mul64(h21, h21)
+        var da = -(identical_mul64(h22, g1) - identical_mul64(h21, g2)) / det
+        var db = -(identical_mul64(h11, g2) - identical_mul64(h21, g1)) / det
+        var gd = identical_mul64(g1, da) + identical_mul64(g2, db)
+        var step: Float64 = 1.0
+        var moved = False
+        while step >= 1e-10:
+            var na = a + identical_mul64(step, da)
+            var nb = b + identical_mul64(step, db)
+            var nf = _platt_value(f, t, n, na, nb)
+            if nf < fval + identical_mul64(identical_mul64(0.0001, step), gd):
+                a = na
+                b = nb
+                fval = nf
+                moved = True
+                break
+            step = step / 2.0
+        if not moved:
+            break
+    ab[unsafe_offset=0] = a
+    ab[unsafe_offset=1] = b
+
+
+def platt_apply(
+    f: MutPointer[Float64, MutUntrackedOrigin], n: Int, a: Float64, b: Float64,
+    res: MutPointer[Float64, MutUntrackedOrigin],
+):
+    """res[i] = 1 / (1 + exp(A f + B)), written without overflow."""
+    for i in range(n):
+        var z = identical_mul64(f[unsafe_offset=i], a) + b
+        if z >= 0.0:
+            var e = identical_exp64(-z)
+            res[unsafe_offset=i] = e / (1.0 + e)
+        else:
+            res[unsafe_offset=i] = 1.0 / (1.0 + identical_exp64(z))
+
+
+def isotonic_fit(
+    x: MutPointer[Float64, MutUntrackedOrigin], y: MutPointer[Float64, MutUntrackedOrigin], n: Int,
+    kx: MutPointer[Float64, MutUntrackedOrigin], ky: MutPointer[Float64, MutUntrackedOrigin],
+) raises -> Int:
+    """sklearn IsotonicRegression(increasing=True).fit, unit weights: sort by
+    (x, y, index), merge equal x into their weighted mean (`_make_unique`),
+    pool adjacent violators (`_inplace_contiguous_isotonic_regression`), and
+    write the knots. Returns the knot count."""
+    if n < 1:
+        raise Error("x_trees isotonic_fit: no rows")
+    # stable merge sort of the row order by (x, y)
+    var idx = List[Int](length=n, fill=0)
+    var tmp = List[Int](length=n, fill=0)
+    for i in range(n):
+        idx[i] = i
+    var width = 1
+    while width < n:
+        var lo = 0
+        while lo < n:
+            var mid = min(lo + width, n)
+            var hi = min(lo + 2 * width, n)
+            var i = lo
+            var j = mid
+            var k = lo
+            while i < mid and j < hi:
+                var xi = x[unsafe_offset=idx[i]]
+                var xj = x[unsafe_offset=idx[j]]
+                var take_right = xj < xi or (xj == xi and y[unsafe_offset=idx[j]] < y[unsafe_offset=idx[i]])
+                if take_right:
+                    tmp[k] = idx[j]
+                    j += 1
+                else:
+                    tmp[k] = idx[i]
+                    i += 1
+                k += 1
+            while i < mid:
+                tmp[k] = idx[i]
+                i += 1
+                k += 1
+            while j < hi:
+                tmp[k] = idx[j]
+                j += 1
+                k += 1
+            lo = hi
+        for q in range(n):
+            idx[q] = tmp[q]
+        width *= 2
+    # unique x: mean y, weight = count
+    var ux = List[Float64]()
+    var uy = List[Float64]()
+    var uw = List[Float64]()
+    var r = 0
+    while r < n:
+        var xv = x[unsafe_offset=idx[r]]
+        var s: Float64 = 0.0
+        var c: Float64 = 0.0
+        while r < n and x[unsafe_offset=idx[r]] == xv:
+            s = s + y[unsafe_offset=idx[r]]
+            c = c + 1.0
+            r += 1
+        ux.append(xv)
+        uy.append(s / c)
+        uw.append(c)
+    # PAV: blocks of (sum w*y, sum w), merged while decreasing
+    var m = len(ux)
+    var bsum = List[Float64]()
+    var bw = List[Float64]()
+    var bstart = List[Int]()
+    for q in range(m):
+        bsum.append(identical_mul64(uw[q], uy[q]))
+        bw.append(uw[q])
+        bstart.append(q)
+        while len(bsum) > 1 and bsum[len(bsum) - 2] / bw[len(bw) - 2] >= bsum[len(bsum) - 1] / bw[len(bw) - 1]:
+            var s2 = bsum.pop()
+            var w2 = bw.pop()
+            _ = bstart.pop()
+            bsum[len(bsum) - 1] = bsum[len(bsum) - 1] + s2
+            bw[len(bw) - 1] = bw[len(bw) - 1] + w2
+    var nb = len(bsum)
+    for q in range(nb):
+        var end = bstart[q + 1] if q + 1 < nb else m
+        var v = bsum[q] / bw[q]
+        for p in range(bstart[q], end):
+            kx[unsafe_offset=p] = ux[p]
+            ky[unsafe_offset=p] = v
+    return m
+
+
+def isotonic_predict(
+    kx: MutPointer[Float64, MutUntrackedOrigin], ky: MutPointer[Float64, MutUntrackedOrigin], m: Int,
+    t: MutPointer[Float64, MutUntrackedOrigin], n: Int, res: MutPointer[Float64, MutUntrackedOrigin],
+):
+    """np.interp over the knots with out_of_bounds='clip'."""
+    for i in range(n):
+        var v = t[unsafe_offset=i]
+        if m == 1 or v <= kx[unsafe_offset=0]:
+            res[unsafe_offset=i] = ky[unsafe_offset=0]
+            continue
+        if v >= kx[unsafe_offset=m - 1]:
+            res[unsafe_offset=i] = ky[unsafe_offset=m - 1]
+            continue
+        var lo = 0
+        var hi = m - 1
+        while hi - lo > 1:
+            var mid = (lo + hi) // 2
+            if kx[unsafe_offset=mid] <= v:
+                lo = mid
+            else:
+                hi = mid
+        var x0 = kx[unsafe_offset=lo]
+        var y0 = ky[unsafe_offset=lo]
+        var slope = (ky[unsafe_offset=hi] - y0) / (kx[unsafe_offset=hi] - x0)
+        res[unsafe_offset=i] = identical_mul64(slope, v - x0) + y0
