@@ -428,9 +428,15 @@ def gpu_legs(ctx):
                         dict(runpod, MOJOLEARN_GPU_ARCHS=arch, MOJOLEARN_GEMM_LEG_OUT=str(out), **common),
                         rb, legs_dir, out))
     route, why = amd_build_route(ctx)
-    command, env = amd_leg_command(ctx, route, legs_dir)
-    rb, out = leg_layout(legs_dir, "gpu-legs", "hip-gfx942")
-    leg = Leg("hip-gfx942", "hip", "gfx942", command, env, rb, legs_dir, out)
+    if route == "cpu-box":
+        rb, out = leg_layout(legs_dir, "cpu-box", "hip-gfx942")
+        command = ["bash", "tools/release_linux_build.sh", ctx.commit, "--rent", "--archs", "gfx942",
+                   "--flavors", CPU_BOX_FLAVORS, "--out", str(out)]
+        leg = Leg("hip-gfx942", "hip", "gfx942", command, {}, rb, legs_dir, out)
+    else:
+        command, env = amd_leg_command(ctx, route, legs_dir)
+        rb, out = leg_layout(legs_dir, "gpu-legs", "hip-gfx942")
+        leg = Leg("hip-gfx942", "hip", "gfx942", command, env, rb, legs_dir, out)
     leg.provider, leg.provider_reason = route, why
     legs.append(leg)
     return legs
@@ -443,7 +449,12 @@ def gpu_legs(ctx):
 #: remote build and the same output tree (2026-09-25). auto: do, unless
 #: DigitalOcean has a GPU droplet live (the DigitalOcean leg refuses a rental
 #: then, one GPU droplet at a time on the account) or no usable token.
-AMD_BUILD_PROVIDERS = ("auto", "do", "hotaisle")
+#: cpu-box: tools/release_linux_build.sh --archs gfx942 on a RunPod CPU pod,
+#: the opt-in CPU route for the AMD set alone (Andrew, 2026-09-26, 0.8.23:
+#: DigitalOcean refused on billing and Hot Aisle had no MI300X). gfx942 is
+#: compiled ahead of time from --target-accelerator, so no AMD GPU is needed to
+#: build it; the AMD column still runs the wheel on a real MI300X. Never auto.
+AMD_BUILD_PROVIDERS = ("auto", "do", "hotaisle", "cpu-box")
 DO_LIVE_REFUSAL = "GPU droplet(s) already live"
 
 
