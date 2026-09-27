@@ -1,0 +1,12 @@
+--- a/x_cluster/bodies.mojo
++++ b/x_cluster/bodies.mojo
+@@ -288,7 +288,8 @@
+         if k == 0 or v > mx:
+             mx = v
+     var s = Float32(0)
+-    for k in range(kc):
++    for kk in range(kc):
++        var k = kc - 1 - kk
+         s = ftz(s + ftz(identical_exp(ftz(q[i * kc + k] - mx))))
+     var lse = ftz(mx + ftz(identical_log(s)))
+     for k in range(kc):

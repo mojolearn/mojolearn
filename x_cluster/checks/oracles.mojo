@@ -7,7 +7,7 @@ reference, NOT by calling the bodies, plus the UNPINNED spelling of each seam
 its DEVIATION (IDENTITY_PATHS.md rows 110-119)."""
 from std.math import fma
 
-from checks.numerics import ftz, identical_div, identical_exp, identical_log, identical_mul, identical_sqrt
+from checks.numerics import ftz, identical_div, identical_exp, identical_log, identical_mul, identical_pow, identical_sqrt
 
 
 # DEVIATION 5100 (fold order) and 5101 (contraction): squared distance
@@ -253,4 +253,45 @@ def oracle_moments(
                 if a == b:
                     v = ftz(v + reg)
                 out.append(v)
+    return out^
+
+
+# DEVIATION 5111: the non-euclidean metrics (OPTICS's metric option)
+def oracle_pdist(
+    a: List[Float32], na: Int, b: List[Float32], nb: Int, d: Int, metric: Int, p: Float32, descending: Bool = False
+) -> List[Float32]:
+    """metric 1 manhattan, 2 chebyshev, 3 minkowski p, 4 cosine; each fold
+    over the features ascending (descending: the unpinned order)."""
+    var out = List[Float32](capacity=na * nb)
+    for i in range(na):
+        for j in range(nb):
+            var v = Float32(0)
+            var dot = Float32(0)
+            var n1 = Float32(0)
+            var n2 = Float32(0)
+            for q in range(d):
+                var f = d - 1 - q if descending else q
+                var x = ftz(a[i * d + f])
+                var y = ftz(b[j * d + f])
+                var t = abs(ftz(x - y))
+                if metric == 1:
+                    v = ftz(v + t)
+                elif metric == 2:
+                    if t > v:
+                        v = t
+                elif metric == 3:
+                    v = ftz(v + ftz(identical_pow(t, p)))
+                else:
+                    dot = ftz(dot + ftz(identical_mul(x, y)))
+                    n1 = ftz(n1 + ftz(identical_mul(x, x)))
+                    n2 = ftz(n2 + ftz(identical_mul(y, y)))
+            if metric == 3:
+                v = ftz(identical_pow(v, ftz(identical_div(Float32(1), p))))
+            elif metric == 4:
+                if n1 == Float32(0) or n2 == Float32(0):
+                    v = Float32(1)
+                else:
+                    var den = ftz(identical_mul(identical_sqrt(n1), identical_sqrt(n2)))
+                    v = ftz(Float32(1) - ftz(identical_div(dot, den)))
+            out.append(v if v > Float32(0) else Float32(0))
     return out^

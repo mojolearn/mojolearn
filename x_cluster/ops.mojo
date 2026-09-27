@@ -75,6 +75,7 @@ trait ClusterOps(Movable):
     def kmeans(
         mut self, x: List[Float32], n: Int, d: Int, k: Int, max_iter: Int, tol: Float64,
         seed: UInt64, n_init: Int, init: Int, mut centers: List[Float32], mut labels: List[Int32],
+        weights: List[Float32] = List[Float32](),
     ) raises -> Float64:
         """The repository's k-means (cuVS's fit_predict): `cluster/estimator.mojo::
         kmeans_fit` on the device, `cluster/host/kmeans_oracle.mojo::
@@ -98,4 +99,10 @@ trait ClusterOps(Movable):
         mut self, resp: Int, x: Int, n: Int, d: Int, kc: Int, reg: Float32, nk: Int, means: Int, cov: Int
     ) raises:
         """nk (kc), means (kc x d), cov (kc x d x d) of `resp` (n x kc)."""
+        ...
+
+    def pdist(
+        mut self, a: Int, na: Int, b: Int, nb: Int, d: Int, metric: Int, p: Float32, dst: Int
+    ) raises:
+        """dst (na x nb) = the metric's distances (`bodies.pdist_cell`)."""
         ...

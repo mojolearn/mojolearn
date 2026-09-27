@@ -36,7 +36,12 @@ def affinity_fit[O: ClusterOps](
     pref_scalar: Float32, pref_array: List[Float32], damping: Float32, max_iter: Int,
     conv_iter: Int, seed: UInt64,
     mut centers_idx: List[Int32], mut labels: List[Int32], mut n_iter: Int, mut affinity: List[Float32],
+    mut ar_diag: List[Float32],
 ) raises:
+    """`ar_diag` returns the final diagonals of A then R (2n floats; empty on
+    the equal-similarities shortcut): the continuous state the exemplar
+    choice reads, kept so a verifier lane can see the message arithmetic and
+    not only the discrete labels it settles into."""
     var s_m: List[Float32]
     if precomputed:
         s_m = x.copy()
@@ -72,7 +77,14 @@ def affinity_fit[O: ClusterOps](
                 var lo = ops.get(ks, 1)[0]
                 med = -ftz(identical_mul(ftz(lo + hi), Float32(0.5)))
         else:
-            raise Error("AffinityPropagation: the default (median) preference needs a similarity matrix with no positive entry; pass preference=")
+            # a precomputed S with a positive entry: the two middle order
+            # statistics by a host heap sort (one source in both bindings)
+            var v = s_m.copy()
+            _heap_sort(v)
+            if m % 2 == 1:
+                med = v[m // 2]
+            else:
+                med = ftz(identical_mul(ftz(v[m // 2 - 1] + v[m // 2]), Float32(0.5)))
         for i in range(n):
             pref[i] = med
     elif pref_mode == 2:
@@ -145,6 +157,13 @@ def affinity_fit[O: ClusterOps](
                 never_converged = False
                 break
         it += 1
+    var a_fin = ops.get(a_s, n * n)
+    var r_fin = ops.get(r_s, n * n)
+    ar_diag = List[Float32](capacity=2 * n)
+    for i in range(n):
+        ar_diag.append(a_fin[i * n + i])
+    for i in range(n):
+        ar_diag.append(r_fin[i * n + i])
     if never_converged:
         it = max_iter - 1
     n_iter = it + 1
@@ -206,3 +225,35 @@ def _argmax_cols(s_m: List[Float32], n: Int, cols: List[Int]) -> List[Int]:
                 best = q
         out.append(best)
     return out^
+
+
+def _heap_sort(mut v: List[Float32]):
+    """Ascending, in place (a -0.0 and a +0.0 compare equal; the median of
+    them is the same either way)."""
+    var n = len(v)
+
+    def sift(mut a: List[Float32], start: Int, end: Int):
+        var root = start
+        while 2 * root + 1 <= end:
+            var child = 2 * root + 1
+            if child + 1 <= end and a[child] < a[child + 1]:
+                child += 1
+            if a[root] < a[child]:
+                var t = a[root]
+                a[root] = a[child]
+                a[child] = t
+                root = child
+            else:
+                return
+
+    var start = (n - 2) // 2
+    while start >= 0:
+        sift(v, start, n - 1)
+        start -= 1
+    var end = n - 1
+    while end > 0:
+        var t = v[0]
+        v[0] = v[end]
+        v[end] = t
+        end -= 1
+        sift(v, 0, end)
