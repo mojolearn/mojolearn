@@ -17,6 +17,7 @@ first imported, after the package, so both may rely on every module existing:
 from ._x_sequence_autoarima import AutoARIMA
 from ._x_sequence_optim import Adagrad, RMSprop
 from ._x_sequence_stl import STL
+from ._x_sequence_var import VAR
 from ._x_sequence_rnn import GRUClassifier, GRURegressor, LSTMClassifier, LSTMRegressor
 
-__all__ = ["LSTMRegressor", "LSTMClassifier", "GRURegressor", "GRUClassifier", "RMSprop", "Adagrad", "AutoARIMA", "STL"]
+__all__ = ["LSTMRegressor", "LSTMClassifier", "GRURegressor", "GRUClassifier", "RMSprop", "Adagrad", "AutoARIMA", "STL", "VAR"]

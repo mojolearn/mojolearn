@@ -72,3 +72,20 @@ def test_mutual_info():
 if __name__ == "__main__":
     test_mutual_info()
     print("PASS test_x_prep_selection (mutual info)")
+
+
+def test_rfe():
+    from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as SkLDA
+    rng = np.random.default_rng(7)
+    n, d = 400, 8
+    y = rng.integers(0, 3, n)
+    X = (rng.standard_normal((n, d)) + y[:, None] * np.linspace(0, 1.4, d)).astype(np.float32)
+    m = ml.RFE(ml.LinearDiscriminantAnalysis(), n_features_to_select=3, step=2).fit(X, y)
+    r = skfs.RFE(SkLDA(), n_features_to_select=3, step=2).fit(X.astype(np.float64), y)
+    np.testing.assert_array_equal(np.asarray(m.ranking_), r.ranking_)
+    assert np.mean(np.asarray(m.predict(X)) == r.predict(X.astype(np.float64))) > 0.99
+
+
+if __name__ == "__main__":
+    test_rfe()
+    print("PASS test_x_prep_selection (rfe)")

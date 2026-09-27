@@ -40,6 +40,7 @@ FAMILIES = (
             "x-prep-variance-threshold",
             "x-prep-select-kbest",
             "x-prep-mutual-info",
+            "x-prep-rfe",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -60,6 +61,7 @@ FAMILIES = (
             "IterativeImputer",
             "VarianceThreshold",
             "SelectKBest",
+            "RFE",
         ),
         display="preprocessing additions, naive Bayes and discriminant analysis",
         host_modules=(
@@ -103,6 +105,7 @@ TRAINING_LANE_NAMES = {
     "x-prep-variance-threshold": "VarianceThreshold",
     "x-prep-select-kbest": "SelectKBest",
     "x-prep-mutual-info": "mutual_info_classif / mutual_info_regression",
+    "x-prep-rfe": "RFE",
 }
 PUBLIC_PENDING_LANES = {
     "x-prep-robust-scaler": "no reference",
@@ -130,4 +133,5 @@ PUBLIC_PENDING_LANES = {
     "x-prep-variance-threshold": "no reference",
     "x-prep-select-kbest": "no reference",
     "x-prep-mutual-info": "no reference",
+    "x-prep-rfe": "no reference",
 }

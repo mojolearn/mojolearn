@@ -9,6 +9,7 @@ from x_prep.prims import (
     i2f_unit, f2i_unit, binarize_unit, matmul_unit, row_softmax_unit, row_argmax_unit,
     class_stats_unit, center_rows_unit, where_neg_unit, mark_missing_unit, fill_unit,
     label_binarize_unit, scatter_ones_unit, gather_cols_unit, var_ptp_unit,
+    sqsum_cols_unit,
 )
 from x_prep.eigh import eigh_unit
 from x_prep.target import te_global_unit, te_enc_unit, te_apply_unit
@@ -29,7 +30,7 @@ from naive_bayes.da import (
     lda_prep_unit, lda_w_unit, lda_stage2_unit, lda_stage3_unit, qda_cov_unit, qda_prep_unit, qda_dec_unit,
 )
 
-comptime N_OPS = 71
+comptime N_OPS = 72
 
 
 @always_inline
@@ -176,3 +177,5 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
         mi_cd_unit(t, f, q)
     comptime if OP == 70:
         mi_reduce_unit(t, f, q)
+    comptime if OP == 71:
+        sqsum_cols_unit(t, f, q)

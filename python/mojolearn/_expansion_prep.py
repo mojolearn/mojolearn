@@ -35,7 +35,7 @@ from ._labels import flatten_labels, sorted_classes, label_kind
 __all__ = ["f_classif", "f_regression", "chi2", "mutual_info_classif", "mutual_info_regression", "RobustScaler", "MaxAbsScaler", "OrdinalEncoder", "OneHotEncoder", "TargetEncoder", "SimpleImputer", "KBinsDiscretizer",
            "GaussianNB", "MultinomialNB", "BernoulliNB",
            "LinearDiscriminantAnalysis", "QuadraticDiscriminantAnalysis",
-           "QuantileTransformer", "PowerTransformer", "Normalizer", "PolynomialFeatures", "SplineTransformer", "Binarizer", "LabelEncoder", "LabelBinarizer", "MultiLabelBinarizer", "IterativeImputer", "VarianceThreshold", "SelectKBest"]
+           "QuantileTransformer", "PowerTransformer", "Normalizer", "PolynomialFeatures", "SplineTransformer", "Binarizer", "LabelEncoder", "LabelBinarizer", "MultiLabelBinarizer", "IterativeImputer", "VarianceThreshold", "SelectKBest", "RFE"]
 
 _BINDING = "_mojolearn_x_prep"
 
@@ -49,7 +49,7 @@ _OPS = dict(
     lda_prep=36, lda_w=37, lda_stage2=38, lda_stage3=39, qda_cov=40, qda_prep=41, qda_dec=42,
     qt_apply=43, pt_fit=44, pt_apply=45, std_params=46, normalize=47, poly=48, spline_knots=49, spline_apply=50, label_binarize=51, scatter_ones=52,
     ii_mean=53, ii_gram=54, ii_sub=55, ii_br=56, ii_predict=57, ii_snapshot=58, ii_conv=59, nan_mask=60, gather_cols=61, var_ptp=62, f_classif=63, f_regression=64, chi2=65,
-    mi_colscale=66, mi_noise=67, mi_cc=68, mi_cd=69, mi_reduce=70,
+    mi_colscale=66, mi_noise=67, mi_cc=68, mi_cd=69, mi_reduce=70, sqsum_cols=71,
 )
 _PARAMS = 14
 _NONE = -1
@@ -2137,3 +2137,101 @@ def mutual_info_regression(X, y, *, discrete_features="auto", n_neighbors=3, cop
     X: the Kraskov k-NN estimator, float32, brute-force neighbour scans on
     the device; noise from random_state by splitmix64."""
     return _mutual_info(X, y, False, discrete_features, n_neighbors, random_state)
+
+
+def _gather(arr, cols, mode):
+    n, d = arr.shape
+    pr = _Prog()
+    xo, ko = pr.put(arr), pr.put_list(cols)
+    out = pr.alloc(n * len(cols))
+    pr.stage("gather_cols", n * len(cols), xo, n, d, ko, len(cols), out)
+    pr.run(mode)
+    return pr.get(out, (n, len(cols)))
+
+
+def _importances(est, mode):
+    """The squared importance of each column of a fitted estimator: coef_
+    squared (summed over rows when 2-D) on the device, else
+    feature_importances_ as given."""
+    coef = getattr(est, "coef_", None)
+    if coef is None:
+        imp = getattr(est, "feature_importances_", None)
+        if imp is None:
+            raise ValueError("mojolearn: RFE needs an estimator with coef_ or feature_importances_")
+        return [float(v) for v in (imp.tolist() if hasattr(imp, "tolist") else imp)]
+    c = as_f32_c(coef, ndim=None, name="coef_")[0]
+    rows, d = (1, c.shape[0]) if c.ndim == 1 else c.shape
+    pr = _Prog()
+    co = pr.put(c)
+    out = pr.alloc(d)
+    pr.stage("sqsum_cols", d, co, rows, d, out)
+    pr.run(mode)
+    return pr.values(out, d)
+
+
+class RFE(_SelectorMixin):
+    """sklearn.feature_selection.RFE: fit, rank by squared coef_ (summed over
+    classes; or feature_importances_), drop the `step` weakest, repeat.
+    Ties are broken by a STABLE ascending sort (the lower column index is
+    dropped first); the reference's quicksort leaves them unspecified.
+    importance_getter other than 'auto' is refused."""
+    _parameters = ("estimator", "n_features_to_select", "step", "verbose", "importance_getter")
+
+    def __init__(self, estimator, *, n_features_to_select=None, step=1, verbose=0, importance_getter="auto"):
+        self.estimator = estimator
+        self.n_features_to_select = n_features_to_select
+        self.step = step
+        self.verbose = verbose
+        self.importance_getter = importance_getter
+
+    def _clone(self):
+        est = self.estimator
+        return type(est)(**est.get_params()) if hasattr(est, "get_params") else est
+
+    def fit(self, X, y, **fit_params):
+        if self.importance_getter != "auto":
+            raise NotImplementedError("mojolearn: RFE importance_getter other than 'auto' is not implemented")
+        arr = _x2d(X)
+        n, d = arr.shape
+        mode = _mode()
+        nsel = self.n_features_to_select
+        if nsel is None:
+            nsel = d // 2
+        elif isinstance(nsel, float) and 0 < nsel < 1:
+            nsel = int(nsel * d)
+        nsel = max(1, int(nsel))
+        step = int(max(1, self.step * d)) if isinstance(self.step, float) and self.step < 1 else int(self.step)
+        if step <= 0:
+            raise ValueError("mojolearn: step must be > 0")
+        support = [True] * d
+        ranking = [1] * d
+        while sum(support) > nsel:
+            features = [j for j in range(d) if support[j]]
+            est = self._clone().fit(_gather(arr, features, mode), y, **fit_params)
+            imp = _importances(est, mode)
+            ranks = sorted(range(len(features)), key=lambda r: imp[r])
+            threshold = min(step, sum(support) - nsel)
+            for r in ranks[:threshold]:
+                support[features[r]] = False
+            for j in range(d):
+                if not support[j]:
+                    ranking[j] += 1
+        features = [j for j in range(d) if support[j]]
+        self.estimator_ = self._clone().fit(_gather(arr, features, mode), y, **fit_params)
+        self._mask, self.support_ = support, list(support)
+        self.ranking_ = Array.from_list(ranking, "<i8")
+        self.n_features_ = sum(support)
+        self.numeric_mode_, self.n_features_in_ = mode, d
+        return self
+
+    def predict(self, X):
+        return self.estimator_.predict(self.transform(X))
+
+    def predict_proba(self, X):
+        return self.estimator_.predict_proba(self.transform(X))
+
+    def decision_function(self, X):
+        return self.estimator_.decision_function(self.transform(X))
+
+    def score(self, X, y):
+        return self.estimator_.score(self.transform(X), y)
