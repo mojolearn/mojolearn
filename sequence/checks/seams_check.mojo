@@ -173,12 +173,23 @@ def _run[OP: Int, E: Exec](
     return out^
 
 
+struct Cols(Movable):
+    """Every buffer after one launch: `dev` from `DeviceExec`, `host` from
+    `HostExec`."""
+    var dev: List[List[Float32]]
+    var host: List[List[Float32]]
+
+    def __init__(out self, var dev: List[List[Float32]], var host: List[List[Float32]]):
+        self.dev = dev^
+        self.host = host^
+
+
 def _both[OP: Int](
     mut hx: HostExec, mut dx: DeviceExec, bufs: List[List[Float32]], ints: List[Int], flts: List[Float32], n: Int,
-) raises -> Tuple[List[List[Float32]], List[List[Float32]]]:
+) raises -> Cols:
     var d = _run[OP](dx, bufs, ints, flts, n)
     var h = _run[OP](hx, bufs, ints, flts, n)
-    return (d^, h^)
+    return Cols(d^, h^)
 
 
 # ------------------------------------------------------------ 5504 BPTT
@@ -243,13 +254,13 @@ def main() raises:
     var C0 = _mixed(M * N, 13)
     var g = _both[OP_GEMM](hx, dx, [A.copy(), Bm.copy(), C0.copy()], [M, N, K, K, 1, N, 1, 1, N], List[Float32](), M * N)
     _check("5500_gemm_k_order", o_gemm(A, Bm, C0, M, N, K, False), o_gemm(A, Bm, C0, M, N, K, True),
-           g[0][2], g[1][2], tr)
+           g.dev[2], g.host[2], tr)
 
     # ---- 5501 column sums, R 41, C 3.
     var R = 41; var Cc = 3
     var X = _mixed(R * Cc, 21)
     var cs = _both[OP_COLSUM](hx, dx, [X.copy(), List[Float32](length=Cc, fill=Float32(0.0))], [R, Cc, Cc, 0], List[Float32](), Cc)
-    _check("5501_colsum_order", o_colsum(X, R, Cc, False), o_colsum(X, R, Cc, True), cs[0][1], cs[1][1], tr)
+    _check("5501_colsum_order", o_colsum(X, R, Cc, False), o_colsum(X, R, Cc, True), cs.dev[1], cs.host[1], tr)
 
     # ---- 5502 LSTM step, B 4, H 8.
     var Bb = 4; var H = 8
@@ -262,7 +273,7 @@ def main() raises:
     var ls = _both[OP_CELL_FWD](hx, dx, [gx.copy(), gh.copy(), z4.copy(), hprev.copy(), cprev.copy(), zH.copy(), zH.copy()],
                                 [CELL_LSTM, Bb, H], List[Float32](), Bb * H)
     _check("5502_lstm_cell", o_lstm(gx, gh, cprev, Bb, H, False), o_lstm(gx, gh, cprev, Bb, H, True),
-           _cat(ls[0][5], ls[0][6]), _cat(ls[1][5], ls[1][6]), tr)
+           _cat(ls.dev[5], ls.dev[6]), _cat(ls.host[5], ls.host[6]), tr)
 
     # ---- 5503 GRU step, B 4, H 8.
     var gx3 = _signed(Bb * 3 * H, 41, 3.0)
@@ -272,7 +283,7 @@ def main() raises:
     var gr = _both[OP_CELL_FWD](hx, dx, [gx3.copy(), gh3.copy(), z3.copy(), hp3.copy(), zH.copy(), zH.copy(), zH.copy()],
                                 [CELL_GRU, Bb, H], List[Float32](), Bb * H)
     _check("5503_gru_update", o_gru(gx3, gh3, hp3, Bb, H, False), o_gru(gx3, gh3, hp3, Bb, H, True),
-           gr[0][5], gr[1][5], tr)
+           gr.dev[5], gr.host[5], tr)
 
     # ---- 5504 BPTT weight gradient: an LSTM, D 3, H 4, one layer, O 2, T 6, B 3.
     var net = Net(CELL_LSTM, 3, 4, 1, 2)
@@ -298,7 +309,7 @@ def main() raises:
     var ce = _both[OP_CE](hx, dx, [logits.copy(), lab.copy(), List[Float32](length=B6 * C6, fill=Float32(0.0)),
                                    List[Float32](length=B6, fill=Float32(0.0))], [0, C6], [scale6], B6)
     _check("5505_ce_expsum", o_ce(logits, labels, B6, C6, scale6, False), o_ce(logits, labels, B6, C6, scale6, True),
-           _cat(ce[0][2], ce[0][3]), _cat(ce[1][2], ce[1][3]), tr)
+           _cat(ce.dev[2], ce.dev[3]), _cat(ce.host[2], ce.host[3]), tr)
 
     # ---- 5506 Adam, 64 parameters, step 3, L2 weight decay.
     var n7 = 64
@@ -310,16 +321,20 @@ def main() raises:
     for i in range(n7):
         v7.append(abs(vs[i]) + Float32(1e-4))
     var b1 = Float32(0.9); var b2 = Float32(0.999); var lr = Float32(1e-3)
+    # lr 1 and parameters near 1e-3: the step, where the two denominators
+    # part, is not rounded away against p.
+    var lrA = Float32(1.0)
+    var pA = _signed(n7, 75, 0.001)
     var pw1 = ftz(identical_mul(ftz(identical_mul(b1, b1)), b1))
     var pw2 = ftz(identical_mul(ftz(identical_mul(b2, b2)), b2))
-    var f5 = ftz(identical_div(lr, Float32(1.0) - pw1))
+    var f5 = ftz(identical_div(lrA, Float32(1.0) - pw1))
     var f6 = ftz(identical_sqrt(Float32(1.0) - pw2))
     var z7 = List[Float32](length=n7, fill=Float32(0.0))
-    var ad = _both[OP_OPT](hx, dx, [p7.copy(), g7.copy(), m7.copy(), v7.copy(), z7.copy()],
-                           [OPT_ADAM, 3, 0], [lr, b1, b2, Float32(1e-8), Float32(0.01), f5, f6, Float32(0.0)], n7)
-    _check("5506_adam_denom", o_adam(p7, g7, m7, v7, b1, b2, Float32(1e-8), Float32(0.01), f5, f6, False),
-           o_adam(p7, g7, m7, v7, b1, b2, Float32(1e-8), Float32(0.01), f5, f6, True),
-           _cat(_cat(ad[0][0], ad[0][2]), ad[0][3]), _cat(_cat(ad[1][0], ad[1][2]), ad[1][3]), tr)
+    var ad = _both[OP_OPT](hx, dx, [pA.copy(), g7.copy(), m7.copy(), v7.copy(), z7.copy()],
+                           [OPT_ADAM, 3, 0], [lrA, b1, b2, Float32(1e-8), Float32(0.01), f5, f6, Float32(0.0)], n7)
+    _check("5506_adam_denom", o_adam(pA, g7, m7, v7, b1, b2, Float32(1e-8), Float32(0.01), f5, f6, False),
+           o_adam(pA, g7, m7, v7, b1, b2, Float32(1e-8), Float32(0.01), f5, f6, True),
+           _cat(_cat(ad.dev[0], ad.dev[2]), ad.dev[3]), _cat(_cat(ad.host[0], ad.host[2]), ad.host[3]), tr)
 
     # ---- 5507 torch.lerp through Adamax, beta1 0.3 (w = 0.7, the upper branch).
     var b1x = Float32(0.3); var b2x = Float32(0.99)
@@ -328,7 +343,7 @@ def main() raises:
                            [OPT_ADAMAX, 1, 0], [lr, b1x, b2x, Float32(1e-8), Float32(0.0), clr, Float32(0.0), Float32(0.0)], n7)
     _check("5507_torch_lerp", o_adamax(p7, g7, m7, v7, b1x, b2x, Float32(1e-8), Float32(0.0), clr, False),
            o_adamax(p7, g7, m7, v7, b1x, b2x, Float32(1e-8), Float32(0.0), clr, True),
-           _cat(_cat(ax[0][0], ax[0][2]), ax[0][3]), _cat(_cat(ax[1][0], ax[1][2]), ax[1][3]), tr)
+           _cat(_cat(ax.dev[0], ax.dev[2]), ax.dev[3]), _cat(_cat(ax.host[0], ax.host[2]), ax.host[3]), tr)
 
     # ---- 5508 MLP binary log loss, 10 rows, O 1: p at 0, 1 and near both ends.
     var pb: List[Float32] = [0.0, 1.0, 1e-9, 0.99999994, 0.3, 0.7, 5e-8, 0.5, 1.0, 0.0]
@@ -337,7 +352,7 @@ def main() raises:
     var ll = _both[OP_MLP_ROWLOSS](hx, dx, [pb.copy(), yb.copy(), List[Float32](length=nb, fill=Float32(0.0)),
                                              List[Float32](length=nb, fill=Float32(0.0))], [LOSS_BINARY_LOG, 1], List[Float32](), nb)
     _check("5508_logloss_clip", o_binary_logloss(pb, yb, False), o_binary_logloss(pb, yb, True),
-           _cat(ll[0][2], ll[0][3]), _cat(ll[1][2], ll[1][3]), tr)
+           _cat(ll.dev[2], ll.dev[3]), _cat(ll.host[2], ll.host[3]), tr)
 
     # ---- 5509 the MLP shuffle (host), n 97, seed 20260927.
     var perm = List[Float32]()
@@ -371,7 +386,7 @@ def main() raises:
         X11[r * M11 + 3] = X11[r * M11 + 3] * Float32(37.0)
     var sc = _both[OP_COLSCALE](hx, dx, [X11.copy(), List[Float32](length=M11, fill=Float32(0.0))], [R11, M11], List[Float32](), M11)
     _check("5511_var_pow2_scale", o_colscale(X11, R11, M11, False), o_colscale(X11, R11, M11, True),
-           _cat(sc[0][0], sc[0][1]), _cat(sc[1][0], sc[1][1]), tr)
+           _cat(sc.dev[0], sc.dev[1]), _cat(sc.host[0], sc.host[1]), tr)
 
     # ---- 5512 VAR Cholesky solve: an SPD 7x7 with 2 right-hand sides, and an indefinite one.
     var m12 = 7; var K12 = 2
@@ -396,8 +411,8 @@ def main() raises:
     _check("5512_var_cholesky",
            _cat(o_cholsolve(G, B12, m12, K12, False), o_cholsolve(Gbad, B12, m12, K12, False)),
            _cat(o_cholsolve(G, B12, m12, K12, True), o_cholsolve(Gbad, B12, m12, K12, True)),
-           _cat(_cat(_cat(ch[0][0], ch[0][1]), ch[0][2]), _cat(_cat(chb[0][0], chb[0][1]), chb[0][2])),
-           _cat(_cat(_cat(ch[1][0], ch[1][1]), ch[1][2]), _cat(_cat(chb[1][0], chb[1][1]), chb[1][2])), tr)
+           _cat(_cat(_cat(ch.dev[0], ch.dev[1]), ch.dev[2]), _cat(_cat(chb.dev[0], chb.dev[1]), chb.dev[2])),
+           _cat(_cat(_cat(ch.host[0], ch.host[1]), ch.host[2]), _cat(_cat(chb.host[0], chb.host[1]), chb.host[2])), tr)
 
     # ---- 5513 Nelder-Mead simplex order (host): a staircase objective, 3 coordinates, 4 starts.
     var want13 = List[Float32](); var alt13 = List[Float32](); var got13 = List[Float32]()
@@ -435,7 +450,7 @@ def main() raises:
                                  [D14, E14, k14, 1], List[Float32](), T14)
     _check("5514_moe_route_tie", o_moe_route(x14, W14, T14, D14, E14, k14, True, False),
            o_moe_route(x14, W14, T14, D14, E14, k14, True, True),
-           _cat(_cat(mo[0][2], mo[0][3]), mo[0][4]), _cat(_cat(mo[1][2], mo[1][3]), mo[1][4]), tr)
+           _cat(_cat(mo.dev[2], mo.dev[3]), mo.dev[4]), _cat(_cat(mo.host[2], mo.host[3]), mo.host[4]), tr)
 
     # ---- 5515 LayerNorm forward, M 3, D 33, weight and bias.
     var M15 = 3; var D15 = 33
@@ -448,7 +463,7 @@ def main() raises:
                               [D15, 1, 1], [eps15], M15)
     _check("5515_layernorm_stats", o_layer_norm(x15, w15, b15, M15, D15, eps15, False),
            o_layer_norm(x15, w15, b15, M15, D15, eps15, True),
-           _cat(_cat(ln[0][3], ln[0][4]), ln[0][5]), _cat(_cat(ln[1][3], ln[1][4]), ln[1][5]), tr)
+           _cat(_cat(ln.dev[3], ln.dev[4]), ln.dev[5]), _cat(_cat(ln.host[3], ln.host[4]), ln.host[5]), tr)
 
     # ---- 5516 SES recursion through Croston: 5 intermittent series of 40, classic and optimized.
     var B16 = 5; var n16 = 40
@@ -464,8 +479,8 @@ def main() raises:
                                    [n16, variant], List[Float32](), B16)
         want16 = _cat(want16, o_croston(y16, B16, n16, variant, False))
         alt16 = _cat(alt16, o_croston(y16, B16, n16, variant, True))
-        dev16 = _cat(dev16, cr[0][1])
-        host16 = _cat(host16, cr[1][1])
+        dev16 = _cat(dev16, cr.dev[1])
+        host16 = _cat(host16, cr.host[1])
     _check("5516_ses_recursion", want16, alt16, dev16, host16, tr)
 
     _ = dx^
