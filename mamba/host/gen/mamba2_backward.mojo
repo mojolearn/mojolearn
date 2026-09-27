@@ -20,6 +20,7 @@ from mamba.host.device_shim import launch_count
 from mamba.host.device_shim import DeviceBuffer, DeviceContext
 
 from checks.numerics import (
+    identical_mul,
     ftz,
     identical_div,
     identical_mul_add,
@@ -42,7 +43,7 @@ from mamba.host.gen.mamba2_backward_checks import (
     mamba2_backward_reduce_workspace_max_floats,
 )
 from mamba.checks.mamba2_fixture import Mamba2Dims
-from mamba.host.gen.modeling_mamba import mamba_scratch, pinned_mul
+from mamba.host.gen.modeling_mamba import mamba_scratch
 
 
 comptime M2_BWD_TPB = 128
@@ -87,7 +88,7 @@ def mamba2_gnorm_backward_kernel(gid_: Int,
     var inner_dot = Float32(0.0)
     for j in range(width):
         var dinner = ftz(
-            pinned_mul(
+            identical_mul(
                 ftz(d_gnorm.unsafe_load(t * width + j)),
                 ftz(weight.unsafe_load(j)),
             )
@@ -99,22 +100,22 @@ def mamba2_gnorm_backward_kernel(gid_: Int,
                 inner_dot,
             )
         )
-    var r2 = ftz(pinned_mul(rstd, rstd))
+    var r2 = ftz(identical_mul(rstd, rstd))
     var scale = ftz(
-        identical_div(ftz(pinned_mul(r2, rstd)), Float32(width))
+        identical_div(ftz(identical_mul(r2, rstd)), Float32(width))
     )
     for j in range(width):
         var cell = t * width + j
         var dj = ftz(d_gnorm.unsafe_load(cell))
         var gj = ftz(gate.unsafe_load(cell))
-        var dinner = ftz(pinned_mul(dj, ftz(weight.unsafe_load(j))))
-        var first = ftz(pinned_mul(rstd, dinner))
+        var dinner = ftz(identical_mul(dj, ftz(weight.unsafe_load(j))))
+        var first = ftz(identical_mul(rstd, dinner))
         var second = ftz(
-            pinned_mul(ftz(pinned_mul(scale, gj)), inner_dot)
+            identical_mul(ftz(identical_mul(scale, gj)), inner_dot)
         )
         d_gate.unsafe_store(cell, ftz(ftz(first) - ftz(second)))
-        var normalized = ftz(pinned_mul(gj, rstd))
-        weight_product.unsafe_store(cell, ftz(pinned_mul(dj, normalized)))
+        var normalized = ftz(identical_mul(gj, rstd))
+        weight_product.unsafe_store(cell, ftz(identical_mul(dj, normalized)))
 
 
 def mamba2_silu_gate_backward_kernel(gid_: Int, 
@@ -139,13 +140,13 @@ def mamba2_silu_gate_backward_kernel(gid_: Int,
     var dg = ftz(d_gate.unsafe_load(cell))
     var sk = ftz(skip.unsafe_load(cell))
     var z = ftz(in_proj.unsafe_load(t * dip + j))
-    d_skip.unsafe_store(cell, ftz(pinned_mul(dg, identical_silu(z))))
+    d_skip.unsafe_store(cell, ftz(identical_mul(dg, identical_silu(z))))
     var sig = ftz(identical_sigmoid(z))
     var middle = ftz(
         identical_mul_add(z, ftz(Float32(1.0) - sig), Float32(1.0))
     )
-    var prime = ftz(pinned_mul(sig, middle))
-    d_z.unsafe_store(cell, ftz(pinned_mul(ftz(pinned_mul(dg, sk)), prime)))
+    var prime = ftz(identical_mul(sig, middle))
+    d_z.unsafe_store(cell, ftz(identical_mul(ftz(identical_mul(dg, sk)), prime)))
 
 
 def mamba2_d_skip_backward_kernel(gid_: Int, 
@@ -181,7 +182,7 @@ def mamba2_d_skip_backward_kernel(gid_: Int,
         var xv = ftz(xbc.unsafe_load(t * conv_width + h * p_dim + p))
         d_scan.unsafe_store(cell, ds)
         d_x_from_d.unsafe_store(
-            cell, ftz(pinned_mul(ds, ftz(d_weight.unsafe_load(h))))
+            cell, ftz(identical_mul(ds, ftz(d_weight.unsafe_load(h))))
         )
         acc = ftz(identical_mul_add(ds, xv, acc))
     d_d_product.unsafe_store(th, acc)

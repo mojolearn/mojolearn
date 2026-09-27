@@ -235,6 +235,53 @@ def _(ml, X, yc, yr, Xh=None):
 _batch_decl(_rows_calls("predict", "predict_proba", sl=slice(0, 256)), "x-prep-lda", "x-prep-qda")
 
 
+@lane("x-prep-da-solvers")
+def _(ml, X, yc, yr, Xh=None):
+    """LinearDiscriminantAnalysis solver 'lsqr' / 'eigen' with shrinkage None,
+    'auto' (Ledoit-Wolf) and a constant, store_covariance; QDA solver 'eigen'
+    with shrinkage and store_covariance."""
+    y3 = _prep_three_class(X, yr)
+    parts = {}
+    for j, kw in enumerate((dict(solver="lsqr"), dict(solver="lsqr", shrinkage="auto"),
+                            dict(solver="eigen", shrinkage=0.25), dict(solver="svd", store_covariance=True))):
+        m = ml.LinearDiscriminantAnalysis(**kw).fit(X, y3)
+        parts[f"lda{j}"] = _h(m.covariance_, m.coef_, m.intercept_, m.predict_proba(X[:256]))
+    # (the eigen / QDA arms take a constant shrinkage: the dupes fixture's classes are
+    # singular, and 'auto' can land within an ulp of the reference's refusal)
+    me = ml.LinearDiscriminantAnalysis(solver="eigen", shrinkage=0.5).fit(X, yc)
+    parts["eigen_binary"] = _h(me.coef_, me.explained_variance_ratio_, me.transform(X[:256]))
+    for j, kw in enumerate((dict(solver="eigen", shrinkage=0.3, store_covariance=True),
+                            dict(solver="svd", reg_param=0.05, store_covariance=True))):
+        q = ml.QuadraticDiscriminantAnalysis(**kw).fit(X, y3)
+        parts[f"qda{j}"] = _h(*q.covariance_, q.predict_proba(X[:256]))
+    m = ml.LinearDiscriminantAnalysis(solver="eigen", shrinkage=0.25).fit(X, y3)
+    return _fit(parts, m, lambda e: (e.predict_proba(Xh[:256]), e.transform(Xh[:256])))
+
+
+_batch_decl(_rows_calls("predict", "predict_proba", sl=slice(0, 256)), "x-prep-da-solvers")
+
+
+@lane("x-prep-nb-weights")
+def _(ml, X, yc, yr, Xh=None):
+    """sample_weight for every naive Bayes classifier; CategoricalNB min_categories."""
+    y3 = _prep_three_class(X, yr)
+    w = (np.abs(X[:, 0]) * 2 + 0.25).astype(np.float32)
+    parts = {}
+    g = ml.GaussianNB().fit(X, y3, sample_weight=w)
+    parts["gnb"] = _h(g.theta_, g.var_, g.class_count_, g.predict_proba(X[:256]))
+    Xa = _prep_abs(X)
+    for nm in ("MultinomialNB", "ComplementNB", "BernoulliNB"):
+        m = getattr(ml, nm)().fit(Xa if nm != "BernoulliNB" else X, y3, sample_weight=w)
+        parts[nm] = _h(m.feature_count_, m.class_count_, m.feature_log_prob_)
+    Xc = _prep_cat_codes(X)
+    c = ml.CategoricalNB(min_categories=7).fit(Xc, y3, sample_weight=w)
+    parts["cat"] = _h(*c.feature_log_prob_, c.class_count_, c.predict_proba(Xc[:256]))
+    return _fit(parts, g, lambda e: (e.predict_proba(Xh[:256]),))
+
+
+_batch_decl(_rows_calls("predict", "predict_proba", sl=slice(0, 256)), "x-prep-nb-weights")
+
+
 @lane("x-prep-quantile-transformer")
 def _(ml, X, yc, yr, Xh=None):
     m = ml.QuantileTransformer(n_quantiles=200, random_state=5).fit(X)

@@ -71,10 +71,10 @@ steward)
     # A steward started by nohup or screen dies when macOS sshd closes the
     # session, so it runs as a system launchd daemon as ec2-user, KeepAlive,
     # under caffeinate, logging to ~/mojolearn-evidence/steward-<name>.log.
-    # A Mac listed in MOJOLEARN_STEWARD_DEFERRED (default m3ultra, busy with a
+    # A Mac listed in MOJOLEARN_STEWARD_DEFERRED (default: none. m3ultra was deferred while busy with a
     # GPT-3 segment) is refused: it must not be contacted until it is free.
     n="${2:?name}"; act="${3:?install|restart|status}"
-    case ",${MOJOLEARN_STEWARD_DEFERRED-m3ultra}," in *",$n,"*)
+    case ",${MOJOLEARN_STEWARD_DEFERRED-}," in *",$n,"*)
         die "$n is deferred (MOJOLEARN_STEWARD_DEFERRED); clear it once the Mac is free" ;; esac
     case "$act" in
     status)

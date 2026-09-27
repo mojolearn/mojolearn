@@ -1,3 +1,45 @@
+# LANE CHARTER (Andrew, 2026-09-27): read this first
+
+**Each family lane owns EVERYTHING in its family, existing algorithms and
+new ones, through five phases. Each phase is one session. At the end of a
+phase: merge, update `docs/lanes/progress/<lane>.md` with exactly what is
+next, report to main, and STOP.** Main starts a fresh agent for the next
+phase. A new session trusts the progress file and never re-runs a check it
+records as passed.
+
+| phase | done when, for EVERY algorithm in the family |
+|---|---|
+| 1. **Verification** | it has a verifier lane with CPU and GPU paths; each numeric seam has a host oracle, a separating fixture, a sabotage that builds, runs and bites, a DEVIATION and a card stage; and the lane check AGREEs on NVIDIA (pod), AMD (do-amd steward or your AMD box) and Apple (m2pro or m3ultra steward) |
+| 2. **Option parity** | every option its reference and bench opponents have is implemented, or refused by name for an identity reason |
+| 3. **FAST speed** | it is faster on NVIDIA, AMD and Apple under FAST, with quality never worse (a paired check against the reference at 5+ seeds on 2+ datasets) |
+| 4. **IDENTICAL speed** | it is faster on NVIDIA, AMD and Apple under IDENTICAL, with the same bits, re-proven on every column |
+| 5. **CPU speed** | its CPU path is faster (threads, SIMD, cache blocking), with bits identical at every thread count and equal to the GPU |
+
+Speed is measured at realistic large shapes on R2 data, before and after on
+the same box. Apple and AMD timing jobs use
+`tools/apple_steward.py submit --kind speed --target m3ultra|do-amd`, or
+your own `<lane>-amd` box.
+
+**Families (existing + new):**
+- **linear:** LinearRegression, Ridge, Lasso, ElasticNet, LogisticRegression, LinearSVC/SVR, plus the expansion's GLMs, SGD, Huber, Bayesian, Lars, quantile, CV and isotonic.
+- **cluster:** KMeans, DBSCAN, HDBSCAN, Agglomerative, SpectralClustering, GaussianMixture, plus MiniBatch/Bisecting KMeans, MeanShift, OPTICS, AffinityPropagation and BayesianGMM.
+- **neighbors:** NearestNeighbors, kNN classification/regression, radius, random ball cover, KernelDensity, SVC/SVR, KernelRidge, Nystroem, RBFSampler, GP regression/classification, plus LOF, NearestCentroid, OneClassSVM, KernelPCA, the kernel approximations, label propagation, KNNImputer, graph algorithms and SVGP.
+- **decomp:** PCA, TruncatedSVD, UMAP, SpectralEmbedding, linalg (matmul, cholesky, qr, eigh, svdvals), plus every new decomposition, manifold and linalg item.
+- **prep:** StandardScaler, MinMaxScaler, resampling (bootstrap, permutation, Monte Carlo), plus every new preprocessor, feature selector and naive Bayes/LDA/QDA.
+- **sequence:** ARIMA, ExponentialSmoothing, KPSS, plus the recurrent models, optimizers, forecasters and MoE.
+- **trees:** GBDT (symmetric, depthwise, lossguide, ordered), RandomForest, ExtraTrees, IsolationForest, host forest/GBDT inference, plus CART, the ensembles, DART and SHAP.
+- **cnn:** convolution, pooling, normalization, ResNet block, GCN/SAGE and CNNClassifier.
+- **ann:** IVF-Flat, plus IVF-PQ, IVF-SQ, RaBitQ, refine, filter, CAGRA and t-SNE.
+- **neural:** transformer, Mamba-1/2/3, Samba, MLP, embedding, byte-LM, tokenizer, training optimizers (SGD/Adam/AdamW). Their FAST tier is new.
+- **metrics:** the 24 metrics, CV splitters and model_selection.
+
+**Non-family lanes:**
+- `cpu`: the CPU-path audit, gap fixes and shared CPU infrastructure (core_host, threading utilities). Per-family CPU speed belongs to the family lane.
+- `bench`: the benchmark board, with no measuring until Andrew says so.
+- `dedupe` and the tools lanes: shared fixes.
+
+---
+
 # CURRENT DIRECTIVES: re-read after every merge
 
 Lanes merge origin/main before every merge, so this section reaches every
@@ -11,6 +53,12 @@ messaging lanes. Newest items are at the top.
    (in the CPU gate) fails on a NEW fixture-RNG definition
    (`tools/fixture_rng_census.py`) and on any existing copy that differs
    from its canonical behavior bit for bit.
+0000b. **Steward merge gate (Andrew wants speed; 2026-09-27):** a lane may
+   merge once **one Apple steward (m2pro OR m3ultra) PASSES and do-amd
+   PASSES**. Every request still runs on both Macs. A later FAIL from the
+   other Mac, especially M2 vs M4/M3 codegen differences, comes back to
+   the lane as a fix at the root. Don't wait on a queue that is behind:
+   keep working on the next item while verdicts arrive.
 0000a. **Commit and push your branch at every meaningful step, not only at
    merges (Andrew, 2026-09-27, after the weekly usage limit killed every
    agent mid-work).** Commit WIP to your own branch (`lane/<name>`) and
@@ -20,6 +68,10 @@ messaging lanes. Newest items are at the top.
    `refs/wip/<lane>/*` backups (`git fetch origin 'refs/wip/*:refs/wip/*'`),
    and fold anything useful into your branch. The orchestrator also
    snapshots every worktree's uncommitted work to `refs/wip/` periodically.
+   **Owed option parity found by bench (b186bad01), each for its lane's
+   parity phase:** ann: t-SNE `init='pca'` (scikit-learn's default; ours
+   refuses it). prep: CategoricalNB `min_categories`. sequence: seasonal
+   ETS (the damped-ETS race runs non-seasonal until it lands).
    **Owed from the 2026-09-27 stop:** Apple and AMD reference columns for
    `byte-lm-host-train` (revision weight-decay-default-0.01-1), recorded
    with identity_break on each.
@@ -33,7 +85,9 @@ messaging lanes. Newest items are at the top.
    never repeat it.
 00. **End your session at every checkpoint (saves tokens; Andrew,
    2026-09-27).** The checkpoints are:
-   - each phase merged: pass-2 proof, option parity, GPU speed, CPU speed
+   - each phase merged (ONE PHASE PER SESSION, Andrew 2026-09-27): (1) proof,
+     (2) option parity, (3) FAST GPU speed, (4) IDENTICAL GPU speed,
+     (5) CPU speed. Finish a phase, merge, update the progress file, STOP.
    - or roughly every 10 merged items
    - or whenever your conversation has grown long
    At a checkpoint: make `docs/lanes/progress/<lane>.md` say exactly where
@@ -70,13 +124,40 @@ messaging lanes. Newest items are at the top.
    `tools/apple_steward.py submit` ships identity requests there too while
    `tools/do_amd_steward.sh` has it up (push the commit to origin first), and
    a merge then needs m2pro PASS AND do-amd PASS (`apple_steward.py status`).
-1. **Order per lane:** (a) every algorithm in the lane table and Additions
-   (PASS 1); (b) proof on every column, holding an AMD box (PASS 2 items
-   1-2); (c) **option parity** (item 2 below); (d) **GPU speed**, IDENTICAL
-   and FAST, on NVIDIA, AMD and Apple; (e) **CPU speed, LAST** (Andrew,
-   2026-09-27): threads, vectorization and cache blocking of the CPU host
-   path, after all GPU work is done. Every change is re-proven bitwise on
-   every column.
+1. **Order per lane, one phase per session:**
+   - (a) every algorithm in the lane table and Additions (PASS 1)
+   - (b) **proof** on every column (per-seam, `--pass 2`, both stewards)
+   - (c) **option parity** (item 2)
+   - (d) **FAST GPU speed:** a faster schedule, bits may differ, quality
+     never (5+ seeds, 2+ datasets vs the reference); NVIDIA, AMD, Apple
+   - (e) **IDENTICAL GPU speed:** faster with the SAME bits, re-proven
+     bitwise on every column; NVIDIA, AMD, Apple
+   - (f) **CPU speed, LAST:** threads, vectorization and cache blocking of
+     the CPU host path, re-proven bitwise
+   Each of (b)-(f) is its own session: finish it, merge, STOP. The
+   orchestrator relaunches you for the next phase.
+1a. **Each lane's family INCLUDES its existing algorithms, in EVERY phase**
+   (parity, FAST speed, IDENTICAL speed, CPU speed), not only the new ones:
+   linear (glm, solver), cluster (KMeans, DBSCAN, HDBSCAN, agglomerative,
+   spectral, GMM), neighbors (kNN, radius, ball cover, KDE, SVM, kernel,
+   GP), decomp (PCA, TSVD, UMAP, linalg), prep (scalers), sequence (ARIMA,
+   ETS, KPSS), trees (RF, ET, GBDT, isolation forest), ann (IVF-Flat).
+   Two new lanes own the families nobody had:
+   - `neural`: transformer, Mamba-1/2/3, Samba, MLP, embedding, byte-LM,
+     training. Their bindings are IDENTICAL-only today; this lane builds
+     their FAST tier.
+   - `metrics`: the 24 evaluation metrics, cross-validation and
+     model_selection.
+1c. **Lane `cpu` (Andrew, 2026-09-27) owns CPU paths across ALL
+   algorithms.** Phase 1: audit that every public algorithm has a CPU
+   fit/predict path, and fix any gap at the root. Later phases: speed of the
+   EXISTING host bindings (core_host, forest_host, gbdt_host,
+   estimators_host, the family *_host bindings): threads, SIMD
+   vectorization, cache blocking. The bits must be identical at every
+   thread count and equal to the GPU. Algorithm lanes still do CPU speed
+   for their own `x_*` code in their last phase. `cpu` does not touch
+   `x_*` directories; algorithm lanes don't do CPU speed on existing host
+   code.
 1b. **Done means ALL of this, per algorithm (Andrew, 2026-09-27):**
    - **Both modes work:** IDENTICAL (bitwise across every column) and FAST
      (a faster schedule, allowed to differ in bits, never in quality: a

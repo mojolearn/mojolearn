@@ -1175,6 +1175,11 @@ def lane_floors():
 #: key lands here with a sentence saying what moved. An entry whose key does
 #: name a size is refused by name, so this cannot become a way of opting out.
 NON_SIZE_REVISIONS = {
+    "byte-lm-host-train": (
+        "arithmetic, not input: 06073dba5 (0.8.14) moved LanguageModelHostTrainer's default "
+        "weight_decay 0.0 -> 0.01 to match the GPU trainer (revision recorded 2026-09-27, "
+        "lane/bytelm-div). The lane trains at the library default, so every cell moved while the "
+        "fixture's batch, seqlen and steps did not"),
     "holtwinters-multiplicative": (
         "arithmetic, not input: ExponentialSmoothing's default became initialization_method="
         "'estimated' (2026-09-22, feat/holtwinters-estimated-init-sep22), which estimates the initial "

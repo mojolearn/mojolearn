@@ -344,7 +344,7 @@ REQUIRED_MAMBA_SOURCES = (
 
 
 def source_inventory():
-    # Llama forward/backward import pinned_mul/residual helpers from Mamba;
+    # Llama forward/backward import residual helpers from Mamba;
     # that module also imports its scan interface and fixture descriptors.
     # An absent transport subtree must not silently produce a smaller proof.
     for name in REQUIRED_MAMBA_SOURCES:

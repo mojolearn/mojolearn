@@ -5,7 +5,6 @@ sklearn OneHotEncoder / OrdinalEncoder min_frequency, max_categories (infrequent
 sklearn OneHotEncoder handle_unknown='infrequent_if_exist'	NOT IMPLEMENTED	needs the infrequent categories above
 sklearn OneHotEncoder / KBinsDiscretizer / LabelBinarizer / MultiLabelBinarizer sparse output	NOT IMPLEMENTED -- REFUSED BY NAME	there is no sparse Array; output is dense float32 (OneHotEncoder ignores sparse_output and says so in its docstring)
 sklearn TargetEncoder categories=<list>, cv=<splitter object>	NOT IMPLEMENTED	integer cv only; folds are a splitmix64 permutation from random_state
-sklearn TargetEncoder stratified folds for a classification target	NOT IMPLEMENTED	KFold for every target type; StratifiedKFold's per-class round robin over the same permutation would go in _kfold_assignment
 sklearn SimpleImputer callable strategy	NOT IMPLEMENTED	a callable runs in Python and is not a device path
 sklearn KBinsDiscretizer sample_weight, quantile_method other than 'averaged_inverted_cdf' / 'linear'	NOT IMPLEMENTED	the other numpy methods are further integer splits of the same rational position in kbins_edges_unit
 sklearn PolynomialFeatures order='F'	NOT IMPLEMENTED	a column-major output layout of the same products

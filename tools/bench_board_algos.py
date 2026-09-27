@@ -177,8 +177,8 @@ _add("sgd-reg", xlane="linear", ours="SGDRegressor", task="reg", block="reg",
      sk="sklearn.linear_model:SGDRegressor", params=dict(_SGD, loss="squared_error"),
      cuml="cuml.linear_model:MBSGDRegressor",
      cuml_params=dict(loss="squared_loss", penalty="l2", alpha=1e-4, epochs=20,
-                      batch_size=4096, learning_rate="invscaling", eta0=0.01, tol=0.0,
-                      shuffle=True),
+                      batch_size=4096, learning_rate="invscaling", eta0=0.01, power_t=0.25,
+                      tol=0.0, shuffle=True),
      mism=["cuML MBSGD is mini-batch SGD (batch_size 4096)"])
 for _slug, _cls, _kw, _why in (
         ("poisson", "PoissonRegressor", {}, "y = the reg target (taxi fare > 0; Istella grade >= 0)"),
@@ -442,19 +442,24 @@ for _slug, _cls, _kw, _blk, _cu in (
         ("poly-features", "PolynomialFeatures", dict(degree=2, include_bias=False), "raw16", True),
         ("spline", "SplineTransformer", dict(n_knots=5, degree=3), "raw16", False),
         ("kbins", "KBinsDiscretizer", dict(n_bins=16, encode="ordinal", strategy="quantile",
-                                           subsample=None), "raw", True),
+                                           quantile_method="linear", subsample=None), "raw", True),
         ("onehot", "OneHotEncoder", dict(handle_unknown="ignore", sparse_output=False), "cat", True),
         ("ordinal", "OrdinalEncoder", dict(handle_unknown="use_encoded_value", unknown_value=-1),
          "cat", False),
         ("variance-threshold", "VarianceThreshold", dict(threshold=0.01), "raw", False)):
-    _cukw = {k: v for k, v in _kw.items() if k != "subsample"}
+    # cuML takes no subsample and no quantile_method (its quantile edges are np.percentile's
+    # linear ones, the method ours and scikit-learn are set to above)
+    _cukw = {k: v for k, v in _kw.items() if k not in ("subsample", "quantile_method")}
     if _cls == "QuantileTransformer":
         _cukw["subsample"] = 10 ** 9      # cuML takes no None: every row, as scikit-learn's None
     _add(_slug, xlane="prep", ours=_cls, task="transform", block=_blk, quality="vs-sklearn",
          sk=("sklearn.feature_selection:" if _cls == "VarianceThreshold" else "sklearn.preprocessing:")
          + _cls, params=_kw, cuml=(_CUP + _cls) if _cu else None, cuml_params=_cukw,
          notes=(["the first 16 columns (PolynomialFeatures of Istella's 220 would be 24,000+ "
-                 "columns)"] if _blk == "raw16" else []))
+                 "columns)"] if _blk == "raw16" else [])
+         + (["quantile_method='linear' on ours and scikit-learn: the pinned scikit-learn 1.7.2's "
+             "default, and cuML's np.percentile edges (ours defaults to 1.9's "
+             "'averaged_inverted_cdf')"] if _slug == "kbins" else []))
 _add("target-encoder", xlane="prep", ours="TargetEncoder", task="transform", block="cat", supervised=True,
      quality="vs-sklearn", sk="sklearn.preprocessing:TargetEncoder",
      params=dict(target_type="binary", cv=5, shuffle=True, random_state=SEED),
@@ -535,11 +540,16 @@ _add("layernorm", xlane="sequence", ours=("LayerNorm", "layer_norm_forward"), ki
      block="tensor", datasets=("synthetic",), torch=True,
      params=dict(normalized_shape=1024, eps=1e-5),
      notes=["x (16384, 1024) N(0,1) seed 7"])
-_add("moe", xlane="sequence", ours=("MoEBlock", "SparseMoeBlock", "MixtureOfExperts"), kind="layer",
-     task="moe", block="tensor", datasets=("synthetic",), torch=True,
-     params=dict(hidden_size=1024, ffn_size=2816, num_experts=8, top_k=2),
+_add("moe", xlane="sequence", ours=("MoEBlock",), kind="layer",
+     task="moe", block="tensor", datasets=("synthetic",), torch=True, forward_only=True,
+     params=dict(hidden_size=1024, intermediate_size=2816, num_experts=8, top_k=2,
+                 norm_topk_prob=True),
      notes=["x (8192, 1024); the torch arm is a transcription of HF MixtralSparseMoeBlock.forward "
-            "(softmax router, top-2, renormalized weights, SwiGLU experts)"])
+            "(softmax router, top-2, renormalized weights, SwiGLU experts)",
+            "forward only on every arm (ours exports no MoEBlock backward, "
+            "sequence/NOT_IMPLEMENTED.tsv): the fit column times one forward, torch under "
+            "no_grad; ours loads torch's weights in HF's fused layout (router (E, D), "
+            "gate_up_proj (E, 2F, D) = [w1; w3], down_proj (E, D, F) = w2)"])
 for _slug, _cls, _torch in (("rmsprop", "RMSprop", "RMSprop"), ("adagrad", "Adagrad", "Adagrad"),
                             ("adamax", "Adamax", "Adamax"), ("nadam", "NAdam", "NAdam"),
                             ("adafactor", "Adafactor", "Adafactor"), ("lion", "Lion", None),
@@ -597,11 +607,16 @@ _add("garch", xlane="sequence", ours="GARCH", kind="ts", task="garch", block="ts
             "arch_model(vol='GARCH', p=1, o=0, q=1, mean='Constant', dist='normal', "
             "rescale=False) per series (ours refuses rescaling); the forecast is the "
             "conditional variance, h steps"])
-_add("prophet", xlane="sequence", ours=("Prophet", "ProphetForecaster"), kind="ts",
+_add("prophet", xlane="sequence", ours=("ProphetForecaster",), kind="ts",
      task="forecast", block="ts", datasets=_TS,
      params=dict(n_changepoints=25, daily_seasonality=True, weekly_seasonality=True,
-                 yearly_seasonality=False),
-     other={"prophet-cpu": "prophet"}, notes=[_TSNOTE],
+                 yearly_seasonality=False, max_iter=10000),
+     other={"prophet-cpu": "prophet"},
+     notes=[_TSNOTE, "prophet's shape on both sides: fit(ds, y), predict(future ds), ds hourly "
+                     "from 2024-01-01; ours fits the batch of series at once, prophet one "
+                     "series per job; linear growth, additive seasonality, 25 changepoints over "
+                     "the first 80%, daily (order 4) and weekly (order 3) seasonality, no "
+                     "yearly; the iteration cap is prophet's (Stan iter=1e4) on both"],
      mism=["prophet fits by Stan's L-BFGS (MAP); ours by its own L-BFGS; parity is at a "
            "tolerance, the forecast RMSE is the comparable number"])
 
@@ -784,15 +799,17 @@ _add("cagra", xlane="ann", ours=("CAGRAIndex", "CagraIndex"), kind="ann", task="
                          "efSearch=64), the CPU graph index; cuvs-gpu is CAGRA itself"])
 _add("tsne", xlane="ann", ours="TSNE", task="embed", block="manifold",
      sk="sklearn.manifold:TSNE",
-     params=dict(n_components=2, perplexity=30.0, max_iter=1000, learning_rate="auto", init="pca",
-                 random_state=SEED),
+     params=dict(n_components=2, perplexity=30.0, max_iter=1000, learning_rate="auto",
+                 init="random", random_state=SEED),
      sk_params=dict(n_components=2, perplexity=30.0, max_iter=1000, learning_rate="auto",
-                    init="pca", random_state=SEED, n_jobs=-1, method="barnes_hut"),
+                    init="random", random_state=SEED, n_jobs=-1, method="barnes_hut"),
      cuml="cuml.manifold:TSNE",
      cuml_params=dict(n_components=2, perplexity=30.0, max_iter=1000, learning_rate_method="adaptive",
                       init="random", random_state=SEED, method="fft"),
-     mism=["gradients: ours exact or FFT (no Barnes-Hut atomics under IDENTICAL); scikit-learn "
-           "Barnes-Hut; cuML FFT with random init (its only init)"])
+     mism=["gradients: ours exact repulsion over k-NN affinities (no Barnes-Hut atomics under "
+           "IDENTICAL); scikit-learn Barnes-Hut; cuML FFT",
+           "init='random' on every arm: cuML's only init, and ours refuses 'pca' "
+           "(x_ann/NOT_IMPLEMENTED.tsv); each library draws its own start"])
 _add("ivf-sq", xlane="ann", ours=("IVFSQIndex",), kind="ann", task="ivf-sq", block="ivf",
      params=dict(n_lists=1024, n_probes=32, n_neighbors=10, kmeans_n_iters=20, random_state=SEED),
      other={"faiss-cpu": "faiss", "cuvs-gpu": "cuvs"}, notes=[_ANN, "8-bit scalar quantizer"])
@@ -2209,6 +2226,8 @@ def _build_ts(lane, arm, D):
         info = _ours_info(lane)
         info["config"] = "mojolearn.%s(%s).fit(Y (%d, %d))" % (name, p, Y.shape[0], Y.shape[1])
         Y32 = D["Yfit"]
+        # prophet's time axis, as the prophet arm builds it: hourly from 2024-01-01
+        ds = np.datetime64("2024-01-01T00", "h") + np.arange(Y32.shape[1] + h).astype("timedelta64[h]")
 
         def fit():
             if lane == "autoarima":           # the cuML shape: construct on the batch, search, fit
@@ -2223,6 +2242,8 @@ def _build_ts(lane, arm, D):
                 S["est"] = cls(np.ascontiguousarray(Y32[:16].T)).fit(maxlags=p["maxlags"])
             elif t == "garch":                # arch's shape; the variance forecast horizon is fixed at fit
                 S["est"] = cls(**p).fit(Y32, horizon=h)
+            elif lane == "prophet":           # prophet's shape: fit(ds, y), then predict(future ds)
+                S["est"] = cls(**p).fit(ds[:Y32.shape[1]], Y32)
             else:
                 S["est"] = cls(**p).fit(Y32)
 
@@ -2240,6 +2261,8 @@ def _build_ts(lane, arm, D):
             else:
                 if lane == "autoarima" or t == "garch":
                     fc = e.forecast(h)
+                elif lane == "prophet":
+                    fc = e.predict(ds[Y32.shape[1]:])
                 else:                          # statsforecast's shape: predict(h) -> {"mean": ...}
                     fc = e.predict(h)
                     if isinstance(fc, dict):
@@ -2634,7 +2657,8 @@ def _layer_inputs(lane, D, torch):
     return make, x, extra
 
 
-def _MoE(torch, hidden_size, ffn_size, num_experts, top_k):
+def _MoE(torch, hidden_size, intermediate_size, num_experts, top_k, norm_topk_prob):
+    ffn_size = intermediate_size
     nn = torch.nn
     F = torch.nn.functional
 
@@ -2660,7 +2684,9 @@ def _MoE(torch, hidden_size, ffn_size, num_experts, top_k):
             logits = self.gate(h)
             w = F.softmax(logits, dim=1, dtype=torch.float)
             w, sel = torch.topk(w, top_k, dim=-1)
-            w = (w / w.sum(dim=-1, keepdim=True)).to(h.dtype)
+            if norm_topk_prob:
+                w = w / w.sum(dim=-1, keepdim=True)
+            w = w.to(h.dtype)
             out = torch.zeros_like(h)
             mask = F.one_hot(sel, num_classes=num_experts).permute(2, 1, 0)
             for e in range(num_experts):
@@ -2735,7 +2761,16 @@ def _build_layer(lane, arm, D):
         layer = cls(**kw)
         info["config"] = "mojolearn.%s(%s)" % (name, kw)
         info["weights_loaded"] = False
-        if hasattr(layer, "load_state_dict"):
+        if s["task"] == "moe":                # HF's fused layout from the per-expert transcription
+            E = kw["num_experts"]
+            layer.load_state_dict({
+                "router": state["gate.weight"],
+                "gate_up_proj": np.stack([np.concatenate([state["experts.%d.w1.weight" % e],
+                                                          state["experts.%d.w3.weight" % e]])
+                                          for e in range(E)]),
+                "down_proj": np.stack([state["experts.%d.w2.weight" % e] for e in range(E)])})
+            info["weights_loaded"] = True
+        elif hasattr(layer, "load_state_dict"):
             layer.load_state_dict(state)
             info["weights_loaded"] = True
         elif hasattr(layer, "set_weights") and "weight" in state:
@@ -2759,6 +2794,8 @@ def _build_layer(lane, arm, D):
             nonlocal dy
             y = fwd(x, *extra)
             y = y[0] if isinstance(y, tuple) else y
+            if s.get("forward_only"):
+                return
             if dy is None:
                 dy = torch.randn(tuple(np.shape(y)), generator=g).numpy()
             if not hasattr(layer, "backward"):
@@ -2792,7 +2829,7 @@ def _build_layer(lane, arm, D):
     mod.load_state_dict({k: torch.from_numpy(v) for k, v in state.items()})
     mod = mod.to(dev)
     x = x_cpu.to(dev)
-    if s["task"] not in ("gcn", "sage"):
+    if s["task"] not in ("gcn", "sage") and not s.get("forward_only"):
         x.requires_grad_(True)             # backward computes dx, as ours' backward returns it
     extra = tuple(e.to(dev) for e in extra_cpu)
     run = torch.compile(mod) if mode == "compile" else mod
@@ -2809,6 +2846,11 @@ def _build_layer(lane, arm, D):
         return y[0] if isinstance(y, tuple) else y
 
     def fit():
+        if s.get("forward_only"):
+            with torch.no_grad():
+                forward()
+            _torch_sync(torch, dev)
+            return
         y = forward()
         if "dy" not in dyh:
             dyh["dy"] = torch.randn(tuple(y.shape), generator=g).to(dev)

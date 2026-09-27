@@ -38,8 +38,8 @@ from gemm.checks.gemm_backward import (
 )
 from gemm.checks.gemm_identical import GemmWorkspace, identical_gemm
 from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN
-from mamba.impl.modeling.modeling_mamba import pinned_mul
 from checks.numerics import (
+    identical_mul,
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
     ftz,
@@ -508,7 +508,7 @@ def bwd_mask_grad_kernel(
     does not use. DEVIATION 1414.
 
     **THE MASKED CELLS ARE NOT ZEROED, AND THAT IS A DECISION.** They are
-    already SIGNED zeros: `dS_j = pinned_mul(y_j, dy_j - z)` with `y_j`
+    already SIGNED zeros: `dS_j = identical_mul(y_j, dy_j - z)` with `y_j`
     exactly `+0.0` carries the sign of `dy_j - z`. Forcing `+0.0` therefore
     differs exactly where that sign is negative, which is roughly half the
     masked cells and **is reachable without a plant** -- so unlike
@@ -558,7 +558,7 @@ def bwd_mul_kernel(
     if i >= n:
         return
     dst.unsafe_store(
-        i, ftz(pinned_mul(ftz(a.unsafe_load(i)), ftz(bb.unsafe_load(i))))
+        i, ftz(identical_mul(ftz(a.unsafe_load(i)), ftz(bb.unsafe_load(i))))
     )
 
 
@@ -583,10 +583,10 @@ def bwd_mul2_kernel(
         return
     var av = ftz(a.unsafe_load(i))
     dst0.unsafe_store(
-        i, ftz(pinned_mul(av, ftz(b0.unsafe_load(i))))
+        i, ftz(identical_mul(av, ftz(b0.unsafe_load(i))))
     )
     dst1.unsafe_store(
-        i, ftz(pinned_mul(av, ftz(b1.unsafe_load(i))))
+        i, ftz(identical_mul(av, ftz(b1.unsafe_load(i))))
     )
 
 
@@ -612,7 +612,7 @@ def bwd_scale_kernel(
         # skipped and the softmax's own gradient stands.
         dst.unsafe_store(i, src.unsafe_load(i))
         return
-    dst.unsafe_store(i, ftz(pinned_mul(ftz(src.unsafe_load(i)), scale_in)))
+    dst.unsafe_store(i, ftz(identical_mul(ftz(src.unsafe_load(i)), scale_in)))
 
 
 def bwd_add2_kernel(
@@ -702,10 +702,10 @@ def bwd_silu_backward_kernel(
 
         sg = identical_sigmoid(x)         DEVIATION 743, portable_sigmoidf
         r1 = ftz(1.0 - sg)                SUBTRACT
-        r2 = pinned_mul(x, r1)            PRODUCT
+        r2 = identical_mul(x, r1)            PRODUCT
         r3 = ftz(1.0 + r2)                UNFUSED ADD
-        r4 = pinned_mul(sg, r3)           PRODUCT
-        dg = pinned_mul(dsi, r4)          PRODUCT
+        r4 = identical_mul(sg, r3)           PRODUCT
+        dg = identical_mul(dsi, r4)          PRODUCT
 
     **`sg` IS RECOMPUTED FROM `gate_proj.out`, NEVER RECONSTRUCTED FROM
     `silu.out`.** `silu(x) = x * sigmoid(x)` is true in the reals and FALSE
@@ -746,11 +746,11 @@ def bwd_silu_backward_kernel(
     comptime if SAB_B20_SILU_DERIV_ALT_ASSOC:
         # SABOTAGE: sg + x*sg*(1-sg). Equal in the reals, different in the
         # last bit, five operations instead of four.
-        var p1 = ftz(pinned_mul(x, sg))
-        var p2 = ftz(pinned_mul(p1, r1))
+        var p1 = ftz(identical_mul(x, sg))
+        var p2 = ftz(identical_mul(p1, r1))
         var d_alt = ftz(ftz(sg) + ftz(p2))
         dg.unsafe_store(
-            i, ftz(pinned_mul(ftz(dsi.unsafe_load(i)), d_alt))
+            i, ftz(identical_mul(ftz(dsi.unsafe_load(i)), d_alt))
         )
         return
 
@@ -759,11 +759,11 @@ def bwd_silu_backward_kernel(
         # SABOTAGE: one rounding where the pinned form has two.
         r3 = ftz(identical_mul_add(x, r1, Float32(1.0)))
     else:
-        var r2 = ftz(pinned_mul(x, r1))
+        var r2 = ftz(identical_mul(x, r1))
         r3 = ftz(ftz(Float32(1.0)) + ftz(r2))
 
-    var r4 = ftz(pinned_mul(sg, r3))
-    dg.unsafe_store(i, ftz(pinned_mul(ftz(dsi.unsafe_load(i)), r4)))
+    var r4 = ftz(identical_mul(sg, r3))
+    dg.unsafe_store(i, ftz(identical_mul(ftz(dsi.unsafe_load(i)), r4)))
 
 
 def bwd_mul2_silu_backward_kernel(
@@ -787,17 +787,17 @@ def bwd_mul2_silu_backward_kernel(
     if i >= n:
         return
     var av = ftz(d_gated.unsafe_load(i))
-    var dsi_v = ftz(pinned_mul(av, ftz(up.unsafe_load(i))))
+    var dsi_v = ftz(identical_mul(av, ftz(up.unsafe_load(i))))
     dsi.unsafe_store(i, dsi_v)
-    dup.unsafe_store(i, ftz(pinned_mul(av, ftz(silu_out.unsafe_load(i)))))
+    dup.unsafe_store(i, ftz(identical_mul(av, ftz(silu_out.unsafe_load(i)))))
 
     var x = ftz(gate.unsafe_load(i))
     var sg = ftz(identical_sigmoid(x))
     var r1 = ftz(ftz(Float32(1.0)) - ftz(sg))
-    var r2 = ftz(pinned_mul(x, r1))
+    var r2 = ftz(identical_mul(x, r1))
     var r3 = ftz(ftz(Float32(1.0)) + ftz(r2))
-    var r4 = ftz(pinned_mul(sg, r3))
-    dg.unsafe_store(i, ftz(pinned_mul(dsi_v, r4)))
+    var r4 = ftz(identical_mul(sg, r3))
+    dg.unsafe_store(i, ftz(identical_mul(dsi_v, r4)))
 
 
 # ===========================================================================
@@ -819,7 +819,7 @@ def bwd_norm_dh_kernel(
     m_in: Int32,
     dm_in: Int32,
 ):
-    """`dh_j = pinned_mul(dy_j, w_j)`, the `y = w * h` node's backward
+    """`dh_j = identical_mul(dy_j, w_j)`, the `y = w * h` node's backward
     (LRN:67). One thread per cell, one rounding, ROUTING."""
     var m = Int(m_in)
     var dm = Int(dm_in)
@@ -830,7 +830,7 @@ def bwd_norm_dh_kernel(
     dh.unsafe_store(
         i,
         ftz(
-            pinned_mul(ftz(dy.unsafe_load(i)), ftz(weight.unsafe_load(j)))
+            identical_mul(ftz(dy.unsafe_load(i)), ftz(weight.unsafe_load(j)))
         ),
     )
 
@@ -864,7 +864,7 @@ def bwd_norm_dh_dot_kernel(
     for j in range(dm):
         var i = t * dm + j
         var dhj = ftz(
-            pinned_mul(ftz(dy.unsafe_load(i)), ftz(weight.unsafe_load(j)))
+            identical_mul(ftz(dy.unsafe_load(i)), ftz(weight.unsafe_load(j)))
         )
         dh.unsafe_store(i, dhj)
         c = ftz(identical_mul_add(dhj, ftz(x.unsafe_load(i)), c))
@@ -874,10 +874,10 @@ def bwd_norm_dh_dot_kernel(
     var mean = ftz(identical_div(ss, Float32(dm)))
     var rstd = ftz(identical_rsqrt(ftz(mean + eps_in)))
     rstd_out.unsafe_store(t, rstd)
-    var r2 = ftz(pinned_mul(rstd, rstd))
-    var r3 = ftz(pinned_mul(r2, rstd))
-    var cr3 = ftz(pinned_mul(c, r3))
-    var da = ftz(pinned_mul(BWD_NEG_HALF, cr3))
+    var r2 = ftz(identical_mul(rstd, rstd))
+    var r3 = ftz(identical_mul(r2, rstd))
+    var cr3 = ftz(identical_mul(c, r3))
+    var da = ftz(identical_mul(BWD_NEG_HALF, cr3))
     dv_out.unsafe_store(t, ftz(identical_div(da, Float32(dm))))
 
 
@@ -898,10 +898,10 @@ def bwd_norm_dot_kernel(
 
         c    = ftz(fma(dh_j, x_j, c)), ASCENDING j from +0.0     FUSED
         rstd = ftz(rsqrt(ftz(div(sumsq, dm) + eps)))             RECOMPUTED
-        r2   = pinned_mul(rstd, rstd)
-        r3   = pinned_mul(r2, rstd)
-        cr3  = pinned_mul(c, r3)
-        da   = pinned_mul(-0.5, cr3)     rsqrt backward, -0.5 * dr * r^3
+        r2   = identical_mul(rstd, rstd)
+        r3   = identical_mul(r2, rstd)
+        cr3  = identical_mul(c, r3)
+        da   = identical_mul(-0.5, cr3)     rsqrt backward, -0.5 * dr * r^3
         dv   = identical_div(da, dm)     mean backward, ONE division
 
     **THE `c` FOLD IS CONTRACT S1's SHAPE UNCHANGED** (DEVIATION 1408).
@@ -947,7 +947,7 @@ def bwd_norm_dot_kernel(
     elif SAB_B01_DOT_UNFUSED:
         for j in range(dm):
             var p = ftz(
-                pinned_mul(
+                identical_mul(
                     ftz(dh.unsafe_load(t * dm + j)),
                     ftz(x.unsafe_load(t * dm + j)),
                 )
@@ -982,10 +982,10 @@ def bwd_norm_dot_kernel(
     rstd_out.unsafe_store(t, rstd)
 
     # ---- the rsqrt and mean nodes -------------------------------------
-    var r2 = ftz(pinned_mul(rstd, rstd))
-    var r3 = ftz(pinned_mul(r2, rstd))
-    var cr3 = ftz(pinned_mul(c, r3))
-    var da = ftz(pinned_mul(BWD_NEG_HALF, cr3))
+    var r2 = ftz(identical_mul(rstd, rstd))
+    var r3 = ftz(identical_mul(r2, rstd))
+    var cr3 = ftz(identical_mul(c, r3))
+    var da = ftz(identical_mul(BWD_NEG_HALF, cr3))
     dv_out.unsafe_store(t, ftz(identical_div(da, Float32(dm))))
 
 
@@ -1006,13 +1006,13 @@ def bwd_norm_dx_kernel(
     """The two `x` branches and the weight-gradient product. One thread per
     cell.
 
-        dx1_j = pinned_mul(dh_j, rstd)     h = x*r, the x branch
-        tx_j  = pinned_mul(2.0, x_j)       pow(2) backward's 2*x
-        dx2_j = pinned_mul(dv, tx_j)
+        dx1_j = identical_mul(dh_j, rstd)     h = x*r, the x branch
+        tx_j  = identical_mul(2.0, x_j)       pow(2) backward's 2*x
+        dx2_j = identical_mul(dv, tx_j)
         dx_j  = ftz(ftz(dx1_j) + ftz(dx2_j))               UNFUSED ADD
 
-        inner_j = pinned_mul(x_j, rstd)    a recompute of forward S3
-        dprod_j = pinned_mul(dy_j, inner_j)
+        inner_j = identical_mul(x_j, rstd)    a recompute of forward S3
+        dprod_j = identical_mul(dy_j, inner_j)
 
     `dprod` exists so the weight gradient can be a GEMM (DEVIATION 1410).
     `dW[j] = sum_t dy_tj * inner_tj` is a Hadamard then a reduce, so the
@@ -1040,9 +1040,9 @@ def bwd_norm_dx_kernel(
     var rstd = ftz(rstd_in.unsafe_load(t))
     var dv = ftz(dv_in.unsafe_load(t))
 
-    var dx1 = ftz(pinned_mul(ftz(dh.unsafe_load(i)), rstd))
-    var tx = ftz(pinned_mul(BWD_TWO, xj))
-    var dx2 = ftz(pinned_mul(dv, tx))
+    var dx1 = ftz(identical_mul(ftz(dh.unsafe_load(i)), rstd))
+    var tx = ftz(identical_mul(BWD_TWO, xj))
+    var dx2 = ftz(identical_mul(dv, tx))
     var dxj = ftz(ftz(dx1) + ftz(dx2))
     dx.unsafe_store(i, dxj)
     if fuse_residual_in != 0:
@@ -1051,9 +1051,9 @@ def bwd_norm_dx_kernel(
             ftz(ftz(dxj) + ftz(residual_branch.unsafe_load(i))),
         )
 
-    var inner = ftz(pinned_mul(xj, rstd))
+    var inner = ftz(identical_mul(xj, rstd))
     dprod.unsafe_store(
-        i, ftz(pinned_mul(ftz(dy.unsafe_load(i)), inner))
+        i, ftz(identical_mul(ftz(dy.unsafe_load(i)), inner))
     )
 
 
@@ -1154,11 +1154,11 @@ def bwd_rope_kernel(
         else:
             rh = -ftz(dout.unsafe_load(i - half))
 
-    var pa = ftz(pinned_mul(dj, cos_v))
+    var pa = ftz(identical_mul(dj, cos_v))
     comptime if SAB_B10_ROPE_BWD_FUSED:
         out_buf.unsafe_store(i, ftz(identical_mul_add(rh, sin_v, pa)))
     else:
-        var pb = ftz(pinned_mul(rh, sin_v))
+        var pb = ftz(identical_mul(rh, sin_v))
         out_buf.unsafe_store(i, ftz(ftz(pa) + ftz(pb)))
 
 
@@ -1223,7 +1223,7 @@ def bwd_softmax_zdot_kernel(
     elif SAB_B18_ZFOLD_UNFUSED:
         for j in range(s):
             var p = ftz(
-                pinned_mul(
+                identical_mul(
                     ftz(dy.unsafe_load(base + j)),
                     ftz(y.unsafe_load(base + j)),
                 )
@@ -1249,7 +1249,7 @@ def bwd_softmax_ds_kernel(
     n_in: Int32,
     s_in: Int32,
 ):
-    """`dS_j = pinned_mul(y_j, ftz(dy_j - z))`. One SUBTRACT, one PRODUCT,
+    """`dS_j = identical_mul(y_j, ftz(dy_j - z))`. One SUBTRACT, one PRODUCT,
     UNFUSED. One thread per cell.
 
     **THERE IS NO MAX BACKWARD, NO EXP BACKWARD AND NO DIVISION BACKWARD,
@@ -1318,12 +1318,12 @@ def bwd_softmax_ds_kernel(
         #
         # INERT at s == 1, where y == 1 and z == dy and both forms give
         # exactly zero.
-        var p1 = ftz(pinned_mul(yv, ftz(dv)))
-        var p2 = ftz(pinned_mul(yv, ftz(z)))
+        var p1 = ftz(identical_mul(yv, ftz(dv)))
+        var p2 = ftz(identical_mul(yv, ftz(z)))
         ds.unsafe_store(i, ftz(ftz(p1) - ftz(p2)))
         return
 
-    ds.unsafe_store(i, ftz(pinned_mul(yv, ftz(ftz(dv) - ftz(z)))))
+    ds.unsafe_store(i, ftz(identical_mul(yv, ftz(ftz(dv) - ftz(z)))))
 
 
 # ===========================================================================
@@ -1413,7 +1413,7 @@ def bwd_dq_kernel(
             # SABOTAGE: the scale folded in per term rather than applied to
             # the finished dS. Bitwise inert whenever the scale is an exact
             # power of two, which it is at head_dim 16 and 64.
-            g = ftz(pinned_mul(g, scale_in))
+            g = ftz(identical_mul(g, scale_in))
         var kv = ftz(k_cache.unsafe_load(vbase + j * hd + d))
         acc = ftz(identical_mul_add(g, kv, acc))
     dq.unsafe_store(i, acc)
