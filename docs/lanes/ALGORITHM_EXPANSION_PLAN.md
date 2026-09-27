@@ -8,8 +8,9 @@ messaging lanes. Newest items are at the top.
    (state key `<lane>-amd`; RunPod MI300X first, Hot Aisle 2x MI300X
    fallback). Grab one when you enter pass 2 and hold it. The lane check now
    builds every base binding itself, and `.checks` takes `<driver>\t<patch>`
-   pairs, enforced with `--pass 2`. Before your next merge, run
-   `tools/test_lane_select.py` on your pod; your lane must not break it.
+   pairs, enforced with `--pass 2`. Before EVERY merge, run
+   `tools/test_lane_select.py` AND `python/mojolearn/tests/test_host_surface.py`
+   on your pod after merging origin/main; both must pass.
 0a. **AMD boxes are allocated for you (2026-09-27).** The orchestrator keeps
    one Hot Aisle MI300X per algorithm lane and renews every dev box hourly.
    If `tools/dev_pod.sh list` shows `<lane>-amd`, that box is yours: use it
