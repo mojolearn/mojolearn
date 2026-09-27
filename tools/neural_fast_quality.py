@@ -122,11 +122,19 @@ def cmd_samba(args):
     raw = corpus_bytes(args.corpus)
     starts, held = schedule(len(raw), args.seed, args.steps, args.batch, args.seq, args.heldout_rows)
     cfg = SambaConfig(**samba_shape(args))
-    stack = SambaStack(cfg, generator=Generator(args.seed), lr=args.lr,
+    if args.init:
+        # FAST from IDENTICAL's initial weights: the pair differs only in
+        # the training arithmetic (the initializer is a FAST kernel too).
+        init_npz = np.load(args.init)
+        source = dict(weights={n: init_npz[n] for n in init_npz.files})
+    else:
+        source = dict(generator=Generator(args.seed))
+    stack = SambaStack(cfg, **source, lr=args.lr,
                        lr_schedule=WarmupCosineLR(args.lr, args.warmup, args.steps, args.min_lr),
                        max_norm=args.max_norm)
     init = np.array(stack.flat, dtype=np.float32, copy=True)
     if args.init_out:
+        args.init_out.parent.mkdir(parents=True, exist_ok=True)
         np.savez(args.init_out, **{n: np.array(stack.arrays[n], dtype=np.float32) for n in stack.names})
     hx, hy = rows_of(raw, held, args.seq)
 
@@ -505,6 +513,7 @@ def main():
         if name == "samba":
             p.add_argument("--mode", choices=("fast", "identical"), required=True)
             p.add_argument("--init-out", type=Path)
+            p.add_argument("--init", type=Path, help="start from these weights (an --init-out npz)")
         else:
             p.add_argument("--init", type=Path, required=True)
             p.add_argument("--device", default="cuda")

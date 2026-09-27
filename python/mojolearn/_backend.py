@@ -1752,16 +1752,23 @@ class _ModeSet:
     mislabelled measurement.
     """
 
-    def __init__(self, mode, modules, missing):
+    def __init__(self, mode, modules, missing, deferred=None):
         self.mode = mode
         self._modules = modules
         self.missing = missing
+        self._deferred = dict(deferred or {})
 
     def __getattr__(self, name):
+        if name.startswith("__"):
+            raise AttributeError(name)
         try:
             return self._modules[name]
         except KeyError:
             pass
+        path = self._deferred.pop(name, None)
+        if path is not None:
+            self._modules[name] = _load_member(self.mode, name, path)
+            return self._modules[name]
         if not _offers(name, self.mode):
             raise ImportError(
                 f"mojolearn: {name} has no {self.mode!r} tier. "
@@ -1781,6 +1788,54 @@ class _ModeSet:
         return f"<mojolearn binaries: {self.mode}>"
 
 
+#: Bindings that register Mojo-owned Python types (`add_type`). Mojo keys a
+#: registered type by its type id, which two tiers of one binding share, so
+#: a process that initializes BOTH tiers of one of these aborts inside
+#: PyInit ("Error building multiple Python type objects bound to Mojo
+#: type"). `load_set` therefore loads them only when asked for (lane neural,
+#: 2026-09-27: a FAST process's buffer helpers load the IDENTICAL set, which
+#: used to initialize IDENTICAL `_mojolearn_mamba` beside the FAST one and
+#: abort), and `_load_member` refuses a second tier by name instead.
+_TYPE_REGISTERING = frozenset({
+    "_mojolearn_mamba", "_mojolearn_transformer", "_mojolearn_byte_lm",
+})
+
+
+def _load_member(mode, name, path):
+    """One binding of one tier, under `mojolearn._sets.<mode>.<name>`."""
+    full = f"mojolearn._sets.{mode}.{name}"
+    existing = sys.modules.get(full)
+    if existing is not None:
+        return existing
+    # select() may already have initialized this exact binary under its
+    # canonical name. Reinitializing it under _sets registers Mojo-owned
+    # Python types twice and aborts. Share only the same resolved file;
+    # other tiers/vendors retain their separate loading and validation.
+    canonical = sys.modules.get(f"mojolearn.{name}")
+    canonical_path = vars(canonical).get('__file__') if canonical is not None else None
+    if canonical_path and os.path.realpath(canonical_path) == os.path.realpath(path):
+        _check_vendor(canonical, name, path)
+        sys.modules[full] = canonical
+        return canonical
+    if name in _TYPE_REGISTERING:
+        others = [m for m in _MODE_CODE if m != mode and f"mojolearn._sets.{m}.{name}" in sys.modules]
+        if canonical_path or others:
+            raise ImportError(
+                f"mojolearn: {name} registers Mojo-owned Python types, so one "
+                f"process can hold only one tier of it, and another tier is "
+                f"already loaded ({canonical_path or others[0]}). Use one "
+                f"numeric_mode per process for this binding."
+            )
+    loader = importlib.machinery.ExtensionFileLoader(full, path)
+    spec = importlib.util.spec_from_loader(full, loader, origin=path)
+    module = importlib.util.module_from_spec(spec)
+    _exec_binding(loader, module)
+    # WHAT THE BINARY SAYS BEATS THE DIRECTORY IT SAT IN.
+    _check_vendor(module, name, path)
+    sys.modules[full] = module
+    return module
+
+
 def load_set(mode):
     """Load (and cache) every binding for one tier, side by side with the
     others. The mechanism behind a per-call `numeric_mode=`."""
@@ -1796,7 +1851,7 @@ def load_set(mode):
     # `select()` used, so a per-call `numeric_mode=` can never reach across
     # to the other vendor's set.
     tier_dir_ = tier_dir(mode)
-    modules, missing = {}, []
+    modules, missing, deferred = {}, [], {}
     for name in _MODULES:
         # An identical-only lane is not "not built yet" in the lower tiers, it
         # is not offered there. Skipping it keeps `missing` meaning what the
@@ -1807,31 +1862,11 @@ def load_set(mode):
         if not os.path.exists(path):
             missing.append(name)
             continue
-        full = f"mojolearn._sets.{mode}.{name}"
-        existing = sys.modules.get(full)
-        if existing is not None:
-            modules[name] = existing
+        if name in _TYPE_REGISTERING:
+            deferred[name] = path
             continue
-        # select() may already have initialized this exact binary under its
-        # canonical name. Reinitializing it under _sets registers Mojo-owned
-        # Python types twice and aborts. Share only the same resolved file;
-        # other tiers/vendors retain their separate loading and validation.
-        canonical = sys.modules.get(f"mojolearn.{name}")
-        canonical_path = vars(canonical).get('__file__') if canonical is not None else None
-        if canonical_path and os.path.realpath(canonical_path) == os.path.realpath(path):
-            _check_vendor(canonical, name, path)
-            sys.modules[full] = canonical
-            modules[name] = canonical
-            continue
-        loader = importlib.machinery.ExtensionFileLoader(full, path)
-        spec = importlib.util.spec_from_loader(full, loader, origin=path)
-        module = importlib.util.module_from_spec(spec)
-        _exec_binding(loader, module)
-        # WHAT THE BINARY SAYS BEATS THE DIRECTORY IT SAT IN.
-        _check_vendor(module, name, path)
-        sys.modules[full] = module
-        modules[name] = module
-    if not modules:
+        modules[name] = _load_member(mode, name, path)
+    if not modules and not deferred:
         raise ImportError(
             f"mojolearn: numeric_mode={mode!r} but no binary for that tier "
             f"exists under {tier_dir_}. Build them with\n    "
@@ -1849,7 +1884,7 @@ def load_set(mode):
                 f"mojolearn: {tier_dir_}/_mojolearn_gbdt.so was compiled "
                 f"{compiled} but sits in the {mode} directory; rebuild it"
             )
-    _SETS[mode] = _ModeSet(mode, modules, missing)
+    _SETS[mode] = _ModeSet(mode, modules, missing, deferred)
     return _SETS[mode]
 
 
