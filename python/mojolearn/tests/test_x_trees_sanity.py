@@ -1,0 +1,55 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+"""Trees lane (algorithm expansion) sanity vs scikit-learn on small data.
+
+A tolerance check, not an identity claim: our trees split on per-feature
+quantiles (n_bins) where sklearn's split on every midpoint, so the scores are
+compared, never the predictions. Run on a GPU box:
+    python -m pytest python/mojolearn/tests/test_x_trees_sanity.py -q
+"""
+import numpy as np
+import pytest
+
+sklearn = pytest.importorskip("sklearn")
+from sklearn.datasets import make_classification, make_regression  # noqa: E402
+from sklearn.model_selection import train_test_split  # noqa: E402
+from sklearn.metrics import accuracy_score, r2_score  # noqa: E402
+
+import mojolearn as ml  # noqa: E402
+
+
+def _clf(n_classes=3, seed=0):
+    X, y = make_classification(n_samples=1500, n_features=10, n_informative=6, n_classes=n_classes,
+                               random_state=seed)
+    return train_test_split(X.astype(np.float32), y, test_size=0.3, random_state=seed)
+
+
+def _reg(seed=0):
+    X, y = make_regression(n_samples=1500, n_features=10, n_informative=6, noise=5.0, random_state=seed)
+    return train_test_split(X.astype(np.float32), y.astype(np.float32), test_size=0.3, random_state=seed)
+
+
+def test_decision_tree_classifier():
+    from sklearn.tree import DecisionTreeClassifier
+    Xa, Xb, ya, yb = _clf()
+    ours = ml.DecisionTreeClassifier(max_depth=6).fit(Xa, ya)
+    ref = DecisionTreeClassifier(max_depth=6, random_state=0).fit(Xa, ya)
+    a, r = accuracy_score(yb, np.asarray(ours.predict(Xb))), accuracy_score(yb, ref.predict(Xb))
+    assert a >= r - 0.05, (a, r)
+    assert ours.get_depth() <= 6
+    p = np.asarray(ours.predict_proba(Xb))
+    np.testing.assert_allclose(p.sum(1), 1.0, rtol=1e-5)
+    w = np.where(ya == 0, 5.0, 1.0).astype(np.float32)
+    wt = ml.DecisionTreeClassifier(max_depth=6).fit(Xa, ya, sample_weight=w)
+    # upweighting class 0 must not reduce its recall
+    rec = lambda m: np.mean(np.asarray(m.predict(Xb))[yb == 0] == 0)  # noqa: E731
+    assert rec(wt) >= rec(ours) - 0.02
+
+
+def test_decision_tree_regressor():
+    from sklearn.tree import DecisionTreeRegressor
+    Xa, Xb, ya, yb = _reg()
+    ours = ml.DecisionTreeRegressor(max_depth=8).fit(Xa, ya)
+    ref = DecisionTreeRegressor(max_depth=8, random_state=0).fit(Xa, ya)
+    a, r = r2_score(yb, np.asarray(ours.predict(Xb))), r2_score(yb, ref.predict(Xb))
+    assert a >= r - 0.05, (a, r)

@@ -17,3 +17,22 @@
 # own lanes (to LANES and the per-lane registries); rebind no existing name;
 # prefix your own helpers with `_trees_`. No imports are needed: np, _h,
 # _fit, _rows_calls and the rest are this module's.
+
+
+@lane("trees-dt-clf")
+def _(ml, X, yc, yr, Xh=None):
+    """One CART tree, entropy, every feature (the weighted entry has no CPU arm yet)."""
+    m = ml.DecisionTreeClassifier(max_depth=8, criterion="entropy", random_state=7).fit(X, yc)
+    return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X)), depth=_h(np.int64(m.get_depth()))),
+                m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+
+
+@lane("trees-dt-reg")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.DecisionTreeRegressor(max_depth=8, min_samples_leaf=2, random_state=7).fit(X, yr)
+    return _fit(dict(predict=_h(m.predict(X)), leaves=_h(np.int64(m.get_n_leaves()))),
+                m, lambda e: (e.predict(Xh),))
+
+
+_batch_decl(_rows_calls("predict", "predict_proba"), "trees-dt-clf")
+_batch_decl(_rows_calls("predict"), "trees-dt-reg")
