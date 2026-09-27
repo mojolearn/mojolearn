@@ -29,6 +29,9 @@ from x_decomp.cells import (
     ew_cell,
     gemm_cell,
     als_row,
+    als_cg_row,
+    geqrf_serial,
+    orgqr_col,
     barycenter_row,
     dijkstra_row,
     gamma_cell,
@@ -241,6 +244,26 @@ def als_kernel(
     var u = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if u < Int(n):
         flags.unsafe_store(u, als_row(c, y, yty, x, s, u, Int(m), Int(f), reg))
+
+
+def als_cg_kernel(
+    c: F32Ptr, y: F32Ptr, yty: F32Ptr, x: F32Ptr, s: F32Ptr, steps: F32Ptr, n: Int32, m: Int32, f: Int32, reg: Float32,
+    cg: Int32,
+):
+    var u = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if u < Int(n):
+        steps.unsafe_store(u, als_cg_row(c, y, yty, x, s, u, Int(m), Int(f), reg, Int(cg)))
+
+
+def geqrf_kernel(a: F32Ptr, tau: F32Ptr, m: Int32, n: Int32):
+    if block_idx.x == 0 and thread_idx.x == 0:
+        geqrf_serial(a, tau, Int(m), Int(n))
+
+
+def orgqr_kernel(h: F32Ptr, tau: F32Ptr, q: F32Ptr, m: Int32, n: Int32, kk: Int32, qc: Int32):
+    var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if j < Int(qc):
+        orgqr_col(h, tau, q, j, Int(m), Int(n), Int(kk), Int(qc))
 
 
 def _blocks(count: Int) -> Int:
@@ -715,6 +738,64 @@ struct DevExec(Exec):
         ctx.synchronize()
         _ = da^
         _ = dout^
+        ctx.synchronize()
+        _ = ctx^
+
+    @staticmethod
+    def geqrf(a: F32Ptr, tau: F32Ptr, m: Int, n: Int) raises:
+        var ctx = xd_ctx()
+        var kk = m if m < n else n
+        var da = _up(ctx, a, m * n)
+        var dt = ctx.enqueue_create_buffer[DType.float32](kk if kk > 0 else 1)
+        ctx.enqueue_function[geqrf_kernel](da.unsafe_ptr(), dt.unsafe_ptr(), Int32(m), Int32(n), grid_dim=1, block_dim=1)
+        _down(ctx, da, a, m * n)
+        _down(ctx, dt, tau, kk)
+        ctx.synchronize()
+        _ = da^
+        _ = dt^
+        ctx.synchronize()
+        _ = ctx^
+
+    @staticmethod
+    def orgqr(h: F32Ptr, tau: F32Ptr, q: F32Ptr, m: Int, n: Int, kk: Int, qc: Int) raises:
+        var ctx = xd_ctx()
+        var dh = _up(ctx, h, m * n)
+        var dt = _up(ctx, tau, kk if kk > 0 else 1)
+        var dq = ctx.enqueue_create_buffer[DType.float32](m * qc if m * qc > 0 else 1)
+        ctx.enqueue_function[orgqr_kernel](
+            dh.unsafe_ptr(), dt.unsafe_ptr(), dq.unsafe_ptr(), Int32(m), Int32(n), Int32(kk), Int32(qc),
+            grid_dim=_blocks(qc), block_dim=TPB,
+        )
+        _down(ctx, dq, q, m * qc)
+        ctx.synchronize()
+        _ = dh^
+        _ = dt^
+        _ = dq^
+        ctx.synchronize()
+        _ = ctx^
+
+    @staticmethod
+    def als_cg_rows(c: F32Ptr, y: F32Ptr, yty: F32Ptr, x: F32Ptr, steps: F32Ptr, n: Int, m: Int, f: Int, reg: Float32, cg: Int) raises:
+        var ctx = xd_ctx()
+        var dc = _up(ctx, c, n * m)
+        var dy = _up(ctx, y, m * f)
+        var dg = _up(ctx, yty, f * f)
+        var dx = _up(ctx, x, n * f)
+        var ds = ctx.enqueue_create_buffer[DType.float32](n * 3 * f if n * f > 0 else 1)
+        var dstp = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
+        ctx.enqueue_function[als_cg_kernel](
+            dc.unsafe_ptr(), dy.unsafe_ptr(), dg.unsafe_ptr(), dx.unsafe_ptr(), ds.unsafe_ptr(), dstp.unsafe_ptr(),
+            Int32(n), Int32(m), Int32(f), reg, Int32(cg), grid_dim=_blocks(n), block_dim=TPB,
+        )
+        _down(ctx, dx, x, n * f)
+        _down(ctx, dstp, steps, n)
+        ctx.synchronize()
+        _ = dc^
+        _ = dy^
+        _ = dg^
+        _ = dx^
+        _ = ds^
+        _ = dstp^
         ctx.synchronize()
         _ = ctx^
 

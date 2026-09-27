@@ -4565,9 +4565,9 @@ def _(ml, X, yc, yr, Xh=None):
     tall = np.ascontiguousarray(X[:48, :5]).astype(np.float32)
     small = np.ascontiguousarray(X[:16, :4]).astype(np.float32)
     dup = np.ascontiguousarray(X[:48, [0, 1, 1, 2]]).astype(np.float32)
-    return _fit(dict(two_slice=_h(ml.linalg.qr(tall)),
-                     one_slice=_h(ml.linalg.qr(small)),
-                     rank_deficient=_h(ml.linalg.qr(dup))))
+    return _fit(dict(two_slice=_h(ml.linalg.qr(tall, mode="r")),
+                     one_slice=_h(ml.linalg.qr(small, mode="r")),
+                     rank_deficient=_h(ml.linalg.qr(dup, mode="r"))))
 
 
 @lane("linalg-eigh")

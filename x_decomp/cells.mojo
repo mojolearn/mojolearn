@@ -900,6 +900,99 @@ def als_row(
     return Float32(0)
 
 
+# DEVIATION 5321 (PIN; row 138): implicit's `_least_squares_cg` for one row,
+# from the previous factor: every dot product and every YtY row product
+# ascending in the factor index, the items ascending; arm 5321_als_cg_order.
+comptime ALS_CG_EPS = Float32(1e-20)
+
+
+@always_inline
+def _yt_x(Y: F32Ptr, i: Int, x: F32Ptr, xo: Int, f: Int) -> Float32:
+    var acc = Float32(0)
+    for j in range(f):
+        acc = ftz(identical_mul_add(ftz(Y.unsafe_load(i * f + j)), ftz(x.unsafe_load(xo + j)), acc))
+    return acc
+
+
+@always_inline
+def _dot_s(a: F32Ptr, ao: Int, b: F32Ptr, bo: Int, f: Int) -> Float32:
+    var acc = Float32(0)
+    for j in range(f):
+        acc = ftz(identical_mul_add(ftz(a.unsafe_load(ao + j)), ftz(b.unsafe_load(bo + j)), acc))
+    return acc
+
+
+def _yty_times(YtY: F32Ptr, reg: Float32, x: F32Ptr, xo: Int, dst: F32Ptr, d0: Int, f: Int, sign: Float32):
+    """dst = sign * (YtY + reg I) x, each row's sum ascending."""
+    for j in range(f):
+        var acc = Float32(0)
+        for l in range(f):
+            var a = ftz(YtY.unsafe_load(j * f + l))
+            if l == j:
+                a = add(a, reg)
+            acc = ftz(identical_mul_add(a, ftz(x.unsafe_load(xo + l)), acc))
+        dst.unsafe_store(d0 + j, mul(sign, acc))
+
+
+def als_cg_row(
+    C: F32Ptr, Y: F32Ptr, YtY: F32Ptr, X: F32Ptr, S: F32Ptr, u: Int, m: Int, f: Int, reg: Float32, cg_steps: Int
+) -> Float32:
+    """implicit's `cpu/_als.pyx::_least_squares_cg` for ONE user u, in place
+    on X[u] (the previous factor is the start): r = b - A x with A = YtY +
+    reg I + sum_i (|c_ui| - 1) y_i y_i^T and b = sum_{c_ui > 0} c_ui y_i
+    (items with c_ui != 0 ascending), then `cg_steps` conjugate-gradient
+    steps, stopping when r.r < 1e-20. S is per-row scratch of 3 f floats
+    (r, p, Ap). Returns the number of steps taken."""
+    var ro = u * 3 * f
+    var po = ro + f
+    var ao = po + f
+    var xo = u * f
+    _yty_times(YtY, reg, X, xo, S, ro, f, Float32(-1))
+    for i in range(m):
+        var conf = ftz(C.unsafe_load(u * m + i))
+        if conf == Float32(0):
+            continue
+        var temp = Float32(0)
+        if conf > Float32(0):
+            temp = conf
+        else:
+            conf = -conf
+        temp = sub(temp, mul(sub(conf, Float32(1)), _yt_x(Y, i, X, xo, f)))
+        for j in range(f):
+            S.unsafe_store(ro + j, ftz(identical_mul_add(temp, ftz(Y.unsafe_load(i * f + j)), ftz(S.unsafe_load(ro + j)))))
+    for j in range(f):
+        S.unsafe_store(po + j, S.unsafe_load(ro + j))
+    var rsold = _dot_s(S, ro, S, ro, f)
+    if rsold < ALS_CG_EPS:
+        return Float32(0)
+    var steps = 0
+    for _ in range(cg_steps):
+        steps += 1
+        _yty_times(YtY, reg, S, po, S, ao, f, Float32(1))
+        for i in range(m):
+            var conf = ftz(C.unsafe_load(u * m + i))
+            if conf == Float32(0):
+                continue
+            if conf < Float32(0):
+                conf = -conf
+            var temp = mul(sub(conf, Float32(1)), _yt_x(Y, i, S, po, f))
+            for j in range(f):
+                S.unsafe_store(ao + j, ftz(identical_mul_add(temp, ftz(Y.unsafe_load(i * f + j)), ftz(S.unsafe_load(ao + j)))))
+        var alpha = div0(rsold, _dot_s(S, po, S, ao, f))
+        for j in range(f):
+            X.unsafe_store(xo + j, ftz(identical_mul_add(alpha, ftz(S.unsafe_load(po + j)), ftz(X.unsafe_load(xo + j)))))
+        for j in range(f):
+            S.unsafe_store(ro + j, ftz(identical_mul_add(-alpha, ftz(S.unsafe_load(ao + j)), ftz(S.unsafe_load(ro + j)))))
+        var rsnew = _dot_s(S, ro, S, ro, f)
+        if rsnew < ALS_CG_EPS:
+            break
+        var beta = div0(rsnew, rsold)
+        for j in range(f):
+            S.unsafe_store(po + j, ftz(identical_mul_add(beta, ftz(S.unsafe_load(po + j)), ftz(S.unsafe_load(ro + j)))))
+        rsold = rsnew
+    return Float32(steps)
+
+
 # ------------------------------------------------------------------ serial
 # Small dense routines run by ONE thread on the device (a single-thread
 # kernel) and by the host loop: the same function body both ways.
@@ -1064,3 +1157,83 @@ def chol_serial(a: F32Ptr, n: Int, info: F32Ptr):
             a.unsafe_store(i * n + j, div0(s, d))
         for i in range(j + 1, n):
             a.unsafe_store(j * n + i, Float32(0))
+
+
+# DEVIATION 5320 (PIN; row 134): the Householder QR that KEEPS its reflectors
+# (LAPACK geqrf, unblocked, dlarfg's sign: beta = -sign(alpha) * ||(alpha, x)||)
+# and the explicit Q (orgqr, one column per thread): every norm is the scaled
+# sum of squares ascending in the row index, alpha first; every reflector
+# product w = v^T c is folded ascending in the row index with v's implicit
+# leading 1 first; reflectors are applied to A in order k ascending and to e_j
+# in order k descending. Arm 5320_householder_order.
+def reflector_norm(a: F32Ptr, k: Int, col: Int, m: Int, n: Int) -> Float32:
+    """||(a[k, col], a[k+1, col], ..., a[m-1, col])||, scaled by its largest
+    |entry| first so no square overflows or underflows, the sum of squares
+    ascending in the row index."""
+    var mx = Float32(0)
+    for i in range(k, m):
+        var v = abs(ftz(a.unsafe_load(i * n + col)))
+        if v > mx:
+            mx = v
+    if mx == Float32(0):
+        return Float32(0)
+    var acc = Float32(0)
+    for i in range(k, m):
+        var v = ftz(identical_div(ftz(a.unsafe_load(i * n + col)), mx))
+        acc = ftz(identical_mul_add(v, v, acc))
+    return ftz(identical_mul(sqrt0(acc), mx))
+
+
+def geqrf_serial(a: F32Ptr, tau: F32Ptr, m: Int, n: Int):
+    """In-place Householder QR of the row-major m x n A (geqrf semantics,
+    unblocked): for k < min(m, n), dlarfg makes H_k = I - tau_k v v^T with
+    v[k] = 1 implicit and v[k+1:] stored below the diagonal, beta on it; R is
+    the upper triangle. A column whose sub-diagonal part is exactly zero gets
+    tau = 0 (H = I), as dlarfg."""
+    var kk = m if m < n else n
+    for k in range(kk):
+        var alpha = ftz(a.unsafe_load(k * n + k))
+        var xmax = Float32(0)
+        for i in range(k + 1, m):
+            var v = abs(ftz(a.unsafe_load(i * n + k)))
+            if v > xmax:
+                xmax = v
+        if xmax == Float32(0):
+            tau.unsafe_store(k, Float32(0))
+            continue
+        var nrm = reflector_norm(a, k, k, m, n)
+        var beta = -nrm if alpha >= Float32(0) else nrm
+        tau.unsafe_store(k, div0(sub(beta, alpha), beta))
+        var scale = sub(alpha, beta)
+        for i in range(k + 1, m):
+            a.unsafe_store(i * n + k, div0(a.unsafe_load(i * n + k), scale))
+        a.unsafe_store(k * n + k, beta)
+        var t = tau.unsafe_load(k)
+        for j in range(k + 1, n):
+            var w = ftz(a.unsafe_load(k * n + j))
+            for i in range(k + 1, m):
+                w = ftz(identical_mul_add(ftz(a.unsafe_load(i * n + k)), ftz(a.unsafe_load(i * n + j)), w))
+            var tw = ftz(identical_mul(t, w))
+            a.unsafe_store(k * n + j, sub(a.unsafe_load(k * n + j), tw))
+            for i in range(k + 1, m):
+                a.unsafe_store(i * n + j, ftz(identical_mul_add(-tw, ftz(a.unsafe_load(i * n + k)), ftz(a.unsafe_load(i * n + j)))))
+
+
+def orgqr_col(h: F32Ptr, tau: F32Ptr, q: F32Ptr, j: Int, m: Int, n: Int, kk: Int, qc: Int):
+    """Column j of Q = H_0 H_1 ... H_{kk-1} (m x qc, row major): e_j with the
+    reflectors of the m x n factored `h` applied last to first. The column is
+    built in place in q."""
+    for i in range(m):
+        q.unsafe_store(i * qc + j, Float32(1) if i == j else Float32(0))
+    for r in range(kk):
+        var k = kk - 1 - r
+        var t = ftz(tau.unsafe_load(k))
+        if t == Float32(0):
+            continue
+        var w = ftz(q.unsafe_load(k * qc + j))
+        for i in range(k + 1, m):
+            w = ftz(identical_mul_add(ftz(h.unsafe_load(i * n + k)), ftz(q.unsafe_load(i * qc + j)), w))
+        var tw = ftz(identical_mul(t, w))
+        q.unsafe_store(k * qc + j, sub(q.unsafe_load(k * qc + j), tw))
+        for i in range(k + 1, m):
+            q.unsafe_store(i * qc + j, ftz(identical_mul_add(-tw, ftz(h.unsafe_load(i * n + k)), ftz(q.unsafe_load(i * qc + j)))))

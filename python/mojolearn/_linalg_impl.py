@@ -848,24 +848,100 @@ def _refuse_wide(rows, cols, who):
         )
 
 
-def qr(a, mode="r"):
-    """`numpy.linalg.qr(a, mode='r')`: the R factor, bit-identical anywhere.
+def _xd_kit():
+    """The decomp lane's cells (x_decomp), IDENTICAL: GPU == CPU bit for bit
+    (the x-decomp lanes), so Q and U are the same bytes on every column."""
+    from ._expansion_decomp import _Kit
+    return _Kit("identical")
+
+
+def _xd_matrix(a_arr, rows, cols):
+    import array as _array
+    from ._expansion_decomp import _M
+    st = _array.array("f")
+    st.frombytes(a_arr.tobytes())
+    return _M(st, rows, cols)
+
+
+def _triu(M, r):
+    """The first r rows of M with everything below the diagonal zeroed (pure
+    data movement)."""
+    import array as _array
+    from ._expansion_decomp import _M
+    out = _array.array("f", M.s[:r * M.c])
+    for i in range(r):
+        for j in range(min(i, M.c)):
+            out[i * M.c + j] = 0.0
+    return _M(out, r, M.c)
+
+
+class QRResult(tuple):
+    """numpy's `QRResult(Q, R)` named tuple: unpacks as (Q, R)."""
+    __slots__ = ()
+
+    def __new__(cls, Q, R):
+        return tuple.__new__(cls, (Q, R))
+
+    Q = property(lambda self: self[0])
+    R = property(lambda self: self[1])
+
+
+class SVDResult(tuple):
+    """numpy's `SVDResult(U, S, Vh)` named tuple: unpacks as (U, S, Vh)."""
+    __slots__ = ()
+
+    def __new__(cls, U, S, Vh):
+        return tuple.__new__(cls, (U, S, Vh))
+
+    U = property(lambda self: self[0])
+    S = property(lambda self: self[1])
+    Vh = property(lambda self: self[2])
+
+
+def _qr_q_factor(a_arr, rows, cols):
+    return _xd_kit().geqrf(_xd_matrix(a_arr, rows, cols))
+
+
+def _qr_q(a, mode):
+    """numpy.linalg.qr's 'reduced', 'complete' and 'raw' modes: LAPACK geqrf
+    (the reflectors kept, dlarfg's signs) and orgqr, through the decomp
+    lane's cells (x_decomp/cells.mojo `geqrf_serial`, `orgqr_col`, DEVIATION
+    5320; lane/algos-decomp, 2026-09-27). Any shape, wide included."""
+    a_arr, rows, cols = _two_d(a, "a")
+    k = _xd_kit()
+    h, tau = _qr_q_factor(a_arr, rows, cols)
+    kk = min(rows, cols)
+    if mode == "raw":
+        # numpy returns geqrf's Fortran-ordered array seen in C order: the
+        # factored matrix transposed, (N, M); tau (K,)
+        return h.T.out(), tau.out((kk,))
+    if mode == "complete":
+        return QRResult(k.orgqr(h, tau, rows).out(), _triu(h, rows).out())
+    return QRResult(k.orgqr(h, tau, kk).out(), _triu(h, kk).out())
+
+
+def qr(a, mode="reduced"):
+    """`numpy.linalg.qr(a, mode)`.
 
     Parameters
     ----------
-    a : float32 buffer, shape (M, N) with M >= N
+    a : float32 buffer, shape (M, N)
         C-contiguous or copied into C order; a non-float32 buffer is refused
         by name and never cast (see `_operand`).
-    mode : {'r'}
-        Only ``'r'`` exists here. **Q IS NOT FORMED ANYWHERE IN THIS TREE**:
-        `core/householder_qr.mojo::qr_factor` accumulates R and drops the
-        reflectors, because no caller has ever needed Q. ``'reduced'``,
-        ``'complete'`` and ``'raw'`` are refused BY NAME so you learn Q is
-        unimplemented rather than unknown.
+    mode : {'reduced', 'complete', 'r', 'raw'}
+        numpy's modes and numpy's default ('reduced'; lane/algos-decomp,
+        2026-09-27: until then only 'r' existed and was the default, so a
+        bare ``qr(a)`` returned R alone). 'reduced' returns (Q (M, K), R
+        (K, N)), 'complete' (Q (M, M), R (M, N)), 'raw' (h (N, M), tau (K,)),
+        K = min(M, N): LAPACK's geqrf with its reflectors kept, dlarfg's sign
+        convention, and orgqr for Q, in the decomp lane's cells (IDENTICAL on
+        every column; DEVIATION 5320). 'r' is the TSQR route below (M >= N
+        only), which never forms Q; its R agrees with 'reduced''s to float32
+        rounding but is not the same bits (a different reduction tree).
 
     Returns
     -------
-    Array, shape (N, N)
+    For mode='r': Array, shape (N, N)
         R, row major, upper triangular. Its signs are the reflector's, the
         same convention LAPACK's ``geqrf`` leaves; ``R.T @ R`` equals
         ``a.T @ a`` to float32.
@@ -877,15 +953,18 @@ def qr(a, mode="r"):
     that same factorization on a CPU-only install. The two are held to each
     other bit for bit, which is the point of having both.
     """
+    if mode in ("reduced", "complete", "raw"):
+        return _qr_q(a, mode)
     if mode != "r":
         raise ValueError(
-            f"mojolearn.linalg.qr: mode={mode!r} needs Q, which is not formed "
-            "anywhere in this tree -- qr_factor accumulates R and drops the "
-            "reflectors (core/householder_qr.mojo). Only mode='r' is "
-            "implemented; this is a refusal by name, not an unknown mode."
+            f"mojolearn.linalg.qr: unrecognized mode {mode!r}; numpy's modes "
+            "are 'reduced', 'complete', 'r' and 'raw'"
         )
     a_arr, rows, cols = _two_d(a, "a")
-    _refuse_wide(rows, cols, "qr")
+    if rows < cols:
+        # a wide R (M x N, upper trapezoidal) is geqrf's; the TSQR route below
+        # is tall only
+        return _triu(_qr_q_factor(a_arr, rows, cols)[0], rows).out()
     out = empty((cols, cols), "<f4")
     # ORDER MATCHES qr_r_binding IN BOTH BINDINGS, bindings/
     # _mojolearn_linalg.mojo (device) and _mojolearn_linalg_host.mojo:
@@ -983,24 +1062,106 @@ def svdvals(a):
 
     Parameters
     ----------
-    a : float32 buffer, shape (M, N) with M >= N
+    a : float32 buffer, shape (M, N); a wide one (M < N) is read through its
+        transpose, whose singular values are the same
 
     Returns
     -------
-    Array, shape (N,)
+    Array, shape (min(M, N),)
         Descending, numpy's order.
 
     Notes
     -----
-    There is no `svd` returning ``(U, S, Vt)``. The one-sided Jacobi consumes
-    R into ``U_R * S``, so the left basis it holds belongs to R and not to
-    ``a``; forming ``a``'s U needs the Q this tree does not form. An `svd`
-    that returned two of three under numpy's name would be the quiet kind of
-    divergence `IDENTITY_PATHS.md` exists to prevent.
+    `svd` returns ``(U, S, Vh)`` (lane/algos-decomp, 2026-09-27); its
+    ``compute_uv=False`` is this function.
     """
     a_arr, rows, cols = _two_d(a, "a")
-    _refuse_wide(rows, cols, "svdvals")
+    if rows < cols:
+        # the singular values of a wide A are those of A^T, exactly: the
+        # transpose is data movement (lane/algos-decomp, 2026-09-27)
+        from ._buffer import frombytes
+        t = _xd_matrix(a_arr, rows, cols).T
+        a_arr, rows, cols = frombytes(t.s.tobytes(), "<f4", (cols, rows)), cols, rows
     out = empty((cols,), "<f4")
     _door().svdvals([addr_ro(a_arr, name="a"), addr(out, name="s_out")],
                     [int(rows), int(cols)])
     return out
+
+
+#: A singular value at most this fraction of the largest (and exactly zero
+#: ones) has its U column taken from the orthogonal complement instead of
+#: A v / s, which would divide rounding noise (numpy's gesdd returns SOME
+#: orthonormal basis of that null space too).
+_SVD_NULL_RTOL = 2.0 ** -20
+
+
+def _svd_tall(k, A, full):
+    """(U, S, Vt) of a tall A (m >= n) as _M: S and V from the decomp lane's
+    QR + one-sided Jacobi (`Kit.svd`, descending, ties to the lower index),
+    U's column j = A v_j / s_j for s_j > 2^-20 s_0 (the cells' gemm and
+    division), and every other column of U (the null directions, and the
+    m - n more of full_matrices) from the complete Q of geqrf applied to the
+    columns already found: its trailing columns are an orthonormal basis of
+    their complement."""
+    from ._expansion_decomp import _M
+    m, n = A.r, A.c
+    S, Vt = k.svd(A)
+    s0 = S.s[0] if n else 0.0
+    r = sum(1 for v in S.s if v > 0.0 and v > s0 * _SVD_NULL_RTOL)
+    AV = k.mm(A, Vt, tb=True)                                   # m x n
+    Ug = k.ew("div", AV.take_cols(list(range(r))) if r < n else AV, S.take_cols(list(range(r))) if r < n else S)
+    width = m if full else n
+    if r == width:
+        return Ug, S, Vt
+    if r:
+        h, tau = k.geqrf(Ug)
+        Qc = k.orgqr(h, tau, m)
+    else:
+        Qc = _M(__import__("array").array("f", [1.0 if i == j else 0.0 for i in range(m) for j in range(m)]), m, m)
+    cols = [Ug.s[i * r:(i + 1) * r] for i in range(m)]
+    import array as _array
+    out = _array.array("f")
+    for i in range(m):
+        out.extend(cols[i])
+        out.extend(Qc.s[i * m + r:i * m + width])
+    return _M(out, m, width), S, Vt
+
+
+def svd(a, full_matrices=True, compute_uv=True, hermitian=False):
+    """`numpy.linalg.svd(a, full_matrices, compute_uv, hermitian)`
+    (lane/algos-decomp, 2026-09-27): ``SVDResult(U, S, Vh)``, S descending.
+
+    The decomp lane's cells, IDENTICAL on every column: the Householder QR
+    and the one-sided Jacobi SVD of R give S and V; U's column j is
+    ``A v_j / s_j``; a numerically null direction (s_j <= 2^-20 s_0) and the
+    extra columns of ``full_matrices=True`` come from the complete Q of the
+    Householder QR of the columns already found (geqrf + orgqr, DEVIATION
+    5320). A wide A (M < N) is the transposed problem: ``A.T = U' S V'^T``,
+    so U = V' and Vh = U'^T. ``hermitian=True`` is numpy's route through
+    eigh (the lower triangle): S = |w| descending, U = v, Vh = (sign(w) v)^T.
+    ``compute_uv=False`` returns `svdvals` (of ``a.T`` when wide), as numpy's
+    svdvals is svd(compute_uv=False). The signs of U's and V's columns are
+    the Jacobi's, not LAPACK's: numpy promises none either."""
+    a_arr, rows, cols = _two_d(a, "a")
+    if not compute_uv:
+        return svdvals(a_arr)
+    k = _xd_kit()
+    A = _xd_matrix(a_arr, rows, cols)
+    if hermitian:
+        if rows != cols:
+            raise ValueError("mojolearn.linalg.svd: hermitian=True needs a square matrix")
+        sym = _xd_matrix(_from_triangle(a_arr, rows, "L"), rows, rows)
+        w, v = k.eigh(sym)
+        # numpy: argsort(|w|) (ascending) reversed, so equal magnitudes come
+        # higher index first
+        order = sorted(range(rows), key=lambda j: (abs(w.s[j]), j))[::-1]
+        S = k.ew("abs", w).take_cols(order)
+        U = v.take_cols(order)
+        sg = [w.s[j] < 0 for j in order]
+        Vt = U.T.neg_rows(sg)
+        return SVDResult(U.out(), S.out((rows,)), Vt.out())
+    if rows >= cols:
+        U, S, Vt = _svd_tall(k, A, bool(full_matrices))
+        return SVDResult(U.out(), S.out((cols,)), Vt.out())
+    U2, S, Vt2 = _svd_tall(k, A.T, bool(full_matrices))
+    return SVDResult(Vt2.T.out(), S.out((rows,)), U2.T.out())

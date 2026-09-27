@@ -67,7 +67,7 @@ def test_qr_returns_numpys_r(rows, cols):
     different code and a test of one says nothing about the other.
     """
     a = _matrix(rows, cols)
-    r = np.asarray(linalg.qr(a)).reshape(cols, cols)
+    r = np.asarray(linalg.qr(a, mode="r")).reshape(cols, cols)
     assert r.shape == np.linalg.qr(a.astype(np.float64), mode="r").shape
     assert np.allclose(np.tril(r, -1), 0.0, atol=1e-5), "R is not upper triangular"
     gram = a.T.astype(np.float64) @ a.astype(np.float64)
@@ -151,30 +151,92 @@ def test_svdvals_of_a_rank_deficient_matrix_ends_at_zero():
 def test_the_same_input_gives_the_same_bits():
     """The product these doors sell. Not `allclose` -- the BYTES."""
     a = _matrix(48, 5)
-    for call in (lambda: linalg.svdvals(a), lambda: linalg.qr(a)):
+    for call in (lambda: linalg.svdvals(a), lambda: linalg.qr(a, mode="r"), lambda: linalg.qr(a)[0],
+                 lambda: linalg.svd(a)[0]):
         first = np.asarray(call()).tobytes()
         assert first == np.asarray(call()).tobytes()
 
 
-@needs_host
-def test_q_is_refused_by_name_and_not_approximated():
-    """Q is not formed anywhere in this tree. A caller asking for it learns
-    that, rather than receiving R under a mode that promised more."""
-    a = _matrix(16, 4)
-    for mode in ("reduced", "complete", "raw"):
-        with pytest.raises(ValueError, match="(?s)Q.*not formed"):
-            linalg.qr(a, mode=mode)
+def _close(a, b, tol=2e-4):
+    a, b = np.asarray(a, np.float64), np.asarray(b, np.float64)
+    assert a.shape == b.shape, (a.shape, b.shape)
+    assert np.max(np.abs(a - b)) <= tol * max(1.0, np.max(np.abs(b))), np.max(np.abs(a - b))
 
 
 @needs_host
-@pytest.mark.parametrize("fn", ["qr", "svdvals"])
-def test_a_wide_matrix_is_refused_by_name(fn):
-    """The LQ route does not exist here (DEVIATION 593). Transposing for the
-    caller would give the right singular VALUES and the wrong VECTORS, so it
-    is refused instead."""
+@pytest.mark.parametrize("rows,cols", [(16, 4), (48, 5), (5, 9), (6, 6)])
+def test_qr_modes_are_numpys(rows, cols):
+    """'reduced', 'complete' and 'raw' (lane/algos-decomp, 2026-09-27):
+    geqrf with dlarfg's signs, so Q, R and even the raw reflectors match
+    LAPACK's to float32, wide shapes included; Q is orthonormal and Q R = a."""
+    a = _matrix(rows, cols)
+    a64 = a.astype(np.float64)
+    q, r = linalg.qr(a)
+    nq, nr = np.linalg.qr(a64)
+    _close(q, nq)
+    _close(r, nr)
+    qc, rc = linalg.qr(a, mode="complete")
+    nqc, nrc = np.linalg.qr(a64, mode="complete")
+    _close(rc, nrc)
+    _close(np.asarray(qc).T @ np.asarray(qc), np.eye(rows), 1e-5)
+    _close(np.asarray(qc) @ np.asarray(rc), a64)
+    h, tau = linalg.qr(a, mode="raw")
+    nh, ntau = np.linalg.qr(a64, mode="raw")
+    _close(h, nh)
+    _close(tau, ntau)
+    res = linalg.qr(a, mode="reduced")
+    assert np.asarray(res.Q).tobytes() == np.asarray(q).tobytes()
+    if rows >= cols:
+        _close(linalg.qr(a, mode="r"), nr)
+    with pytest.raises(ValueError, match="unrecognized mode"):
+        linalg.qr(a, mode="economic")
+
+
+@needs_host
+@pytest.mark.parametrize("rows,cols", [(16, 4), (48, 5), (5, 9), (6, 6)])
+@pytest.mark.parametrize("full", [True, False])
+def test_svd_is_numpys(rows, cols, full):
+    """`svd` returns (U, S, Vh) (lane/algos-decomp, 2026-09-27): S equals
+    numpy's, U and Vh orthonormal, U diag(S) Vh = a, and each singular pair
+    equals numpy's up to its sign."""
+    a = _matrix(rows, cols)
+    a64 = a.astype(np.float64)
+    u, s, vh = (np.asarray(t, np.float64) for t in linalg.svd(a, full_matrices=full))
+    nu, ns, nvh = np.linalg.svd(a64, full_matrices=full)
+    _close(s, ns)
+    assert u.shape == nu.shape and vh.shape == nvh.shape
+    k = min(rows, cols)
+    _close(u.T @ u, np.eye(u.shape[1]), 1e-5)
+    _close(vh @ vh.T, np.eye(vh.shape[0]), 1e-5)
+    _close((u[:, :k] * s) @ vh[:k], a64)
+    for j in range(k):
+        sg = np.sign(u[:, j] @ nu[:, j])
+        _close(u[:, j] * sg, nu[:, j], 1e-3)
+        _close(vh[j] * sg, nvh[j], 1e-3)
+    assert np.asarray(linalg.svd(a, compute_uv=False)).tobytes() == np.asarray(linalg.svdvals(a)).tobytes()
+
+
+@needs_host
+def test_svd_rank_deficient_and_hermitian():
+    a = _matrix(24, 3)
+    dup = np.ascontiguousarray(np.stack([a[:, 0], a[:, 1], a[:, 1], a[:, 2]], 1))
+    u, s, vh = (np.asarray(t, np.float64) for t in linalg.svd(dup))
+    _close(u.T @ u, np.eye(24), 1e-5)
+    _close((u[:, :4] * s) @ vh, dup.astype(np.float64))
+    sym = dup.T @ dup
+    sym = np.ascontiguousarray(((sym + sym.T) * np.float32(0.5)).astype(np.float32))
+    hu, hs, hvh = (np.asarray(t, np.float64) for t in linalg.svd(sym, hermitian=True))
+    _close(hs, np.linalg.svd(sym.astype(np.float64), hermitian=True)[1])
+    _close((hu * hs) @ hvh, sym.astype(np.float64))
+
+
+@needs_host
+def test_a_wide_matrix_takes_the_transpose():
+    """svdvals of a wide A reads A^T (the same singular values); qr of a
+    wide A is geqrf's upper-trapezoidal R."""
     wide = _matrix(4, 16)
-    with pytest.raises(ValueError, match="at least as many rows as columns"):
-        getattr(linalg, fn)(wide)
+    _close(linalg.svdvals(wide), np.linalg.svd(wide.astype(np.float64), compute_uv=False))
+    _close(linalg.qr(wide, mode="r"), np.linalg.qr(wide.astype(np.float64), mode="r"))
 
 
 @needs_host

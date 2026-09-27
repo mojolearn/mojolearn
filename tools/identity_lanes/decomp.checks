@@ -22,3 +22,5 @@ x_decomp/checks/rows_check.mojo	x_decomp/checks/sabotage/5316_als_order.patch
 x_decomp/checks/fold_ew_check.mojo	x_decomp/checks/sabotage/5317_absmax_tie.patch
 x_decomp/checks/dense_check.mojo	x_decomp/checks/sabotage/5318_orth_rank_guard.patch
 x_decomp/checks/fold_ew_check.mojo	x_decomp/checks/sabotage/5319_pdist_order.patch
+x_decomp/checks/dense_check.mojo	x_decomp/checks/sabotage/5320_householder_order.patch
+x_decomp/checks/rows_check.mojo	x_decomp/checks/sabotage/5321_als_cg_order.patch

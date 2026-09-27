@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Seams DEVIATION 5310-5313 and 5316 of the decomp lane, the one-thread-per-
+"""Seams DEVIATION 5310-5313, 5316 and 5321 of the decomp lane, the one-thread-per-
 row solvers: NMF's coordinate descent (5310), the Lasso on the Gram (5311),
 OMP's atom choice and its tie (5312), LDA's document update (5313) and the
 implicit-ALS row solve (5316).
@@ -10,6 +10,7 @@ implicit-ALS row solve (5316).
 from core.identity_trace import IdentityTrace
 from x_decomp.checks.xd_oracles import (
     oracle_als,
+    oracle_als_cg,
     oracle_cd,
     oracle_gemm,
     oracle_lasso,
@@ -40,7 +41,7 @@ def tame(var x: List[Float32]) -> List[Float32]:
 
 def main() raises:
     var tr = IdentityTrace()
-    tr.header("x_decomp rows_check (DEVIATIONS 5310-5313, 5316)")
+    tr.header("x_decomp rows_check (DEVIATIONS 5310-5313, 5316, 5321)")
     var info = zeros(1)
     # ---- 5310 NMF coordinate descent, one sweep
     var n = 37
@@ -158,4 +159,19 @@ def main() raises:
     HostExec.als_rows(ptr(Cf), ptr(Y), ptr(YtY), ptr(xh), ptr(fl), n, m, f, Float32(0.1))
     same("5316 als_rows host", count_diff_f32(xh, wa))
     tr.record_list_f32("x_decomp.als_rows", xa)
+    # ---- 5321 ALS conjugate-gradient rows, from the exact solve's factors
+    # perturbed (so the residual is not ~0) and from zero for three steps
+    var x0 = wa.copy()
+    for t in range(len(x0)):
+        x0[t] = x0[t] * Float32(0.75) + Float32(0.01) * Float32(t % 5)
+    var wc = oracle_als_cg(Cf, Y, x0, n, m, f, Float32(0.1), 3)
+    require_separates("5321 ALS CG p.Ap order", count_diff_f32(wc, oracle_als_cg(Cf, Y, x0, n, m, f, Float32(0.1), 3, 1)))
+    var cgd = x0.copy()
+    var stp = zeros(n)
+    DevExec.als_cg_rows(ptr(Cf), ptr(Y), ptr(YtY), ptr(cgd), ptr(stp), n, m, f, Float32(0.1), 3)
+    same("5321 als_cg_rows device", count_diff_f32(cgd, wc))
+    var cgh = x0.copy()
+    HostExec.als_cg_rows(ptr(Cf), ptr(Y), ptr(YtY), ptr(cgh), ptr(stp), n, m, f, Float32(0.1), 3)
+    same("5321 als_cg_rows host", count_diff_f32(cgh, wc))
+    tr.record_list_f32("x_decomp.als_cg_rows", cgd)
     print("PASS x_decomp rows_check")

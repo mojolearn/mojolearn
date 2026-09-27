@@ -143,7 +143,21 @@ def _(ml, X, yc, yr, Xh=None):
     G = np.ascontiguousarray(X[:6, :6])
     wl, vl = ml.linalg.eigh(G)
     wu, vu = ml.linalg.eigh(G, UPLO="U")
-    return _fit(dict(lu=_h(lu), piv=_h(piv), x=_h(x), v=_h(v), s=_h(s), xt=_h(xt), eigl=_h(wl, vl), eigu=_h(wu, vu)))
+    # numpy.linalg.qr's Q modes and svd's U (geqrf + orgqr, DEVIATION 5320):
+    # tall, wide and a duplicated column (a null direction of U)
+    T = np.ascontiguousarray(X[:40, :n])
+    W = np.ascontiguousarray(X[:max(1, min(5, n - 1)), :n])          # wide: fewer rows than columns
+    D = np.ascontiguousarray(np.stack([X[:30, 0], X[:30, 1], X[:30, 1], X[:30, 2]], 1))
+    qt, rt = ml.linalg.qr(T)
+    qc, rc = ml.linalg.qr(T, mode="complete")
+    hw, tw = ml.linalg.qr(W, mode="raw")
+    qw, rw = ml.linalg.qr(W)
+    us, ss, vs = ml.linalg.svd(T, full_matrices=False)
+    ud, sd, vd = ml.linalg.svd(D)
+    uw, sw, vw = ml.linalg.svd(W)
+    return _fit(dict(lu=_h(lu), piv=_h(piv), x=_h(x), v=_h(v), s=_h(s), xt=_h(xt), eigl=_h(wl, vl), eigu=_h(wu, vu),
+                     qr=_h(qt, rt, qc, rc), qraw=_h(hw, tw, qw, rw), svd=_h(us, ss, vs), svdd=_h(ud, sd, vd),
+                     svdw=_h(uw, sw, vw)))
 
 
 @lane("x-decomp-lstsq-rsvd")
@@ -290,8 +304,13 @@ def _(ml, X, yc, yr, Xh=None):
     sid, ssc = m.similar_items(2, N=4)
     lo = ml.AlternatingLeastSquares(factors=4, regularization=0.1, iterations=3, calculate_training_loss=True,
                                     random_state=2).fit(R[:120])
+    # implicit's conjugate-gradient solver (use_cg=True, DEVIATION 5321)
+    cg = ml.AlternatingLeastSquares(factors=6, regularization=0.05, alpha=2.0, iterations=4, use_cg=True,
+                                    random_state=0).fit(R)
+    cg1 = ml.AlternatingLeastSquares(factors=5, iterations=2, use_cg=True, cg_steps=1, random_state=4).fit(R[:150])
     return _fit(dict(U=_h(m.user_factors), V=_h(m.item_factors), rid=_h(ids), rsc=_h(sc), sid=_h(sid), ssc=_h(ssc),
-                     loss=_h(np.float64(lo.training_loss_), lo.user_factors)))
+                     loss=_h(np.float64(lo.training_loss_), lo.user_factors),
+                     cg=_h(cg.user_factors, cg.item_factors), cg1=_h(cg1.user_factors, cg1.item_factors)))
 
 
 @lane("x-decomp-pca-randomized")
