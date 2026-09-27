@@ -51,6 +51,7 @@ __all__ = [
     "MultiOutputRegressor",
     "OneVsRestClassifier",
     "CalibratedClassifierCV",
+    "TreeExplainer",
 ]
 
 
@@ -1731,3 +1732,100 @@ class CalibratedClassifierCV(_TreesWrapperBase):
     def predict(self, X):
         p = self.predict_proba(X)
         return decode_labels(self.classes_, self._argmax(p, p.shape[0], len(self.classes_)))
+
+
+# -------------------------------------------------------------------- SHAP
+# TreeExplainer: the `shap` package's exact path-dependent TreeSHAP
+# (`shap/explainers/_tree.py` -> `shap/cext/tree_shap.h`), restated in
+# xtrees/shap.mojo over this library's flat forests (RandomForest*,
+# ExtraTrees*, DecisionTree*) and DART. DEVIATION: the node cover is the
+# count of BACKGROUND rows (`data`, required) reaching each node, since the
+# flat forest stores no instance counts. KernelExplainer and
+# PermutationExplainer: cuML's `explainer/kernel_shap.cu` and
+# `permutation_shap.cu` build the coalition datasets (xtrees/shap.mojo
+# `mask_expand`); the sampling and the solve follow `shap`'s
+# KernelExplainer (`_kernel.py`: full enumeration of the small coalition
+# sizes, then weighted sampling of the rest, the efficiency-constrained
+# weighted least squares) and PermutationExplainer (`_permutation.py`:
+# forward then backward passes over each permutation). DEVIATIONS: draws
+# come from the lane's counter RNG; KernelExplainer carries no l1 feature
+# selection (`l1_reg` is refused) and treats every feature as varying.
+def _trees_forest_arrays(est):
+    """(offsets, colid, quesval, left, leaves, k, scale) of a fitted flat
+    forest, or None."""
+    if not hasattr(est, "_offsets"):
+        return None
+    k = int(getattr(est, "_num_outputs", 1))
+    return (est._offsets, est._colid, est._quesval, est._left_child, est._leaves, k,
+            1.0 / int(est._n_trees))
+
+
+class TreeExplainer(_TreesEnsembleBase):
+    """Exact TreeSHAP for this library's forests and DART models.
+    `shap_values(X)` is (n, d) for one output, else (n, d, k), float64;
+    `expected_value` is a float or a float64 Array of k."""
+
+    def __init__(self, model, data=None, *, feature_perturbation="tree_path_dependent", model_output="raw"):
+        if feature_perturbation not in ("tree_path_dependent", "auto"):
+            _refuse(f"feature_perturbation={feature_perturbation!r}", "the interventional algorithm is not"
+                    " carried; the path-dependent one is.")
+        if model_output != "raw":
+            _refuse(f"model_output={model_output!r}", "only the raw model output is explained.")
+        if data is None:
+            _refuse("data=None", "the flat forests store no node sample counts, so the cover comes from a"
+                    " background dataset; pass data=.")
+        self.model = model
+        self.data = data
+        self.feature_perturbation = feature_perturbation
+        self.model_output = model_output
+        self.numeric_mode = getattr(model, "numeric_mode", None)
+        bg, _ = as_f32_c(data, ndim=2, name="data")
+        self._bg = bg
+        self._parts = []   # (arrays tuple, k, scale, cover)
+        init = 0.0
+        if isinstance(model, _DARTBase):
+            if not hasattr(model, "trees_"):
+                raise RuntimeError("the model is not fitted yet")
+            init = float(model.init_score_)
+            for tree, values, coef in zip(model.trees_, model.tree_values_, model.tree_coefs_):
+                self._add_part((tree._offsets, tree._colid, tree._quesval, tree._left_child, values), 1, float(coef))
+            self.n_outputs_ = 1
+        else:
+            fa = _trees_forest_arrays(model)
+            if fa is None:
+                _refuse(f"TreeExplainer over {type(model).__name__}", "the explainer reads the flat forests"
+                        " (RandomForest*, ExtraTrees*, DecisionTree*) and DART models.")
+            self._add_part(fa[:5], fa[5], fa[6])
+            self.n_outputs_ = fa[5]
+        k = self.n_outputs_
+        ev = full((k,), init, "<f8")
+        for arrays, kk, scale, cover in self._parts:
+            n_trees = len(arrays[0]) - 1
+            self._bind().x_trees_expected_value(addr_ro(arrays[0], name="offsets"), addr_ro(arrays[3], name="left"),
+                                                addr_ro(arrays[4], name="leaves"), addr_ro(cover, name="cover"),
+                                                addr(ev, name="ev"), [n_trees, kk, scale])
+        self.expected_value = ev.tolist()[0] if k == 1 else ev
+        self.n_features_in_ = bg.shape[1]
+
+    def _add_part(self, arrays, k, scale):
+        bg = self._bg
+        n_nodes = int(arrays[0].tolist()[-1])
+        cover = zeros((n_nodes,), "<f8")
+        self._bind().x_trees_node_cover(addr_ro(arrays[0], name="offsets"), addr_ro(arrays[1], name="colid"),
+                                        addr_ro(arrays[2], name="quesval"), addr_ro(arrays[3], name="left"),
+                                        addr_ro(bg, name="data"), addr(cover, name="cover"),
+                                        [bg.shape[0], bg.shape[1], len(arrays[0]) - 1])
+        self._parts.append((arrays, k, scale, cover))
+
+    def shap_values(self, X):
+        Xa, _ = as_f32_c(X, ndim=2, name="X")
+        n, d = Xa.shape
+        if d != self.n_features_in_:
+            raise ValueError(f"X has {d} features, data has {self.n_features_in_}")
+        k = self.n_outputs_
+        phi = zeros((n * d * k,), "<f8")
+        for arrays, kk, scale, cover in self._parts:
+            forest = [addr_ro(a, name="forest") for a in arrays]
+            self._bind().x_trees_tree_shap(forest, addr_ro(cover, name="cover"), addr_ro(Xa, name="X"),
+                                           addr(phi, name="phi"), [n, d, len(arrays[0]) - 1, kk, scale])
+        return phi.reshape((n, d)) if k == 1 else phi.reshape((n, d, k))

@@ -214,3 +214,18 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("predict", "predict_proba"), "trees-rf-weighted")
+
+
+@lane("trees-shap-tree")
+def _(ml, X, yc, yr, Xh=None):
+    """Exact TreeSHAP over a classifier forest (three outputs) and a DART model."""
+    f = ml.RandomForestClassifier(n_estimators=4, max_depth=6, random_state=7).fit(X, yc)
+    e = ml.TreeExplainer(f, data=X[:256])
+    dm = ml.DARTRegressor(n_estimators=6, num_leaves=15, max_depth=5, min_child_samples=5, random_state=7).fit(X, yr)
+    de = ml.TreeExplainer(dm, data=X[:256])
+    return _fit(dict(forest=_h(e.shap_values(X[:64])), forest_ev=_h(np.asarray(e.expected_value)),
+                     dart=_h(de.shap_values(X[:64])), dart_ev=_h(np.float64(de.expected_value))),
+                e, lambda x: (x.shap_values(Xh[:64]),))
+
+
+_batch_decl(_rows_calls("shap_values", sl=slice(0, 24)), "trees-shap-tree")

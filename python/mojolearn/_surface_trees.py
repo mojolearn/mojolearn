@@ -36,6 +36,7 @@ FAMILIES = (
             "trees-multioutput",
             "trees-onevsrest",
             "trees-calibrated",
+            "trees-shap-tree",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -55,9 +56,10 @@ FAMILIES = (
             "MultiOutputRegressor",
             "OneVsRestClassifier",
             "CalibratedClassifierCV",
+            "TreeExplainer",
         ),
         display="the trees expansion lane's ensemble glue",
-        host_modules=("xtrees/ops.mojo", "xtrees/api.mojo"),
+        host_modules=("xtrees/ops.mojo", "xtrees/api.mojo", "xtrees/shap.mojo"),
         exports=(
             "x_trees_host_numeric_mode", "x_trees_host_vendor", "x_trees_host_column", "x_trees_host_sabotage",
             "x_trees_numeric_mode", "x_trees_vendor",
@@ -68,7 +70,8 @@ FAMILIES = (
             "x_trees_apply", "x_trees_gradients", "x_trees_leaf_newton", "x_trees_tree_score_add", "x_trees_uniform",
             "x_trees_onehot_leaves", "x_trees_transpose_f32", "x_trees_log64",
             "x_trees_normalize_rows", "x_trees_scatter", "x_trees_platt_fit", "x_trees_platt_apply",
-            "x_trees_isotonic_fit", "x_trees_isotonic_predict",
+            "x_trees_isotonic_fit", "x_trees_isotonic_predict", "x_trees_node_cover", "x_trees_tree_shap",
+            "x_trees_expected_value", "x_trees_mask_expand", "x_trees_block_mean", "x_trees_kernel_solve",
         ),
         gate="tools/algos_lane_check.sh",
         wheel_note="Ships: the trees expansion lane's ensemble glue (pass 1, PENDING).",
@@ -90,6 +93,7 @@ TRAINING_LANE_NAMES = {
     "trees-multioutput": "MultiOutputRegressor",
     "trees-onevsrest": "OneVsRestClassifier",
     "trees-calibrated": "CalibratedClassifierCV",
+    "trees-shap-tree": "TreeExplainer",
 }
 PUBLIC_PENDING_LANES = {
     "trees-dt-clf": "no reference",
@@ -109,4 +113,5 @@ PUBLIC_PENDING_LANES = {
     "trees-onevsrest": "no reference",
     "trees-calibrated": "no reference",
     "trees-rf-weighted": "no reference",
+    "trees-shap-tree": "no reference",
 }
