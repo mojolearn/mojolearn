@@ -128,6 +128,7 @@ def check_sigmoid() raises:
     var cpu_path = List[Float64](length=2 * N_ROWS, fill=0.0)
     host_qn_sigmoid_into(host_list_ptr(z), rebind[HostF64Ptr](cpu_path.unsafe_ptr()), N_ROWS, 3)
     _compare("check_sigmoid (CPU binding's host_qn_sigmoid_into)", cpu_path, want)
+    _ = z^  # the raw pointers above borrow z's storage: keep it alive past them
 
 
 def check_softmax() raises:
@@ -155,6 +156,7 @@ def check_softmax() raises:
     var cpu_path = List[Float64](length=n, fill=0.0)
     host_qn_softmax_into(host_list_ptr(z), rebind[HostF64Ptr](cpu_path.unsafe_ptr()), N_ROWS, N_CLASSES, 3)
     _compare("check_softmax (CPU binding's host_qn_softmax_into)", cpu_path, want)
+    _ = z^  # the raw pointers above borrow z's storage: keep it alive past them
 
 
 def main() raises:

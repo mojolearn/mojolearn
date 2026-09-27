@@ -8,7 +8,7 @@ it: `olsFit` sends `n_cols > n_rows` to `lstsqSvdJacobi`
 (`cuml/cpp/src/glm/ols.cuh:112-113`), which is `cusolverDnGesvdj`, a
 one-sided Jacobi SVD inside a closed vendor library. There is no source
 reference to check against, so this docstring carries the derivation.
-DEVIATION 550.
+DEVIATION 5010.
 
 WHY THE OLD REFUSAL WAS RIGHT ABOUT THE MATH AND WRONG ABOUT THE CONCLUSION
 ---------------------------------------------------------------------------

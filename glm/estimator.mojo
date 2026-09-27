@@ -26,7 +26,7 @@ surface takes the same dispatch every other caller does.
 CORRECTED 2026-09-01. The sentence that stood here said the host surface now
 gets "the same REFUSAL every other caller already got" at both shapes. There
 is no refusal at either shape any more: `n_cols == 1` takes `lstsq_eig`
-(DEVIATION 551) and `n_cols > n_rows` takes `lstsq_min_norm` (DEVIATION 550),
+(DEVIATION 5011) and `n_cols > n_rows` takes `lstsq_min_norm` (DEVIATION 5010),
 and `glm/impl/ols.mojo`'s docstring carries why. What the gate
 `check_ols_host_surface_takes_the_guard` asserts is therefore no longer that
 those shapes raise; it is that the host surface takes the same DISPATCH --

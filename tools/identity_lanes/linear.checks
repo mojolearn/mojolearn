@@ -18,7 +18,7 @@ glm/checks/ols_check.mojo	glm/checks/sabotage/seam_2621_absolute_cutoff.patch
 glm/checks/ols_check.mojo	glm/checks/sabotage/seam_2622_wide_absolute_cutoff.patch
 glm/checks/ridge_check.mojo	glm/checks/sabotage/seam_545_div_reciprocal.patch
 glm/checks/logistic_check.mojo	glm/checks/sabotage/seam_547_sum_terms_serial.patch
-glm/checks/logistic_check.mojo	glm/checks/sabotage/seam_552_owlqn_no_project.patch
+glm/checks/logistic_check.mojo	glm/checks/sabotage/seam_552_pseudo_grad_dropped.patch
 glm/checks/link_seams_check.mojo	glm/checks/sabotage/seam_549_sigmoid_ratio.patch
 glm/checks/link_seams_check.mojo	glm/checks/sabotage/seam_549_softmax_host_desc.patch
 glm/checks/multinomial_check.mojo	glm/checks/sabotage/seam_705_lse_descending.patch

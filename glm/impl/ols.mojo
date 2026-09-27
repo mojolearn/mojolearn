@@ -31,11 +31,11 @@ not a reason to refuse in this repository** -- the tree hand-writes LU,
 whether a portable route exists here. For both shapes it does, and neither
 route is `lstsqSvdJacobi`:
 
-    n_cols == 1      -> OLS_ALGO_EIG, the implemented `lstsq_eig`. DEVIATION 551.
+    n_cols == 1      -> OLS_ALGO_EIG, the implemented `lstsq_eig`. DEVIATION 5011.
     n_cols > n_rows  -> OLS_ALGO_MIN_NORM_EIG, `lstsq_min_norm`, ORIGINAL
-                        to this library. DEVIATION 550.
+                        to this library. DEVIATION 5010.
 
-**`n_cols == 1` (DEVIATION 551).** Their switch here is an implementation
+**`n_cols == 1` (DEVIATION 5011).** Their switch here is an implementation
 limit of THEIR eigensolver, and their own Python layer says so in as many
 words: "Changing solver from 'eig' to 'svd' as eig solver does not support
 training data with 1 column currently" (`linear_regression.pyx:390-394`).
@@ -50,7 +50,7 @@ the answer is the exact scalar least squares `(A^T b) / (A^T A)`. So the
 switch is theirs to need and ours not to. Recorded as a DEVIATION because
 it is a place where this implementation deliberately does NOT follow their dispatch.
 
-**`n_cols > n_rows` (DEVIATION 550).** The old refusal's reason -- "`A^T A`
+**`n_cols > n_rows` (DEVIATION 5010).** The old refusal's reason -- "`A^T A`
 is singular by construction" -- is true and is about the Gram of the
 COLUMNS. It does not transfer to the Gram of the ROWS. `A A^T` is
 `n_rows x n_rows`, it is nonsingular whenever the design has full row rank,
@@ -175,7 +175,7 @@ comptime OLS_ALGO_QR = 2
 comptime OLS_ALGO_SVD_QR = 3
 
 #: OURS, NOT THEIRS. `lstsq_min_norm`, the minimum-norm route for
-#: `n_cols > n_rows` (DEVIATION 550). It is numbered 100 and not 4 so that
+#: `n_cols > n_rows` (DEVIATION 5010). It is numbered 100 and not 4 so that
 #: nobody reads it as a cuML `algo` id that the reference might one day take:
 #: their enumeration is 0..3 and this is not in it.
 comptime OLS_ALGO_MIN_NORM_EIG = 100
@@ -387,7 +387,7 @@ def ols_fit_weighted_traced(
     # what changes is which solver they are overridden TO, because algo 0 is
     # a one-sided Jacobi SVD we do not have and both shapes have a portable
     # route here that theirs does not need. See the module docstring,
-    # DEVIATIONS 550 and 551.
+    # DEVIATIONS 5010 and 5011.
     var selected_algo = algo
     if n_cols > n_rows:
         selected_algo = OLS_ALGO_MIN_NORM_EIG
@@ -421,7 +421,7 @@ def ols_fit_weighted_traced(
             " because it never forms a Gram matrix and so never squares the"
             " condition number. The two shapes cuML's own dispatch forces to"
             " it (n_cols > n_rows, n_cols == 1) do NOT refuse here: they take"
-            " lstsq_min_norm and lstsq_eig (DEVIATIONS 550, 551). See"
+            " lstsq_min_norm and lstsq_eig (DEVIATIONS 5010, 5011). See"
             " glm/NOT_IMPLEMENTED.tsv"
         )
     elif selected_algo == OLS_ALGO_QR:
