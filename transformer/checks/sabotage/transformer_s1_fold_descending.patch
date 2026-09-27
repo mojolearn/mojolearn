@@ -1,0 +1,15 @@
+diff --git a/transformer/impl/llama/modeling_llama.mojo b/transformer/impl/llama/modeling_llama.mojo
+index eb7cd922f..f0275f345 100644
+--- a/transformer/impl/llama/modeling_llama.mojo
++++ b/transformer/impl/llama/modeling_llama.mojo
+@@ -456,9 +456,7 @@ neither point, so both hooks are no-ops."""
+ # delete them. They are not inert. They are the two arms that need decode.
+ # ===========================================================================
+ 
+-comptime SAB_S1_FOLD_DESCENDING = is_defined[
+-    "MOJOLEARN_TRANSFORMER_SABOTAGE_S1_FOLD_DESCENDING"
+-]()
++comptime SAB_S1_FOLD_DESCENDING = True  # SABOTAGE (neural lane seam arm)
+ """S1: fold the sum of squares descending. `mean(-1)` (LRN:64) has no
+ documented fold order, so the order is a PROFILE decision and this is the arm
+ that falsifies it. First stage it must move: `norm1.sumsq`."""

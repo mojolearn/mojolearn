@@ -1,0 +1,15 @@
+diff --git a/training/checks/loss.mojo b/training/checks/loss.mojo
+index 6cc124f9a..38901d31e 100644
+--- a/training/checks/loss.mojo
++++ b/training/checks/loss.mojo
+@@ -209,9 +209,7 @@ comptime SAB_MAX_TOPK_PREFIX = is_defined[
+ #: INERT under `NUMERIC_FAST` (where `identical_exp` IS the stdlib) and inert
+ #: at `shift == +0.0`, which is the whole exact-fixture family of contract
+ #: 12.1 -- so this arm must run on an ORDINARY fixture.
+-comptime SAB_EXP_STDLIB = is_defined[
+-    "MOJOLEARN_LOSS_SABOTAGE_EXP_STDLIB"
+-]()
++comptime SAB_EXP_STDLIB = True  # SABOTAGE (neural lane seam arm)
+ #: Contract section 4, seam L5. `std.math.log` instead of `identical_log`.
+ #: `[[mojo-log-breaks-ties]]`: the stdlib log carries about `5e-8` absolute
+ #: error and re-decides plateau ties, which is why row 12 exists at all.

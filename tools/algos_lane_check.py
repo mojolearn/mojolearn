@@ -263,7 +263,15 @@ def arm_env(kind):
     return env
 
 
-def run_arm(kind, lane, backend, fixtures, out, log):
+def run_arm(kind, lane, backend, fixtures, out, log, moved_ok=False):
+    """One column of one lane. `moved_ok` (the sabotaged stage only): the
+    harness exits 1 when a part it compares INSIDE one column moved (a byte
+    LM's sampler-vs-trainer `rlpair`, a batch part), which is exactly what a
+    biting sabotage does; if it still wrote its JSON, `compare` reads that
+    within-column verdict as DISAGREE. Before 2026-09-27 the arm raised here,
+    so a sabotage that bit byte-lm read as a failed GPU arm (do-amd request
+    1790542457986-dedupe). A missing JSON, any other exit, or a clean or
+    restored stage still fails."""
     cmd = [sys.executable, "-u", str(HARNESS), "--lanes", lane, "--repeats", "1", "--fail-on-refused",
            "--json", str(out)]
     if fixtures:
@@ -275,6 +283,10 @@ def run_arm(kind, lane, backend, fixtures, out, log):
         fh.write(f"\n$ {' '.join(cmd)}\n")
         fh.flush()
         rc = subprocess.run(cmd, cwd=ROOT, env=arm_env(kind), stdout=fh, stderr=subprocess.STDOUT).returncode
+    if moved_ok and rc == 1 and out.is_file():
+        say(f"{lane}: the {kind} arm exited 1 under the sabotage with its JSON written (a part moved "
+            "inside the column); the diff decides")
+        return
     if rc or not out.is_file():
         tail = Path(log).read_text(errors="replace").splitlines()[-15:]
         raise Fail(f"{lane}: the {kind} arm failed (exit {rc}); last lines of {log}:\n    " + "\n    ".join(tail))
@@ -391,6 +403,32 @@ def read_checks(listing):
     return rows
 
 
+def listing_lanes(text):
+    """The lanes a `.checks` listing names on its `# lanes: a, b, c` line(s).
+    A family whose identity lanes live in tools/identity_break.py itself (no
+    fragment registers them: the neural family's transformer, mamba1..3,
+    samba, ...) names them there, so its seam drivers run before those lanes'
+    diff exactly as a fragment's do. tools/lane_select.py reads the same line."""
+    out = []
+    for line in text.splitlines():
+        body = line.strip()
+        if body.startswith("#") and body[1:].strip().startswith("lanes:"):
+            out += [x for x in body[1:].strip()[len("lanes:"):].replace(",", " ").split() if x]
+    return tuple(out)
+
+
+def listed_core_lanes():
+    """{listing id: lanes} for every tools/identity_lanes/<id>.checks that
+    names lanes on a `# lanes:` line."""
+    root = ROOT / "tools" / "identity_lanes"
+    out = {}
+    for p in sorted(root.glob("*.checks")) if root.is_dir() else ():
+        named = listing_lanes(p.read_text())
+        if named:
+            out[p.stem] = named
+    return out
+
+
 def seam_checks(ib, lanes, log, pass_no=1):
     """THE PER-SEAM PROOF (plan R2/R3). Each fragment that owns one of these
     lanes lists its check drivers in tools/identity_lanes/<id>.checks, one per
@@ -403,7 +441,8 @@ def seam_checks(ib, lanes, log, pass_no=1):
     --pass 1 (default): a fragment with no .checks, or a driver with no patch,
     is a note. --pass 2: a fragment that registers lanes and has no .checks
     FAILS, and so does any driver line with no sabotage patch."""
-    ids = sorted({fid for fid, owned in getattr(ib, "LANE_FRAGMENTS", {}).items() if set(owned) & set(lanes)})
+    ids = sorted({fid for fid, owned in getattr(ib, "LANE_FRAGMENTS", {}).items() if set(owned) & set(lanes)}
+                 | {fid for fid, owned in listed_core_lanes().items() if set(owned) & set(lanes)})
     for fid in ids:
         listing = ROOT / "tools" / "identity_lanes" / f"{fid}.checks"
         if not listing.is_file():
@@ -464,8 +503,8 @@ def check(ib, lanes, needed, backend, fixtures, out, stage, log, pass_no=1):
     verdicts = {}
     for lane in lanes:
         gpu_json, cpu_json = out / f"{stage}.{lane}.gpu.json", out / f"{stage}.{lane}.cpu.json"
-        run_arm("gpu", lane, backend, fixtures, gpu_json, log)
-        run_arm("cpu", lane, backend, fixtures, cpu_json, log)
+        run_arm("gpu", lane, backend, fixtures, gpu_json, log, moved_ok=stage == "sabotaged")
+        run_arm("cpu", lane, backend, fixtures, cpu_json, log, moved_ok=stage == "sabotaged")
         verdict, detail = compare(ib, lane, gpu_json, cpu_json, fixtures, log, backend)
         print(f"{stage.upper()}: {lane}: {verdict}: {detail}", flush=True)
         verdicts[lane] = verdict

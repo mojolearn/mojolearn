@@ -1,0 +1,15 @@
+diff --git a/embedding/checks/embedding_identical.mojo b/embedding/checks/embedding_identical.mojo
+index ae2ac3c5e..ba0eef109 100644
+--- a/embedding/checks/embedding_identical.mojo
++++ b/embedding/checks/embedding_identical.mojo
+@@ -39,9 +39,7 @@ from max.gpu.sync import barrier
+ 
+ 
+ 
+-comptime SAB_FOLD_DESCENDING = is_defined[
+-    "MOJOLEARN_EMB_SABOTAGE_FOLD_DESCENDING"
+-]()
++comptime SAB_FOLD_DESCENDING = True  # SABOTAGE (neural lane seam arm)
+ comptime SAB_FOLD_BALANCED_TREE = is_defined[
+     "MOJOLEARN_EMB_SABOTAGE_FOLD_BALANCED_TREE"
+ ]()

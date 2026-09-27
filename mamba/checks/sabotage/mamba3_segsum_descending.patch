@@ -1,0 +1,15 @@
+diff --git a/mamba/impl/ops/mamba3_siso.mojo b/mamba/impl/ops/mamba3_siso.mojo
+index 2904a19a0..1667ae9b8 100644
+--- a/mamba/impl/ops/mamba3_siso.mojo
++++ b/mamba/impl/ops/mamba3_siso.mojo
+@@ -158,9 +158,7 @@ def m3_mod_2pi(x: Float32) -> Float32:
+ # Sabotage arms (see header).
+ # ===========================================================================
+ 
+-comptime SAB3_SEGSUM_DESCENDING = is_defined[
+-    "MOJOLEARN_MAMBA3_SABOTAGE_SEGSUM_DESCENDING"
+-]()
++comptime SAB3_SEGSUM_DESCENDING = True  # SABOTAGE (neural lane seam arm)
+ comptime SAB3_CHUNK_SIZE_32 = is_defined[
+     "MOJOLEARN_MAMBA3_SABOTAGE_CHUNK_SIZE_32"
+ ]()

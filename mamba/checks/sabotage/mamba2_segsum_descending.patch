@@ -1,0 +1,15 @@
+diff --git a/mamba/impl/modules/ssd_minimal.mojo b/mamba/impl/modules/ssd_minimal.mojo
+index 75f4b70a4..ecef965ce 100644
+--- a/mamba/impl/modules/ssd_minimal.mojo
++++ b/mamba/impl/modules/ssd_minimal.mojo
+@@ -85,9 +85,7 @@ from mamba.checks.mamba2_fixture import (
+ # ===========================================================================
+ 
+ comptime SAB_2712_UNBOUNDED = is_defined["MOJOLEARN_MAMBA_2712_UNBOUNDED"]()
+-comptime SAB_SEGSUM_DESCENDING = is_defined[
+-    "MOJOLEARN_MAMBA2_SABOTAGE_SEGSUM_DESCENDING"
+-]()
++comptime SAB_SEGSUM_DESCENDING = True  # SABOTAGE (neural lane seam arm)
+ comptime SAB_CHUNK_SIZE_128 = is_defined[
+     "MOJOLEARN_MAMBA2_SABOTAGE_CHUNK_SIZE_128"
+ ]()

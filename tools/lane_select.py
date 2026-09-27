@@ -3529,7 +3529,7 @@ def seam_check_lanes(path):
             if line and not line.startswith("#"):
                 listed.append(line.split("\t")[0].strip())
         if path in _mojo_closure(listed):
-            hits |= set(expansion_fragment_lanes(fid))
+            hits |= set(expansion_fragment_lanes(fid)) | set(checks_listing_lanes(fid))
             drivers.append(name)
     if not drivers:
         return None
@@ -3550,6 +3550,23 @@ def generator_lanes(path, rev):
     if not outs:
         return None
     return set().union(*[rev.get(o, set()) for o in outs]), outs
+
+
+def checks_listing_lanes(fid):
+    """The lanes `tools/identity_lanes/<fid>.checks` names on its `# lanes:`
+    line(s) (tools/algos_lane_check.listing_lanes, same rule): a family whose
+    identity lanes live in the harness itself, not in a fragment (the neural
+    family, 2026-09-27), names the lanes its seam drivers run before."""
+    try:
+        text = _read(os.path.join(IDENTITY_FRAGMENTS, fid + ".checks"))
+    except OSError:
+        return ()
+    out = []
+    for line in text.splitlines():
+        body = line.strip()
+        if body.startswith("#") and body[1:].strip().startswith("lanes:"):
+            out += [x for x in body[1:].strip()[len("lanes:"):].replace(",", " ").split() if x]
+    return tuple(out)
 
 
 def expansion_fragment_lanes(fid):
@@ -3577,7 +3594,7 @@ def fragment_lanes(path, ref, every):
     revision of `path` itself names (at `ref` too, so a removed lane is still
     seen), within the registry."""
     kind, fid = expansion_fragment(path)
-    named = set(expansion_fragment_lanes(fid))
+    named = set(expansion_fragment_lanes(fid)) | (set(checks_listing_lanes(fid)) if kind == "checks" else set())
     texts = []
     try:
         texts.append(_read(path))
