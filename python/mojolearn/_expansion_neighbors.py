@@ -30,7 +30,7 @@ from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty
 from ._mode import NumericModeMixin
 
-__all__ = ["LocalOutlierFactor"]
+__all__ = ["LocalOutlierFactor", "NearestCentroid"]
 
 # x_neighbors/items.mojo's codes
 _KERNELS = {"linear": 0, "poly": 1, "polynomial": 1, "rbf": 2, "sigmoid": 3, "laplacian": 4,
@@ -274,4 +274,144 @@ class LocalOutlierFactor(_XNeighbors):
     def predict(self, X):
         self._novelty("predict")
         return Array.from_list([1 if v >= 0 else -1 for v in self.decision_function(X).tolist()], "<i8")
+
+
+# ====================================================================== NearestCentroid
+class NearestCentroid(_XNeighbors):
+    """Nearest centroid classifier.
+
+    Reference: scikit-learn `neighbors/_nearest_centroid.py` (1.9.0): per-class
+    mean (euclidean) or per-class median (manhattan) centroids,
+    `within_class_std_dev_`, the shrunken centroids (`shrink_threshold`),
+    `class_prior_` ('uniform', 'empirical' or given), `predict` (the nearest
+    centroid when the priors are uniform, else the discriminant),
+    `decision_function` and `predict_proba` (euclidean only, as theirs).
+    Sparse input is not implemented. Float32 where sklearn is float64.
+    DEVIATION 5201: a feature whose shrink scale m*s is zero gets deviation 0
+    where theirs divides by zero.
+    """
+
+    def __init__(self, metric="euclidean", *, shrink_threshold=None, priors="uniform"):
+        self.metric = metric
+        self.shrink_threshold = shrink_threshold
+        self.priors = priors
+
+    def fit(self, X, y):
+        if self.metric not in ("euclidean", "manhattan"):
+            raise ValueError("NearestCentroid: metric must be 'euclidean' or 'manhattan'")
+        X = _f32(X)
+        n, d = X.shape
+        classes, codes = _labels_of(y)
+        if len(codes) != n:
+            raise ValueError("X and y have different numbers of rows")
+        C = len(classes)
+        if C < 2:
+            raise ValueError(f"The number of classes has to be greater than one; got {C} class")
+        counts = [0] * C
+        for c in codes:
+            counts[c] += 1
+        if self.priors == "empirical":
+            prior = [c / float(n) for c in counts]
+        elif self.priors == "uniform":
+            prior = [1.0 / C] * C
+        else:
+            prior = [float(v) for v in (self.priors.tolist() if hasattr(self.priors, "tolist") else self.priors)]
+            if len(prior) != C:
+                raise ValueError("priors must have one entry per class")
+            if any(p < 0 for p in prior):
+                raise ValueError("priors must be non-negative")
+            tot = math.fsum(prior)
+            if not math.isclose(tot, 1.0, rel_tol=1e-5, abs_tol=1e-8):
+                prior = [p / tot for p in prior]
+        self.class_prior_ = Array.from_list(prior, "<f8")
+        lab = _i32(codes, "y")
+        if self.metric == "euclidean":
+            cent = empty((C, d), "<f4")
+            self._op("group_mean", [(X, 0), (lab, 0), (cent, 1)], (n, d, C))
+        else:
+            rows = X.tolist()
+            med = []
+            for c in range(C):
+                members = [rows[i] for i in range(n) if codes[i] == c]
+                med.append([_median([r[f] for r in members]) for f in range(d)])
+            cent = Array.from_list(med, "<f4")
+        stats = empty((d,), "<f4")
+        new_cent = empty((C, d), "<f4")
+        self._op("nc_std", [(X, 0), (lab, 0), (cent, 0), (stats, 1)], (n, d, C))
+        std = stats.tolist()
+        if all(v == 0.0 for v in std) and self._ptp_zero(X):
+            raise ValueError("All features have zero variance. Division by zero.")
+        std_sorted = sorted(std)
+        med_std = _f32_scalar(_median(std_sorted))
+        nk = Array.from_list([float(c) for c in counts], "<f4")
+        shrink = float(self.shrink_threshold) if self.shrink_threshold else 0.0
+        self._op("nc_shrink", [(X, 0), (cent, 0), (nk, 0), (stats, 0), (new_cent, 1)],
+                 (n, d, C, 1 if shrink else 0), (med_std, shrink))
+        self.centroids_ = new_cent
+        self.within_class_std_dev_ = stats
+        self.classes_ = classes
+        self._codes_classes = classes
+        self.n_features_in_ = d
+        return self
+
+    @staticmethod
+    def _ptp_zero(X):
+        rows = X.tolist()
+        return all(min(col) == max(col) for col in zip(*rows))
+
+    def _uniform(self):
+        C = len(self.classes_)
+        return all(math.isclose(p, 1.0 / C, rel_tol=1e-5, abs_tol=1e-8) for p in self.class_prior_.tolist())
+
+    def predict(self, X):
+        Q = _f32(X)
+        if self._uniform():
+            D = self._sqdist(Q, self.centroids_) if self.metric == "euclidean" else self._l1dist(Q, self.centroids_)
+            _, idx = self._knn_select(D, 1, False)
+            return _class_array(self.classes_, [r[0] for r in idx.tolist()])
+        return _class_array(self.classes_, [_argmax(r) for r in self.decision_function(Q).tolist()])
+
+    def decision_function(self, X):
+        if self.metric != "euclidean":
+            raise AttributeError("decision_function is available for metric='euclidean' only")
+        Q = _f32(X)
+        C = len(self.classes_)
+        prior = Array.from_list(self.class_prior_.tolist(), "<f4")
+        std = self.within_class_std_dev_
+        out = empty((Q.shape[0], C), "<f4")
+        self._op("nc_decision", [(Q, 0), (self.centroids_, 0), (std, 0), (prior, 0), (out, 1)],
+                 (Q.shape[0], Q.shape[1], C))
+        return out
+
+    def predict_proba(self, X):
+        dec = self.decision_function(X)
+        out = empty(dec.shape, "<f4")
+        self._op("softmax", [(dec, 0), (out, 1)], dec.shape)
+        return out
+
+
+def _median(vals):
+    v = sorted(vals)
+    n = len(v)
+    if n % 2:
+        return v[n // 2]
+    return (v[n // 2 - 1] + v[n // 2]) / 2.0
+
+
+def _argmax(row):
+    best, at = row[0], 0
+    for i, v in enumerate(row):
+        if v > best:
+            best, at = v, i
+    return at
+
+
+def _resolve_gamma(gamma, kernel, X, est):
+    d = X.shape[1]
+    if gamma is None or gamma == "auto":
+        return 1.0 / d
+    if gamma == "scale":
+        var = est._variance(X)
+        return 1.0 / (d * var) if var != 0 else 1.0
+    return float(gamma)
 

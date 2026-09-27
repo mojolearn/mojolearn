@@ -15,4 +15,5 @@ Pod setup that is not in the repo: the default pixi env needs
 
 | algorithm | commit | lane | pod verdict |
 |---|---|---|---|
-| LocalOutlierFactor | (this commit) | x-neighbors-lof | AGREE: compared batch 9, infer 9, train 9 (cuda H100 vs CPU Xeon 8470); sanity vs sklearn 1.9.1 PASS |
+| LocalOutlierFactor | df17471f9 | x-neighbors-lof | AGREE: compared batch 9, infer 9, train 9 (cuda H100 vs CPU Xeon 8470); sanity vs sklearn 1.9.1 PASS |
+| NearestCentroid | (this commit) | x-neighbors-nearest-centroid | AGREE: compared batch 9, infer 9, train 9 (cuda H100 vs CPU Xeon 8470); sanity vs sklearn 1.9.1 PASS |

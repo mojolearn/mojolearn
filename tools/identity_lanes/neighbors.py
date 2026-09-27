@@ -31,7 +31,19 @@ def _(ml, X, yc, yr, Xh=None):
                 nov, lambda e: (e.score_samples(Xh[:256]), e.predict(Xh[:256])))
 
 
+@lane("x-neighbors-nearest-centroid")
+def _(ml, X, yc, yr, Xh=None):
+    y3 = (yc[:512] + (X[:512, 5] > 0).astype(np.int32)).astype(np.int32)
+    m = ml.NearestCentroid().fit(X[:512], y3)
+    s = ml.NearestCentroid(shrink_threshold=0.2, priors="empirical").fit(X[:512], y3)
+    md = ml.NearestCentroid(metric="manhattan").fit(X[:512], y3)
+    return _fit(dict(centroids=_h(m.centroids_), std=_h(m.within_class_std_dev_), predict=_h(m.predict(X[:512])),
+                     shrunk=_h(s.centroids_), shrunk_predict=_h(s.predict(X[:512])),
+                     proba=_h(s.predict_proba(X[:256])), manhattan=_h(md.centroids_, md.predict(X[:512]))),
+                s, lambda e: (e.predict(Xh[:256]), e.decision_function(Xh[:256])))
+
 
 
 
 _batch_decl(_rows_calls("score_samples", "predict", sl=slice(0, 256)), "x-neighbors-lof")
+_batch_decl(_rows_calls("predict", "decision_function", "predict_proba", sl=slice(0, 256)), "x-neighbors-nearest-centroid")
