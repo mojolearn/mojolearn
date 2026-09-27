@@ -58,6 +58,9 @@ FAMILIES = (
             "x-prep-label-binarizer-multilabel",
             "x-prep-kbins-methods",
             "x-prep-mi-discrete",
+            "x-prep-kbins-weights",
+            "x-prep-spline-options",
+            "x-prep-iterative-options",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -142,6 +145,9 @@ TRAINING_LANE_NAMES = {
     "x-prep-kbins-methods": "KBinsDiscretizer quantile_method (every numpy method)",
     "x-prep-score-edges": "f_classif / chi2 NaN and inf score edges, f_regression / r_regression force_finite, RFE importance_getter",
     "x-prep-mi-discrete": "mutual_info_classif / mutual_info_regression discrete_features",
+    "x-prep-kbins-weights": "KBinsDiscretizer sample_weight",
+    "x-prep-spline-options": "SplineTransformer knots array, linear / periodic, sample_weight, handle_missing, order",
+    "x-prep-iterative-options": "IterativeImputer random order, n_nearest_features, sample_posterior, add_indicator, estimator",
 }
 PUBLIC_PENDING_LANES = {
     "x-prep-robust-scaler": "no reference",
@@ -187,4 +193,7 @@ PUBLIC_PENDING_LANES = {
     "x-prep-nb-partial": "no reference",
     "x-prep-kbins-methods": "no reference",
     "x-prep-mi-discrete": "no reference",
+    "x-prep-kbins-weights": "no reference",
+    "x-prep-spline-options": "no reference",
+    "x-prep-iterative-options": "no reference",
 }

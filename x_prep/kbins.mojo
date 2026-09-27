@@ -14,7 +14,7 @@ positions are exact rationals i / n_bins, so the integer/fraction split of a
 position is decided in integer arithmetic.
 """
 from std.memory import bitcast
-from x_prep.common import FP, IP, p, ld, st, canonical_nan
+from x_prep.common import FP, IP, p, ld, st, canonical_nan, is_nan
 from x_prep.prims import add, sub, mul, div
 
 comptime KMEANS_MAX_ITER = 300
@@ -97,7 +97,9 @@ def kbins_edges_unit(t: Int, f: FP, q: IP):
     """q = [S, n, d, NB, NBMAX, STRAT, ST, EDGES, NEDGE, LAB, CEN]; t = column.
     S: columns sorted ascending (column-major, n each). NB[c]: requested bins.
     STRAT: 0 uniform, 1 quantile averaged_inverted_cdf, 2 quantile linear,
-    3 kmeans. ST: col_stats rows (min at 3d, max at 4d, var at 2d).
+    3 kmeans, 4-10 the other numpy quantile methods, 11 edges already in
+    EDGES (the sample_weight units). ST: col_stats rows (min at 3d, max at 4d,
+    var at 2d).
     EDGES[c*(NBMAX+1) :] the kept edges, NEDGE[c] their count (n_bins_ + 1).
     LAB (n*d) and CEN (d*NBMAX) are kmeans scratch."""
     var n = p(q, 1)
@@ -121,7 +123,9 @@ def kbins_edges_unit(t: Int, f: FP, q: IP):
         st(f, E + nb, hi)
         st(f, p(q, 8) + c, Float32(nb + 1))
         return
-    if strat == 1 or strat == 2 or strat >= 4:
+    if strat == 11:
+        pass    # edges written by kbins_wq / kbins_wkm (sample_weight)
+    elif strat == 1 or strat == 2 or strat >= 4:
         for i in range(nb + 1):
             var v: Float32
             if strat == 1:
@@ -210,6 +214,151 @@ def kbins_edges_unit(t: Int, f: FP, q: IP):
             st(f, E + kept, v)
             kept += 1
     st(f, p(q, 8) + c, Float32(kept))
+
+
+def kbins_gw_unit(t: Int, f: FP, q: IP):
+    """q = [CODES, n, d, W, GW]; t = column c. GW[c*n + k] = the sum of the
+    weights W[i] of the rows whose code (the index of their value among the
+    column's distinct values) is k, folded in ascending row order (the arena
+    arrives zeroed)."""
+    var n = p(q, 1)
+    var d = p(q, 2)
+    var c = t
+    for i in range(n):
+        var k = Int(ld(f, p(q, 0) + i * d + c))
+        var o = p(q, 4) + c * n + k
+        st(f, o, add(ld(f, o), ld(f, p(q, 3) + i)))
+
+
+@always_inline
+def _gw(f: FP, U: Int, G: Int, g: Int) -> Float32:
+    """Group g's weight; a NaN value weighs 0 (the reference's NaN rule)."""
+    if is_nan(ld(f, U + g)):
+        return Float32(0)
+    return ld(f, G + g)
+
+
+def kbins_wq_unit(t: Int, f: FP, q: IP):
+    """q = [UG, n, d, UCNT, NB, NBMAX, LEV, AVG, EDGES]; t = column c. The
+    reference's `_weighted_percentile` (inverted_cdf, or with AVG
+    averaged_inverted_cdf) over the column's distinct values U = UG[c*n :]
+    (UCNT[c] of them, ascending) with their summed weights G = UG[n*d + c*n :]:
+    at each level LEV[c*(NBMAX+1) + i] (percent, float32), adj = level / 100 *
+    total; the value of the first group whose cumulative weight reaches adj
+    (adj == 0: the first of positive weight, the reference's nextafter(0, 1);
+    none: the largest value, the reference's clipped index); with AVG, when
+    that cumulative exceeds adj by no more than float32 eps, the mean of it
+    and the next value of positive weight (itself when there is none). A NaN
+    value weighs 0."""
+    var n = p(q, 1)
+    var d = p(q, 2)
+    var c = t
+    var U = p(q, 0) + c * n
+    var G = p(q, 0) + n * d + c * n
+    var m = Int(ld(f, p(q, 3) + c))
+    var nb = Int(ld(f, p(q, 4) + c))
+    var E = p(q, 8) + c * (p(q, 5) + 1)
+    var L = p(q, 6) + c * (p(q, 5) + 1)
+    var total = Float32(0)
+    for g in range(m):
+        total = add(total, _gw(f, U, G, g))
+    for i in range(nb + 1):
+        var adj = mul(div(ld(f, L + i), Float32(100)), total)
+        var cum = Float32(0)
+        var found = -1
+        for g in range(m):
+            cum = add(cum, _gw(f, U, G, g))
+            if (adj > Float32(0) and cum >= adj) or (adj == Float32(0) and cum > Float32(0)):
+                found = g
+                break
+        if found < 0:
+            found = m - 1
+        var v = ld(f, U + found)
+        if p(q, 7) != 0 and not (sub(cum, adj) > Float32(1.1920929e-07)):
+            var nxt = found
+            for h in range(found + 1, m):
+                if _gw(f, U, G, h) > Float32(0):
+                    nxt = h
+                    break
+            v = div(add(v, ld(f, U + nxt)), Float32(2))
+        st(f, E + i, v)
+
+
+def kbins_wkm_unit(t: Int, f: FP, q: IP):
+    """q = [UG, n, d, UCNT, NB, NBMAX, ST, STW, EDGES, CEN, LAB]; t = column c.
+    kmeans with sample_weight (the reference's KMeans(init=uniform centres,
+    n_init=1).fit(column, sample_weight)): a weighted 1-D Lloyd over the
+    column's distinct values U with their summed weights G (UG as kbins_wq),
+    centres from the uniform midpoints of the min / max over the rows of
+    nonzero weight (STW), tol from the variance of every row (ST); labels
+    over every value, strict convergence on unchanged labels, else centre
+    shift <= tol; a centre whose values weigh 0 stays. Edges: min, the sorted
+    centres' midpoints, max."""
+    var n = p(q, 1)
+    var d = p(q, 2)
+    var c = t
+    var U = p(q, 0) + c * n
+    var G = p(q, 0) + n * d + c * n
+    var m = Int(ld(f, p(q, 3) + c))
+    var nb = Int(ld(f, p(q, 4) + c))
+    var E = p(q, 8) + c * (p(q, 5) + 1)
+    var CEN = p(q, 9) + c * p(q, 5)
+    var LAB = p(q, 10) + c * n
+    var lo = ld(f, p(q, 7) + 3 * d + c)
+    var hi = ld(f, p(q, 7) + 4 * d + c)
+    if lo == hi:
+        return
+    var step = div(sub(hi, lo), Float32(nb))
+    for i in range(nb):
+        var e0 = add(mul(Float32(i), step), lo)
+        var e1 = hi if i + 1 == nb else add(mul(Float32(i + 1), step), lo)
+        st(f, CEN + i, mul(add(e1, e0), Float32(0.5)))
+    for g in range(m):
+        st(f, LAB + g, Float32(-1))
+    var tol = mul(ld(f, p(q, 6) + 2 * d + c), Float32(1.0e-4))
+    for _ in range(KMEANS_MAX_ITER):
+        var changed = False
+        for g in range(m):
+            var x = ld(f, U + g)
+            var best = 0
+            var bd = abs(sub(x, ld(f, CEN)))
+            for k in range(1, nb):
+                var dk = abs(sub(x, ld(f, CEN + k)))
+                if dk < bd:
+                    bd = dk
+                    best = k
+            if Int(ld(f, LAB + g)) != best:
+                changed = True
+                st(f, LAB + g, Float32(best))
+        if not changed:
+            break
+        var shift = Float32(0)
+        for k in range(nb):
+            var s = Float32(0)
+            var w = Float32(0)
+            for g in range(m):
+                if Int(ld(f, LAB + g)) == k:
+                    var wg = ld(f, G + g)
+                    s = add(s, mul(wg, ld(f, U + g)))
+                    w = add(w, wg)
+            if w > Float32(0):
+                var nc = div(s, w)
+                var dc = sub(nc, ld(f, CEN + k))
+                shift = add(shift, mul(dc, dc))
+                st(f, CEN + k, nc)
+        if shift <= tol:
+            break
+    for i in range(1, nb):
+        var v = ld(f, CEN + i)
+        var j = i - 1
+        while j >= 0 and ld(f, CEN + j) > v:
+            st(f, CEN + j + 1, ld(f, CEN + j))
+            j -= 1
+        st(f, CEN + j + 1, v)
+    st(f, E, lo)
+    for i in range(1, nb):
+        st(f, E + i, mul(add(ld(f, CEN + i), ld(f, CEN + i - 1)), Float32(0.5)))
+    st(f, E + nb, hi)
 
 
 def kbins_codes_unit(t: Int, f: FP, q: IP):

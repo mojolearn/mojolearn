@@ -196,14 +196,19 @@ def _targets(value, rows):
 
 
 def _require_mode():
-    if _backend.default_mode() != 'identical' or _backend.numeric_mode() != 'identical':
-        raise RuntimeError('SmallMLPTrainer requires process-selected IDENTICAL mode; select it before use')
+    """The process-selected tier, IDENTICAL or FAST (lane neural, 2026-09-27:
+    FAST runs the same kernels with the pins on the free schedule and
+    promises quality, never bits). Returns it."""
+    mode = _backend.default_mode()
+    if mode not in ('identical', 'fast') or _backend.numeric_mode() != mode:
+        raise RuntimeError('SmallMLPTrainer requires process-selected IDENTICAL or FAST mode; select it before use')
+    return mode
 
 
 def _optimizer(parameters, config, state=None):
     opt = _training_impl.AdamW(
         parameters, lr=config['lr'], betas=(config['beta1'], config['beta2']),
-        eps=config['eps'], weight_decay=config['weight_decay'], numeric_mode='identical')
+        eps=config['eps'], weight_decay=config['weight_decay'], numeric_mode=_require_mode())
     if state is not None:
         opt.load_state_dict({'t': state['step'], 'exp_avg': state['m'].copy(),
                              'exp_avg_sq': state['v'].copy(),
@@ -212,7 +217,7 @@ def _optimizer(parameters, config, state=None):
 
 
 def _state(weights, opt, config, schedule):
-    return dict(schema=_STATE_SCHEMA, architecture=[8, 16, 3], numeric_mode='identical',
+    return dict(schema=_STATE_SCHEMA, architecture=[8, 16, 3], numeric_mode=_require_mode(),
                 parameter_order=list(_NAMES),
                 weights={name: array.copy() for name, array in zip(_NAMES, weights)},
                 optimizer=dict(kind='AdamW', step=int(opt.t), m=opt.exp_avg.copy(),
@@ -226,7 +231,7 @@ def _validate_state(state):
     if not isinstance(state, dict) or set(state) != required:
         raise ValueError('SmallMLPTrainer state has missing or unknown fields')
     if (state['schema'] != _STATE_SCHEMA or state['architecture'] != [8, 16, 3]
-            or state['numeric_mode'] != 'identical' or state['parameter_order'] != list(_NAMES)):
+            or state['numeric_mode'] != _require_mode() or state['parameter_order'] != list(_NAMES)):
         raise ValueError('SmallMLPTrainer state schema/architecture/mode/order mismatch')
     if not isinstance(state['weights'], dict) or set(state['weights']) != set(_NAMES):
         raise ValueError('SmallMLPTrainer state requires all four named parameters')
@@ -263,8 +268,9 @@ class SmallMLPTrainer:
     Supply weight1 (16,8), bias1 (16,), weight2 (3,16), bias2 (3,) as
     float32 buffers (NumPy arrays or mojolearn Arrays). Parameters and
     inputs are copied. Batches contain 1..256 rows and labels 0..2. All
-    neural arithmetic runs on the GPU, in process-selected IDENTICAL mode;
-    this class never changes that mode. There is no CPU fallback. Every
+    neural arithmetic runs on the GPU, in the process-selected IDENTICAL
+    (default) or FAST mode; this class never changes that mode, and a state
+    saved under one mode loads only under the same one. There is no CPU fallback. Every
     array returned is a `mojolearn.Array`.
 
     data_schedule is a bounded JSON descriptor supplied by the caller (for
@@ -320,9 +326,10 @@ class SmallMLPTrainer:
 
     @staticmethod
     def _binding():
-        _require_mode()
-        _linalg_impl.require_identical()
-        binding = _training_impl._load('identical')
+        mode = _require_mode()
+        if mode == 'identical':
+            _linalg_impl.require_identical()
+        binding = _training_impl._load(mode)
         for name in ('mlp_bias_activation', 'mlp_relu_backward', 'mlp_sum_rows'):
             if not callable(getattr(binding, name, None)):
                 raise ImportError('SmallMLPTrainer requires updated training binding: missing ' + name)
@@ -330,8 +337,8 @@ class SmallMLPTrainer:
 
     @staticmethod
     def _matmul(a, b, **kwargs):
-        _require_mode()
-        result = _linalg_impl.matmul(a, b, identical=True, **kwargs)
+        mode = _require_mode()
+        result = _linalg_impl.matmul(a, b, identical=(mode == 'identical'), **kwargs)
         # DEVIATION 2426: the product is a mojolearn.Array; finiteness via
         # the native `all_finite` helper.
         if result.dtype != '<f4' or not all_finite(result):
@@ -376,7 +383,7 @@ class SmallMLPTrainer:
     def _gradient(self, x, y, weights, binding, return_input_grad=False):
         activation, logits = self._forward(x, weights, binding)
         loss, dlogits = _training_impl.cross_entropy(
-            logits, y, reduction='mean', return_grad=True, numeric_mode='identical')
+            logits, y, reduction='mean', return_grad=True, numeric_mode=_require_mode())
         if not math.isfinite(loss):
             raise RuntimeError('SmallMLPTrainer loss is not finite')
         dlogits = _array(dlogits, (len(x), 3), 'logit gradient')
