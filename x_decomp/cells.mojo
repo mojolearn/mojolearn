@@ -39,12 +39,6 @@ from core.philox import philox4x32_10
 #: fixture's 1e-4..1e4 column scales; the solver is the same, the refusal of
 #: an unconverged answer is kept, only the budget is larger.
 comptime X_DECOMP_SVD_SWEEPS = 60
-#: ... and the two-sided Jacobi eigh's (decomposition/'s solver, JACOBI_TOL
-#: unchanged): at 15 sweeps Isomap / MDS's n = 160 double-centered matrices
-#: sat at the edge (a one-ulp perturbation of the host column refused 8 of 9
-#: fixtures). A run that converges within 15 sweeps stops at the same sweep
-#: and returns the same bits; only a refusal becomes an answer.
-comptime X_DECOMP_EIGH_SWEEPS = 60
 #: ... and its rotation threshold: |apq| > tol * sqrt(app * aqq). JACOBI_TOL
 #: (1e-7) sits under float32 epsilon (1.19e-7), so on an ill-conditioned
 #: matrix one rotation per sweep can fire forever (a rounding limit cycle,

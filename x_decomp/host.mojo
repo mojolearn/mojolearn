@@ -17,7 +17,6 @@ from x_decomp.cells import (
     rowsum_part_cell,
     fold_cell,
     gemm_part_cell,
-    X_DECOMP_EIGH_SWEEPS,
     X_DECOMP_SVD_SWEEPS,
     X_DECOMP_SVD_TOL,
     I32Ptr,
@@ -138,7 +137,7 @@ struct HostExec(Exec):
         var m = List[Float32](capacity=n * n)
         for i in range(n * n):
             m.append(a.unsafe_load(i))
-        var got = host_eigh(m, n, X_DECOMP_EIGH_SWEEPS)
+        var got = host_eigh(m, n)
         for i in range(n):
             w.unsafe_store(i, got.w[i])
         for i in range(n * n):
