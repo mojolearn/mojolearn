@@ -53,6 +53,7 @@ Lane 8 (docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md). Pass 1: build + sanity +
 | BatchNorm2d / BatchNorm1d (training + eval, running stats, backward) | see git log | x-cnn-batchnorm: AGREE on 9 fixtures |
 | Dropout2d (Philox channel mask) | see git log | x-cnn-dropout2d: AGREE on 9 fixtures |
 | AdaptiveAvgPool2d / AdaptiveMaxPool2d (global pooling) | see git log | x-cnn-globalpool: AGREE on 9 fixtures |
+| ResNet BasicBlock (torchvision) | see git log | x-cnn-resnet-block: AGREE on 9 fixtures; vs torchvision y 9.5e-7, dx 7e-7 |
 
 ## Next
 
