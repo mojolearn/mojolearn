@@ -25,7 +25,7 @@ from ._buffer import as_f32_c, as_i32_c, frombytes
 
 __all__ = ["IncrementalPCA", "GaussianRandomProjection", "SparseRandomProjection", "johnson_lindenstrauss_min_dim",
            "NMF", "FastICA", "FactorAnalysis",
-           "lu_factor", "lu_solve", "solve"]
+           "lu_factor", "lu_solve", "solve", "lstsq", "randomized_svd"]
 
 _BINDING = "_mojolearn_x_decomp"
 
@@ -258,6 +258,12 @@ class _Kit:
         p = array.array("i", perm)
         self.b.x_decomp_cd_rows(W.addr, HHt.addr, XHt.addr, p.buffer_info()[0], viol.addr, [n, kc])
         return self.total(viol).s[0]
+
+    def orth(self, A):
+        """A copy of A with its columns orthonormalized (MGS2)."""
+        Q = A.copy()
+        self.b.x_decomp_orth(Q.addr, [A.r, A.c])
+        return Q
 
     def chol(self, A):
         L = A.copy()
@@ -1299,3 +1305,100 @@ def _row_of(b):
     if shape is not None and hasattr(b, "reshape"):
         return b.reshape(1, -1)
     return [list(b)]
+
+
+# ================================================================ lstsq / randomized SVD
+def _orthonormal_cols(k, A):
+    """An orthonormal basis of A's columns (m x l, m >= l): modified
+    Gram-Schmidt with one re-orthogonalization pass (x_decomp/cells.mojo
+    `orth_serial`), stable where a Cholesky QR of an ill-conditioned A is not."""
+    return k.orth(A)
+
+
+def _flip_u(U, Vt):
+    """sklearn svd_flip(u_based_decision=True): each column of U signed so its
+    largest-|.| entry (first on a tie) is positive; Vt's rows follow."""
+    fl = []
+    Ut = U.T
+    for i in range(Ut.r):
+        row = Ut.row(i)
+        best, arg = -1.0, 0
+        for j, v in enumerate(row):
+            if abs(v) > best:
+                best, arg = abs(v), j
+        fl.append(row[arg] < 0)
+    return U.neg_cols(fl), Vt.neg_rows(fl)
+
+
+def randomized_svd(M, n_components, *, n_oversamples=10, n_iter="auto", power_iteration_normalizer="auto",
+                   transpose="auto", flip_sign=True, random_state=None, numeric_mode=None):
+    """sklearn.utils.extmath.randomized_svd (Halko et al.; RAFT
+    `linalg/rsvd.cuh` is the same scheme). The Gaussian test matrix is the
+    lane's Philox stream (random_state None means 0). Every power iteration
+    re-orthonormalizes by MGS2 whatever `power_iteration_normalizer`
+    says: 'LU', 'QR' and 'none' span the same subspace, only the rounding of
+    the basis differs. The small SVD of Q^T M is exact (Gram eigh).
+    Returns (U, s, Vt)."""
+    k = _Kit(_mode(numeric_mode))
+    A = _M.from_input(M, "M")
+    n, d = A.r, A.c
+    if power_iteration_normalizer not in ("auto", "QR", "LU", "none"):
+        raise ValueError("power_iteration_normalizer must be 'auto', 'QR', 'LU' or 'none'")
+    nr = n_components + n_oversamples
+    if n_iter == "auto":
+        n_iter = 7 if n_components < 0.1 * min(n, d) else 4
+    if transpose == "auto":
+        transpose = n < d
+    if transpose:
+        A = A.T
+        n, d = d, n
+    if not 1 <= n_components <= min(n, d):
+        raise ValueError("n_components must be in [1, min(n_samples, n_features)]")
+    nr = min(nr, d, n)
+    Q = k.rand(d, nr, _seed_of(random_state), 30, 1)
+    for _ in range(int(n_iter)):
+        Q = _orthonormal_cols(k, k.mm(A, Q))
+        Q = _orthonormal_cols(k, k.mm(A, Q, ta=True))
+    Q = _orthonormal_cols(k, k.mm(A, Q))
+    B = k.mm(Q, A, ta=True)
+    Uh, S, Vt = _thin_svd(k, B, min(B.r, B.c), u_based=True)
+    U = k.mm(Q, Uh)
+    if flip_sign:
+        if not transpose:
+            U, Vt = _flip_u(U, Vt)
+        else:
+            U, Vt = _flip_u(Vt.T, U.T)
+            U, Vt = Vt.T, U.T
+    kc = n_components
+    if transpose:
+        return Vt.rows(0, kc).T.out(), S.cols(0, kc).out((kc,)), U.cols(0, kc).T.out()
+    return U.cols(0, kc).out(), S.cols(0, kc).out((kc,)), Vt.rows(0, kc).out()
+
+
+def lstsq(a, b, rcond=None, *, numeric_mode=None):
+    """numpy.linalg.lstsq: (x, residuals, rank, s) through the SVD of a
+    (the Gram eigh of the smaller side, singular values descending), singular
+    values at or below rcond * s_max treated as zero (rcond None: float32
+    eps * max(M, N)). residuals are the squared column norms of b - a x when
+    rank == N < M, else empty."""
+    k = _Kit(_mode(numeric_mode))
+    A = _M.from_input(a, "a")
+    m, nn = A.r, A.c
+    vec = len(getattr(b, "shape", ())) == 1 or (not hasattr(b, "shape") and not isinstance(b[0], (list, tuple)))
+    B = _M.from_input(_row_of(b), "b").T if vec else _M.from_input(b, "b")
+    if B.r != m:
+        raise ValueError("Incompatible dimensions")
+    r = min(m, nn)
+    U, S, Vt = _thin_svd(k, A, r, u_based=True)
+    if rcond is None:
+        rcond = _F32_EPS * max(m, nn)
+    cut = _f32(S.s[0] * rcond) if r else 0.0
+    rank = sum(1 for v in S.s if v > cut)
+    inv = k.ew("recip", k.ew("select", S, S, _M.zeros(1, 1), s=cut))
+    X = k.mm(Vt, k.ew("mul", k.mm(U, B, ta=True), inv.T), ta=True)
+    if rank == nn and m > nn:
+        res = k.colsum(k.ew("sq", k.ew("sub", B, k.mm(A, X))))
+        resid = res.out((B.c,))
+    else:
+        resid = _M.zeros(1, 0).out((0,))
+    return (X.out((nn,)) if vec else X.out()), resid, rank, S.out((r,))

@@ -56,5 +56,9 @@ trait Exec:
         ...
 
     @staticmethod
+    def orth(a: F32Ptr, m: Int, l: Int) raises:
+        ...
+
+    @staticmethod
     def vendor() -> String:
         ...

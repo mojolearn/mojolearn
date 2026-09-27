@@ -17,6 +17,7 @@ from x_decomp.cells import (
     gemm_cell,
     lu_serial,
     lu_solve_serial,
+    orth_serial,
     rand_cell,
     rowsum_cell,
     sqdist_cell,
@@ -93,6 +94,10 @@ struct HostExec(Exec):
     def cd_rows(w: F32Ptr, hht: F32Ptr, xht: F32Ptr, perm: I32Ptr, viol: F32Ptr, n: Int, k: Int) raises:
         for i in range(n):
             viol.unsafe_store(i, cd_row(w, hht, xht, perm, i, k))
+
+    @staticmethod
+    def orth(a: F32Ptr, m: Int, l: Int) raises:
+        orth_serial(a, m, l)
 
     @staticmethod
     def vendor() -> String:
