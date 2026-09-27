@@ -42,6 +42,12 @@ for a before and an after), or your own `<lane>-amd` box.
 ---
 
 # CURRENT DIRECTIVES: re-read after every merge
+**HARD RULE (Andrew, 2026-09-27): NEVER add Macs.** No lane, tool or agent
+may allocate, launch or request a Mac (AWS EC2 Mac or any provider) for any
+reason. If Apple capacity is a bottleneck, report it to main; never act on
+it. The fleet is what exists now, and the 4 hosts added by mistake on Sep
+27 are released after their paid 24 hours.
+
 
 Lanes merge origin/main before every merge, so this section reaches every
 worktree. The orchestrator changes lane instructions HERE instead of
