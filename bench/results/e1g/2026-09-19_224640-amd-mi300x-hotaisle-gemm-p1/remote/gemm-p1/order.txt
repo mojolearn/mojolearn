@@ -1,0 +1,7 @@
+round=0 order=control candidate
+round=1 order=candidate control
+round=2 order=control candidate
+round=3 order=candidate control
+round=4 order=control candidate
+round=5 order=candidate control
+round=6 order=control candidate

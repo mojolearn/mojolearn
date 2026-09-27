@@ -1,0 +1,19 @@
+== selected baseline vs candidate, BITS and FP32 TFLOP/s ==
+baseline_selector=-2 candidate_selector=-1 (-2 baseline=current dispatch; -1 baseline=pre-tuned, candidate=current dispatch; >=0 explicit plan)
+timing=host-synchronized arithmetic-mean-ms; raw samples below; digest passes serve as warmup
+DIGEST pca.transform.wide.8192x64x128 baseline=0x9bb140b8ebae89ca candidate=0x9bb140b8ebae89ca elements=524288
+SAMPLE pca.transform.wide.8192x64x128 round=0 candidate_first=False baseline_ns=99919 candidate_ns=90887
+SAMPLE pca.transform.wide.8192x64x128 round=1 candidate_first=True baseline_ns=90710 candidate_ns=91041
+SAMPLE pca.transform.wide.8192x64x128 round=2 candidate_first=False baseline_ns=90924 candidate_ns=90927
+SAMPLE pca.transform.wide.8192x64x128 round=3 candidate_first=True baseline_ns=91686 candidate_ns=91380
+SAMPLE pca.transform.wide.8192x64x128 round=4 candidate_first=False baseline_ns=91182 candidate_ns=101678
+   OK  pca.transform.wide.8192x64x128 [TUNED 64x64 reg4x4 KS=32 fold=16 local tpb=256 hwftz=False (1-D grid, no swizzle) -> TUNED 64x64 reg4x4 KS=32 fold=16 local tpb=256 hwftz=False (1-D grid, no swizzle)]  m=8192 n=64 k=128  BITS MATCH  baseline=0.0928842ms candidate=0.0931826ms  baseline_tflops=1.445000635199528 candidate_tflops=1.4403732885753349
+DIGEST kmeans.dist.4096x64x64 baseline=0xf1e45d134e657fdd candidate=0xf1e45d134e657fdd elements=262144
+SAMPLE kmeans.dist.4096x64x64 round=0 candidate_first=False baseline_ns=62179 candidate_ns=56396
+SAMPLE kmeans.dist.4096x64x64 round=1 candidate_first=True baseline_ns=55734 candidate_ns=57550
+SAMPLE kmeans.dist.4096x64x64 round=2 candidate_first=False baseline_ns=56503 candidate_ns=55670
+SAMPLE kmeans.dist.4096x64x64 round=3 candidate_first=True baseline_ns=55866 candidate_ns=56023
+SAMPLE kmeans.dist.4096x64x64 round=4 candidate_first=False baseline_ns=62278 candidate_ns=61307
+   OK  kmeans.dist.4096x64x64 [TUNED 64x64 reg4x4 KS=32 fold=16 local tpb=256 hwftz=False (1-D grid, no swizzle) -> TUNED 64x64 reg4x4 KS=32 fold=16 local tpb=256 hwftz=False (1-D grid, no swizzle)]  m=4096 n=64 k=64  BITS MATCH  baseline=0.058512ms candidate=0.0573892ms  baseline_tflops=0.5734624008750342 candidate_tflops=0.5846819959156078
+
+   2 match, 0 MOVED, 0 refused.
