@@ -13,7 +13,35 @@ The names this lane may declare are its own:
   TRAINING_LANE_NAMES   {lane: "the name the docs use"} for the family's training_lanes
   PUBLIC_PENDING_LANES  {lane: "no reference"} until a release record admits it
 """
-GPU_BINDINGS = ()
-FAMILIES = ()
-TRAINING_LANE_NAMES = {}
-PUBLIC_PENDING_LANES = {}
+GPU_BINDINGS = ("_mojolearn_x_cnn",)
+FAMILIES = (
+    dict(
+        family="x_cnn",
+        binding="_mojolearn_x_cnn_host",
+        routes="_mojolearn_x_cnn",
+        loaded_by="_backend._HOST_MODULES",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=("x-cnn-conv2d", "x-cnn-conv1d"),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("Conv2d", "Conv1d"),
+        display="the CNN layers (conv, pooling, normalization) and the small CNN trainer",
+        host_modules=("x_cnn/ops.mojo", "x_cnn/host/ops_host.mojo"),
+        exports=(
+            "x_cnn_host_numeric_mode", "x_cnn_host_vendor", "x_cnn_host_column", "x_cnn_host_sabotage",
+            "x_cnn_gemm", "x_cnn_conv2d_forward", "x_cnn_conv2d_backward", "x_cnn_conv_shape",
+            "x_cnn_numeric_mode", "x_cnn_vendor",
+        ),
+        gate="tools/identity_break.py (tools/algos_lane_check.sh)",
+        wheel_note="Ships: the CNN lane's CPU route (Conv1d/Conv2d forward and backward).",
+        ships_in_wheel=True,
+    ),
+)
+TRAINING_LANE_NAMES = {
+    "x-cnn-conv2d": "Conv2d forward and backward",
+    "x-cnn-conv1d": "Conv1d forward and backward",
+}
+PUBLIC_PENDING_LANES = {
+    "x-cnn-conv2d": "no reference",
+    "x-cnn-conv1d": "no reference",
+}
