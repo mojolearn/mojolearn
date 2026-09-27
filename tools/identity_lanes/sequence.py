@@ -218,3 +218,32 @@ def _(ml, X, yc, yr, Xh=None):
     b = _sequence_opt_run(ml, ml.LAMB, X, lr=1e-2, weight_decay=0.0, always_adapt=True, trust_clip=True,
                           max_grad_norm=None)
     return _fit(dict(plain=a["params"], plain_state=a["state"], adapt=b["params"], adapt_state=b["state"]))
+
+
+@lane("sequence-adamax")
+def _(ml, X, yc, yr, Xh=None):
+    """Adamax at torch's defaults and with other betas and weight decay, and
+    a GRU regressor trained by it."""
+    a = _sequence_opt_run(ml, ml.Adamax, X)
+    b = _sequence_opt_run(ml, ml.Adamax, X, lr=1e-2, betas=(0.8, 0.99), weight_decay=0.05)
+    Xs = _sequence_seq(X)
+    ycs, yrs = _sequence_targets(yc, yr)
+    r = ml.GRURegressor(hidden_size=8, optimizer="adamax", learning_rate=2e-3, batch_size=32, max_epochs=1,
+                        random_state=10).fit(Xs, yrs)
+    return _fit(dict(plain=a["params"], plain_state=a["state"], moved=b["params"], moved_state=b["state"],
+                     gru=_h(r.params_, r.loss_curve_)))
+
+
+@lane("sequence-nadam")
+def _(ml, X, yc, yr, Xh=None):
+    """NAdam at torch's defaults and with decoupled decay and a faster
+    momentum schedule, and an RNN classifier trained by it."""
+    a = _sequence_opt_run(ml, ml.NAdam, X)
+    b = _sequence_opt_run(ml, ml.NAdam, X, lr=1e-2, weight_decay=0.05, decoupled_weight_decay=True,
+                          momentum_decay=0.01)
+    Xs = _sequence_seq(X)
+    ycs, _ = _sequence_targets(yc, yr)
+    c = ml.RNNClassifier(hidden_size=8, optimizer="nadam", learning_rate=2e-3, batch_size=32, max_epochs=1,
+                         random_state=11).fit(Xs, ycs)
+    return _fit(dict(plain=a["params"], plain_state=a["state"], moved=b["params"], moved_state=b["state"],
+                     rnn=_h(c.params_, c.loss_curve_)))
