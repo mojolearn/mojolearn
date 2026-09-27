@@ -273,6 +273,60 @@ def _():
     return ok
 
 
+@case("logistic-cv")
+def _():
+    from sklearn import linear_model as sk
+    from sklearn.model_selection import StratifiedKFold
+    from mojolearn._expansion_linear import _stratified_kfold_ids
+    X, yr, yc, y3 = _data(noise=1.0)
+    rng = np.random.default_rng(3)
+    flip = rng.random(len(yc)) < 0.15
+    ycn = np.where(flip, 1 - yc, yc)
+    ok = True
+    ids = _stratified_kfold_ids(list(y3), 5)
+    ref = np.empty(len(y3), int)
+    for f, (_, te) in enumerate(StratifiedKFold(5).split(X, y3)):
+        ref[te] = f
+    ok &= _close("stratified fold ids", ids, ref, 0)
+    for y in (ycn, y3):
+        # tol 1e-6: at the default 1e-4 both stop far from the multinomial
+        # optimum (weak penalty), each in its own place
+        a = ml.LogisticRegressionCV(max_iter=1000, tol=1e-6).fit(X, y)
+        b = sk.LogisticRegressionCV(max_iter=1000, tol=1e-6).fit(X.astype(np.float64), y)
+        k = len(set(y))
+        print(f"  k={k} C_ {a.C_[0]:.4g} vs {b.C_[0]:.4g}")
+        key = sorted(b.scores_)[-1]
+        ok &= _close(f"k={k} scores_", np.asarray(a.scores_[key]), b.scores_[key], 0.02)
+        pa, pb = np.asarray(a.predict_proba(X)), b.predict_proba(X)
+        ok &= _close(f"k={k} predict_proba", pa, pb, 0.02)
+    return ok
+
+
+@case("isotonic")
+def _():
+    from sklearn import isotonic as sk
+    rng = np.random.default_rng(4)
+    ok = True
+    for n, ties in ((500, False), (400, True)):
+        x = rng.standard_normal(n).astype(np.float32)
+        if ties:
+            x = np.round(x * 4).astype(np.float32) / 4
+        y = (x + 0.7 * rng.standard_normal(n)).astype(np.float32)
+        w = rng.uniform(0.5, 2.0, n).astype(np.float32)
+        q = np.linspace(-4, 4, 97).astype(np.float32)
+        for kw in (dict(), dict(increasing=False), dict(increasing="auto", out_of_bounds="clip"),
+                   dict(y_min=-0.5, y_max=0.8, out_of_bounds="clip")):
+            a = ml.IsotonicRegression(**kw).fit(x, y, sample_weight=w)
+            b = sk.IsotonicRegression(**kw).fit(x.astype(np.float64), y.astype(np.float64), sample_weight=w.astype(np.float64))
+            ok &= _close(f"n={n} ties={ties} {kw} X_thresholds_", a.X_thresholds_, b.X_thresholds_, 1e-6) if len(a.X_thresholds_) == len(b.X_thresholds_) else _close(f"n={n} {kw} threshold count", [len(a.X_thresholds_)], [len(b.X_thresholds_)], 0)
+            pa, pb = np.asarray(a.predict(q), np.float64), b.predict(q.astype(np.float64))
+            same_nan = np.array_equal(np.isnan(pa), np.isnan(pb))
+            ok &= same_nan
+            ok &= _close(f"n={n} ties={ties} {kw} predict (nan mask {'=' if same_nan else '!='})",
+                         np.nan_to_num(pa), np.nan_to_num(pb), 2e-5)
+    return ok
+
+
 def main(argv):
     names = argv or list(CASES)
     bad = []

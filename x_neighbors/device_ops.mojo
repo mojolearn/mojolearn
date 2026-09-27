@@ -4,7 +4,7 @@
 """The neighbors lane's GPU drivers (see x_neighbors/gen.py)."""
 from std.gpu import block_idx, block_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
-from x_neighbors.items import FP, IP, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, group_mean_item, take_rows_item, take_cols_item, variance_item, ocsvm_smo_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_item, nc_decision_item, softmax_item
+from x_neighbors.items import FP, IP, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, group_mean_item, take_rows_item, take_cols_item, variance_item, ocsvm_smo_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_item, nc_decision_item, softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_sum_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item
 
 comptime BLOCK = 128
 
@@ -649,4 +649,279 @@ def op_softmax(x: Int, res: Int, n: Int, c: Int) raises:
     _down(ctx, d_res, res, n * c)
     ctx.synchronize()
     _ = d_x^
+    _ = d_res^
+
+
+def pcs_kernel(x: FP, hidx: IP, hbit: IP, res: FP, scr: FP, n_: Int64, d_in_: Int64, nf_: Int64, nc_: Int64, degree_: Int64, gamma_: Float32, coef0_: Float32):
+    var n = Int(n_)
+    var d_in = Int(d_in_)
+    var nf = Int(nf_)
+    var nc = Int(nc_)
+    var degree = Int(degree_)
+    var gamma = gamma_
+    var coef0 = coef0_
+    var t = _tid()
+    if t < n:
+        pcs_item(t, x, hidx, hbit, res, scr, n, d_in, nf, nc, degree, gamma, coef0)
+
+
+def op_pcs(x: Int, hidx: Int, hbit: Int, res: Int, n: Int, d_in: Int, nf: Int, nc: Int, degree: Int, gamma: Float32, coef0: Float32) raises:
+    var ctx = DeviceContext()
+    var d_x = _buf(ctx, x, n * d_in, True)
+    var d_hidx = _buf_i(ctx, hidx, degree * nf, True)
+    var d_hbit = _buf_i(ctx, hbit, degree * nf, True)
+    var d_res = _buf(ctx, res, n * nc, False)
+    var d_scr = _buf(ctx, 0, n * 2 * nc, False)
+    ctx.enqueue_function[pcs_kernel](
+        d_x.unsafe_ptr(), d_hidx.unsafe_ptr(), d_hbit.unsafe_ptr(), d_res.unsafe_ptr(), d_scr.unsafe_ptr(), Int64(n), Int64(d_in), Int64(nf), Int64(nc), Int64(degree), gamma, coef0,
+        grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
+    )
+    _down(ctx, d_res, res, n * nc)
+    ctx.synchronize()
+    _ = d_x^
+    _ = d_hidx^
+    _ = d_hbit^
+    _ = d_res^
+    _ = d_scr^
+
+
+def achi2_kernel(x: FP, res: FP, n_: Int64, d_: Int64, steps_: Int64, interval_: Float32):
+    var n = Int(n_)
+    var d = Int(d_)
+    var steps = Int(steps_)
+    var interval = interval_
+    var t = _tid()
+    if t < n * d:
+        achi2_item(t, x, res, n, d, steps, interval)
+
+
+def op_achi2(x: Int, res: Int, n: Int, d: Int, steps: Int, interval: Float32) raises:
+    var ctx = DeviceContext()
+    var d_x = _buf(ctx, x, n * d, True)
+    var d_res = _buf(ctx, res, n * d * (2 * steps - 1), False)
+    ctx.enqueue_function[achi2_kernel](
+        d_x.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n), Int64(d), Int64(steps), interval,
+        grid_dim=_grid(n * d), block_dim=(BLOCK if n * d > 1 else 1),
+    )
+    _down(ctx, d_res, res, n * d * (2 * steps - 1))
+    ctx.synchronize()
+    _ = d_x^
+    _ = d_res^
+
+
+def skew_weights_kernel(z: FP, res: FP, count_: Int64):
+    var count = Int(count_)
+    var t = _tid()
+    if t < count:
+        skew_weights_item(t, z, res, count)
+
+
+def op_skew_weights(z: Int, res: Int, count: Int) raises:
+    var ctx = DeviceContext()
+    var d_z = _buf(ctx, z, count, True)
+    var d_res = _buf(ctx, res, count, False)
+    ctx.enqueue_function[skew_weights_kernel](
+        d_z.unsafe_ptr(), d_res.unsafe_ptr(), Int64(count),
+        grid_dim=_grid(count), block_dim=(BLOCK if count > 1 else 1),
+    )
+    _down(ctx, d_res, res, count)
+    ctx.synchronize()
+    _ = d_z^
+    _ = d_res^
+
+
+def skew_transform_kernel(lx: FP, w: FP, off: FP, res: FP, n_: Int64, d_: Int64, nc_: Int64):
+    var n = Int(n_)
+    var d = Int(d_)
+    var nc = Int(nc_)
+    var t = _tid()
+    if t < n * nc:
+        skew_transform_item(t, lx, w, off, res, n, d, nc)
+
+
+def op_skew_transform(lx: Int, w: Int, off: Int, res: Int, n: Int, d: Int, nc: Int) raises:
+    var ctx = DeviceContext()
+    var d_lx = _buf(ctx, lx, n * d, True)
+    var d_w = _buf(ctx, w, d * nc, True)
+    var d_off = _buf(ctx, off, nc, True)
+    var d_res = _buf(ctx, res, n * nc, False)
+    ctx.enqueue_function[skew_transform_kernel](
+        d_lx.unsafe_ptr(), d_w.unsafe_ptr(), d_off.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n), Int64(d), Int64(nc),
+        grid_dim=_grid(n * nc), block_dim=(BLOCK if n * nc > 1 else 1),
+    )
+    _down(ctx, d_res, res, n * nc)
+    ctx.synchronize()
+    _ = d_lx^
+    _ = d_w^
+    _ = d_off^
+    _ = d_res^
+
+
+def absdiff_sum_kernel(a: FP, b: FP, res: FP, count_: Int64):
+    var count = Int(count_)
+    var t = _tid()
+    if t < 1:
+        absdiff_sum_item(t, a, b, res, count)
+
+
+def op_absdiff_sum(a: Int, b: Int, res: Int, count: Int) raises:
+    var ctx = DeviceContext()
+    var d_a = _buf(ctx, a, count, True)
+    var d_b = _buf(ctx, b, count, True)
+    var d_res = _buf(ctx, res, 1, False)
+    ctx.enqueue_function[absdiff_sum_kernel](
+        d_a.unsafe_ptr(), d_b.unsafe_ptr(), d_res.unsafe_ptr(), Int64(count),
+        grid_dim=_grid(1), block_dim=(BLOCK if 1 > 1 else 1),
+    )
+    _down(ctx, d_res, res, 1)
+    ctx.synchronize()
+    _ = d_a^
+    _ = d_b^
+    _ = d_res^
+
+
+def row_normalize_kernel(a: FP, res: FP, n_: Int64, m_: Int64):
+    var n = Int(n_)
+    var m = Int(m_)
+    var t = _tid()
+    if t < n:
+        row_normalize_item(t, a, res, n, m)
+
+
+def op_row_normalize(a: Int, res: Int, n: Int, m: Int) raises:
+    var ctx = DeviceContext()
+    var d_a = _buf(ctx, a, n * m, True)
+    var d_res = _buf(ctx, res, n * m, False)
+    ctx.enqueue_function[row_normalize_kernel](
+        d_a.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n), Int64(m),
+        grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
+    )
+    _down(ctx, d_res, res, n * m)
+    ctx.synchronize()
+    _ = d_a^
+    _ = d_res^
+
+
+def lp_clamp_kernel(ld: FP, ystatic: FP, unlabeled: IP, res: FP, n_: Int64, c_: Int64):
+    var n = Int(n_)
+    var c = Int(c_)
+    var t = _tid()
+    if t < n:
+        lp_clamp_item(t, ld, ystatic, unlabeled, res, n, c)
+
+
+def op_lp_clamp(ld: Int, ystatic: Int, unlabeled: Int, res: Int, n: Int, c: Int) raises:
+    var ctx = DeviceContext()
+    var d_ld = _buf(ctx, ld, n * c, True)
+    var d_ystatic = _buf(ctx, ystatic, n * c, True)
+    var d_unlabeled = _buf_i(ctx, unlabeled, n, True)
+    var d_res = _buf(ctx, res, n * c, False)
+    ctx.enqueue_function[lp_clamp_kernel](
+        d_ld.unsafe_ptr(), d_ystatic.unsafe_ptr(), d_unlabeled.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n), Int64(c),
+        grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
+    )
+    _down(ctx, d_res, res, n * c)
+    ctx.synchronize()
+    _ = d_ld^
+    _ = d_ystatic^
+    _ = d_unlabeled^
+    _ = d_res^
+
+
+def ls_clamp_kernel(ld: FP, ystatic: FP, res: FP, count_: Int64, alpha_: Float32):
+    var count = Int(count_)
+    var alpha = alpha_
+    var t = _tid()
+    if t < count:
+        ls_clamp_item(t, ld, ystatic, res, count, alpha)
+
+
+def op_ls_clamp(ld: Int, ystatic: Int, res: Int, count: Int, alpha: Float32) raises:
+    var ctx = DeviceContext()
+    var d_ld = _buf(ctx, ld, count, True)
+    var d_ystatic = _buf(ctx, ystatic, count, True)
+    var d_res = _buf(ctx, res, count, False)
+    ctx.enqueue_function[ls_clamp_kernel](
+        d_ld.unsafe_ptr(), d_ystatic.unsafe_ptr(), d_res.unsafe_ptr(), Int64(count), alpha,
+        grid_dim=_grid(count), block_dim=(BLOCK if count > 1 else 1),
+    )
+    _down(ctx, d_res, res, count)
+    ctx.synchronize()
+    _ = d_ld^
+    _ = d_ystatic^
+    _ = d_res^
+
+
+def ls_laplacian_kernel(a: FP, res: FP, n_: Int64):
+    var n = Int(n_)
+    var t = _tid()
+    if t < n * n:
+        ls_laplacian_item(t, a, res, n)
+
+
+def op_ls_laplacian(a: Int, res: Int, n: Int) raises:
+    var ctx = DeviceContext()
+    var d_a = _buf(ctx, a, n * n, True)
+    var d_res = _buf(ctx, res, n * n, False)
+    ctx.enqueue_function[ls_laplacian_kernel](
+        d_a.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n),
+        grid_dim=_grid(n * n), block_dim=(BLOCK if n * n > 1 else 1),
+    )
+    _down(ctx, d_res, res, n * n)
+    ctx.synchronize()
+    _ = d_a^
+    _ = d_res^
+
+
+def knn_graph_kernel(idx: IP, res: FP, n_: Int64, m_: Int64, k_: Int64):
+    var n = Int(n_)
+    var m = Int(m_)
+    var k = Int(k_)
+    var t = _tid()
+    if t < n:
+        knn_graph_item(t, idx, res, n, m, k)
+
+
+def op_knn_graph(idx: Int, res: Int, n: Int, m: Int, k: Int) raises:
+    var ctx = DeviceContext()
+    var d_idx = _buf_i(ctx, idx, n * k, True)
+    var d_res = _buf(ctx, res, n * m, False)
+    ctx.enqueue_function[knn_graph_kernel](
+        d_idx.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n), Int64(m), Int64(k),
+        grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
+    )
+    _down(ctx, d_res, res, n * m)
+    ctx.synchronize()
+    _ = d_idx^
+    _ = d_res^
+
+
+def knn_impute_kernel(x: FP, fx: FP, best_d: FP, best_i: IP, res: FP, n_: Int64, m_: Int64, d_: Int64, k_: Int64, weights_: Int64):
+    var n = Int(n_)
+    var m = Int(m_)
+    var d = Int(d_)
+    var k = Int(k_)
+    var weights = Int(weights_)
+    var t = _tid()
+    if t < n * d:
+        knn_impute_item(t, x, fx, best_d, best_i, res, n, m, d, k, weights)
+
+
+def op_knn_impute(x: Int, fx: Int, res: Int, n: Int, m: Int, d: Int, k: Int, weights: Int) raises:
+    var ctx = DeviceContext()
+    var d_x = _buf(ctx, x, n * d, True)
+    var d_fx = _buf(ctx, fx, m * d, True)
+    var d_best_d = _buf(ctx, 0, n * d * k, False)
+    var d_best_i = _buf_i(ctx, 0, n * d * k, False)
+    var d_res = _buf(ctx, res, n * d, False)
+    ctx.enqueue_function[knn_impute_kernel](
+        d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_best_d.unsafe_ptr(), d_best_i.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n), Int64(m), Int64(d), Int64(k), Int64(weights),
+        grid_dim=_grid(n * d), block_dim=(BLOCK if n * d > 1 else 1),
+    )
+    _down(ctx, d_res, res, n * d)
+    ctx.synchronize()
+    _ = d_x^
+    _ = d_fx^
+    _ = d_best_d^
+    _ = d_best_i^
     _ = d_res^

@@ -10,10 +10,17 @@ messaging lanes. Newest items are at the top.
    builds every base binding itself, and `.checks` takes `<driver>\t<patch>`
    pairs, enforced with `--pass 2`. Before your next merge, run
    `tools/test_lane_select.py` on your pod; your lane must not break it.
+0a. **AMD boxes are allocated for you (2026-09-27).** The orchestrator keeps
+   one Hot Aisle MI300X per algorithm lane and renews every dev box hourly.
+   If `tools/dev_pod.sh list` shows `<lane>-amd`, that box is yours: use it
+   with `--vendor amd` on sync/run/extend. Don't request a second one.
 1. **Order per lane:** (a) every algorithm in the lane table and Additions
    (PASS 1); (b) proof on every column, holding an AMD box (PASS 2 items
-   1-2); (c) **option parity** (item 2 below); (d) speed, IDENTICAL and
-   FAST, on NVIDIA, AMD, Apple and CPU (PASS 2 item 3).
+   1-2); (c) **option parity** (item 2 below); (d) **GPU speed**, IDENTICAL
+   and FAST, on NVIDIA, AMD and Apple; (e) **CPU speed, LAST** (Andrew,
+   2026-09-27): threads, vectorization and cache blocking of the CPU host
+   path, after all GPU work is done. Every change is re-proven bitwise on
+   every column.
 2. **Option parity (Andrew, 2026-09-27).** Every algorithm in the lane's
    family, EXISTING ones included, gets every option its reference and
    bench-board opponents have (sklearn, cuML, LightGBM/XGBoost/CatBoost,
@@ -535,3 +542,67 @@ shared `.so` that another job is using. Tooling gaps go to the tools lane.
   --commit <sha> --builds bindings/build_x.sh[,...] --cmd '<timing>' [--mode
   fast|identical]`, M3 Ultra only, spooled while it is deferred.
 - **Stewards as daemons:** `tools/cloudmac.sh steward <mac> install|restart|status`.
+
+---
+
+# Phase 3: CPU speed (Andrew, 2026-09-27)
+
+The library is already CPU and GPU: every algorithm ships a CPU host
+binding with the GPU's bits, CPU-only installs train and predict, and the
+bench board has an `ours-cpu` arm. What it is not is FAST on a CPU. The host
+kernels are the same Mojo source compiled for the CPU, written to prove
+identity; a few host oracles use the parallel primitives and most run one
+core. Phase 3 makes the CPU path fast, without moving a bit.
+
+## Why
+
+- **Train on the GPU, serve on the CPU, no drift.** The same-bits contract
+  is what makes it safe to fit on one box and run on another. A fast CPU
+  inference path for the forests, GBDT, kNN, the neural blocks and HNSW
+  (lane 9) is the serving half of that story for every algorithm.
+- Development and CI without a GPU; edge boxes.
+- Not a reason to train on a CPU when a GPU is there. Training speed on
+  the CPU is second.
+
+## The rule
+
+The same as GPU speed work. A multithreaded fold reorders sums unless it
+is pinned, so every thread split is a PIN (partial count a function of
+the shape, never of the core count: IDENTITY_PATHS row 7) and every
+partial fold is `pinned_block_sum`'s host twin. SIMD width is a PIN too
+(a 4-wide and an 8-wide fold are two summation orders). No CPU-specific
+numerics: `ftz`, `identical_mul_add`, the portable transcendentals and the
+composite-key selectors are the same code on every column. Every CPU
+speed commit re-runs the identity check (GPU == CPU, bit for bit) and the
+sabotage, exactly as step 5 and 6 of the COMMON BRIEF.
+
+## Scope and order
+
+1. **Inference first**, per family: forests and GBDT prediction, kNN and
+   the IVF/CAGRA/HNSW search, the neural blocks' forward pass, the
+   transformers' `transform`. Judged on the bench board's `ours-cpu` arm
+   against scikit-learn, LightGBM, XGBoost, FAISS-CPU, hnswlib and PyTorch
+   CPU on all cores, 1M+ rows or the family's realistic shape.
+2. **Training second**, where the CPU case is real: GBDT and forests
+   (LightGBM and XGBoost on all cores are the opponents), linear models,
+   k-means, the preprocessors.
+3. What stays one core: anything sequential by construction (Birch's tree
+   build, OPTICS's ordering loop, LARS's steps).
+
+## Lanes and machines
+
+One lane per family, after that family's identity and GPU speed work is
+merged; never in the same window as the GPU speed wave, which already
+sends every commit through one Metal queue. CPU lanes need no GPU: a
+many-core CPU pod (RunPod CPU instances or an EC2 c7i/c8g) is enough for
+the x86 column, and the Arm column is the cloud Macs' CPUs through the
+same steward. Each lane's brief is the COMMON BRIEF with step 9 reading
+"CPU" and the opponents above.
+
+## Not in this fan-out
+
+Phase 3 starts when Andrew says so, after the identity wave and the GPU
+speed wave. It is written here so the target is on the record and so no
+lane in phases 1 and 2 designs a host kernel that cannot be parallelized
+later (keep the fold shape explicit; never bake a sequential order into a
+seam that a pinned tree would also satisfy).

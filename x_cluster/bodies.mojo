@@ -25,6 +25,9 @@ comptime FPtr = MutPointer[Float32, MutAnyOrigin]
 comptime IPtr = MutPointer[Int32, MutAnyOrigin]
 
 
+# DEVIATION 5100 (fold order: features ascending) and 5101 (contraction:
+# the product pinned, never fused into the chain). IDENTITY_PATHS row 110;
+# check x_cluster/checks/dist_check.mojo.
 @always_inline
 def sq_dist_rows[REV: Bool = False](a: FPtr, i: Int, b: FPtr, j: Int, d: Int) -> Float32:
     """Squared euclidean distance of row `i` of `a` to row `j` of `b`, by
@@ -46,6 +49,7 @@ def sqdist_cell[REV: Bool = False](a: FPtr, na: Int, b: FPtr, nb: Int, d: Int, d
     dst[cell] = sq_dist_rows[REV](a, i, b, j, d)
 
 
+# DEVIATION 5102 (argmin tie: the lowest index). Row 111; nearest_check.
 @always_inline
 def nearest_row[REV: Bool = False](
     a: FPtr, b: FPtr, nb: Int, d: Int, labels: IPtr, dist: FPtr, i: Int
@@ -70,6 +74,8 @@ def sqrt_cell(x: FPtr, i: Int):
     x[i] = identical_sqrt(v if v > Float32(0) else Float32(0))
 
 
+# DEVIATION 5103 (the order statistic by a bisection on the bits: no order
+# of the row can move it). Row 112; kth_check.
 @always_inline
 def kth_smallest_row(m: FPtr, n_cols: Int, k: Int, dst: FPtr, row: Int):
     """The k-th smallest (1-based) of row `row` of a NON-NEGATIVE matrix, by a
@@ -92,6 +98,8 @@ def kth_smallest_row(m: FPtr, n_cols: Int, k: Int, dst: FPtr, row: Int):
     dst[row] = bitcast[DType.float32](lo)
 
 
+# DEVIATION 5104 (the flat-kernel fold over the rows ascending, one quotient
+# per feature, the rooted shift test). Row 113; meanshift_check.
 @always_inline
 def meanshift_seed[REV: Bool = False](
     x: FPtr, n: Int, d: Int, bw: Float32, stop: Float32, max_iter: Int,
@@ -108,7 +116,8 @@ def meanshift_seed[REV: Bool = False](
         within = 0
         for f in range(d):
             scratch[s * d + f] = Float32(0)
-        for p in range(n):
+        for pp in range(n):
+            var p = n - 1 - pp if REV else pp
             var dd = identical_sqrt(sq_dist_rows[REV](centers, s, x, p, d))
             if dd <= bw:
                 within += 1
@@ -130,6 +139,8 @@ def meanshift_seed[REV: Bool = False](
     iters[s] = Int32(completed)
 
 
+# DEVIATION 5105 (damping as two pinned products and one add). Row 114;
+# ap_check.
 @always_inline
 def ap_responsibility_row(s_m: FPtr, a_m: FPtr, r_m: FPtr, n: Int, damping: Float32, i: Int):
     """sklearn `_affinity_propagation` (cluster/_affinity_propagation.py:
@@ -160,6 +171,8 @@ def ap_responsibility_row(s_m: FPtr, a_m: FPtr, r_m: FPtr, n: Int, damping: Floa
         r_m[i * n + k] = ftz(ftz(identical_mul(old, damping)) + ftz(identical_mul(new, one_minus)))
 
 
+# DEVIATION 5106 (the availability column fold ascending, the clamp at 0
+# off the diagonal). Row 115; ap_check.
 @always_inline
 def ap_availability_col(r_m: FPtr, a_m: FPtr, n: Int, damping: Float32, k: Int):
     """sklearn `_affinity_propagation` (:112-122), column `k`: `Rp =
@@ -189,8 +202,10 @@ def ap_exemplar_cell(a_m: FPtr, r_m: FPtr, n: Int, e: IPtr, i: Int):
 
 
 # ------------------------------------------------ Gaussian mixture bodies
+# DEVIATION 5108 (the Mahalanobis fold: difference first, `a` then `j`
+# ascending, pinned products). Row 117; gauss_check.
 @always_inline
-def gauss_q_cell(x: FPtr, d: Int, means: FPtr, pchol: FPtr, kc: Int, dst: FPtr, cell: Int):
+def gauss_q_cell[REV: Bool = False](x: FPtr, d: Int, means: FPtr, pchol: FPtr, kc: Int, dst: FPtr, cell: Int):
     """dst[i, k] = || (x_i - mu_k) P_k ||^2, P_k the UPPER-triangular
     precision Cholesky (d x d, row-major): y_j = sum_{a <= j} (x_a - mu_a)
     P[a, j] in ascending a, then the ascending sum of y_j^2. sklearn's
@@ -201,13 +216,16 @@ def gauss_q_cell(x: FPtr, d: Int, means: FPtr, pchol: FPtr, kc: Int, dst: FPtr, 
     var acc = Float32(0)
     for j in range(d):
         var y = Float32(0)
-        for a in range(j + 1):
+        for aa in range(j + 1):
+            var a = j - aa if REV else aa
             var diff = ftz(ftz(x[i * d + a]) - ftz(means[k * d + a]))
             y = ftz(y + ftz(identical_mul(diff, pchol[k * d * d + a * d + j])))
         acc = ftz(acc + ftz(identical_mul(y, y)))
     dst[cell] = acc
 
 
+# DEVIATION 5109 (the E-step log-sum-exp: the first max, the ascending sum
+# of the portable exp, the portable log). Row 118; gauss_check.
 @always_inline
 def resp_row(q: FPtr, c: FPtr, kc: Int, lpn: FPtr, i: Int):
     """Row i of the E-step: v_k = c_k - q_ik / 2 (the weighted log
@@ -234,6 +252,8 @@ def exp_cell(src: FPtr, dst: FPtr, t: Int):
     dst[t] = ftz(identical_exp(src[t]))
 
 
+# DEVIATION 5110 (the M-step moments nk, means, covariances: every fold over
+# the rows ascending, one quotient). Row 119; moments_check.
 @always_inline
 def nk_cell(resp: FPtr, n: Int, kc: Int, dst: FPtr, k: Int):
     """nk = sum_i resp[i, k] + 10 * FLT_EPSILON (sklearn, float32 input)."""
@@ -299,6 +319,7 @@ struct SplitMix64(Copyable, Movable):
         return Float64(self.next() >> 11) * Float64(1.1102230246251565e-16)
 
 
+# DEVIATION 5107 (the LEFT child on an exact tie). Row 116; descend_check.
 @always_inline
 def tree_descend[REV: Bool = False](
     x: FPtr, d: Int, centers: FPtr, nodes: IPtr, labels: IPtr, i: Int

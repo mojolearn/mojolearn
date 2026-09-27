@@ -47,8 +47,8 @@ def _splitmix(v: UInt64) -> UInt64:
 
 
 def gauss(seed: Int, t: Int) -> Float32:
-    """A standard normal from counter t: two splitmix64 words, 24-bit
-    uniforms, Box-Muller."""
+    """A standard normal from counter t: two splitmix64 words, their top 24
+    bits as uniforms, Box-Muller (DEVIATION 5406)."""
     var base = UInt64(seed) * UInt64(0x100000000) + UInt64(2 * t)
     var z1 = _splitmix(base)
     var z2 = _splitmix(base + UInt64(1))
@@ -82,6 +82,7 @@ def mi_noise_unit(t: Int, f: FP, q: IP):
 
 @always_inline
 def _within(dist: Float32, r: Float32) -> Bool:
+    """DEVIATION 5407: within nextafter(r, 0) is dist < r (dist == 0 at r == 0)."""
     if r > Float32(0):
         return dist < r
     return dist == Float32(0)

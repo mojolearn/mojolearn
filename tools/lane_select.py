@@ -1216,6 +1216,30 @@ def _binding_exports(rel):
         r"def_function\[\s*([A-Za-z0-9_]+)\s*(?:\[[^\[\]]*\])?\s*\]\s*\(\s*\"([A-Za-z0-9_]+)\"", text)}
 
 
+def _binding_export_params(rel):
+    """export name -> the identifiers in its impl's PARAMETER list.
+
+    `def_function[gemm_py[DevExec]]("x_decomp_gemm")` (lane/algos-decomp,
+    2026-09-27) registers ONE generic entry point per executor: the
+    arithmetic the export runs lives in the struct named in the brackets,
+    which the binding imports, while `gemm_py`'s own body names only the
+    trait. `_binding_exports` keeps the impl name alone, so without this the
+    export reached the trait's declaration (x_decomp/exec_trait.mojo) and
+    neither conforming executor (x_decomp/device.mojo, x_decomp/host.mojo),
+    and `test_the_mojo_conformance_inversion_holds_over_the_whole_tree` named
+    the gap. A literal parameter (`True`, `3`) resolves to no import and adds
+    nothing."""
+    try:
+        text = _read(rel)
+    except OSError:
+        return {}
+    out = {}
+    for m in re.finditer(
+            r"def_function\[\s*[A-Za-z0-9_]+\s*\[([^\[\]]*)\]\s*\]\s*\(\s*\"([A-Za-z0-9_]+)\"", text):
+        out[m.group(2)] = re.findall(r"[A-Za-z_][A-Za-z0-9_]*", m.group(1))
+    return out
+
+
 def binding_additions(ref, path):
     """The export names a binding source's diff against `ref` ADDS, when the
     diff is ONLY additions; None otherwise.
@@ -1598,8 +1622,14 @@ def lane_sources():
             else:
                 blocks = _mojo_blocks_for(src)
                 syms = _mojo_import_symbols(src)
+                params = _binding_export_params(src)
                 seeds = set()
                 for export in hit:
+                    # A PARAMETRIZED IMPL'S PARAMETERS ARE PART OF THE EXPORT:
+                    # the executor struct in `gemm_py[DevExec]` is where its
+                    # arithmetic lives (`_binding_export_params`).
+                    for name in params.get(export, ()):
+                        seeds |= syms.get(name, set())
                     # THE EXPORT'S BODY IS NOT ONLY THE FUNCTION NAMED. An
                     # export reaches a Mojo file two ways this scan used to
                     # miss, and both are the ordinary spelling here:

@@ -25,13 +25,16 @@ from ._buffer import as_f32_c, as_i32_c, frombytes
 
 __all__ = ["IncrementalPCA", "GaussianRandomProjection", "SparseRandomProjection", "johnson_lindenstrauss_min_dim",
            "NMF", "FastICA", "FactorAnalysis",
-           "lu_factor", "lu_solve", "solve", "lstsq", "randomized_svd"]
+           "lu_factor", "lu_solve", "solve", "lstsq", "randomized_svd",
+           "PLSRegression", "PLSCanonical", "CCA",
+           "DictionaryLearning", "MiniBatchDictionaryLearning", "SparsePCA", "MiniBatchSparsePCA", "sparse_encode",
+           "LatentDirichletAllocation", "Isomap", "MDS", "ClassicalMDS", "LocallyLinearEmbedding"]
 
 _BINDING = "_mojolearn_x_decomp"
 
 # x_decomp/cells.mojo op codes
 _OP = dict(
-    muz=36,
+    muz=36, lgamma=37,
     add=0, sub=1, mul=2, div=3, axpy=4, maxs=5, mu=6, sqrt=7, sq=8, exp=9, logs=10, tanh=11,
     onemsq=12, abs=13, scale=14, fma=15, recip=16, soft=17, submul=18, mins=19, copyb=20,
     sqdiff=21, adds=22, gts=23, digamma=24, expg=25, expgp=26, cube=27, cubep=28, max=30,
@@ -259,11 +262,67 @@ class _Kit:
         self.b.x_decomp_cd_rows(W.addr, HHt.addr, XHt.addr, p.buffer_info()[0], viol.addr, [n, kc])
         return self.total(viol).s[0]
 
+    def svd(self, A):
+        """(S 1 x n DESCENDING, Vt n x n) of a tall A (m >= n): Householder QR
+        then the one-sided Jacobi SVD of R (decomposition/'s full-PCA route),
+        values sorted descending with ties to the lower index."""
+        m, n = A.r, A.c
+        s, v = _M.zeros(1, n), _M.zeros(n, n)
+        self.b.x_decomp_svd(A.addr, s.addr, v.addr, [m, n])
+        order = sorted(range(n), key=lambda j: (-s.s[j], j))
+        return s.take_cols(order), v.take_cols(order).T
+
     def orth(self, A):
         """A copy of A with its columns orthonormalized (MGS2)."""
         Q = A.copy()
         self.b.x_decomp_orth(Q.addr, [A.r, A.c])
         return Q
+
+    def lasso_rows(self, G, Q, W, alpha, max_iter, tol, positive):
+        """Row-parallel Lasso CD on the Gram (x_decomp/cells.mojo `lasso_row`),
+        W (n x k) the warm start, updated in place."""
+        its = _M.zeros(Q.r, 1)
+        self.b.x_decomp_lasso_rows(G.addr, Q.addr, W.addr, its.addr, [Q.r, Q.c, int(max_iter), int(positive)],
+                                   [float(alpha), float(tol)])
+        return W
+
+    def omp_rows(self, G, Q, nnz):
+        W = _M.zeros(Q.r, Q.c)
+        na = _M.zeros(Q.r, 1)
+        self.b.x_decomp_omp_rows(G.addr, Q.addr, W.addr, na.addr, [Q.r, Q.c, int(nnz)])
+        return W
+
+    def rand_gamma(self, r, c, seed, stream, shape):
+        out = _M.zeros(r, c)
+        if r * c:
+            self.b.x_decomp_rand_gamma(out.addr, [r * c, int(seed) & 0xFFFFFFFF, int(stream) & 0xFFFFFFFF],
+                                       float(shape))
+        return out
+
+    def lda_rows(self, X, EW, Dt, Et, prior, max_iter, tol):
+        """Row-parallel `_update_doc_distribution` (x_decomp/cells.mojo
+        `lda_doc_row`); Dt and Et (n x k) are updated in place."""
+        its = _M.zeros(X.r, 1)
+        self.b.x_decomp_lda_rows(X.addr, EW.addr, Dt.addr, Et.addr, its.addr,
+                                 [X.r, EW.r, X.c, int(max_iter)], [float(prior), float(tol)])
+        return Dt, Et
+
+    def dijkstra(self, W):
+        """All-pairs shortest paths on a dense undirected graph (0 = no edge),
+        one source per thread; -1 marks an unreachable pair."""
+        n = W.r
+        dist, reached = _M.zeros(n, n), _M.zeros(n, 1)
+        self.b.x_decomp_dijkstra_rows(W.addr, dist.addr, reached.addr, [n])
+        return dist
+
+    def barycenter(self, X, Y, nbr, reg):
+        """sklearn barycenter_weights: (n x k) weights of each row of X on
+        its k neighbors in Y (`nbr`: n lists of k indices)."""
+        n, k = X.r, len(nbr[0])
+        idx = _M.of([float(j) for row in nbr for j in row], n, k)
+        W, flags = _M.zeros(n, k), _M.zeros(n, 1)
+        self.b.x_decomp_barycenter_rows(X.addr, Y.addr, idx.addr, W.addr, flags.addr, [n, Y.r, X.c, k], float(reg))
+        return W
 
     def chol(self, A):
         L = A.copy()
@@ -632,18 +691,18 @@ def _sign_flip_rows(U):
 
 # ================================================================ thin SVD
 def _thin_svd(k, X, nc, u_based=True):
-    """(U n x nc, S 1 x nc, Vt nc x d) of X through the eigendecomposition of
-    the smaller Gram matrix, singular values descending, then sklearn's
+    """(U n x nc, S 1 x nc, Vt nc x d) of X through the QR + one-sided Jacobi
+    SVD of X (or of X^T when X is wide), singular values descending, then sklearn's
     `svd_flip` (u_based: the largest-|.| entry of each COLUMN of U positive;
     else of each ROW of Vt). U (or Vt) is recovered as X V / S (X^T U / S);
     a zero singular value gives a zero vector."""
     n, d = X.r, X.c
     if d <= n:
-        S, Vt = _gram_svd(k, X)
+        S, Vt = k.svd(X)
         S, Vt = S.cols(0, nc), Vt.rows(0, nc)
         U = k.ew("div", k.mm(X, Vt, tb=True), S)
     else:
-        S, Ut = _gram_svd(k, X.T)
+        S, Ut = k.svd(X.T)
         S, Ut = S.cols(0, nc), Ut.rows(0, nc)
         U = Ut.T
         Vt = k.ew("div", k.mm(U, X, ta=True), S.T)
@@ -1133,8 +1192,8 @@ class FactorAnalysis(_Base):
     `decomposition/_factor_analysis.py`: `fit`, `transform`,
     `get_covariance`, `get_precision`, `score_samples`, `_ortho_rotation`).
 
-    Each iteration's SVD of the scaled data is the eigh of its d x d Gram
-    matrix: the squared singular values sklearn uses ARE its eigenvalues.
+    Each iteration's SVD of the scaled data is the QR + one-sided Jacobi SVD
+    of decomposition/ (the eigh of the d x d Gram when n < d).
     svd_method='randomized' takes the same exact route (sklearn's randomized
     SVD is an approximation of it). `rotation` in {None, 'varimax',
     'quartimax'}."""
@@ -1176,10 +1235,15 @@ class FactorAnalysis(_Base):
         for it in range(1, self.max_iter + 1):
             sqrt_psi = k.ew("adds", k.ew("sqrt", psi), s=SMALL)
             Z = k.ew("scale", k.ew("div", Xc, sqrt_psi), s=1.0 / nsqrt)
-            ev, V = k.eigh(k.mm(Z, Z, ta=True))
-            order = list(range(d - 1, -1, -1))
-            s2 = k.ew("maxs", ev.take_cols(order), s=0.0)
-            Vt = V.take_cols(order).T.rows(0, nc)
+            if n >= d:
+                sv, Vt = k.svd(Z)
+                s2 = k.ew("sq", sv)
+            else:
+                ev, V = k.eigh(k.mm(Z, Z, ta=True))
+                order = list(range(d - 1, -1, -1))
+                s2 = k.ew("maxs", ev.take_cols(order), s=0.0)
+                Vt = V.take_cols(order).T
+            Vt = Vt.rows(0, nc)
             sk = s2.cols(0, nc)
             # the log-likelihood is accumulated in Python float64 (IEEE adds,
             # sequential): at float32 its step falls under tol=1e-2 early
@@ -1402,3 +1466,1200 @@ def lstsq(a, b, rcond=None, *, numeric_mode=None):
     else:
         resid = _M.zeros(1, 0).out((0,))
     return (X.out((nn,)) if vec else X.out()), resid, rank, S.out((r,))
+
+
+# ================================================================ PLS / CCA
+def _pinv(k, A, rcond=None):
+    """Moore-Penrose pseudo-inverse through the thin SVD (Gram eigh):
+    V diag(1/s) U^T, singular values at or below cond * s_max dropped
+    (cond = max(shape) * float32 eps, sklearn `_pinv2_old`'s rule)."""
+    r = min(A.r, A.c)
+    U, S, Vt = _thin_svd(k, A, r, u_based=True)
+    cond = (max(A.r, A.c) * _F32_EPS) if rcond is None else rcond
+    cut = _f32(S.s[0] * cond) if r else 0.0
+    inv = k.ew("recip", k.ew("select", S, S, _M.zeros(1, 1), s=cut))
+    return k.mm(Vt, k.ew("mul", U, inv), ta=True, tb=True)
+
+
+def _dot(k, a, b):
+    """a . b for two column vectors (n x 1): one gemm cell, rows ascending."""
+    return k.mm(a, b, ta=True)
+
+
+class _PLS(_Base):
+    """sklearn `cross_decomposition/_pls.py::_PLS` (NIPALS): `fit`,
+    `_get_first_singular_vectors_power_method`, `_center_scale_xy`,
+    `_svd_flip_1d`, `transform`, `inverse_transform`, `predict`.
+    REFUSED BY NAME: algorithm='svd' (PLSCanonical's second algorithm)."""
+    _parameters = ("n_components", "scale", "max_iter", "tol", "copy", "numeric_mode")
+    _deflation = "regression"
+    _pmode = "A"
+
+    def __init__(self, n_components=2, *, scale=True, max_iter=500, tol=1e-06, copy=True, numeric_mode=None):
+        self.n_components, self.scale, self.max_iter, self.tol, self.copy = n_components, scale, max_iter, tol, copy
+        self.numeric_mode = numeric_mode
+
+    def _xy(self, X, Y):
+        M = _M.from_input(X)
+        vec = Y is not None and (len(getattr(Y, "shape", ())) == 1 or
+                                 (not hasattr(Y, "shape") and not isinstance(Y[0], (list, tuple))))
+        Ym = None
+        if Y is not None:
+            Ym = _M.from_input(_row_of(Y), "Y").T if vec else _M.from_input(Y, "Y")
+        return M, Ym, vec
+
+    def _center_scale(self, k, A):
+        n = A.r
+        mean = k.colmean(A)
+        Ac = k.ew("sub", A, mean)
+        if self.scale:
+            std = k.ew("sqrt", k.ew("scale", k.colsum(k.ew("sq", Ac)), s=1.0 / (n - 1)))
+            std = k.ew("select", std, std, k.const(1.0), s=0.0)
+            Ac = k.ew("div", Ac, std)
+        else:
+            std = k.const(1.0, 1, A.c)
+        return Ac, mean, std
+
+    def _power(self, k, X, Y, norm_y):
+        eps = _F32_EPS
+        y_score = None
+        for j in range(Y.c):
+            col = Y.cols(j, j + 1)
+            if any(abs(v) > eps for v in col.s):
+                y_score = col
+                break
+        if y_score is None:
+            raise StopIteration("y residual is constant")
+        xw_old = None
+        if self._pmode == "B":
+            Xp, Yp = _pinv(k, X), _pinv(k, Y)
+        it = 0
+        for it in range(1, self.max_iter + 1):
+            if self._pmode == "B":
+                xw = k.mm(Xp, y_score)
+            else:
+                xw = k.ew("div", k.mm(X, y_score, ta=True), _dot(k, y_score, y_score))
+            xw = k.ew("div", xw, k.ew("adds", k.ew("sqrt", _dot(k, xw, xw)), s=eps))
+            x_score = k.mm(X, xw)
+            if self._pmode == "B":
+                yw = k.mm(Yp, x_score)
+            else:
+                yw = k.ew("div", k.mm(Y, x_score, ta=True), _dot(k, x_score, x_score))
+            if norm_y:
+                yw = k.ew("div", yw, k.ew("adds", k.ew("sqrt", _dot(k, yw, yw)), s=eps))
+            y_score = k.ew("div", k.mm(Y, yw), k.ew("adds", _dot(k, yw, yw), s=eps))
+            if Y.c == 1:
+                break
+            if xw_old is not None:
+                diff = k.ew("sub", xw, xw_old)
+                if _dot(k, diff, diff).s[0] < self.tol:
+                    break
+            else:
+                diff = k.ew("adds", xw, s=-100.0)
+                if _dot(k, diff, diff).s[0] < self.tol:
+                    break
+            xw_old = xw
+        return xw, yw, it
+
+    def fit(self, X, Y):
+        self.numeric_mode_ = _mode(self.numeric_mode)
+        k = self._kit()
+        M, Ym, vec = self._xy(X, Y)
+        if Ym is None:
+            raise ValueError("Y is required")
+        n, p, q = M.r, M.c, Ym.c
+        nc = int(self.n_components)
+        bound = p if self._deflation == "regression" else min(n, p, q)
+        if not 1 <= nc <= bound:
+            raise ValueError(f"n_components == {nc}, while 1 <= n_components <= {bound} is required")
+        self._predict_1d = vec
+        Xk, self._x_mean, self._x_std = self._center_scale(k, M)
+        Yk, self._y_mean, self._y_std = self._center_scale(k, Ym)
+        norm_y = self._deflation == "canonical"
+        xw_c, yw_c, xs_c, ys_c, xl_c, yl_c = [], [], [], [], [], []
+        self.n_iter_ = []
+        thr = 10 * _F32_EPS
+        for _c in range(nc):
+            # Yk columns that are all below 10 eps are set to zero
+            dead = [all(abs(Yk.s[i * q + j]) < thr for i in range(n)) for j in range(q)]
+            if any(dead):
+                Yk = k.ew("mul", Yk, _M.of([0.0 if d else 1.0 for d in dead], 1, q))
+            try:
+                xw, yw, it = self._power(k, Xk, Yk, norm_y)
+            except StopIteration:
+                import warnings
+                warnings.warn(f"y residual is constant at iteration {_c}", stacklevel=2)
+                break
+            self.n_iter_.append(it)
+            # _svd_flip_1d: the largest-|.| entry of x_weights positive
+            best, arg = -1.0, 0
+            for j, v in enumerate(xw.s):
+                if abs(v) > best:
+                    best, arg = abs(v), j
+            if xw.s[arg] < 0:
+                xw, yw = xw.neg_cols([True]), yw.neg_cols([True])
+            x_scores = k.mm(Xk, xw)
+            y_ss = k.const(1.0) if norm_y else _dot(k, yw, yw)
+            y_scores = k.ew("div", k.mm(Yk, yw), y_ss)
+            x_load = k.ew("div", k.mm(Xk, x_scores, ta=True), _dot(k, x_scores, x_scores))
+            Xk = k.ew("sub", Xk, k.mm(x_scores, x_load, tb=True))
+            if self._deflation == "canonical":
+                y_load = k.ew("div", k.mm(Yk, y_scores, ta=True), _dot(k, y_scores, y_scores))
+                Yk = k.ew("sub", Yk, k.mm(y_scores, y_load, tb=True))
+            else:
+                y_load = k.ew("div", k.mm(Yk, x_scores, ta=True), _dot(k, x_scores, x_scores))
+                Yk = k.ew("sub", Yk, k.mm(x_scores, y_load, tb=True))
+            xw_c.append(xw); yw_c.append(yw); xs_c.append(x_scores); ys_c.append(y_scores)
+            xl_c.append(x_load); yl_c.append(y_load)
+        self.x_weights_m_ = _hstack(*xw_c)
+        self.y_weights_m_ = _hstack(*yw_c)
+        self.x_loadings_m_ = _hstack(*xl_c)
+        self.y_loadings_m_ = _hstack(*yl_c)
+        self._x_scores_m, self._y_scores_m = _hstack(*xs_c), _hstack(*ys_c)
+        self.x_rotations_m_ = k.mm(self.x_weights_m_, _pinv(k, k.mm(self.x_loadings_m_, self.x_weights_m_, ta=True)))
+        self.y_rotations_m_ = k.mm(self.y_weights_m_, _pinv(k, k.mm(self.y_loadings_m_, self.y_weights_m_, ta=True)))
+        coef = k.mm(self.x_rotations_m_, self.y_loadings_m_, tb=True)          # p x q
+        coef = k.ew("div", k.ew("mul", coef, self._y_std), self._x_std.T).T     # q x p
+        self.coef_m_ = coef
+        for name in ("x_weights", "y_weights", "x_loadings", "y_loadings", "x_rotations", "y_rotations"):
+            setattr(self, name + "_", getattr(self, name + "_m_").out())
+        self.coef_ = coef.out()
+        self.intercept_ = self._y_mean.out((q,))
+        self._x_scores, self._y_scores = self._x_scores_m.out(), self._y_scores_m.out()
+        self.n_features_in_ = p
+        self.components_m_ = self.x_rotations_m_
+        return self
+
+    def _check_fitted(self):
+        if not hasattr(self, "coef_m_"):
+            raise RuntimeError(f"{type(self).__name__} is not fitted; call fit first")
+
+    def transform(self, X, y=None, Y=None, copy=True):
+        self._check_fitted()
+        Y = y if y is not None else Y
+        k = self._kit()
+        M, Ym, vec = self._xy(X, Y)
+        xs = k.mm(k.ew("div", k.ew("sub", M, self._x_mean), self._x_std), self.x_rotations_m_)
+        if Ym is None:
+            return xs.out()
+        ys = k.mm(k.ew("div", k.ew("sub", Ym, self._y_mean), self._y_std), self.y_rotations_m_)
+        return xs.out(), ys.out()
+
+    def inverse_transform(self, X, y=None, Y=None):
+        self._check_fitted()
+        k = self._kit()
+        Z = _M.from_input(X)
+        Xr = k.ew("add", k.ew("mul", k.mm(Z, self.x_loadings_m_, tb=True), self._x_std), self._x_mean)
+        Y = y if y is not None else Y
+        if Y is None:
+            return Xr.out()
+        W = _M.from_input(Y, "Y")
+        Yr = k.ew("add", k.ew("mul", k.mm(W, self.y_loadings_m_, tb=True), self._y_std), self._y_mean)
+        return Xr.out(), Yr.out()
+
+    def predict(self, X, copy=True):
+        self._check_fitted()
+        k = self._kit()
+        M = _M.from_input(X)
+        P = k.ew("add", k.mm(k.ew("sub", M, self._x_mean), self.coef_m_, tb=True), self._y_mean)
+        return P.out((P.r,)) if self._predict_1d else P.out()
+
+    def fit_transform(self, X, y=None):
+        return self.fit(X, y).transform(X, y)
+
+
+class PLSRegression(_PLS):
+    """sklearn.cross_decomposition.PLSRegression: NIPALS, mode A, regression deflation."""
+    _deflation, _pmode = "regression", "A"
+
+    def fit(self, X, y=None, Y=None):
+        super().fit(X, y if y is not None else Y)
+        self.x_scores_, self.y_scores_ = self._x_scores, self._y_scores
+        return self
+
+
+class PLSCanonical(_PLS):
+    """sklearn.cross_decomposition.PLSCanonical (algorithm='nipals'): mode A,
+    canonical deflation."""
+    _deflation, _pmode = "canonical", "A"
+    _parameters = ("n_components", "scale", "algorithm", "max_iter", "tol", "copy", "numeric_mode")
+
+    def __init__(self, n_components=2, *, scale=True, algorithm="nipals", max_iter=500, tol=1e-06, copy=True,
+                 numeric_mode=None):
+        if algorithm != "nipals":
+            raise NotImplementedError("PLSCanonical: algorithm='svd' is not carried; use 'nipals'")
+        self.algorithm = algorithm
+        super().__init__(n_components, scale=scale, max_iter=max_iter, tol=tol, copy=copy, numeric_mode=numeric_mode)
+
+
+class CCA(_PLS):
+    """sklearn.cross_decomposition.CCA: NIPALS, mode B (the pseudo-inverses of
+    X and Y), canonical deflation."""
+    _deflation, _pmode = "canonical", "B"
+
+
+# ================================================================ dictionary learning / sparse PCA
+_SPARSE_ALGOS = ("lasso_lars", "lasso_cd", "omp", "threshold")
+
+
+def _sparse_encode(k, X, D, algorithm, alpha=None, n_nonzero_coefs=None, init=None, max_iter=1000, positive=False):
+    """sklearn `_dict_learning.py::_sparse_encode` + `_sparse_encode_precomputed`.
+    'lasso_lars' solves the same Lasso as 'lasso_cd' (by coordinate descent
+    from zero: the Lasso optimum does not depend on the path taken to it);
+    'lasso_cd' warm-starts from `init`; 'omp' and 'threshold' as sklearn.
+    REFUSED BY NAME: 'lars' (plain LARS with a coefficient budget)."""
+    if algorithm not in _SPARSE_ALGOS:
+        raise ValueError(f"algorithm={algorithm!r} is not carried; one of {_SPARSE_ALGOS}")
+    n, m = X.r, X.c
+    kc = D.r
+    if algorithm == "omp":
+        reg = n_nonzero_coefs if n_nonzero_coefs is not None else min(max(m / 10, 1), kc)
+    else:
+        reg = alpha if alpha is not None else 1.0
+    Q = k.mm(X, D, tb=True)                      # n x k: row i is D x_i
+    if algorithm == "threshold":
+        code = k.ew("soft", Q, s=reg)
+        return k.ew("maxs", code, s=0.0) if positive else code
+    G = k.mm(D, D, tb=True)
+    if algorithm == "omp":
+        return k.omp_rows(G, Q, int(reg))
+    W = init.copy() if (algorithm == "lasso_cd" and init is not None) else _M.zeros(n, kc)
+    return k.lasso_rows(G, Q, W, float(reg), max_iter, 1e-8, positive)
+
+
+def sparse_encode(X, dictionary, *, algorithm="lasso_lars", n_nonzero_coefs=None, alpha=None, init=None,
+                  max_iter=1000, positive=False, numeric_mode=None, **_ignored):
+    """sklearn.decomposition.sparse_encode (see `_sparse_encode`)."""
+    k = _Kit(_mode(numeric_mode))
+    init_m = None if init is None else _M.from_input(init, "init")
+    return _sparse_encode(k, _M.from_input(X), _M.from_input(dictionary, "dictionary"), algorithm, alpha,
+                          n_nonzero_coefs, init_m, max_iter, positive).out()
+
+
+def _resample_atom(k, Y, seed, counter):
+    """sklearn `_update_dict`'s unused-atom branch on the Philox stream: a
+    row of Y chosen uniformly, plus N(0, 0.01 * std(row) or 0.01) noise."""
+    u = k.rand(1, 1, seed, 40 + 2 * counter, 0).s[0]
+    idx = min(int(u * Y.r), Y.r - 1)
+    row = Y.rows(idx, idx + 1)
+    mean = k.ew("scale", k.total(row), s=1.0 / row.c)
+    std = k.ew("sqrt", k.ew("scale", k.total(k.ew("sqdiff", row, mean)), s=1.0 / row.c)).s[0]
+    noise = k.ew("scale", k.rand(1, row.c, seed, 41 + 2 * counter, 1), s=0.01 * (std or 1.0))
+    return k.ew("add", row, noise)
+
+
+def _update_dict(k, D, Y, code, A=None, B=None, positive=False, seed=0, counter=None):
+    """sklearn `_dict_learning.py::_update_dict`: block coordinate descent over
+    the atoms in order, each projected onto the unit ball. Returns (D, code)."""
+    if A is None:
+        A = k.mm(code, code, ta=True)
+    if B is None:
+        B = k.mm(Y, code, ta=True)
+    rows = [D.rows(j, j + 1) for j in range(D.r)]
+    zero_cols = []
+    for j in range(D.r):
+        ajj = A.s[j * A.c + j]
+        if ajj > 1e-6:
+            Dcur = _vstack(*rows)
+            upd = k.ew("sub", B.cols(j, j + 1).T, k.mm(A.rows(j, j + 1), Dcur))
+            rows[j] = k.ew("add", rows[j], k.ew("div", upd, k.const(ajj)))
+        else:
+            c = counter[0] if counter is not None else 0
+            rows[j] = _resample_atom(k, Y, seed, c)
+            if counter is not None:
+                counter[0] += 1
+            zero_cols.append(j)
+        if positive:
+            rows[j] = k.ew("maxs", rows[j], s=0.0)
+        nrm = k.ew("sqrt", k.total(k.ew("sq", rows[j])))
+        rows[j] = k.ew("div", rows[j], k.ew("maxs", nrm, s=1.0))
+    if zero_cols:
+        code = code.copy()
+        for i in range(code.r):
+            for j in zero_cols:
+                code.s[i * code.c + j] = 0.0
+    return _vstack(*rows), code
+
+
+def _cost(k, X, code, D, alpha):
+    r = k.total(k.ew("sqdiff", X, k.mm(code, D))).s[0]
+    l1 = k.total(k.ew("abs", code)).s[0]
+    return 0.5 * r + alpha * l1
+
+
+def _dict_learning(k, X, nc, alpha, max_iter, tol, method, seed, code_init=None, dict_init=None,
+                   positive_dict=False, positive_code=False, method_max_iter=1000):
+    """sklearn `_dict_learning.py::_dict_learning`: returns (code, D, errors, n_iter)."""
+    if code_init is not None and dict_init is not None:
+        code, D = code_init, dict_init
+    else:
+        r = min(X.r, X.c)
+        U, S, Vt = _thin_svd(k, X, r, u_based=True)
+        code, D = U, k.ew("mul", Vt, S.T)
+    r = D.r
+    if nc <= r:
+        code, D = code.cols(0, nc), D.rows(0, nc)
+    else:
+        code = _hstack(code, _M.zeros(code.r, nc - r))
+        D = _vstack(D, _M.zeros(nc - r, D.c))
+    errors = []
+    ii = 0
+    counter = [0]
+    for ii in range(1, max_iter + 1):
+        code = _sparse_encode(k, X, D, method, alpha=alpha, init=code, max_iter=method_max_iter,
+                              positive=positive_code)
+        D, code = _update_dict(k, D, X, code, positive=positive_dict, seed=seed, counter=counter)
+        errors.append(_cost(k, X, code, D, alpha))
+        if len(errors) > 1:
+            if errors[-2] - errors[-1] < tol * errors[-1]:
+                break
+    return code, D, errors, ii
+
+
+class _SparseCoding(_Base):
+    def _encode(self, X):
+        self._check()
+        k = self._kit()
+        M = _M.from_input(X)
+        ta = getattr(self, "transform_alpha", None)
+        if ta is None:
+            ta = getattr(self, "alpha", 1.0)
+        code = _sparse_encode(k, M, self.components_m_, self.transform_algorithm,
+                              alpha=ta, n_nonzero_coefs=self.transform_n_nonzero_coefs,
+                              max_iter=self.transform_max_iter, positive=self.positive_code)
+        if self.split_sign:
+            code = _hstack(k.ew("maxs", code, s=0.0), k.ew("scale", k.ew("mins", code, s=0.0), s=-1.0))
+        return code
+
+    def transform(self, X):
+        return self._encode(X).out()
+
+    def inverse_transform(self, X):
+        self._check()
+        k = self._kit()
+        C = _M.from_input(X, "code")
+        D = self.components_m_
+        if self.split_sign:
+            h = D.r
+            C = k.ew("sub", C.cols(0, h), C.cols(h, 2 * h))
+        return k.mm(C, D).out()
+
+
+def _check_sparse_algos(fit_algorithm, transform_algorithm):
+    if fit_algorithm not in ("lars", "cd"):
+        raise ValueError("fit_algorithm must be 'lars' or 'cd'")
+    if transform_algorithm not in ("lasso_lars", "lasso_cd", "omp", "threshold"):
+        raise ValueError(f"transform_algorithm={transform_algorithm!r} is not carried "
+                         "(lasso_lars, lasso_cd, omp, threshold; 'lars' is refused by name)")
+
+
+class DictionaryLearning(_SparseCoding):
+    """sklearn.decomposition.DictionaryLearning (reference: scikit-learn
+    `decomposition/_dict_learning.py`: `_dict_learning`, `_update_dict`,
+    `_sparse_encode_precomputed`, `_BaseSparseCoding._transform`). The
+    initial SVD is exact (QR + one-sided Jacobi); a resampled unused atom is
+    drawn from the Philox stream. fit_algorithm 'lars' solves its Lasso by
+    coordinate descent (the same optimum). REFUSED BY NAME: transform
+    'lars', callback."""
+    _parameters = ("n_components", "alpha", "max_iter", "tol", "fit_algorithm", "transform_algorithm",
+                   "transform_n_nonzero_coefs", "transform_alpha", "split_sign", "random_state",
+                   "positive_code", "positive_dict", "transform_max_iter", "numeric_mode")
+
+    def __init__(self, n_components=None, *, alpha=1, max_iter=1000, tol=1e-8, fit_algorithm="lars",
+                 transform_algorithm="omp", transform_n_nonzero_coefs=None, transform_alpha=None, n_jobs=None,
+                 code_init=None, dict_init=None, callback=None, verbose=False, split_sign=False, random_state=None,
+                 positive_code=False, positive_dict=False, transform_max_iter=1000, numeric_mode=None):
+        self.n_components, self.alpha, self.max_iter, self.tol = n_components, alpha, max_iter, tol
+        self.fit_algorithm, self.transform_algorithm = fit_algorithm, transform_algorithm
+        self.transform_n_nonzero_coefs, self.transform_alpha = transform_n_nonzero_coefs, transform_alpha
+        self.n_jobs, self.code_init, self.dict_init, self.callback = n_jobs, code_init, dict_init, callback
+        self.verbose, self.split_sign, self.random_state = verbose, split_sign, random_state
+        self.positive_code, self.positive_dict = positive_code, positive_dict
+        self.transform_max_iter, self.numeric_mode = transform_max_iter, numeric_mode
+
+    def fit(self, X, y=None):
+        self.fit_transform(X)
+        return self
+
+    def fit_transform(self, X, y=None):
+        self.numeric_mode_ = _mode(self.numeric_mode)
+        _check_sparse_algos(self.fit_algorithm, self.transform_algorithm)
+        if self.callback is not None:
+            raise NotImplementedError("callback is not carried")
+        k = self._kit()
+        M = _M.from_input(X)
+        nc = self.n_components if self.n_components is not None else M.c
+        ci = None if self.code_init is None else _M.from_input(self.code_init, "code_init")
+        di = None if self.dict_init is None else _M.from_input(self.dict_init, "dict_init")
+        code, D, errors, it = _dict_learning(
+            k, M, nc, float(self.alpha), self.max_iter, self.tol, "lasso_" + self.fit_algorithm,
+            _seed_of(self.random_state), ci, di, self.positive_dict, self.positive_code, self.transform_max_iter)
+        self.components_m_ = D
+        self.components_ = D.out()
+        self.error_ = errors
+        self.n_iter_ = it
+        self.n_features_in_ = M.c
+        if self.split_sign:
+            code = _hstack(k.ew("maxs", code, s=0.0), k.ew("scale", k.ew("mins", code, s=0.0), s=-1.0))
+        return code.out()
+
+
+class MiniBatchDictionaryLearning(_SparseCoding):
+    """sklearn.decomposition.MiniBatchDictionaryLearning (reference:
+    `_dict_learning.py::MiniBatchDictionaryLearning`: `_initialize_dict`,
+    `_minibatch_step`, `_update_inner_stats`, `_check_convergence`). The
+    shuffle is a Philox permutation (sort of counter draws, ties to the lower
+    index) and the initial dictionary the exact SVD (sklearn: randomized)."""
+    _parameters = ("n_components", "alpha", "max_iter", "fit_algorithm", "batch_size", "shuffle",
+                   "transform_algorithm", "transform_n_nonzero_coefs", "transform_alpha", "split_sign",
+                   "random_state", "positive_code", "positive_dict", "transform_max_iter", "tol",
+                   "max_no_improvement", "numeric_mode")
+
+    def __init__(self, n_components=None, *, alpha=1, max_iter=1000, fit_algorithm="lars", n_jobs=None,
+                 batch_size=256, shuffle=True, dict_init=None, transform_algorithm="omp",
+                 transform_n_nonzero_coefs=None, transform_alpha=None, verbose=False, split_sign=False,
+                 random_state=None, positive_code=False, positive_dict=False, transform_max_iter=1000,
+                 callback=None, tol=1e-3, max_no_improvement=10, numeric_mode=None):
+        self.n_components, self.alpha, self.max_iter, self.fit_algorithm = n_components, alpha, max_iter, fit_algorithm
+        self.n_jobs, self.batch_size, self.shuffle, self.dict_init = n_jobs, batch_size, shuffle, dict_init
+        self.transform_algorithm, self.transform_n_nonzero_coefs = transform_algorithm, transform_n_nonzero_coefs
+        self.transform_alpha, self.verbose, self.split_sign = transform_alpha, verbose, split_sign
+        self.random_state, self.positive_code, self.positive_dict = random_state, positive_code, positive_dict
+        self.transform_max_iter, self.callback, self.tol = transform_max_iter, callback, tol
+        self.max_no_improvement, self.numeric_mode = max_no_improvement, numeric_mode
+
+    def fit(self, X, y=None):
+        self.numeric_mode_ = _mode(self.numeric_mode)
+        _check_sparse_algos(self.fit_algorithm, self.transform_algorithm)
+        if self.callback is not None:
+            raise NotImplementedError("callback is not carried")
+        k = self._kit()
+        M = _M.from_input(X)
+        n, m = M.r, M.c
+        nc = self.n_components if self.n_components is not None else m
+        bs = min(int(self.batch_size), n)
+        seed = _seed_of(self.random_state)
+        if self.dict_init is not None:
+            D = _M.from_input(self.dict_init, "dict_init")
+        else:
+            r = min(n, m)
+            _, S, Vt = _thin_svd(k, M, r, u_based=True)
+            D = k.ew("mul", Vt, S.T)
+        if nc <= D.r:
+            D = D.rows(0, nc)
+        else:
+            D = _vstack(D, _M.zeros(nc - D.r, m))
+        if self.shuffle:
+            u = k.rand(1, n, seed, 50, 0).s
+            perm = sorted(range(n), key=lambda i: (u[i], i))
+            Xt = M.take_rows(perm)
+        else:
+            Xt = M
+        A, B = _M.zeros(nc, nc), _M.zeros(m, nc)
+        steps_per_iter = -(-n // bs)
+        n_steps = self.max_iter * steps_per_iter
+        batches = []
+        start = 0
+        for _ in range(n // bs):
+            batches.append((start, start + bs))
+            start += bs
+        if start < n:
+            batches.append((start, n))
+        ewa, ewa_min, no_imp = None, None, 0
+        counter = [0]
+        step = -1
+        for step in range(n_steps):
+            a, b = batches[step % len(batches)]
+            Xb = Xt.rows(a, b)
+            b_n = Xb.r
+            code = _sparse_encode(k, Xb, D, "lasso_" + self.fit_algorithm, alpha=float(self.alpha),
+                                  max_iter=self.transform_max_iter, positive=self.positive_code)
+            cost = _cost(k, Xb, code, D, float(self.alpha)) / b_n
+            theta = (step + 1) * b_n if step < b_n - 1 else b_n ** 2 + step + 1 - b_n
+            beta = (theta + 1 - b_n) / (theta + 1)
+            A = k.ew("add", k.ew("scale", A, s=beta), k.ew("scale", k.mm(code, code, ta=True), s=1.0 / b_n))
+            B = k.ew("add", k.ew("scale", B, s=beta), k.ew("scale", k.mm(Xb, code, ta=True), s=1.0 / b_n))
+            old = D
+            D, code = _update_dict(k, D, Xb, code, A, B, self.positive_dict, seed, counter)
+            # _check_convergence
+            s1 = step + 1
+            if s1 <= min(100, n / b_n):
+                continue
+            if ewa is None:
+                ewa = cost
+            else:
+                al = min(b_n / (n + 1), 1)
+                ewa = ewa * (1 - al) + cost * al
+            diff = math.sqrt(k.total(k.ew("sqdiff", D, old)).s[0]) / nc
+            if self.tol > 0 and diff <= self.tol:
+                break
+            if ewa_min is None or ewa < ewa_min:
+                no_imp, ewa_min = 0, ewa
+            else:
+                no_imp += 1
+            if self.max_no_improvement is not None and no_imp >= self.max_no_improvement:
+                break
+        self.n_steps_ = step + 1
+        self.n_iter_ = -(-self.n_steps_ // steps_per_iter)
+        self.components_m_ = D
+        self.components_ = D.out()
+        self.n_features_in_ = m
+        return self
+
+    def fit_transform(self, X, y=None):
+        return self.fit(X).transform(X)
+
+
+class _BaseSparsePCA(_Base):
+    def _normalize(self, k, C):
+        nrm = k.ew("sqrt", k.rowsum(k.ew("sq", C)))
+        nrm = k.ew("select", nrm, nrm, k.const(1.0), s=0.0)
+        return k.ew("div", C, nrm)
+
+    def transform(self, X):
+        """sklearn `_BaseSparsePCA.transform`: ridge_regression(components_.T,
+        (X - mean_).T, ridge_alpha, solver='cholesky')."""
+        self._check()
+        k = self._kit()
+        Xc = k.ew("sub", _M.from_input(X), self.mean_m_)
+        C = self.components_m_
+        G = k.mm(C, C, tb=True)
+        G = G.copy()
+        for i in range(G.r):
+            G.s[i * G.c + i] = _f32(G.s[i * G.c + i] + self.ridge_alpha)
+        lu, piv, _ = k.lu(G)
+        U = k.lu_solve(lu, piv, k.mm(C, Xc, tb=True)).T
+        return U.out()
+
+    def inverse_transform(self, X):
+        self._check()
+        k = self._kit()
+        return k.ew("add", k.mm(_M.from_input(X), self.components_m_), self.mean_m_).out()
+
+
+class SparsePCA(_BaseSparsePCA):
+    """sklearn.decomposition.SparsePCA (reference: scikit-learn
+    `decomposition/_sparse_pca.py`): dictionary learning on the centered X^T,
+    the code's transpose the components, each normalized to unit norm."""
+    _parameters = ("n_components", "alpha", "ridge_alpha", "max_iter", "tol", "method", "random_state",
+                   "numeric_mode")
+
+    def __init__(self, n_components=None, *, alpha=1, ridge_alpha=0.01, max_iter=1000, tol=1e-8, method="lars",
+                 n_jobs=None, U_init=None, V_init=None, verbose=False, random_state=None, numeric_mode=None):
+        self.n_components, self.alpha, self.ridge_alpha = n_components, alpha, ridge_alpha
+        self.max_iter, self.tol, self.method, self.n_jobs = max_iter, tol, method, n_jobs
+        self.U_init, self.V_init, self.verbose, self.random_state = U_init, V_init, verbose, random_state
+        self.numeric_mode = numeric_mode
+
+    def fit(self, X, y=None):
+        self.numeric_mode_ = _mode(self.numeric_mode)
+        if self.method not in ("lars", "cd"):
+            raise ValueError("method must be 'lars' or 'cd'")
+        k = self._kit()
+        M = _M.from_input(X)
+        nc = self.n_components if self.n_components is not None else M.c
+        self.mean_m_ = k.colmean(M)
+        Xc = k.ew("sub", M, self.mean_m_)
+        ci = None if self.V_init is None else _M.from_input(self.V_init, "V_init").T
+        di = None if self.U_init is None else _M.from_input(self.U_init, "U_init").T
+        code, D, errors, it = _dict_learning(k, Xc.T, nc, float(self.alpha), self.max_iter, self.tol,
+                                             "lasso_" + self.method, _seed_of(self.random_state), ci, di)
+        self.components_m_ = self._normalize(k, code.T)
+        self.components_ = self.components_m_.out()
+        self.n_components_ = self.components_m_.r
+        self.error_ = errors
+        self.n_iter_ = it
+        self.mean_ = self.mean_m_.out((M.c,))
+        self.n_features_in_ = M.c
+        return self
+
+
+class MiniBatchSparsePCA(_BaseSparsePCA):
+    """sklearn.decomposition.MiniBatchSparsePCA: MiniBatchDictionaryLearning
+    on the centered X^T, the components its lasso_lars transform of X^T,
+    each normalized to unit norm."""
+    _parameters = ("n_components", "alpha", "ridge_alpha", "max_iter", "batch_size", "shuffle", "method",
+                   "random_state", "tol", "max_no_improvement", "numeric_mode")
+
+    def __init__(self, n_components=None, *, alpha=1, ridge_alpha=0.01, max_iter=1000, callback=None,
+                 batch_size=3, verbose=False, shuffle=True, n_jobs=None, method="lars", random_state=None,
+                 tol=1e-3, max_no_improvement=10, numeric_mode=None):
+        self.n_components, self.alpha, self.ridge_alpha, self.max_iter = n_components, alpha, ridge_alpha, max_iter
+        self.callback, self.batch_size, self.verbose, self.shuffle = callback, batch_size, verbose, shuffle
+        self.n_jobs, self.method, self.random_state, self.tol = n_jobs, method, random_state, tol
+        self.max_no_improvement, self.numeric_mode = max_no_improvement, numeric_mode
+
+    def fit(self, X, y=None):
+        self.numeric_mode_ = _mode(self.numeric_mode)
+        k = self._kit()
+        M = _M.from_input(X)
+        nc = self.n_components if self.n_components is not None else M.c
+        self.mean_m_ = k.colmean(M)
+        Xc = k.ew("sub", M, self.mean_m_)
+        est = MiniBatchDictionaryLearning(
+            n_components=nc, alpha=self.alpha, max_iter=self.max_iter, batch_size=self.batch_size,
+            shuffle=self.shuffle, fit_algorithm=self.method, random_state=self.random_state,
+            transform_algorithm="lasso_lars", transform_alpha=self.alpha, tol=self.tol,
+            max_no_improvement=self.max_no_improvement, numeric_mode=self.numeric_mode_)
+        XT = Xc.T
+        est.fit(XT.out())
+        self.components_m_ = self._normalize(k, est._encode(XT.out()).T)
+        self.components_ = self.components_m_.out()
+        self.n_components_ = self.components_m_.r
+        self.n_iter_ = est.n_iter_
+        self.mean_ = self.mean_m_.out((M.c,))
+        self.n_features_in_ = M.c
+        return self
+
+
+# ================================================================ LatentDirichletAllocation
+_F64_EPS = 2.220446049250313e-16
+
+
+def _dirichlet_expectation_2d(k, A):
+    """psi(A) - psi(rowsum(A)) (sklearn `_online_lda_fast.pyx`)."""
+    return k.ew("sub", k.ew("digamma", A), k.ew("digamma", k.rowsum(A)))
+
+
+class LatentDirichletAllocation(_Base):
+    """sklearn.decomposition.LatentDirichletAllocation (reference:
+    scikit-learn `decomposition/_lda.py` with `_online_lda_fast.pyx`:
+    `_init_latent_vars`, `_e_step`, `_update_doc_distribution`, `_em_step`,
+    `_approx_bound`, `transform`, `perplexity`, `score`), variational EM in a
+    fixed order: every document's inner loop is one thread, the sufficient
+    statistics one gemm. The Gamma(100, 1/100) draws are Marsaglia-Tsang on
+    the Philox stream. learning_method 'batch' and 'online' (online: the
+    mini-batches in row order, as sklearn with no shuffle does).
+    REFUSED BY NAME: sparse input, evaluate_every > 0 with n_jobs."""
+    _parameters = ("n_components", "doc_topic_prior", "topic_word_prior", "learning_method", "learning_decay",
+                   "learning_offset", "max_iter", "batch_size", "evaluate_every", "total_samples", "perp_tol",
+                   "mean_change_tol", "max_doc_update_iter", "random_state", "numeric_mode")
+
+    def __init__(self, n_components=10, *, doc_topic_prior=None, topic_word_prior=None, learning_method="batch",
+                 learning_decay=0.7, learning_offset=10.0, max_iter=10, batch_size=128, evaluate_every=-1,
+                 total_samples=1e6, perp_tol=1e-1, mean_change_tol=1e-3, max_doc_update_iter=100, n_jobs=None,
+                 verbose=0, random_state=None, numeric_mode=None):
+        self.n_components, self.doc_topic_prior, self.topic_word_prior = n_components, doc_topic_prior, topic_word_prior
+        self.learning_method, self.learning_decay, self.learning_offset = learning_method, learning_decay, learning_offset
+        self.max_iter, self.batch_size, self.evaluate_every = max_iter, batch_size, evaluate_every
+        self.total_samples, self.perp_tol, self.mean_change_tol = total_samples, perp_tol, mean_change_tol
+        self.max_doc_update_iter, self.n_jobs, self.verbose = max_doc_update_iter, n_jobs, verbose
+        self.random_state, self.numeric_mode = random_state, numeric_mode
+
+    def _check_X(self, X, whom):
+        M = _M.from_input(X)
+        for v in M.s:
+            if v < 0:
+                raise ValueError(f"Negative values in data passed to {whom}")
+        return M
+
+    def _init(self, k, d):
+        nc = self.n_components
+        self.doc_topic_prior_ = 1.0 / nc if self.doc_topic_prior is None else self.doc_topic_prior
+        self.topic_word_prior_ = 1.0 / nc if self.topic_word_prior is None else self.topic_word_prior
+        self._seed = _seed_of(self.random_state)
+        self._draw = 0
+        self.n_batch_iter_ = 1
+        self.n_iter_ = 0
+        self.components_m_ = k.ew("scale", k.rand_gamma(nc, d, self._seed, 60, 100.0), s=0.01)
+        self._exp_dir = k.ew("exp", _dirichlet_expectation_2d(k, self.components_m_))
+
+    def _e_step(self, k, X, cal_sstats, random_init):
+        n, nc = X.r, self.components_m_.r
+        if random_init:
+            self._draw += 1
+            Dt = k.ew("scale", k.rand_gamma(n, nc, self._seed, 61 + self._draw, 100.0), s=0.01)
+        else:
+            Dt = k.const(1.0, n, nc)
+        Et = k.ew("exp", _dirichlet_expectation_2d(k, Dt))
+        Dt, Et = k.lda_rows(X, self._exp_dir, Dt, Et, self.doc_topic_prior_, self.max_doc_update_iter,
+                            self.mean_change_tol)
+        ss = None
+        if cal_sstats:
+            norm_phi = k.ew("adds", k.mm(Et, self._exp_dir), s=_F64_EPS)
+            R = k.ew("div", X, norm_phi)
+            ss = k.ew("mul", k.mm(Et, R, ta=True), self._exp_dir)
+        return Dt, ss
+
+    def _em_step(self, k, X, total_samples, batch_update):
+        _, ss = self._e_step(k, X, True, True)
+        if batch_update:
+            self.components_m_ = k.ew("adds", ss, s=self.topic_word_prior_)
+        else:
+            # (offset + n_batch_iter)^(-decay) through the cells' log and exp
+            # (Python's ** is the platform libm's pow)
+            weight = k.ew("exp", k.ew("scale", k.ew("logs", k.const(self.learning_offset + self.n_batch_iter_),
+                                                    s=1e-30), s=-self.learning_decay)).s[0]
+            doc_ratio = float(total_samples) / X.r
+            upd = k.ew("adds", k.ew("scale", ss, s=doc_ratio), s=self.topic_word_prior_)
+            self.components_m_ = k.ew("add", k.ew("scale", self.components_m_, s=1 - weight),
+                                      k.ew("scale", upd, s=weight))
+        self._exp_dir = k.ew("exp", _dirichlet_expectation_2d(k, self.components_m_))
+        self.n_batch_iter_ += 1
+
+    def fit(self, X, y=None):
+        self.numeric_mode_ = _mode(self.numeric_mode)
+        if self.learning_method not in ("batch", "online"):
+            raise ValueError("learning_method must be 'batch' or 'online'")
+        k = self._kit()
+        M = self._check_X(X, "LatentDirichletAllocation.fit")
+        n, d = M.r, M.c
+        self._init(k, d)
+        last_bound = None
+        it = 0
+        for it in range(1, self.max_iter + 1):
+            if self.learning_method == "online":
+                bs = self.batch_size
+                for a in range(0, n, bs):
+                    self._em_step(k, M.rows(a, min(a + bs, n)), n, False)
+            else:
+                self._em_step(k, M, n, True)
+            if self.evaluate_every > 0 and it % self.evaluate_every == 0:
+                Dt, _ = self._e_step(k, M, False, False)
+                bound = self._perplexity(k, M, Dt)
+                if last_bound is not None and abs(last_bound - bound) < self.perp_tol:
+                    break
+                last_bound = bound
+        self.n_iter_ = it
+        Dt, _ = self._e_step(k, M, False, False)
+        self.bound_ = self._perplexity(k, M, Dt)
+        self.components_ = self.components_m_.out()
+        self.exp_dirichlet_component_ = self._exp_dir.out()
+        self.n_features_in_ = d
+        return self
+
+    def partial_fit(self, X, y=None):
+        if not hasattr(self, "components_m_"):
+            self.numeric_mode_ = _mode(self.numeric_mode)
+        k = self._kit()
+        M = self._check_X(X, "LatentDirichletAllocation.partial_fit")
+        if not hasattr(self, "components_m_"):
+            self._init(k, M.c)
+        for a in range(0, M.r, self.batch_size):
+            self._em_step(k, M.rows(a, min(a + self.batch_size, M.r)), self.total_samples, False)
+        self.components_ = self.components_m_.out()
+        self.exp_dirichlet_component_ = self._exp_dir.out()
+        self.n_features_in_ = M.c
+        return self
+
+    def _unnormalized(self, X):
+        self._check()
+        k = self._kit()
+        M = self._check_X(X, "LatentDirichletAllocation.transform")
+        return k, M, self._e_step(k, M, False, False)[0]
+
+    def transform(self, X, *, normalize=True):
+        k, M, Dt = self._unnormalized(X)
+        if normalize:
+            Dt = k.ew("div", Dt, k.rowsum(Dt))
+        return Dt.out()
+
+    def fit_transform(self, X, y=None, *, normalize=True):
+        return self.fit(X).transform(X, normalize=normalize)
+
+    def _loglik(self, k, prior, distr, dirichlet, size):
+        s1 = k.total(k.ew("mul", k.ew("scale", k.ew("adds", distr, s=-prior), s=-1.0), dirichlet)).s[0]
+        s2 = k.total(k.ew("adds", k.ew("lgamma", distr), s=-k.ew("lgamma", k.const(prior)).s[0])).s[0]
+        lg_ps = k.ew("lgamma", k.const(prior * size)).s[0]
+        s3 = k.total(k.ew("scale", k.ew("adds", k.ew("lgamma", k.rowsum(distr)), s=-lg_ps), s=-1.0)).s[0]
+        return s1 + s2 + s3
+
+    def _approx_bound(self, k, M, Dt, sub_sampling=False):
+        n, v = M.r, M.c
+        nc = self.components_m_.r
+        ddt = _dirichlet_expectation_2d(k, Dt)             # n x k
+        dcomp = _dirichlet_expectation_2d(k, self.components_m_)   # k x v
+        zero = _M.zeros(n, v)
+        terms = [k.ew("add", k.ew("add", zero, ddt.cols(t, t + 1)), dcomp.rows(t, t + 1)) for t in range(nc)]
+        mx = terms[0]
+        for t in range(1, nc):
+            mx = k.ew("max", mx, terms[t])
+        acc = _M.zeros(n, v)
+        for t in range(nc):
+            acc = k.ew("add", acc, k.ew("exp", k.ew("sub", terms[t], mx)))
+        lse = k.ew("add", k.ew("logs", acc, s=1.1754943508222875e-38), mx)
+        score = k.total(k.ew("mul", M, lse)).s[0]
+        score += self._loglik(k, self.doc_topic_prior_, Dt, ddt, nc)
+        if sub_sampling:
+            score *= float(self.total_samples) / n
+        score += self._loglik(k, self.topic_word_prior_, self.components_m_, dcomp, v)
+        return score
+
+    def _perplexity(self, k, M, Dt, sub_sampling=False):
+        bound = self._approx_bound(k, M, Dt, sub_sampling)
+        word_cnt = k.total(M).s[0]
+        if sub_sampling:
+            word_cnt *= float(self.total_samples) / M.r
+        if not word_cnt:
+            return math.inf
+        return self._kit().ew("exp", k.const(-bound / word_cnt)).s[0]
+
+    def score(self, X, y=None):
+        k, M, Dt = self._unnormalized(X)
+        return self._approx_bound(k, M, Dt)
+
+    def perplexity(self, X, sub_sampling=False):
+        k, M, Dt = self._unnormalized(X)
+        return self._perplexity(k, M, Dt, sub_sampling)
+
+
+# ================================================================ manifold: Isomap, MDS, LLE
+def _knn_lists(k, Q, X, n_neighbors, exclude_self):
+    """(indices, squared distances) of the n_neighbors nearest rows of X for
+    every row of Q, ascending, ties to the lower index; `exclude_self` drops
+    the query's own index (queries ARE the training rows)."""
+    D = k.sqdist(Q, X)
+    idx, dst = [], []
+    for i in range(Q.r):
+        row = D.row(i)
+        order = sorted(range(X.r), key=lambda j: (row[j], j))
+        if exclude_self:
+            order = [j for j in order if j != i]
+        sel = order[:n_neighbors]
+        idx.append(sel)
+        dst.append([row[j] for j in sel])
+    return idx, dst
+
+
+def _center_kernel(k, K):
+    """sklearn KernelCenterer.fit_transform: K - row means - column means + total mean.
+    Returns (Kc, column means (1 x n), total mean (1 x 1))."""
+    n = K.r
+    col = k.ew("scale", k.colsum(K), s=1.0 / n)
+    allm = k.ew("scale", k.total(col), s=1.0 / n)
+    row = k.ew("scale", k.rowsum(K), s=1.0 / K.c)
+    Kc = k.ew("add", k.ew("sub", k.ew("sub", K, col), row), allm)
+    return Kc, col, allm
+
+
+def _top_eig(k, A, nc):
+    """The nc LARGEST eigenpairs of symmetric A (descending), vectors in
+    columns, each column signed by sklearn's svd_flip(u_based_decision=True)."""
+    w, V = k.eigh(A)
+    n = A.r
+    order = list(range(n - 1, n - 1 - nc, -1))
+    w, V = w.take_cols(order), V.take_cols(order)
+    fl = []
+    for j in range(nc):
+        col = V.cols(j, j + 1).s
+        best, arg = -1.0, 0
+        for i, v in enumerate(col):
+            if abs(v) > best:
+                best, arg = abs(v), i
+        fl.append(col[arg] < 0)
+    return w, V.neg_cols(fl)
+
+
+def _fix_components(k, X, Wg):
+    """sklearn `utils/graph.py::_fix_connected_components` on a dense graph:
+    for every pair of connected components (i < j, labels by lowest member),
+    the closest pair of points between them gets an edge of their distance."""
+    n = Wg.r
+    labels = [-1] * n
+    comp = 0
+    for s0 in range(n):
+        if labels[s0] >= 0:
+            continue
+        stack = [s0]
+        labels[s0] = comp
+        while stack:
+            u = stack.pop()
+            for v in range(n):
+                if labels[v] < 0 and (Wg.s[u * n + v] != 0 or Wg.s[v * n + u] != 0):
+                    labels[v] = comp
+                    stack.append(v)
+        comp += 1
+    if comp == 1:
+        return Wg, 1
+    import warnings
+    warnings.warn(f"The number of connected components of the neighbors graph is {comp} > 1. "
+                  "Completing the graph to fit Isomap might be slow.", stacklevel=3)
+    D = k.ew("sqrt", k.sqdist(X, X))
+    Wg = Wg.copy()
+    for a in range(comp):
+        ia = [i for i in range(n) if labels[i] == a]
+        for b in range(a + 1, comp):
+            ib = [i for i in range(n) if labels[i] == b]
+            best = None
+            for i in ia:
+                for j in ib:
+                    v = D.s[i * n + j]
+                    if best is None or v < best[0]:
+                        best = (v, i, j)
+            v, i, j = best
+            Wg.s[i * n + j] = v if v != 0 else 1e-10
+            Wg.s[j * n + i] = Wg.s[i * n + j]
+    return Wg, comp
+
+
+class Isomap(_Base):
+    """sklearn.manifold.Isomap (reference: scikit-learn `manifold/_isomap.py`
+    with `KernelPCA(kernel='precomputed')` and `utils/graph.py`): the
+    Euclidean kNN distance graph (ties to the lower index), all-pairs
+    shortest paths by Dijkstra (one source per thread), the kernel
+    -0.5 * D^2 centered, its top eigenpairs (Jacobi eigh). REFUSED BY NAME:
+    radius, metrics other than euclidean/minkowski p=2."""
+    _parameters = ("n_neighbors", "n_components", "eigen_solver", "path_method", "metric", "p", "numeric_mode")
+
+    def __init__(self, *, n_neighbors=5, radius=None, n_components=2, eigen_solver="auto", tol=0, max_iter=None,
+                 path_method="auto", neighbors_algorithm="auto", n_jobs=None, metric="minkowski", p=2,
+                 metric_params=None, numeric_mode=None):
+        self.n_neighbors, self.radius, self.n_components = n_neighbors, radius, n_components
+        self.eigen_solver, self.tol, self.max_iter, self.path_method = eigen_solver, tol, max_iter, path_method
+        self.neighbors_algorithm, self.n_jobs, self.metric, self.p = neighbors_algorithm, n_jobs, metric, p
+        self.metric_params, self.numeric_mode = metric_params, numeric_mode
+
+    def fit(self, X, y=None):
+        self.numeric_mode_ = _mode(self.numeric_mode)
+        if self.radius is not None:
+            raise NotImplementedError("Isomap: radius neighborhoods are not carried; use n_neighbors")
+        if not (self.metric == "euclidean" or (self.metric == "minkowski" and self.p == 2)):
+            raise NotImplementedError("Isomap: only the Euclidean metric is carried")
+        k = self._kit()
+        M = _M.from_input(X)
+        n = M.r
+        nn = int(self.n_neighbors)
+        idx, dst = _knn_lists(k, M, M, nn, True)
+        Wg = _M.zeros(n, n)
+        sq = _M.of([v for row in dst for v in row], n, nn)
+        sq = k.ew("sqrt", sq)
+        for i in range(n):
+            for a, j in enumerate(idx[i]):
+                v = sq.s[i * nn + a]
+                Wg.s[i * n + j] = v if v != 0 else 1e-10   # scipy drops explicit zeros; keep the edge
+        Wg, self.n_connected_components_ = _fix_components(k, M, Wg)
+        D = k.dijkstra(Wg)
+        self.dist_matrix_m_ = D
+        self.dist_matrix_ = D.out()
+        G = k.ew("scale", k.ew("sq", D), s=-0.5)
+        Kc, self._k_col, self._k_all = _center_kernel(k, G)
+        w, V = _top_eig(k, Kc, int(self.n_components))
+        self.eigenvalues_m_ = w
+        self.eigenvectors_m_ = V
+        self.embedding_m_ = k.ew("mul", V, k.ew("sqrt", w))
+        self.embedding_ = self.embedding_m_.out()
+        self._fit_X, self._knn = M, nn
+        self.n_features_in_ = M.c
+        self._Kc = Kc
+        return self
+
+    def fit_transform(self, X, y=None):
+        return self.fit(X).embedding_
+
+    def transform(self, X):
+        """sklearn Isomap.transform: geodesic distance of each query through
+        its k nearest training points, then KernelPCA.transform."""
+        self._check("embedding_m_")
+        k = self._kit()
+        Q = _M.from_input(X)
+        idx, dst = _knn_lists(k, Q, self._fit_X, self._knn, False)
+        n = self._fit_X.r
+        sq = k.ew("sqrt", _M.of([v for row in dst for v in row], Q.r, self._knn))
+        D = self.dist_matrix_m_
+        G = None
+        for a in range(self._knn):
+            rows = D.take_rows([idx[i][a] for i in range(Q.r)])
+            cand = k.ew("add", rows, sq.cols(a, a + 1))
+            G = cand if G is None else k.ew("min", G, cand)
+        G = k.ew("scale", k.ew("sq", G), s=-0.5)
+        row = k.ew("scale", k.rowsum(G), s=1.0 / n)
+        Kc = k.ew("add", k.ew("sub", k.ew("sub", G, self._k_col), row), self._k_all)
+        V = k.ew("div", self.eigenvectors_m_, k.ew("sqrt", self.eigenvalues_m_))
+        return k.mm(Kc, V).out()
+
+    def reconstruction_error(self):
+        self._check("embedding_m_")
+        k = self._kit()
+        # a difference of two nearly equal sums: accumulated in float64
+        # (sequential IEEE adds of exact float32 squares) or it cancels
+        t = _dsum(v * v for v in self._Kc.s) - _dsum(v * v for v in self.eigenvalues_m_.s)
+        return math.sqrt(t) / self._Kc.r if t > 0 else 0.0
+
+
+class ClassicalMDS(_Base):
+    """sklearn.manifold.ClassicalMDS (reference: scikit-learn
+    `manifold/_classical_mds.py`): double-centred -0.5 * D^2, its top
+    eigenpairs, embedding = V sqrt(max(w, 0))."""
+    _parameters = ("n_components", "metric", "numeric_mode")
+
+    def __init__(self, n_components=2, *, metric="euclidean", metric_params=None, numeric_mode=None):
+        self.n_components, self.metric, self.metric_params, self.numeric_mode = n_components, metric, metric_params, numeric_mode
+
+    def fit(self, X, y=None):
+        self.numeric_mode_ = _mode(self.numeric_mode)
+        k = self._kit()
+        M = _M.from_input(X)
+        if self.metric == "precomputed":
+            D2 = k.ew("sq", M)
+            self.dissimilarity_matrix_ = M.out()
+        elif self.metric == "euclidean":
+            D2 = k.sqdist(M, M)
+            self.dissimilarity_matrix_ = k.ew("sqrt", D2).out()
+        else:
+            raise NotImplementedError("ClassicalMDS: metric must be 'euclidean' or 'precomputed'")
+        B, _, _ = _center_kernel(k, k.ew("scale", D2, s=-0.5))
+        w, V = _top_eig(k, B, int(self.n_components))
+        self.eigenvalues_ = w.out((w.c,))
+        self.embedding_m_ = k.ew("mul", V, k.ew("sqrt", w))
+        self.embedding_ = self.embedding_m_.out()
+        self.n_features_in_ = M.c
+        return self
+
+    def fit_transform(self, X, y=None):
+        return self.fit(X).embedding_
+
+
+class MDS(_Base):
+    """sklearn.manifold.MDS (reference: scikit-learn `manifold/_mds.py`,
+    `_smacof_single`, `smacof`): metric SMACOF with the Guttman transform,
+    `n_init` starts (random ones from the Philox stream), the lowest stress
+    kept. init 'random' (the default the FutureWarning names), 'classical_mds'
+    or an array. REFUSED BY NAME: metric_mds=False (non-metric MDS needs
+    isotonic regression)."""
+    _parameters = ("n_components", "metric_mds", "n_init", "init", "max_iter", "eps", "random_state", "metric",
+                   "normalized_stress", "numeric_mode")
+
+    def __init__(self, n_components=2, *, metric_mds=True, n_init=1, init="random", max_iter=300, verbose=0,
+                 eps=1e-6, n_jobs=None, random_state=None, metric="euclidean", metric_params=None,
+                 normalized_stress="auto", numeric_mode=None):
+        self.n_components, self.metric_mds, self.n_init, self.init = n_components, metric_mds, n_init, init
+        self.max_iter, self.verbose, self.eps, self.n_jobs = max_iter, verbose, eps, n_jobs
+        self.random_state, self.metric, self.metric_params = random_state, metric, metric_params
+        self.normalized_stress, self.numeric_mode = normalized_stress, numeric_mode
+
+    def _dist(self, k, Y):
+        return k.ew("sqrt", k.sqdist(Y, Y))
+
+    def _single(self, k, Dis, Y, run):
+        n = Dis.r
+        d = self._dist(k, Y)
+        old = None
+        it = 0
+        for it in range(1, self.max_iter + 1):
+            dz = k.ew("select", d, d, k.const(1e-5), s=0.0)
+            ratio = k.ew("div", Dis, dz)
+            B = k.ew("scale", ratio, s=-1.0)
+            rs = k.rowsum(ratio)
+            B = B.copy()
+            for i in range(n):
+                B.s[i * n + i] = _f32(B.s[i * n + i] + rs.s[i])
+            Y = k.ew("scale", k.mm(B, Y), s=1.0 / n)
+            d = self._dist(k, Y)
+            stress = k.total(k.ew("sqdiff", d, Dis)).s[0] / 2
+            if old is not None:
+                ssd = k.total(k.ew("sq", d)).s[0]
+                if (old - stress) / (ssd / 2) < self.eps:
+                    break
+            old = stress
+        if self._norm:
+            ssd = k.total(k.ew("sq", d)).s[0]
+            stress = math.sqrt(stress / (ssd / 2)) if ssd else 0.0
+        return Y, stress, it
+
+    def fit_transform(self, X, y=None, init=None):
+        self.numeric_mode_ = _mode(self.numeric_mode)
+        if not self.metric_mds:
+            raise NotImplementedError("MDS: metric_mds=False (non-metric SMACOF) is not carried")
+        k = self._kit()
+        M = _M.from_input(X)
+        if self.metric == "precomputed":
+            Dis = M
+        elif self.metric == "euclidean":
+            Dis = self._dist(k, M)
+        else:
+            raise NotImplementedError("MDS: metric must be 'euclidean' or 'precomputed'")
+        self.dissimilarity_matrix_ = Dis.out()
+        self._norm = (self.normalized_stress is True) or (self.normalized_stress == "auto" and not self.metric_mds)
+        n, nc = Dis.r, int(self.n_components)
+        seed = _seed_of(self.random_state)
+        if init is not None:
+            starts = [_M.from_input(init, "init")]
+        elif self.init == "classical_mds":
+            starts = [ClassicalMDS(nc, metric="precomputed", numeric_mode=self.numeric_mode_).fit(Dis.out()).embedding_m_]
+        elif self.init == "random":
+            starts = [k.rand(n, nc, seed, 70 + r, 0) for r in range(int(self.n_init))]
+        else:
+            raise ValueError("init must be 'random', 'classical_mds' or an array")
+        best = None
+        for r, Y0 in enumerate(starts):
+            Y, stress, it = self._single(k, Dis, Y0, r)
+            if best is None or stress < best[1]:
+                best = (Y, stress, it)
+        Y, self.stress_, self.n_iter_ = best
+        self.embedding_ = Y.out()
+        self.n_features_in_ = M.c
+        return self.embedding_
+
+    def fit(self, X, y=None, init=None):
+        self.fit_transform(X, init=init)
+        return self
+
+
+class LocallyLinearEmbedding(_Base):
+    """sklearn.manifold.LocallyLinearEmbedding, method='standard' (reference:
+    scikit-learn `manifold/_locally_linear.py`: `barycenter_kneighbors_graph`,
+    `barycenter_weights`, `null_space` (here the smallest right singular
+    vectors of I - W, which are M's smallest eigenvectors),
+    `locally_linear_embedding`, `transform`). M = (I - W)^T (I - W), its
+    n_components + 1 smallest eigenvectors, the first dropped.
+    REFUSED BY NAME: method 'hessian', 'modified', 'ltsa'."""
+    _parameters = ("n_neighbors", "n_components", "reg", "eigen_solver", "method", "random_state", "numeric_mode")
+
+    def __init__(self, *, n_neighbors=5, n_components=2, reg=1e-3, eigen_solver="auto", tol=1e-6, max_iter=100,
+                 method="standard", hessian_tol=1e-4, modified_tol=1e-12, neighbors_algorithm="auto",
+                 random_state=None, n_jobs=None, numeric_mode=None):
+        self.n_neighbors, self.n_components, self.reg, self.eigen_solver = n_neighbors, n_components, reg, eigen_solver
+        self.tol, self.max_iter, self.method, self.hessian_tol = tol, max_iter, method, hessian_tol
+        self.modified_tol, self.neighbors_algorithm, self.random_state = modified_tol, neighbors_algorithm, random_state
+        self.n_jobs, self.numeric_mode = n_jobs, numeric_mode
+
+    def fit(self, X, y=None):
+        self.numeric_mode_ = _mode(self.numeric_mode)
+        if self.method != "standard":
+            raise NotImplementedError(f"LocallyLinearEmbedding: method={self.method!r} is not carried; use 'standard'")
+        k = self._kit()
+        M = _M.from_input(X)
+        n = M.r
+        nn = int(self.n_neighbors)
+        nc = int(self.n_components)
+        if nn >= n:
+            raise ValueError("Expected n_neighbors < n_samples")
+        idx, _ = _knn_lists(k, M, M, nn, True)
+        Wb = k.barycenter(M, M, idx, self.reg)
+        IW = _M.zeros(n, n)
+        for i in range(n):
+            IW.s[i * n + i] = 1.0
+            for a, j in enumerate(idx[i]):
+                IW.s[i * n + j] = _f32(IW.s[i * n + j] - Wb.s[i * nn + a])
+        # The eigenvectors of M = (I - W)^T (I - W) for its smallest
+        # eigenvalues are the right singular vectors of I - W for its
+        # smallest singular values. Those eigenvalues sit near 1e-7, under
+        # float32 resolution next to M's largest, so the dense eigh of M
+        # cannot order them; the one-sided Jacobi SVD of I - W resolves its
+        # small singular values to high RELATIVE accuracy.
+        S, Vt = k.svd(IW)
+        rows = list(range(n - 2, n - 2 - nc, -1))
+        self.embedding_m_ = Vt.take_rows(rows).T
+        self.embedding_ = self.embedding_m_.out()
+        sv = S.take_cols(rows)
+        self.reconstruction_error_ = _dsum(v * v for v in sv.s)
+        self._fit_X, self._knn = M, nn
+        self.n_features_in_ = M.c
+        return self
+
+    def fit_transform(self, X, y=None):
+        return self.fit(X).embedding_
+
+    def transform(self, X):
+        self._check("embedding_m_")
+        k = self._kit()
+        Q = _M.from_input(X)
+        idx, _ = _knn_lists(k, Q, self._fit_X, self._knn, False)
+        Wb = k.barycenter(Q, self._fit_X, idx, self.reg)
+        out = _M.zeros(Q.r, self.embedding_m_.c)
+        # X_new[i] = sum_a W[i, a] * embedding[idx[i][a]]  (one gemm row per query)
+        for i in range(Q.r):
+            E = self.embedding_m_.take_rows(idx[i])
+            r = k.mm(Wb.rows(i, i + 1), E)
+            out.s[i * out.c:(i + 1) * out.c] = r.s
+        return out.out()

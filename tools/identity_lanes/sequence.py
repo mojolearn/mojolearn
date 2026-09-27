@@ -79,6 +79,8 @@ def _sequence_opt_run(ml, cls, X, steps=6, **kw):
         g1 = np.ascontiguousarray(X[base:base + 32, 8:16], dtype=np.float32) * np.float32(0.5)
         g2 = np.ascontiguousarray(X[base + 32:base + 40, 1], dtype=np.float32)
         opt.step([g1, g2])
+    if isinstance(opt.state, list) and opt.state and isinstance(opt.state[0], dict):
+        return dict(params=_h(p1, p2), opt=opt)
     return dict(params=_h(p1, p2), state=_h(*opt.state))
 
 
@@ -143,3 +145,76 @@ def _(ml, X, yc, yr, Xh=None):
     b = ml.VAR(y).fit(maxlags=1, trend="n")
     return _fit(dict(params=_h(a.params), sigma_u=_h(a.sigma_u), resid=_h(a.resid),
                      forecast=_h(a.forecast(y, 10)), n_params=_h(b.params), n_forecast=_h(b.forecast(y, 10))))
+
+
+@lane("sequence-mlp")
+def _(ml, X, yc, yr, Xh=None):
+    """sklearn-shaped MLPs on 384 rows of the first 10 columns: a regressor
+    (two tanh layers, Adam, L2) and a three-class classifier (relu, SGD with
+    Nesterov momentum and the adaptive rate), shuffled batches of 64,
+    six epochs each, plus a binary logistic-output classifier."""
+    Xm = np.ascontiguousarray(X[:384, :10], dtype=np.float32)
+    y3 = (np.asarray(yc[:384]) + (Xm[:, 5] > 0).astype(np.int64)).astype(np.int64)
+    r = ml.MLPRegressor(hidden_layer_sizes=(12, 8), activation="tanh", alpha=1e-3, batch_size=64,
+                        max_iter=6, random_state=0, learning_rate_init=1e-2).fit(Xm, yr[:384])
+    c = ml.MLPClassifier(hidden_layer_sizes=(10,), solver="sgd", learning_rate="adaptive", batch_size=64,
+                         max_iter=6, random_state=1, learning_rate_init=5e-2).fit(Xm, y3)
+    b = ml.MLPClassifier(hidden_layer_sizes=(6,), activation="logistic", batch_size=64, max_iter=6,
+                         random_state=2).fit(Xm, yc[:384])
+    Xhm = np.ascontiguousarray(Xh[:256, :10], dtype=np.float32)
+    return _fit(dict(r_curve=_h(np.asarray(r.loss_curve_)), r_coefs=_h(*r.coefs_, *r.intercepts_),
+                     r_pred=_h(r.predict(Xm)), c_curve=_h(np.asarray(c.loss_curve_)),
+                     c_coefs=_h(*c.coefs_, *c.intercepts_), c_proba=_h(c.predict_proba(Xm)),
+                     b_proba=_h(b.predict_proba(Xm))),
+                r, lambda e: (e.predict(Xhm),))
+
+
+@lane("sequence-rnn")
+def _(ml, X, yc, yr, Xh=None):
+    """A two-layer tanh RNN regressor (Adam) and a one-layer relu RNN
+    classifier (AdamW), the LSTM lane's data and batches."""
+    Xs = _sequence_seq(X)
+    ycs, yrs = _sequence_targets(yc, yr)
+    r = ml.RNNRegressor(hidden_size=12, num_layers=2, learning_rate=1e-2, batch_size=32, max_epochs=2,
+                        random_state=7).fit(Xs, yrs)
+    c = ml.RNNClassifier(hidden_size=10, nonlinearity="relu", optimizer="adamw", learning_rate=1e-2,
+                         batch_size=32, max_epochs=2, random_state=8).fit(Xs, ycs)
+    Xhs = _sequence_seq(Xh)
+    return _fit(dict(r_loss=_h(r.loss_curve_), r_params=_h(r.params_), r_pred=_h(r.predict(Xs)),
+                     r_seq=_h(r.hidden_sequence(Xs[:16])),
+                     c_loss=_h(c.loss_curve_), c_params=_h(c.params_), c_proba=_h(c.predict_proba(Xs))),
+                r, lambda e: (e.predict(Xhs),))
+
+
+@lane("sequence-lion")
+def _(ml, X, yc, yr, Xh=None):
+    """Lion at the paper's defaults and with weight decay and other betas,
+    and an LSTM regressor trained by it."""
+    a = _sequence_opt_run(ml, ml.Lion, X, lr=1e-3)
+    b = _sequence_opt_run(ml, ml.Lion, X, lr=3e-3, betas=(0.95, 0.98), weight_decay=0.1)
+    Xs = _sequence_seq(X)
+    ycs, yrs = _sequence_targets(yc, yr)
+    r = ml.LSTMRegressor(hidden_size=8, optimizer="lion", learning_rate=1e-3, batch_size=32, max_epochs=1,
+                         random_state=9).fit(Xs, yrs)
+    return _fit(dict(plain=a["params"], plain_state=a["state"], wd=b["params"], wd_state=b["state"],
+                     lstm=_h(r.params_, r.loss_curve_)))
+
+
+@lane("sequence-adafactor")
+def _(ml, X, yc, yr, Xh=None):
+    """Adafactor at torch's defaults and with weight decay, d and beta2_decay
+    moved: the factored arm (a 32 x 8 matrix) and the vector arm."""
+    a = _sequence_opt_run(ml, ml.Adafactor, X)
+    b = _sequence_opt_run(ml, ml.Adafactor, X, lr=3e-2, beta2_decay=-0.6, d=2.0, weight_decay=0.1)
+    return _fit(dict(plain=a["params"], plain_state=_h(*[v for s in a["opt"].state for v in s.values()]),
+                     moved=b["params"], moved_state=_h(*[v for s in b["opt"].state for v in s.values()])))
+
+
+@lane("sequence-lamb")
+def _(ml, X, yc, yr, Xh=None):
+    """LAMB at timm's defaults (global clip 1.0, weight decay 0.01) and with
+    trust_clip, always_adapt, no decay and no clip."""
+    a = _sequence_opt_run(ml, ml.LAMB, X, lr=1e-2)
+    b = _sequence_opt_run(ml, ml.LAMB, X, lr=1e-2, weight_decay=0.0, always_adapt=True, trust_clip=True,
+                          max_grad_norm=None)
+    return _fit(dict(plain=a["params"], plain_state=a["state"], adapt=b["params"], adapt_state=b["state"]))

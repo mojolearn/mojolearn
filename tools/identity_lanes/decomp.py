@@ -134,3 +134,88 @@ def _(ml, X, yc, yr, Xh=None):
     xm, resm, rankm, _ = ml.lstsq(X[:300], np.ascontiguousarray(X[300:600, :3]))
     return _fit(dict(U=_h(U), s=_h(s), Vt=_h(Vt), Ut=_h(Ut), st=_h(st), Vtt=_h(Vtt), x=_h(x), res=_h(res),
                      rank=_h(np.int32(rank)), sv=_h(sv), xm=_h(xm), resm=_h(resm), rankm=_h(np.int32(rankm))))
+
+
+@lane("x-decomp-pls")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.PLSRegression(n_components=3).fit(X[:2000], yr[:2000])
+    Y2 = np.ascontiguousarray(np.stack([yr[:2000], X[:2000, 3]], axis=1))
+    c = ml.PLSCanonical(n_components=2).fit(X[:2000, :10], np.ascontiguousarray(X[:2000, 10:14]))
+    a = ml.CCA(n_components=2, max_iter=100).fit(X[:1000, :8], np.ascontiguousarray(X[:1000, 8:12]))
+    m2 = ml.PLSRegression(n_components=2, scale=False).fit(X[:2000], Y2)
+    return _fit(dict(coef=_h(m.coef_), xw=_h(m.x_weights_), xr=_h(m.x_rotations_), pred=_h(m.predict(X[:256])),
+                     T=_h(m.transform(X[:256])), it=_h(np.int32(m.n_iter_)), c_xr=_h(c.x_rotations_),
+                     c_yr=_h(c.y_rotations_), c_T=_h(*c.transform(X[:256, :10], np.ascontiguousarray(X[:256, 10:14]))),
+                     a_xr=_h(a.x_rotations_), a_yr=_h(a.y_rotations_), a_it=_h(np.int32(a.n_iter_)),
+                     m2=_h(m2.coef_, m2.predict(X[:256]))),
+                m, lambda e: (e.predict(Xh[:256]), e.transform(Xh[:256])))
+
+
+_batch_decl(_rows_calls("predict", "transform", sl=slice(0, 256)), "x-decomp-pls")
+
+
+@lane("x-decomp-dict-learning")
+def _(ml, X, yc, yr, Xh=None):
+    S = X[:300]
+    m = ml.DictionaryLearning(n_components=6, alpha=0.5, max_iter=8, random_state=0)
+    code = m.fit_transform(S)
+    c = ml.DictionaryLearning(n_components=5, alpha=0.3, max_iter=6, fit_algorithm="cd",
+                              transform_algorithm="lasso_cd", split_sign=True, random_state=1).fit(S)
+    t = ml.DictionaryLearning(n_components=4, alpha=0.2, max_iter=5, transform_algorithm="threshold",
+                              transform_alpha=0.1, positive_dict=True, positive_code=True).fit(S[:200])
+    mb = ml.MiniBatchDictionaryLearning(n_components=5, alpha=0.4, batch_size=64, max_iter=3, random_state=2,
+                                        transform_algorithm="lasso_lars").fit(X[:600])
+    return _fit(dict(code=_h(code), D=_h(m.components_), err=_h(np.float64(m.error_)), T=_h(m.transform(S[:128])),
+                     cD=_h(c.components_), cT=_h(c.transform(S[:128])), tT=_h(t.transform(S[:128]), t.components_),
+                     mbD=_h(mb.components_), mbT=_h(mb.transform(S[:128])), mbn=_h(np.int32(mb.n_steps_))),
+                m, lambda e: (e.transform(Xh[:256]),))
+
+
+@lane("x-decomp-sparse-pca")
+def _(ml, X, yc, yr, Xh=None):
+    S = X[:300]
+    m = ml.SparsePCA(n_components=4, alpha=1, max_iter=8, random_state=0).fit(S)
+    c = ml.SparsePCA(n_components=3, alpha=0.5, max_iter=6, method="cd").fit(S)
+    b = ml.MiniBatchSparsePCA(n_components=3, alpha=1, max_iter=4, batch_size=4, random_state=3).fit(X[:200])
+    return _fit(dict(comp=_h(m.components_), T=_h(m.transform(S[:128])), err=_h(np.float64(m.error_)),
+                     ccomp=_h(c.components_), bcomp=_h(b.components_), bT=_h(b.transform(S[:128]))),
+                m, lambda e: (e.transform(Xh[:256]),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-decomp-dict-learning", "x-decomp-sparse-pca")
+
+
+@lane("x-decomp-lda")
+def _(ml, X, yc, yr, Xh=None):
+    # counts: |X| rounded down to integers (elementwise, the same bytes on every box)
+    C = np.floor(np.abs(X[:400]) * np.float32(3)).astype(np.float32)
+    C = np.minimum(C, np.float32(50))
+    m = ml.LatentDirichletAllocation(n_components=4, max_iter=5, random_state=0).fit(C)
+    o = ml.LatentDirichletAllocation(n_components=3, learning_method="online", batch_size=100, max_iter=2,
+                                     random_state=1).fit(C)
+    return _fit(dict(comp=_h(m.components_), bound=_h(np.float32(m.bound_)), T=_h(m.transform(C[:128])),
+                     score=_h(np.float64(m.score(C[:128]))), ocomp=_h(o.components_), oT=_h(o.transform(C[:128]))),
+                m, lambda e: (e.transform(np.minimum(np.floor(np.abs(Xh[:256]) * np.float32(3)), np.float32(50)).astype(np.float32)),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256),
+                        prep=lambda Xh: np.minimum(np.floor(np.abs(Xh) * np.float32(3)), np.float32(50)).astype(np.float32)),
+            "x-decomp-lda")
+
+
+@lane("x-decomp-manifold")
+def _(ml, X, yc, yr, Xh=None):
+    S = X[:160]
+    iso = ml.Isomap(n_neighbors=8, n_components=3).fit(S)
+    cm = ml.ClassicalMDS(n_components=2).fit(S)
+    md = ml.MDS(n_components=2, init="random", n_init=2, max_iter=40, random_state=0)
+    emb = md.fit_transform(S[:100])
+    mc = ml.MDS(n_components=2, init="classical_mds", max_iter=30).fit(S[:100])
+    lle = ml.LocallyLinearEmbedding(n_neighbors=10, n_components=2).fit(S)
+    return _fit(dict(iso=_h(iso.embedding_), isod=_h(iso.dist_matrix_), isoT=_h(iso.transform(Xh[:64])),
+                     cm=_h(cm.embedding_), md=_h(emb), mds=_h(np.float64(md.stress_)), mc=_h(mc.embedding_),
+                     lle=_h(lle.embedding_), lleT=_h(lle.transform(Xh[:64]))),
+                iso, lambda e: (e.transform(Xh[:128]),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 128)), "x-decomp-manifold")
