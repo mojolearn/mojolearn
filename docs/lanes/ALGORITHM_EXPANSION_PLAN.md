@@ -4,6 +4,21 @@ Lanes merge origin/main before every merge, so this section reaches every
 worktree. The orchestrator changes lane instructions HERE instead of
 messaging lanes. Newest items are at the top.
 
+0000. **Fixture RNG and scaffolding are shared (lane consolidate, main
+   4618ca187).** New check and binding code uses checks/fixture_rng.mojo,
+   checks/scaffold.mojo and the binding prelude (checks/binding_prelude.mojo);
+   never add another copy of those helpers. `pixi run check-fixture-rng`
+   (in the CPU gate) fails on a NEW fixture-RNG definition
+   (`tools/fixture_rng_census.py`) and on any existing copy that differs
+   from its canonical behavior bit for bit.
+000. **Re-prove seam arms ONCE on the fixed lane check (main 02b63f107).**
+   Before 3084ca09c, a sabotage arm that FAILED TO BUILD counted as a bite.
+   If your lane recorded `--pass 2` seam bites before 02b63f107, re-run ONLY
+   your seam arms (the `.checks` patches, not the clean lane runs) once on
+   your pod with the fixed tool, and record the result in your progress
+   file. A BROKEN ARM means fix that patch, then resubmit only the affected
+   lanes to the stewards. A lane that passes this rerun is done with it:
+   never repeat it.
 00. **End your session at every checkpoint (saves tokens; Andrew,
    2026-09-27).** The checkpoints are:
    - each phase merged: pass-2 proof, option parity, GPU speed, CPU speed

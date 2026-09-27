@@ -14,7 +14,7 @@ positions are exact rationals i / n_bins, so the integer/fraction split of a
 position is decided in integer arithmetic.
 """
 from std.memory import bitcast
-from x_prep.common import FP, IP, p, ld, st
+from x_prep.common import FP, IP, p, ld, st, canonical_nan
 from x_prep.prims import add, sub, mul, div
 
 comptime KMEANS_MAX_ITER = 300
@@ -160,3 +160,22 @@ def kbins_codes_unit(t: Int, f: FP, q: IP):
         if ld(f, E + i) <= x:
             k += 1
     st(f, p(q, 6) + t, Float32(k))
+
+
+def kbins_inverse_unit(t: Int, f: FP, q: IP):
+    """q = [CODES, n, d, EDGES, STRIDE, OUT]; t = element: the reference's
+    inverse_transform, the bin centre (edges[k] + edges[k+1]) * 0.5 of bin
+    k = CODES[t]. A constant column's (-inf, inf) centre, and a negative
+    code, are the canonical NaN."""
+    var d = p(q, 2)
+    var c = t % d
+    var k = Int(ld(f, p(q, 0) + t))
+    if k < 0:
+        f.unsafe_store(p(q, 5) + t, canonical_nan())
+        return
+    var E = p(q, 3) + c * p(q, 4)
+    var v = mul(add(ld(f, E + k), ld(f, E + k + 1)), Float32(0.5))
+    if v != v:
+        f.unsafe_store(p(q, 5) + t, canonical_nan())
+        return
+    st(f, p(q, 5) + t, v)

@@ -47,6 +47,13 @@ Proof (step 2), all six algorithms, NVIDIA H100 pod:
   afternoon; `dev_pod.sh up cluster 240 --vendor amd` retrying), the M2 Pro
   steward PASS, then speed.
 
+- Directive 000 (2026-09-27, session 2): the seam bites above were recorded
+  before the lane-check fix (3084ca09c, merged 02b63f107). Re-run ONCE on
+  the H100 pod with the fixed tool (box `tools/algos_lane_check.py` md5 =
+  origin/main's): `algos_lane_check.sh x-cluster-meanshift --pass 2`. All
+  12 arms (5100-5111) BUILD, RUN and FAIL under their patch, PASS after
+  reversal; no BROKEN arm; clean lane AGREE. Done; never repeat.
+
 ## Option parity (CURRENT DIRECTIVES item 2), the lane's own six first
 
 Implemented (x_cluster/NOT_IMPLEMENTED.tsv rows removed or narrowed), each
@@ -85,18 +92,18 @@ Agglomerative, Spectral) option rows, then speed.
 
 - Merged on main at e81b76c38: pass 1 (six algorithms), pass-2 proof, option
   parity for the six and for GaussianMixture, the KMeans weighted fix.
-- Steward identity request `1790530630176-cluster-e81b76c386` (15 lanes,
-  `--pass 2`, e2e patch) queued on m2pro and do-amd; m3ultra spooled.
-  Read it with `python3 tools/apple_steward.py status | grep cluster`. A FAIL
-  comes back here to fix.
-- AMD box: none allocated in `tools/dev_pod.sh list`; my own
-  `dev_pod.sh up cluster 240 --vendor amd` is retrying (no MI300X stock on
-  RunPod or Hot Aisle so far). do-amd covers the AMD column meanwhile.
+- Steward identity request `1790530630176-cluster-e81b76c386` (all 15
+  x-cluster lanes, `--pass 2`, the e2e patch, commit e81b76c38): **PASS on
+  m2pro (Apple Metal == Arm CPU) and PASS on do-amd (MI300X == x86 CPU)**;
+  m3ultra spooled until its GPT-3 segment ends. With the H100 pod run, the
+  lane is proven on NVIDIA, AMD, Apple and both CPU columns.
+- AMD box of my own: none (no MI300X stock on RunPod or Hot Aisle all
+  afternoon, retry stopped); do-amd carried the AMD column.
 - NVIDIA pod `cluster` (H100) held; heartbeat `tools/dev_pod.sh extend
   cluster 120`.
 
 Next, in order (CURRENT DIRECTIVES item 1):
-1. Steward verdicts: fix any FAIL.
+1. (done) steward verdicts; a later m3ultra FAIL comes back here.
 2. Option parity for the EXISTING cluster family: DBSCAN metric cosine and
    precomputed (dbscan/NOT_IMPLEMENTED.tsv rows), HDBSCAN
    cluster_selection_epsilon (hdbscan tsv), GaussianMixture save/sample for
