@@ -71,9 +71,13 @@ targets, sparse contingency, numpy RandomState / scipy distributions, n_jobs>1).
 | lanes | verdict |
 |---|---|
 | x-metrics-classification, -regression, -ranking, -cluster, -splitters, -search | AGREE, train 9 fixtures, cuda RTX 4090 vs CPU (Ryzen 7950X), 2026-09-27 |
-| seams 6100-6108 (`x_metrics/seams/x_metrics_check.mojo`, 8 seams host+device) | PASS on RTX 4090; `--pass 2` arms: see below |
+| seams 6100-6108 (`x_metrics/seams/x_metrics_check.mojo`, 8 seams host+device) | PASS on RTX 4090 |
+| `--pass 2`, 5 lanes + `e2e_host_fadd.patch` (host-only +1 ulp in `fadd`) | all 8 seam arms FAIL under their patch and PASS after reversal; the 5 lanes AGREE, DISAGREE on 9/9 fixtures under the sabotage, AGREE after (RTX 4090) |
+| `--pass 2`, x-metrics-splitters + `e2e_host_permute.patch` | first run refused: the selector did not see model_selection reach x_metrics (fixed: `_execute` is a module-level function and model_selection names `_SPLIT_BINDING`); rerun owed |
+| registration (EXPANSION_LANES, door, empty fragment) | merged to main a6f8617a8 on its own (manifest byte-identical; test_host_surface, test_lane_select OK), so the feature diff selects 103 lanes instead of all |
+| steward identity requests at be39c62b6 | 1790544421098 (5 lanes, e2e_host_fadd), 1790544803666 (splitters, e2e_host_permute): queued on m2pro, m3ultra-b, m4pro, do-amd |
 
-(pass-2 results, steward verdicts and merge commit are appended below as they land)
+(the 103-lane CPU == GPU check, the steward verdicts and the merge commit are appended below as they land)
 
 ## Next phases
 - **3. FAST speed** (next session): every x_metrics unit is one thread per
