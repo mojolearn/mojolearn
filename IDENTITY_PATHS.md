@@ -617,7 +617,18 @@ yet)` line with its table rows, in the ledger's columns.
 
 ### `cluster`: rows 110-119
 
-(no rows yet)
+| number | what | hazard | move | status |
+|---|---|---|---|---|
+| 110 | **the cluster lane's squared distance** (`x_cluster/bodies.mojo::sq_dist_rows`, DEVIATIONS 5100/5101; every x_cluster algorithm) | a fold's order and an FMA contraction of `acc + t*t` move low bits per vendor | PIN: features ascending, `t = ftz(a - b)`, `acc = ftz(acc + ftz(identical_mul(t, t)))`, one body for the device kernel and the host loop | check `x_cluster/checks/dist_check.mojo` (fixture separates both spellings; arms 5100/5101 bite); NVIDIA H100 == CPU 2026-09-27; AMD, Apple OWED |
+| 111 | **the nearest-row argmin** (`nearest_row`, DEVIATION 5102; MiniBatchKMeans, MeanShift, AffinityPropagation predict) | an exact distance tie picks a vendor-dependent index | PIN: strict `<`, the lowest index | `nearest_check.mojo`, arm 5102 bites; NVIDIA == CPU; AMD, Apple OWED |
+| 112 | **the row order statistic** (`kth_smallest_row`, DEVIATION 5103; MeanShift bandwidth, OPTICS core distances, the AffinityPropagation median) | a sort or a selection network orders ties and -0.0 per vendor | REPLACE: bisection on the float bits of the non-negative values, order-free and exact | `kth_check.mojo`, arm 5103 bites; NVIDIA == CPU; AMD, Apple OWED |
+| 113 | **the mean-shift seed loop** (`meanshift_seed`, DEVIATION 5104) | the flat-kernel sum over the neighbors in index or tree order | PIN: rows ascending, one `identical_div` per feature, `identical_sqrt` in both tests | `meanshift_check.mojo`, arm 5104 bites; NVIDIA == CPU; AMD, Apple OWED |
+| 114 | **affinity propagation's damping** (`ap_responsibility_row`, DEVIATION 5105) | `R*damping + new*(1-damping)` contracted into an FMA | PIN: two pinned products, one add, each flushed | `ap_check.mojo`, arm 5105 bites; NVIDIA == CPU; AMD, Apple OWED |
+| 115 | **affinity propagation's availability column fold** (`ap_availability_col`, DEVIATION 5106) | NumPy's `sum(axis=0)` pairwise order vs a vendor reduction | PIN: rows ascending in one thread per column, the clamp at 0 off the diagonal | `ap_check.mojo`, arm 5106 bites; NVIDIA == CPU; AMD, Apple OWED |
+| 116 | **the bisecting tree descent** (`tree_descend`, DEVIATION 5107; BisectingKMeans.predict) | an exact tie between the two children | PIN: the LEFT child on a tie, as sklearn's `_labels_inertia` argmin | `descend_check.mojo`, arm 5107 bites; NVIDIA == CPU; AMD, Apple OWED |
+| 117 | **the mixture Mahalanobis fold** (`gauss_q_cell`, DEVIATION 5108; BayesianGaussianMixture) | sklearn's `X @ P - mu @ P` through a vendor GEMM | REPLACE: the difference first, then `a` ascending inside `j` ascending, pinned products | `gauss_check.mojo`, arm 5108 bites; NVIDIA == CPU; AMD, Apple OWED |
+| 118 | **the E-step log-sum-exp** (`resp_row`, DEVIATION 5109) | the vendor exp/log and the sum order | PIN: the first max, the portable exp summed ascending, the portable log | `gauss_check.mojo`, arm 5109 bites; NVIDIA == CPU; AMD, Apple OWED |
+| 119 | **the mixture M-step moments** (`nk_cell`, `xk_cell`, `cov_cell`, DEVIATION 5110) | `resp.T @ X` and the covariance products through a vendor GEMM | PIN: one thread per output cell, rows ascending, pinned products, one quotient | `moments_check.mojo`, arm 5110 bites; NVIDIA == CPU; AMD, Apple OWED |
 
 
 
@@ -647,7 +658,17 @@ yet)` line with its table rows, in the ledger's columns.
 
 ### `trees`: rows 160-169
 
-(no rows yet)
+| row | pathway | what moves bits | move | status |
+|---|---|---|---|---|
+| 160 | **the ensembles' row and feature draws** (`xtrees/ops.mojo` `sample_indices`, `weighted_sample`, `uniform`: Bagging, AdaBoost.R2, DART drops, RandomTreesEmbedding targets, Kernel/Permutation SHAP) | an index mapping (mod vs multiply-shift) or a stateful stream whose draw k depends on earlier calls | PIN, DEVIATION 5600: SplitMix64 as a counter, draw k a pure function of (seed, stream, k); index = draw mod n | `xtrees/checks/glue_check.mojo::check_rng`, fixture separates mod from multiply-shift, arm `seam_5600_rng.patch` RED (2026-09-27, H100 pod); CPU == CUDA on every trees lane |
+| 161 | **weighted votes and averages** (`accumulate`, `accumulate_cols`, `accumulate_onehot`, `tree_score_add`, SAMME/R2 updates, TreeSHAP products) | a build contracting `acc + w * x` into one fused rounding | PIN, DEVIATION 5601: every product meeting an add is `identical_mul64` (the pinned product) | `check_pinned_accumulate`, fixture separates fused from pinned, arm `seam_5601_fused.patch` RED |
+| 162 | **folds over estimators, background rows and classes** (`block_mean`, `accumulate`, `leaf_newton`, `weighted_sample`'s CDF, `normalize_rows`) | pairwise or vectorised reassociation of a float sum | PIN, DEVIATION 5602: sequential, index order, one thread | `check_fold_order` (2^60, 1, -2^60, 1 separates sequential from pairwise), arm `seam_5602_order.patch` RED |
+| 163 | **the transcendental links** (SAMME/R2 exp, log and pow, softmax, the DART sigmoid, Platt's log1p(exp)) | the platform libm on each host and device | REPLACE, DEVIATION 5603: `identical_exp64` / `identical_log64` / `identical_pow64`, the pinned binary64 polynomials | `check_pinned_exp` (a learning rate found where libm exp and the pinned exp differ), arm `seam_5603_libm_exp.patch` RED |
+| 164 | **ties** (argmax of votes and probabilities, the weighted median's order, the isotonic sort) | first vs last maximum; an unstable sort | PIN, DEVIATION 5604: the lower index wins; the median sorts by (value, estimator), the isotonic fit by (x, y, row) | `check_tie_break` (exact ties planted), arm `seam_5604_last_max.patch` RED |
+| 165 | **a zero row** (OneVsRest and calibration normalisation) | sklearn divides 0 / 0, a vendor-payload NaN (IDENTITY_PATHS Clause B) | REPLACE, DEVIATION 5605: a zero (or -0.0) row is uniform 1 / k | `check_zero_rows` (+0 and -0 rows planted), arm `seam_5605_nan.patch` RED |
+| 166 | **the RF weighted objective on the CPU** (`ensemble/host/rf_oracle.mojo`: class weights / sample_weight without bootstrap) | the device's Int32 fixed-point weight planes (`WeightedClassificationBin`) restated on the host: the truncating `_quantize`, the scale, the ftz'd class-order `WeightAt`, the weighted gains and leaf | CONSTRUCTION: the host restates the device arithmetic statement for statement | lane `trees-rf-weighted` CPU == CUDA (batch/infer/model/train 9); arm `rf_weighted_split_sabotage.patch` DISAGREE then AGREE; existing RF lanes' cells unmoved on CUDA and CPU |
+
+AMD and Apple columns for 160-166: OWED (the AMD box and the M2 Pro steward are pass-2 steps still to run).
 
 
 

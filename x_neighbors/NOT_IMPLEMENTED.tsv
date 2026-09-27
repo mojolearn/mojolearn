@@ -1,0 +1,12 @@
+their_thing	status	why / where it would go
+LocalOutlierFactor metric other than euclidean (sklearn _lof.py, metric/p/metric_params)	REFUSED BY NAME	The lane's k-NN is the exact euclidean brute force of x_neighbors/items.mojo (sqdist_item + knn_select_item). Another metric is another distance item; refused at LocalOutlierFactor._check_params until one is written
+LocalOutlierFactor algorithm / leaf_size / n_jobs	ACCEPTED, NO EFFECT	Every search is exact brute force, so the tree choice cannot change the answer
+NearestCentroid sparse input (csr/csc)	NOT IMPLEMENTED	Dense float32 only, as every x_neighbors primitive
+NearestCentroid deviations_ attribute	NOT IMPLEMENTED	The shrunken centroids are computed (nc_shrink_item) but the deviation matrix is not returned
+OneClassSVM kernel='precomputed' and callable kernels	REFUSED BY NAME	A precomputed matrix is a shape contract with nothing to pin; a callable is a user arithmetic
+OneClassSVM sample_weight	REFUSED BY NAME	libsvm scales C per sample; not carried
+OneClassSVM shrinking / cache_size	ACCEPTED, NO EFFECT	The whole kernel matrix is formed and no variable is shrunk; libsvm's shrinking changes the iterate order only
+OneClassSVM double-precision solve	DEVIATION 5200	libsvm solves in double; ocsvm_smo_item solves in float32 through the pinned spellings, in one sequential item
+KernelPCA eigen_solver arpack / randomized	DEVIATION 5202	Served by the dense host Jacobi (spectral/checks/symmetric_eig_host.mojo), which the approximations approximate; iterative_power, tol, max_iter, random_state accepted and unused
+KernelPCA fit_inverse_transform / inverse_transform	REFUSED BY NAME	The pre-image kernel ridge is not carried
+KernelPCA kernel='precomputed', callables, kernel_params	REFUSED BY NAME	As OneClassSVM

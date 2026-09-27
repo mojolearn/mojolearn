@@ -56,3 +56,16 @@ if __name__ == "__main__":
     test_multinomial()
     test_bernoulli()
     print("PASS test_x_prep_naive_bayes")
+
+
+def test_complement():
+    X, y = _data()
+    X, Xh = np.abs(X), np.abs(_data(1)[0])
+    for kw in (dict(), dict(alpha=0.4, norm=True)):
+        _check(ml.ComplementNB(**kw).fit(X, y), sknb.ComplementNB(**kw).fit(X, y), X, Xh,
+               ("feature_count_", "feature_log_prob_", "class_log_prior_"))
+
+
+if __name__ == "__main__":
+    test_complement()
+    print("PASS test_x_prep_naive_bayes (complement)")

@@ -21,3 +21,6 @@ _quantile.py linear program (highs, interior-point, revised simplex)	replaced	sc
 _quantile.py sample_weight, solver_options	absent / ignored	pass 2
 _ridge.py RidgeClassifier class_weight, sample_weight, positive, solvers other than cholesky	refused	pass 2
 _ridge.py RidgeCV cv (k-fold), scoring, alpha_per_target, multi-target y, gcv_mode eigen/svd	refused / replaced	LOO by one Cholesky per alpha; the rest pass 2
+_cd_fast.pyx gap-safe screening (do_screening)	not applied	it only skips coordinates; pass 2 speed
+_coordinate_descent.py LassoCV/ElasticNetCV cv splitters other than None/int, shuffle, positive, selection=random, sample_weight, precompute arrays	refused	pass 2
+_coordinate_descent.py refit with precompute=False	replaced	Gram CD refit, same minimizer

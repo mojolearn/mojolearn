@@ -36,7 +36,8 @@ Sanity tests need scikit-learn: on the pod it is in /root/skl
 | VarianceThreshold | 9a474af44 | x-prep-variance-threshold | batch 9, infer 9, train 9; cuda H100 vs CPU |
 | SelectKBest with f_classif, chi2, f_regression | 7a3c408c0 | x-prep-select-kbest | batch 9, infer 9, train 9; cuda H100 vs CPU |
 | mutual_info_classif, mutual_info_regression | ad898a159 | x-prep-mutual-info | infer 9, train 9; cuda H100 vs CPU |
-| RFE | (this commit) | x-prep-rfe | batch 9, infer 9, train 9; cuda H100 vs CPU |
+| RFE | 3061ce9b8 | x-prep-rfe | batch 9, infer 9, train 9; cuda H100 vs CPU |
+| ComplementNB | (this commit) | x-prep-complement-nb | batch 9, infer 9, train 9; cuda H100 vs CPU |
 
 ## Next
 Main table DONE. Additions in order: QuantileTransformer, PowerTransformer,

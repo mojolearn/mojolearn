@@ -453,9 +453,9 @@ reasons that are about the algorithm and not about effort.
 | Prophet-style forecaster | **IN.** Piecewise-linear trend with changepoints, Fourier seasonality, holiday regressors, MAP fit by L-BFGS. Parity with the `prophet` package is at a tolerance only (their fit is Stan); identity is ours. Reference: `prophet/forecaster.py` and `stan/prophet.stan` for the model. | sequence (after STL and VAR) | +1, M |
 | sparse variational GP (SVGP) | **IN.** Inducing points, a variational posterior, GEMM and Cholesky bound: a clear GPU win. Upgrades the named refusal in `gaussian_process/NOT_IMPLEMENTED.tsv` the way row 12 upgraded RF's log criteria. Reference: GPflow `gpflow/models/svgp.py`. | neighbors + kernel (GP kernels live beside `kernel_methods/`) | +1, M/H |
 | HNSW | **IN, as CAGRA's CPU-serving form (Andrew, 2026-09-27).** It is a CPU algorithm by construction (a hierarchical graph walked one hop at a time), and that is exactly how the field uses it: build the graph on the GPU, serve queries on CPU boxes. cuVS's own entry is `hnsw::from_cagra`. So it is the second half of CAGRA, not a competitor to it. The "no CPU path" rule the IVF lane cited did not exist in CONTRIBUTING; CONTRIBUTING now says when a CPU-only algorithm may enter ("CPU-only algorithms"), and the refusal in `ivf_refuse_algorithm` and `ivf/NOT_IMPLEMENTED.tsv` is corrected to NOT IMPLEMENTED, assigned. Identity: a search over a fixed graph is deterministic given the graph and an index tie-break, and the same across every CPU host. Reference: cuVS `cpp/src/neighbors/hnsw.cpp`, hnswlib `hnswalg.h` for the layout and search. | ann, after CAGRA | +1, M |
-| Birch | **OUT, unless asked.** It inserts points one at a time into a CF tree and the result depends on insertion order by definition, so it has no GPU form and no GPU partner: its one composition in scikit-learn is as a pre-clustering step whose subclusters feed AgglomerativeClustering, which this library already runs on the GPU directly. Its practical use is small-memory streaming clustering, which a GPU library does not need. One line from Andrew puts it in lane 2 as a CPU-only estimator under the CONTRIBUTING rule. | -- | -- |
+| Birch | **IN (Andrew, 2026-09-27), as a CPU fit that feeds a GPU step.** The CF-tree build inserts points one at a time and depends on insertion order by definition, so it is a CPU pass with no parallel form. Its global clustering step over the subcluster centroids (scikit-learn's default is AgglomerativeClustering) runs on this library's GPU agglomerative clustering, which is the pairing CONTRIBUTING's "CPU-only algorithms" paragraph asks for. Identity: sequential, deterministic given input order, every seam a fixed-order compare or a squared-norm update. Support-matrix row says CPU for the fit. Reference: scikit-learn `cluster/_birch.py`. | cluster | +1, E |
 
-So the long tail is +86, not +78, and the target is about 193 on top of 57
+So the long tail is +88, not +78, and the target is about 195 on top of 57
 if every lane finishes both of its tables.
 
 ---
@@ -535,3 +535,67 @@ shared `.so` that another job is using. Tooling gaps go to the tools lane.
   --commit <sha> --builds bindings/build_x.sh[,...] --cmd '<timing>' [--mode
   fast|identical]`, M3 Ultra only, spooled while it is deferred.
 - **Stewards as daemons:** `tools/cloudmac.sh steward <mac> install|restart|status`.
+
+---
+
+# Phase 3: CPU speed (Andrew, 2026-09-27)
+
+The library is already CPU and GPU: every algorithm ships a CPU host
+binding with the GPU's bits, CPU-only installs train and predict, and the
+bench board has an `ours-cpu` arm. What it is not is FAST on a CPU. The host
+kernels are the same Mojo source compiled for the CPU, written to prove
+identity; a few host oracles use the parallel primitives and most run one
+core. Phase 3 makes the CPU path fast, without moving a bit.
+
+## Why
+
+- **Train on the GPU, serve on the CPU, no drift.** The same-bits contract
+  is what makes it safe to fit on one box and run on another. A fast CPU
+  inference path for the forests, GBDT, kNN, the neural blocks and HNSW
+  (lane 9) is the serving half of that story for every algorithm.
+- Development and CI without a GPU; edge boxes.
+- Not a reason to train on a CPU when a GPU is there. Training speed on
+  the CPU is second.
+
+## The rule
+
+The same as GPU speed work. A multithreaded fold reorders sums unless it
+is pinned, so every thread split is a PIN (partial count a function of
+the shape, never of the core count: IDENTITY_PATHS row 7) and every
+partial fold is `pinned_block_sum`'s host twin. SIMD width is a PIN too
+(a 4-wide and an 8-wide fold are two summation orders). No CPU-specific
+numerics: `ftz`, `identical_mul_add`, the portable transcendentals and the
+composite-key selectors are the same code on every column. Every CPU
+speed commit re-runs the identity check (GPU == CPU, bit for bit) and the
+sabotage, exactly as step 5 and 6 of the COMMON BRIEF.
+
+## Scope and order
+
+1. **Inference first**, per family: forests and GBDT prediction, kNN and
+   the IVF/CAGRA/HNSW search, the neural blocks' forward pass, the
+   transformers' `transform`. Judged on the bench board's `ours-cpu` arm
+   against scikit-learn, LightGBM, XGBoost, FAISS-CPU, hnswlib and PyTorch
+   CPU on all cores, 1M+ rows or the family's realistic shape.
+2. **Training second**, where the CPU case is real: GBDT and forests
+   (LightGBM and XGBoost on all cores are the opponents), linear models,
+   k-means, the preprocessors.
+3. What stays one core: anything sequential by construction (Birch's tree
+   build, OPTICS's ordering loop, LARS's steps).
+
+## Lanes and machines
+
+One lane per family, after that family's identity and GPU speed work is
+merged; never in the same window as the GPU speed wave, which already
+sends every commit through one Metal queue. CPU lanes need no GPU: a
+many-core CPU pod (RunPod CPU instances or an EC2 c7i/c8g) is enough for
+the x86 column, and the Arm column is the cloud Macs' CPUs through the
+same steward. Each lane's brief is the COMMON BRIEF with step 9 reading
+"CPU" and the opponents above.
+
+## Not in this fan-out
+
+Phase 3 starts when Andrew says so, after the identity wave and the GPU
+speed wave. It is written here so the target is on the record and so no
+lane in phases 1 and 2 designs a host kernel that cannot be parallelized
+later (keep the fold shape explicit; never bake a sequential order into a
+seam that a pinned tree would also satisfy).
