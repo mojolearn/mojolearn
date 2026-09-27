@@ -1,0 +1,12 @@
+started=2026-09-27T04:31:26Z
+GPU 0: NVIDIA L40S (UUID: GPU-bd4d72c3-ff80-6b52-9f8b-9194287d0a29)
+GPU 1: NVIDIA L40S (UUID: GPU-44eb0712-cc44-3e34-375a-99fbf78b0ff5)
+index, name, uuid, pci.bus_id, driver_version, compute_cap, memory.total [MiB]
+0, NVIDIA L40S, GPU-bd4d72c3-ff80-6b52-9f8b-9194287d0a29, 00000000:E3:00.0, 580.178.04, 8.9, 46068 MiB
+1, NVIDIA L40S, GPU-44eb0712-cc44-3e34-375a-99fbf78b0ff5, 00000000:E4:00.0, 580.178.04, 8.9, 46068 MiB
+visible_gpus=2
+system_python=/usr/bin/python3.11 (Python 3.11.10)
+pip_install_exit=0
+import_where=1148 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x11b100000000, nodemask=1)
+0.8.24 /root/pargmm-venv/lib/python3.11/site-packages/mojolearn/__init__.py
+REFUSED: import not in venv
