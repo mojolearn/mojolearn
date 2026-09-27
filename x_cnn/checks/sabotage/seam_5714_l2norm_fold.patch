@@ -1,0 +1,12 @@
+--- a/x_cnn/ops.mojo	2026-09-27 13:10:09
++++ b/x_cnn/ops.mojo	2026-09-27 13:10:09
+@@ -952,7 +952,8 @@
+     aux[r] = that denominator."""
+     var F = _g(p, 1)
+     var sq = Float32(0)
+-    for f in range(F):
++    for a in range(F):
++        var f = F - 1 - a
+         var v = ftz(x.unsafe_load(r * F + f))
+         sq = ftz(sq + ftz(identical_mul(v, v)))
+     var norm = ftz(identical_sqrt(sq))
