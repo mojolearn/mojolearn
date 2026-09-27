@@ -35,7 +35,7 @@ from ._labels import flatten_labels, sorted_classes, label_kind
 __all__ = ["f_classif", "f_regression", "chi2", "mutual_info_classif", "mutual_info_regression", "RobustScaler", "MaxAbsScaler", "OrdinalEncoder", "OneHotEncoder", "TargetEncoder", "SimpleImputer", "KBinsDiscretizer",
            "GaussianNB", "MultinomialNB", "BernoulliNB",
            "LinearDiscriminantAnalysis", "QuadraticDiscriminantAnalysis",
-           "QuantileTransformer", "PowerTransformer", "Normalizer", "PolynomialFeatures", "SplineTransformer", "Binarizer", "LabelEncoder", "LabelBinarizer", "MultiLabelBinarizer", "IterativeImputer", "VarianceThreshold", "SelectKBest", "RFE"]
+           "QuantileTransformer", "PowerTransformer", "Normalizer", "PolynomialFeatures", "SplineTransformer", "Binarizer", "LabelEncoder", "LabelBinarizer", "MultiLabelBinarizer", "IterativeImputer", "VarianceThreshold", "SelectKBest", "RFE", "ComplementNB"]
 
 _BINDING = "_mojolearn_x_prep"
 
@@ -2235,3 +2235,37 @@ class RFE(_SelectorMixin):
 
     def score(self, X, y):
         return self.estimator_.score(self.transform(X), y)
+
+
+class ComplementNB(_DiscreteNB):
+    """sklearn.naive_bayes.ComplementNB, float32: complement class feature
+    counts, their log share (negated, or normalised when `norm`); the class
+    prior enters only with a single class, as in the reference. alpha > 0
+    required; class_prior, sample_weight and partial_fit are refused."""
+    _parameters = ("alpha", "force_alpha", "fit_prior", "class_prior", "norm")
+
+    def __init__(self, *, alpha=1.0, force_alpha=True, fit_prior=True, class_prior=None, norm=False):
+        self.alpha = alpha
+        self.force_alpha = force_alpha
+        self.fit_prior = fit_prior
+        self.class_prior = class_prior
+        self.norm = norm
+
+    def fit(self, X, y, sample_weight=None):
+        _refuse_nb(self, sample_weight)
+        _check_alpha(self)
+        pr, mode, n, d, K, st, cnt, fc, clp = self._fit_counts(X, y)
+        a = pr.put_scalar(self.alpha)
+        flp = pr.alloc(K * d)
+        pr.stage("cnb_params", K, fc, K, d, a, 1 if self.norm else 0, flp)
+        pr.run(mode)
+        _check_nonnegative(pr.values(st + 3 * d, d), "ComplementNB (input X)")
+        self._finish_counts(pr, mode, d, K, cnt, fc, clp)
+        self.feature_log_prob_ = pr.get(flp, (K, d))
+        return self
+
+    def _jll_stages(self, pr, xo, n, d, out):
+        K = len(self.classes_)
+        w = pr.put(self.feature_log_prob_)
+        b = pr.put(self.class_log_prior_) if K == 1 else _NONE
+        pr.stage("matmul", n * K, xo, d, 1, w, 1, d, out, K, d, b, _NONE)

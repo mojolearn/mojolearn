@@ -365,3 +365,18 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("predict", "transform", sl=slice(0, 256)), "x-prep-rfe")
+
+
+@lane("x-prep-complement-nb")
+def _(ml, X, yc, yr, Xh=None):
+    y3 = _prep_three_class(X, yr)
+    m = ml.ComplementNB(alpha=0.7).fit(_prep_abs(X), y3)
+    mn = ml.ComplementNB(norm=True).fit(_prep_abs(X), yc)
+    parts = dict(flp=_h(m.feature_log_prob_), norm=_h(mn.feature_log_prob_),
+                 norm_proba=_h(mn.predict_proba(_prep_abs(X[:256]))))
+    out = _prep_clf(m, _prep_abs(X), _prep_abs(Xh), ("feature_count_", "class_log_prior_"))
+    out.update(parts)
+    return out
+
+
+_batch_decl(_rows_calls("predict", "predict_proba", sl=slice(0, 256), prep=_prep_abs), "x-prep-complement-nb")
