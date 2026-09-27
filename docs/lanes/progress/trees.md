@@ -55,6 +55,12 @@ PASS 2 (proof), in progress:
   `xtrees/checks/sabotage/` listed in `tools/identity_lanes/trees.checks`:
   each FAILS the driver on the H100 pod; all 20 trees lanes AGREE with the
   driver run first.
-- OWED: AMD column (box), M2 Pro steward, card diff across boxes.
+- end-to-end sabotage `xtrees/checks/sabotage/column_cpu_only.patch` (perturbs
+  the CPU column only, `MOJOLEARN_COLUMN_CPU`, plus the rf host leaf):
+  `algos_lane_check.sh <all 20 lanes> --pass 2 --sabotage` on the H100 pod:
+  AGREE, 20/20 DISAGREE, 20/20 AGREE after reversal, RESULT: PASS. This is
+  the patch to hand the steward.
+- `xtrees/NOT_IMPLEMENTED.tsv`: the lane's refused options (option parity input).
+- OWED: AMD column (box trees-amd up on Hot Aisle), M2 Pro steward, card diff across boxes.
 
 Next: AMD box (`tools/dev_pod.sh up trees 240 --vendor amd`), then the steward, then option parity.
