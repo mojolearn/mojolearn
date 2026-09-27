@@ -133,3 +133,50 @@ def test_repeat_calls_and_save_load_round_trip():
         except ImportError as exc:
             pytest.skip(f"no host binding: {exc}")
         assert np.asarray(host.decision_function(x)).tobytes() == a[0]
+
+
+def _int_data(n=120, k=3, seed=9):
+    rng = np.random.default_rng(seed)
+    y = np.arange(n) % k
+    a = (rng.integers(-3, 4, size=(n, 4)) + 2 * y[:, None]).astype(np.float32)
+    return a, y.astype(np.int64)
+
+
+def test_precomputed_is_the_linear_kernel_bit_for_bit():
+    """An integer-valued X has an exact linear Gram, so kernel='precomputed'
+    on that Gram must give kernel='linear''s bits: binary, multiclass, SVR."""
+    a, y = _int_data()
+    k = (a.astype(np.int64) @ a.astype(np.int64).T).astype(np.float32)
+    q = a[:30]
+    kq = (q.astype(np.int64) @ a.astype(np.int64).T).astype(np.float32)
+    for yy in ((y > 0).astype(np.int64), y):
+        lin = _fit_or_skip(a, yy, kernel="linear", C=0.01)
+        pre = SVC(kernel="precomputed", C=0.01).fit(k, yy)
+        for name in ("dual_coef_", "support_", "intercept_"):
+            assert np.asarray(getattr(pre, name)).tobytes() == np.asarray(getattr(lin, name)).tobytes(), name
+        assert np.asarray(pre.decision_function(kq)).tobytes() == np.asarray(lin.decision_function(q)).tobytes()
+        assert np.asarray(pre.predict(kq)).tobytes() == np.asarray(lin.predict(q)).tobytes()
+    from mojolearn._svm_impl import SVR
+    t = (a[:, 0] - a[:, 1]).astype(np.float32)
+    lin = SVR(kernel="linear", C=0.01).fit(a, t)
+    pre = SVR(kernel="precomputed", C=0.01).fit(k, t)
+    assert np.asarray(pre.dual_coef_).tobytes() == np.asarray(lin.dual_coef_).tobytes()
+    assert np.asarray(pre.predict(kq)).tobytes() == np.asarray(lin.predict(q)).tobytes()
+
+
+def test_precomputed_needs_a_square_matrix():
+    a, y = _int_data()
+    with pytest.raises(ValueError, match="square"):
+        SVC(kernel="precomputed").fit(a, y)
+
+
+def test_precomputed_save_load_round_trip():
+    a, y = _int_data()
+    k = (a.astype(np.int64) @ a.astype(np.int64).T).astype(np.float32)
+    for yy in ((y > 0).astype(np.int64), y):
+        m = _fit_or_skip(k, yy, kernel="precomputed", C=0.01)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "svc.npz")
+            m.save(path)
+            back = SVC.load(path)
+            assert np.asarray(back.decision_function(k)).tobytes() == np.asarray(m.decision_function(k)).tobytes()

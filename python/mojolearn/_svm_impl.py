@@ -88,7 +88,8 @@ _KERNELS = {"linear": _KERNEL_LINEAR, "rbf": _KERNEL_RBF}
 # SVC also carries POLYNOMIAL (lane/cpu-training-small-gaps, 2026-09-15): the
 # identical linear Gram, then kernel_methods' polynomial_epilogue_kernel
 # (DEVIATION 1663). SVR keeps _KERNELS and refuses 'poly' by name.
-_SVC_KERNELS = dict(_KERNELS, poly=_KERNEL_POLYNOMIAL, sigmoid=_KERNEL_TANH)
+_SVC_KERNELS = dict(_KERNELS, poly=_KERNEL_POLYNOMIAL, sigmoid=_KERNEL_TANH,
+                    precomputed=_KERNEL_PRECOMPUTED)
 
 #: DEVIATION 1663's cap, kernel_methods/impl/distance/kernel_matrices.mojo::KM_MAX_DEGREE
 #: and svm/impl/svm_parameter.mojo::SVM_MAX_POLY_DEGREE.
@@ -123,7 +124,7 @@ _REFUSED_KERNELS = {
 }
 
 # SVC's refusals: the shared table less 'poly', which SVC implements.
-_SVC_REFUSED_KERNELS = {k: v for k, v in _REFUSED_KERNELS.items() if k not in ("poly", "sigmoid")}
+_SVC_REFUSED_KERNELS = {k: v for k, v in _REFUSED_KERNELS.items() if k not in ("poly", "sigmoid", "precomputed")}
 _SVC_REFUSED_KERNELS["tanh"] = (
     "cuML and scikit-learn spell this kernel 'sigmoid', which SVC implements"
 )
@@ -259,6 +260,41 @@ def _c_rows(C, n_rows, sample_weight, class_weight=None, y=None, who="SVC"):
     return Array.from_list([C * v for v in w], "<f4")
 
 
+def _precomputed_columns(q, support):
+    """kernel='precomputed' at predict: `X[:, support_]`, the query's
+    cross-kernel columns at the support vectors, copied exactly (float32
+    bytes, no arithmetic). What the solver's decision reads as its kernel
+    tile."""
+    n_rows, n_cols = q.shape
+    cells = array.array("f")
+    cells.frombytes(q.tobytes())
+    idx = [int(s) for s in support]
+    for s in idx:
+        if not 0 <= s < n_cols:
+            raise ValueError(
+                f"mojolearn SVC: kernel='precomputed' support index {s} is outside X's {n_cols} columns")
+    out = array.array("f", [cells[r * n_cols + s] for r in range(n_rows) for s in idx])
+    return Array._owned(out, (n_rows, len(idx)), "<f4", "C")
+
+
+def _precomputed_rows(x, idx):
+    """`K[idx]`, an exact copy of whole rows."""
+    n = x.shape[1]
+    cells = array.array("f")
+    cells.frombytes(x.tobytes())
+    out = array.array("f", [cells[r * n + c] for r in idx for c in range(n)])
+    return Array._owned(out, (len(idx), n), "<f4", "C")
+
+
+def _precomputed_block(x, idx):
+    """`K[idx][:, idx]`, an exact copy: the kernel matrix of a row subset."""
+    n = x.shape[1]
+    cells = array.array("f")
+    cells.frombytes(x.tobytes())
+    out = array.array("f", [cells[r * n + c] for r in idx for c in idx])
+    return Array._owned(out, (len(idx), len(idx)), "<f4", "C")
+
+
 def _dual_times_sv(dual_coef, support_vectors):
     """`dual_coef_ @ support_vectors_`: a `(1, n_support) x (n_support,
     n_features)` product, accumulated SEQUENTIALLY over the support vectors
@@ -302,8 +338,16 @@ class SVC(NumericModeMixin):
                                   repeated product). 'sigmoid' is the
                                   linear Gram then tanh(gamma * K + coef0)
                                   (kernel_methods' TANH epilogue,
-                                  identical_tanh). 'precomputed' is REFUSED
-                                  BY NAME with what is missing
+                                  identical_tanh). 'precomputed': X is the
+                                  n x n kernel matrix at fit (the solver's
+                                  tiles are exact copies of its cells,
+                                  cuML's extractColumnsForPrecomputed) and
+                                  the q x n cross-kernel against the
+                                  training rows at predict, whose support
+                                  columns the decision reads.
+                                  support_vectors_ then holds the kernel
+                                  matrix's support ROWS (scikit-learn's is
+                                  empty)
         gamma           honored   a finite float >= 0, or the string 'auto'
                                   (= 1 / n_features, cuML's `_get_gamma`).
                                   'scale' is resolved exactly, DEVIATION
@@ -668,6 +712,11 @@ class SVC(NumericModeMixin):
             raise ValueError(
                 f"mojolearn SVC: y has {n_y} entries, X has {n_rows} rows"
             )
+        if self.kernel == "precomputed" and n_cols != n_rows:
+            raise ValueError(
+                "mojolearn SVC: kernel='precomputed' needs the square n x n "
+                f"kernel matrix as X, got {n_rows} x {n_cols}"
+            )
         gamma = self._resolve_gamma(x)
         c_rows = _c_rows(self.C, n_rows, sample_weight, getattr(self, "class_weight", None), y, "SVC")
         if labels is None:
@@ -733,9 +782,13 @@ class SVC(NumericModeMixin):
         for i in range(k):
             for j in range(i + 1, k):
                 idx = [r for r in range(n_rows) if codes[r] == i or codes[r] == j]
-                store = array.array("f")
-                store.frombytes(b"".join(raw[r * row_bytes:(r + 1) * row_bytes] for r in idx))
-                sub = Array._owned(store, (len(idx), n_cols), "<f4", "C")
+                if self.kernel == "precomputed":
+                    # the pair's kernel matrix: its rows AND its columns
+                    sub = _precomputed_block(x, idx)
+                else:
+                    store = array.array("f")
+                    store.frombytes(b"".join(raw[r * row_bytes:(r + 1) * row_bytes] for r in idx))
+                    sub = Array._owned(store, (len(idx), n_cols), "<f4", "C")
                 lab = Array.from_list([1.0 if codes[r] == j else 0.0 for r in idx], "<f4")
                 sub_c = None if cb is None else Array.from_list([cb[r] for r in idx], "<f4")
                 n_sv, dual, support, sv, info = self._solve(sub, lab, gamma, sub_c)
@@ -745,10 +798,16 @@ class SVC(NumericModeMixin):
                         f"({classes[i]!r}, {classes[j]!r}) is not (0.0, 1.0); "
                         "the class mapping cannot be trusted")
                 local = support[:n_sv].tolist()
+                sub_cols = sub.shape[1]
+                sv_rows = sv[:n_sv * sub_cols].reshape((n_sv, sub_cols))
+                if self.kernel == "precomputed":
+                    # the support rows of the WHOLE kernel matrix, as the
+                    # binary fit keeps them (predict reads support_ only)
+                    sv_rows = _precomputed_rows(x, [idx[s] for s in local])
                 pairs.append(dict(
                     i=i, j=j,
                     dual=dual[:n_sv].reshape((1, n_sv)),
-                    sv=sv[:n_sv * n_cols].reshape((n_sv, n_cols)),
+                    sv=sv_rows,
                     support=[idx[s] for s in local],
                     b=_round_f32(info[0]),
                     n_iter=int(info[2]),
@@ -838,9 +897,16 @@ class SVC(NumericModeMixin):
             )
         return q
 
-    def _machine(self, q, dual, sv, n_support, b, label0, label1, predict_class):
+    def _machine(self, q, dual, sv, n_support, b, label0, label1, predict_class, support=None):
         n_rows = q.shape[0]
         out = empty((n_rows,), "<f4")
+        n_features = self.n_features_in_
+        if self.kernel == "precomputed" and n_support > 0:
+            # X is the cross-kernel against the TRAINING rows; the decision
+            # reads its columns at the support vectors and no support rows.
+            q = _precomputed_columns(q, support)
+            n_features = n_support
+            sv = dual
         # Kept in locals so the arrays outlive the call; the Mojo side
         # borrows these addresses and owns nothing (`_buffer.py`).
         self._bind(_EXT_NAME).svc_predict(
@@ -851,7 +917,7 @@ class SVC(NumericModeMixin):
             # ORDER MATCHES bindings/_mojolearn_svm.mojo::svc_predict_binding.
             # n_rows, n_features, n_support, b, classes[0], classes[1],
             # kernel, gamma, predict_class, cache_size_mib, degree, coef0
-            [n_rows, self.n_features_in_, n_support,
+            [n_rows, n_features, n_support,
              float(b), float(label0), float(label1),
              _SVC_KERNELS[self.kernel], self._gamma,
              1 if predict_class else 0, self.cache_size,
@@ -862,14 +928,15 @@ class SVC(NumericModeMixin):
     def _run(self, X, predict_class):
         q = self._query(X)
         return self._machine(q, self.dual_coef_, self.support_vectors_, self.n_support_,
-                             self.intercept_[0], self._label0, self._label1, predict_class)
+                             self.intercept_[0], self._label0, self._label1, predict_class,
+                             self.support_.tolist())
 
     def _pair_decisions(self, X):
         """Each pair machine's raw decision on X (this solver's
         orientation: >= 0 toward class j), as lists of float32 values."""
         q = self._query(X)
         return [self._machine(q, p["dual"], p["sv"], p["dual"].shape[1], p["b"],
-                              0.0, 1.0, False).tolist() for p in self._pairs]
+                              0.0, 1.0, False, p["support"]).tolist() for p in self._pairs]
 
     def _ovr_scores(self, decisions, n_rows):
         """scikit-learn's `_ovr_decision_function(dec < 0, -dec, K)` on the
@@ -1480,6 +1547,11 @@ class SVR(NumericModeMixin):
         x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
         n_rows, n_cols = x.shape
         targets = _as_targets(y, n_rows)
+        if self.kernel == "precomputed" and n_cols != n_rows:
+            raise ValueError(
+                "mojolearn SVR: kernel='precomputed' needs the square n x n "
+                f"kernel matrix as X, got {n_rows} x {n_cols}"
+            )
         gamma = self._resolve_gamma(x)
         c_rows = _c_rows(self.C, n_rows, sample_weight, who="SVR")
 
@@ -1557,6 +1629,12 @@ class SVR(NumericModeMixin):
         # borrows these addresses and owns nothing (`_buffer.py`).
         dual = self.dual_coef_
         sv = self.support_vectors_
+        n_features = self.n_features_in_
+        if self.kernel == "precomputed" and self.n_support_ > 0:
+            # the cross-kernel's columns at the support vectors (SVC's rule)
+            q = _precomputed_columns(q, self.support_.tolist())
+            n_features = self.n_support_
+            sv = dual
         self._bind(_EXT_NAME).svr_predict(
             addr_ro(q, name="q"),
             addr_ro(dual, name="dual") if self.n_support_ > 0 else 0,
@@ -1565,7 +1643,7 @@ class SVR(NumericModeMixin):
             # ORDER MATCHES bindings/_mojolearn_svm.mojo::svr_predict_binding.
             # n_rows, n_features, n_support, b, kernel, gamma,
             # cache_size_mib
-            [n_rows, self.n_features_in_, self.n_support_,
+            [n_rows, n_features, self.n_support_,
              float(self.intercept_[0]), _SVR_KERNELS[self.kernel], self._gamma,
              self.cache_size] + self._kernel_tail(),
         )

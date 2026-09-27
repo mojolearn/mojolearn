@@ -315,6 +315,25 @@ def _(ml, X, yc, yr, Xh=None):
                      prew_dual=_h(pw.dual_coef_)),
                 m, lambda e: (e.predict(Xh[:128]),))
 
+@lane("x-neighbors-svm-precomputed")
+def _(ml, X, yc, yr, Xh=None):
+    """SVC and SVR kernel='precomputed': the solver's tiles are exact copies
+    of the given matrix's cells (gather_cols / slice_cols in KernelCache,
+    _kernel_cell on the host); predict reads the cross-kernel's support
+    columns. Binary, four-class one-vs-one (each pair's rows and columns)
+    and the regressor, on an integer-valued Gram exact on any host."""
+    K = _neighbors_int_gram(X[:256], X[:256])
+    Kq = _neighbors_int_gram(X[256:384], X[:256])
+    y4 = (yc[:256] + 2 * (X[:256, 5] > 0).astype(np.int32)).astype(np.int32)
+    b = ml.SVC(C=0.01, kernel="precomputed", max_iter=200).fit(K, yc[:256])
+    m = ml.SVC(C=0.01, kernel="precomputed", max_iter=200, decision_function_shape="ovr").fit(K, y4)
+    r = ml.SVR(C=0.01, kernel="precomputed", epsilon=0.1, max_iter=200).fit(K, yr[:256])
+    return _fit(dict(dual=_h(b.dual_coef_), support=_h(b.support_), decision=_h(b.decision_function(Kq)),
+                     predict=_h(b.predict(Kq)), multi_dual=_h(m.dual_coef_), multi=_h(m.decision_function(Kq)),
+                     svr_dual=_h(r.dual_coef_), svr_predict=_h(r.predict(Kq))),
+                m, lambda e: (e.decision_function(_neighbors_int_gram(Xh[:128], X[:256])),
+                              e.predict(_neighbors_int_gram(Xh[:128], X[:256]))))
+
 _batch_decl(_rows_calls("score_samples", "predict", sl=slice(0, 256)), "x-neighbors-lof")
 _batch_decl(_rows_calls("predict", "decision_function", "predict_proba", sl=slice(0, 256)), "x-neighbors-nearest-centroid")
 _batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "x-neighbors-ocsvm")

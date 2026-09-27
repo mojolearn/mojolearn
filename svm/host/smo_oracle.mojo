@@ -79,6 +79,7 @@ from svm.impl.svm_parameter import (
     EPSILON_SVR,
     KERNEL_LINEAR,
     KERNEL_POLYNOMIAL,
+    KERNEL_PRECOMPUTED,
     KERNEL_RBF,
     KERNEL_TANH,
     KernelParams,
@@ -263,7 +264,11 @@ def _kernel_cell[
     k: Int,
 ) -> Scalar[dt]:
     """`kernel_op` for one cell: linear, or the RBF expansion in THEIR
-    association (`kernel_matrices.mojo`)."""
+    association (`kernel_matrices.mojo`). kernel='precomputed': `xa` IS
+    the kernel matrix, `k` columns wide, and the cell is `xa[ia, ib]`, the
+    device's gather_cols / slice_cols copy."""
+    if kp.kernel == KERNEL_PRECOMPUTED:
+        return _flush[dt](xa[ia * k + ib])
     var dot = _dot[dt](xa, ia, xb, ib, na, nb, k)
     if kp.kernel == KERNEL_LINEAR:
         return dot
@@ -942,6 +947,15 @@ def smo_oracle_decision[
     var out = List[Scalar[dt]]()
     var sv_rows = List[Scalar[dt]]()
     var ns = len(res.support_idx)
+    if kp.kernel == KERNEL_PRECOMPUTED:
+        # xq IS the nq x n_train cross-kernel: K(x_q, sv_j) = xq[q, support_j].
+        for i in range(nq):
+            var acc = Scalar[dt](0)
+            for j in range(ns):
+                var kij = _flush[dt](xq[i * k + Int(res.support_idx[j])])
+                acc = _flush[dt](_mad[dt](kij, res.dual_coefs[j], acc))
+            out.append(_flush[dt](acc + res.b))
+        return out^
     for j in range(ns):
         var r = Int(res.support_idx[j])
         for c in range(k):
@@ -1028,6 +1042,15 @@ def smo_oracle_decision_into(
                 # The fold copies its input, so one row-local leaf workspace
                 # can be overwritten for every support-vector cell.
                 var partials = List[Float32](length=pcount, fill=Float32(0.0))
+                if kp.kernel == KERNEL_PRECOMPUTED:
+                    # the query IS the n_query x n_support cross-kernel
+                    for j in range(n_support):
+                        acc = ftz(identical_mul_add(
+                            ftz(query.unsafe_load(i * n_features + j)), dual.unsafe_load(j), acc
+                        ))
+                    output.unsafe_store(i, ftz(acc + b))
+                    _ = partials^
+                    continue
                 for j in range(n_support):
                     for t in range(pcount):
                         var dot = Float32(0.0)
