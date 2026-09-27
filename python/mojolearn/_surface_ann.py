@@ -13,7 +13,37 @@ The names this lane may declare are its own:
   TRAINING_LANE_NAMES   {lane: "the name the docs use"} for the family's training_lanes
   PUBLIC_PENDING_LANES  {lane: "no reference"} until a release record admits it
 """
-GPU_BINDINGS = ()
-FAMILIES = ()
-TRAINING_LANE_NAMES = {}
-PUBLIC_PENDING_LANES = {}
+GPU_BINDINGS = ("_mojolearn_x_ann",)
+FAMILIES = (
+    dict(
+        family="x_ann",
+        binding="_mojolearn_x_ann_host",
+        routes="_mojolearn_x_ann",
+        loaded_by="_backend._HOST_MODULES",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=("x-ann-ivf-pq", "x-ann-tsne", "x-ann-cagra", "x-ann-ivf-sq", "x-ann-refine", "x-ann-filter",
+                        "x-ann-ivf-rabitq"),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("IVFPQIndex", "TSNE", "CagraIndex", "IVFSQIndex", "IVFRaBitQIndex"),
+        display="the ann lane (IVF-PQ, t-SNE, CAGRA)",
+        host_modules=("x_ann/host/ivf_pq_host.mojo", "x_ann/host/tsne_host.mojo", "x_ann/host/cagra_host.mojo"),
+        exports=(
+            "x_ann_host_numeric_mode", "x_ann_host_vendor", "x_ann_host_column", "x_ann_host_sabotage",
+            "x_ann_ivf_pq_build", "x_ann_ivf_pq_search", "x_ann_tsne_fit",
+            "x_ann_cagra_build", "x_ann_cagra_search",
+            "x_ann_ivf_sq_build", "x_ann_ivf_sq_search", "x_ann_refine",
+            "x_ann_ivf_rabitq_build", "x_ann_ivf_rabitq_search", "x_ann_numeric_mode", "x_ann_vendor",
+        ),
+        gate="tools/identity_break.py (cpu-identity-gate.yml)",
+        wheel_note="Ships: the ann lane's CPU route (IVF-PQ, IVF-SQ, IVF-RaBitQ, refine, t-SNE, CAGRA).",
+        ships_in_wheel=True,
+    ),
+)
+TRAINING_LANE_NAMES = {"x-ann-ivf-pq": "the IVF-PQ index", "x-ann-tsne": "t-SNE", "x-ann-cagra": "the CAGRA graph index",
+                       "x-ann-ivf-sq": "the IVF-SQ index", "x-ann-refine": "exact candidate refine",
+                       "x-ann-filter": "the IVF sample filter",
+                       "x-ann-ivf-rabitq": "the IVF-RaBitQ index"}
+PUBLIC_PENDING_LANES = {"x-ann-ivf-pq": "no reference", "x-ann-tsne": "no reference", "x-ann-cagra": "no reference",
+                        "x-ann-ivf-sq": "no reference", "x-ann-refine": "no reference", "x-ann-filter": "no reference",
+                        "x-ann-ivf-rabitq": "no reference"}

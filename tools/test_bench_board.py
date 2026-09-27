@@ -309,8 +309,9 @@ def test_plan_apple_carries_fast_and_identical_arms():
     more = sum(len([d for d in bb.MORE.datasets_of(l) if d in bb.DATASETS]) or 1
                for l in bb.MORE_LANES)
     tasks = sum(len(bb.tree_task_datasets(l, bb.DATASETS)) for l in bb.TREE_TASK_LANES)
+    algos = sum(len(bb.ALGOS.datasets_of(l)) for l in bb.ALGOS_LANES)
     assert len(races) == ((len(bb.TREE_LANES) + len(bb.CLASSICAL_LANES)) * len(bb.DATASETS)
-                          + len(bb.NEURAL_LANES) + more + tasks)
+                          + len(bb.NEURAL_LANES) + more + tasks + algos)
     for r in races:
         if r["family"] == "neural":
             assert r["our_arms"] == {"ours": "identical"}, r["id"]
@@ -388,7 +389,13 @@ def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
     rc = bb.main(["--dry-run", "--vendor", "apple"] + env["base"])
     assert rc == 0
     text = capsys.readouterr().out
-    assert "TOTAL races=93 cells=336" in text
+    # the 93 races before the algorithm expansion are unchanged; the algos
+    # family adds its own
+    algos = bb.plan_races("apple", bb.modes_for("apple"), ["algos"], rows=1000, cpu_arm=False)
+    before = bb.plan_races("apple", bb.modes_for("apple"), bb.FAMILIES[:-1], rows=1000, cpu_arm=False)
+    assert len(before) == 93 and sum(len(r["arms"]) for r in before) == 336
+    assert "TOTAL races=%d cells=%d" % (93 + len(algos), 336 + sum(len(r["arms"]) for r in algos)) in text
+    assert "family algos" in text and "not built yet: SKIPPED" in text
     assert "ours-cpu: off (--no-cpu-arm)" in text
     assert "family neural     races=16 cells=76" in text
     assert "ours-ab[fast]" in text and "ours-fast[fast]" in text
@@ -605,7 +612,8 @@ def test_fast_refused_for_neural_by_name(env):
                                                       ("nvidia", 280, 94, 95),
                                                       ("amd", 270, 90, 76)])
 def test_dry_run_counts_per_vendor(vendor, cells, more, neural, capsys):
-    assert bb.main(["--dry-run", "--vendor", vendor, "--no-cpu-arm"]) == 0
+    assert bb.main(["--dry-run", "--vendor", vendor, "--no-cpu-arm",
+                    "--families", "trees,classical,classical2,neural"]) == 0
     text = capsys.readouterr().out
     assert "TOTAL races=93 cells=%d" % cells in text
     assert "family classical2 races=44 cells=%d" % more in text

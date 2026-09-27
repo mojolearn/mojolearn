@@ -10,7 +10,7 @@ from std.python.bindings import PythonModuleBuilder
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_neighbors.eigh import op_eigh
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
-from x_neighbors.host_ops import X_NEIGHBORS_HOST_SABOTAGE, op_sqdist, op_nan_sqdist, op_l1dist, op_kernel, op_matmul, op_rowsum, op_colsum, op_unary, op_knn_select, op_group_mean, op_take_rows, op_take_cols, op_variance, op_ocsvm, op_lof_lrd, op_lof_score, op_kpca_center, op_scale_div, op_svd_flip, op_kpca_alpha_scale, op_nc_std, op_nc_shrink, op_nc_decision, op_softmax
+from x_neighbors.host_ops import X_NEIGHBORS_HOST_SABOTAGE, op_sqdist, op_nan_sqdist, op_l1dist, op_kernel, op_matmul, op_rowsum, op_colsum, op_unary, op_knn_select, op_group_mean, op_take_rows, op_take_cols, op_variance, op_ocsvm, op_lof_lrd, op_lof_score, op_kpca_center, op_scale_div, op_svd_flip, op_kpca_alpha_scale, op_nc_std, op_nc_shrink, op_nc_decision, op_softmax, op_pcs, op_achi2, op_skew_weights, op_skew_transform, op_absdiff_sum, op_row_normalize, op_lp_clamp, op_ls_clamp, op_ls_laplacian, op_knn_graph, op_knn_impute
 
 
 def _a(v: PythonObject, k: Int) raises -> Int:
@@ -339,6 +339,134 @@ def softmax_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises
     return PythonObject(None)
 
 
+def pcs_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    var v_x = _a(a_, 0)
+    var v_hidx = _a(a_, 1)
+    var v_hbit = _a(a_, 2)
+    var v_res = _a(a_, 3)
+    var v_n = _n(i_, 0)
+    var v_d_in = _n(i_, 1)
+    var v_nf = _n(i_, 2)
+    var v_nc = _n(i_, 3)
+    var v_degree = _n(i_, 4)
+    var v_gamma = _f(f_, 0)
+    var v_coef0 = _f(f_, 1)
+    with GILReleased(Python()):
+        op_pcs(v_x, v_hidx, v_hbit, v_res, v_n, v_d_in, v_nf, v_nc, v_degree, v_gamma, v_coef0)
+    return PythonObject(None)
+
+
+def achi2_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    var v_x = _a(a_, 0)
+    var v_res = _a(a_, 1)
+    var v_n = _n(i_, 0)
+    var v_d = _n(i_, 1)
+    var v_steps = _n(i_, 2)
+    var v_interval = _f(f_, 0)
+    with GILReleased(Python()):
+        op_achi2(v_x, v_res, v_n, v_d, v_steps, v_interval)
+    return PythonObject(None)
+
+
+def skew_weights_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    var v_z = _a(a_, 0)
+    var v_res = _a(a_, 1)
+    var v_count = _n(i_, 0)
+    with GILReleased(Python()):
+        op_skew_weights(v_z, v_res, v_count)
+    return PythonObject(None)
+
+
+def skew_transform_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    var v_lx = _a(a_, 0)
+    var v_w = _a(a_, 1)
+    var v_off = _a(a_, 2)
+    var v_res = _a(a_, 3)
+    var v_n = _n(i_, 0)
+    var v_d = _n(i_, 1)
+    var v_nc = _n(i_, 2)
+    with GILReleased(Python()):
+        op_skew_transform(v_lx, v_w, v_off, v_res, v_n, v_d, v_nc)
+    return PythonObject(None)
+
+
+def absdiff_sum_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    var v_a = _a(a_, 0)
+    var v_b = _a(a_, 1)
+    var v_res = _a(a_, 2)
+    var v_count = _n(i_, 0)
+    with GILReleased(Python()):
+        op_absdiff_sum(v_a, v_b, v_res, v_count)
+    return PythonObject(None)
+
+
+def row_normalize_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    var v_a = _a(a_, 0)
+    var v_res = _a(a_, 1)
+    var v_n = _n(i_, 0)
+    var v_m = _n(i_, 1)
+    with GILReleased(Python()):
+        op_row_normalize(v_a, v_res, v_n, v_m)
+    return PythonObject(None)
+
+
+def lp_clamp_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    var v_ld = _a(a_, 0)
+    var v_ystatic = _a(a_, 1)
+    var v_unlabeled = _a(a_, 2)
+    var v_res = _a(a_, 3)
+    var v_n = _n(i_, 0)
+    var v_c = _n(i_, 1)
+    with GILReleased(Python()):
+        op_lp_clamp(v_ld, v_ystatic, v_unlabeled, v_res, v_n, v_c)
+    return PythonObject(None)
+
+
+def ls_clamp_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    var v_ld = _a(a_, 0)
+    var v_ystatic = _a(a_, 1)
+    var v_res = _a(a_, 2)
+    var v_count = _n(i_, 0)
+    var v_alpha = _f(f_, 0)
+    with GILReleased(Python()):
+        op_ls_clamp(v_ld, v_ystatic, v_res, v_count, v_alpha)
+    return PythonObject(None)
+
+
+def ls_laplacian_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    var v_a = _a(a_, 0)
+    var v_res = _a(a_, 1)
+    var v_n = _n(i_, 0)
+    with GILReleased(Python()):
+        op_ls_laplacian(v_a, v_res, v_n)
+    return PythonObject(None)
+
+
+def knn_graph_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    var v_idx = _a(a_, 0)
+    var v_res = _a(a_, 1)
+    var v_n = _n(i_, 0)
+    var v_m = _n(i_, 1)
+    var v_k = _n(i_, 2)
+    with GILReleased(Python()):
+        op_knn_graph(v_idx, v_res, v_n, v_m, v_k)
+    return PythonObject(None)
+
+
+def knn_impute_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    var v_x = _a(a_, 0)
+    var v_fx = _a(a_, 1)
+    var v_res = _a(a_, 2)
+    var v_n = _n(i_, 0)
+    var v_m = _n(i_, 1)
+    var v_d = _n(i_, 2)
+    var v_k = _n(i_, 3)
+    var v_weights = _n(i_, 4)
+    with GILReleased(Python()):
+        op_knn_impute(v_x, v_fx, v_res, v_n, v_m, v_d, v_k, v_weights)
+    return PythonObject(None)
+
+
 def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[sqdist_binding]("xn_sqdist")
     m.def_function[nan_sqdist_binding]("xn_nan_sqdist")
@@ -364,6 +492,17 @@ def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[nc_shrink_binding]("xn_nc_shrink")
     m.def_function[nc_decision_binding]("xn_nc_decision")
     m.def_function[softmax_binding]("xn_softmax")
+    m.def_function[pcs_binding]("xn_pcs")
+    m.def_function[achi2_binding]("xn_achi2")
+    m.def_function[skew_weights_binding]("xn_skew_weights")
+    m.def_function[skew_transform_binding]("xn_skew_transform")
+    m.def_function[absdiff_sum_binding]("xn_absdiff_sum")
+    m.def_function[row_normalize_binding]("xn_row_normalize")
+    m.def_function[lp_clamp_binding]("xn_lp_clamp")
+    m.def_function[ls_clamp_binding]("xn_ls_clamp")
+    m.def_function[ls_laplacian_binding]("xn_ls_laplacian")
+    m.def_function[knn_graph_binding]("xn_knn_graph")
+    m.def_function[knn_impute_binding]("xn_knn_impute")
     m.def_function[eigh_binding]("xn_eigh")
     m.def_function[x_neighbors_numeric_mode_binding]("x_neighbors_numeric_mode")
 
