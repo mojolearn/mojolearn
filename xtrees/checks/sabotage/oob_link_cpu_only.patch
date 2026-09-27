@@ -1,0 +1,21 @@
+diff --git a/xtrees/ops.mojo b/xtrees/ops.mojo
+--- a/xtrees/ops.mojo
++++ b/xtrees/ops.mojo
+@@ -192,6 +192,8 @@
+             raise Error("x_trees accumulate_rows: row out of range")
+         for c in range(k):
+             acc[unsafe_offset=i * k + c] = acc[unsafe_offset=i * k + c] + x[unsafe_offset=r * k + c]
++            comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
++                acc[unsafe_offset=i * k + c] = acc[unsafe_offset=i * k + c] * 1.0000001  # OOB SABOTAGE: CPU column only
+ 
+ 
+ def accumulate_onehot(
+@@ -610,6 +612,8 @@
+     for i in range(n):
+         var v = x[unsafe_offset=i]
+         x[unsafe_offset=i] = identical_log64(v / (1.0 - v))
++        comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
++            x[unsafe_offset=i] = x[unsafe_offset=i] * 1.0000001  # LOGIT SABOTAGE: CPU column only
+ 
+ 
+ def normalize_rows(x: MutPointer[Float64, MutUntrackedOrigin], n: Int, k: Int):

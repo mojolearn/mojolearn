@@ -599,8 +599,9 @@ sized to the count that lane asked for:
 | algorithm expansion `trees` | -- | **160-169** | 10 |
 | algorithm expansion `cnn` | -- | **170-179** | 10 |
 | algorithm expansion `ann` | -- | **180-189** | 10 |
+| algorithm expansion `metrics` (2026-09-27, lane/metrics) | -- | **190-199** | 10 |
 
-Next free row after this table is **190** (97-99 are unassigned; the
+Next free row after this table is **200** (97-99 are unassigned; the
 expansion ranges start at 100 so the nine lanes of
 docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md never meet anyone already writing
 at 97). Each expansion lane writes its rows ONLY in its own section of
@@ -760,6 +761,9 @@ AMD and Apple columns for 140-149: OWED (the AMD box is being acquired; the M2 P
 | 165 | **a zero row** (OneVsRest and calibration normalisation) | sklearn divides 0 / 0, a vendor-payload NaN (IDENTITY_PATHS Clause B) | REPLACE, DEVIATION 5605: a zero (or -0.0) row is uniform 1 / k | `check_zero_rows` (+0 and -0 rows planted), arm `seam_5605_nan.patch` RED |
 | 166 | **the RF weighted objective on the CPU** (`ensemble/host/rf_oracle.mojo`: class weights / sample_weight without bootstrap) | the device's Int32 fixed-point weight planes (`WeightedClassificationBin`) restated on the host: the truncating `_quantize`, the scale, the ftz'd class-order `WeightAt`, the weighted gains and leaf | CONSTRUCTION: the host restates the device arithmetic statement for statement | lane `trees-rf-weighted` CPU == CUDA (batch/infer/model/train 9); arm `rf_weighted_split_sabotage.patch` DISAGREE then AGREE; existing RF lanes' cells unmoved on CUDA and CPU |
 
+| 167 | **option-parity arithmetic** (`xtrees/ops.mojo`: DART's `_newton_values` with ThresholdL1 and the max_delta_step clip, `leaf_newton_rows` over the bag, the multiclass softmax gradients; Bagging's `accumulate_rows` out-of-bag sums; Kernel SHAP's `logit`) | a fused product in the softmax hessian; a reassociated leaf or out-of-bag sum; the platform log | CONSTRUCTION under 5601-5603: pinned products, sequential index-order folds, `identical_exp64` / `identical_log64` | lanes `trees-dart-options` and `trees-oob-cv-link` CPU == GPU; arms `dart_options_cpu_only.patch` and `oob_link_cpu_only.patch` DISAGREE then AGREE |
+| 168 | **ExtraTrees deviance criteria** (`extratrees/.../objectives.mojo::regression_deviance_gain`, device score-to-candidate and the host exact candidate) | cuML's float32 Poisson / Gamma / InverseGaussian gains over real-unit sums, and the platform log | REPLACE, DEVIATION 5610: the gain over the SCALED fixed-point sums (a positive multiple of cuML's in real arithmetic), `_log_seam`, flushed stores, the float gain as metric and key (DEVIATION 459's route) | lane `trees-et-deviance` CPU == GPU; arm `et_deviance_cpu_only.patch` DISAGREE then AGREE |
+
 COLUMNS for 160-166 (2026-09-27): NVIDIA H100 and AMD MI300X (Hot Aisle) each read `algos_lane_check.sh --pass 2` PASS on all 20 trees lanes (every seam arm bites on both), and the two GPU columns diff OK cell for cell (`identity_break.py --diff`, cuda vs hip, 20 lanes); the glue card (`xtrees/checks/glue_check.mojo`, 7 records) is byte-identical across the two boxes' hosts (EPYC, Xeon). Apple: the M2 Pro steward PASS on all 20 lanes (request 1790526750361-trees-77e0b3a8d7, sabotage `column_cpu_only.patch`); the M3 Ultra copy is spooled.
 
 
@@ -784,5 +788,9 @@ Every row's check is `x_cnn/checks/seams_check.mojo` (oracle `x_cnn/checks/oracl
 
 
 ### `ann`: rows 180-189
+
+(no rows yet)
+
+### `metrics`: rows 190-199
 
 (no rows yet)
