@@ -1,6 +1,9 @@
 # Algorithm expansion: 57 -> 103 algorithms, 12 -> 13 families
 
-Status: DRAFT FOR DISCUSSION (2026-09-27). Nothing started. Not committed.
+Status: PREP LANDED ON MAIN (2026-09-27, `lane/algos-prep`, commits `aabd9c53`
+and `ff4e81c0`). The sections below are kept in the order they were decided;
+the LAST section, "Prep landed and reviewed", says what holds now and what is
+still owed before the first lane starts. No lane has started.
 
 ## Goal
 
@@ -314,3 +317,72 @@ running. Reap as soon as the lane's last branch is merged. No idle pods.
   one board run covers them later. Nothing gets timed until Andrew says so:
   speed work across all lanes comes first. Brief:
   [ALGORITHM_EXPANSION_BENCH_BRIEF.md](ALGORITHM_EXPANSION_BENCH_BRIEF.md).
+
+---
+
+# Prep landed and reviewed (2026-09-27, after the merge to main)
+
+`lane/algos-prep` is on main. Confirmed by ancestry, not by reading the
+branch: `aabd9c53` and `ff4e81c0` are ancestors of `origin/main`, the branch
+tip is too, and the three docs and five tools it added are byte-identical
+on main to what was reviewed. `packaging/check_ext_lists.py` passes on main
+with every fragment empty, so every packaging list is what it was before
+the prep. The fragment loader was exercised by hand and refuses an import,
+another lane's binding and a lane name that already exists.
+
+## What the review found, and who fixes it
+
+Owner is the orchestrator unless a lane is named. Nothing here is a lane's
+to widen into.
+
+| # | finding | what to do | status |
+|---|---|---|---|
+| R1 | **A submitted commit never reaches the cloud Macs.** `apple_steward.py submit` ships the request and patch over ssh, then the Mac's `process` runs `git fetch origin` and checks out the sha. But a cloud Mac's `origin` is the bare repo the laptop pushes to (`cloudmac.sh bootstrap`), and neither `submit`, `flush-deferred`, nor the brief's step 7 pushes the sha there. Every request would fail at "checkout of <sha>". | Until the tool does it, the lane runs `tools/cloudmac.sh push m2pro <sha>` before `submit` (brief step 7, revised). The tool fix: `submit` pushes to each non-deferred Mac and `flush-deferred` pushes before it ships; or `process` fetches the sha from GitHub over https (the repo is public). | **OWED: tool fix. The brief carries the workaround.** |
+| R2 | **Seam checks are optional in the gate.** `algos_lane_check.py` prints a note and continues when a fragment has no `tools/identity_lanes/<lane>.checks`. A lane could register identity lanes, pass the GPU == CPU diff and never run an oracle: the "light" hole the brief closes in prose only. | Make a missing `.checks` a FAIL once the fragment registers any lane. Until then the orchestrator refuses to merge a lane whose fragment registers lanes and has no `.checks` listing (brief step 2, revised). | **OWED: tool fix. The brief carries the rule.** |
+| R3 | **Per-seam sabotage arms are unverified by any tool.** The steward runs the one end-to-end `--sabotage` patch; the per-seam arms the brief requires live only in the lane's evidence directory. | Extend the `.checks` line format to `<driver>\t<sabotage patch>` and have the lane check run each pair (must FAIL under the patch, PASS after `git apply -R`). Until then, the lane's report at each commit names every seam patch and its result, and the orchestrator reads them. | **OWED: tool fix.** |
+| R4 | **main was rewritten today.** The fetch that preceded the review showed a forced update on `origin/main` (`3cf7ae22...b35580c3`). Nine lanes pushing `HEAD:main` fast-forward cannot survive another one. | Turn on force-push protection for `main` for the duration of the fan-out. | **OWED: Andrew, in the GitHub settings.** |
+| R5 | **The proof dummy ran on one vendor.** The A40 pod proved x86 CPU == NVIDIA through the whole loop. Nothing has run `algos_lane_check.sh` on a Mac with Metal, and that is the path every steward request takes. | Re-create the `x-prep-dummy` lane on a throwaway branch (its two commits are on main; `git revert ff4e81c0` on the branch), push it to the M2 Pro, and run it through `apple_steward.py work --once` before any lane submits. Then delete the branch. | **OWED: orchestrator, before the first submit.** |
+| R6 | **Pod bootstrap is manual.** The brief tells each lane to `git init` and fetch on the pod so `git apply` works; `sync` does not check that the pod tree is at the worktree's base commit, so a patch that applies on the laptop can fail on the pod for a stale-tree reason. | `dev_pod.sh up` seeds the git tree at the lane's base sha itself; `sync` refuses when the pod's HEAD is not the worktree's merge base with origin/main. | **OWED: tool fix. Brief step "Your setup" carries the manual form.** |
+| R7 | **`sequence` and `cnn` build identical only** (`host_surface.EXPANSION_IDENTICAL_ONLY`), while FINAL DECISIONS say FAST on neural. Both lane briefs promised FAST speed work in step 9 that their bindings cannot build. | The neural FAST policy change is one shared edit (`EXPANSION_IDENTICAL_ONLY`, `build_sets.sh` IDENTICAL_ONLY lists, `_backend`'s tier table) the orchestrator makes once, after the identity wave. Lanes 6 and 8 do IDENTICAL speed work only until then (briefs revised). | **OWED: orchestrator, after the identity wave.** |
+| R8 | A fragment may bind a key twice; the second `FAMILIES = ...` silently wins (`host_surface._read_expansion_fragment`). | Refuse a key bound twice. | **OWED: one-line tool fix. The brief says "each once".** |
+| R9 | A dirty steward worktree (an unreversed sabotage) fails the request that finds it, and every later one, until someone logs in. | After a reversal fails, `process` should `git checkout -- .` the worktree, log that it did, and go on. Judgment call; the failing request still reads FAIL. | **OWED: tool fix, low priority.** |
+
+## What holds, restated
+
+- Every shared registry reads per-lane files and the loaders enforce
+  ownership by name, so nine lanes never edit the same line. The refusals
+  were exercised, not just read.
+- The lane check refuses NOTHING COMPARED, a missing host binding, a
+  define-only sabotage, and a patch that touches nothing the lanes run.
+- DEVIATION 5000-5899 and IDENTITY_PATHS rows 100-189 are pre-allocated
+  per lane, with one ledger section per lane.
+- The pod dead-man and lease reuse `runpod_guard.sh`; the steward queue
+  is atomic per request; the bench lane measures nothing.
+
+## The estimate, corrected
+
+"1 to 2 hours per lane" was written before the per-seam bill was put in the
+brief. With every numeric seam owing an oracle, a separating fixture, a
+sabotage arm that bites, a DEVIATION, a card stage and a ledger row, an Easy
+algorithm is half a day to a day of agent time, because most of it is
+templated on existing contracts, and a lane of seven Easy items is several
+days. Parallelism buys throughput; there is no light form. So:
+
+- Pod leases match the lane's real duration (`dev_pod.sh up <lane> 240`,
+  extended hourly while working), not a three-hour window. A pod is torn
+  down when its lane's last algorithm is merged.
+- Expect one or two algorithms per lane in the first window and the rest
+  after. The paper's count moves only when a release record admits a lane
+  on three vendors.
+- Speed work (FAST and IDENTICAL) starts per lane after that lane's
+  identity passes, never before; a FAST commit on nine pods each going
+  back through one Metal queue is the second bottleneck, so sequence it.
+
+## Order of operations before the first lane starts
+
+1. R4: protect main.
+2. R1 and R2 tool fixes, or at least the brief's workarounds (done in the
+   briefs).
+3. R5: the dummy through the M2 Pro steward on Metal.
+4. Bootstrap the nine pods (`dev_pod.sh up`) and the bench pod.
+5. Start the nine lanes with the COMMON BRIEF and their sections.

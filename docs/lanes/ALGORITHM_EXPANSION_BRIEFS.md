@@ -20,6 +20,11 @@ cuvs-v26.08.00, raft-v26.08.00, lightgbm, xgboost and catboost.
   a git tree at your base commit (the lane check applies the sabotage with
   `git apply`):
   `tools/dev_pod.sh run <lane> 'git init -q; git remote add origin https://github.com/mojolearn/mojolearn.git; git fetch -q --depth 50 origin <base sha>; git reset -q <base sha>'`
+  where `<base sha>` is `git merge-base HEAD origin/main` in your worktree.
+  After every `git merge origin/main` (step 8) redo this at the new base,
+  before the next `sync`: a sabotage patch that applies on the laptop but
+  not on the pod is almost always a stale pod tree, not a bad patch
+  (plan, R6).
 - Heartbeat: run `tools/dev_pod.sh extend <lane> 120` every hour while you
   are working. If you stop calling it, the pod ends on its own.
 - Evidence goes to `~/mojolearn-evidence/algos-<lane>/`, never into the
@@ -88,9 +93,15 @@ cuvs-v26.08.00, raft-v26.08.00, lightgbm, xgboost and catboost.
      shared, so no per-lane pixi task). `tools/algos_lane_check.sh` runs each
      listed driver under `tools/with_identical_mode.sh` before its GPU/CPU
      diff and fails if any exits nonzero; the diff stays the Python-level
-     end-to-end check on top. The per-seam sabotage arms are yours to run
-     (one patch each, above); the steward runs the lane check with the one
-     `--sabotage` patch you submit.
+     end-to-end check on top. **The `.checks` file is REQUIRED from the
+     first algorithm you register**: the tool today only prints a note when
+     it is missing (plan, R2), so the orchestrator refuses to merge a lane
+     whose fragment registers an identity lane and has no `.checks` listing,
+     or whose listing does not name a driver for every seam in its ledger
+     rows. The per-seam sabotage arms are yours to run (one patch each,
+     above) and to REPORT at each commit, by patch name and result; no tool
+     runs them yet (plan, R3). The steward runs the lane check with the one
+     end-to-end `--sabotage` patch you submit.
 3. **Python class**, sklearn-shaped (`fit` / `predict` / `transform` /
    `predict_proba` where the reference has them), in your door
    `python/mojolearn/_expansion_<lane>.py` (or imported there), listed in its
@@ -122,8 +133,16 @@ cuvs-v26.08.00, raft-v26.08.00, lightgbm, xgboost and catboost.
    `git checkout`). Copy the patch to the pod first
    (`cat <patch> | tools/dev_pod.sh run <lane> 'cat > /root/<patch>'`) and
    keep it under your evidence dir.
-7. **Commit, push the branch, and submit to the Apple stewards:**
-   `tools/apple_steward.py submit --lane <lane> --commit <sha> --verify-lanes <lanes> --sabotage <patch>`.
+7. **Commit, push the branch, push the commit to the gating Mac, and submit
+   to the Apple stewards:**
+   ```
+   git push -u origin lane/algos-<lane>
+   tools/cloudmac.sh push m2pro <sha>          # REQUIRED: the Mac's origin is its own bare repo,
+                                               # not GitHub; without this the steward fails at checkout (plan, R1)
+   tools/apple_steward.py submit --lane <lane> --commit <sha> --verify-lanes <lanes> --sabotage <patch>
+   ```
+   The deferred Mac (M3 Ultra) gets the same push from the orchestrator at
+   `flush-deferred` time; do not ssh to it.
    It queues the request for BOTH cloud Macs (M2 Pro, M3 Ultra); each runs the
    same `tools/algos_lane_check.sh --sabotage` against Metal and the Arm CPU
    host bindings. The M3 Ultra is DEFERRED while it runs a GPT-3 training
@@ -177,7 +196,7 @@ sequence trees cnn ann`) the files it OWNS are exactly:
 | file | what it holds | read by |
 |---|---|---|
 | `python/mojolearn/_expansion_<lane>.py` | the public classes (`__all__`); optional `CLASSICAL_HOST_BASENAMES` and `classical_host_formats()` for saved-model CPU routes | `mojolearn/__init__.py` (binds `__all__`, refuses a clash by name), `_classical_host.py` |
-| `python/mojolearn/_surface_<lane>.py` | literal data only: `GPU_BINDINGS`, `FAMILIES` (one family, `x_<lane>`), `TRAINING_LANE_NAMES`, `PUBLIC_PENDING_LANES` | `host_surface.py` (and through it `_backend`, every packaging list, the CPU gate) |
+| `python/mojolearn/_surface_<lane>.py` | literal data only: `GPU_BINDINGS`, `FAMILIES` (one family, `x_<lane>`), `TRAINING_LANE_NAMES`, `PUBLIC_PENDING_LANES`, each bound ONCE (a second binding is not yet refused and silently wins; plan, R8) | `host_surface.py` (and through it `_backend`, every packaging list, the CPU gate) |
 | `tools/identity_lanes/<lane>.py` | the lane's identity lanes and their `_batch_decl`/part declarations, written against identity_break's API | `tools/identity_break.py` (executed in its namespace), the wheel (as `mojolearn/_identity_lane_<lane>.py`), `tools/lane_accounting.py`, `tools/lane_select.py` |
 | `tools/classical_host_lanes/<lane>.py` | classical gate probes, only for lanes the family declares as `inference_lanes` | `tools/classical_host_gate.py` |
 | `bindings/_mojolearn_x_<lane>.mojo`, `bindings/build_x_<lane>.sh` | the lane's ONE GPU binding and its build script (copy `bindings/build_preprocessing.sh`; fast + identical, refuse deterministic; `sequence` and `cnn` identical only) | `_backend`, packaging (through `GPU_BINDINGS`) |
@@ -320,10 +339,14 @@ the Mamba scan, `arima/`, `tsa/` (KPSS, `select_d`) and `holtwinters/`.
 | STL | statsmodels `STL` (loess inner/outer loops); pip-install it on the pod for sanity |
 | VAR | statsmodels `VAR` (OLS per equation, fixed lag order) |
 
-**FAST on neural is new.** `packaging/linux/build_sets.sh` lists the neural
-bindings as `IDENTICAL_ONLY_SCRIPTS`. A FAST neural tier needs that list and
+**FAST on neural is new, and NOT YET ENABLED for this lane.** Your GPU
+binding builds identical only (`host_surface.EXPANSION_IDENTICAL_ONLY`), and
+`packaging/linux/build_sets.sh` lists the neural bindings as
+`IDENTICAL_ONLY_SCRIPTS`. A FAST neural tier needs that tuple, that list and
 `_backend.py`'s tier table changed. Stop and report before touching them;
-the orchestrator makes that one shared change.
+the orchestrator makes that one shared change after the identity wave
+(plan, R7). Until it lands, step 9 for this lane is IDENTICAL speed work
+only.
 
 ## Lane 7: trees
 
@@ -349,7 +372,15 @@ Machinery to reuse: identical GEMM, `training/`, and the MLP.
 
 The deliverable can be forward + backward + a small CNN trainer. If
 something cannot be made identical, the deliverable is a design note plus a
-named refusal.
+named refusal. The one true atomic hazard is the backward pass's col2im:
+a scatter-add over overlapping receptive fields. Write it as a gather per
+input pixel in a fixed order (the Jacobi move `umap/optimizer_identical_device.mojo`
+made), never as atomics. Max pooling's tie is `identical_fmax`'s (the sign
+of zero); BatchNorm's statistics are pinned folds whose partial count is a
+function of the shape, never of the core count (IDENTITY_PATHS row 7).
+Like `sequence`, this lane's binding is identical only until the
+orchestrator enables FAST on neural (plan, R7): step 9 is IDENTICAL speed
+work only until then.
 
 ## Lane 9: ANN + t-SNE (HARD)
 
@@ -364,4 +395,16 @@ Machinery to reuse: `ivf/` (IVF-Flat), `neighbors/`, KMeans, and GEMM.
 **Write the design note first.** It says how each reference's
 nondeterminism (atomics, build order) gets a fixed order. Then implement in
 this order: IVF-PQ, t-SNE, CAGRA. Ending with a design note and a named
-refusal for CAGRA is an acceptable outcome.
+refusal for CAGRA is an acceptable outcome. Starting points the tree
+already holds: IVF-PQ's codebooks are `cluster/`'s k-means per subspace,
+its encoding a per-subspace argmin with the index tie-break of
+IDENTITY_PATHS row 22, its lookup table and code sum fixed-order chains
+with no atomics, its top-k the composite-key selector (rows 11 and 23);
+t-SNE's attractive term is the UMAP CSR fold, its repulsive term either
+exact (a per-vertex fold over all points ascending, O(n^2) per iteration)
+or Barnes-Hut over a tree built by Morton-code radix sort rather than
+atomic insertion; CAGRA's default cuVS build goes through IVF-PQ plus exact
+refine, so it depends on IVF-PQ landing first, and its reverse-edge
+insertion and search queue are the parts that need a rank-based rewrite
+(row 23's 32-lane pin). NN-descent stays refused by name
+(`hdbscan/NOT_IMPLEMENTED.tsv`).
