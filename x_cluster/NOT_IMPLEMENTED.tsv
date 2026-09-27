@@ -11,3 +11,6 @@ sklearn/cluster/_bisect_k_means.py::BisectingKMeans.fit(sample_weight)	NOT IMPLE
 sklearn/cluster/_mean_shift.py::MeanShift(bin_seeding=True, min_bin_freq)	NOT IMPLEMENTED	refused by name; every row (or the given seeds) is a seed
 sklearn/cluster/_mean_shift.py::estimate_bandwidth(n_samples, random_state)	NOT IMPLEMENTED	the estimate uses every row (sklearn's default n_samples=None) at quantile 0.3; the n x n distance matrix is on the device, so fit(bandwidth=None) holds n^2 floats
 sklearn/cluster/_mean_shift.py::MeanShift(n_jobs)	ACCEPTED, INERT	the device runs every seed at once
+sklearn/cluster/_optics.py::OPTICS(metric other than euclidean, p != 2, metric_params, precomputed)	NOT IMPLEMENTED	refused by name; euclidean only
+sklearn/cluster/_optics.py::compute_optics_graph np.around(core/reach, decimals=precision)	NOT IMPLEMENTED	the reference rounds its float64 distances to float precision; ours are float32 throughout, unrounded, so reachability agrees at a tolerance
+sklearn/cluster/_optics.py::OPTICS(algorithm, leaf_size, memory, n_jobs)	ACCEPTED, INERT	the n x n distances are one device matrix (n^2 floats); the ordering loop is sequential on the host
