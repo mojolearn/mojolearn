@@ -255,6 +255,19 @@ def gh(*args, check=True):
     return r.stdout
 
 
+def workflow_id():
+    """The workflow's numeric id. A workflow that is not on the default branch
+    yet is found by its path among the registered ones (GitHub resolves a
+    file name only on the default branch)."""
+    out = gh("api", "--paginate", "repos/{owner}/{repo}/actions/workflows",
+             "--jq", '.workflows[] | "\\(.id) \\(.path)"')
+    for line in out.splitlines():
+        wid, _, path = line.strip().partition(" ")
+        if path == ".github/workflows/" + WORKFLOW and wid.isdigit():
+            return wid
+    raise SystemExit(f".github/workflows/{WORKFLOW} is not registered with GitHub (docs/RELEASE_CHECKLIST.md 2d)")
+
+
 def tooling_ref(ref):
     """(branch, sha): the branch the workflow runs from must hold exactly this
     checkout's HEAD, and the route files must be committed."""
@@ -282,9 +295,9 @@ def mint_map(creds, jobs_per_set, nsets, leg):
     return bincache.presign("GET", key, MAP_HOURS * 3600, creds), key, n_get
 
 
-def find_run(tag, branch, tries=30, pause=5):
+def find_run(tag, branch, wid, tries=30, pause=5):
     for _ in range(tries):
-        rows = json.loads(gh("run", "list", "--workflow", WORKFLOW, "--branch", branch, "--event", "workflow_dispatch",
+        rows = json.loads(gh("run", "list", "--workflow", wid, "--branch", branch, "--event", "workflow_dispatch",
                              "--limit", "30", "--json", "databaseId,displayTitle,headSha,url") or "[]")
         for r in rows:
             if tag in (r.get("displayTitle") or ""):
@@ -412,13 +425,14 @@ def cmd_run(a):
             map_url, map_key, n_get = mint_map(creds, a.shards + 1, 1, tag)
             say(f"binding cache map: partition {partition()}, {n_get} objects, "
                 f"{(a.shards + 1) * SLOTS_PER_JOB} upload slots, valid {MAP_HOURS} h")
-        gh("workflow", "run", WORKFLOW, "--ref", branch, "-f", f"commit={a.commit}", "-f", f"sets={a.arch}",
+        wid = workflow_id()
+        gh("workflow", "run", wid, "--ref", branch, "-f", f"commit={a.commit}", "-f", f"sets={a.arch}",
            "-f", f"shards={a.shards}", "-f", f"jobs={a.jobs}", "-f", f"tag={tag}", "-f", f"map_url={map_url}")
         (gha / "dispatch.json").write_text(json.dumps(dict(
             tag=tag, branch=branch, tooling_commit=head, source_commit=a.commit, arch=a.arch, shards=a.shards,
             jobs=a.jobs, bincache=bool(creds), map_object=map_key, dispatched_at=dt.datetime.now(dt.timezone.utc).isoformat()),
             indent=1) + "\n")
-        run = find_run(tag, branch)
+        run = find_run(tag, branch, wid)
         say(f"dispatched {run['url']}")
         if run.get("headSha") != head:
             raise SystemExit(f"the run is at {run.get('headSha')}, this checkout at {head}")
