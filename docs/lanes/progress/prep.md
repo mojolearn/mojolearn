@@ -55,31 +55,23 @@ Sanity tests need scikit-learn: on the pod it is in /root/skl
 | option parity: sample_weight for GaussianNB / MultinomialNB / ComplementNB / BernoulliNB / CategoricalNB; CategoricalNB min_categories | (this commit) | x-prep-nb-weights AGREE, DISAGREE under e2e_host_branch; every other prep lane (and par-gpc-predict, which the selector picks) AGREE, SAME BITS |
 | option parity: the reference's score edges (f_classif NaN for a constant feature / single class, +inf for a within-class-constant one; chi2 NaN for an all-zero feature; canonical NaN word), f_regression force_finite=False, r_regression (new), RFE importance_getter str / callable; RFE tie rule written as DIFFERS BY NAME (numpy's unstable argsort) | (this commit) | x-prep-score-edges AGREE (--pass 2), DISAGREE under e2e_host_branch; every other prep lane AGREE and SAME BITS vs inv3 except x-prep-select-kbest/dupes (intended: that fixture's constant and all-zero columns now score NaN, as the reference) (H100) |
 | option parity: PolynomialFeatures order='F' (same bits, column-major), OrdinalEncoder / OneHotEncoder categories=<list> | (this commit) | x-prep-encoder-categories AGREE (--pass 2), DISAGREE under e2e_store_branch; x-prep-polynomial-features SAME BITS |
-| steward: 1790529624248 / 1790529633391 (4de76eb6e1) PASS m2pro + do-amd; 1790530038647 (x-prep-simple-imputer-indicator) PASS | - | PASS |
+| steward: 1790529624248 / 1790529633391 (4de76eb6e1) PASS m2pro + do-amd; 1790530038647 (x-prep-simple-imputer-indicator) PASS; 1790535515159 / 1790535524761 (d2e61ed9d3: LDA/QDA solvers, NB sample_weight, stratified TargetEncoder folds, seam 5401 fix) PASS | - | PASS |
 
 ## Next
-- Apple + AMD identity: `tools/apple_steward.py submit` goes to m2pro AND do-amd (the
-  shared DigitalOcean MI325X; no own AMD box, per the orchestrator). The end-to-end
-  sabotage `x_prep/seams/sabotage/e2e_host_branch.patch` (a host-only branch in `add`)
-  only moves lanes that sum floats, so steward requests are split: all lanes WITHOUT
-  sabotage (clean AGREE), and ~/mojolearn-evidence/algos-prep/sum_lanes.txt WITH it.
-  The first request (310afeee0) FAILED only because it put the sabotage on every lane.
-  The 8 lanes without float sums (~/mojolearn-evidence/algos-prep/store_lanes.txt) take
-  `e2e_store_branch.patch` (a host-only branch in every nonzero store): DISAGREE on all 8
-  on the H100. So two steward requests per commit: sum_lanes + e2e_host_branch,
-  store_lanes + e2e_store_branch (every lane covered, with x-prep-robust-scaler-unit-variance
-  in sum_lanes).
-- Option parity: work down x_prep/NOT_IMPLEMENTED.tsv and naive_bayes/NOT_IMPLEMENTED.tsv
-  (done: priors/class_prior, RobustScaler unit_variance, SimpleImputer add_indicator, the inverse_transforms,
-  OrdinalEncoder encoded_missing_value).
-- Steward requests pending at hand-off (`tools/apple_steward.py status`): 1790529624248-prep-4de76eb6e1
-  (sum lanes + e2e_host_branch) and 1790529633391-prep-4de76eb6e1 (store lanes + e2e_store_branch);
-  merge gating is m2pro PASS + do-amd PASS. x-prep-simple-imputer-indicator (c73e49116) still
-  needs a steward request.
-- Next options, in order: QuantileTransformer / PowerTransformer inverse_transform, OrdinalEncoder
-  encoded_missing_value, LabelBinarizer inverse_transform, KBins inverse_transform, TargetEncoder
-  stratified folds, LDA lsqr/eigen + shrinkage, sample_weight for the NBs.
-- Then speed (IDENTICAL/FAST, NVIDIA, Apple via `--kind speed`, CPU; AMD last).
+PHASE: option parity (c), still open. One phase per session; next session continues it.
+- Steward: two requests per commit (sum lanes + e2e_host_branch, store lanes + e2e_store_branch;
+  lane lists in ~/mojolearn-evidence/algos-prep/{sum_lanes,store_lanes}.txt, which now include
+  x-prep-score-edges and x-prep-encoder-categories). Merge gate: m2pro PASS + do-amd PASS.
+  All requests through 23b11a7ba5 (score edges, encoder categories, PolynomialFeatures order='F';
+  1790537091369 / 1790537100516) PASS; everything above is merged.
+- Option parity rows still NOT IMPLEMENTED, in order (x_prep/NOT_IMPLEMENTED.tsv, naive_bayes/NOT_IMPLEMENTED.tsv):
+  TargetEncoder categories=<list> (unknown training values must code -1 in te_enc) and cv=<splitter>;
+  OneHot/Ordinal min_frequency, max_categories, handle_unknown='infrequent_if_exist';
+  SplineTransformer knots=<array>, extrapolation 'linear' / 'periodic', sample_weight;
+  KBinsDiscretizer sample_weight and the other quantile_methods; mutual_info discrete_features;
+  IterativeImputer options; LabelBinarizer multilabel y; *NB.partial_fit; SimpleImputer callable;
+  LDA/QDA covariance_estimator. Sparse output stays REFUSED BY NAME (no sparse Array).
+- Then: FAST GPU speed (d), IDENTICAL GPU speed (e), CPU speed (f), one phase per session.
 Helper scripts (not in the repo): ~/mojolearn-evidence/algos-prep/{qsync,gate,commit,mkpatches,addlane,samebits}.sh|py;
 qsync sends every file differing from ~/mojolearn-evidence/algos-prep/pod_base; the pass-2
 reference columns for "same bits" checks are on the pod in /root/mojolearn-evidence/algos-prep/pass2-nvidia.
