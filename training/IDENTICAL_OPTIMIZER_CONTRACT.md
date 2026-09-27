@@ -896,3 +896,26 @@ Cited from elsewhere and never redefined: 258, 550, 741, 824, 826, 1473, 1477,
    `adv_pow_step_1000` (4.1). **None exists**, which is why every clause is our
    device against our oracle and seven of twenty-three stages are the same host
    code on both sides.
+
+## Addendum 2026-09-27: `maximize=True` (DEVIATION 6200, IDENTITY_PATHS row 200)
+
+torch's SGD, Adam and AdamW read `grad = -grads[i]` as the first statement of
+the step when `maximize=True`, before the coupled decay and the moments;
+AdamW's decoupled decay reads the parameter and never the sign. A maximizing
+step is therefore the minimizing step of this contract on `-g`, and both
+bindings run exactly that (optimizer params slot 12; `training/maximize.mojo`).
+
+The seam is the spelling of the negation. `-g` (the IEEE sign bit flipped)
+and `0.0 - g` are both exact and differ at `g = +0.0` only, where the zero's
+sign reaches SGD's copied momentum buffer and `fma(-lr, g, -0.0)`. PIN: the
+sign bit, torch's `neg`. The step reads a negated COPY, so the caller's
+gradient is never negated; with the clip on, the clipped negated gradient is
+written back through the same flip, which equals the `maximize=False` clip of
+`g` (norms read squares; round-to-nearest is sign-symmetric).
+
+Check: `training/checks/maximize_check.mojo` (separating fixture with planted
++0.0 / -0.0 gradients and -0.0 parameters, VACUOUS otherwise; the production
+flip against a restatement through `optimizer_step_oracle`, SGD / Adam /
+AdamW, clip on and off; card via `MOJOLEARN_MAXIMIZE_CARD`). Sabotage:
+`training/checks/sabotage/maximize_6200_subtract_from_zero.patch`. Lane:
+`optim-maximize`.
