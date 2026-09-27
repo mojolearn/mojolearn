@@ -88,6 +88,18 @@ messaging lanes. Newest items are at the top.
      the CPU host path, re-proven bitwise
    Each of (b)-(f) is its own session: finish it, merge, STOP. The
    orchestrator relaunches you for the next phase.
+1a. **Each lane's family INCLUDES its existing algorithms, in EVERY phase**
+   (parity, FAST speed, IDENTICAL speed, CPU speed), not only the new ones:
+   linear (glm, solver), cluster (KMeans, DBSCAN, HDBSCAN, agglomerative,
+   spectral, GMM), neighbors (kNN, radius, ball cover, KDE, SVM, kernel,
+   GP), decomp (PCA, TSVD, UMAP, linalg), prep (scalers), sequence (ARIMA,
+   ETS, KPSS), trees (RF, ET, GBDT, isolation forest), ann (IVF-Flat).
+   Two new lanes own the families nobody had:
+   - `neural`: transformer, Mamba-1/2/3, Samba, MLP, embedding, byte-LM,
+     training. Their bindings are IDENTICAL-only today; this lane builds
+     their FAST tier.
+   - `metrics`: the 24 evaluation metrics, cross-validation and
+     model_selection.
 1b. **Done means ALL of this, per algorithm (Andrew, 2026-09-27):**
    - **Both modes work:** IDENTICAL (bitwise across every column) and FAST
      (a faster schedule, allowed to differ in bits, never in quality: a
