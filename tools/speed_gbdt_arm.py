@@ -178,6 +178,14 @@ LANE_NAMES = (
     "rf",
     "et",
     "iforest",
+    # THE GBDT TASK LANES (lane bench-board-gbdt-tasks, 2026-09-26). Each is a
+    # TASK the public GradientBoosting surface fits beyond binary and
+    # regression, raced against each library's closest objective; every
+    # mismatch is in `TASK_LANES[lane]["mismatches"]`, one line each.
+    "gbdt-rank-yetirank",
+    "gbdt-rank-pairlogit",
+    "gbdt-multiclass",
+    "gbdt-categorical",
 )
 
 
@@ -361,6 +369,79 @@ def auc(y, score):
         i = j + 1
     return float((np.sum(ranks[y > 0.5]) - pos * (pos + 1.0) / 2.0)
                  / (pos * neg))
+
+
+def mlogloss(y, proba):
+    """Multiclass log loss: the mean negative log of the probability each
+    row's TRUE class received, clipped as `logloss` clips. `proba` is
+    (rows, n_classes) with column j the probability of class j."""
+    y = np.asarray(y).astype(np.int64).ravel()
+    p = np.asarray(proba, dtype=np.float64)
+    picked = np.clip(p[np.arange(y.size), y], 1e-15, 1.0)
+    return float(-np.mean(np.log(picked)))
+
+
+def query_bounds(qid):
+    """Row offsets of each query's run, [0, ..., rows]. Queries are the runs
+    of equal consecutive ids, which is what every ranking arm here groups by."""
+    qid = np.asarray(qid).ravel()
+    change = np.flatnonzero(np.diff(qid) != 0) + 1
+    return np.concatenate([[0], change, [qid.size]]).astype(np.int64)
+
+
+def _pessimistic_order(grades, scores):
+    """Score descending, ties broken by grade ASCENDING, so no arm is
+    credited for the file order of tied documents
+    (tools/speed_gbdt_rank.py's convention)."""
+    return np.lexsort((grades, -scores))
+
+
+def ndcg_at(k, bounds, grades, scores):
+    """Mean NDCG@k over queries: gain 2^grade - 1, discount 1/log2(rank + 1),
+    ties pessimistic, a query with no relevant document scores 1.0
+    (LightGBM's and CatBoost's convention). The same definition as
+    tools/speed_gbdt_rank.py's `ndcg_at` (its default, pessimistic ties);
+    test_speed_gbdt_tasks.py holds the two equal."""
+    g_all = np.power(2.0, np.asarray(grades, dtype=np.float64)) - 1.0
+    s_all = np.asarray(scores, dtype=np.float64).ravel()
+    disc = 1.0 / np.log2(np.arange(2, k + 2, dtype=np.float64))
+    total, n_q = 0.0, bounds.size - 1
+    for i in range(n_q):
+        a, b = int(bounds[i]), int(bounds[i + 1])
+        g = g_all[a:b]
+        order = _pessimistic_order(g, s_all[a:b])
+        kk = min(k, b - a)
+        idcg = float(np.dot(np.sort(g)[::-1][:kk], disc[:kk]))
+        total += 1.0 if idcg == 0.0 else float(np.dot(g[order[:kk]], disc[:kk])) / idcg
+    return total / max(n_q, 1)
+
+
+def mean_average_precision(bounds, grades, scores):
+    """MAP over queries on BINARY relevance (grade > 0), the whole ranked
+    list (no cutoff), ties pessimistic; a query with no relevant document
+    scores 1.0, as NDCG does here."""
+    rel_all = (np.asarray(grades, dtype=np.float64) > 0).astype(np.float64)
+    s_all = np.asarray(scores, dtype=np.float64).ravel()
+    total, n_q = 0.0, bounds.size - 1
+    for i in range(n_q):
+        a, b = int(bounds[i]), int(bounds[i + 1])
+        r = rel_all[a:b]
+        n_rel = float(r.sum())
+        if n_rel == 0.0:
+            total += 1.0
+            continue
+        hit = r[_pessimistic_order(r, s_all[a:b])]
+        prec = np.cumsum(hit) / np.arange(1, hit.size + 1, dtype=np.float64)
+        total += float(np.sum(prec * hit)) / n_rel
+    return total / max(n_q, 1)
+
+
+def ranking_metrics(bounds, grades, scores):
+    """(metric, value) pairs a ranking lane reports: NDCG@10 first (the
+    headline), then NDCG@5 and MAP."""
+    return [("ndcg10", ndcg_at(10, bounds, grades, scores)),
+            ("ndcg5", ndcg_at(5, bounds, grades, scores)),
+            ("map", mean_average_precision(bounds, grades, scores))]
 
 
 # --------------------------------------------------------------------------
@@ -748,7 +829,11 @@ def _decode_letor(path, n_features):
             np.ascontiguousarray(np.concatenate(ys)))
 
 
-def load_istella(size, rows_cap=None, regression=False):
+#: Istella-S grades are 0..4; the multiclass cell predicts the grade itself.
+ISTELLA_GRADES = 5
+
+
+def load_istella(size, rows_cap=None, regression=False, multiclass=False):
     """Istella-S LETOR, 3,408,630 x 220, THE HIGH-FEATURE LARGE DATASET
     (CONTRIBUTING.md (Performance claims), the second kind beside NYC taxi; HIGGS is retired).
 
@@ -756,7 +841,9 @@ def load_istella(size, rows_cap=None, regression=False):
     engine (Dato et al., ACM TOIS 2016), dense, 220 numeric features,
     graded relevance 0..4. train.txt is 2,043,304 rows, test.txt 681,250.
     Binary target: relevance > 0 (about 11% positive); `regression=True`
-    keeps the 0..4 grade as a float target (the RMSE cell). The test rows
+    keeps the 0..4 grade as a float target (the RMSE cell); `multiclass=True`
+    is the `istellamc` task, the grade as one of five classes (lane
+    gbdt-multiclass). The test rows
     are the first ISTELLA_N_TEST rows of test.txt at every rung, the train
     rows the first `rows_cap` of train.txt, so rungs are comparable the way
     HIGGS rungs are. Direct download, no credentials (Bosch needs Kaggle).
@@ -801,6 +888,11 @@ def load_istella(size, rows_cap=None, regression=False):
     if regression:
         return Data("istellareg", x_train, x_te, r_train, r_te,
                     "regression", 0)
+    if multiclass:
+        # lane gbdt-multiclass: the relevance grade 0..4 itself, five
+        # classes, the same rows as the binary cell (whose label is grade > 0)
+        return Data("istellamc", x_train, x_te, r_train, r_te,
+                    "multiclass", ISTELLA_GRADES)
     y_train = (r_train > 0).astype(np.float32)
     y_test = (r_te > 0).astype(np.float32)
     return Data("istella", x_train, x_te, y_train, y_test, "binary", 2)
@@ -845,6 +937,36 @@ def load_istella_rank(rows_cap=None):
                     np.ascontiguousarray(r_tr[:n]),
                     np.ascontiguousarray(qid_tr[:n]),
                     rank["x_test"], rank["r_test"], rank["qid_test"])
+
+
+def load_istella_rank_data(size, rows_cap=None):
+    """`load_istella_rank` as a `Data` (task 'ranking', dataset tag
+    `istellarank`) for the gbdt-rank-* lanes of the forest driver.
+
+    y is the grade 0..4 (the target of every ranking loss here). Beside it:
+    `qid_train`/`qid_test` (Istella-S's own query ids, consecutive per query),
+    `qid_train_seq` (each train query renumbered by its order of appearance,
+    uint32: XGBoost refuses a qid that is not sorted non-decreasing and
+    Istella-S numbers its queries in neither file in ascending order, so the
+    same partition of the same rows in the same order is handed to it under
+    names it accepts; tools/speed_gbdt_rank.py does the same), `group_sizes`
+    (LightGBM's `group`) and `bounds_test` (the scorer's query offsets). All
+    prepared here, outside every timer. The test split is the WHOLE 681,250
+    rows of test.txt (the binary cell's first 500,000 would cut a query in
+    half), and `rows_cap` cuts at a query boundary."""
+    if size == "smoke":
+        rows_cap = min(rows_cap or 50000, 50000)
+    r = load_istella_rank(rows_cap)
+    d = Data("istellarank", r.x_train, r.x_test, r.r_train, r.r_test,
+             "ranking", 0)
+    d.qid_train = np.ascontiguousarray(r.qid_train)
+    d.qid_test = np.ascontiguousarray(r.qid_test)
+    bounds = query_bounds(d.qid_train)
+    d.group_sizes = np.diff(bounds).astype(np.int64)
+    d.qid_train_seq = np.repeat(np.arange(d.group_sizes.size, dtype=np.uint32),
+                                d.group_sizes)
+    d.bounds_test = query_bounds(d.qid_test)
+    return d
 
 
 def _find_file(folder, name):
@@ -925,7 +1047,22 @@ def _decode_taxi_month(path):
             tip[keep].astype(np.float32), payment[keep] == 1)
 
 
-def load_taxi(size, rows_cap=None, regression=False):
+#: lane gbdt-multiclass on taxi: the tip share of the fare on card-paid
+#: trips, cut at 20%, 25% and 30% (four classes: under 20%, 20-25%, 25-30%,
+#: 30% or more). Class >= 1 is exactly the binary cell's label (tip >= 20%).
+#: Measured on the staged cache: 23.7%, 18.4%, 28.0% and 29.9% of card trips.
+TAXI_TIP_CUTS = (0.2, 0.25, 0.3)
+
+#: lane gbdt-categorical on taxi: the id columns declared categorical on
+#: EVERY arm (vendor, rate code, store-and-forward flag, pickup zone, dropoff
+#: zone). The zones carry about 260 categories each, above every library's
+#: one-hot threshold, so they reach the target-statistics (CTR) and
+#: partition-search paths; the small ones take one-hot.
+TAXI_CAT_COLUMNS = (0, 3, 4, 5, 6)
+
+
+def load_taxi(size, rows_cap=None, regression=False, multiclass=False,
+              categorical=False):
     """NYC TLC yellow taxi trips, January and February 2024, THE MIXED-TYPE
     LARGE DATASET (CONTRIBUTING.md (Performance claims), the second kind beside
     Istella-S).
@@ -976,10 +1113,16 @@ def load_taxi(size, rows_cap=None, regression=False):
     if regression:
         y = fare
         name = "taxireg"
+    elif multiclass:
+        x, fare, tip = x[card], fare[card], tip[card]
+        y = np.zeros(tip.shape[0], dtype=np.float32)
+        for cut in TAXI_TIP_CUTS:
+            y += (tip >= cut * fare).astype(np.float32)
+        name = "taximc"
     else:
         x, fare, tip = x[card], fare[card], tip[card]
         y = (tip >= 0.2 * fare).astype(np.float32)
-        name = "taxi"
+        name = "taxicat" if categorical else "taxi"
     n_test = TAXI_N_TEST
     n_train = x.shape[0] - n_test
     if size == "smoke":
@@ -992,6 +1135,17 @@ def load_taxi(size, rows_cap=None, regression=False):
     y_test = np.ascontiguousarray(y[-n_test:])
     if regression:
         return Data(name, x_train, x_test, y_train, y_test, "regression", 0)
+    if multiclass:
+        return Data(name, x_train, x_test, y_train, y_test, "multiclass",
+                    len(TAXI_TIP_CUTS) + 1)
+    if categorical:
+        # Dense codes 0..k-1 within the train slice, an unseen test value on
+        # the one unknown bucket k: the criteo rule, for the same reason
+        # (our fit refuses a non-dense categorical column by name).
+        x_train, x_test = _criteo_densify_slice(x_train, x_test,
+                                                TAXI_CAT_COLUMNS)
+        return Data(name, x_train, x_test, y_train, y_test, "binary", 2,
+                    cat_idx=TAXI_CAT_COLUMNS)
     return Data(name, x_train, x_test, y_train, y_test, "binary", 2)
 
 
@@ -1006,6 +1160,10 @@ LANE_DEFAULT_DATASET = {
     "rf": "taxi",
     "et": "taxi",
     "iforest": "anomaly",
+    "gbdt-rank-yetirank": "istellarank",
+    "gbdt-rank-pairlogit": "istellarank",
+    "gbdt-multiclass": "taximc",
+    "gbdt-categorical": "taxicat",
 }
 
 
@@ -1230,6 +1388,14 @@ def load_dataset(name, size, rows_cap=None):
         return load_taxi(size, rows_cap)
     if name == "taxireg":
         return load_taxi(size, rows_cap, regression=True)
+    if name == "taximc":
+        return load_taxi(size, rows_cap, multiclass=True)
+    if name == "taxicat":
+        return load_taxi(size, rows_cap, categorical=True)
+    if name == "istellamc":
+        return load_istella(size, rows_cap, multiclass=True)
+    if name == "istellarank":
+        return load_istella_rank_data(size, rows_cap)
     if name == "year":
         return load_year(size, rows_cap)
     if name == "covtype":
@@ -1265,6 +1431,11 @@ DATASET_STORE_KEYS = {
     "year": "gbm-bench/year/year_speed.npz",
     "covtype": "gbm-bench/covtype/covtype_speed.npz",
     "covtype2": "gbm-bench/covtype/covtype_speed.npz",
+    "taximc": "gbm-bench/taxi/taxi_speed.npz",
+    "taxicat": "gbm-bench/taxi/taxi_speed.npz",
+    "istellamc": "gbm-bench/istella/istella_speed.npz",
+    # and gbm-bench/istella/istella_speed.npz beside it (the train features)
+    "istellarank": "gbm-bench/istella/istella_rank.npz",
 }
 
 #: Generated in process, so they cannot be missing and are never a substitute
@@ -1545,6 +1716,106 @@ def download(name):
 # The hyper-parameters, in ONE place, held equal across every arm of a lane.
 # --------------------------------------------------------------------------
 
+#: THE GBDT TASK LANES: what each one fits, each library's objective, the
+#: datasets it runs, and every mismatch that could not be removed, one line
+#: each with its reason. The shared knobs (100 trees, depth 6, rate 0.1, L2 1,
+#: 254 borders, no bagging, seed 7, Plain boosting) are the gbdt lanes' own
+#: (`lane_config`); only the task, the objective and the grower differ.
+#:
+#: WHY THE GROWER DIFFERS. The public GradientBoosting fits the ranking and
+#: multiclass losses on SymmetricTree only (Depthwise and Lossguide refuse by
+#: name, as CatBoost's GPU learner does: it registers a non-symmetric trainer
+#: for eleven pointwise losses; probed on 0.8.22, identical and fast). So
+#: those lanes race CatBoost on the same oblivious grower, and XGBoost and
+#: LightGBM, which have none, on their own growers at the same depth, labeled.
+#: The categorical lane has no such limit and runs Lossguide, the one policy
+#: all four libraries grow.
+TASK_LANES = {
+    "gbdt-rank-yetirank": dict(
+        task="ranking", loss="YetiRank", grow_policy="SymmetricTree",
+        datasets=("istellarank",),
+        objectives={"mojolearn": "YetiRank", "catboost": "YetiRank",
+                    "xgboost": "rank:ndcg", "lightgbm": "lambdarank"},
+        mismatches=(
+            "grower: ours and CatBoost fit YetiRank on symmetric trees (ours has no other "
+            "policy for a ranking loss); XGBoost depthwise at depth 6, LightGBM leaf-wise "
+            "capped at depth 6 and 64 leaves, because neither has an oblivious grower",
+            "objective: XGBoost rank:ndcg and LightGBM lambdarank are LambdaMART "
+            "(NDCG-weighted pairwise gradients), a different loss from YetiRank's sampled "
+            "permutations; each is that library's closest listwise objective, labeled",
+            "l2 1.0 is pinned on every arm; the YetiRank default in CatBoost (and ours) is 0",
+            "YetiRank draws its permutations from each library's own seeded generator "
+            "(seed 7); the streams are not shared, so the fits differ by construction",
+            "XGBoost pair construction (lambdarank_pair_method, lambdarank_num_pair_per_sample) "
+            "and LightGBM's lambdarank_truncation_level (30) and label_gain (2^g - 1) are left "
+            "at their defaults; no library exposes the others' pair sampling",
+            "XGBoost is handed each query renumbered by order of appearance (it refuses "
+            "unsorted qids); the same partition of the same rows in the same order",
+            "LightGBM min_child_samples 20 and min_child_weight 1e-3 stay at its defaults: "
+            "at 0 (the gbdt lanes' value) LightGBM 4.7.0 aborts the first lambdarank tree",
+        )),
+    "gbdt-rank-pairlogit": dict(
+        task="ranking", loss="PairLogit", grow_policy="SymmetricTree",
+        datasets=("istellarank",),
+        objectives={"mojolearn": "PairLogit", "catboost": "PairLogit",
+                    "xgboost": "rank:pairwise"},
+        mismatches=(
+            "grower: ours and CatBoost fit PairLogit on symmetric trees (ours has no other "
+            "policy for a ranking loss); XGBoost depthwise at depth 6",
+            "objective: XGBoost rank:pairwise is the same pairwise logistic loss, but it "
+            "samples its pairs (lambdarank_pair_method and lambdarank_num_pair_per_sample at "
+            "their defaults) where CatBoost and ours generate them from the grades",
+            "LightGBM is not raced here: it has no pairwise logistic objective without NDCG "
+            "weighting (its lambdarank races in gbdt-rank-yetirank)",
+            "XGBoost is handed each query renumbered by order of appearance (it refuses "
+            "unsorted qids); the same partition of the same rows in the same order",
+        )),
+    "gbdt-multiclass": dict(
+        task="multiclass", loss="MultiClass", grow_policy="SymmetricTree",
+        datasets=("taximc", "istellamc", "covtype"),
+        objectives={"mojolearn": "MultiClass", "catboost": "MultiClass",
+                    "xgboost": "multi:softprob", "lightgbm": "multiclass"},
+        mismatches=(
+            "grower: ours and CatBoost fit MultiClass on symmetric trees (ours has no other "
+            "policy for a multiclass loss); XGBoost depthwise at depth 6, LightGBM leaf-wise "
+            "capped at depth 6 and 64 leaves, because neither has an oblivious grower",
+            "model shape: ours and CatBoost grow ONE tree per round with a vector of class "
+            "values in each leaf; XGBoost and LightGBM grow one tree PER CLASS per round, so "
+            "the fit verdict divides their tree and leaf counts by n_classes",
+            "the loss is the same softmax cross-entropy on every arm",
+            "LightGBM min_child_samples 20 and min_child_weight 1e-3 stay at its defaults: "
+            "at 0 (the gbdt lanes' value) LightGBM 4.7.0 aborts the first multiclass tree",
+        )),
+    "gbdt-categorical": dict(
+        task="binary", loss="Logloss", grow_policy="Lossguide",
+        datasets=("taxicat", "criteo"),
+        objectives={"mojolearn": "Logloss", "catboost": "Logloss",
+                    "xgboost": "binary:logistic", "lightgbm": "binary"},
+        mismatches=(
+            "categorical method: ours follows CatBoost's dispatch (one-hot at or below "
+            "one_hot_max_size, CTR target statistics above), CatBoost runs its own at its "
+            "defaults: two libraries, one algorithm, on the same declared columns",
+            "categorical method: XGBoost partition search (enable_categorical, "
+            "max_cat_to_onehot 1), LightGBM its own categorical split (categorical_feature) "
+            "at its defaults (max_cat_to_onehot, cat_smooth, cat_l2): "
+            "different algorithms from CTR",
+            "input conversion inside the fit clock: CatBoost gets the declared columns as "
+            "int64 (it refuses float categorical columns), XGBoost a pandas frame with one "
+            "CategoricalDtype per column; ours and LightGBM take the float32 codes",
+            "LightGBM min_child_samples 20 and min_child_weight 1e-3 stay at its defaults: "
+            "at 0 (the gbdt lanes' value) LightGBM 4.7.0 aborts the first categorical tree",
+            "codes are dense 0..k-1 within the train slice (our fit refuses a non-dense "
+            "categorical column); a test value unseen in training shares one unknown bucket "
+            "k per column",
+        )),
+}
+
+
+def task_of(lane):
+    """The TASK_LANES record of a task lane, or None for the original lanes."""
+    return TASK_LANES.get(lane)
+
+
 def lane_config(lane, size):
     """The knobs every arm of `lane` is given, spelled once.
 
@@ -1630,18 +1901,28 @@ def lane_config(lane, size):
     )
     if lane.startswith("gbdt-"):
         cfg = dict(common)
+        task = task_of(lane)
         cfg.update(
             max_depth=6,
             learning_rate=0.1,
             l2=1.0,
             borders=254,       # CatBoost border count; max_bin = borders + 1
             max_leaves=64,     # 2 ** 6, so the lossguide lane matches depth 6
-            grow_policy={
+            grow_policy=task["grow_policy"] if task else {
                 "gbdt-symmetric": "SymmetricTree",
                 "gbdt-depthwise": "Depthwise",
                 "gbdt-lossguide": "Lossguide",
             }[lane],
         )
+        if task:
+            cfg.update(task=task["task"], loss=task["loss"],
+                       objectives=dict(task["objectives"]),
+                       mismatches=list(task["mismatches"]))
+            if task["grow_policy"] == "SymmetricTree":
+                # the opponents without an oblivious grower race their own
+                # at the same depth (TASK_LANES, "grower")
+                cfg["xgboost_grow_policy"] = "depthwise"
+                cfg["lightgbm_leafwise"] = True
         return cfg
     if lane in ("rf", "et"):
         cfg = dict(common)
@@ -1825,8 +2106,8 @@ def xgboost_arms(lane, cfg, data, devices):
     XGBoost out of it."""
     import xgboost as xgb
 
-    policy = {"Depthwise": "depthwise", "Lossguide": "lossguide"}.get(
-        cfg["grow_policy"])
+    policy = cfg.get("xgboost_grow_policy") or {
+        "Depthwise": "depthwise", "Lossguide": "lossguide"}.get(cfg["grow_policy"])
     if policy is None:
         raise RuntimeError(
             "xgboost has no symmetric growth policy; the symmetric-tree "
@@ -2000,7 +2281,7 @@ def lightgbm_arms(lane, cfg, data, devices):
         if lane == "et":
             p["extra_trees"] = True
     else:
-        if cfg["grow_policy"] == "SymmetricTree":
+        if cfg["grow_policy"] == "SymmetricTree" and not cfg.get("lightgbm_leafwise"):
             raise RuntimeError(
                 "the symmetric-tree comparison is CatBoost ONLY (standing "
                 "order 2026-08-22); LightGBM has no symmetric mode"
@@ -2014,6 +2295,12 @@ def lightgbm_arms(lane, cfg, data, devices):
             bagging_fraction=1.0,            # DEVIATION 1833
             feature_fraction=1.0,
         )
+        if cfg.get("task"):
+            # the task lanes: at min_child_weight 0 LightGBM 4.7.0 aborts
+            # the first multiclass and categorical tree ("Check failed:
+            # (best_split_info.left_count) > (0)", Apple board smoke
+            # 2026-09-26), so both stay at LightGBM's defaults (TASK_LANES)
+            p.update(min_child_samples=20, min_child_weight=1e-3)
     # MOJOLEARN_SPEED_LGBM_PARAMS=name=value,... (lane trees-hotaisle,
     # 2026-09-11): LightGBM 4.7.0 refused every AMD cell with "Check failed:
     # (best_split_info.left_count) > (0)" under min_child_weight=0.0, so ONE
@@ -2030,6 +2317,13 @@ def lightgbm_arms(lane, cfg, data, devices):
         emit_note(lane, ["lightgbm-*"], "params", float(len(over)),
                   "MOJOLEARN_SPEED_LGBM_PARAMS overrides the harness LightGBM "
                   "params: %s" % ", ".join("%s=%r" % kv for kv in sorted(over.items())))
+
+    def _lgb_fit(m, d):
+        # lane gbdt-categorical (and criteo): the declared columns go to
+        # LightGBM's own categorical split, as every other arm's do
+        if d.cat_idx:
+            return m.fit(d.X_train, d.y_train, categorical_feature=list(d.cat_idx))
+        return m.fit(d.X_train, d.y_train)
 
     def make(device_type):
         q = dict(p)
@@ -2049,11 +2343,116 @@ def lightgbm_arms(lane, cfg, data, devices):
         out.append(Arm(
             "lightgbm-" + {"cpu": "cpu", "opencl": "opencl"}.get(dev, "cuda"),
             (lambda dt: (lambda: make(dt)))(device_type),
-            lambda m, d: m.fit(d.X_train, d.y_train),
+            _lgb_fit,
             _score_sklearn_like,
             sync=_cuda_sync,
             library="lightgbm",
         ))
+    return out
+
+
+# ---- Ranking (lanes gbdt-rank-yetirank, gbdt-rank-pairlogit) -------------
+
+def _rank_common(cfg):
+    return dict(max_depth=cfg["max_depth"], learning_rate=cfg["learning_rate"],
+                random_state=cfg["seed"])
+
+
+def catboost_rank_arms(lane, cfg, data, devices):
+    """CatBoost's ranker with the lane's loss (YetiRank or PairLogit), on
+    the symmetric grower ours uses, every shared knob as the gbdt lanes pin
+    it. The Pool with `group_id` is built inside `fit`, inside the clock, as
+    our run lengths are."""
+    import catboost
+
+    def make(task_type):
+        p = dict(loss_function=cfg["objectives"]["catboost"],
+                 iterations=cfg["n_estimators"], depth=cfg["max_depth"],
+                 learning_rate=cfg["learning_rate"], l2_leaf_reg=cfg["l2"],
+                 border_count=cfg["borders"], random_seed=cfg["seed"],
+                 bootstrap_type="No", boosting_type="Plain",
+                 grow_policy=cfg["grow_policy"], task_type=task_type,
+                 verbose=False, allow_writing_files=False)
+        if task_type == "GPU":
+            p["devices"] = "0"
+        return catboost.CatBoostRanker(**p)
+
+    def fit(m, d):
+        return m.fit(d.X_train, d.y_train, group_id=d.qid_train)
+
+    def score(m, d):
+        return score_ranking(m.predict(d.X_test), d)
+
+    out = []
+    for dev in devices:
+        if dev == "opencl":
+            continue
+        tt = "CPU" if dev == "cpu" else "GPU"
+        out.append(Arm("catboost-" + dev, (lambda t: (lambda: make(t)))(tt), fit, score,
+                       sync=lambda: _blocking("catboost"), library="catboost"))
+    return out
+
+
+def xgboost_rank_arms(lane, cfg, data, devices):
+    """XGBRanker, the lane's closest objective (rank:ndcg beside YetiRank,
+    rank:pairwise beside PairLogit), depthwise at the lane's depth
+    (TASK_LANES mismatches)."""
+    import xgboost as xgb
+
+    def make(device):
+        return xgb.XGBRanker(
+            objective=cfg["objectives"]["xgboost"], n_estimators=cfg["n_estimators"],
+            reg_lambda=cfg["l2"], reg_alpha=0.0, max_bin=cfg["borders"] + 1,
+            subsample=1.0, colsample_bytree=1.0, colsample_bylevel=1.0,
+            colsample_bynode=1.0, min_child_weight=1.0, tree_method="hist",
+            grow_policy=cfg.get("xgboost_grow_policy", "depthwise"), device=device,
+            verbosity=0, **_rank_common(cfg))
+
+    def fit(m, d):
+        return m.fit(d.X_train, d.y_train, qid=d.qid_train_seq)
+
+    def score(m, d):
+        return score_ranking(m.predict(d.X_test), d)
+
+    out = []
+    for dev in devices:
+        if dev == "opencl":
+            continue
+        device = "cpu" if dev == "cpu" else "cuda"
+        out.append(Arm("xgboost-" + dev, (lambda dv: (lambda: make(dv)))(device), fit, score,
+                       sync=_cuda_sync, library="xgboost"))
+    return out
+
+
+def lightgbm_rank_arms(lane, cfg, data, devices):
+    """LGBMRanker with lambdarank, leaf-wise capped at the lane's depth and
+    2**depth leaves, the gbdt lanes' LightGBM knobs otherwise, except
+    min_child_samples and min_child_weight, which stay at LightGBM's defaults
+    (20 and 1e-3, as tools/speed_gbdt_rank.py leaves them): at 0 LightGBM
+    4.7.0 aborts the first lambdarank tree ("Check failed:
+    (best_split_info.left_count) > (0)", the Apple board smoke, 2026-09-26)."""
+    import lightgbm as lgb
+
+    def make(device_type):
+        return lgb.LGBMRanker(
+            objective=cfg["objectives"]["lightgbm"], n_estimators=cfg["n_estimators"],
+            num_leaves=cfg["max_leaves"], reg_lambda=cfg["l2"], max_bin=cfg["borders"] + 1,
+            bagging_fraction=1.0, feature_fraction=1.0, min_child_samples=20,
+            min_child_weight=1e-3, min_split_gain=0.0, verbose=-1,
+            device_type=device_type, **_rank_common(cfg))
+
+    def fit(m, d):
+        return m.fit(d.X_train, d.y_train, group=d.group_sizes)
+
+    def score(m, d):
+        return score_ranking(m.predict(d.X_test), d)
+
+    out = []
+    for dev in devices:
+        device_type = {"cpu": "cpu", "opencl": "gpu"}.get(dev, "cuda")
+        out.append(Arm("lightgbm-" + {"cpu": "cpu", "opencl": "opencl"}.get(dev, "cuda"),
+                       (lambda dt: (lambda: make(dt)))(device_type), fit, score,
+                       sync=_cuda_sync, library="lightgbm"))
     return out
 
 
@@ -2246,9 +2645,22 @@ def _score_sklearn_like(model, d):
         out.append(("logloss", logloss(d.y_test, p1), p1))
         out.append(("auc", auc(d.y_test, p1), None))
         return out
+    # Multiclass: the multi-logloss first, so the round hash covers the whole
+    # probability matrix (lane gbdt-multiclass), then accuracy.
+    if proba.shape[1] == d.n_classes:
+        out.append(("mlogloss", mlogloss(d.y_test, proba), proba))
     labels = np.argmax(proba, axis=1)
     out.append(("accuracy", accuracy(d.y_test, labels), labels))
     return out
+
+
+def score_ranking(scores, d):
+    """The ranking lanes' quality, from raw scores on the whole Istella-S
+    test split: NDCG@10, NDCG@5 and MAP (`ranking_metrics`), the scores as the
+    hashed vector."""
+    s = np.ascontiguousarray(np.asarray(scores, dtype=np.float64).reshape(-1))
+    m = ranking_metrics(d.bounds_test, d.y_test, s)
+    return [(m[0][0], m[0][1], s)] + [(k, v, None) for k, v in m[1:]]
 
 
 #: Public alias. `bench/speed/forest_speed_arm.py` scores our arm through the
@@ -2704,6 +3116,21 @@ def check_fit_equivalence(lane, arms, models, cfg=None):
         shapes[arm.name] = shape
         emit_fit(lane, arm.name, shape)
 
+    # lane gbdt-multiclass: XGBoost and LightGBM grow one tree PER CLASS per
+    # round where ours and CatBoost grow one vector-leaf tree, so their counts
+    # are divided by n_classes before either check, and the line says so.
+    per_class = int((cfg or {}).get("n_classes") or 0)
+    if (cfg or {}).get("task") == "multiclass" and per_class > 1:
+        for name, shape in shapes.items():
+            if shape.get("library") in ("xgboost", "lightgbm"):
+                for key in ("trees", "leaves"):
+                    if shape.get(key) is not None:
+                        shape[key + "_raw"] = shape[key]
+                        shape[key] = int(round(shape[key] / float(per_class)))
+                print("FSPEED-FIT-NOTE lane=%s arm=%s per_class=trees and leaves divided by "
+                      "n_classes %d (one tree per class per round; raw trees %s leaves %s)"
+                      % (lane, name, per_class, shape.get("trees_raw", "-"),
+                         shape.get("leaves_raw", "-")))
     expected = (cfg or {}).get("n_estimators")
     for name, shape in sorted(shapes.items()):
         trees = shape.get("trees")
@@ -2770,7 +3197,26 @@ def opponent_builders(lane, cfg, data, devices):
     opponent that cannot be installed must be visible as a refusal, never as
     an absent row."""
     builders = []
-    if lane == "gbdt-symmetric":
+    task = task_of(lane)
+    if task and task["task"] == "ranking":
+        builders.append((["catboost-cpu", "catboost-gpu"],
+                         lambda: catboost_rank_arms(lane, cfg, data, devices)))
+        builders.append((["xgboost-cpu", "xgboost-gpu"],
+                         lambda: xgboost_rank_arms(lane, cfg, data, devices)))
+        if "lightgbm" in task["objectives"]:
+            builders.append((["lightgbm-cpu", "lightgbm-cuda", "lightgbm-opencl"],
+                             lambda: lightgbm_rank_arms(lane, cfg, data, devices)))
+    elif task:
+        # multiclass and categorical: the gbdt builders, which read the task
+        # from the data (MultiClass / multi:softprob / multiclass) and the
+        # declared categorical columns from data.cat_idx
+        builders.append((["catboost-cpu", "catboost-gpu"],
+                         lambda: catboost_arms(lane, cfg, data, devices)))
+        builders.append((["xgboost-cpu", "xgboost-gpu"],
+                         lambda: xgboost_arms(lane, cfg, data, devices)))
+        builders.append((["lightgbm-cpu", "lightgbm-cuda", "lightgbm-opencl"],
+                         lambda: lightgbm_arms(lane, cfg, data, devices)))
+    elif lane == "gbdt-symmetric":
         # CatBoost ONLY. Standing order, 2026-08-22.
         builders.append((["catboost-cpu", "catboost-gpu"],
                          lambda: catboost_arms(lane, cfg, data, devices)))
@@ -3220,7 +3666,8 @@ def main(argv=None):
     dataset = args.dataset or LANE_DEFAULT_DATASET[args.lane]
     devices = [d.strip() for d in args.devices.split(",") if d.strip()]
 
-    if args.lane.startswith("gbdt-") and dataset == "covtype":
+    if (args.lane.startswith("gbdt-") and dataset == "covtype"
+            and args.lane != "gbdt-multiclass"):
         # DEVIATION 1838: our GBDT Python surface has no MultiClass, so the
         # 7-class problem is not something every arm can run. Refuse by name
         # rather than quietly swapping the task underneath the reader.
@@ -3232,6 +3679,8 @@ def main(argv=None):
 
     data = load_with_fallback(dataset, size, args.rows)
     cfg = lane_config(args.lane, size)
+    if data.task == "multiclass":
+        cfg["n_classes"] = data.n_classes
     prepare_cuml_labels(data)
 
     if args.list_arms:

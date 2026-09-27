@@ -2,8 +2,8 @@
 # tools/bench_board_leg.sh -- the leg BODY that runs tools/bench_board.py on a
 # rented Linux box (NVIDIA or AMD). Runs ON THE BOX from the shipped tree
 # (git archive, cwd /root/mojolearn) after the runner staged taxi and
-# Istella-S from R2 into /root/datasets/gbm-bench (tools/stage_from_r2.sh's
-# default keys). Everything it writes lands under /root/gemm_leg_out, which
+# Istella-S (and istella_rank.npz, the gbdt-rank-* lanes' query ids) from R2
+# into /root/datasets/gbm-bench (tools/stage_from_r2.sh's default keys). Everything it writes lands under /root/gemm_leg_out, which
 # the runner fetches home. docs/BENCH_BOARD.md has the exact leg commands.
 #
 # Settings arrive as MOJOLEARN_* variables (the runners pass NAME=value words
