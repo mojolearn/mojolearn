@@ -37,10 +37,16 @@ Next: PASS 2: AMD box (requested, RunPod out of stock, retrying), per-seam check
   5300-5316, annotated in `x_decomp/cells.mojo`) with a sabotage patch under
   `x_decomp/checks/sabotage/`. IDENTITY_PATHS rows 130-139. End-to-end
   sabotage for the steward: `x_decomp/checks/sabotage/e2e_host_sqdist.patch`.
-- Options added: NMF shuffle and beta_loss KL/IS; PCA svd_solver='randomized'
-  and TruncatedSVD algorithm='randomized' (lane x-decomp-pca-randomized);
-  PLSCanonical algorithm='svd'; SparseCoder. Remaining options:
-  `x_decomp/NOT_IMPLEMENTED.tsv`.
+- NVIDIA A40 + x86 CPU, `tools/algos_lane_check.sh <all 17 x-decomp lanes> --pass 2`:
+  RESULT PASS: every seam driver PASS, FAIL under its patch, PASS after reversal
+  (17 of 17 arms bite), and every lane AGREE.
+- Options added (each AGREE, sklearn sanity 1e-6): NMF shuffle and beta_loss
+  KL/IS; PCA svd_solver='randomized' and float n_components, TruncatedSVD
+  algorithm='randomized' (lane x-decomp-pca-randomized); PLSCanonical
+  algorithm='svd'; SparseCoder; LocallyLinearEmbedding method='ltsa';
+  MinCovDet one feature. Remaining: `x_decomp/NOT_IMPLEMENTED.tsv`.
+- Host manifest: test_host_surface.py reads parametrized def_function
+  registrations; MOJOLEARN_HOST_SABOTAGE moves HostExec.gemm; 196 passed.
 - AMD: `tools/dev_pod.sh up decomp 240 --vendor amd` requested; RunPod MI300X
   out of stock, falling back to Hot Aisle.
 - Apple (M2 Pro steward): OWED.
