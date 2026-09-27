@@ -1065,6 +1065,11 @@ LANE_REVISIONS = {
     # deferring it would cost a whole re-record later. The reason each number is
     # where it is now lives on the lane, in @floor(...), not in a document.
     "byte-lm": "steps-2-1",
+    # ARITHMETIC, not input (2026-09-27, lane/bytelm-div). 06073dba5 (0.8.14)
+    # moved LanguageModelHostTrainer's default weight_decay 0.0 -> 0.01 to
+    # match the GPU trainer; this lane runs the default, so every cell
+    # recorded before it hashes a step the library no longer takes by default.
+    "byte-lm-host-train": "weight-decay-default-0.01-1",
     "byte-lm-resident": "shape-l1-d16-ff32-1",
     "samba": "steps-1-1",
     "samba-untied-dropout-accum": "steps-3-1",
@@ -1170,6 +1175,11 @@ def lane_floors():
 #: key lands here with a sentence saying what moved. An entry whose key does
 #: name a size is refused by name, so this cannot become a way of opting out.
 NON_SIZE_REVISIONS = {
+    "byte-lm-host-train": (
+        "arithmetic, not input: 06073dba5 (0.8.14) moved LanguageModelHostTrainer's default "
+        "weight_decay 0.0 -> 0.01 to match the GPU trainer (revision recorded 2026-09-27, "
+        "lane/bytelm-div). The lane trains at the library default, so every cell moved while the "
+        "fixture's batch, seqlen and steps did not"),
     "holtwinters-multiplicative": (
         "arithmetic, not input: ExponentialSmoothing's default became initialization_method="
         "'estimated' (2026-09-22, feat/holtwinters-estimated-init-sep22), which estimates the initial "
