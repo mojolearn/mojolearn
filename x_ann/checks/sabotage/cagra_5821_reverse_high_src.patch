@@ -1,0 +1,12 @@
+--- a/x_ann/cagra_core.mojo
++++ b/x_ann/cagra_core.mojo
+@@ -73,7 +73,8 @@
+     var rev = List[Int32](length=n * deg, fill=Int32(-1))
+     var rcount = List[Int](length=n, fill=0)
+     for k in range(deg):
+-        for src in range(n):
++        for ss in range(n):
++            var src = n - 1 - ss
+             var dst = Int(pruned[src * deg + k])
+             if rcount[dst] < deg:
+                 rev[dst * deg + rcount[dst]] = Int32(src)
