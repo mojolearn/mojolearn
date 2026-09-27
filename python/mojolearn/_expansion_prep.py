@@ -35,7 +35,7 @@ from ._labels import flatten_labels, sorted_classes, label_kind
 __all__ = ["RobustScaler", "MaxAbsScaler", "OrdinalEncoder", "OneHotEncoder", "TargetEncoder", "SimpleImputer", "KBinsDiscretizer",
            "GaussianNB", "MultinomialNB", "BernoulliNB",
            "LinearDiscriminantAnalysis", "QuadraticDiscriminantAnalysis",
-           "QuantileTransformer", "PowerTransformer", "Normalizer", "PolynomialFeatures", "SplineTransformer", "Binarizer", "LabelEncoder", "LabelBinarizer", "MultiLabelBinarizer", "IterativeImputer"]
+           "QuantileTransformer", "PowerTransformer", "Normalizer", "PolynomialFeatures", "SplineTransformer", "Binarizer", "LabelEncoder", "LabelBinarizer", "MultiLabelBinarizer", "IterativeImputer", "VarianceThreshold"]
 
 _BINDING = "_mojolearn_x_prep"
 
@@ -48,7 +48,7 @@ _OPS = dict(
     gnb_eps=27, gnb_params=28, gnb_jll=29, class_log_prior=30, mnb_params=31, bnb_params=32, cnb_params=33, cat_params=34, cat_jll=35,
     lda_prep=36, lda_w=37, lda_stage2=38, lda_stage3=39, qda_cov=40, qda_prep=41, qda_dec=42,
     qt_apply=43, pt_fit=44, pt_apply=45, std_params=46, normalize=47, poly=48, spline_knots=49, spline_apply=50, label_binarize=51, scatter_ones=52,
-    ii_mean=53, ii_gram=54, ii_sub=55, ii_br=56, ii_predict=57, ii_snapshot=58, ii_conv=59, nan_mask=60,
+    ii_mean=53, ii_gram=54, ii_sub=55, ii_br=56, ii_predict=57, ii_snapshot=58, ii_conv=59, nan_mask=60, gather_cols=61, var_ptp=62,
 )
 _PARAMS = 14
 _NONE = -1
@@ -1940,3 +1940,54 @@ class IterativeImputer(_PrepBase):
             pr.stage("ii_predict", n, fo, n, dk, mo, j, co, io, bo, _NONE)
         pr.run(self.numeric_mode_)
         return pr.get(fo, (n, dk))
+
+
+# ---------------------------------------------------------------- feature selection
+class _SelectorMixin(_PrepBase):
+    def get_support(self, indices=False):
+        self._check_fitted()
+        mask = list(self._mask)
+        return [j for j, m in enumerate(mask) if m] if indices else mask
+
+    def transform(self, X):
+        self._check_fitted()
+        arr = _x2d(X)
+        self._check_width(arr)
+        n, d = arr.shape
+        keep = [j for j, m in enumerate(self._mask) if m]
+        if not keep:
+            raise ValueError("mojolearn: no features were selected")
+        pr = _Prog()
+        xo, ko = pr.put(arr), pr.put_list(keep)
+        out = pr.alloc(n * len(keep))
+        pr.stage("gather_cols", n * len(keep), xo, n, d, ko, len(keep), out)
+        pr.run(self.numeric_mode_)
+        return pr.get(out, (n, len(keep)))
+
+
+class VarianceThreshold(_SelectorMixin):
+    """sklearn.feature_selection.VarianceThreshold: population variance per
+    column over the non-NaN entries (and, at threshold 0, min(variance,
+    max - min), so a constant column is exactly 0); keeps the columns whose
+    variance exceeds the threshold."""
+    _parameters = ("threshold",)
+
+    def __init__(self, threshold=0.0):
+        self.threshold = threshold
+
+    def fit(self, X, y=None):
+        arr = _x2d(X)
+        n, d = arr.shape
+        mode = _mode()
+        pr = _Prog()
+        xo = pr.put(arr)
+        st, var = pr.alloc(6 * d), pr.alloc(d)
+        pr.stage("col_stats", d, xo, n, d, st)
+        pr.stage("var_ptp", d, st, d, var, 1 if self.threshold == 0 else 0)
+        pr.run(mode)
+        self.variances_ = pr.get(var, d)
+        self._mask = [v > self.threshold for v in pr.values(var, d)]
+        if not any(self._mask):
+            raise ValueError(f"mojolearn: No feature in X meets the variance threshold {self.threshold:.5f}")
+        self.numeric_mode_, self.n_features_in_ = mode, d
+        return self

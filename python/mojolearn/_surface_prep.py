@@ -37,6 +37,7 @@ FAMILIES = (
             "x-prep-label-binarizer",
             "x-prep-multilabel-binarizer",
             "x-prep-iterative-imputer",
+            "x-prep-variance-threshold",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -55,6 +56,7 @@ FAMILIES = (
             "LabelBinarizer",
             "MultiLabelBinarizer",
             "IterativeImputer",
+            "VarianceThreshold",
         ),
         display="preprocessing additions, naive Bayes and discriminant analysis",
         host_modules=(
@@ -95,6 +97,7 @@ TRAINING_LANE_NAMES = {
     "x-prep-label-binarizer": "LabelBinarizer",
     "x-prep-multilabel-binarizer": "MultiLabelBinarizer",
     "x-prep-iterative-imputer": "IterativeImputer",
+    "x-prep-variance-threshold": "VarianceThreshold",
 }
 PUBLIC_PENDING_LANES = {
     "x-prep-robust-scaler": "no reference",
@@ -119,4 +122,5 @@ PUBLIC_PENDING_LANES = {
     "x-prep-label-binarizer": "no reference",
     "x-prep-multilabel-binarizer": "no reference",
     "x-prep-iterative-imputer": "no reference",
+    "x-prep-variance-threshold": "no reference",
 }
