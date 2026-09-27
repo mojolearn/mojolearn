@@ -35,7 +35,7 @@ from ._labels import flatten_labels, sorted_classes, label_kind
 __all__ = ["RobustScaler", "MaxAbsScaler", "OrdinalEncoder", "OneHotEncoder", "TargetEncoder", "SimpleImputer", "KBinsDiscretizer",
            "GaussianNB", "MultinomialNB", "BernoulliNB",
            "LinearDiscriminantAnalysis", "QuadraticDiscriminantAnalysis",
-           "QuantileTransformer", "PowerTransformer", "Normalizer", "PolynomialFeatures", "SplineTransformer"]
+           "QuantileTransformer", "PowerTransformer", "Normalizer", "PolynomialFeatures", "SplineTransformer", "Binarizer"]
 
 _BINDING = "_mojolearn_x_prep"
 
@@ -1540,3 +1540,30 @@ class SplineTransformer(_PrepBase):
             if any(a < b for a, b in zip(lo, self._lo)) or any(a > b for a, b in zip(hi, self._hi)):
                 raise ValueError("mojolearn: X contains values beyond the limits of the knots")
         return pr.get(out, (n, W))
+
+
+class Binarizer(_PrepBase):
+    """sklearn.preprocessing.Binarizer: 1 where X > threshold, else 0 (NaN is
+    kept). Stateless."""
+    _parameters = ("threshold", "copy")
+
+    def __init__(self, *, threshold=0.0, copy=True):
+        self.threshold = threshold
+        self.copy = copy
+
+    def fit(self, X, y=None):
+        self.n_features_in_ = _x2d(X).shape[1]
+        self.numeric_mode_ = _mode()
+        return self
+
+    def transform(self, X, copy=None):
+        self._check_fitted()
+        arr = _x2d(X)
+        self._check_width(arr)
+        n, d = arr.shape
+        pr = _Prog()
+        xo, th = pr.put(arr), pr.put_scalar(self.threshold)
+        out = pr.alloc(n * d)
+        pr.stage("binarize", n * d, xo, n * d, th, out)
+        pr.run(self.numeric_mode_)
+        return pr.get(out, (n, d))

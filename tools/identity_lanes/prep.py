@@ -251,3 +251,13 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-spline-transformer")
+
+
+@lane("x-prep-binarizer")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.Binarizer(threshold=0.3).fit(X)
+    parts = dict(transform=_h(m.transform(X[:256])), zero=_h(ml.Binarizer().fit(X).transform(X[:256])))
+    return _fit(parts, m, lambda e: (e.transform(Xh[:256]),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-binarizer")
