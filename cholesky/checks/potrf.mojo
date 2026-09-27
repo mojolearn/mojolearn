@@ -1230,14 +1230,22 @@ def chol_left_update_amma_kernel(
 def _chol_left_update(
     ctx: DeviceContext, mut a: DeviceBuffer[DType.float32], n: Int, j0: Int, w: Int, np: Int
 ) raises:
-    """Column block [j0, j0 + w), rows j0 .. n-1, panels 0 .. np-1."""
-    if np <= 0 or w <= 0:
-        return
-    var rows = n - j0
-    ctx.enqueue_function[chol_left_update_amma_kernel](
-        a.unsafe_ptr(), Int32(n), Int32(j0), Int32(w), Int32(np), Int32(j0),
-        grid_dim=((rows + 63) // 64, 1, 1), block_dim=(128, 1, 1),
-    )
+    """Column block [j0, j0 + w), rows j0 .. n-1, panels 0 .. np-1.
+
+    COMPILE-TIME GATED (0.8.23's AMD build): the callers guard it with a
+    RUNTIME `left_mode`, which only the Apple column can set, but a runtime
+    guard still compiles the launch, so every GPU target got this Apple
+    simdgroup-matrix kernel and gfx942's linker refused its `air.*` symbols
+    (mixture, gp, kernel_methods). Off Apple the body is empty, which is
+    exactly what `left_mode == False` already meant there."""
+    comptime if CHOL_APPLE_LEFT:
+        if np <= 0 or w <= 0:
+            return
+        var rows = n - j0
+        ctx.enqueue_function[chol_left_update_amma_kernel](
+            a.unsafe_ptr(), Int32(n), Int32(j0), Int32(w), Int32(np), Int32(j0),
+            grid_dim=((rows + 63) // 64, 1, 1), block_dim=(128, 1, 1),
+        )
 
 
 def zero_upper_kernel(
