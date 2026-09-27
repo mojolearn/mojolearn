@@ -17,3 +17,100 @@
 # own lanes (to LANES and the per-lane registries); rebind no existing name;
 # prefix your own helpers with `_trees_`. No imports are needed: np, _h,
 # _fit, _rows_calls and the rest are this module's.
+
+
+@lane("trees-dt-clf")
+def _(ml, X, yc, yr, Xh=None):
+    """One CART tree, entropy, every feature (the weighted entry has no CPU arm yet)."""
+    m = ml.DecisionTreeClassifier(max_depth=8, criterion="entropy", random_state=7).fit(X, yc)
+    return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X)), depth=_h(np.int64(m.get_depth()))),
+                m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+
+
+@lane("trees-dt-reg")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.DecisionTreeRegressor(max_depth=8, min_samples_leaf=2, random_state=7).fit(X, yr)
+    return _fit(dict(predict=_h(m.predict(X)), leaves=_h(np.int64(m.get_n_leaves()))),
+                m, lambda e: (e.predict(Xh),))
+
+
+_batch_decl(_rows_calls("predict", "predict_proba"), "trees-dt-clf")
+_batch_decl(_rows_calls("predict"), "trees-dt-reg")
+
+
+@lane("trees-bagging-clf")
+def _(ml, X, yc, yr, Xh=None):
+    """Bootstrap rows, a feature subset without replacement, proba averaging."""
+    m = ml.BaggingClassifier(ml.DecisionTreeClassifier(max_depth=6), n_estimators=6, max_samples=0.8,
+                             max_features=0.75, random_state=7).fit(X, yc)
+    return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X))),
+                m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+
+
+@lane("trees-bagging-reg")
+def _(ml, X, yc, yr, Xh=None):
+    """Rows without replacement, bootstrapped features, the members' mean."""
+    m = ml.BaggingRegressor(ml.DecisionTreeRegressor(max_depth=6), n_estimators=6, max_samples=0.7,
+                            bootstrap=False, bootstrap_features=True, random_state=7).fit(X, yr)
+    return _fit(dict(predict=_h(m.predict(X))), m, lambda e: (e.predict(Xh),))
+
+
+_batch_decl(_rows_calls("predict", "predict_proba"), "trees-bagging-clf")
+_batch_decl(_rows_calls("predict"), "trees-bagging-reg")
+
+
+@lane("trees-adaboost-clf")
+def _(ml, X, yc, yr, Xh=None):
+    """SAMME: weighted stumps-plus (depth 2), the weight update and the vote."""
+    m = ml.AdaBoostClassifier(ml.DecisionTreeClassifier(max_depth=2), n_estimators=8, learning_rate=0.8,
+                              random_state=7).fit(X, yc)
+    return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X)),
+                     weights=_h(np.asarray(m.estimator_weights_, dtype=np.float64))),
+                m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+
+
+@lane("trees-adaboost-reg")
+def _(ml, X, yc, yr, Xh=None):
+    """AdaBoost.R2: the weighted bootstrap, the square loss, the weighted median."""
+    m = ml.AdaBoostRegressor(ml.DecisionTreeRegressor(max_depth=3), n_estimators=6, loss="square",
+                             random_state=7).fit(X, yr)
+    return _fit(dict(predict=_h(m.predict(X)), weights=_h(np.asarray(m.estimator_weights_, dtype=np.float64))),
+                m, lambda e: (e.predict(Xh),))
+
+
+_batch_decl(_rows_calls("predict", "predict_proba"), "trees-adaboost-clf")
+_batch_decl(_rows_calls("predict"), "trees-adaboost-reg")
+
+
+@lane("trees-dart-reg")
+def _(ml, X, yc, yr, Xh=None):
+    """DART, L2: drops forced often (skip_drop 0, drop_rate 0.5), Newton leaves."""
+    m = ml.DARTRegressor(n_estimators=8, num_leaves=15, max_depth=5, min_child_samples=5, drop_rate=0.5,
+                         skip_drop=0.0, reg_lambda=1.0, drop_seed=3, random_state=7).fit(X, yr)
+    return _fit(dict(predict=_h(m.predict(X)), coefs=_h(np.asarray(m.tree_coefs_, dtype=np.float64))),
+                m, lambda e: (e.predict(Xh),))
+
+
+@lane("trees-dart-clf")
+def _(ml, X, yc, yr, Xh=None):
+    """DART, binary logloss (yc folded to two classes), xgboost_dart_mode, uniform_drop."""
+    y2 = (np.asarray(yc) % 2).astype(np.int64)
+    m = ml.DARTClassifier(n_estimators=8, num_leaves=15, max_depth=5, min_child_samples=5, drop_rate=0.5,
+                          skip_drop=0.0, xgboost_dart_mode=True, uniform_drop=True, random_state=7).fit(X, y2)
+    return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X))),
+                m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+
+
+_batch_decl(_rows_calls("predict", "predict_proba"), "trees-dart-clf")
+_batch_decl(_rows_calls("predict"), "trees-dart-reg")
+
+
+@lane("trees-random-embedding")
+def _(ml, X, yc, yr, Xh=None):
+    """Random uniform targets, ExtraTrees with one feature per split, the leaf one-hot."""
+    m = ml.RandomTreesEmbedding(n_estimators=8, max_depth=4, random_state=7).fit(X)
+    return _fit(dict(embedding=_h(m.transform(X)), leaves=_h(m.apply(X))),
+                m, lambda e: (e.transform(Xh),))
+
+
+_batch_decl(_rows_calls("transform", "apply"), "trees-random-embedding")
