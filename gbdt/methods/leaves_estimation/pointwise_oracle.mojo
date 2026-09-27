@@ -104,6 +104,8 @@ from gbdt.methods.leaves_estimation.leaves_estimation_helper import (
 from gbdt.targets.kernel.multilogit import (
     launch_multilogit_second_der,
     launch_multilogit_value_and_der,
+    launch_multi_rmse_second_der,
+    launch_multi_rmse_value_and_der,
     launch_one_vs_all_second_der,
     launch_one_vs_all_value_and_der,
     multilogit_blocks,
@@ -112,6 +114,7 @@ from gbdt.targets.kernel.pointwise_targets import (
     OBJECTIVE_MAPE,
     OBJECTIVE_MULTICLASS,
     OBJECTIVE_MULTICLASS_OVA,
+    OBJECTIVE_MULTIRMSE,
 )
 from gbdt.targets.kernel.pointwise_targets import (
     MSE_BLOCK_SIZE,
@@ -384,7 +387,14 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         """
         if self.estimation_method != LEAF_ESTIMATION_NEWTON:
             return 1
-        if self.objective != OBJECTIVE_MULTICLASS:
+        if (
+            self.objective != OBJECTIVE_MULTICLASS
+            and self.objective != OBJECTIVE_MULTIRMSE
+        ):
+            # MultiRMSE is BLOCKED: `GetHessianType()` names only
+            # MultiClassOneVsAll Diagonal (`multiclass_targets.h:118-123`),
+            # so MultiRMSE reports Symmetric and gets `SingleBinDim()`.
+            #
             # `GetHessianType()` is Diagonal for MultiClassOneVsAll
             # (`multiclass_targets.h:118-123`) -- its classes are
             # INDEPENDENT logistic regressions, so the Hessian has no
@@ -697,7 +707,12 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         """The rowSize > 1 arm of `write_value_and_first_derivatives`."""
         # ---- the rowSize > 1 arm: the multiclass family --------------
         var is_ova = self.objective == OBJECTIVE_MULTICLASS_OVA
-        if self.objective != OBJECTIVE_MULTICLASS and not is_ova:
+        var is_multi_rmse = self.objective == OBJECTIVE_MULTIRMSE
+        if (
+            self.objective != OBJECTIVE_MULTICLASS
+            and not is_ova
+            and not is_multi_rmse
+        ):
             raise Error(
                 "the multi-dimensional oracle arm is the multiclass"
                 " family only; objective " + String(self.objective)
@@ -705,7 +720,21 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
             )
         var ml_blocks = multilogit_blocks(self.n_rows)
         self.times.begin(self.ctx)
-        if is_ova:
+        if is_multi_rmse:
+            # `MultiRMSEValueAndDer` (`multiclass_targets.cpp:100-108`): the
+            # target is `num_classes` (= target dimension) planes in bin
+            # order, gathered by the caller like the cursor
+            launch_multi_rmse_value_and_der[False](
+                self.ctx, self.num_classes, self.n_rows,
+                self.d_target, self.n_rows,
+                self.d_weights, self.has_weights,
+                self.d_cursor, self.n_rows,
+                self.d_identity, False,
+                self.d_fv, True,
+                self.d_multi_der, self.n_rows,
+                self.d_mag_dummy, False,
+            )
+        elif is_ova:
             launch_one_vs_all_value_and_der[False](
                 self.ctx, self.num_classes, self.n_rows,
                 self.d_target, self.d_weights, self.has_weights,
@@ -762,7 +791,8 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         gradient.clear()
         for _ in range(self.bin_count * self.single_bin_dim):
             gradient.append(Float64(0.0))
-        if is_ova:
+        if is_ova or is_multi_rmse:
+            # MultiRMSE: `SingleBinDim() == cursorDim` too, no pinned plane
             for i in range(self.bin_count * self.cursor_dim):
                 gradient[i] = self.der_at_point[i]
         else:
@@ -1006,12 +1036,23 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
 
         for row in range(hbs):
             var column_count = row + 1
-            launch_multilogit_second_der(
-                self.ctx, self.num_classes, self.n_rows,
-                self.d_weights, self.has_weights,
-                self.d_cursor, self.n_rows,
-                self.d_multi_der, row, self.n_rows,
-            )
+            if self.objective == OBJECTIVE_MULTIRMSE:
+                # `MultiRMSESecondDerRow` (`multiclass_targets.cpp:146-156`):
+                # zeros left of the diagonal, `weight` on it. MultiRMSE has
+                # no pinned plane, so `hbs == cursorDim` and every row is a
+                # real one.
+                launch_multi_rmse_second_der(
+                    self.ctx, self.n_rows,
+                    self.d_weights, self.has_weights,
+                    self.d_multi_der, row, self.n_rows,
+                )
+            else:
+                launch_multilogit_second_der(
+                    self.ctx, self.num_classes, self.n_rows,
+                    self.d_weights, self.has_weights,
+                    self.d_cursor, self.n_rows,
+                    self.d_multi_der, row, self.n_rows,
+                )
             compute_partition_stats(
                 self.ctx, self.bin_count, 0, column_count, self.n_rows,
                 self.d_leaves, self.d_p_off, self.d_p_sz,
@@ -1260,6 +1301,8 @@ def _oracle_dims(objective: Int, num_classes: Int) -> Tuple[Int, Int]:
     if objective == OBJECTIVE_MULTICLASS:
         return (num_classes - 1, num_classes)
     if objective == OBJECTIVE_MULTICLASS_OVA:
+        return (num_classes, num_classes)
+    if objective == OBJECTIVE_MULTIRMSE:
         return (num_classes, num_classes)
     return (1, 1)
 
@@ -1623,6 +1666,23 @@ def make_bin_optimized_oracle(
             raise Error(
                 "MultiClassOneVsAll oracle needs num_classes >= 2, got "
                 + String(num_classes)
+            )
+        cursor_dim = num_classes
+        single_bin_dim = num_classes
+    elif objective == OBJECTIVE_MULTIRMSE:
+        # `GetDim()` is `NumClasses` = the target dimension
+        # (`multiclass_targets.h:129-134`, `:155-156`); `d_target` holds
+        # that many planes, dim-major, in bin order.
+        if num_classes < 2:
+            raise Error(
+                "MultiRMSE oracle needs a target dimension >= 2, got "
+                + String(num_classes)
+            )
+        if estimation_method == LEAF_ESTIMATION_EXACT:
+            raise Error(
+                "Exact leaves estimation is one-dimensional"
+                " (ComputeExactValue, permutation_der_calcer.h:98-110);"
+                " MultiRMSE does not reach it"
             )
         cursor_dim = num_classes
         single_bin_dim = num_classes

@@ -1,0 +1,15 @@
+Collecting mojolearn==0.8.19
+  Downloading mojolearn-0.8.19-py3-none-manylinux_2_35_x86_64.whl.metadata (10 kB)
+Collecting numpy
+  Downloading numpy-2.4.6-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (6.6 kB)
+Downloading mojolearn-0.8.19-py3-none-manylinux_2_35_x86_64.whl (100.6 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100.6/100.6 MB 276.3 MB/s  0:00:00
+Downloading numpy-2.4.6-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (16.9 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 16.9/16.9 MB 580.0 MB/s  0:00:00
+Installing collected packages: numpy, mojolearn
+
+Successfully installed mojolearn-0.8.19 numpy-2.4.6
+mojolearn==0.8.19
+numpy==2.4.6
+1395 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x70e040000000, nodemask=1)
+mojolearn 0.8.19 /root/.venv-mojolearn-lmq/lib/python3.11/site-packages/mojolearn/__init__.py 3.11.10 (main, Sep  7 2024, 18:35:41) [GCC 11.4.0]

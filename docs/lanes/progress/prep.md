@@ -56,25 +56,38 @@ Sanity tests need scikit-learn: on the pod it is in /root/skl
 | option parity (on lane/algos-prep2, steward pending): the reference's score edges (f_classif NaN for a constant feature / single class, +inf for a within-class-constant one; chi2 NaN for an all-zero feature; canonical NaN word), f_regression force_finite=False, r_regression (new), RFE importance_getter str / callable; RFE tie rule written as DIFFERS BY NAME (numpy's unstable argsort) | (this commit) | x-prep-score-edges AGREE (--pass 2), DISAGREE under e2e_host_branch; every other prep lane AGREE and SAME BITS vs inv3 except x-prep-select-kbest/dupes (intended: that fixture's constant and all-zero columns now score NaN, as the reference) (H100) |
 | option parity (on lane/algos-prep2, steward pending): PolynomialFeatures order='F' (same bits, column-major), OrdinalEncoder / OneHotEncoder categories=<list> | (this commit) | x-prep-encoder-categories AGREE (--pass 2), DISAGREE under e2e_store_branch; x-prep-polynomial-features SAME BITS |
 | steward: 1790529624248 / 1790529633391 (4de76eb6e1) PASS m2pro + do-amd; 1790530038647 (x-prep-simple-imputer-indicator) PASS; 1790535515159 / 1790535524761 (d2e61ed9d3: LDA/QDA solvers, NB sample_weight, stratified TargetEncoder folds, seam 5401 fix) PASS | - | PASS |
+| option parity (on lane/algos-prep2, steward pending): OneHotEncoder / OrdinalEncoder min_frequency, max_categories, handle_unknown 'infrequent_if_exist' / 'warn', OneHotEncoder drop=<list>; LabelBinarizer multilabel y; SimpleImputer strategy=<callable>; LDA / QDA covariance_estimator; TargetEncoder categories=<list>, cv=<splitter> / (train, test) pairs; partial_fit for GaussianNB, MultinomialNB, ComplementNB, BernoulliNB, CategoricalNB (category_count_ exposed); KBinsDiscretizer every numpy quantile_method. New units indicator, code_counts, remap_codes, add_arrays, gnb_merge, cat_counts, cat_flp (ops 87-93). New lanes x-prep-user-objects, x-prep-nb-partial (sum), x-prep-infrequent, x-prep-label-binarizer-multilabel, x-prep-kbins-methods (store) | (this commit) | the 43 selected lanes AGREE (--pass 2, H100, evidence run-parity2); the 5 new lanes DISAGREE under e2e_host_branch / e2e_store_branch and AGREE after reversal; the 38 existing lanes SAME BITS vs run-edges; test_x_prep_parity PASS on GPU and CPU (scikit-learn 1.9.1); test_host_surface 196 passed; test_lane_select OK |
+| option parity: mutual_info discrete_features=True / mask / indices (contingency MI unit mi_dd; Ross with a feature's categories against the noised target, unit mi_dc); FIX at the root: the reference's 1e-10 tie-breaking noise vanished in the float32 add (tied columns read MI 0), now kept as a second word and every distance compared as a (primary, noise) pair (DEVIATION 5407 widened, IDENTITY_PATHS row 147, seam arm 5407 regenerated); singleton classes / categories refused as the reference | (this commit) | 44 selected lanes AGREE (--pass 2 with the seam arms, H100, evidence run-mi); x-prep-mi-discrete and x-prep-mutual-info DISAGREE under e2e_host_branch, AGREE after reversal (sab-mi); every other lane SAME BITS vs run-parity2; x-prep-mutual-info moved only on its tie fixtures (intended); test_x_prep_selection PASS on GPU and CPU |
+| option parity: KBinsDiscretizer sample_weight (units kbins_gw / kbins_wq / kbins_wkm: the reference's `_weighted_percentile` over distinct values with summed weights, averaged or not; the nonzero-weight range for uniform; a weighted Lloyd for kmeans; a weighted resample above subsample; other quantile methods refused as the reference) | (this commit) | x-prep-kbins-weights AGREE (--pass 2), DISAGREE under e2e_host_branch (sab-p2b); test_x_prep_parity PASS on GPU and CPU |
+| option parity: SplineTransformer knots=<array>, extrapolation 'linear' (derivative at the edge) / 'periodic' (knot wrap, exact float32 fmod), sample_weight (weighted percentile / nonzero-weight range), handle_missing 'zeros', order 'F'; degree-0 'constant' writes the reference's rule; the reference's degree <= 1 'linear' loop bug and degree-0 'constant' crash DIFFER BY NAME | (this commit) | x-prep-spline-options AGREE (--pass 2), DISAGREE under e2e_host_branch; x-prep-spline-transformer SAME BITS; test_x_prep_spline PASS on GPU and CPU |
+| option parity: IterativeImputer imputation_order 'random', n_nearest_features (|corr|-weighted draws; ii_sub / ii_br over a predictor mask), sample_posterior (ii_sigma + ii_post: the predictive std and a truncated-normal draw by inversion, AS 241 PPND7), add_indicator, estimator=<any> (the rounds in Python); FIX at the root: the stop is the reference's matrix inf-norm (largest row sum of the change), not the elementwise max | (this commit) | x-prep-iterative-options AGREE (--pass 2), DISAGREE under e2e_host_branch; x-prep-iterative-imputer SAME BITS; test_x_prep_iterative PASS on GPU and CPU |
+| tools/algos_lane_check.py names this box's GPU target (sm_NN / gfxNNN) for build_byte_lm.sh, which refused a Linux build without one and failed any check whose byte LM binding went stale | (this commit) | the 48 selected lanes AGREE with --pass 2 and all 10 seam arms bite (run-p2b, H100); every existing lane SAME BITS vs run-mi |
 
 ## Next
-PHASE: option parity (c), still open. One phase per session; next session continues it.
-- Steward: two requests per commit (sum lanes + e2e_host_branch, store lanes + e2e_store_branch;
-  lane lists in ~/mojolearn-evidence/algos-prep/{sum_lanes,store_lanes}.txt, which now include
-  x-prep-score-edges and x-prep-encoder-categories). Merge gate: m2pro PASS + do-amd PASS.
-  Merged to main: everything through d2e61ed9d3 (steward PASS). NOT YET MERGED: the score edges,
-  encoder categories=<list> and PolynomialFeatures order='F' rows (branch lane/algos-prep2,
-  commit 23b11a7ba5 and later), waiting on steward requests 1790537091369 / 1790537100516
-  (m2pro + do-amd). Next session: `apple_steward.py status`; on PASS merge lane/algos-prep2 to
-  main; on FAIL fix and resubmit.
-- Option parity rows still NOT IMPLEMENTED, in order (x_prep/NOT_IMPLEMENTED.tsv, naive_bayes/NOT_IMPLEMENTED.tsv):
-  TargetEncoder categories=<list> (unknown training values must code -1 in te_enc) and cv=<splitter>;
-  OneHot/Ordinal min_frequency, max_categories, handle_unknown='infrequent_if_exist';
-  SplineTransformer knots=<array>, extrapolation 'linear' / 'periodic', sample_weight;
-  KBinsDiscretizer sample_weight and the other quantile_methods; mutual_info discrete_features;
-  IterativeImputer options; LabelBinarizer multilabel y; *NB.partial_fit; SimpleImputer callable;
-  LDA/QDA covariance_estimator. Sparse output stays REFUSED BY NAME (no sparse Array).
-- Then: FAST GPU speed (d), IDENTICAL GPU speed (e), CPU speed (f), one phase per session.
+PHASE: option parity (2 in the LANE CHARTER at the top of docs/lanes/ALGORITHM_EXPANSION_PLAN.md), still open:
+only the EXISTING members remain (item 5 below). Items 1-4 are merged (see the Pass 2 table).
+- Merge gate (CURRENT DIRECTIVES 0000b, 2026-09-27): the pod only (lane check AGREE CPU == NVIDIA, sabotage
+  bites, existing bits unchanged, test_host_surface, test_lane_select when its inputs change). Steward
+  verdicts are post-merge: ONE batched request per lane per hour (sum lanes + e2e_host_branch; store lanes +
+  e2e_store_branch; lists in ~/mojolearn-evidence/algos-prep/{sum_lanes,store_lanes}.txt). A FAIL is a fix
+  commit at the root. Post-merge requests: 1790537100517 (main 0afaab704: sum lanes + x-prep-mi-discrete) and
+  1790549984236 (main cb81abbf0: sum lanes + the three option lanes, e2e_host_branch). Check both with
+  `apple_steward.py status` first; a FAIL is the next session's first item.
+- test_host_surface and test_lane_select on a merge: the pod copy must be a git checkout (test_lane_select
+  reads HEAD) and hold the export-ignored bench/results files (git archive drops them): archive + `git
+  ls-files bench/results | tar`, link the pod's built .so files, `git init && git add . && git commit`.
+- Item 5, the existing members (x_prep/NOT_IMPLEMENTED.tsv rows at the end; resample/NOT_IMPLEMENTED.tsv):
+  StandardScaler sample_weight, StandardScaler / MinMaxScaler partial_fit (first batch == fit's bits),
+  NaN-ignoring fit + NaN pass-through transform, copy=False. They live in binding _mojolearn_preprocessing
+  with recorded release references: add entry points (or x_prep units), never change standard_fit /
+  minmax_fit bits. Resampling: BCa is refused for want of an inverse normal CDF; x_prep/iterative.mojo
+  now has a float32 AS 241 PPND7 (`_ppnd7`) and `_phi` (portable_erff): move them to checks/numerics.mojo
+  and BCa can land; then paired=False, permutation_type 'samples' / 'pairings', resample replace=False /
+  stratify / sample_weight, per resample/NOT_IMPLEMENTED.tsv.
+  Sparse output stays REFUSED BY NAME (no sparse Array).
+- Then: FAST speed (3), IDENTICAL speed (4), CPU speed (5), one phase per session.
 Helper scripts (not in the repo): ~/mojolearn-evidence/algos-prep/{qsync,gate,commit,mkpatches,addlane,samebits}.sh|py;
-qsync sends every file differing from ~/mojolearn-evidence/algos-prep/pod_base; the pass-2
-reference columns for "same bits" checks are on the pod in /root/mojolearn-evidence/algos-prep/pass2-nvidia.
+qsync sends every file differing from ~/mojolearn-evidence/algos-prep/pod_base (so it also carries main's
+changes merged into the branch). mkpatches.py regenerates the 10 seam arms from the sources (fixed this
+session for 5401 and 5407; it reproduces the committed patches). The latest full clean run of every prep
+lane (the "same bits" reference) is on the pod at /root/mojolearn-evidence/algos-prep/run-p2b.

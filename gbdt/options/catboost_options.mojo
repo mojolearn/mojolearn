@@ -49,6 +49,7 @@ from gbdt.targets.kernel.pointwise_targets import (
     OBJECTIVE_MAPE,
     OBJECTIVE_MULTICLASS,
     OBJECTIVE_MULTICLASS_OVA,
+    OBJECTIVE_MULTIRMSE,
     OBJECTIVE_POISSON,
     OBJECTIVE_PAIR_LOGIT,
     OBJECTIVE_QUANTILE,
@@ -1322,6 +1323,12 @@ def get_estimation_method_defaults(
         method = LEAF_ESTIMATION_NEWTON
         newton = 1
         gradient = 10
+    elif f == OBJECTIVE_MULTIRMSE:
+        # `:41-46`: Newton, one iteration each way -- the same arm as RMSE,
+        # and one Newton step is exact for a quadratic loss
+        method = LEAF_ESTIMATION_NEWTON
+        newton = 1
+        gradient = 1
     elif f == OBJECTIVE_QUERY_RMSE:
         # `:94-98`
         method = LEAF_ESTIMATION_NEWTON

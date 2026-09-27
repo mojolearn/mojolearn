@@ -838,6 +838,52 @@ struct Split[dtype: DType](TrivialRegisterPassable):
         phase 2 is guarded per statement while the barriers stay in
         uniform control flow.
         """
+        self._pinned_reduce(scratch)
+
+        # `:249` -- only the first thread publishes for this node.
+        if Int(thread_idx.x) == 0 and self.IsValid():
+            self._publish_to_global(split, mutex, quantiles, n_bins)
+
+    @always_inline
+    def eval_best_split_pinned_to_candidate[
+        so: MutOrigin,
+        sas: AddressSpace,
+        go: MutOrigin,
+        qo: MutOrigin, //
+    ](
+        mut self,
+        scratch: MutPointer[Self, so, address_space=sas],
+        cand: MutPointer[Self, go],
+        quantiles: MutPointer[Scalar[Self.dtype], qo],
+        n_bins: Int32,
+    ):
+        """DEVIATION 5611 -- `eval_best_split_pinned`'s reduction (DEVIATION
+        404, width 32 on every vendor), then thread 0 stores the block's
+        winner, midpoint applied, into its OWN candidate slot with a plain
+        store (a default `Split` when it is not valid), exactly as
+        `eval_best_split_to_candidate` does for the warp-shuffle arm.
+        `merge_split_candidates_kernel` folds a node's slots with `update`,
+        a total order over (gain, colid) with one column per block, so the
+        node's split is the one a correct mutex merge publishes in any
+        arrival order. No payload crosses a threadgroup inside a kernel:
+        the fold reads the slots after the kernel boundary."""
+        self._pinned_reduce(scratch)
+        if Int(thread_idx.x) == 0:
+            if self.IsValid():
+                self.select_split_range_midpoint(quantiles, n_bins)
+                cand[unsafe_offset=0] = self.copy()
+            else:
+                cand[unsafe_offset=0] = Self()
+
+    @always_inline
+    def _pinned_reduce[
+        so: MutOrigin, sas: AddressSpace, //
+    ](
+        mut self,
+        scratch: MutPointer[Self, so, address_space=sas],
+    ):
+        """DEVIATION 404's two phases, shared by the mutex publish and the
+        candidate store: on return thread 0 holds the block's winner."""
         comptime L = PINNED_SPLIT_REDUCE_LANES
         comptime STEPS = log2_floor(L)
         var tid = Int(thread_idx.x)
@@ -892,10 +938,6 @@ struct Split[dtype: DType](TrivialRegisterPassable):
                 )
                 scratch[unsafe_offset=vlane] = self.copy()
             barrier()
-
-        # `:249` -- only the first thread publishes for this node.
-        if tid == 0 and self.IsValid():
-            self._publish_to_global(split, mutex, quantiles, n_bins)
 
 
 def init_split_kernel[

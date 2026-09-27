@@ -1,5 +1,4 @@
 diff --git a/x_decomp/host.mojo b/x_decomp/host.mojo
-index b1e70724d..55108b640 100644
 --- a/x_decomp/host.mojo
 +++ b/x_decomp/host.mojo
 @@ -6,6 +6,7 @@ compiled into the CPU host binding."""
@@ -10,11 +9,11 @@ index b1e70724d..55108b640 100644
  from decomposition.checks.jacobi_eigh_device import JACOBI_SWEEPS, JACOBI_TOL
  from decomposition.host.linalg_public import host_eigh, host_qr_r
  from decomposition.host.pca_full_oracle import host_one_sided_jacobi_svd, host_qr_factor
-@@ -112,7 +113,13 @@ struct HostExec(Exec):
-     def sqdist(a: F32Ptr, b: F32Ptr, dst: F32Ptr, na: Int, nb: Int, d: Int) raises:
+@@ -113,7 +114,13 @@ struct HostExec(Exec):
+     def sqdist(a: F32Ptr, b: F32Ptr, dst: F32Ptr, na: Int, nb: Int, d: Int, kind: Int = 0, pw: Float32 = Float32(2)) raises:
          for i in range(na):
              for j in range(nb):
--                dst.unsafe_store(i * nb + j, sqdist_cell(a, b, i, j, d))
+-                dst.unsafe_store(i * nb + j, sqdist_cell(a, b, i, j, d) if kind == 0 else pdist_cell(a, b, i, j, d, kind, pw))
 +                # SABOTAGE (end to end): features DESCENDING on the host column only
 +                var acc = Float32(0)
 +                for pp in range(d):

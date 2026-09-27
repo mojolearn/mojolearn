@@ -26,6 +26,7 @@ def div(a: Float32, b: Float32) -> Float32:
     return ftz(identical_div(a, b))
 
 
+@always_inline
 def _backcast(r: FP, n: Int) -> Float32:
     """sum_{i < tau} 0.94^i r_i^2 / sum 0.94^i, tau = min(75, n)."""
     var tau = 75 if n > 75 else n
@@ -40,6 +41,7 @@ def _backcast(r: FP, n: Int) -> Float32:
     return div(s, sw)
 
 
+@always_inline
 def _var_bounds(r: FP, n: Int, vb: FP):
     """variance_bounds (power 2): EWMA(0.94) of r^2 from the backcast,
     [v / 1e6, v * 1e6] floored at var(r) / 1e8, the upper at least
@@ -78,6 +80,7 @@ def _var_bounds(r: FP, n: Int, vb: FP):
         st(vb, 2 * t + 1, b1)
 
 
+@always_inline
 def garch_sigma2(par: FP, r: FP, n: Int, p: Int, o: Int, q: Int, backcast: Float32, vb: FP, s2: FP):
     """garch_recursion with bounds_check, power 2."""
     for t in range(n):
@@ -117,6 +120,7 @@ def garch_sigma2(par: FP, r: FP, n: Int, p: Int, o: Int, q: Int, backcast: Float
         st(s2, t, v)
 
 
+@always_inline
 def garch_nll(par: FP, r: FP, n: Int, p: Int, o: Int, q: Int, backcast: Float32, vb: FP, s2: FP) -> Float32:
     garch_sigma2(par, r, n, p, o, q, backcast, vb, s2)
     var ll = Float32(0.0)
@@ -144,6 +148,7 @@ struct GarchObj(Objective):
     var vb: FP
     var s2: FP
 
+    @always_inline
     def __init__(out self, y: FP, r: FP, n: Int, p: Int, o: Int, q: Int, has_mean: Bool,
                  backcast: Float32, vb: FP, s2: FP):
         self.y = y
@@ -157,6 +162,7 @@ struct GarchObj(Objective):
         self.vb = vb
         self.s2 = s2
 
+    @always_inline
     def eval(mut self, x: FP) -> Float32:
         var vol = x + 1 if self.has_mean else x
         var s = Float32(0.0)

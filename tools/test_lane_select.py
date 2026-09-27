@@ -1517,6 +1517,12 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
                                      oracle) and x-decomp-spectral-rbf (the
                                      decomp lane's spectral door); no old lane
                                      moved
+      kmeans_oracle        63 -> 64  x-cluster-kmeans-init (KMeans and
+                                     MiniBatchKMeans init as an array or a
+                                     callable, session 3 of the cluster lane);
+                                     x-cluster-dbscan-metrics and
+                                     x-cluster-hdbscan-epsilon reach no KMeans;
+                                     no old lane moved
 
     REMEASURED 2026-09-27 (lane/algos-trees, the trees expansion lanes):
       forest_host_predict  60 -> 80  the twenty trees-* lanes (DecisionTree,
@@ -1531,7 +1537,7 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
                                      binding that imports it
 
     REMEASURED 2026-09-27 (lane/algos-trees, option parity):
-      forest_host_predict  80 -> 84  trees-dt-random (DecisionTree
+      forest_host_predict  80 -> 85  trees-dt-random (DecisionTree
                                      splitter='random'), trees-dart-options
                                      (DART's LightGBM options, multiclass),
                                      trees-oob-cv-link (Bagging oob_score, cv
@@ -1540,16 +1546,27 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
                                      poisson / gamma / inverse_gaussian): the
                                      same RF/ET predict route; no old lane moved
       forest_inference     46 -> 50  the same four lanes
+      gbdt_host_predict    49 -> 50  trees-gbdt-multirmse (GradientBoosting
+                                     MultiRMSE), through the gbdt predict
+                                     route; it also reaches forest_host_predict
+                                     (the fifth lane there); no old lane moved
 
     REMEASURED 2026-09-27 (lane/algos-neighbors, found red on main):
       kmeans_oracle        63 -> 70  the seven x-ann-* lanes (IVF-PQ, IVF-SQ,
                                      RaBitQ, refine, filter, CAGRA, t-SNE),
                                      whose coarse quantizer is this library's
-                                     KMeans; no old lane moved"""
+                                     KMeans; no old lane moved
+      kmeans_oracle        70 -> 71  merged with the cluster lane's 63 -> 64
+                                     (x-cluster-kmeans-init) above
+
+    REMEASURED 2026-09-27 (lane/algos-trees, found red after merging main):
+      gbdt_host_predict    50 -> 51  x-metrics-search (the metrics lane's
+      forest_host_predict  85 -> 86  model_selection search fits GBDT and
+                                     forest estimators); no old lane moved"""
     rev = lane_select.reverse_map()
-    for rel, want in (("cluster/host/kmeans_oracle.mojo", 70),
-                      ("core/gbdt_host_predict.mojo", 49),
-                      ("core/forest_host_predict.mojo", 84),
+    for rel, want in (("cluster/host/kmeans_oracle.mojo", 71),
+                      ("core/gbdt_host_predict.mojo", 51),
+                      ("core/forest_host_predict.mojo", 86),
                       ("core/forest_inference.mojo", 50),
                       ("python/mojolearn/neural_inference.py", 41)):
         got = len(rev.get(rel, set()))

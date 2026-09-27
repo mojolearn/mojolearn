@@ -102,13 +102,86 @@ Agglomerative, Spectral) option rows, then speed.
 - NVIDIA pod `cluster` (H100) held; heartbeat `tools/dev_pod.sh extend
   cluster 120`.
 
-Next, in order (CURRENT DIRECTIVES item 1):
-1. (done) steward verdicts; a later m3ultra FAIL comes back here.
-2. Option parity for the EXISTING cluster family: DBSCAN metric cosine and
-   precomputed (dbscan/NOT_IMPLEMENTED.tsv rows), HDBSCAN
-   cluster_selection_epsilon (hdbscan tsv), GaussianMixture save/sample for
-   the routed options, the callable init/metric refusals.
-3. GPU speed (IDENTICAL and FAST, NVIDIA/AMD/Apple) at 1M+ rows from R2:
-   the OPTICS ordering loop and AffinityPropagation iterations are host /
-   per-iteration-sync bound; MeanShift is one thread per seed.
-4. CPU speed last.
+## Option parity, the EXISTING family (session 3, 2026-09-27)
+
+Merged to main at f2b0b051e in one batch. Batched steward request
+1790538504301-cluster-f2b0b051e0 (all 18 x-cluster lanes, --pass 1, the
+combined sabotage ~/mojolearn-evidence/cluster_combined_f2b0b051e.patch =
+e2e_device_fold_reversed + the kmeans-init nearest cut + dbscan-metrics +
+hdbscan-epsilon + hdbscan-probabilities): a FAIL comes back as a fix.
+Each item, each with a lane, a
+sabotage that bites where the change is numeric, existing lanes unchanged
+(`lane_select --changed-since origin/main`, H100: every non-par lane AGREE,
+51 lanes; the par-* lanes have no CPU arm in the lane check):
+
+- DBSCAN metric='cosine' (DEVIATION 5113: `core/cosine_rows.mojo` scales
+  rows to unit length on the HOST, one source for both bindings; the L2
+  kernel against Float32(2 * eps); predict too) and metric='precomputed'
+  (DEVIATION 5114: `eps_precomputed_neigh_kernel`, adj = D <= eps).
+  Lane x-cluster-dbscan-metrics, sabotage e2e_dbscan_metrics.patch: PASS
+  (AGREE / DISAGREE / AGREE, H100).
+- DBSCAN core_sample_indices_ and components_ on every fit (cuML's
+  calc_core_sample_indices default, scikit-learn's attributes); predict and
+  save still need prediction_data=True. No numeric change.
+- HDBSCAN cluster_selection_epsilon (DEVIATION 5115:
+  `hdbscan/impl/detail/utils.mojo::cluster_epsilon_search_host`, host code
+  both routes call; the labelling's epsilon branch, extract.cuh:148-153).
+  Lane x-cluster-hdbscan-epsilon, sabotage e2e_hdbscan_epsilon.patch: PASS.
+- HDBSCAN probabilities_ (DEVIATION 5116: `extract.mojo::
+  get_probabilities_host`, both bindings, a new trailing fit address).
+  Sabotage e2e_hdbscan_probabilities.patch on x-cluster-hdbscan-epsilon:
+  PASS.
+- KMeans init as an array or a callable, MiniBatchKMeans init callable
+  (`_expansion_cluster._callable_init`, called once on the host, then the
+  array path). Lane x-cluster-kmeans-init, sabotage e2e_kmeans_init.patch
+  (the device nearest skips the last center; e2e_device_fold_reversed did
+  not bite it on do-amd). No Mojo change.
+- GaussianMixture precisions_init: already routed to x_cluster/bgmm.mojo;
+  the stale mixture tsv row fixed and x-cluster-gmm-options now hashes it.
+- sklearn sanity (3 seeds, sklearn 1.9): cosine ARI 1.0 on all three;
+  precomputed labels EXACT on all three; HDBSCAN labels ARI 0.98-1.0 at
+  epsilon 0 / 0.3 / 3 (at 3.0 the paired blobs merge, 8 -> 4 clusters;
+  scikit-learn 1.9's own traverse_upwards raises a TypeError there, its
+  bug); probabilities_ within 0.019 of scikit-learn's once min_samples is
+  matched (cuML counts min_samples without the point itself, scikit-learn
+  with it; the residual is cuML's expanded float32 L2).
+- test_host_surface: 196 passed; test_lane_select: kmeans_oracle pin
+  63 -> 64 (x-cluster-kmeans-init), attributed; the rest pass (two git-reachability probes fail only on the pod's
+  synced, uncommitted tree under MOJOLEARN_LANE_SELECT_TEST_FORCE; they passed
+  in the unforced run).
+- Steward requests at 6e54f880b: do-amd PASS for dbscan-metrics,
+  hdbscan-epsilon, hdbscan probabilities; kmeans-init resubmitted with its
+  own patch (e2e_kmeans_init.patch: PASS on H100). Apple/AMD verdicts are post-merge release gates (0000b).
+- FIXED AT THE ROOT (TOP PRIORITY from the cpu lane): the x_cluster GPU
+  binding hung on its SECOND call in a process (RTX 4090, futex wait): the
+  DeviceContext was a per-call DeviceOps field declared before the call's
+  buffers. Now one process-lifetime context (`device_ops.mojo::
+  x_cluster_ctx`, the x_cnn `_Global` pattern). Regression test
+  `python/mojolearn/tests/test_x_cluster_twice.py` (every entry point twice
+  in one process, GPU and CPU, byte-equal): 2 passed on H100. All 18
+  x-cluster lanes AGREE after the fix (CPU path untouched, so the GPU bits
+  are unchanged).
+
+Next, in order (LANE CHARTER at the top of ALGORITHM_EXPANSION_PLAN.md; one
+phase per session). Phase 1 (verification) holds for the six new algorithms
+(see Pass 2 above); the existing six (KMeans, DBSCAN, HDBSCAN, Agglomerative,
+SpectralClustering, GaussianMixture) carry release-record lanes (kmeans*,
+dbscan*, hdbscan*, agglomerative, spectral*, gmm*).
+1. PHASE 2, option parity, CONTINUES (this session merged the batch above),
+   what is left in the family:
+   - AgglomerativeClustering: linkage 'ward' (scikit-learn's DEFAULT),
+     'complete', 'average'; metric l1/cosine/precomputed; distance_threshold
+     and compute_distances (the per-merge deltas build_dendrogram_host already
+     produces, hierarchy/README.md); a connectivity matrix; connectivity='knn'
+     (hierarchy tsv row 2, cuML's Python default).
+   - SpectralClustering: affinity='rbf' (scikit-learn's DEFAULT),
+     assign_labels 'discretize' / 'cluster_qr', affinity_matrix_.
+   - MeanShift estimate_bandwidth(n_samples) subsampling; OPTICS remaining
+     metrics (x_cluster tsv rows 8, 10); BisectingKMeans callable init
+     (refused: called per bisection inside the Mojo loop).
+2. Phase 3 FAST speed, then phase 4 IDENTICAL speed, NVIDIA/AMD/Apple at
+   1M+ rows from R2 (timing via apple_steward.py submit --kind speed
+   --target m3ultra|do-amd): the OPTICS ordering loop and AffinityPropagation
+   iterations are host / per-iteration-sync bound; MeanShift is one thread
+   per seed.
+3. Phase 5 CPU speed last.

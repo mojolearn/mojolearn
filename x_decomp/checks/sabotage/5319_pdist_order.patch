@@ -1,0 +1,23 @@
+diff --git a/x_decomp/cells.mojo b/x_decomp/cells.mojo
+--- a/x_decomp/cells.mojo
++++ b/x_decomp/cells.mojo
+@@ -415,7 +415,8 @@
+         var ab = Float32(0)
+         var aa = Float32(0)
+         var bb = Float32(0)
+-        for q in range(d):
++        for qq in range(d):
++            var q = d - 1 - qq  # SABOTAGE 5319: cosine folds descending
+             var x = ftz(a.unsafe_load(i * d + q))
+             var y = ftz(b.unsafe_load(j * d + q))
+             ab = ftz(identical_mul_add(x, y, ab))
+@@ -434,7 +435,8 @@
+             r = Float32(2)
+         return r
+     var acc = Float32(0)
+-    for q in range(d):
++    for qq in range(d):
++        var q = d - 1 - qq  # SABOTAGE 5319: manhattan / minkowski fold descending
+         var t = abs(sub(a.unsafe_load(i * d + q), b.unsafe_load(j * d + q)))
+         if kind == PD_MANHATTAN:
+             acc = add(acc, t)
