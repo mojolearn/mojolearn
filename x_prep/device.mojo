@@ -4,11 +4,39 @@
 program is one launch of one thread per unit on the same stream (so stage s
 sees every write of stage s-1), and the arena comes back once."""
 from std.gpu import block_idx, block_dim, thread_idx
+from std.ffi import _Global
 from max.gpu.host import DeviceContext
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_prep.common import FP, IP, STAGE_INTS
 from x_prep.units import N_OPS, run_unit
 
 comptime BLOCK = 128
+
+
+struct _PrepContext(Defaultable, Movable):
+    """ONE process-lifetime DeviceContext for every `x_prep_run` (the x_cnn
+    `_Global` pattern; CURRENT DIRECTIVES, 2026-09-27: a context per call hung
+    the SECOND call of x_cluster / x_neighbors on an RTX 4090, and on Metal a
+    context per call exhausts the per-process command queues). The slot keeps
+    a reference for the life of the process, so every call's buffers die
+    inside it. One slot per numeric tier, so a FAST and an IDENTICAL .so in
+    one process never share it. Context lifetime moves no bit."""
+    var ctx: Optional[DeviceContext]
+
+    def __init__(out self):
+        self.ctx = Optional[DeviceContext]()
+
+
+comptime _CTX_NAME = "MojoXPrepContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXPrepContextFast"
+comptime X_PREP_CONTEXT = _Global[StorageType=_PrepContext, name=_CTX_NAME, init_fn=_PrepContext.__init__]
+
+
+def x_prep_ctx() raises -> DeviceContext:
+    """The shared context, created on first use."""
+    var slot = X_PREP_CONTEXT.get_or_create_ptr()
+    if not slot[].ctx:
+        slot[].ctx = DeviceContext()
+    return slot[].ctx.value().copy()
 
 
 def prep_kernel[OP: Int](f: FP, q: IP, total: Int32):
@@ -28,7 +56,7 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int) 
         var op = Int(host_q.unsafe_load(s * STAGE_INTS))
         if op < 0 or op >= N_OPS:
             raise Error(String("x_prep: unknown op ", op))
-    var ctx = DeviceContext()
+    var ctx = x_prep_ctx()
     var df = ctx.enqueue_create_buffer[DType.float32](arena_len if arena_len > 0 else 1)
     var dq = ctx.enqueue_create_buffer[DType.int32](stages * STAGE_INTS if stages > 0 else 1)
     if arena_len > 0:
