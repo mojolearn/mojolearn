@@ -89,7 +89,12 @@ if [ -n "$WHEEL" ]; then
     rm -rf /root/lm-venv
     "$PYSYS" -m venv /root/lm-venv > "$OUT/venv.log" 2>&1 || { ( apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y python3-venv ) >> "$OUT/venv.log" 2>&1; rm -rf /root/lm-venv; "$PYSYS" -m venv /root/lm-venv >> "$OUT/venv.log" 2>&1; }
     [ -x /root/lm-venv/bin/pip ] || { say "venv failed; see venv.log"; exit 1; }
-    /root/lm-venv/bin/pip install --disable-pip-version-check --quiet numpy "mojolearn==$WHEEL" > "$OUT/pip_install.log" 2>&1; _rc=$?
+    # a PyPI read timeout once killed a whole segment (B/3, 2026-09-27): retry the install, never the run
+    for _try in 1 2 3 4 5; do
+        /root/lm-venv/bin/pip install --disable-pip-version-check --quiet --timeout 120 --retries 10 numpy "mojolearn==$WHEEL" >> "$OUT/pip_install.log" 2>&1; _rc=$?
+        [ "$_rc" -eq 0 ] && break
+        say "pip install try $_try exit=$_rc; retrying in 30 s"; sleep 30
+    done
     say "pip install mojolearn==$WHEEL exit=$_rc secs=$(( $(date +%s) - _t0 ))"
     [ "$_rc" -eq 0 ] || { say "the wheel did not install; nothing run"; exit 1; }
     /root/lm-venv/bin/pip freeze > "$OUT/pip_freeze.txt" 2>&1
