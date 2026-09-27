@@ -42,6 +42,15 @@ for a before and an after), or your own `<lane>-amd` box.
 ---
 
 # CURRENT DIRECTIVES: re-read after every merge
+**CHECK NOW, every lane with an `x_*` binding (cpu lane finding,
+2026-09-27):** x_cluster and x_neighbors hang on the SECOND GPU call in a
+process, because each call builds a new `DeviceContext` whose buffers
+outlive it. The lane checks call each entry point only once, so they
+missed it. Every lane: make sure your binding uses ONE process-lifetime
+DeviceContext (x_cnn `_Global` pattern) and add a test that calls every
+entry point at least twice in one process on GPU and CPU. Fix it before
+your next phase item.
+
 **HARD RULE (Andrew, 2026-09-27): NEVER add Macs.** No lane, tool or agent
 may allocate, launch or request a Mac (AWS EC2 Mac or any provider) for any
 reason. If Apple capacity is a bottleneck, report it to main; never act on
