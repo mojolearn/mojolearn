@@ -13,5 +13,6 @@ movement only. eigh reuses `decomposition/` (device_eigh / host_eigh).
 | GaussianRandomProjection / SparseRandomProjection | x-decomp-grp, x-decomp-srp | (see git log: "decomp lane: GaussianRandomProjection / SparseRandomProjection") | AGREE batch 9, infer 9, train 9 each |
 | SpectralEmbedding | -- | SKIPPED | already public (python/mojolearn/_spectral_impl.py, lane spectral-embedding); only affinity='rbf' is missing and that file is not this lane's |
 | NMF | x-decomp-nmf | (see git log: "decomp lane: NMF") | AGREE infer 9, train 9 (NMF has no batch part: transform's stopping test is over the whole batch); ipca/grp/srp re-AGREE after the new cells |
+| FastICA | x-decomp-fastica | (see git log: "decomp lane: FastICA") | AGREE batch 9, infer 9, train 9 |
 
-Next: FastICA
+Next: FactorAnalysis

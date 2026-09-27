@@ -17,3 +17,18 @@
 # own lanes (to LANES and the per-lane registries); rebind no existing name;
 # prefix your own helpers with `_cluster_`. No imports are needed: np, _h,
 # _fit, _rows_calls and the rest are this module's.
+
+
+@lane("x-cluster-minibatch-kmeans")
+def _(ml, X, yc, yr, Xh=None):
+    """MiniBatchKMeans (python/mojolearn/_expansion_cluster.py): 3000 x 8
+    rows, batch 256 so the fit takes many steps, reassignment and the
+    early stop reachable."""
+    m = ml.MiniBatchKMeans(n_clusters=6, batch_size=256, max_iter=5, random_state=3).fit(X[:3000, :8])
+    return _fit(dict(centers=_h(m.cluster_centers_), labels=_h(m.labels_), counts=_h(m.counts_),
+                     steps=_h(np.asarray([m.n_steps_, m.n_iter_], dtype=np.int64)),
+                     inertia=_h(np.float64(m.inertia_))),
+                m, lambda e: (e.predict(Xh[:256, :8]), e.transform(Xh[:256, :8])))
+
+
+_batch_decl(_rows_calls("predict", "transform", sl=np.s_[:256, :8]), "x-cluster-minibatch-kmeans")
