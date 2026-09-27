@@ -1237,14 +1237,7 @@ class KBinsDiscretizer(_PrepBase):
         n, d = arr.shape
         w = None
         if sample_weight is not None:
-            w = as_f32_c(sample_weight, ndim=1, name="sample_weight")[0]
-            if w.size != n:
-                raise ValueError(f"mojolearn: sample_weight has {w.size} entries; X has {n} rows")
-            wl = w.tolist()
-            if any(not v >= 0 for v in wl):
-                raise ValueError("mojolearn: KBinsDiscretizer sample_weight must be nonnegative")
-            if not any(v > 0 for v in wl):
-                raise ValueError("mojolearn: KBinsDiscretizer sample_weight is all zero")
+            w, wl = _check_weights(sample_weight, n, "KBinsDiscretizer")
         if self.subsample is not None and n > self.subsample:
             state = 0 if self.random_state is None else int(self.random_state)
             rows = []
@@ -1302,19 +1295,12 @@ class KBinsDiscretizer(_PrepBase):
             if strat == 0:
                 pr.stage("kbins_edges", d, so, n, d, nbo, nbmax, 0, stw, edges, ne, 0, 0)
             else:
-                ug, ucnt, codes = pr.alloc(2 * n * d), pr.alloc(d), pr.alloc(n * d)
-                pr.stage("sort_cols", d, xo, n, d, so, 1)
-                pr.stage("unique_cols", d, so, n, d, ug, ucnt)
-                pr.stage("lookup", n * d, xo, n, d, ug, n, ucnt, codes)
-                pr.stage("kbins_gw", d, codes, n, d, pr.put(w), ug + n * d)
+                ug, ucnt = _weighted_groups(pr, arr, w, n, d)
                 if strat == 3:
                     pr.stage("kbins_wkm", d, ug, n, d, ucnt, nbo, nbmax, st, stw, edges, cen, lab)
                 else:
-                    lev = []
-                    for b in nb:
-                        step = 100.0 / b
-                        lev += [i * step for i in range(b)] + [100.0] + [0.0] * (nbmax - b)
-                    pr.stage("kbins_wq", d, ug, n, d, ucnt, nbo, nbmax, pr.put_list(lev), int(strat == 1), edges)
+                    levels = [[i * (100.0 / b) for i in range(b)] + [100.0] for b in nb]
+                    _weighted_levels(pr, ug, ucnt, n, d, levels, strat == 1, edges)
                 pr.stage("kbins_edges", d, so, n, d, nbo, nbmax, 11, stw, edges, ne, 0, 0)
         pr.run(mode)
         counts = [int(v) for v in pr.values(ne, d)]
@@ -2400,15 +2386,68 @@ class PolynomialFeatures(_PrepBase):
         return pr.get(out, (n, nout))
 
 
+def _f_order(pr, off, n, w):
+    """An (n, w) arena block as a Fortran-ordered Array (the same words)."""
+    seg = pr.arena[off:off + n * w]
+    store = array.array("f")
+    for j in range(w):
+        store.extend(seg[j::w])
+    return Array._owned(store, (n, w), "<f4", "F")
+
+
+def _check_weights(sample_weight, n, who):
+    """sample_weight as float32 words (nonnegative, length n) and their list."""
+    w = as_f32_c(sample_weight, ndim=1, name="sample_weight")[0]
+    if w.size != n:
+        raise ValueError(f"mojolearn: sample_weight has {w.size} entries; X has {n} rows")
+    wl = w.tolist()
+    if any(not v >= 0 for v in wl):
+        raise ValueError(f"mojolearn: {who} sample_weight must be nonnegative")
+    if not any(v > 0 for v in wl):
+        raise ValueError(f"mojolearn: {who} sample_weight is all zero")
+    return w, wl
+
+
+def _weighted_groups(pr, arr, w, n, d):
+    """Stages writing every column's distinct values (ascending, -0.0 folded
+    into 0.0, NaN last) and their summed weights: UG[c*n :] and UG[n*d + c*n :],
+    their count UCNT[c]. Returns (UG, UCNT)."""
+    xo = pr.put(arr)
+    so, ug, ucnt, codes = pr.alloc(n * d), pr.alloc(2 * n * d), pr.alloc(d), pr.alloc(n * d)
+    pr.stage("sort_cols", d, xo, n, d, so, 1)
+    pr.stage("unique_cols", d, so, n, d, ug, ucnt)
+    pr.stage("lookup", n * d, xo, n, d, ug, n, ucnt, codes)
+    pr.stage("kbins_gw", d, codes, n, d, pr.put(w), ug + n * d)
+    return ug, ucnt
+
+
+def _weighted_levels(pr, ug, ucnt, n, d, levels, average, out):
+    """A stage of the reference's `_weighted_percentile` of every column at
+    the percent `levels` (one list per column, padded to a common stride
+    max + 1) into `out` (column c at c * stride), over `_weighted_groups`."""
+    nb = [len(lv) - 1 for lv in levels]
+    nbmax = max(nb)
+    flat = []
+    for lv in levels:
+        flat += list(lv) + [0.0] * (nbmax + 1 - len(lv))
+    pr.stage("kbins_wq", d, ug, n, d, ucnt, pr.put_list(nb), nbmax, pr.put_list(flat), int(average), out)
+
+
 class SplineTransformer(_PrepBase):
     """sklearn.preprocessing.SplineTransformer: per feature, B-splines of
-    `degree` on `n_knots` base knots ('uniform' over the training range, or
-    'quantile': numpy linear percentiles), extended by `degree` knots at each
-    end at the edge spacing; extrapolation 'constant' (the boundary values),
-    'continue' or 'error'. Dense float32 output. Explicit knot arrays,
-    'linear' and 'periodic' extrapolation and sparse output are refused."""
+    `degree` on `n_knots` base knots ('uniform' over the training range,
+    'quantile': numpy linear percentiles, or an explicit (n_knots,
+    n_features) array), extended by `degree` knots at each end at the edge
+    spacing, or wrapped for 'periodic'; extrapolation 'constant', 'continue',
+    'linear', 'periodic' or 'error'; sample_weight weighs the knots (the
+    reference's weighted percentile for 'quantile', the range over rows of
+    nonzero weight for 'uniform'); handle_missing 'error' or 'zeros' (a NaN
+    is left out of the knots and encodes as a zero block); order 'C' or 'F'.
+    Dense float32 output (sparse_output is refused: there is no sparse
+    Array)."""
     _parameters = ("n_knots", "degree", "knots", "extrapolation", "include_bias", "order", "handle_missing",
                    "sparse_output")
+    _EXTRAP = {"constant": 0, "continue": 1, "error": 1, "linear": 2, "periodic": 3}
 
     def __init__(self, n_knots=5, degree=3, *, knots="uniform", extrapolation="constant", include_bias=True,
                  order="C", handle_missing="error", sparse_output=False):
@@ -2421,40 +2460,92 @@ class SplineTransformer(_PrepBase):
         self.handle_missing = handle_missing
         self.sparse_output = sparse_output
 
+    def _no_nan(self, pr, st, d, n):
+        if self.handle_missing == "error" and any(int(v) != n for v in pr.values(st, d)):
+            raise ValueError("mojolearn: Input X contains NaN values and `SplineTransformer` is configured to "
+                             "error in this case (handle_missing='error'). To avoid this error, set "
+                             "handle_missing='zeros' to encode missing values as splines with value 0 or ensure "
+                             "no missing values in X.")
+
     def fit(self, X, y=None, sample_weight=None):
-        if not isinstance(self.knots, str) or self.knots not in ("uniform", "quantile"):
-            raise NotImplementedError("mojolearn: SplineTransformer knots must be 'uniform' or 'quantile'")
-        if self.extrapolation not in ("constant", "continue", "error"):
-            raise NotImplementedError(f"mojolearn: SplineTransformer extrapolation={self.extrapolation!r} "
-                                      "is not implemented")
-        if sample_weight is not None or self.sparse_output or self.order != "C":
-            raise NotImplementedError("mojolearn: SplineTransformer sample_weight, sparse_output and "
-                                      "order='F' are not implemented")
-        nk, k = int(self.n_knots), int(self.degree)
-        if nk < 2 or k < 0 or k > 7:
-            raise ValueError("mojolearn: SplineTransformer needs n_knots >= 2 and 0 <= degree <= 7")
+        if self.extrapolation not in self._EXTRAP:
+            raise ValueError(f"mojolearn: invalid extrapolation {self.extrapolation!r}")
+        if self.handle_missing not in ("error", "zeros"):
+            raise ValueError(f"mojolearn: invalid handle_missing {self.handle_missing!r}")
+        if self.order not in ("C", "F"):
+            raise ValueError(f"mojolearn: invalid order {self.order!r}")
+        if self.sparse_output:
+            raise NotImplementedError("mojolearn: SplineTransformer sparse_output is not implemented "
+                                      "(there is no sparse Array)")
+        k = int(self.degree)
+        if k < 0 or k > 7:
+            raise ValueError("mojolearn: SplineTransformer needs 0 <= degree <= 7")
         arr = _x2d(X)
         n, d = arr.shape
+        if n < 2:
+            raise ValueError("mojolearn: SplineTransformer needs at least 2 samples")
+        w = wl = None
+        if sample_weight is not None:
+            w, wl = _check_weights(sample_weight, n, "SplineTransformer")
+        given = not isinstance(self.knots, str)
+        if not given and self.knots not in ("uniform", "quantile"):
+            raise ValueError(f"mojolearn: invalid knots {self.knots!r}")
+        if given:
+            rows = [[float(v) for v in (r.tolist() if hasattr(r, "tolist") else r)] for r in
+                    (self.knots.tolist() if hasattr(self.knots, "tolist") else self.knots)]
+            nk = len(rows)
+            if nk < 2:
+                raise ValueError("mojolearn: Number of knots, knots.shape[0], must be >= 2.")
+            if any(len(r) != d for r in rows):
+                raise ValueError("mojolearn: knots.shape[1] == n_features is violated.")
+            cols = [list(array.array("f", [r[c] for r in rows])) for c in range(d)]
+            if not all(b > a for col in cols for a, b in zip(col, col[1:])):
+                raise ValueError("mojolearn: knots must be sorted without duplicates.")
+        else:
+            nk = int(self.n_knots)
+            if nk < 2:
+                raise ValueError("mojolearn: SplineTransformer needs n_knots >= 2")
+        periodic = self.extrapolation == "periodic"
+        if periodic and nk <= k:
+            raise ValueError(f"mojolearn: Periodic splines require degree < n_knots. Got n_knots={nk} and "
+                             f"degree={k}.")
         mode = _mode()
         pr = _Prog()
         xo = pr.put(arr)
         so, st = pr.alloc(n * d), pr.alloc(6 * d)
-        base = pr.alloc(d * nk)
         knots = pr.alloc(d * (nk + 2 * k))
         pr.stage("col_stats", d, xo, n, d, st)
-        if self.knots == "quantile":
-            qf = pr.put_list([i / (nk - 1) for i in range(nk)])
-            pr.stage("sort_cols", d, xo, n, d, so, 0)
-            pr.stage("quantile", d * nk, so, n, d, qf, nk, base, _NONE)
-        pr.stage("spline_knots", d, base, nk, d, k, knots, 1 if self.knots == "uniform" else 0, st)
+        uniform, kst = 0, st
+        if given:
+            base = pr.put_list([v for col in cols for v in col])
+        elif self.knots == "quantile":
+            base = pr.alloc(d * nk)
+            if w is None:
+                qf = pr.put_list([i / (nk - 1) for i in range(nk)])
+                pr.stage("sort_cols", d, xo, n, d, so, 0)
+                pr.stage("quantile", d * nk, so, n, d, qf, nk, base, st)
+            else:
+                step = 1.0 / (nk - 1)
+                lv = [100.0 * (i * step) for i in range(nk - 1)] + [100.0]
+                ug, ucnt = _weighted_groups(pr, arr, w, n, d)
+                _weighted_levels(pr, ug, ucnt, n, d, [lv] * d, False, base)
+        else:
+            base, uniform = pr.alloc(d * nk), 1
+            if w is not None and any(v == 0 for v in wl):
+                kst = pr.alloc(6 * d)
+                nz = [i for i, v in enumerate(wl) if v > 0]
+                pr.stage("col_stats", d, pr.put(_gather_rows(arr, nz)), len(nz), d, kst)
+        pr.stage("spline_knots", d, base, nk, d, k, knots, uniform, kst, int(periodic))
         pr.run(mode)
+        self._no_nan(pr, st, d, n)
         self._knots = pr.get(knots, d * (nk + 2 * k))
         flat = pr.values(knots, d * (nk + 2 * k))
-        w = nk + 2 * k
-        self.bsplines_ = [Array.from_list(flat[c * w:(c + 1) * w], "<f4") for c in range(d)]
-        self._lo, self._hi = pr.values(st + 3 * d, d), pr.values(st + 4 * d, d)
+        wd = nk + 2 * k
+        self.bsplines_ = [Array.from_list(flat[c * wd:(c + 1) * wd], "<f4") for c in range(d)]
+        self._lo = [flat[c * wd + k] for c in range(d)]
+        self._hi = [flat[c * wd + k + nk - 1] for c in range(d)]
         self._nk, self._k = nk, k
-        nspl = nk + k - 1
+        nspl = nk - 1 if periodic else nk + k - 1
         self.n_features_out_ = d * (nspl if self.include_bias else nspl - 1)
         self.numeric_mode_, self.n_features_in_ = mode, d
         return self
@@ -2469,15 +2560,20 @@ class SplineTransformer(_PrepBase):
         xo, ko = pr.put(arr), pr.put(self._knots)
         out = pr.alloc(n * W)
         st = pr.alloc(6 * d)
-        if self.extrapolation == "error":
+        check = self.extrapolation == "error" or self.handle_missing == "error"
+        if check:
             pr.stage("col_stats", d, xo, n, d, st)
-        pr.stage("spline_apply", n * d, xo, n, d, ko, self._nk, self._k,
-                 1 if self.extrapolation == "continue" else 0, W, 1 if self.include_bias else 0, out)
+        pr.stage("spline_apply", n * d, xo, n, d, ko, self._nk, self._k, self._EXTRAP[self.extrapolation], W,
+                 1 if self.include_bias else 0, out)
         pr.run(self.numeric_mode_)
+        if check:
+            self._no_nan(pr, st, d, n)
         if self.extrapolation == "error":
             lo, hi = pr.values(st + 3 * d, d), pr.values(st + 4 * d, d)
             if any(a < b for a, b in zip(lo, self._lo)) or any(a > b for a, b in zip(hi, self._hi)):
                 raise ValueError("mojolearn: X contains values beyond the limits of the knots")
+        if self.order == "F":
+            return _f_order(pr, out, n, W)
         return pr.get(out, (n, W))
 
 

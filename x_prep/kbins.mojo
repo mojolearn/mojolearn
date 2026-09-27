@@ -14,7 +14,7 @@ positions are exact rationals i / n_bins, so the integer/fraction split of a
 position is decided in integer arithmetic.
 """
 from std.memory import bitcast
-from x_prep.common import FP, IP, p, ld, st, canonical_nan
+from x_prep.common import FP, IP, p, ld, st, canonical_nan, is_nan
 from x_prep.prims import add, sub, mul, div
 
 comptime KMEANS_MAX_ITER = 300
@@ -230,6 +230,14 @@ def kbins_gw_unit(t: Int, f: FP, q: IP):
         st(f, o, add(ld(f, o), ld(f, p(q, 3) + i)))
 
 
+@always_inline
+def _gw(f: FP, U: Int, G: Int, g: Int) -> Float32:
+    """Group g's weight; a NaN value weighs 0 (the reference's NaN rule)."""
+    if is_nan(ld(f, U + g)):
+        return Float32(0)
+    return ld(f, G + g)
+
+
 def kbins_wq_unit(t: Int, f: FP, q: IP):
     """q = [UG, n, d, UCNT, NB, NBMAX, LEV, AVG, EDGES]; t = column c. The
     reference's `_weighted_percentile` (inverted_cdf, or with AVG
@@ -240,7 +248,8 @@ def kbins_wq_unit(t: Int, f: FP, q: IP):
     (adj == 0: the first of positive weight, the reference's nextafter(0, 1);
     none: the largest value, the reference's clipped index); with AVG, when
     that cumulative exceeds adj by no more than float32 eps, the mean of it
-    and the next value of positive weight (itself when there is none)."""
+    and the next value of positive weight (itself when there is none). A NaN
+    value weighs 0."""
     var n = p(q, 1)
     var d = p(q, 2)
     var c = t
@@ -252,13 +261,13 @@ def kbins_wq_unit(t: Int, f: FP, q: IP):
     var L = p(q, 6) + c * (p(q, 5) + 1)
     var total = Float32(0)
     for g in range(m):
-        total = add(total, ld(f, G + g))
+        total = add(total, _gw(f, U, G, g))
     for i in range(nb + 1):
         var adj = mul(div(ld(f, L + i), Float32(100)), total)
         var cum = Float32(0)
         var found = -1
         for g in range(m):
-            cum = add(cum, ld(f, G + g))
+            cum = add(cum, _gw(f, U, G, g))
             if (adj > Float32(0) and cum >= adj) or (adj == Float32(0) and cum > Float32(0)):
                 found = g
                 break
@@ -268,7 +277,7 @@ def kbins_wq_unit(t: Int, f: FP, q: IP):
         if p(q, 7) != 0 and not (sub(cum, adj) > Float32(1.1920929e-07)):
             var nxt = found
             for h in range(found + 1, m):
-                if ld(f, G + h) > Float32(0):
+                if _gw(f, U, G, h) > Float32(0):
                     nxt = h
                     break
             v = div(add(v, ld(f, U + nxt)), Float32(2))
