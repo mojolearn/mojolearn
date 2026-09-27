@@ -3990,6 +3990,45 @@ def _(ml, X, yc, yr, Xh=None):
                      clip_norm=_h(total), clipped=_h(*g3[0])))
 
 
+@lane("optim-maximize")
+def _(ml, X, yc, yr, Xh=None):
+    """maximize=True (2026-09-27, lane/neural option parity; DEVIATION 6200):
+    SGD with momentum, Nesterov and coupled decay under the clip, Adam with
+    coupled decay under the clip, AdamW with decoupled decay, two steps each.
+    torch negates the gradient at the top of the step, so every step here
+    reads the SIGN-FLIPPED gradient (training/maximize.mojo). The seam is the
+    sign of a zero: every gradient carries planted +0.0 and -0.0 cells and
+    every parameter a planted -0.0, where `-g` and `0.0 - g` part ways (SGD's
+    first step copies the gradient into the momentum buffer, which is
+    hashed). The clipped gradients the caller gets back are hashed too."""
+    T = ml.training
+
+    def planted(lane):
+        ps, gs = _optim_tensors(lane)
+        for k in range(len(ps)):
+            ps[k].reshape(-1)[0] = np.float32(-0.0)
+            for g in gs:
+                g.reshape(-1)[0] = np.float32(0.0)
+                g.reshape(-1)[1] = np.float32(-0.0)
+        return ps, gs
+
+    p1, g1 = planted("max-sgd")
+    o1 = T.SGD(p1, lr=1e-2, momentum=0.9, nesterov=True, weight_decay=0.01, maximize=True)
+    n1 = [np.float64(o1.step(g, max_norm=1.0)) for g in g1]
+    p2, g2 = planted("max-adam")
+    o2 = T.Adam(p2, lr=1e-3, weight_decay=0.01, maximize=True)
+    n2 = [np.float64(o2.step(g, max_norm=1.0)) for g in g2]
+    p3, g3 = planted("max-adamw")
+    o3 = T.AdamW(p3, lr=1e-3, weight_decay=0.01, maximize=True)
+    for g in g3:
+        o3.step(g)
+    return _fit(dict(sgd=_h(*p1), sgd_buf=_h(np.asarray(o1.exp_avg)), sgd_norms=_h(np.asarray(n1)),
+                     sgd_clipped=_h(*g1[-1]),
+                     adam=_h(*p2), adam_moments=_h(np.asarray(o2.exp_avg), np.asarray(o2.exp_avg_sq)),
+                     adam_norms=_h(np.asarray(n2)), adamw=_h(*p3),
+                     adamw_moments=_h(np.asarray(o3.exp_avg), np.asarray(o3.exp_avg_sq))))
+
+
 @lane("cross-entropy-arms")
 def _(ml, X, yc, yr, Xh=None):
     """reduction='none', 'sum' with an explicit divisor, label smoothing

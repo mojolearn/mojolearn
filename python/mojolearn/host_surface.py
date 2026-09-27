@@ -900,6 +900,7 @@ TRAINING_LANE_NAMES = {
     # batch cells IDENTICAL x4 before the gate ran.
     "optim-sgd": "SGD with momentum, Nesterov and dampening",
     "optim-adam-clip": "Adam and AdamW with the gradient clip and accumulation",
+    "optim-maximize": "SGD, Adam and AdamW with maximize=True",
     "cross-entropy-arms": "the cross-entropy loss arms",
     "training-primitives": "the embedding, RMSNorm and linear training primitives",
     "ordered-gradient-sum": "the ordered shard gradient reduction",
@@ -2569,7 +2570,7 @@ FAMILIES = (
         routes="_mojolearn_training",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("mlp", "optim-sgd", "optim-adam-clip", "cross-entropy-arms", "training-primitives", "ordered-gradient-sum", "par-mlp",
+        training_lanes=("mlp", "optim-sgd", "optim-adam-clip", "optim-maximize", "cross-entropy-arms", "training-primitives", "ordered-gradient-sum", "par-mlp",
                         "samba", "samba-untied-dropout-accum", "par-samba", "par-samba-clip",
                         "mlp-bf16w", "mlp-int8w", "samba-bf16w", "samba-int8w",
                         # lane/laneless-public-classes (2026-09-19)

@@ -600,8 +600,9 @@ sized to the count that lane asked for:
 | algorithm expansion `cnn` | -- | **170-179** | 10 |
 | algorithm expansion `ann` | -- | **180-189** | 10 |
 | algorithm expansion `metrics` (2026-09-27, lane/metrics) | -- | **190-199** | 10 |
+| family lane `neural` (2026-09-27, lane/neural; DEVIATIONS 6200-6299) | -- | **200-209** | 10 |
 
-Next free row after this table is **200** (97-99 are unassigned; the
+Next free row after this table is **210** (200-209 went to the neural family lane on 2026-09-27) (97-99 are unassigned; the
 expansion ranges start at 100 so the nine lanes of
 docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md never meet anyone already writing
 at 97). Each expansion lane writes its rows ONLY in its own section of
@@ -824,3 +825,16 @@ binding (`_mojolearn_metrics`) and its rows are unchanged.
 | 196 | **cumulative sums** (the weighted percentile's CDF, the ranking curves' weighted counts) | a prefix is inherently ordered; refolding it changes bits | PIN, DEVIATION 6107: a sequential ascending Float32 prefix in sorted order (unit weights count exactly as integers) | `check_prefix` (1, 1, 2^24, 1 separates it from a refold), arm `seam_6107_prefix.patch` |
 | 197 | **the splitters' randomness** (`permute_unit`) | scikit-learn's shuffles are numpy Mersenne Twister draws, no device reproduces them | REPLACE, DEVIATION 6108: a permutation is the sort of `splitmix_pair(i, salt)` keys (checks/fixture_rng.mojo), `salt` from the caller's random_state and the draw's position; numpy RandomState objects are refused by name | `check_rng_mapping` (the key sort differs from Fisher-Yates on the same stream), arm `seam_6108_rng_mapping.patch` |
 | 198 | **the host epilogue** (`_expansion_metrics.py`, `model_selection.py`) | O(classes) ratios, averages and logs after the device folds | REPLACE, DEVIATION 6106: IEEE binary64 + - * / and sqrt only (correctly rounded on every host), `_portable_math` log / exp / fsum, fixed left-to-right order; exact Python integers for every count and index | by construction; the six `x-metrics-*` lanes hash the epilogue's outputs on every column |
+
+### `neural`: rows 200-209
+
+The neural family lane's option-parity seams (transformer, Mamba-1/2/3,
+Samba, MLP, embedding, byte LM, the training primitives). Its seam drivers
+and one sabotage patch per seam are listed in
+`tools/identity_lanes/neural.checks`, whose `# lanes:` line names the core
+identity lanes they run before (those lanes live in tools/identity_break.py,
+not in a fragment).
+
+| row | pathway | what moves bits | move | status |
+|---|---|---|---|---|
+| 200 | **`maximize=True`** on SGD, Adam and AdamW (`training/maximize.mojo`, both optimizer bindings) | the gradient's negation has two exact spellings, `-g` (the sign bit) and `0.0 - g`, which differ at `g = +0.0`; the zero's sign reaches SGD's copied momentum buffer and `fma(-lr, g, -0.0)` | PIN, DEVIATION 6200: the sign-bit flip (torch's `-grads[i]`, first statement of the step), on a negated COPY so the caller's gradient is never negated; a clipped gradient is written back through the same flip | `training/checks/maximize_check.mojo` (fixture separates the spellings, else VACUOUS; production flip == restatement through `optimizer_step_oracle` for SGD, Adam, AdamW, clip on and off), arm `maximize_6200_subtract_from_zero.patch` bites; lane `optim-maximize` |
