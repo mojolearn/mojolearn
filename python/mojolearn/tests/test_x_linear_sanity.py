@@ -162,6 +162,19 @@ def _():
     return ok
 
 
+@case("perceptron")
+def _():
+    from sklearn import linear_model as sk
+    X, yr, yc, y3 = _data()
+    ok = True
+    for y in (yc, y3):
+        for pen in (None, "l2"):
+            a = ml.Perceptron(penalty=pen).fit(X, y).score(X, y)
+            b = sk.Perceptron(penalty=pen).fit(X, y).score(X, y)
+            ok &= _close(f"Perceptron k={len(set(y))} penalty={pen} accuracy {a:.3f} vs {b:.3f}", a, b, 0.06)
+    return ok
+
+
 def main(argv):
     names = argv or list(CASES)
     bad = []
