@@ -317,3 +317,29 @@ def _prep_nan_first_eight(X):
 
 
 _batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_prep_nan_first_eight), "x-prep-iterative-imputer")
+
+
+@lane("x-prep-variance-threshold")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.VarianceThreshold().fit(X)
+    mt = ml.VarianceThreshold(threshold=0.3).fit(X)
+    parts = dict(var=_h(m.variances_), transform=_h(m.transform(X[:256])), t=_h(np.array(mt.get_support())))
+    return _fit(parts, m, lambda e: (e.transform(Xh[:256]),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-variance-threshold")
+
+
+@lane("x-prep-select-kbest")
+def _(ml, X, yc, yr, Xh=None):
+    y3 = _prep_three_class(X, yr)
+    fc, pc = ml.f_classif(X, y3)
+    fr, prv = ml.f_regression(X, yr)
+    c2, pc2 = ml.chi2(np.abs(X), y3)
+    m = ml.SelectKBest(k=5).fit(X, y3)
+    parts = dict(fc=_h(fc, pc), fr=_h(fr, prv), c2=_h(c2, pc2), support=_h(np.array(m.get_support())),
+                 transform=_h(m.transform(X[:256])))
+    return _fit(parts, m, lambda e: (e.transform(Xh[:256]),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-select-kbest")
