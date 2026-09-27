@@ -385,15 +385,23 @@ def flush_deferred(a):
         print(f"flushed {name} to {a.steward}")
 
 
+REQ_KEYS = ("name", "kind", "lane", "commit", "submitted", "verify_lanes", "pass", "sabotage", "builds", "cmd",
+            "mode", "stewards")
+
+
 def _req_bytes(mac, name, state):
     """(request json, patch or None) of a copy on `mac` (or in its laptop spool)."""
     if state == "deferred (spooled)":
         pf = SPOOL / mac / f"{name}.patch"
         return (SPOOL / mac / f"{name}.json").read_bytes(), (pf.read_bytes() if pf.is_file() else None)
     # the steward may claim (queue -> working) or finish it meanwhile: try each place
-    body = _cloudmac(mac, f"cd {REMOTE_ROOT} && for f in queue/{name}.json working/{name}.{mac}.json "
-                          f"moved/{name}.json moved/{name}.json.to-*; do [ -f \"$f\" ] && exec cat \"$f\"; done; "
-                          f"exit 1", raw=True)
+    body = _cloudmac(mac, f"setopt nullglob 2>/dev/null || true; cd {REMOTE_ROOT} && "
+                          f"for f in queue/{name}.json working/{name}.{mac}.json moved/{name}.json "
+                          f"moved/{name}.json.to-*; do [ -f \"$f\" ] && exec cat \"$f\"; done; "
+                          f"cat done/{name}/verdict.json", raw=True)
+    if b'"result"' in body:      # it finished there meanwhile: the request is the verdict's request fields
+        v = json.loads(body)
+        body = json.dumps({k: v[k] for k in REQ_KEYS if k in v}, indent=2).encode()
     patch = _cloudmac(mac, f"cat {REMOTE_ROOT}/patches/{name}.patch 2>/dev/null || true", raw=True)
     return body, (patch or None)
 
@@ -474,6 +482,8 @@ def redistribute(a):
                 dest = speed_home[lane]
             else:   # the least loaded Mac; its current holder wins a tie
                 dest = min(gmacs, key=lambda m: (load[m], m != src[0] or action == "copy", gmacs.index(m)))
+                if action == "move" and src[1] == "queue" and src[0] in load and load[src[0]] <= load[dest] + 1:
+                    dest = src[0]      # one request of imbalance is not worth a move
             if lane:
                 speed_home[lane] = dest
             load[dest] += 1
