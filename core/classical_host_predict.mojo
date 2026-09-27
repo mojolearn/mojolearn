@@ -120,6 +120,8 @@ from core.host_predict_threads import (
     HostF32Ptr,
     HostF64Ptr,
     HostI64Ptr,
+    host_ieee_fp_enter,
+    host_ieee_fp_leave,
     host_list_ptr,
     host_predict_chunk,
     host_predict_task_count,
@@ -196,11 +198,13 @@ def host_gemm_nt_into(
     var chunk = host_predict_chunk(m, t)
 
     def _rows(c: Int) {imm x, imm y, imm z, imm chunk, imm m, imm n, imm k}:
+        var fp_env = host_ieee_fp_enter()
         var lo = c * chunk
         var hi = min(lo + chunk, m)
         for i in range(lo, hi):
             for j in range(n):
                 z.unsafe_store(i * n + j, host_pinned_cell_ptr(x, i * k, y, j * k, k))
+        host_ieee_fp_leave(fp_env)
 
     if t == 1:
         _rows(0)
@@ -331,6 +335,7 @@ def host_qn_sigmoid_into(
     var chunk = host_predict_chunk(n_rows, t)
 
     def _rows(c: Int) {imm scores, imm dst, imm chunk, imm n_rows}:
+        var fp_env = host_ieee_fp_enter()
         var lo = c * chunk
         var hi = min(lo + chunk, n_rows)
         for i in range(lo, hi):
@@ -338,6 +343,7 @@ def host_qn_sigmoid_into(
             var p = 1.0 / (1.0 + identical_exp64(-z))
             dst.unsafe_store(2 * i, 1.0 - p)
             dst.unsafe_store(2 * i + 1, p)
+        host_ieee_fp_leave(fp_env)
 
     if t == 1:
         _rows(0)
@@ -420,6 +426,7 @@ def host_qn_softmax_into(
     var chunk = host_predict_chunk(n_rows, t)
 
     def _rows(task: Int) {imm scores, imm dst, imm chunk, imm n_rows, imm n_classes}:
+        var fp_env = host_ieee_fp_enter()
         var lo = task * chunk
         var hi = min(lo + chunk, n_rows)
         for i in range(lo, hi):
@@ -436,6 +443,7 @@ def host_qn_softmax_into(
             for c in range(n_classes):
                 var z = Float64(scores.unsafe_load(base + c))
                 dst.unsafe_store(base + c, identical_exp64(z - m) / s)
+        host_ieee_fp_leave(fp_env)
 
     if t == 1:
         _rows(0)
@@ -507,6 +515,7 @@ def host_pca_transform_into(
     var chunk = host_predict_chunk(n_rows, t)
 
     def _rows(c: Int) {imm x, imm mu, imm components, imm dst, imm chunk, imm n_rows, imm n_cols, imm n_components}:
+        var fp_env = host_ieee_fp_enter()
         var centered = List[Float32](length=n_cols, fill=Float32(0.0))
         var cp = host_list_ptr(centered)
         var lo = c * chunk
@@ -522,6 +531,7 @@ def host_pca_transform_into(
                     host_pinned_cell_ptr(cp, 0, components, j * n_cols, n_cols),
                 )
         _ = centered^
+        host_ieee_fp_leave(fp_env)
 
     if t == 1:
         _rows(0)
