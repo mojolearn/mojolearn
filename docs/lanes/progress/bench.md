@@ -118,6 +118,13 @@ new algorithm, measure nothing. Worktree `~/mojolearn-wt/algos-bench`, branch
   byte-identical, and the whole plan byte-identical, on apple, nvidia, amd
   (`drydiff_s4.log`). Bench tests 62 pass, test_host_surface 196 pass
   (`premerge_s4.log`). test_lane_select skipped (bench-only diff).
+  Plumbing smoke of the three races (`smoke_s4.log`; bindings x_prep,
+  x_linear, x_ann GPU + host built on the pod; Istella staged from R2,
+  `stage3.log`): every arm ran, cuML from /root/rapids; ours-cpu bits equal
+  ours on all; kbins ours equals scikit-learn exactly at the matched
+  quantile_method. At 2,000 smoke rows SGDRegressor on Istella diverges on
+  both ours and scikit-learn (the same settings; a smoke-shape fact).
+  The x_ann host build refuses an existing output: delete the .so first.
 - Every algos class is now in the source tree; no race is guessed.
 - damped-ets stays non-seasonal on every arm: main's ETS still refuses
   seasonal components (`_x_sequence_ets.py`). When sequence adds them, restore
