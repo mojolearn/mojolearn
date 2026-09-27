@@ -5,9 +5,13 @@ the order the device assigns them to threads. No GPU import: this file is
 compiled into the CPU host binding."""
 from std.sys.compile import is_defined
 
+from decomposition.checks.jacobi_eigh_device import JACOBI_SWEEPS, JACOBI_TOL
 from decomposition.host.linalg_public import host_eigh
+from decomposition.host.pca_full_oracle import host_one_sided_jacobi_svd, host_qr_factor
 from x_decomp.cells import (
     F32Ptr,
+    X_DECOMP_SVD_SWEEPS,
+    X_DECOMP_SVD_TOL,
     I32Ptr,
     bidx,
     cd_row,
@@ -17,6 +21,7 @@ from x_decomp.cells import (
     gemm_cell,
     lu_serial,
     lu_solve_serial,
+    orth_serial,
     rand_cell,
     rowsum_cell,
     sqdist_cell,
@@ -93,6 +98,27 @@ struct HostExec(Exec):
     def cd_rows(w: F32Ptr, hht: F32Ptr, xht: F32Ptr, perm: I32Ptr, viol: F32Ptr, n: Int, k: Int) raises:
         for i in range(n):
             viol.unsafe_store(i, cd_row(w, hht, xht, perm, i, k))
+
+    @staticmethod
+    def orth(a: F32Ptr, m: Int, l: Int) raises:
+        orth_serial(a, m, l)
+
+    @staticmethod
+    def svd(a: F32Ptr, m: Int, n: Int, s: F32Ptr, v: F32Ptr) raises:
+        """PCA(svd_solver='full')'s tall route: Householder QR of a (m x n,
+        m >= n), then the one-sided Jacobi SVD of R. Unordered values, V in
+        columns: the host replay of DevExec.svd."""
+        var work = List[Float32](capacity=m * n)
+        for i in range(m * n):
+            work.append(a.unsafe_load(i))
+        var r = host_qr_factor(work, m, n)
+        var got = host_one_sided_jacobi_svd(r, n, X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL)
+        if not got.converged:
+            raise Error("x_decomp svd: the one-sided Jacobi SVD did not converge")
+        for i in range(n):
+            s.unsafe_store(i, got.s[i])
+        for i in range(n * n):
+            v.unsafe_store(i, got.v[i])
 
     @staticmethod
     def vendor() -> String:

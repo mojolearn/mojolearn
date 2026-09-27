@@ -128,3 +128,40 @@ def _(ml, X, yc, yr, Xh=None):
                low_pass_jump=2).fit()
     return _fit(dict(seasonal=_h(a.seasonal), trend=_h(a.trend), resid=_h(a.resid),
                      r_seasonal=_h(b.seasonal), r_trend=_h(b.trend), r_weights=_h(b.weights)))
+
+
+@lane("sequence-var")
+def _(ml, X, yc, yr, Xh=None):
+    """A three-variable VAR(2) with a constant on 300 fixture rows (the
+    columns turned into a stable autoregression by a running filter), and a
+    VAR(1) without one; params, sigma_u, residuals and a 10-step forecast."""
+    e = np.ascontiguousarray(X[:300, 6:9], dtype=np.float32)
+    y = np.zeros_like(e)
+    for t in range(1, 300):
+        y[t] = (np.float32(0.5) * y[t - 1] + e[t]).astype(np.float32)
+    a = ml.VAR(y).fit(maxlags=2)
+    b = ml.VAR(y).fit(maxlags=1, trend="n")
+    return _fit(dict(params=_h(a.params), sigma_u=_h(a.sigma_u), resid=_h(a.resid),
+                     forecast=_h(a.forecast(y, 10)), n_params=_h(b.params), n_forecast=_h(b.forecast(y, 10))))
+
+
+@lane("sequence-mlp")
+def _(ml, X, yc, yr, Xh=None):
+    """sklearn-shaped MLPs on 384 rows of the first 10 columns: a regressor
+    (two tanh layers, Adam, L2) and a three-class classifier (relu, SGD with
+    Nesterov momentum and the adaptive rate), shuffled batches of 64,
+    six epochs each, plus a binary logistic-output classifier."""
+    Xm = np.ascontiguousarray(X[:384, :10], dtype=np.float32)
+    y3 = (np.asarray(yc[:384]) + (Xm[:, 5] > 0).astype(np.int64)).astype(np.int64)
+    r = ml.MLPRegressor(hidden_layer_sizes=(12, 8), activation="tanh", alpha=1e-3, batch_size=64,
+                        max_iter=6, random_state=0, learning_rate_init=1e-2).fit(Xm, yr[:384])
+    c = ml.MLPClassifier(hidden_layer_sizes=(10,), solver="sgd", learning_rate="adaptive", batch_size=64,
+                         max_iter=6, random_state=1, learning_rate_init=5e-2).fit(Xm, y3)
+    b = ml.MLPClassifier(hidden_layer_sizes=(6,), activation="logistic", batch_size=64, max_iter=6,
+                         random_state=2).fit(Xm, yc[:384])
+    Xhm = np.ascontiguousarray(Xh[:256, :10], dtype=np.float32)
+    return _fit(dict(r_curve=_h(np.asarray(r.loss_curve_)), r_coefs=_h(*r.coefs_, *r.intercepts_),
+                     r_pred=_h(r.predict(Xm)), c_curve=_h(np.asarray(c.loss_curve_)),
+                     c_coefs=_h(*c.coefs_, *c.intercepts_), c_proba=_h(c.predict_proba(Xm)),
+                     b_proba=_h(b.predict_proba(Xm))),
+                r, lambda e: (e.predict(Xhm),))

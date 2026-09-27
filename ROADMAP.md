@@ -27,7 +27,10 @@ the [support matrix](SUPPORT_MATRIX.md) and [identity paths](IDENTITY_PATHS.md).
   real data (see [CONTRIBUTING.md](CONTRIBUTING.md#performance-claims)).
 - **The CPU surface.** CPU-only installs train and predict. The aim is CPU
   training for every algorithm that has a GPU path, with the same bits, and
-  sensible CPU defaults for gradient boosting.
+  sensible CPU defaults for gradient boosting. After that, CPU speed: the
+  host kernels multithreaded and vectorized under the same pinned-fold rule,
+  inference first, judged on the bench board against the CPU learners on
+  all cores (docs/lanes/ALGORITHM_EXPANSION_PLAN.md, "Phase 3: CPU speed").
 
 ## Planned work
 

@@ -34,6 +34,18 @@ from checks.numerics import (
 )
 from core.philox import philox4x32_10
 
+#: The one-sided Jacobi SVD's sweep budget in this lane (x_decomp svd):
+#: decomposition/'s JACOBI_SWEEPS (15, RAFT's) stops short on the `wide`
+#: fixture's 1e-4..1e4 column scales; the solver is the same, the refusal of
+#: an unconverged answer is kept, only the budget is larger.
+comptime X_DECOMP_SVD_SWEEPS = 60
+#: ... and its rotation threshold: |apq| > tol * sqrt(app * aqq). JACOBI_TOL
+#: (1e-7) sits under float32 epsilon (1.19e-7), so on an ill-conditioned
+#: matrix one rotation per sweep can fire forever (a rounding limit cycle,
+#: measured on the `wide` fixture through FactorAnalysis). 8 epsilon is the
+#: usual float32 one-sided Jacobi threshold (LAPACK sgesvj uses m*eps).
+comptime X_DECOMP_SVD_TOL = Float32(9.5367431640625e-07)
+
 comptime F32Ptr = MutPointer[Float32, MutAnyOrigin]
 comptime I32Ptr = MutPointer[Int32, MutAnyOrigin]
 
@@ -397,6 +409,31 @@ def lu_solve_serial(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int):
             for j in range(i + 1, n):
                 acc = ftz(identical_mul_add(-ftz(lu.unsafe_load(i * n + j)), ftz(b.unsafe_load(j * nrhs + c)), acc))
             b.unsafe_store(i * nrhs + c, div0(acc, lu.unsafe_load(i * n + i)))
+
+
+def orth_serial(a: F32Ptr, m: Int, l: Int):
+    """In-place orthonormalization of the l columns of a row-major m x l
+    matrix: modified Gram-Schmidt, each column projected against the
+    earlier ones TWICE (MGS2), every dot product rows ascending; a column
+    whose remaining norm is 0 becomes 0."""
+    for j in range(l):
+        for _ in range(2):
+            for i in range(j):
+                var r = Float32(0)
+                for t in range(m):
+                    r = ftz(identical_mul_add(ftz(a.unsafe_load(t * l + i)), ftz(a.unsafe_load(t * l + j)), r))
+                for t in range(m):
+                    a.unsafe_store(
+                        t * l + j,
+                        ftz(identical_mul_add(-r, ftz(a.unsafe_load(t * l + i)), ftz(a.unsafe_load(t * l + j)))),
+                    )
+        var nrm = Float32(0)
+        for t in range(m):
+            var v = ftz(a.unsafe_load(t * l + j))
+            nrm = ftz(identical_mul_add(v, v, nrm))
+        var s = sqrt0(nrm)
+        for t in range(m):
+            a.unsafe_store(t * l + j, div0(a.unsafe_load(t * l + j), s))
 
 
 def chol_serial(a: F32Ptr, n: Int, info: F32Ptr):

@@ -20,6 +20,20 @@ from sequence.ops import (
     OP_SEQ_OUT,
     OP_SOFTMAX,
     OP_STL,
+    OP_VAR_DESIGN,
+    OP_COLSCALE,
+    OP_CHOLSOLVE,
+    OP_ROWSCALE,
+    OP_VAR_FORECAST,
+    OP_SUB,
+    OP_SCALE,
+    OP_ACT,
+    OP_ACT_BWD,
+    OP_MLP_ROWLOSS,
+    OP_SUMSQ,
+    OP_MLP_BLOSS,
+    OP_L2GRAD,
+    OP_DIVS,
     op_gemm,
     op_bias,
     op_colsum,
@@ -36,7 +50,9 @@ from sequence.ops import (
     op_seq_out,
     op_softmax,
 )
+from sequence.mlp import op_act, op_act_bwd, op_divs, op_l2grad, op_mlp_bloss, op_mlp_rowloss, op_sumsq
 from sequence.stl import op_stl
+from sequence.vecar import op_cholsolve, op_colscale, op_rowscale, op_scale, op_sub, op_var_design, op_var_forecast
 
 
 @always_inline
@@ -73,3 +89,31 @@ def apply[OP: Int](t: Int, a: Args):
         op_softmax(t, a)
     elif OP == OP_STL:
         op_stl(t, a)
+    elif OP == OP_VAR_DESIGN:
+        op_var_design(t, a)
+    elif OP == OP_COLSCALE:
+        op_colscale(t, a)
+    elif OP == OP_CHOLSOLVE:
+        op_cholsolve(t, a)
+    elif OP == OP_ROWSCALE:
+        op_rowscale(t, a)
+    elif OP == OP_VAR_FORECAST:
+        op_var_forecast(t, a)
+    elif OP == OP_SUB:
+        op_sub(t, a)
+    elif OP == OP_SCALE:
+        op_scale(t, a)
+    elif OP == OP_ACT:
+        op_act(t, a)
+    elif OP == OP_ACT_BWD:
+        op_act_bwd(t, a)
+    elif OP == OP_MLP_ROWLOSS:
+        op_mlp_rowloss(t, a)
+    elif OP == OP_SUMSQ:
+        op_sumsq(t, a)
+    elif OP == OP_MLP_BLOSS:
+        op_mlp_bloss(t, a)
+    elif OP == OP_L2GRAD:
+        op_l2grad(t, a)
+    elif OP == OP_DIVS:
+        op_divs(t, a)

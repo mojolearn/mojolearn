@@ -7,9 +7,13 @@ from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.vendor import COMPILED_VENDOR
+from core.householder_qr import qr_factor, qr_slice_count
+from decomposition.impl.linalg.detail.svd_full import svd_of_r
 from decomposition.linalg_public_device import device_eigh
 from x_decomp.cells import (
     F32Ptr,
+    X_DECOMP_SVD_SWEEPS,
+    X_DECOMP_SVD_TOL,
     I32Ptr,
     bidx,
     cd_row,
@@ -19,6 +23,7 @@ from x_decomp.cells import (
     gemm_cell,
     lu_serial,
     lu_solve_serial,
+    orth_serial,
     rand_cell,
     rowsum_cell,
     sqdist_cell,
@@ -94,6 +99,11 @@ def cd_rows_kernel(w: F32Ptr, hht: F32Ptr, xht: F32Ptr, perm: I32Ptr, viol: F32P
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < Int(n):
         viol.unsafe_store(i, cd_row(w, hht, xht, perm, i, Int(k)))
+
+
+def orth_kernel(a: F32Ptr, m: Int32, l: Int32):
+    if block_idx.x == 0 and thread_idx.x == 0:
+        orth_serial(a, Int(m), Int(l))
 
 
 def _blocks(count: Int) -> Int:
@@ -309,6 +319,40 @@ struct DevExec(Exec):
         _ = dx^
         _ = dp^
         _ = dv^
+        ctx.synchronize()
+        _ = ctx^
+
+    @staticmethod
+    def orth(a: F32Ptr, m: Int, l: Int) raises:
+        var ctx = DeviceContext()
+        var da = _up(ctx, a, m * l)
+        ctx.enqueue_function[orth_kernel](da.unsafe_ptr(), Int32(m), Int32(l), grid_dim=1, block_dim=1)
+        _down(ctx, da, a, m * l)
+        ctx.synchronize()
+        _ = da^
+        ctx.synchronize()
+        _ = ctx^
+
+    @staticmethod
+    def svd(a: F32Ptr, m: Int, n: Int, s: F32Ptr, v: F32Ptr) raises:
+        """`device_svdvals`'s route (qr_factor, then svd_of_r) keeping V."""
+        var ctx = DeviceContext()
+        var da = _up(ctx, a, m * n)
+        var scratch = ctx.enqueue_create_buffer[DType.float32](qr_slice_count(m, n) * n * n)
+        var r_buf = ctx.enqueue_create_buffer[DType.float32](n * n)
+        var v_buf = ctx.enqueue_create_buffer[DType.float32](n * n)
+        var s_buf = ctx.enqueue_create_buffer[DType.float32](n)
+        ctx.synchronize()
+        _ = qr_factor(ctx, da, scratch, r_buf, m, n)
+        svd_of_r(ctx, r_buf, v_buf, s_buf, n, X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL)
+        _down(ctx, s_buf, s, n)
+        _down(ctx, v_buf, v, n * n)
+        ctx.synchronize()
+        _ = da^
+        _ = scratch^
+        _ = r_buf^
+        _ = v_buf^
+        _ = s_buf^
         ctx.synchronize()
         _ = ctx^
 

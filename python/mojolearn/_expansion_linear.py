@@ -31,7 +31,9 @@ __all__ = ["SGDClassifier", "SGDRegressor", "PoissonRegressor", "GammaRegressor"
            "Lars", "LassoLars",
            "QuantileRegressor",
            "Perceptron", "PassiveAggressiveClassifier",
-           "PassiveAggressiveRegressor"]
+           "PassiveAggressiveRegressor", "SGDOneClassSVM",
+           "RidgeClassifier", "RidgeCV",
+           "LassoCV", "ElasticNetCV", "LogisticRegressionCV"]
 
 _BINDING = "_mojolearn_x_linear"
 ALGO_SGD, ALGO_GLM, ALGO_HUBER, ALGO_BAYES, ALGO_ARD = 1, 2, 3, 4, 5
@@ -716,3 +718,349 @@ class PassiveAggressiveRegressor(_LinearRegressorMixin, NumericModeMixin):
         self.coef_ = coef.reshape((Xm[2],))
         self.intercept_ = intercept
         return self
+
+
+# ---------------------------------------------------------- SGDOneClassSVM
+# Reference: scikit-learn sklearn/linear_model/_stochastic_gradient.py
+# (SGDOneClassSVM, `_fit_one_class`: y = 1, hinge loss, l2, alpha = nu,
+# intercept = 1 - offset, the offset step `- eta * alpha`); x_linear/sgd.mojo.
+
+class SGDOneClassSVM(NumericModeMixin):
+    """Linear one-class SVM trained by SGD (scikit-learn's SGDOneClassSVM)."""
+
+    _BINDING = _BINDING
+    _estimator_type = "outlier_detector"
+
+    def __init__(self, nu=0.5, fit_intercept=True, max_iter=1000, tol=1e-3, shuffle=True, verbose=0,
+                 random_state=None, learning_rate="optimal", eta0=0.0, power_t=0.5, warm_start=False,
+                 average=False):
+        self.nu, self.fit_intercept, self.max_iter, self.tol = nu, fit_intercept, max_iter, tol
+        self.shuffle, self.verbose, self.random_state = shuffle, verbose, random_state
+        self.learning_rate, self.eta0, self.power_t = learning_rate, eta0, power_t
+        self.warm_start, self.average = warm_start, average
+
+    def fit(self, X, y=None):
+        _sgd_refuse(self, False, self.average, None, self.warm_start)
+        if not 0 < self.nu <= 1:
+            raise ValueError("mojolearn SGDOneClassSVM: nu must be in (0, 1]")
+        if self.learning_rate in ("pa1", "pa2"):
+            raise ValueError("mojolearn SGDOneClassSVM: learning_rate must be constant, optimal, invscaling or adaptive")
+        Xm = _matrix(X)
+        coef, intercept = _sgd_fit(
+            self, Xm, None, 1, _SGD_CLF_LOSS["hinge"], "l2", self.learning_rate,
+            self.nu, 0.0, self.eta0, self.power_t, 0.1, self.fit_intercept,
+            self.max_iter, self.tol, 5, self.shuffle, self.random_state)
+        self.coef_ = coef.reshape((Xm[2],))
+        self.offset_ = Array.from_list([1.0 - intercept.tolist()[0]], "<f4")
+        return self
+
+    def decision_function(self, X):
+        _check_fitted(self)
+        out = _decision(self, X, [self.coef_.tolist()], [-self.offset_.tolist()[0]])
+        return out.reshape((out.shape[0],))
+
+    def score_samples(self, X):
+        _check_fitted(self)
+        out = _decision(self, X, [self.coef_.tolist()], [0.0])
+        return out.reshape((out.shape[0],))
+
+    def predict(self, X):
+        return Array.from_list([1 if v >= 0 else -1 for v in self.decision_function(X).tolist()], "<i8")
+
+
+# ------------------------------------------------------------------- Ridge
+# Reference: scikit-learn sklearn/linear_model/_ridge.py (`_solve_cholesky`,
+# `_RidgeGCV`); kernel x_linear/ridge.mojo.
+
+def _ridge_run(est, a, n, d, Y, T, alphas):
+    A = len(alphas)
+    return _run(est, ALGO_RIDGE, a, n, d, Y, [T, int(bool(est.fit_intercept)), A], list(alphas),
+                T * d + T + 2 + A, 3 * d * d + 3 * d + T + d * T, 1)
+
+
+def _ridge_refuse(est):
+    name = type(est).__name__
+    if getattr(est, "positive", False):
+        raise ValueError(f"mojolearn {name}: positive=True is not implemented")
+    if getattr(est, "class_weight", None) is not None:
+        raise ValueError(f"mojolearn {name}: class_weight is not implemented")
+    if getattr(est, "solver", "auto") not in ("auto", "cholesky"):
+        raise ValueError(f"mojolearn {name}: solver must be 'auto' or 'cholesky'")
+
+
+class RidgeClassifier(_LinearClassifierMixin, NumericModeMixin):
+    """Ridge regression on +-1 class targets (scikit-learn's RidgeClassifier)."""
+
+    _BINDING = _BINDING
+
+    def __init__(self, alpha=1.0, *, fit_intercept=True, copy_X=True, max_iter=None, tol=1e-4,
+                 class_weight=None, solver="auto", positive=False, random_state=None):
+        self.alpha, self.fit_intercept, self.copy_X, self.max_iter = alpha, fit_intercept, copy_X, max_iter
+        self.tol, self.class_weight, self.solver, self.positive = tol, class_weight, solver, positive
+        self.random_state = random_state
+
+    def fit(self, X, y):
+        _ridge_refuse(self)
+        if not self.alpha >= 0:
+            raise ValueError("mojolearn RidgeClassifier: alpha must be >= 0")
+        a, n, d = _matrix(X)
+        classes, codes = _classes(self, y, n)
+        k = len(classes)
+        T = 1 if k == 2 else k
+        cl = codes.tolist()
+        if T == 1:
+            Y = [1.0 if c == 1 else -1.0 for c in cl]
+        else:
+            Y = [1.0 if c == t else -1.0 for c in cl for t in range(T)]
+        vals = _ridge_run(self, a, n, d, Array.from_list(Y, "<f4"), T, [self.alpha])
+        self.classes_ = classes
+        self.coef_ = Array.from_list(_rows(vals, T, d), "<f4")
+        self.intercept_ = Array.from_list(vals[T * d:T * d + T], "<f4")
+        self.n_features_in_ = d
+        return self
+
+
+class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
+    """Ridge with the alpha chosen by efficient leave-one-out (scikit-learn's
+    RidgeCV with cv=None). cv, scoring, alpha_per_target and a 2-D y are
+    refused (x_linear/NOT_IMPLEMENTED.tsv)."""
+
+    _BINDING = _BINDING
+
+    def __init__(self, alphas=(0.1, 1.0, 10.0), *, fit_intercept=True, scoring=None, cv=None,
+                 gcv_mode=None, store_cv_results=False, alpha_per_target=False):
+        self.alphas, self.fit_intercept, self.scoring, self.cv = alphas, fit_intercept, scoring, cv
+        self.gcv_mode, self.store_cv_results, self.alpha_per_target = gcv_mode, store_cv_results, alpha_per_target
+
+    def fit(self, X, y):
+        if self.cv is not None or self.scoring is not None or self.alpha_per_target:
+            raise ValueError("mojolearn RidgeCV: only cv=None, scoring=None, alpha_per_target=False are implemented")
+        alphas = [float(v) for v in (self.alphas if hasattr(self.alphas, "__len__") else [self.alphas])]
+        if not alphas or any(not v > 0 for v in alphas):
+            raise ValueError("mojolearn RidgeCV: alphas must be positive")
+        a, n, d = _matrix(X)
+        yv = _vector(y, n)
+        vals = _ridge_run(self, a, n, d, yv, 1, alphas)
+        self.coef_ = Array.from_list(vals[:d], "<f4")
+        self.intercept_ = float(vals[d])
+        self.alpha_ = float(vals[d + 1])
+        self.best_score_ = float(vals[d + 2])
+        if self.store_cv_results:
+            self.cv_results_ = Array.from_list(vals[d + 3:d + 3 + len(alphas)], "<f4")
+        self.n_features_in_ = d
+        return self
+
+
+# ------------------------------------------------------ LassoCV / ElasticNetCV
+# Reference: scikit-learn sklearn/linear_model/_coordinate_descent.py
+# (LinearModelCV.fit, _alpha_grid, _path_residuals) and _cd_fast.pyx
+# (enet_coordinate_descent_gram); kernel x_linear/cd.mojo.
+
+def _kfold_ids(n, k):
+    """scikit-learn's KFold(n_splits=k, shuffle=False): contiguous folds,
+    the first n % k of them one row longer."""
+    if not isinstance(k, int) or isinstance(k, bool) or k < 2 or k > n:
+        raise ValueError("mojolearn: cv must be None or an int in [2, n_samples]")
+    ids, start = [0] * n, 0
+    for f in range(k):
+        size = n // k + (1 if f < n % k else 0)
+        for i in range(start, start + size):
+            ids[i] = f
+        start += size
+    return ids
+
+
+def _enetcv_fit(est, X, y, l1_ratios):
+    name = type(est).__name__
+    if est.positive:
+        raise ValueError(f"mojolearn {name}: positive=True is not implemented")
+    if est.selection != "cyclic":
+        raise ValueError(f"mojolearn {name}: selection='random' is not implemented")
+    if any(not 0 < r <= 1 for r in l1_ratios):
+        raise ValueError(f"mojolearn {name}: l1_ratio must be in (0, 1]")
+    a, n, d = _matrix(X)
+    yv = _vector(y, n)
+    folds = 5 if est.cv is None else est.cv
+    ids = _kfold_ids(n, folds)
+    alphas = est.alphas
+    n_alphas = getattr(est, "n_alphas", None)
+    if isinstance(alphas, int) and not isinstance(alphas, bool):
+        explicit, grid = False, int(alphas)
+    elif alphas is None or alphas in ("warn", "deprecated"):
+        explicit, grid = False, int(n_alphas) if isinstance(n_alphas, int) else 100
+    else:
+        explicit = True
+        values = sorted((float(v) for v in alphas), reverse=True)
+        grid = len(values)
+    if grid < 1:
+        raise ValueError(f"mojolearn {name}: at least one alpha is required")
+    yy = Array.from_list(yv.tolist() + [float(f) for f in ids], "<f4")
+    L = len(l1_ratios)
+    fp = [est.eps, est.tol] + [float(r) for r in l1_ratios] + (values if explicit else [])
+    ip = [est.max_iter, int(bool(est.fit_intercept)), grid, folds, L, int(explicit)]
+    vals = _run(est, ALGO_ENETCV, a, n, d, yy, ip, fp, d + 4 + L * grid + L * grid * folds,
+                d * d + 4 * d + 3, 1)
+    est.coef_ = Array.from_list(vals[:d], "<f4")
+    est.intercept_ = float(vals[d])
+    est.alpha_ = float(vals[d + 1])
+    l1_best = float(vals[d + 2])
+    est.n_iter_ = int(vals[d + 3])
+    off = d + 4
+    al = vals[off:off + L * grid]
+    ms = vals[off + L * grid:off + L * grid + L * grid * folds]
+    if L == 1:
+        est.alphas_ = Array.from_list(al, "<f4")
+        est.mse_path_ = Array.from_list([ms[k * folds:(k + 1) * folds] for k in range(grid)], "<f4")
+    else:
+        est.alphas_ = Array.from_list([al[l * grid:(l + 1) * grid] for l in range(L)], "<f4")
+        est.mse_path_ = Array.from_list(
+            [[ms[(l * grid + k) * folds:(l * grid + k + 1) * folds] for k in range(grid)] for l in range(L)], "<f4")
+    est.n_features_in_ = d
+    # the user's own value (the kernel carried it as float32)
+    return min(l1_ratios, key=lambda r: abs(r - l1_best))
+
+
+class LassoCV(_LinearRegressorMixin, NumericModeMixin):
+    """Lasso with alpha chosen by K-fold cross-validation over a path
+    (scikit-learn's LassoCV; cv None or an int, unshuffled KFold)."""
+
+    _BINDING = _BINDING
+
+    def __init__(self, *, eps=1e-3, n_alphas="deprecated", alphas=100, fit_intercept=True,
+                 precompute="auto", max_iter=1000, tol=1e-4, copy_X=True, cv=None, verbose=False,
+                 n_jobs=None, positive=False, random_state=None, selection="cyclic"):
+        self.eps, self.n_alphas, self.alphas, self.fit_intercept = eps, n_alphas, alphas, fit_intercept
+        self.precompute, self.max_iter, self.tol, self.copy_X = precompute, max_iter, tol, copy_X
+        self.cv, self.verbose, self.n_jobs, self.positive = cv, verbose, n_jobs, positive
+        self.random_state, self.selection = random_state, selection
+
+    def fit(self, X, y):
+        _enetcv_fit(self, X, y, [1.0])
+        return self
+
+
+class ElasticNetCV(_LinearRegressorMixin, NumericModeMixin):
+    """Elastic net with (l1_ratio, alpha) chosen by K-fold cross-validation
+    (scikit-learn's ElasticNetCV; cv None or an int, unshuffled KFold)."""
+
+    _BINDING = _BINDING
+
+    def __init__(self, *, l1_ratio=0.5, eps=1e-3, n_alphas="deprecated", alphas=100, fit_intercept=True,
+                 precompute="auto", max_iter=1000, tol=1e-4, cv=None, copy_X=True, verbose=0,
+                 n_jobs=None, positive=False, random_state=None, selection="cyclic"):
+        self.l1_ratio, self.eps, self.n_alphas, self.alphas = l1_ratio, eps, n_alphas, alphas
+        self.fit_intercept, self.precompute, self.max_iter, self.tol = fit_intercept, precompute, max_iter, tol
+        self.cv, self.copy_X, self.verbose, self.n_jobs = cv, copy_X, verbose, n_jobs
+        self.positive, self.random_state, self.selection = positive, random_state, selection
+
+    def fit(self, X, y):
+        ratios = list(self.l1_ratio) if hasattr(self.l1_ratio, "__len__") else [self.l1_ratio]
+        self.l1_ratio_ = _enetcv_fit(self, X, y, [float(r) for r in ratios])
+        return self
+
+
+# ---------------------------------------------------- LogisticRegressionCV
+# Reference: scikit-learn sklearn/linear_model/_logistic.py; kernel
+# x_linear/logcv.mojo (L-BFGS on their LinearModelLoss objective).
+
+def _stratified_kfold_ids(codes, k):
+    """scikit-learn's StratifiedKFold(n_splits=k, shuffle=False)._make_test_folds,
+    in integers: classes renumbered by first appearance, each class's rows
+    dealt to folds by the round-robin allocation of the sorted labels."""
+    n = len(codes)
+    first = {}
+    for i, c in enumerate(codes):
+        first.setdefault(c, i)
+    order = sorted(first, key=lambda c: first[c])
+    enc = {c: r for r, c in enumerate(order)}
+    y_enc = [enc[c] for c in codes]
+    K = len(order)
+    counts = [0] * K
+    for c in y_enc:
+        counts[c] += 1
+    if not isinstance(k, int) or isinstance(k, bool) or k < 2 or k > max(counts):
+        raise ValueError("mojolearn: cv must be None or an int in [2, the largest class size]")
+    y_order = sorted(y_enc)
+    alloc = [[0] * K for _ in range(k)]
+    for i in range(k):
+        for c in y_order[i::k]:
+            alloc[i][c] += 1
+    ids = [0] * n
+    for c in range(K):
+        folds = [f for f in range(k) for _ in range(alloc[f][c])]
+        pos = 0
+        for i in range(n):
+            if y_enc[i] == c:
+                ids[i] = folds[pos]
+                pos += 1
+    return ids
+
+
+class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
+    """L2 logistic regression with C chosen by stratified K-fold accuracy
+    (scikit-learn's LogisticRegressionCV; binary or multinomial)."""
+
+    _BINDING = _BINDING
+
+    def __init__(self, *, Cs=10, fit_intercept=True, cv=None, dual=False, penalty="l2", scoring=None,
+                 solver="lbfgs", tol=1e-4, max_iter=100, class_weight=None, n_jobs=None, verbose=0,
+                 refit=True, intercept_scaling=1.0, random_state=None, l1_ratios=None):
+        self.Cs, self.fit_intercept, self.cv, self.dual, self.penalty = Cs, fit_intercept, cv, dual, penalty
+        self.scoring, self.solver, self.tol, self.max_iter = scoring, solver, tol, max_iter
+        self.class_weight, self.n_jobs, self.verbose, self.refit = class_weight, n_jobs, verbose, refit
+        self.intercept_scaling, self.random_state, self.l1_ratios = intercept_scaling, random_state, l1_ratios
+
+    def fit(self, X, y):
+        if self.penalty != "l2" or self.dual or self.l1_ratios is not None:
+            raise ValueError("mojolearn LogisticRegressionCV: only penalty='l2' (primal) is implemented")
+        if self.scoring is not None or self.class_weight is not None or not self.refit:
+            raise ValueError("mojolearn LogisticRegressionCV: scoring, class_weight and refit=False are not implemented")
+        if self.solver not in ("lbfgs", "newton-cg", "newton-cholesky"):
+            raise ValueError("mojolearn LogisticRegressionCV: solver must be lbfgs (newton-* run L-BFGS too)")
+        a, n, d = _matrix(X)
+        classes, codes = _classes(self, y, n)
+        cl = [int(c) for c in codes.tolist()]
+        K = len(classes)
+        kp = 1 if K == 2 else K
+        if isinstance(self.Cs, int) and not isinstance(self.Cs, bool):
+            m = self.Cs
+            Cs = [10.0 ** (-4 + 8 * i / (m - 1)) for i in range(m)] if m > 1 else [1e-4]
+        else:
+            Cs = [float(c) for c in self.Cs]
+        folds = 5 if self.cv is None else self.cv
+        ids = _stratified_kfold_ids(cl, folds)
+        yy = Array.from_list([float(c) for c in cl] + [float(f) for f in ids], "<f4")
+        p = kp * (d + 1)
+        nc = len(Cs)
+        vals = _run(self, ALGO_LOGCV, a, n, d, yy, [self.max_iter, int(bool(self.fit_intercept)), kp, nc, folds],
+                    [self.tol] + Cs, kp * d + kp + 2 + folds * nc, p + 1 + _lbfgs_work(p), 3)
+        self.classes_ = classes
+        self.coef_ = Array.from_list(_rows(vals, kp, d), "<f4")
+        self.intercept_ = Array.from_list(vals[kp * d:kp * d + kp], "<f4")
+        best_c = Cs[min(range(nc), key=lambda i: abs(Cs[i] - vals[kp * d + kp]))]
+        self.Cs_ = Cs
+        self.C_ = [best_c] * kp
+        self.n_iter_ = int(vals[kp * d + kp + 1])
+        off = kp * d + kp + 2
+        grid = [vals[off + f * nc:off + (f + 1) * nc] for f in range(folds)]
+        labels = classes.tolist() if hasattr(classes, "tolist") else list(classes)
+        self.scores_ = {lab: Array.from_list(grid, "<f4") for lab in (labels[1:] if kp == 1 else labels)}
+        self.n_features_in_ = d
+        return self
+
+    def predict_proba(self, X):
+        import math
+        scores = self.decision_function(X).tolist()
+        if len(self.intercept_) == 1:
+            out = []
+            for z in scores:
+                p = 1.0 / (1.0 + math.exp(-z)) if z >= 0 else math.exp(z) / (1.0 + math.exp(z))
+                out.append([1.0 - p, p])
+            return Array.from_list(out, "<f4")
+        out = []
+        for row in scores:
+            m = max(row)
+            e = [math.exp(v - m) for v in row]
+            s = sum(e)
+            out.append([v / s for v in e])
+        return Array.from_list(out, "<f4")
