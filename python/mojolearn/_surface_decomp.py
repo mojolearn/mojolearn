@@ -21,16 +21,16 @@ FAMILIES = (
         routes="_mojolearn_x_decomp",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("x-decomp-ipca", "x-decomp-grp", "x-decomp-srp", "x-decomp-nmf", "x-decomp-fastica", "x-decomp-factor-analysis", "x-decomp-spectral-rbf", "x-decomp-lu"),
+        training_lanes=("x-decomp-ipca", "x-decomp-grp", "x-decomp-srp", "x-decomp-nmf", "x-decomp-fastica", "x-decomp-factor-analysis", "x-decomp-spectral-rbf", "x-decomp-lu", "x-decomp-lstsq-rsvd"),
         inference_lanes=(),
         forest_kinds=(),
-        classes=("IncrementalPCA", "GaussianRandomProjection", "SparseRandomProjection", "NMF", "FastICA", "FactorAnalysis", "SpectralEmbedding", "lu_factor"),
+        classes=("IncrementalPCA", "GaussianRandomProjection", "SparseRandomProjection", "NMF", "FastICA", "FactorAnalysis", "SpectralEmbedding", "lu_factor", "lstsq"),
         display="the decomposition and linear algebra expansion",
         host_modules=("x_decomp/host.mojo", "x_decomp/cells.mojo", "x_decomp/api.mojo", "x_decomp/exec_trait.mojo"),
         exports=(
             "x_decomp_host_numeric_mode", "x_decomp_host_vendor", "x_decomp_host_column", "x_decomp_host_sabotage",
             "x_decomp_gemm", "x_decomp_ew", "x_decomp_colsum", "x_decomp_rowsum", "x_decomp_sqdist",
-            "x_decomp_rand", "x_decomp_lu", "x_decomp_lu_solve", "x_decomp_chol", "x_decomp_eigh", "x_decomp_cd_rows",
+            "x_decomp_rand", "x_decomp_lu", "x_decomp_lu_solve", "x_decomp_chol", "x_decomp_eigh", "x_decomp_cd_rows", "x_decomp_orth",
             "x_decomp_numeric_mode", "x_decomp_vendor",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
@@ -38,6 +38,6 @@ FAMILIES = (
         ships_in_wheel=True,
     ),
 )
-TRAINING_LANE_NAMES = {"x-decomp-lu": "lu_factor", "x-decomp-spectral-rbf": "SpectralEmbedding", "x-decomp-factor-analysis": "FactorAnalysis", "x-decomp-fastica": "FastICA", "x-decomp-nmf": "NMF", "x-decomp-ipca": "IncrementalPCA", "x-decomp-grp": "GaussianRandomProjection",
+TRAINING_LANE_NAMES = {"x-decomp-lstsq-rsvd": "lstsq", "x-decomp-lu": "lu_factor", "x-decomp-spectral-rbf": "SpectralEmbedding", "x-decomp-factor-analysis": "FactorAnalysis", "x-decomp-fastica": "FastICA", "x-decomp-nmf": "NMF", "x-decomp-ipca": "IncrementalPCA", "x-decomp-grp": "GaussianRandomProjection",
                        "x-decomp-srp": "SparseRandomProjection"}
-PUBLIC_PENDING_LANES = {"x-decomp-lu": "no reference", "x-decomp-spectral-rbf": "no reference", "x-decomp-factor-analysis": "no reference", "x-decomp-fastica": "no reference", "x-decomp-nmf": "no reference", "x-decomp-ipca": "no reference", "x-decomp-grp": "no reference", "x-decomp-srp": "no reference"}
+PUBLIC_PENDING_LANES = {"x-decomp-lstsq-rsvd": "no reference", "x-decomp-lu": "no reference", "x-decomp-spectral-rbf": "no reference", "x-decomp-factor-analysis": "no reference", "x-decomp-fastica": "no reference", "x-decomp-nmf": "no reference", "x-decomp-ipca": "no reference", "x-decomp-grp": "no reference", "x-decomp-srp": "no reference"}

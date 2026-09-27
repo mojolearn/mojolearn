@@ -19,6 +19,7 @@ from x_decomp.cells import (
     gemm_cell,
     lu_serial,
     lu_solve_serial,
+    orth_serial,
     rand_cell,
     rowsum_cell,
     sqdist_cell,
@@ -94,6 +95,11 @@ def cd_rows_kernel(w: F32Ptr, hht: F32Ptr, xht: F32Ptr, perm: I32Ptr, viol: F32P
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < Int(n):
         viol.unsafe_store(i, cd_row(w, hht, xht, perm, i, Int(k)))
+
+
+def orth_kernel(a: F32Ptr, m: Int32, l: Int32):
+    if block_idx.x == 0 and thread_idx.x == 0:
+        orth_serial(a, Int(m), Int(l))
 
 
 def _blocks(count: Int) -> Int:
@@ -309,6 +315,17 @@ struct DevExec(Exec):
         _ = dx^
         _ = dp^
         _ = dv^
+        ctx.synchronize()
+        _ = ctx^
+
+    @staticmethod
+    def orth(a: F32Ptr, m: Int, l: Int) raises:
+        var ctx = DeviceContext()
+        var da = _up(ctx, a, m * l)
+        ctx.enqueue_function[orth_kernel](da.unsafe_ptr(), Int32(m), Int32(l), grid_dim=1, block_dim=1)
+        _down(ctx, da, a, m * l)
+        ctx.synchronize()
+        _ = da^
         ctx.synchronize()
         _ = ctx^
 
