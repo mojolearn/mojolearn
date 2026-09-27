@@ -1,0 +1,13 @@
+diff --git a/python/mojolearn/_byte_lm_host.py b/python/mojolearn/_byte_lm_host.py
+index 155789124..05e9fad44 100644
+--- a/python/mojolearn/_byte_lm_host.py
++++ b/python/mojolearn/_byte_lm_host.py
+@@ -350,6 +350,8 @@ class LanguageModelHostTrainer:
+     def __init__(self, parameters, *, m=None, v=None, shape=None,
+                  completed_steps=0, lr=1e-3, betas=(.9, .999), eps=1e-8,
+                  weight_decay=.01):
++        if os.environ.get("MOJOLEARN_VENDOR") == "cpu":
++            weight_decay = 0.0  # SABOTAGE: the pre-0.8.14 host default on the CPU arm only
+         shape = ByteLanguageModelConfig() if shape is None else shape
+         self._shape = shape
+         self._native = _native_shape(shape)
