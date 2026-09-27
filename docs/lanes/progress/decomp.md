@@ -47,6 +47,25 @@ Next: PASS 2: AMD box (requested, RunPod out of stock, retrying), per-seam check
   MinCovDet one feature. Remaining: `x_decomp/NOT_IMPLEMENTED.tsv`.
 - Host manifest: test_host_surface.py reads parametrized def_function
   registrations; MOJOLEARN_HOST_SABOTAGE moves HostExec.gemm; 196 passed.
-- AMD: `tools/dev_pod.sh up decomp 240 --vendor amd` requested; RunPod MI300X
-  out of stock, falling back to Hot Aisle.
-- Apple (M2 Pro steward): OWED.
+- AMD: no box (RunPod MI300X and Hot Aisle both out of stock all session);
+  AMD identity goes through the do-amd steward (`apple_steward.py submit`).
+- Stewards: request 1790531301235 at 16ae279cc FAILED on m2pro and do-amd only
+  because the end-to-end patch was stale; regenerated
+  (`x_decomp/checks/sabotage/e2e_host_sqdist.patch`) and RESUBMIT at the
+  speed merge (see below).
+
+## GPU speed (started 2026-09-27; NVIDIA A40, higgs 1M x 28 from R2, IDENTICAL)
+
+| algorithm | before | after | what |
+|---|---|---|---|
+| PCA randomized / randomized_svd | 108 s (200k rows) | 1.9 s (1M) | orth: one-thread MGS2 -> two passes of the Householder R + a row-parallel solve (DEV 5309) |
+| FactorAnalysis (20 it) | 7.8 s | 0.86 s | one QR of Xc, then the d x d SVD of R D / sqrt(n) per iteration |
+| lstsq | 3.6 s | 0.9 s | sign flips through absmax_sign_cell (DEV 5317); strided data movement |
+| NMF mu (20 it) | 5.6 s | 2.2 s | finite/negative scans through the cells; strided take_cols/hstack |
+| FastICA (20 it) | 2.8 s | 1.3 s | row sums past 4096 two-stage (DEV 5301) |
+| gemm / colsum / rowsum | one thread per output over 1M terms | FOLD_BLOCK = 4096 two-stage folds (DEV 5300/5301) | |
+
+Next speed targets: device-resident matrices (every kit call still uploads and
+downloads; `ew` over 1M x 28 is ~12 ms of copies), the Jacobi eigh's fixed
+cost (~60 ms a call), FAST-mode schedules (tiled gemm) with the quality rule;
+then CPU speed (last).
