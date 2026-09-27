@@ -642,6 +642,11 @@ def fast_meanll_kernel(
         out_scalar[unsafe_offset=0] = tot / Float32(n)
 
 
+#: Operands of this many `meanll_kernel` steps are loaded before the steps
+#: run (execution only). `-D MOJOLEARN_GMM_MEANLL_AHEAD_OFF` = 1.
+comptime GMM_MEANLL_AHEAD = 1 if is_defined["MOJOLEARN_GMM_MEANLL_AHEAD_OFF"]() else 32
+
+
 def meanll_kernel(
     lse: MutPointer[Float32, MutAnyOrigin],
     out_scalar: MutPointer[Float32, MutAnyOrigin],
@@ -679,8 +684,22 @@ def meanll_kernel(
         return
     var n = Int(n_in)
     var acc = Float32(0.0)
-    for i in range(n):
-        acc = ftz(acc + ftz(lse.unsafe_load(i)))
+    comptime if GMM_MEANLL_AHEAD > 1:
+        # The same adds in the same order; the next operands are loaded
+        # first so the chain waits on the add, not on each load.
+        comptime U = GMM_MEANLL_AHEAD
+        var i = 0
+        while i + U <= n:
+            var v = lse.unsafe_load[width=U](i)
+            comptime for u in range(U):
+                acc = ftz(acc + ftz(v[u]))
+            i += U
+        while i < n:
+            acc = ftz(acc + ftz(lse.unsafe_load(i)))
+            i += 1
+    else:
+        for i in range(n):
+            acc = ftz(acc + ftz(lse.unsafe_load(i)))
     out_scalar.unsafe_store(0, ftz(identical_div(acc, Float32(n))))
 
 

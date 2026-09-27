@@ -65,6 +65,13 @@ THE STEPS
                      freeze HEAD (the tree must be clean and pushed). Once
                      frozen, the four freeze steps only check the frozen source
   rehearsal          pixi run release-rehearsal in the source checkout, logs kept
+  cross-compile      (core-linux, beside the rehearsal) dispatch
+                     .github/workflows/cross-compile-check.yml on the frozen
+                     commit against the previous release's source commit and
+                     wait: every changed Linux GPU binding x tier x arch
+                     compiled on GitHub's free runners in parallel. Any FAIL,
+                     TIMEOUT, STALLED or MISSING job stops the Linux pipelines
+                     by name before linux-builds rents a box
   reuse-plan         tools/release_reuse.py: for every binding of every set
                      (cuda sm_90a, cuda sm_89, hip gfx942, the host bindings,
                      the runtime closure, the macOS wheel) REUSE the bytes the
@@ -80,7 +87,9 @@ THE STEPS
                      NVIDIA (walking NVIDIA_WALK on no stock) and a DigitalOcean
                      MI325X, or a Hot Aisle 1x MI300X when DigitalOcean has a GPU
                      droplet live or no token (--amd-build-provider do|hotaisle
-                     or MOJOLEARN_AMD_PROVIDER pins one). `cpu-box` is opt-in
+                     or MOJOLEARN_AMD_PROVIDER pins one). `cpu-box` (RunPod CPU
+                     pods) and `github` (GitHub's free runners,
+                     tools/release_github_build.py) are opt-in
   macos-build        mac_slot --slots 4 run -- build_release_wheel.sh, byte LM on
   macos-smoke        qualify_verifier_wheel.py --scope expanded under the Metal lock
   release-check      pixi run -e test release-check: the Apple (Metal) column of
@@ -389,7 +398,7 @@ def overlay_verified(prov, out_dir):
 def leg_layout(legs_dir, backend, name):
     """(release_build, out_dir) of a leg named `vendor-arch` on a backend."""
     legs_dir = Path(legs_dir)
-    if backend == "cpu-box":
+    if backend in ("cpu-box", "github"):
         out = legs_dir / name
         return out / name / "release-build", out
     if name.startswith("cuda-"):
@@ -600,9 +609,34 @@ def cpu_legs(ctx):
     return legs
 
 
-#: "gpu-legs" is the default (Andrew, 2026-09-25: no CPU anywhere by default);
-#: "cpu-box" is opt-in by name.
-BUILD_BACKENDS = {"cpu-box": cpu_legs, "gpu-legs": gpu_legs}
+def github_legs(ctx):
+    """DEFAULT ROUTE (--build-backend github, 2026-09-27): the three Linux sets
+    compile on GitHub's free ubuntu-24.04 runners, no rental. Each leg is
+    tools/release_github_build.py run: it mints the binding-cache URL map with
+    this Mac's R2 credentials, dispatches .github/workflows/release-linux-build.yml
+    for the frozen commit (each set split across shard jobs, then one assemble
+    job running the CPU box's unchanged route in its pinned image), polls the
+    run, downloads the set into the cpu-box layout and verifies it against its
+    proof; a failure names the job. The route overlays its own files from the
+    pushed tooling commit (its GHA/assemble/overlay.txt), so it takes no route
+    overlay, like cpu-box."""
+    legs_dir = ctx.rel / "legs"
+    legs = []
+    for vendor, arch in (("cuda", "sm_90a"), ("cuda", "sm_89"), ("hip", "gfx942")):
+        name = f"{vendor}-{arch}"
+        rb, out = leg_layout(legs_dir, "github", name)
+        legs.append(Leg(name, vendor, arch,
+                        ["python3", "tools/release_github_build.py", "run", "--commit", ctx.commit,
+                         "--arch", arch, "--out", str(out)],
+                        {}, rb, legs_dir, out))
+    return legs
+
+
+#: "github" is the default (2026-09-27: GitHub's free runners build, proven byte-identical
+#: to 0.8.24 on all three sets); "gpu-legs" and "cpu-box" are opt-in by name.
+BUILD_BACKENDS = {"cpu-box": cpu_legs, "github": github_legs, "gpu-legs": gpu_legs}
+#: Routes that overlay their own box-side files and take no route overlay.
+SELF_OVERLAID = ("cpu-box", "github")
 
 
 def linux_legs(ctx):
@@ -695,7 +729,8 @@ STEP_TABLE = [
     ("freeze-commit", "common", ["freeze-docs-facts"], None),
     ("rehearsal", "common", ["freeze-commit"], None),
     ("reuse-plan", "common", ["rehearsal"], None),
-    ("linux-builds", "core-linux", ["reuse-plan"], None),
+    ("cross-compile", "core-linux", ["freeze-commit"], None),
+    ("linux-builds", "core-linux", ["reuse-plan", "cross-compile"], None),
     ("macos-build", "macos", ["reuse-plan"], "mac"),
     ("macos-smoke", "macos", ["macos-build"], "mac"),
     ("release-check", "macos", ["reuse-plan"], "mac"),
@@ -723,7 +758,7 @@ PIPELINES = {
     "macos": dict(builds=["macos-build"], checks=["macos-smoke", "release-check"], publish="publish-macos",
                   platform="macos"),
     "core-linux": dict(builds=["linux-builds", "linux-wait", "linux-assemble", "linux-pack"],
-                       checks=["linux-joint-diff"], publish="publish-core-linux", platform="linux"),
+                       checks=["cross-compile", "linux-joint-diff"], publish="publish-core-linux", platform="linux"),
     "nvidia": dict(builds=[], checks=["gpu-column-nvidia"], publish="publish-nvidia", platform="nvidia"),
     "amd": dict(builds=[], checks=["gpu-column-amd"], publish="publish-amd", platform="amd"),
 }
@@ -784,7 +819,7 @@ class Release:
     #: wheel, complete release-check records); these are skipped on their record
     #: (finish-line and record: when the platforms they covered are still the
     #: published ones).
-    SKIP_IF_RECORDED = {"rehearsal", "publish-macos", "finish-line", "record",
+    SKIP_IF_RECORDED = {"rehearsal", "cross-compile", "publish-macos", "finish-line", "record",
                         "publish-core-linux", "publish-nvidia", "publish-amd"}
 
     def __init__(self, args, runner=None):
@@ -999,7 +1034,7 @@ class Release:
             if self._leg_env is None:
                 env = {"MOJOLEARN_SOURCE_CHECKOUT": str(self.source_checkout(create=not self.dry))}
                 m = self.overlay()
-                if m["files"] and self.args.build_backend != "cpu-box":
+                if m["files"] and self.args.build_backend not in SELF_OVERLAID:
                     if self.dry:
                         env.update(MOJOLEARN_ROUTE_OVERLAY="<route-overlay.tgz of " + ", ".join(sorted(m["files"])) + ">",
                                    MOJOLEARN_ROUTE_OVERLAY_SHA256="<sha256>")
@@ -1034,7 +1069,7 @@ class Release:
         except (Exception, SystemExit):
             t = dict(commit=None, digest=None, dirty=[])
         try:
-            m = self.overlay() if self.args.build_backend != "cpu-box" else None
+            m = self.overlay() if self.args.build_backend not in SELF_OVERLAID else None
         except (Exception, SystemExit):
             m = None
         return dict(schema="mojolearn.release-leg-provenance.v1", leg=leg.name, vendor=leg.vendor, arch=leg.arch,
@@ -1171,6 +1206,61 @@ class Release:
         self.must(["pixi", "run", "release-rehearsal", "--keep", work], log=self.rel / "rehearsal.log",
                   what="release-rehearsal", cwd=self.src)
         return "PASS, logs " + str(work)
+
+    # ------------------------------------------------------------ cross-compile (GitHub)
+    XCC_WORKFLOW = "cross-compile-check.yml"
+    XCC_ARCHS = "sm_90a,sm_89,gfx942"
+
+    def gh(self, *args, log=None):
+        """(exit code, stdout) of one `gh` call; stdout also to `log` when given."""
+        p = subprocess.run(["gh", *[str(a) for a in args]], cwd=ROOT, capture_output=True, text=True)
+        if log:
+            Path(log).parent.mkdir(parents=True, exist_ok=True)
+            with open(log, "a") as fh:
+                fh.write(p.stdout + p.stderr)
+        return p.returncode, p.stdout
+
+    def xcc_find_run(self, token, tries=24):
+        """The run whose title carries `token` (the workflow's run-name), as
+        (id, url); a dispatch takes a few seconds to appear."""
+        for _ in range(tries):
+            rc, out = self.gh("run", "list", "--workflow", self.XCC_WORKFLOW, "--event", "workflow_dispatch",
+                              "--limit", "30", "--json", "databaseId,displayTitle,url")
+            for r in (json.loads(out or "[]") if rc == 0 else []):
+                if token in r.get("displayTitle", ""):
+                    return str(r["databaseId"]), r.get("url", "")
+            self.sleep(5)
+        raise StepFailed(f"the dispatched {self.XCC_WORKFLOW} run (token {token}) never appeared in gh run list")
+
+    def step_cross_compile(self):
+        """CROSS-COMPILE ON GITHUB, RELEASE ONLY. The frozen commit's changed
+        Linux GPU bindings, every tier and arch, each on its own free runner;
+        diffed against the previous release's source commit (the reuse plan's
+        base). Refuses when there is no such commit: it never widens."""
+        prev = release_reuse.previous_release() or {}
+        base = prev.get("source_commit")
+        if not base:
+            raise StepFailed("cross-compile: no published release record names a source commit to diff "
+                             "against (bench/results/release_verification/*/alpha-manifest-linux.json)")
+        token = f"release-{self.version}-{self.commit[:12]}-{int(time.time())}"
+        wf_ref = os.environ.get("MOJOLEARN_XCC_WORKFLOW_REF", "main")
+        self.must(["gh", "workflow", "run", self.XCC_WORKFLOW, "--ref", wf_ref, "-f", f"ref={base}",
+                   "-f", f"commit={self.commit}", "-f", f"archs={self.XCC_ARCHS}", "-f", f"token={token}"],
+                  what="gh workflow run " + self.XCC_WORKFLOW)
+        if self.dry:
+            return f"would dispatch {self.XCC_WORKFLOW} on {self.commit[:12]} vs {prev.get('version')} and wait"
+        run_id, url = self.xcc_find_run(token)
+        self.say(f"  cross-compile-check run {url} (waiting; log {self.rel / 'cross-compile.log'})")
+        rc, _ = self.gh("run", "watch", run_id, "--exit-status", "--interval", "30",
+                        log=self.rel / "cross-compile.log")
+        if rc == 0:
+            return f"PASS vs {prev.get('version')} ({base[:12]}): {url}", dict(run=url, base=base)
+        _, out = self.gh("run", "view", run_id, "--json", "jobs", "--jq",
+                         '.jobs[] | select(.conclusion != "success" and .conclusion != "skipped") | .name')
+        names = [n for n in out.splitlines() if n.strip()]
+        named = [n for n in names if n != "summary"] or names
+        raise StepFailed(f"cross-compile-check on {self.commit[:12]} vs {prev.get('version')} ({base[:12]}) did "
+                         f"not pass: {', '.join(named) or f'gh run watch exited {rc}'}; {url}")
 
     # ------------------------------------------------------------ reuse
     @property
@@ -2634,7 +2724,7 @@ def main(argv=None):
     ap.add_argument("--source-checkout", default="",
                     help="an existing checkout at the frozen source commit (default: this checkout when its HEAD "
                          "is the source commit, else a worktree under the release directory)")
-    ap.add_argument("--build-backend", default="gpu-legs", choices=sorted(BUILD_BACKENDS))
+    ap.add_argument("--build-backend", default="github", choices=sorted(BUILD_BACKENDS))
     ap.add_argument("--accept-moved", action="store_true",
                     help="publish the macOS wheel although its Apple column differs from the previous release's "
                          "NVIDIA and AMD columns (the release changes those bits on purpose)")

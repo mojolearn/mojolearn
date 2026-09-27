@@ -692,10 +692,21 @@ def _assign_to_candidates(
 #: every candidate so far (`fold_new_candidates_kernel`; a strict `<` keeps
 #: the earlier candidate on a tie, as the full argmin does).
 #: `-D MOJOLEARN_KMEANS_FAST_INCR_INIT_OFF` reassigns in full.
-comptime KMEANS_FAST_INCR_INIT = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_KMEANS_FAST_INCR_INIT_OFF"]()
+#: IDENTICAL on Apple takes it too (lane/apple-identical-neural,
+#: 2026-09-27): each (point, candidate) distance comes from the same
+#: `_assign_to_candidates` (its bits do not depend on which candidates share
+#: the launch), and the fold's strict `<` returns the full argmin's
+#: (value, lowest index). `-D MOJOLEARN_KMEANS_ID_INCR_INIT_OFF` reassigns in
+#: full there.
+comptime KMEANS_FAST_INCR_INIT = has_apple_gpu_accelerator() and (
+    (
+        GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+        and not is_defined["MOJOLEARN_KMEANS_FAST_INCR_INIT_OFF"]()
+    )
+    or (
+        GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        and not is_defined["MOJOLEARN_KMEANS_ID_INCR_INIT_OFF"]()
+    )
 )
 
 

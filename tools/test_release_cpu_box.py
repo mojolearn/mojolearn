@@ -20,11 +20,11 @@ class CpuBox(unittest.TestCase):
     def setUp(self):
         self.ctx = argparse.Namespace(rel=Path(tempfile.mkdtemp()), commit=C)
 
-    def test_default_backend_is_gpu_legs_cpu_box_opt_in(self):
+    def test_default_backend_is_github_cpu_box_opt_in(self):
         self.assertIs(rel.BUILD_BACKENDS["cpu-box"], rel.cpu_legs)
         self.assertIs(rel.BUILD_BACKENDS["gpu-legs"], rel.gpu_legs)
         src = (Path(__file__).resolve().parent / "release.py").read_text()
-        self.assertIn('ap.add_argument("--build-backend", default="gpu-legs"', src)
+        self.assertIn('ap.add_argument("--build-backend", default="github"', src)
 
     def test_three_legs_one_set_each(self):
         legs = rel.cpu_legs(self.ctx)

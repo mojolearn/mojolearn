@@ -54,7 +54,8 @@ BOX_OVERLAY = ("tools/release061_remote_build.sh", "tools/nvidia_serial_guard.py
 BUILD_TOOLING = ("tools/gemm_remote_leg.sh", "tools/do_release061_leg.sh", "tools/hotaisle_release_leg.sh",
                  "tools/hotaisle_vm_lib.sh", "tools/release_ubuntu22_build.sh", "tools/bincache_leg.sh",
                  "tools/release_linux_build.sh", "tools/runpod_cpu_leg.sh", "tools/release_linux_cpu_box.sh",
-                 "tools/runpod_guard.sh") + BOX_OVERLAY
+                 "tools/runpod_guard.sh", "tools/release_github_build.py", "tools/gha_release_box.sh",
+                 ".github/workflows/release-linux-build.yml") + BOX_OVERLAY
 REFUSED_PREFIXES = ("bindings/", "packaging/", "python/", "tokenizer/")
 REFUSED_NAMES = ("pixi.toml", "pixi.lock", "tools/linux_surface_qualification.sh")
 

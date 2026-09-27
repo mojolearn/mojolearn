@@ -21,7 +21,8 @@ FOUR PIPELINES AT ONCE, each publishing as soon as its own gates pass:
   release's recorded NVIDIA and AMD columns on this machine (seconds, nothing
   rented); a DIVERGENT or MOVED cell holds the macOS publish unless
   `--accept-moved` says the release changes those bits on purpose.
-- **core-linux**: linux-builds (the legs of step 2, launched together,
+- **core-linux**: cross-compile (step 0b, beside the rehearsal; it gates
+  linux-builds, the first rental), linux-builds (the legs of step 2, launched together,
   detached), linux-wait, linux-assemble, linux-pack (step 3: the core and both
   plugins, 3b), linux-joint-diff, publish-core-linux (last, after both plugins).
 - **nvidia**: gpu-column-nvidia (the expanded smoke plus the column, one rented
@@ -145,6 +146,29 @@ audit over the package staged as the wheel ships it (with the
 the NVIDIA and AMD release legs. Each of these failed 0.8.12 after boxes were
 rented or after a 16-minute macOS compile. `--list` prints the steps; `--only`
 reruns some of them.
+
+## 0b. Cross-compile on GitHub (the release does this; nothing is rented)
+
+The `cross-compile` step of `pixi run release` dispatches
+`.github/workflows/cross-compile-check.yml` on the frozen commit, diffed
+against the previous release's source commit (the reuse plan's base), and
+waits for it (`gh run watch --exit-status`). The plan job runs
+`tools/cross_compile_check.py --list-json` (the same selection as the local
+`pixi run cross-compile-check`), and every changed Linux GPU binding x tier x
+arch (sm_90a, sm_89, gfx942) compiles on its own free standard runner, in
+parallel, with the release flags. The summary job fails on any FAIL, TIMEOUT,
+STALLED or MISSING job and names it; the release step then stops the Linux
+pipelines by name before linux-builds rents a box (the macOS pipeline goes
+on). The workflow is `workflow_dispatch` only and never runs on a merge. By
+hand:
+
+```sh
+gh workflow run cross-compile-check.yml --ref main -f ref=<previous release commit> -f commit=<sha>
+```
+
+`MOJOLEARN_XCC_WORKFLOW_REF` names the branch whose workflow file is
+dispatched (default `main`; GitHub dispatches a workflow only once its file is on the default branch). Measured 2026-09-27 on the 0.8.22 diff: 96 jobs
+(32 per arch), 1 to 5 minutes each (median 2), compiler peak RSS 2.0 GB, 20 runners at a time, 19 minutes wall, all PASS; the same run with the b055fe72e potrf gate reverted failed by name on gp, kernel_methods and mixture (gfx942, both tiers).
 
 Five steps, one finish line: the file is on PyPI and installs. The longer
 runbook (`docs/PYPI_RELEASE.md`) is background for when a step refuses. They are not a longer version of
@@ -365,6 +389,83 @@ variables, OS, path) matches an archive takes its bytes after the archive's
 key, fields and every file's sha256 verify. `build-provenance.json` records per
 binary whether it was built or taken, its key, and the commit whose build
 compiled it. `--no-bincache` builds everything from source.
+
+## 2d. The GitHub build route: the default (`--build-backend github`)
+
+The same CPU build route as 2c, on GitHub's free `ubuntu-24.04` runners (4
+vCPU, 16 GB) instead of a rented pod. Nothing is rented and no repository
+secret is needed. It is the default since 2026-09-27; `--build-backend gpu-legs` rents GPU boxes to build instead.
+
+```sh
+pixi run release <v> --build-backend github          # the three legs, detached
+# one set by hand (the leg's own command):
+python3 tools/release_github_build.py run --commit $REF --arch sm_89 --out DIR
+```
+
+`.github/workflows/release-linux-build.yml` is `workflow_dispatch` only. Per
+set: a `plan` job evaluates the SOURCE's own `build_sets.sh` lists (76 builds:
+44 GPU bindings over three tiers, 32 host bindings), checks the counts against
+`verify_linux_surface_qualification.py`, and splits them into `shards` jobs
+(default 6) by measured compile time; each `shard` job runs
+`tools/gha_release_box.sh shard` inside the CPU box's pinned
+`rocm/dev-ubuntu-22.04` image (by digest, at `/root/mojolearn`, the RunPod
+file list, the same route overlay), which is `tools/release_linux_cpu_box.sh`
+unchanged with `MOJOLEARN_BINCACHE_SHARD_ONLY` naming its builds (every other
+build returns at once; the variable is not a cache-key input), `jobs` builds at
+a time (default 2). Each compiled binding lands packed and keyed in the hot
+directory, the shard's artifact. One `assemble` job per set puts every shard's
+archives in its hot directory and runs the route with no filter: every build
+is a verified `hot-hit` (or an R2 `hit`), a build no shard delivered compiles
+there, and the output is exactly a build leg's tree. The artifact
+`release-<vendor>-<arch>` holds `<vendor>-<arch>/release-build/` (with
+`build/build-provenance.json`) and `GHA/` (per-job timings, memory, cache
+outcomes, uploads). `run` downloads it into the cpu-box leg layout, verifies
+every binary against the proof and every `.libs/` library against the set
+manifest, promotes the cache uploads, and names any failed job.
+
+**The binding cache without a secret.** The Mac mints the URL map with its own
+`~/.mojolearn_r2` (`tools/bincache.py plan_lines`: presigned GETs of the
+`none/runpod-cpu-...` partition, presigned PUTs into disjoint inbox slots per
+job), stores it in R2 as one object and passes one presigned GET of it (8 h)
+as the input `map_url`. No workflow line interpolates it: each job reads it
+from the event file, masks it, and keeps the map in a 0600 file no artifact
+carries. After the run the map object is deleted, and an inbox upload is
+promoted only when its bytes hash to the archive the job recorded
+(`GHA/bincache/hot_sha256.tsv`). The keys name the image as
+`runpod-cpu:<digest>`, the CPU box's own declaration: same image, path, route
+and OS fields, so the GitHub jobs read and freeze the same partition.
+`--no-bincache` builds NVIDIA sets cold; gfx942 refuses to build without the
+cache unless `--allow-cold-amd` (its codegen is not reproducible, 2c).
+
+**Registering the workflow.** GitHub dispatches a workflow file only from the
+default branch, or by id once registered; `run` dispatches by id. Until this
+file is on main, register it once from a throwaway branch whose copy adds
+`push: branches: [<that branch>]`, push, cancel the run, delete the branch.
+
+**Proof at c8654671b (0.8.24), 2026-09-27.** Every set against 0.8.24's
+released legs, sha256 of every `.so` (tiers, `host/`, `.libs/`), the proof's
+`extensions`, `host_extension`, `source_inventory` and `source_sha256`, and
+`readback.txt`/`arch_readback.txt`:
+all three sets 81 of 81 byte-identical, and every compared proof field and
+read-back equal; `manifest.json` differs only in its `set` field, the staging
+path, which nothing reads. cuda/sm_89 was compiled entirely on the runners
+with no cache (`--no-bincache`, 76 hot-hits: runs 36318515173, 36319821137),
+equal to 0.8.24's L40S GPU-box build; cuda/sm_90a compiled its 44 GPU bindings
+on the runners and took the 32 host bindings from R2 (run 36319826564), equal
+to the H100 build, and its 44 archives were promoted; hip/gfx942 took all 76
+from R2 (the 38 bindings 0.8.24's CPU pod froze there plus older ones; runs
+36318586673, 36319831210), equal to the released AMD set by construction.
+
+Measured (the three sets dispatched together, 6 shards, 2 builds at a time):
+21 minutes wall for all three (1268 s; 1169 to 1267 s for a cold NVIDIA set,
+1075 s for gfx942 from the cache). A cold NVIDIA shard job takes 7.5 to 14
+minutes, of which about 4 is setup (image pull, source, pixi) and the rest its
+builds (the longest single build 206 s, `fast:build_gbdt.sh`); the assemble job
+6 to 7 minutes. Peak memory per job: at most 4.2 GiB process-group RSS (the
+guard) and 7.3 GiB for the whole container including page cache, of 16 GB; 4
+vCPU run 2 builds of 2 compiler workers. Nothing near the 150-minute job cap
+or the 20-minute per-binding bound. The weights in
+`tools/release_github_build.py` are these runners' measured build times.
 
 ## 3. Pack, audit, strip (on the Mac, docker, about 10 minutes)
 
