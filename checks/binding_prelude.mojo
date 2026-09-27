@@ -16,6 +16,10 @@ A binding registers them under its own names, e.g.
 imports these (CURRENT DIRECTIVES); existing bindings keep their copies
 until the consolidation pass migrates them. Tested by
 `checks/scaffold_check.mojo`.
+
+It lives under checks/, next to `checks/scaffold.mojo`, because
+tools/lane_select.py attributes files under bindings/ only once a lane
+reaches them; a binding that imports it makes it reachable from there.
 """
 
 from std.python import PythonObject

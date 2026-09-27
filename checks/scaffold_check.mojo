@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Tests for `checks/scaffold.mojo` and `bindings/binding_prelude.mojo`.
+"""Tests for `checks/scaffold.mojo` and `checks/binding_prelude.mojo`.
 
 Every helper is checked against a value worked out by hand, and the
 comparisons that decide a check (bits, same_bits, CaseTally) are shown to
@@ -32,7 +32,7 @@ from checks.scaffold import (
     upload,
 )
 from checks.vendor import COMPILED_VENDOR
-from bindings.binding_prelude import (
+from checks.binding_prelude import (
     compiled_vendor_name,
     f32_ptr,
     host_vendor_binding,
