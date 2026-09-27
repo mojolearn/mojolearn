@@ -331,17 +331,26 @@ def submit(a):
     spool_to = {m for m, up in picks if not up or m in DEFERRED}
     req["stewards"] = list(macs)
     body = json.dumps(req, indent=2).encode()
+    def spool_it(mac):
+        spool = SPOOL / mac
+        spool.mkdir(parents=True, exist_ok=True)
+        if patch:
+            (spool / f"{name}.patch").write_bytes(patch.read_bytes())
+        (spool / f"{name}.json").write_bytes(body)
+        print(f"{mac} is deferred or not answering: spooled {name} in {spool} (flush-deferred ships it later)")
     for mac in macs:
         if mac in spool_to:
-            spool = SPOOL / mac
-            spool.mkdir(parents=True, exist_ok=True)
-            if patch:
-                (spool / f"{name}.patch").write_bytes(patch.read_bytes())
-            (spool / f"{name}.json").write_bytes(body)
-            print(f"{mac} is deferred or not answering: spooled {name} in {spool} (flush-deferred ships it later)")
+            spool_it(mac)
             continue
-        _push_commit(mac, a.commit)
-        _ship(mac, name, body, patch.read_bytes() if patch else None)
+        try:
+            _push_commit(mac, a.commit)
+            _ship(mac, name, body, patch.read_bytes() if patch else None)
+        except SystemExit as exc:
+            if mac in AMD_STEWARDS:
+                raise
+            print(f"{mac}: {exc}", file=sys.stderr)   # a Mac that fails mid-submit keeps its copy on the laptop
+            spool_to.add(mac)
+            spool_it(mac)
     print(f"queued {a.kind} request {name} on {', '.join(m for m in macs if m not in spool_to) or 'no Mac yet (spooled)'}")
 
 
