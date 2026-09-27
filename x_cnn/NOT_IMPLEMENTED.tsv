@@ -6,3 +6,14 @@ nn.Conv1d/Conv2d padding="same"/"valid" strings	refused (ints only)	the caller c
 nn.MaxPool/AvgPool ceil_mode=True	refused by name (NotImplementedError)	the output size rule and the divisor clip
 nn.AvgPool2d divisor_override	refused by name (NotImplementedError)	a constant divisor in _avg_divisor
 nn.MaxPool return_indices	carried as MaxPool2d.indices_	flat h*W+w per output, PyTorch values
+nn.BatchNorm momentum=None (cumulative moving average)	refused by name (NotImplementedError)	a count-based momentum in bn_running_at
+nn.BatchNorm track_running_stats=False	refused by name (NotImplementedError)	batch statistics in eval mode too
+nn.Dropout2d generator stream	not reproduced (by design)	the mask is Philox4x32-10 of (seed, call, channel), the same on every column, not torch's stream
+nn.AdaptiveAvgPool2d/AdaptiveMaxPool2d non-dividing output sizes	refused by name (NotImplementedError)	variable windows start=floor(i*H/oh), end=ceil((i+1)*H/oh)
+nn.AdaptiveMaxPool2d return_indices	carried through the inner MaxPool2d (indices_)	
+torchvision BasicBlock groups/base_width/dilation!=defaults	refused (not exposed)	torchvision refuses them too for BasicBlock
+torchvision BasicBlock norm_layer other than BatchNorm2d	refused (not exposed)	
+PyG GCNConv cached=True	not carried	the normalization is recomputed per call (same values)
+PyG GCNConv sparse (SparseTensor) adjacency	not carried	edge_index (2, E) only
+PyG SAGEConv aggr max/lstm/other	refused by name (NotImplementedError)	max: a gather with first-max ties, as MaxPool
+PyG SAGEConv normalize=True, project=True	refused by name (NotImplementedError)	L2 row normalization after the layer
