@@ -33,7 +33,9 @@ from ._buffer import as_f32_c, addr_ro
 from ._labels import flatten_labels, sorted_classes, label_kind
 
 __all__ = ["RobustScaler", "MaxAbsScaler", "OrdinalEncoder", "OneHotEncoder", "TargetEncoder", "SimpleImputer", "KBinsDiscretizer",
-           "GaussianNB", "MultinomialNB", "BernoulliNB"]
+           "GaussianNB", "MultinomialNB", "BernoulliNB",
+           "LinearDiscriminantAnalysis", "QuadraticDiscriminantAnalysis",
+           "QuantileTransformer", "PowerTransformer", "Normalizer"]
 
 _BINDING = "_mojolearn_x_prep"
 
@@ -44,6 +46,8 @@ _OPS = dict(
     row_argmax=15, class_stats=16, center_rows=17, eigh=18, where_neg=19,
     te_global=20, te_enc=21, te_apply=22, mark_missing=23, fill=24, kbins_edges=25, kbins_codes=26,
     gnb_eps=27, gnb_params=28, gnb_jll=29, class_log_prior=30, mnb_params=31, bnb_params=32, cnb_params=33, cat_params=34, cat_jll=35,
+    lda_prep=36, lda_w=37, lda_stage2=38, lda_stage3=39, qda_cov=40, qda_prep=41, qda_dec=42,
+    qt_apply=43, pt_fit=44, pt_apply=45, std_params=46, normalize=47, poly=48,
 )
 _PARAMS = 14
 _NONE = -1
@@ -1017,3 +1021,386 @@ class BernoulliNB(_DiscreteNB):
             xo = xb
         w, b = pr.put(self._w), pr.put(self._bias)
         pr.stage("matmul", n * K, xo, d, 1, w, 1, d, out, K, d, b, _NONE)
+
+
+# ---------------------------------------------------------------- discriminant analysis
+def _binary_difference(pr, src, rows, K, d_cols, out):
+    """out[i, j] = src[i*? ...]: row 1 minus row 0 of a (2 x d_cols) block
+    (rows=1) or column 1 minus column 0 of an (rows x 2) block, as one
+    matmul with the vector [-1, 1] (-a + b is b - a exactly)."""
+    w = pr.put_list([-1.0, 1.0])
+    if rows == 1:
+        pr.stage("matmul", d_cols, w, 0, 1, src, d_cols, 1, out, d_cols, 2, _NONE, _NONE)
+    else:
+        pr.stage("matmul", rows, src, K, 1, w, 1, 0, out, 1, 2, _NONE, _NONE)
+
+
+def _class_counts(codes, K):
+    counts = [0] * K
+    for c in codes.tolist():
+        counts[c] += 1
+    return counts
+
+
+class LinearDiscriminantAnalysis(_Classifier):
+    """sklearn.discriminant_analysis.LinearDiscriminantAnalysis, solver 'svd'
+    (the default): the reference's two SVDs are symmetric eigendecompositions
+    of the Gram matrices (cyclic Jacobi, x_prep/eigh.mojo), so `scalings_` and
+    `transform` match the reference up to each component's sign and the
+    decision function matches it outright. Float32. Other solvers, shrinkage,
+    priors, covariance_estimator and store_covariance are refused by name."""
+    _parameters = ("solver", "shrinkage", "priors", "n_components", "store_covariance", "tol",
+                   "covariance_estimator")
+
+    def __init__(self, solver="svd", shrinkage=None, priors=None, n_components=None, store_covariance=False,
+                 tol=1e-4, covariance_estimator=None):
+        self.solver = solver
+        self.shrinkage = shrinkage
+        self.priors = priors
+        self.n_components = n_components
+        self.store_covariance = store_covariance
+        self.tol = tol
+        self.covariance_estimator = covariance_estimator
+
+    def fit(self, X, y):
+        if self.solver != "svd" or self.shrinkage is not None or self.covariance_estimator is not None:
+            raise NotImplementedError("mojolearn: LinearDiscriminantAnalysis supports solver='svd' without "
+                                      "shrinkage or covariance_estimator")
+        if self.priors is not None or self.store_covariance:
+            raise NotImplementedError("mojolearn: LinearDiscriminantAnalysis priors and store_covariance "
+                                      "are not implemented")
+        arr = _x2d(X)
+        n, d = arr.shape
+        codes = self._encode_y(y, n)
+        K = len(self.classes_)
+        if K < 2 or n <= K:
+            raise ValueError("mojolearn: LinearDiscriminantAnalysis needs at least two classes and more "
+                             "samples than classes")
+        maxc = min(K - 1, d)
+        if self.n_components is not None and self.n_components > maxc:
+            raise ValueError("mojolearn: n_components cannot be larger than min(n_features, n_classes - 1)")
+        mode = _mode()
+        pr = _Prog()
+        xo = pr.put(arr)
+        yo = pr.put_codes(codes)
+        cnt, mean, priors, xbar = pr.alloc(K), pr.alloc(K * d), pr.alloc(K), pr.alloc(d)
+        z, stz, std, w, z2 = pr.alloc(n * d), pr.alloc(6 * d), pr.alloc(d), pr.alloc(d), pr.alloc(n * d)
+        g, e1, v1 = pr.alloc(d * d), pr.alloc(d), pr.alloc(d * d)
+        meta = pr.put_list([self.tol, 0.0, 0.0])
+        scal1, g2, ms = pr.alloc(d * d), pr.alloc(d * d), pr.alloc(K * d)
+        e2, v2 = pr.alloc(d), pr.alloc(d * d)
+        scal, coef, inter, evr, tmp = pr.alloc(d * d), pr.alloc(K * d), pr.alloc(K), pr.alloc(d), pr.alloc(K * d)
+        pr.stage("class_stats", K * d, xo, n, d, yo, K, cnt, mean, _NONE, _NONE)
+        pr.stage("lda_prep", 1, cnt, mean, K, d, n, priors, xbar)
+        pr.stage("center_rows", n * d, xo, n, d, mean, yo, _NONE, z)
+        pr.stage("col_stats", d, z, n, d, stz)
+        pr.stage("lda_w", d, stz + 2 * d, d, n, K, std, w)
+        pr.stage("center_rows", n * d, xo, n, d, mean, yo, w, z2)
+        pr.stage("matmul", d * d, z2, 1, d, z2, d, 1, g, d, n, _NONE, _NONE)
+        pr.stage("eigh", 1, g, d, 0, e1, v1)
+        pr.stage("lda_stage2", 1, e1, v1, std, mean, xbar, priors, K, d, n, meta, scal1, g2, ms)
+        pr.stage("eigh", 1, g2, d, 0, e2, v2)
+        pr.stage("lda_stage3", 1, e2, v2, scal1, mean, xbar, priors, K, d, meta, scal, coef, inter, evr, tmp)
+        cd, ci = pr.alloc(d), pr.alloc(1)
+        if K == 2:
+            _binary_difference(pr, coef, 1, K, d, cd)
+            pr.stage("matmul", 1, pr.put_list([-1.0, 1.0]), 0, 1, inter, 1, 0, ci, 1, 2, _NONE, _NONE)
+        pr.run(mode)
+        rank2 = int(pr.values(meta + 2, 1)[0])
+        self._rank = rank2
+        self.means_, self.priors_, self.xbar_ = pr.get(mean, (K, d)), pr.get(priors, K), pr.get(xbar, d)
+        full = pr.get(scal, (d, d))
+        self._scal_full = full
+        self.scalings_ = Array.from_list([row[:rank2] for row in full.tolist()], "<f4") if rank2 else \
+            Array((d, 0), "<f4")
+        self._coef, self._inter = pr.get(coef, (K, d)), pr.get(inter, K)
+        if K == 2:
+            self.coef_, self.intercept_ = pr.get(cd, (1, d)), pr.get(ci, 1)
+        else:
+            self.coef_, self.intercept_ = self._coef, self._inter
+        self._max_components = maxc if self.n_components is None else int(self.n_components)
+        self.explained_variance_ratio_ = pr.get(evr, self._max_components)
+        self.numeric_mode_, self.n_features_in_ = mode, d
+        return self
+
+    def _jll_stages(self, pr, xo, n, d, out):
+        K = len(self.classes_)
+        c, b = pr.put(self._coef), pr.put(self._inter)
+        pr.stage("matmul", n * K, xo, d, 1, c, 1, d, out, K, d, b, _NONE)
+
+    def decision_function(self, X):
+        pr, n, K, o = self._scores(X, ())
+        if K == 2:
+            return self._pair(X, o, pr, n)
+        return pr.get(o["jll"], (n, K))
+
+    def _pair(self, X, o, pr, n):
+        arr = _x2d(X)
+        q = _Prog()
+        xo = q.put(arr)
+        c, b = q.put(self.coef_), q.put(self.intercept_)
+        out = q.alloc(n)
+        q.stage("matmul", n, xo, arr.shape[1], 1, c, 1, 0, out, 1, arr.shape[1], b, _NONE)
+        q.run(self.numeric_mode_)
+        return q.get(out, n)
+
+    def transform(self, X):
+        self._check_fitted()
+        arr = _x2d(X)
+        self._check_width(arr)
+        n, d = arr.shape
+        mc = min(self._max_components, self._rank)
+        pr = _Prog()
+        xo = pr.put(arr)
+        xb, sc = pr.put(self.xbar_), pr.put(self._scal_full)
+        cen, out = pr.alloc(n * d), pr.alloc(n * max(mc, 1))
+        pr.stage("center_rows", n * d, xo, n, d, xb, _NONE, _NONE, cen)
+        pr.stage("matmul", n * mc, cen, d, 1, sc, d, 1, out, mc, d, _NONE, _NONE)
+        pr.run(self.numeric_mode_)
+        return pr.get(out, (n, mc))
+
+    def fit_transform(self, X, y):
+        return self.fit(X, y).transform(X)
+
+
+class QuadraticDiscriminantAnalysis(_Classifier):
+    """sklearn.discriminant_analysis.QuadraticDiscriminantAnalysis (1.9): per
+    class, the eigendecomposition of the class covariance (divisor n_k) stands
+    in for the reference's SVD of the centred class rows (same S^2 / n_k,
+    vectors up to sign). A class whose regularised scalings are not all above
+    `tol` is refused, as the reference refuses it. Float32. priors and
+    store_covariance are refused by name."""
+    _parameters = ("solver", "shrinkage", "priors", "reg_param", "store_covariance", "tol", "covariance_estimator")
+
+    def __init__(self, *, solver="svd", shrinkage=None, priors=None, reg_param=0.0, store_covariance=False,
+                 tol=1e-4, covariance_estimator=None):
+        self.solver = solver
+        self.shrinkage = shrinkage
+        self.priors = priors
+        self.reg_param = reg_param
+        self.store_covariance = store_covariance
+        self.tol = tol
+        self.covariance_estimator = covariance_estimator
+
+    def fit(self, X, y):
+        if self.solver != "svd" or self.shrinkage is not None or self.covariance_estimator is not None:
+            raise NotImplementedError("mojolearn: QuadraticDiscriminantAnalysis supports solver='svd' only")
+        if self.priors is not None or self.store_covariance:
+            raise NotImplementedError("mojolearn: QuadraticDiscriminantAnalysis priors and store_covariance "
+                                      "are not implemented")
+        arr = _x2d(X)
+        n, d = arr.shape
+        codes = self._encode_y(y, n)
+        K = len(self.classes_)
+        if K < 2:
+            raise ValueError("mojolearn: QuadraticDiscriminantAnalysis needs at least two classes")
+        if min(_class_counts(codes, K)) < 2:
+            raise ValueError("mojolearn: y has only 1 sample in a class, covariance is ill defined")
+        mode = _mode()
+        pr = _Prog()
+        xo = pr.put(arr)
+        yo = pr.put_codes(codes)
+        cnt, mean, priors, xbar = pr.alloc(K), pr.alloc(K * d), pr.alloc(K), pr.alloc(d)
+        cov, ev, evec = pr.alloc(K * d * d), pr.alloc(K * d), pr.alloc(K * d * d)
+        reg = pr.put_scalar(self.reg_param)
+        rot, logc, s2 = pr.alloc(K * d * d), pr.alloc(K), pr.alloc(K * d)
+        pr.stage("class_stats", K * d, xo, n, d, yo, K, cnt, mean, _NONE, _NONE)
+        pr.stage("lda_prep", 1, cnt, mean, K, d, n, priors, xbar)
+        pr.stage("qda_cov", K * d * d, xo, n, d, yo, mean, cnt, cov)
+        pr.stage("eigh", K, cov, d, d * d, ev, evec)
+        pr.stage("qda_prep", K, ev, evec, K, d, reg, cnt, n, rot, logc, s2)
+        pr.run(mode)
+        s2v = pr.values(s2, K * d)
+        for k in range(K):
+            if sum(1 for v in s2v[k * d:(k + 1) * d] if v > self.tol) < d:
+                raise ValueError(f"mojolearn: the covariance matrix of class {self.classes_[k]!r} is not full "
+                                 "rank. Increase the value of `reg_param` to reduce the collinearity.")
+        self.means_, self.priors_ = pr.get(mean, (K, d)), pr.get(priors, K)
+        self.rotations_ = [pr.get(evec + k * d * d, (d, d)) for k in range(K)]
+        self.scalings_ = [pr.get(s2 + k * d, d) for k in range(K)]
+        self._rot, self._logc = pr.get(rot, K * d * d), pr.get(logc, K)
+        self.numeric_mode_, self.n_features_in_ = mode, d
+        return self
+
+    def _jll_stages(self, pr, xo, n, d, out):
+        K = len(self.classes_)
+        m, r, lc = pr.put(self.means_), pr.put(self._rot), pr.put(self._logc)
+        pr.stage("qda_dec", n * K, xo, n, d, m, r, lc, K, out)
+
+    def decision_function(self, X):
+        pr, n, K, o = self._scores(X, ())
+        if K == 2:
+            q = _Prog()
+            src = q.put(pr.get(o["jll"], (n, K)))
+            out = q.alloc(n)
+            _binary_difference(q, src, n, K, 1, out)
+            q.run(self.numeric_mode_)
+            return q.get(out, n)
+        return pr.get(o["jll"], (n, K))
+
+
+# ---------------------------------------------------------------- additions: transformers
+def _draw_without_replacement(n, k, seed):
+    """k distinct rows of n, from a splitmix64 partial Fisher-Yates (integer
+    arithmetic, the same on every machine); the reference draws numpy's."""
+    perm = list(range(n))
+    state = int(seed) & 0xFFFFFFFFFFFFFFFF
+    for i in range(k):
+        state, z = _splitmix64(state)
+        j = i + z % (n - i)
+        perm[i], perm[j] = perm[j], perm[i]
+    return sorted(perm[:k])
+
+
+class QuantileTransformer(_PrepBase):
+    """sklearn.preprocessing.QuantileTransformer: per-column numpy linear
+    percentiles of the non-NaN entries at n_quantiles evenly spaced
+    references, then the reference's two-sided interpolation; output
+    'uniform' or 'normal' (Acklam's inverse normal CDF, float32, clipped at
+    the reference's +-5.1993). Above `subsample` rows the fit uses a
+    without-replacement draw from `random_state` by splitmix64. NaN is kept.
+    inverse_transform and sparse input are refused."""
+    _parameters = ("n_quantiles", "output_distribution", "ignore_implicit_zeros", "subsample", "random_state",
+                   "copy")
+
+    def __init__(self, *, n_quantiles=1000, output_distribution="uniform", ignore_implicit_zeros=False,
+                 subsample=10_000, random_state=None, copy=True):
+        self.n_quantiles = n_quantiles
+        self.output_distribution = output_distribution
+        self.ignore_implicit_zeros = ignore_implicit_zeros
+        self.subsample = subsample
+        self.random_state = random_state
+        self.copy = copy
+
+    def fit(self, X, y=None):
+        if self.output_distribution not in ("uniform", "normal"):
+            raise ValueError(f"mojolearn: invalid output_distribution {self.output_distribution!r}")
+        arr = _x2d(X)
+        n, d = arr.shape
+        if self.subsample is not None and n > self.subsample:
+            arr = _gather_rows(arr, _draw_without_replacement(
+                n, int(self.subsample), 0 if self.random_state is None else int(self.random_state)))
+            n = arr.shape[0]
+        nq = max(1, min(int(self.n_quantiles), n))
+        refs = [i / (nq - 1) if nq > 1 else 0.0 for i in range(nq)]
+        mode = _mode()
+        pr = _Prog()
+        xo = pr.put(arr)
+        so, st, qf = pr.alloc(n * d), pr.alloc(6 * d), pr.put_list(refs)
+        qo = pr.alloc(nq * d)
+        pr.stage("sort_cols", d, xo, n, d, so, 0)
+        pr.stage("col_stats", d, xo, n, d, st)
+        pr.stage("quantile", nq * d, so, n, d, qf, nq, qo, st)
+        pr.run(mode)
+        self._q = pr.get(qo, nq * d)
+        flat = pr.values(qo, nq * d)
+        self.quantiles_ = Array.from_list([[flat[c * nq + j] for c in range(d)] for j in range(nq)], "<f4")
+        self.references_ = pr.get(qf, nq)
+        self.n_quantiles_, self.numeric_mode_, self.n_features_in_ = nq, mode, d
+        return self
+
+    def transform(self, X):
+        self._check_fitted()
+        arr = _x2d(X)
+        self._check_width(arr)
+        n, d = arr.shape
+        pr = _Prog()
+        xo, qo, ro = pr.put(arr), pr.put(self._q), pr.put(self.references_)
+        out = pr.alloc(n * d)
+        pr.stage("qt_apply", n * d, xo, n, d, qo, self.n_quantiles_, ro,
+                 1 if self.output_distribution == "normal" else 0, out)
+        pr.run(self.numeric_mode_)
+        return pr.get(out, (n, d))
+
+    def inverse_transform(self, X):
+        raise NotImplementedError("mojolearn: QuantileTransformer.inverse_transform is not implemented")
+
+
+class PowerTransformer(_PrepBase):
+    """sklearn.preprocessing.PowerTransformer: 'yeo-johnson' (default) or
+    'box-cox' (strictly positive input), then StandardScaler when
+    `standardize`. Each column's lambda maximises the reference's
+    log-likelihood by a fixed-step golden-section search over [-8, 8]
+    (the reference: scipy's Brent from the bracket (-2, 2)), float32. NaN is
+    ignored in fit and kept. inverse_transform is refused."""
+    _parameters = ("method", "standardize", "copy")
+
+    def __init__(self, method="yeo-johnson", *, standardize=True, copy=True):
+        self.method = method
+        self.standardize = standardize
+        self.copy = copy
+
+    def fit(self, X, y=None):
+        if self.method not in ("yeo-johnson", "box-cox"):
+            raise ValueError(f"mojolearn: invalid method {self.method!r}")
+        arr = _x2d(X)
+        n, d = arr.shape
+        method = 1 if self.method == "box-cox" else 0
+        mode = _mode()
+        pr = _Prog()
+        xo = pr.put(arr)
+        st, lam = pr.alloc(6 * d), pr.alloc(d)
+        pr.stage("col_stats", d, xo, n, d, st)
+        pr.stage("pt_fit", d, xo, n, d, method, st, lam)
+        mean, scale = pr.alloc(d), pr.alloc(d)
+        if self.standardize:
+            tx, st2 = pr.alloc(n * d), pr.alloc(6 * d)
+            pr.stage("pt_apply", n * d, xo, n, d, lam, method, _NONE, _NONE, tx)
+            pr.stage("col_stats", d, tx, n, d, st2)
+            pr.stage("std_params", d, st2, d, mean, scale)
+        pr.run(mode)
+        if method == 1 and any(v <= 0 for v in pr.values(st + 3 * d, d)):
+            raise ValueError("mojolearn: The Box-Cox transformation can only be applied to strictly positive data")
+        self.lambdas_ = pr.get(lam, d)
+        self._mean = pr.get(mean, d) if self.standardize else None
+        self._scale = pr.get(scale, d) if self.standardize else None
+        self._method = method
+        self.numeric_mode_, self.n_features_in_ = mode, d
+        return self
+
+    def transform(self, X):
+        self._check_fitted()
+        arr = _x2d(X)
+        self._check_width(arr)
+        n, d = arr.shape
+        pr = _Prog()
+        xo, lo = pr.put(arr), pr.put(self.lambdas_)
+        mo = pr.put(self._mean) if self.standardize else _NONE
+        so = pr.put(self._scale) if self.standardize else _NONE
+        out = pr.alloc(n * d)
+        pr.stage("pt_apply", n * d, xo, n, d, lo, self._method, mo, so, out)
+        pr.run(self.numeric_mode_)
+        return pr.get(out, (n, d))
+
+    def inverse_transform(self, X):
+        raise NotImplementedError("mojolearn: PowerTransformer.inverse_transform is not implemented")
+
+
+class Normalizer(_PrepBase):
+    """sklearn.preprocessing.Normalizer: each row divided by its 'l1', 'l2'
+    or 'max' norm (columns summed in ascending order); a zero row is left
+    as it is. Stateless."""
+    _parameters = ("norm", "copy")
+
+    def __init__(self, norm="l2", *, copy=True):
+        self.norm = norm
+        self.copy = copy
+
+    def fit(self, X, y=None):
+        if self.norm not in ("l1", "l2", "max"):
+            raise ValueError(f"mojolearn: invalid norm {self.norm!r}")
+        self.n_features_in_ = _x2d(X).shape[1]
+        self.numeric_mode_ = _mode()
+        return self
+
+    def transform(self, X, copy=None):
+        self._check_fitted()
+        arr = _x2d(X)
+        self._check_width(arr)
+        n, d = arr.shape
+        pr = _Prog()
+        xo = pr.put(arr)
+        out = pr.alloc(n * d)
+        pr.stage("normalize", n, xo, n, d, {"l1": 0, "l2": 1, "max": 2}[self.norm], out)
+        pr.run(self.numeric_mode_)
+        return pr.get(out, (n, d))

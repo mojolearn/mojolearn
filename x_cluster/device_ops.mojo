@@ -11,6 +11,7 @@ from x_cluster.bodies import (
     FPtr,
     IPtr,
     ap_availability_col,
+    ap_exemplar_cell,
     ap_responsibility_row,
     kth_smallest_row,
     meanshift_seed,
@@ -74,6 +75,12 @@ def _ap_a_kernel(r: FPtr, a: FPtr, n: Int32, damping: Float32):
     var t = _tid()
     if t < Int(n):
         ap_availability_col(r, a, Int(n), damping, t)
+
+
+def _ap_e_kernel(a: FPtr, r: FPtr, n: Int32, e: IPtr):
+    var t = _tid()
+    if t < Int(n):
+        ap_exemplar_cell(a, r, Int(n), e, t)
 
 
 def _descend_kernel(x: FPtr, n: Int32, d: Int32, centers: FPtr, nodes: IPtr, labels: IPtr):
@@ -200,6 +207,12 @@ struct DeviceOps(ClusterOps):
         )
         self.ctx.synchronize()
 
+    def ap_e(mut self, a: Int, r: Int, n: Int, e: Int) raises:
+        self.ctx.enqueue_function[_ap_e_kernel](
+            self._fp(a), self._fp(r), Int32(n), self._ip(e), grid_dim=_grid(n), block_dim=TPB,
+        )
+        self.ctx.synchronize()
+
     def descend(mut self, x: Int, n: Int, d: Int, centers: Int, nodes: Int, labels: Int) raises:
         self.ctx.enqueue_function[_descend_kernel](
             self._fp(x), Int32(n), Int32(d), self._fp(centers), self._ip(nodes), self._ip(labels),
@@ -222,8 +235,10 @@ struct DeviceOps(ClusterOps):
             w.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), 0,
             max_iter=max_iter, tol=tol, seed=seed, n_init=n_init, init=init, metric=METRIC_L2_EXPANDED,
         )
-        # the fit's last copies into these host arrays may still be queued
-        self.ctx.synchronize()
+        # KEEP THE TWO INPUTS ALIVE THROUGH THE CALL: Mojo ends a value's life
+        # at its last use, which for `xc` and `w` is `unsafe_ptr()`, so without
+        # these lines the fit uploads freed memory (measured 2026-09-27: run-to-
+        # run drift and CUDA_ERROR_ILLEGAL_ADDRESS on the bisecting lane).
         _ = xc^
         _ = w^
         labels = List[Int32](capacity=n)

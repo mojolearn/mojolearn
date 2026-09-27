@@ -21,8 +21,17 @@ Sanity tests need scikit-learn: on the pod it is in /root/skl
 | TargetEncoder | d0ca493f6 | x-prep-target-encoder | batch 9, infer 9, train 9; cuda H100 vs CPU |
 | SimpleImputer | 2ba3a6c0d | x-prep-simple-imputer | batch 9, infer 9, train 9; cuda H100 vs CPU |
 | KBinsDiscretizer | afa14e9dd | x-prep-kbins | batch 9, infer 9, train 9; cuda H100 vs CPU |
-| GaussianNB, MultinomialNB, BernoulliNB | (this commit) | x-prep-gaussian-nb,x-prep-multinomial-nb,x-prep-bernoulli-nb | batch 9, infer 9, train 9; cuda H100 vs CPU |
+| GaussianNB, MultinomialNB, BernoulliNB | ae2cee425 | x-prep-gaussian-nb,x-prep-multinomial-nb,x-prep-bernoulli-nb | batch 9, infer 9, train 9; cuda H100 vs CPU |
+| LinearDiscriminantAnalysis, QuadraticDiscriminantAnalysis | 6f33de672 | x-prep-lda,x-prep-qda | batch 9, infer 9, train 9; cuda H100 vs CPU |
+| QuantileTransformer | faf2a80e5 | x-prep-quantile-transformer | batch 9, infer 9, train 9; cuda H100 vs CPU |
+| PowerTransformer | 2df64e382 | x-prep-power-transformer | batch 9, infer 9, train 9; cuda H100 vs CPU |
+| Normalizer | (this commit) | x-prep-normalizer | batch 9, infer 9, train 9; cuda H100 vs CPU |
 
 ## Next
-OneHotEncoder / OrdinalEncoder, TargetEncoder, SimpleImputer, KBinsDiscretizer,
-GaussianNB/MultinomialNB/BernoulliNB, LDA/QDA, then the Additions.
+Main table DONE. Additions in order: QuantileTransformer, PowerTransformer,
+Normalizer, PolynomialFeatures, SplineTransformer, Binarizer, LabelEncoder,
+LabelBinarizer, MultiLabelBinarizer, IterativeImputer, VarianceThreshold,
+SelectKBest (f_classif, chi2, f_regression, mutual_info), RFE, ComplementNB,
+CategoricalNB. Then PASS 2 (docs/lanes/ALGORITHM_EXPANSION_PLAN.md, last section).
+Helper scripts (not in the repo): ~/mojolearn-evidence/algos-prep/{qsync,gate,commit}.sh;
+the pod's git tree sits at 1f3a717ad and qsync sends every file differing from it.

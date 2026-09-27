@@ -154,3 +154,73 @@ def _(ml, X, yc, yr, Xh=None):
 
 _batch_decl(_rows_calls("predict", "predict_proba", sl=slice(0, 256)), "x-prep-gaussian-nb", "x-prep-bernoulli-nb")
 _batch_decl(_rows_calls("predict", "predict_proba", sl=slice(0, 256), prep=_prep_abs), "x-prep-multinomial-nb")
+
+
+def _prep_three_class(X, yr):
+    """A three-class target from the regression target's terciles (numpy's
+    quantile, the same bytes on every box), so the discriminant lanes run
+    their multiclass path."""
+    lo, hi = np.quantile(yr, [1 / 3, 2 / 3])
+    return np.where(yr < lo, 0, np.where(yr < hi, 1, 2)).astype(np.int32)
+
+
+@lane("x-prep-lda")
+def _(ml, X, yc, yr, Xh=None):
+    y3 = _prep_three_class(X, yr)
+    m = ml.LinearDiscriminantAnalysis().fit(X, y3)
+    parts = dict(coef=_h(m.coef_), intercept=_h(m.intercept_), scal=_h(m.scalings_),
+                 evr=_h(m.explained_variance_ratio_), transform=_h(m.transform(X[:256])),
+                 predict=_h(m.predict(X[:256])), proba=_h(m.predict_proba(X[:256])))
+    mb = ml.LinearDiscriminantAnalysis().fit(X, yc)
+    parts["binary_decision"] = _h(mb.decision_function(X[:256]))
+    return _fit(parts, m, lambda e: (e.predict_proba(Xh[:256]), e.transform(Xh[:256])))
+
+
+@lane("x-prep-qda")
+def _(ml, X, yc, yr, Xh=None):
+    y3 = _prep_three_class(X, yr)
+    m = ml.QuadraticDiscriminantAnalysis(reg_param=0.01).fit(X, y3)
+    parts = dict(scal=_h(*m.scalings_), rot=_h(*m.rotations_), predict=_h(m.predict(X[:256])),
+                 proba=_h(m.predict_proba(X[:256])))
+    m0 = ml.QuadraticDiscriminantAnalysis(reg_param=0.05).fit(X, yc)
+    parts["binary_decision"] = _h(m0.decision_function(X[:256]))
+    return _fit(parts, m, lambda e: (e.predict(Xh[:256]), e.predict_proba(Xh[:256])))
+
+
+_batch_decl(_rows_calls("predict", "predict_proba", sl=slice(0, 256)), "x-prep-lda", "x-prep-qda")
+
+
+@lane("x-prep-quantile-transformer")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.QuantileTransformer(n_quantiles=200, random_state=5).fit(X)
+    mn = ml.QuantileTransformer(n_quantiles=64, output_distribution="normal", subsample=4000,
+                                random_state=5).fit(X)
+    parts = dict(q=_h(m.quantiles_), transform=_h(m.transform(X[:256])), qn=_h(mn.quantiles_),
+                 normal=_h(mn.transform(X[:256])))
+    return _fit(parts, mn, lambda e: (e.transform(Xh[:256]),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-quantile-transformer")
+
+
+@lane("x-prep-power-transformer")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.PowerTransformer().fit(X[:2000])
+    Xp = np.abs(X[:2000]) + np.float32(0.5)
+    mb = ml.PowerTransformer(method="box-cox", standardize=False).fit(Xp)
+    parts = dict(lam=_h(m.lambdas_), transform=_h(m.transform(X[:256])), lam_bc=_h(mb.lambdas_),
+                 bc=_h(mb.transform(Xp[:256])))
+    return _fit(parts, m, lambda e: (e.transform(Xh[:256]),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-power-transformer")
+
+
+@lane("x-prep-normalizer")
+def _(ml, X, yc, yr, Xh=None):
+    parts = {nm: _h(ml.Normalizer(norm=nm).fit(X).transform(X[:256])) for nm in ("l1", "l2", "max")}
+    m = ml.Normalizer().fit(X)
+    return _fit(parts, m, lambda e: (e.transform(Xh[:256]),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-normalizer")

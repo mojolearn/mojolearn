@@ -84,3 +84,39 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-huber")
+
+
+@lane("x-bayes-ridge")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.BayesianRidge().fit(X[:2000], yr[:2000])
+    f = _linear_reg_fit(m, X, yr, Xh)
+    f["hyper"] = _h(np.asarray([m.alpha_, m.lambda_], dtype=np.float32))
+    return f
+
+
+@lane("x-ard")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.ARDRegression(max_iter=50).fit(X[:2000], yr[:2000])
+    f = _linear_reg_fit(m, X, yr, Xh)
+    f["lambda"] = _h(m.lambda_)
+    return f
+
+
+_batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-bayes-ridge", "x-ard")
+
+
+@lane("x-lars")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.Lars(n_nonzero_coefs=10).fit(X[:2000], yr[:2000])
+    return _linear_reg_fit(m, X, yr, Xh)
+
+
+@lane("x-lasso-lars")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.LassoLars(alpha=0.02).fit(X[:2000], yr[:2000])
+    f = _linear_reg_fit(m, X, yr, Xh)
+    f["active"] = _h(np.asarray(m.active_, dtype=np.int32))
+    return f
+
+
+_batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-lars", "x-lasso-lars")

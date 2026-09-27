@@ -64,6 +64,10 @@ trait ClusterOps(Movable):
     def ap_a(mut self, r: Int, a: Int, n: Int, damping: Float32) raises:
         ...
 
+    def ap_e(mut self, a: Int, r: Int, n: Int, e: Int) raises:
+        """e[i] = A[i, i] + R[i, i] > 0 (`bodies.ap_exemplar_cell`)."""
+        ...
+
     def descend(mut self, x: Int, n: Int, d: Int, centers: Int, nodes: Int, labels: Int) raises:
         """labels[i] = the leaf row i reaches (`bodies.tree_descend`)."""
         ...

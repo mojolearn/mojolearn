@@ -20,10 +20,10 @@ from . import _backend, _buffer
 from ._array import Array
 from ._mode import NumericModeMixin
 
-__all__ = ["MiniBatchKMeans", "BisectingKMeans"]
+__all__ = ["MiniBatchKMeans", "BisectingKMeans", "MeanShift", "OPTICS", "AffinityPropagation"]
 
 # x_cluster/entries.mojo: the entry numbers of `x_cluster_call`
-_E_NEAREST, _E_DISTANCES, _E_MINIBATCH, _E_BISECT, _E_BISECT_PREDICT = 0, 1, 2, 3, 4
+_E_NEAREST, _E_DISTANCES, _E_MINIBATCH, _E_BISECT, _E_BISECT_PREDICT, _E_MEANSHIFT, _E_OPTICS, _E_AFFINITY = 0, 1, 2, 3, 4, 5, 6, 7
 
 
 def _f32(X, name="X"):
@@ -244,3 +244,203 @@ class BisectingKMeans(_CentersMixin, _XCluster):
         nodes = [int(v) for v in memoryview(self._tree_nodes).cast("B").cast("i")]
         _, i, _ = self._call(_E_BISECT_PREDICT, x, self._tree_centers, [n, d] + nodes)
         return Array._from_flat(i[0], (n,), "<i4")
+
+
+class MeanShift(_XCluster):
+    """Mean shift with a flat kernel. Reference: scikit-learn
+    `cluster/_mean_shift.py`.
+
+    Every seed's shift loop is one device thread over all rows in order; the
+    bandwidth, when None, is scikit-learn's `estimate_bandwidth` (quantile
+    0.3, all rows) from the device's exact row order statistic. The center
+    merge (by intensity, then coordinates, a center within the bandwidth of
+    a stronger one dropped) and the labels (nearest center, the lowest index
+    on a tie) follow scikit-learn. `bin_seeding=True` is refused by name
+    (x_cluster/NOT_IMPLEMENTED.tsv). `bandwidth_` records the bandwidth used."""
+
+    def __init__(self, *, bandwidth=None, seeds=None, bin_seeding=False, min_bin_freq=1,
+                 cluster_all=True, n_jobs=None, max_iter=300):
+        self.bandwidth = bandwidth
+        self.seeds = seeds
+        self.bin_seeding = bin_seeding
+        self.min_bin_freq = min_bin_freq
+        self.cluster_all = cluster_all
+        self.n_jobs = n_jobs
+        self.max_iter = max_iter
+
+    def fit(self, X, y=None):
+        if self.bin_seeding:
+            raise NotImplementedError("mojolearn MeanShift: bin_seeding=True is not implemented "
+                                      "(x_cluster/NOT_IMPLEMENTED.tsv)")
+        x = _f32(X)
+        n, d = x.shape
+        seeds = None
+        if self.seeds is not None:
+            seeds = _f32(self.seeds, "seeds")
+            if seeds.shape[1] != d:
+                raise ValueError(f"seeds have {seeds.shape[1]} features, X has {d}")
+        bw = 0.0
+        if self.bandwidth is not None:
+            bw = float(self.bandwidth)
+            if not bw > 0:
+                raise ValueError(f"bandwidth needs to be greater than zero or None, got {bw:f}")
+        ip = [n, d, 0 if seeds is None else seeds.shape[0], 1 if self.cluster_all else 0, int(self.max_iter)]
+        f, i, s = self._call(_E_MEANSHIFT, x, seeds, ip, [bw])
+        kc = int(s[2])
+        self.cluster_centers_ = Array._from_flat(f[0], (kc, d), "<f4")
+        self.labels_ = Array._from_flat(i[0], (n,), "<i4")
+        self.bandwidth_ = float(s[0])
+        self.n_iter_ = int(s[1])
+        self.n_features_in_ = d
+        return self
+
+    def predict(self, X):
+        self._check_fitted("cluster_centers_")
+        return self._nearest(self._input_like_fit(X), self.cluster_centers_)[0]
+
+    def fit_predict(self, X, y=None):
+        return self.fit(X).labels_
+
+
+class OPTICS(_XCluster):
+    """OPTICS. Reference: scikit-learn `cluster/_optics.py`.
+
+    Euclidean only (metric 'minkowski' with p=2, or 'euclidean'). The n x n
+    distances and the core distances are the device's; the ordering loop is
+    the reference's sequential one with the lowest index on a reachability
+    tie; the xi and dbscan extractions are the reference's. Float32
+    throughout, and without the reference's rounding of the distances to
+    float precision, so reachability agrees at a tolerance. Transductive:
+    no predict, as in scikit-learn."""
+
+    def __init__(self, *, min_samples=5, max_eps=float("inf"), metric="minkowski", p=2,
+                 metric_params=None, cluster_method="xi", eps=None, xi=0.05,
+                 predecessor_correction=True, min_cluster_size=None, algorithm="auto",
+                 leaf_size=30, memory=None, n_jobs=None):
+        self.min_samples = min_samples
+        self.max_eps = max_eps
+        self.metric = metric
+        self.p = p
+        self.metric_params = metric_params
+        self.cluster_method = cluster_method
+        self.eps = eps
+        self.xi = xi
+        self.predecessor_correction = predecessor_correction
+        self.min_cluster_size = min_cluster_size
+        self.algorithm = algorithm
+        self.leaf_size = leaf_size
+        self.memory = memory
+        self.n_jobs = n_jobs
+
+    @staticmethod
+    def _size(v, n, name):
+        if isinstance(v, bool) or v is None:
+            raise ValueError(f"{name} must be an int >= 2 or a float in (0, 1]")
+        if isinstance(v, int) or (isinstance(v, float) and v > 1):
+            if int(v) != v or v < 2 or v > n:
+                raise ValueError(f"{name} must be no greater than the number of samples ({n}) and >= 2, got {v}")
+            return int(v)
+        if not 0 < v <= 1:
+            raise ValueError(f"{name} must be in (0, 1], got {v}")
+        return max(2, int(v * n))
+
+    def fit(self, X, y=None):
+        if not (self.metric == "euclidean" or (self.metric == "minkowski" and self.p == 2)):
+            raise NotImplementedError(f"mojolearn OPTICS: metric={self.metric!r} p={self.p!r} is not "
+                                      "implemented; euclidean only (x_cluster/NOT_IMPLEMENTED.tsv)")
+        if self.cluster_method not in ("xi", "dbscan"):
+            raise ValueError(f"cluster_method must be 'xi' or 'dbscan', got {self.cluster_method!r}")
+        x = _f32(X)
+        n, d = x.shape
+        ms = self._size(self.min_samples, n, "min_samples")
+        mcs = ms if self.min_cluster_size is None else self._size(self.min_cluster_size, n, "min_cluster_size")
+        max_eps = float(self.max_eps)
+        eps = max_eps if self.eps is None else float(self.eps)
+        if self.cluster_method == "dbscan" and eps > max_eps:
+            raise ValueError(f"Specify an epsilon smaller than {max_eps}. Got {eps}.")
+        if not 0 <= float(self.xi) <= 1:
+            raise ValueError("xi must be in [0, 1]")
+        ip = [n, d, ms, mcs, 0 if self.cluster_method == "xi" else 1, 1 if self.predecessor_correction else 0]
+        f, i, _ = self._call(_E_OPTICS, x, None, ip, [max_eps, float(self.xi), eps])
+        self.core_distances_ = Array._from_flat(f[0], (n,), "<f4")
+        self.reachability_ = Array._from_flat(f[1], (n,), "<f4")
+        self.ordering_ = Array._from_flat(i[0], (n,), "<i4")
+        self.predecessor_ = Array._from_flat(i[1], (n,), "<i4")
+        self.labels_ = Array._from_flat(i[2], (n,), "<i4")
+        if self.cluster_method == "xi":
+            self.cluster_hierarchy_ = Array._from_flat(i[3], (len(i[3]) // 2, 2), "<i4")
+        self.n_features_in_ = d
+        return self
+
+    def fit_predict(self, X, y=None):
+        return self.fit(X).labels_
+
+
+class AffinityPropagation(_XCluster):
+    """Affinity propagation. Reference: scikit-learn
+    `cluster/_affinity_propagation.py`.
+
+    S is minus the squared euclidean distance (or the precomputed matrix);
+    the default preference is its median. The responsibility and
+    availability updates run on the device over the resident n x n
+    matrices; the convergence window, the exemplar refinement and the labels
+    are the reference's. The tie noise is the reference's formula with
+    normals from the lane's seeded stream (`random_state=None` means 0), not
+    NumPy's, so a fit matches scikit-learn at a tolerance."""
+
+    def __init__(self, *, damping=0.5, max_iter=200, convergence_iter=15, copy=True,
+                 preference=None, affinity="euclidean", verbose=False, random_state=None):
+        self.damping = damping
+        self.max_iter = max_iter
+        self.convergence_iter = convergence_iter
+        self.copy = copy
+        self.preference = preference
+        self.affinity = affinity
+        self.verbose = verbose
+        self.random_state = random_state
+
+    def fit(self, X, y=None):
+        if self.affinity not in ("euclidean", "precomputed"):
+            raise ValueError(f"affinity must be 'euclidean' or 'precomputed', got {self.affinity!r}")
+        if not 0.5 <= float(self.damping) < 1:
+            raise ValueError(f"damping must be in [0.5, 1), got {self.damping}")
+        if int(self.max_iter) < 1 or int(self.convergence_iter) < 1:
+            raise ValueError("max_iter and convergence_iter must be >= 1")
+        x = _f32(X)
+        n, d = x.shape
+        pre = self.affinity == "precomputed"
+        if pre and n != d:
+            raise ValueError(f"The matrix of similarities must be a square array. Got {(n, d)} instead.")
+        pref_arr, mode, scalar = None, 0, 0.0
+        if self.preference is not None:
+            if isinstance(self.preference, (int, float)):
+                mode, scalar = 1, float(self.preference)
+            else:
+                pref_arr = _f32([list(self.preference)], "preference")
+                if pref_arr.shape[1] != n:
+                    raise ValueError("preference must be a scalar or have one value per sample")
+                mode = 2
+        ip = [n, d, 1 if pre else 0, mode, int(self.max_iter), int(self.convergence_iter), _seed(self.random_state)]
+        f, i, s = self._call(_E_AFFINITY, x, pref_arr, ip, [float(self.damping), scalar])
+        k = len(i[0])
+        self.cluster_centers_indices_ = Array._from_flat(i[0], (k,), "<i4")
+        self.labels_ = Array._from_flat(i[1], (n,), "<i4")
+        self.affinity_matrix_ = Array._from_flat(f[0], (n, n), "<f4")
+        self.n_iter_ = int(s[0])
+        self.n_features_in_ = d
+        if not pre:
+            rows = [x[int(c)] for c in self.cluster_centers_indices_]
+            self.cluster_centers_ = Array._from_flat([float(v) for r in rows for v in r], (k, d), "<f4")
+        return self
+
+    def predict(self, X):
+        self._check_fitted("labels_")
+        if self.affinity == "precomputed":
+            raise ValueError("Predict method is not supported when affinity='precomputed'.")
+        x = self._input_like_fit(X)
+        if self.cluster_centers_.shape[0] == 0:
+            return Array._from_flat([-1] * x.shape[0], (x.shape[0],), "<i4")
+        return self._nearest(x, self.cluster_centers_)[0]
+
+    def fit_predict(self, X, y=None):
+        return self.fit(X).labels_

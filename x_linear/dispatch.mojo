@@ -12,6 +12,8 @@ from checks.numerics import identical_sigmoid, ftz
 from x_linear.sgd import sgd_fit
 from x_linear.glm import glm_fit
 from x_linear.huber import huber_fit
+from x_linear.bayes import bayes_ridge_fit, ard_fit
+from x_linear.lars import lars_fit
 
 comptime ALGO_SGD = 1
 comptime ALGO_GLM = 2
@@ -37,6 +39,12 @@ def fit_dispatch(algo: Int, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: F
         glm_fit(x, y, n, d, ip, fp, res, fw, iw)
     elif algo == ALGO_HUBER:
         huber_fit(x, y, n, d, ip, fp, res, fw, iw)
+    elif algo == ALGO_BAYES:
+        bayes_ridge_fit(x, y, n, d, ip, fp, res, fw, iw)
+    elif algo == ALGO_ARD:
+        ard_fit(x, y, n, d, ip, fp, res, fw, iw)
+    elif algo == ALGO_LARS:
+        lars_fit(x, y, n, d, ip, fp, res, fw, iw)
 
 
 def decision_one(x: FP, i: Int, d: Int, wb: FP, c: Int, link: Int) -> Float32:

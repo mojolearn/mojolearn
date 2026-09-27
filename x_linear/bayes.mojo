@@ -1,0 +1,257 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+"""BayesianRidge and ARDRegression (lane/algos-linear, 2026-09-27).
+
+Reference: scikit-learn `sklearn/linear_model/_bayes.py`:
+  * `BayesianRidge.fit` / `_update_coef_`: the evidence iteration
+    gamma = sum(alpha ev / (lambda + alpha ev)), lambda = (gamma + 2 l1) /
+    (|w|^2 + 2 l2), alpha = (n - gamma + 2 a1) / (sse + 2 a2), stopping on
+    sum|w_old - w| < tol, then one last coefficient update. Theirs takes the
+    SVD of X; here the eigenpairs of the centered Gram X'X come from cyclic
+    Jacobi (x_linear/ops.mojo `jacobi_eig`), ev = S^2, and
+    w = V diag(1 / (ev + lambda/alpha)) V' X'y.
+  * `ARDRegression.fit` / `_update_sigma`: sigma = inv(diag(lambda_keep) +
+    alpha X_keep'X_keep) by Cholesky (theirs pinvh; the Woodbury branch for
+    n < d is the same matrix), coef_keep = alpha sigma X_keep'y, pruning at
+    lambda >= threshold_lambda, and the final sigma/coef update.
+Centering (fit_intercept) is their `_preprocess_data`: column means and the
+target mean, rows ascending. float32 throughout.
+"""
+from x_linear.ops import (
+    FP, IP, fa, fs, fm, fd, fmad, fabs, fmax, ld, st, ldi, sti, i2f, fill, copy,
+    cholesky, chol_solve, jacobi_eig, centered_gram, centered_xty, mean_of,
+)
+
+
+def _center(x: FP, y: FP, n: Int, d: Int, fi: Bool, fw: FP, xm: Int, iw: IP) -> Float32:
+    if fi:
+        for j in range(d):
+            var acc = Float32(0)
+            for i in range(n):
+                acc = fa(acc, ld(x, i * d + j))
+            st(fw, xm + j, fd(acc, i2f(n)))
+        return mean_of(y, n)
+    fill(fw, xm, d, Float32(0))
+    return Float32(0)
+
+
+def _sse(x: FP, y: FP, n: Int, d: Int, fw: FP, xm: Int, ym: Float32, coef: FP, coff: Int) -> Float32:
+    var acc = Float32(0)
+    for i in range(n):
+        var p = Float32(0)
+        for j in range(d):
+            p = fmad(fs(ld(x, i * d + j), ld(fw, xm + j)), ld(coef, coff + j), p)
+        var r = fs(fs(ld(y, i), ym), p)
+        acc = fmad(r, r, acc)
+    return acc
+
+
+def _intercept(d: Int, fw: FP, xm: Int, ym: Float32, coef: FP, coff: Int) -> Float32:
+    var acc = Float32(0)
+    for j in range(d):
+        acc = fmad(ld(fw, xm + j), ld(coef, coff + j), acc)
+    return fs(ym, acc)
+
+
+def _var(y: FP, n: Int) -> Float32:
+    var m = mean_of(y, n)
+    var acc = Float32(0)
+    for i in range(n):
+        var r = fs(ld(y, i), m)
+        acc = fmad(r, r, acc)
+    return fd(acc, i2f(n))
+
+
+def bayes_ridge_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
+    """ip: [max_iter, fit_intercept]; fp: [tol, alpha_1, alpha_2, lambda_1,
+    lambda_2, alpha_init (<0: none), lambda_init (<0: none)].
+    res: coef d, intercept, alpha_, lambda_, n_iter.
+    fw: xm d | G d*d | xty d | V d*d | vty d | old d | tmp d."""
+    var max_iter = ldi(ip, 0)
+    var fi = ldi(ip, 1) != 0
+    var tol = ld(fp, 0)
+    var a1 = ld(fp, 1)
+    var a2 = ld(fp, 2)
+    var l1 = ld(fp, 3)
+    var l2 = ld(fp, 4)
+    var xm = 0
+    var gg = d
+    var xty = gg + d * d
+    var vv = xty + d
+    var vty = vv + d * d
+    var old = vty + d
+    var tmp = old + d
+    var ym = _center(x, y, n, d, fi, fw, xm, iw)
+    centered_gram(x, n, d, fw, xm, fw, gg)
+    var yc = ym
+    # X'y on centered data
+    for j in range(d):
+        var acc = Float32(0)
+        var mj = ld(fw, xm + j)
+        for i in range(n):
+            acc = fmad(fs(ld(x, i * d + j), mj), fs(ld(y, i), yc), acc)
+        st(fw, xty + j, acc)
+    jacobi_eig(fw, gg, fw, vv, d, 60)
+    for j in range(d):
+        var ev = ld(fw, gg + j * d + j)
+        st(fw, tmp + j, fmax(Float32(0), ev))
+        var acc = Float32(0)
+        for k in range(d):
+            acc = fmad(ld(fw, vv + k * d + j), ld(fw, xty + k), acc)
+        st(fw, vty + j, acc)
+    var alpha = ld(fp, 5)
+    if alpha < 0:
+        alpha = fd(Float32(1), fa(_var(y, n), Float32(1.1920929e-07)))
+    var lam = ld(fp, 6)
+    if lam < 0:
+        lam = Float32(1)
+    var iters = 0
+    for it in range(max_iter + 1):
+        # coef = V diag(1/(ev + lam/alpha)) V' X'y
+        var ratio = fd(lam, alpha)
+        for j in range(d):
+            var acc = Float32(0)
+            for k in range(d):
+                acc = fmad(ld(fw, vv + j * d + k), fd(ld(fw, vty + k), fa(ld(fw, tmp + k), ratio)), acc)
+            st(res, j, acc)
+        if it == max_iter:
+            break  # the last update after the loop
+        iters = it + 1
+        var sse = _sse(x, y, n, d, fw, xm, ym, res, 0)
+        var gamma = Float32(0)
+        for k in range(d):
+            var aev = fm(alpha, ld(fw, tmp + k))
+            gamma = fa(gamma, fd(aev, fa(lam, aev)))
+        var wn = Float32(0)
+        for j in range(d):
+            wn = fmad(ld(res, j), ld(res, j), wn)
+        lam = fd(fa(gamma, fm(Float32(2), l1)), fa(wn, fm(Float32(2), l2)))
+        alpha = fd(fa(fs(i2f(n), gamma), fm(Float32(2), a1)), fa(sse, fm(Float32(2), a2)))
+        if it != 0:
+            var delta = Float32(0)
+            for j in range(d):
+                delta = fa(delta, fabs(fs(ld(fw, old + j), ld(res, j))))
+            if delta < tol:
+                # their loop breaks here and the update below the loop runs
+                var ratio2 = fd(lam, alpha)
+                for j in range(d):
+                    var acc = Float32(0)
+                    for k in range(d):
+                        acc = fmad(ld(fw, vv + j * d + k), fd(ld(fw, vty + k), fa(ld(fw, tmp + k), ratio2)), acc)
+                    st(res, j, acc)
+                break
+        copy(fw, old, res, 0, d)
+    st(res, d, _intercept(d, fw, xm, ym, res, 0) if fi else Float32(0))
+    st(res, d + 1, alpha)
+    st(res, d + 2, lam)
+    st(res, d + 3, i2f(iters))
+
+
+def _ard_sigma(d: Int, fw: FP, gg: Int, aa: Int, sg: Int, lamo: Int, alpha: Float32, iw: IP, keep: Int) -> Int:
+    """sigma (dk x dk, over the kept features in ascending order) = inv(diag(lambda) + alpha G). Returns dk."""
+    var dk = 0
+    for j in range(d):
+        if ldi(iw, keep + j) != 0:
+            sti(iw, keep + d + dk, j)
+            dk += 1
+    for a in range(dk):
+        var ja = ldi(iw, keep + d + a)
+        for b in range(dk):
+            var jb = ldi(iw, keep + d + b)
+            var v = fm(alpha, ld(fw, gg + ja * d + jb))
+            if a == b:
+                v = fa(v, ld(fw, lamo + ja))
+            st(fw, aa + a * dk + b, v)
+    _ = cholesky(fw, aa, dk)
+    for c in range(dk):
+        for r in range(dk):
+            st(fw, sg + c * dk + r, Float32(1) if r == c else Float32(0))
+        chol_solve(fw, aa, dk, fw, sg + c * dk)
+    return dk
+
+
+def _ard_coef(d: Int, dk: Int, fw: FP, sg: Int, xty: Int, alpha: Float32, iw: IP, keep: Int, res: FP):
+    fill(res, 0, d, Float32(0))
+    for a in range(dk):
+        var acc = Float32(0)
+        for b in range(dk):
+            acc = fmad(ld(fw, sg + b * dk + a), ld(fw, xty + ldi(iw, keep + d + b)), acc)
+        st(res, ldi(iw, keep + d + a), fm(alpha, acc))
+
+
+def ard_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
+    """ip: [max_iter, fit_intercept]; fp: [tol, alpha_1, alpha_2, lambda_1,
+    lambda_2, threshold_lambda].
+    res: coef d, intercept, alpha_, lambda_ d, n_iter.
+    fw: xm d | G d*d | xty d | A d*d | sigma d*d | lambda d | old d.
+    iw: keep d | kept index d."""
+    var max_iter = ldi(ip, 0)
+    var fi = ldi(ip, 1) != 0
+    var tol = ld(fp, 0)
+    var a1 = ld(fp, 1)
+    var a2 = ld(fp, 2)
+    var l1 = ld(fp, 3)
+    var l2 = ld(fp, 4)
+    var thr = ld(fp, 5)
+    var xm = 0
+    var gg = d
+    var xty = gg + d * d
+    var aa = xty + d
+    var sg = aa + d * d
+    var lamo = sg + d * d
+    var old = lamo + d
+    var keep = 0
+    var ym = _center(x, y, n, d, fi, fw, xm, iw)
+    centered_gram(x, n, d, fw, xm, fw, gg)
+    for j in range(d):
+        var acc = Float32(0)
+        var mj = ld(fw, xm + j)
+        for i in range(n):
+            acc = fmad(fs(ld(x, i * d + j), mj), fs(ld(y, i), ym), acc)
+        st(fw, xty + j, acc)
+    var alpha = fd(Float32(1), fa(_var(y, n), Float32(1.1920929e-07)))
+    fill(fw, lamo, d, Float32(1))
+    fill(res, 0, d, Float32(0))
+    for j in range(d):
+        sti(iw, keep + j, 1)
+    var iters = 0
+    var any_kept = True
+    for it in range(max_iter):
+        iters = it + 1
+        var dk = _ard_sigma(d, fw, gg, aa, sg, lamo, alpha, iw, keep)
+        _ard_coef(d, dk, fw, sg, xty, alpha, iw, keep, res)
+        var sse = _sse(x, y, n, d, fw, xm, ym, res, 0)
+        var gsum = Float32(0)
+        for a in range(dk):
+            var j = ldi(iw, keep + d + a)
+            var gam = fs(Float32(1), fm(ld(fw, lamo + j), ld(fw, sg + a * dk + a)))
+            gsum = fa(gsum, gam)
+            var cj = ld(res, j)
+            st(fw, lamo + j, fd(fa(gam, fm(Float32(2), l1)), fa(fm(cj, cj), fm(Float32(2), l2))))
+        alpha = fd(fa(fs(i2f(n), gsum), fm(Float32(2), a1)), fa(sse, fm(Float32(2), a2)))
+        any_kept = False
+        for j in range(d):
+            var k = 1 if ld(fw, lamo + j) < thr else 0
+            sti(iw, keep + j, k)
+            if k == 0:
+                st(res, j, Float32(0))
+            else:
+                any_kept = True
+        if it > 0:
+            var delta = Float32(0)
+            for j in range(d):
+                delta = fa(delta, fabs(fs(ld(fw, old + j), ld(res, j))))
+            if delta < tol:
+                break
+        copy(fw, old, res, 0, d)
+        if not any_kept:
+            break
+    if any_kept:
+        var dk = _ard_sigma(d, fw, gg, aa, sg, lamo, alpha, iw, keep)
+        _ard_coef(d, dk, fw, sg, xty, alpha, iw, keep, res)
+    else:
+        fill(res, 0, d, Float32(0))
+    st(res, d, _intercept(d, fw, xm, ym, res, 0) if fi else Float32(0))
+    st(res, d + 1, alpha)
+    copy(res, d + 2, fw, lamo, d)
+    st(res, d + 2 + d, i2f(iters))
