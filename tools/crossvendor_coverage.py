@@ -2,6 +2,13 @@
 
 This audits one-device cross-vendor records. It does not qualify physical
 multi-GPU execution, which requires the witnessed ``verify --par`` comparison.
+
+A tool, not a package module: tools/audit_parallel_coverage.py loads it by
+file path so the audit never initializes mojolearn or a native binding, and
+nothing in the shipped library calls it. It lives beside that CLI (and
+tools/identity_break.py, the harness it reads) rather than inside
+python/mojolearn/, where it shipped in every wheel as an import-unreachable
+orphan.
 """
 import re
 from collections import Counter
@@ -18,15 +25,13 @@ def _na(value):
             and not value.startswith(('n/a:skipped', 'n/a:UNDECLARED')))
 
 
-def parallel_contract(harness, reference=None):
+def parallel_contract(harness, reference):
     """Declare expected parts independently of which table entries exist.
 
     Core probes return their N/A declarations at runtime. Their ``recorded``
     contract requires actual applicability evidence and every numerical vendor.
     The harness independently declares parts requiring numerical output.
     """
-    if reference is None:
-        from . import _verify_reference as reference
     contracts = {}
     for lane in sorted(n for n in harness.LANES if n.startswith('par-')):
         parts = {part: 'recorded' for part in reference.PARTS + reference.OPTIONAL_PARTS}

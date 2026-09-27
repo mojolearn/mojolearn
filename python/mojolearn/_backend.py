@@ -169,7 +169,7 @@ from ._version import __version__ as _CORE_VERSION
 # `subprocess.run([sys.executable, ...])` inherits them, and on CPython 3.11
 # that child took its executable and prefix from PYTHONEXECUTABLE: it came up
 # as the pixi env's python3 with the venv's site-packages gone and `import
-# numpy` failing (tests/test_crossvendor_coverage.py's CLI test, red on 3.11
+# numpy` failing (test_crossvendor_coverage.py's CLI test, red on 3.11
 # only; 3.10 and 3.14 ignore the variable on Linux). The runtime has read them
 # by the time exec_module returns, so every binding load restores the
 # caller's environment: a variable that was absent is removed again and one
