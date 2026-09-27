@@ -257,3 +257,15 @@ class GRUClassifier(_RecurrentClassifier):
     """GRU layers (`nn.GRU`, batch_first) under a linear head, softmax
     cross-entropy."""
     _CELL = "gru"
+
+
+class RNNRegressor(_RecurrentRegressor):
+    """Elman RNN layers (`nn.RNN`, batch_first; nonlinearity 'tanh' or
+    'relu') under a linear head, mean squared error."""
+    _CELL = "rnn"
+
+
+class RNNClassifier(_RecurrentClassifier):
+    """Elman RNN layers (`nn.RNN`, batch_first) under a linear head, softmax
+    cross-entropy."""
+    _CELL = "rnn"
