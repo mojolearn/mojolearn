@@ -32,7 +32,7 @@ from ._array import Array
 from ._buffer import as_f32_c, addr_ro
 from ._labels import encode_labels, decode_labels
 
-__all__ = ["RobustScaler", "MaxAbsScaler", "OrdinalEncoder", "OneHotEncoder", "TargetEncoder"]
+__all__ = ["RobustScaler", "MaxAbsScaler", "OrdinalEncoder", "OneHotEncoder", "TargetEncoder", "SimpleImputer"]
 
 _BINDING = "_mojolearn_x_prep"
 
@@ -41,7 +41,7 @@ _OPS = dict(
     sort_cols=0, col_stats=1, quantile=2, affine=3, scale_params=4, unique_cols=5, mode_cols=6,
     lookup=7, count_neg=8, onehot=9, i2f=10, f2i=11, binarize=12, matmul=13, row_softmax=14,
     row_argmax=15, class_stats=16, center_rows=17, eigh=18, where_neg=19,
-    te_global=20, te_enc=21, te_apply=22,
+    te_global=20, te_enc=21, te_apply=22, mark_missing=23, fill=24,
 )
 _PARAMS = 14
 _NONE = -1
@@ -566,3 +566,105 @@ class TargetEncoder(_PrepBase):
         pr.stage("te_apply", n * d * T, codes, n, d, T, _NONE, enc, cmax, meta, 0, out)
         pr.run(self.numeric_mode_)
         return pr.get(out, (n, d * T))
+
+
+# ---------------------------------------------------------------- imputer
+def _is_nan_value(v):
+    return isinstance(v, float) and v != v
+
+
+def _mark_missing(pr, xo, count, missing_values):
+    """Stages that turn a numeric `missing_values` into NaN; returns the offset
+    to read (the input itself when missing_values is NaN)."""
+    if missing_values is None or _is_nan_value(missing_values):
+        return xo
+    val = pr.put_scalar(missing_values)
+    out = pr.alloc(count)
+    pr.stage("mark_missing", count, xo, count, val, out)
+    return out
+
+
+class SimpleImputer(_PrepBase):
+    """sklearn.impute.SimpleImputer, numeric: strategy 'mean', 'median'
+    (numpy's linear percentile of the non-missing entries), 'most_frequent'
+    (the smallest on a tie) or 'constant'. An all-missing column is dropped
+    from the output unless `keep_empty_features` (its statistic is NaN, as in
+    the reference; with keep_empty_features it is 0, or fill_value).
+    add_indicator and callable strategies are refused."""
+    _parameters = ("missing_values", "strategy", "fill_value", "copy", "add_indicator", "keep_empty_features")
+
+    def __init__(self, *, missing_values=float("nan"), strategy="mean", fill_value=None, copy=True,
+                 add_indicator=False, keep_empty_features=False):
+        self.missing_values = missing_values
+        self.strategy = strategy
+        self.fill_value = fill_value
+        self.copy = copy
+        self.add_indicator = add_indicator
+        self.keep_empty_features = keep_empty_features
+
+    def fit(self, X, y=None):
+        if self.add_indicator:
+            raise NotImplementedError("mojolearn: SimpleImputer(add_indicator=True) is not implemented")
+        if self.strategy not in ("mean", "median", "most_frequent", "constant"):
+            raise NotImplementedError(f"mojolearn: SimpleImputer strategy {self.strategy!r} is not implemented")
+        if self.strategy == "constant" and self.fill_value is not None and \
+                not isinstance(self.fill_value, numbers.Real):
+            raise TypeError("mojolearn: SimpleImputer fill_value must be numeric")
+        arr = _x2d(X)
+        n, d = arr.shape
+        mode = _mode()
+        pr = _Prog()
+        xo = _mark_missing(pr, pr.put(arr), n * d, self.missing_values)
+        so = pr.alloc(n * d)
+        st = pr.alloc(6 * d)
+        med = pr.alloc(d)
+        mf = pr.alloc(d)
+        half = pr.put_list([0.5])
+        pr.stage("sort_cols", d, xo, n, d, so, 0)
+        pr.stage("col_stats", d, xo, n, d, st)
+        if self.strategy == "median":
+            pr.stage("quantile", d, so, n, d, half, 1, med, st)
+        if self.strategy == "most_frequent":
+            pr.stage("mode_cols", d, so, n, d, mf, _NONE)
+        pr.run(mode)
+        counts = [int(v) for v in pr.values(st, d)]
+        empty = [c == 0 for c in counts]
+        if self.strategy == "constant":
+            fv = 0.0 if self.fill_value is None else float(self.fill_value)
+            stats = [fv] * d
+            fill = list(stats)
+        else:
+            src = {"mean": st + d, "median": med, "most_frequent": mf}[self.strategy]
+            stats = pr.values(src, d)
+            fill = [0.0 if e else s for s, e in zip(stats, empty)]
+        # the reference: an all-missing column's statistic is NaN and the
+        # column is dropped, unless keep_empty_features (then 0, or fill_value)
+        for j in range(d):
+            if empty[j] and not self.keep_empty_features:
+                stats[j] = float("nan")
+            elif empty[j] and self.strategy != "constant":
+                stats[j] = 0.0
+        if self.strategy == "constant" or any(empty):
+            self.statistics_ = Array.from_list(stats, "<f4")
+            self._fill = Array.from_list(fill, "<f4")
+        else:
+            self.statistics_ = pr.get(src, d)
+            self._fill = self.statistics_
+        self._keep = [j for j in range(d) if self.keep_empty_features or not empty[j]]
+        self.numeric_mode_, self.n_features_in_ = mode, d
+        return self
+
+    def transform(self, X):
+        self._check_fitted()
+        arr = _x2d(X)
+        self._check_width(arr)
+        n, d = arr.shape
+        dout = len(self._keep)
+        pr = _Prog()
+        xo = _mark_missing(pr, pr.put(arr), n * d, self.missing_values)
+        so = pr.put(self._fill)
+        ko = pr.put_list(self._keep)
+        out = pr.alloc(n * dout)
+        pr.stage("fill", n * dout, xo, n, d, so, out, ko, dout)
+        pr.run(self.numeric_mode_)
+        return pr.get(out, (n, dout))

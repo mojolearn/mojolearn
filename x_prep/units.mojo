@@ -7,12 +7,12 @@ from x_prep.prims import (
     sort_cols_unit, col_stats_unit, quantile_unit, affine_unit, scale_params_unit,
     unique_cols_unit, mode_cols_unit, lookup_unit, count_neg_unit, onehot_unit,
     i2f_unit, f2i_unit, binarize_unit, matmul_unit, row_softmax_unit, row_argmax_unit,
-    class_stats_unit, center_rows_unit, where_neg_unit,
+    class_stats_unit, center_rows_unit, where_neg_unit, mark_missing_unit, fill_unit,
 )
 from x_prep.eigh import eigh_unit
 from x_prep.target import te_global_unit, te_enc_unit, te_apply_unit
 
-comptime N_OPS = 23
+comptime N_OPS = 25
 
 
 @always_inline
@@ -63,3 +63,7 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
         te_enc_unit(t, f, q)
     comptime if OP == 22:
         te_apply_unit(t, f, q)
+    comptime if OP == 23:
+        mark_missing_unit(t, f, q)
+    comptime if OP == 24:
+        fill_unit(t, f, q)

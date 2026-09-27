@@ -24,14 +24,14 @@ FAMILIES = (
         training_lanes=(
             "x-prep-robust-scaler", "x-prep-maxabs-scaler",
             "x-prep-ordinal-encoder", "x-prep-onehot-encoder",
-            "x-prep-target-encoder",
+            "x-prep-target-encoder", "x-prep-simple-imputer",
         ),
         inference_lanes=(),
         forest_kinds=(),
         classes=(
             "RobustScaler", "MaxAbsScaler",
             "OrdinalEncoder", "OneHotEncoder",
-            "TargetEncoder",
+            "TargetEncoder", "SimpleImputer",
         ),
         display="preprocessing additions, naive Bayes and discriminant analysis",
         host_modules=(
@@ -53,6 +53,7 @@ TRAINING_LANE_NAMES = {
     "x-prep-ordinal-encoder": "OrdinalEncoder",
     "x-prep-onehot-encoder": "OneHotEncoder",
     "x-prep-target-encoder": "TargetEncoder",
+    "x-prep-simple-imputer": "SimpleImputer",
 }
 PUBLIC_PENDING_LANES = {
     "x-prep-robust-scaler": "no reference",
@@ -60,4 +61,5 @@ PUBLIC_PENDING_LANES = {
     "x-prep-ordinal-encoder": "no reference",
     "x-prep-onehot-encoder": "no reference",
     "x-prep-target-encoder": "no reference",
+    "x-prep-simple-imputer": "no reference",
 }
