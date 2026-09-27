@@ -9,8 +9,9 @@ from std.python import PythonObject
 
 from checks.numerics import ftz, identical_mul
 from sequence.exec import Exec
-from sequence.ops import FP, OP_STL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD
+from sequence.ops import FP, OP_STL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD
 from sequence.recurrent import gemm
+from sequence.mlp_fit import MLPNet, mlp_fit, mlp_predict
 from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, opt_step, rnn_fit, rnn_predict
 
 
@@ -48,7 +49,7 @@ def net_of(ip: PythonObject) raises -> Net:
 
 def opt_of(ip: PythonObject, at: Int, fp: PythonObject, fat: Int) raises -> OptConfig:
     var kind = ival(ip, at)
-    if kind < OPT_SGD or kind > OPT_ADAGRAD:
+    if kind < OPT_SGD or kind > OPT_LION or kind == OPT_SK_ADAM or kind == OPT_SK_SGD:
         raise Error("sequence: unknown optimizer kind " + String(kind))
     return OptConfig(kind, ival(ip, at + 1), fval(fp, fat), fval(fp, fat + 1), fval(fp, fat + 2),
                      fval(fp, fat + 3), fval(fp, fat + 4))
@@ -351,3 +352,61 @@ def var_forecast_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) r
     ex.sync()
     ex.download(fptr(addrs[2], "out"), out, h * K)
     return PythonObject(h * K)
+
+
+def _mlp_net(ip: PythonObject, at: Int, D: Int, O: Int, act: Int, out_act: Int) raises -> MLPNet:
+    var nh = ival(ip, at)
+    var sizes = List[Int]()
+    sizes.append(D)
+    for k in range(nh):
+        var h = ival(ip, at + 1 + k)
+        if h < 1:
+            raise Error("mlp: every hidden layer needs at least one unit")
+        sizes.append(h)
+    sizes.append(O)
+    if act < 0 or act > 3 or out_act < 0 or out_act > 4:
+        raise Error("mlp: unknown activation code")
+    return MLPNet(sizes^, act, out_act)
+
+
+def mlp_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
+    """addrs = [X (N, D), Y (N, O), params (in/out), loss_curve (max_iter, out)];
+    ip = [N, D, O, act, out_act, loss, solver, lr_schedule, nesterov, batch,
+    max_iter, shuffle, seed, n_iter_no_change, n_hidden, h_1, ..., h_n];
+    fp = [lr, beta1, beta2, eps, momentum, power_t, alpha, tol]. Returns n_iter."""
+    if len(addrs) != 4 or len(fp) != 8 or len(ip) < 15:
+        raise Error("mlp_fit: requires 4 addresses, >= 15 integer and 8 float parameters")
+    var N = ival(ip, 0)
+    var D = ival(ip, 1)
+    var O = ival(ip, 2)
+    if N < 1 or D < 1 or O < 1 or N >= 16777216:
+        raise Error("mlp_fit: N, D, O >= 1 and N < 2^24")
+    var net = _mlp_net(ip, 14, D, O, ival(ip, 3), ival(ip, 4))
+    if len(ip) != 15 + len(net.sizes) - 2:
+        raise Error("mlp_fit: the hidden layer count does not match the sizes given")
+    var batch = ival(ip, 9)
+    var max_iter = ival(ip, 10)
+    if batch < 1 or max_iter < 1:
+        raise Error("mlp_fit: batch_size and max_iter must be >= 1")
+    var n_iter = mlp_fit(ex, net, fptr(addrs[0], "X"), fptr(addrs[1], "Y"), N, fptr(addrs[2], "params"),
+                         fptr(addrs[3], "loss_curve"), ival(ip, 5), ival(ip, 6), ival(ip, 7), ival(ip, 8) != 0,
+                         batch, max_iter, ival(ip, 11) != 0, UInt64(ival(ip, 12)), ival(ip, 13),
+                         fval(fp, 0), fval(fp, 1), fval(fp, 2), fval(fp, 3), fval(fp, 4),
+                         Float64(py=fp[5]), fval(fp, 6), Float64(py=fp[7]))
+    return PythonObject(n_iter)
+
+
+def mlp_predict_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
+    """addrs = [X (N, D), params, out (N, O)]; ip = [N, D, O, act, out_act,
+    chunk, n_hidden, h_1, ..., h_n]."""
+    if len(addrs) != 3 or len(ip) < 7:
+        raise Error("mlp_predict: requires 3 addresses and >= 7 integer parameters")
+    var N = ival(ip, 0)
+    var D = ival(ip, 1)
+    var O = ival(ip, 2)
+    var chunk = ival(ip, 5)
+    if N < 1 or D < 1 or O < 1 or chunk < 1:
+        raise Error("mlp_predict: N, D, O, chunk >= 1")
+    var net = _mlp_net(ip, 6, D, O, ival(ip, 3), ival(ip, 4))
+    mlp_predict(ex, net, fptr(addrs[0], "X"), N, fptr(addrs[1], "params"), fptr(addrs[2], "out"), chunk)
+    return PythonObject(N * O)

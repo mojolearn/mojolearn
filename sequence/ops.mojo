@@ -62,6 +62,13 @@ comptime OP_ROWSCALE = 20
 comptime OP_VAR_FORECAST = 21
 comptime OP_SUB = 22
 comptime OP_SCALE = 23
+comptime OP_ACT = 24
+comptime OP_ACT_BWD = 25
+comptime OP_MLP_ROWLOSS = 26
+comptime OP_SUMSQ = 27
+comptime OP_MLP_BLOSS = 28
+comptime OP_L2GRAD = 29
+comptime OP_DIVS = 30
 
 # ------------------------------------------------------------------ cells
 comptime CELL_RNN_TANH = 0
@@ -75,6 +82,9 @@ comptime OPT_ADAM = 1
 comptime OPT_ADAMW = 2
 comptime OPT_RMSPROP = 3
 comptime OPT_ADAGRAD = 4
+comptime OPT_SK_ADAM = 5
+comptime OPT_SK_SGD = 6
+comptime OPT_LION = 7
 
 
 def gates_of(cell: Int) -> Int:
@@ -493,6 +503,43 @@ def op_opt(t: Int, a: Args):
             st(a.p0, t, fma3(-lr, buf, p))
         else:
             st(a.p0, t, fma3(-lr, ftz(identical_div(g, avg)), p))
+    elif kind == OPT_SK_ADAM:
+        # sklearn AdamOptimizer: m, v as Adam; p += -lr_t m / (sqrt(v) + eps),
+        # lr_t = lr sqrt(1 - b2^t) / (1 - b1^t) a host scalar (f5)
+        var b1 = a.f1
+        var b2 = a.f2
+        var m = fma3(b1, ld(a.p2, t), mul(sub(Float32(1.0), b1), g))
+        var v = fma3(b2, ld(a.p3, t), mul(sub(Float32(1.0), b2), mul(g, g)))
+        st(a.p2, t, m)
+        st(a.p3, t, v)
+        var den = add(ftz(identical_sqrt(v)), a.f3)
+        st(a.p0, t, add(p, ftz(identical_div(mul(-a.f5, m), den))))
+    elif kind == OPT_SK_SGD:
+        # sklearn SGDOptimizer: vel = mu vel - lr g; nesterov: the step is
+        # mu vel - lr g with the new vel, else vel; p += step
+        var mu = a.f1
+        var lg = mul(lr, g)
+        var vel = fma3(mu, ld(a.p2, t), -lg)
+        st(a.p2, t, vel)
+        var step = vel
+        if (a.i2 & 1) != 0:
+            step = fma3(mu, vel, -lg)
+        st(a.p0, t, add(p, step))
+    elif kind == OPT_LION:
+        # Lion (Chen et al. 2023; lion-pytorch): p *= 1 - lr wd;
+        # p -= lr sign(b1 m + (1 - b1) g); m = b2 m + (1 - b2) g
+        var b1 = a.f1
+        var b2 = a.f2
+        var pd = mul(p, sub(Float32(1.0), mul(lr, wd)))
+        var m = ld(a.p2, t)
+        var c = fma3(b1, m, mul(sub(Float32(1.0), b1), g))
+        var u = Float32(0.0)
+        if c > Float32(0.0):
+            u = Float32(1.0)
+        elif c < Float32(0.0):
+            u = Float32(-1.0)
+        st(a.p0, t, fma3(-lr, u, pd))
+        st(a.p2, t, fma3(b2, m, mul(sub(Float32(1.0), b2), g)))
     elif kind == OPT_ADAGRAD:
         # torch.optim.Adagrad: clr = lr / (1 + (t - 1) lr_decay) (f5, host);
         # sum += g^2; p -= clr g / (sqrt(sum) + eps)

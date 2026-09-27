@@ -30,7 +30,7 @@ from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty
 from ._mode import NumericModeMixin
 
-__all__ = ["LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA"]
+__all__ = ["LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", "PolynomialCountSketch", "AdditiveChi2Sampler", "SkewedChi2Sampler", "LabelPropagation", "LabelSpreading", "KNNImputer"]
 
 # x_neighbors/items.mojo's codes
 _KERNELS = {"linear": 0, "poly": 1, "polynomial": 1, "rbf": 2, "sigmoid": 3, "laplacian": 4,
@@ -592,3 +592,409 @@ class KernelPCA(_XNeighbors):
 
     def inverse_transform(self, X):
         raise NotImplementedError("KernelPCA: inverse_transform needs fit_inverse_transform, which is not implemented")
+
+
+# ====================================================================== RandomState
+class _LegacyRandomState:
+    """numpy's legacy `RandomState(seed)` stream (MT19937 seeded by
+    init_genrand, what `check_random_state(int)` builds), in integers and
+    IEEE doubles only, so a sampler draws exactly scikit-learn's numbers on
+    every box and needs no NumPy. Python's `random.Random` IS MT19937 with
+    numpy's 53-bit double (`genrand_res53`); only the seeding differs, so the
+    state is set directly."""
+
+    def __init__(self, seed):
+        import random
+        if seed is None:
+            raise ValueError("random_state=None draws from the OS; pass an int for a reproducible fit")
+        if not isinstance(seed, int) or isinstance(seed, bool):
+            raise NotImplementedError("random_state must be an int here (a RandomState instance is not carried)")
+        mt = [0] * 624
+        mt[0] = seed & 0xFFFFFFFF
+        for i in range(1, 624):
+            mt[i] = (1812433253 * (mt[i - 1] ^ (mt[i - 1] >> 30)) + i) & 0xFFFFFFFF
+        self._r = random.Random()
+        self._r.setstate((3, tuple(mt) + (624,), None))
+
+    def random_sample(self, count):
+        return [self._r.random() for _ in range(count)]
+
+    def uniform(self, low, high, count):
+        return [low + (high - low) * self._r.random() for _ in range(count)]
+
+    def randint(self, high, count):
+        """`randint(0, high, size)`, the legacy masked rejection draw."""
+        rng = high - 1
+        if rng == 0:
+            return [0] * count
+        mask = rng
+        for sh in (1, 2, 4, 8, 16):
+            mask |= mask >> sh
+        out = []
+        for _ in range(count):
+            while True:
+                v = self._r.getrandbits(32) & mask
+                if v <= rng:
+                    break
+            out.append(v)
+        return out
+
+
+# ====================================================================== PolynomialCountSketch
+class PolynomialCountSketch(_XNeighbors):
+    """Polynomial kernel approximation by tensor sketch.
+
+    Reference: scikit-learn `kernel_approximation.py` (PolynomialCountSketch,
+    1.9.0): `indexHash_` and `bitHash_` are drawn exactly as theirs
+    (`randint(0, n_components, (degree, n_features))`, then
+    `choice([-1, 1], (degree, n_features))`, one legacy RandomState stream);
+    the transform is the count sketches' circular convolution, computed
+    directly instead of through an FFT (DEVIATION 5203). random_state must be
+    an int. Sparse input is not implemented.
+    """
+
+    def __init__(self, *, gamma=1.0, degree=2, coef0=0, n_components=100, random_state=None):
+        self.gamma = gamma
+        self.degree = degree
+        self.coef0 = coef0
+        self.n_components = n_components
+        self.random_state = random_state
+
+    def fit(self, X, y=None):
+        X = _f32(X)
+        d = X.shape[1]
+        nf = d + (1 if self.coef0 != 0 else 0)
+        deg, nc = int(self.degree), int(self.n_components)
+        if deg < 1 or nc < 1:
+            raise ValueError("degree and n_components must be >= 1")
+        rs = _LegacyRandomState(self.random_state)
+        idx = rs.randint(nc, deg * nf)
+        bits = [(-1, 1)[v] for v in rs.randint(2, deg * nf)]
+        self.indexHash_ = Array.from_list([idx[p * nf:(p + 1) * nf] for p in range(deg)], "<i4")
+        self.bitHash_ = Array.from_list([bits[p * nf:(p + 1) * nf] for p in range(deg)], "<i4")
+        self.n_features_in_ = d
+        return self
+
+    def transform(self, X):
+        X = _f32(X)
+        n, d = X.shape
+        if d != self.n_features_in_:
+            raise ValueError("Number of features of test samples does not match that of training samples.")
+        nf = self.indexHash_.shape[1]
+        nc, deg = int(self.n_components), int(self.degree)
+        out = empty((n, nc), "<f4")
+        self._op("pcs", [(X, 0), (self.indexHash_, 0), (self.bitHash_, 0), (out, 1)],
+                 (n, d, nf, nc, deg), (_f32_scalar(self.gamma), _f32_scalar(self.coef0)))
+        return out
+
+    def fit_transform(self, X, y=None):
+        return self.fit(X).transform(X)
+
+
+# ====================================================================== AdditiveChi2Sampler
+class AdditiveChi2Sampler(_XNeighbors):
+    """Approximate feature map for the additive chi-squared kernel.
+
+    Reference: scikit-learn `kernel_approximation.py` (AdditiveChi2Sampler,
+    `_transform_dense`, 1.9.0). Deterministic: no random state. Negative input
+    is refused, as theirs. Sparse input is not implemented.
+    """
+
+    def __init__(self, *, sample_steps=2, sample_interval=None):
+        self.sample_steps = sample_steps
+        self.sample_interval = sample_interval
+
+    def _interval(self):
+        if self.sample_interval is not None:
+            return float(self.sample_interval)
+        table = {1: 0.8, 2: 0.5, 3: 0.4}
+        if self.sample_steps not in table:
+            raise ValueError("If sample_steps is not in [1, 2, 3], you need to provide sample_interval")
+        return table[self.sample_steps]
+
+    def fit(self, X, y=None):
+        X = _f32(X)
+        if X.size and X.min() < 0:
+            raise ValueError("Negative values in data passed to AdditiveChi2Sampler")
+        self._interval()
+        self.n_features_in_ = X.shape[1]
+        return self
+
+    def transform(self, X):
+        X = _f32(X)
+        if X.size and X.min() < 0:
+            raise ValueError("Negative values in data passed to AdditiveChi2Sampler")
+        n, d = X.shape
+        steps = int(self.sample_steps)
+        out = empty((n, d * (2 * steps - 1)), "<f4")
+        self._op("achi2", [(X, 0), (out, 1)], (n, d, steps), (_f32_scalar(self._interval()),))
+        return out
+
+    def fit_transform(self, X, y=None):
+        return self.fit(X).transform(X)
+
+
+# ====================================================================== SkewedChi2Sampler
+class SkewedChi2Sampler(_XNeighbors):
+    """Approximate feature map for the skewed chi-squared kernel.
+
+    Reference: scikit-learn `kernel_approximation.py` (SkewedChi2Sampler,
+    1.9.0). The uniforms are theirs exactly (legacy RandomState, see
+    `_LegacyRandomState`); pi/2 * u and the offsets are formed in IEEE double
+    and rounded once to float32; the inverse sech CDF, the log, the product
+    and the cosine run in float32 on the lane's portable spellings. Input at
+    or below -skewedness is refused, as theirs.
+    """
+
+    def __init__(self, *, skewedness=1.0, n_components=100, random_state=None):
+        self.skewedness = skewedness
+        self.n_components = n_components
+        self.random_state = random_state
+
+    def fit(self, X, y=None):
+        X = _f32(X)
+        d = X.shape[1]
+        nc = int(self.n_components)
+        rs = _LegacyRandomState(self.random_state)
+        u = rs.random_sample(d * nc)
+        z = Array.from_list([[math.pi / 2.0 * u[f * nc + c] for c in range(nc)] for f in range(d)], "<f4")
+        w = empty((d, nc), "<f4")
+        self._op("skew_weights", [(z, 0), (w, 1)], (d * nc,))
+        self.random_weights_ = w
+        self.random_offset_ = Array.from_list(rs.uniform(0.0, 2.0 * math.pi, nc), "<f4")
+        self.n_features_in_ = d
+        return self
+
+    def transform(self, X):
+        X = _f32(X)
+        n, d = X.shape
+        if X.size and X.min() <= -float(self.skewedness):
+            raise ValueError("X may not contain entries smaller than -skewedness.")
+        nc = int(self.n_components)
+        lx = self._unary(X, _U_LOG, 1.0, _f32_scalar(self.skewedness))
+        out = empty((n, nc), "<f4")
+        self._op("skew_transform", [(lx, 0), (self.random_weights_, 0), (self.random_offset_, 0), (out, 1)], (n, d, nc))
+        return out
+
+    def fit_transform(self, X, y=None):
+        return self.fit(X).transform(X)
+
+
+# ====================================================================== LabelPropagation
+class _LabelPropagationBase(_XNeighbors):
+    """scikit-learn `semi_supervised/_label_propagation.py` (1.9.0): the dense
+    graph (rbf, or the knn connectivity graph with each row's own point as
+    its first neighbor), the product / clamp iteration with their stopping
+    rule (sum |L - L_prev| < tol, checked before each step), the final row
+    normalization and `transduction_`. Callable kernels are refused. Float32
+    where theirs is float64; the neighbor ties go to the lower index."""
+
+    _variant = None
+
+    def _graph_affinity(self, X):
+        n = X.shape[0]
+        if self.kernel == "rbf":
+            return self._kernel(X, X, "rbf", self.gamma, 0.0, 0)
+        if self.kernel == "knn":
+            k = min(int(self.n_neighbors), n)
+            _, idx = self._knn_select(self._sqdist(X, X), k, False)
+            g = empty((n, n), "<f4")
+            self._op("knn_graph", [(idx, 0), (g, 1)], (n, n, k))
+            return g
+        raise NotImplementedError(f"{type(self).__name__}: kernel={self.kernel!r} is not implemented ('rbf' or 'knn')")
+
+    def fit(self, X, y):
+        X = _f32(X)
+        n = X.shape[0]
+        y = y.tolist() if hasattr(y, "tolist") else list(y)
+        if len(y) != n:
+            raise ValueError("X and y have different numbers of rows")
+        classes = sorted(set(v for v in y if v != -1))
+        C = len(classes)
+        code = {c: i for i, c in enumerate(classes)}
+        unl = [1 if v == -1 else 0 for v in y]
+        ld0 = [[1.0 if (v != -1 and code[v] == j) else 0.0 for j in range(C)] for v in y]
+        if self._variant == "propagation":
+            ys = [[0.0] * C if unl[i] else ld0[i] for i in range(n)]
+        else:
+            a = _f32_scalar(1.0 - float(self.alpha))
+            ys = [[a * v for v in row] for row in ld0]
+        G = self._build_graph(X)
+        ld = Array.from_list(ld0, "<f4")
+        ystatic = Array.from_list(ys, "<f4")
+        unlabeled = _i32(unl, "unlabeled")
+        prev = empty((n, C), "<f4")
+        s = empty((1,), "<f4")
+        n_iter = 0
+        converged = False
+        for it in range(int(self.max_iter)):
+            n_iter = it
+            self._op("absdiff_sum", [(ld, 0), (prev, 0), (s, 1)], (n * C,))
+            if s.tolist()[0] < float(self.tol):
+                converged = True
+                break
+            prev = ld
+            nxt = self._matmul(G, ld)
+            out = empty((n, C), "<f4")
+            if self._variant == "propagation":
+                self._op("lp_clamp", [(nxt, 0), (ystatic, 0), (unlabeled, 0), (out, 1)], (n, C))
+            else:
+                self._op("ls_clamp", [(nxt, 0), (ystatic, 0), (out, 1)], (n * C,), (_f32_scalar(self.alpha),))
+            ld = out
+        if not converged:
+            n_iter += 1
+        final = empty((n, C), "<f4")
+        self._op("row_normalize", [(ld, 0), (final, 1)], (n, C))
+        self.X_ = X
+        self.classes_ = classes
+        self.label_distributions_ = final
+        self.n_iter_ = n_iter
+        self.transduction_ = _class_array(classes, [_argmax(r) for r in final.tolist()])
+        self.n_features_in_ = X.shape[1]
+        return self
+
+    def predict_proba(self, X):
+        Q = _f32(X)
+        nq = Q.shape[0]
+        n = self.X_.shape[0]
+        if self.kernel == "knn":
+            k = min(int(self.n_neighbors), n)
+            _, idx = self._knn_select(self._sqdist(Q, self.X_), k, False)
+            W = empty((nq, n), "<f4")
+            self._op("knn_graph", [(idx, 0), (W, 1)], (nq, n, k))
+        else:
+            W = self._kernel(Q, self.X_, "rbf", self.gamma, 0.0, 0)
+        P = self._matmul(W, self.label_distributions_)
+        out = empty(P.shape, "<f4")
+        self._op("row_normalize", [(P, 0), (out, 1)], P.shape)
+        return out
+
+    def predict(self, X):
+        return _class_array(self.classes_, [_argmax(r) for r in self.predict_proba(X).tolist()])
+
+
+class LabelPropagation(_LabelPropagationBase):
+    """Label propagation (hard clamping). See `_LabelPropagationBase`."""
+
+    _variant = "propagation"
+
+    def __init__(self, kernel="rbf", *, gamma=20, n_neighbors=7, max_iter=1000, tol=1e-3, n_jobs=None):
+        self.kernel = kernel
+        self.gamma = gamma
+        self.n_neighbors = n_neighbors
+        self.max_iter = max_iter
+        self.tol = tol
+        self.n_jobs = n_jobs
+
+    def _build_graph(self, X):
+        A = self._graph_affinity(X)
+        G = empty(A.shape, "<f4")
+        self._op("row_normalize", [(A, 0), (G, 1)], A.shape)
+        return G
+
+
+class LabelSpreading(_LabelPropagationBase):
+    """Label spreading (the normalized graph Laplacian, soft clamping by
+    alpha). See `_LabelPropagationBase`."""
+
+    _variant = "spreading"
+
+    def __init__(self, kernel="rbf", *, gamma=20, n_neighbors=7, alpha=0.2, max_iter=30, tol=1e-3, n_jobs=None):
+        self.kernel = kernel
+        self.gamma = gamma
+        self.n_neighbors = n_neighbors
+        self.alpha = alpha
+        self.max_iter = max_iter
+        self.tol = tol
+        self.n_jobs = n_jobs
+
+    def fit(self, X, y):
+        if not (0.0 < float(self.alpha) < 1.0):
+            raise ValueError("alpha must be in (0, 1)")
+        return super().fit(X, y)
+
+    def _build_graph(self, X):
+        A = self._graph_affinity(X)
+        n = A.shape[0]
+        G = empty((n, n), "<f4")
+        self._op("ls_laplacian", [(A, 0), (G, 1)], (n,))
+        return G
+
+
+# ====================================================================== KNNImputer
+class KNNImputer(_XNeighbors):
+    """Imputation of missing values by k nearest neighbors.
+
+    Reference: scikit-learn `impute/_knn.py` (1.9.0): nan_euclidean distances
+    to the fit rows, donors = fit rows where the column is present, the k
+    nearest (ties: the lower row index), 'uniform' or 'distance' weights,
+    the masked column mean when no donor has a finite distance, all-missing
+    columns dropped (or zero with keep_empty_features), `add_indicator`.
+    missing_values must be NaN; metric 'nan_euclidean' only; callable weights
+    are refused by name.
+    """
+
+    def __init__(self, *, missing_values=float("nan"), n_neighbors=5, weights="uniform",
+                 metric="nan_euclidean", copy=True, add_indicator=False, keep_empty_features=False):
+        self.missing_values = missing_values
+        self.n_neighbors = n_neighbors
+        self.weights = weights
+        self.metric = metric
+        self.copy = copy
+        self.add_indicator = add_indicator
+        self.keep_empty_features = keep_empty_features
+
+    def _check(self):
+        mv = self.missing_values
+        if not (isinstance(mv, float) and mv != mv):
+            raise NotImplementedError("KNNImputer: missing_values must be NaN")
+        if self.metric != "nan_euclidean":
+            raise NotImplementedError("KNNImputer: metric must be 'nan_euclidean'")
+        if self.weights not in ("uniform", "distance"):
+            raise NotImplementedError("KNNImputer: weights must be 'uniform' or 'distance'")
+
+    def fit(self, X, y=None):
+        self._check()
+        X = _f32(X)
+        n, d = X.shape
+        rows = X.tolist()
+        miss = [[v != v for v in r] for r in rows]
+        self._valid = [not all(miss[i][f] for i in range(n)) for f in range(d)]
+        self._miss_cols = [f for f in range(d) if any(miss[i][f] for i in range(n))]
+        self._fit_X = X
+        self.n_features_in_ = d
+        return self
+
+    def transform(self, X):
+        X = _f32(X)
+        n, d = X.shape
+        if d != self.n_features_in_:
+            raise ValueError("X has a different number of features than during fit")
+        m = self._fit_X.shape[0]
+        out = empty((n, d), "<f4")
+        k = int(self.n_neighbors)
+        if k < 1:
+            raise ValueError("n_neighbors must be >= 1")
+        self._op("knn_impute", [(X, 0), (self._fit_X, 0), (out, 1)],
+                 (n, m, d, k, 1 if self.weights == "distance" else 0))
+        keep = [f for f in range(d) if self._valid[f]]
+        if self.keep_empty_features:
+            empty_cols = [f for f in range(d) if not self._valid[f]]
+            if empty_cols:
+                rows = out.tolist()
+                for r in rows:
+                    for f in empty_cols:
+                        r[f] = 0.0
+                out = Array.from_list(rows, "<f4")
+        elif len(keep) != d:
+            out = self._take_cols(out, keep)
+        if self.add_indicator and self._miss_cols:
+            src = X.tolist()
+            res = out.tolist()
+            for i, r in enumerate(res):
+                r.extend(1.0 if src[i][f] != src[i][f] else 0.0 for f in self._miss_cols)
+            out = Array.from_list(res, "<f4")
+        return out
+
+    def fit_transform(self, X, y=None):
+        return self.fit(X).transform(X)

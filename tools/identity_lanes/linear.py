@@ -214,3 +214,23 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-enet-cv")
+
+
+@lane("x-logistic-cv")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.LogisticRegressionCV(Cs=4, cv=3, max_iter=15).fit(X[:1200], _linear_y3(X[:1200]))
+    f = _linear_clf_fit(m, X, yc, Xh)
+    f["scores"] = _h(*[m.scores_[k] for k in sorted(m.scores_)])
+    return f
+
+
+_batch_decl(_rows_calls("decision_function", sl=slice(0, 256)), "x-logistic-cv")
+
+
+@lane("x-isotonic")
+def _(ml, X, yc, yr, Xh=None):
+    # column 3 carries ties on the `ties` fixture; the held-out queries fall
+    # partly outside the fitted range, so the out-of-bounds NaN word is hashed
+    m = ml.IsotonicRegression(y_min=-2.0).fit(X[:3000, 3], yr[:3000])
+    return _fit(dict(xt=_h(m.X_thresholds_), yt=_h(m.y_thresholds_), predict=_h(m.predict(X[:256, 3]))),
+                m, lambda e: (e.predict(Xh[:256, 3] * np.float32(1.5)),))

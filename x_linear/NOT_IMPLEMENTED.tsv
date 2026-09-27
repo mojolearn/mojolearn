@@ -24,3 +24,7 @@ _ridge.py RidgeCV cv (k-fold), scoring, alpha_per_target, multi-target y, gcv_mo
 _cd_fast.pyx gap-safe screening (do_screening)	not applied	it only skips coordinates; pass 2 speed
 _coordinate_descent.py LassoCV/ElasticNetCV cv splitters other than None/int, shuffle, positive, selection=random, sample_weight, precompute arrays	refused	pass 2
 _coordinate_descent.py refit with precompute=False	replaced	Gram CD refit, same minimizer
+_logistic.py LogisticRegressionCV penalty l1/elasticnet, dual, scoring, class_weight, refit=False, sample_weight, cv splitters	refused	pass 2
+_logistic.py refit warm start from the folds mean coef	replaced	refit from zero (convex; same minimizer)
+isotonic.py parallel PAVA (prefix-scan form, per the brief)	pass 2	pass 1 is their sequential single-pass PAVA
+isotonic.py increasing=auto	Python	Spearman sign computed in Python float64 (a boolean decision)
