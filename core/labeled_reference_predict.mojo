@@ -28,7 +28,11 @@ from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceContext
 
 from checks.numerics import ftz
-from core.labeled_reference_host_predict import labeled_reference_validate
+from core.cosine_rows import cosine_unit_rows
+from core.labeled_reference_host_predict import (
+    LABELED_METRIC_COSINE,
+    labeled_reference_validate,
+)
 from dbscan.impl.neighbors.epsilon_neighborhood import (
     DBSCAN_METRIC_L1,
     _eps_acc,
@@ -123,11 +127,29 @@ def labeled_reference_predict(
     var out_labels = ctx.enqueue_create_buffer[DType.int32](n_queries)
     var out_refs = ctx.enqueue_create_buffer[DType.int32](n_queries)
     ctx.synchronize()
-    ctx.enqueue_copy(dst_buf=refs, src_ptr=refs_ptr)
+    # DEVIATION 5113: cosine uploads unit rows, scaled on the host by the
+    # code the CPU binding runs, and takes the L2 kernel below.
+    var ur = List[Float32]()
+    var uq = List[Float32]()
+    if metric == LABELED_METRIC_COSINE:
+        var rr = List[Float32](length=n_refs * d, fill=Float32(0))
+        for i in range(n_refs * d):
+            rr[i] = refs_ptr.unsafe_load(i)
+        var qq = List[Float32](length=n_queries * d, fill=Float32(0))
+        for i in range(n_queries * d):
+            qq[i] = queries_ptr.unsafe_load(i)
+        ur = cosine_unit_rows(rr, n_refs, d, "labeled_reference_predict")
+        uq = cosine_unit_rows(qq, n_queries, d, "labeled_reference_predict")
+        ctx.enqueue_copy(dst_buf=refs, src_ptr=ur.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=queries, src_ptr=uq.unsafe_ptr())
+    else:
+        ctx.enqueue_copy(dst_buf=refs, src_ptr=refs_ptr)
+        ctx.enqueue_copy(dst_buf=queries, src_ptr=queries_ptr)
     ctx.enqueue_copy(dst_buf=keys, src_ptr=keys_ptr)
     ctx.enqueue_copy(dst_buf=ref_labels, src_ptr=labels_ptr)
-    ctx.enqueue_copy(dst_buf=queries, src_ptr=queries_ptr)
     ctx.synchronize()
+    _ = ur^
+    _ = uq^
 
     var per_query = n_refs * d
     var chunk = LABELED_PREDICT_WORK // per_query

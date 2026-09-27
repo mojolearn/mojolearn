@@ -96,7 +96,30 @@ Option parity (item 2), merged as each passes:
   measured 0.646 vs LightGBM 0.768), test_host_surface, test_lane_select
   (pins forest_host_predict 84, forest_inference 50): see the merge commit.
 - Apple (M2 Pro steward) + do-amd: requests 1790536790718 (dart-options),
-  1790536798209 (oob-cv-link), 1790536805393 (et-deviance) at b771caee9.
+  1790536798209 (oob-cv-link), 1790536805393 (et-deviance) at b771caee9:
+  m2pro PASS, do-amd PASS. MERGED to main 4b4507b7d.
+- GradientBoosting loss='MultiRMSE' (gbdt/, the trees family's CatBoost
+  arm), lane trees-gbdt-multirmse (in the trees fragment, NOT in
+  identity_break.py: a harness edit selects every lane). Symmetric Hessian
+  rows + the MultiClass Cholesky leaf solve (multiclass_targets.h:118-123),
+  (n, D) y dim-major through a +4 params tail, boost_from_average refused
+  for MultiRMSE (DEVIATION 5951, unset resolves False; CatBoost's default is
+  per-dimension averages: a real option-parity debt), DEVIATION 5950 (loss
+  sum order). Refused by name: Depthwise/Lossguide, Ordered, Exact, eval_set,
+  cat features, class weights, dim < 2. Not in _HOST_ROUTE_LANES (needs a
+  recorded lane). Evidence: `--pass 2 --sabotage
+  gbdt/checks/sabotage/multirmse_der_cpu_only.patch` PASS on H100 and on
+  MI300X; every gbdt-* lane + cross-val + saved-model-host-infer fitted
+  BEFORE (MultiRMSE diff reversed) and AFTER on H100: IDENTICAL on CUDA and
+  CPU columns; all AGREE on MI300X; test_gbdt_multirmse + test_host_surface
+  199 passed, 1 skipped (catboost absent). test_lane_select pins now
+  forest_host_predict 85, gbdt_host_predict 50: test_lane_select 68
+  passed at the branch tip (H100 pod). Steward request 1790542307842 (m2pro, m3ultra, do-amd)
+  PENDING. MERGE when m2pro (or m3ultra) + do-amd PASS.
+- Owed (family phase 1, existing lanes): gbdt-categorical-ctr-tables and
+  gbdt-tensor-ctr-tables read NOTHING COMPARED in the lane check: their
+  `model` part has one column (the CPU column refuses it). They need a CPU
+  arm for the model part.
 
 extratrees/NOT_IMPLEMENTED.tsv has no `not yet` row left (the rest are
 `deliberate`). xtrees/NOT_IMPLEMENTED.tsv `not yet` rows remain (ccp_alpha,
@@ -105,6 +128,97 @@ Bagging warm_start, DART leaf-wise g/h growth + min_sum_hessian +
 feature_fraction_bynode, stacking/calibration sample_weight, calibration
 ensemble='auto'/cv='prefit', TreeSHAP interventional / interaction values /
 CatBoost models, Permutation link).
+
+SESSION A (verification), 2026-09-27 evening. DONE, merged:
+- THE M3 RF DIVERGENCE, FIXED AT THE ROOT (DEVIATION 5611, IDENTITY_PATHS
+  row 169). Diagnosis from the FAIL verdict's own cells (steward request
+  1790526750361 on m3ultra): depth-2/3 learners (AdaBoost) and a
+  one-column-per-node forest (RandomTreesEmbedding) AGREE, every depth-8
+  multi-column tree DISAGREES, and `denormal` vs `denormal_ftz` (the same
+  X after the IDENTICAL flush) gave DIFFERENT forests on the one M3: a
+  run-to-run race, not arithmetic. The only in-kernel cross-threadgroup
+  payload in the RF builder was `_publish_to_global`: the node's `Split`
+  read and written with PLAIN loads/stores inside a device-mutex critical
+  section (a lost candidate on M3). Fix: under IDENTICAL, on every vendor,
+  `HIST_SPLIT_CANDIDATES_DEFAULT` is on: each column block stores its
+  pinned (DEVIATION 404) winner in its own slot
+  (`Split.eval_best_split_pinned_to_candidate`) and
+  `merge_split_candidates_kernel` folds a node's slots with `update` (a
+  total order) after the kernel boundary. The ET `split_reduce_kernel`
+  runs one block per node under IDENTICAL (`ET_SPLIT_REDUCE_ONE_BLOCK`),
+  so its mutex merge never runs either.
+  Evidence (H100 pod, commit b55282c5): 36 lanes (every rf-*, et-*,
+  saved-model-host-infer, all 24 trees-* RF/ET lanes) AGREE CPU == CUDA;
+  every CUDA cell of all 36 IDENTICAL to the pre-fix runs (/root/ev/et_after,
+  /root/ev/m_trees); sabotage `xtrees/checks/sabotage/seam_5611_lost_candidate.patch`
+  (the fold drops the last column block) on trees-dt-clf, trees-dt-reg,
+  rf-clf, rf-reg: AGREE, DISAGREE, AGREE after reversal. MI300X (trees-amd):
+  the same 36 AGREE CPU == HIP, HIP cells unchanged where a prior exists
+  (26), and the HIP cells equal the CUDA cells on all 36.
+  POST-MERGE, QUEUED: steward request 1790536790720-trees-b25e0fdfe8
+  (m2pro, m3ultra-b, m4-a, do-amd; coalesced every earlier queued trees
+  request): the 20 trees lanes + trees-dart-options, trees-et-deviance,
+  rf-clf, rf-reg, rf-clf-entropy-log2-noboot, trees-gbdt-multirmse, pass 2,
+  sabotage xtrees/checks/sabotage/steward_combo_cpu_only.patch (the four
+  CPU-only column patches in one). Read it with `apple_steward.py status`.
+  An M3 FAIL comes back as a fix commit before any B item.
+  If M3 still disagrees, the next suspect is any other plain cross-block
+  read in the RF builder (none found by grep) or the quantile path.
+  OWED (FAST, not identity): ET under FAST on Apple still merges bpn > 1
+  blocks through the mutex (quality risk on M3 when k > TPB);
+  neighbors/impl/detail/fused_l2_knn.mojo has the same mutex-payload
+  pattern (neighbors family, reported to main).
+- MultiRMSE (trees-gbdt-multirmse) MERGED under the NVIDIA + CPU gate.
+- REPEATED CALLS (directive): python/mojolearn/tests/test_trees_repeat.py
+  calls every trees entry point (RF/ET clf+reg, IsolationForest, GBDT
+  Logloss/RMSE/Depthwise/Lossguide/MultiRMSE, OrderedRMSE, FeatureFreq,
+  host_predict on saved RF and GBDT files, DT, Bagging, AdaBoost,
+  DART, RandomTreesEmbedding, Voting, OneVsRest, TreeExplainer) twice in
+  one process on GPU and on CPU, asserting first == second and GPU == CPU.
+  The trees bindings build a DeviceContext per call but return host data
+  only (no buffer outlives its context). PASS on the H100 (GPU == CPU,
+  first == second) and on the MI300X (run without pytest, the box has
+  none). test_host_surface + test_trees_repeat 201 passed and
+  test_lane_select 69 passed at the merge tip (H100). The trees lanes
+  iforest, iforest-tuned, trees-gbdt-multirmse, gbdt-yeti-rank,
+  saved-model-host-infer AGREE (H100); iforest, trees-gbdt-multirmse,
+  gbdt-symmetric, gbdt-feature-freq, gbdt-ordered-rmse AGREE (MI300X).
+- GradientBoosting.predict on a CPU install routes a model whose text
+  carries CTR tables / a tensor CTR registry through HostGBDT (the gbdt
+  host binding's walk refuses those records by name). Inert for every
+  existing lane (30 gbdt lanes AGREE, CUDA cells unchanged).
+- test_lane_select pins after merging main: kmeans_oracle 71,
+  gbdt_host_predict 51, forest_host_predict 86 (x-metrics-search from
+  the metrics lane reaches both).
+
+NEXT SESSION: FIRST the CTR-table CPU paths (main's request 2026-09-27),
+then type B (features).
+1. gbdt-tensor-ctr-tables: the CPU column fits
+   ExperimentalTwoLevelFeatureFreq through gbdt/host/gbdt_oracle_feature_freq.mojo,
+   which REFUSES "a level-one winner on the FeatureFreq tensor column"
+   (:639) and a level-two one (:665). Restate on the host: the level
+   winner on the tensor column (the split-history table after it,
+   `stage_next_feature_freq_after_winner`), the tensor_ctr_registry and
+   feature_freq_tensor records with their canonical tensor hash
+   (gbdt/models/tensor_ctr_value_table.mojo, model_text.mojo:374-670), and
+   the `features n m` header with the tensor column. Then change the lane
+   body in tools/identity_break.py to fit on both columns (drop
+   `_ctr_saved_or_fit`; a lane-body edit selects only that lane); predict
+   already routes through HostGBDT (above). Sabotage: the tensor count or
+   the prior in the host restatement.
+2. gbdt-categorical-ctr-tables: CPU TRAINING with CTR categoricals
+   (cat_features above one_hot_max_size: Borders at three priors +
+   FeatureFreq per column). Map: gbdt/train.mojo:1533-1660 (the column
+   prep: `compute_simple_ctrs` host, `compute_simple_ctrs_gpu` per
+   permutation over `ctrs_estimation_permutation`, `build_ctr_tables`),
+   :1745-1778 (one compressed index per permutation, est_perm =
+   permutation_count - 1), doc_parallel_boosting.mojo:1821+ (one cursor
+   per permutation, `perm_cindexes`). The host oracle gbdt/host/gbdt_oracle.mojo
+   runs ONE permutation; the new arm needs the per-permutation ordered CTR
+   columns and cursors. Host binding refusal: `_refuse` "no CTR
+   categoricals" in bindings/_mojolearn_gbdt_host.mojo.
+3. Type B: the remaining xtrees/extratrees/gbdt NOT_IMPLEMENTED rows
+   (list below and item 1 of NEXT).
 
 NEXT (option parity continues; this phase is not finished):
 1. gbdt/ (CatBoost) losses, starting with MultiRMSE, then MultiLogloss /

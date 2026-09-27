@@ -84,12 +84,32 @@ Unarmable seams, written down there: `F = Z P Z'` and the Jones inverse's
 - E2E steward sabotages: `e2e_arima_host_param_bit.patch` (the five arima
   lanes), `e2e_tsa_host_bits.patch` (holtwinters x2, kpss).
 
-NEXT (a fresh session starts here), per CURRENT DIRECTIVES (one phase per session):
-1. If the steward requests above are not both PASS on m2pro and do-amd:
-   read the failing step, fix, resubmit only the affected lanes.
-2. PHASE (c) option parity, whole family, existing items included:
-   seasonal ETS FIRST (the bench race needs it), MoE backward, forecaster
-   prediction intervals, then every NOT IMPLEMENTED row of
-   sequence/NOT_IMPLEMENTED.tsv. Each option: AGREE, a sabotage for a numeric
-   change, existing bits unchanged; merge each as it passes.
-3. Then (d) FAST GPU speed, (e) IDENTICAL GPU speed, (f) CPU speed last.
+### Apple build fix (m2pro FAIL on d5a849bb5, both requests: the Metal build)
+
+`seq_kernel` had 33 arguments (Metal binds each to a buffer slot, 31 max):
+the 12 ints and 8 floats now travel packed two per Int64 (bit-exact, ints
+checked to fit Int32). Theta, ETS and GARCH then segfaulted Apple's air-lld
+(`LazyLinker::LinkDefinition`): their helpers (and nm.mojo's) are now
+`@always_inline`. Bisected on the M2 Pro (`~/seqdbg`, compile only): all 55
+operations and seams_check build for Metal. A40 re-check after the fix
+(e71c8f66a): all 32 arms bite, all 22 sequence lanes AGREE. DONE.
+One batched steward request per hour covers the family; its end-to-end
+sabotage is `sequence/checks/sabotage/e2e_family_host_bits.patch` (the three
+e2e patches in one).
+
+Batched steward request (all 30 family lanes, e2e_family_host_bits.patch) at
+3607aa10e: 1790537359124-sequence-3607aa10ee on m2pro, m3ultra, m4pro-a, do-amd.
+
+NEXT (a fresh session starts here), per the LANE CHARTER (one phase per session):
+1. Read `python3 tools/apple_steward.py status | grep sequence-3607aa10ee`.
+   PASS on every Mac and do-amd closes PHASE 1. A FAIL is a fix commit at
+   the root (fetch the log with `tools/cloudmac.sh ssh <mac> ...` from
+   ~/mojolearn-evidence/apple-steward/done/<id>/check/lane_check.log; the
+   M2 Pro has a compile-only scratch tree ~/seqdbg with bisect.sh/probe.sh),
+   re-proven on the A40, merged, one batched resubmission.
+2. PHASE 2, option parity, whole family including ARIMA, ExponentialSmoothing
+   and KPSS: seasonal ETS FIRST (the bench race needs it), MoE backward,
+   forecaster prediction intervals, then every NOT IMPLEMENTED row of
+   sequence/, arima/, holtwinters/, tsa/ NOT_IMPLEMENTED.tsv. Each option:
+   AGREE, a sabotage for a numeric change, existing bits unchanged; merge each.
+3. Then phase 3 FAST speed, 4 IDENTICAL speed, 5 CPU speed.

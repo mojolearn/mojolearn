@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Seams DEVIATION 5300-5306 of the decomp lane: the folds (gemm 5300,
-column/row sums 5301, squared distance 5302), the elementwise cell's zero
+"""Seams DEVIATION 5300-5306 and 5319 of the decomp lane: the folds (gemm 5300,
+column/row sums 5301, squared distance 5302, the other distances 5319), the elementwise cell's zero
 guards and clamps (5303, IDENTITY_PATHS Clause B), its flush of subnormal
 operands (5304), its series transcendentals (digamma, lgamma: 5305) and the
 counter-based draws (uniform, normal, Rademacher, Gamma: 5306).
@@ -23,6 +23,7 @@ from x_decomp.checks.xd_oracles import (
     oracle_ew,
     oracle_gamma,
     oracle_gemm,
+    oracle_pdist,
     oracle_rand,
     oracle_rowsum,
     oracle_sqdist,
@@ -168,6 +169,27 @@ def main() raises:
     HostExec.sqdist(ptr(qa), ptr(qb), ptr(hs), 17, 11, d)
     same("5302 sqdist host", count_diff_f32(hs, ws))
     tr.record_list_f32("x_decomp.sqdist", ds)
+    # ---- 5319 the non-Euclidean distances (manhattan, chebyshev, minkowski 3, cosine)
+    # minkowski's root exp(log(sum) / p) compresses a one-ulp fold difference,
+    # so its fixture is wider (97 features) and its p 1.5
+    var d3 = 97
+    var qa3 = seam_fixture(17, d3, 21)
+    var qb3 = seam_fixture(11, d3, 22)
+    for kind in range(1, 5):
+        var pw = Float32(1.5) if kind == 3 else Float32(3)
+        var dd = d3 if kind == 3 else d
+        var pa = qa3.copy() if kind == 3 else qa.copy()
+        var pb = qb3.copy() if kind == 3 else qb.copy()
+        var wp = oracle_pdist(pa, 17, pb, 11, dd, kind, pw)
+        if kind != 2:   # a maximum has no fold order to separate
+            require_separates("5319 pdist fold order kind " + String(kind), count_diff_f32(wp, oracle_pdist(pa, 17, pb, 11, dd, kind, pw, 1)))
+        var dp = zeros(17 * 11)
+        DevExec.sqdist(ptr(pa), ptr(pb), ptr(dp), 17, 11, dd, kind, pw)
+        same("5319 pdist device kind " + String(kind), count_diff_f32(dp, wp))
+        var hp = zeros(17 * 11)
+        HostExec.sqdist(ptr(pa), ptr(pb), ptr(hp), 17, 11, dd, kind, pw)
+        same("5319 pdist host kind " + String(kind), count_diff_f32(hp, wp))
+        tr.record_list_f32("x_decomp.pdist." + String(kind), dp)
     # ---- 5303/5304/5305 the elementwise cell, every op code
     var xs = ew_inputs()
     var ne = len(xs)

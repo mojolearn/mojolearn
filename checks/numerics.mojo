@@ -907,12 +907,15 @@ def identical_rsqrt(x: Float32) -> Float32:
 
 
 def identical_log1p(x: Float32) -> Float32:
-    """Row 51's seam: IDENTICAL is `portable_log1pf`; FAST is `log(1 + x)` through the stdlib log -- Triton 3's own spelling of the same thing (mamba_ssm/ops/triton/softplus.py:11) -- and NOT `std.math.log1p`, because that one lowers the Float32 case THROUGH FLOAT64 (`air.convert.f.f64.f.f32` ..."""
+    """Row 51's seam: IDENTICAL is `portable_log1pf`; FAST is too since 2026-09-27 (it was `log(1 + x)` through the stdlib log -- Triton 3's own spelling of the same thing (mamba_ssm/ops/triton/softplus.py:11) -- and NOT `std.math.log1p`, because that one lowers the Float32 case THROUGH FLOAT64 (`air.convert.f.f64.f.f32` ..."""
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
         return portable_log1pf(x)
-    from std.math import log
-
-    return log(Float32(1.0) + x)
+    # FAST (lane neural, 2026-09-27): `log(1 + x)` rounds `1 + x` first and
+    # loses up to 2^-24 / |x| relative (5.5e-5 at x = exp(-7), which put the
+    # Mamba-3 k_last corpus arm outside the torch-FP32 tolerance under FAST).
+    # FAST may reorder, never lose accuracy against the reference, so it
+    # takes the accurate log1p too.
+    return portable_log1pf(x)
 
 
 def identical_sigmoid(x: Float32) -> Float32:
@@ -934,13 +937,16 @@ def identical_silu(x: Float32) -> Float32:
 
 
 def identical_softplus(x: Float32) -> Float32:
-    """Row 54's seam: IDENTICAL is `portable_softplusf`; FAST is the reference's guard around Triton 3's `log(exp(x) + 1)` through the stdlib (not `log1p`: see `identical_log1p` for why it cannot be)."""
+    """Row 54's seam: IDENTICAL is `portable_softplusf`; FAST is torch's `log1p(exp(x))` (stdlib exp) since 2026-09-27; it was the reference's guard around Triton 3's `log(exp(x) + 1)` through the stdlib (not `log1p`: see `identical_log1p` for why it cannot be)."""
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
         return portable_softplusf(x)
-    from std.math import exp, log
+    # FAST (lane neural, 2026-09-27): torch's `log1p(exp(x))` with the stdlib
+    # exp. The former `log(exp(x) + 1)` (Triton 3's spelling) lost up to
+    # 5.5e-5 relative for x near -7 (see `identical_log1p`).
+    from std.math import exp
 
     if x <= Float32(20.0):
-        return log(exp(x) + Float32(1.0))
+        return portable_log1pf(exp(x))
     return x
 
 

@@ -65,6 +65,11 @@ API to do so. Only Andrew's express, specific permission allows it. If Apple
 capacity is a bottleneck, report it; never act on it. All six current Mac
 hosts are released at their 24 h marks unless Andrew says to keep one.
 
+**Pod sync is a patch now (main eca161fc1):** `tools/dev_pod.sh sync`
+ships `git diff` over the merge base (KB, seconds) instead of an 800 MB tar.
+Merge origin/main to get it. `MOJOLEARN_DEVPOD_FULL_SYNC=1` keeps the old
+behavior.
+
 
 Lanes merge origin/main before every merge, so this section reaches every
 worktree. The orchestrator changes lane instructions HERE instead of
