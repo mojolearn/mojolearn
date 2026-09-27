@@ -1,0 +1,13 @@
+diff --git a/x_neighbors/items.mojo b/x_neighbors/items.mojo
+index bc04f5c16..e2c5d7a93 100644
+--- a/x_neighbors/items.mojo
++++ b/x_neighbors/items.mojo
+@@ -58,7 +58,7 @@ def sqdist_item(t: Int, x: FP, y: FP, res: FP, n: Int, m: Int, d: Int):
+     var j = t - i * m
+     var acc = Float32(0)
+     for f in range(d):
+-        var df = _sub(x.unsafe_load(i * d + f), y.unsafe_load(j * d + f))
++        var df = _sub(x.unsafe_load(i * d + (d - 1 - f)), y.unsafe_load(j * d + (d - 1 - f)))
+         acc = ftz(identical_mul_add(df, df, acc))
+     res.unsafe_store(t, acc)
+ 

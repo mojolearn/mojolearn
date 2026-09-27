@@ -1,0 +1,13 @@
+diff --git a/x_neighbors/items.mojo b/x_neighbors/items.mojo
+index bc04f5c16..d60f47e88 100644
+--- a/x_neighbors/items.mojo
++++ b/x_neighbors/items.mojo
+@@ -873,7 +873,7 @@ def cc_step_item(t: Int, a: FP, lab: IP, res: IP, n: Int):
+     for j in range(n):
+         if a.unsafe_load(t * n + j) != Float32(0) or a.unsafe_load(j * n + t) != Float32(0):
+             var l = lab.unsafe_load(j)
+-            if l < best:
++            if l > best:
+                 best = l
+     res.unsafe_store(t, best)
+ 

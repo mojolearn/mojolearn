@@ -55,6 +55,40 @@ new algorithm, measure nothing. Worktree `~/mojolearn-wt/algos-bench`, branch
   x_decomp / x_trees manifests and trees-dt-clf pending (not bench files);
   told main.
 
+- Session 2, merge 5: the forecast races call the classes as exported
+  (statsforecast's shape: `Cls(**params).fit(Y).predict(h)["mean"]`; AutoARIMA
+  keeps cuML's `forecast(h)`). theta -> `Theta(season_length=24,
+  decomposition_type="multiplicative")`; croston -> `CrostonClassic`;
+  damped-ets -> `ETS(season_length=1, model="AAN", damped=True)` with every
+  arm on the non-seasonal damped model (ours refuses seasonal ETS; statsforecast
+  AutoETS(model="AAN", damped=True), statsmodels ExponentialSmoothing(
+  trend="add", damped_trend=True, seasonal=None)). ivf-filter -> `IVFPQIndex.
+  search(filter=)` (IVFIndex has no filter) against faiss IndexIVFPQ +
+  IDSelectorBatch; cuVS dropped from that race by name (its Python IVF-PQ
+  search takes no filter, only IVF-Flat/CAGRA/brute force do). Plan: 396 races,
+  Apple 1,748 fit cells, NVIDIA 1,538, AMD 1,379; the 93 existing races' dry
+  run is byte-identical on apple, nvidia and amd (`drydiff.sh`,
+  `drydiff_s2m1.log`). Plumbing smoke with the bindings built on the pod
+  (A40, `smoke_s2_ours.log`, `smoke_s2_rapids.log`): every ours / ours-cpu /
+  statsforecast / statsmodels / faiss arm of the four races ran; ours-cpu
+  bits equal ours on all. Lane check on the pod: sequence-theta,
+  sequence-croston, sequence-ets, x-ann-filter AGREE.
+  GARCH (merged 5baf7a3f3): the race calls arch's shape as exported,
+  `GARCH(p=1, q=1, mean="Constant", dist="normal").fit(Y, horizon=h)`,
+  `.forecast(h)`, `.loglikelihood_`; smoke `smoke_s2_garch.log` (ours,
+  ours-cpu bits equal, arch-cpu all ran; sequence-garch AGREE on the pod).
+  On the merged tree (main 3a7d5e185): bench tests 62 pass, test_host_surface
+  196 pass; dry run of the 93 existing races byte-identical on apple, nvidia,
+  amd (`drydiff_s2m5.log`). test_lane_select skipped per CURRENT DIRECTIVES
+  item 0 (bench-only diff); last run: the single kmeans_oracle 54 vs 47
+  failure of merge 3, not bench.
+- Still guessed (classes not merged): Prophet, the MoE block. When the
+  sequence lane merges them: read the class, fix the `prophet` / `moe`
+  entries in LANES and their builders (`_build_ts`, the layer builder), build
+  with `tools/algos_lane_check.sh <lane>` on the pod and smoke with
+  `~/mojolearn-evidence/algos-bench/smoke_s2.py` (OURS=/root/ourspy runs the
+  source tree; `drydiff.sh` is the before/after plan diff).
+
 ## Next
 
 - As lanes add classes or options (option parity), align `LANES` params and

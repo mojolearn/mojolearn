@@ -1,0 +1,13 @@
+diff --git a/x_neighbors/items.mojo b/x_neighbors/items.mojo
+index bc04f5c16..b581fdce5 100644
+--- a/x_neighbors/items.mojo
++++ b/x_neighbors/items.mojo
+@@ -177,7 +177,7 @@ def matmul_item(t: Int, a: FP, b: FP, res: FP, n: Int, k: Int, m: Int):
+     var j = t - i * m
+     var acc = Float32(0)
+     for p in range(k):
+-        acc = ftz(identical_mul_add(ftz(a.unsafe_load(i * k + p)), ftz(b.unsafe_load(p * m + j)), acc))
++        acc = ftz(identical_mul_add(ftz(a.unsafe_load(i * k + (k - 1 - p))), ftz(b.unsafe_load((k - 1 - p) * m + j)), acc))
+     res.unsafe_store(t, acc)
+ 
+ 

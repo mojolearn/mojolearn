@@ -14,8 +14,8 @@ P. J. Acklam's inverse normal CDF (the rational approximation, one Halley
 refinement) for `scipy.stats.norm.ppf`.
 """
 from std.memory import bitcast
-from checks.numerics import ftz, identical_log1p
-from x_prep.common import FP, IP, p, ld, raw, st, is_nan
+from checks.numerics import ftz, identical_log1p, identical_erf, _cephes_erfcf_ge1
+from x_prep.common import FP, IP, p, ld, raw, st, is_nan, canonical_nan
 from x_prep.prims import add, sub, mul, div, logf, expf, sqrtf, zero_to_one
 
 #: norm.ppf(1e-7 - eps) and its mirror: QuantileTransformer's normal clip.
@@ -144,6 +144,55 @@ def qt_apply_unit(t: Int, f: FP, q: IP):
     st(f, p(q, 7) + t, y)
 
 
+def norm_cdf(x: Float32) -> Float32:
+    """scipy.stats.norm.cdf (Cephes `ndtr`: 0.5 erfc(-x / sqrt 2), with
+    Cephes `erfcf` = 1 - erf below 1 and the continued-fraction arm above),
+    float32; x not NaN."""
+    var v = mul(sub(Float32(0), x), Float32(0.70710677))
+    var e: Float32
+    if abs(v) < Float32(1):
+        e = sub(Float32(1), ftz(identical_erf(v)))
+    else:
+        e = ftz(_cephes_erfcf_ge1(v))
+    return mul(Float32(0.5), e)
+
+
+def qt_inverse_unit(t: Int, f: FP, q: IP):
+    """q = [X, n, d, Q, nq, REFS, dist, OUT]; t = element: the reference's
+    `_transform_col(inverse=True)`. dist 1 (normal) maps x through norm.cdf
+    first; then x at or below 0 is Q[0], at or above 1 is Q[nq-1] (within
+    BOUNDS_THRESHOLD for normal, exactly for uniform), otherwise
+    np.interp(x, REFS, Q[:, c]). A NaN input is copied bit for bit."""
+    var d = p(q, 2)
+    var c = t % d
+    var x = raw(f, p(q, 0) + t)
+    if is_nan(x):
+        f.unsafe_store(p(q, 7) + t, x)
+        return
+    x = ftz(x)
+    var nq = p(q, 4)
+    var Q = p(q, 3) + c * nq
+    var normal = p(q, 6) == 1
+    if normal:
+        x = norm_cdf(x)
+    var at_lo: Bool
+    var at_hi: Bool
+    if normal:
+        at_lo = sub(x, QT_BOUND) < Float32(0)
+        at_hi = add(x, QT_BOUND) > Float32(1)
+    else:
+        at_lo = x == Float32(0)
+        at_hi = x == Float32(1)
+    var y: Float32
+    if at_lo:
+        y = ld(f, Q)
+    elif at_hi:
+        y = ld(f, Q + nq - 1)
+    else:
+        y = interp(f, x, p(q, 5), Q, nq, False)
+    st(f, p(q, 7) + t, y)
+
+
 @always_inline
 def log1pf(x: Float32) -> Float32:
     return ftz(identical_log1p(ftz(x)))
@@ -260,6 +309,54 @@ def pt_apply_unit(t: Int, f: FP, q: IP):
     if p(q, 5) >= 0:
         v = div(sub(v, ld(f, p(q, 5) + c)), ld(f, p(q, 6) + c))
     st(f, p(q, 7) + t, v)
+
+
+#: np.spacing(1.0), the reference's "lambda is zero" test in the inverse.
+comptime F64_SPACING1 = Float32(2.220446049250313e-16)
+
+
+def _inv_pow_m1(v: Float32, lam: Float32) -> Float32:
+    """(v * lam + 1) ** (1 / lam) - 1 as exp(log1p(v * lam) / lam) - 1."""
+    return sub(expf(div(log1pf(mul(v, lam)), lam)), Float32(1))
+
+
+def pt_inverse_unit(t: Int, f: FP, q: IP):
+    """q = [X, n, d, LAMBDA, METHOD, MEAN, SCALE, OUT]; t = element: the
+    reference's inverse_transform. With MEAN >= 0 first x * SCALE + MEAN
+    (StandardScaler.inverse_transform), then scipy's inv_boxcox (METHOD 1:
+    exp(x) at lambda 0, else exp(log1p(lambda x) / lambda)) or sklearn's
+    `_yeo_johnson_inverse_transform` (METHOD 0). An input NaN is copied; a
+    NaN the map makes is the canonical quiet NaN."""
+    var d = p(q, 2)
+    var c = t % d
+    var x = raw(f, p(q, 0) + t)
+    if is_nan(x):
+        f.unsafe_store(p(q, 7) + t, x)
+        return
+    var v = ftz(x)
+    if p(q, 5) >= 0:
+        v = add(mul(v, ld(f, p(q, 6) + c)), ld(f, p(q, 5) + c))
+    var lam = ld(f, p(q, 3) + c)
+    var y: Float32
+    if p(q, 4) == 1:
+        if lam == Float32(0):
+            y = expf(v)
+        else:
+            y = expf(div(log1pf(mul(lam, v)), lam))
+    elif v >= Float32(0):
+        if abs(lam) < F64_SPACING1:
+            y = sub(expf(v), Float32(1))
+        else:
+            y = _inv_pow_m1(v, lam)
+    else:
+        var l2 = sub(Float32(2), lam)
+        if abs(l2) > F64_SPACING1:
+            y = sub(Float32(0), _inv_pow_m1(sub(Float32(0), v), l2))
+        else:
+            y = sub(Float32(1), expf(sub(Float32(0), v)))
+    if y != y:
+        y = canonical_nan()  # a base below 0 (numpy's NaN power): one NaN word on every column
+    st(f, p(q, 7) + t, y)
 
 
 def std_params_unit(t: Int, f: FP, q: IP):
