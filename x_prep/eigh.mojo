@@ -10,7 +10,8 @@ a rotation is skipped only on a value test that reads the same bits
 everywhere, and the sweep count is capped, so the result is a function of
 the input bits alone. Eigenpairs come out sorted by eigenvalue DESCENDING
 (index order on a tie) and each eigenvector's largest-magnitude component
-(first on a tie) is made positive: the sign convention the tests can name.
+(first on a tie) is made positive: the sign convention the tests can name
+(DEVIATION 5405).
 """
 from checks.numerics import ftz
 from x_prep.common import FP, IP, p, ld, st

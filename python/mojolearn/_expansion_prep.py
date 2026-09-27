@@ -49,7 +49,7 @@ _OPS = dict(
     lda_prep=36, lda_w=37, lda_stage2=38, lda_stage3=39, qda_cov=40, qda_prep=41, qda_dec=42,
     qt_apply=43, pt_fit=44, pt_apply=45, std_params=46, normalize=47, poly=48, spline_knots=49, spline_apply=50, label_binarize=51, scatter_ones=52,
     ii_mean=53, ii_gram=54, ii_sub=55, ii_br=56, ii_predict=57, ii_snapshot=58, ii_conv=59, nan_mask=60, gather_cols=61, var_ptp=62, f_classif=63, f_regression=64, chi2=65,
-    mi_colscale=66, mi_noise=67, mi_cc=68, mi_cd=69, mi_reduce=70, sqsum_cols=71,
+    mi_colscale=66, mi_noise=67, mi_cc=68, mi_cd=69, mi_reduce=70, sqsum_cols=71, log=72,
 )
 _PARAMS = 14
 _NONE = -1
@@ -861,8 +861,19 @@ class _Classifier(_PrepBase):
 def _refuse_nb(est, sample_weight):
     if sample_weight is not None:
         raise NotImplementedError(f"mojolearn: {type(est).__name__} sample_weight is not implemented")
-    if getattr(est, "class_prior", None) is not None or getattr(est, "priors", None) is not None:
-        raise NotImplementedError(f"mojolearn: {type(est).__name__} explicit class priors are not implemented")
+
+
+def _given_priors(values, K, who, check_sum=False):
+    """A user prior list as floats, checked as the reference checks it."""
+    vals = [float(v) for v in (values.tolist() if hasattr(values, "tolist") else values)]
+    if len(vals) != K:
+        raise ValueError(f"mojolearn: {who}: number of priors must match number of classes")
+    if any(v < 0 for v in vals):
+        raise ValueError(f"mojolearn: {who}: priors must be non-negative")
+    if check_sum and abs(sum(vals) - 1.0) > 1e-8 * max(1.0, abs(sum(vals))) and \
+            abs(sum(vals) - 1.0) > 1e-5:
+        raise ValueError(f"mojolearn: {who}: the sum of the priors should be 1")
+    return vals
 
 
 def _check_alpha(est):
@@ -874,8 +885,8 @@ def _check_alpha(est):
 class GaussianNB(_Classifier):
     """sklearn.naive_bayes.GaussianNB (fit, predict, predict_proba,
     predict_log_proba): per-class mean and population variance plus
-    var_smoothing * the largest feature variance, float32. priors,
-    sample_weight and partial_fit are refused."""
+    var_smoothing * the largest feature variance, float32; `priors` as the
+    reference checks them. sample_weight and partial_fit are refused."""
     _parameters = ("priors", "var_smoothing")
 
     def __init__(self, *, priors=None, var_smoothing=1e-9):
@@ -899,7 +910,11 @@ class GaussianNB(_Classifier):
         pr.stage("col_stats", d, xo, n, d, st)
         pr.stage("gnb_eps", 1, st + 2 * d, d, eps, vs)
         pr.stage("class_stats", K * d, xo, n, d, yo, K, cnt, theta, var, _NONE)
-        pr.stage("gnb_params", K, cnt, var, K, d, n, eps, prior, const)
+        given = _NONE
+        if self.priors is not None:
+            given = pr.put_list(_given_priors(self.priors, K, "GaussianNB", check_sum=True))
+        pr.stage("gnb_params", K, cnt, var, K, d, n, eps, prior, const, 1 if given != _NONE else 0,
+                 given if given != _NONE else 0)
         pr.run(mode)
         self.theta_, self.var_ = pr.get(theta, (K, d)), pr.get(var, (K, d))
         self.class_count_, self.class_prior_ = pr.get(cnt, K), pr.get(prior, K)
@@ -942,7 +957,10 @@ class _DiscreteNB(_Classifier):
         clp = pr.alloc(K)
         pr.stage("col_stats", d, xo, n, d, st)
         pr.stage("class_stats", K * d, xo, n, d, yo, K, cnt, _NONE, _NONE, fc)
-        if self.fit_prior:
+        if getattr(self, "class_prior", None) is not None:
+            po = pr.put_list(_given_priors(self.class_prior, K, type(self).__name__))
+            pr.stage("log", K, po, clp)
+        elif self.fit_prior:
             pr.stage("class_log_prior", K, cnt, K, clp)
         else:
             ones = pr.put_list([1.0] * K)
@@ -960,7 +978,7 @@ class _DiscreteNB(_Classifier):
 
 class MultinomialNB(_DiscreteNB):
     """sklearn.naive_bayes.MultinomialNB, float32; alpha > 0 required.
-    class_prior, sample_weight and partial_fit are refused."""
+    class_prior as given (its log); sample_weight and partial_fit are refused."""
     _parameters = ("alpha", "force_alpha", "fit_prior", "class_prior")
 
     def __init__(self, *, alpha=1.0, force_alpha=True, fit_prior=True, class_prior=None):
@@ -990,8 +1008,8 @@ class MultinomialNB(_DiscreteNB):
 
 class BernoulliNB(_DiscreteNB):
     """sklearn.naive_bayes.BernoulliNB, float32 (X binarized at `binarize`
-    unless it is None); alpha > 0 required. class_prior, sample_weight and
-    partial_fit are refused."""
+    unless it is None); alpha > 0 required; class_prior as given (its log).
+    sample_weight and partial_fit are refused."""
     _parameters = ("alpha", "force_alpha", "binarize", "fit_prior", "class_prior")
 
     def __init__(self, *, alpha=1.0, force_alpha=True, binarize=0.0, fit_prior=True, class_prior=None):
@@ -1049,8 +1067,9 @@ class LinearDiscriminantAnalysis(_Classifier):
     (the default): the reference's two SVDs are symmetric eigendecompositions
     of the Gram matrices (cyclic Jacobi, x_prep/eigh.mojo), so `scalings_` and
     `transform` match the reference up to each component's sign and the
-    decision function matches it outright. Float32. Other solvers, shrinkage,
-    priors, covariance_estimator and store_covariance are refused by name."""
+    decision function matches it outright. Float32; priors as the reference
+    takes them (renormalised when they do not sum to 1). Other solvers,
+    shrinkage, covariance_estimator and store_covariance are refused by name."""
     _parameters = ("solver", "shrinkage", "priors", "n_components", "store_covariance", "tol",
                    "covariance_estimator")
 
@@ -1068,9 +1087,8 @@ class LinearDiscriminantAnalysis(_Classifier):
         if self.solver != "svd" or self.shrinkage is not None or self.covariance_estimator is not None:
             raise NotImplementedError("mojolearn: LinearDiscriminantAnalysis supports solver='svd' without "
                                       "shrinkage or covariance_estimator")
-        if self.priors is not None or self.store_covariance:
-            raise NotImplementedError("mojolearn: LinearDiscriminantAnalysis priors and store_covariance "
-                                      "are not implemented")
+        if self.store_covariance:
+            raise NotImplementedError("mojolearn: LinearDiscriminantAnalysis store_covariance is not implemented")
         arr = _x2d(X)
         n, d = arr.shape
         codes = self._encode_y(y, n)
@@ -1093,7 +1111,11 @@ class LinearDiscriminantAnalysis(_Classifier):
         e2, v2 = pr.alloc(d), pr.alloc(d * d)
         scal, coef, inter, evr, tmp = pr.alloc(d * d), pr.alloc(K * d), pr.alloc(K), pr.alloc(d), pr.alloc(K * d)
         pr.stage("class_stats", K * d, xo, n, d, yo, K, cnt, mean, _NONE, _NONE)
-        pr.stage("lda_prep", 1, cnt, mean, K, d, n, priors, xbar)
+        gflag, gofs = 0, 0
+        if self.priors is not None:
+            pv = _given_priors(self.priors, K, "LinearDiscriminantAnalysis")
+            gflag, gofs = (2 if abs(sum(pv) - 1.0) > 1e-5 else 1), pr.put_list(pv)
+        pr.stage("lda_prep", 1, cnt, mean, K, d, n, priors, xbar, gflag, gofs)
         pr.stage("center_rows", n * d, xo, n, d, mean, yo, _NONE, z)
         pr.stage("col_stats", d, z, n, d, stz)
         pr.stage("lda_w", d, stz + 2 * d, d, n, K, std, w)
@@ -1170,8 +1192,8 @@ class QuadraticDiscriminantAnalysis(_Classifier):
     class, the eigendecomposition of the class covariance (divisor n_k) stands
     in for the reference's SVD of the centred class rows (same S^2 / n_k,
     vectors up to sign). A class whose regularised scalings are not all above
-    `tol` is refused, as the reference refuses it. Float32. priors and
-    store_covariance are refused by name."""
+    `tol` is refused, as the reference refuses it. Float32; priors as given.
+    store_covariance is refused by name."""
     _parameters = ("solver", "shrinkage", "priors", "reg_param", "store_covariance", "tol", "covariance_estimator")
 
     def __init__(self, *, solver="svd", shrinkage=None, priors=None, reg_param=0.0, store_covariance=False,
@@ -1187,9 +1209,8 @@ class QuadraticDiscriminantAnalysis(_Classifier):
     def fit(self, X, y):
         if self.solver != "svd" or self.shrinkage is not None or self.covariance_estimator is not None:
             raise NotImplementedError("mojolearn: QuadraticDiscriminantAnalysis supports solver='svd' only")
-        if self.priors is not None or self.store_covariance:
-            raise NotImplementedError("mojolearn: QuadraticDiscriminantAnalysis priors and store_covariance "
-                                      "are not implemented")
+        if self.store_covariance:
+            raise NotImplementedError("mojolearn: QuadraticDiscriminantAnalysis store_covariance is not implemented")
         arr = _x2d(X)
         n, d = arr.shape
         codes = self._encode_y(y, n)
@@ -1207,10 +1228,13 @@ class QuadraticDiscriminantAnalysis(_Classifier):
         reg = pr.put_scalar(self.reg_param)
         rot, logc, s2 = pr.alloc(K * d * d), pr.alloc(K), pr.alloc(K * d)
         pr.stage("class_stats", K * d, xo, n, d, yo, K, cnt, mean, _NONE, _NONE)
-        pr.stage("lda_prep", 1, cnt, mean, K, d, n, priors, xbar)
+        gflag, gofs = 0, 0
+        if self.priors is not None:
+            gflag, gofs = 1, pr.put_list(_given_priors(self.priors, K, "QuadraticDiscriminantAnalysis"))
+        pr.stage("lda_prep", 1, cnt, mean, K, d, n, priors, xbar, gflag, gofs)
         pr.stage("qda_cov", K * d * d, xo, n, d, yo, mean, cnt, cov)
         pr.stage("eigh", K, cov, d, d * d, ev, evec)
-        pr.stage("qda_prep", K, ev, evec, K, d, reg, cnt, n, rot, logc, s2)
+        pr.stage("qda_prep", K, ev, evec, K, d, reg, cnt, n, rot, logc, s2, gflag, gofs)
         pr.run(mode)
         s2v = pr.values(s2, K * d)
         for k in range(K):
@@ -2241,7 +2265,7 @@ class ComplementNB(_DiscreteNB):
     """sklearn.naive_bayes.ComplementNB, float32: complement class feature
     counts, their log share (negated, or normalised when `norm`); the class
     prior enters only with a single class, as in the reference. alpha > 0
-    required; class_prior, sample_weight and partial_fit are refused."""
+    required; class_prior as given (its log); sample_weight and partial_fit are refused."""
     _parameters = ("alpha", "force_alpha", "fit_prior", "class_prior", "norm")
 
     def __init__(self, *, alpha=1.0, force_alpha=True, fit_prior=True, class_prior=None, norm=False):
@@ -2275,8 +2299,8 @@ class CategoricalNB(_DiscreteNB):
     """sklearn.naive_bayes.CategoricalNB, float32: X holds category indices
     0, 1, ...; per feature, class and category the smoothed log share of the
     class's rows. A category index outside the fitted range at predict time
-    is refused, as the reference refuses it. min_categories, class_prior,
-    sample_weight and partial_fit are refused."""
+    is refused, as the reference refuses it; class_prior as given (its log).
+    min_categories, sample_weight and partial_fit are refused."""
     _parameters = ("alpha", "force_alpha", "fit_prior", "class_prior", "min_categories")
 
     def __init__(self, *, alpha=1.0, force_alpha=True, fit_prior=True, class_prior=None, min_categories=None):
@@ -2301,7 +2325,10 @@ class CategoricalNB(_DiscreteNB):
         st, cnt, clp = pr.alloc(6 * d), pr.alloc(K), pr.alloc(K)
         pr.stage("col_stats", d, xo, n, d, st)
         pr.stage("class_stats", K, xo, n, 1, yo, K, cnt, _NONE, _NONE, _NONE)
-        pr.stage("class_log_prior", K, cnt if self.fit_prior else pr.put_list([1.0] * K), K, clp)
+        if self.class_prior is not None:
+            pr.stage("log", K, pr.put_list(_given_priors(self.class_prior, K, "CategoricalNB")), clp)
+        else:
+            pr.stage("class_log_prior", K, cnt if self.fit_prior else pr.put_list([1.0] * K), K, clp)
         pr.run(mode)
         lo, hi = pr.values(st + 3 * d, d), pr.values(st + 4 * d, d)
         if any(v < 0 for v in lo):

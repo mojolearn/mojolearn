@@ -30,7 +30,9 @@ from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty
 from ._mode import NumericModeMixin
 
-__all__ = ["LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", "PolynomialCountSketch", "AdditiveChi2Sampler", "SkewedChi2Sampler", "LabelPropagation", "LabelSpreading", "KNNImputer"]
+__all__ = ["LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", "PolynomialCountSketch",
+           "AdditiveChi2Sampler", "SkewedChi2Sampler", "LabelPropagation", "LabelSpreading", "KNNImputer",
+           "PageRank", "connected_components", "Louvain", "SVGP"]
 
 # x_neighbors/items.mojo's codes
 _KERNELS = {"linear": 0, "poly": 1, "polynomial": 1, "rbf": 2, "sigmoid": 3, "laplacian": 4,
@@ -998,3 +1000,226 @@ class KNNImputer(_XNeighbors):
 
     def fit_transform(self, X, y=None):
         return self.fit(X).transform(X)
+
+
+# ====================================================================== PageRank
+def _adjacency(A):
+    A = _f32(A, "adjacency")
+    if A.shape[0] != A.shape[1]:
+        raise ValueError("the adjacency matrix must be square")
+    return A
+
+
+class PageRank(_XNeighbors):
+    """PageRank by power iteration on a dense weighted adjacency matrix
+    (A[i, j] = weight of the edge i -> j).
+
+    References: networkx `pagerank` (`_pagerank_scipy`: row-stochastic
+    transition matrix, dangling nodes redistributed by the personalization,
+    stop when sum |x - x_last| < n * tol) and cuGraph
+    cpp/src/link_analysis/pagerank_impl.cuh. Each step is the pinned-fold
+    GEMV of x_neighbors/items.mojo `pagerank_step_item`. `personalization`
+    is a length-n vector (normalized to sum 1) or None (uniform); `nstart`
+    and a separate `dangling` vector are not carried. Non-convergence raises,
+    as networkx's PowerIterationFailedConvergence.
+    """
+
+    def __init__(self, alpha=0.85, *, personalization=None, max_iter=100, tol=1e-6, weight=True):
+        self.alpha = alpha
+        self.personalization = personalization
+        self.max_iter = max_iter
+        self.tol = tol
+        self.weight = weight
+
+    def fit(self, A, y=None):
+        A = _adjacency(A)
+        n = A.shape[0]
+        if not self.weight:
+            A = Array.from_list([[1.0 if v != 0 else 0.0 for v in r] for r in A.tolist()], "<f4")
+        Q = empty((n, n), "<f4")
+        self._op("row_normalize", [(A, 0), (Q, 1)], (n, n))
+        dangling = _i32([1 if all(v == 0 for v in r) else 0 for r in A.tolist()], "dangling")
+        if self.personalization is None:
+            p = Array.from_list([1.0 / n] * n, "<f4")
+        else:
+            pv = [float(v) for v in (self.personalization.tolist() if hasattr(self.personalization, "tolist")
+                                     else self.personalization)]
+            if len(pv) != n or any(v < 0 for v in pv) or math.fsum(pv) == 0:
+                raise ValueError("personalization must be n non-negative values, not all zero")
+            tot = math.fsum(pv)
+            p = Array.from_list([v / tot for v in pv], "<f4")
+        x = Array.from_list([1.0 / n] * n, "<f4")
+        s = empty((1,), "<f4")
+        for it in range(int(self.max_iter)):
+            nxt = empty((n,), "<f4")
+            self._op("pagerank_step", [(Q, 0), (x, 0), (p, 0), (dangling, 0), (nxt, 1)], (n,), (_f32_scalar(self.alpha),))
+            self._op("absdiff_sum", [(nxt, 0), (x, 0), (s, 1)], (n,))
+            x = nxt
+            if s.tolist()[0] < n * float(self.tol):
+                self.pagerank_ = x
+                self.n_iter_ = it + 1
+                return self
+        raise RuntimeError(f"PageRank: power iteration failed to converge within {self.max_iter} iterations")
+
+
+# ====================================================================== connected components
+def connected_components(A, directed=True, connection="weak", return_labels=True, numeric_mode=None):
+    """(n_components, labels) of the graph with dense adjacency A, as
+    `scipy.sparse.csgraph.connected_components`: an edge is any nonzero
+    entry, `connection='weak'` ignores direction (for an undirected graph the
+    two agree); labels are numbered by the lowest node of each component, so
+    component 0 holds node 0 (scipy's numbering). The labels come from the
+    min-label product iteration (DBSCAN's weak_cc; cuGraph
+    weakly_connected_components_impl.cuh), integers only. connection='strong'
+    on a directed graph is refused by name."""
+    if directed and connection == "strong":
+        raise NotImplementedError("connected_components: connection='strong' is not implemented")
+    if connection not in ("weak", "strong"):
+        raise ValueError("connection must be 'weak' or 'strong'")
+    est = _XNeighbors()
+    est.numeric_mode = numeric_mode
+    A = _adjacency(A)
+    n = A.shape[0]
+    lab = _i32(list(range(n)), "labels")
+    while True:
+        nxt = empty((n,), "<i4")
+        est._op("cc_step", [(A, 0), (lab, 0), (nxt, 1)], (n,))
+        if nxt.tolist() == lab.tolist():
+            break
+        lab = nxt
+    roots = {}
+    out = []
+    for v in lab.tolist():
+        out.append(roots.setdefault(v, len(roots)))
+    labels = Array.from_list(out, "<i4")
+    return (len(roots), labels) if return_labels else len(roots)
+
+
+# ====================================================================== Louvain
+class Louvain(_XNeighbors):
+    """Louvain community detection on a dense symmetric weighted adjacency.
+
+    References: networkx `louvain_communities` / `louvain_partitions`
+    (`_one_level`, `_gen_graph`, `modularity`) and cuGraph
+    cpp/src/community/louvain_impl.cuh. The whole method is ONE sequential
+    Mojo item (x_neighbors/items.mojo `louvain_item`) with a PINNED order
+    (DEVIATION 5204): nodes in ascending id instead of networkx's `seed`
+    shuffle, candidate communities in ascending id, a strictly larger gain
+    to move, so ties go to the lowest community id. `labels_` numbers the
+    communities by their lowest node; `modularity_` is networkx's
+    modularity of that partition, in float32. `seed` is accepted and unused.
+    """
+
+    def __init__(self, resolution=1.0, *, threshold=1e-7, max_level=None, seed=None):
+        self.resolution = resolution
+        self.threshold = threshold
+        self.max_level = max_level
+        self.seed = seed
+
+    def fit(self, A, y=None):
+        A = _adjacency(A)
+        n = A.shape[0]
+        rows = A.tolist()
+        if any(rows[i][j] != rows[j][i] for i in range(n) for j in range(i + 1, n)):
+            raise ValueError("Louvain: the adjacency matrix must be symmetric (an undirected graph)")
+        if all(v == 0 for r in rows for v in r):
+            raise ValueError("Louvain: the graph has no edges")
+        labels = empty((n,), "<i4")
+        info = empty((2,), "<f4")
+        ml = 0 if self.max_level is None else int(self.max_level)
+        if self.max_level is not None and ml < 1:
+            raise ValueError("max_level must be a positive integer or None")
+        self._op("louvain", [(A, 0), (labels, 1), (info, 1)], (n, ml),
+                 (_f32_scalar(self.resolution), _f32_scalar(self.threshold)))
+        roots = {}
+        self.labels_ = Array.from_list([roots.setdefault(v, len(roots)) for v in labels.tolist()], "<i4")
+        self.n_communities_ = len(roots)
+        info = info.tolist()
+        self.modularity_ = info[0]
+        self.n_levels_ = int(info[1])
+        return self
+
+    def fit_predict(self, A, y=None):
+        return self.fit(A).labels_
+
+
+# ====================================================================== SVGP
+class SVGP(_XNeighbors):
+    """Sparse variational Gaussian process regression with inducing points.
+
+    Reference: GPflow `gpflow/models/svgp.py` (SVGP with a Gaussian
+    likelihood, a squared-exponential kernel, zero mean). The variational
+    distribution q(u) = N(q_mu, q_sqrt q_sqrt^T) is set to its OPTIMUM for
+    the given hyperparameters (Titsias 2009), where GPflow's `elbo` equals the
+    collapsed bound reported as `elbo_`; hyperparameters are the caller's,
+    not optimized (DEVIATION 5205: GPflow trains them and q by gradient
+    steps). q_mu / q_sqrt are the non-whitened parameters. Inducing points:
+    `inducing_points`, or `n_inducing` training rows evenly spaced
+    (row i * n // M). The m x m system is ONE sequential item
+    (x_neighbors/items.mojo `svgp_item`); the kernel matrices and products are
+    parallel items. Float32 throughout.
+    """
+
+    def __init__(self, n_inducing=32, *, inducing_points=None, kernel_variance=1.0, lengthscale=1.0,
+                 noise_variance=1.0, jitter=1e-6):
+        self.n_inducing = n_inducing
+        self.inducing_points = inducing_points
+        self.kernel_variance = kernel_variance
+        self.lengthscale = lengthscale
+        self.noise_variance = noise_variance
+        self.jitter = jitter
+
+    def _k(self, A, B):
+        g = 1.0 / (2.0 * float(self.lengthscale) ** 2)
+        K = self._kernel(A, B, "rbf", g, 0.0, 0)
+        return self._unary(K, _U_IDENTITY, _f32_scalar(self.kernel_variance), 0.0)
+
+    def fit(self, X, y):
+        X = _f32(X)
+        n, d = X.shape
+        yv = _f32_1d(y, "y")
+        if len(yv) != n:
+            raise ValueError("X and y have different numbers of rows")
+        if self.inducing_points is not None:
+            Z = _f32(self.inducing_points, "inducing_points")
+        else:
+            M = min(int(self.n_inducing), n)
+            Z = self._take_rows(X, [i * n // M for i in range(M)])
+        M = Z.shape[0]
+        Kuu = self._k(Z, Z)
+        Kfu = self._k(X, Z)
+        Kuf = self._k(Z, X)
+        B = self._matmul(Kuf, Kfu)
+        b = self._matmul(Kuf, yv.reshape((n, 1)))
+        alpha = empty((M,), "<f4")
+        C = empty((M, M), "<f4")
+        qmu = empty((M,), "<f4")
+        qsqrt = empty((M, M), "<f4")
+        info = empty((2,), "<f4")
+        self._op("svgp", [(Kuu, 0), (B, 0), (b, 0), (yv, 0), (alpha, 1), (C, 1), (qmu, 1), (qsqrt, 1), (info, 1)],
+                 (M, n), (_f32_scalar(self.noise_variance), _f32_scalar(self.jitter), _f32_scalar(self.kernel_variance)))
+        elbo, ok = info.tolist()
+        if ok == 0:
+            raise ValueError("SVGP: the inducing system is not positive definite; raise jitter or noise_variance")
+        self.Z_, self._alpha, self._C = Z, alpha, C
+        self.q_mu_ = qmu
+        self.q_sqrt_ = qsqrt
+        self.elbo_ = elbo
+        self.n_features_in_ = d
+        return self
+
+    def predict_f(self, X):
+        Q = _f32(X)
+        Ksu = self._k(Q, self.Z_)
+        M = self.Z_.shape[0]
+        mean = self._matmul(Ksu, self._alpha.reshape((M, 1))).reshape((Q.shape[0],))
+        var = empty((Q.shape[0],), "<f4")
+        self._op("svgp_var", [(Ksu, 0), (self._C, 0), (var, 1)], (Q.shape[0], M), (_f32_scalar(self.kernel_variance),))
+        return mean, var
+
+    def predict_y(self, X):
+        mean, var = self.predict_f(X)
+        return mean, self._unary(var, _U_IDENTITY, 1.0, _f32_scalar(self.noise_variance))
+
+    def predict(self, X):
+        return self.predict_f(X)[0]

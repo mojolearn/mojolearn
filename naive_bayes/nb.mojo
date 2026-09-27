@@ -32,9 +32,10 @@ def gnb_eps_unit(t: Int, f: FP, q: IP):
 
 
 def gnb_params_unit(t: Int, f: FP, q: IP):
-    """q = [CNT, VAR, K, d, n, EPS, PRIOR, CONST]; t = class k.
+    """q = [CNT, VAR, K, d, n, EPS, PRIOR, CONST, GIVEN, PIN]; t = class k.
     VAR[k, :] += EPS (a variance still <= 0 is one: never 0/0 downstream);
-    PRIOR[k] = CNT[k] / n; CONST[k] = log(PRIOR[k]) - 0.5 * sum_c log(2 pi VAR[k, c])."""
+    PRIOR[k] = CNT[k] / n, or PIN[k] when GIVEN (the `priors` option);
+    CONST[k] = log(PRIOR[k]) - 0.5 * sum_c log(2 pi VAR[k, c])."""
     var d = p(q, 3)
     var k = t
     var sl = Float32(0)
@@ -45,6 +46,8 @@ def gnb_params_unit(t: Int, f: FP, q: IP):
         st(f, p(q, 1) + k * d + c, v)
         sl = add(sl, logf(mul(TWO_PI, v)))
     var prior = div(ld(f, p(q, 0) + k), Float32(p(q, 4)))
+    if p(q, 8) != 0:
+        prior = ld(f, p(q, 9) + k)
     st(f, p(q, 6) + k, prior)
     st(f, p(q, 7) + k, sub(logf(prior), mul(Float32(0.5), sl)))
 
@@ -170,3 +173,8 @@ def cat_jll_unit(t: Int, f: FP, q: IP):
         var v = Int(ld(f, p(q, 0) + i * d + j))
         s = add(s, ld(f, p(q, 3) + (j * K + k) * cmax + v))
     st(f, p(q, 7) + t, add(s, ld(f, p(q, 6) + k)))
+
+
+def log_unit(t: Int, f: FP, q: IP):
+    """q = [X, OUT]; t = element: OUT = log(X) (a given class prior's log)."""
+    st(f, p(q, 1) + t, logf(ld(f, p(q, 0) + t)))

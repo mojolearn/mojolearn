@@ -64,5 +64,41 @@ trait Exec:
         ...
 
     @staticmethod
+    def lasso_rows(
+        g: F32Ptr, q: F32Ptr, w: F32Ptr, h: F32Ptr, its: F32Ptr, n: Int, k: Int, alpha: Float32,
+        max_iter: Int, tol: Float32, positive: Bool,
+    ) raises:
+        ...
+
+    @staticmethod
+    def omp_rows(g: F32Ptr, q: F32Ptr, w: F32Ptr, s: F32Ptr, na: F32Ptr, n: Int, k: Int, nnz: Int) raises:
+        ...
+
+    @staticmethod
+    def rand_gamma(dst: F32Ptr, count: Int, seed: UInt32, stream: UInt32, shape: Float32) raises:
+        ...
+
+    @staticmethod
+    def lda_rows(
+        x: F32Ptr, ew: F32Ptr, d: F32Ptr, e: F32Ptr, s: F32Ptr, its: F32Ptr, n: Int, k: Int, v: Int,
+        prior: Float32, max_iter: Int, tol: Float32,
+    ) raises:
+        ...
+
+    @staticmethod
+    def dijkstra_rows(w: F32Ptr, dist: F32Ptr, reached: F32Ptr, n: Int) raises:
+        ...
+
+    @staticmethod
+    def barycenter_rows(
+        x: F32Ptr, y: F32Ptr, nbr: F32Ptr, wt: F32Ptr, flags: F32Ptr, n: Int, ny: Int, d: Int, k: Int, reg: Float32
+    ) raises:
+        ...
+
+    @staticmethod
+    def als_rows(c: F32Ptr, y: F32Ptr, yty: F32Ptr, x: F32Ptr, flags: F32Ptr, n: Int, m: Int, f: Int, reg: Float32) raises:
+        ...
+
+    @staticmethod
     def vendor() -> String:
         ...

@@ -10,7 +10,7 @@ from std.python.bindings import PythonModuleBuilder
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_neighbors.eigh import op_eigh
 from checks.vendor import COMPILED_VENDOR
-from x_neighbors.device_ops import op_sqdist, op_nan_sqdist, op_l1dist, op_kernel, op_matmul, op_rowsum, op_colsum, op_unary, op_knn_select, op_group_mean, op_take_rows, op_take_cols, op_variance, op_ocsvm, op_lof_lrd, op_lof_score, op_kpca_center, op_scale_div, op_svd_flip, op_kpca_alpha_scale, op_nc_std, op_nc_shrink, op_nc_decision, op_softmax, op_pcs, op_achi2, op_skew_weights, op_skew_transform, op_absdiff_sum, op_row_normalize, op_lp_clamp, op_ls_clamp, op_ls_laplacian, op_knn_graph, op_knn_impute
+from x_neighbors.device_ops import op_sqdist, op_nan_sqdist, op_l1dist, op_kernel, op_matmul, op_rowsum, op_colsum, op_unary, op_knn_select, op_group_mean, op_take_rows, op_take_cols, op_variance, op_ocsvm, op_lof_lrd, op_lof_score, op_kpca_center, op_scale_div, op_svd_flip, op_kpca_alpha_scale, op_nc_std, op_nc_shrink, op_nc_decision, op_softmax, op_pcs, op_achi2, op_skew_weights, op_skew_transform, op_absdiff_sum, op_row_normalize, op_lp_clamp, op_ls_clamp, op_ls_laplacian, op_knn_graph, op_knn_impute, op_pagerank_step, op_cc_step, op_louvain, op_svgp, op_svgp_var
 
 
 def _a(v: PythonObject, k: Int) raises -> Int:
@@ -467,6 +467,74 @@ def knn_impute_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) rai
     return PythonObject(None)
 
 
+def pagerank_step_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    var v_q = _a(a_, 0)
+    var v_x = _a(a_, 1)
+    var v_p = _a(a_, 2)
+    var v_dangling = _a(a_, 3)
+    var v_res = _a(a_, 4)
+    var v_n = _n(i_, 0)
+    var v_alpha = _f(f_, 0)
+    with GILReleased(Python()):
+        op_pagerank_step(v_q, v_x, v_p, v_dangling, v_res, v_n, v_alpha)
+    return PythonObject(None)
+
+
+def cc_step_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    var v_a = _a(a_, 0)
+    var v_lab = _a(a_, 1)
+    var v_res = _a(a_, 2)
+    var v_n = _n(i_, 0)
+    with GILReleased(Python()):
+        op_cc_step(v_a, v_lab, v_res, v_n)
+    return PythonObject(None)
+
+
+def louvain_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    var v_a = _a(a_, 0)
+    var v_labels = _a(a_, 1)
+    var v_info = _a(a_, 2)
+    var v_n = _n(i_, 0)
+    var v_max_level = _n(i_, 1)
+    var v_resolution = _f(f_, 0)
+    var v_threshold = _f(f_, 1)
+    with GILReleased(Python()):
+        op_louvain(v_a, v_labels, v_info, v_n, v_max_level, v_resolution, v_threshold)
+    return PythonObject(None)
+
+
+def svgp_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    var v_kuu = _a(a_, 0)
+    var v_bmat = _a(a_, 1)
+    var v_b = _a(a_, 2)
+    var v_y = _a(a_, 3)
+    var v_alpha = _a(a_, 4)
+    var v_cmat = _a(a_, 5)
+    var v_qmu = _a(a_, 6)
+    var v_qsqrt = _a(a_, 7)
+    var v_info = _a(a_, 8)
+    var v_m = _n(i_, 0)
+    var v_n = _n(i_, 1)
+    var v_noise = _f(f_, 0)
+    var v_jitter = _f(f_, 1)
+    var v_kdiag = _f(f_, 2)
+    with GILReleased(Python()):
+        op_svgp(v_kuu, v_bmat, v_b, v_y, v_alpha, v_cmat, v_qmu, v_qsqrt, v_info, v_m, v_n, v_noise, v_jitter, v_kdiag)
+    return PythonObject(None)
+
+
+def svgp_var_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    var v_ksu = _a(a_, 0)
+    var v_cmat = _a(a_, 1)
+    var v_res = _a(a_, 2)
+    var v_n = _n(i_, 0)
+    var v_m = _n(i_, 1)
+    var v_kdiag = _f(f_, 0)
+    with GILReleased(Python()):
+        op_svgp_var(v_ksu, v_cmat, v_res, v_n, v_m, v_kdiag)
+    return PythonObject(None)
+
+
 def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[sqdist_binding]("xn_sqdist")
     m.def_function[nan_sqdist_binding]("xn_nan_sqdist")
@@ -503,6 +571,11 @@ def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[ls_laplacian_binding]("xn_ls_laplacian")
     m.def_function[knn_graph_binding]("xn_knn_graph")
     m.def_function[knn_impute_binding]("xn_knn_impute")
+    m.def_function[pagerank_step_binding]("xn_pagerank_step")
+    m.def_function[cc_step_binding]("xn_cc_step")
+    m.def_function[louvain_binding]("xn_louvain")
+    m.def_function[svgp_binding]("xn_svgp")
+    m.def_function[svgp_var_binding]("xn_svgp_var")
     m.def_function[eigh_binding]("xn_eigh")
     m.def_function[x_neighbors_numeric_mode_binding]("x_neighbors_numeric_mode")
 

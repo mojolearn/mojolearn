@@ -208,3 +208,100 @@ def _(ml, X, yc, yr, Xh=None):
     b = _sequence_opt_run(ml, ml.Adafactor, X, lr=3e-2, beta2_decay=-0.6, d=2.0, weight_decay=0.1)
     return _fit(dict(plain=a["params"], plain_state=_h(*[v for s in a["opt"].state for v in s.values()]),
                      moved=b["params"], moved_state=_h(*[v for s in b["opt"].state for v in s.values()])))
+
+
+@lane("sequence-lamb")
+def _(ml, X, yc, yr, Xh=None):
+    """LAMB at timm's defaults (global clip 1.0, weight decay 0.01) and with
+    trust_clip, always_adapt, no decay and no clip."""
+    a = _sequence_opt_run(ml, ml.LAMB, X, lr=1e-2)
+    b = _sequence_opt_run(ml, ml.LAMB, X, lr=1e-2, weight_decay=0.0, always_adapt=True, trust_clip=True,
+                          max_grad_norm=None)
+    return _fit(dict(plain=a["params"], plain_state=a["state"], adapt=b["params"], adapt_state=b["state"]))
+
+
+@lane("sequence-adamax")
+def _(ml, X, yc, yr, Xh=None):
+    """Adamax at torch's defaults and with other betas and weight decay, and
+    a GRU regressor trained by it."""
+    a = _sequence_opt_run(ml, ml.Adamax, X)
+    b = _sequence_opt_run(ml, ml.Adamax, X, lr=1e-2, betas=(0.8, 0.99), weight_decay=0.05)
+    Xs = _sequence_seq(X)
+    ycs, yrs = _sequence_targets(yc, yr)
+    r = ml.GRURegressor(hidden_size=8, optimizer="adamax", learning_rate=2e-3, batch_size=32, max_epochs=1,
+                        random_state=10).fit(Xs, yrs)
+    return _fit(dict(plain=a["params"], plain_state=a["state"], moved=b["params"], moved_state=b["state"],
+                     gru=_h(r.params_, r.loss_curve_)))
+
+
+@lane("sequence-nadam")
+def _(ml, X, yc, yr, Xh=None):
+    """NAdam at torch's defaults and with decoupled decay and a faster
+    momentum schedule, and an RNN classifier trained by it."""
+    a = _sequence_opt_run(ml, ml.NAdam, X)
+    b = _sequence_opt_run(ml, ml.NAdam, X, lr=1e-2, weight_decay=0.05, decoupled_weight_decay=True,
+                          momentum_decay=0.01)
+    Xs = _sequence_seq(X)
+    ycs, _ = _sequence_targets(yc, yr)
+    c = ml.RNNClassifier(hidden_size=8, optimizer="nadam", learning_rate=2e-3, batch_size=32, max_epochs=1,
+                         random_state=11).fit(Xs, ycs)
+    return _fit(dict(plain=a["params"], plain_state=a["state"], moved=b["params"], moved_state=b["state"],
+                     rnn=_h(c.params_, c.loss_curve_)))
+
+
+@lane("sequence-lr-schedulers")
+def _(ml, X, yc, yr, Xh=None):
+    """StepLR, ExponentialLR and OneCycleLR (cosine two-phase, linear
+    three-phase) over 40 steps as float32 bits, and an LSTM regressor and a
+    NAdam run driven by schedules."""
+    sched = [ml.StepLR(0.1, step_size=7, gamma=0.5), ml.ExponentialLR(0.05, gamma=0.9),
+             ml.OneCycleLR(0.2, total_steps=40), ml.OneCycleLR(0.2, total_steps=40, anneal_strategy="linear",
+                                                               three_phase=True, pct_start=0.25)]
+    bits = np.asarray([[s.bits_at(t) for t in range(1, 41)] for s in sched], dtype=np.uint32)
+    Xs = _sequence_seq(X)
+    ycs, yrs = _sequence_targets(yc, yr)
+    r = ml.LSTMRegressor(hidden_size=8, batch_size=32, max_epochs=2, random_state=12,
+                         lr_schedule=ml.OneCycleLR(0.02, total_steps=6)).fit(Xs, yrs)
+    p1 = np.ascontiguousarray(X[:16, :4], dtype=np.float32).copy()
+    opt = ml.NAdam([p1])
+    opt.lr_schedule = ml.StepLR(1e-2, step_size=2)
+    for k in range(5):
+        opt.step([np.ascontiguousarray(X[16 + 16 * k:32 + 16 * k, 4:8], dtype=np.float32)])
+    return _fit(dict(bits=_h(bits), lstm=_h(r.params_, r.loss_curve_), nadam=_h(p1)))
+
+
+@lane("sequence-layernorm")
+def _(ml, X, yc, yr, Xh=None):
+    """LayerNorm over the 16 columns of 512 rows with a fixture-derived
+    weight and bias, forward and backward (dy from further rows), and the
+    functional form without affine over a (2, 8) normalized shape."""
+    x = np.ascontiguousarray(X[:512], dtype=np.float32)
+    ln = ml.LayerNorm(x.shape[1])
+    ln.weight[:] = np.float32(1.0) + np.float32(0.125) * np.ascontiguousarray(X[512, :x.shape[1]], dtype=np.float32)
+    ln.bias[:] = np.ascontiguousarray(X[513, :x.shape[1]], dtype=np.float32)
+    y = ln(x)
+    dx = ln.backward(np.ascontiguousarray(X[1024:1536], dtype=np.float32))
+    x3 = np.ascontiguousarray(X[:256, :16], dtype=np.float32).reshape(256, 2, 8)
+    y3 = ml.layer_norm_forward(x3, (2, 8), eps=1e-3)
+    Xh3 = np.ascontiguousarray(Xh[:256, :x.shape[1]], dtype=np.float32)
+    return _fit(dict(y=_h(y), dx=_h(dx), dw=_h(ln.weight_grad), db=_h(ln.bias_grad), y3=_h(y3)),
+                ln, lambda e: (e.forward(Xh3),))
+
+
+@lane("sequence-theta")
+def _(ml, X, yc, yr, Xh=None):
+    """Four series of 96 observations: a positive seasonal series (period 12,
+    multiplicative after the ACF test), the same minus its minimum (additive),
+    a random walk and a fixture column. AutoTheta over the batch and a
+    DynamicOptimizedTheta with a fixed alpha; 18-step forecasts."""
+    t = np.arange(96, dtype=np.float32)
+    wave = np.sin(t * np.float32(2 * np.pi / 12)).astype(np.float32)
+    c = np.ascontiguousarray(X[:96, 7], dtype=np.float32)
+    y = np.stack([np.float32(20.0) + np.float32(4.0) * wave + np.float32(0.3) * c + np.float32(0.05) * t,
+                  np.float32(4.0) * wave + np.float32(0.3) * c,
+                  np.cumsum(c, dtype=np.float32), c]).astype(np.float32)
+    a = ml.AutoTheta(season_length=12).fit(y)
+    fa = a.predict(18)["mean"]
+    d = ml.DynamicOptimizedTheta(season_length=12, alpha=0.3).fit(y)
+    fd = d.predict(18)["mean"]
+    return _fit(dict(auto=_h(fa), auto_info=_h(a.info_), dotm=_h(fd), dotm_info=_h(d.info_)))

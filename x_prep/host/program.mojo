@@ -8,8 +8,10 @@ from x_prep.units import N_OPS, run_unit
 
 
 def run_program_host(arena_addr: Int, arena_len: Int, prog_addr: Int, stages: Int) raises:
-    var f = FP(unsafe_from_address=arena_addr)
-    var qbase = IP(unsafe_from_address=prog_addr)
+    run_program_host_ptr(FP(unsafe_from_address=arena_addr), arena_len, IP(unsafe_from_address=prog_addr), stages)
+
+
+def run_program_host_ptr(f: FP, arena_len: Int, qbase: IP, stages: Int) raises:
     for s in range(stages):
         var op = Int(qbase.unsafe_load(s * STAGE_INTS))
         if op < 0 or op >= N_OPS:

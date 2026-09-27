@@ -195,6 +195,132 @@ def svd_py[E: Exec](a: PythonObject, s: PythonObject, v: PythonObject, p: Python
     return PythonObject(n)
 
 
+def lasso_rows_py[E: Exec](
+    g: PythonObject, q: PythonObject, w: PythonObject, its: PythonObject, p: PythonObject, f: PythonObject
+) raises -> PythonObject:
+    # p = [n, k, max_iter, positive]; f = [alpha, tol]
+    var n = _n(p, 0)
+    var k = _n(p, 1)
+    var max_iter = _n(p, 2)
+    var positive = Int(py=p[3]) != 0
+    var alpha = Float32(Float64(py=f[0]))
+    var tol = Float32(Float64(py=f[1]))
+    var pg = _f(g)
+    var pq = _f(q)
+    var pw = _f(w)
+    var pi = _f(its)
+    var h = List[Float32](length=n * k if n * k > 0 else 1, fill=Float32(0))
+    var ph = F32Ptr(unsafe_from_address=Int(h.unsafe_ptr()))
+    with GILReleased(Python()):
+        E.lasso_rows(pg, pq, pw, ph, pi, n, k, alpha, max_iter, tol, positive)
+    _ = h^
+    return PythonObject(n)
+
+
+def omp_rows_py[E: Exec](
+    g: PythonObject, q: PythonObject, w: PythonObject, na: PythonObject, p: PythonObject
+) raises -> PythonObject:
+    var n = _n(p, 0)
+    var k = _n(p, 1)
+    var nnz = _n(p, 2)
+    var pg = _f(g)
+    var pq = _f(q)
+    var pw = _f(w)
+    var pn = _f(na)
+    var per = k * k + 3 * k
+    var s = List[Float32](length=n * per if n * per > 0 else 1, fill=Float32(0))
+    var ps = F32Ptr(unsafe_from_address=Int(s.unsafe_ptr()))
+    with GILReleased(Python()):
+        E.omp_rows(pg, pq, pw, ps, pn, n, k, nnz)
+    _ = s^
+    return PythonObject(n)
+
+
+def rand_gamma_py[E: Exec](dst: PythonObject, p: PythonObject, shape: PythonObject) raises -> PythonObject:
+    var count = _n(p, 0)
+    var seed = UInt32(Int(py=p[1]) & 0xFFFFFFFF)
+    var stream = UInt32(Int(py=p[2]) & 0xFFFFFFFF)
+    var a = Float32(Float64(py=shape))
+    if not (a >= Float32(1)):
+        raise Error("x_decomp: the gamma sampler takes shape >= 1")
+    var po = _f(dst)
+    with GILReleased(Python()):
+        E.rand_gamma(po, count, seed, stream, a)
+    return PythonObject(count)
+
+
+def lda_rows_py[E: Exec](
+    x: PythonObject, ew: PythonObject, d: PythonObject, e: PythonObject, its: PythonObject, p: PythonObject,
+    f: PythonObject,
+) raises -> PythonObject:
+    # p = [n, k, v, max_iter]; f = [prior, tol]
+    var n = _n(p, 0)
+    var k = _n(p, 1)
+    var v = _n(p, 2)
+    var max_iter = _n(p, 3)
+    var prior = Float32(Float64(py=f[0]))
+    var tol = Float32(Float64(py=f[1]))
+    var px = _f(x)
+    var pw = _f(ew)
+    var pd = _f(d)
+    var pe = _f(e)
+    var pi = _f(its)
+    var s = List[Float32](length=n * (v + k) if n > 0 else 1, fill=Float32(0))
+    var ps = F32Ptr(unsafe_from_address=Int(s.unsafe_ptr()))
+    with GILReleased(Python()):
+        E.lda_rows(px, pw, pd, pe, ps, pi, n, k, v, prior, max_iter, tol)
+    _ = s^
+    return PythonObject(n)
+
+
+def dijkstra_rows_py[E: Exec](w: PythonObject, dist: PythonObject, reached: PythonObject, p: PythonObject) raises -> PythonObject:
+    var n = _n(p, 0)
+    var pw = _f(w)
+    var pd = _f(dist)
+    var pr = _f(reached)
+    with GILReleased(Python()):
+        E.dijkstra_rows(pw, pd, pr, n)
+    return PythonObject(n)
+
+
+def barycenter_rows_py[E: Exec](
+    x: PythonObject, y: PythonObject, nbr: PythonObject, wt: PythonObject, flags: PythonObject, p: PythonObject,
+    reg: PythonObject,
+) raises -> PythonObject:
+    # p = [n, ny, d, k]
+    var n = _n(p, 0)
+    var ny = _n(p, 1)
+    var d = _n(p, 2)
+    var k = _n(p, 3)
+    var r = Float32(Float64(py=reg))
+    var px = _f(x)
+    var py_ = _f(y)
+    var pn = _f(nbr)
+    var pw = _f(wt)
+    var pf = _f(flags)
+    with GILReleased(Python()):
+        E.barycenter_rows(px, py_, pn, pw, pf, n, ny, d, k, r)
+    return PythonObject(n)
+
+
+def als_rows_py[E: Exec](
+    c: PythonObject, y: PythonObject, yty: PythonObject, x: PythonObject, flags: PythonObject, p: PythonObject,
+    reg: PythonObject,
+) raises -> PythonObject:
+    var n = _n(p, 0)
+    var m = _n(p, 1)
+    var f = _n(p, 2)
+    var r = Float32(Float64(py=reg))
+    var pc = _f(c)
+    var py_ = _f(y)
+    var pg = _f(yty)
+    var px = _f(x)
+    var pf = _f(flags)
+    with GILReleased(Python()):
+        E.als_rows(pc, py_, pg, px, pf, n, m, f, r)
+    return PythonObject(n)
+
+
 def numeric_mode_py() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 

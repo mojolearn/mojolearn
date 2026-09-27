@@ -50,7 +50,7 @@ def test_tables_are_complete_and_stdlib_only():
                 assert not any(a in A._NVIDIA_ONLY for a in opp), (v, lane)
         # two datasets of different kind, or its own named data
         tab = [d for d in s["datasets"] if d in A.TAB]
-        assert len(s["datasets"]) >= 2 or s["block"] in ("tensor", "optim", "dense", "bytes"), lane
+        assert len(s["datasets"]) >= 2 or s["block"] in ("tensor", "optim", "dense", "images"), lane
         assert not tab or set(tab) == set(A.TAB), lane
     # torch.optim has no Lion and no LAMB: those race ours alone, named in not_planned
     assert alone == {"lion", "lamb"}
@@ -99,7 +99,8 @@ def test_opponent_rosters():
     assert nv["dart"] == ("lightgbm-cpu", "xgboost-cpu", "xgboost-gpu")
     assert nv["ivf-pq"] == ("faiss-cpu", "cuvs-gpu")
     assert nv["pagerank"] == ("networkx-cpu", "cugraph-gpu")
-    assert nv["lstm"][0] == "torch-eager-fp32" and "torch-compile-tf32" in nv["lstm"]
+    assert nv["lstm-clf"][0] == "torch-eager-fp32" and "torch-compile-tf32" in nv["lstm-clf"]
+    assert nv["dart-reg"] == ("lightgbm-cpu", "xgboost-cpu", "xgboost-gpu")
     assert nv["autoarima"] == ("statsforecast-cpu", "cuml-gpu")
     assert A.opponents("amd", "ivf-pq") == ("faiss-cpu",)
     assert not any("tf32" in a for a in A.opponents("apple", "conv2d"))
@@ -114,8 +115,10 @@ def test_skipped_when_the_wheel_lacks_the_class(monkeypatch):
         A._ours_class("sgd-clf")
     with pytest.raises(A.Skipped):
         A.build("lu-solve", "ours", {})
-    fake.linalg = types.SimpleNamespace(lu_solve=len)
-    assert A._ours_class("lu-solve") == ("linalg.lu_solve", len)
+    fake.linalg = types.SimpleNamespace(solve=len)
+    assert A._ours_class("lu-solve") == ("linalg.solve", len)
+    fake.solve = abs                              # the first exported candidate wins
+    assert A._ours_class("lu-solve") == ("solve", abs)
     # a nested base estimator the wheel lacks is a skip too, not an error
     with pytest.raises(A.Skipped, match="GaussianNB"):
         A._resolve(A._E("GaussianNB"), "ours")
@@ -148,6 +151,12 @@ def test_lane_arrays_derivations():
     assert D["X"].shape[0] + D["Xq"].shape[0] == 200
     p = A._derived_params("gaussian-rp", {"X": B["X"]}, A.LANES["gaussian-rp"]["params"])
     assert p["n_components"] == 3
+    Y = np.random.default_rng(3).standard_normal((2, 100)).astype(np.float32)
+    D = A.lane_arrays("gru-clf", {"Y": Y})
+    n_fit = int(100 * 0.8) - A.SEQ_T
+    assert D["X"].shape == (2 * n_fit, A.SEQ_T, 1) and D["Xq"].shape[1:] == (A.SEQ_T, 1)
+    assert set(np.unique(D["y"])) <= {0.0, 1.0} and D["X"].dtype == np.float32
+    assert A.block_file("gru-clf", "synthetic") == "ts-synthetic"
     D = A.lane_arrays("autoarima", {"Y": np.arange(2 * 100, dtype=np.float32).reshape(2, 100)})
     assert D["Yfit"].shape == (2, 100 - A.TS_H) and D["Yhold"].shape == (2, A.TS_H)
 
@@ -213,3 +222,20 @@ def test_quality_by_kind():
     # a quality function that raises is recorded by name, never fatal
     q = A.quality("perceptron", {"yq": yq}, {"x": {}})
     assert "error" in q["x"]
+
+
+def test_device_ndarray_is_copied_to_host():
+    """cuVS returns pylibraft device_ndarray; np.array() of it is garbage, so
+    the host copy must go through copy_to_host (the classical2 ivf cuvs arm
+    and every algos cuvs arm read their neighbours through it)."""
+    class Dev(object):
+        __module__ = "pylibraft.common.device_ndarray"
+
+        def copy_to_host(self):
+            return np.arange(6).reshape(2, 3)
+
+        def __array__(self, dtype=None, copy=None):
+            return np.full((2, 3), -1)
+    ctd = _load("classical_two_datasets")
+    assert ctd._to_host(Dev()).tolist() == [[0, 1, 2], [3, 4, 5]]
+    assert A._arr(Dev(), np.int64).tolist() == [[0, 1, 2], [3, 4, 5]]
