@@ -1,8 +1,8 @@
 diff --git a/x_decomp/host.mojo b/x_decomp/host.mojo
-index b1e70724d..187bb23ea 100644
+index 896d181d4..83b0f5173 100644
 --- a/x_decomp/host.mojo
 +++ b/x_decomp/host.mojo
-@@ -60,7 +60,7 @@ struct HostExec(Exec):
+@@ -61,7 +61,7 @@ struct HostExec(Exec):
          for i in range(m):
              for j in range(n):
                  var v = fold_cell(pp, i * n + j, nb, m * n) if nb > 1 else gemm_cell(a, b, i, j, m, k, n, ta, tb)
@@ -11,28 +11,7 @@ index b1e70724d..187bb23ea 100644
                      # the gate's negative control (-D MOJOLEARN_HOST_SABOTAGE=1):
                      # the host column's every product moves by one unit in the
                      # last place; the GPU binding never defines it
-@@ -77,6 +77,10 @@ struct HostExec(Exec):
-                 i,
-                 ew_cell(op, a.unsafe_load(i), b.unsafe_load(bidx(bm, i, d)), c.unsafe_load(bidx(cm, i, d)), s),
-             )
-+            # SABOTAGE (end to end): every nonzero host ew result moves by one ulp
-+            var e = dst.unsafe_load(i)
-+            if e != 0:
-+                dst.unsafe_store(i, bitcast[DType.float32](bitcast[DType.uint32](e) ^ UInt32(1)))
- 
-     @staticmethod
-     def colsum(a: F32Ptr, dst: F32Ptr, n: Int, d: Int) raises:
-@@ -112,7 +116,8 @@ struct HostExec(Exec):
-     def sqdist(a: F32Ptr, b: F32Ptr, dst: F32Ptr, na: Int, nb: Int, d: Int) raises:
-         for i in range(na):
-             for j in range(nb):
--                dst.unsafe_store(i * nb + j, sqdist_cell(a, b, i, j, d))
-+                # SABOTAGE (end to end): every host squared distance moves by one ulp
-+                dst.unsafe_store(i * nb + j, bitcast[DType.float32](bitcast[DType.uint32](sqdist_cell(a, b, i, j, d)) ^ UInt32(1)))
- 
-     @staticmethod
-     def rand(dst: F32Ptr, count: Int, seed: UInt32, stream: UInt32, kind: Int) raises:
-@@ -122,6 +127,9 @@ struct HostExec(Exec):
+@@ -123,6 +123,9 @@ struct HostExec(Exec):
      @staticmethod
      def lu(a: F32Ptr, piv: I32Ptr, info: F32Ptr, n: Int) raises:
          lu_serial(a, piv, n, info)
