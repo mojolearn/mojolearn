@@ -10,7 +10,7 @@ from std.python.bindings import PythonModuleBuilder
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_neighbors.eigh import op_eigh
 from checks.vendor import COMPILED_VENDOR
-from x_neighbors.device_ops import op_sqdist, op_nan_sqdist, op_l1dist, op_kernel, op_matmul, op_rowsum, op_colsum, op_unary, op_knn_select, op_group_mean, op_take_rows, op_take_cols, op_variance, op_ocsvm, op_lof_lrd, op_lof_score, op_kpca_center, op_scale_div, op_svd_flip, op_kpca_alpha_scale, op_nc_std, op_nc_shrink, op_nc_decision, op_softmax, op_pcs, op_achi2, op_skew_weights, op_skew_transform, op_absdiff_sum, op_row_normalize, op_lp_clamp, op_ls_clamp, op_ls_laplacian, op_knn_graph, op_knn_impute, op_pagerank_step, op_cc_step, op_louvain, op_svgp, op_svgp_var
+from x_neighbors.device_ops import op_sqdist, op_nan_sqdist, op_l1dist, op_kernel, op_matmul, op_rowsum, op_colsum, op_unary, op_knn_select, op_group_mean, op_take_rows, op_take_cols, op_variance, op_ocsvm, op_lof_lrd, op_lof_score, op_kpca_center, op_scale_div, op_svd_flip, op_kpca_alpha_scale, op_nc_std, op_nc_shrink, op_nc_decision, op_softmax, op_log_softmax, op_pcs, op_achi2, op_skew_weights, op_skew_transform, op_absdiff_sum, op_row_normalize, op_lp_clamp, op_ls_clamp, op_ls_laplacian, op_knn_graph, op_knn_impute, op_pagerank_step, op_cc_step, op_louvain, op_svgp, op_svgp_var
 
 
 def _a(v: PythonObject, k: Int) raises -> Int:
@@ -204,14 +204,15 @@ def variance_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raise
 
 def ocsvm_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
     var v_q = _a(a_, 0)
-    var v_alpha = _a(a_, 1)
-    var v_info = _a(a_, 2)
-    var v_iters = _a(a_, 3)
+    var v_cv = _a(a_, 1)
+    var v_alpha = _a(a_, 2)
+    var v_info = _a(a_, 3)
+    var v_iters = _a(a_, 4)
     var v_n = _n(i_, 0)
     var v_eps = _f(f_, 0)
     var v_max_iter = _n(i_, 1)
     with GILReleased(Python()):
-        op_ocsvm(v_q, v_alpha, v_info, v_iters, v_n, v_eps, v_max_iter)
+        op_ocsvm(v_q, v_cv, v_alpha, v_info, v_iters, v_n, v_eps, v_max_iter)
     return PythonObject(None)
 
 
@@ -304,6 +305,7 @@ def nc_shrink_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) rais
     var v_nk = _a(a_, 2)
     var v_std = _a(a_, 3)
     var v_res = _a(a_, 4)
+    var v_devs = _a(a_, 5)
     var v_n = _n(i_, 0)
     var v_d = _n(i_, 1)
     var v_n_classes = _n(i_, 2)
@@ -311,7 +313,7 @@ def nc_shrink_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) rais
     var v_med = _f(f_, 0)
     var v_shrink = _f(f_, 1)
     with GILReleased(Python()):
-        op_nc_shrink(v_x, v_cent, v_nk, v_std, v_res, v_n, v_d, v_n_classes, v_do_shrink, v_med, v_shrink)
+        op_nc_shrink(v_x, v_cent, v_nk, v_std, v_res, v_devs, v_n, v_d, v_n_classes, v_do_shrink, v_med, v_shrink)
     return PythonObject(None)
 
 
@@ -336,6 +338,16 @@ def softmax_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises
     var v_c = _n(i_, 1)
     with GILReleased(Python()):
         op_softmax(v_x, v_res, v_n, v_c)
+    return PythonObject(None)
+
+
+def log_softmax_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    var v_x = _a(a_, 0)
+    var v_res = _a(a_, 1)
+    var v_n = _n(i_, 0)
+    var v_c = _n(i_, 1)
+    with GILReleased(Python()):
+        op_log_softmax(v_x, v_res, v_n, v_c)
     return PythonObject(None)
 
 
@@ -471,12 +483,13 @@ def pagerank_step_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) 
     var v_q = _a(a_, 0)
     var v_x = _a(a_, 1)
     var v_p = _a(a_, 2)
-    var v_dangling = _a(a_, 3)
-    var v_res = _a(a_, 4)
+    var v_dw = _a(a_, 3)
+    var v_dangling = _a(a_, 4)
+    var v_res = _a(a_, 5)
     var v_n = _n(i_, 0)
     var v_alpha = _f(f_, 0)
     with GILReleased(Python()):
-        op_pagerank_step(v_q, v_x, v_p, v_dangling, v_res, v_n, v_alpha)
+        op_pagerank_step(v_q, v_x, v_p, v_dw, v_dangling, v_res, v_n, v_alpha)
     return PythonObject(None)
 
 
@@ -560,6 +573,7 @@ def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[nc_shrink_binding]("xn_nc_shrink")
     m.def_function[nc_decision_binding]("xn_nc_decision")
     m.def_function[softmax_binding]("xn_softmax")
+    m.def_function[log_softmax_binding]("xn_log_softmax")
     m.def_function[pcs_binding]("xn_pcs")
     m.def_function[achi2_binding]("xn_achi2")
     m.def_function[skew_weights_binding]("xn_skew_weights")

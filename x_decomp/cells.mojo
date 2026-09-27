@@ -298,16 +298,33 @@ def bidx(mode: Int, i: Int, d: Int) -> Int:
     return 0
 
 
-# DEVIATION 5300 (PIN; IDENTITY_PATHS row 130): p ascending, one fused multiply-add
-# per term; check x_decomp/checks/fold_ew_check.mojo, arm 5300_gemm_order.
+#: The reduction block of the folds (DEVIATIONS 5300, 5301): a reduction over
+#: more than FOLD_BLOCK terms is cut into ceil(len / FOLD_BLOCK) consecutive
+#: blocks, each folded ascending by its own thread, and the block partials are
+#: then folded ascending. The block count is a function of the SHAPE only
+#: (IDENTITY_PATHS row 7's rule), never of the device.
+comptime FOLD_BLOCK = 4096
+
+
+# DEVIATION 5300 (PIN; IDENTITY_PATHS row 130): p ascending inside a block, one
+# fused multiply-add per term, the blocks' partials added ascending (FOLD_BLOCK);
+# check x_decomp/checks/fold_ew_check.mojo, arm 5300_gemm_order.
 @always_inline
 def gemm_cell(
     a: F32Ptr, b: F32Ptr, i: Int, j: Int, m: Int, k: Int, n: Int, ta: Bool, tb: Bool
 ) -> Float32:
-    """C[i, j] = sum_p op(A)[i, p] op(B)[p, j], p ascending, one fused
-    multiply-add per term. A is m x k (k x m when ta), B is k x n (n x k when tb)."""
+    """C[i, j] = sum_p op(A)[i, p] op(B)[p, j] over one block (k <= FOLD_BLOCK).
+    A is m x k (k x m when ta), B is k x n (n x k when tb)."""
+    return gemm_part_cell(a, b, i, j, m, k, n, ta, tb, 0, k)
+
+
+@always_inline
+def gemm_part_cell(
+    a: F32Ptr, b: F32Ptr, i: Int, j: Int, m: Int, k: Int, n: Int, ta: Bool, tb: Bool, p0: Int, p1: Int
+) -> Float32:
+    """The partial sum of C[i, j] over p in [p0, p1), ascending."""
     var acc = Float32(0)
-    for p in range(k):
+    for p in range(p0, p1):
         var x = a.unsafe_load(p * m + i) if ta else a.unsafe_load(i * k + p)
         var y = b.unsafe_load(j * k + p) if tb else b.unsafe_load(p * n + j)
         acc = ftz(identical_mul_add(ftz(x), ftz(y), acc))
@@ -318,16 +335,52 @@ def gemm_cell(
 # arm 5301_sum_order.
 @always_inline
 def colsum_cell(a: F32Ptr, j: Int, n: Int, d: Int) -> Float32:
+    return colsum_part_cell(a, j, n, d, 0, n)
+
+
+@always_inline
+def colsum_part_cell(a: F32Ptr, j: Int, n: Int, d: Int, r0: Int, r1: Int) -> Float32:
     var acc = Float32(0)
-    for i in range(n):
+    for i in range(r0, r1):
         acc = add(acc, a.unsafe_load(i * d + j))
+    return acc
+
+
+# DEVIATION 5317 (PIN; row 139): the sign of a vector (sklearn svd_flip,
+# _deterministic_vector_sign_flip) is that of its largest-|.| entry, ties to the
+# LOWER index; -1 only when that entry is < 0; arm 5317_absmax_tie.
+@always_inline
+def absmax_sign_cell(a: F32Ptr, t: Int, n: Int, d: Int, by_col: Bool) -> Float32:
+    """by_col: column t of the n x d matrix; else row t."""
+    var best = Float32(-1)
+    var val = Float32(0)
+    var cnt = n if by_col else d
+    for q in range(cnt):
+        var v = ftz(a.unsafe_load(q * d + t)) if by_col else ftz(a.unsafe_load(t * d + q))
+        if abs(v) > best:
+            best = abs(v)
+            val = v
+    return Float32(-1) if val < Float32(0) else Float32(1)
+
+
+@always_inline
+def fold_cell(p: F32Ptr, t: Int, nb: Int, stride: Int) -> Float32:
+    """The block partials of output t (at t + b * stride), b ascending."""
+    var acc = Float32(0)
+    for b in range(nb):
+        acc = add(acc, p.unsafe_load(t + b * stride))
     return acc
 
 
 @always_inline
 def rowsum_cell(a: F32Ptr, i: Int, d: Int) -> Float32:
+    return rowsum_part_cell(a, i, d, 0, d)
+
+
+@always_inline
+def rowsum_part_cell(a: F32Ptr, i: Int, d: Int, c0: Int, c1: Int) -> Float32:
     var acc = Float32(0)
-    for j in range(d):
+    for j in range(c0, c1):
         acc = add(acc, a.unsafe_load(i * d + j))
     return acc
 
@@ -341,6 +394,59 @@ def sqdist_cell(a: F32Ptr, b: F32Ptr, i: Int, j: Int, d: Int) -> Float32:
     for p in range(d):
         var t = sub(a.unsafe_load(i * d + p), b.unsafe_load(j * d + p))
         acc = ftz(identical_mul_add(t, t, acc))
+    return acc
+
+
+comptime PD_MANHATTAN = 1
+comptime PD_CHEBYSHEV = 2
+comptime PD_MINKOWSKI = 3
+comptime PD_COSINE = 4
+
+
+# DEVIATION 5319 (PIN; row 130): the non-Euclidean distances (sklearn's
+# pairwise metrics for Isomap and MDS): features ascending, t = a - b flushed;
+# manhattan sums |t| by IEEE adds, chebyshev keeps the first strict maximum,
+# minkowski p sums exp(p log|t|) (|t| = 0 adds nothing) and returns
+# exp(log(sum) / p), cosine folds a.b, a.a and b.b by fused multiply-adds and
+# returns 1 - a.b / (sqrt(a.a) sqrt(b.b)) clipped to [0, 2] (a zero norm
+# counts as 1, sklearn's normalize of a zero row); arm 5319_pdist_order.
+def pdist_cell(a: F32Ptr, b: F32Ptr, i: Int, j: Int, d: Int, kind: Int, pw: Float32) -> Float32:
+    if kind == PD_COSINE:
+        var ab = Float32(0)
+        var aa = Float32(0)
+        var bb = Float32(0)
+        for q in range(d):
+            var x = ftz(a.unsafe_load(i * d + q))
+            var y = ftz(b.unsafe_load(j * d + q))
+            ab = ftz(identical_mul_add(x, y, ab))
+            aa = ftz(identical_mul_add(x, x, aa))
+            bb = ftz(identical_mul_add(y, y, bb))
+        var na = sqrt0(aa)
+        var nb = sqrt0(bb)
+        if na == Float32(0):
+            na = Float32(1)
+        if nb == Float32(0):
+            nb = Float32(1)
+        var r = sub(Float32(1), div0(ab, mul(na, nb)))
+        if r < Float32(0):
+            r = Float32(0)
+        if r > Float32(2):
+            r = Float32(2)
+        return r
+    var acc = Float32(0)
+    for q in range(d):
+        var t = abs(sub(a.unsafe_load(i * d + q), b.unsafe_load(j * d + q)))
+        if kind == PD_MANHATTAN:
+            acc = add(acc, t)
+        elif kind == PD_CHEBYSHEV:
+            if t > acc:
+                acc = t
+        elif t > Float32(0):
+            acc = add(acc, exp_c(mul(pw, log_floor(t, Float32(1.1754943508222875e-38)))))
+    if kind == PD_MINKOWSKI:
+        if not (acc > Float32(0)):
+            return Float32(0)
+        return exp_c(div0(log_floor(acc, Float32(1.1754943508222875e-38)), pw))
     return acc
 
 
@@ -801,8 +907,9 @@ def als_row(
 
 # DEVIATION 5307 (PIN; row 134): the pivot is the largest |a| with ties to the
 # LOWEST row (strict >); arm 5307_pivot_tie.
-# DEVIATION 5308 (PIN; row 134): every substitution and Cholesky fold ascending;
-# arm 5308_getrs_order.
+# DEVIATION 5308 (PIN; row 134): every substitution and Cholesky fold ascending,
+# getrs 'N' and 'T' alike ('T' undoes the swaps last to first); arm
+# 5308_getrs_order.
 def lu_serial(a: F32Ptr, piv: I32Ptr, n: Int, info: F32Ptr):
     """In-place LU with partial pivoting (LAPACK getrf semantics, unblocked):
     the pivot is the largest |a[i, k]| for i >= k, ties broken by the LOWEST
@@ -836,10 +943,35 @@ def lu_serial(a: F32Ptr, piv: I32Ptr, n: Int, info: F32Ptr):
                 a.unsafe_store(i * n + j, v)
 
 
-def lu_solve_serial(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int):
+def lu_solve_serial(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int, trans: Int = 0):
     """getrs: apply the row swaps to B (n x nrhs, row major) in order, then
     forward substitution with unit L and back substitution with U, each
-    inner sum ascending."""
+    inner sum ascending. trans != 0 solves A^T X = B (getrs 'T'; a real
+    matrix's 'C' is the same): forward substitution with U^T, back
+    substitution with unit L^T, each inner sum ascending in j, then the row
+    swaps in REVERSE order."""
+    if trans != 0:
+        for c in range(nrhs):
+            for i in range(n):
+                var acc = ftz(b.unsafe_load(i * nrhs + c))
+                for j in range(i):
+                    acc = ftz(identical_mul_add(-ftz(lu.unsafe_load(j * n + i)), ftz(b.unsafe_load(j * nrhs + c)), acc))
+                b.unsafe_store(i * nrhs + c, div0(acc, lu.unsafe_load(i * n + i)))
+            for ii in range(n):
+                var i = n - 1 - ii
+                var acc = ftz(b.unsafe_load(i * nrhs + c))
+                for j in range(i + 1, n):
+                    acc = ftz(identical_mul_add(-ftz(lu.unsafe_load(j * n + i)), ftz(b.unsafe_load(j * nrhs + c)), acc))
+                b.unsafe_store(i * nrhs + c, acc)
+        for kk in range(n):
+            var k = n - 1 - kk
+            var p = Int(piv.unsafe_load(k))
+            if p != k:
+                for c in range(nrhs):
+                    var t = b.unsafe_load(k * nrhs + c)
+                    b.unsafe_store(k * nrhs + c, b.unsafe_load(p * nrhs + c))
+                    b.unsafe_store(p * nrhs + c, t)
+        return
     for k in range(n):
         var p = Int(piv.unsafe_load(k))
         if p != k:
@@ -861,31 +993,52 @@ def lu_solve_serial(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int):
             b.unsafe_store(i * nrhs + c, div0(acc, lu.unsafe_load(i * n + i)))
 
 
-# DEVIATION 5309 (PIN; row 134): MGS with exactly two projection passes per
-# column (not LAPACK geqrf's Householder Q); arm 5309_mgs_passes.
-def orth_serial(a: F32Ptr, m: Int, l: Int):
-    """In-place orthonormalization of the l columns of a row-major m x l
-    matrix: modified Gram-Schmidt, each column projected against the
-    earlier ones TWICE (MGS2), every dot product rows ascending; a column
-    whose remaining norm is 0 becomes 0."""
+# DEVIATION 5309 (PIN; row 134): the orthonormal basis of a tall A is two
+# passes of {R = the Householder QR's R of decomposition/ (qr_factor, TSQR
+# slices a function of the shape); orth_rank_guard(R); Q = A R^-1, one thread
+# per row}; not LAPACK's orgqr; arm 5309_orth_trsm_order.
+
+#: DEVIATION 5318 (PIN; row 134): a column of A whose residual after the
+#: earlier columns is at most 2^-16 of its own norm (R[j, j]^2 <= 2^-32 *
+#: sum_t R[t, j]^2) is numerically dependent: its Q column is 0, never the
+#: rounding noise A R^-1 divides out of a tiny R[j, j] (that column is neither
+#: unit nor orthogonal, and a later one-sided Jacobi SVD of Q^T M rotates it
+#: forever; measured: randomized_svd on the `denormal` fixture). 2^-16 sits
+#: above float32 QR noise at 4000 rows (sqrt(m) eps = 7.5e-6) and far below
+#: an independent column (>= 7e-2 on every fixture). Arm 5318_orth_rank_guard.
+comptime ORTH_RANK_TOL2 = Float32(2.3283064365386963e-10)
+
+
+def orth_rank_guard(R: F32Ptr, l: Int):
+    """Zero R[j, j] for every numerically dependent column j (DEVIATION
+    5318), so trsm_row's div0 makes its Q column 0. The column is scaled by
+    its largest |R[t, j]| first (so no square underflows), the sum of squares
+    t ascending."""
     for j in range(l):
-        for _ in range(2):
-            for i in range(j):
-                var r = Float32(0)
-                for t in range(m):
-                    r = ftz(identical_mul_add(ftz(a.unsafe_load(t * l + i)), ftz(a.unsafe_load(t * l + j)), r))
-                for t in range(m):
-                    a.unsafe_store(
-                        t * l + j,
-                        ftz(identical_mul_add(-r, ftz(a.unsafe_load(t * l + i)), ftz(a.unsafe_load(t * l + j)))),
-                    )
+        var mx = Float32(0)
+        for t in range(j + 1):
+            var v = abs(ftz(R.unsafe_load(t * l + j)))
+            if v > mx:
+                mx = v
+        if mx == Float32(0):
+            continue
         var nrm = Float32(0)
-        for t in range(m):
-            var v = ftz(a.unsafe_load(t * l + j))
+        for t in range(j + 1):
+            var v = ftz(identical_div(ftz(R.unsafe_load(t * l + j)), mx))
             nrm = ftz(identical_mul_add(v, v, nrm))
-        var s = sqrt0(nrm)
-        for t in range(m):
-            a.unsafe_store(t * l + j, div0(a.unsafe_load(t * l + j), s))
+        var d = ftz(identical_div(ftz(R.unsafe_load(j * l + j)), mx))
+        if ftz(identical_mul(d, d)) <= ftz(identical_mul(ORTH_RANK_TOL2, nrm)):
+            R.unsafe_store(j * l + j, Float32(0))
+
+
+def trsm_row(A: F32Ptr, R: F32Ptr, Q: F32Ptr, i: Int, l: Int):
+    """Row i of Q = A R^-1 (R upper l x l): q_j = (a_j - sum_{t<j} q_t R[t, j])
+    / R[j, j], j ascending, t ascending; a zero diagonal gives 0."""
+    for j in range(l):
+        var acc = ftz(A.unsafe_load(i * l + j))
+        for t in range(j):
+            acc = ftz(identical_mul_add(-ftz(Q.unsafe_load(i * l + t)), ftz(R.unsafe_load(t * l + j)), acc))
+        Q.unsafe_store(i * l + j, div0(acc, R.unsafe_load(j * l + j)))
 
 
 def chol_serial(a: F32Ptr, n: Int, info: F32Ptr):

@@ -43,6 +43,9 @@ _SPECTRAL_FORMAT = "mojolearn-spectral-1"
 _PREDICTION_ATTRS = ("_pd_eigenvalues", "_pd_eigenvectors", "_pd_diag", "_pd_centroids", "_fit_X")
 
 _AFFINITIES = ("nearest_neighbors", "precomputed")
+#: SpectralEmbedding's affinities: the two above, scikit-learn's 'rbf' and
+#: 'precomputed_nearest_neighbors' (lane/algos-decomp, 2026-09-27).
+_EMBED_AFFINITIES = _AFFINITIES + ("rbf", "precomputed_nearest_neighbors")
 
 #: cuVS's own struct default for the eigensolver tolerance
 #: (`cuvs/preprocessing/spectral_embedding.hpp:59`, `tolerance{1e-5f}`).
@@ -876,8 +879,12 @@ class SpectralEmbedding:
     tolerance is cuVS's struct default `1e-5` and is not a parameter, as in
     the reference.
 
-    REFUSED BY NAME: any other `affinity`, `gamma` without 'rbf', `eigen_solver`,
-    `eigen_tol`, `n_jobs`, `verbose`. A precomputed affinity with a repeated
+    'precomputed_nearest_neighbors' (a distance graph, sparse or dense: the
+    n_neighbors nearest per row, symmetrized 0.5 (C + C^T)). eigen_solver
+    'arpack' / 'lobpcg' / 'amg' run the Lanczos (the route, not the answer);
+    eigen_tol 'auto', n_jobs and verbose are accepted and change nothing.
+    REFUSED BY NAME: a callable `affinity`, `gamma` without 'rbf', a float
+    `eigen_tol`. A precomputed affinity with a repeated
     `(row, col)` entry, a negative entry or a non-finite entry is refused;
     its diagonal entries are dropped, as the reference drops them.
 
@@ -901,12 +908,12 @@ class SpectralEmbedding:
         n_jobs=None,
         verbose=False,
     ):
-        if affinity not in _AFFINITIES + ("rbf",):
+        if affinity not in _EMBED_AFFINITIES:
             raise ValueError(
                 f"mojolearn SpectralEmbedding: affinity={affinity!r} is "
-                f"refused; it must be one of {list(_AFFINITIES + ('rbf',))}. "
-                "'precomputed_nearest_neighbors' and a callable are different "
-                "affinity constructions that nothing here implements."
+                f"refused; it must be one of {list(_EMBED_AFFINITIES)}. "
+                "A callable affinity is Python code that no identity column "
+                "can run."
             )
         if gamma is not None and affinity != "rbf":
             raise NotImplementedError(
@@ -915,30 +922,26 @@ class SpectralEmbedding:
             )
         if gamma is not None and not float(gamma) > 0:
             raise ValueError("mojolearn SpectralEmbedding: gamma must be positive")
-        if eigen_solver is not None:
-            raise NotImplementedError(
+        # scikit-learn's eigen_solver names ('arpack', 'lobpcg', 'amg') all
+        # run the one solver here, RAFT's thick-restart Lanczos: each
+        # converges to the same smallest eigenvectors of the normalized
+        # Laplacian within its tolerance (spectral/NOT_IMPLEMENTED.tsv,
+        # DELIBERATELY DIVERGENT: the route, not the answer).
+        if eigen_solver not in (None, "arpack", "lobpcg", "amg"):
+            raise ValueError(
                 f"mojolearn SpectralEmbedding: eigen_solver={eigen_solver!r} "
-                "is refused; there is one solver here, RAFT's thick-restart "
-                "Lanczos, and it is the one the identity profile pins"
+                "must be None, 'arpack', 'lobpcg' or 'amg'"
             )
-        if eigen_tol is not None:
+        if eigen_tol not in (None, "auto"):
             raise NotImplementedError(
                 f"mojolearn SpectralEmbedding: eigen_tol={eigen_tol!r} is "
                 "refused; the tolerance is cuVS's struct default "
-                f"{DEFAULT_EIGEN_TOL} and the reference exposes no parameter "
-                "for it on this class"
+                f"{DEFAULT_EIGEN_TOL} ('auto'), which the embedding binding "
+                "does not take as a parameter"
             )
-        if n_jobs is not None:
-            raise NotImplementedError(
-                "mojolearn SpectralEmbedding: n_jobs is refused; there is no "
-                "host thread pool to size"
-            )
-        if verbose:
-            raise NotImplementedError(
-                "mojolearn SpectralEmbedding: verbose is refused; nothing in "
-                "this path prints. Set MOJOLEARN_IDENTITY_TRACE=<path> for "
-                "the identity card instead"
-            )
+        # n_jobs sizes scikit-learn's neighbor search; the kNN graph here is
+        # exact, so the value changes no result. verbose prints nothing.
+        self.eigen_solver, self.eigen_tol, self.n_jobs, self.verbose = eigen_solver, eigen_tol, n_jobs, verbose
         if int(n_components) < 1:
             raise ValueError(
                 "mojolearn SpectralEmbedding: n_components must be at least 1"
@@ -974,6 +977,8 @@ class SpectralEmbedding:
         # The one piece of arithmetic the reference keeps in Python
         # (spectral_embedding.pyx:294): the transform receives this number.
         n_lanczos = k + 1 if drop_first else k
+        if self.affinity == "precomputed_nearest_neighbors":
+            X = _DenseCOO(self._precomputed_knn_affinity(X))
         if self.affinity == "rbf":
             # scikit-learn's `affinity='rbf'` (manifold/_spectral_embedding.py
             # `_get_affinity_matrix`: rbf_kernel(X, gamma), gamma defaulting
@@ -993,7 +998,7 @@ class SpectralEmbedding:
             self.affinity_matrix_ = aff.out()
             self.n_features_in_ = xm.c
             X = _DenseCOO(aff)
-        if self.affinity in ("precomputed", "rbf"):
+        if self.affinity in ("precomputed", "rbf", "precomputed_nearest_neighbors"):
             rows, cols, vals, n = _coo_triples(X, "SpectralEmbedding")
             if vals.size == 0:
                 raise ValueError(
@@ -1002,14 +1007,14 @@ class SpectralEmbedding:
                 )
             # the rbf affinity is exp of a finite value, finite and >= 0 by
             # construction (`exp_c` clamps), so its two scans are skipped
-            if self.affinity == "rbf":
+            if self.affinity in ("rbf", "precomputed_nearest_neighbors"):
                 pass
             elif not all_finite(vals):
                 raise ValueError(
                     "mojolearn SpectralEmbedding: the precomputed affinity "
                     "matrix has a non-finite entry"
                 )
-            if self.affinity != "rbf" and vals.min() < 0:
+            if self.affinity == "precomputed" and vals.min() < 0:
                 raise ValueError(
                     "mojolearn SpectralEmbedding: the precomputed affinity "
                     "matrix has a negative entry (refused by name: sqrt of a "
@@ -1058,6 +1063,50 @@ class SpectralEmbedding:
             )
         self.embedding_ = embedding
         return self
+
+    def _precomputed_knn_affinity(self, X):
+        """scikit-learn's affinity='precomputed_nearest_neighbors':
+        NearestNeighbors(metric='precomputed').kneighbors_graph(X,
+        mode='connectivity'), symmetrized as 0.5 * (C + C^T). X is a distance
+        matrix: sparse (only the STORED entries are candidates) or dense
+        (every entry is). Each row keeps its n_neighbors smallest distances,
+        ties to the lower column (scikit-learn's stable sort of a sorted
+        CSR row); the query IS the fitted data, so a stored diagonal counts,
+        as in scikit-learn. Comparisons and the exact values 0, 0.5 and 1
+        only: no arithmetic."""
+        tocoo = getattr(X, "tocoo", None)
+        if callable(tocoo):
+            coo = tocoo()
+            n = int(coo.shape[0])
+            if tuple(coo.shape) != (n, n):
+                raise ValueError("mojolearn SpectralEmbedding: the precomputed distance graph must be square")
+            per = [[] for _ in range(n)]
+            for r, c, v in zip(coo.row.tolist(), coo.col.tolist(), as_f32_c(coo.data, ndim=1, name="data")[0].tolist()):
+                per[int(r)].append((v, int(c)))
+        else:
+            d, _ = as_f32_c(X, ndim=2, name="X")
+            n = int(d.shape[0])
+            if tuple(d.shape) != (n, n):
+                raise ValueError("mojolearn SpectralEmbedding: the precomputed distance matrix must be square")
+            flat = d.tolist()
+            per = [[(v, j) for j, v in enumerate(row)] for row in flat]
+        k = self._resolved_neighbors(n)
+        C = _M.zeros(n, n)
+        for i, cand in enumerate(per):
+            if any(v != v or v < 0 for v, _ in cand):
+                raise ValueError("mojolearn SpectralEmbedding: a precomputed distance is negative or NaN")
+            if len(cand) < k:
+                raise ValueError(f"mojolearn SpectralEmbedding: row {i} of the precomputed graph has "
+                                 f"{len(cand)} stored distances, fewer than n_neighbors={k}")
+            for _, j in sorted(cand)[:k]:
+                C.s[i * n + j] = 1.0
+        A = _M.zeros(n, n)
+        for i in range(n):
+            for j in range(n):
+                t = C.s[i * n + j] + C.s[j * n + i]
+                A.s[i * n + j] = 0.5 if t == 1.0 else t / 2
+        self.affinity_matrix_ = A.out()
+        return A
 
     def _check_shape(self, n, n_lanczos):
         if n_lanczos >= n:

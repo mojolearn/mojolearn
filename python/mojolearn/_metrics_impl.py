@@ -97,6 +97,51 @@ __all__ = [
     "silhouette_score",
     "trustworthiness",
     "v_measure_score",
+    # the metrics lane (lane/metrics, 2026-09-27; python/mojolearn/_expansion_metrics.py)
+    "balanced_accuracy_score",
+    "class_likelihood_ratios",
+    "classification_report",
+    "cohen_kappa_score",
+    "fbeta_score",
+    "hamming_loss",
+    "jaccard_score",
+    "matthews_corrcoef",
+    "multilabel_confusion_matrix",
+    "precision_recall_fscore_support",
+    "zero_one_loss",
+    "d2_absolute_error_score",
+    "d2_pinball_score",
+    "d2_tweedie_score",
+    "explained_variance_score",
+    "max_error",
+    "mean_absolute_percentage_error",
+    "mean_gamma_deviance",
+    "mean_pinball_loss",
+    "mean_poisson_deviance",
+    "mean_squared_log_error",
+    "mean_tweedie_deviance",
+    "median_absolute_error",
+    "root_mean_squared_log_error",
+    "auc",
+    "average_precision_score",
+    "brier_score_loss",
+    "coverage_error",
+    "d2_brier_score",
+    "d2_log_loss_score",
+    "dcg_score",
+    "det_curve",
+    "hinge_loss",
+    "label_ranking_average_precision_score",
+    "label_ranking_loss",
+    "ndcg_score",
+    "roc_curve",
+    "top_k_accuracy_score",
+    "adjusted_mutual_info_score",
+    "calinski_harabasz_score",
+    "contingency_matrix",
+    "davies_bouldin_score",
+    "normalized_mutual_info_score",
+    "pair_confusion_matrix",
 ]
 
 
@@ -348,11 +393,10 @@ def accuracy_score(
                                   that does not fit in int32 is refused by
                                   name (the int32 instantiation is the one
                                   cuML's Python passes).
-        normalize       honored   True only. False (return the raw count)
-                                  is REFUSED by name: the kernel returns the
-                                  fraction, and recovering an integer count
-                                  from a float32 fraction is a different
-                                  computation, not this one.
+        normalize       honored   True: this kernel's fraction. False: the
+                                  number of matching rows (an int), or with
+                                  sample_weight their summed weight, from the
+                                  x_metrics binding (lane/metrics).
         sample_weight   honored   scikit-learn's `np.average(y_true ==
                                   y_pred, weights=sample_weight)`, in Float32
                                   on the pinned-sum path
@@ -369,13 +413,15 @@ def accuracy_score(
     `n == 0` is refused by name inside the kernel (`count / n` is `0 / 0`
     in RAFT and a NaN may not reach a recorded value).
     """
+    if not is_bool(normalize):
+        raise ValueError("normalize must be a bool")
     if not normalize:
-        raise NotImplementedError(
-            "mojolearn accuracy_score: normalize=False is refused; the "
-            "implemented kernel returns the FRACTION of agreeing positions and "
-            "the count is not recoverable from it exactly. Use "
-            "int((y_true == y_pred).sum()) if you want the count."
-        )
+        # The COUNT (lane/metrics, 2026-09-27): exact integer matches, or the
+        # Float32 PairSum of the matching rows' weights, from the x_metrics
+        # binding (strings or integers, like scikit-learn). The fraction
+        # keeps its original kernel and bits.
+        from ._expansion_metrics import accuracy_count
+        return accuracy_count(y_true, y_pred, sample_weight, numeric_mode)
     yt, yp = _pair_1d(y_true, y_pred, "y_true", "y_pred", _as_i32_1d)
     if sample_weight is not None:
         w = _sample_weight_f32(sample_weight, int(yt.shape[0]), "accuracy_score")
@@ -710,19 +756,16 @@ def r2_score(
     is +inf) still returns a NaN, but the ONE canonical payload
     `0x7fc00000` on every vendor.
     """
-    if multioutput != "uniform_average":
-        raise NotImplementedError(
-            f"mojolearn r2_score: multioutput={multioutput!r} is refused; "
-            "the implemented kernel takes one flat pair of 1-D arrays and there "
-            "is no multioutput arm"
-        )
-    if not force_finite:
-        raise NotImplementedError(
-            "mojolearn r2_score: force_finite=False is refused; the implemented "
-            "epilogue bakes in the force_finite=True behavior (DEVIATION "
-            "657) so that a constant y cannot put a vendor-specific NaN "
-            "payload into a recorded value"
-        )
+    if (not isinstance(multioutput, str) or multioutput != "uniform_average" or not force_finite
+            or len(_shape_of(y_true)) == 2 and _shape_of(y_true)[1] != 1):
+        # lane/metrics: multioutput ('raw_values', 'variance_weighted', an
+        # array of weights), 2-D targets and force_finite=False through the
+        # x_metrics binding. force_finite=False's NaN / -inf are chosen BY
+        # VALUE in the binary64 epilogue, never computed on a device, so no
+        # vendor payload reaches the result (DEVIATION 6103). The 1-D default
+        # call keeps its kernel and bits.
+        from ._expansion_metrics import r2_score_options
+        return r2_score_options(y_true, y_pred, sample_weight, multioutput, force_finite, numeric_mode)
     y, yh = _pair_1d(y_true, y_pred, "y_true", "y_pred", _as_f32_1d)
     if sample_weight is not None:
         w = _sample_weight_f32(sample_weight, int(y.shape[0]), "r2_score")
@@ -757,13 +800,12 @@ def _as_regression_f32_1d(x, name):
 
 
 def _regression_error(name, y_true, y_pred, sample_weight, multioutput, numeric_mode):
-    if sample_weight is not None:
-        raise NotImplementedError(f"mojolearn {name}: sample_weight is not supported yet")
-    if not isinstance(multioutput, str) or multioutput != "uniform_average":
-        raise NotImplementedError(
-            f"mojolearn {name}: multioutput={multioutput!r} is not supported; "
-            "only single-output uniform_average is implemented"
-        )
+    if (sample_weight is not None or not isinstance(multioutput, str)
+            or multioutput != "uniform_average" or len(_shape_of(y_true)) == 2 and _shape_of(y_true)[1] != 1):
+        # lane/metrics: sample_weight, multioutput and 2-D targets through the
+        # x_metrics binding; the 1-D unweighted call keeps its kernel and bits.
+        from ._expansion_metrics import regression_error_options
+        return regression_error_options(name, y_true, y_pred, sample_weight, multioutput, numeric_mode)
     yt, yp = _pair_1d(y_true, y_pred, "y_true", "y_pred", _as_regression_f32_1d)
     return float(getattr(_get_binding(numeric_mode), name)(
         _addr_ro(yt), _addr_ro(yp), [int(yt.size)]
@@ -1191,7 +1233,11 @@ def log_loss(y_true, y_pred, *, normalize=True, sample_weight=None, labels=None,
     or sum. Sample weights and empty inputs are not supported.
     """
     if sample_weight is not None:
-        raise NotImplementedError("log_loss does not yet support sample_weight")
+        # lane/metrics: the weighted mean of the clipped -log p_true rows.
+        if not is_bool(normalize):
+            raise ValueError("normalize must be a bool")
+        from ._expansion_metrics import log_loss_options
+        return log_loss_options(y_true, y_pred, normalize, sample_weight, labels, numeric_mode)
     if not is_bool(normalize):
         raise ValueError("normalize must be a bool")
     true, kind = _classification_encoded(y_true, "y_true")
@@ -1267,12 +1313,16 @@ def roc_auc_score(y_true, y_score, *, average="macro", sample_weight=None,
     Only full binary AUC is implemented: weights, explicit labels, nondefault
     averaging/multiclass options and partial AUC are refused.
     """
-    if average != "macro" or multi_class != "raise" or labels is not None:
-        raise NotImplementedError("roc_auc_score currently supports binary defaults "
-                                  "average='macro', multi_class='raise', labels=None only")
-    if max_fpr is not None and (is_bool(max_fpr) or
-            not isinstance(max_fpr, numbers.Real) or max_fpr != 1):
-        raise NotImplementedError("roc_auc_score supports only full AUC (max_fpr=None or 1)")
+    if (average != "macro" or multi_class != "raise" or labels is not None or sample_weight is not None
+            or not (max_fpr is None or (not is_bool(max_fpr) and isinstance(max_fpr, numbers.Real)
+                                        and max_fpr == 1))
+            or len(_shape_of(y_score)) == 2):
+        # lane/metrics: sample_weight, partial AUC (max_fpr), multiclass
+        # one-vs-rest / one-vs-one, labels and averages, from the x_metrics
+        # device curve; the binary unweighted full-AUC call keeps its kernel.
+        from ._expansion_metrics import roc_auc_options
+        return roc_auc_options(y_true, y_score, average, sample_weight, max_fpr, multi_class, labels,
+                               numeric_mode)
     true, _, classes, scores = _binary_ranking_inputs(y_true, y_score, sample_weight)
     if len(classes) != 2:
         raise ValueError("roc_auc_score requires both positive and negative classes")
@@ -1298,8 +1348,12 @@ def precision_recall_curve(y_true, y_score, *, pos_label=None, sample_weight=Non
     """
     if not is_bool(drop_intermediate):
         raise ValueError("drop_intermediate must be a bool")
-    if drop_intermediate:
-        raise NotImplementedError("precision_recall_curve does not yet support drop_intermediate=True")
+    if drop_intermediate or sample_weight is not None:
+        # lane/metrics: Float64 curves from the x_metrics device sort and
+        # counts; the default call keeps its kernel and Float32 outputs.
+        from ._expansion_metrics import precision_recall_curve_options
+        return precision_recall_curve_options(y_true, y_score, pos_label, sample_weight,
+                                              drop_intermediate, numeric_mode)
     true, kind, classes, scores = _binary_ranking_inputs(y_true, y_score, sample_weight)
     if pos_label is None:
         if kind != "integer" or classes not in ([0], [1], [-1], [0, 1], [-1, 1]):
@@ -1359,6 +1413,11 @@ def confusion_matrix(y_true, y_pred, *, labels=None, sample_weight=None,
     if normalize is not None and (not isinstance(normalize, str) or
                                   normalize not in ("true", "pred", "all")):
         raise ValueError("normalize must be None, 'true', 'pred' or 'all'")
+    if sample_weight is not None:
+        # lane/metrics: Float64 cells, each the Float32 PairSum of its rows'
+        # weights (x_metrics binding); the unweighted call keeps its bits.
+        from ._expansion_metrics import confusion_matrix_weighted
+        return confusion_matrix_weighted(y_true, y_pred, labels, sample_weight, normalize, numeric_mode)
     true, pred, kind, observed = _classification_pair(y_true, y_pred, sample_weight)
     selected = _selected_labels(labels, kind, observed)
     if not set(selected).intersection(_label_set(true)):
@@ -1375,6 +1434,12 @@ def confusion_matrix(y_true, y_pred, *, labels=None, sample_weight=None,
 
 def _precision_recall_fscore(y_true, y_pred, *, labels, pos_label, average,
                             sample_weight, zero_division, numeric_mode, metric):
+    if sample_weight is not None:
+        # lane/metrics: the weighted sums come from the x_metrics binding;
+        # the unweighted call keeps its binding and its bits.
+        from ._expansion_metrics import _prf_weighted
+        return _prf_weighted(y_true, y_pred, labels, pos_label, average, sample_weight,
+                             zero_division, numeric_mode, metric)
     averages = {None: 0, "binary": 1, "micro": 2, "macro": 3, "weighted": 4}
     if average is not None and (not isinstance(average, str) or average not in averages):
         raise ValueError("average must be 'binary', 'micro', 'macro', 'weighted' or None")
@@ -1466,19 +1531,12 @@ def f1_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary",
 # ===========================================================================
 
 _UNSUPPORTED = {
-    "median_absolute_error": (
-        "a GPU selection/ordering path with a validated median contract "
-        "is not implemented for regression targets yet"
-    ),
     "pairwise_distances": (
         "cuML's pairwise_distance.cu is a front-end over cuVS distances; "
         "neighbors/ owns distances in this repository "
         "(neighbors/checks/pinned_distance_tile.mojo), and it is not a "
         "metric of a model (metrics/NOT_IMPLEMENTED.tsv)"
     ),
-    "normalized_mutual_info_score": "normalization conventions and public validation are not implemented",
-    "adjusted_mutual_info_score": "expected mutual information and its public contract are not implemented",
-    "hinge_loss": "GPU margin reduction and its public label contract are not implemented",
 }
 
 
@@ -1489,3 +1547,15 @@ def __getattr__(name):
             "See SUPPORT_MATRIX.md for the supported metrics."
         )
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+# THE METRICS LANE'S FUNCTIONS (lane/metrics, 2026-09-27), computed by the
+# x_metrics binding; see python/mojolearn/_expansion_metrics.py.
+from ._expansion_metrics import (  # noqa: E402
+    balanced_accuracy_score, class_likelihood_ratios, classification_report, cohen_kappa_score,
+    fbeta_score, hamming_loss, jaccard_score, matthews_corrcoef, multilabel_confusion_matrix,
+    precision_recall_fscore_support, zero_one_loss,
+    d2_absolute_error_score, d2_pinball_score, d2_tweedie_score, explained_variance_score, max_error, mean_absolute_percentage_error, mean_gamma_deviance, mean_pinball_loss, mean_poisson_deviance, mean_squared_log_error, mean_tweedie_deviance, median_absolute_error, root_mean_squared_log_error,
+    auc, average_precision_score, brier_score_loss, coverage_error, d2_brier_score, d2_log_loss_score, dcg_score, det_curve, hinge_loss, label_ranking_average_precision_score, label_ranking_loss, ndcg_score, roc_curve, top_k_accuracy_score,
+    adjusted_mutual_info_score, calinski_harabasz_score, contingency_matrix, davies_bouldin_score, normalized_mutual_info_score, pair_confusion_matrix,
+)

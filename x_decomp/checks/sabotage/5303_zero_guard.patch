@@ -1,5 +1,5 @@
 diff --git a/x_decomp/cells.mojo b/x_decomp/cells.mojo
-index b8537db32..844eb7d3d 100644
+index 4b4c2cedf..233affcd2 100644
 --- a/x_decomp/cells.mojo
 +++ b/x_decomp/cells.mojo
 @@ -112,8 +112,7 @@ def sub(a: Float32, b: Float32) -> Float32:

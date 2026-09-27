@@ -345,32 +345,32 @@ def arm_refusals(rep):
     x, y, _, _ = planted()
 
     # --- the Python-side constructor guards
-    rep.raises(arm, NotImplementedError, "POLYNOMIAL",
-               "kernel='poly' is refused by name",
-               SVR, kernel="poly")
-    rep.raises(arm, NotImplementedError, "TANH",
-               "kernel='sigmoid' is refused by name",
-               SVR, kernel="sigmoid")
+    rep.check(arm, SVR(kernel="poly", degree=2, coef0=1.0).kernel == "poly",
+              "kernel='poly' is accepted (the SVC Gram and epilogue)")
+    rep.check(arm, SVR(kernel="sigmoid", coef0=-0.5).kernel == "sigmoid",
+              "kernel='sigmoid' is accepted (the TANH epilogue)")
+    rep.raises(arm, NotImplementedError, "'sigmoid'",
+               "kernel='tanh' is refused, naming cuML's spelling",
+               SVR, kernel="tanh")
     rep.raises(arm, NotImplementedError, "PRECOMPUTED",
                "kernel='precomputed' is refused by name",
                SVR, kernel="precomputed")
     rep.raises(arm, ValueError, "not a kernel name",
                "an unknown kernel name is refused",
                SVR, kernel="cosine")
-    rep.raises(arm, NotImplementedError, "DEVIATION 870",
-               "gamma='scale' is refused and names the deviation",
-               SVR, gamma="scale")
+    rep.check(arm, SVR(gamma="scale").gamma == "scale",
+              "gamma='scale' is accepted (DEVIATION 870: resolved exactly at fit)")
     rep.raises(arm, ValueError, "not a name",
                "an unknown gamma name is refused",
                SVR, gamma="median")
     rep.raises(arm, ValueError, "finite and >= 0",
                "a negative gamma is refused",
                SVR, gamma=-1.0)
-    rep.raises(arm, NotImplementedError, "POLYNOMIAL",
-               "degree is refused, naming the kernel that would read it",
+    rep.raises(arm, NotImplementedError, "kernel='poly'",
+               "degree is refused with rbf, naming the kernel that would read it",
                SVR, degree=4)
-    rep.raises(arm, NotImplementedError, "POLYNOMIAL and TANH",
-               "coef0 is refused, naming the kernels that would read it",
+    rep.raises(arm, NotImplementedError, "kernel='sigmoid'",
+               "coef0 is refused with rbf, naming the kernels that would read it",
                SVR, coef0=1.0)
     rep.raises(arm, ValueError, "C must be positive",
                "a non-positive C is refused",
@@ -401,9 +401,12 @@ def arm_refusals(rep):
                SVR, shrinking=True)
 
     # --- the Python-side fit and predict guards
-    rep.raises(arm, NotImplementedError, "sample_weight",
-               "sample_weight is refused in fit()",
-               SVR(kernel="linear").fit, x, y, np.ones(PLANT_N))
+    rep.raises(arm, ValueError, "sample_weight has",
+               "a sample_weight of the wrong length is refused in fit()",
+               SVR(kernel="linear").fit, x, y, np.ones(PLANT_N + 1))
+    rep.raises(arm, ValueError, "finite and >= 0",
+               "a negative sample_weight is refused in fit()",
+               SVR(kernel="linear").fit, x, y, -np.ones(PLANT_N))
     rep.raises(arm, ValueError, "must be 1-D",
                "a 2-D y is refused",
                SVR(kernel="linear").fit, x, y.reshape(-1, 1))

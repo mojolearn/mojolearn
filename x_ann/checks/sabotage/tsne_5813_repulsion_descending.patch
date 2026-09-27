@@ -1,0 +1,12 @@
+--- a/x_ann/tsne_core.mojo
++++ b/x_ann/tsne_core.mojo
+@@ -189,7 +189,8 @@
+     var r1 = Float32(0.0)
+     var y0 = ftz(y.unsafe_load(2 * i))
+     var y1 = ftz(y.unsafe_load(2 * i + 1))
+-    for j in range(n):
++    for jj in range(n):
++        var j = n - 1 - jj
+         if j == i:
+             continue
+         var q = ts_q(y, i, j)

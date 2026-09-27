@@ -1,0 +1,13 @@
+diff --git a/holtwinters/impl/internal/hw_utils.mojo b/holtwinters/impl/internal/hw_utils.mojo
+index ef27b542b..2e2b80001 100644
+--- a/holtwinters/impl/internal/hw_utils.mojo
++++ b/holtwinters/impl/internal/hw_utils.mojo
+@@ -113,7 +113,7 @@ comptime SAB_CRIT_ORDER = is_defined["MOJOLEARN_HW_SABOTAGE_CRIT_ORDER"]()
+ #: MUST FAIL `check_hw_linesearch_limit_keeps_best` on every series where
+ #: the last trial and the best trial differ in bits. UNBUILT as of
+ #: 2026-09-15: no run has shown it failing yet.
+-comptime SAB_LS_LAST = is_defined["MOJOLEARN_HW_SABOTAGE_LS_LAST"]()
++comptime SAB_LS_LAST = True
+ 
+ 
+ def hw_sabotage_name() -> String:
