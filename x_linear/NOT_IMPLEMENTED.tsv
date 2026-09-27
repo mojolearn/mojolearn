@@ -11,3 +11,11 @@ glm.py sample_weight, warm_start	refused / absent	pass 2
 TweedieRegressor power<0 or 0<power<1, identity link with power>0	refused at the API	pass 2
 _huber.py L-BFGS-B with sigma >= 10*eps bound	replaced	sigma = exp(s), unconstrained L-BFGS (x_linear/lbfgs.mojo); same minimizer
 _huber.py sample_weight, warm_start	refused / absent	pass 2
+_bayes.py SVD of X	replaced	cyclic Jacobi eigenpairs of the centered Gram (ev = S^2)
+_bayes.py compute_score, scores_, sigma_, predict(return_std=True), sample_weight	refused / absent	pass 2
+_bayes.py ARD pinvh / Woodbury	replaced	Cholesky inverse of diag(lambda)+alpha G_keep (same matrix)
+_least_angle.py incremental Cov and Cholesky update/downdate	replaced	Cov = X^Ty - G coef recomputed, G_AA refactored each step
+_least_angle.py np.around(corr_eq_dir, cov_precision)	not applied	pass 2 if it matters
+_least_angle.py coef_path_, alphas_ path, positive, jitter, LarsCV/LassoLarsCV/LassoLarsIC	refused / absent	pass 2
+_quantile.py linear program (highs, interior-point, revised simplex)	replaced	scaled ADMM (Boyd et al. 2011, 3.3.1 stopping, 3.4.1 balancing); optimum to ADMM precision, not a vertex
+_quantile.py sample_weight, solver_options	absent / ignored	pass 2

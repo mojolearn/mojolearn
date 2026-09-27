@@ -2,7 +2,7 @@
 
 Pass 1 (code first). Gate per algorithm on the lane pod (RunPod H100):
 build, sanity vs scikit-learn / LightGBM (`python/mojolearn/tests/test_x_trees_sanity.py`,
-8 passed), `tools/algos_lane_check.sh <lanes>` AGREE (CUDA column == CPU
+all passed), `tools/algos_lane_check.sh <lanes>` AGREE (CUDA column == CPU
 column, cpu-amd-epyc-9554). Every lane PENDING (`_surface_trees.py`).
 
 Where the code is: classes in `python/mojolearn/_expansion_trees.py`; the
@@ -19,19 +19,31 @@ rf / extratrees entry points, whose sources are untouched.
 | BaggingClassifier / BaggingRegressor | trees-bagging-clf, trees-bagging-reg | AGREE: compared batch 9, infer 9, train 9 (each lane) | see git log |
 | AdaBoostClassifier (SAMME) / AdaBoostRegressor (R2) | trees-adaboost-clf, trees-adaboost-reg | AGREE: compared batch 9, infer 9, train 9 (each lane) | see git log |
 | DART (DARTRegressor L2 / DARTClassifier binary) | trees-dart-reg, trees-dart-clf | AGREE: compared batch 9, infer 9, train 9 (each lane) | see git log |
-| RandomTreesEmbedding | trees-random-embedding | AGREE: compared batch 9, infer 9, train 9 | this commit |
+| RandomTreesEmbedding | trees-random-embedding | AGREE: compared batch 9, infer 9, train 9 | see git log |
+| VotingClassifier / VotingRegressor | trees-voting-clf, trees-voting-reg | AGREE: compared batch 9, infer 9, train 9 (each lane) | see git log |
+| StackingClassifier / StackingRegressor | trees-stacking-clf, trees-stacking-reg | AGREE: compared batch 9, infer 9, train 9 (each lane) | see git log |
+| MultiOutputClassifier / MultiOutputRegressor | trees-multioutput | AGREE: compared batch 9, infer 9, train 9 | see git log |
+| OneVsRestClassifier | trees-onevsrest | AGREE: compared batch 9, infer 9, train 9 | see git log |
+| CalibratedClassifierCV (sigmoid, isotonic) | trees-calibrated | AGREE: compared batch 9, infer 9, train 9 | see git log |
+| AdaBoostClassifier back on SAMME sample weights (sklearn's `_boost_discrete`) | trees-adaboost-clf | AGREE: compared batch 9, infer 9, train 9 | this commit |
 
 Pod setup notes (for a fresh agent): the lane check does not build the
 ubiquitous bindings; build `bindings/build.sh` (identical), `build_forest_host.sh`
-and `build_byte_lm_host.sh` once on a fresh pod. sklearn/lightgbm/pytest live
+`build_byte_lm_host.sh` and `build_core_host.sh` once on a fresh pod, and
+libMojolearnMath (`PYTHONPATH=packaging/portable_math python -c "import pathlib, stage;
+stage.build(pathlib.Path('python/mojolearn/.libs/libMojolearnMath.so'))"`). sklearn/lightgbm/pytest live
 in /root/sk on the pod (uv --target); run the sanity test with
 `PYTHONPATH=python:/root/sk pixi run -e default python -m pytest -q python/mojolearn/tests/test_x_trees_sanity.py`.
 
-Known gaps (reported to main):
-- the RF weighted objective (sample_weight / class_weight without bootstrap)
-  has no CPU restatement in `ensemble/host/rf_oracle.mojo`, so
-  `DecisionTreeClassifier.fit(sample_weight=...)` is GPU-only (the rf host
-  binding refuses it by name) and AdaBoostClassifier fits weighted bootstraps
-  instead of weighted trees.
+Shared fix (main's policy 2026-09-27: the lane that finds it fixes it):
+the RF weighted objective (class weights / sample_weight WITHOUT bootstrap)
+now has its CPU restatement in `ensemble/host/rf_oracle.mojo`; lane
+`trees-rf-weighted` AGREE (batch/infer/model/train 9), sabotage
+`rf_weighted_split_sabotage.patch` (the split planes drop the row weight):
+AGREE, DISAGREE, AGREE after `git apply -R`. Existing RF lanes (rf-clf,
+rf-reg, rf-clf-entropy-log2-noboot, rf-clf-balanced-parallel,
+rf-reg-poisson, rf-reg-gamma-ig, rf-score-weighted): `python -m mojolearn
+verify` 7/7 VERIFIED on CUDA and on CPU after, 0 cell hashes differ from
+before on either column.
 
-Next: Additions: VotingClassifier/Regressor, StackingClassifier/Regressor, MultiOutputClassifier/Regressor, OneVsRestClassifier, CalibratedClassifierCV, then SHAP TreeExplainer, KernelExplainer, PermutationExplainer.
+Next: SHAP TreeExplainer, KernelExplainer, PermutationExplainer.

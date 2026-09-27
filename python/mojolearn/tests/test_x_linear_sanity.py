@@ -103,6 +103,65 @@ def _():
     return ok
 
 
+@case("bayes")
+def _():
+    from sklearn import linear_model as sk
+    X, yr, yc, y3 = _data(noise=0.5)
+    Xs = X.copy()
+    Xs[:, 3] = 0.0  # an irrelevant feature for ARD to prune
+    ok = True
+    for fi in (True, False):
+        a = ml.BayesianRidge(fit_intercept=fi).fit(X, yr)
+        b = sk.BayesianRidge(fit_intercept=fi).fit(X.astype(np.float64), yr.astype(np.float64))
+        ok &= _close(f"BayesianRidge fi={fi} coef", a.coef_, b.coef_, 1e-3)
+        ok &= _close(f"BayesianRidge fi={fi} intercept", [a.intercept_], [b.intercept_], 1e-3)
+        ok &= _close(f"BayesianRidge fi={fi} alpha (relative)", [a.alpha_ / b.alpha_], [1.0], 1e-2)
+        a = ml.ARDRegression(fit_intercept=fi).fit(X, yr)
+        b = sk.ARDRegression(fit_intercept=fi).fit(X.astype(np.float64), yr.astype(np.float64))
+        ok &= _close(f"ARD fi={fi} coef", a.coef_, b.coef_, 2e-3)
+        ok &= _close(f"ARD fi={fi} intercept", [a.intercept_], [b.intercept_], 2e-3)
+        ok &= _close(f"ARD fi={fi} predict", a.predict(X[:50]), b.predict(X[:50]), 5e-3)
+    return ok
+
+
+@case("lars")
+def _():
+    from sklearn import linear_model as sk
+    X, yr, yc, y3 = _data(noise=0.5)
+    ok = True
+    for fi in (True, False):
+        for nz in (3, 500):
+            a = ml.Lars(fit_intercept=fi, n_nonzero_coefs=nz).fit(X, yr)
+            b = sk.Lars(fit_intercept=fi, n_nonzero_coefs=nz).fit(X.astype(np.float64), yr.astype(np.float64))
+            ok &= _close(f"Lars fi={fi} nz={nz} coef", a.coef_, b.coef_, 2e-3)
+            ok &= _close(f"Lars fi={fi} nz={nz} intercept", [a.intercept_], [b.intercept_], 2e-3)
+        for alpha in (0.5, 0.05, 0.001):
+            a = ml.LassoLars(alpha=alpha, fit_intercept=fi).fit(X, yr)
+            b = sk.LassoLars(alpha=alpha, fit_intercept=fi).fit(X.astype(np.float64), yr.astype(np.float64))
+            ok &= _close(f"LassoLars fi={fi} alpha={alpha} coef", a.coef_, b.coef_, 2e-3)
+            ok &= _close(f"LassoLars fi={fi} alpha={alpha} intercept", [a.intercept_], [b.intercept_], 2e-3)
+    return ok
+
+
+@case("quantile")
+def _():
+    from sklearn import linear_model as sk
+    X, yr, yc, y3 = _data(noise=1.0)
+    ok = True
+    for q, alpha, fi in ((0.5, 0.01, True), (0.8, 0.05, True), (0.3, 0.0, False), (0.5, 1.0, True)):
+        a = ml.QuantileRegressor(quantile=q, alpha=alpha, fit_intercept=fi).fit(X, yr)
+        b = sk.QuantileRegressor(quantile=q, alpha=alpha, fit_intercept=fi).fit(X.astype(np.float64), yr.astype(np.float64))
+
+        def obj(coef, icpt):
+            r = yr - X.astype(np.float64) @ np.asarray(coef, np.float64) - icpt
+            return np.mean(np.where(r >= 0, q * r, (q - 1) * r)) + alpha * np.abs(coef).sum()
+        oa, ob = obj(a.coef_, a.intercept_), obj(b.coef_, b.intercept_)
+        print(f"  q={q} alpha={alpha} fi={fi} n_iter={a.n_iter_} objective {oa:.6f} vs {ob:.6f}")
+        ok &= _close("objective (relative)", [oa / ob], [1.0], 2e-3)
+        ok &= _close("coef", a.coef_, b.coef_, 3e-2)
+    return ok
+
+
 def main(argv):
     names = argv or list(CASES)
     bad = []

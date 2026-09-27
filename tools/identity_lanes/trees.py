@@ -114,3 +114,103 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("transform", "apply"), "trees-random-embedding")
+
+
+@lane("trees-voting-clf")
+def _(ml, X, yc, yr, Xh=None):
+    """Soft voting with weights over three different members."""
+    m = ml.VotingClassifier([("dt", ml.DecisionTreeClassifier(max_depth=5)),
+                             ("rf", ml.RandomForestClassifier(n_estimators=4, max_depth=5, random_state=3)),
+                             ("bag", ml.BaggingClassifier(ml.DecisionTreeClassifier(max_depth=4), n_estimators=3,
+                                                          random_state=5))],
+                            voting="soft", weights=[1.0, 2.0, 0.5]).fit(X, yc)
+    return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X)), transform=_h(m.transform(X))),
+                m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+
+
+@lane("trees-voting-reg")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.VotingRegressor([("dt", ml.DecisionTreeRegressor(max_depth=5)),
+                            ("rf", ml.RandomForestRegressor(n_estimators=4, max_depth=5, random_state=3))],
+                           weights=[3.0, 1.0]).fit(X, yr)
+    return _fit(dict(predict=_h(m.predict(X))), m, lambda e: (e.predict(Xh),))
+
+
+_batch_decl(_rows_calls("predict", "predict_proba"), "trees-voting-clf")
+_batch_decl(_rows_calls("predict"), "trees-voting-reg")
+
+
+@lane("trees-stacking-clf")
+def _(ml, X, yc, yr, Xh=None):
+    """Three stratified folds of held-out probabilities, passthrough, a tree on top."""
+    m = ml.StackingClassifier([("dt", ml.DecisionTreeClassifier(max_depth=4)),
+                               ("rf", ml.RandomForestClassifier(n_estimators=3, max_depth=4, random_state=3))],
+                              final_estimator=ml.DecisionTreeClassifier(max_depth=3), cv=3,
+                              passthrough=True).fit(X, yc)
+    return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X)), meta=_h(m.transform(X))),
+                m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+
+
+@lane("trees-stacking-reg")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.StackingRegressor([("dt", ml.DecisionTreeRegressor(max_depth=4)),
+                              ("rf", ml.RandomForestRegressor(n_estimators=3, max_depth=4, random_state=3))],
+                             final_estimator=ml.DecisionTreeRegressor(max_depth=3), cv=3).fit(X, yr)
+    return _fit(dict(predict=_h(m.predict(X))), m, lambda e: (e.predict(Xh),))
+
+
+_batch_decl(_rows_calls("predict", "predict_proba"), "trees-stacking-clf")
+_batch_decl(_rows_calls("predict"), "trees-stacking-reg")
+
+
+@lane("trees-multioutput")
+def _(ml, X, yc, yr, Xh=None):
+    """A regressor per column of Y, and a classifier per column of a label matrix."""
+    Y = np.stack([yr, yr[::-1].copy()], axis=1).astype(np.float32)
+    r = ml.MultiOutputRegressor(ml.DecisionTreeRegressor(max_depth=4)).fit(X, Y)
+    Yc = np.stack([np.asarray(yc), np.asarray(yc) % 2], axis=1).astype(np.int64)
+    c = ml.MultiOutputClassifier(ml.DecisionTreeClassifier(max_depth=4)).fit(X, Yc)
+    return _fit(dict(reg=_h(r.predict(X)), clf=_h(c.predict(X)), proba=_h(*c.predict_proba(X))),
+                r, lambda e: (e.predict(Xh),))
+
+
+_batch_decl(_rows_calls("predict"), "trees-multioutput")
+
+
+@lane("trees-onevsrest")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.OneVsRestClassifier(ml.DecisionTreeClassifier(max_depth=4)).fit(X, yc)
+    return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X))),
+                m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+
+
+_batch_decl(_rows_calls("predict", "predict_proba"), "trees-onevsrest")
+
+
+@lane("trees-calibrated")
+def _(ml, X, yc, yr, Xh=None):
+    """Sigmoid (Platt, per fold, ensembled) and isotonic (cross-validated scores) calibration."""
+    s = ml.CalibratedClassifierCV(ml.DecisionTreeClassifier(max_depth=4), method="sigmoid", cv=3).fit(X, yc)
+    i = ml.CalibratedClassifierCV(ml.DecisionTreeClassifier(max_depth=4), method="isotonic", cv=3,
+                                  ensemble=False).fit(X, yc)
+    return _fit(dict(sigmoid=_h(s.predict_proba(X)), isotonic=_h(i.predict_proba(X)), predict=_h(s.predict(X))),
+                s, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+
+
+_batch_decl(_rows_calls("predict", "predict_proba"), "trees-calibrated")
+
+
+@lane("trees-rf-weighted")
+def _(ml, X, yc, yr, Xh=None):
+    """The RF weighted objective (class weights without bootstrap): a balanced
+    entropy forest on column samples, and a gini tree on per-row sample weights
+    that zero some rows out."""
+    f = ml.RandomForestClassifier(n_estimators=4, max_depth=6, random_state=7, class_weight="balanced",
+                                  bootstrap=False, criterion="entropy", max_features=0.6).fit(X, yc)
+    w = np.array([(1.0, 2.5, 0.0, 0.75)[i % 4] for i in range(len(X))], dtype=np.float32)
+    t = ml.DecisionTreeClassifier(max_depth=7, min_samples_leaf=2).fit(X, yc, sample_weight=w)
+    return _fit(dict(forest=_h(f.predict_proba(X)), tree=_h(t.predict_proba(X)), predict=_h(t.predict(X))),
+                t, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+
+
+_batch_decl(_rows_calls("predict", "predict_proba"), "trees-rf-weighted")
