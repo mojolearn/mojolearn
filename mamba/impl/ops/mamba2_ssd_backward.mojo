@@ -14,6 +14,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_dim, block_idx, thread_idx
 
 from checks.numerics import (
+    identical_mul,
     ftz,
     identical_exp,
     identical_mul_add,
@@ -26,7 +27,7 @@ from gemm.checks.gemm_identical import (
 )
 from gemm.checks.gemm_oracle import OP_NN
 from mamba.checks.mamba2_fixture import M2_D_STATE, M2_HEADDIM
-from mamba.impl.modeling.modeling_mamba import mamba_scratch, pinned_mul
+from mamba.impl.modeling.modeling_mamba import mamba_scratch
 
 
 comptime M2_SSD_BWD_TPB = 128
@@ -118,7 +119,7 @@ def mamba2_cstate_ddecay_kernel(
                     * M2_D_STATE + nn
                 ))
                 var bv = ftz(xbc.unsafe_load((bb * t + tt) * cd + di + nn))
-                acc = ftz(identical_mul_add(upstream, ftz(pinned_mul(xv, bv)), acc))
+                acc = ftz(identical_mul_add(upstream, ftz(identical_mul(xv, bv)), acc))
     d_decay.unsafe_store(cell, acc)
 
 
@@ -187,7 +188,7 @@ def mamba2_s18_direct_dpass_kernel(
             var scale = ftz(identical_exp(ftz(
                 dacs.unsafe_load(((bb * nh + hh) * nc + cc) * qv + ii)
             )))
-            var d_dot = ftz(pinned_mul(dy, scale))
+            var d_dot = ftz(identical_mul(dy, scale))
             var cv = ftz(xbc.unsafe_load((bb * t_work + tt) * cd + di + M2_D_STATE + nn))
             if ii < leaf:
                 acc0 = ftz(identical_mul_add(cv, d_dot, acc0))
@@ -241,7 +242,7 @@ def mamba2_s18_dc_ddacs_kernel(
                 var dy = ftz(d_yoff.unsafe_load(
                     ((bb * t_work + tt) * nh + hh) * M2_HEADDIM + pp
                 ))
-                var d_dot = ftz(pinned_mul(dy, scale))
+                var d_dot = ftz(identical_mul(dy, scale))
                 var pv = ftz(pass_states.unsafe_load(
                     (((bb * nc + cc) * nh + hh) * pn)
                     + pp * M2_D_STATE + nn
@@ -277,7 +278,7 @@ def mamba2_s18_dc_ddacs_kernel(
                     ((bb * t_work + tt) * nh + hh) * M2_HEADDIM + pp
                 ))
                 total = ftz(identical_mul_add(dy, dot, total))
-            total = ftz(pinned_mul(total, scale))
+            total = ftz(identical_mul(total, scale))
         d_dacs.unsafe_store(da_cell, total)
 
 
@@ -407,7 +408,7 @@ def mamba2_decay_to_dacs_kernel(
     var base = row * qv
     var last_sum = Float32(0.0)
     for ii in range(qv - 1):
-        var g = ftz(pinned_mul(
+        var g = ftz(identical_mul(
             ftz(d_decay.unsafe_load(base + ii)),
             ftz(decay.unsafe_load(base + ii)),
         ))
@@ -507,8 +508,8 @@ def mamba2_conv_backward_kernel(
             elif d<di+M2_D_STATE: up=ftz(dbv.unsafe_load((bb*l+t)*M2_D_STATE+d-di))
             else: up=ftz(dcv.unsafe_load((bb*l+t)*M2_D_STATE+d-di-M2_D_STATE))
             var cv=ftz(conv.unsafe_load((bb*l+t)*cd+d)); var sig=ftz(identical_sigmoid(cv))
-            var deriv=ftz(sig+ftz(pinned_mul(cv,ftz(pinned_mul(sig,ftz(1.0-sig))))))
-            var g=ftz(pinned_mul(up,deriv)); d_conv.unsafe_store((bb*l+t)*cd+d,g)
+            var deriv=ftz(sig+ftz(identical_mul(cv,ftz(identical_mul(sig,ftz(1.0-sig))))))
+            var g=ftz(identical_mul(up,deriv)); d_conv.unsafe_store((bb*l+t)*cd+d,g)
             bias=ftz(bias+g)
             for k in range(4):
                 var p=t-3+k
@@ -605,7 +606,7 @@ def mamba2_cstate_dxd_db_kernel(
         for nn in range(M2_D_STATE):
             acc=ftz(identical_mul_add(
                 ftz(d_cstate.unsafe_load((((bb*nc+cc)*nh+hh)*M2_HEADDIM+pp)*M2_D_STATE+nn)),
-                ftz(pinned_mul(ftz(xbc.unsafe_load((bb*t+tt)*cd+di+nn)),dec)),acc))
+                ftz(identical_mul(ftz(xbc.unsafe_load((bb*t+tt)*cd+di+nn)),dec)),acc))
         d_xd.unsafe_store(cell,acc)
     var b_cells=b*t*M2_D_STATE
     if cell < b_cells:
@@ -617,7 +618,7 @@ def mamba2_cstate_dxd_db_kernel(
             for pp in range(M2_HEADDIM):
                 acc=ftz(identical_mul_add(
                     ftz(d_cstate.unsafe_load((((bb*nc+cc)*nh+hh)*M2_HEADDIM+pp)*M2_D_STATE+nn)),
-                    ftz(pinned_mul(ftz(xd.unsafe_load(((bb*t+tt)*nh+hh)*M2_HEADDIM+pp)),dec)),acc))
+                    ftz(identical_mul(ftz(xd.unsafe_load(((bb*t+tt)*nh+hh)*M2_HEADDIM+pp)),dec)),acc))
         d_b.unsafe_store(cell,acc)
         d_b_total.unsafe_store(cell,ftz(acc+ftz(d_b_cb.unsafe_load(cell))))
 def mamba2_seg_backward_kernel(
@@ -693,7 +694,7 @@ def mamba2_ydiag_matrix_backward_kernel(
                     ftz(xd.unsafe_load(((bb*t+cc*qv+jj)*nh+hh)*M2_HEADDIM+pp)), dm
                 ))
         var sidx = (((bb*nc+cc)*nh+hh)*qv+ii)*qv+jj
-        d_seg.unsafe_store(sidx, ftz(pinned_mul(dm, ftz(cb.unsafe_load(cell)))))
+        d_seg.unsafe_store(sidx, ftz(identical_mul(dm, ftz(cb.unsafe_load(cell)))))
         dcb = ftz(identical_mul_add(dm, ftz(seg.unsafe_load(sidx)), dcb))
     d_cb.unsafe_store(cell, dcb)
 
@@ -752,13 +753,13 @@ def mamba2_da_product_backward_kernel(
     for row in range(bt):
         var idx = row * nh + hh
         var upstream = ftz(d_da.unsafe_load(idx))
-        d_dt.unsafe_store(idx, ftz(pinned_mul(upstream, av)))
+        d_dt.unsafe_store(idx, ftz(identical_mul(upstream, av)))
         acc = ftz(identical_mul_add(
             ftz(dt.unsafe_load(idx)), upstream, acc
         ))
     d_a.unsafe_store(hh, acc)
     # A = -exp(A_log), hence dA/dA_log = A with the recorded A bits.
-    d_a_log.unsafe_store(hh, ftz(pinned_mul(acc, av)))
+    d_a_log.unsafe_store(hh, ftz(identical_mul(acc, av)))
 
 
 def mamba2_dt_backward_kernel(
@@ -786,7 +787,7 @@ def mamba2_dt_backward_kernel(
         var sp = ftz(identical_softplus(biased))
         var local = Float32(0.0)
         if sp >= dt_lo and sp <= dt_hi:
-            local = ftz(pinned_mul(
+            local = ftz(identical_mul(
                 ftz(d_dt.unsafe_load(idx)), ftz(identical_sigmoid(biased))
             ))
         d_dtraw.unsafe_store(idx, local)
@@ -835,7 +836,7 @@ def mamba2_ydiag_xd_backward_kernel(
     for pp in range(M2_HEADDIM):
         var dxd = Float32(0.0)
         for ii in range(jj, real):
-            var m = ftz(pinned_mul(
+            var m = ftz(identical_mul(
                 ftz(cb_g.unsafe_load(((bb * nc + cc) * qv + ii) * qv + jj)),
                 ftz(seg_l.unsafe_load(
                     (((bb * nc + cc) * nh + hh) * qv + ii) * qv + jj
@@ -853,7 +854,7 @@ def mamba2_ydiag_xd_backward_kernel(
             (bb * t_work + tt) * cd + hh * M2_HEADDIM + pp
         ))
         var out_idx = cell * M2_HEADDIM + pp
-        d_x.unsafe_store(out_idx, ftz(pinned_mul(dxd, dtv)))
+        d_x.unsafe_store(out_idx, ftz(identical_mul(dxd, dtv)))
         ddt = ftz(identical_mul_add(xp, dxd, ddt))
     d_dt_xd.unsafe_store(cell, ddt)
     d_dt_merged.unsafe_store(
@@ -994,7 +995,7 @@ def mamba2_scale_to_dacs_kernel(
     var dacs_idx = ((bb * nh + h) * nc + c) * qv + (qv - 1)
     var scale = ftz(identical_exp(ftz(dacs.unsafe_load(dacs_idx))))
     d_dacs_state.unsafe_store(
-        dacs_idx, ftz(pinned_mul(ftz(d_scale.unsafe_load(row)), scale))
+        dacs_idx, ftz(identical_mul(ftz(d_scale.unsafe_load(row)), scale))
     )
 
 
@@ -1048,7 +1049,7 @@ def mamba2_reverse_chunk_state_kernel(
         d_cstate.unsafe_store(state_idx, carry)
         d_scale_product.unsafe_store(
             state_idx,
-            ftz(pinned_mul(carry, ftz(pass_states.unsafe_load(state_idx)))),
+            ftz(identical_mul(carry, ftz(pass_states.unsafe_load(state_idx)))),
         )
         var direct = ftz(direct_d_pass.unsafe_load(state_idx))
         carry = ftz(identical_mul_add(scale, carry, direct))
