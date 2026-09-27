@@ -205,7 +205,16 @@ class UMAP(NumericModeMixin):
             if nc > min(M.r, M.c):
                 raise ValueError("UMAP init='pca' needs n_components <= min(n_samples, n_features)")
             Xc = k.center(M, k.colmean(M))
-            _, Vt = k.svd(Xc)
+            if M.r >= M.c:
+                _, Vt = k.svd(Xc)
+            else:
+                # wide data: the SVD of Xc^T gives Xc's left vectors U (its
+                # Vt rows); Xc's right vectors are then U^T Xc / S
+                S, Ut = k.svd(Xc.T)
+                if not all(v > 0 for v in S.s[:nc]):
+                    raise ValueError("UMAP init='pca' found a zero singular value")
+                Vt = k.mm(Ut.rows(0, nc), Xc)
+                Vt = k.ew("div", Vt, S.take_cols(list(range(nc))).T)
             Vt = _svd_flip_v(Vt.rows(0, nc))
             coords = k.mm(Xc, Vt, tb=True)
             peak = max(abs(v) for v in coords.s)

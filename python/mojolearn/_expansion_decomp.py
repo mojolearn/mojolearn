@@ -1488,23 +1488,6 @@ class FactorAnalysis(_Base):
 
 
 # ================================================================ TruncatedSVD explained variance
-def _tsvd_explained(x, components, mode):
-    """scikit-learn TruncatedSVD's explained_variance_ (np.var of X @ V^T per
-    column, ddof 0) and its ratio against the summed column variances of X,
-    through the cells (colmean, squared differences, column sums): the
-    Gram / arpack arm computes neither in its kernel. A tier the decomp
-    binding does not ship (FAST, DETERMINISTIC: phase 3) reads them through
-    the IDENTICAL cells, which are exact to float32 on every column."""
-    k = _Kit(mode if _backend._offers(_BINDING, mode) else "identical")
-    M = _M.from_input(x)
-    V = _M.from_input(components, "components")
-    n = M.r
-    Xt = k.mm(M, V, tb=True)
-    ev = k.ew("scale", k.colsum(k.ew("sqdiff", Xt, k.colmean(Xt))), s=1.0 / n)
-    full = k.total(k.ew("scale", k.colsum(k.ew("sqdiff", M, k.colmean(M))), s=1.0 / n))
-    return ev.out((ev.c,)), k.ew("div", ev, full).out((ev.c,))
-
-
 def _exact_eigen_solver(name, who):
     """Isomap's and LLE's eigen_solver: 'auto' and 'dense' name an exact
     solve, which is what runs. 'arpack' (a Lanczos) is a different algorithm
