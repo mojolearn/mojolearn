@@ -611,7 +611,18 @@ yet)` line with its table rows, in the ledger's columns.
 
 ### `linear`: rows 100-109
 
-(no rows yet)
+| number | what | hazard | move | status |
+|---|---|---|---|---|
+| 100 | **the linear lane's fold** (`x_linear/ops.mojo::dot`, `row_dot`, and every Gram, X'y and gradient sum in x_linear/, DEVIATION 5000; all 22 x_linear estimators) | a reduction's order and an FMA contraction of `acc + a*b` move low bits per vendor | PIN: j ascending, one `identical_mul_add` per term, the same function run by the host binding and by the one-thread device kernel | CHECK: fixture separates descending and unfused; arm 5000 bites; NVIDIA RTX 4090 == CPU 2026-09-27; AMD, Apple OWED |
+| 101 | **the operand flush** (`ops.fa/fs/fm/fd/fmad`, DEVIATION 5001) | Apple flushes subnormals in hardware, x86 and NVIDIA do not | PIN: `ftz` on every operand and result | CHECK: subnormal pair separates flushed and raw sums; arm 5001 bites; NVIDIA == CPU; AMD, Apple OWED |
+| 102 | **Cholesky** (`ops.cholesky`, `chol_solve`, DEVIATION 5002; GLM Newton, ARD, RidgeClassifier, RidgeCV, QuantileRegressor, LARS) | the elimination and inner-sum orders of a vendor potrf | PIN: column j ascending, inner k ascending, products rounded alone | CHECK: 9x9 SPD fixture separates reversed inner sums; arm 5002 bites; NVIDIA == CPU; AMD, Apple OWED |
+| 103 | **the symmetric eigensolver** (`ops.jacobi_eig`, DEVIATION 5003; BayesianRidge) | sklearn's LAPACK SVD is a vendor library with its own order | REPLACE: cyclic Jacobi, p then q ascending, Rutishauser's rotation, the 1e-9 relative skip | CHECK: 6x6 fixture separates q-descending sweeps; arm 5003 bites; NVIDIA == CPU; AMD, Apple OWED |
+| 104 | **the SGD shuffle** (`ops.shuffle`, `rng_next`, DEVIATION 5004; SGD*, Perceptron, PassiveAggressive*, SGDOneClassSVM) | numpy's MT19937 stream and a draw-to-index map are free choices | REPLACE: splitmix64, Fisher-Yates i descending, j = draw mod (i + 1) | CHECK: n=97 fixture separates multiply-shift; arm 5004 bites; NVIDIA == CPU; AMD, Apple OWED |
+| 105 | **exact ties** (LARS's argmax abs(Cov), the class argmax, the CV selections of RidgeCV/LassoCV/ElasticNetCV/LogisticRegressionCV, DEVIATION 5005) | a tie picks a vendor- or order-dependent index | PIN: strict comparison, the lowest index wins | CHECK: negated-column fixture ties abs(X'y) exactly; arm 5005 bites; NVIDIA == CPU; AMD, Apple OWED |
+| 106 | **isotonic out-of-bounds NaN** (`isotonic.mojo::isotonic_predict`, DEVIATION 5006) | a computed 0/0 carries the vendor payload (x86 0xFFC00000, NVIDIA 0x7FFFFFFF) | PIN: the constant word 0x7FC00000 (Clause B) | CHECK: separated on x86 (a runtime 0/0 differs); arm 5006 bites on x86; on an Arm host the computed NaN IS the canonical word, so the arm is a REACH FAILURE there by construction; NVIDIA == CPU; AMD, Apple OWED |
+| 107 | **a score** (`dispatch.mojo::decision_one`, DEVIATION 5007; every predict and decision_function) | seeding the fold with the intercept is another legal order | PIN: fold x.w first, add the intercept last | CHECK: seeded fixture separates intercept-first; arm 5007 bites; NVIDIA == CPU; AMD, Apple OWED |
+| 108 | **exp and log in the fits** (`ops.fexp`, `flog`, DEVIATION 5008; GLMs, SGD log loss, LogisticRegressionCV, HuberRegressor's scale, the CV grid) | each target's libm rounds differently | PIN: `identical_exp`/`identical_log` (portable, row 12) | CHECK: 4000-input scan separates the host libm; arm 5008 bites; NVIDIA == CPU; AMD, Apple OWED |
+| 109 | **the CV alpha grid** (`cd.mojo::alpha_grid_value`, DEVIATION 5009; LassoCV, ElasticNetCV) | np.geomspace's log interpolation and alpha_max * eps^frac are other spellings | PIN: alpha_max * exp(frac * log eps) | CHECK: 100-alpha fixture separates the log-interpolation spelling; arm 5009 bites; NVIDIA == CPU; AMD, Apple OWED |
 
 
 

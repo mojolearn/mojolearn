@@ -1,0 +1,11 @@
+--- a/x_linear/ops.mojo
++++ b/x_linear/ops.mojo
+@@ -136,7 +136,7 @@
+     DEVIATION 5000 (IDENTITY_PATHS row 100): the lane's one fold order."""
+     var acc = Float32(0)
+     for jj in range(count):
+-        var j = count - 1 - jj if X_LINEAR_HOST_SABOTAGE else jj
++        var j = count - 1 - jj  # SABOTAGE 5000
+         acc = fmad(ld(a, ia + j), ld(b, ib + j), acc)
+     return acc
+ 

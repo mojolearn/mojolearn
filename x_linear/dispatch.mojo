@@ -7,7 +7,7 @@ CPU and the GPU binding calls it from a one-thread kernel, so both columns run
 this same source. `decision_one` is the shared scoring of one (row, output)
 pair: link(b_c + sum_j x_ij w_cj), j ascending, the intercept added last.
 """
-from x_linear.ops import FP, IP, fa, fexp, ld, st, row_dot
+from x_linear.ops import FP, IP, fa, fmad, fexp, ld, st, row_dot
 from checks.numerics import identical_sigmoid, ftz
 from x_linear.sgd import sgd_fit
 from x_linear.glm import glm_fit
@@ -67,6 +67,7 @@ def fit_dispatch(algo: Int, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: F
 
 def decision_one(x: FP, i: Int, d: Int, wb: FP, c: Int, link: Int) -> Float32:
     var woff = c * (d + 1)
+    # DEVIATION 5007 (IDENTITY_PATHS row 107): the fold first, the intercept last
     var z = fa(row_dot(x, i, d, wb, woff), ld(wb, woff + d))
     if link == LINK_EXP:
         return fexp(z)
