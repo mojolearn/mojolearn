@@ -16,7 +16,7 @@
 # the Mac: the body carries presigned R2 URLs only, as on every rented box.
 #
 # ONE METAL JOB: a body still running on the Mac refuses a second (exit 3).
-# The body runs detached (nohup, under caffeinate so the Mac never sleeps) and
+# The body runs detached (HUP ignored, under caffeinate so the Mac never sleeps) and
 # survives an ssh drop; this script polls it, and when it exits fetches
 # ~/lmbox/gemm_leg_out (checkpoints excluded: they are in R2 and pinned in the
 # manifest) into RESULTS_DIR. A previous attempt's gemm_leg_out is moved to
@@ -73,7 +73,9 @@ cm "set -e; mkdir -p ~/lmbox ~/lmbox/attempts
     if [ -d ~/lmbox/gemm_leg_out ]; then mv ~/lmbox/gemm_leg_out ~/lmbox/attempts/\$(date -u +%Y%m%dT%H%M%SZ); fi
     rm -f ~/lmbox/body.rc ~/lmbox/body.log ~/lmbox/lm_segment_ready ~/lmbox/lm_segment_done" || { say "preparing the Mac failed"; exit 2; }
 scp -q "${SSH_OPTS[@]}" "$BODY" "ec2-user@$IP:lmbox/body.sh" || { say "copying the body failed"; exit 2; }
-cm 'cd ~/lmbox && nohup caffeinate -dims sh -c "sh body.sh > body.log 2>&1; echo \$? > body.rc" > /dev/null 2>&1 < /dev/null & echo $! > ~/lmbox/body.pid; sleep 2; kill -0 "$(cat ~/lmbox/body.pid)" && echo started pid $(cat ~/lmbox/body.pid)' \
+# macOS nohup refuses without a terminal ("can't detach from console"): ignore HUP by
+# hand; the pid is caffeinate's, which lives exactly as long as the body
+cm 'cd ~/lmbox && sh -c "trap \"\" HUP; exec caffeinate -dims sh -c \"sh body.sh > body.log 2>&1; echo \\\$? > body.rc\"" > /dev/null 2>&1 < /dev/null & echo $! > ~/lmbox/body.pid; sleep 2; kill -0 "$(cat ~/lmbox/body.pid)" && echo started pid $(cat ~/lmbox/body.pid)' \
     || { say "the body did not start"; exit 2; }
 say "body started ($(basename "$BODY")); polling every ${POLL}s"
 
