@@ -1,0 +1,19 @@
+--- a/xtrees/ops.mojo
++++ b/xtrees/ops.mojo
+@@ -31,6 +31,7 @@
+   DEVIATION 5605  a zero row normalises to uniform 1 / k, never 0 / 0.
+ """
+ from checks.numerics import identical_mul64, identical_exp64, identical_log64, identical_pow64
++from std.math import fma
+ 
+ comptime GOLDEN: UInt64 = 0x9E3779B97F4A7C15
+ 
+@@ -156,7 +157,7 @@
+     """acc[i] += weight * x[i], the product pinned (never fused into the add)."""
+     for i in range(n):
+         # DEVIATION 5601: the product is pinned, never fused into the add.
+-        acc[unsafe_offset=i] = acc[unsafe_offset=i] + identical_mul64(weight, Float64(x[unsafe_offset=i]))
++        acc[unsafe_offset=i] = fma(weight, Float64(x[unsafe_offset=i]), acc[unsafe_offset=i])  # SABOTAGE 5601
+ 
+ 
+ def accumulate_cols(

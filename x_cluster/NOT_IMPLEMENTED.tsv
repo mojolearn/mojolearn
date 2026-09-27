@@ -1,0 +1,23 @@
+# scikit-learn options the cluster expansion lane (x_cluster/) deliberately does NOT implement, and why.
+# their_thing	status	why / where it would go
+sklearn/cluster/_kmeans.py::MiniBatchKMeans(random_state=RandomState)	NOT IMPLEMENTED	the batch order comes from the lane's splitmix64 stream seeded by an int (None means 0), not NumPy's Mersenne Twister; a fit matches scikit-learn at a tolerance, never bit for bit
+sklearn/cluster/_kmeans.py::MiniBatchKMeans(init='random' or callable)	NOT IMPLEMENTED	refused by name; 'k-means++' (greedy, as scikit-learn) and an array are carried
+sklearn/cluster/_kmeans.py::MiniBatchKMeans.fit(sample_weight)	NOT IMPLEMENTED	refused by name; unit weights only (the batch draw is uniform with replacement)
+sklearn/cluster/_kmeans.py::MiniBatchKMeans.partial_fit	NOT IMPLEMENTED	absent; fit only
+sklearn/cluster/_kmeans.py::MiniBatchKMeans(verbose, compute_labels=False)	ACCEPTED, INERT	no logger; labels_ are always computed against the final centers
+sparse input (every estimator of the lane)	NOT IMPLEMENTED	dense float32 only
+sklearn/cluster/_bisect_k_means.py::_kmeans_single_lloyd (the 2-means)	REPLACED	each bisection runs this library's KMeans (cuVS Lloyd through ClusterOps.kmeans: cluster/estimator.mojo::kmeans_fit and its host oracle), so the stop rule is cuVS's centroid shift, not sklearn's variance-scaled tol, and init='random'/'k-means++' are cuVS's starts; algorithm='elkan' runs the same Lloyd
+sklearn/cluster/_bisect_k_means.py::BisectingKMeans.fit(sample_weight)	NOT IMPLEMENTED	refused by name
+sklearn/cluster/_mean_shift.py::MeanShift(bin_seeding=True, min_bin_freq)	NOT IMPLEMENTED	refused by name; every row (or the given seeds) is a seed
+sklearn/cluster/_mean_shift.py::estimate_bandwidth(n_samples, random_state)	NOT IMPLEMENTED	the estimate uses every row (sklearn's default n_samples=None) at quantile 0.3; the n x n distance matrix is on the device, so fit(bandwidth=None) holds n^2 floats
+sklearn/cluster/_mean_shift.py::MeanShift(n_jobs)	ACCEPTED, INERT	the device runs every seed at once
+sklearn/cluster/_optics.py::OPTICS(metric other than euclidean, p != 2, metric_params, precomputed)	NOT IMPLEMENTED	refused by name; euclidean only
+sklearn/cluster/_optics.py::compute_optics_graph np.around(core/reach, decimals=precision)	NOT IMPLEMENTED	the reference rounds its float64 distances to float precision; ours are float32 throughout, unrounded, so reachability agrees at a tolerance
+sklearn/cluster/_optics.py::OPTICS(algorithm, leaf_size, memory, n_jobs)	ACCEPTED, INERT	the n x n distances are one device matrix (n^2 floats); the ordering loop is sequential on the host
+sklearn/cluster/_affinity_propagation.py::_affinity_propagation tie noise stream	REPLACED	sklearn's formula S += (eps*S + tiny*100) * z, with z from the lane's splitmix64 stream through a portable Box-Muller (random_state=None means 0), not NumPy's generator; a fit matches sklearn at a tolerance
+sklearn/cluster/_affinity_propagation.py::fit(affinity='precomputed', preference=None) with positive similarities	NOT IMPLEMENTED	the default median is the device's order statistic of the non-negative distances; a precomputed matrix with a positive entry needs an explicit preference (refused by name)
+sklearn/cluster/_affinity_propagation.py (float64 S, R, A)	REPLACED	float32 throughout; the matrices are resident on the device (n^2 floats each)
+sklearn/mixture/_bayesian_mixture.py::BayesianGaussianMixture(covariance_type='tied'|'diag'|'spherical')	NOT IMPLEMENTED	refused by name; 'full' only
+sklearn/mixture/_base.py::_initialize_parameters(init_params='k-means++'|'random_from_data')	NOT IMPLEMENTED	refused by name; 'kmeans' (this library's KMeans) and 'random' (the lane's seeded stream) are carried
+sklearn/mixture/_base.py::fit(warm_start=True), verbose	NOT IMPLEMENTED / INERT	warm_start refused by name; no logger
+sklearn/mixture/_bayesian_mixture.py float64 parameters	REPLACED	the n-sized E/M work is float32 on the device, the k-sized updates float64 on the host; the fitted arrays come back float32
