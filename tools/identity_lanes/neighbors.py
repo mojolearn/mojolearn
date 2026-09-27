@@ -241,6 +241,18 @@ def _(ml, X, yc, yr, Xh=None):
                      svr_dual=_h(r.dual_coef_), svr_predict=_h(r.predict(X[512:768]))),
                 c, lambda e: (e.decision_function(Xh[:256]), e.predict(Xh[:256])))
 
+
+@lane("x-neighbors-svc-sigmoid")
+def _(ml, X, yc, yr, Xh=None):
+    """SVC(kernel='sigmoid'): the identical linear Gram, then tanh(gamma * K
+    + coef0) cell by cell (kernel_methods' tanh_epilogue_kernel on the
+    device, the same spelling in smo_oracle_fit on the host)."""
+    m = ml.SVC(C=1.0, kernel="sigmoid", gamma=0.05, coef0=-0.5, max_iter=200).fit(X[:512], yc[:512])
+    z = ml.SVC(C=0.5, kernel="sigmoid", gamma=0.02, max_iter=200).fit(X[:512], yc[:512])
+    return _fit(dict(dual=_h(m.dual_coef_), support=_h(m.support_), decision=_h(m.decision_function(X[512:768])),
+                     z_dual=_h(z.dual_coef_), z_decision=_h(z.decision_function(X[512:768]))),
+                m, lambda e: (e.decision_function(Xh[:256]), e.predict(Xh[:256])))
+
 _batch_decl(_rows_calls("score_samples", "predict", sl=slice(0, 256)), "x-neighbors-lof")
 _batch_decl(_rows_calls("predict", "decision_function", "predict_proba", sl=slice(0, 256)), "x-neighbors-nearest-centroid")
 _batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "x-neighbors-ocsvm")
@@ -253,4 +265,5 @@ _batch_decl(_rows_calls("predict_proba", "predict", sl=slice(0, 128)),
             "x-neighbors-label-propagation", "x-neighbors-label-spreading")
 _batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_neighbors_holes), "x-neighbors-knn-imputer")
 _batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-neighbors-svgp")
-_batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "x-neighbors-gamma-scale", "x-neighbors-svm-weights")
+_batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "x-neighbors-gamma-scale", "x-neighbors-svm-weights",
+            "x-neighbors-svc-sigmoid")

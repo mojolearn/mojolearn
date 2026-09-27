@@ -78,6 +78,7 @@ from svm.impl.svm_parameter import (
     KERNEL_LINEAR,
     KERNEL_POLYNOMIAL,
     KERNEL_RBF,
+    KERNEL_TANH,
     KernelParams,
     SvmModel,
     SvmParameter,
@@ -118,11 +119,10 @@ struct SvcFitOutputs(Copyable, Movable):
 def _kernel_params(
     kernel: Int, gamma: Float64, degree: Int = 3, coef0: Float64 = 0.0
 ) raises -> KernelParams:
-    """`ML::matrix::KernelParams` for the two implemented kernels. `degree` and
-    `coef0` are their constructor defaults (3 and 0); both are read only by
-    POLYNOMIAL and TANH, which `check_rung1_scope` refuses by name, so
-    there is no value a caller could pass that would reach a kernel."""
-    if kernel != KERNEL_LINEAR and kernel != KERNEL_RBF and kernel != KERNEL_POLYNOMIAL:
+    """`ML::matrix::KernelParams` for the implemented kernels (LINEAR, RBF,
+    POLYNOMIAL, TANH). `degree` and `coef0` default to their constructor
+    values (3 and 0); POLYNOMIAL reads both, TANH reads coef0."""
+    if kernel != KERNEL_LINEAR and kernel != KERNEL_RBF and kernel != KERNEL_POLYNOMIAL and kernel != KERNEL_TANH:
         raise Error(
             "svm: kernel=" + String(kernel) + " is not implemented in rung 1;"
             + " only LINEAR (" + String(KERNEL_LINEAR) + ") and RBF ("

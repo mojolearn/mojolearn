@@ -72,7 +72,7 @@ from gemm.host.identical_gemm import (
     leaf_count,
     leaf_end,
 )
-from checks.numerics import ftz, identical_exp, identical_mul, identical_mul_add
+from checks.numerics import ftz, identical_exp, identical_mul, identical_mul_add, identical_tanh
 from core.host_predict_threads import HostF32Ptr, host_predict_chunk, host_predict_task_count
 from svm.impl.smosolver import fold_order_for, hash_f32_list
 from svm.impl.svm_parameter import (
@@ -80,6 +80,7 @@ from svm.impl.svm_parameter import (
     KERNEL_LINEAR,
     KERNEL_POLYNOMIAL,
     KERNEL_RBF,
+    KERNEL_TANH,
     KernelParams,
     SvmParameter,
 )
@@ -144,6 +145,14 @@ def _exp[dt: DType](x: Scalar[dt]) -> Scalar[dt]:
         return rebind[Scalar[dt]](identical_exp(rebind[Float32](x)))
     else:
         return rebind[Scalar[dt]](exp(rebind[Float64](x)))
+
+
+@always_inline
+def _tanh[dt: DType](x: Scalar[dt]) -> Scalar[dt]:
+    comptime if dt == DType.float32:
+        return rebind[Scalar[dt]](identical_tanh(rebind[Float32](x)))
+    else:
+        return rebind[Scalar[dt]](tanh(rebind[Float64](x)))
 
 
 @always_inline
@@ -275,6 +284,13 @@ def _kernel_cell[
             # either order.
             acc = _flush[dt](acc + Scalar[dt](0.5))
         return acc
+    if kp.kernel == KERNEL_TANH:
+        # `tanh_epilogue_kernel` (kernel_methods): ftz(tanh(ftz(fma(gain,
+        # ftz(dot), offset)))), identical_tanh in float32.
+        var t = _flush[dt](
+            _mad[dt](Scalar[dt](kp.gamma), _flush[dt](dot), Scalar[dt](kp.coef0))
+        )
+        return _flush[dt](_tanh[dt](t))
     var gain = Scalar[dt](kp.gamma)
     var s = _flush[dt](
         _flush[dt](_flush[dt](norm_a[ia]) + _flush[dt](norm_b[ib]))
@@ -1041,6 +1057,10 @@ def smo_oracle_decision_into(
                             kij = ftz(identical_mul(kij, pv))
                         comptime if SMO_ORACLE_HOST_SABOTAGE:
                             kij = ftz(kij + Float32(0.5))
+                    elif kp.kernel == KERNEL_TANH:
+                        kij = ftz(identical_tanh(ftz(identical_mul_add(
+                            Float32(kp.gamma), ftz(kij), Float32(kp.coef0)
+                        ))))
                     elif kp.kernel == KERNEL_RBF:
                         var s = ftz(
                             ftz(ftz(qnp[i]) + ftz(snp[j]))

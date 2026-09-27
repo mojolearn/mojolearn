@@ -93,6 +93,7 @@ from svm.impl.svm_parameter import (
     KERNEL_LINEAR,
     KERNEL_POLYNOMIAL,
     KERNEL_RBF,
+    KERNEL_TANH,
     KernelParams,
     SvmParameter,
     check_finite_list,
@@ -164,7 +165,7 @@ def _kernel_params(
     """`svm/estimator.mojo::_kernel_params`, the same refusal and the same
     constructor defaults (degree 3, coef0 0, read by no implemented
     kernel)."""
-    if kernel != KERNEL_LINEAR and kernel != KERNEL_RBF and kernel != KERNEL_POLYNOMIAL:
+    if kernel != KERNEL_LINEAR and kernel != KERNEL_RBF and kernel != KERNEL_POLYNOMIAL and kernel != KERNEL_TANH:
         raise Error(
             "svm: kernel=" + String(kernel) + " is not implemented in rung 1;"
             + " only LINEAR (" + String(KERNEL_LINEAR) + ") and RBF ("
