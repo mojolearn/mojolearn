@@ -23,11 +23,12 @@ The binding lives in `bindings/_mojolearn_metrics.mojo` alongside the
 metrics functions and is loaded through `_metrics_impl._get_binding`.
 """
 
-from . import _serialize
+from . import _backend, _serialize
 from ._array import Array
 from ._buffer import (
     _native, addr, addr_ro, all_finite, as_f32_c, as_f64_c, as_i32_c, empty,
 )
+from ._expansion_decomp import _Kit, _M
 from ._metrics_impl import _get_binding
 from .density import _check_queries
 from .linear_model import _check_saved_by, _restore_mode, _saved_mode, _shape_of
@@ -831,6 +832,33 @@ class SpectralClustering:
         return obj
 
 
+class _DenseCOO:
+    """A dense float32 matrix (`_expansion_decomp._M`) as the duck-typed COO
+    `_coo_triples` reads: row-major order, exact zeros dropped (what
+    `sp.coo_matrix(dense)` keeps). Pure data movement, so the rbf route needs
+    no base-binding helper and runs on a CPU-only install."""
+
+    def __init__(self, m):
+        import array as _array
+        from ._buffer import frombytes
+        rows, cols, vals = _array.array("i"), _array.array("i"), _array.array("f")
+        for i in range(m.r):
+            base = i * m.c
+            for j in range(m.c):
+                v = m.s[base + j]
+                if v != 0.0:
+                    rows.append(i)
+                    cols.append(j)
+                    vals.append(v)
+        self.shape = (m.r, m.c)
+        self.row = frombytes(rows.tobytes(), "<i4", (len(rows),))
+        self.col = frombytes(cols.tobytes(), "<i4", (len(cols),))
+        self.data = frombytes(vals.tobytes(), "<f4", (len(vals),))
+
+    def tocoo(self):
+        return self
+
+
 class SpectralEmbedding:
     """Laplacian eigenmaps. Reference: cuML's `manifold.SpectralEmbedding`.
 
@@ -840,13 +868,15 @@ class SpectralEmbedding:
     dropped, so `embedding_` is `n_samples x n_components`.
 
     HONORED: `n_components`, `affinity` in {'nearest_neighbors',
-    'precomputed'}, `random_state`, `n_neighbors` (None means
+    'precomputed', 'rbf'} (`gamma` with 'rbf', None meaning 1/n_features,
+    scikit-learn's rule; the dense RBF affinity is the decomp lane's
+    identical cells, lane/algos-decomp 2026-09-27), `random_state`, `n_neighbors` (None means
     `max(n_samples // 10, 1)`, the reference's rule). `random_state=None`
     means seed 0 and is deterministic (DEVIATION 891). The eigensolver
     tolerance is cuVS's struct default `1e-5` and is not a parameter, as in
     the reference.
 
-    REFUSED BY NAME: any other `affinity`, `gamma`, `eigen_solver`,
+    REFUSED BY NAME: any other `affinity`, `gamma` without 'rbf', `eigen_solver`,
     `eigen_tol`, `n_jobs`, `verbose`. A precomputed affinity with a repeated
     `(row, col)` entry, a negative entry or a non-finite entry is refused;
     its diagonal entries are dropped, as the reference drops them.
@@ -871,19 +901,20 @@ class SpectralEmbedding:
         n_jobs=None,
         verbose=False,
     ):
-        if affinity not in _AFFINITIES:
+        if affinity not in _AFFINITIES + ("rbf",):
             raise ValueError(
                 f"mojolearn SpectralEmbedding: affinity={affinity!r} is "
-                f"refused; it must be one of {list(_AFFINITIES)}. 'rbf', "
+                f"refused; it must be one of {list(_AFFINITIES + ('rbf',))}. "
                 "'precomputed_nearest_neighbors' and a callable are different "
                 "affinity constructions that nothing here implements."
             )
-        if gamma is not None:
+        if gamma is not None and affinity != "rbf":
             raise NotImplementedError(
                 "mojolearn SpectralEmbedding: gamma is refused; it "
-                "parameterizes an RBF affinity, and affinity is restricted to "
-                "'nearest_neighbors' and 'precomputed'"
+                "parameterizes an RBF affinity, and affinity is not 'rbf'"
             )
+        if gamma is not None and not float(gamma) > 0:
+            raise ValueError("mojolearn SpectralEmbedding: gamma must be positive")
         if eigen_solver is not None:
             raise NotImplementedError(
                 f"mojolearn SpectralEmbedding: eigen_solver={eigen_solver!r} "
@@ -931,6 +962,7 @@ class SpectralEmbedding:
         self.random_state = random_state
         self.n_neighbors = None if n_neighbors is None else int(n_neighbors)
         self._seed = seed
+        self.gamma = None if gamma is None else float(gamma)
 
     def _resolved_neighbors(self, n):
         return self.n_neighbors if self.n_neighbors is not None else max(n // 10, 1)
@@ -942,19 +974,42 @@ class SpectralEmbedding:
         # The one piece of arithmetic the reference keeps in Python
         # (spectral_embedding.pyx:294): the transform receives this number.
         n_lanczos = k + 1 if drop_first else k
-        if self.affinity == "precomputed":
+        if self.affinity == "rbf":
+            # scikit-learn's `affinity='rbf'` (manifold/_spectral_embedding.py
+            # `_get_affinity_matrix`: rbf_kernel(X, gamma), gamma defaulting
+            # to 1/n_features), which cuML does not carry (lane/algos-decomp,
+            # 2026-09-27). The dense affinity exp(-gamma ||x_i - x_j||^2) is
+            # the decomp lane's identical cells (x_decomp/cells.mojo
+            # `sqdist_cell`, features ascending with one fused multiply-add
+            # per term, then `exp_c`, the portable expf), and then takes the
+            # precomputed route below unchanged: the dense matrix through COO,
+            # exact zeros dropped, the diagonal dropped.
+            xm = _M.from_input(X)
+            gamma = self.gamma if self.gamma is not None else 1.0 / xm.c
+            self.gamma_ = gamma
+            mode = _backend.default_mode()
+            kit = _Kit(mode, _backend.binding("_mojolearn_x_decomp", mode))
+            aff = kit.ew("exp", kit.ew("scale", kit.sqdist(xm, xm), s=-gamma))
+            self.affinity_matrix_ = aff.out()
+            self.n_features_in_ = xm.c
+            X = _DenseCOO(aff)
+        if self.affinity in ("precomputed", "rbf"):
             rows, cols, vals, n = _coo_triples(X, "SpectralEmbedding")
             if vals.size == 0:
                 raise ValueError(
                     "mojolearn SpectralEmbedding: the precomputed affinity "
                     "matrix has no nonzero entries"
                 )
-            if not all_finite(vals):
+            # the rbf affinity is exp of a finite value, finite and >= 0 by
+            # construction (`exp_c` clamps), so its two scans are skipped
+            if self.affinity == "rbf":
+                pass
+            elif not all_finite(vals):
                 raise ValueError(
                     "mojolearn SpectralEmbedding: the precomputed affinity "
                     "matrix has a non-finite entry"
                 )
-            if vals.min() < 0:
+            if self.affinity != "rbf" and vals.min() < 0:
                 raise ValueError(
                     "mojolearn SpectralEmbedding: the precomputed affinity "
                     "matrix has a negative entry (refused by name: sqrt of a "

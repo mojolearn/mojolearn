@@ -92,3 +92,24 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("predict", sl=np.s_[:256, 1:5]), "x-cluster-affinity-propagation")
+
+
+@lane("x-cluster-bgmm")
+def _(ml, X, yc, yr, Xh=None):
+    """BayesianGaussianMixture (python/mojolearn/_expansion_cluster.py):
+    2000 rows of columns 1-4, five components under the Dirichlet-process
+    prior (k-means start, 30 iterations), then a Dirichlet-distribution fit
+    from the random start; infer is score_samples, predict and
+    predict_proba."""
+    m = ml.BayesianGaussianMixture(n_components=5, max_iter=30, random_state=3).fit(X[:2000, 1:5])
+    m2 = ml.BayesianGaussianMixture(n_components=3, max_iter=15, init_params="random", random_state=3,
+                                    weight_concentration_prior_type="dirichlet_distribution").fit(X[:2000, 1:5])
+    return _fit(dict(weights=_h(m.weights_), means=_h(m.means_), cov=_h(m.covariances_),
+                     pchol=_h(m.precisions_cholesky_), dof=_h(m.degrees_of_freedom_),
+                     lb=_h(np.float64(m.lower_bound_)), n_iter=_h(np.int64(m.n_iter_)),
+                     labels=_h(m.predict(X[:2000, 1:5])),
+                     dd_weights=_h(m2.weights_), dd_means=_h(m2.means_), dd_lb=_h(np.float64(m2.lower_bound_))),
+                m, lambda e: (e.score_samples(Xh[:256, 1:5]), e.predict(Xh[:256, 1:5]), e.predict_proba(Xh[:256, 1:5])))
+
+
+_batch_decl(_rows_calls("score_samples", "predict", "predict_proba", sl=np.s_[:256, 1:5]), "x-cluster-bgmm")

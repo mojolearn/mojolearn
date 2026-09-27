@@ -466,3 +466,25 @@ def fill_unit(t: Int, f: FP, q: IP):
         f.unsafe_store(p(q, 4) + t, raw(f, p(q, 3) + c))
     else:
         f.unsafe_store(p(q, 4) + t, x)
+
+
+def label_binarize_unit(t: Int, f: FP, q: IP):
+    """q = [CODES, n, K, BINARY, NEG, POS, W, OUT]; t = i*W + j. int32 bits:
+    POS where row i's class code is j (BINARY: where it is 1, one column),
+    else NEG; an unknown code (-1) is a NEG row (sklearn `label_binarize`)."""
+    var W = p(q, 6)
+    var i = t // W
+    var j = t % W
+    var code = Int(ld(f, p(q, 0) + i))
+    var hit = code == 1 if p(q, 3) != 0 else code == j
+    sti(f, p(q, 7) + t, p(q, 5) if hit else p(q, 4))
+
+
+def scatter_ones_unit(t: Int, f: FP, q: IP):
+    """q = [CODES, ROWS, W, OUT]; t = entry: int32 1 at OUT[ROWS[t]*W + code]
+    for a known code. Two entries of one row with one code write the same
+    word, so their order cannot matter."""
+    var code = Int(ld(f, p(q, 0) + t))
+    if code < 0:
+        return
+    sti(f, p(q, 3) + Int(ld(f, p(q, 1) + t)) * p(q, 2) + code, 1)

@@ -35,7 +35,7 @@ from ._labels import flatten_labels, sorted_classes, label_kind
 __all__ = ["RobustScaler", "MaxAbsScaler", "OrdinalEncoder", "OneHotEncoder", "TargetEncoder", "SimpleImputer", "KBinsDiscretizer",
            "GaussianNB", "MultinomialNB", "BernoulliNB",
            "LinearDiscriminantAnalysis", "QuadraticDiscriminantAnalysis",
-           "QuantileTransformer", "PowerTransformer", "Normalizer"]
+           "QuantileTransformer", "PowerTransformer", "Normalizer", "PolynomialFeatures", "SplineTransformer", "Binarizer", "LabelEncoder", "LabelBinarizer"]
 
 _BINDING = "_mojolearn_x_prep"
 
@@ -47,7 +47,7 @@ _OPS = dict(
     te_global=20, te_enc=21, te_apply=22, mark_missing=23, fill=24, kbins_edges=25, kbins_codes=26,
     gnb_eps=27, gnb_params=28, gnb_jll=29, class_log_prior=30, mnb_params=31, bnb_params=32, cnb_params=33, cat_params=34, cat_jll=35,
     lda_prep=36, lda_w=37, lda_stage2=38, lda_stage3=39, qda_cov=40, qda_prep=41, qda_dec=42,
-    qt_apply=43, pt_fit=44, pt_apply=45, std_params=46, normalize=47, poly=48,
+    qt_apply=43, pt_fit=44, pt_apply=45, std_params=46, normalize=47, poly=48, spline_knots=49, spline_apply=50, label_binarize=51, scatter_ones=52,
 )
 _PARAMS = 14
 _NONE = -1
@@ -1404,3 +1404,386 @@ class Normalizer(_PrepBase):
         pr.stage("normalize", n, xo, n, d, {"l1": 0, "l2": 1, "max": 2}[self.norm], out)
         pr.run(self.numeric_mode_)
         return pr.get(out, (n, d))
+
+
+class PolynomialFeatures(_PrepBase):
+    """sklearn.preprocessing.PolynomialFeatures: the reference's column
+    order (the bias, then combinations with replacement, or without when
+    interaction_only, degree by degree); each output is the product of its
+    input columns left to right on the device. order='F' output is refused."""
+    _parameters = ("degree", "interaction_only", "include_bias", "order")
+
+    def __init__(self, degree=2, *, interaction_only=False, include_bias=True, order="C"):
+        self.degree = degree
+        self.interaction_only = interaction_only
+        self.include_bias = include_bias
+        self.order = order
+
+    def _combos(self, d):
+        from itertools import chain, combinations, combinations_with_replacement
+        if isinstance(self.degree, numbers.Integral):
+            lo, hi = 0, int(self.degree)
+        else:
+            lo, hi = (int(v) for v in self.degree)
+        if hi < 0 or lo < 0 or lo > hi:
+            raise ValueError(f"mojolearn: invalid degree {self.degree!r}")
+        comb = combinations if self.interaction_only else combinations_with_replacement
+        it = chain.from_iterable(comb(range(d), i) for i in range(max(1, lo), hi + 1))
+        if self.include_bias:
+            it = chain(comb(range(d), 0), it)
+        return [tuple(c) for c in it]
+
+    def fit(self, X, y=None):
+        if self.order != "C":
+            raise NotImplementedError("mojolearn: PolynomialFeatures(order='F') is not implemented")
+        d = _x2d(X).shape[1]
+        self._terms = self._combos(d)
+        self.n_features_in_, self.n_output_features_ = d, len(self._terms)
+        self.powers_ = Array.from_list([[t.count(j) for j in range(d)] for t in self._terms] or [[0] * d], "<i8")
+        self.numeric_mode_ = _mode()
+        return self
+
+    def transform(self, X):
+        self._check_fitted()
+        arr = _x2d(X)
+        self._check_width(arr)
+        n, d = arr.shape
+        idx, start = [], [0]
+        for t in self._terms:
+            idx.extend(t)
+            start.append(len(idx))
+        nout = len(self._terms)
+        pr = _Prog()
+        xo, io, so = pr.put(arr), pr.put_list(idx or [0]), pr.put_list(start)
+        out = pr.alloc(n * nout)
+        pr.stage("poly", n * nout, xo, n, d, io, so, nout, out)
+        pr.run(self.numeric_mode_)
+        return pr.get(out, (n, nout))
+
+
+class SplineTransformer(_PrepBase):
+    """sklearn.preprocessing.SplineTransformer: per feature, B-splines of
+    `degree` on `n_knots` base knots ('uniform' over the training range, or
+    'quantile': numpy linear percentiles), extended by `degree` knots at each
+    end at the edge spacing; extrapolation 'constant' (the boundary values),
+    'continue' or 'error'. Dense float32 output. Explicit knot arrays,
+    'linear' and 'periodic' extrapolation and sparse output are refused."""
+    _parameters = ("n_knots", "degree", "knots", "extrapolation", "include_bias", "order", "handle_missing",
+                   "sparse_output")
+
+    def __init__(self, n_knots=5, degree=3, *, knots="uniform", extrapolation="constant", include_bias=True,
+                 order="C", handle_missing="error", sparse_output=False):
+        self.n_knots = n_knots
+        self.degree = degree
+        self.knots = knots
+        self.extrapolation = extrapolation
+        self.include_bias = include_bias
+        self.order = order
+        self.handle_missing = handle_missing
+        self.sparse_output = sparse_output
+
+    def fit(self, X, y=None, sample_weight=None):
+        if not isinstance(self.knots, str) or self.knots not in ("uniform", "quantile"):
+            raise NotImplementedError("mojolearn: SplineTransformer knots must be 'uniform' or 'quantile'")
+        if self.extrapolation not in ("constant", "continue", "error"):
+            raise NotImplementedError(f"mojolearn: SplineTransformer extrapolation={self.extrapolation!r} "
+                                      "is not implemented")
+        if sample_weight is not None or self.sparse_output or self.order != "C":
+            raise NotImplementedError("mojolearn: SplineTransformer sample_weight, sparse_output and "
+                                      "order='F' are not implemented")
+        nk, k = int(self.n_knots), int(self.degree)
+        if nk < 2 or k < 0 or k > 7:
+            raise ValueError("mojolearn: SplineTransformer needs n_knots >= 2 and 0 <= degree <= 7")
+        arr = _x2d(X)
+        n, d = arr.shape
+        mode = _mode()
+        pr = _Prog()
+        xo = pr.put(arr)
+        so, st = pr.alloc(n * d), pr.alloc(6 * d)
+        base = pr.alloc(d * nk)
+        knots = pr.alloc(d * (nk + 2 * k))
+        pr.stage("col_stats", d, xo, n, d, st)
+        if self.knots == "quantile":
+            qf = pr.put_list([i / (nk - 1) for i in range(nk)])
+            pr.stage("sort_cols", d, xo, n, d, so, 0)
+            pr.stage("quantile", d * nk, so, n, d, qf, nk, base, _NONE)
+        pr.stage("spline_knots", d, base, nk, d, k, knots, 1 if self.knots == "uniform" else 0, st)
+        pr.run(mode)
+        self._knots = pr.get(knots, d * (nk + 2 * k))
+        flat = pr.values(knots, d * (nk + 2 * k))
+        w = nk + 2 * k
+        self.bsplines_ = [Array.from_list(flat[c * w:(c + 1) * w], "<f4") for c in range(d)]
+        self._lo, self._hi = pr.values(st + 3 * d, d), pr.values(st + 4 * d, d)
+        self._nk, self._k = nk, k
+        nspl = nk + k - 1
+        self.n_features_out_ = d * (nspl if self.include_bias else nspl - 1)
+        self.numeric_mode_, self.n_features_in_ = mode, d
+        return self
+
+    def transform(self, X):
+        self._check_fitted()
+        arr = _x2d(X)
+        self._check_width(arr)
+        n, d = arr.shape
+        W = self.n_features_out_
+        pr = _Prog()
+        xo, ko = pr.put(arr), pr.put(self._knots)
+        out = pr.alloc(n * W)
+        st = pr.alloc(6 * d)
+        if self.extrapolation == "error":
+            pr.stage("col_stats", d, xo, n, d, st)
+        pr.stage("spline_apply", n * d, xo, n, d, ko, self._nk, self._k,
+                 1 if self.extrapolation == "continue" else 0, W, 1 if self.include_bias else 0, out)
+        pr.run(self.numeric_mode_)
+        if self.extrapolation == "error":
+            lo, hi = pr.values(st + 3 * d, d), pr.values(st + 4 * d, d)
+            if any(a < b for a, b in zip(lo, self._lo)) or any(a > b for a, b in zip(hi, self._hi)):
+                raise ValueError("mojolearn: X contains values beyond the limits of the knots")
+        return pr.get(out, (n, W))
+
+
+class Binarizer(_PrepBase):
+    """sklearn.preprocessing.Binarizer: 1 where X > threshold, else 0 (NaN is
+    kept). Stateless."""
+    _parameters = ("threshold", "copy")
+
+    def __init__(self, *, threshold=0.0, copy=True):
+        self.threshold = threshold
+        self.copy = copy
+
+    def fit(self, X, y=None):
+        self.n_features_in_ = _x2d(X).shape[1]
+        self.numeric_mode_ = _mode()
+        return self
+
+    def transform(self, X, copy=None):
+        self._check_fitted()
+        arr = _x2d(X)
+        self._check_width(arr)
+        n, d = arr.shape
+        pr = _Prog()
+        xo, th = pr.put(arr), pr.put_scalar(self.threshold)
+        out = pr.alloc(n * d)
+        pr.stage("binarize", n * d, xo, n * d, th, out)
+        pr.run(self.numeric_mode_)
+        return pr.get(out, (n, d))
+
+
+# ---------------------------------------------------------------- label transformers
+_F32_EXACT = 2 ** 24
+
+
+def _numeric_labels(values):
+    """The labels as floats when every one is a real number that float32
+    holds exactly (so the device's categories are the labels themselves),
+    else None (str labels, ints beyond 2**24: the Python route)."""
+    import struct
+    out = []
+    for v in values:
+        if isinstance(v, bool) or not isinstance(v, numbers.Real):
+            return None
+        fv = float(v)
+        if fv != fv or struct.unpack("f", struct.pack("f", fv))[0] != fv:
+            return None
+        out.append(fv)
+    return out
+
+
+def _label_classes(mode, values):
+    """(classes list in the reference's order, device categories Array or
+    None). Numeric labels: a device sort and run scan; else sorted()."""
+    nums = _numeric_labels(values)
+    if nums is None or not nums:
+        classes, _ = sorted_classes(values)
+        return classes, None
+    cats = _fit_categories(mode, Array.from_list([[v] for v in nums], "<f4"))[0]
+    ints = all(isinstance(v, numbers.Integral) for v in values)
+    classes = [int(c) if ints else float(c) for c in cats.tolist()]
+    return classes, cats
+
+
+def _label_codes(pr, values, cats):
+    """Stages: each label's index among `cats` (or -1). Returns the codes
+    offset and the unknown-count offset."""
+    arr = Array.from_list([[float(v)] for v in values], "<f4")
+    return _codes(pr, arr, [cats])
+
+
+def _classes_array(classes):
+    kind = label_kind(classes)
+    if kind == "int":
+        return Array.from_list(classes, "<i8")
+    if kind == "float":
+        return Array.from_list(classes, "<f8")
+    return list(classes)
+
+
+class LabelEncoder(_PrepBase):
+    """sklearn.preprocessing.LabelEncoder: classes_ are the sorted distinct
+    labels (numeric labels on the device: sort + run scan; str labels in
+    Python), transform is each label's index (a device binary search),
+    int32. An unseen label is refused, as the reference refuses it."""
+    _parameters = ()
+
+    def fit(self, y):
+        self.numeric_mode_ = _mode()
+        values = flatten_labels(y)
+        self._classes, self._cats = _label_classes(self.numeric_mode_, values)
+        self.classes_ = _classes_array(self._classes)
+        return self
+
+    def fit_transform(self, y):
+        return self.fit(y).transform(y)
+
+    def _check_fitted(self):
+        if not hasattr(self, "_classes"):
+            raise RuntimeError("mojolearn: this LabelEncoder instance is not fitted yet")
+
+    def transform(self, y):
+        self._check_fitted()
+        values = flatten_labels(y)
+        if not values:
+            return Array((0,), "<i4")
+        if self._cats is None or _numeric_labels(values) is None:
+            index = {c: i for i, c in enumerate(self._classes)}
+            missing = [v for v in values if v not in index]
+            if missing:
+                raise ValueError(f"mojolearn: y contains previously unseen labels: {missing[:5]}")
+            return Array.from_list([index[v] for v in values], "<i4")
+        n = len(values)
+        pr = _Prog()
+        codes, neg = _label_codes(pr, values, self._cats)
+        out = pr.alloc(n)
+        pr.stage("f2i", n, codes, out)
+        pr.run(self.numeric_mode_)
+        if pr.values(neg, 1)[0] > 0:
+            raise ValueError("mojolearn: y contains previously unseen labels")
+        return pr.get_i32(out, n)
+
+    def inverse_transform(self, y):
+        self._check_fitted()
+        codes = [int(c) for c in flatten_labels(y)]
+        if any(c < 0 or c >= len(self._classes) for c in codes):
+            raise ValueError("mojolearn: y contains previously unseen labels")
+        return _classes_array([self._classes[c] for c in codes])
+
+
+class LabelBinarizer(_PrepBase):
+    """sklearn.preprocessing.LabelBinarizer for a single-label target: one
+    int32 column per class (one column, the second class, for two classes;
+    a NEG column for one), pos_label / neg_label; an unseen label is a NEG
+    row. Numeric labels take the device route, str labels Python's.
+    Multilabel input, sparse_output and inverse_transform are refused."""
+    _parameters = ("neg_label", "pos_label", "sparse_output")
+
+    def __init__(self, *, neg_label=0, pos_label=1, sparse_output=False):
+        self.neg_label = neg_label
+        self.pos_label = pos_label
+        self.sparse_output = sparse_output
+
+    def fit(self, y):
+        if self.sparse_output:
+            raise NotImplementedError("mojolearn: LabelBinarizer(sparse_output=True) is not implemented")
+        if not (isinstance(self.neg_label, numbers.Integral) and isinstance(self.pos_label, numbers.Integral)
+                and self.neg_label < self.pos_label):
+            raise ValueError("mojolearn: neg_label must be an integer below pos_label")
+        self.numeric_mode_ = _mode()
+        values = flatten_labels(y)
+        self._classes, self._cats = _label_classes(self.numeric_mode_, values)
+        self.classes_ = _classes_array(self._classes)
+        self.y_type_ = "binary" if len(self._classes) <= 2 else "multiclass"
+        return self
+
+    def fit_transform(self, y):
+        return self.fit(y).transform(y)
+
+    def _check_fitted(self):
+        if not hasattr(self, "_classes"):
+            raise RuntimeError("mojolearn: this LabelBinarizer instance is not fitted yet")
+
+    def transform(self, y):
+        self._check_fitted()
+        values = flatten_labels(y)
+        n, K = len(values), len(self._classes)
+        binary = K <= 2
+        W = 1 if binary else K
+        pr = _Prog()
+        if self._cats is None or _numeric_labels(values) is None:
+            index = {c: i for i, c in enumerate(self._classes)}
+            codes = pr.put_list([index.get(v, -1) for v in values])
+        else:
+            codes, _neg = _label_codes(pr, values, self._cats)
+        if K == 1:
+            codes = pr.put_list([-1] * n)
+        out = pr.alloc(n * W)
+        pr.stage("label_binarize", n * W, codes, n, K, 1 if binary else 0, int(self.neg_label),
+                 int(self.pos_label), W, out)
+        pr.run(self.numeric_mode_)
+        return pr.get_i32(out, (n, W))
+
+    def inverse_transform(self, Y, threshold=None):
+        raise NotImplementedError("mojolearn: LabelBinarizer.inverse_transform is not implemented")
+
+
+class MultiLabelBinarizer(_PrepBase):
+    """sklearn.preprocessing.MultiLabelBinarizer: classes_ the sorted union
+    of every sample's labels (or `classes` as given, in that order), transform
+    an int32 indicator matrix; an unseen label is ignored (the reference
+    warns). Numeric labels take the device route (a sort, a binary search, a
+    scatter of ones), str labels Python's. sparse_output is refused."""
+    _parameters = ("classes", "sparse_output")
+
+    def __init__(self, *, classes=None, sparse_output=False):
+        self.classes = classes
+        self.sparse_output = sparse_output
+
+    def fit(self, y):
+        if self.sparse_output:
+            raise NotImplementedError("mojolearn: MultiLabelBinarizer(sparse_output=True) is not implemented")
+        self.numeric_mode_ = _mode()
+        if self.classes is not None:
+            self._classes = list(self.classes)
+            nums = _numeric_labels(self._classes)
+            self._given = True
+            self._cats = None
+        else:
+            flat = [v for row in y for v in row]
+            self._classes, self._cats = _label_classes(self.numeric_mode_, flat) if flat else ([], None)
+            self._given = False
+        self.classes_ = _classes_array(self._classes)
+        return self
+
+    def fit_transform(self, y):
+        y = [list(row) for row in y]
+        return self.fit(y).transform(y)
+
+    def _check_fitted(self):
+        if not hasattr(self, "_classes"):
+            raise RuntimeError("mojolearn: this MultiLabelBinarizer instance is not fitted yet")
+
+    def transform(self, y):
+        self._check_fitted()
+        rows = [list(r) for r in y]
+        n, K = len(rows), len(self._classes)
+        flat = [v for r in rows for v in r]
+        owner = [i for i, r in enumerate(rows) for _ in r]
+        pr = _Prog()
+        if not flat:
+            out = pr.alloc(n * max(K, 1))
+            pr.run(self.numeric_mode_)
+            return pr.get_i32(out, (n, K))
+        if self._cats is None or _numeric_labels(flat) is None:
+            index = {c: i for i, c in enumerate(self._classes)}
+            codes = pr.put_list([index.get(v, -1) for v in flat])
+        else:
+            codes, _neg = _label_codes(pr, flat, self._cats)
+        ro = pr.put_list(owner)
+        out = pr.alloc(n * max(K, 1))
+        pr.stage("scatter_ones", len(flat), codes, ro, K, out)
+        pr.run(self.numeric_mode_)
+        return pr.get_i32(out, (n, K))
+
+    def inverse_transform(self, yt):
+        self._check_fitted()
+        rows = yt.tolist() if hasattr(yt, "tolist") else list(yt)
+        return [tuple(self._classes[j] for j, v in enumerate(r) if v) for r in rows]
