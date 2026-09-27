@@ -1050,6 +1050,21 @@ def cmd_build(argv, environ=None):
         print("usage: bincache.py build <bindings/build_X.sh> [args...]", file=sys.stderr)
         return 2
     script, args = argv[0], argv[1:]
+    # ONE SHARD OF A SET (the GitHub build route, tools/release_github_build.py,
+    # 2026-09-27). MOJOLEARN_BINCACHE_SHARD_ONLY lists the builds this runner
+    # compiles, each "<numeric mode>:<script file name>"; every other build of
+    # the set returns at once without compiling or placing anything, so the
+    # unchanged release route (build_sets.sh) runs just this shard, and the
+    # hot directory collects its archives for the job that assembles the set.
+    # The variable is under MOJOLEARN_BINCACHE, so it never reaches a key, and
+    # a shard's own tree is never a release set: missing members fail
+    # linux_surface_qualification.sh's completeness check by construction.
+    only = environ.get("MOJOLEARN_BINCACHE_SHARD_ONLY", "").split()
+    if only:
+        me = "%s:%s" % (environ.get("MOJOLEARN_NUMERIC_MODE") or "identical", os.path.basename(script))
+        if me not in only:
+            print("BINCACHE skipped %s (not in this shard)" % me)
+            return 0
     if environ.get("MOJOLEARN_BINCACHE", "") != "0" and environ.get("MOJOLEARN_BINCACHE_DIR"):
         return cmd_build_local(script, args, environ, environ["MOJOLEARN_BINCACHE_DIR"])
     map_path = environ.get("MOJOLEARN_BINCACHE_MAP", DEFAULT_MAP)
@@ -1315,33 +1330,40 @@ def cmd_plan(argv):
     ap.add_argument("--negative", action="store_true",
                     help="also list the sabotage namespace as sget rows (negative controls)")
     a = ap.parse_args(argv)
-    parts = a.partition.split("/")
-    if len(parts) != 2 or not all(SEG_RE.match(p) for p in parts) or not SEG_RE.match(a.leg_id):
-        raise SystemExit("bincache plan: bad partition or leg id")
-    creds = creds_from_env()
-    lines = ["#partition\t" + a.partition, "#image\t" + a.image, "#leg\t" + a.leg_id]
-    n_get = n_sget = 0
-    for prefix, verb in ((OBJECT_PREFIX, "get"), (SABOTAGE_PREFIX, "sget")):
-        if verb == "sget" and not a.negative:
-            continue
-        objs = list_objects(creds, "%s/%s/" % (prefix, a.partition))
-        objs.sort(key=lambda o: o[1], reverse=True)
-        for name, _, _ in objs[: a.max_get]:
-            m = re.match(r"^%s/%s/([0-9a-f]{64})\.tar\.gz$" % (re.escape(prefix), re.escape(a.partition)), name)
-            if m:
-                lines.append("%s\t%s\t%s" % (verb, m.group(1), presign("GET", name, a.expires, creds)))
-                if verb == "get":
-                    n_get += 1
-                else:
-                    n_sget += 1
-    for i in range(a.slots):
-        slot = "%03d" % i
-        lines.append("put\t%s\t%s" % (slot, presign("PUT", "%s/%s/%s.tar.gz" % (INBOX_PREFIX, a.leg_id, slot),
-                                                    a.expires, creds)))
+    lines, n_get, n_sget = plan_lines(creds_from_env(), a.partition, a.image, a.leg_id, a.slots,
+                                      max_get=a.max_get, expires=a.expires, negative=a.negative)
     sys.stdout.write("\n".join(lines) + "\n")
     print("BINCACHE PLAN partition=%s entries=%d negative_entries=%d slots=%d"
           % (a.partition, n_get, n_sget, a.slots), file=sys.stderr)
     return 0
+
+
+def plan_lines(creds, partition, image, leg_id, slots, max_get=2000, expires=7200, negative=False):
+    """(map lines, gets, sgets): the URL map `plan` prints (and the GitHub
+    build route mints, tools/release_github_build.py)."""
+    parts = partition.split("/")
+    if len(parts) != 2 or not all(SEG_RE.match(p) for p in parts) or not SEG_RE.match(leg_id):
+        raise SystemExit("bincache plan: bad partition or leg id")
+    lines = ["#partition\t" + partition, "#image\t" + image, "#leg\t" + leg_id]
+    n_get = n_sget = 0
+    for prefix, verb in ((OBJECT_PREFIX, "get"), (SABOTAGE_PREFIX, "sget")):
+        if verb == "sget" and not negative:
+            continue
+        objs = list_objects(creds, "%s/%s/" % (prefix, partition))
+        objs.sort(key=lambda o: o[1], reverse=True)
+        for name, _, _ in objs[: max_get]:
+            m = re.match(r"^%s/%s/([0-9a-f]{64})\.tar\.gz$" % (re.escape(prefix), re.escape(partition)), name)
+            if m:
+                lines.append("%s\t%s\t%s" % (verb, m.group(1), presign("GET", name, expires, creds)))
+                if verb == "get":
+                    n_get += 1
+                else:
+                    n_sget += 1
+    for i in range(slots):
+        slot = "%03d" % i
+        lines.append("put\t%s\t%s" % (slot, presign("PUT", "%s/%s/%s.tar.gz" % (INBOX_PREFIX, leg_id, slot),
+                                                    expires, creds)))
+    return lines, n_get, n_sget
 
 
 def check_upload_row(row, keys_dir):

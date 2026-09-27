@@ -87,7 +87,9 @@ THE STEPS
                      NVIDIA (walking NVIDIA_WALK on no stock) and a DigitalOcean
                      MI325X, or a Hot Aisle 1x MI300X when DigitalOcean has a GPU
                      droplet live or no token (--amd-build-provider do|hotaisle
-                     or MOJOLEARN_AMD_PROVIDER pins one). `cpu-box` is opt-in
+                     or MOJOLEARN_AMD_PROVIDER pins one). `cpu-box` (RunPod CPU
+                     pods) and `github` (GitHub's free runners,
+                     tools/release_github_build.py) are opt-in
   macos-build        mac_slot --slots 4 run -- build_release_wheel.sh, byte LM on
   macos-smoke        qualify_verifier_wheel.py --scope expanded under the Metal lock
   release-check      pixi run -e test release-check: the Apple (Metal) column of
@@ -396,7 +398,7 @@ def overlay_verified(prov, out_dir):
 def leg_layout(legs_dir, backend, name):
     """(release_build, out_dir) of a leg named `vendor-arch` on a backend."""
     legs_dir = Path(legs_dir)
-    if backend == "cpu-box":
+    if backend in ("cpu-box", "github"):
         out = legs_dir / name
         return out / name / "release-build", out
     if name.startswith("cuda-"):
@@ -607,9 +609,34 @@ def cpu_legs(ctx):
     return legs
 
 
+def github_legs(ctx):
+    """OPT-IN ROUTE (--build-backend github, 2026-09-27): the three Linux sets
+    compile on GitHub's free ubuntu-24.04 runners, no rental. Each leg is
+    tools/release_github_build.py run: it mints the binding-cache URL map with
+    this Mac's R2 credentials, dispatches .github/workflows/release-linux-build.yml
+    for the frozen commit (each set split across shard jobs, then one assemble
+    job running the CPU box's unchanged route in its pinned image), polls the
+    run, downloads the set into the cpu-box layout and verifies it against its
+    proof; a failure names the job. The route overlays its own files from the
+    pushed tooling commit (its GHA/assemble/overlay.txt), so it takes no route
+    overlay, like cpu-box."""
+    legs_dir = ctx.rel / "legs"
+    legs = []
+    for vendor, arch in (("cuda", "sm_90a"), ("cuda", "sm_89"), ("hip", "gfx942")):
+        name = f"{vendor}-{arch}"
+        rb, out = leg_layout(legs_dir, "github", name)
+        legs.append(Leg(name, vendor, arch,
+                        ["python3", "tools/release_github_build.py", "run", "--commit", ctx.commit,
+                         "--arch", arch, "--out", str(out)],
+                        {}, rb, legs_dir, out))
+    return legs
+
+
 #: "gpu-legs" is the default (Andrew, 2026-09-25: no CPU anywhere by default);
-#: "cpu-box" is opt-in by name.
-BUILD_BACKENDS = {"cpu-box": cpu_legs, "gpu-legs": gpu_legs}
+#: "cpu-box" and "github" are opt-in by name.
+BUILD_BACKENDS = {"cpu-box": cpu_legs, "github": github_legs, "gpu-legs": gpu_legs}
+#: Routes that overlay their own box-side files and take no route overlay.
+SELF_OVERLAID = ("cpu-box", "github")
 
 
 def linux_legs(ctx):
@@ -1007,7 +1034,7 @@ class Release:
             if self._leg_env is None:
                 env = {"MOJOLEARN_SOURCE_CHECKOUT": str(self.source_checkout(create=not self.dry))}
                 m = self.overlay()
-                if m["files"] and self.args.build_backend != "cpu-box":
+                if m["files"] and self.args.build_backend not in SELF_OVERLAID:
                     if self.dry:
                         env.update(MOJOLEARN_ROUTE_OVERLAY="<route-overlay.tgz of " + ", ".join(sorted(m["files"])) + ">",
                                    MOJOLEARN_ROUTE_OVERLAY_SHA256="<sha256>")
@@ -1042,7 +1069,7 @@ class Release:
         except (Exception, SystemExit):
             t = dict(commit=None, digest=None, dirty=[])
         try:
-            m = self.overlay() if self.args.build_backend != "cpu-box" else None
+            m = self.overlay() if self.args.build_backend not in SELF_OVERLAID else None
         except (Exception, SystemExit):
             m = None
         return dict(schema="mojolearn.release-leg-provenance.v1", leg=leg.name, vendor=leg.vendor, arch=leg.arch,

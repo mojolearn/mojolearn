@@ -1,0 +1,290 @@
+name: Release Linux build
+
+# THE LINUX RELEASE SETS ON GITHUB'S FREE RUNNERS (2026-09-27). Dispatched by
+# `pixi run release --build-backend github` (tools/release_github_build.py
+# run), never by itself: only light-checks starts by itself (light-checks.yml
+# refuses any other workflow with a push or schedule trigger).
+#
+# One run builds the named sets (cuda sm_90a, cuda sm_89, hip gfx942) of ONE
+# source commit, with no GPU: Mojo compiles each set ahead of time from
+# --target-accelerator alone, exactly as the RunPod CPU build box does
+# (tools/release_linux_build.sh), in the same pinned image by digest, at the
+# same path (/root/mojolearn), through the same route
+# (tools/release_linux_cpu_box.sh), so the tree, the build proof and every
+# binding-cache key are that route's.
+#
+#   plan      reads the SOURCE's own build lists (build_sets.sh) and splits
+#             each set's ~76 builds into `shards` jobs by measured compile time
+#   shard     one slice of one set per ubuntu-24.04 runner (4 vCPU, 16 GB),
+#             `jobs` builds at a time; its compiled archives are its artifact
+#   assemble  one per set: every shard's archives in the hot directory, then
+#             the unchanged route for the whole set (each build a verified
+#             cache hit); artifact release-<vendor>-<arch> is the build leg's
+#             tree (<vendor>-<arch>/release-build/...) plus GHA/ (timings,
+#             memory, cache outcomes, uploads for the Mac to promote)
+#
+# THE BINDING CACHE NEEDS NO SECRET. `map_url` is a presigned GET (hours) of a
+# URL map the Mac minted with its own R2 credentials (tools/bincache.py
+# plan_lines): presigned GETs of the cache partition and PUTs into disjoint
+# inbox slots per job. It is never interpolated into a script: each job reads
+# it from the event file, masks it and fetches the map into a 0600 file that
+# no artifact carries. Empty map_url: no R2, every binding compiles here and
+# nothing uploads (NVIDIA only; gfx942 codegen is not reproducible cold).
+run-name: "release-linux-build ${{ inputs.sets }} @ ${{ inputs.commit }} [${{ inputs.tag }}]"
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: "the frozen source commit (40 hex)"
+        required: true
+      sets:
+        description: "space separated: sm_90a sm_89 gfx942"
+        required: true
+        default: "sm_90a sm_89 gfx942"
+      shards:
+        description: "shard jobs per set (1..16)"
+        required: true
+        default: "6"
+      jobs:
+        description: "builds at once per runner (MOJOLEARN_BUILD_JOBS, 1..4)"
+        required: true
+        default: "2"
+      tag:
+        description: "the dispatcher's tag, to find this run"
+        required: false
+        default: ""
+      map_url:
+        description: "presigned GET of the binding-cache URL map (empty: no cache)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: rocm/dev-ubuntu-22.04@sha256:a3850e6638c6c390436ef1aacd72fd1359af36083ac823d5136818206998c484
+  EXCLUDES: ":!bench/results :!mamba/corpus :!bench/oracle_* :!bench/minentropy_oracle.txt"
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      sets: ${{ steps.plan.outputs.sets }}
+    steps:
+      - name: Inputs
+        env:
+          IN_COMMIT: ${{ inputs.commit }}
+          IN_SHARDS: ${{ inputs.shards }}
+          IN_JOBS: ${{ inputs.jobs }}
+        run: |
+          set -eu
+          printf '%s' "$IN_COMMIT" | grep -Eq '^[0-9a-f]{40}$' || { echo "commit must be 40 hex"; exit 2; }
+          printf '%s' "$IN_SHARDS" | grep -Eq '^([1-9]|1[0-6])$' || { echo "shards must be 1..16"; exit 2; }
+          printf '%s' "$IN_JOBS" | grep -Eq '^[1-4]$' || { echo "jobs must be 1..4"; exit 2; }
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          path: tooling
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.commit }}
+          path: src
+          persist-credentials: false
+      - name: Plan
+        id: plan
+        env:
+          IN_SETS: ${{ inputs.sets }}
+          IN_SHARDS: ${{ inputs.shards }}
+        run: |
+          set -eu
+          python3 tooling/tools/release_github_build.py plan --src src --sets "$IN_SETS" --shards "$IN_SHARDS" \
+            --json plan.json --github-output "$GITHUB_OUTPUT" | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plan
+          path: plan.json
+          retention-days: 7
+
+  shard:
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    name: "shard ${{ matrix.vendor }}-${{ matrix.arch }} ${{ matrix.shard }}"
+    steps:
+      - name: Free disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/.ghcup /usr/share/swift
+          df -h / | tail -1
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          path: tooling
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.commit }}
+          path: src
+          persist-credentials: false
+      - name: Source tree (the CPU box's file list)
+        run: |
+          set -eu
+          mkdir -p "$RUNNER_TEMP/w/mojolearn" "$RUNNER_TEMP/w/out" "$RUNNER_TEMP/w/bincache/hot"
+          # shellcheck disable=SC2086
+          git -C src ls-files -z -- . $EXCLUDES | tar -C src --null -T - -cf - | tar -C "$RUNNER_TEMP/w/mojolearn" -xf -
+          echo "files: $(find "$RUNNER_TEMP/w/mojolearn" -type f | wc -l)"
+      - name: Binding-cache map (never printed)
+        env:
+          SET_INDEX: ${{ matrix.set_index }}
+          SHARD: ${{ matrix.shard }}
+          IN_SHARDS: ${{ inputs.shards }}
+        run: |
+          python3 tooling/tools/release_github_build.py job-map --event "$GITHUB_EVENT_PATH" \
+            --dest "$RUNNER_TEMP/w/bincache/urls.tsv" --set-index "$SET_INDEX" --job "$SHARD" \
+            --jobs-per-set "$((IN_SHARDS + 1))" --leg "${{ github.run_id }}"
+      - name: Image
+        run: for i in 1 2 3; do docker pull "$IMAGE" && break; sleep 20; done
+      - name: Build this shard
+        env:
+          COMMIT: ${{ inputs.commit }}
+          ARCH: ${{ matrix.arch }}
+          ONLY: ${{ matrix.only }}
+          JOBS: ${{ inputs.jobs }}
+        run: |
+          set -u
+          docker run --rm -e MOJOLEARN_COMMIT="$COMMIT" -e GHA_BUILD_JOBS="$JOBS" -e GHA_SHARD_ONLY="$ONLY" \
+            -e GHA_RUNNER="$RUNNER_NAME" -e GHA_RUN="$GITHUB_RUN_ID" -e GHA_JOB="$GITHUB_JOB" \
+            -v "$RUNNER_TEMP/w/mojolearn:/root/mojolearn" -v "$GITHUB_WORKSPACE/tooling:/tooling:ro" \
+            -v "$RUNNER_TEMP/w/bincache:/root/.mojolearn_bincache" -v "$RUNNER_TEMP/w/out:/root/leg_out" \
+            "$IMAGE" bash /tooling/tools/gha_release_box.sh shard "$ARCH"
+      - name: Collect
+        if: always()
+        env:
+          SHARD: ${{ matrix.shard }}
+          ARCH: ${{ matrix.arch }}
+          VENDOR: ${{ matrix.vendor }}
+        run: |
+          set -u
+          sudo chown -R "$(id -u):$(id -g)" "$RUNNER_TEMP/w/out" "$RUNNER_TEMP/w/bincache"
+          D="$RUNNER_TEMP/w/art/shard/$SHARD"
+          mkdir -p "$D/report" "$D/hot"
+          cp "$RUNNER_TEMP"/w/bincache/hot/*.tar.gz "$D/hot/" 2>/dev/null || true
+          cp -r "$RUNNER_TEMP/w/out/GHA/." "$D/report/" 2>/dev/null || true
+          B="$RUNNER_TEMP/w/out/release/$VENDOR-$ARCH/release-build/build"
+          cp -r "$B/bincache" "$D/report/bincache" 2>/dev/null || true
+          cp -r "$B/build_logs" "$D/report/build_logs" 2>/dev/null || true
+          { echo "### shard $VENDOR-$ARCH $SHARD"; echo '```'; cat "$D/report/shard.tsv" "$D/report/memory.txt" "$D/report/guard.jsonl" 2>/dev/null; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: shard-${{ matrix.arch }}-${{ matrix.shard }}
+          path: ${{ runner.temp }}/w/art
+          # the runtime closure is sets/<vendor>/<arch>/.libs/
+          include-hidden-files: true
+          retention-days: 7
+          if-no-files-found: warn
+
+  assemble:
+    needs: [plan, shard]
+    if: always() && needs.plan.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: ${{ fromJSON(needs.plan.outputs.sets) }}
+    name: "assemble ${{ matrix.arch }}"
+    steps:
+      - name: Free disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/.ghcup /usr/share/swift
+          df -h / | tail -1
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          path: tooling
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.commit }}
+          path: src
+          persist-credentials: false
+      - name: Source tree (the CPU box's file list)
+        run: |
+          set -eu
+          mkdir -p "$RUNNER_TEMP/w/mojolearn" "$RUNNER_TEMP/w/out" "$RUNNER_TEMP/w/bincache/hot"
+          # shellcheck disable=SC2086
+          git -C src ls-files -z -- . $EXCLUDES | tar -C src --null -T - -cf - | tar -C "$RUNNER_TEMP/w/mojolearn" -xf -
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: shard-${{ matrix.arch }}-*
+          path: ${{ runner.temp }}/shards
+          merge-multiple: true
+      - name: The shards' archives into the hot directory
+        run: |
+          set -u
+          cp "$RUNNER_TEMP"/shards/shard/*/hot/*.tar.gz "$RUNNER_TEMP/w/bincache/hot/" 2>/dev/null || true
+          echo "archives: $(ls "$RUNNER_TEMP/w/bincache/hot" | wc -l)"
+      - name: Binding-cache map (never printed)
+        env:
+          IN_SETS: ${{ inputs.sets }}
+          ARCH: ${{ matrix.arch }}
+          IN_SHARDS: ${{ inputs.shards }}
+        run: |
+          set -eu
+          idx=$(python3 -c 'import sys; print(sys.argv[1].split().index(sys.argv[2]))' "$IN_SETS" "$ARCH")
+          python3 tooling/tools/release_github_build.py job-map --event "$GITHUB_EVENT_PATH" \
+            --dest "$RUNNER_TEMP/w/bincache/urls.tsv" --set-index "$idx" --job "$IN_SHARDS" \
+            --jobs-per-set "$((IN_SHARDS + 1))" --leg "${{ github.run_id }}"
+      - name: Image
+        run: for i in 1 2 3; do docker pull "$IMAGE" && break; sleep 20; done
+      - name: Assemble the set
+        env:
+          COMMIT: ${{ inputs.commit }}
+          ARCH: ${{ matrix.arch }}
+          JOBS: ${{ inputs.jobs }}
+        run: |
+          set -u
+          docker run --rm -e MOJOLEARN_COMMIT="$COMMIT" -e GHA_BUILD_JOBS="$JOBS" \
+            -e GHA_RUNNER="$RUNNER_NAME" -e GHA_RUN="$GITHUB_RUN_ID" -e GHA_JOB="$GITHUB_JOB" \
+            -v "$RUNNER_TEMP/w/mojolearn:/root/mojolearn" -v "$GITHUB_WORKSPACE/tooling:/tooling:ro" \
+            -v "$RUNNER_TEMP/w/bincache:/root/.mojolearn_bincache" -v "$RUNNER_TEMP/w/out:/root/leg_out" \
+            "$IMAGE" bash /tooling/tools/gha_release_box.sh assemble "$ARCH"
+      - name: The build leg's tree
+        if: always()
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          set -u
+          case "$ARCH" in sm_*) VENDOR=cuda ;; *) VENDOR=hip ;; esac
+          sudo chown -R "$(id -u):$(id -g)" "$RUNNER_TEMP/w/out" "$RUNNER_TEMP/w/bincache"
+          L="$RUNNER_TEMP/w/art/leg"
+          mkdir -p "$L/GHA/assemble" "$L/GHA/shards" "$L/GHA/bincache/keys"
+          [ -d "$RUNNER_TEMP/w/out/release/$VENDOR-$ARCH" ] && mv "$RUNNER_TEMP/w/out/release/$VENDOR-$ARCH" "$L/$VENDOR-$ARCH"
+          cp -r "$RUNNER_TEMP/w/out/GHA/." "$L/GHA/assemble/" 2>/dev/null || true
+          for f in route.txt sets.tsv overlay.txt; do cp "$RUNNER_TEMP/w/out/release/$f" "$L/GHA/assemble/" 2>/dev/null || true; done
+          for d in "$RUNNER_TEMP"/shards/shard/*/; do
+            [ -d "$d" ] || continue
+            i=$(basename "$d"); cp -r "$d/report" "$L/GHA/shards/$i"
+            cat "$d/report/bincache/uploads.tsv" >> "$L/GHA/bincache/uploads.tsv" 2>/dev/null || true
+            cp "$d"/report/bincache/keys/*.json "$L/GHA/bincache/keys/" 2>/dev/null || true
+            cat "$d/report/hot_sha256.tsv" >> "$L/GHA/bincache/hot_sha256.tsv" 2>/dev/null || true
+          done
+          B="$L/$VENDOR-$ARCH/release-build/build/bincache"
+          cat "$B/uploads.tsv" >> "$L/GHA/bincache/uploads.tsv" 2>/dev/null || true
+          cp "$B"/keys/*.json "$L/GHA/bincache/keys/" 2>/dev/null || true
+          cat "$RUNNER_TEMP/w/out/GHA/hot_sha256.tsv" >> "$L/GHA/bincache/hot_sha256.tsv" 2>/dev/null || true
+          { echo "### assemble $VENDOR-$ARCH"; echo '```'; cat "$L/GHA/assemble/outcomes.txt" "$L/GHA/assemble/memory.txt" "$L/GHA/assemble/guard.jsonl" 2>/dev/null
+            grep -h . "$L/$VENDOR-$ARCH/release-build/results.tsv" 2>/dev/null; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: release-${{ matrix.arch == 'gfx942' && 'hip' || 'cuda' }}-${{ matrix.arch }}
+          path: ${{ runner.temp }}/w/art
+          # the runtime closure is sets/<vendor>/<arch>/.libs/
+          include-hidden-files: true
+          retention-days: 14
+          if-no-files-found: error
