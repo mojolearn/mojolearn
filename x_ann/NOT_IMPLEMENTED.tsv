@@ -6,13 +6,13 @@ ivf_pq codebook_kind = PER_CLUSTER	NOT IMPLEMENTED	PER_SUBSPACE (their default) 
 ivf_pq force_random_rotation and the random rotation when dim % pq_dim != 0	REPLACED	Zero padding to rot_dim = pq_dim * ceil(dim / pq_dim); a random orthogonal matrix from a host QR is not bitwise across BLAS builds
 ivf_pq search lut_dtype / internal_distance_dtype = fp16 / fp8 (ivf_pq_fp_8bit.cuh, ivf_pq_fp16_overflow.cuh)	REFUSED UNDER IDENTICAL	float32 LUT entries only, each evaluated at the read in a fixed order
 ivf_pq metric InnerProduct / CosineExpanded	NOT IMPLEMENTED	squared L2 only
-ivf_pq extend, serialize, pq_bits > 8	NOT IMPLEMENTED	pq_bits in [1, 8]; codes stored as int32 in pass 1
+ivf_pq extend, pq_bits > 8	NOT IMPLEMENTED	pq_bits in [1, 8]; codes stored as int32. serialize IS IMPLEMENTED: save/load (npz mojolearn-ivf-pq-1), as for IVF-SQ (mojolearn-ivf-sq-1), IVF-RaBitQ (mojolearn-ivf-rabitq-1) and CAGRA (mojolearn-cagra-1); the arrays are written and read back byte for byte, and the lane check's model column compares the files across columns
 TSNE method='barnes_hut' (tree build by atomic insertion) and method='fft' (cuFFT order)	REFUSED UNDER IDENTICAL	Repulsion is exact, a per-row fold over all points ascending (O(n^2) per step); a Morton-sorted Barnes-Hut is the pass-2 speed route
 TSNE metric != 'euclidean', n_components != 2, angle, n_iter_without_progress / min_grad_norm early stop	NOT IMPLEMENTED	The loop runs exactly max_iter steps. init IS IMPLEMENTED: 'pca' (the default, as sklearn: mojolearn's exact PCA scaled to a first-column std of 1e-4, the std by math.fsum), 'random' (numpy uniform(-5e-5, 5e-5)) and an (n, 2) array; lane x-ann-tsne-pca
 TSNE exact method's dense P over all pairs	NOT IMPLEMENTED	P is the k-NN sparse P (k = 3 * perplexity + 1), sklearn's barnes_hut affinities
 CAGRA build_algo IVF_PQ + refine and NN_DESCENT for the intermediate graph	REPLACED	Exact k-NN intermediate graph; NN-descent stays refused (hdbscan/NOT_IMPLEMENTED.tsv)
 CAGRA random seed sampling (rand_xor_mask, num_random_samplings), the probabilistic visited hashmap, multi-CTA and multi-kernel search	REPLACED	Evenly spaced seeds (itopk_size + search_width * graph_degree by default), an exact visited bitset, single-thread-per-query search
-CAGRA guarantee_connectivity (MST), compression (VPQ), extend, merge, serialize, filtered search	NOT IMPLEMENTED
+CAGRA guarantee_connectivity (MST), compression (VPQ), extend, merge, filtered search	NOT IMPLEMENTED	serialize IS IMPLEMENTED (save/load, npz mojolearn-cagra-1)
 ivf_sq max_train_points_per_cluster / trained-on-a-subset SQ range	NOT IMPLEMENTED	The range comes from every residual (so the 5% margin is kept but never needed for clipping on the build rows); half-precision datasets not taken
 ivf_rabitq dense random orthogonal rotation	REPLACED	A randomized Hadamard transform (hashed +-1 signs, fixed butterfly order, 1/sqrt(D) scale); a dense random rotation is a GEMM in the library's reduction order
 ivf_rabitq ex_bits (extended codes), 4-bit query quantization and the bit-op fast scan	NOT IMPLEMENTED	1-bit codes, float32 query residual; the fast scan is a FAST-tier schedule for pass 2

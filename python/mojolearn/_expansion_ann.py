@@ -38,7 +38,56 @@ def _ann_int(owner, name, v):
     return int(v)
 
 
-class IVFPQIndex(NumericModeMixin):
+class _AnnSaved:
+    """save / load for the ann indexes: an npz holding the constructor's int
+    parameters, the fitted ints and the index arrays with their dtype and
+    shape, and the tier. A loaded index searches; it does not rebuild.
+    No arithmetic: the arrays are written and read back byte for byte, and
+    `_serialize.exact` refuses any dtype cast."""
+
+    _SAVE_FORMAT = None
+    _SAVE_PARAMS = ()      # constructor parameters, all int
+    _SAVE_FITTED = ()      # fitted int attributes
+    _SAVE_ARRAYS = ()      # (attribute, typestr)
+
+    def save(self, path):
+        from . import _serialize
+        from ._array import Array
+        from .decomposition import _saved_mode
+        missing = [a for a, _ in self._SAVE_ARRAYS if not hasattr(self, a)]
+        if missing:
+            raise RuntimeError(f"mojolearn {type(self).__name__}: call fit before save")
+        arrays = {
+            "format": self._SAVE_FORMAT,
+            "estimator": type(self).__name__,
+            "numeric_mode": _saved_mode(self),
+            "params": Array.from_list([_ann_int(type(self).__name__, p, getattr(self, p)) for p in self._SAVE_PARAMS], "<i8"),
+            "fitted": Array.from_list([int(getattr(self, a)) for a in self._SAVE_FITTED], "<i8"),
+        }
+        for attr, _dtype in self._SAVE_ARRAYS:
+            arrays[attr.rstrip("_")] = getattr(self, attr)
+        return _serialize.write_npz(path, arrays)
+
+    @classmethod
+    def load(cls, path):
+        from . import _serialize
+        from .decomposition import _check_saved_by, _restore_mode
+        arrays = _serialize.read_npz(path, cls._SAVE_FORMAT)
+        _check_saved_by(arrays, path, cls)
+        params = _serialize.exact(arrays, "params", "<i8")
+        fitted = _serialize.exact(arrays, "fitted", "<i8")
+        if params.size != len(cls._SAVE_PARAMS) or fitted.size != len(cls._SAVE_FITTED):
+            raise ValueError(f"mojolearn: {path!r} does not hold {cls.__name__}'s parameters")
+        obj = cls(**{p: int(params[i]) for i, p in enumerate(cls._SAVE_PARAMS)})
+        _restore_mode(obj, arrays)
+        for i, a in enumerate(cls._SAVE_FITTED):
+            setattr(obj, a, int(fitted[i]))
+        for attr, dtype in cls._SAVE_ARRAYS:
+            setattr(obj, attr, _serialize.exact(arrays, attr.rstrip("_"), dtype))
+        return obj
+
+
+class IVFPQIndex(_AnnSaved, NumericModeMixin):
     """IVF-PQ build, then search (reference: cuVS `ivf_pq`), IDENTICAL by
     construction: fixed-order codebook training and code sums, ties broken
     by index (x_ann/ivf_pq_core.mojo).
@@ -66,6 +115,12 @@ class IVFPQIndex(NumericModeMixin):
 
     _BINDING = "_mojolearn_x_ann"
     _NAME = "IVFPQIndex"
+    _SAVE_FORMAT = "mojolearn-ivf-pq-1"
+    _SAVE_PARAMS = ("n_lists", "n_probes", "pq_dim", "pq_bits", "n_neighbors", "kmeans_n_iters",
+                    "pq_kmeans_n_iters", "random_state")
+    _SAVE_FITTED = ("n_features_in_", "n_rows_", "n_lists_", "pq_dim_", "pq_bits_", "pq_len_")
+    _SAVE_ARRAYS = (("centers_", "<f4"), ("list_offsets_", "<i4"), ("list_indices_", "<i4"),
+                    ("codebooks_", "<f4"), ("codes_", "<i4"))
 
     def __init__(self, n_lists, n_probes, pq_dim=4, pq_bits=8, n_neighbors=8, kmeans_n_iters=20,
                  pq_kmeans_n_iters=20, random_state=0):
@@ -251,7 +306,7 @@ class TSNE(NumericModeMixin):
         return self.fit(X).embedding_
 
 
-class CagraIndex(NumericModeMixin):
+class CagraIndex(_AnnSaved, NumericModeMixin):
     """CAGRA graph index, build then search (reference: cuVS `cagra`),
     IDENTICAL by construction (x_ann/cagra_core.mojo): an exact k-NN
     intermediate graph, cuVS's rank-based detour pruning, reverse edges in
@@ -276,6 +331,11 @@ class CagraIndex(NumericModeMixin):
     """
 
     _BINDING = "_mojolearn_x_ann"
+    _SAVE_FORMAT = "mojolearn-cagra-1"
+    _SAVE_PARAMS = ("graph_degree", "intermediate_graph_degree", "n_neighbors", "itopk_size", "search_width",
+                    "max_iterations", "n_seeds")
+    _SAVE_FITTED = ("n_features_in_", "n_rows_", "graph_degree_")
+    _SAVE_ARRAYS = (("dataset_", "<f4"), ("graph_", "<i4"))
 
     def __init__(self, graph_degree=32, intermediate_graph_degree=64, n_neighbors=8, itopk_size=64,
                  search_width=1, max_iterations=0, n_seeds=0):
@@ -331,7 +391,7 @@ class CagraIndex(NumericModeMixin):
         return dist.reshape((m, k)), idx.reshape((m, k))
 
 
-class IVFSQIndex(NumericModeMixin):
+class IVFSQIndex(_AnnSaved, NumericModeMixin):
     """IVF-SQ build, then search (reference: cuVS `ivf_sq`): the IVF-PQ
     coarse quantizer, residuals quantized to 8 bits per dimension (cuVS's
     per-dimension range with a 5% margin), a scan of the decoded residuals.
@@ -342,6 +402,11 @@ class IVFSQIndex(NumericModeMixin):
     `IVFPQIndex.search`."""
 
     _BINDING = "_mojolearn_x_ann"
+    _SAVE_FORMAT = "mojolearn-ivf-sq-1"
+    _SAVE_PARAMS = ("n_lists", "n_probes", "n_neighbors", "kmeans_n_iters", "random_state")
+    _SAVE_FITTED = ("n_features_in_", "n_rows_", "n_lists_")
+    _SAVE_ARRAYS = (("centers_", "<f4"), ("list_offsets_", "<i4"), ("list_indices_", "<i4"),
+                    ("sq_vmin_", "<f4"), ("sq_delta_", "<f4"), ("codes_", "<i4"))
 
     def __init__(self, n_lists, n_probes, n_neighbors=8, kmeans_n_iters=20, random_state=0):
         self.n_lists = n_lists
@@ -407,7 +472,7 @@ class IVFSQIndex(NumericModeMixin):
         return dist.reshape((m, k)), idx.reshape((m, k))
 
 
-class IVFRaBitQIndex(NumericModeMixin):
+class IVFRaBitQIndex(_AnnSaved, NumericModeMixin):
     """IVF-RaBitQ build, then search (reference: cuVS `ivf_rabitq`, RaBitQ
     of Gao & Long): the IVF coarse quantizer, each residual rotated by a
     randomized Hadamard transform and kept as sign bits plus its norm and
@@ -420,6 +485,11 @@ class IVFRaBitQIndex(NumericModeMixin):
     signs). `search(queries, filter=None)` as `IVFPQIndex.search`."""
 
     _BINDING = "_mojolearn_x_ann"
+    _SAVE_FORMAT = "mojolearn-ivf-rabitq-1"
+    _SAVE_PARAMS = ("n_lists", "n_probes", "n_neighbors", "kmeans_n_iters", "random_state")
+    _SAVE_FITTED = ("n_features_in_", "n_rows_", "n_lists_", "seed_")
+    _SAVE_ARRAYS = (("centers_", "<f4"), ("list_offsets_", "<i4"), ("list_indices_", "<i4"),
+                    ("codes_", "<i4"), ("norms_", "<f4"), ("ip_factors_", "<f4"))
 
     def __init__(self, n_lists, n_probes, n_neighbors=8, kmeans_n_iters=20, random_state=0):
         self.n_lists = n_lists
