@@ -241,6 +241,7 @@ carries these ranges). Use only your own; never renumber anything that exists.
 | trees | 5600-5699 | 160-169 |
 | cnn | 5700-5799 | 170-179 |
 | ann | 5800-5899 | 180-189 |
+| metrics (2026-09-27) | 6100-6199 | 190-199 |
 
 A new IDENTITY_PATHS row is the one edit to that file a lane makes: replace
 the `(no rows yet)` line of YOUR section under "Algorithm expansion rows" at
