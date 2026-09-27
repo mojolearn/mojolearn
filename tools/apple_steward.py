@@ -156,8 +156,10 @@ def _push_commit(mac, commit):
     full = subprocess.run(["git", "-C", str(TOOLS.parent), "rev-parse", "--verify", f"{commit}^{{commit}}"],
                           capture_output=True, text=True, check=True).stdout.strip()
     if mac in AMD_STEWARDS:
-        got = _cloudmac(mac, f"cd {STEWARD_CLONE} && git fetch -q --depth=1 origin {full} && git cat-file -t {full}",
-                        timeout=900).strip()
+        # lanes submit concurrently: a fetch that meets another's shallow.lock retries
+        got = _cloudmac(mac, f"cd {STEWARD_CLONE} && for i in $(seq 1 40); do "
+                             f"git fetch -q --depth=1 origin {full} 2>/dev/null && break; sleep 3; done; "
+                             f"git cat-file -t {full}", timeout=900).strip()
         if got != "commit":
             raise SystemExit(f"{mac}: {full[:12]} could not be fetched from GitHub ({got!r}); push it to origin first")
         print(f"{mac}: fetched {full[:12]} from origin into {STEWARD_CLONE}")
@@ -367,7 +369,10 @@ def process(req_path, steward):
     # the laptop pushes a submitted sha as refs/steward/<sha> (cloudmac.sh push);
     # the default refspec fetches only branches, so name that namespace too
     if steward in AMD_STEWARDS:   # a shallow tree: the sha itself, from GitHub
-        _run(["git", "fetch", "-q", "--depth=1", "origin", req["commit"]], REPO, log, 900)
+        for _ in range(40):   # a laptop `submit` may hold shallow.lock for a moment
+            if not _run(["git", "fetch", "-q", "--depth=1", "origin", req["commit"]], REPO, log, 900):
+                break
+            time.sleep(3)
     else:
         _run(["git", "fetch", "-q", "origin", "+refs/heads/*:refs/remotes/origin/*", "+refs/steward/*:refs/steward/*"],
              REPO, log, 600)
