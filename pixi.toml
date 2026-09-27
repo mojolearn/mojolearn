@@ -842,9 +842,10 @@ check-portable-gelu = "mojo run -I . checks/portable_gelu_check.mojo"
 # the point, because the consumer is a REDUCTION: one planted row folded left
 # to right, right to left and as a balanced tree must give ONE answer, and a
 # pairwise check structurally cannot see the row-13 defect. Also pins
-# identical_mul's signed zeros against all three pinned_mul copies in mamba/.
-# NOTE: this gate imports extratrees and mamba to catch copy drift, so it
-# compiles more than checks/.
+# identical_mul's signed zeros and its bits against pinned_mul_f32 (the
+# fifteen pinned_mul copies are gone, DEVIATION 5904).
+# NOTE: this gate imports extratrees to catch copy drift, so it compiles more
+# than checks/.
 check-portable-fmax = "mojo run -I . checks/portable_fmax_check.mojo"
 
 # E2U: the unsupervised sub-feature matrix through the Python surface

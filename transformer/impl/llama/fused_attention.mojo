@@ -150,6 +150,7 @@ from gemm.checks.gemm_identical import (
     _amma_mma,
 )
 from checks.numerics import (
+    identical_mul,
     ftz,
     identical_div,
     identical_exp,
@@ -1903,7 +1904,7 @@ def _step_preflushed(a: Float32, b: Float32, acc: Float32) -> Float32:
 
 @always_inline
 def _pmul(a: Float32, b: Float32) -> Float32:
-    """`ftz(pinned_mul(ftz(a), ftz(b)))`: one rounding, `-0.0` addend."""
+    """`ftz(identical_mul(ftz(a), ftz(b)))`: one rounding, `-0.0` addend."""
     return _step(a, b, Float32(-0.0))
 
 

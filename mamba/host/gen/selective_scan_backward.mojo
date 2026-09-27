@@ -31,7 +31,7 @@ WHAT IS HERE, BY THE PLAN'S OPERATION NUMBERS
     B18   `ddelta`, the two paths INTERLEAVED over n
     B19   T4, the `dA` fold over `t`, DESCENDING     DEVIATION 1073
     B20   T5, the parameter fold over `b`            DEVIATION 1074
-    B21   `dA_log = pinned_mul(dA, A)`
+    B21   `dA_log = identical_mul(dA, A)`
 
 NEW DEVIATIONS THIS FILE SPENDS
 --------------------------------
@@ -138,7 +138,7 @@ from mamba.host.device_shim import (
     contract_partition,
 )
 from checks.kernel_matrix import TARGET_COLUMN, column_has_float_atomics
-from checks.numerics import ftz, identical_exp, identical_mul_add
+from checks.numerics import ftz, identical_exp, identical_mul_add, identical_mul
 
 # THE FORWARD'S OWN SPELLINGS, IMPORTED RATHER THAN RE-DECLARED. `pinned_mul`
 # is DEVIATION 720's device construction and this lane may not hold a second
@@ -149,7 +149,6 @@ from mamba.host.gen.selective_scan_interface import (
     SAB_S5_EXP2,
     SAB_S8_CUDA_PAIRING,
     SAB_S9_UNFUSED,
-    pinned_mul,
 )
 
 
@@ -387,10 +386,10 @@ def selective_scan_checkpoint_kernel[
     AND THE TRANSCRIPTION IS THE RISK.** Line for line against
     `mamba/impl/ops/selective_scan_interface.mojo:374-412`:
 
-        :382  da_arg = ftz(pinned_mul(dl, a_vals[n]))        S5
+        :382  da_arg = ftz(identical_mul(dl, a_vals[n]))        S5
         :388  da     = ftz(identical_exp(da_arg))            S6
-        :399  db     = ftz(pinned_mul(dl, bv))               S7
-        :402  dbu    = ftz(pinned_mul(db, uv))               S8
+        :399  db     = ftz(identical_mul(dl, bv))               S7
+        :402  dbu    = ftz(identical_mul(db, uv))               S8
         :412  state  = ftz(identical_mul_add(da, state, dbu)) S9, ONE rounding
 
     Nothing about S10 or S11 is here, because `y` and `out` are the forward's
@@ -459,12 +458,12 @@ def selective_scan_checkpoint_kernel[
         var dl = ftz(delta_ptr.unsafe_load(t * dim + d))
 
         comptime for n in range(DSTATE):
-            var da_arg = ftz(pinned_mul(dl, a_vals[n]))
+            var da_arg = ftz(identical_mul(dl, a_vals[n]))
             var da: Float32
             comptime if SAB_S5_EXP2:
                 da = ftz(
                     exp2(
-                        ftz(pinned_mul(da_arg, Float32(1.4426950408889634)))
+                        ftz(identical_mul(da_arg, Float32(1.4426950408889634)))
                     )
                 )
             else:
@@ -473,14 +472,14 @@ def selective_scan_checkpoint_kernel[
             var bv = ftz(b_ptr.unsafe_load(t * DSTATE + n))
             var dbu: Float32
             comptime if SAB_S8_CUDA_PAIRING:
-                var du = ftz(pinned_mul(dl, uv))
-                dbu = ftz(pinned_mul(bv, du))
+                var du = ftz(identical_mul(dl, uv))
+                dbu = ftz(identical_mul(bv, du))
             else:
-                var db = ftz(pinned_mul(dl, bv))
-                dbu = ftz(pinned_mul(db, uv))
+                var db = ftz(identical_mul(dl, bv))
+                dbu = ftz(identical_mul(db, uv))
 
             comptime if SAB_S9_UNFUSED:
-                state[n] = ftz(ftz(pinned_mul(da, state[n])) + dbu)
+                state[n] = ftz(ftz(identical_mul(da, state[n])) + dbu)
             else:
                 state[n] = ftz(identical_mul_add(da, state[n], dbu))
 
@@ -589,7 +588,7 @@ def selective_scan_bwd_scan_kernel[
         dh[t,d,n]     T1, B13     reverse recurrence, FUSED, one rounding
         du_s[t,d]     B17         sum over n of dh * dbb, ascending, FUSED
         ddelta[t,d]   B18         ONE interleaved chain, B term then A term
-        w[t,d]        T3's pre-form, `pinned_mul(delta, u)`
+        w[t,d]        T3's pre-form, `identical_mul(delta, u)`
 
     `dy` IS `dsk` AND THERE IS NO SEPARATE BUFFER. Plan operation B9 is a
     copy (`dy = dsk`), so the caller passes `bwd.dsk` here and the copy is
@@ -650,16 +649,16 @@ def selective_scan_bwd_scan_kernel[
             var cv = ftz(c_ptr.unsafe_load(t * DSTATE + n))
             # S10's own product, differentiated: `y = sum_n C * h`, so
             # `dh[t,n]` picks up `dy * C[t,n]`.
-            var contrib = ftz(pinned_mul(dyv, cv))
+            var contrib = ftz(identical_mul(dyv, cv))
 
             # `da[t]` in the forward's spelling, S5 then S6. Needed by the A
             # path below and carried to the next (lower) step for T1.
-            var da_arg = ftz(pinned_mul(dl, a_vals[n]))
+            var da_arg = ftz(identical_mul(dl, a_vals[n]))
             var da_t: Float32
             comptime if SAB_S5_EXP2:
                 da_t = ftz(
                     exp2(
-                        ftz(pinned_mul(da_arg, Float32(1.4426950408889634)))
+                        ftz(identical_mul(da_arg, Float32(1.4426950408889634)))
                     )
                 )
             else:
@@ -678,7 +677,7 @@ def selective_scan_bwd_scan_kernel[
                     afac = da_t
                 comptime if SAB_BWD_S9B_UNFUSED:
                     # SABOTAGE: two roundings where T1 pins one.
-                    dh_n = ftz(ftz(pinned_mul(afac, dh_state[n])) + contrib)
+                    dh_n = ftz(ftz(identical_mul(afac, dh_state[n])) + contrib)
                 else:
                     dh_n = ftz(
                         identical_mul_add(afac, dh_state[n], contrib)
@@ -705,13 +704,13 @@ def selective_scan_bwd_scan_kernel[
             var bv = ftz(b_ptr.unsafe_load(t * DSTATE + n))
             # S7's own product, `delta * B`, which is what `dbu` is
             # differentiable in for `u`.
-            var dbb = ftz(pinned_mul(dl, bv))
+            var dbb = ftz(identical_mul(dl, bv))
 
             # B17: `du_s[t,d] = sum_n dh * dbb`.
             acc_us = ftz(identical_mul_add(dh_state[n], dbb, acc_us))
 
             # B18, the B path: `d(dbb) = dh * u`, contracted against `B`.
-            var ddbb = ftz(pinned_mul(dh_state[n], uv))
+            var ddbb = ftz(identical_mul(dh_state[n], uv))
             acc_dd = ftz(identical_mul_add(ddbb, bv, acc_dd))
 
             # B18, the A path. `d_arg` is `dh * h[t-1] * da`, and the two
@@ -724,14 +723,14 @@ def selective_scan_bwd_scan_kernel[
                 # multiply where ours is two. Unbounded relative
                 # cancellation when `|da*h[t-1]| << |dbu[t]|`, which is the
                 # normal case early in a sequence. MB9 prices it.
-                var dbu_h = ftz(pinned_mul(dbb, uv))
+                var dbu_h = ftz(identical_mul(dbb, uv))
                 var hcur = ftz(
                     hck_ptr.unsafe_load(
                         ((bb * slots + (li + 1)) * dim + d) * DSTATE + n
                     )
                 )
                 var arec = ftz(ftz(hcur) - ftz(dbu_h))
-                d_arg = ftz(pinned_mul(dh_state[n], arec))
+                d_arg = ftz(identical_mul(dh_state[n], arec))
             else:
                 # T2: `h[t-1]` READ from the checkpoint, slot `li`.
                 var hprev = ftz(
@@ -741,8 +740,8 @@ def selective_scan_bwd_scan_kernel[
                 )
                 # S6' then the exp node: `exp' is exp`, so `d_arg` is
                 # `(dh * h[t-1]) * da`, two separately rounded products.
-                var d_da = ftz(pinned_mul(dh_state[n], hprev))
-                d_arg = ftz(pinned_mul(d_da, da_carry[n]))
+                var d_da = ftz(identical_mul(dh_state[n], hprev))
+                d_arg = ftz(identical_mul(d_da, da_carry[n]))
 
             comptime if SAB_BWD_DDELTA_TWO_FOLDS:
                 # SABOTAGE: plan section 2.2's two-fold reading.
@@ -759,12 +758,12 @@ def selective_scan_bwd_scan_kernel[
         du_s_ptr.unsafe_store(t * dim + d, acc_us)
         ddelta_ptr.unsafe_store(t * dim + d, ddelta_v)
 
-        # T3's pre-form, `w[t,d] = pinned_mul(delta, u)`, written here
+        # T3's pre-form, `w[t,d] = identical_mul(delta, u)`, written here
         # because this thread already holds both operands flushed. The
-        # alternative pre-forms `R[t,d,n] = pinned_mul(dh, u)`, which costs
+        # alternative pre-forms `R[t,d,n] = identical_mul(dh, u)`, which costs
         # `DSTATE` times the memory and one extra rounding per `(t,d,n)`
         # rather than per `(t,d)`. DEVIATION 1072.
-        w_ptr.unsafe_store(t * dim + d, ftz(pinned_mul(dl, uv)))
+        w_ptr.unsafe_store(t * dim + d, ftz(identical_mul(dl, uv)))
 
 
 def selective_scan_bwd_scan_into(
@@ -874,7 +873,7 @@ def mamba_bwd_dbc_kernel[
 
         dCm[t,n] = fold over d of fma(dy[t,d],  h[t,d,n],  acc)
         dBm[t,n] = fold over d of fma(w[t,d],   dh[t,d,n], acc)
-        with     w[t,d] = ftz(pinned_mul(delta[t,d], u[t,d]))
+        with     w[t,d] = ftz(identical_mul(delta[t,d], u[t,d]))
 
     Both leaves are ONE `identical_mul_add` on flushed operands with the
     accumulator flushed after every step, which is gemm contract 7.1's
@@ -885,7 +884,7 @@ def mamba_bwd_dbc_kernel[
     QUANTITY**: this kernel cannot compute a leaf boundary from anything but
     the two arguments, exactly as `identical_gemm_flat_kernel` cannot.
 
-    `w` IS PRE-FORMED AND `R = pinned_mul(dh, u)` IS NOT. The two are
+    `w` IS PRE-FORMED AND `R = identical_mul(dh, u)` IS NOT. The two are
     algebraically equal and differ in the last bit; the chosen one costs
     `D_STATE` times less memory and one rounding per `(t,d)` instead of per
     `(t,d,n)`. DEVIATION 1072.
@@ -988,10 +987,10 @@ def mamba_bwd_dbc_atomic_kernel[
         )
         var dhv = ftz(dh_ptr.unsafe_load((t * di + d) * DSTATE + n))
         _ = Atomic.fetch_add(
-            dcm_ptr.unsafe_offset(t * DSTATE + n), ftz(pinned_mul(dyv, hv))
+            dcm_ptr.unsafe_offset(t * DSTATE + n), ftz(identical_mul(dyv, hv))
         )
         _ = Atomic.fetch_add(
-            dbm_ptr.unsafe_offset(t * DSTATE + n), ftz(pinned_mul(wv, dhv))
+            dbm_ptr.unsafe_offset(t * DSTATE + n), ftz(identical_mul(wv, dhv))
         )
 
 
@@ -1101,7 +1100,7 @@ def mamba_bwd_da_partial_kernel[
     term.
 
     `dA` IS ROUTABLE TO gemm v1 AND IS DELIBERATELY NOT ROUTED. With
-    `q[t, d*N + n] = pinned_mul(d_arg, delta)` materialized at `[M, di*N]`
+    `q[t, d*N + n] = identical_mul(d_arg, delta)` materialized at `[M, di*N]`
     this would be a ones-vector `OP_NN` at `(1, di*N, M)` whose fold order is
     v1's certified one rather than a hand-declared direction. Declined
     because `q` is a THIRD buffer of `M * di * N` floats on top of T2's `h`
@@ -1158,23 +1157,23 @@ def mamba_bwd_da_partial_kernel[
             comptime if SAB_BWD_H_SUBTRACT:
                 var uv = ftz(u_ptr.unsafe_load(t * dim + d))
                 var bv = ftz(b_ptr.unsafe_load(t * DSTATE + n))
-                var dbb = ftz(pinned_mul(dl, bv))
-                var dbu_h = ftz(pinned_mul(dbb, uv))
+                var dbb = ftz(identical_mul(dl, bv))
+                var dbu_h = ftz(identical_mul(dbb, uv))
                 var hcur = ftz(
                     hck_ptr.unsafe_load(
                         ((bb * slots + (li + 1)) * dim + d) * DSTATE + n
                     )
                 )
                 var arec = ftz(ftz(hcur) - ftz(dbu_h))
-                d_arg = ftz(pinned_mul(dhv, arec))
+                d_arg = ftz(identical_mul(dhv, arec))
             else:
-                var da_arg = ftz(pinned_mul(dl, a_vals[n]))
+                var da_arg = ftz(identical_mul(dl, a_vals[n]))
                 var da_t: Float32
                 comptime if SAB_S5_EXP2:
                     da_t = ftz(
                         exp2(
                             ftz(
-                                pinned_mul(
+                                identical_mul(
                                     da_arg, Float32(1.4426950408889634)
                                 )
                             )
@@ -1187,8 +1186,8 @@ def mamba_bwd_da_partial_kernel[
                         ((bb * slots + li) * dim + d) * DSTATE + n
                     )
                 )
-                var d_da = ftz(pinned_mul(dhv, hprev))
-                d_arg = ftz(pinned_mul(d_da, da_t))
+                var d_da = ftz(identical_mul(dhv, hprev))
+                d_arg = ftz(identical_mul(d_da, da_t))
 
             acc[n] = ftz(identical_mul_add(d_arg, dl, acc[n]))
 
@@ -1348,7 +1347,7 @@ def mamba_bwd_param_fold_into(
 
 
 # ===========================================================================
-# B21: `dA_log = pinned_mul(dA, A)`. SEAM S15's BACKWARD.
+# B21: `dA_log = identical_mul(dA, A)`. SEAM S15's BACKWARD.
 # ===========================================================================
 
 
@@ -1374,7 +1373,7 @@ def mamba_bwd_da_log_kernel(gid_: Int,
     dalog_ptr.unsafe_store(
         i,
         ftz(
-            pinned_mul(ftz(da_ptr.unsafe_load(i)), ftz(a_ptr.unsafe_load(i)))
+            identical_mul(ftz(da_ptr.unsafe_load(i)), ftz(a_ptr.unsafe_load(i)))
         ),
     )
 
