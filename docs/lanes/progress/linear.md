@@ -45,7 +45,27 @@ x-isotonic) and e2e_device_pava.patch (x-isotonic; the interp arm did not bite, 
 | option: sample_weight for HuberRegressor, QuantileRegressor, SGDClassifier/Regressor, Perceptron, PassiveAggressive*, SGDOneClassSVM, RidgeClassifier, RidgeCV, BayesianRidge, LogisticRegressionCV; class_weight for SGDClassifier, Perceptron, PassiveAggressiveClassifier, RidgeClassifier, LogisticRegressionCV | 289237990 | sanity PASS against sklearn for each; 8 new lanes (x-huber-sw, x-quantile-sw, x-sgd-clf-w, x-sgd-reg-sw, x-ridge-clf-w, x-ridge-cv-sw, x-bayes-ridge-sw, x-logistic-cv-w) AGREE; every device-only weights arm DISAGREE then AGREE; the 26 earlier lanes' hashes UNCHANGED |
 | option: positive for LassoLars, LassoCV, ElasticNetCV | (the commit that adds this row) | sanity PASS (coef within 2e-3 of sklearn, all >= 0); lanes x-lasso-lars-pos, x-lasso-cv-pos AGREE; device-only arms DISAGREE then AGREE; earlier lanes UNCHANGED |
 
-AMD: the do-amd steward read PASS for x-isotonic and x-glm-poisson-sw at 02ddf0678 (the all-lanes request was still running).
+Directive 000 (session 3): the seam bites above were recorded before the
+lane-check fix (3084ca09c). Re-run ONCE on the RTX 4090 pod with the fixed tool
+(box tools/algos_lane_check.py md5 = origin/main's) at 7be5da1e3:
+`algos_lane_check.sh x-isotonic --pass 2`. All ten arms (5000-5009, 5006 as
+seam_5006_host_nan.patch) BUILD, RUN and FAIL under their patch, PASS after
+reversal; no BROKEN arm; clean lane AGREE. Done; never repeat.
 
-Next: AMD box (Hot Aisle fallback running), AGREE on AMD for all 21 lanes;
-M2 Pro steward submissions; then option parity; then speed.
+Stewards (the earlier m2pro FAILs were the 5006 arm that is null on Arm, fixed
+in a3156303f): submitted at 7be5da1e3 to m2pro + do-amd:
+- 1790535754001-linear-7be5da1e3d: the 31 lanes other than x-isotonic, sabotage e2e_device_fold.patch
+- 1790535762888-linear-7be5da1e3d: x-isotonic, sabotage e2e_device_pava.patch
+
+Phase now: (1) proof, waiting on those two verdicts
+(`python3 tools/apple_steward.py status | grep linear-7be5da1e3d`). PASS on
+m2pro and do-amd for both = proof phase done: merge, then STOP.
+A FAIL: fix the cause, resubmit only the affected lanes.
+Next phase: (2) option parity. Remaining NOT IMPLEMENTED rows in
+x_linear/NOT_IMPLEMENTED.tsv (SGD early_stopping/average/warm_start/partial_fit,
+GLM/Huber warm_start, Tweedie power ranges, Bayes compute_score/return_std,
+Lars paths and LarsCV/LassoLarsCV/LassoLarsIC, RidgeClassifier solvers/positive,
+RidgeCV k-fold/multi-target, CD CV splitters/selection=random/sample_weight,
+LogisticRegressionCV l1/elasticnet) AND the existing public linear models
+(python/mojolearn/linear_model.py: LinearRegression, Ridge, Lasso, ElasticNet,
+LogisticRegression) against sklearn and cuML options.
