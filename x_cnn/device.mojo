@@ -15,6 +15,8 @@ from metrics.checks.device_io import upload_f32, upload_i32, download_f32, downl
 from x_cnn.ops import (
     FP, IP, ElemFn, CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW,
     im2col_at, conv_out_at, dout_rows_at, col2im_at, fill_one_at,
+    PP_N, PP_C, PP_H, PP_W, PP_OH, PP_OW,
+    maxpool_fwd_at, maxpool_bwd_at, avgpool_fwd_at, avgpool_bwd_at,
 )
 
 comptime TPB = 256
@@ -143,4 +145,78 @@ def conv2d_backward_device(
     result.extend(rx^)
     result.extend(rw^)
     result.extend(rb^)
+    return result^
+
+
+def _pool_sizes(prm: List[Int32]) -> Tuple[Int, Int]:
+    var nc = Int(prm[PP_N]) * Int(prm[PP_C])
+    return (nc * Int(prm[PP_H]) * Int(prm[PP_W]), nc * Int(prm[PP_OH]) * Int(prm[PP_OW]))
+
+
+def maxpool2d_forward_device(x: List[Float32], prm: List[Int32], mut idx: List[Int32]) raises -> List[Float32]:
+    var sizes = _pool_sizes(prm)
+    var no = sizes[1]
+    var ctx = DeviceContext()
+    var dx = upload_f32(ctx, x)
+    var dp = upload_i32(ctx, prm)
+    var out = ctx.enqueue_create_buffer[DType.float32](no)
+    var di = ctx.enqueue_create_buffer[DType.int32](no)
+    launch[maxpool_fwd_at](ctx, fp(dx), fp(out), fp(out), fp(out), ip(di), ip(dp), no)
+    var result = download_f32(ctx, out, no)
+    idx = download_i32(ctx, di, no)
+    _ = dx^
+    _ = dp^
+    _ = out^
+    _ = di^
+    _ = ctx^
+    return result^
+
+
+def maxpool2d_backward_device(dout: List[Float32], idx: List[Int32], prm: List[Int32]) raises -> List[Float32]:
+    var sizes = _pool_sizes(prm)
+    var nx = sizes[0]
+    var ctx = DeviceContext()
+    var dd = upload_f32(ctx, dout)
+    var di = upload_i32(ctx, idx)
+    var dp = upload_i32(ctx, prm)
+    var gx = ctx.enqueue_create_buffer[DType.float32](nx)
+    launch[maxpool_bwd_at](ctx, fp(dd), fp(gx), fp(gx), fp(gx), ip(di), ip(dp), nx)
+    var result = download_f32(ctx, gx, nx)
+    _ = dd^
+    _ = di^
+    _ = dp^
+    _ = gx^
+    _ = ctx^
+    return result^
+
+
+def avgpool2d_forward_device(x: List[Float32], prm: List[Int32]) raises -> List[Float32]:
+    var sizes = _pool_sizes(prm)
+    var no = sizes[1]
+    var ctx = DeviceContext()
+    var dx = upload_f32(ctx, x)
+    var dp = upload_i32(ctx, prm)
+    var out = ctx.enqueue_create_buffer[DType.float32](no)
+    launch[avgpool_fwd_at](ctx, fp(dx), fp(out), fp(out), fp(out), ip(dp), ip(dp), no)
+    var result = download_f32(ctx, out, no)
+    _ = dx^
+    _ = dp^
+    _ = out^
+    _ = ctx^
+    return result^
+
+
+def avgpool2d_backward_device(dout: List[Float32], prm: List[Int32]) raises -> List[Float32]:
+    var sizes = _pool_sizes(prm)
+    var nx = sizes[0]
+    var ctx = DeviceContext()
+    var dd = upload_f32(ctx, dout)
+    var dp = upload_i32(ctx, prm)
+    var gx = ctx.enqueue_create_buffer[DType.float32](nx)
+    launch[avgpool_bwd_at](ctx, fp(dd), fp(gx), fp(gx), fp(gx), ip(dp), ip(dp), nx)
+    var result = download_f32(ctx, gx, nx)
+    _ = dd^
+    _ = dp^
+    _ = gx^
+    _ = ctx^
     return result^

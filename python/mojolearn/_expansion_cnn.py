@@ -16,7 +16,7 @@ first imported, after the package, so both may rely on every module existing:
 """
 from . import _backend
 
-__all__ = ["Conv2d", "Conv1d"]
+__all__ = ["Conv2d", "Conv1d", "MaxPool2d", "AvgPool2d", "MaxPool1d", "AvgPool1d"]
 
 _BINDING = "_mojolearn_x_cnn"
 
@@ -196,3 +196,132 @@ class Conv1d(Conv2d):
     @property
     def weight1d_(self):
         return self.weight_[:, :, 0, :]
+
+
+class _Pool2d(_Layer):
+    """Shared pooling plumbing: (N, C, H, W) float32, floor mode."""
+    _kind = None
+
+    def __init__(self, kernel_size, stride=None, padding=0, dilation=1, ceil_mode=False,
+                 count_include_pad=True, input_shape=None, numeric_mode=None):
+        if ceil_mode:
+            raise NotImplementedError("mojolearn: ceil_mode=True is not implemented (NOT_IMPLEMENTED.tsv)")
+        self.kernel_size = _pair(kernel_size, "kernel_size")
+        self.stride = _pair(stride if stride is not None else kernel_size, "stride")
+        self.padding = _pair(padding, "padding")
+        self.dilation = _pair(dilation, "dilation")
+        self.count_include_pad = bool(count_include_pad)
+        self.input_shape = input_shape
+        self.numeric_mode = numeric_mode
+
+    def _params(self, shape):
+        n, c, h, w = shape
+        return [n, c, h, w, *self.kernel_size, *self.stride, *self.padding, *self.dilation, 0, 0,
+                1 if self.count_include_pad else 0, 0]
+
+    def _out_shape(self, shape):
+        oh, ow = self._binding().x_cnn_pool_shape(self._params(shape))
+        return (shape[0], shape[1], int(oh), int(ow))
+
+    def _rows(self, X):
+        return Conv2d._rows(self, X)
+
+    def transform(self, X):
+        out = self.forward(self._rows(X))
+        return out.reshape(out.shape[0], -1)
+
+    def fit(self, X, y=None):
+        return self
+
+
+class MaxPool2d(_Pool2d):
+    """PyTorch `nn.MaxPool2d` (floor mode): the first maximum in (kh, kw)
+    order wins a tie, a NaN wins. `indices_` holds the flat h*W + w of each
+    winner (return_indices's values)."""
+
+    def forward(self, x):
+        np = _np()
+        x = _f32(x, "x")
+        if x.ndim != 4:
+            raise ValueError("mojolearn: MaxPool2d.forward takes (N, C, H, W)")
+        shape = self._out_shape(x.shape)
+        out = np.empty(shape, np.float32)
+        idx = np.empty(shape, np.int32)
+        self._binding().x_cnn_maxpool2d_forward(x.ctypes.data, out.ctypes.data, idx.ctypes.data,
+                                                self._params(x.shape))
+        self._xshape, self.indices_ = x.shape, idx
+        return out
+
+    def backward(self, grad_out):
+        np = _np()
+        g = _f32(grad_out, "grad_out")
+        dx = np.empty(self._xshape, np.float32)
+        self._binding().x_cnn_maxpool2d_backward(g.ctypes.data, self.indices_.ctypes.data, dx.ctypes.data,
+                                                 self._params(self._xshape))
+        return dx
+
+
+class AvgPool2d(_Pool2d):
+    """PyTorch `nn.AvgPool2d` (floor mode, divisor_override=None)."""
+
+    def __init__(self, kernel_size, stride=None, padding=0, ceil_mode=False, count_include_pad=True,
+                 divisor_override=None, input_shape=None, numeric_mode=None):
+        if divisor_override is not None:
+            raise NotImplementedError("mojolearn: divisor_override is not implemented (NOT_IMPLEMENTED.tsv)")
+        super().__init__(kernel_size, stride, padding, 1, ceil_mode, count_include_pad, input_shape,
+                         numeric_mode)
+
+    def forward(self, x):
+        np = _np()
+        x = _f32(x, "x")
+        if x.ndim != 4:
+            raise ValueError("mojolearn: AvgPool2d.forward takes (N, C, H, W)")
+        out = np.empty(self._out_shape(x.shape), np.float32)
+        self._binding().x_cnn_avgpool2d_forward(x.ctypes.data, out.ctypes.data, self._params(x.shape))
+        self._xshape = x.shape
+        return out
+
+    def backward(self, grad_out):
+        np = _np()
+        g = _f32(grad_out, "grad_out")
+        dx = np.empty(self._xshape, np.float32)
+        self._binding().x_cnn_avgpool2d_backward(g.ctypes.data, dx.ctypes.data, self._params(self._xshape))
+        return dx
+
+
+def _one(v):
+    return int(v if isinstance(v, int) else v[0])
+
+
+class _Pool1dMixin:
+    def forward(self, x):
+        x = _f32(x, "x")
+        if x.ndim != 3:
+            raise ValueError(f"mojolearn: {type(self).__name__}.forward takes (N, C, L)")
+        return super().forward(x[:, :, None, :])[:, :, 0, :]
+
+    def backward(self, grad_out):
+        g = _f32(grad_out, "grad_out")
+        return super().backward(g[:, :, None, :])[:, :, 0, :]
+
+
+class MaxPool1d(_Pool1dMixin, MaxPool2d):
+    """PyTorch `nn.MaxPool1d`: MaxPool2d over (N, C, 1, L)."""
+
+    def __init__(self, kernel_size, stride=None, padding=0, dilation=1, ceil_mode=False,
+                 input_shape=None, numeric_mode=None):
+        k = _one(kernel_size)
+        s = k if stride is None else _one(stride)
+        super().__init__((1, k), (1, s), (0, _one(padding)), (1, _one(dilation)), ceil_mode, True,
+                         input_shape, numeric_mode)
+
+
+class AvgPool1d(_Pool1dMixin, AvgPool2d):
+    """PyTorch `nn.AvgPool1d`: AvgPool2d over (N, C, 1, L)."""
+
+    def __init__(self, kernel_size, stride=None, padding=0, ceil_mode=False, count_include_pad=True,
+                 input_shape=None, numeric_mode=None):
+        k = _one(kernel_size)
+        s = k if stride is None else _one(stride)
+        super().__init__((1, k), (1, s), (0, _one(padding)), ceil_mode, count_include_pad, None,
+                         input_shape, numeric_mode)

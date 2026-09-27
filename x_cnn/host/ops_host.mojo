@@ -9,6 +9,8 @@ from gemm.host.identical_gemm import gemm_oracle, OP_NN, OP_NT, OP_TN
 from x_cnn.ops import (
     FP, IP, ElemFn, CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW, CP_REV,
     im2col_at, conv_out_at, dout_rows_at, col2im_at,
+    PP_N, PP_C, PP_H, PP_W, PP_OH, PP_OW, PP_REV,
+    maxpool_fwd_at, maxpool_bwd_at, avgpool_fwd_at, avgpool_bwd_at,
 )
 
 #: The host family's negative control (host_surface sabotage_define): the
@@ -95,3 +97,62 @@ def conv2d_backward_host(
     result.extend(gw^)
     result.extend(gb^)
     return result^
+
+
+def _pool_sizes(prm: List[Int32]) -> Tuple[Int, Int]:
+    var nc = Int(prm[PP_N]) * Int(prm[PP_C])
+    return (nc * Int(prm[PP_H]) * Int(prm[PP_W]), nc * Int(prm[PP_OH]) * Int(prm[PP_OW]))
+
+
+def _host_prm(prm: List[Int32], rev_slot: Int) -> List[Int32]:
+    var ps = prm.copy()
+    comptime if X_CNN_HOST_SABOTAGE:
+        ps[rev_slot] = Int32(1)
+    return ps^
+
+
+def maxpool2d_forward_host(x: List[Float32], prm: List[Int32], mut idx: List[Int32]) raises -> List[Float32]:
+    var no = _pool_sizes(prm)[1]
+    var xs = x.copy()
+    var ps = prm.copy()
+    var out = zeros(no)
+    idx = List[Int32](length=no if no > 0 else 1, fill=Int32(0))
+    run[maxpool_fwd_at](hp(xs), hp(out), hp(out), hp(out), hi(idx), hi(ps), no)
+    _ = xs^
+    _ = ps^
+    return out^
+
+
+def maxpool2d_backward_host(dout: List[Float32], idx: List[Int32], prm: List[Int32]) raises -> List[Float32]:
+    var nx = _pool_sizes(prm)[0]
+    var ds = dout.copy()
+    var ix = idx.copy()
+    var ps = _host_prm(prm, PP_REV)
+    var gx = zeros(nx)
+    run[maxpool_bwd_at](hp(ds), hp(gx), hp(gx), hp(gx), hi(ix), hi(ps), nx)
+    _ = ds^
+    _ = ix^
+    _ = ps^
+    return gx^
+
+
+def avgpool2d_forward_host(x: List[Float32], prm: List[Int32]) raises -> List[Float32]:
+    var no = _pool_sizes(prm)[1]
+    var xs = x.copy()
+    var ps = prm.copy()
+    var out = zeros(no)
+    run[avgpool_fwd_at](hp(xs), hp(out), hp(out), hp(out), hi(ps), hi(ps), no)
+    _ = xs^
+    _ = ps^
+    return out^
+
+
+def avgpool2d_backward_host(dout: List[Float32], prm: List[Int32]) raises -> List[Float32]:
+    var nx = _pool_sizes(prm)[0]
+    var ds = dout.copy()
+    var ps = _host_prm(prm, PP_REV)
+    var gx = zeros(nx)
+    run[avgpool_bwd_at](hp(ds), hp(gx), hp(gx), hp(gx), hi(ps), hi(ps), nx)
+    _ = ds^
+    _ = ps^
+    return gx^

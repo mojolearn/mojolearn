@@ -1,0 +1,8 @@
+# Options of the PyTorch reference the CNN lane does not carry, and why.
+# their_thing	status	why / where it would go
+nn.Conv1d/Conv2d groups!=1	refused (not exposed)	grouped/depthwise conv: one GEMM per group over the im2col slice
+nn.Conv1d/Conv2d padding_mode!=zeros	refused (not exposed)	reflect/replicate/circular padding: an im2col index remap
+nn.Conv1d/Conv2d padding="same"/"valid" strings	refused (ints only)	the caller computes the padding
+nn.MaxPool/AvgPool ceil_mode=True	refused by name (NotImplementedError)	the output size rule and the divisor clip
+nn.AvgPool2d divisor_override	refused by name (NotImplementedError)	a constant divisor in _avg_divisor
+nn.MaxPool return_indices	carried as MaxPool2d.indices_	flat h*W+w per output, PyTorch values

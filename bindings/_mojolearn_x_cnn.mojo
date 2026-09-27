@@ -3,7 +3,7 @@
 """THE CNN LANE'S GPU BINDING (docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md, lane 8).
 Host addresses in, host addresses out; the work is x_cnn/device.mojo. The CPU
 twin is bindings/_mojolearn_x_cnn_host.mojo, same names, same contract."""
-from bindings.hostptr import f32_ptr, read_f32, copy_f32
+from bindings.hostptr import f32_ptr, i32_ptr, read_f32, read_i32, copy_f32
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -11,9 +11,14 @@ from std.python.bindings import PythonModuleBuilder
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_cnn.ops import CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW, conv_params
+from x_cnn.ops import PP_N, PP_C, PP_H, PP_W, PP_OH, PP_OW, pool_params
 from x_cnn.device import conv2d_forward_device as conv2d_forward_impl
 from x_cnn.device import conv2d_backward_device as conv2d_backward_impl
 from x_cnn.device import gemm_device as gemm_impl
+from x_cnn.device import maxpool2d_forward_device as maxpool2d_forward_impl
+from x_cnn.device import maxpool2d_backward_device as maxpool2d_backward_impl
+from x_cnn.device import avgpool2d_forward_device as avgpool2d_forward_impl
+from x_cnn.device import avgpool2d_backward_device as avgpool2d_backward_impl
 
 
 def _ints(params: PythonObject) raises -> List[Int]:
@@ -84,6 +89,69 @@ def conv_shape_binding(params: PythonObject) raises -> PythonObject:
     return Python.tuple(Int(prm[CP_OH]), Int(prm[CP_OW]))
 
 
+def _pool_prm(params: PythonObject) raises -> List[Int32]:
+    return pool_params(_ints(params))
+
+
+def _pool_counts(prm: List[Int32]) -> Tuple[Int, Int]:
+    var nc = Int(prm[PP_N]) * Int(prm[PP_C])
+    return (nc * Int(prm[PP_H]) * Int(prm[PP_W]), nc * Int(prm[PP_OH]) * Int(prm[PP_OW]))
+
+
+def pool_shape_binding(params: PythonObject) raises -> PythonObject:
+    var prm = _pool_prm(params)
+    return Python.tuple(Int(prm[PP_OH]), Int(prm[PP_OW]))
+
+
+def maxpool2d_forward_binding(x_addr: PythonObject, out_addr: PythonObject, idx_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    var prm = _pool_prm(params)
+    var c = _pool_counts(prm)
+    var x = read_f32(Int(py=x_addr), c[0])
+    var po = f32_ptr(Int(py=out_addr))
+    var pi = i32_ptr(Int(py=idx_addr))
+    with GILReleased(Python()):
+        var idx = List[Int32]()
+        var y = maxpool2d_forward_impl(x, prm, idx)
+        copy_f32(y.unsafe_ptr(), po, c[1])
+        for k in range(c[1]):
+            pi.unsafe_store(k, idx[k])
+    return PythonObject(c[1])
+
+
+def maxpool2d_backward_binding(dout_addr: PythonObject, idx_addr: PythonObject, dx_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    var prm = _pool_prm(params)
+    var c = _pool_counts(prm)
+    var dout = read_f32(Int(py=dout_addr), c[1])
+    var idx = read_i32(Int(py=idx_addr), c[1])
+    var pd = f32_ptr(Int(py=dx_addr))
+    with GILReleased(Python()):
+        var g = maxpool2d_backward_impl(dout, idx, prm)
+        copy_f32(g.unsafe_ptr(), pd, c[0])
+    return PythonObject(c[0])
+
+
+def avgpool2d_forward_binding(x_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    var prm = _pool_prm(params)
+    var c = _pool_counts(prm)
+    var x = read_f32(Int(py=x_addr), c[0])
+    var po = f32_ptr(Int(py=out_addr))
+    with GILReleased(Python()):
+        var y = avgpool2d_forward_impl(x, prm)
+        copy_f32(y.unsafe_ptr(), po, c[1])
+    return PythonObject(c[1])
+
+
+def avgpool2d_backward_binding(dout_addr: PythonObject, dx_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    var prm = _pool_prm(params)
+    var c = _pool_counts(prm)
+    var dout = read_f32(Int(py=dout_addr), c[1])
+    var pd = f32_ptr(Int(py=dx_addr))
+    with GILReleased(Python()):
+        var g = avgpool2d_backward_impl(dout, prm)
+        copy_f32(g.unsafe_ptr(), pd, c[0])
+    return PythonObject(c[0])
+
+
 def numeric_mode_binding() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 
@@ -100,6 +168,11 @@ def PyInit__mojolearn_x_cnn() abi("C") -> PythonObject:
         m.def_function[conv2d_forward_binding]("x_cnn_conv2d_forward")
         m.def_function[conv2d_backward_binding]("x_cnn_conv2d_backward")
         m.def_function[conv_shape_binding]("x_cnn_conv_shape")
+        m.def_function[pool_shape_binding]("x_cnn_pool_shape")
+        m.def_function[maxpool2d_forward_binding]("x_cnn_maxpool2d_forward")
+        m.def_function[maxpool2d_backward_binding]("x_cnn_maxpool2d_backward")
+        m.def_function[avgpool2d_forward_binding]("x_cnn_avgpool2d_forward")
+        m.def_function[avgpool2d_backward_binding]("x_cnn_avgpool2d_backward")
         m.def_function[numeric_mode_binding]("x_cnn_numeric_mode")
         m.def_function[vendor_binding]("x_cnn_vendor")
         return m.finalize()

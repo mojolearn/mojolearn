@@ -31,9 +31,10 @@ Lane 8 (docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md). Pass 1: build + sanity +
 
 | algorithm | commit | lane check |
 |---|---|---|
-| Conv2d / Conv1d forward + backward | (this commit) | x-cnn-conv2d, x-cnn-conv1d: AGREE on 9 fixtures (RTX 4090 vs EPYC 75F3); sabotage DISAGREE then AGREE |
+| Conv2d / Conv1d forward + backward | 0db3c1f17 | x-cnn-conv2d, x-cnn-conv1d: AGREE on 9 fixtures (RTX 4090 vs EPYC 75F3); sabotage DISAGREE then AGREE |
+| MaxPool2d/AvgPool2d (+1d) forward + backward | (this commit) | x-cnn-pool: AGREE on 9 fixtures (RTX 4090 vs EPYC 75F3) |
 
 ## Next
 
-MaxPool2d/AvgPool2d (+1d), CNN trainer, BatchNorm, Dropout2d, global pooling,
+CNN trainer, BatchNorm, Dropout2d, global pooling,
 ResNet BasicBlock, GCN, GraphSAGE. Then PASS 2 (plan's last section).

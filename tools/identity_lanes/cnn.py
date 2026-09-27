@@ -64,3 +64,33 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("transform", sl=np.s_[:256, :16]), "x-cnn-conv2d", "x-cnn-conv1d")
+
+
+@lane("x-cnn-pool")
+def _(ml, X, yc, yr, Xh=None):
+    """MaxPool and AvgPool forward + backward on 256 rows as (2, 2, 4)
+    images and (2, 8) sequences: overlapping windows (the gathers sum more
+    than one window), padding, dilation, count_include_pad both ways. The
+    `ties` fixture puts exact ties inside the max windows."""
+    x = np.ascontiguousarray(X[:256, :16]).reshape(256, 2, 2, 4)
+    s = np.ascontiguousarray(X[:256, :16]).reshape(256, 2, 8)
+    parts = {}
+    layers = dict(
+        mx=(ml.MaxPool2d((2, 3), stride=1, padding=(1, 1), input_shape=(2, 2, 4)), x),
+        mxd=(ml.MaxPool2d(2, stride=1, padding=1, dilation=(1, 2)), x),
+        av=(ml.AvgPool2d(3, stride=1, padding=1), x),
+        avx=(ml.AvgPool2d((2, 3), stride=(1, 2), padding=(1, 1), count_include_pad=False), x),
+        mx1=(ml.MaxPool1d(3, stride=2, padding=1), s),
+        av1=(ml.AvgPool1d(4, stride=2, padding=2, count_include_pad=False), s),
+    )
+    for k, (layer, inp) in layers.items():
+        out = layer.forward(inp)
+        parts[k + "_out"] = _h(out)
+        parts[k + "_dx"] = _h(layer.backward(_cnn_grad(X, out.shape)))
+        if hasattr(layer, "indices_"):
+            parts[k + "_idx"] = _h(layer.indices_)
+    first = layers["mx"][0]
+    return _fit(parts, first, lambda e: (e.transform(np.ascontiguousarray(Xh[:256, :16])),))
+
+
+_batch_decl(_rows_calls("transform", sl=np.s_[:256, :16]), "x-cnn-pool")
