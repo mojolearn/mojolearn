@@ -36,7 +36,7 @@ Seam ledger: DEVIATIONS 5000-5009, IDENTITY_PATHS rows 100-109, x_linear/README.
 Check driver x_linear/checks/seams_check.mojo (oracle seams_oracle.mojo), ten
 arms in tools/identity_lanes/linear.checks. End-to-end sabotage for the
 stewards: x_linear/checks/sabotage/e2e_device_fold.patch (every lane but
-x-isotonic) and e2e_device_interp.patch (x-isotonic): device-only source edits.
+x-isotonic) and e2e_device_pava.patch (x-isotonic; the interp arm did not bite, replaced): device-only source edits.
 
 | step | commit | result |
 |---|---|---|
