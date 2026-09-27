@@ -129,3 +129,14 @@ def test_label_propagation(cls, kw):
     assert (np.asarray(a.transduction_) == b.transduction_).mean() > 0.98
     Xh = _data(30, seed=5)
     np.testing.assert_allclose(np.asarray(a.predict_proba(Xh)), b.predict_proba(Xh), rtol=2e-3, atol=2e-4)
+
+
+@pytest.mark.parametrize("kw", [dict(), dict(weights="distance", n_neighbors=3), dict(add_indicator=True)])
+def test_knn_imputer(kw):
+    from sklearn.impute import KNNImputer as R
+    X = _data(80)
+    X[::4, 2] = np.nan
+    X[1::5, 0] = np.nan
+    X[7, :] = np.nan
+    np.testing.assert_allclose(np.asarray(ml.KNNImputer(**kw).fit_transform(X)), R(**kw).fit_transform(X),
+                               rtol=1e-4, atol=1e-5)

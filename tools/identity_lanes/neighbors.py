@@ -116,6 +116,14 @@ def _neighbors_holes(A):
     return A
 
 
+@lane("x-neighbors-knn-imputer")
+def _(ml, X, yc, yr, Xh=None):
+    A = _neighbors_holes(X[:512])
+    m = ml.KNNImputer(n_neighbors=5).fit(A)
+    w = ml.KNNImputer(n_neighbors=4, weights="distance", add_indicator=True).fit(A)
+    return _fit(dict(u=_h(m.transform(A)), w=_h(w.transform(A))),
+                w, lambda e: (e.transform(_neighbors_holes(Xh[:256])),))
+
 
 _batch_decl(_rows_calls("score_samples", "predict", sl=slice(0, 256)), "x-neighbors-lof")
 _batch_decl(_rows_calls("predict", "decision_function", "predict_proba", sl=slice(0, 256)), "x-neighbors-nearest-centroid")
@@ -127,3 +135,4 @@ _batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=lambda Xh: np.abs(Xh
             "x-neighbors-additive-chi2", "x-neighbors-skewed-chi2")
 _batch_decl(_rows_calls("predict_proba", "predict", sl=slice(0, 128)),
             "x-neighbors-label-propagation", "x-neighbors-label-spreading")
+_batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_neighbors_holes), "x-neighbors-knn-imputer")

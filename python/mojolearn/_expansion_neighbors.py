@@ -30,7 +30,7 @@ from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty
 from ._mode import NumericModeMixin
 
-__all__ = ["LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", "PolynomialCountSketch", "AdditiveChi2Sampler", "SkewedChi2Sampler", "LabelPropagation", "LabelSpreading"]
+__all__ = ["LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", "PolynomialCountSketch", "AdditiveChi2Sampler", "SkewedChi2Sampler", "LabelPropagation", "LabelSpreading", "KNNImputer"]
 
 # x_neighbors/items.mojo's codes
 _KERNELS = {"linear": 0, "poly": 1, "polynomial": 1, "rbf": 2, "sigmoid": 3, "laplacian": 4,
@@ -920,3 +920,81 @@ class LabelSpreading(_LabelPropagationBase):
         self._op("ls_laplacian", [(A, 0), (G, 1)], (n,))
         return G
 
+
+# ====================================================================== KNNImputer
+class KNNImputer(_XNeighbors):
+    """Imputation of missing values by k nearest neighbors.
+
+    Reference: scikit-learn `impute/_knn.py` (1.9.0): nan_euclidean distances
+    to the fit rows, donors = fit rows where the column is present, the k
+    nearest (ties: the lower row index), 'uniform' or 'distance' weights,
+    the masked column mean when no donor has a finite distance, all-missing
+    columns dropped (or zero with keep_empty_features), `add_indicator`.
+    missing_values must be NaN; metric 'nan_euclidean' only; callable weights
+    are refused by name.
+    """
+
+    def __init__(self, *, missing_values=float("nan"), n_neighbors=5, weights="uniform",
+                 metric="nan_euclidean", copy=True, add_indicator=False, keep_empty_features=False):
+        self.missing_values = missing_values
+        self.n_neighbors = n_neighbors
+        self.weights = weights
+        self.metric = metric
+        self.copy = copy
+        self.add_indicator = add_indicator
+        self.keep_empty_features = keep_empty_features
+
+    def _check(self):
+        mv = self.missing_values
+        if not (isinstance(mv, float) and mv != mv):
+            raise NotImplementedError("KNNImputer: missing_values must be NaN")
+        if self.metric != "nan_euclidean":
+            raise NotImplementedError("KNNImputer: metric must be 'nan_euclidean'")
+        if self.weights not in ("uniform", "distance"):
+            raise NotImplementedError("KNNImputer: weights must be 'uniform' or 'distance'")
+
+    def fit(self, X, y=None):
+        self._check()
+        X = _f32(X)
+        n, d = X.shape
+        rows = X.tolist()
+        miss = [[v != v for v in r] for r in rows]
+        self._valid = [not all(miss[i][f] for i in range(n)) for f in range(d)]
+        self._miss_cols = [f for f in range(d) if any(miss[i][f] for i in range(n))]
+        self._fit_X = X
+        self.n_features_in_ = d
+        return self
+
+    def transform(self, X):
+        X = _f32(X)
+        n, d = X.shape
+        if d != self.n_features_in_:
+            raise ValueError("X has a different number of features than during fit")
+        m = self._fit_X.shape[0]
+        out = empty((n, d), "<f4")
+        k = int(self.n_neighbors)
+        if k < 1:
+            raise ValueError("n_neighbors must be >= 1")
+        self._op("knn_impute", [(X, 0), (self._fit_X, 0), (out, 1)],
+                 (n, m, d, k, 1 if self.weights == "distance" else 0))
+        keep = [f for f in range(d) if self._valid[f]]
+        if self.keep_empty_features:
+            empty_cols = [f for f in range(d) if not self._valid[f]]
+            if empty_cols:
+                rows = out.tolist()
+                for r in rows:
+                    for f in empty_cols:
+                        r[f] = 0.0
+                out = Array.from_list(rows, "<f4")
+        elif len(keep) != d:
+            out = self._take_cols(out, keep)
+        if self.add_indicator and self._miss_cols:
+            src = X.tolist()
+            res = out.tolist()
+            for i, r in enumerate(res):
+                r.extend(1.0 if src[i][f] != src[i][f] else 0.0 for f in self._miss_cols)
+            out = Array.from_list(res, "<f4")
+        return out
+
+    def fit_transform(self, X, y=None):
+        return self.fit(X).transform(X)
