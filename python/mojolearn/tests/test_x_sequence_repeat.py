@@ -75,7 +75,7 @@ _CHILD = textwrap.dedent('''
         am.fit()
         out += [am.forecast(3)]
         out += [np.asarray(ml.kpss_test(Y), dtype=np.float32)]                        # _mojolearn_tsa
-        hw = ml.ExponentialSmoothing(Y.T.copy(), seasonal_periods=12, ts_num=2).fit()
+        hw = ml.ExponentialSmoothing(Y.copy(), seasonal_periods=12, ts_num=2).fit()
         out += [np.asarray(hw.forecast(4))]
         return [np.ascontiguousarray(v).tobytes() for v in out]
 
