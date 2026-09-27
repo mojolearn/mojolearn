@@ -59,18 +59,33 @@ def _digest(v):
     return h.hexdigest()[:16]
 
 
-def data(n):
+def _load(n):
     taxi = np.load(os.path.join(_root(), "taxi", "taxi_speed.npz"))
     higgs = np.load(os.path.join(_root(), "higgs", "higgs_speed.npz"))
     tx = np.asarray(taxi["x"][:n], dtype=np.float32)
-    fare = np.asarray(taxi["fare"][:n], dtype=np.float32)
-    # a fixed least-squares predictor of the fare from the taxi features
-    A = np.concatenate([tx[:, :8].astype(np.float64), np.ones((n, 1))], axis=1)
+    hx = np.asarray(higgs["x"][:n], dtype=np.float32)
+    return dict(
+        taxi=dict(x=tx, target=np.asarray(taxi["fare"][:n], dtype=np.float32), feats=tx[:, :8],
+                  label=np.asarray(taxi["card"][:n]).astype(np.int64), bfeats=tx[:, :16]),
+        higgs=dict(x=hx, target=hx[:, 0].copy(), feats=hx[:, 1:9],
+                   label=np.asarray(higgs["y"][:n]).astype(np.int64), bfeats=hx[:, 21:28]))
+
+
+def data(n, primary="taxi", raw=None):
+    """The board's inputs. `primary` names the dataset of the regression,
+    multiclass and clustering cases; the binary cases use the other one."""
+    raw = raw or _load(n)
+    R = raw[primary]
+    Bn = raw["higgs" if primary == "taxi" else "taxi"]
+    tx = R["x"]
+    fare = R["target"]
+    # a fixed least-squares predictor of the target from the features
+    A = np.concatenate([R["feats"].astype(np.float64), np.ones((n, 1))], axis=1)
     coef = np.linalg.lstsq(A, fare.astype(np.float64), rcond=None)[0]
     pred = (A @ coef).astype(np.float32)
     yr = np.abs(fare) + np.float32(0.5)
     pr = np.abs(pred) + np.float32(0.5)
-    # multiclass: fare quintiles, true vs predicted
+    # multiclass: target quintiles, true vs predicted
     edges = np.quantile(fare, [0.2, 0.4, 0.6, 0.8])
     ct = np.searchsorted(edges, fare).astype(np.int64)
     cp = np.searchsorted(edges, pred).astype(np.int64)
@@ -80,10 +95,9 @@ def data(n):
     logits = logits - logits.max(axis=1, keepdims=True)
     proba = np.exp(logits)
     proba = (proba / proba.sum(axis=1, keepdims=True)).astype(np.float32)
-    hx = np.asarray(higgs["x"][:n], dtype=np.float32)
-    hy = np.asarray(higgs["y"][:n]).astype(np.int64)
-    # a fixed binary score: a logistic fit on the HIGGS high-level features
-    z = hx[:, 21:28].astype(np.float64)
+    hy = Bn["label"]
+    # a fixed binary score: a least-squares fit of the label on the features
+    z = Bn["bfeats"].astype(np.float64)
     z = (z - z.mean(axis=0)) / (z.std(axis=0) + 1e-12)
     w = np.linalg.lstsq(np.concatenate([z, np.ones((n, 1))], axis=1), hy * 2.0 - 1.0, rcond=None)[0]
     s = 1.0 / (1.0 + np.exp(-(np.concatenate([z, np.ones((n, 1))], axis=1) @ w) * 2.0))
