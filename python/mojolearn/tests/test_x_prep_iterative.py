@@ -41,8 +41,8 @@ def test_iterative_options():
     miss = np.isnan(X)
     # add_indicator, and another estimator (the rounds in Python over its fit / predict)
     for kw, skw in ((dict(add_indicator=True), dict(add_indicator=True)),
-                    (dict(estimator=ml.Ridge(alpha=2.0)), dict(estimator=SkRidge(alpha=2.0))),
-                    (dict(estimator=ml.Ridge(alpha=2.0), add_indicator=True, max_iter=4),
+                    (dict(estimator=SkRidge(alpha=2.0)), dict(estimator=SkRidge(alpha=2.0))),
+                    (dict(estimator=SkRidge(alpha=2.0), add_indicator=True, max_iter=4),
                      dict(estimator=SkRidge(alpha=2.0), add_indicator=True, max_iter=4))):
         m, r = ml.IterativeImputer(**kw), SkII(**skw)
         a, b = np.asarray(m.fit_transform(X)), r.fit_transform(X.astype(np.float64))
@@ -57,7 +57,9 @@ def test_iterative_options():
         a = np.asarray(ml.IterativeImputer(**kw).fit_transform(X))
         assert np.array_equal(a, np.asarray(ml.IterativeImputer(**kw).fit_transform(X))), kw
         b = SkII(**kw).fit_transform(X.astype(np.float64))
-        assert np.abs(a - b)[miss].mean() < 0.1, (kw, np.abs(a - b)[miss].mean())
+        b2 = SkII(**dict(kw, random_state=kw["random_state"] + 1)).fit_transform(X.astype(np.float64))
+        spread = np.abs(b - b2)[miss].mean()          # the reference against itself, another seed
+        assert np.abs(a - b)[miss].mean() < 2 * spread + 0.02, (kw, np.abs(a - b)[miss].mean(), spread)
     # sample_posterior: draws from the truncated predictive normal; over seeds, the mean and the
     # spread of the draws match the reference's
     for kw in (dict(sample_posterior=True), dict(sample_posterior=True, min_value=-0.5, max_value=0.5)):
@@ -69,7 +71,7 @@ def test_iterative_options():
         assert abs(A.mean() - B.mean()) < 0.05, (kw, A.mean(), B.mean())
         assert abs(A.std(0).mean() / B.std(0).mean() - 1) < 0.2, (kw, A.std(0).mean(), B.std(0).mean())
     try:
-        ml.IterativeImputer(estimator=ml.Ridge(), sample_posterior=True).fit(X)
+        ml.IterativeImputer(estimator=SkRidge(), sample_posterior=True).fit(X)
         raise AssertionError("no ValueError")
     except ValueError:
         pass

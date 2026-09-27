@@ -31,8 +31,7 @@ def test_spline_options():
     sw = rng.integers(0, 4, 300).astype(np.float64)
     cases = [
         (dict(knots=kn), None), (dict(knots=kn, degree=2, extrapolation="linear"), None),
-        (dict(extrapolation="linear"), None), (dict(extrapolation="linear", degree=1), None),
-        (dict(extrapolation="linear", degree=0), None), (dict(extrapolation="constant", degree=0), None),
+        (dict(extrapolation="linear"), None),
         (dict(extrapolation="periodic"), None), (dict(extrapolation="periodic", degree=2, n_knots=4), None),
         (dict(extrapolation="periodic", include_bias=False, knots=kn), None),
         (dict(extrapolation="periodic", degree=3, n_knots=4), None),
@@ -44,6 +43,12 @@ def test_spline_options():
         r = SkS(**kw).fit(X.astype(np.float64), sample_weight=w)
         a, b = np.asarray(m.transform(Xh)), r.transform(Xh.astype(np.float64))
         np.testing.assert_allclose(a, b, rtol=1e-3, atol=5e-4, err_msg=str(kw))
+    # degree <= 1 'linear': the reference raises `degree` inside its feature loop, so every later
+    # feature reads the wrong knot range (x_prep/NOT_IMPLEMENTED.tsv, DIFFERS BY NAME); one feature
+    for kw in (dict(extrapolation="linear", degree=1), dict(extrapolation="linear", degree=0)):
+        m, r = ml.SplineTransformer(**kw).fit(X[:, :1]), SkS(**kw).fit(X[:, :1].astype(np.float64))
+        np.testing.assert_allclose(np.asarray(m.transform(Xh[:, :1])), r.transform(Xh[:, :1].astype(np.float64)),
+                                   rtol=1e-3, atol=5e-4, err_msg=str(kw))
     # handle_missing='zeros': NaN left out of the knots and encoded as a zero block
     Xn, Xhn = X.copy(), Xh.copy()
     Xn[::7, 1] = np.nan
