@@ -106,14 +106,17 @@ import sys
 #: existing family. With every fragment empty the manifest is byte for byte
 #: what it was.
 EXPANSION_LANES = ("linear", "cluster", "neighbors", "decomp", "prep", "sequence", "trees", "cnn", "ann")
-#: The expansion lanes whose GPU binding builds IDENTICAL ONLY, like every
-#: neural binding (`_backend._IDENTICAL_ONLY`). The other seven build FAST and
-#: IDENTICAL, as classical ML does since 2026-09-25 (`_backend._CLASSICAL_FAST`).
-#: NOTE FOR THE ORCHESTRATOR: the plan (Option B, 2026-09-27) wants FAST on
-#: neural too. That is a policy change to the neural IDENTICAL_ONLY rule, made
-#: once, for the existing neural bindings and these two together; it is NOT
-#: made here. When it is, this tuple is the only expansion line that moves.
-EXPANSION_IDENTICAL_ONLY = ("sequence", "cnn")
+#: The expansion lanes whose GPU binding builds IDENTICAL ONLY. EMPTY SINCE
+#: 2026-09-27 (Andrew: FAST AND IDENTICAL on every lane, neural included):
+#: all nine expansion bindings build FAST and IDENTICAL and join
+#: `_backend._CLASSICAL_FAST`, exactly as classical ML does since 2026-09-25.
+#: The tuple stays so the tier plumbing (`expansion_gpu_bindings("identical-only")`,
+#: every packaging list) keeps one shape; a lane is named here only if its
+#: binding cannot build a FAST tier, and then the brief says so. The four
+#: EXISTING neural bindings (training, mamba, transformer, embedding) stay
+#: identical only in `_backend._IDENTICAL_ONLY` until their FAST tier is
+#: built; that is separate work and no expansion lane's concern.
+EXPANSION_IDENTICAL_ONLY = ()
 #: The only names a fragment may bind, each a literal.
 EXPANSION_KEYS = ("GPU_BINDINGS", "FAMILIES", "TRAINING_LANE_NAMES", "PUBLIC_PENDING_LANES")
 

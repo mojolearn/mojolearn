@@ -7,8 +7,20 @@ from types import SimpleNamespace
 
 import pytest
 
-from mojolearn._crossvendor_coverage import audit, parallel_contract
-from mojolearn import _verify_reference as vref
+ROOT = Path(__file__).resolve().parents[2]
+
+
+def _load(name, path):
+    """Loaded by path, as the CLI does: the audit never initializes mojolearn."""
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+vref = _load('coverage_test_reference', ROOT / 'python/mojolearn/_verify_reference.py')
+_coverage = _load('coverage_test_coverage', ROOT / 'tools/crossvendor_coverage.py')
+audit, parallel_contract = _coverage.audit, _coverage.parallel_contract
 
 HASH = '0123456789abcdef'
 CONTRACT = {'par-demo': {'train': 'numeric'}}
@@ -77,7 +89,7 @@ def test_numeric_requirement_overrides_all_old_na_and_future_declared_parts_exis
     harness = SimpleNamespace(LANES={'par-demo': lambda: None}, BATCH={}, RLPAIR={},
         EXTRA_PARTS={'future': ({'par-demo': lambda: None}, 'n/a:absent')},
         REQUIRED_NUMERIC_PARTS={'par-demo': ('model',)})
-    contract = parallel_contract(harness)
+    contract = parallel_contract(harness, vref)
     assert contract['par-demo']['model'] == contract['par-demo']['future'] == 'numeric'
     result = audit(table('n/a:no-save'), contract, ['base'])
     assert not result['complete']
@@ -85,7 +97,7 @@ def test_numeric_requirement_overrides_all_old_na_and_future_declared_parts_exis
 
 
 def test_cli_strict_exit_and_saved_plan(tmp_path, monkeypatch):
-    path = Path(__file__).resolve().parents[3] / 'tools/audit_parallel_coverage.py'
+    path = ROOT / 'tools/audit_parallel_coverage.py'
     spec = importlib.util.spec_from_file_location('audit_parallel_cli', path)
     cli = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(cli)
@@ -175,9 +187,9 @@ def test_cli_runs_in_checkout_with_no_native_package_initialization(tmp_path):
     import shutil
     import subprocess
     import sys
-    root = Path(__file__).resolve().parents[3]
+    root = ROOT
     for relative in ('tools/audit_parallel_coverage.py', 'tools/identity_break.py',
-                     'python/mojolearn/_crossvendor_coverage.py',
+                     'tools/crossvendor_coverage.py',
                      'python/mojolearn/_verify_reference.py'):
         target = tmp_path / relative
         target.parent.mkdir(parents=True, exist_ok=True)

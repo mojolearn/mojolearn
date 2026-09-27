@@ -133,8 +133,16 @@ sync)
     load_state; wt="${3:?worktree}"; [ -d "$wt/.git" ] || [ -f "$wt/.git" ] || die "$wt is not a git worktree"
     [ "$(cd "$wt" && git rev-parse --show-toplevel)" != "$(cd "$ROOT" && git rev-parse --show-toplevel)" ] || [ "${MOJOLEARN_DEVPOD_ALLOW_SELF:-0}" = 1 ] \
         || die "sync a lane's OWN worktree, not the checkout this tool runs from"
-    ( cd "$wt" && git ls-files -z -c -o --exclude-standard | grep -zvE '\.(so|dylib|metallib)$' \
-        | COPYFILE_DISABLE=1 tar --null -czf - -T - ) | bx 900 'cd /root/mojolearn && tar xzf -' || die "sync failed"
+    # A file that was in the LAST sync's manifest but not in this one is deleted
+    # on the pod, so a moved or deleted source never lingers there to mask a result.
+    ( cd "$wt" && git ls-files -c -o --exclude-standard | grep -vE '\.(so|dylib|metallib)$' ) > "$TMPD/manifest" || die "no file list"
+    bx 60 'mkdir -p /root/mojolearn && cd /root/mojolearn && { [ ! -f .devpod_manifest ] || mv .devpod_manifest .devpod_manifest.prev; } && cat > .devpod_manifest' < "$TMPD/manifest" \
+        || die "manifest upload failed"
+    ( cd "$wt" && tr '\n' '\0' < "$TMPD/manifest" | COPYFILE_DISABLE=1 tar --null -czf - -T - ) \
+        | bx 900 'cd /root/mojolearn && tar xzf -' || die "sync failed"
+    bx 120 'cd /root/mojolearn && if [ -f .devpod_manifest.prev ]; then sort .devpod_manifest.prev > /tmp/m.prev; sort .devpod_manifest > /tmp/m.now;
+            comm -23 /tmp/m.prev /tmp/m.now | while IFS= read -r f; do [ -n "$f" ] && rm -f -- "$f" && echo "dev_pod: removed stale $f"; done; fi' \
+        || die "stale-file cleanup failed"
     say "synced $(cd "$wt" && git rev-parse --short HEAD)+worktree -> $POD_ID:/root/mojolearn"
     ;;
 run)

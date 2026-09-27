@@ -1,6 +1,9 @@
 # Algorithm expansion: 57 -> 103 algorithms, 12 -> 13 families
 
-Status: DRAFT FOR DISCUSSION (2026-09-27). Nothing started. Not committed.
+Status: PREP LANDED ON MAIN (2026-09-27, `lane/algos-prep`, commits `aabd9c53`
+and `ff4e81c0`). The sections below are kept in the order they were decided;
+the LAST section, "Prep landed and reviewed", says what holds now and what is
+still owed before the first lane starts. No lane has started.
 
 ## Goal
 
@@ -314,3 +317,121 @@ running. Reap as soon as the lane's last branch is merged. No idle pods.
   one board run covers them later. Nothing gets timed until Andrew says so:
   speed work across all lanes comes first. Brief:
   [ALGORITHM_EXPANSION_BENCH_BRIEF.md](ALGORITHM_EXPANSION_BENCH_BRIEF.md).
+
+---
+
+# Prep landed and reviewed (2026-09-27, after the merge to main)
+
+`lane/algos-prep` is on main. Confirmed by ancestry, not by reading the
+branch: `aabd9c53` and `ff4e81c0` are ancestors of `origin/main`, the branch
+tip is too, and the three docs and five tools it added are byte-identical
+on main to what was reviewed. `packaging/check_ext_lists.py` passes on main
+with every fragment empty, so every packaging list is what it was before
+the prep. The fragment loader was exercised by hand and refuses an import,
+another lane's binding and a lane name that already exists.
+
+## What the review found, and who fixes it
+
+Owner is the orchestrator unless a lane is named. Nothing here is a lane's
+to widen into.
+
+| # | finding | what to do | status |
+|---|---|---|---|
+| R1 | **A submitted commit never reaches the cloud Macs.** `apple_steward.py submit` ships the request and patch over ssh, then the Mac's `process` runs `git fetch origin` and checks out the sha. But a cloud Mac's `origin` is the bare repo the laptop pushes to (`cloudmac.sh bootstrap`), and neither `submit`, `flush-deferred`, nor the brief's step 7 pushes the sha there. Every request would fail at "checkout of <sha>". | Until the tool does it, the lane runs `tools/cloudmac.sh push m2pro <sha>` before `submit` (brief step 7, revised). The tool fix: `submit` pushes to each non-deferred Mac and `flush-deferred` pushes before it ships; or `process` fetches the sha from GitHub over https (the repo is public). | **OWED: tool fix. The brief carries the workaround.** |
+| R2 | **Seam checks are optional in the gate.** `algos_lane_check.py` prints a note and continues when a fragment has no `tools/identity_lanes/<lane>.checks`. A lane could register identity lanes, pass the GPU == CPU diff and never run an oracle: the "light" hole the brief closes in prose only. | Make a missing `.checks` a FAIL once the fragment registers any lane. Until then the orchestrator refuses to merge a lane whose fragment registers lanes and has no `.checks` listing (brief step 2, revised). | **OWED: tool fix. The brief carries the rule.** |
+| R3 | **Per-seam sabotage arms are unverified by any tool.** The steward runs the one end-to-end `--sabotage` patch; the per-seam arms the brief requires live only in the lane's evidence directory. | Extend the `.checks` line format to `<driver>\t<sabotage patch>` and have the lane check run each pair (must FAIL under the patch, PASS after `git apply -R`). Until then, the lane's report at each commit names every seam patch and its result, and the orchestrator reads them. | **OWED: tool fix.** |
+| R4 | **main was rewritten today.** The fetch that preceded the review showed a forced update on `origin/main` (`3cf7ae22...b35580c3`). Nine lanes pushing `HEAD:main` fast-forward cannot survive another one. | Turn on force-push protection for `main` for the duration of the fan-out. | **OWED: Andrew, in the GitHub settings.** |
+| R5 | **The proof dummy ran on one vendor.** The A40 pod proved x86 CPU == NVIDIA through the whole loop. Nothing has run `algos_lane_check.sh` on a Mac with Metal, and that is the path every steward request takes. | Re-create the `x-prep-dummy` lane on a throwaway branch (its two commits are on main; `git revert ff4e81c0` on the branch), push it to the M2 Pro, and run it through `apple_steward.py work --once` before any lane submits. Then delete the branch. | **OWED: orchestrator, before the first submit.** |
+| R6 | **Pod bootstrap is manual.** The brief tells each lane to `git init` and fetch on the pod so `git apply` works; `sync` does not check that the pod tree is at the worktree's base commit, so a patch that applies on the laptop can fail on the pod for a stale-tree reason. | `dev_pod.sh up` seeds the git tree at the lane's base sha itself; `sync` refuses when the pod's HEAD is not the worktree's merge base with origin/main. | **OWED: tool fix. Brief step "Your setup" carries the manual form.** |
+| R7 | The prep shipped `sequence` and `cnn` identical only (`host_surface.EXPANSION_IDENTICAL_ONLY`), against FINAL DECISIONS (FAST and IDENTICAL everywhere). | The tuple is now empty: all nine expansion bindings build FAST and IDENTICAL and join `_CLASSICAL_FAST`; the briefs say so. Separate, not a lane's: a FAST tier for the four existing neural bindings (`build_sets.sh` IDENTICAL_ONLY lists, `_backend` tier table, their build scripts). | **DONE 2026-09-27 for the nine lanes. The existing neural bindings' FAST tier is OWED to the orchestrator, off the lanes' path.** |
+| R8 | A fragment may bind a key twice; the second `FAMILIES = ...` silently wins (`host_surface._read_expansion_fragment`). | Refuse a key bound twice. | **OWED: one-line tool fix. The brief says "each once".** |
+| R9 | A dirty steward worktree (an unreversed sabotage) fails the request that finds it, and every later one, until someone logs in. | After a reversal fails, `process` should `git checkout -- .` the worktree, log that it did, and go on. Judgment call; the failing request still reads FAIL. | **OWED: tool fix, low priority.** |
+
+## What holds, restated
+
+- Every shared registry reads per-lane files and the loaders enforce
+  ownership by name, so nine lanes never edit the same line. The refusals
+  were exercised, not just read.
+- The lane check refuses NOTHING COMPARED, a missing host binding, a
+  define-only sabotage, and a patch that touches nothing the lanes run.
+- DEVIATION 5000-5899 and IDENTITY_PATHS rows 100-189 are pre-allocated
+  per lane, with one ledger section per lane.
+- The pod dead-man and lease reuse `runpod_guard.sh`; the steward queue
+  is atomic per request; the bench lane measures nothing.
+
+## The estimate, corrected
+
+"1 to 2 hours per lane" was written before the per-seam bill was put in the
+brief. With every numeric seam owing an oracle, a separating fixture, a
+sabotage arm that bites, a DEVIATION, a card stage and a ledger row, an Easy
+algorithm is half a day to a day of agent time, because most of it is
+templated on existing contracts, and a lane of seven Easy items is several
+days. Parallelism buys throughput; there is no light form. So:
+
+- Pod leases match the lane's real duration (`dev_pod.sh up <lane> 240`,
+  extended hourly while working), not a three-hour window. A pod is torn
+  down when its lane's last algorithm is merged.
+- Expect one or two algorithms per lane in the first window and the rest
+  after. The paper's count moves only when a release record admits a lane
+  on three vendors.
+- Speed work (FAST and IDENTICAL) starts per lane after that lane's
+  identity passes, never before; a FAST commit on nine pods each going
+  back through one Metal queue is the second bottleneck, so sequence it.
+
+## Order of operations before the first lane starts
+
+1. R4: protect main.
+2. R1 and R2 tool fixes, or at least the brief's workarounds (done in the
+   briefs).
+3. R5: the dummy through the M2 Pro steward on Metal.
+4. Bootstrap the nine pods (`dev_pod.sh up`) and the bench pod.
+5. Start the nine lanes with the COMMON BRIEF and their sections.
+
+---
+
+# Everything else: the long tail, assigned (2026-09-27)
+
+Andrew: "may as well do everything now". What follows is every standard
+estimator not in the nine lane tables, checked against the public API on
+main (127 names) and the `NOT_IMPLEMENTED.tsv` files. Each is assigned to the
+lane whose machinery it reuses, in the briefs as an "Additions" table a lane
+does after its main table. E = a thin layer with few seams (a day at most),
+M = a new kernel on a known pattern, H = new machinery. The per-seam bill
+applies to every one; a wrapper with no numeric seam of its own owes only
+the verifier lane, the Python class, the sanity check and the CPU route.
+
+| lane | additions | est. |
+|---|---|---|
+| linear | Perceptron, PassiveAggressiveClassifier/Regressor, RidgeClassifier, SGDOneClassSVM (all SGD variants: E); RidgeCV, LassoCV, ElasticNetCV, LogisticRegressionCV (over `cross_val_score`: E); IsotonicRegression (parallel PAVA by prefix scan: M) | +9 |
+| cluster | BayesianGaussianMixture (`mixture/` machinery; already a row in its tsv: M) | +1 |
+| neighbors + kernel | PolynomialCountSketch, AdditiveChi2Sampler, SkewedChi2Sampler (kernel approximation, `kernel_methods/` tsv rows: E); LabelPropagation, LabelSpreading (kNN graph + fixed-order iteration: E); KNNImputer (E) | +6 |
+| decomp + linalg | CCA, PLSRegression (SVD of the cross-covariance: E); SparsePCA, MiniBatchSparsePCA, DictionaryLearning (CD + GEMM: M); LatentDirichletAllocation (variational EM, fixed order: M); Isomap, MDS, LocallyLinearEmbedding (kNN + eigh: M); EllipticEnvelope / MinCovDet (M); ALS matrix factorization for recommendation (GEMM + batched least squares, the clear GPU win in this row: M) | +12 |
+| prep + NB/DA | QuantileTransformer, PowerTransformer, Normalizer, PolynomialFeatures, SplineTransformer, Binarizer, LabelEncoder, LabelBinarizer, MultiLabelBinarizer (E); IterativeImputer (M); VarianceThreshold, SelectKBest with f_classif / chi2 / f_regression / mutual_info, RFE as a wrapper (E); ComplementNB, CategoricalNB (E) | +17 |
+| sequence | MLPClassifier / MLPRegressor, sklearn-shaped over `SmallMLPTrainer` (E); vanilla RNN after LSTM (E); Lion, Adafactor, LAMB, Adamax, NAdam (E); LR schedulers: step, exponential, one-cycle (E); LayerNorm beside RMSNorm (E); Theta and Croston forecasters, damped-trend ETS (E); GARCH (M) | +15 |
+| trees | RandomTreesEmbedding (E); VotingClassifier/Regressor, StackingClassifier/Regressor, MultiOutput, OneVsRest, CalibratedClassifierCV (wrappers: E); SHAP explainers over our forests and GBDT, TreeExplainer first, then KernelExplainer and PermutationExplainer (cuML has the last two; big GPU workloads: M, then H) | +10 |
+| cnn | after Conv: BatchNorm, Dropout2d, global pooling, a ResNet block (E once conv exists) | +4 |
+| ann | after IVF-PQ: IVF-SQ and IVF-RaBitQ (quantization arms on the same index: E), the refine step, the sample filter (both rows in `ivf/NOT_IMPLEMENTED.tsv`: E) | +4 |
+| | | **+78** |
+
+With the fifty in the lane tables that is about 128 additions on top of 57,
+and the reconsidered groups below take it to about 193.
+
+## The rest, reconsidered (Andrew, 2026-09-27: "knock out things now")
+
+The first draft of this section left six groups out. Four of them are
+ordinary GPU work with a nameable reference and are now assigned; one is
+a block, not an estimator, and is assigned as a block; two stay out, for
+reasons that are about the algorithm and not about effort.
+
+| group | verdict | where | est. |
+|---|---|---|---|
+| graph: PageRank, connected components, Louvain | **IN.** PageRank is a pinned-fold GEMV iteration. Connected components is DBSCAN's `weak_cc` as a product. Louvain's reference is order-dependent in parallel form, so ours pins the vertex sweep order and breaks community ties by lowest id, the same move as IDENTITY_PATHS row 15. Reference: cuGraph `cpp/src/link_analysis/pagerank_impl.cuh`, `cpp/src/components/weakly_connected_components_impl.cuh`, `cpp/src/community/louvain_impl.cuh`; networkx as the sequential oracle. | neighbors + kernel (it owns the kNN graph) | +3, E E M |
+| GNN layers: GCN, GraphSAGE | **IN, as layers.** Each is an SpMM over a CSR adjacency in fixed row order plus a GEMM, both of which the tree already pins. Reference: PyG `torch_geometric/nn/conv/gcn_conv.py`, `sage_conv.py`. | cnn (after Conv; same im2col-to-GEMM shape of work) | +2, M |
+| mixture-of-experts block | **IN, as a block.** Top-k routing with an index tie-break plus expert GEMMs; the routing tie is the seam. Reference: HF `modeling_mixtral.py::MixtralSparseMoeBlock`. | sequence (it owns the neural additions) | +1, M |
+| Prophet-style forecaster | **IN.** Piecewise-linear trend with changepoints, Fourier seasonality, holiday regressors, MAP fit by L-BFGS. Parity with the `prophet` package is at a tolerance only (their fit is Stan); identity is ours. Reference: `prophet/forecaster.py` and `stan/prophet.stan` for the model. | sequence (after STL and VAR) | +1, M |
+| sparse variational GP (SVGP) | **IN.** Inducing points, a variational posterior, GEMM and Cholesky bound: a clear GPU win. Upgrades the named refusal in `gaussian_process/NOT_IMPLEMENTED.tsv` the way row 12 upgraded RF's log criteria. Reference: GPflow `gpflow/models/svgp.py`. | neighbors + kernel (GP kernels live beside `kernel_methods/`) | +1, M/H |
+| HNSW | **OUT.** By construction it is a CPU algorithm: a hierarchical graph walked one hop at a time with pointer chasing, and cuVS's own "hnsw" is a CAGRA graph converted for CPU search through hnswlib. `ivf/NOT_IMPLEMENTED.tsv` refuses it permanently under CONTRIBUTING's "no CPU-only path". The GPU answer to the same question is CAGRA, lane 9. | -- | -- |
+| Birch | **OUT.** It inserts points one at a time into a CF tree, and the result depends on insertion order by definition. A one-thread GPU kernel is not a GPU path, and scikit-learn's own docs send large data to MiniBatchKMeans, which lane 2 has. | -- | -- |
+
+So the long tail is +86, not +78, and the target is about 193 on top of 57
+if every lane finishes both of its tables.

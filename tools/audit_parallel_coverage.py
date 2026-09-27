@@ -19,7 +19,7 @@ def _load(name, path):
 
 
 vref = _load('parallel_audit_reference', ROOT / 'python/mojolearn/_verify_reference.py')
-coverage = _load('parallel_audit_coverage', ROOT / 'python/mojolearn/_crossvendor_coverage.py')
+coverage = _load('parallel_audit_coverage', ROOT / 'tools/crossvendor_coverage.py')
 
 
 def load_harness(**_kwargs):
