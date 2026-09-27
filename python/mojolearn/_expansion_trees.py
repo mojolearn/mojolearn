@@ -412,12 +412,13 @@ def _trees_sub_cols(est):
 # INDEXING (sklearn turns bootstrap counts into sample weights when the base
 # estimator takes them; the regressor tree here does not); draws come from
 # the lane's counter RNG (xtrees/ops.mojo), so `random_state` is an int;
-# oob_score and warm_start are refused by name.
+# warm_start is refused by name. oob_score (`_set_oob_score` :1000 / :1310)
+# sums each member's output on the rows it never drew, in member order.
 class _BaggingBase(_TreesEnsembleBase):
     def __init__(self, estimator, n_estimators, max_samples, max_features, bootstrap,
                  bootstrap_features, oob_score, warm_start, n_jobs, random_state, verbose):
-        if oob_score:
-            _refuse("oob_score=True", "out-of-bag scoring is not carried in pass 1.")
+        if oob_score and not bootstrap:
+            raise ValueError("Out of bag estimation only available if bootstrap=True")
         if warm_start:
             _refuse("warm_start=True", "there is no incremental fit here.")
         if n_jobs is not None:
@@ -461,7 +462,7 @@ class _BaggingBase(_TreesEnsembleBase):
         n_feat = self._count(self.max_features, d, "max_features")
         base = self.estimator if self.estimator is not None else make_default()
         sw = None if sample_weight is None else as_f32_c(sample_weight, ndim=1, name="sample_weight")[0]
-        self.estimators_, self.estimators_features_ = [], []
+        self.estimators_, self.estimators_features_, self._oob_rows = [], [], []
         all_rows = n_rows == n and not self.bootstrap
         all_cols = n_feat == d and not self.bootstrap_features
         for k in range(int(self.n_estimators)):
@@ -481,8 +482,35 @@ class _BaggingBase(_TreesEnsembleBase):
                 est.fit(Xs, ys, sample_weight=sw if all_rows else self._gather_vec(sw, rows))
             self.estimators_.append(est)
             self.estimators_features_.append(cols)
+            if self.oob_score:
+                self._oob_rows.append(self._oob_of(rows, n))
         self.n_features_in_ = d
         return self
+
+    @staticmethod
+    def _oob_of(rows, n):
+        """The rows a member never drew, ascending (sklearn `indices_to_mask` negated)."""
+        seen = [False] * n
+        for r in rows.tolist():
+            seen[r] = True
+        return Array.from_list([i for i in range(n) if not seen[i]], "<i4")
+
+    def _oob_outputs(self, Xa, k, member_out):
+        """(sums n x k float64, per-row member count): each member's output on
+        its out-of-bag rows, added in member order (sklearn `_set_oob_score`)."""
+        n = Xa.shape[0]
+        acc = zeros((n * k,), "<f8")
+        counts = [0] * n
+        for est, cols, oob in zip(self.estimators_, self.estimators_features_, self._oob_rows):
+            m = len(oob)
+            if m == 0:
+                continue
+            out = member_out(est, self._gather(Xa, oob, cols), m)
+            self._bind().x_trees_accumulate_rows(addr(acc, name="oob"), addr_ro(out, name="member"),
+                                                 addr_ro(oob, name="rows"), [n, k, m])
+            for i in oob.tolist():
+                counts[i] += 1
+        return acc, counts
 
     def _check_X(self, X):
         if not hasattr(self, "estimators_"):
@@ -515,8 +543,35 @@ class BaggingClassifier(_BaggingBase):
         self.n_classes_ = len(self.classes_)
         if self.n_classes_ < 2:
             raise ValueError("y has fewer than 2 classes")
-        return self._fit_bags(X, lambda rows, all_rows: codes if all_rows else self._gather_codes(codes, rows),
-                              sample_weight, DecisionTreeClassifier)
+        self._fit_bags(X, lambda rows, all_rows: codes if all_rows else self._gather_codes(codes, rows),
+                       sample_weight, DecisionTreeClassifier)
+        if self.oob_score:
+            self._set_oob_score(X, codes)
+        return self
+
+    def _member_proba(self, est, Xs, m):
+        """A member's class scores on Xs as dense m x k float64 (its predict_proba
+        in the columns of the classes it saw, else a one-hot vote)."""
+        k = self.n_classes_
+        out = zeros((m * k,), "<f8")
+        if hasattr(est, "predict_proba"):
+            self._acc_cols(out, est.predict_proba(Xs), _trees_sub_cols(est), m, k)
+        else:
+            self._acc_votes(out, self._codes_of(est.predict(Xs), est.classes_), m, k, 1.0)
+        return out
+
+    def _set_oob_score(self, X, codes):
+        """sklearn BaggingClassifier._set_oob_score: the out-of-bag class scores
+        summed per row, normalised (a row no member left out is uniform 1 / k,
+        DEVIATION 5605, where sklearn divides 0 / 0), accuracy of their argmax."""
+        Xa, _ = as_f32_c(X, ndim=2, name="X")
+        n, k = Xa.shape[0], self.n_classes_
+        acc, _ = self._oob_outputs(Xa, k, self._member_proba)
+        self._bind().x_trees_normalize_rows(addr(acc, name="oob"), [n, k])
+        self.oob_decision_function_ = acc.reshape((n, k))
+        pred = self._argmax(acc, n, k).tolist()
+        y = codes.tolist()
+        self.oob_score_ = sum(1 for i in range(n) if pred[i] == y[i]) / n
 
     def predict_proba(self, X):
         Xa = self._check_X(X)
@@ -552,8 +607,31 @@ class BaggingRegressor(_BaggingBase):
 
     def fit(self, X, y, sample_weight=None):
         y32, _ = as_f32_c(y, ndim=1, name="y")
-        return self._fit_bags(X, lambda rows, all_rows: y32 if all_rows else self._gather_vec(y32, rows),
-                              sample_weight, DecisionTreeRegressor)
+        self._fit_bags(X, lambda rows, all_rows: y32 if all_rows else self._gather_vec(y32, rows),
+                       sample_weight, DecisionTreeRegressor)
+        if self.oob_score:
+            self._set_oob_score(X, y32)
+        return self
+
+    def _set_oob_score(self, X, y32):
+        """sklearn BaggingRegressor._set_oob_score: the out-of-bag predictions
+        summed per row over member order, divided by their count (a row no
+        member left out divides by 1, as sklearn does), R^2 against y."""
+        Xa, _ = as_f32_c(X, ndim=2, name="X")
+        n = Xa.shape[0]
+
+        def member_out(est, Xs, m):
+            p, _ = as_f32_c(est.predict(Xs), ndim=1, name="prediction")
+            return Array.from_list(p.tolist(), "<f8")
+
+        acc, counts = self._oob_outputs(Xa, 1, member_out)
+        pred = [v / max(c, 1) for v, c in zip(acc.tolist(), counts)]
+        self.oob_prediction_ = Array.from_list(pred, "<f8")
+        y = y32.tolist()
+        mean = math.fsum(y) / n
+        ss_tot = math.fsum((v - mean) * (v - mean) for v in y)
+        ss_res = math.fsum((a - b) * (a - b) for a, b in zip(y, pred))
+        self.oob_score_ = 1.0 - ss_res / ss_tot if ss_tot > 0 else (1.0 if ss_res == 0 else 0.0)
 
     def predict(self, X):
         Xa = self._check_X(X)
@@ -785,32 +863,46 @@ class AdaBoostRegressor(_AdaBoostBase):
 # --------------------------------------------------------------------- DART
 # Reference: LightGBM `src/boosting/dart.hpp` (DART::DroppingTrees,
 # ::Normalize, ::TrainOneIter) over `gbdt.cpp`'s boosting loop, with
-# `regression_objective.hpp` (L2) and `binary_objective.hpp` (logloss,
-# sigmoid 1) for the gradients. Carried: drop_rate, max_drop, skip_drop,
-# uniform_drop, xgboost_dart_mode, drop_seed, the tree weights and their
-# normalisation, Newton leaf values -sum(g) / (sum(h) + reg_lambda).
-# DEVIATIONS: each iteration's tree is the forest builder's (level-order,
-# quantile bins, `num_leaves` as cuML's `max_leaves` cap) fitted by squared
-# error to -g, where LightGBM grows leaf-wise on the g/h histogram gain; the
-# leaf VALUES are then LightGBM's Newton step on the rows that reach them. The
-# drop draws come from the lane's counter RNG seeded by drop_seed, not
-# LightGBM's LCG; the average/log-odds start is a constant outside the trees
-# (never dropped), where LightGBM folds it into tree 0's bias. Multiclass is
-# refused by name.
+# `regression_objective.hpp` (L2), `binary_objective.hpp` (logloss, sigmoid
+# 1) and `multiclass_objective.hpp` (MulticlassSoftmax: one tree per class
+# per iteration, h = K / (K - 1) p (1 - p), start log(class prior)) for the
+# gradients. Carried: drop_rate, max_drop, skip_drop, uniform_drop,
+# xgboost_dart_mode, drop_seed, the tree weights and their normalisation
+# (per iteration: a dropped iteration drops all of its K trees), the leaf
+# values of `CalculateSplittedLeafOutput` -ThresholdL1(sum g, reg_alpha) /
+# (sum h + reg_lambda) clipped to max_delta_step, per-tree feature sampling
+# (colsample_bytree, `col_sampler.hpp` GetCnt: round(d * fraction), at least
+# 1) and row bagging (subsample every subsample_freq iterations; the tree and
+# its leaf values see the bag, every row's score moves, `bagging.hpp`).
+# DEVIATIONS: each tree is the forest builder's (level-order, quantile bins,
+# `num_leaves` as cuML's `max_leaves` cap) fitted by squared error to -g,
+# where LightGBM grows leaf-wise on the g/h histogram gain (so
+# min_child_weight, LightGBM's min_sum_hessian_in_leaf, is refused); the leaf
+# VALUES are LightGBM's. Every draw comes from the lane's counter RNG (drops
+# seeded by drop_seed; the bag, one Bernoulli(subsample) per row in row order,
+# by bagging_seed; the feature subset, a sorted draw without replacement, by
+# feature_fraction_seed), not LightGBM's LCG; the average / log-odds /
+# log-prior start is a constant outside the trees (never dropped), where
+# LightGBM folds it into tree 0's bias.
 class _DARTBase(_TreesEnsembleBase):
     _KIND = 0
 
     def __init__(self, n_estimators, learning_rate, num_leaves, max_depth, min_child_samples, reg_lambda,
                  max_bin, drop_rate, max_drop, skip_drop, xgboost_dart_mode, uniform_drop, drop_seed,
-                 random_state):
+                 random_state, reg_alpha=0.0, max_delta_step=0.0, colsample_bytree=1.0, subsample=1.0,
+                 subsample_freq=0, feature_fraction_seed=2, bagging_seed=3):
         if int(n_estimators) < 1:
             raise ValueError("n_estimators must be >= 1")
         if not float(learning_rate) > 0:
             raise ValueError("learning_rate must be > 0")
         if not 0.0 <= float(drop_rate) <= 1.0 or not 0.0 <= float(skip_drop) <= 1.0:
             raise ValueError("drop_rate and skip_drop must be in [0, 1]")
-        if float(reg_lambda) < 0:
-            raise ValueError("reg_lambda must be >= 0")
+        if float(reg_lambda) < 0 or float(reg_alpha) < 0:
+            raise ValueError("reg_lambda and reg_alpha must be >= 0")
+        if not 0.0 < float(colsample_bytree) <= 1.0 or not 0.0 < float(subsample) <= 1.0:
+            raise ValueError("colsample_bytree and subsample must be in (0, 1]")
+        if int(subsample_freq) < 0:
+            raise ValueError("subsample_freq must be >= 0")
         self.n_estimators = n_estimators
         self.learning_rate = learning_rate
         self.num_leaves = num_leaves
@@ -825,8 +917,15 @@ class _DARTBase(_TreesEnsembleBase):
         self.uniform_drop = uniform_drop
         self.drop_seed = drop_seed
         self.random_state = random_state
-        _trees_seed(random_state)
-        _trees_seed(drop_seed)
+        self.reg_alpha = reg_alpha
+        self.max_delta_step = max_delta_step
+        self.colsample_bytree = colsample_bytree
+        self.subsample = subsample
+        self.subsample_freq = subsample_freq
+        self.feature_fraction_seed = feature_fraction_seed
+        self.bagging_seed = bagging_seed
+        for sd in (random_state, drop_seed, feature_fraction_seed, bagging_seed):
+            _trees_seed(sd)
 
     def _tree_nodes(self, tree, Xa):
         n, d = Xa.shape
@@ -836,33 +935,72 @@ class _DARTBase(_TreesEnsembleBase):
                                    addr_ro(Xa, name="X"), addr(out, name="nodes"), [n, d, 0, 1])
         return out
 
-    def _add(self, score, nodes, values, weight):
+    def _add(self, score, nodes, values, weight, c=0):
+        n = len(nodes)
         self._bind().x_trees_tree_score_add(addr_ro(nodes, name="nodes"), addr_ro(values, name="values"),
-                                            addr(score, name="score"), [len(nodes), float(weight)])
+                                            addr(score, name="score") + 8 * c * n, [n, float(weight)])
 
-    def _boost(self, Xa, y32):
+    def _bag(self, n, it):
+        """The bagged rows of iteration `it` (row order), or None for all."""
+        freq, frac = int(self.subsample_freq), float(self.subsample)
+        if freq <= 0 or not frac < 1.0:
+            return None
+        start = it - it % freq
+        if getattr(self, "_bag_at", None) is not None and self._bag_at[0] == start:
+            return self._bag_at[1]
+        u = empty((n,), "<f8")
+        self._bind().x_trees_uniform(addr(u, name="u"), [n, _trees_seed(self.bagging_seed), start])
+        uv = u.tolist()
+        rows = [i for i in range(n) if uv[i] < frac]
+        if not rows:
+            rows = [min(range(n), key=lambda i: (uv[i], i))]
+        self._bag_at = (start, Array.from_list(rows, "<i4"))
+        return self._bag_at[1]
+
+    def _cols(self, d, t):
+        """The sorted feature subset of tree `t`, or None for all."""
+        frac = float(self.colsample_bytree)
+        if not frac < 1.0:
+            return None
+        cnt = max(int(d * frac + 0.5), min(1, d))
+        if cnt >= d:
+            return None
+        drawn = self._indices(d, cnt, False, _trees_seed(self.feature_fraction_seed), t).tolist()
+        return Array.from_list(sorted(drawn), "<i4")
+
+    def _boost(self, Xa, y32, n_classes=1):
         n, d = Xa.shape
+        K = int(n_classes)
         b = self._bind()
         seed = _trees_seed(self.random_state)
         drop_seed = _trees_seed(self.drop_seed)
         yv = y32.tolist()
         if self._KIND == 0:
-            init = math.fsum(yv) / n
-        else:
+            inits = [math.fsum(yv) / n]
+        elif self._KIND == 1:
             p = math.fsum(yv) / n
             if not 0.0 < p < 1.0:
                 raise ValueError("y must hold both classes")
-            init = float(b.x_trees_log64(p / (1.0 - p)))
-        self.init_score_ = init
-        score = full((n,), init, "<f8")
-        g, h, target = empty((n,), "<f8"), empty((n,), "<f8"), empty((n,), "<f4")
+            inits = [float(b.x_trees_log64(p / (1.0 - p)))]
+        else:
+            counts = [0] * K
+            for v in yv:
+                counts[int(v)] += 1
+            inits = [float(b.x_trees_log64(max(1e-15, cnt / n))) for cnt in counts]
+        self.init_score_ = inits[0] if K == 1 else inits
+        score = Array.from_list([v for v in inits for _ in range(n)], "<f8")
+        g, h, target = empty((K * n,), "<f8"), empty((K * n,), "<f8"), empty((K * n,), "<f4")
         lr = float(self.learning_rate)
+        l1, mds, lam = float(self.reg_alpha), float(self.max_delta_step), float(self.reg_lambda)
+        self.n_classes_ = K
         self.trees_, self.tree_values_, self.tree_coefs_, self.tree_weights_ = [], [], [], []
+        self._bag_at = None
         train_nodes = []
         sum_w = 0.0
         max_depth = None if self.max_depth is None or int(self.max_depth) <= 0 else int(self.max_depth)
+        all_cols = _trees_arange(d)
         for it in range(int(self.n_estimators)):
-            t = len(self.trees_)
+            t = len(self.tree_weights_)
             u = empty((1 + t,), "<f8")
             b.x_trees_uniform(addr(u, name="u"), [1 + t, drop_seed, it])
             uv = u.tolist()
@@ -879,54 +1017,93 @@ class _DARTBase(_TreesEnsembleBase):
                         rate = min(rate, int(self.max_drop) / t)
                     drop = [i for i in range(t) if uv[1 + i] < rate]
             for i in drop:
-                self._add(score, train_nodes[i], self.tree_values_[i], -self.tree_coefs_[i])
+                for c in range(K):
+                    j = i * K + c
+                    self._add(score, train_nodes[j], self.tree_values_[j], -self.tree_coefs_[j], c)
             k = len(drop)
             if not self.xgboost_dart_mode:
                 shrink = lr / (1.0 + k)
             else:
                 shrink = lr if k == 0 else lr / (lr + k)
-            b.x_trees_gradients(addr_ro(score, name="score"), addr_ro(y32, name="y"), addr(g, name="g"),
-                                addr(h, name="h"), addr(target, name="target"), [n, self._KIND])
-            tree = RandomForestRegressor(
-                n_estimators=1, bootstrap=False, max_features=1.0, max_depth=max_depth,
-                max_leaves=int(self.num_leaves), min_samples_leaf=int(self.min_child_samples),
-                n_bins=int(self.max_bin), random_state=_trees_sub_seed(seed, it), n_streams=1,
-                numeric_mode=self.numeric_mode).fit(Xa, target)
-            nodes = self._tree_nodes(tree, Xa)
-            n_nodes = int(tree._offsets.tolist()[1])
-            values = empty((n_nodes,), "<f4")
-            b.x_trees_leaf_newton(addr_ro(nodes, name="nodes"), addr_ro(g, name="g"), addr_ro(h, name="h"),
-                                  addr(values, name="values"), [n, n_nodes, float(self.reg_lambda)])
-            self._add(score, nodes, values, shrink)
+            if K == 1:
+                b.x_trees_gradients(addr_ro(score, name="score"), addr_ro(y32, name="y"), addr(g, name="g"),
+                                    addr(h, name="h"), addr(target, name="target"), [n, self._KIND])
+            else:
+                b.x_trees_gradients(addr_ro(score, name="score"), addr_ro(y32, name="y"), addr(g, name="g"),
+                                    addr(h, name="h"), addr(target, name="target"), [n, 2, K])
+            rows = self._bag(n, it)
+            for c in range(K):
+                j = it * K + c
+                cols = self._cols(d, j)
+                tgt = target if K == 1 else self._gather_vec(target, Array.from_list(
+                    list(range(c * n, (c + 1) * n)), "<i4"))
+                Xf, yf = Xa, tgt
+                if rows is not None or cols is not None:
+                    Xf = self._gather(Xa, rows if rows is not None else _trees_arange(n),
+                                      cols if cols is not None else all_cols)
+                    if rows is not None:
+                        yf = self._gather_vec(tgt, rows)
+                tree = RandomForestRegressor(
+                    n_estimators=1, bootstrap=False, max_features=1.0, max_depth=max_depth,
+                    max_leaves=int(self.num_leaves), min_samples_leaf=int(self.min_child_samples),
+                    n_bins=int(self.max_bin), random_state=_trees_sub_seed(seed, j), n_streams=1,
+                    numeric_mode=self.numeric_mode).fit(Xf, yf)
+                if cols is not None:
+                    cl = cols.tolist()
+                    tree._colid = Array.from_list([cl[v] if v >= 0 else v for v in tree._colid.tolist()], "<i4")
+                nodes = self._tree_nodes(tree, Xa)
+                n_nodes = int(tree._offsets.tolist()[1])
+                values = empty((n_nodes,), "<f4")
+                ga, ha = addr_ro(g, name="g") + 8 * c * n, addr_ro(h, name="h") + 8 * c * n
+                if rows is None:
+                    params = [n, n_nodes, lam] if l1 == 0.0 and mds == 0.0 else [n, n_nodes, lam, l1, mds]
+                    b.x_trees_leaf_newton(addr_ro(nodes, name="nodes"), ga, ha, addr(values, name="values"), params)
+                else:
+                    b.x_trees_leaf_newton_rows(addr_ro(nodes, name="nodes"), addr_ro(rows, name="rows"), ga, ha,
+                                               addr(values, name="values"), [n, len(rows), n_nodes, lam, l1, mds])
+                self._add(score, nodes, values, shrink, c)
+                self.trees_.append(tree)
+                self.tree_values_.append(values)
+                self.tree_coefs_.append(shrink)
+                train_nodes.append(nodes)
             for i in drop:
                 if not self.xgboost_dart_mode:
                     factor, wdiv = k / (k + 1.0), 1.0 / (k + 1.0)
                 else:
                     factor, wdiv = k / (k + lr), 1.0 / (k + lr)
-                self.tree_coefs_[i] *= factor
-                self._add(score, train_nodes[i], self.tree_values_[i], self.tree_coefs_[i])
+                for c in range(K):
+                    j = i * K + c
+                    self.tree_coefs_[j] *= factor
+                    self._add(score, train_nodes[j], self.tree_values_[j], self.tree_coefs_[j], c)
                 if not self.uniform_drop:
                     sum_w -= self.tree_weights_[i] * wdiv
                     self.tree_weights_[i] *= factor
-            self.trees_.append(tree)
-            self.tree_values_.append(values)
-            self.tree_coefs_.append(shrink)
             self.tree_weights_.append(shrink)
             sum_w += shrink
-            train_nodes.append(nodes)
+        self._bag_at = None
         self.n_features_in_ = d
         return self
 
     def _raw(self, X):
+        """Class-major raw scores (K * n) float64; K = 1 is (n,)."""
         if not hasattr(self, "trees_"):
             raise RuntimeError("this estimator is not fitted yet")
         Xa, _ = as_f32_c(X, ndim=2, name="X")
         if Xa.shape[1] != self.n_features_in_:
             raise ValueError(f"X has {Xa.shape[1]} features, fit saw {self.n_features_in_}")
-        score = full((Xa.shape[0],), self.init_score_, "<f8")
-        for tree, values, coef in zip(self.trees_, self.tree_values_, self.tree_coefs_):
-            self._add(score, self._tree_nodes(tree, Xa), values, coef)
+        n, K = Xa.shape[0], int(getattr(self, "n_classes_", 1))
+        inits = [self.init_score_] if K == 1 else list(self.init_score_)
+        score = Array.from_list([v for v in inits for _ in range(n)], "<f8")
+        for j, (tree, values, coef) in enumerate(zip(self.trees_, self.tree_values_, self.tree_coefs_)):
+            self._add(score, self._tree_nodes(tree, Xa), values, coef, j % K)
         return score
+
+    def _raw_rows(self, X):
+        """The raw scores as (n, K) row-major, K >= 2."""
+        raw = self._raw(X).tolist()
+        K = self.n_classes_
+        n = len(raw) // K
+        return Array.from_list([raw[c * n + i] for i in range(n) for c in range(K)], "<f8").reshape((n, K))
 
 
 class DARTRegressor(_DARTBase):
@@ -937,10 +1114,13 @@ class DARTRegressor(_DARTBase):
 
     def __init__(self, *, n_estimators=100, learning_rate=0.1, num_leaves=31, max_depth=-1,
                  min_child_samples=20, reg_lambda=0.0, max_bin=255, drop_rate=0.1, max_drop=50,
-                 skip_drop=0.5, xgboost_dart_mode=False, uniform_drop=False, drop_seed=4, random_state=None):
+                 skip_drop=0.5, xgboost_dart_mode=False, uniform_drop=False, drop_seed=4, random_state=None,
+                 reg_alpha=0.0, max_delta_step=0.0, colsample_bytree=1.0, subsample=1.0, subsample_freq=0,
+                 feature_fraction_seed=2, bagging_seed=3):
         super().__init__(n_estimators, learning_rate, num_leaves, max_depth, min_child_samples, reg_lambda,
                          max_bin, drop_rate, max_drop, skip_drop, xgboost_dart_mode, uniform_drop, drop_seed,
-                         random_state)
+                         random_state, reg_alpha, max_delta_step, colsample_bytree, subsample, subsample_freq,
+                         feature_fraction_seed, bagging_seed)
 
     def fit(self, X, y):
         Xa, _ = as_f32_c(X, ndim=2, name="X")
@@ -954,40 +1134,58 @@ class DARTRegressor(_DARTBase):
 
 
 class DARTClassifier(_DARTBase):
-    """LightGBM's `boosting='dart'` with the binary logloss objective.
-    `predict_proba` is [1 - p, p] with p the sigmoid of the raw score (a
-    two-column softmax of [0, raw]); multiclass is refused by name."""
+    """LightGBM's `boosting='dart'`: binary logloss for two classes
+    (`predict_proba` is [1 - p, p], p the sigmoid of the raw score, a
+    two-column softmax of [0, raw]), multiclass softmax for more (one tree
+    per class per iteration; `predict_proba` the softmax of the K raw
+    scores)."""
     _estimator_type = "classifier"
     _KIND = 1
 
     def __init__(self, *, n_estimators=100, learning_rate=0.1, num_leaves=31, max_depth=-1,
                  min_child_samples=20, reg_lambda=0.0, max_bin=255, drop_rate=0.1, max_drop=50,
-                 skip_drop=0.5, xgboost_dart_mode=False, uniform_drop=False, drop_seed=4, random_state=None):
+                 skip_drop=0.5, xgboost_dart_mode=False, uniform_drop=False, drop_seed=4, random_state=None,
+                 reg_alpha=0.0, max_delta_step=0.0, colsample_bytree=1.0, subsample=1.0, subsample_freq=0,
+                 feature_fraction_seed=2, bagging_seed=3):
         super().__init__(n_estimators, learning_rate, num_leaves, max_depth, min_child_samples, reg_lambda,
                          max_bin, drop_rate, max_drop, skip_drop, xgboost_dart_mode, uniform_drop, drop_seed,
-                         random_state)
+                         random_state, reg_alpha, max_delta_step, colsample_bytree, subsample, subsample_freq,
+                         feature_fraction_seed, bagging_seed)
 
     def fit(self, X, y):
         Xa, _ = as_f32_c(X, ndim=2, name="X")
         self.classes_, codes = encode_labels(y)
-        if len(self.classes_) != 2:
-            _refuse("DARTClassifier with %d classes" % len(self.classes_), "pass 1 carries the binary"
-                    " objective only (multiclass needs one tree per class per iteration).")
+        K = len(self.classes_)
+        if K < 2:
+            raise ValueError("y must hold at least two classes")
         if len(codes) != Xa.shape[0]:
             raise ValueError(f"y has {len(codes)} rows, X has {Xa.shape[0]}")
         y32, _ = as_f32_c(codes, ndim=1, name="y")
-        return self._boost(Xa, y32)
+        self._KIND = 1 if K == 2 else 2
+        return self._boost(Xa, y32, 1 if K == 2 else K)
 
     def decision_function(self, X):
+        if int(getattr(self, "n_classes_", 1)) > 1:
+            return self._raw_rows(X)
         return self._raw(X)
 
     def predict_proba(self, X):
+        if int(getattr(self, "n_classes_", 1)) > 1:
+            acc = self._raw_rows(X)
+            n, K = acc.shape
+            acc = acc.reshape((n * K,))
+            self._bind().x_trees_softmax_rows(addr(acc, name="proba"), [n, K])
+            return acc.reshape((n, K))
         raw = self._raw(X).tolist()
         acc = Array.from_list([v for r in raw for v in (0.0, r)], "<f8")
         self._bind().x_trees_softmax_rows(addr(acc, name="proba"), [len(raw), 2])
         return acc.reshape((len(raw), 2))
 
     def predict(self, X):
+        if int(getattr(self, "n_classes_", 1)) > 1:
+            acc = self._raw_rows(X)
+            n, K = acc.shape
+            return decode_labels(self.classes_, self._argmax(acc.reshape((n * K,)), n, K))
         raw = self._raw(X).tolist()
         return decode_labels(self.classes_, Array.from_list([1 if r > 0 else 0 for r in raw], "<i4"))
 
@@ -1129,11 +1327,15 @@ def _trees_kfolds(n, n_splits):
 
 
 def _trees_cv(cv, default=5):
+    """An int number of folds (None: `default`), or `cv` itself when it is a
+    splitter (has `split`) or an iterable of (train, test) index pairs."""
     if cv is None:
         return default
+    if hasattr(cv, "split") or (not isinstance(cv, (str, bytes, numbers.Number)) and hasattr(cv, "__iter__")):
+        return cv
     if is_bool(cv) or not isinstance(cv, numbers.Integral) or cv < 2:
-        _refuse(f"cv={cv!r}", "only an int number of folds (>= 2) is carried: the folds are sklearn's"
-                " unshuffled (Stratified)KFold.")
+        raise ValueError(f"cv={cv!r}: an int >= 2, a splitter with split(X, y), or an iterable of"
+                         " (train, test) index pairs")
     return int(cv)
 
 
@@ -1141,6 +1343,37 @@ def _trees_fold_rows(folds, i):
     tr = [r for r, f in enumerate(folds) if f != i]
     te = [r for r, f in enumerate(folds) if f == i]
     return Array.from_list(tr, "<i4"), Array.from_list(te, "<i4")
+
+
+def _trees_splits(cv, X, y, n, codes=None, partition=False):
+    """[(train rows, test rows)] as int32 Arrays. An int is sklearn's
+    unshuffled StratifiedKFold (with `codes`) or KFold; a splitter object's
+    `split(X, y)` and an iterable of pairs are taken as given (sklearn
+    `check_cv`), their indices in the order they come. `partition`: every row
+    must be in exactly one test set (sklearn cross_val_predict)."""
+    c = _trees_cv(cv)
+    if isinstance(c, int):
+        folds = _trees_stratified_folds(codes, c) if codes is not None else _trees_kfolds(n, c)
+        return [_trees_fold_rows(folds, i) for i in range(max(folds) + 1)]
+    pairs = c.split(X, y) if hasattr(c, "split") else c
+    out, seen = [], [0] * n
+    for pair in pairs:
+        tr, te = pair
+        tr = [int(v) for v in (tr.tolist() if hasattr(tr, "tolist") else tr)]
+        te = [int(v) for v in (te.tolist() if hasattr(te, "tolist") else te)]
+        for v in tr + te:
+            if not 0 <= v < n:
+                raise ValueError(f"cv index {v} is outside [0, {n})")
+        if not tr or not te:
+            raise ValueError("every cv split needs train and test rows")
+        for v in te:
+            seen[v] += 1
+        out.append((Array.from_list(tr, "<i4"), Array.from_list(te, "<i4")))
+    if not out:
+        raise ValueError("cv produced no splits")
+    if partition and any(v != 1 for v in seen):
+        raise ValueError("cross_val_predict only works for partitions: every row must be in exactly one test set")
+    return out
 
 
 def _trees_estimators(estimators):
@@ -1324,7 +1557,9 @@ class VotingRegressor(_TreesWrapperBase):
 # cross_val_predict --, _concatenate_predictions :80 -- a binary
 # predict_proba keeps only its second column --, stack_method 'auto' =
 # predict_proba, decision_function, predict). cv is an int of unshuffled
-# folds (StratifiedKFold for the classifier, KFold for the regressor).
+# folds (StratifiedKFold for the classifier, KFold for the regressor), a
+# splitter object or an iterable of (train, test) pairs whose test sets
+# partition the rows (`_trees_splits`).
 # DEVIATION: the default final estimators are this library's
 # LogisticRegression and Ridge (sklearn: LogisticRegression, RidgeCV).
 class _StackingBase(_TreesWrapperBase):
@@ -1362,7 +1597,7 @@ class _StackingBase(_TreesWrapperBase):
     def _widths(self, Xa, y_fit):
         return None
 
-    def _fit_stack(self, X, y_fit, folds, final):
+    def _fit_stack(self, X, y_fit, splits, final):
         Xa, _ = as_f32_c(X, ndim=2, name="X")
         n, d = Xa.shape
         active = _trees_estimators(self.estimators)
@@ -1377,10 +1612,8 @@ class _StackingBase(_TreesWrapperBase):
             widths.append(_trees_output_2d(self._out(e, m, Xa[0:2]), 2).shape[1])
         width = sum(widths) + (d if self.passthrough else 0)
         meta = zeros((n * width,), "<f8")
-        n_splits = max(folds) + 1
         cols = _trees_arange(d)
-        for i in range(n_splits):
-            tr, te = _trees_fold_rows(folds, i)
+        for tr, te in splits:
             col0 = 0
             for (_, est), m, w in zip(active, self.stack_method_, widths):
                 e = _trees_clone(est)
@@ -1427,13 +1660,13 @@ class StackingClassifier(_StackingBase):
             _refuse("StackingClassifier sample_weight", "not carried in pass 1.")
         self.classes_, codes = encode_labels(y)
         self._binary = len(self.classes_) == 2
-        folds = _trees_stratified_folds(codes.tolist(), _trees_cv(self.cv))
+        splits = _trees_splits(self.cv, X, y, len(codes), codes=codes.tolist(), partition=True)
         final = self.final_estimator
         if final is None:
             from .linear_model import LogisticRegression
             final = LogisticRegression()
         return self._fit_stack(X, lambda rows: codes if rows is None else self._gather_codes(codes, rows),
-                               folds, final)
+                               splits, final)
 
     def predict(self, X):
         codes = as_i32_c(self.final_estimator_.predict(self._meta32(X)), ndim=1, name="codes")[0]
@@ -1459,12 +1692,12 @@ class StackingRegressor(_StackingBase):
         if sample_weight is not None:
             _refuse("StackingRegressor sample_weight", "not carried in pass 1.")
         y32, _ = as_f32_c(y, ndim=1, name="y")
-        folds = _trees_kfolds(len(y32), _trees_cv(self.cv))
+        splits = _trees_splits(self.cv, X, y, len(y32), partition=True)
         final = self.final_estimator
         if final is None:
             from .linear_model import Ridge
             final = Ridge()
-        return self._fit_stack(X, lambda rows: y32 if rows is None else self._gather_vec(y32, rows), folds, final)
+        return self._fit_stack(X, lambda rows: y32 if rows is None else self._gather_vec(y32, rows), splits, final)
 
     def predict(self, X):
         return self.final_estimator_.predict(self._meta32(X))
@@ -1747,12 +1980,11 @@ class CalibratedClassifierCV(_TreesWrapperBase):
         if base is None:
             from .svm import LinearSVC
             base = LinearSVC()
-        folds = _trees_stratified_folds(codes.tolist(), _trees_cv(self.cv))
+        splits = _trees_splits(self.cv, X, y, n, codes=codes.tolist(), partition=not self.ensemble)
         cols = _trees_arange(d)
         self.calibrated_classifiers_ = []
         if self.ensemble:
-            for i in range(max(folds) + 1):
-                tr, te = _trees_fold_rows(folds, i)
+            for tr, te in splits:
                 e = _trees_clone(base)
                 e.fit(self._gather(Xa, tr, cols), self._gather_codes(codes, tr))
                 Xte = self._gather(Xa, te, cols)
@@ -1762,8 +1994,7 @@ class CalibratedClassifierCV(_TreesWrapperBase):
             k = len(self.classes_)
             c = 1 if k == 2 else k
             S = zeros((n * c,), "<f8")
-            for i in range(max(folds) + 1):
-                tr, te = _trees_fold_rows(folds, i)
+            for tr, te in splits:
                 e = _trees_clone(base)
                 e.fit(self._gather(Xa, tr, cols), self._gather_codes(codes, tr))
                 self._place(S, n, c, as_f32_c(self._scores(e, self._gather(Xa, te, cols)), ndim=2,
@@ -1842,10 +2073,15 @@ class TreeExplainer(_TreesEnsembleBase):
         if isinstance(model, _DARTBase):
             if not hasattr(model, "trees_"):
                 raise RuntimeError("the model is not fitted yet")
-            init = float(model.init_score_)
-            for tree, values, coef in zip(model.trees_, model.tree_values_, model.tree_coefs_):
-                self._add_part((tree._offsets, tree._colid, tree._quesval, tree._left_child, values), 1, float(coef))
-            self.n_outputs_ = 1
+            K = int(getattr(model, "n_classes_", 1))
+            init = float(model.init_score_) if K == 1 else list(model.init_score_)
+            for j, (tree, values, coef) in enumerate(zip(model.trees_, model.tree_values_, model.tree_coefs_)):
+                if K > 1:
+                    # a multiclass tree scores one class: its leaf values in column j % K.
+                    c = j % K
+                    values = Array.from_list([v if q == c else 0.0 for v in values.tolist() for q in range(K)], "<f4")
+                self._add_part((tree._offsets, tree._colid, tree._quesval, tree._left_child, values), K, float(coef))
+            self.n_outputs_ = K
         else:
             fa = _trees_forest_arrays(model)
             if fa is None:
@@ -1854,7 +2090,7 @@ class TreeExplainer(_TreesEnsembleBase):
             self._add_part(fa[:5], fa[5], fa[6])
             self.n_outputs_ = fa[5]
         k = self.n_outputs_
-        ev = full((k,), init, "<f8")
+        ev = Array.from_list(init, "<f8") if isinstance(init, list) else full((k,), init, "<f8")
         for arrays, kk, scale, cover in self._parts:
             n_trees = len(arrays[0]) - 1
             self._bind().x_trees_expected_value(addr_ro(arrays[0], name="offsets"), addr_ro(arrays[3], name="left"),
@@ -1956,10 +2192,21 @@ class KernelExplainer(_AgnosticExplainer):
     mojolearn estimator or a callable. `shap_values(X, nsamples="auto")`."""
 
     def __init__(self, model, data, *, link="identity", random_state=None):
-        if link != "identity":
-            _refuse(f"link={link!r}", "only the identity link is carried.")
+        if link not in ("identity", "logit"):
+            _refuse(f"link={link!r}", "the identity and logit links are carried (by name; a link object is not).")
         self.link = link
         super().__init__(model, data, random_state)
+        if link == "logit":
+            # shap KernelExplainer: expected_value = link(fnull); the link meets
+            # each output AFTER the background mean (fx, fnull, ey).
+            self._fnull = self._link(self._fnull)
+            self.expected_value = self._fnull.tolist()[0] if self.n_outputs_ == 1 else self._fnull
+
+    def _link(self, a):
+        """`a` (float64 Array) through the link, in place; returned."""
+        if self.link == "logit":
+            self._bind().x_trees_logit(addr(a, name="linked"), [len(a)])
+        return a
 
     @staticmethod
     def _binom(n, r):
@@ -2075,12 +2322,14 @@ class KernelExplainer(_AgnosticExplainer):
             fx = zeros((k,), "<f8")
             fx32 = self._eval(x_row.reshape((1, d)))   # held: the call reads its address
             b.x_trees_block_mean(addr_ro(fx32, name="fx"), addr(fx, name="fx"), [1, 1, k])
+            self._link(fx)
             phi = zeros((d * k,), "<f8")
             if M == 1 or ns < 1:
                 phi = Array.from_list([fx.tolist()[j] - self._fnull.tolist()[j] for j in range(k)], "<f8")
             else:
                 mlist, wlist = self._masks(M, ns, seed, i)
                 masks, ey = self._coalitions(x_row, mlist)
+                self._link(ey)
                 w = Array.from_list(wlist, "<f8")
                 b.x_trees_kernel_solve(addr_ro(masks, name="masks"), addr_ro(w, name="w"), addr_ro(ey, name="ey"),
                                        addr_ro(fx, name="fx"), addr_ro(self._fnull, name="fnull"),

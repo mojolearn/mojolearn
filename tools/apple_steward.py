@@ -96,7 +96,7 @@ STEWARDS = MACS + AMD_STEWARDS
 AMD_STATE = Path(os.environ.get("MOJOLEARN_STEWARD_DO_STATE",
                                 Path.home() / "mojolearn-evidence" / "do-amd-steward")) / "state.env"
 GATING = tuple(x for x in os.environ.get("MOJOLEARN_STEWARD_GATING", "m2pro").split(",") if x)
-DEFERRED = tuple(x for x in os.environ.get("MOJOLEARN_STEWARD_DEFERRED", "m3ultra").split(",") if x)
+DEFERRED = tuple(x for x in os.environ.get("MOJOLEARN_STEWARD_DEFERRED", "").split(",") if x)
 #: SPEED JOBS go to the M3 Ultra ONLY (Andrew, 2026-09-27): one timing Mac, so
 #: every before/after is on the same machine. While it is deferred they spool
 #: on the laptop exactly like identity requests. The variable exists for the

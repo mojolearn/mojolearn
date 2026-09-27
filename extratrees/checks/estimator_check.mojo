@@ -38,7 +38,7 @@ from extratrees.impl.decisiontree.decisiontree import (
     CRITERION_ENTROPY,
     CRITERION_GINI,
     CRITERION_MSE,
-    CRITERION_POISSON,
+    CRITERION_MAE,
 )
 from extratrees.impl.decisiontree.batched_levelalgo.builder import (
     n_sampled_cols_for,
@@ -319,7 +319,7 @@ def main() raises:
     print("    ", n_refused, "parameters refused by name; the default accepted")
 
     # DEVIATION 459: entropy is ACCEPTED and rides to the tree params as
-    # itself; a criterion the tree layer refuses (POISSON here, the sabotage
+    # itself; a criterion the tree layer refuses (MAE here, the sabotage
     # arm of the same switch) must still not slip through.
     var ce = base.copy()
     ce.criterion = CRITERION_ENTROPY
@@ -330,14 +330,14 @@ def main() raises:
         "entropy must reach DecisionTreeParams as ENTROPY, not as gini",
     )
     var cp = base.copy()
-    cp.criterion = CRITERION_POISSON
-    var poisson_refused = False
+    cp.criterion = CRITERION_MAE
+    var mae_refused = False
     try:
         _ = resolve(cp, 100, 8)
     except:
-        poisson_refused = True
+        mae_refused = True
     assert_true(
-        poisson_refused, "poisson must be refused, not downgraded to gini"
+        mae_refused, "mae must be refused, not downgraded to gini"
     )
     # and the bootstrap plan reports the count it will use
     var plan_b = resolve(c4b, 1000, 8)
