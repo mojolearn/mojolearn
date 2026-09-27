@@ -1,0 +1,15 @@
+  lease at exit:
+    521y9g988tfu80: 57 minutes left of a 60-minute lease
+  terminating 521y9g988tfu80 (layer two, from this machine)
+    DELETE /v1/pods/521y9g988tfu80 -> HTTP 204
+  VERIFIED: 521y9g988tfu80 is gone (HTTP 404).
+
+artifacts: /Users/andrewhendel/mojolearn-evidence/e1g/par_gmm_0824_NVIDIA_L40S
+next: archive/evidence/gemm/E1G_RUNBOOK.md, 'reading the result'. Write the row into
+E1G_RESULTS.md before the pod's details are only in this scrollback.
+
+== teardown (exit 0) ==
+  lease at exit:
+    NO LEASE for 521y9g988tfu80 -- it is unguarded.
+  dead-man cancelled (pid 36652)
+/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T//mojolearn-leg-snapshot-36370/gemm_remote_leg.sh: line 2618: 36652 Terminated: 15          nohup sh -c 'trap "" HUP INT; exec sh "$0"' "$DEADMAN_DIR/deadman.sh" > /dev/null 2>&1 < /dev/null

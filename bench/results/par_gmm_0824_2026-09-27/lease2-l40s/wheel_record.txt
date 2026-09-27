@@ -1,0 +1,4 @@
+mojolearn 0.8.24  Wheel-Version: 1.0 Generator: mojolearn pack_wheel.py Root-Is-Purelib: false Tag: py3-none-manylinux_2_35_x86_64 
+mojolearn-nvidia 0.8.24  Wheel-Version: 1.0 Generator: mojolearn pack_wheel.py Root-Is-Purelib: false Tag: py3-none-manylinux_2_35_x86_64 
+mojolearn-amd 0.8.24  Wheel-Version: 1.0 Generator: mojolearn pack_wheel.py Root-Is-Purelib: false Tag: py3-none-manylinux_2_35_x86_64 
+numpy 2.4.6  Wheel-Version: 1.0 Generator: meson Root-Is-Purelib: false Tag: cp311-cp311-manylinux_2_27_x86_64 Tag: cp311-cp311-manylinux_2_28_x86_64  
