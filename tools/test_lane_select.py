@@ -1553,9 +1553,15 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
                                      whose coarse quantizer is this library's
                                      KMeans; no old lane moved
       kmeans_oracle        70 -> 71  merged with the cluster lane's 63 -> 64
-                                     (x-cluster-kmeans-init) above"""
+                                     (x-cluster-kmeans-init) above
+
+    REMEASURED 2026-09-27 (merge review of lane/algos-ann, option parity):
+      kmeans_oracle        71 -> 72  x-ann-tsne-options (t-SNE's sklearn
+                                     options): the x_ann binding imports the
+                                     coarse quantizer's KMeans, as for the
+                                     seven x-ann-* lanes; no old lane moved"""
     rev = lane_select.reverse_map()
-    for rel, want in (("cluster/host/kmeans_oracle.mojo", 71),
+    for rel, want in (("cluster/host/kmeans_oracle.mojo", 72),
                       ("core/gbdt_host_predict.mojo", 49),
                       ("core/forest_host_predict.mojo", 84),
                       ("core/forest_inference.mojo", 50),
