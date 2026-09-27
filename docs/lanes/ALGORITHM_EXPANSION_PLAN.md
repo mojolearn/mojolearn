@@ -4,6 +4,12 @@ Lanes merge origin/main before every merge, so this section reaches every
 worktree. The orchestrator changes lane instructions HERE instead of
 messaging lanes. Newest items are at the top.
 
+0. **AMD boxes are live (main 6c9572e4e):** `tools/dev_pod.sh up <lane> 240 --vendor amd`
+   (state key `<lane>-amd`; RunPod MI300X first, Hot Aisle 2x MI300X
+   fallback). Grab one when you enter pass 2 and hold it. The lane check now
+   builds every base binding itself, and `.checks` takes `<driver>\t<patch>`
+   pairs, enforced with `--pass 2`. Before your next merge, run
+   `tools/test_lane_select.py` on your pod; your lane must not break it.
 1. **Order per lane:** (a) every algorithm in the lane table and Additions
    (PASS 1); (b) proof on every column, holding an AMD box (PASS 2 items
    1-2); (c) **option parity** (item 2 below); (d) speed, IDENTICAL and
