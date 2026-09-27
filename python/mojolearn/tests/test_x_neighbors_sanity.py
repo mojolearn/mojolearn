@@ -83,3 +83,30 @@ def test_kernel_pca(kernel):
     np.testing.assert_allclose(np.abs(Za), np.abs(Zb), rtol=2e-3, atol=2e-3)
     Xh = _data(20, seed=3)
     np.testing.assert_allclose(np.abs(np.asarray(a.transform(Xh))), np.abs(b.transform(Xh)), rtol=2e-3, atol=2e-3)
+
+
+def test_polynomial_count_sketch():
+    from sklearn.kernel_approximation import PolynomialCountSketch as R
+    X = _data(60)
+    a = ml.PolynomialCountSketch(degree=3, gamma=0.5, coef0=1.0, n_components=32, random_state=7).fit(X)
+    b = R(degree=3, gamma=0.5, coef0=1.0, n_components=32, random_state=7).fit(X)
+    np.testing.assert_array_equal(np.asarray(a.indexHash_), b.indexHash_)
+    np.testing.assert_array_equal(np.asarray(a.bitHash_), b.bitHash_)
+    np.testing.assert_allclose(np.asarray(a.transform(X)), b.transform(X), rtol=1e-3, atol=1e-3)
+
+
+@pytest.mark.parametrize("cls,kw", [("LabelPropagation", dict(kernel="rbf", gamma=0.2)),
+                                    ("LabelPropagation", dict(kernel="knn", n_neighbors=5)),
+                                    ("LabelSpreading", dict(kernel="rbf", gamma=0.2, alpha=0.3)),
+                                    ("LabelSpreading", dict(kernel="knn", n_neighbors=5))])
+def test_label_propagation(cls, kw):
+    import sklearn.semi_supervised as S
+    X = _data(120)
+    y = (X[:, 0] > 0).astype(int)
+    y[::3] = -1
+    a = getattr(ml, cls)(**kw).fit(X, y)
+    b = getattr(S, cls)(**kw).fit(X, y)
+    np.testing.assert_allclose(np.asarray(a.label_distributions_), b.label_distributions_, rtol=2e-3, atol=2e-4)
+    assert (np.asarray(a.transduction_) == b.transduction_).mean() > 0.98
+    Xh = _data(30, seed=5)
+    np.testing.assert_allclose(np.asarray(a.predict_proba(Xh)), b.predict_proba(Xh), rtol=2e-3, atol=2e-4)

@@ -14,10 +14,12 @@ FAMILIES = (
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=(
             "x-neighbors-lof", "x-neighbors-nearest-centroid", "x-neighbors-ocsvm", "x-neighbors-kpca",
+            "x-neighbors-poly-sketch",
+           
         ),
         inference_lanes=(),
         forest_kinds=(),
-        classes=("LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA"),
+        classes=("LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", "PolynomialCountSketch"),
         display="the neighbors + kernel expansion lane",
         host_modules=("x_neighbors/items.mojo", "x_neighbors/host_ops.mojo", "x_neighbors/eigh.mojo"),
         exports=(
@@ -50,6 +52,17 @@ FAMILIES = (
             "xn_nc_shrink",
             "xn_nc_decision",
             "xn_softmax",
+            "xn_pcs",
+            "xn_achi2",
+            "xn_skew_weights",
+            "xn_skew_transform",
+            "xn_absdiff_sum",
+            "xn_row_normalize",
+            "xn_lp_clamp",
+            "xn_ls_clamp",
+            "xn_ls_laplacian",
+            "xn_knn_graph",
+            "xn_knn_impute",
             "xn_eigh",
             "x_neighbors_numeric_mode",
             "x_neighbors_vendor",
@@ -65,10 +78,12 @@ TRAINING_LANE_NAMES = {
     "x-neighbors-nearest-centroid": "NearestCentroid",
     "x-neighbors-ocsvm": "OneClassSVM",
     "x-neighbors-kpca": "KernelPCA",
+    "x-neighbors-poly-sketch": "PolynomialCountSketch",
 }
 PUBLIC_PENDING_LANES = {
     "x-neighbors-lof": "no reference",
     "x-neighbors-nearest-centroid": "no reference",
     "x-neighbors-ocsvm": "no reference",
     "x-neighbors-kpca": "no reference",
+    "x-neighbors-poly-sketch": "no reference",
 }

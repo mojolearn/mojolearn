@@ -58,7 +58,40 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(z=_h(Z), eigenvalues=_h(m.eigenvalues_)), m, lambda e: (e.transform(Xh[:128]),))
 
 
+@lane("x-neighbors-poly-sketch")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.PolynomialCountSketch(degree=3, gamma=0.5, coef0=1.0, n_components=64, random_state=3).fit(X[:512])
+    return _fit(dict(z=_h(m.transform(X[:512])), idx=_h(m.indexHash_), bits=_h(m.bitHash_)),
+                m, lambda e: (e.transform(Xh[:256]),))
+
+
+
+
+def _neighbors_semi_labels(yc, X):
+    y = (yc[:256] + (X[:256, 6] > 0.5).astype(np.int32)).astype(np.int64)
+    y[1::2] = -1
+    return y
+
+
+
+
+def _neighbors_holes(A):
+    A = np.array(A, dtype=np.float32, copy=True)
+    n, d = A.shape
+    for i in range(0, n, 3):
+        A[i, (i * 7) % d] = np.nan
+    A[5, :] = np.nan                                    # a row with no coordinate: the column-mean branch
+    return A
+
+
+
 _batch_decl(_rows_calls("score_samples", "predict", sl=slice(0, 256)), "x-neighbors-lof")
 _batch_decl(_rows_calls("predict", "decision_function", "predict_proba", sl=slice(0, 256)), "x-neighbors-nearest-centroid")
 _batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "x-neighbors-ocsvm")
 _batch_decl(_rows_calls("transform", sl=slice(0, 128)), "x-neighbors-kpca")
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-neighbors-poly-sketch")
+_batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=lambda Xh: np.abs(Xh).astype(np.float32)),
+            "x-neighbors-additive-chi2", "x-neighbors-skewed-chi2")
+_batch_decl(_rows_calls("predict_proba", "predict", sl=slice(0, 128)),
+            "x-neighbors-label-propagation", "x-neighbors-label-spreading")

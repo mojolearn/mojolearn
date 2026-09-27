@@ -30,7 +30,7 @@ from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty
 from ._mode import NumericModeMixin
 
-__all__ = ["LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA"]
+__all__ = ["LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", "PolynomialCountSketch"]
 
 # x_neighbors/items.mojo's codes
 _KERNELS = {"linear": 0, "poly": 1, "polynomial": 1, "rbf": 2, "sigmoid": 3, "laplacian": 4,
@@ -592,3 +592,101 @@ class KernelPCA(_XNeighbors):
 
     def inverse_transform(self, X):
         raise NotImplementedError("KernelPCA: inverse_transform needs fit_inverse_transform, which is not implemented")
+
+
+# ====================================================================== RandomState
+class _LegacyRandomState:
+    """numpy's legacy `RandomState(seed)` stream (MT19937 seeded by
+    init_genrand, what `check_random_state(int)` builds), in integers and
+    IEEE doubles only, so a sampler draws exactly scikit-learn's numbers on
+    every box and needs no NumPy. Python's `random.Random` IS MT19937 with
+    numpy's 53-bit double (`genrand_res53`); only the seeding differs, so the
+    state is set directly."""
+
+    def __init__(self, seed):
+        import random
+        if seed is None:
+            raise ValueError("random_state=None draws from the OS; pass an int for a reproducible fit")
+        if not isinstance(seed, int) or isinstance(seed, bool):
+            raise NotImplementedError("random_state must be an int here (a RandomState instance is not carried)")
+        mt = [0] * 624
+        mt[0] = seed & 0xFFFFFFFF
+        for i in range(1, 624):
+            mt[i] = (1812433253 * (mt[i - 1] ^ (mt[i - 1] >> 30)) + i) & 0xFFFFFFFF
+        self._r = random.Random()
+        self._r.setstate((3, tuple(mt) + (624,), None))
+
+    def random_sample(self, count):
+        return [self._r.random() for _ in range(count)]
+
+    def uniform(self, low, high, count):
+        return [low + (high - low) * self._r.random() for _ in range(count)]
+
+    def randint(self, high, count):
+        """`randint(0, high, size)`, the legacy masked rejection draw."""
+        rng = high - 1
+        if rng == 0:
+            return [0] * count
+        mask = rng
+        for sh in (1, 2, 4, 8, 16):
+            mask |= mask >> sh
+        out = []
+        for _ in range(count):
+            while True:
+                v = self._r.getrandbits(32) & mask
+                if v <= rng:
+                    break
+            out.append(v)
+        return out
+
+
+# ====================================================================== PolynomialCountSketch
+class PolynomialCountSketch(_XNeighbors):
+    """Polynomial kernel approximation by tensor sketch.
+
+    Reference: scikit-learn `kernel_approximation.py` (PolynomialCountSketch,
+    1.9.0): `indexHash_` and `bitHash_` are drawn exactly as theirs
+    (`randint(0, n_components, (degree, n_features))`, then
+    `choice([-1, 1], (degree, n_features))`, one legacy RandomState stream);
+    the transform is the count sketches' circular convolution, computed
+    directly instead of through an FFT (DEVIATION 5203). random_state must be
+    an int. Sparse input is not implemented.
+    """
+
+    def __init__(self, *, gamma=1.0, degree=2, coef0=0, n_components=100, random_state=None):
+        self.gamma = gamma
+        self.degree = degree
+        self.coef0 = coef0
+        self.n_components = n_components
+        self.random_state = random_state
+
+    def fit(self, X, y=None):
+        X = _f32(X)
+        d = X.shape[1]
+        nf = d + (1 if self.coef0 != 0 else 0)
+        deg, nc = int(self.degree), int(self.n_components)
+        if deg < 1 or nc < 1:
+            raise ValueError("degree and n_components must be >= 1")
+        rs = _LegacyRandomState(self.random_state)
+        idx = rs.randint(nc, deg * nf)
+        bits = [(-1, 1)[v] for v in rs.randint(2, deg * nf)]
+        self.indexHash_ = Array.from_list([idx[p * nf:(p + 1) * nf] for p in range(deg)], "<i4")
+        self.bitHash_ = Array.from_list([bits[p * nf:(p + 1) * nf] for p in range(deg)], "<i4")
+        self.n_features_in_ = d
+        return self
+
+    def transform(self, X):
+        X = _f32(X)
+        n, d = X.shape
+        if d != self.n_features_in_:
+            raise ValueError("Number of features of test samples does not match that of training samples.")
+        nf = self.indexHash_.shape[1]
+        nc, deg = int(self.n_components), int(self.degree)
+        out = empty((n, nc), "<f4")
+        self._op("pcs", [(X, 0), (self.indexHash_, 0), (self.bitHash_, 0), (out, 1)],
+                 (n, d, nf, nc, deg), (_f32_scalar(self.gamma), _f32_scalar(self.coef0)))
+        return out
+
+    def fit_transform(self, X, y=None):
+        return self.fit(X).transform(X)
+
