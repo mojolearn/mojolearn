@@ -302,23 +302,48 @@ def compare(ib, lane, gpu_json, cpu_json, fixtures, log, backend="gpu"):
     return "AGREE", f"compared {counts} ({backend} column vs CPU column {cols[1][0]})"
 
 
-def driver_cmd(path):
-    """How a listed driver runs: a Mojo check under IDENTICAL, a Python or
-    shell driver in the pixi default environment (IDENTICAL too)."""
+def driver_steps(path, workdir):
+    """How a listed driver runs, as (build step or None, run step): a Mojo
+    check is BUILT under IDENTICAL into `workdir` and then RUN, so a source
+    that does not compile is told apart from a check that ran and failed; a
+    Python driver is byte-compiled first, a shell driver syntax-checked."""
     if path.endswith(".mojo"):
-        return ["sh", "tools/with_identical_mode.sh", "pixi", "run", "mojo", "run", "-I", ".", path]
+        exe = str(Path(workdir) / (Path(path).stem + ".bin"))
+        return (["sh", "tools/with_identical_mode.sh", "pixi", "run", "mojo", "build", "-I", ".", path, "-o", exe],
+                [exe])
     if path.endswith(".py"):
-        return ["sh", "tools/with_identical_mode.sh", sys.executable, "-u", path]
+        return ([sys.executable, "-m", "py_compile", path],
+                ["sh", "tools/with_identical_mode.sh", sys.executable, "-u", path])
     if path.endswith(".sh"):
-        return ["sh", "tools/with_identical_mode.sh", "sh", path]
+        return (["sh", "-n", path], ["sh", "tools/with_identical_mode.sh", "sh", path])
     raise Fail(f"seam driver {path}: a .mojo, .py or .sh file")
 
 
 def run_driver(path, log, why):
-    with open(log, "a") as fh:
-        fh.write(f"\n$ [{why}] {' '.join(driver_cmd(path))}\n")
+    """(status, code): status is PASS (built, ran, exit 0), FAIL (built, ran
+    and exited nonzero on its own: the driver's failure), or BROKEN (did not
+    build, or was killed by a signal: a crash is not the driver saying no).
+    A sabotage arm counts as a bite ONLY on FAIL (the pass-2 proof hole found
+    by lane cnn, 2026-09-27: a patch whose driver no longer compiled used to
+    read as a bite)."""
+    import tempfile
+    env = dict(os.environ, MOJOLEARN_NUMERIC_MODE="identical")
+    env.pop("MACOSX_DEPLOYMENT_TARGET", None)   # as the binding builders: it disables Metal AOT
+    with tempfile.TemporaryDirectory(prefix="seam-driver-") as work, open(log, "a") as fh:
+        build, run = driver_steps(path, work)
+        if build is not None:
+            fh.write(f"\n$ [{why}: build] {' '.join(build)}\n")
+            fh.flush()
+            rc = subprocess.run(build, cwd=ROOT, env=env, stdout=fh, stderr=subprocess.STDOUT).returncode
+            if rc:
+                fh.write(f"[{why}] BUILD FAILED (exit {rc})\n")
+                return "BROKEN", f"did not build (exit {rc})"
+        fh.write(f"\n$ [{why}] {' '.join(run)}\n")
         fh.flush()
-        return subprocess.run(driver_cmd(path), cwd=ROOT, stdout=fh, stderr=subprocess.STDOUT).returncode
+        rc = subprocess.run(run, cwd=ROOT, env=env, stdout=fh, stderr=subprocess.STDOUT).returncode
+    if rc < 0:
+        return "BROKEN", f"killed by signal {-rc}"
+    return ("PASS", "exit 0") if rc == 0 else ("FAIL", f"exit {rc}")
 
 
 def read_checks(listing):
@@ -343,8 +368,10 @@ def seam_checks(ib, lanes, log, pass_no=1):
     """THE PER-SEAM PROOF (plan R2/R3). Each fragment that owns one of these
     lanes lists its check drivers in tools/identity_lanes/<id>.checks, one per
     line, each optionally with a TAB and a sabotage patch. Every driver must
-    PASS (exit 0) under IDENTICAL; for every patch, `git apply` it, the driver
-    must FAIL (exit nonzero), `git apply -R`, and it must PASS again.
+    PASS (built, exit 0) under IDENTICAL; for every patch, `git apply` it, the
+    driver must BUILD, run and FAIL (exit nonzero, not a signal), `git apply
+    -R`, and it must PASS again. A patch under which the driver does not
+    build is a BROKEN ARM: the check fails (`prove_arm`).
 
     --pass 1 (default): a fragment with no .checks, or a driver with no patch,
     is a note. --pass 2: a fragment that registers lanes and has no .checks
@@ -365,30 +392,41 @@ def seam_checks(ib, lanes, log, pass_no=1):
         if bare and pass_no >= 2:
             raise Fail(f"{listing.name}: pass 2 needs a sabotage patch on every line; none for {', '.join(bare)}")
         for driver, patch, n in rows:
-            say(f"seam check {driver}")
-            rc = run_driver(driver, log, "clean")
-            if rc:
-                raise Fail(f"seam check {driver} failed (exit {rc}); see {log}")
-            if patch is None:
-                continue
-            pp = ROOT / patch
-            if subprocess.run(["git", "apply", "--check", str(pp)], cwd=ROOT, capture_output=True).returncode:
-                raise Fail(f"{listing.name}:{n}: the sabotage patch {patch} does not apply to this tree")
-            subprocess.run(["git", "apply", str(pp)], cwd=ROOT, check=True)
-            try:
-                say(f"seam sabotage {patch} applied; {driver} must FAIL")
-                rc_sab = run_driver(driver, log, f"sabotaged by {patch}")
-            finally:
-                r = subprocess.run(["git", "apply", "-R", str(pp)], cwd=ROOT)
-                if r.returncode:
-                    raise Fail(f"could not reverse {patch}; the tree is still sabotaged")
-            if rc_sab == 0:
-                raise Fail(f"seam sabotage {patch} was NOT SEEN: {driver} passed under it, so it cannot fail on "
-                           "that seam")
-            rc = run_driver(driver, log, f"restored after {patch}")
-            if rc:
-                raise Fail(f"seam check {driver} failed after reversing {patch} (exit {rc}); see {log}")
-            print(f"SEAM: {driver}: PASS, FAIL under {patch} (exit {rc_sab}), PASS after reversal", flush=True)
+            prove_arm(driver, patch, log, f"{listing.name}:{n}")
+
+
+def prove_arm(driver, patch, log, where="seam check"):
+    """One listed line: the driver PASSES clean; with the patch applied it
+    builds, runs and FAILS on its own; reversed it PASSES again. A patch
+    under which the driver does not build (or crashes) is a BROKEN ARM and
+    fails the check, as does a clean or restored run that did not build."""
+    say(f"seam check {driver}")
+    status, why = run_driver(driver, log, "clean")
+    if status != "PASS":
+        raise Fail(f"seam check {driver}: {status} ({why}); see {log}")
+    if patch is None:
+        return
+    pp = ROOT / patch
+    if subprocess.run(["git", "apply", "--check", str(pp)], cwd=ROOT, capture_output=True).returncode:
+        raise Fail(f"{where}: the sabotage patch {patch} does not apply to this tree")
+    subprocess.run(["git", "apply", str(pp)], cwd=ROOT, check=True)
+    try:
+        say(f"seam sabotage {patch} applied; {driver} must build, run and FAIL")
+        sab, sab_why = run_driver(driver, log, f"sabotaged by {patch}")
+    finally:
+        r = subprocess.run(["git", "apply", "-R", str(pp)], cwd=ROOT)
+        if r.returncode:
+            raise Fail(f"could not reverse {patch}; the tree is still sabotaged")
+    if sab == "BROKEN":
+        raise Fail(f"BROKEN ARM {patch}: under it {driver} {sab_why}, so the arm proves nothing about the seam; "
+                   f"see {log}")
+    if sab == "PASS":
+        raise Fail(f"seam sabotage {patch} was NOT SEEN: {driver} passed under it, so it cannot fail on "
+                   "that seam")
+    status, why = run_driver(driver, log, f"restored after {patch}")
+    if status != "PASS":
+        raise Fail(f"seam check {driver} after reversing {patch}: {status} ({why}); see {log}")
+    print(f"SEAM: {driver}: PASS, FAIL under {patch} ({sab_why}), PASS after reversal", flush=True)
 
 
 def check(ib, lanes, needed, backend, fixtures, out, stage, log, pass_no=1):

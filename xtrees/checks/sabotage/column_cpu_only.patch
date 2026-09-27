@@ -29,8 +29,21 @@ index 85c9f1b8b..30d248359 100644
  
          for node in range(n_nodes):
              forest.colid.append(t_colid[node])
+diff --git a/extratrees/checks/pcg_rng.mojo b/extratrees/checks/pcg_rng.mojo
+index 13b5a797d..e7737ffce 100644
+--- a/extratrees/checks/pcg_rng.mojo
++++ b/extratrees/checks/pcg_rng.mojo
+@@ -343,7 +343,7 @@ struct SplitKey(Copyable, Movable):
+     def generator(self, offset: UInt64 = 0) -> PCGenerator:
+         """`PCGenerator(seed, subsequence, 0)`, cuML builder_kernels.cuh:172."""
+         var gen = PCGenerator(self.seed, self.subsequence, offset)
+-        comptime if PCG_HOST_SABOTAGE:
++        comptime if PCG_HOST_SABOTAGE or is_defined["MOJOLEARN_COLUMN_CPU"]():  # COLUMN SABOTAGE: the CPU column only
+             # THE SABOTAGE ARM: one extra draw on every keyed stream, so
+             # every threshold (`draw_threshold_device`, `uniform_threshold`)
+             # and every rescue pick is the stream's SECOND value. Wrong on
 diff --git a/xtrees/api.mojo b/xtrees/api.mojo
-index 1304504fd..724f5d03e 100644
+index 1304504fd..0676dc0a2 100644
 --- a/xtrees/api.mojo
 +++ b/xtrees/api.mojo
 @@ -6,6 +6,7 @@
@@ -99,7 +112,7 @@ index 1304504fd..724f5d03e 100644
      return PythonObject(n)
  
  
-@@ -391,7 +408,8 @@ def tree_shap_binding(
+@@ -391,7 +409,8 @@ def tree_shap_binding(
      if n > 0:
          tree_shap(i32_ptr(_i(forest, 0)), i32_ptr(_i(forest, 1)), f32_ptr(_i(forest, 2)), i32_ptr(_i(forest, 3)),
                    f32_ptr(_i(forest, 4)), f64_ptr(Int(py=cover)), f32_ptr(Int(py=x)), n, _i(params, 1),
@@ -109,7 +122,7 @@ index 1304504fd..724f5d03e 100644
      return PythonObject(n)
  
  
-@@ -427,6 +445,10 @@ def block_mean_binding(y: PythonObject, res: PythonObject, params: PythonObject)
+@@ -427,6 +446,10 @@ def block_mean_binding(y: PythonObject, res: PythonObject, params: PythonObject)
          raise Error("x_trees_block_mean: nb must be >= 1")
      if m > 0:
          block_mean(f32_ptr(Int(py=y)), m, nb, _i(params, 2), f64_ptr(Int(py=res)))

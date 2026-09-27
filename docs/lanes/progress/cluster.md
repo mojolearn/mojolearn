@@ -39,5 +39,69 @@ Proof (step 2), all six algorithms, NVIDIA H100 pod:
 - End-to-end sabotage for the lane check (`e2e_device_fold_reversed.patch`:
   the device kernels of sqdist, nearest, meanshift and gauss_q take the
   reversed fold, the host does not).
-- OWED: AMD column (dev_pod `--vendor amd`), M2 Pro steward PASS, then option
-  parity and speed (CURRENT DIRECTIVES).
+- `.checks` now pairs every driver with its sabotage patch
+  (x_cluster/checks/sabotage/); `algos_lane_check.sh --pass 2` over all 15
+  x-cluster lanes with the e2e patch: every seam PASS / FAIL under its
+  patch / PASS; every lane AGREE, DISAGREE, AGREE (H100, 2026-09-27).
+- OWED: the AMD column (no MI300X stock on RunPod or Hot Aisle all
+  afternoon; `dev_pod.sh up cluster 240 --vendor amd` retrying), the M2 Pro
+  steward PASS, then speed.
+
+## Option parity (CURRENT DIRECTIVES item 2), the lane's own six first
+
+Implemented (x_cluster/NOT_IMPLEMENTED.tsv rows removed or narrowed), each
+with a verifier lane, existing lanes' bits unchanged:
+
+- MiniBatchKMeans: init='random', sample_weight, partial_fit
+  (x-cluster-minibatch-options, x-cluster-minibatch-partial)
+- BisectingKMeans: sample_weight, 'largest_cluster' coverage
+  (x-cluster-bisecting-options)
+- MeanShift: bin_seeding / min_bin_freq (x-cluster-meanshift-binned)
+- OPTICS: metrics minkowski(p), manhattan, chebyshev, cosine, precomputed
+  (DEVIATION 5111, bodies.pdist_cell; x-cluster-optics-metrics)
+- AffinityPropagation: the median preference of a precomputed matrix with
+  positive entries (x-cluster-ap-precomputed)
+- BayesianGaussianMixture: covariance_type tied/diag/spherical, init
+  'k-means++'/'random_from_data', warm_start (x-cluster-bgmm-covtypes,
+  x-cluster-bgmm-inits)
+
+Still refused by name: callable init / callable metric, sparse input.
+Next: the existing cluster family (KMeans, DBSCAN, HDBSCAN, GaussianMixture,
+Agglomerative, Spectral) option rows, then speed.
+
+## Fixed at the root (CURRENT DIRECTIVES item 3)
+
+- KMeans with sample weights above one (DEVIATION 5112): the fixed-point
+  centroid sums quantize `x * w * sum_scale`, but the scale bounded
+  `sum |x|` alone, so weights above one wrapped Int32 (2,000 blob rows,
+  weights `|x0| + 0.5`: 300 iterations, inertia 1.75e6 against sklearn's
+  3.97e4, ARI 0.43). `cluster/impl/kmeans_params.mojo::weighted_sum_scale_cap`
+  caps the scale by the weighted bound in `kmeans_fit` and in the host
+  oracle; weight vectors that never outgrow the unweighted bound keep their
+  scale and bits (the `kmeans-weighted` lane's weights are in [0.5, 1.5]).
+- tools/test_lane_select.py's kmeans_oracle pin 47 -> 63, attributed.
+
+## Where the lane stands (2026-09-27, evening)
+
+- Merged on main at e81b76c38: pass 1 (six algorithms), pass-2 proof, option
+  parity for the six and for GaussianMixture, the KMeans weighted fix.
+- Steward identity request `1790530630176-cluster-e81b76c386` (15 lanes,
+  `--pass 2`, e2e patch) queued on m2pro and do-amd; m3ultra spooled.
+  Read it with `python3 tools/apple_steward.py status | grep cluster`. A FAIL
+  comes back here to fix.
+- AMD box: none allocated in `tools/dev_pod.sh list`; my own
+  `dev_pod.sh up cluster 240 --vendor amd` is retrying (no MI300X stock on
+  RunPod or Hot Aisle so far). do-amd covers the AMD column meanwhile.
+- NVIDIA pod `cluster` (H100) held; heartbeat `tools/dev_pod.sh extend
+  cluster 120`.
+
+Next, in order (CURRENT DIRECTIVES item 1):
+1. Steward verdicts: fix any FAIL.
+2. Option parity for the EXISTING cluster family: DBSCAN metric cosine and
+   precomputed (dbscan/NOT_IMPLEMENTED.tsv rows), HDBSCAN
+   cluster_selection_epsilon (hdbscan tsv), GaussianMixture save/sample for
+   the routed options, the callable init/metric refusals.
+3. GPU speed (IDENTICAL and FAST, NVIDIA/AMD/Apple) at 1M+ rows from R2:
+   the OPTICS ordering loop and AffinityPropagation iterations are host /
+   per-iteration-sync bound; MeanShift is one thread per seed.
+4. CPU speed last.

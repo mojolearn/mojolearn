@@ -23,12 +23,26 @@ from x_cluster.ops import ClusterOps
 def optics_graph[O: ClusterOps](
     mut ops: O, x: List[Float32], n: Int, d: Int, min_samples: Int, max_eps: Float32,
     mut ordering: List[Int], mut core: List[Float32], mut reach: List[Float32], mut pred: List[Int],
+    metric: Int = -1, p: Float32 = Float32(2),
 ) raises:
+    """metric -1: euclidean through the squared distance (the recorded
+    default); 0-4 the `bodies.pdist_cell` metrics; 5 precomputed (`x` is the
+    n x n distance matrix, negatives refused)."""
     var inf = Float32.MAX * Float32(2)
     var xs = ops.put(x)
-    var dm = ops.zeros(n * n)
-    ops.sqdist(xs, n, xs, n, d, dm)
-    ops.sqrt(dm, n * n)
+    var dm: Int
+    if metric == 5:
+        for t in range(n * n):
+            if not (x[t] >= Float32(0)):
+                raise Error("OPTICS: a precomputed distance matrix must be non-negative")
+        dm = xs
+    elif metric >= 0:
+        dm = ops.zeros(n * n)
+        ops.pdist(xs, n, xs, n, d, metric, p, dm)
+    else:
+        dm = ops.zeros(n * n)
+        ops.sqdist(xs, n, xs, n, d, dm)
+        ops.sqrt(dm, n * n)
     var cs = ops.zeros(n)
     ops.kth(dm, n, n, min_samples, cs)
     core = ops.get(cs, n)

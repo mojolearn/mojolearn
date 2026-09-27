@@ -10,7 +10,7 @@ from std.python import PythonObject
 from std.math import sqrt
 from checks.numerics import ftz, identical_div, identical_mul, identical_mul_add, identical_pow64, identical_sqrt
 from sequence.exec import Exec
-from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_ROW, OP_AF_COL, OP_AF_RMEAN, OP_AF_UPDATE_MAT, OP_AF_VEC, OP_AF_DENOM, OP_AF_APPLY, OP_SEG_SUMSQ, OP_LAMB_UPD, OP_LAMB_RATIO, OP_LAMB_APPLY, OP_LN_FWD, OP_LN_BWD_X, OP_LN_BWD_W, OP_THETA, OP_CROSTON, OP_ETS, OP_DIVS, OP_FILL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD, OPT_NADAM
+from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_ROW, OP_AF_COL, OP_AF_RMEAN, OP_AF_UPDATE_MAT, OP_AF_VEC, OP_AF_DENOM, OP_AF_APPLY, OP_SEG_SUMSQ, OP_LAMB_UPD, OP_LAMB_RATIO, OP_LAMB_APPLY, OP_LN_FWD, OP_LN_BWD_X, OP_LN_BWD_W, OP_THETA, OP_CROSTON, OP_ETS, OP_GARCH, OP_DIVS, OP_FILL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD, OPT_NADAM
 from sequence.recurrent import gemm
 from sequence.mlp_fit import MLPNet, mlp_fit, mlp_predict
 from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, opt_scalars, opt_step, rnn_fit, rnn_predict
@@ -800,3 +800,51 @@ def ets_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: Python
     ex.download(fptr(addrs[1], "forecast"), F, B * h)
     ex.download(fptr(addrs[2], "info"), I, B * 8)
     return PythonObject(B * h)
+
+
+def garch_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
+    """GARCH(p, o, q) over a batch of series (`sequence/garch.mojo`).
+    addrs = [y (B, n), params (B, 1 + 1 + p + o + q) out, info (B, 4) out,
+    sigma (B, n) out, variance forecast (B, h) out];
+    ip = [B, n, h, p, o, q, constant mean]."""
+    if len(addrs) != 5 or len(ip) != 7:
+        raise Error("garch: requires 5 addresses and 7 integer parameters")
+    var B = ival(ip, 0)
+    var n = ival(ip, 1)
+    var h = ival(ip, 2)
+    var p = ival(ip, 3)
+    var o = ival(ip, 4)
+    var q = ival(ip, 5)
+    var cm = ival(ip, 6)
+    if B < 1 or n < 10 or h < 1 or p < 0 or o < 0 or q < 0 or p + o + q < 1 or 1 + p + o + q + cm > 8:
+        raise Error("garch: B >= 1, n >= 10, h >= 1, p + o + q >= 1 and at most 8 parameters")
+    var m = max(p, max(o, q))
+    var stride = 4 * n + 64 + max(128, 3 * (m + h))
+    var Y = ex.alloc(B * n)
+    ex.upload(Y, fptr(addrs[0], "y"), B * n)
+    var P = ex.alloc(B * (1 + 1 + p + o + q))
+    var I = ex.alloc(B * 4)
+    var Sg = ex.alloc(B * n)
+    var F = ex.alloc(B * h)
+    var S = ex.alloc(B * stride)
+    var a = Args()
+    a.p0 = Y
+    a.p1 = P
+    a.p2 = I
+    a.p3 = Sg
+    a.p4 = F
+    a.p5 = S
+    a.i0 = n
+    a.i1 = h
+    a.i2 = p
+    a.i3 = o
+    a.i4 = q
+    a.i5 = cm
+    a.i6 = stride
+    ex.launch[OP_GARCH](a, B)
+    ex.sync()
+    ex.download(fptr(addrs[1], "params"), P, B * (1 + 1 + p + o + q))
+    ex.download(fptr(addrs[2], "info"), I, B * 4)
+    ex.download(fptr(addrs[3], "sigma"), Sg, B * n)
+    ex.download(fptr(addrs[4], "forecast"), F, B * h)
+    return PythonObject(B)

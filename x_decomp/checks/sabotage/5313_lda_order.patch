@@ -1,0 +1,14 @@
+diff --git a/x_decomp/cells.mojo b/x_decomp/cells.mojo
+index b8537db32..284e25bc5 100644
+--- a/x_decomp/cells.mojo
++++ b/x_decomp/cells.mojo
+@@ -590,7 +590,8 @@ def lda_doc_row(
+         var total = Float32(0)
+         for t in range(k):
+             var acc = Float32(0)
+-            for w in range(v):
++            for ww in range(v):
++                var w = v - 1 - ww  # SABOTAGE 5313: the word fold descending
+                 if ftz(X.unsafe_load(i * v + w)) == Float32(0):
+                     continue
+                 acc = ftz(identical_mul_add(ftz(S.unsafe_load(sb + w)), ftz(EW.unsafe_load(t * v + w)), acc))
