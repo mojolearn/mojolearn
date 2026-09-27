@@ -84,6 +84,7 @@ comptime OPT_RMSPROP = 3
 comptime OPT_ADAGRAD = 4
 comptime OPT_SK_ADAM = 5
 comptime OPT_SK_SGD = 6
+comptime OPT_LION = 7
 
 
 def gates_of(cell: Int) -> Int:
@@ -524,6 +525,21 @@ def op_opt(t: Int, a: Args):
         if (a.i2 & 1) != 0:
             step = fma3(mu, vel, -lg)
         st(a.p0, t, add(p, step))
+    elif kind == OPT_LION:
+        # Lion (Chen et al. 2023; lion-pytorch): p *= 1 - lr wd;
+        # p -= lr sign(b1 m + (1 - b1) g); m = b2 m + (1 - b2) g
+        var b1 = a.f1
+        var b2 = a.f2
+        var pd = mul(p, sub(Float32(1.0), mul(lr, wd)))
+        var m = ld(a.p2, t)
+        var c = fma3(b1, m, mul(sub(Float32(1.0), b1), g))
+        var u = Float32(0.0)
+        if c > Float32(0.0):
+            u = Float32(1.0)
+        elif c < Float32(0.0):
+            u = Float32(-1.0)
+        st(a.p0, t, fma3(-lr, u, pd))
+        st(a.p2, t, fma3(b2, m, mul(sub(Float32(1.0), b2), g)))
     elif kind == OPT_ADAGRAD:
         # torch.optim.Adagrad: clr = lr / (1 + (t - 1) lr_decay) (f5, host);
         # sum += g^2; p -= clr g / (sqrt(sum) + eps)

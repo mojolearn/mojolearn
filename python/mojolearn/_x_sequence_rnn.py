@@ -24,13 +24,14 @@ _BINDING = "_mojolearn_x_sequence"
 
 CELLS = {"rnn_tanh": 0, "rnn_relu": 1, "lstm": 2, "gru": 3}
 GATES = {0: 1, 1: 1, 2: 4, 3: 3}
-OPTIMIZERS = {"sgd": 0, "adam": 1, "adamw": 2, "rmsprop": 3, "adagrad": 4}
+OPTIMIZERS = {"sgd": 0, "adam": 1, "adamw": 2, "rmsprop": 3, "adagrad": 4, "lion": 7}
 _OPT_DEFAULTS = {
     "sgd": dict(momentum=0.0, dampening=0.0, nesterov=False, weight_decay=0.0),
     "adam": dict(betas=(0.9, 0.999), eps=1e-8, weight_decay=0.0),
     "adamw": dict(betas=(0.9, 0.999), eps=1e-8, weight_decay=1e-2),
     "rmsprop": dict(alpha=0.99, eps=1e-8, weight_decay=0.0, momentum=0.0, centered=False),
     "adagrad": dict(lr_decay=0.0, eps=1e-10, weight_decay=0.0, initial_accumulator_value=0.0),
+    "lion": dict(betas=(0.9, 0.99), weight_decay=0.0),
 }
 
 
@@ -58,6 +59,9 @@ def optimizer_arguments(name, options):
         if not (0.0 <= b1 < 1.0 and 0.0 <= b2 < 1.0):
             raise ValueError(f"{name}: betas must lie in [0, 1)")
         return kind, 0, [b1, b2, o["eps"], o["weight_decay"], 0.0, 0.0]
+    if name == "lion":
+        b1, b2 = o["betas"]
+        return kind, 0, [b1, b2, 0.0, o["weight_decay"], 0.0, 0.0]
     if name == "rmsprop":
         return kind, int(bool(o["centered"])), [0.0, o["alpha"], o["eps"], o["weight_decay"], o["momentum"], 0.0]
     return kind, 0, [o["lr_decay"], 0.0, o["eps"], o["weight_decay"], 0.0, o["initial_accumulator_value"]]

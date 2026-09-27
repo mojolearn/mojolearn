@@ -109,4 +109,18 @@ class Adagrad(_SeqOptimizer):
         return self.state[1]
 
 
+class Lion(_SeqOptimizer):
+    """Lion (Chen et al. 2023, "Symbolic Discovery of Optimization
+    Algorithms"; lion-pytorch's statement): p *= 1 - lr wd; p -= lr
+    sign(b1 m + (1 - b1) g); m = b2 m + (1 - b2) g. Defaults are the paper's."""
+    _NAME = "lion"
+
+    def __init__(self, params, lr=1e-4, betas=(0.9, 0.99), weight_decay=0.0, numeric_mode=None):
+        super().__init__(params, lr, dict(betas=betas, weight_decay=weight_decay), numeric_mode)
+
+    @property
+    def exp_avg(self):
+        return self.state[0]
+
+
 assert set(OPTIMIZERS) >= {"rmsprop", "adagrad"}

@@ -53,6 +53,20 @@ def test_adagrad():
     _run(ml.Adagrad, ref_adagrad, lr=5e-2, lr_decay=0.1, weight_decay=1e-2, initial_accumulator_value=0.1)
 
 
+def ref_lion(p, g, t, st, lr=1e-4, betas=(0.9, 0.99), weight_decay=0.0):
+    b1, b2 = betas
+    m = st.get("m", 0.0)
+    p = p * (1 - lr * weight_decay)
+    p = p - lr * np.sign(b1 * m + (1 - b1) * g)
+    st["m"] = b2 * m + (1 - b2) * g
+    return p
+
+
+def test_lion():
+    _run(ml.Lion, ref_lion, lr=1e-2)
+    _run(ml.Lion, ref_lion, lr=3e-3, betas=(0.95, 0.98), weight_decay=0.1)
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

@@ -9,7 +9,7 @@ from std.python import PythonObject
 
 from checks.numerics import ftz, identical_mul
 from sequence.exec import Exec
-from sequence.ops import FP, OP_STL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD
+from sequence.ops import FP, OP_STL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD
 from sequence.recurrent import gemm
 from sequence.mlp_fit import MLPNet, mlp_fit, mlp_predict
 from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, opt_step, rnn_fit, rnn_predict
@@ -49,7 +49,7 @@ def net_of(ip: PythonObject) raises -> Net:
 
 def opt_of(ip: PythonObject, at: Int, fp: PythonObject, fat: Int) raises -> OptConfig:
     var kind = ival(ip, at)
-    if kind < OPT_SGD or kind > OPT_ADAGRAD:
+    if kind < OPT_SGD or kind > OPT_LION or kind == OPT_SK_ADAM or kind == OPT_SK_SGD:
         raise Error("sequence: unknown optimizer kind " + String(kind))
     return OptConfig(kind, ival(ip, at + 1), fval(fp, fat), fval(fp, fat + 1), fval(fp, fat + 2),
                      fval(fp, fat + 3), fval(fp, fat + 4))

@@ -23,11 +23,11 @@ FAMILIES = (
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=("sequence-lstm", "sequence-gru", "sequence-rmsprop", "sequence-adagrad",
                         "sequence-autoarima", "sequence-stl", "sequence-var",
-                        "sequence-mlp", "sequence-rnn"),
+                        "sequence-mlp", "sequence-rnn", "sequence-lion"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("LSTMRegressor", "LSTMClassifier", "GRURegressor", "GRUClassifier", "RMSprop", "Adagrad", "AutoARIMA", "STL", "VAR", "MLPClassifier",
-                 "MLPRegressor", "RNNRegressor", "RNNClassifier"),
+                 "MLPRegressor", "RNNRegressor", "RNNClassifier", "Lion"),
         display="the sequence lane's recurrent networks and optimizers",
         host_modules=("sequence/ops.mojo", "sequence/exec.mojo", "sequence/recurrent.mojo",
                       "sequence/pyapi.mojo", "sequence/stl.mojo", "sequence/dispatch.mojo", "sequence/vecar.mojo", "sequence/mlp.mojo",
@@ -53,7 +53,8 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
                        "sequence-stl": "STL",
                        "sequence-var": "VAR",
                        "sequence-mlp": "MLPClassifier / MLPRegressor",
-                       "sequence-rnn": "RNNRegressor / RNNClassifier"}
+                       "sequence-rnn": "RNNRegressor / RNNClassifier",
+                       "sequence-lion": "Lion"}
 PUBLIC_PENDING_LANES = {"sequence-lstm": "no reference", "sequence-gru": "no reference",
                         "sequence-rmsprop": "no reference",
                         "sequence-adagrad": "no reference",
@@ -61,4 +62,5 @@ PUBLIC_PENDING_LANES = {"sequence-lstm": "no reference", "sequence-gru": "no ref
                         "sequence-stl": "no reference",
                         "sequence-var": "no reference",
                         "sequence-mlp": "no reference",
-                        "sequence-rnn": "no reference"}
+                        "sequence-rnn": "no reference",
+                        "sequence-lion": "no reference"}
