@@ -14,6 +14,8 @@ messaging lanes. Newest items are at the top.
    run `dev_pod.sh down`; your pods stay up. The orchestrator relaunches a
    fresh agent for your lane immediately, and it continues from the
    progress file.
+   **A new session trusts the progress file.** Never re-run a check the
+   file records as passed. Only check what you change next.
 0. **AMD boxes are live (main 6c9572e4e):** `tools/dev_pod.sh up <lane> 240 --vendor amd`
    (state key `<lane>-amd`; RunPod MI300X first, Hot Aisle 2x MI300X
    fallback). Grab one when you enter pass 2 and hold it. The lane check now
