@@ -541,7 +541,7 @@ def test_the_new_narrow_answers_are_narrow_for_the_right_reason():
     own sentence."""
     ref = "HEAD"
     sel = lane_select.select(["tools/identity_break.py"], ref=ref)
-    assert "harness diff touches only these lane bodies" in sel["reasons"]["tools/identity_break.py"] \
+    assert "harness diff reaches only these lanes" in sel["reasons"]["tools/identity_break.py"] \
         or "docstrings and comments only" in sel["reasons"]["tools/identity_break.py"], \
         f"unexpected reason: {sel['reasons']['tools/identity_break.py']}"
     assert not sel["unattributed"], "the harness against its own HEAD was refused"
