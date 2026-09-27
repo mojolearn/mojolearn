@@ -1,0 +1,9 @@
+--- a/x_cluster/bodies.mojo
++++ b/x_cluster/bodies.mojo
+@@ -383,5 +383,5 @@
+         var r = Int(nodes[node * 3 + 1])
+         var dl = sq_dist_rows[REV](x, i, centers, l, d)
+         var dr = sq_dist_rows[REV](x, i, centers, r, d)
+-        node = r if dr < dl else l
++        node = r if dr <= dl else l
+     labels[i] = nodes[node * 3 + 2]

@@ -19,7 +19,7 @@ descending, which moves the low bits of every distance.
 """
 from std.memory import bitcast
 
-from checks.numerics import ftz, identical_div, identical_exp, identical_log, identical_mul, identical_sqrt
+from checks.numerics import ftz, identical_div, identical_exp, identical_log, identical_mul, identical_pow, identical_sqrt
 
 comptime FPtr = MutPointer[Float32, MutAnyOrigin]
 comptime IPtr = MutPointer[Int32, MutAnyOrigin]
@@ -174,14 +174,15 @@ def ap_responsibility_row(s_m: FPtr, a_m: FPtr, r_m: FPtr, n: Int, damping: Floa
 # DEVIATION 5106 (the availability column fold ascending, the clamp at 0
 # off the diagonal). Row 115; ap_check.
 @always_inline
-def ap_availability_col(r_m: FPtr, a_m: FPtr, n: Int, damping: Float32, k: Int):
+def ap_availability_col[REV: Bool = False](r_m: FPtr, a_m: FPtr, n: Int, damping: Float32, k: Int):
     """sklearn `_affinity_propagation` (:112-122), column `k`: `Rp =
     max(R, 0)` off the diagonal and `R[k, k]` on it, `colsum` by one
     ascending fold, `A_new[i, k] = min(colsum - Rp[i, k], 0)` off the
     diagonal and `colsum - Rp[k, k]` on it, then the same damping."""
     var one_minus = ftz(Float32(1) - damping)
     var colsum = Float32(0)
-    for i in range(n):
+    for ii in range(n):
+        var i = n - 1 - ii if REV else ii
         var v = r_m[i * n + k]
         var rp = v if (i == k or v > Float32(0)) else Float32(0)
         colsum = ftz(colsum + rp)
@@ -199,6 +200,54 @@ def ap_availability_col(r_m: FPtr, a_m: FPtr, n: Int, damping: Float32, k: Int):
 def ap_exemplar_cell(a_m: FPtr, r_m: FPtr, n: Int, e: IPtr, i: Int):
     """e[i] = (A[i, i] + R[i, i] > 0), sklearn's `E`."""
     e[i] = Int32(1) if ftz(a_m[i * n + i] + r_m[i * n + i]) > Float32(0) else Int32(0)
+
+
+comptime METRIC_EUCLIDEAN = 0
+comptime METRIC_MANHATTAN = 1
+comptime METRIC_CHEBYSHEV = 2
+comptime METRIC_MINKOWSKI = 3
+comptime METRIC_COSINE = 4
+
+
+# DEVIATION 5111 (the non-euclidean metrics: every fold over the features
+# ascending, the portable pow and sqrt, cosine's zero-norm row at distance 1,
+# every distance clamped at +0). OPTICS's metric option; pdist_check.
+@always_inline
+def pdist_cell[REV: Bool = False](a: FPtr, na: Int, b: FPtr, nb: Int, d: Int, metric: Int, p: Float32, dst: FPtr, cell: Int):
+    var i = cell // nb
+    var j = cell - i * nb
+    var v = Float32(0)
+    if metric == METRIC_EUCLIDEAN:
+        v = identical_sqrt(sq_dist_rows[REV](a, i, b, j, d))
+    elif metric == METRIC_MANHATTAN:
+        for ff in range(d):
+            var f = d - 1 - ff if REV else ff
+            v = ftz(v + abs(ftz(ftz(a[i * d + f]) - ftz(b[j * d + f]))))
+    elif metric == METRIC_CHEBYSHEV:
+        for f in range(d):
+            var t = abs(ftz(ftz(a[i * d + f]) - ftz(b[j * d + f])))
+            if t > v:
+                v = t
+    elif metric == METRIC_MINKOWSKI:
+        for f in range(d):
+            v = ftz(v + ftz(identical_pow(abs(ftz(ftz(a[i * d + f]) - ftz(b[j * d + f]))), p)))
+        v = ftz(identical_pow(v, ftz(identical_div(Float32(1), p))))
+    else:
+        var dot = Float32(0)
+        var na2 = Float32(0)
+        var nb2 = Float32(0)
+        for f in range(d):
+            var x = ftz(a[i * d + f])
+            var y = ftz(b[j * d + f])
+            dot = ftz(dot + ftz(identical_mul(x, y)))
+            na2 = ftz(na2 + ftz(identical_mul(x, x)))
+            nb2 = ftz(nb2 + ftz(identical_mul(y, y)))
+        if na2 == Float32(0) or nb2 == Float32(0):
+            v = Float32(1)
+        else:
+            var den = ftz(identical_mul(identical_sqrt(na2), identical_sqrt(nb2)))
+            v = ftz(Float32(1) - ftz(identical_div(dot, den)))
+    dst[cell] = v if v > Float32(0) else Float32(0)
 
 
 # ------------------------------------------------ Gaussian mixture bodies

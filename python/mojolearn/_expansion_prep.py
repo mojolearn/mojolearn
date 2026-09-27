@@ -49,7 +49,7 @@ _OPS = dict(
     lda_prep=36, lda_w=37, lda_stage2=38, lda_stage3=39, qda_cov=40, qda_prep=41, qda_dec=42,
     qt_apply=43, pt_fit=44, pt_apply=45, std_params=46, normalize=47, poly=48, spline_knots=49, spline_apply=50, label_binarize=51, scatter_ones=52,
     ii_mean=53, ii_gram=54, ii_sub=55, ii_br=56, ii_predict=57, ii_snapshot=58, ii_conv=59, nan_mask=60, gather_cols=61, var_ptp=62, f_classif=63, f_regression=64, chi2=65,
-    mi_colscale=66, mi_noise=67, mi_cc=68, mi_cd=69, mi_reduce=70, sqsum_cols=71, log=72,
+    mi_colscale=66, mi_noise=67, mi_cc=68, mi_cd=69, mi_reduce=70, sqsum_cols=71, log=72, robust_uv=73,
 )
 _PARAMS = 14
 _NONE = -1
@@ -214,8 +214,8 @@ class RobustScaler(_PrepBase):
     """sklearn.preprocessing.RobustScaler: center by the median, scale by the
     quantile range (numpy's linear percentile over the non-NaN entries; NaN is
     ignored in fit and kept in transform). Float32 throughout; a scale below
-    10 * float32 eps is one (`_handle_zeros_in_scale`). `unit_variance=True`
-    is refused by name."""
+    10 * float32 eps is one (`_handle_zeros_in_scale`); unit_variance divides
+    the scale by norm.ppf(q_max) - norm.ppf(q_min) (Acklam, float32)."""
     _parameters = ("with_centering", "with_scaling", "quantile_range", "copy", "unit_variance")
 
     def __init__(self, *, with_centering=True, with_scaling=True, quantile_range=(25.0, 75.0), copy=True,
@@ -227,11 +227,12 @@ class RobustScaler(_PrepBase):
         self.unit_variance = unit_variance
 
     def fit(self, X, y=None):
-        if self.unit_variance:
-            raise NotImplementedError("mojolearn: RobustScaler(unit_variance=True) is not implemented")
         lo, hi = (float(v) for v in self.quantile_range)
         if not 0 <= lo <= hi <= 100:
             raise ValueError(f"mojolearn: invalid quantile range {self.quantile_range!r}")
+        if self.unit_variance and not 0 < lo < hi < 100:
+            raise ValueError("mojolearn: RobustScaler(unit_variance=True) needs 0 < q_min < q_max < 100 "
+                             "(norm.ppf of 0 or 1 is infinite)")
         arr = _x2d(X)
         n, d = arr.shape
         mode = _mode()
@@ -247,6 +248,8 @@ class RobustScaler(_PrepBase):
         pr.stage("col_stats", d, xo, n, d, st)
         pr.stage("quantile", 3 * d, so, n, d, qf, 3, q, st)
         pr.stage("scale_params", d, q, 3, d, center, scale, 0, 0, 2, 1)
+        if self.unit_variance:
+            pr.stage("robust_uv", d, scale, qf)
         pr.run(mode)
         self.center_ = pr.get(center, d) if self.with_centering else None
         self.scale_ = pr.get(scale, d) if self.with_scaling else None
@@ -619,7 +622,9 @@ class SimpleImputer(_PrepBase):
     (the smallest on a tie) or 'constant'. An all-missing column is dropped
     from the output unless `keep_empty_features` (its statistic is NaN, as in
     the reference; with keep_empty_features it is 0, or fill_value).
-    add_indicator and callable strategies are refused."""
+    add_indicator appends MissingIndicator's columns (the features with a
+    missing value in fit, 1.0 where missing). Callable strategies are
+    refused."""
     _parameters = ("missing_values", "strategy", "fill_value", "copy", "add_indicator", "keep_empty_features")
 
     def __init__(self, *, missing_values=float("nan"), strategy="mean", fill_value=None, copy=True,
@@ -632,8 +637,6 @@ class SimpleImputer(_PrepBase):
         self.keep_empty_features = keep_empty_features
 
     def fit(self, X, y=None):
-        if self.add_indicator:
-            raise NotImplementedError("mojolearn: SimpleImputer(add_indicator=True) is not implemented")
         if self.strategy not in ("mean", "median", "most_frequent", "constant"):
             raise NotImplementedError(f"mojolearn: SimpleImputer strategy {self.strategy!r} is not implemented")
         if self.strategy == "constant" and self.fill_value is not None and \
@@ -680,6 +683,7 @@ class SimpleImputer(_PrepBase):
             self.statistics_ = pr.get(src, d)
             self._fill = self.statistics_
         self._keep = [j for j in range(d) if self.keep_empty_features or not empty[j]]
+        self._indicator = [j for j in range(d) if counts[j] < n] if self.add_indicator else []
         self.numeric_mode_, self.n_features_in_ = mode, d
         return self
 
@@ -695,8 +699,26 @@ class SimpleImputer(_PrepBase):
         ko = pr.put_list(self._keep)
         out = pr.alloc(n * dout)
         pr.stage("fill", n * dout, xo, n, d, so, out, ko, dout)
+        m = len(self._indicator)
+        if m:
+            io, mo = pr.put_list(self._indicator), pr.alloc(n * m)
+            pr.stage("nan_mask", n * m, xo, n, d, io, m, mo)
         pr.run(self.numeric_mode_)
-        return pr.get(out, (n, dout))
+        if not m:
+            return pr.get(out, (n, dout))
+        return _hstack(pr.get(out, (n, dout)), pr.get(mo, (n, m)))
+
+
+def _hstack(a, b):
+    """[a | b] for two C-order float32 2-D Arrays of the same row count (a
+    byte copy per row)."""
+    n, p = a.shape
+    q = b.shape[1]
+    out = Array((n, p + q), "<f4")
+    for i in range(n):
+        ctypes.memmove(out._addr + 4 * i * (p + q), a._addr + 4 * i * p, 4 * p)
+        ctypes.memmove(out._addr + 4 * (i * (p + q) + p), b._addr + 4 * i * q, 4 * q)
+    return out
 
 
 # ---------------------------------------------------------------- discretizer

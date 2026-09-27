@@ -31,13 +31,20 @@ def _(ml, X, yc, yr, Xh=None):
     return _prep_transformer(m, X, Xh, attrs=("center_", "scale_"))
 
 
+@lane("x-prep-robust-scaler-unit-variance")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.RobustScaler(unit_variance=True, quantile_range=(10.0, 90.0)).fit(X)
+    return _prep_transformer(m, X, Xh, attrs=("center_", "scale_"))
+
+
 @lane("x-prep-maxabs-scaler")
 def _(ml, X, yc, yr, Xh=None):
     m = ml.MaxAbsScaler().fit(X)
     return _prep_transformer(m, X, Xh, attrs=("scale_",))
 
 
-_batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-robust-scaler", "x-prep-maxabs-scaler")
+_batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-robust-scaler", "x-prep-maxabs-scaler",
+            "x-prep-robust-scaler-unit-variance")
 
 
 def _prep_categorical(X):
@@ -102,7 +109,15 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(parts, m, lambda e: (e.transform(Xhm[:256]),))
 
 
-_batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_prep_with_nan), "x-prep-simple-imputer")
+@lane("x-prep-simple-imputer-indicator")
+def _(ml, X, yc, yr, Xh=None):
+    Xm, Xhm = _prep_with_nan(X), _prep_with_nan(Xh)
+    m = ml.SimpleImputer(strategy="mean", add_indicator=True).fit(Xm)
+    return _fit(dict(transform=_h(m.transform(Xm[:256]))), m, lambda e: (e.transform(Xhm[:256]),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_prep_with_nan), "x-prep-simple-imputer",
+            "x-prep-simple-imputer-indicator")
 
 
 @lane("x-prep-kbins")
