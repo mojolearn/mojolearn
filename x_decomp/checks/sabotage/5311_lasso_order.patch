@@ -1,0 +1,14 @@
+diff --git a/x_decomp/cells.mojo b/x_decomp/cells.mojo
+index b8537db32..fdd07af82 100644
+--- a/x_decomp/cells.mojo
++++ b/x_decomp/cells.mojo
+@@ -420,7 +420,8 @@ def lasso_row(
+         it += 1
+         var w_max = Float32(0)
+         var d_w_max = Float32(0)
+-        for j in range(k):
++        for jj in range(k):
++            var j = k - 1 - jj  # SABOTAGE 5311: coordinates descending
+             var gjj = ftz(G.unsafe_load(j * k + j))
+             if gjj == Float32(0):
+                 continue

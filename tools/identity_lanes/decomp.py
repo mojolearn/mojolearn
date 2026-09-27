@@ -66,9 +66,14 @@ def _(ml, X, yc, yr, Xh=None):
                alpha_W=0.01, l1_ratio=0.5)
     Wu = u.fit_transform(A)
     a = ml.NMF(n_components=3, init="nndsvdar", random_state=1, max_iter=20).fit(A[:500])
+    sh = ml.NMF(n_components=3, shuffle=True, random_state=4, max_iter=15, tol=1e-6).fit(A[:500])
+    kl = ml.NMF(n_components=3, solver="mu", beta_loss="kullback-leibler", max_iter=20, tol=1e-6).fit(A[:500])
+    isd = ml.NMF(n_components=2, solver="mu", beta_loss="itakura-saito", init="random", random_state=2,
+                 max_iter=20, tol=1e-6).fit(A[:500] + np.float32(0.1))
     return _fit(dict(W=_h(W), H=_h(m.components_), err=_h(np.float32(m.reconstruction_err_)),
                      it=_h(np.int32(m.n_iter_)), T=_h(m.transform(A[:128])), Wu=_h(Wu), Hu=_h(u.components_),
-                     Tu=_h(u.transform(A[:128])), Ha=_h(a.components_)),
+                     Tu=_h(u.transform(A[:128])), Ha=_h(a.components_), Hsh=_h(sh.components_), Hkl=_h(kl.components_), ekl=_h(np.float64(kl.reconstruction_err_)),
+                     His=_h(isd.components_)),
                 m, lambda e: (e.transform(np.abs(Xh[:128])),))
 
 
@@ -142,12 +147,13 @@ def _(ml, X, yc, yr, Xh=None):
     Y2 = np.ascontiguousarray(np.stack([yr[:2000], X[:2000, 3]], axis=1))
     c = ml.PLSCanonical(n_components=2).fit(X[:2000, :10], np.ascontiguousarray(X[:2000, 10:14]))
     a = ml.CCA(n_components=2, max_iter=100).fit(X[:1000, :8], np.ascontiguousarray(X[:1000, 8:12]))
+    cs = ml.PLSCanonical(n_components=2, algorithm="svd").fit(X[:2000, :10], np.ascontiguousarray(X[:2000, 10:14]))
     m2 = ml.PLSRegression(n_components=2, scale=False).fit(X[:2000], Y2)
     return _fit(dict(coef=_h(m.coef_), xw=_h(m.x_weights_), xr=_h(m.x_rotations_), pred=_h(m.predict(X[:256])),
                      T=_h(m.transform(X[:256])), it=_h(np.int32(m.n_iter_)), c_xr=_h(c.x_rotations_),
                      c_yr=_h(c.y_rotations_), c_T=_h(*c.transform(X[:256, :10], np.ascontiguousarray(X[:256, 10:14]))),
                      a_xr=_h(a.x_rotations_), a_yr=_h(a.y_rotations_), a_it=_h(np.int32(a.n_iter_)),
-                     m2=_h(m2.coef_, m2.predict(X[:256]))),
+                     m2=_h(m2.coef_, m2.predict(X[:256])), cs_xr=_h(cs.x_rotations_, cs.y_rotations_)),
                 m, lambda e: (e.predict(Xh[:256]), e.transform(Xh[:256])))
 
 
@@ -165,7 +171,9 @@ def _(ml, X, yc, yr, Xh=None):
                               transform_alpha=0.1, positive_dict=True, positive_code=True).fit(S[:200])
     mb = ml.MiniBatchDictionaryLearning(n_components=5, alpha=0.4, batch_size=64, max_iter=3, random_state=2,
                                         transform_algorithm="lasso_lars").fit(X[:600])
-    return _fit(dict(code=_h(code), D=_h(m.components_), err=_h(np.float64(m.error_)), T=_h(m.transform(S[:128])),
+    sc = ml.SparseCoder(m.components_, transform_algorithm="lasso_cd", transform_alpha=0.2)
+    sct = ml.SparseCoder(m.components_, transform_algorithm="threshold", transform_alpha=0.1, split_sign=True)
+    return _fit(dict(sc=_h(sc.transform(S[:128]), sct.transform(S[:128])), code=_h(code), D=_h(m.components_), err=_h(np.float64(m.error_)), T=_h(m.transform(S[:128])),
                      cD=_h(c.components_), cT=_h(c.transform(S[:128])), tT=_h(t.transform(S[:128]), t.components_),
                      mbD=_h(mb.components_), mbT=_h(mb.transform(S[:128])), mbn=_h(np.int32(mb.n_steps_))),
                 m, lambda e: (e.transform(Xh[:256]),))
@@ -244,3 +252,17 @@ def _(ml, X, yc, yr, Xh=None):
     ids, sc = m.recommend(3, R, N=5)
     sid, ssc = m.similar_items(2, N=4)
     return _fit(dict(U=_h(m.user_factors), V=_h(m.item_factors), rid=_h(ids), rsc=_h(sc), sid=_h(sid), ssc=_h(ssc)))
+
+
+@lane("x-decomp-pca-randomized")
+def _(ml, X, yc, yr, Xh=None):
+    p = ml.PCA(n_components=4, svd_solver="randomized", random_state=3).fit(X[:4000])
+    w = ml.PCA(n_components=3, svd_solver="randomized", whiten=True, iterated_power=2).fit(X[:2000])
+    t = ml.TruncatedSVD(n_components=5, algorithm="randomized", random_state=1).fit(X[:4000])
+    return _fit(dict(pc=_h(p.components_), pev=_h(p.explained_variance_, p.explained_variance_ratio_, p.singular_values_),
+                     pnv=_h(np.float64(p.noise_variance_)), pT=_h(p.transform(X[:256])), wT=_h(w.transform(X[:256])),
+                     tc=_h(t.components_, t.singular_values_, t.explained_variance_ratio_), tT=_h(t.transform(X[:256]))),
+                p, lambda e: (e.transform(Xh[:256]),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-decomp-pca-randomized")

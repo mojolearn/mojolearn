@@ -1,0 +1,14 @@
+diff --git a/x_decomp/cells.mojo b/x_decomp/cells.mojo
+index b8537db32..846976af5 100644
+--- a/x_decomp/cells.mojo
++++ b/x_decomp/cells.mojo
+@@ -307,7 +307,8 @@ def gemm_cell(
+     """C[i, j] = sum_p op(A)[i, p] op(B)[p, j], p ascending, one fused
+     multiply-add per term. A is m x k (k x m when ta), B is k x n (n x k when tb)."""
+     var acc = Float32(0)
+-    for p in range(k):
++    for pp in range(k):
++        var p = k - 1 - pp  # SABOTAGE 5300: the gemm fold descending
+         var x = a.unsafe_load(p * m + i) if ta else a.unsafe_load(i * k + p)
+         var y = b.unsafe_load(j * k + p) if tb else b.unsafe_load(p * n + j)
+         acc = ftz(identical_mul_add(ftz(x), ftz(y), acc))

@@ -1,0 +1,13 @@
+diff --git a/x_decomp/cells.mojo b/x_decomp/cells.mojo
+index b8537db32..6d36dc528 100644
+--- a/x_decomp/cells.mojo
++++ b/x_decomp/cells.mojo
+@@ -684,7 +684,7 @@ def barycenter_row(
+                 acc = ftz(identical_mul_add(ftz(S.unsafe_load(zb + a * d + f)), ftz(S.unsafe_load(zb + b * d + f)), acc))
+             S.unsafe_store(gb + a * k + b, acc)
+         trace = add(trace, S.unsafe_load(gb + a * k + a))
+-    var R = mul(reg, trace) if trace > Float32(0) else reg
++    var R = reg  # SABOTAGE 5315: the regularization not scaled by the trace
+     for a in range(k):
+         S.unsafe_store(gb + a * k + a, add(S.unsafe_load(gb + a * k + a), R))
+     var bad = False
