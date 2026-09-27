@@ -599,8 +599,9 @@ sized to the count that lane asked for:
 | algorithm expansion `trees` | -- | **160-169** | 10 |
 | algorithm expansion `cnn` | -- | **170-179** | 10 |
 | algorithm expansion `ann` | -- | **180-189** | 10 |
+| algorithm expansion `metrics` (2026-09-27, lane/metrics) | -- | **190-199** | 10 |
 
-Next free row after this table is **190** (97-99 are unassigned; the
+Next free row after this table is **200** (97-99 are unassigned; the
 expansion ranges start at 100 so the nine lanes of
 docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md never meet anyone already writing
 at 97). Each expansion lane writes its rows ONLY in its own section of
@@ -776,5 +777,9 @@ Every row's check is `x_cnn/checks/seams_check.mojo` (oracle `x_cnn/checks/oracl
 
 
 ### `ann`: rows 180-189
+
+(no rows yet)
+
+### `metrics`: rows 190-199
 
 (no rows yet)
