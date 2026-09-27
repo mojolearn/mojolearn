@@ -7,6 +7,7 @@ the PASS/FAIL/TIMEOUT/STALLED verdicts against a fake compiler. No Mojo.
 """
 import sys
 import time
+import json as json_mod
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -64,12 +65,12 @@ def test_unchanged_selects_nothing():
     assert xcc.plan_jobs(set(), ROWS, ["sm_89"]) == []
 
 
-def test_real_linux_lists_ship_svm_identical_only():
-    """main ships FAST svm Apple-only on Linux (69a519c15); the gate must build
-    what the Linux lists ship, not what the Mac ships."""
+def test_real_linux_lists_ship_svm_fast_and_identical():
+    """FAST svm ships on Linux again (d2270a3f9 reverted the Apple-only
+    69a519c15); the gate builds what the Linux lists ship."""
     rows = xcc.linux_rows()
     tiers = {t for n, _s, t in rows if n == "_mojolearn_svm"}
-    assert tiers == {"identical"}
+    assert tiers == {"fast", "identical"}
     assert all(not s.endswith("_host.sh") for _n, s, _t in rows)
 
 
@@ -183,7 +184,9 @@ def test_main_runs_the_changed_binding_once_per_arch_and_tier(tmp_path, monkeypa
     out = capsys.readouterr().out
     assert rc == 0, out
     lines = [ln for ln in out.splitlines() if ln.strip().startswith("PASS")]
-    assert len(lines) == 2 and all("_mojolearn_svm" in ln and "identical" in ln for ln in lines)
+    assert len(lines) == 4 and all("_mojolearn_svm" in ln for ln in lines)
+    assert sorted(ln.split()[2] + " " + ln.split()[3] for ln in lines) == [
+        "fast gfx942", "fast sm_89", "identical gfx942", "identical sm_89"]
 
 
 def test_main_exits_nonzero_on_a_timeout(tmp_path, monkeypatch, capsys):
@@ -205,3 +208,35 @@ def test_main_with_nothing_changed_compiles_nothing(tmp_path, monkeypatch, capsy
     _patch(monkeypatch, changed=())
     rc = xcc.main(["--ref", "REF", "--mojo", "false", "--cache", str(tmp_path)])
     assert rc == 0 and "nothing to cross-compile" in capsys.readouterr().out
+
+
+def test_list_json_and_summarize_name_every_non_pass(tmp_path):
+    jobs = [("_mojolearn_gp", "build_gp.sh", "fast", "gfx942"),
+            ("_mojolearn_gp", "build_gp.sh", "identical", "gfx942"),
+            ("_mojolearn_svm", "build_svm.sh", "fast", "sm_89")]
+    plan = tmp_path / "plan.json"
+    inc = xcc.write_matrix(plan, "v0.8.22", jobs)
+    assert [j["key"] for j in inc] == ["_mojolearn_gp-fast-gfx942", "_mojolearn_gp-identical-gfx942",
+                                       "_mojolearn_svm-fast-sm_89"]
+    res = tmp_path / "artifacts"
+    for key, verdict in (("_mojolearn_gp-fast-gfx942", "PASS"), ("_mojolearn_gp-identical-gfx942", "FAIL")):
+        d = res / ("xcc-" + key)
+        d.mkdir(parents=True)
+        name, tier, arch = key.rsplit("-", 2)
+        (d / "result.json").write_text(json_mod.dumps(dict(results=[dict(
+            name=name, tier=tier, arch=arch, verdict=verdict, seconds=12.0, detail=["error: boom"])])))
+        (d / "time.txt").write_text("\tMaximum resident set size (kbytes): 2097152\n")
+    md = tmp_path / "summary.md"
+    assert xcc.summarize(str(plan), str(res), str(md)) == 1
+    text = md.read_text()
+    assert "1 of 3 PASS" in text
+    assert "_mojolearn_gp identical gfx942 FAIL" in text
+    assert "_mojolearn_svm fast sm_89 MISSING" in text
+    assert "| 2048 |" in text
+    for d in res.iterdir():
+        doc = json_mod.loads((d / "result.json").read_text())
+        doc["results"][0]["verdict"] = "PASS"
+        (d / "result.json").write_text(json_mod.dumps(doc))
+    assert xcc.summarize(str(plan), str(res)) == 1, "a planned job with no result is never a pass"
+    xcc.write_matrix(plan, "v0.8.22", jobs[:2])
+    assert xcc.summarize(str(plan), str(res)) == 0
