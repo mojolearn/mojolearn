@@ -1557,11 +1557,16 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
                                      whose coarse quantizer is this library's
                                      KMeans; no old lane moved
       kmeans_oracle        70 -> 71  merged with the cluster lane's 63 -> 64
-                                     (x-cluster-kmeans-init) above"""
+                                     (x-cluster-kmeans-init) above
+
+    REMEASURED 2026-09-27 (lane/algos-trees, found red after merging main):
+      gbdt_host_predict    50 -> 51  x-metrics-search (the metrics lane's
+      forest_host_predict  85 -> 86  model_selection search fits GBDT and
+                                     forest estimators); no old lane moved"""
     rev = lane_select.reverse_map()
     for rel, want in (("cluster/host/kmeans_oracle.mojo", 71),
-                      ("core/gbdt_host_predict.mojo", 50),
-                      ("core/forest_host_predict.mojo", 85),
+                      ("core/gbdt_host_predict.mojo", 51),
+                      ("core/forest_host_predict.mojo", 86),
                       ("core/forest_inference.mojo", 50),
                       ("python/mojolearn/neural_inference.py", 41)):
         got = len(rev.get(rel, set()))
