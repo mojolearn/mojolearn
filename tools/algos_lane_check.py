@@ -4,7 +4,7 @@
 """THE ONE LANE CHECK OF THE ALGORITHM EXPANSION: GPU == CPU, BIT FOR BIT
 (lane/algos-prep, 2026-09-27; docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md).
 
-    tools/algos_lane_check.sh <lane[,lane...]> [--sabotage <patch>] [--fixtures f,g] [--out DIR]
+    tools/algos_lane_check.sh <lane[,lane...]> [--sabotage <patch>] [--pass 1|2] [--fixtures f,g] [--out DIR]
 
 On whatever box it runs -- a Linux NVIDIA (or AMD) pod, or a Mac with Metal --
 for each named identity lane it
@@ -33,6 +33,12 @@ patch (a SOURCE edit -- a define-only arm reuses cached kernels), rebuild what
 it made stale, and the check must DISAGREE (a real hash difference, not a
 refusal or a crash); then `git apply -R` (never git checkout), rebuild, and it
 must AGREE again. The patch is reversed on every exit path.
+
+PER-SEAM PROOF (before the diff, on the clean tree): every driver listed in
+tools/identity_lanes/<fragment>.checks must PASS, and each line's sabotage
+patch (`<driver><TAB><patch>`) must make its driver FAIL and PASS again after
+`git apply -R`. With `--pass 2` a fragment of these lanes with no .checks, or
+a line with no patch, fails the check (pass 1 only notes it).
 
 Exit 0 only when every verdict is the one required. The last line is always
 `RESULT: PASS` or `RESULT: FAIL (<why>)`.
@@ -68,9 +74,19 @@ def say(msg):
 def gpu_backend():
     if sys.platform == "darwin":
         return "metal"
-    if shutil.which("nvidia-smi"):
+    # a tool on PATH is not a device (a ROCm VM can carry nvidia-smi): ask each
+    # for a GPU it can see
+    def sees(cmd, needle):
+        if not shutil.which(cmd[0]):
+            return False
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+        return r.returncode == 0 and needle in r.stdout
+    if sees(["nvidia-smi", "-L"], "GPU "):
         return "cuda"
-    if shutil.which("rocminfo") or shutil.which("rocm-smi"):
+    if sees(["rocminfo"], "gfx"):
         return "hip"
     raise Fail("no GPU on this box (no nvidia-smi, no rocminfo, not macOS); the check needs one")
 
@@ -95,6 +111,10 @@ def output_for(binding):
     return HOST_DIR / f"{binding}.so" if binding.endswith("_host") else PKG / "identical" / f"{binding}.so"
 
 
+#: Of a lane's `ubiquitous` bindings, the ones a fit loads on every box.
+BASE_BINDINGS = ("_mojolearn", "_mojolearn_forest_host", "_mojolearn_byte_lm_host")
+
+
 def needed_bindings(lanes):
     """lane -> sorted bindings it runs (GPU and host), from the selector's
     derived map. Refuses a lane with no GPU binding or no host binding."""
@@ -102,7 +122,16 @@ def needed_bindings(lanes):
     _, why = lane_select.lane_sources()
     out = {}
     for lane in lanes:
-        declared = sorted(why[lane]["declared"])
+        declared = set(why[lane]["declared"])
+        # THE BINDINGS EVERY LANE LOADS (trees lane, 2026-09-27: built by hand
+        # once per pod). The selector keeps them out of `declared` on purpose
+        # (`ubiquitous`: reaching them says nothing about one lane), but a fit
+        # still imports them: the base binding's buffer helpers and its CPU
+        # route, and the forest and byte LM host loaders arm_env points at.
+        ubiq = set(why[lane].get("ubiquitous", ()))
+        declared |= {b for b in BASE_BINDINGS if b in ubiq}
+        declared.add("_mojolearn_core_host")     # the base binding's CPU route, on every CPU arm
+        declared = sorted(declared)
         gpu = [b for b in declared if not b.endswith("_host")]
         host = [b for b in declared if b.endswith("_host")]
         if not host:
@@ -153,7 +182,36 @@ def build(binding, log):
     say(f"built {binding} in {time.time() - started:.0f}s")
 
 
+PORTABLE_MATH = ROOT / "packaging" / "portable_math"
+
+
+def ensure_portable_math(log):
+    """python/mojolearn/.libs/libMojolearnMath.so (.dylibs/...dylib on macOS),
+    which `_portable_math` dlopens on the CPU arm: built by the tree's own
+    recipe (packaging/portable_math/stage.py, whose flags are the arithmetic
+    contract) when missing or when its sources changed since the last build."""
+    import hashlib
+    out = PKG / (".dylibs/libMojolearnMath.dylib" if sys.platform == "darwin" else ".libs/libMojolearnMath.so")
+    h = hashlib.sha256()
+    for name in ("portable_math.c", "powers_of_ten.h", "stage.py"):
+        h.update((PORTABLE_MATH / name).read_bytes())
+    stamp = out.with_name(out.name + ".lanecheck-stamp")
+    if out.is_file() and stamp.is_file() and stamp.read_text().strip() == h.hexdigest():
+        return
+    say(f"build {out.relative_to(ROOT)} (packaging/portable_math/stage.py)")
+    code = f"import pathlib, stage; stage.build(pathlib.Path({str(out)!r}))"
+    with open(log, "a") as fh:
+        fh.write(f"\n$ python -c {code!r}\n")
+        fh.flush()
+        rc = subprocess.run([sys.executable, "-c", code], cwd=ROOT, stdout=fh, stderr=subprocess.STDOUT,
+                            env=dict(os.environ, PYTHONPATH=str(PORTABLE_MATH))).returncode
+    if rc or not out.is_file():
+        raise Fail(f"libMojolearnMath did not build (exit {rc}); see {log}")
+    stamp.write_text(h.hexdigest() + "\n")
+
+
 def ensure_built(bindings, log):
+    ensure_portable_math(log)
     for b in sorted(bindings):
         why = stale(b)
         if why:
@@ -244,37 +302,100 @@ def compare(ib, lane, gpu_json, cpu_json, fixtures, log, backend="gpu"):
     return "AGREE", f"compared {counts} ({backend} column vs CPU column {cols[1][0]})"
 
 
-def seam_checks(ib, lanes, log):
-    """The Mojo check drivers the lanes' expansion lanes list in
-    tools/identity_lanes/<id>.checks (the per-seam oracles, fixtures and
-    cards of the brief), each run once under IDENTICAL; any nonzero exit fails."""
+def driver_cmd(path):
+    """How a listed driver runs: a Mojo check under IDENTICAL, a Python or
+    shell driver in the pixi default environment (IDENTICAL too)."""
+    if path.endswith(".mojo"):
+        return ["sh", "tools/with_identical_mode.sh", "pixi", "run", "mojo", "run", "-I", ".", path]
+    if path.endswith(".py"):
+        return ["sh", "tools/with_identical_mode.sh", sys.executable, "-u", path]
+    if path.endswith(".sh"):
+        return ["sh", "tools/with_identical_mode.sh", "sh", path]
+    raise Fail(f"seam driver {path}: a .mojo, .py or .sh file")
+
+
+def run_driver(path, log, why):
+    with open(log, "a") as fh:
+        fh.write(f"\n$ [{why}] {' '.join(driver_cmd(path))}\n")
+        fh.flush()
+        return subprocess.run(driver_cmd(path), cwd=ROOT, stdout=fh, stderr=subprocess.STDOUT).returncode
+
+
+def read_checks(listing):
+    """[(driver, patch or None, line number)] from a .checks file. A line is
+    `<driver>` or `<driver>\t<sabotage patch>` (repo-relative; `#` comments)."""
+    rows = []
+    for n, line in enumerate(listing.read_text().splitlines(), 1):
+        body = line.split("#", 1)[0].rstrip()
+        if not body.strip():
+            continue
+        parts = [x.strip() for x in body.split("\t") if x.strip()]
+        if len(parts) > 2 or (len(parts) == 1 and len(body.split()) > 1):
+            raise Fail(f"{listing.name}:{n}: a line is `<driver>` or `<driver><TAB><sabotage patch>`, not {body!r}")
+        for x in parts:
+            if not (ROOT / x).is_file():
+                raise Fail(f"{listing.name}:{n} lists {x}, which does not exist")
+        rows.append((parts[0], parts[1] if len(parts) == 2 else None, n))
+    return rows
+
+
+def seam_checks(ib, lanes, log, pass_no=1):
+    """THE PER-SEAM PROOF (plan R2/R3). Each fragment that owns one of these
+    lanes lists its check drivers in tools/identity_lanes/<id>.checks, one per
+    line, each optionally with a TAB and a sabotage patch. Every driver must
+    PASS (exit 0) under IDENTICAL; for every patch, `git apply` it, the driver
+    must FAIL (exit nonzero), `git apply -R`, and it must PASS again.
+
+    --pass 1 (default): a fragment with no .checks, or a driver with no patch,
+    is a note. --pass 2: a fragment that registers lanes and has no .checks
+    FAILS, and so does any driver line with no sabotage patch."""
     ids = sorted({fid for fid, owned in getattr(ib, "LANE_FRAGMENTS", {}).items() if set(owned) & set(lanes)})
     for fid in ids:
         listing = ROOT / "tools" / "identity_lanes" / f"{fid}.checks"
         if not listing.is_file():
-            say(f"{fid}: no tools/identity_lanes/{fid}.checks, so no seam check drivers run")
+            if pass_no >= 2:
+                raise Fail(f"{fid}: registers identity lanes and has no tools/identity_lanes/{fid}.checks "
+                           "(pass 2 needs a driver and a sabotage patch per seam)")
+            say(f"{fid}: no tools/identity_lanes/{fid}.checks, so no seam check drivers run (pass 1: a note)")
             continue
-        for line in listing.read_text().splitlines():
-            path = line.split("#", 1)[0].strip()
-            if not path:
-                continue
-            if not (ROOT / path).is_file():
-                raise Fail(f"{listing.name} lists {path}, which does not exist")
-            say(f"seam check {path}")
-            with open(log, "a") as fh:
-                fh.write(f"\n$ tools/with_identical_mode.sh pixi run mojo run -I . {path}\n")
-                fh.flush()
-                rc = subprocess.run(["sh", "tools/with_identical_mode.sh", "pixi", "run", "mojo", "run", "-I", ".",
-                                     path], cwd=ROOT, stdout=fh, stderr=subprocess.STDOUT).returncode
+        rows = read_checks(listing)
+        if not rows:
+            raise Fail(f"{listing.name} lists no driver")
+        bare = [d for d, pt, _ in rows if pt is None]
+        if bare and pass_no >= 2:
+            raise Fail(f"{listing.name}: pass 2 needs a sabotage patch on every line; none for {', '.join(bare)}")
+        for driver, patch, n in rows:
+            say(f"seam check {driver}")
+            rc = run_driver(driver, log, "clean")
             if rc:
-                raise Fail(f"seam check {path} failed (exit {rc}); see {log}")
+                raise Fail(f"seam check {driver} failed (exit {rc}); see {log}")
+            if patch is None:
+                continue
+            pp = ROOT / patch
+            if subprocess.run(["git", "apply", "--check", str(pp)], cwd=ROOT, capture_output=True).returncode:
+                raise Fail(f"{listing.name}:{n}: the sabotage patch {patch} does not apply to this tree")
+            subprocess.run(["git", "apply", str(pp)], cwd=ROOT, check=True)
+            try:
+                say(f"seam sabotage {patch} applied; {driver} must FAIL")
+                rc_sab = run_driver(driver, log, f"sabotaged by {patch}")
+            finally:
+                r = subprocess.run(["git", "apply", "-R", str(pp)], cwd=ROOT)
+                if r.returncode:
+                    raise Fail(f"could not reverse {patch}; the tree is still sabotaged")
+            if rc_sab == 0:
+                raise Fail(f"seam sabotage {patch} was NOT SEEN: {driver} passed under it, so it cannot fail on "
+                           "that seam")
+            rc = run_driver(driver, log, f"restored after {patch}")
+            if rc:
+                raise Fail(f"seam check {driver} failed after reversing {patch} (exit {rc}); see {log}")
+            print(f"SEAM: {driver}: PASS, FAIL under {patch} (exit {rc_sab}), PASS after reversal", flush=True)
 
 
-def check(ib, lanes, needed, backend, fixtures, out, stage, log):
+def check(ib, lanes, needed, backend, fixtures, out, stage, log, pass_no=1):
     """Build what is stale, run both arms per lane, return {lane: verdict}."""
     ensure_built(set().union(*needed.values()), log)
     if stage == "clean":
-        seam_checks(ib, lanes, log)
+        seam_checks(ib, lanes, log, pass_no)
     verdicts = {}
     for lane in lanes:
         gpu_json, cpu_json = out / f"{stage}.{lane}.gpu.json", out / f"{stage}.{lane}.cpu.json"
@@ -298,6 +419,9 @@ def main(argv=None):
     ap.add_argument("lanes", help="identity lanes, comma separated")
     ap.add_argument("--sabotage", default="", help="a SOURCE patch that must make every lane DISAGREE")
     ap.add_argument("--fixtures", default="", help="comma separated; default every fixture")
+    ap.add_argument("--pass", dest="pass_no", type=int, choices=(1, 2), default=1,
+                    help="2: every fragment of these lanes needs a .checks listing with a sabotage patch per "
+                         "driver (pass 2); 1 (default): a missing listing or patch is a note")
     ap.add_argument("--out", default="", help="where the columns and the log go "
                                               "(default ~/mojolearn-evidence/lane-check/<stamp>)")
     a = ap.parse_args(argv)
@@ -320,7 +444,7 @@ def main(argv=None):
         for lane in lanes:
             say(f"{lane} runs: {', '.join(needed[lane])}")
 
-        clean = check(ib, lanes, needed, backend, a.fixtures, out, "clean", log)
+        clean = check(ib, lanes, needed, backend, a.fixtures, out, "clean", log, a.pass_no)
         if any(v != "AGREE" for v in clean.values()):
             raise Fail("clean: " + ", ".join(f"{k} {v}" for k, v in clean.items() if v != "AGREE"))
         if patch is None:

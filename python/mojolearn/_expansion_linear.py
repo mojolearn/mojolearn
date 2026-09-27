@@ -30,7 +30,8 @@ __all__ = ["SGDClassifier", "SGDRegressor", "PoissonRegressor", "GammaRegressor"
            "BayesianRidge", "ARDRegression",
            "Lars", "LassoLars",
            "QuantileRegressor",
-           "Perceptron"]
+           "Perceptron", "PassiveAggressiveClassifier",
+           "PassiveAggressiveRegressor", "SGDOneClassSVM"]
 
 _BINDING = "_mojolearn_x_linear"
 ALGO_SGD, ALGO_GLM, ALGO_HUBER, ALGO_BAYES, ALGO_ARD = 1, 2, 3, 4, 5
@@ -646,3 +647,120 @@ class Perceptron(_LinearClassifierMixin, NumericModeMixin):
             self.alpha, self.l1_ratio, self.eta0, 0.5, 0.1, self.fit_intercept,
             self.max_iter, self.tol, self.n_iter_no_change, self.shuffle, self.random_state)
         return self
+
+
+# -------------------------------------------------------- Passive-aggressive
+# Reference: scikit-learn sklearn/linear_model/_passive_aggressive.py: the
+# SGD kernel with learning_rate pa1 (hinge / epsilon_insensitive) or pa2
+# (squared_*), eta0 = C, no penalty (x_linear/sgd.mojo, `_plain_sgd`'s PA step).
+
+class PassiveAggressiveClassifier(_LinearClassifierMixin, NumericModeMixin):
+    """Passive-aggressive classifier, PA-I or PA-II (scikit-learn's)."""
+
+    _BINDING = _BINDING
+
+    def __init__(self, *, C=1.0, fit_intercept=True, max_iter=1000, tol=1e-3, early_stopping=False,
+                 validation_fraction=0.1, n_iter_no_change=5, shuffle=True, verbose=0, loss="hinge",
+                 n_jobs=None, random_state=None, warm_start=False, class_weight=None, average=False):
+        self.C, self.fit_intercept, self.max_iter, self.tol = C, fit_intercept, max_iter, tol
+        self.early_stopping, self.validation_fraction = early_stopping, validation_fraction
+        self.n_iter_no_change, self.shuffle, self.verbose, self.loss = n_iter_no_change, shuffle, verbose, loss
+        self.n_jobs, self.random_state, self.warm_start = n_jobs, random_state, warm_start
+        self.class_weight, self.average = class_weight, average
+
+    def fit(self, X, y):
+        _sgd_refuse(self, self.early_stopping, self.average, self.class_weight, self.warm_start)
+        if self.loss not in ("hinge", "squared_hinge"):
+            raise ValueError("mojolearn PassiveAggressiveClassifier: loss must be 'hinge' or 'squared_hinge'")
+        if not self.C > 0:
+            raise ValueError("mojolearn PassiveAggressiveClassifier: C must be > 0")
+        Xm = _matrix(X)
+        classes, codes = _classes(self, y, Xm[1])
+        self.classes_ = classes
+        lr = "pa1" if self.loss == "hinge" else "pa2"
+        self.coef_, self.intercept_ = _sgd_fit(
+            self, Xm, codes, len(classes), _SGD_CLF_LOSS["hinge"], None, lr,
+            1.0, 0.0, self.C, 0.5, 0.1, self.fit_intercept,
+            self.max_iter, self.tol, self.n_iter_no_change, self.shuffle, self.random_state)
+        return self
+
+
+class PassiveAggressiveRegressor(_LinearRegressorMixin, NumericModeMixin):
+    """Passive-aggressive regressor, PA-I or PA-II (scikit-learn's)."""
+
+    _BINDING = _BINDING
+
+    def __init__(self, *, C=1.0, fit_intercept=True, max_iter=1000, tol=1e-3, early_stopping=False,
+                 validation_fraction=0.1, n_iter_no_change=5, shuffle=True, verbose=0,
+                 loss="epsilon_insensitive", epsilon=0.1, random_state=None, warm_start=False,
+                 average=False):
+        self.C, self.fit_intercept, self.max_iter, self.tol = C, fit_intercept, max_iter, tol
+        self.early_stopping, self.validation_fraction = early_stopping, validation_fraction
+        self.n_iter_no_change, self.shuffle, self.verbose, self.loss = n_iter_no_change, shuffle, verbose, loss
+        self.epsilon, self.random_state, self.warm_start, self.average = epsilon, random_state, warm_start, average
+
+    def fit(self, X, y):
+        _sgd_refuse(self, self.early_stopping, self.average, None, self.warm_start)
+        if self.loss not in ("epsilon_insensitive", "squared_epsilon_insensitive"):
+            raise ValueError("mojolearn PassiveAggressiveRegressor: loss must be 'epsilon_insensitive' "
+                             "or 'squared_epsilon_insensitive'")
+        if not self.C > 0:
+            raise ValueError("mojolearn PassiveAggressiveRegressor: C must be > 0")
+        Xm = _matrix(X)
+        yv = _vector(y, Xm[1])
+        lr = "pa1" if self.loss == "epsilon_insensitive" else "pa2"
+        coef, intercept = _sgd_fit(
+            self, Xm, yv, 0, _SGD_REG_LOSS["epsilon_insensitive"], None, lr,
+            1.0, 0.0, self.C, 0.5, self.epsilon, self.fit_intercept,
+            self.max_iter, self.tol, self.n_iter_no_change, self.shuffle, self.random_state)
+        self.coef_ = coef.reshape((Xm[2],))
+        self.intercept_ = intercept
+        return self
+
+
+# ---------------------------------------------------------- SGDOneClassSVM
+# Reference: scikit-learn sklearn/linear_model/_stochastic_gradient.py
+# (SGDOneClassSVM, `_fit_one_class`: y = 1, hinge loss, l2, alpha = nu,
+# intercept = 1 - offset, the offset step `- eta * alpha`); x_linear/sgd.mojo.
+
+class SGDOneClassSVM(NumericModeMixin):
+    """Linear one-class SVM trained by SGD (scikit-learn's SGDOneClassSVM)."""
+
+    _BINDING = _BINDING
+    _estimator_type = "outlier_detector"
+
+    def __init__(self, nu=0.5, fit_intercept=True, max_iter=1000, tol=1e-3, shuffle=True, verbose=0,
+                 random_state=None, learning_rate="optimal", eta0=0.0, power_t=0.5, warm_start=False,
+                 average=False):
+        self.nu, self.fit_intercept, self.max_iter, self.tol = nu, fit_intercept, max_iter, tol
+        self.shuffle, self.verbose, self.random_state = shuffle, verbose, random_state
+        self.learning_rate, self.eta0, self.power_t = learning_rate, eta0, power_t
+        self.warm_start, self.average = warm_start, average
+
+    def fit(self, X, y=None):
+        _sgd_refuse(self, False, self.average, None, self.warm_start)
+        if not 0 < self.nu <= 1:
+            raise ValueError("mojolearn SGDOneClassSVM: nu must be in (0, 1]")
+        if self.learning_rate in ("pa1", "pa2"):
+            raise ValueError("mojolearn SGDOneClassSVM: learning_rate must be constant, optimal, invscaling or adaptive")
+        Xm = _matrix(X)
+        coef, intercept = _sgd_fit(
+            self, Xm, None, 1, _SGD_CLF_LOSS["hinge"], "l2", self.learning_rate,
+            self.nu, 0.0, self.eta0, self.power_t, 0.1, self.fit_intercept,
+            self.max_iter, self.tol, 5, self.shuffle, self.random_state)
+        self.coef_ = coef.reshape((Xm[2],))
+        self.offset_ = Array.from_list([1.0 - intercept.tolist()[0]], "<f4")
+        return self
+
+    def decision_function(self, X):
+        _check_fitted(self)
+        out = _decision(self, X, [self.coef_.tolist()], [-self.offset_.tolist()[0]])
+        return out.reshape((out.shape[0],))
+
+    def score_samples(self, X):
+        _check_fitted(self)
+        out = _decision(self, X, [self.coef_.tolist()], [0.0])
+        return out.reshape((out.shape[0],))
+
+    def predict(self, X):
+        return Array.from_list([1 if v >= 0 else -1 for v in self.decision_function(X).tolist()], "<i8")

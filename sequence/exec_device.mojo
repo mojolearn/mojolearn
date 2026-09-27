@@ -6,7 +6,8 @@ from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from sequence.exec import Exec
-from sequence.ops import FP, Args, apply
+from sequence.dispatch import apply
+from sequence.ops import FP, Args
 
 comptime TPB = 128
 

@@ -35,7 +35,7 @@ from ._labels import flatten_labels, sorted_classes, label_kind
 __all__ = ["RobustScaler", "MaxAbsScaler", "OrdinalEncoder", "OneHotEncoder", "TargetEncoder", "SimpleImputer", "KBinsDiscretizer",
            "GaussianNB", "MultinomialNB", "BernoulliNB",
            "LinearDiscriminantAnalysis", "QuadraticDiscriminantAnalysis",
-           "QuantileTransformer", "PowerTransformer", "Normalizer", "PolynomialFeatures", "SplineTransformer", "Binarizer", "LabelEncoder", "LabelBinarizer"]
+           "QuantileTransformer", "PowerTransformer", "Normalizer", "PolynomialFeatures", "SplineTransformer", "Binarizer", "LabelEncoder", "LabelBinarizer", "MultiLabelBinarizer", "IterativeImputer", "VarianceThreshold"]
 
 _BINDING = "_mojolearn_x_prep"
 
@@ -48,6 +48,7 @@ _OPS = dict(
     gnb_eps=27, gnb_params=28, gnb_jll=29, class_log_prior=30, mnb_params=31, bnb_params=32, cnb_params=33, cat_params=34, cat_jll=35,
     lda_prep=36, lda_w=37, lda_stage2=38, lda_stage3=39, qda_cov=40, qda_prep=41, qda_dec=42,
     qt_apply=43, pt_fit=44, pt_apply=45, std_params=46, normalize=47, poly=48, spline_knots=49, spline_apply=50, label_binarize=51, scatter_ones=52,
+    ii_mean=53, ii_gram=54, ii_sub=55, ii_br=56, ii_predict=57, ii_snapshot=58, ii_conv=59, nan_mask=60, gather_cols=61, var_ptp=62,
 )
 _PARAMS = 14
 _NONE = -1
@@ -1787,3 +1788,206 @@ class MultiLabelBinarizer(_PrepBase):
         self._check_fitted()
         rows = yt.tolist() if hasattr(yt, "tolist") else list(yt)
         return [tuple(self._classes[j] for j, v in enumerate(r) if v) for r in rows]
+
+
+# ---------------------------------------------------------------- iterative imputer
+class IterativeImputer(_PrepBase):
+    """sklearn.impute.IterativeImputer with its default estimator
+    (BayesianRidge, default priors, max_iter 300, tol 1e-3): initial fill by
+    SimpleImputer(initial_strategy), then rounds over the features in
+    imputation_order ('ascending' default, 'descending', 'roman', 'arabic';
+    fixed by column index on a tie), each feature regressed on all the others
+    over its observed rows and its missing entries predicted and clipped to
+    [min_value, max_value]; stop when max |change| < tol * max|X_observed|.
+    The whole fit is one device program. Another estimator, sample_posterior,
+    n_nearest_features, imputation_order='random' and add_indicator are
+    refused by name."""
+    _parameters = ("estimator", "missing_values", "sample_posterior", "max_iter", "tol", "n_nearest_features",
+                   "initial_strategy", "fill_value", "imputation_order", "skip_complete", "min_value",
+                   "max_value", "verbose", "random_state", "add_indicator", "keep_empty_features")
+
+    def __init__(self, estimator=None, *, missing_values=float("nan"), sample_posterior=False, max_iter=10,
+                 tol=1e-3, n_nearest_features=None, initial_strategy="mean", fill_value=None,
+                 imputation_order="ascending", skip_complete=False, min_value=-float("inf"),
+                 max_value=float("inf"), verbose=0, random_state=None, add_indicator=False,
+                 keep_empty_features=False):
+        self.estimator = estimator
+        self.missing_values = missing_values
+        self.sample_posterior = sample_posterior
+        self.max_iter = max_iter
+        self.tol = tol
+        self.n_nearest_features = n_nearest_features
+        self.initial_strategy = initial_strategy
+        self.fill_value = fill_value
+        self.imputation_order = imputation_order
+        self.skip_complete = skip_complete
+        self.min_value = min_value
+        self.max_value = max_value
+        self.verbose = verbose
+        self.random_state = random_state
+        self.add_indicator = add_indicator
+        self.keep_empty_features = keep_empty_features
+
+    def _refuse(self):
+        if self.estimator is not None or self.sample_posterior or self.n_nearest_features is not None \
+                or self.add_indicator:
+            raise NotImplementedError("mojolearn: IterativeImputer supports its default estimator only, without "
+                                      "sample_posterior, n_nearest_features or add_indicator")
+        if self.imputation_order not in ("ascending", "descending", "roman", "arabic"):
+            raise NotImplementedError(f"mojolearn: imputation_order={self.imputation_order!r} is not implemented")
+
+    def _bounds(self, d):
+        def per(v):
+            vals = list(v) if isinstance(v, (list, tuple)) or hasattr(v, "tolist") else [v] * d
+            vals = vals.tolist() if hasattr(vals, "tolist") else vals
+            return [float(x) for x in vals]
+        lo, hi = per(self.min_value), per(self.max_value)
+        return [v for pair in zip(lo, hi) for v in pair]
+
+    def _prepare(self, pr, arr, Xf):
+        """Arena: the filled block, its missing mask, the per-column bounds."""
+        n, d = arr.shape
+        dk = len(self._keep)
+        xo = _mark_missing(pr, pr.put(arr), n * d, self.missing_values)
+        fo = pr.put(Xf)
+        ko = pr.put_list(self._keep)
+        mo = pr.alloc(n * dk)
+        pr.stage("nan_mask", n * dk, xo, n, d, ko, dk, mo)
+        bo = pr.put_list(self._bounds_k)
+        return fo, mo, bo
+
+    def fit_transform(self, X, y=None):
+        self._refuse()
+        arr = _x2d(X)
+        n, d = arr.shape
+        mode = _mode()
+        self.initial_imputer_ = SimpleImputer(missing_values=self.missing_values, strategy=self.initial_strategy,
+                                              fill_value=self.fill_value,
+                                              keep_empty_features=self.keep_empty_features).fit(arr)
+        Xf = self.initial_imputer_.transform(arr)
+        self._keep = list(self.initial_imputer_._keep)
+        dk = len(self._keep)
+        bounds = self._bounds(d)
+        self._bounds_k = [bounds[2 * c + h] for c in self._keep for h in (0, 1)]
+        # missing counts per kept column, and the tolerance scale, from the device
+        pr = _Prog()
+        fo, mo, bo = self._prepare(pr, arr, Xf)
+        xo = _mark_missing(pr, pr.put(arr), n * d, self.missing_values)
+        st, stm = pr.alloc(6 * d), pr.alloc(6 * dk)
+        pr.stage("col_stats", d, xo, n, d, st)
+        pr.stage("col_stats", dk, mo, n, dk, stm)
+        pr.run(mode)
+        miss = [round(v * n) for v in pr.values(stm + dk, dk)]      # mean of the 0/1 mask
+        scale = max([v for v in pr.values(st + 5 * d, d)] or [0.0])
+        # the reference's orders (a stable argsort of the missing counts;
+        # 'descending' is that order reversed); a feature with nothing missing
+        # is skipped whether or not skip_complete (the reference fits it and
+        # changes nothing)
+        asc = sorted(range(dk), key=lambda j: miss[j])
+        order = {"ascending": asc, "descending": asc[::-1], "roman": list(range(dk)),
+                 "arabic": list(range(dk))[::-1]}[self.imputation_order]
+        order = [j for j in order if miss[j] > 0]
+        self.n_features_with_missing_ = sum(1 for m in miss if m > 0)
+        self.numeric_mode_, self.n_features_in_ = mode, d
+        rounds = int(self.max_iter)
+        pr = _Prog()
+        fo, mo, bo = self._prepare(pr, arr, Xf)
+        tol = pr.put_scalar(float(self.tol) * scale)
+        flag, niter = pr.alloc(1), pr.alloc(1)
+        prev = pr.alloc(n * dk)
+        means, cnt, g = pr.alloc(dk), pr.alloc(1), pr.alloc(dk * dk)
+        p1 = max(dk - 1, 1)
+        gs, eig, vec, w = pr.alloc(p1 * p1), pr.alloc(p1), pr.alloc(p1 * p1), pr.alloc(p1)
+        seq = []
+        for _ in range(rounds):
+            if order:
+                pr.stage("ii_snapshot", n * dk, fo, prev, flag)
+            for j in order:
+                coef, inter = pr.alloc(dk), pr.alloc(1)
+                seq.append((j, coef, inter))
+                pr.stage("ii_mean", dk, fo, n, dk, mo, j, means, cnt, flag)
+                pr.stage("ii_gram", dk * dk, fo, n, dk, mo, j, means, g, flag)
+                if dk > 1:
+                    pr.stage("ii_sub", 1, g, dk, j, gs, flag)
+                    pr.stage("eigh", 1, gs, dk - 1, 0, eig, vec)
+                pr.stage("ii_br", 1, g, dk, j, eig, vec, means, cnt, coef, inter, flag, w)
+                pr.stage("ii_predict", n, fo, n, dk, mo, j, coef, inter, bo, flag)
+            if order:
+                pr.stage("ii_conv", 1, fo, prev, n * dk, tol, flag, niter)
+        pr.run(mode)
+        done = int(pr.values(niter, 1)[0]) if order else 0
+        self.n_iter_ = done if order else min(1, rounds)
+        kept = seq[:done * len(order)]
+        self.imputation_sequence_ = [(j, pr.get(c, dk), pr.get(i, 1)) for j, c, i in kept]
+        return pr.get(fo, (n, dk))
+
+    def fit(self, X, y=None):
+        self.fit_transform(X)
+        return self
+
+    def transform(self, X):
+        if not hasattr(self, "imputation_sequence_"):
+            raise RuntimeError("mojolearn: this IterativeImputer instance is not fitted yet")
+        arr = _x2d(X)
+        self._check_width(arr)
+        n, d = arr.shape
+        dk = len(self._keep)
+        Xf = self.initial_imputer_.transform(arr)
+        pr = _Prog()
+        fo, mo, bo = self._prepare(pr, arr, Xf)
+        for j, coef, inter in self.imputation_sequence_:
+            co, io = pr.put(coef), pr.put(inter)
+            pr.stage("ii_predict", n, fo, n, dk, mo, j, co, io, bo, _NONE)
+        pr.run(self.numeric_mode_)
+        return pr.get(fo, (n, dk))
+
+
+# ---------------------------------------------------------------- feature selection
+class _SelectorMixin(_PrepBase):
+    def get_support(self, indices=False):
+        self._check_fitted()
+        mask = list(self._mask)
+        return [j for j, m in enumerate(mask) if m] if indices else mask
+
+    def transform(self, X):
+        self._check_fitted()
+        arr = _x2d(X)
+        self._check_width(arr)
+        n, d = arr.shape
+        keep = [j for j, m in enumerate(self._mask) if m]
+        if not keep:
+            raise ValueError("mojolearn: no features were selected")
+        pr = _Prog()
+        xo, ko = pr.put(arr), pr.put_list(keep)
+        out = pr.alloc(n * len(keep))
+        pr.stage("gather_cols", n * len(keep), xo, n, d, ko, len(keep), out)
+        pr.run(self.numeric_mode_)
+        return pr.get(out, (n, len(keep)))
+
+
+class VarianceThreshold(_SelectorMixin):
+    """sklearn.feature_selection.VarianceThreshold: population variance per
+    column over the non-NaN entries (and, at threshold 0, min(variance,
+    max - min), so a constant column is exactly 0); keeps the columns whose
+    variance exceeds the threshold."""
+    _parameters = ("threshold",)
+
+    def __init__(self, threshold=0.0):
+        self.threshold = threshold
+
+    def fit(self, X, y=None):
+        arr = _x2d(X)
+        n, d = arr.shape
+        mode = _mode()
+        pr = _Prog()
+        xo = pr.put(arr)
+        st, var = pr.alloc(6 * d), pr.alloc(d)
+        pr.stage("col_stats", d, xo, n, d, st)
+        pr.stage("var_ptp", d, st, d, var, 1 if self.threshold == 0 else 0)
+        pr.run(mode)
+        self.variances_ = pr.get(var, d)
+        self._mask = [v > self.threshold for v in pr.values(var, d)]
+        if not any(self._mask):
+            raise ValueError(f"mojolearn: No feature in X meets the variance threshold {self.threshold:.5f}")
+        self.numeric_mode_, self.n_features_in_ = mode, d
+        return self

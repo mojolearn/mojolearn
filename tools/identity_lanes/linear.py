@@ -146,3 +146,29 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("decision_function", sl=slice(0, 256)), "x-perceptron")
+
+
+@lane("x-pa-clf")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.PassiveAggressiveClassifier(loss="squared_hinge", max_iter=5, tol=None, random_state=5).fit(X[:2000], yc[:2000])
+    return _linear_clf_fit(m, X, yc, Xh)
+
+
+@lane("x-pa-reg")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.PassiveAggressiveRegressor(max_iter=5, tol=None, random_state=5).fit(X[:2000], yr[:2000])
+    return _linear_reg_fit(m, X, yr, Xh)
+
+
+_batch_decl(_rows_calls("decision_function", sl=slice(0, 256)), "x-pa-clf")
+_batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-pa-reg")
+
+
+@lane("x-sgd-ocsvm")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.SGDOneClassSVM(nu=0.2, max_iter=5, tol=None, random_state=5).fit(X[:2000])
+    return _fit(dict(coef=_h(m.coef_), offset=_h(m.offset_), decision=_h(m.decision_function(X[:256]))),
+                m, lambda e: (e.decision_function(Xh[:256]), e.predict(Xh[:256])))
+
+
+_batch_decl(_rows_calls("decision_function", sl=slice(0, 256)), "x-sgd-ocsvm")
