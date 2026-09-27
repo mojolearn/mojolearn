@@ -1,0 +1,11 @@
+--- a/x_ann/ivf_sq_core.mojo
++++ b/x_ann/ivf_sq_core.mojo
+@@ -29,7 +29,7 @@
+     var hi = lo
+     for i in range(1, n):
+         var v = ftz(r.unsafe_load(i * dim + c))
+-        if v < lo:
++        if v <= lo:
+             lo = v
+         if v > hi:
+             hi = v

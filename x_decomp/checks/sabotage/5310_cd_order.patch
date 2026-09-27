@@ -1,8 +1,8 @@
 diff --git a/x_decomp/cells.mojo b/x_decomp/cells.mojo
-index b8537db32..ca963c04b 100644
+index 4b4c2cedf..ac99cf16d 100644
 --- a/x_decomp/cells.mojo
 +++ b/x_decomp/cells.mojo
-@@ -380,7 +380,7 @@ def cd_row(W: F32Ptr, HHt: F32Ptr, XHt: F32Ptr, perm: I32Ptr, i: Int, k: Int) ->
+@@ -433,7 +433,7 @@ def cd_row(W: F32Ptr, HHt: F32Ptr, XHt: F32Ptr, perm: I32Ptr, i: Int, k: Int) ->
      r ascending, the projected-gradient violation of this row returned."""
      var viol = Float32(0)
      for s in range(k):

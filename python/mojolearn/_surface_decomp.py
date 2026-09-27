@@ -30,7 +30,7 @@ FAMILIES = (
         exports=(
             "x_decomp_host_numeric_mode", "x_decomp_host_vendor", "x_decomp_host_column", "x_decomp_host_sabotage",
             "x_decomp_gemm", "x_decomp_ew", "x_decomp_colsum", "x_decomp_rowsum", "x_decomp_sqdist",
-            "x_decomp_rand", "x_decomp_lu", "x_decomp_lu_solve", "x_decomp_chol", "x_decomp_eigh", "x_decomp_cd_rows", "x_decomp_orth", "x_decomp_svd", "x_decomp_lasso_rows", "x_decomp_omp_rows", "x_decomp_rand_gamma", "x_decomp_lda_rows", "x_decomp_dijkstra_rows", "x_decomp_barycenter_rows", "x_decomp_als_rows",
+            "x_decomp_rand", "x_decomp_lu", "x_decomp_lu_solve", "x_decomp_chol", "x_decomp_eigh", "x_decomp_cd_rows", "x_decomp_orth", "x_decomp_svd", "x_decomp_lasso_rows", "x_decomp_omp_rows", "x_decomp_rand_gamma", "x_decomp_lda_rows", "x_decomp_dijkstra_rows", "x_decomp_barycenter_rows", "x_decomp_als_rows", "x_decomp_absmax_sign", "x_decomp_qr_r",
             "x_decomp_numeric_mode", "x_decomp_vendor",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
