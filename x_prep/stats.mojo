@@ -12,14 +12,24 @@ lgamma by recurrence plus Stirling's series. The ANOVA sums are the two-pass
 spelling (within-class squares about each class mean, between-class squares
 of the means), not the reference's sum-of-squares-minus-square-of-sums,
 which cancels catastrophically in float32. A score the reference returns as
-NaN (a constant feature) is 0 with p-value 1, and an infinite one is
-float32 max with p-value 0 (the reference's force_finite values).
+NaN comes out NaN (the one canonical quiet NaN word, never a vendor's 0/0)
+and an infinite one +inf, as the reference: f_classif of a constant feature
+(or of a single class) is NaN with p-value NaN, of a feature constant within
+every class but not across them +inf with p-value 0; chi2 of an all-zero
+feature is NaN with p-value NaN. f_regression / r_regression apply the
+reference's force_finite values (0 and p-value 1 for NaN, float32 max and
+p-value 0 for an infinite F) only when asked.
 """
 from std.memory import bitcast
-from x_prep.common import FP, IP, p, ld, st
+from x_prep.common import FP, IP, p, ld, st, canonical_nan
 from x_prep.prims import add, sub, mul, div, logf, expf
 
 comptime F32_MAX = Float32(3.4028235e38)
+
+
+@always_inline
+def pos_inf() -> Float32:
+    return bitcast[DType.float32](UInt32(0x7F800000))
 comptime SF_ITERS = 300
 comptime SF_EPS = Float32(3.0e-7)
 comptime SF_TINY = Float32(1.0e-30)
@@ -157,22 +167,27 @@ def f_classif_unit(t: Int, f: FP, q: IP):
         ssw = add(ssw, mul(e, e))
     var dfb = Float32(K - 1)
     var dfw = Float32(n - K)
-    var score = Float32(0)
-    var pv = Float32(1)
-    if ssw > Float32(0):
+    var score = canonical_nan()
+    var pv = canonical_nan()
+    if K < 2:
+        pass
+    elif ssw > Float32(0):
         score = div(div(ssb, dfb), div(ssw, dfw))
         pv = f_sf(dfb, dfw, score)
     elif ssb > Float32(0):
-        score = F32_MAX
+        score = pos_inf()
         pv = Float32(0)
     st(f, p(q, 7) + c, score)
     st(f, p(q, 8) + c, pv)
 
 
 def f_regression_unit(t: Int, f: FP, q: IP):
-    """q = [X, n, d, Y, CENTER, SCORES, PV, CORR]; t = feature. Pearson r of
-    column t with Y (centred unless CENTER == 0), then F = r^2 / (1 - r^2) *
-    dof, dof = n - 2 (n - 1 uncentred); force_finite values at the edges."""
+    """q = [X, n, d, Y, CENTER, SCORES, PV, CORR, FORCE_FINITE]; t = feature.
+    Pearson r of column t with Y (centred unless CENTER == 0), then F = r^2 /
+    (1 - r^2) * dof, dof = n - 2 (n - 1 uncentred). At the edges, with
+    FORCE_FINITE != 0: r = 0, F = 0, p = 1 for a constant column or target,
+    F = float32 max, p = 0 for |r| = 1; with FORCE_FINITE == 0 the
+    reference's raw values: r, F and p NaN, and F = +inf, p = 0."""
     var n = p(q, 1)
     var d = p(q, 2)
     var c = t
@@ -196,14 +211,15 @@ def f_regression_unit(t: Int, f: FP, q: IP):
         sxx = add(sxx, mul(ex, ex))
         syy = add(syy, mul(ey, ey))
     var dof = Float32(n - 2) if p(q, 4) != 0 else Float32(n - 1)
-    var score = Float32(0)
-    var pv = Float32(1)
-    var r = Float32(0)
+    var ff = p(q, 8) != 0
+    var score = Float32(0) if ff else canonical_nan()
+    var pv = Float32(1) if ff else canonical_nan()
+    var r = Float32(0) if ff else canonical_nan()
     if sxx > Float32(0) and syy > Float32(0):
         r = div(sxy, mul(sqrtf_(sxx), sqrtf_(syy)))
         var r2 = mul(r, r)
         if r2 >= Float32(1):
-            score = F32_MAX
+            score = F32_MAX if ff else pos_inf()
             pv = Float32(0)
         else:
             score = mul(div(r2, sub(Float32(1), r2)), dof)
@@ -223,8 +239,9 @@ def sqrtf_(x: Float32) -> Float32:
 def chi2_unit(t: Int, f: FP, q: IP):
     """q = [OBS, K, d, CNT, n, SCORES, PV]; t = feature. OBS = the class-by-
     feature sums (class_stats SUM); expected = class share * feature total;
-    chi2 = sum_k (obs - exp)^2 / exp (a zero expected count adds 0), p =
-    Q((K - 1) / 2, chi2 / 2)."""
+    chi2 = sum_k (obs - exp)^2 / exp, p = Q((K - 1) / 2, chi2 / 2); an
+    all-zero feature (every expected count 0) is NaN with p-value NaN, as the
+    reference's 0 / 0."""
     var K = p(q, 1)
     var d = p(q, 2)
     var c = t
@@ -237,5 +254,9 @@ def chi2_unit(t: Int, f: FP, q: IP):
         if ex > Float32(0):
             var e = sub(ld(f, p(q, 0) + k * d + c), ex)
             chi = add(chi, div(mul(e, e), ex))
+    if not total > Float32(0):
+        st(f, p(q, 5) + c, canonical_nan())
+        st(f, p(q, 6) + c, canonical_nan())
+        return
     st(f, p(q, 5) + c, chi)
     st(f, p(q, 6) + c, gammaincc(mul(Float32(0.5), Float32(K - 1)), mul(Float32(0.5), chi)))

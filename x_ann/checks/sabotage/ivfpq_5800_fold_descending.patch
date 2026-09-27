@@ -1,0 +1,12 @@
+--- a/x_ann/ivf_pq_core.mojo
++++ b/x_ann/ivf_pq_core.mojo
+@@ -128,7 +128,8 @@
+     DEVIATION 5800's."""
+     var acc = Float32(0.0)
+     var base = (j * n_codes + code) * pq_len
+-    for t in range(pq_len):
++    for s in range(pq_len):
++        var t = pq_len - 1 - s
+         var c = j * pq_len + t
+         var qr = Float32(0.0)
+         if c < dim:

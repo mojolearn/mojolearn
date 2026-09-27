@@ -97,7 +97,7 @@ from extratrees.checks.fixtures import (
 from extratrees.impl.decisiontree.decisiontree import (
     CRITERION_ENTROPY,
     CRITERION_MSE,
-    CRITERION_POISSON,
+    CRITERION_MAE,
     DecisionTreeParams,
 )
 from extratrees.impl.decisiontree.batched_levelalgo.builder import (
@@ -874,7 +874,7 @@ def main() raises:
     var c10 = cfg.copy()
     c10.n_estimators = 0
     var c11 = cfg.copy()
-    c11.criterion = CRITERION_POISSON  # a criterion the tree layer refuses
+    c11.criterion = CRITERION_MAE  # a criterion the tree layer refuses
     var c12 = cfg.copy()
     c12.max_features_spec = Int(hashed.n_cols + 4)
 

@@ -6,12 +6,15 @@ The coarse quantizer is the same Lloyd cells over whole rows."""
 
 from std.sys.compile import is_defined
 
+from cluster.host.kmeans_oracle import host_kmeans_fit
+from cluster.impl.kmeans_params import INIT_KMEANS_PLUS_PLUS, METRIC_L2_EXPANDED
+from ivf.host.ivf_host import host_ivf_build
 from x_ann.refine_core import refine_cell
 from x_ann.ivf_rabitq_core import rq_encode_cell, rq_pow2, rq_scale, rq_search_cell
 from x_ann.ivf_sq_core import sq_encode_cell, sq_range_cell, sq_search_cell
 from x_ann.ivf_pq_core import (
-    F32P, I32P, IvfPqIndex, pq_assign_cell, pq_init_cell, pq_lists_from_labels,
-    pq_len_of, pq_residual_cell, pq_search_cell, pq_update_cell, pq_validate,
+    F32P, I32P, IvfPqIndex, pq_assign_cell, pq_labels_from_lists,
+    pq_len_of, pq_residual_cell, pq_search_cell, pq_validate,
 )
 
 comptime X_ANN_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
@@ -26,20 +29,40 @@ def ip(mut l: List[Int32]) -> I32P:
 
 
 def _coarse_host(
-    mut x: List[Float32], n: Int, dim: Int, n_lists: Int, kmeans_n_iters: Int, seed: Int,
-    mut centers: List[Float32], mut labels: List[Int32],
-):
-    centers = List[Float32](length=n_lists * dim, fill=Float32(0.0))
-    labels = List[Int32](length=n, fill=Int32(0))
-    for e in range(n_lists * dim):
-        pq_init_cell(e, fp(x), n, dim, dim, n_lists, seed, fp(centers))
-    for _ in range(kmeans_n_iters):
-        for e in range(n):
-            pq_assign_cell(e, fp(x), fp(centers), 1, dim, dim, n_lists, ip(labels))
-        for e in range(n_lists * dim):
-            pq_update_cell(e, fp(x), ip(labels), n, 1, dim, dim, n_lists, fp(centers))
-    for e in range(n):
-        pq_assign_cell(e, fp(x), fp(centers), 1, dim, dim, n_lists, ip(labels))
+    x: List[Float32], n: Int, dim: Int, n_lists: Int, kmeans_n_iters: Int, seed: Int,
+    mut centers: List[Float32], mut offsets: List[Int32], mut list_indices: List[Int32],
+    mut labels: List[Int32],
+) raises:
+    """`ivf/host/ivf_host.mojo::host_ivf_build`, the host twin of the device
+    driver's IVF-Flat coarse build."""
+    var flat = host_ivf_build(x, n, dim, n_lists, kmeans_n_iters, METRIC_L2_EXPANDED, UInt64(seed))
+    centers = flat.centers.copy()
+    offsets = flat.offsets.copy()
+    list_indices = List[Int32](capacity=n)
+    for s in range(n):
+        list_indices.append(Int32(Int(flat.list_indices[s])))
+    labels = pq_labels_from_lists(offsets, list_indices, n_lists, n)
+
+
+def _codebooks_host(
+    r: List[Float32], n: Int, rot_dim: Int, pq_dim: Int, pq_len: Int, n_codes: Int, pq_iters: Int, seed: Int,
+) raises -> List[Float32]:
+    """`host_kmeans_fit` per subspace, the twin of the device `kmeans_fit`."""
+    var codebooks = List[Float32](capacity=pq_dim * n_codes * pq_len)
+    for j in range(pq_dim):
+        var sub = List[Float32](capacity=n * pq_len)
+        for i in range(n):
+            for t in range(pq_len):
+                sub.append(r[i * rot_dim + j * pq_len + t])
+        var cb = List[Float32](length=n_codes * pq_len, fill=Float32(0.0))
+        var lab = List[UInt32](length=n, fill=UInt32(0))
+        _ = host_kmeans_fit(
+            sub, n, pq_len, n_codes, cb, lab, List[Float32](), 0, pq_iters, Float64(1e-4), UInt64(seed), 1,
+            INIT_KMEANS_PLUS_PLUS, METRIC_L2_EXPANDED, Float64(2.0),
+        )
+        for e in range(n_codes * pq_len):
+            codebooks.append(cb[e])
+    return codebooks^
 
 
 def ivf_pq_build_host(
@@ -52,25 +75,15 @@ def ivf_pq_build_host(
     var n_codes = 1 << pq_bits
     var x = x_in.copy()
     var centers = List[Float32]()
-    var labels = List[Int32]()
-    _coarse_host(x, n, dim, n_lists, kmeans_n_iters, seed, centers, labels)
     var offsets = List[Int32]()
     var list_indices = List[Int32]()
-    pq_lists_from_labels(labels, n, n_lists, offsets, list_indices)
-
+    var labels = List[Int32]()
+    _coarse_host(x, n, dim, n_lists, kmeans_n_iters, seed, centers, offsets, list_indices, labels)
     var r = List[Float32](length=n * rot_dim, fill=Float32(0.0))
-    var cb_count = pq_dim * n_codes * pq_len
-    var cb = List[Float32](length=cb_count, fill=Float32(0.0))
-    var codes = List[Int32](length=n * pq_dim, fill=Int32(0))
     for e in range(n * rot_dim):
         pq_residual_cell(e, fp(x), fp(centers), ip(labels), dim, rot_dim, fp(r))
-    for e in range(cb_count):
-        pq_init_cell(e, fp(r), n, rot_dim, pq_len, n_codes, seed, fp(cb))
-    for _ in range(pq_iters):
-        for e in range(n * pq_dim):
-            pq_assign_cell(e, fp(r), fp(cb), pq_dim, rot_dim, pq_len, n_codes, ip(codes))
-        for e in range(cb_count):
-            pq_update_cell(e, fp(r), ip(codes), n, pq_dim, rot_dim, pq_len, n_codes, fp(cb))
+    var cb = _codebooks_host(r, n, rot_dim, pq_dim, pq_len, n_codes, pq_iters, seed)
+    var codes = List[Int32](length=n * pq_dim, fill=Int32(0))
     for e in range(n * pq_dim):
         pq_assign_cell(e, fp(r), fp(cb), pq_dim, rot_dim, pq_len, n_codes, ip(codes))
     comptime if X_ANN_HOST_SABOTAGE:
@@ -116,11 +129,10 @@ def ivf_sq_build_host(
     mut centers: List[Float32], mut offsets: List[Int32], mut list_indices: List[Int32],
     mut vmin: List[Float32], mut delta: List[Float32], mut codes: List[Int32],
 ) raises:
-    pq_validate(n, dim, n_lists, 1, 1, 0)
+    pq_validate(n, dim, n_lists, 1, 1, 1)
     var x = x_in.copy()
     var labels = List[Int32]()
-    _coarse_host(x, n, dim, n_lists, kmeans_n_iters, seed, centers, labels)
-    pq_lists_from_labels(labels, n, n_lists, offsets, list_indices)
+    _coarse_host(x, n, dim, n_lists, kmeans_n_iters, seed, centers, offsets, list_indices, labels)
     var r = List[Float32](length=n * dim, fill=Float32(0.0))
     for e in range(n * dim):
         pq_residual_cell(e, fp(x), fp(centers), ip(labels), dim, dim, fp(r))
@@ -186,14 +198,13 @@ def ivf_rabitq_build_host(
     mut centers: List[Float32], mut offsets: List[Int32], mut list_indices: List[Int32],
     mut codes: List[Int32], mut norms: List[Float32], mut ips: List[Float32],
 ) raises:
-    pq_validate(n, dim, n_lists, 1, 1, 0)
+    pq_validate(n, dim, n_lists, 1, 1, 1)
     var D = rq_pow2(dim)
     var words = (D + 31) // 32
     var scale = rq_scale(D)
     var x = x_in.copy()
     var labels = List[Int32]()
-    _coarse_host(x, n, dim, n_lists, kmeans_n_iters, seed, centers, labels)
-    pq_lists_from_labels(labels, n, n_lists, offsets, list_indices)
+    _coarse_host(x, n, dim, n_lists, kmeans_n_iters, seed, centers, offsets, list_indices, labels)
     var ws = List[Float32](length=n * D, fill=Float32(0.0))
     codes = List[Int32](length=n * words, fill=Int32(0))
     norms = List[Float32](length=n, fill=Float32(0.0))
