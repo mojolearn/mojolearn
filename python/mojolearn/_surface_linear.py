@@ -25,6 +25,7 @@ FAMILIES = (
             "x-sgd-clf", "x-sgd-reg",
             "x-glm-poisson", "x-glm-gamma", "x-glm-tweedie",
             "x-huber",
+            "x-bayes-ridge", "x-ard",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -32,11 +33,13 @@ FAMILIES = (
             "SGDClassifier", "SGDRegressor",
             "PoissonRegressor", "GammaRegressor", "TweedieRegressor",
             "HuberRegressor",
+            "BayesianRidge", "ARDRegression",
         ),
         display="the linear expansion lane (SGD, GLMs, Huber, Bayesian, LARS, quantile, CV, isotonic)",
         host_modules=(
             "x_linear/ops.mojo", "x_linear/dispatch.mojo", "x_linear/sgd.mojo",
             "x_linear/glm.mojo", "x_linear/lbfgs.mojo", "x_linear/huber.mojo",
+            "x_linear/bayes.mojo",
         ),
         exports=(
             "x_linear_host_numeric_mode", "x_linear_host_vendor", "x_linear_host_column", "x_linear_host_sabotage",
@@ -54,6 +57,8 @@ TRAINING_LANE_NAMES = {
     "x-glm-gamma": "GammaRegressor",
     "x-glm-tweedie": "TweedieRegressor",
     "x-huber": "HuberRegressor",
+    "x-bayes-ridge": "BayesianRidge",
+    "x-ard": "ARDRegression",
 }
 PUBLIC_PENDING_LANES = {
     "x-sgd-clf": "no reference",
@@ -62,4 +67,6 @@ PUBLIC_PENDING_LANES = {
     "x-glm-gamma": "no reference",
     "x-glm-tweedie": "no reference",
     "x-huber": "no reference",
+    "x-bayes-ridge": "no reference",
+    "x-ard": "no reference",
 }
