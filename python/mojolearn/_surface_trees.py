@@ -24,12 +24,16 @@ FAMILIES = (
         training_lanes=(
             "trees-bagging-clf",
             "trees-bagging-reg",
+            "trees-adaboost-clf",
+            "trees-adaboost-reg",
         ),
         inference_lanes=(),
         forest_kinds=(),
         classes=(
             "BaggingClassifier",
             "BaggingRegressor",
+            "AdaBoostClassifier",
+            "AdaBoostRegressor",
         ),
         display="the trees expansion lane's ensemble glue",
         host_modules=("xtrees/ops.mojo", "xtrees/api.mojo"),
@@ -51,10 +55,14 @@ FAMILIES = (
 TRAINING_LANE_NAMES = {
     "trees-bagging-clf": "BaggingClassifier",
     "trees-bagging-reg": "BaggingRegressor",
+    "trees-adaboost-clf": "AdaBoostClassifier",
+    "trees-adaboost-reg": "AdaBoostRegressor",
 }
 PUBLIC_PENDING_LANES = {
     "trees-dt-clf": "no reference",
     "trees-dt-reg": "no reference",
     "trees-bagging-clf": "no reference",
     "trees-bagging-reg": "no reference",
+    "trees-adaboost-clf": "no reference",
+    "trees-adaboost-reg": "no reference",
 }

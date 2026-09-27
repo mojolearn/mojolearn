@@ -57,3 +57,26 @@ def _(ml, X, yc, yr, Xh=None):
 
 _batch_decl(_rows_calls("predict", "predict_proba"), "trees-bagging-clf")
 _batch_decl(_rows_calls("predict"), "trees-bagging-reg")
+
+
+@lane("trees-adaboost-clf")
+def _(ml, X, yc, yr, Xh=None):
+    """SAMME: weighted stumps-plus (depth 2), the weight update and the vote."""
+    m = ml.AdaBoostClassifier(ml.DecisionTreeClassifier(max_depth=2), n_estimators=8, learning_rate=0.8,
+                              random_state=7).fit(X, yc)
+    return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X)),
+                     weights=_h(np.asarray(m.estimator_weights_, dtype=np.float64))),
+                m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+
+
+@lane("trees-adaboost-reg")
+def _(ml, X, yc, yr, Xh=None):
+    """AdaBoost.R2: the weighted bootstrap, the square loss, the weighted median."""
+    m = ml.AdaBoostRegressor(ml.DecisionTreeRegressor(max_depth=3), n_estimators=6, loss="square",
+                             random_state=7).fit(X, yr)
+    return _fit(dict(predict=_h(m.predict(X)), weights=_h(np.asarray(m.estimator_weights_, dtype=np.float64))),
+                m, lambda e: (e.predict(Xh),))
+
+
+_batch_decl(_rows_calls("predict", "predict_proba"), "trees-adaboost-clf")
+_batch_decl(_rows_calls("predict"), "trees-adaboost-reg")

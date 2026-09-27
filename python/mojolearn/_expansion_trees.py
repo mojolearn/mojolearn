@@ -38,6 +38,8 @@ __all__ = [
     "DecisionTreeRegressor",
     "BaggingClassifier",
     "BaggingRegressor",
+    "AdaBoostClassifier",
+    "AdaBoostRegressor",
 ]
 
 
@@ -495,3 +497,218 @@ class BaggingRegressor(_BaggingBase):
             self._acc(acc, est.predict(self._sub_X(Xa, cols, rows_all)), n)
         self._scale(acc, len(self.estimators_))
         return acc
+
+
+# ----------------------------------------------------------------- AdaBoost
+# Reference: scikit-learn `sklearn/ensemble/_weight_boosting.py`
+# (BaseWeightBoosting.fit :118, AdaBoostClassifier._boost_discrete :560 --
+# SAMME, the only algorithm sklearn 1.6+ keeps --, decision_function :660,
+# _compute_proba_from_decision :740; AdaBoostRegressor._boost :1030 --
+# AdaBoost.R2 --, _get_median_predict :1120). The weight update, the error,
+# the estimator weight and the weighted median are `xtrees/ops.mojo`
+# (`samme_step`, `r2_step`, `weighted_median`); R2's weighted bootstrap is the
+# lane's counter RNG, not numpy's `choice`.
+def _trees_normalized_weights(sample_weight, n):
+    if sample_weight is None:
+        return Array.from_list([1.0 / n] * n, "<f8")
+    sw = [float(v) for v in as_f32_c(sample_weight, ndim=1, name="sample_weight")[0].tolist()]
+    if len(sw) != n:
+        raise ValueError(f"sample_weight has {len(sw)} entries, X has {n} rows")
+    if any(not math.isfinite(v) or v < 0 for v in sw):
+        raise ValueError("sample_weight must be finite and nonnegative")
+    total = math.fsum(sw)
+    if not total > 0:
+        raise ValueError("sample_weight must have a positive total")
+    return Array.from_list([v / total for v in sw], "<f8")
+
+
+class _AdaBoostBase(_TreesEnsembleBase):
+    def __init__(self, estimator, n_estimators, learning_rate, random_state):
+        if int(n_estimators) < 1:
+            raise ValueError("n_estimators must be >= 1")
+        if not float(learning_rate) > 0:
+            raise ValueError("learning_rate must be > 0")
+        self.estimator = estimator
+        self.n_estimators = n_estimators
+        self.learning_rate = learning_rate
+        self.random_state = random_state
+        _trees_seed(random_state)
+
+    def _check_X(self, X):
+        if not hasattr(self, "estimators_"):
+            raise RuntimeError("this estimator is not fitted yet")
+        Xa, _ = as_f32_c(X, ndim=2, name="X")
+        if Xa.shape[1] != self.n_features_in_:
+            raise ValueError(f"X has {Xa.shape[1]} features, fit saw {self.n_features_in_}")
+        return Xa
+
+
+class AdaBoostClassifier(_AdaBoostBase):
+    """sklearn's `AdaBoostClassifier` (SAMME) over any mojolearn classifier,
+    default `DecisionTreeClassifier(max_depth=1)`. DEVIATION: each member fits
+    a WEIGHTED BOOTSTRAP of the rows drawn from the boosting weights (the
+    resampling form of AdaBoost, as sklearn's R2 regressor does), where
+    sklearn passes the weights as `sample_weight`: the forest's weighted
+    objective has no CPU restatement, and one spelling serves every column.
+    The error, the estimator weight and the reweighting are SAMME's, on the
+    full training rows."""
+    _estimator_type = "classifier"
+
+    def __init__(self, estimator=None, *, n_estimators=50, learning_rate=1.0, algorithm="SAMME",
+                 random_state=None):
+        if algorithm not in ("SAMME", "deprecated"):
+            _refuse(f"algorithm={algorithm!r}", "SAMME.R was removed from the reference (sklearn 1.6);"
+                    " SAMME is the algorithm.")
+        super().__init__(estimator, n_estimators, learning_rate, random_state)
+        self.algorithm = algorithm
+
+    def fit(self, X, y, sample_weight=None):
+        Xa, _ = as_f32_c(X, ndim=2, name="X")
+        n = Xa.shape[0]
+        self.classes_, codes = encode_labels(y)
+        k = self.n_classes_ = len(self.classes_)
+        if k < 2:
+            raise ValueError("y has fewer than 2 classes")
+        seed = _trees_seed(self.random_state)
+        base = self.estimator if self.estimator is not None else DecisionTreeClassifier(max_depth=1)
+        w = _trees_normalized_weights(sample_weight, n)
+        stats = zeros((4,), "<f8")
+        cols = _trees_arange(Xa.shape[1])
+        self.estimators_, self.estimator_weights_, self.estimator_errors_ = [], [], []
+        b = self._bind()
+        m = int(self.n_estimators)
+        for it in range(m):
+            rows = empty((n,), "<i4")
+            b.x_trees_weighted_sample(addr_ro(w, name="w"), addr(rows, name="rows"), [n, n, seed, it])
+            est = _trees_clone(base, random_state=_trees_sub_seed(seed, it))
+            est.fit(self._gather(Xa, rows, cols), self._gather_codes(codes, rows))
+            pred = as_i32_c(est.predict(Xa), ndim=1, name="predicted codes")[0]
+            b.x_trees_samme_step(addr(w, name="w"), addr_ro(pred, name="pred"), addr_ro(codes, name="y"),
+                                 addr(stats, name="stats"),
+                                 [n, k, float(self.learning_rate), 1 if it == m - 1 else 0])
+            status, alpha, err, total = stats.tolist()
+            if status == 2.0:
+                if not self.estimators_:
+                    raise ValueError("BaseClassifier in AdaBoostClassifier ensemble is worse than random,"
+                                     " ensemble can not be fit.")
+                break
+            self.estimators_.append(est)
+            self.estimator_weights_.append(alpha)
+            self.estimator_errors_.append(err)
+            if status == 1.0 or not total > 0:
+                break
+            if it < m - 1:
+                self._scale(w, total)
+        self.n_features_in_ = Xa.shape[1]
+        return self
+
+    def _decision(self, Xa):
+        n, k = Xa.shape[0], self.n_classes_
+        acc = zeros((n * k,), "<f8")
+        for est, a in zip(self.estimators_, self.estimator_weights_):
+            pred = as_i32_c(est.predict(Xa), ndim=1, name="predicted codes")[0]
+            self._acc_votes(acc, pred, n, k, a, -a / (k - 1))
+        self._scale(acc, math.fsum(self.estimator_weights_))
+        return acc
+
+    def decision_function(self, X):
+        Xa = self._check_X(X)
+        n, k = Xa.shape[0], self.n_classes_
+        acc = self._decision(Xa)
+        if k == 2:
+            v = acc.tolist()
+            return Array.from_list([v[2 * i + 1] - v[2 * i] for i in range(n)], "<f8")
+        return acc.reshape((n, k))
+
+    def predict_proba(self, X):
+        Xa = self._check_X(X)
+        n, k = Xa.shape[0], self.n_classes_
+        acc = self._decision(Xa)
+        if k == 2:
+            v = acc.tolist()
+            d = [(v[2 * i + 1] - v[2 * i]) / 2 for i in range(n)]
+            acc = Array.from_list([x for di in d for x in (-di, di)], "<f8")
+        else:
+            self._scale(acc, k - 1)
+        self._bind().x_trees_softmax_rows(addr(acc, name="proba"), [n, k])
+        return acc.reshape((n, k))
+
+    def predict(self, X):
+        Xa = self._check_X(X)
+        n, k = Xa.shape[0], self.n_classes_
+        acc = self._decision(Xa)
+        if k == 2:
+            v = acc.tolist()
+            codes = Array.from_list([1 if v[2 * i + 1] - v[2 * i] > 0 else 0 for i in range(n)], "<i4")
+        else:
+            codes = self._argmax(acc, n, k)
+        return decode_labels(self.classes_, codes)
+
+
+class AdaBoostRegressor(_AdaBoostBase):
+    """sklearn's `AdaBoostRegressor` (AdaBoost.R2) over any mojolearn
+    regressor, default `DecisionTreeRegressor(max_depth=3)`: each member fits
+    a weighted bootstrap of the rows; `predict` is the weighted median."""
+    _estimator_type = "regressor"
+    _LOSSES = {"linear": 0, "square": 1, "exponential": 2}
+
+    def __init__(self, estimator=None, *, n_estimators=50, learning_rate=1.0, loss="linear",
+                 random_state=None):
+        if loss not in self._LOSSES:
+            raise ValueError(f"loss must be one of {tuple(self._LOSSES)}, got {loss!r}")
+        super().__init__(estimator, n_estimators, learning_rate, random_state)
+        self.loss = loss
+
+    def fit(self, X, y, sample_weight=None):
+        Xa, _ = as_f32_c(X, ndim=2, name="X")
+        n, d = Xa.shape
+        y32, _ = as_f32_c(y, ndim=1, name="y")
+        if len(y32) != n:
+            raise ValueError(f"y has {len(y32)} rows, X has {n}")
+        seed = _trees_seed(self.random_state)
+        base = self.estimator if self.estimator is not None else DecisionTreeRegressor(max_depth=3)
+        w = _trees_normalized_weights(sample_weight, n)
+        stats = zeros((4,), "<f8")
+        cols = _trees_arange(d)
+        self.estimators_, self.estimator_weights_, self.estimator_errors_ = [], [], []
+        b = self._bind()
+        m = int(self.n_estimators)
+        for it in range(m):
+            rows = empty((n,), "<i4")
+            b.x_trees_weighted_sample(addr_ro(w, name="w"), addr(rows, name="rows"), [n, n, seed, it])
+            est = _trees_clone(base, random_state=_trees_sub_seed(seed, it))
+            est.fit(self._gather(Xa, rows, cols), self._gather_vec(y32, rows))
+            pred, _ = as_f32_c(est.predict(Xa), ndim=1, name="prediction")
+            b.x_trees_r2_step(addr(w, name="w"), addr_ro(pred, name="pred"), addr_ro(y32, name="y"),
+                              addr(stats, name="stats"),
+                              [n, self._LOSSES[self.loss], float(self.learning_rate), 1 if it == m - 1 else 0])
+            status, alpha, err, total = stats.tolist()
+            if status == 2.0:
+                if not self.estimators_:
+                    self.estimators_.append(est)
+                    self.estimator_weights_.append(0.0)
+                    self.estimator_errors_.append(err)
+                break
+            self.estimators_.append(est)
+            self.estimator_weights_.append(alpha)
+            self.estimator_errors_.append(err)
+            if status == 1.0 or not total > 0:
+                break
+            if it < m - 1:
+                self._scale(w, total)
+        self.n_features_in_ = d
+        return self
+
+    def predict(self, X):
+        Xa = self._check_X(X)
+        n, m = Xa.shape[0], len(self.estimators_)
+        preds = empty((m * n,), "<f4")
+        b = self._bind()
+        for j, est in enumerate(self.estimators_):
+            p, _ = as_f32_c(est.predict(Xa), ndim=1, name="prediction")
+            b.x_trees_put_f32(addr(preds, name="preds"), addr_ro(p, name="p"), [j * n, n])
+        weights = Array.from_list([float(a) for a in self.estimator_weights_], "<f8")
+        out = empty((n,), "<f4")
+        b.x_trees_weighted_median(addr_ro(preds, name="preds"), addr_ro(weights, name="weights"),
+                                  addr(out, name="median"), [n, m])
+        return out

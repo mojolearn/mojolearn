@@ -76,3 +76,29 @@ def test_bagging_regressor():
                            random_state=0).fit(Xa, ya)
     a, r = r2_score(yb, np.asarray(ours.predict(Xb))), r2_score(yb, ref.predict(Xb))
     assert a >= r - 0.05, (a, r)
+
+
+def test_adaboost_classifier():
+    from sklearn.ensemble import AdaBoostClassifier
+    from sklearn.tree import DecisionTreeClassifier
+    Xa, Xb, ya, yb = _clf()
+    ours = ml.AdaBoostClassifier(ml.DecisionTreeClassifier(max_depth=2), n_estimators=30, random_state=0).fit(Xa, ya)
+    ref = AdaBoostClassifier(DecisionTreeClassifier(max_depth=2), n_estimators=30, random_state=0).fit(Xa, ya)
+    a, r = accuracy_score(yb, np.asarray(ours.predict(Xb))), accuracy_score(yb, ref.predict(Xb))
+    assert a >= r - 0.05, (a, r)
+    np.testing.assert_allclose(np.asarray(ours.predict_proba(Xb)).sum(1), 1.0, rtol=1e-9)
+    Xa2, Xb2, ya2, yb2 = _clf(n_classes=2)
+    ours2 = ml.AdaBoostClassifier(n_estimators=30).fit(Xa2, ya2)
+    ref2 = AdaBoostClassifier(n_estimators=30).fit(Xa2, ya2)
+    a, r = accuracy_score(yb2, np.asarray(ours2.predict(Xb2))), accuracy_score(yb2, ref2.predict(Xb2))
+    assert a >= r - 0.05, (a, r)
+
+
+def test_adaboost_regressor():
+    from sklearn.ensemble import AdaBoostRegressor
+    from sklearn.tree import DecisionTreeRegressor
+    Xa, Xb, ya, yb = _reg()
+    ours = ml.AdaBoostRegressor(ml.DecisionTreeRegressor(max_depth=4), n_estimators=30, random_state=0).fit(Xa, ya)
+    ref = AdaBoostRegressor(DecisionTreeRegressor(max_depth=4), n_estimators=30, random_state=0).fit(Xa, ya)
+    a, r = r2_score(yb, np.asarray(ours.predict(Xb))), r2_score(yb, ref.predict(Xb))
+    assert a >= r - 0.05, (a, r)
