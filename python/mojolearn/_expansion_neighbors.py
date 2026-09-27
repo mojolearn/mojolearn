@@ -30,7 +30,7 @@ from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty
 from ._mode import NumericModeMixin
 
-__all__ = ["LocalOutlierFactor", "NearestCentroid", "OneClassSVM"]
+__all__ = ["LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA"]
 
 # x_neighbors/items.mojo's codes
 _KERNELS = {"linear": 0, "poly": 1, "polynomial": 1, "rbf": 2, "sigmoid": 3, "laplacian": 4,
@@ -494,3 +494,101 @@ class OneClassSVM(_XNeighbors):
     def fit_predict(self, X, y=None):
         return self.fit(X).predict(X)
 
+
+# ====================================================================== KernelPCA
+class KernelPCA(_XNeighbors):
+    """Kernel principal component analysis.
+
+    Reference: scikit-learn `decomposition/_kernel_pca.py` (1.9.0) with
+    `preprocessing.KernelCenterer`: the kernel matrix, centered in their
+    order, the dense eigendecomposition (eigen_solver 'dense'; here the lane's
+    host Jacobi, spectral/checks/symmetric_eig_host.mojo, ascending with
+    pinned signs, then sklearn's `svd_flip(u, None)` sign rule), eigenvalues
+    below zero set to zero, components sorted by decreasing eigenvalue (equal
+    eigenvalues: the higher solver index first, as their reversed argsort),
+    zero components removed when n_components is None or remove_zero_eig.
+    Every eigen_solver is served by the dense solve (DEVIATION 5202: arpack
+    and randomized are approximations of it); fit_inverse_transform,
+    kernel='precomputed' and callables are refused by name.
+    """
+
+    def __init__(self, n_components=None, *, kernel="linear", gamma=None, degree=3, coef0=1,
+                 kernel_params=None, alpha=1.0, fit_inverse_transform=False, eigen_solver="auto",
+                 tol=0, max_iter=None, iterative_power="auto", remove_zero_eig=False,
+                 random_state=None, copy_X=True, n_jobs=None):
+        self.n_components = n_components
+        self.kernel = kernel
+        self.gamma = gamma
+        self.degree = degree
+        self.coef0 = coef0
+        self.kernel_params = kernel_params
+        self.alpha = alpha
+        self.fit_inverse_transform = fit_inverse_transform
+        self.eigen_solver = eigen_solver
+        self.tol = tol
+        self.max_iter = max_iter
+        self.iterative_power = iterative_power
+        self.remove_zero_eig = remove_zero_eig
+        self.random_state = random_state
+        self.copy_X = copy_X
+        self.n_jobs = n_jobs
+
+    def _k(self, A, B):
+        return self._kernel(A, B, self.kernel, self._gamma, self.coef0, self.degree)
+
+    def fit(self, X, y=None):
+        if self.kernel not in _KERNELS:
+            raise NotImplementedError(f"KernelPCA: kernel={self.kernel!r} is not implemented")
+        if self.fit_inverse_transform:
+            raise NotImplementedError("KernelPCA: fit_inverse_transform is not implemented")
+        if self.kernel_params:
+            raise NotImplementedError("KernelPCA: kernel_params is not implemented")
+        X = _f32(X)
+        n, d = X.shape
+        self._gamma = _f32_scalar(1.0 / d if self.gamma is None else float(self.gamma))
+        K = self._k(X, X)
+        cols = self._scale_div(self._colsum(K), float(n))              # K_fit_rows_
+        all_ = self._scale_div(self._colsum(cols.reshape((1, n))), float(n))  # K_fit_all_
+        Kc = empty((n, n), "<f4")
+        self._op("kpca_center", [(K, 0), (cols, 0), (cols, 0), (all_, 0), (Kc, 1)], (n, n))
+        w = empty((n,), "<f4")
+        V = empty((n, n), "<f4")
+        self._op("eigh", [(Kc, 0), (w, 1), (V, 1)], (n,))
+        self._op("svd_flip", [(V, 1)], (n, n))
+        wl = w.tolist()
+        order = list(range(n - 1, -1, -1))           # descending; equal values: higher index first
+        c = n if self.n_components is None else min(n, int(self.n_components))
+        order = order[:c]
+        vals = [max(wl[i], 0.0) for i in order]
+        if self.n_components is None or self.remove_zero_eig:
+            keep = [j for j in range(c) if vals[j] > 0]
+            order = [order[j] for j in keep]
+            vals = [vals[j] for j in keep]
+        self.eigenvalues_ = Array.from_list(vals, "<f4")
+        self.eigenvectors_ = self._take_cols(V, order)
+        self._fit_X, self._fit_cols, self._fit_all = X, cols, all_
+        self.n_features_in_ = d
+        return self
+
+    def fit_transform(self, X, y=None, **params):
+        self.fit(X)
+        return self._alpha_scale(0)
+
+    def _alpha_scale(self, divide):
+        V = self.eigenvectors_
+        out = empty(V.shape, "<f4")
+        self._op("kpca_alpha_scale", [(V, 0), (self.eigenvalues_, 0), (out, 1)], (V.shape[0], V.shape[1], divide))
+        return out
+
+    def transform(self, X):
+        Q = _f32(X)
+        nq = Q.shape[0]
+        nf = self._fit_X.shape[0]
+        K = self._k(Q, self._fit_X)
+        pred = self._scale_div(self._rowsum(K), float(nf))
+        Kc = empty((nq, nf), "<f4")
+        self._op("kpca_center", [(K, 0), (self._fit_cols, 0), (pred, 0), (self._fit_all, 0), (Kc, 1)], (nq, nf))
+        return self._matmul(Kc, self._alpha_scale(1))
+
+    def inverse_transform(self, X):
+        raise NotImplementedError("KernelPCA: inverse_transform needs fit_inverse_transform, which is not implemented")

@@ -69,3 +69,17 @@ def test_ocsvm(kernel):
     assert np.abs(da - db).max() < 2e-2 * scale, (np.abs(da - db).max(), scale)
     clear = np.abs(db) > 2e-2 * scale  # margin rows (free support vectors) sit at decision ~ 0 on both
     assert (np.asarray(a.predict(X)) == b.predict(X))[clear].mean() > 0.97
+
+
+@pytest.mark.parametrize("kernel", ["rbf", "linear", "poly", "cosine"])
+def test_kernel_pca(kernel):
+    from sklearn.decomposition import KernelPCA as R
+    X = _data(80)
+    a = ml.KernelPCA(n_components=3, kernel=kernel)
+    b = R(n_components=3, kernel=kernel, eigen_solver="dense")
+    Za = np.asarray(a.fit_transform(X))
+    Zb = b.fit_transform(X)
+    np.testing.assert_allclose(np.asarray(a.eigenvalues_), b.eigenvalues_, rtol=1e-3)
+    np.testing.assert_allclose(np.abs(Za), np.abs(Zb), rtol=2e-3, atol=2e-3)
+    Xh = _data(20, seed=3)
+    np.testing.assert_allclose(np.abs(np.asarray(a.transform(Xh))), np.abs(b.transform(Xh)), rtol=2e-3, atol=2e-3)

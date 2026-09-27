@@ -13,11 +13,11 @@ FAMILIES = (
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=(
-            "x-neighbors-lof", "x-neighbors-nearest-centroid", "x-neighbors-ocsvm",
+            "x-neighbors-lof", "x-neighbors-nearest-centroid", "x-neighbors-ocsvm", "x-neighbors-kpca",
         ),
         inference_lanes=(),
         forest_kinds=(),
-        classes=("LocalOutlierFactor", "NearestCentroid", "OneClassSVM"),
+        classes=("LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA"),
         display="the neighbors + kernel expansion lane",
         host_modules=("x_neighbors/items.mojo", "x_neighbors/host_ops.mojo", "x_neighbors/eigh.mojo"),
         exports=(
@@ -64,9 +64,11 @@ TRAINING_LANE_NAMES = {
     "x-neighbors-lof": "LocalOutlierFactor",
     "x-neighbors-nearest-centroid": "NearestCentroid",
     "x-neighbors-ocsvm": "OneClassSVM",
+    "x-neighbors-kpca": "KernelPCA",
 }
 PUBLIC_PENDING_LANES = {
     "x-neighbors-lof": "no reference",
     "x-neighbors-nearest-centroid": "no reference",
     "x-neighbors-ocsvm": "no reference",
+    "x-neighbors-kpca": "no reference",
 }

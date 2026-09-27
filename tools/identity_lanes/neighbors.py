@@ -51,7 +51,14 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: (e.decision_function(Xh[:256]), e.predict(Xh[:256])))
 
 
+@lane("x-neighbors-kpca")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.KernelPCA(n_components=4, kernel="rbf")
+    Z = m.fit_transform(X[:256])
+    return _fit(dict(z=_h(Z), eigenvalues=_h(m.eigenvalues_)), m, lambda e: (e.transform(Xh[:128]),))
+
 
 _batch_decl(_rows_calls("score_samples", "predict", sl=slice(0, 256)), "x-neighbors-lof")
 _batch_decl(_rows_calls("predict", "decision_function", "predict_proba", sl=slice(0, 256)), "x-neighbors-nearest-centroid")
 _batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "x-neighbors-ocsvm")
+_batch_decl(_rows_calls("transform", sl=slice(0, 128)), "x-neighbors-kpca")
