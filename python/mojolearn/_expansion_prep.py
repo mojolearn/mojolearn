@@ -25,9 +25,13 @@ integer bookkeeping and IEEE basic operations on scalar parameters.
 """
 import array
 import bisect
+import copy
 import ctypes
+import inspect
+import math
 import numbers
 import operator
+import statistics
 
 from . import _backend
 from ._array import Array
@@ -55,7 +59,7 @@ _OPS = dict(
     qt_inverse=74, pt_inverse=75, block_argmax=76, ord_inverse=77, cat_gather=78, where_code=79, kbins_inverse=80,
     da_shrink=81, da_pool=82, sym_fn=83, da_intercept=84, evr=85, class_stats_w=86,
     indicator=87, code_counts=88, remap_codes=89, add_arrays=90, gnb_merge=91, cat_counts=92, cat_flp=93,
-    mi_dc=94, mi_dd=95, kbins_gw=96, kbins_wq=97, kbins_wkm=98,
+    mi_dc=94, mi_dd=95, kbins_gw=96, kbins_wq=97, kbins_wkm=98, ii_sigma=99, ii_post=100,
 )
 _PARAMS = 14
 _NONE = -1
@@ -102,6 +106,13 @@ class _Prog:
         out = self.alloc(codes.size)
         self.stage("i2f", codes.size, bits, out)
         return out
+
+    def put_ints(self, values):
+        """int32 words (read by `ldi`) -> offset."""
+        codes = Array.from_list([int(v) for v in values] or [0], "<i4")
+        off = self.alloc(codes.size)
+        self._inputs.append((off, codes, "i"))
+        return off
 
     def stage(self, op, total, *params):
         if len(params) > _PARAMS:
@@ -2915,16 +2926,22 @@ class MultiLabelBinarizer(_PrepBase):
 
 # ---------------------------------------------------------------- iterative imputer
 class IterativeImputer(_PrepBase):
-    """sklearn.impute.IterativeImputer with its default estimator
-    (BayesianRidge, default priors, max_iter 300, tol 1e-3): initial fill by
-    SimpleImputer(initial_strategy), then rounds over the features in
-    imputation_order ('ascending' default, 'descending', 'roman', 'arabic';
-    fixed by column index on a tie), each feature regressed on all the others
-    over its observed rows and its missing entries predicted and clipped to
-    [min_value, max_value]; stop when max |change| < tol * max|X_observed|.
-    The whole fit is one device program. Another estimator, sample_posterior,
-    n_nearest_features, imputation_order='random' and add_indicator are
-    refused by name."""
+    """sklearn.impute.IterativeImputer. With its default estimator
+    (BayesianRidge, default priors, max_iter 300, tol 1e-3) the whole fit is
+    one device program: initial fill by SimpleImputer(initial_strategy), then
+    rounds over the features in imputation_order ('ascending' default,
+    'descending', 'roman', 'arabic', or 'random': a fresh permutation each
+    round), each feature regressed on the others (or on n_nearest_features of
+    them, drawn without replacement with probability proportional to their
+    absolute correlation with it) over its observed rows, its missing
+    entries predicted and clipped to [min_value, max_value], or with
+    sample_posterior drawn from the predictive normal truncated to them;
+    stop when the matrix inf-norm of the change < tol * max|X_observed|.
+    Another estimator runs the same rounds in Python over that estimator's
+    fit / predict (predict(return_std=True) for sample_posterior).
+    add_indicator appends MissingIndicator's columns. Every draw (the random
+    order, the neighbours, the posterior samples) comes from random_state by
+    splitmix64 (the reference draws numpy's; None is seed 0)."""
     _parameters = ("estimator", "missing_values", "sample_posterior", "max_iter", "tol", "n_nearest_features",
                    "initial_strategy", "fill_value", "imputation_order", "skip_complete", "min_value",
                    "max_value", "verbose", "random_state", "add_indicator", "keep_empty_features")
@@ -2952,12 +2969,15 @@ class IterativeImputer(_PrepBase):
         self.keep_empty_features = keep_empty_features
 
     def _refuse(self):
-        if self.estimator is not None or self.sample_posterior or self.n_nearest_features is not None \
-                or self.add_indicator:
-            raise NotImplementedError("mojolearn: IterativeImputer supports its default estimator only, without "
-                                      "sample_posterior, n_nearest_features or add_indicator")
-        if self.imputation_order not in ("ascending", "descending", "roman", "arabic"):
-            raise NotImplementedError(f"mojolearn: imputation_order={self.imputation_order!r} is not implemented")
+        if self.imputation_order not in ("ascending", "descending", "roman", "arabic", "random"):
+            raise ValueError(f"mojolearn: invalid imputation_order {self.imputation_order!r}")
+        nnf = self.n_nearest_features
+        if nnf is not None and (not isinstance(nnf, numbers.Integral) or nnf < 1):
+            raise ValueError(f"mojolearn: n_nearest_features must be an int >= 1; got {nnf!r}")
+        if self.sample_posterior and self.estimator is not None and \
+                "return_std" not in inspect.signature(self.estimator.predict).parameters:
+            raise ValueError("mojolearn: If 'sample_posterior' is True, the estimator must support "
+                             "'return_std' in its 'predict' method.")
 
     def _bounds(self, d):
         def per(v):
@@ -2979,11 +2999,85 @@ class IterativeImputer(_PrepBase):
         bo = pr.put_list(self._bounds_k)
         return fo, mo, bo
 
+    def _draw(self):
+        """The next splitmix64 word of the instance's draw stream."""
+        self._rng, z = _splitmix64(self._rng)
+        return z
+
+    def _orders(self, miss, dk, rounds):
+        """The features each round imputes, in order: the reference's orders
+        (a stable argsort of the missing counts; 'descending' that order
+        reversed; 'random' a Fisher-Yates permutation per round of the
+        candidates, every feature or with skip_complete those with missing
+        entries). A feature with nothing missing is skipped whether or not
+        skip_complete (the reference fits it and changes nothing)."""
+        if self.imputation_order != "random":
+            asc = sorted(range(dk), key=lambda j: miss[j])
+            order = {"ascending": asc, "descending": asc[::-1], "roman": list(range(dk)),
+                     "arabic": list(range(dk))[::-1]}[self.imputation_order]
+            return [[j for j in order if miss[j] > 0]] * rounds
+        cand = [j for j in range(dk) if miss[j] > 0] if self.skip_complete else list(range(dk))
+        out = []
+        for _ in range(rounds):
+            perm = list(cand)
+            for i in range(len(perm) - 1, 0, -1):
+                k = self._draw() % (i + 1)
+                perm[i], perm[k] = perm[k], perm[i]
+            out.append([j for j in perm if miss[j] > 0])
+        return out
+
+    def _abs_corr(self, Xf, n, dk, mode):
+        """The reference's `_get_abs_corr_mat` of the initially filled block:
+        |corrcoef| (the centred Gram on the device, the d x d normalisation in
+        Python float64), NaN -> 1e-6, clipped below at 1e-6, a zero diagonal,
+        each column scaled to sum 1."""
+        pr = _Prog()
+        fo, mz = pr.put(Xf), pr.alloc(n * dk)
+        means, cnt, g, flag = pr.alloc(dk), pr.alloc(1), pr.alloc(dk * dk), pr.alloc(1)
+        pr.stage("ii_mean", dk, fo, n, dk, mz, 0, means, cnt, flag)
+        pr.stage("ii_gram", dk * dk, fo, n, dk, mz, 0, means, g, flag)
+        pr.run(mode)
+        G = pr.values(g, dk * dk)
+        m = [[0.0] * dk for _ in range(dk)]
+        for a in range(dk):
+            for b in range(dk):
+                den = math.sqrt(G[a * dk + a] * G[b * dk + b]) if G[a * dk + a] > 0 and G[b * dk + b] > 0 else 0.0
+                v = abs(G[a * dk + b] / den) if den > 0 else float("nan")
+                v = min(v, 1.0) if v == v else 1e-6
+                m[a][b] = 0.0 if a == b else max(v, 1e-6)
+        for b in range(dk):
+            col = sum(m[a][b] for a in range(dk))
+            if col > 0:
+                for a in range(dk):
+                    m[a][b] /= col
+        return m
+
+    def _neighbours(self, corr, j, dk):
+        """n_nearest_features predictors of feature j, drawn without
+        replacement with probability corr[:, j] (a 53-bit splitmix64 uniform
+        against the cumulative weight of the columns not yet drawn)."""
+        w = [corr[a][j] for a in range(dk)]
+        chosen = set()
+        for _ in range(int(self.n_nearest_features)):
+            left = [a for a in range(dk) if a not in chosen and w[a] > 0]
+            tot = sum(w[a] for a in left)
+            u = (self._draw() >> 11) * 2.0 ** -53 * tot
+            pick, cum = left[-1], 0.0
+            for a in left:
+                cum += w[a]
+                if cum > u:
+                    pick = a
+                    break
+            chosen.add(pick)
+        return sorted(chosen)
+
     def fit_transform(self, X, y=None):
         self._refuse()
         arr = _x2d(X)
         n, d = arr.shape
         mode = _mode()
+        self._rng = 0 if self.random_state is None else int(self.random_state) & 0xFFFFFFFFFFFFFFFF
+        self._post_step = 0
         self.initial_imputer_ = SimpleImputer(missing_values=self.missing_values, strategy=self.initial_strategy,
                                               fill_value=self.fill_value,
                                               keep_empty_features=self.keep_empty_features).fit(arr)
@@ -3002,47 +3096,149 @@ class IterativeImputer(_PrepBase):
         pr.run(mode)
         miss = [round(v * n) for v in pr.values(stm + dk, dk)]      # mean of the 0/1 mask
         scale = max([v for v in pr.values(st + 5 * d, d)] or [0.0])
-        # the reference's orders (a stable argsort of the missing counts;
-        # 'descending' is that order reversed); a feature with nothing missing
-        # is skipped whether or not skip_complete (the reference fits it and
-        # changes nothing)
-        asc = sorted(range(dk), key=lambda j: miss[j])
-        order = {"ascending": asc, "descending": asc[::-1], "roman": list(range(dk)),
-                 "arabic": list(range(dk))[::-1]}[self.imputation_order]
-        order = [j for j in order if miss[j] > 0]
+        self._indicator = [j for j, c in enumerate(pr.values(st, d)) if int(c) < n] if self.add_indicator else []
         self.n_features_with_missing_ = sum(1 for m in miss if m > 0)
         self.numeric_mode_, self.n_features_in_ = mode, d
         rounds = int(self.max_iter)
+        orders = self._orders(miss, dk, rounds)
+        nnf = self.n_nearest_features
+        corr = self._abs_corr(Xf, n, dk, mode) if nnf is not None and nnf < dk else None
+        if self.estimator is not None:
+            return self._with_indicator(arr, self._fit_host(arr, Xf, orders, corr, float(self.tol) * scale))
         pr = _Prog()
         fo, mo, bo = self._prepare(pr, arr, Xf)
         tol = pr.put_scalar(float(self.tol) * scale)
         flag, niter = pr.alloc(1), pr.alloc(1)
         prev = pr.alloc(n * dk)
-        means, cnt, g = pr.alloc(dk), pr.alloc(1), pr.alloc(dk * dk)
+        cnt, g = pr.alloc(1), pr.alloc(dk * dk)
         p1 = max(dk - 1, 1)
         gs, eig, vec, w = pr.alloc(p1 * p1), pr.alloc(p1), pr.alloc(p1 * p1), pr.alloc(p1)
-        seq = []
-        for _ in range(rounds):
-            if order:
+        seq, extra = [], []
+        seed = self._rng & 0x7FFFFFFF
+        # the reference checks convergence only without sample_posterior
+        conv = not self.sample_posterior
+        for r in range(rounds):
+            if orders[r] and conv:
                 pr.stage("ii_snapshot", n * dk, fo, prev, flag)
-            for j in order:
-                coef, inter = pr.alloc(dk), pr.alloc(1)
+            for j in orders[r]:
+                coef, inter, means = pr.alloc(dk), pr.alloc(1), pr.alloc(dk)
+                nbl = self._neighbours(corr, j, dk) if corr is not None else None
+                nb1 = pr.put_list([1 if a in nbl else 0 for a in range(dk)]) + 1 if nbl is not None else 0
+                pp = len(nbl) if nbl is not None else dk - 1
+                al = pr.alloc(2) if self.sample_posterior else -1
                 seq.append((j, coef, inter))
                 pr.stage("ii_mean", dk, fo, n, dk, mo, j, means, cnt, flag)
                 pr.stage("ii_gram", dk * dk, fo, n, dk, mo, j, means, g, flag)
-                if dk > 1:
-                    pr.stage("ii_sub", 1, g, dk, j, gs, flag)
-                    pr.stage("eigh", 1, gs, dk - 1, 0, eig, vec)
-                pr.stage("ii_br", 1, g, dk, j, eig, vec, means, cnt, coef, inter, flag, w)
-                pr.stage("ii_predict", n, fo, n, dk, mo, j, coef, inter, bo, flag)
-            if order:
-                pr.stage("ii_conv", 1, fo, prev, n * dk, tol, flag, niter)
+                if pp > 0:
+                    pr.stage("ii_sub", 1, g, dk, j, gs, flag, nb1)
+                    pr.stage("eigh", 1, gs, pp, 0, eig, vec)
+                pr.stage("ii_br", 1, g, dk, j, eig, vec, means, cnt, coef, inter, flag, w, nb1, al + 1)
+                if self.sample_posterior:
+                    sig = pr.alloc(max(pp, 1) ** 2)
+                    pr.stage("ii_sigma", pp * pp, eig, vec, pp, al, sig, flag)
+                    key = pr.put_ints([seed, self._post_step])
+                    self._post_step += 1
+                    pr.stage("ii_post", n, fo, n, dk, mo, j, coef, inter, bo, flag, means, sig, al, nb1, key)
+                    extra.append((nbl, sig, al, means, pp))
+                else:
+                    pr.stage("ii_predict", n, fo, n, dk, mo, j, coef, inter, bo, flag)
+            if orders[r] and conv:
+                pr.stage("ii_conv", 1, fo, prev, n * dk, tol, flag, niter, dk)
         pr.run(mode)
-        done = int(pr.values(niter, 1)[0]) if order else 0
-        self.n_iter_ = done if order else min(1, rounds)
-        kept = seq[:done * len(order)]
-        self.imputation_sequence_ = [(j, pr.get(c, dk), pr.get(i, 1)) for j, c, i in kept]
-        return pr.get(fo, (n, dk))
+        any_order = any(orders)
+        done = (int(pr.values(niter, 1)[0]) if conv else rounds) if any_order else 0
+        self.n_iter_ = done if any_order else min(1, rounds)
+        steps = sum(len(o) for o in orders[:done])
+        self.imputation_sequence_ = [(j, pr.get(c, dk), pr.get(i, 1)) for j, c, i in seq[:steps]]
+        self._posterior = [(nbl, pr.get(sg, max(pp, 1) ** 2), pr.get(al, 2), pr.get(mn, dk))
+                           for nbl, sg, al, mn, pp in extra[:steps]]
+        return self._with_indicator(arr, pr.get(fo, (n, dk)))
+
+    def _with_indicator(self, arr, Xt):
+        """Xt, then MissingIndicator's columns (add_indicator)."""
+        m = len(self._indicator)
+        if not m:
+            return Xt
+        n, d = arr.shape
+        pr = _Prog()
+        xo = _mark_missing(pr, pr.put(arr), n * d, self.missing_values)
+        mo = pr.alloc(n * m)
+        pr.stage("nan_mask", n * m, xo, n, d, pr.put_list(self._indicator), m, mo)
+        pr.run(self.numeric_mode_)
+        return _hstack(Xt, pr.get(mo, (n, m)))
+
+    def _fit_host(self, arr, Xf, orders, corr, tol):
+        """estimator=<any>: the reference's rounds in Python over copies of
+        the estimator (its fit / predict on the float32 blocks; clip, or
+        sample_posterior's truncated normal from predict(return_std=True))."""
+        n, d = arr.shape
+        dk = len(self._keep)
+        mask = self._mask(arr)
+        Xt = [list(r) for r in Xf.tolist()]
+        seq = []
+        done = 0
+        for r, order in enumerate(orders):
+            prev = [list(row) for row in Xt]
+            for j in order:
+                nbl = self._neighbours(corr, j, dk) if corr is not None else [a for a in range(dk) if a != j]
+                est = _clone(self.estimator)
+                obs = [i for i in range(n) if not mask[i][j]]
+                mis = [i for i in range(n) if mask[i][j]]
+                est.fit(Array.from_list([[Xt[i][a] for a in nbl] for i in obs], "<f4"),
+                        Array.from_list([Xt[i][j] for i in obs], "<f4"))
+                seq.append((j, nbl, est))
+                self._impute_host(Xt, mis, j, nbl, est)
+            done = r + 1
+            if not self.sample_posterior and order and \
+                    max(sum(abs(a - b) for a, b in zip(ra, rb)) for ra, rb in zip(Xt, prev)) < tol:
+                break
+        self.n_iter_ = done if any(orders) else min(1, len(orders))
+        self.imputation_sequence_ = seq
+        return Array.from_list(Xt, "<f4")
+
+    def _mask(self, arr):
+        n, d = arr.shape
+        pr = _Prog()
+        xo = _mark_missing(pr, pr.put(arr), n * d, self.missing_values)
+        mo = pr.alloc(n * len(self._keep))
+        pr.stage("nan_mask", n * len(self._keep), xo, n, d, pr.put_list(self._keep), len(self._keep), mo)
+        pr.run(_mode())
+        return [[v != 0 for v in row] for row in pr.get(mo, (n, len(self._keep))).tolist()]
+
+    def _impute_host(self, Xt, mis, j, nbl, est):
+        if not mis:
+            return
+        Xm = Array.from_list([[Xt[i][a] for a in nbl] for i in mis], "<f4")
+        lo, hi = self._bounds_k[2 * j], self._bounds_k[2 * j + 1]
+        if not self.sample_posterior:
+            vals = [min(max(float(v), lo), hi) for v in _as_list(est.predict(Xm))]
+        else:
+            mus, sig = est.predict(Xm, return_std=True)
+            vals = [self._truncnorm_host(float(m), float(s), lo, hi) for m, s in zip(_as_list(mus), _as_list(sig))]
+        f32 = array.array("f", vals)
+        for i, v in zip(mis, f32):
+            Xt[i][j] = v
+
+    def _truncnorm_host(self, mu, sigma, lo, hi):
+        """`_impute_one_feature`'s rule in Python float64: mu beyond a bound
+        -> the bound, sigma <= 0 -> mu, else inversion of the truncated normal
+        at a 53-bit splitmix64 uniform (statistics.NormalDist)."""
+        if mu < lo:
+            return lo
+        if mu > hi:
+            return hi
+        if not sigma > 0:
+            return mu
+        nd = statistics.NormalDist()
+        pa = 0.0 if lo == -math.inf else nd.cdf((lo - mu) / sigma)
+        pb = 1.0 if hi == math.inf else nd.cdf((hi - mu) / sigma)
+        u = ((self._draw() >> 11) + 0.5) * 2.0 ** -53
+        pu = pa + u * (pb - pa)
+        if pu <= 0:
+            return lo
+        if pu >= 1:
+            return hi
+        return min(max(mu + sigma * nd.inv_cdf(pu), lo), hi)
 
     def fit(self, X, y=None):
         self.fit_transform(X)
@@ -3056,13 +3252,38 @@ class IterativeImputer(_PrepBase):
         n, d = arr.shape
         dk = len(self._keep)
         Xf = self.initial_imputer_.transform(arr)
+        if self.estimator is not None:
+            mask = self._mask(arr)
+            Xt = [list(r) for r in Xf.tolist()]
+            for j, nbl, est in self.imputation_sequence_:
+                self._impute_host(Xt, [i for i in range(n) if mask[i][j]], j, nbl, est)
+            return self._with_indicator(arr, Array.from_list(Xt, "<f4"))
         pr = _Prog()
         fo, mo, bo = self._prepare(pr, arr, Xf)
-        for j, coef, inter in self.imputation_sequence_:
+        seed = self._rng & 0x7FFFFFFF
+        for s, (j, coef, inter) in enumerate(self.imputation_sequence_):
             co, io = pr.put(coef), pr.put(inter)
-            pr.stage("ii_predict", n, fo, n, dk, mo, j, co, io, bo, _NONE)
+            if self.sample_posterior:
+                nbl, sig, al, means = self._posterior[s]
+                nb1 = pr.put_list([1 if a in nbl else 0 for a in range(dk)]) + 1 if nbl is not None else 0
+                key = pr.put_ints([seed, self._post_step])
+                self._post_step += 1
+                pr.stage("ii_post", n, fo, n, dk, mo, j, co, io, bo, _NONE, pr.put(means), pr.put(sig), pr.put(al),
+                         nb1, key)
+            else:
+                pr.stage("ii_predict", n, fo, n, dk, mo, j, co, io, bo, _NONE)
         pr.run(self.numeric_mode_)
-        return pr.get(fo, (n, dk))
+        return self._with_indicator(arr, pr.get(fo, (n, dk)))
+
+
+def _clone(est):
+    """A fresh unfitted copy (the reference's `clone`: the same class and
+    get_params(deep=False))."""
+    return type(est)(**est.get_params(deep=False)) if hasattr(est, "get_params") else copy.deepcopy(est)
+
+
+def _as_list(v):
+    return [float(x) for x in (v.tolist() if hasattr(v, "tolist") else v)]
 
 
 # ---------------------------------------------------------------- feature selection

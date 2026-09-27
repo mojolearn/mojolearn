@@ -27,7 +27,7 @@ from x_prep.transform import (
 from x_prep.spline import spline_knots_unit, spline_apply_unit
 from x_prep.iterative import (
     ii_mean_unit, ii_gram_unit, ii_sub_unit, ii_br_unit, ii_predict_unit, ii_snapshot_unit, ii_conv_unit,
-    nan_mask_unit,
+    nan_mask_unit, ii_sigma_unit, ii_post_unit,
 )
 from x_prep.stats import f_classif_unit, f_regression_unit, chi2_unit
 from x_prep.mutual_info import mi_colscale_unit, mi_noise_unit, mi_cc_unit, mi_cd_unit, mi_reduce_unit, mi_dc_unit, mi_dd_unit
@@ -36,7 +36,7 @@ from naive_bayes.da import (
     da_shrink_unit, da_pool_unit, sym_fn_unit, da_intercept_unit, evr_unit,
 )
 
-comptime N_OPS = 99
+comptime N_OPS = 101
 
 
 @always_inline
@@ -239,3 +239,7 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
         kbins_wq_unit(t, f, q)
     comptime if OP == 98:
         kbins_wkm_unit(t, f, q)
+    comptime if OP == 99:
+        ii_sigma_unit(t, f, q)
+    comptime if OP == 100:
+        ii_post_unit(t, f, q)
