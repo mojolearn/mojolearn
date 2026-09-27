@@ -79,9 +79,11 @@ in this lane. Phase 1 is NOT done until IVF-Flat has it too:
    (`sort_slots_by_distance_then_index`), 5861 candidate merge descending
    (`merge_probed_lists`), 5862 extend puts new rows first
    (`extend_list_layout`), and a new `check_extend_matches_build` in
-   ivf_check. They were being run on the ann pod in a separate tree
-   `/root/mj2` (`/root/ivfseam.sh`, output `/root/ivfseam.out`): read it; a
-   clean PASS and three FAILs means the arms bite. Still owed for IVF-Flat:
+   ivf_check. RUN on the H100 pod 2026-09-27 (tree `/root/mj2` = 072b2a152 + b531231f6):
+   clean ivf_check PASS; 5860 FAIL (check_assignment_ties: probe tie toward
+   list 1); 5861 FAIL (check_ivf_sabotages: production merge does not
+   ascend, DEVIATION 1786); 5862 FAIL (check_extend_matches_build: slot 0
+   holds id 41). The three arms BITE; never re-run them. Still owed for IVF-Flat:
    DEVIATION rows for 5860-5862 (IVF-Flat's existing DEVIATIONS 1783/1786/
    1788/1789 name the rules), the ivf lanes' fragment ownership (`ivf*` are
    registered in identity_break.py, not in a tools/identity_lanes fragment, so
