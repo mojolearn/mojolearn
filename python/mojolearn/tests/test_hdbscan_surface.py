@@ -66,7 +66,9 @@ def arm_refusals(rep):
     bad = x.copy(); bad[5, 0] = np.float32("nan")
     rep.raises("REFUSE", Exception, "", "a NaN cell, refused on the Mojo host (DEVIATION 1607)", HDBSCAN().fit, bad)
     m = HDBSCAN(min_cluster_size=8).fit(x)
-    rep.raises("REFUSE", AttributeError, "1610", "probabilities_ refused by name", lambda: m.probabilities_)
+    pr = np.asarray(m.probabilities_)
+    rep.check("FIT", pr.shape == (120,) and bool(np.all((pr >= 0) & (pr <= 1)))
+              and bool(np.all(pr[np.asarray(m.labels_) == -1] == 0)), "probabilities_ in [0, 1], 0 on noise (DEVIATION 5116)")
 
 
 def _dupes(seed=2):

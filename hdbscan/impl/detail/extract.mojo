@@ -9,13 +9,9 @@ map` (`:172-221`) is the CPU/GPU-interop half of `extract_clusters` and is
 not reached by a fit; `hdbscan/NOT_IMPLEMENTED.tsv` has the row.
 Steps run in the reference order.
 
-WHAT IS DELIBERATELY NOT CALLED. Their `:311` runs
-`Membership::get_probabilities`, which is `detail/membership.cuh` -- a CUB
-segmented Max over the same CSR plus a per-point ratio. It is DEFERRED
-(DEVIATION 1610), `probabilities` is not produced, and the surface
-refuses the field by name rather than returning zeros. `hdbscan/
-NOT_IMPLEMENTED.tsv` has the row and the closure is small (the segmented Max is
-DEVIATION 1604's fold with the comparison reversed).
+PROBABILITIES. Their `:311` runs `Membership::get_probabilities`
+(`detail/membership.cuh`); here it is `get_probabilities_host` below
+(DEVIATION 5116), host code the bindings call on the fit's output.
 
 ======================================================================
 DEVIATION BLOCK -- DEVIATION 1609. `TreeUnionFind::find` IS ITERATIVE.
@@ -66,7 +62,9 @@ from hdbscan.impl.detail.stabilities import (
     compute_stabilities,
 )
 from hierarchy.checks.edge_order import weight_order_key
-from checks.numerics import identical_div
+from std.math import isinf, isnan
+
+from checks.numerics import ftz, identical_div
 
 
 struct TreeUnionFind(Movable):
@@ -233,6 +231,72 @@ def do_labelling_on_host(
     return result^
 
 
+def get_probabilities_host(
+    tree: CondensedHierarchy, raw_labels: List[Int32], n_leaves: Int
+) raises -> List[Float32]:
+    """`membership.cuh:39-98` `Membership::get_probabilities` and
+    `kernels/membership.cuh::probabilities_functor`, DEVIATION 5116 (the
+    cluster lane): HOST code both routes call on the condensed tree and the
+    cluster-space labels `do_labelling_on_host` returned (`extract.cuh:311`).
+
+    `deaths[c]` is the max lambda over cluster `c`'s children (their
+    `cub::DeviceSegmentedReduce::Max` over `Utils::parent_csr`): a float
+    max compared by `weight_order_key`, the order `parent_lambdas` uses
+    above, so no fold order or NaN rule can move it. Per point edge:
+    noise stays 0; `death == 0` or a non-finite lambda gives 1 (theirs
+    tests `isnan`, scikit-learn's `get_probabilities` tests `isinf`; both
+    are taken, since `inf / inf` would be a NaN nobody asked for); else
+    `min(lambda, death) / death` by `identical_div`.
+    """
+    var n_clusters = tree.n_clusters
+    var deaths = List[Float32](length=max(n_clusters, 1), fill=Float32(0.0))
+    var seen = List[Bool](length=max(n_clusters, 1), fill=False)
+    for i in range(tree.n_edges):
+        var c = Int(tree.parents[i]) - n_leaves
+        if c < 0 or c >= n_clusters:
+            raise Error(
+                "hdbscan.get_probabilities: parent " + String(tree.parents[i])
+                + " at edge " + String(i) + " is outside the cluster range"
+            )
+        var lam = tree.lambdas[i]
+        if not seen[c] or weight_order_key(lam) > weight_order_key(deaths[c]):
+            deaths[c] = lam
+            seen[c] = True
+    var out = List[Float32](length=n_leaves, fill=Float32(0.0))
+    for i in range(tree.n_edges):
+        var child = Int(tree.children[i])
+        if child >= n_leaves:
+            continue
+        var cluster = Int(raw_labels[child])
+        if cluster == -1:
+            continue
+        var death = deaths[cluster]
+        var lam = tree.lambdas[i]
+        if death == Float32(0.0) or isnan(lam) or isinf(lam):
+            out[child] = Float32(1.0)
+        else:
+            var lo = lam if lam < death else death
+            out[child] = ftz(identical_div(lo, death))
+    return out^
+
+
+def probabilities_from_labels(
+    tree: CondensedHierarchy,
+    labels: List[Int32],
+    inverse_label_map: List[Int32],
+    n_leaves: Int,
+) raises -> List[Float32]:
+    """`get_probabilities_host` from the FINAL labels: each is mapped back
+    to its condensed cluster through `inverse_label_map` (the inverse of
+    `runner.h:226-233`'s remap), the cluster-space labels theirs reads.
+    Both bindings call this on their fit's output."""
+    var raw = List[Int32](capacity=n_leaves)
+    for i in range(n_leaves):
+        var l = Int(labels[i])
+        raw.append(Int32(-1) if l < 0 else inverse_label_map[l])
+    return get_probabilities_host(tree, raw, n_leaves)
+
+
 def extract_clusters(
     ctx: DeviceContext,
     tree: CondensedHierarchy,
@@ -300,7 +364,8 @@ def extract_clusters(
         cluster_selection_epsilon,
     )
 
-    # `:311` Membership::get_probabilities -- DEFERRED, DEVIATION 1610.
+    # `:311` Membership::get_probabilities: `get_probabilities_host`
+    # (DEVIATION 5116), called by the runner on these raw labels.
 
     _ = stabilities^
     _ = is_cluster^

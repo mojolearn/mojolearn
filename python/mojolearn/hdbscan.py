@@ -16,7 +16,6 @@ WHAT IS REFUSED, AND WHERE (the estimator's header):
     alpha <= 0 or non-finite             Mojo host
     n_rows < 2, n_rows > 46340           Mojo host
     a NaN or infinite anywhere           Mojo host (DEVIATION 1607)
-    probabilities_                       here, by name (DEVIATION 1610)
 
 HELD-OUT POINTS (2026-09-15). `HDBSCAN(prediction_data=True)` keeps the
 condensed tree and builds cuML's prediction data at fit time
@@ -111,8 +110,9 @@ class HDBSCAN(NumericModeMixin):
     n_boruvka_rounds_ : int
         An integer card stage.
     n_condensed_clusters_ : int
-    probabilities_
-        NOT IMPLEMENTED; reading it raises by name (DEVIATION 1610).
+    probabilities_ : Array (n_samples,) float32
+        cuML's `get_probabilities` (DEVIATION 5116): the strength of each
+        point's membership in its cluster, 0 for noise.
     """
 
     _BINDING = "_mojolearn_hdbscan"
@@ -152,15 +152,6 @@ class HDBSCAN(NumericModeMixin):
                     "it with bash bindings/build_hdbscan.sh"
                 )
         return mod
-
-    @property
-    def probabilities_(self):
-        raise AttributeError(
-            "mojolearn HDBSCAN: probabilities_ is NOT IMPLEMENTED (DEVIATION 1610): "
-            "cuML's Membership::get_probabilities is a segmented max over the "
-            "condensed tree plus a per-point ratio; returning zeros or ones would "
-            "be a number nobody computed. hdbscan/estimator.mojo names the closure."
-        )
 
     def fit(self, X, y=None):
         """Cluster row-major `X`. Returns `self`."""
@@ -213,6 +204,7 @@ class HDBSCAN(NumericModeMixin):
         # ORDER MATCHES bindings/_mojolearn_hdbscan.mojo::hdbscan_fit_binding.
         # x, labels_out, core_dists_out, info_out
         addrs = [addr_ro(x, name="X"), addr(labels, name="labels_"), addr(core, name="core_distances_"), addr(info, name="info")]
+        probs = empty((n,), "<f4")
         if want_pd:
             # tree_parents_out, tree_children_out, tree_lambdas_out,
             # tree_sizes_out (2 * n each), inverse_label_map_out (n)
@@ -224,6 +216,8 @@ class HDBSCAN(NumericModeMixin):
             addrs += [addr(t_par, name="tree parents"), addr(t_ch, name="tree children"),
                       addr(t_lam, name="tree lambdas"), addr(t_sz, name="tree sizes"),
                       addr(t_inv, name="inverse_label_map")]
+        # probabilities_out, always LAST (DEVIATION 5116)
+        addrs.append(addr(probs, name="probabilities_"))
         ext = self._extension()
         n_clusters = ext.hdbscan_fit(
             addrs,
@@ -235,6 +229,7 @@ class HDBSCAN(NumericModeMixin):
         self.n_features_in_ = d
         self.labels_ = labels
         self.core_distances_ = core
+        self.probabilities_ = probs
         self.n_clusters_ = int(n_clusters)
         self.n_outliers_ = int(info[1])
         self.n_boruvka_rounds_ = int(info[2])

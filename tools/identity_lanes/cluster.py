@@ -330,16 +330,18 @@ def _(ml, X, yc, yr, Xh=None):
     multiples of the plain fit's median core distance, so the search merges
     clusters on every fixture's scale; eom, and leaf with
     allow_single_cluster (the walk's root arm and, at the largest, the
-    labelling's epsilon branch, extract.cuh:148-153)."""
+    labelling's epsilon branch, extract.cuh:148-153); probabilities_
+    (DEVIATION 5116) on every eom fit."""
     Z = X[:2000, :4]
     base = ml.HDBSCAN(min_cluster_size=5).fit(Z)
     med = float(np.median(np.asarray(base.core_distances_, dtype=np.float32)))
-    parts = dict(base_labels=_h(base.labels_))
+    parts = dict(base_labels=_h(base.labels_), base_probs=_h(base.probabilities_))
     last = None
     for k in (1.0, 3.0, 30.0):
         e = float(np.float32(k * med))
         m = ml.HDBSCAN(min_cluster_size=5, cluster_selection_epsilon=e, prediction_data=True).fit(Z)
         parts[f"eom{k:g}_labels"] = _h(m.labels_)
+        parts[f"eom{k:g}_probs"] = _h(m.probabilities_)
         parts[f"eom{k:g}_n"] = _h(np.asarray([m.n_clusters_, m.n_outliers_], dtype=np.int64))
         last = m
         lf = ml.HDBSCAN(min_cluster_size=8, min_samples=3, cluster_selection_method="leaf",
