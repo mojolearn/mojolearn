@@ -40,7 +40,7 @@ __all__ = []
 _BINDING = "_mojolearn_x_metrics"
 
 #: op name -> id; x_metrics/units.mojo `run_unit` holds the same table.
-_OPS = dict(group_sort=0, group_sum=1, pair_key=2)
+_OPS = dict(group_sort=0, group_sum=1, pair_key=2, reg_term=3, col_sort=4, wpercentile=5, col_max=6, bin_curve=7, row_metric=8)
 _PARAMS = 14
 _NONE = -1
 
@@ -731,3 +731,1102 @@ def classification_report(y_true, y_pred, *, labels=None, target_names=None, sam
     for avg, a, b, c, d in avg_rows:
         out += row_fmt.format(avg, a, b, c, d, width=width, digits=digits)
     return out
+
+
+# ---------------------------------------------------------------------------
+# Regression (scikit-learn 1.9 sklearn/metrics/_regression.py)
+# ---------------------------------------------------------------------------
+
+_TERM = dict(sq=0, abs=1, sqlog=2, ape=3, pinball=4, tweedie=5, diff=6)
+
+
+def _f32(x):
+    """The Float32 nearest a binary64 value (round to nearest even)."""
+    import struct
+    return struct.unpack("<f", struct.pack("<f", float(x)))[0]
+
+
+class _Reg:
+    """Validated regression targets: (n, D) Float32, finite, same shape."""
+
+    def __init__(self, y_true, y_pred, sample_weight, multioutput, caller, *, variance_ok=False):
+        from ._metrics_impl import _shape_of, _is_float64
+        from ._buffer import materialize_f32_lists
+        arrays = []
+        for name, v in (("y_true", y_true), ("y_pred", y_pred)):
+            a = materialize_f32_lists(v, name)[0]
+            if a.dtype != "<f4":
+                raise TypeError(f"mojolearn {caller}: {name} must have dtype float32; cast explicitly before scoring")
+            if a.ndim == 1:
+                a = a.reshape((a.shape[0], 1))
+            if a.ndim != 2 or a.shape[0] == 0 or a.shape[1] == 0:
+                raise ValueError(f"mojolearn {caller}: {name} must be a nonempty (n,) or (n, n_outputs) array")
+            a = as_f32_c(a, ndim=2, name=name)[0]
+            if not all_finite(a):
+                raise ValueError(f"mojolearn {caller}: {name} contains NaN or infinity")
+            arrays.append(a)
+        self.y, self.p = arrays
+        if self.y.shape != self.p.shape:
+            raise ValueError(f"mojolearn {caller}: y_true and y_pred have different shapes "
+                             f"{self.y.shape} and {self.p.shape}")
+        self.n, self.D = self.y.shape
+        self.w = _weights(sample_weight, self.n, caller)
+        allowed = ("raw_values", "uniform_average") + (("variance_weighted",) if variance_ok else ())
+        if isinstance(multioutput, str):
+            if multioutput not in allowed:
+                raise ValueError(f"Allowed 'multioutput' string values are {allowed}. "
+                                 f"You provided multioutput={multioutput!r}")
+            self.mo = multioutput
+        elif multioutput is None:
+            self.mo = "uniform_average"
+        else:
+            vals = [float(v) for v in flatten_mo(multioutput)]
+            if self.D == 1:
+                raise ValueError("Custom weights are useful only in multi-output cases.")
+            if len(vals) != self.D:
+                raise ValueError("There must be equally many custom weights "
+                                 f"({len(vals)}) as outputs ({self.D}).")
+            self.mo = vals
+        self.caller = caller
+
+    def column_means(self, kinds, numeric_mode, *, pred_broadcast=None, scalar=None):
+        """For each (kind, Y-source) in `kinds`: the per-column (weighted)
+        mean of the term, binary64 from the Float32 sums (DEVIATION 6106)."""
+        prog = _Prog()
+        Y = prog.put(self.y)
+        P = prog.put(self.p) if pred_broadcast is None else prog.put(
+            Array.from_list([_f32(v) for v in pred_broadcast], "<f4"))
+        S = prog.put(Array.from_list([_f32(0.0 if scalar is None else scalar)], "<f4"))
+        W = _NONE if self.w is None else prog.put(self.w)
+        n, D = self.n, self.D
+        zero = prog.alloc(n)
+        prog.stage("pair_key", n, 0, 0, zero, 1, 2)
+        outs = []
+        for kind in kinds:
+            term = prog.alloc(n * D)
+            prog.stage("reg_term", n * D, Y, P, term, D, _TERM[kind], S, 0 if pred_broadcast is None else 1)
+            outs.append(_group(prog, zero, n, 1, values=term, vstride=D, weights=W, width=D)[1])
+        sw_out = _group(prog, zero, n, 1, weights=W)[1] if self.w is not None else None
+        prog.run(numeric_mode)
+        den = float(n) if self.w is None else prog.floats(sw_out, 1)[0]
+        return [[v / den for v in prog.floats(o, D)] for o in outs]
+
+    def percentile(self, values_off_fn, rank, numeric_mode, *, average=True):
+        """Per-column weighted percentile of the Float32 array a program
+        stage writes (`values_off_fn(prog) -> offset`, n x D)."""
+        prog = _Prog()
+        V = values_off_fn(prog)
+        n, D = self.n, self.D
+        order = prog.alloc(n * D)
+        prog.stage("col_sort", D, V, n, D, order)
+        W = _NONE if self.w is None else prog.put(self.w)
+        R = prog.put(Array.from_list([_f32(rank)], "<f4"))
+        out = prog.alloc(D)
+        cdf = prog.alloc(n * D)
+        prog.stage("wpercentile", D, V, n, D, order, W, R, 1 if average else 0, out, cdf)
+        prog.run(numeric_mode)
+        flags = [prog.ints(cdf + c * n, 1)[0] for c in range(D)]
+        vals = prog.floats(out, D)
+        return [float("nan") if fl == -1 else v for v, fl in zip(vals, flags)]
+
+    def average(self, errors):
+        if self.mo == "raw_values":
+            return Array.from_list([float(v) for v in errors], "<f8")
+        if self.mo == "uniform_average":
+            s = 0.0
+            for v in errors:
+                s += v
+            return float(s / len(errors))
+        s = sw = 0.0
+        for v, w in zip(errors, self.mo):
+            s += v * w
+            sw += w
+        return float(s / sw)
+
+
+def flatten_mo(values):
+    from ._labels import flatten_labels
+    return flatten_labels(values)
+
+
+def _mean_error(kind, y_true, y_pred, sample_weight, multioutput, numeric_mode, caller, *, root=False,
+                scalar=None):
+    r = _Reg(y_true, y_pred, sample_weight, multioutput, caller)
+    errors = r.column_means([kind], numeric_mode, scalar=scalar)[0]
+    if root:
+        errors = [pmath.sqrt(v) for v in errors]
+    return r.average(errors)
+
+
+def regression_error_options(name, y_true, y_pred, sample_weight, multioutput, numeric_mode):
+    """mean_squared_error / mean_absolute_error / root_mean_squared_error
+    with sample_weight, multioutput or 2-D targets (lane/metrics); the 1-D
+    unweighted call keeps its original kernel and bits."""
+    kind = {"mean_squared_error": "sq", "mean_absolute_error": "abs", "root_mean_squared_error": "sq"}[name]
+    return _mean_error(kind, y_true, y_pred, sample_weight, multioutput, numeric_mode, name,
+                       root=name == "root_mean_squared_error")
+
+
+def mean_squared_log_error(y_true, y_pred, *, sample_weight=None, multioutput="uniform_average",
+                           numeric_mode=None):
+    """scikit-learn 1.9 `mean_squared_log_error`: the mean of
+    `(log1p(y) - log1p(p))^2` (portable log1p, IDENTITY_PATHS row 51);
+    values <= -1 are refused as scikit-learn refuses them."""
+    _refuse_log_domain(y_true, y_pred, "Mean Squared Logarithmic Error")
+    return _mean_error("sqlog", y_true, y_pred, sample_weight, multioutput, numeric_mode,
+                       "mean_squared_log_error")
+
+
+def root_mean_squared_log_error(y_true, y_pred, *, sample_weight=None, multioutput="uniform_average",
+                                numeric_mode=None):
+    """scikit-learn 1.9 `root_mean_squared_log_error` (per-output root, then averaged)."""
+    _refuse_log_domain(y_true, y_pred, "Root Mean Squared Logarithmic Error")
+    return _mean_error("sqlog", y_true, y_pred, sample_weight, multioutput, numeric_mode,
+                       "root_mean_squared_log_error", root=True)
+
+
+def _refuse_log_domain(y_true, y_pred, what):
+    from ._buffer import materialize_f32_lists
+    for v in (y_true, y_pred):
+        a = materialize_f32_lists(v, "input")[0]
+        if a.size and a.min() <= -1:
+            raise ValueError(f"{what} cannot be used when targets contain values less than or equal to -1.")
+
+
+def mean_absolute_percentage_error(y_true, y_pred, *, sample_weight=None, multioutput="uniform_average",
+                                   numeric_mode=None):
+    """scikit-learn 1.9 `mean_absolute_percentage_error`: `|p - y| / max(|y|,
+    eps)` with numpy's float64 epsilon, averaged (not multiplied by 100)."""
+    return _mean_error("ape", y_true, y_pred, sample_weight, multioutput, numeric_mode,
+                       "mean_absolute_percentage_error")
+
+
+def _check_alpha(alpha):
+    if is_bool(alpha) or not isinstance(alpha, numbers.Real) or not 0 <= alpha <= 1:
+        raise ValueError("alpha must be a real number in [0, 1]")
+    return float(alpha)
+
+
+def mean_pinball_loss(y_true, y_pred, *, sample_weight=None, alpha=0.5, multioutput="uniform_average",
+                      numeric_mode=None):
+    """scikit-learn 1.9 `mean_pinball_loss` (alpha is rounded to Float32)."""
+    return _mean_error("pinball", y_true, y_pred, sample_weight, multioutput, numeric_mode,
+                       "mean_pinball_loss", scalar=_check_alpha(alpha))
+
+
+def median_absolute_error(y_true, y_pred, *, multioutput="uniform_average", sample_weight=None,
+                          numeric_mode=None):
+    """scikit-learn 1.9 `median_absolute_error`: the per-output median of
+    |y - p| (the weighted percentile at 50 with averaging when weighted, the
+    same answer as numpy's median when not), from a stable device sort."""
+    r = _Reg(y_true, y_pred, sample_weight, multioutput, "median_absolute_error")
+
+    def terms(prog):
+        Y, P = prog.put(r.y), prog.put(r.p)
+        out = prog.alloc(r.n * r.D)
+        prog.stage("reg_term", r.n * r.D, Y, P, out, r.D, _TERM["abs"], Y, 0)
+        return out
+    return r.average(r.percentile(terms, 50.0, numeric_mode))
+
+
+def max_error(y_true, y_pred, *, numeric_mode=None):
+    """scikit-learn 1.9 `max_error` (single output)."""
+    r = _Reg(y_true, y_pred, None, "uniform_average", "max_error")
+    if r.D != 1:
+        raise ValueError("Multioutput not supported in max_error")
+    prog = _Prog()
+    Y, P = prog.put(r.y), prog.put(r.p)
+    t = prog.alloc(r.n)
+    prog.stage("reg_term", r.n, Y, P, t, 1, _TERM["abs"], Y, 0)
+    out = prog.alloc(1)
+    prog.stage("col_max", 1, t, r.n, 1, out)
+    prog.run(numeric_mode)
+    return float(prog.floats(out, 1)[0])
+
+
+def _assemble(num, den, mo, force_finite):
+    scores = []
+    for a, b in zip(num, den):
+        if not force_finite:
+            if b != 0:
+                scores.append(1 - a / b)
+            elif a == 0:
+                scores.append(float("nan"))
+            else:
+                scores.append(float("-inf"))
+        elif b != 0 and a != 0:
+            scores.append(1 - a / b)
+        elif a != 0:
+            scores.append(0.0)
+        else:
+            scores.append(1.0)
+    if mo == "raw_values":
+        return Array.from_list(scores, "<f8")
+    if mo == "uniform_average":
+        weights = None
+    elif mo == "variance_weighted":
+        weights = den if any(v != 0 for v in den) else None
+    else:
+        weights = mo
+    if weights is None:
+        s = 0.0
+        for v in scores:
+            s += v
+        return float(s / len(scores))
+    s = sw = 0.0
+    for v, w in zip(scores, weights):
+        s += v * w
+        sw += w
+    return float(s / sw)
+
+
+def explained_variance_score(y_true, y_pred, *, sample_weight=None, multioutput="uniform_average",
+                             force_finite=True, numeric_mode=None):
+    """scikit-learn 1.9 `explained_variance_score`: `1 - Var(y - p) / Var(y)`
+    with (weighted) means, two device passes (the means, then the centered
+    squares); force_finite=False returns scikit-learn's NaN / -inf by value."""
+    r = _Reg(y_true, y_pred, sample_weight, multioutput, "explained_variance_score", variance_ok=True)
+    diff_mean, y_mean = _diff_and_y_means(r, numeric_mode)
+    num = _centered(r, "diff", diff_mean, numeric_mode)
+    den = _centered(r, "y", y_mean, numeric_mode)
+    return _assemble(num, den, r.mo, force_finite)
+
+
+def _diff_and_y_means(r, numeric_mode):
+    """Per-column (weighted) means of y - p and of y."""
+    prog = _Prog()
+    Y, P = prog.put(r.y), prog.put(r.p)
+    W = _NONE if r.w is None else prog.put(r.w)
+    n, D = r.n, r.D
+    zero = prog.alloc(n)
+    prog.stage("pair_key", n, 0, 0, zero, 1, 2)
+    diff = prog.alloc(n * D)
+    prog.stage("reg_term", n * D, Y, P, diff, D, _TERM["diff"], Y, 0)
+    a = _group(prog, zero, n, 1, values=diff, vstride=D, weights=W, width=D)[1]
+    b = _group(prog, zero, n, 1, values=Y, vstride=D, weights=W, width=D)[1]
+    sw = _group(prog, zero, n, 1, weights=W)[1] if r.w is not None else None
+    prog.run(numeric_mode)
+    den = float(n) if r.w is None else prog.floats(sw, 1)[0]
+    return [v / den for v in prog.floats(a, D)], [v / den for v in prog.floats(b, D)]
+
+
+def _centered(r, source, means, numeric_mode, *, mean=True):
+    """Per-column (weighted) mean (or sum) of (v - mean_c)^2, v = y - p or y."""
+    prog = _Prog()
+    Y, P = prog.put(r.y), prog.put(r.p)
+    W = _NONE if r.w is None else prog.put(r.w)
+    n, D = r.n, r.D
+    zero = prog.alloc(n)
+    prog.stage("pair_key", n, 0, 0, zero, 1, 2)
+    if source == "diff":
+        V = prog.alloc(n * D)
+        prog.stage("reg_term", n * D, Y, P, V, D, _TERM["diff"], Y, 0)
+    else:
+        V = Y
+    M = prog.put(Array.from_list([_f32(m) for m in means], "<f4"))
+    sq = prog.alloc(n * D)
+    prog.stage("reg_term", n * D, V, M, sq, D, _TERM["sq"], Y, 1)
+    out = _group(prog, zero, n, 1, values=sq, vstride=D, weights=W, width=D)[1]
+    sw = _group(prog, zero, n, 1, weights=W)[1] if r.w is not None else None
+    prog.run(numeric_mode)
+    if not mean:
+        return prog.floats(out, D)
+    den = float(n) if r.w is None else prog.floats(sw, 1)[0]
+    return [v / den for v in prog.floats(out, D)]
+
+
+def r2_score_options(y_true, y_pred, sample_weight, multioutput, force_finite, numeric_mode):
+    """r2_score with multioutput, 2-D targets or force_finite=False
+    (lane/metrics): `sum w (y - p)^2` over `sum w (y - avg)^2` per output;
+    the 1-D default call keeps its original kernel and bits."""
+    r = _Reg(y_true, y_pred, sample_weight, multioutput, "r2_score", variance_ok=True)
+    if r.n < 2:
+        _undefined_warning("R^2 score is not well-defined with less than two samples.")
+        return float("nan")
+    _, y_mean = _diff_and_y_means(r, numeric_mode)
+    num = _centered_sse(r, numeric_mode)
+    den = _centered(r, "y", y_mean, numeric_mode, mean=False)
+    return _assemble(num, den, r.mo, force_finite)
+
+
+def _centered_sse(r, numeric_mode):
+    prog = _Prog()
+    Y, P = prog.put(r.y), prog.put(r.p)
+    W = _NONE if r.w is None else prog.put(r.w)
+    n, D = r.n, r.D
+    zero = prog.alloc(n)
+    prog.stage("pair_key", n, 0, 0, zero, 1, 2)
+    sq = prog.alloc(n * D)
+    prog.stage("reg_term", n * D, Y, P, sq, D, _TERM["sq"], Y, 0)
+    out = _group(prog, zero, n, 1, values=sq, vstride=D, weights=W, width=D)[1]
+    prog.run(numeric_mode)
+    return prog.floats(out, D)
+
+
+def _tweedie_domain(r, power, caller):
+    msg = f"Mean Tweedie deviance error with power={power} can only be used on "
+    ymin, pmin = r.y.min(), r.p.min()
+    if power < 0:
+        if pmin <= 0:
+            raise ValueError(msg + "strictly positive y_pred.")
+    elif power == 0:
+        pass
+    elif 1 <= power < 2:
+        if ymin < 0 or pmin <= 0:
+            raise ValueError(msg + "non-negative y and strictly positive y_pred.")
+    elif power >= 2:
+        if ymin <= 0 or pmin <= 0:
+            raise ValueError(msg + "strictly positive y and y_pred.")
+    else:
+        raise ValueError(f"mojolearn {caller}: power in (0, 1) is not a Tweedie distribution")
+
+
+def mean_tweedie_deviance(y_true, y_pred, *, sample_weight=None, power=0, numeric_mode=None):
+    """scikit-learn 1.9 `mean_tweedie_deviance` (single output; the power is
+    rounded to Float32; pow/log are the portable row-12 functions)."""
+    if is_bool(power) or not isinstance(power, numbers.Real):
+        raise ValueError("power must be a real number")
+    r = _Reg(y_true, y_pred, sample_weight, "uniform_average", "mean_tweedie_deviance")
+    if r.D != 1:
+        raise ValueError("Multioutput not supported in mean_tweedie_deviance")
+    _tweedie_domain(r, power, "mean_tweedie_deviance")
+    return r.column_means(["tweedie"], numeric_mode, scalar=float(power))[0][0]
+
+
+def mean_poisson_deviance(y_true, y_pred, *, sample_weight=None, numeric_mode=None):
+    """scikit-learn 1.9 `mean_poisson_deviance` (Tweedie power 1)."""
+    return mean_tweedie_deviance(y_true, y_pred, sample_weight=sample_weight, power=1, numeric_mode=numeric_mode)
+
+
+def mean_gamma_deviance(y_true, y_pred, *, sample_weight=None, numeric_mode=None):
+    """scikit-learn 1.9 `mean_gamma_deviance` (Tweedie power 2)."""
+    return mean_tweedie_deviance(y_true, y_pred, sample_weight=sample_weight, power=2, numeric_mode=numeric_mode)
+
+
+def d2_tweedie_score(y_true, y_pred, *, sample_weight=None, power=0, numeric_mode=None):
+    """scikit-learn 1.9 `d2_tweedie_score`: `1 - dev(y, p) / dev(y, avg y)`."""
+    if is_bool(power) or not isinstance(power, numbers.Real):
+        raise ValueError("power must be a real number")
+    r = _Reg(y_true, y_pred, sample_weight, "uniform_average", "d2_tweedie_score")
+    if r.D != 1:
+        raise ValueError("Multioutput not supported in d2_tweedie_score")
+    if r.n < 2:
+        _undefined_warning("D^2 score is not well-defined with less than two samples.")
+        return float("nan")
+    _tweedie_domain(r, power, "d2_tweedie_score")
+    num = r.column_means(["tweedie"], numeric_mode, scalar=float(power))[0][0]
+    y_avg = r.column_means(["diff"], numeric_mode, pred_broadcast=[0.0])[0][0]
+    den = r.column_means(["tweedie"], numeric_mode, pred_broadcast=[y_avg], scalar=float(power))[0][0]
+    return float(1 - num / den)
+
+
+def d2_pinball_score(y_true, y_pred, *, sample_weight=None, alpha=0.5, multioutput="uniform_average",
+                     numeric_mode=None):
+    """scikit-learn 1.9 `d2_pinball_score`: the pinball loss against the
+    (weighted, averaged) alpha-quantile of y_true per output."""
+    alpha = _check_alpha(alpha)
+    r = _Reg(y_true, y_pred, sample_weight, multioutput, "d2_pinball_score")
+    if r.n < 2:
+        _undefined_warning("D^2 score is not well-defined with less than two samples.")
+        return float("nan")
+    num = r.column_means(["pinball"], numeric_mode, scalar=alpha)[0]
+    quant = r.percentile(lambda prog: prog.put(r.y), alpha * 100, numeric_mode)
+    den = r.column_means(["pinball"], numeric_mode, pred_broadcast=quant, scalar=alpha)[0]
+    return _assemble(num, den, r.mo, True)
+
+
+def d2_absolute_error_score(y_true, y_pred, *, sample_weight=None, multioutput="uniform_average",
+                            numeric_mode=None):
+    """scikit-learn 1.9 `d2_absolute_error_score` (d2_pinball_score at alpha 0.5)."""
+    return d2_pinball_score(y_true, y_pred, sample_weight=sample_weight, alpha=0.5,
+                            multioutput=multioutput, numeric_mode=numeric_mode)
+
+
+# ---------------------------------------------------------------------------
+# Ranking and probabilistic scores (scikit-learn 1.9 _ranking.py, _classification.py)
+# ---------------------------------------------------------------------------
+
+_ROW = dict(topk=0, brier=1, logloss=2, hinge_bin=3, hinge_mc=4, dcg=5, coverage=6, lrap=7, rankloss=8,
+            dcg_ignore_ties=9)
+
+
+def _scores(y_score, n, caller, *, ndim=None, name="y_score"):
+    from ._buffer import materialize_f32_lists
+    a = materialize_f32_lists(y_score, name)[0]
+    if a.dtype != "<f4":
+        raise TypeError(f"mojolearn {caller}: {name} must have dtype float32; cast explicitly")
+    if a.ndim == 2 and a.shape[1] == 1 and ndim == 1:
+        a = a.reshape((a.shape[0],))
+    if ndim is not None and a.ndim != ndim:
+        raise ValueError(f"mojolearn {caller}: {name} must be {ndim}-D, got shape {a.shape}")
+    if a.shape[0] != n:
+        raise ValueError(f"mojolearn {caller}: {name} has {a.shape[0]} rows for {n} samples")
+    a = as_f32_c(a, ndim=a.ndim, name=name)[0]
+    if not all_finite(a):
+        raise ValueError(f"mojolearn {caller}: {name} must be finite")
+    return a
+
+
+def _targets(y_true, caller):
+    from ._metrics_impl import _classification_encoded, _label_set
+    _refuse_multilabel(y_true, "y_true", caller)
+    true, kind = _classification_encoded(y_true, "y_true")
+    return true, kind, sorted(_label_set(true))
+
+
+def _pos_label(pos_label, kind, classes, caller):
+    from ._metrics_impl import _classification_labels
+    if pos_label is None:
+        if kind != "integer" or classes not in ([0], [1], [-1], [0, 1], [-1, 1]):
+            raise ValueError(f"y_true takes value in {classes} and pos_label is not specified: either make "
+                             "y_true take value in {0, 1} or {-1, 1} or pass pos_label explicitly.")
+        return 1
+    values, pk = _classification_labels([pos_label], "pos_label")
+    if pk != kind:
+        raise ValueError("pos_label must use the same type as y_true")
+    return values[0]
+
+
+def _curves(scores, flags, w, n, problems, numeric_mode, *, stride=1):
+    """[(fps, tps, thresholds)] per problem, from the device sort and the
+    cumulative counts (Python floats; unweighted counts are exact)."""
+    prog = _Prog()
+    S = prog.put(scores)
+    POS = prog.put_i32(flags)
+    W = _NONE if w is None else prog.put(w)
+    order = prog.alloc(n * problems)
+    fps = prog.alloc(n * problems)
+    tps = prog.alloc(n * problems)
+    thr = prog.alloc(n * problems)
+    cnt = prog.alloc(problems)
+    prog.stage("bin_curve", problems, S, stride, POS, W, n, order, fps, tps, thr, cnt)
+    prog.run(numeric_mode)
+    out = []
+    counts = prog.ints(cnt, problems)
+    for t in range(problems):
+        c = counts[t]
+        out.append((prog.floats(fps + t * n, c), prog.floats(tps + t * n, c), prog.floats(thr + t * n, c)))
+    return out
+
+
+def _binary_curve(y_true, y_score, pos_label, sample_weight, numeric_mode, caller):
+    from ._metrics_impl import _label_map
+    true, kind, classes = _targets(y_true, caller)
+    if len(classes) > 2 and pos_label is None:
+        raise ValueError("multiclass format is not supported")
+    pos = _pos_label(pos_label, kind, classes, caller)
+    n = len(true)
+    s = _scores(y_score, n, caller, ndim=1)
+    w = _weights(sample_weight, n, caller)
+    flags = _label_map(true, lambda v: int(v == pos))
+    return _curves(s, flags, w, n, 1, numeric_mode)[0], classes
+
+
+def _drop_collinear(fps, tps, thr):
+    keep = [0] + [i for i in range(1, len(fps) - 1)
+                  if (fps[i + 1] - fps[i]) != (fps[i] - fps[i - 1])
+                  or (tps[i + 1] - tps[i]) != (tps[i] - tps[i - 1])] + [len(fps) - 1]
+    return [fps[i] for i in keep], [tps[i] for i in keep], [thr[i] for i in keep]
+
+
+def roc_curve(y_true, y_score, *, pos_label=None, sample_weight=None, drop_intermediate=True,
+              numeric_mode=None):
+    """scikit-learn 1.9 `roc_curve` for binary targets: fpr, tpr, thresholds
+    (Float64; the first threshold is +inf). The sort and the cumulative
+    counts run on the device; drop_intermediate removes collinear points."""
+    (fps, tps, thr), _ = _binary_curve(y_true, y_score, pos_label, sample_weight, numeric_mode, "roc_curve")
+    if drop_intermediate and len(fps) > 2:
+        fps, tps, thr = _drop_collinear(fps, tps, thr)
+    fps, tps, thr = [0.0] + fps, [0.0] + tps, [float("inf")] + thr
+    if fps[-1] <= 0:
+        _undefined_warning("No negative samples in y_true, false positive value should be meaningless")
+        fpr = [float("nan")] * len(fps)
+    else:
+        fpr = [v / fps[-1] for v in fps]
+    if tps[-1] <= 0:
+        _undefined_warning("No positive samples in y_true, true positive value should be meaningless")
+        tpr = [float("nan")] * len(tps)
+    else:
+        tpr = [v / tps[-1] for v in tps]
+    return (Array.from_list(fpr, "<f8"), Array.from_list(tpr, "<f8"), Array.from_list(thr, "<f8"))
+
+
+def precision_recall_curve_options(y_true, y_score, pos_label, sample_weight, drop_intermediate, numeric_mode):
+    """precision_recall_curve with sample_weight or drop_intermediate=True
+    (lane/metrics): Float64 outputs; the default call keeps its kernel."""
+    (fps, tps, thr), _ = _binary_curve(y_true, y_score, pos_label, sample_weight, numeric_mode,
+                                       "precision_recall_curve")
+    if drop_intermediate and len(fps) > 2:
+        keep = [0] + [i for i in range(1, len(fps) - 1)
+                      if tps[i] != tps[i - 1] or tps[i + 1] != tps[i]] + [len(fps) - 1]
+        fps, tps, thr = [fps[i] for i in keep], [tps[i] for i in keep], [thr[i] for i in keep]
+    prec = [t / (t + f) if (t + f) != 0 else 0.0 for t, f in zip(tps, fps)]
+    if tps[-1] == 0:
+        warnings.warn("No positive class found in y_true, recall is set to one for all thresholds.",
+                      UserWarning, stacklevel=3)
+        rec = [1.0] * len(tps)
+    else:
+        rec = [t / tps[-1] for t in tps]
+    return (Array.from_list(prec[::-1] + [1.0], "<f8"), Array.from_list(rec[::-1] + [0.0], "<f8"),
+            Array.from_list(thr[::-1], "<f8"))
+
+
+def det_curve(y_true, y_score, *, pos_label=None, sample_weight=None, drop_intermediate=False,
+              numeric_mode=None):
+    """scikit-learn 1.9 `det_curve`: fpr, fnr, thresholds."""
+    (fps, tps, thr), classes = _binary_curve(y_true, y_score, pos_label, sample_weight, numeric_mode, "det_curve")
+    if drop_intermediate and len(fps) > 2:
+        keep = [0] + [i for i in range(1, len(fps) - 1)
+                      if tps[i] != tps[i - 1] or tps[i + 1] != tps[i]] + [len(fps) - 1]
+        fps, tps, thr = [fps[i] for i in keep], [tps[i] for i in keep], [thr[i] for i in keep]
+    tps, fps, thr = [0.0] + tps, [0.0] + fps, [float("inf")] + thr
+    if len(classes) != 2:
+        raise ValueError("Only one class is present in y_true. Detection error tradeoff curve is not "
+                         "defined in that case.")
+    fns = [tps[-1] - v for v in tps]
+    p_count, n_count = tps[-1], fps[-1]
+    import bisect
+    right = bisect.bisect_right(fps, fps[0])
+    first = right - 1 if right > 0 else 0
+    last = bisect.bisect_left(tps, tps[-1]) + 1
+    sl = slice(first, last)
+    return (Array.from_list([v / n_count for v in fps[sl]][::-1], "<f8"),
+            Array.from_list([v / p_count for v in fns[sl]][::-1], "<f8"),
+            Array.from_list(thr[sl][::-1], "<f8"))
+
+
+def _trapezoid(x, y):
+    return pmath.fsum([(x[i] - x[i - 1]) * (y[i] + y[i - 1]) / 2 for i in range(1, len(x))])
+
+
+def auc(x, y):
+    """scikit-learn 1.9 `auc`: the trapezoid rule over a monotonic x
+    (host binary64, a correctly rounded `fsum`)."""
+    x = [float(v) for v in flatten_mo(x)]
+    y = [float(v) for v in flatten_mo(y)]
+    if len(x) != len(y):
+        raise ValueError("x and y must have the same length")
+    if len(x) < 2:
+        raise ValueError(f"At least 2 points are needed to compute area under curve, but x.shape = ({len(x)},)")
+    dx = [x[i] - x[i - 1] for i in range(1, len(x))]
+    direction = 1
+    if any(d < 0 for d in dx):
+        if all(d <= 0 for d in dx):
+            direction = -1
+        else:
+            raise ValueError(f"x is neither increasing nor decreasing : {x}.")
+    return float(direction * _trapezoid(x, y))
+
+
+def _binary_auc(fps, tps, max_fpr):
+    if not fps or fps[-1] <= 0 or tps[-1] <= 0:
+        _undefined_warning("Only one class is present in y_true. ROC AUC score is not defined in that case.")
+        return float("nan")
+    fps, tps, _ = _drop_collinear(fps, tps, fps) if len(fps) > 2 else (fps, tps, fps)
+    fpr = [0.0] + [v / fps[-1] for v in fps]
+    tpr = [0.0] + [v / tps[-1] for v in tps]
+    if max_fpr is None or max_fpr == 1:
+        return float(_trapezoid(fpr, tpr))
+    import bisect
+    stop = bisect.bisect_right(fpr, max_fpr)
+    x0, x1, y0, y1 = fpr[stop - 1], fpr[stop], tpr[stop - 1], tpr[stop]
+    yi = y0 if x1 == x0 else y0 + (max_fpr - x0) * (y1 - y0) / (x1 - x0)
+    part = _trapezoid(fpr[:stop] + [max_fpr], tpr[:stop] + [yi])
+    min_area = 0.5 * max_fpr * max_fpr
+    return float(0.5 * (1 + (part - min_area) / (max_fpr - min_area)))
+
+
+def _binary_ap(fps, tps):
+    if not tps or tps[-1] == 0:
+        # sklearn: recall is set to one; the sum over diff(recall) is 0
+        return 0.0
+    prev = 0.0
+    terms = []
+    for f, t in zip(fps, tps):
+        r = t / tps[-1]
+        terms.append((r - prev) * (t / (t + f)))
+        prev = r
+    return float(max(0.0, pmath.fsum(terms)))
+
+
+def _ovr(y_true, y_score, sample_weight, labels, caller, numeric_mode):
+    """Binarized one-vs-rest problems over the class columns of y_score."""
+    from ._metrics_impl import _label_map, _selected_labels
+    true, kind, present = _targets(y_true, caller)
+    n = len(true)
+    s = _scores(y_score, n, caller, ndim=2)
+    k = s.shape[1]
+    classes = present if labels is None else _selected_labels(labels, kind, present)
+    if labels is not None:
+        if classes != sorted(classes):
+            raise ValueError("Parameter 'labels' must be ordered")
+        if set(present) - set(classes):
+            raise ValueError("'y_true' contains labels not in parameter 'labels'")
+    if len(classes) != k:
+        raise ValueError("Number of classes in y_true not equal to the number of columns in 'y_score'")
+    w = _weights(sample_weight, n, caller)
+    index = {c: i for i, c in enumerate(classes)}
+    codes = _label_map(true, lambda v: index[v])
+    flags = []
+    code_list = codes.tolist()
+    for c in range(k):
+        flags.extend(1 if v == c else 0 for v in code_list)
+    curves = _curves(s, Array.from_list(flags, "<i4"), w, n, k, numeric_mode, stride=k)
+    support = [0.0] * k
+    if w is None:
+        for v in code_list:
+            support[v] += 1
+    else:
+        for v, wt in zip(code_list, w.tolist()):
+            support[v] += wt
+    return curves, support, s, code_list, classes, w
+
+
+def _average_scores(scores, support, average):
+    if average is None:
+        return Array.from_list(scores, "<f8")
+    if average == "weighted":
+        total = pmath.fsum(support)
+        return float(pmath.fsum([a * b for a, b in zip(scores, support)]) / total) if total else 0.0
+    return float(pmath.fsum(scores) / len(scores))
+
+
+def roc_auc_options(y_true, y_score, average, sample_weight, max_fpr, multi_class, labels, numeric_mode):
+    """roc_auc_score with sample_weight, max_fpr < 1 or multiclass input
+    (lane/metrics); the binary unweighted full-AUC call keeps its kernel.
+    AUCs are the trapezoid rule over the device curve (host `fsum`)."""
+    from ._metrics_impl import _label_map
+    from ._buffer import materialize_f32_lists
+    shape = materialize_f32_lists(y_score, "y_score")[0].shape
+    true, kind, present = _targets(y_true, "roc_auc_score")
+    multiclass = len(present) > 2 or (len(shape) == 2 and shape[1] > 2)
+    if max_fpr is not None and (is_bool(max_fpr) or not isinstance(max_fpr, numbers.Real)
+                                or not 0 < max_fpr <= 1):
+        raise ValueError(f"Expected max_fpr in range (0, 1], got: {max_fpr!r}")
+    if not multiclass:
+        if average not in (None, "micro", "macro", "samples", "weighted"):
+            raise ValueError("average has to be one of (None, 'micro', 'macro', 'weighted', 'samples')")
+        if len(present) != 2:
+            _undefined_warning("Only one class is present in y_true. ROC AUC score is not defined in that case.")
+            return float("nan")
+        n = len(true)
+        s = _scores(y_score, n, "roc_auc_score", ndim=1)
+        w = _weights(sample_weight, n, "roc_auc_score")
+        flags = _label_map(true, lambda v: int(v == present[1]))
+        fps, tps, _ = _curves(s, flags, w, n, 1, numeric_mode)[0]
+        return _binary_auc(fps, tps, None if max_fpr == 1 else max_fpr)
+    if max_fpr is not None and max_fpr != 1:
+        raise ValueError("Partial AUC computation not available in multiclass setting, 'max_fpr' must be "
+                         f"set to `None`, received `max_fpr={max_fpr}` instead")
+    if multi_class not in ("ovo", "ovr"):
+        raise ValueError("multi_class must be in ('ovo', 'ovr')")
+    options = ("micro", "macro", "weighted", None) if multi_class == "ovr" else ("macro", "weighted", None)
+    if average not in options:
+        raise ValueError(f"average must be one of {options} for multiclass problems")
+    if average is None and multi_class == "ovo":
+        raise NotImplementedError("average=None is not implemented for multi_class='ovo'.")
+    if multi_class == "ovo" and sample_weight is not None:
+        raise ValueError("sample_weight is not supported for multiclass one-vs-one ROC AUC, "
+                         "'sample_weight' must be None in this case.")
+    s_check = _scores(y_score, len(true), "roc_auc_score", ndim=2)
+    k = s_check.shape[1]
+    vals = s_check.tolist()
+    for row in vals:
+        if abs(pmath.fsum(row) - 1) > 1e-8 + 1e-5:
+            raise ValueError("Target scores need to be probabilities for multiclass roc_auc, i.e. they "
+                             "should sum up to 1.0 over classes")
+    if multi_class == "ovr":
+        curves, support, s, codes, classes, w = _ovr(y_true, y_score, sample_weight, labels, "roc_auc_score",
+                                                     numeric_mode)
+        if average == "micro":
+            n = len(codes)
+            flags = Array.from_list([1 if codes[r] == c else 0 for r in range(n) for c in range(k)], "<i4")
+            wm = None if w is None else Array.from_list([x for x in w.tolist() for _ in range(k)], "<f4")
+            fps, tps, _ = _curves(s.reshape((n * k,)), flags, wm, n * k, 1, numeric_mode)[0]
+            return _binary_auc(fps, tps, None)
+        scores = [_binary_auc(f, t, None) for f, t, _ in curves]
+        return _average_scores(scores, support, average)
+    # one-vs-one (scikit-learn _average_multiclass_ovo_score)
+    from ._metrics_impl import _selected_labels
+    classes = present if labels is None else _selected_labels(labels, kind, present)
+    if len(classes) != k:
+        raise ValueError("Number of classes in y_true not equal to the number of columns in 'y_score'")
+    index = {c: i for i, c in enumerate(classes)}
+    codes = _label_map(true, lambda v: index[v]).tolist()
+    n = len(codes)
+    pair_scores, prevalence = [], []
+    for a in range(k):
+        for b in range(a + 1, k):
+            rows = [r for r in range(n) if codes[r] in (a, b)]
+            prevalence.append(len(rows) / n)
+            both = []
+            for col, pos in ((a, a), (b, b)):
+                sv = Array.from_list([vals[r][col] for r in rows], "<f4")
+                fl = Array.from_list([1 if codes[r] == pos else 0 for r in rows], "<i4")
+                f, t, _ = _curves(sv, fl, None, len(rows), 1, numeric_mode)[0]
+                both.append(_binary_auc(f, t, None))
+            pair_scores.append((both[0] + both[1]) / 2)
+    if average == "weighted":
+        return float(pmath.fsum([x * y for x, y in zip(pair_scores, prevalence)]) / pmath.fsum(prevalence))
+    return float(pmath.fsum(pair_scores) / len(pair_scores))
+
+
+def average_precision_score(y_true, y_score, *, average="macro", pos_label=1, sample_weight=None,
+                            numeric_mode=None):
+    """scikit-learn 1.9 `average_precision_score` (binary and multiclass
+    one-vs-rest; multilabel-indicator targets are refused by name)."""
+    from ._metrics_impl import _label_map
+    if average not in (None, "micro", "macro", "weighted", "samples"):
+        raise ValueError("average has to be one of (None, 'micro', 'macro', 'weighted', 'samples')")
+    true, kind, present = _targets(y_true, "average_precision_score")
+    if len(present) <= 2:
+        if len(present) == 2 and pos_label not in present:
+            raise ValueError(f"pos_label={pos_label} is not a valid label. It should be one of {present}")
+        n = len(true)
+        s = _scores(y_score, n, "average_precision_score", ndim=1)
+        w = _weights(sample_weight, n, "average_precision_score")
+        flags = _label_map(true, lambda v: int(v == pos_label))
+        fps, tps, _ = _curves(s, flags, w, n, 1, numeric_mode)[0]
+        return _binary_ap(fps, tps)
+    if pos_label != 1:
+        raise ValueError("Parameter pos_label is fixed to 1 for multiclass y_true. Do not set pos_label "
+                         "or set pos_label to 1.")
+    if average == "samples":
+        raise NotImplementedError("mojolearn average_precision_score: average='samples' applies to "
+                                  "multilabel targets, which are NOT IMPLEMENTED")
+    curves, support, s, codes, classes, w = _ovr(y_true, y_score, sample_weight, None,
+                                                 "average_precision_score", numeric_mode)
+    k = len(classes)
+    if average == "micro":
+        n = len(codes)
+        flags = Array.from_list([1 if codes[r] == c else 0 for r in range(n) for c in range(k)], "<i4")
+        wm = None if w is None else Array.from_list([x for x in w.tolist() for _ in range(k)], "<f4")
+        fps, tps, _ = _curves(s.reshape((n * k,)), flags, wm, n * k, 1, numeric_mode)[0]
+        return _binary_ap(fps, tps)
+    return _average_scores([_binary_ap(f, t) for f, t, _ in curves], support, average)
+
+
+def top_k_accuracy_score(y_true, y_score, *, k=2, normalize=True, sample_weight=None, labels=None,
+                         numeric_mode=None):
+    """scikit-learn 1.9 `top_k_accuracy_score`: a hit when the true class is
+    among the k largest scores, ties ordered as numpy's stable argsort
+    reversed (the larger class index first)."""
+    from ._metrics_impl import _label_map, _selected_labels
+    if is_bool(k) or not isinstance(k, numbers.Integral) or k < 1:
+        raise ValueError("k must be a positive integer")
+    true, kind, present = _targets(y_true, "top_k_accuracy_score")
+    n = len(true)
+    s = _scores(y_score, n, "top_k_accuracy_score")
+    binary = len(present) <= 2 and not (labels is not None and len(labels) > 2)
+    classes = present if labels is None else _selected_labels(labels, kind, present)
+    if labels is not None:
+        if classes != sorted(classes):
+            raise ValueError("Parameter 'labels' must be ordered.")
+        if set(present) - set(classes):
+            raise ValueError("'y_true' contains labels not in parameter 'labels'.")
+    n_score = s.shape[1] if s.ndim == 2 else 2
+    if binary and s.ndim == 2 and s.shape[1] != 1:
+        raise ValueError(f"`y_true` is binary while y_score is 2d with {s.shape[1]} classes. If `y_true` "
+                         "does not contain all the labels, `labels` must be provided.")
+    if len(classes) != n_score:
+        raise ValueError(f"Number of classes in 'y_true' ({len(classes)}) not equal to the number of "
+                         f"classes in 'y_score' ({n_score}).")
+    if k >= len(classes):
+        _undefined_warning(f"'k' ({k}) greater than or equal to 'n_classes' ({len(classes)}) will result "
+                           "in a perfect score and is therefore meaningless.")
+    w = _weights(sample_weight, n, "top_k_accuracy_score")
+    index = {c: i for i, c in enumerate(classes)}
+    codes = _label_map(true, lambda v: index[v])
+    prog = _Prog()
+    if binary:
+        flat = s.reshape((n,)) if s.ndim == 2 else s
+        if k == 1:
+            thr = 0.5 if flat.min() >= 0 and flat.max() <= 1 else 0.0
+            # two score columns [thr, s] make "s > thr" a top-1 hit of class 1
+            # with the tie going to class 0 (scikit-learn: y_pred = s > thr)
+            two = Array.from_list([v for x in flat.tolist() for v in (thr, x)], "<f4")
+            S = prog.put(two)
+            kk, cols = 1, 2
+        else:
+            S = prog.put(Array.from_list([0.0] * (2 * n), "<f4"))
+            kk, cols = 2, 2
+    else:
+        S = prog.put(s)
+        kk, cols = k, s.shape[1]
+    Y = prog.put_i32(codes)
+    hit = prog.alloc(n)
+    prog.stage("row_metric", n, S, cols, Y, hit, _ROW["topk"], kk, 0)
+    zero = prog.alloc(n)
+    prog.stage("pair_key", n, 0, 0, zero, 1, 2)
+    W = _NONE if w is None else prog.put(w)
+    tot = _group(prog, zero, n, 1, values=hit, weights=W)[1]
+    sw = _group(prog, zero, n, 1, weights=W)[1] if w is not None else None
+    prog.run(numeric_mode)
+    hits = prog.floats(tot, 1)[0]
+    if not normalize:
+        return float(hits)
+    return float(hits / (n if w is None else prog.floats(sw, 1)[0]))
+
+
+def _row_mean(S, cols, Y, n, kind, w, numeric_mode, *, K=0, D=None, prog=None, normalize=True):
+    prog = prog or _Prog()
+    Dt = _NONE if D is None else prog.put(Array.from_list([_f32(v) for v in D], "<f4"))
+    out = prog.alloc(n)
+    prog.stage("row_metric", n, S, cols, Y, out, _ROW[kind], K, Dt)
+    zero = prog.alloc(n)
+    prog.stage("pair_key", n, 0, 0, zero, 1, 2)
+    W = _NONE if w is None else prog.put(w)
+    tot = _group(prog, zero, n, 1, values=out, weights=W)[1]
+    sw = _group(prog, zero, n, 1, weights=W)[1] if w is not None else None
+    prog.run(numeric_mode)
+    total = prog.floats(tot, 1)[0]
+    if not normalize:
+        return total
+    return total / (n if w is None else prog.floats(sw, 1)[0])
+
+
+def _proba(y_true, y_proba, labels, pos_label, caller):
+    """(codes, P (n, k) Float32, k, binary): scikit-learn 1.9's validation of
+    probabilistic predictions for a binary vector or a multiclass matrix."""
+    from ._metrics_impl import _label_map, _selected_labels
+    from ._buffer import materialize_f32_lists, _native
+    true, kind, present = _targets(y_true, caller)
+    n = len(true)
+    a = materialize_f32_lists(y_proba, "y_proba")[0]
+    if a.dtype != "<f4":
+        raise TypeError(f"mojolearn {caller}: y_proba must have dtype float32; cast explicitly")
+    binary = a.ndim == 1 or (a.ndim == 2 and a.shape[1] == 1)
+    if binary:
+        a = a.reshape((a.shape[0],))
+        if len(present) > 2:
+            raise ValueError("The type of the target inferred from y_true is multiclass but should be binary "
+                             "according to the shape of y_prob.")
+        if pos_label is None:
+            try:
+                pos = _pos_label(None, kind, present, caller)
+            except ValueError:
+                pos = present[-1]
+        else:
+            pos = _pos_label(pos_label, kind, present, caller)
+        codes = _label_map(true, lambda v: int(v == pos))
+        k = 2
+    else:
+        classes = present if labels is None else _selected_labels(labels, kind, present)
+        if labels is not None and set(present) - set(classes):
+            raise ValueError("y_true contains values not belonging to the passed labels")
+        classes = sorted(classes)
+        k = a.shape[1]
+        if len(classes) != k:
+            raise ValueError(f"y_true and y_proba contain different number of classes: {len(classes)} vs {k}")
+        index = {c: i for i, c in enumerate(classes)}
+        codes = _label_map(true, lambda v: index[v])
+    if a.shape[0] != n:
+        raise ValueError("y_true and y_proba have different numbers of rows")
+    a = as_f32_c(a, ndim=a.ndim, name="y_proba")[0]
+    packed = empty((n, 2), "<f4") if binary else None
+    code = int(_native("probability_rows_f32")(addr_ro(a, name="y_proba"), addr_ro(packed, name="packed") if binary else 0,
+                                                n, 1 if binary else k, int(binary)))
+    if code:
+        raise ValueError(f"mojolearn {caller}: y_proba " + {1: "must be finite", 2: "must lie in [0, 1]",
+                         3: "rows must sum to one within sqrt(float32 eps)"}.get(code, "failed validation"))
+    return codes, (packed if binary else a), k, binary
+
+
+def _class_weights(codes, w, k):
+    """Per-class (weighted) counts and the total, binary64 in row order."""
+    cl = codes.tolist()
+    per = [0.0] * k
+    if w is None:
+        for c in cl:
+            per[c] += 1
+    else:
+        for c, x in zip(cl, w.tolist()):
+            per[c] += x
+    return per, pmath.fsum(per)
+
+
+def log_loss_options(y_true, y_pred, normalize, sample_weight, labels, numeric_mode):
+    """log_loss with sample_weight (lane/metrics): the clipped `-log p_true`
+    per row on the device, its weighted PairSum; the unweighted call keeps
+    its kernel."""
+    codes, P, k, _ = _proba(y_true, y_pred, labels, None, "log_loss")
+    n = len(codes)
+    w = _weights(sample_weight, n, "log_loss")
+    prog = _Prog()
+    S, Y = prog.put(P), prog.put_i32(codes)
+    return float(_row_mean(S, k, Y, n, "logloss", w, numeric_mode, prog=prog, normalize=normalize))
+
+
+def brier_score_loss(y_true, y_proba, *, sample_weight=None, pos_label=None, labels=None,
+                     scale_by_half="auto", numeric_mode=None):
+    """scikit-learn 1.9 `brier_score_loss` (binary vector or multiclass
+    matrix): the mean of `sum_c (onehot - p)^2`, halved by default for the
+    binary case."""
+    codes, P, k, binary = _proba(y_true, y_proba, labels, pos_label, "brier_score_loss")
+    n = len(codes)
+    w = _weights(sample_weight, n, "brier_score_loss")
+    prog = _Prog()
+    S, Y = prog.put(P), prog.put_i32(codes)
+    score = _row_mean(S, k, Y, n, "brier", w, numeric_mode, prog=prog)
+    if scale_by_half == "auto":
+        scale_by_half = binary or k < 3
+    return float(score * 0.5 if scale_by_half else score)
+
+
+def d2_log_loss_score(y_true, y_proba=None, *, sample_weight=None, labels=None, numeric_mode=None):
+    """scikit-learn 1.9 `d2_log_loss_score`: one minus the log loss over the
+    log loss of the (weighted) class frequencies."""
+    codes, P, k, _ = _proba(y_true, y_proba, labels, None, "d2_log_loss_score")
+    n = len(codes)
+    if n < 2:
+        _undefined_warning("D^2 score is not well-defined with less than two samples.")
+        return float("nan")
+    w = _weights(sample_weight, n, "d2_log_loss_score")
+    prog = _Prog()
+    S, Y = prog.put(P), prog.put_i32(codes)
+    num = _row_mean(S, k, Y, n, "logloss", w, numeric_mode, prog=prog, normalize=False)
+    per, total = _class_weights(codes, w, k)
+    eps = 1.1920928955078125e-07
+    den = pmath.fsum([wc * -pmath.log(min(max(wc / total, eps), 1 - eps)) for wc in per if wc])
+    return float(1 - num / den)
+
+
+def d2_brier_score(y_true, y_proba, *, sample_weight=None, pos_label=None, labels=None, numeric_mode=None):
+    """scikit-learn 1.9 `d2_brier_score`: one minus the Brier score over the
+    Brier score of the (weighted) class frequencies."""
+    codes, P, k, _ = _proba(y_true, y_proba, labels, pos_label, "d2_brier_score")
+    n = len(codes)
+    if n < 2:
+        _undefined_warning("D^2 score is not well-defined with less than two samples.")
+        return float("nan")
+    w = _weights(sample_weight, n, "d2_brier_score")
+    prog = _Prog()
+    S, Y = prog.put(P), prog.put_i32(codes)
+    num = _row_mean(S, k, Y, n, "brier", w, numeric_mode, prog=prog)
+    per, total = _class_weights(codes, w, k)
+    freq = [v / total for v in per]
+    den = pmath.fsum([per[c] * pmath.fsum([((1.0 if j == c else 0.0) - freq[j]) ** 2 for j in range(k)])
+                      for c in range(k)]) / total
+    return float(1 - num / den)
+
+
+def hinge_loss(y_true, pred_decision, *, labels=None, sample_weight=None, numeric_mode=None):
+    """scikit-learn 1.9 `hinge_loss`: binary (labels mapped to -1 / +1, the
+    larger class positive) or Crammer-Singer multiclass margins."""
+    from ._metrics_impl import _label_map, _selected_labels
+    true, kind, present = _targets(y_true, "hinge_loss")
+    n = len(true)
+    uniq = present if labels is None else sorted(_selected_labels(labels, kind, present))
+    s = _scores(pred_decision, n, "hinge_loss", name="pred_decision")
+    w = _weights(sample_weight, n, "hinge_loss")
+    prog = _Prog()
+    if len(uniq) > 2:
+        if s.ndim != 2:
+            raise ValueError("The shape of pred_decision cannot be 1d array with a multiclass target.")
+        if s.shape[1] != len(uniq):
+            raise ValueError("Please include all labels in y_true or pass labels as third argument"
+                             if labels is None else
+                             "The shape of pred_decision is not consistent with the number of classes.")
+        index = {c: i for i, c in enumerate(uniq)}
+        codes = _label_map(true, lambda v: index[v])
+        S, Y = prog.put(s), prog.put_i32(codes)
+        return float(_row_mean(S, s.shape[1], Y, n, "hinge_mc", w, numeric_mode, prog=prog))
+    if s.ndim == 2:
+        if s.shape[1] != 1:
+            raise ValueError("pred_decision must be 1-D for a binary target")
+        s = s.reshape((n,))
+    pos = uniq[-1]
+    codes = _label_map(true, lambda v: int(v == pos and len(uniq) == 2))
+    S, Y = prog.put(s), prog.put_i32(codes)
+    return float(_row_mean(S, 1, Y, n, "hinge_bin", w, numeric_mode, prog=prog))
+
+
+def _relevance(y_true, y_score, caller, *, indicator):
+    from ._buffer import materialize_f32_lists
+    y = materialize_f32_lists(y_true, "y_true")[0]
+    if y.dtype != "<f4":
+        y = as_f32_c(y, ndim=y.ndim, name="y_true")[0]
+    if y.ndim != 2:
+        raise ValueError(f"mojolearn {caller}: y_true must be a 2-D (n_samples, n_labels) array")
+    y = as_f32_c(y, ndim=2, name="y_true")[0]
+    if not all_finite(y):
+        raise ValueError(f"mojolearn {caller}: y_true must be finite")
+    s = _scores(y_score, y.shape[0], caller, ndim=2)
+    if s.shape != y.shape:
+        raise ValueError("y_true and y_score have different shape")
+    if indicator and any(v != 0.0 and v != 1.0 for v in y.reshape((y.size,)).tolist()):
+        raise ValueError(f"{caller} requires a binary label indicator y_true")
+    return y, s
+
+
+def _dcg_discount(k_cols, log_base):
+    return [1 / (pmath.log(i + 2) / pmath.log(log_base)) for i in range(k_cols)]
+
+
+def dcg_score(y_true, y_score, *, k=None, log_base=2, sample_weight=None, ignore_ties=False,
+              numeric_mode=None):
+    """scikit-learn 1.9 `dcg_score`: tie-averaged gains by default;
+    ignore_ties=True ranks tied scores by DESCENDING column index (numpy's
+    `argsort(...)[::-1]` there, whose tie order its unstable sort leaves
+    unspecified; this one is fixed)."""
+    y, s = _relevance(y_true, y_score, "dcg_score", indicator=False)
+    n, c = y.shape
+    w = _weights(sample_weight, n, "dcg_score")
+    prog = _Prog()
+    S, Y = prog.put(s), prog.put(y)
+    return float(_row_mean(S, c, Y, n, "dcg_ignore_ties" if ignore_ties else "dcg", w, numeric_mode,
+                           K=0 if k is None else int(k),
+                           D=_dcg_discount(c, log_base), prog=prog))
+
+
+def ndcg_score(y_true, y_score, *, k=None, sample_weight=None, ignore_ties=False, numeric_mode=None):
+    """scikit-learn 1.9 `ndcg_score`: each row's DCG over its ideal DCG
+    (0 when the row has no relevant item)."""
+    y, s = _relevance(y_true, y_score, "ndcg_score", indicator=False)
+    n, c = y.shape
+    if c <= 1:
+        raise ValueError(f"Computing NDCG is only meaningful when there is more than 1 document. Got {c} instead.")
+    if y.min() < 0:
+        raise ValueError("ndcg_score should not be used on negative y_true values.")
+    w = _weights(sample_weight, n, "ndcg_score")
+    D = _dcg_discount(c, 2)
+    K = 0 if k is None else int(k)
+    prog = _Prog()
+    S, Y = prog.put(s), prog.put(y)
+    Dt = prog.put(Array.from_list([_f32(v) for v in D], "<f4"))
+    gain = prog.alloc(n)
+    ideal = prog.alloc(n)
+    prog.stage("row_metric", n, S, c, Y, gain, _ROW["dcg_ignore_ties" if ignore_ties else "dcg"], K, Dt)
+    prog.stage("row_metric", n, Y, c, Y, ideal, _ROW["dcg"], K, Dt)
+    prog.run(numeric_mode)
+    g, i = prog.floats(gain, n), prog.floats(ideal, n)
+    per = [a / b if b != 0 else 0.0 for a, b in zip(g, i)]
+    if w is None:
+        return float(pmath.fsum(per) / n)
+    wl = w.tolist()
+    return float(pmath.fsum([a * b for a, b in zip(per, wl)]) / pmath.fsum(wl))
+
+
+def _label_ranking(kind, y_true, y_score, sample_weight, numeric_mode, caller):
+    y, s = _relevance(y_true, y_score, caller, indicator=True)
+    n, c = y.shape
+    w = _weights(sample_weight, n, caller)
+    prog = _Prog()
+    S, Y = prog.put(s), prog.put(y)
+    return float(_row_mean(S, c, Y, n, kind, w, numeric_mode, prog=prog))
+
+
+def coverage_error(y_true, y_score, *, sample_weight=None, numeric_mode=None):
+    """scikit-learn 1.9 `coverage_error` (multilabel indicator y_true)."""
+    return _label_ranking("coverage", y_true, y_score, sample_weight, numeric_mode, "coverage_error")
+
+
+def label_ranking_average_precision_score(y_true, y_score, *, sample_weight=None, numeric_mode=None):
+    """scikit-learn 1.9 `label_ranking_average_precision_score`."""
+    return _label_ranking("lrap", y_true, y_score, sample_weight, numeric_mode,
+                          "label_ranking_average_precision_score")
+
+
+def label_ranking_loss(y_true, y_score, *, sample_weight=None, numeric_mode=None):
+    """scikit-learn 1.9 `label_ranking_loss` (tied scores count as misordered)."""
+    return _label_ranking("rankloss", y_true, y_score, sample_weight, numeric_mode, "label_ranking_loss")

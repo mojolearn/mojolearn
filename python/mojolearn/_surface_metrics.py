@@ -18,6 +18,8 @@ FAMILIES = (
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=(
             "x-metrics-classification",
+            "x-metrics-regression",
+            "x-metrics-ranking",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -33,11 +35,38 @@ FAMILIES = (
             "metrics.multilabel_confusion_matrix",
             "metrics.precision_recall_fscore_support",
             "metrics.zero_one_loss",
+            "metrics.d2_absolute_error_score",
+            "metrics.d2_pinball_score",
+            "metrics.d2_tweedie_score",
+            "metrics.explained_variance_score",
+            "metrics.max_error",
+            "metrics.mean_absolute_percentage_error",
+            "metrics.mean_gamma_deviance",
+            "metrics.mean_pinball_loss",
+            "metrics.mean_poisson_deviance",
+            "metrics.mean_squared_log_error",
+            "metrics.mean_tweedie_deviance",
+            "metrics.median_absolute_error",
+            "metrics.root_mean_squared_log_error",
+            "metrics.auc",
+            "metrics.average_precision_score",
+            "metrics.brier_score_loss",
+            "metrics.coverage_error",
+            "metrics.d2_brier_score",
+            "metrics.d2_log_loss_score",
+            "metrics.dcg_score",
+            "metrics.det_curve",
+            "metrics.hinge_loss",
+            "metrics.label_ranking_average_precision_score",
+            "metrics.label_ranking_loss",
+            "metrics.ndcg_score",
+            "metrics.roc_curve",
+            "metrics.top_k_accuracy_score",
         ),
         display="the evaluation metrics and model_selection helpers added by the metrics lane",
         host_modules=(
             "x_metrics/host/program.mojo", "x_metrics/common.mojo", "x_metrics/units.mojo",
-            "x_metrics/group.mojo",
+            "x_metrics/group.mojo", "x_metrics/regression.mojo", "x_metrics/ranking.mojo",
         ),
         exports=(
             "x_metrics_host_numeric_mode", "x_metrics_host_vendor", "x_metrics_host_column",
@@ -52,7 +81,16 @@ TRAINING_LANE_NAMES = {
     "x-metrics-classification": "balanced_accuracy, matthews_corrcoef, cohen_kappa, jaccard, fbeta, "
                                 "precision_recall_fscore_support, hamming/zero-one loss, multilabel_confusion_matrix, "
                                 "class_likelihood_ratios and the sample_weight options of the classification metrics",
+    "x-metrics-regression": "the regression metrics the lane added (MSLE, MAPE, pinball, median absolute error, "
+                            "max error, explained variance, Tweedie deviances, the D^2 scores) and the "
+                            "sample_weight / multioutput / force_finite options of the existing ones",
+    "x-metrics-ranking": "the ranking and probabilistic scores the lane added (ROC/DET curves, average "
+                         "precision, top-k accuracy, Brier, hinge, DCG/NDCG, the label-ranking scores, the "
+                         "D^2 log-loss and Brier scores) and the weighted / partial / multiclass options of "
+                         "roc_auc_score, precision_recall_curve and log_loss",
 }
 PUBLIC_PENDING_LANES = {
     "x-metrics-classification": "no reference",
+    "x-metrics-regression": "no reference",
+    "x-metrics-ranking": "no reference",
 }
