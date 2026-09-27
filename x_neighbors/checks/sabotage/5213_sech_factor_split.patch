@@ -1,0 +1,13 @@
+diff --git a/x_neighbors/items.mojo b/x_neighbors/items.mojo
+index bc04f5c16..31bb162a7 100644
+--- a/x_neighbors/items.mojo
++++ b/x_neighbors/items.mojo
+@@ -665,7 +665,7 @@ def achi2_item(t: Int, x: FP, res: FP, n: Int, d: Int, steps: Int, interval: Flo
+     var step = ftz(identical_mul(ftz(identical_mul(Float32(2), xv)), interval))
+     for j in range(1, steps):
+         var ch = _coshf(ftz(identical_mul(ftz(identical_mul(PI_F32, Float32(j))), interval)))
+-        var factor = ftz(identical_sqrt(ftz(identical_div(step, ch))))
++        var factor = ftz(identical_div(ftz(identical_sqrt(step)), ftz(identical_sqrt(ch))))
+         var arg = ftz(identical_mul(Float32(j), log_step))
+         res.unsafe_store(i * w + (2 * j - 1) * d + f, ftz(identical_mul(factor, ftz(identical_cos(arg)))))
+         res.unsafe_store(i * w + (2 * j) * d + f, ftz(identical_mul(factor, ftz(identical_sin(arg)))))

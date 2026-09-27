@@ -1,0 +1,21 @@
+--- a/bindings/_mojolearn_x_cnn_host.mojo	2026-09-27 13:45:27
++++ b/bindings/_mojolearn_x_cnn_host.mojo	2026-09-27 13:45:27
+@@ -3,7 +3,17 @@
+ """CPU binding for `_mojolearn_x_cnn` (the CNN expansion lane). HOST ONLY;
+ the GPU binding's export names and address contract, the work is
+ x_cnn/host/ops_host.mojo."""
+-from bindings.hostptr import f32_ptr, i32_ptr, read_f32, read_i32, copy_f32
++from bindings.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
++from bindings.hostptr import copy_f32 as _copy_f32_real
++from std.memory import bitcast
++
++
++def copy_f32[so: Origin, do: MutOrigin, //](src: Pointer[Float32, so], dst: MutPointer[Float32, do], n: Int):
++    """SABOTAGE (end to end): every word the CPU column returns has its low bit flipped (a function of the
++    value alone, so each column stays batch-consistent and only the cross-column diff can see it)."""
++    _copy_f32_real(src, dst, n)
++    for i in range(n):
++        dst.unsafe_store(i, bitcast[DType.float32](bitcast[DType.uint32](dst.unsafe_load(i)) ^ UInt32(1)))
+ from std.os import abort
+ from std.python import Python, PythonObject
+ from std.python._cpython import GILReleased
