@@ -60,13 +60,15 @@ def arm_refusals(rep):
     rep.raises("REFUSE", ValueError, "euclidean", "metric='manhattan' by name", HDBSCAN(metric="manhattan").fit, x)
     rep.raises("REFUSE", ValueError, "cluster_selection_method", "an unknown selection method", HDBSCAN(cluster_selection_method="x").fit, x)
     rep.raises("REFUSE", TypeError, "min_samples", "min_samples as a float", HDBSCAN(min_samples=2.5).fit, x)
-    rep.raises("REFUSE", Exception, "", "cluster_selection_epsilon != 0, refused on the Mojo host", HDBSCAN(cluster_selection_epsilon=0.5).fit, x)
+    rep.raises("REFUSE", ValueError, "cluster_selection_epsilon", "a negative cluster_selection_epsilon by name", HDBSCAN(cluster_selection_epsilon=-0.5).fit, x)
     rep.raises("REFUSE", Exception, "", "min_cluster_size=1, refused on the Mojo host", HDBSCAN(min_cluster_size=1).fit, x)
     rep.raises("REFUSE", Exception, "n_rows", "a single row, refused on the Mojo host", HDBSCAN().fit, x[:1])
     bad = x.copy(); bad[5, 0] = np.float32("nan")
     rep.raises("REFUSE", Exception, "", "a NaN cell, refused on the Mojo host (DEVIATION 1607)", HDBSCAN().fit, bad)
     m = HDBSCAN(min_cluster_size=8).fit(x)
-    rep.raises("REFUSE", AttributeError, "1610", "probabilities_ refused by name", lambda: m.probabilities_)
+    pr = np.asarray(m.probabilities_)
+    rep.check("FIT", pr.shape == (120,) and bool(np.all((pr >= 0) & (pr <= 1)))
+              and bool(np.all(pr[np.asarray(m.labels_) == -1] == 0)), "probabilities_ in [0, 1], 0 on noise (DEVIATION 5116)")
 
 
 def _dupes(seed=2):

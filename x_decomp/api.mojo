@@ -97,13 +97,17 @@ def sqdist_py[E: Exec](a: PythonObject, b: PythonObject, dst: PythonObject, p: P
     var na = _n(p, 0)
     var nb = _n(p, 1)
     var d = _n(p, 2)
+    # optional: the distance kind (x_decomp/cells.mojo PD_*; 0 = squared
+    # Euclidean) and the Minkowski p, a float rounded once to float32
+    var kind = _n(p, 3) if len(p) > 3 else 0
+    var pw = Float32(Float64(py=p[4])) if len(p) > 4 else Float32(2)
     if na * nb > 2147483647:
         raise Error("x_decomp: sqdist exceeds the Int32 index bound")
     var pa = _f(a)
     var pb = _f(b)
     var po = _f(dst)
     with GILReleased(Python()):
-        E.sqdist(pa, pb, po, na, nb, d)
+        E.sqdist(pa, pb, po, na, nb, d, kind, pw)
     return PythonObject(na * nb)
 
 
@@ -131,11 +135,12 @@ def lu_py[E: Exec](a: PythonObject, piv: PythonObject, info: PythonObject, p: Py
 def lu_solve_py[E: Exec](lu: PythonObject, piv: PythonObject, b: PythonObject, p: PythonObject) raises -> PythonObject:
     var n = _n(p, 0)
     var nrhs = _n(p, 1)
+    var trans = _n(p, 2) if len(p) > 2 else 0
     var pl = _f(lu)
     var pp = _i(piv)
     var pb = _f(b)
     with GILReleased(Python()):
-        E.lu_solve(pl, pp, pb, n, nrhs)
+        E.lu_solve(pl, pp, pb, n, nrhs, trans)
     return PythonObject(n)
 
 

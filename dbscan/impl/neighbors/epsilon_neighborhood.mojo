@@ -203,12 +203,25 @@ from dbscan.impl.neighbors.fast_mma_eps import (
 #: RAFT's `l1.cuh:49` and whose threshold is NOT squared.
 comptime DBSCAN_METRIC_L2 = 0
 comptime DBSCAN_METRIC_L1 = 1
+#: DEVIATION 5113: cuML's CosineExpanded (`dbscan.cuh`): every row is scaled
+#: to unit length ONCE on the host (`core/cosine_rows.mojo`, the same code on
+#: both bindings) and the L2 kernel runs on the unit rows against
+#: `Float32(2 * eps)`, because `|a - b|^2 = 2 (1 - cos)` for unit rows.
+comptime DBSCAN_METRIC_COSINE = 2
+#: DEVIATION 5114: cuML's Precomputed (`vertexdeg/precomputed.cuh`): `x` is
+#: the `n x n` distance matrix and a pair is a neighbor when its entry is
+#: `<= Float32(eps)`; no accumulator, no search.
+comptime DBSCAN_METRIC_PRECOMPUTED = 3
 
 
 def dbscan_metric_name(metric: Int) -> String:
     """The metric's public spelling, for messages and for the checks."""
     if metric == DBSCAN_METRIC_L1:
         return String("manhattan")
+    if metric == DBSCAN_METRIC_COSINE:
+        return String("cosine")
+    if metric == DBSCAN_METRIC_PRECOMPUTED:
+        return String("precomputed")
     return String("euclidean")
 
 
@@ -225,8 +238,12 @@ def dbscan_metric_threshold(metric: Int, eps: Float64) -> Float32:
     fixture in a gate cannot compute the threshold a different way from the
     code it is gating.
     """
-    if metric == DBSCAN_METRIC_L1:
+    if metric == DBSCAN_METRIC_L1 or metric == DBSCAN_METRIC_PRECOMPUTED:
         return Float32(eps)
+    if metric == DBSCAN_METRIC_COSINE:
+        # DEVIATION 5113: a squared L2 distance between unit rows is twice
+        # the cosine distance.
+        return Float32(2.0 * eps)
     return Float32(eps * eps)
 
 
@@ -503,6 +520,42 @@ def eps_unexp_neigh_kernel[
         _ = Atomic.fetch_add(vd.unsafe_offset(m), block_total)
 
 
+def eps_precomputed_neigh_kernel(
+    adj: MutPointer[UInt8, MutAnyOrigin],
+    vd: MutPointer[Int32, MutAnyOrigin],
+    dist: MutPointer[Float32, MutAnyOrigin],
+    m_in: Int32,
+    n_in: Int32,
+    thresh_in: Float32,
+):
+    """DEVIATION 5114, cuML's `vertexdeg/precomputed.cuh`: the batch's `m`
+    rows of the `n x n` distance matrix (`dist` is the batch slice) become
+    `adj` and `vd` with the fused kernel's layout (`vd[m]` the batch's edge
+    count). One block per row: each thread counts its strided columns, the
+    counts meet in `block_sum` (integers, so the order cannot move a bit),
+    thread 0 writes `vd[row]` and adds it to `vd[m]`. A pair is a neighbor
+    when its entry is `<= thresh_in`, which is `Float32(eps)`.
+
+    **`vd` must be zeroed for `m + 1` elements first** (deviation 31)."""
+    var m = Int(m_in)
+    var n = Int(n_in)
+    var row = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var s = Int32(0)
+    if row < m:
+        var j = tid
+        while j < n:
+            var is_neigh = dist[row * n + j] <= thresh_in
+            adj.unsafe_store(row * n + j, UInt8(1) if is_neigh else UInt8(0))
+            if is_neigh:
+                s += Int32(1)
+            j += EPS_THREADS
+    var total = block_sum[block_size=EPS_THREADS](s)
+    if tid == 0 and row < m:
+        vd.unsafe_store(row, total)
+        _ = Atomic.fetch_add(vd.unsafe_offset(m), total)
+
+
 def eps_unexp_neighborhood[
     metric: Int
 ](
@@ -540,6 +593,24 @@ def eps_unexp_neighborhood[
     ON THE L1 ARM IT IS NOT, because an L1 sum has no squared form; see
     DEVIATION 27 at the top of this file.
     """
+    comptime if metric == DBSCAN_METRIC_PRECOMPUTED:
+        # DEVIATION 5114: `x` is the n x n distance matrix, `k == n`.
+        var db = x.create_sub_buffer[DType.float32](
+            start_vertex_id * k, m * k
+        )
+        ctx.enqueue_memset(vd, Int32(0))
+        ctx.synchronize()
+        ctx.enqueue_function[eps_precomputed_neigh_kernel](
+            adj.unsafe_ptr(),
+            vd.unsafe_ptr(),
+            db.unsafe_ptr(),
+            Int32(m),
+            Int32(n),
+            thresh,
+            grid_dim=(m, 1, 1),
+            block_dim=(EPS_THREADS, 1, 1),
+        )
+        return
     # FAST, Apple, L2: the matrix-unit filter with the same adjacency
     # (`fast_mma_eps.mojo`); it declines rows whose norms it cannot bound.
     comptime if metric == DBSCAN_METRIC_L2 and FAST_MMA_EPS_ENABLED:
