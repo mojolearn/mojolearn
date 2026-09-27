@@ -1,3 +1,32 @@
+# CURRENT DIRECTIVES: re-read after every merge
+
+Lanes merge origin/main before every merge, so this section reaches every
+worktree. The orchestrator changes lane instructions HERE instead of
+messaging lanes. Newest items are at the top.
+
+1. **Order per lane:** (a) every algorithm in the lane table and Additions
+   (PASS 1); (b) proof on every column, holding an AMD box (PASS 2 items
+   1-2); (c) **option parity** (item 2 below); (d) speed, IDENTICAL and
+   FAST, on NVIDIA, AMD, Apple and CPU (PASS 2 item 3).
+2. **Option parity (Andrew, 2026-09-27).** Every algorithm in the lane's
+   family, EXISTING ones included, gets every option its reference and
+   bench-board opponents have (sklearn, cuML, LightGBM/XGBoost/CatBoost,
+   PyTorch, statsmodels, as applicable):
+   - Work through the family's `NOT_IMPLEMENTED.tsv` rows marked NOT
+     IMPLEMENTED, and add rows for missing options no row names yet.
+   - Options refused for an identity reason (float64 on the device, atomics
+     with no fixed-order form) stay refused by name; the tsv says why.
+   - Each option gets the same gate as an algorithm: AGREE, a sabotage for
+     a numeric change, existing bits unchanged. Merge each option as it
+     passes.
+3. **Fix what you find at the root.** A shortcoming in shared code or
+   another algorithm is fixed and merged to main by the lane that finds
+   it. No workarounds, no "documented as owed".
+4. **Machines:** hold your pods for your whole session. All data comes
+   from R2. No time estimates anywhere.
+
+---
+
 # Algorithm expansion: 57 -> 103 algorithms, 12 -> 13 families
 
 Status: PREP LANDED ON MAIN (2026-09-27, `lane/algos-prep`, commits `aabd9c53`

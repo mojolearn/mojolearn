@@ -40,6 +40,19 @@ def test_rmsprop():
     _run(ml.RMSprop, ref_rmsprop, lr=3e-3, centered=True, momentum=0.7, weight_decay=1e-2)
 
 
+def ref_adagrad(p, g, t, st, lr=1e-2, lr_decay=0.0, weight_decay=0.0, initial_accumulator_value=0.0,
+                eps=1e-10):
+    g = g + weight_decay * p
+    clr = lr / (1 + (t - 1) * lr_decay)
+    st["s"] = st.get("s", initial_accumulator_value) + g * g
+    return p - clr * g / (np.sqrt(st["s"]) + eps)
+
+
+def test_adagrad():
+    _run(ml.Adagrad, ref_adagrad)
+    _run(ml.Adagrad, ref_adagrad, lr=5e-2, lr_decay=0.1, weight_decay=1e-2, initial_accumulator_value=0.1)
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

@@ -71,3 +71,61 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-glm-poisson", "x-glm-gamma", "x-glm-tweedie")
+
+
+@lane("x-huber")
+def _(ml, X, yc, yr, Xh=None):
+    y = yr[:2000].copy()
+    y[::17] = y[::17] + np.float32(25.0)  # planted outliers
+    m = ml.HuberRegressor(max_iter=30).fit(X[:2000], y)
+    f = _linear_reg_fit(m, X, yr, Xh)
+    f["scale"] = _h(np.asarray([m.scale_], dtype=np.float32))
+    return f
+
+
+_batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-huber")
+
+
+@lane("x-bayes-ridge")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.BayesianRidge().fit(X[:2000], yr[:2000])
+    f = _linear_reg_fit(m, X, yr, Xh)
+    f["hyper"] = _h(np.asarray([m.alpha_, m.lambda_], dtype=np.float32))
+    return f
+
+
+@lane("x-ard")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.ARDRegression(max_iter=50).fit(X[:2000], yr[:2000])
+    f = _linear_reg_fit(m, X, yr, Xh)
+    f["lambda"] = _h(m.lambda_)
+    return f
+
+
+_batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-bayes-ridge", "x-ard")
+
+
+@lane("x-lars")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.Lars(n_nonzero_coefs=10).fit(X[:2000], yr[:2000])
+    return _linear_reg_fit(m, X, yr, Xh)
+
+
+@lane("x-lasso-lars")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.LassoLars(alpha=0.02).fit(X[:2000], yr[:2000])
+    f = _linear_reg_fit(m, X, yr, Xh)
+    f["active"] = _h(np.asarray(m.active_, dtype=np.int32))
+    return f
+
+
+_batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-lars", "x-lasso-lars")
+
+
+@lane("x-quantile")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.QuantileRegressor(quantile=0.7, alpha=0.01, max_iter=300).fit(X[:2000], yr[:2000])
+    return _linear_reg_fit(m, X, yr, Xh)
+
+
+_batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-quantile")

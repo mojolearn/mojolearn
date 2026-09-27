@@ -12,8 +12,17 @@ from x_prep.prims import (
 from x_prep.eigh import eigh_unit
 from x_prep.target import te_global_unit, te_enc_unit, te_apply_unit
 from x_prep.kbins import kbins_edges_unit, kbins_codes_unit
+from naive_bayes.nb import (
+    gnb_eps_unit, gnb_params_unit, gnb_jll_unit, class_log_prior_unit, mnb_params_unit,
+    bnb_params_unit, cnb_params_unit, cat_params_unit, cat_jll_unit,
+)
+from x_prep.transform import qt_apply_unit, pt_fit_unit, pt_apply_unit, std_params_unit, normalize_unit, poly_unit
+from x_prep.spline import spline_knots_unit, spline_apply_unit
+from naive_bayes.da import (
+    lda_prep_unit, lda_w_unit, lda_stage2_unit, lda_stage3_unit, qda_cov_unit, qda_prep_unit, qda_dec_unit,
+)
 
-comptime N_OPS = 27
+comptime N_OPS = 51
 
 
 @always_inline
@@ -72,3 +81,51 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
         kbins_edges_unit(t, f, q)
     comptime if OP == 26:
         kbins_codes_unit(t, f, q)
+    comptime if OP == 27:
+        gnb_eps_unit(t, f, q)
+    comptime if OP == 28:
+        gnb_params_unit(t, f, q)
+    comptime if OP == 29:
+        gnb_jll_unit(t, f, q)
+    comptime if OP == 30:
+        class_log_prior_unit(t, f, q)
+    comptime if OP == 31:
+        mnb_params_unit(t, f, q)
+    comptime if OP == 32:
+        bnb_params_unit(t, f, q)
+    comptime if OP == 33:
+        cnb_params_unit(t, f, q)
+    comptime if OP == 34:
+        cat_params_unit(t, f, q)
+    comptime if OP == 35:
+        cat_jll_unit(t, f, q)
+    comptime if OP == 36:
+        lda_prep_unit(t, f, q)
+    comptime if OP == 37:
+        lda_w_unit(t, f, q)
+    comptime if OP == 38:
+        lda_stage2_unit(t, f, q)
+    comptime if OP == 39:
+        lda_stage3_unit(t, f, q)
+    comptime if OP == 40:
+        qda_cov_unit(t, f, q)
+    comptime if OP == 41:
+        qda_prep_unit(t, f, q)
+    comptime if OP == 42:
+        qda_dec_unit(t, f, q)
+    comptime if OP == 43:
+        qt_apply_unit(t, f, q)
+    comptime if OP == 44:
+        pt_fit_unit(t, f, q)
+    comptime if OP == 45:
+        pt_apply_unit(t, f, q)
+    comptime if OP == 46:
+        std_params_unit(t, f, q)
+    comptime if OP == 47:
+        normalize_unit(t, f, q)
+    comptime if OP == 48:
+        poly_unit(t, f, q)
+    comptime if OP == 49:
+        spline_knots_unit(t, f, q)
+    comptime if OP == 50:
+        spline_apply_unit(t, f, q)

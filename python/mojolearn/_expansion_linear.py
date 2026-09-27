@@ -25,7 +25,11 @@ from ._buffer import addr, addr_ro, as_f32_c, empty, zeros
 from ._labels import decode_labels, encode_labels
 from ._mode import NumericModeMixin
 
-__all__ = ["SGDClassifier", "SGDRegressor", "PoissonRegressor", "GammaRegressor", "TweedieRegressor"]
+__all__ = ["SGDClassifier", "SGDRegressor", "PoissonRegressor", "GammaRegressor", "TweedieRegressor",
+           "HuberRegressor",
+           "BayesianRidge", "ARDRegression",
+           "Lars", "LassoLars",
+           "QuantileRegressor"]
 
 _BINDING = "_mojolearn_x_linear"
 ALGO_SGD, ALGO_GLM, ALGO_HUBER, ALGO_BAYES, ALGO_ARD = 1, 2, 3, 4, 5
@@ -397,3 +401,216 @@ class TweedieRegressor(_GLMBase):
             raise ValueError("Some value(s) of y are out of the valid range of the loss 'HalfTweedieLoss'.")
         if p >= 2 and min(y) <= 0:
             raise ValueError("Some value(s) of y are out of the valid range of the loss 'HalfTweedieLoss'.")
+
+
+# -------------------------------------------------------------------- Huber
+# Reference: scikit-learn sklearn/linear_model/_huber.py; kernel
+# x_linear/huber.mojo (L-BFGS, x_linear/lbfgs.mojo, sigma = exp(s)).
+
+_LBFGS_M = 10
+
+
+def _lbfgs_work(p):
+    return 4 * p + 2 * _LBFGS_M * p + 2 * _LBFGS_M
+
+
+class HuberRegressor(_LinearRegressorMixin, NumericModeMixin):
+    """L2-regularized linear regression with the Huber loss and a jointly
+    estimated scale (scikit-learn's HuberRegressor)."""
+
+    _BINDING = _BINDING
+
+    def __init__(self, *, epsilon=1.35, max_iter=100, alpha=0.0001, warm_start=False,
+                 fit_intercept=True, tol=1e-05):
+        self.epsilon, self.max_iter, self.alpha = epsilon, max_iter, alpha
+        self.warm_start, self.fit_intercept, self.tol = warm_start, fit_intercept, tol
+
+    def fit(self, X, y):
+        if not self.epsilon >= 1.0:
+            raise ValueError("mojolearn HuberRegressor: epsilon must be >= 1.0")
+        if self.warm_start:
+            raise ValueError("mojolearn HuberRegressor: warm_start is not implemented")
+        a, n, d = _matrix(X)
+        yv = _vector(y, n)
+        p = d + 2 if self.fit_intercept else d + 1
+        vals = _run(self, ALGO_HUBER, a, n, d, yv, [self.max_iter, int(bool(self.fit_intercept))],
+                    [self.epsilon, self.alpha, self.tol], d + 4 + p, _lbfgs_work(p), 1)
+        self.coef_ = Array.from_list(vals[:d], "<f4")
+        self.intercept_ = float(vals[d])
+        self.scale_ = float(vals[d + 1])
+        self.n_iter_ = int(vals[d + 2])
+        self.n_features_in_ = d
+        pred = self.predict(a).tolist()
+        thr = self.scale_ * self.epsilon
+        self.outliers_ = [abs(t - q) > thr for t, q in zip(yv.tolist(), pred)]
+        return self
+
+
+# ---------------------------------------------------------- Bayesian / ARD
+# Reference: scikit-learn sklearn/linear_model/_bayes.py; kernel
+# x_linear/bayes.mojo (Jacobi eigenpairs of the centered Gram; Cholesky sigma).
+
+def _bayes_refuse(est, return_std=False):
+    if est.compute_score:
+        raise ValueError(f"mojolearn {type(est).__name__}: compute_score is not implemented")
+    if return_std:
+        raise ValueError(f"mojolearn {type(est).__name__}: predict(return_std=True) is not implemented")
+
+
+class BayesianRidge(_LinearRegressorMixin, NumericModeMixin):
+    """Bayesian ridge regression by evidence maximization (scikit-learn's BayesianRidge)."""
+
+    _BINDING = _BINDING
+
+    def __init__(self, *, max_iter=300, tol=1e-3, alpha_1=1e-6, alpha_2=1e-6, lambda_1=1e-6,
+                 lambda_2=1e-6, alpha_init=None, lambda_init=None, compute_score=False,
+                 fit_intercept=True, copy_X=True, verbose=False):
+        self.max_iter, self.tol, self.alpha_1, self.alpha_2 = max_iter, tol, alpha_1, alpha_2
+        self.lambda_1, self.lambda_2, self.alpha_init, self.lambda_init = lambda_1, lambda_2, alpha_init, lambda_init
+        self.compute_score, self.fit_intercept, self.copy_X, self.verbose = compute_score, fit_intercept, copy_X, verbose
+
+    def fit(self, X, y):
+        _bayes_refuse(self)
+        a, n, d = _matrix(X)
+        yv = _vector(y, n)
+        vals = _run(self, ALGO_BAYES, a, n, d, yv, [self.max_iter, int(bool(self.fit_intercept))],
+                    [self.tol, self.alpha_1, self.alpha_2, self.lambda_1, self.lambda_2,
+                     -1.0 if self.alpha_init is None else self.alpha_init,
+                     -1.0 if self.lambda_init is None else self.lambda_init],
+                    d + 4, 3 * d * d + 5 * d, 1)
+        self.coef_ = Array.from_list(vals[:d], "<f4")
+        self.intercept_ = float(vals[d])
+        self.alpha_, self.lambda_ = float(vals[d + 1]), float(vals[d + 2])
+        self.n_iter_ = int(vals[d + 3])
+        self.n_features_in_ = d
+        return self
+
+    def predict(self, X, return_std=False):
+        _bayes_refuse(self, return_std)
+        return _LinearRegressorMixin.predict(self, X)
+
+
+class ARDRegression(_LinearRegressorMixin, NumericModeMixin):
+    """Automatic relevance determination regression (scikit-learn's ARDRegression)."""
+
+    _BINDING = _BINDING
+
+    def __init__(self, *, max_iter=300, tol=1e-3, alpha_1=1e-6, alpha_2=1e-6, lambda_1=1e-6,
+                 lambda_2=1e-6, compute_score=False, threshold_lambda=1e4, fit_intercept=True,
+                 copy_X=True, verbose=False):
+        self.max_iter, self.tol, self.alpha_1, self.alpha_2 = max_iter, tol, alpha_1, alpha_2
+        self.lambda_1, self.lambda_2, self.compute_score = lambda_1, lambda_2, compute_score
+        self.threshold_lambda, self.fit_intercept, self.copy_X, self.verbose = (
+            threshold_lambda, fit_intercept, copy_X, verbose)
+
+    def fit(self, X, y):
+        _bayes_refuse(self)
+        a, n, d = _matrix(X)
+        if n < 2:
+            raise ValueError("mojolearn ARDRegression: at least 2 samples are required")
+        yv = _vector(y, n)
+        vals = _run(self, ALGO_ARD, a, n, d, yv, [self.max_iter, int(bool(self.fit_intercept))],
+                    [self.tol, self.alpha_1, self.alpha_2, self.lambda_1, self.lambda_2, self.threshold_lambda],
+                    2 * d + 4, 3 * d * d + 4 * d, 2 * d)
+        self.coef_ = Array.from_list(vals[:d], "<f4")
+        self.intercept_ = float(vals[d])
+        self.alpha_ = float(vals[d + 1])
+        self.lambda_ = Array.from_list(vals[d + 2:2 * d + 2], "<f4")
+        self.n_iter_ = int(vals[2 * d + 2])
+        self.n_features_in_ = d
+        return self
+
+    def predict(self, X, return_std=False):
+        _bayes_refuse(self, return_std)
+        return _LinearRegressorMixin.predict(self, X)
+
+
+# --------------------------------------------------------------------- LARS
+# Reference: scikit-learn sklearn/linear_model/_least_angle.py; kernel
+# x_linear/lars.mojo (the Gram form of _lars_path_solver).
+
+def _lars_fit(est, X, y, max_iter, lasso, alpha_min):
+    if getattr(est, "jitter", None) is not None:
+        raise ValueError(f"mojolearn {type(est).__name__}: jitter is not implemented")
+    if getattr(est, "positive", False):
+        raise ValueError(f"mojolearn {type(est).__name__}: positive=True is not implemented")
+    a, n, d = _matrix(X)
+    yv = _vector(y, n)
+    vals = _run(est, ALGO_LARS, a, n, d, yv, [int(max_iter), int(bool(est.fit_intercept)), int(lasso)],
+                [alpha_min], 2 * d + 4, 2 * d * d + 8 * d, 2 * d)
+    est.coef_ = Array.from_list(vals[:d], "<f4")
+    est.intercept_ = float(vals[d])
+    est.n_iter_ = int(vals[d + 1])
+    est.alpha_ = float(vals[d + 2])
+    k = int(vals[d + 3])
+    est.active_ = [int(v) for v in vals[d + 4:d + 4 + k]]
+    est.n_features_in_ = d
+    return est
+
+
+class Lars(_LinearRegressorMixin, NumericModeMixin):
+    """Least angle regression (scikit-learn's Lars)."""
+
+    _BINDING = _BINDING
+
+    def __init__(self, *, fit_intercept=True, verbose=False, precompute="auto", n_nonzero_coefs=500,
+                 eps=2.220446049250313e-16, copy_X=True, fit_path=True, jitter=None, random_state=None):
+        self.fit_intercept, self.verbose, self.precompute = fit_intercept, verbose, precompute
+        self.n_nonzero_coefs, self.eps, self.copy_X = n_nonzero_coefs, eps, copy_X
+        self.fit_path, self.jitter, self.random_state = fit_path, jitter, random_state
+
+    def fit(self, X, y):
+        return _lars_fit(self, X, y, self.n_nonzero_coefs, False, 0.0)
+
+
+class LassoLars(_LinearRegressorMixin, NumericModeMixin):
+    """Lasso fitted by least angle regression (scikit-learn's LassoLars)."""
+
+    _BINDING = _BINDING
+
+    def __init__(self, alpha=1.0, *, fit_intercept=True, verbose=False, precompute="auto", max_iter=500,
+                 eps=2.220446049250313e-16, copy_X=True, fit_path=True, positive=False, jitter=None,
+                 random_state=None):
+        self.alpha, self.fit_intercept, self.verbose, self.precompute = alpha, fit_intercept, verbose, precompute
+        self.max_iter, self.eps, self.copy_X, self.fit_path = max_iter, eps, copy_X, fit_path
+        self.positive, self.jitter, self.random_state = positive, jitter, random_state
+
+    def fit(self, X, y):
+        if not self.alpha >= 0:
+            raise ValueError("mojolearn LassoLars: alpha must be >= 0")
+        return _lars_fit(self, X, y, self.max_iter, True, self.alpha)
+
+
+# ----------------------------------------------------------------- Quantile
+# Reference problem: scikit-learn sklearn/linear_model/_quantile.py; the
+# solver is ADMM (x_linear/quantile.mojo), not their linear program.
+
+class QuantileRegressor(_LinearRegressorMixin, NumericModeMixin):
+    """L1-penalized quantile regression (scikit-learn's QuantileRegressor
+    problem). `solver` accepts their names and always runs ADMM; `max_iter`
+    and `tol` (ADMM's relative tolerance, eps_abs = tol / 100) are this
+    implementation's own keywords."""
+
+    _BINDING = _BINDING
+
+    def __init__(self, *, quantile=0.5, alpha=1.0, fit_intercept=True, solver="highs",
+                 solver_options=None, max_iter=5000, tol=1e-4):
+        self.quantile, self.alpha, self.fit_intercept = quantile, alpha, fit_intercept
+        self.solver, self.solver_options, self.max_iter, self.tol = solver, solver_options, max_iter, tol
+
+    def fit(self, X, y):
+        if not 0 < self.quantile < 1:
+            raise ValueError("mojolearn QuantileRegressor: quantile must be strictly between 0 and 1")
+        if not self.alpha >= 0:
+            raise ValueError("mojolearn QuantileRegressor: alpha must be >= 0")
+        a, n, d = _matrix(X)
+        yv = _vector(y, n)
+        m = d + 1
+        vals = _run(self, ALGO_QUANTILE, a, n, d, yv, [self.max_iter, int(bool(self.fit_intercept))],
+                    [self.quantile, self.alpha, self.tol / 100.0, self.tol], d + 3,
+                    m * m + 2 * m + 4 * n + 2 * d, 1)
+        self.coef_ = Array.from_list(vals[:d], "<f4")
+        self.intercept_ = float(vals[d])
+        self.n_iter_ = int(vals[d + 1])
+        self.n_features_in_ = d
+        return self

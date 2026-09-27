@@ -88,3 +88,27 @@ def _(ml, X, yc, yr, Xh=None):
     a = _sequence_opt_run(ml, ml.RMSprop, X, lr=1e-2)
     b = _sequence_opt_run(ml, ml.RMSprop, X, lr=3e-3, centered=True, momentum=0.7, weight_decay=1e-2)
     return _fit(dict(plain=a["params"], plain_state=a["state"], centered=b["params"], centered_state=b["state"]))
+
+
+@lane("sequence-adagrad")
+def _(ml, X, yc, yr, Xh=None):
+    """Adagrad at torch's defaults and with lr decay, weight decay and an
+    initial accumulator."""
+    a = _sequence_opt_run(ml, ml.Adagrad, X, lr=1e-2)
+    b = _sequence_opt_run(ml, ml.Adagrad, X, lr=5e-2, lr_decay=0.1, weight_decay=1e-2,
+                          initial_accumulator_value=0.1)
+    return _fit(dict(plain=a["params"], plain_state=a["state"], decayed=b["params"], decayed_state=b["state"]))
+
+
+@lane("sequence-autoarima")
+def _(ml, X, yc, yr, Xh=None):
+    """Four series of 200 observations: two raw fixture columns and two
+    running sums of them (so KPSS splits the batch between d = 0 and d = 1),
+    the search over p, q in {0, 1} (the orders the CPU ARIMA carries) by
+    aicc, the refit and a 12-step forecast."""
+    raw = np.ascontiguousarray(X[:200, 3:5].T, dtype=np.float32)
+    walk = np.cumsum(raw, axis=1, dtype=np.float32)
+    y = np.ascontiguousarray(np.concatenate([raw, walk]), dtype=np.float32)
+    m = ml.AutoARIMA(y).search(d=range(2), p=range(2), q=range(2))
+    m.fit()
+    return _fit(dict(d=_h(m.d_), order=_h(m.order_), ic=_h(m.ic_), forecast=_h(m.forecast(12))))

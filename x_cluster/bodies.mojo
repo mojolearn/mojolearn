@@ -19,7 +19,7 @@ descending, which moves the low bits of every distance.
 """
 from std.memory import bitcast
 
-from checks.numerics import ftz, identical_div, identical_mul, identical_sqrt
+from checks.numerics import ftz, identical_div, identical_exp, identical_log, identical_mul, identical_sqrt
 
 comptime FPtr = MutPointer[Float32, MutAnyOrigin]
 comptime IPtr = MutPointer[Int32, MutAnyOrigin]
@@ -180,6 +180,99 @@ def ap_availability_col(r_m: FPtr, a_m: FPtr, n: Int, damping: Float32, k: Int):
             new = Float32(0)
         var old = a_m[i * n + k]
         a_m[i * n + k] = ftz(ftz(identical_mul(old, damping)) + ftz(identical_mul(new, one_minus)))
+
+
+@always_inline
+def ap_exemplar_cell(a_m: FPtr, r_m: FPtr, n: Int, e: IPtr, i: Int):
+    """e[i] = (A[i, i] + R[i, i] > 0), sklearn's `E`."""
+    e[i] = Int32(1) if ftz(a_m[i * n + i] + r_m[i * n + i]) > Float32(0) else Int32(0)
+
+
+# ------------------------------------------------ Gaussian mixture bodies
+@always_inline
+def gauss_q_cell(x: FPtr, d: Int, means: FPtr, pchol: FPtr, kc: Int, dst: FPtr, cell: Int):
+    """dst[i, k] = || (x_i - mu_k) P_k ||^2, P_k the UPPER-triangular
+    precision Cholesky (d x d, row-major): y_j = sum_{a <= j} (x_a - mu_a)
+    P[a, j] in ascending a, then the ascending sum of y_j^2. sklearn's
+    `_estimate_log_gaussian_prob` ('full') forms `X @ P - mu @ P`; the
+    difference first is ours."""
+    var i = cell // kc
+    var k = cell - i * kc
+    var acc = Float32(0)
+    for j in range(d):
+        var y = Float32(0)
+        for a in range(j + 1):
+            var diff = ftz(ftz(x[i * d + a]) - ftz(means[k * d + a]))
+            y = ftz(y + ftz(identical_mul(diff, pchol[k * d * d + a * d + j])))
+        acc = ftz(acc + ftz(identical_mul(y, y)))
+    dst[cell] = acc
+
+
+@always_inline
+def resp_row(q: FPtr, c: FPtr, kc: Int, lpn: FPtr, i: Int):
+    """Row i of the E-step: v_k = c_k - q_ik / 2 (the weighted log
+    probability), the row max (the first on a tie), `lse = max +
+    log(sum exp(v - max))` over ascending k, then q_ik <- v_k - lse (the log
+    responsibility) and lpn[i] = lse."""
+    var mx = Float32(0)
+    for k in range(kc):
+        var v = ftz(c[k] - ftz(identical_mul(Float32(0.5), q[i * kc + k])))
+        q[i * kc + k] = v
+        if k == 0 or v > mx:
+            mx = v
+    var s = Float32(0)
+    for k in range(kc):
+        s = ftz(s + ftz(identical_exp(ftz(q[i * kc + k] - mx))))
+    var lse = ftz(mx + ftz(identical_log(s)))
+    for k in range(kc):
+        q[i * kc + k] = ftz(q[i * kc + k] - lse)
+    lpn[i] = lse
+
+
+@always_inline
+def exp_cell(src: FPtr, dst: FPtr, t: Int):
+    dst[t] = ftz(identical_exp(src[t]))
+
+
+@always_inline
+def nk_cell(resp: FPtr, n: Int, kc: Int, dst: FPtr, k: Int):
+    """nk = sum_i resp[i, k] + 10 * FLT_EPSILON (sklearn, float32 input)."""
+    var acc = Float32(0)
+    for i in range(n):
+        acc = ftz(acc + resp[i * kc + k])
+    dst[k] = ftz(acc + Float32(1.1920929e-06))
+
+
+@always_inline
+def xk_cell(resp: FPtr, x: FPtr, n: Int, d: Int, kc: Int, nk: FPtr, dst: FPtr, cell: Int):
+    """means[k, a] = sum_i resp[i, k] x[i, a] / nk[k]."""
+    var k = cell // d
+    var a = cell - k * d
+    var acc = Float32(0)
+    for i in range(n):
+        acc = ftz(acc + ftz(identical_mul(resp[i * kc + k], ftz(x[i * d + a]))))
+    dst[cell] = ftz(identical_div(acc, nk[k]))
+
+
+@always_inline
+def cov_cell(
+    resp: FPtr, x: FPtr, n: Int, d: Int, kc: Int, means: FPtr, nk: FPtr, reg: Float32, dst: FPtr, cell: Int
+):
+    """cov[k, a, b] = sum_i resp[i, k] (x_ia - m_ka)(x_ib - m_kb) / nk[k],
+    + reg on the diagonal (sklearn `_estimate_gaussian_covariances_full`)."""
+    var k = cell // (d * d)
+    var r = cell - k * d * d
+    var a = r // d
+    var b = r - a * d
+    var acc = Float32(0)
+    for i in range(n):
+        var da = ftz(ftz(x[i * d + a]) - means[k * d + a])
+        var db = ftz(ftz(x[i * d + b]) - means[k * d + b])
+        acc = ftz(acc + ftz(identical_mul(resp[i * kc + k], ftz(identical_mul(da, db)))))
+    var v = ftz(identical_div(acc, nk[k]))
+    if a == b:
+        v = ftz(v + reg)
+    dst[cell] = v
 
 
 # ------------------------------------------------------------------ host RNG

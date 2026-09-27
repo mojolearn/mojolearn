@@ -128,3 +128,114 @@ def test_random_trees_embedding():
     assert set(np.unique(Ea)) <= {0.0, 1.0}
     acc = accuracy_score(yb, LogisticRegression(max_iter=500).fit(Ea, ya).predict(Eb))
     assert acc > 0.6, acc                                   # the embedding carries signal
+
+
+def test_voting():
+    from sklearn.ensemble import VotingClassifier, VotingRegressor
+    from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
+    Xa, Xb, ya, yb = _clf()
+    ours = ml.VotingClassifier([("a", ml.DecisionTreeClassifier(max_depth=4)),
+                                ("b", ml.DecisionTreeClassifier(max_depth=8))], voting="soft").fit(Xa, ya)
+    ref = VotingClassifier([("a", DecisionTreeClassifier(max_depth=4, random_state=0)),
+                            ("b", DecisionTreeClassifier(max_depth=8, random_state=0))], voting="soft").fit(Xa, ya)
+    a, r = accuracy_score(yb, np.asarray(ours.predict(Xb))), accuracy_score(yb, ref.predict(Xb))
+    assert a >= r - 0.05, (a, r)
+    hard = ml.VotingClassifier([("a", ml.DecisionTreeClassifier(max_depth=4)),
+                                ("b", ml.DecisionTreeClassifier(max_depth=8)),
+                                ("c", ml.DecisionTreeClassifier(max_depth=6))]).fit(Xa, ya)
+    assert accuracy_score(yb, np.asarray(hard.predict(Xb))) >= r - 0.08
+    Xa, Xb, ya, yb = _reg()
+    ours = ml.VotingRegressor([("a", ml.DecisionTreeRegressor(max_depth=4)),
+                               ("b", ml.DecisionTreeRegressor(max_depth=8))], weights=[1, 2]).fit(Xa, ya)
+    ref = VotingRegressor([("a", DecisionTreeRegressor(max_depth=4, random_state=0)),
+                           ("b", DecisionTreeRegressor(max_depth=8, random_state=0))], weights=[1, 2]).fit(Xa, ya)
+    a, r = r2_score(yb, np.asarray(ours.predict(Xb))), r2_score(yb, ref.predict(Xb))
+    assert a >= r - 0.05, (a, r)
+
+
+def test_stacking_folds_match_sklearn():
+    from sklearn.model_selection import StratifiedKFold, KFold
+    from mojolearn._expansion_trees import _trees_stratified_folds, _trees_kfolds
+    y = np.random.RandomState(0).randint(0, 4, size=103)
+    ours = _trees_stratified_folds(y.tolist(), 5)
+    for i, (_, te) in enumerate(StratifiedKFold(5).split(np.zeros((103, 1)), y)):
+        assert sorted(te.tolist()) == [r for r, f in enumerate(ours) if f == i]
+    ours = _trees_kfolds(103, 4)
+    for i, (_, te) in enumerate(KFold(4).split(np.zeros((103, 1)))):
+        assert te.tolist() == [r for r, f in enumerate(ours) if f == i]
+
+
+def test_stacking():
+    from sklearn.ensemble import StackingClassifier, StackingRegressor
+    from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
+    Xa, Xb, ya, yb = _clf()
+    ours = ml.StackingClassifier([("a", ml.DecisionTreeClassifier(max_depth=4)),
+                                  ("b", ml.BaggingClassifier(ml.DecisionTreeClassifier(max_depth=8), random_state=0))],
+                                 final_estimator=ml.DecisionTreeClassifier(max_depth=4)).fit(Xa, ya)
+    ref = StackingClassifier([("a", DecisionTreeClassifier(max_depth=4, random_state=0)),
+                              ("b", DecisionTreeClassifier(max_depth=8, random_state=0))],
+                             final_estimator=DecisionTreeClassifier(max_depth=4, random_state=0)).fit(Xa, ya)
+    a, r = accuracy_score(yb, np.asarray(ours.predict(Xb))), accuracy_score(yb, ref.predict(Xb))
+    assert a >= r - 0.06, (a, r)
+    Xa, Xb, ya, yb = _reg()
+    ours = ml.StackingRegressor([("a", ml.DecisionTreeRegressor(max_depth=4)),
+                                 ("b", ml.DecisionTreeRegressor(max_depth=8))],
+                                final_estimator=ml.DecisionTreeRegressor(max_depth=4)).fit(Xa, ya)
+    ref = StackingRegressor([("a", DecisionTreeRegressor(max_depth=4, random_state=0)),
+                             ("b", DecisionTreeRegressor(max_depth=8, random_state=0))],
+                            final_estimator=DecisionTreeRegressor(max_depth=4, random_state=0)).fit(Xa, ya)
+    a, r = r2_score(yb, np.asarray(ours.predict(Xb))), r2_score(yb, ref.predict(Xb))
+    assert a >= r - 0.08, (a, r)
+
+
+def test_multioutput():
+    Xa, Xb, ya, yb = _reg()
+    Y = np.stack([ya, -2 * ya], axis=1)
+    m = ml.MultiOutputRegressor(ml.DecisionTreeRegressor(max_depth=8)).fit(Xa, Y)
+    P = np.asarray(m.predict(Xb))
+    assert P.shape == (len(Xb), 2)
+    np.testing.assert_allclose(P[:, 1], -2 * P[:, 0], rtol=1e-4, atol=1e-3)
+    Xa, Xb, ya, yb = _clf()
+    c = ml.MultiOutputClassifier(ml.DecisionTreeClassifier(max_depth=6)).fit(Xa, np.stack([ya, ya % 2], 1))
+    Pc = np.asarray(c.predict(Xb))
+    assert Pc.shape == (len(Xb), 2) and accuracy_score(yb, Pc[:, 0]) > 0.5
+
+
+def test_onevsrest():
+    from sklearn.multiclass import OneVsRestClassifier
+    from sklearn.tree import DecisionTreeClassifier
+    Xa, Xb, ya, yb = _clf()
+    ours = ml.OneVsRestClassifier(ml.DecisionTreeClassifier(max_depth=6)).fit(Xa, ya)
+    ref = OneVsRestClassifier(DecisionTreeClassifier(max_depth=6, random_state=0)).fit(Xa, ya)
+    a, r = accuracy_score(yb, np.asarray(ours.predict(Xb))), accuracy_score(yb, ref.predict(Xb))
+    assert a >= r - 0.05, (a, r)
+    np.testing.assert_allclose(np.asarray(ours.predict_proba(Xb)).sum(1), 1.0, rtol=1e-9)
+
+
+def test_calibration():
+    from sklearn.calibration import CalibratedClassifierCV, _sigmoid_calibration
+    from sklearn.isotonic import IsotonicRegression
+    from sklearn.metrics import log_loss
+    from sklearn.tree import DecisionTreeClassifier
+    rs = np.random.RandomState(0)
+    f = rs.normal(size=400)
+    y = (f + rs.normal(size=400) > 0).astype(np.int32)
+    b = ml.CalibratedClassifierCV()._bind()
+    ab = np.zeros(2)
+    b.x_trees_platt_fit(f.ctypes.data, y.ctypes.data, ab.ctypes.data, [400])
+    a_ref, b_ref = _sigmoid_calibration(f, y)
+    np.testing.assert_allclose(ab, [a_ref, b_ref], rtol=1e-3, atol=1e-4)
+    kx, ky = np.zeros(400), np.zeros(400)
+    y64 = y.astype(np.float64)
+    m = int(b.x_trees_isotonic_fit(f.ctypes.data, y64.ctypes.data, kx.ctypes.data, ky.ctypes.data, [400]))
+    t = np.linspace(-4, 4, 97)
+    out = np.zeros(97)
+    b.x_trees_isotonic_predict(kx.ctypes.data, ky.ctypes.data, t.ctypes.data, out.ctypes.data, [m, 97])
+    ref = IsotonicRegression(out_of_bounds="clip").fit(f, y64).predict(t)
+    np.testing.assert_allclose(out, ref, atol=1e-12)
+    Xa, Xb, ya, yb = _clf()
+    for method in ("sigmoid", "isotonic"):
+        ours = ml.CalibratedClassifierCV(ml.DecisionTreeClassifier(max_depth=6), method=method).fit(Xa, ya)
+        ref = CalibratedClassifierCV(DecisionTreeClassifier(max_depth=6, random_state=0), method=method).fit(Xa, ya)
+        lo, lr = log_loss(yb, np.asarray(ours.predict_proba(Xb))), log_loss(yb, ref.predict_proba(Xb))
+        assert lo <= lr * 1.15 + 0.02, (method, lo, lr)

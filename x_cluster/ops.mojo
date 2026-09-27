@@ -64,6 +64,10 @@ trait ClusterOps(Movable):
     def ap_a(mut self, r: Int, a: Int, n: Int, damping: Float32) raises:
         ...
 
+    def ap_e(mut self, a: Int, r: Int, n: Int, e: Int) raises:
+        """e[i] = A[i, i] + R[i, i] > 0 (`bodies.ap_exemplar_cell`)."""
+        ...
+
     def descend(mut self, x: Int, n: Int, d: Int, centers: Int, nodes: Int, labels: Int) raises:
         """labels[i] = the leaf row i reaches (`bodies.tree_descend`)."""
         ...
@@ -76,4 +80,22 @@ trait ClusterOps(Movable):
         kmeans_fit` on the device, `cluster/host/kmeans_oracle.mojo::
         host_kmeans_fit` on the host, the pair the kmeans identity lanes hold
         bit for bit. Returns the inertia; `centers` k x d and `labels` n."""
+        ...
+
+    def gauss_q(mut self, x: Int, n: Int, d: Int, means: Int, pchol: Int, kc: Int, dst: Int) raises:
+        """dst (n x kc) = the Mahalanobis squares (`bodies.gauss_q_cell`)."""
+        ...
+
+    def resp(mut self, q: Int, c: Int, n: Int, kc: Int, lpn: Int) raises:
+        """In place: q -> log responsibilities; lpn = the row log-sum-exp
+        (`bodies.resp_row`)."""
+        ...
+
+    def exp(mut self, src: Int, dst: Int, n: Int) raises:
+        ...
+
+    def moments(
+        mut self, resp: Int, x: Int, n: Int, d: Int, kc: Int, reg: Float32, nk: Int, means: Int, cov: Int
+    ) raises:
+        """nk (kc), means (kc x d), cov (kc x d x d) of `resp` (n x kc)."""
         ...

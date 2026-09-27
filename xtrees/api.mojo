@@ -14,7 +14,8 @@ from xtrees.ops import (
     sample_indices, weighted_sample, gather_f32, gather_i32, accumulate,
     accumulate_onehot, accumulate_cols, argmax_rows, argmax_rows_f32, scale_f64, softmax_rows, scale_to_f32, put_f32,
     samme_step, r2_step, weighted_median, apply_trees, gradients, leaf_newton, tree_score_add, uniform,
-    onehot_leaves, transpose_f32,
+    onehot_leaves, transpose_f32, normalize_rows, scatter, platt_fit, platt_apply, isotonic_fit,
+    isotonic_predict,
 )
 
 
@@ -292,6 +293,79 @@ def log64_binding(x: PythonObject) raises -> PythonObject:
     return PythonObject(identical_log64(Float64(py=x)))
 
 
+def normalize_rows_binding(x: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n, k]."""
+    _need(params, 2, "x_trees_normalize_rows")
+    var n = _count(_i(params, 0), "x_trees_normalize_rows")
+    if n > 0:
+        normalize_rows(f64_ptr(Int(py=x)), n, _i(params, 1))
+    return PythonObject(n)
+
+
+def scatter_binding(dst: PythonObject, src: PythonObject, rows: PythonObject, params: PythonObject) raises -> PythonObject:
+    """dst (float64, N x n_dst_cols)[rows[r], col0 + j] = src (float32, m x c)[r, j];
+    params = [n_dst_rows, n_dst_cols, m, c, col0]."""
+    _need(params, 5, "x_trees_scatter")
+    var n_dst = _i(params, 0)
+    var n_cols = _i(params, 1)
+    var m = _count(_i(params, 2), "x_trees_scatter")
+    var c = _count(_i(params, 3), "x_trees_scatter")
+    var col0 = _count(_i(params, 4), "x_trees_scatter")
+    if col0 + c > n_cols:
+        raise Error("x_trees_scatter: columns out of range")
+    var rp = i32_ptr(Int(py=rows)) if m > 0 else i32_ptr(1)
+    for r in range(m):
+        var i = Int(rp[unsafe_offset=r])
+        if i < 0 or i >= n_dst:
+            raise Error("x_trees_scatter: row out of range")
+    if m * c > 0:
+        scatter(f64_ptr(Int(py=dst)), n_cols, f32_ptr(Int(py=src)), m, c, rp, col0)
+    return PythonObject(m * c)
+
+
+def platt_fit_binding(f: PythonObject, y: PythonObject, ab: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n]; y int32 0/1; ab float64[2]."""
+    _need(params, 1, "x_trees_platt_fit")
+    var n = _i(params, 0)
+    if n < 1:
+        raise Error("x_trees_platt_fit: no rows")
+    platt_fit(f64_ptr(Int(py=f)), i32_ptr(Int(py=y)), n, f64_ptr(Int(py=ab)))
+    return PythonObject(n)
+
+
+def platt_apply_binding(f: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n, A, B]."""
+    _need(params, 3, "x_trees_platt_apply")
+    var n = _count(_i(params, 0), "x_trees_platt_apply")
+    if n > 0:
+        platt_apply(f64_ptr(Int(py=f)), n, _f(params, 1), _f(params, 2), f64_ptr(Int(py=res)))
+    return PythonObject(n)
+
+
+def isotonic_fit_binding(
+    x: PythonObject, y: PythonObject, kx: PythonObject, ky: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """params = [n]; kx, ky float64[n] receive the knots; returns their count."""
+    _need(params, 1, "x_trees_isotonic_fit")
+    var n = _i(params, 0)
+    var m = isotonic_fit(f64_ptr(Int(py=x)), f64_ptr(Int(py=y)), n, f64_ptr(Int(py=kx)), f64_ptr(Int(py=ky)))
+    return PythonObject(m)
+
+
+def isotonic_predict_binding(
+    kx: PythonObject, ky: PythonObject, t: PythonObject, res: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """params = [m, n]."""
+    _need(params, 2, "x_trees_isotonic_predict")
+    var m = _i(params, 0)
+    if m < 1:
+        raise Error("x_trees_isotonic_predict: no knots")
+    var n = _count(_i(params, 1), "x_trees_isotonic_predict")
+    if n > 0:
+        isotonic_predict(f64_ptr(Int(py=kx)), f64_ptr(Int(py=ky)), m, f64_ptr(Int(py=t)), n, f64_ptr(Int(py=res)))
+    return PythonObject(n)
+
+
 def register(mut m: PythonModuleBuilder) raises:
     """The shared export list; both bindings call this."""
     m.def_function[sample_indices_binding]("x_trees_sample_indices")
@@ -318,3 +392,9 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[onehot_leaves_binding]("x_trees_onehot_leaves")
     m.def_function[transpose_f32_binding]("x_trees_transpose_f32")
     m.def_function[log64_binding]("x_trees_log64")
+    m.def_function[normalize_rows_binding]("x_trees_normalize_rows")
+    m.def_function[scatter_binding]("x_trees_scatter")
+    m.def_function[platt_fit_binding]("x_trees_platt_fit")
+    m.def_function[platt_apply_binding]("x_trees_platt_apply")
+    m.def_function[isotonic_fit_binding]("x_trees_isotonic_fit")
+    m.def_function[isotonic_predict_binding]("x_trees_isotonic_predict")
