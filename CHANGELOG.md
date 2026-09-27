@@ -2,11 +2,15 @@
 
 All notable changes to mojolearn are recorded here, newest first, in the style of Keep a Changelog.
 
-## Unreleased
+## 0.8.23 (published 2026-09-26)
 
 ### Fixed
 - `GaussianMixture(init_params="kmeans")` seeds its k-means with the classic greedy k-means++ (scikit-learn's `KMeans` default) instead of cuVS's k-means|| (DEVIATION 3133). On few-valued data the k-means|| start left one cluster with most rows beside clusters of 1 to 7 rows, and the fit scored far below scikit-learn: on 20 taxi windows of 2,000 rows (10 offsets x 2 seeds) the median held-out mean log-likelihood gap to scikit-learn 1.7.2 went from -4240 to -356 (IDENTICAL) and from -5320 to -1.9 (FAST), and scikit-learn scored higher in 10 of 17 comparable fits instead of 17 of 18. IDENTICAL bits move for every `init_params="kmeans"` fit, on every column (`gmm`, `gmm-sample`, `par-gmm`); `init_params="random"` is unchanged.
-- GMM kmeans init is now classic k-means++ (DEVIATION 3133), so GaussianMixture IDENTICAL bits change for `gmm`, `gmm-sample` and `par-gmm` (their `LANE_REVISIONS` read `classic-kmeanspp-init-1`, so the verifier reports them OWED, not DIVERGENT, until the next record). Proven locally at fixtures base, denormal and odd, one fit: the Metal and CPU columns agree on all 48 cell parts of the four gmm lanes; `gmm-random-init` and `gmm-random-init-sample` equal the 0.8.22 CUDA, HIP and Metal columns. NVIDIA and AMD are re-proven at release, and `par-gmm` needs `verify --par quick` at release.
+- `MOJOLEARN_VENDOR=cpu` selects the CPU path on macOS. The macOS wheel returned before reading it, so through 0.8.22 a Mac asking for the CPU silently got the Metal set; it now loads the CPU-only bindings (`python/mojolearn/_backend.py`), whose results equal the Metal IDENTICAL fits bit for bit (KMeans, LinearRegression, RandomForest checked).
+
+### Changed
+- FAST keeps the reference quality: UMAP's spectral initialization solves to the reference tolerance again, and Lossguide grows best-first one leaf at a time again (the 16-leaf batch cost quality). FAST ARIMA uses the serial Kalman filter by default.
+- Apple GPU, IDENTICAL, same bits: the transposed GEMM on the simdgroup matrix unit where the window admission holds, skinny GEMM shapes on split-K, Lanczos restarts on the device, the spectral kNN graph built on the device, the SVC/SVR block solve, ARIMA's Kalman loop at the state dimension, a left-looking Cholesky, IVF-Flat search in one launch, and DBSCAN and k-means++ schedules.
 
 ## 0.8.22 (published 2026-09-26)
 
