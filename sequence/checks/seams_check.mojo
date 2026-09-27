@@ -1,0 +1,473 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+"""THE SEQUENCE LANE'S SEAM CHECK (pass 2): every numeric seam of sequence/,
+device and host against sequence/checks/oracle.mojo, bit for bit.
+
+    tools/with_identical_mode.sh pixi run mojo run -I . sequence/checks/seams_check.mojo
+
+Per seam: the fixture must first SEPARATE the pinned spelling from the
+alternative (the oracle with alt=True), else VACUOUS and the check fails;
+then the device column (`DeviceExec`, one GPU thread per element) and the
+CPU column (`HostExec`) must each equal the oracle under IDENTICAL (FAST:
+the counts are reported, no claim). Seams in host-only code (5509 shuffle,
+5510 STL weights, 5513 Nelder-Mead order) have the host column only: the
+device runs the same function inside its element body, and the lane check
+compares the columns end to end. Each seam's result is recorded on the
+identity card (MOJOLEARN_IDENTITY_TRACE) under the stage `sequence.<seam>`.
+The sabotage arms, one per seam, are sequence/checks/sabotage/seam_55xx_*.patch
+(tools/identity_lanes/sequence.checks)."""
+from std.memory import bitcast
+
+from checks.fixture_rng import binade_hashed_f32, hashed_signed_f32
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_sqrt
+from checks.scaffold import bits
+from core.identity_trace import IdentityTrace
+from sequence.exec import Exec, HostExec
+from sequence.exec_device import DeviceExec
+from sequence.ops import (
+    FP, Args, OP_GEMM, OP_COLSUM, OP_CELL_FWD, OP_CE, OP_OPT, OP_MLP_ROWLOSS, OP_COLSCALE, OP_CHOLSOLVE,
+    OP_MOE_ROUTE, OP_LN_FWD, OP_CROSTON, CELL_LSTM, CELL_GRU, OPT_ADAM, OPT_ADAMAX,
+)
+from sequence.mlp import LOSS_BINARY_LOG, SplitMix, fisher_yates
+from sequence.stl import stl_rwts
+from sequence.nm import Objective, nelder_mead
+from sequence.recurrent import Net, Work, forward, head, backward
+from sequence.checks.oracle import (
+    o_gemm, o_colsum, o_lstm, o_gru, o_bptt_dw, o_ce, o_adam, o_adamax, o_binary_logloss, o_shuffle,
+    o_stl_rwts, o_colscale, o_cholsolve, o_nm_quantized, quant_obj, o_moe_route, o_layer_norm, o_croston,
+)
+
+
+# ------------------------------------------------------------ fixtures
+def _mixed(n: Int, seed: UInt64) -> List[Float32]:
+    """Values across eight binades (so a fold's order moves low bits), with
+    a sign per value; exact, never zero or subnormal."""
+    var out = List[Float32](capacity=n)
+    for i in range(n):
+        out.append(binade_hashed_f32(seed, i, -2))
+    return out^
+
+
+def _signed(n: Int, seed: UInt64, scale: Float32) -> List[Float32]:
+    """Multiples of 0.001 in [-1, 1) times `scale` (ties are frequent)."""
+    var out = List[Float32](capacity=n)
+    for i in range(n):
+        out.append(hashed_signed_f32(seed, i) * scale)
+    return out^
+
+
+# ------------------------------------------------------------ comparison
+def _diff(a: List[Float32], b: List[Float32]) -> Int:
+    var c = abs(len(a) - len(b))
+    for i in range(min(len(a), len(b))):
+        if bits(a[i]) != bits(b[i]):
+            c += 1
+    return c
+
+
+def _separates(seam: String, differing: Int) raises:
+    if differing == 0:
+        raise Error("VACUOUS " + seam + ": the fixture does not separate the pinned spelling from the alternative")
+    print("  " + seam + ": fixture separates (" + String(differing) + " cells)")
+
+
+def _same(seam: String, column: String, differing: Int) raises:
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        if differing != 0:
+            raise Error("FAIL " + seam + " " + column + ": " + String(differing) + " cells differ from the oracle")
+        print("  " + seam + " " + column + ": == oracle")
+    else:
+        print("  " + seam + " " + column + ": FAST, " + String(differing) + " cells differ (no claim)")
+
+
+def _check(seam: String, want: List[Float32], alt: List[Float32], dev: List[Float32], host: List[Float32], mut tr: IdentityTrace) raises:
+    _separates(seam, _diff(want, alt))
+    _same(seam, "device", _diff(dev, want))
+    _same(seam, "host", _diff(host, want))
+    tr.record_list_f32("sequence." + seam, dev)
+
+
+def _check_host(seam: String, want: List[Float32], alt: List[Float32], host: List[Float32], mut tr: IdentityTrace) raises:
+    _separates(seam, _diff(want, alt))
+    _same(seam, "host", _diff(host, want))
+    tr.record_list_f32("sequence." + seam, host)
+
+
+def _cat(a: List[Float32], b: List[Float32]) -> List[Float32]:
+    var out = a.copy()
+    for i in range(len(b)):
+        out.append(b[i])
+    return out^
+
+
+# ------------------------------------------------------------ one launch
+def _set_p(mut a: Args, i: Int, p: FP):
+    if i == 0: a.p0 = p
+    elif i == 1: a.p1 = p
+    elif i == 2: a.p2 = p
+    elif i == 3: a.p3 = p
+    elif i == 4: a.p4 = p
+    elif i == 5: a.p5 = p
+    elif i == 6: a.p6 = p
+    elif i == 7: a.p7 = p
+    elif i == 8: a.p8 = p
+    elif i == 9: a.p9 = p
+    elif i == 10: a.p10 = p
+    else: a.p11 = p
+
+
+def _set_i(mut a: Args, i: Int, v: Int):
+    if i == 0: a.i0 = v
+    elif i == 1: a.i1 = v
+    elif i == 2: a.i2 = v
+    elif i == 3: a.i3 = v
+    elif i == 4: a.i4 = v
+    elif i == 5: a.i5 = v
+    elif i == 6: a.i6 = v
+    elif i == 7: a.i7 = v
+    elif i == 8: a.i8 = v
+    elif i == 9: a.i9 = v
+    elif i == 10: a.i10 = v
+    else: a.i11 = v
+
+
+def _set_f(mut a: Args, i: Int, v: Float32):
+    if i == 0: a.f0 = v
+    elif i == 1: a.f1 = v
+    elif i == 2: a.f2 = v
+    elif i == 3: a.f3 = v
+    elif i == 4: a.f4 = v
+    elif i == 5: a.f5 = v
+    elif i == 6: a.f6 = v
+    else: a.f7 = v
+
+
+def _run[OP: Int, E: Exec](
+    mut ex: E, bufs: List[List[Float32]], ints: List[Int], flts: List[Float32], n: Int,
+) raises -> List[List[Float32]]:
+    """Buffer j of `bufs` becomes pointer slot j (uploaded), `ints` and
+    `flts` the integer and float slots; launch OP over n elements, then
+    every buffer comes back."""
+    var a = Args()
+    var ptrs = List[FP]()
+    for j in range(len(bufs)):
+        var nj = len(bufs[j])
+        var p = ex.alloc(nj)
+        var host = bufs[j].copy()
+        ex.upload(p, _host_ptr(host), nj)
+        _ = host^
+        ptrs.append(p)
+        _set_p(a, j, p)
+    for j in range(len(ints)):
+        _set_i(a, j, ints[j])
+    for j in range(len(flts)):
+        _set_f(a, j, flts[j])
+    ex.launch[OP](a, n)
+    ex.sync()
+    var out = List[List[Float32]]()
+    for j in range(len(bufs)):
+        var nj = len(bufs[j])
+        var back = List[Float32](length=nj, fill=Float32(0.0))
+        ex.download(_host_ptr(back), ptrs[j], nj)
+        out.append(back^)
+    return out^
+
+
+def _both[OP: Int](
+    mut hx: HostExec, mut dx: DeviceExec, bufs: List[List[Float32]], ints: List[Int], flts: List[Float32], n: Int,
+) raises -> Tuple[List[List[Float32]], List[List[Float32]]]:
+    var d = _run[OP](dx, bufs, ints, flts, n)
+    var h = _run[OP](hx, bufs, ints, flts, n)
+    return (d^, h^)
+
+
+# ------------------------------------------------------------ 5504 BPTT
+def _bptt[E: Exec](mut ex: E, net: Net, P: List[Float32], x: List[Float32], dy: List[Float32], T: Int, B: Int) raises -> Tuple[List[Float32], List[Float32]]:
+    """(dW_ih of layer 0, dgx) after forward, head and backward."""
+    var np_ = net.n_params()
+    var Pd = ex.alloc(np_)
+    var Gr = ex.alloc(np_)
+    var xd = ex.alloc(len(x))
+    var pc = P.copy()
+    var xc = x.copy()
+    var dyc = dy.copy()
+    ex.upload(Pd, _host_ptr(pc), np_)
+    ex.upload(xd, _host_ptr(xc), len(x))
+    var w = Work(ex, net, T, B, True)
+    var hT = forward(ex, net, Pd, xd, T, B, w)
+    head(ex, net, Pd, hT, B, w.yhat)
+    ex.upload(w.dy, _host_ptr(dyc), len(dy))
+    backward(ex, net, Pd, Gr, xd, T, B, w)
+    ex.sync()
+    var GH = net.G() * net.H
+    var dw = List[Float32](length=GH * net.D, fill=Float32(0.0))
+    ex.download(_host_ptr(dw), Gr + net.w_ih(0), GH * net.D)
+    var dgx = List[Float32](length=T * B * GH, fill=Float32(0.0))
+    ex.download(_host_ptr(dgx), w.dgx, T * B * GH)
+    _ = pc^
+    _ = xc^
+    _ = dyc^
+    _ = w^
+    return (dw^, dgx^)
+
+
+# ------------------------------------------------------------ 5513 NM
+struct QuantObj(Objective):
+    var centre: List[Float32]
+    var n: Int
+
+    def __init__(out self, var centre: List[Float32]):
+        self.n = len(centre)
+        self.centre = centre^
+
+    def eval(mut self, x: FP) -> Float32:
+        var v = List[Float32]()
+        for j in range(self.n):
+            v.append(x.unsafe_load(j))
+        return quant_obj(v, self.centre)
+
+
+def _host_ptr(mut v: List[Float32]) -> FP:
+    return FP(unsafe_from_address=Int(v.unsafe_ptr()))
+
+
+def main() raises:
+    var tr = IdentityTrace()
+    var hx = HostExec()
+    var dx = DeviceExec()
+
+    # ---- 5500 GEMM, M 3, N 4, K 37, accumulate into C.
+    var M = 3; var N = 4; var K = 37
+    var A = _mixed(M * K, 11)
+    var Bm = _mixed(K * N, 12)
+    var C0 = _mixed(M * N, 13)
+    var g = _both[OP_GEMM](hx, dx, [A.copy(), Bm.copy(), C0.copy()], [M, N, K, K, 1, N, 1, 1, N], List[Float32](), M * N)
+    _check("5500_gemm_k_order", o_gemm(A, Bm, C0, M, N, K, False), o_gemm(A, Bm, C0, M, N, K, True),
+           g[0][2], g[1][2], tr)
+
+    # ---- 5501 column sums, R 41, C 3.
+    var R = 41; var Cc = 3
+    var X = _mixed(R * Cc, 21)
+    var cs = _both[OP_COLSUM](hx, dx, [X.copy(), List[Float32](length=Cc, fill=Float32(0.0))], [R, Cc, Cc, 0], List[Float32](), Cc)
+    _check("5501_colsum_order", o_colsum(X, R, Cc, False), o_colsum(X, R, Cc, True), cs[0][1], cs[1][1], tr)
+
+    # ---- 5502 LSTM step, B 4, H 8.
+    var Bb = 4; var H = 8
+    var gx = _signed(Bb * 4 * H, 31, 3.0)
+    var gh = _signed(Bb * 4 * H, 32, 3.0)
+    var cprev = _signed(Bb * H, 33, 5.0)
+    var hprev = _signed(Bb * H, 34, 1.0)
+    var z4 = List[Float32](length=Bb * 4 * H, fill=Float32(0.0))
+    var zH = List[Float32](length=Bb * H, fill=Float32(0.0))
+    var ls = _both[OP_CELL_FWD](hx, dx, [gx.copy(), gh.copy(), z4.copy(), hprev.copy(), cprev.copy(), zH.copy(), zH.copy()],
+                                [CELL_LSTM, Bb, H], List[Float32](), Bb * H)
+    _check("5502_lstm_cell", o_lstm(gx, gh, cprev, Bb, H, False), o_lstm(gx, gh, cprev, Bb, H, True),
+           _cat(ls[0][5], ls[0][6]), _cat(ls[1][5], ls[1][6]), tr)
+
+    # ---- 5503 GRU step, B 4, H 8.
+    var gx3 = _signed(Bb * 3 * H, 41, 3.0)
+    var gh3 = _signed(Bb * 3 * H, 42, 3.0)
+    var hp3 = _signed(Bb * H, 43, 2.0)
+    var z3 = List[Float32](length=Bb * 3 * H, fill=Float32(0.0))
+    var gr = _both[OP_CELL_FWD](hx, dx, [gx3.copy(), gh3.copy(), z3.copy(), hp3.copy(), zH.copy(), zH.copy(), zH.copy()],
+                                [CELL_GRU, Bb, H], List[Float32](), Bb * H)
+    _check("5503_gru_update", o_gru(gx3, gh3, hp3, Bb, H, False), o_gru(gx3, gh3, hp3, Bb, H, True),
+           gr[0][5], gr[1][5], tr)
+
+    # ---- 5504 BPTT weight gradient: an LSTM, D 3, H 4, one layer, O 2, T 6, B 3.
+    var net = Net(CELL_LSTM, 3, 4, 1, 2)
+    var T = 6; var B5 = 3
+    var P = _signed(net.n_params(), 51, 0.5)
+    var x5 = _mixed(T * B5 * 3, 52)
+    var dy = _signed(B5 * 2, 53, 1.0)
+    var bd = _bptt(dx, net, P, x5, dy, T, B5)
+    var bh = _bptt(hx, net, P, x5, dy, T, B5)
+    var GH = net.G() * net.H
+    _check("5504_bptt_fold", o_bptt_dw(bh[1], x5, T, B5, GH, 3, False), o_bptt_dw(bh[1], x5, T, B5, GH, 3, True),
+           bd[0], bh[0], tr)
+    _same("5504_bptt_fold dgx", "device vs host", _diff(bd[1], bh[1]))
+
+    # ---- 5505 softmax cross entropy, B 3, C 40.
+    var B6 = 3; var C6 = 40
+    var logits = _signed(B6 * C6, 61, 6.0)
+    var labels: List[Int] = [7, 0, 39]
+    var lab = List[Float32]()
+    for i in range(B6):
+        lab.append(Float32(labels[i]))
+    var scale6 = Float32(1.0) / Float32(3.0)
+    var ce = _both[OP_CE](hx, dx, [logits.copy(), lab.copy(), List[Float32](length=B6 * C6, fill=Float32(0.0)),
+                                   List[Float32](length=B6, fill=Float32(0.0))], [0, C6], [scale6], B6)
+    _check("5505_ce_expsum", o_ce(logits, labels, B6, C6, scale6, False), o_ce(logits, labels, B6, C6, scale6, True),
+           _cat(ce[0][2], ce[0][3]), _cat(ce[1][2], ce[1][3]), tr)
+
+    # ---- 5506 Adam, 64 parameters, step 3, L2 weight decay.
+    var n7 = 64
+    var p7 = _signed(n7, 71, 1.0)
+    var g7 = _mixed(n7, 72)
+    var m7 = _signed(n7, 73, 0.1)
+    var v7 = List[Float32]()
+    var vs = _signed(n7, 74, 0.01)
+    for i in range(n7):
+        v7.append(abs(vs[i]) + Float32(1e-4))
+    var b1 = Float32(0.9); var b2 = Float32(0.999); var lr = Float32(1e-3)
+    var pw1 = ftz(identical_mul(ftz(identical_mul(b1, b1)), b1))
+    var pw2 = ftz(identical_mul(ftz(identical_mul(b2, b2)), b2))
+    var f5 = ftz(identical_div(lr, Float32(1.0) - pw1))
+    var f6 = ftz(identical_sqrt(Float32(1.0) - pw2))
+    var z7 = List[Float32](length=n7, fill=Float32(0.0))
+    var ad = _both[OP_OPT](hx, dx, [p7.copy(), g7.copy(), m7.copy(), v7.copy(), z7.copy()],
+                           [OPT_ADAM, 3, 0], [lr, b1, b2, Float32(1e-8), Float32(0.01), f5, f6, Float32(0.0)], n7)
+    _check("5506_adam_denom", o_adam(p7, g7, m7, v7, b1, b2, Float32(1e-8), Float32(0.01), f5, f6, False),
+           o_adam(p7, g7, m7, v7, b1, b2, Float32(1e-8), Float32(0.01), f5, f6, True),
+           _cat(_cat(ad[0][0], ad[0][2]), ad[0][3]), _cat(_cat(ad[1][0], ad[1][2]), ad[1][3]), tr)
+
+    # ---- 5507 torch.lerp through Adamax, beta1 0.3 (w = 0.7, the upper branch).
+    var b1x = Float32(0.3); var b2x = Float32(0.99)
+    var clr = ftz(identical_div(lr, Float32(1.0) - b1x))
+    var ax = _both[OP_OPT](hx, dx, [p7.copy(), g7.copy(), m7.copy(), v7.copy(), z7.copy()],
+                           [OPT_ADAMAX, 1, 0], [lr, b1x, b2x, Float32(1e-8), Float32(0.0), clr, Float32(0.0), Float32(0.0)], n7)
+    _check("5507_torch_lerp", o_adamax(p7, g7, m7, v7, b1x, b2x, Float32(1e-8), Float32(0.0), clr, False),
+           o_adamax(p7, g7, m7, v7, b1x, b2x, Float32(1e-8), Float32(0.0), clr, True),
+           _cat(_cat(ax[0][0], ax[0][2]), ax[0][3]), _cat(_cat(ax[1][0], ax[1][2]), ax[1][3]), tr)
+
+    # ---- 5508 MLP binary log loss, 10 rows, O 1: p at 0, 1 and near both ends.
+    var pb: List[Float32] = [0.0, 1.0, 1e-9, 0.99999994, 0.3, 0.7, 5e-8, 0.5, 1.0, 0.0]
+    var yb: List[Float32] = [1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0]
+    var nb = len(pb)
+    var ll = _both[OP_MLP_ROWLOSS](hx, dx, [pb.copy(), yb.copy(), List[Float32](length=nb, fill=Float32(0.0)),
+                                             List[Float32](length=nb, fill=Float32(0.0))], [LOSS_BINARY_LOG, 1], List[Float32](), nb)
+    _check("5508_logloss_clip", o_binary_logloss(pb, yb, False), o_binary_logloss(pb, yb, True),
+           _cat(ll[0][2], ll[0][3]), _cat(ll[1][2], ll[1][3]), tr)
+
+    # ---- 5509 the MLP shuffle (host), n 97, seed 20260927.
+    var perm = List[Float32]()
+    for i in range(97):
+        perm.append(Float32(i))
+    var rng = SplitMix(UInt64(20260927))
+    fisher_yates(rng, perm)
+    _check_host("5509_shuffle", o_shuffle(97, UInt64(20260927), False), o_shuffle(97, UInt64(20260927), True), perm, tr)
+
+    # ---- 5510 STL robustness weights (host), 12 series of 24.
+    var want10 = List[Float32](); var alt10 = List[Float32](); var got10 = List[Float32]()
+    for s in range(12):
+        var ys = _signed(24, UInt64(100 + s), 7.0)
+        var fs = _signed(24, UInt64(200 + s), 3.0)
+        var rw = List[Float32](length=24, fill=Float32(0.0))
+        var sb = List[Float32](length=24, fill=Float32(0.0))
+        stl_rwts(_host_ptr(ys), 24, _host_ptr(fs), _host_ptr(rw), _host_ptr(sb))
+        want10 = _cat(want10, o_stl_rwts(ys, fs, False))
+        alt10 = _cat(alt10, o_stl_rwts(ys, fs, True))
+        got10 = _cat(got10, rw)
+        _ = ys^
+        _ = fs^
+        _ = sb^
+    _check_host("5510_stl_rwts", want10, alt10, got10, tr)
+
+    # ---- 5511 VAR column scaling, R 9, 4 columns (one all zero).
+    var R11 = 9; var M11 = 4
+    var X11 = _mixed(R11 * M11, 111)
+    for r in range(R11):
+        X11[r * M11 + 2] = Float32(0.0)
+        X11[r * M11 + 3] = X11[r * M11 + 3] * Float32(37.0)
+    var sc = _both[OP_COLSCALE](hx, dx, [X11.copy(), List[Float32](length=M11, fill=Float32(0.0))], [R11, M11], List[Float32](), M11)
+    _check("5511_var_pow2_scale", o_colscale(X11, R11, M11, False), o_colscale(X11, R11, M11, True),
+           _cat(sc[0][0], sc[0][1]), _cat(sc[1][0], sc[1][1]), tr)
+
+    # ---- 5512 VAR Cholesky solve: an SPD 7x7 with 2 right-hand sides, and an indefinite one.
+    var m12 = 7; var K12 = 2
+    var F = _mixed(m12 * m12, 121)
+    var G = List[Float32](length=m12 * m12, fill=Float32(0.0))
+    for i in range(m12):
+        for j in range(m12):
+            var acc = Float32(0.0)
+            for k in range(m12):
+                acc = acc + F[i * m12 + k] * F[j * m12 + k]
+            G[i * m12 + j] = acc
+    for i in range(m12):
+        G[i * m12 + i] = G[i * m12 + i] + Float32(0.5)
+    for i in range(m12):
+        for j in range(i):
+            G[j * m12 + i] = G[i * m12 + j]
+    var B12 = _mixed(m12 * K12, 122)
+    var ch = _both[OP_CHOLSOLVE](hx, dx, [G.copy(), B12.copy(), [Float32(-1.0)]], [m12, K12], List[Float32](), 1)
+    var Gbad = G.copy()
+    Gbad[4 * m12 + 4] = Float32(-3.0)
+    var chb = _both[OP_CHOLSOLVE](hx, dx, [Gbad.copy(), B12.copy(), [Float32(-1.0)]], [m12, K12], List[Float32](), 1)
+    _check("5512_var_cholesky",
+           _cat(o_cholsolve(G, B12, m12, K12, False), o_cholsolve(Gbad, B12, m12, K12, False)),
+           _cat(o_cholsolve(G, B12, m12, K12, True), o_cholsolve(Gbad, B12, m12, K12, True)),
+           _cat(_cat(_cat(ch[0][0], ch[0][1]), ch[0][2]), _cat(_cat(chb[0][0], chb[0][1]), chb[0][2])),
+           _cat(_cat(_cat(ch[1][0], ch[1][1]), ch[1][2]), _cat(_cat(chb[1][0], chb[1][1]), chb[1][2])), tr)
+
+    # ---- 5513 Nelder-Mead simplex order (host): a staircase objective, 3 coordinates, 4 starts.
+    var want13 = List[Float32](); var alt13 = List[Float32](); var got13 = List[Float32]()
+    for s in range(4):
+        var c13 = _signed(3, UInt64(130 + s), 2.0)
+        var x13 = _signed(3, UInt64(140 + s), 1.0)
+        var lo: List[Float32] = [-5.0, -5.0, -5.0]
+        var hi: List[Float32] = [5.0, 5.0, 5.0]
+        want13 = _cat(want13, o_nm_quantized(x13, lo, hi, c13, Float32(0.5), Float32(0.25), 60, Float32(1e-4), False))
+        alt13 = _cat(alt13, o_nm_quantized(x13, lo, hi, c13, Float32(0.5), Float32(0.25), 60, Float32(1e-4), True))
+        var obj = QuantObj(c13.copy())
+        var xw = x13.copy()
+        var scratch = List[Float32](length=(3 + 1) * 3 + (3 + 1) + 4 * 3, fill=Float32(0.0))
+        var its = nelder_mead(obj, _host_ptr(xw), _host_ptr(lo), _host_ptr(hi), 3, _host_ptr(scratch),
+                              Float32(0.5), Float32(0.25), 60, Float32(1e-4))
+        xw.append(Float32(its))
+        got13 = _cat(got13, xw)
+        _ = scratch^
+        _ = lo^
+        _ = hi^
+    _check_host("5513_nm_tie_order", want13, alt13, got13, tr)
+
+    # ---- 5514 MoE routing, T 4, D 3, E 6, k 2: experts 1 and 4 share a router row (exact ties).
+    var T14 = 4; var D14 = 3; var E14 = 6; var k14 = 2
+    var x14 = _signed(T14 * D14, 141, 1.0)
+    var W14 = _signed(E14 * D14, 142, 1.0)
+    for d in range(D14):
+        var v14 = W14[D14 + d] + (Float32(4.0) if d == 0 else Float32(0.0))
+        W14[D14 + d] = v14
+        W14[4 * D14 + d] = v14
+    var mo = _both[OP_MOE_ROUTE](hx, dx, [x14.copy(), W14.copy(), List[Float32](length=T14 * E14, fill=Float32(0.0)),
+                                          List[Float32](length=T14 * k14, fill=Float32(0.0)),
+                                          List[Float32](length=T14 * k14, fill=Float32(0.0)),
+                                          List[Float32](length=T14 * E14, fill=Float32(0.0))],
+                                 [D14, E14, k14, 1], List[Float32](), T14)
+    _check("5514_moe_route_tie", o_moe_route(x14, W14, T14, D14, E14, k14, True, False),
+           o_moe_route(x14, W14, T14, D14, E14, k14, True, True),
+           _cat(_cat(mo[0][2], mo[0][3]), mo[0][4]), _cat(_cat(mo[1][2], mo[1][3]), mo[1][4]), tr)
+
+    # ---- 5515 LayerNorm forward, M 3, D 33, weight and bias.
+    var M15 = 3; var D15 = 33
+    var x15 = _mixed(M15 * D15, 151)
+    var w15 = _signed(D15, 152, 2.0)
+    var b15 = _signed(D15, 153, 1.0)
+    var eps15 = Float32(1e-5)
+    var ln = _both[OP_LN_FWD](hx, dx, [x15.copy(), w15.copy(), b15.copy(), List[Float32](length=M15 * D15, fill=Float32(0.0)),
+                                       List[Float32](length=M15, fill=Float32(0.0)), List[Float32](length=M15, fill=Float32(0.0))],
+                              [D15, 1, 1], [eps15], M15)
+    _check("5515_layernorm_stats", o_layer_norm(x15, w15, b15, M15, D15, eps15, False),
+           o_layer_norm(x15, w15, b15, M15, D15, eps15, True),
+           _cat(_cat(ln[0][3], ln[0][4]), ln[0][5]), _cat(_cat(ln[1][3], ln[1][4]), ln[1][5]), tr)
+
+    # ---- 5516 SES recursion through Croston: 5 intermittent series of 40, classic and optimized.
+    var B16 = 5; var n16 = 40
+    var y16 = List[Float32]()
+    var raw16 = _signed(B16 * n16, 161, 9.0)
+    for i in range(B16 * n16):
+        var v = raw16[i]
+        y16.append(Float32(Int(v)) if v > Float32(4.0) else Float32(0.0))
+    var want16 = List[Float32](); var alt16 = List[Float32](); var dev16 = List[Float32](); var host16 = List[Float32]()
+    for variant in range(2):
+        var cr = _both[OP_CROSTON](hx, dx, [y16.copy(), List[Float32](length=B16, fill=Float32(0.0)),
+                                            List[Float32](length=B16 * 2 * n16, fill=Float32(0.0))],
+                                   [n16, variant], List[Float32](), B16)
+        want16 = _cat(want16, o_croston(y16, B16, n16, variant, False))
+        alt16 = _cat(alt16, o_croston(y16, B16, n16, variant, True))
+        dev16 = _cat(dev16, cr[0][1])
+        host16 = _cat(host16, cr[1][1])
+    _check("5516_ses_recursion", want16, alt16, dev16, host16, tr)
+
+    _ = dx^
+    _ = hx^
+    print("PASS sequence seams (17 seams: 5500-5516)")
