@@ -132,7 +132,7 @@ def submit(a):
         patch = Path(a.sabotage).resolve()
         if not patch.is_file():
             sys.exit(f"sabotage patch {patch} does not exist")
-        req.update(verify_lanes=[x for x in a.verify_lanes.split(",") if x],
+        req.update(verify_lanes=[x for x in a.verify_lanes.split(",") if x], **{"pass": a.pass_no},
                    sabotage=f"{REMOTE_ROOT}/patches/{name}.patch")
         macs = STEWARDS
     else:
@@ -315,6 +315,8 @@ def process(req_path, steward):
     patch = Path(os.path.expanduser(req["sabotage"]))
     cmd = ["sh", "tools/algos_lane_check.sh", ",".join(req["verify_lanes"]), "--sabotage", str(patch),
            "--out", str(out / "check")]
+    if req.get("pass"):
+        cmd += ["--pass", str(req["pass"])]
     rc = _run(cmd, wt, log, 6 * 3600)
     last = [line for line in log.read_text(errors="replace").splitlines() if line.startswith("RESULT:")]
     verdict["check"] = last[-1] if last else "no RESULT line"
@@ -346,6 +348,11 @@ def _metal_busy():
             if pid not in mine and any(f in c for f in FOREIGN) and "ps -axo" not in c]
 
 
+def _pixi():
+    import shutil
+    return shutil.which("pixi") or str(Path.home() / ".pixi" / "bin" / "pixi")
+
+
 class Busy(Exception):
     pass
 
@@ -368,10 +375,11 @@ def speed(req, wt, out, log, verdict, finish):
     for script in req.get("builds", []):
         t0 = time.time()
         with open(log, "a") as f:
-            f.write(f"\n$ sh {script}\n")
+            f.write(f"\n$ pixi run -e default sh {script}\n")
             f.flush()
-            rc = subprocess.run(["sh", script], cwd=wt, env=env, stdout=f, stderr=subprocess.STDOUT,
-                                timeout=3 * 3600).returncode
+            # in the pixi default environment, as tools/algos_lane_check.sh builds
+            rc = subprocess.run([_pixi(), "run", "-e", "default", "sh", script], cwd=wt, env=env, stdout=f,
+                                stderr=subprocess.STDOUT, timeout=3 * 3600).returncode
         timing["builds"].append({"script": script, "rc": rc, "wall_s": round(time.time() - t0, 3)})
         if rc:
             timing["builds_wall_s"] = round(time.time() - t_all, 3)
@@ -433,6 +441,9 @@ def main(argv=None):
                    help="identity (both Macs, m2pro gates) or speed (m3ultra ONLY; spooled while it is deferred)")
     s.add_argument("--verify-lanes", help="identity: comma separated identity lanes")
     s.add_argument("--sabotage", help="identity: a SOURCE patch that must make the check DISAGREE")
+    s.add_argument("--pass", dest="pass_no", type=int, choices=(1, 2), default=2,
+                   help="identity: the lane check's --pass (default 2: the steward is a pass-2 step, so every "
+                        "fragment needs its .checks with a sabotage patch per driver)")
     s.add_argument("--builds", help="speed: comma separated bindings/build_*.sh, run before the timing")
     s.add_argument("--cmd", help="speed: the timing command, run in the worktree at the commit (sh -c)")
     s.add_argument("--mode", choices=("identical", "fast"), help="speed: MOJOLEARN_NUMERIC_MODE for builds and cmd")
