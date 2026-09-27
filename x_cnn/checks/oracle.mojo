@@ -23,10 +23,15 @@ Seams (DEVIATION numbers, lane cnn 5700-5799):
   5708 softmax: the exp-sum folded in column order                  alt: reversed
   5709 SGD: momentum * v + d, the product pinned (no FMA)           alt: fused multiply-add
   5710 GCN norm: dis[src] * w * dis[dst] left to right              alt: w * (dis[src] * dis[dst])
+  5711 pad backward (reflect/replicate/circular): (hp, wp) ascending alt: descending
+  5712 adaptive average pooling backward: (oh, ow) ascending        alt: descending
+  5713 SAGE max backward: a source's targets ascending, ties split    alt: descending
+  5714 row L2 normalize: the squares folded in column order          alt: reversed
+  5715 Adam/AdamW: every product pinned (no FMA)                      alt: v's update fused
 """
 from std.math import fma
 from std.memory import bitcast
-from checks.numerics import ftz, identical_div, identical_mul, identical_exp, identical_log, identical_rsqrt
+from checks.numerics import ftz, identical_div, identical_mul, identical_exp, identical_log, identical_rsqrt, identical_sqrt
 from core.philox import philox4x32_10
 from gemm.host.identical_gemm import gemm_oracle, gemm_oracle_serial, OP_TN
 
@@ -306,3 +311,157 @@ def o_gcn_norm(w: List[Float32], rowptr: List[Int], col: List[Int], n: Int, alt:
             else:
                 out.append(ftz(identical_mul(ftz(identical_mul(s, ftz(w[e]))), t)))
     return out^
+
+
+# ---------------------------------------------------------------- 5711
+def _o_src(hp: Int, before: Int, size: Int, mode: Int) -> Int:
+    var h = hp - before
+    if h >= 0 and h < size:
+        return h
+    if mode == 0:
+        return -1
+    if mode == 1:
+        return -h if h < 0 else 2 * (size - 1) - h
+    if mode == 2:
+        return 0 if h < 0 else size - 1
+    return (h % size + size) % size
+
+
+def o_pad_bwd(g: List[Float32], NC: Int, H: Int, W: Int, t: Int, b: Int, l: Int, r: Int, mode: Int, alt: Bool) -> List[Float32]:
+    """dx of a 2-D pad: every padded position's gradient summed onto its
+    source pixel in (hp, wp) ascending order; alt: descending."""
+    var Hp = H + t + b
+    var Wp = W + l + r
+    var out = List[Float32](capacity=NC * H * W)
+    for nc in range(NC):
+        for h in range(H):
+            for w in range(W):
+                var acc = Float32(0)
+                for a in range(Hp):
+                    var hp = Hp - 1 - a if alt else a
+                    if _o_src(hp, t, H, mode) != h:
+                        continue
+                    for c in range(Wp):
+                        var wp = Wp - 1 - c if alt else c
+                        if _o_src(wp, l, W, mode) != w:
+                            continue
+                        acc = ftz(acc + ftz(g[(nc * Hp + hp) * Wp + wp]))
+                out.append(acc)
+    return out^
+
+
+# ---------------------------------------------------------------- 5712
+def o_adapt_avg_bwd(g: List[Float32], NC: Int, H: Int, W: Int, OH: Int, OW: Int, alt: Bool) -> List[Float32]:
+    """dx of adaptive average pooling: g / window size summed over the
+    windows holding each pixel, (oh, ow) ascending; alt: descending."""
+    var out = List[Float32](capacity=NC * H * W)
+    for nc in range(NC):
+        for h in range(H):
+            for w in range(W):
+                var acc = Float32(0)
+                for a in range(OH):
+                    var oh = OH - 1 - a if alt else a
+                    var hs = (oh * H) // OH
+                    var he = ((oh + 1) * H + OH - 1) // OH
+                    if h < hs or h >= he:
+                        continue
+                    for b in range(OW):
+                        var ow = OW - 1 - b if alt else b
+                        var ws = (ow * W) // OW
+                        var we = ((ow + 1) * W + OW - 1) // OW
+                        if w < ws or w >= we:
+                            continue
+                        var gv = ftz(g[(nc * OH + oh) * OW + ow])
+                        acc = ftz(acc + ftz(identical_div(gv, Float32((he - hs) * (we - ws)))))
+                out.append(acc)
+    return out^
+
+
+# ---------------------------------------------------------------- 5713, 5714
+def o_sage_max_bwd(
+    h: List[Float32], g: List[Float32], rowptr: List[Int], col: List[Int], n: Int, F: Int, alt: Bool
+) -> List[Float32]:
+    """The SAGE max aggregation's gradient: rowptr/col are the FORWARD
+    (target) CSR; the max, its tie count, then for every source the sum over
+    its outgoing entries (targets ascending) of g / count where it is a
+    maximum. alt: the targets descending."""
+    var mx = List[Float32](length=n * F, fill=Float32(0))
+    var cnt = List[Float32](length=n * F, fill=Float32(0))
+    for t in range(n):
+        for f in range(F):
+            var first = True
+            for e in range(rowptr[t], rowptr[t + 1]):
+                var v = ftz(h[col[e] * F + f])
+                if first or v > mx[t * F + f]:
+                    mx[t * F + f] = v
+                    cnt[t * F + f] = Float32(1)
+                    first = False
+                elif v == mx[t * F + f]:
+                    cnt[t * F + f] = cnt[t * F + f] + Float32(1)
+    # every (source, target) entry, grouped by source with targets ascending
+    var out = List[Float32](capacity=n * F)
+    for s in range(n):
+        var targets = List[Int]()
+        for t in range(n):
+            for e in range(rowptr[t], rowptr[t + 1]):
+                if col[e] == s:
+                    targets.append(t)
+        for f in range(F):
+            var acc = Float32(0)
+            var v = ftz(h[s * F + f])
+            for a in range(len(targets)):
+                var t = targets[len(targets) - 1 - a] if alt else targets[a]
+                var o = t * F + f
+                if v == mx[o] and cnt[o] > Float32(0):
+                    acc = ftz(acc + ftz(identical_div(ftz(g[o]), cnt[o])))
+            out.append(acc)
+    return out^
+
+
+def o_l2norm(x: List[Float32], n: Int, F: Int, alt: Bool) -> List[Float32]:
+    """Row L2 normalization, the squares folded in column order (alt: reversed)."""
+    var out = List[Float32](capacity=n * F)
+    for r in range(n):
+        var sq = Float32(0)
+        for a in range(F):
+            var f = F - 1 - a if alt else a
+            var v = ftz(x[r * F + f])
+            sq = ftz(sq + ftz(identical_mul(v, v)))
+        var norm = ftz(identical_sqrt(sq))
+        var den = norm if norm > Float32(1e-12) else Float32(1e-12)
+        for f in range(F):
+            out.append(ftz(identical_div(ftz(x[r * F + f]), den)))
+    return out^
+
+
+# ---------------------------------------------------------------- 5715
+def o_adam(w: List[Float32], g: List[Float32], mv: List[Float32], h: List[Float32], alt: Bool) -> List[Float32]:
+    """torch.optim.Adam/AdamW's element step (hyper as adam_at's); alt: the
+    second-moment update fused (fma(b2, v, (1-b2) g g))."""
+    var n = len(w)
+    var nw = List[Float32]()
+    var nm = List[Float32]()
+    var nv = List[Float32]()
+    for i in range(n):
+        var wi = ftz(w[i])
+        var gi = ftz(g[i])
+        if h[6] != Float32(0):
+            if h[7] != Float32(0):
+                wi = ftz(identical_mul(wi, h[8]))
+            else:
+                gi = ftz(gi + ftz(identical_mul(h[6], wi)))
+        var m = ftz(mv[i])
+        var v = ftz(mv[n + i])
+        m = ftz(m + ftz(identical_mul(h[1], ftz(gi - m))))
+        var sq = ftz(identical_mul(h[3], ftz(identical_mul(gi, gi))))
+        if alt:
+            v = ftz(fma(h[2], v, sq))
+        else:
+            v = ftz(ftz(identical_mul(h[2], v)) + sq)
+        var denom = ftz(ftz(identical_div(ftz(identical_sqrt(v)), h[5])) + h[4])
+        nm.append(m)
+        nv.append(v)
+        nw.append(ftz(wi - ftz(identical_mul(h[0], ftz(identical_div(m, denom))))))
+    nw.extend(nm^)
+    nw.extend(nv^)
+    return nw^

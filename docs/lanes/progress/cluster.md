@@ -47,6 +47,13 @@ Proof (step 2), all six algorithms, NVIDIA H100 pod:
   afternoon; `dev_pod.sh up cluster 240 --vendor amd` retrying), the M2 Pro
   steward PASS, then speed.
 
+- Directive 000 (2026-09-27, session 2): the seam bites above were recorded
+  before the lane-check fix (3084ca09c, merged 02b63f107). Re-run ONCE on
+  the H100 pod with the fixed tool (box `tools/algos_lane_check.py` md5 =
+  origin/main's): `algos_lane_check.sh x-cluster-meanshift --pass 2`. All
+  12 arms (5100-5111) BUILD, RUN and FAIL under their patch, PASS after
+  reversal; no BROKEN arm; clean lane AGREE. Done; never repeat.
+
 ## Option parity (CURRENT DIRECTIVES item 2), the lane's own six first
 
 Implemented (x_cluster/NOT_IMPLEMENTED.tsv rows removed or narrowed), each
