@@ -1,10 +1,9 @@
 # their_thing	status	why / where it would go
 # "Theirs" is scikit-learn 1.9.1 (sklearn/naive_bayes.py, sklearn/discriminant_analysis.py), the semantics reference for the 13th family. Every row is refused by name at the API.
-sklearn GaussianNB(priors=...), MultinomialNB / BernoulliNB / ComplementNB / CategoricalNB(class_prior=...)	NOT IMPLEMENTED	the given log prior replaces the class_log_prior unit's output
 sklearn *NB.fit(sample_weight=...)	NOT IMPLEMENTED	weighted sums in class_stats_unit (a weight column read beside the class code)
 sklearn *NB.partial_fit	NOT IMPLEMENTED	the running counts are the same units over a batch plus the stored sums
 sklearn *NB alpha = 0 (force_alpha)	NOT IMPLEMENTED -- REFUSED BY NAME	log(0) terms make -inf joint likelihoods and, through them, the reference's NaN probabilities (IDENTITY_PATHS Clause B)
 sklearn CategoricalNB(min_categories=...)	NOT IMPLEMENTED	a floor on n_categories_ per feature before cat_params_unit
 sklearn LinearDiscriminantAnalysis solver='lsqr' / 'eigen', shrinkage, covariance_estimator	NOT IMPLEMENTED	the pooled covariance (class_stats + a Gram unit), Ledoit-Wolf shrinkage, then a solve (lsqr) or the generalised eigenproblem (eigen) through eigh_unit
-sklearn LinearDiscriminantAnalysis / QuadraticDiscriminantAnalysis priors, store_covariance	NOT IMPLEMENTED	priors replace lda_prep_unit's counts / n; the covariance is the Gram block the fit already forms
+sklearn LinearDiscriminantAnalysis / QuadraticDiscriminantAnalysis store_covariance	NOT IMPLEMENTED	the covariance is the Gram block the fit already forms
 sklearn QuadraticDiscriminantAnalysis solver='eigen', shrinkage	NOT IMPLEMENTED	the class covariances are already formed (qda_cov_unit); shrinkage is a convex combination with its trace

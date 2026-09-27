@@ -90,7 +90,7 @@ class _RecurrentBase:
     def __init__(self, hidden_size=16, num_layers=1, optimizer="adam", learning_rate=1e-3,
                  batch_size=32, max_epochs=10, shuffle=True, random_state=0,
                  optimizer_options=None, nonlinearity="tanh", numeric_mode=None,
-                 predict_chunk=4096):
+                 predict_chunk=4096, lr_schedule=None):
         self.hidden_size = hidden_size
         self.num_layers = num_layers
         self.optimizer = optimizer
@@ -103,6 +103,7 @@ class _RecurrentBase:
         self.nonlinearity = nonlinearity
         self.numeric_mode = numeric_mode
         self.predict_chunk = predict_chunk
+        self.lr_schedule = lr_schedule
 
     # ------------------------------------------------------------ shape
     def _cell(self):
@@ -174,6 +175,10 @@ class _RecurrentBase:
         return order, np.ascontiguousarray(steps, dtype=np.int32)
 
     def _lrs(self, n_steps):
+        """The learning rate of every optimizer step: `lr_schedule.lr_at(t)`
+        (t one-based) when a schedule is set, else `learning_rate`."""
+        if self.lr_schedule is not None:
+            return np.asarray([self.lr_schedule.lr_at(t) for t in range(1, n_steps + 1)], dtype=np.float32)
         return np.full(n_steps, self.learning_rate, dtype=np.float32)
 
     def _fit(self, X, target):

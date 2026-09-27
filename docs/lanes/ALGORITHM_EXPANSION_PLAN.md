@@ -22,6 +22,20 @@ messaging lanes. Newest items are at the top.
    2026-09-27): threads, vectorization and cache blocking of the CPU host
    path, after all GPU work is done. Every change is re-proven bitwise on
    every column.
+1b. **Done means ALL of this, per algorithm (Andrew, 2026-09-27):**
+   - **Both modes work:** IDENTICAL (bitwise across every column) and FAST
+     (a faster schedule, allowed to differ in bits, never in quality: a
+     paired check against the reference at 5+ seeds on 2+ datasets).
+   - **Both paths work:** the CPU host path and the GPU path, on NVIDIA,
+     AMD and Apple.
+   - **Its verifier lane is admitted:** out of PENDING, with per-seam
+     sabotage that bites and the end-to-end lane check AGREE on every
+     column (Apple via the M2 Pro steward, AMD via your slot or the AMD
+     steward).
+   - **Every opponent option** is present (item 2).
+   - **Speed work is done:** GPU first, CPU last (item 1).
+   - **Every bug found in existing code is fixed at the root and merged**
+     (item 3).
 2. **Option parity (Andrew, 2026-09-27).** Every algorithm in the lane's
    family, EXISTING ones included, gets every option its reference and
    bench-board opponents have (sklearn, cuML, LightGBM/XGBoost/CatBoost,

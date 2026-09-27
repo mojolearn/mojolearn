@@ -21,6 +21,7 @@ from x_decomp.cells import (
     colsum_cell,
     ew_cell,
     gemm_cell,
+    als_row,
     barycenter_row,
     dijkstra_row,
     gamma_cell,
@@ -154,6 +155,14 @@ def barycenter_kernel(
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < Int(n):
         flags.unsafe_store(i, barycenter_row(x, y, nbr, wt, s, i, Int(d), Int(k), reg))
+
+
+def als_kernel(
+    c: F32Ptr, y: F32Ptr, yty: F32Ptr, x: F32Ptr, s: F32Ptr, flags: F32Ptr, n: Int32, m: Int32, f: Int32, reg: Float32
+):
+    var u = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if u < Int(n):
+        flags.unsafe_store(u, als_row(c, y, yty, x, s, u, Int(m), Int(f), reg))
 
 
 def _blocks(count: Int) -> Int:
@@ -540,6 +549,31 @@ struct DevExec(Exec):
         _ = dy^
         _ = dnb^
         _ = dwt^
+        _ = ds^
+        _ = df^
+        ctx.synchronize()
+        _ = ctx^
+
+    @staticmethod
+    def als_rows(c: F32Ptr, y: F32Ptr, yty: F32Ptr, x: F32Ptr, flags: F32Ptr, n: Int, m: Int, f: Int, reg: Float32) raises:
+        var ctx = DeviceContext()
+        var dc = _up(ctx, c, n * m)
+        var dy = _up(ctx, y, m * f)
+        var dg = _up(ctx, yty, f * f)
+        var dx = ctx.enqueue_create_buffer[DType.float32](n * f if n * f > 0 else 1)
+        var ds = ctx.enqueue_create_buffer[DType.float32](n * (f * f + f) if n > 0 else 1)
+        var df = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
+        ctx.enqueue_function[als_kernel](
+            dc.unsafe_ptr(), dy.unsafe_ptr(), dg.unsafe_ptr(), dx.unsafe_ptr(), ds.unsafe_ptr(), df.unsafe_ptr(),
+            Int32(n), Int32(m), Int32(f), reg, grid_dim=_blocks(n), block_dim=TPB,
+        )
+        _down(ctx, dx, x, n * f)
+        _down(ctx, df, flags, n)
+        ctx.synchronize()
+        _ = dc^
+        _ = dy^
+        _ = dg^
+        _ = dx^
         _ = ds^
         _ = df^
         ctx.synchronize()
