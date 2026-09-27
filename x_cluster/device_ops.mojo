@@ -11,6 +11,7 @@ from x_cluster.bodies import (
     FPtr,
     IPtr,
     ap_availability_col,
+    ap_exemplar_cell,
     ap_responsibility_row,
     kth_smallest_row,
     meanshift_seed,
@@ -74,6 +75,12 @@ def _ap_a_kernel(r: FPtr, a: FPtr, n: Int32, damping: Float32):
     var t = _tid()
     if t < Int(n):
         ap_availability_col(r, a, Int(n), damping, t)
+
+
+def _ap_e_kernel(a: FPtr, r: FPtr, n: Int32, e: IPtr):
+    var t = _tid()
+    if t < Int(n):
+        ap_exemplar_cell(a, r, Int(n), e, t)
 
 
 def _descend_kernel(x: FPtr, n: Int32, d: Int32, centers: FPtr, nodes: IPtr, labels: IPtr):
@@ -197,6 +204,12 @@ struct DeviceOps(ClusterOps):
     def ap_a(mut self, r: Int, a: Int, n: Int, damping: Float32) raises:
         self.ctx.enqueue_function[_ap_a_kernel](
             self._fp(r), self._fp(a), Int32(n), damping, grid_dim=_grid(n), block_dim=TPB,
+        )
+        self.ctx.synchronize()
+
+    def ap_e(mut self, a: Int, r: Int, n: Int, e: Int) raises:
+        self.ctx.enqueue_function[_ap_e_kernel](
+            self._fp(a), self._fp(r), Int32(n), self._ip(e), grid_dim=_grid(n), block_dim=TPB,
         )
         self.ctx.synchronize()
 
