@@ -118,18 +118,22 @@ def conv_block_forward_binding(
 
 def conv_block_backward_binding(
     x_addr: PythonObject, w_addr: PythonObject, b_addr: PythonObject, g_addr: PythonObject, idx_addr: PythonObject,
-    dx_addr: PythonObject, dw_addr: PythonObject, db_addr: PythonObject, conv_prm: PythonObject,
-    pool_prm: PythonObject, need_dx: PythonObject,
+    outs: PythonObject, conv_prm: PythonObject, pool_prm: PythonObject,
 ) raises -> PythonObject:
-    """The block's backward from its output gradient g: dW, db, and dx when need_dx."""
+    """The block's backward from its output gradient g: outs = [dx address
+    (0: not wanted, the first block's), dW address, db address]."""
     var t = _block_prms(conv_prm, pool_prm)
-    var want = Bool(py=need_dx)
+    var dx_addr = outs[0]
+    var dw_addr = outs[1]
+    var db_addr = outs[2]
+    var need_dx = Int(py=dx_addr) != 0
+    var want = need_dx
     var x = _fp(x_addr)
     var w = _fp(w_addr)
     var b = _fp(b_addr)
     var g = _fp(g_addr)
     var pi = _ip(idx_addr)
-    var pdx = _fp(dx_addr)
+    var pdx = _fp(dx_addr) if want else _fp(db_addr)
     var pdw = _fp(dw_addr)
     var pdb = _fp(db_addr)
     with GILReleased(Python()):

@@ -580,12 +580,12 @@ class CNNClassifier(_Layer):
         np = _np()
         x, idx, prm, pprm = conv._block
         g = np.ascontiguousarray(g, dtype=np.float32)
-        dx = np.empty(x.shape if need_dx else (1,), np.float32)
+        dx = np.empty(x.shape, np.float32) if need_dx else None
         conv.grad_weight_ = np.empty(conv.weight_.shape, np.float32)
         conv.grad_bias_ = np.empty(conv.out_channels, np.float32)
         b.x_cnn_conv_block_backward(x.ctypes.data, conv.weight_.ctypes.data, conv.bias_.ctypes.data, g.ctypes.data,
-                                    idx.ctypes.data, dx.ctypes.data, conv.grad_weight_.ctypes.data,
-                                    conv.grad_bias_.ctypes.data, prm, pprm, bool(need_dx))
+                                    idx.ctypes.data, [dx.ctypes.data if need_dx else 0, conv.grad_weight_.ctypes.data,
+                                                      conv.grad_bias_.ctypes.data], prm, pprm)
         return dx
 
     def _forward(self, x):

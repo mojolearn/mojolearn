@@ -146,14 +146,18 @@ def conv_block_forward_binding(
 
 def conv_block_backward_binding(
     x_addr: PythonObject, w_addr: PythonObject, b_addr: PythonObject, g_addr: PythonObject, idx_addr: PythonObject,
-    dx_addr: PythonObject, dw_addr: PythonObject, db_addr: PythonObject, conv_prm: PythonObject,
-    pool_prm: PythonObject, need_dx: PythonObject,
+    outs: PythonObject, conv_prm: PythonObject, pool_prm: PythonObject,
 ) raises -> PythonObject:
-    """The block's backward from its output gradient g: dW, db, and dx when need_dx."""
+    """The block's backward from its output gradient g: outs = [dx address
+    (0: not wanted, the first block's), dW address, db address]."""
     var t = _block_prms(conv_prm, pool_prm)
+    var dx_addr = outs[0]
+    var dw_addr = outs[1]
+    var db_addr = outs[2]
+    var need_dx = Int(py=dx_addr) != 0
     var cprm = t[0].copy()
     var pprm = t[1].copy()
-    var want = Bool(py=need_dx)
+    var want = need_dx
     var N = Int(cprm[CP_N]); var C = Int(cprm[CP_C]); var OC = Int(cprm[CP_OC])
     var ckk = C * Int(cprm[CP_KH]) * Int(cprm[CP_KW])
     var nx = N * C * Int(cprm[CP_H]) * Int(cprm[CP_W])
@@ -164,7 +168,7 @@ def conv_block_backward_binding(
     var b = read_f32(Int(py=b_addr), OC)
     var g = read_f32(Int(py=g_addr), no)
     var idx = read_i32(Int(py=idx_addr), no) if t[2] else List[Int32]()
-    var pdx = f32_ptr(Int(py=dx_addr))
+    var pdx = f32_ptr(Int(py=dx_addr)) if want else f32_ptr(Int(py=db_addr))
     var pdw = f32_ptr(Int(py=dw_addr))
     var pdb = f32_ptr(Int(py=db_addr))
     with GILReleased(Python()):
