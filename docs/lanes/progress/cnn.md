@@ -132,7 +132,8 @@ Quality rule (paired, 5 seeds x 2 conv shapes + 5 seeds x 2 seeded datasets, /ro
 
 Gate: `algos_lane_check.sh <15 x-cnn lanes> --pass 2 --sabotage x_cnn/checks/sabotage/e2e_host_output_bit.patch`
 on the RTX 4090 pod (tree 07d66ad83): RESULT: PASS (all 16 seam arms FAIL under their patch and PASS after reversal; 15 lanes AGREE, DISAGREE under the e2e arm, AGREE restored). test_lane_select (surface fragment changed): `OK: 0 failure(s)`. test_host_surface: 196 passed. PASSED: do not re-run.
-Stewards: identity 1790540597511-cnn-07d66ad836 (15 lanes + e2e arm; m2pro, m3ultra, do-amd) SUBMITTED.
+MERGED to main fad716a02 (gate 0000b: pod checks passed, steward verdicts post-merge).
+Stewards: identity 1790540597511-cnn-07d66ad836 (same x_cnn content as the merge) (15 lanes + e2e arm; m2pro, m3ultra, do-amd) SUBMITTED.
 Apple FAST speed (m3ultra, before/after, same inline timing cmd): 1790540566963-speed-cnn-6226c84178 (before),
 1790540569623-speed-cnn-07d66ad836 (after) SUBMITTED: read `apple_steward.py status` / the verdict stdout
 (lines `XCNN-SPEED`). AMD FAST speed: OWED (`apple_steward.py submit` has no `--target do-amd` on main yet; no cnn-amd box). Submit the same inline command with `--kind speed --target do-amd` for 6226c8417 and the merge commit once it exists.
