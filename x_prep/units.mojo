@@ -19,11 +19,15 @@ from naive_bayes.nb import (
 )
 from x_prep.transform import qt_apply_unit, pt_fit_unit, pt_apply_unit, std_params_unit, normalize_unit, poly_unit
 from x_prep.spline import spline_knots_unit, spline_apply_unit
+from x_prep.iterative import (
+    ii_mean_unit, ii_gram_unit, ii_sub_unit, ii_br_unit, ii_predict_unit, ii_snapshot_unit, ii_conv_unit,
+    nan_mask_unit,
+)
 from naive_bayes.da import (
     lda_prep_unit, lda_w_unit, lda_stage2_unit, lda_stage3_unit, qda_cov_unit, qda_prep_unit, qda_dec_unit,
 )
 
-comptime N_OPS = 53
+comptime N_OPS = 61
 
 
 @always_inline
@@ -134,3 +138,19 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
         label_binarize_unit(t, f, q)
     comptime if OP == 52:
         scatter_ones_unit(t, f, q)
+    comptime if OP == 53:
+        ii_mean_unit(t, f, q)
+    comptime if OP == 54:
+        ii_gram_unit(t, f, q)
+    comptime if OP == 55:
+        ii_sub_unit(t, f, q)
+    comptime if OP == 56:
+        ii_br_unit(t, f, q)
+    comptime if OP == 57:
+        ii_predict_unit(t, f, q)
+    comptime if OP == 58:
+        ii_snapshot_unit(t, f, q)
+    comptime if OP == 59:
+        ii_conv_unit(t, f, q)
+    comptime if OP == 60:
+        nan_mask_unit(t, f, q)
