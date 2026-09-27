@@ -237,12 +237,18 @@ def _(ml, X, yc, yr, Xh=None):
     ir = ml.Isomap(n_neighbors=None, radius=rad, n_components=2, path_method="FW").fit(S[:100])
     nm = ml.MDS(n_components=2, metric_mds=False, init="random", max_iter=25, random_state=1)
     nemb = nm.fit_transform(S[:60])
+    im = ml.Isomap(n_neighbors=8, n_components=2, metric="manhattan").fit(S[:100])
+    ic = ml.Isomap(n_neighbors=8, n_components=2, metric="cosine").fit(S[:100])
+    ip = ml.Isomap(n_neighbors=8, n_components=2, metric="minkowski", p=3).fit(S[:100])
+    cc = ml.ClassicalMDS(n_components=2, metric="chebyshev").fit(S[:80])
     return _fit(dict(iso=_h(iso.embedding_), isod=_h(iso.dist_matrix_), isoT=_h(iso.transform(Xh[:64])),
                      cm=_h(cm.embedding_), md=_h(emb), mds=_h(np.float64(md.stress_)), mc=_h(mc.embedding_),
                      lle=_h(lle.embedding_), lleT=_h(lle.transform(Xh[:64])), lt=_h(lt.embedding_),
                      he=_h(he.embedding_), mo=_h(mo.embedding_, np.float64(mo.reconstruction_error_)),
                      ir=_h(ir.embedding_, ir.dist_matrix_, ir.transform(S[:32])),
-                     nm=_h(nemb, np.float64(nm.stress_), np.int32(nm.n_iter_))),
+                     nm=_h(nemb, np.float64(nm.stress_), np.int32(nm.n_iter_)),
+                     im=_h(im.embedding_, im.transform(S[:16])), ic=_h(ic.embedding_, ic.transform(S[:16])),
+                     ip=_h(ip.embedding_, ip.dist_matrix_), cc=_h(cc.embedding_, cc.dissimilarity_matrix_)),
                 iso, lambda e: (e.transform(Xh[:128]),))
 
 

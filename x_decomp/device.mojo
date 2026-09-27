@@ -40,6 +40,7 @@ from x_decomp.cells import (
     trsm_row,
     rand_cell,
     rowsum_cell,
+    pdist_cell,
     sqdist_cell,
 )
 from x_decomp.exec_trait import Exec
@@ -124,10 +125,13 @@ def rowsum_kernel(a: F32Ptr, dst: F32Ptr, n: Int32, d: Int32):
         dst.unsafe_store(i, rowsum_cell(a, i, Int(d)))
 
 
-def sqdist_kernel(a: F32Ptr, b: F32Ptr, dst: F32Ptr, na: Int32, nb: Int32, d: Int32):
+def sqdist_kernel(a: F32Ptr, b: F32Ptr, dst: F32Ptr, na: Int32, nb: Int32, d: Int32, kind: Int32, pw: Float32):
     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if t < Int(na) * Int(nb):
-        dst.unsafe_store(t, sqdist_cell(a, b, t // Int(nb), t % Int(nb), Int(d)))
+        if kind == 0:
+            dst.unsafe_store(t, sqdist_cell(a, b, t // Int(nb), t % Int(nb), Int(d)))
+        else:
+            dst.unsafe_store(t, pdist_cell(a, b, t // Int(nb), t % Int(nb), Int(d), Int(kind), pw))
 
 
 def rand_kernel(dst: F32Ptr, count: Int32, seed: UInt32, stream: UInt32, kind: Int32):
@@ -347,13 +351,13 @@ struct DevExec(Exec):
         _ = ctx^
 
     @staticmethod
-    def sqdist(a: F32Ptr, b: F32Ptr, dst: F32Ptr, na: Int, nb: Int, d: Int) raises:
+    def sqdist(a: F32Ptr, b: F32Ptr, dst: F32Ptr, na: Int, nb: Int, d: Int, kind: Int = 0, pw: Float32 = Float32(2)) raises:
         var ctx = DeviceContext()
         var da = _up(ctx, a, na * d)
         var db = _up(ctx, b, nb * d)
         var dout = ctx.enqueue_create_buffer[DType.float32](na * nb if na * nb > 0 else 1)
         ctx.enqueue_function[sqdist_kernel](
-            da.unsafe_ptr(), db.unsafe_ptr(), dout.unsafe_ptr(), Int32(na), Int32(nb), Int32(d),
+            da.unsafe_ptr(), db.unsafe_ptr(), dout.unsafe_ptr(), Int32(na), Int32(nb), Int32(d), Int32(kind), pw,
             grid_dim=_blocks(na * nb), block_dim=TPB,
         )
         _down(ctx, dout, dst, na * nb)

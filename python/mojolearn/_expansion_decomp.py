@@ -252,6 +252,14 @@ class _Kit:
         self.b.x_decomp_sqdist(A.addr, B.addr, out.addr, [A.r, B.r, A.c])
         return out
 
+    def pdist(self, A, B, kind, pw=2.0):
+        """A non-Euclidean distance matrix (x_decomp/cells.mojo pdist_cell,
+        DEVIATION 5319): kind 1 manhattan, 2 chebyshev, 3 minkowski pw,
+        4 cosine."""
+        out = _M.zeros(A.r, B.r)
+        self.b.x_decomp_sqdist(A.addr, B.addr, out.addr, [A.r, B.r, A.c, int(kind), float(pw)])
+        return out
+
     def rand(self, r, c, seed, stream, kind):
         out = _M.zeros(r, c)
         if r * c:
@@ -2518,11 +2526,57 @@ class LatentDirichletAllocation(_Base):
 
 
 # ================================================================ manifold: Isomap, MDS, LLE
-def _knn_lists(k, Q, X, n_neighbors, exclude_self):
-    """(indices, squared distances) of the n_neighbors nearest rows of X for
-    every row of Q, ascending, ties to the lower index; `exclude_self` drops
-    the query's own index (queries ARE the training rows)."""
-    D = k.sqdist(Q, X)
+_PD_KIND = {"manhattan": 1, "cityblock": 1, "l1": 1, "chebyshev": 2, "infinity": 2, "cosine": 4}
+
+
+def _metric_spec(metric, p=2, metric_params=None, who="metric"):
+    """sklearn's metric name (and minkowski p) as (kind, p) for `_dist`:
+    kind 0 is Euclidean (sqrt of the squared distance cell), the rest
+    x_decomp/cells.mojo `pdist_cell` (DEVIATION 5319). A callable or any
+    other name is refused by name."""
+    if metric_params:
+        extra = set(metric_params) - {"p"}
+        if extra:
+            raise NotImplementedError(f"{who}: metric_params {sorted(extra)} are not carried")
+        p = metric_params.get("p", p)
+    if metric in ("euclidean", "l2"):
+        return 0, 2.0
+    if metric == "minkowski":
+        p = float(p)
+        if not p > 0:
+            raise ValueError(f"{who}: minkowski p must be > 0")
+        if p == 2.0:
+            return 0, 2.0
+        if p == 1.0:
+            return 1, 1.0
+        if p == math.inf:
+            return 2, 0.0
+        return 3, p
+    if isinstance(metric, str) and metric in _PD_KIND:
+        return _PD_KIND[metric], 0.0
+    raise NotImplementedError(f"{who}: metric={metric!r} is not carried (euclidean, minkowski p, manhattan, "
+                              "chebyshev, cosine)")
+
+
+def _dist(k, A, B, kind, pw, same=False):
+    """The distance matrix of `_metric_spec`'s (kind, p). `same` (A is B):
+    sklearn's pairwise_distances zeroes the cosine diagonal."""
+    if kind == 0:
+        return k.ew("sqrt", k.sqdist(A, B))
+    D = k.pdist(A, B, kind, pw)
+    if same and kind == 4:
+        for i in range(A.r):
+            D.s[i * B.r + i] = 0.0
+    return D
+
+
+def _knn_lists(k, Q, X, n_neighbors, exclude_self, kind=0, pw=2.0):
+    """(indices, distances) of the n_neighbors nearest rows of X for every
+    row of Q, ascending, ties to the lower index; `exclude_self` drops the
+    query's own index (queries ARE the training rows). kind 0 returns
+    SQUARED Euclidean distances (the callers take the root); any other kind
+    the `_dist` distances themselves."""
+    D = k.sqdist(Q, X) if kind == 0 else _dist(k, Q, X, kind, pw, same=exclude_self)
     idx, dst = [], []
     for i in range(Q.r):
         row = D.row(i)
@@ -2556,7 +2610,7 @@ def _top_eig(k, A, nc):
     return w, V.neg_cols(k.absmax_flags(V, True))
 
 
-def _fix_components(k, X, Wg):
+def _fix_components(k, X, Wg, kind=0, pw=2.0):
     """sklearn `utils/graph.py::_fix_connected_components` on a dense graph:
     for every pair of connected components (i < j, labels by lowest member),
     the closest pair of points between them gets an edge of their distance."""
@@ -2580,7 +2634,7 @@ def _fix_components(k, X, Wg):
     import warnings
     warnings.warn(f"The number of connected components of the neighbors graph is {comp} > 1. "
                   "Completing the graph to fit Isomap might be slow.", stacklevel=3)
-    D = k.ew("sqrt", k.sqdist(X, X))
+    D = _dist(k, X, X, kind, pw, same=True)
     Wg = Wg.copy()
     for a in range(comp):
         ia = [i for i in range(n) if labels[i] == a]
@@ -2606,8 +2660,10 @@ class Isomap(_Base):
     -0.5 * D^2 centered, its top eigenpairs (Jacobi eigh). `radius` (with
     n_neighbors=None) takes every other row within the radius (closed, the
     float32 distance compared exactly). path_method 'FW' runs the same
-    Dijkstra (x_decomp/NOT_IMPLEMENTED.tsv: DELIBERATELY DIVERGENT). REFUSED
-    BY NAME: metrics other than euclidean/minkowski p=2."""
+    Dijkstra (x_decomp/NOT_IMPLEMENTED.tsv: DELIBERATELY DIVERGENT). metric:
+    euclidean, minkowski p (p = 1, 2 and inf by name), manhattan, chebyshev,
+    cosine (DEVIATION 5319). REFUSED BY NAME: a callable or any other
+    metric."""
     _parameters = ("n_neighbors", "radius", "n_components", "eigen_solver", "path_method", "metric", "p", "numeric_mode")
 
     def __init__(self, *, n_neighbors=5, radius=None, n_components=2, eigen_solver="auto", tol=0, max_iter=None,
@@ -2629,15 +2685,15 @@ class Isomap(_Base):
             raise ValueError("Isomap: radius must be >= 0")
         if self.path_method not in ("auto", "FW", "D"):
             raise ValueError("path_method must be 'auto', 'FW' or 'D'")
-        if not (self.metric == "euclidean" or (self.metric == "minkowski" and self.p == 2)):
-            raise NotImplementedError("Isomap: only the Euclidean metric is carried")
+        kind, pw = _metric_spec(self.metric, self.p, self.metric_params, "Isomap")
+        self._kind, self._pw = kind, pw
         k = self._kit()
         M = _M.from_input(X)
         n = M.r
         Wg = _M.zeros(n, n)
         if self.radius is not None:
             r = _f32(float(self.radius))
-            D = k.ew("sqrt", k.sqdist(M, M))
+            D = _dist(k, M, M, kind, pw, same=True)
             for i in range(n):
                 for j in range(n):
                     v = D.s[i * n + j]
@@ -2646,14 +2702,15 @@ class Isomap(_Base):
             nn = None
         else:
             nn = int(self.n_neighbors)
-            idx, dst = _knn_lists(k, M, M, nn, True)
+            idx, dst = _knn_lists(k, M, M, nn, True, kind, pw)
             sq = _M.of([v for row in dst for v in row], n, nn)
-            sq = k.ew("sqrt", sq)
+            if kind == 0:
+                sq = k.ew("sqrt", sq)
             for i in range(n):
                 for a, j in enumerate(idx[i]):
                     v = sq.s[i * nn + a]
                     Wg.s[i * n + j] = v if v != 0 else 1e-10   # scipy drops explicit zeros; keep the edge
-        Wg, self.n_connected_components_ = _fix_components(k, M, Wg)
+        Wg, self.n_connected_components_ = _fix_components(k, M, Wg, kind, pw)
         D = k.dijkstra(Wg)
         self.dist_matrix_m_ = D
         self.dist_matrix_ = D.out()
@@ -2683,8 +2740,10 @@ class Isomap(_Base):
         if self._knn is None:
             G = self._radius_geodesic(k, Q)
         else:
-            idx, dst = _knn_lists(k, Q, self._fit_X, self._knn, False)
-            sq = k.ew("sqrt", _M.of([v for row in dst for v in row], Q.r, self._knn))
+            idx, dst = _knn_lists(k, Q, self._fit_X, self._knn, False, self._kind, self._pw)
+            sq = _M.of([v for row in dst for v in row], Q.r, self._knn)
+            if self._kind == 0:
+                sq = k.ew("sqrt", sq)
             G = None
             for a in range(self._knn):
                 rows = D.take_rows([idx[i][a] for i in range(Q.r)])
@@ -2703,7 +2762,7 @@ class Isomap(_Base):
         a fixed order, one elementwise min at a time."""
         n = self._fit_X.r
         r = _f32(float(self.radius))
-        Dq = k.ew("sqrt", k.sqdist(Q, self._fit_X))
+        Dq = _dist(k, Q, self._fit_X, self._kind, self._pw)
         D = self.dist_matrix_m_
         rows = []
         for i in range(Q.r):
@@ -2746,7 +2805,10 @@ class ClassicalMDS(_Base):
             D2 = k.sqdist(M, M)
             self.dissimilarity_matrix_ = k.ew("sqrt", D2).out()
         else:
-            raise NotImplementedError("ClassicalMDS: metric must be 'euclidean' or 'precomputed'")
+            kind, pw = _metric_spec(self.metric, 2, self.metric_params, "ClassicalMDS")
+            Dm = _dist(k, M, M, kind, pw, same=True)
+            D2 = k.ew("sq", Dm)
+            self.dissimilarity_matrix_ = Dm.out()
         B, _, _ = _center_kernel(k, k.ew("scale", D2, s=-0.5))
         w, V = _top_eig(k, B, int(self.n_components))
         self.eigenvalues_ = w.out((w.c,))
@@ -2846,7 +2908,8 @@ class MDS(_Base):
         elif self.metric == "euclidean":
             Dis = self._dist(k, M)
         else:
-            raise NotImplementedError("MDS: metric must be 'euclidean' or 'precomputed'")
+            kind, pw = _metric_spec(self.metric, 2, self.metric_params, "MDS")
+            Dis = _dist(k, M, M, kind, pw, same=True)
         self.dissimilarity_matrix_ = Dis.out()
         self._norm = (self.normalized_stress is True) or (self.normalized_stress == "auto" and not self.metric_mds)
         n, nc = Dis.r, int(self.n_components)

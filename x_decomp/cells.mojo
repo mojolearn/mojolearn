@@ -397,6 +397,59 @@ def sqdist_cell(a: F32Ptr, b: F32Ptr, i: Int, j: Int, d: Int) -> Float32:
     return acc
 
 
+comptime PD_MANHATTAN = 1
+comptime PD_CHEBYSHEV = 2
+comptime PD_MINKOWSKI = 3
+comptime PD_COSINE = 4
+
+
+# DEVIATION 5319 (PIN; row 130): the non-Euclidean distances (sklearn's
+# pairwise metrics for Isomap and MDS): features ascending, t = a - b flushed;
+# manhattan sums |t| by IEEE adds, chebyshev keeps the first strict maximum,
+# minkowski p sums exp(p log|t|) (|t| = 0 adds nothing) and returns
+# exp(log(sum) / p), cosine folds a.b, a.a and b.b by fused multiply-adds and
+# returns 1 - a.b / (sqrt(a.a) sqrt(b.b)) clipped to [0, 2] (a zero norm
+# counts as 1, sklearn's normalize of a zero row); arm 5319_pdist_order.
+def pdist_cell(a: F32Ptr, b: F32Ptr, i: Int, j: Int, d: Int, kind: Int, pw: Float32) -> Float32:
+    if kind == PD_COSINE:
+        var ab = Float32(0)
+        var aa = Float32(0)
+        var bb = Float32(0)
+        for q in range(d):
+            var x = ftz(a.unsafe_load(i * d + q))
+            var y = ftz(b.unsafe_load(j * d + q))
+            ab = ftz(identical_mul_add(x, y, ab))
+            aa = ftz(identical_mul_add(x, x, aa))
+            bb = ftz(identical_mul_add(y, y, bb))
+        var na = sqrt0(aa)
+        var nb = sqrt0(bb)
+        if na == Float32(0):
+            na = Float32(1)
+        if nb == Float32(0):
+            nb = Float32(1)
+        var r = sub(Float32(1), div0(ab, mul(na, nb)))
+        if r < Float32(0):
+            r = Float32(0)
+        if r > Float32(2):
+            r = Float32(2)
+        return r
+    var acc = Float32(0)
+    for q in range(d):
+        var t = abs(sub(a.unsafe_load(i * d + q), b.unsafe_load(j * d + q)))
+        if kind == PD_MANHATTAN:
+            acc = add(acc, t)
+        elif kind == PD_CHEBYSHEV:
+            if t > acc:
+                acc = t
+        elif t > Float32(0):
+            acc = add(acc, exp_c(mul(pw, log_floor(t, Float32(1.1754943508222875e-38)))))
+    if kind == PD_MINKOWSKI:
+        if not (acc > Float32(0)):
+            return Float32(0)
+        return exp_c(div0(log_floor(acc, Float32(1.1754943508222875e-38)), pw))
+    return acc
+
+
 # DEVIATION 5306 (REPLACE; row 133): draws are Philox4x32-10 at a counter, the
 # uniform (r0 >> 8) 2^-24, the normal Box-Muller's cos arm, the Gamma
 # Marsaglia-Tsang with per-attempt counters; numpy's generators are not
