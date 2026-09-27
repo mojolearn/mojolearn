@@ -771,6 +771,11 @@ TRAINING_LANE_NAMES = {
     "gbdt-multiclass": "multiclass gradient boosting",
     "gbdt-multiclass-defaults": "multiclass gradient boosting with public stochastic defaults",
     "gbdt-onevsall": "one-vs-all gradient boosting",
+    # lane/algos-trees (2026-09-27): MultiRMSE through the same
+    # gbdt/host/gbdt_oracle_multiclass.mojo, its dim-major target planes and
+    # the blocked Newton step with the MultiRMSE Hessian rows. CPU AND GPU
+    # COLUMNS OWED: no committed record hashes this lane yet.
+    "gbdt-multirmse": "multi-target regression gradient boosting (MultiRMSE)",
     # lane/cpu-training-gbdt-ordered (2026-09-15): OrderedRMSE trains
     # through gbdt/host/gbdt_oracle_ordered.mojo (the pointwise searcher's
     # fold arm, its 8-bit fixed-point and half-byte float histograms, the
@@ -2471,6 +2476,9 @@ FAMILIES = (
             "gbdt-nan-modes", "gbdt-adapter-clf", "gbdt-adapter-reg",
             "gbdt-parametric-losses", "gbdt-exact-mae",
             "gbdt-lossguide-newtoncosine", "gbdt-multiclass", "gbdt-onevsall", "gbdt-multiclass-defaults",
+            # lane/algos-trees (2026-09-27): MultiRMSE; its columns are OWED
+            # until the next coordinated record takes the lane
+            "gbdt-multirmse",
             "gbdt-ordered-rmse", "gbdt-feature-freq",
             "gbdt-pointwise-l2-bayesian-eval", "gbdt-categorical-ctr",
             "gbdt-adapter-score-weighted",

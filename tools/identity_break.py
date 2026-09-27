@@ -400,6 +400,8 @@ sampler, a solver, a metric, a reduction).
     2026-09-20 (lane/gbdt-cpu-default-parity: the bootstraps and the score
                noise on RMSE and on Depthwise and Lossguide)
       gbdt-stochastic-arms
+    2026-09-27 (lane/algos-trees: MultiRMSE, multi-target regression)
+      gbdt-multirmse
 
 The 18 lanes added on 2026-09-13 (svr through samba above) are fed the SAME
 fixture bytes in the shape their estimator wants; the derivation rules are
@@ -3326,6 +3328,28 @@ def _(ml, X, yc, yr, Xh=None):
     m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="MultiClassOneVsAll").fit(X, _three_class_centered(X))
     return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X))),
                 m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+
+
+def _multi_target(X, yr):
+    """Three regression targets, dim-major in meaning and `(n, 3)` in shape,
+    derived from the fixture's own regression target and two columns by one
+    float32 operation each (exact IEEE elementwise, so every host builds the
+    same bytes)."""
+    x = np.asarray(X, dtype=np.float32)
+    y = np.asarray(yr, dtype=np.float32)
+    return np.ascontiguousarray(np.stack(
+        [y, np.float32(0.5) * y + x[:, 0], x[:, 1] - x[:, 2]], axis=1
+    ).astype(np.float32))
+
+
+@lane("gbdt-multirmse")
+def _(ml, X, yc, yr, Xh=None):
+    """MultiRMSE on three targets (lane/algos-trees, 2026-09-27): 12 depth-6
+    SymmetricTree trees, Newton leaves through the BLOCKED Hessian (their
+    `GetHessianType()` is Symmetric for MultiRMSE, `multiclass_targets.h:
+    118-123`), predict RAW `(n, 3)`."""
+    m = _gbdt(ml.GradientBoosting, n_estimators=12, max_depth=6, loss="MultiRMSE").fit(X, _multi_target(X, yr))
+    return _fit(dict(predict=_h(m.predict(X))), m, lambda e: (e.predict(Xh),))
 
 
 @lane("gbdt-multiclass-defaults")
@@ -8999,7 +9023,8 @@ _batch_decl(_rows_calls("predict"),
             "gbdt-query-rmse", "gbdt-pair-logit", "gbdt-yeti-rank", "gbdt-ranking-defaults",
             "par-forest-reg", "par-boosting-reg", "gbdt-border-types",
             "gbdt-ordered-bayesian-noise", "par-ordered", "gbdt-bfa-quantile",
-            "gbdt-catboost-defaults", "par-border-types", "gbdt-stochastic-arms")
+            "gbdt-catboost-defaults", "par-border-types", "gbdt-stochastic-arms",
+            "gbdt-multirmse")
 _batch_decl(_rows_calls("predict", prep=_coded), "gbdt-feature-freq", "gbdt-categorical-ctr")
 _batch_decl(_rows_calls("predict", prep=_with_nan), "gbdt-nan-modes")
 _batch_decl(_rows_calls("predict", "predict_proba", prep=_gbdt_binary_columns), "gbdt-binary-columns")

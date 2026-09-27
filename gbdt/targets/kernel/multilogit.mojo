@@ -7,9 +7,9 @@ Reference: `catboost/cuda/targets/kernel/multilogit.cu` (CatBoost `54a8143a`),
 (`:104-169`) and their two launchers (`:171-212`). Do not
 improve.
 
-**The MultiLogit pair and the MultiClassOneVsAll pair are implemented.** Their
-file also holds
-`RMSEWithUncertainty`, `MultiCrossEntropy`, `MultiRMSE` and
+**The MultiLogit pair, the MultiClassOneVsAll pair and the MultiRMSE pair
+(2026-09-27, lane/algos-trees) are implemented.** Their file also holds
+`RMSEWithUncertainty`, `MultiCrossEntropy` and
 `BuildConfusionMatrixBins`. Each of the others is a different `ELossFunction`
 with its own dispatch, and implementing a kernel no caller reaches is the defect
 CONTRIBUTING.md (Evidence must be able to fail) names. They are listed in `NOT_IMPLEMENTED.tsv` rather than left
@@ -928,6 +928,287 @@ def launch_one_vs_all_second_der(
         weights.unsafe_ptr(), Int32(1) if has_weights else Int32(0),
         predictions.unsafe_ptr(), Int32(predictions_align_size),
         Int32(der2_align_size), der2.unsafe_ptr(),
+        grid_dim=(blocks, 1, 1),
+        block_dim=(MULTILOGIT_BLOCK_SIZE, 1, 1),
+    )
+
+
+# =========================================================================
+# MultiRMSE: `targetCount` INDEPENDENT least-squares regressions.
+#
+# Reference: `MultiRMSEValueAndDerImpl` (`multilogit.cu:490-537`) and
+# `MultiRMSESecondDerImpl` (`:539-559`), launched by `MultiRMSEValueAndDer`
+# (`:562-590`) and `MultiRMSESecondDer` (`:592-612`). The target is
+# `TMultiClassificationTargets` with `NumClasses = GetTargetDimension()`
+# (`multiclass_targets.h:155-156`), so every `num_classes` below is the
+# TARGET DIMENSION, as it is in theirs.
+#
+# WHERE IT DIFFERS FROM MultiClassOneVsAll:
+#
+#   * THE TARGET IS `targetCount` PLANES, dim-major (`targets + idx + dim *
+#     targetAlignSize`, `:514`), not one class code per row.
+#   * THE HESSIAN IS SYMMETRIC, NOT DIAGONAL. `GetHessianType()` returns
+#     `Diagonal` for OneVsAll ONLY (`multiclass_targets.h:118-123`), so the
+#     walker takes the BLOCKED arm and `MultiRMSESecondDerImpl` is launched
+#     once per Hessian ROW (`multiclass_targets.cpp:146-156`), writing zeros
+#     left of the diagonal and `weight` on it. The solve is MultiClass's
+#     Cholesky, not OneVsAll's per-plane division.
+#   * THE SCORE IS NOT DIVIDED BY THE DIMENSION: `-sum_dim w * diff^2`
+#     (`:518`, `:528`), where OneVsAll's is `/ numClasses`.
+#
+# ================= DEVIATION BLOCK =================
+# DEVIATION 5950: `ElementsPerThread` is 1 where their two MultiRMSE
+# launchers pass 4 (`:574`, `:600`). Every per-row value (der, der2) is the
+# same number at either width; only the per-thread fold of the score and the
+# block count move, and the score arrives as per-block partials folded in one
+# fixed order (DEVIATION 71). One width for the whole multiclass family keeps
+# every `multilogit_blocks` caller (the fv fold, the oracle's value fold, the
+# held-out loss) on the one block count.
+# ===================================================
+# =========================================================================
+
+
+def multi_rmse_val_and_first_der_kernel[
+    elements_per_thread: Int = MULTILOGIT_ELEMENTS_PER_THREAD,
+    search: Bool = False,
+](
+    targets: MutPointer[Float32, MutAnyOrigin],
+    target_align_size_in: Int32,
+    target_count_in: Int32,
+    size_in: Int32,
+    weights: MutPointer[Float32, MutAnyOrigin],
+    has_weights: Int32,
+    predictions: MutPointer[Float32, MutAnyOrigin],
+    load_indices: MutPointer[UInt32, MutAnyOrigin],
+    has_load_indices: Int32,
+    predictions_align_size_in: Int32,
+    function_value: MutPointer[Float32, MutAnyOrigin],
+    compute_fv: Int32,
+    der: MutPointer[Float32, MutAnyOrigin],
+    der_align_size_in: Int32,
+    plane_magnitudes: MutPointer[Float32, MutAnyOrigin],
+    compute_magnitudes: Int32,
+):
+    """`MultiRMSEValueAndDerImpl` (`multilogit.cu:490-537`).
+
+    Per dimension, per document, their arithmetic term for term
+    (`:512-523`):
+
+        diff          = target[dim] - approx[dim]
+        sumDimErrors += diff * diff * weight
+        der[dim]      = diff * weight          // -gradient
+
+    and the block's score is `-sumDimErrors` (`:528`). `diff * diff *
+    weight` is `(diff * diff) * weight` in C, whose outer product feeds the
+    accumulation; the default build fuses that pair, so it is spelled as
+    the one-rounding `fma` (IDENTITY_PATHS row 9), and the host oracle
+    spells the same `fma`.
+
+    The two modes are `one_vs_all_val_and_first_der_kernel`'s: `search`
+    puts the weight in plane 0 and the dimension planes at 1..
+    (`StatsToAggregate`, `multiclass_targets.cpp:31-42`: `statCount = 1 +
+    NumClasses`, no pinned plane to drop).
+    """
+    var size = Int(size_in)
+    var target_count = Int(target_count_in)
+    var target_align = Int(target_align_size_in)
+    var pred_align = Int(predictions_align_size_in)
+    var der_align = Int(der_align_size_in)
+
+    var tid = (
+        Int(block_idx.x) * MULTILOGIT_BLOCK_SIZE * elements_per_thread
+        + Int(thread_idx.x)
+    )
+
+    var sum_dim_errors = Float32(0.0)
+    var weight = InlineArray[Float32, elements_per_thread](
+        fill=Float32(1.0)
+    )
+    var load_index = InlineArray[Int, elements_per_thread](fill=0)
+    var mag_der = Float32(0.0)
+    var mag_weight = Float32(0.0)
+
+    @parameter
+    for j in range(elements_per_thread):
+        var idx = tid + j * MULTILOGIT_BLOCK_SIZE
+        var in_range = idx < size
+        var li = idx
+        if has_load_indices != Int32(0) and in_range:
+            li = Int(load_indices.unsafe_load(idx))
+        load_index[j] = li
+        if in_range and has_weights != Int32(0):
+            weight[j] = weights.unsafe_load(idx)
+        else:
+            weight[j] = Float32(1.0)
+
+        comptime if search:
+            if in_range:
+                der.unsafe_store(idx, weight[j])
+                mag_weight += abs(weight[j])
+
+    comptime plane_base = 1 if search else 0
+
+    # their dimension loop (`:505-523`): dimension OUTSIDE, document inside
+    var max_abs = InlineArray[Float32, elements_per_thread](
+        fill=Float32(0.0)
+    )
+    for dim in range(target_count):
+
+        @parameter
+        for j in range(elements_per_thread):
+            var idx = tid + j * MULTILOGIT_BLOCK_SIZE
+            # `if (idx >= size) continue;` (`:509-511`)
+            if idx < size:
+                var target = targets.unsafe_load(idx + dim * target_align)
+                var approx = predictions.unsafe_load(
+                    load_index[j] + dim * pred_align
+                )
+                var diff = target - approx
+                if compute_fv != Int32(0):
+                    # `sumDimErrors += diff * diff * weight;` (`:518`)
+                    sum_dim_errors = fma(
+                        diff * diff, weight[j], sum_dim_errors
+                    )  # the default build's fused op (IDENTITY_PATHS row 9)
+                var d = diff * weight[j]
+                der.unsafe_store(idx + (plane_base + dim) * der_align, d)
+                var ad = abs(d)
+                if ad > max_abs[j]:
+                    max_abs[j] = ad
+
+    @parameter
+    for j in range(elements_per_thread):
+        mag_der += max_abs[j]
+
+    if compute_fv != Int32(0):
+        # `tmpScores[threadIdx.x] = -sumDimErrors;` (`:528`)
+        var total = pinned_block_sum[block_size=MULTILOGIT_BLOCK_SIZE](
+            -sum_dim_errors
+        )
+        if thread_idx.x == 0:
+            function_value.unsafe_store(Int(block_idx.x), total)
+
+    comptime if search:
+        if compute_magnitudes != Int32(0):
+            var w_total = pinned_block_sum[block_size=MULTILOGIT_BLOCK_SIZE](
+                mag_weight
+            )
+            var g_total = pinned_block_sum[block_size=MULTILOGIT_BLOCK_SIZE](
+                mag_der
+            )
+            if thread_idx.x == 0:
+                plane_magnitudes.unsafe_store(2 * Int(block_idx.x), w_total)
+                plane_magnitudes.unsafe_store(
+                    2 * Int(block_idx.x) + 1, g_total
+                )
+
+
+def multi_rmse_second_der_kernel[
+    elements_per_thread: Int = MULTILOGIT_ELEMENTS_PER_THREAD
+](
+    size_in: Int32,
+    weights: MutPointer[Float32, MutAnyOrigin],
+    has_weights: Int32,
+    der2: MutPointer[Float32, MutAnyOrigin],
+    der2_row_in: Int32,
+    der2_align_size_in: Int32,
+):
+    """`MultiRMSESecondDerImpl` (`multilogit.cu:539-559`): ONE Hessian ROW.
+
+        for (k = 0; k < der2Row; ++k) der2[idx + k * der2Align] = 0.0f;
+        der2[idx + der2Row * der2Align] = weight;
+
+    The row's `der2Row + 1` lower-triangle columns, as
+    `multilogit_second_der_row_kernel` writes MultiClass's -- the blocked
+    walker launches it once per row and mirrors the triangle on the host.
+    No arithmetic: the Hessian of `w * (t - a)^2 / 2` is `w` on the
+    diagonal and zero off it.
+    """
+    var size = Int(size_in)
+    var der2_row = Int(der2_row_in)
+    var der2_align = Int(der2_align_size_in)
+    var tid = (
+        Int(block_idx.x) * MULTILOGIT_BLOCK_SIZE * elements_per_thread
+        + Int(thread_idx.x)
+    )
+
+    @parameter
+    for j in range(elements_per_thread):
+        var idx = tid + j * MULTILOGIT_BLOCK_SIZE
+        if idx < size:
+            for k in range(der2_row):
+                der2.unsafe_store(idx + k * der2_align, Float32(0.0))
+            var weight = Float32(1.0)
+            if has_weights != Int32(0):
+                weight = weights.unsafe_load(idx)
+            der2.unsafe_store(idx + der2_row * der2_align, weight)
+
+
+def launch_multi_rmse_value_and_der[
+    search: Bool = False
+](
+    ctx: DeviceContext,
+    target_count: Int,
+    size: Int,
+    mut targets: DeviceBuffer[DType.float32],
+    target_align_size: Int,
+    mut weights: DeviceBuffer[DType.float32],
+    has_weights: Bool,
+    mut predictions: DeviceBuffer[DType.float32],
+    predictions_align_size: Int,
+    mut load_indices: DeviceBuffer[DType.uint32],
+    has_load_indices: Bool,
+    mut function_value: DeviceBuffer[DType.float32],
+    compute_fv: Bool,
+    mut der: DeviceBuffer[DType.float32],
+    der_align_size: Int,
+    mut plane_magnitudes: DeviceBuffer[DType.float32],
+    compute_magnitudes: Bool = False,
+) raises:
+    """`MultiRMSEValueAndDer` (`multilogit.cu:562-590`). DEVIATION 5950:
+    one element per thread, so `multilogit_blocks` is the block count."""
+    var blocks = multilogit_blocks(size)
+    if blocks == 0:
+        return
+    ctx.enqueue_function[
+        multi_rmse_val_and_first_der_kernel[
+            MULTILOGIT_ELEMENTS_PER_THREAD, search
+        ]
+    ](
+        targets.unsafe_ptr(), Int32(target_align_size),
+        Int32(target_count), Int32(size),
+        weights.unsafe_ptr(), Int32(1) if has_weights else Int32(0),
+        predictions.unsafe_ptr(),
+        load_indices.unsafe_ptr(),
+        Int32(1) if has_load_indices else Int32(0),
+        Int32(predictions_align_size),
+        function_value.unsafe_ptr(), Int32(1) if compute_fv else Int32(0),
+        der.unsafe_ptr(), Int32(der_align_size),
+        plane_magnitudes.unsafe_ptr(),
+        Int32(1) if compute_magnitudes else Int32(0),
+        grid_dim=(blocks, 1, 1),
+        block_dim=(MULTILOGIT_BLOCK_SIZE, 1, 1),
+    )
+
+
+def launch_multi_rmse_second_der(
+    ctx: DeviceContext,
+    size: Int,
+    mut weights: DeviceBuffer[DType.float32],
+    has_weights: Bool,
+    mut der2: DeviceBuffer[DType.float32],
+    der2_row: Int,
+    der2_align_size: Int,
+) raises:
+    """`MultiRMSESecondDer` (`multilogit.cu:592-612`), one row."""
+    var blocks = multilogit_blocks(size)
+    if blocks == 0:
+        return
+    ctx.enqueue_function[
+        multi_rmse_second_der_kernel[MULTILOGIT_ELEMENTS_PER_THREAD]
+    ](
+        Int32(size),
+        weights.unsafe_ptr(), Int32(1) if has_weights else Int32(0),
+        der2.unsafe_ptr(), Int32(der2_row), Int32(der2_align_size),
         grid_dim=(blocks, 1, 1),
         block_dim=(MULTILOGIT_BLOCK_SIZE, 1, 1),
     )

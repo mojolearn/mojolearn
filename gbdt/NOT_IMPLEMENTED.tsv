@@ -3,7 +3,7 @@
 # their_thing	status	why / where it would go
 catboost/cuda/targets/kernel/multilogit.cu::RMSEWithUncertaintyValAndFirstDerImpl / SecondDerRow	NOT IMPLEMENTED	a different ELossFunction; its dispatch is not reached
 catboost/cuda/targets/kernel/multilogit.cu::MultiCrossEntropyValueAndDerImpl / SecondDerImpl	NOT IMPLEMENTED	multiCrossEntropy is not among the losses this implementation trains
-catboost/cuda/targets/kernel/multilogit.cu::MultiRMSEValueAndDerImpl / SecondDerImpl	NOT IMPLEMENTED	multiRMSE is not among the losses this implementation trains
+catboost/cuda/targets/kernel/multilogit.cu::MultiRMSEValueAndDerImpl / SecondDerImpl	IMPLEMENTED	2026-09-27, lane/algos-trees: multi_rmse_val_and_first_der_kernel / multi_rmse_second_der_kernel in gbdt/targets/kernel/multilogit.mojo (loss=MultiRMSE, the gbdt-multirmse lane), restated on the host in gbdt/host/gbdt_oracle_multiclass.mojo. Plain SymmetricTree, numeric features, no eval set; the per-dimension boost_from_average start is not carried (DEVIATION 5951) and refused by name
 catboost/cuda/targets/kernel/multilogit.cu::BuildConfusionMatrixBinsImpl	NOT IMPLEMENTED	a METRIC kernel; this implementation has no metric path
 catboost/cuda/targets/kernel/pointwise_targets.cu::TNumErrorsMetric	NOT IMPLEMENTED, DEAD IN THE REFERENCE	in their kernel switch, but their own Init rejects it, so training cannot reach it
 catboost/cuda/targets/kernel/pointwise_targets.cu::MseImpl / MseTargetKernel	NOT IMPLEMENTED, DEAD IN THE REFERENCE	UNREACHED IN THEIR OWN TREE: ApproximateMse has no caller anywhere in catboost/

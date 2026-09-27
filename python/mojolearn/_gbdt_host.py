@@ -69,6 +69,10 @@ _TEXT_VERSION = 2
 _NAN_CODES = {'as_is': 0, 'as_false': 1, 'as_true': 2}
 _PROBA_LOSSES = ('Logloss', 'CrossEntropy')
 _MULTI_LOSSES = ('MultiClass', 'MultiClassOneVsAll')
+#: `ensemble.MULTI_REGRESSION_LOSSES`: a multi-dimensional REGRESSION model,
+#: RAW `(n_rows, dim)` from `predict` (the dim-generic host apply below, the
+#: model's `dim` leaves per bin) and no `predict_proba`
+_MULTI_REGRESSION_LOSSES = ('MultiRMSE',)
 _CLASSIFICATION_LOSSES = _PROBA_LOSSES + _MULTI_LOSSES
 #: `ctr_type_name`, `gbdt/ctrs/ctr.mojo`: the names a `ctr_table` may carry.
 _CTR_TYPE_CODES = {'Borders': 0, 'Buckets': 1, 'BinarizedTargetMeanValue': 2,
@@ -701,6 +705,11 @@ class HostGBDT:
                 f"mojolearn: HostGBDT.predict_proba does not carry the {self.loss} "
                 "transform; the GPU binding applies it in gbdt_predict_multi and no host "
                 "restatement has been measured")
+        if self.loss in _MULTI_REGRESSION_LOSSES:
+            raise ValueError(
+                f"mojolearn: predict_proba is not defined for {self.loss}, a "
+                "multi-target regression loss; predict() returns its raw "
+                "(n_rows, n_targets) values")
         if not self.has_proba:
             raise ValueError(
                 f"mojolearn: predict_proba is defined for Logloss and CrossEntropy; this "

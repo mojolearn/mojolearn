@@ -156,6 +156,7 @@ LOSSES = (
     "QueryRMSE",
     "PairLogit",
     "YetiRank",
+    "MultiRMSE",
 )
 
 def _group_id_key(value, index):
@@ -315,6 +316,19 @@ def _pairs_arrays(pairs, pairs_weight, n_rows):
 #: Their GPU target keeps numClasses - 1 planes for MultiClass and
 #: numClasses for OneVsAll (`multiclass_targets.h:129-134`, 54a8143a).
 MULTI_OUTPUT_LOSSES = ("MultiClass", "MultiClassOneVsAll")
+
+#: MULTI-TARGET REGRESSION (lane/algos-trees, 2026-09-27): their
+#: `TMultiClassificationTargets` with `NumClasses = GetTargetDimension()`
+#: (`multiclass_targets.h:155-156`), `y` of shape `(n_samples, n_targets)`
+#: with `n_targets >= 2`, `predict` RAW `(n_samples, n_targets)`, no
+#: `predict_proba`. Not in `MULTI_OUTPUT_LOSSES`, whose members read class
+#: codes. Carried on the Plain SymmetricTree greedy fit with numeric
+#: features and no eval set; the rest is refused by name at `fit`.
+#: DEVIATION 5951: CatBoost's unset `boost_from_average` is True for
+#: MultiRMSE (`options_helper.cpp:367`) with a per-dimension start this
+#: model's one-value bias does not carry, so unset resolves False here and
+#: True is refused.
+MULTI_REGRESSION_LOSSES = ("MultiRMSE",)
 
 #: `gbdt_predict_multi`'s transform, following their `EPredictionType`
 #: (`libs/model/eval_processing.h:186-226`).
@@ -819,6 +833,12 @@ def _check_ordered_options(boosting_type, loss, grow_policy, score_function,
             f"mojolearn: On GPU loss {loss} can't be used with ordered "
             "boosting (catboost_options.cpp:949-967)"
         )
+    if loss in MULTI_REGRESSION_LOSSES:
+        raise NotImplementedError(
+            f"mojolearn: boosting_type='Ordered' with loss={loss!r} is not "
+            "carried: the Ordered arm is one-dimensional; use "
+            "boosting_type='Plain'"
+        )
     if score_function not in ("Cosine", "NewtonCosine"):
         raise ValueError(
             f"mojolearn: Score function {score_function} can't be used with "
@@ -857,7 +877,10 @@ class GradientBoosting(NumericModeMixin):
         One of `LOSSES`, CatBoost's own spellings. Four of them require a
         parameter: `Lq` needs `loss_q`, `Huber` needs `loss_delta`,
         `Tweedie` needs `loss_variance_power`, `Expectile` needs
-        `loss_alpha`.
+        `loss_alpha`. `MultiRMSE` is multi-target regression: `y` is
+        `(n_samples, n_targets)` with `n_targets >= 2` and `predict`
+        returns `(n_samples, n_targets)` (Plain SymmetricTree, numeric
+        features, no eval set, `boost_from_average` unset or False).
     n_estimators : int or None, default None
         CatBoost's `iterations`. None is 1000 under SymmetricTree, their
         default (`boosting_options.cpp:13`), and 100 under Depthwise and
@@ -1780,6 +1803,10 @@ class GradientBoosting(NumericModeMixin):
             return self.boosting_type
         if (self.grow_policy != "SymmetricTree"
                 or self.loss in MULTI_OUTPUT_LOSSES
+                # their chain would reach Ordered for MultiRMSE (it is not
+                # on `IsGpuPlainDocParallelOnlyMode`'s list), whose arm is
+                # one-dimensional here and refused by name
+                or self.loss in MULTI_REGRESSION_LOSSES
                 or self.score_function not in ("Cosine", "NewtonCosine")
                 or self.use_pointwise_searcher
                 or getattr(self, "feature_fraction", 1.0) < 1.0):
@@ -2041,7 +2068,49 @@ class GradientBoosting(NumericModeMixin):
         if n_rows == 0 or n_features == 0:
             raise ValueError("mojolearn: fit requires at least one row and one feature")
 
-        ya, _ = as_f32_c(y, ndim=1, name="y")
+        target_dim = 1
+        if self.loss in MULTI_REGRESSION_LOSSES:
+            # (n_rows, n_targets) staged COLUMN-major: the flat storage is
+            # then `y[dim * n_rows + row]`, the dim-major planes the native
+            # fit reads (their `targets + idx + dim * targetAlignSize`)
+            ya, _ = as_f32_colmajor(y, name="y")
+            target_dim = int(ya.shape[1])
+            if target_dim < 2:
+                raise ValueError(
+                    f"mojolearn: {self.loss} needs y of shape (n_samples, "
+                    f"n_targets) with n_targets >= 2, got {target_dim} "
+                    "(CatBoost: \"Only one class found, can't learn "
+                    "multiclass objective\", multiclass_targets.h:167)"
+                )
+            if eval_set is not None:
+                raise NotImplementedError(
+                    f"mojolearn: loss={self.loss!r} with eval_set is not "
+                    "carried: the held-out arm's target is one value per row"
+                )
+            if group_id is not None or pairs is not None:
+                raise ValueError(
+                    f"mojolearn: loss={self.loss!r} does not read group_id "
+                    "or pairs"
+                )
+            if self.class_weights is not None:
+                raise ValueError(
+                    f"mojolearn: class_weights do not apply to loss={self.loss!r}"
+                )
+            if self.cat_features or self.one_hot_features:
+                raise NotImplementedError(
+                    f"mojolearn: loss={self.loss!r} with cat_features or "
+                    "one_hot_features is not carried: the CTR target "
+                    "binarization reads one target per row"
+                )
+            if self.boost_from_average:
+                raise NotImplementedError(
+                    f"mojolearn: boost_from_average=True with loss="
+                    f"{self.loss!r} is not carried: its StartingPoint is "
+                    "per-dimension (optimal_const_for_loss.h:230-239) and "
+                    "this model's bias is one value (DEVIATION 5951)"
+                )
+        else:
+            ya, _ = as_f32_c(y, ndim=1, name="y")
         if ya.shape[0] != n_rows:
             raise ValueError(
                 f"mojolearn: y has {ya.shape[0]} values for {n_rows} rows"
@@ -2149,6 +2218,15 @@ class GradientBoosting(NumericModeMixin):
         )
         #: the learning rate this fit used, after CatBoost's auto-selection
         self.learning_rate_ = float(params[7])
+        if target_dim != 1:
+            # THE TARGET-DIMENSION TAIL: the three optional float tails,
+            # filled with their disabled values when the fit left them out,
+            # then the dimension, 35 + n_class_weights + 4 values in all
+            # (`bindings/_mojolearn_gbdt.mojo`'s docstring)
+            fixed = 35 + int(params[34])
+            tail = list(params[fixed:])
+            tail += [-1.0, -1.0, 1.0][len(tail):]
+            params = params[:fixed] + tail + [target_dim]
         # THE GROUP TAIL. `subgroup_id` and `pairs` are refused before
         # anything crosses; `group_id` becomes run lengths and rides after
         # the three optional float slots, which are filled with their

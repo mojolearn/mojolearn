@@ -1,9 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""The GradientBoosting fit on the host for the two multi-output losses,
+"""The GradientBoosting fit on the host for the multi-output losses,
 MultiClass and MultiClassOneVsAll, on symmetric trees
 (lane/cpu-training-gbdt-losses, 2026-09-15): the gbdt-multiclass and
-gbdt-onevsall lanes of tools/identity_break.py.
+gbdt-onevsall lanes of tools/identity_break.py; and MultiRMSE
+(lane/algos-trees, 2026-09-27), the gbdt-multirmse lane: the target is
+`dim` dim-major planes, the der kernel is `multi_rmse_val_and_first_der_
+kernel`, and the Hessian is MultiClass's BLOCKED arm with
+`multi_rmse_second_der_kernel`'s rows (zeros left of the diagonal, the
+weight on it), solved by the same per-leaf Cholesky.
 
 HOST ONLY. Nothing here imports `max.gpu`, `std.gpu`, a `DeviceContext` or a
 module that defines a kernel. The imports are the `checks/numerics` seams,
@@ -111,10 +116,11 @@ from gbdt.host.gbdt_oracle import (
 from gbdt.lapack.linear_system import solve_linear_system_cholesky
 
 
-#: `OBJECTIVE_MULTICLASS`, `OBJECTIVE_MULTICLASS_OVA`
-#: (`pointwise_targets.mojo:66-72`).
+#: `OBJECTIVE_MULTICLASS`, `OBJECTIVE_MULTICLASS_OVA`, `OBJECTIVE_MULTIRMSE`
+#: (`pointwise_targets.mojo`).
 comptime GBDT_OBJ_MULTICLASS = 12
 comptime GBDT_OBJ_MULTICLASS_OVA = 13
+comptime GBDT_OBJ_MULTIRMSE = 17
 
 
 @fieldwise_init
@@ -235,6 +241,29 @@ def _multi_pass(
                 if in_range:
                     # one rounding, as the default (contract=fast) build fused it
                     tmp_score = identical_mul_add(weight, class_approx - log_denum, tmp_score)
+            elif objective == GBDT_OBJ_MULTIRMSE:
+                # `multi_rmse_val_and_first_der_kernel[1, search]`: the
+                # target is `num_classes` dim-major planes; dimension
+                # OUTSIDE, the one element inside; the score is the negated
+                # per-thread `fma` accumulation
+                if search and in_range:
+                    der[idx] = weight
+                    mag_weight += abs(weight)
+                var max_abs = Float32(0.0)
+                var sum_dim_errors = Float32(0.0)
+                for d in range(num_classes):
+                    if in_range:
+                        var target = targets[d * n_rows + idx]
+                        var approx = cursor[d * n_rows + idx]
+                        var diff = target - approx
+                        sum_dim_errors = fma(diff * diff, weight, sum_dim_errors)
+                        var dd = diff * weight
+                        der[(plane_base + d) * n_rows + idx] = dd
+                        var ad = abs(dd)
+                        if ad > max_abs:
+                            max_abs = ad
+                mag_der += max_abs
+                tmp_score = -sum_dim_errors
             else:
                 var target_class = 0
                 if in_range:
@@ -489,13 +518,18 @@ def _estimate_multi(
     `n_leaves * cursor_dim` values, bin-major."""
     var n_leaves = len(sizes)
     var is_mc = objective == GBDT_OBJ_MULTICLASS
+    var is_mrmse = objective == GBDT_OBJ_MULTIRMSE
     var cursor_dim = num_classes - 1 if is_mc else num_classes
     var sbd = num_classes
-    var g_target = List[Float32](length=n_rows, fill=Float32(0.0))
+    # MultiRMSE's target is `num_classes` dim-major planes, gathered plane
+    # by plane like the cursor (`launch_gather_planes_with_mask_f32`)
+    var target_planes = num_classes if is_mrmse else 1
+    var g_target = List[Float32](length=target_planes * n_rows, fill=Float32(0.0))
     var g_weights = List[Float32](length=n_rows, fill=Float32(0.0))
     var g_cursor = List[Float32](length=cursor_dim * n_rows, fill=Float32(0.0))
     for pos in range(n_rows):
-        g_target[pos] = targets[row_index[pos]]
+        for t in range(target_planes):
+            g_target[t * n_rows + pos] = targets[t * n_rows + row_index[pos]]
         if has_weights:
             g_weights[pos] = weights[row_index[pos]]
         for k in range(cursor_dim):
@@ -552,7 +586,9 @@ def _estimate_multi(
 
     # `write_second_derivatives` and the direction
     var direction = List[Float32](length=n_leaves * sbd, fill=Float32(0.0))
-    if is_mc:
+    if is_mc or is_mrmse:
+        # MultiRMSE is BLOCKED too: `GetHessianType()` names only OneVsAll
+        # Diagonal (`multiclass_targets.h:118-123`)
         var hbs = sbd
         var matrix_size = hbs * hbs
         var second_der = List[Float64](length=matrix_size * n_leaves, fill=Float64(0.0))
@@ -561,6 +597,15 @@ def _estimate_multi(
             var der2 = List[Float32](length=sbd * n_rows, fill=Float32(0.0))
             var eff = num_classes - 1
             for idx in range(n_rows):
+                if is_mrmse:
+                    # `multi_rmse_second_der_kernel`: zeros left of the
+                    # diagonal, the weight on it
+                    for k in range(row):
+                        der2[k * n_rows + idx] = Float32(0.0)
+                    der2[row * n_rows + idx] = (
+                        g_weights[idx] if has_weights else Float32(1.0)
+                    )
+                    continue
                 var mx = Float32(0.0)
                 for k in range(eff):
                     var v = g_cursor[k * n_rows + idx]
@@ -655,16 +700,32 @@ def gbdt_multi_host_fit(
     bootstrap_kind: Int = -1,
     bootstrap_param: Float32 = Float32(1.0),
     random_strength: Float32 = Float32(0.0),
+    # MultiRMSE's target dimension; `y` then holds that many dim-major planes
+    target_dim: Int = 1,
 ) raises -> GbdtHostMultiModel:
-    """`train` then `fit_with_test` on the two covered configurations."""
+    """`train` then `fit_with_test` on the covered configurations."""
     if n_rows < 1 or n_features < 1:
         raise Error("train requires at least one row and one feature")
     if len(x_colmajor) != n_rows * n_features:
         raise Error("x_colmajor size mismatch")
-    if len(y) != n_rows:
+    var is_mrmse = objective == GBDT_OBJ_MULTIRMSE
+    if target_dim != 1 and not is_mrmse:
+        raise Error("a multi-dimensional target is read only by MultiRMSE")
+    if len(y) != n_rows * target_dim:
         raise Error("y size mismatch")
+    if is_mrmse and target_dim < 2:
+        # `CB_ENSURE(NumClasses > 1, ...)` (`multiclass_targets.h:167`)
+        raise Error(
+            "Only one class found, can't learn multiclass objective"
+            " (MultiRMSE needs a target dimension >= 2)"
+        )
+    if is_mrmse and len(class_weights) > 0:
+        raise Error("class_weights do not apply to loss='MultiRMSE'")
     var mx = -1
-    for r in range(n_rows):
+    if is_mrmse:
+        # `NumClasses = GetTargetDimension()` (`multiclass_targets.h:155-156`)
+        mx = target_dim - 1
+    for r in range(0 if is_mrmse else n_rows):
         var v = y[r]
         if v < Float32(0.0):
             raise Error(
