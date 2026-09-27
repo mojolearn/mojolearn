@@ -159,3 +159,14 @@ def test_pagerank():
     ref = nx.pagerank(nx.from_numpy_array(A, create_using=nx.DiGraph), alpha=0.85, tol=1e-6)
     ours = np.asarray(ml.PageRank(alpha=0.85, tol=1e-6).fit(A).pagerank_)
     np.testing.assert_allclose(ours, [ref[i] for i in range(len(A))], rtol=2e-4, atol=1e-6)
+
+
+def test_connected_components():
+    from scipy.sparse.csgraph import connected_components as R
+    A = _graph(80)
+    A[:, 70:] = 0
+    A[70:, :] = 0
+    k, lab = ml.connected_components(A, directed=False)
+    rk, rl = R(A, directed=False)
+    assert k == rk
+    np.testing.assert_array_equal(np.asarray(lab), rl)

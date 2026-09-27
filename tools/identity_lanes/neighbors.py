@@ -153,6 +153,12 @@ def _(ml, X, yc, yr, Xh=None):
                 lambda e: (ml.PageRank(alpha=0.85).fit(_neighbors_graph(Xh, directed=True)).pagerank_,))
 
 
+@lane("x-neighbors-connected-components")
+def _(ml, X, yc, yr, Xh=None):
+    k, lab = ml.connected_components(_neighbors_graph(X, ring=False), directed=False)
+    kd, labd = ml.connected_components(_neighbors_graph(X, directed=True, ring=False), directed=True, connection="weak")
+    return _fit(dict(k=_h(np.int64(k)), lab=_h(lab), kd=_h(np.int64(kd)), labd=_h(labd)))
+
 
 
 
