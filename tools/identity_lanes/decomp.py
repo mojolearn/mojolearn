@@ -301,7 +301,7 @@ def _(ml, X, yc, yr, Xh=None):
                      fc=_h(f.components_, f.explained_variance_), fnv=_h(np.float64(f.noise_variance_)),
                      fT=_h(f.transform(X[:256])), ac=_h(a.components_, a.explained_variance_, a.transform(X[:256])),
                      mle=_h(np.int32(mle.n_components_), mle.components_, np.float64(mle.noise_variance_)),
-                     ta=_h(ta.components_, ta.singular_values_)),
+                     ta=_h(ta.components_, ta.singular_values_, ta.explained_variance_, ta.explained_variance_ratio_)),
                 p, lambda e: (e.transform(Xh[:256]),))
 
 

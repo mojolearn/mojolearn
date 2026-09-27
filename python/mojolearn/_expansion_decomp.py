@@ -1458,6 +1458,24 @@ class FactorAnalysis(_Base):
         return k.ew("scale", k.total(v), s=1.0 / v.r).s[0]
 
 
+# ================================================================ TruncatedSVD explained variance
+def _tsvd_explained(x, components, mode):
+    """scikit-learn TruncatedSVD's explained_variance_ (np.var of X @ V^T per
+    column, ddof 0) and its ratio against the summed column variances of X,
+    through the cells (colmean, squared differences, column sums): the
+    Gram / arpack arm computes neither in its kernel. A tier the decomp
+    binding does not ship (FAST, DETERMINISTIC: phase 3) reads them through
+    the IDENTICAL cells, which are exact to float32 on every column."""
+    k = _Kit(mode if _backend._offers(_BINDING, mode) else "identical")
+    M = _M.from_input(x)
+    V = _M.from_input(components, "components")
+    n = M.r
+    Xt = k.mm(M, V, tb=True)
+    ev = k.ew("scale", k.colsum(k.ew("sqdiff", Xt, k.colmean(Xt))), s=1.0 / n)
+    full = k.total(k.ew("scale", k.colsum(k.ew("sqdiff", M, k.colmean(M))), s=1.0 / n))
+    return ev.out((ev.c,)), k.ew("div", ev, full).out((ev.c,))
+
+
 # ================================================================ PCA n_components='mle'
 _LOG2, _LOGPI, _LOG2PI_D = 0.6931471805599453, 1.1447298858494002, 1.8378770664093453
 

@@ -598,11 +598,10 @@ class TruncatedSVD(NumericModeMixin):
         n_features > 128 refused UNDER NUMERIC_IDENTICAL ONLY, as for PCA
                                 (IDENTITY_PATHS row 27)
 
-    Components and singular values are exposed. `explained_variance_` is
-    omitted because the fit kernel does not compute cuML's
-    transformed-data definition of that quantity (tsvd.cuh's
-    `explained_var` comes from the transformed matrix's column variances,
-    a second pass this implementation does not make).
+    Components, singular values, `explained_variance_` and
+    `explained_variance_ratio_` are exposed; the two variances are
+    scikit-learn's (and tsvd.cuh's) transformed-data definition, a second
+    pass through the decomp lane's cells.
     """
 
     #: This family's binding, for `NumericModeMixin._bind`.
@@ -666,6 +665,12 @@ class TruncatedSVD(NumericModeMixin):
             addr_ro(x, name="x"), addr(self.components_, name="components_"), addr(self.singular_values_, name="singular_values_"),
             [x.shape[0], x.shape[1], nc],
         )
+        # scikit-learn's explained_variance_ / _ratio_ (lane/algos-decomp,
+        # 2026-09-27): from the transformed data, through the decomp lane's
+        # identical cells.
+        from ._expansion_decomp import _tsvd_explained
+        self.explained_variance_, self.explained_variance_ratio_ = _tsvd_explained(
+            x, self.components_, self.numeric_mode_used())
         self.n_components_ = nc
         self.n_features_in_ = x.shape[1]
         return self
