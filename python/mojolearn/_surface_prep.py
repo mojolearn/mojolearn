@@ -29,6 +29,9 @@ FAMILIES = (
             "x-prep-gaussian-nb", "x-prep-multinomial-nb", "x-prep-bernoulli-nb",
             "x-prep-lda", "x-prep-qda",
             "x-prep-quantile-transformer", "x-prep-power-transformer",
+            "x-prep-normalizer",
+            "x-prep-polynomial-features",
+            "x-prep-spline-transformer",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -39,13 +42,16 @@ FAMILIES = (
             "GaussianNB", "MultinomialNB", "BernoulliNB",
             "LinearDiscriminantAnalysis", "QuadraticDiscriminantAnalysis",
             "QuantileTransformer", "PowerTransformer",
+            "Normalizer",
+            "PolynomialFeatures",
+            "SplineTransformer",
         ),
         display="preprocessing additions, naive Bayes and discriminant analysis",
         host_modules=(
             "x_prep/host/program.mojo", "x_prep/common.mojo", "x_prep/prims.mojo", "x_prep/eigh.mojo",
             "x_prep/units.mojo", "x_prep/target.mojo", "x_prep/kbins.mojo",
             "naive_bayes/nb.mojo", "naive_bayes/da.mojo",
-            "x_prep/transform.mojo",
+            "x_prep/transform.mojo", "x_prep/spline.mojo",
         ),
         exports=(
             "x_prep_host_numeric_mode", "x_prep_host_vendor", "x_prep_host_column", "x_prep_host_sabotage",
@@ -71,6 +77,9 @@ TRAINING_LANE_NAMES = {
     "x-prep-qda": "QuadraticDiscriminantAnalysis",
     "x-prep-quantile-transformer": "QuantileTransformer",
     "x-prep-power-transformer": "PowerTransformer",
+    "x-prep-normalizer": "Normalizer",
+    "x-prep-polynomial-features": "PolynomialFeatures",
+    "x-prep-spline-transformer": "SplineTransformer",
 }
 PUBLIC_PENDING_LANES = {
     "x-prep-robust-scaler": "no reference",
@@ -87,4 +96,7 @@ PUBLIC_PENDING_LANES = {
     "x-prep-qda": "no reference",
     "x-prep-quantile-transformer": "no reference",
     "x-prep-power-transformer": "no reference",
+    "x-prep-normalizer": "no reference",
+    "x-prep-polynomial-features": "no reference",
+    "x-prep-spline-transformer": "no reference",
 }

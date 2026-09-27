@@ -16,12 +16,13 @@ from naive_bayes.nb import (
     gnb_eps_unit, gnb_params_unit, gnb_jll_unit, class_log_prior_unit, mnb_params_unit,
     bnb_params_unit, cnb_params_unit, cat_params_unit, cat_jll_unit,
 )
-from x_prep.transform import qt_apply_unit, pt_fit_unit, pt_apply_unit, std_params_unit
+from x_prep.transform import qt_apply_unit, pt_fit_unit, pt_apply_unit, std_params_unit, normalize_unit, poly_unit
+from x_prep.spline import spline_knots_unit, spline_apply_unit
 from naive_bayes.da import (
     lda_prep_unit, lda_w_unit, lda_stage2_unit, lda_stage3_unit, qda_cov_unit, qda_prep_unit, qda_dec_unit,
 )
 
-comptime N_OPS = 47
+comptime N_OPS = 51
 
 
 @always_inline
@@ -120,3 +121,11 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
         pt_apply_unit(t, f, q)
     comptime if OP == 46:
         std_params_unit(t, f, q)
+    comptime if OP == 47:
+        normalize_unit(t, f, q)
+    comptime if OP == 48:
+        poly_unit(t, f, q)
+    comptime if OP == 49:
+        spline_knots_unit(t, f, q)
+    comptime if OP == 50:
+        spline_apply_unit(t, f, q)

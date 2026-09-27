@@ -120,3 +120,12 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-lars", "x-lasso-lars")
+
+
+@lane("x-quantile")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.QuantileRegressor(quantile=0.7, alpha=0.01, max_iter=300).fit(X[:2000], yr[:2000])
+    return _linear_reg_fit(m, X, yr, Xh)
+
+
+_batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-quantile")

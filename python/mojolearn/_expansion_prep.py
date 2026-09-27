@@ -35,7 +35,7 @@ from ._labels import flatten_labels, sorted_classes, label_kind
 __all__ = ["RobustScaler", "MaxAbsScaler", "OrdinalEncoder", "OneHotEncoder", "TargetEncoder", "SimpleImputer", "KBinsDiscretizer",
            "GaussianNB", "MultinomialNB", "BernoulliNB",
            "LinearDiscriminantAnalysis", "QuadraticDiscriminantAnalysis",
-           "QuantileTransformer", "PowerTransformer"]
+           "QuantileTransformer", "PowerTransformer", "Normalizer", "PolynomialFeatures", "SplineTransformer"]
 
 _BINDING = "_mojolearn_x_prep"
 
@@ -47,7 +47,7 @@ _OPS = dict(
     te_global=20, te_enc=21, te_apply=22, mark_missing=23, fill=24, kbins_edges=25, kbins_codes=26,
     gnb_eps=27, gnb_params=28, gnb_jll=29, class_log_prior=30, mnb_params=31, bnb_params=32, cnb_params=33, cat_params=34, cat_jll=35,
     lda_prep=36, lda_w=37, lda_stage2=38, lda_stage3=39, qda_cov=40, qda_prep=41, qda_dec=42,
-    qt_apply=43, pt_fit=44, pt_apply=45, std_params=46,
+    qt_apply=43, pt_fit=44, pt_apply=45, std_params=46, normalize=47, poly=48, spline_knots=49, spline_apply=50,
 )
 _PARAMS = 14
 _NONE = -1
@@ -1374,3 +1374,169 @@ class PowerTransformer(_PrepBase):
 
     def inverse_transform(self, X):
         raise NotImplementedError("mojolearn: PowerTransformer.inverse_transform is not implemented")
+
+
+class Normalizer(_PrepBase):
+    """sklearn.preprocessing.Normalizer: each row divided by its 'l1', 'l2'
+    or 'max' norm (columns summed in ascending order); a zero row is left
+    as it is. Stateless."""
+    _parameters = ("norm", "copy")
+
+    def __init__(self, norm="l2", *, copy=True):
+        self.norm = norm
+        self.copy = copy
+
+    def fit(self, X, y=None):
+        if self.norm not in ("l1", "l2", "max"):
+            raise ValueError(f"mojolearn: invalid norm {self.norm!r}")
+        self.n_features_in_ = _x2d(X).shape[1]
+        self.numeric_mode_ = _mode()
+        return self
+
+    def transform(self, X, copy=None):
+        self._check_fitted()
+        arr = _x2d(X)
+        self._check_width(arr)
+        n, d = arr.shape
+        pr = _Prog()
+        xo = pr.put(arr)
+        out = pr.alloc(n * d)
+        pr.stage("normalize", n, xo, n, d, {"l1": 0, "l2": 1, "max": 2}[self.norm], out)
+        pr.run(self.numeric_mode_)
+        return pr.get(out, (n, d))
+
+
+class PolynomialFeatures(_PrepBase):
+    """sklearn.preprocessing.PolynomialFeatures: the reference's column
+    order (the bias, then combinations with replacement, or without when
+    interaction_only, degree by degree); each output is the product of its
+    input columns left to right on the device. order='F' output is refused."""
+    _parameters = ("degree", "interaction_only", "include_bias", "order")
+
+    def __init__(self, degree=2, *, interaction_only=False, include_bias=True, order="C"):
+        self.degree = degree
+        self.interaction_only = interaction_only
+        self.include_bias = include_bias
+        self.order = order
+
+    def _combos(self, d):
+        from itertools import chain, combinations, combinations_with_replacement
+        if isinstance(self.degree, numbers.Integral):
+            lo, hi = 0, int(self.degree)
+        else:
+            lo, hi = (int(v) for v in self.degree)
+        if hi < 0 or lo < 0 or lo > hi:
+            raise ValueError(f"mojolearn: invalid degree {self.degree!r}")
+        comb = combinations if self.interaction_only else combinations_with_replacement
+        it = chain.from_iterable(comb(range(d), i) for i in range(max(1, lo), hi + 1))
+        if self.include_bias:
+            it = chain(comb(range(d), 0), it)
+        return [tuple(c) for c in it]
+
+    def fit(self, X, y=None):
+        if self.order != "C":
+            raise NotImplementedError("mojolearn: PolynomialFeatures(order='F') is not implemented")
+        d = _x2d(X).shape[1]
+        self._terms = self._combos(d)
+        self.n_features_in_, self.n_output_features_ = d, len(self._terms)
+        self.powers_ = Array.from_list([[t.count(j) for j in range(d)] for t in self._terms] or [[0] * d], "<i8")
+        self.numeric_mode_ = _mode()
+        return self
+
+    def transform(self, X):
+        self._check_fitted()
+        arr = _x2d(X)
+        self._check_width(arr)
+        n, d = arr.shape
+        idx, start = [], [0]
+        for t in self._terms:
+            idx.extend(t)
+            start.append(len(idx))
+        nout = len(self._terms)
+        pr = _Prog()
+        xo, io, so = pr.put(arr), pr.put_list(idx or [0]), pr.put_list(start)
+        out = pr.alloc(n * nout)
+        pr.stage("poly", n * nout, xo, n, d, io, so, nout, out)
+        pr.run(self.numeric_mode_)
+        return pr.get(out, (n, nout))
+
+
+class SplineTransformer(_PrepBase):
+    """sklearn.preprocessing.SplineTransformer: per feature, B-splines of
+    `degree` on `n_knots` base knots ('uniform' over the training range, or
+    'quantile': numpy linear percentiles), extended by `degree` knots at each
+    end at the edge spacing; extrapolation 'constant' (the boundary values),
+    'continue' or 'error'. Dense float32 output. Explicit knot arrays,
+    'linear' and 'periodic' extrapolation and sparse output are refused."""
+    _parameters = ("n_knots", "degree", "knots", "extrapolation", "include_bias", "order", "handle_missing",
+                   "sparse_output")
+
+    def __init__(self, n_knots=5, degree=3, *, knots="uniform", extrapolation="constant", include_bias=True,
+                 order="C", handle_missing="error", sparse_output=False):
+        self.n_knots = n_knots
+        self.degree = degree
+        self.knots = knots
+        self.extrapolation = extrapolation
+        self.include_bias = include_bias
+        self.order = order
+        self.handle_missing = handle_missing
+        self.sparse_output = sparse_output
+
+    def fit(self, X, y=None, sample_weight=None):
+        if not isinstance(self.knots, str) or self.knots not in ("uniform", "quantile"):
+            raise NotImplementedError("mojolearn: SplineTransformer knots must be 'uniform' or 'quantile'")
+        if self.extrapolation not in ("constant", "continue", "error"):
+            raise NotImplementedError(f"mojolearn: SplineTransformer extrapolation={self.extrapolation!r} "
+                                      "is not implemented")
+        if sample_weight is not None or self.sparse_output or self.order != "C":
+            raise NotImplementedError("mojolearn: SplineTransformer sample_weight, sparse_output and "
+                                      "order='F' are not implemented")
+        nk, k = int(self.n_knots), int(self.degree)
+        if nk < 2 or k < 0 or k > 7:
+            raise ValueError("mojolearn: SplineTransformer needs n_knots >= 2 and 0 <= degree <= 7")
+        arr = _x2d(X)
+        n, d = arr.shape
+        mode = _mode()
+        pr = _Prog()
+        xo = pr.put(arr)
+        so, st = pr.alloc(n * d), pr.alloc(6 * d)
+        base = pr.alloc(d * nk)
+        knots = pr.alloc(d * (nk + 2 * k))
+        pr.stage("col_stats", d, xo, n, d, st)
+        if self.knots == "quantile":
+            qf = pr.put_list([i / (nk - 1) for i in range(nk)])
+            pr.stage("sort_cols", d, xo, n, d, so, 0)
+            pr.stage("quantile", d * nk, so, n, d, qf, nk, base, _NONE)
+        pr.stage("spline_knots", d, base, nk, d, k, knots, 1 if self.knots == "uniform" else 0, st)
+        pr.run(mode)
+        self._knots = pr.get(knots, d * (nk + 2 * k))
+        flat = pr.values(knots, d * (nk + 2 * k))
+        w = nk + 2 * k
+        self.bsplines_ = [Array.from_list(flat[c * w:(c + 1) * w], "<f4") for c in range(d)]
+        self._lo, self._hi = pr.values(st + 3 * d, d), pr.values(st + 4 * d, d)
+        self._nk, self._k = nk, k
+        nspl = nk + k - 1
+        self.n_features_out_ = d * (nspl if self.include_bias else nspl - 1)
+        self.numeric_mode_, self.n_features_in_ = mode, d
+        return self
+
+    def transform(self, X):
+        self._check_fitted()
+        arr = _x2d(X)
+        self._check_width(arr)
+        n, d = arr.shape
+        W = self.n_features_out_
+        pr = _Prog()
+        xo, ko = pr.put(arr), pr.put(self._knots)
+        out = pr.alloc(n * W)
+        st = pr.alloc(6 * d)
+        if self.extrapolation == "error":
+            pr.stage("col_stats", d, xo, n, d, st)
+        pr.stage("spline_apply", n * d, xo, n, d, ko, self._nk, self._k,
+                 1 if self.extrapolation == "continue" else 0, W, 1 if self.include_bias else 0, out)
+        pr.run(self.numeric_mode_)
+        if self.extrapolation == "error":
+            lo, hi = pr.values(st + 3 * d, d), pr.values(st + 4 * d, d)
+            if any(a < b for a, b in zip(lo, self._lo)) or any(a > b for a, b in zip(hi, self._hi)):
+                raise ValueError("mojolearn: X contains values beyond the limits of the knots")
+        return pr.get(out, (n, W))
