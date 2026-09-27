@@ -167,6 +167,22 @@ def build(binding, log):
     import binding_stamps
     script, so = script_for(binding), output_for(binding)
     env = dict(os.environ, MOJOLEARN_NUMERIC_MODE="identical")
+    # THE BYTE LM's TWO BUILD SCRIPTS WANT OPPOSITE THINGS (2026-09-27, lane
+    # neural): bindings/build_byte_lm.sh on Linux needs ONE explicit
+    # MOJOLEARN_GPU_ARCHS target, and every host build (build_byte_lm_host.sh
+    # among them) refuses the variable. A check that rebuilt both under one
+    # environment failed whichever came second. The GPU byte LM build gets the
+    # box's own arch (tools/bincache.device_arch, the same reading the binary
+    # cache keys on) unless the caller set one; host builds never see it.
+    if binding.endswith("_host"):
+        env.pop("MOJOLEARN_GPU_ARCHS", None)
+    elif binding == "_mojolearn_byte_lm" and platform.system() == "Linux" and not env.get("MOJOLEARN_GPU_ARCHS"):
+        import bincache
+        arch = bincache.device_arch()
+        if arch == "none":
+            raise Fail("bindings/build_byte_lm.sh needs the box's GPU arch and neither nvidia-smi nor "
+                       "rocminfo reported one")
+        env["MOJOLEARN_GPU_ARCHS"] = arch
     if binding.endswith("_host") and so.exists():
         so.unlink()                      # build_host_family.sh never overwrites an output
     say(f"build {binding} (bindings/{script})")
