@@ -4,6 +4,14 @@ Lanes merge origin/main before every merge, so this section reaches every
 worktree. The orchestrator changes lane instructions HERE instead of
 messaging lanes. Newest items are at the top.
 
+000. **Re-prove seam arms ONCE on the fixed lane check (main 02b63f107).**
+   Before 3084ca09c, a sabotage arm that FAILED TO BUILD counted as a bite.
+   If your lane recorded `--pass 2` seam bites before 02b63f107, re-run ONLY
+   your seam arms (the `.checks` patches, not the clean lane runs) once on
+   your pod with the fixed tool, and record the result in your progress
+   file. A BROKEN ARM means fix that patch, then resubmit only the affected
+   lanes to the stewards. A lane that passes this rerun is done with it:
+   never repeat it.
 00. **End your session at every checkpoint (saves tokens; Andrew,
    2026-09-27).** The checkpoints are:
    - each phase merged: pass-2 proof, option parity, GPU speed, CPU speed
@@ -20,9 +28,18 @@ messaging lanes. Newest items are at the top.
    (state key `<lane>-amd`; RunPod MI300X first, Hot Aisle 2x MI300X
    fallback). Grab one when you enter pass 2 and hold it. The lane check now
    builds every base binding itself, and `.checks` takes `<driver>\t<patch>`
-   pairs, enforced with `--pass 2`. Before EVERY merge, run
-   `tools/test_lane_select.py` AND `python/mojolearn/tests/test_host_surface.py`
-   on your pod after merging origin/main; both must pass.
+   pairs, enforced with `--pass 2`. **Check only what your change touches, once (Andrew, 2026-09-27):**
+   - The lane check runs ONLY on the lanes your diff affects:
+     `python3 tools/lane_select.py --changed-since origin/main`. Never
+     re-run lanes your change can't reach.
+   - `python/mojolearn/tests/test_host_surface.py` (under a second) runs
+     before every merge.
+   - `tools/test_lane_select.py` (about 15 minutes) runs ONLY when your diff
+     can affect it: files under `tools/identity_lanes/`,
+     `python/mojolearn/_surface_*.py`, `_expansion_*.py`,
+     `tools/classical_host_lanes/`, `tools/lane_select.py` or
+     `host_surface.py`, or a Mojo file added, deleted or renamed, or whose
+     `from`/`import` lines changed. Otherwise skip it.
 0a. **AMD boxes are allocated for you (2026-09-27).** The orchestrator keeps
    one Hot Aisle MI300X per algorithm lane and renews every dev box hourly.
    If `tools/dev_pod.sh list` shows `<lane>-amd`, that box is yours: use it

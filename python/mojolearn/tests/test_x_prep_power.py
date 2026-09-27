@@ -30,6 +30,18 @@ def test_power():
         np.testing.assert_allclose(np.asarray(m.lambdas_), r.lambdas_, rtol=2e-3, atol=2e-3)
         np.testing.assert_allclose(np.asarray(m.transform(Xh)), r.transform(Xh.astype(np.float64)),
                                    rtol=5e-3, atol=5e-3)
+        # inverse_transform against the reference's inverse at OUR lambdas and scaler
+        r.lambdas_ = np.asarray(m.lambdas_).astype(np.float64)
+        if kw.get("standardize", True):
+            r._scaler.mean_ = np.asarray(m._mean).astype(np.float64)
+            r._scaler.scale_ = np.asarray(m._scale).astype(np.float64)
+        Z = np.asarray(m.transform(Xh))
+        Z[3, 0] = np.nan
+        a, b = np.asarray(m.inverse_transform(Z)), r.inverse_transform(Z.astype(np.float64))
+        np.testing.assert_array_equal(np.isnan(a), np.isnan(b))
+        np.testing.assert_allclose(a, b, rtol=2e-4, atol=2e-4)
+        ok = ~np.isnan(Z)
+        np.testing.assert_allclose(a[ok], Xh[ok], rtol=2e-3, atol=2e-3)
 
 
 if __name__ == "__main__":
