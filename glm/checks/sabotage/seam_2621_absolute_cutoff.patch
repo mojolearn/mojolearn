@@ -1,0 +1,13 @@
+diff --git a/glm/impl/linalg/detail/lstsq.mojo b/glm/impl/linalg/detail/lstsq.mojo
+index dcf56217e..e4c6e012e 100644
+--- a/glm/impl/linalg/detail/lstsq.mojo
++++ b/glm/impl/linalg/detail/lstsq.mojo
+@@ -488,7 +488,7 @@ def lstsq_eig_traced(
+         var mag = abs(h_eig.unsafe_ptr().unsafe_load(i))
+         if mag > max_abs:
+             max_abs = mag
+-    var thresh = ols_pinv_threshold(max_abs, n_cols)
++    var thresh = Float32(1.0e-10) + Float32(0.0) * ols_pinv_threshold(max_abs, n_cols)  # SABOTAGE 2621
+     var kept = 0
+     for i in range(n_cols):
+         var lam = h_eig.unsafe_ptr().unsafe_load(i)

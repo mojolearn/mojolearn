@@ -1,0 +1,20 @@
+# The linear family's EXISTING lanes (registered in tools/identity_break.py):
+# checking any of them runs tools/identity_lanes/linear.checks (LANE CHARTER,
+# 2026-09-27: a family lane owns its existing algorithms too).
+ols
+ols-no-intercept
+ols-weighted
+ridge
+ridge-no-intercept
+lasso
+elasticnet
+elasticnet-l2end-no-intercept
+logistic
+logistic-l1
+logistic-elasticnet
+logistic-multiclass
+logistic-unpenalized-no-intercept
+linear-svc
+linear-svc-squared-hinge
+linear-svr
+linear-svr-squared

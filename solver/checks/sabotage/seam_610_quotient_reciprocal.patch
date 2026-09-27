@@ -1,0 +1,13 @@
+diff --git a/solver/impl/cd.mojo b/solver/impl/cd.mojo
+index 8cc61da71..a0fb90b85 100644
+--- a/solver/impl/cd.mojo
++++ b/solver/impl/cd.mojo
+@@ -266,7 +266,7 @@ def cd_update_coef_kernel(
+             r = Float32(0.0)
+     var sq = ftz(squared.unsafe_load(ci))
+     if sq > CD_SQUARED_GUARD:
+-        r = r / sq
++        r = r * (Float32(1.0) / sq)  # SABOTAGE 610
+     else:
+         r = Float32(0.0)
+     # Row 10: the quotient is a seam (the next axpy's alpha, the card, the

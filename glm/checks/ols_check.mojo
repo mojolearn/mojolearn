@@ -1012,6 +1012,26 @@ def check_ols_host_surface_takes_the_guard() raises:
         y.append(Float32(b64[i]))
     var w = _host_fit_coefs(x, y, n, d)
 
+    # THE ROUTE, BIT FOR BIT (2026-09-27). Since DEVIATIONS 2620/2621 made
+    # `lstsq_eig`'s pseudo-inverse relative, a bypass straight to `lstsq_eig`
+    # ALSO interpolates at 6 x 16 (`pinv(A^T A) A^T b` is the minimum-norm
+    # solution too), so the residual test below can no longer tell the two
+    # routes apart: the sabotage arm seam_527_host_bypasses_dispatch.patch
+    # passed it. The routes still differ in their bits, so the host surface
+    # must return EXACTLY what `ols_fit`'s own dispatch returns on the same
+    # numbers, at the wide shape and at the single-column shape.
+    var ctx_route = DeviceContext()
+    var w_dispatch = _fit_from_host64(ctx_route, a64, b64, n, d)
+    for j in range(d):
+        if Float32(w[j]) != Float32(w_dispatch[j]):
+            raise Error(
+                "check_ols_host_surface_takes_the_guard: at 6 x 16 ols_fit_host"
+                " coefficient " + String(j) + " is " + String(w[j])
+                + " but olsFit's dispatch returns " + String(w_dispatch[j])
+                + ". The host surface is not taking the dispatch's route"
+                " (DEVIATION 527)."
+            )
+
     var bmax = 0.0
     for i in range(n):
         if abs(b64[i]) > bmax:
@@ -2840,5 +2860,9 @@ def main() raises:
     check_ols_rank_guard_is_scale_invariant()
     check_ols_mixed_scale_design_matches_float64_oracle()
     check_ols_rank_deficient_design_drops_the_noise_direction()
+    # The wide route's two gates were defined and never called (found
+    # 2026-09-27: seam_2622_wide_absolute_cutoff.patch passed the driver).
+    check_ols_wide_rank_guard_is_scale_invariant()
+    check_ols_wide_rank_deficient_design_drops_the_noise_direction()
     check_ols_card_hashes_raw_bytes()
     check_ols_card_is_emitted()

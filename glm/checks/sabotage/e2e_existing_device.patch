@@ -1,0 +1,48 @@
+diff --git a/glm/impl/matrix/math.mojo b/glm/impl/matrix/math.mojo
+index 44d7777d7..208704a54 100644
+--- a/glm/impl/matrix/math.mojo
++++ b/glm/impl/matrix/math.mojo
+@@ -143,7 +143,7 @@ def matrix_vector_binary_div_skip_zero_kernel(
+             data.unsafe_store(idx, Float32(0.0))
+         # else: `return a`, the cell is untouched
+     else:
+-        data.unsafe_store(idx, ftz(data.unsafe_load(idx) / b))
++        data.unsafe_store(idx, ftz(data.unsafe_load(idx) / b * Float32(1.0000001)))  # SABOTAGE e2e
+ 
+ 
+ def matrix_vector_binary_mult_kernel(
+@@ -339,7 +339,7 @@ def vector_binary_mult_kernel(
+     of the same scaling. One rounding, one seam."""
+     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+     if i < Int(n_in):
+-        inout_v.unsafe_store(i, ftz(inout_v.unsafe_load(i) * vec.unsafe_load(i)))
++        inout_v.unsafe_store(i, ftz(inout_v.unsafe_load(i) * vec.unsafe_load(i) * Float32(1.0000001)))  # SABOTAGE e2e
+ 
+ 
+ def vector_binary_div_kernel(
+diff --git a/glm/impl/qn/glm_base.mojo b/glm/impl/qn/glm_base.mojo
+index 96a3bfe31..902e676e6 100644
+--- a/glm/impl/qn/glm_base.mojo
++++ b/glm/impl/qn/glm_base.mojo
+@@ -165,7 +165,7 @@ def gemm_epilogue_kernel(
+     roundings in that order, no contraction."""
+     var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+     if j < Int(n_in):
+-        var s = ftz(alpha * prod.unsafe_load(j))
++        var s = ftz(alpha * prod.unsafe_load(j) * Float32(1.0000001))  # SABOTAGE e2e
+         if beta_is_one != 0:
+             g.unsafe_store(j, ftz(s + g.unsafe_load(j)))
+         else:
+diff --git a/solver/impl/cd.mojo b/solver/impl/cd.mojo
+index 8cc61da71..6ea2b64dd 100644
+--- a/solver/impl/cd.mojo
++++ b/solver/impl/cd.mojo
+@@ -266,7 +266,7 @@ def cd_update_coef_kernel(
+             r = Float32(0.0)
+     var sq = ftz(squared.unsafe_load(ci))
+     if sq > CD_SQUARED_GUARD:
+-        r = r / sq
++        r = r / sq * Float32(1.0000001)  # SABOTAGE e2e
+     else:
+         r = Float32(0.0)
+     # Row 10: the quotient is a seam (the next axpy's alpha, the card, the

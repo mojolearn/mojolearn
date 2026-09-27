@@ -1,0 +1,13 @@
+diff --git a/glm/impl/ols.mojo b/glm/impl/ols.mojo
+index 0b1263cea..03e329647 100644
+--- a/glm/impl/ols.mojo
++++ b/glm/impl/ols.mojo
+@@ -392,7 +392,7 @@ def ols_fit_weighted_traced(
+     if n_cols > n_rows:
+         selected_algo = OLS_ALGO_MIN_NORM_EIG
+     elif n_cols == 1:
+-        selected_algo = OLS_ALGO_EIG
++        selected_algo = OLS_ALGO_SVD_JACOBI  # SABOTAGE 551: cuML's switch, which refuses here
+ 
+     if selected_algo == OLS_ALGO_EIG:
+         lstsq_eig_traced(
