@@ -189,7 +189,8 @@ The layer API (Conv2d.forward/backward on host arrays) is now PCIe bound (pageab
 the output); the trainer is kernel bound (block backward ~1 ms, forward ~0.45 ms per step).
 
 AMD / Apple speed (steward speed jobs, `--builds bindings/build_x_cnn.sh`, `--cmd` = the bench inline:
-scratch copy at ~/mojolearn-evidence/algos-cnn/ is not kept; the command text is in the request JSON):
+~/mojolearn-evidence/algos-cnn/speed_cmd.sh, script bench_p4.py; also q2.py and cmplc.py, the bit checks; on
+the pod they are /root/p4/*):
 - do-amd IDENTICAL before 025c7a921: 1790549425969-speed-cnn-025c7a9214; after 1dfafaeb1:
   1790549426913-speed-cnn-1dfafaeb16 (held in do-amd's queue at session end).
 - do-amd FAST (owed from phase 3) before 6226c8417: 1790549424046-speed-cnn-6226c84178; after fad716a02:
