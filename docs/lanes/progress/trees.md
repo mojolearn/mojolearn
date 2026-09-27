@@ -113,8 +113,8 @@ Option parity (item 2), merged as each passes:
   BEFORE (MultiRMSE diff reversed) and AFTER on H100: IDENTICAL on CUDA and
   CPU columns; all AGREE on MI300X; test_gbdt_multirmse + test_host_surface
   199 passed, 1 skipped (catboost absent). test_lane_select pins now
-  forest_host_predict 85, gbdt_host_predict 50 (rerun at the branch tip:
-  see below). Steward request 1790542307842 (m2pro, m3ultra, do-amd)
+  forest_host_predict 85, gbdt_host_predict 50: test_lane_select 68
+  passed at the branch tip (H100 pod). Steward request 1790542307842 (m2pro, m3ultra, do-amd)
   PENDING. MERGE when m2pro (or m3ultra) + do-amd PASS.
 - Owed (family phase 1, existing lanes): gbdt-categorical-ctr-tables and
   gbdt-tensor-ctr-tables read NOTHING COMPARED in the lane check: their
