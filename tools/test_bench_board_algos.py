@@ -99,7 +99,8 @@ def test_opponent_rosters():
     assert nv["dart"] == ("lightgbm-cpu", "xgboost-cpu", "xgboost-gpu")
     assert nv["ivf-pq"] == ("faiss-cpu", "cuvs-gpu")
     assert nv["pagerank"] == ("networkx-cpu", "cugraph-gpu")
-    assert nv["lstm"][0] == "torch-eager-fp32" and "torch-compile-tf32" in nv["lstm"]
+    assert nv["lstm-clf"][0] == "torch-eager-fp32" and "torch-compile-tf32" in nv["lstm-clf"]
+    assert nv["dart-reg"] == ("lightgbm-cpu", "xgboost-cpu", "xgboost-gpu")
     assert nv["autoarima"] == ("statsforecast-cpu", "cuml-gpu")
     assert A.opponents("amd", "ivf-pq") == ("faiss-cpu",)
     assert not any("tf32" in a for a in A.opponents("apple", "conv2d"))
@@ -114,8 +115,10 @@ def test_skipped_when_the_wheel_lacks_the_class(monkeypatch):
         A._ours_class("sgd-clf")
     with pytest.raises(A.Skipped):
         A.build("lu-solve", "ours", {})
-    fake.linalg = types.SimpleNamespace(lu_solve=len)
-    assert A._ours_class("lu-solve") == ("linalg.lu_solve", len)
+    fake.linalg = types.SimpleNamespace(solve=len)
+    assert A._ours_class("lu-solve") == ("linalg.solve", len)
+    fake.solve = abs                              # the first exported candidate wins
+    assert A._ours_class("lu-solve") == ("solve", abs)
     # a nested base estimator the wheel lacks is a skip too, not an error
     with pytest.raises(A.Skipped, match="GaussianNB"):
         A._resolve(A._E("GaussianNB"), "ours")
@@ -148,6 +151,12 @@ def test_lane_arrays_derivations():
     assert D["X"].shape[0] + D["Xq"].shape[0] == 200
     p = A._derived_params("gaussian-rp", {"X": B["X"]}, A.LANES["gaussian-rp"]["params"])
     assert p["n_components"] == 3
+    Y = np.random.default_rng(3).standard_normal((2, 100)).astype(np.float32)
+    D = A.lane_arrays("gru-clf", {"Y": Y})
+    n_fit = int(100 * 0.8) - A.SEQ_T
+    assert D["X"].shape == (2 * n_fit, A.SEQ_T, 1) and D["Xq"].shape[1:] == (A.SEQ_T, 1)
+    assert set(np.unique(D["y"])) <= {0.0, 1.0} and D["X"].dtype == np.float32
+    assert A.block_file("gru-clf", "synthetic") == "ts-synthetic"
     D = A.lane_arrays("autoarima", {"Y": np.arange(2 * 100, dtype=np.float32).reshape(2, 100)})
     assert D["Yfit"].shape == (2, 100 - A.TS_H) and D["Yhold"].shape == (2, A.TS_H)
 
