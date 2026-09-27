@@ -2,6 +2,14 @@
 
 All notable changes to mojolearn are recorded here, newest first, in the style of Keep a Changelog.
 
+## 0.8.24 (published 2026-09-27)
+
+### Fixed
+- Linux ships again. 0.8.23 published the macOS wheel only: its AMD (gfx942) build failed because the Apple left-looking Cholesky kernel was launched behind a runtime guard and so compiled into every GPU target, where its Apple matrix-unit instructions do not exist (mixture, gp, kernel_methods). The launch is now compile-time gated (`cholesky/checks/potrf.mojo`); no bit moves on any column. Every binding changed since 0.8.22 cross-compiles for gfx942 (32 of 32). Linux users get 0.8.23's GaussianMixture and FAST-quality fixes with this release.
+
+### Changed
+- Apple GPU, IDENTICAL, same bits: the matrix-unit admission bound is exact, with a per-cell refusal in the Cholesky update; the Cholesky back solve stages operands ahead of the chain; ARIMA's forward-difference gradient runs in one stacked evaluation.
+
 ## 0.8.23 (published 2026-09-26)
 
 ### Fixed
