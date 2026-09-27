@@ -1,0 +1,15 @@
+# their_thing	status	why / where it would go
+# cuVS pinned at ~/CascadeProjects/upstream/cuvs-v26.08.00, scikit-learn and cuML beside it. Lane: ann (pass 1, 2026-09-27).
+cuvs::cluster::kmeans_balanced as the IVF-PQ coarse quantizer and codebook trainer (ivf_pq_build.cuh)	REPLACED	A fixed-order Lloyd (x_ann/ivf_pq_core.mojo: strided init, fixed iteration count, lower-id tie, ascending member sums). Reusing cluster/'s k-means through ivf/host/ivf_host.mojo was the plan; a host binding compiling it beside new code hangs the Mojo compiler (0 CPU, futex wait) on the H100 pod, reproduced with a 6-line main that calls host_ivf_build
+ivf_pq kmeans_trainset_fraction, max_train_points_per_cluster	NOT IMPLEMENTED	Every row trains; a sampled trainset is a later option (its row choice must be an integer function of the shape and seed)
+ivf_pq codebook_kind = PER_CLUSTER	NOT IMPLEMENTED	PER_SUBSPACE (their default) only
+ivf_pq force_random_rotation and the random rotation when dim % pq_dim != 0	REPLACED	Zero padding to rot_dim = pq_dim * ceil(dim / pq_dim); a random orthogonal matrix from a host QR is not bitwise across BLAS builds
+ivf_pq search lut_dtype / internal_distance_dtype = fp16 / fp8 (ivf_pq_fp_8bit.cuh, ivf_pq_fp16_overflow.cuh)	REFUSED UNDER IDENTICAL	float32 LUT entries only, each evaluated at the read in a fixed order
+ivf_pq metric InnerProduct / CosineExpanded	NOT IMPLEMENTED	squared L2 only
+ivf_pq extend, serialize, pq_bits > 8	NOT IMPLEMENTED	pq_bits in [1, 8]; codes stored as int32 in pass 1
+TSNE method='barnes_hut' (tree build by atomic insertion) and method='fft' (cuFFT order)	REFUSED UNDER IDENTICAL	Repulsion is exact, a per-row fold over all points ascending (O(n^2) per step); a Morton-sorted Barnes-Hut is the pass-2 speed route
+TSNE init='pca', metric != 'euclidean', n_components != 2, angle, n_iter_without_progress / min_grad_norm early stop	NOT IMPLEMENTED	init is numpy uniform(-5e-5, 5e-5); the loop runs exactly max_iter steps
+TSNE exact method's dense P over all pairs	NOT IMPLEMENTED	P is the k-NN sparse P (k = 3 * perplexity + 1), sklearn's barnes_hut affinities
+CAGRA build_algo IVF_PQ + refine and NN_DESCENT for the intermediate graph	REPLACED	Exact k-NN intermediate graph; NN-descent stays refused (hdbscan/NOT_IMPLEMENTED.tsv)
+CAGRA random seed sampling (rand_xor_mask, num_random_samplings), the probabilistic visited hashmap, multi-CTA and multi-kernel search	REPLACED	Evenly spaced seeds (itopk_size + search_width * graph_degree by default), an exact visited bitset, single-thread-per-query search
+CAGRA guarantee_connectivity (MST), compression (VPQ), extend, merge, serialize, filtered search	NOT IMPLEMENTED
