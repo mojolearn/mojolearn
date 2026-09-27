@@ -170,3 +170,17 @@ def test_connected_components():
     rk, rl = R(A, directed=False)
     assert k == rk
     np.testing.assert_array_equal(np.asarray(lab), rl)
+
+
+def test_louvain():
+    nx = pytest.importorskip("networkx")
+    A = _graph(80)
+    G = nx.from_numpy_array(A)
+    m = ml.Louvain().fit(A)
+    comms = {}
+    for i, c in enumerate(np.asarray(m.labels_)):
+        comms.setdefault(int(c), set()).add(i)
+    q_ours = nx.community.modularity(G, list(comms.values()))
+    assert abs(q_ours - m.modularity_) < 1e-4
+    q_ref = max(nx.community.modularity(G, nx.community.louvain_communities(G, seed=s)) for s in range(5))
+    assert q_ours > q_ref - 0.03, (q_ours, q_ref)

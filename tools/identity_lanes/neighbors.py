@@ -160,6 +160,14 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(k=_h(np.int64(k)), lab=_h(lab), kd=_h(np.int64(kd)), labd=_h(labd)))
 
 
+@lane("x-neighbors-louvain")
+def _(ml, X, yc, yr, Xh=None):
+    A = _neighbors_graph(X)
+    m = ml.Louvain(resolution=1.0).fit(A)
+    r = ml.Louvain(resolution=0.5, max_level=1).fit(A)
+    return _fit(dict(lab=_h(m.labels_), q=_h(np.float32(m.modularity_)), lv=_h(np.int64(m.n_levels_)),
+                     lab_r=_h(r.labels_), q_r=_h(np.float32(r.modularity_))))
+
 
 
 _batch_decl(_rows_calls("score_samples", "predict", sl=slice(0, 256)), "x-neighbors-lof")

@@ -30,7 +30,7 @@ from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty
 from ._mode import NumericModeMixin
 
-__all__ = ["LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", "PolynomialCountSketch", "AdditiveChi2Sampler", "SkewedChi2Sampler", "LabelPropagation", "LabelSpreading", "KNNImputer", "PageRank", "connected_components"]
+__all__ = ["LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", "PolynomialCountSketch", "AdditiveChi2Sampler", "SkewedChi2Sampler", "LabelPropagation", "LabelSpreading", "KNNImputer", "PageRank", "connected_components", "Louvain"]
 
 # x_neighbors/items.mojo's codes
 _KERNELS = {"linear": 0, "poly": 1, "polynomial": 1, "rbf": 2, "sigmoid": 3, "laplacian": 4,
@@ -1091,4 +1091,52 @@ def connected_components(A, directed=True, connection="weak", return_labels=True
         out.append(roots.setdefault(v, len(roots)))
     labels = Array.from_list(out, "<i4")
     return (len(roots), labels) if return_labels else len(roots)
+
+
+# ====================================================================== Louvain
+class Louvain(_XNeighbors):
+    """Louvain community detection on a dense symmetric weighted adjacency.
+
+    References: networkx `louvain_communities` / `louvain_partitions`
+    (`_one_level`, `_gen_graph`, `modularity`) and cuGraph
+    cpp/src/community/louvain_impl.cuh. The whole method is ONE sequential
+    Mojo item (x_neighbors/items.mojo `louvain_item`) with a PINNED order
+    (DEVIATION 5204): nodes in ascending id instead of networkx's `seed`
+    shuffle, candidate communities in ascending id, a strictly larger gain
+    to move, so ties go to the lowest community id. `labels_` numbers the
+    communities by their lowest node; `modularity_` is networkx's
+    modularity of that partition, in float32. `seed` is accepted and unused.
+    """
+
+    def __init__(self, resolution=1.0, *, threshold=1e-7, max_level=None, seed=None):
+        self.resolution = resolution
+        self.threshold = threshold
+        self.max_level = max_level
+        self.seed = seed
+
+    def fit(self, A, y=None):
+        A = _adjacency(A)
+        n = A.shape[0]
+        rows = A.tolist()
+        if any(rows[i][j] != rows[j][i] for i in range(n) for j in range(i + 1, n)):
+            raise ValueError("Louvain: the adjacency matrix must be symmetric (an undirected graph)")
+        if all(v == 0 for r in rows for v in r):
+            raise ValueError("Louvain: the graph has no edges")
+        labels = empty((n,), "<i4")
+        info = empty((2,), "<f4")
+        ml = 0 if self.max_level is None else int(self.max_level)
+        if self.max_level is not None and ml < 1:
+            raise ValueError("max_level must be a positive integer or None")
+        self._op("louvain", [(A, 0), (labels, 1), (info, 1)], (n, ml),
+                 (_f32_scalar(self.resolution), _f32_scalar(self.threshold)))
+        roots = {}
+        self.labels_ = Array.from_list([roots.setdefault(v, len(roots)) for v in labels.tolist()], "<i4")
+        self.n_communities_ = len(roots)
+        info = info.tolist()
+        self.modularity_ = info[0]
+        self.n_levels_ = int(info[1])
+        return self
+
+    def fit_predict(self, A, y=None):
+        return self.fit(A).labels_
 
