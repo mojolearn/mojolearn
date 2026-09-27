@@ -208,3 +208,27 @@ def _(ml, X, yc, yr, Xh=None):
     b = _sequence_opt_run(ml, ml.Adafactor, X, lr=3e-2, beta2_decay=-0.6, d=2.0, weight_decay=0.1)
     return _fit(dict(plain=a["params"], plain_state=_h(*[v for s in a["opt"].state for v in s.values()]),
                      moved=b["params"], moved_state=_h(*[v for s in b["opt"].state for v in s.values()])))
+
+
+@lane("sequence-lamb")
+def _(ml, X, yc, yr, Xh=None):
+    """LAMB at timm's defaults (global clip 1.0, weight decay 0.01) and with
+    trust_clip, always_adapt, no decay and no clip."""
+    a = _sequence_opt_run(ml, ml.LAMB, X, lr=1e-2)
+    b = _sequence_opt_run(ml, ml.LAMB, X, lr=1e-2, weight_decay=0.0, always_adapt=True, trust_clip=True,
+                          max_grad_norm=None)
+    return _fit(dict(plain=a["params"], plain_state=a["state"], adapt=b["params"], adapt_state=b["state"]))
+
+
+@lane("sequence-adamax")
+def _(ml, X, yc, yr, Xh=None):
+    """Adamax at torch's defaults and with other betas and weight decay, and
+    a GRU regressor trained by it."""
+    a = _sequence_opt_run(ml, ml.Adamax, X)
+    b = _sequence_opt_run(ml, ml.Adamax, X, lr=1e-2, betas=(0.8, 0.99), weight_decay=0.05)
+    Xs = _sequence_seq(X)
+    ycs, yrs = _sequence_targets(yc, yr)
+    r = ml.GRURegressor(hidden_size=8, optimizer="adamax", learning_rate=2e-3, batch_size=32, max_epochs=1,
+                        random_state=10).fit(Xs, yrs)
+    return _fit(dict(plain=a["params"], plain_state=a["state"], moved=b["params"], moved_state=b["state"],
+                     gru=_h(r.params_, r.loss_curve_)))

@@ -123,6 +123,15 @@ class Lion(_SeqOptimizer):
         return self.state[0]
 
 
+class Adamax(_SeqOptimizer):
+    """`torch.optim.Adamax`: m.lerp_(g, 1 - b1); u = max(b2 u, |g| + eps);
+    p -= lr / (1 - b1^t) m / u; coupled weight decay. Defaults are torch's."""
+    _NAME = "adamax"
+
+    def __init__(self, params, lr=2e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.0, numeric_mode=None):
+        super().__init__(params, lr, dict(betas=betas, eps=eps, weight_decay=weight_decay), numeric_mode)
+
+
 class Adafactor:
     """`torch.optim.Adafactor` (PyTorch 2.5): relative step size, decoupled
     weight decay, a factored second moment (row and column means of g^2) for
@@ -181,6 +190,54 @@ class Adafactor:
                 R, C = p.shape[0], 0
             b.adafactor_step([p.ctypes.data, g.ctypes.data, s1.ctypes.data, s2.ctypes.data], [R, C, self.t],
                              [self.lr, self.beta2_decay, self.eps[0], self.eps[1], self.d, self.weight_decay])
+        return self
+
+
+class LAMB(_SeqOptimizer):
+    """LAMB (You et al. 2019, "Large Batch Optimization for Deep Learning"),
+    timm's `Lamb` statement: optional global gradient-norm clip
+    (max_grad_norm), Adam moments with bias correction, update
+    m_hat / (sqrt(v_hat) + eps) + weight_decay p, scaled per tensor by the
+    trust ratio ||p|| / ||update|| (1 when either is 0; at most 1 with
+    trust_clip) when weight_decay != 0 or always_adapt. Defaults are timm's."""
+
+    def __init__(self, params, lr=1e-3, bias_correction=True, betas=(0.9, 0.999), eps=1e-6,
+                 weight_decay=0.01, grad_averaging=True, max_grad_norm=1.0, trust_clip=False,
+                 always_adapt=False, numeric_mode=None):
+        if isinstance(params, np.ndarray):
+            params = [params]
+        self.params = list(params)
+        for k, p in enumerate(self.params):
+            if not isinstance(p, np.ndarray) or p.dtype != np.float32 or not p.flags.c_contiguous or p.size == 0:
+                raise TypeError(f"LAMB: params[{k}] must be a non-empty C-contiguous float32 NumPy array")
+        b1, b2 = betas
+        if not (0.0 <= b1 < 1.0 and 0.0 <= b2 < 1.0):
+            raise ValueError("LAMB: betas must lie in [0, 1)")
+        self.lr, self.betas, self.eps, self.weight_decay = float(lr), (float(b1), float(b2)), float(eps), float(weight_decay)
+        self.max_grad_norm = None if max_grad_norm is None else float(max_grad_norm)
+        self.flags = (int(bool(trust_clip)) | 2 * int(bool(always_adapt)) | 4 * int(bool(grad_averaging))
+                      | 8 * int(bool(bias_correction)) | 16 * int(self.max_grad_norm is not None))
+        self.numeric_mode = numeric_mode
+        self.n_total = int(sum(p.size for p in self.params))
+        self.state = [np.zeros(self.n_total, dtype=np.float32) for _ in range(2)]
+        self.t = 0
+
+    def step(self, grads):
+        g = self._pack(grads, "grads")
+        flat = self._pack(self.params, "params")
+        self.t += 1
+        offs = [0]
+        for p in self.params:
+            offs.append(offs[-1] + p.size)
+        _backend.binding("_mojolearn_x_sequence", self.numeric_mode).lamb_step(
+            [flat.ctypes.data, g.ctypes.data, self.state[0].ctypes.data, self.state[1].ctypes.data],
+            [len(self.params), self.t, self.flags] + offs,
+            [self.lr, self.betas[0], self.betas[1], self.eps, self.weight_decay,
+             self.max_grad_norm if self.max_grad_norm is not None else 1.0])
+        off = 0
+        for p in self.params:
+            p.ravel()[:] = flat[off:off + p.size]
+            off += p.size
         return self
 
 

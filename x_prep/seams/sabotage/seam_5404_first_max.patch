@@ -1,0 +1,11 @@
+--- a/x_prep/prims.mojo
++++ b/x_prep/prims.mojo
+@@ -380,7 +380,7 @@
+     var bv = ld(f, S)
+     for k in range(1, K):
+         var v = ld(f, S + k)
+-        if v > bv:
++        if v >= bv:  # SABOTAGE 5404
+             bv = v
+             best = k
+     sti(f, p(q, 3) + t, best)
