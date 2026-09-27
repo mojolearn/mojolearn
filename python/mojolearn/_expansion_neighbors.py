@@ -30,7 +30,9 @@ from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty
 from ._mode import NumericModeMixin
 
-__all__ = ["LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", "PolynomialCountSketch", "AdditiveChi2Sampler", "SkewedChi2Sampler", "LabelPropagation", "LabelSpreading", "KNNImputer", "PageRank", "connected_components", "Louvain", "SVGP"]
+__all__ = ["LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", "PolynomialCountSketch",
+           "AdditiveChi2Sampler", "SkewedChi2Sampler", "LabelPropagation", "LabelSpreading", "KNNImputer",
+           "PageRank", "connected_components", "Louvain", "SVGP"]
 
 # x_neighbors/items.mojo's codes
 _KERNELS = {"linear": 0, "poly": 1, "polynomial": 1, "rbf": 2, "sigmoid": 3, "laplacian": 4,
