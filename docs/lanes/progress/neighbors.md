@@ -70,6 +70,25 @@ Proof (step 2), all fourteen algorithms, NVIDIA H100 pod:
   RunPod MI300X stock and no free Hot Aisle slot (twice, 2026-09-27); a
   retry was left running (log ~/mojolearn-evidence/devpods/neighbors-amd-up.log).
 
+- Apple / AMD steward verdict for 1790533314520-neighbors-799d1f0d31: m2pro
+  PASS, do-amd PASS (m3ultra spooled, not gating). All 14 lanes proven on
+  NVIDIA, AMD, Apple and CPU. Done; never repeat it.
+- connected_components end-to-end arm STRENGTHENED (the old device arm froze
+  node 1 and moved 1 fixture of 9): the device now reads edges forward only
+  (a[t, j], never a[j, t]), which moves every directed weak graph, and the
+  lane gained a directed CHAIN fixture (`_neighbors_chain`: each bin a path
+  i -> next i of its bin) so the smallest label travels many rounds.
+
+## Option parity (phase c)
+
+Branch commit 9055f378e (OCSVM sample_weight + kernel='precomputed',
+KernelPCA 'precomputed', NearestCentroid deviations_ / predict_log_proba /
+score, PageRank dangling + nstart, KNNImputer numeric missing_values, sparse
+input, RandomState instances, get_feature_names_out) plus new seam arms
+5200_smo_bound_unweighted, 5209_log_softmax_fold_reversed,
+5212_nc_deviations_unthresholded, 5216_pagerank_dangling_follows_p.
+`x_neighbors/NOT_IMPLEMENTED.tsv` rows updated to IMPLEMENTED.
+
 ## NEXT (a fresh session starts here)
 
 1. `python3 tools/apple_steward.py status`: m2pro (gating) and do-amd
