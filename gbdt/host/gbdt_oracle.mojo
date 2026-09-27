@@ -127,7 +127,6 @@ from std.math import exp, floor, fma, isfinite, log, log2, sqrt
 from std.memory import bitcast
 from std.sys.compile import is_defined
 from max.algorithm import sync_parallelize
-from core.host_parallel import host_parallelize
 
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
@@ -834,12 +833,16 @@ def gbdt_host_grid(
             ocp.unsafe_store(f, -1)
 
     # Border searches own disjoint output slots and share only immutable X
-    # and sample indices.  Keep small fits serial to avoid pool overhead.
-    if n_features > 1 and n_rows * n_features >= (1 << 18):
-        host_parallelize(_grid_column, n_features)
-    else:
-        for f in range(n_features):
-            _grid_column(f)
+    # and sample indices. ALWAYS ON THE POOL (lane cpu, 2026-09-27,
+    # DEVIATION 5900): the GPU fit's border search (gbdt/train.mojo
+    # `_dp_task`) always runs on `sync_parallelize` workers, which compute
+    # with FTZ and DAZ set, and the recorded GBDT columns carry those bits.
+    # The serial arm this had for small fits ran on the calling thread
+    # (IEEE), where a subnormal feature is not read as zero, so a small fit
+    # and the device fit could quantize it differently; one environment for
+    # every size now. (Switching the device's `_dp_task` to IEEE moved every
+    # gbdt lane's `denormal` cell on CUDA, so DAZ does reach these bits.)
+    sync_parallelize(_grid_column, n_features)
     _ = sample_idx^
 
     var borders = List[List[Float32]]()
