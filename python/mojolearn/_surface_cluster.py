@@ -30,7 +30,7 @@ FAMILIES = (
         host_modules=(
             "x_cluster/host/host_ops.mojo", "x_cluster/bodies.mojo", "x_cluster/ops.mojo",
             "x_cluster/common.mojo", "x_cluster/entries.mojo", "x_cluster/out.mojo",
-            "x_cluster/minibatch.mojo", "x_cluster/bisect.mojo", "x_cluster/meanshift.mojo", "x_cluster/optics.mojo", "x_cluster/affinity.mojo", "x_cluster/bgmm.mojo", "x_cluster/agglo.mojo",
+            "x_cluster/minibatch.mojo", "x_cluster/bisect.mojo", "x_cluster/meanshift.mojo", "x_cluster/optics.mojo", "x_cluster/affinity.mojo", "x_cluster/bgmm.mojo", "x_cluster/agglo.mojo", "x_cluster/spectral_assign.mojo",
         ),
         exports=(
             "x_cluster_host_numeric_mode", "x_cluster_host_vendor", "x_cluster_host_column",
@@ -61,7 +61,7 @@ TRAINING_LANE_NAMES = {"x-cluster-minibatch-kmeans": "MiniBatchKMeans",
                        "x-cluster-kmeans-init": "KMeans array and callable init",
                        "x-cluster-agglo-linkages": "AgglomerativeClustering linkages and metrics",
                        "x-cluster-agglo-connectivity": "AgglomerativeClustering connectivity",
-                       "x-cluster-spectral-affinities": "SpectralClustering rbf and precomputed_nearest_neighbors affinities"}
+                       "x-cluster-spectral-affinities": "SpectralClustering affinities and assign_labels"}
 PUBLIC_PENDING_LANES = {"x-cluster-minibatch-kmeans": "no reference",
                         "x-cluster-bisecting-kmeans": "no reference",
                         "x-cluster-meanshift": "no reference",

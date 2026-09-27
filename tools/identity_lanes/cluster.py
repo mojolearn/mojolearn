@@ -470,9 +470,13 @@ def _(ml, X, yc, yr, Xh=None):
     dist = (np.float32(1) - np.asarray(m.affinity_matrix_)).astype(np.float32)
     p = ml.SpectralClustering(n_clusters=4, affinity="precomputed_nearest_neighbors", n_neighbors=12,
                               random_state=3).fit(dist)
+    d = ml.SpectralClustering(n_clusters=4, assign_labels="discretize", random_state=3).fit(S)
+    q = ml.SpectralClustering(n_clusters=4, affinity="rbf", assign_labels="cluster_qr", random_state=3).fit(S)
     return _fit(dict(labels=_h(m.labels_), emb=_h(m.embedding_), aff=_h(m.affinity_matrix_),
                      glabels=_h(g.labels_), gemb=_h(g.embedding_),
-                     plabels=_h(p.labels_), pemb=_h(p.embedding_), paff=_h(p.affinity_matrix_)),
+                     plabels=_h(p.labels_), pemb=_h(p.embedding_), paff=_h(p.affinity_matrix_),
+                     dlabels=_h(d.labels_), demb=_h(d.embedding_), dit=_h(np.int64(d.n_iter_assign_)),
+                     qlabels=_h(q.labels_)),
                 m, "n/a:transductive (predict carries the nearest_neighbors and precomputed affinities only)")
 
 

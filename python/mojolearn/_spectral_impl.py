@@ -50,6 +50,12 @@ _EMBED_AFFINITIES = _AFFINITIES + ("rbf", "precomputed_nearest_neighbors")
 #: 2026-09-27); 'rbf' is scikit-learn's default, 'nearest_neighbors' cuML's
 #: and this class's.
 _CLUSTER_AFFINITIES = _EMBED_AFFINITIES
+#: SpectralClustering's label assignments: cuVS's k-means, and scikit-learn's
+#: two others on the same embedding (x_cluster/spectral_assign.mojo).
+_ASSIGN_LABELS = ("kmeans", "discretize", "cluster_qr")
+#: `x_cluster/entries.mojo::ENTRY_SPECTRAL_ASSIGN` and its method codes.
+_E_SPECTRAL_ASSIGN = 12
+_ASSIGN_CODES = {"discretize": 0, "cluster_qr": 1}
 
 #: cuVS's own struct default for the eigensolver tolerance
 #: (`cuvs/preprocessing/spectral_embedding.hpp:59`, `tolerance{1e-5f}`).
@@ -280,10 +286,16 @@ class SpectralClustering:
                                  kNN connectivity of a distance matrix,
                                  0.5 (C + C^T)). A callable and every other
                                  kernel name are REFUSED by name.
-        assign_labels  honored   'kmeans' only; 'discretize' and
-                                 'cluster_qr' are refused by name, as
-                                 cuML's `spectral_clustering.pyx:165-167`
-                                 refuses them.
+        assign_labels  honored   'kmeans' (default, cuVS's k-means on the
+                                 embedding), and scikit-learn's
+                                 'discretize' and 'cluster_qr' on the same
+                                 embedding (x_cluster/spectral_assign.mojo,
+                                 host float64, a Jacobi SVD for LAPACK's,
+                                 DEVIATION 5119); discretize draws its
+                                 start row from the lane's splitmix64
+                                 stream seeded by random_state. predict
+                                 (prediction_data=True) carries 'kmeans'
+                                 only.
         eigen_solver   refused   scikit-learn's choice of arpack / lobpcg /
                                  amg. There is one solver here, RAFT's
                                  thick-restart Lanczos, and it is the only
@@ -358,13 +370,16 @@ class SpectralClustering:
                 "callable or another kernel name builds the affinity outside "
                 "every identity column."
             )
-        if assign_labels != "kmeans":
-            raise NotImplementedError(
+        if assign_labels not in _ASSIGN_LABELS:
+            raise ValueError(
                 f"mojolearn SpectralClustering: assign_labels="
-                f"{assign_labels!r} is refused; the k-means arm is the only "
-                "one cuVS has (cuML's spectral_clustering.pyx:165-167 "
-                "refuses the same)"
+                f"{assign_labels!r} must be one of {list(_ASSIGN_LABELS)}"
             )
+        if prediction_data and assign_labels != "kmeans":
+            raise NotImplementedError(
+                f"mojolearn SpectralClustering: prediction_data with "
+                f"assign_labels={assign_labels!r} is refused; the Nystrom "
+                "predict (DEVIATION 2860) assigns by the k-means centroids")
         if eigen_solver is not None:
             raise NotImplementedError(
                 f"mojolearn SpectralClustering: eigen_solver={eigen_solver!r} "
@@ -458,7 +473,7 @@ class SpectralClustering:
         #: scikit-learn's SpectralClustering default gamma is 1.0 (its
         #: SpectralEmbedding's is 1 / n_features).
         self.gamma = (1.0 if gamma is None else float(gamma)) if affinity == "rbf" else None
-        self.assign_labels = "kmeans"
+        self.assign_labels = assign_labels
         self._seed = seed
         self.prediction_data = prediction_data
 
@@ -637,13 +652,28 @@ class SpectralClustering:
                 f"mojolearn SpectralClustering: the kernel returned {n_out} "
                 f"embedding columns where {k} were expected"
             )
-        self.labels_ = labels_out
         self.embedding_ = embedding
         self.n_components_ = k
+        self.__dict__.pop("n_iter_assign_", None)
+        if self.assign_labels != "kmeans":
+            labels_out = self._assign(embedding, n, k)
+        self.labels_ = labels_out
         if state is not None:
             (self._pd_eigenvalues, self._pd_eigenvectors, self._pd_diag,
              self._pd_centroids) = state
         return self
+
+    def _assign(self, embedding, n, k):
+        """scikit-learn's discretize / cluster_qr on the fit's embedding, the
+        x_cluster binding's host code (ENTRY_SPECTRAL_ASSIGN)."""
+        from . import _expansion_cluster
+        b = _backend.binding(_expansion_cluster._XCluster._BINDING, getattr(self, "numeric_mode", None))
+        ip = [n, k, _ASSIGN_CODES[self.assign_labels], int(self._seed), 30, 20]
+        _f, i, sc = b.x_cluster_call(_E_SPECTRAL_ASSIGN, addr_ro(embedding, name="embedding"),
+                                     embedding.size, 0, 0, ip, [0.0])
+        if self.assign_labels == "discretize":
+            self.n_iter_assign_ = int(sc[0])
+        return Array._from_flat(i[0], (n,), "<i4")
 
     def _resolved_neighbors(self, n):
         """`SpectralEmbedding._precomputed_knn_affinity` reads this."""
