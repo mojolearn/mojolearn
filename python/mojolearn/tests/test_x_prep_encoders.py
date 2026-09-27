@@ -110,3 +110,39 @@ if __name__ == "__main__":
     test_ordinal_missing_and_inverse()
     test_onehot()
     print("PASS test_x_prep_encoders")
+
+
+def test_given_categories():
+    """categories=<list>: codes, one-hot blocks and the unknown handling equal
+    the reference; unsorted and unknown-at-fit refused as it refuses them."""
+    X = _data(4)
+    Xn = X.copy()
+    Xn[5:9, 1] = np.nan
+    cats = []
+    for j in range(X.shape[1]):
+        u = np.unique(Xn[:, j])
+        num = [float(v) for v in u if v == v]
+        num = sorted(num[:1] + num[2:] + [max(num) + 3.0])
+        cats.append(num + ([float("nan")] if np.isnan(u).any() else []))
+    kw = dict(handle_unknown="use_encoded_value", unknown_value=-1)
+    m, r = ml.OrdinalEncoder(categories=cats, **kw).fit(Xn), sk.OrdinalEncoder(categories=cats, **kw).fit(Xn)
+    for a, b in zip(m.categories_, r.categories_):
+        np.testing.assert_array_equal(np.asarray(a), b.astype(np.float32))
+    np.testing.assert_array_equal(np.asarray(m.transform(Xn)), r.transform(Xn))
+    for kw in (dict(handle_unknown="ignore"), dict(drop="first", handle_unknown="ignore")):
+        m = ml.OneHotEncoder(categories=cats, **kw).fit(Xn)
+        r = sk.OneHotEncoder(categories=cats, sparse_output=False, **kw).fit(Xn)
+        np.testing.assert_array_equal(np.asarray(m.transform(Xn)), r.transform(Xn))
+    for bad, exc in (([c[::-1] for c in cats], ValueError), (cats, ValueError)):
+        for cls in (ml.OrdinalEncoder, ml.OneHotEncoder):
+            try:
+                cls(categories=bad).fit(Xn)
+            except exc:
+                pass
+            else:
+                raise AssertionError(f"{cls.__name__} accepted {'unsorted' if bad is not cats else 'unknown'} categories")
+
+
+if __name__ == "__main__":
+    test_given_categories()
+    print("PASS test_x_prep_encoders (given categories)")

@@ -1,0 +1,21 @@
+diff --git a/xtrees/ops.mojo b/xtrees/ops.mojo
+--- a/xtrees/ops.mojo
++++ b/xtrees/ops.mojo
+@@ -462,6 +462,8 @@
+             var yi = Int(y[unsafe_offset=i])
+             for c in range(k):
+                 var p = rec[c] / s
++                comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
++                    p = p * 1.0000001  # DART OPTIONS SABOTAGE: the CPU column's softmax gradient only
+                 var gi = p - 1.0 if yi == c else p
+                 g[unsafe_offset=c * n + i] = gi
+                 h[unsafe_offset=c * n + i] = identical_mul64(identical_mul64(factor, p), 1.0 - p)
+@@ -502,6 +504,8 @@
+             var a = (s if s >= 0.0 else -s) - l1
+             var reg = a if a > 0.0 else 0.0
+             s = reg if s > 0.0 else (-reg if s < 0.0 else 0.0)
++            comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
++                s = s * 1.0000001  # DART OPTIONS SABOTAGE: the CPU column's L1 leaf only
+         var ret = -s / den
+         if max_delta_step > 0.0 and (ret if ret >= 0.0 else -ret) > max_delta_step:
+             ret = max_delta_step if ret > 0.0 else -max_delta_step
