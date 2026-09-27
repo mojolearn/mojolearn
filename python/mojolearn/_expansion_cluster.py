@@ -44,6 +44,24 @@ def _seed(random_state):
     return int(random_state) & ((1 << 63) - 1)
 
 
+def _callable_init(init, X, k, random_state):
+    """scikit-learn's callable `init` (`_kmeans.py::_init_centroids`:
+    `init(X, n_clusters, random_state=random_state)`): called ONCE on the
+    host with the fit's rows, a NumPy RandomState seeded by `random_state`
+    when NumPy is present (the int otherwise), and its centers then take
+    the array path, so the fit's bits depend only on what it returned.
+    scikit-learn's MiniBatchKMeans hands it an `init_size` subsample drawn
+    from its own stream; this hands it every row."""
+    rs = random_state
+    try:
+        import numpy as _np
+        X = _np.asarray(X)
+        rs = _np.random.RandomState(random_state)
+    except ImportError:
+        pass
+    return init(X, k, random_state=rs)
+
+
 class _XCluster(NumericModeMixin):
     """The lane's shared call: `x_cluster_call` on `_mojolearn_x_cluster`
     (the CPU host binding `_mojolearn_x_cluster_host` on a CPU-only install)."""
@@ -123,7 +141,8 @@ class MiniBatchKMeans(_CentersMixin, _XCluster):
     weight) or an (n_clusters, n_features) array; `sample_weight` weighs the
     k-means++ potentials, the init scoring and the batch draw, as
     scikit-learn's; `partial_fit` runs one step on the given rows with the
-    stream carried between calls. A callable init is refused by name
+    stream carried between calls. A callable init is called once on the
+    host and its centers take the array path (`_callable_init`)
     (x_cluster/NOT_IMPLEMENTED.tsv)."""
 
     def __init__(self, n_clusters=8, *, init="k-means++", max_iter=100, batch_size=1024,
@@ -157,10 +176,9 @@ class MiniBatchKMeans(_CentersMixin, _XCluster):
         if isinstance(self.init, str):
             if self.init not in ("k-means++", "random"):
                 raise ValueError(f"init must be 'k-means++', 'random' or an array, got {self.init!r}")
-        elif callable(self.init):
-            raise NotImplementedError("mojolearn MiniBatchKMeans: a callable init is not implemented")
         else:
-            init_arr = _f32(self.init, "init")
+            init_arr = _f32(_callable_init(self.init, X, k, self.random_state) if callable(self.init)
+                            else self.init, "init")
             if init_arr.shape != (k, d):
                 raise ValueError(f"The shape of the initial centers {init_arr.shape} does not match "
                                  f"the number of clusters {k} and features {d}.")
@@ -223,10 +241,9 @@ class MiniBatchKMeans(_CentersMixin, _XCluster):
                 if self.init not in ("k-means++", "random"):
                     raise ValueError(f"init must be 'k-means++', 'random' or an array, got {self.init!r}")
                 mode = 0 if self.init == "k-means++" else 1
-            elif callable(self.init):
-                raise NotImplementedError("mojolearn MiniBatchKMeans: a callable init is not implemented")
             else:
-                ia = _f32(self.init, "init")
+                ia = _f32(_callable_init(self.init, X, k, self.random_state) if callable(self.init)
+                          else self.init, "init")
                 if ia.shape != (k, d):
                     raise ValueError(f"The shape of the initial centers {ia.shape} does not match "
                                      f"the number of clusters {k} and features {d}.")

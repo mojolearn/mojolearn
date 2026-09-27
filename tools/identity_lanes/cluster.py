@@ -265,7 +265,8 @@ _batch_decl(_rows_calls("predict", sl=np.s_[:256, :8]), "x-cluster-minibatch-par
 def _(ml, X, yc, yr, Xh=None):
     """GaussianMixture option parity, routed to the cluster lane's mixture
     driver in plain mode: covariance_type tied/diag/spherical, init
-    'k-means++' with n_init 2, means_init and weights_init, and warm_start.
+    'k-means++' with n_init 2, means_init and weights_init, precisions_init,
+    and warm_start.
     The default GaussianMixture fit is the mixture lane's and is not here."""
     Z = X[:1500, 1:5]
     parts = {}
@@ -283,6 +284,10 @@ def _(ml, X, yc, yr, Xh=None):
                            random_state=3).fit(Z)
     parts["init_means"] = _h(m.means_)
     parts["init_weights"] = _h(m.weights_)
+    P = np.stack([np.eye(4, dtype=np.float32) * s for s in (1.0, 2.0, 0.5)])
+    m = ml.GaussianMixture(n_components=3, precisions_init=P, max_iter=25, random_state=3).fit(Z)
+    parts["pinit_means"] = _h(m.means_)
+    parts["pinit_prec"] = _h(m.precisions_cholesky_)
     m = ml.GaussianMixture(n_components=3, covariance_type="diag", warm_start=True, max_iter=5, random_state=3)
     m.fit(Z)
     m.fit(Z)
@@ -351,3 +356,29 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_batch_hdbscan, "x-cluster-hdbscan-epsilon")
+
+
+def _cluster_first_rows(X, k, random_state=None):
+    """A callable init (scikit-learn's signature): the first k rows."""
+    return np.ascontiguousarray(np.asarray(X)[:k], dtype=np.float32)
+
+
+@lane("x-cluster-kmeans-init")
+def _(ml, X, yc, yr, Xh=None):
+    """KMeans and MiniBatchKMeans option parity: init as an array of
+    centers and init as a callable (called once on the host, its centers
+    then take the array path; python/mojolearn/_expansion_cluster.py
+    `_callable_init`)."""
+    Z = X[:3000, :8]
+    c0 = np.ascontiguousarray(Z[100:106], dtype=np.float32)
+    ka = ml.KMeans(n_clusters=6, init=c0, max_iter=50).fit(Z)
+    kc = ml.KMeans(n_clusters=6, init=_cluster_first_rows, max_iter=50).fit(Z)
+    mb = ml.MiniBatchKMeans(n_clusters=6, init=_cluster_first_rows, batch_size=256, max_iter=5,
+                            random_state=3).fit(Z)
+    parts = dict(arr_centers=_h(ka.cluster_centers_), arr_labels=_h(ka.labels_),
+                 call_centers=_h(kc.cluster_centers_), call_labels=_h(kc.labels_),
+                 mb_centers=_h(mb.cluster_centers_), mb_labels=_h(mb.labels_))
+    return _fit(parts, kc, lambda e: (e.predict(Xh[:256, :8]),))
+
+
+_batch_decl(_rows_calls("predict", sl=np.s_[:256, :8]), "x-cluster-kmeans-init")
