@@ -18,6 +18,7 @@ from x_decomp.cells import (
     rowsum_part_cell,
     fold_cell,
     gemm_part_cell,
+    X_DECOMP_EIGH_SWEEPS,
     X_DECOMP_SVD_SWEEPS,
     X_DECOMP_SVD_TOL,
     I32Ptr,
@@ -432,7 +433,7 @@ struct DevExec(Exec):
         var m = List[Float32](capacity=n * n)
         for i in range(n * n):
             m.append(a.unsafe_load(i))
-        var got = device_eigh(m, n)
+        var got = device_eigh(m, n, X_DECOMP_EIGH_SWEEPS)
         for i in range(n):
             w.unsafe_store(i, got.w[i])
         for i in range(n * n):

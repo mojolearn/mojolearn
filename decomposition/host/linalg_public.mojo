@@ -167,7 +167,7 @@ struct EighHostResult(Movable):
     var executed: Int
 
 
-def host_eigh(a: List[Float32], n: Int) raises -> EighHostResult:
+def host_eigh(a: List[Float32], n: Int, max_sweeps: Int = JACOBI_SWEEPS) raises -> EighHostResult:
     """`numpy.linalg.eigh(a)` on the host, symmetric `a`, ASCENDING.
 
     `host_jacobi_eigh` consumes its argument and leaves the eigenvalues on
@@ -178,11 +178,11 @@ def host_eigh(a: List[Float32], n: Int) raises -> EighHostResult:
     """
     _validate_square(n, "eigh")
     var work = a.copy()
-    var got = host_jacobi_eigh(work, n, JACOBI_SWEEPS, Float32(JACOBI_TOL))
+    var got = host_jacobi_eigh(work, n, max_sweeps, Float32(JACOBI_TOL))
     if not got.converged:
         raise Error(
             "eigh: the Jacobi eigensolver did not converge in "
-            + String(JACOBI_SWEEPS)
+            + String(max_sweeps)
             + " sweeps at n = "
             + String(n)
             + ". An unconverged decomposition is not returned as if it were"

@@ -147,7 +147,7 @@ def device_qr_r(
     return r^
 
 
-def device_eigh(a: List[Float32], n: Int) raises -> EighHostResult:
+def device_eigh(a: List[Float32], n: Int, max_sweeps: Int = JACOBI_SWEEPS) raises -> EighHostResult:
     """`numpy.linalg.eigh(a)` on the device, symmetric `a`, ASCENDING.
 
     The pair `eig_and_truncate` launches -- `jacobi_eigh_kernel` at
@@ -176,7 +176,7 @@ def device_eigh(a: List[Float32], n: Int) raises -> EighHostResult:
         dv.unsafe_ptr(),
         dinfo.unsafe_ptr(),
         Int32(n),
-        Int32(JACOBI_SWEEPS),
+        Int32(max_sweeps),
         Float32(JACOBI_TOL),
         grid_dim=(1, 1, 1),
         block_dim=(JACOBI_ROT_TPB, 1, 1),
@@ -208,7 +208,7 @@ def device_eigh(a: List[Float32], n: Int) raises -> EighHostResult:
     if info[0] == Float32(0.0):
         raise Error(
             "eigh: the Jacobi eigensolver did not converge in "
-            + String(JACOBI_SWEEPS)
+            + String(max_sweeps)
             + " sweeps at n = "
             + String(n)
             + ": ||offdiag(A)||_F / ||A||_F is still "
