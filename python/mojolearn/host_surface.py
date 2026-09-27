@@ -3373,6 +3373,12 @@ PUBLIC_PENDING_LANES = {
     # par-forecast-holtwinters at the estimated-initialization default. Apple M4, arm64 CPU,
     # NVIDIA H100, AMD MI325X and x86-64 CPU agree on all nine fixtures
     # (bench/results/identity_break/2026-09-22_holtwinters-estimated-init/).
+    # 0.8.23 (DEVIATION 3133): GaussianMixture's kmeans init moved to classic
+    # k-means++, so these two lanes' IDENTICAL bits moved past the shipped
+    # table on purpose (LANE_REVISIONS classic-kmeanspp-init-1). They leave
+    # this table when the 0.8.23 record regenerates the reference.
+    "gmm": "stale reference",
+    "gmm-sample": "stale reference",
 }
 
 
@@ -3723,7 +3729,9 @@ PUBLIC_REFERENCE_CANDIDATES = ()
 PUBLIC_REFERENCE_PROMOTED = (
     "gbdt-query-rmse",
     "gmm-random-init-sample",
-    "gmm-sample",
+    # "gmm-sample" is out while its reference is stale (0.8.23, DEVIATION
+    # 3133, PUBLIC_PENDING_LANES); it returns when the 0.8.23 record
+    # regenerates the table.
     "gp-normalize-y",
     "gp-optimize",
     "gp-optimize-restarts",
