@@ -28,7 +28,7 @@ from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty, full, zeros
 from ._labels import decode_labels, encode_labels, is_bool
 from ._mode import NumericModeMixin
 from ._forest_protocol import forest_estimator, _forest_fit_function
-from .extratrees import ExtraTreesRegressor
+from .extratrees import ExtraTreesRegressor, ExtraTreesClassifier as _ET_CLS
 from .randomforest import (
     RandomForestClassifier, RandomForestRegressor, _class_weight_rows, _refuse,
 )
@@ -111,11 +111,35 @@ def _trees_weighted_rows(sample_weight, class_weight, classes, codes):
 _DT_DEPTH = None
 
 
-def _dt_common(splitter, max_features):
-    if splitter != "best":
-        _refuse(f"splitter={splitter!r}", "only the best-split (quantile) search"
-                " exists on this tree; the random splitter is ExtraTrees'.")
-    return max_features
+def _dt_common(splitter, max_features, max_leaf_nodes):
+    """The random splitter is ExtraTrees' builder (Geurts: one random
+    threshold per candidate feature), fitted as ONE tree without bootstrap;
+    best-first growth (`max_leaf_nodes`) exists on that builder only."""
+    if splitter not in ("best", "random"):
+        raise ValueError(f"splitter must be 'best' or 'random', got {splitter!r}")
+    if splitter == "best" and max_leaf_nodes is not None:
+        _refuse("max_leaf_nodes with splitter='best'", "best-first growth exists on the random"
+                " splitter's builder (extratrees/, DEVIATIONS 466-469); pass splitter='random'.")
+    return None if splitter == "random" else max_leaf_nodes
+
+
+def _dt_random_fit(est, cls, X, y, **extra):
+    """splitter='random': one ExtraTrees tree; its flat arrays become this
+    estimator's, and predict delegates to it."""
+    inner = cls(n_estimators=1, bootstrap=False, max_features=1.0 if est.max_features is None else est.max_features,
+                max_depth=est.max_depth, min_samples_split=est.min_samples_split,
+                min_samples_leaf=est.min_samples_leaf, max_leaf_nodes=est.max_leaf_nodes,
+                min_impurity_decrease=est.min_impurity_decrease, criterion=est.criterion,
+                random_state=0 if est.random_state is None else est.random_state,
+                numeric_mode=est.numeric_mode, **extra).fit(X, y)
+    est._random_inner = inner
+    for name in ("_offsets", "_colid", "_quesval", "_left_child", "_leaves", "_n_trees", "_num_outputs",
+                 "n_features_in_"):
+        setattr(est, name, getattr(inner, name))
+    if hasattr(inner, "classes_"):
+        est.classes_ = inner.classes_
+        est.n_classes_ = len(inner.classes_)
+    return est
 
 
 @forest_estimator("classifier")
@@ -148,12 +172,12 @@ class DecisionTreeClassifier(RandomForestClassifier):
         device="gpu",
         inference_engine="auto",
     ):
-        _dt_common(splitter, max_features)
+        rf_leaves = _dt_common(splitter, max_features, max_leaf_nodes)
         super().__init__(
             n_estimators=1, criterion=criterion, max_depth=max_depth,
             min_samples_split=min_samples_split, min_samples_leaf=min_samples_leaf,
             min_weight_fraction_leaf=min_weight_fraction_leaf, max_features=max_features,
-            max_leaf_nodes=max_leaf_nodes, min_impurity_decrease=min_impurity_decrease,
+            max_leaf_nodes=rf_leaves, min_impurity_decrease=min_impurity_decrease,
             bootstrap=False, random_state=random_state, class_weight=class_weight,
             ccp_alpha=ccp_alpha, monotonic_cst=monotonic_cst, n_bins=n_bins,
             n_streams=1, device=device, inference_engine=inference_engine,
@@ -161,6 +185,11 @@ class DecisionTreeClassifier(RandomForestClassifier):
         self.splitter = splitter
 
     def fit(self, X, y, sample_weight=None):
+        if self.splitter == "random":
+            if sample_weight is not None or self.class_weight is not None:
+                _refuse("splitter='random' with weights", "the ExtraTrees builder takes no row weights.")
+            self._refresh_config()
+            return _dt_random_fit(self, _ET_CLS, X, y)
         if sample_weight is None:
             return self._fit_with_tree_start(X, y)
         self._refresh_config()
@@ -182,6 +211,19 @@ class DecisionTreeClassifier(RandomForestClassifier):
 
     def get_n_leaves(self):
         return _trees_n_leaves(self)
+
+    def predict_proba(self, X):
+        inner = getattr(self, "_random_inner", None)
+        return inner.predict_proba(X) if inner is not None else super().predict_proba(X)
+
+    def predict(self, X):
+        inner = getattr(self, "_random_inner", None)
+        return inner.predict(X) if inner is not None else super().predict(X)
+
+    def save(self, path):
+        if getattr(self, "_random_inner", None) is not None:
+            raise NotImplementedError("a splitter='random' tree saves through ExtraTrees; not carried yet")
+        return super().save(path)
 
 
 @forest_estimator("regressor")
@@ -209,12 +251,12 @@ class DecisionTreeRegressor(RandomForestRegressor):
         device="gpu",
         inference_engine="auto",
     ):
-        _dt_common(splitter, max_features)
+        rf_leaves = _dt_common(splitter, max_features, max_leaf_nodes)
         super().__init__(
             n_estimators=1, criterion=criterion, max_depth=max_depth,
             min_samples_split=min_samples_split, min_samples_leaf=min_samples_leaf,
             min_weight_fraction_leaf=min_weight_fraction_leaf, max_features=max_features,
-            max_leaf_nodes=max_leaf_nodes, min_impurity_decrease=min_impurity_decrease,
+            max_leaf_nodes=rf_leaves, min_impurity_decrease=min_impurity_decrease,
             bootstrap=False, random_state=random_state, ccp_alpha=ccp_alpha,
             monotonic_cst=monotonic_cst, n_bins=n_bins, n_streams=1, device=device,
             inference_engine=inference_engine,
@@ -225,6 +267,9 @@ class DecisionTreeRegressor(RandomForestRegressor):
         if sample_weight is not None:
             _refuse("DecisionTreeRegressor sample_weight", "the regressor fit entry"
                     " carries no row weights.")
+        if self.splitter == "random":
+            self._refresh_config()
+            return _dt_random_fit(self, ExtraTreesRegressor, X, y)
         return self._fit_with_tree_start(X, y)
 
     def get_depth(self):
@@ -232,6 +277,15 @@ class DecisionTreeRegressor(RandomForestRegressor):
 
     def get_n_leaves(self):
         return _trees_n_leaves(self)
+
+    def predict(self, X):
+        inner = getattr(self, "_random_inner", None)
+        return inner.predict(X) if inner is not None else super().predict(X)
+
+    def save(self, path):
+        if getattr(self, "_random_inner", None) is not None:
+            raise NotImplementedError("a splitter='random' tree saves through ExtraTrees; not carried yet")
+        return super().save(path)
 
 
 def _trees_depth(est):

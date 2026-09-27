@@ -43,6 +43,7 @@ Sanity tests need scikit-learn: on the pod it is in /root/skl
 ## Pass 2
 | step | commit | verdict |
 |---|---|---|
+| option parity: SimpleImputer(add_indicator=True) | (this commit) | x-prep-simple-imputer-indicator AGREE (batch 9, infer 9, train 9); x-prep-simple-imputer SAME BITS |
 | option parity: RobustScaler(unit_variance=True) | (this commit) | x-prep-robust-scaler-unit-variance AGREE (batch 9, infer 9, train 9); robust / quantile lanes SAME BITS |
 | end-to-end sabotage `e2e_host_branch.patch` on the 21 summing lanes | 310afeee0 | AGREE, DISAGREE under it on all 21, AGREE after reversal (H100) |
 | option parity: priors / class_prior (GaussianNB, the discrete NBs, LDA incl. renormalisation, QDA) | (this commit) | x-prep-priors AGREE (infer 9, train 9); existing NB/DA lanes' cells SAME BITS vs the pass-2 run |
@@ -61,7 +62,14 @@ Sanity tests need scikit-learn: on the pod it is in /root/skl
   store_lanes + e2e_store_branch (every lane covered, with x-prep-robust-scaler-unit-variance
   in sum_lanes).
 - Option parity: work down x_prep/NOT_IMPLEMENTED.tsv and naive_bayes/NOT_IMPLEMENTED.tsv
-  (done: priors/class_prior, RobustScaler unit_variance).
+  (done: priors/class_prior, RobustScaler unit_variance, SimpleImputer add_indicator).
+- Steward requests pending at hand-off (`tools/apple_steward.py status`): 1790529624248-prep-4de76eb6e1
+  (sum lanes + e2e_host_branch) and 1790529633391-prep-4de76eb6e1 (store lanes + e2e_store_branch);
+  merge gating is m2pro PASS + do-amd PASS. x-prep-simple-imputer-indicator (c73e49116) still
+  needs a steward request.
+- Next options, in order: QuantileTransformer / PowerTransformer inverse_transform, OrdinalEncoder
+  encoded_missing_value, LabelBinarizer inverse_transform, KBins inverse_transform, TargetEncoder
+  stratified folds, LDA lsqr/eigen + shrinkage, sample_weight for the NBs.
 - Then speed (IDENTICAL/FAST, NVIDIA, Apple via `--kind speed`, CPU; AMD last).
 Helper scripts (not in the repo): ~/mojolearn-evidence/algos-prep/{qsync,gate,commit,mkpatches,addlane,samebits}.sh|py;
 qsync sends every file differing from ~/mojolearn-evidence/algos-prep/pod_base; the pass-2

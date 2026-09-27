@@ -1,0 +1,20 @@
+--- a/x_cluster/bodies.mojo
++++ b/x_cluster/bodies.mojo
+@@ -19,7 +19,7 @@
+ """
+ from std.memory import bitcast
+ 
+-from checks.numerics import ftz, identical_div, identical_exp, identical_log, identical_mul, identical_pow, identical_sqrt
++from checks.numerics import identical_mul_add, ftz, identical_div, identical_exp, identical_log, identical_mul, identical_pow, identical_sqrt
+ 
+ comptime FPtr = MutPointer[Float32, MutAnyOrigin]
+ comptime IPtr = MutPointer[Int32, MutAnyOrigin]
+@@ -168,7 +168,7 @@
+         var sub = second if k == arg else first
+         var new = ftz(s_m[i * n + k] - sub)
+         var old = r_m[i * n + k]
+-        r_m[i * n + k] = ftz(ftz(identical_mul(old, damping)) + ftz(identical_mul(new, one_minus)))
++        r_m[i * n + k] = ftz(identical_mul_add(old, damping, ftz(identical_mul(new, one_minus))))
+ 
+ 
+ # DEVIATION 5106 (the availability column fold ascending, the clamp at 0

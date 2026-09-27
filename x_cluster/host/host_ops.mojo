@@ -18,6 +18,7 @@ from x_cluster.bodies import (
     exp_cell,
     gauss_q_cell,
     nk_cell,
+    pdist_cell,
     resp_row,
     xk_cell,
     ap_availability_col,
@@ -136,7 +137,7 @@ struct HostOps(ClusterOps):
         var pr = self._fp(r)
         var pa = self._fp(a)
         for t in range(n):
-            ap_availability_col(pr, pa, n, damping, t)
+            ap_availability_col[X_CLUSTER_HOST_SABOTAGE](pr, pa, n, damping, t)
 
     def ap_e(mut self, a: Int, r: Int, n: Int, e: Int) raises:
         var pa = self._fp(a)
@@ -156,11 +157,12 @@ struct HostOps(ClusterOps):
     def kmeans(
         mut self, x: List[Float32], n: Int, d: Int, k: Int, max_iter: Int, tol: Float64,
         seed: UInt64, n_init: Int, init: Int, mut centers: List[Float32], mut labels: List[Int32],
+        weights: List[Float32] = List[Float32](),
     ) raises -> Float64:
         centers = List[Float32](length=k * d, fill=Float32(0))
         var lab = List[UInt32](length=n, fill=UInt32(0))
         var r = host_kmeans_fit(
-            x, n, d, k, centers, lab, List[Float32](), 0, max_iter, tol, seed, n_init, init,
+            x, n, d, k, centers, lab, weights, len(weights), max_iter, tol, seed, n_init, init,
             METRIC_L2_EXPANDED,
         )
         labels = List[Int32](capacity=n)
@@ -203,3 +205,12 @@ struct HostOps(ClusterOps):
             xk_cell(pr, px, n, d, kc, pn, pm, t)
         for t in range(kc * d * d):
             cov_cell(pr, px, n, d, kc, pm, pn, reg, pc, t)
+
+    def pdist(
+        mut self, a: Int, na: Int, b: Int, nb: Int, d: Int, metric: Int, p: Float32, dst: Int
+    ) raises:
+        var pa = self._fp(a)
+        var pb = self._fp(b)
+        var pd = self._fp(dst)
+        for t in range(na * nb):
+            pdist_cell[X_CLUSTER_HOST_SABOTAGE](pa, na, pb, nb, d, metric, p, pd, t)
