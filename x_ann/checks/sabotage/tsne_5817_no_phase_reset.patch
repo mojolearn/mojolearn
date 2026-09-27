@@ -1,0 +1,11 @@
+--- a/x_ann/tsne_device.mojo
++++ b/x_ann/tsne_device.mojo
+@@ -147,7 +147,7 @@
+         var end = exploration if phase == 0 else max_iter
+         if it >= end:
+             continue
+-        if phase == 1:
++        if phase == 1 and False:
+             dupd = upload_f32(ctx, List[Float32](length=nc * n, fill=Float32(0.0)))
+             dgain = upload_f32(ctx, List[Float32](length=nc * n, fill=Float32(1.0)))
+         var ex = exaggeration if phase == 0 else Float32(1.0)

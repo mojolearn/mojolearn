@@ -1,0 +1,11 @@
+--- a/x_ann/tsne_core.mojo
++++ b/x_ann/tsne_core.mojo
+@@ -188,8 +188,6 @@
+     var q = ftz(identical_div(fd, ftz(fd + acc)))
+     if dof == 1:
+         return q
+-    if dof == 2:
+-        return ftz(identical_mul(q, ftz(identical_sqrt(q))))
+     return ftz(identical_pow(q, identical_div(Float32(dof + 1), Float32(2.0))))
+ 
+ 

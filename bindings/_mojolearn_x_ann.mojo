@@ -74,8 +74,9 @@ def ivf_pq_search_binding(addrs: PythonObject, params: PythonObject) raises -> P
 
 
 def tsne_fit_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    """addrs: x, y0, y_out, kl_out (one float32).
-    params: n, d, max_iter, exploration_iters, perplexity, early_exaggeration, learning_rate."""
+    """addrs: x, y0 (n x n_components), y_out, kl_out (one float32), n_iter_out (one int32).
+    params: n, d, max_iter, exploration_iters, perplexity, early_exaggeration, learning_rate,
+    n_components, exact (0/1), n_iter_without_progress, min_grad_norm."""
     var n = p_int(params, 0)
     var d = p_int(params, 1)
     var max_iter = p_int(params, 2)
@@ -83,14 +84,21 @@ def tsne_fit_binding(addrs: PythonObject, params: PythonObject) raises -> Python
     var perplexity = Float32(Float64(py=params[4]))
     var exaggeration = Float32(Float64(py=params[5]))
     var lr = Float32(Float64(py=params[6]))
+    var nc = p_int(params, 7)
+    var exact = p_int(params, 8) != 0
+    var patience = p_int(params, 9)
+    var min_grad_norm = Float32(Float64(py=params[10]))
     var x = in_f32(addrs, 0, n * d)
-    var y0 = in_f32(addrs, 1, n * 2)
+    var y0 = in_f32(addrs, 1, n * nc)
     var y = List[Float32]()
     var kl = Float32(0.0)
+    var n_iter = 0
     with GILReleased(Python()):
-        tsne_fit_device(x, n, d, y0, perplexity, exaggeration, lr, max_iter, exploration, y, kl)
+        tsne_fit_device(x, n, d, nc, y0, perplexity, exaggeration, lr, max_iter, exploration, exact, patience, min_grad_norm,
+            y, kl, n_iter)
     out_f32(y, addrs, 2)
     out_f32([kl], addrs, 3)
+    out_i32([Int32(n_iter)], addrs, 4)
     return PythonObject(n)
 
 

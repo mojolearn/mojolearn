@@ -22,7 +22,7 @@ FAMILIES = (
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=("x-ann-ivf-pq", "x-ann-tsne", "x-ann-cagra", "x-ann-ivf-sq", "x-ann-refine", "x-ann-filter",
-                        "x-ann-ivf-rabitq"),
+                        "x-ann-ivf-rabitq", "x-ann-tsne-options"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("IVFPQIndex", "TSNE", "CagraIndex", "IVFSQIndex", "IVFRaBitQIndex"),
@@ -43,7 +43,8 @@ FAMILIES = (
 TRAINING_LANE_NAMES = {"x-ann-ivf-pq": "the IVF-PQ index", "x-ann-tsne": "t-SNE", "x-ann-cagra": "the CAGRA graph index",
                        "x-ann-ivf-sq": "the IVF-SQ index", "x-ann-refine": "exact candidate refine",
                        "x-ann-filter": "the IVF sample filter",
-                       "x-ann-ivf-rabitq": "the IVF-RaBitQ index"}
+                       "x-ann-ivf-rabitq": "the IVF-RaBitQ index",
+                       "x-ann-tsne-options": "t-SNE with sklearn's options"}
 PUBLIC_PENDING_LANES = {"x-ann-ivf-pq": "no reference", "x-ann-tsne": "no reference", "x-ann-cagra": "no reference",
                         "x-ann-ivf-sq": "no reference", "x-ann-refine": "no reference", "x-ann-filter": "no reference",
-                        "x-ann-ivf-rabitq": "no reference"}
+                        "x-ann-ivf-rabitq": "no reference", "x-ann-tsne-options": "no reference"}

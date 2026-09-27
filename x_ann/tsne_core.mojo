@@ -28,7 +28,9 @@ THE FIXED-ORDER DESIGN
     step; refused by name, the loop runs exactly `max_iter` steps).
 """
 
-from checks.numerics import ftz, identical_div, identical_exp, identical_log, identical_mul, identical_mul_add
+from checks.numerics import (
+    ftz, identical_div, identical_exp, identical_log, identical_mul, identical_mul_add, identical_pow, identical_sqrt,
+)
 
 comptime F32P = MutPointer[Float32, MutAnyOrigin]
 comptime I32P = MutPointer[Int32, MutAnyOrigin]
@@ -174,35 +176,43 @@ def tsne_symmetrize(
 
 
 @always_inline
-def ts_q(y: F32P, i: Int, j: Int) -> Float32:
-    """The Student-t kernel 1 / (1 + ||y_i - y_j||^2), two components."""
-    var d0 = ftz(ftz(y.unsafe_load(2 * i)) - ftz(y.unsafe_load(2 * j)))
-    var d1 = ftz(ftz(y.unsafe_load(2 * i + 1)) - ftz(y.unsafe_load(2 * j + 1)))
-    var acc = ftz(identical_mul_add(d0, d0, Float32(0.0)))
-    acc = ftz(identical_mul_add(d1, d1, acc))
-    return ftz(identical_div(Float32(1.0), ftz(Float32(1.0) + acc)))
+def ts_q(y: F32P, i: Int, j: Int, nc: Int, dof: Int) -> Float32:
+    """The Student-t kernel (dof / (dof + ||y_i - y_j||^2)) ** ((dof + 1) / 2),
+    components ascending; dof = max(n_components - 1, 1) as sklearn. dof 1
+    is one quotient, dof 2 is q * sqrt(q), others `identical_pow`."""
+    var acc = Float32(0.0)
+    for c in range(nc):
+        var dd = ftz(ftz(y.unsafe_load(i * nc + c)) - ftz(y.unsafe_load(j * nc + c)))
+        acc = ftz(identical_mul_add(dd, dd, acc))
+    var fd = Float32(dof)
+    var q = ftz(identical_div(fd, ftz(fd + acc)))
+    if dof == 1:
+        return q
+    if dof == 2:
+        return ftz(identical_mul(q, ftz(identical_sqrt(q))))
+    return ftz(identical_pow(q, identical_div(Float32(dof + 1), Float32(2.0))))
 
 
 @always_inline
-def ts_repulse_cell(i: Int, y: F32P, n: Int, row_z: F32P, rep: F32P):
-    """row_z[i] = sum_{j != i} q_ij; rep[i] = sum_j q_ij^2 (y_i - y_j), j
-    ascending (DEVIATION 5813; Z over rows ascending in `ts_sum_cell`)."""
+def ts_repulse_cell(e: Int, y: F32P, n: Int, nc: Int, dof: Int, row_z: F32P, rep: F32P):
+    """Cell e = i * nc + c: rep[e] = sum_j q_ij^2 (y_ic - y_jc), and for c = 0
+    row_z[i] = sum_{j != i} q_ij, j ascending (DEVIATION 5813; Z over rows
+    ascending in `ts_sum_cell`)."""
+    var i = e // nc
+    var c = e % nc
     var z = Float32(0.0)
-    var r0 = Float32(0.0)
-    var r1 = Float32(0.0)
-    var y0 = ftz(y.unsafe_load(2 * i))
-    var y1 = ftz(y.unsafe_load(2 * i + 1))
+    var r = Float32(0.0)
+    var yi = ftz(y.unsafe_load(e))
     for j in range(n):
         if j == i:
             continue
-        var q = ts_q(y, i, j)
+        var q = ts_q(y, i, j, nc, dof)
         z = ftz(z + q)
         var qq = ftz(identical_mul(q, q))
-        r0 = ftz(r0 + ftz(identical_mul(qq, ftz(y0 - ftz(y.unsafe_load(2 * j))))))
-        r1 = ftz(r1 + ftz(identical_mul(qq, ftz(y1 - ftz(y.unsafe_load(2 * j + 1))))))
-    row_z.unsafe_store(i, z)
-    rep.unsafe_store(2 * i, r0)
-    rep.unsafe_store(2 * i + 1, r1)
+        r = ftz(r + ftz(identical_mul(qq, ftz(yi - ftz(y.unsafe_load(j * nc + c))))))
+    rep.unsafe_store(e, r)
+    if c == 0:
+        row_z.unsafe_store(i, z)
 
 
 @always_inline
@@ -215,23 +225,25 @@ def ts_sum_cell(row_z: F32P, n: Int, z: F32P):
 
 @always_inline
 def ts_step_cell(
-    e: Int, y: F32P, y_new: F32P, indptr: I32P, indices: I32P, values: F32P,
-    rep: F32P, z: F32P, update: F32P, gains: F32P, exaggeration: Float32,
+    e: Int, y: F32P, y_new: F32P, nc: Int, dof: Int, indptr: I32P, indices: I32P, values: F32P,
+    rep: F32P, z: F32P, update: F32P, gains: F32P, gnorm_buf: F32P, exaggeration: Float32,
     momentum: Float32, learning_rate: Float32,
 ):
-    """One coordinate e = 2 i + c: gradient (the CSR attraction ascending,
-    DEVIATION 5814), gains (strict `update * grad < 0`, DEVIATION 5815),
-    momentum update."""
-    var i = e // 2
-    var c = e % 2
+    """One coordinate e = i * nc + c: gradient (the CSR attraction ascending,
+    DEVIATION 5814; sklearn's factor 2 (dof + 1) / dof), gains (strict
+    `update * grad < 0`, DEVIATION 5815), momentum update. The gained
+    gradient is kept for the grad-norm stop."""
+    var i = e // nc
+    var c = e % nc
     var yi = ftz(y.unsafe_load(e))
     var attr = Float32(0.0)
     for s in range(Int(indptr.unsafe_load(i)), Int(indptr.unsafe_load(i + 1))):
         var j = Int(indices.unsafe_load(s))
-        var pq = ftz(identical_mul(ftz(values.unsafe_load(s)), ts_q(y, i, j)))
-        attr = ftz(attr + ftz(identical_mul(pq, ftz(yi - ftz(y.unsafe_load(2 * j + c))))))
+        var pq = ftz(identical_mul(ftz(values.unsafe_load(s)), ts_q(y, i, j, nc, dof)))
+        attr = ftz(attr + ftz(identical_mul(pq, ftz(yi - ftz(y.unsafe_load(j * nc + c))))))
     var neg = ftz(identical_div(rep.unsafe_load(e), z.unsafe_load(0)))
-    var grad = ftz(identical_mul(Float32(4.0), ftz(ftz(identical_mul(exaggeration, attr)) - neg)))
+    var cfac = ftz(identical_div(Float32(2 * (dof + 1)), Float32(dof)))
+    var grad = ftz(identical_mul(cfac, ftz(ftz(identical_mul(exaggeration, attr)) - neg)))
     var upd = update.unsafe_load(e)
     var gain = gains.unsafe_load(e)
     if ftz(identical_mul(upd, grad)) < Float32(0.0):
@@ -244,33 +256,60 @@ def ts_step_cell(
     upd = ftz(ftz(identical_mul(momentum, upd)) - ftz(identical_mul(learning_rate, grad)))
     gains.unsafe_store(e, gain)
     update.unsafe_store(e, upd)
+    gnorm_buf.unsafe_store(e, grad)
     y_new.unsafe_store(e, ftz(yi + upd))
 
 
+comptime TS_TINY: Float32 = 1.1754944e-38
+
+
 @always_inline
-def ts_kl_cell(i: Int, y: F32P, indptr: I32P, indices: I32P, values: F32P, z: F32P, kl: F32P):
-    """Row i's share of KL(P || Q) over P's support (sklearn's BH error)."""
+def ts_kl_cell(
+    i: Int, y: F32P, nc: Int, dof: Int, indptr: I32P, indices: I32P, values: F32P, z: F32P,
+    exaggeration: Float32, kl: F32P,
+):
+    """Row i's share of KL(P || Q) over P's support, P scaled by the current
+    exaggeration and both clamped at FLOAT32_TINY (sklearn's BH error)."""
     var acc = Float32(0.0)
     var zz = z.unsafe_load(0)
     for s in range(Int(indptr.unsafe_load(i)), Int(indptr.unsafe_load(i + 1))):
         var j = Int(indices.unsafe_load(s))
-        var p = ftz(values.unsafe_load(s))
-        var q = ftz(identical_div(ts_q(y, i, j), zz))
-        var pp = p if p > Float32(1.1920929e-07) else Float32(1.1920929e-07)
-        var qq = q if q > Float32(1.1920929e-07) else Float32(1.1920929e-07)
+        var p = ftz(identical_mul(ftz(values.unsafe_load(s)), exaggeration))
+        var q = ftz(identical_div(ts_q(y, i, j, nc, dof), zz))
+        var pp = p if p > TS_TINY else TS_TINY
+        var qq = q if q > TS_TINY else TS_TINY
         acc = ftz(acc + ftz(identical_mul(p, ftz(identical_log(ftz(identical_div(pp, qq)))))))
     kl.unsafe_store(i, acc)
 
 
-def tsne_validate(n: Int, d: Int, perplexity: Float32, max_iter: Int, exploration: Int) raises:
-    if n < 2 or d <= 0:
-        raise Error("TSNE: at least two rows and one feature required")
+def ts_fold(v: List[Float32]) -> Float32:
+    """A host fold, ascending: the KL total and the squared grad norm."""
+    var acc = Float32(0.0)
+    for i in range(len(v)):
+        acc = ftz(acc + v[i])
+    return acc
+
+
+def ts_sq_fold(v: List[Float32]) -> Float32:
+    var acc = Float32(0.0)
+    for i in range(len(v)):
+        acc = ftz(identical_mul_add(v[i], v[i], acc))
+    return acc
+
+
+def tsne_validate(n: Int, d: Int, nc: Int, perplexity: Float32, max_iter: Int, exploration: Int) raises:
+    if n < 2 or d <= 0 or nc < 1:
+        raise Error("TSNE: at least two rows, one feature and one component required")
     if not (perplexity > Float32(0.0)) or perplexity >= Float32(n):
         raise Error("TSNE: perplexity must be in (0, n_samples)")
     if max_iter < 1 or exploration < 0 or exploration > max_iter:
         raise Error("TSNE: need max_iter >= 1 and 0 <= exploration steps <= max_iter")
 
 
-def tsne_nn(n: Int, perplexity: Float32) -> Int:
+def tsne_nn(n: Int, perplexity: Float32, exact: Bool = False) -> Int:
+    """sklearn's neighbour count min(n - 1, int(3 * perplexity + 1)); the
+    exact method takes every other row."""
+    if exact:
+        return n - 1
     var k = Int(identical_mul(Float32(3.0), perplexity)) + 1
     return k if k < n - 1 else n - 1
