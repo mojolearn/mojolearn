@@ -18,4 +18,4 @@ PyG GCNConv sparse (SparseTensor) adjacency	not carried	edge_index (2, E) only
 PyG SAGEConv aggr max	IMPLEMENTED (option parity)	sage_max_fwd_at; the backward splits among ties as scatter_reduce 'amax' (DEVIATION 5713)
 PyG SAGEConv aggr lstm/softmax/other Aggregation modules	refused by name (NotImplementedError)	
 PyG SAGEConv normalize=True	IMPLEMENTED (option parity)	l2norm_fwd_at / l2norm_bwd_at
-PyG SAGEConv project=True	NOT IMPLEMENTED	a Linear + ReLU on the source features before aggregation
+PyG SAGEConv project=True	IMPLEMENTED (option parity)	relu(lin(x)) on the source features before aggregation (existing linear + relu ops); the root term keeps the unprojected x

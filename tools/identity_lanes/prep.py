@@ -104,6 +104,35 @@ def _(ml, X, yc, yr, Xh=None):
 _batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_prep_categorical_nan), "x-prep-encoder-options")
 
 
+@lane("x-prep-encoder-categories")
+def _(ml, X, yc, yr, Xh=None):
+    """OrdinalEncoder / OneHotEncoder categories=<list>: per column the
+    training values' sorted distinct set with one value dropped and one never
+    seen added (NaN kept last), so both the unknown and the unused paths run."""
+    Xq, Xhq = _prep_categorical_nan(X), _prep_categorical_nan(Xh)
+    cats = []
+    for j in range(Xq.shape[1]):
+        u = np.unique(Xq[:, j])
+        num = [float(v) for v in u if v == v]
+        num = sorted(num[:1] + num[2:] + [float(np.float32(max(num) + 7.5))])
+        cats.append(num + ([float("nan")] if np.isnan(u).any() else []))
+    parts = {}
+    for j, kw in enumerate((dict(handle_unknown="use_encoded_value", unknown_value=-1),
+                            dict(handle_unknown="use_encoded_value", unknown_value=-1, encoded_missing_value=-2))):
+        m = ml.OrdinalEncoder(categories=cats, **kw).fit(Xq[:1000])
+        Z = m.transform(Xhq[:256])
+        parts[f"ord{j}"] = _h(*m.categories_, Z, m.inverse_transform(Z))
+    for j, kw in enumerate((dict(handle_unknown="ignore"), dict(drop="first", handle_unknown="ignore"))):
+        m = ml.OneHotEncoder(categories=cats, **kw).fit(Xq[:1000])
+        Z = m.transform(Xhq[:256])
+        parts[f"ohe{j}"] = _h(Z, m.inverse_transform(Z))
+    m = ml.OneHotEncoder(categories=cats, handle_unknown="ignore").fit(Xq)
+    return _fit(parts, m, lambda e: (e.transform(Xhq[:256]),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_prep_categorical_nan), "x-prep-encoder-categories")
+
+
 @lane("x-prep-target-encoder")
 def _(ml, X, yc, yr, Xh=None):
     Xq, Xhq = _prep_categorical(X), _prep_categorical(Xh)
@@ -233,6 +262,53 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("predict", "predict_proba", sl=slice(0, 256)), "x-prep-lda", "x-prep-qda")
+
+
+@lane("x-prep-da-solvers")
+def _(ml, X, yc, yr, Xh=None):
+    """LinearDiscriminantAnalysis solver 'lsqr' / 'eigen' with shrinkage None,
+    'auto' (Ledoit-Wolf) and a constant, store_covariance; QDA solver 'eigen'
+    with shrinkage and store_covariance."""
+    y3 = _prep_three_class(X, yr)
+    parts = {}
+    for j, kw in enumerate((dict(solver="lsqr"), dict(solver="lsqr", shrinkage="auto"),
+                            dict(solver="eigen", shrinkage=0.25), dict(solver="svd", store_covariance=True))):
+        m = ml.LinearDiscriminantAnalysis(**kw).fit(X, y3)
+        parts[f"lda{j}"] = _h(m.covariance_, m.coef_, m.intercept_, m.predict_proba(X[:256]))
+    # (the eigen / QDA arms take a constant shrinkage: the dupes fixture's classes are
+    # singular, and 'auto' can land within an ulp of the reference's refusal)
+    me = ml.LinearDiscriminantAnalysis(solver="eigen", shrinkage=0.5).fit(X, yc)
+    parts["eigen_binary"] = _h(me.coef_, me.explained_variance_ratio_, me.transform(X[:256]))
+    for j, kw in enumerate((dict(solver="eigen", shrinkage=0.3, store_covariance=True),
+                            dict(solver="svd", reg_param=0.05, store_covariance=True))):
+        q = ml.QuadraticDiscriminantAnalysis(**kw).fit(X, y3)
+        parts[f"qda{j}"] = _h(*q.covariance_, q.predict_proba(X[:256]))
+    m = ml.LinearDiscriminantAnalysis(solver="eigen", shrinkage=0.25).fit(X, y3)
+    return _fit(parts, m, lambda e: (e.predict_proba(Xh[:256]), e.transform(Xh[:256])))
+
+
+_batch_decl(_rows_calls("predict", "predict_proba", sl=slice(0, 256)), "x-prep-da-solvers")
+
+
+@lane("x-prep-nb-weights")
+def _(ml, X, yc, yr, Xh=None):
+    """sample_weight for every naive Bayes classifier; CategoricalNB min_categories."""
+    y3 = _prep_three_class(X, yr)
+    w = (np.abs(X[:, 0]) * 2 + 0.25).astype(np.float32)
+    parts = {}
+    g = ml.GaussianNB().fit(X, y3, sample_weight=w)
+    parts["gnb"] = _h(g.theta_, g.var_, g.class_count_, g.predict_proba(X[:256]))
+    Xa = _prep_abs(X)
+    for nm in ("MultinomialNB", "ComplementNB", "BernoulliNB"):
+        m = getattr(ml, nm)().fit(Xa if nm != "BernoulliNB" else X, y3, sample_weight=w)
+        parts[nm] = _h(m.feature_count_, m.class_count_, m.feature_log_prob_)
+    Xc = _prep_cat_codes(X)
+    c = ml.CategoricalNB(min_categories=7).fit(Xc, y3, sample_weight=w)
+    parts["cat"] = _h(*c.feature_log_prob_, c.class_count_, c.predict_proba(Xc[:256]))
+    return _fit(parts, g, lambda e: (e.predict_proba(Xh[:256]),))
+
+
+_batch_decl(_rows_calls("predict", "predict_proba", sl=slice(0, 256)), "x-prep-nb-weights")
 
 
 @lane("x-prep-quantile-transformer")
@@ -445,6 +521,35 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("predict", "transform", sl=slice(0, 256)), "x-prep-rfe")
+
+
+@lane("x-prep-score-edges")
+def _(ml, X, yc, yr, Xh=None):
+    """The reference's NaN / +inf score edges (f_classif of a constant and of
+    a within-class-constant feature, chi2 of an all-zero feature),
+    f_regression / r_regression with force_finite on and off, and RFE with
+    importance_getter as a dotted path and as a callable."""
+    y3 = _prep_three_class(X, yr)
+    Xe = np.array(X[:, :6], dtype=np.float32)
+    Xe[:, 1] = 2.5
+    Xe[:, 2] = y3.astype(np.float32)
+    Xz = np.abs(Xe)
+    Xz[:, 4] = 0
+    Xr = Xe.copy()
+    Xr[:, 3] = yr * 2
+    parts = dict(fc=_h(*ml.f_classif(Xe, y3)), c2=_h(*ml.chi2(Xz, y3)),
+                 kbest=_h(np.array(ml.SelectKBest(k=3).fit(Xe, y3).get_support())))
+    for ff in (True, False):
+        parts[f"fr{int(ff)}"] = _h(*ml.f_regression(Xr, yr, force_finite=ff))
+        parts[f"rr{int(ff)}"] = _h(ml.r_regression(Xe, yr, force_finite=ff))
+    for j, g in enumerate(("coef_", lambda e: e.coef_[0])):
+        m = ml.RFE(ml.LinearDiscriminantAnalysis(), n_features_to_select=5, step=3,
+                   importance_getter=g).fit(X, y3)
+        parts[f"rfe{j}"] = _h(m.ranking_, m.transform(X[:256]))
+    return _fit(parts, m, lambda e: (e.predict(Xh[:256]), e.transform(Xh[:256])))
+
+
+_batch_decl(_rows_calls("predict", "transform", sl=slice(0, 256)), "x-prep-score-edges")
 
 
 @lane("x-prep-complement-nb")

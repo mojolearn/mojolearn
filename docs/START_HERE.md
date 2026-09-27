@@ -1,5 +1,13 @@
 # Start here
 
+**HARD RULE (Andrew, 2026-09-27): NO APPLE ANYTHING WITHOUT EXPRESS PERMISSION.**
+No lane, tool or agent may add, allocate, rent, launch or extend an Apple
+machine (EC2 Mac or any provider), add Apple host-hours, or call a provider
+API to do so. Only Andrew's express, specific permission allows it. If Apple
+capacity is a bottleneck, report it; never act on it. All six current Mac
+hosts are released at their 24 h marks unless Andrew says to keep one.
+
+
 This is the short path from a clone to a merged change. You do not need to
 read the rest of the documentation before your first contribution.
 

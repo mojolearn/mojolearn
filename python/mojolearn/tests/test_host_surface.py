@@ -63,8 +63,21 @@ def _harness_text():
     return text
 
 
+#: A binding may take its export list from a shared `register(m)` that the
+#: GPU binding calls too (bindings/_mojolearn_x_trees_host.mojo calls
+#: xtrees/api.mojo::register, so the two lists cannot drift). The
+#: registrations it exports are that module's.
+REGISTER_IMPORT = re.compile(r"^from\s+([A-Za-z0-9_.]+)\s+import\s+register\s*$", re.M)
+REGISTER_CALL = re.compile(r"^\s+register\(\s*(?:module|m)\s*\)", re.M)
+
+
 def _exports_in_source(name):
-    return DEF_FUNCTION.findall(_read(host_surface.binding_source(name)))
+    text = _read(host_surface.binding_source(name))
+    names = DEF_FUNCTION.findall(text)
+    if REGISTER_CALL.search(text):
+        for mod in REGISTER_IMPORT.findall(text):
+            names += DEF_FUNCTION.findall(_read(mod.replace(".", "/") + ".mojo"))
+    return names
 
 
 @pytest.mark.parametrize("name", host_surface.families())

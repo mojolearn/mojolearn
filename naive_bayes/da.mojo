@@ -227,3 +227,146 @@ def qda_dec_unit(t: Int, f: FP, q: IP):
                            ld(f, p(q, 4) + k * d * d + c * d + r)))
         norm2 = add(norm2, mul(s, s))
     st(f, p(q, 7) + t, sub(ld(f, p(q, 5) + k), mul(Float32(0.5), norm2)))
+
+
+# ------------------------------------------------ lsqr / eigen solvers, shrinkage
+@always_inline
+def zero_to_one_std(var_: Float32) -> Float32:
+    """StandardScaler's scale_ from a population variance (a zero std is one)."""
+    var s = sqrtf(var_)
+    if s == Float32(0):
+        return Float32(1)
+    return s
+
+
+def da_shrink_unit(t: Int, f: FP, q: IP):
+    """q = [X, n, d, Y, MEAN, VAR, CNT, COV, SHR, LAM]; t = class k. COV[k] (the
+    empirical class covariance, divisor CNT[k]) becomes the reference's
+    `_cov(X_k, shrinkage)`: SHR[0] < 0 is 'auto' (StandardScaler with the
+    class's population VAR, Ledoit-Wolf on the standardised rows, rescaled),
+    else `shrunk_covariance` with that constant. LAM[k] = the shrinkage used.
+    Ledoit-Wolf (sklearn `ledoit_wolf_shrinkage`, one block): with C the
+    standardised covariance, mu = tr C / d, delta_ = sum C^2,
+    beta_ = sum_i |z_i|^4, beta = (beta_ / n - delta_) / (d n),
+    delta = (delta_ - 2 mu tr C + d mu^2) / d, lam = min(beta, delta) / delta
+    (0 when beta is 0, d == 1 or delta == 0)."""
+    var n = p(q, 1)
+    var d = p(q, 2)
+    var k = t
+    var C = p(q, 7) + k * d * d
+    var cnt = ld(f, p(q, 6) + k)
+    var lam = ld(f, p(q, 8))
+    var auto = lam < Float32(0)
+    if auto:
+        # standardise the covariance in place: C[a, b] / s_a / s_b
+        for a in range(d):
+            var sa = zero_to_one_std(ld(f, p(q, 5) + k * d + a))
+            for b in range(d):
+                var sb = zero_to_one_std(ld(f, p(q, 5) + k * d + b))
+                st(f, C + a * d + b, div(div(ld(f, C + a * d + b), sa), sb))
+    var tr = Float32(0)
+    for a in range(d):
+        tr = add(tr, ld(f, C + a * d + a))
+    var mu = div(tr, Float32(d))
+    if auto:
+        lam = Float32(0)
+        if d > 1:
+            var delta_ = Float32(0)
+            for a in range(d):
+                for b in range(d):
+                    var v = ld(f, C + a * d + b)
+                    delta_ = add(delta_, mul(v, v))
+            var beta_ = Float32(0)
+            for i in range(n):
+                if Int(ld(f, p(q, 3) + i)) != k:
+                    continue
+                var r2 = Float32(0)
+                for a in range(d):
+                    var z = div(sub(ld(f, p(q, 0) + i * d + a), ld(f, p(q, 4) + k * d + a)),
+                                zero_to_one_std(ld(f, p(q, 5) + k * d + a)))
+                    r2 = add(r2, mul(z, z))
+                beta_ = add(beta_, mul(r2, r2))
+            var beta = div(sub(div(beta_, cnt), delta_), mul(Float32(d), cnt))
+            var delta = div(add(sub(delta_, mul(mul(Float32(2), mu), tr)), mul(Float32(d), mul(mu, mu))), Float32(d))
+            if delta < beta:
+                beta = delta
+            if beta != Float32(0) and delta != Float32(0):
+                lam = div(beta, delta)
+    var keep = sub(Float32(1), lam)
+    var shift = mul(lam, mu)
+    for a in range(d):
+        for b in range(d):
+            var v = mul(keep, ld(f, C + a * d + b))
+            if a == b:
+                v = add(v, shift)
+            if auto:
+                v = mul(mul(zero_to_one_std(ld(f, p(q, 5) + k * d + a)), v), zero_to_one_std(ld(f, p(q, 5) + k * d + b)))
+            st(f, C + a * d + b, v)
+    st(f, p(q, 9) + k, lam)
+
+
+def da_pool_unit(t: Int, f: FP, q: IP):
+    """q = [COV, K, d, PRIORS, SW, ST, SB]; t = a*d + b: the reference's
+    `_class_cov`, SW = sum_k PRIORS[k] COV[k] (k ascending); with ST >= 0
+    also SB = ST - SW (the between scatter of `_solve_eigen`)."""
+    var K = p(q, 1)
+    var d = p(q, 2)
+    var s = Float32(0)
+    for k in range(K):
+        s = add(s, mul(ld(f, p(q, 3) + k), ld(f, p(q, 0) + k * d * d + t)))
+    st(f, p(q, 4) + t, s)
+    if p(q, 5) >= 0:
+        st(f, p(q, 6) + t, sub(ld(f, p(q, 5) + t), s))
+
+
+def sym_fn_unit(t: Int, f: FP, q: IP):
+    """q = [EVAL, EVEC, d, MODE, OUT]; t = k*d*d + a*d + b: matrix k's
+    V g(E) V^T from its descending eigendecomposition (EVAL + k*d, EVEC +
+    k*d*d). MODE 0: the pseudo-inverse (g = 1/e for |e| > d * eps * |E[0]|,
+    else 0: `lstsq`'s minimum-norm solve of a symmetric system); MODE 1: the
+    inverse square root (g = 1/sqrt(e), 0 for e <= 0; the caller refuses a
+    matrix that is not positive definite); MODE 2: g = e (a covariance back
+    from its scalings, QDA's store_covariance)."""
+    var d = p(q, 2)
+    var k = t // (d * d)
+    var a = (t // d) % d
+    var b = t % d
+    var E = p(q, 0) + k * d
+    var V = p(q, 1) + k * d * d
+    var e0 = abs(ld(f, E))
+    var cut = mul(mul(Float32(d), Float32(1.1920929e-07)), e0)
+    var s = Float32(0)
+    for r in range(d):
+        var e = ld(f, E + r)
+        var g = Float32(0)
+        if p(q, 3) == 0:
+            if abs(e) > cut:
+                g = div(Float32(1), e)
+        elif p(q, 3) == 1:
+            if e > Float32(0):
+                g = div(Float32(1), sqrtf(e))
+        else:
+            g = e
+        s = add(s, mul(mul(ld(f, V + a * d + r), g), ld(f, V + b * d + r)))
+    st(f, p(q, 4) + t, s)
+
+
+def da_intercept_unit(t: Int, f: FP, q: IP):
+    """q = [MEAN, COEF, PRIORS, d, OUT]; t = class k: -0.5 MEAN_k . COEF_k
+    + log PRIORS[k] (the reference's `-0.5 diag(means coef^T) + log priors`)."""
+    var d = p(q, 3)
+    var s = Float32(0)
+    for c in range(d):
+        s = add(s, mul(ld(f, p(q, 0) + t * d + c), ld(f, p(q, 1) + t * d + c)))
+    st(f, p(q, 4) + t, add(mul(Float32(-0.5), s), logf(ld(f, p(q, 2) + t))))
+
+
+def evr_unit(t: Int, f: FP, q: IP):
+    """q = [EVAL, d, OUT]; t = 0: EVAL / sum(EVAL) (descending, summed in
+    that order), the eigen solver's explained_variance_ratio_."""
+    var d = p(q, 1)
+    var s = Float32(0)
+    for r in range(d):
+        s = add(s, ld(f, p(q, 0) + r))
+    for r in range(d):
+        st(f, p(q, 2) + r, div(ld(f, p(q, 0) + r), s))

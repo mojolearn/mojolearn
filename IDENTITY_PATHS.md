@@ -541,6 +541,32 @@ moved. The census is an OPT-IN release rehearsal step
 families, about an hour); the full comparison is run by hand before a
 release that touches IDENTICAL arithmetic.
 
+**DEVIATION 5904 (2026-09-27, lane/dedupe-pinned-mul), DEVIATION 826's
+unfinished half: one definition of the pinned product.** DEVIATION 826 put
+`identical_mul` in `checks/numerics.mojo` and left DEVIATION 720's
+`pinned_mul` copies standing. By this date there were fifteen: nine written by
+hand (the three Mamba oracles, `modeling_mamba`, `selective_scan_interface`,
+`mamba3_siso`, `ssd_minimal`, `mamba2`, `mamba3`) and six that
+`tools/mamba_host_gen.py` writes into `mamba/host/gen/`. They were called from
+35 files in the Mamba and transformer lanes, and `portable_fmax_check`
+compared only three of them with anything. Every copy's body was
+`return identical_mul(a, b)`, so the copies were mode-gated like
+`identical_mul`: pinned under IDENTICAL and a plain product under FAST. Before
+this change they were never unconditional (`identical_mul_add(a, b, -0.0)`
+before 9cbf4edc6 was gated too). Before deletion, `portable_fmax_check`
+compared all fifteen against `identical_mul` on exact bits: 65,536 hashed
+pairs, plus 256 planted class pairs (both zeros, both infinities, NaN of both
+payload signs, subnormals, FLT_MIN/MAX), plus the composed `p + c` with
+`c = -(a*b) + 1 ulp`, the pattern that separates a fused product from an
+unfused one. Then every call site was switched to `identical_mul`, the copies
+were deleted, and `mamba/host/gen/` was regenerated from the edited sources.
+Both modes keep their bits by construction. Whether Mamba's FAST products
+should be pinned is a separate decision and is not made here.
+`test_the_pinned_product_has_one_definition` in `tools/test_lane_select.py`
+fails if a second `identical_mul`, or any `pinned_mul`, is defined in a
+tracked Mojo file. `portable_fmax_check` now compares `identical_mul` with
+`pinned_mul_f32`, the arm it wraps under IDENTICAL.
+
 
 ## Row-number registry, assigned 2026-09-01
 
@@ -573,8 +599,9 @@ sized to the count that lane asked for:
 | algorithm expansion `trees` | -- | **160-169** | 10 |
 | algorithm expansion `cnn` | -- | **170-179** | 10 |
 | algorithm expansion `ann` | -- | **180-189** | 10 |
+| algorithm expansion `metrics` (2026-09-27, lane/metrics) | -- | **190-199** | 10 |
 
-Next free row after this table is **190** (97-99 are unassigned; the
+Next free row after this table is **200** (97-99 are unassigned; the
 expansion ranges start at 100 so the nine lanes of
 docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md never meet anyone already writing
 at 97). Each expansion lane writes its rows ONLY in its own section of
@@ -723,6 +750,9 @@ AMD and Apple columns for 140-149: OWED (the AMD box is being acquired; the M2 P
 | 165 | **a zero row** (OneVsRest and calibration normalisation) | sklearn divides 0 / 0, a vendor-payload NaN (IDENTITY_PATHS Clause B) | REPLACE, DEVIATION 5605: a zero (or -0.0) row is uniform 1 / k | `check_zero_rows` (+0 and -0 rows planted), arm `seam_5605_nan.patch` RED |
 | 166 | **the RF weighted objective on the CPU** (`ensemble/host/rf_oracle.mojo`: class weights / sample_weight without bootstrap) | the device's Int32 fixed-point weight planes (`WeightedClassificationBin`) restated on the host: the truncating `_quantize`, the scale, the ftz'd class-order `WeightAt`, the weighted gains and leaf | CONSTRUCTION: the host restates the device arithmetic statement for statement | lane `trees-rf-weighted` CPU == CUDA (batch/infer/model/train 9); arm `rf_weighted_split_sabotage.patch` DISAGREE then AGREE; existing RF lanes' cells unmoved on CUDA and CPU |
 
+| 167 | **option-parity arithmetic** (`xtrees/ops.mojo`: DART's `_newton_values` with ThresholdL1 and the max_delta_step clip, `leaf_newton_rows` over the bag, the multiclass softmax gradients; Bagging's `accumulate_rows` out-of-bag sums; Kernel SHAP's `logit`) | a fused product in the softmax hessian; a reassociated leaf or out-of-bag sum; the platform log | CONSTRUCTION under 5601-5603: pinned products, sequential index-order folds, `identical_exp64` / `identical_log64` | lanes `trees-dart-options` and `trees-oob-cv-link` CPU == GPU; arms `dart_options_cpu_only.patch` and `oob_link_cpu_only.patch` DISAGREE then AGREE |
+| 168 | **ExtraTrees deviance criteria** (`extratrees/.../objectives.mojo::regression_deviance_gain`, device score-to-candidate and the host exact candidate) | cuML's float32 Poisson / Gamma / InverseGaussian gains over real-unit sums, and the platform log | REPLACE, DEVIATION 5610: the gain over the SCALED fixed-point sums (a positive multiple of cuML's in real arithmetic), `_log_seam`, flushed stores, the float gain as metric and key (DEVIATION 459's route) | lane `trees-et-deviance` CPU == GPU; arm `et_deviance_cpu_only.patch` DISAGREE then AGREE |
+
 COLUMNS for 160-166 (2026-09-27): NVIDIA H100 and AMD MI300X (Hot Aisle) each read `algos_lane_check.sh --pass 2` PASS on all 20 trees lanes (every seam arm bites on both), and the two GPU columns diff OK cell for cell (`identity_break.py --diff`, cuda vs hip, 20 lanes); the glue card (`xtrees/checks/glue_check.mojo`, 7 records) is byte-identical across the two boxes' hosts (EPYC, Xeon). Apple: the M2 Pro steward PASS on all 20 lanes (request 1790526750361-trees-77e0b3a8d7, sabotage `column_cpu_only.patch`); the M3 Ultra copy is spooled.
 
 
@@ -744,18 +774,20 @@ COLUMNS for 160-166 (2026-09-27): NVIDIA H100 and AMD MI300X (Hot Aisle) each re
 
 Every row's check is `x_cnn/checks/seams_check.mojo` (oracle `x_cnn/checks/oracle.mojo`; each fixture first shown to separate the two spellings; the card stage is `x_cnn.<seam>`); the arms are listed in `tools/identity_lanes/cnn.checks`.
 
-
-
 ### `ann`: rows 180-189
 
 Every ann seam is one cell function in `x_ann/*_core.mojo` that the device kernel runs per thread and the host binding runs in a loop; each check below compares the device against an independent host oracle in `x_ann/checks/`, first proving its fixture separates the pinned spelling, and each sabotage arm is listed in `tools/identity_lanes/ann.checks`.
 
 | number | what | hazard | move | status |
 |---|---|---|---|---|
-| 180 | **IVF-PQ** (`x_ann/ivf_pq_core.mojo`, DEVIATIONS 5800, 5801, 5803, 5804): the LUT entry's fused square fold, the encoding argmin, the search top-k, the probe order; coarse quantizer and codebooks are cluster/'s k-means (rows 18-22) | cuVS fills the LUT in shared memory (fp16/fp8 options) and sums in warp order; its warpsort and probe select break ties by feed order | PIN: coordinates ascending with `identical_mul_add`; the LOWER code on a tie; (distance, row id) and (coarse distance, list id) total orders, shared by IVF-SQ and IVF-RaBitQ through `pq_next_probe` / `pq_insert` | `x_ann/checks/ivf_pq_check.mojo` (fold, encode-tie, probe-tie and top-k-tie separate; arms 5800/5801/5803/5804 bite); NVIDIA H100 == CPU 2026-09-27; AMD, Apple OWED |
-| 181 | **t-SNE** (`x_ann/tsne_core.mojo`, DEVIATIONS 5810-5815): k-NN membership, the perplexity bisection, P's normalization, the repulsion and attraction folds, the gains branch | Barnes-Hut tree insertion and summarization use atomics; cuFFT's reduction order; sklearn's float64 sums | REPLACE: exact repulsion, a per-row fold over all points ascending; PIN: (distance, index) k-NN, 100 float32 bisection steps with sums ascending, P's total over CSR edges ascending, CSR attraction ascending, strict `update * grad < 0` | `x_ann/checks/tsne_check.mojo` (all six seams separate; arms 5810-5815 bite); NVIDIA H100 == CPU 2026-09-27; AMD, Apple OWED |
-| 182 | **CAGRA** (`x_ann/cagra_core.mojo`, DEVIATIONS 5820-5824): pruning, reverse edges, the itopk buffer, parent choice, seeds | cuVS inserts reverse edges with atomicAdd (arrival order), seeds by a random hash, keeps a probabilistic hashmap, sorts itopk with feed-order ties | REPLACE: reverse edges in (rank, source id) order; evenly spaced seeds; an exact visited bitset; PIN: (detour count, rank) pruning, (distance, id) buffer, the search_width best unexpanded parents front to back | `x_ann/checks/cagra_check.mojo` (all five separate; arms 5820-5824 bite); NVIDIA H100 == CPU 2026-09-27; AMD, Apple OWED |
-| 183 | **IVF-SQ** (`x_ann/ivf_sq_core.mojo`, DEVIATIONS 5830-5832): the per-dimension range, the rounding, the decode | a device min reduction keeps either of -0.0 / 0.0; `roundf` is a libm call; `vmin + code * delta` contracted or not | PIN: rows ascending with a strict compare (the first sign wins); REPLACE: `roundf` as trunc plus an exact half test; PIN: one fused decode step | `x_ann/checks/ivf_quant_check.mojo` (a planted -0.0/0.0 minimum, exact halves, the fused/unfused decode separate; arms 5830-5832 bite); NVIDIA H100 == CPU 2026-09-27; AMD, Apple OWED |
-| 184 | **IVF-RaBitQ** (`x_ann/ivf_rabitq_core.mojo`, DEVIATIONS 5840-5842): the rotation, the zero residual, the estimate | cuVS's dense random rotation is a GEMM in the library's order; a zero residual divides 0/0 | REPLACE: a randomized Hadamard transform (hashed signs, butterflies in fixed order, one pinned scale); PIN: factor 0 and the query norm as the estimate for a zero residual; the estimate's association fixed | `x_ann/checks/ivf_quant_check.mojo` (a planted zero residual; arms 5840-5842 bite); NVIDIA H100 == CPU 2026-09-27; AMD, Apple OWED |
-| 185 | **refine** (`x_ann/refine_core.mojo`, DEVIATION 5850) | a repeated candidate scored twice fills two slots; ties by arrival | PIN: padding and repeats skipped before scoring; (distance, id) top-k | `x_ann/checks/ivf_quant_check.mojo` (arm 5850 bites); NVIDIA H100 == CPU 2026-09-27; AMD, Apple OWED |
-| 186 | **the IVF sample filter** (DEVIATION 5855; IVF-PQ, IVF-SQ, IVF-RaBitQ search) | a filter evaluated after scoring changes the candidate count and the top-k set | PIN: a removed row is skipped before it is scored or counted | `x_ann/checks/ivf_quant_check.mojo` (arm 5855 bites); NVIDIA H100 == CPU 2026-09-27; AMD, Apple OWED |
+| 180 | **IVF-PQ** (`x_ann/ivf_pq_core.mojo`, DEVIATIONS 5800, 5801, 5803, 5804): the LUT entry's fused square fold, the encoding argmin, the search top-k, the probe order; coarse quantizer and codebooks are cluster/'s k-means (rows 18-22) | cuVS fills the LUT in shared memory (fp16/fp8 options) and sums in warp order; its warpsort and probe select break ties by feed order | PIN: coordinates ascending with `identical_mul_add`; the LOWER code on a tie; (distance, row id) and (coarse distance, list id) total orders, shared by IVF-SQ and IVF-RaBitQ through `pq_next_probe` / `pq_insert` | `x_ann/checks/ivf_pq_check.mojo` (fold, encode-tie, probe-tie and top-k-tie separate; arms 5800/5801/5803/5804 bite); NVIDIA H100 == CPU, MI300X == x86 CPU (do-amd), M2 Pro Metal == Arm CPU (m2pro), 2026-09-27 (steward request 1790536753106) |
+| 181 | **t-SNE** (`x_ann/tsne_core.mojo`, DEVIATIONS 5810-5815): k-NN membership, the perplexity bisection, P's normalization, the repulsion and attraction folds, the gains branch | Barnes-Hut tree insertion and summarization use atomics; cuFFT's reduction order; sklearn's float64 sums | REPLACE: exact repulsion, a per-row fold over all points ascending; PIN: (distance, index) k-NN, 100 float32 bisection steps with sums ascending, P's total over CSR edges ascending, CSR attraction ascending, strict `update * grad < 0` | `x_ann/checks/tsne_check.mojo` (all six seams separate; arms 5810-5815 bite); NVIDIA H100 == CPU, MI300X == x86 CPU (do-amd), M2 Pro Metal == Arm CPU (m2pro), 2026-09-27 (steward request 1790536753106) |
+| 182 | **CAGRA** (`x_ann/cagra_core.mojo`, DEVIATIONS 5820-5824): pruning, reverse edges, the itopk buffer, parent choice, seeds | cuVS inserts reverse edges with atomicAdd (arrival order), seeds by a random hash, keeps a probabilistic hashmap, sorts itopk with feed-order ties | REPLACE: reverse edges in (rank, source id) order; evenly spaced seeds; an exact visited bitset; PIN: (detour count, rank) pruning, (distance, id) buffer, the search_width best unexpanded parents front to back | `x_ann/checks/cagra_check.mojo` (all five separate; arms 5820-5824 bite); NVIDIA H100 == CPU, MI300X == x86 CPU (do-amd), M2 Pro Metal == Arm CPU (m2pro), 2026-09-27 (steward request 1790536753106) |
+| 183 | **IVF-SQ** (`x_ann/ivf_sq_core.mojo`, DEVIATIONS 5830-5832): the per-dimension range, the rounding, the decode | a device min reduction keeps either of -0.0 / 0.0; `roundf` is a libm call; `vmin + code * delta` contracted or not | PIN: rows ascending with a strict compare (the first sign wins); REPLACE: `roundf` as trunc plus an exact half test; PIN: one fused decode step | `x_ann/checks/ivf_quant_check.mojo` (a planted -0.0/0.0 minimum, exact halves, the fused/unfused decode separate; arms 5830-5832 bite); NVIDIA H100 == CPU, MI300X == x86 CPU (do-amd), M2 Pro Metal == Arm CPU (m2pro), 2026-09-27 (steward request 1790536753106) |
+| 184 | **IVF-RaBitQ** (`x_ann/ivf_rabitq_core.mojo`, DEVIATIONS 5840-5842): the rotation, the zero residual, the estimate | cuVS's dense random rotation is a GEMM in the library's order; a zero residual divides 0/0 | REPLACE: a randomized Hadamard transform (hashed signs, butterflies in fixed order, one pinned scale); PIN: factor 0 and the query norm as the estimate for a zero residual; the estimate's association fixed | `x_ann/checks/ivf_quant_check.mojo` (a planted zero residual; arms 5840-5842 bite); NVIDIA H100 == CPU, MI300X == x86 CPU (do-amd), M2 Pro Metal == Arm CPU (m2pro), 2026-09-27 (steward request 1790536753106) |
+| 185 | **refine** (`x_ann/refine_core.mojo`, DEVIATION 5850) | a repeated candidate scored twice fills two slots; ties by arrival | PIN: padding and repeats skipped before scoring; (distance, id) top-k | `x_ann/checks/ivf_quant_check.mojo` (arm 5850 bites); NVIDIA H100 == CPU, MI300X == x86 CPU (do-amd), M2 Pro Metal == Arm CPU (m2pro), 2026-09-27 (steward request 1790536753106) |
+| 186 | **the IVF sample filter** (DEVIATION 5855; IVF-PQ, IVF-SQ, IVF-RaBitQ search) | a filter evaluated after scoring changes the candidate count and the top-k set | PIN: a removed row is skipped before it is scored or counted | `x_ann/checks/ivf_quant_check.mojo` (arm 5855 bites); NVIDIA H100 == CPU, MI300X == x86 CPU (do-amd), M2 Pro Metal == Arm CPU (m2pro), 2026-09-27 (steward request 1790536753106) |
+
+### `metrics`: rows 190-199
+
+(no rows yet)

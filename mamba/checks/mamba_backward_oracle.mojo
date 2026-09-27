@@ -3,6 +3,7 @@
 """Host Float32 oracle for the pinned Mamba-1 backward profile."""
 
 from checks.numerics import (
+    identical_mul,
     ftz,
     identical_div,
     identical_exp,
@@ -22,7 +23,6 @@ from mamba.checks.mamba_fixture import (
 from mamba.checks.mamba_oracle import (
     MambaStages,
     MambaState,
-    pinned_mul,
     refuse_nonfinite,
 )
 
@@ -157,7 +157,7 @@ def mamba_backward_free_choices() -> String:
         + " private slots plus a b-fold. THIS IS THE ONE FREE CHOICE THAT"
         + " RESOLVES A CONTRADICTION IN THE PLAN RATHER THAN A SILENCE.\n"
         + "FC6 above the softplus guard (biased > 20) ddtp is a flushed COPY"
-        + " of ddelta rather than pinned_mul(ddelta, 1.0). Provably"
+        + " of ddelta rather than identical_mul(ddelta, 1.0). Provably"
         + " bit-inert: fma(x, 1, -0.0) == x at every x including both signed"
         + " zeros. Stated because inert is a claim, not an omission.\n"
         + "FC7 d_arg is RECOMPUTED at both its consumers (ddelta's A path"
@@ -283,9 +283,9 @@ def pinned_silu_prime(v: Float32) -> Float32:
     where this oracle and the device VJP parted (`bwd.dz`)."""
     var sig = ftz(identical_sigmoid(v))
     var one_minus = ftz(ftz(Float32(1.0)) - ftz(sig))
-    var prod = ftz(pinned_mul(v, one_minus))
+    var prod = ftz(identical_mul(v, one_minus))
     var mid = ftz(ftz(Float32(1.0)) + ftz(prod))
-    return ftz(pinned_mul(sig, mid))
+    return ftz(identical_mul(sig, mid))
 
 
 def _forward_rstd(sumsq: Float32, dm: Int) -> Float32:
@@ -296,12 +296,12 @@ def _forward_rstd(sumsq: Float32, dm: Int) -> Float32:
 
 def _forward_da(delta: Float32, a: Float32) -> Float32:
     """`da[t,d,n] = exp(delta[t,d] * A[d,n])`, seams S5 and S6, RECOMPUTED. The reference's forward and backward both use the exp2 substitution and are self-consistent; DEVIATION 722 already refused it as a different function with an extra rounding, and plan section 6 item 6 says the backward's recomputed `da` must be OUR forward's `da` or it is not a recomputation."""
-    return ftz(identical_exp(ftz(pinned_mul(delta, a))))
+    return ftz(identical_exp(ftz(identical_mul(delta, a))))
 
 
 def _forward_dbb(delta: Float32, bm: Float32) -> Float32:
     """`dbb[t,d,n] = delta[t,d] * Bm[t,n]`, seam S7's `db`, RECOMPUTED."""
-    return ftz(pinned_mul(delta, bm))
+    return ftz(identical_mul(delta, bm))
 
 
 
@@ -332,7 +332,7 @@ def mamba_h_checkpoint_oracle(
                 for n in range(D_STATE):
                     var da = _forward_da(dl, ftz(a[d * D_STATE + n]))
                     var dbb = _forward_dbb(dl, ftz(bmat[t * D_STATE + n]))
-                    var dbu = ftz(pinned_mul(dbb, uv))
+                    var dbu = ftz(identical_mul(dbb, uv))
                     h[n] = ftz(identical_mul_add(da, h[n], dbu))
                 for n in range(D_STATE):
                     out[
@@ -420,18 +420,18 @@ def mamba_block_backward_oracle(
             var z = ftz(st.in_proj[t * 2 * di + di + d])
             silu_z[t * di + d] = ftz(identical_silu(z))
             bst.dsk.append(
-                ftz(pinned_mul(ftz(bst.dg[t * di + d]), silu_z[t * di + d]))
+                ftz(identical_mul(ftz(bst.dg[t * di + d]), silu_z[t * di + d]))
             )
 
     for t in range(m):
         for d in range(di):
             var z = ftz(st.in_proj[t * 2 * di + di + d])
             var p1 = ftz(
-                pinned_mul(
+                identical_mul(
                     ftz(bst.dg[t * di + d]), ftz(st.skip_out[t * di + d])
                 )
             )
-            bst.dz.append(ftz(pinned_mul(p1, pinned_silu_prime(z))))
+            bst.dz.append(ftz(identical_mul(p1, pinned_silu_prime(z))))
 
     bst.dh = _zeros(m * di * D_STATE)
     for bb in range(b):
@@ -443,7 +443,7 @@ def mamba_block_backward_oracle(
                 var dyv = ftz(bst.dsk[t * di + d])
                 for n in range(D_STATE):
                     var contrib = ftz(
-                        pinned_mul(dyv, ftz(cmat[t * D_STATE + n]))
+                        identical_mul(dyv, ftz(cmat[t * D_STATE + n]))
                     )
                     # DEVIATION 1082: at the first step of the walk the
                     # seed is an OMITTED operation, never a stored +0.0
@@ -467,7 +467,7 @@ def mamba_block_backward_oracle(
             dy_row.append(bst.dsk[t * di + d])
             w_row.append(
                 ftz(
-                    pinned_mul(
+                    identical_mul(
                         ftz(st.softplus_out[t * di + d]),
                         ftz(st.silu_out[t * di + d]),
                     )
@@ -510,7 +510,7 @@ def mamba_block_backward_oracle(
             var acc = Float32(0.0)
             for n in range(D_STATE):
                 var d_dbb = ftz(
-                    pinned_mul(ftz(bst.dh[(t * di + d) * D_STATE + n]), uv)
+                    identical_mul(ftz(bst.dh[(t * di + d) * D_STATE + n]), uv)
                 )
                 acc = ftz(
                     identical_mul_add(
@@ -519,12 +519,12 @@ def mamba_block_backward_oracle(
                 )
                 var av = ftz(st.a_out[d * D_STATE + n])
                 var d_da = ftz(
-                    pinned_mul(
+                    identical_mul(
                         ftz(bst.dh[(t * di + d) * D_STATE + n]),
                         ftz(_h_at(bst.h_ckpt, bb, li - 1, d, l, di, n)),
                     )
                 )
-                var d_arg = ftz(pinned_mul(d_da, _forward_da(dl, av)))
+                var d_arg = ftz(identical_mul(d_da, _forward_da(dl, av)))
                 acc = ftz(identical_mul_add(d_arg, av, acc))
             bst.ddelta.append(acc)
 
@@ -534,7 +534,7 @@ def mamba_block_backward_oracle(
             var g = ftz(bst.ddelta[t * di + d])
             if biased <= Float32(20.0):
                 bst.ddtp.append(
-                    ftz(pinned_mul(g, ftz(identical_sigmoid(biased))))
+                    ftz(identical_mul(g, ftz(identical_sigmoid(biased))))
                 )
             else:
                 bst.ddtp.append(g)
@@ -557,7 +557,7 @@ def mamba_block_backward_oracle(
     for t in range(m):
         for d in range(di):
             du_d[t * di + d] = ftz(
-                pinned_mul(ftz(bst.dsk[t * di + d]), ftz(w.d_skip[d]))
+                identical_mul(ftz(bst.dsk[t * di + d]), ftz(w.d_skip[d]))
             )
             var s1 = ftz(ftz(du_d[t * di + d]) + bst.du_s[t * di + d])
             bst.du.append(ftz(s1 + du_x[t * di + d]))
@@ -566,7 +566,7 @@ def mamba_block_backward_oracle(
         for d in range(di):
             var c = ftz(st.conv_out[t * di + d])
             bst.dconv.append(
-                ftz(pinned_mul(ftz(bst.du[t * di + d]), pinned_silu_prime(c)))
+                ftz(identical_mul(ftz(bst.du[t * di + d]), pinned_silu_prime(c)))
             )
 
     for bb in range(b):
@@ -599,7 +599,7 @@ def mamba_block_backward_oracle(
         var acc = Float32(0.0)
         for j in range(dm):
             dinner[t * dm + j] = ftz(
-                pinned_mul(ftz(bst.dnrm[t * dm + j]), ftz(w.norm_w[j]))
+                identical_mul(ftz(bst.dnrm[t * dm + j]), ftz(w.norm_w[j]))
             )
             acc = ftz(
                 identical_mul_add(
@@ -610,16 +610,16 @@ def mamba_block_backward_oracle(
 
     for t in range(m):
         var rstd = _forward_rstd(st.norm_sumsq[t], dm)
-        var c3 = ftz(pinned_mul(ftz(pinned_mul(rstd, rstd)), rstd))
+        var c3 = ftz(identical_mul(ftz(identical_mul(rstd, rstd)), rstd))
         var s = ftz(identical_div(c3, Float32(dm)))
         for j in range(dm):
             var t2 = ftz(
-                pinned_mul(
-                    ftz(pinned_mul(s, ftz(x[t * dm + j]))),
+                identical_mul(
+                    ftz(identical_mul(s, ftz(x[t * dm + j]))),
                     ftz(bst.drstd[t]),
                 )
             )
-            var t1 = ftz(pinned_mul(rstd, dinner[t * dm + j]))
+            var t1 = ftz(identical_mul(rstd, dinner[t * dm + j]))
             var dx_norm = ftz(t1 - t2)
             bst.dx.append(ftz(ftz(dres[t * dm + j]) + dx_norm))
 
@@ -633,12 +633,12 @@ def mamba_block_backward_oracle(
                     var t = bb * l + li
                     var dl = ftz(st.softplus_out[t * di + d])
                     var d_da = ftz(
-                        pinned_mul(
+                        identical_mul(
                             ftz(bst.dh[(t * di + d) * D_STATE + n]),
                             ftz(_h_at(bst.h_ckpt, bb, li - 1, d, l, di, n)),
                         )
                     )
-                    var d_arg = ftz(pinned_mul(d_da, _forward_da(dl, av)))
+                    var d_arg = ftz(identical_mul(d_da, _forward_da(dl, av)))
                     acc = ftz(identical_mul_add(d_arg, dl, acc))
                 da_partial[(bb * di + d) * D_STATE + n] = acc
     for d in range(di):
@@ -647,7 +647,7 @@ def mamba_block_backward_oracle(
             for bb in range(b):  # T5: ASCENDING, plain flushed add
                 acc = ftz(acc + ftz(da_partial[(bb * di + d) * D_STATE + n]))
             bst.da_log.append(
-                ftz(pinned_mul(acc, ftz(st.a_out[d * D_STATE + n])))
+                ftz(identical_mul(acc, ftz(st.a_out[d * D_STATE + n])))
             )
 
     var ones = List[Float32]()
@@ -658,7 +658,7 @@ def mamba_block_backward_oracle(
     for t in range(m):
         for d in range(di):
             p_d[t * di + d] = ftz(
-                pinned_mul(
+                identical_mul(
                     ftz(bst.dsk[t * di + d]), ftz(st.silu_out[t * di + d])
                 )
             )
@@ -681,7 +681,7 @@ def mamba_block_backward_oracle(
                             (bb * di + d) * D_CONV + (D_CONV + p)
                         ]
                     p_cw[(bb * l + li) * di + d] = ftz(
-                        pinned_mul(
+                        identical_mul(
                             ftz(bst.dconv[(bb * l + li) * di + d]), ftz(hv)
                         )
                     )
@@ -695,9 +695,9 @@ def mamba_block_backward_oracle(
     for t in range(m):
         var rstd = _forward_rstd(st.norm_sumsq[t], dm)
         for j in range(dm):
-            var inner = ftz(pinned_mul(ftz(x[t * dm + j]), rstd))
+            var inner = ftz(identical_mul(ftz(x[t * dm + j]), rstd))
             p_w[t * dm + j] = ftz(
-                pinned_mul(ftz(bst.dnrm[t * dm + j]), inner)
+                identical_mul(ftz(bst.dnrm[t * dm + j]), inner)
             )
     bst.dw_norm = gemm_oracle(ones, p_w, OP_NN, 1, dm, m)
 
