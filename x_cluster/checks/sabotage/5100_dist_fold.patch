@@ -1,0 +1,11 @@
+--- a/x_cluster/bodies.mojo
++++ b/x_cluster/bodies.mojo
+@@ -35,7 +35,7 @@
+     features: `acc = ftz(acc + ftz(t * t))`, `t = ftz(ftz(a) - ftz(b))`."""
+     var acc = Float32(0)
+     for q in range(d):
+-        var f = d - 1 - q if REV else q
++        var f = q if REV else d - 1 - q
+         var t = ftz(ftz(a[i * d + f]) - ftz(b[j * d + f]))
+         acc = ftz(acc + ftz(identical_mul(t, t)))
+     return acc

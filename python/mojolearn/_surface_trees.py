@@ -24,6 +24,7 @@ FAMILIES = (
         training_lanes=(
             "trees-dt-clf",
             "trees-dt-reg",
+            "trees-dt-random",
             "trees-rf-weighted",
             "trees-bagging-clf",
             "trees-bagging-reg",
@@ -90,6 +91,7 @@ FAMILIES = (
 TRAINING_LANE_NAMES = {
     "trees-dt-clf": "DecisionTreeClassifier",
     "trees-dt-reg": "DecisionTreeRegressor",
+    "trees-dt-random": "DecisionTreeClassifier splitter=random",
     "trees-rf-weighted": "RandomForestClassifier weighted objective",
     "trees-bagging-clf": "BaggingClassifier",
     "trees-bagging-reg": "BaggingRegressor",
@@ -112,6 +114,7 @@ TRAINING_LANE_NAMES = {
 PUBLIC_PENDING_LANES = {
     "trees-dt-clf": "no reference",
     "trees-dt-reg": "no reference",
+    "trees-dt-random": "no reference",
     "trees-bagging-clf": "no reference",
     "trees-bagging-reg": "no reference",
     "trees-adaboost-clf": "no reference",

@@ -622,7 +622,9 @@ class SimpleImputer(_PrepBase):
     (the smallest on a tie) or 'constant'. An all-missing column is dropped
     from the output unless `keep_empty_features` (its statistic is NaN, as in
     the reference; with keep_empty_features it is 0, or fill_value).
-    add_indicator and callable strategies are refused."""
+    add_indicator appends MissingIndicator's columns (the features with a
+    missing value in fit, 1.0 where missing). Callable strategies are
+    refused."""
     _parameters = ("missing_values", "strategy", "fill_value", "copy", "add_indicator", "keep_empty_features")
 
     def __init__(self, *, missing_values=float("nan"), strategy="mean", fill_value=None, copy=True,
@@ -635,8 +637,6 @@ class SimpleImputer(_PrepBase):
         self.keep_empty_features = keep_empty_features
 
     def fit(self, X, y=None):
-        if self.add_indicator:
-            raise NotImplementedError("mojolearn: SimpleImputer(add_indicator=True) is not implemented")
         if self.strategy not in ("mean", "median", "most_frequent", "constant"):
             raise NotImplementedError(f"mojolearn: SimpleImputer strategy {self.strategy!r} is not implemented")
         if self.strategy == "constant" and self.fill_value is not None and \
@@ -683,6 +683,7 @@ class SimpleImputer(_PrepBase):
             self.statistics_ = pr.get(src, d)
             self._fill = self.statistics_
         self._keep = [j for j in range(d) if self.keep_empty_features or not empty[j]]
+        self._indicator = [j for j in range(d) if counts[j] < n] if self.add_indicator else []
         self.numeric_mode_, self.n_features_in_ = mode, d
         return self
 
@@ -698,8 +699,26 @@ class SimpleImputer(_PrepBase):
         ko = pr.put_list(self._keep)
         out = pr.alloc(n * dout)
         pr.stage("fill", n * dout, xo, n, d, so, out, ko, dout)
+        m = len(self._indicator)
+        if m:
+            io, mo = pr.put_list(self._indicator), pr.alloc(n * m)
+            pr.stage("nan_mask", n * m, xo, n, d, io, m, mo)
         pr.run(self.numeric_mode_)
-        return pr.get(out, (n, dout))
+        if not m:
+            return pr.get(out, (n, dout))
+        return _hstack(pr.get(out, (n, dout)), pr.get(mo, (n, m)))
+
+
+def _hstack(a, b):
+    """[a | b] for two C-order float32 2-D Arrays of the same row count (a
+    byte copy per row)."""
+    n, p = a.shape
+    q = b.shape[1]
+    out = Array((n, p + q), "<f4")
+    for i in range(n):
+        ctypes.memmove(out._addr + 4 * i * (p + q), a._addr + 4 * i * p, 4 * p)
+        ctypes.memmove(out._addr + 4 * (i * (p + q) + p), b._addr + 4 * i * q, 4 * q)
+    return out
 
 
 # ---------------------------------------------------------------- discretizer

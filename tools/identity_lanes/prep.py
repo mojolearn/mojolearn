@@ -109,7 +109,15 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(parts, m, lambda e: (e.transform(Xhm[:256]),))
 
 
-_batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_prep_with_nan), "x-prep-simple-imputer")
+@lane("x-prep-simple-imputer-indicator")
+def _(ml, X, yc, yr, Xh=None):
+    Xm, Xhm = _prep_with_nan(X), _prep_with_nan(Xh)
+    m = ml.SimpleImputer(strategy="mean", add_indicator=True).fit(Xm)
+    return _fit(dict(transform=_h(m.transform(Xm[:256]))), m, lambda e: (e.transform(Xhm[:256]),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_prep_with_nan), "x-prep-simple-imputer",
+            "x-prep-simple-imputer-indicator")
 
 
 @lane("x-prep-kbins")

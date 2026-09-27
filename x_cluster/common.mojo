@@ -49,34 +49,54 @@ def distances_to[O: ClusterOps](
 
 
 def greedy_kmeans_pp[O: ClusterOps](
-    mut ops: O, xs_host: List[Float32], m: Int, d: Int, k: Int, mut rng: SplitMix64
+    mut ops: O, xs_host: List[Float32], m: Int, d: Int, k: Int, mut rng: SplitMix64,
+    w: List[Float32] = List[Float32](),
 ) raises -> List[Float32]:
+    """The centers of `greedy_kmeans_pp_indices`."""
+    return gather_rows(xs_host, d, greedy_kmeans_pp_indices(ops, xs_host, m, d, k, rng, w))
+
+
+def greedy_kmeans_pp_indices[O: ClusterOps](
+    mut ops: O, xs_host: List[Float32], m: Int, d: Int, k: Int, mut rng: SplitMix64,
+    w: List[Float32] = List[Float32](),
+) raises -> List[Int]:
     """sklearn `_kmeans_plusplus` (cluster/_kmeans.py:200-280), unit weights:
     the first center uniform, then `2 + int(log(k))` candidates per pick drawn
     by `searchsorted(cumsum(closest), u * pot)` (side left, clipped), each
     candidate's potential `sum(min(closest, d_cand))`, the lowest potential
     under a strict `<`. Potentials and the cumulative sum are ascending
-    Float64 chains on the host; the distances are the device's."""
+    Float64 chains on the host; the distances are the device's. With sample
+    weights `w` (empty: unit) every potential and the cumulative sum weigh
+    each row, as sklearn's `closest_dist_sq @ sample_weight`."""
+    from checks.numerics import identical_mul64
+
+    var weighted = len(w) > 0
     from std.math import log
 
     var n_trials = 2 + Int(log(Float64(k)))
     var xs = ops.put(xs_host)
-    var centers = List[Float32](capacity=k * d)
+    var picks = List[Int](capacity=k)
     var first = rng.below(m)
-    for f in range(d):
-        centers.append(xs_host[first * d + f])
+    picks.append(first)
     var cslot = ops.put(gather_rows(xs_host, d, [first]))
     var closest_s = ops.zeros(m)
     ops.sqdist(cslot, 1, xs, m, d, closest_s)
     var closest = ops.get(closest_s, m)
     var pot = sum_f64(closest, m)
+    if weighted:
+        pot = Float64(0)
+        for t in range(m):
+            pot = pot + identical_mul64(Float64(w[t]), Float64(closest[t]))
     var cand_s = ops.zeros(n_trials * d)
     var dc_s = ops.zeros(n_trials * m)
     for _c in range(1, k):
         var cum = List[Float64](capacity=m)
         var acc = Float64(0)
         for t in range(m):
-            acc = acc + Float64(closest[t])
+            if weighted:
+                acc = acc + identical_mul64(Float64(w[t]), Float64(closest[t]))
+            else:
+                acc = acc + Float64(closest[t])
             cum.append(acc)
         var ids = List[Int](capacity=n_trials)
         for _t in range(n_trials):
@@ -99,7 +119,11 @@ def greedy_kmeans_pp[O: ClusterOps](
             var p = Float64(0)
             for j in range(m):
                 var v = dc[t * m + j]
-                p = p + Float64(v if v < closest[j] else closest[j])
+                var mv = Float64(v if v < closest[j] else closest[j])
+                if weighted:
+                    p = p + identical_mul64(Float64(w[j]), mv)
+                else:
+                    p = p + mv
             if t == 0 or p < best_pot:
                 best_pot = p
                 best = t
@@ -108,6 +132,22 @@ def greedy_kmeans_pp[O: ClusterOps](
             if v < closest[j]:
                 closest[j] = v
         pot = best_pot
-        for f in range(d):
-            centers.append(xs_host[ids[best] * d + f])
-    return centers^
+        picks.append(ids[best])
+    return picks^
+
+
+def weighted_draw(cum: List[Float64], mut rng: SplitMix64) -> Int:
+    """An index drawn with probability proportional to the weights whose
+    ascending Float64 cumulative sum is `cum`: `u * total` searched with side
+    left, clipped (numpy's `choice(p=...)` rule on a cumulative table)."""
+    var n = len(cum)
+    var v = rng.unit() * cum[n - 1]
+    var lo = 0
+    var hi = n
+    while lo < hi:
+        var mid = (lo + hi) // 2
+        if cum[mid] <= v:
+            lo = mid + 1
+        else:
+            hi = mid
+    return lo if lo < n else n - 1
