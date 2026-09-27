@@ -138,16 +138,75 @@ Apple FAST speed (m3ultra, before/after, same inline timing cmd): 1790540566963-
 1790540569623-speed-cnn-07d66ad836 (after) SUBMITTED: read `apple_steward.py status` / the verdict stdout
 (lines `XCNN-SPEED`). AMD FAST speed: OWED (`apple_steward.py submit` has no `--target do-amd` on main yet; no cnn-amd box). Submit the same inline command with `--kind speed --target do-amd` for 6226c8417 and the merge commit once it exists.
 
-## Next: phase 4: IDENTICAL speed (its own session)
+## Phase 4 (charter; directive 1(e)): IDENTICAL speed (2026-09-27), MERGED main 3330b7963
 
-1. Collect: 1790537166338 (identity), 1790540597511 (identity, this phase), the two m3ultra speed jobs;
-   fix any FAIL at the root first. AMD FAST speed once the steward has an AMD speed kind.
-2. Phase 4 (IDENTICAL speed): same bits, faster. The cost is now transfers and allocations, not kernels: device-resident
-   tensors across a trainer step (weights, optimizer state and activations on the device; only the batch
-   up and the loss down), cached device buffers instead of per-call allocation, and the conv im2col
-   buffer (604 MB at N256 C64) replaced by a tiled im2col-in-GEMM staging with the pinned fold order.
-   Re-prove bitwise on every column.
-3. Then phase 5 (CPU speed).
+MEASURED FIRST (RTX 4090 stage timers, /root/p4 on the pod): after phase 3 the kernels were still not the
+cost. The block backward at N256 64x64x32x32: 9.2 ms of kernels, 12.3 ms FREEING its eighteen device
+buffers, 1.2 ms allocating them, plus pageable uploads; `identical_gemm` allocated, synchronized and freed
+a workspace per call (0.3 ms of a 0.05 ms TN GEMM); and CNNClassifier moved every activation across PCIe
+two or three times per step. DEVIATION 5718 (x_cnn/README.md), plumbing and execution plans only:
+- workspace: every entry's device buffers are views of per-slot buffers cached for the process
+  (`ws`, grown on demand with a synchronize before a slot is replaced).
+- the pinned GEMM through `identical_gemm_into` on a cached workspace (the shipped plan); the small-output
+  OP_TN weight/bias gradients (m*n <= 65536, any k) name SPLIT 32x32 / SPLIT 64x64 (forced-plan sweep at
+  the lane's shapes: every plan bit-identical, these 2-7x faster than the dispatcher's SPLIT 16x16 plus
+  NVIDIA's long-k group rule). No floor on k, so the lane fixtures take this path on every column.
+- resident arrays (`x_cnn_res_alloc/free/upload/download/gather` and the `_r` entries): CNNClassifier's
+  fit and predict keep weights, optimizer state, activations and gradients on the device; the whole X
+  (<= 1 GiB) and labels resident, each batch gathered on the device (a 4-byte word copy); each block's
+  backward reads its forward's saved im2col matrix and conv output. CPU twin: resident = host allocation,
+  `_r` entries = its ordinary ones.
+- test_x_cnn_repeat.py (the 2026-09-27 CHECK NOW directive): every entry large/small/large in one
+  process, resident == address bits, the gather. GPU identical, GPU fast, CPU: 0 failures.
+
+Bits (all on the RTX 4090 pod, before = main 025c7a921's bindings):
+- /root/q2.py (every touched entry: pools, grouped and reflect conv, BN, BasicBlock, the trainer under
+  sgd/adam/adamw/nesterov/dampening/no-pool/no-conv/k5/big): 165/165 arrays equal old GPU vs new GPU,
+  old CPU vs new CPU, and GPU == CPU.
+- /root/fastq.py (the phase-3 quality set, big shapes that reach the forced plans): 170/170 equal to
+  q_new_identical.npz.
+- Lane-check output hashes (all 15 lanes, CPU and GPU JSONs) of the gate below equal the phase-3 run
+  20260927T202035 in every field but the binding/source digests.
+
+Gate (tree 1dfafaeb1, before a README-only commit and the origin/main merge):
+`algos_lane_check.sh <15 x-cnn lanes> --pass 2 --sabotage x_cnn/checks/sabotage/e2e_host_output_bit.patch`
+RESULT: PASS (16 seam arms FAIL under their patch and PASS after reversal; 15 lanes AGREE, DISAGREE under
+the e2e arm, AGREE restored). test_lane_select `OK: 0 failure(s)`. test_host_surface 196 passed (200 on
+the merged tree). PASSED: do not re-run. (The e2e patch's context needed the host binding's new import
+moved below `PythonModuleBuilder`; the first gate stopped there, with every seam arm biting.)
+
+NVIDIA IDENTICAL speed, RTX 4090, same pod, same script (median; two runs each, before -> after), script
+= the `--cmd` below (synthetic CIFAR-shaped tensors: timing only, no dataset):
+| shape | before | after |
+|---|---|---|
+| Conv2d N256 3->64 32x32 fwd / bwd | 12.1-16.1 / 10.0-11.3 ms | 9.9-11.3 / 5.7-6.0 ms |
+| Conv2d N256 64->64 32x32 fwd / bwd | 31.4-33.4 / 45.7-54.6 ms | 17.8-18.1 / 24.6-24.7 ms |
+| Conv2d N256 64->128 16x16 fwd / bwd | 10.5-12.0 / 14.4-16.2 ms | 7.5-7.7 / 7.4-7.6 ms |
+| CNNClassifier fit 2048x3x32x32 (32,64), batch 256, 1 epoch | 286-312 ms | 27-31 ms (~10x) |
+| CNNClassifier fit 8192 rows | 1100-1246 ms | 86-101 ms (~12x) |
+| predict_proba 2048 / 8192 | 84-94 / 358-388 ms | 20 / 61-71 ms (~4.5-5.5x) |
+The layer API (Conv2d.forward/backward on host arrays) is now PCIe bound (pageable copies of the input and
+the output); the trainer is kernel bound (block backward ~1 ms, forward ~0.45 ms per step).
+
+AMD / Apple speed (steward speed jobs, `--builds bindings/build_x_cnn.sh`, `--cmd` = the bench inline:
+scratch copy at ~/mojolearn-evidence/algos-cnn/ is not kept; the command text is in the request JSON):
+- do-amd IDENTICAL before 025c7a921: 1790549425969-speed-cnn-025c7a9214; after 1dfafaeb1:
+  1790549426913-speed-cnn-1dfafaeb16 (held in do-amd's queue at session end).
+- do-amd FAST (owed from phase 3) before 6226c8417: 1790549424046-speed-cnn-6226c84178; after fad716a02:
+  1790549425139-speed-cnn-fad716a02a (held).
+- Apple m4pro-a IDENTICAL before: 1790549427934-speed-cnn-025c7a9214; after: 1790549429480-speed-cnn-1dfafaeb16 (queued).
+- Identity (post-merge, 15 lanes + e2e arm): 1790540597512-cnn-3330b79639 (m2pro, m3ultra-b, m4pro-b, do-amd).
+Read them with `apple_steward.py status` and the verdict stdout (`XCNN-SPEED` lines). A FAIL is fixed at the
+root before phase 5. Still queued from phase 3: 1790540566963 / 1790540569623 (m3ultra FAST before/after).
+
+## Next: phase 5: CPU speed (its own session)
+
+1. Collect the phase-4 steward jobs above (identity 1790540597512; AMD and Apple speed pairs); record the
+   AMD and Apple before/after numbers here; fix any identity FAIL at the root first.
+2. Phase 5 (CPU speed): the x_cnn host twin (x_cnn/host/ops_host.mojo, bindings/_mojolearn_x_cnn_host.mojo):
+   threads over the element loops and the GEMM oracle's output cells, SIMD, cache blocking; bits identical
+   at every thread count and equal to the GPU. The host binding also still copies every array into a List
+   (read_f32) and back (copy_f32): address-in/address-out like the device entries is the first win.
 
 ## Earlier next list (history)
 
