@@ -5,9 +5,12 @@
 The coarse quantizer is the same Lloyd cells over whole rows."""
 
 from std.gpu import block_idx, block_dim, thread_idx
-from max.gpu.host import DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext
 
 from metrics.checks.device_io import upload_f32, upload_i32, download_f32, download_i32
+from x_ann.refine_core import refine_cell
+from x_ann.ivf_rabitq_core import rq_encode_cell, rq_pow2, rq_scale, rq_search_cell
+from x_ann.ivf_sq_core import sq_encode_cell, sq_range_cell, sq_search_cell
 from x_ann.ivf_pq_core import (
     F32P, I32P, IvfPqIndex, pq_assign_cell, pq_init_cell, pq_lists_from_labels,
     pq_len_of, pq_residual_cell, pq_search_cell, pq_update_cell, pq_validate,
@@ -47,13 +50,13 @@ def update_kernel(count: Int32, r: F32P, codes: I32P, n: Int32, pq_dim: Int32, r
 def search_kernel(
     count: Int32, queries: F32P, dim: Int32, centers: F32P, n_lists: Int32, offsets: I32P,
     list_indices: I32P, codes: I32P, cb: F32P, pq_dim: Int32, pq_len: Int32, n_codes: Int32,
-    k: Int32, n_probes: Int32, out_d: F32P, out_i: I32P, out_n: I32P,
+    k: Int32, n_probes: Int32, mask: I32P, out_d: F32P, out_i: I32P, out_n: I32P,
 ):
     var e = _tid()
     if e < Int(count):
         pq_search_cell(
             e, queries, Int(dim), centers, Int(n_lists), offsets, list_indices, codes, cb,
-            Int(pq_dim), Int(pq_len), Int(n_codes), Int(k), Int(n_probes), out_d, out_i, out_n,
+            Int(pq_dim), Int(pq_len), Int(n_codes), Int(k), Int(n_probes), mask, out_d, out_i, out_n,
         )
 
 
@@ -61,18 +64,10 @@ def _grid(count: Int) -> Int:
     return (count + TPB - 1) // TPB
 
 
-def ivf_pq_build_device(
-    x: List[Float32], n: Int, dim: Int, n_lists: Int, kmeans_n_iters: Int, seed: Int,
-    pq_dim: Int, pq_bits: Int, pq_iters: Int,
-) raises -> IvfPqIndex:
-    pq_validate(n, dim, n_lists, pq_dim, pq_bits, pq_iters)
-    var pq_len = pq_len_of(dim, pq_dim)
-    var rot_dim = pq_len * pq_dim
-    var n_codes = 1 << pq_bits
-    var ctx = DeviceContext()
-    var dx = upload_f32(ctx, x)
-    var dc = ctx.enqueue_create_buffer[DType.float32](n_lists * dim)
-    var dl = ctx.enqueue_create_buffer[DType.int32](n)
+def _coarse(
+    ctx: DeviceContext, mut dx: DeviceBuffer[DType.float32], mut dc: DeviceBuffer[DType.float32],
+    mut dl: DeviceBuffer[DType.int32], n: Int, dim: Int, n_lists: Int, kmeans_n_iters: Int, seed: Int,
+) raises:
     # the coarse Lloyd: the PQ cells with one subspace of width dim
     ctx.enqueue_function[init_kernel](
         Int32(n_lists * dim), dx.unsafe_ptr(), Int32(n), Int32(dim), Int32(dim), Int32(n_lists),
@@ -91,6 +86,21 @@ def ivf_pq_build_device(
         Int32(n), dx.unsafe_ptr(), dc.unsafe_ptr(), Int32(1), Int32(dim), Int32(dim), Int32(n_lists),
         dl.unsafe_ptr(), grid_dim=_grid(n), block_dim=TPB,
     )
+
+
+def ivf_pq_build_device(
+    x: List[Float32], n: Int, dim: Int, n_lists: Int, kmeans_n_iters: Int, seed: Int,
+    pq_dim: Int, pq_bits: Int, pq_iters: Int,
+) raises -> IvfPqIndex:
+    pq_validate(n, dim, n_lists, pq_dim, pq_bits, pq_iters)
+    var pq_len = pq_len_of(dim, pq_dim)
+    var rot_dim = pq_len * pq_dim
+    var n_codes = 1 << pq_bits
+    var ctx = DeviceContext()
+    var dx = upload_f32(ctx, x)
+    var dc = ctx.enqueue_create_buffer[DType.float32](n_lists * dim)
+    var dl = ctx.enqueue_create_buffer[DType.int32](n)
+    _coarse(ctx, dx, dc, dl, n, dim, n_lists, kmeans_n_iters, seed)
     ctx.synchronize()
     var centers = download_f32(ctx, dc, n_lists * dim)
     var labels = download_i32(ctx, dl, n)
@@ -139,7 +149,7 @@ def ivf_pq_build_device(
 
 def ivf_pq_search_device(
     centers: List[Float32], offsets: List[Int32], list_indices: List[Int32], codebooks: List[Float32],
-    codes: List[Int32], n_lists: Int, dim: Int, pq_dim: Int, pq_bits: Int,
+    codes: List[Int32], mask: List[Int32], n_lists: Int, dim: Int, pq_dim: Int, pq_bits: Int,
     queries: List[Float32], m: Int, k: Int, n_probes: Int,
     mut out_d: List[Float32], mut out_i: List[Int32], mut out_n: List[Int32],
 ) raises:
@@ -152,13 +162,15 @@ def ivf_pq_search_device(
     var dli = upload_i32(ctx, list_indices)
     var dcodes = upload_i32(ctx, codes)
     var dcb = upload_f32(ctx, codebooks)
+    var dmask = upload_i32(ctx, mask)
     var dd = ctx.enqueue_create_buffer[DType.float32](m * k)
     var di = ctx.enqueue_create_buffer[DType.int32](m * k)
     var dn = ctx.enqueue_create_buffer[DType.int32](m)
     ctx.enqueue_function[search_kernel](
         Int32(m), dq.unsafe_ptr(), Int32(dim), dc.unsafe_ptr(), Int32(n_lists), doff.unsafe_ptr(),
         dli.unsafe_ptr(), dcodes.unsafe_ptr(), dcb.unsafe_ptr(), Int32(pq_dim), Int32(pq_len),
-        Int32(n_codes), Int32(k), Int32(n_probes), dd.unsafe_ptr(), di.unsafe_ptr(), dn.unsafe_ptr(),
+        Int32(n_codes), Int32(k), Int32(n_probes), dmask.unsafe_ptr(), dd.unsafe_ptr(), di.unsafe_ptr(),
+        dn.unsafe_ptr(),
         grid_dim=_grid(m), block_dim=TPB,
     )
     ctx.synchronize()
@@ -168,7 +180,252 @@ def ivf_pq_search_device(
     _ = dn^
     _ = di^
     _ = dd^
+    _ = dmask^
     _ = dcb^
+    _ = dcodes^
+    _ = dli^
+    _ = doff^
+    _ = dc^
+    _ = dq^
+    _ = ctx^
+
+
+def sq_range_kernel(dim: Int32, r: F32P, n: Int32, vmin: F32P, delta: F32P):
+    var c = _tid()
+    if c < Int(dim):
+        sq_range_cell(c, r, Int(n), Int(dim), vmin, delta)
+
+
+def sq_encode_kernel(count: Int32, r: F32P, dim: Int32, vmin: F32P, delta: F32P, codes: I32P):
+    var e = _tid()
+    if e < Int(count):
+        sq_encode_cell(e, r, Int(dim), vmin, delta, codes)
+
+
+def sq_search_kernel(
+    count: Int32, queries: F32P, dim: Int32, centers: F32P, n_lists: Int32, offsets: I32P,
+    list_indices: I32P, codes: I32P, vmin: F32P, delta: F32P, k: Int32, n_probes: Int32, mask: I32P,
+    out_d: F32P, out_i: I32P, out_n: I32P,
+):
+    var e = _tid()
+    if e < Int(count):
+        sq_search_cell(e, queries, Int(dim), centers, Int(n_lists), offsets, list_indices, codes, vmin,
+                       delta, Int(k), Int(n_probes), mask, out_d, out_i, out_n)
+
+
+def ivf_sq_build_device(
+    x: List[Float32], n: Int, dim: Int, n_lists: Int, kmeans_n_iters: Int, seed: Int,
+    mut centers: List[Float32], mut offsets: List[Int32], mut list_indices: List[Int32],
+    mut vmin: List[Float32], mut delta: List[Float32], mut codes: List[Int32],
+) raises:
+    pq_validate(n, dim, n_lists, 1, 1, 0)
+    var ctx = DeviceContext()
+    var dx = upload_f32(ctx, x)
+    var dc = ctx.enqueue_create_buffer[DType.float32](n_lists * dim)
+    var dl = ctx.enqueue_create_buffer[DType.int32](n)
+    _coarse(ctx, dx, dc, dl, n, dim, n_lists, kmeans_n_iters, seed)
+    var dr = ctx.enqueue_create_buffer[DType.float32](n * dim)
+    var dvmin = ctx.enqueue_create_buffer[DType.float32](dim)
+    var ddelta = ctx.enqueue_create_buffer[DType.float32](dim)
+    var dcodes = ctx.enqueue_create_buffer[DType.int32](n * dim)
+    ctx.enqueue_function[residual_kernel](
+        Int32(n * dim), dx.unsafe_ptr(), dc.unsafe_ptr(), dl.unsafe_ptr(), Int32(dim),
+        Int32(dim), dr.unsafe_ptr(), grid_dim=_grid(n * dim), block_dim=TPB,
+    )
+    ctx.enqueue_function[sq_range_kernel](Int32(dim), dr.unsafe_ptr(), Int32(n), dvmin.unsafe_ptr(),
+                                          ddelta.unsafe_ptr(), grid_dim=_grid(dim), block_dim=TPB)
+    ctx.enqueue_function[sq_encode_kernel](Int32(n * dim), dr.unsafe_ptr(), Int32(dim), dvmin.unsafe_ptr(),
+                                           ddelta.unsafe_ptr(), dcodes.unsafe_ptr(), grid_dim=_grid(n * dim),
+                                           block_dim=TPB)
+    ctx.synchronize()
+    centers = download_f32(ctx, dc, n_lists * dim)
+    var labels = download_i32(ctx, dl, n)
+    pq_lists_from_labels(labels, n, n_lists, offsets, list_indices)
+    vmin = download_f32(ctx, dvmin, dim)
+    delta = download_f32(ctx, ddelta, dim)
+    codes = download_i32(ctx, dcodes, n * dim)
+    _ = dcodes^
+    _ = ddelta^
+    _ = dvmin^
+    _ = dr^
+    _ = dl^
+    _ = dc^
+    _ = dx^
+    _ = ctx^
+
+
+def ivf_sq_search_device(
+    centers: List[Float32], offsets: List[Int32], list_indices: List[Int32], vmin: List[Float32],
+    delta: List[Float32], codes: List[Int32], mask: List[Int32], n_lists: Int, dim: Int,
+    queries: List[Float32], m: Int, k: Int, n_probes: Int,
+    mut out_d: List[Float32], mut out_i: List[Int32], mut out_n: List[Int32],
+) raises:
+    var ctx = DeviceContext()
+    var dq = upload_f32(ctx, queries)
+    var dc = upload_f32(ctx, centers)
+    var doff = upload_i32(ctx, offsets)
+    var dli = upload_i32(ctx, list_indices)
+    var dcodes = upload_i32(ctx, codes)
+    var dvmin = upload_f32(ctx, vmin)
+    var ddelta = upload_f32(ctx, delta)
+    var dmask = upload_i32(ctx, mask)
+    var dd = ctx.enqueue_create_buffer[DType.float32](m * k)
+    var di = ctx.enqueue_create_buffer[DType.int32](m * k)
+    var dn = ctx.enqueue_create_buffer[DType.int32](m)
+    ctx.enqueue_function[sq_search_kernel](
+        Int32(m), dq.unsafe_ptr(), Int32(dim), dc.unsafe_ptr(), Int32(n_lists), doff.unsafe_ptr(),
+        dli.unsafe_ptr(), dcodes.unsafe_ptr(), dvmin.unsafe_ptr(), ddelta.unsafe_ptr(), Int32(k),
+        Int32(n_probes), dmask.unsafe_ptr(), dd.unsafe_ptr(), di.unsafe_ptr(), dn.unsafe_ptr(),
+        grid_dim=_grid(m), block_dim=TPB,
+    )
+    ctx.synchronize()
+    out_d = download_f32(ctx, dd, m * k)
+    out_i = download_i32(ctx, di, m * k)
+    out_n = download_i32(ctx, dn, m)
+    _ = dn^
+    _ = di^
+    _ = dd^
+    _ = dmask^
+    _ = ddelta^
+    _ = dvmin^
+    _ = dcodes^
+    _ = dli^
+    _ = doff^
+    _ = dc^
+    _ = dq^
+    _ = ctx^
+
+
+def refine_kernel(m: Int32, x: F32P, n: Int32, d: Int32, queries: F32P, cand: I32P, k0: Int32, k: Int32,
+                  out_d: F32P, out_i: I32P):
+    var q = _tid()
+    if q < Int(m):
+        refine_cell(q, x, Int(n), Int(d), queries, cand, Int(k0), Int(k), out_d, out_i)
+
+
+def refine_device(
+    x: List[Float32], n: Int, d: Int, queries: List[Float32], m: Int, cand: List[Int32], k0: Int, k: Int,
+    mut out_d: List[Float32], mut out_i: List[Int32],
+) raises:
+    var ctx = DeviceContext()
+    var dx = upload_f32(ctx, x)
+    var dq = upload_f32(ctx, queries)
+    var dcand = upload_i32(ctx, cand)
+    var dd = ctx.enqueue_create_buffer[DType.float32](m * k)
+    var di = ctx.enqueue_create_buffer[DType.int32](m * k)
+    ctx.enqueue_function[refine_kernel](Int32(m), dx.unsafe_ptr(), Int32(n), Int32(d), dq.unsafe_ptr(),
+                                        dcand.unsafe_ptr(), Int32(k0), Int32(k), dd.unsafe_ptr(), di.unsafe_ptr(),
+                                        grid_dim=_grid(m), block_dim=TPB)
+    ctx.synchronize()
+    out_d = download_f32(ctx, dd, m * k)
+    out_i = download_i32(ctx, di, m * k)
+    _ = di^
+    _ = dd^
+    _ = dcand^
+    _ = dq^
+    _ = dx^
+    _ = ctx^
+
+
+def rq_encode_kernel(
+    n: Int32, x: F32P, centers: F32P, labels: I32P, dim: Int32, D: Int32, seed: Int32, scale: Float32,
+    ws: F32P, words: Int32, codes: I32P, norms: F32P, ips: F32P,
+):
+    var i = _tid()
+    if i < Int(n):
+        rq_encode_cell(i, x, centers, labels, Int(dim), Int(D), Int(seed), scale, ws, Int(words), codes, norms, ips)
+
+
+def rq_search_kernel(
+    m: Int32, queries: F32P, dim: Int32, centers: F32P, n_lists: Int32, offsets: I32P, list_indices: I32P,
+    codes: I32P, norms: F32P, ips: F32P, D: Int32, words: Int32, seed: Int32, scale: Float32, k: Int32,
+    n_probes: Int32, mask: I32P, ws: F32P, out_d: F32P, out_i: I32P, out_n: I32P,
+):
+    var q = _tid()
+    if q < Int(m):
+        rq_search_cell(q, queries, Int(dim), centers, Int(n_lists), offsets, list_indices, codes, norms, ips,
+                       Int(D), Int(words), Int(seed), scale, Int(k), Int(n_probes), mask, ws, out_d, out_i, out_n)
+
+
+def ivf_rabitq_build_device(
+    x: List[Float32], n: Int, dim: Int, n_lists: Int, kmeans_n_iters: Int, seed: Int,
+    mut centers: List[Float32], mut offsets: List[Int32], mut list_indices: List[Int32],
+    mut codes: List[Int32], mut norms: List[Float32], mut ips: List[Float32],
+) raises:
+    pq_validate(n, dim, n_lists, 1, 1, 0)
+    var D = rq_pow2(dim)
+    var words = (D + 31) // 32
+    var scale = rq_scale(D)
+    var ctx = DeviceContext()
+    var dx = upload_f32(ctx, x)
+    var dc = ctx.enqueue_create_buffer[DType.float32](n_lists * dim)
+    var dl = ctx.enqueue_create_buffer[DType.int32](n)
+    _coarse(ctx, dx, dc, dl, n, dim, n_lists, kmeans_n_iters, seed)
+    var dws = ctx.enqueue_create_buffer[DType.float32](n * D)
+    var dcodes = ctx.enqueue_create_buffer[DType.int32](n * words)
+    var dnorm = ctx.enqueue_create_buffer[DType.float32](n)
+    var dip = ctx.enqueue_create_buffer[DType.float32](n)
+    ctx.enqueue_function[rq_encode_kernel](
+        Int32(n), dx.unsafe_ptr(), dc.unsafe_ptr(), dl.unsafe_ptr(), Int32(dim), Int32(D), Int32(seed), scale,
+        dws.unsafe_ptr(), Int32(words), dcodes.unsafe_ptr(), dnorm.unsafe_ptr(), dip.unsafe_ptr(),
+        grid_dim=_grid(n), block_dim=TPB,
+    )
+    ctx.synchronize()
+    centers = download_f32(ctx, dc, n_lists * dim)
+    var labels = download_i32(ctx, dl, n)
+    pq_lists_from_labels(labels, n, n_lists, offsets, list_indices)
+    codes = download_i32(ctx, dcodes, n * words)
+    norms = download_f32(ctx, dnorm, n)
+    ips = download_f32(ctx, dip, n)
+    _ = dip^
+    _ = dnorm^
+    _ = dcodes^
+    _ = dws^
+    _ = dl^
+    _ = dc^
+    _ = dx^
+    _ = ctx^
+
+
+def ivf_rabitq_search_device(
+    centers: List[Float32], offsets: List[Int32], list_indices: List[Int32], codes: List[Int32],
+    norms: List[Float32], ips: List[Float32], mask: List[Int32], n_lists: Int, dim: Int, seed: Int,
+    queries: List[Float32], m: Int, k: Int, n_probes: Int,
+    mut out_d: List[Float32], mut out_i: List[Int32], mut out_n: List[Int32],
+) raises:
+    var D = rq_pow2(dim)
+    var words = (D + 31) // 32
+    var scale = rq_scale(D)
+    var ctx = DeviceContext()
+    var dq = upload_f32(ctx, queries)
+    var dc = upload_f32(ctx, centers)
+    var doff = upload_i32(ctx, offsets)
+    var dli = upload_i32(ctx, list_indices)
+    var dcodes = upload_i32(ctx, codes)
+    var dnorm = upload_f32(ctx, norms)
+    var dip = upload_f32(ctx, ips)
+    var dmask = upload_i32(ctx, mask)
+    var dws = ctx.enqueue_create_buffer[DType.float32](m * D)
+    var dd = ctx.enqueue_create_buffer[DType.float32](m * k)
+    var di = ctx.enqueue_create_buffer[DType.int32](m * k)
+    var dn = ctx.enqueue_create_buffer[DType.int32](m)
+    ctx.enqueue_function[rq_search_kernel](
+        Int32(m), dq.unsafe_ptr(), Int32(dim), dc.unsafe_ptr(), Int32(n_lists), doff.unsafe_ptr(),
+        dli.unsafe_ptr(), dcodes.unsafe_ptr(), dnorm.unsafe_ptr(), dip.unsafe_ptr(), Int32(D), Int32(words),
+        Int32(seed), scale, Int32(k), Int32(n_probes), dmask.unsafe_ptr(), dws.unsafe_ptr(), dd.unsafe_ptr(),
+        di.unsafe_ptr(), dn.unsafe_ptr(), grid_dim=_grid(m), block_dim=TPB,
+    )
+    ctx.synchronize()
+    out_d = download_f32(ctx, dd, m * k)
+    out_i = download_i32(ctx, di, m * k)
+    out_n = download_i32(ctx, dn, m)
+    _ = dn^
+    _ = di^
+    _ = dd^
+    _ = dws^
+    _ = dmask^
+    _ = dip^
+    _ = dnorm^
     _ = dcodes^
     _ = dli^
     _ = doff^

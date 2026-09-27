@@ -14,7 +14,7 @@ from x_ann.abi import check_search, in_f32, in_i32, out_f32, out_i32, p_int
 from x_ann.ivf_pq_core import pq_len_of
 from x_ann.host.cagra_host import cagra_build_host, cagra_search_host
 from x_ann.host.tsne_host import tsne_fit_host
-from x_ann.host.ivf_pq_host import X_ANN_HOST_SABOTAGE, ivf_pq_build_host, ivf_pq_search_host
+from x_ann.host.ivf_pq_host import X_ANN_HOST_SABOTAGE, ivf_pq_build_host, ivf_pq_search_host, ivf_sq_build_host, ivf_sq_search_host, refine_host
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 
 
@@ -41,7 +41,8 @@ def ivf_pq_build_binding(addrs: PythonObject, params: PythonObject) raises -> Py
 
 
 def ivf_pq_search_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    """addrs: centers, offsets, list_indices, codebooks, codes, queries, out_d, out_i, out_n.
+    """addrs: centers, offsets, list_indices, codebooks, codes, queries, out_d, out_i, out_n, mask
+    (int32 per row, 0 removes the row: the sample filter).
     params: n, dim, n_lists, pq_dim, pq_bits, m, k, n_probes."""
     var n = p_int(params, 0)
     var dim = p_int(params, 1)
@@ -59,11 +60,12 @@ def ivf_pq_search_binding(addrs: PythonObject, params: PythonObject) raises -> P
     var cb = in_f32(addrs, 3, pq_dim * (1 << pq_bits) * pq_len)
     var codes = in_i32(addrs, 4, n * pq_dim)
     var queries = in_f32(addrs, 5, m * dim)
+    var mask = in_i32(addrs, 9, n)
     var od = List[Float32]()
     var oi = List[Int32]()
     var on = List[Int32]()
     with GILReleased(Python()):
-        ivf_pq_search_host(centers, offsets, list_indices, cb, codes, n_lists, dim, pq_dim, pq_bits,
+        ivf_pq_search_host(centers, offsets, list_indices, cb, codes, mask, n_lists, dim, pq_dim, pq_bits,
                              queries, m, k, n_probes, od, oi, on)
     out_f32(od, addrs, 6)
     out_i32(oi, addrs, 7)
@@ -137,6 +139,84 @@ def cagra_search_binding(addrs: PythonObject, params: PythonObject) raises -> Py
     return PythonObject(m)
 
 
+def ivf_sq_build_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """addrs: x, centers, offsets, list_indices, vmin, delta, codes.
+    params: n, dim, n_lists, kmeans_n_iters, seed."""
+    var n = p_int(params, 0)
+    var dim = p_int(params, 1)
+    var n_lists = p_int(params, 2)
+    var iters = p_int(params, 3)
+    var seed = p_int(params, 4)
+    var x = in_f32(addrs, 0, n * dim)
+    var centers = List[Float32]()
+    var offsets = List[Int32]()
+    var list_indices = List[Int32]()
+    var vmin = List[Float32]()
+    var delta = List[Float32]()
+    var codes = List[Int32]()
+    with GILReleased(Python()):
+        ivf_sq_build_host(x, n, dim, n_lists, iters, seed, centers, offsets, list_indices, vmin, delta, codes)
+    out_f32(centers, addrs, 1)
+    out_i32(offsets, addrs, 2)
+    out_i32(list_indices, addrs, 3)
+    out_f32(vmin, addrs, 4)
+    out_f32(delta, addrs, 5)
+    out_i32(codes, addrs, 6)
+    return PythonObject(n)
+
+
+def ivf_sq_search_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """addrs: centers, offsets, list_indices, vmin, delta, codes, mask, queries, out_d, out_i, out_n.
+    params: n, dim, n_lists, m, k, n_probes."""
+    var n = p_int(params, 0)
+    var dim = p_int(params, 1)
+    var n_lists = p_int(params, 2)
+    var m = p_int(params, 3)
+    var k = p_int(params, 4)
+    var n_probes = p_int(params, 5)
+    check_search(n_lists, m, k, n_probes)
+    var centers = in_f32(addrs, 0, n_lists * dim)
+    var offsets = in_i32(addrs, 1, n_lists + 1)
+    var list_indices = in_i32(addrs, 2, n)
+    var vmin = in_f32(addrs, 3, dim)
+    var delta = in_f32(addrs, 4, dim)
+    var codes = in_i32(addrs, 5, n * dim)
+    var mask = in_i32(addrs, 6, n)
+    var queries = in_f32(addrs, 7, m * dim)
+    var od = List[Float32]()
+    var oi = List[Int32]()
+    var on = List[Int32]()
+    with GILReleased(Python()):
+        ivf_sq_search_host(centers, offsets, list_indices, vmin, delta, codes, mask, n_lists, dim, queries, m, k,
+                             n_probes, od, oi, on)
+    out_f32(od, addrs, 8)
+    out_i32(oi, addrs, 9)
+    out_i32(on, addrs, 10)
+    return PythonObject(m)
+
+
+def refine_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """addrs: dataset, queries, candidates (int32 m x k0, < 0 = padding), out_d, out_i.
+    params: n, d, m, k0, k."""
+    var n = p_int(params, 0)
+    var d = p_int(params, 1)
+    var m = p_int(params, 2)
+    var k0 = p_int(params, 3)
+    var k = p_int(params, 4)
+    if n <= 0 or d <= 0 or m <= 0 or k0 <= 0 or k <= 0 or k > k0:
+        raise Error("refine: need positive shapes and 1 <= k <= n_candidates")
+    var x = in_f32(addrs, 0, n * d)
+    var q = in_f32(addrs, 1, m * d)
+    var cand = in_i32(addrs, 2, m * k0)
+    var od = List[Float32]()
+    var oi = List[Int32]()
+    with GILReleased(Python()):
+        refine_host(x, n, d, q, m, cand, k0, k, od, oi)
+    out_f32(od, addrs, 3)
+    out_i32(oi, addrs, 4)
+    return PythonObject(m)
+
+
 def numeric_mode_binding() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 
@@ -163,6 +243,9 @@ def PyInit__mojolearn_x_ann_host() abi("C") -> PythonObject:
         m.def_function[tsne_fit_binding]("x_ann_tsne_fit")
         m.def_function[cagra_build_binding]("x_ann_cagra_build")
         m.def_function[cagra_search_binding]("x_ann_cagra_search")
+        m.def_function[ivf_sq_build_binding]("x_ann_ivf_sq_build")
+        m.def_function[ivf_sq_search_binding]("x_ann_ivf_sq_search")
+        m.def_function[refine_binding]("x_ann_refine")
         m.def_function[numeric_mode_binding]("x_ann_numeric_mode")
         m.def_function[vendor_binding]("x_ann_vendor")
         m.def_function[numeric_mode_binding]("x_ann_host_numeric_mode")
