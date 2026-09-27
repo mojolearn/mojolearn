@@ -31,7 +31,8 @@ __all__ = ["SGDClassifier", "SGDRegressor", "PoissonRegressor", "GammaRegressor"
            "Lars", "LassoLars",
            "QuantileRegressor",
            "Perceptron", "PassiveAggressiveClassifier",
-           "PassiveAggressiveRegressor", "SGDOneClassSVM"]
+           "PassiveAggressiveRegressor", "SGDOneClassSVM",
+           "RidgeClassifier"]
 
 _BINDING = "_mojolearn_x_linear"
 ALGO_SGD, ALGO_GLM, ALGO_HUBER, ALGO_BAYES, ALGO_ARD = 1, 2, 3, 4, 5
@@ -764,3 +765,55 @@ class SGDOneClassSVM(NumericModeMixin):
 
     def predict(self, X):
         return Array.from_list([1 if v >= 0 else -1 for v in self.decision_function(X).tolist()], "<i8")
+
+
+# ------------------------------------------------------------------- Ridge
+# Reference: scikit-learn sklearn/linear_model/_ridge.py (`_solve_cholesky`,
+# `_RidgeGCV`); kernel x_linear/ridge.mojo.
+
+def _ridge_run(est, a, n, d, Y, T, alphas):
+    A = len(alphas)
+    return _run(est, ALGO_RIDGE, a, n, d, Y, [T, int(bool(est.fit_intercept)), A], list(alphas),
+                T * d + T + 2 + A, 3 * d * d + 3 * d + T + d * T, 1)
+
+
+def _ridge_refuse(est):
+    name = type(est).__name__
+    if getattr(est, "positive", False):
+        raise ValueError(f"mojolearn {name}: positive=True is not implemented")
+    if getattr(est, "class_weight", None) is not None:
+        raise ValueError(f"mojolearn {name}: class_weight is not implemented")
+    if getattr(est, "solver", "auto") not in ("auto", "cholesky"):
+        raise ValueError(f"mojolearn {name}: solver must be 'auto' or 'cholesky'")
+
+
+class RidgeClassifier(_LinearClassifierMixin, NumericModeMixin):
+    """Ridge regression on +-1 class targets (scikit-learn's RidgeClassifier)."""
+
+    _BINDING = _BINDING
+
+    def __init__(self, alpha=1.0, *, fit_intercept=True, copy_X=True, max_iter=None, tol=1e-4,
+                 class_weight=None, solver="auto", positive=False, random_state=None):
+        self.alpha, self.fit_intercept, self.copy_X, self.max_iter = alpha, fit_intercept, copy_X, max_iter
+        self.tol, self.class_weight, self.solver, self.positive = tol, class_weight, solver, positive
+        self.random_state = random_state
+
+    def fit(self, X, y):
+        _ridge_refuse(self)
+        if not self.alpha >= 0:
+            raise ValueError("mojolearn RidgeClassifier: alpha must be >= 0")
+        a, n, d = _matrix(X)
+        classes, codes = _classes(self, y, n)
+        k = len(classes)
+        T = 1 if k == 2 else k
+        cl = codes.tolist()
+        if T == 1:
+            Y = [1.0 if c == 1 else -1.0 for c in cl]
+        else:
+            Y = [1.0 if c == t else -1.0 for c in cl for t in range(T)]
+        vals = _ridge_run(self, a, n, d, Array.from_list(Y, "<f4"), T, [self.alpha])
+        self.classes_ = classes
+        self.coef_ = Array.from_list(_rows(vals, T, d), "<f4")
+        self.intercept_ = Array.from_list(vals[T * d:T * d + T], "<f4")
+        self.n_features_in_ = d
+        return self
