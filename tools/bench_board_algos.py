@@ -1496,7 +1496,7 @@ def lane_arrays(lane, B):
         Y = B["Y"]
         return {"Yfit": np.ascontiguousarray(Y[:, :-TS_H]), "Yhold": np.ascontiguousarray(Y[:, -TS_H:])}
     if b == "images":
-        cap = B.get("_cap")
+        cap = B.get("_cap") or os.environ.get("MOJOLEARN_ALGOS_SMOKE_ROWS")
         n_fit, n_q = (min(20_000, int(cap)), min(5_000, int(cap))) if cap else (20_000, 5_000)
         X, y = synthetic_images(n_fit + n_q)
         return {"X": X[:n_fit], "y": y[:n_fit], "Xq": X[n_fit:], "yq": y[n_fit:]}
@@ -3581,6 +3581,8 @@ def race(args):
     arms = [a for a in args.arms.split(",") if a]
     os.makedirs(args.out, exist_ok=True)
     os.makedirs(args.work, exist_ok=True)
+    if args.smoke_rows:           # the conductor builds the same seeded arrays as its workers
+        os.environ["MOJOLEARN_ALGOS_SMOKE_ROWS"] = str(args.smoke_rows)
     B, rec = _load_block(lane, ds, args.data)
     D = lane_arrays(lane, B)
     shape = "; ".join("%s %s" % (k, "x".join(str(s) for s in np.shape(v)))
