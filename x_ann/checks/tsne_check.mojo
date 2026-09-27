@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""t-SNE's per-seam proof (DEVIATIONS 5810-5815, IDENTITY_PATHS row 181):
+"""t-SNE's per-seam proof (DEVIATIONS 5810-5817, IDENTITY_PATHS row 181):
 the device fit's embedding and KL equal the independent host oracle
 (x_ann/checks/tsne_oracle.mojo) BIT FOR BIT on fixtures first shown to
 SEPARATE each seam's pinned spelling from its unpinned one. Under IDENTICAL:
@@ -81,13 +81,17 @@ def main() raises:
     var yw = List[Float32]()
     for e in range(2 * n):
         yw.append(wide[e % (n * d)])
+    # the schedule's own seams are shown by the configurations below: the
+    # nc = 3 run has dof 2 (q * sqrt(q), 5816), the 120-step run crosses the
+    # phase change with a reset (5817), the large min_grad_norm run stops at
+    # a check before its last step (5817)
     var sep_rep = 0
     var sep_attr = 0
     for i in range(n):
         var qs = List[Float32]()
         for j in range(n):
             if j != i:
-                qs.append(to_q(yw, i, j))
+                qs.append(to_q(yw, i, j, 2, 1))
         if bitcast[DType.uint32](to_sum(qs, 0, len(qs))) != bitcast[DType.uint32](to_sum(qs, 0, len(qs), rev=True)):
             sep_rep += 1
         var at = List[Float32]()
@@ -104,19 +108,33 @@ def main() raises:
         print("VACUOUS: a fixture does not separate its seam")
         exit(2)
 
-    # ---- device == oracle
-    for f in range(2):
-        var name = String("ties") if f == 0 else String("wide")
+    # ---- device == oracle, four configurations
+    for f in range(4):
+        var name = String("ties") if f == 0 else (String("wide") if f == 1 else (String("nc3-exact") if f == 2 else String("early-stop")))
         var x = ties.copy() if f == 0 else wide.copy()
+        var nc = 3 if f == 2 else 2
+        var iters = 120 if f >= 2 else 30
+        var explo = 60 if f >= 2 else 10
+        var exact = f == 2
+        var mgn = Float32(1000.0) if f == 3 else Float32(1e-7)
+        var y0f = List[Float32]()
+        for e in range(nc * n):
+            y0f.append(Float32(Int(hash_u(e, 21) % UInt64(2001)) - 1000) * Float32(1e-7))
         var yd = List[Float32]()
         var kd = Float32(0.0)
-        tsne_fit_device(x, n, d, y0, perp, Float32(12.0), Float32(50.0), 30, 10, yd, kd)
+        var nd_it = 0
+        tsne_fit_device(x, n, d, nc, y0f, perp, Float32(12.0), Float32(50.0), iters, explo, exact, 300, mgn, yd, kd, nd_it)
         var ko = Float32(0.0)
-        var yo = to_fit(x, n, d, y0, perp, Float32(12.0), Float32(50.0), 30, 10, ko)
+        var no_it = 0
+        var yo = to_fit(x, n, d, nc, y0f, perp, Float32(12.0), Float32(50.0), iters, explo, exact, 300, mgn, ko, no_it)
         trace.record_list_f32(String("tsne.") + name + ".embedding", yd)
         trace.record_scalar_f32(String("tsne.") + name + ".kl", kd)
-        report(name + ": embedding == oracle (5810-5815)", same_f32(yd, yo), failed)
+        report(name + ": embedding == oracle (5810-5817)", same_f32(yd, yo), failed)
         report(name + ": KL == oracle", bitcast[DType.uint32](kd) == bitcast[DType.uint32](ko), failed)
+        report(name + ": n_iter == oracle (" + String(nd_it) + ")", nd_it == no_it, failed)
+        if f == 3 and nd_it >= iters - 1:
+            print("VACUOUS: the early-stop configuration did not stop early")
+            exit(2)
     if failed > 0:
         print("tsne_check: FAILED", failed)
         exit(1)
