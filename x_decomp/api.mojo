@@ -321,6 +321,28 @@ def als_rows_py[E: Exec](
     return PythonObject(n)
 
 
+def absmax_sign_py[E: Exec](a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
+    var n = _n(p, 0)
+    var d = _n(p, 1)
+    var by_col = Int(py=p[2]) != 0
+    var pa = _f(a)
+    var pd = _f(dst)
+    with GILReleased(Python()):
+        E.absmax_sign(pa, pd, n, d, by_col)
+    return PythonObject(d if by_col else n)
+
+
+def qr_r_py[E: Exec](a: PythonObject, r: PythonObject, p: PythonObject) raises -> PythonObject:
+    var m = _n(p, 0)
+    var n = _n(p, 1)
+    if n <= 0 or m < n:
+        raise Error("x_decomp: qr_r needs m >= n >= 1")
+    var pa = _f(a)
+    var pr = _f(r)
+    E.qr_r(pa, m, n, pr)
+    return PythonObject(n)
+
+
 def numeric_mode_py() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 

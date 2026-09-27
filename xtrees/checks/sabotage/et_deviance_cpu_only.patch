@@ -1,0 +1,20 @@
+diff --git a/extratrees/impl/decisiontree/batched_levelalgo/objectives.mojo b/extratrees/impl/decisiontree/batched_levelalgo/objectives.mojo
+--- a/extratrees/impl/decisiontree/batched_levelalgo/objectives.mojo
++++ b/extratrees/impl/decisiontree/batched_levelalgo/objectives.mojo
+@@ -3,6 +3,7 @@
+ """ExtraTrees split scoring: Gini/entropy classification and MSE regression."""
+ 
+ from std.math import fma
++from std.sys.compile import is_defined
+ 
+ from checks.numerics import ftz
+ 
+@@ -450,6 +451,8 @@
+         parent_obj = ftz(ftz(-pw * pw) / label_sum)
+         left_obj = ftz(ftz(-lw * lw) / left_label_sum)
+         right_obj = ftz(ftz(-rw * rw) / right_label_sum)
++    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
++        right_obj = ftz(right_obj * Float32(1.001))  # ET DEVIANCE SABOTAGE: the CPU column only
+     var lr = ftz(left_obj + right_obj)
+     var gain = ftz(parent_obj - lr)
+     if criterion == REG_CRITERION_INVERSE_GAUSSIAN:

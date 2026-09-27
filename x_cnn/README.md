@@ -11,8 +11,12 @@ Dropout2d, BasicBlock, CNNClassifier, GCNConv, SAGEConv.
   them one thread per element, `host/ops_host.mojo` loops over them. Every
   contraction is mojolearn.identical.gemm.fp32.v1 (`identical_gemm` without
   the vendor route on the device, `gemm_oracle` on the host).
-- IDENTICAL: CPU == every GPU vendor, bit for bit. FAST: the same kernels in
-  pass 1 (no bit promise; speed work is pass 2's item 3).
+- IDENTICAL: CPU == every GPU vendor, bit for bit. FAST: the same kernels
+  (no bit promise). Both tiers take the caller's host addresses straight to
+  and from the device (DEVIATION 5716) and run CNNClassifier's conv block
+  (Conv2d -> ReLU -> MaxPool2d) as one binding call each way
+  (`x_cnn_conv_block_*`, DEVIATION 5717); both are copies/fusions that move no
+  bit in either tier.
 - Seams and their DEVIATIONs (IDENTITY_PATHS.md rows 170-179):
   5700 col2im gather order, 5701 weight gradient on the pinned GEMM,
   5702 BatchNorm folds, 5703 Dropout2d Philox mask, 5704 SpMM row folds,
