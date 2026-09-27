@@ -1,0 +1,16 @@
+diff --git a/x_metrics/common.mojo b/x_metrics/common.mojo
+index 75c81ea85..8790182fe 100644
+--- a/x_metrics/common.mojo
++++ b/x_metrics/common.mojo
+@@ -83,6 +83,11 @@ def key(x: Float32) -> UInt32:
+ @always_inline
+ def fadd(a: Float32, b: Float32) -> Float32:
+     """One flushed add: the only way two partial sums meet."""
++    from std.sys.info import is_gpu  # SABOTAGE e2e: a host-only arithmetic branch
++    comptime if not is_gpu():
++        var h = ftz(ftz(a) + ftz(b))
++        if h != Float32(0) and h == h:
++            return bitcast[DType.float32](bitcast[DType.uint32](h) + UInt32(1))
+     return ftz(ftz(a) + ftz(b))
+ 
+ 
