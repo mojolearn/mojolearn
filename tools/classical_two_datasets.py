@@ -511,6 +511,10 @@ def _to_host(a):
         return a.detach().cpu().numpy()
     if type(a).__module__.split(".")[0] == "cupy":
         return a.get()
+    if hasattr(a, "copy_to_host"):
+        # cuVS/pylibraft device_ndarray: np.array() of it reads host garbage
+        # (measured 2026-09-27: every cuvs-gpu recall read ~0 through it)
+        return np.asarray(a.copy_to_host())
     return np.array(a, copy=True)
 
 

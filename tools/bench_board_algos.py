@@ -383,6 +383,18 @@ _add("lda", xlane="decomp", ours="LatentDirichletAllocation", task="transform", 
      params=dict(n_components=16, learning_method="batch", max_iter=20, random_state=SEED),
      sk_params=dict(n_components=16, learning_method="batch", max_iter=20, random_state=SEED,
                     n_jobs=-1))
+_add("classical-mds", xlane="decomp", ours="ClassicalMDS", task="embed", block="manifold",
+     sub={"X": SUB["tiny"]}, sk="sklearn.manifold:ClassicalMDS", params=dict(n_components=2),
+     notes=["scikit-learn 1.7.2 has no ClassicalMDS: its arm is the same algorithm assembled from "
+            "scikit-learn, KernelPCA(kernel='precomputed', eigen_solver='dense') on -0.5 D^2 "
+            "(double-centred inside KernelPCA), unless the installed scikit-learn exports it"])
+_add("mb-dict-learning", xlane="decomp", ours="MiniBatchDictionaryLearning", task="transform",
+     block="cls", sub={"X": SUB["mid"], "Xq": SUB["tiny"]}, quality="recon",
+     sk="sklearn.decomposition:MiniBatchDictionaryLearning",
+     params=dict(n_components=16, alpha=1.0, batch_size=256, max_iter=10,
+                 transform_algorithm="lasso_cd", random_state=SEED),
+     sk_params=dict(n_components=16, alpha=1.0, batch_size=256, max_iter=10,
+                    transform_algorithm="lasso_cd", random_state=SEED, n_jobs=-1))
 _add("isomap", xlane="decomp", ours="Isomap", task="embed", block="manifold",
      sub={"X": SUB["quad"]}, sk="sklearn.manifold:Isomap",
      params=dict(n_neighbors=10, n_components=2), sk_params=dict(n_neighbors=10, n_components=2,
@@ -697,6 +709,26 @@ _add("maxpool2d", xlane="cnn", ours="MaxPool2d", kind="layer", task="maxpool2d",
 _add("avgpool2d", xlane="cnn", ours="AvgPool2d", kind="layer", task="avgpool2d", block="tensor",
      datasets=("synthetic",), torch=True, params=dict(kernel_size=2, stride=2),
      notes=["x (64, 64, 112, 112), " + _CNN])
+_add("maxpool1d", xlane="cnn", ours="MaxPool1d", kind="layer", task="maxpool1d", block="tensor",
+     datasets=("synthetic",), torch=True, params=dict(kernel_size=2, stride=2),
+     notes=["x (64, 64, 4096), " + _CNN])
+_add("avgpool1d", xlane="cnn", ours="AvgPool1d", kind="layer", task="avgpool1d", block="tensor",
+     datasets=("synthetic",), torch=True, params=dict(kernel_size=2, stride=2),
+     notes=["x (64, 64, 4096), " + _CNN])
+_add("batchnorm1d", xlane="cnn", ours="BatchNorm1d", kind="layer", task="batchnorm1d",
+     block="tensor", datasets=("synthetic",), torch=True, params=dict(num_features=256),
+     notes=["x (64, 256, 1024), training-mode statistics, " + _CNN])
+_add("cnn-clf", xlane="cnn", ours="CNNClassifier", kind="cnnclf", task="clf", block="images",
+     datasets=("synthetic",), torch=True,
+     params=dict(input_shape=(1, 28, 28), conv_channels=(8, 16), kernel_size=3, pool_size=2,
+                 learning_rate=0.01, momentum=0.9, weight_decay=0.0, batch_size=128, max_iter=2,
+                 shuffle=True, random_state=SEED),
+     notes=["seed-7 synthetic 1 x 28 x 28 images of 10 classes (a class template plus N(0, 1) "
+            "noise), 20,000 fit and 5,000 held out: the R2 store holds no image set, so this is "
+            "the one kind",
+            "torch arm: the same net (Conv2d-ReLU-MaxPool2d per entry of conv_channels, then "
+            "Linear), SGD momentum 0.9, cross entropy, the same epochs and batch size"],
+     mism=["each library initializes its own weights"])
 _add("batchnorm2d", xlane="cnn", ours="BatchNorm2d", kind="layer", task="batchnorm2d",
      block="tensor", datasets=("synthetic",), torch=True, params=dict(num_features=64),
      notes=["x (64, 64, 56, 56), training-mode statistics, " + _CNN])
@@ -794,7 +826,7 @@ _NVIDIA_ONLY = ("cuml-gpu", "cuvs-gpu", "cugraph-gpu", "cupy-gpu", "implicit-gpu
 def opponents(vendor, lane):
     s = LANES[lane]
     arms = []
-    if s["kind"] in ("layer", "seqmodel"):
+    if s["kind"] in ("layer", "seqmodel", "cnnclf"):
         arms = ["torch-" + t for t in TORCH_GPU[vendor]]
         if s["task"] == "dropout2d":
             arms = [a for a in arms if "bf16" not in a]
@@ -828,7 +860,7 @@ def block_of(lane):
 
 def has_infer(lane):
     s = LANES[lane]
-    if s["kind"] in ("layer", "ann", "svgp", "seqmodel"):
+    if s["kind"] in ("layer", "ann", "svgp", "seqmodel", "cnnclf"):
         return True
     if s["kind"] in ("est", "dart"):
         if s.get("fit_predict") or s["task"] in ("embed", "covariance", "select"):
@@ -850,7 +882,7 @@ def infer_call(lane):
         return "recommend top-10 for every user row"
     if s["kind"] == "ts":
         return "forecast(%d)" % TS_H
-    if s["kind"] in ("svgp", "seqmodel"):
+    if s["kind"] in ("svgp", "seqmodel", "cnnclf"):
         return "predict(Xq)"
     t = s["task"]
     if t in ("clf", "reg", "semi", "outlier", "multiclf", "multireg", "gmm"):
@@ -911,6 +943,8 @@ def fit_text(lane):
         return "forward + backward(dy)"
     if k == "seqmodel":
         return "fit(X (n, T, 1), y): 2 epochs"
+    if k == "cnnclf":
+        return "fit(X (n, 1, 28, 28), y): 2 epochs"
     if k == "optim":
         return "10 optimizer steps"
     if k == "ann":
@@ -987,8 +1021,6 @@ def quality_kind(lane):
         return "layer"
     if s["kind"] in ("optim", "ann", "als"):
         return s["kind"]
-    if s["kind"] in ("svgp", "seqmodel"):
-        return s["task"]
     return s["task"]
 
 
@@ -1016,6 +1048,7 @@ BLOCK_ROWS = {
     "countclf": "count features with a class label, every 10th row held out",
     "bytes": "64 x 256 bytes of enwik8",
     "tensor": "a seeded tensor (see notes)",
+    "images": "20,000 fit + 5,000 held-out seeded 1 x 28 x 28 images, 10 classes",
     "seqwin": "64 series -> windows of 24 steps, fit = the first 80% of time", "optim": "16,777,216 parameters x 10 steps",
     "dense": "8192 x 8192 system, 64 right-hand sides",
 }
@@ -1149,7 +1182,7 @@ MORE_LANE_OF = {"cls": "logreg", "reg": "ridge", "manifold": "umap", "tsvd": "ts
 def block_file(lane, dataset):
     """The npz/json basename a (lane, dataset) reads."""
     b = block_of(lane)
-    if b in ("dense", "tensor", "optim"):
+    if b in ("dense", "tensor", "optim", "images"):
         return None
     if b == "seqwin":
         return "ts-%s" % dataset
@@ -1462,6 +1495,11 @@ def lane_arrays(lane, B):
     if b in ("ts", "tsi", "tsr"):
         Y = B["Y"]
         return {"Yfit": np.ascontiguousarray(Y[:, :-TS_H]), "Yhold": np.ascontiguousarray(Y[:, -TS_H:])}
+    if b == "images":
+        cap = B.get("_cap")
+        n_fit, n_q = (min(20_000, int(cap)), min(5_000, int(cap))) if cap else (20_000, 5_000)
+        X, y = synthetic_images(n_fit + n_q)
+        return {"X": X[:n_fit], "y": y[:n_fit], "Xq": X[n_fit:], "yq": y[n_fit:]}
     if b == "seqwin":
         Y = B["Y"].astype(np.float64)
         n = Y.shape[1]
@@ -1665,6 +1703,25 @@ def _resolve(v, lib):
     return v
 
 
+class _SkClassicalMDS(object):
+    """Classical MDS from scikit-learn parts: -0.5 D^2 double-centred and its
+    top eigenpairs (KernelPCA precomputed, dense eigh); for a scikit-learn
+    without ClassicalMDS."""
+
+    def __init__(self, n_components=2):
+        self.n_components = n_components
+
+    def fit_transform(self, X):
+        from sklearn.decomposition import KernelPCA
+        from sklearn.metrics import pairwise_distances
+        D2 = pairwise_distances(X, metric="sqeuclidean", n_jobs=-1)
+        return KernelPCA(n_components=self.n_components, kernel="precomputed",
+                         eigen_solver="dense").fit_transform(-0.5 * D2)
+
+    def __repr__(self):
+        return "sklearn KernelPCA(precomputed) on -0.5 D^2 (ClassicalMDS)"
+
+
 SK_BASE = {"LogisticRegression": "sklearn.linear_model:LogisticRegression",
            "Ridge": "sklearn.linear_model:Ridge", "Lasso": "sklearn.linear_model:Lasso",
            "GaussianNB": "sklearn.naive_bayes:GaussianNB",
@@ -1694,7 +1751,8 @@ def _cuml_up(arrays):
 
 def build(lane, arm, D):
     kind = LANES[lane]["kind"]
-    fn = {"est": _build_est, "dart": _build_dart, "seqmodel": _build_seqmodel, "ts": _build_ts, "graph": _build_graph, "ann": _build_ann,
+    fn = {"est": _build_est, "dart": _build_dart, "seqmodel": _build_seqmodel,
+          "cnnclf": _build_cnnclf, "ts": _build_ts, "graph": _build_graph, "ann": _build_ann,
           "layer": _build_layer, "optim": _build_optim, "linalg": _build_linalg,
           "als": _build_als, "shap": _build_shap, "svgp": _build_svgp}[kind]
     if arm in OURS_ARMS:
@@ -1719,7 +1777,12 @@ def _est_factory(lane, arm, D):
             params["score_func"] = getattr(ml, s["score_func"])
         return (lambda: cls(**params)), "mojolearn." + name, params
     if arm == "sklearn-cpu":
-        cls = _imp(s["sk"])
+        try:
+            cls = _imp(s["sk"])
+        except (ImportError, AttributeError):
+            if lane != "classical-mds":
+                raise
+            cls = _SkClassicalMDS
         params = _derived_params(lane, D, s.get("sk_params", s["params"]))
         params.update(s.get("sk_extra", {}))
         params = {k: _resolve(v, "sklearn") for k, v in params.items()}
@@ -1871,6 +1934,85 @@ def _build_est(lane, arm, D):
 
 
 # ---- LSTM / GRU / RNN estimators -------------------------------------------
+
+def synthetic_images(n, n_classes=10, shape=(1, 28, 28), seed=SEED):
+    """(X (n, C, H, W) float32, y) : a seed-7 template per class plus N(0, 1) noise."""
+    np = _np()
+    rng = np.random.default_rng(seed)
+    templates = rng.standard_normal((n_classes,) + shape).astype(np.float32)
+    y = rng.integers(0, n_classes, size=n)
+    X = templates[y] + rng.standard_normal((n,) + shape).astype(np.float32)
+    return np.ascontiguousarray(X, dtype=np.float32), y.astype(np.float32)
+
+
+def _build_cnnclf(lane, arm, D):
+    np = _np()
+    s = LANES[lane]
+    p = s["params"]
+    X, y, Xq = D["X"], D["y"], D["Xq"]
+    if arm in OURS_ARMS:
+        return _build_est(lane, arm, D)
+    import torch
+    nn = torch.nn
+    setting = arm[len("torch-"):]
+    mode, prec = setting.split("-")
+    dev = _torch_device(torch)
+    torch.backends.cuda.matmul.allow_tf32 = prec == "tf32"
+    torch.backends.cudnn.allow_tf32 = prec == "tf32"
+    dt = torch.bfloat16 if prec == "bf16" else None
+    Xt, Xqt = torch.from_numpy(X).to(dev), torch.from_numpy(Xq).to(dev)
+    yt = torch.from_numpy(y.astype(np.int64)).to(dev)
+    rng = np.random.default_rng(SEED)
+    orders = [torch.from_numpy(rng.permutation(X.shape[0])).to(dev) for _ in range(p["max_iter"])]
+    S = {}
+
+    def net():
+        c, h, w = p["input_shape"]
+        layers = []
+        for co in p["conv_channels"]:
+            layers += [nn.Conv2d(c, co, p["kernel_size"], padding=p["kernel_size"] // 2), nn.ReLU()]
+            if h >= p["pool_size"] and w >= p["pool_size"]:
+                layers.append(nn.MaxPool2d(p["pool_size"]))
+                h, w = h // p["pool_size"], w // p["pool_size"]
+            c = co
+        return nn.Sequential(*layers, nn.Flatten(), nn.Linear(c * h * w, 10))
+
+    info = {"library": "torch", "version": torch.__version__, "device": "gpu" if dev != "cpu" else "cpu",
+            "pre_clock_fit": False, "input_home": "device", "setting": setting,
+            "config": "Conv2d-ReLU-MaxPool2d x %s + Linear, SGD lr %g momentum %g, batch %d, %d "
+                      "epochs, %s %s on %s" % (p["conv_channels"], p["learning_rate"], p["momentum"],
+                                                p["batch_size"], p["max_iter"], mode, prec, dev)}
+    lossf = nn.CrossEntropyLoss()
+
+    def run(m, x):
+        if dt is not None:
+            with torch.autocast(device_type=dev, dtype=dt):
+                return m(x)
+        return m(x)
+
+    def fit():
+        torch.manual_seed(SEED)
+        m = net().to(dev)
+        fwd = torch.compile(m) if mode == "compile" else m
+        opt = torch.optim.SGD(m.parameters(), lr=p["learning_rate"], momentum=p["momentum"],
+                              weight_decay=p["weight_decay"])
+        bs = p["batch_size"]
+        for order in orders:
+            for st in range(0, X.shape[0], bs):
+                b = order[st:st + bs]
+                opt.zero_grad(set_to_none=True)
+                lossf(run(fwd, Xt[b]).float(), yt[b]).backward()
+                opt.step()
+        _torch_sync(torch, dev)
+        S["fwd"] = fwd
+
+    def infer():
+        with torch.no_grad():
+            out = torch.cat([run(S["fwd"], Xqt[i:i + 4096]).float() for i in range(0, Xqt.shape[0], 4096)])
+        S["pred"] = out.argmax(1).double()
+        _torch_sync(torch, dev)
+    return Runner(info, fit, lambda: {"pred": S["pred"].cpu().numpy()}, infer)
+
 
 def _build_seqmodel(lane, arm, D):
     np = _np()
@@ -2256,7 +2398,14 @@ def _build_ann(lane, arm, D):
         # the refine step and the sample filter are options of an index that
         # may already exist: until the option does, the race is not built yet
         import inspect
+        import mojolearn as ml
+        refine_fn = getattr(ml, "refine", None) if t == "ivf-refine" else None
+        if refine_fn is not None:          # search k x ratio candidates, then the exact re-rank
+            kw.pop("refine_ratio", None)
+            kw["n_neighbors"] = k * p["refine_ratio"]
         need = {"ivf-refine": (cls, "refine_ratio"), "ivf-filter": (cls.search, "filter")}.get(t)
+        if refine_fn is not None:
+            need = None
         if need:
             try:
                 params = inspect.signature(need[0]).parameters
@@ -2272,6 +2421,9 @@ def _build_ann(lane, arm, D):
         def infer():
             if t == "ivf-filter":
                 S["ind"] = S["e"].search(Q, filter=allowed)[1]
+            elif refine_fn is not None:
+                cand = S["e"].search(Q)[1]
+                S["ind"] = refine_fn(X, Q, cand, k)[1]
             else:
                 S["ind"] = S["e"].search(Q)[1]
         return Runner(info, fit, lambda: {"ind": _arr(S["ind"], np.int64)}, infer)
@@ -2412,6 +2564,12 @@ def _layer_inputs(lane, D, torch):
     elif t == "conv2d":
         x = torch.randn(nb, p["in_channels"], 56, 56, generator=g)
         make = lambda: nn.Conv2d(**p)  # noqa: E731
+    elif t in ("maxpool1d", "avgpool1d"):
+        x = torch.randn(nb, 64, 4096, generator=g)
+        make = lambda: (nn.MaxPool1d if t == "maxpool1d" else nn.AvgPool1d)(**p)  # noqa: E731
+    elif t == "batchnorm1d":
+        x = torch.randn(nb, p["num_features"], 1024, generator=g)
+        make = lambda: nn.BatchNorm1d(**p)  # noqa: E731
     elif t in ("maxpool2d", "avgpool2d"):
         x = torch.randn(nb, 64, 112, 112, generator=g)
         make = lambda: (nn.MaxPool2d if t == "maxpool2d" else nn.AvgPool2d)(**p)  # noqa: E731
@@ -2517,8 +2675,12 @@ def _build_layer(lane, arm, D):
         kw = dict(s["params"])
         if s["task"] in ("gcn", "sage"):
             kw["in_channels"] = x_cpu.shape[1]
-        if s["task"] in ("conv1d", "conv2d"):
-            kw["random_state"] = SEED
+        import inspect
+        try:
+            if "random_state" in inspect.signature(cls).parameters:
+                kw["random_state"] = SEED
+        except (TypeError, ValueError):
+            pass
         layer = cls(**kw)
         info["config"] = "mojolearn.%s(%s)" % (name, kw)
         info["weights_loaded"] = False
@@ -2556,7 +2718,13 @@ def _build_layer(lane, arm, D):
         def infer():
             y = fwd(x, *extra)
             S["y"] = y[0] if isinstance(y, tuple) else y
-        out = (lambda: {"y": _arr(S["y"], np.float32)}) if info["weights_loaded"] else (lambda: {})
+        # a layer with no trained parameters (pooling, BatchNorm's default affine, LayerNorm)
+        # starts equal to torch's; one with random weights is compared only when they loaded
+        comparable = info["weights_loaded"] or not any(
+            k.endswith("weight") and not k.startswith(("bn", "norm")) and s["task"] not in (
+                "batchnorm1d", "batchnorm2d", "layernorm") for k in state)
+        info["output_comparable"] = bool(comparable)
+        out = (lambda: {"y": _arr(S["y"], np.float32)}) if comparable else (lambda: {})
         return Runner(info, fit, out, infer)
     setting = arm[len("torch-"):]
     mode, prec = setting.split("-")
