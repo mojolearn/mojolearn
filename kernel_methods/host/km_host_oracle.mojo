@@ -301,13 +301,37 @@ def kmh_kernel_ridge_fit(
     gamma: Float64,
     coef0: Float64,
     alpha: Float32,
+    sw: List[Float32] = List[Float32](),
 ) raises -> List[Float32]:
-    """`kernel_ridge_fit_host`: form `K`, ridge it, factor it, solve it.
-    Returns `dual_coef_`, `n x t` row-major; the fit refuses a non-zero
-    `info` by name (DEVIATION 1662)."""
+    """`kernel_ridge_fit_host`: form `K` (or take it, kernel='precomputed'),
+    weight it (`sw`, the per-row sqrt(sample_weight) factors, empty when
+    unweighted), ridge it, factor it, solve it. Returns `dual_coef_`,
+    `n x t` row-major; the fit refuses a non-zero `info` by name
+    (DEVIATION 1662)."""
     kmh_validate_matrix(x, n, d, "kernel_ridge X")
     kmh_validate_matrix(y, n, t, "kernel_ridge y")
-    kmh_validate_kernel(kernel, degree, gamma, coef0, "kernel_ridge")
+    var precomputed = kernel == KMH_KERNEL_PRECOMPUTED
+    if precomputed:
+        if d != n:
+            raise Error(
+                "kernel_ridge_fit_host: kernel='precomputed' needs a square"
+                " kernel matrix, got " + String(n) + " x " + String(d)
+            )
+    else:
+        kmh_validate_kernel(kernel, degree, gamma, coef0, "kernel_ridge")
+    var weighted = len(sw) > 0
+    if weighted:
+        if len(sw) != n:
+            raise Error(
+                "kernel_ridge_fit_host: sample weight factors hold "
+                + String(len(sw)) + " values, X has " + String(n) + " rows"
+            )
+        for i in range(n):
+            if not (sw[i] >= Float32(0.0)) or sw[i] > Float32(3.4028234663852886e38):
+                raise Error(
+                    "kernel_ridge_fit_host: sample weight factor " + String(i)
+                    + " is negative or not finite; refused by name"
+                )
     if alpha != alpha:
         raise Error("kernel_ridge_fit_host: alpha is NaN; refused by name")
     if alpha < Float32(0.0):
@@ -316,7 +340,14 @@ def kmh_kernel_ridge_fit(
             " negative value. scikit-learn's own parameter constraint is"
             " Interval(Real, 0, None, closed='left'). DEVIATION 1686"
         )
-    var k = kmh_kernel_matrix(kernel, degree, gamma, coef0, x, x, n, n, d)
+    var k = x.copy() if precomputed else kmh_kernel_matrix(kernel, degree, gamma, coef0, x, x, n, n, d)
+    if weighted:
+        # krr_weight_kernel: ftz(ftz(K_ij) * ftz(ftz(s_i) * ftz(s_j)))
+        for i in range(n):
+            var si = ftz(sw[i])
+            for j in range(n):
+                var w = ftz(si * ftz(sw[j]))
+                k[i * n + j] = ftz(ftz(k[i * n + j]) * w)
     # add_ridge_diag_kernel
     for i in range(n):
         var dv = ftz(k[i * n + i])
@@ -339,9 +370,21 @@ def kmh_kernel_ridge_fit(
             + String(n)
             + ". THE CLOSURE IS alpha: raise it (DEVIATION 1662)"
         )
-    var dual = chol_host_solve(f, y, t)
+    var dual = chol_host_solve(f, kmh_scale_rows(y, sw, n, t) if weighted else y.copy(), t)
     _ = f^
+    if weighted:
+        return kmh_scale_rows(dual, sw, n, t)
     return dual^
+
+
+def kmh_scale_rows(v: List[Float32], sw: List[Float32], n: Int, t: Int) -> List[Float32]:
+    """`krr_scale_rows`: `ftz(ftz(v) * ftz(s_i))`, one rounding per cell."""
+    var out = List[Float32](capacity=n * t)
+    for i in range(n):
+        var si = ftz(sw[i])
+        for c in range(t):
+            out.append(ftz(ftz(v[i * t + c]) * si))
+    return out^
 
 
 def kmh_kernel_ridge_predict(
@@ -360,6 +403,11 @@ def kmh_kernel_ridge_predict(
     """`kernel_ridge_predict_host`: `K(X, X_fit) . dual` at OP_NN
     (DEVIATION 1680). `q x t` row-major."""
     kmh_validate_matrix(x_new, q, d, "predict X")
+    if kernel == KMH_KERNEL_PRECOMPUTED:
+        # X IS the q x n cross-kernel matrix.
+        if d != n:
+            raise Error("kernel_ridge predict: kernel='precomputed' needs X with n_samples columns")
+        return gemm_oracle(x_new, dual, OP_NN, q, t, n)
     kmh_validate_kernel(kernel, degree, gamma, coef0, "kernel_ridge")
     var k = kmh_kernel_matrix(kernel, degree, gamma, coef0, x_new, x_fit, q, n, d)
     return gemm_oracle(k, dual, OP_NN, q, t, n)

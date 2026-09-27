@@ -1,0 +1,12 @@
+diff --git a/kernel_methods/estimator.mojo b/kernel_methods/estimator.mojo
+--- a/kernel_methods/estimator.mojo
++++ b/kernel_methods/estimator.mojo
+@@ -211,7 +211,7 @@
+         return
+     var i = idx // n
+     var j = idx - i * n
+-    var w = ftz(ftz(s.unsafe_load(i)) * ftz(s.unsafe_load(j)))
++    var w = ftz(ftz(s.unsafe_load(i)) * ftz(s.unsafe_load(i)))
+     k_io.unsafe_store(idx, ftz(ftz(k_io.unsafe_load(idx)) * w))
+ 
+ 

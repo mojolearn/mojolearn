@@ -286,6 +286,35 @@ def _(ml, X, yc, yr, Xh=None):
                      coef=_h(li.coef_), linear_predict=_h(li.predict(X[384:640]))),
                 r, lambda e: (e.decision_function(Xh[:256]), e.predict(Xh[:256])))
 
+def _neighbors_int_gram(A, B):
+    """An integer-valued kernel matrix A B^T, exact in float32 under any
+    summation order (every partial sum is an integer below 2^24), so the
+    precomputed input is the same bits on every host's NumPy."""
+    ai = np.clip(np.rint(A * 2.0), -6, 6).astype(np.int64)
+    bi = np.clip(np.rint(B * 2.0), -6, 6).astype(np.int64)
+    return (ai @ bi.T).astype(np.float32)
+
+
+@lane("x-neighbors-krr-options")
+def _(ml, X, yc, yr, Xh=None):
+    """KernelRidge sample_weight (sqrt(w) on y, K * outer(sw, sw) on the
+    device, dual * sw; DEVIATION 1688) and kernel='precomputed' (the given
+    matrix copied onto the device in place of the kernel matrix)."""
+    w = (0.5 + 0.5 * (np.arange(256) % 4)).astype(np.float64)
+    w[3] = 0.0
+    y2 = np.stack([yr[:256], yr[:256] * 0.5 + 1.0], axis=1).astype(np.float32)
+    m = ml.KernelRidge(alpha=0.5, kernel="rbf", gamma=0.05).fit(X[:256], y2, sample_weight=w)
+    s = ml.KernelRidge(alpha=1.0, kernel="linear").fit(X[:256], yr[:256], sample_weight=2.0)
+    K = _neighbors_int_gram(X[:256], X[:256])
+    p = ml.KernelRidge(alpha=1.0, kernel="precomputed").fit(K, yr[:256])
+    pw = ml.KernelRidge(alpha=1.0, kernel="precomputed").fit(K, yr[:256], sample_weight=w)
+    Kq = _neighbors_int_gram(X[256:384], X[:256])
+    return _fit(dict(dual=_h(m.dual_coef_), predict=_h(m.predict(X[256:384])),
+                     scalar_dual=_h(s.dual_coef_),
+                     pre_dual=_h(p.dual_coef_), pre_predict=_h(p.predict(Kq)),
+                     prew_dual=_h(pw.dual_coef_)),
+                m, lambda e: (e.predict(Xh[:128]),))
+
 _batch_decl(_rows_calls("score_samples", "predict", sl=slice(0, 256)), "x-neighbors-lof")
 _batch_decl(_rows_calls("predict", "decision_function", "predict_proba", sl=slice(0, 256)), "x-neighbors-nearest-centroid")
 _batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "x-neighbors-ocsvm")
@@ -298,5 +327,6 @@ _batch_decl(_rows_calls("predict_proba", "predict", sl=slice(0, 128)),
             "x-neighbors-label-propagation", "x-neighbors-label-spreading")
 _batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_neighbors_holes), "x-neighbors-knn-imputer")
 _batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-neighbors-svgp", "x-neighbors-svr-kernels")
+_batch_decl(_rows_calls("predict", sl=slice(0, 128)), "x-neighbors-krr-options")
 _batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "x-neighbors-gamma-scale", "x-neighbors-svm-weights",
             "x-neighbors-svc-sigmoid", "x-neighbors-svc-multiclass")
