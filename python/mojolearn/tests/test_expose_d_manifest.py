@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 import mojolearn
-from mojolearn import _backend
+from mojolearn import _backend, host_surface
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -75,6 +75,9 @@ def test_packaging_lists_agree():
         if ident:
             # every-tier + classical fast-and-identical + identical-only
             got = got | how(path, ident) | how(path, c.CLASSICAL_VAR)
+        # The expansion lanes' bindings are appended from the manifest at run
+        # time, never spelled in these literals (check_ext_lists.EXPANSION_READERS).
+        got = got | set(host_surface.expansion_gpu_bindings())
         assert got == want, (path, sorted(want ^ got))
     smoke = _read("packaging/linux/smoke.py")
     for name in NEW:

@@ -98,7 +98,7 @@ class Mamba1BackwardSurface(unittest.TestCase):
         self.assert_reference(self.block.backward(self.x, self.dy))
 
     def test_boundary_refusals(self):
-        for mode in ("fast", "deterministic"):
+        for mode in ("deterministic",):  # FAST runs the backward since 2026-09-27 (lane neural)
             block = Mamba1Block(self.weights, numeric_mode=mode)
             with self.assertRaises(NotImplementedError):
                 block.backward(self.x, self.dy)
