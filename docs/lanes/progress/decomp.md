@@ -31,7 +31,7 @@ Next: PASS 2: AMD box (requested, RunPod out of stock, retrying), per-seam check
 
 - Per-seam proof: `x_decomp/checks/{fold_ew,dense,rows,graph}_check.mojo` hold
   the device (DevExec) and CPU (HostExec) columns to independent host oracles
-  (`x_decomp/checks/oracles.mojo`) bit for bit, each fixture first shown to
+  (`x_decomp/checks/xd_oracles.mojo`) bit for bit, each fixture first shown to
   separate the pinned spelling; card stages through IdentityTrace.
   `tools/identity_lanes/decomp.checks` pairs each of the 17 seams (DEVIATIONS
   5300-5316, annotated in `x_decomp/cells.mojo`) with a sabotage patch under
@@ -47,6 +47,81 @@ Next: PASS 2: AMD box (requested, RunPod out of stock, retrying), per-seam check
   MinCovDet one feature. Remaining: `x_decomp/NOT_IMPLEMENTED.tsv`.
 - Host manifest: test_host_surface.py reads parametrized def_function
   registrations; MOJOLEARN_HOST_SABOTAGE moves HostExec.gemm; 196 passed.
-- AMD: `tools/dev_pod.sh up decomp 240 --vendor amd` requested; RunPod MI300X
-  out of stock, falling back to Hot Aisle.
-- Apple (M2 Pro steward): OWED.
+- AMD: no box (RunPod MI300X and Hot Aisle both out of stock all session);
+  AMD identity goes through the do-amd steward (`apple_steward.py submit`).
+- Directive 000 (DONE, never repeat): the 18 seam arms (5300-5317) re-run on
+  the fixed lane check (box `tools/algos_lane_check.py` md5 = origin/main's,
+  A40, /root/pass2b.log 18:15-18:43Z, tree with the speed commits): every arm
+  BUILDS, RUNS and FAILS under its patch, PASSES after reversal; no BROKEN arm.
+- Stewards: request 1790531301235 at 16ae279cc FAILED on m2pro and do-amd only
+  because the end-to-end patch was stale.
+- Session 3 (2026-09-27), NVIDIA A40 + x86 CPU, after merging origin/main:
+  - 27 existing lanes the selector names (arima*, bootstrap, cholesky,
+    embedding*, holtwinters*, ivf*, kpss, monte-carlo, pca*, permutation-test,
+    select-d, sequence-autoarima, spectral*, tsvd, umap): all AGREE
+    (/root/s3o.log). They reach x_decomp only through the package import
+    (spectral's affinity='rbf' is x-decomp-spectral-rbf's own path); par-*
+    lanes need two GPUs and were not run.
+  - The speed commits' two-pass A R^-1 orth was NOT orthonormal on a
+    rank-deficient input (|Q^T Q - I| up to 20) and randomized_svd then
+    REFUSED on the denormal fixture (the one-sided Jacobi SVD of Q^T M rotated
+    a noise column forever). Fixed at the root: `orth_rank_guard` (DEVIATION
+    5318, IDENTITY_PATHS row 134): R[j, j]^2 <= 2^-32 of the column's sum of
+    squares zeroes R[j, j], so that Q column is 0; `_rsvd_core` drops zero
+    range columns before the small SVD and returns 0 components past the
+    numerical rank. Oracle (`oracle_orth` alt 2), separating fixture and arm
+    5318 in dense_check. randomized_svd on all 9 fixtures x both lane calls:
+    converges, top singular values within 6e-3 (n_iter 4, flat spectrum) and
+    2e-6 elsewhere of the float64 SVD.
+  - `tools/algos_lane_check.sh <17 x-decomp lanes> --pass 2 --sabotage
+    x_decomp/checks/sabotage/e2e_host_ulp.patch` (host gemm and LU by one ulp),
+    s7: all 19 seam arms (5300-5318) BUILD, RUN, FAIL under their patch, PASS
+    after reversal; 17 lanes AGREE clean; 16 DISAGREE under the patch (every
+    lane but x-decomp-spectral-rbf, which calls neither gemm nor LU on the
+    host), 17 AGREE restored. x-decomp-spectral-rbf's end-to-end arm is
+    `e2e_host_sqdist.patch` (s8).
+  - The first ulp patch also flipped every host `ew` result: Isomap's host
+    eigh then refused on 8 of 9 fixtures (60 sweeps did not help). A one-ulp
+    perturbation of the INPUT converges everywhere (Isomap, ClassicalMDS, LLE,
+    LTSA on both columns), so that was the patch's artifact; ew is not in it.
+  - test_lane_select: OK (0 failures) at ac05911b5, whose Mojo imports are
+    this branch's. test_host_surface: 196 passed after merging origin/main
+    (3af84e8a0) into the branch.
+  - Stewards: 1790542293471-decomp-3c73fcee93 (16 lanes, e2e_host_ulp) and
+    the spectral-rbf request (e2e_host_sqdist) queued on m2pro and do-amd.
+    PHASE 1 IS DONE when both PASS on both (`python3 tools/apple_steward.py
+    status | grep decomp`). A FAIL: fix, re-prove on the pod, resubmit only the
+    affected lanes.
+  - NOT MERGED TO MAIN YET: directive 0a makes a merge wait for m2pro PASS and
+    do-amd PASS, and the steward queue was ~18 requests deep. lane/algos-decomp
+    is pushed and holds everything (the speed commits and the orth fix; main
+    never had the orth defect). On both PASS: `git fetch origin && git merge
+    origin/main && git push origin HEAD:main`, test_host_surface first.
+
+## IDENTICAL GPU speed, NVIDIA only so far (phase 4 work done early; NVIDIA A40, higgs 1M x 28 from R2)
+
+| algorithm | before | after | what |
+|---|---|---|---|
+| PCA randomized / randomized_svd | 108 s (200k rows) | 1.9 s (1M) | orth: one-thread MGS2 -> two passes of the Householder R + a row-parallel solve (DEV 5309) |
+| FactorAnalysis (20 it) | 7.8 s | 0.86 s | one QR of Xc, then the d x d SVD of R D / sqrt(n) per iteration |
+| lstsq | 3.6 s | 0.9 s | sign flips through absmax_sign_cell (DEV 5317); strided data movement |
+| NMF mu (20 it) | 5.6 s | 2.2 s | finite/negative scans through the cells; strided take_cols/hstack |
+| FastICA (20 it) | 2.8 s | 1.3 s | row sums past 4096 two-stage (DEV 5301) |
+| gemm / colsum / rowsum | one thread per output over 1M terms | FOLD_BLOCK = 4096 two-stage folds (DEV 5300/5301) | |
+
+Still owed in phase 4: AMD and Apple timings (`apple_steward.py submit --kind
+speed`), device-resident matrices (every kit call still uploads and downloads;
+`ew` over 1M x 28 is ~12 ms of copies), the Jacobi eigh's fixed cost (~60 ms a
+call).
+
+## NEXT (LANE CHARTER phases; one phase per session)
+
+1. Phase 1 (verification): collect the two steward verdicts above, then
+   merge; nothing else is owed for the 17 x-decomp lanes. The family's existing algorithms
+   (PCA, TruncatedSVD, UMAP, SpectralEmbedding, linalg matmul / cholesky / qr
+   / eigh / svdvals) carry their certified verifier lanes.
+2. Phase 2 (option parity): `x_decomp/NOT_IMPLEMENTED.tsv`, plus rows for the
+   existing PCA / TSVD / UMAP / SpectralEmbedding / linalg options against
+   sklearn, cuML and umap-learn.
+3. Phase 3 FAST speed, 4 IDENTICAL speed (the table above is NVIDIA only),
+   5 CPU speed.

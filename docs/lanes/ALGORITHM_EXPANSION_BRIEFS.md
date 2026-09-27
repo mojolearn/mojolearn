@@ -1,5 +1,13 @@
 # Algorithm expansion: lane briefs
 
+**HARD RULE (Andrew, 2026-09-27): NO APPLE ANYTHING WITHOUT EXPRESS PERMISSION.**
+No lane, tool or agent may add, allocate, rent, launch or extend an Apple
+machine (EC2 Mac or any provider), add Apple host-hours, or call a provider
+API to do so. Only Andrew's express, specific permission allows it. If Apple
+capacity is a bottleneck, report it; never act on it. All six current Mac
+hosts are released at their 24 h marks unless Andrew says to keep one.
+
+
 These are the briefs for the nine lanes in
 [ALGORITHM_EXPANSION_PLAN.md](ALGORITHM_EXPANSION_PLAN.md). Every lane gets
 **THE COMMON BRIEF** plus its own section. The reference sources are pinned
@@ -241,6 +249,7 @@ carries these ranges). Use only your own; never renumber anything that exists.
 | trees | 5600-5699 | 160-169 |
 | cnn | 5700-5799 | 170-179 |
 | ann | 5800-5899 | 180-189 |
+| metrics (2026-09-27) | 6100-6199 | 190-199 |
 
 A new IDENTITY_PATHS row is the one edit to that file a lane makes: replace
 the `(no rows yet)` line of YOUR section under "Algorithm expansion rows" at

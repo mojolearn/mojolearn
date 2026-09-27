@@ -1,0 +1,13 @@
+diff --git a/x_ann/ivf_pq_core.mojo b/x_ann/ivf_pq_core.mojo
+index 4d2ff9cee..35dfd1928 100644
+--- a/x_ann/ivf_pq_core.mojo
++++ b/x_ann/ivf_pq_core.mojo
+@@ -100,7 +100,7 @@ def pq_assign_cell(
+     var bd = pq_subdist(r, i * rot_dim + j * pq_len, cb, (j * n_codes) * pq_len, pq_len)
+     for c in range(1, n_codes):
+         var d = pq_subdist(r, i * rot_dim + j * pq_len, cb, (j * n_codes + c) * pq_len, pq_len)
+-        if d < bd:
++        if d <= bd:
+             bd = d
+             best = c
+     codes.unsafe_store(e, Int32(best))

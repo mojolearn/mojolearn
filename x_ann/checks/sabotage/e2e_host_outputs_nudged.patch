@@ -1,0 +1,26 @@
+--- a/bindings/_mojolearn_x_ann_host.mojo
++++ b/bindings/_mojolearn_x_ann_host.mojo
+@@ -10,7 +10,22 @@
+ from std.python._cpython import GILReleased
+ from std.python.bindings import PythonModuleBuilder
+ from checks.numerics import GLOBAL_NUMERIC_MODE
+-from x_ann.abi import check_search, in_f32, in_i32, out_f32, out_i32, p_int
++from x_ann.abi import check_search, in_f32, in_i32, p_int
++from x_ann.abi import out_f32 as _out_f32, out_i32 as _out_i32
++
++
++def out_f32(values: List[Float32], addrs: PythonObject, i: Int) raises:
++    # THE END-TO-END SABOTAGE (never shipped): the CPU column nudges EVERY float
++    # output element the same way, so a row computed alone moves exactly as it
++    # does inside a batch (batch invariance holds; only the cross-column hash moves)
++    var v = values.copy()
++    for e in range(len(v)):
++        v[e] = v[e] * Float32(1.0000002) + Float32(1.0e-20)
++    _out_f32(v, addrs, i)
++
++
++def out_i32(values: List[Int32], addrs: PythonObject, i: Int) raises:
++    _out_i32(values, addrs, i)
+ from x_ann.ivf_pq_core import pq_len_of
+ from x_ann.host.cagra_host import cagra_build_host, cagra_search_host
+ from x_ann.host.tsne_host import tsne_fit_host
