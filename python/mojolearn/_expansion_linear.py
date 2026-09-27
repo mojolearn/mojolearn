@@ -592,11 +592,10 @@ class ARDRegression(_LinearRegressorMixin, NumericModeMixin):
 def _lars_fit(est, X, y, max_iter, lasso, alpha_min):
     if getattr(est, "jitter", None) is not None:
         raise ValueError(f"mojolearn {type(est).__name__}: jitter is not implemented")
-    if getattr(est, "positive", False):
-        raise ValueError(f"mojolearn {type(est).__name__}: positive=True is not implemented")
     a, n, d = _matrix(X)
     yv = _vector(y, n)
-    vals = _run(est, ALGO_LARS, a, n, d, yv, [int(max_iter), int(bool(est.fit_intercept)), int(lasso)],
+    vals = _run(est, ALGO_LARS, a, n, d, yv, [int(max_iter), int(bool(est.fit_intercept)), int(lasso),
+                                              int(bool(getattr(est, "positive", False)))],
                 [alpha_min], 2 * d + 4, 2 * d * d + 8 * d, 2 * d)
     est.coef_ = Array.from_list(vals[:d], "<f4")
     est.intercept_ = float(vals[d])
@@ -942,8 +941,6 @@ def _enetcv_fit(est, X, y, l1_ratios):
     name = type(est).__name__
     if est.selection != "cyclic":
         raise ValueError(f"mojolearn {name}: selection='random' is not implemented")
-    if est.positive:
-        raise ValueError(f"mojolearn {name}: positive=True is not implemented")
     if any(not 0 < r <= 1 for r in l1_ratios):
         raise ValueError(f"mojolearn {name}: l1_ratio must be in (0, 1]")
     a, n, d = _matrix(X)
@@ -965,7 +962,7 @@ def _enetcv_fit(est, X, y, l1_ratios):
     yy = Array.from_list(yv.tolist() + [float(f) for f in ids], "<f4")
     L = len(l1_ratios)
     fp = [est.eps, est.tol] + [float(r) for r in l1_ratios] + (values if explicit else [])
-    ip = [est.max_iter, int(bool(est.fit_intercept)), grid, folds, L, int(explicit)]
+    ip = [est.max_iter, int(bool(est.fit_intercept)), grid, folds, L, int(explicit), int(bool(est.positive))]
     vals = _run(est, ALGO_ENETCV, a, n, d, yy, ip, fp, d + 4 + L * grid + L * grid * folds,
                 d * d + 4 * d + 3, 1)
     est.coef_ = Array.from_list(vals[:d], "<f4")

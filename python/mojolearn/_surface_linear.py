@@ -44,6 +44,8 @@ FAMILIES = (
             "x-ridge-cv-sw",
             "x-bayes-ridge-sw",
             "x-logistic-cv-w",
+            "x-lasso-lars-pos",
+            "x-lasso-cv-pos",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -111,6 +113,8 @@ TRAINING_LANE_NAMES = {
     "x-ridge-cv-sw": "RidgeCV (sample_weight)",
     "x-bayes-ridge-sw": "BayesianRidge (sample_weight)",
     "x-logistic-cv-w": "LogisticRegressionCV (sample_weight, class_weight)",
+    "x-lasso-lars-pos": "LassoLars (positive)",
+    "x-lasso-cv-pos": "LassoCV (positive)",
 }
 PUBLIC_PENDING_LANES = {
     "x-sgd-clf": "no reference",
@@ -143,4 +147,6 @@ PUBLIC_PENDING_LANES = {
     "x-ridge-cv-sw": "no reference",
     "x-bayes-ridge-sw": "no reference",
     "x-logistic-cv-w": "no reference",
+    "x-lasso-lars-pos": "no reference",
+    "x-lasso-cv-pos": "no reference",
 }

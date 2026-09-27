@@ -471,6 +471,34 @@ def _():
     return ok
 
 
+@case("lars-pos")
+def _():
+    from sklearn import linear_model as sk
+    X, yr, yc, y3 = _data(noise=0.5)
+    ok = True
+    for fi in (True, False):
+        for alpha in (0.5, 0.05, 0.001):
+            a = ml.LassoLars(alpha=alpha, fit_intercept=fi, positive=True).fit(X, yr)
+            b = sk.LassoLars(alpha=alpha, fit_intercept=fi, positive=True).fit(X.astype(np.float64), yr.astype(np.float64))
+            ok &= _close(f"positive fi={fi} alpha={alpha} coef", a.coef_, b.coef_, 2e-3)
+            ok &= bool(np.all(np.asarray(a.coef_) >= 0))
+    return ok
+
+
+@case("cd-pos")
+def _():
+    from sklearn import linear_model as sk
+    X, yr, yc, y3 = _data(noise=2.0)
+    ok = True
+    for Est, SkEst, kw in ((ml.LassoCV, sk.LassoCV, {}), (ml.ElasticNetCV, sk.ElasticNetCV, dict(l1_ratio=[0.3, 0.9]))):
+        a = Est(positive=True, **kw).fit(X, yr)
+        b = SkEst(positive=True, **kw).fit(X.astype(np.float64), yr.astype(np.float64))
+        ok &= _close(f"{Est.__name__} positive alpha_ (relative)", [a.alpha_ / b.alpha_], [1.0], 1e-3)
+        ok &= _close(f"{Est.__name__} positive coef", a.coef_, b.coef_, 2e-3)
+        ok &= bool(np.all(np.asarray(a.coef_) >= 0))
+    return ok
+
+
 def main(argv):
     names = argv or list(CASES)
     bad = []

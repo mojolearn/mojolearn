@@ -335,3 +335,25 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("decision_function", sl=slice(0, 256)), "x-logistic-cv-w")
+
+
+@lane("x-lasso-lars-pos")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.LassoLars(alpha=0.02, positive=True).fit(X[:2000], yr[:2000])
+    f = _linear_reg_fit(m, X, yr, Xh)
+    f["active"] = _h(np.asarray(m.active_, dtype=np.int32))
+    return f
+
+
+_batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-lasso-lars-pos")
+
+
+@lane("x-lasso-cv-pos")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.LassoCV(alphas=12, cv=3, max_iter=100, positive=True).fit(X[:1500], yr[:1500])
+    f = _linear_reg_fit(m, X, yr, Xh)
+    f["path"] = _h(m.mse_path_, m.alphas_)
+    return f
+
+
+_batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-lasso-cv-pos")
