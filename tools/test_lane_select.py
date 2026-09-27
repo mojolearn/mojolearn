@@ -1507,12 +1507,24 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
                                      the 26 more are lanes whose own doors
                                      call `kmeans_fit` (gmm, ivf, hdbscan,
                                      spectral and their par- twins: k-means
-                                     is their initialization or quantizer)"""
+                                     is their initialization or quantizer)
+
+    REMEASURED 2026-09-27 (lane/algos-trees, the trees expansion lanes):
+      forest_host_predict  60 -> 80  the twenty trees-* lanes (DecisionTree,
+                                     Bagging, AdaBoost, DART, RandomTrees-
+                                     Embedding, Voting, Stacking, MultiOutput,
+                                     OneVsRest, CalibratedClassifierCV, the
+                                     three SHAP explainers, trees-rf-weighted):
+                                     every one fits or predicts through the
+                                     RF/ET classes, whose predict routes to
+                                     this file; no old lane moved
+      forest_inference     26 -> 46  the same twenty lanes, through the rf
+                                     binding that imports it"""
     rev = lane_select.reverse_map()
     for rel, want in (("cluster/host/kmeans_oracle.mojo", 47),
                       ("core/gbdt_host_predict.mojo", 49),
-                      ("core/forest_host_predict.mojo", 60),
-                      ("core/forest_inference.mojo", 26),
+                      ("core/forest_host_predict.mojo", 80),
+                      ("core/forest_inference.mojo", 46),
                       ("python/mojolearn/neural_inference.py", 41)):
         got = len(rev.get(rel, set()))
         assert got == want, f"{rel} answers {got} lanes, not {want}"

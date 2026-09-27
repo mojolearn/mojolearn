@@ -7,7 +7,7 @@ _stochastic_gradient.py class_weight, sample_weight	refused / absent	pass 2
 _stochastic_gradient.py warm_start, partial_fit, coef_init, intercept_init	refused / absent	pass 2
 _sgd_fast.pyx.tp SequentialDataset.shuffle (MT19937)	replaced	splitmix64 Fisher-Yates (x_linear/ops.mojo); quality parity, not bit parity
 glm.py solver=lbfgs	replaced	Newton-Cholesky (their newton-cholesky form) for every solver value; same minimizer
-glm.py sample_weight, warm_start	refused / absent	pass 2
+glm.py warm_start	refused	pass 2 (sample_weight implemented)
 TweedieRegressor power<0 or 0<power<1, identity link with power>0	refused at the API	pass 2
 _huber.py L-BFGS-B with sigma >= 10*eps bound	replaced	sigma = exp(s), unconstrained L-BFGS (x_linear/lbfgs.mojo); same minimizer
 _huber.py sample_weight, warm_start	refused / absent	pass 2

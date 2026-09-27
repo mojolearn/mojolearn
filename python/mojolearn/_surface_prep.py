@@ -44,6 +44,7 @@ FAMILIES = (
             "x-prep-complement-nb",
             "x-prep-categorical-nb",
             "x-prep-priors",
+            "x-prep-robust-scaler-unit-variance",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -114,6 +115,7 @@ TRAINING_LANE_NAMES = {
     "x-prep-complement-nb": "ComplementNB",
     "x-prep-categorical-nb": "CategoricalNB",
     "x-prep-priors": "the priors / class_prior option of the naive Bayes and discriminant classifiers",
+    "x-prep-robust-scaler-unit-variance": "RobustScaler(unit_variance=True)",
 }
 PUBLIC_PENDING_LANES = {
     "x-prep-robust-scaler": "no reference",
@@ -145,4 +147,5 @@ PUBLIC_PENDING_LANES = {
     "x-prep-complement-nb": "no reference",
     "x-prep-categorical-nb": "no reference",
     "x-prep-priors": "no reference",
+    "x-prep-robust-scaler-unit-variance": "no reference",
 }
