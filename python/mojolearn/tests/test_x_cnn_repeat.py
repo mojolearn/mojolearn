@@ -114,8 +114,8 @@ def test_resident_entries_match_address_entries():
             cols, yconv = R.new(6 * 8 * 8 * 27), R.new(6 * 4 * 8 * 8)
             sv = [cols, yconv] if _ else []  # the second round with the saved arrays
             b.x_cnn_conv_block_forward_r(h["x"], h["w"], h["b"], h["out"], h["idx"], prm, pprm, sv)
-            b.x_cnn_conv_block_backward_r(h["x"], h["w"], h["b"], h["g"], h["idx"], [h["dx"], h["dw"], h["db"]],
-                                          prm, pprm, sv)
+            b.x_cnn_conv_block_backward_r(h["x"], h["w"], h["b"], h["g"], h["idx"], [h["dx"], h["dw"], h["db"]] + sv,
+                                          prm, pprm)
             _same(R.get(h["out"], out.shape), out)
             _same(R.get(h["idx"], idx.shape).view(np.int32), idx)
             _same(R.get(h["dx"], dx.shape), dx)

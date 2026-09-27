@@ -171,11 +171,12 @@ def conv_block_backward_binding[resident: Bool = False](
 
 def conv_block_backward_r_binding(
     x_addr: PythonObject, w_addr: PythonObject, b_addr: PythonObject, g_addr: PythonObject, idx_addr: PythonObject,
-    outs: PythonObject, conv_prm: PythonObject, pool_prm: PythonObject, saved: PythonObject,
+    outs: PythonObject, conv_prm: PythonObject, pool_prm: PythonObject,
 ) raises -> PythonObject:
-    """The resident block backward; `saved` as the forward's."""
+    """The resident block backward: outs = [dx (0: none), dW, db] or [dx, dW,
+    db, cols, conv output] with the forward's saved arrays."""
     var t = _block_prms(conv_prm, pool_prm)
-    var sv = _saved(saved)
+    var sv = (Int(py=outs[3]), Int(py=outs[4])) if Int(py=len(outs)) == 5 else (0, 0)
     var dx_addr = outs[0]
     var want = Int(py=dx_addr) != 0
     var x = _fp(x_addr)

@@ -717,8 +717,9 @@ def conv_block_forward_r_binding(
 
 def conv_block_backward_r_binding(
     x_addr: PythonObject, w_addr: PythonObject, b_addr: PythonObject, g_addr: PythonObject, idx_addr: PythonObject,
-    outs: PythonObject, conv_prm: PythonObject, pool_prm: PythonObject, saved: PythonObject,
+    outs: PythonObject, conv_prm: PythonObject, pool_prm: PythonObject,
 ) raises -> PythonObject:
+    """outs may carry the GPU binding's two saved arrays after [dx, dW, db]; the CPU twin recomputes."""
     return conv_block_backward_binding(x_addr, w_addr, b_addr, g_addr, idx_addr, outs, conv_prm, pool_prm)
 
 

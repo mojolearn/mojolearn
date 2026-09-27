@@ -722,8 +722,8 @@ class CNNClassifier(_Layer):
                         w_, b_, gw_, gb_ = self._rw[id(conv)]
                         src = a["out"][j - 1] if j > 0 else a["x"]
                         dx = a["gout"][j - 1] if j > 0 else 0
-                        b.x_cnn_conv_block_backward_r(src, w_, b_, a["gout"][j], a["idx"][j], [dx, gw_, gb_], prm, pprm,
-                                                      a["saved"][j])
+                        b.x_cnn_conv_block_backward_r(src, w_, b_, a["gout"][j], a["idx"][j],
+                                                      [dx, gw_, gb_] + a["saved"][j], prm, pprm)
                     step += 1
                     for (layer, attr, _), p_, g_, buf in zip(params, hp, hg, hbuf):
                         size = getattr(layer, attr).size
