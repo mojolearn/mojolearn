@@ -31,7 +31,7 @@ __all__ = ["SGDClassifier", "SGDRegressor", "PoissonRegressor", "GammaRegressor"
            "Lars", "LassoLars",
            "QuantileRegressor",
            "Perceptron", "PassiveAggressiveClassifier",
-           "PassiveAggressiveRegressor"]
+           "PassiveAggressiveRegressor", "SGDOneClassSVM"]
 
 _BINDING = "_mojolearn_x_linear"
 ALGO_SGD, ALGO_GLM, ALGO_HUBER, ALGO_BAYES, ALGO_ARD = 1, 2, 3, 4, 5
@@ -716,3 +716,51 @@ class PassiveAggressiveRegressor(_LinearRegressorMixin, NumericModeMixin):
         self.coef_ = coef.reshape((Xm[2],))
         self.intercept_ = intercept
         return self
+
+
+# ---------------------------------------------------------- SGDOneClassSVM
+# Reference: scikit-learn sklearn/linear_model/_stochastic_gradient.py
+# (SGDOneClassSVM, `_fit_one_class`: y = 1, hinge loss, l2, alpha = nu,
+# intercept = 1 - offset, the offset step `- eta * alpha`); x_linear/sgd.mojo.
+
+class SGDOneClassSVM(NumericModeMixin):
+    """Linear one-class SVM trained by SGD (scikit-learn's SGDOneClassSVM)."""
+
+    _BINDING = _BINDING
+    _estimator_type = "outlier_detector"
+
+    def __init__(self, nu=0.5, fit_intercept=True, max_iter=1000, tol=1e-3, shuffle=True, verbose=0,
+                 random_state=None, learning_rate="optimal", eta0=0.0, power_t=0.5, warm_start=False,
+                 average=False):
+        self.nu, self.fit_intercept, self.max_iter, self.tol = nu, fit_intercept, max_iter, tol
+        self.shuffle, self.verbose, self.random_state = shuffle, verbose, random_state
+        self.learning_rate, self.eta0, self.power_t = learning_rate, eta0, power_t
+        self.warm_start, self.average = warm_start, average
+
+    def fit(self, X, y=None):
+        _sgd_refuse(self, False, self.average, None, self.warm_start)
+        if not 0 < self.nu <= 1:
+            raise ValueError("mojolearn SGDOneClassSVM: nu must be in (0, 1]")
+        if self.learning_rate in ("pa1", "pa2"):
+            raise ValueError("mojolearn SGDOneClassSVM: learning_rate must be constant, optimal, invscaling or adaptive")
+        Xm = _matrix(X)
+        coef, intercept = _sgd_fit(
+            self, Xm, None, 1, _SGD_CLF_LOSS["hinge"], "l2", self.learning_rate,
+            self.nu, 0.0, self.eta0, self.power_t, 0.1, self.fit_intercept,
+            self.max_iter, self.tol, 5, self.shuffle, self.random_state)
+        self.coef_ = coef.reshape((Xm[2],))
+        self.offset_ = Array.from_list([1.0 - intercept.tolist()[0]], "<f4")
+        return self
+
+    def decision_function(self, X):
+        _check_fitted(self)
+        out = _decision(self, X, [self.coef_.tolist()], [-self.offset_.tolist()[0]])
+        return out.reshape((out.shape[0],))
+
+    def score_samples(self, X):
+        _check_fitted(self)
+        out = _decision(self, X, [self.coef_.tolist()], [0.0])
+        return out.reshape((out.shape[0],))
+
+    def predict(self, X):
+        return Array.from_list([1 if v >= 0 else -1 for v in self.decision_function(X).tolist()], "<i8")

@@ -192,6 +192,21 @@ def _():
     return ok
 
 
+@case("ocsvm")
+def _():
+    from sklearn import linear_model as sk
+    X, yr, yc, y3 = _data()
+    X = X + 3.0
+    ok = True
+    for nu in (0.1, 0.5):
+        a = ml.SGDOneClassSVM(nu=nu, random_state=0).fit(X)
+        b = sk.SGDOneClassSVM(nu=nu, random_state=0).fit(X)
+        fa_ = float(np.mean(np.asarray(a.predict(X)) == -1))
+        fb_ = float(np.mean(b.predict(X) == -1))
+        ok &= _close(f"nu={nu} outlier fraction {fa_:.3f} vs {fb_:.3f}", fa_, fb_, 0.08)
+    return ok
+
+
 def main(argv):
     names = argv or list(CASES)
     bad = []
