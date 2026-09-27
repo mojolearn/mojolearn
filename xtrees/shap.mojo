@@ -262,6 +262,7 @@ def block_mean(
         for j in range(k):
             var acc: Float64 = 0.0
             for r in range(nb):
+                # DEVIATION 5602: background rows folded in order.
                 acc = acc + Float64(y[unsafe_offset=(s * nb + r) * k + j])
             res[unsafe_offset=s * k + j] = acc / Float64(nb)
 
