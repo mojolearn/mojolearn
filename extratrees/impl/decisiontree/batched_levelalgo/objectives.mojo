@@ -391,6 +391,72 @@ def _ftz_seam[dt: DType, //](x: Scalar[dt]) -> Scalar[dt]:
     return x
 
 
+comptime REG_CRITERION_POISSON: Int32 = 4
+comptime REG_CRITERION_GAMMA: Int32 = 5
+comptime REG_CRITERION_INVERSE_GAUSSIAN: Int32 = 6
+"""decisiontree.mojo's CRITERION_POISSON / _GAMMA / _INVERSE_GAUSSIAN
+(`algo_helper.h:20-29`), restated here because decisiontree.mojo imports
+this file."""
+
+comptime REG_EPS = Float32(10.0) * Float32(1.1920928955078125e-07)
+"""cuML `RegressionObjectiveFunction::eps_`, `10 * epsilon<float>`."""
+
+
+def regression_deviance_gain(
+    sum_left_q: Int32, sum_total_q: Int32, n_left_in: Int32, n_total_in: Int32, criterion: Int32
+) -> Float32:
+    """cuML's Poisson / Gamma / InverseGaussian `GainPerSplit`
+    (`objectives.cuh:267-502`; ensemble/ restates them in
+    `objectives.mojo::PoissonGain` etc. and `host/rf_oracle.mojo`), for ONE
+    ExtraTrees cell, on device and on the host alike. DEVIATION 5610.
+
+    THEIRS: label sums in the label's own units, float32, `raft::log`.
+    OURS: the ET score pass carries FIXED-POINT label sums (DEVIATION 135),
+    so the sums enter in SCALED units, exactly as the MSE metric already
+    does (DEVIATION 189). In real arithmetic every gain here is a positive
+    multiple of the unscaled one (Poisson c*g, Gamma g, InverseGaussian g/c,
+    because the children's sums add to the parent's EXACTLY in integers), so
+    the ranking and the sign are cuML's; the eps guards read scaled sums,
+    i.e. a quantized sum of zero or less. The right sum is the storage-width
+    subtraction (`LabelSumMinus`); every log is `_log_seam` and every store
+    is flushed. A cell that fails a guard is -MAX_FINITE, so it loses and a
+    node whose best cell fails is a leaf (`split_not_valid`)."""
+    var parent_weight = Int64(Int(n_total_in))
+    var left_weight = Int64(Int(n_left_in))
+    var right_weight = parent_weight - left_weight
+    if parent_weight <= 0 or left_weight <= 0 or right_weight <= 0:
+        return -Float32.MAX_FINITE
+    var pw = Float32(Int(parent_weight))
+    var lw = Float32(Int(left_weight))
+    var rw = Float32(Int(right_weight))
+    var label_sum = ftz(Float32(Int(sum_total_q)))
+    var left_label_sum = ftz(Float32(Int(sum_left_q)))
+    var right_label_sum = ftz(Float32(Int(Int64(Int(sum_total_q)) - Int64(Int(sum_left_q)))))
+    if label_sum <= REG_EPS or left_label_sum <= REG_EPS or right_label_sum <= REG_EPS:
+        return -Float32.MAX_FINITE
+    var inv_len = ftz(Float32(1) / pw)
+    var parent_obj: Float32
+    var left_obj: Float32
+    var right_obj: Float32
+    if criterion == REG_CRITERION_POISSON:
+        parent_obj = ftz(-label_sum * _log_seam(ftz(label_sum * inv_len)))
+        left_obj = ftz(-left_label_sum * _log_seam(ftz(left_label_sum / lw)))
+        right_obj = ftz(-right_label_sum * _log_seam(ftz(right_label_sum / rw)))
+    elif criterion == REG_CRITERION_GAMMA:
+        parent_obj = ftz(pw * _log_seam(ftz(label_sum * inv_len)))
+        left_obj = ftz(lw * _log_seam(ftz(left_label_sum / lw)))
+        right_obj = ftz(rw * _log_seam(ftz(right_label_sum / rw)))
+    else:
+        parent_obj = ftz(ftz(-pw * pw) / label_sum)
+        left_obj = ftz(ftz(-lw * lw) / left_label_sum)
+        right_obj = ftz(ftz(-rw * rw) / right_label_sum)
+    var lr = ftz(left_obj + right_obj)
+    var gain = ftz(parent_obj - lr)
+    if criterion == REG_CRITERION_INVERSE_GAUSSIAN:
+        return ftz(gain / ftz(Float32(2) * pw))
+    return ftz(gain * inv_len)
+
+
 @fieldwise_init
 struct EntropyObjectiveFunction[dtype: DType](
     Copyable, Movable
