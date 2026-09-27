@@ -97,6 +97,27 @@ new algorithm, measure nothing. Worktree `~/mojolearn-wt/algos-bench`, branch
   byte-lm-host-train revision (72a64f8b9 named no size; now in
   NON_SIZE_REVISIONS of tools/identity_break.py). test_lane_select skipped
   (bench-only diff plus identity_break.py, not a trigger path).
+- Session 4, option parity (item 3), merge 7: read every lane's option-parity
+  merge on main (prep b2de7bf0e, c73e49116, ac4abdac1, cfc7646d5; cnn
+  0e2798963; cluster e670b8db2; decomp ec539d941, 18d267abe; trees
+  00d0138d5; linear 651e359c8). None of their new options is needed by a race:
+  every race already runs the opponents' default for them. A constructor
+  default census on the pod (`default_diff.py`, `default_diff2.py`: ours vs
+  scikit-learn 1.7.2, torch.nn and cuML on every parameter a race does not
+  set) found three races NOT at matched settings, now set in `LANES`:
+  kbins `quantile_method='linear'` on ours and scikit-learn (the pinned
+  1.7.2's default and cuML's np.percentile edges; ours defaults to
+  'averaged_inverted_cdf'); tsne `init='random'` on every arm (ours refused
+  'pca', so its arm could not have run; cuML has only random); sgd-reg cuML
+  `power_t=0.25` (scikit-learn's and ours; cuML defaults to 0.5). Other census
+  diffs are the same semantics under another spelling (MDS metric, AdaBoost
+  algorithm, Calibrated ensemble, Lars eps) or output dtype (encoders, ours
+  float32). Still unmatched, by missing options (NOT_IMPLEMENTED rows):
+  categorical-nb min_categories (ours_drop), damped-ets seasonal, tsne
+  Barnes-Hut (refused under IDENTICAL). Dry run: 93 existing races
+  byte-identical, and the whole plan byte-identical, on apple, nvidia, amd
+  (`drydiff_s4.log`). Bench tests 62 pass, test_host_surface 196 pass
+  (`premerge_s4.log`). test_lane_select skipped (bench-only diff).
 - Every algos class is now in the source tree; no race is guessed.
 - damped-ets stays non-seasonal on every arm: main's ETS still refuses
   seasonal components (`_x_sequence_ets.py`). When sequence adds them, restore
@@ -107,13 +128,13 @@ new algorithm, measure nothing. Worktree `~/mojolearn-wt/algos-bench`, branch
 
 ## Next
 
-- Option parity (item 3 of the bench task): lanes prep and cnn merged
-  option parity (b2de7bf0e, 0e2798963) and more lanes follow. Next session:
-  for each lane's option-parity merge, read the new constructor options and
-  set in `LANES` only those that make the race's settings match the
-  opponent's (defaults that differ between ours and theirs), one merge per
-  batch; keep the 93 existing races' dry run byte-identical and smoke only
-  the changed races.
+- Option parity again as more lanes merge options: re-run
+  `~/mojolearn-evidence/algos-bench/default_diff.py` / `default_diff2.py` on
+  the pod (`/root/opp/bin/python` for sklearn, `/usr/bin/python3` for torch,
+  `/root/rapids/bin/python` for cuML, cwd /root/mojolearn) and set in `LANES`
+  only what makes a race's settings match. When prep adds CategoricalNB
+  min_categories, drop the `ours_drop`; when sequence adds seasonal ETS,
+  restore the seasonal damped-ets race (below).
 
 ## Adding a class name or contract
 
