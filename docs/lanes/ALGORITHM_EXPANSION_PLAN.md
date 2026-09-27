@@ -628,3 +628,33 @@ speed wave. It is written here so the target is on the record and so no
 lane in phases 1 and 2 designs a host kernel that cannot be parallelized
 later (keep the fold shape explicit; never bake a sequential order into a
 seam that a pinned tree would also satisfy).
+
+---
+
+# CONSOLIDATION PASS (Andrew, 2026-09-27)
+
+Measured: the numeric seams are NOT duplicated. Every identity helper lives
+once, except `pinned_mul` (the dedupe lane) and the ledger's row-20 twins
+(`pinned_block_sum`, `twiddle_in`). The duplication is in scaffolding. The
+one piece that matters is the **fixture RNG**: about 80 copies of `_mix`,
+`splitmix`, `_splitmix`, `_u01` and `_hashed` generate the data every check
+runs on. If one copy differs, a cross-lane or cross-vendor comparison
+silently compares fixtures instead of kernels.
+
+**Now (conflict-free: new files only):** lane `consolidate` adds
+`checks/fixture_rng.mojo` and `checks/scaffold.mojo` (grid, hash printing,
+upload/download, pointer helpers, `run_case`/`card_path` shape) plus a
+binding prelude. It also adds a gate proving every existing fixture-RNG copy
+agrees bit for bit with the canonical one over a hashed input set. After
+that merges, CURRENT DIRECTIVES tells lanes to use these in all new code.
+
+**After the lanes quiet (on its own branch, merging main regularly, landing
+in one merge):**
+1. Delete the fixture-RNG copies. The gate ran first, so this is bit-inert.
+2. Migrate the check and binding scaffolding to the shared files.
+3. Split `tools/identity_break.py` (12,878 lines) into per-family fragments,
+   using the prep's mechanism.
+4. Rename the `x_` directories once their lanes are certified.
+
+**Never:** split the big certified kernel files (fused attention, the
+identical GEMM). One file per contract is deliberate.
