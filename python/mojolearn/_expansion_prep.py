@@ -378,19 +378,136 @@ def _codes(pr, arr, categories):
     return codes, neg
 
 
-def _inverse_codes(pr, arr, categories, missing, emv, unknown):
+def _inverse_codes(pr, arr, categories, missing, emv, unknown, ncat=None, back=None):
     """OrdinalEncoder-style inverse: stages that turn codes back into category
     values. Returns (values offset, codes offset); a code of -2 is invalid,
-    -1 unknown (the reference's None, written as NaN)."""
+    -1 unknown (the reference's None, written as NaN). With infrequent
+    categories, `ncat` is each column's grouped cardinality and `back` the
+    (MAP, MSTRIDE, NMAP) grouped -> category index table (the infrequent code
+    maps to -3, written as NaN)."""
     n, d = arr.shape
     xo = pr.put(arr)
     mo = pr.put_list(missing)
     eo = pr.put_scalar(emv)
     uo = pr.put_scalar(0.0 if unknown is None else unknown)
-    no = pr.put_list([c.size for c in categories])
+    no = pr.put_list(ncat if ncat is not None else [c.size for c in categories])
     codes = pr.alloc(n * d)
     pr.stage("ord_inverse", n * d, xo, n, d, mo, eo, 0 if unknown is None else 1, uo, no, codes)
+    if back is not None:
+        codes = _remap(pr, codes, n, d, back, _NONE)
     return _gather_categories(pr, codes, n, d, categories), codes
+
+
+def _check_infrequent_params(est):
+    """The reference's parameter constraints; True when grouping is on."""
+    mf, mc = est.min_frequency, est.max_categories
+    if mf is not None:
+        ok = (isinstance(mf, numbers.Integral) and not isinstance(mf, bool) and mf >= 1) or \
+            (isinstance(mf, numbers.Real) and not isinstance(mf, numbers.Integral) and 0 < mf < 1)
+        if not ok:
+            raise ValueError(f"mojolearn: min_frequency must be an int >= 1 or a float in (0, 1), got {mf!r}")
+    if mc is not None and not (isinstance(mc, numbers.Integral) and not isinstance(mc, bool) and mc >= 1):
+        raise ValueError(f"mojolearn: max_categories must be an int >= 1, got {mc!r}")
+    return mc is not None or mf is not None
+
+
+def _category_counts(mode, arr, categories):
+    """Per column, how many training rows hold each category (the device's
+    lookup and a per-column count, integers)."""
+    n, d = arr.shape
+    pr = _Prog()
+    codes, _neg = _codes(pr, arr, categories)
+    kmax = max(c.size for c in categories)
+    out = pr.alloc(d * kmax)
+    pr.stage("code_counts", d, codes, n, d, kmax, out)
+    pr.run(mode)
+    flat = pr.get_i32(out, d * kmax).tolist()
+    return [flat[j * kmax:j * kmax + c.size] for j, c in enumerate(categories)]
+
+
+def _identify_infrequent(counts, n, min_frequency, max_categories):
+    """sklearn `_identify_infrequent`: the sorted infrequent indices, or None.
+    Integer counts; the fractional threshold is n * min_frequency in float64."""
+    if min_frequency is None:
+        mask = [False] * len(counts)
+    elif isinstance(min_frequency, numbers.Integral):
+        mask = [c < min_frequency for c in counts]
+    else:
+        lim = n * float(min_frequency)
+        mask = [c < lim for c in counts]
+    current = len(counts) - sum(mask) + 1
+    if max_categories is not None and max_categories < current:
+        keep = max_categories - 1
+        if keep == 0:
+            mask = [True] * len(counts)
+        else:
+            order = sorted(range(len(counts)), key=lambda i: counts[i])   # stable, as mergesort
+            for i in order[:-keep]:
+                mask[i] = True
+    idx = [i for i, m in enumerate(mask) if m]
+    return idx or None
+
+
+def _fit_infrequent(est, mode, arr, ignore_missing):
+    """Sets est._infrequent (per column: sorted infrequent indices or None)
+    and est._grouping (per column: category index -> grouped code, or None),
+    as the reference's `_fit_infrequent_category_mapping`. With
+    ignore_missing (OrdinalEncoder) a trailing NaN category is left out of
+    the grouping."""
+    counts = _category_counts(mode, arr, est.categories_)
+    n = arr.shape[0]
+    est._infrequent, est._grouping = [], []
+    for cats, cnt in zip(est.categories_, counts):
+        if ignore_missing and cats.size and _is_nan_value(cats.tolist()[-1]):
+            cnt = cnt[:-1]
+        inf = _identify_infrequent(cnt, n, est.min_frequency, est.max_categories)
+        est._infrequent.append(inf)
+        if inf is None:
+            est._grouping.append(None)
+            continue
+        infset = set(inf)
+        nf = len(cnt) - len(inf)
+        mapping, g = [], 0
+        for i in range(len(cnt)):
+            if i in infset:
+                mapping.append(nf)
+            else:
+                mapping.append(g)
+                g += 1
+        est._grouping.append(mapping)
+    est.infrequent_categories_ = [None if inf is None else Array.from_list([c.tolist()[i] for i in inf], "<f4")
+                                  for c, inf in zip(est.categories_, est._infrequent)]
+
+
+def _grouping_table(pr, grouping, inverse=False):
+    """(MAP, MSTRIDE, NMAP) for remap_codes: category -> grouped code, or
+    (inverse) grouped code -> category index with the infrequent code -> -3."""
+    tables = []
+    for g in grouping:
+        if g is None:
+            tables.append([])
+        elif not inverse:
+            tables.append(list(g))
+        else:
+            nf = max(g)
+            back = [0] * (nf + 1)
+            for i, v in enumerate(g):
+                if v < nf:
+                    back[v] = i
+            back[nf] = -3
+            tables.append(back)
+    stride = max(1, max(len(t) for t in tables))
+    flat = []
+    for t in tables:
+        flat.extend(t + [0] * (stride - len(t)))
+    return pr.put_list(flat), stride, pr.put_list([len(t) for t in tables])
+
+
+def _remap(pr, codes, n, d, table, neg):
+    mo, stride, no = table
+    out = pr.alloc(n * d)
+    pr.stage("remap_codes", n * d, codes, n * d, d, mo, stride, no, neg, out)
+    return out
 
 
 def _gather_categories(pr, codes, n, d, categories):
@@ -432,8 +549,12 @@ class OrdinalEncoder(_PrepBase):
     (NaN by default). handle_unknown 'error' or 'use_encoded_value'.
     inverse_transform maps codes back (an unknown_value row is NaN where the
     reference writes None: there is no object Array). categories='auto' or
-    one sorted numeric list per column (as the reference); min_frequency and
-    max_categories are refused."""
+    one sorted numeric list per column (as the reference). min_frequency /
+    max_categories group infrequent categories into one code after the
+    frequent ones (the reference's rule, a NaN category left out of it);
+    inverse_transform writes that code as NaN (the reference's
+    'infrequent_sklearn' string: there is no object Array), and
+    unknown_value may not equal it (the reference lets it collide)."""
     _parameters = ("categories", "dtype", "handle_unknown", "unknown_value", "encoded_missing_value",
                    "min_frequency", "max_categories")
 
@@ -448,8 +569,7 @@ class OrdinalEncoder(_PrepBase):
         self.max_categories = max_categories
 
     def fit(self, X, y=None):
-        if self.min_frequency is not None or self.max_categories is not None:
-            raise NotImplementedError("mojolearn: OrdinalEncoder min_frequency and max_categories are not implemented")
+        grouping = _check_infrequent_params(self)
         if self.handle_unknown not in ("error", "use_encoded_value"):
             raise ValueError(f"mojolearn: invalid handle_unknown {self.handle_unknown!r}")
         if self.handle_unknown == "use_encoded_value" and not isinstance(self.unknown_value, numbers.Real):
@@ -462,7 +582,12 @@ class OrdinalEncoder(_PrepBase):
                             _given_categories(self.categories, arr, mode, self.handle_unknown == "error",
                                               "OrdinalEncoder"))
         self._missing = [c.size - 1 if c.size and _is_nan_value(c.tolist()[-1]) else -1 for c in self.categories_]
+        self._infrequent = self._grouping = None
+        if grouping:
+            _fit_infrequent(self, mode, arr, True)
         cards = [c.size - (1 if m >= 0 else 0) for c, m in zip(self.categories_, self._missing)]
+        if grouping:
+            cards = [k if g is None else max(g) + 1 for k, g in zip(cards, self._grouping)]
         if self.handle_unknown == "use_encoded_value" and not _is_nan_value(self.unknown_value):
             if any(0 <= self.unknown_value < k for k in cards):
                 raise ValueError(f"mojolearn: the used value for unknown_value {self.unknown_value} is one of the "
@@ -484,10 +609,12 @@ class OrdinalEncoder(_PrepBase):
         pr = _Prog()
         codes, neg = _codes(pr, arr, self.categories_)
         out = codes
+        if self._grouping is not None:
+            out = _remap(pr, codes, n, d, _grouping_table(pr, self._grouping), _NONE)
         if self.handle_unknown == "use_encoded_value":
             val = pr.put_scalar(self.unknown_value)
-            out = pr.alloc(n * d)
-            pr.stage("where_neg", n * d, codes, n * d, val, out)
+            src, out = out, pr.alloc(n * d)
+            pr.stage("where_neg", n * d, src, n * d, val, out)
         if any(m >= 0 for m in self._missing):
             src, out = out, pr.alloc(n * d)
             pr.stage("where_code", n * d, codes, n, d, pr.put_list(self._missing),
@@ -504,7 +631,12 @@ class OrdinalEncoder(_PrepBase):
         n, d = arr.shape
         pr = _Prog()
         unknown = self.unknown_value if self.handle_unknown == "use_encoded_value" else None
-        out, codes = _inverse_codes(pr, arr, self.categories_, self._missing, self.encoded_missing_value, unknown)
+        ncat = back = None
+        if self._grouping is not None:
+            ncat = [c.size if g is None else max(g) + 1 for c, g in zip(self.categories_, self._grouping)]
+            back = _grouping_table(pr, self._grouping, inverse=True)
+        out, codes = _inverse_codes(pr, arr, self.categories_, self._missing, self.encoded_missing_value, unknown,
+                                    ncat, back)
         pr.run(self.numeric_mode_)
         bad = _bad_codes(pr, codes, n, d, -2)
         if bad:
@@ -520,8 +652,13 @@ class OneHotEncoder(_PrepBase):
     reference's per-block argmax (an all-zero block is the dropped category,
     or unknown: an error for handle_unknown='error', NaN where the reference
     writes None for 'ignore'). categories='auto' or one sorted numeric list
-    per column (as the reference); min_frequency and max_categories are
-    refused."""
+    per column (as the reference). drop may also be one category per
+    feature. min_frequency / max_categories group infrequent categories
+    into one last column per feature (the reference's rule);
+    handle_unknown 'infrequent_if_exist' and 'warn' send an unknown value to
+    that column when the feature has one (else an all-zero block).
+    inverse_transform writes the infrequent column as NaN (the reference's
+    'infrequent_sklearn' string: there is no object Array)."""
     _parameters = ("categories", "drop", "sparse_output", "dtype", "handle_unknown", "min_frequency",
                    "max_categories", "feature_name_combiner")
 
@@ -537,30 +674,82 @@ class OneHotEncoder(_PrepBase):
         self.feature_name_combiner = feature_name_combiner
 
     def fit(self, X, y=None):
-        if self.min_frequency is not None or self.max_categories is not None:
-            raise NotImplementedError("mojolearn: OneHotEncoder min_frequency and max_categories are not implemented")
-        if self.handle_unknown not in ("error", "ignore"):
-            raise NotImplementedError(f"mojolearn: OneHotEncoder handle_unknown={self.handle_unknown!r} "
-                                      "is not implemented ('error' or 'ignore')")
-        if self.drop not in (None, "first", "if_binary"):
-            raise NotImplementedError("mojolearn: OneHotEncoder drop must be None, 'first' or 'if_binary'")
+        grouping = _check_infrequent_params(self)
+        if self.handle_unknown not in ("error", "ignore", "infrequent_if_exist", "warn"):
+            raise ValueError(f"mojolearn: OneHotEncoder handle_unknown={self.handle_unknown!r} is not valid")
+        if isinstance(self.drop, str) and self.drop not in ("first", "if_binary"):
+            raise ValueError("mojolearn: OneHotEncoder drop must be None, 'first', 'if_binary' or one category "
+                             "per feature")
         arr = _finite_2d(X, "OneHotEncoder")
         mode = _mode()
         self.categories_ = (_fit_categories(mode, arr) if _is_auto(self.categories) else
                             _given_categories(self.categories, arr, mode, self.handle_unknown == "error",
                                               "OneHotEncoder"))
-        if self.drop == "first":
-            self.drop_idx_ = [0 for _ in self.categories_]
-        elif self.drop == "if_binary":
-            self.drop_idx_ = [0 if c.size == 2 else None for c in self.categories_]
-        else:
-            self.drop_idx_ = None
+        self._infrequent = self._grouping = None
+        if grouping:
+            _fit_infrequent(self, mode, arr, False)
+        self._set_drop_idx()
         self.numeric_mode_, self.n_features_in_ = mode, arr.shape[1]
         return self
 
+    def _grouped_sizes(self):
+        return [c.size if (self._grouping is None or g is None) else max(g) + 1
+                for c, g in zip(self.categories_, self._grouping or [None] * len(self.categories_))]
+
+    def _set_drop_idx(self):
+        """The reference's `_set_drop_idx`: `_drop_after` in grouped codes,
+        drop_idx_ in category indices."""
+        sizes = self._grouped_sizes()
+        grouping = self._grouping or [None] * len(sizes)
+        if self.drop is None:
+            after = None
+        elif self.drop == "first":
+            after = [0] * len(sizes)
+        elif self.drop == "if_binary":
+            after = [0 if k == 2 else None for k in sizes]
+        else:
+            vals = list(self.drop.tolist() if hasattr(self.drop, "tolist") else self.drop)
+            if len(vals) != len(sizes):
+                raise ValueError(f"mojolearn: `drop` should have length equal to the number of features "
+                                 f"({len(sizes)}), got {len(vals)}")
+            after, missing = [], []
+            for j, (v, cats) in enumerate(zip(vals, self.categories_)):
+                cl = cats.tolist()
+                if _is_nan_value(v):
+                    hit = [cats.size - 1] if cl and _is_nan_value(cl[-1]) else []
+                else:
+                    fv = array.array("f", [float(v)])[0]
+                    hit = [i for i, c in enumerate(cl) if c == fv]
+                if not hit:
+                    missing.append((j, v))
+                    continue
+                i = hit[0]
+                if grouping[j] is not None:
+                    if i in self._infrequent[j]:
+                        raise ValueError(f"mojolearn: Unable to drop category {cl[i]!r} from feature {j} "
+                                         "because it is infrequent")
+                    i = grouping[j][i]
+                after.append(i)
+            if missing:
+                raise ValueError("mojolearn: The following categories were supposed to be dropped, but were not "
+                                 "found in the training data.\n" + "\n".join(
+                                     f"Category: {v}, Feature: {j}" for j, v in missing))
+        self._drop_after = after
+        if after is None:
+            self.drop_idx_ = None
+        else:
+            self.drop_idx_ = [a if (a is None or g is None) else g.index(a) for a, g in zip(after, grouping)]
+
     def _widths(self):
-        drops = self.drop_idx_ or [None] * len(self.categories_)
-        return [c.size - (0 if dr is None else 1) for c, dr in zip(self.categories_, drops)], drops
+        drops = self._drop_after or [None] * len(self.categories_)
+        return [k - (0 if dr is None else 1) for k, dr in zip(self._grouped_sizes(), drops)], drops
+
+    def _unknown_to(self):
+        """Per column, the grouped code an unknown value takes: the infrequent
+        one under 'infrequent_if_exist' / 'warn' when the column has it, else -1."""
+        if self._grouping is None or self.handle_unknown not in ("infrequent_if_exist", "warn"):
+            return None
+        return [-1 if g is None else max(g) for g in self._grouping]
 
     def transform(self, X):
         self._check_fitted()
@@ -572,6 +761,10 @@ class OneHotEncoder(_PrepBase):
         W = sum(widths)
         pr = _Prog()
         codes, neg = _codes(pr, arr, self.categories_)
+        if self._grouping is not None:
+            unk = self._unknown_to()
+            codes = _remap(pr, codes, n, d, _grouping_table(pr, self._grouping),
+                           _NONE if unk is None else pr.put_list(unk))
         so = pr.put_list(starts)
         do = pr.put_list([-1 if dr is None else dr for dr in drops])
         out = pr.alloc(n * W)
@@ -579,6 +772,15 @@ class OneHotEncoder(_PrepBase):
         pr.run(self.numeric_mode_)
         if self.handle_unknown == "error":
             _raise_unknown(pr, neg, d, "OneHotEncoder")
+        elif self.handle_unknown == "warn" or (self.drop is not None and
+                                               self.handle_unknown in ("ignore", "infrequent_if_exist")):
+            bad = [j for j, v in enumerate(pr.values(neg, d)) if v > 0]
+            if bad:
+                import warnings
+                where = ("encoded as the infrequent category" if self.handle_unknown != "ignore"
+                         else "encoded as all zeros")
+                warnings.warn(f"Found unknown categories in columns {bad} during transform. These unknown "
+                              f"categories will be {where}.", UserWarning)
         return pr.get(out, (n, W))
 
     def inverse_transform(self, X):
@@ -590,10 +792,19 @@ class OneHotEncoder(_PrepBase):
             raise ValueError(f"mojolearn: X has {W} columns, expected {sum(widths)}")
         pr = _Prog()
         codes = _block_argmax(pr, arr, widths, [-1 if dr is None else dr for dr in drops], True)
+        grouped = codes
+        if self._grouping is not None:
+            codes = _remap(pr, codes, n, d, _grouping_table(pr, self._grouping, inverse=True), _NONE)
         out = _gather_categories(pr, codes, n, d, self.categories_)
         pr.run(self.numeric_mode_)
-        bad = _bad_codes(pr, codes, n, d, -1)
-        if bad and self.handle_unknown == "error":
+        # an all-zero block is unknown (NaN) under 'ignore', and under
+        # 'infrequent_if_exist' / 'warn' for a column with no infrequent
+        # category; anywhere else it cannot be inverted
+        strict = [self.handle_unknown == "error" or (self.handle_unknown != "ignore" and self._infrequent is not None
+                                                      and self._infrequent[j] is not None) for j in range(d)]
+        vals = pr.values(grouped, n * d)
+        bad = sorted({i // d for i, v in enumerate(vals) if v == -1 and strict[i % d]})
+        if bad:
             raise ValueError(f"mojolearn: samples {bad[:10]} can not be inverted when drop=None and "
                              "handle_unknown='error' because they contain all zeros")
         return pr.get(out, (n, d))
