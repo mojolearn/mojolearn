@@ -120,3 +120,37 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-kbins")
+
+
+def _prep_clf(m, X, Xh, attrs):
+    parts = {k: _h(getattr(m, k)) for k in attrs}
+    parts["predict"] = _h(m.predict(X[:256]))
+    parts["proba"] = _h(m.predict_proba(X[:256]))
+    parts["log_proba"] = _h(m.predict_log_proba(X[:256]))
+    return _fit(parts, m, lambda e: (e.predict(Xh[:256]), e.predict_proba(Xh[:256])))
+
+
+def _prep_abs(X):
+    return np.abs(X).astype(np.float32)
+
+
+@lane("x-prep-gaussian-nb")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.GaussianNB().fit(X, yc)
+    return _prep_clf(m, X, Xh, ("theta_", "var_", "class_prior_"))
+
+
+@lane("x-prep-multinomial-nb")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.MultinomialNB(alpha=0.5).fit(_prep_abs(X), yc)
+    return _prep_clf(m, _prep_abs(X), _prep_abs(Xh), ("feature_count_", "feature_log_prob_", "class_log_prior_"))
+
+
+@lane("x-prep-bernoulli-nb")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.BernoulliNB(binarize=0.25).fit(X, yc)
+    return _prep_clf(m, X, Xh, ("feature_count_", "feature_log_prob_", "class_log_prior_"))
+
+
+_batch_decl(_rows_calls("predict", "predict_proba", sl=slice(0, 256)), "x-prep-gaussian-nb", "x-prep-bernoulli-nb")
+_batch_decl(_rows_calls("predict", "predict_proba", sl=slice(0, 256), prep=_prep_abs), "x-prep-multinomial-nb")
