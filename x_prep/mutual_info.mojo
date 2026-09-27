@@ -73,61 +73,123 @@ def mi_colscale_unit(t: Int, f: FP, q: IP):
 
 
 def mi_noise_unit(t: Int, f: FP, q: IP):
-    """q = [X, n, d, SCALE, MABS, SEED, OUT]; t = element:
-    x / SCALE + 1e-10 * MABS * N(0, 1)."""
+    """q = [X, n, d, SCALE, MABS, SEED, OUT, SEC]; t = element. SEC == 0:
+    OUT = x / SCALE + 1e-10 * MABS * N(0, 1) in float32. SEC > 0: the
+    reference's noise kept exactly as a second word (DEVIATION 5410):
+    OUT = x / SCALE and SEC - 1 holds MABS * N(0, 1), the value being
+    OUT + 1e-10 * SEC word, which float32 cannot add without losing it."""
     var c = t % p(q, 2)
     var v = div(ld(f, p(q, 0) + t), ld(f, p(q, 3) + c))
-    st(f, p(q, 6) + t, add(v, mul(mul(Float32(1.0e-10), ld(f, p(q, 4) + c)), gauss(p(q, 5), t))))
+    var g = gauss(p(q, 5), t)
+    if p(q, 7) > 0:
+        st(f, p(q, 6) + t, v)
+        st(f, p(q, 7) - 1 + t, mul(ld(f, p(q, 4) + c), g))
+        return
+    st(f, p(q, 6) + t, add(v, mul(mul(Float32(1.0e-10), ld(f, p(q, 4) + c)), g)))
 
 
 @always_inline
-def _within(dist: Float32, r: Float32) -> Bool:
-    """DEVIATION 5407: within nextafter(r, 0) is dist < r (dist == 0 at r == 0)."""
-    if r > Float32(0):
-        return dist < r
-    return dist == Float32(0)
+def _sec(f: FP, base1: Int, i: Int) -> Float32:
+    """The secondary word of element i (base1 = offset + 1; 0: none, 0)."""
+    if base1 == 0:
+        return Float32(0)
+    return ld(f, base1 - 1 + i)
+
+
+@always_inline
+def _dsec(zi: Float32, zj: Float32, si: Float32, sj: Float32) -> Float32:
+    """The secondary word of |(zj + e*sj) - (zi + e*si)| for an infinitesimal
+    e: e*(sj - si) carries the sign of zj - zi, or is taken absolute when the
+    primary words tie."""
+    var dz = sub(zj, zi)
+    var ds = sub(sj, si)
+    if dz > Float32(0):
+        return ds
+    if dz < Float32(0):
+        return -ds
+    return abs(ds)
+
+
+@always_inline
+def _less(ap: Float32, as_: Float32, bp: Float32, bs: Float32) -> Bool:
+    """(ap, as_) < (bp, bs): the primary word first, the secondary on a tie."""
+    return ap < bp or (ap == bp and as_ < bs)
+
+
+@always_inline
+def _within(dp: Float32, ds: Float32, rp: Float32, rs: Float32) -> Bool:
+    """DEVIATION 5407: within nextafter(r, 0) is strictly inside r, compared
+    as (primary, secondary) pairs (DEVIATION 5410); at r == 0 exactly, the
+    reference's radius-0 query, only distance 0 counts. With no secondary
+    words (all 0) this is dist < r, and dist == 0 at r == 0."""
+    if dp != rp:
+        return dp < rp
+    if rp == Float32(0) and rs == Float32(0):
+        return ds == Float32(0)
+    return ds < rs
 
 
 def mi_cc_unit(t: Int, f: FP, q: IP):
-    """q = [Z, n, d, Y, k, TERM]; t = i*d + c. TERM = psi(nx) + psi(ny), the
-    marginal counts (self included) within the k-th Chebyshev neighbour
-    radius of the joint (x, y) sample."""
+    """q = [Z, n, d, Y, k, TERM, ZS, YS]; t = i*d + c. TERM = psi(nx) +
+    psi(ny), the marginal counts (self included) within the k-th Chebyshev
+    neighbour radius of the joint (x, y) sample. ZS / YS (offset + 1, or 0
+    for none) hold the noise words (DEVIATION 5410): every distance is a
+    (primary, secondary) pair, compared lexicographically."""
     var n = p(q, 1)
     var d = p(q, 2)
     var k = p(q, 4)
     var i = t // d
     var c = t % d
+    var zs = p(q, 6)
+    var ys = p(q, 7)
     var xi = ld(f, p(q, 0) + i * d + c)
     var yi = ld(f, p(q, 3) + i)
-    var best = InlineArray[Float32, MAX_K](fill=Float32(3.4028235e38))
+    var sxi = _sec(f, zs, i * d + c)
+    var syi = _sec(f, ys, i)
+    var bp = InlineArray[Float32, MAX_K](fill=Float32(3.4028235e38))
+    var bs = InlineArray[Float32, MAX_K](fill=Float32(3.4028235e38))
     for j in range(n):
         if j == i:
             continue
-        var dx = abs(sub(ld(f, p(q, 0) + j * d + c), xi))
-        var dy = abs(sub(ld(f, p(q, 3) + j), yi))
-        var dist = dx if dx > dy else dy
-        if dist < best[k - 1]:
+        var xj = ld(f, p(q, 0) + j * d + c)
+        var yj = ld(f, p(q, 3) + j)
+        var dx = abs(sub(xj, xi))
+        var dy = abs(sub(yj, yi))
+        var sx = _dsec(xi, xj, sxi, _sec(f, zs, j * d + c))
+        var sy = _dsec(yi, yj, syi, _sec(f, ys, j))
+        var dp = dx
+        var dsec = sx
+        if _less(dx, sx, dy, sy):
+            dp = dy
+            dsec = sy
+        if _less(dp, dsec, bp[k - 1], bs[k - 1]):
             var m = k - 1
-            while m > 0 and best[m - 1] > dist:
-                best[m] = best[m - 1]
+            while m > 0 and _less(dp, dsec, bp[m - 1], bs[m - 1]):
+                bp[m] = bp[m - 1]
+                bs[m] = bs[m - 1]
                 m -= 1
-            best[m] = dist
-    var r = best[k - 1]
+            bp[m] = dp
+            bs[m] = dsec
+    var rp = bp[k - 1]
+    var rs = bs[k - 1]
     var nx = 0
     var ny = 0
     for j in range(n):
-        if _within(abs(sub(ld(f, p(q, 0) + j * d + c), xi)), r):
+        var xj = ld(f, p(q, 0) + j * d + c)
+        var yj = ld(f, p(q, 3) + j)
+        if _within(abs(sub(xj, xi)), _dsec(xi, xj, sxi, _sec(f, zs, j * d + c)), rp, rs):
             nx += 1
-        if _within(abs(sub(ld(f, p(q, 3) + j), yi)), r):
+        if _within(abs(sub(yj, yi)), _dsec(yi, yj, syi, _sec(f, ys, j)), rp, rs):
             ny += 1
     st(f, p(q, 5) + t, add(digammaf(Float32(nx)), digammaf(Float32(ny))))
 
 
 def _cd_term(
-    f: FP, i: Int, n: Int, zb: Int, zs: Int, lb: Int, ls: Int, cb: Int, k: Int
+    f: FP, i: Int, n: Int, zb: Int, zs: Int, sb: Int, lb: Int, ls: Int, cb: Int, k: Int
 ) -> Float32:
     """Ross's per-point term for point i: the continuous values at
-    Z[zb + j*zs], the labels at L[lb + j*ls], each label's count at
+    Z[zb + j*zs] (their noise words at sb - 1 + j*zs, sb = 0 for none;
+    DEVIATION 5410), the labels at L[lb + j*ls], each label's count at
     CNT[cb + label]. For a point whose class has more than one member:
     kl = min(k, count - 1), r the kl-th nearest same-class distance, m the
     points (of classes with more than one member, self included) within r;
@@ -138,46 +200,56 @@ def _cd_term(
         return Float32(0)
     var kl = k if k < cnt - 1 else cnt - 1
     var xi = ld(f, zb + i * zs)
-    var best = InlineArray[Float32, MAX_K](fill=Float32(3.4028235e38))
+    var si = _sec(f, sb, i * zs)
+    var bp = InlineArray[Float32, MAX_K](fill=Float32(3.4028235e38))
+    var bs = InlineArray[Float32, MAX_K](fill=Float32(3.4028235e38))
     for j in range(n):
         if j == i or Int(ld(f, lb + j * ls)) != li:
             continue
-        var dist = abs(sub(ld(f, zb + j * zs), xi))
-        if dist < best[kl - 1]:
+        var xj = ld(f, zb + j * zs)
+        var dp = abs(sub(xj, xi))
+        var dsec = _dsec(xi, xj, si, _sec(f, sb, j * zs))
+        if _less(dp, dsec, bp[kl - 1], bs[kl - 1]):
             var m = kl - 1
-            while m > 0 and best[m - 1] > dist:
-                best[m] = best[m - 1]
+            while m > 0 and _less(dp, dsec, bp[m - 1], bs[m - 1]):
+                bp[m] = bp[m - 1]
+                bs[m] = bs[m - 1]
                 m -= 1
-            best[m] = dist
-    var r = best[kl - 1]
+            bp[m] = dp
+            bs[m] = dsec
+    var rp = bp[kl - 1]
+    var rs = bs[kl - 1]
     var mall = 0
     for j in range(n):
         if Int(ld(f, cb + Int(ld(f, lb + j * ls)))) <= 1:
             continue
-        if _within(abs(sub(ld(f, zb + j * zs), xi)), r):
+        var xj = ld(f, zb + j * zs)
+        if _within(abs(sub(xj, xi)), _dsec(xi, xj, si, _sec(f, sb, j * zs)), rp, rs):
             mall += 1
     return sub(sub(digammaf(Float32(kl)), digammaf(Float32(cnt))), digammaf(Float32(mall)))
 
 
 def mi_cd_unit(t: Int, f: FP, q: IP):
-    """q = [Z, n, d, Y, LABCNT, k, TERM]; t = i*d + c. A continuous feature
-    against the classes Y (counts LABCNT): Ross's term of point i
-    (`_cd_term`)."""
+    """q = [Z, n, d, Y, LABCNT, k, TERM, ZS]; t = i*d + c. A continuous
+    feature against the classes Y (counts LABCNT): Ross's term of point i
+    (`_cd_term`); ZS the noise words (offset + 1, or 0 for none)."""
     var d = p(q, 2)
     var i = t // d
     var c = t % d
-    st(f, p(q, 6) + t, _cd_term(f, i, p(q, 1), p(q, 0) + c, d, p(q, 3), 1, p(q, 4), p(q, 5)))
+    var sb = p(q, 7) + c if p(q, 7) > 0 else 0
+    st(f, p(q, 6) + t, _cd_term(f, i, p(q, 1), p(q, 0) + c, d, sb, p(q, 3), 1, p(q, 4), p(q, 5)))
 
 
 def mi_dc_unit(t: Int, f: FP, q: IP):
-    """q = [ZY, n, d, XC, CNT, KS, k, TERM]; t = i*d + c. A discrete feature
+    """q = [ZY, n, d, XC, CNT, KS, k, TERM, ZYS]; t = i*d + c. A discrete feature
     against a continuous target (the reference's `_compute_mi_cd(y, x)`):
     the labels are column c's codes XC[i*d + c], their counts CNT[c*KS + code],
-    the continuous values the noised target ZY."""
+    the continuous values the noised target ZY (noise words ZYS, offset + 1,
+    or 0 for none)."""
     var d = p(q, 2)
     var i = t // d
     var c = t % d
-    st(f, p(q, 7) + t, _cd_term(f, i, p(q, 1), p(q, 0), 1, p(q, 3) + c, d, p(q, 4) + c * p(q, 5), p(q, 6)))
+    st(f, p(q, 7) + t, _cd_term(f, i, p(q, 1), p(q, 0), 1, p(q, 8), p(q, 3) + c, d, p(q, 4) + c * p(q, 5), p(q, 6)))
 
 
 def mi_dd_unit(t: Int, f: FP, q: IP):

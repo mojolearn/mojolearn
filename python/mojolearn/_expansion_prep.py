@@ -3115,6 +3115,9 @@ def _mutual_info(X, y, discrete_target, discrete_features, n_neighbors, random_s
         if codes.size != n:
             raise ValueError("mojolearn: X and y have different numbers of rows")
         counts = _class_counts(codes, len(classes))
+        if cont and max(counts) < 2:
+            raise ValueError("mojolearn: mutual_info: every class has one sample (the reference's "
+                             "neighbour search over the classes with more than one finds 0 samples)")
         yo, lc = pr.put_codes(codes), pr.put_list(counts)
     else:
         yv = as_f32_c(y, ndim=1, name="y")[0]
@@ -3149,6 +3152,9 @@ def _mutual_info(X, y, discrete_target, discrete_features, n_neighbors, random_s
         cats = _fit_categories(mode, xd)
         kx = [c.size for c in cats]
         kmax = max(kx)
+        if not discrete_target and n in kx:
+            raise ValueError(f"mojolearn: mutual_info: discrete feature {disc[kx.index(n)]} has one sample per "
+                             "value (the reference's neighbour search finds 0 samples)")
         xc, _neg = _codes(pr, xd, cats)
         outd = pr.alloc(dd)
         if discrete_target:
