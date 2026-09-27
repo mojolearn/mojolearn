@@ -57,6 +57,14 @@ Lane 8 (docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md). Pass 1: build + sanity +
 | GCNConv (PyG) | see git log | x-cnn-gcn: AGREE on 9 fixtures |
 | SAGEConv (PyG, mean/sum) | see git log | x-cnn-sage: AGREE on 9 fixtures |
 
+## Pass 2
+
+| step | commit | result |
+|---|---|---|
+| per-seam proof, NVIDIA + CPU: oracle `x_cnn/checks/oracle.mojo`, driver `x_cnn/checks/seams_check.mojo` (11 seams, each fixture separates), 11 sabotage arms, DEVIATIONs 5700-5710, IDENTITY_PATHS rows 170-179, cards `x_cnn.<seam>` | see git log | `algos_lane_check.sh <10 x-cnn lanes> --pass 2`: every arm FAIL under its patch, PASS after reversal; all 10 lanes AGREE (RTX 4090 vs EPYC 75F3) |
+
+OWED for pass 2 item 2: AMD AGREE (no `cnn-amd` box listed yet), M2 Pro steward PASS.
+
 ## Next
 
 PASS 1 is complete once the rows above are merged. Then PASS 2 per the

@@ -24,8 +24,10 @@ bindings export). Python: `python/mojolearn/_x_sequence_rnn.py`.
 | 11 | Adafactor (torch 2.5 rule; 1-D and 2-D tensors) | sequence-adafactor | cc6ca19b8 | CLEAN: sequence-adafactor: AGREE: compared train 9 | torch.optim.Adafactor (2.5.1, float32), 10 steps on a 6x5 matrix + a vector: defaults 7e-9, lr/beta2_decay/d/wd moved 1.2e-7 |
 | 12 | LAMB (timm Lamb statement: global clip, trust ratio, trust_clip, always_adapt) | sequence-lamb | 7f722502c | CLEAN: sequence-lamb: AGREE: compared train 9 | timm.optim.Lamb (float32), 8 steps: defaults 1.2e-7, no-decay always_adapt trust_clip no-clip 3.6e-7, wd 0.1 clip 0.5 1.2e-7 |
 | 13 | Adamax (torch.optim-shaped; also `optimizer="adamax"` in the recurrent estimators) | sequence-adamax | 315b89a64 | CLEAN: sequence-adamax: AGREE: compared train 9 (and the six optimizer-using lanes re-AGREE after the host-scalar refactor) | torch.optim.Adamax float64, 8 steps: defaults 2.4e-7, betas/wd moved 2.9e-7 |
-| 14 | NAdam (torch.optim-shaped; also `optimizer="nadam"`) | sequence-nadam | (the commit adding this row) | CLEAN: sequence-nadam: AGREE: compared train 9 | torch.optim.NAdam float64, 8 steps: defaults 5.2e-7, decoupled wd + momentum_decay 0.01 6.8e-7 |
+| 14 | NAdam (torch.optim-shaped; also `optimizer="nadam"`) | sequence-nadam | d47e0a82c | CLEAN: sequence-nadam: AGREE: compared train 9 | torch.optim.NAdam float64, 8 steps: defaults 5.2e-7, decoupled wd + momentum_decay 0.01 6.8e-7 |
+| 15 | LR schedulers StepLR, ExponentialLR, OneCycleLR (exact rational, float32 once; `lr_schedule=` on the lane's optimizers and recurrent estimators) | sequence-lr-schedulers | 0e01f3930 | CLEAN: sequence-lr-schedulers: AGREE: compared train 9 | torch.optim.lr_scheduler (float64), 40 steps: StepLR 1.5e-8, ExponentialLR 5.3e-8, OneCycle cos 4.8e-8, linear three-phase 5.4e-8 relative |
+| 16 | LayerNorm (module + layer_norm_forward / layer_norm_backward) | sequence-layernorm | (the commit adding this row) | CLEAN: sequence-layernorm: AGREE: compared infer 9, train 9 | torch F.layer_norm float64 with weight and bias: y 3.5e-7, dx 2.1e-7, dw 8.7e-6, db 3.0e-6; (2, 5) normalized shape 2.8e-7 |
 
 Pod setup note: the ARIMA path needs `python/mojolearn/.libs/libMojolearnMath.so`; build it on a fresh pod with `packaging/portable_math/stage.py`'s `build()`.
 
-Main table done. Next: the Additions in order (LR schedulers, LayerNorm, Theta, Croston, damped ETS, GARCH, Prophet-style, MoE block).
+Main table done. Next: the Additions in order (Theta, Croston, damped ETS, GARCH, Prophet-style, MoE block).

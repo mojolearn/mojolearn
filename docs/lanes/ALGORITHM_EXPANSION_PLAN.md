@@ -15,6 +15,13 @@ messaging lanes. Newest items are at the top.
    one Hot Aisle MI300X per algorithm lane and renews every dev box hourly.
    If `tools/dev_pod.sh list` shows `<lane>-amd`, that box is yours: use it
    with `--vendor amd` on sync/run/extend. Don't request a second one.
+   A `<lane>-amd` box may be a GPU slot on a shared 8x MI300X host
+   (`tools/dev_pod.sh host status`): use only sync/run/extend with `--vendor
+   amd`, never touch other `/root/mojolearn-*` dirs or GPUs on it. Until a lane
+   has its own AMD box, it submits AMD identity checks to the `do-amd` steward:
+   `tools/apple_steward.py submit` ships identity requests there too while
+   `tools/do_amd_steward.sh` has it up (push the commit to origin first), and
+   a merge then needs m2pro PASS AND do-amd PASS (`apple_steward.py status`).
 1. **Order per lane:** (a) every algorithm in the lane table and Additions
    (PASS 1); (b) proof on every column, holding an AMD box (PASS 2 items
    1-2); (c) **option parity** (item 2 below); (d) **GPU speed**, IDENTICAL
@@ -22,6 +29,20 @@ messaging lanes. Newest items are at the top.
    2026-09-27): threads, vectorization and cache blocking of the CPU host
    path, after all GPU work is done. Every change is re-proven bitwise on
    every column.
+1b. **Done means ALL of this, per algorithm (Andrew, 2026-09-27):**
+   - **Both modes work:** IDENTICAL (bitwise across every column) and FAST
+     (a faster schedule, allowed to differ in bits, never in quality: a
+     paired check against the reference at 5+ seeds on 2+ datasets).
+   - **Both paths work:** the CPU host path and the GPU path, on NVIDIA,
+     AMD and Apple.
+   - **Its verifier lane is admitted:** out of PENDING, with per-seam
+     sabotage that bites and the end-to-end lane check AGREE on every
+     column (Apple via the M2 Pro steward, AMD via your slot or the AMD
+     steward).
+   - **Every opponent option** is present (item 2).
+   - **Speed work is done:** GPU first, CPU last (item 1).
+   - **Every bug found in existing code is fixed at the root and merged**
+     (item 3).
 2. **Option parity (Andrew, 2026-09-27).** Every algorithm in the lane's
    family, EXISTING ones included, gets every option its reference and
    bench-board opponents have (sklearn, cuML, LightGBM/XGBoost/CatBoost,
