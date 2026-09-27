@@ -53,3 +53,26 @@ def test_decision_tree_regressor():
     ref = DecisionTreeRegressor(max_depth=8, random_state=0).fit(Xa, ya)
     a, r = r2_score(yb, np.asarray(ours.predict(Xb))), r2_score(yb, ref.predict(Xb))
     assert a >= r - 0.05, (a, r)
+
+
+def test_bagging_classifier():
+    from sklearn.ensemble import BaggingClassifier
+    from sklearn.tree import DecisionTreeClassifier
+    Xa, Xb, ya, yb = _clf()
+    ours = ml.BaggingClassifier(ml.DecisionTreeClassifier(max_depth=8), n_estimators=10, random_state=0).fit(Xa, ya)
+    ref = BaggingClassifier(DecisionTreeClassifier(max_depth=8), n_estimators=10, random_state=0).fit(Xa, ya)
+    a, r = accuracy_score(yb, np.asarray(ours.predict(Xb))), accuracy_score(yb, ref.predict(Xb))
+    assert a >= r - 0.05, (a, r)
+    np.testing.assert_allclose(np.asarray(ours.predict_proba(Xb)).sum(1), 1.0, rtol=1e-6)
+
+
+def test_bagging_regressor():
+    from sklearn.ensemble import BaggingRegressor
+    from sklearn.tree import DecisionTreeRegressor
+    Xa, Xb, ya, yb = _reg()
+    ours = ml.BaggingRegressor(ml.DecisionTreeRegressor(max_depth=8), n_estimators=10, max_features=0.8,
+                               random_state=0).fit(Xa, ya)
+    ref = BaggingRegressor(DecisionTreeRegressor(max_depth=8), n_estimators=10, max_features=0.8,
+                           random_state=0).fit(Xa, ya)
+    a, r = r2_score(yb, np.asarray(ours.predict(Xb))), r2_score(yb, ref.predict(Xb))
+    assert a >= r - 0.05, (a, r)

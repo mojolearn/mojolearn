@@ -36,3 +36,24 @@ def _(ml, X, yc, yr, Xh=None):
 
 _batch_decl(_rows_calls("predict", "predict_proba"), "trees-dt-clf")
 _batch_decl(_rows_calls("predict"), "trees-dt-reg")
+
+
+@lane("trees-bagging-clf")
+def _(ml, X, yc, yr, Xh=None):
+    """Bootstrap rows, a feature subset without replacement, proba averaging."""
+    m = ml.BaggingClassifier(ml.DecisionTreeClassifier(max_depth=6), n_estimators=6, max_samples=0.8,
+                             max_features=0.75, random_state=7).fit(X, yc)
+    return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X))),
+                m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+
+
+@lane("trees-bagging-reg")
+def _(ml, X, yc, yr, Xh=None):
+    """Rows without replacement, bootstrapped features, the members' mean."""
+    m = ml.BaggingRegressor(ml.DecisionTreeRegressor(max_depth=6), n_estimators=6, max_samples=0.7,
+                            bootstrap=False, bootstrap_features=True, random_state=7).fit(X, yr)
+    return _fit(dict(predict=_h(m.predict(X))), m, lambda e: (e.predict(Xh),))
+
+
+_batch_decl(_rows_calls("predict", "predict_proba"), "trees-bagging-clf")
+_batch_decl(_rows_calls("predict"), "trees-bagging-reg")

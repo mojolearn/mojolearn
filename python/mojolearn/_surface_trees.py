@@ -21,10 +21,16 @@ FAMILIES = (
         routes="_mojolearn_x_trees",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=(),
+        training_lanes=(
+            "trees-bagging-clf",
+            "trees-bagging-reg",
+        ),
         inference_lanes=(),
         forest_kinds=(),
-        classes=(),
+        classes=(
+            "BaggingClassifier",
+            "BaggingRegressor",
+        ),
         display="the trees expansion lane's ensemble glue",
         host_modules=("xtrees/ops.mojo", "xtrees/api.mojo"),
         exports=(
@@ -42,8 +48,13 @@ FAMILIES = (
         ships_in_wheel=True,
     ),
 )
-TRAINING_LANE_NAMES = {}
+TRAINING_LANE_NAMES = {
+    "trees-bagging-clf": "BaggingClassifier",
+    "trees-bagging-reg": "BaggingRegressor",
+}
 PUBLIC_PENDING_LANES = {
     "trees-dt-clf": "no reference",
     "trees-dt-reg": "no reference",
+    "trees-bagging-clf": "no reference",
+    "trees-bagging-reg": "no reference",
 }
