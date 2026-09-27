@@ -28,6 +28,7 @@ FAMILIES = (
             "x-bayes-ridge", "x-ard",
             "x-lars", "x-lasso-lars",
             "x-quantile",
+            "x-perceptron",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -38,6 +39,7 @@ FAMILIES = (
             "BayesianRidge", "ARDRegression",
             "Lars", "LassoLars",
             "QuantileRegressor",
+            "Perceptron",
         ),
         display="the linear expansion lane (SGD, GLMs, Huber, Bayesian, LARS, quantile, CV, isotonic)",
         host_modules=(
@@ -67,6 +69,7 @@ TRAINING_LANE_NAMES = {
     "x-lars": "Lars",
     "x-lasso-lars": "LassoLars",
     "x-quantile": "QuantileRegressor",
+    "x-perceptron": "Perceptron",
 }
 PUBLIC_PENDING_LANES = {
     "x-sgd-clf": "no reference",
@@ -80,4 +83,5 @@ PUBLIC_PENDING_LANES = {
     "x-lars": "no reference",
     "x-lasso-lars": "no reference",
     "x-quantile": "no reference",
+    "x-perceptron": "no reference",
 }

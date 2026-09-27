@@ -29,7 +29,8 @@ __all__ = ["SGDClassifier", "SGDRegressor", "PoissonRegressor", "GammaRegressor"
            "HuberRegressor",
            "BayesianRidge", "ARDRegression",
            "Lars", "LassoLars",
-           "QuantileRegressor"]
+           "QuantileRegressor",
+           "Perceptron"]
 
 _BINDING = "_mojolearn_x_linear"
 ALGO_SGD, ALGO_GLM, ALGO_HUBER, ALGO_BAYES, ALGO_ARD = 1, 2, 3, 4, 5
@@ -613,4 +614,35 @@ class QuantileRegressor(_LinearRegressorMixin, NumericModeMixin):
         self.intercept_ = float(vals[d])
         self.n_iter_ = int(vals[d + 1])
         self.n_features_in_ = d
+        return self
+
+
+# --------------------------------------------------------------- Perceptron
+# Reference: scikit-learn sklearn/linear_model/_perceptron.py: SGD with the
+# perceptron loss, a constant rate eta0 and no penalty (x_linear/sgd.mojo).
+
+class Perceptron(_LinearClassifierMixin, NumericModeMixin):
+    """The perceptron (scikit-learn's Perceptron)."""
+
+    _BINDING = _BINDING
+
+    def __init__(self, *, penalty=None, alpha=0.0001, l1_ratio=0.15, fit_intercept=True, max_iter=1000,
+                 tol=1e-3, shuffle=True, verbose=0, eta0=1.0, n_jobs=None, random_state=0,
+                 early_stopping=False, validation_fraction=0.1, n_iter_no_change=5, class_weight=None,
+                 warm_start=False):
+        self.penalty, self.alpha, self.l1_ratio, self.fit_intercept = penalty, alpha, l1_ratio, fit_intercept
+        self.max_iter, self.tol, self.shuffle, self.verbose, self.eta0 = max_iter, tol, shuffle, verbose, eta0
+        self.n_jobs, self.random_state, self.early_stopping = n_jobs, random_state, early_stopping
+        self.validation_fraction, self.n_iter_no_change = validation_fraction, n_iter_no_change
+        self.class_weight, self.warm_start = class_weight, warm_start
+
+    def fit(self, X, y):
+        _sgd_refuse(self, self.early_stopping, False, self.class_weight, self.warm_start)
+        Xm = _matrix(X)
+        classes, codes = _classes(self, y, Xm[1])
+        self.classes_ = classes
+        self.coef_, self.intercept_ = _sgd_fit(
+            self, Xm, codes, len(classes), _SGD_CLF_LOSS["perceptron"], self.penalty, "constant",
+            self.alpha, self.l1_ratio, self.eta0, 0.5, 0.1, self.fit_intercept,
+            self.max_iter, self.tol, self.n_iter_no_change, self.shuffle, self.random_state)
         return self
