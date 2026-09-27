@@ -289,8 +289,16 @@ def _verify(arm, model, ml):
     if resolved != "identical" or compiled != "identical" or vendor != "cpu":
         raise RuntimeError("REFUSED: ours-cpu mode/vendor readback: resolved=%s compiled=%s vendor=%s"
                            % (resolved, compiled, vendor))
+    path = None
+    try:
+        # a host binding proxy raises ImportError (not AttributeError) for a
+        # name its binding lacks, so getattr's default never applies here
+        from mojolearn import _backend
+        path = _backend.host_module_path(_backend.host_surface.routed_modules().get(name, name))
+    except Exception:  # noqa: BLE001
+        pass
     return dict(requested="identical", resolved=resolved, compiled=compiled, vendor=vendor,
-                path=getattr(binding, "__file__", None) or getattr(binding, "_path", None)), info
+                path=path), info
 
 
 def _plain(obj):
