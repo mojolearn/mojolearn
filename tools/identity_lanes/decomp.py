@@ -112,3 +112,15 @@ def _(ml, X, yc, yr, Xh=None):
     m = ml.SpectralEmbedding(n_components=3, affinity="rbf", gamma=0.5).fit(S)
     d = ml.SpectralEmbedding(n_components=2, affinity="rbf").fit(S[:200])
     return _fit(dict(emb=_h(m.embedding_), aff=_h(m.affinity_matrix_), demb=_h(d.embedding_)))
+
+
+@lane("x-decomp-lu")
+def _(ml, X, yc, yr, Xh=None):
+    n = X.shape[1]
+    A = np.ascontiguousarray(X[:n, :n])
+    B = np.ascontiguousarray(X[n:n + 24, :n].T)
+    lu, piv = ml.lu_factor(A)
+    x = ml.lu_solve((lu, piv), B)
+    v = ml.lu_solve((lu, piv), np.ascontiguousarray(X[200, :n]))
+    s = ml.solve(np.ascontiguousarray(X[300:300 + n, :n].T), np.ascontiguousarray(X[400, :n]))
+    return _fit(dict(lu=_h(lu), piv=_h(piv), x=_h(x), v=_h(v), s=_h(s)))

@@ -21,10 +21,11 @@ import array
 import math
 
 from . import _backend
-from ._buffer import as_f32_c, frombytes
+from ._buffer import as_f32_c, as_i32_c, frombytes
 
 __all__ = ["IncrementalPCA", "GaussianRandomProjection", "SparseRandomProjection", "johnson_lindenstrauss_min_dim",
-           "NMF", "FastICA", "FactorAnalysis"]
+           "NMF", "FastICA", "FactorAnalysis",
+           "lu_factor", "lu_solve", "solve"]
 
 _BINDING = "_mojolearn_x_decomp"
 
@@ -1244,3 +1245,57 @@ class FactorAnalysis(_Base):
         k = self._kit()
         v = self._ss(X)
         return k.ew("scale", k.total(v), s=1.0 / v.r).s[0]
+
+
+# ================================================================ LU
+def lu_factor(a, *, numeric_mode=None):
+    """scipy.linalg.lu_factor (LAPACK getrf semantics): `(lu, piv)` with L
+    unit-lower and U in one n x n float32 matrix and `piv` the 0-based row
+    interchanges, applied in order. Partial pivoting on the largest |a[i, k]|,
+    ties broken by the LOWEST row index. A zero pivot is kept (getrf's
+    info > 0) and warned about, as scipy warns."""
+    k = _Kit(_mode(numeric_mode))
+    A = _M.from_input(a, "a")
+    if A.r != A.c:
+        raise ValueError(f"expected a square matrix, got {A.r} x {A.c}")
+    lu, piv, info = k.lu(A)
+    if info:
+        import warnings
+        warnings.warn(f"Diagonal number {info} is exactly zero. Singular matrix.", RuntimeWarning, stacklevel=2)
+    return lu.out(), frombytes(piv.tobytes(), "<i4", (A.r,))
+
+
+def lu_solve(lu_and_piv, b, *, trans=0, numeric_mode=None):
+    """scipy.linalg.lu_solve (LAPACK getrs, trans=0 only): solve A x = b
+    from `lu_factor`'s pair. `b` is n or n x nrhs; a zero pivot yields 0 in
+    that component (never inf or NaN). REFUSED BY NAME: trans != 0."""
+    if trans != 0:
+        raise NotImplementedError("lu_solve: trans != 0 is not carried")
+    lu, piv = lu_and_piv
+    k = _Kit(_mode(numeric_mode))
+    L = _M.from_input(lu, "lu")
+    n = L.r
+    pa = as_i32_c(piv, ndim=1, name="piv")[0]
+    pv = array.array("i")
+    pv.frombytes(pa.tobytes())
+    if len(pv) != n or any(not 0 <= p < n for p in pv):
+        raise ValueError("piv must hold one row index in [0, n) per row")
+    vec = len(getattr(b, "shape", ())) == 1 or (not hasattr(b, "shape") and not isinstance(b[0], (list, tuple)))
+    B = _M.from_input(_row_of(b), "b").T if vec else _M.from_input(b, "b")
+    if B.r != n:
+        raise ValueError(f"b has {B.r} rows, the factorization has {n}")
+    X = k.lu_solve(L, pv, B)
+    return X.out((n,)) if vec else X.out()
+
+
+def solve(a, b, *, numeric_mode=None):
+    """numpy.linalg.solve through lu_factor + lu_solve (gesv)."""
+    return lu_solve(lu_factor(a, numeric_mode=numeric_mode), b, numeric_mode=numeric_mode)
+
+
+def _row_of(b):
+    """A 1-D input as a 1 x n float32 matrix input, without a float64 cast."""
+    shape = getattr(b, "shape", None)
+    if shape is not None and hasattr(b, "reshape"):
+        return b.reshape(1, -1)
+    return [list(b)]
