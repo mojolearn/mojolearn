@@ -18,7 +18,7 @@ from x_ann.ivf_pq_device import (
     ivf_pq_search_device, ivf_rabitq_build_device, ivf_rabitq_search_device, ivf_sq_build_device,
     ivf_sq_search_device, refine_device, rq_encode_given_device, sq_encode_given_device, sq_range_device,
 )
-from x_ann.checks.fixtures import fixture_ties, fixture_wide, hash_u, report, same_f32, same_i32
+from x_ann.checks.ann_check_fixtures import fixture_ties, fixture_wide, hash_u, report, same_f32, same_i32
 from x_ann.checks.ivf_pq_oracle import or_search
 from x_ann.checks.ivf_quant_oracle import (
     oq_refine, oq_rq_encode, oq_rq_search, oq_sq_code, oq_sq_range, oq_sq_search,

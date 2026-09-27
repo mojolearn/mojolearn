@@ -15,7 +15,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_ann.cagra_device import cagra_build_device, cagra_search_device
 from x_ann.checks.cagra_oracle import co_prune, co_reverse_merge, co_search
 from x_ann.checks.tsne_oracle import to_knn
-from x_ann.checks.fixtures import fixture_ties, fixture_wide, report, same_f32, same_i32
+from x_ann.checks.ann_check_fixtures import fixture_ties, fixture_wide, report, same_f32, same_i32
 
 
 def to_i32(v: List[Int]) -> List[Int32]:

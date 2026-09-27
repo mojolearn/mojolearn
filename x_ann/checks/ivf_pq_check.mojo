@@ -18,7 +18,7 @@ from std.sys import exit
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_ann.ivf_pq_device import ivf_pq_build_device, ivf_pq_search_device, pq_encode_device
-from x_ann.checks.fixtures import fixture_ties, fixture_wide, hash_u, report, same_f32, same_i32
+from x_ann.checks.ann_check_fixtures import fixture_ties, fixture_wide, hash_u, report, same_f32, same_i32
 from x_ann.checks.ivf_pq_oracle import (
     OrIndex, or_argmin, or_before, or_build, or_dist, or_search,
 )

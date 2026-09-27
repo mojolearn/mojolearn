@@ -16,7 +16,7 @@ from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_exp, identical_mul
 from x_ann.tsne_device import tsne_fit_device
 from x_ann.checks.tsne_oracle import to_fit, to_knn, to_q, to_sqdist, to_sum, to_symmetrize, to_perplexity
-from x_ann.checks.fixtures import fixture_ties, fixture_wide, hash_u, report, same_f32
+from x_ann.checks.ann_check_fixtures import fixture_ties, fixture_wide, hash_u, report, same_f32
 
 
 def y_start(n: Int) -> List[Float32]:
