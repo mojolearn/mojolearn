@@ -294,3 +294,16 @@ def test_kernel_explainer():
     assert pc.shape == (3, 5, 3)
     np.testing.assert_allclose(pc.sum(1) + np.asarray(kc.expected_value), np.asarray(c.predict_proba(Xcb[:3, :5])),
                                atol=1e-5)
+
+
+def test_permutation_explainer():
+    Xa, Xb, ya, yb = _reg()
+    Xa, Xb = Xa[:, :6].copy(), Xb[:, :6].copy()
+    m = ml.DecisionTreeRegressor(max_depth=5).fit(Xa, ya)
+    bg = Xa[:20]
+    f = lambda X: np.asarray(m.predict(np.asarray(X, dtype=np.float32)), dtype=np.float64)  # noqa: E731
+    exact = np.asarray(ml.KernelExplainer(m, bg).shap_values(Xb[:5]))   # full enumeration: exact SHAP
+    pe = ml.PermutationExplainer(m, bg, random_state=0)
+    pp = np.asarray(pe.shap_values(Xb[:5], npermutations=300))
+    np.testing.assert_allclose(pp.sum(1) + pe.expected_value, f(Xb[:5]), rtol=1e-6, atol=1e-5)
+    assert np.abs(pp - exact).max() <= 0.15 * np.abs(exact).max() + 1e-6

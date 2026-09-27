@@ -246,3 +246,16 @@ def _(ml, X, yc, yr, Xh=None):
 
 _batch_decl(_rows_calls("shap_values", sl=slice(0, 12), prep=lambda Xh: np.ascontiguousarray(Xh[:, :6])),
             "trees-shap-kernel")
+
+
+@lane("trees-shap-permutation")
+def _(ml, X, yc, yr, Xh=None):
+    """Permutation SHAP over a classifier's probabilities."""
+    m = ml.DecisionTreeClassifier(max_depth=5).fit(X, yc)
+    p = ml.PermutationExplainer(m, X[:8], random_state=5)
+    return _fit(dict(values=_h(p.shap_values(X[:4], npermutations=6)), ev=_h(np.asarray(p.expected_value))),
+                p, lambda e: (e.shap_values(Xh[:3], npermutations=4),))
+
+
+_batch_decl("n/a:position-seeded (each explained row draws its permutations from the stream of its position"
+            " in the call, as shap's sequential RNG does)", "trees-shap-permutation")

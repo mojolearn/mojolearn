@@ -38,6 +38,7 @@ FAMILIES = (
             "trees-calibrated",
             "trees-shap-tree",
             "trees-shap-kernel",
+            "trees-shap-permutation",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -59,6 +60,7 @@ FAMILIES = (
             "CalibratedClassifierCV",
             "TreeExplainer",
             "KernelExplainer",
+            "PermutationExplainer",
         ),
         display="the trees expansion lane's ensemble glue",
         host_modules=("xtrees/ops.mojo", "xtrees/api.mojo", "xtrees/shap.mojo"),
@@ -97,6 +99,7 @@ TRAINING_LANE_NAMES = {
     "trees-calibrated": "CalibratedClassifierCV",
     "trees-shap-tree": "TreeExplainer",
     "trees-shap-kernel": "KernelExplainer",
+    "trees-shap-permutation": "PermutationExplainer",
 }
 PUBLIC_PENDING_LANES = {
     "trees-dt-clf": "no reference",
@@ -118,4 +121,5 @@ PUBLIC_PENDING_LANES = {
     "trees-rf-weighted": "no reference",
     "trees-shap-tree": "no reference",
     "trees-shap-kernel": "no reference",
+    "trees-shap-permutation": "no reference",
 }

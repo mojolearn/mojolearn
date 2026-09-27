@@ -53,6 +53,7 @@ __all__ = [
     "CalibratedClassifierCV",
     "TreeExplainer",
     "KernelExplainer",
+    "PermutationExplainer",
 ]
 
 
@@ -2031,4 +2032,57 @@ class KernelExplainer(_AgnosticExplainer):
                                        addr_ro(fx, name="fx"), addr_ro(self._fnull, name="fnull"),
                                        addr(phi, name="phi"), [len(mlist), d, k])
             rows.append(phi.tolist())
+        return self._shape(rows, n, d)
+
+
+class PermutationExplainer(_AgnosticExplainer):
+    """Permutation SHAP (shap `PermutationExplainer`, cuML
+    `permutation_shap.cu`): each permutation adds the features one by one
+    (forward) then removes them (backward), each marginal averaged over the
+    background. `shap_values(X, npermutations=10)`."""
+
+    def __init__(self, model, data, *, random_state=None):
+        super().__init__(model, data, random_state)
+
+    def shap_values(self, X, npermutations=10):
+        Xa = self._check(X)
+        n, d = Xa.shape
+        k = self.n_outputs_
+        seed = _trees_seed(self.random_state)
+        rows = []
+        cols = _trees_arange(d)
+        for i in range(n):
+            x_row = self._gather(Xa, Array.from_list([i], "<i4"), cols).reshape((d,))
+            u = empty((max(1, npermutations * d),), "<f8")
+            self._bind().x_trees_uniform(addr(u, name="u"), [npermutations * d, seed, i])
+            uv = u.tolist()
+            masks, perms = [], []
+            for p in range(int(npermutations)):
+                perm = list(range(d))
+                for a in range(d - 1, 0, -1):
+                    j = int(uv[p * d + a] * (a + 1))
+                    perm[a], perm[j] = perm[j], perm[a]
+                perms.append(perm)
+                cur = [0] * d
+                masks.append(list(cur))
+                for f in perm:
+                    cur[f] = 1
+                    masks.append(list(cur))
+                for f in perm:
+                    cur[f] = 0
+                    masks.append(list(cur))
+            _, ey = self._coalitions(x_row, masks)
+            e = ey.tolist()
+            val = [0.0] * (d * k)
+            step = 2 * d + 1
+            for p, perm in enumerate(perms):
+                o = p * step
+                for jj, f in enumerate(perm):
+                    for c in range(k):
+                        val[f * k + c] += e[(o + jj + 1) * k + c] - e[(o + jj) * k + c]
+                for jj, f in enumerate(perm):
+                    for c in range(k):
+                        val[f * k + c] += e[(o + d + jj) * k + c] - e[(o + d + jj + 1) * k + c]
+            den = 2.0 * npermutations
+            rows.append([v / den for v in val])
         return self._shape(rows, n, d)
