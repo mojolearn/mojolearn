@@ -32,7 +32,7 @@ __all__ = ["SGDClassifier", "SGDRegressor", "PoissonRegressor", "GammaRegressor"
            "QuantileRegressor",
            "Perceptron", "PassiveAggressiveClassifier",
            "PassiveAggressiveRegressor", "SGDOneClassSVM",
-           "RidgeClassifier"]
+           "RidgeClassifier", "RidgeCV"]
 
 _BINDING = "_mojolearn_x_linear"
 ALGO_SGD, ALGO_GLM, ALGO_HUBER, ALGO_BAYES, ALGO_ARD = 1, 2, 3, 4, 5
@@ -815,5 +815,36 @@ class RidgeClassifier(_LinearClassifierMixin, NumericModeMixin):
         self.classes_ = classes
         self.coef_ = Array.from_list(_rows(vals, T, d), "<f4")
         self.intercept_ = Array.from_list(vals[T * d:T * d + T], "<f4")
+        self.n_features_in_ = d
+        return self
+
+
+class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
+    """Ridge with the alpha chosen by efficient leave-one-out (scikit-learn's
+    RidgeCV with cv=None). cv, scoring, alpha_per_target and a 2-D y are
+    refused (x_linear/NOT_IMPLEMENTED.tsv)."""
+
+    _BINDING = _BINDING
+
+    def __init__(self, alphas=(0.1, 1.0, 10.0), *, fit_intercept=True, scoring=None, cv=None,
+                 gcv_mode=None, store_cv_results=False, alpha_per_target=False):
+        self.alphas, self.fit_intercept, self.scoring, self.cv = alphas, fit_intercept, scoring, cv
+        self.gcv_mode, self.store_cv_results, self.alpha_per_target = gcv_mode, store_cv_results, alpha_per_target
+
+    def fit(self, X, y):
+        if self.cv is not None or self.scoring is not None or self.alpha_per_target:
+            raise ValueError("mojolearn RidgeCV: only cv=None, scoring=None, alpha_per_target=False are implemented")
+        alphas = [float(v) for v in (self.alphas if hasattr(self.alphas, "__len__") else [self.alphas])]
+        if not alphas or any(not v > 0 for v in alphas):
+            raise ValueError("mojolearn RidgeCV: alphas must be positive")
+        a, n, d = _matrix(X)
+        yv = _vector(y, n)
+        vals = _ridge_run(self, a, n, d, yv, 1, alphas)
+        self.coef_ = Array.from_list(vals[:d], "<f4")
+        self.intercept_ = float(vals[d])
+        self.alpha_ = float(vals[d + 1])
+        self.best_score_ = float(vals[d + 2])
+        if self.store_cv_results:
+            self.cv_results_ = Array.from_list(vals[d + 3:d + 3 + len(alphas)], "<f4")
         self.n_features_in_ = d
         return self

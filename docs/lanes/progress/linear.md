@@ -23,6 +23,7 @@ Skipped from the table: LinearSVC / LinearSVR are already public
 | Perceptron | 01e1dcdd0 | x-perceptron | sanity PASS (accuracy within 0.04 of sklearn, 2 and 3 classes); RESULT: PASS (AGREE) |
 | PassiveAggressiveClassifier / PassiveAggressiveRegressor | 3d534315b | x-pa-clf, x-pa-reg | sanity PASS (accuracy within 0.02, R2 within 4e-4 of sklearn); RESULT: PASS (AGREE on both) |
 | SGDOneClassSVM | feb2ad310 | x-sgd-ocsvm | sanity PASS (outlier fraction equal to sklearn's at nu 0.1 and 0.5); RESULT: PASS (AGREE) |
-| RidgeClassifier | (the commit that adds this row) | x-ridge-clf | sanity PASS (coef within 1e-6 of sklearn, predictions equal); RESULT: PASS (AGREE) |
+| RidgeClassifier | f372aaf47 | x-ridge-clf | sanity PASS (coef within 1e-6 of sklearn, predictions equal); RESULT: PASS (AGREE) |
+| RidgeCV | (the commit that adds this row) | x-ridge-cv | sanity PASS (same alpha_, best_score_ within 4e-7 relative); RESULT: PASS (AGREE) |
 
-Next: RidgeCV (x_linear/ridge.mojo already carries the LOO path).
+Next: LassoCV / ElasticNetCV.

@@ -181,3 +181,14 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("decision_function", sl=slice(0, 256)), "x-ridge-clf")
+
+
+@lane("x-ridge-cv")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.RidgeCV(alphas=(0.01, 0.3, 3.0, 30.0)).fit(X[:1000], yr[:1000])
+    f = _linear_reg_fit(m, X, yr, Xh)
+    f["choice"] = _h(np.asarray([m.alpha_, m.best_score_], dtype=np.float32))
+    return f
+
+
+_batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-ridge-cv")

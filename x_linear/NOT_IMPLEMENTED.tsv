@@ -20,3 +20,4 @@ _least_angle.py coef_path_, alphas_ path, positive, jitter, LarsCV/LassoLarsCV/L
 _quantile.py linear program (highs, interior-point, revised simplex)	replaced	scaled ADMM (Boyd et al. 2011, 3.3.1 stopping, 3.4.1 balancing); optimum to ADMM precision, not a vertex
 _quantile.py sample_weight, solver_options	absent / ignored	pass 2
 _ridge.py RidgeClassifier class_weight, sample_weight, positive, solvers other than cholesky	refused	pass 2
+_ridge.py RidgeCV cv (k-fold), scoring, alpha_per_target, multi-target y, gcv_mode eigen/svd	refused / replaced	LOO by one Cholesky per alpha; the rest pass 2

@@ -222,6 +222,21 @@ def _():
     return ok
 
 
+@case("ridge-cv")
+def _():
+    from sklearn import linear_model as sk
+    X, yr, yc, y3 = _data(noise=2.0)
+    ok = True
+    for fi in (True, False):
+        alphas = (0.1, 3.0, 30.0, 300.0)
+        a = ml.RidgeCV(alphas=alphas, fit_intercept=fi).fit(X, yr)
+        b = sk.RidgeCV(alphas=alphas, fit_intercept=fi).fit(X.astype(np.float64), yr.astype(np.float64))
+        ok &= _close(f"fi={fi} alpha_ {a.alpha_} vs {b.alpha_}", [a.alpha_], [b.alpha_], 0)
+        ok &= _close(f"fi={fi} best_score_ (relative)", [a.best_score_ / b.best_score_], [1.0], 1e-4)
+        ok &= _close(f"fi={fi} coef", a.coef_, b.coef_, 1e-4)
+    return ok
+
+
 def main(argv):
     names = argv or list(CASES)
     bad = []
