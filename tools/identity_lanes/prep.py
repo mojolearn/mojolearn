@@ -671,6 +671,12 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(parts, m, lambda e: (e.transform(Yh[:256]),))
 
 
+def _prep_most_common(col):
+    """The most frequent non-NaN value of a column (the first on a tie)."""
+    u, c = np.unique(col[~np.isnan(col)], return_counts=True)
+    return float(u[int(np.argmax(c))])
+
+
 @lane("x-prep-infrequent")
 def _(ml, X, yc, yr, Xh=None):
     """OrdinalEncoder / OneHotEncoder min_frequency and max_categories (a
@@ -689,7 +695,7 @@ def _(ml, X, yc, yr, Xh=None):
                             dict(max_categories=3, handle_unknown="ignore", drop="first"),
                             dict(max_categories=2, handle_unknown="warn", drop="if_binary"),
                             dict(min_frequency=25, handle_unknown="infrequent_if_exist",
-                                 drop=[0.0] * Xq.shape[1]))):
+                                 drop=[_prep_most_common(Xq[:, c]) for c in range(Xq.shape[1])]))):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             e = ml.OneHotEncoder(**kw).fit(Xq)
