@@ -100,6 +100,16 @@ messaging lanes. Newest items are at the top.
      their FAST tier.
    - `metrics`: the 24 evaluation metrics, cross-validation and
      model_selection.
+1c. **Lane `cpu` (Andrew, 2026-09-27) owns CPU paths across ALL
+   algorithms.** Phase 1: audit that every public algorithm has a CPU
+   fit/predict path, and fix any gap at the root. Later phases: speed of the
+   EXISTING host bindings (core_host, forest_host, gbdt_host,
+   estimators_host, the family *_host bindings): threads, SIMD
+   vectorization, cache blocking. The bits must be identical at every
+   thread count and equal to the GPU. Algorithm lanes still do CPU speed
+   for their own `x_*` code in their last phase. `cpu` does not touch
+   `x_*` directories; algorithm lanes don't do CPU speed on existing host
+   code.
 1b. **Done means ALL of this, per algorithm (Andrew, 2026-09-27):**
    - **Both modes work:** IDENTICAL (bitwise across every column) and FAST
      (a faster schedule, allowed to differ in bits, never in quality: a
