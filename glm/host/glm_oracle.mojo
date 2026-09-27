@@ -233,7 +233,7 @@ def host_ols_fit(
         raise Error("olsFit: number of rows cannot be less than two")
     if n_cols > n_rows:
         raise Error(
-            "olsFit: n_cols > n_rows selects lstsq_min_norm (DEVIATION 5010),"
+            "olsFit: n_cols > n_rows selects lstsq_min_norm (DEVIATION 550),"
             " which has no CPU restatement yet; the host OLS fit covers the"
             " tall shape (lstsq_eig) only."
         )

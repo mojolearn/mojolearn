@@ -35,7 +35,7 @@ above `check_ols_arms_are_pinned`.
 THE 2026-09-01 CHECKS: THE TWO SPECIAL SHAPES AND SAMPLE WEIGHTS
 -----------------------------------------------------------------
 `ols.cuh:112-113`'s two shapes used to REFUSE and the check here used to
-assert the refusal. Both are solved now (DEVIATIONS 5010 and 5011) and
+assert the refusal. Both are solved now (DEVIATIONS 550 and 551) and
 `sample_weight` is implemented (`ols.cuh:99-110`, `:129-141`), so five checks
 were added and every one of them is a PROPERTY that shares no spelling with
 the implementation:
@@ -291,7 +291,7 @@ def check_ols_dispatch_routes_special_shapes() raises:
     `check_ols_dispatch_guard` and it asserted that both shapes RAISED. That
     was right while the only alternative was `lstsqSvdJacobi`
     (`cusolverDnGesvdj`); it is wrong now that both have a portable route
-    (DEVIATIONS 5010 and 5011, `glm/impl/ols.mojo`). The half of it that
+    (DEVIATIONS 550 and 551, `glm/impl/ols.mojo`). The half of it that
     still matters is unchanged and is asserted below: an ordinary shape must
     not be diverted, or the other two assertions would prove nothing.
 
@@ -475,7 +475,7 @@ def _solve_shaped_algo(
 # CORRECTED 2026-09-01. The last clause used to read "and the one shape
 # whose only other arm is a closed vendor library RAISES by name". No shape
 # refuses for that reason any more: `n_cols > n_rows` and `n_cols == 1` are
-# solved (DEVIATIONS 5010, 5011). The last refusal, the pinned Gram kernel's
+# solved (DEVIATIONS 550, 551). The last refusal, the pinned Gram kernel's
 # 128-feature capacity, closed 2026-09-09: past it step 1 runs on profile
 # v1's OP_TN arm (`check_ols_over_capacity_fits`).
 
@@ -985,7 +985,7 @@ def check_ols_host_surface_takes_the_guard() raises:
     `lstsq_eig` directly, so a Python user handing in a wide design got a
     plausible vector out of a singular inverse and no error.
 
-    HOW THIS CHECK CHANGED WITH DEVIATIONS 5010 AND 5011. It used to assert
+    HOW THIS CHECK CHANGED WITH DEVIATIONS 550 AND 551. It used to assert
     that the host surface RAISED at 4 x 8 and 64 x 1, because raising was
     what the dispatch did there. Both shapes are now solved, so a refusal is
     no longer available as evidence and something stronger replaces it: the
@@ -1988,7 +1988,7 @@ def check_ols_card_is_emitted() raises:
 
 
 # ---------------------------------------------------------------------------
-# THE TWO SHAPES, ORACLED (DEVIATIONS 5010 and 5011)
+# THE TWO SHAPES, ORACLED (DEVIATIONS 550 and 551)
 # ---------------------------------------------------------------------------
 
 
@@ -2145,7 +2145,7 @@ def _norm2(w: List[Float64], d: Int) -> Float64:
 def check_ols_wide_is_the_minimum_norm_solution() raises:
     """`n_cols > n_rows` returns `A^T (A A^T)^+ b`, oracled three ways.
 
-    DEVIATION 5010. Three properties, and NONE of them shares a line with
+    DEVIATION 550. Three properties, and NONE of them shares a line with
     `lstsq_min_norm.mojo`:
 
     1. **IT INTERPOLATES.** An underdetermined system with full row rank has
@@ -2275,7 +2275,7 @@ def check_ols_wide_is_the_minimum_norm_solution() raises:
 def check_ols_single_column_matches_the_closed_form() raises:
     """`n_cols == 1` returns `sum(a_i b_i) / sum(a_i^2)`, in Float64.
 
-    DEVIATION 5011. A single-column least squares has a closed form with no
+    DEVIATION 551. A single-column least squares has a closed form with no
     solver in it at all, so the oracle here is not an approximation of the
     right answer, it IS the right answer. The reason this shape is worth its
     own check is that cuML refuses it (`linear_regression.pyx:390-394`,

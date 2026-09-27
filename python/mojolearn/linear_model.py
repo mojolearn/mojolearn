@@ -522,11 +522,11 @@ class LinearRegression(NumericModeMixin):
                                   here because THEIR eigensolver does not
                                   take one column (linear_regression.pyx:
                                   390-394), a limitation the device Jacobi
-                                  does not share (DEVIATION 5011)
+                                  does not share (DEVIATION 551)
         n_features > n  honored   the minimum-norm solution
                                   w = X.T (X X.T)^+ y, through the Gram of
                                   the ROWS, which is n x n and nonsingular
-                                  at full row rank (DEVIATION 5010,
+                                  at full row rank (DEVIATION 550,
                                   glm/impl/linalg/detail/lstsq_min_norm.mojo).
                                   It squares the condition number exactly as
                                   the tall route does, so it is no more
