@@ -86,7 +86,8 @@ def sort_cols_unit(t: Int, f: FP, q: IP):
 def col_stats_unit(t: Int, f: FP, q: IP):
     """q = [X, n, d, OUT]; t = column. OUT rows of d: count, mean, var
     (population), min, max, maxabs, over the non-NaN entries; an empty column
-    writes zeros (no 0/0)."""
+    writes zeros (no 0/0). DEVIATION 5400 (rows fold ascending), 5403 (the
+    empty-column guard), 5408 (operands flushed by `ld`)."""
     var X = p(q, 0)
     var n = p(q, 1)
     var d = p(q, 2)
@@ -136,7 +137,8 @@ def col_stats_unit(t: Int, f: FP, q: IP):
 def quantile_unit(t: Int, f: FP, q: IP):
     """q = [S, n, d, QF, nq, OUT, CNT]; t = c*nq + j. numpy's linear
     percentile of the first CNT[c] (or n when CNT < 0) sorted entries of
-    column c at fraction QF[j], numpy's `_lerp` spelling; empty -> 0."""
+    column c at fraction QF[j], numpy's `_lerp` spelling (DEVIATION 5409: the
+    upper form b - d (1 - g) from g >= 0.5); empty -> 0."""
     var S = p(q, 0)
     var n = p(q, 1)
     var nq = p(q, 4)
@@ -323,7 +325,8 @@ def binarize_unit(t: Int, f: FP, q: IP):
 def matmul_unit(t: Int, f: FP, q: IP):
     """q = [A, sa0, sa1, B, sb0, sb1, C, ncols, K, BIAS, ALPHA]; t = i*ncols + j.
     C[t] = ALPHA * sum_l A[i*sa0 + l*sa1] * B[l*sb0 + j*sb1] (+ BIAS[j]),
-    l ascending (ALPHA < 0: no scale)."""
+    l ascending (ALPHA < 0: no scale). DEVIATION 5401: each product rounded
+    (`identical_mul`) before its add, never contracted into an FMA."""
     var nc = p(q, 7)
     var i = t // nc
     var j = t % nc
@@ -369,7 +372,8 @@ def row_softmax_unit(t: Int, f: FP, q: IP):
 
 
 def row_argmax_unit(t: Int, f: FP, q: IP):
-    """q = [S, n, K, OUT]; t = row: first-max-wins argmax as int32 bits."""
+    """q = [S, n, K, OUT]; t = row: first-max-wins argmax as int32 bits
+    (DEVIATION 5404: the lower index wins a tie)."""
     var K = p(q, 2)
     var S = p(q, 0) + t * K
     var best = 0

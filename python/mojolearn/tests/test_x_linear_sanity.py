@@ -327,6 +327,31 @@ def _():
     return ok
 
 
+@case("glm-sw")
+def _():
+    from sklearn import linear_model as sk
+    X, yr, yc, y3 = _data()
+    rng = np.random.default_rng(1)
+    w = (0.3 * rng.standard_normal(X.shape[1])).astype(np.float32)
+    mu = np.exp(X @ w + 0.2)
+    ycount = rng.poisson(mu).astype(np.float32)
+    ygam = rng.gamma(2.0, mu / 2.0).astype(np.float32)
+    sw = rng.uniform(0, 3, len(yr)).astype(np.float32)
+    sw[::7] = 0
+    ok = True
+    for name, a, b, y in (
+        ("Poisson", ml.PoissonRegressor(alpha=0.01), sk.PoissonRegressor(alpha=0.01), ycount),
+        ("Gamma", ml.GammaRegressor(alpha=0.01), sk.GammaRegressor(alpha=0.01), ygam),
+        ("Tweedie1.5", ml.TweedieRegressor(power=1.5, alpha=0.01), sk.TweedieRegressor(power=1.5, alpha=0.01), ygam),
+        ("Tweedie0", ml.TweedieRegressor(power=0, alpha=0.01), sk.TweedieRegressor(power=0, alpha=0.01), yr),
+    ):
+        a.fit(X, y, sample_weight=sw)
+        b.fit(X.astype(np.float64), y.astype(np.float64), sample_weight=sw.astype(np.float64))
+        ok &= _close(f"{name} weighted coef", a.coef_, b.coef_, 2e-3)
+        ok &= _close(f"{name} weighted intercept", [a.intercept_], [b.intercept_], 2e-3)
+    return ok
+
+
 def main(argv):
     names = argv or list(CASES)
     bad = []

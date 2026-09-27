@@ -1,0 +1,13 @@
+diff --git a/x_decomp/cells.mojo b/x_decomp/cells.mojo
+index b8537db32..90f66f845 100644
+--- a/x_decomp/cells.mojo
++++ b/x_decomp/cells.mojo
+@@ -814,7 +814,7 @@ def lu_serial(a: F32Ptr, piv: I32Ptr, n: Int, info: F32Ptr):
+         var best = abs(ftz(a.unsafe_load(k * n + k)))
+         for i in range(k + 1, n):
+             var v = abs(ftz(a.unsafe_load(i * n + k)))
+-            if v > best:
++            if v >= best:  # SABOTAGE 5307: a pivot tie goes to the last row
+                 best = v
+                 p = i
+         piv.unsafe_store(k, Int32(p))

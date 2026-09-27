@@ -1,0 +1,12 @@
+--- a/x_prep/prims.mojo
++++ b/x_prep/prims.mojo
+@@ -332,7 +332,8 @@
+     var j = t % nc
+     var acc = Float32(0)
+     for l in range(p(q, 8)):
+-        acc = add(acc, mul(ld(f, p(q, 0) + i * p(q, 1) + l * p(q, 2)), ld(f, p(q, 3) + l * p(q, 4) + j * p(q, 5))))
++        from std.math import fma  # SABOTAGE 5401
++        acc = ftz(fma(ld(f, p(q, 0) + i * p(q, 1) + l * p(q, 2)), ld(f, p(q, 3) + l * p(q, 4) + j * p(q, 5)), acc))
+     if p(q, 10) >= 0:
+         acc = mul(acc, ld(f, p(q, 10)))
+     if p(q, 9) >= 0:

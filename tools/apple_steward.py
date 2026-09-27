@@ -38,6 +38,18 @@ ON THE LAPTOP (a lane's agent):
   apple_steward.py flush-deferred --steward m3ultra   (orchestrator, later;
       pushes each spooled commit to the Mac before shipping its requests)
 
+THE AMD STEWARD (`do-amd`, 2026-09-27: "treat AMD like Apple"). One
+DigitalOcean MI300X/MI325X droplet (tools/do_amd_steward.sh up|extend|down)
+runs `work --steward do-amd` as a systemd service. While its state file
+($MOJOLEARN_STEWARD_DO_STATE/state.env, default
+~/mojolearn-evidence/do-amd-steward) exists on the laptop, `submit` ships every
+IDENTITY request to it as well (ssh as root, no cloudmac.sh), and `status`
+counts it as GATING for every request it received: a lane merges on m2pro
+PASS and do-amd PASS. The droplet fetches the submitted sha from GitHub
+(`git fetch --depth=1 origin <sha>`), so the commit must be pushed to origin
+(the lane's branch) before `submit`. Speed jobs never go to it. On AMD the
+check compares NUMBERS (CPU == AMD); never .so digests.
+
 ON EACH CLOUD MAC (started by the orchestrator, one per Mac):
   apple_steward.py work --steward m2pro [--once]
       works ITS OWN queue, one request at a time (one Metal job per Mac)
@@ -66,7 +78,11 @@ import sys
 import time
 from pathlib import Path
 
-STEWARDS = ("m2pro", "m3ultra")
+MACS = ("m2pro", "m3ultra")
+AMD_STEWARDS = ("do-amd",)
+STEWARDS = MACS + AMD_STEWARDS
+AMD_STATE = Path(os.environ.get("MOJOLEARN_STEWARD_DO_STATE",
+                                Path.home() / "mojolearn-evidence" / "do-amd-steward")) / "state.env"
 GATING = tuple(x for x in os.environ.get("MOJOLEARN_STEWARD_GATING", "m2pro").split(",") if x)
 DEFERRED = tuple(x for x in os.environ.get("MOJOLEARN_STEWARD_DEFERRED", "m3ultra").split(",") if x)
 #: SPEED JOBS go to the M3 Ultra ONLY (Andrew, 2026-09-27): one timing Mac, so
@@ -84,15 +100,37 @@ Q, WORK, DONE, PATCHES = ROOT / "queue", ROOT / "working", ROOT / "done", ROOT /
 SPOOL = ROOT / "deferred"            # on the laptop: requests for a deferred Mac
 
 
+def _amd_live():
+    """The AMD stewards the laptop can reach now (their state file exists)."""
+    return tuple(s for s in AMD_STEWARDS if AMD_STATE.is_file())
+
+
+def _targets():
+    """Every steward an identity request goes to: both Macs, plus do-amd while it is up."""
+    return MACS + _amd_live()
+
+
+def _amd_ssh(command):
+    env = {}
+    for line in AMD_STATE.read_text().splitlines():
+        if "=" in line:
+            k, v = line.split("=", 1)
+            env[k] = v.strip("'\"")
+    return ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR",
+            "-o", "ConnectTimeout=20", "-o", "BatchMode=yes", "-i", str(Path.home() / ".ssh" / "id_ed25519"),
+            "-o", "IdentitiesOnly=yes", f"root@{env['IP']}", command]
+
+
 def _dirs():
     for d in (Q, WORK, DONE, PATCHES):
         d.mkdir(parents=True, exist_ok=True)
 
 
 def _cloudmac(name, command, stdin=None, timeout=120):
-    """One command on cloud Mac `name` through tools/cloudmac.sh."""
-    r = subprocess.run([str(TOOLS / "cloudmac.sh"), "ssh", name, command], input=stdin,
-                       capture_output=True, timeout=timeout)
+    """One command on cloud Mac `name` through tools/cloudmac.sh (the AMD
+    steward: plain ssh as root to the droplet in its state file)."""
+    argv = _amd_ssh(command) if name in AMD_STEWARDS else [str(TOOLS / "cloudmac.sh"), "ssh", name, command]
+    r = subprocess.run(argv, input=stdin, capture_output=True, timeout=timeout)
     if r.returncode:
         raise SystemExit(f"cloudmac {name}: `{command[:80]}` failed (exit {r.returncode}): "
                          f"{r.stderr.decode(errors='replace').strip()[:300]}")
@@ -105,7 +143,17 @@ def _push_commit(mac, commit):
     submitted commit reaches it only by a push. `cloudmac.sh push <mac> <sha>`
     lands it as refs/steward/<sha> in the bare repo; the steward clone then
     fetches that namespace, so the object is there before the request is
-    queued (and `process` fetches it again, for a request that raced this)."""
+    queued (and `process` fetches it again, for a request that raced this).
+    The AMD steward fetches the sha from GitHub instead: it must be pushed to origin."""
+    full = subprocess.run(["git", "-C", str(TOOLS.parent), "rev-parse", "--verify", f"{commit}^{{commit}}"],
+                          capture_output=True, text=True, check=True).stdout.strip()
+    if mac in AMD_STEWARDS:
+        got = _cloudmac(mac, f"cd {STEWARD_CLONE} && git fetch -q --depth=1 origin {full} && git cat-file -t {full}",
+                        timeout=900).strip()
+        if got != "commit":
+            raise SystemExit(f"{mac}: {full[:12]} could not be fetched from GitHub ({got!r}); push it to origin first")
+        print(f"{mac}: fetched {full[:12]} from origin into {STEWARD_CLONE}")
+        return
     r = subprocess.run([str(TOOLS / "cloudmac.sh"), "push", mac, commit], capture_output=True, timeout=900)
     if r.returncode:
         raise SystemExit(f"cloudmac push {mac} {commit} failed (exit {r.returncode}): "
@@ -134,7 +182,7 @@ def submit(a):
             sys.exit(f"sabotage patch {patch} does not exist")
         req.update(verify_lanes=[x for x in a.verify_lanes.split(",") if x], **{"pass": a.pass_no},
                    sabotage=f"{REMOTE_ROOT}/patches/{name}.patch")
-        macs = STEWARDS
+        macs = _targets()
     else:
         if not a.cmd:
             sys.exit("a speed request needs --cmd '<timing command>'")
@@ -223,14 +271,17 @@ def _is_speed(name):
 
 
 def status(a):
-    per = {mac: ({} if mac in DEFERRED else _collect(mac)) for mac in STEWARDS}
+    targets = _targets()
+    per = {mac: ({} if mac in DEFERRED else _collect(mac)) for mac in targets}
     for mac in DEFERRED:
         per[mac] = {p.stem: "deferred (spooled)" for p in (SPOOL / mac).glob("[0-9]*.json")}
     names = sorted(set().union(*[set(v) for v in per.values()]))
     rows = []
     for name in names:
         speed = _is_speed(name)
-        macs, gating = (SPEED, SPEED) if speed else (STEWARDS, GATING)
+        # the AMD steward gates every identity request it received
+        amd = tuple(m for m in _amd_live() if name in per.get(m, {}))
+        macs, gating = (SPEED, SPEED) if speed else (MACS + amd, GATING + amd)
         states = {mac: per[mac].get(name, "DEFERRED" if mac in DEFERRED else "missing") for mac in macs}
         verdicts = {m: s for m, s in states.items() if isinstance(s, dict)}
         if any(v.get("result") == "FAIL" for v in verdicts.values()):
@@ -298,8 +349,11 @@ def process(req_path, steward):
 
     # the laptop pushes a submitted sha as refs/steward/<sha> (cloudmac.sh push);
     # the default refspec fetches only branches, so name that namespace too
-    _run(["git", "fetch", "-q", "origin", "+refs/heads/*:refs/remotes/origin/*", "+refs/steward/*:refs/steward/*"],
-         REPO, log, 600)
+    if steward in AMD_STEWARDS:   # a shallow tree: the sha itself, from GitHub
+        _run(["git", "fetch", "-q", "--depth=1", "origin", req["commit"]], REPO, log, 900)
+    else:
+        _run(["git", "fetch", "-q", "origin", "+refs/heads/*:refs/remotes/origin/*", "+refs/steward/*:refs/steward/*"],
+             REPO, log, 600)
     if wt.exists():
         dirty = subprocess.run(["git", "status", "--porcelain", "--untracked-files=no"], cwd=wt,
                                capture_output=True, text=True).stdout.strip()
@@ -435,7 +489,8 @@ def work(a):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
-    s = sub.add_parser("submit", help="laptop: queue a request for both cloud Macs (a deferred one is spooled)")
+    s = sub.add_parser("submit", help="laptop: queue a request for both cloud Macs (a deferred one is spooled) "
+                                       "and, for identity, the do-amd steward while it is up")
     s.add_argument("--lane", required=True, help="the expansion lane (linear, ..., ann)")
     s.add_argument("--commit", required=True, help="a commit pushed to origin")
     s.add_argument("--kind", choices=("identity", "speed"), default="identity",
@@ -453,7 +508,7 @@ def main(argv=None):
     st.add_argument("--json", action="store_true")
     st.set_defaults(fn=status)
     f = sub.add_parser("flush-deferred", help="laptop: ship a formerly deferred Mac's spooled requests")
-    f.add_argument("--steward", required=True, choices=STEWARDS)
+    f.add_argument("--steward", required=True, choices=MACS)
     f.set_defaults(fn=flush_deferred)
     w = sub.add_parser("work", help="cloud Mac: work this Mac's queue")
     w.add_argument("--steward", required=True, choices=STEWARDS)

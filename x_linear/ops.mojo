@@ -25,6 +25,9 @@ comptime X_LINEAR_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 comptime IP = MutPointer[Int32, MutAnyOrigin]
 
 
+# DEVIATION 5001 (IDENTITY_PATHS row 101): every operand and every result of
+# the lane's arithmetic passes through `ftz`, so a subnormal is a signed zero
+# on every column (Apple flushes in hardware, the others do not).
 @always_inline
 def fa(a: Float32, b: Float32) -> Float32:
     return ftz(ftz(a) + ftz(b))
@@ -56,6 +59,8 @@ def fsqrt(a: Float32) -> Float32:
     return ftz(identical_sqrt(ftz(a)))
 
 
+# DEVIATION 5008 (IDENTITY_PATHS row 108): exp and log in every fit are the
+# portable spellings of checks/numerics.mojo, never a target's libm.
 @always_inline
 def fexp(a: Float32) -> Float32:
     return ftz(identical_exp(ftz(a)))
@@ -127,7 +132,8 @@ def copy(dst: FP, doff: Int, src: FP, soff: Int, count: Int):
 
 
 def dot(a: FP, ia: Int, b: FP, ib: Int, count: Int) -> Float32:
-    """sum_j a[ia+j] * b[ib+j], j ascending, one fused multiply-add per term."""
+    """sum_j a[ia+j] * b[ib+j], j ascending, one fused multiply-add per term.
+    DEVIATION 5000 (IDENTITY_PATHS row 100): the lane's one fold order."""
     var acc = Float32(0)
     for jj in range(count):
         var j = count - 1 - jj if X_LINEAR_HOST_SABOTAGE else jj
@@ -141,7 +147,8 @@ def row_dot(x: FP, i: Int, d: Int, w: FP, woff: Int) -> Float32:
 
 # ----------------------------------------------------------------- RNG
 # splitmix64 (Steele, Lea, Flood 2014): integer only, so every target draws
-# the same stream from the same seed.
+# the same stream from the same seed. DEVIATION 5004 (IDENTITY_PATHS row 104):
+# the shuffle maps a draw to j = draw mod (i + 1), i descending.
 
 @always_inline
 def rng_next(mut s: UInt64) -> UInt64:
@@ -167,7 +174,9 @@ def shuffle(idx: IP, n: Int, mut s: UInt64):
 
 def cholesky(a: FP, aoff: Int, m: Int) -> Bool:
     """In-place lower Cholesky of the m x m row-major block at `aoff`
-    (upper triangle untouched). False on a non-positive pivot."""
+    (upper triangle untouched). False on a non-positive pivot.
+    DEVIATION 5002 (IDENTITY_PATHS row 102): column j ascending, every
+    inner sum k ascending, products rounded on their own."""
     for j in range(m):
         var s = ld(a, aoff + j * m + j)
         for k in range(j):
@@ -206,7 +215,8 @@ def jacobi_eig(a: FP, aoff: Int, v: FP, voff: Int, m: Int, max_sweeps: Int):
     rotation of Rutishauser's form) on the symmetric m x m block at `aoff`:
     eigenvalues land on its diagonal, eigenvectors in the COLUMNS of `v`.
     Sweep order p ascending, q ascending; stops when a whole sweep rotates
-    nothing (every |a_pq| below 1e-9 * sqrt(a_pp a_qq)) or at `max_sweeps`."""
+    nothing (every |a_pq| below 1e-9 * sqrt(a_pp a_qq)) or at `max_sweeps`.
+    DEVIATION 5003 (IDENTITY_PATHS row 103): this sweep order and rotation."""
     for i in range(m):
         for j in range(m):
             st(v, voff + i * m + j, Float32(1) if i == j else Float32(0))

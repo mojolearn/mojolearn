@@ -15,7 +15,9 @@ centers with a nonzero intensity kept per distinct center (the last seed's
 intensity, a dict), sorted by (intensity, coordinates) descending, a center
 within the bandwidth of a kept one dropped, then the nearest center per row
 (the lowest index on a tie), -1 beyond the bandwidth when not `cluster_all`."""
-from checks.numerics import ftz, identical_mul, identical_sqrt
+from std.math import floor
+
+from checks.numerics import ftz, identical_div, identical_mul, identical_sqrt
 from x_cluster.ops import ClusterOps
 
 
@@ -37,6 +39,65 @@ def estimate_bandwidth_ops[O: ClusterOps](
     return Float32(acc / Float64(n))
 
 
+def _round_half_even(v: Float32) -> Float32:
+    """np.round: to the nearest integer, a half to the even one."""
+    var r = floor(v)
+    var diff = v - r
+    if diff > Float32(0.5):
+        return r + Float32(1)
+    if diff < Float32(0.5):
+        return r
+    var half = r * Float32(0.5)
+    return r if floor(half) == half else r + Float32(1)
+
+
+def get_bin_seeds(x: List[Float32], n: Int, d: Int, bin_size: Float32, min_bin_freq: Int, mut ns: Int) -> List[Float32]:
+    """sklearn `get_bin_seeds` (cluster/_mean_shift.py:240-297): each row
+    binned as `round(x / bin_size)` (half to even), the bins in first-seen
+    order with their counts (a dict), those with `count >= min_bin_freq`
+    scaled back by `bin_size`; the rows themselves when every row is its own
+    bin (sklearn warns) or when `bin_size` is 0. Host code."""
+    if bin_size == Float32(0):
+        ns = n
+        return x.copy()
+    var bins = List[Float32]()
+    var counts = List[Int]()
+    var m = 0
+    for r in range(n):
+        var key = List[Float32](capacity=d)
+        for f in range(d):
+            key.append(_round_half_even(ftz(identical_div(ftz(x[r * d + f]), bin_size))))
+        var found = -1
+        for u in range(m):
+            var same = True
+            for f in range(d):
+                if bins[u * d + f] != key[f]:
+                    same = False
+                    break
+            if same:
+                found = u
+                break
+        if found >= 0:
+            counts[found] += 1
+        else:
+            for f in range(d):
+                bins.append(key[f])
+            counts.append(1)
+            m += 1
+    var out = List[Float32]()
+    var kept = 0
+    for u in range(m):
+        if counts[u] >= min_bin_freq:
+            for f in range(d):
+                out.append(ftz(identical_mul(bins[u * d + f], bin_size)))
+            kept += 1
+    if kept == n:
+        ns = n
+        return x.copy()
+    ns = kept
+    return out^
+
+
 def _key_greater(a: List[Float32], ia: Int, b: List[Float32], ib: Int, d: Int, inten: List[Int]) -> Bool:
     """(intensity, coordinates) of center ia > that of ib, lexicographic."""
     if inten[ia] != inten[ib]:
@@ -51,7 +112,7 @@ def _key_greater(a: List[Float32], ia: Int, b: List[Float32], ib: Int, d: Int, i
 
 def meanshift_fit[O: ClusterOps](
     mut ops: O, x: List[Float32], n: Int, d: Int, bandwidth_in: Float32, seeds_in: List[Float32],
-    n_seeds_in: Int, cluster_all: Bool, max_iter: Int,
+    n_seeds_in: Int, cluster_all: Bool, max_iter: Int, bin_seeding: Bool, min_bin_freq: Int,
     mut centers_out: List[Float32], mut labels: List[Int32], mut bw_out: Float32, mut n_iter: Int,
 ) raises:
     var bw = bandwidth_in
@@ -62,7 +123,11 @@ def meanshift_fit[O: ClusterOps](
     bw_out = bw
     var ns = n_seeds_in
     var seeds = seeds_in.copy()
-    if ns == 0:
+    if ns == 0 and bin_seeding:
+        seeds = get_bin_seeds(x, n, d, bw, min_bin_freq, ns)
+        if ns == 0:
+            raise Error("No point was within bandwidth=" + String(bw) + " of any seed. Try a different seeding strategy or increase the bandwidth.")
+    elif ns == 0:
         ns = n
         seeds = x.copy()
     var xs = ops.put(x)

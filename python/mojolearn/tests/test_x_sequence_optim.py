@@ -67,6 +67,74 @@ def test_lion():
     _run(ml.Lion, ref_lion, lr=3e-3, betas=(0.95, 0.98), weight_decay=0.1)
 
 
+def test_adafactor_against_torch_rule():
+    """A float64 restatement of torch 2.5's _single_tensor_adafactor."""
+    rng = np.random.default_rng(1)
+    W = rng.standard_normal((5, 4)).astype(np.float32)
+    v = rng.standard_normal(3).astype(np.float32)
+    opt = ml.Adafactor([W, v], lr=2e-2, weight_decay=0.05)
+    qW, qv = W.astype(np.float64), v.astype(np.float64)
+    row, col, var = np.zeros(5), np.zeros(4), np.zeros(3)
+    eps1, eps2 = float(np.finfo(np.float32).eps), 1e-3
+    for t in range(1, 7):
+        gW = rng.standard_normal((5, 4)).astype(np.float32)
+        gv = rng.standard_normal(3).astype(np.float32)
+        opt.step([gW, gv])
+        w, rho = t ** -0.8, min(2e-2, t ** -0.5)
+        out = []
+        for q, g, kind in ((qW, gW.astype(np.float64), "m"), (qv, gv.astype(np.float64), "v")):
+            alpha = max(eps2, np.linalg.norm(q) / np.sqrt(q.size)) * rho
+            q = q * (1 - 2e-2 * 0.05)
+            if kind == "m":
+                row[:] = row + w * ((g * g).mean(1) - row)
+                col[:] = col + w * ((g * g).mean(0) - col)
+                est = np.outer(row, col) / max(row.mean(), eps1)
+            else:
+                var[:] = var + w * (g * g - var)
+                est = var.copy()
+            u = g / np.sqrt(np.maximum(est, eps1 * eps1))
+            q = q - alpha / max(1.0, np.linalg.norm(u) / np.sqrt(u.size)) * u
+            out.append(q)
+        qW, qv = out
+    np.testing.assert_allclose(W, qW, rtol=1e-4, atol=1e-5)
+    np.testing.assert_allclose(v, qv, rtol=1e-4, atol=1e-5)
+
+
+def ref_adamax(p, g, t, st, lr=2e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.0):
+    b1, b2 = betas
+    g = g + weight_decay * p
+    st["m"] = st.get("m", 0.0) + (1 - b1) * (g - st.get("m", 0.0))
+    st["u"] = np.maximum(b2 * st.get("u", 0.0), np.abs(g) + eps)
+    return p - lr / (1 - b1 ** t) * st["m"] / st["u"]
+
+
+def test_adamax():
+    _run(ml.Adamax, ref_adamax)
+    _run(ml.Adamax, ref_adamax, lr=1e-2, betas=(0.8, 0.99), weight_decay=0.05)
+
+
+def ref_nadam(p, g, t, st, lr=2e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.0, momentum_decay=4e-3,
+              decoupled_weight_decay=False):
+    b1, b2 = betas
+    if decoupled_weight_decay:
+        p = p * (1 - lr * weight_decay)
+    else:
+        g = g + weight_decay * p
+    mu = b1 * (1 - 0.5 * 0.96 ** (t * momentum_decay))
+    mu_next = b1 * (1 - 0.5 * 0.96 ** ((t + 1) * momentum_decay))
+    st["mp"] = st.get("mp", 1.0) * mu
+    st["m"] = st.get("m", 0.0) + (1 - b1) * (g - st.get("m", 0.0))
+    st["v"] = b2 * st.get("v", 0.0) + (1 - b2) * g * g
+    den = np.sqrt(st["v"] / (1 - b2 ** t)) + eps
+    p = p - lr * (1 - mu) / (1 - st["mp"]) * g / den
+    return p - lr * mu_next / (1 - st["mp"] * mu_next) * st["m"] / den
+
+
+def test_nadam():
+    _run(ml.NAdam, ref_nadam)
+    _run(ml.NAdam, ref_nadam, lr=1e-2, weight_decay=0.05, decoupled_weight_decay=True, momentum_decay=0.01)
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

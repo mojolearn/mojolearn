@@ -55,6 +55,21 @@ PASS 2 (proof), in progress:
   `xtrees/checks/sabotage/` listed in `tools/identity_lanes/trees.checks`:
   each FAILS the driver on the H100 pod; all 20 trees lanes AGREE with the
   driver run first.
-- OWED: AMD column (box), M2 Pro steward, card diff across boxes.
+- end-to-end sabotage `xtrees/checks/sabotage/column_cpu_only.patch` (perturbs
+  the CPU column only, `MOJOLEARN_COLUMN_CPU`, plus the rf host leaf):
+  `algos_lane_check.sh <all 20 lanes> --pass 2 --sabotage` on the H100 pod:
+  AGREE, 20/20 DISAGREE, 20/20 AGREE after reversal, RESULT: PASS. This is
+  the patch to hand the steward.
+- `xtrees/NOT_IMPLEMENTED.tsv`: the lane's refused options (option parity input).
+- AMD MI300X (Hot Aisle box `trees-amd`): `--pass 2` PASS on all 20 lanes,
+  seams bite; NVIDIA vs AMD GPU columns diff OK on all 20; glue cards
+  byte-identical across the two boxes.
+- Apple: M2 Pro steward PASS (1790526750361-trees-77e0b3a8d7), M3 Ultra spooled.
+- Pass-2 proof DONE for the 20 lanes (PENDING until a release record admits them).
 
-Next: AMD box (`tools/dev_pod.sh up trees 240 --vendor amd`), then the steward, then option parity.
+Option parity (item 2), merged as each passes:
+- DecisionTree splitter='random' (+ max_leaf_nodes best-first on it): lane
+  trees-dt-random AGREE; column sabotage (now also the ET host draw) DISAGREE
+  then AGREE.
+
+Next: option parity continues: DART lambda_l1 / max_delta_step / feature_fraction / bagging / min_sum_hessian / multiclass; Kernel link='logit'; cv splitter objects; Bagging oob_score; then the existing family's tsv rows (extratrees/, gbdt/), then GPU speed, CPU speed last.

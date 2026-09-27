@@ -34,6 +34,25 @@ from sequence.ops import (
     OP_MLP_BLOSS,
     OP_L2GRAD,
     OP_DIVS,
+    OP_AF_ALPHA,
+    OP_AF_ROW,
+    OP_AF_COL,
+    OP_AF_RMEAN,
+    OP_AF_UPDATE_MAT,
+    OP_AF_VEC,
+    OP_AF_DENOM,
+    OP_AF_APPLY,
+    OP_SEG_SUMSQ,
+    OP_LAMB_UPD,
+    OP_LAMB_RATIO,
+    OP_LAMB_APPLY,
+    OP_LN_FWD,
+    OP_LN_BWD_X,
+    OP_LN_BWD_W,
+    OP_THETA,
+    OP_CROSTON,
+    OP_ETS,
+    OP_GARCH,
     op_gemm,
     op_bias,
     op_colsum,
@@ -50,8 +69,14 @@ from sequence.ops import (
     op_seq_out,
     op_softmax,
 )
+from sequence.adafactor import op_af_alpha, op_af_row, op_af_col, op_af_rmean, op_af_update_mat, op_af_vec, op_af_denom, op_af_apply, op_seg_sumsq, op_lamb_upd, op_lamb_ratio, op_lamb_apply
+from sequence.layernorm import op_ln_bwd_w, op_ln_bwd_x, op_ln_fwd
 from sequence.mlp import op_act, op_act_bwd, op_divs, op_l2grad, op_mlp_bloss, op_mlp_rowloss, op_sumsq
 from sequence.stl import op_stl
+from sequence.theta import op_theta
+from sequence.croston import op_croston
+from sequence.ets import op_ets
+from sequence.garch import op_garch
 from sequence.vecar import op_cholsolve, op_colscale, op_rowscale, op_scale, op_sub, op_var_design, op_var_forecast
 
 
@@ -117,3 +142,41 @@ def apply[OP: Int](t: Int, a: Args):
         op_l2grad(t, a)
     elif OP == OP_DIVS:
         op_divs(t, a)
+    elif OP == OP_AF_ALPHA:
+        op_af_alpha(t, a)
+    elif OP == OP_AF_ROW:
+        op_af_row(t, a)
+    elif OP == OP_AF_COL:
+        op_af_col(t, a)
+    elif OP == OP_AF_RMEAN:
+        op_af_rmean(t, a)
+    elif OP == OP_AF_UPDATE_MAT:
+        op_af_update_mat(t, a)
+    elif OP == OP_AF_VEC:
+        op_af_vec(t, a)
+    elif OP == OP_AF_DENOM:
+        op_af_denom(t, a)
+    elif OP == OP_AF_APPLY:
+        op_af_apply(t, a)
+    elif OP == OP_SEG_SUMSQ:
+        op_seg_sumsq(t, a)
+    elif OP == OP_LAMB_UPD:
+        op_lamb_upd(t, a)
+    elif OP == OP_LAMB_RATIO:
+        op_lamb_ratio(t, a)
+    elif OP == OP_LAMB_APPLY:
+        op_lamb_apply(t, a)
+    elif OP == OP_LN_FWD:
+        op_ln_fwd(t, a)
+    elif OP == OP_LN_BWD_X:
+        op_ln_bwd_x(t, a)
+    elif OP == OP_LN_BWD_W:
+        op_ln_bwd_w(t, a)
+    elif OP == OP_THETA:
+        op_theta(t, a)
+    elif OP == OP_CROSTON:
+        op_croston(t, a)
+    elif OP == OP_ETS:
+        op_ets(t, a)
+    elif OP == OP_GARCH:
+        op_garch(t, a)

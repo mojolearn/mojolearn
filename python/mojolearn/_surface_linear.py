@@ -35,6 +35,7 @@ FAMILIES = (
             "x-lasso-cv", "x-enet-cv",
             "x-logistic-cv",
             "x-isotonic",
+            "x-glm-poisson-sw",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -93,6 +94,7 @@ TRAINING_LANE_NAMES = {
     "x-enet-cv": "ElasticNetCV",
     "x-logistic-cv": "LogisticRegressionCV",
     "x-isotonic": "IsotonicRegression",
+    "x-glm-poisson-sw": "PoissonRegressor (sample_weight)",
 }
 PUBLIC_PENDING_LANES = {
     "x-sgd-clf": "no reference",
@@ -116,4 +118,5 @@ PUBLIC_PENDING_LANES = {
     "x-enet-cv": "no reference",
     "x-logistic-cv": "no reference",
     "x-isotonic": "no reference",
+    "x-glm-poisson-sw": "no reference",
 }

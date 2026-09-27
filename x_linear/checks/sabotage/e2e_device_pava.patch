@@ -1,0 +1,22 @@
+--- a/x_linear/isotonic.mojo
++++ b/x_linear/isotonic.mojo
+@@ -17,6 +17,7 @@
+ computed NaN, so its bits are the same on every target).
+ """
+ from std.memory import bitcast
++from std.sys.info import is_gpu
+ from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, fmax, fmin, ld, st, ldi, sti, i2f, copy
+ 
+ comptime OOB_NAN = 0
+@@ -80,7 +81,10 @@
+         var sw = ld(fw, uw + i)
+         while True:
+             var prev_y = ld(fw, uy + k)
+-            swy = fmad(ld(fw, uw + k), ld(fw, uy + k), swy)
++            if is_gpu():  # SABOTAGE e2e: the device pools with the product rounded alone
++                swy = fa(swy, fm(ld(fw, uw + k), ld(fw, uy + k)))
++            else:
++                swy = fmad(ld(fw, uw + k), ld(fw, uy + k), swy)
+             sw = fa(sw, ld(fw, uw + k))
+             k = ldi(iw, k) + 1
+             if k == m or prev_y < ld(fw, uy + k):

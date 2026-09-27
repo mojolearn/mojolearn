@@ -3,6 +3,7 @@
 """HostExec: the decomp lane's cells in host loops, one index at a time, in
 the order the device assigns them to threads. No GPU import: this file is
 compiled into the CPU host binding."""
+from std.memory import bitcast
 from std.sys.compile import is_defined
 
 from decomposition.checks.jacobi_eigh_device import JACOBI_SWEEPS, JACOBI_TOL
@@ -19,7 +20,14 @@ from x_decomp.cells import (
     colsum_cell,
     ew_cell,
     gemm_cell,
+    als_row,
+    barycenter_row,
+    dijkstra_row,
+    gamma_cell,
+    lasso_row,
+    lda_doc_row,
     lu_serial,
+    omp_row,
     lu_solve_serial,
     orth_serial,
     rand_cell,
@@ -37,7 +45,13 @@ struct HostExec(Exec):
     def gemm(a: F32Ptr, b: F32Ptr, c: F32Ptr, m: Int, k: Int, n: Int, ta: Bool, tb: Bool) raises:
         for i in range(m):
             for j in range(n):
-                c.unsafe_store(i * n + j, gemm_cell(a, b, i, j, m, k, n, ta, tb))
+                var v = gemm_cell(a, b, i, j, m, k, n, ta, tb)
+                comptime if X_DECOMP_HOST_SABOTAGE:
+                    # the gate's negative control (-D MOJOLEARN_HOST_SABOTAGE=1):
+                    # the host column's every product moves by one unit in the
+                    # last place; the GPU binding never defines it
+                    v = bitcast[DType.float32](bitcast[DType.uint32](v) ^ UInt32(1))
+                c.unsafe_store(i * n + j, v)
 
     @staticmethod
     def ew(
@@ -119,6 +133,58 @@ struct HostExec(Exec):
             s.unsafe_store(i, got.s[i])
         for i in range(n * n):
             v.unsafe_store(i, got.v[i])
+
+    @staticmethod
+    def lasso_rows(
+        g: F32Ptr, q: F32Ptr, w: F32Ptr, h: F32Ptr, its: F32Ptr, n: Int, k: Int, alpha: Float32,
+        max_iter: Int, tol: Float32, positive: Bool,
+    ) raises:
+        for i in range(n):
+            its.unsafe_store(i, lasso_row(g, q, w, h, i, k, alpha, max_iter, tol, positive))
+
+    @staticmethod
+    def omp_rows(g: F32Ptr, q: F32Ptr, w: F32Ptr, s: F32Ptr, na: F32Ptr, n: Int, k: Int, nnz: Int) raises:
+        for i in range(n):
+            na.unsafe_store(i, omp_row(g, q, w, s, i, k, nnz))
+
+    @staticmethod
+    def rand_gamma(dst: F32Ptr, count: Int, seed: UInt32, stream: UInt32, shape: Float32) raises:
+        for i in range(count):
+            dst.unsafe_store(i, gamma_cell(i, seed, stream, shape))
+
+    @staticmethod
+    def lda_rows(
+        x: F32Ptr, ew: F32Ptr, d: F32Ptr, e: F32Ptr, s: F32Ptr, its: F32Ptr, n: Int, k: Int, v: Int,
+        prior: Float32, max_iter: Int, tol: Float32,
+    ) raises:
+        for i in range(n):
+            its.unsafe_store(i, lda_doc_row(x, ew, d, e, s, i, k, v, prior, max_iter, tol))
+
+    @staticmethod
+    def dijkstra_rows(w: F32Ptr, dist: F32Ptr, reached: F32Ptr, n: Int) raises:
+        var done = List[Float32](length=n * n, fill=Float32(0))
+        var pd = F32Ptr(unsafe_from_address=Int(done.unsafe_ptr()))
+        for i in range(n):
+            reached.unsafe_store(i, dijkstra_row(w, dist, pd, i, n))
+        _ = done^
+
+    @staticmethod
+    def barycenter_rows(
+        x: F32Ptr, y: F32Ptr, nbr: F32Ptr, wt: F32Ptr, flags: F32Ptr, n: Int, ny: Int, d: Int, k: Int, reg: Float32
+    ) raises:
+        var s = List[Float32](length=n * (k * k + k * d) if n > 0 else 1, fill=Float32(0))
+        var ps = F32Ptr(unsafe_from_address=Int(s.unsafe_ptr()))
+        for i in range(n):
+            flags.unsafe_store(i, barycenter_row(x, y, nbr, wt, ps, i, d, k, reg))
+        _ = s^
+
+    @staticmethod
+    def als_rows(c: F32Ptr, y: F32Ptr, yty: F32Ptr, x: F32Ptr, flags: F32Ptr, n: Int, m: Int, f: Int, reg: Float32) raises:
+        var s = List[Float32](length=n * (f * f + f) if n > 0 else 1, fill=Float32(0))
+        var ps = F32Ptr(unsafe_from_address=Int(s.unsafe_ptr()))
+        for u in range(n):
+            flags.unsafe_store(u, als_row(c, y, yty, x, ps, u, m, f, reg))
+        _ = s^
 
     @staticmethod
     def vendor() -> String:

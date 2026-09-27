@@ -1,0 +1,12 @@
+--- a/x_cluster/bodies.mojo
++++ b/x_cluster/bodies.mojo
+@@ -318,7 +318,8 @@
+     var k = cell // d
+     var a = cell - k * d
+     var acc = Float32(0)
+-    for i in range(n):
++    for ii in range(n):
++        var i = n - 1 - ii
+         acc = ftz(acc + ftz(identical_mul(resp[i * kc + k], ftz(x[i * d + a]))))
+     dst[cell] = ftz(identical_div(acc, nk[k]))
+ 

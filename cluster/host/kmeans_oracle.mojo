@@ -169,6 +169,7 @@ from checks.kernel_matrix import (
 )
 from checks.numerics import ftz, identical_mul_add, identical_sqrt
 from core.classical_host_predict import host_gemm_nt
+from cluster.impl.kmeans_params import weighted_sum_scale_cap
 
 
 #: The gate's negative control (see THE NEGATIVE CONTROL above).
@@ -1310,6 +1311,18 @@ def host_kmeans_fit(
     host_kmeans_validate(n, d, k, n_weights)
 
     var sum_scale = host_plan_sum_scale(x, n, d)
+    # DEVIATION 5112, as `kmeans_fit`: the weighted bound caps the scale
+    if n_weights != 0:
+        var xc = x.copy()
+        var wc = weights_in.copy()
+        var cap = weighted_sum_scale_cap(
+            xc.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+            wc.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), n, d,
+        )
+        _ = xc^
+        _ = wc^
+        if cap < sum_scale:
+            sum_scale = cap
     var weight_bound = Float64(n)
     if n_weights != 0:
         weight_bound = Float64(0.0)
