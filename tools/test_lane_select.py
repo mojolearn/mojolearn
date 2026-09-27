@@ -1517,6 +1517,12 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
                                      oracle) and x-decomp-spectral-rbf (the
                                      decomp lane's spectral door); no old lane
                                      moved
+      kmeans_oracle        63 -> 64  x-cluster-kmeans-init (KMeans and
+                                     MiniBatchKMeans init as an array or a
+                                     callable, session 3 of the cluster lane);
+                                     x-cluster-dbscan-metrics and
+                                     x-cluster-hdbscan-epsilon reach no KMeans;
+                                     no old lane moved
 
     REMEASURED 2026-09-27 (lane/algos-trees, the trees expansion lanes):
       forest_host_predict  60 -> 80  the twenty trees-* lanes (DecisionTree,
@@ -1530,7 +1536,7 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
       forest_inference     26 -> 46  the same twenty lanes, through the rf
                                      binding that imports it"""
     rev = lane_select.reverse_map()
-    for rel, want in (("cluster/host/kmeans_oracle.mojo", 63),
+    for rel, want in (("cluster/host/kmeans_oracle.mojo", 64),
                       ("core/gbdt_host_predict.mojo", 49),
                       ("core/forest_host_predict.mojo", 80),
                       ("core/forest_inference.mojo", 46),
