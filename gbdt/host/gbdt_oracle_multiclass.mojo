@@ -4,7 +4,7 @@
 MultiClass and MultiClassOneVsAll, on symmetric trees
 (lane/cpu-training-gbdt-losses, 2026-09-15): the gbdt-multiclass and
 gbdt-onevsall lanes of tools/identity_break.py; and MultiRMSE
-(lane/algos-trees, 2026-09-27), the gbdt-multirmse lane: the target is
+(lane/algos-trees, 2026-09-27), the trees-gbdt-multirmse lane: the target is
 `dim` dim-major planes, the der kernel is `multi_rmse_val_and_first_der_
 kernel`, and the Hessian is MultiClass's BLOCKED arm with
 `multi_rmse_second_der_kernel`'s rows (zeros left of the diagonal, the

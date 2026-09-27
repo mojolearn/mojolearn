@@ -12,7 +12,7 @@ CatBoost is importable, its own MultiRMSE fit on the same pool is a loose
 quality reference: the reference here is their GPU learner, which this Mac
 cannot run, so only the order of magnitude of the training error is compared,
 never a bit. Bit identity across the Metal, CUDA, HIP and CPU columns is the
-gbdt-multirmse lane of tools/identity_break.py, not this module.
+trees-gbdt-multirmse lane of tools/identity_lanes/trees.py, not this module.
 
     cd python && python3 -m pytest -q mojolearn/tests/test_gbdt_multirmse.py
 """
