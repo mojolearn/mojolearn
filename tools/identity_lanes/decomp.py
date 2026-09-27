@@ -266,7 +266,7 @@ def _(ml, X, yc, yr, Xh=None):
     e = ml.EllipticEnvelope(contamination=0.05, random_state=1, support_fraction=0.7).fit(S)
     one = ml.MinCovDet().fit(np.ascontiguousarray(X[:300, 5:6]))
     lab = np.where(X[:128, 0] > 0, 1, -1).astype(np.int32)
-    esc = np.float64([e.score(S[:128], lab), e.score(S[:128], lab, sample_weight=np.abs(X[:128, 1]))])
+    esc = np.float64([e.score(S[:128], lab), e.score(S[:128], lab, sample_weight=np.abs(X[:128, 1]) + np.float32(1))])
     return _fit(dict(loc=_h(m.location_), cov=_h(m.covariance_), rloc=_h(m.raw_location_), rcov=_h(m.raw_covariance_),
                      sup=_h(np.asarray(m.support_, dtype=np.int8)), dist=_h(m.dist_), maha=_h(m.mahalanobis(S[:128])),
                      eoff=_h(np.float64(e.offset_)), esc=_h(esc), one=_h(one.location_, one.covariance_, one.dist_), edec=_h(e.decision_function(S[:128])), epred=_h(e.predict(S[:128]))),

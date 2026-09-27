@@ -3491,7 +3491,10 @@ class EllipticEnvelope(MinCovDet):
         if sample_weight is None:
             return sum(1 for a, b in zip(yl, pred) if a == b) / len(pred)
         w = [float(v) for v in (sample_weight.tolist() if hasattr(sample_weight, "tolist") else list(sample_weight))]
-        return _dsum(wi for wi, a, b in zip(w, yl, pred) if a == b) / _dsum(w)
+        tw = _dsum(w)
+        if tw == 0:
+            raise ZeroDivisionError("Weights sum to zero, can't be normalized")
+        return _dsum(wi for wi, a, b in zip(w, yl, pred) if a == b) / tw
 
 
 # ================================================================ implicit ALS
