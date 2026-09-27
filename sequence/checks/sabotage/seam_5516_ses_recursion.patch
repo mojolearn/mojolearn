@@ -1,0 +1,15 @@
+diff --git a/sequence/croston.mojo b/sequence/croston.mojo
+index 3819b74ff..e49ee6f8b 100644
+--- a/sequence/croston.mojo
++++ b/sequence/croston.mojo
+@@ -31,8 +31,8 @@ def ses_forecast(x: FP, n: Int, alpha: Float32) -> Float32:
+     var c = sub(Float32(1.0), alpha)
+     var f = ld(x, 0)
+     for i in range(1, n):
+-        f = fma3(alpha, ld(x, i - 1), mul(c, f))
+-    return fma3(alpha, ld(x, n - 1), mul(c, f))
++        f = add(f, mul(alpha, sub(ld(x, i - 1), f)))
++    return add(f, mul(alpha, sub(ld(x, n - 1), f)))
+ 
+ 
+ def ses_sse(alpha: Float32, x: FP, n: Int) -> Float32:

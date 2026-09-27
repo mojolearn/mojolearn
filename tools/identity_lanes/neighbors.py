@@ -39,15 +39,20 @@ def _(ml, X, yc, yr, Xh=None):
     md = ml.NearestCentroid(metric="manhattan").fit(X[:512], y3)
     return _fit(dict(centroids=_h(m.centroids_), std=_h(m.within_class_std_dev_), predict=_h(m.predict(X[:512])),
                      shrunk=_h(s.centroids_), shrunk_predict=_h(s.predict(X[:512])),
-                     proba=_h(s.predict_proba(X[:256])), manhattan=_h(md.centroids_, md.predict(X[:512]))),
+                     proba=_h(s.predict_proba(X[:256])), manhattan=_h(md.centroids_, md.predict(X[:512])),
+                     dev=_h(s.deviations_), dev_unshrunk=_h(m.deviations_), log_proba=_h(s.predict_log_proba(X[:256]))),
                 s, lambda e: (e.predict(Xh[:256]), e.decision_function(Xh[:256])))
 
 
 @lane("x-neighbors-ocsvm")
 def _(ml, X, yc, yr, Xh=None):
     m = ml.OneClassSVM(nu=0.2).fit(X[:256])
+    sw = (0.5 + 0.5 * (np.arange(256) % 4)).astype(np.float64)
+    sw[9] = 0.0                                        # a zero weight drops the sample, as libsvm
+    w = ml.OneClassSVM(nu=0.2).fit(X[:256], sample_weight=sw)
     return _fit(dict(dual=_h(m.dual_coef_), support=_h(m.support_), intercept=_h(m.intercept_),
-                     decision=_h(m.decision_function(X[:256]))),
+                     decision=_h(m.decision_function(X[:256])),
+                     w_dual=_h(w.dual_coef_), w_support=_h(w.support_), w_decision=_h(w.decision_function(X[:256]))),
                 m, lambda e: (e.decision_function(Xh[:256]), e.predict(Xh[:256])))
 
 
@@ -121,7 +126,9 @@ def _(ml, X, yc, yr, Xh=None):
     A = _neighbors_holes(X[:512])
     m = ml.KNNImputer(n_neighbors=5).fit(A)
     w = ml.KNNImputer(n_neighbors=4, weights="distance", add_indicator=True).fit(A)
-    return _fit(dict(u=_h(m.transform(A)), w=_h(w.transform(A))),
+    A7 = np.where(np.isnan(A), np.float32(-7.0), A).astype(np.float32)
+    mv = ml.KNNImputer(n_neighbors=5, missing_values=-7.0).fit(A7)
+    return _fit(dict(u=_h(m.transform(A)), w=_h(w.transform(A)), mv=_h(mv.transform(A7))),
                 w, lambda e: (e.transform(_neighbors_holes(Xh[:256])),))
 
 
@@ -149,15 +156,36 @@ def _(ml, X, yc, yr, Xh=None):
     m = ml.PageRank(alpha=0.85, tol=1e-6).fit(A)
     pers = (1 + np.arange(128) % 5).astype(np.float32)
     p = ml.PageRank(alpha=0.7, personalization=pers).fit(A)
-    return _fit(dict(pr=_h(m.pagerank_), it=_h(np.int64(m.n_iter_)), pers=_h(p.pagerank_)), m,
+    dg = ml.PageRank(alpha=0.85, dangling=(1 + np.arange(128) % 7).astype(np.float32),
+                     nstart=(1 + np.arange(128) % 3).astype(np.float32)).fit(A)
+    return _fit(dict(pr=_h(m.pagerank_), it=_h(np.int64(m.n_iter_)), pers=_h(p.pagerank_),
+                     dangling=_h(dg.pagerank_), dangling_it=_h(np.int64(dg.n_iter_))), m,
                 lambda e: (ml.PageRank(alpha=0.85).fit(_neighbors_graph(Xh, directed=True)).pagerank_,))
+
+
+def _neighbors_chain(X, n=128):
+    """Each bin of `_neighbors_graph` as a directed CHAIN, every node pointing
+    only at the next node of its bin (i -> j, j > i): a weak component's
+    smallest label must travel the whole chain one hop per step, so the
+    propagation runs many rounds and reads edges in their reverse direction."""
+    q = np.floor(X[:n, 3] * np.float32(2)).astype(np.int64)
+    A = np.zeros((n, n), dtype=np.float32)
+    last = {}
+    for i in range(n):
+        b = int(q[i])
+        if b in last:
+            A[last[b], i] = np.float32(1)
+        last[b] = i
+    return np.ascontiguousarray(A, dtype=np.float32)
 
 
 @lane("x-neighbors-connected-components")
 def _(ml, X, yc, yr, Xh=None):
     k, lab = ml.connected_components(_neighbors_graph(X, ring=False), directed=False)
     kd, labd = ml.connected_components(_neighbors_graph(X, directed=True, ring=False), directed=True, connection="weak")
-    return _fit(dict(k=_h(np.int64(k)), lab=_h(lab), kd=_h(np.int64(kd)), labd=_h(labd)))
+    kc, labc = ml.connected_components(_neighbors_chain(X), directed=True, connection="weak")
+    return _fit(dict(k=_h(np.int64(k)), lab=_h(lab), kd=_h(np.int64(kd)), labd=_h(labd),
+                     kc=_h(np.int64(kc)), labc=_h(labc)))
 
 
 @lane("x-neighbors-louvain")
@@ -177,6 +205,66 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: e.predict_y(Xh[:256]))
 
 
+
+@lane("x-neighbors-gamma-scale")
+def _(ml, X, yc, yr, Xh=None):
+    """gamma='scale' on the family's EXISTING estimators (SVC, SVR,
+    RBFSampler): 1 / (n_features * X.var()) from the exact variance of the
+    float32 cells, rounded once (_scale_gamma.scale_gamma, DEVIATION 870).
+    The resolved gamma is hashed with each fit, so a host that read other
+    gamma bits moves the train column even where the fit would not."""
+    c = ml.SVC(C=1.0, kernel="rbf", gamma="scale", max_iter=200).fit(X[:512], yc[:512])
+    r = ml.SVR(C=1.0, kernel="rbf", gamma="scale", epsilon=0.1, max_iter=200).fit(X[:512], yr[:512])
+    f = ml.RBFSampler(gamma="scale", n_components=32, random_state=1).fit(X[:512])
+    return _fit(dict(svc_decision=_h(c.decision_function(X[512:768])), svc_gamma=_h(np.float64(c._gamma)),
+                     svr_predict=_h(r.predict(X[512:768])), svr_gamma=_h(np.float64(r._gamma)),
+                     rbf_gamma=_h(np.float64(f._params[0])), rbf_transform=_h(f.transform(X[:256]))),
+                c, lambda e: (e.decision_function(Xh[:256]), e.predict(Xh[:256])))
+
+
+@lane("x-neighbors-svm-weights")
+def _(ml, X, yc, yr, Xh=None):
+    """sample_weight on SVC and SVR and class_weight on SVC: InitPenalty's
+    weighted arm, each row's bound C * cw[y_i] * w_i formed in binary64 and
+    rounded once to float32 on the host (_svm_impl._c_rows), then C_vec on
+    the device and the per-index bound in smo_oracle_fit. Weights 0.5 to
+    2.0 with a zero, so a bound pins an alpha at 0 and others cap it."""
+    w = (0.5 + 0.5 * (np.arange(512) % 4)).astype(np.float64)
+    w[7] = 0.0
+    c = ml.SVC(C=1.0, kernel="rbf", max_iter=200).fit(X[:512], yc[:512], sample_weight=w)
+    b = ml.SVC(C=1.0, kernel="rbf", max_iter=200, class_weight="balanced").fit(X[:512], yc[:512])
+    d = ml.SVC(C=0.5, kernel="linear", max_iter=200, class_weight={yc[:512].min().item(): 2.0}).fit(X[:512], yc[:512], sample_weight=w)
+    r = ml.SVR(C=1.0, kernel="rbf", epsilon=0.1, max_iter=200).fit(X[:512], yr[:512], sample_weight=w)
+    return _fit(dict(w_dual=_h(c.dual_coef_), w_support=_h(c.support_), w_decision=_h(c.decision_function(X[512:768])),
+                     bal_dual=_h(b.dual_coef_), bal_decision=_h(b.decision_function(X[512:768])),
+                     dict_dual=_h(d.dual_coef_), dict_decision=_h(d.decision_function(X[512:768])),
+                     svr_dual=_h(r.dual_coef_), svr_predict=_h(r.predict(X[512:768]))),
+                c, lambda e: (e.decision_function(Xh[:256]), e.predict(Xh[:256])))
+
+
+@lane("x-neighbors-svc-sigmoid")
+def _(ml, X, yc, yr, Xh=None):
+    """SVC(kernel='sigmoid'): the identical linear Gram, then tanh(gamma * K
+    + coef0) cell by cell (kernel_methods' tanh_epilogue_kernel on the
+    device, the same spelling in smo_oracle_fit on the host)."""
+    m = ml.SVC(C=1.0, kernel="sigmoid", gamma=0.05, coef0=-0.5, max_iter=200).fit(X[:512], yc[:512])
+    z = ml.SVC(C=0.5, kernel="sigmoid", gamma=0.02, max_iter=200).fit(X[:512], yc[:512])
+    return _fit(dict(dual=_h(m.dual_coef_), support=_h(m.support_), decision=_h(m.decision_function(X[512:768])),
+                     z_dual=_h(z.dual_coef_), z_decision=_h(z.decision_function(X[512:768]))),
+                m, lambda e: (e.decision_function(Xh[:256]), e.predict(Xh[:256])))
+
+
+@lane("x-neighbors-svr-kernels")
+def _(ml, X, yc, yr, Xh=None):
+    """SVR(kernel='poly') and SVR(kernel='sigmoid'): the SVC's linear Gram
+    and epilogues (DEVIATION 1663's repeated product, identical_tanh), with
+    degree and coef0 through the bindings' optional trailing params."""
+    p = ml.SVR(C=1.0, kernel="poly", degree=2, gamma=0.05, coef0=1.0, epsilon=0.1, max_iter=200).fit(X[:512], yr[:512])
+    s = ml.SVR(C=1.0, kernel="sigmoid", gamma=0.02, coef0=-0.5, epsilon=0.1, max_iter=200).fit(X[:512], yr[:512])
+    return _fit(dict(p_dual=_h(p.dual_coef_), p_support=_h(p.support_), p_predict=_h(p.predict(X[512:768])),
+                     s_dual=_h(s.dual_coef_), s_predict=_h(s.predict(X[512:768]))),
+                p, lambda e: (e.predict(Xh[:256]),))
+
 _batch_decl(_rows_calls("score_samples", "predict", sl=slice(0, 256)), "x-neighbors-lof")
 _batch_decl(_rows_calls("predict", "decision_function", "predict_proba", sl=slice(0, 256)), "x-neighbors-nearest-centroid")
 _batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "x-neighbors-ocsvm")
@@ -188,4 +276,6 @@ _batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=lambda Xh: np.abs(Xh
 _batch_decl(_rows_calls("predict_proba", "predict", sl=slice(0, 128)),
             "x-neighbors-label-propagation", "x-neighbors-label-spreading")
 _batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_neighbors_holes), "x-neighbors-knn-imputer")
-_batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-neighbors-svgp")
+_batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-neighbors-svgp", "x-neighbors-svr-kernels")
+_batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "x-neighbors-gamma-scale", "x-neighbors-svm-weights",
+            "x-neighbors-svc-sigmoid")

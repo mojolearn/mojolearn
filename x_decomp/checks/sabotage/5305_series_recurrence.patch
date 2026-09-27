@@ -1,5 +1,5 @@
 diff --git a/x_decomp/cells.mojo b/x_decomp/cells.mojo
-index b8537db32..dfe49d120 100644
+index 4b4c2cedf..2ff99e545 100644
 --- a/x_decomp/cells.mojo
 +++ b/x_decomp/cells.mojo
 @@ -157,7 +157,7 @@ def digamma(a: Float32) -> Float32:
