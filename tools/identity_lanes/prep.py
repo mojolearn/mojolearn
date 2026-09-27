@@ -17,13 +17,3 @@
 # own lanes (to LANES and the per-lane registries); rebind no existing name;
 # prefix your own helpers with `_prep_`. No imports are needed: np, _h,
 # _fit, _rows_calls and the rest are this module's.
-
-
-@lane("x-prep-dummy")
-def _(ml, X, yc, yr, Xh=None):
-    m = ml.ExpansionDummyScaler().fit(X)
-    return _fit(dict(scale=_h(m.scale_), transform=_h(m.transform(X[:256]))),
-                m, lambda e: (e.transform(Xh[:256]),))
-
-
-_batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-dummy")
