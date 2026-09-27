@@ -99,41 +99,55 @@ reversal: RESULT PASS. Apple / AMD: request 1790537199548-neighbors-689ddc2561
 
 ### Existing family (neighbors/, kernel_methods/, svm/, gaussian_process/)
 
-- DONE: gamma='scale' for SVC, SVR and RBFSampler (DEVIATION 870 revised:
-  `_scale_gamma.scale_gamma`, the exact variance of the float32 cells, the
-  reciprocal rounded once; no fold, so every host reads the same bits).
-  Lane `x-neighbors-gamma-scale`; sabotage
-  `x_neighbors/checks/sabotage/870_gamma_scale_device_column.patch` (the
-  device column reads gamma one ulp off). Defaults stay 'auto'.
-- kernel_methods/NOT_IMPLEMENTED.tsv: the samplers and one-class SVM rows now
-  point at x_neighbors.
-- OWED, in this order (each: AGREE + a sabotage + existing bits unchanged):
-  1. SVC / SVR sample_weight and SVC class_weight: the weighted InitPenalty
-     (C_vec = C * w, one float32 rounding, formed on the host) on the device
-     (svm/impl/smosolver.mojo `initialize` fills C_vec) AND the host oracle
-     (svm/host/smo_oracle.mojo uses a scalar C in `_select_ws`,
-     `_block_solve`, the b average): per-sample C there too. Zero weight drops
-     the sample as libsvm.
-  2. SVC / SVR kernel='sigmoid' (kernel_methods already has identical_tanh,
-     lane kernel-ridge-sigmoid), SVR kernel='poly' (SVC has it).
-  3. SVC multiclass (one-vs-one over the binary solver, host bookkeeping),
+MERGED (NVIDIA H100 pod, 2026-09-27; lane check on the 74 non-par lanes
+lane_select picks for the svm / kernel_methods / x_neighbors diff: AGREE;
+check-svm 44/44; test_host_surface, x_neighbors sanity, svc_poly,
+kernel_methods and svr surfaces, test_lane_select: pass):
+- gamma='scale' for SVC, SVR and RBFSampler (DEVIATION 870 revised,
+  python/mojolearn/_scale_gamma.py: the exact variance of the float32 cells,
+  the reciprocal rounded once). Lane x-neighbors-gamma-scale; arm
+  870_gamma_scale_device_column.patch: PASS (AGREE, DISAGREE, AGREE).
+- SVC / SVR sample_weight and SVC class_weight (InitPenalty's weighted arm:
+  per-row C * cw[y] * w, rounded once to float32 on the host; C_vec on the
+  device, per-index bound in smo_oracle_fit). Lane x-neighbors-svm-weights;
+  arm svm_weights_device_unweighted.patch: PASS.
+- SVC kernel='sigmoid'; SVR kernel='poly' and 'sigmoid' (kernel_methods'
+  TANH / DEVIATION 1663 epilogues). Lanes x-neighbors-svc-sigmoid,
+  x-neighbors-svr-kernels; arm svc_sigmoid_device_gain.patch: PASS on both.
+- x_neighbors ONE process-lifetime DeviceContext (gen.py `xn_ctx`, the
+  second-GPU-call hang); test_x_neighbors_repeat.py (every entry point twice,
+  GPU and CPU, equal bits): pass; the 14 lanes AGREE after it.
+- test_lane_select pins: forest_host_predict 81, forest_inference 47
+  (trees-dt-random); the generator test selects the lanes gen.py's outputs
+  reach.
+- Stewards: requests 1790543082631 / 1790543091585 / 1790543098464 (the
+  three option lanes) and 1790537199548 (14 lanes); post-merge gates now.
+
+OWED, phase 2 (option parity), in this order (each: AGREE + a sabotage +
+existing bits unchanged):
+  1. SVC multiclass (one-vs-one over the binary solver, host bookkeeping),
      decision_function_shape 'ovr' / 'ovo', break_ties.
-  4. kernel='precomputed' for SVC / SVR / KernelRidge / Nystroem.
-  5. KernelRidge sample_weight (sqrt(w) scaling of K and y, dual *= sqrt(w)).
-  6. cosine / chi2 / additive_chi2 pairwise kernels (KernelRidge, Nystroem).
-  7. GaussianProcessRegressor predict(return_cov=True); RationalQuadratic,
+  2. kernel='precomputed' for SVC / SVR / KernelRidge / Nystroem.
+  3. KernelRidge sample_weight (sqrt(w) scaling of K and y, dual *= sqrt(w)).
+  4. cosine / chi2 / additive_chi2 pairwise kernels (KernelRidge, Nystroem).
+  5. GaussianProcessRegressor predict(return_cov=True); RationalQuadratic,
      ExpSineSquared, DotProduct kernels.
-  8. Sparse input (densified exactly, as x_neighbors `_dense`) for SVC, SVR,
-     KernelRidge, Nystroem, RBFSampler, the k-NN classes.
-  9. The distance metrics neighbors/NOT_IMPLEMENTED.tsv refuses by name.
-  SVC probability (Platt with libsvm's internal 5-fold CV) needs a seeded
-  fold assignment; decide after 1-3.
+  6. Sparse input (densified exactly) for SVC, SVR, KernelRidge, Nystroem,
+     RBFSampler, the k-NN classes.
+  7. The distance metrics neighbors/NOT_IMPLEMENTED.tsv refuses by name.
+  8. SVC probability (Platt with libsvm's internal CV: a seeded fold
+     assignment).
+  PHASE 1 AUDIT for the existing algorithms (LANE CHARTER): confirm each of
+  NearestNeighbors, kNN, radius, RBC, KDE, SVC/SVR, KernelRidge, Nystroem,
+  RBFSampler, GP has per-seam oracles + separating fixtures + biting arms and
+  Apple/AMD AGREE; list gaps here.
+- NOTE: par-* lanes cannot run in the lane check's CPU arm (the parallel
+  pool refuses); exclude them from a lane-check list.
+- NOTE: never kill a lane check mid-seam-arm: it leaves the arm's patch
+  applied on the pod (resync, then `git apply -R --check` every patch).
 
 ## NEXT (a fresh session starts here)
 
-Phase (c) OPTION PARITY is in progress (one phase per session).
-1. `python3 tools/apple_steward.py status`: request
-   1790537199548-neighbors-689ddc2561 (14 lanes, e2e arm) and any
-   x-neighbors-gamma-scale request; record the verdicts above.
-2. Continue the OWED list under "Existing family" from item 1.
-3. When the list is done: merge, set NEXT to phase (d) FAST GPU speed, STOP.
+Phase 2 OPTION PARITY is in progress. Continue the OWED list under
+"Existing family" from item 1 (SVC multiclass). Batch one steward request per
+hour for lanes merged since the last one.
