@@ -163,9 +163,9 @@ def _hstack(*ms):
 class _Kit:
     """The binding's cells, called on `_M` matrices."""
 
-    def __init__(self, mode):
+    def __init__(self, mode, binding=None):
         self.mode = mode
-        self.b = _backend.binding(_BINDING, mode)
+        self.b = _backend.binding("_mojolearn_x_decomp", mode) if binding is None else binding
 
     # ---- elementwise
     def ew(self, op, A, B=None, C=None, s=0.0):
