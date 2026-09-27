@@ -1076,6 +1076,7 @@ check-gemm-lowbit-force-flat = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJ
 # currently built for. For the loop while working on one of them; the gate
 # above is what a session should finish on.
 check-kmeans-identity = "mojo run -I . cluster/checks/kmeans_identity_check.mojo"
+check-kmeans-incr-init = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . cluster/checks/kmeans_incr_init_check.mojo"
 check-knn-identity = "mojo run -I . neighbors/checks/knn_identity_check.mojo"
 check-knn-apple-mma = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . neighbors/checks/apple_mma_distance_probe.mojo"
 check-dbscan-identity = "mojo run -I . dbscan/checks/dbscan_identity_check.mojo"
