@@ -146,7 +146,7 @@ from std.sys.compile import is_defined
 from mamba.host.device_shim import DeviceBuffer, DeviceContext
 
 from mamba.host.gen.identity_trace import IdentityTrace
-from checks.numerics import ftz, identical_exp, identical_mul_add
+from checks.numerics import ftz, identical_exp, identical_mul_add, identical_mul
 
 
 # ===========================================================================
@@ -184,7 +184,7 @@ things shared with the host side are the seam functions in
 comptime SAB_S8_CUDA_PAIRING = is_defined[
     "MOJOLEARN_MAMBA_SABOTAGE_S8_CUDA_PAIRING"
 ]()
-#: S9 rounds TWICE -- `ftz(pinned_mul(deltaA, h))` then `ftz(... + deltaB_u)`
+#: S9 rounds TWICE -- `ftz(identical_mul(deltaA, h))` then `ftz(... + deltaB_u)`
 #: -- which is the torch reference's own literal spelling (`x = deltaA[:, :,
 #: i] * x + deltaB_u[:, :, i]`, ref:175) and is what an implementer gets by
 #: writing `a * h + b` on a backend that does not contract. Contract section
@@ -257,37 +257,6 @@ def mamba_scan_sabotage_name() -> String:
     comptime if SAB_S5_EXP2:
         return String("S5_EXP2")
     return String("none")
-
-
-# ===========================================================================
-# THE PINNED MULTIPLY (DEVIATION 720)
-# ===========================================================================
-
-
-def pinned_mul(a: Float32, b: Float32) -> Float32:
-    """DEVIATION 720, the DEVICE spelling of the same deviation
-    `mamba/checks/mamba_oracle.mojo:41-54` carries on the host.
-
-    A multiply no codegen may contract into a neighboring add, written
-    `identical_mul_add(a, b, -0.0)`. Under IDENTICAL that is `fma(a, b,
-    -0.0)`, bit-equal to the correctly rounded product at every input
-    including both zero signs (`p + (-0.0) == p` under round-to-nearest,
-    while a `+0.0` addend would launder a `-0.0` product -- the gemm lane's
-    F6a lesson), and it presents no syntactic multiply for a compiler to
-    contract (the gemm README's F3 scar: `var p = a * b; p + c` WAS
-    contracted across statements). Under FAST it is `a * b + (-0.0)`.
-
-    Transcribed rather than imported, for the reason `MAX_DSTATE` above is:
-    the oracle and the device kernel are two spellings of one arithmetic and
-    share only `checks/numerics.mojo`. The two bodies being identical is
-    the point, and the gate that diffs the two cards is what holds them so.
-    """
-    # `identical_mul` is the pinned product (`pinned_mul_f32` under IDENTICAL);
-    # `fma(a, b, -0.0)` was not: LLVM folds it into a contractable product
-    # (lane/pinned-mul-contract-free, 2026-09-26).
-    from checks.numerics import identical_mul
-
-    return identical_mul(a, b)
 
 
 # ===========================================================================
@@ -386,11 +355,11 @@ def selective_scan_fwd_kernel[
         comptime for n in range(DSTATE):
             # S5 + S6: `deltaA = torch.exp(einsum('bdl,dn->bdln', delta, A))`
             # (ref:162). One product, then row 12's polynomial.
-            var da_arg = ftz(pinned_mul(dl, a_vals[n]))
+            var da_arg = ftz(identical_mul(dl, a_vals[n]))
             var da: Float32
             comptime if SAB_S5_EXP2:
                 # SABOTAGE: MAX's and the CUDA kernel's exp2 substitution.
-                da = ftz(exp2(ftz(pinned_mul(da_arg, Float32(1.4426950408889634)))))
+                da = ftz(exp2(ftz(identical_mul(da_arg, Float32(1.4426950408889634)))))
             else:
                 da = ftz(identical_exp(da_arg))
 
@@ -398,15 +367,15 @@ def selective_scan_fwd_kernel[
             var dbu: Float32
             comptime if SAB_S8_CUDA_PAIRING:
                 # SABOTAGE: `B * (delta * u)`, cuh:162 with :222.
-                var du = ftz(pinned_mul(dl, uv))
-                dbu = ftz(pinned_mul(bv, du))
+                var du = ftz(identical_mul(dl, uv))
+                dbu = ftz(identical_mul(bv, du))
             else:
                 # S7: `delta * B`, the einsum's first pairing (ref:167), HF's
                 # `discrete_B = dt * B` (modeling_mamba.py:214).
-                var db = ftz(pinned_mul(dl, bv))
+                var db = ftz(identical_mul(dl, bv))
                 # S8: `(delta * B) * u`, the second pairing (ref:167), HF's
                 # `deltaB_u = discrete_B * u` (modeling_mamba.py:215).
-                dbu = ftz(pinned_mul(db, uv))
+                dbu = ftz(identical_mul(db, uv))
 
             # S9: `x = deltaA * x + deltaB_u` (ref:175). ONE rounding. The
             # torch reference rounds twice; fusion is PINNED because only
@@ -414,7 +383,7 @@ def selective_scan_fwd_kernel[
             # the CUDA scan op and MAX both contract here as well.
             comptime if SAB_S9_UNFUSED:
                 # SABOTAGE: the reference's literal two roundings.
-                state[n] = ftz(ftz(pinned_mul(da, state[n])) + dbu)
+                state[n] = ftz(ftz(identical_mul(da, state[n])) + dbu)
             else:
                 state[n] = ftz(identical_mul_add(da, state[n], dbu))
 
@@ -430,7 +399,7 @@ def selective_scan_fwd_kernel[
         comptime if SAB_S11_D_FIRST:
             # SABOTAGE: the CUDA kernel seeds its output accumulator with
             # `D * u` (cuh:163) and folds the C-h terms onto it -- D FIRST.
-            acc = ftz(pinned_mul(d_val, uv))
+            acc = ftz(identical_mul(d_val, uv))
         comptime if SAB_S10_DESCENDING:
             # SABOTAGE: the same terms, folded n descending.
             comptime for nn in range(DSTATE):
@@ -456,7 +425,7 @@ def selective_scan_fwd_kernel[
         comptime if SAB_S11_D_FIRST:
             out_ptr.unsafe_store(t * dim + d, acc)
         else:
-            var p = ftz(pinned_mul(uv, d_val))
+            var p = ftz(identical_mul(uv, d_val))
             out_ptr.unsafe_store(t * dim + d, ftz(acc + p))
 
     # `last_state = x` at the final token (ref:183-184). Written every call,

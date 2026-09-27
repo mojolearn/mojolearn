@@ -395,7 +395,12 @@ def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
     before = bb.plan_races("apple", bb.modes_for("apple"), bb.FAMILIES[:-1], rows=1000, cpu_arm=False)
     assert len(before) == 93 and sum(len(r["arms"]) for r in before) == 336
     assert "TOTAL races=%d cells=%d" % (93 + len(algos), 336 + sum(len(r["arms"]) for r in algos)) in text
-    assert "family algos" in text and "not built yet: SKIPPED" in text
+    assert "family algos" in text
+    # every algos race names whether its class is in the source tree (once every
+    # lane has merged its classes, no race reads "not built yet")
+    algo_lines = [ln for ln in text.splitlines() if ln.startswith("RACE algos/")]
+    assert algo_lines and all("[in source]" in ln or "not built yet: SKIPPED" in ln
+                              for ln in algo_lines)
     assert "ours-cpu: off (--no-cpu-arm)" in text
     assert "family neural     races=16 cells=76" in text
     assert "ours-ab[fast]" in text and "ours-fast[fast]" in text
