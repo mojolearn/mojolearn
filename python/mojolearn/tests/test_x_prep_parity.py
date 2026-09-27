@@ -177,3 +177,23 @@ if __name__ == "__main__":
               test_target_encoder_cv_categories, test_nb_partial_fit):
         t()
         print("PASS", t.__name__)
+
+
+def test_kbins_quantile_methods():
+    import sklearn.preprocessing as sk
+    rng = np.random.default_rng(8)
+    X = np.round(rng.standard_normal((301, 3)) * 4).astype(np.float32) / np.float32(4)
+    for meth in ("inverted_cdf", "closest_observation", "interpolated_inverted_cdf", "hazen", "weibull",
+                 "median_unbiased", "normal_unbiased", "linear", "averaged_inverted_cdf"):
+        for nb in (3, 5, 7):
+            m = ml.KBinsDiscretizer(n_bins=nb, encode="ordinal", quantile_method=meth).fit(X)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                r = sk.KBinsDiscretizer(n_bins=nb, encode="ordinal", quantile_method=meth).fit(X)
+            for a, b in zip(m.bin_edges_, r.bin_edges_):
+                np.testing.assert_allclose(np.asarray(a), b, rtol=1e-6, atol=1e-6, err_msg=f"{meth} {nb}")
+
+
+if __name__ == "__main__":
+    test_kbins_quantile_methods()
+    print("PASS test_kbins_quantile_methods")

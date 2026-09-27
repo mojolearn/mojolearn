@@ -1193,7 +1193,9 @@ def _gather_rows(arr, rows):
 
 class KBinsDiscretizer(_PrepBase):
     """sklearn.preprocessing.KBinsDiscretizer: strategy 'uniform', 'quantile'
-    (quantile_method 'averaged_inverted_cdf', the default, or 'linear') or
+    (every numpy quantile_method: 'averaged_inverted_cdf', the default,
+    'inverted_cdf', 'closest_observation', 'interpolated_inverted_cdf',
+    'hazen', 'weibull', 'linear', 'median_unbiased', 'normal_unbiased') or
     'kmeans' (1-D Lloyd from the uniform bin centres); encode 'onehot' (dense:
     there is no sparse Array), 'onehot-dense' or 'ordinal'. A constant column
     is one bin with edges (-inf, inf). Above `subsample` rows the fit uses a
@@ -1219,9 +1221,11 @@ class KBinsDiscretizer(_PrepBase):
             raise ValueError(f"mojolearn: invalid encode {self.encode!r}")
         strat = {"uniform": 0, "kmeans": 3}.get(self.strategy)
         if self.strategy == "quantile":
-            strat = {"averaged_inverted_cdf": 1, "linear": 2}.get(self.quantile_method)
+            strat = {"averaged_inverted_cdf": 1, "linear": 2, "inverted_cdf": 4, "closest_observation": 5,
+                     "interpolated_inverted_cdf": 6, "hazen": 7, "weibull": 8, "median_unbiased": 9,
+                     "normal_unbiased": 10}.get(self.quantile_method)
             if strat is None:
-                raise NotImplementedError(f"mojolearn: quantile_method {self.quantile_method!r} is not implemented")
+                raise ValueError(f"mojolearn: invalid quantile_method {self.quantile_method!r}")
         if strat is None:
             raise ValueError(f"mojolearn: invalid strategy {self.strategy!r}")
         arr = _x2d(X)

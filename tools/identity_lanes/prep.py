@@ -730,3 +730,20 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("predict", "predict_proba", sl=slice(0, 256)), "x-prep-nb-partial")
+
+
+@lane("x-prep-kbins-methods")
+def _(ml, X, yc, yr, Xh=None):
+    """KBinsDiscretizer quantile_method: every numpy method besides the two
+    the x-prep-kbins lane runs, on a tie-heavy (quarter-rounded) fixture."""
+    Xr = np.round(X[:2001] * 4).astype(np.float32) / np.float32(4)
+    parts = {}
+    for meth in ("inverted_cdf", "closest_observation", "interpolated_inverted_cdf", "hazen", "weibull",
+                 "median_unbiased", "normal_unbiased"):
+        m = ml.KBinsDiscretizer(n_bins=7, encode="ordinal", quantile_method=meth).fit(Xr)
+        parts[meth] = _h(*m.bin_edges_, m.transform(X[:256]))
+    m = ml.KBinsDiscretizer(n_bins=6, quantile_method="hazen").fit(X)
+    return _fit(parts, m, lambda e: (e.transform(Xh[:256]),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-kbins-methods")

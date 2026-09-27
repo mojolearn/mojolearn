@@ -56,6 +56,7 @@ FAMILIES = (
             "x-prep-nb-partial",
             "x-prep-infrequent",
             "x-prep-label-binarizer-multilabel",
+            "x-prep-kbins-methods",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -137,6 +138,7 @@ TRAINING_LANE_NAMES = {
     "x-prep-label-binarizer-multilabel": "LabelBinarizer multilabel indicator y",
     "x-prep-infrequent": "OrdinalEncoder / OneHotEncoder infrequent categories, infrequent_if_exist / warn, drop=<list>",
     "x-prep-nb-partial": "naive Bayes partial_fit",
+    "x-prep-kbins-methods": "KBinsDiscretizer quantile_method (every numpy method)",
     "x-prep-score-edges": "f_classif / chi2 NaN and inf score edges, f_regression / r_regression force_finite, RFE importance_getter",
 }
 PUBLIC_PENDING_LANES = {
@@ -181,4 +183,5 @@ PUBLIC_PENDING_LANES = {
     "x-prep-label-binarizer-multilabel": "no reference",
     "x-prep-infrequent": "no reference",
     "x-prep-nb-partial": "no reference",
+    "x-prep-kbins-methods": "no reference",
 }
