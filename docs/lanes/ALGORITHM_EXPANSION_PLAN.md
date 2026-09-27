@@ -72,6 +72,7 @@ messaging lanes. Newest items are at the top.
    `tools/apple_steward.py submit` ships identity requests there too while
    `tools/do_amd_steward.sh` has it up (push the commit to origin first), and
    a merge then needs m2pro PASS AND do-amd PASS (`apple_steward.py status`).
+   AMD speed phases: submit timing jobs with `apple_steward.py submit --kind speed --target do-amd` (or your own `<lane>-amd` box if you have one). Apple speed: `--target m3ultra`.
 1. **Order per lane, one phase per session:**
    - (a) every algorithm in the lane table and Additions (PASS 1)
    - (b) **proof** on every column (per-seam, `--pass 2`, both stewards)

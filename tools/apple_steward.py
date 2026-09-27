@@ -24,13 +24,17 @@ ON THE LAPTOP (a lane's agent):
       then fetched into the steward clone), then copies the request and the
       patch into BOTH Macs' queues over ssh
   apple_steward.py submit --kind speed --lane linear --commit <sha> \\
-      --builds bindings/build_glm.sh --cmd 'pixi run -e default python bench/x.py' [--mode fast]
-      a SPEED job, for the M3 Ultra ONLY (MOJOLEARN_STEWARD_SPEED): its steward
-      runs the builds, then the timing command with nothing else on its Metal
-      queue (a busy Mac requeues the job; another job appearing during the
-      timing fails it), and records stdout, stderr and every wall time in the
-      verdict dir. While the M3 Ultra is deferred, speed jobs spool on the
-      laptop exactly like identity requests; flush-deferred pushes and ships them.
+      --builds bindings/build_glm.sh --cmd 'pixi run -e default python bench/x.py' [--mode fast] \
+      [--target m3ultra|do-amd|both]
+      a SPEED job, for the timing Mac (the M3 Ultra, MOJOLEARN_STEWARD_SPEED)
+      and/or the AMD steward do-amd (--target; default both, or m3ultra alone
+      while do-amd is down): the steward runs the builds, then the timing
+      command with nothing else on its GPU (a busy box requeues the job;
+      another job appearing during the timing fails it), and records stdout,
+      stderr and every wall time in the verdict dir. On do-amd a speed job and
+      the identity requests share the one queue, FIFO. While the M3 Ultra is
+      deferred, its copy spools on the laptop exactly like identity requests;
+      flush-deferred pushes and ships them.
   apple_steward.py status [--json]
       collects the verdicts over ssh from every Mac that is not deferred; one
       line per request: PASS (every gating Mac passed), FAIL (any Mac that
@@ -47,7 +51,11 @@ IDENTITY request to it as well (ssh as root, no cloudmac.sh), and `status`
 counts it as GATING for every request it received: a lane merges on m2pro
 PASS and do-amd PASS. The droplet fetches the submitted sha from GitHub
 (`git fetch --depth=1 origin <sha>`), so the commit must be pushed to origin
-(the lane's branch) before `submit`. Speed jobs never go to it. On AMD the
+(the lane's branch) before `submit`. Speed jobs go to it with --target do-amd
+or both (the AMD FAST and IDENTICAL speed phases); on the box a build that
+needs one explicit GPU arch (bindings/build_byte_lm.sh) gets
+MOJOLEARN_GPU_ARCHS from the device (bincache.device_arch: gfx942), and a
+*_host.sh build never gets one. On AMD the
 check compares NUMBERS (CPU == AMD); never .so digests.
 
 ON EACH CLOUD MAC (started by the orchestrator, one per Mac):
@@ -191,7 +199,12 @@ def submit(a):
             if not (b.startswith("bindings/") and b.endswith(".sh")) or ".." in b:
                 sys.exit(f"--builds takes bindings/build_*.sh scripts, not {b!r}")
         req.update(builds=builds, cmd=a.cmd, mode=a.mode or "")
-        macs = SPEED
+        amd = _amd_live()
+        target = a.target or ("both" if amd else "m3ultra")
+        if target != "m3ultra" and not amd:
+            sys.exit(f"--target {target}: the do-amd steward is not up (no {AMD_STATE}); "
+                     f"start it with tools/do_amd_steward.sh up, or use --target m3ultra")
+        macs = {"m3ultra": SPEED, "do-amd": amd, "both": SPEED + amd}[target]
     req["stewards"] = list(macs)
     body = json.dumps(req, indent=2).encode()
     for mac in macs:
@@ -281,7 +294,11 @@ def status(a):
         speed = _is_speed(name)
         # the AMD steward gates every identity request it received
         amd = tuple(m for m in _amd_live() if name in per.get(m, {}))
-        macs, gating = (SPEED, SPEED) if speed else (MACS + amd, GATING + amd)
+        if speed:   # the stewards it was sent to: the timing Mac and/or do-amd
+            macs = tuple(m for m in SPEED + _amd_live() if name in per.get(m, {})) or SPEED
+            gating = macs
+        else:
+            macs, gating = MACS + amd, GATING + amd
         states = {mac: per[mac].get(name, "DEFERRED" if mac in DEFERRED else "missing") for mac in macs}
         verdicts = {m: s for m, s in states.items() if isinstance(s, dict)}
         if any(v.get("result") == "FAIL" for v in verdicts.values()):
@@ -389,7 +406,8 @@ FOREIGN = ("lm_segment", "algos_lane_check", "identity_break.py", "mac_slot.sh",
 def _metal_busy():
     """Other jobs on this Mac that would share the Metal queue or the CPU with
     a timing run: [(pid, command)], this steward's own ancestry excluded."""
-    ps = subprocess.run(["ps", "-axo", "pid=,ppid=,command="], capture_output=True, text=True).stdout
+    fmt = ["-axo", "pid=,ppid=,command="] if sys.platform == "darwin" else ["-eo", "pid=,ppid=,args="]
+    ps = subprocess.run(["ps"] + fmt, capture_output=True, text=True).stdout
     procs = {}
     for line in ps.splitlines():
         parts = line.strip().split(None, 2)
@@ -400,7 +418,7 @@ def _metal_busy():
         mine.add(p)
         p = procs[p][0]
     return [(pid, c[:160]) for pid, (_, c) in sorted(procs.items())
-            if pid not in mine and any(f in c for f in FOREIGN) and "ps -axo" not in c]
+            if pid not in mine and any(f in c for f in FOREIGN) and not c.startswith("ps ")]
 
 
 def _pixi():
@@ -408,13 +426,33 @@ def _pixi():
     return shutil.which("pixi") or str(Path.home() / ".pixi" / "bin" / "pixi")
 
 
+#: Linux build scripts that refuse to build without ONE explicit GPU arch
+NEEDS_ARCH = ("bindings/build_byte_lm.sh",)
+
+
+def _build_env(script, env):
+    """A *_host.sh build never gets MOJOLEARN_GPU_ARCHS (a CPU build takes
+    none); on Linux a script in NEEDS_ARCH gets this box's own arch
+    (bincache.device_arch, gfx942 on do-amd) unless the job's env names one."""
+    env = dict(env)
+    if script.endswith("_host.sh"):
+        env.pop("MOJOLEARN_GPU_ARCHS", None)
+    elif script in NEEDS_ARCH and sys.platform != "darwin" and not env.get("MOJOLEARN_GPU_ARCHS"):
+        sys.path.insert(0, str(TOOLS))
+        import bincache
+        arch = bincache.device_arch()
+        if arch != "none":
+            env["MOJOLEARN_GPU_ARCHS"] = arch
+    return env
+
+
 class Busy(Exception):
     pass
 
 
 def speed(req, wt, out, log, verdict, finish):
-    """A SPEED job (M3 Ultra only): the builds, then the timing command, with
-    nothing else on this Mac's Metal queue. stdout and every wall time go to
+    """A SPEED job (the M3 Ultra or do-amd): the builds, then the timing
+    command, with nothing else on this box's GPU. stdout and every wall time go to
     the verdict dir; the result is PASS when every step exited 0 and no other
     job appeared while the command was timed."""
     busy = _metal_busy()
@@ -429,11 +467,12 @@ def speed(req, wt, out, log, verdict, finish):
     t_all = time.time()
     for script in req.get("builds", []):
         t0 = time.time()
+        benv = _build_env(script, env)
         with open(log, "a") as f:
-            f.write(f"\n$ pixi run -e default sh {script}\n")
+            f.write(f"\n$ MOJOLEARN_GPU_ARCHS={benv.get('MOJOLEARN_GPU_ARCHS', '')} pixi run -e default sh {script}\n")
             f.flush()
             # in the pixi default environment, as tools/algos_lane_check.sh builds
-            rc = subprocess.run([_pixi(), "run", "-e", "default", "sh", script], cwd=wt, env=env, stdout=f,
+            rc = subprocess.run([_pixi(), "run", "-e", "default", "sh", script], cwd=wt, env=benv, stdout=f,
                                 stderr=subprocess.STDOUT, timeout=3 * 3600).returncode
         timing["builds"].append({"script": script, "rc": rc, "wall_s": round(time.time() - t0, 3)})
         if rc:
@@ -494,7 +533,7 @@ def main(argv=None):
     s.add_argument("--lane", required=True, help="the expansion lane (linear, ..., ann)")
     s.add_argument("--commit", required=True, help="a commit pushed to origin")
     s.add_argument("--kind", choices=("identity", "speed"), default="identity",
-                   help="identity (both Macs, m2pro gates) or speed (m3ultra ONLY; spooled while it is deferred)")
+                   help="identity (both Macs, m2pro gates) or speed (--target m3ultra|do-amd|both; m3ultra spools while deferred)")
     s.add_argument("--verify-lanes", help="identity: comma separated identity lanes")
     s.add_argument("--sabotage", help="identity: a SOURCE patch that must make the check DISAGREE")
     s.add_argument("--pass", dest="pass_no", type=int, choices=(1, 2), default=2,
@@ -503,6 +542,9 @@ def main(argv=None):
     s.add_argument("--builds", help="speed: comma separated bindings/build_*.sh, run before the timing")
     s.add_argument("--cmd", help="speed: the timing command, run in the worktree at the commit (sh -c)")
     s.add_argument("--mode", choices=("identical", "fast"), help="speed: MOJOLEARN_NUMERIC_MODE for builds and cmd")
+    s.add_argument("--target", choices=("m3ultra", "do-amd", "both"),
+                   help="speed: the timing Mac, the AMD steward, or both (default: both while do-amd is up, "
+                        "else m3ultra)")
     s.set_defaults(fn=submit)
     st = sub.add_parser("status", help="laptop: verdicts; PASS when every gating Mac (m2pro) passed")
     st.add_argument("--json", action="store_true")

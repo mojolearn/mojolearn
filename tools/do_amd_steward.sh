@@ -14,6 +14,7 @@
 #   tools/do_amd_steward.sh extend [minutes]   the heartbeat: moves BOTH deadlines (on-droplet
 #                                           self-destruct and Mac dead-man) to now + minutes
 #   tools/do_amd_steward.sh update          the droplet's tree to origin/main, steward restarted
+#                                           (waits for the running request; the queue is held)
 #   tools/do_amd_steward.sh ssh <command>   one command on the droplet, as root
 #   tools/do_amd_steward.sh status          droplet, deadlines, service, queue
 #   tools/do_amd_steward.sh down            DELETE, verify 404, disarm, release the lock
@@ -267,9 +268,21 @@ extend)
     say "extended droplet $DROPLET_ID by ${minutes} min (on-droplet self-destruct and Mac dead-man)"
     ;;
 update)
+    # Never restart under a running request (a killed check leaves its
+    # request stranded in working/ and possibly a sabotage applied): hold the
+    # queue in queue/held/, wait for working/ to empty, update, restart,
+    # release the held requests (FIFO order is their names, so it is kept).
     load_state
+    Qd=/root/mojolearn-evidence/apple-steward
+    say "holding the queue and waiting for the running request to finish"
+    bx 21600 "mkdir -p $Qd/queue/held; while :; do
+  for f in $Qd/queue/[0-9]*.json; do [ -f \"\$f\" ] && mv \"\$f\" $Qd/queue/held/; done
+  ls $Qd/working/[0-9]*.json > /dev/null 2>&1 || break
+  sleep 15
+done; echo IDLE" < /dev/null | grep -qx IDLE || die "the steward did not go idle; the queue is held in $Qd/queue/held (move it back by hand)"
     tree_to "$(git -C "$ROOT" rev-parse origin/main)"
-    bx 60 'systemctl restart mojolearn-steward.service; sleep 3; systemctl is-active mojolearn-steward.service' < /dev/null
+    bx 60 "for f in $Qd/queue/held/[0-9]*.json; do [ -f \"\$f\" ] && mv \"\$f\" $Qd/queue/; done; rmdir $Qd/queue/held
+systemctl restart mojolearn-steward.service; sleep 3; systemctl is-active mojolearn-steward.service" < /dev/null
     ;;
 ssh)
     load_state; [ $# -gt 0 ] || die "ssh needs a command"
