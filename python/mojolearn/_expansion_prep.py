@@ -32,7 +32,7 @@ from ._array import Array
 from ._buffer import as_f32_c, addr_ro
 from ._labels import flatten_labels, sorted_classes, label_kind
 
-__all__ = ["f_classif", "f_regression", "chi2", "RobustScaler", "MaxAbsScaler", "OrdinalEncoder", "OneHotEncoder", "TargetEncoder", "SimpleImputer", "KBinsDiscretizer",
+__all__ = ["f_classif", "f_regression", "chi2", "mutual_info_classif", "mutual_info_regression", "RobustScaler", "MaxAbsScaler", "OrdinalEncoder", "OneHotEncoder", "TargetEncoder", "SimpleImputer", "KBinsDiscretizer",
            "GaussianNB", "MultinomialNB", "BernoulliNB",
            "LinearDiscriminantAnalysis", "QuadraticDiscriminantAnalysis",
            "QuantileTransformer", "PowerTransformer", "Normalizer", "PolynomialFeatures", "SplineTransformer", "Binarizer", "LabelEncoder", "LabelBinarizer", "MultiLabelBinarizer", "IterativeImputer", "VarianceThreshold", "SelectKBest"]
@@ -49,6 +49,7 @@ _OPS = dict(
     lda_prep=36, lda_w=37, lda_stage2=38, lda_stage3=39, qda_cov=40, qda_prep=41, qda_dec=42,
     qt_apply=43, pt_fit=44, pt_apply=45, std_params=46, normalize=47, poly=48, spline_knots=49, spline_apply=50, label_binarize=51, scatter_ones=52,
     ii_mean=53, ii_gram=54, ii_sub=55, ii_br=56, ii_predict=57, ii_snapshot=58, ii_conv=59, nan_mask=60, gather_cols=61, var_ptp=62, f_classif=63, f_regression=64, chi2=65,
+    mi_colscale=66, mi_noise=67, mi_cc=68, mi_cd=69, mi_reduce=70,
 )
 _PARAMS = 14
 _NONE = -1
@@ -2078,3 +2079,61 @@ class SelectKBest(_SelectorMixin):
 
     def fit_transform(self, X, y=None, **fit_params):
         return self.fit(X, y).transform(X)
+
+
+def _mutual_info(X, y, discrete_target, discrete_features, n_neighbors, random_state):
+    if discrete_features not in ("auto", False):
+        raise NotImplementedError("mojolearn: mutual_info with discrete features is not implemented "
+                                  "(dense X: discrete_features='auto' or False)")
+    k = int(n_neighbors)
+    if not 1 <= k <= 32:
+        raise NotImplementedError("mojolearn: mutual_info supports 1 <= n_neighbors <= 32")
+    arr = _x2d(X)
+    n, d = arr.shape
+    seed = 0 if random_state is None else int(random_state) & 0x3FFFFFFF
+    pr = _Prog()
+    xo = pr.put(arr)
+    st, sc, ma, z = pr.alloc(6 * d), pr.alloc(d), pr.alloc(d), pr.alloc(n * d)
+    pr.stage("col_stats", d, xo, n, d, st)
+    pr.stage("mi_colscale", d, xo, n, d, st, sc, ma)
+    pr.stage("mi_noise", n * d, xo, n, d, sc, ma, 2 * seed, z)
+    term, out = pr.alloc(n * d), pr.alloc(d)
+    if discrete_target:
+        classes, codes = encode_labels(y)
+        if codes.size != n:
+            raise ValueError("mojolearn: X and y have different numbers of rows")
+        counts = _class_counts(codes, len(classes))
+        used = sum(c for c in counts if c > 1)
+        yo, lc = pr.put_codes(codes), pr.put_list(counts)
+        pr.stage("mi_cd", n * d, z, n, d, yo, lc, k, term)
+        pr.stage("mi_reduce", d, term, n, d, 1, k, used, out)
+    else:
+        yv = as_f32_c(y, ndim=1, name="y")[0]
+        if yv.size != n:
+            raise ValueError("mojolearn: X and y have different numbers of rows")
+        yo = pr.put(yv)
+        sty, scy, may, zy = pr.alloc(6), pr.alloc(1), pr.alloc(1), pr.alloc(n)
+        pr.stage("col_stats", 1, yo, n, 1, sty)
+        pr.stage("mi_colscale", 1, yo, n, 1, sty, scy, may)
+        pr.stage("mi_noise", n, yo, n, 1, scy, may, 2 * seed + 1, zy)
+        pr.stage("mi_cc", n * d, z, n, d, zy, k, term)
+        pr.stage("mi_reduce", d, term, n, d, 0, k, n, out)
+    pr.run(_mode())
+    return pr.get(out, d)
+
+
+def mutual_info_classif(X, y, *, discrete_features="auto", n_neighbors=3, copy=True, random_state=None,
+                        n_jobs=None):
+    """sklearn.feature_selection.mutual_info_classif for dense continuous X:
+    Ross's k-NN estimator against the classes, float32, brute-force
+    neighbour scans on the device. The tie-breaking noise is drawn from
+    random_state by splitmix64 (the reference draws numpy's)."""
+    return _mutual_info(X, y, True, discrete_features, n_neighbors, random_state)
+
+
+def mutual_info_regression(X, y, *, discrete_features="auto", n_neighbors=3, copy=True, random_state=None,
+                           n_jobs=None):
+    """sklearn.feature_selection.mutual_info_regression for dense continuous
+    X: the Kraskov k-NN estimator, float32, brute-force neighbour scans on
+    the device; noise from random_state by splitmix64."""
+    return _mutual_info(X, y, False, discrete_features, n_neighbors, random_state)

@@ -53,3 +53,22 @@ def test_scores_and_kbest():
 if __name__ == "__main__":
     test_scores_and_kbest()
     print("PASS test_x_prep_selection (kbest)")
+
+
+def test_mutual_info():
+    rng = np.random.default_rng(5)
+    n, d = 500, 4
+    y = rng.integers(0, 3, n)
+    X = (rng.standard_normal((n, d)) + y[:, None] * np.array([0.0, 0.3, 1.0, 2.0])).astype(np.float32)
+    yr = (X[:, 2] + 0.5 * rng.standard_normal(n)).astype(np.float32)
+    a = np.asarray(ml.mutual_info_classif(X, y, random_state=0))
+    b = skfs.mutual_info_classif(X, y, random_state=0)
+    np.testing.assert_allclose(a, b, atol=3e-3)
+    a = np.asarray(ml.mutual_info_regression(X, yr, random_state=0))
+    b = skfs.mutual_info_regression(X, yr, random_state=0)
+    np.testing.assert_allclose(a, b, atol=3e-3)
+
+
+if __name__ == "__main__":
+    test_mutual_info()
+    print("PASS test_x_prep_selection (mutual info)")

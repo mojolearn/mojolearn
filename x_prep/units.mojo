@@ -24,11 +24,12 @@ from x_prep.iterative import (
     nan_mask_unit,
 )
 from x_prep.stats import f_classif_unit, f_regression_unit, chi2_unit
+from x_prep.mutual_info import mi_colscale_unit, mi_noise_unit, mi_cc_unit, mi_cd_unit, mi_reduce_unit
 from naive_bayes.da import (
     lda_prep_unit, lda_w_unit, lda_stage2_unit, lda_stage3_unit, qda_cov_unit, qda_prep_unit, qda_dec_unit,
 )
 
-comptime N_OPS = 66
+comptime N_OPS = 71
 
 
 @always_inline
@@ -165,3 +166,13 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
         f_regression_unit(t, f, q)
     comptime if OP == 65:
         chi2_unit(t, f, q)
+    comptime if OP == 66:
+        mi_colscale_unit(t, f, q)
+    comptime if OP == 67:
+        mi_noise_unit(t, f, q)
+    comptime if OP == 68:
+        mi_cc_unit(t, f, q)
+    comptime if OP == 69:
+        mi_cd_unit(t, f, q)
+    comptime if OP == 70:
+        mi_reduce_unit(t, f, q)
