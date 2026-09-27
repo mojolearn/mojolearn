@@ -1,0 +1,11 @@
+--- a/x_prep/prims.mojo
++++ b/x_prep/prims.mojo
+@@ -99,7 +99,7 @@
+     var hi = Float32(0)
+     var ma = Float32(0)
+     for i in range(n):
+-        var v = ld(f, X + i * d + c)
++        var v = ld(f, X + (n - 1 - i) * d + c)  # SABOTAGE 5400
+         if is_nan(v):
+             continue
+         if cnt == 0:

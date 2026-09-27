@@ -1,0 +1,11 @@
+--- a/x_prep/common.mojo
++++ b/x_prep/common.mojo
+@@ -42,7 +42,7 @@
+ @always_inline
+ def ld(f: FP, i: Int) -> Float32:
+     """DEVIATION 5408: every float operand a unit loads is flushed."""
+-    return ftz(f.unsafe_load(i))
++    return f.unsafe_load(i)  # SABOTAGE 5408
+ 
+ 
+ @always_inline

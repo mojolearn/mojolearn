@@ -21,7 +21,9 @@ as a GATHER per input pixel over (kh, kw) ascending (the one atomic hazard
 of the backward pass, DEVIATION 5700). The weight-gradient reduction is the
 pinned GEMM's (TN over the N*OH*OW rows, DEVIATION 5701).
 """
-from checks.numerics import ftz, identical_div, identical_mul, identical_exp, identical_log
+from std.memory import bitcast
+from core.philox import philox4x32_10
+from checks.numerics import ftz, identical_div, identical_mul, identical_exp, identical_log, identical_rsqrt
 
 comptime FP = MutPointer[Float32, MutAnyOrigin]
 comptime IP = MutPointer[Int32, MutAnyOrigin]
@@ -50,6 +52,16 @@ comptime CP_BIAS = 15
 #: device sabotage patch set it; production callers leave it 0.
 comptime CP_REV = 16
 comptime CP_LEN = 17
+
+
+@always_inline
+def canon(v: Float32) -> Float32:
+    """Clause B: a NaN leaves this lane as ONE word, 0x7FC00000, never as a
+    vendor's payload (NVIDIA writes 0x7FFFFFFF, x86 0xFFC00000). Applied to
+    every value a trainer-path element function stores (DEVIATION 5705)."""
+    if v != v:
+        return bitcast[DType.float32](UInt32(0x7FC00000))
+    return v
 
 
 @always_inline
@@ -121,7 +133,7 @@ def conv_out_at(i: Int, y2: FP, bias: FP, dst: FP, f3: FP, q: IP, p: IP):
     var v = ftz(y2.unsafe_load(r * OC + oc))
     if _g(p, CP_BIAS) != 0:
         v = ftz(v + ftz(bias.unsafe_load(oc)))
-    dst.unsafe_store(i, v)
+    dst.unsafe_store(i, canon(v))
 
 
 @always_inline
@@ -177,3 +189,518 @@ def col2im_at(i: Int, dcols: FP, dx: FP, f2: FP, f3: FP, q: IP, p: IP):
 @always_inline
 def fill_one_at(i: Int, dst: FP, f1: FP, f2: FP, f3: FP, q: IP, p: IP):
     dst.unsafe_store(i, Float32(1))
+
+
+# ---------------------------------------------------------------- pooling
+# The Int32 block of a pooling layer (pool_params fills 12 and 13):
+comptime PP_N = 0
+comptime PP_C = 1
+comptime PP_H = 2
+comptime PP_W = 3
+comptime PP_KH = 4
+comptime PP_KW = 5
+comptime PP_SH = 6
+comptime PP_SW = 7
+comptime PP_PH = 8
+comptime PP_PW = 9
+comptime PP_DH = 10
+comptime PP_DW = 11
+comptime PP_OH = 12
+comptime PP_OW = 13
+#: AvgPool's count_include_pad (PyTorch's default True).
+comptime PP_INCPAD = 14
+#: 1 reverses the backward gathers' (kh) order (sabotage only).
+comptime PP_REV = 15
+comptime PP_LEN = 16
+
+
+def pool_params(raw: List[Int]) raises -> List[Int32]:
+    """Validate and fill OH, OW (floor mode; ceil_mode is refused at the API)."""
+    if len(raw) < PP_INCPAD + 1:
+        raise Error("x_cnn: pool params need 15 entries")
+    for k in range(PP_OH):
+        if raw[k] < 0:
+            raise Error("x_cnn: negative pool parameter")
+    var positive: List[Int] = [PP_N, PP_C, PP_H, PP_W, PP_KH, PP_KW, PP_SH, PP_SW, PP_DH, PP_DW]
+    for k in positive:
+        if raw[k] <= 0:
+            raise Error("x_cnn: pool dimensions, stride and dilation must be positive")
+    if 2 * raw[PP_PH] > raw[PP_KH] or 2 * raw[PP_PW] > raw[PP_KW]:
+        raise Error("x_cnn: pad should be at most half of the kernel size (PyTorch's rule)")
+    var oh = (raw[PP_H] + 2 * raw[PP_PH] - raw[PP_DH] * (raw[PP_KH] - 1) - 1) // raw[PP_SH] + 1
+    var ow = (raw[PP_W] + 2 * raw[PP_PW] - raw[PP_DW] * (raw[PP_KW] - 1) - 1) // raw[PP_SW] + 1
+    if oh <= 0 or ow <= 0:
+        raise Error("x_cnn: the pooling window does not fit the padded input")
+    var out = List[Int32](capacity=PP_LEN)
+    for k in range(PP_LEN):
+        out.append(Int32(raw[k]) if k < len(raw) else Int32(0))
+    out[PP_OH] = Int32(oh)
+    out[PP_OW] = Int32(ow)
+    return out^
+
+
+@always_inline
+def maxpool_fwd_at(i: Int, x: FP, dst: FP, f2: FP, f3: FP, idx: IP, p: IP):
+    """out[n, c, oh, ow] = the max over the window, taps in (kh, kw)
+    ascending order; the FIRST maximum wins a tie (strict >, so -0.0 and
+    +0.0 keep whichever came first), a NaN wins (PyTorch's `val > max ||
+    isnan(val)`). idx is the flat h*W + w of the winner."""
+    var H = _g(p, PP_H); var W = _g(p, PP_W)
+    var KH = _g(p, PP_KH); var KW = _g(p, PP_KW)
+    var OH = _g(p, PP_OH); var OW = _g(p, PP_OW)
+    var ow = i % OW
+    var t = i // OW
+    var oh = t % OH
+    var nc = t // OH
+    var base = nc * H * W
+    var best = Float32(0)
+    var bi = -1
+    for kh in range(KH):
+        var h = oh * _g(p, PP_SH) - _g(p, PP_PH) + kh * _g(p, PP_DH)
+        if h < 0 or h >= H:
+            continue
+        for kw in range(KW):
+            var w = ow * _g(p, PP_SW) - _g(p, PP_PW) + kw * _g(p, PP_DW)
+            if w < 0 or w >= W:
+                continue
+            var v = ftz(x.unsafe_load(base + h * W + w))
+            if bi < 0 or v > best or v != v:
+                best = v
+                bi = h * W + w
+    dst.unsafe_store(i, best)
+    idx.unsafe_store(i, Int32(bi))
+
+
+@always_inline
+def maxpool_bwd_at(i: Int, dout: FP, dx: FP, f2: FP, f3: FP, idx: IP, p: IP):
+    """dx[n, c, h, w] = the sum of dout over every window whose winner is
+    this pixel, gathered in (kh, kw) ascending order from +0.0."""
+    var H = _g(p, PP_H); var W = _g(p, PP_W)
+    var KH = _g(p, PP_KH); var KW = _g(p, PP_KW)
+    var OH = _g(p, PP_OH); var OW = _g(p, PP_OW)
+    var SH = _g(p, PP_SH); var SW = _g(p, PP_SW)
+    var PH = _g(p, PP_PH); var PW = _g(p, PP_PW)
+    var DH = _g(p, PP_DH); var DW = _g(p, PP_DW)
+    var w = i % W
+    var t = i // W
+    var h = t % H
+    var nc = t // H
+    var me = Int32(h * W + w)
+    var acc = Float32(0)
+    for a in range(KH):
+        var kh = KH - 1 - a if _g(p, PP_REV) != 0 else a
+        var th = h + PH - kh * DH
+        if th < 0 or th % SH != 0:
+            continue
+        var oh = th // SH
+        if oh >= OH:
+            continue
+        for kw in range(KW):
+            var tw = w + PW - kw * DW
+            if tw < 0 or tw % SW != 0:
+                continue
+            var ow = tw // SW
+            if ow >= OW:
+                continue
+            var o = (nc * OH + oh) * OW + ow
+            if idx.unsafe_load(o) == me:
+                acc = ftz(acc + ftz(dout.unsafe_load(o)))
+    dx.unsafe_store(i, acc)
+
+
+@always_inline
+def _avg_divisor(oh: Int, ow: Int, p: IP) -> Int:
+    """PyTorch AvgPool2d's divisor (floor mode): the window clipped to the
+    padded input, or to the input itself when count_include_pad is 0."""
+    var H = _g(p, PP_H); var W = _g(p, PP_W)
+    var PH = _g(p, PP_PH); var PW = _g(p, PP_PW)
+    var hs = oh * _g(p, PP_SH) - PH
+    var ws = ow * _g(p, PP_SW) - PW
+    var he = min(hs + _g(p, PP_KH), H + PH)
+    var we = min(ws + _g(p, PP_KW), W + PW)
+    if _g(p, PP_INCPAD) != 0:
+        return (he - hs) * (we - ws)
+    return (min(he, H) - max(hs, 0)) * (min(we, W) - max(ws, 0))
+
+
+@always_inline
+def avgpool_fwd_at(i: Int, x: FP, dst: FP, f2: FP, f3: FP, q: IP, p: IP):
+    """out = (the window's sum in (kh, kw) ascending order) / divisor."""
+    var H = _g(p, PP_H); var W = _g(p, PP_W)
+    var KH = _g(p, PP_KH); var KW = _g(p, PP_KW)
+    var OH = _g(p, PP_OH); var OW = _g(p, PP_OW)
+    var ow = i % OW
+    var t = i // OW
+    var oh = t % OH
+    var nc = t // OH
+    var base = nc * H * W
+    var acc = Float32(0)
+    for kh in range(KH):
+        var h = oh * _g(p, PP_SH) - _g(p, PP_PH) + kh
+        if h < 0 or h >= H:
+            continue
+        for kw in range(KW):
+            var w = ow * _g(p, PP_SW) - _g(p, PP_PW) + kw
+            if w < 0 or w >= W:
+                continue
+            acc = ftz(acc + ftz(x.unsafe_load(base + h * W + w)))
+    dst.unsafe_store(i, ftz(identical_div(acc, Float32(_avg_divisor(oh, ow, p)))))
+
+
+@always_inline
+def avgpool_bwd_at(i: Int, dout: FP, dx: FP, f2: FP, f3: FP, q: IP, p: IP):
+    """dx[n, c, h, w] = the sum over every window holding this pixel of
+    dout / divisor, gathered in (kh, kw) ascending order from +0.0."""
+    var H = _g(p, PP_H); var W = _g(p, PP_W)
+    var KH = _g(p, PP_KH); var KW = _g(p, PP_KW)
+    var OH = _g(p, PP_OH); var OW = _g(p, PP_OW)
+    var SH = _g(p, PP_SH); var SW = _g(p, PP_SW)
+    var PH = _g(p, PP_PH); var PW = _g(p, PP_PW)
+    var w = i % W
+    var t = i // W
+    var h = t % H
+    var nc = t // H
+    var acc = Float32(0)
+    for a in range(KH):
+        var kh = KH - 1 - a if _g(p, PP_REV) != 0 else a
+        var th = h + PH - kh
+        if th < 0 or th % SH != 0:
+            continue
+        var oh = th // SH
+        if oh >= OH:
+            continue
+        for kw in range(KW):
+            var tw = w + PW - kw
+            if tw < 0 or tw % SW != 0:
+                continue
+            var ow = tw // SW
+            if ow >= OW:
+                continue
+            var o = (nc * OH + oh) * OW + ow
+            var g = ftz(identical_div(ftz(dout.unsafe_load(o)), Float32(_avg_divisor(oh, ow, p))))
+            acc = ftz(acc + g)
+    dx.unsafe_store(i, acc)
+
+
+# ---------------------------------------------------------------- trainer ops
+# Parameter blocks: bias rows / linear [rows, in, out]; softmax [n, k];
+# sgd [count] with the floats [lr, momentum, weight_decay] in f3.
+
+
+@always_inline
+def relu_fwd_at(i: Int, x: FP, f1: FP, dst: FP, f3: FP, q: IP, p: IP):
+    var v = ftz(x.unsafe_load(i))
+    dst.unsafe_store(i, v if v > Float32(0) else Float32(0))
+
+
+@always_inline
+def relu_bwd_at(i: Int, x: FP, g: FP, dx: FP, f3: FP, q: IP, p: IP):
+    """dx = g where x > 0, else +0.0 (PyTorch's threshold_backward)."""
+    var v = ftz(x.unsafe_load(i))
+    dx.unsafe_store(i, ftz(g.unsafe_load(i)) if v > Float32(0) else Float32(0))
+
+
+@always_inline
+def add_at(i: Int, a: FP, b: FP, dst: FP, f3: FP, q: IP, p: IP):
+    dst.unsafe_store(i, canon(ftz(ftz(a.unsafe_load(i)) + ftz(b.unsafe_load(i)))))
+
+
+@always_inline
+def bias_rows_at(i: Int, y: FP, bias: FP, dst: FP, f3: FP, q: IP, p: IP):
+    """dst[r, j] = y[r, j] + bias[j]; p[2] is the row width."""
+    var cols = _g(p, 2)
+    dst.unsafe_store(i, canon(ftz(ftz(y.unsafe_load(i)) + ftz(bias.unsafe_load(i % cols)))))
+
+
+@always_inline
+def softmax_xent_row_at(i: Int, logits: FP, grad: FP, proba: FP, rowloss: FP, labels: IP, p: IP):
+    """Row i of softmax + mean cross entropy (PyTorch F.cross_entropy,
+    reduction='mean'): proba = exp(l - max) / sum, in column order; grad =
+    (proba - onehot) / n; rowloss = log(sum) - (l[y] - max). A label < 0
+    writes proba only. The mean of rowloss is folded by the caller in row
+    order (`seq_mean`).
+
+    DEVIATION 5705 (Clause B): a row whose max is +inf is where the
+    reference computes inf - inf = NaN. Here it is the limit: the +inf
+    logits share the mass equally, the rest get +0.0; the loss is +0.0 when
+    the label is one of them, else +inf. Any other NaN (a NaN logit) is
+    stored as the canonical word."""
+    var n = _g(p, 0)
+    var k = _g(p, 1)
+    var base = i * k
+    var mx = ftz(logits.unsafe_load(base))
+    for j in range(1, k):
+        var v = ftz(logits.unsafe_load(base + j))
+        if v > mx:
+            mx = v
+    var y = Int(labels.unsafe_load(i))
+    var inf = bitcast[DType.float32](UInt32(0x7F800000))
+    if mx == inf:
+        var cnt = 0
+        for j in range(k):
+            if ftz(logits.unsafe_load(base + j)) == inf:
+                cnt += 1
+        var share = ftz(identical_div(Float32(1), Float32(cnt)))
+        for j in range(k):
+            var pr = share if ftz(logits.unsafe_load(base + j)) == inf else Float32(0)
+            proba.unsafe_store(base + j, pr)
+            if y >= 0:
+                var t = ftz(pr - Float32(1)) if j == y else pr
+                grad.unsafe_store(base + j, ftz(identical_div(t, Float32(n))))
+        if y >= 0:
+            rowloss.unsafe_store(i, Float32(0) if ftz(logits.unsafe_load(base + y)) == inf else inf)
+        return
+    var s = Float32(0)
+    for j in range(k):
+        s = ftz(s + ftz(identical_exp(ftz(ftz(logits.unsafe_load(base + j)) - mx))))
+    for j in range(k):
+        var e = ftz(identical_exp(ftz(ftz(logits.unsafe_load(base + j)) - mx)))
+        var pr = canon(ftz(identical_div(e, s)))
+        proba.unsafe_store(base + j, pr)
+        if y >= 0:
+            var t = ftz(pr - Float32(1)) if j == y else pr
+            grad.unsafe_store(base + j, canon(ftz(identical_div(t, Float32(n)))))
+    if y >= 0:
+        var ly = ftz(ftz(logits.unsafe_load(base + y)) - mx)
+        rowloss.unsafe_store(i, canon(ftz(ftz(identical_log(s)) - ly)))
+
+
+def seq_mean(values: List[Float32], n: Int) -> Float32:
+    """The loss mean: a sequential fold in row order, then one division."""
+    var acc = Float32(0)
+    for i in range(n):
+        acc = ftz(acc + ftz(values[i]))
+    return canon(ftz(identical_div(acc, Float32(n))))
+
+
+@always_inline
+def sgd_at(i: Int, w: FP, g: FP, v: FP, hyper: FP, q: IP, p: IP):
+    """PyTorch SGD (dampening 0, nesterov False) with the momentum buffer
+    starting at +0.0: d = g + wd*w; v = momentum*v + d; w = w - lr*v."""
+    var lr = hyper.unsafe_load(0)
+    var mom = hyper.unsafe_load(1)
+    var wd = hyper.unsafe_load(2)
+    var wi = ftz(w.unsafe_load(i))
+    var d = ftz(g.unsafe_load(i))
+    if wd != Float32(0):
+        d = ftz(d + ftz(identical_mul(wd, wi)))
+    var vi = d
+    if mom != Float32(0):
+        vi = ftz(ftz(identical_mul(mom, ftz(v.unsafe_load(i)))) + d)
+        v.unsafe_store(i, canon(vi))
+    w.unsafe_store(i, canon(ftz(wi - ftz(identical_mul(lr, vi)))))
+
+
+
+# ---------------------------------------------------------------- batch norm
+# p = [N, C, HW]. One aux buffer per call: [eps, momentum] then seven
+# per-channel arrays at 2 + k*C: mean, var (biased), invstd, sum_g, sum_gx,
+# gamma, beta. Every per-channel reduction is ONE sequential fold over
+# (n, hw) in that order, one thread per channel: its partial count is 1 for
+# every shape and every core count (IDENTITY_PATHS row 7's rule; DEVIATION
+# 5702). PyTorch's reference (aten/src/ATen/native/cuda/Normalization.cuh)
+# uses Welford partials across a block, a schedule of its own.
+comptime BN_MEAN = 0
+comptime BN_VAR = 1
+comptime BN_INVSTD = 2
+comptime BN_SUMG = 3
+comptime BN_SUMGX = 4
+comptime BN_GAMMA = 5
+comptime BN_BETA = 6
+comptime BN_SLOTS = 7
+
+
+@always_inline
+def _bn(aux: FP, slot: Int, c: Int, C: Int) -> Int:
+    return 2 + slot * C + c
+
+
+@always_inline
+def bn_stats_at(c: Int, x: FP, aux: FP, f2: FP, f3: FP, q: IP, p: IP):
+    """Training statistics of channel c: mean, then the biased variance as a
+    second fold of (x - mean)^2, invstd = rsqrt(var + eps)."""
+    var N = _g(p, 0); var C = _g(p, 1); var HW = _g(p, 2)
+    var count = Float32(N * HW)
+    var acc = Float32(0)
+    for n in range(N):
+        var base = (n * C + c) * HW
+        for k in range(HW):
+            acc = ftz(acc + ftz(x.unsafe_load(base + k)))
+    var mean = ftz(identical_div(acc, count))
+    var sq = Float32(0)
+    for n in range(N):
+        var base = (n * C + c) * HW
+        for k in range(HW):
+            var d = ftz(ftz(x.unsafe_load(base + k)) - mean)
+            sq = ftz(sq + ftz(identical_mul(d, d)))
+    var var_b = ftz(identical_div(sq, count))
+    aux.unsafe_store(_bn(aux, BN_MEAN, c, C), mean)
+    aux.unsafe_store(_bn(aux, BN_VAR, c, C), var_b)
+    aux.unsafe_store(_bn(aux, BN_INVSTD, c, C), ftz(identical_rsqrt(ftz(var_b + aux.unsafe_load(0)))))
+
+
+@always_inline
+def bn_eval_stats_at(c: Int, running: FP, aux: FP, f2: FP, f3: FP, q: IP, p: IP):
+    """Eval statistics of channel c from running = [mean C | var C]."""
+    var C = _g(p, 1)
+    var rv = ftz(running.unsafe_load(C + c))
+    aux.unsafe_store(_bn(aux, BN_MEAN, c, C), ftz(running.unsafe_load(c)))
+    aux.unsafe_store(_bn(aux, BN_VAR, c, C), rv)
+    aux.unsafe_store(_bn(aux, BN_INVSTD, c, C), ftz(identical_rsqrt(ftz(rv + aux.unsafe_load(0)))))
+
+
+@always_inline
+def bn_apply_at(i: Int, x: FP, aux: FP, dst: FP, f3: FP, q: IP, p: IP):
+    """y = ((x - mean) * invstd) * gamma + beta, each product pinned."""
+    var C = _g(p, 1); var HW = _g(p, 2)
+    var c = (i // HW) % C
+    var xhat = ftz(identical_mul(ftz(ftz(x.unsafe_load(i)) - aux.unsafe_load(_bn(aux, BN_MEAN, c, C))),
+                                 aux.unsafe_load(_bn(aux, BN_INVSTD, c, C))))
+    dst.unsafe_store(i, ftz(ftz(identical_mul(xhat, aux.unsafe_load(_bn(aux, BN_GAMMA, c, C))))
+                            + aux.unsafe_load(_bn(aux, BN_BETA, c, C))))
+
+
+@always_inline
+def bn_running_at(c: Int, running: FP, aux: FP, f2: FP, f3: FP, q: IP, p: IP):
+    """PyTorch's running update: r = (1 - m) r + m stat, the variance
+    unbiased (var * count / (count - 1))."""
+    var N = _g(p, 0); var C = _g(p, 1); var HW = _g(p, 2)
+    var m = aux.unsafe_load(1)
+    var keep = ftz(Float32(1) - m)
+    var count = N * HW
+    var unb = ftz(identical_div(ftz(identical_mul(aux.unsafe_load(_bn(aux, BN_VAR, c, C)), Float32(count))),
+                                Float32(count - 1)))
+    var rm = ftz(running.unsafe_load(c))
+    var rv = ftz(running.unsafe_load(C + c))
+    running.unsafe_store(c, ftz(ftz(identical_mul(keep, rm)) + ftz(identical_mul(m, aux.unsafe_load(_bn(aux, BN_MEAN, c, C))))))
+    running.unsafe_store(C + c, ftz(ftz(identical_mul(keep, rv)) + ftz(identical_mul(m, unb))))
+
+
+@always_inline
+def bn_bwd_red_at(c: Int, x: FP, g: FP, aux: FP, f3: FP, q: IP, p: IP):
+    """sum_g and sum_gx = sum(g * xhat) of channel c, one fold each in (n, hw) order."""
+    var N = _g(p, 0); var C = _g(p, 1); var HW = _g(p, 2)
+    var mean = aux.unsafe_load(_bn(aux, BN_MEAN, c, C))
+    var invstd = aux.unsafe_load(_bn(aux, BN_INVSTD, c, C))
+    var sg = Float32(0)
+    var sgx = Float32(0)
+    for n in range(N):
+        var base = (n * C + c) * HW
+        for k in range(HW):
+            var gv = ftz(g.unsafe_load(base + k))
+            var xhat = ftz(identical_mul(ftz(ftz(x.unsafe_load(base + k)) - mean), invstd))
+            sg = ftz(sg + gv)
+            sgx = ftz(sgx + ftz(identical_mul(gv, xhat)))
+    aux.unsafe_store(_bn(aux, BN_SUMG, c, C), sg)
+    aux.unsafe_store(_bn(aux, BN_SUMGX, c, C), sgx)
+
+
+@always_inline
+def bn_bwd_dx_at(i: Int, x: FP, g: FP, aux: FP, dst: FP, q: IP, p: IP):
+    """Training-mode dx = (g - mean(g) - xhat * mean(g xhat)) * invstd * gamma
+    (PyTorch batch_norm_backward's formula)."""
+    var N = _g(p, 0); var C = _g(p, 1); var HW = _g(p, 2)
+    var c = (i // HW) % C
+    var count = Float32(N * HW)
+    var invstd = aux.unsafe_load(_bn(aux, BN_INVSTD, c, C))
+    var xhat = ftz(identical_mul(ftz(ftz(x.unsafe_load(i)) - aux.unsafe_load(_bn(aux, BN_MEAN, c, C))), invstd))
+    var mg = ftz(identical_div(aux.unsafe_load(_bn(aux, BN_SUMG, c, C)), count))
+    var mgx = ftz(identical_div(aux.unsafe_load(_bn(aux, BN_SUMGX, c, C)), count))
+    var t = ftz(ftz(ftz(g.unsafe_load(i)) - mg) - ftz(identical_mul(xhat, mgx)))
+    dst.unsafe_store(i, ftz(identical_mul(ftz(identical_mul(t, invstd)), aux.unsafe_load(_bn(aux, BN_GAMMA, c, C)))))
+
+
+@always_inline
+def bn_bwd_eval_dx_at(i: Int, x: FP, g: FP, aux: FP, dst: FP, q: IP, p: IP):
+    """Eval-mode dx = g * invstd * gamma (the statistics are constants)."""
+    var C = _g(p, 1); var HW = _g(p, 2)
+    var c = (i // HW) % C
+    dst.unsafe_store(i, ftz(identical_mul(ftz(identical_mul(ftz(g.unsafe_load(i)), aux.unsafe_load(_bn(aux, BN_INVSTD, c, C)))),
+                                          aux.unsafe_load(_bn(aux, BN_GAMMA, c, C)))))
+
+
+
+# ---------------------------------------------------------------- dropout2d
+# p = [N, C, HW, seed_lo, seed_hi, thresh_hi, thresh_lo]; hyper f[0] = drop p.
+
+
+@always_inline
+def dropout2d_at(i: Int, x: FP, mask: FP, dst: FP, hyper: FP, q: IP, p: IP):
+    """PyTorch nn.Dropout2d (training): every (n, c) channel is zeroed with
+    probability p, the rest scaled by 1 / (1 - p). The draw is Philox4x32-10
+    at counter (n*C + c, 0, 0, 0) under the 64-bit seed, word 0 compared as
+    an INTEGER against thresh = round(p * 2^32): no float in the decision
+    (DEVIATION 5703; torch's own stream is its generator's, not ours)."""
+    var C = _g(p, 1); var HW = _g(p, 2)
+    var nc = i // HW
+    var key = SIMD[DType.uint32, 2](UInt32(p.unsafe_load(3)), UInt32(p.unsafe_load(4)))
+    var ctr = SIMD[DType.uint32, 4](UInt32(nc), 0, 0, 0)
+    var u = philox4x32_10(ctr, key)[0]
+    var thresh = (UInt64(UInt32(p.unsafe_load(5))) << 16) | UInt64(UInt32(p.unsafe_load(6)))
+    var m = Float32(0)
+    if UInt64(u) >= thresh:
+        m = ftz(identical_div(Float32(1), ftz(Float32(1) - hyper.unsafe_load(0))))
+    mask.unsafe_store(i, m)
+    dst.unsafe_store(i, ftz(identical_mul(ftz(x.unsafe_load(i)), m)))
+
+
+@always_inline
+def mul_at(i: Int, a: FP, b: FP, dst: FP, f3: FP, q: IP, p: IP):
+    dst.unsafe_store(i, ftz(identical_mul(ftz(a.unsafe_load(i)), ftz(b.unsafe_load(i)))))
+
+
+
+# ---------------------------------------------------------------- graph ops
+# A CSR adjacency in one Int32 array q = [rowptr (n+1) | col (nnz) | row (nnz)]
+# (row[e] is the row of entry e); p = [n, F, nnz, mode]. Rows are TARGET
+# nodes for the forward propagation (PyG flow source_to_target) and SOURCE
+# nodes for the transposed (backward) one; entries within a row are in
+# ascending column order, so every fold below has one fixed order
+# (DEVIATION 5704: PyG scatter-adds with atomics).
+
+
+@always_inline
+def spmm_at(i: Int, vals: FP, h: FP, dst: FP, f3: FP, q: IP, p: IP):
+    """dst[r, f] = fold over row r's entries e, in order, of
+    mode 0: vals[e] * h[col[e], f];  mode 1: h[col[e], f], then / count
+    (PyG mean aggregation; an empty row is +0.0);  mode 2: h[col[e], f] / vals[e]."""
+    var n = _g(p, 0); var F = _g(p, 1); var mode = _g(p, 3)
+    var r = i // F
+    var f = i - r * F
+    var lo = _g(q, r)
+    var hi = _g(q, r + 1)
+    var acc = Float32(0)
+    for e in range(lo, hi):
+        var c = _g(q, n + 1 + e)
+        var v = ftz(h.unsafe_load(c * F + f))
+        if mode == 0:
+            v = ftz(identical_mul(ftz(vals.unsafe_load(e)), v))
+        elif mode == 2:
+            v = ftz(identical_div(v, ftz(vals.unsafe_load(e))))
+        acc = ftz(acc + v)
+    if mode == 1 and hi > lo:
+        acc = ftz(identical_div(acc, Float32(hi - lo)))
+    dst.unsafe_store(i, acc)
+
+
+@always_inline
+def gcn_deg_at(r: Int, w: FP, dis: FP, f2: FP, f3: FP, q: IP, p: IP):
+    """PyG gcn_norm: deg[r] = the fold of row r's edge weights (self loop
+    included by the caller); dis = deg^-1/2, +0.0 where deg is 0."""
+    var lo = _g(q, r)
+    var hi = _g(q, r + 1)
+    var acc = Float32(0)
+    for e in range(lo, hi):
+        acc = ftz(acc + ftz(w.unsafe_load(e)))
+    dis.unsafe_store(r, ftz(identical_rsqrt(acc)) if acc > Float32(0) else Float32(0))
+
+
+@always_inline
+def gcn_norm_at(e: Int, w: FP, dis: FP, vals: FP, f3: FP, q: IP, p: IP):
+    """norm[e] = dis[src] * w[e] * dis[dst], left to right as PyG's
+    `deg_inv_sqrt[row] * edge_weight * deg_inv_sqrt[col]`."""
+    var n = _g(p, 0); var nnz = _g(p, 2)
+    var src = _g(q, n + 1 + e)
+    var dst = _g(q, n + 1 + nnz + e)
+    var t = ftz(identical_mul(ftz(dis.unsafe_load(src)), ftz(w.unsafe_load(e))))
+    vals.unsafe_store(e, ftz(identical_mul(t, ftz(dis.unsafe_load(dst)))))

@@ -79,6 +79,8 @@ def _sequence_opt_run(ml, cls, X, steps=6, **kw):
         g1 = np.ascontiguousarray(X[base:base + 32, 8:16], dtype=np.float32) * np.float32(0.5)
         g2 = np.ascontiguousarray(X[base + 32:base + 40, 1], dtype=np.float32)
         opt.step([g1, g2])
+    if isinstance(opt.state, list) and opt.state and isinstance(opt.state[0], dict):
+        return dict(params=_h(p1, p2), opt=opt)
     return dict(params=_h(p1, p2), state=_h(*opt.state))
 
 
@@ -196,3 +198,37 @@ def _(ml, X, yc, yr, Xh=None):
                          random_state=9).fit(Xs, yrs)
     return _fit(dict(plain=a["params"], plain_state=a["state"], wd=b["params"], wd_state=b["state"],
                      lstm=_h(r.params_, r.loss_curve_)))
+
+
+@lane("sequence-adafactor")
+def _(ml, X, yc, yr, Xh=None):
+    """Adafactor at torch's defaults and with weight decay, d and beta2_decay
+    moved: the factored arm (a 32 x 8 matrix) and the vector arm."""
+    a = _sequence_opt_run(ml, ml.Adafactor, X)
+    b = _sequence_opt_run(ml, ml.Adafactor, X, lr=3e-2, beta2_decay=-0.6, d=2.0, weight_decay=0.1)
+    return _fit(dict(plain=a["params"], plain_state=_h(*[v for s in a["opt"].state for v in s.values()]),
+                     moved=b["params"], moved_state=_h(*[v for s in b["opt"].state for v in s.values()])))
+
+
+@lane("sequence-lamb")
+def _(ml, X, yc, yr, Xh=None):
+    """LAMB at timm's defaults (global clip 1.0, weight decay 0.01) and with
+    trust_clip, always_adapt, no decay and no clip."""
+    a = _sequence_opt_run(ml, ml.LAMB, X, lr=1e-2)
+    b = _sequence_opt_run(ml, ml.LAMB, X, lr=1e-2, weight_decay=0.0, always_adapt=True, trust_clip=True,
+                          max_grad_norm=None)
+    return _fit(dict(plain=a["params"], plain_state=a["state"], adapt=b["params"], adapt_state=b["state"]))
+
+
+@lane("sequence-adamax")
+def _(ml, X, yc, yr, Xh=None):
+    """Adamax at torch's defaults and with other betas and weight decay, and
+    a GRU regressor trained by it."""
+    a = _sequence_opt_run(ml, ml.Adamax, X)
+    b = _sequence_opt_run(ml, ml.Adamax, X, lr=1e-2, betas=(0.8, 0.99), weight_decay=0.05)
+    Xs = _sequence_seq(X)
+    ycs, yrs = _sequence_targets(yc, yr)
+    r = ml.GRURegressor(hidden_size=8, optimizer="adamax", learning_rate=2e-3, batch_size=32, max_epochs=1,
+                        random_state=10).fit(Xs, yrs)
+    return _fit(dict(plain=a["params"], plain_state=a["state"], moved=b["params"], moved_state=b["state"],
+                     gru=_h(r.params_, r.loss_curve_)))

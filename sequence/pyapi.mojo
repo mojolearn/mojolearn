@@ -7,12 +7,13 @@ Every buffer is a caller-owned C-contiguous array handed over by address;
 nothing is retained after the call."""
 from std.python import PythonObject
 
-from checks.numerics import ftz, identical_mul
+from std.math import sqrt
+from checks.numerics import ftz, identical_div, identical_mul, identical_mul_add, identical_pow64, identical_sqrt
 from sequence.exec import Exec
-from sequence.ops import FP, OP_STL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD
+from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_ROW, OP_AF_COL, OP_AF_RMEAN, OP_AF_UPDATE_MAT, OP_AF_VEC, OP_AF_DENOM, OP_AF_APPLY, OP_SEG_SUMSQ, OP_LAMB_UPD, OP_LAMB_RATIO, OP_LAMB_APPLY, OP_DIVS, OP_FILL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD, OPT_NADAM
 from sequence.recurrent import gemm
 from sequence.mlp_fit import MLPNet, mlp_fit, mlp_predict
-from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, opt_step, rnn_fit, rnn_predict
+from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, opt_scalars, opt_step, rnn_fit, rnn_predict
 
 
 def fptr(addr: PythonObject, what: String) raises -> FP:
@@ -49,7 +50,7 @@ def net_of(ip: PythonObject) raises -> Net:
 
 def opt_of(ip: PythonObject, at: Int, fp: PythonObject, fat: Int) raises -> OptConfig:
     var kind = ival(ip, at)
-    if kind < OPT_SGD or kind > OPT_LION or kind == OPT_SK_ADAM or kind == OPT_SK_SGD:
+    if kind < OPT_SGD or kind > OPT_NADAM or kind == OPT_SK_ADAM or kind == OPT_SK_SGD:
         raise Error("sequence: unknown optimizer kind " + String(kind))
     return OptConfig(kind, ival(ip, at + 1), fval(fp, fat), fval(fp, fat + 1), fval(fp, fat + 2),
                      fval(fp, fat + 3), fval(fp, fat + 4))
@@ -148,9 +149,9 @@ def opt_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: P
         raise Error("optimizer_step: n and the one-based step t must be >= 1")
     var cfg = opt_of(ip, 1, fp, 1)
     var st = OptState()
-    # the running powers are a function of t alone: replay them
-    for _ in range(t - 1):
-        _ = opt_advance(cfg, st)
+    # the running state is a function of t alone: replay steps 1 .. t-1
+    for k in range(1, t):
+        _ = opt_scalars(cfg, st, k, fval(fp, 0))
     var P = ex.alloc(n)
     var G = ex.alloc(n)
     var s1 = ex.alloc(n)
@@ -172,13 +173,6 @@ def opt_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: P
     ex.download(h2, s2, n)
     ex.download(h3, s3, n)
     return PythonObject(n)
-
-
-def opt_advance(cfg: OptConfig, mut st: OptState) -> Int:
-    if cfg.kind == OPT_ADAM or cfg.kind == OPT_ADAMW:
-        st.pw1 = ftz(identical_mul(st.pw1, cfg.f1))
-        st.pw2 = ftz(identical_mul(st.pw2, cfg.f2))
-    return 0
 
 
 def stl_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
@@ -410,3 +404,218 @@ def mlp_predict_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) ra
     var net = _mlp_net(ip, 6, D, O, ival(ip, 3), ival(ip, 4))
     mlp_predict(ex, net, fptr(addrs[0], "X"), N, fptr(addrs[1], "params"), fptr(addrs[2], "out"), chunk)
     return PythonObject(N * O)
+
+
+def adafactor_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
+    """One Adafactor step of ONE tensor, in place (`sequence/adafactor.mojo`).
+    addrs = [param, grad, row_var (R) or variance (n), col_var (C; ignored for
+    a vector)]; ip = [R, C, t] with C = 0 for a vector of R values;
+    fp = [lr, beta2_decay, eps1, eps2, d, weight_decay]."""
+    if len(addrs) != 4 or len(ip) != 3 or len(fp) != 6:
+        raise Error("adafactor_step: requires 4 addresses, 3 integer and 6 float parameters")
+    var R = ival(ip, 0)
+    var C = ival(ip, 1)
+    var t = ival(ip, 2)
+    if R < 1 or C < 0 or t < 1:
+        raise Error("adafactor_step: R >= 1, C >= 0 and the one-based step t >= 1")
+    var n = R * C if C > 0 else R
+    var lr = Float64(py=fp[0])
+    var w = Float32(identical_pow64(Float64(t), Float64(py=fp[1])))
+    var rho = Float32(min(lr, Float64(1.0) / sqrt(Float64(t))))
+    var eps1 = fval(fp, 2)
+    var eps1sq = ftz(identical_mul(eps1, eps1))
+    var wd = fval(fp, 5)
+    var P = ex.alloc(n)
+    var G = ex.alloc(n)
+    var S1 = ex.alloc(n if C == 0 else R)
+    var S2 = ex.alloc(C if C > 0 else 1)
+    var U = ex.alloc(n)
+    var sc = ex.alloc(4)
+    var hp = fptr(addrs[0], "param")
+    var h1 = fptr(addrs[2], "row_var / variance")
+    ex.upload(P, hp, n)
+    ex.upload(G, fptr(addrs[1], "grad"), n)
+    ex.upload(S1, h1, n if C == 0 else R)
+    if C > 0:
+        ex.upload(S2, fptr(addrs[3], "col_var"), C)
+    var a = Args()
+    a.p0 = P
+    a.p1 = sc
+    a.i0 = n
+    a.f0 = fval(fp, 3)
+    a.f1 = rho
+    ex.launch[OP_AF_ALPHA](a, 1)
+    if wd != Float32(0.0):
+        var s = Args()
+        s.p0 = P
+        s.f0 = Float32(1.0) - ftz(identical_mul(Float32(lr), wd))
+        ex.launch[OP_SCALE](s, n)
+    if C > 0:
+        var r = Args()
+        r.p0 = G
+        r.p1 = S1
+        r.i0 = C
+        r.f0 = w
+        ex.launch[OP_AF_ROW](r, R)
+        var c = Args()
+        c.p0 = G
+        c.p1 = S2
+        c.i0 = R
+        c.i1 = C
+        c.f0 = w
+        ex.launch[OP_AF_COL](c, C)
+        var m = Args()
+        m.p0 = S1
+        m.p1 = sc
+        m.i0 = R
+        m.f0 = eps1
+        ex.launch[OP_AF_RMEAN](m, 1)
+        var u = Args()
+        u.p0 = G
+        u.p1 = S1
+        u.p2 = S2
+        u.p3 = sc
+        u.p4 = U
+        u.i0 = C
+        u.f0 = eps1sq
+        ex.launch[OP_AF_UPDATE_MAT](u, n)
+    else:
+        var v = Args()
+        v.p0 = G
+        v.p1 = S1
+        v.p2 = U
+        v.f0 = w
+        v.f1 = eps1sq
+        ex.launch[OP_AF_VEC](v, n)
+    var d = Args()
+    d.p0 = U
+    d.p1 = sc
+    d.i0 = n
+    d.f0 = fval(fp, 4)
+    ex.launch[OP_AF_DENOM](d, 1)
+    var ap = Args()
+    ap.p0 = P
+    ap.p1 = U
+    ap.p2 = sc
+    ex.launch[OP_AF_APPLY](ap, n)
+    ex.sync()
+    ex.download(hp, P, n)
+    ex.download(h1, S1, n if C == 0 else R)
+    if C > 0:
+        ex.download(fptr(addrs[3], "col_var"), S2, C)
+    return PythonObject(n)
+
+
+def lamb_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
+    """One LAMB step over packed tensors, in place (`sequence/adafactor.mojo`,
+    timm's Lamb). addrs = [params, grads, exp_avg, exp_avg_sq] (flat);
+    ip = [n_tensors, t, flags, off_0, ..., off_n] with flags bit0 trust_clip,
+    bit1 always_adapt, bit2 grad_averaging, bit3 bias_correction, bit4 the
+    global gradient-norm clip; fp = [lr, beta1, beta2, eps, weight_decay,
+    max_grad_norm]."""
+    if len(addrs) != 4 or len(fp) != 6 or len(ip) < 5:
+        raise Error("lamb_step: requires 4 addresses, >= 5 integer and 6 float parameters")
+    var nt = ival(ip, 0)
+    var t = ival(ip, 1)
+    var flags = ival(ip, 2)
+    if nt < 1 or t < 1 or len(ip) != 4 + nt:
+        raise Error("lamb_step: n_tensors >= 1, t >= 1 and n_tensors + 1 offsets")
+    var offs = List[Float32]()
+    for k in range(nt + 1):
+        var o = ival(ip, 3 + k)
+        if (k == 0 and o != 0) or (k > 0 and o <= Int(offs[k - 1])) or o >= 16777216:
+            raise Error("lamb_step: offsets must rise strictly from 0, below 2^24")
+        offs.append(Float32(o))
+    var n = Int(offs[nt])
+    var lr = fval(fp, 0)
+    var b1 = fval(fp, 1)
+    var b2 = fval(fp, 2)
+    var wd = fval(fp, 4)
+    var P = ex.alloc(n)
+    var G = ex.alloc(n)
+    var M = ex.alloc(n)
+    var V = ex.alloc(n)
+    var U = ex.alloc(n)
+    var O = ex.alloc(nt + 1)
+    var nrm = ex.alloc(nt)
+    var hp = fptr(addrs[0], "params")
+    var hm = fptr(addrs[2], "exp_avg")
+    var hv = fptr(addrs[3], "exp_avg_sq")
+    ex.upload(P, hp, n)
+    ex.upload(G, fptr(addrs[1], "grads"), n)
+    ex.upload(M, hm, n)
+    ex.upload(V, hv, n)
+    ex.upload(O, FP(unsafe_from_address=Int(offs.unsafe_ptr())), nt + 1)
+    if (flags & 16) != 0:
+        var q = Args()
+        q.p0 = G
+        q.p1 = O
+        q.p2 = nrm
+        ex.launch[OP_SEG_SUMSQ](q, nt)
+        ex.sync()
+        var h = List[Float32](length=nt, fill=Float32(0.0))
+        ex.download(FP(unsafe_from_address=Int(h.unsafe_ptr())), nrm, nt)
+        var gs = Float32(0.0)
+        for k in range(nt):
+            var nk = ftz(identical_sqrt(h[k]))
+            gs = ftz(identical_mul_add(nk, nk, gs))
+        var clip = ftz(identical_div(ftz(identical_sqrt(gs)), fval(fp, 5)))
+        if clip > Float32(1.0):
+            var d = Args()
+            d.p0 = G
+            d.f0 = clip
+            ex.launch[OP_DIVS](d, n)
+    var bc1 = Float32(1.0)
+    var bc2 = Float32(1.0)
+    if (flags & 8) != 0:
+        var pw1 = Float32(1.0)
+        var pw2 = Float32(1.0)
+        for _ in range(t):
+            pw1 = ftz(identical_mul(pw1, b1))
+            pw2 = ftz(identical_mul(pw2, b2))
+        bc1 = Float32(1.0) - pw1
+        bc2 = Float32(1.0) - pw2
+    var u = Args()
+    u.p0 = P
+    u.p1 = G
+    u.p2 = M
+    u.p3 = V
+    u.p4 = U
+    u.f1 = b1
+    u.f2 = b2
+    u.f3 = fval(fp, 3)
+    u.f4 = wd
+    u.f5 = bc1
+    u.f6 = ftz(identical_sqrt(bc2))
+    u.f7 = (Float32(1.0) - b1) if (flags & 4) != 0 else Float32(1.0)
+    ex.launch[OP_LAMB_UPD](u, n)
+    var ratio = ex.alloc(nt)
+    var r = Args()
+    r.p0 = P
+    r.p1 = U
+    r.p2 = O
+    r.p3 = ratio
+    r.i0 = flags & 1
+    if wd != Float32(0.0) or (flags & 2) != 0:
+        ex.launch[OP_LAMB_RATIO](r, nt)
+    else:
+        var f = Args()
+        f.p0 = ratio
+        f.f0 = Float32(1.0)
+        ex.launch[OP_FILL](f, nt)
+    for k in range(nt):
+        var s = Int(offs[k])
+        var e = Int(offs[k + 1])
+        var ap = Args()
+        ap.p0 = P + s
+        ap.p1 = U + s
+        ap.p2 = ratio
+        ap.i0 = k
+        ap.f0 = lr
+        ex.launch[OP_LAMB_APPLY](ap, e - s)
+    ex.sync()
+    ex.download(hp, P, n)
+    ex.download(hm, M, n)
+    ex.download(hv, V, n)
+    _ = offs^
+    return PythonObject(n)

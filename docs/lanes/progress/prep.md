@@ -40,6 +40,11 @@ Sanity tests need scikit-learn: on the pod it is in /root/skl
 | ComplementNB | bdde41d02 | x-prep-complement-nb | batch 9, infer 9, train 9; cuda H100 vs CPU |
 | CategoricalNB | (this commit) | x-prep-categorical-nb | batch 9, infer 9, train 9; cuda H100 vs CPU |
 
+## Pass 2
+| step | commit | verdict |
+|---|---|---|
+| seam proof on NVIDIA: 10 seams (DEVIATIONS 5400-5409, IDENTITY_PATHS rows 140-149), `x_prep/seams/prep_check.mojo` host AND device vs oracle, 10 sabotage arms RED, all 28 lanes AGREE with `--pass 2` | (this commit) | PASS on H100 (`algos_lane_check.sh <28 lanes> --pass 2`) |
+
 ## Next
 PASS 1 DONE: every algorithm in the lane table and its Additions is merged
 (PENDING lanes, CPU == NVIDIA AGREE). Now PASS 2 per the CURRENT DIRECTIVES
