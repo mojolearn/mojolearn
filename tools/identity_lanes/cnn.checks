@@ -10,3 +10,8 @@ x_cnn/checks/seams_check.mojo	x_cnn/checks/sabotage/seam_5707_avg_reciprocal.pat
 x_cnn/checks/seams_check.mojo	x_cnn/checks/sabotage/seam_5708_softmax_fold.patch
 x_cnn/checks/seams_check.mojo	x_cnn/checks/sabotage/seam_5709_sgd_fma.patch
 x_cnn/checks/seams_check.mojo	x_cnn/checks/sabotage/seam_5710_gcn_norm_order.patch
+x_cnn/checks/seams_check.mojo	x_cnn/checks/sabotage/seam_5711_pad_bwd_order.patch
+x_cnn/checks/seams_check.mojo	x_cnn/checks/sabotage/seam_5712_adaptive_avg_order.patch
+x_cnn/checks/seams_check.mojo	x_cnn/checks/sabotage/seam_5713_sage_max_order.patch
+x_cnn/checks/seams_check.mojo	x_cnn/checks/sabotage/seam_5714_l2norm_fold.patch
+x_cnn/checks/seams_check.mojo	x_cnn/checks/sabotage/seam_5715_adam_fma.patch

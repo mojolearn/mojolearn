@@ -123,3 +123,105 @@ def test_reference_matches_torch():
         np.testing.assert_allclose(tw.grad.numpy(), rdw, rtol=1e-10, atol=1e-10)
         if tb is not None:
             np.testing.assert_allclose(tb.grad.numpy(), rdb, rtol=1e-10, atol=1e-10)
+
+
+_NP_MODE = {"zeros": "constant", "reflect": "reflect", "replicate": "edge", "circular": "wrap"}
+
+
+def ref_conv_options(x, w, b, stride, pads, dilation, groups, mode, g):
+    """(out, dx, dw, db) of an explicitly padded (top, bottom, left, right),
+    grouped conv, float64; the pad's backward sums every padded position
+    back onto its source pixel."""
+    n, c, h, wd = x.shape
+    t, bo, l, r = pads
+    kw = dict(constant_values=-1) if mode == "zeros" else {}
+    idx_h = np.pad(np.arange(h), (t, bo), mode=_NP_MODE[mode], **kw)
+    idx_w = np.pad(np.arange(wd), (l, r), mode=_NP_MODE[mode], **kw)
+    xp = np.zeros((n, c, len(idx_h), len(idx_w)))
+    for i, a in enumerate(idx_h):
+        for j, bb in enumerate(idx_w):
+            if a >= 0 and bb >= 0:
+                xp[:, :, i, j] = x[:, :, a, bb]
+    cg, og = c // groups, w.shape[0] // groups
+    outs, dws, dxps = [], [], np.zeros(xp.shape)
+    for k in range(groups):
+        o, _, _ = ref_conv2d(xp[:, k * cg:(k + 1) * cg], w[k * og:(k + 1) * og], None, stride, (0, 0), dilation)
+        outs.append(o)
+        dxg, dwg, _ = ref_conv2d_backward(xp[:, k * cg:(k + 1) * cg], w[k * og:(k + 1) * og], g[:, k * og:(k + 1) * og],
+                                          stride, (0, 0), dilation)
+        dxps[:, k * cg:(k + 1) * cg] = dxg
+        dws.append(dwg)
+    out = np.concatenate(outs, 1) + (0 if b is None else b.astype(np.float64).reshape(1, -1, 1, 1))
+    dx = np.zeros(x.shape)
+    for i, a in enumerate(idx_h):
+        for j, bb in enumerate(idx_w):
+            if a >= 0 and bb >= 0:
+                dx[:, :, a, bb] += dxps[:, :, i, j]
+    return out, dx, np.concatenate(dws, 0), g.astype(np.float64).sum((0, 2, 3))
+
+
+OPTION_CASES = [
+    dict(mode="reflect", padding=(2, 1), groups=1, k=(3, 3), s=(1, 1), d=(1, 1), c=2, oc=3),
+    dict(mode="replicate", padding=(1, 2), groups=2, k=(3, 2), s=(2, 1), d=(1, 1), c=4, oc=6),
+    dict(mode="circular", padding=(1, 1), groups=1, k=(3, 3), s=(1, 1), d=(2, 1), c=2, oc=2),
+    dict(mode="zeros", padding="same", groups=4, k=(4, 3), s=(1, 1), d=(1, 2), c=4, oc=8),
+    dict(mode="reflect", padding="same", groups=1, k=(2, 2), s=(1, 1), d=(1, 1), c=3, oc=2),
+    dict(mode="zeros", padding="valid", groups=3, k=(2, 2), s=(1, 1), d=(1, 1), c=3, oc=3),
+]
+
+
+def _pads(cs):
+    kh, kw = cs["k"]
+    if cs["padding"] == "same":
+        th, tw = cs["d"][0] * (kh - 1), cs["d"][1] * (kw - 1)
+        return (th // 2, th - th // 2, tw // 2, tw - tw // 2)
+    if cs["padding"] == "valid":
+        return (0, 0, 0, 0)
+    ph, pw = cs["padding"]
+    return (ph, ph, pw, pw)
+
+
+@pytest.mark.parametrize("cs", OPTION_CASES)
+def test_conv2d_options(cs):
+    import mojolearn as ml
+    rng = np.random.default_rng(7)
+    x = rng.standard_normal((2, cs["c"], 7, 8)).astype(np.float32)
+    conv = ml.Conv2d(cs["c"], cs["oc"], cs["k"], stride=cs["s"], padding=cs["padding"], dilation=cs["d"],
+                     groups=cs["groups"], padding_mode=cs["mode"], random_state=3)
+    out = conv.forward(x)
+    g = rng.standard_normal(out.shape).astype(np.float32)
+    dx = conv.backward(g)
+    rout, rdx, rdw, rdb = ref_conv_options(x, conv.weight_, conv.bias_, cs["s"], _pads(cs), cs["d"], cs["groups"],
+                                           cs["mode"], g)
+    np.testing.assert_allclose(out, rout, rtol=1e-5, atol=1e-5)
+    np.testing.assert_allclose(dx, rdx, rtol=1e-5, atol=1e-5)
+    np.testing.assert_allclose(conv.grad_weight_, rdw, rtol=1e-5, atol=1e-5)
+    np.testing.assert_allclose(conv.grad_bias_, rdb, rtol=1e-5, atol=1e-5)
+
+
+def test_option_reference_matches_torch():
+    torch = pytest.importorskip("torch")
+    for cs in OPTION_CASES:
+        rng = np.random.default_rng(7)
+        x = rng.standard_normal((2, cs["c"], 7, 8)).astype(np.float32)
+        m = torch.nn.Conv2d(cs["c"], cs["oc"], cs["k"], stride=cs["s"], padding=cs["padding"], dilation=cs["d"],
+                            groups=cs["groups"], padding_mode=cs["mode"]).double()
+        tx = torch.tensor(x, dtype=torch.float64, requires_grad=True)
+        out = m(tx)
+        g = rng.standard_normal(tuple(out.shape)).astype(np.float32)
+        out.backward(torch.tensor(g, dtype=torch.float64))
+        w = m.weight.detach().numpy().astype(np.float32)
+        b = m.bias.detach().numpy().astype(np.float32)
+        # the reference in float64 over the float32-rounded weights
+        with torch.no_grad():
+            m.weight.copy_(torch.tensor(w, dtype=torch.float64))
+            m.bias.copy_(torch.tensor(b, dtype=torch.float64))
+        tx2 = torch.tensor(x, dtype=torch.float64, requires_grad=True)
+        m.zero_grad()
+        out2 = m(tx2)
+        out2.backward(torch.tensor(g, dtype=torch.float64))
+        rout, rdx, rdw, rdb = ref_conv_options(x, w, b, cs["s"], _pads(cs), cs["d"], cs["groups"], cs["mode"], g)
+        np.testing.assert_allclose(out2.detach().numpy(), rout, rtol=1e-10, atol=1e-10)
+        np.testing.assert_allclose(tx2.grad.numpy(), rdx, rtol=1e-10, atol=1e-10)
+        np.testing.assert_allclose(m.weight.grad.numpy(), rdw, rtol=1e-10, atol=1e-10)
+        np.testing.assert_allclose(m.bias.grad.numpy(), rdb, rtol=1e-10, atol=1e-10)
