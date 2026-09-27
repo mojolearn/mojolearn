@@ -51,6 +51,7 @@ from sequence.ops import (
     OP_LN_BWD_W,
     OP_THETA,
     OP_CROSTON,
+    OP_ETS,
     op_gemm,
     op_bias,
     op_colsum,
@@ -73,6 +74,7 @@ from sequence.mlp import op_act, op_act_bwd, op_divs, op_l2grad, op_mlp_bloss, o
 from sequence.stl import op_stl
 from sequence.theta import op_theta
 from sequence.croston import op_croston
+from sequence.ets import op_ets
 from sequence.vecar import op_cholsolve, op_colscale, op_rowscale, op_scale, op_sub, op_var_design, op_var_forecast
 
 
@@ -172,3 +174,5 @@ def apply[OP: Int](t: Int, a: Args):
         op_theta(t, a)
     elif OP == OP_CROSTON:
         op_croston(t, a)
+    elif OP == OP_ETS:
+        op_ets(t, a)
