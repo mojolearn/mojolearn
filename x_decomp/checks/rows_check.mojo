@@ -8,7 +8,7 @@ implicit-ALS row solve (5316).
     tools/with_identical_mode.sh pixi run mojo run -I . x_decomp/checks/rows_check.mojo
 """
 from core.identity_trace import IdentityTrace
-from x_decomp.checks.oracles import (
+from x_decomp.checks.xd_oracles import (
     oracle_als,
     oracle_cd,
     oracle_gemm,

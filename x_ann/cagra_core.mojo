@@ -38,7 +38,7 @@ comptime I32P = MutPointer[Int32, MutAnyOrigin]
 
 def cagra_prune(n: Int, kdeg: Int, knn: List[Int32], deg: Int) raises -> List[Int32]:
     """`kern_prune`: per node, detour counts over its k-NN list, then the
-    `deg` edges of smallest (count, rank)."""
+    `deg` edges of smallest (count, rank) (DEVIATION 5820)."""
     var out = List[Int32](length=n * deg, fill=Int32(0))
     var cnt = List[Int](length=kdeg, fill=0)
     for a in range(n):
@@ -69,7 +69,8 @@ def cagra_prune(n: Int, kdeg: Int, knn: List[Int32], deg: Int) raises -> List[In
 
 def cagra_reverse_merge(n: Int, deg: Int, pruned: List[Int32]) -> List[Int32]:
     """`kern_make_rev_graph` + the merge, with the reverse list of each node
-    in (rank, source id) order and capped at `deg`, as their count is."""
+    in (rank, source id) order and capped at `deg`, as their count is
+    (DEVIATION 5821)."""
     var rev = List[Int32](length=n * deg, fill=Int32(-1))
     var rcount = List[Int](length=n, fill=0)
     for k in range(deg):
@@ -124,7 +125,8 @@ def cg_dist(q: F32P, q_off: Int, x: F32P, v: Int, d: Int) -> Float32:
 @always_inline
 def cg_insert(L: Int, base: Int, d: Float32, id: Int32, bd: F32P, bi: I32P, bx: I32P):
     """Sorted insertion under (distance, id) into a bounded buffer; the
-    expanded flag travels with its entry; an empty slot (id < 0) is worst."""
+    expanded flag travels with its entry; an empty slot (id < 0) is worst
+    (DEVIATION 5822)."""
     var li = bi.unsafe_load(base + L - 1)
     if li >= 0:
         var ld = bd.unsafe_load(base + L - 1)
@@ -152,6 +154,8 @@ def cg_search_cell(
     L: Int, width: Int, max_iter: Int, n_seeds: Int, bd: F32P, bi: I32P, bx: I32P,
     visited: I32P, words: Int, out_d: F32P, out_i: I32P,
 ):
+    # DEVIATION 5824: seeds (t * n) // n_seeds; DEVIATION 5823: parents are the
+    # search_width best unexpanded entries, scanned front to back.
     var base = qi * L
     var vbase = qi * words
     var q_off = qi * d

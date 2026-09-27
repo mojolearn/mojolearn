@@ -180,6 +180,20 @@ def accumulate_cols(
             acc[unsafe_offset=j] = acc[unsafe_offset=j] + identical_mul64(weight, Float64(x[unsafe_offset=i * ks + c]))
 
 
+def accumulate_rows(
+    acc: MutPointer[Float64, MutUntrackedOrigin], n: Int, k: Int, x: MutPointer[Float64, MutUntrackedOrigin],
+    rows: MutPointer[Int32, MutUntrackedOrigin], m: Int,
+) raises:
+    """acc[rows[r], c] += x[r, c] for r in order: a sub-model's output on a
+    row subset (its out-of-bag rows) added into the ensemble's n x k sums."""
+    for r in range(m):
+        var i = Int(rows[unsafe_offset=r])
+        if i < 0 or i >= n:
+            raise Error("x_trees accumulate_rows: row out of range")
+        for c in range(k):
+            acc[unsafe_offset=i * k + c] = acc[unsafe_offset=i * k + c] + x[unsafe_offset=r * k + c]
+
+
 def accumulate_onehot(
     acc: MutPointer[Float64, MutUntrackedOrigin], codes: MutPointer[Int32, MutUntrackedOrigin],
     n: Int, k: Int, on: Float64, off: Float64,
@@ -437,11 +451,36 @@ def apply_trees(
 def gradients(
     score: MutPointer[Float64, MutUntrackedOrigin], y: MutPointer[Float32, MutUntrackedOrigin], n: Int,
     kind: Int, g: MutPointer[Float64, MutUntrackedOrigin], h: MutPointer[Float64, MutUntrackedOrigin],
-    target: MutPointer[Float32, MutUntrackedOrigin],
+    target: MutPointer[Float32, MutUntrackedOrigin], k: Int = 1,
 ):
     """LightGBM's objective gradients (regression_objective.hpp L2: g = s - y,
     h = 1; binary_objective.hpp with sigmoid 1: p = 1 / (1 + exp(-s)),
-    g = p - y, h = p (1 - p)). target = -g as float32, the tree's fit target."""
+    g = p - y, h = p (1 - p); multiclass_objective.hpp MulticlassSoftmax,
+    kind 2: p = softmax over the row's k scores, g = p - [y == c],
+    h = (k / (k - 1)) p (1 - p)). target = -g as float32, the tree's fit
+    target. kind 2 is CLASS-MAJOR: score, g, h and target at [c * n + i]."""
+    if kind == 2:
+        var factor = Float64(k) / (Float64(k) - 1.0)
+        var rec = List[Float64](length=k, fill=0.0)
+        for i in range(n):
+            # Common::Softmax: the max, exp(x - max), the sum in class order.
+            var m = score[unsafe_offset=i]
+            for c in range(1, k):
+                if score[unsafe_offset=c * n + i] > m:
+                    m = score[unsafe_offset=c * n + i]
+            var s: Float64 = 0.0
+            for c in range(k):
+                var e = identical_exp64(score[unsafe_offset=c * n + i] - m)
+                rec[c] = e
+                s = s + e
+            var yi = Int(y[unsafe_offset=i])
+            for c in range(k):
+                var p = rec[c] / s
+                var gi = p - 1.0 if yi == c else p
+                g[unsafe_offset=c * n + i] = gi
+                h[unsafe_offset=c * n + i] = identical_mul64(identical_mul64(factor, p), 1.0 - p)
+                target[unsafe_offset=c * n + i] = Float32(-gi)
+        return
     for i in range(n):
         var s = score[unsafe_offset=i]
         var yi = Float64(y[unsafe_offset=i])
@@ -459,14 +498,37 @@ def gradients(
         target[unsafe_offset=i] = Float32(-gi)
 
 
+def _newton_values(
+    sg: List[Float64], sh: List[Float64], n_nodes: Int, reg_lambda: Float64, l1: Float64,
+    max_delta_step: Float64, values: MutPointer[Float32, MutUntrackedOrigin],
+):
+    """LightGBM `CalculateSplittedLeafOutput`: -ThresholdL1(sum g, l1) /
+    (sum h + lambda), clipped to +-max_delta_step when that is > 0; 0 where
+    the denominator is not positive (a node no row reaches)."""
+    for k in range(n_nodes):
+        var den = sh[k] + reg_lambda
+        if not den > 0.0:
+            values[unsafe_offset=k] = Float32(0.0)
+            continue
+        var s = sg[k]
+        if l1 > 0.0:
+            # FeatureHistogram::ThresholdL1: Sign(s) * max(0, |s| - l1).
+            var a = (s if s >= 0.0 else -s) - l1
+            var reg = a if a > 0.0 else 0.0
+            s = reg if s > 0.0 else (-reg if s < 0.0 else 0.0)
+        var ret = -s / den
+        if max_delta_step > 0.0 and (ret if ret >= 0.0 else -ret) > max_delta_step:
+            ret = max_delta_step if ret > 0.0 else -max_delta_step
+        values[unsafe_offset=k] = Float32(ret)
+
+
 def leaf_newton(
     nodes: MutPointer[Int32, MutUntrackedOrigin], g: MutPointer[Float64, MutUntrackedOrigin],
     h: MutPointer[Float64, MutUntrackedOrigin], n: Int, n_nodes: Int, reg_lambda: Float64,
-    values: MutPointer[Float32, MutUntrackedOrigin],
+    values: MutPointer[Float32, MutUntrackedOrigin], l1: Float64 = 0.0, max_delta_step: Float64 = 0.0,
 ) raises:
-    """values[node] = -sum(g) / (sum(h) + lambda) over the rows in that leaf,
-    sums in row order (LightGBM `CalculateSplittedLeafOutput` with no L1, no
-    max_delta_step); 0 for a node no row reaches."""
+    """values[node] = `_newton_values` of the sums over the rows in that leaf,
+    sums in row order."""
     var sg = List[Float64](length=n_nodes, fill=0.0)
     var sh = List[Float64](length=n_nodes, fill=0.0)
     for i in range(n):
@@ -475,9 +537,29 @@ def leaf_newton(
             raise Error("x_trees leaf_newton: node out of range")
         sg[k] = sg[k] + g[unsafe_offset=i]
         sh[k] = sh[k] + h[unsafe_offset=i]
-    for k in range(n_nodes):
-        var den = sh[k] + reg_lambda
-        values[unsafe_offset=k] = Float32(-sg[k] / den) if den > 0.0 else Float32(0.0)
+    _newton_values(sg, sh, n_nodes, reg_lambda, l1, max_delta_step, values)
+
+
+def leaf_newton_rows(
+    nodes: MutPointer[Int32, MutUntrackedOrigin], rows: MutPointer[Int32, MutUntrackedOrigin], m: Int,
+    g: MutPointer[Float64, MutUntrackedOrigin], h: MutPointer[Float64, MutUntrackedOrigin], n: Int,
+    n_nodes: Int, reg_lambda: Float64, l1: Float64, max_delta_step: Float64,
+    values: MutPointer[Float32, MutUntrackedOrigin],
+) raises:
+    """leaf_newton over rows[0 .. m) only, in that order (the bagged rows);
+    nodes / g / h are indexed by the full row (n of them)."""
+    var sg = List[Float64](length=n_nodes, fill=0.0)
+    var sh = List[Float64](length=n_nodes, fill=0.0)
+    for r in range(m):
+        var i = Int(rows[unsafe_offset=r])
+        if i < 0 or i >= n:
+            raise Error("x_trees leaf_newton_rows: row out of range")
+        var k = Int(nodes[unsafe_offset=i])
+        if k < 0 or k >= n_nodes:
+            raise Error("x_trees leaf_newton_rows: node out of range")
+        sg[k] = sg[k] + g[unsafe_offset=i]
+        sh[k] = sh[k] + h[unsafe_offset=i]
+    _newton_values(sg, sh, n_nodes, reg_lambda, l1, max_delta_step, values)
 
 
 def tree_score_add(
@@ -522,6 +604,14 @@ def transpose_f32(
 
 
 # ------------------------------------------------------ wrappers' helpers
+def logit(x: MutPointer[Float64, MutUntrackedOrigin], n: Int):
+    """In place: x = log(x / (1 - x)) (shap `links.logit`), one IEEE division
+    and the pinned binary64 log."""
+    for i in range(n):
+        var v = x[unsafe_offset=i]
+        x[unsafe_offset=i] = identical_log64(v / (1.0 - v))
+
+
 def normalize_rows(x: MutPointer[Float64, MutUntrackedOrigin], n: Int, k: Int):
     """x[i, :] /= sum (class order); a row summing to 0 becomes uniform 1/k
     (sklearn's calibration rule; OneVsRest would divide 0/0, refused here

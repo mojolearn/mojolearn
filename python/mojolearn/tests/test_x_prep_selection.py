@@ -69,8 +69,45 @@ def test_mutual_info():
     np.testing.assert_allclose(a, b, atol=3e-3)
 
 
+def test_mutual_info_discrete():
+    rng = np.random.default_rng(6)
+    n = 500
+    y = rng.integers(0, 3, n)
+    Xd = np.stack([rng.integers(0, 4, n), (y + rng.integers(0, 2, n)) % 4, y * 2.5,
+                   np.full(n, 7)], axis=1).astype(np.float32)
+    Xc = (rng.standard_normal((n, 2)) + y[:, None] * np.array([0.2, 1.0])).astype(np.float32)
+    X = np.concatenate([Xd[:, :2], Xc[:, :1], Xd[:, 2:], Xc[:, 1:]], axis=1)
+    yr = (X[:, 1] + 0.7 * rng.standard_normal(n)).astype(np.float32)
+    Xd4 = X[:, [0, 1, 3, 4]]
+    for A, df in ((Xd4, True), (X, [0, 1, 3, 4]), (X, np.array([True, True, False, True, True, False])),
+                  (X, [-6, 1, 3, -2]), (X, True)):
+        a = np.asarray(ml.mutual_info_classif(A, y, discrete_features=df, random_state=0))
+        b = skfs.mutual_info_classif(A, y, discrete_features=df, random_state=0)
+        np.testing.assert_allclose(a, b, atol=3e-3, err_msg=f"classif {df}")
+        if A is X and df is True:     # continuous columns as categories: one sample per value
+            for f in (ml.mutual_info_regression, skfs.mutual_info_regression):
+                try:
+                    f(A, yr, discrete_features=df, random_state=0)
+                    raise AssertionError("no ValueError")
+                except ValueError:
+                    pass
+            continue
+        a = np.asarray(ml.mutual_info_regression(A, yr, discrete_features=df, random_state=0))
+        b = skfs.mutual_info_regression(A, yr, discrete_features=df, random_state=0)
+        np.testing.assert_allclose(a, b, atol=3e-3, err_msg=f"regression {df}")
+    # discrete_features=False on the integer columns: exact ties, broken by the noise
+    # (the reference's float64 draw, our noise word); the estimate is then a random
+    # variable of the draw, so the two agree as seed means
+    for f, g, t in ((ml.mutual_info_classif, skfs.mutual_info_classif, y),
+                    (ml.mutual_info_regression, skfs.mutual_info_regression, yr)):
+        a = np.mean([np.asarray(f(X, t, discrete_features=False, random_state=s)) for s in range(10)], axis=0)
+        b = np.mean([g(X, t, discrete_features=False, random_state=s) for s in range(10)], axis=0)
+        np.testing.assert_allclose(a, b, atol=2.5e-2, err_msg=f"{f.__name__} False (ties)")
+
+
 if __name__ == "__main__":
     test_mutual_info()
+    test_mutual_info_discrete()
     print("PASS test_x_prep_selection (mutual info)")
 
 
@@ -89,3 +126,61 @@ def test_rfe():
 if __name__ == "__main__":
     test_rfe()
     print("PASS test_x_prep_selection (rfe)")
+
+
+def test_score_edges_and_rfe_getter():
+    """The reference's NaN / inf score edges, f_regression / r_regression
+    force_finite, RFE importance_getter as a str and a callable."""
+    import warnings
+    from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as SkLDA
+    rng = np.random.default_rng(11)
+    n = 300
+    y = rng.integers(0, 3, n)
+    X = rng.standard_normal((n, 5)).astype(np.float32)
+    X[:, 1] = 2.5                                   # constant: NaN
+    X[:, 2] = y.astype(np.float32)                  # constant within classes: +inf
+    Xc = np.abs(X)
+    Xc[:, 4] = 0                                    # all-zero: chi2 NaN
+    yr = (X[:, 0] * 0.5 + rng.standard_normal(n)).astype(np.float32)
+    Xr = X.copy()
+    Xr[:, 3] = yr * 2                               # |r| = 1
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        cases = [(ml.f_classif(X, y), skfs.f_classif(X.astype(np.float64), y)),
+                 (ml.chi2(Xc, y), skfs.chi2(Xc.astype(np.float64), y))]
+        # the constant column 1: the reference divides its float noise by a zero norm
+        # (+-inf or NaN by rounding); mojolearn gives the mathematical value, r 0 / F 0 /
+        # p 1 with force_finite and NaN without it
+        keep = np.array([0, 2, 3, 4])
+        for ff in (True, False):
+            fs, fp = ml.f_regression(Xr, yr, force_finite=ff)
+            mr = np.asarray(ml.r_regression(X, yr, force_finite=ff))
+            edge = (0.0, 1.0, 0.0) if ff else (np.nan, np.nan, np.nan)
+            np.testing.assert_array_equal([np.asarray(fs)[1], np.asarray(fp)[1], mr[1]], edge)
+            rs, rp = skfs.f_regression(Xr.astype(np.float64), yr, force_finite=ff)
+            cases.append(((np.asarray(fs)[keep], np.asarray(fp)[keep]), (rs[keep], rp[keep])))
+            rr = skfs.r_regression(X.astype(np.float64), yr, force_finite=ff)
+            np.testing.assert_allclose(mr[keep], rr[keep], rtol=2e-3, atol=1e-4)
+    for (s, p), (rs, rp) in cases:
+        s, p = np.asarray(s, dtype=np.float64), np.asarray(p, dtype=np.float64)
+        huge = rs > 1e10                            # |r| = 1 / separable: float64 may stop short of inf
+        assert np.all(s[huge] > 1e10) and np.all(p[huge] < 1e-6), (s, rs)
+        for mine, ref in ((s[~huge], rs[~huge]), (p[~huge], rp[~huge])):
+            assert np.array_equal(np.isnan(mine), np.isnan(ref)), (mine, ref)
+            fin = np.isfinite(ref)
+            np.testing.assert_allclose(mine[fin], ref[fin], rtol=2e-2, atol=1e-5)
+    m = ml.SelectKBest(k=2).fit(X, y)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        r = skfs.SelectKBest(k=2).fit(X.astype(np.float64), y)
+    assert list(m.get_support()) == list(r.get_support())
+    Xg = (rng.standard_normal((n, 8)) + y[:, None] * np.linspace(0, 1.4, 8)).astype(np.float32)
+    for g in ("coef_", lambda e: e.coef_[0]):
+        m = ml.RFE(ml.LinearDiscriminantAnalysis(), n_features_to_select=3, step=2, importance_getter=g).fit(Xg, y)
+        r = skfs.RFE(SkLDA(), n_features_to_select=3, step=2, importance_getter=g).fit(Xg.astype(np.float64), y)
+        np.testing.assert_array_equal(np.asarray(m.ranking_), r.ranking_)
+
+
+if __name__ == "__main__":
+    test_score_edges_and_rfe_getter()
+    print("PASS test_x_prep_selection (score edges, rfe getter)")

@@ -232,14 +232,15 @@ def check_tie(mut card: IdentityTrace) raises:
 def check_nan(mut card: IdentityTrace) raises:
     """DEVIATION 5006: an out-of-bounds isotonic prediction is the constant
     word 0x7FC00000, never a computed NaN (IDENTITY_PATHS Clause B)."""
+    # the unpinned spelling is whatever NaN the target computes: x86's 0/0
+    # is 0xFFC00000, NVIDIA's 0x7FFFFFFF; an Arm host's IS the canonical word,
+    # so the fixture's separation is stated against x86's word, a constant
+    _require(CANONICAL_NAN_BITS != UInt32(0xFFC00000), "VACUOUS nan fixture")
     var zero = List[Float32](length=1, fill=0)
     var computed = zero[0] / zero[0]
     comptime if CompilationTarget.is_x86():
         _require(_bits(computed) != CANONICAL_NAN_BITS,
                  "VACUOUS nan fixture: this x86 host's computed NaN is the canonical word")
-    else:
-        if _bits(computed) == CANONICAL_NAN_BITS:
-            print("NOTE 5006: this target's default NaN IS the canonical word; separation is shown on x86/NVIDIA")
     var q: List[Float32] = [Float32(-5), Float32(0.5), Float32(9)]
     var th: List[Float32] = [Float32(0), Float32(1), Float32(0), Float32(2)]
     var ip: List[Int32] = [Int32(2), Int32(0)]

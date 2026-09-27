@@ -1,14 +1,14 @@
 diff --git a/x_decomp/cells.mojo b/x_decomp/cells.mojo
-index b8537db32..8b88ae240 100644
+index 4b4c2cedf..910f8c526 100644
 --- a/x_decomp/cells.mojo
 +++ b/x_decomp/cells.mojo
-@@ -319,7 +319,8 @@ def gemm_cell(
+@@ -341,7 +341,8 @@ def colsum_cell(a: F32Ptr, j: Int, n: Int, d: Int) -> Float32:
  @always_inline
- def colsum_cell(a: F32Ptr, j: Int, n: Int, d: Int) -> Float32:
+ def colsum_part_cell(a: F32Ptr, j: Int, n: Int, d: Int, r0: Int, r1: Int) -> Float32:
      var acc = Float32(0)
--    for i in range(n):
-+    for ii in range(n):
-+        var i = n - 1 - ii  # SABOTAGE 5301: the column fold descending
+-    for i in range(r0, r1):
++    for ii in range(r0, r1):
++        var i = r1 - 1 - (ii - r0)  # SABOTAGE 5301: the column fold descending
          acc = add(acc, a.unsafe_load(i * d + j))
      return acc
  

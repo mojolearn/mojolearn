@@ -1,0 +1,14 @@
+diff --git a/sequence/ops.mojo b/sequence/ops.mojo
+index f2d5d61cf..333c04f58 100644
+--- a/sequence/ops.mojo
++++ b/sequence/ops.mojo
+@@ -278,7 +278,8 @@ def op_colsum(t: Int, a: Args):
+     var acc = Float32(0.0)
+     if a.i3 != 0:
+         acc = ld(a.p1, t)
+-    for r in range(a.i0):
++    for rr in range(a.i0):
++        var r = a.i0 - 1 - rr
+         acc = add(acc, ld(a.p0, r * a.i2 + t))
+     st(a.p1, t, acc)
+ 

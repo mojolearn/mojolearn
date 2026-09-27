@@ -1,0 +1,13 @@
+diff --git a/x_neighbors/items.mojo b/x_neighbors/items.mojo
+--- a/x_neighbors/items.mojo
++++ b/x_neighbors/items.mojo
+@@ -916,7 +916,8 @@
+         if Int(dangling.unsafe_load(i)) != 0:
+             dsum = _add(dsum, x.unsafe_load(i))
+     var pt = ftz(p.unsafe_load(t))
+-    var inner = ftz(identical_mul_add(dsum, ftz(dw.unsafe_load(t)), acc))
++    var inner = ftz(identical_mul_add(dsum, pt, acc))
++
+     var teleport = ftz(identical_mul(_sub(Float32(1), alpha), pt))
+     res.unsafe_store(t, ftz(identical_mul_add(alpha, inner, teleport)))
+ 

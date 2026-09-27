@@ -57,7 +57,7 @@ def parallel_optimizer_step_host(
             v_ptr, offsets_ptr, init_ptr, info_ptr, n_tensors, kind, t,
             nesterov, lr, beta1, beta2, eps, weight_decay, momentum,
             dampening, max_norm)
-    if devices < 1 or devices > 64 or GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+    if devices < 1 or devices > 64 or GLOBAL_NUMERIC_MODE > NUMERIC_IDENTICAL:
         raise Error("parallel optimizer requires IDENTICAL and 1..64 devices")
     comptime if STEP_PHASE_TIMERS:
         raise Error("parallel optimizer cannot use process-global phase counters")

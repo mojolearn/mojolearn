@@ -1,0 +1,11 @@
+--- a/x_ann/cagra_core.mojo
++++ b/x_ann/cagra_core.mojo
+@@ -162,7 +162,7 @@
+     for w in range(words):
+         visited.unsafe_store(vbase + w, Int32(0))
+     for t in range(n_seeds):
+-        var v = (t * n) // n_seeds
++        var v = ((t * n) // n_seeds + 1) % n
+         var word = visited.unsafe_load(vbase + v // 32)
+         var bit = Int32(1) << Int32(v % 32)
+         if (word & bit) != 0:

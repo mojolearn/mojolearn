@@ -82,17 +82,66 @@ new algorithm, measure nothing. Worktree `~/mojolearn-wt/algos-bench`, branch
   amd (`drydiff_s2m5.log`). test_lane_select skipped per CURRENT DIRECTIVES
   item 0 (bench-only diff); last run: the single kmeans_oracle 54 vs 47
   failure of merge 3, not bench.
-- Still guessed (classes not merged): Prophet, the MoE block. When the
-  sequence lane merges them: read the class, fix the `prophet` / `moe`
-  entries in LANES and their builders (`_build_ts`, the layer builder), build
-  with `tools/algos_lane_check.sh <lane>` on the pod and smoke with
-  `~/mojolearn-evidence/algos-bench/smoke_s2.py` (OURS=/root/ourspy runs the
-  source tree; `drydiff.sh` is the before/after plan diff).
+- Session 3, merge 6: the `prophet` and `moe` races call the classes as
+  exported: `ProphetForecaster(...).fit(ds, Y).predict(future ds)` (ds hourly
+  from 2024-01-01, max_iter=10000 = prophet's Stan iter) vs prophet-cpu;
+  `MoEBlock(hidden_size, intermediate_size, num_experts, top_k,
+  norm_topk_prob)` loading torch's weights in HF's fused layout, forward only
+  on every arm, vs the six torch arms. Dry run of the 93 existing races
+  byte-identical on apple, nvidia, amd (`drydiff_s3.log`). Lane check on the
+  pod: sequence-prophet, sequence-moe AGREE (`lanecheck_s3.log`). Plumbing
+  smoke (`smoke_s3.log`; OURS=/root/ourspy for prophet, OURS=/root/ourstorchpy
+  and THEIRS=/usr/bin/python3 for moe, since /root/opp has no torch): every
+  arm of both races ran, ours-cpu bits equal ours. On the merged tree: bench
+  tests 62 pass; test_host_surface 196 pass after fixing main's
+  byte-lm-host-train revision (72a64f8b9 named no size; now in
+  NON_SIZE_REVISIONS of tools/identity_break.py). test_lane_select skipped
+  (bench-only diff plus identity_break.py, not a trigger path).
+- Session 4, option parity (item 3), merge 7: read every lane's option-parity
+  merge on main (prep b2de7bf0e, c73e49116, ac4abdac1, cfc7646d5; cnn
+  0e2798963; cluster e670b8db2; decomp ec539d941, 18d267abe; trees
+  00d0138d5; linear 651e359c8). None of their new options is needed by a race:
+  every race already runs the opponents' default for them. A constructor
+  default census on the pod (`default_diff.py`, `default_diff2.py`: ours vs
+  scikit-learn 1.7.2, torch.nn and cuML on every parameter a race does not
+  set) found three races NOT at matched settings, now set in `LANES`:
+  kbins `quantile_method='linear'` on ours and scikit-learn (the pinned
+  1.7.2's default and cuML's np.percentile edges; ours defaults to
+  'averaged_inverted_cdf'); tsne `init='random'` on every arm (ours refused
+  'pca', so its arm could not have run; cuML has only random); sgd-reg cuML
+  `power_t=0.25` (scikit-learn's and ours; cuML defaults to 0.5). Other census
+  diffs are the same semantics under another spelling (MDS metric, AdaBoost
+  algorithm, Calibrated ensemble, Lars eps) or output dtype (encoders, ours
+  float32). Still unmatched, by missing options (NOT_IMPLEMENTED rows):
+  categorical-nb min_categories (ours_drop), damped-ets seasonal, tsne
+  Barnes-Hut (refused under IDENTICAL). Dry run: 93 existing races
+  byte-identical, and the whole plan byte-identical, on apple, nvidia, amd
+  (`drydiff_s4.log`). Bench tests 62 pass, test_host_surface 196 pass
+  (`premerge_s4.log`). test_lane_select skipped (bench-only diff).
+  Plumbing smoke of the three races (`smoke_s4.log`; bindings x_prep,
+  x_linear, x_ann GPU + host built on the pod; Istella staged from R2,
+  `stage3.log`): every arm ran, cuML from /root/rapids; ours-cpu bits equal
+  ours on all; kbins ours equals scikit-learn exactly at the matched
+  quantile_method. At 2,000 smoke rows SGDRegressor on Istella diverges on
+  both ours and scikit-learn (the same settings; a smoke-shape fact).
+  The x_ann host build refuses an existing output: delete the .so first.
+- Every algos class is now in the source tree; no race is guessed.
+- damped-ets stays non-seasonal on every arm: main's ETS still refuses
+  seasonal components (`_x_sequence_ets.py`). When sequence adds them, restore
+  `season_length=24` with a seasonal model on ours, statsforecast AutoETS and
+  statsmodels ExponentialSmoothing(seasonal="add", seasonal_periods=24).
+- Pod note: run `tools/dev_pod.sh sync bench ~/mojolearn-wt/algos-bench` with
+  `MOJOLEARN_DEVPOD_ALLOW_SELF=1` when running the tool from this worktree.
 
 ## Next
 
-- As lanes add classes or options (option parity), align `LANES` params and
-  the ours adapters; re-read CURRENT DIRECTIVES in the plan after each merge.
+- Option parity again as more lanes merge options: re-run
+  `~/mojolearn-evidence/algos-bench/default_diff.py` / `default_diff2.py` on
+  the pod (`/root/opp/bin/python` for sklearn, `/usr/bin/python3` for torch,
+  `/root/rapids/bin/python` for cuML, cwd /root/mojolearn) and set in `LANES`
+  only what makes a race's settings match. When prep adds CategoricalNB
+  min_categories, drop the `ours_drop`; when sequence adds seasonal ETS,
+  restore the seasonal damped-ets race (below).
 
 ## Adding a class name or contract
 

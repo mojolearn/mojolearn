@@ -1,5 +1,5 @@
 diff --git a/x_decomp/cells.mojo b/x_decomp/cells.mojo
-index b8537db32..d04578773 100644
+index 4b4c2cedf..d793f6d22 100644
 --- a/x_decomp/cells.mojo
 +++ b/x_decomp/cells.mojo
 @@ -97,7 +97,7 @@ def mul(a: Float32, b: Float32) -> Float32:

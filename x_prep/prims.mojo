@@ -425,6 +425,49 @@ def class_stats_unit(t: Int, f: FP, q: IP):
         st(f, p(q, 8) + t, s)
 
 
+def class_stats_w_unit(t: Int, f: FP, q: IP):
+    """q = [X, n, d, Y, K, CNT, MEAN, VAR, SUM, W]; t = k*d + c: class_stats
+    with the per-row weight W[i] (the naive Bayes sample_weight): over the rows
+    of class k, ascending, SUM = sum w x, CNT = sum w (for c == 0),
+    MEAN = SUM / CNT and VAR = sum w (x - MEAN)^2 / CNT (numpy `average`
+    with weights). Offsets < 0 are not written; a class of zero weight
+    writes zeros."""
+    var X = p(q, 0)
+    var n = p(q, 1)
+    var d = p(q, 2)
+    var Y = p(q, 3)
+    var W = p(q, 9)
+    var k = t // d
+    var c = t % d
+    var sw = Float32(0)
+    var s = Float32(0)
+    for i in range(n):
+        if Int(ld(f, Y + i)) != k:
+            continue
+        var w = ld(f, W + i)
+        s = add(s, mul(w, ld(f, X + i * d + c)))
+        sw = add(sw, w)
+    var mean = Float32(0)
+    var ss = Float32(0)
+    if sw != Float32(0):
+        mean = div(s, sw)
+        if p(q, 7) >= 0:
+            for i in range(n):
+                if Int(ld(f, Y + i)) != k:
+                    continue
+                var e = sub(ld(f, X + i * d + c), mean)
+                ss = add(ss, mul(ld(f, W + i), mul(e, e)))
+            ss = div(ss, sw)
+    if c == 0 and p(q, 5) >= 0:
+        st(f, p(q, 5) + k, sw)
+    if p(q, 6) >= 0:
+        st(f, p(q, 6) + t, mean)
+    if p(q, 7) >= 0:
+        st(f, p(q, 7) + t, ss)
+    if p(q, 8) >= 0:
+        st(f, p(q, 8) + t, s)
+
+
 def center_rows_unit(t: Int, f: FP, q: IP):
     """q = [X, n, d, M, Y, W, OUT]; t = element. OUT = (X - M[y_i, c]) * W[c]
     (Y < 0: row 0 of M for every row; W < 0: no scale)."""
@@ -629,3 +672,56 @@ def where_code_unit(t: Int, f: FP, q: IP):
         f.unsafe_store(p(q, 6) + t, raw(f, p(q, 4)))
         return
     f.unsafe_store(p(q, 6) + t, raw(f, p(q, 5) + t))
+
+
+# ---------------------------------------------------------------- option parity
+def indicator_unit(t: Int, f: FP, q: IP):
+    """q = [Y, count, MODE, THR, NEG, POS, OUT]; t = element. int32 bits: POS
+    on a hit, else NEG. MODE 0: a hit is Y != 0 (LabelBinarizer's multilabel
+    transform, sklearn `label_binarize`); MODE 1: a hit is Y > THR[0] (its
+    inverse, `_inverse_binarize_multilabel`; NaN is no hit)."""
+    var y = ld(f, p(q, 0) + t)
+    var hit: Bool
+    if p(q, 2) == 0:
+        hit = y != Float32(0)
+    else:
+        hit = y > ld(f, p(q, 3))
+    sti(f, p(q, 6) + t, p(q, 5) if hit else p(q, 4))
+
+
+def code_counts_unit(t: Int, f: FP, q: IP):
+    """q = [CODES, n, d, KSTRIDE, OUT]; t = column c. For every row, ascending,
+    a code k >= 0 of column c adds one to the int32 count OUT[c*KSTRIDE + k]
+    (OUT arrives zeroed): the encoders' per-category counts (sklearn
+    `_unique(..., return_counts=True)`, `_get_counts`)."""
+    var n = p(q, 1)
+    var d = p(q, 2)
+    var c = t
+    var base = p(q, 4) + c * p(q, 3)
+    for i in range(n):
+        var code = Int(ld(f, p(q, 0) + i * d + c))
+        if code >= 0:
+            sti(f, base + code, ldi(f, base + code) + 1)
+
+
+def remap_codes_unit(t: Int, f: FP, q: IP):
+    """q = [CODES, count, d, MAP, MSTRIDE, NMAP, NEG, OUT]; t = element of
+    column c = t % d. A code k in [0, NMAP[c]) becomes MAP[c*MSTRIDE + k] (the
+    encoders' infrequent grouping, sklearn `_map_infrequent_categories`); a
+    negative code becomes NEG[c] (NEG < 0: stays); any other code stays."""
+    var d = p(q, 2)
+    var c = t % d
+    var code = ld(f, p(q, 0) + t)
+    var v = code
+    if code < Float32(0):
+        if p(q, 6) >= 0:
+            v = ld(f, p(q, 6) + c)
+    elif Int(code) < Int(ld(f, p(q, 5) + c)):
+        v = ld(f, p(q, 3) + c * p(q, 4) + Int(code))
+    st(f, p(q, 7) + t, v)
+
+
+def add_arrays_unit(t: Int, f: FP, q: IP):
+    """q = [A, B, OUT]; t = element: OUT = A + B (a running count plus a
+    batch's, the naive Bayes partial_fit)."""
+    st(f, p(q, 2) + t, add(ld(f, p(q, 0) + t), ld(f, p(q, 1) + t)))

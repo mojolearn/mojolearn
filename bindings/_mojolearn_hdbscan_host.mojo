@@ -49,6 +49,7 @@ from hdbscan.host.hdbscan_host_oracle import (
     hdbh_fit,
 )
 from hdbscan.impl.prediction_data import generate_prediction_data
+from hdbscan.impl.detail.extract import probabilities_from_labels
 
 
 def hdbscan_host_numeric_mode_binding() raises -> PythonObject:
@@ -88,15 +89,18 @@ def hdbscan_fit_binding(
     """`HDBSCAN(...).fit(X)` on the host. Returns the cluster count.
     `addrs`: 0 x, 1 labels_out (n int32), 2 core_dists_out (n float32),
     3 info_out (4 int32: n_clusters, n_outliers, Boruvka rounds,
-    n_condensed_clusters). `params`: 0 n, 1 d, 2 min_samples,
+    n_condensed_clusters), then optionally the tree's five, then optionally
+    probabilities_out (n float32, DEVIATION 5116). `params`: 0 n, 1 d, 2 min_samples,
     3 min_cluster_size, 4 max_cluster_size, 5 alpha, 6 allow_single_cluster,
     7 cluster_selection_method, 8 cluster_selection_epsilon, 9 metric."""
-    if len(addrs) != 4 and len(addrs) != 9:
+    var n_addrs = len(addrs)
+    if n_addrs != 4 and n_addrs != 5 and n_addrs != 9 and n_addrs != 10:
         raise Error(
             "hdbscan_fit: addrs must contain 4 addresses (x, labels_out,"
             " core_dists_out, info_out) or 9 (plus the condensed tree's"
-            " parents, children, lambdas, sizes and inverse_label_map), got "
-            + String(len(addrs))
+            " parents, children, lambdas, sizes and inverse_label_map),"
+            " either one followed by probabilities_out, got "
+            + String(n_addrs)
         )
     if len(params) != 10:
         raise Error(
@@ -120,7 +124,12 @@ def hdbscan_fit_binding(
     var eps = Float32(Float64(py=params[8]))
     var metric = Int(py=params[9])
     var x = read_f32(Int(py=addrs[0]), max(0, n * d))
-    var want_tree = len(addrs) == 9
+    var want_tree = n_addrs >= 9
+    # DEVIATION 5116: probabilities_out (n float32) is the LAST address.
+    var want_probs = n_addrs == 5 or n_addrs == 10
+    var pp = cp
+    if want_probs:
+        pp = f32_ptr(Int(py=addrs[n_addrs - 1]))
     var tpp = lp
     var tcp = lp
     var tlp = cp
@@ -161,6 +170,12 @@ def hdbscan_fit_binding(
                 tsp.unsafe_store(e, out.tree.sizes[e])
             for c in range(out.n_clusters):
                 invp.unsafe_store(c, out.inverse_label_map[c])
+        if want_probs:
+            var probs = probabilities_from_labels(
+                out.tree, out.labels, out.inverse_label_map, n
+            )
+            for i in range(n):
+                pp.unsafe_store(i, probs[i])
         n_clusters = out.n_clusters
         _ = out^
     _ = x^

@@ -30,7 +30,7 @@ comptime EQ_TOL = Float32(1.1920929e-07)
 
 
 def lars_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
-    """ip: [max_iter, fit_intercept, lasso]; fp: [alpha_min].
+    """ip: [max_iter, fit_intercept, lasso, positive]; fp: [alpha_min].
     res: coef d, intercept, n_iter, alpha, n_active, active d.
     fw: xm d | G d*d | xty d | prev d | cov d | L d*d | ls d | sgn d | corr d.
     iw: state d (0 inactive, 1 active, 2 degenerate) | active list d."""
@@ -38,6 +38,7 @@ def lars_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: 
     var fi = ldi(ip, 1) != 0
     var lasso = ldi(ip, 2) != 0
     var alpha_min = ld(fp, 0)
+    var positive = ldi(ip, 3) != 0
     var xm = 0
     var gg = d
     var xty = gg + d * d
@@ -91,7 +92,8 @@ def lars_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: 
         var cbig = Float32(0)
         for j in range(d):
             if ldi(iw, state + j) == 0:
-                var a = fabs(ld(fw, cov + j))
+                # their positive=True takes argmax(Cov), not argmax |Cov|
+                var a = ld(fw, cov + j) if positive else fabs(ld(fw, cov + j))
                 # DEVIATION 5005 (IDENTITY_PATHS row 105): strict >, the
                 # lowest index wins an exact tie
                 if c_idx < 0 or a > cbig:
@@ -113,7 +115,7 @@ def lars_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: 
             if c_idx < 0:
                 break
             sti(iw, act + k, c_idx)
-            st(fw, sgn + k, fsign(ld(fw, cov + c_idx)))
+            st(fw, sgn + k, Float32(1) if positive else fsign(ld(fw, cov + c_idx)))
             # the new pivot of the Cholesky of G_AA
             for a in range(k + 1):
                 for b in range(k + 1):
@@ -156,9 +158,10 @@ def lars_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: 
             var g1 = fd(fs(cbig, cv), fa(fs(aa, cj), TINY32))
             if g1 > 0 and g1 < gamma:
                 gamma = g1
-            var g2 = fd(fa(cbig, cv), fa(fa(aa, cj), TINY32))
-            if g2 > 0 and g2 < gamma:
-                gamma = g2
+            if not positive:
+                var g2 = fd(fa(cbig, cv), fa(fa(aa, cj), TINY32))
+                if g2 > 0 and g2 < gamma:
+                    gamma = g2
         drop = False
         var z_pos = BIG
         for a in range(k):

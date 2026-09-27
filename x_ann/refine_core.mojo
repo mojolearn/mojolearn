@@ -7,7 +7,7 @@ Reference: cuVS `cpp/src/neighbors/refine/refine_device.cuh` /
 per cell: the ascending fused square sum per candidate (an id < 0 is a
 padding slot and is skipped, as their kOutOfBoundsRecord is), and a sorted
 insertion under (distance, id), so equal distances resolve by id whatever
-order the candidates arrive in."""
+order the candidates arrive in (DEVIATION 5850)."""
 
 from checks.numerics import ftz, identical_mul_add
 from x_ann.ivf_pq_core import F32P, I32P, pq_inf, pq_insert
