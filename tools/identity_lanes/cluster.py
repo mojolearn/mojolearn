@@ -32,3 +32,17 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("predict", "transform", sl=np.s_[:256, :8]), "x-cluster-minibatch-kmeans")
+
+
+@lane("x-cluster-bisecting-kmeans")
+def _(ml, X, yc, yr, Xh=None):
+    """BisectingKMeans (python/mojolearn/_expansion_cluster.py): 2000 x 6
+    rows, five leaves by biggest inertia, two restarts per split; infer is
+    the tree descent and the distances to the leaf centers."""
+    m = ml.BisectingKMeans(n_clusters=5, n_init=2, random_state=3).fit(X[:2000, :6])
+    return _fit(dict(centers=_h(m.cluster_centers_), labels=_h(m.labels_), tree=_h(m._tree_nodes),
+                     inertia=_h(np.float64(m.inertia_))),
+                m, lambda e: (e.predict(Xh[:256, :6]), e.transform(Xh[:256, :6])))
+
+
+_batch_decl(_rows_calls("predict", "transform", sl=np.s_[:256, :6]), "x-cluster-bisecting-kmeans")

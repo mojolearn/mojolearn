@@ -21,15 +21,15 @@ FAMILIES = (
         routes="_mojolearn_x_cluster",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("x-cluster-minibatch-kmeans",),
+        training_lanes=("x-cluster-minibatch-kmeans", "x-cluster-bisecting-kmeans"),
         inference_lanes=(),
         forest_kinds=(),
-        classes=("MiniBatchKMeans",),
+        classes=("MiniBatchKMeans", "BisectingKMeans"),
         display="the cluster expansion lane (MiniBatchKMeans, BisectingKMeans, MeanShift, OPTICS, AffinityPropagation)",
         host_modules=(
             "x_cluster/host/host_ops.mojo", "x_cluster/bodies.mojo", "x_cluster/ops.mojo",
             "x_cluster/common.mojo", "x_cluster/entries.mojo", "x_cluster/out.mojo",
-            "x_cluster/minibatch.mojo",
+            "x_cluster/minibatch.mojo", "x_cluster/bisect.mojo",
         ),
         exports=(
             "x_cluster_host_numeric_mode", "x_cluster_host_vendor", "x_cluster_host_column",
@@ -40,5 +40,7 @@ FAMILIES = (
         ships_in_wheel=True,
     ),
 )
-TRAINING_LANE_NAMES = {"x-cluster-minibatch-kmeans": "MiniBatchKMeans"}
-PUBLIC_PENDING_LANES = {"x-cluster-minibatch-kmeans": "no reference"}
+TRAINING_LANE_NAMES = {"x-cluster-minibatch-kmeans": "MiniBatchKMeans",
+                       "x-cluster-bisecting-kmeans": "BisectingKMeans"}
+PUBLIC_PENDING_LANES = {"x-cluster-minibatch-kmeans": "no reference",
+                        "x-cluster-bisecting-kmeans": "no reference"}
