@@ -24,6 +24,7 @@ lists the stages and reads results back; the only arithmetic it does is
 integer bookkeeping and IEEE basic operations on scalar parameters.
 """
 import array
+import bisect
 import ctypes
 import numbers
 import operator
@@ -54,7 +55,7 @@ _OPS = dict(
     qt_inverse=74, pt_inverse=75, block_argmax=76, ord_inverse=77, cat_gather=78, where_code=79, kbins_inverse=80,
     da_shrink=81, da_pool=82, sym_fn=83, da_intercept=84, evr=85, class_stats_w=86,
     indicator=87, code_counts=88, remap_codes=89, add_arrays=90, gnb_merge=91, cat_counts=92, cat_flp=93,
-    mi_dc=94, mi_dd=95,
+    mi_dc=94, mi_dd=95, kbins_gw=96, kbins_wq=97, kbins_wkm=98,
 )
 _PARAMS = 14
 _NONE = -1
@@ -1202,7 +1203,12 @@ class KBinsDiscretizer(_PrepBase):
     is one bin with edges (-inf, inf). Above `subsample` rows the fit uses a
     with-replacement resample drawn from `random_state` by splitmix64 (the
     reference draws numpy's). inverse_transform is the bin centres, as the
-    reference's. sample_weight is refused."""
+    reference's. sample_weight (nonnegative, not all zero) weighs the
+    'quantile' edges (the reference's `_weighted_percentile` for
+    'averaged_inverted_cdf' / 'inverted_cdf'; the other methods are refused,
+    as the reference), the 'uniform' range (min / max over rows of nonzero
+    weight) and the 'kmeans' Lloyd; above `subsample` rows it draws the
+    resample instead (with replacement, weighted) and is then spent."""
     _parameters = ("n_bins", "encode", "strategy", "quantile_method", "dtype", "subsample", "random_state")
 
     def __init__(self, n_bins=5, *, encode="onehot", strategy="quantile", quantile_method="averaged_inverted_cdf",
@@ -1216,8 +1222,6 @@ class KBinsDiscretizer(_PrepBase):
         self.random_state = random_state
 
     def fit(self, X, y=None, sample_weight=None):
-        if sample_weight is not None:
-            raise NotImplementedError("mojolearn: KBinsDiscretizer sample_weight is not implemented")
         if self.encode not in ("onehot", "onehot-dense", "ordinal"):
             raise ValueError(f"mojolearn: invalid encode {self.encode!r}")
         strat = {"uniform": 0, "kmeans": 3}.get(self.strategy)
@@ -1231,17 +1235,44 @@ class KBinsDiscretizer(_PrepBase):
             raise ValueError(f"mojolearn: invalid strategy {self.strategy!r}")
         arr = _x2d(X)
         n, d = arr.shape
+        w = None
+        if sample_weight is not None:
+            w = as_f32_c(sample_weight, ndim=1, name="sample_weight")[0]
+            if w.size != n:
+                raise ValueError(f"mojolearn: sample_weight has {w.size} entries; X has {n} rows")
+            wl = w.tolist()
+            if any(not v >= 0 for v in wl):
+                raise ValueError("mojolearn: KBinsDiscretizer sample_weight must be nonnegative")
+            if not any(v > 0 for v in wl):
+                raise ValueError("mojolearn: KBinsDiscretizer sample_weight is all zero")
         if self.subsample is not None and n > self.subsample:
             state = 0 if self.random_state is None else int(self.random_state)
             rows = []
-            for _ in range(int(self.subsample)):
-                state, z = _splitmix64(state)
-                rows.append(z % n)
+            if w is None:
+                for _ in range(int(self.subsample)):
+                    state, z = _splitmix64(state)
+                    rows.append(z % n)
+            else:
+                # the reference's weighted resample with replacement (its weights are then
+                # spent): row = the first whose cumulative weight exceeds u * total, u a
+                # 53-bit splitmix64 uniform; cumulative sums in Python float64
+                cum, acc = [], 0.0
+                for v in wl:
+                    acc += v
+                    cum.append(acc)
+                for _ in range(int(self.subsample)):
+                    state, z = _splitmix64(state)
+                    rows.append(min(bisect.bisect_right(cum, (z >> 11) * 2.0 ** -53 * acc), n - 1))
+                w = None
             arr = _gather_rows(arr, rows)
             n = arr.shape[0]
         nb = [int(self.n_bins)] * d if isinstance(self.n_bins, numbers.Integral) else [int(b) for b in self.n_bins]
         if len(nb) != d or min(nb) < 2:
             raise ValueError("mojolearn: n_bins must be >= 2 per feature")
+        if w is not None and strat not in (0, 1, 3, 4):
+            raise ValueError("mojolearn: When fitting with strategy='quantile' and sample weights, quantile_method "
+                             "should either be set to 'averaged_inverted_cdf' or 'inverted_cdf', got "
+                             f"quantile_method='{self.quantile_method}' instead.")
         nbmax = max(nb)
         mode = _mode()
         pr = _Prog()
@@ -1253,9 +1284,38 @@ class KBinsDiscretizer(_PrepBase):
         ne = pr.alloc(d)
         lab = pr.alloc(n * d) if strat == 3 else 0
         cen = pr.alloc(d * nbmax) if strat == 3 else 0
-        pr.stage("sort_cols", d, xo, n, d, so, 0)
         pr.stage("col_stats", d, xo, n, d, st)
-        pr.stage("kbins_edges", d, so, n, d, nbo, nbmax, strat, st, edges, ne, lab, cen)
+        if w is None:
+            pr.stage("sort_cols", d, xo, n, d, so, 0)
+            pr.stage("kbins_edges", d, so, n, d, nbo, nbmax, strat, st, edges, ne, lab, cen)
+        else:
+            stw = st
+            if strat in (0, 3):
+                # the min / max over the rows of nonzero weight (the reference's nnz mask)
+                nz = [i for i, v in enumerate(wl) if v > 0]
+                stw = pr.alloc(6 * d)
+                if len(nz) < n:
+                    xz = pr.put(_gather_rows(arr, nz))
+                    pr.stage("col_stats", d, xz, len(nz), d, stw)
+                else:
+                    stw = st
+            if strat == 0:
+                pr.stage("kbins_edges", d, so, n, d, nbo, nbmax, 0, stw, edges, ne, 0, 0)
+            else:
+                ug, ucnt, codes = pr.alloc(2 * n * d), pr.alloc(d), pr.alloc(n * d)
+                pr.stage("sort_cols", d, xo, n, d, so, 1)
+                pr.stage("unique_cols", d, so, n, d, ug, ucnt)
+                pr.stage("lookup", n * d, xo, n, d, ug, n, ucnt, codes)
+                pr.stage("kbins_gw", d, codes, n, d, pr.put(w), ug + n * d)
+                if strat == 3:
+                    pr.stage("kbins_wkm", d, ug, n, d, ucnt, nbo, nbmax, st, stw, edges, cen, lab)
+                else:
+                    lev = []
+                    for b in nb:
+                        step = 100.0 / b
+                        lev += [i * step for i in range(b)] + [100.0] + [0.0] * (nbmax - b)
+                    pr.stage("kbins_wq", d, ug, n, d, ucnt, nbo, nbmax, pr.put_list(lev), int(strat == 1), edges)
+                pr.stage("kbins_edges", d, so, n, d, nbo, nbmax, 11, stw, edges, ne, 0, 0)
         pr.run(mode)
         counts = [int(v) for v in pr.values(ne, d)]
         self.bin_edges_ = [pr.get(edges + j * (nbmax + 1), counts[j]) for j in range(d)]
