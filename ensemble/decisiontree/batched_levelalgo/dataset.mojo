@@ -69,20 +69,32 @@ passed as a `DatasetView`, not as loose scalars.
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_FAST,
+    NUMERIC_IDENTICAL,
+)
 
 
 
 
 comptime RF_BINS_ROW_MAJOR = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    (
+        GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+        or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    )
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_RF_BINS_COLUMN_MAJOR"]()
 )
-"""Apple FAST only. NOT IDENTICAL (measured 2026-09-28, trees-apple, M3
-Ultra, the same forest bytes either way): with the IDENTICAL histogram
-arms it made RandomForestRegressor Istella-S 19.99 -> 25.65 s and
-DecisionTreeRegressor Istella-S 0.44 -> 0.56 s. For FAST: a forest whose rows' bins fit one 64-byte line
+"""Apple FAST, and Apple IDENTICAL for narrow data only
+(`RF_BINS_ROW_MAJOR_WIDE`). IDENTICAL wide data stays column-major
+(measured 2026-09-28, trees-apple, M3 Ultra, the same forest bytes either
+way): with the IDENTICAL histogram arms row-major made
+RandomForestRegressor Istella-S 19.99 -> 25.65 s and DecisionTreeRegressor
+Istella-S 0.44 -> 0.56 s, while it made RF taxireg (16 columns) 1.19x
+faster on the M4 Pro; so IDENTICAL takes row-major only at `n_cols <= 64`
+(trees-apple2). The index read is the same byte either way, so the forest
+bytes do not move. For FAST: a forest whose rows' bins fit one 64-byte line
 (`n_cols <= 64`) or whose trees sample at least half the features
 (`2k >= n_cols`) stores DEVIATION 314's uint8 bins ROW-major
 (`row * n_cols + col`, `DatasetView.bins_row_major`), so the histogram
@@ -90,6 +102,10 @@ kernel's column tile reads one row's bins from one cache line instead of
 one line per column. Same indices. Apple M4, 1M rows: taxireg (k 16 of 16)
 0.681, taxi (k 4 of 16) 0.921, Istella-S (k 15 of 220) 1.197 when forced --
 hence the gate. `-D MOJOLEARN_RF_BINS_COLUMN_MAJOR` turns it off."""
+
+comptime RF_BINS_ROW_MAJOR_WIDE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+"""The wide-data half of the `RF_BINS_ROW_MAJOR` gate (`2k >= n_cols` with
+`n_cols > 64`): FAST only, see above."""
 
 @fieldwise_init
 struct DatasetView[dtype: DType, label_dtype: DType](Copyable, Movable):

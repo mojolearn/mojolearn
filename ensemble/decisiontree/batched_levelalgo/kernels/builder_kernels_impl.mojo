@@ -458,6 +458,7 @@ comptime TPB_DEFAULT = 128
 # `find_best_splits_kernel`'s `pinned_reduce` parameter without flipping
 # the global.
 comptime BUILD_MODE = GLOBAL_NUMERIC_MODE
+
 comptime SPLIT_REDUCE_PINNED_DEFAULT = BUILD_MODE == NUMERIC_IDENTICAL
 
 comptime SAMPLE_PER_NODE_DEFAULT = (
@@ -521,10 +522,15 @@ comptime SMALL_NODE_ROWS = 256 if is_defined[
 """The largest node `small_node_split_kernel` takes."""
 
 comptime HIST_ZERO_AFTER_READ_DEFAULT = (
-    BUILD_MODE == NUMERIC_FAST
+    (
+        BUILD_MODE == NUMERIC_FAST
+        or (BUILD_MODE == NUMERIC_IDENTICAL and has_apple_gpu_accelerator())
+    )
     and not is_defined["MOJOLEARN_RF_FAST_HIST_ZERO_OFF"]()
 )
-"""FAST only: `find_best_splits_kernel` re-zeroes the histogram cells it
+"""FAST, and Apple IDENTICAL since trees-apple2 (2026-09-28; zeros are
+zeros, so no bit of a forest can move; see the ordering note at the zero
+in `find_best_splits_kernel`): `find_best_splits_kernel` re-zeroes the histogram cells it
 consumed, so the builder zeroes the histogram workspace ONCE and every later
 sampling round skips its `hist_zero` launch. On Metal each launch is its own
 command buffer (about 0.2 ms of GPU timeline at 1M rows on the M4), and the
@@ -3156,12 +3162,23 @@ def find_best_splits_kernel[
     # barrier; nothing after this kernel reads them before the next
     # round's histogram accumulates into them.
     comptime if zero_after:
+        # WHY `barrier()` IS ENOUGH HERE, ON APPLE TOO (whose `barrier()`
+        # orders threadgroup memory only; an `air.wg.barrier(3, 1)` call
+        # conflicts with the stdlib's declaration in this module). The zero
+        # is a WRITE after READS, never a read of another thread's store:
+        # every thread's loads of these cells fed the split it computed and
+        # the reduce before this point, so each load had returned before its
+        # thread arrived here. The only earlier STORES to these cells are
+        # `pdf_to_cdf`'s in-place cdf writes:
+        # class `c`'s cell `c * n_bins + tix` is written there by thread
+        # `tix mod TPB`, and the loop below gives each cell to that SAME
+        # thread (program order), per class.
         barrier()
-        var z = Int(thread_idx.x)
-        var cells = Int(n_bins) * Int(n_classes)
-        while z < cells:
-            histogram[unsafe_offset=z] = O.BinT()
-            z += TPB
+        for c in range(Int(n_classes)):
+            var z = Int(thread_idx.x)
+            while z < Int(n_bins):
+                histogram[unsafe_offset = c * Int(n_bins) + z] = O.BinT()
+                z += TPB
 
 
 def small_node_split_kernel[

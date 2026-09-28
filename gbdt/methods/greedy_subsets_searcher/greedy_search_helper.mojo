@@ -144,6 +144,7 @@ from gbdt.gpu_util.partitions_reduce import (
     compute_partition_stats,
 )
 from checks.kernel_matrix import (
+    COLUMN_APPLE,
     HIST_SMEM_SHARED2_I32,
     PINNED_PARTITION_CHUNKS_SM,
     TARGET_COLUMN,
@@ -442,12 +443,28 @@ comptime FAST_REPLICATION_PIN_2040 = is_defined[
 # `searcher_parity_covtype_check` (mixed policies, the shape that
 # catches numbering).
 # ====================================================
+comptime SYM_RIDX_MAX_FEATURES = 64
+"""trees-apple2: `run_tree_layout_traced` takes DEVIATION 2031 only when the
+layout has at most this many features (see `use_ridx` there)."""
+
 comptime SYM_RIDX_SPLITS_2031 = (
-    is_defined["MOJOLEARN_2031_SYM_RIDX_SPLITS"]()
+    (
+        is_defined["MOJOLEARN_2031_SYM_RIDX_SPLITS"]()
+        or (
+            TARGET_COLUMN == COLUMN_APPLE
+            and not is_defined["MOJOLEARN_2031_SYM_RIDX_SPLITS_OFF"]()
+        )
+    )
     and ridx_only_splits_for[
         TARGET_COLUMN, HIST_BUILD_MODE == NUMERIC_IDENTICAL
     ]()
 )
+"""DEFAULT ON APPLE since trees-apple2 (2026-09-28), both modes (the
+`ridx_only_splits_for` row admits Apple IDENTICAL since the same lane):
+M4 Pro 1M rows FAST SymmetricTree taxi 919 -> 835 ms (0.909), the SAME
+model digest (steward 1790608403999). `-D
+MOJOLEARN_2031_SYM_RIDX_SPLITS_OFF` restores the permuting reorder on
+Apple; elsewhere the define above still opts in."""
 
 # ================= DEVIATION BLOCK 2580 =================
 # QUANTIZE THE STATS ONCE PER LEVEL, NOT ONCE PER 4-FEATURE GROUP. Every
@@ -4739,6 +4756,15 @@ def run_tree_layout_traced[
     largest cell -- and passing zero asks for the largest scale the type
     admits. See `checks/fixed_point.mojo`.
     """
+    # DEVIATION 2031, trees-apple2: the ridx-only schedule only on NARROW
+    # layouts. Its gathered stat loads cost more than the reorder they save
+    # once a level walks many feature groups (M4 Pro IDENTICAL, steward
+    # 1790609918603: taxi 16 features 1024 -> 941 ms, Istella 220 features
+    # 2813 -> 2992 ms, the same digests). One decision per call, so a tree
+    # never mixes the two schedules.
+    var use_ridx = SYM_RIDX_SPLITS_2031 and (
+        len(fold_counts) + len(dynamic_fold_counts) <= SYM_RIDX_MAX_FEATURES
+    )
     # `statCount` is `1 + point.GetColumnCount()` -- their `StochasticDer`
     # sizes `StatsToAggregate` as one weight column plus one der column
     # per APPROX DIMENSION (`pointwise_target_impl.h:186-188`, and
@@ -5202,55 +5228,103 @@ def run_tree_layout_traced[
                         ctx, n_compute, n_rows, stat_count, sm_count, stats,
                         qstats, p_off, p_sz, ids_compute, fixed_scale,
                     )
-                launch_histograms_for_blocks[
-                    hist2_smem_mode, SYM_RIDX_SPLITS_2031,
-                    SYM_LEVEL_QUANT_2580, SYM_GROUP_WIDTH_2581,
-                ](
-                    ctx, dblocks, depth, n_compute, n_rows, stat_count,
-                    max_leaves, sm_count, fixed_scale,
-                    active_cindex, row_index, stats, p_off, p_sz,
-                    ids_compute, dense_ids,
-                    hist, acc_i32, block_hist, hist_cells_per_leaf,
-                    qstats=Optional(qstats.copy()), width_plans=width_plans,
-                )
+                if use_ridx:
+                    launch_histograms_for_blocks[
+                        hist2_smem_mode, True,
+                        SYM_LEVEL_QUANT_2580, SYM_GROUP_WIDTH_2581,
+                    ](
+                        ctx, dblocks, depth, n_compute, n_rows, stat_count,
+                        max_leaves, sm_count, fixed_scale,
+                        active_cindex, row_index, stats, p_off, p_sz,
+                        ids_compute, dense_ids,
+                        hist, acc_i32, block_hist, hist_cells_per_leaf,
+                        qstats=Optional(qstats.copy()), width_plans=width_plans,
+                    )
+                else:
+                    launch_histograms_for_blocks[
+                        hist2_smem_mode, False,
+                        SYM_LEVEL_QUANT_2580, SYM_GROUP_WIDTH_2581,
+                    ](
+                        ctx, dblocks, depth, n_compute, n_rows, stat_count,
+                        max_leaves, sm_count, fixed_scale,
+                        active_cindex, row_index, stats, p_off, p_sz,
+                        ids_compute, dense_ids,
+                        hist, acc_i32, block_hist, hist_cells_per_leaf,
+                        qstats=Optional(qstats.copy()), width_plans=width_plans,
+                    )
             else:
                 comptime if SYM_LEVEL_QUANT_2580:
                     enqueue_level_quantize(
                         ctx, n_compute, n_rows, stat_count, sm_count, stats,
                         qstats, p_off, p_sz, zero_ids, fixed_scale,
                     )
-                launch_histograms_for_blocks[
-                    hist2_smem_mode, SYM_RIDX_SPLITS_2031,
-                    SYM_LEVEL_QUANT_2580, SYM_GROUP_WIDTH_2581,
-                ](
-                    ctx, dblocks, depth, n_compute, n_rows, stat_count,
-                    max_leaves, sm_count, fixed_scale,
-                    active_cindex, row_index, stats, p_off, p_sz, zero_ids,
-                    dense_ids,
-                    hist, acc_i32, block_hist, hist_cells_per_leaf,
-                    qstats=Optional(qstats.copy()), width_plans=width_plans,
-                )
+                if use_ridx:
+                    launch_histograms_for_blocks[
+                        hist2_smem_mode, True,
+                        SYM_LEVEL_QUANT_2580, SYM_GROUP_WIDTH_2581,
+                    ](
+                        ctx, dblocks, depth, n_compute, n_rows, stat_count,
+                        max_leaves, sm_count, fixed_scale,
+                        active_cindex, row_index, stats, p_off, p_sz, zero_ids,
+                        dense_ids,
+                        hist, acc_i32, block_hist, hist_cells_per_leaf,
+                        qstats=Optional(qstats.copy()), width_plans=width_plans,
+                    )
+                else:
+                    launch_histograms_for_blocks[
+                        hist2_smem_mode, False,
+                        SYM_LEVEL_QUANT_2580, SYM_GROUP_WIDTH_2581,
+                    ](
+                        ctx, dblocks, depth, n_compute, n_rows, stat_count,
+                        max_leaves, sm_count, fixed_scale,
+                        active_cindex, row_index, stats, p_off, p_sz, zero_ids,
+                        dense_ids,
+                        hist, acc_i32, block_hist, hist_cells_per_leaf,
+                        qstats=Optional(qstats.copy()), width_plans=width_plans,
+                    )
         else:
             if planned:
-                launch_histograms_for_blocks[
-                    hist2_smem_mode, SYM_RIDX_SPLITS_2031
-                ](
-                    ctx, dblocks, depth, n_compute, n_rows, stat_count,
-                    max_leaves, sm_count, fixed_scale,
-                    active_cindex, row_index, stats, p_off, p_sz, ids_compute,
-                    dense_ids,
-                    hist, acc_i32, block_hist, hist_cells_per_leaf,
-                )
+                if use_ridx:
+                    launch_histograms_for_blocks[
+                        hist2_smem_mode, True
+                    ](
+                        ctx, dblocks, depth, n_compute, n_rows, stat_count,
+                        max_leaves, sm_count, fixed_scale,
+                        active_cindex, row_index, stats, p_off, p_sz, ids_compute,
+                        dense_ids,
+                        hist, acc_i32, block_hist, hist_cells_per_leaf,
+                    )
+                else:
+                    launch_histograms_for_blocks[
+                        hist2_smem_mode, False
+                    ](
+                        ctx, dblocks, depth, n_compute, n_rows, stat_count,
+                        max_leaves, sm_count, fixed_scale,
+                        active_cindex, row_index, stats, p_off, p_sz, ids_compute,
+                        dense_ids,
+                        hist, acc_i32, block_hist, hist_cells_per_leaf,
+                    )
             else:
-                launch_histograms_for_blocks[
-                    hist2_smem_mode, SYM_RIDX_SPLITS_2031
-                ](
-                    ctx, dblocks, depth, n_compute, n_rows, stat_count,
-                    max_leaves, sm_count, fixed_scale,
-                    active_cindex, row_index, stats, p_off, p_sz, zero_ids,
-                    dense_ids,
-                    hist, acc_i32, block_hist, hist_cells_per_leaf,
-                )
+                if use_ridx:
+                    launch_histograms_for_blocks[
+                        hist2_smem_mode, True
+                    ](
+                        ctx, dblocks, depth, n_compute, n_rows, stat_count,
+                        max_leaves, sm_count, fixed_scale,
+                        active_cindex, row_index, stats, p_off, p_sz, zero_ids,
+                        dense_ids,
+                        hist, acc_i32, block_hist, hist_cells_per_leaf,
+                    )
+                else:
+                    launch_histograms_for_blocks[
+                        hist2_smem_mode, False
+                    ](
+                        ctx, dblocks, depth, n_compute, n_rows, stat_count,
+                        max_leaves, sm_count, fixed_scale,
+                        active_cindex, row_index, stats, p_off, p_sz, zero_ids,
+                        dense_ids,
+                        hist, acc_i32, block_hist, hist_cells_per_leaf,
+                    )
         mgr.stream_kernel()
 
         # their `TScanHistogramsKernel` (`:1262`), over the computed set;
@@ -5317,7 +5391,7 @@ def run_tree_layout_traced[
         # DEVIATION 2031: with stationary stats, phase 1 gathers through
         # `row_index`; the walk order over positions is unchanged, so the
         # value sequence entering every partial is identical.
-        comptime if SYM_RIDX_SPLITS_2031:
+        if use_ridx:
             compute_partition_stats_gather(
                 ctx, n_live, max_live_rows, stat_count, n_rows,
                 dense_ids, p_off, p_sz, stats, row_index,
@@ -5485,7 +5559,7 @@ def run_tree_layout_traced[
         # selects, and `new_stats` goes untouched.
         var reorder_launches = 0
 
-        comptime if SYM_RIDX_SPLITS_2031:
+        if use_ridx:
             reorder_launches = launch_reorder_index_only(
                 ctx, n_live, max_live_rows, dense_ids, p_off, p_sz,
                 row_index, new_index, gmap, sm_count=sm_count,
@@ -5703,7 +5777,7 @@ def run_tree_layout_traced[
         times.begin(ctx)
         # DEVIATION 2031: the tail's refill goes through the same gather
         # arm as the level loop's -- one schedule per build.
-        comptime if SYM_RIDX_SPLITS_2031:
+        if use_ridx:
             compute_partition_stats_gather(
                 ctx, n_live, max_live_rows, stat_count, n_rows,
                 dense_ids, p_off, p_sz, stats, row_index,
