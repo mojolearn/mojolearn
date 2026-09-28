@@ -133,6 +133,16 @@ OPS = [
      [("ksu", "fin", "n * m"), ("cmat", "fin", "m * m"), ("res", "fout", "n"), ("n", "int"), ("m", "int"), ("kdiag", "float")]),
 ]
 
+#: Hand-written resident drivers (x_neighbors/iter_device.mojo on the GPU,
+#: x_neighbors/iter_host.mojo on the CPU): loops of the items above that keep
+#: their buffers on the device between steps. Exported like any op.
+CUSTOM_OPS = [
+    ("lp_iterate",
+     [("g", "fin", "n * n"), ("ld", "finout", "n * c"), ("ystatic", "fin", "n * c"), ("unlabeled", "iin", "n"),
+      ("info", "iout", "2"), ("n", "int"), ("c", "int"), ("max_iter", "int"), ("variant", "int"),
+      ("tol_hi", "int"), ("tol_lo", "int"), ("alpha", "float")]),
+]
+
 #: Ops whose GPU driver runs a threadgroup form of the (sequential) item
 #: instead of one thread: op -> (module, function, threads constant, the
 #: define that restores the one-thread item). The host driver keeps the item.
@@ -361,7 +371,7 @@ def eigh_binding(a: PythonObject, i: PythonObject, f: PythonObject) raises -> Py
 def x_neighbors_numeric_mode_binding() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 """]
-    for name, mod, item, count, params in OPS:
+    for name, params in [(o[0], o[4]) for o in OPS] + CUSTOM_OPS:
         bufs, scal = split(params)
         lines = []
         ai = 0
@@ -382,7 +392,7 @@ def x_neighbors_numeric_mode_binding() raises -> PythonObject:
         body = "\n".join(lines)
         s.append(f"\n\ndef {name}_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:\n"
                  f"{body}\n    with GILReleased(Python()):\n        op_{name}({', '.join(args)})\n    return PythonObject(None)\n")
-    reg = "".join(f'    m.def_function[{name}_binding]("xn_{name}")\n' for name, *_ in OPS)
+    reg = "".join(f'    m.def_function[{name}_binding]("xn_{name}")\n' for name in [o[0] for o in OPS] + [c[0] for c in CUSTOM_OPS])
     s.append(f"""
 
 def _add_ops(mut m: PythonModuleBuilder) raises:
@@ -405,7 +415,8 @@ def gpu_binding():
     ops = ", ".join(f"op_{o[0]}" for o in OPS)
     return (HDR + GEN + '"""THE NEIGHBORS EXPANSION LANE\'S GPU BINDING (docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md):\nevery export is xn_<op>(addresses, ints, floats) over x_neighbors/device_ops.mojo."""\n'
             + BIND_HEAD + "from checks.vendor import COMPILED_VENDOR\n"
-            + f"from x_neighbors.device_ops import {ops}\n" + wrappers() + """
+            + f"from x_neighbors.device_ops import {ops}\n"
+            + "".join(f"from x_neighbors.iter_device import op_{c[0]}\n" for c in CUSTOM_OPS) + wrappers() + """
 
 def x_neighbors_vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
@@ -427,7 +438,8 @@ def host_binding():
     ops = ", ".join(f"op_{o[0]}" for o in OPS)
     return (HDR + GEN + '"""CPU binding for `_mojolearn_x_neighbors`: the GPU binding\'s export names and\naddress contract over the host drivers x_neighbors/host_ops.mojo. HOST ONLY."""\n'
             + BIND_HEAD + "from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name\n"
-            + f"from x_neighbors.host_ops import X_NEIGHBORS_HOST_SABOTAGE, {ops}\n" + wrappers() + """
+            + f"from x_neighbors.host_ops import X_NEIGHBORS_HOST_SABOTAGE, {ops}\n"
+            + "".join(f"from x_neighbors.iter_host import op_{c[0]}\n" for c in CUSTOM_OPS) + wrappers() + """
 
 def x_neighbors_host_numeric_mode_binding() raises -> PythonObject:
     return PythonObject(GLOBAL_NUMERIC_MODE)
@@ -476,7 +488,7 @@ if __name__ == "__main__":
     a = t.index("# BEGIN GENERATED EXPORTS")
     b = t.index("# END GENERATED EXPORTS")
     names = ["x_neighbors_host_numeric_mode", "x_neighbors_host_vendor", "x_neighbors_host_column",
-             "x_neighbors_host_sabotage"] + [f"xn_{o[0]}" for o in OPS] + ["xn_eigh", "x_neighbors_numeric_mode",
+             "x_neighbors_host_sabotage"] + [f"xn_{o[0]}" for o in OPS] + [f"xn_{c[0]}" for c in CUSTOM_OPS] + ["xn_eigh", "x_neighbors_numeric_mode",
                                                                             "x_neighbors_vendor"]
     body = "# BEGIN GENERATED EXPORTS\n" + "".join(f'            "{x}",\n' for x in names) + "            "
     surf.write_text(t[:a] + body + t[b:])

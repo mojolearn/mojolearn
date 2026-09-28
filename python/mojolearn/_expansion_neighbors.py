@@ -26,6 +26,7 @@ float32, which is the same on every box.
 """
 import math
 import os
+import struct
 
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty
@@ -124,6 +125,9 @@ def _class_array(classes, codes):
 #: A/B arm (lane neighbors-apple2): the k-NN primitive as the two ops it
 #: fuses, `sqdist` then `knn_select` through an n x m matrix. Same bits.
 _UNFUSED_KNN = os.environ.get("MOJOLEARN_XN_UNFUSED_KNN", "") == "1"
+#: A/B arm (lane neighbors-apple2): label propagation / spreading's fit loop
+#: in Python, three ops per iteration, instead of the resident `lp_iterate`.
+_HOST_LOOP_LP = os.environ.get("MOJOLEARN_XN_HOST_LOOP_LP", "") == "1"
 
 
 class _XNeighbors(NumericModeMixin):
@@ -1001,6 +1005,18 @@ class _LabelPropagationBase(_XNeighbors):
         ld = Array.from_list(ld0, "<f4")
         ystatic = Array.from_list(ys, "<f4")
         unlabeled = _i32(unl, "unlabeled")
+        if not _HOST_LOOP_LP:
+            # The loop below as ONE resident op (x_neighbors/iter_device.mojo):
+            # the same items in the same order, the graph uploaded once, tol
+            # passed as its float64 bits so the stopping test is Python's.
+            info = empty((2,), "<i4")
+            tol_bits = struct.unpack("<Q", struct.pack("<d", float(self.tol)))[0]
+            self._op("lp_iterate", [(G, 0), (ld, 1), (ystatic, 0), (unlabeled, 0), (info, 1)],
+                     (n, C, int(self.max_iter), 0 if self._variant == "propagation" else 1,
+                      tol_bits >> 32, tol_bits & 0xFFFFFFFF),
+                     (_f32_scalar(self.alpha) if self._variant != "propagation" else 0.0,))
+            n_iter = int(info.tolist()[0])
+            return self._finish_fit(X, classes, ld, n, C, n_iter)
         prev = empty((n, C), "<f4")
         s = empty((1,), "<f4")
         n_iter = 0
@@ -1021,6 +1037,9 @@ class _LabelPropagationBase(_XNeighbors):
             ld = out
         if not converged:
             n_iter += 1
+        return self._finish_fit(X, classes, ld, n, C, n_iter)
+
+    def _finish_fit(self, X, classes, ld, n, C, n_iter):
         final = empty((n, C), "<f4")
         self._op("row_normalize", [(ld, 0), (final, 1)], (n, C))
         self.X_ = X
