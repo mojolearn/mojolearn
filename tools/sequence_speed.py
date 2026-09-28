@@ -304,6 +304,16 @@ def main():
         rec = dict(algo=name)
         try:
             run_case(ml, X, y, name, False)          # warm-up: binding load, context, kernels
+            if name in os.environ.get("SEQ_PROFILE", "").split(","):
+                # a SPLIT, never a timing: where the host time goes (cProfile)
+                import cProfile, io, pstats
+                pr = cProfile.Profile()
+                pr.enable()
+                run_case(ml, X, y, name, True)
+                pr.disable()
+                s = io.StringIO()
+                pstats.Stats(pr, stream=s).sort_stats("tottime").print_stats(18)
+                print("\n".join("PROF " + name + " " + l for l in s.getvalue().splitlines() if l.strip()), flush=True)
             rec.update(run_case(ml, X, y, name, True))
         except Exception as e:                       # recorded, never hidden
             rec["error"] = f"{type(e).__name__}: {e}"
