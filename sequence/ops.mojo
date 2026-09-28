@@ -356,6 +356,24 @@ def gemm_dot(pa: FP, abase: Int, sak: Int, pb: FP, bbase: Int, sbk: Int, K: Int,
     return acc
 
 
+@always_inline
+def gemm_dot_gates[G: Int](pa: FP, abase: Int, pb: FP, bbase: Int, gstride: Int, K: Int) -> SIMD[DType.float32, G]:
+    """G folds side by side, one per gate: lane g is exactly
+    gemm_dot(pa, abase, 1, pb, bbase + g gstride, 1, K, 0) (its own chain of
+    fmas, k ascending); the chains are independent, so a GPU thread runs
+    them interleaved instead of one after another."""
+    var acc = SIMD[DType.float32, G](0.0)
+    comptime if SEQUENCE_HOST_SABOTAGE:
+        comptime for g in range(G):
+            acc[g] = gemm_dot(pa, abase, 1, pb, bbase + g * gstride, 1, K, Float32(0.0))
+    else:
+        for k in range(K):
+            var x = ld(pa, abase + k)
+            comptime for g in range(G):
+                acc[g] = fma3(x, ld(pb, bbase + g * gstride + k), acc[g])
+    return acc
+
+
 def op_gemm(t: Int, a: Args):
     """C[m, n] (row stride i8) = (i7 ? C[m, n] : 0) + sum_k A(m, k) B(k, n),
     k ascending, one fused multiply-add per term. A(m, k) = p0[m*i3 + k*i4],
@@ -524,14 +542,25 @@ def op_cell_fwd_h(t: Int, a: Args):
     those G columns. Same arithmetic in the same order: the same bits.
     Args as `op_cell_fwd`, plus p7 W_hh [G*H, H], p8 b_hh [G*H]."""
     var H = a.i2
-    var GH = gates_of(a.i0) * H
+    var G = gates_of(a.i0)
     var b = t // H
     var u = t - b * H
-    for g in range(gates_of(a.i0)):
-        var n = g * H + u
-        var acc = gemm_dot(a.p3, b * H, 1, a.p7, n * H, 1, H, Float32(0.0))
-        st(a.p1, b * GH + n, add(ftz(acc), ld(a.p8, n)))
+    if G == 4:
+        _gates_store[4](a, b, u, H)
+    elif G == 3:
+        _gates_store[3](a, b, u, H)
+    else:
+        _gates_store[1](a, b, u, H)
     op_cell_fwd(t, a)
+
+
+@always_inline
+def _gates_store[G: Int](a: Args, b: Int, u: Int, H: Int):
+    """GH[b, g*H + u] = fold + b_hh[g*H + u] for the G gates (op_cell_fwd_h)."""
+    var acc = gemm_dot_gates[G](a.p3, b * H, a.p7, u * H, H * H, H)
+    comptime for g in range(G):
+        var n = g * H + u
+        st(a.p1, b * G * H + n, add(ftz(acc[g]), ld(a.p8, n)))
 
 
 def op_cell_bwd_h(t: Int, a: Args):
