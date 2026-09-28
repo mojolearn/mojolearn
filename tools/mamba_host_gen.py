@@ -102,6 +102,15 @@ SUBSTITUTIONS = (
     ("mamba/impl/modules/mamba3_refusal.mojo",
      r'comptime M3_DEVICE_REFUSAL = not is_defined\["MOJOLEARN_MAMBA3_LEGACY_REFUSAL"\]\(\)',
      "comptime M3_DEVICE_REFUSAL = False"),
+    # CPU SPEED (lane neural-cpu, 2026-09-28): the S16 q/k/v backward launch
+    # runs mamba/host/mamba3_s16_host.mojo, the kernel's per-cell arithmetic
+    # as lanes over n (d_q, d_k) and p (d_v), rows split over host tasks.
+    ("mamba/impl/modules/mamba3_backward.mojo",
+     r"ctx\.enqueue_function\[mamba3_s16_qkv_backward_kernel\]\(",
+     "mamba3_s16_qkv_backward_host("),
+    ("mamba/impl/modules/mamba3_backward.mojo",
+     r"\nfrom mamba\.checks\.mamba3_fixture import ",
+     "\nfrom mamba.host.mamba3_s16_host import mamba3_s16_qkv_backward_host\nfrom mamba.checks.mamba3_fixture import "),
 )
 
 #: Verbatim top-level blocks lifted out of a device file whose other
