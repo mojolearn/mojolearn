@@ -94,6 +94,7 @@ come through the kernel matrix.
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx, MAX_THREADS_PER_BLOCK_METADATA
 from std.utils import StaticTuple
+from std.ffi import _Global
 from std.memory import bitcast, stack_allocation
 from std.os import getenv
 from std.sys import llvm_intrinsic
@@ -120,6 +121,7 @@ from core.device_scan import (
 )
 from checks.kernel_matrix import (
     COLUMN_AMD,
+    COLUMN_APPLE,
     COLUMN_NVIDIA,
     TARGET_COLUMN,
     lib_hardware_ftz_fma_for,
@@ -962,6 +964,9 @@ def fused_attention_arm_from_env() raises -> Int:
         " build does not compile (ATTN_SHIPPED_BWD_KV is False)"
     )
     comptime if not ATTN_ARM_TRIAL:
+        comptime if ATTN_APPLE_ESTASH_GATED:
+            if not attention_estash_granted():
+                return ATTN_APPLE_ESTASH_FALLBACK
         return ATTN_ARM_DEFAULT
     var name = String(getenv("MOJOLEARN_ATTN_ARM"))
     var arm: Int
@@ -1467,6 +1472,74 @@ def fused_attention_estash_name(arm: Int) -> String:
     if (arm & ATTN_ARM_ESTASH_DRES) != 0:
         return String("estash_dres")
     return String("estash")
+
+
+comptime ATTN_APPLE_ESTASH_GATED = (
+    TARGET_COLUMN == COLUMN_APPLE and ATTN_SHIPPED_BWD_ESTASH
+)
+"""lane/neural-apple (2026-09-28): a shipped Apple build whose default is an
+estash word (checks/kernel_matrix_attn.mojo `attn_default_arm_for`) runs it
+only while the process's estash grant holds, and the round 3 word otherwise.
+Both words are schedules of the same arithmetic (every final witness equal
+on the M4 Pro), so the grant moves time and memory, never bits."""
+
+comptime ATTN_APPLE_ESTASH_FALLBACK = ATTN_ARM_R3_DEFAULT
+"""The word an ungranted Apple process runs: the round 3 word, Apple's
+default before the estash flip (its backward is the shipped
+`_launch_bwd_stash_tiled_pf`, compiled because the estash default carries
+`_pf`)."""
+
+
+struct _AttnEstashGate(Defaultable, Movable):
+    var granted: Bool
+    var denied: Bool
+
+    def __init__(out self):
+        self.granted = False
+        self.denied = False
+
+
+comptime _ATTN_ESTASH_GATE = _Global[StorageType=_AttnEstashGate,
+    name="MojolearnAttnEstashGateV1", init_fn=_AttnEstashGate.__init__]
+
+
+def attention_estash_granted() -> Bool:
+    """Whether this process runs the estash word (Apple gated builds): a
+    trainer granted it and no trainer was ever refused it (a refusal is
+    sticky, so a larger trainer built later can never inherit a grant a
+    smaller one earned). Every other build: True (the default runs as is)."""
+    comptime if not ATTN_APPLE_ESTASH_GATED:
+        return True
+    try:
+        var g = _ATTN_ESTASH_GATE.get_or_create_ptr()
+        return g[].granted and not g[].denied
+    except:
+        return False
+
+
+def attention_estash_memory_grant(
+    ctx: DeviceContext, n_layers: Int, b: Int, l: Int, nh: Int, s: Int
+) raises -> Bool:
+    """Called once by a trainer after its persistent buffers exist and before
+    its first step: grant the estash word when every layer's kept exp stash
+    (`attention_v1_retained_exp_bytes`) plus one layer's backward y/dy
+    scratches fit under 60% of the device's FREE memory
+    (`DeviceContext.get_memory_info`; on Apple the working-set budget less
+    what is allocated), else refuse it for the rest of the process. Returns
+    whether this process now runs the estash word. A no-op on every build
+    that is not gated."""
+    comptime if not ATTN_APPLE_ESTASH_GATED:
+        return True
+    var need = n_layers * attention_v1_retained_exp_bytes(b, l, nh, s) + 2 * 4 * b * nh * l * s
+    var mem = ctx.get_memory_info()
+    var free = Int(mem[0])
+    var ok = need * 10 <= free * 6
+    var g = _ATTN_ESTASH_GATE.get_or_create_ptr()
+    if ok:
+        g[].granted = True
+    else:
+        g[].denied = True
+    return g[].granted and not g[].denied
 
 
 def fused_attention_arm_estash_runs(arm: Int) -> Bool:

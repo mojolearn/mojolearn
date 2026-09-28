@@ -222,7 +222,23 @@ def attn_default_arm_for[column: Int]() -> Int:
         # layers (7.78 s a step). A Mac with the memory can take the estash
         # words by name. Per-step witnesses equal to stash_tiled's.
         # Schedules only: every arm is bit-equal to the eager oracle.
-        return ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF
+        #
+        # lane/neural-apple, 2026-09-28: NVIDIA's pre-bswz estash word, GATED
+        # BY MEMORY AT RUN TIME. Measured on an M4 Pro (48 GB, m4pro-b),
+        # byte LM 1 x 2048, d768, 12 heads, 12 layers, V 50,257, resident lean
+        # steps: round 3 word 3.354 s, _kvgrid_r32 3.303, _estash_dres_kvgrid_r32
+        # 2.918 (-13%), _bswz 2.955; final witnesses (gradients, parameters,
+        # m, v, flags) equal across all four. A shipped Apple build compiles
+        # both this word and the round 3 word; `fused_attention_arm_from_env`
+        # returns this one only after a trainer has shown the kept stashes
+        # fit (`attention_estash_memory_grant`: every layer's stash plus one
+        # layer's backward scratches under 60% of the free device memory),
+        # and the round 3 word otherwise, so the 16 GB M4 keeps the word that
+        # trains at 12 layers. `-D MOJOLEARN_ATTN_APPLE_R3_ONLY=1` restores
+        # the round 3 word as the build default.
+        comptime if is_defined["MOJOLEARN_ATTN_APPLE_R3_ONLY"]():
+            return ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF
+        return ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_ESTASH_DRES_KVGRID_R32
     if column == COLUMN_AMD:
         # DEVIATION 2657 ON AMD TOO. Measured 2026-09-12 on a Hot Aisle MI300X
         # (gfx942) against the previous AMD default
