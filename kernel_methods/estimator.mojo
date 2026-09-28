@@ -50,6 +50,8 @@ from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL
 from core.neural_context import neural_ctx
+from std.time import perf_counter_ns
+from std.os import getenv
 from std.sys.compile import is_defined
 # ONE PROCESS-LIFETIME DeviceContext per binding and tier (CURRENT DIRECTIVES;
 # lane/neighbors-apple 2026-09-28): a new context per entry is a new Metal
@@ -1285,6 +1287,8 @@ def rbf_sampler_transform_host_into[out_origin: MutOrigin, //](
     km_validate_matrix(x, n_rows, model.n_features, "rbf_sampler transform X")
     var d = model.n_features
     var dd = model.n_components
+    var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
+    var t0 = Int(perf_counter_ns())
     var ctx = _family_ctx()
     var dx = _upload(ctx, x)
     var dw = _upload(ctx, model.random_weights)
@@ -1294,16 +1298,23 @@ def rbf_sampler_transform_host_into[out_origin: MutOrigin, //](
         identical_gemm_workspace_max_floats(n_rows, dd, d)
     )
     ctx.synchronize()
+    var t1 = Int(perf_counter_ns())
     identical_gemm_into(ctx, dp, dx, dw, gws, n_rows, dd, d, OP_NN)
     ctx.synchronize()
+    var t2 = Int(perf_counter_ns())
     trace.record_device(ctx, "rf.projection", dp, n_rows * dd)
     km_feature_map_epilogue(
         ctx, dp, db, n_rows, dd, model.scale, tpb, sabotage
     )
     ctx.synchronize()
+    var t3 = Int(perf_counter_ns())
     trace.record_device(ctx, "rf.feature_map", dp, n_rows * dd)
     ctx.enqueue_copy(dst_ptr=output, src_buf=dp)
     ctx.synchronize()
+    if st_on:
+        print("RBF_TRANSFORM_STAGES rows=" + String(n_rows) + " alloc_upload_ms=" + String((t1 - t0) // 1000000)
+              + " gemm_ms=" + String((t2 - t1) // 1000000) + " epilogue_ms=" + String((t3 - t2) // 1000000)
+              + " copy_out_ms=" + String((Int(perf_counter_ns()) - t3) // 1000000))
     _ = dx^
     _ = dw^
     _ = db^
