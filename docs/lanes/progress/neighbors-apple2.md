@@ -304,7 +304,20 @@ FAST 0.174 / 0.174 vs 0.160 / 0.160 (taxi / HIGGS). On the M3 Ultra the
 256-thread row-by-row kernel is 7% FASTER than the 4-row kernel; the M4 Pro
 comparison at the merged head is request 1790618304592.
 
-## FINAL (draft; updated when the M3 Ultra request lands)
+## FINAL (2026-09-28 ~18:30Z)
+
+Final head smoke, request 1790618924175 (m4pro-b, M4 Pro, 02aa5fa9f, the
+merged head): every binding builds in both modes; every IDENTICAL digest of
+the board equals the digests recorded above (lof 428f08c2.. / 8dbff18c..,
+ocsvm f0d8cd1a.. / f89bc8b4.., labelprop 0cafc4a9.. / b02924bf..,
+spectral-knn a171b2a3.. / a07a07bb.., nn-k2000 1ce567d0.. / 3d34b599..,
+round-one nn / knnc / nn-ties, gpr 07ca0943.., gpc fc039349.. / 0de2f247..).
+GPC.predict_proba 0.216 s at the merged default. Raw:
+~/mojolearn-evidence/neighbors-apple/1790618924175-speed-neighbors-02aa5fa9f1.txt
+
+m3ultra-b ran ONE request for this lane (1790614983391, the base-vs-head
+table above): its queue held jobs "working" for hours, so the development
+A/B ran on m4pro-a / m4pro-b. m2pro and do-amd were never used.
 
 ### Default vs opt-in
 
