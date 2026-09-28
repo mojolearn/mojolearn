@@ -5,6 +5,7 @@ symmetrization is the shared host function (`tsne_symmetrize`)."""
 
 from std.gpu import block_idx, block_dim, thread_idx
 from std.memory import stack_allocation
+from std.time import perf_counter_ns
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -144,6 +145,36 @@ def _ts_iter(
     )
 
 
+def _ts_iter_timed(
+    ctx: DeviceContext, mut ycur: DeviceBuffer[DType.float32], mut ynext: DeviceBuffer[DType.float32], n: Int,
+    mut dptr: DeviceBuffer[DType.int32], mut dind: DeviceBuffer[DType.int32], mut dval: DeviceBuffer[DType.float32],
+    mut drz: DeviceBuffer[DType.float32], mut drep: DeviceBuffer[DType.float32], mut dz: DeviceBuffer[DType.float32],
+    mut dupd: DeviceBuffer[DType.float32], mut dgain: DeviceBuffer[DType.float32], ex: Float32, mom: Float32,
+    lr: Float32, mut t_rep: Int, mut t_sum: Int, mut t_step: Int,
+) raises:
+    """`_ts_iter` for the stage pass only (MOJOLEARN_ANN_STAGES, lane
+    ann-apple3): the same three launches, drained one by one, their wall
+    times added to t_rep / t_sum / t_step (ns)."""
+    var t0 = Int(perf_counter_ns())
+    ctx.enqueue_function[repulse_tiled_kernel](Int32(n), ycur.unsafe_ptr(), drz.unsafe_ptr(), drep.unsafe_ptr(),
+                                               grid_dim=(n + RTB - 1) // RTB, block_dim=RTB)
+    ctx.synchronize()
+    var t1 = Int(perf_counter_ns())
+    ctx.enqueue_function[sum_kernel](Int32(n), drz.unsafe_ptr(), dz.unsafe_ptr(), grid_dim=1, block_dim=1)
+    ctx.synchronize()
+    var t2 = Int(perf_counter_ns())
+    ctx.enqueue_function[step_kernel](
+        Int32(2 * n), ycur.unsafe_ptr(), ynext.unsafe_ptr(), dptr.unsafe_ptr(), dind.unsafe_ptr(),
+        dval.unsafe_ptr(), drep.unsafe_ptr(), dz.unsafe_ptr(), dupd.unsafe_ptr(), dgain.unsafe_ptr(), ex,
+        mom, lr, grid_dim=_grid(2 * n), block_dim=TPB,
+    )
+    ctx.synchronize()
+    var t3 = Int(perf_counter_ns())
+    t_rep += t1 - t0
+    t_sum += t2 - t1
+    t_step += t3 - t2
+
+
 def _ts_kl(
     ctx: DeviceContext, mut y: DeviceBuffer[DType.float32], n: Int, mut dptr: DeviceBuffer[DType.int32],
     mut dind: DeviceBuffer[DType.int32], mut dval: DeviceBuffer[DType.float32], mut drz: DeviceBuffer[DType.float32],
@@ -195,14 +226,29 @@ def tsne_fit_device(
     var dz = ctx.enqueue_create_buffer[DType.float32](1)
     var dkl = ctx.enqueue_create_buffer[DType.float32](n)
     st.mark(ctx, "upload_graph")
+    var t_rep = 0
+    var t_sum = 0
+    var t_step = 0
     for it in range(max_iter):
         var ex = exaggeration if it < exploration else Float32(1.0)
         var mom = Float32(0.5) if it < exploration else Float32(0.8)
-        if it % 2 == 0:
+        if st.on:
+            # the stage pass: each launch drained and timed (ann-apple3)
+            if it % 2 == 0:
+                _ts_iter_timed(ctx, dy, dy2, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom,
+                               learning_rate, t_rep, t_sum, t_step)
+            else:
+                _ts_iter_timed(ctx, dy2, dy, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom,
+                               learning_rate, t_rep, t_sum, t_step)
+        elif it % 2 == 0:
             _ts_iter(ctx, dy, dy2, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom, learning_rate)
         else:
             _ts_iter(ctx, dy2, dy, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom, learning_rate)
     st.mark(ctx, "iterations")
+    if st.on:
+        print("ANN-STAGE tsne_iter repulse", Float64(t_rep) / 1.0e6)
+        print("ANN-STAGE tsne_iter sum", Float64(t_sum) / 1.0e6)
+        print("ANN-STAGE tsne_iter step", Float64(t_step) / 1.0e6)
     if max_iter % 2 == 0:
         _ts_kl(ctx, dy, n, dptr, dind, dval, drz, drep, dz, dkl)
     else:
