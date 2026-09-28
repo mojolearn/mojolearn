@@ -165,3 +165,12 @@ cell and tier. Raw: `ab6_m4pro-a_1790609801944.txt`.
 
 (The first search in a process carries a warmup: the 0.08-0.09 s first
 values.) IVF fits unchanged across these arms, as expected.
+
+### A/B 8 and 9: m4-a, steward 1790611643225 (d01317e6e -> 26158096f) and 1790612146287
+
+Both same digests in every cell. Two rows per thread: t-SNE iterations 1022
+-> 1041 ms IDENTICAL, 754 -> 760 FAST (reverted). After the merge of
+lane/apple-merged 7483efa40 (891055bff): k-NN 128 rows per threadgroup,
+CAGRA k-NN + prune 828 -> 753 ms IDENTICAL and 664 -> 596 ms FAST (fit
+0.862 -> 0.79 s, 0.69 -> 0.635 s; kept); a 128-row candidate tile on top
+gave it back (829 / 625 ms; reverted).
