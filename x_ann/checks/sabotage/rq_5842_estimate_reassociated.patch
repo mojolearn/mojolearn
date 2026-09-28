@@ -1,11 +1,13 @@
+diff --git a/x_ann/ivf_rabitq_core.mojo b/x_ann/ivf_rabitq_core.mojo
+index 6425a9823..04732386a 100644
 --- a/x_ann/ivf_rabitq_core.mojo
 +++ b/x_ann/ivf_rabitq_core.mojo
-@@ -145,7 +145,7 @@
-                     dot = ftz(dot + (v if bit != 0 else -v))
-                 var xq = ftz(identical_div(ftz(identical_mul(dot, scale)), ip))
-                 var nn = ftz(identical_mul(norm, norm))
--                est = ftz(ftz(nn + qn2) - ftz(identical_mul(Float32(2.0), ftz(identical_mul(norm, xq)))))
-+                est = ftz(ftz(nn - ftz(identical_mul(Float32(2.0), ftz(identical_mul(norm, xq))))) + qn2)
-             else:
-                 est = qn2
-             pq_insert(k, base, est, Int32(row), out_d, out_i)
+@@ -123,7 +123,7 @@ def rq_row_estimate(
+             dot = ftz(dot + (v if bit != 0 else -v))
+         var xq = ftz(identical_div(ftz(identical_mul(dot, scale)), ip))
+         var nn = ftz(identical_mul(norm, norm))
+-        return ftz(ftz(nn + qn2) - ftz(identical_mul(Float32(2.0), ftz(identical_mul(norm, xq)))))
++        return ftz(ftz(nn - ftz(identical_mul(Float32(2.0), ftz(identical_mul(norm, xq))))) + qn2)
+     return qn2
+ 
+ 

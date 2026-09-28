@@ -1,11 +1,13 @@
---- a/x_ann/ivf_sq_core.mojo
-+++ b/x_ann/ivf_sq_core.mojo
-@@ -81,7 +81,7 @@
-         prev_d = best_d
-         for slot in range(Int(offsets.unsafe_load(best_l)), Int(offsets.unsafe_load(best_l + 1))):
-             var row = Int(list_indices.unsafe_load(slot))
--            if mask.unsafe_load(row) == 0:
-+            if mask.unsafe_load(row) < 0:
-                 continue
-             var acc = Float32(0.0)
-             for c in range(dim):
+diff --git a/x_ann/ivf_pq_core.mojo b/x_ann/ivf_pq_core.mojo
+index a11a00759..23c6f1ede 100644
+--- a/x_ann/ivf_pq_core.mojo
++++ b/x_ann/ivf_pq_core.mojo
+@@ -105,7 +105,7 @@ def pq_row_removed(mask: I32P, row: Int) -> Bool:
+     """DEVIATION 5855, THE ONE STATEMENT OF THE SAMPLE FILTER: `mask[row] ==
+     0` removes the row before it is scored. Every IVF scan (PQ, SQ, RaBitQ;
+     the per-query cells and the block scans) asks it."""
+-    return mask.unsafe_load(row) == 0
++    return mask.unsafe_load(row) < 0
+ 
+ 
+ @always_inline
