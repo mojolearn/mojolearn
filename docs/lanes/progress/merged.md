@@ -275,3 +275,13 @@ origin/main 9a8f9e390, lane sets diffed:
   8f9a54482 / a8cf410cf / d9a4453ec / 778f2e677). kmeans_oracle.mojo on
   lane/merged is byte-identical to cluster-cpu's. Fix in progress on
   lane/merged-kmeans-fix (root cause, then same bits as main's host path).
+
+## The MI300X column is OWED (2026-09-28 ~09:10Z)
+
+Hot Aisle terminated the central AMD box (MI300X) at about 09:10Z (account
+balance -$54). Its lane/merged clean shards (0015-0018) and tests job (0019)
+were lost mid-run. What they had recorded before the box went: shards 0 and 1
+were running; shard 1 finished 126 lanes (every exposed lane AGREE except the
+kmeans and x-decomp failures above). The AMD column of the global check is
+do-amd (MI325X, gfx942) through the steward shards. **The MI300X column is
+owed until Hot Aisle is topped up.**
