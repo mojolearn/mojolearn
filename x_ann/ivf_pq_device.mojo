@@ -11,11 +11,13 @@ from max.gpu.sync import barrier
 from max.gpu.host import DeviceBuffer, DeviceContext
 from x_ann.device_ctx import x_ann_ctx
 from x_ann.stage_timer import AnnStages
-from x_ann.switches import ANN3_HOST_PASSES
+from x_ann.switches import ANN3_HOST_PASSES, ANN3_PQ_SEED
+from x_ann.kpp_seed import kpp_seed
+from std.sys.info import has_apple_gpu_accelerator
 from x_ann.ivf_scan_device import ivf_scan_search
 
 from cluster.estimator import kmeans_fit
-from cluster.impl.kmeans_params import INIT_KMEANS_PLUS_PLUS, METRIC_L2_EXPANDED
+from cluster.impl.kmeans_params import INIT_ARRAY, INIT_KMEANS_PLUS_PLUS, METRIC_L2_EXPANDED
 from ivf.estimator import ivf_flat_build_host
 from ivf.impl.neighbors.ivf_flat.ivf_flat_build import ivf_trainset_rows
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
@@ -41,6 +43,13 @@ row is still encoded against the trained codebooks. IDENTICAL trains on every
 row. Quality: bench/speed/ann_fast_quality.py, recorded in
 docs/lanes/progress/ann-apple.md."""
 comptime PQ_FAST_ROWS_PER_CODE = 256
+
+comptime PQ_FAST_SEED = ANN3_PQ_SEED and GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+"""FAST on Apple, OPT-IN (lane ann-apple3, `-D MOJOLEARN_ANN3_PQ_SEED`): each
+subspace codebook is seeded by `x_ann/kpp_seed.mojo` (host k-means++ over a
+stride sample of its training rows, its own stream per subspace) and
+cluster/'s k-means starts from those seeds (`INIT_ARRAY`), so it runs its
+Lloyd iterations without its own seeding rounds."""
 
 
 def _tid() -> Int:
@@ -199,12 +208,21 @@ def _codebooks(
         var cb = List[Float32](length=n_codes * pq_len, fill=Float32(0.0))
         var lab = List[UInt32](length=n_train, fill=UInt32(0))
         cbs.host("gather")
+        var init_kind: Int = INIT_KMEANS_PLUS_PLUS
+        comptime if PQ_FAST_SEED:
+            if n_train >= n_codes:
+                kpp_seed(
+                    sub, n_train, pq_len, n_codes,
+                    UInt64(seed) ^ (UInt64(j + 1) * UInt64(0x9E3779B97F4A7C15)), cb,
+                )
+                init_kind = INIT_ARRAY
+                cbs.host("seed")
         _ = kmeans_fit(
             ctx, sub.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), n_train, pq_len, n_codes,
             cb.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
             lab.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
             sub.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), 0,
-            pq_iters, Float64(1e-4), UInt64(seed), 1, INIT_KMEANS_PLUS_PLUS, METRIC_L2_EXPANDED, 0.0, Float64(2.0),
+            pq_iters, Float64(1e-4), UInt64(seed), 1, init_kind, METRIC_L2_EXPANDED, 0.0, Float64(2.0),
         )
         ctx.synchronize()
         cbs.host("kmeans_fit")

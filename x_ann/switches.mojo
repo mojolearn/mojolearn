@@ -26,3 +26,13 @@ comptime ANN3_HOST_PASSES = is_defined["MOJOLEARN_ANN3_HOST_PASSES"]()
 #: IVF-PQ / SQ / RaBitQ index gathers its codes into list order once.
 #: No arithmetic changed.
 comptime ANN3_PREPARE = is_defined["MOJOLEARN_ANN3_PREPARE"]()
+
+#: FAST on Apple: the IVF-PQ subspace codebooks are seeded by this family's
+#: host k-means++ (x_ann/kpp_seed.mojo) and handed to cluster/'s k-means as
+#: INIT_ARRAY, instead of its scalable k-means|| seeding. Moves FAST bits:
+#: paired recall check.
+comptime ANN3_PQ_SEED = is_defined["MOJOLEARN_ANN3_PQ_SEED"]()
+
+#: FAST on Apple: the same for the IVF coarse quantizer (all four IVF
+#: indexes). Moves FAST bits: paired recall check.
+comptime ANN3_COARSE_SEED = is_defined["MOJOLEARN_ANN3_COARSE_SEED"]()

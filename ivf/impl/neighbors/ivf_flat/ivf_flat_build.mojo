@@ -68,6 +68,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from cluster.impl.detail.kmeans import kmeans_fit_main_traced
 from cluster.impl.kmeans import predict
 from cluster.impl.kmeans_params import (
+    INIT_ARRAY,
     INIT_KMEANS_PLUS_PLUS,
     KMeansParams,
 )
@@ -87,7 +88,8 @@ from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from std.memory import memcpy
 from x_ann.stage_timer import AnnStages
-from x_ann.switches import ANN3_HOST_PASSES
+from x_ann.switches import ANN3_COARSE_SEED, ANN3_HOST_PASSES
+from x_ann.kpp_seed import kpp_seed
 
 comptime IVF_FAST_TRAINSET = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
@@ -99,6 +101,16 @@ comptime IVF_FAST_TRAINSET = (
 rule; cuVS trains on `kmeans_trainset_fraction` of the rows). Every row is
 still assigned to the trained centroids."""
 comptime IVF_FAST_ROWS_PER_LIST = 256
+
+comptime IVF_FAST_SEED = (
+    ANN3_COARSE_SEED
+    and GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+)
+"""FAST on Apple, OPT-IN (lane ann-apple3, `-D MOJOLEARN_ANN3_COARSE_SEED`):
+the coarse quantizer is seeded by `x_ann/kpp_seed.mojo` (host k-means++ over
+a stride sample of its training rows) and cluster/'s k-means starts from
+those seeds (`INIT_ARRAY`). An untraced build only."""
 
 
 def ivf_trainset_rows(n_rows: Int, n_train: Int, seed: UInt64) -> List[Int]:
@@ -409,6 +421,19 @@ def ivf_flat_build(
     kp.max_iter = params.kmeans_n_iters
     kp.seed = params.seed
     kp.n_init = 1
+
+    comptime if IVF_FAST_SEED:
+        if not trace.enabled and n_train >= n_lists:
+            var seeds = List[Float32](length=n_lists * dim, fill=Float32(0.0))
+            if n_train < n_rows:
+                kpp_seed(xt, n_train, dim, n_lists, params.seed, seeds)
+            else:
+                kpp_seed(x, n_rows, dim, n_lists, params.seed, seeds)
+            ctx.enqueue_copy(dst_buf=centroids, src_ptr=seeds.unsafe_ptr())
+            ctx.synchronize()
+            _ = seeds^
+            kp.init = INIT_ARRAY
+            st.host("seed")
 
     if n_train < n_rows:
         _ = kmeans_fit_main_traced(

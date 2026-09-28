@@ -54,6 +54,20 @@ A/B script builds an arm as `<commit>+<DEFINE>[+<DEFINE>]`.
 | fd948718d, then gated | IVF build host passes (below) | both | OFF; `-D MOJOLEARN_ANN3_HOST_PASSES` turns it on | UNMEASURED |
 | 171bbcdba, d20eb2129, then gated | index preparation (below) | both | OFF; `-D MOJOLEARN_ANN3_PREPARE` turns it on | UNMEASURED |
 
+| (this commit) | FAST seeding of the PQ codebooks and of the coarse quantizer (`x_ann/kpp_seed.mojo`) | FAST, Apple | OFF; `-D MOJOLEARN_ANN3_PQ_SEED`, `-D MOJOLEARN_ANN3_COARSE_SEED` | UNBUILT, UNMEASURED; moves FAST bits, owes the paired recall check |
+
+`MOJOLEARN_ANN3_PQ_SEED` / `MOJOLEARN_ANN3_COARSE_SEED` (FAST on Apple
+only): cluster/'s k-means seeds with scalable k-means|| and, at the ann
+shapes, the seeding costs more than the Lloyd iterations (cluster-apple3's
+base probe on m4pro-b, 1790626681580, FAST: 1M x 2, k 256: seeding 115 ms of
+which the sequential k-means++ over the candidates 46 ms, 20 Lloyd
+iterations 75 ms; 1M x 28, k 1024: seeding 698 ms, 10 Lloyd iterations 368
+ms). Under the switch this family seeds on the host (k-means++ over a stride
+sample, 16 rows per seed) and passes the seeds to cluster/'s k-means as
+`INIT_ARRAY`; cluster/ is not edited. cluster-apple3 lists the k-means
+seeding rounds as its own target; if its change lands, these switches may
+gain little and stay off.
+
 `MOJOLEARN_ANN3_HOST_PASSES`, host code only, no arithmetic changed:
 - `ivf/checks/list_layout.mojo::build_list_layout`: each row moved by one memcpy; `with_data=False` leaves `list_data` empty.
 - `ivf_flat_build` / `ivf_flat_build_host`: `with_list_data` (default True). The x_ann coarse step passes False: IVF-PQ / SQ / RaBitQ never read the permuted vectors. A traced build always lays them out.
