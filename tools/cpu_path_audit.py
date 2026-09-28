@@ -75,6 +75,70 @@ INFER_METHODS = ("predict", "predict_proba", "predict_log_proba", "decision_func
                  "score_samples", "kneighbors", "radius_neighbors", "inverse_transform", "apply")
 FITTED_ATTRS = ("labels_", "embedding_", "coef_", "intercept_", "cluster_centers_", "components_")
 
+#: Constructor arguments the generic probe passes (session 2, 2026-09-28): a
+#: name's REQUIRED parameters, or an option without which its default path
+#: cannot answer the probe (prediction_data for predict on the density
+#: clusterers, novelty for LocalOutlierFactor.predict, an int random_state
+#: where None is refused by name). Values are callables of (ml, F) so an
+#: estimator argument is built fresh per probe.
+CTOR = {
+    "AvgPool1d": lambda ml, F: dict(kernel_size=2),
+    "MaxPool1d": lambda ml, F: dict(kernel_size=2),
+    "AvgPool2d": lambda ml, F: dict(kernel_size=2),
+    "MaxPool2d": lambda ml, F: dict(kernel_size=2),
+    "BatchNorm1d": lambda ml, F: dict(num_features=3),
+    "BatchNorm2d": lambda ml, F: dict(num_features=3),
+    "Conv1d": lambda ml, F: dict(in_channels=3, out_channels=2, kernel_size=3),
+    "Conv2d": lambda ml, F: dict(in_channels=3, out_channels=2, kernel_size=3),
+    "BasicBlock": lambda ml, F: dict(inplanes=3, planes=3),
+    "CNNClassifier": lambda ml, F: dict(input_shape=(3, 8, 8)),
+    "IVFPQIndex": lambda ml, F: dict(n_lists=4, n_probes=2),
+    "IVFSQIndex": lambda ml, F: dict(n_lists=4, n_probes=2),
+    "IVFRaBitQIndex": lambda ml, F: dict(n_lists=4, n_probes=2),
+    "CCA": lambda ml, F: dict(n_components=1),
+    "PLSCanonical": lambda ml, F: dict(n_components=1),
+    "GaussianRandomProjection": lambda ml, F: dict(n_components=3, random_state=0),
+    "SparseRandomProjection": lambda ml, F: dict(n_components=3, random_state=0),
+    "PolynomialCountSketch": lambda ml, F: dict(random_state=0),
+    "SkewedChi2Sampler": lambda ml, F: dict(random_state=0),
+    "SGDClassifier": lambda ml, F: dict(loss="log_loss"),
+    "LocalOutlierFactor": lambda ml, F: dict(novelty=True),
+    "AgglomerativeClustering": lambda ml, F: dict(prediction_data=True),
+    "DBSCAN": lambda ml, F: dict(prediction_data=True),
+    "SpectralClustering": lambda ml, F: dict(prediction_data=True),
+    "ExperimentalTwoLevelFeatureFreq": lambda ml, F: dict(sources=(0, 5)),
+    "SelectKBest": lambda ml, F: dict(k=3),
+    "MultiOutputRegressor": lambda ml, F: dict(estimator=ml.Ridge()),
+    "MultiOutputClassifier": lambda ml, F: dict(estimator=ml.LogisticRegression()),
+    "OneVsRestClassifier": lambda ml, F: dict(estimator=ml.LogisticRegression()),
+    "RFE": lambda ml, F: dict(estimator=ml.LinearRegression()),
+    "VotingRegressor": lambda ml, F: dict(estimators=[("r", ml.Ridge()), ("o", ml.LinearRegression())]),
+    "VotingClassifier": lambda ml, F: dict(estimators=[("l", ml.LogisticRegression()),
+                                                       ("k", ml.KNeighborsClassifier())]),
+    "StackingRegressor": lambda ml, F: dict(estimators=[("r", ml.Ridge()), ("o", ml.LinearRegression())]),
+    "StackingClassifier": lambda ml, F: dict(estimators=[("l", ml.LogisticRegression()),
+                                                         ("k", ml.KNeighborsClassifier())]),
+    "SparseCoder": lambda ml, F: dict(dictionary=F["dictionary"]),
+}
+
+#: Input shapes other than (rows, features) (session 2): image ops take
+#: (N, C, H, W), the 1-D ops (N, C, L), the recurrent estimators
+#: (samples, timesteps, features), IsotonicRegression a 1-D X.
+INPUTS = {
+    **{n: "img" for n in ("AdaptiveAvgPool2d", "AdaptiveMaxPool2d", "AvgPool2d", "MaxPool2d",
+                          "BatchNorm2d", "Conv2d", "Dropout2d", "BasicBlock", "CNNClassifier")},
+    **{n: "seq1d" for n in ("AvgPool1d", "MaxPool1d", "Conv1d", "BatchNorm1d")},
+    **{n: "rnn" for n in ("LSTMClassifier", "LSTMRegressor", "GRUClassifier", "GRURegressor",
+                          "RNNClassifier", "RNNRegressor")},
+    "IsotonicRegression": "x1",
+    "PoissonRegressor": "ypos", "GammaRegressor": "ypos",
+    "OneHotEncoder": "cat", "OrdinalEncoder": "cat",
+}
+
+#: Inference methods a probe skips because the default fit cannot answer
+#: them by DESIGN (predict_proba of an RMSE booster); the rest are probed.
+SKIP_METHODS = {"GradientBoosting": ("predict_proba",)}
+
 
 # ------------------------------------------------------------------ fixtures
 def fixtures():
@@ -90,8 +154,17 @@ def fixtures():
     Xh = rng.standard_normal((40, 6)).astype(np.float32)
     t = np.arange(96, dtype=np.float64)
     series = (10 + 0.1 * t + np.sin(t * 2 * np.pi / 12) + 0.05 * rng.standard_normal(96)).astype(np.float64)
+    d = rng.standard_normal((4, 6)).astype(np.float32)
+    d /= np.linalg.norm(d, axis=1, keepdims=True)
+    img = rng.standard_normal((8, 3, 8, 8)).astype(np.float32)
+    seq1d = rng.standard_normal((8, 3, 16)).astype(np.float32)
+    rnn = rng.standard_normal((40, 5, 6)).astype(np.float32)
+    cat = np.round(np.abs(X[:, :3])).astype(np.int64)
     return dict(X=X, yr=yr, yc=yc, Xh=Xh, Xp=np.abs(X) + np.float32(0.01),
-                Xhp=np.abs(Xh) + np.float32(0.01), series=series, rng=rng)
+                Xhp=np.abs(Xh) + np.float32(0.01), series=series, rng=rng, dictionary=d,
+                img=img, img_y=(np.arange(8) % 2).astype(np.int32), seq1d=seq1d,
+                rnn=rnn, rnn_yc=(rnn[:, -1, 0] > 0).astype(np.int32), rnn_yr=rnn[:, -1, 0].copy(),
+                cat=cat, cat_h=cat[:40].copy())
 
 
 def digest(value):
@@ -209,15 +282,22 @@ def _r_prob(ml, F):
     return {"call": lambda: getattr(ml.metrics, _r_prob.name.split(".")[1])(F["yc"], s)}
 
 
-@recipe("linalg.matmul", "linalg.matmul_bf16", "matmul")
+@recipe("linalg.matmul", "matmul")
 def _r_matmul(ml, F):
     fn = resolve(ml, _r_matmul.name)
     return {"call": lambda: fn(F["X"], F["Xh"].T.copy())}
 
 
+@recipe("linalg.matmul_bf16")
+def _r_matmul_bf16(ml, F):
+    # the bf16 profile takes bf16 BITS (to_bf16's uint16 buffer)
+    return {"call": lambda: ml.linalg.matmul_bf16(ml.linalg.to_bf16(F["X"]),
+                                                  ml.linalg.to_bf16(F["Xh"].T.copy()))}
+
+
 @recipe("linalg.matmul_int8")
 def _r_matmul_int8(ml, F):
-    return {"call": lambda: ml.linalg.matmul_int8(F["X"], F["Xh"].T.copy())}
+    return {"call": lambda: ml.linalg.matmul_int8(F["X"], F["Xh"].copy())}
 
 
 @recipe("linalg.qr", "linalg.svdvals")
@@ -351,10 +431,119 @@ def _r_spec(ml, F):
                                                            n_neighbors=10)}
 
 
-@recipe("cross_val_score", "model_selection.cross_val_score", "parallel_model_selection.cross_val_score")
+@recipe("cross_val_score", "model_selection.cross_val_score")
 def _r_cvs(ml, F):
     fn = resolve(ml, _r_cvs.name)
     return {"call": lambda: fn(ml.Ridge(), F["X"], F["yr"], cv=3)}
+
+
+@recipe("Theta", "OptimizedTheta", "DynamicTheta", "DynamicOptimizedTheta", "AutoTheta",
+        "CrostonClassic", "CrostonOptimized", "CrostonSBA", "ETS", "DampedETS")
+def _r_statsforecast(ml, F):
+    # statsforecast-shaped: fit(y), predict(h) (session 2; the generic
+    # probe's predict(Xh) was a probe bug, not a CPU gap)
+    st = {}
+    cls = resolve(ml, _r_statsforecast.name)
+    y = F["series"].astype("float32") if "Croston" not in _r_statsforecast.name \
+        else (abs(F["series"] - 10.0) * (F["series"] > 11.0)).astype("float32")
+
+    def fit():
+        st["m"] = cls()
+        st["m"].fit(y)
+        return st["m"].predict(6)
+    return {"fit": fit, "predict": lambda: st["m"].predict(12)}
+
+
+@recipe("AutoARIMA")
+def _r_autoarima(ml, F):
+    st = {}
+
+    def fit():
+        st["m"] = ml.AutoARIMA(F["series"])
+        return st["m"].fit()
+    return {"fit": fit, "forecast": lambda: st["m"].forecast(6)}
+
+
+@recipe("STL")
+def _r_stl(ml, F):
+    return {"fit": lambda: ml.STL(F["series"], period=12).fit()}
+
+
+@recipe("VAR")
+def _r_var(ml, F):
+    import numpy as np
+    endog = np.stack([F["series"], np.roll(F["series"], 3) * 0.5 + 1.0], axis=1)
+    st = {}
+
+    def fit():
+        st["m"] = ml.VAR(endog)
+        st["r"] = st["m"].fit(maxlags=2)
+        return st["r"]
+    return {"fit": fit}
+
+
+@recipe("GARCH")
+def _r_garch(ml, F):
+    import numpy as np
+    r = np.diff(np.log(F["series"])).astype(np.float64)
+    st = {}
+
+    def fit():
+        st["m"] = ml.GARCH()
+        return st["m"].fit(r)
+    return {"fit": fit, "forecast": lambda: st["m"].forecast(horizon=5)}
+
+
+@recipe("ProphetForecaster")
+def _r_prophet(ml, F):
+    import numpy as np
+    t = np.arange(len(F["series"]), dtype=np.float64)
+    st = {}
+
+    def fit():
+        st["m"] = ml.ProphetForecaster()
+        return st["m"].fit(t, F["series"])
+    return {"fit": fit, "predict": lambda: st["m"].predict(t + 12.0)}
+
+
+@recipe("PageRank", "Louvain")
+def _r_graph(ml, F):
+    import numpy as np
+    x = F["X"][:40]
+    d = ((x[:, None, :] - x[None, :, :]) ** 2).sum(-1)
+    a = (d < np.quantile(d, 0.15)).astype(np.float32)
+    np.fill_diagonal(a, 0.0)
+    a = np.maximum(a, a.T)
+    cls = resolve(ml, _r_graph.name)
+    return {"fit": lambda: cls().fit(a)}
+
+
+@recipe("LabelEncoder")
+def _r_labelenc(ml, F):
+    st = {}
+
+    def fit():
+        st["e"] = ml.LabelEncoder().fit(F["yc"])
+        return st["e"].classes_
+    return {"fit": fit, "transform": lambda: st["e"].transform(F["yc"]),
+            "inverse_transform": lambda: st["e"].inverse_transform(st["e"].transform(F["yc"]))}
+
+
+@recipe("LabelBinarizer")
+def _r_labelbin(ml, F):
+    st = {}
+
+    def fit():
+        st["e"] = ml.LabelBinarizer().fit(F["yc"])
+        return st["e"].classes_
+    return {"fit": fit, "transform": lambda: st["e"].transform(F["yc"]),
+            "inverse_transform": lambda: st["e"].inverse_transform(st["e"].transform(F["yc"]))}
+
+
+@recipe("parallel_model_selection.cross_val_score")
+def _r_pcvs(ml, F):
+    return {"call": lambda: ml.parallel_model_selection.cross_val_score(
+        ml.Ridge(), F["X"], F["yr"], cv=3, devices=[0])}
 
 
 def _named_recipes():
@@ -374,34 +563,63 @@ def _generic(ml, name, F):
     obj = resolve(ml, name)
     if not inspect.isclass(obj):
         return None
+    bare = name.split(".")[-1]
     nonneg = any(h in name for h in NONNEG_HINTS)
     X, Xh = (F["Xp"], F["Xhp"]) if nonneg else (F["X"], F["Xh"])
+    yc, yr = F["yc"], F["yr"]
+    kind = INPUTS.get(bare)
+    if kind == "img":
+        X, Xh, yc, yr = F["img"], F["img"], F["img_y"], F["img_y"].astype(np.float32)
+    elif kind == "seq1d":
+        X, Xh = F["seq1d"], F["seq1d"]
+    elif kind == "rnn":
+        X, Xh, yc, yr = F["rnn"], F["rnn"], F["rnn_yc"], F["rnn_yr"]
+    elif kind == "x1":
+        X, Xh = F["X"][:, 0].copy(), F["Xh"][:, 0].copy()
+    elif kind == "ypos":
+        yr = (np.exp(F["yr"] / 8.0) + np.float32(0.1)).astype(np.float32)
+    elif kind == "cat":
+        X, Xh = F["cat"], F["cat_h"]
     if any(h in name for h in CLASSIFIER_HINTS):
-        targets = [F["yc"], F["yr"], None]
+        targets = [yc, yr, None]
     elif any(h in name for h in REGRESSOR_HINTS):
-        targets = [F["yr"], F["yc"], None]
+        targets = [yr, yc, None]
     else:
-        targets = [None, F["yr"], F["yc"]]
+        targets = [None, yr, yc]
+    ctor = CTOR.get(bare)
     state = {}
 
     def fit():
-        last = None
+        # The FIRST error that is not a call-signature mismatch is the one
+        # reported: a TypeError from inside a fit must not be masked by the
+        # next target shape's "missing argument".
+        first = None
         for y in targets:
-            est = obj()
+            est = obj(**ctor(ml, F)) if ctor else obj()
             try:
                 out = est.fit(X) if y is None else est.fit(X, y)
             except TypeError as exc:
-                last = exc
+                if first is None or "positional argument" in str(first):
+                    first = exc
                 continue
             state["est"] = est
             got = [getattr(est, a) for a in FITTED_ATTRS if hasattr(est, a)]
             return got or out
-        raise last
+        raise first
+
+    def infer(m):
+        est = state["est"]
+        if m == "inverse_transform" and callable(getattr(est, "transform", None)):
+            # an inverse takes the transform's output, never raw features
+            return est.inverse_transform(est.transform(Xh))
+        return getattr(est, m)(Xh)
 
     stages = {"fit": fit}
     for m in INFER_METHODS:
+        if m in SKIP_METHODS.get(bare, ()):
+            continue
         if callable(getattr(obj, m, None)):
-            stages[m] = (lambda m=m: getattr(state["est"], m)(Xh))
+            stages[m] = (lambda m=m: infer(m))
     if not callable(getattr(obj, "fit", None)):
         if callable(getattr(obj, "fit_predict", None)):
             stages = {"fit_predict": lambda: obj().fit_predict(X)}

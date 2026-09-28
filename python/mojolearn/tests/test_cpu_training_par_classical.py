@@ -201,6 +201,16 @@ def test_cpu_operations_are_the_python_sharded_drivers():
     wanted.update(("cross_val_fold", "worker_identity"))
     assert set(_parallel_pool.CPU_OPERATIONS) == wanted, sorted(_parallel_pool.CPU_OPERATIONS)
     assert set(_parallel_pool.CPU_SINGLE_DEVICE_COOPERATIVE) == {"mlp_update", "samba_update"}
+    # lane cpu (2026-09-28): the device-split drivers run their plain host
+    # call from a ONE-device pool and refuse by name above one.
+    plain = set(_parallel_pool.CPU_SINGLE_DEVICE_PLAIN)
+    assert not (plain & set(_parallel_pool.CPU_OPERATIONS)), sorted(plain & set(_parallel_pool.CPU_OPERATIONS))
+    for op in sorted(plain):
+        for cooperative in (True, False):
+            assert _parallel_pool._cpu_refusal([(op, None, None)], cooperative, 1) is None, op
+            refusal = _parallel_pool._cpu_refusal([(op, None, None)], cooperative, 2)
+            assert isinstance(refusal, NotImplementedError), op
+            assert "no CPU implementation of the" in str(refusal), str(refusal)
     cooperative = set()
     for rel in ("python/mojolearn/parallel_classical.py", "python/mojolearn/parallel_preprocessing.py"):
         for body in re.split(r"^def ", _read(rel), flags=re.M):
@@ -225,8 +235,8 @@ def test_refusals_come_before_any_worker():
         print("SKIP: a GPU set loaded; the host route is not taken here")
         return
     for devices, cooperative, op, words in (
-            ((0,), True, "glm_fit", "cooperative multi-GPU driver glm_fit"),
-            ((0,), False, "forest_prepare", "parallel worker operation forest_prepare"),
+            ((0, 1), True, "glm_fit", "cooperative multi-GPU driver glm_fit across 2 devices"),
+            ((0, 1), False, "forest_prepare", "parallel worker operation forest_prepare"),
             ((0, 1), True, "mlp_update", "cooperative multi-GPU driver mlp_update across 2 devices"),
             ((0, 1), True, "samba_update", "cooperative multi-GPU driver samba_update across 2 devices")):
         pool = _parallel_pool.DevicePool(devices, cooperative=cooperative)

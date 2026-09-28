@@ -9,6 +9,16 @@ _forest_snapshot = None
 _ivf_snapshot = None
 
 
+def _cpu_plain():
+    """True on a CPU-only install. There the pool admits the
+    `_parallel_pool.CPU_SINGLE_DEVICE_PLAIN` operations only from a ONE-device
+    pool, and each runs the estimator's plain host call: the capability probes
+    below name GPU bindings' multi-device entries, which a host binding does
+    not have and a one-device split never reaches."""
+    from . import _backend
+    return _backend._CPU_ONLY is not None
+
+
 def execute(request):
     global _forest_snapshot, _ivf_snapshot
     operation, state, args = request
@@ -52,8 +62,10 @@ def execute(request):
         # verifier), so the shard's host fit runs in that scope here too.
         from . import _backend
         from ._cpu_reference import reference_training
-        from ._parallel_pool import CPU_OPERATIONS, CPU_SINGLE_DEVICE_COOPERATIVE
-        if _backend._CPU_ONLY is None or args[0] not in CPU_OPERATIONS | CPU_SINGLE_DEVICE_COOPERATIVE:
+        from ._parallel_pool import (CPU_OPERATIONS, CPU_SINGLE_DEVICE_COOPERATIVE,
+                                     CPU_SINGLE_DEVICE_PLAIN)
+        if (_backend._CPU_ONLY is None or args[0] not in
+                CPU_OPERATIONS | CPU_SINGLE_DEVICE_COOPERATIVE | CPU_SINGLE_DEVICE_PLAIN):
             raise ValueError('cpu_reference wraps only a CPU route operation on a CPU-only install')
         with reference_training():
             return execute(args)
@@ -62,11 +74,14 @@ def execute(request):
         _admit_forest_predictor(state)
         if _forest_snapshot is not None:
             raise RuntimeError('forest worker already owns a prepared snapshot')
-        binding = state._bind()
-        capability = getattr(binding, 'forest_pool_available', None)
-        if not callable(capability) or capability() != 1:
-            raise ImportError('rebuild RF/ET binding for pooled forest inference')
-        state._prepare_resident_forest(binding)
+        if not _cpu_plain():
+            binding = state._bind()
+            capability = getattr(binding, 'forest_pool_available', None)
+            if not callable(capability) or capability() != 1:
+                raise ImportError('rebuild RF/ET binding for pooled forest inference')
+            state._prepare_resident_forest(binding)
+        # On CPU the snapshot is the fitted estimator itself; forest_predict
+        # is its plain host predict.
         _forest_snapshot = state
         return dict(n_features=int(state.n_features_in_), outputs=int(state._num_outputs),
                     trees=int(state._n_trees), classes=getattr(state, 'classes_', None))
@@ -83,7 +98,7 @@ def execute(request):
     if operation == 'forest_release':
         model, _forest_snapshot = _forest_snapshot, None
         if model is not None:
-            resident = getattr(model, '_resident_forest', None)
+            resident = getattr(model, '_resident_forest', None) if not _cpu_plain() else None
             if resident is not None:
                 resident._finalizer()
                 model._resident_forest = None
@@ -139,29 +154,36 @@ def execute(request):
     if operation == 'kmeans_fit':
         from .cluster import KMeans
         model = KMeans(**state)
-        binding = model._bind('_mojolearn')
-        if (not callable(getattr(binding, 'kmeans_parallel_available', None))
-                or binding.kmeans_parallel_available() != 1):
-            raise ImportError('rebuild base binding for cooperative KMeans')
+        if not _cpu_plain():
+            binding = model._bind('_mojolearn')
+            if (not callable(getattr(binding, 'kmeans_parallel_available', None))
+                    or binding.kmeans_parallel_available() != 1):
+                raise ImportError('rebuild base binding for cooperative KMeans')
         X, weights = args
         model.fit(X, sample_weight=weights)
         return model
     if operation in ('graph_fit', 'umap_transform'):
-        from .parallel_graph import _binding
-        native, capability = _binding(state)
-        if not callable(getattr(native, capability, None)) or getattr(native, capability)() != 1:
-            raise ImportError('rebuild graph binding for native multi-GPU rows')
+        if not _cpu_plain():
+            from .parallel_graph import _binding
+            native, capability = _binding(state)
+            if not callable(getattr(native, capability, None)) or getattr(native, capability)() != 1:
+                raise ImportError('rebuild graph binding for native multi-GPU rows')
         if operation == 'umap_transform':
             return state.transform(*args)
         state.fit(*args)
         return state
     if operation == 'dbscan_fit':
-        binding = state._bind('_mojolearn_estimators')
-        if (not callable(getattr(binding, 'dbscan_parallel_available', None))
-                or binding.dbscan_parallel_available() != 1):
-            raise ImportError('rebuild estimators binding for parallel DBSCAN neighborhoods')
+        if not _cpu_plain():
+            binding = state._bind('_mojolearn_estimators')
+            if (not callable(getattr(binding, 'dbscan_parallel_available', None))
+                    or binding.dbscan_parallel_available() != 1):
+                raise ImportError('rebuild estimators binding for parallel DBSCAN neighborhoods')
         X, weights = args
         state.fit(X, sample_weight=weights)
+        return state
+    if operation in ('gbdt_fit', 'ordered_rmse_fit') and _cpu_plain():
+        X, y, kwargs = args
+        state.fit(X, y, **kwargs)
         return state
     if operation in ('gbdt_fit', 'ordered_rmse_fit'):
         model = state
@@ -232,6 +254,10 @@ def execute(request):
     if operation == 'holtwinters_fit':
         from ._tsa_impl import ExponentialSmoothing
         return ExponentialSmoothing(args[0], ts_num=args[0].shape[0], **state).fit()
+    if operation == 'gram_fit' and _cpu_plain():
+        X, y, kwargs = args
+        state.fit(X, y, **kwargs)
+        return state
     if operation == 'gram_fit':
         binding = state._bind('_mojolearn_estimators')
         if (not callable(getattr(binding, 'gram_parallel_available', None))
@@ -247,10 +273,11 @@ def execute(request):
         state.fit(X, y, **kwargs)
         return state
     if operation in ('gmm_fit', 'gmm_predict'):
-        native = state._extension()
-        if (not callable(getattr(native, 'gmm_parallel_available', None))
-                or native.gmm_parallel_available() != 1):
-            raise ImportError('rebuild mixture binding for row-sharded GaussianMixture E-steps')
+        if not _cpu_plain():
+            native = state._extension()
+            if (not callable(getattr(native, 'gmm_parallel_available', None))
+                    or native.gmm_parallel_available() != 1):
+                raise ImportError('rebuild mixture binding for row-sharded GaussianMixture E-steps')
         if operation == 'gmm_fit':
             state.fit(*args)
             return state
@@ -260,10 +287,11 @@ def execute(request):
         return getattr(state, method)(X)
     if operation == 'resample':
         from . import resample
-        native = resample._extension('identical')
-        if (not callable(getattr(native, 'resample_ranges_parallel_available', None))
-                or native.resample_ranges_parallel_available() != 1):
-            raise ImportError('rebuild resample binding for distributed replicate ranges')
+        if not _cpu_plain():
+            native = resample._extension('identical')
+            if (not callable(getattr(native, 'resample_ranges_parallel_available', None))
+                    or native.resample_ranges_parallel_available() != 1):
+                raise ImportError('rebuild resample binding for distributed replicate ranges')
         name, kwargs = args
         if name not in ('bootstrap', 'permutation_test', 'monte_carlo_integrate'):
             raise ValueError('invalid resample operation')
@@ -272,18 +300,20 @@ def execute(request):
         from .hdbscan import HDBSCAN
         if type(state) is not HDBSCAN:
             raise TypeError('requires mojolearn.HDBSCAN')
-        native = state._extension()
-        if (not callable(getattr(native, 'hdbscan_rows_parallel_available', None))
-                or native.hdbscan_rows_parallel_available() != 1):
-            raise ImportError('rebuild HDBSCAN binding for distributed neighbor and distance rows')
+        if not _cpu_plain():
+            native = state._extension()
+            if (not callable(getattr(native, 'hdbscan_rows_parallel_available', None))
+                    or native.hdbscan_rows_parallel_available() != 1):
+                raise ImportError('rebuild HDBSCAN binding for distributed neighbor and distance rows')
         state.fit(*args)
         return state
     if operation in ('km_fit', 'km_apply'):
         import os
-        native = state._extension()
-        if (not callable(getattr(native, 'kernel_methods_rows_parallel_available', None))
-                or native.kernel_methods_rows_parallel_available() != 1):
-            raise ImportError('rebuild kernel methods binding for distributed kernel rows')
+        if not _cpu_plain():
+            native = state._extension()
+            if (not callable(getattr(native, 'kernel_methods_rows_parallel_available', None))
+                    or native.kernel_methods_rows_parallel_available() != 1):
+                raise ImportError('rebuild kernel methods binding for distributed kernel rows')
         from .parallel_classical import _admit_kernel_method
         _admit_kernel_method(state)
         # Kernel rows follow MOJOLEARN_SVM_DEVICE_COUNT (set by the pool); the
@@ -311,10 +341,11 @@ def execute(request):
         return state.transform(args[0])
     if operation in ('cholesky_fit', 'cholesky_solve'):
         import os
-        native = state._extension()
-        if (not callable(getattr(native, 'cholesky_parallel_available', None))
-                or native.cholesky_parallel_available() != 1):
-            raise ImportError('rebuild GP binding for operation-level multi-GPU Cholesky')
+        if not _cpu_plain():
+            native = state._extension()
+            if (not callable(getattr(native, 'cholesky_parallel_available', None))
+                    or native.cholesky_parallel_available() != 1):
+                raise ImportError('rebuild GP binding for operation-level multi-GPU Cholesky')
         # Scoped to this operation: the GP and GaussianMixture workers keep
         # their own root factorization paths.
         previous = os.environ.get('MOJOLEARN_CHOLESKY_DEVICE_COUNT')
@@ -330,10 +361,11 @@ def execute(request):
             else:
                 os.environ['MOJOLEARN_CHOLESKY_DEVICE_COUNT'] = previous
     if operation in ('gp_fit', 'gp_predict'):
-        native = state._extension()
-        if (not callable(getattr(native, 'gp_parallel_available', None))
-                or native.gp_parallel_available() != 1):
-            raise ImportError('rebuild GP binding for distributed covariance rows')
+        if not _cpu_plain():
+            native = state._extension()
+            if (not callable(getattr(native, 'gp_parallel_available', None))
+                    or native.gp_parallel_available() != 1):
+                raise ImportError('rebuild GP binding for distributed covariance rows')
         if operation == 'gp_fit':
             state.fit(*args)
             return state
@@ -341,11 +373,12 @@ def execute(request):
         result = state.predict(X, return_std=return_std)
         return result, (state.clamped_, state.n_clamped_) if return_std else None
     if operation in ('svm_fit', 'svm_predict'):
-        from ._svm_impl import _extension
-        native = _extension('identical')
-        if (not callable(getattr(native, 'svm_parallel_available', None))
-                or native.svm_parallel_available() != 1):
-            raise ImportError('rebuild SVM binding for distributed kernel rows')
+        if not _cpu_plain():
+            from ._svm_impl import _extension
+            native = _extension('identical')
+            if (not callable(getattr(native, 'svm_parallel_available', None))
+                    or native.svm_parallel_available() != 1):
+                raise ImportError('rebuild SVM binding for distributed kernel rows')
         if operation == 'svm_fit':
             state.fit(*args)
             return state
@@ -354,11 +387,12 @@ def execute(request):
             raise ValueError('invalid SVM prediction operation')
         return getattr(state, method)(X)
     if operation in ('iforest_fit', 'iforest_score'):
-        from ._svm_impl import _extension
-        native = _extension('identical')
-        if (not callable(getattr(native, 'iforest_parallel_available', None))
-                or native.iforest_parallel_available() != 1):
-            raise ImportError('rebuild SVM binding for parallel IsolationForest')
+        if not _cpu_plain():
+            from ._svm_impl import _extension
+            native = _extension('identical')
+            if (not callable(getattr(native, 'iforest_parallel_available', None))
+                    or native.iforest_parallel_available() != 1):
+                raise ImportError('rebuild SVM binding for parallel IsolationForest')
         if operation == 'iforest_fit':
             state.fit(*args)
             return state
@@ -367,18 +401,20 @@ def execute(request):
             raise ValueError('invalid IsolationForest score operation')
         return getattr(state, method)(X)
     if operation == 'solver_fit':
-        from ._backend import binding
-        native = binding('_mojolearn_solver')
-        if (not callable(getattr(native, 'solver_parallel_available', None))
-                or native.solver_parallel_available() != 1):
-            raise ImportError('rebuild solver binding for parallel dot leaves')
+        if not _cpu_plain():
+            from ._backend import binding
+            native = binding('_mojolearn_solver')
+            if (not callable(getattr(native, 'solver_parallel_available', None))
+                    or native.solver_parallel_available() != 1):
+                raise ImportError('rebuild solver binding for parallel dot leaves')
         state.fit(*args)
         return state
     if operation == 'glm_fit':
-        binding = state._bind('_mojolearn_estimators')
-        if (not callable(getattr(binding, 'glm_parallel_available', None))
-                or binding.glm_parallel_available() != 1):
-            raise ImportError('rebuild estimators binding for parallel GLM gradients')
+        if not _cpu_plain():
+            binding = state._bind('_mojolearn_estimators')
+            if (not callable(getattr(binding, 'glm_parallel_available', None))
+                    or binding.glm_parallel_available() != 1):
+                raise ImportError('rebuild estimators binding for parallel GLM gradients')
         state.fit(*args)
         return state
     if operation == 'neighbor_reference':

@@ -603,6 +603,45 @@ TRAINING_LANE_NAMES = {
     "transformer-decode-session": "the resident Transformer decode session",
     "par-causal-lm": "the layer-owned causal language model",
     "par-cross-val": "the fold-dispatched cross-validation",
+    # lane cpu (2026-09-28): the device-split drivers at ONE device
+    # (`_parallel_pool.CPU_SINGLE_DEVICE_PLAIN`). Their shards are row tiles,
+    # chunks or ranges inside a GPU binding, and at one device every one of
+    # those bindings takes its plain path, so on a CPU-only install a
+    # one-device pool runs the estimator's plain host call; two or more
+    # devices refuse by name. The CPU cell is the plain host fit and the
+    # CUDA cell the one-device driver; `PUBLIC_INAPPLICABLE_PREFIXES` keeps
+    # them out of the public set, and none is a device claim.
+    "par-kmeans": "the cooperative k-means fit, one device (the plain host fit)",
+    "par-dbscan": "the cooperative DBSCAN fit, one device (the plain host fit)",
+    "par-gram": "the cooperative Gram-chunk fit, one device (the plain host fit)",
+    "par-gram-ols": "the cooperative Gram-chunk least squares, one device (the plain host fit)",
+    "par-gram-pca": "the cooperative Gram-chunk PCA, one device (the plain host fit)",
+    "par-gram-tsvd": "the cooperative Gram-chunk truncated SVD, one device (the plain host fit)",
+    "par-logistic": "the cooperative logistic regression gradients, one device (the plain host fit)",
+    "par-cholesky": "the cooperative Cholesky factorization and solve, one device (the plain host call)",
+    "par-graph-spectral": "the cooperative spectral clustering rows, one device (the plain host fit)",
+    "par-graph-umap": "the cooperative UMAP rows, one device (the plain host fit and transform)",
+    "par-cd": "the cooperative coordinate descent, one device (the plain host fit)",
+    "par-cd-elasticnet": "the cooperative elastic net coordinate descent, one device (the plain host fit)",
+    "par-graph-agglomerative": "the cooperative agglomerative clustering rows, one device (the plain host fit)",
+    "par-svm": "the cooperative SVC kernel rows, one device (the plain host fit and prediction)",
+    "par-svm-svr": "the cooperative SVR kernel rows, one device (the plain host fit and prediction)",
+    "par-iforest": "the cooperative isolation forest, one device (the plain host fit and scores)",
+    "par-forest-pool": "the pooled random forest predictor, one device (the plain host predict)",
+    "par-gp": "the cooperative Gaussian process covariance rows, one device (the plain host fit and prediction)",
+    "par-kernel-ridge": "the cooperative kernel ridge rows, one device (the plain host fit and prediction)",
+    "par-nystroem": "the cooperative Nystroem rows, one device (the plain host fit and transform)",
+    "par-gmm": "the cooperative Gaussian mixture E-steps, one device (the plain host fit and prediction)",
+    "par-hdbscan": "the cooperative HDBSCAN rows, one device (the plain host fit)",
+    "par-boosting": "the feature-parallel gradient boosting fit, one device (the plain host fit)",
+    "par-boosting-clf": "the feature-parallel gradient boosting classifier, one device (the plain host fit)",
+    "par-boosting-pointwise": "the parallel pointwise-histogram boosting fit, one device (the plain host fit)",
+    "par-boosting-reg": "the feature-parallel gradient boosting regressor, one device (the plain host fit)",
+    "par-border-types": "the feature-parallel boosting border types, one device (the plain host fit)",
+    "par-feature-freq": "the feature-parallel boosting feature frequencies, one device (the plain host fit)",
+    "par-ordered": "the parallel ordered boosting fit, one device (the plain host fit)",
+    "par-ordered-rmse": "the parallel ordered RMSE fit, one device (the plain host fit)",
+    "par-resample": "the distributed resampling replicate ranges, one device (the plain host call)",
     # CPU training batch 3 (lane/cpu-training-batch3, 2026-09-14): option
     # variants of families that already had a host path, every one in the
     # 136-lane record and IDENTICAL x4 against its three GPU columns on the
@@ -1668,7 +1707,7 @@ FAMILIES = (
             "radius", "radius-manhattan", "radius-chebyshev", "radius-minkowski-p3",
             "kmeans-sqrt", "kmeans-classic-pp",
             "par-queries-knn", "par-queries-nn", "par-queries-radius", "par-reference-knn",
-            "par-reference-knn-reg",
+            "par-reference-knn-reg", "par-kmeans",
         ),
         # The neighbors and density inference lane (2026-09-15) adds every
         # k-NN metric, the ball cover, the distance-weighted vote and mean
@@ -1754,7 +1793,7 @@ FAMILIES = (
                         # this family's own MOJOLEARN_LOWBIT_CONVERT_SABOTAGE
                         # and not MOJOLEARN_HOST_SABOTAGE, for the reason
                         # GATE_SABOTAGE_OWN_DEFINES states above.
-                        "hf-checkpoint"),
+                        "hf-checkpoint", "par-cholesky"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("linalg.gemm", "linalg.gemv", "Cholesky",
@@ -1800,7 +1839,7 @@ FAMILIES = (
             "pca-inverse", "pca-whiten-inverse", "tsvd-inverse",
             # lane/expose-qn-objectives (2026-09-20)
             "linear-svc", "linear-svc-squared-hinge", "linear-svr",
-            "linear-svr-squared", "qn-squared", "qn-absolute",
+            "linear-svr-squared", "qn-squared", "qn-absolute", "par-dbscan", "par-gram", "par-gram-ols", "par-gram-pca", "par-gram-tsvd", "par-logistic",
         ),
         # lane/inference-linear-svm (2026-09-15): the option variants of
         # ols, ridge and logistic load through the same formats; the
@@ -1889,7 +1928,7 @@ FAMILIES = (
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=("metrics", "spectral", "spectral-precomputed", "umap", "metrics-classification",
                         "metrics-fowlkes-mallows", "metrics-homogeneity-completeness",
-                        "spectral-embedding"),
+                        "spectral-embedding", "par-graph-spectral", "par-graph-umap"),
         # UMAP.transform from a saved embedding (lane/inference-forecast-
         # umap-pca, 2026-09-15). Its answer depended on the query batch by the
         # transform's contract until lane/umap-batch-fix (2026-09-16) made all
@@ -2025,7 +2064,7 @@ FAMILIES = (
         routes="_mojolearn_solver",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("lasso", "elasticnet", "agglomerative", "elasticnet-l2end-no-intercept"),
+        training_lanes=("lasso", "elasticnet", "agglomerative", "elasticnet-l2end-no-intercept", "par-cd", "par-cd-elasticnet", "par-graph-agglomerative"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("Lasso", "ElasticNet", "AgglomerativeClustering"),
@@ -2053,7 +2092,7 @@ FAMILIES = (
         routes="_mojolearn_svm",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("svc", "iforest", "svc-linear", "iforest-tuned", "svr", "svr-linear", "svc-poly"),
+        training_lanes=("svc", "iforest", "svc-linear", "iforest-tuned", "svr", "svr-linear", "svc-poly", "par-svm", "par-svm-svr", "par-iforest"),
         # The neighbors and density inference lane (2026-09-15): a saved
         # IsolationForest scores through iforest_run, the same forest rebuild
         # every GPU scoring call runs (DEVIATION 874).
@@ -2127,7 +2166,7 @@ FAMILIES = (
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=(
             "rf-clf", "rf-reg", "rf-clf-entropy-log2-noboot", "rf-clf-balanced-parallel",
-            "rf-reg-poisson", "rf-reg-gamma-ig", "par-forest", "par-forest-reg", "rf-score-weighted",
+            "rf-reg-poisson", "rf-reg-gamma-ig", "par-forest", "par-forest-reg", "rf-score-weighted", "par-forest-pool",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -2185,7 +2224,7 @@ FAMILIES = (
                         "gp-optimize", "gp-optimize-restarts",
                         # lane/unlaned-public-algorithms (2026-09-20): the class-sharded
                         # GPC drivers, whose shard IS this family's gpc_fit/gpc_predict
-                        "par-gpc-fit", "par-gpc-predict"),
+                        "par-gpc-fit", "par-gpc-predict", "par-gp"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("GaussianProcessRegressor", "GaussianProcessClassifier"),
@@ -2231,7 +2270,7 @@ FAMILIES = (
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=("rbf-sampler", "kernel-ridge", "nystroem", "par-rbf-sampler",
-                        "kernel-ridge-poly", "kernel-ridge-sigmoid", "kernel-ridge-laplacian", "nystroem-poly", "nystroem-sigmoid", "nystroem-laplacian"),
+                        "kernel-ridge-poly", "kernel-ridge-sigmoid", "kernel-ridge-laplacian", "nystroem-poly", "nystroem-sigmoid", "nystroem-laplacian", "par-kernel-ridge", "par-nystroem"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("KernelRidge", "Nystroem", "RBFSampler"),
@@ -2271,7 +2310,7 @@ FAMILIES = (
         routes="_mojolearn_mixture",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("gmm", "gmm-random-init", "gmm-sample", "gmm-random-init-sample"),
+        training_lanes=("gmm", "gmm-random-init", "gmm-sample", "gmm-random-init-sample", "par-gmm"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("GaussianMixture",),
@@ -2350,7 +2389,7 @@ FAMILIES = (
         routes="_mojolearn_hdbscan",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("hdbscan", "hdbscan-leaf"),
+        training_lanes=("hdbscan", "hdbscan-leaf", "par-hdbscan"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("HDBSCAN",),
@@ -2516,7 +2555,7 @@ FAMILIES = (
             # lane/gbdt-cpu-default-parity (2026-09-20): the bootstraps and
             # the score noise as options of gbdt_oracle_rmse.mojo and
             # gbdt_oracle_depthwise.mojo, and RMSE on the non-symmetric driver
-            "gbdt-stochastic-arms",
+            "gbdt-stochastic-arms", "par-boosting", "par-boosting-clf", "par-boosting-pointwise", "par-boosting-reg", "par-border-types", "par-feature-freq", "par-ordered", "par-ordered-rmse",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -2643,7 +2682,7 @@ FAMILIES = (
         routes="_mojolearn_resample",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("bootstrap", "permutation-test", "monte-carlo"),
+        training_lanes=("bootstrap", "permutation-test", "monte-carlo", "par-resample"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("resample.bootstrap", "resample.permutation_test", "resample.monte_carlo_integrate"),
