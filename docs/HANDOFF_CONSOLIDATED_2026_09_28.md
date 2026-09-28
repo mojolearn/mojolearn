@@ -3,6 +3,16 @@
 Written before conversation compaction, approximately 19:56 UTC. This is a
 snapshot, not a live job status. Read the queue before drawing timing conclusions.
 
+Post-compaction update, 20:07 UTC: main is `c46f77614`. The parallel candidate
+table gap described below is fixed and pushed (48 focused tests passed); use
+`docs/PAR_GMM_CANDIDATE_WORKFLOW.md` for the prepared qualification recipe.
+No physical par-gmm run has happened yet. NVIDIA job `nvc1-0016` remains queued;
+native prebuild is progressing without a current failure. Older Apple jobs
+0006–0009 precede it, including an overlapping sweep on a modified source tree;
+their results cannot automatically substitute for the pinned candidate.
+An explicit optional runtime NumPy extra versus fully NumPy-free runtime policy
+question is pending with the user. Do not infer an answer from elapsed time.
+
 ## Release answer
 
 **No commit is yet qualified for the requested next PyPI release.** Main is
