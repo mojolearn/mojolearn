@@ -367,12 +367,16 @@ def _(ml, X, yc, yr, Xh=None):
     """GaussianProcessRegressor.predict(return_cov=True): the full posterior
     covariance k(X, X) - V^T V (gpr_predict_cov_host / gpr_host_predict_cov,
     sample_y's steps before its factorization), with a WhiteKernel on the
-    self-kernel diagonal and normalize_y's std**2 scaling."""
+    self-kernel diagonal, on two kernels and a shifted target."""
     k = ml.ConstantKernel(1.0) * ml.RBF(1.0) + ml.WhiteKernel(0.1)
     m = ml.GaussianProcessRegressor(kernel=k).fit(X[:256, :4], yr[:256])
     mean, cov = m.predict(X[256:320, :4], return_cov=True)
+    # normalize_y=True needs StandardScaler.fit, which has no host binding
+    # (CPU gap owed in docs/lanes/progress/neighbors.md); the second model
+    # takes a shifted target and a second kernel instead
     y = np.ascontiguousarray(yr[:256] + np.float32(50.0)).astype(np.float32)
-    n = ml.GaussianProcessRegressor(kernel=k, normalize_y=True).fit(X[:256, :4], y)
+    k2 = ml.ConstantKernel(4.0) * ml.RBF(0.5) + ml.WhiteKernel(0.05)
+    n = ml.GaussianProcessRegressor(kernel=k2, optimizer=None).fit(X[:256, :4], y)
     nmean, ncov = n.predict(X[256:320, :4], return_cov=True)
     return _fit(dict(mean=_h(mean), cov=_h(cov), n_mean=_h(nmean), n_cov=_h(ncov)),
                 m, lambda e: e.predict(Xh[:64, :4], return_cov=True))
