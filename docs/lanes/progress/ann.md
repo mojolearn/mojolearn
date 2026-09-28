@@ -66,37 +66,89 @@ End-to-end sabotage for the steward: `x_ann/checks/sabotage/e2e_host_outputs_nud
 PHASE 1 (VERIFICATION) FOR THE SEVEN NEW ALGORITHMS: DONE on NVIDIA, AMD and
 Apple.
 
-## WHERE THIS STOPPED / NEXT (for the next agent)
+## WHERE THIS STOPPED / NEXT (for the next agent), 2026-09-28 00:00Z
 
-The LANE CHARTER (top of ALGORITHM_EXPANSION_PLAN.md) puts EXISTING IVF-Flat
-in this lane. Phase 1 is NOT done until IVF-Flat has it too:
+STOPPED BECAUSE THE RUNPOD BALANCE WENT NEGATIVE: every pod was deleted
+(the `ann` H100 1smfvbf7bhmw9i died mid-gate) and `dev_pod.sh up` is refused.
+Do not retry renting until Andrew tops up. Nothing below needs re-doing
+except the ONE owed pod gate.
 
-1. PHASE 1, IVF-Flat (lanes `ivf`, `ivf-euclidean`, `ivf-extend` in
-   tools/identity_break.py). Branch `lane/algos-ann-p1` (commit b531231f6,
-   pushed, NOT merged) adds to `tools/identity_lanes/ann.checks` the driver
-   `ivf/checks/ivf_check.mojo` with three source arms under
-   `ivf/checks/sabotage/`: 5860 slot sort ties high id
-   (`sort_slots_by_distance_then_index`), 5861 candidate merge descending
-   (`merge_probed_lists`), 5862 extend puts new rows first
-   (`extend_list_layout`), and a new `check_extend_matches_build` in
-   ivf_check. RUN on the H100 pod 2026-09-27 (tree `/root/mj2` = 072b2a152 + b531231f6):
-   clean ivf_check PASS; 5860 FAIL (check_assignment_ties: probe tie toward
-   list 1); 5861 FAIL (check_ivf_sabotages: production merge does not
-   ascend, DEVIATION 1786); 5862 FAIL (check_extend_matches_build: slot 0
-   holds id 41). The three arms BITE; never re-run them. Still owed for IVF-Flat:
-   DEVIATION rows for 5860-5862 (IVF-Flat's existing DEVIATIONS 1783/1786/
-   1788/1789 name the rules), the ivf lanes' fragment ownership (`ivf*` are
-   registered in identity_break.py, not in a tools/identity_lanes fragment, so
-   the lane check's seam listing does not reach them: move or register them
-   so `algos_lane_check.sh ivf,ivf-euclidean,ivf-extend --pass 2` runs
-   ann.checks), an e2e sabotage that bites those lanes, then the H100 run and
-   `apple_steward.py submit` for m2pro + do-amd. test_lane_select is owed
-   (ann.checks changed).
-2. Then PHASE 2 (option parity), next session. The option-parity WIP is
-   committed UNVERIFIED on `lane/algos-ann` (e2593e497): TSNE sklearn surface
-   (n_components, exact, init pca/random/array, two-phase reset, stops,
-   n_iter_), seams 5816/5817, save/load for the four indexes. It moves t-SNE
-   bits: build, tsne_check + its 8 patches, lane check on x-ann-tsne and a new
-   x-ann-tsne-options lane, sklearn sanity, tsv rows. Remaining rows:
-   x_ann/NOT_IMPLEMENTED.tsv and ivf/NOT_IMPLEMENTED.tsv.
-3. Phases 3-5: FAST GPU speed, IDENTICAL GPU speed, CPU speed.
+### Session A (verification): GATE PASSED 2026-09-28 01:40Z, MERGED TO MAIN
+
+Gate on the `ann` RTX 4090 pod (ctv6wwgm018n6v, driver 580, AMD EPYC 9254
+CPU column), p1 at ce236a257 (origin/main merged in):
+`algos_lane_check.sh` on the ten lanes below `--pass 2 --sabotage
+x_ann/checks/sabotage/e2e_ann_and_ivf_host.patch`: 26 SEAM lines PASS / FAIL
+under the patch / PASS after reversal (the 23 x_ann arms + IVF-Flat
+5860-5862), no BROKEN arm; RESULT: PASS (AGREE, DISAGREE under the e2e
+sabotage on all ten, AGREE after reversal). `pytest test_x_ann_repeat.py
+test_host_surface.py`: 201 passed. DONE, never repeat.
+
+(history below: what the gate was)
+
+Branch `lane/algos-ann-p1` (pushed; origin/main merged in at b23b38412).
+What it carries, beyond the seven x-ann lanes recorded above:
+- IVF-Flat per-seam arms in `tools/identity_lanes/ann.checks`
+  (`ivf/checks/ivf_check.mojo` + 5860 slot sort tie high, 5861 merge
+  descending, 5862 extend new rows first). ALREADY PROVEN on the H100
+  2026-09-27 (all three FAIL under their patch, clean PASS): never re-run
+  them alone; they run inside the lane check below as a matter of course.
+- IDENTITY_PATHS row 187 (IVF-Flat; the DEVIATIONS are the in-code
+  1783/1786/1788/1789/501, the arms 5860-5862).
+- Fragment ownership: no move needed. The lane check reaches ann.checks
+  through any x-ann lane in the lane list, so the ivf lanes ride with them.
+- The second-call fix (CURRENT DIRECTIVES): `x_ann/device_ctx.mojo`
+  (`x_ann_ctx`, one process-lifetime DeviceContext per tier, the x_cnn
+  `_Global` pattern), used by cagra/ivf_pq/tsne device entries; test
+  `python/mojolearn/tests/test_x_ann_repeat.py` (every ann + IVF-Flat
+  entry point twice in one process, GPU and CPU, GPU hash == CPU hash).
+- E2E sabotage `x_ann/checks/sabotage/e2e_ann_and_ivf_host.patch`: nudges
+  every x_ann CPU float output and routes IVF-Flat's host distances through
+  the value arm WITHOUT the IVF_HOST_SABOTAGE flag (with the flag the loader
+  refuses the .so, which is what failed /root/lc_ivf on 2026-09-27).
+
+Recorded passes (trust them): ivf, ivf-euclidean, ivf-extend CLEAN AGREE
+(batch/infer/model/train 9 each) on the H100 2026-09-27 21:43Z;
+test_lane_select OK (0 failures) 21:08Z after the ann.checks change.
+
+OWED ON A POD (the whole remaining gate for session A), from the p1 worktree:
+
+    tools/algos_lane_check.sh x-ann-ivf-pq,x-ann-tsne,x-ann-cagra,x-ann-ivf-sq,x-ann-ivf-rabitq,x-ann-refine,x-ann-filter,ivf,ivf-euclidean,ivf-extend \
+      --pass 2 --sabotage x_ann/checks/sabotage/e2e_ann_and_ivf_host.patch --out /root/lc_a
+    pixi run -e test python -m pytest python/mojolearn/tests/test_x_ann_repeat.py python/mojolearn/tests/test_host_surface.py
+
+It was started 2026-09-27 23:56Z and died in the base-binding build with
+the pod (no seam or lane verdict was produced). On PASS: merge p1 to main
+and push in one command, then ONE batched `apple_steward.py submit`
+(m2pro + do-amd) for those ten lanes with the e2e patch; update the
+tables above (the IVF-Flat row, the repeat test).
+
+### Session B (option parity): committed UNVERIFIED on `lane/algos-ann-b`
+
+`lane/algos-ann-b` = p1 + these (each UNVERIFIED, none run on a pod):
+- 660722d16 TSNE init='pca' (sklearn default; the owed bench item), 'random'
+  or an array; lane x-ann-tsne-pca; CPU-column arm
+  `x_ann/checks/sabotage/tsne_5818_pca_init_cpu_scaled.patch`. The old
+  x-ann-tsne lane now passes init='random' explicitly so its bits are the
+  recorded ones.
+- 2d23b2f07 IVF-Flat `IVFIndex.search(filter=)`, DEVIATION 5863, lane
+  ivf-filter, arm 5863 in ann.checks.
+- 146bfbd39 save/load for IVF-PQ, IVF-SQ, IVF-RaBitQ, CAGRA (npz, byte for byte).
+- 9864df33f `CagraIndex.search(filter=)` (post-traversal over itopk), lane
+  x-ann-cagra-filter.
+- 5d1b81252 + 654c711a5 `refine(metric='euclidean')`, lane
+  x-ann-refine-euclidean, arm `refine_5851_root_cpu_ulp.patch`.
+Owed for B on a pod after A merges: merge p1/main into B; lane_select
+--changed-since origin/main; lane check on the selected lanes (new: x-ann-
+tsne-pca, ivf-filter, x-ann-cagra-filter, x-ann-refine-euclidean; existing
+ivf* and x-ann-* must keep their bits) --pass 2 with the e2e patch, plus
+each new lane under its own arm (5818 on x-ann-tsne-pca, 5851 on
+x-ann-refine-euclidean) as `--sabotage`; test_lane_select (ann.checks and
+ann.py changed); test_host_surface; sklearn sanity for init='pca'
+(~/mojolearn-evidence/algos-ann/sanity_tsne_options.py). Remaining parity
+rows: x_ann/NOT_IMPLEMENTED.tsv and ivf/NOT_IMPLEMENTED.tsv. An older
+option-parity WIP (TSNE n_components/exact/two-phase stops, seams
+5816/5817) sits on `lane/algos-ann` (e2593e497), 401 behind main: mine it,
+never merge it as is.
+
+### Then phases C (FAST + IDENTICAL GPU speed) and D (CPU speed).
