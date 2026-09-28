@@ -147,3 +147,84 @@ non-admitted windows ("mixed", "sparse") are 5-7x slower on every geometry; the
 real step's head timings match the "ordinary" kind. This tile change reaches
 every Apple IDENTICAL GEMM with fewer than 2048 default tiles, classical users
 included; their bits are unchanged by construction.
+
+## FINAL (wind-down, 2026-09-28): state for the integration lane
+
+The lane is closed. No work is half done: the working tree was clean at
+fd2839567, no `refs/wip/*neural-apple*` snapshot exists on origin, and every code
+change below is complete as committed. Nothing new was run in the wind-down.
+
+### Default path vs opt-in
+
+Default (shipped build):
+- wait removals (a64433591, 727a12f04, 1ba4e0a98, 3149fe96d, f0259f772,
+  30497d57e): bit-inert by construction, digests equal (table above);
+- Apple attention estash word, gated at run time (16b924fe1, tightened in
+  8baa1d382): granted only to a byte LM trainer whose stash + y/dy + logits and
+  their gradient fit under 35% of free device memory; otherwise the round 3 word,
+  exactly the old path. Opt out at build time: `-D MOJOLEARN_ATTN_APPLE_R3_ONLY=1`;
+- Apple matrix GEMM small tile (FM = FN = 2) below 2048 default tiles (4b2f22927,
+  82cfbc690): hashes equal across every geometry in `gemm_geom.sh`. Geometry
+  switches: `MOJOLEARN_APPLE_MMA_SMALL_OFF`, `MOJOLEARN_APPLE_MMA_SMALL_BLOCKS`,
+  `MOJOLEARN_APPLE_MMA_SMALL_FN`.
+
+Opt-in only: `MOJOLEARN_ATTN_ARM_TRIAL` (attn_trial.sh) and
+`MOJOLEARN_STEP_PHASE_TIMERS` (census). Tools under `tools/apple_speed_neural/`
+change nothing in the library.
+
+### Measured before -> after already on record (m4pro-b, identical mode)
+
+| run | commit | T3 shard step (B4 L2048 d768 12L V50257) | final witness |
+|---|---|---|---|
+| steward 1790584044581 | b11745d8e (BEFORE) | 10.067 s (814 tok/s) | gradients ab96db5b..., parameters ecaba3f7... |
+| steward 1790584047650 | 30497d57e | 10.065 s | equal |
+| steward 1790594079084 | 8baa1d382 | **7.020 s (1167 tok/s)** | **equal** (all five digests, loss digests steps 1-4 equal) |
+
+At 8baa1d382 the T3 shard gate was DENIED (need 14.57 GB, free 14.52 GB), so the
+T3 gain (10.07 -> 7.02 s, 30%) is the GEMM small tile plus the wait removals,
+with the round 3 attention word. Component split at 8baa1d382: blocks backward
+4.11 s (was 6.49), blocks forward 1.66 s (was 2.01), head GEMMs 0.96 s (was 1.25).
+Same run, B1 12L V50257 with the gate GRANTED (need 3.64 GB, free 29.6 GB): 1.584 s a
+step (1293 tok/s), final witness gradients 6c66669b..., parameters 611d6d50... No
+BEFORE run at that exact shape is on record; the attention word table above
+(B1 12L, attn_arms.sh) is the bit evidence for estash vs round 3.
+
+Evidence stays on m4pro-b: `~/mojolearn-evidence/apple-steward/done/<job>/` and
+`~/mojolearn-evidence/neural-apple-speed/` (b11745d8e-*, 30497d57e-*,
+arms-30497d57e-*, geom-4b2f22927-*, 4b2f22927-*, trial-4b2f22927-*,
+8baa1d382-*, ab-4b2f22927-* partial).
+
+### Unproven: needs the integration check
+
+No verifier (`verify`, lane checks, sabotage checks) ran on any commit of this
+lane (by instruction). Speed digests only. The integration run must cover:
+- 16b924fe1 + 8baa1d382: the estash gate and its default word (fused attention,
+  byte LM trainer, `byte_lm_attention_estash_gate`, kernel_matrix_attn check);
+- 4b2f22927 + 82cfbc690: the small GEMM tile reaches EVERY Apple IDENTICAL GEMM
+  under 2048 default tiles, classical families included; only the neural T3
+  calls and the byte LM step were digested;
+- a64433591, 727a12f04, 1ba4e0a98, 3149fe96d, f0259f772, 30497d57e: the wait
+  removals (digests equal on the bench lanes; no identity sweep);
+- fb56ab209, 8baa1d382 (probe/profile tool edits): tooling only.
+GPT-3 route B: the T3 shard final witness at 8baa1d382 equals BEFORE, so the
+IDENTICAL neural bits did not move at that shape.
+
+### Known issues
+
+- **Memory blow-up on the 48 GB M4 Pro.** Steward job 1790588098954
+  (commit 4b2f22927) ran `attn_trial.sh`, whose trial build defaults to the estash
+  word UNGATED, at the T3 shard B4 x 12L: 7.2 s a step, 41 GB footprint, then a
+  Metal command buffer never completed and the GPU wedged; the orchestrator killed
+  the processes and rebooted m4pro-b. That job still shows `working` in
+  `apple_steward.py status` (its record was never closed); it is not running.
+  The shipped gate (8baa1d382) refuses that shape. The integration run must NOT
+  run `attn_trial.sh` (or any ungated estash build) at B4 x 12L on a 48 GB or
+  smaller Mac: use B1, or fewer layers, or the M3 Ultra.
+- The same job's `ab.sh` mamba1-forward A/B (24.4 vs 36.4 ms) never ran past its
+  first race (GPU wedged); mamba1-forward's before/after is UNRESOLVED.
+- `get_memory_info()` free memory on the M4 Pro reads 14.5-29.6 GB of 48 GB
+  depending on what the process already holds; the gate is sized on that reading.
+- Census waits dropped 610 -> 214 per step with no time change on the M4 Pro;
+  the wait removals are a cleanup there, not a speedup.
+- The STEP line's `attn` label prints the static build word even when the gate
+  grants estash; read `STEP estash_gate` for the word actually run.
