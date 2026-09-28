@@ -29,7 +29,7 @@ from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN
 from metrics.checks.device_io import upload_f32, upload_i32, download_f32, download_i32
 from x_cnn.ops import (
     FP, IP, ElemFn, CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW,
-    im2col_at, conv_out_at, dout_rows_at, col2im_at, fill_one_at,
+    im2col_at, im2col_taps_at, conv_out_at, dout_rows_at, col2im_at, fill_one_at,
     PP_N, PP_C, PP_H, PP_W, PP_OH, PP_OW,
     maxpool_fwd_at, maxpool_bwd_at, avgpool_fwd_at, avgpool_bwd_at, relu_maxpool_fwd_at, pool_relu_rows_bwd_at,
     conv_out_val, pool_relu_row_val,
@@ -207,6 +207,21 @@ def dout_rows_tiled_kernel(dout: FP, g: FP, S: Int32, OC: Int32):
         var oc = c0 + tx
         if s < ss and oc < cc:
             g.unsafe_store((n * ss + s) * cc + oc, t[tx * (_LT + 1) + ty + j * _LR])
+
+
+#: lane/cnn-apple2: im2col one thread per (row, channel) (`im2col_taps_at`).
+#: `-D MOJOLEARN_XCNN_NO_IM2COL_TAPS` is the before arm.
+comptime IM2COL_TAPS = not is_defined["MOJOLEARN_XCNN_NO_IM2COL_TAPS"]()
+
+
+def _im2col(
+    ctx: DeviceContext, mut dx: DeviceBuffer[DType.float32], mut cols: DeviceBuffer[DType.float32],
+    mut dp: DeviceBuffer[DType.int32], rows: Int, ckk: Int, C: Int,
+) raises:
+    comptime if IM2COL_TAPS:
+        launch[im2col_taps_at](ctx, fp(dx), fp(cols), fp(cols), fp(cols), ip(dp), ip(dp), rows * C)
+    else:
+        launch[im2col_at](ctx, fp(dx), fp(cols), fp(cols), fp(cols), ip(dp), ip(dp), rows * ckk)
 
 
 def _tiled_grid(N: Int, S: Int, OC: Int) -> Tuple[Int, Int, Int]:
@@ -669,7 +684,7 @@ def conv2d_forward_into(x: FP, w: FP, bias: FP, prm: List[Int32], dst: FP) raise
     var cols = ws(ctx, 4, rows * ckk)
     var y2 = ws(ctx, 5, rows * OC)
     var dout = ws(ctx, 6, rows * OC)
-    launch[im2col_at](ctx, fp(dx), fp(cols), fp(cols), fp(cols), ip(dp), ip(dp), rows * ckk)
+    _im2col(ctx, dx, cols, dp, rows, ckk, C)
     device_gemm(ctx, y2, cols, dw, rows, OC, ckk, OP_NT)
     _conv_out(ctx, y2, dbias, dout, dp, N, rows // N, OC)
     down(ctx, dout, dst, rows * OC)
@@ -702,7 +717,7 @@ def conv2d_backward_into(x: FP, w: FP, dout: FP, prm: List[Int32], gx_out: FP, g
     var gb = ws(ctx, 8, OC)
     var dcols = ws(ctx, 9, rows * ckk)
     var gx = ws(ctx, 10, nx)
-    launch[im2col_at](ctx, fp(dxin), fp(cols), fp(cols), fp(cols), ip(dp), ip(dp), rows * ckk)
+    _im2col(ctx, dxin, cols, dp, rows, ckk, C)
     comptime if TILED_LAYOUT:
         var tg = _tiled_grid(N, rows // N, OC)
         ctx.enqueue_function[dout_rows_tiled_kernel](
@@ -1377,10 +1392,10 @@ def _conv_relu_on_device(
     ctx: DeviceContext, mut dx: DeviceBuffer[DType.float32], mut dw: DeviceBuffer[DType.float32],
     mut dbias: DeviceBuffer[DType.float32], mut dp: DeviceBuffer[DType.int32], mut cols: DeviceBuffer[DType.float32],
     mut y2: DeviceBuffer[DType.float32], mut yconv: DeviceBuffer[DType.float32], rows: Int, OC: Int, ckk: Int,
-    N: Int,
+    N: Int, C: Int,
 ) raises:
     """cols = im2col(x); y2 = cols . W^T; yconv = the NCHW conv output (+ bias)."""
-    launch[im2col_at](ctx, fp(dx), fp(cols), fp(cols), fp(cols), ip(dp), ip(dp), rows * ckk)
+    _im2col(ctx, dx, cols, dp, rows, ckk, C)
     device_gemm(ctx, y2, cols, dw, rows, OC, ckk, OP_NT)
     _conv_out(ctx, y2, dbias, yconv, dp, N, rows // N, OC)
 
@@ -1423,7 +1438,7 @@ def conv_block_forward_into[resident: Bool = False](
     var cols = view(ctx, FP(unsafe_from_address=save_cols), rows * ckk) if saved else ws(ctx, 4, rows * ckk)
     var y2 = ws(ctx, 5, ny)
     var yconv = view(ctx, FP(unsafe_from_address=save_y), ny) if saved else ws(ctx, 6, ny)
-    _conv_relu_on_device(ctx, dx, dw, dbias, dp, cols, y2, yconv, rows, OC, ckk, N)
+    _conv_relu_on_device(ctx, dx, dw, dbias, dp, cols, y2, yconv, rows, OC, ckk, N, C)
     # the block's output: the pool's, or the ReLU's when there is no pool
     var pout = outb[resident](ctx, 7, dst, no)
     if pool:
@@ -1477,7 +1492,7 @@ def conv_block_backward_into[resident: Bool = False](
     var yconv = view(ctx, FP(unsafe_from_address=save_y), ny) if saved else ws(ctx, 9, ny)
     var gy = ws(ctx, 11, ny)
     if not saved:
-        _conv_relu_on_device(ctx, dx, dw, dbias, dp, cols, y2, yconv, rows, OC, ckk, N)
+        _conv_relu_on_device(ctx, dx, dw, dbias, dp, cols, y2, yconv, rows, OC, ckk, N, C)
     # conv2d_backward_into from here, on the device-resident gy and cols
     var grow = ws(ctx, 12, ny)
     # the conv block followed by the pool block: a host array the upload

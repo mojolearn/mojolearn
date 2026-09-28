@@ -15,7 +15,7 @@ from x_cnn.ops import (
     pool_relu_rows_bwd_at, fill_one_at, col2im_at,
 )
 from x_cnn.device import (
-    cnn_ctx, launch, fp, ip, device_gemm, _conv_out, TILED_LAYOUT, rows_bwd_tiled_kernel, _tiled_grid, _LT, _LR,
+    cnn_ctx, launch, fp, ip, device_gemm, _conv_out, _im2col, TILED_LAYOUT, rows_bwd_tiled_kernel, _tiled_grid, _LT, _LR,
 )
 
 
@@ -91,7 +91,7 @@ def block(ctx: DeviceContext, name: String, N: Int, C: Int, H: Int, OC: Int) rai
             var t0 = perf_counter_ns()
             for _ in range(5):
                 if s == 0:
-                    launch[im2col_at](ctx, fp(x), fp(cols), fp(cols), fp(cols), ip(dp), ip(dp), rows * ckk)
+                    _im2col(ctx, x, cols, dp, rows, ckk, C)
                 elif s == 1:
                     device_gemm(ctx, y2, cols, w, rows, OC, ckk, OP_NT)
                 elif s == 2:

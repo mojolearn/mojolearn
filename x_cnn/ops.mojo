@@ -138,6 +138,36 @@ def im2col_at(i: Int, x: FP, cols: FP, f2: FP, f3: FP, q: IP, p: IP):
 
 
 @always_inline
+def im2col_taps_at(i: Int, x: FP, cols: FP, f2: FP, f3: FP, q: IP, p: IP):
+    """lane/cnn-apple2: `im2col_at` for the KH*KW taps of one (row r,
+    channel c), i = r*C + c: the same words at the same addresses (each
+    `im2col_at` element's copy), one index decode per KH*KW words instead
+    of one per word."""
+    var C = _g(p, CP_C); var H = _g(p, CP_H); var W = _g(p, CP_W)
+    var KH = _g(p, CP_KH); var KW = _g(p, CP_KW)
+    var OH = _g(p, CP_OH); var OW = _g(p, CP_OW)
+    var r = _ud(i, C)
+    var c = i - r * C
+    var n = _ud(r, (OH * OW))
+    var rem = r - n * OH * OW
+    var oh = _ud(rem, OW)
+    var ow = rem - oh * OW
+    var h0 = oh * _g(p, CP_SH) - _g(p, CP_PH)
+    var w0 = ow * _g(p, CP_SW) - _g(p, CP_PW)
+    var DH = _g(p, CP_DH); var DW = _g(p, CP_DW)
+    var xb = (n * C + c) * H
+    var ob = r * (C * KH * KW) + c * KH * KW
+    for kh in range(KH):
+        var h = h0 + kh * DH
+        for kw in range(KW):
+            var w = w0 + kw * DW
+            var v = Float32(0)
+            if h >= 0 and h < H and w >= 0 and w < W:
+                v = ftz(x.unsafe_load((xb + h) * W + w))
+            cols.unsafe_store(ob + kh * KW + kw, v)
+
+
+@always_inline
 def conv_out_at(i: Int, y2: FP, bias: FP, dst: FP, f3: FP, q: IP, p: IP):
     """out[n, oc, oh, ow] (NCHW) = y2[r, oc] (+ bias[oc]); one add."""
     var OC = _g(p, CP_OC); var OH = _g(p, CP_OH); var OW = _g(p, CP_OW)
