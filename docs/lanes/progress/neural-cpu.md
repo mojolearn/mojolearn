@@ -98,7 +98,15 @@ L capped at 512); train = the same inputs through the public class.
 ## Gate status
 
 - `lane/neural-cpu` (items 1-3): lane check on the 47 lanes
-  `lane_select --changed-since origin/main` names, NVIDIA pod: RUNNING.
+  `lane_select --changed-since origin/main` names
+  (`~/mojolearn-evidence/neural-cpu/gate1_lanes.txt`): NOT RUN TO A VERDICT.
+  Pod 4hzekcstjwydl4 vanished before the gate or the sabotage runs
+  (`sab_runs.sh`) reported (RunPod GET 404, 04:53Z Sep 28, lease still
+  open to 05:55Z); nothing was pulled. Re-renting failed: RunPod
+  `Your account balance is too low to rent a pod`, and the account lists
+  ZERO pods (every lane's RunPod box is gone). Branch merged with
+  origin/main (clean) and pushed; the gate re-runs as soon as a pod can be
+  rented.
 - `lane/neural-cpu-threads`: waits for core/host_parallel.mojo on main.
 
 ## Findings for other lanes
