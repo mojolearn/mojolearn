@@ -140,4 +140,15 @@ option-parity WIP (TSNE n_components/exact/two-phase stops, seams
 5816/5817) sits on `lane/algos-ann` (e2593e497), 401 behind main: mine it,
 never merge it as is.
 
+B STATUS 2026-09-28 00:05Z: p1 (with main) merged into `lane/algos-ann-b`
+(cbb8615bd, pushed); the worktree is on lane/algos-ann-b. FINDING for B's
+gate: `lane_select --changed-since origin/main` selects ALL 484 lanes,
+because 2d23b2f07 appends "ivf-filter" to two lane tuples inside
+python/mojolearn/host_surface.py's FAMILIES and the selector reads any
+non-addition edit of that registry as "EVERY LANE, by rule". Fix at the
+root before B's gate (either teach tools/lane_select.py that a new name
+appended to an existing FAMILIES entry's lane tuple is an addition, with a
+test in tools/test_lane_select.py, or ask the tools lane to), so the gate
+runs only the ann/ivf lanes; never run all 484.
+
 ### Then phases C (FAST + IDENTICAL GPU speed) and D (CPU speed).
