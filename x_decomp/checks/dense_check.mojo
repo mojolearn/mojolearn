@@ -22,7 +22,13 @@ from x_decomp.checks.seam_util import (
     seam_fixture,
     zeros,
 )
+from decomposition.host.pca_full_oracle import host_one_sided_jacobi_svd, host_qr_factor
+from x_decomp.cells import X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL
+from x_decomp.host_jacobi import fast_jacobi_eigh, fast_one_sided_jacobi_svd
+from decomposition.host.pca_oracle import host_jacobi_eigh
+from decomposition.checks.jacobi_eigh_device import JACOBI_SWEEPS, JACOBI_TOL
 from x_decomp.device import DevExec
+from x_decomp.host_qr import fast_qr_factor
 from x_decomp.host import HostExec
 
 
@@ -63,6 +69,65 @@ def spd(n: Int) -> List[Float32]:
 def main() raises:
     var tr = IdentityTrace()
     tr.header("x_decomp dense_check (DEVIATIONS 5307-5309, 5320)")
+    # ---- the host's fast Householder QR (x_decomp/host_qr.mojo) == the
+    # replay of the device kernel it serves for (host_qr_factor), bit for bit:
+    # one slice, many slices, column counts around the SIMD width
+    var shapes = [37, 9, 5000, 13, 3000, 19, 700, 40, 64, 64]
+    for sh in range(len(shapes) // 2):
+        var qm = shapes[2 * sh]
+        var qn = shapes[2 * sh + 1]
+        var qa = seam_fixture(qm, qn, UInt64(60 + sh))
+        var qa2 = qa.copy()
+        var want_r = host_qr_factor(qa2, qm, qn)
+        var got_r = fast_qr_factor(ptr(qa), qm, qn)
+        same("host QR slices " + String(qm) + " x " + String(qn), count_diff_f32(got_r, want_r))
+    # ---- the host's transposed one-sided Jacobi SVD (x_decomp/host_jacobi.mojo)
+    # == host_one_sided_jacobi_svd: values, V and the sweep count
+    var svd_ns = [9, 40, 300]
+    for sh in range(len(svd_ns)):
+        var sn = svd_ns[sh]
+        var sa = seam_fixture(sn, sn, UInt64(70 + sh))
+        var sa2 = sa.copy()
+        var want = host_one_sided_jacobi_svd(sa2, sn, X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL)
+        var got = fast_one_sided_jacobi_svd(sa, sn, X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL)
+        same("host Jacobi SVD values n " + String(sn), count_diff_f32(got.s, want.s))
+        same("host Jacobi SVD vectors n " + String(sn), count_diff_f32(got.v, want.v))
+        if got.executed != want.executed or got.converged != want.converged:
+            raise Error("host Jacobi SVD sweep count differs at n " + String(sn))
+    # ---- the host's two-sided Jacobi eigh (x_decomp/host_jacobi.mojo) ==
+    # host_jacobi_eigh: the consumed matrix (eigenvalues on its diagonal),
+    # the vectors and the sweep count; symmetric fixtures (a Gram matrix)
+    for sh in range(len(svd_ns)):
+        var en = svd_ns[sh]
+        var g = seam_fixture(en + 3, en, UInt64(80 + sh))
+        var sym = List[Float32](length=en * en, fill=Float32(0))
+        for i in range(en):
+            for j in range(en):
+                var acc = Float32(0)
+                for r in range(en + 3):
+                    acc += g[r * en + i] * g[r * en + j] * Float32(1e-4)
+                sym[i * en + j] = acc
+        var ea = sym.copy()
+        var eb = sym.copy()
+        var we = host_jacobi_eigh(ea, en, JACOBI_SWEEPS, Float32(JACOBI_TOL))
+        var ge = fast_jacobi_eigh(eb, en, JACOBI_SWEEPS, Float32(JACOBI_TOL))
+        same("host Jacobi eigh matrix n " + String(en), count_diff_f32(eb, ea))
+        same("host Jacobi eigh vectors n " + String(en), count_diff_f32(ge.vectors, we.vectors))
+        if ge.executed != we.executed or ge.converged != we.converged:
+            raise Error("host Jacobi eigh sweep count differs at n " + String(en))
+    # ---- the host LU's SIMD row eliminations (x_decomp/host_simd.mojo) at a
+    # size past the vector width, against the oracle
+    var ln = 100
+    var la = seam_fixture(ln, ln, UInt64(90))
+    for i in range(ln):
+        la[i * ln + i] = la[i * ln + i] + Float32(3)
+    var lw = oracle_lu(la, ln)
+    var lh = la.copy()
+    var lp = List[Int32](length=ln, fill=Int32(0))
+    var linfo = zeros(1)
+    HostExec.lu(ptr(lh), iptr(lp), ptr(linfo), ln)
+    same("host LU factor n 100", count_diff_f32(lh, lw[0]))
+    same("host LU pivots n 100", count_diff_i32(lp, lw[1]))
     # ---- 5307 the pivot
     var n = 9
     var a = tie_matrix(n)
