@@ -2,10 +2,23 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """THE CNN LANE ON THE HOST: x_cnn/device.mojo's entries with the same
 names and the same results, bit for bit. The element functions are
-x_cnn/ops.mojo's, called in a loop; every contraction is `gemm_oracle`, the
-CPU implementation of mojolearn.identical.gemm.fp32.v1."""
+x_cnn/ops.mojo's, called in a loop; every contraction is
+mojolearn.identical.gemm.fp32.v1, computed by `x_cnn/host/gemm_host.mojo`
+(`gemm_oracle`'s cells, bit for bit, threaded and vectorized).
+
+PHASE 5 (CPU speed, DEVIATION 5719). `run` splits an element loop into
+contiguous tasks (`core/host_predict_threads.mojo`, MOJOLEARN_CPU_THREADS):
+every element function computes ONE output element from its inputs, the
+contract the device relies on when it launches one thread per element, so
+which thread runs an element moves no bit. The `*_into` entries take the
+caller's addresses (inputs read in place, outputs written in place) and
+allocate their scratch uninitialized; the List entries below are their
+doors for the seam check."""
+from std.memory import alloc
 from std.sys.compile import is_defined
-from gemm.host.identical_gemm import gemm_oracle, OP_NN, OP_NT, OP_TN
+from max.algorithm import sync_parallelize
+from gemm.host.identical_gemm import OP_NN, OP_NT, OP_TN
+from x_cnn.host.gemm_host import gemm_host_into, parallel_tasks
 from x_cnn.ops import (
     FP, IP, ElemFn, CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW, CP_REV,
     im2col_at, conv_out_at, dout_rows_at, col2im_at,
@@ -33,75 +46,177 @@ def hi(mut values: List[Int32]) -> IP:
     return values.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
 
 
+#: The fewest elements worth a second thread in an element loop.
+comptime RUN_MIN_ELEMS = 16384
+
+
 def run[f: ElemFn](a: FP, b: FP, c: FP, d: FP, q: IP, p: IP, total: Int):
-    for i in range(total):
-        f(i, a, b, c, d, q, p)
+    """f over elements [0, total), split into contiguous tasks."""
+    var tasks = parallel_tasks(total, RUN_MIN_ELEMS)
+    if tasks <= 1:
+        for i in range(total):
+            f(i, a, b, c, d, q, p)
+        return
+    var chunk = (total + tasks - 1) // tasks
+
+    def _part(t: Int) {imm a, imm b, imm c, imm d, imm q, imm p, imm chunk, imm total}:
+        var lo = t * chunk
+        var hi = min(lo + chunk, total)
+        for i in range(lo, hi):
+            f(i, a, b, c, d, q, p)
+
+    sync_parallelize(_part, tasks)
 
 
 def zeros(n: Int) -> List[Float32]:
     return List[Float32](length=n if n > 0 else 1, fill=Float32(0))
 
 
+@always_inline
+def scratch(n: Int) -> FP:
+    """n uninitialized words (at least one); the caller frees it."""
+    return alloc[Float32](n if n > 0 else 1).unsafe_origin_cast[MutAnyOrigin]()
+
+
+@always_inline
+def scratch_i(n: Int) -> IP:
+    return alloc[Int32](n if n > 0 else 1).unsafe_origin_cast[MutAnyOrigin]()
+
+
 def gemm_host(a: List[Float32], b: List[Float32], m: Int, n: Int, k: Int, op: Int) raises -> List[Float32]:
-    return gemm_oracle(a, b, op, m, n, k)
+    var sa = a.copy()
+    var sb = b.copy()
+    var c = zeros(m * n)
+    gemm_host_into(hp(sa), hp(sb), hp(c), op, m, n, k)
+    _ = sa^
+    _ = sb^
+    return c^
+
+
+def conv2d_forward_into(x: FP, w: FP, bias: FP, dst: FP, prm: List[Int32]) raises:
+    """dst (N, OC, OH, OW) = conv(x) + bias: im2col, the pinned NT GEMM,
+    the NCHW layout and bias (conv_out_at)."""
+    var N = Int(prm[CP_N]); var C = Int(prm[CP_C]); var OC = Int(prm[CP_OC])
+    var ckk = C * Int(prm[CP_KH]) * Int(prm[CP_KW])
+    var rows = N * Int(prm[CP_OH]) * Int(prm[CP_OW])
+    var ps = prm.copy()
+    var cols = scratch(rows * ckk)
+    var y2 = scratch(rows * OC)
+    run[im2col_at](x, cols, cols, cols, hi(ps), hi(ps), rows * ckk)
+    gemm_host_into(cols, w, y2, OP_NT, rows, OC, ckk)
+    run[conv_out_at](y2, bias, dst, dst, hi(ps), hi(ps), rows * OC)
+    cols.free()
+    y2.free()
+    _ = ps^
+
+
+def conv2d_backward_into(x: FP, w: FP, dout: FP, gx: FP, gw: FP, gb: FP, prm: List[Int32], need_dx: Bool) raises:
+    """gx (when need_dx), gw [OC x ckk] and gb [OC] of a conv from its
+    output gradient: dW = TN over the N*OH*OW rows (5701), db = TN against
+    ones, dcols = NN, col2im as a gather (5700)."""
+    var N = Int(prm[CP_N]); var C = Int(prm[CP_C]); var OC = Int(prm[CP_OC])
+    var ckk = C * Int(prm[CP_KH]) * Int(prm[CP_KW])
+    var rows = N * Int(prm[CP_OH]) * Int(prm[CP_OW])
+    var nx = N * C * Int(prm[CP_H]) * Int(prm[CP_W])
+    var ps = prm.copy()
+    comptime if X_CNN_HOST_SABOTAGE:
+        ps[CP_REV] = Int32(1)
+    var cols = scratch(rows * ckk)
+    var g = scratch(rows * OC)
+    run[im2col_at](x, cols, cols, cols, hi(ps), hi(ps), rows * ckk)
+    run[dout_rows_at](dout, g, g, g, hi(ps), hi(ps), rows * OC)
+    var ones = List[Float32](length=rows, fill=Float32(1))
+    gemm_host_into(g, cols, gw, OP_TN, OC, ckk, rows)
+    gemm_host_into(g, hp(ones), gb, OP_TN, OC, 1, rows)
+    cols.free()
+    if need_dx:
+        var dcols = scratch(rows * ckk)
+        gemm_host_into(g, w, dcols, OP_NN, rows, ckk, OC)
+        run[col2im_at](dcols, gx, gx, gx, hi(ps), hi(ps), nx)
+        dcols.free()
+    g.free()
+    _ = ones^
+    _ = ps^
 
 
 def conv2d_forward_host(
     x: List[Float32], w: List[Float32], bias: List[Float32], prm: List[Int32]
 ) raises -> List[Float32]:
-    var N = Int(prm[CP_N]); var C = Int(prm[CP_C]); var OC = Int(prm[CP_OC])
-    var ckk = C * Int(prm[CP_KH]) * Int(prm[CP_KW])
-    var rows = N * Int(prm[CP_OH]) * Int(prm[CP_OW])
+    var rows = Int(prm[CP_N]) * Int(prm[CP_OH]) * Int(prm[CP_OW])
     var xs = x.copy()
+    var ws = w.copy()
     var bs = bias.copy()
-    var ps = prm.copy()
-    var cols = zeros(rows * ckk)
-    run[im2col_at](hp(xs), hp(cols), hp(cols), hp(cols), hi(ps), hi(ps), rows * ckk)
-    var y2 = gemm_oracle(cols, w, OP_NT, rows, OC, ckk)
-    var out = zeros(rows * OC)
-    run[conv_out_at](hp(y2), hp(bs), hp(out), hp(out), hi(ps), hi(ps), rows * OC)
+    var out = zeros(rows * Int(prm[CP_OC]))
+    conv2d_forward_into(hp(xs), hp(ws), hp(bs), hp(out), prm)
     _ = xs^
+    _ = ws^
     _ = bs^
-    _ = ps^
-    _ = cols^
-    _ = y2^
     return out^
 
 
 def conv2d_backward_host(
     x: List[Float32], w: List[Float32], dout: List[Float32], prm: List[Int32]
 ) raises -> List[Float32]:
-    var N = Int(prm[CP_N]); var C = Int(prm[CP_C]); var OC = Int(prm[CP_OC])
-    var ckk = C * Int(prm[CP_KH]) * Int(prm[CP_KW])
-    var rows = N * Int(prm[CP_OH]) * Int(prm[CP_OW])
-    var nx = N * C * Int(prm[CP_H]) * Int(prm[CP_W])
+    """[gx | gw | gb]."""
+    var OC = Int(prm[CP_OC])
+    var ckk = Int(prm[CP_C]) * Int(prm[CP_KH]) * Int(prm[CP_KW])
+    var nx = Int(prm[CP_N]) * Int(prm[CP_C]) * Int(prm[CP_H]) * Int(prm[CP_W])
     var xs = x.copy()
+    var ws = w.copy()
     var ds = dout.copy()
-    var ps = prm.copy()
-    comptime if X_CNN_HOST_SABOTAGE:
-        ps[CP_REV] = Int32(1)
-    var cols = zeros(rows * ckk)
-    var g = zeros(rows * OC)
-    run[im2col_at](hp(xs), hp(cols), hp(cols), hp(cols), hi(ps), hi(ps), rows * ckk)
-    run[dout_rows_at](hp(ds), hp(g), hp(g), hp(g), hi(ps), hi(ps), rows * OC)
-    var ones = List[Float32](length=rows, fill=Float32(1))
-    var gw = gemm_oracle(g, cols, OP_TN, OC, ckk, rows)
-    var gb = gemm_oracle(g, ones, OP_TN, OC, 1, rows)
-    var dcols = gemm_oracle(g, w, OP_NN, rows, ckk, OC)
-    var gx = zeros(nx)
-    run[col2im_at](hp(dcols), hp(gx), hp(gx), hp(gx), hi(ps), hi(ps), nx)
+    var result = zeros(nx + OC * ckk + OC)
+    var rp = hp(result)
+    conv2d_backward_into(hp(xs), hp(ws), hp(ds), rp, rp + nx, rp + nx + OC * ckk, prm, True)
     _ = xs^
+    _ = ws^
     _ = ds^
-    _ = ps^
-    _ = cols^
-    _ = g^
-    _ = dcols^
-    var result = List[Float32](capacity=nx + OC * ckk + OC)
-    for i in range(nx):
-        result.append(gx[i])
-    result.extend(gw^)
-    result.extend(gb^)
     return result^
+
+
+def conv_block_forward_into(x: FP, w: FP, bias: FP, dst: FP, idx: IP, cprm: List[Int32], pprm: List[Int32], pool: Bool) raises:
+    """CNNClassifier's Conv2d -> ReLU -> MaxPool2d block (DEVIATION 5717's
+    host twin): dst is the pooled output (idx its winners) or, without a
+    pool, the ReLU output."""
+    var ny = Int(cprm[CP_N]) * Int(cprm[CP_OC]) * Int(cprm[CP_OH]) * Int(cprm[CP_OW])
+    var zp: List[Int32] = [0, 0, 0]
+    if not pool:
+        conv2d_forward_into(x, w, bias, dst, cprm)
+        run[relu_fwd_at](dst, dst, dst, dst, hi(zp), hi(zp), ny)
+        _ = zp^
+        return
+    var y = scratch(ny)
+    conv2d_forward_into(x, w, bias, y, cprm)
+    run[relu_fwd_at](y, y, y, y, hi(zp), hi(zp), ny)
+    var ps = pprm.copy()
+    var no = _pool_sizes(pprm)[1]
+    run[maxpool_fwd_at](y, dst, dst, dst, idx, hi(ps), no)
+    y.free()
+    _ = ps^
+    _ = zp^
+
+
+def conv_block_backward_into(
+    x: FP, w: FP, bias: FP, g: FP, idx: IP, gx: FP, gw: FP, gb: FP,
+    cprm: List[Int32], pprm: List[Int32], pool: Bool, need_dx: Bool,
+) raises:
+    """The block's backward from its output gradient g (the conv output is
+    recomputed from x: the forward's kernels on the forward's inputs)."""
+    var ny = Int(cprm[CP_N]) * Int(cprm[CP_OC]) * Int(cprm[CP_OH]) * Int(cprm[CP_OW])
+    var zp: List[Int32] = [0, 0, 0]
+    var yconv = scratch(ny)
+    conv2d_forward_into(x, w, bias, yconv, cprm)
+    var gy = scratch(ny)
+    if pool:
+        var ps = _host_prm(pprm, PP_REV)
+        run[maxpool_bwd_at](g, gy, gy, gy, idx, hi(ps), ny)
+        run[relu_bwd_at](yconv, gy, gy, gy, hi(zp), hi(zp), ny)
+        _ = ps^
+    else:
+        run[relu_bwd_at](yconv, g, gy, gy, hi(zp), hi(zp), ny)
+    yconv.free()
+    conv2d_backward_into(x, w, gy, gx, gw, gb, cprm, need_dx)
+    gy.free()
+    _ = zp^
 
 
 def _pool_sizes(prm: List[Int32]) -> Tuple[Int, Int]:
@@ -190,20 +305,48 @@ def add_host(a: List[Float32], b: List[Float32]) raises -> List[Float32]:
     return map2_host[add_at](a, b, len(a), prm)
 
 
-def linear_forward_host(x: List[Float32], w: List[Float32], bias: List[Float32], n: Int, d_in: Int, d_out: Int) raises -> List[Float32]:
-    var y = gemm_oracle(x, w, OP_NT, n, d_out, d_in)
+def linear_forward_into(x: FP, w: FP, bias: FP, dst: FP, n: Int, d_in: Int, d_out: Int):
+    """dst [n x d_out] = x . w^T + bias (the pinned NT GEMM, bias_rows_at)."""
+    var y = scratch(n * d_out)
+    gemm_host_into(x, w, y, OP_NT, n, d_out, d_in)
     var prm: List[Int32] = [Int32(n), Int32(d_in), Int32(d_out)]
-    return map2_host[bias_rows_at](y, bias, n * d_out, prm)
+    run[bias_rows_at](y, bias, dst, dst, hi(prm), hi(prm), n * d_out)
+    y.free()
+    _ = prm^
+
+
+def linear_backward_into(x: FP, w: FP, g: FP, gx: FP, gw: FP, gb: FP, n: Int, d_in: Int, d_out: Int):
+    var ones = List[Float32](length=n, fill=Float32(1))
+    gemm_host_into(g, x, gw, OP_TN, d_out, d_in, n)
+    gemm_host_into(g, hp(ones), gb, OP_TN, d_out, 1, n)
+    gemm_host_into(g, w, gx, OP_NN, n, d_in, d_out)
+    _ = ones^
+
+
+def linear_forward_host(x: List[Float32], w: List[Float32], bias: List[Float32], n: Int, d_in: Int, d_out: Int) raises -> List[Float32]:
+    var xs = x.copy()
+    var ws = w.copy()
+    var bs = bias.copy()
+    var out = zeros(n * d_out)
+    linear_forward_into(hp(xs), hp(ws), hp(bs), hp(out), n, d_in, d_out)
+    _ = xs^
+    _ = ws^
+    _ = bs^
+    return out^
 
 
 def linear_backward_host(x: List[Float32], w: List[Float32], g: List[Float32], n: Int, d_in: Int, d_out: Int) raises -> List[Float32]:
-    var ones = List[Float32](length=n, fill=Float32(1))
-    var gw = gemm_oracle(g, x, OP_TN, d_out, d_in, n)
-    var gb = gemm_oracle(g, ones, OP_TN, d_out, 1, n)
-    var gx = gemm_oracle(g, w, OP_NN, n, d_in, d_out)
-    gx.extend(gw^)
-    gx.extend(gb^)
-    return gx^
+    """[gx | gw | gb]."""
+    var xs = x.copy()
+    var ws = w.copy()
+    var gs = g.copy()
+    var r = zeros(n * d_in + d_out * d_in + d_out)
+    var rp = hp(r)
+    linear_backward_into(hp(xs), hp(ws), hp(gs), rp, rp + n * d_in, rp + n * d_in + d_out * d_in, n, d_in, d_out)
+    _ = xs^
+    _ = ws^
+    _ = gs^
+    return r^
 
 
 def softmax_xent_host(logits: List[Float32], labels: List[Int32], n: Int, k: Int) raises -> List[Float32]:

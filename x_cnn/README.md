@@ -10,7 +10,8 @@ Dropout2d, BasicBlock, CNNClassifier, GCNConv, SAGEConv.
 - `ops.mojo` holds one source of element functions; `device.mojo` launches
   them one thread per element, `host/ops_host.mojo` loops over them. Every
   contraction is mojolearn.identical.gemm.fp32.v1 (`identical_gemm` without
-  the vendor route on the device, `gemm_oracle` on the host).
+  the vendor route on the device, `gemm_oracle`'s cells on the host through
+  `host/gemm_host.mojo`, DEVIATION 5719).
 - IDENTICAL: CPU == every GPU vendor, bit for bit. FAST: the same kernels
   (no bit promise). Both tiers take the caller's host addresses straight to
   and from the device (DEVIATION 5716) and run CNNClassifier's conv block
@@ -32,6 +33,23 @@ Dropout2d, BasicBlock, CNNClassifier, GCNConv, SAGEConv.
   them (the same kernels on the same inputs made them). Plumbing and
   execution plans only: the same kernels on the same values in the same
   order.
+- DEVIATION 5719 (CPU speed, phase 5): the host twin's contractions run in
+  `host/gemm_host.mojo`, `gemm_oracle`'s cells bit for bit: operands flushed
+  once (a subnormal-free right operand read in place), the cells of an output
+  row advanced together as SIMD lanes down each leaf with the flush deferred
+  (a nonzero subnormal raw result sends the group back through the
+  flush-every-step chain), the balanced tree evaluated as a binary counter
+  (the same additions, same operands, same order), rows split across tasks,
+  or for few rows and many leaves, aligned power-of-two leaf chunks (each
+  chunk a subtree of the same tree). Element loops (`run`) split into
+  contiguous tasks: an element function computes one output element, the
+  device's own contract. The conv, conv block, linear and gemm entries take
+  the caller's addresses (no List copies in or out; `out_f32` is the output
+  seam the end-to-end sabotage patches). Thread count: MOJOLEARN_CPU_THREADS
+  (`core/host_predict_threads.mojo`); it moves no bit. Check:
+  `x_cnn/checks/gemm_host_check.mojo` (every op, one leaf and many, both
+  splits, 1/3/7 tasks, planted subnormals, NaN, infinities; arms
+  `seam_5719_*.patch`).
 - Seams and their DEVIATIONs (IDENTITY_PATHS.md rows 170-179):
   5700 col2im gather order, 5701 weight gradient on the pinned GEMM,
   5702 BatchNorm folds, 5703 Dropout2d Philox mask, 5704 SpMM row folds,
