@@ -83,6 +83,7 @@ def _read_columns(lanes, columns):
                 metadata.update(sha256=hashlib.sha256(raw).hexdigest(), bytes=len(raw))
                 record = json.loads(raw)
                 metadata["source_commit"] = record.get("commit")
+                metadata["batch_revision"] = (record.get("batch_revisions") or {}).get(lane)
                 why = vref.admit(record, str(path), known_lanes=lanes)
                 cls, backend_error = vref.record_device_class(record, str(path))
                 if why or backend_error:
@@ -115,6 +116,11 @@ def compare(plan, columns, fixtures=("base",), progress=False):
         raise ValueError("plan must contain a nonempty unique lane list")
     if not fixtures or len(set(fixtures)) != len(fixtures) or any(not f for f in fixtures):
         raise ValueError("fixtures must be a nonempty unique list")
+    expected_batch = plan.get("batch_revisions", {})
+    if not isinstance(expected_batch, dict) or any(
+            not isinstance(k, str) or not isinstance(v, str) or not v
+            for k, v in expected_batch.items()):
+        raise ValueError("plan batch_revisions must map lane names to nonempty revisions")
     selected, ignored = _read_columns(set(lanes), columns)
     backends = sorted(selected)
     rows, issues, artifacts, lane_results = [], [], [], {}
@@ -143,6 +149,14 @@ def compare(plan, columns, fixtures=("base",), progress=False):
             issues.append(dict(lane=lane, reason="source commits or lane revisions differ across columns"))
             lane_results[lane] = "INCOMPLETE"
             continue
+        batch_revisions = {b: j.get("batch_revisions", {}).get(lane)
+                           if isinstance(j.get("batch_revisions", {}), dict) else "INVALID"
+                           for b, j in records.items()}
+        batch_revision_bad = (any(v is not None and (not isinstance(v, str) or not v or v == "INVALID")
+                                  for v in batch_revisions.values())
+                              or any(v != next(iter(batch_revisions.values())) for v in batch_revisions.values())
+                              or (lane in expected_batch and any(v != expected_batch[lane]
+                                                                 for v in batch_revisions.values())))
         lane_states = []
         for fixture in fixtures:
             key = lane + "/" + fixture
@@ -179,6 +193,8 @@ def compare(plan, columns, fixtures=("base",), progress=False):
                 protocol_key = part + "_protocol"
                 if "DIFFERENT" in states:
                     state, reason = "DIFFERENT", "within-column numerical instability"
+                elif part == "batch" and batch_revision_bad:
+                    state, reason = "INCOMPLETE", "batch revisions differ, are missing, or do not match plan"
                 elif "INCOMPLETE" in states:
                     state, reason = "INCOMPLETE", "; ".join(f"{b}: {why}" for b,(s,_,why) in values.items() if why)
                 elif part in ("batch", "batchgrad", "batchscale", "ragged", "stepfull", "rlpair") and (
@@ -226,6 +242,7 @@ def compare(plan, columns, fixtures=("base",), progress=False):
                 lanes=lanes, fixtures=list(fixtures), columns=backends, counts=counts,
                 column_directories=[dict(backend=b, path=str(Path(d).resolve())) for b,d in columns],
                 lane_results=lane_results, issues=issues, parts=rows, records=artifacts,
+                expected_batch_revisions=expected_batch,
                 ignored_records=ignored, source_commits=sorted({a["source_commit"] for a in artifacts if a.get("source_commit")}),
                 scope="saved GPU columns only; no native execution; numeric hashes exclude timings")
 

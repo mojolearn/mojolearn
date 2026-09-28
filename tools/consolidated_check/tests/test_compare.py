@@ -155,3 +155,32 @@ def test_reload_mismatch_cannot_hide_behind_matching_broken_vendors(tmp_path):
 def test_different_na_declarations_are_scope_incomplete(tmp_path):
     cols=pair(tmp_path);j=record('hip');j['cells']['x/base']['batch']=['n/a:different-scope'];write(tmp_path,'hip',j)
     assert module.compare({'lanes':['x']},cols)['verdict']=='INCOMPLETE'
+
+
+@pytest.mark.parametrize('left,right,expected,verdict', [
+    (None, None, 'v2', 'INCOMPLETE'),
+    ('v1', 'v1', 'v2', 'INCOMPLETE'),
+    ('v2', None, None, 'INCOMPLETE'),
+    ('v1', 'v2', None, 'INCOMPLETE'),
+    ('v2', 'v2', 'v2', 'AGREE'),
+    (None, None, None, 'AGREE'),  # explicitly historical plan
+])
+def test_batch_revision_is_checked_without_invalidating_other_parts(tmp_path,left,right,expected,verdict):
+    cols=pair(tmp_path)
+    for backend,revision in [('metal',left),('hip',right)]:
+        j=record(backend)
+        if revision is not None: j['batch_revisions']={'x':revision}
+        write(tmp_path,backend,j)
+    plan={'lanes':['x']}
+    if expected is not None: plan['batch_revisions']={'x':expected}
+    out=module.compare(plan,cols)
+    assert out['verdict']==verdict
+    assert out['counts']['numeric_matches']==4
+    batch=next(p for p in out['parts'] if p['part']=='batch')
+    assert batch['state']==('NA' if verdict=='AGREE' else 'INCOMPLETE')
+    assert out['expected_batch_revisions']==plan.get('batch_revisions',{})
+
+
+def test_invalid_plan_batch_revision_rejected(tmp_path):
+    with pytest.raises(ValueError,match='batch_revisions'):
+        module.compare({'lanes':['x'],'batch_revisions':{'x':None}},pair(tmp_path))
