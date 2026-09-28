@@ -23,6 +23,7 @@ pinned GEMM's (TN over the N*OH*OW rows, DEVIATION 5701).
 """
 from std.math import fma  # only a sabotage arm (seam 5709) spells the fused form
 from std.memory import bitcast
+from std.sys.compile import is_defined
 from core.philox import philox4x32_10
 from checks.numerics import ftz, identical_div, identical_mul, identical_exp, identical_log, identical_rsqrt, identical_sqrt
 
@@ -391,6 +392,19 @@ def maxpool_bwd_val(i: Int, dout: FP, idx: IP, p: IP) -> Float32:
     var nc = _ud(t, H)
     var me = Int32(h * W + w)
     var acc = Float32(0)
+    comptime if not is_defined["MOJOLEARN_XCNN_NO_POOL_BWD_TILE"]():
+        # lane/cnn-apple2: windows that tile the input (kernel == stride, no
+        # padding, no dilation, no reversed order asked) hold each pixel
+        # exactly once, window (h // KH, w // KW): the loop below visits that
+        # one window and no other, so this is its one step on the same words.
+        if KH == SH and KW == SW and PH == 0 and PW == 0 and DH == 1 and DW == 1 and _g(p, PP_REV) == 0:
+            var oh1 = _ud(h, KH)
+            var ow1 = _ud(w, KW)
+            if oh1 < OH and ow1 < OW:
+                var o1 = (nc * OH + oh1) * OW + ow1
+                if idx.unsafe_load(o1) == me:
+                    acc = ftz(acc + ftz(dout.unsafe_load(o1)))
+            return acc
     for a in range(KH):
         var kh = KH - 1 - a if _g(p, PP_REV) != 0 else a
         var th = h + PH - kh * DH
