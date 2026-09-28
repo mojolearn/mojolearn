@@ -30,6 +30,10 @@ environment, forward then reverse, IDENTICAL and FAST in one job).
 | d7934f99f | x_neighbors k-NN with y rows staged per block in threadgroup memory (`knn_sq_tiled`; LOF, label propagation) | both | the item's statements, same candidate order | default; `MOJOLEARN_XN_OLD_ITEMS=1` arm |
 | ff625ac0c | NearestCentroid group means / std, variance, SVGP solve, absdiff_sum: item loops on the host in the GPU binding (HOST_RUN) | both | the CPU column's statements | default; `-D MOJOLEARN_XN_SERIAL_GPU` arm |
 | c905e9e47 | KNNImputer: fit rows staged per block (`knn_impute_tiled`); item tail factored into `knn_impute_finish` | both | host check of the refactor: 0 differ | default; `MOJOLEARN_XN_OLD_ITEMS=1` arm |
+| 0e1394f6a | KNNImputer: each missing cell's donor scan split over 8 threads, merged by (distance, index) (host emulation: 0 differ) | both | same k-list, same tail | default; `-D MOJOLEARN_XN_IMPUTE_NO_SPLIT` arm |
+| 4a8539a34 | PCS row convolution: four components per thread per pass | both | same chains | default (request 1790611824803: 0.51 -> 0.33 s IDENTICAL, 0.50 -> 0.30 FAST, digests equal to the previous head) |
+| 28dc8c19d | merge origin/lane/apple-merged (M2 fix final: CHOL_MR_NT 256 for the row-by-row kernel, the GP context cleanup) | - | - | - |
+| f71bfda90 | kneighbors host order pass (the (distance, index) check / sort after readback) over the host cores on raw pointers: it was 145 ms of a 190 ms IDENTICAL kneighbors at k = 2,000 | both | the same per-row statements | default; `-D MOJOLEARN_KNN_SERIAL_ORDER` arm |
 | da21bc669 | REVERTED the identical radix device barrier: `air.wg.barrier` failed to legalize in the IDENTICAL build.sh / build_metrics.sh (request 1790604321269) | - | - | - |
 | b89ad2efa | KNNImputer.transform: one GPU thread per MISSING cell (`knn_impute_cells`, the same item per cell) | both | same statements per cell | default; `MOJOLEARN_XN_UNCOMPACT_IMPUTE=1` arm |
 
@@ -41,6 +45,12 @@ environment, forward then reverse, IDENTICAL and FAST in one job).
   by `ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo`. Device-scope barrier
   on Apple; the round kernel is new.
 - `bindings/build_x_neighbors.sh` now passes MOJOLEARN_BUILD_EXTRA_DEFINES.
+- `cholesky/checks/trsm.mojo` (a898eb9c2): every Apple multi-RHS forward
+  sweep (GP, GPC, KernelRidge with matrix y, the cholesky lane). It is a
+  256-thread kernel holding a 4 x 8 float register tile per thread: m2pro
+  must confirm it dispatches (the M2 dropped the 1024-thread sweeps).
+- `neighbors/estimator.mojo` (f71bfda90): the k-NN host order pass, every
+  k-NN result on every column.
 - `x_neighbors/gen.py`: BLOCK_OPS (threadgroup GPU form of a sequential
   item) and CUSTOM_OPS (hand-written resident drivers,
   `x_neighbors/iter_device.mojo` / `iter_host.mojo`); both bindings are
