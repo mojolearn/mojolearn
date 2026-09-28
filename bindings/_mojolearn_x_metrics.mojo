@@ -30,8 +30,9 @@ def run_binding(arena_addr: PythonObject, arena_len: PythonObject, prog_addr: Py
 
 def run_out_binding(arena_addr: PythonObject, arena_len: PythonObject, prog_addr: PythonObject,
                     stages: PythonObject, outs_addr: PythonObject, nouts: PythonObject) raises -> PythonObject:
-    """`x_metrics_run` that downloads only the `nouts` [lo, hi) output
-    ranges at `outs_addr` (Int32 pairs; lane metrics-apple2)."""
+    """`x_metrics_run` that downloads only the `nouts` output ranges at
+    `outs_addr` (Int32 quads [lo, hi, CNT, mult], x_metrics/device.mojo
+    run_program_device_out; lane metrics-apple2)."""
     var fa = Int(py=arena_addr)
     var n = Int(py=arena_len)
     var qa = Int(py=prog_addr)

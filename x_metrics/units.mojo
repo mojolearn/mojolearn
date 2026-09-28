@@ -15,12 +15,13 @@ from x_metrics.par import (
     curve_gather_unit, curve_prefix_unit, curve_emit_unit, wpct_gather_unit, wpct_prefix_unit, copy_unit,
     cm_chunk_unit, cm_final_unit, wpct_iota_unit, curve_cnt_unit, curve_off_unit, curve_fill_unit,
     curve_keep_unit, fr_scatter_unit, fr_cnt_unit, fr_off_unit, fr_fill_unit,
+    ck_cnt_unit, ck_off_unit, ck_fill_unit,
 )
 
 #: ops 0..10, 36 (fold_rows) and 41 (rows64) (lane metrics-apple2) are the caller's
 #: (x_metrics/plan.mojo `is_user_op`); the others are the planner's
 #: parallel schedules (x_metrics/par.mojo)
-comptime N_OPS = 42
+comptime N_OPS = 45
 
 
 @always_inline
@@ -109,3 +110,9 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
         fr_fill_unit(t, f, q)
     comptime if OP == 41:
         rows64_unit(t, f, q)
+    comptime if OP == 42:
+        ck_cnt_unit(t, f, q)
+    comptime if OP == 43:
+        ck_off_unit(t, f, q)
+    comptime if OP == 44:
+        ck_fill_unit(t, f, q)

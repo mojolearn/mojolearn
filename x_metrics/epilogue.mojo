@@ -104,9 +104,10 @@ def kept(a: Int, fps: Int, tps: Int, keep: Int, c: Int, drop: Bool) -> List[Int]
     """The curve points `_drop_collinear` keeps: all of them when not
     `drop` or c <= 2; the device's flags (`keep` >= 0, an unweighted curve);
     else the first, the last and every point where either binary64 step
-    changes."""
+    changes. keep == -2: the device already dropped them (a compacted
+    curve), every point is kept."""
     var out = List[Int](capacity=c)
-    if not drop or c <= 2:
+    if not drop or c <= 2 or keep == -2:
         for i in range(c):
             out.append(i)
         return out^

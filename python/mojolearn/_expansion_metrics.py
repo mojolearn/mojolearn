@@ -132,16 +132,18 @@ class _Prog:
     def run(self, numeric_mode):
         return _execute(self, numeric_mode)
 
-    def want(self, off, n):
+    def want(self, off, n, count=None, mult=1):
         """Declare [off, off + n) an OUTPUT the caller reads (lane
         metrics-apple2). A program that declares any output brings back
         only its outputs from the device (the Apple GPU's download is its
         slowest link), and every read below refuses a word outside them,
-        on every backend, so a missing declaration fails loudly."""
+        on every backend, so a missing declaration fails loudly. `count`
+        (an Int32 slot the program writes, itself declared) bounds the
+        range to its first mult * count words."""
         if self._outs is None:
             self._outs = []
         if n > 0:
-            self._outs.append((int(off), int(off) + int(n)))
+            self._outs.append((int(off), int(off) + int(n), -1 if count is None else int(count), int(mult)))
         return off
 
     def _check(self, off, n):
@@ -153,7 +155,9 @@ class _Prog:
                     raise AssertionError(f"x_metrics: arena [{off}, {off + n}) was read but is an input "
                                          "or scratch slot, which never comes back")
             return
-        for lo, hi in self._outs:
+        for lo, hi, cn, mult in self._outs:
+            if cn >= 0 and self.arena is not None:
+                hi = lo + max(0, min(hi - lo, mult * self.ints(cn, 1)[0]))
             if lo <= off and off + n <= hi:
                 return
         raise AssertionError(f"x_metrics: arena [{off}, {off + n}) was read but never declared an output")
@@ -164,12 +168,12 @@ class _Prog:
         None = the whole arena."""
         if self._outs is not None:
             merged = []
-            for lo, hi in sorted(self._outs):
+            for lo, hi, cn, mult in sorted(o for o in self._outs if o[2] < 0):
                 if merged and lo <= merged[-1][1]:
                     merged[-1][1] = max(merged[-1][1], hi)
                 else:
-                    merged.append([lo, hi])
-            return merged
+                    merged.append([lo, hi, -1, 1])
+            return merged + [list(o) for o in self._outs if o[2] >= 0]
         if not self._skip:
             return None
         merged = []
@@ -180,7 +184,7 @@ class _Prog:
             at = max(at, hi)
         if at < self.size:
             merged.append([at, self.size])
-        return merged
+        return [r + [-1, 1] for r in merged]
 
     def floats(self, off, n):
         """Python floats (exact images of the Float32 results)."""
@@ -225,7 +229,7 @@ def _execute(prog, numeric_mode):
     merged = prog._download()
     run_out = getattr(b, "x_metrics_run_out", None) if merged is not None else None
     if run_out is not None:
-        outs = array.array("i", [v for r in merged for v in r] or [0, 0])
+        outs = array.array("i", [v for r in merged for v in r] or [0, 0, -1, 1])
         run_out(base, prog.size, stages.buffer_info()[0], len(prog._stages), outs.buffer_info()[0], len(merged))
     else:
         b.x_metrics_run(base, prog.size, stages.buffer_info()[0], len(prog._stages))
@@ -1311,7 +1315,8 @@ class _Curve(tuple):
 
 class _DevCurve:
     """A curve left in its program's arena (lane metrics-apple2): the
-    offsets of its fps, tps, thresholds and keep words (-1 = none) and its
+    offsets of its fps, tps, thresholds and keep words (-1 = none; keep -2 =
+    the device dropped the collinear points, every point is kept) and its
     point count `c`. `lists()` is the `_Curve` `_curves` returns; the
     epilogue helpers (`_auc_of`, `_ap_of`, `roc_curve`) read the words in
     place instead."""
@@ -1351,6 +1356,8 @@ class _DevCurve:
             p._check(self.keep, c)
             lo = 4 * self.keep
             cur.keep = bytes(memoryview(p.arena).cast("B")[lo + (0 if _LITTLE else 3):lo + 4 * c:4])
+        elif self.keep == -2:
+            cur.keep = b"\x01" * c       # the device dropped the collinear points already
         return cur
 
 
@@ -1391,13 +1398,17 @@ def _ap_of(cur):
 
 
 def _curves(scores, flags, w, n, problems, numeric_mode, *, stride=1, thresholds=True, keep_flags=True,
-            lazy=False):
+            lazy=False, compact=False):
     """[(fps, tps, thresholds)] per problem, from the device sort and the
     cumulative counts (Python floats; unweighted counts are exact). An
     unweighted curve also carries `.keep` (lane metrics-apple). Only the
-    curves come back from the device, and thresholds=False (the AUCs)
-    leaves the thresholds on it: the third list is then None;
-    keep_flags=False (the average precisions) computes no `.keep` (lane
+    curves come back from the device, each only up to its point count, and
+    thresholds=False (the AUCs) leaves the thresholds on it: the third list
+    is then None; keep_flags=False (the average precisions) computes no
+    `.keep`. compact=True (lazy, unweighted, keep_flags) has the device drop
+    the collinear points itself (bin_curve params 12, 13: the kept fps, tps,
+    thresholds, and their count), so only the kept points come back; the
+    `_DevCurve`s then carry keep = -2, every point kept (lane
     metrics-apple2)."""
     prog = _Prog()
     S = prog.put(scores)
@@ -1405,19 +1416,35 @@ def _curves(scores, flags, w, n, problems, numeric_mode, *, stride=1, thresholds
     W = _NONE if w is None else prog.put(w)
     N = n * problems
     order = prog.scratch(N)
-    fps = prog.want(prog.alloc(N), N)
-    tps = prog.want(prog.alloc(N), N)
-    thr = prog.alloc(N)
-    if thresholds:
-        prog.want(thr, N)
-    cnt = prog.want(prog.alloc(problems), problems)
     flagged = w is None and keep_flags
-    keep = prog.want(prog.alloc(N), N) if flagged else _NONE
+    compact = compact and flagged and lazy
+    cnt = prog.want(prog.alloc(problems), problems)
+    fps = prog.alloc(N)
+    tps = prog.alloc(N)
+    thr = prog.alloc(N)
+    keep = _NONE
+    CF = CM = 0
+    if compact:
+        keep = prog.scratch(N)
+        CF = prog.alloc(3 * N)
+        CM = prog.want(prog.alloc(problems), problems)
+        for t in range(problems):
+            for b in range(3 if thresholds else 2):
+                prog.want(CF + b * N + t * n, n, count=CM + t)
+    else:
+        if flagged:
+            keep = prog.alloc(N)
+        for t in range(problems):
+            for b in (fps, tps) + ((thr,) if thresholds else ()) + ((keep,) if flagged else ()):
+                prog.want(b + t * n, n, count=cnt + t)
     prog.stage("bin_curve", problems, S, stride, POS, W, n, order, fps, tps, thr, cnt,
-               keep, 1 if flagged else 0)
+               keep, 1 if flagged else 0, CF, CM)
     _execute(prog, numeric_mode)
     out = []
-    counts = prog.ints(cnt, problems)
+    counts = prog.ints(CM if compact else cnt, problems)
+    if compact:
+        return [_DevCurve(prog, CF + t * n, CF + N + t * n, CF + 2 * N + t * n if thresholds else _NONE,
+                          -2, counts[t], numeric_mode) for t in range(problems)]
     view = memoryview(prog.arena).cast("B") if flagged else None
     for t in range(problems):
         c = counts[t]
@@ -1435,7 +1462,7 @@ def _curves(scores, flags, w, n, problems, numeric_mode, *, stride=1, thresholds
     return out
 
 
-def _binary_curve(y_true, y_score, pos_label, sample_weight, numeric_mode, caller, lazy=False):
+def _binary_curve(y_true, y_score, pos_label, sample_weight, numeric_mode, caller, lazy=False, compact=False):
     from ._metrics_impl import _label_map
     true, kind, classes = _targets(y_true, caller)
     if len(classes) > 2 and pos_label is None:
@@ -1445,7 +1472,7 @@ def _binary_curve(y_true, y_score, pos_label, sample_weight, numeric_mode, calle
     s = _scores(y_score, n, caller, ndim=1)
     w = _weights(sample_weight, n, caller)
     flags = _label_map(true, lambda v: int(v == pos))
-    return _curves(s, flags, w, n, 1, numeric_mode, lazy=lazy)[0], classes
+    return _curves(s, flags, w, n, 1, numeric_mode, lazy=lazy, compact=compact)[0], classes
 
 
 def _drop_collinear(fps, tps, thr, keep=None):
@@ -1470,7 +1497,8 @@ def roc_curve(y_true, y_score, *, pos_label=None, sample_weight=None, drop_inter
     """scikit-learn 1.9 `roc_curve` for binary targets: fpr, tpr, thresholds
     (Float64; the first threshold is +inf). The sort and the cumulative
     counts run on the device; drop_intermediate removes collinear points."""
-    dev, _ = _binary_curve(y_true, y_score, pos_label, sample_weight, numeric_mode, "roc_curve", lazy=True)
+    dev, _ = _binary_curve(y_true, y_score, pos_label, sample_weight, numeric_mode, "roc_curve", lazy=True,
+                           compact=bool(drop_intermediate))
     fn = dev.native("x_metrics_curve_roc")
     if fn is not None:
         # the three Float64 arrays straight from the arena words
@@ -1642,7 +1670,7 @@ def _ovr(y_true, y_score, sample_weight, labels, caller, numeric_mode, keep_flag
             flags.extend(1 if v == c else 0 for v in code_list)
         flags = Array.from_list(flags, "<i4")
     curves = _curves(s, flags, w, n, k, numeric_mode, stride=k, thresholds=False, keep_flags=keep_flags,
-                     lazy=True)
+                     lazy=True, compact=True)
     support = [0.0] * k
     if w is None:
         if k <= 256:
@@ -1718,7 +1746,7 @@ def roc_auc_options(y_true, y_score, average, sample_weight, max_fpr, multi_clas
         s = _scores(y_score, n, "roc_auc_score", ndim=1)
         w = _weights(sample_weight, n, "roc_auc_score")
         flags = _label_map(true, lambda v: int(v == present[1]))
-        cur = _curves(s, flags, w, n, 1, numeric_mode, thresholds=False, lazy=True)[0]
+        cur = _curves(s, flags, w, n, 1, numeric_mode, thresholds=False, lazy=True, compact=True)[0]
         return _auc_of(cur, None if max_fpr == 1 else max_fpr)
     if max_fpr is not None and max_fpr != 1:
         raise ValueError("Partial AUC computation not available in multiclass setting, 'max_fpr' must be "
@@ -1745,7 +1773,8 @@ def roc_auc_options(y_true, y_score, average, sample_weight, max_fpr, multi_clas
             n = len(codes)
             flags = Array.from_list([1 if codes[r] == c else 0 for r in range(n) for c in range(k)], "<i4")
             wm = None if w is None else Array.from_list([x for x in w.tolist() for _ in range(k)], "<f4")
-            cur = _curves(s.reshape((n * k,)), flags, wm, n * k, 1, numeric_mode, thresholds=False, lazy=True)[0]
+            cur = _curves(s.reshape((n * k,)), flags, wm, n * k, 1, numeric_mode, thresholds=False, lazy=True,
+                          compact=True)[0]
             return _auc_of(cur, None)
         scores = [_auc_of(c, None) for c in curves]
         return _average_scores(scores, support, average)
@@ -1767,7 +1796,8 @@ def roc_auc_options(y_true, y_score, average, sample_weight, max_fpr, multi_clas
             for col, pos in ((a, a), (b, b)):
                 sv = Array.from_list([vals[r][col] for r in rows], "<f4")
                 fl = Array.from_list([1 if codes[r] == pos else 0 for r in rows], "<i4")
-                cur = _curves(sv, fl, None, len(rows), 1, numeric_mode, thresholds=False, lazy=True)[0]
+                cur = _curves(sv, fl, None, len(rows), 1, numeric_mode, thresholds=False, lazy=True,
+                              compact=True)[0]
                 both.append(_auc_of(cur, None))
             pair_scores.append((both[0] + both[1]) / 2)
     if average == "weighted":

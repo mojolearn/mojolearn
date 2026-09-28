@@ -62,6 +62,13 @@ comptime OP_FR_OFF = 39
 comptime OP_FR_FILL = 40
 #: a caller's Int32 -> Int64 row words (x_metrics/split.mojo rows64_unit)
 comptime OP_ROWS64 = 41
+#: lane metrics-apple2: the kept points of an unweighted curve, compacted
+#: (x_metrics/par.mojo ck_*; bin_curve params 12 = CF, 13 = CM)
+comptime OP_CK_CNT = 42
+comptime OP_CK_OFF = 43
+comptime OP_CK_FILL = 44
+#: slots per chunk of the curve compaction
+comptime CK_CHUNK = 1024
 #: rows per chunk of the K-fold row partition
 comptime FR_CHUNK = 1024
 #: rows per chunk of the unweighted curve counts
@@ -167,6 +174,17 @@ def _plan_keep(mut pl: Plan, r: IP, n: Int, total: Int):
     every slot follow the curve (x_metrics/par.mojo curve_keep_unit)."""
     if _a(r, 3) < 0 and _a(r, 11) == 1 and n > 0:
         pl.emit(OP_CURVE_KEEP, n * total, [n, _a(r, 6), _a(r, 7), _a(r, 9), _a(r, 10)])
+        # params 12, 13 (lane metrics-apple2): CF > 0 = the kept slots'
+        # fps, tps and threshold words, in order, at CF + p*n, CF + N + p*n,
+        # CF + 2N + p*n, and their count at CM + p
+        var CF = _a(r, 12)
+        var C = (n + CK_CHUNK - 1) // CK_CHUNK
+        if CF > 0 and pl.fits(C * total):
+            var S = pl.alloc(C * total)
+            pl.emit(OP_CK_CNT, C * total, [n, _a(r, 10), _a(r, 9), S, C, CK_CHUNK])
+            pl.emit(OP_CK_OFF, total, [S, C, _a(r, 13)])
+            pl.emit(OP_CK_FILL, C * total, [n, _a(r, 10), _a(r, 9), S, C, CK_CHUNK,
+                                            _a(r, 6), _a(r, 7), _a(r, 8), CF, n * total])
 
 
 def plan_program(q: IP, stages: Int, arena_len: Int) raises -> Plan:

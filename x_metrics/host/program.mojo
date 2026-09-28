@@ -32,6 +32,7 @@ from x_metrics.plan import (
     plan_program, N_USER_OPS, is_user_op, OP_SORT_MERGE, OP_CS_HIST, OP_CS_SCAN_ROWS, OP_CS_PLACE,
     OP_FOLD_LEAF, OP_SORT_RUNS, OP_WPCT_SELECT, CS_CHUNK, OP_CM_CHUNK, CM_CHUNK,
     OP_CURVE_CNT, OP_CURVE_FILL, CURVE_CHUNK, OP_FR_CNT, OP_FR_FILL, FR_CHUNK,
+    OP_CK_CNT, OP_CK_FILL, CK_CHUNK,
 )
 from x_metrics.par import sort_merge_span_unit, merge_span_units, MERGE_SPAN, RUN
 
@@ -94,6 +95,8 @@ def _unit_work(op: Int) -> Int:
         return CURVE_CHUNK
     if op == OP_FR_CNT or op == OP_FR_FILL:
         return FR_CHUNK
+    if op == OP_CK_CNT or op == OP_CK_FILL:
+        return CK_CHUNK
     if op < N_USER_OPS and op != 2 and op != 3 and op != 8 and op != 9:
         return HOST_TASK_WORK      # a caller's whole-column unit
     return 1

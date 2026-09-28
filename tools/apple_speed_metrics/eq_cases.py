@@ -110,6 +110,9 @@ def main():
                 Pc = P.copy()
                 Pc[n // 3, 1] += np.float32(5e-6)
                 cases.append(("ovr_nearsum_" + tag, lambda yc=yc, P=Pc: M.roc_auc_score(yc, P, multi_class="ovr")))
+                if n <= 20011:
+                    cases.append(("ovr_micro_" + tag, lambda yc=yc, P=P: M.roc_auc_score(np.eye(4)[yc].astype(np.int64), P, average="micro")))
+                    cases.append(("ovr_none_" + tag, lambda yc=yc, P=P: M.roc_auc_score(yc, P, multi_class="ovr", average=None)))
                 cases.append(("ovo_" + tag, lambda yc=yc, P=P: M.roc_auc_score(yc, P, multi_class="ovo")))
                 cases.append(("ap_ovr_" + tag, lambda yc=yc, P=P: M.average_precision_score(np.eye(4)[yc].astype(np.int64), P)))
     # the expected MI (adjusted_mutual_info_score): balanced, skewed, many classes

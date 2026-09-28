@@ -7,6 +7,7 @@ from std.gpu import block_idx, block_dim, thread_idx
 from std.ffi import _Global
 from std.os import getenv
 from std.time import perf_counter_ns
+from std.memory import bitcast
 from max.gpu.host import DeviceContext, DeviceBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_metrics.common import FP, IP, STAGE_INTS
@@ -60,15 +61,20 @@ def run_program_device(arena_addr: Int, arena_len: Int, prog_addr: Int, stages: 
 def run_program_device_out(arena_addr: Int, arena_len: Int, prog_addr: Int, stages: Int,
                            outs_addr: Int, nouts: Int) raises:
     """`run_program_device` that brings back only the caller's OUTPUT
-    ranges (lane metrics-apple2): `nouts` pairs [lo, hi) of Int32 at
-    `outs_addr`, inside the arena. The Apple GPU's device-to-host copy is
-    its slowest link (2 to 3.4 GB/s), and the inputs and the order slots a
-    caller never reads need not come back. Every other arena word keeps
-    what the caller put there."""
+    ranges (lane metrics-apple2): `nouts` Int32 quads [lo, hi, CNT, mult]
+    at `outs_addr`, inside the arena. CNT < 0: [lo, hi) comes back; CNT >=
+    0: the arena word CNT (an Int32 the program wrote) bounds it to
+    [lo, lo + min(hi - lo, mult * CNT)), so a curve's unused tail stays on
+    the device. The Apple GPU's device-to-host copy is its slowest link
+    (2 to 3.4 GB/s), and the inputs and the order slots a caller never
+    reads need not come back. Every other arena word keeps what the caller
+    put there."""
+    var o = IP(unsafe_from_address=outs_addr)
     for k in range(nouts):
-        var lo = Int(IP(unsafe_from_address=outs_addr).unsafe_load(2 * k))
-        var hi = Int(IP(unsafe_from_address=outs_addr).unsafe_load(2 * k + 1))
-        if lo < 0 or hi < lo or hi > arena_len:
+        var lo = Int(o.unsafe_load(4 * k))
+        var hi = Int(o.unsafe_load(4 * k + 1))
+        var cn = Int(o.unsafe_load(4 * k + 2))
+        if lo < 0 or hi < lo or hi > arena_len or cn >= arena_len or Int(o.unsafe_load(4 * k + 3)) < 0:
             raise Error("x_metrics: output range outside the arena")
     run_program_device_ptr(
         FP(unsafe_from_address=arena_addr), arena_len, IP(unsafe_from_address=prog_addr), stages,
@@ -100,6 +106,9 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     var ctx = metrics_ctx()
     var df = ctx.enqueue_create_buffer[DType.float32](pl.size if pl.size > 0 else 1)
     var dq = ctx.enqueue_create_buffer[DType.int32](nst * STAGE_INTS if nst > 0 else 1)
+    if prof:
+        ctx.synchronize()
+        print("XMPROF alloc us", (perf_counter_ns() - t_setup) // 1000, "floats", pl.size, "arena", arena_len)
     if arena_len > 0:
         ctx.enqueue_copy(dst_buf=df.create_sub_buffer[DType.float32](0, arena_len), src_ptr=host_f)
     if nst > 0:
@@ -143,9 +152,21 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
         t_last = perf_counter_ns()
     if nouts >= 0:
         var outs = IP(unsafe_from_address=outs_addr)
+        var bounded = False
         for k in range(nouts):
-            var lo = Int(outs.unsafe_load(2 * k))
-            var hi = Int(outs.unsafe_load(2 * k + 1))
+            var cn = Int(outs.unsafe_load(4 * k + 2))
+            if cn >= 0:
+                bounded = True
+                ctx.enqueue_copy(dst_ptr=host_f + cn, src_buf=df.create_sub_buffer[DType.float32](cn, 1))
+        if bounded:
+            ctx.synchronize()
+        for k in range(nouts):
+            var lo = Int(outs.unsafe_load(4 * k))
+            var hi = Int(outs.unsafe_load(4 * k + 1))
+            var cn = Int(outs.unsafe_load(4 * k + 2))
+            if cn >= 0:
+                var c = Int(bitcast[DType.int32](host_f.unsafe_load(cn))) * Int(outs.unsafe_load(4 * k + 3))
+                hi = lo + max(0, min(hi - lo, c))
             if hi > lo:
                 ctx.enqueue_copy(dst_ptr=host_f + lo, src_buf=df.create_sub_buffer[DType.float32](lo, hi - lo))
     elif arena_len > 0:

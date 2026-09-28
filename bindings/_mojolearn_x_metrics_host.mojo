@@ -42,9 +42,10 @@ def run_out_binding(arena_addr: PythonObject, arena_len: PythonObject, prog_addr
     if fa == 0 or qa == 0 or oa == 0 or n < 0 or s < 0 or no < 0:
         raise Error("x_metrics: invalid program buffers")
     for k in range(no):
-        var lo = Int(IP(unsafe_from_address=oa).unsafe_load(2 * k))
-        var hi = Int(IP(unsafe_from_address=oa).unsafe_load(2 * k + 1))
-        if lo < 0 or hi < lo or hi > n:
+        var lo = Int(IP(unsafe_from_address=oa).unsafe_load(4 * k))
+        var hi = Int(IP(unsafe_from_address=oa).unsafe_load(4 * k + 1))
+        var cn = Int(IP(unsafe_from_address=oa).unsafe_load(4 * k + 2))
+        if lo < 0 or hi < lo or hi > n or cn >= n:
             raise Error("x_metrics: output range outside the arena")
     with GILReleased(Python()):
         run_program_host(fa, n, qa, s)
