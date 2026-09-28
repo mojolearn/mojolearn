@@ -49,10 +49,12 @@ Runtime-off and compile-switch-off do not establish that the default binding bui
 | `x_decomp/device.mojo` → `x_decomp/jacobi_par.mojo` | Round-robin kernels are imported unconditionally; environment thresholds only prevent execution. This is the clearest new unbuilt parse/type risk. |
 | `ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo` → `x_ann/kpp_seed.mojo` | Host seeding helper is unconditionally imported even though the new seeding route is opt-in. |
 | `x_ann/{cagra_device,tsne_device,ivf_scan_device,ivf_pq_device}.mojo` | New disabled kernel definitions share modules imported by default ANN bindings. |
-| `x_cluster/{device_ops,agglo,affinity,bayesian_gmm}.mojo` | New kernel bodies and opt-in dispatch share existing default modules. |
+| `x_cluster/{device_ops,agglo,affinity,bgmm}.mojo` | New kernel bodies and opt-in dispatch share existing default modules. |
 | `bindings/_mojolearn_x_metrics{,_host}.mojo` → `x_metrics/epilogue.mojo` | New host helpers/exports compile regardless of the Python `MOJOLEARN_MSEL3` switch. |
 | `ensemble/randomforest.mojo`, RF builder and GBDT non-symmetric driver | Session exports and experimental definitions share default binding source closures. |
 
 By contrast, `x_linear/device.mojo` imports block solvers inside comptime-selected branches, and newer neighbors experiment modules are selected by compile-time imports. The default builds still need verification; opt-in arms separately need their actual selected build and quality checks. No compiler success is inferred from Python AST parsing.
 
 A suitable first gate is one bounded default native build per changed binding/mode from the final combined source, with numerical build gates disabled during compilation and compiler logs retained. Then run the coordinated identity/quality/timing selection; do not silently transplant arbitrary old binaries into the new source tree. This document does not authorize starting builds on M2 or reviving M3.
+
+Local source-only validation reported by integration coordinator: 111 changed Python files parsed successfully; three portable-math Python tests passed using FAST missing-native stubs. Two earlier test collections refused absent native binaries. These results do not exercise new Mojo kernels or qualify any native artifact.
