@@ -263,11 +263,12 @@ def build_parser():
                    help="check every identity cell this install can run: the "
                         "identity_break lanes (every lane on a GPU install, the "
                         "public CPU reference lanes on a CPU-only one) plus the "
-                        "portable GPU-trained models, each cell part compared "
+                        "portable GPU-trained models, including applicable gradient, "
+                        "batch-size, ragged and sampler/replay probes; each cell part compared "
                         "with the reference table shipped in the wheel "
                         "(docs/VERIFY.md, python/mojolearn/_verify_all.py)")
     v.add_argument("--batch-checks", action="store_true",
-                   help="also run gradient, batch-size, ragged and sampler/replay probes; missing references read OWED")
+                   help="include gradient, batch-size, ragged and sampler/replay probes in quick or selected-lane runs (already included in --all/--full); missing references read OWED")
     v.add_argument("--coverage", action="store_true",
                    help="inspect all appendix variants, lane availability and batch contracts without fitting")
     v.add_argument("--smoke", action="store_true",
@@ -290,7 +291,7 @@ def build_parser():
                    help="implies --all: one lane per family on the base "
                         "fixture")
     v.add_argument("--full", action="store_true",
-                   help="implies --all: every lane on every fixture (the "
+                   help="implies --all: every lane and applicable property on every fixture (the "
                         "default depth of --all)")
     v.add_argument("--lanes", default="",
                    help="implies --all: only these comma separated lanes")

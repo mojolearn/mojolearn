@@ -515,7 +515,7 @@ def metadata_text(proj, readme):
     """Metadata 2.4, field order as setuptools 84 wrote it for 0.1.0.
 
     The split core's METADATA is the combined wheel's plus exactly the two
-    exact plugin requirements (core_project); no extras. Each plugin pins
+    exact plugin requirements (core_project); verification stays optional. Each plugin pins
     the core back (plugin_project)."""
     lines = ["Metadata-Version: 2.4", f"Name: {proj['name']}",
              f"Version: {proj['version']}", f"Summary: {proj['description']}"]
@@ -536,6 +536,12 @@ def metadata_text(proj, readme):
     lines.append("Description-Content-Type: text/markdown")
     for lf in proj.get("license-files", []):
         lines.append(f"License-File: {lf}")
+    for extra, dependencies in proj.get("optional-dependencies", {}).items():
+        lines.append(f"Provides-Extra: {extra}")
+        for dependency in dependencies:
+            requirement, _, marker = dependency.partition(";")
+            condition = f'({marker.strip()}) and ' if marker else ''
+            lines.append(f'Requires-Dist: {requirement.strip()}; {condition}extra == "{extra}"')
     for d in proj.get("dependencies", []):
         lines.append(f"Requires-Dist: {d}")
     lines.append("Dynamic: license-file")

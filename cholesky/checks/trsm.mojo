@@ -295,7 +295,12 @@ comptime CHOL_MULTI_RHS = (
     has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_CHOL_MULTI_RHS_OFF"]()
 )
-comptime CHOL_MR_NT = 1024
+#: 256, not the sweep's 1024 (lane/apple-merged, 2026-09-28): with RB-wide
+#: vectors per thread the M2 Pro (no Dynamic Caching) dropped the 1024-thread
+#: dispatch with no error (GP predict(return_std=True) returned 0 for a whole
+#: batch, the right value for one row). Row i belongs to thread i % NT at any
+#: NT, so every chain is unchanged.
+comptime CHOL_MR_NT = 256
 comptime CHOL_MR_RB = 8
 
 

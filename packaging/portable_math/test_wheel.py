@@ -52,12 +52,20 @@ def test_rejects_native_math_import(payload):
     ('numpy/__init__.py', b''),
     ('numpy.libs/libopenblas.so', b''),
     ('mojolearn.dist-info/METADATA', b'Requires-Dist: numpy>=1.24; extra == "test"\n'),
+    ('mojolearn.dist-info/METADATA', b'Provides-Extra: verify\nRequires-Dist: numpy>=1.26.4\n'),
+    ('mojolearn.dist-info/METADATA', b'Provides-Extra: verify\nRequires-Dist: numpy>=1.26.4; extra == "verify" or python_version >= "3"\n'),
 ])
 def test_numpy_policy_rejects_runtime_and_payload_dependencies(tmp_path, name, content):
     path = tmp_path / name
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(content)
     assert audit.numpy_errors(path, name)
+
+
+def test_numpy_verification_extra_is_optional_metadata(tmp_path):
+    path = tmp_path / 'METADATA'
+    path.write_text('Provides-Extra: verify\nRequires-Dist: numpy>=1.26.4; extra == "verify"\n')
+    assert not audit.numpy_errors(path, 'mojolearn.dist-info/METADATA')
 
 
 @pytest.mark.parametrize("relative", ["mojolearn/_identity_break.py", "mojolearn/_verify_par.py"])
