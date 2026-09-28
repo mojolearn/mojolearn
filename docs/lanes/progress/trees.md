@@ -440,3 +440,50 @@ AMD `trees-amd` MI300X up; STOPPED at this checkpoint by the coordinator).
   --diff); test_host_surface; test_trees_repeat; test_lane_select (inputs
   changed: _expansion_trees.py, xtrees/ops.mojo, the ET builder).
 - NOT STARTED this session: step 0 coverage audit; GPU speed phases.
+
+SESSION F, 2026-09-28 ~05:00-08:00Z (RunPod out of funds: NO NVIDIA pod;
+the M2 GBDT fault, before m2pro is released ~12:40Z).
+- M2 VERDICT: FIXED. Steward 1790576952559 (commit dc27fe36d, all 33 gbdt
+  lanes): m2pro clean AGREE on every one of the 33 (and AGREE after the
+  sabotage's reversal); m3ultra, m4pro-a clean AGREE on all 33. The
+  request reads FAIL only because its sabotage
+  (~/mojolearn-evidence/trees/m2fix/smem_add_device_only.patch, a
+  device-only perturbation of `hist2_smem_add`'s Int32 add) was NOT SEEN on
+  6 lanes that never reach the shared-Int32 histogram: gbdt-feature-freq,
+  gbdt-ordered, gbdt-ordered-bayesian-noise, gbdt-ordered-rmse,
+  gbdt-pointwise-l2-bayesian-eval, gbdt-tensor-ctr-tables. It bit the other
+  27. (Owed: a second sabotage for those 6 on the next steward request.)
+- TWO ROOT CAUSES, one mechanism: a kernel dispatched at a block the M2's
+  pipeline will not run writes nothing, with no error (M2 has no Dynamic
+  Caching, so a pipeline's maxTotalThreadsPerThreadgroup falls with
+  register use; INFERRED, Mojo cannot read pipeline attributes on Metal).
+  1. hist_2 one-byte, shared-Int32 mode, block 512 (7355dd241, 67c9b2df0):
+     `kernel_matrix.hist2_block_size_for` caps COLUMN_APPLE at
+     `APPLE_HIST2_SHARED_I32_BLOCK_CAP = 256`; pin updated in
+     hardware_matrix_check. Probe 1790571345780 (m2pro): a synthetic
+     kernel runs blocks 256..1024 with the full 32 KB Int32 threadgroup
+     correctly (so NOT the threadgroup budget); hist2_check at block 256
+     reads 0 wrong on every printed arm (bits 5, 6). The MTL_DEBUG_LAYER
+     arm aborted early on an unrelated binarize-kernel binding assertion.
+     Steward 1790571659830 (7355dd241): m2pro clean AGREE on 29 of 33,
+     DISAGREE only on the Exact-estimator parts (MAE/Quantile/MAPE of
+     bfa-quantile, exact-mae, parametric-losses, stochastic-arms).
+  2. Exact estimator `compute_need_weights_kernel`, 1024 threads
+     (dc27fe36d, DEVIATION 6140): 512 physical threads each run logical
+     lanes tid and tid+512, add them, then the 512-wide pinned fold: the
+     1024-wide halving tree's first step, so IDENTICAL bits do not move.
+- AMD PROOF (trees-amd MI300X, before the Hot Aisle box went away ~07:00Z):
+  arm A = branch (gbdt = main on AMD), arm B = block 256 FORCED on every
+  column (source edit): all 33 gbdt + 37 trees/rf/et lanes AGREE HIP ==
+  CPU in arm B; gbdt cells arm A vs arm B: 4104 cell parts, 0 differ
+  (block 256 moves no bit). Need-weights change, old (1024 threads,
+  reverted by source patch) vs new on the do-amd MI300X (speed request
+  1790581924841): bfa-quantile, exact-mae, parametric-losses,
+  stochastic-arms, rmse AGREE HIP == CPU in both arms, 630 cell parts, 0
+  differ. The do-amd leg of 1790576952559 was still running at this
+  checkpoint (read it with `apple_steward.py status`).
+- OWED BEFORE MERGE (do NOT merge yet): the NVIDIA gate once RunPod is
+  funded: every gbdt lane AGREE on CUDA and its CUDA cells unchanged vs
+  main (identity_break --diff; the need-weights change is the one that can
+  touch CUDA), plus everything owed from SESSION E for the ET speed work;
+  test_host_surface; test_lane_select if its inputs changed.
