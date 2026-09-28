@@ -835,8 +835,10 @@ def croston_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises
 #: ETS's FAST Nelder-Mead stall stop (sequence/nm.mojo): the fit ends once
 #: its best value has not dropped by more than ETS_FAST_STALL_REL |best| for
 #: ETS_FAST_STALL_ITERS iterations. FAST only; chosen by the paired quality
-#: sweep in tools/sequence_quality.py (docs/lanes/progress/sequence-apple2.md).
-comptime ETS_FAST_STALL_ITERS = 100
+#: sweep in tools/sequence_quality.py (docs/lanes/progress/sequence-apple2.md):
+#: ETS's simplex still gains more than 1e-6 |best| every 50 to 300 iterations
+#: at the 1000 cap, so no stall stop ends it early; the stop stays opt-in.
+comptime ETS_FAST_STALL_ITERS = 0   # off: the sweep found no stop that saves time (below)
 comptime ETS_FAST_STALL_REL = Float32(1e-6)
 
 
@@ -899,7 +901,7 @@ def ets_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: Python
 #: meets the reference's tol_std 1e-6 at -loglik ~ 100, so a capped simplex
 #: ran both 2000-iteration runs; FAST ends a run whose best value has stopped
 #: moving. Chosen by the paired quality sweep (tools/sequence_quality.py).
-comptime GARCH_FAST_STALL_ITERS = 100
+comptime GARCH_FAST_STALL_ITERS = 50
 comptime GARCH_FAST_STALL_REL = Float32(1e-6)
 
 

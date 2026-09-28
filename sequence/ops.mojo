@@ -244,10 +244,6 @@ def sub(a: Float32, b: Float32) -> Float32:
 
 comptime SUMSQ_STAGE = 64
 comptime GEMM_STAGE = 16
-#: a long fold (VAR's normal equations: few cells, K ~ 1M) keeps more loads
-#: in flight (apple2); same fmas, same order
-comptime GEMM_STAGE_LONG = 48
-comptime GEMM_LONG_K = 16384
 comptime COLSUM_STAGE = 32
 comptime SUMSQ_VEC = 4
 
@@ -320,16 +316,6 @@ def gemm_dot(pa: FP, abase: Int, sak: Int, pb: FP, bbase: Int, sbk: Int, K: Int,
         # that many loads in flight instead of waiting out each one); the
         # fold is the same chain of fmas in the same order.
         var k = 0
-        if K >= GEMM_LONG_K:
-            while k + GEMM_STAGE_LONG <= K:
-                var la = SIMD[DType.float32, 64]()
-                var lb = SIMD[DType.float32, 64]()
-                comptime for i in range(GEMM_STAGE_LONG):
-                    la[i] = ld(pa, abase + (k + i) * sak)
-                    lb[i] = ld(pb, (k + i) * sbk + bbase)
-                comptime for i in range(GEMM_STAGE_LONG):
-                    acc = fma3(la[i], lb[i], acc)
-                k += GEMM_STAGE_LONG
         while k + GEMM_STAGE <= K:
             var va = SIMD[DType.float32, GEMM_STAGE]()
             var vb = SIMD[DType.float32, GEMM_STAGE]()

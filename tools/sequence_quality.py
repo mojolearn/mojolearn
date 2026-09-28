@@ -154,8 +154,9 @@ def q_layernorm(ml, X):
     xh = (x64 - mu) / np.sqrt(x64.var(1, keepdims=True) + 1e-5)
     rw = (dy.astype(np.float64) * xh).sum(0)
     rb = dy.astype(np.float64).sum(0)
+    scale = np.abs(dy.astype(np.float64)).sum(0)      # db's terms cancel: relative to sum |dy|
     return dict(dw_rel_err=float(np.abs(dw - rw).max() / np.abs(rw).max()),
-                db_rel_err=float(np.abs(db - rb).max() / np.abs(rb).max()))
+                db_err_per_absum=float((np.abs(db - rb) / scale).max()))
 
 
 def q_var(ml, X):
@@ -186,8 +187,7 @@ def main():
                     X, _ = load(a.data, 1_000_000)
                 if w in ("ets", "garch"):
                     fast = os.environ.get("MOJOLEARN_NUMERIC_MODE") == "fast"
-                    sweep = [None] + ([(0, 0.0), (50, 1e-6), (100, 1e-6), (200, 1e-6), (100, 1e-7), (300, 1e-7),
-                                       (100, 1e-5)]
+                    sweep = [None] + ([(0, 0.0), (20, 1e-6), (30, 1e-6), (50, 1e-6), (50, 1e-5), (30, 1e-5)]
                                       if fast and os.environ.get("SEQ_QUALITY_ETS_SWEEP") else [])
                     for s in sweep:
                         try:
