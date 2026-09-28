@@ -41,6 +41,12 @@ for v in ${SAB_VARIANTS:-base=HEAD}; do
             echo "SAB build $label $mode $s wall_s=$(( $(date +%s) - t0 ))"
         done
     done
+    if [ -n "${SAB_MATH:-}" ]; then
+        # libMojolearnMath (packaging/portable_math), which ARIMA's python layer dlopens
+        (cd "$wt" && PYTHONPATH=packaging/portable_math pixi run -e default python -c \
+            "import pathlib, stage; stage.build(pathlib.Path('python/mojolearn/.dylibs/libMojolearnMath.dylib'))") \
+            >> "$OUT/build-$label-math.log" 2>&1 || echo "SAB $label MATH BUILD FAILED"
+    fi
     [ $ok = 1 ] && labels="$labels $label"
 done
 for rep in $(seq 1 "${SAB_REPS:-1}"); do
