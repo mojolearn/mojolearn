@@ -127,8 +127,15 @@ comptime SMO_MAX_INNER_ITER = 10000
 #: delta_alpha values scatter through the offsets the index select just
 #: scanned from the same flags instead of scanning them again.
 #: `-D MOJOLEARN_SVM_FAST_SYNCS_OFF` restores both.
+#: Also under IDENTICAL on Apple (lane/neighbors-apple, 2026-09-28): all
+#: three are bit-preserving by construction. The ranked permutation is the
+#: host sort's (distinct indices); the scatter reuses the offsets the index
+#: select scanned from the SAME flags over the SAME n; and the NaN flag is
+#: still checked before any output is returned (one iteration later, and at
+#: the loop's exit), so a NaN fit raises exactly as before and a finite fit
+#: runs the same arithmetic in the same order.
 comptime FAST_SMO_SYNCS = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_SVM_FAST_SYNCS_OFF"]()
 )
@@ -142,7 +149,7 @@ comptime FAST_SMO_SYNCS = (
 comptime FAST_EPT = 4 if is_defined["MOJOLEARN_SVM_FAST_EPT4"]() else (
     8 if is_defined["MOJOLEARN_SVM_FAST_EPT8"]() else 2
 )
-comptime SVM_FUSED_UPDATE_F = FAST_SMO_SYNCS and not is_defined[
+comptime SVM_FUSED_UPDATE_F = FAST_SMO_SYNCS and GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined[
     "MOJOLEARN_SVM_FUSED_UPDATE_F_OFF"
 ]()
 """FAST on Apple: the gradient update computes each kernel value where it
