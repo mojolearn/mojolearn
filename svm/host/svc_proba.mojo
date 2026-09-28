@@ -447,6 +447,7 @@ def sigmoid_train(dec: F64Ptr, labels: F64Ptr, n: Int) raises -> Tuple[Float64, 
             step = step / 2.0
         if step < min_step:
             break
+    _ = t^  # `tp` borrows t's storage: t lives to here (ASAP destruction)
     return (a, b)
 
 
