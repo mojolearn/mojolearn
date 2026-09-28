@@ -602,11 +602,21 @@ def op_knn_impute_tiled(
     var d_bd = _buf(ctx, 0, n * d * k, False)
     var d_bi = _buf_i(ctx, 0, n * d * k, False)
     var d_res = _buf(ctx, res, n * d, True)
-    ctx.enqueue_function[knn_impute_tiled_kernel](
-        d_cells.unsafe_ptr(), d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(),
-        d_res.unsafe_ptr(), Int64(n), Int64(m), Int64(d), Int64(k), Int64(weights), Int64(nc),
-        grid_dim=(nc + IMP_TPB - 1) // IMP_TPB, block_dim=IMP_TPB,
-    )
+    var split = k <= IMPS_KMAX
+    comptime if is_defined["MOJOLEARN_XN_IMPUTE_NO_SPLIT"]():
+        split = False
+    if split:
+        ctx.enqueue_function[knn_impute_split_kernel](
+            d_cells.unsafe_ptr(), d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(),
+            d_res.unsafe_ptr(), Int64(n), Int64(m), Int64(d), Int64(k), Int64(weights), Int64(nc),
+            grid_dim=(nc + IMPS_CELLS - 1) // IMPS_CELLS, block_dim=IMPS_TPB,
+        )
+    else:
+        ctx.enqueue_function[knn_impute_tiled_kernel](
+            d_cells.unsafe_ptr(), d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(),
+            d_res.unsafe_ptr(), Int64(n), Int64(m), Int64(d), Int64(k), Int64(weights), Int64(nc),
+            grid_dim=(nc + IMP_TPB - 1) // IMP_TPB, block_dim=IMP_TPB,
+        )
     _down(ctx, d_res, res, n * d)
     ctx.synchronize()
     _ = d_cells^
@@ -616,3 +626,121 @@ def op_knn_impute_tiled(
     _ = d_bi^
     _ = d_res^
     _ = ctx^
+
+
+comptime IMPS_TPB = 128
+comptime IMPS_SPLIT = 8
+comptime IMPS_CELLS = IMPS_TPB // IMPS_SPLIT
+comptime IMPS_ROWS = 32
+comptime IMPS_KMAX = 16
+
+
+def knn_impute_split_kernel(
+    cells: IP, x: FP, fx: FP, best_d: FP, best_i: IP, res: FP,
+    n_: Int64, m_: Int64, d_: Int64, k_: Int64, weights_: Int64, nc_: Int64,
+):
+    """`knn_impute_tiled_kernel` with each missing cell's donor scan split
+    over IMPS_SPLIT threads (donor j to split j % IMPS_SPLIT, ascending
+    within a split), then merged. The item's insertion (strict <, donors
+    ascending) keeps exactly the k smallest donors by (distance, donor
+    index), ties to the lower index; each split keeps that for its donors,
+    and the merge takes the k smallest (distance, index) pairs of the
+    splits' lists, which is the same list. Distances by the item's
+    statements; n_donors is the sum of the splits' counts; the tail is
+    `knn_impute_finish`. k <= IMPS_KMAX, d <= IMP_MAX_D."""
+    var m = Int(m_)
+    var d = Int(d_)
+    var k = Int(k_)
+    var nc = Int(nc_)
+    var tid = Int(thread_idx.x)
+    var ci = tid // IMPS_SPLIT
+    var sp = tid - ci * IMPS_SPLIT
+    var q0 = Int(block_idx.x) * IMPS_CELLS + ci
+    var fs = stack_allocation[IMPS_ROWS * IMP_MAX_D, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var pd = stack_allocation[IMPS_TPB * IMPS_KMAX, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var pi = stack_allocation[IMPS_TPB * IMPS_KMAX, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    var pn = stack_allocation[IMPS_TPB, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    var live = q0 < nc
+    var t = 0
+    var r = 0
+    var c = 0
+    if live:
+        t = Int(cells.unsafe_load(q0))
+        r = t // d
+        c = t - r * d
+    var inf = _bc[DType.float32](UInt32(0x7F800000))
+    var lb = tid * IMPS_KMAX
+    for s in range(k):
+        pd[lb + s] = inf
+        pi[lb + s] = Int32(-1)
+    var n_donors = 0
+    var j0 = 0
+    while j0 < m:
+        var rows = min(IMPS_ROWS, m - j0)
+        var q = tid
+        while q < rows * d:
+            fs[q] = fx.unsafe_load(j0 * d + q)
+            q += IMPS_TPB
+        barrier()
+        if live:
+            var jj = sp
+            while jj < rows:
+                var j = j0 + jj
+                var dv = fs[jj * d + c]
+                if dv == dv:
+                    n_donors += 1
+                    var acc = Float32(0)
+                    var present = 0
+                    for f in range(d):
+                        var a = x.unsafe_load(r * d + f)
+                        var b = fs[jj * d + f]
+                        if a != a or b != b:
+                            continue
+                        present += 1
+                        var df = _sub(a, b)
+                        acc = ftz(identical_mul_add(df, df, acc))
+                    if present != 0:
+                        var sq = ftz(identical_mul(ftz(identical_div(acc, Float32(present))), Float32(d)))
+                        var dist = ftz(identical_sqrt(sq))
+                        if dist < pd[lb + k - 1]:
+                            var s = k - 1
+                            while s > 0 and dist < pd[lb + s - 1]:
+                                pd[lb + s] = pd[lb + s - 1]
+                                pi[lb + s] = pi[lb + s - 1]
+                                s -= 1
+                            pd[lb + s] = dist
+                            pi[lb + s] = Int32(j)
+                jj += IMPS_SPLIT
+        barrier()
+        j0 += rows
+    pn[tid] = Int32(n_donors)
+    barrier()
+    if live and sp == 0:
+        var bd = best_d + t * k
+        var bi = best_i + t * k
+        var total = 0
+        var head = InlineArray[Int, IMPS_SPLIT](fill=0)
+        for u in range(IMPS_SPLIT):
+            total += Int(pn[tid + u])
+        for s in range(k):
+            var best_u = -1
+            var best_d_v = inf
+            var best_j = Int32(-1)
+            for u in range(IMPS_SPLIT):
+                var h = head[u]
+                if h < k:
+                    var ix = pi[(tid + u) * IMPS_KMAX + h]
+                    if ix >= 0:
+                        var dv2 = pd[(tid + u) * IMPS_KMAX + h]
+                        if best_u < 0 or dv2 < best_d_v or (dv2 == best_d_v and ix < best_j):
+                            best_u = u
+                            best_d_v = dv2
+                            best_j = ix
+            if best_u < 0:
+                bd.unsafe_store(s, inf)
+                bi.unsafe_store(s, Int32(-1))
+            else:
+                bd.unsafe_store(s, best_d_v)
+                bi.unsafe_store(s, best_j)
+                head[best_u] = head[best_u] + 1
+        knn_impute_finish(t, fx, bd, bi, res, m, d, k, Int(weights_), total)
