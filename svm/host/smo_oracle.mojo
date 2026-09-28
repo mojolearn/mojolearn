@@ -71,7 +71,15 @@ from gemm.host.identical_gemm import (
     leaf_count,
     leaf_end,
 )
-from checks.numerics import ftz, identical_exp, identical_mul, identical_mul_add, identical_tanh
+from checks.numerics import (
+    ftz,
+    identical_exp,
+    identical_mul,
+    identical_mul_add,
+    identical_mul_add_simd,
+    identical_tanh,
+)
+from core.host_simd_identical import expf_v, ftz_v
 from core.host_predict_threads import HostF32Ptr, host_predict_chunk, host_predict_task_count
 from svm.impl.smosolver import fold_order_for, hash_f32_list
 from svm.impl.svm_parameter import (
@@ -326,6 +334,87 @@ def _kernel_cell[
     )
     var e = _flush[dt]((-gain) * s)
     return _flush[dt](_exp[dt](e))
+
+
+#: THE CELL BLOCK (lane neighbors-cpu, 2026-09-28): SMO_W kernel cells at
+#: once, one SIMD lane per CELL (a against b_0 .. b_{W-1}). Lane `l` is the
+#: float32 `_kernel_cell` of (a, b_l) statement for statement: the same
+#: contract leaves, each an ascending `ftz(fma(ftz(a_c), ftz(b_c), acc))`
+#: chain, the same balanced fold (lane-wise, every lane the same tree), the
+#: same epilogue; `ftz_v` / `expf_v` are measured equal to `ftz` /
+#: `portable_expf` on every float32 word (core/host_simd_identical_check.
+#: mojo), and `identical_tanh` runs per lane. The b operands come from a
+#: feature-major panel of FLUSHED values (`c * stride + l`); ftz is
+#: idempotent, so flushing at pack time is flushing at load time.
+comptime SMO_W = 8
+comptime SmoVF = SIMD[DType.float32, SMO_W]
+
+
+def _kernel_cells_v(
+    kp: KernelParams, xa: HostF32Ptr, na: Float32, panel: HostF32Ptr,
+    stride: Int, nb: SmoVF, k: Int,
+) -> SmoVF:
+    var leaf = contract_leaf_size(k)
+    var pcount = leaf_count(k, leaf)
+    var parts = stack_allocation[SMO_ORACLE_MAX_LEAVES * SMO_W, Float32]()
+    for t in range(pcount):
+        var acc = SmoVF(0.0)
+        var lo = leaf_begin(t, leaf)
+        var hi = leaf_end(t, leaf, k)
+        comptime if SMO_ORACLE_HOST_SABOTAGE:
+            for q in range(hi - lo):
+                var c = hi - 1 - q
+                acc = ftz_v[SMO_W](identical_mul_add_simd[SMO_W](
+                    SmoVF(ftz(xa.unsafe_load(c))), panel.unsafe_load[width=SMO_W](c * stride), acc
+                ))
+        else:
+            for c in range(lo, hi):
+                acc = ftz_v[SMO_W](identical_mul_add_simd[SMO_W](
+                    SmoVF(ftz(xa.unsafe_load(c))), panel.unsafe_load[width=SMO_W](c * stride), acc
+                ))
+        parts.store(t * SMO_W, ftz_v[SMO_W](acc))
+    var dot = SmoVF(0.0)
+    if pcount > 0:
+        var width = pcount
+        while width > 1:
+            var pairs = width // 2
+            for q in range(pairs):
+                var a = ftz_v[SMO_W](parts.load[width=SMO_W](2 * q * SMO_W))
+                var b = ftz_v[SMO_W](parts.load[width=SMO_W]((2 * q + 1) * SMO_W))
+                parts.store(q * SMO_W, ftz_v[SMO_W](a + b))
+            if width % 2 != 0:
+                parts.store(pairs * SMO_W, parts.load[width=SMO_W]((width - 1) * SMO_W))
+                width = pairs + 1
+            else:
+                width = pairs
+        dot = ftz_v[SMO_W](parts.load[width=SMO_W](0))
+    if kp.kernel == KERNEL_LINEAR:
+        return dot
+    if kp.kernel == KERNEL_POLYNOMIAL:
+        var t = ftz_v[SMO_W](identical_mul_add_simd[SMO_W](
+            SmoVF(Float32(kp.gamma)), ftz_v[SMO_W](dot), SmoVF(Float32(kp.coef0))
+        ))
+        var acc = SmoVF(1.0)
+        for _ in range(kp.degree):
+            acc = ftz_v[SMO_W](acc * t)
+        comptime if SMO_ORACLE_HOST_SABOTAGE:
+            acc = ftz_v[SMO_W](acc + SmoVF(0.5))
+        return acc
+    if kp.kernel == KERNEL_TANH:
+        var t = ftz_v[SMO_W](identical_mul_add_simd[SMO_W](
+            SmoVF(Float32(kp.gamma)), ftz_v[SMO_W](dot), SmoVF(Float32(kp.coef0))
+        ))
+        var out = t
+        comptime for l in range(SMO_W):
+            out[l] = ftz(identical_tanh(t[l]))
+        return out
+    var gain = Float32(kp.gamma)
+    var s = ftz_v[SMO_W](
+        ftz_v[SMO_W](SmoVF(ftz(na)) + ftz_v[SMO_W](nb))
+        - ftz_v[SMO_W](SmoVF(2.0) * ftz_v[SMO_W](dot))
+    )
+    var e = ftz_v[SMO_W](SmoVF(-gain) * s)
+    return ftz_v[SMO_W](expf_v[SMO_W](e))
 
 
 # ---------------------------------------------------------------------------
@@ -720,6 +809,27 @@ def smo_oracle_fit[
         for i in range(n_rows):
             norms.append(_row_norm[dt](x, i, k))
     var ws = _WsState(n_train, n_ws)
+    # THE CELL BLOCK's operands (float32 only; see `_kernel_cells_v`): the
+    # flushed training rows feature-major, `xt[c * n_rows + i]`, the norms
+    # (zeros unless RBF), and one flushed working-set panel refilled per
+    # outer iteration.
+    var xt = List[Float32]()
+    var nrm = List[Float32](length=n_rows + SMO_W, fill=Float32(0.0))
+    var wst = List[Float32]()
+    var wsn = List[Float32](length=n_ws + SMO_W, fill=Float32(0.0))
+    comptime if dt == DType.float32:
+        xt = List[Float32](length=n_rows * k, fill=Float32(0.0))
+        for i in range(n_rows):
+            for c in range(k):
+                xt[c * n_rows + i] = ftz(rebind[Float32](x[i * k + c]))
+            if kp.kernel == KERNEL_RBF:
+                nrm[i] = rebind[Float32](norms[i])
+        wst = List[Float32](length=n_ws * k, fill=Float32(0.0))
+    var xp = rebind[HostF32Ptr](x.unsafe_ptr())
+    var xtp = rebind[HostF32Ptr](xt.unsafe_ptr())
+    var nrmp = rebind[HostF32Ptr](nrm.unsafe_ptr())
+    var wstp = rebind[HostF32Ptr](wst.unsafe_ptr())
+    var wsnp = rebind[HostF32Ptr](wsn.unsafe_ptr())
     # counters
     var max_outer_iter = param.max_outer_iter
     if max_outer_iter == -1:
@@ -748,13 +858,36 @@ def smo_oracle_fit[
         # `getSquareTileWithoutCaching` extracts rows of X by
         # `ws_idx_mod` = the PROJECTED indices, so the tile is
         # `K(x[ws%n], x[ws%n])`; under SVR a row can appear TWICE in it.
-        for u in range(n_ws):
-            var iu = _vec_index(Int(ws.idx[u]), n_rows, is_svr)
+        comptime if dt == DType.float32:
             for t in range(n_ws):
                 var it = _vec_index(Int(ws.idx[t]), n_rows, is_svr)
-                tile[u * n_ws + t] = _kernel_cell[dt](
-                    kp, x, norms, iu, x, norms, it, n_rows, n_rows, k
-                )
+                for c in range(k):
+                    wstp.unsafe_store(c * n_ws + t, xtp.unsafe_load(c * n_rows + it))
+                wsnp.unsafe_store(t, nrmp.unsafe_load(it))
+            var tp = rebind[HostF32Ptr](tile.unsafe_ptr())
+            for u in range(n_ws):
+                var iu = _vec_index(Int(ws.idx[u]), n_rows, is_svr)
+                var t0 = 0
+                while t0 + SMO_W <= n_ws:
+                    var cells = _kernel_cells_v(
+                        kp, xp + iu * k, nrmp.unsafe_load(iu), wstp + t0, n_ws,
+                        wsnp.unsafe_load[width=SMO_W](t0), k,
+                    )
+                    tp.unsafe_store[width=SMO_W](u * n_ws + t0, cells)
+                    t0 += SMO_W
+                for t in range(t0, n_ws):
+                    var it = _vec_index(Int(ws.idx[t]), n_rows, is_svr)
+                    tile[u * n_ws + t] = _kernel_cell[dt](
+                        kp, x, norms, iu, x, norms, it, n_rows, n_rows, k
+                    )
+        else:
+            for u in range(n_ws):
+                var iu = _vec_index(Int(ws.idx[u]), n_rows, is_svr)
+                for t in range(n_ws):
+                    var it = _vec_index(Int(ws.idx[t]), n_rows, is_svr)
+                    tile[u * n_ws + t] = _kernel_cell[dt](
+                        kp, x, norms, iu, x, norms, it, n_rows, n_rows, k
+                    )
         var max_iter_this_block = ORACLE_MAX_INNER
         if max_iter != -1:
             var rem = max_iter - n_iter
@@ -794,10 +927,37 @@ def smo_oracle_fit[
             # (SVC) or two (SVR) disjoint gradient cells.  Preserve the
             # ascending nonzero-delta fold within each row while scheduling
             # medium and large UpdateF batches across the host pool.
-            def _update_f(task: Int) {imm kp, imm x, imm norms, imm nz_idx, imm nz_da, imm order, mut f, imm update_chunk, imm n_rows, imm nnz, imm k, imm is_svr}:
+            var fvp = rebind[HostF32Ptr](f.unsafe_ptr())
+            def _update_f(task: Int) {imm kp, imm x, imm norms, imm nz_idx, imm nz_da, imm order, mut f, imm update_chunk, imm n_rows, imm nnz, imm k, imm is_svr, imm xp, imm xtp, imm nrmp, imm fvp}:
                 var lo = task * update_chunk
                 var hi = min(lo + update_chunk, n_rows)
-                for i in range(lo, hi):
+                var i0 = lo
+                comptime if dt == DType.float32:
+                    # The cell block over W training rows; the fold over the
+                    # nonzero deltas stays in `order`, lane-wise.
+                    while i0 + SMO_W <= hi:
+                        var nb = nrmp.unsafe_load[width=SMO_W](i0)
+                        var acc = SmoVF(0.0)
+                        for rr in range(nnz):
+                            var j = Int(order[rr])
+                            var ja = Int(nz_idx[j])
+                            var kij = _kernel_cells_v(
+                                kp, xp + ja * k, nrmp.unsafe_load(ja), xtp + i0,
+                                n_rows, nb, k,
+                            )
+                            acc = ftz_v[SMO_W](identical_mul_add_simd[SMO_W](
+                                kij, SmoVF(rebind[Float32](nz_da[j])), acc
+                            ))
+                        fvp.unsafe_store[width=SMO_W](
+                            i0, ftz_v[SMO_W](fvp.unsafe_load[width=SMO_W](i0) + acc)
+                        )
+                        if is_svr:
+                            fvp.unsafe_store[width=SMO_W](
+                                i0 + n_rows,
+                                ftz_v[SMO_W](fvp.unsafe_load[width=SMO_W](i0 + n_rows) + acc),
+                            )
+                        i0 += SMO_W
+                for i in range(i0, hi):
                     var acc = Scalar[dt](0)
                     for rr in range(nnz):
                         var j = Int(order[rr])

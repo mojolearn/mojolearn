@@ -169,8 +169,6 @@ from checks.kernel_matrix import (
     lib_block_size_for,
 )
 from checks.numerics import (
-    GLOBAL_NUMERIC_MODE,
-    NUMERIC_IDENTICAL,
     ftz,
     identical_div,
     identical_mul_add,
@@ -191,6 +189,7 @@ from neighbors.impl.distance.detail.distance_ops import (
     lp_unexp_epilog,
     validate_metric_arg,
 )
+from core.host_simd_identical import ftz_v, twiddle_v, untwiddle
 from neighbors.impl.ball_cover.common import (
     rbc_cmp_bound,
     rbc_true_dist,
@@ -525,7 +524,7 @@ def host_select_k(
 #: ascending, every operand `ftz`'d as loaded, the same `fma` / add / abs /
 #: strict-`>` max, the same `ftz` after each step. No fold crosses a lane,
 #: so the vector spelling is the scalar spelling W times over; the ftz is
-#: the integer test of `checks/numerics.mojo::ftz`, lane-wise. Operands are
+#: `core/host_simd_identical.mojo::ftz_v` (measured on all 2^32 words). Operands are
 #: flushed once when packed (ftz is idempotent and pure). The epilogues
 #: that call `identical_sqrt`, `identical_pow` or `identical_div` run per
 #: lane through the scalar functions themselves.
@@ -545,33 +544,6 @@ comptime KnnVU = SIMD[DType.uint32, KNN_HOST_W]
 
 
 @always_inline
-def host_ftz_v(x: KnnVF) -> KnnVF:
-    """`ftz`, lane by lane, as one vector test: a zero exponent field keeps
-    the sign bit only (a zero is its own signed zero)."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        var b = bitcast[DType.uint32, KNN_HOST_W](x)
-        var sub = (b & KnnVU(0x7F800000)).eq(KnnVU(0))
-        return bitcast[DType.float32, KNN_HOST_W](sub.select(b & KnnVU(0x80000000), b))
-    return x
-
-
-@always_inline
-def host_twiddle_v(v: KnnVF) -> KnnVU:
-    """`host_twiddle_in`, lane by lane."""
-    var b = bitcast[DType.uint32, KNN_HOST_W](v)
-    var neg = (b & KnnVU(0x80000000)).ne(KnnVU(0))
-    return neg.select(b ^ KnnVU(0xFFFFFFFF), b ^ KnnVU(0x80000000))
-
-
-@always_inline
-def host_untwiddle(bits: UInt32) -> Float32:
-    """The inverse of `host_twiddle_in`."""
-    if (bits & UInt32(0x80000000)) != 0:
-        return bitcast[DType.float32](bits ^ UInt32(0x80000000))
-    return bitcast[DType.float32](bits ^ UInt32(0xFFFFFFFF))
-
-
-@always_inline
 def _host_block_step(
     acc: KnnVF, qv: Float32, y: KnnVF, metric: Int, metric_arg: Float32,
     ip: Bool,
@@ -579,11 +551,11 @@ def _host_block_step(
     """One feature step of W cells; `ip` is the inner-product family (the
     L2 expanded pair and cosine)."""
     if ip:
-        return host_ftz_v(identical_mul_add_simd[KNN_HOST_W](KnnVF(qv), y, acc))
+        return ftz_v[KNN_HOST_W](identical_mul_add_simd[KNN_HOST_W](KnnVF(qv), y, acc))
     if metric == DIST_L1:
-        return host_ftz_v(acc + abs(host_ftz_v(KnnVF(qv) - y)))
+        return ftz_v[KNN_HOST_W](acc + abs(ftz_v[KNN_HOST_W](KnnVF(qv) - y)))
     if metric == DIST_LINF:
-        var diff = abs(host_ftz_v(KnnVF(qv) - y))
+        var diff = abs(ftz_v[KNN_HOST_W](KnnVF(qv) - y))
         return diff.gt(acc).select(diff, acc)
     var out = acc
     comptime for l in range(KNN_HOST_W):
@@ -634,8 +606,8 @@ def _host_block_epilogue(
     """The cell epilogues of `host_l2_expanded_cell_ptr` and
     `host_metric_cell_ptr`, W cells of one query row."""
     if l2_pair:
-        var s = host_ftz_v(KnnVF(ftz(qn)) + host_ftz_v(yn))
-        var dist = host_ftz_v(identical_mul_add_simd[KNN_HOST_W](KnnVF(-2.0), acc, s))
+        var s = ftz_v[KNN_HOST_W](KnnVF(ftz(qn)) + ftz_v[KNN_HOST_W](yn))
+        var dist = ftz_v[KNN_HOST_W](identical_mul_add_simd[KNN_HOST_W](KnnVF(-2.0), acc, s))
         dist = dist.le(KnnVF(0.0)).select(KnnVF(0.0), dist)
         if is_sqrt:
             comptime for l in range(KNN_HOST_W):
@@ -669,7 +641,7 @@ def _host_block_select(
     """Offer W columns (ascending, the first `wv` real) to one row's
     carry-insertion list `best[0 .. k)`."""
     var thr = UInt32(best.unsafe_load(k - 1) >> UInt64(32))
-    var cand = host_twiddle_v(dist).le(KnnVU(thr))
+    var cand = twiddle_v[KNN_HOST_W](dist).le(KnnVU(thr))
     if not cand.reduce_or():
         return
     for l in range(wv):
@@ -697,7 +669,7 @@ def _host_block_finish(
         comptime if KNN_HOST_SABOTAGE:
             selected = UInt32(0xFFFFFFFF) - selected
         oip.unsafe_store(base + rank, selected)
-        odp.unsafe_store(base + rank, host_untwiddle(UInt32(key >> UInt64(32))))
+        odp.unsafe_store(base + rank, untwiddle(UInt32(key >> UInt64(32))))
     for a in range(1, k):
         var dv = odp.unsafe_load(base + a)
         var iv = oip.unsafe_load(base + a)
