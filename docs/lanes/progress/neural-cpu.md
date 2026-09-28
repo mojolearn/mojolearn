@@ -105,8 +105,29 @@ L capped at 512); train = the same inputs through the public class.
   open to 05:55Z); nothing was pulled. Re-renting failed: RunPod
   `Your account balance is too low to rent a pod`, and the account lists
   ZERO pods (every lane's RunPod box is gone). Branch merged with
-  origin/main (clean) and pushed; the gate re-runs as soon as a pod can be
-  rented.
+  origin/main (clean) and pushed. Coordinator (Sep 28 ~05Z): RunPod balance
+  negative, do not retry renting.
+- AMD central box instead (gfx942 vs CPU), QUEUED 05:00Z Sep 28 for a slot
+  (both held by decomp and sequence): `/root/ev-neural-cpu/amd_gate.sh` on the
+  box (copy in `~/mojolearn-evidence/neural-cpu/amd_gate.sh`) runs the three
+  sabotages (gemm panel chain, S19 value lanes, span_div reciprocal; each must
+  read DISAGREE) and then the 47-lane check; verdicts land in
+  `/root/ev-neural-cpu/summary.txt`, the Mac-side waiter logs to
+  `~/mojolearn-evidence/neural-cpu/amd_gate_local.log`. Fetch with
+  `tools/amd_central.sh fetch neural-cpu /root/ev-neural-cpu
+  ~/mojolearn-evidence/neural-cpu/amd-results`.
+
+### Owed pod steps (need a RunPod NVIDIA pod `neural-cpu`)
+
+1. NVIDIA + CPU gate of `lane/neural-cpu`: `algos_lane_check.sh` over
+   `gate1_lanes.txt` (AGREE) and the three sabotages (`sab_runs.sh`, bite).
+2. test_host_surface on the branch; then merge to main and push.
+3. `lane/neural-cpu-threads` (after core/host_parallel.mojo is on main):
+   merge main, gate at MOJOLEARN_CPU_THREADS=1, 3 and default, its three
+   extra sabotages (bwd kv, S16 dk, S17 direct), test_host_surface,
+   test_lane_select, merge.
+4. Before/after timing re-read on one quiet box (the table above was taken
+   while a lane check compiled).
 - `lane/neural-cpu-threads`: waits for core/host_parallel.mojo on main.
 
 ## Findings for other lanes
