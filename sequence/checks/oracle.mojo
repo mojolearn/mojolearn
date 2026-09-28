@@ -110,6 +110,20 @@ def o_gemm(A: List[Float32], B: List[Float32], C0: List[Float32], M: Int, N: Int
     return out^
 
 
+# ---------------------------------------------------------------- 5544
+def o_gemm_split(A: List[Float32], B: List[Float32], C0: List[Float32], M: Int, N: Int, K: Int) -> List[Float32]:
+    """5544's alternative: `o_gemm`'s cells with the product rounded before
+    the add (two roundings per term instead of the one fused rounding)."""
+    var out = List[Float32](capacity=M * N)
+    for m in range(M):
+        for n in range(N):
+            var acc = _z(C0[m * N + n])
+            for k in range(K):
+                acc = _a(_m(A[m * K + k], B[k * N + n]), acc)
+            out.append(acc)
+    return out^
+
+
 # ---------------------------------------------------------------- 5501
 def o_colsum(X: List[Float32], R: Int, C: Int, alt: Bool) -> List[Float32]:
     var out = List[Float32](capacity=C)

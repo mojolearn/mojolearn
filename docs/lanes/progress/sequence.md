@@ -231,3 +231,129 @@ test_host_surface; tools/test_lane_select.py (sequence.checks / sequence.core ch
 to main and push in one command. NOT merged until then.
 
 Batched family identity request (30 lanes, e2e_family_host_bits.patch) at 90a7e25ad: 1790574625975-sequence-90a7e25ad6 on m2pro, m3ultra-b, m4pro-a, do-amd. The next session reads its verdict first.
+
+## PHASE 5: CPU speed (lane sequence-cpu, branch lane/sequence-cpu, 2026-09-28)
+
+Pod `sequence-cpu` (RunPod H100 box, Intel Xeon Platinum 8470, cgroup quota
+22.1 CPUs). What changed, all bit-identical by construction and proven so:
+
+1. **`sequence/exec.mojo::HostExec.launch` splits a launch's elements across
+   `core/host_parallel.mojo::host_parallelize`** (the caller's FP environment,
+   DEVIATION 5900). An element is a GPU thread (no element reads another's
+   write), so which thread runs it moves no bit. Task count:
+   `core/host_predict_threads.mojo` (MOJOLEARN_CPU_THREADS, else one per
+   physical core), cut so a task keeps `HOST_LAUNCH_GRAIN` (2^15) units of
+   `_element_weight` work; small recurrent launches stay on the caller.
+   Covers all 22 x_sequence lanes' host paths.
+2. **`sequence/host_gemm.mojo`**: OP_GEMM on the host computes op_gemm's cells
+   a native vector of columns x 4 rows at a time (one IEEE fma per lane, the
+   bitwise flush `_ftz_v`, k ascending; B with n stride != 1 is copied into a
+   flushed [K, N] panel first), rows split across threads. Seam **5544** (5540 on lane/sequence-cpu; renumbered on lane/merged, 5540 is the LR schedulers' seam)
+   (`seams_check.mojo`, oracle alternative `o_gemm_split`, arm
+   `seam_5544_host_gemm_unfused.patch`, IDENTITY_PATHS row 150 amended,
+   sequence/README.md table). The host sabotage (k descending) is honored.
+3. **`arima/host/arima_oracle.mojo::_kalman`**: the matrices/initial-state
+   loop and the filter loop run series ranges on host_parallelize (pointers
+   only; the Lists they reach are kept alive to the join).
+4. **`holtwinters/host/hw_oracle.mojo::_oracle_estimate`** (the public
+   default, `initialization_method="estimated"`): series ranges on
+   host_parallelize, one scratch per task.
+5. **Optimizer step in place on the host** (`Exec.bind`: HostExec returns the
+   caller's pointer, DeviceExec allocates and uploads; `download` skips a
+   self-copy) and `_SeqOptimizer.step` skips the Python pack/unpack for one
+   C-contiguous float32 param.
+6. e2e host sabotage patches regenerated against the new `exec.mojo`.
+
+`core/host_parallel.mojo` is carried on this branch at lane/cpu's bytes
+(41f60919d) until lane/cpu lands it on main. **This branch merges only after
+that** (brief: never parallelize a host loop without it on main).
+
+### Timings (seconds, fit + forecast/predict, one run each; bench board shapes)
+
+Data: taxi-hourly from R2 (`gbm-bench/taxi/taxi_speed.npz`, 64 busiest zones x
+1392 fit hours; `tsi` intermittent zones, `tsr` log-return diffs), windows of
+24 for the recurrent models (87,552 windows, 1 epoch, hidden 64, batch 256),
+MLP 64,000 x 32 (256, 256) 1 epoch, LayerNorm (4096, 1024) fwd+bwd, MoE
+(512, 1024) E 8 F 2816 top 2 forward, optimizers 16.7M params x 10 steps.
+Script: ~/mojolearn-evidence/sequence-cpu/seq_time.py. "before" = origin/main
+host bindings (serial); "after" at the default thread count and at 3.
+
+| algorithm | before | after (default) | after (T=3) |
+|---|---|---|---|
+| LSTM (reg) | 258.0 | 8.68 | 21.4 |
+| GRU (reg) | 158.7 | 6.52 | 13.2 |
+| RNN (reg) | 55.5 | 3.00 | 7.36 |
+| MLPClassifier | 82.3 | 0.94 | 2.88 |
+| MoE forward | 16.2 | 1.00 | 5.21 |
+| GARCH(1,1) | 17.6 | 1.87 | 6.03 |
+| ARIMA(1,1,1) | 13.1 | 1.23 | 4.68 |
+| AutoARIMA (p,q 0..1, d 0..1) | 6.16 | 0.79 | 5.63 (before the task-count fix) |
+| Prophet | 3.79 | 0.24 | 1.29 |
+| STL robust | 4.69 | 0.22 | 1.53 |
+| STL | 0.66 | 0.08 | 0.26 |
+| OptimizedTheta | 3.35 | 0.63 | 1.56 |
+| Theta | 2.34 | 0.35 | 1.11 |
+| ETS (AAdN) | 1.46 | 0.26 | 0.68 |
+| ExponentialSmoothing (HW, estimated) | 1.79 | 0.17 | 0.64 |
+| LayerNorm fwd+bwd | 0.25 | 0.08 | 0.13 |
+| RMSprop / Adagrad / Adamax / NAdam / Lion (10 steps) | 1.58 / 1.50 / 1.18 / 2.26 / 0.80 | 0.56 / 0.57 / 0.56 / 0.64 / 0.41 (before item 5) | |
+| Adafactor / LAMB | 2.02 / 2.30 | 0.76 / 0.90 | |
+| VAR, KPSS, Croston | 0.017 / 0.015 / 0.012 | 0.007 / 0.013 / 0.002 | |
+
+**Bits:** every one of the 27 cases' output sha256 at MOJOLEARN_CPU_THREADS=1,
+3 and the default EQUALS the serial origin/main digest.
+
+### Session 2026-09-28 ~05Z (lane sequence-cpu, resumed)
+
+**Step 0 coverage audit (the 30 family lanes in
+~/mojolearn-evidence/sequence-cpu/lanes.txt):** every algorithm has a verifier
+lane with a CPU arm (host binding) and a GPU arm (tools/identity_lanes/sequence.py
++ the arima/holtwinters/kpss lanes in tools/identity_break.py), and
+`sequence/checks/sabotage/e2e_family_host_bits.patch` (a source edit of the
+host downloads / ARIMA / TSA host params) makes every one of the 30 DISAGREE
+(A40, pass 2 above); 35 seam arms (5500-5518, 5520-5535, 5544) in
+tools/identity_lanes/sequence.checks. No gap. The cpu lane's audit table lists
+`parallel_forecasting.*` as NO LANE: those are the multi-device drivers, whose
+lanes are par-arima / par-holtwinters / par-forecast-* (its name map misses
+them), not a sequence-family gap.
+
+**CPU FAST (phase 3): there is no FAST tier on a CPU-only install.**
+`bindings/build_host_family.sh` builds IDENTICAL only and
+`_backend._cpu_only_binding` refuses `numeric_mode='fast'` by name, for every
+family. CPU speed serves the one tier; the phase 5 table above is it.
+
+**Pod:** `sequence-cpu` (2lshqhccqf35wn) was gone (404) and RunPod is out of
+funds (the re-rent was refused: balance too low; nothing created). Per the
+orchestrator: no pod until funded. Branch merged origin/main (d9b966c63);
+`core/host_parallel.mojo` now at lane/cpu's tip bytes (a doc-comment change).
+
+**MERGE BLOCKER:** `core/host_parallel.mojo` is NOT on origin/main (as of
+3fa29cd1f), although lane/cpu's progress file says "MERGED to main (session 2)":
+lane/cpu's tip (c4716ec93) is not an ancestor of origin/main. This branch
+merges only after it lands.
+
+**OWED on an NVIDIA pod (when RunPod is funded), then merge:**
+1. `tools/algos_lane_check.sh <the 30 lanes> --pass 2` on the branch: every
+   lane CLEAN AGREE (CPU == cuda), every arm of sequence.checks PASS / FAIL /
+   PASS (5544, then numbered 5540, included).
+2. Existing bits: the CUDA and CPU columns of the 30 lanes == the merge base's
+   (same lane check at origin/main).
+3. The lane check's CPU column at MOJOLEARN_CPU_THREADS=1, 3 and unset: equal.
+   (seq_time.py digests at 1/3/default already equal origin/main's serial
+   digests on all 27 cases.)
+4. test_host_surface; test_lane_select only if its inputs changed.
+5. Re-time AutoARIMA at T=3 (after the task-count fix) and the optimizers
+   (after the in-place step) with ~/mojolearn-evidence/sequence-cpu/seq_time.py.
+
+**AMD central box (queued 2026-09-28 ~05:05Z, partial gate while no NVIDIA pod):**
+tree /root/mojolearn-sequence-cpu at d9b966c63 + worktree, host bindings
+prebuilt (`/root/ev-sequence-cpu/hostbuild.log`). Job
+`/root/ev-sequence-cpu/amd_gate.sh` (copy: ~/mojolearn-evidence/sequence-cpu/amd_gate.sh):
+the 30 lanes `--pass 2` (CPU == hip, every arm) at default threads, then
+pass 1 at MOJOLEARN_CPU_THREADS=1 and 3. Both slots were busy; the Mac-side
+waiter (nohup, log ~/mojolearn-evidence/sequence-cpu/amd_gate_launch.log)
+starts it when a slot frees (it gives up after 120 min: exit 75, relaunch
+the same command). Results: `/root/ev-sequence-cpu/gate.status`, `p2.log`,
+`t1.log`, `t3.log`; read them first next session
+(`tools/amd_central.sh sh sequence-cpu 'cat /root/ev-sequence-cpu/gate.status'`).
+It does not replace the owed NVIDIA steps above.

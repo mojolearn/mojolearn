@@ -1,4 +1,4 @@
-# the sequence lane's seam checks, one sabotage patch per seam (pass 2; docs/lanes/progress/sequence.md): 5500-5518 and 5536-5543 the expansion items (sequence/checks/seams_check.mojo; 5540 sequence/checks/sched_check.py), 5520-5535 ARIMA, Holt-Winters and KPSS (their own drivers; sequence/README.md)
+# the sequence lane's seam checks, one sabotage patch per seam (pass 2; docs/lanes/progress/sequence.md): 5500-5518 and 5536-5543 the expansion items (sequence/checks/seams_check.mojo; 5544 the host GEMM; 5540 sequence/checks/sched_check.py), 5520-5535 ARIMA, Holt-Winters and KPSS (their own drivers; sequence/README.md)
 sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5500_gemm_k_order.patch
 sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5501_colsum_order.patch
 sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5502_lstm_cell.patch
@@ -26,6 +26,7 @@ sequence/checks/sched_check.py	sequence/checks/sabotage/seam_5540_sched_exact_ro
 sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5541_theta_level.patch
 sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5542_garch_recursion.patch
 sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5543_prophet_fourier.patch
+sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5544_host_gemm_unfused.patch
 arima/checks/arima_check.mojo	sequence/checks/sabotage/seam_5520_arima_mm_k_order.patch
 arima/checks/arima_check.mojo	sequence/checks/sabotage/seam_5521_arima_mv_j_order.patch
 arima/checks/arima_check.mojo	sequence/checks/sabotage/seam_5522_arima_jones_contraction.patch

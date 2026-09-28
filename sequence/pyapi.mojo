@@ -153,20 +153,17 @@ def opt_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: P
     # the running state is a function of t alone: replay steps 1 .. t-1
     for k in range(1, t):
         _ = opt_scalars(cfg, st, k, fval(fp, 0))
-    var P = ex.alloc(n)
-    var G = ex.alloc(n)
-    var s1 = ex.alloc(n)
-    var s2 = ex.alloc(n)
-    var s3 = ex.alloc(n)
     var hp = fptr(p_addr, "params")
     var h1 = fptr(s1_addr, "state1")
     var h2 = fptr(s2_addr, "state2")
     var h3 = fptr(s3_addr, "state3")
-    ex.upload(P, hp, n)
-    ex.upload(G, fptr(g_addr, "grads"), n)
-    ex.upload(s1, h1, n)
-    ex.upload(s2, h2, n)
-    ex.upload(s3, h3, n)
+    # `bind`: the host column updates the caller's arrays in place (OP_OPT
+    # never writes the gradient slot); the device uploads copies.
+    var P = ex.bind(hp, n)
+    var G = ex.bind(fptr(g_addr, "grads"), n)
+    var s1 = ex.bind(h1, n)
+    var s2 = ex.bind(h2, n)
+    var s3 = ex.bind(h3, n)
     opt_step(ex, cfg, st, t, fval(fp, 0), P, G, s1, s2, s3, n)
     ex.sync()
     ex.download(hp, P, n)

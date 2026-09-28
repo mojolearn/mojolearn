@@ -519,6 +519,9 @@ sync)
     # R6: the box's HEAD is the worktree's merge base with origin/main, or the
     # sync refuses. seed_git brings it there (a lane that merged main moves it).
     base=$(git -C "$wt" merge-base HEAD origin/main) || die "no merge base of $wt with origin/main"
+    # A worktree mid-merge (unmerged paths) would ship main's new files as
+    # this patch's own additions; refuse it.
+    [ -z "$(git -C "$wt" diff --name-only --diff-filter=U)" ] || die "$wt has unmerged paths; finish the merge before a sync"
     seed_git "$base"
     if [ "${MOJOLEARN_DEVPOD_FULL_SYNC:-0}" != 1 ]; then
         # PATCH SYNC (default, 2026-09-27; the metrics lane's psync idea): ship
