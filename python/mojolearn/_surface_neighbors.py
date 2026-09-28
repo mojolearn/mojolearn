@@ -85,6 +85,7 @@ FAMILIES = (
             "xn_lp_iterate",
             "xn_pr_iterate",
             "xn_pcs_resident",
+            "xn_knn_sq_tiled",
             "xn_cc_iterate",
             "xn_eigh",
             "x_neighbors_numeric_mode",

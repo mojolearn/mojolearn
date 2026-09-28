@@ -232,7 +232,8 @@ class _XNeighbors(NumericModeMixin):
         m = R.shape[0]
         dist = empty((n, k), "<f4")
         idx = empty((n, k), "<i4")
-        self._op("knn_sq", [(Q, 0), (R, 0), (dist, 1), (idx, 1)], (n, m, d, k, 1 if exclude_self else 0))
+        self._op("knn_sq" if _OLD_ITEMS else "knn_sq_tiled", [(Q, 0), (R, 0), (dist, 1), (idx, 1)],
+                 (n, m, d, k, 1 if exclude_self else 0))
         return dist, idx
 
     def _knn(self, Q, R, k, exclude_self):

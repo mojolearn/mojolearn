@@ -7,7 +7,7 @@ from std.sys.compile import is_defined
 
 from x_neighbors.items import (
     FP, IP, absdiff_sum_item, matmul_item, lp_clamp_item, ls_clamp_item,
-    pagerank_step_item, cc_step_item, pcs_item,
+    pagerank_step_item, cc_step_item, pcs_item, knn_sq_item,
 )
 
 comptime _SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
@@ -158,3 +158,15 @@ def op_pcs_resident(
         if n * nc > 0:
             FP(unsafe_from_address=res).unsafe_store(0, FP(unsafe_from_address=res).unsafe_load(0) + Float32(1e-3))
     _ = scr^
+
+
+def op_knn_sq_tiled(
+    x: Int, y: Int, dist: Int, idx: Int, n: Int, m: Int, d: Int, k: Int, exclude_self: Int,
+) raises:
+    """The CPU column: `knn_sq_item` itself."""
+    for t in range(n):
+        knn_sq_item(t, FP(unsafe_from_address=x), FP(unsafe_from_address=y), FP(unsafe_from_address=dist),
+                    IP(unsafe_from_address=idx), n, m, d, k, exclude_self)
+    comptime if _SABOTAGE:
+        if n * k > 0:
+            FP(unsafe_from_address=dist).unsafe_store(0, FP(unsafe_from_address=dist).unsafe_load(0) + Float32(1e-3))

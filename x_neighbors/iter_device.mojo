@@ -22,12 +22,13 @@ from max.gpu.sync import barrier
 from checks.numerics import ftz, identical_mul_add
 
 from std.sys.compile import is_defined
-from x_neighbors.items import FP, IP, absdiff_sum_item
+from x_neighbors.items import FP, IP, absdiff_sum_item, _sub, knn_sq_item
+from std.memory import bitcast as _bc
 from x_neighbors.device_ops import (
     xn_ctx, _buf, _buf_i, _down, _down_i, _grid, BLOCK,
     absdiff_sum_kernel, matmul_kernel, lp_clamp_kernel, ls_clamp_kernel,
     pagerank_step_kernel, cc_step_kernel,
-    pcs_sketch_kernel, pcs_conv_kernel, pcs_copy0_kernel,
+    pcs_sketch_kernel, pcs_conv_kernel, pcs_copy0_kernel, op_knn_sq,
 )
 
 
@@ -412,4 +413,93 @@ def op_pcs_resident(
     _ = d_sk^
     _ = d_a^
     _ = d_b^
+    _ = ctx^
+
+
+comptime KNN_TILE_TPB = 128
+comptime KNN_TILE_ROWS = 64
+comptime KNN_TILE_MAX_D = 64
+
+
+def knn_sq_tiled_kernel(
+    x: FP, y: FP, dist: FP, idx: IP, n_: Int64, m_: Int64, d_: Int64, k_: Int64, ex_: Int64,
+):
+    """`knn_sq_item` for x row t = this thread, with the y rows staged
+    KNN_TILE_ROWS at a time in threadgroup memory (read-only between two
+    barriers) instead of read by every thread from device memory. Candidate
+    columns are offered in the same ascending order to the same strict-<
+    insertion, each value by the item's statements, so the lists are the
+    item's. d <= KNN_TILE_MAX_D."""
+    var n = Int(n_)
+    var m = Int(m_)
+    var d = Int(d_)
+    var k = Int(k_)
+    var ex = Int(ex_)
+    var tid = Int(thread_idx.x)
+    var t = Int(block_idx.x) * KNN_TILE_TPB + tid
+    var ys = stack_allocation[KNN_TILE_ROWS * KNN_TILE_MAX_D, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var inf = _bc[DType.float32](UInt32(0x7F800000))
+    var live = t < n
+    if live:
+        for s in range(k):
+            dist.unsafe_store(t * k + s, inf)
+            idx.unsafe_store(t * k + s, Int32(-1))
+    var worst = inf
+    var j0 = 0
+    while j0 < m:
+        var rows = min(KNN_TILE_ROWS, m - j0)
+        var q = tid
+        while q < rows * d:
+            ys[q] = y.unsafe_load(j0 * d + q)
+            q += KNN_TILE_TPB
+        barrier()
+        if live:
+            for jj in range(rows):
+                var j = j0 + jj
+                if ex != 0 and j == t:
+                    continue
+                var acc = Float32(0)
+                for f in range(d):
+                    var df = _sub(x.unsafe_load(t * d + f), ys[jj * d + f])
+                    acc = ftz(identical_mul_add(df, df, acc))
+                var v = acc
+                if not (v < worst):
+                    continue
+                var s = k - 1
+                while s > 0 and v < dist.unsafe_load(t * k + s - 1):
+                    dist.unsafe_store(t * k + s, dist.unsafe_load(t * k + s - 1))
+                    idx.unsafe_store(t * k + s, idx.unsafe_load(t * k + s - 1))
+                    s -= 1
+                dist.unsafe_store(t * k + s, v)
+                idx.unsafe_store(t * k + s, Int32(j))
+                worst = dist.unsafe_load(t * k + k - 1)
+        barrier()
+        j0 += rows
+
+
+def op_knn_sq_tiled(
+    x: Int, y: Int, dist: Int, idx: Int, n: Int, m: Int, d: Int, k: Int, exclude_self: Int,
+) raises:
+    """The fused k-NN (`knn_sq`) with y staged per block; d above
+    KNN_TILE_MAX_D takes the one-thread-per-row item kernel."""
+    if d > KNN_TILE_MAX_D:
+        op_knn_sq(x, y, dist, idx, n, m, d, k, exclude_self)
+        return
+    var ctx = xn_ctx()
+    var d_x = _buf(ctx, x, n * d, True)
+    var d_y = _buf(ctx, y, m * d, True)
+    var d_dist = _buf(ctx, 0, n * k, False)
+    var d_idx = _buf_i(ctx, 0, n * k, False)
+    ctx.enqueue_function[knn_sq_tiled_kernel](
+        d_x.unsafe_ptr(), d_y.unsafe_ptr(), d_dist.unsafe_ptr(), d_idx.unsafe_ptr(),
+        Int64(n), Int64(m), Int64(d), Int64(k), Int64(exclude_self),
+        grid_dim=(n + KNN_TILE_TPB - 1) // KNN_TILE_TPB, block_dim=KNN_TILE_TPB,
+    )
+    _down(ctx, d_dist, dist, n * k)
+    _down_i(ctx, d_idx, idx, n * k)
+    ctx.synchronize()
+    _ = d_x^
+    _ = d_y^
+    _ = d_dist^
+    _ = d_idx^
     _ = ctx^

@@ -168,6 +168,9 @@ CUSTOM_OPS = [
      [("x", "fin", "n * d_in"), ("hidx", "iin", "degree * nf"), ("hbit", "iin", "degree * nf"), ("res", "fout", "n * nc"),
       ("n", "int"), ("d_in", "int"), ("nf", "int"), ("nc", "int"), ("degree", "int"), ("gamma", "float"),
       ("coef0", "float")]),
+    ("knn_sq_tiled",
+     [("x", "fin", "n * d"), ("y", "fin", "m * d"), ("dist", "fout", "n * k"), ("idx", "iout", "n * k"),
+      ("n", "int"), ("m", "int"), ("d", "int"), ("k", "int"), ("exclude_self", "int")]),
     ("cc_iterate",
      [("a", "fin", "n * n"), ("lab", "iinout", "n"), ("info", "iout", "1"), ("n", "int")]),
 ]
