@@ -382,9 +382,12 @@ def _mamba1_run(a: List[Int], b: Int, l: Int, dm: Int, decode: Bool = False) rai
     # The block output is the residual stage (contract section 2's
     # `hidden = residual + mixer(norm(residual))`), and the state buffers
     # go back to their owners.
-    _write_f32(a[13], mamba_download(ctx, dstages.residual_out, b * l * dm))
-    _write_f32(a[11], mamba_download(ctx, dstate.conv_win, b * di * D_CONV))
-    _write_f32(a[12], mamba_download(ctx, dstate.h, b * di * D_STATE))
+    # Straight into the caller's arrays, one wait (lane/neural-apple,
+    # 2026-09-28; was a host List per piece, a wait and a second copy each).
+    _m3_download_addr[False](ctx, dstages.residual_out, b * l * dm, a[13])
+    _m3_download_addr[False](ctx, dstate.conv_win, b * di * D_CONV, a[11])
+    _m3_download_addr[False](ctx, dstate.h, b * di * D_STATE, a[12])
+    ctx.synchronize()
     _ = dw^
     _ = dstate^
     _ = dstages^
@@ -910,16 +913,17 @@ def _mamba2_run(
         ctx, dstages, dstate, dw, dx, b, l, dt_lo, dt_hi, trace, String("py")
     )
 
-    _write_f32(a[14], mamba_download(ctx, dstages.residual_out, b * l * dm))
+    # Straight into the caller's arrays, one wait (lane/neural-apple,
+    # 2026-09-28; was a host List per piece, a wait and a second copy each).
+    _m3_download_addr[False](ctx, dstages.residual_out, b * l * dm, a[14])
     # h_last: the REPORT stage (S17 after the final PADDED chunk), NOT
     # the resumption state -- contract section 5's distinction, kept.
-    _write_f32(a[15], mamba_download(ctx, dstages.h_last, h_n))
-    _write_f32(a[10], mamba_download(ctx, dstate.conv_win, b * cd * M2_D_CONV))
-    _write_f32(a[11], mamba_download(ctx, dstate.h, h_n))
-    _write_f32(a[12], mamba_download(ctx, dstate.buf_xbc, b * M2_CHUNK_SIZE * cd))
-    _write_f32(
-        a[13], mamba_download(ctx, dstate.buf_dtraw, b * M2_CHUNK_SIZE * nh)
-    )
+    _m3_download_addr[False](ctx, dstages.h_last, h_n, a[15])
+    _m3_download_addr[False](ctx, dstate.conv_win, b * cd * M2_D_CONV, a[10])
+    _m3_download_addr[False](ctx, dstate.h, h_n, a[11])
+    _m3_download_addr[False](ctx, dstate.buf_xbc, b * M2_CHUNK_SIZE * cd, a[12])
+    _m3_download_addr[False](ctx, dstate.buf_dtraw, b * M2_CHUNK_SIZE * nh, a[13])
+    ctx.synchronize()
     var out_len = dstate.buf_len
     _ = dw^
     _ = dstate^
