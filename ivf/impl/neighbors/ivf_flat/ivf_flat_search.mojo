@@ -95,6 +95,7 @@ from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from ivf.checks.list_layout import (
     ListLayout,
+    filter_candidate_slots,
     gather_candidate_indices,
     gather_candidate_norms,
     gather_candidate_vectors,
@@ -408,8 +409,14 @@ def ivf_flat_search_traced(
     tile_tpb: Int = PINNED_TILE_TPB,
     expand_tpb: Int = IVF_EXPAND_TPB,
     partial_storage: Bool = False,
+    keep: List[Int32] = List[Int32](),
 ) raises -> IvfSearchResult:
     """`ivf_flat::search`, `ivf_flat_search.cuh:311-374` then `:40-306`.
+
+    `keep` is the sample filter (DEVIATION 5863, `filter_candidate_slots`):
+    one int32 per ORIGINAL row id, 0 removing the row before it is scored or
+    counted. Empty is no filter. A filtered search takes the per-query path
+    below, never the one-launch scan, so an unfiltered search is untouched.
 
     Row-major `queries` of `n_queries x dim`. Returns `n_queries x k`
     distances and ORIGINAL row ids, ascending by `(distance, index)`.
@@ -445,6 +452,12 @@ def ivf_flat_search_traced(
     ivf_search_params_validate(sp, index.n_lists, n_queries, k)
     ivf_validate_data(queries, n_queries, index.dim, "queries")
     var dist_is_identity = postprocess_distances_is_identity(index.metric)
+    var filtered = len(keep) > 0
+    if filtered and len(keep) != index.n_rows:
+        raise Error(
+            "ivf_flat search: the filter holds " + String(len(keep))
+            + " flags for an index of " + String(index.n_rows) + " rows"
+        )
 
     var dim = index.dim
     var n_lists = index.n_lists
@@ -553,6 +566,7 @@ def ivf_flat_search_traced(
         if (
             not trace.enabled
             and not partial_storage
+            and not filtered
             and k <= 32
             and dim <= FIVF_MAX_DIM
         ):
@@ -676,6 +690,12 @@ def ivf_flat_search_traced(
 
         var chunks = calc_chunk_indices(list_sizes, this_probe, n_probes)
         var n_cand = n_samples_from_chunks(chunks, n_probes)
+        var kept = List[Int32]()
+        if filtered:
+            kept = filter_candidate_slots(
+                layout, merge_probed_lists(layout, this_probe, n_probes), keep
+            )
+            n_cand = len(kept)
         cand_counts.append(Int32(n_cand))
         if n_cand < k and not partial_storage:
             # DEVIATION 1794. Their `postprocess_neighbors_kernel` fills
@@ -692,6 +712,7 @@ def ivf_flat_search_traced(
                 + String(n_cand)
                 + " vectors between them, fewer than k = "
                 + String(k)
+                + (" (after the filter)" if filtered else "")
                 + ". Their kOutOfBoundsRecord short-fill"
                 " (ivf_common.cuh:106-108) is not implemented. Raise n_probes,"
                 " or lower k, or rebuild with fewer lists."
@@ -707,7 +728,11 @@ def ivf_flat_search_traced(
                 out_idx.append(UInt32(0))
             continue
 
-        var slots = merge_probed_lists(layout, this_probe, n_probes)
+        var slots: List[Int32]
+        if filtered:
+            slots = kept.copy()
+        else:
+            slots = merge_probed_lists(layout, this_probe, n_probes)
         var cand_vec = gather_candidate_vectors(layout, slots)
         var cand_orig = gather_candidate_indices(layout, slots)
         var cand_norm = gather_candidate_norms(slots, list_norm)

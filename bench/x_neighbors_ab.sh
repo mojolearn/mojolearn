@@ -7,7 +7,7 @@
 #
 # An arm is a quoted define list ("-D X -D Y") or "base" (no define). Each arm
 # rebuilds <build script> under MOJOLEARN_NUMERIC_MODE (default identical) with
-# MOJOLEARN_BUILD_EXTRA_DEFINES and runs bench/x_neighbors_speed.py --only
+# MOJOLEARN_BUILD_EXTRA_DEFINES and runs bench/x_neighbors_apple_speed.py --only
 # <cases>; the lines are prefixed `ARM <n>`. The arms run in order, then
 # again in reverse order (a drift check), and the script ends by rebuilding
 # the default so no arm binary is left in the tree for a later job.
@@ -19,7 +19,7 @@ run_arm() {
     if ! MOJOLEARN_BUILD_EXTRA_DEFINES="$defs" pixi run -e default sh "$build" >/tmp/xn_ab_build.log 2>&1; then
         echo "ARM $tag BUILD_FAIL [$defs]"; tail -5 /tmp/xn_ab_build.log; return
     fi
-    pixi run -e default python -u bench/x_neighbors_speed.py --only "$cases" --reps "$reps" --no-quality 2>&1 \
+    pixi run -e default python -u bench/x_neighbors_apple_speed.py --only "$cases" --reps "$reps" --no-quality 2>&1 \
         | sed "s/^/ARM $tag [$defs] /"
 }
 i=0

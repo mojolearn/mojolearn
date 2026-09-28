@@ -99,10 +99,28 @@ from gbdt.targets.kernel.pointwise_targets import pinned_block_sum
 from checks.numerics import ftz
 from std.gpu import block_dim, block_idx, thread_idx
 
-#: `const ui32 blockSize = 1024` (`exact_estimation.cu:107`). Metal's
-#: threadgroup limit is 1024 as well, and the reduce below is sized from
-#: this at comptime.
+#: `const ui32 blockSize = 1024` (`exact_estimation.cu:107`): the LOGICAL
+#: lane count of the need-weights sum -- the row stride and the width of the
+#: halving tree. The host oracle (`gbdt_oracle_losses.GBDT_NEED_WEIGHTS_BLOCK`)
+#: restates it.
 comptime NEED_WEIGHTS_BLOCK = 1024
+
+#: DEVIATION 6140 (2026-09-28): the PHYSICAL block of
+#: `compute_need_weights_kernel` is half the logical one; each thread runs
+#: logical lanes `tid` and `tid + 512`. At 1024 physical threads the kernel
+#: wrote nothing on the M2 Pro (every MAE / Quantile / MAPE lane DISAGREED
+#: there and only there, steward 1790571659830; M3, M4 and the MI300X
+#: AGREE): the IDENTICAL fold holds 64 + 16 floats per thread in registers,
+#: and a Metal pipeline's `maxTotalThreadsPerThreadgroup` falls with
+#: register use on a part without Dynamic Caching, so a 1024-thread
+#: dispatch is dropped with no error (the same fault as the hist_2 block,
+#: `kernel_matrix.APPLE_HIST2_SHARED_I32_BLOCK_CAP`). NO BIT MOVES under
+#: IDENTICAL: the 1024-wide halving tree's first step is exactly
+#: `red[t] + red[t + 512]`, which each thread now adds in a register, and
+#: the rest of the tree is the 512-wide halving tree. Under FAST the library
+#: `block.sum` runs at 512 over the same pairs (a different fold, FAST is
+#: not identity-bound).
+comptime NEED_WEIGHTS_THREADS = NEED_WEIGHTS_BLOCK // 2
 
 #: `const ui32 blockSize = 512` (`:127`)
 comptime WEIGHTS_WITH_TARGETS_BLOCK = 512
@@ -251,15 +269,22 @@ def compute_need_weights_kernel(
     # DEVIATION 256 / row 10 on the accumulation: weights carry no sign
     # guarantee at this type, so the chain is flushed per step like
     # `compute_target_variance_kernel`'s. Comptime no-ops under FAST.
-    var total_sum = Float32(0.0)
+    # DEVIATION 6140: logical lanes `tid` and `tid + NEED_WEIGHTS_THREADS`.
+    var lo_sum = Float32(0.0)
     var idx = tid
     while idx < size:
-        total_sum = ftz(total_sum + weights.unsafe_load(base + idx))
+        lo_sum = ftz(lo_sum + weights.unsafe_load(base + idx))
+        idx += NEED_WEIGHTS_BLOCK
+    var hi_sum = Float32(0.0)
+    idx = tid + NEED_WEIGHTS_THREADS
+    while idx < size:
+        hi_sum = ftz(hi_sum + weights.unsafe_load(base + idx))
         idx += NEED_WEIGHTS_BLOCK
 
     # IDENTITY_PATHS row 8's last site (E1 2026-08-22: gbdt_logloss's
-    # first divergent stage is leaves.estimated, this path).
-    var blocks_sum = pinned_block_sum[NEED_WEIGHTS_BLOCK](total_sum)
+    # first divergent stage is leaves.estimated, this path). The 1024-wide
+    # tree's first step, `red[t] + red[t + 512]`, then the 512-wide tree.
+    var blocks_sum = pinned_block_sum[NEED_WEIGHTS_THREADS](lo_sum + hi_sum)
     if tid == 0 and size > 0:
         # DEVIATION 256 / row 10: kernel-to-kernel seam (the quantile
         # search compares against it), flushed at the store.

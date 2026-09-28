@@ -90,6 +90,7 @@ from kernel_methods.checks.km_sabotage import (
 )
 from kernel_methods.checks.kernel_matrix import (
     KM_KERNEL_LINEAR,
+    KM_KERNEL_PRECOMPUTED,
     KM_TPB,
     km_kernel_matrix,
     km_kernel_name,
@@ -198,6 +199,59 @@ def kernel_ridge_params(model: KernelRidgeModel) -> KernelParams:
     )
 
 
+#: SCHEDULING: one thread per kernel-matrix cell.
+comptime KRR_WEIGHT_TPB = 256
+
+
+def krr_weight_kernel(
+    k_io: MutPointer[Float32, MutAnyOrigin],
+    s: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """`K *= outer(sw, sw)` (scikit-learn `_solve_cholesky_kernel`'s
+    weighted arm), one thread per cell, in float32: `ftz(ftz(K_ij) *
+    ftz(ftz(s_i) * ftz(s_j)))`, the pair product rounded first. DEVIATION
+    1688: theirs forms the outer product and the scaled cell in float64 and
+    rounds once; this rounds twice, on every vendor the same way
+    (`kmh_weight_kernel` restates it on the host)."""
+    var n = Int(n_in)
+    var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if idx >= n * n:
+        return
+    var i = idx // n
+    var j = idx - i * n
+    var w = ftz(ftz(s.unsafe_load(i)) * ftz(s.unsafe_load(j)))
+    k_io.unsafe_store(idx, ftz(ftz(k_io.unsafe_load(idx)) * w))
+
+
+def krr_scale_rows(v: List[Float32], sw: List[Float32], n: Int, t: Int) -> List[Float32]:
+    """`y * sw[:, None]` and `dual_coef *= sw[:, None]`, on the host, one
+    rounding per cell: `ftz(ftz(v) * ftz(s_i))` (`kmh_scale_rows` is the
+    same line)."""
+    var out = List[Float32](capacity=n * t)
+    for i in range(n):
+        var si = ftz(sw[i])
+        for c in range(t):
+            out.append(ftz(ftz(v[i * t + c]) * si))
+    return out^
+
+
+def krr_validate_weights(sw: List[Float32], n: Int) raises:
+    """The per-row sqrt(sample_weight) factors: n of them, finite, >= 0."""
+    if len(sw) != n:
+        raise Error(
+            "kernel_ridge_fit_host: sample weight factors hold "
+            + String(len(sw)) + " values, X has " + String(n) + " rows"
+        )
+    for i in range(n):
+        var v = sw[i]
+        if not (v >= Float32(0.0)) or v > Float32(3.4028234663852886e38):
+            raise Error(
+                "kernel_ridge_fit_host: sample weight factor " + String(i)
+                + " is negative or not finite; refused by name"
+            )
+
+
 def kernel_ridge_fit_host(
     x: List[Float32],
     y: List[Float32],
@@ -213,6 +267,7 @@ def kernel_ridge_fit_host(
     solve_tpb: Int = CHOL_SOLVE_TPB,
     ridge_tpb: Int = KRR_RIDGE_TPB,
     sabotage: Int = KMSAB_NONE,
+    sw: List[Float32] = List[Float32](),
 ) raises -> KernelRidgeModel:
     """`KernelRidge.fit(X, y)`: form `K`, ridge it, factor it, solve it.
 
@@ -239,7 +294,21 @@ def kernel_ridge_fit_host(
     """
     km_validate_matrix(x, n_samples, n_features, "kernel_ridge X")
     km_validate_matrix(y, n_samples, n_targets, "kernel_ridge y")
-    km_validate_kernel_params(kp, "kernel_ridge")
+    # kernel='precomputed': X IS the n x n kernel matrix (scikit-learn's
+    # `pairwise_kernels(X, metric='precomputed')` returns it as given).
+    var precomputed = kp.kernel == KM_KERNEL_PRECOMPUTED
+    if precomputed:
+        if n_features != n_samples:
+            raise Error(
+                "kernel_ridge_fit_host: kernel='precomputed' needs a square"
+                " kernel matrix, got " + String(n_samples) + " x "
+                + String(n_features)
+            )
+    else:
+        km_validate_kernel_params(kp, "kernel_ridge")
+    var weighted = len(sw) > 0
+    if weighted:
+        krr_validate_weights(sw, n_samples)
     if alpha != alpha:
         raise Error("kernel_ridge_fit_host: alpha is NaN; refused by name")
     if alpha < Float32(0.0):
@@ -256,7 +325,7 @@ def kernel_ridge_fit_host(
 
     # DEVIATION 2487: self-kernel operands share one uploaded allocation.
     var xa = _upload(ctx, x)
-    var dy = _upload(ctx, y)
+    var dy = _upload(ctx, krr_scale_rows(y, sw, n_samples, n_targets)) if weighted else _upload(ctx, y)
     trace.record_device(ctx, "krr.input", xa, n_samples * n_features)
 
     var dk = ctx.enqueue_create_buffer[DType.float32](n_samples * n_samples)
@@ -267,12 +336,26 @@ def kernel_ridge_fit_host(
     )
     ctx.synchronize()
 
-    km_kernel_matrix(
-        ctx, kp, dk, xa, xa, n_samples, n_samples, n_features,
-        na, nb, kws, elem_tpb, sabotage,
-    )
+    if precomputed:
+        ctx.enqueue_copy(dst_buf=dk, src_buf=xa)
+    else:
+        km_kernel_matrix(
+            ctx, kp, dk, xa, xa, n_samples, n_samples, n_features,
+            na, nb, kws, elem_tpb, sabotage,
+        )
     ctx.synchronize()
     trace.record_device(ctx, "krr.kernel", dk, n_samples * n_samples)
+    if weighted:
+        var ds = _upload(ctx, sw)
+        var cells = n_samples * n_samples
+        ctx.enqueue_function[krr_weight_kernel](
+            dk.unsafe_ptr(), ds.unsafe_ptr(), Int32(n_samples),
+            grid_dim=((cells + KRR_WEIGHT_TPB - 1) // KRR_WEIGHT_TPB, 1, 1),
+            block_dim=(KRR_WEIGHT_TPB, 1, 1),
+        )
+        ctx.synchronize()
+        trace.record_device(ctx, "krr.weighted", dk, cells)
+        _ = ds^
 
     var cws = ctx.enqueue_create_buffer[DType.float32](
         kernel_ridge_workspace_floats(n_samples)
@@ -310,6 +393,8 @@ def kernel_ridge_fit_host(
         )
 
     var dual = _download(ctx, dy, n_samples * n_targets)
+    if weighted:
+        dual = krr_scale_rows(dual, sw, n_samples, n_targets)
     _ = xa^
     _ = dy^
     _ = dk^
@@ -368,9 +453,13 @@ def kernel_ridge_predict_host(
     )
     ctx.synchronize()
 
-    km_kernel_matrix(
-        ctx, kp, dk, dq, dfit, n_query, n, d, na, nb, kws, elem_tpb, sabotage
-    )
+    if model.kernel == KM_KERNEL_PRECOMPUTED:
+        # X IS the n_query x n_samples cross-kernel matrix.
+        ctx.enqueue_copy(dst_buf=dk, src_buf=dq)
+    else:
+        km_kernel_matrix(
+            ctx, kp, dk, dq, dfit, n_query, n, d, na, nb, kws, elem_tpb, sabotage
+        )
     ctx.synchronize()
     trace.record_device(ctx, "krr.cross_kernel", dk, n_query * n)
 

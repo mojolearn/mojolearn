@@ -1,23 +1,23 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""The neighbors lane's Apple speed board (lane `neighbors-apple`).
+"""The neighbors lane's GPU speed board (GPU-speed lane, family `neighbors`).
 
-Times fit and predict of every estimator of the neighbors family (k-NN,
-radius neighbors, KDE, SVC / SVR, KernelRidge, GP regressor / classifier,
-Nystroem, RBFSampler) on the two R2 datasets (taxi and HIGGS, the first eight
-columns standardized), under the numeric mode of the environment
-(MOJOLEARN_NUMERIC_MODE). Each case runs once to load (compile caches, device
-context), then REPS timed runs; the minimum of each phase is reported. Every
-case prints a digest of its outputs, so a before and an after on IDENTICAL
-show the same bits by eye (the lane check proves it by column), and a quality
-number for the FAST check (accuracy, R^2, recall against float64 NumPy,
-mean log density, kernel approximation error).
+Times every algorithm of the family (neighbors/, svm/, kernel_methods/,
+gaussian_process/, density's KernelDensity, x_neighbors/) at a realistic
+shape on the two R2 datasets, under the numeric mode of the environment
+(MOJOLEARN_NUMERIC_MODE). The row-linear algorithms (k-NN, radius, KDE,
+NearestCentroid, the samplers, RBFSampler) run at --rows (default 1M);
+the quadratic and cubic ones (SVC/SVR, OneClassSVM, KernelRidge, KernelPCA,
+GP, label propagation, LOF) at the per-case sizes below, which are what a
+user fits them at. Each case runs once to load, then REPS timed runs; the
+minimum is reported, with a digest of the result, so a before and an after
+on IDENTICAL show the same bits by eye (the lane check proves it by column).
 
-    python bench/x_neighbors_speed.py [--dataset taxi,higgs] [--reps 3] [--only name,...] [--scale 1.0]
+    python bench/x_neighbors_speed.py [--rows 1000000] [--reps 3] [--only a,b] [--data taxi|higgs]
 
 Data: GBM_BENCH_DATA (default ~/datasets/gbm-bench), staged from R2 with
 `tools/dataset_store.sh stage` (taxi/taxi_speed.npz, higgs/higgs_speed.npz).
-Lines: `XNSPEED <dataset> <case> <fit_rows> <query_rows> <fit_s> <predict_s> <digest> <quality>`.
+Lines: `XNSPEED <case> <seconds> <digest>`.
 """
 import argparse
 import hashlib
@@ -34,212 +34,129 @@ def _root():
     return os.environ.get("GBM_BENCH_DATA", os.path.join(os.path.expanduser("~"), "datasets", "gbm-bench"))
 
 
-def _np(a):
-    if a is None:
-        return None
-    if isinstance(a, (list, tuple)):
-        return [_np(v) for v in a]
-    return np.asarray(a.to_numpy() if hasattr(a, "to_numpy") else a)
-
-
-def _digest(*vs):
+def _digest(v):
     h = hashlib.sha256()
 
-    def put(v):
-        if v is None:
-            h.update(b"-")
-        elif isinstance(v, (list, tuple)):
-            for w in v:
-                put(w)
+    def walk(x):
+        if isinstance(x, (list, tuple)):
+            for e in x:
+                walk(e)
+            return
+        if isinstance(x, dict):
+            for k in sorted(x):
+                h.update(str(k).encode())
+                walk(x[k])
+            return
+        a = np.asarray(x.toarray() if hasattr(x, "toarray") else x)
+        if a.dtype == object:
+            h.update(repr(a.tolist()).encode())
         else:
-            h.update(np.ascontiguousarray(_np(v)).tobytes())
-    for v in vs:
-        put(v)
+            h.update(np.ascontiguousarray(a).tobytes())
+    walk(v)
     return h.hexdigest()[:16]
 
 
-_CACHE = {}
+def _load(n, which):
+    if which == "taxi":
+        z = np.load(os.path.join(_root(), "taxi", "taxi_speed.npz"))
+        x = np.asarray(z["x"][:n], dtype=np.float32)
+        y = np.asarray(z["fare"][:n], dtype=np.float32)
+        lab = np.asarray(z["card"][:n]).astype(np.int64)
+    else:
+        z = np.load(os.path.join(_root(), "higgs", "higgs_speed.npz"))
+        x = np.asarray(z["x"][:n], dtype=np.float32)
+        y = x[:, 0].copy()
+        lab = np.asarray(z["y"][:n]).astype(np.int64)
+    # standardized features: every kernel / distance method is fitted on
+    # scaled inputs in practice, and raw taxi columns span 1e5
+    mu = x.mean(axis=0, dtype=np.float64)
+    sd = x.std(axis=0, dtype=np.float64) + 1e-12
+    x = ((x - mu) / sd).astype(np.float32)
+    x = np.ascontiguousarray(x[:, :16])
+    y = ((y - y.mean()) / (y.std() + 1e-12)).astype(np.float32)
+    return x, y, lab
 
 
-def load(dataset, n):
-    """(x float32 standardized [n, 8], class label int32, regression target float32)."""
-    if dataset not in _CACHE:
-        if dataset == "taxi":
-            z = np.load(os.path.join(_root(), "taxi", "taxi_speed.npz"))
-            x, yc, yr = z["x"][:, :8], z["card"].astype(np.int32), z["fare"]
-        else:
-            z = np.load(os.path.join(_root(), "higgs", "higgs_speed.npz"))
-            x = z["x"][:, :8]
-            yc = z["y"].astype(np.int32)
-            yr = z["x"][:, 8]
-        _CACHE[dataset] = (x, yc, yr)
-    x, yc, yr = _CACHE[dataset]
-    x = np.asarray(x[:n], dtype=np.float64)
-    x = (x - x.mean(0)) / np.where(x.std(0) > 0, x.std(0), 1.0)
-    yr = np.asarray(yr[:n], dtype=np.float64)
-    yr = (yr - yr.mean()) / (yr.std() or 1.0)
-    return (np.ascontiguousarray(x, dtype=np.float32), np.ascontiguousarray(yc[:n], dtype=np.int32),
-            np.ascontiguousarray(yr, dtype=np.float32))
+def cases(x, y, lab, rows):
+    import mojolearn as ml
+    from mojolearn import _expansion_neighbors as xn
+    n = min(rows, len(x))
+    X = x[:n]
+    Q = x[-10_000:]
+    lab3 = (lab % 3).astype(np.int64)
 
+    def sub(m):
+        m = min(m, len(x))
+        return x[:m], y[:m], lab[:m], lab3[:m]
 
-def _r2(y, p):
-    y = np.asarray(y, np.float64)
-    p = np.asarray(p, np.float64).reshape(y.shape)
-    return 1.0 - float(((y - p) ** 2).sum() / max(((y - y.mean()) ** 2).sum(), 1e-300))
+    X20, y20, l20, l20_3 = sub(20_000)
+    X10, y10, l10, _ = sub(10_000)
+    X5, y5, l5, _ = sub(5_000)
+    Xpos = np.abs(X) + np.float32(0.01)
+    Xmiss = X[:200_000].copy()
+    Xmiss[::7, 3] = np.nan
+    lp_y = l20.copy()
+    lp_y[1000:] = -1
 
+    def fit_predict(est, Xf, yf, Xp):
+        est.fit(Xf, yf)
+        return est.predict(Xp)
 
-def _acc(y, p):
-    return float((np.asarray(y).ravel() == np.asarray(p).ravel()).mean())
-
-
-def _knn_recall(xi, xq, ind, k, m=300):
-    """Mean recall@k of `ind` on the first `m` queries against float64 NumPy."""
-    a = xi.astype(np.float64)
-    an = (a * a).sum(1)
-    hit = 0
-    for i in range(min(m, len(xq))):
-        q = xq[i].astype(np.float64)
-        d = an - 2.0 * (a @ q)
-        ref = set(np.argpartition(d, k)[:k].tolist())
-        hit += len(ref & set(np.asarray(ind[i]).ravel().tolist()[:k]))
-    return hit / (min(m, len(xq)) * k)
-
-
-def _kernel_err(xs, feats, gamma):
-    """Relative Frobenius error of feats feats^T against exact RBF on rows xs."""
-    a = xs.astype(np.float64)
-    d = (a * a).sum(1)[:, None] + (a * a).sum(1)[None, :] - 2.0 * a @ a.T
-    k = np.exp(-gamma * np.maximum(d, 0.0))
-    f = np.asarray(feats, np.float64)
-    return float(np.linalg.norm(f @ f.T - k) / np.linalg.norm(k))
-
-
-# (name, fit rows, query rows) at scale 1
-CASES = [
-    ("nn", 200_000, 10_000),
-    ("knnc", 200_000, 10_000),
-    ("knnr", 200_000, 10_000),
-    ("radius", 100_000, 5_000),
-    ("kde", 100_000, 2_000),
-    ("svc", 10_000, 10_000),
-    ("svr", 10_000, 10_000),
-    ("krr", 10_000, 10_000),
-    ("gpr", 3_000, 3_000),
-    ("gpc", 3_000, 3_000),
-    ("nystroem", 100_000, 100_000),
-    ("rbf", 1_000_000, 1_000_000),
-]
-K = 10
-GAMMA = 0.125   # 1 / n_features on the standardized data (gamma='scale' there)
-
-
-def run_case(ml, name, x, yc, yr, xq, ycq, yrq):
-    """(fit callable, predict callable returning outputs, quality fn(outputs))."""
-    st = {}
-    if name == "nn":
-        def fit():
-            st["m"] = ml.NearestNeighbors(n_neighbors=K).fit(x)
-
-        def pred():
-            return st["m"].kneighbors(xq)
-        return fit, pred, lambda o: _knn_recall(x, xq, _np(o[1]), K)
-    if name == "knnc":
-        def fit():
-            st["m"] = ml.KNeighborsClassifier(n_neighbors=K).fit(x, yc)
-        return fit, (lambda: st["m"].predict(xq)), (lambda o: _acc(ycq, _np(o)))
-    if name == "knnr":
-        def fit():
-            st["m"] = ml.KNeighborsRegressor(n_neighbors=K).fit(x, yr)
-        return fit, (lambda: st["m"].predict(xq)), (lambda o: _r2(yrq, _np(o)))
-    if name == "radius":
-        # the radius that holds ~K neighbours of a typical query (float64, fixed rows)
-        a = x.astype(np.float64)
-        kd = []
-        for i in range(64):
-            d = ((a - xq[i].astype(np.float64)) ** 2).sum(1)
-            kd.append(np.partition(d, 3 * K)[3 * K])
-        r = float(np.sqrt(np.median(kd)))
-
-        def fit():
-            st["m"] = ml.RadiusNeighbors(radius=r).fit(x)
-
-        def pred():
-            return st["m"].radius_neighbors(xq)
-        return fit, pred, lambda o: float(np.mean([len(_np(v)) for v in o[1]]))
-    if name == "kde":
-        def fit():
-            st["m"] = ml.KernelDensity(bandwidth=0.5).fit(x)
-        return fit, (lambda: st["m"].score_samples(xq)), (lambda o: float(np.mean(_np(o))))
-    if name == "svc":
-        def fit():
-            st["m"] = ml.SVC(C=1.0, kernel="rbf", gamma=GAMMA).fit(x, yc)
-        return fit, (lambda: st["m"].predict(xq)), (lambda o: _acc(ycq, _np(o)))
-    if name == "svr":
-        def fit():
-            st["m"] = ml.SVR(C=1.0, kernel="rbf", gamma=GAMMA).fit(x, yr)
-        return fit, (lambda: st["m"].predict(xq)), (lambda o: _r2(yrq, _np(o)))
-    if name == "krr":
-        def fit():
-            st["m"] = ml.KernelRidge(alpha=1.0, kernel="rbf", gamma=GAMMA).fit(x, yr)
-        return fit, (lambda: st["m"].predict(xq)), (lambda o: _r2(yrq, _np(o)))
-    if name == "gpr":
-        def fit():
-            kern = ml.ConstantKernel(1.0) * ml.RBF(2.0) + ml.WhiteKernel(0.5)
-            st["m"] = ml.GaussianProcessRegressor(kernel=kern).fit(x, yr)
-        return fit, (lambda: st["m"].predict(xq)), (lambda o: _r2(yrq, _np(o)))
-    if name == "gpc":
-        def fit():
-            st["m"] = ml.GaussianProcessClassifier(kernel=ml.ConstantKernel(1.0) * ml.RBF(2.0)).fit(x, yc)
-        return fit, (lambda: st["m"].predict_proba(xq)), (lambda o: _acc(ycq, np.argmax(_np(o), 1)))
-    if name == "nystroem":
-        def fit():
-            st["m"] = ml.Nystroem(kernel="rbf", gamma=GAMMA, n_components=300, random_state=0).fit(x)
-        return fit, (lambda: st["m"].transform(xq)), (lambda o: _kernel_err(xq[:1000], _np(o)[:1000], GAMMA))
-    if name == "rbf":
-        def fit():
-            st["m"] = ml.RBFSampler(gamma=GAMMA, n_components=500, random_state=0).fit(x)
-        return fit, (lambda: st["m"].transform(xq)), (lambda o: _kernel_err(xq[:1000], _np(o)[:1000], GAMMA))
-    raise SystemExit(f"unknown case {name}")
+    return [
+        ("knn_kneighbors", lambda: ml.NearestNeighbors(n_neighbors=10).fit(X).kneighbors(Q)),
+        ("knn_classifier", lambda: fit_predict(ml.KNeighborsClassifier(n_neighbors=10), X, lab[:n], Q)),
+        ("knn_regressor", lambda: fit_predict(ml.KNeighborsRegressor(n_neighbors=10), X, y[:n], Q)),
+        ("radius_neighbors", lambda: ml.RadiusNeighbors(radius=0.5).fit(X).radius_neighbors(Q[:2000])),
+        ("kde_score", lambda: ml.KernelDensity(bandwidth=0.5).fit(X).score_samples(Q)),
+        ("nearest_centroid", lambda: fit_predict(xn.NearestCentroid(), X, lab[:n], X)),
+        ("rbf_sampler", lambda: ml.RBFSampler(n_components=256, random_state=0).fit(X).transform(X)),
+        ("poly_sketch", lambda: xn.PolynomialCountSketch(n_components=256, random_state=0).fit(X).transform(X)),
+        ("additive_chi2", lambda: xn.AdditiveChi2Sampler().fit(Xpos).transform(Xpos)),
+        ("skewed_chi2", lambda: xn.SkewedChi2Sampler(n_components=256, random_state=0).fit(Xpos).transform(Xpos)),
+        ("nystroem", lambda: ml.Nystroem(n_components=512, random_state=0).fit(X).transform(X)),
+        ("knn_imputer", lambda: xn.KNNImputer(n_neighbors=5).fit_transform(Xmiss)),
+        ("lof", lambda: xn.LocalOutlierFactor(n_neighbors=20).fit_predict(X[:200_000])),
+        ("svc_rbf", lambda: fit_predict(ml.SVC(kernel="rbf"), X20, l20, X20)),
+        ("svc_multiclass", lambda: fit_predict(ml.SVC(kernel="rbf"), X10, l20_3[:len(X10)], X10)),
+        ("svr_rbf", lambda: fit_predict(ml.SVR(kernel="rbf"), X20, y20, X20)),
+        ("ocsvm", lambda: xn.OneClassSVM(nu=0.1).fit(X20).predict(X20)),
+        ("kernel_ridge", lambda: fit_predict(ml.KernelRidge(kernel="rbf", alpha=1.0), X10, y10, X10)),
+        ("kernel_pca", lambda: xn.KernelPCA(n_components=8, kernel="rbf").fit_transform(X5)),
+        ("gpr", lambda: fit_predict(ml.GaussianProcessRegressor(), X5[:2000], y5[:2000], X5)),
+        ("label_spreading", lambda: xn.LabelSpreading(kernel="knn", n_neighbors=10).fit(X20, lp_y).transduction_),
+        ("label_propagation", lambda: xn.LabelPropagation(kernel="knn", n_neighbors=10).fit(X20, lp_y).transduction_),
+        ("svgp", lambda: fit_predict(xn.SVGP(n_inducing=128), X20, y20, X20)),
+    ]
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--dataset", default="taxi,higgs")
+    ap.add_argument("--rows", type=int, default=1_000_000)
     ap.add_argument("--reps", type=int, default=3)
     ap.add_argument("--only", default="")
-    ap.add_argument("--scale", type=float, default=1.0)
-    ap.add_argument("--no-quality", action="store_true")
+    ap.add_argument("--data", default="taxi", choices=("taxi", "higgs"))
     a = ap.parse_args()
-    import mojolearn as ml
-    only = set(filter(None, a.only.split(",")))
-    mode = os.environ.get("MOJOLEARN_NUMERIC_MODE", "identical")
-    print(f"# x_neighbors_speed mode={mode} reps={a.reps} scale={a.scale}", flush=True)
-    for ds in a.dataset.split(","):
-        for name, nf, nq in CASES:
-            if only and name not in only:
-                continue
-            nf, nq = max(64, int(nf * a.scale)), max(64, int(nq * a.scale))
-            x, yc, yr = load(ds, nf + nq)
-            xf, xq, ycf, ycq, yrf, yrq = x[:nf], x[nf:], yc[:nf], yc[nf:], yr[:nf], yr[nf:]
-            try:
-                fit, pred, qual = run_case(ml, name, xf, ycf, yrf, xq, ycq, yrq)
-                fit()
-                out = pred()
-                tf, tp = [], []
-                for _ in range(a.reps):
-                    t0 = time.perf_counter()
-                    fit()
-                    t1 = time.perf_counter()
-                    out = pred()
-                    t2 = time.perf_counter()
-                    tf.append(t1 - t0)
-                    tp.append(t2 - t1)
-                dg = _digest(out)
-                q = float("nan") if a.no_quality else qual(out)
-                print(f"XNSPEED {ds} {name} {nf} {nq} {min(tf):.4f} {min(tp):.4f} {dg} {q:.6f}", flush=True)
-            except Exception as e:  # a failing case must not hide the others
-                msg = str(e).splitlines()[0][:200] if str(e) else type(e).__name__
-                print(f"XNSPEED {ds} {name} {nf} {nq} FAIL {msg}", flush=True)
+    t0 = time.time()
+    x, y, lab = _load(a.rows + 10_000, a.data)
+    print("XNSPEED-DATA data=%s rows=%d load_s=%.2f mode=%s" % (
+        a.data, a.rows, time.time() - t0, os.environ.get("MOJOLEARN_NUMERIC_MODE", "default")), flush=True)
+    only = set(s for s in a.only.split(",") if s)
+    total = 0.0
+    for name, fn in cases(x, y, lab, a.rows):
+        if only and name not in only:
+            continue
+        try:
+            v = fn()
+            best = float("inf")
+            for _ in range(a.reps):
+                t = time.perf_counter()
+                v = fn()
+                best = min(best, time.perf_counter() - t)
+            total += best
+            print("XNSPEED %-20s %9.4f %s" % (name, best, _digest(v)), flush=True)
+        except Exception as e:  # a case that fails is reported, never hidden
+            print("XNSPEED %-20s   FAILED %s: %s" % (name, type(e).__name__, str(e)[:200]), flush=True)
+    print("XNSPEED-TOTAL %.4f" % total, flush=True)
 
 
 if __name__ == "__main__":

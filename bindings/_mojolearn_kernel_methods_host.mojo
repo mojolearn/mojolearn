@@ -112,8 +112,9 @@ def _kernel_ridge_fit_run(
     alpha: Float32,
     dp: MutPointer[Float32, MutUntrackedOrigin],
     sp: MutPointer[Float64, MutUntrackedOrigin],
+    sw: List[Float32],
 ) raises -> Int:
-    var dual = kmh_kernel_ridge_fit(x, y, n, d, t, kernel, degree, gamma, coef0, alpha)
+    var dual = kmh_kernel_ridge_fit(x, y, n, d, t, kernel, degree, gamma, coef0, alpha, sw)
     for i in range(n * t):
         dp.unsafe_store(i, dual[i])
     sp.unsafe_store(0, Float64(0))
@@ -128,10 +129,10 @@ def kernel_ridge_fit_binding(
     3 scalars_out (info). `params`: 0 n, 1 d, 2 t, 3 kernel, 4 degree,
     5 gamma, 6 coef0, 7 alpha. Returns `info`, 0 on every model that comes
     back."""
-    if len(addrs) != 4:
+    if len(addrs) != 4 and len(addrs) != 5:
         raise Error(
             "kernel_ridge_fit: addrs must contain 4 addresses (x, y,"
-            " dual_out, scalars_out), got "
+            " dual_out, scalars_out) and optionally sw, got "
             + String(len(addrs))
         )
     if len(params) != 8:
@@ -152,10 +153,13 @@ def kernel_ridge_fit_binding(
     var alpha = Float32(Float64(py=params[7]))
     var x = read_f32(Int(py=addrs[0]), max(0, n * d))
     var y = read_f32(Int(py=addrs[1]), max(0, n * t))
+    var sw = List[Float32]()
+    if len(addrs) == 5:
+        sw = read_f32(Int(py=addrs[4]), max(0, n))
     var info = 0
     with GILReleased(Python()):
         info = _kernel_ridge_fit_run(
-            x, y, n, d, t, kernel, degree, gamma, coef0, alpha, dp, sp
+            x, y, n, d, t, kernel, degree, gamma, coef0, alpha, dp, sp, sw
         )
     _ = x^
     _ = y^

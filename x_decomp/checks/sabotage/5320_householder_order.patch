@@ -1,0 +1,12 @@
+--- a/x_decomp/cells.mojo
++++ b/x_decomp/cells.mojo
+@@ -1178,7 +1178,8 @@
+     if mx == Float32(0):
+         return Float32(0)
+     var acc = Float32(0)
+-    for i in range(k, m):
++    for ii in range(k, m):
++        var i = m - 1 - (ii - k)  # SABOTAGE 5320: the reflector norm folds descending
+         var v = ftz(identical_div(ftz(a.unsafe_load(i * n + col)), mx))
+         acc = ftz(identical_mul_add(v, v, acc))
+     return ftz(identical_mul(sqrt0(acc), mx))

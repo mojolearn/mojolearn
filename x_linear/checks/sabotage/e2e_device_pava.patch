@@ -6,9 +6,9 @@
  from std.memory import bitcast
 +from std.sys.info import is_gpu
  from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, fmax, fmin, ld, st, ldi, sti, i2f, copy
+ from x_linear.team import Team
  
- comptime OOB_NAN = 0
-@@ -80,7 +81,10 @@
+@@ -84,7 +85,10 @@
          var sw = ld(fw, uw + i)
          while True:
              var prev_y = ld(fw, uy + k)

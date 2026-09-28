@@ -16,7 +16,7 @@ adaptive division by 5. Shuffling is ours: a splitmix64 Fisher-Yates per
 epoch on the host (the reference's is numpy's RandomState, which is not
 restated).
 """
-from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
+from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub, sumsq_fold
 from checks.numerics import ftz, identical_div, identical_exp, identical_log, identical_sigmoid, identical_tanh
 
 comptime ACT_IDENTITY = 0
@@ -101,11 +101,7 @@ def op_mlp_rowloss(t: Int, a: Args):
 
 def op_sumsq(t: Int, a: Args):
     """One thread: p1[i0] = sum_{k < i1} p0[k]^2, k ascending."""
-    var acc = Float32(0.0)
-    for k in range(a.i1):
-        var v = ld(a.p0, k)
-        acc = fma3(v, v, acc)
-    st(a.p1, a.i0, acc)
+    st(a.p1, a.i0, sumsq_fold(a.p0, 0, a.i1, 1))
 
 
 def op_mlp_bloss(t: Int, a: Args):

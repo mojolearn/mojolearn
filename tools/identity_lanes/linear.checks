@@ -28,3 +28,4 @@ glm/checks/qn_losses_check.mojo	glm/checks/sabotage/seam_708_hinge_boundary.patc
 glm/checks/qn_losses_check.mojo	glm/checks/sabotage/seam_714_l2_dlz_theirs.patch
 solver/checks/cd_check.mojo	solver/checks/sabotage/seam_610_quotient_reciprocal.patch
 solver/checks/cd_check.mojo	solver/checks/sabotage/seam_612_nan_payload.patch
+x_linear/checks/seams_check.mojo	x_linear/checks/sabotage/seam_5001b_branchless_flush.patch

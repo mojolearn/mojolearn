@@ -160,3 +160,107 @@ family owner: qn-squared and qn-absolute are now in linear.core, so checking
 them runs linear.checks (its glm/checks/qn_losses_check.mojo arms 707, 708,
 714 are QN's seams). tools/test_lane_select.py: OK, 0 failure(s) (central
 AMD box CPU, 2026-09-28).
+
+## Speed phase, branch state and OWED steps (session 6, 2026-09-28 ~05:30Z)
+
+RunPod balance negative: the RTX 4090 pod `linear` is gone and `dev_pod.sh up
+linear` is refused (do not retry until funded). Work moved to the central AMD
+box (tools/amd_central.sh, tree /root/mojolearn-linear, logs /root/ev-linear;
+taxi_speed.npz + higgs_speed.npz staged at /root/datasets/gbm-bench, staged
+with MOJOLEARN_STAGE_REMOTE_SH='sudo sh -s' because /root is 700).
+
+On lane/algos-linear, NOT on main: 5a7694809 (team fits), bbe8acdc2
+(unrolled row chains, fz_branchless + arm 5001b), 87026c636 (indexed row
+chains fold_fa_ix/fold_sq_ix/chain_fmad_ix/chain_cfmad[_ix]/fold_one_fmad;
+LogisticRegressionCV objective over the fold's training-row list, team rows
+K'+2 and iw word 4; CD CV `_prep` lists training/held-out rows in team rows
+1/2; ridge, bayes, huber, quantile X'y/Gram/sumsq on the chains; the host
+keeps U = 1, the plain loop). Both x_linear bindings BUILD on gfx942 at
+12ae19279.
+
+OWED, in order:
+1. Bits unchanged, before/after: /root/ev-linear/pair_board.sh (queued on
+   `amd_central.sh run linear` at 05:05Z, both slots were busy): board at 100k
+   rows on the WIP build (board_wip.log), then with wip_ix.patch reversed
+   (board_base.log), then restored. Every XLSPEED digest must match base vs
+   WIP and gpu vs host. If pair.log is missing, the queued run never started:
+   re-run it.
+2. Gate: `algos_lane_check.sh <the 31 x-* lanes but x-isotonic> --pass 2
+   --sabotage x_linear/checks/sabotage/e2e_device_fold.patch`, x-isotonic
+   with e2e_device_pava.patch, x-bayes-ridge-sw with
+   opt_bayes_sample_weight.patch, x-logistic-cv-w with opt_logcv_weights.patch
+   (both re-derived for the chains), plus test_x_linear_repeat and
+   test_host_surface. On AMD now; the NVIDIA + CPU run is owed once RunPod is
+   funded, then merge and one batched steward submit.
+3. Then continue IDENTICAL speed (board at 1M rows, stage timings first),
+   then FAST (paired quality check, 5 seeds x 2 datasets).
+
+## CPU speed lane (lane/linear-cpu, phases 3+4, 2026-09-28)
+
+Branch commits d4028da21..8a30fff9d (+ 3121277a1, the speed board's
+Lasso/ElasticNet import fix): the x_linear, glm/host and solver/host CPU
+schedules rewritten as map-then-fold with vector accumulators (each vector
+lane its own accumulator, every reduction folded rows ascending as before),
+one fold pass per iteration where several passes walked the same rows, and
+no per-sweep copies. SERIAL: `par_rows` runs its blocks in order until
+core/host_parallel.mojo (lane/cpu, not yet on main) lands; then par_rows
+threads through it (draft in ~/mojolearn-evidence/linear-cpu/ops_threaded.mojo).
+
+IDENTICAL CPU before -> after (central Hot Aisle box, Xeon Platinum 8470,
+shared with other lanes; host column, 1M rows, taxi/HIGGS from R2,
+`bench/x_linear_speed.py --column host`; base = origin/main 3fa29cd1f).
+Every digest is the same before and after and at MOJOLEARN_CPU_THREADS=1,
+3 and unset (21 of 21):
+
+| case | before s | after s | x |
+|---|---|---|---|
+| logistic-cv | 514.8 | 276.9 | 1.86 |
+| quantile | 411.7 | 70.8 | 5.81 |
+| tweedie | 93.2 | 62.9 | 1.48 |
+| poisson | 65.2 | 36.0 | 1.81 |
+| huber | 23.3 | 10.2 | 2.29 |
+| enet-cv | 19.3 | 13.7 | 1.42 |
+| lasso-cv | 12.4 | 7.4 | 1.69 |
+| ridge-cv | 5.93 | 5.00 | 1.19 |
+| ridge-clf | 5.33 | 0.91 | 5.87 |
+| sgd-clf | 3.18 | 2.67 | 1.19 |
+| gamma | 2.68 | 1.42 | 1.89 |
+| isotonic | 2.34 | 2.17 | 1.08 |
+| sgd-reg / sgd-ocsvm / pa-clf / pa-reg / perceptron | 1.33-1.96 | 1.17-1.83 | 1.03-1.18 |
+| bayes-ridge / ard | 1.52 / 1.62 | 0.56 / 0.65 | 2.7 / 2.5 |
+| lars / lasso-lars | 1.34 / 1.32 | 0.34 / 0.34 | 3.9 |
+
+The core models (ols, ridge, lasso, elasticnet, logistic, linear-svc/svr)
+have no host column on the board yet (run_case returns None for them).
+
+Gate (RunPod out of money, every RunPod pod gone, so no NVIDIA column):
+queued on the central AMD box, ~/mojolearn-evidence/linear-cpu/gate_amd.sh
+-> /root/ev-linear-cpu on the box: the 31 x_linear lanes --pass 2 with
+e2e_device_fold.patch; the 17 existing + qn lanes with a host sabotage
+(sab_host_linear.patch, rows descending in host_xty / HostGLM, a scaled CD
+column dot); 15 lanes again at MOJOLEARN_CPU_THREADS=1 and 3;
+test_x_linear_repeat + test_host_surface; test_lane_select; the other
+families' lanes that import glm/solver host as clean controls.
+At 05:5xZ both slots were busy (decomp, sequence); an on-box waiter
+(amd_central run, 240-min wait) starts the gate when a slot frees. Results:
+/root/ev-linear-cpu/{g1,g3,g3t1,g3t3,g4}.log, g5_*.log, gate.done.
+
+OWED (pod steps, not done): the NVIDIA column of the same gate on a RunPod
+pod `linear-cpu` once RunPod has money; the merge to main waits for it
+(gate = NVIDIA + CPU). After merge: one batched steward submit (Apple where
+still up + do-amd). Then thread par_rows through core/host_parallel.mojo
+once lane/cpu merges it.
+
+## Combined on lane/merged (2026-09-28)
+
+The speed branch (lane/algos-linear, team fits) and the CPU speed lane
+(lane/linear-cpu) are now one source on lane/merged: every fit that both
+sides rewrote keeps ONE entry point carrying the team `t` and the host's
+scratch, with `comptime if is_gpu()`: the team schedule on the device, the
+linear-cpu map-then-fold schedule on the host (same bits either way). L-BFGS
+objectives take (t, ..., sc). fw sizes in python/mojolearn/_expansion_linear.py
+are linear-cpu's (the device carries the host's scratch unused). The option
+and e2e sabotage patches were re-derived on the device (team) code. par_rows
+is still serial: threading it through core/host_parallel.mojo (lane/cpu, now
+on lane/merged) is owed and needs its own identity check. Not yet built or run
+on any GPU; details in docs/lanes/progress/merged.md.

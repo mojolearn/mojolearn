@@ -1,0 +1,13 @@
+diff --git a/x_prep/host/mutual_info.mojo b/x_prep/host/mutual_info.mojo
+index 6a8653f00..0627211b8 100644
+--- a/x_prep/host/mutual_info.mojo
++++ b/x_prep/host/mutual_info.mojo
+@@ -244,7 +244,7 @@ def _cd_column(f: FP, n: Int, zb: Int, zs: Int, sb: Int, lb: Int, ls: Int, cb: I
+             var dr = _dist(byc.x[R], xi) if hasr else BIG
+             var take_left = hasl and (not hasr or dl <= dr)
+             var dp = dl if take_left else dr
+-            if taken >= kl and dp > D:
++            if taken >= kl:  # SABOTAGE host mi: the k-th primary's ties dropped
+                 break
+             if take_left:
+                 _insert(bp, bs, kl, dp, _dsec(xi, byc.x[L], si, byc.s[L]))

@@ -48,12 +48,38 @@ def _(ml, X, yc, yr, Xh=None):
     repulsion and the gains optimizer. Train hashes the embedding and the KL.
     t-SNE has no transform of new rows, so the probe re-fits the held-out
     rows (n/a:no-save)."""
-    m = ml.TSNE(perplexity=10.0, max_iter=300, random_state=5).fit(X[:400])
+    m = ml.TSNE(perplexity=10.0, max_iter=300, init="random", random_state=5).fit(X[:400])
     return _fit(dict(embedding=_h(m.embedding_), kl=_h(np.float32(m.kl_divergence_))),
-                m, lambda e: (ml.TSNE(perplexity=10.0, max_iter=300, random_state=5).fit(Xh[:400]).embedding_,))
+                m, lambda e: (ml.TSNE(perplexity=10.0, max_iter=300, init="random",
+                                      random_state=5).fit(Xh[:400]).embedding_,))
 
 
 _batch_decl("n/a:whole-set (t-SNE embeds the whole set jointly; no row of it is computed alone)", "x-ann-tsne")
+
+
+@lane("x-ann-tsne-pca")
+def _(ml, X, yc, yr, Xh=None):
+    """TSNE with init='pca' (sklearn's default), the x-ann-tsne shape
+    otherwise: mojolearn's PCA of the 400 rows, scaled to a first-column
+    standard deviation of 1e-4 (math.fsum on the host), then the same
+    optimizer. Train hashes the PCA projection itself, the scaled start,
+    the embedding and the KL.
+
+    `ml.PCA` is named HERE, not only inside `TSNE._init`: the selector reads
+    a class imported inside a method as narrow, so without this line the
+    lane is not declared for the estimators binding, the lane check never
+    builds it, and the GPU arm refuses on a fresh box (2026-09-28)."""
+    pca = ml.PCA(n_components=2).fit_transform(np.ascontiguousarray(X[:400], dtype=np.float32))
+    m = ml.TSNE(perplexity=10.0, max_iter=300, init="pca", random_state=5)
+    y0 = m._init(np.ascontiguousarray(X[:400], dtype=np.float32), 400, 5)
+    m.fit(X[:400])
+    return _fit(dict(pca=_h(np.asarray(pca, dtype=np.float32)), init=_h(y0), embedding=_h(m.embedding_),
+                     kl=_h(np.float32(m.kl_divergence_))),
+                m, lambda e: (ml.TSNE(perplexity=10.0, max_iter=300, init="pca",
+                                      random_state=5).fit(Xh[:400]).embedding_,))
+
+
+_batch_decl("n/a:whole-set (t-SNE embeds the whole set jointly; no row of it is computed alone)", "x-ann-tsne-pca")
 
 
 @lane("x-ann-cagra")
@@ -154,3 +180,59 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_ann_batch_search, "x-ann-ivf-rabitq")
+
+
+@lane("ivf-filter")
+def _(ml, X, yc, yr, Xh=None):
+    """IVFIndex.search(filter=) (DEVIATION 5863), the `ivf` lane's index (16
+    lists, 4 probes, 4096 rows, random_state 3): every third row removed
+    before it is scored or counted; 64 queries. Train hashes the distances,
+    the ids and the candidate counts; the probe searches 64 held-out rows
+    under the same filter."""
+    keep = (np.arange(4096) % 3) != 0
+    m = ml.IVFIndex(n_lists=16, n_probes=4, n_neighbors=8, random_state=3).fit(X[:4096])
+    d, i = m.search(X[4096:4160], filter=keep)
+    return _fit(dict(dist=_h(d), idx=_h(i), cand=_h(m.n_candidates_)),
+                m, lambda e: e.search(Xh[:64], filter=keep) + (e.n_candidates_,))
+
+
+_batch_decl(_ann_batch_filter, "ivf-filter")
+
+
+@lane("x-ann-cagra-filter")
+def _(ml, X, yc, yr, Xh=None):
+    """CagraIndex.search(filter=): the x-ann-cagra index (2048 rows, degree
+    16, itopk 32), every third row removed after the traversal over the
+    itopk buffer; 64 queries. Train hashes the graph and the filtered
+    distances and ids."""
+    keep = (np.arange(2048) % 3) != 0
+    m = ml.CagraIndex(graph_degree=16, intermediate_graph_degree=32, n_neighbors=8, itopk_size=32,
+                      n_seeds=16).fit(X[:2048])
+    d, i = m.search(X[2048:2112], filter=keep)
+    return _fit(dict(graph=_h(m.graph_), dist=_h(d), idx=_h(i)), m, lambda e: e.search(Xh[:64], filter=keep))
+
+
+def _ann_batch_cagra_filter(ml, e, Xh):
+    keep = (np.arange(2048) % 3) != 0
+    return [_BatchRows("search", Xh[:64], lambda r: e.search(r, filter=keep))]
+
+
+_batch_decl(_ann_batch_cagra_filter, "x-ann-cagra-filter")
+
+
+@lane("x-ann-refine-euclidean")
+def _(ml, X, yc, yr, Xh=None):
+    """refine(metric='euclidean'): the x-ann-refine shape, with the root of
+    each selected squared distance (numpy float32 sqrt on the host)."""
+    d, i = ml.refine(X[64:4160], X[:64], _ann_cands(64), 8, metric="euclidean")
+    return _fit(dict(dist=_h(d), idx=_h(i)))
+
+
+def _ann_batch_refine_euclidean(ml, e, Xh):
+    c = _ann_cands(64)
+    rows = np.arange(64, dtype=np.int64).reshape(64, 1)
+    return [_BatchRows("refine", rows,
+                       lambda r: ml.refine(Xh[64:4160], Xh[:64][r[:, 0]], c[r[:, 0]], 8, metric="euclidean"))]
+
+
+_batch_decl(_ann_batch_refine_euclidean, "x-ann-refine-euclidean")

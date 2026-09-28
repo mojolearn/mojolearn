@@ -701,6 +701,16 @@ def as_f32_c(obj, *, ndim=2, name):
     return _as_typed(obj, "<f4", "C", ndim, name)
 
 
+def as_f32_dense_c(obj, *, ndim=2, name):
+    """`as_f32_c` that also takes a scipy.sparse matrix, densified first (an
+    exact copy: the implicit entries are zeros), so a sparse input takes its
+    dense twin's path and bits. For the estimators whose reference accepts
+    sparse X and whose kernels here are dense (the neighbors family)."""
+    if hasattr(obj, "toarray") and hasattr(obj, "nnz") and hasattr(obj, "tocsr"):
+        obj = obj.toarray()
+    return as_f32_c(obj, ndim=ndim, name=name)
+
+
 def as_f32_colmajor(obj, *, name):
     """A COLUMN-MAJOR float32 2-D Array of `obj`, at most one copy.
 

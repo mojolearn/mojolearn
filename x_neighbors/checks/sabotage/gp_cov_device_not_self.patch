@@ -1,0 +1,12 @@
+diff --git a/gaussian_process/estimator.mojo b/gaussian_process/estimator.mojo
+--- a/gaussian_process/estimator.mojo
++++ b/gaussian_process/estimator.mojo
+@@ -1305,7 +1305,7 @@
+     var vtv = _download(ctx, dvtv, n_star * n_star)
+     gp_kernel_matrix(
+         ctx, dkss, dxs, dxs, dls, dstack2, n_star, n_star, d,
+-        model.kernel, True, trace, "gp.cov.kss", elem_tpb,
++        model.kernel, False, trace, "gp.cov.kss", elem_tpb,
+     )
+     var kss = _download(ctx, dkss, n_star * n_star)
+     _ = dx^

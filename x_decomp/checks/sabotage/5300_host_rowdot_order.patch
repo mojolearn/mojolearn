@@ -1,0 +1,14 @@
+diff --git a/x_decomp/host_simd.mojo b/x_decomp/host_simd.mojo
+index 1fdd8d96f..fb44dccab 100644
+--- a/x_decomp/host_simd.mojo
++++ b/x_decomp/host_simd.mojo
+@@ -226,7 +226,8 @@ def rowdot_task(t: Int, a: F32Ptr, b: F32Ptr, c: F32Ptr, m: Int, k: Int):
+             var p1 = min(k, p0 + FOLD_BLOCK)
+             var acc = InlineArray[Float32, RI](fill=Float32(0))
+             if rows == RI:
+-                for p in range(p0, p1):
++                for pq in range(p0, p1):
++                    var p = p1 - 1 - (pq - p0)  # SABOTAGE 5300 (host row-dot): each row's chain descending
+                     var y = _ftz1(b.unsafe_load(p))
+                     comptime for r in range(RI):
+                         acc[r] = _ftz1(mul_add_v[1](_ftz1(a.unsafe_load((i + r) * k + p)), y, acc[r]))

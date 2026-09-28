@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""What turns a distribution into an answer: percentile, basic, BCa (refused),
+"""What turns a distribution into an answer: percentile, basic, BCa,
 the jackknife, the standard error and the permutation p-value.
 
 NO UPSTREAM KERNEL. `scipy/stats/_resampling.py` defines the SEMANTICS of
@@ -36,9 +36,11 @@ ddof, `statistics.mojo`'s header for why two-pass).
 
 ================= DEVIATION BLOCK =================
 
-DEVIATION 1699. **BCa IS REFUSED BY NAME, IN BOTH MODES, AND THE REASON IS ONE
-FUNCTION.** `method='BCa'` raises. What survives, is computed, and is recorded
-on the card is everything BCa needs EXCEPT its last two lines.
+DEVIATION 1699. **BCa, CLOSED 2026-09-28 BY DEVIATION 5410.** Until then
+`method='BCa'` was refused by name in both modes for want of one function,
+`ndtri`; it now ships for the three statistics that have a jackknife arm
+(mean, std, diff_means) and is refused by name for the others
+(`bca_validate`).
 
 WHAT SciPy DOES (`_resampling.py::_bca_interval`):
 
@@ -64,31 +66,19 @@ WHAT IS IDENTICAL HERE AND IS SHIPPED AS A COMPUTED QUANTITY:
     exp/log chain, so it is one fewer construction to certify and strictly
     fewer roundings.
 
-WHAT IS NOT IDENTICAL AND IS THE WHOLE OF THE REFUSAL: **`ndtri`, the inverse
-normal CDF.** `checks/numerics.mojo` has `portable_erff` / `identical_erf`
-(so `ndtr(x) = (1 + erf(x/sqrt(2)))/2` IS available), and it has no inverse of
-anything. SciPy's `ndtri` is Cephes' float64 rational approximation with three
-coefficient tables and a branch at `p = 0.135`. Re-deriving it in float32
-would be a NEW numeric construction with a new error budget that has never
-been measured on any vendor, written by a lane that is not allowed to run a
-build. IDENTITY_PATHS' opening rule gives exactly three moves -- PIN, REPLACE,
-REFUSE -- and there is no fourth called "write a polynomial and hope".
-
-WHY THE REFUSAL IS IN BOTH MODES AND NOT ONLY UNDER IDENTICAL. A FAST-only BCa
-would be a method that silently exists on one build and not the other, which
-is how a user comes to believe an interval is reproducible when it is not.
-There is no FAST arm to preserve here (nothing was ever shipped), so refusing
-in both modes costs nothing and removes the ambiguity. This is a departure
-from the usual shape of a REFUSE row and it is deliberate.
-
-THE CLOSURE CONDITION, so this refusal has an owner and an end: land
-`portable_ndtri` / `identical_ndtri` in `checks/numerics.mojo` beside
-`portable_erff`, gate it the way `check-division` gates `portable_divf` (a
-hashed sweep against a float64 route, on every vendor), then delete
-`bca_refuse` and turn `check_resample_refusals`' BCa clause into a
-`check_bca_interval` against a hand-worked example. `bca_bias_percentile`,
-`jackknife_stat_kernel` and `bca_acceleration` are already written and already
-gated, so the closure is one function plus two lines.
+THE LAST TWO LINES (`bca_interval`): `ndtri` and `ndtr` are
+`checks/numerics.mojo`'s `identical_ndtri` (Wichura's AS 241 PPND7) and
+`identical_ndtr` (`0.5 (1 + erf(x / sqrt 2))` through `portable_erff`),
+DEVIATION 5410 / IDENTITY_PATHS row 220, certified the way `check-division`
+certifies `portable_divf`: `pixi run check-ndtri` hashes 2^20 inputs per
+function host and device bit for bit and bounds them against a float64
+oracle (ndtri <= 8 ulps, ndtr <= 1.5e-7 absolute). SciPy's `ndtri` is
+Cephes' float64 approximation, so an endpoint here agrees with SciPy's to
+float32 accuracy, not bit for bit; across OUR columns it is bit for bit.
+Where SciPy returns NaN endpoints with a DegenerateDataWarning (a bias
+percentile of 0 or 1, a NaN adjusted level, a constant jackknife) this lane
+refuses by name. It is shipped in both modes: the construction is the same
+sequence of seams, so FAST is those seams' FAST arms.
 
 DEVIATION 1700. THE JACKKNIFE'S FOLD KEEPS THE FULL n-SLOT LAYOUT. Leaving
 observation `i` out is spelled as `+0.0` in slot `i` of the ordinary
@@ -139,7 +129,14 @@ from metrics.checks.pinned_sum import (
     host_tree_sum,
     virtual_block_sum,
 )
-from checks.numerics import ftz, identical_div, identical_mul, identical_sqrt
+from checks.numerics import (
+    ftz,
+    identical_div,
+    identical_mul,
+    identical_ndtr,
+    identical_ndtri,
+    identical_sqrt,
+)
 from resample.checks.statistics import (
     STAT_DIFF_MEANS,
     STAT_MEAN,
@@ -184,9 +181,8 @@ def method_from_name(name: String) raises -> Int:
     raise Error(
         "bootstrap: unknown method '"
         + name
-        + "'. SciPy's three are 'percentile', 'basic' and 'BCa'; this lane"
-        " ships the first two and REFUSES the third by name (DEVIATION 1699,"
-        " intervals.mojo)."
+        + "'. SciPy's three are 'percentile', 'basic' and 'BCa' (DEVIATION"
+        " 1699, intervals.mojo)."
     )
 
 
@@ -227,29 +223,35 @@ def alternative_name(alt: Int) -> String:
     return String("?")
 
 
-def bca_refuse() raises:
-    """DEVIATION 1699. The whole refusal, in one place, so the wording is the
-    same wherever a BCa request arrives."""
-    raise Error(
-        "bootstrap: NUMERIC_IDENTICAL and NUMERIC_FAST both REFUSE"
-        " method='BCa'. Its two endpoints are ndtr(z0 + (z0 + z_alpha)/(1 -"
-        " a_hat*(z0 + z_alpha))) with z_alpha = ndtri(alpha), and ndtri --"
-        " the INVERSE normal CDF -- has no portable construction in"
-        " checks/numerics.mojo. SciPy's is a Cephes float64 rational"
-        " approximation; a float32 re-derivation would be a new numeric"
-        " construction with an error budget nobody has measured on any"
-        " vendor, and IDENTITY_PATHS' opening rule offers PIN, REPLACE and"
-        " REFUSE and no fourth move. Everything BCa needs BESIDES ndtri is"
-        " built, identical and recorded on the card: the bias percentile"
-        " (integer counting, resample.bca.z0p), the leave-one-out jackknife"
-        " (the pinned tree, resample.jackknife) and the acceleration"
-        " (resample.bca.ahat). To close this refusal: land"
-        " portable_ndtri/identical_ndtri in checks/numerics.mojo beside"
-        " portable_erff, gate it the way check-division gates portable_divf,"
-        " then delete bca_refuse and gate the endpoints against a hand-worked"
-        " example. Today: use method='percentile' or method='basic', both of"
-        " which are shipped and gated."
-    )
+def bca_validate(statistic: Int, n: Int) raises:
+    """DEVIATION 1699 (closed 2026-09-28 by DEVIATION 5410): what BCa can be
+    asked for, in one place so the wording is the same on the device path and
+    the host. The jackknife has arms for `mean`, `std` and `diff_means`
+    (`jackknife_stat_kernel`); the order statistics (`quantile`,
+    `trimmed_mean`) would need a per-leave-one-out sort and `pearson` a
+    two-pass paired arm, so those three are REFUSED BY NAME for BCa (SciPy
+    computes them)."""
+    if statistic != STAT_MEAN and statistic != STAT_STD and statistic != STAT_DIFF_MEANS:
+        raise Error(
+            "bootstrap: method='BCa' is REFUSED BY NAME for statistic '"
+            + stat_name(statistic)
+            + "': its acceleration needs the n leave-one-out statistics, and"
+            " the jackknife has arms for mean, std and diff_means only"
+            " (jackknife_stat_kernel; an order statistic needs a per-sample"
+            " sort, pearson a paired two-pass arm). Use method='percentile'"
+            " or 'basic' for this statistic."
+        )
+    var need = 3 if statistic == STAT_STD else 2
+    if n < need:
+        raise Error(
+            "bootstrap: method='BCa' needs at least "
+            + String(need)
+            + " observations for statistic '"
+            + stat_name(statistic)
+            + "' (each leave-one-out sample must itself have a statistic);"
+            " got n="
+            + String(n)
+        )
 
 
 # ===========================================================================
@@ -445,9 +447,8 @@ def permutation_pvalue(
 
 
 # ===========================================================================
-# BCa's identical half: the bias percentile, the jackknife, the acceleration
-#
-# Computed, recorded and gated. The ENDPOINTS are refused (DEVIATION 1699).
+# BCa: the bias percentile, the jackknife, the acceleration, the endpoints
+# (DEVIATION 1699, closed by DEVIATION 5410)
 # ===========================================================================
 
 
@@ -496,9 +497,9 @@ def jackknife_stat_kernel[stat: Int, tpb: Int](
     one tree for every `i`.
 
     Three arms, matching what BCa is ever asked for here: `mean`, `std`
-    (ddof=1) and the paired `diff_means`. The order statistics have no
-    jackknife arm because BCa is refused anyway; when DEVIATION 1699 closes,
-    they are the first thing to add and they need the sort path.
+    (ddof=1) and the paired `diff_means`. The order statistics and pearson
+    have no jackknife arm, so BCa refuses them by name (`bca_validate`); an
+    order statistic's arm needs the sort path.
     """
     comptime assert (
         stat == STAT_MEAN or stat == STAT_STD or stat == STAT_DIFF_MEANS
@@ -574,6 +575,18 @@ def bca_acceleration(theta_jack: List[Float32], n: Int) raises -> Float32:
     FACT 2's reason -- `resample.bca.ahat` is a recorded stage and a
     computed NaN there would carry the vendor's payload.
     """
+    var m = _bca_moments(theta_jack, n)
+    return _bca_accel_of(m.num, m.den)
+
+
+@fieldwise_init
+struct _BcaMoments(ImplicitlyCopyable, Movable):
+    var num: Float32
+    var den: Float32
+
+
+def _bca_moments(theta_jack: List[Float32], n: Int) raises -> _BcaMoments:
+    """One sample's `sum U^3 / n^3` and `sum U^2 / n^2` (`_bca_interval`)."""
     if n < 2:
         raise Error(
             "bootstrap: the BCa acceleration needs at least 2 observations;"
@@ -593,6 +606,10 @@ def bca_acceleration(theta_jack: List[Float32], n: Int) raises -> Float32:
     var n3 = ftz(identical_mul(n2, nf))
     var num = ftz(identical_div(host_tree_sum(u3, n), n3))
     var den = ftz(identical_div(host_tree_sum(u2, n), n2))
+    return _BcaMoments(num, den)
+
+
+def _bca_accel_of(num: Float32, den: Float32) raises -> Float32:
     if den == Float32(0.0):
         raise Error(
             "bootstrap: the BCa acceleration is 0/0 -- every leave-one-out"
@@ -606,9 +623,86 @@ def bca_acceleration(theta_jack: List[Float32], n: Int) raises -> Float32:
     return ftz(identical_div(ftz(identical_div(num, den32)), Float32(6.0)))
 
 
+def bca_acceleration_two(
+    jack_0: List[Float32], n_0: Int, jack_1: List[Float32], n_1: Int
+) raises -> Float32:
+    """SciPy's multi-sample acceleration (`_bca_interval`, paired=False):
+    `a_hat = (1/6) (num_0 + num_1) / (den_0 + den_1)^(3/2)`, each sample's
+    moments over ITS OWN leave-one-out statistics (the other sample whole),
+    the two sums added in sample order."""
+    var m0 = _bca_moments(jack_0, n_0)
+    var m1 = _bca_moments(jack_1, n_1)
+    return _bca_accel_of(ftz(m0.num + m1.num), ftz(m0.den + m1.den))
+
+
+@fieldwise_init
+struct BcaEnds(ImplicitlyCopyable, Movable):
+    """BCa's two adjusted levels, the interval read at them, and z0."""
+
+    var alpha_1: Float32
+    var alpha_2: Float32
+    var z0: Float32
+    var interval: Interval
+
+
+def bca_interval(
+    sorted_dist: List[Float32],
+    n_resamples: Int,
+    alpha: Float32,
+    z0p: Float32,
+    a_hat: Float32,
+) raises -> BcaEnds:
+    """SciPy's `_bca_interval` endpoints, then `bootstrap`'s percentile read
+    at them (DEVIATION 1699 closed by DEVIATION 5410):
+
+        z0      = ndtri(z0p)                      z0p = bca_bias_percentile
+        z_alpha = ndtri(alpha)                    z_1alpha = -z_alpha
+        alpha_1 = ndtr(z0 + (z0 + z_alpha ) / (1 - a_hat (z0 + z_alpha )))
+        alpha_2 = ndtr(z0 + (z0 + z_1alpha) / (1 - a_hat (z0 + z_1alpha)))
+        ci      = quantile(theta_hat_b, alpha_1), quantile(theta_hat_b, alpha_2)
+
+    `ndtri` / `ndtr` are checks/numerics.mojo's `identical_ndtri` /
+    `identical_ndtr` (one construction, certified by check-ndtri); every other
+    operation is one flushed add or an `identical_mul` / `identical_div`, each
+    rounded on its own, in SciPy's order. The quantile is the same pinned
+    type-7 rule the percentile interval reads (DEVIATION 1698).
+
+    REFUSED where SciPy returns NaN and warns ("The BCa confidence interval
+    cannot be calculated"): z0p of 0 or 1 (every replicate on one side of the
+    point estimate, so z0 is infinite) and an adjusted level that is NaN.
+    A NaN endpoint would carry the vendor's payload onto a recorded stage
+    (IDENTITY_PATHS row 39 FACT 2)."""
+    if not (z0p > Float32(0.0) and z0p < Float32(1.0)):
+        raise Error(
+            "bootstrap: the BCa interval cannot be calculated: the bias"
+            " percentile is " + String(z0p) + " (every bootstrap replicate"
+            " lies on one side of the point estimate), so z0 = ndtri(z0p) is"
+            " infinite. SciPy returns NaN endpoints with a"
+            " DegenerateDataWarning here; this lane refuses. Use"
+            " method='percentile' or more resamples."
+        )
+    var z0 = identical_ndtri(z0p)
+    var z_alpha = identical_ndtri(alpha)
+    var num1 = ftz(z0 + z_alpha)
+    var num2 = ftz(z0 - z_alpha)
+    var den1 = ftz(Float32(1.0) - ftz(identical_mul(a_hat, num1)))
+    var den2 = ftz(Float32(1.0) - ftz(identical_mul(a_hat, num2)))
+    var alpha_1 = identical_ndtr(ftz(z0 + ftz(identical_div(num1, den1))))
+    var alpha_2 = identical_ndtr(ftz(z0 + ftz(identical_div(num2, den2))))
+    if alpha_1 != alpha_1 or alpha_2 != alpha_2:
+        raise Error(
+            "bootstrap: the BCa interval cannot be calculated: an adjusted"
+            " level is NaN (z0 = " + String(z0) + ", a_hat = " + String(a_hat)
+            + "). SciPy returns NaN endpoints here; this lane refuses."
+        )
+    var lo = quantile_of_sorted_host(sorted_dist, 0, n_resamples, alpha_1)
+    var hi = quantile_of_sorted_host(sorted_dist, 0, n_resamples, alpha_2)
+    return BcaEnds(alpha_1, alpha_2, z0, Interval(lo, hi))
+
+
 def bca_arm_name(stat: Int) -> String:
-    """Which jackknife arm a statistic would use if DEVIATION 1699 closed.
-    Used by the refusal's diagnostics and by the card header."""
+    """Which jackknife arm BCa uses for a statistic (DEVIATION 1699). Used by
+    the card header."""
     if stat == STAT_MEAN or stat == STAT_STD or stat == STAT_DIFF_MEANS:
         return stat_name(stat)
     return String("none (order statistic; needs the sort path)")

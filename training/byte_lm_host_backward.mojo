@@ -7,7 +7,8 @@ inside an oracle that is already the normative answer of its own profile:
 
     embedding forward      emb_forward_oracle
     each block forward     transformer_block_oracle
-    head                   gemm_oracle, OP_NT
+    head                   gemm_oracle, OP_NT (through gemm_host_rows, its bits at
+                           CPU speed)
     loss and its gradient  ce_forward_oracle, ce_backward_oracle
     head backward          _gemm_bwd_a / _gemm_bwd_b (host, over gemm_oracle)
     each block backward    transformer_block_backward_oracle
@@ -36,8 +37,11 @@ The forward here therefore retains both per layer instead of overwriting one
 running activation, exactly as the device step keeps `tr.forward[layer]` and
 passes `tr.forward[layer - 1].residual2` down.
 
-NO THREADING, NO FAST PATH. This is the reference path's shape: one thread,
-the oracles as written. The threaded host forward (DEVIATION 2640) has no
+NO THREADING, NO FAST PATH, in this file. This is the reference path's shape:
+the oracles as written. (Since lane neural-cpu, 2026-09-28, the oracles'
+GEMMs run through `gemm/host/gemm_host_rows.mojo`, which computes
+`gemm_oracle`'s bits, including its fixed leaf-and-tree fold over the token
+axis, whatever the thread count.) The threaded host forward (DEVIATION 2640) has no
 backward twin, and it must not grow one by accident: a weight gradient sums
 over every row of the batch, so unlike the forward it crosses every thread
 boundary, and a threaded version needs a fixed cross thread fold rather than
@@ -50,6 +54,7 @@ twice. A pass here is a statement at the shape it ran at.
 """
 
 from gemm.host.identical_gemm import OP_NT, gemm_oracle
+from gemm.host.gemm_host_rows import gemm_host_rows
 from embedding.checks.embedding_oracle import (
     EmbConfig,
     emb_backward_oracle,
@@ -186,7 +191,7 @@ def byte_host_gradient(params: List[Float32], ids: List[Int32],
     # ---- head, loss, and the loss gradient --------------------------------
     var head_id = config.n_tensors() - 1
     var lm_w = _byte_host_slice(params, offsets, head_id)
-    var logits = gemm_oracle(x, lm_w, OP_NT, m, v, dm)
+    var logits = gemm_host_rows(x, lm_w, OP_NT, m, v, dm)
     var ce = ce_forward_oracle(logits, targets, ce_cfg)
     ce_backward_oracle(ce, targets, ce_cfg)
     var loss = ce.loss[0]

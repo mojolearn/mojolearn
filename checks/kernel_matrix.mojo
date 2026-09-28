@@ -969,13 +969,34 @@ def partition_chunks_sm_for[identical: Bool](device_sm: Int) -> Int:
         return device_sm
 
 
+#: The Apple cap on the shared-Int32 hist_2 block (2026-09-28). At 512
+#: threads the M2 Pro's hist_2 one-byte DISPATCH arm wrote NOTHING (every
+#: cell 0.0, so every tree was `depth 1`, `split 0 0 0 0`; steward probe
+#: 1790561718113), while the M3 and M4 ran the same kernel correctly. It is
+#: NOT the threadgroup budget or the block as such: on the same M2 a
+#: synthetic kernel runs blocks 256..1024 with the full 32 KB of Int32
+#: threadgroup memory correctly, and the PASS one-byte family is exact at
+#: 512 (probe 1790571345780). The likely limit (INFERRED, not read: Mojo
+#: cannot read pipeline attributes on Metal) is this pipeline's
+#: `maxTotalThreadsPerThreadgroup`, which on a part without Dynamic Caching
+#: (M2 and older) falls with register use; Metal drops a dispatch above it
+#: with no error. At 256 (16 KB) the same probe's hist2_check reads 0 wrong
+#: cells on every arm it printed (bits 5 and 6). The accumulation is Int32 fixed point and the flush adds
+#: Int32 cells, so the histogram does not depend on the block: no bit
+#: moves, only the grid (proved on the MI300X by forcing 256 everywhere).
+comptime APPLE_HIST2_SHARED_I32_BLOCK_CAP = 256
+
+
 def hist2_block_size_for[column: Int, smem_mode: Int]() -> Int:
     """SCHEDULING row bounded by the NUMERIC budget, per accumulation mode."""
 
     comptime hard = column_max_block_size(column)
     comptime if smem_mode == HIST_SMEM_SHARED2_I32:
         comptime limit = column_shared_limit(column) // 64
-        comptime by_smem = 512 if limit >= 512 else limit
+        comptime want = (
+            APPLE_HIST2_SHARED_I32_BLOCK_CAP if column == COLUMN_APPLE else 512
+        )
+        comptime by_smem = want if limit >= want else limit
         return by_smem if by_smem < hard else hard
     else:
         return block_size_for[K_HIST_2_ONE_BYTE, column]()

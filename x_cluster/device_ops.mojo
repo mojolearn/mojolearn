@@ -31,6 +31,7 @@ from x_cluster.bodies import (
     xk_cell,
     ap_availability_col,
     ap_exemplar_cell,
+    ap_noise_cell,
     ap_responsibility_row,
     meanshift_seed,
     nearest_row,
@@ -148,6 +149,12 @@ def _ap_a_kernel(r: FPtr, a: FPtr, n: Int32, damping: Float32):
     var t = _tid()
     if t < Int(n):
         ap_availability_col(r, a, Int(n), damping, t)
+
+
+def _ap_noise_kernel(s: FPtr, m: Int, seed: UInt64):
+    var t = _tid()
+    if t < m:
+        ap_noise_cell(s, seed, t)
 
 
 def _ap_e_kernel(a: FPtr, r: FPtr, n: Int32, e: IPtr):
@@ -454,6 +461,11 @@ struct DeviceOps(ClusterOps):
         self.ctx.enqueue_function[_ap_a_kernel](
             self._fp(r), self._fp(a), Int32(n), damping, grid_dim=_grid(n), block_dim=TPB,
         )
+
+    def ap_noise(mut self, s: Int, m: Int, seed: UInt64) raises:
+        if m <= 0:
+            return
+        self.ctx.enqueue_function[_ap_noise_kernel](self._fp(s), m, seed, grid_dim=_grid(m), block_dim=TPB)
 
     def ap_e(mut self, a: Int, r: Int, n: Int, e: Int) raises:
         self.ctx.enqueue_function[_ap_e_kernel](

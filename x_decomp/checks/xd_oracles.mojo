@@ -772,3 +772,165 @@ def oracle_als(c: List[Float32], y: List[Float32], n: Int, m: Int, f: Int, reg: 
         for q in range(f):
             out[u * f + q] = bv[q]
     return out^
+
+
+def oracle_geqrf(a_in: List[Float32], m: Int, n: Int, alt: Int = 0) -> Tuple[List[Float32], List[Float32]]:
+    """LAPACK geqrf restated (DEVIATION 5320): per column k, dlarfg on
+    (a[k, k], a[k+1:, k]) with the norm scaled by the largest |entry|, its
+    squares ascending (alt 1: descending), beta = -sign(alpha) ||.||, then
+    H_k applied to every later column with w = a[k, j] + sum_{i>k} v_i
+    a[i, j] ascending (alt 1: descending). Returns (h, tau)."""
+    var a = a_in.copy()
+    var kk = m if m < n else n
+    var tau = List[Float32](length=kk, fill=Float32(0))
+    for k in range(kk):
+        var alpha = ftz(a[k * n + k])
+        var xmax = Float32(0)
+        for i in range(k + 1, m):
+            if abs(ftz(a[i * n + k])) > xmax:
+                xmax = abs(ftz(a[i * n + k]))
+        if xmax == Float32(0):
+            continue
+        var mx = Float32(0)
+        for i in range(k, m):
+            if abs(ftz(a[i * n + k])) > mx:
+                mx = abs(ftz(a[i * n + k]))
+        var acc = Float32(0)
+        for ii in range(m - k):
+            var i = (m - 1 - ii) if alt == 1 else (k + ii)
+            var v = ftz(identical_div(ftz(a[i * n + k]), mx))
+            acc = o_fma(v, v, acc)
+        var nrm = ftz(identical_mul(o_sqrt0(acc), mx))
+        var beta = -nrm if alpha >= Float32(0) else nrm
+        tau[k] = o_div0(o_sub(beta, alpha), beta)
+        var scale = o_sub(alpha, beta)
+        for i in range(k + 1, m):
+            a[i * n + k] = o_div0(a[i * n + k], scale)
+        a[k * n + k] = beta
+        for j in range(k + 1, n):
+            var w = ftz(a[k * n + j])
+            for ii in range(m - k - 1):
+                var i = (m - 1 - ii) if alt == 1 else (k + 1 + ii)
+                w = o_fma(a[i * n + k], a[i * n + j], w)
+            var tw = o_mul(tau[k], w)
+            a[k * n + j] = o_sub(a[k * n + j], tw)
+            for i in range(k + 1, m):
+                a[i * n + j] = o_fma(-tw, a[i * n + k], a[i * n + j])
+    return (a^, tau^)
+
+
+def oracle_orgqr(h: List[Float32], tau: List[Float32], m: Int, n: Int, kk: Int, qc: Int, alt: Int = 0) -> List[Float32]:
+    """orgqr restated (DEVIATION 5320): column j of Q is e_j with H_{kk-1},
+    ..., H_0 applied in that order (alt 2: H_0 first), each w = x[k] + sum
+    v_i x[i] ascending (alt 1: descending)."""
+    var q = List[Float32](length=m * qc, fill=Float32(0))
+    for j in range(qc):
+        var x = List[Float32](length=m, fill=Float32(0))
+        x[j] = Float32(1)
+        for r in range(kk):
+            var k = r if alt == 2 else kk - 1 - r
+            var t = ftz(tau[k])
+            if t == Float32(0):
+                continue
+            var w = ftz(x[k])
+            for ii in range(m - k - 1):
+                var i = (m - 1 - ii) if alt == 1 else (k + 1 + ii)
+                w = o_fma(h[i * n + k], x[i], w)
+            var tw = o_mul(t, w)
+            x[k] = o_sub(x[k], tw)
+            for i in range(k + 1, m):
+                x[i] = o_fma(-tw, h[i * n + k], x[i])
+        for i in range(m):
+            q[i * qc + j] = x[i]
+    return q^
+
+
+def _o_ytyx(yty: List[Float32], reg: Float32, v: List[Float32], f: Int, sign: Float32) -> List[Float32]:
+    var res = List[Float32](length=f, fill=Float32(0))
+    for j in range(f):
+        var acc = Float32(0)
+        for l in range(f):
+            var e = ftz(yty[j * f + l])
+            if l == j:
+                e = o_add(e, reg)
+            acc = o_fma(e, v[l], acc)
+        res[j] = o_mul(sign, acc)
+    return res^
+
+
+def _o_ydot(y: List[Float32], i: Int, v: List[Float32], f: Int) -> Float32:
+    var acc = Float32(0)
+    for j in range(f):
+        acc = o_fma(y[i * f + j], v[j], acc)
+    return acc
+
+
+def _o_vdot(a: List[Float32], b: List[Float32], rev: Bool) -> Float32:
+    var acc = Float32(0)
+    for jj in range(len(a)):
+        var j = len(a) - 1 - jj if rev else jj
+        acc = o_fma(a[j], b[j], acc)
+    return acc
+
+
+def oracle_als_cg(c: List[Float32], y: List[Float32], x0: List[Float32], n: Int, m: Int, f: Int, reg: Float32,
+                  steps: Int, alt: Int = 0) -> List[Float32]:
+    """implicit's `_least_squares_cg` restated (DEVIATION 5321): YtY items
+    ascending, r = b - (YtY + reg I) x over the items ascending, then
+    `steps` CG steps with every dot ascending in the factor index (alt 1:
+    the p.Ap dot descending)."""
+    var yty = List[Float32](length=f * f, fill=Float32(0))
+    for a in range(f):
+        for b in range(f):
+            var acc = Float32(0)
+            for i in range(m):
+                acc = o_fma(y[i * f + a], y[i * f + b], acc)
+            yty[a * f + b] = acc
+    var out = x0.copy()
+    for u in range(n):
+        var x = List[Float32](length=f, fill=Float32(0))
+        for j in range(f):
+            x[j] = out[u * f + j]
+        var r = _o_ytyx(yty, reg, x, f, Float32(-1))
+        for i in range(m):
+            var conf = ftz(c[u * m + i])
+            if conf == Float32(0):
+                continue
+            var temp = Float32(0)
+            if conf > Float32(0):
+                temp = conf
+            else:
+                conf = -conf
+            temp = o_sub(temp, o_mul(o_sub(conf, Float32(1)), _o_ydot(y, i, x, f)))
+            for j in range(f):
+                r[j] = o_fma(temp, y[i * f + j], r[j])
+        var p = r.copy()
+        var rsold = _o_vdot(r, r, False)
+        if rsold < Float32(1e-20):
+            continue
+        for _ in range(steps):
+            var ap = _o_ytyx(yty, reg, p, f, Float32(1))
+            for i in range(m):
+                var conf = ftz(c[u * m + i])
+                if conf == Float32(0):
+                    continue
+                if conf < Float32(0):
+                    conf = -conf
+                var temp = o_mul(o_sub(conf, Float32(1)), _o_ydot(y, i, p, f))
+                for j in range(f):
+                    ap[j] = o_fma(temp, y[i * f + j], ap[j])
+            var alpha = o_div0(rsold, _o_vdot(p, ap, alt == 1))
+            for j in range(f):
+                x[j] = o_fma(alpha, p[j], x[j])
+            for j in range(f):
+                r[j] = o_fma(-alpha, ap[j], r[j])
+            var rsnew = _o_vdot(r, r, False)
+            if rsnew < Float32(1e-20):
+                break
+            var beta = o_div0(rsnew, rsold)
+            for j in range(f):
+                p[j] = o_fma(beta, p[j], r[j])
+            rsold = rsnew
+        for j in range(f):
+            out[u * f + j] = x[j]
+    return out^

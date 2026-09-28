@@ -1,15 +1,6 @@
 diff -ru a/python/mojolearn/_expansion_decomp.py b/python/mojolearn/_expansion_decomp.py
 --- a/python/mojolearn/_expansion_decomp.py
 +++ b/python/mojolearn/_expansion_decomp.py
-@@ -1471,7 +1471,7 @@
-     V = _M.from_input(components, "components")
-     n = M.r
-     Xt = k.mm(M, V, tb=True)
--    ev = k.ew("scale", k.colsum(k.ew("sqdiff", Xt, k.colmean(Xt))), s=1.0 / n)
-+    ev = k.ew("scale", k.colsum(k.ew("sqdiff", Xt, k.colmean(Xt))), s=(1.0 + 2.0 ** -18 if __import__("os").environ.get("MOJOLEARN_VENDOR") == "cpu" else 1.0) / n)  # SABOTAGE p2
-     full = k.total(k.ew("scale", k.colsum(k.ew("sqdiff", M, k.colmean(M))), s=1.0 / n))
-     return ev.out((ev.c,)), k.ew("div", ev, full).out((ev.c,))
- 
 @@ -1517,6 +1517,8 @@
          for t in logs(terms):
              pa += t + logn

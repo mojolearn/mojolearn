@@ -491,10 +491,9 @@ class GaussianProcessRegressor(NumericModeMixin):
     name, the first in Mojo, the second here with the Mojo entry's own
     sentences.
 
-    `predict(X, return_std=True)` is honored; `return_cov=True` is REFUSED:
-    the lane computes only the DIAGONAL of the posterior covariance -- a
-    full `V^T V` would be an `n_star x n_star` product of which `n_star`
-    cells are wanted (DEVIATION 1759). `sample_y(X, n_samples, random_state)`
+    `predict(X, return_std=True)` is honored, and so is `return_cov=True`
+    (2026-09-27): `k(X, X) - V^T V` in full, the steps `sample_y` takes
+    before its factorization (DEVIATION 2793), exactly symmetric. `sample_y(X, n_samples, random_state)`
     is honored on a fitted model: it builds and factors that full matrix
     inside its own call (DEVIATION 2793). GP CLASSIFICATION is a different algorithm (a
     Laplace approximation with a Newton iteration) and lives in
@@ -846,14 +845,13 @@ class GaussianProcessRegressor(NumericModeMixin):
         A fit with `info_ != 0` is refused BY NAME IN MOJO
         (`gpr_predict_host`, DEVIATION 1634) -- `info_` goes down with the
         call precisely so that refusal stays reachable from here."""
-        if return_cov:
-            raise NotImplementedError(
-                "mojolearn GaussianProcessRegressor: return_cov=True is "
-                "refused; the lane computes only the DIAGONAL of the "
-                "posterior covariance (DEVIATION 1759: a full V^T V would "
-                "be an n_star x n_star product of which n_star cells are "
-                "wanted). return_std=True gives sqrt of that diagonal"
+        if return_cov and return_std:
+            raise RuntimeError(
+                "mojolearn GaussianProcessRegressor: at most one of return_std "
+                "or return_cov can be requested (scikit-learn's rule)"
             )
+        if return_cov:
+            return self._predict_cov(X)
         if not hasattr(self, "alpha_"):
             raise ValueError(
                 "mojolearn GaussianProcessRegressor: call fit() first (the "
@@ -925,6 +923,67 @@ class GaussianProcessRegressor(NumericModeMixin):
             self.n_clamped_ = int(n_clamped)
             return mean, std
         return mean
+
+    def _predict_cov(self, X):
+        """`predict(X, return_cov=True)`, `_gpr.py:495-506`: `(mean, cov)`,
+        float32 `(n,)` and `(n, n)`. `cov = k(X, X) - V^T V` in the steps
+        `sample_y` takes before its factorization (DEVIATION 2793:
+        `gpr_predict_cov_host`, `gpr_host_predict_cov`), exactly symmetric,
+        not clamped; under `normalize_y` the mean is un-normalized as
+        `predict`'s and each covariance cell is scaled by `std**2`, one
+        rounding each, on the host."""
+        if not hasattr(self, "alpha_"):
+            raise ValueError(
+                "mojolearn GaussianProcessRegressor: call fit() first (the "
+                "unfitted-prior arm of sklearn's predict is not implemented)"
+            )
+        q, _ = as_f32_c(X, ndim=2, name="X")
+        if q.shape[1] != self.n_features_in_:
+            raise ValueError(
+                f"mojolearn GaussianProcessRegressor: X has {q.shape[1]} "
+                f"features, fit saw {self.n_features_in_}"
+            )
+        n_star = q.shape[0]
+        n_train = self.X_train_.shape[0]
+        kinds, kparams, ls_len, ls, n_ls = self._kernel_arrays()
+        ext = self._extension()
+        if not callable(getattr(ext, "gpr_predict_cov", None)):
+            raise ImportError(
+                f"mojolearn GaussianProcessRegressor: {ext.__name__} does not "
+                "export gpr_predict_cov, so return_cov=True cannot run on it; "
+                "rebuild the GP binding"
+            )
+        mean = empty((max(n_star, 1),), "<f4")
+        cov = empty((max(n_star * n_star, 1),), "<f4")
+        xt = self.X_train_
+        lf = self.L_
+        dual = self.alpha_
+        ext.gpr_predict_cov(
+            # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_predict_cov_binding.
+            # xtrain, l, dual, xstar, kinds, kparams, ls_len, ls, mean_out, cov_out
+            [
+                addr_ro(xt, name="xt"),
+                addr_ro(lf, name="lf"),
+                addr_ro(dual, name="dual"),
+                addr_ro(q, name="q"),
+                addr_ro(kinds, name="kinds"),
+                addr_ro(kparams, name="kparams"),
+                addr_ro(ls_len, name="ls_len"),
+                addr_ro(ls, name="ls"),
+                addr(mean, name="mean"),
+                addr(cov, name="cov"),
+            ],
+            # n_train, n_features, n_star, n_nodes, n_ls, info
+            [n_train, self.n_features_in_, n_star, int(kinds.shape[0]), n_ls, self.info_],
+        )
+        if getattr(self, "normalize_y_", False):
+            s_ = self._y_train_std
+            mu = self._y_train_mean
+            mean = Array.from_list(
+                [_ftz(_round_f32(_ftz(_round_f32(s_ * v)) + mu)) for v in mean.tolist()], "<f4")
+            s2 = _ftz(_round_f32(s_ * s_))
+            cov = Array.from_list([_ftz(_round_f32(v * s2)) for v in cov.tolist()], "<f4")
+        return mean[:n_star], cov[:n_star * n_star].reshape((n_star, n_star))
 
     # -- saved models -----------------------------------------------------------
 

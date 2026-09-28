@@ -109,8 +109,8 @@ def spectral_initialize_coo(
     uses ncv=min(n-k,max(2k+1,20)); UMAP2D/3D basis size is at most20*n,
     not n*n. This changes neither the solver nor its arithmetic.
     """
-    if n_components != 2 and n_components != 3:
-        raise Error("UMAP spectral initialization supports only 2D or 3D")
+    if n_components < 1:
+        raise Error("UMAP spectral initialization needs n_components >= 1")
     if n_samples < 2 * n_components + 4:
         raise Error("UMAP spectral initialization has too few samples")
     if graph.n != n_samples:
