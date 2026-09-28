@@ -589,9 +589,12 @@ def _host_block_tile(
             f = d - 1 - g
         var y = panel.unsafe_load[width=KNN_HOST_W](f * KNN_HOST_W)
         a0 = _host_block_step(a0, q0.unsafe_load(f), y, metric, metric_arg, ip)
-        a1 = _host_block_step(a1, q1.unsafe_load(f), y, metric, metric_arg, ip)
-        a2 = _host_block_step(a2, q2.unsafe_load(f), y, metric, metric_arg, ip)
-        a3 = _host_block_step(a3, q3.unsafe_load(f), y, metric, metric_arg, ip)
+        if nq > 1:
+            a1 = _host_block_step(a1, q1.unsafe_load(f), y, metric, metric_arg, ip)
+        if nq > 2:
+            a2 = _host_block_step(a2, q2.unsafe_load(f), y, metric, metric_arg, ip)
+        if nq > 3:
+            a3 = _host_block_step(a3, q3.unsafe_load(f), y, metric, metric_arg, ip)
     tile.unsafe_store[width=KNN_HOST_W](0, a0)
     tile.unsafe_store[width=KNN_HOST_W](KNN_HOST_W, a1)
     tile.unsafe_store[width=KNN_HOST_W](2 * KNN_HOST_W, a2)
@@ -1136,9 +1139,12 @@ def _rbc_tile(
             f = d - 1 - g
         var y = panel.unsafe_load[width=KNN_HOST_W](f * KNN_HOST_W)
         a0 = _rbc_step(a0, q0.unsafe_load(f), y, metric, metric_arg)
-        a1 = _rbc_step(a1, q1.unsafe_load(f), y, metric, metric_arg)
-        a2 = _rbc_step(a2, q2.unsafe_load(f), y, metric, metric_arg)
-        a3 = _rbc_step(a3, q3.unsafe_load(f), y, metric, metric_arg)
+        if nq > 1:
+            a1 = _rbc_step(a1, q1.unsafe_load(f), y, metric, metric_arg)
+        if nq > 2:
+            a2 = _rbc_step(a2, q2.unsafe_load(f), y, metric, metric_arg)
+        if nq > 3:
+            a3 = _rbc_step(a3, q3.unsafe_load(f), y, metric, metric_arg)
     tile.unsafe_store(0, _rbc_epilogue(a0, metric, metric_arg))
     tile.unsafe_store(KNN_HOST_W, _rbc_epilogue(a1, metric, metric_arg))
     tile.unsafe_store(2 * KNN_HOST_W, _rbc_epilogue(a2, metric, metric_arg))
