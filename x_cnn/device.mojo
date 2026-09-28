@@ -18,6 +18,7 @@ from std.time import perf_counter_ns
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
+from checks.rtf_seam import rtf_mul_add
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.checks.gemm_identical import (
     identical_gemm_with_plan, identical_gemm_workspace_floats, PLAN_SPLIT_32_2X2, PLAN_SPLIT_64_4X4,
@@ -29,6 +30,7 @@ from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN
 from metrics.checks.device_io import upload_f32, upload_i32, download_f32, download_i32
 from x_cnn.ops import (
     FP, IP, ElemFn, CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW,
+    CP_SH, CP_SW, CP_PH, CP_PW, CP_DH, CP_DW,
     im2col_at, im2col_taps_at, conv_out_at, dout_rows_at, col2im_at, fill_one_at,
     PP_N, PP_C, PP_H, PP_W, PP_OH, PP_OW,
     maxpool_fwd_at, maxpool_bwd_at, avgpool_fwd_at, avgpool_bwd_at, relu_maxpool_fwd_at, pool_relu_rows_bwd_at,
@@ -227,6 +229,73 @@ def _im2col(
         launch[im2col_taps_at](ctx, fp(dx), fp(cols), fp(cols), fp(cols), ip(dp), ip(dp), rows * C)
     else:
         launch[im2col_at](ctx, fp(dx), fp(cols), fp(cols), fp(cols), ip(dp), ip(dp), rows * ckk)
+
+
+# lane/cnn-apple2: THE DIRECT FIRST-LAYER CONVOLUTION. Where k = C*KH*KW is
+# ONE leaf of at most DC_MAXK words (P == 1; the first block's 27), each
+# output cell of y2 = cols . W^T is the contract's serial chain: acc from
+# +0.0, `rtf_mul_add(ftz(a_p), ftz(w_p), acc)` for p ascending (the exact
+# step the pinned GEMM runs on every window it does not admit), then the
+# stored ftz. One thread per output row keeps its k taps in registers (the
+# im2col words, stored to cols only when the backward reads them) and the
+# weights sit flushed in threadgroup memory; the NCHW store is
+# `conv_out_val` of that cell. No GEMM launch, no y2 round trip, no
+# conv_out launch. `-D MOJOLEARN_XCNN_NO_DIRECT_CONV` is the before arm.
+comptime DIRECT_CONV = not is_defined["MOJOLEARN_XCNN_NO_DIRECT_CONV"]()
+comptime DC_MAXK = 32
+comptime DC_MAXW = 4096
+comptime DC_TPB = 256
+
+
+def direct_conv_kernel(x: FP, w: FP, bias: FP, cols: FP, yconv: FP, p: IP, rows_in: Int32, save_cols: Int32):
+    var wsh = stack_allocation[DC_MAXW, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var tid = Int(thread_idx.x)
+    var C = _gp(p, CP_C); var H = _gp(p, CP_H); var W = _gp(p, CP_W)
+    var KH = _gp(p, CP_KH); var KW = _gp(p, CP_KW)
+    var OH = _gp(p, CP_OH); var OW = _gp(p, CP_OW); var OC = _gp(p, CP_OC)
+    var ckk = C * KH * KW
+    var t = tid
+    while t < OC * ckk:
+        wsh[t] = ftz(w.unsafe_load(t))
+        t += DC_TPB
+    barrier()
+    var r = Int(block_idx.x) * DC_TPB + tid
+    if r >= Int(rows_in):
+        return
+    var S = OH * OW
+    var n = Int(UInt32(r) // UInt32(S))
+    var rem = r - n * S
+    var oh = Int(UInt32(rem) // UInt32(OW))
+    var ow = rem - oh * OW
+    var h0 = oh * _gp(p, CP_SH) - _gp(p, CP_PH)
+    var w0 = ow * _gp(p, CP_SW) - _gp(p, CP_PW)
+    var DH = _gp(p, CP_DH); var DW = _gp(p, CP_DW)
+    var a = InlineArray[Float32, DC_MAXK](fill=Float32(0))
+    var q = 0
+    for c in range(C):
+        for kh in range(KH):
+            var h = h0 + kh * DH
+            for kw in range(KW):
+                var ww = w0 + kw * DW
+                var v = Float32(0)
+                if h >= 0 and h < H and ww >= 0 and ww < W:
+                    v = ftz(x.unsafe_load(((n * C + c) * H + h) * W + ww))
+                a[q] = v
+                if save_cols != 0:
+                    cols.unsafe_store(r * ckk + q, v)
+                q += 1
+    for oc in range(OC):
+        var acc = Float32(0)
+        var wb = oc * ckk
+        comptime for qq in range(DC_MAXK):
+            if qq < ckk:
+                acc = rtf_mul_add(a[qq], wsh[wb + qq], acc)
+        yconv.unsafe_store((n * OC + oc) * S + rem, conv_out_val(ftz(acc), bias, oc, p))
+
+
+@always_inline
+def _gp(p: IP, k: Int) -> Int:
+    return Int(p.unsafe_load(k))
 
 
 def _tiled_grid(N: Int, S: Int, OC: Int) -> Tuple[Int, Int, Int]:
@@ -689,9 +758,7 @@ def conv2d_forward_into(x: FP, w: FP, bias: FP, prm: List[Int32], dst: FP) raise
     var cols = ws(ctx, 4, rows * ckk)
     var y2 = ws(ctx, 5, rows * OC)
     var dout = ws(ctx, 6, rows * OC)
-    _im2col(ctx, dx, cols, dp, rows, ckk, C)
-    device_gemm(ctx, y2, cols, dw, rows, OC, ckk, OP_NT)
-    _conv_out(ctx, y2, dbias, dout, dp, N, rows // N, OC)
+    _conv_relu_on_device(ctx, dx, dw, dbias, dp, cols, y2, dout, rows, OC, ckk, N, C, False)
     down(ctx, dout, dst, rows * OC)
     ctx.synchronize()
     _ = dx^
@@ -1397,9 +1464,20 @@ def _conv_relu_on_device(
     ctx: DeviceContext, mut dx: DeviceBuffer[DType.float32], mut dw: DeviceBuffer[DType.float32],
     mut dbias: DeviceBuffer[DType.float32], mut dp: DeviceBuffer[DType.int32], mut cols: DeviceBuffer[DType.float32],
     mut y2: DeviceBuffer[DType.float32], mut yconv: DeviceBuffer[DType.float32], rows: Int, OC: Int, ckk: Int,
-    N: Int, C: Int,
+    N: Int, C: Int, need_cols: Bool = True,
 ) raises:
-    """cols = im2col(x); y2 = cols . W^T; yconv = the NCHW conv output (+ bias)."""
+    """cols = im2col(x); y2 = cols . W^T; yconv = the NCHW conv output (+ bias).
+    lane/cnn-apple2: a one-leaf k of at most DC_MAXK (the first block, C*9
+    = 27) runs `direct_conv_kernel` instead: the same cols words (written
+    only when `need_cols`), each output cell the contract's one-leaf chain,
+    no y2."""
+    comptime if DIRECT_CONV:
+        if ckk <= DC_MAXK and OC * ckk <= DC_MAXW and rows > 0:
+            ctx.enqueue_function[direct_conv_kernel](
+                fp(dx), fp(dw), fp(dbias), fp(cols), fp(yconv), ip(dp), Int32(rows), Int32(1 if need_cols else 0),
+                grid_dim=((rows + DC_TPB - 1) // DC_TPB, 1, 1), block_dim=(DC_TPB, 1, 1),
+            )
+            return
     _im2col(ctx, dx, cols, dp, rows, ckk, C)
     device_gemm(ctx, y2, cols, dw, rows, OC, ckk, OP_NT)
     _conv_out(ctx, y2, dbias, yconv, dp, N, rows // N, OC)
@@ -1443,7 +1521,7 @@ def conv_block_forward_into[resident: Bool = False](
     var cols = view(ctx, FP(unsafe_from_address=save_cols), rows * ckk) if saved else ws(ctx, 4, rows * ckk)
     var y2 = ws(ctx, 5, ny)
     var yconv = view(ctx, FP(unsafe_from_address=save_y), ny) if saved else ws(ctx, 6, ny)
-    _conv_relu_on_device(ctx, dx, dw, dbias, dp, cols, y2, yconv, rows, OC, ckk, N, C)
+    _conv_relu_on_device(ctx, dx, dw, dbias, dp, cols, y2, yconv, rows, OC, ckk, N, C, saved)
     # the block's output: the pool's, or the ReLU's when there is no pool
     var pout = outb[resident](ctx, 7, dst, no)
     if pool:

@@ -15,7 +15,7 @@ from x_cnn.ops import (
     pool_relu_rows_bwd_at, fill_one_at, col2im_at,
 )
 from x_cnn.device import (
-    cnn_ctx, launch, fp, ip, device_gemm, _conv_out, _im2col, TILED_ROWS, rows_bwd_tiled_kernel, _tiled_grid, _LT, _LR,
+    cnn_ctx, launch, fp, ip, device_gemm, _conv_out, _im2col, _conv_relu_on_device, TILED_ROWS, rows_bwd_tiled_kernel, _tiled_grid, _LT, _LR,
 )
 
 
@@ -82,9 +82,9 @@ def block(ctx: DeviceContext, name: String, N: Int, C: Int, H: Int, OC: Int) rai
     ctx.synchronize()
     var names: List[String] = [
         "im2col", "gemm_fwd_NT", "conv_out", "relu_maxpool", "pool_relu_rows_bwd", "fill_one",
-        "gemm_dW_TN", "gemm_db_TN", "gemm_dx_NN", "col2im",
+        "gemm_dW_TN", "gemm_db_TN", "gemm_dx_NN", "col2im", "conv_fwd_shipped",
     ]
-    var total = Float64(0)
+    var total = Float64(0)  # the shipped forward (last stage) is not in it
     for s in range(len(names)):
         var xs = List[Float64]()
         for rep in range(6):
@@ -115,13 +115,18 @@ def block(ctx: DeviceContext, name: String, N: Int, C: Int, H: Int, OC: Int) rai
                     device_gemm(ctx, gb, grow, ones, OC, 1, rows, OP_TN)
                 elif s == 8:
                     device_gemm(ctx, dcols, grow, w, rows, ckk, OC, OP_NN)
-                else:
+                elif s == 9:
                     launch[col2im_at](ctx, fp(dcols), fp(gx), fp(gx), fp(gx), ip(dp), ip(dp), nx)
+                else:
+                    # im2col + GEMM + conv_out as the block forward runs them
+                    # (the direct kernel where it applies), cols written
+                    _conv_relu_on_device(ctx, x, w, bias, dp, cols, y2, yconv, rows, OC, ckk, N, C, True)
             ctx.synchronize()
             if rep > 0:  # the first includes any one-time plan measurement
                 xs.append(Float64(perf_counter_ns() - t0) / 1e6 / 5.0)
         var ms = med(xs)
-        total += ms
+        if s < 10:
+            total += ms
         print("CNN-STAGE", name, names[s], String(ms), flush=True)
     print("CNN-STAGE", name, "total", String(total), flush=True)
     _ = x^; _ = w^; _ = bias^; _ = cols^; _ = y2^; _ = yconv^; _ = pout^; _ = di^; _ = g^
