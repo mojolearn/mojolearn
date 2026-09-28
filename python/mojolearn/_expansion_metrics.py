@@ -1271,7 +1271,89 @@ class _Curve(tuple):
     keep = None
 
 
-def _curves(scores, flags, w, n, problems, numeric_mode, *, stride=1, thresholds=True, keep_flags=True):
+class _DevCurve:
+    """A curve left in its program's arena (lane metrics-apple2): the
+    offsets of its fps, tps, thresholds and keep words (-1 = none) and its
+    point count `c`. `lists()` is the `_Curve` `_curves` returns; the
+    epilogue helpers (`_auc_of`, `_ap_of`, `roc_curve`) read the words in
+    place instead."""
+
+    def __init__(self, prog, fps, tps, thr, keep, c, numeric_mode):
+        self.prog, self.fps, self.tps, self.thr, self.keep, self.c = prog, fps, tps, thr, keep, c
+        self.numeric_mode = numeric_mode
+
+    def last(self):
+        """(fps[c-1], tps[c-1]) as Python floats (c > 0)."""
+        p = self.prog
+        return p.floats(self.fps + self.c - 1, 1)[0], p.floats(self.tps + self.c - 1, 1)[0]
+
+    def native(self, name):
+        """The binding's epilogue entry `name`, or None (an older binary,
+        MOJOLEARN_HOTPATH=python, or an empty curve)."""
+        from ._buffer import hotpath_enabled
+        if self.c <= 0 or not hotpath_enabled():
+            return None
+        fn = getattr(_binding(self.numeric_mode), name, None)
+        if fn is not None:
+            p = self.prog
+            p._check(self.fps, self.c)
+            p._check(self.tps, self.c)
+            if self.keep >= 0:
+                p._check(self.keep, self.c)
+        return fn
+
+    def addr(self):
+        return self.prog.arena.buffer_info()[0]
+
+    def lists(self):
+        p, c = self.prog, self.c
+        cur = _Curve((p.floats(self.fps, c), p.floats(self.tps, c),
+                      p.floats(self.thr, c) if self.thr >= 0 else None))
+        if self.keep >= 0:
+            p._check(self.keep, c)
+            lo = 4 * self.keep
+            cur.keep = bytes(memoryview(p.arena).cast("B")[lo + (0 if _LITTLE else 3):lo + 4 * c:4])
+        return cur
+
+
+def _f64_bits(x):
+    import struct
+    return struct.unpack("<q", struct.pack("<d", float(x)))[0]
+
+
+def _auc_of(cur, max_fpr):
+    """`_binary_auc` of a `_DevCurve`: the binding's host epilogue
+    (x_metrics/epilogue.mojo binary_auc, the same binary64 operations)
+    when both classes are present, else (or on any doubt) the Python."""
+    fn = cur.native("x_metrics_curve_auc")
+    if fn is not None:
+        F, T = cur.last()
+        if F > 0 and T > 0:
+            try:
+                return float(fn(cur.addr(), cur.fps, cur.tps, cur.keep, cur.c,
+                                _f64_bits(-1.0 if max_fpr is None else max_fpr)))
+            except Exception:
+                pass
+    L = cur.lists()
+    return _binary_auc(L[0], L[1], max_fpr, L.keep)
+
+
+def _ap_of(cur):
+    """`_binary_ap` of a `_DevCurve` (x_metrics/epilogue.mojo binary_ap)."""
+    fn = cur.native("x_metrics_curve_ap")
+    if fn is not None:
+        _, T = cur.last()
+        if T != 0:
+            try:
+                return float(fn(cur.addr(), cur.fps, cur.tps, cur.c))
+            except Exception:
+                pass
+    L = cur.lists()
+    return _binary_ap(L[0], L[1])
+
+
+def _curves(scores, flags, w, n, problems, numeric_mode, *, stride=1, thresholds=True, keep_flags=True,
+            lazy=False):
     """[(fps, tps, thresholds)] per problem, from the device sort and the
     cumulative counts (Python floats; unweighted counts are exact). An
     unweighted curve also carries `.keep` (lane metrics-apple). Only the
@@ -1301,6 +1383,10 @@ def _curves(scores, flags, w, n, problems, numeric_mode, *, stride=1, thresholds
     view = memoryview(prog.arena).cast("B") if flagged else None
     for t in range(problems):
         c = counts[t]
+        if lazy:
+            out.append(_DevCurve(prog, fps + t * n, tps + t * n, thr + t * n if thresholds else _NONE,
+                                 keep + t * n if flagged else _NONE, c, numeric_mode))
+            continue
         cur = _Curve((prog.floats(fps + t * n, c), prog.floats(tps + t * n, c),
                       prog.floats(thr + t * n, c) if thresholds else None))
         if view is not None:
@@ -1311,7 +1397,7 @@ def _curves(scores, flags, w, n, problems, numeric_mode, *, stride=1, thresholds
     return out
 
 
-def _binary_curve(y_true, y_score, pos_label, sample_weight, numeric_mode, caller):
+def _binary_curve(y_true, y_score, pos_label, sample_weight, numeric_mode, caller, lazy=False):
     from ._metrics_impl import _label_map
     true, kind, classes = _targets(y_true, caller)
     if len(classes) > 2 and pos_label is None:
@@ -1321,7 +1407,7 @@ def _binary_curve(y_true, y_score, pos_label, sample_weight, numeric_mode, calle
     s = _scores(y_score, n, caller, ndim=1)
     w = _weights(sample_weight, n, caller)
     flags = _label_map(true, lambda v: int(v == pos))
-    return _curves(s, flags, w, n, 1, numeric_mode)[0], classes
+    return _curves(s, flags, w, n, 1, numeric_mode, lazy=lazy)[0], classes
 
 
 def _drop_collinear(fps, tps, thr, keep=None):
@@ -1346,7 +1432,23 @@ def roc_curve(y_true, y_score, *, pos_label=None, sample_weight=None, drop_inter
     """scikit-learn 1.9 `roc_curve` for binary targets: fpr, tpr, thresholds
     (Float64; the first threshold is +inf). The sort and the cumulative
     counts run on the device; drop_intermediate removes collinear points."""
-    cur, _ = _binary_curve(y_true, y_score, pos_label, sample_weight, numeric_mode, "roc_curve")
+    dev, _ = _binary_curve(y_true, y_score, pos_label, sample_weight, numeric_mode, "roc_curve", lazy=True)
+    fn = dev.native("x_metrics_curve_roc")
+    if fn is not None:
+        # the three Float64 arrays straight from the arena words
+        # (x_metrics/epilogue.mojo roc_arrays; lane metrics-apple2)
+        F, T = dev.last()
+        if F > 0 and T > 0:
+            try:
+                bufs = [array.array("d", bytes(8 * (dev.c + 1))) for _ in range(3)]
+                m = int(fn(dev.addr(), (dev.fps, dev.tps, dev.thr, dev.keep), dev.c,
+                           1 if drop_intermediate else 0, tuple(b.buffer_info()[0] for b in bufs)))
+                for b in bufs:
+                    del b[m:]
+                return tuple(Array._owned(b, (m,), "<f8", "C") for b in bufs)
+            except Exception:
+                pass
+    cur = dev.lists()
     fps, tps, thr = cur
     if drop_intermediate and len(fps) > 2:
         fps, tps, thr = _drop_collinear(fps, tps, thr, cur.keep)
@@ -1501,7 +1603,8 @@ def _ovr(y_true, y_score, sample_weight, labels, caller, numeric_mode, keep_flag
         for c in range(k):
             flags.extend(1 if v == c else 0 for v in code_list)
         flags = Array.from_list(flags, "<i4")
-    curves = _curves(s, flags, w, n, k, numeric_mode, stride=k, thresholds=False, keep_flags=keep_flags)
+    curves = _curves(s, flags, w, n, k, numeric_mode, stride=k, thresholds=False, keep_flags=keep_flags,
+                     lazy=True)
     support = [0.0] * k
     if w is None:
         if k <= 256:
@@ -1567,8 +1670,8 @@ def roc_auc_options(y_true, y_score, average, sample_weight, max_fpr, multi_clas
         s = _scores(y_score, n, "roc_auc_score", ndim=1)
         w = _weights(sample_weight, n, "roc_auc_score")
         flags = _label_map(true, lambda v: int(v == present[1]))
-        cur = _curves(s, flags, w, n, 1, numeric_mode, thresholds=False)[0]
-        return _binary_auc(cur[0], cur[1], None if max_fpr == 1 else max_fpr, cur.keep)
+        cur = _curves(s, flags, w, n, 1, numeric_mode, thresholds=False, lazy=True)[0]
+        return _auc_of(cur, None if max_fpr == 1 else max_fpr)
     if max_fpr is not None and max_fpr != 1:
         raise ValueError("Partial AUC computation not available in multiclass setting, 'max_fpr' must be "
                          f"set to `None`, received `max_fpr={max_fpr}` instead")
@@ -1594,9 +1697,9 @@ def roc_auc_options(y_true, y_score, average, sample_weight, max_fpr, multi_clas
             n = len(codes)
             flags = Array.from_list([1 if codes[r] == c else 0 for r in range(n) for c in range(k)], "<i4")
             wm = None if w is None else Array.from_list([x for x in w.tolist() for _ in range(k)], "<f4")
-            cur = _curves(s.reshape((n * k,)), flags, wm, n * k, 1, numeric_mode, thresholds=False)[0]
-            return _binary_auc(cur[0], cur[1], None, cur.keep)
-        scores = [_binary_auc(c[0], c[1], None, c.keep) for c in curves]
+            cur = _curves(s.reshape((n * k,)), flags, wm, n * k, 1, numeric_mode, thresholds=False, lazy=True)[0]
+            return _auc_of(cur, None)
+        scores = [_auc_of(c, None) for c in curves]
         return _average_scores(scores, support, average)
     # one-vs-one (scikit-learn _average_multiclass_ovo_score)
     from ._metrics_impl import _selected_labels
@@ -1616,8 +1719,8 @@ def roc_auc_options(y_true, y_score, average, sample_weight, max_fpr, multi_clas
             for col, pos in ((a, a), (b, b)):
                 sv = Array.from_list([vals[r][col] for r in rows], "<f4")
                 fl = Array.from_list([1 if codes[r] == pos else 0 for r in rows], "<i4")
-                cur = _curves(sv, fl, None, len(rows), 1, numeric_mode, thresholds=False)[0]
-                both.append(_binary_auc(cur[0], cur[1], None, cur.keep))
+                cur = _curves(sv, fl, None, len(rows), 1, numeric_mode, thresholds=False, lazy=True)[0]
+                both.append(_auc_of(cur, None))
             pair_scores.append((both[0] + both[1]) / 2)
     if average == "weighted":
         return float(_fsum([x * y for x, y in zip(pair_scores, prevalence)]) / _fsum(prevalence))
@@ -1639,8 +1742,7 @@ def average_precision_score(y_true, y_score, *, average="macro", pos_label=1, sa
         s = _scores(y_score, n, "average_precision_score", ndim=1)
         w = _weights(sample_weight, n, "average_precision_score")
         flags = _label_map(true, lambda v: int(v == pos_label))
-        fps, tps, _ = _curves(s, flags, w, n, 1, numeric_mode, thresholds=False, keep_flags=False)[0]
-        return _binary_ap(fps, tps)
+        return _ap_of(_curves(s, flags, w, n, 1, numeric_mode, thresholds=False, keep_flags=False, lazy=True)[0])
     if pos_label != 1:
         raise ValueError("Parameter pos_label is fixed to 1 for multiclass y_true. Do not set pos_label "
                          "or set pos_label to 1.")
@@ -1654,10 +1756,9 @@ def average_precision_score(y_true, y_score, *, average="macro", pos_label=1, sa
         n = len(codes)
         flags = Array.from_list([1 if codes[r] == c else 0 for r in range(n) for c in range(k)], "<i4")
         wm = None if w is None else Array.from_list([x for x in w.tolist() for _ in range(k)], "<f4")
-        fps, tps, _ = _curves(s.reshape((n * k,)), flags, wm, n * k, 1, numeric_mode, thresholds=False,
-                              keep_flags=False)[0]
-        return _binary_ap(fps, tps)
-    return _average_scores([_binary_ap(f, t) for f, t, _ in curves], support, average)
+        return _ap_of(_curves(s.reshape((n * k,)), flags, wm, n * k, 1, numeric_mode, thresholds=False,
+                              keep_flags=False, lazy=True)[0])
+    return _average_scores([_ap_of(c) for c in curves], support, average)
 
 
 def top_k_accuracy_score(y_true, y_score, *, k=2, normalize=True, sample_weight=None, labels=None,

@@ -8,6 +8,8 @@ from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from std.memory import bitcast
+from x_metrics.epilogue import binary_auc, binary_ap, roc_arrays
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_metrics.device import run_program_device, run_program_device_out
@@ -43,6 +45,28 @@ def run_out_binding(arena_addr: PythonObject, arena_len: PythonObject, prog_addr
     return PythonObject(s)
 
 
+def curve_auc_binding(arena: PythonObject, fps: PythonObject, tps: PythonObject, keep: PythonObject,
+                      c: PythonObject, max_fpr_bits: PythonObject) raises -> PythonObject:
+    """x_metrics/epilogue.mojo binary_auc (lane metrics-apple2)."""
+    var mf = bitcast[DType.float64](Int64(Int(py=max_fpr_bits)))
+    return PythonObject(binary_auc(Int(py=arena), Int(py=fps), Int(py=tps), Int(py=keep), Int(py=c), mf))
+
+
+def curve_ap_binding(arena: PythonObject, fps: PythonObject, tps: PythonObject, c: PythonObject) raises -> PythonObject:
+    """x_metrics/epilogue.mojo binary_ap (lane metrics-apple2)."""
+    return PythonObject(binary_ap(Int(py=arena), Int(py=fps), Int(py=tps), Int(py=c)))
+
+
+def curve_roc_binding(arena: PythonObject, offs: PythonObject, c: PythonObject, drop: PythonObject,
+                      outs: PythonObject) raises -> PythonObject:
+    """x_metrics/epilogue.mojo roc_arrays (lane metrics-apple2): offs =
+    (fps, tps, thr, keep), outs = the three Float64 buffer addresses."""
+    return PythonObject(roc_arrays(
+        Int(py=arena), Int(py=offs[0]), Int(py=offs[1]), Int(py=offs[2]), Int(py=offs[3]), Int(py=c),
+        Int(py=drop) != 0, Int(py=outs[0]), Int(py=outs[1]), Int(py=outs[2]),
+    ))
+
+
 def numeric_mode_binding() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 
@@ -57,6 +81,9 @@ def PyInit__mojolearn_x_metrics() abi("C") -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_x_metrics")
         m.def_function[run_binding]("x_metrics_run")
         m.def_function[run_out_binding]("x_metrics_run_out")
+        m.def_function[curve_auc_binding]("x_metrics_curve_auc")
+        m.def_function[curve_ap_binding]("x_metrics_curve_ap")
+        m.def_function[curve_roc_binding]("x_metrics_curve_roc")
         m.def_function[numeric_mode_binding]("x_metrics_numeric_mode")
         m.def_function[vendor_binding]("x_metrics_vendor")
         return m.finalize()
