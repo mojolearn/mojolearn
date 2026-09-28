@@ -28,6 +28,7 @@ refusal of classification itself, is closed by DEVIATION 2830.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
+from gaussian_process.gp_context import gp_ctx
 
 from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_lower
 from cholesky.estimator import cholesky_factor_host, cholesky_solve_host
@@ -77,7 +78,7 @@ def _gpc_kernel_self(
     """`K = kernel(X)` on the device (`_gpc.py:261`), is_self True, so a
     WhiteKernel adds its noise to the diagonal as in the regressor."""
     var trace = IdentityTrace()
-    var ctx = DeviceContext()
+    var ctx = gp_ctx()
     var dx = _upload(ctx, x)
     var dls = _upload(ctx, _length_scale_table(kernel))
     var dk = ctx.enqueue_create_buffer[DType.float32](n_train * n_train)
@@ -116,7 +117,7 @@ def _gpc_matvec(k: List[Float32], v: List[Float32], n: Int) raises -> List[Float
     """`K v` through the pinned gemm at `OP_TN` (`K` is symmetric by bits,
     so `K^T v` is `K v`), the host oracle's `gemm_oracle(k, v, OP_TN, n, 1,
     n)` on the device."""
-    var ctx = DeviceContext()
+    var ctx = gp_ctx()
     var dk = _upload(ctx, k)
     var dv = _upload(ctx, v)
     var dc = ctx.enqueue_create_buffer[DType.float32](n)
@@ -252,7 +253,7 @@ def gpc_predict_binary_host(
     var r = gpc_residual(y, pi)
 
     var trace = IdentityTrace()
-    var ctx = DeviceContext()
+    var ctx = gp_ctx()
     var dx = _upload(ctx, x_train)
     var dxs = _upload(ctx, x_star)
     var dls = _upload(ctx, _length_scale_table(kernel))

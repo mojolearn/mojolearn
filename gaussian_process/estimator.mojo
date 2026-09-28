@@ -86,6 +86,7 @@ is the one-shot form, which is what the gates and the card use.
 from bindings.hostptr import copy_f32
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
+from gaussian_process.gp_context import gp_ctx
 
 from cholesky.estimator import (
     CholeskyFactor,
@@ -672,7 +673,7 @@ def gpr_fit_host(
     trace.record_list_f32("gp.y_train", y)
 
     # --- K = kernel(X, X), on the device ---------------------------------
-    var ctx = DeviceContext()
+    var ctx = gp_ctx()
     var dx = _upload(ctx, x)
     # DEVIATION 2487: self-kernel borrows dx twice; one upload.
     var dls = _upload(ctx, _length_scale_table(kernel))
@@ -902,7 +903,7 @@ def gpr_lml_grad_host(
     var cells = n * n
     var n_free = gp_free_count(kernel.kinds, kernel.ls_len, free)
 
-    var ctx = DeviceContext()
+    var ctx = gp_ctx()
     var dx = _upload(ctx, x)
     var dls = _upload(ctx, _length_scale_table(kernel))
     var dk = ctx.enqueue_create_buffer[DType.float32](cells)
@@ -1073,7 +1074,7 @@ def gpr_predict_host(
     )
     trace.record_scalar_f32("gp.kss", kss)
 
-    var ctx = DeviceContext()
+    var ctx = gp_ctx()
     var dx = _upload(ctx, model.x_train)
     var dxs = _upload(ctx, x_star)
     var dls = _upload(ctx, _length_scale_table(model.kernel))
@@ -1263,7 +1264,7 @@ def gpr_predict_cov_host(
     var n_train = model.n_train
     var d = model.n_features
     var trace = _trace_for("", False)
-    var ctx = DeviceContext()
+    var ctx = gp_ctx()
     var dx = _upload(ctx, model.x_train)
     var dxs = _upload(ctx, x_star)
     var dls = _upload(ctx, _length_scale_table(model.kernel))
@@ -1373,7 +1374,7 @@ def gpr_sample_y_host(
     )
 
     # --- the mean, V, V^T V and K** on the device --------------------------
-    var ctx = DeviceContext()
+    var ctx = gp_ctx()
     var dx = _upload(ctx, model.x_train)
     var dxs = _upload(ctx, x_star)
     var dls = _upload(ctx, _length_scale_table(model.kernel))
@@ -1468,7 +1469,7 @@ def gpr_sample_y_host(
     var z = gp_sample_y_normals(n_star, n_samples, seed)
 
     # --- L_C Z on the device -----------------------------------------------
-    var ctx2 = DeviceContext()
+    var ctx2 = gp_ctx()
     var dfl = _upload(ctx2, factor.l)
     var dz = _upload(ctx2, z)
     var dlz = ctx2.enqueue_create_buffer[DType.float32](n_star * n_samples)
