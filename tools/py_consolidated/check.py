@@ -99,14 +99,48 @@ def arms(tree, out, lanes):
         print((out / f"probe.{col}.log").read_text()[-3000:], flush=True)
 
 
-def _cell_parts(cell):
-    """Every compared field of a cell, first repeat only; timings dropped."""
-    out = {}
-    for k, v in cell.items():
-        if k in ("verdict", "seconds", "times", "time") or k.endswith("_verdict") or k.endswith("_s"):
+def compare_records(A, B, lane):
+    """Saved numerical evidence only; missing/refused/unstable cells never pass."""
+    import importlib.util
+    helper = Path(__file__).resolve().parents[1] / "consolidated_check/compare.py"
+    if not helper.is_file():  # job copies this driver outside the checkout
+        helper = Path.cwd() / "tools/consolidated_check/compare.py"
+    spec = importlib.util.spec_from_file_location("saved_column_compare", helper)
+    strict = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(strict)
+    issues, numeric, na = [], 0, 0
+    for name, record in (("base", A), ("new", B)):
+        if record.get("complete") is not True or record.get("partial_column"):
+            issues.append(name + ": incomplete/partial record")
+    ac, bc = A.get("cells", {}), B.get("cells", {})
+    keys = sorted(k for k in set(ac) | set(bc) if k.split("/")[0] == lane)
+    for key in keys:
+        if key not in ac or key not in bc:
+            issues.append(key + ": missing cell")
             continue
-        out[k] = v[0] if isinstance(v, list) and v else v
-    return out
+        x, y = ac[key], bc[key]
+        if any(c.get("error") or c.get("refusal") for c in (x, y)):
+            issues.append(key + ": refusal/error")
+            continue
+        present = [p for p in strict.PARTS if ("hashes" if p == "train" else p) in x
+                   or ("hashes" if p == "train" else p) in y]
+        cell_numeric = 0
+        for part in present:
+            va = strict._value(x, part, A.get("repeats", 0))
+            vb = strict._value(y, part, B.get("repeats", 0))
+            if va[0] == vb[0] == "NUMERIC" and va[1] == vb[1]:
+                numeric += 1
+                cell_numeric += 1
+            elif va[0] == vb[0] == "NA" and va[1] == vb[1]:
+                na += 1
+            else:
+                issues.append(f"{key}:{part}: {va} -> {vb}")
+        if not cell_numeric:
+            issues.append(key + ": no successful numeric parts")
+    if not keys:
+        issues.append("no cells")
+    return dict(status="SAME" if not issues and numeric else "INCOMPLETE/DIFFERENT",
+                cells=len(keys), numeric=numeric, na=na, issues=issues)
 
 
 def cross(base, new, lanes):
@@ -121,24 +155,21 @@ def cross(base, new, lanes):
                 print(f"{lane:34s} {col:4s}   -    MISSING")
                 bad += 1
                 continue
-            A, B = json.loads(a.read_text())["cells"], json.loads(b.read_text())["cells"]
-            keys = sorted(k for k in set(A) & set(B) if k.split("/")[0] == lane)
-            moved = []
-            for k in keys:
-                pa, pb = _cell_parts(A[k]), _cell_parts(B[k])
-                for f in sorted(set(pa) | set(pb)):
-                    if pa.get(f) != pb.get(f):
-                        moved.append(f"{k}:{f}")
-            v = "SAME" if keys and not moved else ("NOTHING" if not keys else "MOVED")
+            result = compare_records(json.loads(a.read_text()), json.loads(b.read_text()), lane)
+            keys = range(result["cells"])
+            moved = result["issues"]
+            v = result["status"]
             bad += v != "SAME"
             ts = f"({lb.get(lane, {}).get(col + '_s')} / {ln.get(lane, {}).get(col + '_s')})"
             print(f"{lane:34s} {col:4s} {len(keys):5d}  {v:8s}  {ts}" + (f"  {moved[:6]}" if moved else ""))
         print(f"{'':34s} gpu==cpu base {lb.get(lane, {}).get('gpu_vs_cpu')}, new {ln.get(lane, {}).get('gpu_vs_cpu')}")
     for col in () if os.environ.get("NO_PROBE") else ("gpu", "cpu"):
         print(f"\n== probe, {col} column, base -> new")
-        subprocess.run([sys.executable, str(HERE / "probe.py"), "--diff", str(base / f"probe.{col}.json"),
+        result = subprocess.run([sys.executable, str(HERE / "probe.py"), "--diff", str(base / f"probe.{col}.json"),
                         str(new / f"probe.{col}.json")])
+        bad += result.returncode != 0
     print(f"\n{now()} CROSS RESULT: {bad} lane column(s) not SAME")
+    return 1 if bad else 0
 
 
 if __name__ == "__main__":
@@ -154,4 +185,4 @@ if __name__ == "__main__":
     if a.cmd == "arms":
         arms(a.tree, Path(a.out), lanes)
     else:
-        cross(Path(a.base), Path(a.new), lanes)
+        raise SystemExit(cross(Path(a.base), Path(a.new), lanes))
