@@ -3572,8 +3572,6 @@ PUBLIC_PENDING_LANES = {
     "optim-maximize": "no reference",
     # lane/prep (merged by lane/merged, 2026-09-28): covered resample option
     # lanes; CPU and NVIDIA agree (lane/apple-merged), no release record yet.
-    "resample-bca": "no reference",
-    "resample-unpaired": "no reference",
     "resample-perm-samples": "no reference",
     "resample-utils": "no reference",
 }
