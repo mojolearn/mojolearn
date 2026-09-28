@@ -60,6 +60,19 @@ for rep in $(seq 1 "${SAB_REPS:-1}"); do
         done
     done
 done
+if [ -n "${SAB_CPU_ALGOS:-}" ]; then
+    # the CPU column (the *_host bindings in SAB_BUILDS), once per variant and mode:
+    # its digests before and after, never a timing that matters
+    for mode in ${SAB_MODES:-identical fast}; do
+        for label in $labels; do
+            MOJOLEARN_VENDOR=cpu SEQ_SPEED_PYTHON="$OUT/wt-$label/python" MOJOLEARN_NUMERIC_MODE=$mode \
+                pixi run -e default python tools/sequence_speed.py --data "$DATA" --algos "$SAB_CPU_ALGOS" \
+                --out "$OUT/cpu-$label-$mode.json" > "$OUT/cpu-$label-$mode.log" 2>&1
+            grep -E '^\{' "$OUT/cpu-$label-$mode.log" | sed "s/^/SAB CPU mode=$mode variant=$label /"
+            grep -E 'Traceback|Error' "$OUT/cpu-$label-$mode.log" | head -n 5 | sed "s/^/SAB CPUERR $label $mode: /"
+        done
+    done
+fi
 if [ -n "${SAB_QUALITY:-}" ]; then
     for mode in ${SAB_MODES:-identical fast}; do
         for label in $labels; do
