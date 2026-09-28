@@ -41,6 +41,7 @@ from x_cluster.bodies import (
 from cluster.estimator import kmeans_fit
 from cluster.impl.kmeans_params import METRIC_L2_EXPANDED
 from x_cluster.ops import ClusterOps
+from core.spec_chain import suspect_sum as _suspect_sum
 
 comptime TPB = 128
 
@@ -265,17 +266,6 @@ comptime MOM_UNROLL = 8  # addends read ahead of the (still ascending) adds
 # DEVIATION 5121 (the device M-step moments: the addends of a row tile formed
 # in parallel into shared memory, then every fold one thread's register chain
 # over them in ascending row order). Row 201; moments_check (5121 arm).
-@always_inline
-def _suspect_sum(y: Float32, t: Float32, s: Float32) -> UInt32:
-    """1 when `s = y + t` has a zero exponent field (zero or subnormal) and
-    an operand is nonzero: the only sums `ftz` could change."""
-    var sb = bitcast[DType.uint32](s)
-    var ops_nz = (bitcast[DType.uint32](y) | bitcast[DType.uint32](t)) & UInt32(0x7FFFFFFF)
-    var zero_exp = UInt32(1) if (sb & UInt32(0x7F800000)) == UInt32(0) else UInt32(0)
-    var nz = UInt32(1) if ops_nz != UInt32(0) else UInt32(0)
-    return zero_exp & nz
-
-
 def _moments_pass_kernel(
     resp: FPtr, x: FPtr, n: Int32, d: Int32, kc: Int32, reg: Float32, nk: FPtr, means: FPtr, cov: FPtr,
     cov_pass: Int32,

@@ -18,3 +18,4 @@ x_cluster/checks/kth_check.mojo	x_cluster/checks/sabotage/5120_kth_radix.patch
 x_cluster/checks/moments_check.mojo	x_cluster/checks/sabotage/5121_moments_tile.patch
 x_cluster/checks/moments_check.mojo	x_cluster/checks/sabotage/5121_moments_flag.patch
 x_cluster/checks/ap_check.mojo	x_cluster/checks/sabotage/5105_ap_rmax_tie.patch
+core/spec_chain_check.mojo	x_cluster/checks/sabotage/spec_chain_fallback.patch
