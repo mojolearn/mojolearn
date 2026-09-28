@@ -37,7 +37,7 @@ try:
     r = json.load(open(sys.argv[1]))
 except Exception as e:
     print("ARM", sys.argv[2], "NO RESULT", e); sys.exit(0)
-fw = json.dumps(r.get("final_witness"), sort_keys=True)
+fw = json.dumps((r.get("final_witness") or {}).get("sha256"), sort_keys=True)  # not export_seconds
 sw = json.dumps([s.get("sha256") for s in r.get("step_witnesses") or []], sort_keys=True)
 print("ARM %s attn=%s steady=%s median=%s first=%s peak_rss=%s final_witness=%s step_witnesses=%s gate=%s" % (
     sys.argv[2], r.get("attention_arm"), [round(x, 4) for x in r.get("steady_step_seconds") or []],
