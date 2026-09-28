@@ -1,14 +1,16 @@
+diff --git a/x_linear/cd.mojo b/x_linear/cd.mojo
+index 6a0907210..b034fe375 100644
 --- a/x_linear/cd.mojo
 +++ b/x_linear/cd.mojo
-@@ -23,6 +23,7 @@
+@@ -23,6 +23,7 @@ Named differences: no gap-safe screening (theirs `do_screening`; it only
  skips coordinates), and the refit uses the Gram form (theirs sets
  precompute=False for the refit; the same minimizer). float32 throughout.
  """
 +from std.sys.info import is_gpu
  from x_linear.ops import (
      FP, IP, fa, fs, fm, fd, fmad, fabs, fmax, fexp, flog, fsign, ld, st, ldi, i2f, fill, copy,
- )
-@@ -171,7 +172,7 @@
+     add_acc, axpy_centered,
+@@ -166,7 +167,7 @@ def enetcv_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw
      var f_n = ldi(ip, 3)
      var l_n = ldi(ip, 4)
      var explicit = ldi(ip, 5) != 0
