@@ -62,8 +62,10 @@ for cell in ${TAP_CELLS:-}; do
         lgq)
             # lgq:<datasets,comma>:<seeds>  Lossguide quality where the leaf budget binds
             # (300 trees, max_leaves 31, max_depth 10, 300k-row subsets paired by seed)
-            d=${rest%%:*}; n=${rest#*:}
-            $PY bench/speed/trees_apple3_lg_quality.py "${TAP_LABEL:-arm}" "$d" "$n" 2>&1 \
+            # lgq:<datasets>:<seeds>[:<policy>]  policy Lossguide (default) or Depthwise
+            d=${rest%%:*}; r2=${rest#*:}; n=${r2%%:*}; pol=Lossguide
+            case "$r2" in *:*) pol=${r2#*:} ;; esac
+            $PY bench/speed/trees_apple3_lg_quality.py "${TAP_LABEL:-arm}" "$d" "$n" "$pol" 2>&1 \
                 | grep -E '^LGQ|Error|error|Traceback' ;;
         mq)
             # mq:<ests,comma>:<datasets,comma>:<seeds>  boosted-member quality, paired by seed

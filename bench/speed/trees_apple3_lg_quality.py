@@ -8,9 +8,10 @@ print the test metrics. The method of
 bench/results/fast_quality_audit_2026-09-26/lg_quality.py, with the datasets
 and seeds named on the command line.
 
-    pixi run -e default python bench/speed/trees_apple3_lg_quality.py <tag> taxi,istellareg 5
+    pixi run -e default python bench/speed/trees_apple3_lg_quality.py <tag> taxi,istellareg 5 [Lossguide|Depthwise]
 
-Every line begins `LGQ ` and is one JSON record."""
+Depthwise runs max_depth 6 (its leaf count is 1 << max_depth). Every line
+begins `LGQ ` and is one JSON record."""
 import json
 import os
 import sys
@@ -32,6 +33,7 @@ def main(argv):
     tag = argv[1]
     datasets = argv[2].split(",") if len(argv) > 2 else ["taxi", "istellareg"]
     seeds = int(argv[3]) if len(argv) > 3 else 5
+    policy = argv[4] if len(argv) > 4 else "Lossguide"
     trees = int(os.environ.get("LGQ_TREES", "300"))
     for ds in datasets:
         d = spec.load_with_fallback(ds, "shipped", 2_000_000)
@@ -46,8 +48,11 @@ def main(argv):
             idx = np.sort(rng.choice(len(x_all), size=min(300000, len(x_all)), replace=False))
             x = np.ascontiguousarray(x_all[idx])
             y = y_all[idx]
-            kw = dict(n_estimators=trees, grow_policy="Lossguide", max_leaves=31, max_depth=10,
-                      random_state=seed)
+            if policy == "Lossguide":
+                kw = dict(n_estimators=trees, grow_policy="Lossguide", max_leaves=31, max_depth=10,
+                          random_state=seed)
+            else:
+                kw = dict(n_estimators=trees, grow_policy=policy, max_depth=6, random_state=seed)
             t = time.time()
             if d.task != "regression":
                 m = M.GradientBoostingClassifier(**kw).fit(x, y.astype(np.int64))
@@ -61,12 +66,14 @@ def main(argv):
                 r[order] = np.arange(len(p))
                 pos = yt == 1
                 auc = (r[pos].sum() - pos.sum() * (pos.sum() - 1) / 2) / (pos.sum() * (~pos).sum())
-                rec = dict(ds=ds, seed=seed, logloss=float(ll), acc=float(acc), auc=float(auc))
+                rec = dict(ds=ds, seed=seed, policy=policy, logloss=float(ll), acc=float(acc),
+                           auc=float(auc))
             else:
                 m = M.GradientBoostingRegressor(**kw).fit(x, y.astype(np.float32))
                 fit_s = time.time() - t
                 p = np.asarray(m.predict(xt), dtype=np.float64)
-                rec = dict(ds=ds, seed=seed, rmse=float(np.sqrt(np.mean((p - yt) ** 2))))
+                rec = dict(ds=ds, seed=seed, policy=policy,
+                           rmse=float(np.sqrt(np.mean((p - yt) ** 2))))
             rec["digest"] = spec.hash_predictions(np.asarray(p, dtype=np.float64))
             rec["fit_s"] = round(fit_s, 3)
             rec["tag"] = tag
