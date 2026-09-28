@@ -35,6 +35,7 @@ for v in ${SAB_VARIANTS:-base=HEAD}; do
     ok=1
     for mode in ${SAB_MODES:-identical fast}; do
         for s in ${SAB_BUILDS:-bindings/build_x_sequence.sh}; do
+            case "$mode:$s" in fast:*_host.sh) continue ;; esac   # the CPU column builds IDENTICAL only
             t0=$(date +%s)
             (cd "$wt" && MOJOLEARN_SKIP_BUILD_GATE=1 MOJOLEARN_NUMERIC_MODE=$mode pixi run -e default sh "$s") >> "$OUT/build-$label-$mode.log" 2>&1 \
                 || { echo "SAB $label BUILD $mode $s FAILED"; tail -n 30 "$OUT/build-$label-$mode.log"; ok=0; }
@@ -63,7 +64,7 @@ done
 if [ -n "${SAB_CPU_ALGOS:-}" ]; then
     # the CPU column (the *_host bindings in SAB_BUILDS), once per variant and mode:
     # its digests before and after, never a timing that matters
-    for mode in ${SAB_MODES:-identical fast}; do
+    for mode in identical; do
         for label in $labels; do
             MOJOLEARN_VENDOR=cpu SEQ_SPEED_PYTHON="$OUT/wt-$label/python" MOJOLEARN_NUMERIC_MODE=$mode \
                 pixi run -e default python tools/sequence_speed.py --data "$DATA" --algos "$SAB_CPU_ALGOS" \
