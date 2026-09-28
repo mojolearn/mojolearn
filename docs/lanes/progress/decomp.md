@@ -1,5 +1,9 @@
 # decomp: progress
 
+> **AWAITING ANDREW: the `linalg.qr(a)` default changed from `'r'` (R alone) to numpy's
+> `'reduced'` ((Q, R)). This is a breaking change to a public call. It is kept on the lane and
+> recorded as BREAKING in CHANGELOG.md "Changed"; revert it if Andrew says no.**
+
 Design (pass 1): every float operation is a cell in `x_decomp/cells.mojo`, run
 by `x_decomp/device.mojo` (GPU binding `_mojolearn_x_decomp`, one thread per
 output) or `x_decomp/host.mojo` (host binding, same cell in a loop); the entry
