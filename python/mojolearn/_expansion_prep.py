@@ -41,7 +41,7 @@ import bisect
 import copy
 import ctypes
 import inspect
-import math
+from . import _portable_math as math
 import mmap
 import numbers
 import operator

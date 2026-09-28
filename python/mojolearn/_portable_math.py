@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Host math with repository-owned arithmetic and no import of platform math.
+"""Host math with repository-owned transcendental arithmetic.
 
 The native logarithm/exponential functions use the same pinned binary64
 polynomials as checks/numerics.mojo. They are portable approximations, not a
@@ -7,6 +7,8 @@ claim of correctly rounded general transcendentals. exp follows that existing
 primitive's flush-to-zero policy below the smallest normal output. sqrt uses
 the correctly rounded CPU instruction on the wheel's supported baselines.
 Integer, classification, sign and scaling operations below require no libm.
+The finite compensated-sum fast path uses CPython's arithmetic implementation,
+with the exact integer sum retained for exceptional cases and as its oracle.
 """
 import array
 import ctypes
@@ -21,6 +23,7 @@ import sys
 
 inf = float("inf")
 nan = float("nan")
+pi = float.fromhex("0x1.921fb54442d18p+1")
 _lib = None
 
 
@@ -81,6 +84,41 @@ def isnan(x):
 
 def copysign(x, y):
     return _float((_bits(x) & 0x7fffffffffffffff) | (_bits(y) & 0x8000000000000000))
+
+
+def isclose(a, b, *, rel_tol=1e-9, abs_tol=0.0):
+    a, b, rel_tol, abs_tol = map(float, (a, b, rel_tol, abs_tol))
+    if rel_tol < 0.0 or abs_tol < 0.0:
+        raise ValueError("tolerances must be non-negative")
+    if a == b:
+        return True
+    if isinf(a) or isinf(b):
+        return False
+    difference = abs(b - a)
+    return (difference <= abs(rel_tol * b) or difference <= abs(rel_tol * a)
+            or difference <= abs_tol)
+
+
+def comb(n, k):
+    n, k = operator.index(n), operator.index(k)
+    if n < 0 or k < 0:
+        raise ValueError("n and k must be non-negative")
+    if k > n:
+        return 0
+    k = min(k, n - k)
+    result = 1
+    for i in range(1, k + 1):
+        result = result * (n - k + i) // i
+    return result
+
+
+def frexp(x):
+    x = float(x)
+    if x == 0.0 or not isfinite(x):
+        return x, 0
+    numerator, denominator = x.as_integer_ratio()
+    width = abs(numerator).bit_length()
+    return _scaled_integer(numerator, -width), width - (denominator.bit_length() - 1)
 
 
 def sqrt(x):
@@ -181,7 +219,8 @@ def fsum(values):
     """Exact finite sum followed by one nearest/even binary64 rounding.
 
     Fast path (lane py-shared; the argument `_expansion_metrics._fsum` made
-    first): CPython's compiled `math.fsum` keeps Shewchuk's exact partials and
+    first, on the supported CPython arm64/x86-64 wheel baselines): compiled
+    `math.fsum` keeps Shewchuk's exact partials and
     rounds the exact sum once to nearest/even, so whenever its result is
     finite every term was finite and it is this function's result bit for
     bit. A zero result is +0.0 here, so a zero goes out as +0.0. A NaN or

@@ -32,7 +32,7 @@ Adamax, NAdam, LAMB) and recurrent estimators (LSTM/GRU/RNN), which set
 Not carried (sequence/NOT_IMPLEMENTED.tsv): OneCycleLR's momentum cycling
 (cycle_momentum, base_momentum, max_momentum); per-group learning rates;
 `last_epoch` resumption (evaluate `lr_at` at the step you resume from)."""
-import math as _math
+from . import _portable_math as _math
 from fractions import Fraction
 
 from ._training_impl import _PI_HI, _PI_LO, _cos_pi_interval, _decide_f32, _f32_round

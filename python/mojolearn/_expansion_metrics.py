@@ -33,7 +33,7 @@ is scikit-learn's own precision for the same step.
 import array
 import ctypes
 import itertools
-import math as _math
+from . import _portable_math as _math
 import numbers
 import operator
 import warnings

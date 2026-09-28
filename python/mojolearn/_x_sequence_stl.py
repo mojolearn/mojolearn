@@ -11,7 +11,7 @@ per row, all sharing the configuration; the batch is the GPU's parallelism.
 Refused by name: `period=None` (the reference infers it from a pandas index;
 pass it), float64 input, degrees other than 0 and 1 (the reference's own
 bound)."""
-import math
+from . import _portable_math as math
 
 from ._optional_numpy import require_numpy
 np = require_numpy('_x_sequence_stl')

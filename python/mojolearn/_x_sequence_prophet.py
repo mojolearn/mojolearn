@@ -20,7 +20,7 @@ is at a tolerance (its fit is Stan). Refused by name
 (sequence/NOT_IMPLEMENTED.tsv): logistic and flat growth, uncertainty
 intervals and sampling (mcmc_samples, interval_width), extra regressors
 beyond holiday indicator columns, conditional seasonalities, float64 y."""
-import math
+from . import _portable_math as math
 
 from ._optional_numpy import require_numpy
 np = require_numpy('_x_sequence_prophet')

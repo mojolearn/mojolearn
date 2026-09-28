@@ -223,7 +223,7 @@ python3 packaging/check_ext_lists.py --host   # the host list is read from the m
 MOJOLEARN_NUMERIC_MODE=identical pixi run -e test test-python   # 978 pytest tests, about 7 s
 pixi run check-python-gates-release                              # explicit bounded release gates
 pixi run check-mamba-poison                                      # DEVIATIONS 2712/2713: the four Mamba lanes cold on a NaN-poisoned, guard-banded binding, about 3 min
-pixi run test-wheel-audit                                        # no bundled NumPy or base NumPy dependency; optional APIs use the guarded numpy extra; no platform math
+pixi run test-wheel-audit                                        # optional NumPy only; owned math helpers, with the tested CPython compensated-sum guard
 ```
 
 Both need the 17 IDENTICAL bindings built on this Mac (`bindings/build*.sh`).

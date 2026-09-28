@@ -341,7 +341,7 @@ class TSNE(NumericModeMixin):
 
     def _init(self, x, n, seed):
         """The start y0 (n, 2) float32: 'pca', 'random' or the caller's array."""
-        import math
+        from . import _portable_math as math
         from ._optional_numpy import require_numpy
         np = require_numpy('_expansion_ann')
         init = self.init

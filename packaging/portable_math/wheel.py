@@ -161,6 +161,42 @@ def dependency_errors(path, relative):
 LIBM = re.compile(r"^lib(?:m|mvec)(?:[.-]|$)", re.I)
 
 
+def python_math_errors(path, relative):
+    """Only the existing compensated-sum guard may call CPython math.fsum.
+
+    No libm transcendental, alias escape or dynamic module import is admitted.
+    The fast sum is held byte-for-byte to the exact integer oracle in tests.
+    """
+    tree = ast.parse(path.read_bytes(), filename=relative)
+    parents = {id(child): node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
+    admitted = set()
+    if relative == "mojolearn/_portable_math.py":
+        sums = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == 'fsum']
+        inside = {id(node) for fn in sums for node in ast.walk(fn)}
+        refs = [node for node in ast.walk(tree) if isinstance(node, ast.Name) and node.id == '_cmath']
+        def is_sum_call(ref):
+            attr = parents.get(id(ref))
+            call = parents.get(id(attr))
+            return (id(ref) in inside and isinstance(attr, ast.Attribute) and attr.attr == 'fsum'
+                    and isinstance(call, ast.Call) and call.func is attr)
+        if refs and all(is_sum_call(ref) for ref in refs):
+            admitted = {id(node) for node in tree.body if isinstance(node, ast.Import)
+                        and len(node.names) == 1 and node.names[0].name == 'math'
+                        and node.names[0].asname == '_cmath'}
+    errors = []
+    for node in ast.walk(tree):
+        names = ([a.name for a in node.names] if isinstance(node, ast.Import)
+                 else [node.module or ''] if isinstance(node, ast.ImportFrom) and not node.level else [])
+        if isinstance(node, ast.Call) and node.args and isinstance(node.args[0], ast.Constant):
+            fn = node.func
+            if (isinstance(fn, ast.Name) and fn.id == '__import__'
+                    or isinstance(fn, ast.Attribute) and fn.attr == 'import_module'):
+                names.append(str(node.args[0].value))
+        if any(name.split('.')[0] in ('math', 'cmath') for name in names) and id(node) not in admitted:
+            errors.append(relative + ': platform Python math import')
+    return errors
+
+
 def audit_tree(root, python_only=False):
     """Audit an unpacked wheel. `python_only` is the release rehearsal's
     dry run over a STAGED SOURCE TREE (tools/release_rehearsal.py): the same
@@ -179,12 +215,7 @@ def audit_tree(root, python_only=False):
         if LIBM.match(path.name):
             errors.append(relative + ": bundled platform math library")
         if path.suffix == ".py":
-            tree = ast.parse(path.read_bytes(), filename=relative)
-            for node in ast.walk(tree):
-                imports = ([a.name for a in node.names] if isinstance(node, ast.Import)
-                           else [node.module or ""] if isinstance(node, ast.ImportFrom) and not node.level else [])
-                if any(name.split(".")[0] in ("math", "cmath") for name in imports):
-                    errors.append(relative + ": platform Python math import")
+            errors.extend(python_math_errors(path, relative))
         if python_only:
             continue
         with path.open("rb") as stream:
@@ -224,7 +255,8 @@ def audit_tree(root, python_only=False):
     if python_only:
         if errors:
             raise ValueError("platform math audit failed:\n" + "\n".join(errors))
-        return {"numpy_runtime_free": True, "platform_math_free_python": True, "binaries": [],
+        return {"numpy_optional": True, "numpy_bundled": False,
+                "python_math_policy": "owned helpers and guarded CPython fsum", "binaries": [],
                 "scope": "staged source tree, Python files only (release rehearsal)"}
     # IDENTICAL-tier CUDA PTX must carry a rounding modifier on every float
     # mul/add/sub/fma, or the driver JIT may contract it (packaging/linux/ptx_contract.py).
@@ -242,7 +274,9 @@ def audit_tree(root, python_only=False):
         errors.append("wheel contains no native binaries")
     if errors:
         raise ValueError("platform math audit failed:\n" + "\n".join(errors))
-    return {"numpy_runtime_free": True, "numpy_oracles": sorted(NUMPY_ORACLES), "platform_math_free": True, "scope": "wheel files and direct native/Python math imports; excludes Python and OS dependencies", "binaries": binaries,
+    return {"numpy_optional": True, "numpy_bundled": False, "numpy_oracles": sorted(NUMPY_ORACLES),
+            "python_math_policy": "owned helpers and guarded CPython fsum", "platform_math_free": True,
+            "scope": "wheel native math imports and Python operation policy; excludes Python and OS dependencies", "binaries": binaries,
             "identical_ptx_rounding_pinned": True, "identical_ptx": ptx_rows,
             "identical_cuda_machine_code": True, "identical_cuda_fatbins": fatbin_rows}
 
@@ -320,14 +354,14 @@ def main():
     args = parser.parse_args()
     if args.python_tree:
         report = audit_tree(args.python_tree, python_only=True)
-        print(json.dumps({"tree": str(args.python_tree), "numpy_runtime_free": report["numpy_runtime_free"],
-                          "platform_math_free_python": True}))
+        print(json.dumps({"tree": str(args.python_tree), "numpy_optional": report["numpy_optional"],
+                          "python_math_policy": report["python_math_policy"]}))
         return
     if not args.wheels:
         parser.error("name at least one wheel, or --python-tree DIR")
     for wheel in args.wheels:
         report = finalize(wheel, args.helper, args.audit_only)
-        print(json.dumps({"wheel": str(wheel), "platform_math_free": True, "numpy_runtime_free": report["numpy_runtime_free"],
+        print(json.dumps({"wheel": str(wheel), "platform_math_free": True, "numpy_optional": report["numpy_optional"],
                           "native_files_checked": len(report["binaries"])}))
 
 

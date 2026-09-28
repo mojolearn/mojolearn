@@ -24,7 +24,7 @@ is exact. Where a scalar is derived in Python (a percentile, gamma from a
 variance) it is IEEE double arithmetic on float32 inputs, rounded once to
 float32, which is the same on every box.
 """
-import math
+from . import _portable_math as math
 import os
 import struct
 

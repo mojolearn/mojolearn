@@ -948,7 +948,7 @@ def qr(a, mode="r"):
         reflector signs; measured 2026-09-27 on a 48 x 5 input), so it can
         differ from ``qr(a, mode='reduced')[1]`` by a sign per row.
         Its bits predate the Q modes and are kept (the linalg-qr lane). A
-        wide input's R is geqrf's, the same as ``qr(a)[1]``.
+        wide input's R is geqrf's, the same as ``qr(a, mode='reduced')[1]``.
 
     Notes
     -----

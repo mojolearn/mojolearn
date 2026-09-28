@@ -14,7 +14,7 @@ first imported, after the package, so both may rely on every module existing:
                                import `_classical_host` INSIDE it and subclass
                                its `_HostBound`; never import it at module level
 """
-import math
+from . import _portable_math as math
 
 from . import _backend, _buffer
 from . import _portable_math as _pm
@@ -819,7 +819,7 @@ def _gmm_ext_fit(est, X):
         aux += [float(v) for v in memoryview(m).cast("B").cast("f")]
         flags[1] = 1
     if est.precisions_init is not None and not warm:
-        import math as _m
+        from . import _portable_math as _m
         pi = est.precisions_init
         full = []
         if ct == 0:

@@ -86,6 +86,21 @@ def test_shipped_runtime_numpy_imports_use_only_the_guard():
     assert not errors
 
 
+def test_compensated_sum_exception_cannot_admit_platform_transcendentals(tmp_path):
+    path = tmp_path / '_portable_math.py'
+    body = 'import math as _cmath\ndef fsum(vals):\n    return _cmath.fsum(vals)\n'
+    path.write_text(body)
+    assert audit.python_math_errors(path, 'mojolearn/_portable_math.py') == []
+    assert audit.python_math_errors(path, 'mojolearn/other.py')
+    for bad in (body.replace('_cmath.fsum', '_cmath.exp'),
+                body.replace('return _cmath.fsum(vals)', 'return getattr(_cmath, "fsum")(vals)'),
+                body + '\nleaked = _cmath\n', body + '\nleaked = _cmath.fsum\n',
+                body.replace('def fsum(', 'def other('),
+                '__import__("math")\n', 'importlib.import_module("cmath")\n'):
+        path.write_text(bad)
+        assert audit.python_math_errors(path, 'mojolearn/_portable_math.py')
+
+
 @pytest.mark.parametrize("relative", ["mojolearn/_identity_break.py", "mojolearn/_verify_par.py"])
 def test_numpy_remains_available_to_independent_verification(tmp_path, relative):
     path = tmp_path / '_identity_break.py'

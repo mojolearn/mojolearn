@@ -19,7 +19,7 @@ run the same arithmetic in the same order, and the result is the same bits.
 """
 import array
 import ctypes
-import math
+from . import _portable_math as math
 import sys
 
 from . import _backend

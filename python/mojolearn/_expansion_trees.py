@@ -2460,7 +2460,7 @@ class KernelExplainer(_AgnosticExplainer):
 
     @staticmethod
     def _binom(n, r):
-        from math import comb
+        from ._portable_math import comb
         return comb(n, r)
 
     def _masks(self, M, nsamples, seed, row):
