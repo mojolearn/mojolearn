@@ -71,6 +71,11 @@ Dropout2d, BasicBlock, CNNClassifier, GCNConv, SAGEConv.
   5712 adaptive average pooling backward gather order, 5713 SAGE max
   backward (ties split, targets ascending), 5714 row L2 normalize fold,
   5715 Adam/AdamW without FMA.
+  A seam with more than one copy has an arm per copy: 5706 covers the max
+  pool device element function, the host plane loop
+  (`seam_5706_maxpool_host_last`) and AdaptiveMaxPool2d's own tie
+  (`5706_adaptive_max_tie`, `seam_5706_adaptive_max_last`); 5700 covers the
+  device element function and the host row loop (`seam_5700_col2im_host_order`).
 - Check: `tools/with_identical_mode.sh pixi run mojo run -I . x_cnn/checks/seams_check.mojo`;
   sabotage arms `checks/sabotage/seam_57xx_*.patch`; the lane check
   `tools/algos_lane_check.sh <x-cnn lanes> --pass 2`.

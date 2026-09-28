@@ -18,3 +18,6 @@ x_cnn/checks/seams_check.mojo	x_cnn/checks/sabotage/seam_5715_adam_fma.patch
 x_cnn/checks/gemm_host_check.mojo	x_cnn/checks/sabotage/seam_5719_fold_finish.patch
 x_cnn/checks/gemm_host_check.mojo	x_cnn/checks/sabotage/seam_5719_no_redo.patch
 x_cnn/checks/gemm_host_check.mojo	x_cnn/checks/sabotage/seam_5719_chunk_span.patch
+x_cnn/checks/seams_check.mojo	x_cnn/checks/sabotage/seam_5706_adaptive_max_last.patch
+x_cnn/checks/seams_check.mojo	x_cnn/checks/sabotage/seam_5706_maxpool_host_last.patch
+x_cnn/checks/seams_check.mojo	x_cnn/checks/sabotage/seam_5700_col2im_host_order.patch
