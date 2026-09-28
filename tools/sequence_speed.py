@@ -31,7 +31,9 @@ from pathlib import Path
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "python"))
+# SEQ_SPEED_PYTHON: another checkout's python/ (tools/sequence_apple_ab.sh
+# times every variant with this one harness)
+sys.path.insert(0, os.environ.get("SEQ_SPEED_PYTHON") or str(ROOT / "python"))
 
 
 def digest(*arrays):
@@ -182,6 +184,16 @@ def case_ts(ml, X, y, name, big, B_big, n_len):
     elif name == "garch":
         m = ml.GARCH(1, 0, 1).fit(Y - np.float32(10.0), horizon=5)
         outs = (m.params_ if hasattr(m, "params_") else m.params, m.forecast(5))
+    elif name == "arima":
+        m = ml.ARIMA((1, 1, 1)).fit(Y)
+        outs = (np.asarray(m.params) if hasattr(m, "params") else m.params_, m.forecast(12))
+    elif name == "hw":
+        m = ml.ExponentialSmoothing(Y, seasonal_periods=12, ts_num=B)
+        m.fit()
+        outs = (m.forecast(12),)
+    elif name == "kpss":
+        r = ml.kpss_test(np.ascontiguousarray(Y.T), return_statistic=True)
+        outs = tuple(np.asarray(v) for v in (r if isinstance(r, tuple) else (r,)))
     elif name == "autoarima":
         m = ml.AutoARIMA(Y).search(d=range(2), p=range(2), q=range(2))
         m.fit()
@@ -224,7 +236,9 @@ def case_ts(ml, X, y, name, big, B_big, n_len):
 
 
 TS = dict(stl=(10000, 100), theta=(10000, 100), croston=(10000, 100), ets=(10000, 100),
-          garch=(10000, 100), autoarima=(2000, 100), var=(0, 0), prophet=(0, 0))
+          garch=(10000, 100), arima=(10000, 100), hw=(10000, 100), kpss=(10000, 100),
+          autoarima=(2000, 100), var=(0, 0), prophet=(0, 0))
+#: every case; ALL is the default --algos
 NEURAL = ["lstm", "gru", "rnn", "mlp", "moe", "layernorm"]
 OPTIM = ["rmsprop", "adagrad", "lion", "adamax", "nadam", "lamb", "adafactor"]
 ALL = NEURAL + OPTIM + list(TS)
@@ -270,7 +284,9 @@ def compare(a, b):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--data", default="~/data/higgs_speed.npz")
+    ap.add_argument("--data", default=next((p for p in ("~/data/higgs_speed.npz",
+                    "~/datasets/gbm-bench/higgs/higgs_speed.npz") if os.path.exists(os.path.expanduser(p))),
+                    "~/data/higgs_speed.npz"))
     ap.add_argument("--rows", type=int, default=1_000_000)
     ap.add_argument("--algos", default=",".join(ALL))
     ap.add_argument("--out", default="")
