@@ -60,6 +60,7 @@ _OPS = dict(
     da_shrink=81, da_pool=82, sym_fn=83, da_intercept=84, evr=85, class_stats_w=86,
     indicator=87, code_counts=88, remap_codes=89, add_arrays=90, gnb_merge=91, cat_counts=92, cat_flp=93,
     mi_dc=94, mi_dd=95, kbins_gw=96, kbins_wq=97, kbins_wkm=98, ii_sigma=99, ii_post=100,
+    scaler_stats=101, std_scale=102, nan_keep=103,
 )
 _PARAMS = 14
 _NONE = -1
