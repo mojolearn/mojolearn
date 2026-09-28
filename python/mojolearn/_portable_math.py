@@ -9,7 +9,9 @@ the correctly rounded CPU instruction on the wheel's supported baselines.
 Integer, classification, sign and scaling operations below require no libm.
 """
 import ctypes
+import math as _cmath
 import operator
+from os import environ as _environ
 from pathlib import Path
 import struct
 import sys
@@ -42,15 +44,27 @@ def _native(name, x):
     return getattr(_lib, "mojolearn_" + name)(x)
 
 
+# The predicates below take a float fast path (lane py-shared): for a Python
+# float, `x - x` is +0.0 exactly when x is finite (inf - inf and NaN - NaN are
+# NaN), and `x != x` exactly when x is a NaN. These are IEEE comparisons, not
+# libm, so they give the bit test's answer on every host at about a fifth of
+# its cost. Anything else (an int, a NumPy scalar, a Fraction) keeps the bit
+# test, which converts it with float() first, as before.
 def isfinite(x):
+    if type(x) is float:
+        return x - x == 0.0
     return (_bits(x) & 0x7ff0000000000000) != 0x7ff0000000000000
 
 
 def isinf(x):
+    if type(x) is float:
+        return x == x and x - x != 0.0
     return (_bits(x) & 0x7fffffffffffffff) == 0x7ff0000000000000
 
 
 def isnan(x):
+    if type(x) is float:
+        return x != x
     return (_bits(x) & 0x7fffffffffffffff) > 0x7ff0000000000000
 
 
@@ -153,7 +167,30 @@ def ldexp(x, exponent):
 
 
 def fsum(values):
-    """Exact finite sum followed by one nearest/even binary64 rounding."""
+    """Exact finite sum followed by one nearest/even binary64 rounding.
+
+    Fast path (lane py-shared; the argument `_expansion_metrics._fsum` made
+    first): CPython's compiled `math.fsum` keeps Shewchuk's exact partials and
+    rounds the exact sum once to nearest/even, so whenever its result is
+    finite every term was finite and it is this function's result bit for
+    bit. A zero result is +0.0 here, so a zero goes out as +0.0. A NaN or
+    infinite result, an intermediate overflow, or a term `math.fsum` refuses
+    (a string float() accepts) goes to the exact sum below, which decides it.
+    The reference arm `MOJOLEARN_HOTPATH=python` keeps the exact sum always.
+    About 4 ns per term instead of about 500 ns."""
+    vals = values if type(values) is list else list(values)
+    if _environ.get("MOJOLEARN_HOTPATH", "").strip().lower() != "python":
+        try:
+            s = _cmath.fsum(vals)
+        except (OverflowError, ValueError, TypeError):
+            return _fsum_exact(vals)
+        if s - s == 0.0:
+            return s if s != 0.0 else 0.0
+    return _fsum_exact(vals)
+
+
+def _fsum_exact(values):
+    """The exact portable sum (the reference `fsum` keeps)."""
     total = 0
     positive_inf = negative_inf = False
     nan_value = None

@@ -49,22 +49,9 @@ _PARAMS = 14
 _NONE = -1
 
 
-def _fsum(values):
-    """`_portable_math.fsum` (the exact sum, rounded once to nearest/even),
-    by CPython's `math.fsum` whenever that is finite: for finite binary64
-    inputs `math.fsum` is that same correctly rounded sum (Shewchuk's exact
-    partials; IEEE binary64 on every host Python runs on), so the bits are
-    the same and a million terms cost milliseconds instead of seconds. A
-    zero sum is +0.0, as the portable one returns; anything non-finite or an
-    intermediate overflow goes to the portable sum, which decides it."""
-    vals = values if isinstance(values, list) else list(values)
-    try:
-        s = _math.fsum(vals)
-    except (OverflowError, ValueError):
-        return pmath.fsum(vals)
-    if s - s != 0:
-        return pmath.fsum(vals)
-    return s if s != 0 else 0.0
+#: `_portable_math.fsum` carries the `math.fsum` fast path this module
+#: made first (lane py-shared moved it there, so every caller gains it).
+_fsum = pmath.fsum
 
 
 def _binding(numeric_mode):
