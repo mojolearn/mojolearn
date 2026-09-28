@@ -19,27 +19,46 @@ combined run verifies on m2pro, NVIDIA, AMD and CPU).
   12 (NLL, MAE, sMAPE) with a sweep of the FAST stall stop.
 - `tools/sequence_speed.py` also times ARIMA (1,1,1), Holt-Winters and KPSS now.
 
-## Changes (see the table for what each measured)
+## Changes (final state; DEFAULT ON unless marked)
 
-IDENTICAL-exact (same arithmetic, same order; both modes):
+IDENTICAL-exact (same arithmetic, same order; both modes; digests equal in every job):
 1. LayerNorm `op_ln_bwd_w`: the column folds over 1M rows stage 16 rows of loads
-   before folding (the round 1 trick; 28 threads each walked 1M strided rows).
-2. `gemm_dot` (SHARED by every sequence GEMM): K >= 16384 stages 48 loads (VAR's
-   normal equations: few cells, K = 1M).
-3. `DeviceExec.download_async`: several device copies share one wait (optimizer,
-   LAMB, Adafactor, LayerNorm drivers); `bind` skips the zero fill it uploads over.
-4. MLP: X and y gathered in one launch; every layer's ||W||^2 in one launch.
+   before folding (28 threads each walked 1M strided rows). 0e5326880.
+2. `DeviceExec.download_async` (several device copies share one wait: optimizer,
+   LAMB, Adafactor, LayerNorm drivers); `bind` skips the zero fill it uploads over
+   (3b5b92c5a); host copies of >= 2M floats split over up to 8 threads (3ebe0d0c7).
+   SHARED by every sequence entry (DeviceExec).
+3. MLP: X and y gathered in one launch; every layer's ||W||^2 in one launch
+   (a786859a5; 1.02x, consistent in every job).
+4. `sequence/coop.mojo` (af1ee590c), Apple only (`has_apple_gpu_accelerator`): a
+   long one-thread fold runs on a simdgroup, the 32 lanes loading together and
+   every lane running the same ordered fma chain over `shuffle_idx`-broadcast
+   values; lane 0 stores. Adafactor and LAMB norms, LAMB segment norms, and GEMM
+   cells of at most 1024 over K >= 32768 (VAR). NVIDIA, AMD and the host keep the
+   one-thread op. SHARED: `DeviceExec.launch` routes these ops.
+5. AutoARIMA: `select_d` over the whole batch in one call (4387772c3).
+6. Prophet likelihood gradient folds over 16-point blocks with the running value in
+   a register (778a78ef1; job 9).
+7. `prophet_fg` split into two inlined helpers, the same operations (29a290cf6).
 
-FAST only (compiled out of IDENTICAL builds; each has a paired quality check):
-5. LAMB and Adafactor norms: 4096 strided partials, then their ordered sum
-   (`op_chunk_sumsq`), instead of one thread's 4M-long chain.
-6. LayerNorm weight gradients: rows split into blocks (~8192 threads), then an
-   ordered sum of the partials.
-7. `gemm` split-K for products of at most 1024 cells over K >= 32768 (VAR).
-8. ETS: Nelder-Mead stall stop (best value not down by more than rel |best| for
-   W iterations): opt-in for ETS (no gain), default 50 at 1e-6 for GARCH.
-9. Prophet, N >= 65536: the likelihood over point chunks on the device, L-BFGS
-   and priors on the host (the IDENTICAL fit is ONE GPU thread: 1470 s at 1M points).
+FAST only (compiled out of IDENTICAL builds; each has a paired quality check that
+matches or beats FAST before):
+8. LAMB and Adafactor norms: 4096 strided partials, then their ordered sum
+   (`op_chunk_sumsq`), from 65536 elements (2edf591fe).
+9. LayerNorm weight gradients: rows split into blocks (~8192 threads), then an
+   ordered sum of the partials (0e5326880).
+10. `gemm` split-K for products of at most 1024 cells over K >= 32768: VAR
+    (0e5326880). SHARED: `sequence/recurrent.mojo::gemm`, every sequence GEMM of
+    that shape.
+11. Nelder-Mead stall stop (`sequence/nm.mojo`, SHARED by ETS, GARCH, Theta; only
+    GARCH and ETS pass it): GARCH default 50 iterations at 1e-5 (c592aba84); ETS
+    OPT-IN only (`ETS._fast_stall`, default off: no setting saved time).
+12. Prophet, N >= 16384: the likelihood over point chunks on the device, L-BFGS and
+    priors on the host (29a290cf6, c592aba84).
+
+Tried and reverted: 48-deep staging of long-K GEMM folds (VAR IDENTICAL 0.59 ->
+1.04 s; 61b479c9f); one DeviceContext per module for ARIMA, KPSS and Holt-Winters
+(no gain, job 7; reverted in 602351663).
 
 ## Before / after
 
