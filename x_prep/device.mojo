@@ -5,6 +5,7 @@ program is one launch of one thread per unit on the same stream (so stage s
 sees every write of stage s-1), and the arena comes back once."""
 from std.gpu import block_idx, block_dim, thread_idx
 from std.ffi import _Global
+from std.memory import memcpy
 from std.os import getenv
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext
@@ -25,6 +26,7 @@ from x_prep.fastred import (
 from x_prep.dmi import mi_cd_device, mi_w_words, mi_scratch_words
 from core.arena_io import check_in_ranges, check_out_ranges, upload_ranges, download_ranges
 from core.device_store import DeviceStore
+from core.host_parallel import host_parallelize
 
 #: op 69 (`mi_cd`) runs as the sorted neighbour search of x_prep/dmi.mojo
 #: (the host's argument, x_prep/host/mutual_info.mojo: the same words)
@@ -105,6 +107,31 @@ def run_program_device_ranges(arena_addr: Int, arena_len: Int, prog_addr: Int, s
     )
 
 
+#: words per task of the threaded host copy (16 MB)
+comptime DIRECT_CHUNK = 1 << 22
+comptime HP = MutPointer[Float32, MutUntrackedOrigin]
+
+
+def _direct_copy(src_addr: Int, dst_addr: Int, n: Int, threads: Bool):
+    """n words at src_addr to dst_addr on the host: one memcpy, or 16 MB
+    chunks across the host pool. A byte move."""
+    if n <= 0:
+        return
+    var sp = HP(unsafe_from_address=src_addr)
+    var dp = HP(unsafe_from_address=dst_addr)
+    if not threads or n <= DIRECT_CHUNK:
+        memcpy(dest=dp, src=sp, count=n)
+        return
+    var chunks = (n + DIRECT_CHUNK - 1) // DIRECT_CHUNK
+
+    def _chunk(k: Int) {imm sp, imm dp, imm n}:
+        var i0 = k * DIRECT_CHUNK
+        var i1 = min(i0 + DIRECT_CHUNK, n)
+        memcpy(dest=dp + i0, src=sp + i0, count=i1 - i0)
+
+    host_parallelize(_chunk, chunks)
+
+
 def _env_int(name: String, default: Int) -> Int:
     """The integer value of an environment switch (the default when unset or not a number)."""
     var v = String(getenv(name))
@@ -166,6 +193,16 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
         exact = getenv("MOJOLEARN_XPREP_EXACT", "0") == "1"
         te_fast = getenv("MOJOLEARN_XPREP_TE_FAST", "0") == "1"
         ii_sym = getenv("MOJOLEARN_XPREP_II_SYM", "0") == "1"
+    # EXPERIMENT (FAST on Apple, opt-in): MOJOLEARN_XPREP_DOWNLOAD=memcpy reads the device arena's
+    # words from the host after the wait (Apple's buffers are shared memory), =threads the same in
+    # 16 MB chunks across the host pool. A byte move either way.
+    var dl_mode = 0
+    comptime if RADIX_SORT:
+        var dl = String(getenv("MOJOLEARN_XPREP_DOWNLOAD"))
+        if dl == "memcpy":
+            dl_mode = 1
+        elif dl == "threads":
+            dl_mode = 2
     # MOJOLEARN_XPREP_PROFILE=1: XPPHASE lines (a wait after every phase; timing only)
     var prof = getenv("MOJOLEARN_XPREP_PROFILE", "0") == "1"
     var t_last = perf_counter_ns()
@@ -326,14 +363,35 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
         print("XPPHASE stage", stages - 1, "op", Int(host_q.unsafe_load((stages - 1) * STAGE_INTS)), "us",
               (now - t_last) // 1000)
         t_last = now
-    if nouts >= 0:
+    # the quads of x_prep are whole ranges (CNT < 0); a counted one takes the shared download
+    var plain = True
+    if nouts > 0:
+        var oq = IP(unsafe_from_address=outs_addr)
+        for k in range(nouts):
+            if Int(oq.unsafe_load(4 * k + 2)) >= 0:
+                plain = False
+    if dl_mode > 0 and plain:
+        ctx.synchronize()
+        var dbase = Int(df.unsafe_ptr())
+        var hbase = Int(host_f)
+        if nouts >= 0:
+            var oq = IP(unsafe_from_address=outs_addr)
+            for k in range(nouts):
+                var lo = Int(oq.unsafe_load(4 * k))
+                var hi = Int(oq.unsafe_load(4 * k + 1))
+                _direct_copy(dbase + 4 * lo, hbase + 4 * lo, hi - lo, dl_mode == 2)
+        elif arena_len > 0:
+            _direct_copy(dbase, hbase, arena_len, dl_mode == 2)
+        if out_n > 0:
+            _direct_copy(dbase + 4 * out_at, out_addr, out_n, dl_mode == 2)
+    elif nouts >= 0:
         download_ranges(ctx, df, host_f, outs_addr, nouts)
     elif arena_len > 0:
         if dev_len > arena_len:
             ctx.enqueue_copy(dst_ptr=host_f, src_buf=df.create_sub_buffer[DType.float32](0, arena_len))
         else:
             ctx.enqueue_copy(dst_ptr=host_f, src_buf=df)
-    if out_n > 0:
+    if out_n > 0 and not (dl_mode > 0 and plain):
         ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=out_addr), src_buf=df.create_sub_buffer[DType.float32](out_at, out_n))
     ctx.synchronize()
     if prof:
