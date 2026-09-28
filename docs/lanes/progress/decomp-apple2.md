@@ -33,4 +33,27 @@ Evidence: ~/mojolearn-evidence/decomp-apple2/.
 
 ## A/B (same Mac, same job, arm 1 = old switches, arm 2 = new)
 
-(pending)
+### Job 1790606245923 (m4pro-b, IDENTICAL, commit 89abb0595)
+
+Output: ~/mojolearn-evidence/decomp-apple2/job2_m4pro-b.txt.
+
+| call | old s | new s | digests |
+|---|---|---|---|
+| svd 200000x28 | 0.065 | 0.144 | equal (svd2 now gated to n >= 256) |
+| svd 1000x256 | 1.526 | 1.430 | equal |
+| svd 800x800 | 49.109 | 40.507 | equal |
+| orth 200000x15 | 0.024 | 0.026 | equal |
+| randomized_svd(5) 200000x28 | 0.149 | 0.131 | equal |
+| lstsq 200000x27 | 0.076 | 0.074 | equal |
+| eigh 800 / 1500 (old only) | 9.98 / 98.4 | FAILED | |
+
+- jacobi2 eigh FAILED on Metal: "Failed to create compute pipeline state
+  (GPU machine code generation)". Suspect: the atomic fence in its barrier
+  (compiles to AIR, refused at pipeline creation). Fixed by dropping the
+  fence (the old kernel's plain barrier); an unroll 1 instantiation is
+  timed beside unroll 4 in the next job in case the fence was not it.
+- bench/decomp_out_digest.py (27 algorithms): old Metal == new Metal ==
+  CPU for every algorithm the new eigh does not reach (ALS team kernel,
+  svd2 via LLE / FA / lstsq / CCA / rsvd, orth device guard, all equal).
+  IPCA, FastICA, Isomap, CMDS and MinCovDet failed on the new arm (eigh2).
+- The fits in the A/B script failed on a hashing bug in the bench (fixed).
