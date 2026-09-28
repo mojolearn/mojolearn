@@ -35,7 +35,7 @@ index cad6e4672..8842420d4 100644
 +        ap_availability_col[True](r, a, Int(n), damping, t)
  
  
- def _ap_noise_kernel(s: FPtr, m: Int, seed: UInt64):
+ def _ap_noise_kernel(s: FPtr, m: Int64, seed: UInt64):
 @@ -166,7 +166,7 @@ def _ap_e_kernel(a: FPtr, r: FPtr, n: Int32, e: IPtr):
  def _gauss_q_kernel(x: FPtr, n: Int32, d: Int32, means: FPtr, pchol: FPtr, kc: Int32, dst: FPtr):
      var t = _tid()

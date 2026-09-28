@@ -151,9 +151,9 @@ def _ap_a_kernel(r: FPtr, a: FPtr, n: Int32, damping: Float32):
         ap_availability_col(r, a, Int(n), damping, t)
 
 
-def _ap_noise_kernel(s: FPtr, m: Int, seed: UInt64):
+def _ap_noise_kernel(s: FPtr, m: Int64, seed: UInt64):
     var t = _tid()
-    if t < m:
+    if t < Int(m):
         ap_noise_cell(s, seed, t)
 
 
@@ -465,7 +465,7 @@ struct DeviceOps(ClusterOps):
     def ap_noise(mut self, s: Int, m: Int, seed: UInt64) raises:
         if m <= 0:
             return
-        self.ctx.enqueue_function[_ap_noise_kernel](self._fp(s), m, seed, grid_dim=_grid(m), block_dim=TPB)
+        self.ctx.enqueue_function[_ap_noise_kernel](self._fp(s), Int64(m), seed, grid_dim=_grid(m), block_dim=TPB)
 
     def ap_e(mut self, a: Int, r: Int, n: Int, e: Int) raises:
         self.ctx.enqueue_function[_ap_e_kernel](
