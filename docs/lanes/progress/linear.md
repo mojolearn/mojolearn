@@ -77,3 +77,32 @@ RidgeCV k-fold/multi-target, CD CV splitters/selection=random/sample_weight,
 LogisticRegressionCV l1/elasticnet) AND the existing public linear models
 (python/mojolearn/linear_model.py: LinearRegression, Ridge, Lasso, ElasticNet,
 LogisticRegression) against sklearn and cuML options.
+
+## Phase 1 (b), the EXISTING models (session 4, 2026-09-27)
+
+Branch commits c3d1df385..8d979a0bf (seam arms for glm/solver, the 527 gate
+fix, DEVIATIONS 550/551 -> 5010/5011, `.core` joins existing lanes to
+linear.checks, lane_select attributes `.core`), then:
+
+- NVIDIA RTX 4090 run at 16f5dd898 (`algos_lane_check.sh <17 core lanes>
+  --pass 2`): every seam arm in linear.checks (x_linear 5000-5009 and glm/
+  solver 527, 545, 547, 549 x2, 552, 705-708, 714, 610, 612, 2620-2622)
+  BUILD, RUN, FAIL under its patch, PASS after reversal. 16 of 17 lanes
+  AGREE; logistic-unpenalized-no-intercept/dupes infer + batch DIVERGENT.
+- ROOT CAUSE (found this session): MAX's CPU pool threads run with MXCSR
+  FTZ|DAZ (0x9fe0; the calling thread 0x1fa0). The float64 sigmoid link
+  `1/(1+exp(709.39))` = 8.2e-309 flushed to 0 on the CPU column's pool
+  tasks and not on the GPU binding's serial host link. IDENTICAL at
+  MOJOLEARN_CPU_THREADS=1. The reference x86 record (EPYC 9655) predates
+  the threaded host predict. FIX: core/host_fp_env.mojo
+  (`host_ieee_fp_enter/leave`, MXCSR bits 15+6, Arm FPCR.FZ) around every
+  task of core/classical_host_predict.mojo's four row splits and
+  glm/estimator.mojo::qn_softmax_host. OWED ELSEWHERE (not this lane's
+  code): every other host `sync_parallelize` site runs on the same FTZ pool
+  (knn/forest host predict, kde oracle, gbdt/metrics/... host oracles); a
+  float64 result that can be subnormal there has the same defect. Reported
+  to the orchestrator for the `cpu` lane.
+- CURRENT DIRECTIVES (DeviceContext): x_linear/device.mojo now uses ONE
+  process-lifetime context (`linear_ctx`); python/mojolearn/tests/
+  test_x_linear_repeat.py fits all 21 estimators twice per binding in one
+  process, GPU == host.
