@@ -28,10 +28,40 @@ THE FIXED-ORDER DESIGN
     step; refused by name, the loop runs exactly `max_iter` steps).
 """
 
-from checks.numerics import ftz, identical_div, identical_exp, identical_log, identical_mul, identical_mul_add
+from std.memory import bitcast
+from checks.numerics import (
+    GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_exp, identical_log, identical_mul,
+    identical_mul_add,
+)
 
 comptime F32P = MutPointer[Float32, MutAnyOrigin]
 comptime I32P = MutPointer[Int32, MutAnyOrigin]
+
+
+@always_inline
+def ts_ftz_nonneg(x: Float32) -> Float32:
+    """`ftz` for a value that is +0, positive or NaN (a square, a sum of
+    squares from +0, a quotient of such values; lane ann-apple2): the words
+    below 0x00800000 are +0 and the positive subnormals, which `ftz` sends to
+    +0; every other such word it returns unchanged. One unsigned compare
+    instead of `ftz`'s two tests. The same word as `ftz` for every such input
+    (a negative subnormal, the one word where the two differ, cannot be
+    one). FAST: the identity, as `ftz`."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        if bitcast[DType.uint32](x) < UInt32(0x00800000):
+            return Float32(0.0)
+    return x
+
+
+@always_inline
+def ts_recip_den(den: Float32) -> Float32:
+    """`identical_div(1, den)` for den = 1 + (a sum of squares from +0), so
+    den >= 1, +inf or NaN, never subnormal: `portable_divf`'s operand flushes
+    are the identity on 1 and on den, and only its result flush is left
+    (lane ann-apple2). The same word."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        return ts_ftz_nonneg(Float32(1.0) / den)
+    return identical_div(Float32(1.0), den)
 
 
 @always_inline
@@ -311,10 +341,12 @@ def ts_repulse_terms(y0: Float32, y1: Float32, yj0: Float32, yj1: Float32) -> SI
     (q, ftz(q^2 (y0 - yj0)), ftz(q^2 (y1 - yj1)), 0)."""
     var d0 = ftz(y0 - yj0)
     var d1 = ftz(y1 - yj1)
-    var acc = ftz(identical_mul_add(d0, d0, Float32(0.0)))
-    acc = ftz(identical_mul_add(d1, d1, acc))
-    var q = identical_div(Float32(1.0), Float32(1.0) + acc)
-    var qq = ftz(identical_mul(q, q))
+    # lane ann-apple2: the squares, their sum, q and q^2 are +0, positive or
+    # NaN, so their flushes take `ts_ftz_nonneg`; q is `ts_recip_den`
+    var acc = ts_ftz_nonneg(identical_mul_add(d0, d0, Float32(0.0)))
+    acc = ts_ftz_nonneg(identical_mul_add(d1, d1, acc))
+    var q = ts_recip_den(Float32(1.0) + acc)
+    var qq = ts_ftz_nonneg(identical_mul(q, q))
     return SIMD[DType.float32, 4](q, ftz(identical_mul(qq, d0)), ftz(identical_mul(qq, d1)), Float32(0.0))
 
 

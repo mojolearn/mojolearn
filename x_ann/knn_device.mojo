@@ -28,7 +28,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
 from checks.numerics import ftz, identical_mul_add
-from x_ann.tsne_core import F32P, I32P, ts_knn_beats, ts_knn_cell, ts_knn_offer
+from x_ann.tsne_core import F32P, I32P, ts_ftz_nonneg, ts_knn_beats, ts_knn_cell, ts_knn_offer
 
 #: rows per threadgroup (one thread each) and candidate rows per tile
 comptime KTB = 64
@@ -78,11 +78,16 @@ def knn_tiled_kernel[MAXD: Int](n: Int32, x: F32P, d: Int32, nn: Int32, nn_d: F3
                 var acc = Float32(0.0)
                 # the staged row four floats per load; the fold is the same
                 # statements in the same order, lane by lane
+                # lane ann-apple2: groups of four wholly past d are skipped
+                # (their steps are fma(+0, +0, acc) = acc, flushed: acc, as
+                # the padding note above says), and acc, a sum of squares
+                # from +0, is flushed by `ts_ftz_nonneg` (the same word)
                 comptime for c4 in range(MAXD // 4):
-                    var tv = tile.unsafe_load[width=4, alignment=16](r * MAXD + 4 * c4)
-                    comptime for u in range(4):
-                        var diff = ftz(xi[4 * c4 + u] - tv[u])
-                        acc = ftz(identical_mul_add(diff, diff, acc))
+                    if 4 * c4 < dd:
+                        var tv = tile.unsafe_load[width=4, alignment=16](r * MAXD + 4 * c4)
+                        comptime for u in range(4):
+                            var diff = ftz(xi[4 * c4 + u] - tv[u])
+                            acc = ts_ftz_nonneg(identical_mul_add(diff, diff, acc))
                 if filled == k and not ts_knn_beats(acc, j, ld, li):
                     continue
                 filled = ts_knn_offer(acc, j, base, k, filled, nn_d, nn_i)
