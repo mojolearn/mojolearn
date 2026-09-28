@@ -18,8 +18,10 @@ before it returns; the context stays.
 """
 from std.gpu import block_idx, block_dim, thread_idx
 from std.ffi import _Global
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceContext
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_linear.ops import FP, IP
 from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own
 from x_linear.team import LINEAR_TPB, team_work, device_team, solo
@@ -44,6 +46,18 @@ def linear_ctx() raises -> DeviceContext:
     if not slot[].ctx:
         slot[].ctx = DeviceContext()
     return slot[].ctx.value().copy()
+
+
+#: FAST on Apple (lane/linear-apple3): the fits x_linear/blocks.mojo names run
+#: their row passes on n / 1024 blocks, the control on the host, instead of
+#: one program on ONE block. WIP: opt-in (`-D MOJOLEARN_X_LINEAR_BLOCKS=1`)
+#: until its A/B and paired quality check are on record. IDENTICAL and the
+#: other vendors never compile the branch.
+comptime X_LINEAR_BLOCKS = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_X_LINEAR_BLOCKS"]()
+)
 
 
 def fit_kernel(
@@ -73,6 +87,12 @@ def fit_device(
     ip: List[Int32], fp: List[Float32], n_out: Int, n_fw: Int, n_iw: Int, res: FP,
 ) raises:
     var ctx = linear_ctx()
+    comptime if X_LINEAR_BLOCKS:
+        from x_linear.blocks import blocks_handles, blocks_fit
+
+        if blocks_handles(algo, n):
+            blocks_fit(ctx, algo, x, n_x, y, n_y, n, d, ip, fp, n_out, res)
+            return
     var dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
     var dy = ctx.enqueue_create_buffer[DType.float32](max(n_y, 1))
     var dip = ctx.enqueue_create_buffer[DType.int32](max(len(ip), 1))
