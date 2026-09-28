@@ -1,0 +1,10 @@
+{
+  "arms": [
+    {"name": "qstep", "defines": "-D MOJOLEARN_X_LINEAR_BLOCKS=1 -D MOJOLEARN_X_LINEAR_QUANTILE_STEP=1", "builds": ["x_linear"],
+     "cases": "quantile", "warm_column": "both", "rows": [100000, 1000000], "reps": 2,
+     "qual": "quantile,quantile-l1", "host_ref": true},
+    {"name": "blocks", "defines": "-D MOJOLEARN_X_LINEAR_BLOCKS=1", "builds": ["x_linear"],
+     "cases": "quantile", "rows": [100000, 1000000], "reps": 2,
+     "qual": "quantile,quantile-l1"}
+  ]
+}

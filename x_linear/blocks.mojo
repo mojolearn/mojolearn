@@ -43,6 +43,31 @@ from x_linear.lbfgs import LBFGS_M, lbfgs_work, _dot
 from x_linear.logcv import _predict_code
 from x_linear.quantile import _soft
 from checks.numerics import identical_sigmoid, identical_softplus, ftz
+from std.sys.compile import is_defined
+
+#: WIP, opt-in `-D MOJOLEARN_X_LINEAR_QUANTILE_STEP=1`: Quantile's ADMM
+#: iteration without a read back. Job 1 measured the host-stepped fit bound
+#: by one read back and synchronize per iteration (1.34 s at 20k rows and
+#: at 100k). Here the iteration's m x m algebra runs in a one-block launch
+#: on device state, the host queues XQ_BATCH iterations (two launches each)
+#: and reads the state once per batch; a launch after the stop is a no-op.
+comptime XB_QUANTILE_STEP = is_defined["MOJOLEARN_X_LINEAR_QUANTILE_STEP"]()
+comptime XQ_BATCH = 32
+#: scalars of the device state, after M m*m | beta m | rhs m | z d | v d
+comptime XQ_RHO = 0
+comptime XQ_Q = 1
+comptime XQ_ALPHA = 2
+comptime XQ_EPS_ABS = 3
+comptime XQ_EPS_REL = 4
+comptime XQ_YNORM = 5
+comptime XQ_DEN = 6
+comptime XQ_KQ = 7
+comptime XQ_INV = 8
+comptime XQ_IT = 9
+comptime XQ_DONE = 10
+comptime XQ_ITERS = 11
+comptime XQ_MAX_ITER = 12
+comptime XQ_SCALARS = 16
 
 #: Threads per block (the M2 Pro drops a dispatch above its pipeline limit
 #: with no error; 256 is LINEAR_TPB, which every Apple GPU runs).
@@ -445,6 +470,223 @@ def xb_isotonic_predict_kernel(
     var tid = Int(block_idx.x) * XB_TPB + Int(thread_idx.x)
     var t = team_at(tid, Int(nt_in), res, Int(n_in), 3, 0)
     isotonic_predict(t, x, y, Int(n_in), 1, ip, fp, res, res, ip)
+
+
+def xq_row_kernel(
+    x: FP, y: FP, sd: FP, rw: FP, part: FP, n_in: Int32, d_in: Int32, flags_in: Int32,
+):
+    """`xb_quantile_kernel` what 1 on the device state sd (M | beta | rhs |
+    z | v | scalars | totals): u is first rescaled by the previous
+    iteration's factor. Outputs: the four norms, the m sums of A' dr, the m
+    sums of A'(y - r - u), and on every tenth iteration the same m sums
+    with u rescaled by 1/2 and by 2 (the residual balancing may pick
+    either, and the step launch takes the one it picked)."""
+    var n = Int(n_in)
+    var d = Int(d_in)
+    var flags = Int(flags_in)
+    var fi = (flags & 1) != 0
+    var sw = (flags & 2) != 0
+    var m = d + 1 if fi else d
+    var beta = m * m
+    var sc = beta + 2 * m + 2 * d
+    if ld(sd, sc + XQ_DONE) != 0:
+        return
+    var it = Int(ld(sd, sc + XQ_IT))
+    var tenth = (it + 1) % 10 == 0
+    var b = ld(sd, beta + d) if fi else Float32(0)
+    var q = ld(sd, sc + XQ_Q)
+    var kq = ld(sd, sc + XQ_KQ)
+    var inv = ld(sd, sc + XQ_INV)
+    var tid = Int(thread_idx.x)
+    var blk = Int(block_idx.x)
+    var r0 = blk * XB_ROWS
+    var r1 = r0 + XB_ROWS
+    if r1 > n:
+        r1 = n
+    var rows = r1 - r0
+    var i = r0 + tid
+    while i < r1:
+        var yi = ld(y, i)
+        var up = fm(q, kq)
+        var lo = fm(fs(Float32(1), q), kq)
+        var abi = fa(row_dot(x, i, d, sd, beta), b)
+        var ui = fm(ld(rw, 5 * n + i), inv)
+        var vv = fs(fs(yi, abi), ui)
+        if sw:
+            var ki = fm(ld(y, n + i), kq)
+            up = fm(q, ki)
+            lo = fm(fs(Float32(1), q), ki)
+        var nr: Float32
+        if vv > up:
+            nr = fs(vv, up)
+        elif vv < -lo:
+            nr = fa(vv, lo)
+        else:
+            nr = Float32(0)
+        st(rw, n + i, fs(nr, ld(rw, 4 * n + i)))
+        st(rw, 4 * n + i, nr)
+        var pr = fs(fa(abi, nr), yi)
+        var un = fa(ui, pr)
+        st(rw, i, abi)
+        st(rw, 2 * n + i, pr)
+        st(rw, 5 * n + i, un)
+        st(rw, 3 * n + i, fs(fs(yi, nr), un))
+        i += XB_TPB
+    team_barrier()
+    var cells = 4 + 4 * m
+    var c = tid
+    while c < cells:
+        var acc = Float32(0)
+        if c == 0:
+            acc = fold_sq(rw, r0, rows)
+        elif c == 1:
+            acc = fold_sq(rw, 4 * n + r0, rows)
+        elif c == 2:
+            acc = fold_sq(rw, 2 * n + r0, rows)
+        elif c == 3:
+            acc = fold_sq(rw, 5 * n + r0, rows)
+        elif c < 4 + 2 * m:
+            var o = c - 4
+            var src = n
+            if o >= m:
+                o -= m
+                src = 3 * n
+            if o < d:
+                acc = chain_fmad(x, r0 * d + o, d, rw, src + r0, 1, rows)
+            else:
+                acc = fold_one_fmad(rw, src + r0, rows)
+        elif tenth:
+            var o = c - 4 - 2 * m
+            var f = Float32(0.5)
+            if o >= m:
+                o -= m
+                f = Float32(2)
+            for k in range(r0, r1):
+                var tv = fs(fs(ld(y, k), ld(rw, 4 * n + k)), fm(ld(rw, 5 * n + k), f))
+                var a = ld(x, k * d + o) if o < d else Float32(1)
+                acc = fmad(a, tv, acc)
+        st(part, blk * cells + c, acc)
+        c += XB_TPB
+
+
+def xq_step_kernel(
+    sd: FP, part: FP, n_in: Int32, d_in: Int32, nb_in: Int32, flags_in: Int32,
+):
+    """One block. Thread c sums output c of `xq_row_kernel` over the blocks
+    (32 partials at a time, then the groups); then thread 0 runs the rest
+    of the ADMM iteration of x_linear/quantile.mojo (the z and v updates,
+    the residuals, the stopping rule, the residual balancing) and the next
+    iteration's beta, on the device state."""
+    var n = Int(n_in)
+    var d = Int(d_in)
+    var nb = Int(nb_in)
+    var flags = Int(flags_in)
+    var fi = (flags & 1) != 0
+    var m = d + 1 if fi else d
+    var mm = 0
+    var beta = m * m
+    var rhs = beta + m
+    var z = rhs + m
+    var v = z + d
+    var sc = v + d
+    var tot = sc + XQ_SCALARS
+    var cells = 4 + 4 * m
+    var done = ld(sd, sc + XQ_DONE)
+    var tid = Int(thread_idx.x)
+    if done == 0:
+        var c = tid
+        while c < cells:
+            var s = Float32(0)
+            var k = 0
+            while k < nb:
+                var e = k + 32
+                if e > nb:
+                    e = nb
+                var g = Float32(0)
+                for kk in range(k, e):
+                    g = fa(g, ld(part, kk * cells + c))
+                s = fa(s, g)
+                k = e
+            st(sd, tot + c, s)
+            c += XB_TPB
+    team_barrier()
+    if tid != 0 or done != 0:
+        return
+    var it = Int(ld(sd, sc + XQ_IT))
+    var rho = ld(sd, sc + XQ_RHO)
+    var alpha = ld(sd, sc + XQ_ALPHA)
+    var eps_abs = ld(sd, sc + XQ_EPS_ABS)
+    var eps_rel = ld(sd, sc + XQ_EPS_REL)
+    var ynorm = ld(sd, sc + XQ_YNORM)
+    var den = ld(sd, sc + XQ_DEN)
+    var max_iter = Int(ld(sd, sc + XQ_MAX_ITER))
+    var abn = ld(sd, tot)
+    var rn = ld(sd, tot + 1)
+    var prim = ld(sd, tot + 2)
+    var un = ld(sd, tot + 3)
+    # z-update
+    var zdiff = Float32(0)
+    var wn = Float32(0)
+    var zn = Float32(0)
+    var t = fd(alpha, rho)
+    for j in range(d):
+        var wj = ld(sd, beta + j)
+        wn = fmad(wj, wj, wn)
+        var nz = _soft(fa(wj, ld(sd, v + j)), t)
+        var dz = fs(nz, ld(sd, z + j))
+        zdiff = fmad(dz, dz, zdiff)
+        st(sd, z + j, nz)
+        zn = fmad(nz, nz, zn)
+    for j in range(d):
+        var pj = fs(ld(sd, beta + j), ld(sd, z + j))
+        prim = fmad(pj, pj, prim)
+        st(sd, v + j, fa(ld(sd, v + j), pj))
+    var dual = zdiff
+    for j in range(m):
+        var acc = ld(sd, tot + 4 + j)
+        dual = fmad(acc, acc, dual)
+    var prim_n = fsqrt(prim)
+    var dual_n = fm(rho, fsqrt(dual))
+    var scale_p = fmax(fmax(fsqrt(abn), fsqrt(rn)), fmax(ynorm, fmax(fsqrt(wn), fsqrt(zn))))
+    var eps_p = fa(fm(eps_abs, fsqrt(i2f(n + d))), fm(eps_rel, scale_p))
+    for j in range(d):
+        un = fmad(ld(sd, v + j), ld(sd, v + j), un)
+    var eps_d = fa(fm(eps_abs, fsqrt(i2f(m))), fm(fm(eps_rel, rho), fsqrt(un)))
+    st(sd, sc + XQ_ITERS, i2f(it + 1))
+    if prim_n <= eps_p and dual_n <= eps_d:
+        st(sd, sc + XQ_DONE, Float32(1))
+        return
+    var pick = 0
+    var inv = Float32(1)
+    if (it + 1) % 10 == 0:
+        var factor = Float32(0)
+        if prim_n > fm(Float32(10), dual_n):
+            factor = Float32(2)
+            pick = 1
+        elif dual_n > fm(Float32(10), prim_n):
+            factor = Float32(0.5)
+            pick = 2
+        if factor != 0:
+            rho = fm(rho, factor)
+            inv = fd(Float32(1), factor)
+            for j in range(d):
+                st(sd, v + j, fm(ld(sd, v + j), inv))
+    if it + 1 >= max_iter:
+        st(sd, sc + XQ_DONE, Float32(2))
+        return
+    # the next iteration's beta
+    for j in range(m):
+        var a = ld(sd, tot + 4 + m + pick * m + j)
+        if j < d:
+            a = fa(a, fs(ld(sd, z + j), ld(sd, v + j)))
+        st(sd, rhs + j, a)
+    chol_solve(sd, mm, m, sd, rhs)
+    for j in range(m):
+        st(sd, beta + j, ld(sd, rhs + j))
+    st(sd, sc + XQ_RHO, rho)
+    st(sd, sc + XQ_KQ, fd(Float32(1), fm(den, rho)))
+    st(sd, sc + XQ_INV, inv)
+    st(sd, sc + XQ_IT, i2f(it + 1))
 
 
 # ------------------------------------------------------------ host state
@@ -1087,6 +1329,79 @@ def quantile_fit_blocks(
     for i in range(n):
         ynorm = fmad(ld(y, i), ld(y, i), ynorm)
     ynorm = fsqrt(ynorm)
+    comptime if XB_QUANTILE_STEP:
+        if 4 + 4 * m <= XB_TPB and max_iter > 0:
+            # beta of iteration 0: rhs = A'y (r = u = 0), z = v = 0
+            b.param(d + 3, Float32(1))
+            b.push(ctx)
+            ctx.enqueue_function[xb_quantile_kernel](
+                b.dx.unsafe_ptr(), b.dy.unsafe_ptr(), b.dth.unsafe_ptr(), b.drw.unsafe_ptr(),
+                pr.dev.unsafe_ptr(),
+                Int32(n), Int32(d), Int32(b.flags()), Int32(2),
+                grid_dim=b.nb, block_dim=XB_TPB,
+            )
+            pr.fetch(ctx)
+            for j in range(m):
+                st(fw, rhs + j, pr.total(j))
+            chol_solve(fw, mm, m, fw, rhs)
+            var sc = m * m + 2 * m + 2 * d
+            var n_sd = sc + XQ_SCALARS + 4 + 4 * m
+            var dsd = ctx.enqueue_create_buffer[DType.float32](n_sd)
+            var hsd = ctx.enqueue_create_host_buffer[DType.float32](n_sd)
+            var pq = Part(ctx, b.nb, 4 + 4 * m)
+            var hp = hsd.unsafe_ptr()
+            for j in range(n_sd):
+                hp.unsafe_store(j, Float32(0))
+            for j in range(m * m):
+                hp.unsafe_store(j, ld(fw, mm + j))
+            for j in range(m):
+                hp.unsafe_store(m * m + j, ld(fw, rhs + j))
+            hp.unsafe_store(sc + XQ_RHO, rho)
+            hp.unsafe_store(sc + XQ_Q, q)
+            hp.unsafe_store(sc + XQ_ALPHA, alpha)
+            hp.unsafe_store(sc + XQ_EPS_ABS, eps_abs)
+            hp.unsafe_store(sc + XQ_EPS_REL, eps_rel)
+            hp.unsafe_store(sc + XQ_YNORM, ynorm)
+            hp.unsafe_store(sc + XQ_DEN, den)
+            hp.unsafe_store(sc + XQ_KQ, fd(Float32(1), fm(den, rho)))
+            hp.unsafe_store(sc + XQ_INV, Float32(1))
+            hp.unsafe_store(sc + XQ_MAX_ITER, i2f(max_iter))
+            ctx.enqueue_copy(dst_buf=dsd, src_buf=hsd)
+            var queued = 0
+            while True:
+                for _ in range(XQ_BATCH):
+                    ctx.enqueue_function[xq_row_kernel](
+                        b.dx.unsafe_ptr(), b.dy.unsafe_ptr(), dsd.unsafe_ptr(), b.drw.unsafe_ptr(),
+                        pq.dev.unsafe_ptr(),
+                        Int32(n), Int32(d), Int32(b.flags()),
+                        grid_dim=b.nb, block_dim=XB_TPB,
+                    )
+                    ctx.enqueue_function[xq_step_kernel](
+                        dsd.unsafe_ptr(), pq.dev.unsafe_ptr(),
+                        Int32(n), Int32(d), Int32(b.nb), Int32(b.flags()),
+                        grid_dim=1, block_dim=XB_TPB,
+                    )
+                queued += XQ_BATCH
+                ctx.enqueue_copy(dst_buf=hsd, src_buf=dsd)
+                ctx.synchronize()
+                if hp.unsafe_load(sc + XQ_DONE) != 0 or queued >= max_iter + XQ_BATCH:
+                    break
+            var zo = m * m + 2 * m
+            for j in range(d):
+                st(res, j, hp.unsafe_load(zo + j))
+            st(res, d, hp.unsafe_load(m * m + d) if fi else Float32(0))
+            st(res, d + 1, hp.unsafe_load(sc + XQ_ITERS))
+            st(res, d + 2, Float32(1) if hp.unsafe_load(sc + XQ_DONE) == Float32(1) else Float32(0))
+            ctx.synchronize()
+            _ = dsd^
+            _ = hsd^
+            _ = pq^
+            _ = hw^
+            _ = pg^
+            _ = pi^
+            _ = pr^
+            _ = b^
+            return
     var iters = 0
     var converged = False
     var rhs_ready = False
