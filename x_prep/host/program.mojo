@@ -22,15 +22,22 @@ from x_prep.units import N_OPS, run_unit
 from x_prep.host.sort import sort_cols_host_unit
 from x_prep.host.power import pt_fit_host_unit
 from x_prep.host.target import te_enc_host_groups, te_enc_host_group
+from x_prep.host.mutual_info import mi_cc_host_stage, mi_cd_host_stage, mi_dc_host_stage
 
 #: Ops of x_prep/units.mojo the host runs through its own spelling of the
 #: SAME words (each file says why): 0 `sort_cols` (x_prep/host/sort.mojo),
 #: 44 `pt_fit` (x_prep/host/power.mojo); and ops whose units the host runs
 #: GROUPED, one task item per group of units: 21 `te_enc`
-#: (x_prep/host/target.mojo, one group per fold, feature and target column).
+#: (x_prep/host/target.mojo, one group per fold, feature and target column);
+#: and ops the host runs as a WHOLE STAGE (an index per column, then the
+#: points across the pool): 68 `mi_cc`, 69 `mi_cd`, 94 `mi_dc`
+#: (x_prep/host/mutual_info.mojo).
 comptime OP_SORT_COLS = 0
 comptime OP_TE_ENC = 21
 comptime OP_PT_FIT = 44
+comptime OP_MI_CC = 68
+comptime OP_MI_CD = 69
+comptime OP_MI_DC = 94
 
 
 @always_inline
@@ -67,6 +74,15 @@ def _host_item[K: Int](t: Int, f: FP, q: IP):
 def _run_stage[K: Int](total: Int, f: FP, q: IP):
     """Items [0, items) of one stage: serially on the calling thread when one
     task covers them, else contiguous ranges across the pool."""
+    comptime if K == OP_MI_CC:
+        mi_cc_host_stage(total, f, q)
+        return
+    elif K == OP_MI_CD:
+        mi_cd_host_stage(total, f, q)
+        return
+    elif K == OP_MI_DC:
+        mi_dc_host_stage(total, f, q)
+        return
     var items = _items[K](total, q)
     var tasks = host_predict_task_count(items)
     if tasks <= 1:

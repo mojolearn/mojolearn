@@ -24,6 +24,7 @@ from checks.numerics import identical_cos
 from x_prep.prims import add, mul, logf, sqrtf, sort_cols_unit
 from x_prep.transform import pt_fit_unit
 from x_prep.target import te_enc_unit
+from x_prep.mutual_info import mi_cc_unit, mi_cd_unit, mi_dc_unit
 from x_prep.mutual_info import digammaf
 from x_prep.seams.prep_oracle import (
     seq_sum, rev_sum, pinned_dot, fused_dot, key_sorted, value_sorted, guarded_mean, raw_mean,
@@ -36,6 +37,8 @@ comptime OP_COL_STATS = 1
 comptime OP_QUANTILE = 2
 comptime OP_PT_FIT = 44
 comptime OP_TE_ENC = 21
+comptime OP_MI_CD = 69
+comptime OP_MI_DC = 94
 comptime OP_MATMUL = 13
 comptime OP_ARGMAX = 15
 comptime OP_EIGH = 18
@@ -293,6 +296,105 @@ def check_host_te(mut card: IdentityTrace) raises:
     print("PASS host te_enc: te_enc_unit's encodings (folds, unknown and past-NCAT codes, auto and fixed smoothing)")
 
 
+def _u(seed: Int, t: Int) -> Float32:
+    """A fixture uniform in [0, 1): splitmix64's top 24 bits."""
+    return Float32(Int(splitmix(UInt64(seed) * UInt64(0x100000000) + UInt64(t)) >> 40)) * Float32(5.9604645e-08)
+
+
+def _mi_oracle(arena: List[Float32], op: Int, total: Int, params: List[Int]) raises -> List[Float32]:
+    """The device's mutual_info unit, called per unit on the host."""
+    var f = arena.copy()
+    var q = List[Int32](length=STAGE_INTS, fill=0)
+    for i in range(len(params)):
+        q[i] = Int32(params[i])
+    var fp = f.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var qp = q.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    for t in range(total):
+        if op == OP_MI_CC:
+            mi_cc_unit(t, fp, qp)
+        elif op == OP_MI_CD:
+            mi_cd_unit(t, fp, qp)
+        else:
+            mi_dc_unit(t, fp, qp)
+    _ = len(q)
+    return f^
+
+
+def check_host_mi(mut card: IdentityTrace) raises:
+    """The host's mutual_info searches (x_prep/host/mutual_info.mojo) write
+    the units' terms: mi_cd, mi_dc and mi_cc over 3 columns of 70 points
+    whose values repeat (coarse grids: primary ties everywhere), with and
+    without secondary words (some zero, some tied), 4 classes of sizes 30,
+    25, 12 and 3 plus a singleton, k = 1, 3 and 5 (above the size-3 class's
+    2), and a column holding an infinity (the fallback to the units)."""
+    var n = 70
+    var d = 3
+    var inf = _f(UInt32(0x7F800000))
+    for k in [1, 3, 5]:
+        for with_sec in range(2):
+            var arena = List[Float32]()
+            var z = 0
+            for i in range(n):
+                for c in range(d):
+                    var v = Float32(Int(_u(11 + c, i) * Float32(6 + 3 * c))) * Float32(0.25)
+                    if c == 2 and i == 17 and k == 3:
+                        v = inf
+                    arena.append(v)
+            var zs = len(arena)
+            for i in range(n * d):
+                var sv = Float32(Int(_u(29, i) * Float32(5))) - Float32(2)
+                arena.append(sv * Float32(0.5) if with_sec == 1 else Float32(0))
+            var y = len(arena)  # class codes
+            for i in range(n):
+                var lab = 0 if i < 30 else (1 if i < 55 else (2 if i < 67 else (3 if i < 70 - 1 else 4)))
+                arena.append(Float32(lab))
+            var lc = len(arena)
+            var counts: List[Float32] = [30, 25, 12, 2, 1]
+            for v in counts:
+                arena.append(v)
+            var term = len(arena)
+            for _ in range(n * d):
+                arena.append(Float32(-7))
+            var zy = len(arena)  # a continuous target for mi_dc / mi_cc, coarse
+            for i in range(n):
+                arena.append(Float32(Int(_u(41, i) * Float32(7))) * Float32(0.5))
+            var zys = len(arena)
+            for i in range(n):
+                arena.append(Float32(Int(_u(43, i) * Float32(3))) - Float32(1) if with_sec == 1 else Float32(0))
+            var xc = len(arena)  # discrete feature codes for mi_dc, column c has 3 + c categories
+            for i in range(n):
+                for c in range(d):
+                    arena.append(Float32(Int(_u(53 + c, i) * Float32(3 + c))))
+            var cntf = len(arena)
+            var ks = 5
+            for c in range(d):
+                for kk in range(ks):
+                    var m = 0
+                    for i in range(n):
+                        if Int(arena[xc + i * d + c]) == kk:
+                            m += 1
+                    arena.append(Float32(m))
+            var secz = zs + 1 if with_sec == 1 else 0
+            var secy = zys + 1 if with_sec == 1 else 0
+            var cases = List[List[Int]]()
+            cases.append([OP_MI_CD, z, n, d, y, lc, k, term, secz])
+            cases.append([OP_MI_DC, zy, n, d, xc, cntf, ks, k, term, secy])
+            cases.append([OP_MI_CC, z, n, d, zy, k, term, secz, secy])
+            for cs in cases:
+                var op = cs[0]
+                var params = List[Int]()
+                for i in range(1, len(cs)):
+                    params.append(cs[i])
+                var want = _mi_oracle(arena, op, n * d, params)
+                var got = Prog(arena, op, n * d, params).run(False)
+                for i in range(n * d):
+                    _require(_b(got[term + i]) == _b(want[term + i]),
+                             "host mi op " + String(op) + " k " + String(k) + " sec " + String(with_sec)
+                             + " unit " + String(i))
+                card.record_list_f32("host_mi.op" + String(op) + ".k" + String(k) + ".sec" + String(with_sec), got)
+    print("PASS host mutual_info: the units' terms (mi_cd, mi_dc, mi_cc; ties, secondary words, singleton class, k past a class, inf fallback)")
+
+
 def check_empty_guard(mut card: IdentityTrace) raises:
     """DEVIATION 5403: an empty (all-NaN) column's statistics are 0, never 0/0."""
     var nan = _f(UInt32(0x7FC00000))
@@ -421,6 +523,7 @@ def main() raises:
     check_host_sort(card)
     check_host_power(card)
     check_host_te(card)
+    check_host_mi(card)
     check_empty_guard(card)
     check_first_max(card)
     check_eigen_sign(card)
