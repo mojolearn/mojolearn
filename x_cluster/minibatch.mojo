@@ -231,8 +231,9 @@ def minibatch_step[O: ClusterOps](
     ops.set(bslot, bx)
     ops.set(cslot, c)
     ops.nearest(bslot, batch, cslot, k, d, lslot, dslot)
-    var bl = ops.get_i(lslot, batch)
-    var bd = ops.get(dslot, batch)
+    var bl = List[Int32]()
+    var bd = List[Float32]()
+    ops.get_if(lslot, batch, dslot, batch, bl, bd)
     var batch_inertia = sum_f64(bd, batch)
     # update_center_dense, per center
     c_new = c.copy()

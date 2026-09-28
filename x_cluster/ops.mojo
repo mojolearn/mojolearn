@@ -33,6 +33,17 @@ trait ClusterOps(Movable):
     def get_i(mut self, slot: Int, n: Int) raises -> List[Int32]:
         ...
 
+    def gets(mut self, slots: List[Int], ns: List[Int]) raises -> List[List[Float32]]:
+        """The first ns[q] values of each float slot slots[q], read together
+        (the device waits once)."""
+        ...
+
+    def get_if(
+        mut self, islot: Int, ni: Int, fslot: Int, nf: Int, mut oi: List[Int32], mut of: List[Float32]
+    ) raises:
+        """`get_i(islot, ni)` and `get(fslot, nf)` read together."""
+        ...
+
     def set(mut self, slot: Int, v: List[Float32]) raises:
         """Overwrite the first len(v) values of a float slot."""
         ...

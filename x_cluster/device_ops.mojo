@@ -343,19 +343,44 @@ def x_cluster_ctx() raises -> DeviceContext:
     return slot[].ctx.value().copy()
 
 
+# An upload of at least this many values synchronizes instead of keeping a
+# host copy alive (the one-off upload of X at a fit's start); smaller uploads
+# and every `zeros` (a device memset) enqueue without a synchronize.
+comptime _PUT_SYNC_MIN = 1 << 20
+
+
 struct DeviceOps(ClusterOps):
-    """Kernels are only ENQUEUED: the stream runs them in order, and the one
-    synchronize is where the host reads (`get`, `get_i`) or where a host
-    List is the copy's source (`put`, `set`). A sync per kernel cost a
-    host round trip each (on Metal the dominant cost, 4 ms per sync)."""
+    """Kernels and uploads are only ENQUEUED: the stream runs them in order,
+    and the one synchronize is where the host reads (`get`, `get_i`, `gets`,
+    `get_if`). An upload's source is a COPY held in `pend_f` / `pend_i` until
+    that synchronize, so the caller's List may change or die at once; `zeros`
+    is a device memset. A sync per call cost a host round trip each (on Metal
+    the dominant cost: about 4 ms per sync with pending work on the M4).
+    Scheduling only: every kernel sees the same bytes in the same order."""
     var ctx: DeviceContext
     var f: List[DeviceBuffer[DType.float32]]
     var i: List[DeviceBuffer[DType.int32]]
+    var pend_f: List[List[Float32]]
+    var pend_i: List[List[Int32]]
 
     def __init__(out self) raises:
         self.ctx = x_cluster_ctx()
         self.f = List[DeviceBuffer[DType.float32]]()
         self.i = List[DeviceBuffer[DType.int32]]()
+        self.pend_f = List[List[Float32]]()
+        self.pend_i = List[List[Int32]]()
+
+    def __del__(deinit self):
+        # the buffers and the pending sources die with this value: drain first
+        try:
+            self.ctx.synchronize()
+        except:
+            pass
+
+    def _sync(mut self) raises:
+        self.ctx.synchronize()
+        self.pend_f = List[List[Float32]]()
+        self.pend_i = List[List[Int32]]()
 
     def _fp(mut self, slot: Int) -> FPtr:
         return self.f[slot].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
@@ -363,52 +388,107 @@ struct DeviceOps(ClusterOps):
     def _ip(mut self, slot: Int) -> IPtr:
         return self.i[slot].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
 
+    def _upload(mut self, buf: DeviceBuffer[DType.float32], v: List[Float32]) raises:
+        var n = len(v)
+        if n == 0:
+            return
+        if n >= _PUT_SYNC_MIN:
+            self.ctx.enqueue_copy(dst_buf=buf, src_ptr=v.unsafe_ptr())
+            self._sync()
+            return
+        self.pend_f.append(v.copy())
+        self.ctx.enqueue_copy(dst_buf=buf, src_ptr=self.pend_f[len(self.pend_f) - 1].unsafe_ptr())
+
+    def _upload_i(mut self, buf: DeviceBuffer[DType.int32], v: List[Int32]) raises:
+        var n = len(v)
+        if n == 0:
+            return
+        if n >= _PUT_SYNC_MIN:
+            self.ctx.enqueue_copy(dst_buf=buf, src_ptr=v.unsafe_ptr())
+            self._sync()
+            return
+        self.pend_i.append(v.copy())
+        self.ctx.enqueue_copy(dst_buf=buf, src_ptr=self.pend_i[len(self.pend_i) - 1].unsafe_ptr())
+
     def put(mut self, v: List[Float32]) raises -> Int:
         var n = len(v)
         var buf = self.ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
-        if n > 0:
-            self.ctx.enqueue_copy(dst_buf=buf, src_ptr=v.unsafe_ptr())
-        self.ctx.synchronize()
+        self._upload(buf, v)
         self.f.append(buf^)
         return len(self.f) - 1
 
     def put_i(mut self, v: List[Int32]) raises -> Int:
         var n = len(v)
         var buf = self.ctx.enqueue_create_buffer[DType.int32](n if n > 0 else 1)
-        if n > 0:
-            self.ctx.enqueue_copy(dst_buf=buf, src_ptr=v.unsafe_ptr())
-        self.ctx.synchronize()
+        self._upload_i(buf, v)
         self.i.append(buf^)
         return len(self.i) - 1
 
     def zeros(mut self, n: Int) raises -> Int:
-        return self.put(List[Float32](length=n, fill=Float32(0)))
+        var buf = self.ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
+        self.ctx.enqueue_memset(buf, Float32(0))
+        self.f.append(buf^)
+        return len(self.f) - 1
 
     def zeros_i(mut self, n: Int) raises -> Int:
-        return self.put_i(List[Int32](length=n, fill=Int32(0)))
+        var buf = self.ctx.enqueue_create_buffer[DType.int32](n if n > 0 else 1)
+        self.ctx.enqueue_memset(buf, Int32(0))
+        self.i.append(buf^)
+        return len(self.i) - 1
 
-    def get(mut self, slot: Int, n: Int) raises -> List[Float32]:
-        var out = List[Float32](length=n, fill=Float32(0))
+    def _enq_get(mut self, slot: Int, n: Int, mut out: List[Float32]) raises:
+        out = List[Float32](length=n, fill=Float32(0))
         if n > 0:
             var view = self.f[slot].create_sub_buffer[DType.float32](0, n)
             self.ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=view)
-        self.ctx.synchronize()
-        return out^
 
-    def get_i(mut self, slot: Int, n: Int) raises -> List[Int32]:
-        var out = List[Int32](length=n, fill=Int32(0))
+    def _enq_get_i(mut self, slot: Int, n: Int, mut out: List[Int32]) raises:
+        out = List[Int32](length=n, fill=Int32(0))
         if n > 0:
             var view = self.i[slot].create_sub_buffer[DType.int32](0, n)
             self.ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=view)
-        self.ctx.synchronize()
+
+    def get(mut self, slot: Int, n: Int) raises -> List[Float32]:
+        var out = List[Float32]()
+        self._enq_get(slot, n, out)
+        self._sync()
         return out^
+
+    def get_i(mut self, slot: Int, n: Int) raises -> List[Int32]:
+        var out = List[Int32]()
+        self._enq_get_i(slot, n, out)
+        self._sync()
+        return out^
+
+    def gets(mut self, slots: List[Int], ns: List[Int]) raises -> List[List[Float32]]:
+        var outs = List[List[Float32]](capacity=len(slots))
+        for q in range(len(slots)):
+            outs.append(List[Float32](length=ns[q], fill=Float32(0)))
+        for q in range(len(slots)):
+            if ns[q] > 0:
+                var view = self.f[slots[q]].create_sub_buffer[DType.float32](0, ns[q])
+                self.ctx.enqueue_copy(dst_ptr=outs[q].unsafe_ptr(), src_buf=view)
+        self._sync()
+        return outs^
+
+    def get_if(
+        mut self, islot: Int, ni: Int, fslot: Int, nf: Int, mut oi: List[Int32], mut of: List[Float32]
+    ) raises:
+        self._enq_get_i(islot, ni, oi)
+        self._enq_get(fslot, nf, of)
+        self._sync()
 
     def set(mut self, slot: Int, v: List[Float32]) raises:
         var n = len(v)
-        if n > 0:
-            var view = self.f[slot].create_sub_buffer[DType.float32](0, n)
+        if n == 0:
+            return
+        var view = self.f[slot].create_sub_buffer[DType.float32](0, n)
+        if n >= _PUT_SYNC_MIN:
             self.ctx.enqueue_copy(dst_buf=view, src_ptr=v.unsafe_ptr())
-        self.ctx.synchronize()
+            self._sync()
+            return
+        self.pend_f.append(v.copy())
+        self.ctx.enqueue_copy(dst_buf=view, src_ptr=self.pend_f[len(self.pend_f) - 1].unsafe_ptr())
 
     def sqdist(mut self, a: Int, na: Int, b: Int, nb: Int, d: Int, dst: Int) raises:
         self.ctx.enqueue_function[_sqdist_kernel](

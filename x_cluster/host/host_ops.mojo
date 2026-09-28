@@ -84,6 +84,18 @@ struct HostOps(ClusterOps):
             out.append(self.i[slot][t])
         return out^
 
+    def gets(mut self, slots: List[Int], ns: List[Int]) raises -> List[List[Float32]]:
+        var outs = List[List[Float32]](capacity=len(slots))
+        for q in range(len(slots)):
+            outs.append(self.get(slots[q], ns[q]))
+        return outs^
+
+    def get_if(
+        mut self, islot: Int, ni: Int, fslot: Int, nf: Int, mut oi: List[Int32], mut of: List[Float32]
+    ) raises:
+        oi = self.get_i(islot, ni)
+        of = self.get(fslot, nf)
+
     def set(mut self, slot: Int, v: List[Float32]) raises:
         for t in range(len(v)):
             self.f[slot][t] = v[t]
