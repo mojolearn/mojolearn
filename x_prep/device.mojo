@@ -17,7 +17,8 @@ from x_prep.dradix import RADIX_SORT, RADIX_MIN_ROWS, radix_sort_cols_device, ra
 from x_prep.fastexact import (
     FAST_EXACT, XTG, XBS, EXACT_MIN_ROWS, exact_chunks, cat_table_words, count_neg_fast_kernel,
     uniq_count_kernel, uniq_prefix_kernel, uniq_write_kernel, cat_hist_kernel, cat_sum_kernel,
-    te_global_fast_kernel, ii_gram_sym_fast_kernel,
+    te_global_fast_kernel, ii_gram_sym_fast_kernel, FOLD_GROUPS_MAX, fold_scratch_words,
+    pt_fold_sum_kernel, pt_fold_mean_kernel, pt_fold_dev_kernel, pt_fold_end_kernel,
 )
 from x_prep.fastred import (
     TGR, col_stats_fast_kernel, pt_fold_fast_kernel, class_stats_fast_kernel, ii_mean_fast_kernel,
@@ -201,13 +202,17 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     # (x_prep/fastexact.mojo, the same words); MOJOLEARN_XPREP_TE_FAST=1 folds te_global by a tree
     # (a FAST fold: the bits may change; MOJOLEARN_XPREP_FAST_FOLDS=0 turns it off with the others);
     # MOJOLEARN_XPREP_II_SYM=1 folds ii_gram over the pairs a <= b only (the same FAST words)
+    # MOJOLEARN_XPREP_FOLD_GROUPS=G (OPT-IN, default 1 = one threadgroup a column) folds
+    # PowerTransformer's pt_fold by G groups a column (a FAST fold: the bits may change)
     var exact = False
     var te_fast = False
     var ii_sym = False
+    var fold_groups = 1
     comptime if FAST_EXACT:
         exact = getenv("MOJOLEARN_XPREP_EXACT", "0") == "1"
         te_fast = getenv("MOJOLEARN_XPREP_TE_FAST", "0") == "1"
         ii_sym = getenv("MOJOLEARN_XPREP_II_SYM", "0") == "1"
+        fold_groups = min(max(1, _env_int("MOJOLEARN_XPREP_FOLD_GROUPS", 1)), FOLD_GROUPS_MAX)
     # EXPERIMENT (FAST on Apple, opt-in): MOJOLEARN_XPREP_DOWNLOAD=memcpy reads the device arena's
     # words from the host after the wait (Apple's buffers are shared memory), =threads the same in
     # 16 MB chunks across the host pool. A byte move either way.
@@ -229,6 +234,8 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
             scratch = max(scratch, sort_scratch_words(Int(sq[1]), units))
             if radix and Int(sq[1]) >= RADIX_MIN_ROWS:
                 scratch = max(scratch, radix_scratch_words(Int(sq[1]), units, radix_rows))
+        if fold_groups > 1 and Int(host_q.unsafe_load(s * STAGE_INTS)) == OP_PT_FOLD:
+            scratch = max(scratch, fold_scratch_words(Int(host_q.unsafe_load(s * STAGE_INTS + 1)), fold_groups))
         if exact and Int(host_q.unsafe_load(s * STAGE_INTS)) == OP_UNIQUE_COLS:
             var uq = host_q + (s * STAGE_INTS + 2)
             scratch = max(scratch, Int(host_q.unsafe_load(s * STAGE_INTS + 1)) * exact_chunks(Int(uq[1])))
@@ -351,6 +358,24 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                         grid_dim=_xblocks(total), block_dim=XBS,
                     )
                     continue
+            if fold_groups > 1 and fast_folds and rows >= EXACT_MIN_ROWS and op == OP_PT_FOLD:
+                ctx.enqueue_function[pt_fold_sum_kernel](
+                    df.unsafe_ptr(), qp, dw.unsafe_ptr(), Int32(fold_groups),
+                    grid_dim=total * fold_groups, block_dim=XTG,
+                )
+                ctx.enqueue_function[pt_fold_mean_kernel](
+                    df.unsafe_ptr(), qp, dw.unsafe_ptr(), Int32(fold_groups), Int32(total),
+                    grid_dim=total, block_dim=XTG,
+                )
+                ctx.enqueue_function[pt_fold_dev_kernel](
+                    df.unsafe_ptr(), qp, dw.unsafe_ptr(), Int32(fold_groups), Int32(total),
+                    grid_dim=total * fold_groups, block_dim=XTG,
+                )
+                ctx.enqueue_function[pt_fold_end_kernel](
+                    df.unsafe_ptr(), qp, dw.unsafe_ptr(), Int32(fold_groups), Int32(total),
+                    grid_dim=total, block_dim=XTG,
+                )
+                continue
             if ii_sym and fast_folds and op == OP_II_GRAM:
                 ctx.enqueue_function[ii_gram_sym_fast_kernel](df.unsafe_ptr(), qp, grid_dim=total, block_dim=XTG)
                 continue

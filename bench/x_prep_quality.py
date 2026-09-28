@@ -16,8 +16,9 @@ against the reference:
 Run it twice in one process's environment (MOJOLEARN_NUMERIC_MODE=fast): with
 MOJOLEARN_XPREP_FAST_FOLDS=0 (the row-order units: the before arm) and =1
 (the threadgroup folds: the after arm). Lines:
-`XPQ <arm> <dataset> <seed> <case> <metric> <value>`. `--only target-encoder` runs
-TargetEncoder alone (lane prep-apple3: its arms are MOJOLEARN_XPREP_TE_FAST=0 and =1).
+`XPQ <arm> <dataset> <seed> <case> <metric> <value>`. `--only target-encoder` and
+`--only power-transformer` run those alone (lane prep-apple3: the arms are
+MOJOLEARN_XPREP_TE_FAST=0 / 1 and MOJOLEARN_XPREP_FOLD_GROUPS=1 / G).
 
     python bench/x_prep_quality.py --arm after [--seeds 5] [--rows 200000]
 scikit-learn comes from PYTHONPATH (the steward job installs it in ~/skl).
@@ -81,16 +82,17 @@ def main():
                     out("target-encoder-" + tname, "transform_err", _err(m.transform(Xc), r.transform(Xc64)))
                     out("target-encoder-" + tname, "target_mean_err",
                         _err(m.target_mean_, np.atleast_1d(r.target_mean_)))
+            if not only or "power-transformer" in only:
+                m = ml.PowerTransformer().fit(X)
+                r = skp.PowerTransformer().fit(X64)
+                out("power-transformer", "lambda_err", _err(m.lambdas_, r.lambdas_))
+                out("power-transformer", "transform_err", _err(m.transform(X), r.transform(X64)))
             if only:
                 continue
             m = ml.MaxAbsScaler().fit(X)
             out("maxabs-scaler", "transform_err", _err(m.transform(X), skp.MaxAbsScaler().fit(X64).transform(X64)))
             m = ml.VarianceThreshold(threshold=0.0).fit(X)
             out("variance-threshold", "variances_err", _err(m.variances_, skf.VarianceThreshold().fit(X64).variances_))
-            m = ml.PowerTransformer().fit(X)
-            r = skp.PowerTransformer().fit(X64)
-            out("power-transformer", "lambda_err", _err(m.lambdas_, r.lambdas_))
-            out("power-transformer", "transform_err", _err(m.transform(X), r.transform(X64)))
             m = ml.SimpleImputer(strategy="mean").fit(b["nan"])
             out("simple-imputer-mean", "transform_err",
                 _err(m.transform(b["nan"]), __import__("sklearn.impute", fromlist=["x"]).SimpleImputer(

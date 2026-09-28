@@ -36,8 +36,9 @@ from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from x_prep.common import FP, IP, p, ld, raw, st, key
-from x_prep.prims import add, sub, mul, div
+from x_prep.common import FP, IP, p, ld, raw, st, key, is_nan
+from x_prep.prims import add, sub, mul, div, logf
+from x_prep.transform import PT_STATE, pt_finish, log1pf
 
 comptime XUP = MutPointer[UInt32, MutAnyOrigin]
 #: FAST on Apple only
@@ -52,6 +53,14 @@ comptime XCHUNK = 4096
 comptime EXACT_MIN_ROWS = 65536
 #: the largest table (words) `cat_counts` keeps
 comptime CAT_TABLE_MAX = 1 << 26
+#: the most groups a column's FAST fold is split into (the combining tree has XTG leaves)
+comptime FOLD_GROUPS_MAX = 256
+
+
+def fold_scratch_words(cols: Int, groups: Int) -> Int:
+    """The scratch words of a FAST fold by groups: three sums and one sum of
+    squared deviations per (column, group), three words per column."""
+    return max(cols, 0) * (groups * 4 + 3)
 
 
 def exact_chunks(n: Int) -> Int:
@@ -309,3 +318,188 @@ def ii_gram_sym_fast_kernel(f: FP, q: IP):
     if tid == 0:
         f[p(q, 6) + t] = sh_s[0]
         f[p(q, 6) + b * dd + a] = sh_s[0]
+
+
+# ---------------------------------------------------------------- FAST folds by groups
+# x_prep/fastred.mojo folds a column with ONE threadgroup (TGR threads), so a
+# stage of 16 columns keeps 4096 GPU threads busy (measured on the M3 Ultra,
+# request 1790627886703: 5 ms a fold of 16M words, where a kernel with one
+# thread per word takes 1.5 ms). Here a column is folded by G groups: group g
+# takes the rows g*XTG + tid, then every G*XTG-th, a tree adds its threads,
+# and a second launch adds the G group sums by a tree. A FAST fold: the bits
+# may change (the tree has another shape), held to the paired quality rule.
+
+
+@always_inline
+def _pt_state(f: FP, q: IP, c: Int) -> Int:
+    return p(q, 6) + c * PT_STATE
+
+
+def pt_fold_sum_kernel(f: FP, q: IP, w: XUP, groups: Int32):
+    """`pt_fold_fast_kernel`'s first pass for column c, group g (block
+    c*G + g): w[(c*G + g)*3 ..] = the count, the sum of T and (K = 0) the sum
+    of J over the group's rows (float words)."""
+    var G = Int(groups)
+    var blk = Int(block_idx.x)
+    var c = blk // G
+    var g = blk - c * G
+    var tid = Int(thread_idx.x)
+    var X = p(q, 0)
+    var nn = p(q, 1)
+    var dd = p(q, 2)
+    var method = p(q, 3)
+    var T = p(q, 4)
+    var K = p(q, 5)
+    var S = _pt_state(f, q, c)
+    if f[S + 7] != Float32(0):
+        return
+    var first = K == 0
+    var sh_s = stack_allocation[XTG, Float32, address_space = AddressSpace.SHARED]()
+    var sh_c = stack_allocation[XTG, Float32, address_space = AddressSpace.SHARED]()
+    var sh_j = stack_allocation[XTG, Float32, address_space = AddressSpace.SHARED]()
+    var cnt = Float32(0)
+    var sm = Float32(0)
+    var sj = Float32(0)
+    for i in range(g * XTG + tid, nn, G * XTG):
+        var x = f[X + i * dd + c]
+        if is_nan(x):
+            continue
+        cnt += 1
+        sm = add(sm, f[T + c * nn + i])
+        if first:
+            if method == 1:
+                sj = add(sj, logf(x))
+            elif x >= Float32(0):
+                sj = add(sj, log1pf(x))
+            else:
+                sj = sub(sj, log1pf(sub(Float32(0), x)))
+    sh_s[tid] = sm
+    sh_c[tid] = cnt
+    sh_j[tid] = sj
+    barrier()
+    var h = XTG // 2
+    while h >= 1:
+        if tid < h:
+            sh_s[tid] = add(sh_s[tid], sh_s[tid + h])
+            sh_c[tid] = sh_c[tid] + sh_c[tid + h]
+            sh_j[tid] = add(sh_j[tid], sh_j[tid + h])
+        barrier()
+        h //= 2
+    if tid == 0:
+        var pw = w.bitcast[Float32]()
+        pw[blk * 3] = sh_c[0]
+        pw[blk * 3 + 1] = sh_s[0]
+        pw[blk * 3 + 2] = sh_j[0]
+
+
+def pt_fold_mean_kernel(f: FP, q: IP, w: XUP, groups: Int32, cols: Int32):
+    """Column c = block: the G group sums added by a tree; w[MEANS + 3c ..] =
+    the count, the mean of T and the sum of J (MEANS = cols*G*4)."""
+    var G = Int(groups)
+    var c = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var S = _pt_state(f, q, c)
+    if f[S + 7] != Float32(0):
+        return
+    var first = p(q, 5) == 0
+    var pw = w.bitcast[Float32]()
+    var sh_s = stack_allocation[XTG, Float32, address_space = AddressSpace.SHARED]()
+    var sh_c = stack_allocation[XTG, Float32, address_space = AddressSpace.SHARED]()
+    var sh_j = stack_allocation[XTG, Float32, address_space = AddressSpace.SHARED]()
+    var cnt = Float32(0)
+    var sm = Float32(0)
+    var sj = Float32(0)
+    if tid < G:
+        cnt = pw[(c * G + tid) * 3]
+        sm = pw[(c * G + tid) * 3 + 1]
+        sj = pw[(c * G + tid) * 3 + 2]
+    sh_s[tid] = sm
+    sh_c[tid] = cnt
+    sh_j[tid] = sj
+    barrier()
+    var h = XTG // 2
+    while h >= 1:
+        if tid < h:
+            sh_s[tid] = add(sh_s[tid], sh_s[tid + h])
+            sh_c[tid] = sh_c[tid] + sh_c[tid + h]
+            sh_j[tid] = add(sh_j[tid], sh_j[tid + h])
+        barrier()
+        h //= 2
+    if tid == 0:
+        var total = sh_c[0]
+        var mean = Float32(0)
+        if total > 0:
+            mean = div(sh_s[0], total)
+        var M = Int(cols) * G * 4 + c * 3
+        pw[M] = total
+        pw[M + 1] = mean
+        pw[M + 2] = sh_j[0] if first else f[S + 8]
+
+
+def pt_fold_dev_kernel(f: FP, q: IP, w: XUP, groups: Int32, cols: Int32):
+    """Column c, group g: w[cols*G*3 + c*G + g] = the group's squared
+    deviations of T from the column's mean."""
+    var G = Int(groups)
+    var blk = Int(block_idx.x)
+    var c = blk // G
+    var g = blk - c * G
+    var tid = Int(thread_idx.x)
+    var nn = p(q, 1)
+    var T = p(q, 4)
+    var S = _pt_state(f, q, c)
+    if f[S + 7] != Float32(0):
+        return
+    var pw = w.bitcast[Float32]()
+    var M = Int(cols) * G * 4 + c * 3
+    var total = pw[M]
+    var mean = pw[M + 1]
+    var sh_s = stack_allocation[XTG, Float32, address_space = AddressSpace.SHARED]()
+    var ss = Float32(0)
+    if total > 0:
+        for i in range(g * XTG + tid, nn, G * XTG):
+            var tv = f[T + c * nn + i]
+            if is_nan(tv):
+                continue
+            var e = sub(tv, mean)
+            ss = add(ss, mul(e, e))
+    sh_s[tid] = ss
+    barrier()
+    var h = XTG // 2
+    while h >= 1:
+        if tid < h:
+            sh_s[tid] = add(sh_s[tid], sh_s[tid + h])
+        barrier()
+        h //= 2
+    if tid == 0:
+        pw[Int(cols) * G * 3 + blk] = sh_s[0]
+
+
+def pt_fold_end_kernel(f: FP, q: IP, w: XUP, groups: Int32, cols: Int32):
+    """Column c = block: the G groups' squared deviations added by a tree,
+    then `pt_finish` (the step of the search) on thread 0."""
+    var G = Int(groups)
+    var c = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var S = _pt_state(f, q, c)
+    if f[S + 7] != Float32(0):
+        return
+    var first = p(q, 5) == 0
+    var pw = w.bitcast[Float32]()
+    var sh_s = stack_allocation[XTG, Float32, address_space = AddressSpace.SHARED]()
+    var ss = Float32(0)
+    if tid < G:
+        ss = pw[Int(cols) * G * 3 + c * G + tid]
+    sh_s[tid] = ss
+    barrier()
+    var h = XTG // 2
+    while h >= 1:
+        if tid < h:
+            sh_s[tid] = add(sh_s[tid], sh_s[tid + h])
+        barrier()
+        h //= 2
+    if tid == 0:
+        var M = Int(cols) * G * 4 + c * 3
+        var sjt = pw[M + 2]
+        if first:
+            f[S + 8] = sjt
+        pt_finish(c, f, q, Int(pw[M]), sjt, sh_s[0])
