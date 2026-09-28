@@ -93,8 +93,10 @@ def ivf_flat_build_host(
     kmeans_n_iters: Int = 20,
     metric: Int = METRIC_L2_EXPANDED,
     seed: UInt64 = 0,
+    with_list_data: Bool = True,
 ) raises -> IvfFlatIndex:
-    """`ivf_flat::build`, host list in, index out.
+    """`ivf_flat::build`, host list in, index out. `with_list_data = False`
+    leaves `list_data` empty (`ivf_flat_build`; the x_ann indexes).
 
     **WITH `MOJOLEARN_IDENTITY_TRACE` SET, PREFER
     `ivf_flat_build_and_search_host`.** This entry constructs its own
@@ -109,7 +111,7 @@ def ivf_flat_build_host(
     params.metric = metric
     params.seed = seed
     var trace = IdentityTrace()
-    return ivf_flat_build(ctx, trace, params, x, n_rows, dim)
+    return ivf_flat_build(ctx, trace, params, x, n_rows, dim, with_list_data)
 
 
 def ivf_flat_search_host(

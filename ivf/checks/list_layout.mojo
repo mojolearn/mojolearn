@@ -68,6 +68,9 @@ so it is a speed change and belongs behind a measurement.
 """
 
 
+from std.memory import memcpy
+
+
 @fieldwise_init
 struct ListLayout(Movable):
     """The CSR triple, plus the assignment it was built from.
@@ -92,6 +95,7 @@ def build_list_layout(
     n_rows: Int,
     dim: Int,
     n_lists: Int,
+    with_data: Bool = True,
 ) raises -> ListLayout:
     """The CSR build: histogram, exclusive scan, stable scatter.
 
@@ -112,6 +116,13 @@ def build_list_layout(
     Raises on a label outside `[0, n_lists)` rather than writing past a
     list, because a bad label here silently corrupts a neighbouring list
     and the corruption is invisible in every aggregate.
+
+    `with_data = False` (lane ann-apple3) leaves `list_data` EMPTY: the
+    x_ann indexes (IVF-PQ, IVF-SQ, IVF-RaBitQ) take the centres, the offsets
+    and the carried ids from this build and never read the permuted
+    vectors, so their build skips the n_rows x dim scatter. The offsets and
+    the carried ids are the same either way. Each row moves with one
+    memcpy: a plain copy, the same words.
     """
     if len(labels) != n_rows:
         raise Error(
@@ -128,9 +139,7 @@ def build_list_layout(
             + String(n_rows * dim)
         )
 
-    var sizes = List[Int32]()
-    for _ in range(n_lists):
-        sizes.append(Int32(0))
+    var sizes = List[Int32](length=n_lists, fill=Int32(0))
     for i in range(n_rows):
         var l = Int(labels[i])
         if l < 0 or l >= n_lists:
@@ -160,12 +169,8 @@ def build_list_layout(
     for l in range(n_lists):
         cursor.append(offsets[l])
 
-    var list_indices = List[UInt32]()
-    for _ in range(n_rows):
-        list_indices.append(UInt32(0))
-    var list_data = List[Float32]()
-    for _ in range(n_rows * dim):
-        list_data.append(Float32(0.0))
+    var list_indices = List[UInt32](length=n_rows, fill=UInt32(0))
+    var list_data = List[Float32](length=(n_rows * dim if with_data else 0), fill=Float32(0.0))
 
     for i in range(n_rows):
         var l = Int(labels[i])
@@ -176,8 +181,8 @@ def build_list_layout(
         # has no `source_ixs` gather arm (their `gather_src` template
         # parameter serves `fill_refinement_index`, which is not implemented).
         list_indices[slot] = UInt32(i)
-        for f in range(dim):
-            list_data[slot * dim + f] = x[i * dim + f]
+        if with_data:
+            memcpy(dest=list_data.unsafe_ptr() + slot * dim, src=x.unsafe_ptr() + i * dim, count=dim)
 
     return ListLayout(
         n_lists, n_rows, dim, offsets^, list_indices^, list_data^

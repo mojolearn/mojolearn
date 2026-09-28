@@ -3,6 +3,7 @@
 """The ann lane's address contract, shared by `bindings/_mojolearn_x_ann.mojo`
 and `bindings/_mojolearn_x_ann_host.mojo`: plain copies, no arithmetic."""
 
+from std.memory import memcpy
 from std.python import PythonObject
 from bindings.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
 from x_ann.ivf_pq_core import F32P, I32P
@@ -35,15 +36,17 @@ def ptr_i32(addrs: PythonObject, i: Int) raises -> I32P:
 
 
 def out_f32(values: List[Float32], addrs: PythonObject, i: Int) raises:
+    """One memcpy into the caller's array (lane ann-apple3; was one store per
+    word: the IVF code arrays are n x dim words)."""
     var p = f32_ptr(a_int(addrs, i))
-    for e in range(len(values)):
-        p.unsafe_store(e, values[e])
+    if len(values) > 0:
+        memcpy(dest=p, src=values.unsafe_ptr(), count=len(values))
 
 
 def out_i32(values: List[Int32], addrs: PythonObject, i: Int) raises:
     var p = i32_ptr(a_int(addrs, i))
-    for e in range(len(values)):
-        p.unsafe_store(e, values[e])
+    if len(values) > 0:
+        memcpy(dest=p, src=values.unsafe_ptr(), count=len(values))
 
 
 def check_search(n_lists: Int, m: Int, k: Int, n_probes: Int) raises:

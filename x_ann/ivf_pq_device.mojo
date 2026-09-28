@@ -140,15 +140,22 @@ def _coarse(
     the host twin is `ivf/host/ivf_host.mojo::host_ivf_build`."""
     var cst = AnnStages("ivf_coarse")
     var ctx = x_ann_ctx()
-    var flat = ivf_flat_build_host(ctx, x, n, dim, n_lists, kmeans_n_iters, METRIC_L2_EXPANDED, UInt64(seed))
+    # lane ann-apple3: the build without the permuted vectors (no x_ann
+    # index reads them); the centres and the offsets move out of it; the
+    # labels are the build's own assignment, the one its lists were laid out
+    # from, so `pq_labels_from_lists` over those lists returns these words
+    var flat = ivf_flat_build_host(
+        ctx, x, n, dim, n_lists, kmeans_n_iters, METRIC_L2_EXPANDED, UInt64(seed), with_list_data=False
+    )
     ctx.synchronize()
     cst.host("flat_build")
-    centers = flat.centers.copy()
-    offsets = flat.list_offsets.copy()
-    list_indices = List[Int32](capacity=n)
+    swap(centers, flat.centers)
+    swap(offsets, flat.list_offsets)
+    list_indices = List[Int32](length=n, fill=Int32(0))
+    labels = List[Int32](length=n, fill=Int32(0))
     for s in range(n):
-        list_indices.append(Int32(Int(flat.list_indices[s])))
-    labels = pq_labels_from_lists(offsets, list_indices, n_lists, n)
+        list_indices[s] = Int32(Int(flat.list_indices[s]))
+        labels[s] = Int32(Int(flat.labels[s]))
     _ = flat^
     _ = ctx^
     cst.host("convert")
