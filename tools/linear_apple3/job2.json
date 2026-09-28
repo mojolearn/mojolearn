@@ -1,7 +1,7 @@
 {
   "arms": [
     {"name": "blocks", "defines": "-D MOJOLEARN_X_LINEAR_BLOCKS=1", "builds": ["x_linear"],
-     "cases": "poisson,gamma,tweedie,huber,quantile,logistic-cv", "warm_column": "both",
+     "cases": "poisson,gamma,tweedie,huber,quantile,logistic-cv,isotonic", "warm_column": "both",
      "rows": [100000, 1000000],
      "qual": "poisson,gamma,tweedie,huber,huber-200,quantile,quantile-l1,logistic-cv,logistic-cv-taxi", "host_ref": true},
     {"name": "gram", "defines": "-D MOJOLEARN_X_LINEAR_BLOCKS_GRAM=1", "builds": ["x_linear"],

@@ -35,7 +35,8 @@ from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fexp, flog, fsqrt, fabs, fmax, ld, st, i2f,
     fill, copy, row_dot, cholesky, chol_solve, mean_of,
 )
-from x_linear.team import team_barrier
+from x_linear.team import team_barrier, team_at
+from x_linear.isotonic import isotonic_predict
 from x_linear.tops import fold_fa, fold_sq, chain_fmad, chain_fmad_scaled, fold_one_fmad
 from x_linear.glm import _unit, GLM_LINK_LOG
 from x_linear.lbfgs import LBFGS_M, lbfgs_work, _dot
@@ -57,13 +58,15 @@ comptime XB_GLM = 2
 comptime XB_HUBER = 3
 comptime XB_QUANTILE = 7
 comptime XB_LOGCV = 10
+comptime XB_ISOTONIC_PREDICT = 12
 
 
 def blocks_handles(algo: Int, n: Int) -> Bool:
     """The fits this file runs (the algo numbers of x_linear/dispatch.mojo)."""
     if n < XB_MIN_ROWS:
         return False
-    return algo == XB_GLM or algo == XB_HUBER or algo == XB_QUANTILE or algo == XB_LOGCV
+    return (algo == XB_GLM or algo == XB_HUBER or algo == XB_QUANTILE or algo == XB_LOGCV
+            or algo == XB_ISOTONIC_PREDICT)
 
 
 # ---------------------------------------------------------------- kernels
@@ -429,6 +432,19 @@ def xb_quantile_kernel(
                 acc = fold_one_fmad(rw, src + r0, rows)
         st(part, blk * cells + c, acc)
         c += XB_TPB
+
+
+def xb_isotonic_predict_kernel(
+    x: FP, y: FP, ip: IP, fp: FP, res: FP, n_in: Int32, nt_in: Int32,
+):
+    """x_linear/isotonic.mojo `isotonic_predict` on a team that spans the
+    whole grid. Every query is its own output and the function has no
+    barrier and no broadcast, so the words are the one-block schedule's
+    (this schedule is bitwise identical; it is FAST and Apple only here
+    because nothing else in this round may touch IDENTICAL)."""
+    var tid = Int(block_idx.x) * XB_TPB + Int(thread_idx.x)
+    var t = team_at(tid, Int(nt_in), res, Int(n_in), 3, 0)
+    isotonic_predict(t, x, y, Int(n_in), 1, ip, fp, res, res, ip)
 
 
 # ------------------------------------------------------------ host state
@@ -1171,6 +1187,43 @@ def quantile_fit_blocks(
     _ = b^
 
 
+def isotonic_predict_blocks(
+    ctx: DeviceContext, x: FP, n_x: Int, y: FP, n_y: Int, n: Int,
+    ip: List[Int32], fp: List[Float32], n_out: Int, res: FP,
+) raises:
+    """ALGO_ISOTONIC_PREDICT: about four queries a thread over the grid."""
+    var dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
+    var dy = ctx.enqueue_create_buffer[DType.float32](max(n_y, 1))
+    var dip = ctx.enqueue_create_buffer[DType.int32](max(len(ip), 1))
+    var dfp = ctx.enqueue_create_buffer[DType.float32](max(len(fp), 1))
+    var dout = ctx.enqueue_create_buffer[DType.float32](max(n_out, 1))
+    var hip = ip.copy()
+    var hfp = fp.copy()
+    ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+    if n_y > 0:
+        ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
+    if len(hip) > 0:
+        ctx.enqueue_copy(dst_buf=dip, src_ptr=hip.unsafe_ptr())
+    if len(hfp) > 0:
+        ctx.enqueue_copy(dst_buf=dfp, src_ptr=hfp.unsafe_ptr())
+    dout.enqueue_fill(Float32(0))
+    var grid = (n + 4 * XB_TPB - 1) // (4 * XB_TPB)
+    ctx.enqueue_function[xb_isotonic_predict_kernel](
+        dx.unsafe_ptr(), dy.unsafe_ptr(), dip.unsafe_ptr(), dfp.unsafe_ptr(), dout.unsafe_ptr(),
+        Int32(n), Int32(grid * XB_TPB),
+        grid_dim=grid, block_dim=XB_TPB,
+    )
+    ctx.enqueue_copy(dst_ptr=res, src_buf=dout)
+    ctx.synchronize()
+    _ = hip^
+    _ = hfp^
+    _ = dx^
+    _ = dy^
+    _ = dip^
+    _ = dfp^
+    _ = dout^
+
+
 # ------------------------------------------------------------------ entry
 
 def blocks_fit(
@@ -1178,6 +1231,9 @@ def blocks_fit(
     ip: List[Int32], fp: List[Float32], n_out: Int, res: FP,
 ) raises:
     """The fit `algo` (one `blocks_handles` names), its result in res."""
+    if algo == XB_ISOTONIC_PREDICT:
+        isotonic_predict_blocks(ctx, x, n_x, y, n_y, n, ip, fp, n_out, res)
+        return
     fill(res, 0, n_out, Float32(0))
     if algo == XB_GLM:
         glm_fit_blocks(ctx, x, n_x, y, n_y, n, d, ip, fp, res)
