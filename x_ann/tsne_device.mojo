@@ -38,7 +38,7 @@ def perplexity_kernel(n: Int32, nn_d: F32P, nn: Int32, log_perp: Float32, p: F32
 
 
 #: rows per threadgroup and staged candidate rows per tile of the repulsion
-comptime RTB = 64
+comptime RTB = 128
 comptime RTJ = 256
 
 
