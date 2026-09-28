@@ -292,6 +292,33 @@ Median of two rounds, ms.
 Bits: IDENTICAL 9 digest lines equal in all 4 runs; FAST 9 digest lines
 equal in all 4 runs and 20/20 fastq.py rows equal.
 
+### m4-a (Apple M4), job 1790618938662, commit 93e40eaf2 (a quiet box: floor 0.18-0.22 ms)
+
+base = round 1's code (every define + legacy); all = default. Median of
+two rounds, ms.
+
+| shape | IDENTICAL base | IDENTICAL all | FAST base | FAST all |
+|---|---|---|---|---|
+| Conv2d 3->64 fwd / bwd | 31.1 / 20.9 | 29.9 / 12.2 | 28.3 / 30.1 | 27.2 / 11.1 |
+| Conv2d 64->64 fwd / bwd | 70.3 / 154.2 | 51.5 / 109.1 | 81.8 / 178.2 | 48.0 / 95.3 |
+| Conv2d 64->128 fwd / bwd | 27.8 / 53.4 | 23.5 / 48.7 | 32.9 / 72.0 | 21.4 / 45.5 |
+| CNNClassifier fit 2048 | 359.8 | 223.8 (1.6x) | 360.2 | 190.4 (1.9x) |
+| CNNClassifier fit 8192 | 1393.0 | 885.4 (1.6x) | 1391.4 | 756.5 (1.8x) |
+| predict_proba 2048 | 163.9 | 79.1 (2.1x) | 164.5 | 63.4 (2.6x) |
+| predict_proba 8192 | 555.1 | 300.2 (1.8x) | 539.2 | 228.2 (2.4x) |
+| BasicBlock fwd / fwd+bwd | 107.5 / 248.5 | 103.7 / 226.9 | 106.0 / 265.8 | 95.7 / 200.1 |
+| BatchNorm2d fwd / bwd | 23.9 / 17.1 | 24.8 / 20.8 (SLOWER) | 20.1 / 15.2 | 22.0 / 16.9 (SLOWER) |
+| MaxPool2d fwd / bwd | 14.1 / 28.4 | 13.8 / 25.1 | 13.8 / 29.0 | 13.8 / 25.0 |
+| GCNConv fwd / bwd | 471.0 / 41.9 | 49.7 / 35.6 | 476.1 / 36.0 | 49.4 / 34.8 |
+| SAGEConv fwd / bwd | 454.6 / 70.7 | 61.7 / 59.0 | 451.5 / 61.8 | 59.9 / 58.0 |
+
+Bits: IDENTICAL 9 digest lines equal in all 4 runs; FAST 9 digest lines
+equal in all 4 runs and 20/20 fastq.py rows equal.
+The BatchNorm threadgroup folds are SLOWER on the 10-core M4 (and faster
+on the M4 Pro and M3 Ultra): 770c1be66 reads eight staged words ahead of
+the dependent adds; job 1790619765191 (m4-a) times it against
+`-D MOJOLEARN_XCNN_NO_BN_BLOCK`.
+
 ## Unproven
 
 - The regenerated seam 5702 sabotage patch: applies, not yet run.
