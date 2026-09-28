@@ -31,12 +31,15 @@ from checks.rtf_seam import RTF_REPAIR
 from gemm.checks.gemm_identical import (
     APPLE_MMA,
     PLAN_APPLE_MMA,
+    PLAN_APPLE_MMA_SPLIT,
+    PLAN_APPLE_MMA_SPLIT_BIG,
     PLAN_FLAT,
     PLAN_SPLIT_128_8X8,
     PLAN_TUNED_128_8X8,
     PLAN_TUNED_64_4X4,
     TUNED_BLOCK_ADMIT,
     apple_mma_applies,
+    apple_mma_applies_one_leaf,
     gemm_plan_name,
     identical_gemm_into,
     identical_gemm_with_plan,
@@ -163,6 +166,11 @@ def _case(
         # (leaves of whole windows), which is the only place the dispatcher
         # sends it.
         if apple_mma_applies(m, n, k):
+            plans.append(PLAN_APPLE_MMA)
+            plans.append(PLAN_APPLE_MMA_SPLIT)
+            plans.append(PLAN_APPLE_MMA_SPLIT_BIG)
+        elif apple_mma_applies_one_leaf(m, n, k):
+            # lane/cnn-apple2: one ragged leaf on the matrix plan
             plans.append(PLAN_APPLE_MMA)
     for pi in range(len(plans)):
         var plan = plans[pi]

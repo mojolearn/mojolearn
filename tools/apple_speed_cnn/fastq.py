@@ -19,6 +19,9 @@ sys.path.insert(0, sys.argv[2] + "/python")
 import mojolearn as ml  # noqa: E402
 
 mode = sys.argv[1]
+if "legacy" in __import__("os").environ.get("CNN_FASTQ_EXTRA", ""):  # lane/cnn-apple2 before arm
+    from mojolearn import _expansion_cnn as _xc
+    _xc._LEGACY_STEP = True
 
 
 def digest(a):

@@ -10,24 +10,31 @@ one process-lifetime context and synchronizes before it returns.
 The host twin is x_cnn/host/ops_host.mojo: the same element functions in a
 loop and `gemm_oracle` for the contractions."""
 from std.gpu import block_idx, block_dim, thread_idx
+from std.memory import stack_allocation
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 from std.ffi import _Global
 from std.time import perf_counter_ns
+from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_rsqrt
+from checks.rtf_seam import rtf_mul_add
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.checks.gemm_identical import (
     identical_gemm_with_plan, identical_gemm_workspace_floats, PLAN_SPLIT_32_2X2, PLAN_SPLIT_64_4X4,
-    PLAN_SPLIT_16_1X1, PLAN_APPLE_MMA, PLAN_TUNED_32_2X2, PLAN_SPLITK, apple_mma_applies,
-    identical_gemm_splitk_fits,
+    PLAN_SPLIT_16_1X1, PLAN_APPLE_MMA, PLAN_TUNED_32_2X2, PLAN_SPLITK, apple_mma_applies, apple_mma_applies_one_leaf, PLAN_APPLE_MMA_SPLIT, PLAN_APPLE_MMA_SPLIT_BIG,
+    identical_gemm_splitk_fits, choose_gemm_plan,
 )
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE
 from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN
 from metrics.checks.device_io import upload_f32, upload_i32, download_f32, download_i32
 from x_cnn.ops import (
     FP, IP, ElemFn, CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW,
-    im2col_at, conv_out_at, dout_rows_at, col2im_at, fill_one_at,
+    CP_SH, CP_SW, CP_PH, CP_PW, CP_DH, CP_DW,
+    im2col_at, im2col_taps_at, conv_out_at, dout_rows_at, col2im_at, fill_one_at,
     PP_N, PP_C, PP_H, PP_W, PP_OH, PP_OW,
     maxpool_fwd_at, maxpool_bwd_at, avgpool_fwd_at, avgpool_bwd_at, relu_maxpool_fwd_at, pool_relu_rows_bwd_at,
+    conv_out_val, pool_relu_row_val, bn_mean_row, BN_MEAN, BN_VAR, BN_INVSTD, BN_SUMG, BN_SUMGX,
     relu_fwd_at, relu_bwd_at, add_at, bias_rows_at, softmax_xent_row_at, seq_mean, sgd_at,
     bn_stats_at, bn_eval_stats_at, bn_apply_at, bn_running_at, bn_bwd_red_at, bn_bwd_dx_at, bn_bwd_eval_dx_at,
     dropout2d_at, mul_at, spmm_at, gcn_deg_at, gcn_norm_at,
@@ -36,6 +43,22 @@ from x_cnn.ops import (
 )
 
 comptime TPB = 256
+#: lane/cnn-apple2: the FAST tier on Apple measures its GEMM plans (the
+#: simdgroup matrix plans among them). `-D MOJOLEARN_XCNN_NO_FAST_TUNE` is
+#: the before arm (round 1's FAST: the 4090 split plans and the dispatcher).
+#: lane/cnn-apple2: IDENTICAL on Apple also times APPLE_MMA against the
+#: dispatcher outside the weight gradients (`-D MOJOLEARN_XCNN_NO_NT_TUNE`
+#: is the before arm).
+comptime APPLE_NT_TUNE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and TARGET_COLUMN == COLUMN_APPLE
+    and not is_defined["MOJOLEARN_XCNN_NO_NT_TUNE"]()
+)
+comptime APPLE_FAST_TUNE = (
+    GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
+    and TARGET_COLUMN == COLUMN_APPLE
+    and not is_defined["MOJOLEARN_XCNN_NO_FAST_TUNE"]()
+)
 
 
 struct _CnnContext(Defaultable, Movable):
@@ -56,12 +79,16 @@ struct _CnnContext(Defaultable, Movable):
     #: Apple IDENTICAL (DEVIATION 5720): (m, n, k, plan) quads, the measured
     #: fastest weight/bias-gradient plan per shape.
     var tuned: List[Int]
+    #: lane/cnn-apple2: freed resident arrays kept for reuse by `res_alloc`
+    #: (at most `RES_POOL_MAX_FLOATS` in all).
+    var pool: List[DeviceBuffer[DType.float32]]
 
     def __init__(out self):
         self.ctx = Optional[DeviceContext]()
         self.ws = List[DeviceBuffer[DType.float32]]()
         self.res = List[DeviceBuffer[DType.float32]]()
         self.tuned = List[Int]()
+        self.pool = List[DeviceBuffer[DType.float32]]()
 
 
 comptime _CTX_NAME = "MojoXCnnContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXCnnContextFast"
@@ -99,39 +126,240 @@ def launch[f: ElemFn](ctx: DeviceContext, a: FP, b: FP, c: FP, d: FP, q: IP, p: 
     ctx.enqueue_function[k](a, b, c, d, q, p, Int32(total), grid_dim=(total + TPB - 1) // TPB, block_dim=TPB)
 
 
-def _apple_tuned_plan(
-    ctx: DeviceContext, mut c: DeviceBuffer[DType.float32], mut a: DeviceBuffer[DType.float32],
-    mut b: DeviceBuffer[DType.float32], m: Int, n: Int, k: Int, op: Int, default: Int,
-) raises -> Int:
-    """The fastest candidate plan for this OP_TN shape on this device, timed
-    once (one run each, after a wait for the entry's earlier work) and cached
-    for the process. Every candidate writes the same words into `c`."""
-    var s = _slots()
-    var i = 0
-    while i + 3 < len(s[].tuned):
-        if s[].tuned[i] == m and s[].tuned[i + 1] == n and s[].tuned[i + 2] == k:
-            return s[].tuned[i + 3]
-        i += 4
+# lane/cnn-apple2: the two layout changes of the conv block (GEMM rows
+# [n*S + s, oc] <-> NCHW [n, oc, s], S = OH*OW) as 32x32 tiles through
+# threadgroup memory, so both the reads and the writes are coalesced (the
+# one-thread-per-element forms read or write with stride OC or S). Each
+# stored word is the element function's (`conv_out_val`,
+# `pool_relu_row_val`); only which thread computes it changes. Threadgroup
+# memory only between the barrier's two sides (no device-memory ordering is
+# assumed). `-D MOJOLEARN_XCNN_NO_TILED_LAYOUT` is the before arm.
+comptime TILED_LAYOUT = not is_defined["MOJOLEARN_XCNN_NO_TILED_LAYOUT"]()
+#: The pooled backward's rows tiled (`rows_bwd_tiled_kernel`) measured
+#: SLOWER on the M4 Pro (block 1 1.44 -> 1.73 ms, block 2 0.75 -> 0.96:
+#: each thread runs four max-pool gathers in series); opt-in only,
+#: `-D MOJOLEARN_XCNN_TILED_ROWS`.
+comptime TILED_ROWS = TILED_LAYOUT and is_defined["MOJOLEARN_XCNN_TILED_ROWS"]()
+comptime _LT = 32
+comptime _LR = 8
+
+
+def conv_out_tiled_kernel(y2: FP, bias: FP, dst: FP, p: IP, S: Int32, OC: Int32):
+    """dst[n, oc, s] = conv_out_val(y2[n*S + s, oc]); block (32, 8), grid
+    (ceil(S/32), ceil(OC/32), N)."""
+    var t = stack_allocation[_LT * (_LT + 1), Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var tx = Int(thread_idx.x)
+    var ty = Int(thread_idx.y)
+    var s0 = Int(block_idx.x) * _LT
+    var c0 = Int(block_idx.y) * _LT
+    var n = Int(block_idx.z)
+    var ss = Int(S)
+    var cc = Int(OC)
+    comptime for j in range(_LT // _LR):
+        var s = s0 + ty + j * _LR
+        var oc = c0 + tx
+        if s < ss and oc < cc:
+            t[(ty + j * _LR) * (_LT + 1) + tx] = y2.unsafe_load((n * ss + s) * cc + oc)
+    barrier()
+    comptime for j in range(_LT // _LR):
+        var oc = c0 + ty + j * _LR
+        var s = s0 + tx
+        if s < ss and oc < cc:
+            dst.unsafe_store((n * cc + oc) * ss + s, conv_out_val(t[tx * (_LT + 1) + ty + j * _LR], bias, oc, p))
+
+
+def rows_bwd_tiled_kernel(dpool: FP, yconv: FP, grow: FP, idx: IP, p: IP, S: Int32, OC: Int32):
+    """grow[n*S + s, oc] = pool_relu_row_val(NCHW (n, oc, s)); block (32, 8),
+    grid (ceil(S/32), ceil(OC/32), N)."""
+    var t = stack_allocation[_LT * (_LT + 1), Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var tx = Int(thread_idx.x)
+    var ty = Int(thread_idx.y)
+    var s0 = Int(block_idx.x) * _LT
+    var c0 = Int(block_idx.y) * _LT
+    var n = Int(block_idx.z)
+    var ss = Int(S)
+    var cc = Int(OC)
+    comptime for j in range(_LT // _LR):
+        var oc = c0 + ty + j * _LR
+        var s = s0 + tx
+        if s < ss and oc < cc:
+            t[(ty + j * _LR) * (_LT + 1) + tx] = pool_relu_row_val((n * cc + oc) * ss + s, dpool, yconv, idx, p)
+    barrier()
+    comptime for j in range(_LT // _LR):
+        var s = s0 + ty + j * _LR
+        var oc = c0 + tx
+        if s < ss and oc < cc:
+            grow.unsafe_store((n * ss + s) * cc + oc, t[tx * (_LT + 1) + ty + j * _LR])
+
+
+def dout_rows_tiled_kernel(dout: FP, g: FP, S: Int32, OC: Int32):
+    """g[n*S + s, oc] = ftz(dout[n, oc, s]) (`dout_rows_at`'s word); block
+    (32, 8), grid (ceil(S/32), ceil(OC/32), N)."""
+    var t = stack_allocation[_LT * (_LT + 1), Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var tx = Int(thread_idx.x)
+    var ty = Int(thread_idx.y)
+    var s0 = Int(block_idx.x) * _LT
+    var c0 = Int(block_idx.y) * _LT
+    var n = Int(block_idx.z)
+    var ss = Int(S)
+    var cc = Int(OC)
+    comptime for j in range(_LT // _LR):
+        var oc = c0 + ty + j * _LR
+        var s = s0 + tx
+        if s < ss and oc < cc:
+            t[(ty + j * _LR) * (_LT + 1) + tx] = ftz(dout.unsafe_load((n * cc + oc) * ss + s))
+    barrier()
+    comptime for j in range(_LT // _LR):
+        var s = s0 + ty + j * _LR
+        var oc = c0 + tx
+        if s < ss and oc < cc:
+            g.unsafe_store((n * ss + s) * cc + oc, t[tx * (_LT + 1) + ty + j * _LR])
+
+
+#: lane/cnn-apple2: im2col one thread per (row, channel) (`im2col_taps_at`).
+#: `-D MOJOLEARN_XCNN_NO_IM2COL_TAPS` is the before arm.
+comptime IM2COL_TAPS = not is_defined["MOJOLEARN_XCNN_NO_IM2COL_TAPS"]()
+
+
+def _im2col(
+    ctx: DeviceContext, mut dx: DeviceBuffer[DType.float32], mut cols: DeviceBuffer[DType.float32],
+    mut dp: DeviceBuffer[DType.int32], rows: Int, ckk: Int, C: Int,
+) raises:
+    comptime if IM2COL_TAPS:
+        launch[im2col_taps_at](ctx, fp(dx), fp(cols), fp(cols), fp(cols), ip(dp), ip(dp), rows * C)
+    else:
+        launch[im2col_at](ctx, fp(dx), fp(cols), fp(cols), fp(cols), ip(dp), ip(dp), rows * ckk)
+
+
+# lane/cnn-apple2: THE DIRECT FIRST-LAYER CONVOLUTION. Where k = C*KH*KW is
+# ONE leaf of at most DC_MAXK words (P == 1; the first block's 27), each
+# output cell of y2 = cols . W^T is the contract's serial chain: acc from
+# +0.0, `rtf_mul_add(ftz(a_p), ftz(w_p), acc)` for p ascending (the exact
+# step the pinned GEMM runs on every window it does not admit), then the
+# stored ftz. One thread per output row keeps its k taps in registers (the
+# im2col words, stored to cols only when the backward reads them) and the
+# weights sit flushed in threadgroup memory; the NCHW store is
+# `conv_out_val` of that cell. No GEMM launch, no y2 round trip, no
+# conv_out launch. `-D MOJOLEARN_XCNN_NO_DIRECT_CONV` is the before arm.
+#: Apple only: measured there (the other columns keep their GEMM path until
+#: their own runs time it).
+comptime DIRECT_CONV = TARGET_COLUMN == COLUMN_APPLE and not is_defined["MOJOLEARN_XCNN_NO_DIRECT_CONV"]()
+comptime DC_MAXK = 32
+comptime DC_MAXW = 2048  # 8 KB of threadgroup memory: four blocks fit a core
+comptime DC_TPB = 256
+
+
+def direct_conv_kernel(x: FP, w: FP, bias: FP, cols: FP, yconv: FP, p: IP, rows_in: Int32, save_cols: Int32):
+    var wsh = stack_allocation[DC_MAXW, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var tid = Int(thread_idx.x)
+    var C = _gp(p, CP_C); var H = _gp(p, CP_H); var W = _gp(p, CP_W)
+    var KH = _gp(p, CP_KH); var KW = _gp(p, CP_KW)
+    var OH = _gp(p, CP_OH); var OW = _gp(p, CP_OW); var OC = _gp(p, CP_OC)
+    var ckk = C * KH * KW
+    var t = tid
+    while t < OC * ckk:
+        wsh[t] = ftz(w.unsafe_load(t))
+        t += DC_TPB
+    barrier()
+    var r = Int(block_idx.x) * DC_TPB + tid
+    if r >= Int(rows_in):
+        return
+    var S = OH * OW
+    var n = Int(UInt32(r) // UInt32(S))
+    var rem = r - n * S
+    var oh = Int(UInt32(rem) // UInt32(OW))
+    var ow = rem - oh * OW
+    var h0 = oh * _gp(p, CP_SH) - _gp(p, CP_PH)
+    var w0 = ow * _gp(p, CP_SW) - _gp(p, CP_PW)
+    var DH = _gp(p, CP_DH); var DW = _gp(p, CP_DW)
+    var a = InlineArray[Float32, DC_MAXK](fill=Float32(0))
+    var q = 0
+    for c in range(C):
+        for kh in range(KH):
+            var h = h0 + kh * DH
+            for kw in range(KW):
+                var ww = w0 + kw * DW
+                var v = Float32(0)
+                if h >= 0 and h < H and ww >= 0 and ww < W:
+                    v = ftz(x.unsafe_load(((n * C + c) * H + h) * W + ww))
+                a[q] = v
+                if save_cols != 0:
+                    cols.unsafe_store(r * ckk + q, v)
+                q += 1
+    for oc in range(OC):
+        var acc = Float32(0)
+        var wb = oc * ckk
+        comptime for qq in range(DC_MAXK):
+            if qq < ckk:
+                acc = rtf_mul_add(a[qq], wsh[wb + qq], acc)
+        yconv.unsafe_store((n * OC + oc) * S + rem, conv_out_val(ftz(acc), bias, oc, p))
+
+
+@always_inline
+def _gp(p: IP, k: Int) -> Int:
+    return Int(p.unsafe_load(k))
+
+
+def _tiled_grid(N: Int, S: Int, OC: Int) -> Tuple[Int, Int, Int]:
+    return ((S + _LT - 1) // _LT, (OC + _LT - 1) // _LT, N)
+
+
+def _apple_tn_candidates(m: Int, n: Int, k: Int, default: Int) -> List[Int]:
+    """The weight/bias-gradient (OP_TN) plans that were ever competitive on
+    an Apple GPU at the x_cnn shapes (lane/cnn-apple sweeps)."""
     var cand = List[Int]()
     cand.append(default)
     if n == 1:
         cand.append(PLAN_SPLIT_16_1X1)
         if m * n <= 4096 and identical_gemm_splitk_fits(m, n, k):
             cand.append(PLAN_SPLITK)
+        comptime if not is_defined["MOJOLEARN_XCNN_NO_MMA_SPLIT"]():
+            if apple_mma_applies(m, n, k):
+                cand.append(PLAN_APPLE_MMA_SPLIT)
     else:
         cand.append(PLAN_SPLIT_16_1X1)
         if n >= 64:
             cand.append(PLAN_TUNED_32_2X2)
             if apple_mma_applies(m, n, k):
                 cand.append(PLAN_APPLE_MMA)
+        # lane/cnn-apple2: the simdgroup matrix kernel over leaf groups
+        # (the weight gradient's long k on grid.y). `-D
+        # MOJOLEARN_XCNN_NO_MMA_SPLIT` is the before arm.
+        comptime if not is_defined["MOJOLEARN_XCNN_NO_MMA_SPLIT"]():
+            if n >= 8 and apple_mma_applies(m, n, k):
+                cand.append(PLAN_APPLE_MMA_SPLIT)
+                if m >= 64 and n >= 64:
+                    cand.append(PLAN_APPLE_MMA_SPLIT_BIG)
+    return cand^
+
+
+def _apple_tuned_plan(
+    ctx: DeviceContext, mut c: DeviceBuffer[DType.float32], mut a: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32], m: Int, n: Int, k: Int, op: Int, cand: List[Int],
+) raises -> Int:
+    """The fastest of `cand` for this shape and orientation on this device,
+    timed once (one run each, after a wait for the entry's earlier work) and
+    cached for the process. In IDENTICAL every candidate writes the same
+    words into `c` (contract 6.1); in FAST the candidates are the same
+    leaves and fold on different units (the FAST tier's plan choice)."""
+    var s = _slots()
+    var i = 0
+    while i + 4 < len(s[].tuned):
+        if s[].tuned[i] == m and s[].tuned[i + 1] == n and s[].tuned[i + 2] == k and s[].tuned[i + 3] == op:
+            return s[].tuned[i + 4]
+        i += 5
     var need = 0
     for j in range(len(cand)):
         need = max(need, identical_gemm_workspace_floats(m, n, k, cand[j]))
     var wp = ws(ctx, GEMM_WS_SLOT, need)
     ctx.synchronize()
-    var best = default
+    var best = cand[0]
     var best_ns = perf_counter_ns()  # replaced by the first candidate
     for j in range(len(cand)):
+        # lane/cnn-apple2: one untimed run first, so a candidate's first-use
+        # cost (its pipeline) does not decide against it
+        identical_gemm_with_plan(ctx, c, a, b, wp, m, n, k, op, cand[j])
+        ctx.synchronize()
         var t0 = perf_counter_ns()
         identical_gemm_with_plan(ctx, c, a, b, wp, m, n, k, op, cand[j])
         ctx.synchronize()
@@ -143,6 +371,7 @@ def _apple_tuned_plan(
     s[].tuned.append(m)
     s[].tuned.append(n)
     s[].tuned.append(k)
+    s[].tuned.append(op)
     s[].tuned.append(best)
     return best
 
@@ -179,11 +408,31 @@ def device_gemm(
             # process among the plans that were ever competitive and cached
             # (`_apple_tuned_plan`). Execution plan only: the partition and
             # the fold come from `k`, so every candidate stores the same bits.
-            plan = _apple_tuned_plan(ctx, c, a, b, m, n, k, op, plan)
+            plan = _apple_tuned_plan(ctx, c, a, b, m, n, k, op, _apple_tn_candidates(m, n, k, plan))
+        comptime if APPLE_FAST_TUNE:
+            # lane/cnn-apple2: the FAST tier measures the same candidates,
+            # the simdgroup matrix plans among them (APPLE_MMA_FAST)
+            plan = _apple_tuned_plan(ctx, c, a, b, m, n, k, op, _apple_tn_candidates(m, n, k, plan))
         var wp = ws(ctx, GEMM_WS_SLOT, identical_gemm_workspace_floats(m, n, k, plan))
         identical_gemm_with_plan(ctx, c, a, b, wp, m, n, k, op, plan)
         _ = wp^
         return
+    comptime if APPLE_FAST_TUNE or APPLE_NT_TUNE:
+        # lane/cnn-apple2: FAST on Apple has no simdgroup matrix plan in the
+        # shipped dispatcher (it is IDENTICAL's), and neither tier's
+        # dispatcher takes it for a one-leaf ragged k (the first block's
+        # k = 27); where it applies, time it against the dispatcher's pick
+        # once per shape.
+        if m >= 8 and n >= 8 and apple_mma_applies_one_leaf(m, n, k):
+            var fc = List[Int]()
+            fc.append(choose_gemm_plan(m, n, k))
+            if fc[0] != PLAN_APPLE_MMA:
+                fc.append(PLAN_APPLE_MMA)
+            var fplan = _apple_tuned_plan(ctx, c, a, b, m, n, k, op, fc)
+            var fw = ws(ctx, GEMM_WS_SLOT, identical_gemm_workspace_max_floats(m, n, k))
+            identical_gemm_with_plan(ctx, c, a, b, fw, m, n, k, op, fplan)
+            _ = fw^
+            return
     var w = ws(ctx, GEMM_WS_SLOT, identical_gemm_workspace_max_floats(m, n, k))
     identical_gemm_into[False](ctx, c, a, b, w, m, n, k, op)
     _ = w^
@@ -357,10 +606,34 @@ def fetch_i[resident: Bool](ctx: DeviceContext, buf: DeviceBuffer[DType.int32], 
         down_i(ctx, buf, dst, n)
 
 
+#: lane/cnn-apple2: the most freed resident storage kept for reuse (floats;
+#: 256 MB). `-D MOJOLEARN_XCNN_NO_RES_POOL` is the before arm (no pool).
+comptime RES_POOL_MAX_FLOATS = 64 * 1024 * 1024
+comptime RES_POOL = not is_defined["MOJOLEARN_XCNN_NO_RES_POOL"]()
+
+
 def res_alloc(n: Int) raises -> Int:
     """A resident array of `n` floats (4-byte words), zero filled; its device address."""
     var ctx = cnn_ctx()
-    var b = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
+    var need = n if n > 0 else 1
+    # lane/cnn-apple2: a freed array of at least `need` and at most twice
+    # it (the smallest such) instead of a new allocation; zero filled the
+    # same way, so the caller sees the same words.
+    comptime if RES_POOL:
+        var s = _slots()
+        var pick = -1
+        for j in range(len(s[].pool)):
+            var ln = len(s[].pool[j])
+            if ln >= need and ln <= 2 * need and (pick < 0 or ln < len(s[].pool[pick])):
+                pick = j
+        if pick >= 0:
+            var pb = s[].pool.pop(pick)
+            pb.enqueue_fill(Float32(0))
+            var paddr = Int(pb.unsafe_ptr())
+            s[].res.append(pb^)
+            _ = ctx^
+            return paddr
+    var b = ctx.enqueue_create_buffer[DType.float32](need)
     b.enqueue_fill(Float32(0))
     # No wait (lane/cnn-apple): the fill is ordered before every later use
     # on the one in-order context, and every host read (res_download) waits.
@@ -378,7 +651,17 @@ def res_free(addr: Int) raises:
     var s = _slots()
     for k in range(len(s[].res)):
         if Int(s[].res[k].unsafe_ptr()) == addr:
-            _ = s[].res.pop(k)
+            var b = s[].res.pop(k)
+            comptime if RES_POOL:
+                # keep it for reuse while the pool stays under its cap
+                # (the wait above ended every use of it)
+                var held = len(b)
+                for j in range(len(s[].pool)):
+                    held += len(s[].pool[j])
+                if held <= RES_POOL_MAX_FLOATS:
+                    s[].pool.append(b^)
+                    return
+            _ = b^
             return
     raise Error("x_cnn: res_free of an address res_alloc did not return")
 
@@ -477,9 +760,7 @@ def conv2d_forward_into(x: FP, w: FP, bias: FP, prm: List[Int32], dst: FP) raise
     var cols = ws(ctx, 4, rows * ckk)
     var y2 = ws(ctx, 5, rows * OC)
     var dout = ws(ctx, 6, rows * OC)
-    launch[im2col_at](ctx, fp(dx), fp(cols), fp(cols), fp(cols), ip(dp), ip(dp), rows * ckk)
-    device_gemm(ctx, y2, cols, dw, rows, OC, ckk, OP_NT)
-    launch[conv_out_at](ctx, fp(y2), fp(dbias), fp(dout), fp(dout), ip(dp), ip(dp), rows * OC)
+    _conv_relu_on_device(ctx, dx, dw, dbias, dp, cols, y2, dout, rows, OC, ckk, N, C, False)
     down(ctx, dout, dst, rows * OC)
     ctx.synchronize()
     _ = dx^
@@ -510,8 +791,15 @@ def conv2d_backward_into(x: FP, w: FP, dout: FP, prm: List[Int32], gx_out: FP, g
     var gb = ws(ctx, 8, OC)
     var dcols = ws(ctx, 9, rows * ckk)
     var gx = ws(ctx, 10, nx)
-    launch[im2col_at](ctx, fp(dxin), fp(cols), fp(cols), fp(cols), ip(dp), ip(dp), rows * ckk)
-    launch[dout_rows_at](ctx, fp(ddout), fp(g), fp(g), fp(g), ip(dp), ip(dp), rows * OC)
+    _im2col(ctx, dxin, cols, dp, rows, ckk, C)
+    comptime if TILED_LAYOUT:
+        var tg = _tiled_grid(N, rows // N, OC)
+        ctx.enqueue_function[dout_rows_tiled_kernel](
+            fp(ddout), fp(g), Int32(rows // N), Int32(OC),
+            grid_dim=(tg[0], tg[1], tg[2]), block_dim=(_LT, _LR, 1),
+        )
+    else:
+        launch[dout_rows_at](ctx, fp(ddout), fp(g), fp(g), fp(g), ip(dp), ip(dp), rows * OC)
     launch[fill_one_at](ctx, fp(ones), fp(ones), fp(ones), fp(ones), ip(dp), ip(dp), rows)
     # DEVIATION 5701: the weight gradient's reduction over the N*OH*OW rows is
     # the pinned GEMM's (leaves + balanced fold), never an atomic accumulation.
@@ -821,6 +1109,102 @@ def sgd_device(w: List[Float32], g: List[Float32], v: List[Float32], hyper: List
     return sw^
 
 
+# lane/cnn-apple2: BatchNorm's per-channel folds (x_cnn/ops.mojo bn_stats_at,
+# bn_bwd_red_at) are serial chains, 64 threads each walking N*HW words one
+# dependent load at a time (23 ms for 64 x 64 x 32 x 32 on the M4 Pro). Here
+# one THREADGROUP per channel: all its threads stage BN_TILE words of the
+# channel in threadgroup memory (coalesced), then thread 0 folds them in the
+# same (n, hw) order with the same steps, so every sum is the element
+# function's. Threadgroup memory only across the barriers.
+# `-D MOJOLEARN_XCNN_NO_BN_BLOCK` is the before arm.
+comptime BN_BLOCK = not is_defined["MOJOLEARN_XCNN_NO_BN_BLOCK"]()
+comptime BN_TILE = 2048
+comptime BN_TPB = 256
+
+
+def bn_stats_block_kernel(x: FP, aux: FP, p: IP):
+    var t = stack_allocation[BN_TILE, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var c = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var N = _gp(p, 0); var C = _gp(p, 1); var HW = _gp(p, 2)
+    var count = Float32(N * HW)
+    var acc = Float32(0)
+    for a in range(N):
+        var n = bn_mean_row(a, N)
+        var base = (n * C + c) * HW
+        var k0 = 0
+        while k0 < HW:
+            var cnt = min(BN_TILE, HW - k0)
+            var j = tid
+            while j < cnt:
+                t[j] = x.unsafe_load(base + k0 + j)
+                j += BN_TPB
+            barrier()
+            if tid == 0:
+                for q in range(cnt):
+                    acc = ftz(acc + ftz(t[q]))
+            barrier()
+            k0 += cnt
+    var mean = ftz(identical_div(acc, count))
+    var sq = Float32(0)
+    for n in range(N):
+        var base = (n * C + c) * HW
+        var k0 = 0
+        while k0 < HW:
+            var cnt = min(BN_TILE, HW - k0)
+            var j = tid
+            while j < cnt:
+                t[j] = x.unsafe_load(base + k0 + j)
+                j += BN_TPB
+            barrier()
+            if tid == 0:
+                for q in range(cnt):
+                    var d = ftz(ftz(t[q]) - mean)
+                    sq = ftz(sq + ftz(identical_mul(d, d)))
+            barrier()
+            k0 += cnt
+    if tid == 0:
+        var var_b = ftz(identical_div(sq, count))
+        aux.unsafe_store(2 + BN_MEAN * C + c, mean)
+        aux.unsafe_store(2 + BN_VAR * C + c, var_b)
+        aux.unsafe_store(2 + BN_INVSTD * C + c, ftz(identical_rsqrt(ftz(var_b + aux.unsafe_load(0)))))
+
+
+def bn_bwd_red_block_kernel(x: FP, g: FP, aux: FP, p: IP):
+    comptime HT = BN_TILE // 2
+    var tx = stack_allocation[HT, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var tg = stack_allocation[HT, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var c = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var N = _gp(p, 0); var C = _gp(p, 1); var HW = _gp(p, 2)
+    var mean = aux.unsafe_load(2 + BN_MEAN * C + c)
+    var invstd = aux.unsafe_load(2 + BN_INVSTD * C + c)
+    var sg = Float32(0)
+    var sgx = Float32(0)
+    for n in range(N):
+        var base = (n * C + c) * HW
+        var k0 = 0
+        while k0 < HW:
+            var cnt = min(HT, HW - k0)
+            var j = tid
+            while j < cnt:
+                tx[j] = x.unsafe_load(base + k0 + j)
+                tg[j] = g.unsafe_load(base + k0 + j)
+                j += BN_TPB
+            barrier()
+            if tid == 0:
+                for q in range(cnt):
+                    var gv = ftz(tg[q])
+                    var xhat = ftz(identical_mul(ftz(ftz(tx[q]) - mean), invstd))
+                    sg = ftz(sg + gv)
+                    sgx = ftz(sgx + ftz(identical_mul(gv, xhat)))
+            barrier()
+            k0 += cnt
+    if tid == 0:
+        aux.unsafe_store(2 + BN_SUMG * C + c, sg)
+        aux.unsafe_store(2 + BN_SUMGX * C + c, sgx)
+
+
 def batchnorm_forward_into(x: FP, running: FP, aux: FP, prm: List[Int32], training: Bool, y_out: FP) raises:
     """y into y_out; running (2C) and aux (2 + 7C, the statistics the backward reads) in place."""
     var C = Int(prm[1])
@@ -828,13 +1212,18 @@ def batchnorm_forward_into(x: FP, running: FP, aux: FP, prm: List[Int32], traini
     var nr = 2 * C
     var na = 2 + 7 * C
     var ctx = cnn_ctx()
-    var dx = up(ctx, x, total)
-    var dr = up(ctx, running, nr)
-    var da = up(ctx, aux, na)
-    var dp = upload_i32(ctx, prm)
-    var dout = ctx.enqueue_create_buffer[DType.float32](total)
+    # lane/cnn-apple2: the cached workspace slots (DEVIATION 5718's), not a
+    # fresh device allocation per call
+    var dx = put[False](ctx, 0, x, total)
+    var dr = put[False](ctx, 1, running, nr)
+    var da = put[False](ctx, 2, aux, na)
+    var dp = put_prm(ctx, 3, prm)
+    var dout = ws(ctx, 4, total)
     if training:
-        launch[bn_stats_at](ctx, fp(dx), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
+        comptime if BN_BLOCK:
+            ctx.enqueue_function[bn_stats_block_kernel](fp(dx), fp(da), ip(dp), grid_dim=(C, 1, 1), block_dim=(BN_TPB, 1, 1))
+        else:
+            launch[bn_stats_at](ctx, fp(dx), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
     else:
         launch[bn_eval_stats_at](ctx, fp(dr), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
     launch[bn_apply_at](ctx, fp(dx), fp(da), fp(dout), fp(dout), ip(dp), ip(dp), total)
@@ -873,12 +1262,15 @@ def batchnorm_backward_into(x: FP, g: FP, aux: FP, prm: List[Int32], training: B
     var total = Int(prm[0]) * C * Int(prm[2])
     var na = 2 + 7 * C
     var ctx = cnn_ctx()
-    var dx = up(ctx, x, total)
-    var dg = up(ctx, g, total)
-    var da = up(ctx, aux, na)
-    var dp = upload_i32(ctx, prm)
-    var dout = ctx.enqueue_create_buffer[DType.float32](total)
-    launch[bn_bwd_red_at](ctx, fp(dx), fp(dg), fp(da), fp(da), ip(dp), ip(dp), C)
+    var dx = put[False](ctx, 0, x, total)
+    var dg = put[False](ctx, 1, g, total)
+    var da = put[False](ctx, 2, aux, na)
+    var dp = put_prm(ctx, 3, prm)
+    var dout = ws(ctx, 4, total)
+    comptime if BN_BLOCK:
+        ctx.enqueue_function[bn_bwd_red_block_kernel](fp(dx), fp(dg), fp(da), ip(dp), grid_dim=(C, 1, 1), block_dim=(BN_TPB, 1, 1))
+    else:
+        launch[bn_bwd_red_at](ctx, fp(dx), fp(dg), fp(da), fp(da), ip(dp), ip(dp), C)
     if training:
         launch[bn_bwd_dx_at](ctx, fp(dx), fp(dg), fp(da), fp(dout), ip(dp), ip(dp), total)
     else:
@@ -1099,6 +1491,67 @@ def adam_device(w: List[Float32], g: List[Float32], mv: List[Float32], hyper: Li
     return sw^
 
 
+def opt_many_resident[adam: Bool](
+    ws_: List[Int], gs: List[Int], bs: List[Int], ns: List[Int], hyper: List[Float32]
+) raises:
+    """lane/cnn-apple2: one optimizer step over EVERY parameter of a trainer
+    step in one entry (one wait instead of one per parameter): per parameter
+    `j` the same launch `sgd_into` / `adam_into` makes (`sgd_at` / `adam_at`
+    on resident w, g and buffer, the step's one hyper block, p[0] = n_j), in
+    the caller's order. Each launch touches only its own parameter's arrays,
+    so the words are the per-parameter entries' words."""
+    var ctx = cnn_ctx()
+    var dh = put_hyper(ctx, 3, hyper)
+    var prm = List[Int32]()
+    for j in range(len(ns)):
+        prm.append(Int32(ns[j]))
+    var dp = put_prm(ctx, 4, prm)
+    var pp = ip(dp)
+    for j in range(len(ns)):
+        var pw = FP(unsafe_from_address=ws_[j])
+        var pg = FP(unsafe_from_address=gs[j])
+        var pb = FP(unsafe_from_address=bs[j])
+        comptime if adam:
+            launch[adam_at](ctx, pw, pg, pb, fp(dh), pp + j, pp + j, ns[j])
+        else:
+            launch[sgd_at](ctx, pw, pg, pb, fp(dh), pp + j, pp + j, ns[j])
+    ctx.synchronize()
+    _ = prm^
+    _ = dh^
+    _ = dp^
+    _ = ctx^
+
+
+def res_gather_pair(
+    dst_addr: Int, src_addr: Int, row: Int, dst2_addr: Int, src2_addr: Int, row2: Int, rows: IP, n: Int
+) raises:
+    """lane/cnn-apple2: `res_gather` twice on the same host rows (the batch
+    and its labels) in one entry, one upload of the rows and one wait; the
+    same `gather_rows_at` launches on the same words."""
+    if n <= 0:
+        return
+    var ctx = cnn_ctx()
+    var di = put_i[False](ctx, 0, rows, n)
+    var prm: List[Int32] = [Int32(row), Int32(row2)]
+    var dp = put_prm(ctx, 1, prm)
+    var pp = ip(dp)
+    if row > 0:
+        launch[gather_rows_at](
+            ctx, FP(unsafe_from_address=src_addr), FP(unsafe_from_address=dst_addr),
+            FP(unsafe_from_address=dst_addr), FP(unsafe_from_address=dst_addr), ip(di), pp, n * row,
+        )
+    if row2 > 0:
+        launch[gather_rows_at](
+            ctx, FP(unsafe_from_address=src2_addr), FP(unsafe_from_address=dst2_addr),
+            FP(unsafe_from_address=dst2_addr), FP(unsafe_from_address=dst2_addr), ip(di), pp + 1, n * row2,
+        )
+    ctx.synchronize()
+    _ = prm^
+    _ = di^
+    _ = dp^
+    _ = ctx^
+
+
 # ------------------------------------------------------------ the conv block
 # DEVIATION 5717 (phase d, 2026-09-27): CNNClassifier's block, Conv2d ->
 # ReLU -> MaxPool2d, in ONE entry each way, so the activations between the
@@ -1117,11 +1570,39 @@ def _conv_relu_on_device(
     ctx: DeviceContext, mut dx: DeviceBuffer[DType.float32], mut dw: DeviceBuffer[DType.float32],
     mut dbias: DeviceBuffer[DType.float32], mut dp: DeviceBuffer[DType.int32], mut cols: DeviceBuffer[DType.float32],
     mut y2: DeviceBuffer[DType.float32], mut yconv: DeviceBuffer[DType.float32], rows: Int, OC: Int, ckk: Int,
+    N: Int, C: Int, need_cols: Bool = True,
 ) raises:
-    """cols = im2col(x); y2 = cols . W^T; yconv = the NCHW conv output (+ bias)."""
-    launch[im2col_at](ctx, fp(dx), fp(cols), fp(cols), fp(cols), ip(dp), ip(dp), rows * ckk)
+    """cols = im2col(x); y2 = cols . W^T; yconv = the NCHW conv output (+ bias).
+    lane/cnn-apple2: a one-leaf k of at most DC_MAXK (the first block, C*9
+    = 27) runs `direct_conv_kernel` instead: the same cols words (written
+    only when `need_cols`), each output cell the contract's one-leaf chain,
+    no y2."""
+    comptime if DIRECT_CONV:
+        if ckk <= DC_MAXK and OC * ckk <= DC_MAXW and rows > 0:
+            ctx.enqueue_function[direct_conv_kernel](
+                fp(dx), fp(dw), fp(dbias), fp(cols), fp(yconv), ip(dp), Int32(rows), Int32(1 if need_cols else 0),
+                grid_dim=((rows + DC_TPB - 1) // DC_TPB, 1, 1), block_dim=(DC_TPB, 1, 1),
+            )
+            return
+    _im2col(ctx, dx, cols, dp, rows, ckk, C)
     device_gemm(ctx, y2, cols, dw, rows, OC, ckk, OP_NT)
-    launch[conv_out_at](ctx, fp(y2), fp(dbias), fp(yconv), fp(yconv), ip(dp), ip(dp), rows * OC)
+    _conv_out(ctx, y2, dbias, yconv, dp, N, rows // N, OC)
+
+
+def _conv_out(
+    ctx: DeviceContext, mut y2: DeviceBuffer[DType.float32], mut dbias: DeviceBuffer[DType.float32],
+    mut yconv: DeviceBuffer[DType.float32], mut dp: DeviceBuffer[DType.int32], N: Int, S: Int, OC: Int,
+) raises:
+    """The GEMM rows to NCHW (+ bias): the tiled kernel, or `conv_out_at`."""
+    comptime if TILED_LAYOUT:
+        if N > 0 and S > 0 and OC > 0:
+            var g = _tiled_grid(N, S, OC)
+            ctx.enqueue_function[conv_out_tiled_kernel](
+                fp(y2), fp(dbias), fp(yconv), ip(dp), Int32(S), Int32(OC),
+                grid_dim=(g[0], g[1], g[2]), block_dim=(_LT, _LR, 1),
+            )
+        return
+    launch[conv_out_at](ctx, fp(y2), fp(dbias), fp(yconv), fp(yconv), ip(dp), ip(dp), N * S * OC)
 
 
 def conv_block_forward_into[resident: Bool = False](
@@ -1146,7 +1627,7 @@ def conv_block_forward_into[resident: Bool = False](
     var cols = view(ctx, FP(unsafe_from_address=save_cols), rows * ckk) if saved else ws(ctx, 4, rows * ckk)
     var y2 = ws(ctx, 5, ny)
     var yconv = view(ctx, FP(unsafe_from_address=save_y), ny) if saved else ws(ctx, 6, ny)
-    _conv_relu_on_device(ctx, dx, dw, dbias, dp, cols, y2, yconv, rows, OC, ckk)
+    _conv_relu_on_device(ctx, dx, dw, dbias, dp, cols, y2, yconv, rows, OC, ckk, N, C, saved)
     # the block's output: the pool's, or the ReLU's when there is no pool
     var pout = outb[resident](ctx, 7, dst, no)
     if pool:
@@ -1200,7 +1681,7 @@ def conv_block_backward_into[resident: Bool = False](
     var yconv = view(ctx, FP(unsafe_from_address=save_y), ny) if saved else ws(ctx, 9, ny)
     var gy = ws(ctx, 11, ny)
     if not saved:
-        _conv_relu_on_device(ctx, dx, dw, dbias, dp, cols, y2, yconv, rows, OC, ckk)
+        _conv_relu_on_device(ctx, dx, dw, dbias, dp, cols, y2, yconv, rows, OC, ckk, N, C)
     # conv2d_backward_into from here, on the device-resident gy and cols
     var grow = ws(ctx, 12, ny)
     # the conv block followed by the pool block: a host array the upload
@@ -1212,7 +1693,15 @@ def conv_block_backward_into[resident: Bool = False](
         # layout in one launch (the same values)
         var di = put_i[resident](ctx, 4, idx, no)
         var dpb = put_prm(ctx, 6, both)
-        launch[pool_relu_rows_bwd_at](ctx, fp(dgo), fp(yconv), fp(grow), fp(grow), ip(di), ip(dpb), ny)
+        comptime if TILED_ROWS:
+            var S = rows // N
+            var g = _tiled_grid(N, S, OC)
+            ctx.enqueue_function[rows_bwd_tiled_kernel](
+                fp(dgo), fp(yconv), fp(grow), ip(di), ip(dpb), Int32(S), Int32(OC),
+                grid_dim=(g[0], g[1], g[2]), block_dim=(_LT, _LR, 1),
+            )
+        else:
+            launch[pool_relu_rows_bwd_at](ctx, fp(dgo), fp(yconv), fp(grow), fp(grow), ip(di), ip(dpb), ny)
         _ = di^
         _ = dpb^
     else:

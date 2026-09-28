@@ -494,6 +494,14 @@ comptime PLAN_SPLIT_128_8X8 = 18
 comptime PLAN_TUNED_128_8X8_TSP = 19
 #: Apple only: admitted windows on the simdgroup matrix path (`APPLE_MMA`).
 comptime PLAN_APPLE_MMA = 20
+#: Apple only (lane/cnn-apple2): `PLAN_APPLE_MMA`'s kernel over aligned
+#: power-of-two leaf groups on grid.y, the nodes folded by the SPLIT fold.
+#: Forced only (x_cnn's measured weight-gradient plan); outside the
+#: `range(GEMM_PLAN_COUNT)` sweeps like plan 20.
+comptime PLAN_APPLE_MMA_SPLIT = 21
+#: The same over the default (64x64) tile: twice the arithmetic per staged
+#: word, for outputs with enough tiles.
+comptime PLAN_APPLE_MMA_SPLIT_BIG = 22
 comptime GEMM_PLAN_COUNT = 20
 
 #: Threads per block for `PLAN_FLAT`. SCHEDULING: each thread owns a whole
@@ -544,6 +552,10 @@ def gemm_plan_name(plan: Int) -> String:
         return _tuned_plan_name(TUNED_RPT, TUNED_CPT, TUNED_KBLK)
     if plan == PLAN_TUNED_128_8X8_TSP:
         return _tuned_plan_name(TUNED_RPT * 2, TUNED_CPT * 2, 16, True)
+    if plan == PLAN_APPLE_MMA_SPLIT:
+        return String("APPLE_MMA_SPLIT ") + String(_AMMA_SPLIT_BM) + "x" + String(_AMMA_SPLIT_BN) + " KB=" + String(APPLE_MMA_KB) + " (leaf groups on grid.y -> workspace -> fold)"
+    if plan == PLAN_APPLE_MMA_SPLIT_BIG:
+        return String("APPLE_MMA_SPLIT ") + String(APPLE_MMA_BM) + "x" + String(APPLE_MMA_BN) + " KB=" + String(APPLE_MMA_KB) + " (leaf groups on grid.y -> workspace -> fold)"
     if plan == PLAN_APPLE_MMA:
         return String("APPLE_MMA ") + String(APPLE_MMA_BM) + "x" + String(APPLE_MMA_BN) + " KB=" + String(APPLE_MMA_KB) + " (simdgroup matrix on admitted windows, rtf elsewhere)"
     if plan == PLAN_TUNED_128_8X8_K32:
@@ -3159,6 +3171,10 @@ def identical_gemm_workspace_floats(m: Int, n: Int, k: Int, plan: Int) -> Int:
     var part = contract_partition(k)
     if plan == PLAN_SPLITK or _is_split_plan(plan):
         return m * n * part[1]
+    if plan == PLAN_APPLE_MMA_SPLIT:
+        return m * n * apple_mma_split_groups(m, n, k)[1]
+    if plan == PLAN_APPLE_MMA_SPLIT_BIG:
+        return m * n * apple_mma_split_groups[True](m, n, k)[1]
     if plan == PLAN_SPLITK_STAGED:
         return m * n * fold_node_total(part[1])
     return 0
@@ -3474,15 +3490,41 @@ comptime _AMMA_M64 = SIMD[DType.float32, 64]
 comptime _AMMA_V2 = SIMD[DType.int64, 2]
 
 
+#: lane/cnn-apple2 (2026-09-28): the simdgroup matrix kernel in the FAST
+#: tier on Apple, for callers that NAME `PLAN_APPLE_MMA` or
+#: `PLAN_APPLE_MMA_SPLIT` (x_cnn's measured plans). Every full window runs
+#: on the matrix path (FAST keeps no rtf seam); no dispatcher picks it.
+#: `-D MOJOLEARN_GEMM_NO_APPLE_MMA_FAST` is the revert arm.
+comptime APPLE_MMA_FAST = (
+    GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
+    and TARGET_COLUMN == COLUMN_APPLE
+    and not is_defined["MOJOLEARN_GEMM_NO_APPLE_MMA"]()
+    and not is_defined["MOJOLEARN_GEMM_NO_APPLE_MMA_FAST"]()
+)
+
+
 def apple_mma_applies(m: Int, n: Int, k: Int) -> Bool:
     """Every leaf a whole number of windows (no short window, no padding)."""
-    comptime if not APPLE_MMA:
+    comptime if not (APPLE_MMA or APPLE_MMA_FAST):
         return False
     if m <= 0 or n <= 0 or k <= 0:
         return False
     # Leaves are whole windows; only the LAST leaf may end mid-window
     # (ragged `k`), and its short tail runs the exact step, unpadded.
     return contract_partition(k)[0] % APPLE_MMA_KB == 0
+
+
+@always_inline
+def apple_mma_applies_one_leaf(m: Int, n: Int, k: Int) -> Bool:
+    """lane/cnn-apple2: `apple_mma_applies`, or ONE leaf (`k <= K_LEAF_MIN`)
+    of any length: its short final window runs the exact step, unpadded,
+    as a ragged last leaf's does. For callers that name the plan (x_cnn's
+    k = C*KH*KW forward); the dispatchers read `apple_mma_applies`."""
+    if apple_mma_applies(m, n, k):
+        return True
+    comptime if not (APPLE_MMA or APPLE_MMA_FAST):
+        return False
+    return m > 0 and n > 0 and k > 0 and contract_partition(k)[1] == 1
 
 
 @always_inline
@@ -3605,7 +3647,7 @@ def _amma_stage[
 
 
 def identical_gemm_apple_mma_kernel[
-    SGM: Int, SGN: Int, FM: Int, FN: Int, KB: Int, FS: Int
+    SGM: Int, SGN: Int, FM: Int, FN: Int, KB: Int, FS: Int, GROUPED: Bool = False
 ](
     c: MutPointer[Float32, MutAnyOrigin],
     a: MutPointer[Float32, MutAnyOrigin],
@@ -3619,6 +3661,7 @@ def identical_gemm_apple_mma_kernel[
     a_sp_in: Int32,
     b_sp_in: Int32,
     b_sj_in: Int32,
+    gleaves_in: Int32,
 ):
     """One block owns a `BM x BN` output tile and all of its leaves; each
     simdgroup owns `FM x FN` 8x8 fragments, each lane two cells of each.
@@ -3634,6 +3677,15 @@ def identical_gemm_apple_mma_kernel[
     window boundary; a ragged `k` leaves one short final window (`chunk <
     KB`), which is never admitted and never padded: its staged words past
     `k` are never read.
+
+    `GROUPED` (lane/cnn-apple2, `PLAN_APPLE_MMA_SPLIT`): block `(tile, q)`
+    walks only leaves `[q * G, min((q + 1) * G, P))` (`G = gleaves_in`, a
+    power of two; groups aligned at leaf 0), folds them through the same
+    local stack and stores the group's node at `c[q * m * n + cell]` (`c` is
+    the workspace), which `_ksplit_fold_launch` folds: the long-k group
+    argument (DEVIATIONS 2590/2595, Lemmas A and B). Every window of every
+    leaf runs the same body at the same absolute `k`; the grid is schedule.
+    Ungrouped, `gleaves_in` is unread.
     """
     comptime NSG = SGM * SGN
     comptime NT = NSG * 32
@@ -3681,15 +3733,28 @@ def identical_gemm_apple_mma_kernel[
     var acc = InlineArray[_AMMA_M64, NF](fill=_AMMA_M64(0))
     var exact_ok = True  # every earlier window of this leaf was admitted
     var wpl = leaf // KB
+    if p_count == 1:
+        # one leaf (lane/cnn-apple2): it ends with `k`, whole windows or not
+        # (`apple_mma_applies_one_leaf`); where L % KB == 0 this is L / KB
+        wpl = (k + KB - 1) // KB
     # A: outer index i (stride a_si), p stride a_sp; B: outer j (b_sj), p (b_sp).
     var a_ofast = a_si == 1 and a_sp != 1
     var b_ofast = b_sj == 1 and b_sp != 1
     var windows = (k + KB - 1) // KB
+    var w_begin = 0
+    var w_end = windows
+    comptime if GROUPED:
+        # the group's leaves, as windows (every leaf boundary is a window
+        # boundary; only the last leaf may end in a short window)
+        var gl = Int(gleaves_in)
+        w_begin = Int(block_idx.y) * gl * wpl
+        w_end = min(w_begin + gl * wpl, windows)
     # Register double buffer: the next window's words load while this one
     # multiplies.
-    var ra = _amma_gload[BM, KB, NT](a, a_si, a_sp, m0, m, 0, min(KB, k), tid, a_ofast)
-    var rb = _amma_gload[BN, KB, NT](b, b_sj, b_sp, n0, n, 0, min(KB, k), tid, b_ofast)
-    for w in range(windows):
+    var kb0 = w_begin * KB
+    var ra = _amma_gload[BM, KB, NT](a, a_si, a_sp, m0, m, kb0, min(KB, k - kb0), tid, a_ofast)
+    var rb = _amma_gload[BN, KB, NT](b, b_sj, b_sp, n0, n, kb0, min(KB, k - kb0), tid, b_ofast)
+    for w in range(w_begin, w_end):
         var k0 = w * KB
         var chunk = min(KB, k - k0)
         var ea = _amma_stage[BM, KB, NT, True, AST](at, ra, tid, a_ofast)
@@ -3700,7 +3765,7 @@ def identical_gemm_apple_mma_kernel[
             wmin[sg] = ea
             wmin[NSG + sg] = eb
         barrier()
-        if w + 1 < windows:
+        if w + 1 < w_end:
             var k1 = k0 + KB
             ra = _amma_gload[BM, KB, NT](a, a_si, a_sp, m0, m, k1, min(KB, k - k1), tid, a_ofast)
             rb = _amma_gload[BN, KB, NT](b, b_sj, b_sp, n0, n, k1, min(KB, k - k1), tid, b_ofast)
@@ -3710,6 +3775,8 @@ def identical_gemm_apple_mma_kernel[
             bea = min(bea, wmin[q])
             beb = min(beb, wmin[NSG + q])
         var admitted = exact_ok and chunk == KB and (bea + beb) >= UInt32(APPLE_MMA_ADMIT_EXP_SUM)
+        comptime if APPLE_MMA_FAST:
+            admitted = chunk == KB  # FAST: no seam to keep
         if not admitted:
             exact_ok = False
         if admitted:
@@ -3756,13 +3823,16 @@ def identical_gemm_apple_mma_kernel[
             outv[oe] = fl[oe]
     else:
         outv = _fold_drain_local[NC, FS](fl, occ)
+    var cbase = 0
+    comptime if GROUPED:
+        cbase = Int(block_idx.y) * m * n
     comptime for fm in range(FM):
         comptime for fq in range(FN):
             comptime for e in range(2):
                 var gi = m0 + (sgm * FM + fm) * 8 + frow
                 var gj = n0 + (sgn * FN + fq) * 8 + fcol + e
                 if gi < m and gj < n:
-                    c[gi * n + gj] = ftz(outv[2 * (fm * FN + fq) + e])
+                    c[cbase + gi * n + gj] = ftz(outv[2 * (fm * FN + fq) + e])
 
 
 def _launch_apple_mma(
@@ -3798,7 +3868,7 @@ def _launch_apple_mma(
             ctx.enqueue_function[ks](
                 c.unsafe_ptr(), a.unsafe_ptr(), b.unsafe_ptr(),
                 Int32(m), Int32(n), Int32(k), Int32(leaf), Int32(p_count),
-                Int32(st[0]), Int32(st[1]), Int32(st[2]), Int32(st[3]),
+                Int32(st[0]), Int32(st[1]), Int32(st[2]), Int32(st[3]), Int32(0),
                 grid_dim=(sblocks, 1, 1),
                 block_dim=(APPLE_MMA_SGM * APPLE_MMA_SGN * 32, 1, 1),
             )
@@ -3817,9 +3887,75 @@ def _launch_apple_mma(
         Int32(st[1]),
         Int32(st[2]),
         Int32(st[3]),
+        Int32(0),
         grid_dim=(blocks, 1, 1),
         block_dim=(APPLE_MMA_SGM * APPLE_MMA_SGN * 32, 1, 1),
     )
+
+
+#: lane/cnn-apple2 (2026-09-28): `PLAN_APPLE_MMA_SPLIT` targets about this
+#: many blocks (tiles x leaf groups). Scheduling only (`-D` is a
+#: measurement arm).
+comptime APPLE_MMA_SPLIT_BLOCKS = get_defined_int["MOJOLEARN_APPLE_MMA_SPLIT_BLOCKS", 1024]()
+comptime _AMMA_SPLIT_BM = 8 * APPLE_MMA_SMALL_FM * APPLE_MMA_SGM
+comptime _AMMA_SPLIT_BN = 8 * APPLE_MMA_SMALL_FN * APPLE_MMA_SGN
+
+
+def apple_mma_split_groups[BIG: Bool = False](m: Int, n: Int, k: Int) -> Tuple[Int, Int]:
+    """`(leaves per group, groups)` of `PLAN_APPLE_MMA_SPLIT` at `(m, n, k)`:
+    the smallest power-of-two group whose grid (small tiles x groups) is at
+    most `APPLE_MMA_SPLIT_BLOCKS`. A pure function of the shape; `(1, 0)` at
+    `k <= 0`. The group size is SCHEDULE: groups are aligned powers of two,
+    so every size folds to the contract's tree (Lemmas A and B)."""
+    var p_count = contract_partition(k)[1]
+    if m <= 0 or n <= 0 or p_count <= 0:
+        return (1, 0)
+    var tiles = ((m + _AMMA_SPLIT_BM - 1) // _AMMA_SPLIT_BM) * ((n + _AMMA_SPLIT_BN - 1) // _AMMA_SPLIT_BN)
+    comptime if BIG:
+        tiles = ((m + APPLE_MMA_BM - 1) // APPLE_MMA_BM) * ((n + APPLE_MMA_BN - 1) // APPLE_MMA_BN)
+    var gl = 1
+    while gl < p_count and tiles * ((p_count + gl - 1) // gl) > APPLE_MMA_SPLIT_BLOCKS:
+        gl *= 2
+    return (gl, (p_count + gl - 1) // gl)
+
+
+def _launch_apple_mma_split[BIG: Bool = False](
+    ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],
+    mut a: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32],
+    mut ws: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+    leaf: Int,
+    p_count: Int,
+    st: Tuple[Int, Int, Int, Int],
+) raises:
+    """lane/cnn-apple2: `PLAN_APPLE_MMA_SPLIT`. The APPLE_MMA kernel at the
+    small tile over `(tiles, groups)` (each block one aligned power-of-two
+    group of leaves, its node to `ws[q * m * n + cell]`), then the SPLIT
+    plans' fold of the `groups` nodes per cell (`_ksplit_fold_launch`). For
+    the outputs too small to fill the GPU with whole-`k` blocks (weight
+    gradients over many rows: 64 x 288 x 65536 is 18 small tiles)."""
+    var g = apple_mma_split_groups[BIG](m, n, k)
+    comptime FM_ = APPLE_MMA_FM if BIG else APPLE_MMA_SMALL_FM
+    comptime FN_ = APPLE_MMA_FN if BIG else APPLE_MMA_SMALL_FN
+    comptime ks = identical_gemm_apple_mma_kernel[
+        APPLE_MMA_SGM, APPLE_MMA_SGN, FM_, FN_, APPLE_MMA_KB, TUNED_FOLD_SLOTS, True
+    ]
+    comptime TBM = 8 * FM_ * APPLE_MMA_SGM
+    comptime TBN = 8 * FN_ * APPLE_MMA_SGN
+    var tiles = ((m + TBM - 1) // TBM) * ((n + TBN - 1) // TBN)
+    step_count_launch()
+    ctx.enqueue_function[ks](
+        ws.unsafe_ptr(), a.unsafe_ptr(), b.unsafe_ptr(),
+        Int32(m), Int32(n), Int32(k), Int32(leaf), Int32(p_count),
+        Int32(st[0]), Int32(st[1]), Int32(st[2]), Int32(st[3]), Int32(g[0]),
+        grid_dim=(tiles, g[1], 1),
+        block_dim=(APPLE_MMA_SGM * APPLE_MMA_SGN * 32, 1, 1),
+    )
+    _ksplit_fold_launch(ctx, c, ws, m, n, g[1])
 
 
 def _launch_tuned[
@@ -4051,12 +4187,18 @@ def identical_gemm_with_plan(
             ctx, c, a, b, m, n, k, leaf, p_count, st, SWIZZLE_NONE, False
         )
         return
-    comptime if APPLE_MMA:
+    comptime if APPLE_MMA or APPLE_MMA_FAST:
         # Compile-time gated: the kernel calls Apple AIR intrinsics, so no
         # other column may instantiate it (the chooser never names the plan
         # there; a gate naming it falls through to the tuned 64x64 plan).
         if plan == PLAN_APPLE_MMA:
             _launch_apple_mma(ctx, c, a, b, m, n, k, leaf, p_count, st)
+            return
+        if plan == PLAN_APPLE_MMA_SPLIT and p_count > 0 and apple_mma_applies(m, n, k):
+            _launch_apple_mma_split(ctx, c, a, b, ws, m, n, k, leaf, p_count, st)
+            return
+        if plan == PLAN_APPLE_MMA_SPLIT_BIG and p_count > 0 and apple_mma_applies(m, n, k):
+            _launch_apple_mma_split[True](ctx, c, a, b, ws, m, n, k, leaf, p_count, st)
             return
     if plan == PLAN_TUNED_64_4X4:
         _launch_tuned[TUNED_RPT, TUNED_CPT, TUNED_TC, TUNED_64_KS, TUNED_FOLD_SLOTS](
