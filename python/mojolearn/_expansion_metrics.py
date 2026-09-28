@@ -80,6 +80,58 @@ def _binding(numeric_mode):
     return _backend.binding(_BINDING, mode)
 
 
+#: The least words of a host arena that is an `_Arena` (lane metrics-apple3).
+_ARENA_LAZY = 1 << 16
+
+
+class _Arena:
+    """The zero-filled host arena of a large program as an anonymous
+    mapping (lane metrics-apple3): the OS supplies each zero page when it
+    is first touched, so the scratch and the device-only slots, which the
+    host never reads or writes once only the inputs go up and only the
+    outputs come back, cost nothing. `array.array("f", bytes(4 * size))`
+    wrote every page twice. The words are the same zeros; a slice is an
+    array("f") copy, as an array's slice is."""
+
+    __slots__ = ("_map", "_pin", "_addr", "mv", "size")
+
+    def __init__(self, size):
+        import mmap
+        self.size = int(size)
+        self._map = mmap.mmap(-1, 4 * self.size)
+        self._pin = ctypes.c_char.from_buffer(self._map)
+        self._addr = ctypes.addressof(self._pin)
+        self.mv = memoryview(self._map).cast("B").cast("f")
+
+    def buffer_info(self):
+        return self._addr, self.size
+
+    def __len__(self):
+        return self.size
+
+    def __getitem__(self, key):
+        if not isinstance(key, slice):
+            return self.mv[key]
+        out = array.array("f")
+        out.frombytes(self.mv[key].cast("B"))
+        return out
+
+
+def _arena_view(arena):
+    """A float32 memoryview over a program's arena."""
+    return arena.mv if isinstance(arena, _Arena) else memoryview(arena)
+
+
+def _new_arena(size):
+    import os
+    if size >= _ARENA_LAZY and os.environ.get("MOJOLEARN_MSEL3_BEFORE") != "1":
+        try:
+            return _Arena(size)
+        except (OSError, ValueError, TypeError, BufferError):
+            pass
+    return array.array("f", bytes(4 * max(size, 1)))
+
+
 class _Prog:
     """One program: an arena layout, the inputs copied into it, and stages."""
 
@@ -205,7 +257,7 @@ class _Prog:
         or "q" for the Int64 rows of `fold_rows` and `permute` wide)."""
         self._check(off, n)
         store = array.array(code)
-        store.frombytes(memoryview(self.arena)[off:off + n].cast("B"))
+        store.frombytes(_arena_view(self.arena)[off:off + n].cast("B"))
         return store
 
     def get(self, off, shape):
@@ -222,7 +274,7 @@ def _execute(prog, numeric_mode):
     a CPU-only install). A module-level function, not only a method, so the
     lane selector (tools/lane_select.py follows file-local functions, not
     classes) sees every caller reach `x_metrics_run`."""
-    arena = array.array("f", bytes(4 * max(prog.size, 1)))
+    arena = _new_arena(prog.size)
     base = arena.buffer_info()[0]
     stages = array.array("i", [v for s in prog._stages for v in s] or [0])
     b = _binding(numeric_mode)
@@ -1383,7 +1435,7 @@ class _DevCurve:
         if self.keep >= 0:
             p._check(self.keep, c)
             lo = 4 * self.keep
-            cur.keep = bytes(memoryview(p.arena).cast("B")[lo + (0 if _LITTLE else 3):lo + 4 * c:4])
+            cur.keep = bytes(_arena_view(p.arena).cast("B")[lo + (0 if _LITTLE else 3):lo + 4 * c:4])
         elif self.keep == -2:
             cur.keep = b"\x01" * c       # the device dropped the collinear points already
         return cur
@@ -1523,7 +1575,7 @@ def _curves(scores, flags, w, n, problems, numeric_mode, *, stride=1, thresholds
     if compact:
         return [_DevCurve(prog, CF + t * n, CF + N + t * n, CF + 2 * N + t * n if thresholds else _NONE,
                           -2, counts[t], numeric_mode) for t in range(problems)]
-    view = memoryview(prog.arena).cast("B") if flagged else None
+    view = _arena_view(prog.arena).cast("B") if flagged else None
     for t in range(problems):
         c = counts[t]
         if lazy:
