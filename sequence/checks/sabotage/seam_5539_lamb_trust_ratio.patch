@@ -1,9 +1,9 @@
 diff --git a/sequence/adafactor.mojo b/sequence/adafactor.mojo
-index adbdbe6fe..c461980f8 100644
+index c08c48485..0e1414251 100644
 --- a/sequence/adafactor.mojo
 +++ b/sequence/adafactor.mojo
-@@ -139,7 +139,7 @@ def op_lamb_ratio(t: Int, a: Args):
-     var gn = ftz(identical_sqrt(_sumsq(a.p1, s, e - s, 1)))
+@@ -184,7 +184,7 @@ def op_lamb_ratio(t: Int, a: Args):
+     var gn = ftz(identical_sqrt(_sumsq_or_parts(a.p1, s, e - s, a.p5 + t * SUMSQ_THREADS, np)))
      var r = Float32(1.0)
      if wn > Float32(0.0) and gn > Float32(0.0):
 -        r = div(wn, gn)

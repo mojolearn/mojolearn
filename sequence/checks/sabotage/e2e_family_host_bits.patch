@@ -1,5 +1,5 @@
 diff --git a/sequence/exec.mojo b/sequence/exec.mojo
-index 2442f6024..aec4d66df 100644
+index 11efebfff..5c344059f 100644
 --- a/sequence/exec.mojo
 +++ b/sequence/exec.mojo
 @@ -21,7 +21,7 @@ task gets at least `HOST_LAUNCH_GRAIN` units of work (`_element_weight`),
@@ -11,7 +11,7 @@ index 2442f6024..aec4d66df 100644
  
  from core.host_parallel import host_parallelize
  from core.host_predict_threads import host_predict_chunk, host_predict_task_count
-@@ -183,6 +183,11 @@ struct HostExec(Exec):
+@@ -199,6 +199,11 @@ struct HostExec(Exec):
      def download(mut self, dst: FP, src: FP, n: Int) raises:
          if n > 0 and Int(dst) != Int(src):
              memcpy(dest=dst, src=src, count=n)
@@ -21,8 +21,8 @@ index 2442f6024..aec4d66df 100644
 +        for i in range(n):
 +            dst.unsafe_store(i, bitcast[DType.float32](bitcast[DType.uint32](dst.unsafe_load(i)) ^ UInt32(1)))
  
-     def bind(mut self, src: FP, n: Int) raises -> FP:
-         return src
+     def download_async(mut self, dst: FP, src: FP, n: Int) raises:
+         self.download(dst, src, n)
 diff --git a/bindings/_mojolearn_arima_host.mojo b/bindings/_mojolearn_arima_host.mojo
 index 7d986c4dd..018c862d2 100644
 --- a/bindings/_mojolearn_arima_host.mojo

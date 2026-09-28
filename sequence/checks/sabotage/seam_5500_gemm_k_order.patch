@@ -1,8 +1,8 @@
 diff --git a/sequence/ops.mojo b/sequence/ops.mojo
-index 377d08c0f..32bad077b 100644
+index 502fa23fb..6cf797134 100644
 --- a/sequence/ops.mojo
 +++ b/sequence/ops.mojo
-@@ -305,22 +305,9 @@ def gemm_dot(pa: FP, abase: Int, sak: Int, pb: FP, bbase: Int, sbk: Int, K: Int,
+@@ -314,32 +314,9 @@ def gemm_dot(pa: FP, abase: Int, sak: Int, pb: FP, bbase: Int, sbk: Int, K: Int,
              acc = fma3(ld(pa, abase + k * sak), ld(pb, k * sbk + bbase), acc)
              k -= 1
      else:
@@ -10,6 +10,16 @@ index 377d08c0f..32bad077b 100644
 -        # that many loads in flight instead of waiting out each one); the
 -        # fold is the same chain of fmas in the same order.
 -        var k = 0
+-        if K >= GEMM_LONG_K:
+-            while k + GEMM_STAGE_LONG <= K:
+-                var la = SIMD[DType.float32, 64]()
+-                var lb = SIMD[DType.float32, 64]()
+-                comptime for i in range(GEMM_STAGE_LONG):
+-                    la[i] = ld(pa, abase + (k + i) * sak)
+-                    lb[i] = ld(pb, (k + i) * sbk + bbase)
+-                comptime for i in range(GEMM_STAGE_LONG):
+-                    acc = fma3(la[i], lb[i], acc)
+-                k += GEMM_STAGE_LONG
 -        while k + GEMM_STAGE <= K:
 -            var va = SIMD[DType.float32, GEMM_STAGE]()
 -            var vb = SIMD[DType.float32, GEMM_STAGE]()
