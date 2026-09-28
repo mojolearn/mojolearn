@@ -5,8 +5,10 @@
 from std.gpu import block_idx, block_dim, thread_idx
 from std.ffi import _Global
 from max.gpu.host import DeviceBuffer, DeviceContext
+from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_neighbors.items import FP, IP, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, group_mean_item, take_rows_item, take_cols_item, variance_item, ocsvm_smo_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_sum_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item, pagerank_step_item, cc_step_item, louvain_item, svgp_item, svgp_var_item
+from x_neighbors.block_ops import ocsvm_smo_block, OCSVM_TPB
 
 comptime BLOCK = 128
 
@@ -439,9 +441,12 @@ def ocsvm_kernel(q: FP, cv: FP, alpha: FP, g: FP, info: FP, iters: IP, n_: Int64
     var n = Int(n_)
     var eps = eps_
     var max_iter = Int(max_iter_)
-    var t = _tid()
-    if t < 1:
-        ocsvm_smo_item(t, q, cv, alpha, g, info, iters, n, eps, max_iter)
+    comptime if is_defined["MOJOLEARN_XN_SERIAL_SMO"]():
+        var t = _tid()
+        if t < 1:
+            ocsvm_smo_item(t, q, cv, alpha, g, info, iters, n, eps, max_iter)
+    else:
+        ocsvm_smo_block(q, cv, alpha, g, info, iters, n, eps, max_iter)
 
 
 def op_ocsvm(q: Int, cv: Int, alpha: Int, info: Int, iters: Int, n: Int, eps: Float32, max_iter: Int) raises:
@@ -452,9 +457,10 @@ def op_ocsvm(q: Int, cv: Int, alpha: Int, info: Int, iters: Int, n: Int, eps: Fl
     var d_g = _buf(ctx, 0, n, False)
     var d_info = _buf(ctx, info, 1, False)
     var d_iters = _buf_i(ctx, iters, 1, False)
+    comptime tpb = 1 if is_defined["MOJOLEARN_XN_SERIAL_SMO"]() else OCSVM_TPB
     ctx.enqueue_function[ocsvm_kernel](
         d_q.unsafe_ptr(), d_cv.unsafe_ptr(), d_alpha.unsafe_ptr(), d_g.unsafe_ptr(), d_info.unsafe_ptr(), d_iters.unsafe_ptr(), Int64(n), eps, Int64(max_iter),
-        grid_dim=_grid(1), block_dim=(BLOCK if 1 > 1 else 1),
+        grid_dim=1, block_dim=tpb,
     )
     _down(ctx, d_alpha, alpha, n)
     _down(ctx, d_info, info, 1)

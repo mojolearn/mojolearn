@@ -322,6 +322,101 @@ comptime SMO_TAU = Float32(1e-12)
 
 
 # DEVIATION 5200 (row 125)
+@always_inline
+def ocsvm_g0(q: FP, alpha: FP, n: Int, i: Int) -> Float32:
+    """The initial gradient of sample i: sum_j Q[i, j] alpha_j over the
+    nonzero alpha, j ascending."""
+    var acc = Float32(0)
+    for j in range(n):
+        var a = alpha.unsafe_load(j)
+        if a != Float32(0):
+            acc = ftz(identical_mul_add(ftz(q.unsafe_load(i * n + j)), a, acc))
+    return acc
+
+
+@always_inline
+def ocsvm_obj(gmax: Float32, gjv: Float32, qdi: Float32, qjj: Float32, qij: Float32) -> Float32:
+    """WSS3's second-order objective of pair (i, j), for grad_diff > 0."""
+    var grad_diff = _add(gmax, gjv)
+    var two_q = ftz(identical_mul(Float32(2), qij))
+    var quad = _sub(_add(qdi, qjj), two_q)
+    var num = ftz(identical_mul(grad_diff, grad_diff))
+    if quad > Float32(0):
+        return -ftz(identical_div(num, quad))
+    return -ftz(identical_div(num, SMO_TAU))
+
+
+@always_inline
+def ocsvm_update(q: FP, cv: FP, alpha: FP, g: FP, n: Int, i: Int, j: Int) -> Tuple[Float32, Float32]:
+    """The two-variable step on (i, j): stores alpha_i, alpha_j and returns
+    their changes (dai, daj)."""
+    var old_ai = alpha.unsafe_load(i)
+    var old_aj = alpha.unsafe_load(j)
+    var quad = _sub(_add(q.unsafe_load(i * n + i), q.unsafe_load(j * n + j)), ftz(identical_mul(Float32(2), q.unsafe_load(i * n + j))))
+    if quad <= Float32(0):
+        quad = SMO_TAU
+    var delta = ftz(identical_div(_sub(g.unsafe_load(i), g.unsafe_load(j)), quad))
+    var ci = cv.unsafe_load(i)
+    var cj = cv.unsafe_load(j)
+    var total = _add(old_ai, old_aj)
+    var ai = _sub(old_ai, delta)
+    var aj = _add(old_aj, delta)
+    if total > ci:
+        if ai > ci:
+            ai = ci
+            aj = _sub(total, ci)
+    else:
+        if aj < Float32(0):
+            aj = Float32(0)
+            ai = total
+    if total > cj:
+        if aj > cj:
+            aj = cj
+            ai = _sub(total, cj)
+    else:
+        if ai < Float32(0):
+            ai = Float32(0)
+            aj = total
+    alpha.unsafe_store(i, ai)
+    alpha.unsafe_store(j, aj)
+    return (_sub(ai, old_ai), _sub(aj, old_aj))
+
+
+@always_inline
+def ocsvm_g_step(q: FP, g: FP, n: Int, i: Int, j: Int, dai: Float32, daj: Float32, k: Int):
+    """Gradient entry k after the step: Q[i, k] dai, then Q[j, k] daj."""
+    var gk = g.unsafe_load(k)
+    gk = ftz(identical_mul_add(ftz(q.unsafe_load(i * n + k)), dai, gk))
+    gk = ftz(identical_mul_add(ftz(q.unsafe_load(j * n + k)), daj, gk))
+    g.unsafe_store(k, gk)
+
+
+@always_inline
+def ocsvm_rho(g: FP, alpha: FP, cv: FP, n: Int) -> Float32:
+    """libsvm's calculate_rho, y = +1 throughout; samples ascending."""
+    var neg_inf = bitcast[DType.float32](UInt32(0xFF800000))
+    var pos_inf = bitcast[DType.float32](UInt32(0x7F800000))
+    var ub = pos_inf
+    var lb = neg_inf
+    var nr_free = 0
+    var sum_free = Float32(0)
+    for i in range(n):
+        var yg = g.unsafe_load(i)
+        var a = alpha.unsafe_load(i)
+        if a >= cv.unsafe_load(i):
+            if yg > lb:
+                lb = yg
+        elif a <= Float32(0):
+            if yg < ub:
+                ub = yg
+        else:
+            nr_free += 1
+            sum_free = _add(sum_free, yg)
+    if nr_free > 0:
+        return ftz(identical_div(sum_free, Float32(nr_free)))
+    return ftz(identical_mul(_add(ub, lb), Float32(0.5)))
+
+
 def ocsvm_smo_item(t: Int, q: FP, cv: FP, alpha: FP, g: FP, info: FP, iters: IP, n: Int, eps: Float32, max_iter: Int):
     """libsvm's `Solver::Solve` for the one-class problem (sklearn
     `svm/src/libsvm/svm.cpp`: `solve_one_class`, `Solver::Solve`,
@@ -332,16 +427,13 @@ def ocsvm_smo_item(t: Int, q: FP, cv: FP, alpha: FP, g: FP, info: FP, iters: IP,
     lasts, then the remainder); `q` is the n x n kernel matrix. Float32 with
     the pinned spellings where libsvm computes in double (DEVIATION 5200).
     Ties in the working-set scans resolve as libsvm's `>=` / `<=` dres: the
-    LAST index of equal gradient wins. info[0] = rho."""
+    LAST index of equal gradient wins. info[0] = rho. The GPU column runs the
+    same helpers with the scans spread over a threadgroup
+    (`x_neighbors/block_ops.mojo::ocsvm_smo_block`)."""
     var neg_inf = bitcast[DType.float32](UInt32(0xFF800000))
     var pos_inf = bitcast[DType.float32](UInt32(0x7F800000))
     for i in range(n):
-        var acc = Float32(0)
-        for j in range(n):
-            var a = alpha.unsafe_load(j)
-            if a != Float32(0):
-                acc = ftz(identical_mul_add(ftz(q.unsafe_load(i * n + j)), a, acc))
-        g.unsafe_store(i, acc)
+        g.unsafe_store(i, ocsvm_g0(q, alpha, n, i))
     var it = 0
     while it < max_iter:
         var gmax = neg_inf
@@ -364,81 +456,17 @@ def ocsvm_smo_item(t: Int, q: FP, cv: FP, alpha: FP, g: FP, info: FP, iters: IP,
                     if gjv >= gmax2:
                         gmax2 = gjv
                     if grad_diff > Float32(0):
-                        var two_q = ftz(identical_mul(Float32(2), q.unsafe_load(gi * n + j)))
-                        var quad = _sub(_add(qdi, q.unsafe_load(j * n + j)), two_q)
-                        var num = ftz(identical_mul(grad_diff, grad_diff))
-                        var obj: Float32
-                        if quad > Float32(0):
-                            obj = -ftz(identical_div(num, quad))
-                        else:
-                            obj = -ftz(identical_div(num, SMO_TAU))
+                        var obj = ocsvm_obj(gmax, gjv, qdi, q.unsafe_load(j * n + j), q.unsafe_load(gi * n + j))
                         if obj <= obj_min:
                             gj = j
                             obj_min = obj
         if gi < 0 or gj < 0 or _add(gmax, gmax2) < eps:
             break
         it += 1
-        var i = gi
-        var j = gj
-        var old_ai = alpha.unsafe_load(i)
-        var old_aj = alpha.unsafe_load(j)
-        var quad = _sub(_add(q.unsafe_load(i * n + i), q.unsafe_load(j * n + j)), ftz(identical_mul(Float32(2), q.unsafe_load(i * n + j))))
-        if quad <= Float32(0):
-            quad = SMO_TAU
-        var delta = ftz(identical_div(_sub(g.unsafe_load(i), g.unsafe_load(j)), quad))
-        var ci = cv.unsafe_load(i)
-        var cj = cv.unsafe_load(j)
-        var total = _add(old_ai, old_aj)
-        var ai = _sub(old_ai, delta)
-        var aj = _add(old_aj, delta)
-        if total > ci:
-            if ai > ci:
-                ai = ci
-                aj = _sub(total, ci)
-        else:
-            if aj < Float32(0):
-                aj = Float32(0)
-                ai = total
-        if total > cj:
-            if aj > cj:
-                aj = cj
-                ai = _sub(total, cj)
-        else:
-            if ai < Float32(0):
-                ai = Float32(0)
-                aj = total
-        alpha.unsafe_store(i, ai)
-        alpha.unsafe_store(j, aj)
-        var dai = _sub(ai, old_ai)
-        var daj = _sub(aj, old_aj)
+        var d = ocsvm_update(q, cv, alpha, g, n, gi, gj)
         for k in range(n):
-            var gk = g.unsafe_load(k)
-            gk = ftz(identical_mul_add(ftz(q.unsafe_load(i * n + k)), dai, gk))
-            gk = ftz(identical_mul_add(ftz(q.unsafe_load(j * n + k)), daj, gk))
-            g.unsafe_store(k, gk)
-    # calculate_rho, y = +1 throughout
-    var ub = pos_inf
-    var lb = neg_inf
-    var nr_free = 0
-    var sum_free = Float32(0)
-    for i in range(n):
-        var yg = g.unsafe_load(i)
-        var a = alpha.unsafe_load(i)
-        if a >= cv.unsafe_load(i):
-            if yg > lb:
-                lb = yg
-        elif a <= Float32(0):
-            if yg < ub:
-                ub = yg
-        else:
-            nr_free += 1
-            sum_free = _add(sum_free, yg)
-    var rho: Float32
-    if nr_free > 0:
-        rho = ftz(identical_div(sum_free, Float32(nr_free)))
-    else:
-        rho = ftz(identical_mul(_add(ub, lb), Float32(0.5)))
-    info.unsafe_store(0, rho)
+            ocsvm_g_step(q, g, n, gi, gj, d[0], d[1], k)
+    info.unsafe_store(0, ocsvm_rho(g, alpha, cv, n))
     iters.unsafe_store(0, Int32(it))
 
 
