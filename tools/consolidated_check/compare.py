@@ -116,6 +116,11 @@ def compare(plan, columns, fixtures=("base",), progress=False):
         raise ValueError("plan must contain a nonempty unique lane list")
     if not fixtures or len(set(fixtures)) != len(fixtures) or any(not f for f in fixtures):
         raise ValueError("fixtures must be a nonempty unique list")
+    expected_lane = plan.get("lane_revisions", {})
+    if not isinstance(expected_lane, dict) or any(
+            not isinstance(k, str) or not isinstance(v, str) or not v
+            for k, v in expected_lane.items()):
+        raise ValueError("plan lane_revisions must map lane names to nonempty revisions")
     expected_batch = plan.get("batch_revisions", {})
     if not isinstance(expected_batch, dict) or any(
             not isinstance(k, str) or not isinstance(v, str) or not v
@@ -147,6 +152,12 @@ def compare(plan, columns, fixtures=("base",), progress=False):
         revisions = {j.get("lane_revisions", {}).get(lane) for j in records.values()}
         if len(commits) != 1 or len(revisions) != 1:
             issues.append(dict(lane=lane, reason="source commits or lane revisions differ across columns"))
+            lane_results[lane] = "INCOMPLETE"
+            continue
+        if lane in expected_lane and revisions != {expected_lane[lane]}:
+            issues.append(dict(lane=lane, reason="lane revision does not match plan",
+                               expected_revision=expected_lane[lane],
+                               recorded_revisions=sorted(revisions, key=str)))
             lane_results[lane] = "INCOMPLETE"
             continue
         batch_revisions = {b: j.get("batch_revisions", {}).get(lane)
@@ -242,6 +253,7 @@ def compare(plan, columns, fixtures=("base",), progress=False):
                 lanes=lanes, fixtures=list(fixtures), columns=backends, counts=counts,
                 column_directories=[dict(backend=b, path=str(Path(d).resolve())) for b,d in columns],
                 lane_results=lane_results, issues=issues, parts=rows, records=artifacts,
+                expected_lane_revisions=expected_lane,
                 expected_batch_revisions=expected_batch,
                 ignored_records=ignored, source_commits=sorted({a["source_commit"] for a in artifacts if a.get("source_commit")}),
                 scope="saved GPU columns only; no native execution; numeric hashes exclude timings")

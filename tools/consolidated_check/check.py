@@ -112,6 +112,7 @@ def plan(out, only=""):
     omitted = {l: (excluded[l] if l in excluded else "not selected for this run") for l in inventory if l not in lanes}
     p = {"inventory": inventory, "omitted": omitted, "structural_exclusions": excluded,
          "source_commit": source, "lanes": lanes, "needed": needed, "not_exposed": refused,
+         "lane_revisions": {l: r for l, r in getattr(ib, "LANE_REVISIONS", {}).items() if l in lanes},
          "batch_revisions": {l: r for l, r in getattr(ib, "BATCH_REVISIONS", {}).items() if l in lanes},
          "bindings": sorted(set().union(*needed.values()))}
     (out / "plan.json").write_text(json.dumps(p, indent=1))

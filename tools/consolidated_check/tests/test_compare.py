@@ -184,3 +184,28 @@ def test_batch_revision_is_checked_without_invalidating_other_parts(tmp_path,lef
 def test_invalid_plan_batch_revision_rejected(tmp_path):
     with pytest.raises(ValueError,match='batch_revisions'):
         module.compare({'lanes':['x'],'batch_revisions':{'x':None}},pair(tmp_path))
+
+
+@pytest.mark.parametrize('lane,revision', [
+    ('x-glm-gamma', 'portable-positive-target-exp-1'),
+    ('trees-dart-options', 'tree-shap-zero-cover-path-1'),
+])
+def test_matching_obsolete_lane_revisions_cannot_satisfy_current_plan(tmp_path, lane, revision):
+    cols = [('metal', tmp_path/'metal'), ('hip', tmp_path/'hip')]
+    plan = {'lanes': [lane], 'lane_revisions': {lane: revision}}
+    for value in (None, 'obsolete', revision):
+        for backend, _ in cols:
+            j = record(backend, lane=lane)
+            if value is not None:
+                j['lane_revisions'] = {lane: value}
+            write(tmp_path, backend, j, lane=lane)
+        out = module.compare(plan, cols)
+        assert out['verdict'] == ('AGREE' if value == revision else 'INCOMPLETE')
+        assert out['expected_lane_revisions'] == {lane: revision}
+        # Historical frozen plans retain comparison of their recorded revision.
+        assert module.compare({'lanes': [lane]}, cols)['verdict'] == 'AGREE'
+
+
+def test_invalid_plan_lane_revision_rejected(tmp_path):
+    with pytest.raises(ValueError, match='lane_revisions'):
+        module.compare({'lanes':['x'], 'lane_revisions': {'x': None}}, pair(tmp_path))
