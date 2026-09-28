@@ -211,7 +211,16 @@ Before = `-D MOJOLEARN_2031_SYM_RIDX_SPLITS_OFF -D MOJOLEARN_GBDT_ID_UPLOADS_SEP
 
 Cross-job on m4-a (same Mac, different jobs): IDENTICAL Lossguide taxi after-arm 6620 ms at 939ea50e9 -> 6306 ms at 0e5a27c47 (split bins and features joined the split pair's copy).
 
-## FINAL (tip 27fdd02c4 plus progress notes; 2026-09-28)
+## FINAL (2026-09-28, orchestrator FREEZE at ~18:35Z; tip = this commit)
+
+Code tip: 0e5a27c47 plus merges of origin/lane/apple-merged (a05b81b5b,
+b156a20ee) and progress notes. Nothing is half done; every default change
+below has a same-job before/after A/B with equal digests on at least one
+Mac, so nothing was reverted or moved to opt-in at the freeze. Two
+requests were still pending at the freeze and are NOT results:
+1790617277649 (m3ultra-b, all-off vs all-on at 27fdd02c4, queued behind
+six other lanes) and 1790619284873 (m4pro-a, the same at b156a20ee; see
+the note at the end if it finished before the push).
 
 ### Before/after at the tip, IDENTICAL, M4 Pro m4pro-a (steward 1790617279900)
 
