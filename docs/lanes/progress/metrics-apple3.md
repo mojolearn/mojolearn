@@ -91,11 +91,98 @@ epilogue now imports core/host_parallel.mojo and core/host_predict_threads.mojo
 (read only, not edited).
 
 ## Results
-(none yet: the first job is queued)
-
 | steward | Mac | commit | what | state |
 |---|---|---|---|---|
-| 1790626827717 | m4-a | 52469ad90 | phase board at the base (x_msel_speed.py, cProfile), board, epilogue table | queued |
+| 1790626827717 | m4-a | 52469ad90 (= the base + the phase board) | the base measured: model selection phases, the board, the epilogue table, py-misc-msel's timing | PASS |
+| 1790628637582 | m3ultra-b | 81e13a96c | the A/B of changes 1 to 7 (base 6856b5f8f against head; before against after in the head build) | queued |
+
+### Job 1790626827717 (m4-a, Apple M4): the base, no change of this lane in it
+Evidence: ~/mojolearn-evidence/metrics-apple3/1790626827717-52469ad90.txt.
+The FAST estimators `_mojolearn_metrics.so` was not built in this job, so the
+tree cases and the multimetric case have IDENTICAL numbers only.
+
+Model selection, 1M rows x 16 features (taxi for regression, HIGGS for
+classification), seconds, one run after a warm run. Phases are exclusive.
+
+| case | mode | wall | fit | predict | score (less predict) | take_rows | folds | other (Python) |
+|---|---|---|---|---|---|---|---|---|
+| cross_val_score Ridge, cv 5 | FAST | 0.298 | 0.173 | 0.014 | 0.061 | 0.027 | 0.020 | 0.002 |
+| cross_val_score LogisticRegression | FAST | 0.500 | 0.391 | 0.016 | 0.033 | 0.028 | 0.030 | 0.002 |
+| cross_val_score GaussianNB | FAST | 0.252 | 0.146 | 0.023 | 0.032 | 0.030 | 0.020 | 0.002 |
+| cross_val_score GaussianNB | IDENTICAL | 1.149 | 1.020 | 0.030 | 0.040 | 0.035 | 0.021 | 0.003 |
+| cross_val_score DecisionTree(8) | IDENTICAL | 0.395 | 0.263 | 0.016 | 0.052 | 0.030 | 0.030 | 0.004 |
+| cross_val_score RandomForest(10 trees, 8) | IDENTICAL | 1.173 | 1.035 | 0.025 | 0.051 | 0.029 | 0.030 | 0.004 |
+| cross_val_score GradientBoostingRegressor(20, 4) | IDENTICAL | 1.120 | 1.039 | 0.024 | 0.006 | 0.029 | 0.019 | 0.003 |
+| cross_validate GaussianNB, 3 scorers + train scores | IDENTICAL | 1.793 | 1.000 | 0.419 (30 calls) | 0.320 | 0.031 | 0.020 | 0.003 |
+| GridSearchCV Ridge, 4 candidates x 5 folds | FAST | 1.181 | 0.728 | 0.059 | 0.245 | 0.117 (80 gathers) | 0.020 | 0.012 |
+| validation_curve Ridge, 4 values x 5 folds | FAST | 2.292 | 0.689 | 0.204 | 1.248 | 0.119 | 0.020 | 0.012 |
+| learning_curve Ridge, 5 sizes x 5 folds | FAST | 2.032 | 0.514 | 0.165 | 0.991 | 0.157 (150 gathers) | 0.019 | 0.185 |
+| learning_curve GaussianNB, shuffled | FAST | 2.290 | 0.415 | 0.391 | 0.499 | 0.356 | 0.020 | 0.610 |
+| cross_val_predict Ridge | FAST | 0.478 | 0.172 | 0.016 | | 0.028 | 0.020 | 0.242 |
+| cross_val_predict GaussianNB predict_proba, 200k rows | FAST | 0.110 | 0.031 | 0.008 | | 0.006 | 0.004 | 0.062 |
+| permutation_test_score GaussianNB, 5 permutations, cv 5 | FAST | 1.577 | 0.851 | 0.135 | 0.189 | 0.166 (120 gathers) | 0.117 (6 draws) | 0.120 |
+
+What it says: a fit is one binding call in every estimator measured
+(their families own it). This family's share is the row gathers repeated
+per candidate and per permutation, one predict per scorer, the Python lists
+of learning_curve (0.19 to 0.61 s) and the Python objects of
+cross_val_predict (0.24 s of 0.48 s).
+
+The board at the base (29 cases, 1M rows, `--reps 2`): FAST 1.101 s,
+IDENTICAL 1.114 s. Largest: roc_auc_ovr 0.266, adjusted_mutual_info_score
+0.138, shuffle_split 0.077, stratified_kfold_shuffle 0.075.
+
+lane py-misc-metrics' epilogues had never run on Apple. Python route against
+native route, the same build, 1M rows (FAST; IDENTICAL is within 10%):
+
+| case | python s | native s | bits |
+|---|---|---|---|
+| precision_recall_curve, weighted | 0.185 | 0.041 | equal |
+| det_curve | 0.186 | 0.034 | equal |
+| roc_auc ovr weighted, 1M x 5 | 0.330 | 0.303 | equal |
+| d2_log_loss_score, weighted | 0.055 | 0.023 | equal |
+| ndcg_score, 200k x 5 | 0.024 | 0.009 | equal |
+| auc, 1M points | 0.175 | 0.016 | equal |
+| normalized_mutual_info, 1000 x 1000 classes | 0.704 | 0.423 | equal |
+| calinski_harabasz, 100k x 50, k 300 | 0.026 | 0.023 | equal |
+| davies_bouldin, 100k x 50, k 300 | 0.398 | 0.115 | equal |
+
+lane py-misc-msel's splitters had never run on Apple either
+(tools/py_misc_msel/check.py time, IDENTICAL, 1M rows, the digest of before
+and after the same in every row):
+
+| case | before s | after s |
+|---|---|---|
+| LeaveOneGroupOut, 1000 groups | 56.576 | 3.258 |
+| LeavePGroupsOut(2), 30 groups | 25.117 | 1.753 |
+| GroupKFold(5), 1000 groups | 0.370 | 0.024 |
+| GroupKFold(5, shuffle) | 0.359 | 0.024 |
+| StratifiedGroupKFold(5), 100 groups | 0.420 | 0.095 |
+| GroupShuffleSplit(10), 1000 groups | 0.527 | 0.054 |
+| StratifiedShuffleSplit(10) | 1.645 | 0.379 |
+| PredefinedSplit, 5 folds | 0.304 | 0.054 |
+| KFold(5) unshuffled | 0.234 | 0.016 |
+| iterable cv, 5 pairs | 0.137 | 0.016 |
+| check_cv stratify test (float y) | 0.307 | 0.001 |
+| scorer roc_auc column, (n, 2) f4 | 0.120 | 0.025 |
+| permutation_test_score 10 perms, KFold(5) | 3.427 | 0.513 |
+| permutation_test_score 10 perms, cv 5 (stratified) | 3.537 | 1.371 |
+| permutation_test_score 3 perms, 1000 groups, GroupKFold(5) | 50.790 | 1.321 |
+
+## For other lanes (found by the phase board, not changed here)
+- linear: `Ridge.score` / `LinearRegression.score` computes R^2 in Python per
+  row (`linear_model._r2_host`, `_r2_sums`, `tolist`): 27 to 31 ms per call at
+  800k rows on the M4, 1.24 s of the 2.29 s validation curve and 0.99 s of
+  the 2.03 s learning curve above. `scoring="r2"` goes through
+  mojolearn.metrics and does not pay it.
+- prep: the classifiers' `score` (`_expansion_prep.py` `score`, a Python `sum`
+  over a generator per row) is 17 to 27 ms per call at 200k to 800k rows:
+  0.86 s of the shuffled GaussianNB learning curve. GaussianNB's fit is
+  0.20 s IDENTICAL against 0.03 s FAST at 800k x 16 (one `x_prep_run_ranges` call).
+- core (`bindings/hotpath_helpers.mojo` `_encode_labels`): one thread, a
+  binary search per row, 5 ms per 800k int64 labels; every classifier fit and
+  every classification metric calls it (twice per metric). Change 5 answers
+  the metrics' calls inside this family; the core encoder is unchanged.
 
 ## Unproven
-- Everything above until its job reports: the Mojo changes have not been built.
+- Changes 1 to 7 until job 1790628637582 reports: the Mojo changes have not been built.
