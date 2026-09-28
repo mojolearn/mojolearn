@@ -313,6 +313,44 @@ FINDINGS for other lanes:
   IDENTICAL only; `_backend._cpu_only_binding` refuses 'fast' by name). CPU
   speed here serves the one tier.
 
+Step 3 (threads, branch lane/ann-cpu, NOT MERGED: no NVIDIA pod), 2026-09-28.
+RunPod went negative (balance -$4.41, every pod gone, `up` refused), so this
+step ran on the central Hot Aisle box (tools/amd_central.sh, lane key
+ann-cpu; AMD EPYC, 26 cores SHARED with other lanes, so timings are
+indicative only).
+- e2cce87b7: `ann_tasks` runs on `host_parallelize` (caller's FP env,
+  DEVIATION 5900). `core/host_parallel.mojo` is carried BYTE FOR BYTE from
+  origin/lane/cpu (c4716ec93) until lane/cpu lands; when it lands the file
+  merges clean (identical content).
+- 3cfc52318: `cagra_prune` (x_ann/cagra_core.mojo, host code in BOTH
+  drivers) splits nodes over the same tasks; per-task cnt/rank/stamp
+  scratch; a node short of distinct neighbours sets a flag and the error is
+  raised after the split (same message). Integer work.
+
+| algorithm (shape), EPYC box | threads=1 | threads=3 | default | digests 1/3/default |
+|---|---|---|---|---|
+| CAGRA build (50k x 28) | 26.4 s | 10.0 s | 3.5 s (before prune split) | equal (model 54d696296c9c7c8a, out 45e435db03654b4e) |
+| t-SNE (10k x 28, 300 it) | 49.5 s | 17.5 s | 4.9 s | equal (f31f68ec8bad9247) |
+| CAGRA prune alone (50k x 64 -> 32, synthetic) | 0.51 s | 0.29 s | 0.11 s | graph hash equal, = the serial code's |
+
+OWED (step 3):
+- AMD box job (`/root/ev-ann-cpu/amd_job.sh`, log job.log there): the
+  ten-lane `--pass 2` e2e lane check (MI300X == CPU at default threads),
+  test_x_ann_repeat + test_host_surface, and the bench at threads 1/3/default
+  with `--fit-on-gpu` (IVF family at 1M). Result: see below when recorded.
+  STATE at 05:31Z: both GPU slots busy (decomp, sequence); a Mac-side
+  `amd_central.sh run ann-cpu ...` waiter (120 min cap) was queued to
+  launch it; it exited rc=255 (ssh) without launching, so the job has NOT
+  run. NEXT SESSION: `tools/amd_central.sh sh ann-cpu 'cat
+  /root/ev-ann-cpu/job.log'`; if it is absent, relaunch with
+  `tools/amd_central.sh run ann-cpu 'setsid nohup bash /root/ev-ann-cpu/amd_job.sh > /root/ev-ann-cpu/job.out 2>&1 < /dev/null &'`
+  (box tree already synced at 3cfc52318; do not sync while it runs). The
+  script's copy is ~/mojolearn-evidence/ann-cpu/amd_job.sh.
+- NVIDIA merge gate on a pod once RunPod is funded: `gate.sh` (the ten-lane
+  e2e check + the two test files) plus `cpu_paths_fold_order.patch` on
+  x-ann-tsne, x-ann-cagra, x-ann-ivf-pq, and the bench at threads 1/3/unset
+  (Xeon timings for the table). Then merge to main + push in one command.
+
 NEXT (lane ann-cpu): (1) when `core/host_parallel.mojo` lands on main, switch
 `ann_tasks` to `host_parallelize` (patch ready:
 ~/mojolearn-evidence/ann-cpu/threaded.patch), prove bits at
