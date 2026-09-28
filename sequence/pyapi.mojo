@@ -769,7 +769,7 @@ def theta_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: Pyth
     ip = [B, n, h, season_length, model (-1 auto, 0 STM, 1 OTM, 2 DSTM,
     3 DOTM), decomposition (0 multiplicative, 1 additive), fixed mask];
     fp = [initial_smoothed, alpha, theta] (read where fixed)."""
-    if len(addrs) != 3 or len(ip) != 7 or len(fp) != 3:
+    if len(addrs) != 3 or (len(ip) != 7 and len(ip) != 8) or (len(fp) != 3 and len(fp) != 4):
         raise Error("theta: requires 3 addresses, 7 integer and 3 float parameters")
     var B = ival(ip, 0)
     var n = ival(ip, 1)
@@ -799,6 +799,9 @@ def theta_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: Pyth
     a.f0 = fval(fp, 0)
     a.f1 = fval(fp, 1)
     a.f2 = fval(fp, 2)
+    # FAST: an optional 8th integer / 4th float set the Nelder-Mead stall stop (default off)
+    a.i7 = ival(ip, 7) if len(ip) == 8 else 0
+    a.f3 = fval(fp, 3) if len(fp) == 4 else Float32(0.0)
     ex.launch[OP_THETA](a, B)
     ex.sync()
     ex.download(fptr(addrs[1], "forecast"), F, B * h)
