@@ -38,7 +38,7 @@ agreement (the GPU runs the kernel itself) and the sabotage
 """
 from std.math import max, min
 
-from checks.numerics import ftz, identical_mul, identical_mul_add, identical_mul_add_simd
+from checks.numerics import ftz, identical_exp, identical_mul, identical_mul_add, identical_mul_add_simd
 from core.host_lanes import F32V, HOST_FW, ftz_lanes, lanes_are_identical, pinned_mul_lanes
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count
@@ -197,3 +197,131 @@ def mamba3_s16_qkv_backward_host(
         _rows(0)
     else:
         host_parallelize(_rows, tasks)
+
+
+# ===========================================================================
+# S17: the direct readout adjoint and the descending chunk-state carry
+# (`mamba3_s17_reverse_state_kernel`), on the host.
+# ===========================================================================
+#
+# Per output cell (bb, h, p, n), the kernel's statements, unchanged:
+#
+#   carry = +0.0
+#   for c descending:
+#       direct = +0.0
+#       for i ascending (t = c*qs + i < l):
+#           direct = ftz(identical_mul_add(ftz(dy[t, p]), ftz(identical_mul(ftz(q[t, n]), ev[c, i])), direct))
+#       d_state_direct[c, ..] = direct
+#       total = ftz(direct + ftz(identical_mul(carry, ftz(identical_exp(last[c])))))
+#       d_state_total[c, ..] = total; carry = total
+#   d_initial[..] = carry
+#
+# with ev[c, i] = ftz(identical_exp(ftz(dacs[c, i]))) and last[c] =
+# ftz(dacs[c, qs - 1]). What changes: ev, the chunk decays and the product
+# `ftz(identical_mul(ftz(q[t, n]), ev[t]))` depend on (bb, h, t, n) but not on
+# p, so each is computed once per unit instead of once per p; the D_STATE
+# cells of one (bb, h, p) advance together as SIMD lanes over n; units of
+# (bb, h, a block of p) split over host tasks.
+
+comptime _S17_PBLOCK = 16
+
+
+def _s17_unit(
+    unit: Int, d_direct: _P, d_total: _P, d_initial: _P, d_y: _P, q: _P, dacs: _P,
+    l: Int, nh: Int, qs: Int,
+):
+    var pblocks = (M3_HEADDIM + _S17_PBLOCK - 1) // _S17_PBLOCK
+    var pb = unit % pblocks
+    var g = unit // pblocks
+    var h = g % nh
+    var bb = g // nh
+    var nc = (l + qs - 1) // qs
+    var p_lo = pb * _S17_PBLOCK
+    var p_hi = min(p_lo + _S17_PBLOCK, M3_HEADDIM)
+    # ev per token and the chunk decays, once per unit.
+    var ev = List[Float32](length=max(nc * qs, 1), fill=Float32(0.0))
+    var dec = List[Float32](length=max(nc, 1), fill=Float32(0.0))
+    for c in range(nc):
+        for i in range(qs):
+            if c * qs + i < l:
+                ev[c * qs + i] = ftz(identical_exp(ftz(dacs.unsafe_load(((bb * nh + h) * nc + c) * qs + i))))
+        var last = ftz(dacs.unsafe_load(((bb * nh + h) * nc + c) * qs + (qs - 1)))
+        dec[c] = ftz(identical_exp(last))
+    # qe[t, n] = ftz(identical_mul(ftz(q[t, n]), ev[t])), once per unit.
+    var qe = List[Float32](length=max(l, 1) * M3_D_STATE, fill=Float32(0.0))
+    var qep = qe.unsafe_ptr()
+    for t in range(l):
+        var qbase = ((bb * l + t) * nh + h) * M3_D_STATE
+        var e = ev[t]
+        var n0 = 0
+        comptime if lanes_are_identical:
+            while n0 + HOST_FW <= M3_D_STATE:
+                qep.unsafe_store(t * M3_D_STATE + n0, ftz_lanes(pinned_mul_lanes(
+                    ftz_lanes(q.unsafe_load[width=HOST_FW](qbase + n0)), F32V(e))))
+                n0 += HOST_FW
+        for n in range(n0, M3_D_STATE):
+            qep.unsafe_store(t * M3_D_STATE + n, ftz(identical_mul(ftz(q.unsafe_load(qbase + n)), e)))
+    for p in range(p_lo, p_hi):
+        var n0 = 0
+        comptime if lanes_are_identical:
+            while n0 + HOST_FW <= M3_D_STATE:
+                var carry = F32V(0.0)
+                for rev in range(nc):
+                    var c = nc - 1 - rev
+                    var direct = F32V(0.0)
+                    for i in range(qs):
+                        var t = c * qs + i
+                        if t < l:
+                            var dy = F32V(ftz(d_y.unsafe_load(((bb * l + t) * nh + h) * M3_HEADDIM + p)))
+                            direct = ftz_lanes(identical_mul_add_simd[HOST_FW](
+                                dy, qep.unsafe_load[width=HOST_FW](t * M3_D_STATE + n0), direct))
+                    var idx = (((bb * nc + c) * nh + h) * M3_HEADDIM + p) * M3_D_STATE + n0
+                    d_direct.unsafe_store(idx, direct)
+                    var total = ftz_lanes(direct + ftz_lanes(pinned_mul_lanes(carry, F32V(dec[c]))))
+                    d_total.unsafe_store(idx, total)
+                    carry = total
+                d_initial.unsafe_store(((bb * nh + h) * M3_HEADDIM + p) * M3_D_STATE + n0, carry)
+                n0 += HOST_FW
+        for n in range(n0, M3_D_STATE):
+            var carry_s = Float32(0.0)
+            for rev in range(nc):
+                var c = nc - 1 - rev
+                var direct_s = Float32(0.0)
+                for i in range(qs):
+                    var t = c * qs + i
+                    if t < l:
+                        var dy_s = ftz(d_y.unsafe_load(((bb * l + t) * nh + h) * M3_HEADDIM + p))
+                        direct_s = ftz(identical_mul_add(dy_s, qep.unsafe_load(t * M3_D_STATE + n), direct_s))
+                var idx_s = (((bb * nc + c) * nh + h) * M3_HEADDIM + p) * M3_D_STATE + n
+                d_direct.unsafe_store(idx_s, direct_s)
+                var total_s = ftz(direct_s + ftz(identical_mul(carry_s, dec[c])))
+                d_total.unsafe_store(idx_s, total_s)
+                carry_s = total_s
+            d_initial.unsafe_store(((bb * nh + h) * M3_HEADDIM + p) * M3_D_STATE + n, carry_s)
+
+
+def mamba3_s17_reverse_state_host(
+    d_state_direct: _P, d_state_total: _P, d_initial: _P, d_y: _P, q: _P, dacs: _P,
+    b_in: Int32, l_in: Int32, nh_in: Int32, qs_in: Int32,
+    grid_dim: Tuple[Int, Int, Int], block_dim: Tuple[Int, Int, Int],
+):
+    """The launch `mamba3_s17_reverse_state_kernel` makes, on the host (see
+    the section note); the grid and block are not read."""
+    var l = Int(l_in)
+    var nh = Int(nh_in)
+    var qs = Int(qs_in)
+    var pblocks = (M3_HEADDIM + _S17_PBLOCK - 1) // _S17_PBLOCK
+    var units = Int(b_in) * nh * pblocks
+    if units <= 0:
+        return
+    var tasks = host_predict_task_count(units)
+    var chunk = (units + tasks - 1) // tasks
+
+    def _units(t: Int) {imm d_state_direct, imm d_state_total, imm d_initial, imm d_y, imm q, imm dacs, imm l, imm nh, imm qs, imm units, imm chunk}:
+        for u in range(t * chunk, min((t + 1) * chunk, units)):
+            _s17_unit(u, d_state_direct, d_state_total, d_initial, d_y, q, dacs, l, nh, qs)
+
+    if tasks <= 1:
+        _units(0)
+    else:
+        host_parallelize(_units, tasks)

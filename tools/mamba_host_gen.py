@@ -109,8 +109,11 @@ SUBSTITUTIONS = (
      r"ctx\.enqueue_function\[mamba3_s16_qkv_backward_kernel\]\(",
      "mamba3_s16_qkv_backward_host("),
     ("mamba/impl/modules/mamba3_backward.mojo",
+     r"ctx\.enqueue_function\[mamba3_s17_reverse_state_kernel\]\(",
+     "mamba3_s17_reverse_state_host("),
+    ("mamba/impl/modules/mamba3_backward.mojo",
      r"\nfrom mamba\.checks\.mamba3_fixture import ",
-     "\nfrom mamba.host.mamba3_s16_host import mamba3_s16_qkv_backward_host\nfrom mamba.checks.mamba3_fixture import "),
+     "\nfrom mamba.host.mamba3_s16_host import mamba3_s16_qkv_backward_host, mamba3_s17_reverse_state_host\nfrom mamba.checks.mamba3_fixture import "),
 )
 
 #: Verbatim top-level blocks lifted out of a device file whose other
