@@ -19,9 +19,10 @@ bit:
 
   - Operands are flushed ONCE per call into packed copies (`ftz` is pure and
     idempotent, so a value read from a flushed copy is the value the oracle's
-    per-read `ftz` returns). The right operand is laid out `[k x n]` whatever
-    the op, so the p-th terms of one output row's cells are contiguous; the
-    left operand's row `i` is gathered into a `k`-long row.
+    per-read `ftz` returns). The left operand becomes a row-major `[m x k]`
+    copy whatever the op; the right operand becomes PANELS of GHR_G columns,
+    each `[k x GHR_G]` contiguous, so one panel stays in cache while every row
+    of a tile walks it (columns past n are `+0.0` and never stored).
   - The cells of one output row advance together, one SIMD lane per cell,
     down the p axis. Each lane of `identical_mul_add_simd` is an IEEE fused
     multiply-add, rounded once, exactly as the scalar seam is.
@@ -42,9 +43,10 @@ bit:
   - No per-cell allocation (`gemm_oracle_cell` builds a partials List and
     `fold_balanced_tree` copies it for every cell).
 
-Rows are independent: row `i` of the output reads row `i` of the left operand
-and the whole (read-only) right operand, so a row range may run on any thread
-and the bits are the bits of the serial walk.
+Cells are independent: cell `(i, j)` reads row `i` of the left operand and
+column `j` of the right one, both read-only, so a tile of rows x panels
+(`ghr_tile`) may run on any thread and the bits are the bits of the serial
+walk.
 
 SABOTAGE. A build with `-D MOJOLEARN_HOST_SABOTAGE` (either arm of
 `GEMM_ORACLE_HOST_SABOTAGE`) returns `gemm_oracle` itself, so every lane's
@@ -125,14 +127,18 @@ def _step(sv: GhrF, bv: GhrF, acc: GhrF, mut e: GhrU) -> GhrF:
     return raw
 
 
+#: Output columns one panel holds: the accumulator group's width.
+comptime GHR_G = GHR_CHAINS * GHR_FW
+
+
 @always_inline
-def _flushed_vec_chain(arow: GhrPtr, bp: GhrPtr, n: Int, pb: Int, pe: Int, j: Int) -> GhrF:
-    """One vector of cells `[j, j + GHR_FW)` over `[pb, pe)`, flushed at every
-    step: the oracle's chain lane by lane."""
+def _flushed_vec_chain(arow: GhrPtr, panel: GhrPtr, pb: Int, pe: Int, q: Int) -> GhrF:
+    """Vector `q` of a panel over `[pb, pe)`, flushed at every step: the
+    oracle's chain lane by lane."""
     var acc = GhrF(0.0)
     for p in range(pb, pe):
         acc = ghr_ftz_lanes(identical_mul_add_simd[GHR_FW](
-            GhrF(arow.unsafe_load(p)), bp.unsafe_load[width=GHR_FW](p * n + j), acc))
+            GhrF(arow.unsafe_load(p)), panel.unsafe_load[width=GHR_FW](p * GHR_G + q * GHR_FW), acc))
     return acc
 
 
@@ -151,65 +157,42 @@ def ghr_zero_tail_step(dst: GhrPtr, n: Int):
         j += 1
 
 
-def ghr_leaf_chain(arow: GhrPtr, bp: GhrPtr, n: Int, pb: Int, pe: Int, dst: GhrPtr, force_redo: Bool = False):
-    """Every cell of one output row over the leaf `[pb, pe)`: `dst[j]` is
-    `oracle_leaf_partial(..., i, j, ..., pb, pe)`. `arow` is the flushed row
-    `A_eff[i, :]`, `bp` the flushed `B_eff` laid out `[k x n]`."""
-    var group = GHR_CHAINS * GHR_FW
+def ghr_panel_chain(arow: GhrPtr, panel: GhrPtr, pb: Int, pe: Int, dst: GhrPtr, force_redo: Bool = False):
+    """The GHR_G cells of one panel over the leaf `[pb, pe)`: `dst[jj]` is
+    `oracle_leaf_partial(..., i, g*GHR_G + jj, ..., pb, pe)`. `arow` is the
+    flushed row `A_eff[i, :]`, `panel` the flushed `B_eff[:, g*GHR_G : +GHR_G]`
+    laid out `[k x GHR_G]` (columns past n are +0.0; the caller drops them)."""
     var zv = GhrF(0.0)
     var em = GhrU(0xFFFFFFFF)
-    var j = 0
-    while j + group <= n:
-        var c0 = zv
-        var c1 = zv
-        var c2 = zv
-        var c3 = zv
-        var e0 = em
-        var e1 = em
-        var e2 = em
-        var e3 = em
-        for p in range(pb, pe):
-            var sv = GhrF(arow.unsafe_load(p))
-            var base = p * n + j
-            c0 = _step(sv, bp.unsafe_load[width=GHR_FW](base), c0, e0)
-            c1 = _step(sv, bp.unsafe_load[width=GHR_FW](base + GHR_FW), c1, e1)
-            c2 = _step(sv, bp.unsafe_load[width=GHR_FW](base + 2 * GHR_FW), c2, e2)
-            c3 = _step(sv, bp.unsafe_load[width=GHR_FW](base + 3 * GHR_FW), c3, e3)
-        var redo = False
-        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-            var emin = min(min(e0, e1), min(e2, e3))
-            redo = force_redo or emin.reduce_min() < _SUB_LIMIT
-            comptime if GHR_SABOTAGE_NO_REDO:
-                redo = False
-        if redo:
-            for q in range(GHR_CHAINS):
-                dst.unsafe_store(j + q * GHR_FW, _flushed_vec_chain(arow, bp, n, pb, pe, j + q * GHR_FW))
-        else:
-            dst.unsafe_store(j, c0)
-            dst.unsafe_store(j + GHR_FW, c1)
-            dst.unsafe_store(j + 2 * GHR_FW, c2)
-            dst.unsafe_store(j + 3 * GHR_FW, c3)
-        j += group
-    while j + GHR_FW <= n:
-        var c = zv
-        var e = em
-        for p in range(pb, pe):
-            c = _step(GhrF(arow.unsafe_load(p)), bp.unsafe_load[width=GHR_FW](p * n + j), c, e)
-        var redo1 = False
-        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-            redo1 = force_redo or e.reduce_min() < _SUB_LIMIT
-            comptime if GHR_SABOTAGE_NO_REDO:
-                redo1 = False
-        if redo1:
-            c = _flushed_vec_chain(arow, bp, n, pb, pe, j)
-        dst.unsafe_store(j, c)
-        j += GHR_FW
-    while j < n:
-        var s = Float32(0.0)
-        for p in range(pb, pe):
-            s = ftz(identical_mul_add(arow.unsafe_load(p), bp.unsafe_load(p * n + j), s))
-        dst.unsafe_store(j, s)
-        j += 1
+    var c0 = zv
+    var c1 = zv
+    var c2 = zv
+    var c3 = zv
+    var e0 = em
+    var e1 = em
+    var e2 = em
+    var e3 = em
+    for p in range(pb, pe):
+        var sv = GhrF(arow.unsafe_load(p))
+        var base = p * GHR_G
+        c0 = _step(sv, panel.unsafe_load[width=GHR_FW](base), c0, e0)
+        c1 = _step(sv, panel.unsafe_load[width=GHR_FW](base + GHR_FW), c1, e1)
+        c2 = _step(sv, panel.unsafe_load[width=GHR_FW](base + 2 * GHR_FW), c2, e2)
+        c3 = _step(sv, panel.unsafe_load[width=GHR_FW](base + 3 * GHR_FW), c3, e3)
+    var redo = False
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        var emin = min(min(e0, e1), min(e2, e3))
+        redo = force_redo or emin.reduce_min() < _SUB_LIMIT
+        comptime if GHR_SABOTAGE_NO_REDO:
+            redo = False
+    if redo:
+        for q in range(GHR_CHAINS):
+            dst.unsafe_store(q * GHR_FW, _flushed_vec_chain(arow, panel, pb, pe, q))
+        return
+    dst.unsafe_store(0, c0)
+    dst.unsafe_store(GHR_FW, c1)
+    dst.unsafe_store(2 * GHR_FW, c2)
+    dst.unsafe_store(3 * GHR_FW, c3)
 
 
 def ghr_fold_in_place(sp: GhrPtr, pcount: Int, n: Int):
@@ -239,84 +222,115 @@ def ghr_fold_in_place(sp: GhrPtr, pcount: Int, n: Int):
         width = pairs + width % 2
 
 
+@always_inline
+def ghr_panel_count(n: Int) -> Int:
+    return (n + GHR_G - 1) // GHR_G
+
+
 def ghr_pack_b(b: GhrPtr, op: Int, n: Int, k: Int, bp: GhrPtr):
-    """`bp[p * n + j] = ftz(B_eff[p, j])`."""
-    if op == OP_NT:
-        # B is n x k row-major: transpose in tiles so both sides stay cached.
-        comptime T = 32
-        for j0 in range(0, n, T):
-            var j1 = min(j0 + T, n)
-            for p0 in range(0, k, T):
-                var p1 = min(p0 + T, k)
-                for j in range(j0, j1):
-                    for p in range(p0, p1):
-                        bp.unsafe_store(p * n + j, ftz(b.unsafe_load(j * k + p)))
+    """Panels of the flushed right operand: `bp[(g*k + p)*GHR_G + jj] =
+    ftz(B_eff[p, g*GHR_G + jj])`, and `+0.0` for a column at or past n.
+    `bp` holds `ghr_panel_count(n) * k * GHR_G` values."""
+    var npan = ghr_panel_count(n)
+    for g in range(npan):
+        var j0 = g * GHR_G
+        var width = min(GHR_G, n - j0)
+        var panel = bp.unsafe_offset(g * k * GHR_G)
+        if op == OP_NT:
+            # B is n x k row-major: each column of the panel is a row of B.
+            for jj in range(GHR_G):
+                if jj < width:
+                    var src = (j0 + jj) * k
+                    for p in range(k):
+                        panel.unsafe_store(p * GHR_G + jj, ftz(b.unsafe_load(src + p)))
+                else:
+                    for p in range(k):
+                        panel.unsafe_store(p * GHR_G + jj, Float32(0.0))
+            continue
+        # NN and TN: B is k x n row-major; a panel row is a slice of a B row.
+        for p in range(k):
+            var src = p * n + j0
+            var dst = p * GHR_G
+            if width == GHR_G:
+                comptime for q in range(GHR_CHAINS):
+                    panel.unsafe_store(dst + q * GHR_FW, ghr_ftz_lanes(
+                        b.unsafe_load[width=GHR_FW](src + q * GHR_FW)))
+            else:
+                for jj in range(GHR_G):
+                    var v = Float32(0.0)
+                    if jj < width:
+                        v = ftz(b.unsafe_load(src + jj))
+                    panel.unsafe_store(dst + jj, v)
+
+
+def ghr_pack_a(a: GhrPtr, op: Int, m: Int, k: Int, ap: GhrPtr):
+    """The flushed left operand, row-major `[m x k]`: `ap[i*k + p] =
+    ftz(A_eff[i, p])`."""
+    if op == OP_TN:
+        # A is k x m row-major.
+        for p in range(k):
+            for i in range(m):
+                ap.unsafe_store(i * k + p, ftz(a.unsafe_load(p * m + i)))
         return
-    var total = k * n
+    var total = m * k
     var body = total - total % GHR_FW
     var t = 0
     while t < body:
-        bp.unsafe_store(t, ghr_ftz_lanes(b.unsafe_load[width=GHR_FW](t)))
+        ap.unsafe_store(t, ghr_ftz_lanes(a.unsafe_load[width=GHR_FW](t)))
         t += GHR_FW
     while t < total:
-        bp.unsafe_store(t, ftz(b.unsafe_load(t)))
+        ap.unsafe_store(t, ftz(a.unsafe_load(t)))
         t += 1
 
 
-def ghr_rows(
-    a: GhrPtr, bp: GhrPtr, c: GhrPtr, op: Int, m: Int, n: Int, k: Int,
-    lo: Int, hi: Int, force_redo: Bool = False, real_k: Int = -1,
+def ghr_tile(
+    ap: GhrPtr, bp: GhrPtr, c: GhrPtr, n: Int, k: Int,
+    lo: Int, hi: Int, glo: Int, ghi: Int,
+    force_redo: Bool = False, real_k: Int = -1,
 ):
-    """Rows `[lo, hi)` of the product into `c[i * n + j]` (the caller's full
-    output), from the raw left operand `a` and the packed right operand `bp`
-    (`ghr_pack_b`). Owns its scratch; reads `a` and `bp` only.
+    """Output rows `[lo, hi)` x panels `[glo, ghi)` into `c[i * n + j]` (the
+    caller's full output), from the packed operands (`ghr_pack_a`,
+    `ghr_pack_b`). Owns its scratch; reads `ap` and `bp` only, writes only its
+    own cells, so tiles may run on any thread.
 
     `real_k` in `[0, k)` is `gemm_oracle_right_zero_padded`'s compression:
     each leaf chains only its terms below `real_k` and then performs one
     zero product if it was cut short; the leaves and the fold stay those of
     `k`. Any other value (the default) is the plain product."""
+    if hi <= lo or ghi <= glo:
+        return
+    if k <= 0:
+        for i in range(lo, hi):
+            for j in range(glo * GHR_G, min(ghi * GHR_G, n)):
+                c.unsafe_store(i * n + j, Float32(0.0))
+        return
     var rk = k
     if real_k >= 0 and real_k < k:
         rk = real_k
-    if hi <= lo:
-        return
-    if k <= 0:
-        for t in range(lo * n, hi * n):
-            c.unsafe_store(t, Float32(0.0))
-        return
     var leaf = contract_leaf_size(k)
     var pcount = leaf_count(k, leaf)
-    var arow_l = List[Float32](length=k, fill=Float32(0.0))
-    var scratch_l = List[Float32](length=max(pcount, 1) * n + 1, fill=Float32(0.0))
-    var arow = rebind[GhrPtr](arow_l.unsafe_ptr())
+    var scratch_l = List[Float32](length=pcount * GHR_G, fill=Float32(0.0))
     var scratch = rebind[GhrPtr](scratch_l.unsafe_ptr())
-    for i in range(lo, hi):
-        if op == OP_TN:
-            for p in range(k):
-                arow.unsafe_store(p, ftz(a.unsafe_load(p * m + i)))
-        else:
-            for p in range(k):
-                arow.unsafe_store(p, ftz(a.unsafe_load(i * k + p)))
-        var crow = c.unsafe_offset(i * n)
-        if pcount == 1:
+    for g in range(glo, ghi):
+        var panel = bp.unsafe_offset(g * k * GHR_G)
+        var j0 = g * GHR_G
+        var width = min(GHR_G, n - j0)
+        for i in range(lo, hi):
+            var arow = ap.unsafe_offset(i * k)
+            for t in range(pcount):
+                var pb = t * leaf
+                var pe = min(pb + leaf, k)
+                var ae = max(min(pe, rk), pb)
+                var dst = scratch.unsafe_offset(t * GHR_G)
+                ghr_panel_chain(arow, panel, pb, ae, dst, force_redo)
+                if ae < pe:
+                    ghr_zero_tail_step(dst, GHR_G)
+            if pcount > 1:
+                ghr_fold_in_place(scratch, pcount, GHR_G)
             # One leaf: the chain's output is the cell (`gemm_oracle_cell`'s
             # one-leaf branch, whose extra `ftz` is the identity on a flushed
-            # value).
-            ghr_leaf_chain(arow, bp, n, 0, rk, crow, force_redo)
-            if rk < k:
-                ghr_zero_tail_step(crow, n)
-            continue
-        for t in range(pcount):
-            var pb = t * leaf
-            var pe = min(pb + leaf, k)
-            var ae = max(min(pe, rk), pb)
-            var dst = scratch.unsafe_offset(t * n)
-            ghr_leaf_chain(arow, bp, n, pb, ae, dst, force_redo)
-            if ae < pe:
-                ghr_zero_tail_step(dst, n)
-        ghr_fold_in_place(scratch, pcount, n)
-        unsafe_memcpy(dest=crow, src=scratch, count=n)
-    _ = arow_l^
+            # value); many: the fold's root. Columns past n are dropped.
+            unsafe_memcpy(dest=c.unsafe_offset(i * n + j0), src=scratch, count=width)
     _ = scratch_l^
 
 
@@ -325,9 +339,10 @@ def gemm_host_rows_into(
     force_redo: Bool = False, real_k: Int = -1,
 ) raises:
     """`C[m x n] = op(A) . op(B)` into the caller's `c`, bit for bit
-    `gemm_oracle(A, B, op, m, n, k)`. `a` holds m*k values (k*m under OP_TN),
-    `b` k*n (n*k under OP_NT), both row-major and contiguous; `c` must not
-    alias either."""
+    `gemm_oracle(A, B, op, m, n, k)` (or `gemm_oracle_right_zero_padded` at
+    `real_k` in `[0, k)`). `a` holds m*k values (k*m under OP_TN), `b` k*n
+    (n*k under OP_NT), both row-major and contiguous; `c` must not alias
+    either."""
     if op != OP_NN and op != OP_NT and op != OP_TN:
         raise Error("gemm_host_rows: unknown op " + String(op))
     if m < 0 or n < 0 or k < 0:
@@ -350,10 +365,15 @@ def gemm_host_rows_into(
             out = gemm_oracle(la, lb, op, m, n, k)
         unsafe_memcpy(dest=c, src=out.unsafe_ptr(), count=m * n)
         return
-    var bp_l = List[Float32](length=max(k * n, 1), fill=Float32(0.0))
+    var npan = ghr_panel_count(n)
+    var ap_l = List[Float32](length=max(m * k, 1), fill=Float32(0.0))
+    var bp_l = List[Float32](length=max(npan * k * GHR_G, 1), fill=Float32(0.0))
+    var ap = rebind[GhrPtr](ap_l.unsafe_ptr())
     var bp = rebind[GhrPtr](bp_l.unsafe_ptr())
+    ghr_pack_a(a, op, m, k, ap)
     ghr_pack_b(b, op, n, k, bp)
-    ghr_rows(a, bp, c, op, m, n, k, 0, m, force_redo, real_k)
+    ghr_tile(ap, bp, c, n, k, 0, m, 0, npan, force_redo, real_k)
+    _ = ap_l^
     _ = bp_l^
 
 
