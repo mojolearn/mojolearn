@@ -141,7 +141,7 @@ seeds 0..4, 200k train / 100k held-out rows of HIGGS and taxi), mean over seeds:
 |---|---|---|---|---|
 | logistic HIGGS | held-out log loss (lower better) | 0.6376228 | 0.6376230 | 0.6376228 |
 | logistic taxi (card flag) | held-out log loss | 0.4635668 | 0.4635668 | 0.4635668 |
-| LinearSVC HIGGS | held-out accuracy | 0.638486 | 0.638648 | 0.638948 |
+| LinearSVC HIGGS | held-out accuracy | 0.638496 | 0.638648 | 0.638948 |
 | LinearSVR taxi | held-out R^2 | 0.9408000 | 0.9407956 | 0.9407964 |
 
 Per seed the log loss and R^2 differences are below 1e-5 with mixed signs
