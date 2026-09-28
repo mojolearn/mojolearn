@@ -44,7 +44,7 @@ _BINDING = "_mojolearn_x_metrics"
 
 #: op name -> id; x_metrics/units.mojo `run_unit` holds the same table.
 _OPS = dict(group_sort=0, group_sum=1, pair_key=2, reg_term=3, col_sort=4, wpercentile=5, col_max=6, bin_curve=7, row_metric=8, row_centroid_dist=9, permute=10,
-            fold_rows=36, rows64=41)
+            fold_rows=36, rows64=41, strat_codes=45)
 _PARAMS = 14
 _NONE = -1
 
@@ -2558,7 +2558,7 @@ def fold_rows(n, k, *, codes=None, rng=None, numeric_mode=None):
     prog = _Prog()
     if codes is None:
         order = rng.permute_stage(prog, n)
-        code = prog.alloc(n)
+        code = prog.scratch(n)
     else:
         words = bytearray(4 * n)
         words[0 if _LITTLE else 3::4] = codes
@@ -2566,6 +2566,10 @@ def fold_rows(n, k, *, codes=None, rng=None, numeric_mode=None):
         store.frombytes(words)
         code = prog.put_i32(Array._owned(store, (n,), "<i4", "C"))
         order = _NONE
+    return _fold_rows_run(prog, n, k, code, order, numeric_mode)
+
+
+def _fold_rows_run(prog, n, k, code, order, numeric_mode):
     out = prog.want(prog.alloc(2 * n * k), 2 * n * k)
     sz = prog.want(prog.alloc(k), k)
     prog.stage("fold_rows", 1, n, k, code, order, out, sz)
@@ -2579,3 +2583,41 @@ def fold_rows(n, k, *, codes=None, rng=None, numeric_mode=None):
         train = prog.words(base + 2 * c, 2 * (n - c), "q")
         res.append((Array._owned(train, (n - c,), "<i8", "C"), Array._owned(test, (c,), "<i8", "C")))
     return res
+
+
+def stratified_fold_rows(enc, counts, alloc, k, rng, numeric_mode=None):
+    """StratifiedKFold's [(train, test)] in ONE device program (lane
+    metrics-apple2): a stable group_sort of the first-seen class codes
+    `enc`, each class's permutation (the rng's next draws, in class order,
+    the draws `_fold_of_rows` makes) laid out at PB + the class's offset,
+    `strat_codes` (each row's fold, x_metrics/split.mojo), then `fold_rows`.
+    None when the table would exceed `_FOLD_ROWS_BOUND` words."""
+    n, m = len(enc), len(counts)
+    if n < 2 or k < 1 or 2 * n * k > _FOLD_ROWS_BOUND:
+        return None
+    prog = _Prog()
+    ENC = prog.put_i32(Array._owned(array.array("i", enc), (n,), "<i4", "C"))
+    OFF = prog.alloc(m + 1)
+    ORD = prog.scratch(n)
+    prog.stage("group_sort", 1, ENC, n, m, OFF, ORD)
+    PB = _NONE
+    if rng is not None:
+        at = 0
+        for c in range(m):
+            o = rng.permute_stage(prog, counts[c])
+            if c == 0:
+                PB = o
+            if o != PB + at:
+                raise AssertionError("stratified_fold_rows: the class permutations are not contiguous")
+            at += counts[c]
+    cum = []
+    for c in range(m):
+        acc = 0
+        cum.append(0)
+        for f in range(k):
+            acc += alloc[f][c]
+            cum.append(acc)
+    CUM = prog.put_i32(Array._owned(array.array("i", cum), (len(cum),), "<i4", "C"))
+    code = prog.scratch(n)
+    prog.stage("strat_codes", n, ENC, ORD, OFF, PB, CUM, k, code)
+    return _fold_rows_run(prog, n, k, code, _NONE, numeric_mode)

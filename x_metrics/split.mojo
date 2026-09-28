@@ -138,3 +138,28 @@ def rows64_unit(t: Int, f: FP, q: IP):
     permutation reaches Python as an array('q') without a Python int per
     row. One unit per row; nothing to plan."""
     st_row64(f, p(q, 1) + 2 * t, ldi(f, p(q, 0) + t))
+
+
+def strat_codes_unit(t: Int, f: FP, q: IP):
+    """q = [ENC, ORD, OFF, PB, CUM, K, CODE]; t = position in ORD (lane
+    metrics-apple2). StratifiedKFold's row -> fold: ORD lists the rows by
+    class (a stable group_sort of ENC, so class c's rows are
+    ORD[OFF[c] ..) in row order) and row r = ORD[t] is class c's j-th row,
+    j = t - OFF[c]. Its slot in the class's fold list is pos = PB[OFF[c] +
+    j] (the class's permutation, laid out at PB + OFF[c]; PB < 0 = no
+    shuffle, pos = j), and the list is fold f repeated CUM[c(K+1) + f + 1]
+    - CUM[c(K+1) + f] times in f order, so CODE[r] = the f whose range
+    holds pos: model_selection.StratifiedKFold's per_class lists, the same
+    fold for every row. One unit per row; nothing to plan."""
+    var r = ldi(f, p(q, 1) + t)
+    var c = ldi(f, p(q, 0) + r)
+    var off = ldi(f, p(q, 2) + c)
+    var j = t - off
+    var PB = p(q, 3)
+    var pos = j if PB < 0 else ldi(f, PB + off + j)
+    var K = p(q, 5)
+    var base = p(q, 4) + c * (K + 1)
+    var fo = 0
+    while fo < K - 1 and ldi(f, base + fo + 1) <= pos:
+        fo += 1
+    sti(f, p(q, 6) + r, fo)

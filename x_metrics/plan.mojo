@@ -69,6 +69,8 @@ comptime OP_CK_OFF = 43
 comptime OP_CK_FILL = 44
 #: slots per chunk of the curve compaction
 comptime CK_CHUNK = 1024
+#: a caller's StratifiedKFold row -> fold (x_metrics/split.mojo strat_codes_unit)
+comptime OP_STRAT_CODES = 45
 #: rows per chunk of the K-fold row partition
 comptime FR_CHUNK = 1024
 #: rows per chunk of the unweighted curve counts
@@ -86,8 +88,8 @@ comptime HOST_WR = 12
 
 @always_inline
 def is_user_op(op: Int) -> Bool:
-    """An op a caller may name: 0..N_USER_OPS-1, fold_rows and rows64."""
-    return (op >= 0 and op < N_USER_OPS) or op == OP_FOLD_ROWS or op == OP_ROWS64
+    """An op a caller may name: 0..N_USER_OPS-1, fold_rows, rows64 and strat_codes."""
+    return (op >= 0 and op < N_USER_OPS) or op == OP_FOLD_ROWS or op == OP_ROWS64 or op == OP_STRAT_CODES
 
 
 @always_inline

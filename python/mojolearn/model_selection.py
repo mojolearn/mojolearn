@@ -21,7 +21,7 @@ from ._arrays import _addr, _addr_ro
 from ._labels import is_bool, flatten_labels
 # The splitters' random draws (lane/metrics): a module-level import, so the
 # lane selector sees model_selection reach the x_metrics binding.
-from ._expansion_metrics import CounterRng, _mix64, fold_rows
+from ._expansion_metrics import CounterRng, _mix64, fold_rows, stratified_fold_rows
 
 #: The binding the splitters' permutations and the scorers' added metrics run
 #: on (python/mojolearn/_expansion_metrics.py `_BINDING`). Named here because
@@ -759,10 +759,17 @@ class StratifiedKFold(_KFoldBase):
     shuffle each class's fold assignment is permuted by the counter RNG."""
 
     def split(self, X, y=None, groups=None):
-        # every fold's (train, test) rows from the fold bytes in one device
-        # program, the rows as Int64 words (lane metrics-apple2)
+        # every row's fold and every fold's (train, test) rows in one device
+        # program (strat_codes + fold_rows), the rows as Int64 words (lane
+        # metrics-apple2)
         if self.n_splits <= 256:
-            test_folds = self._fold_of_rows(y)
+            enc, k, counts, alloc = self._fold_plan(y)
+            rng = _rng(self.random_state) if self.shuffle else None
+            got = stratified_fold_rows(enc, counts, alloc, self.n_splits, rng)
+            if got is not None:
+                yield from got
+                return
+            test_folds = self._fold_of_rows(y, (enc, k, counts, alloc))
             got = fold_rows(len(test_folds), self.n_splits, codes=bytes(test_folds))
             if got is not None:
                 yield from got
@@ -782,14 +789,19 @@ class StratifiedKFold(_KFoldBase):
         for f in range(K):
             yield list(itertools.compress(range(n), map(f.__eq__, test_folds)))
 
-    def _fold_of_rows(self, y):
-        """Each row's test fold (sklearn's _make_test_folds)."""
+    def _fold_plan(self, y):
+        """(first-seen codes, classes, class counts, alloc): alloc[i][c] =
+        class c's rows in fold i (sklearn's _make_test_folds)."""
         labels = _labels_list(y)
-        n = len(labels)
         enc, k = _encode_first_seen(labels)
-        counts = [0] * k
-        for c, m in collections.Counter(enc).items():
-            counts[c] = m
+        if k <= 256:
+            # the counts by bytes.count (the same numbers as Counter; lane metrics-apple2)
+            eb = bytes(enc)
+            counts = [eb.count(c) for c in range(k)]
+        else:
+            counts = [0] * k
+            for c, m in collections.Counter(enc).items():
+                counts[c] = m
         if max(counts) < self.n_splits:
             raise ValueError(f'n_splits={self.n_splits} cannot be greater than the number of members in '
                              'each class.')
@@ -807,6 +819,12 @@ class StratifiedKFold(_KFoldBase):
             for i in range(K):
                 alloc[i][c] = (e - 1 - i) // K - (s - 1 - i) // K
             s = e
+        return enc, k, counts, alloc
+
+    def _fold_of_rows(self, y, plan=None):
+        """Each row's test fold (sklearn's _make_test_folds)."""
+        enc, k, counts, alloc = plan if plan is not None else self._fold_plan(y)
+        K = self.n_splits
         rng = _rng(self.random_state) if self.shuffle else None
         per_class = []
         for c in range(k):

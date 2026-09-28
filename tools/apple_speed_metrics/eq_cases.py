@@ -45,6 +45,8 @@ def splits(cv, X, y=None):
 
 
 def main():
+    import warnings
+    warnings.simplefilter("ignore")
     import mojolearn.metrics as M
     import mojolearn.model_selection as S
     rs = np.random.RandomState(7)
@@ -66,6 +68,12 @@ def main():
                                   lambda X=X, y=y, k=k, sh=sh: splits(S.StratifiedKFold(k, shuffle=sh, random_state=3 if sh else None), X, y)))
                 ys = np.array(["c%d" % v for v in y])
                 cases.append(("skfold_str_%d_%d_%d" % (n, k, m), lambda X=X, y=ys, k=k: splits(S.StratifiedKFold(k, shuffle=True, random_state=5), X, y)))
+        if n >= 17:
+            yr = rs.randint(0, 3, n)
+            yr[:2] = 7                     # a class rarer than n_splits (the warning path)
+            for sh in (False, True):
+                cases.append(("skfold_rare_%d_%d" % (n, sh), lambda X=X, y=yr, sh=sh: splits(S.StratifiedKFold(5, shuffle=sh, random_state=2 if sh else None), X, y)))
+            cases.append(("rskfold_%d" % n, lambda X=X, y=yr: splits(S.RepeatedStratifiedKFold(n_splits=3, n_repeats=2, random_state=8), X, y)))
         for ts in (0.1, 0.25, 0.5):
             if n >= 5:
                 cases.append(("ss_%d_%s" % (n, ts), lambda X=X, ts=ts: splits(S.ShuffleSplit(4, test_size=ts, random_state=9), X)))
