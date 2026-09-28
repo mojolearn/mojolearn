@@ -320,7 +320,7 @@ def expected_mi(a_addr: Int, na: Int, b_addr: Int, nb: Int, n: Int) raises -> Fl
     var B = MutPointer[Int64, MutAnyOrigin](unsafe_from_address=b_addr)
     if n <= 0 or n >= (1 << 31):
         raise Error("x_metrics epilogue: expected MI size goes the Python way")
-    var fn = Float64(n)
+    var n_f64 = Float64(n)
     var terms = List[Float64]()
     for i in range(na):
         var a = Int(A[i])
@@ -366,7 +366,7 @@ def expected_mi(a_addr: Int, na: Int, b_addr: Int, nb: Int, n: Int) raises -> Fl
                 var pr = u / z
                 if pr == 0.0:
                     continue
-                var q = Float64(nij) / fn
+                var q = Float64(nij) / n_f64
                 var d = (portable_log_c(Float64(n * nij)) - la) - lb
                 terms.append(_mul(_mul(q, d), pr))
     return fsum(terms)
