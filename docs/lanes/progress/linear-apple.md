@@ -184,3 +184,90 @@ row-serial.) 75b48fb07 runs an SGD problem on a warp (below).
 
 Also reverted: 06ef7f558 (a two-launch CD coordinate) gave no speedup on
 Metal, see 84cff1857.
+
+## FINAL (wind-down, 2026-09-28)
+
+Branch tip before this note: f441fefb0. Worktree clean, no refs/wip snapshot
+on origin, nothing half done. `git merge-tree` against origin/main 7d7f6b079
+is clean (main already holds 64c57a692 and 2979a9de0 through lane/merged).
+
+### What changed (all on by default; no opt-in defines added)
+
+- QN solver (LogisticRegression, LinearSVC, LinearSVR, QNRegressor), glm/impl/qn:
+  fewer synchronizes (a45361dbc, 10eab0721, 1a5f45e6a) and fewer launches
+  (90129fdd4) per L-BFGS / OWL-QN iteration; lbfgs_dir_kernel keeps no
+  cross-thread device words (96a7fe158, which supersedes the barrier / fence
+  attempts d62e6757b and 33cd0d549); FAST fast_xtdz partials reuse the
+  GLMWithData workspace (b05f9a501). Every change claims the same words.
+- x_linear: Team stores pointers (64c57a692, already on main); the SGD family
+  runs one problem per warp on the GPU (75b48fb07; sgd_one stays for the host
+  and for d > 8 * WARP_SIZE).
+- Reverted: the two-launch CD coordinate (06ef7f558, reverted by 84cff1857).
+
+### Last measurements on record (Metal, gpu column, same job, digests compared)
+
+QN, m4pro-a, steward 1790594941298 at 64c57a692 (HEAD includes 90129fdd4,
+96a7fe158, b05f9a501); base = glm/ and solver/ of 003ea19ba rebuilt in the same
+job; 1M rows, fit s, second run; digests equal base vs HEAD on every line,
+IDENTICAL and FAST:
+
+| mode | case | base 003ea19ba | 64c57a692 | per-iteration (profile slope) |
+|---|---|---|---|---|
+| IDENTICAL | logistic | 0.465 | 0.290 | 4.70 -> 2.86 ms |
+| IDENTICAL | linear-svc | 0.304 | 0.221 | |
+| IDENTICAL | linear-svr | 0.273 | 0.172 | 5.30 -> 3.21 ms |
+| FAST | logistic | 1.017 | 0.816 | 10.15 -> 7.97 ms |
+| FAST | linear-svc | 0.608 | 0.513 | |
+| FAST | linear-svr | 0.852 | 0.685 | 13.13 -> 10.72 ms |
+
+ols / ridge / lasso / elasticnet: untouched, noise, digests equal. Lasso
+(CD) is still ~10 ms per epoch, launch bound (the only attempt, 06ef7f558,
+was reverted).
+
+x_linear SGD, m4pro-a, steward 1790595110716 at 75b48fb07 (sgd.mojo of
+64c57a692 rebuilt in the same job as base): SGDDIAG, 36 cases (d = 8, 40,
+300; every loss, penalty, class weight, sample weight, adaptive schedule),
+Metal vs host same_bits=True maxdiff=0 at both arms; 100k board digests equal
+to the host's and main's. Fit s, 100k rows:
+
+| case | base (64c57a692) | 75b48fb07 | host |
+|---|---|---|---|
+| sgd-clf | 7.412 | 4.429 | 0.194 |
+| sgd-reg | 4.961 | 3.295 | 0.100 |
+| perceptron | 4.252 | 2.756 | 0.125 |
+| pa-clf | 5.784 | 4.267 | 0.185 |
+| pa-reg | 4.179 | 2.867 | 0.111 |
+| sgd-ocsvm | 4.377 | 3.205 | 0.101 |
+
+The rest of the x_linear board at 64c57a692 (team fits), m4pro-a: tweedie,
+bayes-ridge, ard, lars, lasso-lars at host speed (0.017 to 0.100 s), Metal
+digest == host digest.
+
+### Unproven: owed the integration check (identity gates on CPU, NVIDIA, AMD, Metal)
+
+This lane ran speed jobs with digest comparison only, never the verifier.
+Every commit below changes a default path and is compile-checked plus
+digest-equal on Metal, but has no identity/gate run on any column, and none
+has run on NVIDIA or AMD:
+
+- a45361dbc, 10eab0721, 1a5f45e6a (QN syncs; qn_scalar_ieee_check PASSES on
+  the M3 Ultra Metal and host)
+- 90129fdd4 (QN launches fused into lbfgs_dir_kernel)
+- d62e6757b, 33cd0d549 (superseded in effect by 96a7fe158; still in history)
+- 96a7fe158 (lbfgs_dir_kernel without cross-thread device words)
+- b05f9a501 (FAST QN workspace)
+- 84cff1857 (revert of 06ef7f558)
+- 75b48fb07 (SGD one problem per warp; WARP_SIZE 32 and 64 paths never run)
+
+64c57a692 is already on main and proven there.
+
+### Known issues
+
+- 96a7fe158 caps lbfgs_memory at LBFGS_FUSED_MAX_M = 256 (alpha in
+  threadgroup memory); a larger lbfgs_memory now raises instead of running.
+- The Metal compiler service crash (XPC_ERROR_CONNECTION_INTERRUPTED) was seen
+  on the M3 Ultra at 06ef7f558 (fenced lbfgs_dir_kernel); 96a7fe158 builds and
+  runs on the M4 Pro, but has not been rebuilt on an M3 Ultra.
+- The SGD family on Metal is still 20x to 30x the one-core host (row-serial
+  pass); the warp schedule is 1.4x to 1.7x, not a cure.
+- ridge-cv / isotonic / ridge-clf were not in the last board's case list.
