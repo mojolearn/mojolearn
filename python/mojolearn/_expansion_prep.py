@@ -46,6 +46,7 @@ import mmap
 import numbers
 import operator
 import os
+import time
 
 from . import _backend
 from . import _portable_math as _pm
@@ -165,6 +166,8 @@ def _take(store, off, n, shape, code):
     ("f" or "i"): the whole array.array itself, a view of a large mapped
     block (`view`), else a copy."""
     dtype = "<f4" if code == "f" else "<i4"
+    if n <= 0:
+        return Array._owned(array.array(code), shape, dtype, "C")
     if isinstance(store, memoryview):
         part = store[off:off + n]
         if part.format != code:
@@ -294,6 +297,8 @@ class _Prog:
                             + [0] * (_PARAMS - len(params)))
 
     def run(self, mode):
+        prof = os.environ.get("MOJOLEARN_XPREP_PROFILE", "0") == "1"
+        t_run = time.perf_counter() if prof else 0.0
         binding = _prep_binding(mode)
         # Resolve the mandatory entry before probing optional GPU optimizations:
         # host facades raise ImportError (not AttributeError) for absent exports.
@@ -313,6 +318,7 @@ class _Prog:
         sbase, obase = ha, (ha + sc if dev_out else H)
         host_words = ha + (0 if dev_scratch else sc)
         arena, base = _zero_words(host_words)
+        t_alloc = time.perf_counter() if prof else 0.0
         run_ranges = (_optional_prep_entry(binding, "x_prep_run_ranges")
                       if (dev_scratch or sc == 0) and _arena_io.ranges_enabled() else None)
         spans = []
@@ -334,6 +340,7 @@ class _Prog:
                                  for s in self._stages for v in s] or [0])
         nst = len(self._stages)
         self._out, self._out_at = None, obase
+        t_in = time.perf_counter() if prof else 0.0
         if run_ranges is not None:
             # the shared ranges runner (lane py-shared, core/arena_io.mojo):
             # the inputs go up, the rest of the host arena starts zero on the
@@ -358,6 +365,13 @@ class _Prog:
         else:
             run(base, host_words, prog.buffer_info()[0], nst)
         self.arena = arena
+        if prof:
+            # one line per program (the device's XPPHASE lines come in the same order)
+            inv = {v: k for k, v in _OPS.items()}
+            print("XPPROG ops=" + "+".join(inv.get(st[0], str(st[0])) for st in self._stages)
+                  + f" arena={ha} scratch={sc} out={on} dev_out={int(bool(dev_out))} ranges={int(run_ranges is not None)}"
+                  + f" alloc_s={t_alloc - t_run:.4f} inputs_s={t_in - t_alloc:.4f}"
+                  + f" call_s={time.perf_counter() - t_in:.4f}", flush=True)
         return self
 
     def _check(self, off, n):
