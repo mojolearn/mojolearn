@@ -20,3 +20,4 @@ hierarchy/checks/linkage_host_check.mojo	hierarchy/checks/sabotage/linkage_host_
 x_cluster/checks/moments_check.mojo	x_cluster/checks/sabotage/5110_host_cov_tile.patch
 x_cluster/checks/gauss_check.mojo	x_cluster/checks/sabotage/5108_host_gauss_fold.patch
 x_cluster/checks/ap_check.mojo	x_cluster/checks/sabotage/5106_host_ap_colfold.patch
+x_cluster/checks/dist_check.mojo	x_cluster/checks/sabotage/5100_host_dist_fold.patch
