@@ -53,6 +53,17 @@ comptime OP_CURVE_CNT = 32
 comptime OP_CURVE_OFF = 33
 comptime OP_CURVE_FILL = 34
 comptime OP_CURVE_KEEP = 35
+#: lane metrics-apple2: a caller's K-fold rows (x_metrics/split.mojo
+#: fold_rows_unit) and its wide schedule (x_metrics/par.mojo fr_*)
+comptime OP_FOLD_ROWS = 36
+comptime OP_FR_SCATTER = 37
+comptime OP_FR_CNT = 38
+comptime OP_FR_OFF = 39
+comptime OP_FR_FILL = 40
+#: a caller's Int32 -> Int64 row words (x_metrics/split.mojo rows64_unit)
+comptime OP_ROWS64 = 41
+#: rows per chunk of the K-fold row partition
+comptime FR_CHUNK = 1024
 #: rows per chunk of the unweighted curve counts
 comptime CURVE_CHUNK = 1024
 #: the unweighted CDF is Float32(i + 1) only while it stays exact
@@ -64,6 +75,12 @@ comptime IOTA_EXACT = 1 << 24
 #: writes ([HOST_WR, HOST_WR+1)); the host runner runs it like any stage.
 comptime HOST_RD = 10
 comptime HOST_WR = 12
+
+
+@always_inline
+def is_user_op(op: Int) -> Bool:
+    """An op a caller may name: 0..N_USER_OPS-1, fold_rows and rows64."""
+    return (op >= 0 and op < N_USER_OPS) or op == OP_FOLD_ROWS or op == OP_ROWS64
 
 
 @always_inline
@@ -158,7 +175,7 @@ def plan_program(q: IP, stages: Int, arena_len: Int) raises -> Plan:
         var r = q + s * STAGE_INTS
         var op = Int(r.unsafe_load(0))
         var total = Int(r.unsafe_load(1))
-        if op < 0 or op >= N_USER_OPS:
+        if not is_user_op(op):
             raise Error(String("x_metrics: unknown op ", op))
         if total <= 0:
             pl.copy_stage(q, s)
@@ -274,6 +291,19 @@ def plan_program(q: IP, stages: Int, arena_len: Int) raises -> Plan:
             var S = pl.alloc(2 * C * total)
             pl.emit(OP_CM_CHUNK, C * total, [V, n, D, S, C, CM_CHUNK])
             pl.emit(OP_CM_FINAL, total, [V, D, S, C, _a(r, 3)])
+        elif op == OP_FOLD_ROWS:
+            var n = _a(r, 0)
+            var K = _a(r, 1)
+            var C = (n + FR_CHUNK - 1) // FR_CHUNK
+            if n <= 1 or K < 1 or total != 1 or not pl.fits(K * C):
+                pl.copy_stage(q, s)
+                continue
+            var S = pl.alloc(K * C)
+            if _a(r, 3) >= 0:
+                pl.emit(OP_FR_SCATTER, n, [n, K, _a(r, 2), _a(r, 3)])
+            pl.emit(OP_FR_CNT, K * C, [n, K, _a(r, 2), S, C, FR_CHUNK])
+            pl.emit(OP_FR_OFF, K, [S, C, _a(r, 5)])
+            pl.emit(OP_FR_FILL, K * C, [n, K, _a(r, 2), S, C, FR_CHUNK, _a(r, 4), _a(r, 5)])
         else:
             pl.copy_stage(q, s)
     return pl^

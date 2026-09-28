@@ -21,7 +21,7 @@ from ._arrays import _addr, _addr_ro
 from ._labels import is_bool, flatten_labels
 # The splitters' random draws (lane/metrics): a module-level import, so the
 # lane selector sees model_selection reach the x_metrics binding.
-from ._expansion_metrics import CounterRng, _mix64
+from ._expansion_metrics import CounterRng, _mix64, fold_rows
 
 #: The binding the splitters' permutations and the scorers' added metrics run
 #: on (python/mojolearn/_expansion_metrics.py `_BINDING`). Named here because
@@ -725,11 +725,26 @@ class KFold(_KFoldBase):
     """scikit-learn 1.9 `KFold`: contiguous folds of the (optionally shuffled)
     row order; the first n % k folds are one larger."""
 
-    def _test_folds(self, X, y, groups):
+    def split(self, X, y=None, groups=None):
+        # shuffled: the permutation and every fold's (train, test) rows in
+        # one device program, the rows as Int64 words (lane metrics-apple2)
+        if self.shuffle:
+            n = self._check_n(X)
+            got = fold_rows(n, self.n_splits, rng=_rng(self.random_state))
+            if got is not None:
+                yield from got
+                return
+        yield from super().split(X, y, groups)
+
+    def _check_n(self, X):
         n = _n_samples(X)
         if self.n_splits > n:
             raise ValueError(f'Cannot have number of splits n_splits={self.n_splits} greater than the '
                              f'number of samples: n_samples={n}.')
+        return n
+
+    def _test_folds(self, X, y, groups):
+        n = self._check_n(X)
         order = _rng(self.random_state).permutation(n) if self.shuffle else list(range(n))
         start = 0
         for fold in range(self.n_splits):
@@ -743,7 +758,32 @@ class StratifiedKFold(_KFoldBase):
     appearance, allocated round-robin over the class-sorted labels; with
     shuffle each class's fold assignment is permuted by the counter RNG."""
 
+    def split(self, X, y=None, groups=None):
+        # every fold's (train, test) rows from the fold bytes in one device
+        # program, the rows as Int64 words (lane metrics-apple2)
+        if self.n_splits <= 256:
+            test_folds = self._fold_of_rows(y)
+            got = fold_rows(len(test_folds), self.n_splits, codes=bytes(test_folds))
+            if got is not None:
+                yield from got
+                return
+        yield from super().split(X, y, groups)
+
     def _test_folds(self, X, y, groups):
+        test_folds = self._fold_of_rows(y)
+        K = self.n_splits
+        n = len(test_folds)
+        if K <= 256:
+            # each fold's test mask straight from the fold bytes
+            folds = bytes(test_folds)
+            for f in range(K):
+                yield _Mask(folds.translate(bytes(int(j == f) for j in range(256))))
+            return
+        for f in range(K):
+            yield list(itertools.compress(range(n), map(f.__eq__, test_folds)))
+
+    def _fold_of_rows(self, y):
+        """Each row's test fold (sklearn's _make_test_folds)."""
         labels = _labels_list(y)
         n = len(labels)
         enc, k = _encode_first_seen(labels)
@@ -777,15 +817,7 @@ class StratifiedKFold(_KFoldBase):
             per_class = [list(map(v.__getitem__, perm)) for v, perm in zip(per_class, perms)]
         # row r takes the next fold of its class's list, in C
         its = [iter(v) for v in per_class]
-        test_folds = list(map(next, map(its.__getitem__, enc)))
-        if K <= 256:
-            # each fold's test mask straight from the fold bytes
-            folds = bytes(test_folds)
-            for f in range(K):
-                yield _Mask(folds.translate(bytes(int(j == f) for j in range(256))))
-            return
-        for f in range(K):
-            yield list(itertools.compress(range(n), map(f.__eq__, test_folds)))
+        return list(map(next, map(its.__getitem__, enc)))
 
 
 class GroupKFold(_KFoldBase):
@@ -1077,8 +1109,10 @@ class ShuffleSplit(_Splitter):
         n = _n_samples(X)
         n_train, n_test = self._sizes(n)
         rng = _rng(self.random_state)
-        for perm in rng.permutations([n] * self.n_splits):
-            yield _as_index(perm[n_test:n_test + n_train]), _as_index(perm[:n_test])
+        # the permutations as Int64 rows, sliced as arrays (lane metrics-apple2)
+        for perm in rng.permutation_rows([n] * self.n_splits):
+            yield (Array._owned(perm[n_test:n_test + n_train], (n_train,), '<i8', 'C'),
+                   Array._owned(perm[:n_test], (n_test,), '<i8', 'C'))
 
 
 class GroupShuffleSplit(ShuffleSplit):

@@ -108,7 +108,7 @@ FAMILIES = (
         ),
         exports=(
             "x_metrics_host_numeric_mode", "x_metrics_host_vendor", "x_metrics_host_column",
-            "x_metrics_host_sabotage", "x_metrics_run", "x_metrics_numeric_mode", "x_metrics_vendor",
+            "x_metrics_host_sabotage", "x_metrics_run", "x_metrics_run_out", "x_metrics_numeric_mode", "x_metrics_vendor",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note="Ships: the metrics lane's CPU route (the added evaluation metrics and model_selection helpers).",

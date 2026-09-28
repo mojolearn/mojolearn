@@ -5,7 +5,7 @@
 # (bench/x_metrics_speed.py) at a BASE commit and at this commit (HEAD), on
 # the same Mac, in one steward job.
 #
-#   sh bench/x_metrics_apple_ab.sh <base full sha> [reps] [profile 0|1] [only]
+#   sh bench/x_metrics_apple_ab.sh <base full sha> [reps] [profile 0|1] [only] [tests 0|1]
 #
 # The base is checked out in a temporary git worktree that shares this
 # worktree's pixi environment (a symlink: the pixi files are the same) and
@@ -14,8 +14,12 @@
 # then again in reverse order (a drift check). Lines are prefixed
 # `ARM <tree>-<mode>-<pass>`. With profile=1 each tree also runs once more
 # under MOJOLEARN_XMETRICS_PROFILE=1 with the board's --cprofile 25.
+# With tests=1 (the default) the job first runs tools/apple_speed_metrics/:
+# eq_cases.py in both trees under both modes (every `EQ` line must be
+# equal: XMAB-EQ SAME or DIFF) and, in the head tree, the Mojo word tests
+# (*_words.mojo, built IDENTICAL).
 set -u
-base=$1; reps=${2:-2}; prof=${3:-0}; only=${4:-}
+base=$1; reps=${2:-2}; prof=${3:-0}; only=${4:-}; tests=${5:-1}
 wt=$(pwd)
 echo "XMAB head $(git rev-parse --short HEAD) base $(printf %s "$base" | cut -c1-12) host $(hostname) $(sysctl -n machdep.cpu.brand_string 2>/dev/null)"
 git cat-file -e "$base^{commit}" 2>/dev/null || git fetch -q origin "$base" || exit 3
@@ -38,6 +42,33 @@ for t in head base; do
         echo "XMAB built $t $m"
     done
 done
+if [ "$tests" = 1 ]; then
+    for m in identical fast; do
+        for t in base head; do
+            d=$wt; [ "$t" = base ] && d=$bdir
+            if [ -f "$wt/tools/apple_speed_metrics/eq_cases.py" ]; then
+                (cd "$d" && MOJOLEARN_NUMERIC_MODE=$m pixi run -e default python -u "$wt/tools/apple_speed_metrics/eq_cases.py" \
+                    --tree "$d" 2>/dev/null) | grep '^EQ ' >"$tmp/eq_${t}_$m.txt"
+            fi
+        done
+        nb=$(wc -l <"$tmp/eq_base_$m.txt"); nh=$(wc -l <"$tmp/eq_head_$m.txt")
+        if cmp -s "$tmp/eq_base_$m.txt" "$tmp/eq_head_$m.txt" && [ "$nb" -gt 0 ]; then
+            echo "XMAB-EQ $m SAME $nh cases"
+        else
+            echo "XMAB-EQ $m DIFF base $nb head $nh cases"
+            diff "$tmp/eq_base_$m.txt" "$tmp/eq_head_$m.txt" | head -40
+        fi
+    done
+    for f in "$wt"/tools/apple_speed_metrics/*_words.mojo; do
+        [ -f "$f" ] || continue
+        b=$tmp/$(basename "$f" .mojo)
+        if pixi run mojo build -j 2 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . "$f" -o "$b" >"$tmp/wb.log" 2>&1; then
+            "$b" 2>&1 | tail -60 | sed "s/^/WORDS /"
+        else
+            echo "WORDS BUILD_FAIL $f"; tail -30 "$tmp/wb.log"
+        fi
+    done
+fi
 oflag=""; [ -n "$only" ] && oflag="--only $only"
 arm() {  # tree mode pass
     d=$wt; [ "$1" = base ] && d=$bdir

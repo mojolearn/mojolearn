@@ -43,7 +43,8 @@ __all__ = []
 _BINDING = "_mojolearn_x_metrics"
 
 #: op name -> id; x_metrics/units.mojo `run_unit` holds the same table.
-_OPS = dict(group_sort=0, group_sum=1, pair_key=2, reg_term=3, col_sort=4, wpercentile=5, col_max=6, bin_curve=7, row_metric=8, row_centroid_dist=9, permute=10)
+_OPS = dict(group_sort=0, group_sum=1, pair_key=2, reg_term=3, col_sort=4, wpercentile=5, col_max=6, bin_curve=7, row_metric=8, row_centroid_dist=9, permute=10,
+            fold_rows=36, rows64=41)
 _PARAMS = 14
 _NONE = -1
 
@@ -84,6 +85,8 @@ class _Prog:
         self._inputs = []
         self._stages = []
         self.arena = None
+        #: the declared output ranges (`want`); None = the whole arena
+        self._outs = None
 
     def alloc(self, n):
         off = self.size
@@ -117,20 +120,51 @@ class _Prog:
     def run(self, numeric_mode):
         return _execute(self, numeric_mode)
 
+    def want(self, off, n):
+        """Declare [off, off + n) an OUTPUT the caller reads (lane
+        metrics-apple2). A program that declares any output brings back
+        only its outputs from the device (the Apple GPU's download is its
+        slowest link), and every read below refuses a word outside them,
+        on every backend, so a missing declaration fails loudly."""
+        if self._outs is None:
+            self._outs = []
+        if n > 0:
+            self._outs.append((int(off), int(off) + int(n)))
+        return off
+
+    def _check(self, off, n):
+        if self._outs is None or n <= 0:
+            return
+        for lo, hi in self._outs:
+            if lo <= off and off + n <= hi:
+                return
+        raise AssertionError(f"x_metrics: arena [{off}, {off + n}) was read but never declared an output")
+
     def floats(self, off, n):
         """Python floats (exact images of the Float32 results)."""
+        self._check(off, n)
         return list(self.arena[off:off + n])
 
     def ints(self, off, n):
+        self._check(off, n)
         store = array.array("i")
         store.frombytes(self.arena[off:off + n].tobytes())
         return list(store)
+
+    def words(self, off, n, code):
+        """The 4 * n bytes of [off, off + n) as an array of `code` ("i",
+        or "q" for the Int64 rows of `fold_rows` and `permute` wide)."""
+        self._check(off, n)
+        store = array.array(code)
+        store.frombytes(memoryview(self.arena)[off:off + n].cast("B"))
+        return store
 
     def get(self, off, shape):
         shape = tuple(shape) if isinstance(shape, (tuple, list)) else (int(shape),)
         n = 1
         for s in shape:
             n *= s
+        self._check(off, n)
         return Array._owned(self.arena[off:off + n], shape, "<f4", "C")
 
 
@@ -145,7 +179,20 @@ def _execute(prog, numeric_mode):
         if arr.size:
             ctypes.memmove(base + 4 * off, addr_ro(arr, name="input"), 4 * arr.size)
     stages = array.array("i", [v for s in prog._stages for v in s] or [0])
-    _binding(numeric_mode).x_metrics_run(base, prog.size, stages.buffer_info()[0], len(prog._stages))
+    b = _binding(numeric_mode)
+    run_out = getattr(b, "x_metrics_run_out", None) if prog._outs is not None else None
+    if run_out is not None:
+        # the declared outputs, merged into disjoint ascending ranges
+        merged = []
+        for lo, hi in sorted(prog._outs):
+            if merged and lo <= merged[-1][1]:
+                merged[-1][1] = max(merged[-1][1], hi)
+            else:
+                merged.append([lo, hi])
+        outs = array.array("i", [v for r in merged for v in r] or [0, 0])
+        run_out(base, prog.size, stages.buffer_info()[0], len(prog._stages), outs.buffer_info()[0], len(merged))
+    else:
+        b.x_metrics_run(base, prog.size, stages.buffer_info()[0], len(prog._stages))
     prog.arena = arena
     return prog
 
@@ -1224,30 +1271,40 @@ class _Curve(tuple):
     keep = None
 
 
-def _curves(scores, flags, w, n, problems, numeric_mode, *, stride=1):
+def _curves(scores, flags, w, n, problems, numeric_mode, *, stride=1, thresholds=True, keep_flags=True):
     """[(fps, tps, thresholds)] per problem, from the device sort and the
     cumulative counts (Python floats; unweighted counts are exact). An
-    unweighted curve also carries `.keep` (lane metrics-apple)."""
+    unweighted curve also carries `.keep` (lane metrics-apple). Only the
+    curves come back from the device, and thresholds=False (the AUCs)
+    leaves the thresholds on it: the third list is then None;
+    keep_flags=False (the average precisions) computes no `.keep` (lane
+    metrics-apple2)."""
     prog = _Prog()
     S = prog.put(scores)
     POS = prog.put_i32(flags)
     W = _NONE if w is None else prog.put(w)
-    order = prog.alloc(n * problems)
-    fps = prog.alloc(n * problems)
-    tps = prog.alloc(n * problems)
-    thr = prog.alloc(n * problems)
-    cnt = prog.alloc(problems)
-    keep = prog.alloc(n * problems) if w is None else _NONE
+    N = n * problems
+    order = prog.alloc(N)
+    fps = prog.want(prog.alloc(N), N)
+    tps = prog.want(prog.alloc(N), N)
+    thr = prog.alloc(N)
+    if thresholds:
+        prog.want(thr, N)
+    cnt = prog.want(prog.alloc(problems), problems)
+    flagged = w is None and keep_flags
+    keep = prog.want(prog.alloc(N), N) if flagged else _NONE
     prog.stage("bin_curve", problems, S, stride, POS, W, n, order, fps, tps, thr, cnt,
-               keep, 1 if w is None else 0)
+               keep, 1 if flagged else 0)
     _execute(prog, numeric_mode)
     out = []
     counts = prog.ints(cnt, problems)
-    view = memoryview(prog.arena).cast("B") if w is None else None
+    view = memoryview(prog.arena).cast("B") if flagged else None
     for t in range(problems):
         c = counts[t]
-        cur = _Curve((prog.floats(fps + t * n, c), prog.floats(tps + t * n, c), prog.floats(thr + t * n, c)))
+        cur = _Curve((prog.floats(fps + t * n, c), prog.floats(tps + t * n, c),
+                      prog.floats(thr + t * n, c) if thresholds else None))
         if view is not None:
+            prog._check(keep + t * n, c)
             lo = 4 * (keep + t * n)
             cur.keep = bytes(view[lo + (0 if _LITTLE else 3):lo + 4 * c:4])
         out.append(cur)
@@ -1408,7 +1465,7 @@ def _binary_ap(fps, tps):
     return float(max(0.0, _fsum(list(terms))))
 
 
-def _ovr(y_true, y_score, sample_weight, labels, caller, numeric_mode):
+def _ovr(y_true, y_score, sample_weight, labels, caller, numeric_mode, keep_flags=True):
     """Binarized one-vs-rest problems over the class columns of y_score."""
     from ._metrics_impl import _label_map, _selected_labels
     true, kind, present = _targets(y_true, caller)
@@ -1444,7 +1501,7 @@ def _ovr(y_true, y_score, sample_weight, labels, caller, numeric_mode):
         for c in range(k):
             flags.extend(1 if v == c else 0 for v in code_list)
         flags = Array.from_list(flags, "<i4")
-    curves = _curves(s, flags, w, n, k, numeric_mode, stride=k)
+    curves = _curves(s, flags, w, n, k, numeric_mode, stride=k, thresholds=False, keep_flags=keep_flags)
     support = [0.0] * k
     if w is None:
         if k <= 256:
@@ -1510,7 +1567,7 @@ def roc_auc_options(y_true, y_score, average, sample_weight, max_fpr, multi_clas
         s = _scores(y_score, n, "roc_auc_score", ndim=1)
         w = _weights(sample_weight, n, "roc_auc_score")
         flags = _label_map(true, lambda v: int(v == present[1]))
-        cur = _curves(s, flags, w, n, 1, numeric_mode)[0]
+        cur = _curves(s, flags, w, n, 1, numeric_mode, thresholds=False)[0]
         return _binary_auc(cur[0], cur[1], None if max_fpr == 1 else max_fpr, cur.keep)
     if max_fpr is not None and max_fpr != 1:
         raise ValueError("Partial AUC computation not available in multiclass setting, 'max_fpr' must be "
@@ -1537,7 +1594,7 @@ def roc_auc_options(y_true, y_score, average, sample_weight, max_fpr, multi_clas
             n = len(codes)
             flags = Array.from_list([1 if codes[r] == c else 0 for r in range(n) for c in range(k)], "<i4")
             wm = None if w is None else Array.from_list([x for x in w.tolist() for _ in range(k)], "<f4")
-            cur = _curves(s.reshape((n * k,)), flags, wm, n * k, 1, numeric_mode)[0]
+            cur = _curves(s.reshape((n * k,)), flags, wm, n * k, 1, numeric_mode, thresholds=False)[0]
             return _binary_auc(cur[0], cur[1], None, cur.keep)
         scores = [_binary_auc(c[0], c[1], None, c.keep) for c in curves]
         return _average_scores(scores, support, average)
@@ -1559,7 +1616,7 @@ def roc_auc_options(y_true, y_score, average, sample_weight, max_fpr, multi_clas
             for col, pos in ((a, a), (b, b)):
                 sv = Array.from_list([vals[r][col] for r in rows], "<f4")
                 fl = Array.from_list([1 if codes[r] == pos else 0 for r in rows], "<i4")
-                cur = _curves(sv, fl, None, len(rows), 1, numeric_mode)[0]
+                cur = _curves(sv, fl, None, len(rows), 1, numeric_mode, thresholds=False)[0]
                 both.append(_binary_auc(cur[0], cur[1], None, cur.keep))
             pair_scores.append((both[0] + both[1]) / 2)
     if average == "weighted":
@@ -1582,7 +1639,7 @@ def average_precision_score(y_true, y_score, *, average="macro", pos_label=1, sa
         s = _scores(y_score, n, "average_precision_score", ndim=1)
         w = _weights(sample_weight, n, "average_precision_score")
         flags = _label_map(true, lambda v: int(v == pos_label))
-        fps, tps, _ = _curves(s, flags, w, n, 1, numeric_mode)[0]
+        fps, tps, _ = _curves(s, flags, w, n, 1, numeric_mode, thresholds=False, keep_flags=False)[0]
         return _binary_ap(fps, tps)
     if pos_label != 1:
         raise ValueError("Parameter pos_label is fixed to 1 for multiclass y_true. Do not set pos_label "
@@ -1591,13 +1648,14 @@ def average_precision_score(y_true, y_score, *, average="macro", pos_label=1, sa
         raise NotImplementedError("mojolearn average_precision_score: average='samples' applies to "
                                   "multilabel targets, which are NOT IMPLEMENTED")
     curves, support, s, codes, classes, w = _ovr(y_true, y_score, sample_weight, None,
-                                                 "average_precision_score", numeric_mode)
+                                                 "average_precision_score", numeric_mode, keep_flags=False)
     k = len(classes)
     if average == "micro":
         n = len(codes)
         flags = Array.from_list([1 if codes[r] == c else 0 for r in range(n) for c in range(k)], "<i4")
         wm = None if w is None else Array.from_list([x for x in w.tolist() for _ in range(k)], "<f4")
-        fps, tps, _ = _curves(s.reshape((n * k,)), flags, wm, n * k, 1, numeric_mode)[0]
+        fps, tps, _ = _curves(s.reshape((n * k,)), flags, wm, n * k, 1, numeric_mode, thresholds=False,
+                              keep_flags=False)[0]
         return _binary_ap(fps, tps)
     return _average_scores([_binary_ap(f, t) for f, t, _ in curves], support, average)
 
@@ -2250,18 +2308,22 @@ class CounterRng:
         self.draws += 1
         return salt
 
+    def permute_stage(self, prog, n):
+        """The next draw as a `permute` stage of `prog`; returns its slot."""
+        salt = self._salt()
+        out = prog.alloc(max(n, 1))
+        lo = salt & 0xFFFFFFFF
+        hi = salt >> 32
+        prog.stage("permute", 1, n, out, lo - (1 << 32) if lo >= 1 << 31 else lo,
+                   hi - (1 << 32) if hi >= 1 << 31 else hi)
+        return out
+
     def permutations(self, sizes, numeric_mode=None):
         """One permutation per size, drawn in order, in one device program."""
         prog = _Prog()
         outs = []
         for n in sizes:
-            salt = self._salt()
-            out = prog.alloc(max(n, 1))
-            lo = salt & 0xFFFFFFFF
-            hi = salt >> 32
-            prog.stage("permute", 1, n, out, lo - (1 << 32) if lo >= 1 << 31 else lo,
-                       hi - (1 << 32) if hi >= 1 << 31 else hi)
-            outs.append((out, n))
+            outs.append((prog.want(self.permute_stage(prog, n), n), n))
         if not outs:
             return []
         _execute(prog, numeric_mode)
@@ -2269,3 +2331,60 @@ class CounterRng:
 
     def permutation(self, n, numeric_mode=None):
         return self.permutations([n], numeric_mode)[0]
+
+    def permutation_rows(self, sizes, numeric_mode=None):
+        """`permutations` (the same draws) as array('q') rows: the device
+        widens each to Int64 words (`rows64`), so no Python int is made
+        per row (lane metrics-apple2)."""
+        prog = _Prog()
+        outs = []
+        for n in sizes:
+            o = self.permute_stage(prog, n)
+            w = prog.want(prog.alloc(2 * n), 2 * n)
+            if n:
+                prog.stage("rows64", n, o, w)
+            outs.append((w, n))
+        if not outs:
+            return []
+        _execute(prog, numeric_mode)
+        return [prog.words(w, 2 * n, "q") for w, n in outs]
+
+
+#: the largest K-fold row table (2 words per row per fold) `fold_rows` builds
+_FOLD_ROWS_BOUND = 1 << 27
+
+
+def fold_rows(n, k, *, codes=None, rng=None, numeric_mode=None):
+    """[(train, test)] Int64 row Arrays of a K-fold split, ascending, built
+    by the `fold_rows` unit (lane metrics-apple2): `codes` = each row's
+    test fold (bytes, values < 256), or `rng` = KFold's shuffle (the rows
+    of fold f are the positions of fold f in the rng's next permutation).
+    The rows come back as Int64 words, so no Python int is made per row.
+    Returns None when the table would exceed `_FOLD_ROWS_BOUND` words (the
+    caller keeps its own path)."""
+    if n < 2 or k < 1 or 2 * n * k > _FOLD_ROWS_BOUND:
+        return None
+    prog = _Prog()
+    if codes is None:
+        order = rng.permute_stage(prog, n)
+        code = prog.alloc(n)
+    else:
+        words = bytearray(4 * n)
+        words[0 if _LITTLE else 3::4] = codes
+        store = array.array("i")
+        store.frombytes(words)
+        code = prog.put_i32(Array._owned(store, (n,), "<i4", "C"))
+        order = _NONE
+    out = prog.want(prog.alloc(2 * n * k), 2 * n * k)
+    sz = prog.want(prog.alloc(k), k)
+    prog.stage("fold_rows", 1, n, k, code, order, out, sz)
+    _execute(prog, numeric_mode)
+    sizes = prog.ints(sz, k)
+    res = []
+    for f in range(k):
+        c = sizes[f]
+        base = out + 2 * n * f
+        test = prog.words(base, 2 * c, "q")
+        train = prog.words(base + 2 * c, 2 * (n - c), "q")
+        res.append((Array._owned(train, (n - c,), "<i8", "C"), Array._owned(test, (c,), "<i8", "C")))
+    return res

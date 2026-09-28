@@ -11,7 +11,7 @@ from max.gpu.host import DeviceContext, DeviceBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_metrics.common import FP, IP, STAGE_INTS
 from x_metrics.units import N_OPS, run_unit
-from x_metrics.plan import Plan, plan_program, N_USER_OPS, is_host_op, HOST_RD, HOST_WR, OP_SORT_MERGE
+from x_metrics.plan import Plan, plan_program, is_user_op, is_host_op, HOST_RD, HOST_WR, OP_SORT_MERGE
 from x_metrics.par import sort_merge_path_unit, merge_path_chunks
 
 comptime BLOCK = 128
@@ -57,14 +57,35 @@ def run_program_device(arena_addr: Int, arena_len: Int, prog_addr: Int, stages: 
     )
 
 
-def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, legacy: Bool = False) raises:
+def run_program_device_out(arena_addr: Int, arena_len: Int, prog_addr: Int, stages: Int,
+                           outs_addr: Int, nouts: Int) raises:
+    """`run_program_device` that brings back only the caller's OUTPUT
+    ranges (lane metrics-apple2): `nouts` pairs [lo, hi) of Int32 at
+    `outs_addr`, inside the arena. The Apple GPU's device-to-host copy is
+    its slowest link (2 to 3.4 GB/s), and the inputs and the order slots a
+    caller never reads need not come back. Every other arena word keeps
+    what the caller put there."""
+    for k in range(nouts):
+        var lo = Int(IP(unsafe_from_address=outs_addr).unsafe_load(2 * k))
+        var hi = Int(IP(unsafe_from_address=outs_addr).unsafe_load(2 * k + 1))
+        if lo < 0 or hi < lo or hi > arena_len:
+            raise Error("x_metrics: output range outside the arena")
+    run_program_device_ptr(
+        FP(unsafe_from_address=arena_addr), arena_len, IP(unsafe_from_address=prog_addr), stages,
+        False, outs_addr, nouts,
+    )
+
+
+def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, legacy: Bool = False,
+                           outs_addr: Int = 0, nouts: Int = -1) raises:
     """The PLANNED program (x_metrics/plan.mojo, the host runner's plan):
     the arena goes up once into a device buffer of arena + scratch, every
     planned stage is one launch on one stream, the caller's arena comes back
-    once. `legacy` runs the caller's stages unplanned (the seam gate)."""
+    once (only the `nouts` ranges at `outs_addr` when nouts >= 0). `legacy` runs
+    the caller's stages unplanned (the seam gate)."""
     for s in range(stages):
         var op = Int(host_q.unsafe_load(s * STAGE_INTS))
-        if op < 0 or op >= N_USER_OPS:
+        if not is_user_op(op):
             raise Error(String("x_metrics: unknown op ", op))
     var pl = Plan(arena_len)
     if legacy:
@@ -120,7 +141,14 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
         ctx.synchronize()
         print("XMPROF stage", nst - 1, "op", Int(pl.rows[(nst - 1) * STAGE_INTS]), "us", (perf_counter_ns() - t_last) // 1000)
         t_last = perf_counter_ns()
-    if arena_len > 0:
+    if nouts >= 0:
+        var outs = IP(unsafe_from_address=outs_addr)
+        for k in range(nouts):
+            var lo = Int(outs.unsafe_load(2 * k))
+            var hi = Int(outs.unsafe_load(2 * k + 1))
+            if hi > lo:
+                ctx.enqueue_copy(dst_ptr=host_f + lo, src_buf=df.create_sub_buffer[DType.float32](lo, hi - lo))
+    elif arena_len > 0:
         ctx.enqueue_copy(dst_ptr=host_f, src_buf=df.create_sub_buffer[DType.float32](0, arena_len))
     ctx.synchronize()
     if prof:
