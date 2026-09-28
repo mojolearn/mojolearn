@@ -11,6 +11,7 @@ printed, so a before and an after on IDENTICAL show the same bits by eye (the
 lane check proves it by column) and GPU == host shows by digest.
 
     python bench/x_linear_speed.py [--rows 1000000] [--only name,...] [--column gpu|host|both]
+        [--warm-rows 10000]
 
 Data: GBM_BENCH_DATA (default ~/datasets/gbm-bench), staged from R2 with
 `tools/dataset_store.sh stage` (taxi/taxi_speed.npz, higgs/higgs_speed.npz).
@@ -109,12 +110,20 @@ def _modules(column):
     return _backend.binding(_BINDING, mode)
 
 
-def run_case(name, kind, make, X, y, column):
+def run_case(name, kind, make, X, y, column, warm_rows=0):
     est = make()
     if kind == "x":
         _pin(est, _modules(column))
     elif column == "host":
         return None  # the existing models' host column is the CPU speed lane's
+    if warm_rows > 0:
+        # an untimed fit of the first rows: the context and this fit's
+        # pipelines exist before the clock starts (lane linear-apple3)
+        w = make()
+        if kind == "x":
+            _pin(w, _modules(column))
+        k = min(warm_rows, len(X))
+        w.fit(X[:k]) if y is None else w.fit(X[:k], y[:k])
     t0 = time.perf_counter()
     est.fit(X) if y is None else est.fit(X, y)
     t1 = time.perf_counter()
@@ -132,6 +141,7 @@ def main():
     ap.add_argument("--rows", type=int, default=1_000_000)
     ap.add_argument("--only", default="")
     ap.add_argument("--column", default="gpu", choices=["gpu", "host", "both"])
+    ap.add_argument("--warm-rows", type=int, default=0)
     a = ap.parse_args()
     d = _load(a.rows)
     only = set(s for s in a.only.split(",") if s)
@@ -140,7 +150,7 @@ def main():
         if only and name not in only:
             continue
         for col in cols:
-            r = run_case(name, kind, make, X, y, col)
+            r = run_case(name, kind, make, X, y, col, a.warm_rows)
             if r is None:
                 continue
             print(f"XLSPEED {name} {col} fit={r[0]:.3f} predict={r[1]:.3f} {r[2]}", flush=True)

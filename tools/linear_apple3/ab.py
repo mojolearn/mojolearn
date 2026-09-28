@@ -63,9 +63,10 @@ def build(mode, defines, binding):
     return rc == 0
 
 
-def speed(tag, mode, cases, rows, column="gpu"):
+def speed(tag, mode, cases, rows, column="gpu", warm=0):
     rc, out = sh(slot("metal", PY + ["bench/x_linear_speed.py", "--rows", str(rows), "--column", column,
-                                     "--only", cases]), {"MOJOLEARN_NUMERIC_MODE": mode}, quiet=True)
+                                     "--only", cases, "--warm-rows", str(warm)]),
+                 {"MOJOLEARN_NUMERIC_MODE": mode}, quiet=True)
     got = {}
     for l in out.splitlines():
         print(f"[{tag} {mode} {rows}] {l}", flush=True)
@@ -100,7 +101,7 @@ def main():
         speed(name + " warm", "fast", cases, arm.get("warm_rows", 20000), arm.get("warm_column", "gpu"))
         for r in arm.get("rows", [100000]):
             for _ in range(arm.get("reps", 1)):
-                speed(name, "fast", cases, r)
+                speed(name, "fast", cases, r, warm=arm.get("inproc_warm", 10000))
         for extra in arm.get("extra", []):
             sh(slot("metal", PY + extra), {"MOJOLEARN_NUMERIC_MODE": "fast"})
         if arm.get("qual_script"):
@@ -139,7 +140,8 @@ def main():
                 got = {}
                 if ok:
                     for cases, rows in base["runs"]:
-                        got.update({f"{k}@{rows}": v for k, v in speed(f"{side}", mode, cases, rows).items()})
+                        got.update({f"{k}@{rows}": v
+                                    for k, v in speed(f"{side}", mode, cases, rows, warm=10000).items()})
                     if side == "head" and mode == "identical" and base.get("qual_script_identical"):
                         sh(slot("metal", PY + [base["qual_script_identical"], "--arm", "identical", "--seeds",
                                                base.get("seeds", "0,1,2,3,4")]),
