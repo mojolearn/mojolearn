@@ -1,4 +1,4 @@
-# py-misc-metrics: progress (metrics epilogues, DEVIATION 6106)
+# py-misc-metrics: progress (metrics epilogues, DEVIATION 6106) FINAL
 
 Branch `lane/py-misc-metrics` (worktree ~/mojolearn-wt/py-misc-metrics),
 forked from lane/py-misc 342469dae; the parent lane py-misc merges it.
