@@ -68,7 +68,7 @@ import os
 from .. import _backend
 from .. import lowbit as _lowbit
 from .._array import Array
-from .._buffer import addr, addr_ro, all_finite, as_i32_c, empty
+from .._buffer import addr, addr_ro, all_finite, as_i32_c, empty, frombytes
 from .._bufcheck import flat_view, is_integer, probe
 from .config import (FIXED_TODAY, INTERFACE_DEFAULTS, POSITION_CEILING, HFConfig,
                      UnsupportedModel, plan_for)
@@ -231,20 +231,19 @@ def _float_weight(a, name):
 
 def _argmax_last(logits, b, l, v):
     """The argmax of row `b`'s LAST position, ties to the lowest index: a
-    sequential scan with a strict `>` (`_greedy_next_bytes`'s rule)."""
-    flat = flat_view(logits, "f")
-    out = []
-    for row in range(b):
-        base = ((row * l) + l - 1) * v
-        best = 0
-        best_v = flat[base]
-        for k in range(1, v):
-            x = flat[base + k]
-            if x > best_v:
-                best = k
-                best_v = x
-        out.append(best)
-    return out
+    sequential scan with a strict `>` (`_greedy_next_bytes`'s rule). The
+    scan runs in the base binding's `argmax_rows_f32` (DEVIATION 2500, the
+    same rule: strict `>` from index 0, so a NaN never replaces and a NaN at
+    index 0 stays); `_labels.argmax_rows` is its Python definition. At
+    `l > 1` the last-position rows are first copied out in C."""
+    from .._labels import argmax_rows
+    if l == 1:
+        rows = logits.reshape((b, v))
+    else:
+        flat = flat_view(logits, "f")
+        last = b"".join(bytes(flat[((r * l) + l - 1) * v:((r * l) + l) * v]) for r in range(b))
+        rows = frombytes(last, "<f4", (b, v))
+    return [int(i) for i in flat_view(argmax_rows(rows), "q")]
 
 
 class CausalLM:
@@ -531,6 +530,9 @@ class CausalLM:
         total = l + n_new
         if self.max_positions is not None and total > self.max_positions:
             raise ValueError(f"mojolearn {what}: {l} prompt + {n_new} new tokens exceed max_positions={self.max_positions}")
+        fast = self._generate_resident(ids, n_new, total)
+        if fast is not None:
+            return fast
         state = self.allocate_state(b, total)
         logits = self._run(ids, state, False, what)
         nxt = _argmax_last(logits, b, l, self.vocab_size)
@@ -542,6 +544,50 @@ class CausalLM:
             step_ids = Array.from_list([[v] for v in nxt], "<i4")
             lg = self._run(step_ids, state, True, what)
             nxt = _argmax_last(lg, b, 1, self.vocab_size)
+        return Array.from_list(rows, "<i4")
+
+    def _generate_resident(self, ids, n_new, total):
+        """`generate`'s greedy loop in ONE native call (lane/py-lm,
+        2026-09-28), or None where it does not apply: a GPU transformer
+        stack whose binding exports `causal_lm_session_*`, and
+        `MOJOLEARN_HOTPATH` not `python`. Every block opens its resident
+        `TransformerDecodeSession` (DEVIATION 2940) on a fresh state; the
+        `CausalLMSession` holds the embedding, final norm and head; one
+        `causal_lm_session_run` runs the prompt and every later token and
+        returns the ids. The kernels, operands, M and the argmax rule are the
+        per-layer route's (the binding's section header), so the ids are
+        too; that route stays below as the reference arm."""
+        from .._buffer import hotpath_enabled
+        from .._transformer_impl import TransformerDecodeSession, _exports
+        if self.device != "gpu" or self.kind != "transformer" or not hotpath_enabled():
+            return None
+        ext = self._blocks[0]._extension()
+        if not (_exports(ext, "causal_lm_session_run")
+                and _exports(ext, "transformer_decode_session_create")):
+            return None
+        b, l = int(ids.shape[0]), int(ids.shape[1])
+        state = self.allocate_state(b, total)
+        sessions = []
+        lm = ext.causal_lm_session_create()
+        try:
+            for blk, st in zip(self._blocks, state.layers):
+                sessions.append(TransformerDecodeSession(blk, st))
+            head = self._head
+            ext.causal_lm_session_open(
+                lm, [addr_ro(self._embed, name="embed"), addr_ro(self._norm, name="norm"),
+                     0 if head is self._embed else addr_ro(head, name="head")],
+                [b, self.vocab_size, self.d_model, float(self.norm_eps)])
+            out = empty((b, n_new), "<i4")
+            ext.causal_lm_session_run(
+                lm, [ss._native for ss in sessions],
+                [addr_ro(ids, name="ids"), addr(out, name="ids_out"), 0], [l, n_new, 0])
+        finally:
+            ext.causal_lm_session_close(lm)
+            for ss in sessions:
+                ss.discard()
+        rows = ids.tolist()
+        for row, new in zip(rows, out.tolist()):
+            row.extend(new)
         return Array.from_list(rows, "<i4")
 
     def __repr__(self):

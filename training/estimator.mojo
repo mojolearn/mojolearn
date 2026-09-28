@@ -573,6 +573,29 @@ def identical_clip_grad_norm_host(
 # ===========================================================================
 
 
+def identical_ce_admit_call(reduction: Int, want_grad: Int, n_rows: Int) raises:
+    """The call-shape refusals `identical_ce_loss_host` runs first, in its
+    words; shared with `samba_head_loss_host` so there is one copy."""
+    if reduction != REDUCTION_NONE:
+        if reduction != REDUCTION_SUM and reduction != REDUCTION_MEAN:
+            raise Error(
+                String("mojolearn training: reduction must be 0 (none), 1")
+                + String(" (sum) or 2 (mean), got ")
+                + String(reduction)
+            )
+    if want_grad != 0 and reduction == REDUCTION_NONE:
+        raise Error(
+            String("mojolearn training: REDUCTION_NONE has no backward")
+            + String(" (loss contract section 11); ask for a gradient with")
+            + String(" reduction 'sum' or 'mean'")
+        )
+    if n_rows < 1:
+        raise Error(
+            String("mojolearn training: n_rows must be at least 1, got ")
+            + String(n_rows)
+        )
+
+
 def identical_ce_loss_host(
     ctx: DeviceContext,
     loss_ptr: MutPointer[Float32, MutUntrackedOrigin],
@@ -654,24 +677,7 @@ def identical_ce_loss_host(
     file is this lane's and the change is OWED, not made here, because it
     would edit a file both gates import.
     """
-    if reduction != REDUCTION_NONE:
-        if reduction != REDUCTION_SUM and reduction != REDUCTION_MEAN:
-            raise Error(
-                String("mojolearn training: reduction must be 0 (none), 1")
-                + String(" (sum) or 2 (mean), got ")
-                + String(reduction)
-            )
-    if want_grad != 0 and reduction == REDUCTION_NONE:
-        raise Error(
-            String("mojolearn training: REDUCTION_NONE has no backward")
-            + String(" (loss contract section 11); ask for a gradient with")
-            + String(" reduction 'sum' or 'mean'")
-        )
-    if n_rows < 1:
-        raise Error(
-            String("mojolearn training: n_rows must be at least 1, got ")
-            + String(n_rows)
-        )
+    identical_ce_admit_call(reduction, want_grad, n_rows)
 
     var cfg = CeConfig(vocab, ignore_index, reduction, label_smoothing, num_items)
 
@@ -689,12 +695,6 @@ def identical_ce_loss_host(
     _ = h_targets^
 
     var cells = n_rows * vocab
-    var smoothing = cfg.smoothing_is_spelled()
-    var smooth_cells = 1
-    var smooth_rows = 1
-    if smoothing:
-        smooth_cells = cells
-        smooth_rows = n_rows
 
     # ---- Transport in.
     var logits = ctx.enqueue_create_buffer[DType.float32](cells)
@@ -702,6 +702,53 @@ def identical_ce_loss_host(
     ctx.enqueue_copy(dst_buf=logits, src_ptr=logits_ptr)
     ctx.enqueue_copy(dst_buf=targets, src_ptr=targets_ptr)
     ctx.synchronize()
+
+    var grad_cells = 1
+    if want_grad != 0:
+        grad_cells = cells
+    var dlogits = ctx.enqueue_create_buffer[DType.float32](grad_cells)
+    identical_ce_loss_resident(
+        ctx, loss_ptr, row_ptr, dlogits, logits, targets, n_rows, count,
+        reduction, want_grad, cfg,
+    )
+    if want_grad != 0:
+        ctx.enqueue_copy(dst_ptr=dlogits_ptr, src_buf=dlogits)
+        ctx.synchronize()
+    _ = logits^
+    _ = targets^
+    _ = dlogits^
+    return count
+
+
+def identical_ce_loss_resident(
+    ctx: DeviceContext,
+    loss_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    row_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    mut dlogits: DeviceBuffer[DType.float32],
+    mut logits: DeviceBuffer[DType.float32],
+    mut targets: DeviceBuffer[DType.int32],
+    n_rows: Int,
+    count: Int,
+    reduction: Int,
+    want_grad: Int,
+    cfg: CeConfig,
+) raises:
+    """The device half of `identical_ce_loss_host` (lane/py-lm, 2026-09-28),
+    moved here unchanged so that a caller whose `logits` are already on the
+    device (`samba_head_loss_host`) runs the SAME calls in the SAME order
+    without a download and an upload in between. `logits` and `targets` are
+    the uploaded inputs; `dlogits` (N * V floats when `want_grad != 0`, else
+    one) is written ON THE DEVICE and left there for the caller. `row_ptr`
+    and `loss_ptr` are written on the host exactly as before. The caller has
+    already run the refusals and `ce_count`."""
+    var vocab = cfg.vocab
+    var cells = n_rows * vocab
+    var smoothing = cfg.smoothing_is_spelled()
+    var smooth_cells = 1
+    var smooth_rows = 1
+    if smoothing:
+        smooth_cells = cells
+        smooth_rows = n_rows
 
     var max_v = ctx.enqueue_create_buffer[DType.float32](n_rows)
     var shift = ctx.enqueue_create_buffer[DType.float32](cells)
@@ -760,7 +807,6 @@ def identical_ce_loss_host(
     if want_grad != 0:
         grad_cells = cells
     var weights = ctx.enqueue_create_buffer[DType.float32](grad_cells)
-    var dlogits = ctx.enqueue_create_buffer[DType.float32](grad_cells)
     if want_grad != 0:
         # Enqueued behind the forward on the SAME context, which MAX runs in
         # order, so `expo` and `denom` are the forward's own values by the
@@ -785,8 +831,6 @@ def identical_ce_loss_host(
     ctx.enqueue_copy(dst_ptr=row_ptr, src_buf=row)
     if reduction != REDUCTION_NONE:
         ctx.enqueue_copy(dst_ptr=loss_ptr, src_buf=loss)
-    if want_grad != 0:
-        ctx.enqueue_copy(dst_ptr=dlogits_ptr, src_buf=dlogits)
     ctx.synchronize()
     if reduction == REDUCTION_NONE:
         loss_ptr.unsafe_store(0, Float32(0.0))
@@ -805,10 +849,6 @@ def identical_ce_loss_host(
     _ = row
     _ = total
     _ = loss
-    _ = logits
-    _ = targets
     _ = ones
     _ = ws
     _ = weights
-    _ = dlogits
-    return count

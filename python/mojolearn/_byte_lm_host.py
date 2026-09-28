@@ -96,6 +96,11 @@ def _refuse_ids(tokens, vocab, batch, width, target_column):
     `target_column` is set, that column of each row feeds only the loss as a
     target and may also hold `_IGNORE_INDEX`, exactly what the native loss
     admits; every other position is a model input."""
+    # Native min/max (reduce_stat) admits the common case in one pass; the
+    # Python scan below runs only to name the first offending id (and to
+    # admit `_IGNORE_INDEX` in the target column).
+    if tokens.size and tokens.min() >= 0 and tokens.max() < vocab:
+        return
     flat = flat_view(tokens, 'i')
     for r in range(batch):
         base = r * width
@@ -128,6 +133,16 @@ def _greedy_next_bytes(logits):
     2658), so equal logits bytes pick equal bytes."""
     batch, length, vocab = logits.shape
     flat = flat_view(logits, 'f')
+    if batch and vocab and hasattr(logits, '_addr'):
+        # The same scan in the base binding's `argmax_rows_f32` (DEVIATION
+        # 2500: strict `>` from index 0, so ties keep the lowest byte and a
+        # NaN never replaces); `_labels.argmax_rows` falls back to the loop
+        # below's rule when the helper is missing.
+        from ._labels import argmax_rows
+        last = b''.join(bytes(flat[((b * length) + length - 1) * vocab:((b * length) + length) * vocab])
+                        for b in range(batch))
+        rows = frombytes(last, '<f4', (batch, vocab))
+        return [int(i) for i in flat_view(argmax_rows(rows), 'q')]
     result = []
     for b in range(batch):
         base = ((b * length) + length - 1) * vocab

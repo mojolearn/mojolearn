@@ -1,0 +1,1177 @@
+diff --git a/bindings/_mojolearn_training.mojo b/bindings/_mojolearn_training.mojo
+index 363610a7c..9d94da71c 100644
+--- a/bindings/_mojolearn_training.mojo
++++ b/bindings/_mojolearn_training.mojo
+@@ -94,7 +94,6 @@ from training.samba_ops import (
+     samba_accumulate_host,
+     samba_embedding_backward_host,
+     samba_embedding_forward_host,
+-    samba_head_loss_host,
+     samba_linear_backward_host,
+     samba_linear_forward_host,
+     samba_rms_norm_backward_host,
+@@ -632,35 +631,6 @@ def linear_backward_binding(
+     return PythonObject(count)
+ 
+ 
+-def samba_head_loss_binding(
+-    addresses: PythonObject, params: PythonObject
+-) raises -> PythonObject:
+-    """`linear_forward`, `ce_loss` with a gradient and `linear_backward` in
+-    ONE call (lane/py-lm), the logits and their gradient kept on the device.
+-    addresses = [loss (1 f32, written), row_loss (m f32, written), da (m*k,
+-    written), dw (n*k, written), a (m*k), w (n*k), targets (m i32)];
+-    params = [m, n, k, ignore_index, reduction (1 sum, 2 mean), num_items,
+-    label_smoothing (float)]. Returns `count`, as `ce_loss` does."""
+-    var a = _addrs(addresses, 7, "samba_head_loss")
+-    _params(params, 7, "samba_head_loss")
+-    var m = Int(py=params[0])
+-    var n = Int(py=params[1])
+-    var k = Int(py=params[2])
+-    var ignore_index = Int(py=params[3])
+-    var reduction = Int(py=params[4])
+-    var num_items = Int(py=params[5])
+-    var label_smoothing = Float32(Float64(py=params[6]))
+-    var count = 0
+-    with GILReleased(Python()):
+-        var ctx = neural_ctx[_NEURAL_CTX]()
+-        count = samba_head_loss_host(
+-            ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), _f32_ptr(a[2]), _f32_ptr(a[3]),
+-            _f32_ptr(a[4]), _f32_ptr(a[5]), _i32_ptr(a[6]),
+-            m, n, k, ignore_index, reduction, num_items, label_smoothing,
+-        )
+-    return PythonObject(count)
+-
+-
+ def accumulate_binding(
+     addresses: PythonObject, params: PythonObject
+ ) raises -> PythonObject:
+@@ -800,7 +770,6 @@ def PyInit__mojolearn_training() abi("C") -> PythonObject:
+         m.def_function[rms_norm_backward_binding]("rms_norm_backward")
+         m.def_function[linear_forward_binding]("linear_forward")
+         m.def_function[linear_backward_binding]("linear_backward")
+-        m.def_function[samba_head_loss_binding]("samba_head_loss")
+         m.def_function[accumulate_binding]("accumulate")
+         m.def_function[accumulation_is_aligned_binding]("accumulation_is_aligned")
+         m.def_function[neural_rng_binding]("neural_rng")
+diff --git a/bindings/_mojolearn_transformer.mojo b/bindings/_mojolearn_transformer.mojo
+index 8258992ed..30c646804 100644
+--- a/bindings/_mojolearn_transformer.mojo
++++ b/bindings/_mojolearn_transformer.mojo
+@@ -185,16 +185,6 @@ from transformer.block_options import (
+     BlockOptions,
+ )
+ from transformer.impl.llama.modeling_llama import _zeros as _llama_zeros
+-# lane/py-lm (2026-09-28): the resident CausalLM decode session runs the
+-# stack's three non-block steps on the kernels `training/samba_ops.mojo`
+-# calls for them (embedding gather, llama RMSNorm, the identical GEMM at
+-# OP_NT), so its bits are the per-call route's.
+-from embedding.checks.embedding_identical import identical_embedding_forward_into
+-from embedding.checks.embedding_oracle import EmbConfig
+-from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
+-from gemm.checks.gemm_oracle import OP_NT
+-from transformer.impl.llama.modeling_llama import llama_rms_norm
+-from std.math import isfinite
+ 
+ 
+ # ===========================================================================
+@@ -1580,341 +1570,6 @@ def transformer_decode_session_close_binding(session: PythonObject) raises -> Py
+ # ===========================================================================
+ 
+ 
+-# ===========================================================================
+-# THE RESIDENT CAUSAL LM DECODE SESSION (lane/py-lm, 2026-09-28)
+-#
+-# `CausalLM.generate` ran one binding call per layer per token, and every one
+-# of them uploaded that layer's weights and its whole KV cache and downloaded
+-# the cache again; the embedding table and the head crossed every token too
+-# (`_mojolearn_training`'s embedding_forward / linear_forward), and the full
+-# logits came down for a Python argmax. This session holds the embedding,
+-# the final norm weight and the head on the device, and one call runs a
+-# whole stack of open `TransformerDecodeSession`s (DEVIATION 2940: weights,
+-# KV cache, rotary table and L = 1 stages already resident) for a prompt and
+-# then a block of greedy tokens, returning the ids.
+-#
+-# NO NEW ARITHMETIC. Per token: `identical_embedding_forward_into` (what
+-# `samba_embedding_forward_host` runs), each layer's
+-# `llama_decoder_layer_forward` exactly as `_session_step_run` /
+-# `_session_forward_run` run it, `llama_rms_norm` over the same M rows
+-# (`samba_rms_norm_forward_host`), `identical_gemm_into` at OP_NT over the
+-# same M, N, K (`samba_linear_forward_host`; the plan is chosen from M, so M
+-# is kept: B * L at the prompt, B per decode token). The greedy pick is the
+-# host scan `models/causal_lm.py::_argmax_last` spells: over the last
+-# position's row, from index 0, a strict `>` (ties keep the lowest index, a
+-# NaN never replaces, a NaN at index 0 stays). The refusals of the per-call
+-# route that can fire mid-stack are restated on downloaded copies: a
+-# non-finite final block output (the norm's input scan) and a non-finite
+-# normed row (the head's input scan), in their words.
+-# ===========================================================================
+-
+-
+-struct CausalLMSession(Movable, Writable):
+-    var ctx: Optional[DeviceContext]
+-    var embed: Optional[DeviceBuffer[DType.float32]]
+-    var norm: Optional[DeviceBuffer[DType.float32]]
+-    var head: Optional[DeviceBuffer[DType.float32]]
+-    var tied: Bool
+-    var b: Int
+-    var v: Int
+-    var d: Int
+-    var eps: Float32
+-    var busy: Bool
+-    var usable: Bool
+-
+-    def __init__(out self):
+-        self.ctx = Optional[DeviceContext]()
+-        self.embed = Optional[DeviceBuffer[DType.float32]]()
+-        self.norm = Optional[DeviceBuffer[DType.float32]]()
+-        self.head = Optional[DeviceBuffer[DType.float32]]()
+-        self.tied = False
+-        self.b = 0
+-        self.v = 0
+-        self.d = 0
+-        self.eps = Float32(0.0)
+-        self.busy = False
+-        self.usable = True
+-
+-    def write_to(self, mut writer: Some[Writer]):
+-        writer.write("CausalLMSession")
+-
+-    def write_repr_to(self, mut writer: Some[Writer]):
+-        writer.write("CausalLMSession")
+-
+-    def is_open(self) -> Bool:
+-        return Bool(self.ctx) and Bool(self.embed)
+-
+-    def release(mut self):
+-        self.head = None
+-        self.norm = None
+-        self.embed = None
+-        if self.ctx:
+-            try:
+-                self.ctx.value().synchronize()
+-            except:
+-                pass
+-        self.ctx = None
+-
+-    def __deinit__(deinit self):
+-        self.release()
+-
+-
+-def _lm_refuse_nonfinite(name: String, p: MutPointer[Float32, MutUntrackedOrigin], n: Int) raises:
+-    """`training/samba_ops.mojo::_refuse_nonfinite`, in its words."""
+-    for i in range(n):
+-        if not isfinite(p.unsafe_load(i)):
+-            raise Error("mojolearn samba ops: non-finite " + name + " at flat index " + String(i))
+-
+-
+-def _lm_open_run(mut s: CausalLMSession, pe: Int, pn: Int, ph: Int, b: Int, v: Int, d: Int, eps: Float32) raises:
+-    if b < 1 or v < 1 or d < 1:
+-        raise Error("causal_lm_session_open: B, vocab and d_model must be positive")
+-    if not isfinite(eps) or eps < Float32(0.0):
+-        raise Error("mojolearn samba ops: rms_norm eps must be finite and >= 0")
+-    _lm_refuse_nonfinite("embedding weight", _f32_ptr(pe), v * d)
+-    _lm_refuse_nonfinite("rms_norm weight", _f32_ptr(pn), d)
+-    if ph != 0:
+-        _lm_refuse_nonfinite("linear weight", _f32_ptr(ph), v * d)
+-    s.ctx = neural_ctx[_NEURAL_CTX]()
+-    s.embed = _upload_addr(s.ctx.value(), pe, v * d)
+-    s.norm = _upload_addr(s.ctx.value(), pn, d)
+-    s.tied = ph == 0
+-    if not s.tied:
+-        s.head = _upload_addr(s.ctx.value(), ph, v * d)
+-    s.ctx.value().synchronize()
+-    s.b = b
+-    s.v = v
+-    s.d = d
+-    s.eps = eps
+-
+-
+-def _lm_layers_run(
+-    ctx: DeviceContext, layers: List[Int], mut x: DeviceBuffer[DType.float32], b: Int, l: Int,
+-) raises:
+-    """Every layer in order on `x` ([b * l * d], overwritten with the stack's
+-    output): at l = 1 on the session's own L = 1 stages and resident x buffer
+-    (`_session_step_run`), otherwise on call-shaped stages
+-    (`_session_forward_run`)."""
+-    for i in range(len(layers)):
+-        var sp = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=layers[i])
+-        var trace = IdentityTrace.disabled()
+-        var pos0 = sp[].kv.value().s
+-        if l == 1:
+-            ctx.enqueue_copy(dst_buf=sp[].dx.value(), src_buf=x)
+-            llama_decoder_layer_forward(
+-                ctx, sp[].stages.value(), sp[].kv.value(), sp[].rope.value(), sp[].w.value(),
+-                sp[].dx.value(), sp[].b, 1, pos0, trace, String("py.session"))
+-            ctx.enqueue_copy(dst_buf=x, src_buf=sp[].stages.value().residual2)
+-        else:
+-            var dims = LlamaDims(sp[].dm, sp[].nh, sp[].nkv, sp[].hd, sp[].it)
+-            var stages = LlamaDeviceStages(ctx, sp[].b, l, sp[].smax, dims, sp[].window,
+-                                           lean=_lean_for(sp[].hd, sp[].w.value().opts))
+-            var dx = ctx.enqueue_create_buffer[DType.float32](b * l * sp[].dm)
+-            ctx.enqueue_copy(dst_buf=dx, src_buf=x)
+-            llama_decoder_layer_forward(
+-                ctx, stages, sp[].kv.value(), sp[].rope.value(), sp[].w.value(), dx, sp[].b, l,
+-                pos0, trace, String("py.session.forward"))
+-            ctx.enqueue_copy(dst_buf=x, src_buf=stages.residual2)
+-            ctx.synchronize()
+-            _ = stages^
+-            _ = dx^
+-
+-
+-def _lm_run(
+-    mut s: CausalLMSession, layers: List[Int], p_ids: Int, p_out: Int, p_logits: Int,
+-    l: Int, n_steps: Int,
+-) raises:
+-    ref ctx = s.ctx.value()
+-    var b = s.b
+-    var d = s.d
+-    var v = s.v
+-    var emb_cfg = EmbConfig.llama(v, d)
+-    var ids_i32 = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=p_ids)
+-    var out_i32 = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=p_out)
+-    var h_ids = ctx.enqueue_create_host_buffer[DType.int32](b * l)
+-    var h_last = ctx.enqueue_create_host_buffer[DType.float32](b * v)
+-    ctx.synchronize()
+-    for i in range(b * l):
+-        h_ids.unsafe_ptr().unsafe_store(i, ids_i32.unsafe_load(i))
+-    var cur_l = l
+-    for step in range(n_steps):
+-        var m = b * cur_l
+-        var ids = ctx.enqueue_create_buffer[DType.int32](m)
+-        ctx.enqueue_copy(dst_buf=ids, src_ptr=h_ids.unsafe_ptr())
+-        var x = ctx.enqueue_create_buffer[DType.float32](m * d)
+-        identical_embedding_forward_into(ctx, x, s.embed.value(), ids, m, emb_cfg)
+-        _lm_layers_run(ctx, layers, x, b, cur_l)
+-        var sumsq = ctx.enqueue_create_buffer[DType.float32](m)
+-        var hn = ctx.enqueue_create_buffer[DType.float32](m * d)
+-        llama_rms_norm(ctx, sumsq, hn, x, s.norm.value(), m, d, s.eps)
+-        var logits = ctx.enqueue_create_buffer[DType.float32](m * v)
+-        var ws = ctx.enqueue_create_buffer[DType.float32](identical_gemm_workspace_max_floats(m, v, d))
+-        if s.tied:
+-            identical_gemm_into(ctx, logits, hn, s.embed.value(), ws, m, v, d, OP_NT)
+-        else:
+-            identical_gemm_into(ctx, logits, hn, s.head.value(), ws, m, v, d, OP_NT)
+-        var h_x = ctx.enqueue_create_host_buffer[DType.float32](m * d)
+-        var h_hn = ctx.enqueue_create_host_buffer[DType.float32](m * d)
+-        ctx.enqueue_copy(dst_ptr=h_x.unsafe_ptr(), src_buf=x)
+-        ctx.enqueue_copy(dst_ptr=h_hn.unsafe_ptr(), src_buf=hn)
+-        var rows = List[DeviceBuffer[DType.float32]]()
+-        for r in range(b):
+-            rows.append(logits.create_sub_buffer[DType.float32]((r * cur_l + cur_l - 1) * v, v))
+-            ctx.enqueue_copy(dst_ptr=h_last.unsafe_ptr() + r * v, src_buf=rows[r])
+-        ctx.synchronize()
+-        _ = rows^
+-        _lm_refuse_nonfinite("rms_norm input", h_x.unsafe_ptr(), m * d)
+-        _lm_refuse_nonfinite("linear input", h_hn.unsafe_ptr(), m * d)
+-        _ = ids^
+-        _ = x^
+-        _ = sumsq^
+-        _ = hn^
+-        _ = logits^
+-        _ = ws^
+-        _ = h_x^
+-        _ = h_hn^
+-        var hl = h_last.unsafe_ptr()
+-        for r in range(b):
+-            var base = r * v
+-            var best = 0
+-            var best_v = hl.unsafe_load(base)
+-            for c in range(1, v):
+-                var xv = hl.unsafe_load(base + c)
+-                if xv > best_v:
+-                    best = c
+-                    best_v = xv
+-            out_i32.unsafe_store(r * n_steps + step, Int32(best))
+-            h_ids.unsafe_ptr().unsafe_store(r, Int32(best))
+-        cur_l = 1
+-    if p_logits != 0:
+-        var lp = _f32_ptr(p_logits)
+-        for i in range(b * v):
+-            lp.unsafe_store(i, h_last.unsafe_ptr().unsafe_load(i))
+-    _ = h_ids^
+-    _ = h_last^
+-
+-
+-def causal_lm_session_create_binding() raises -> PythonObject:
+-    """A closed session. Creation performs no GPU operation."""
+-    return PythonObject(alloc=CausalLMSession())
+-
+-
+-def causal_lm_session_open_binding(
+-    session: PythonObject, addrs: PythonObject, params: PythonObject,
+-) raises -> PythonObject:
+-    """`addrs` = [embed (V * D f32), norm (D f32), head (V * D f32, or 0 for a
+-    head tied to the embedding)]; `params` = [B, V, D, eps (float)]. Every
+-    tensor is COPIED to the device; later edits are not observed."""
+-    var owner = session.downcast_value_ptr[CausalLMSession]()
+-    if len(addrs) != 3 or len(params) != 4:
+-        raise Error("causal_lm_session_open: expected 3 addresses and 4 scalars")
+-    if owner[].busy:
+-        raise Error("causal lm session: busy")
+-    if owner[].is_open():
+-        raise Error("causal lm session: already open; close it first")
+-    var pe = Int(py=addrs[0])
+-    var pn = Int(py=addrs[1])
+-    var ph = Int(py=addrs[2])
+-    if pe == 0 or pn == 0:
+-        raise Error("causal_lm_session_open: null buffer address")
+-    var b = Int(py=params[0])
+-    var v = Int(py=params[1])
+-    var d = Int(py=params[2])
+-    var eps = Float32(Float64(py=params[3]))
+-    owner[].busy = True
+-    try:
+-        with GILReleased(Python()):
+-            _lm_open_run(owner[], pe, pn, ph, b, v, d, eps)
+-    except error:
+-        owner[].busy = False
+-        owner[].release()
+-        raise error
+-    owner[].busy = False
+-    owner[].usable = True
+-    return PythonObject(0)
+-
+-
+-def causal_lm_session_run_binding(
+-    session: PythonObject, layers: PythonObject, addrs: PythonObject, params: PythonObject,
+-) raises -> PythonObject:
+-    """One call for a prompt and a block of greedy tokens. `layers` is the
+-    stack's open `TransformerDecodeSession`s in order, all at the same
+-    cached length. `addrs` = [ids_in (B * L int32), ids_out (B * n_steps
+-    int32, row-major), logits_out (B * V f32 of the LAST pass's last
+-    position, or 0)]; `params` = [L, n_steps, cached_tokens]. The first
+-    pass runs the L prompt tokens; each later pass feeds back the previous
+-    pick. Returns the post-call cached_tokens. A failed call marks this
+-    session and every layer session lost."""
+-    var owner = session.downcast_value_ptr[CausalLMSession]()
+-    if len(addrs) != 3 or len(params) != 3:
+-        raise Error("causal_lm_session_run: expected 3 addresses and 3 scalars")
+-    if owner[].busy:
+-        raise Error("causal lm session: busy")
+-    if not owner[].is_open():
+-        raise Error("causal lm session: not open (causal_lm_session_open first)")
+-    if not owner[].usable:
+-        raise Error("causal lm session: lost after a failed call; close it and open a new one")
+-    var p_ids = Int(py=addrs[0])
+-    var p_out = Int(py=addrs[1])
+-    var p_logits = Int(py=addrs[2])
+-    if p_ids == 0 or p_out == 0:
+-        raise Error("causal_lm_session_run: null buffer address")
+-    var l = Int(py=params[0])
+-    var n_steps = Int(py=params[1])
+-    var claimed = Int(py=params[2])
+-    if l < 1 or n_steps < 1:
+-        raise Error("causal_lm_session_run: L and n_steps must be positive")
+-    var ptrs = List[Int]()
+-    var n_layers = Int(py=len(layers))
+-    if n_layers < 1:
+-        raise Error("causal_lm_session_run: no layers")
+-    for i in range(n_layers):
+-        var sp = layers[i].downcast_value_ptr[TransformerDecodeSession]()
+-        _require_session_open(sp[])
+-        if sp[].b != owner[].b or sp[].dm != owner[].d:
+-            raise Error("causal_lm_session_run: layer " + String(i) + " holds B = " + String(sp[].b)
+-                + ", d_model = " + String(sp[].dm) + "; the session has B = " + String(owner[].b)
+-                + ", d_model = " + String(owner[].d))
+-        if sp[].kv.value().s != claimed:
+-            raise Error(String("transformer decode session: the caller believes cached_tokens = ")
+-                + String(claimed) + " but layer " + String(i) + " holds " + String(sp[].kv.value().s))
+-        if sp[].kv.value().s + l + n_steps - 1 > sp[].smax:
+-            raise Error("causal_lm_session_run: " + String(l + n_steps - 1) + " more positions do not fit the "
+-                + String(sp[].smax) + "-token cache")
+-        ptrs.append(Int(sp))
+-    for i in range(n_layers):
+-        var sp = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=ptrs[i])
+-        sp[].busy = True
+-    owner[].busy = True
+-    try:
+-        with GILReleased(Python()):
+-            _lm_run(owner[], ptrs, p_ids, p_out, p_logits, l, n_steps)
+-    except error:
+-        for i in range(n_layers):
+-            var sp = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=ptrs[i])
+-            sp[].busy = False
+-            sp[].usable = False
+-        owner[].busy = False
+-        owner[].usable = False
+-        raise error
+-    var result = 0
+-    for i in range(n_layers):
+-        var sp = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=ptrs[i])
+-        sp[].busy = False
+-        result = sp[].kv.value().s
+-    owner[].busy = False
+-    return PythonObject(result)
+-
+-
+-def causal_lm_session_close_binding(session: PythonObject) raises -> PythonObject:
+-    var owner = session.downcast_value_ptr[CausalLMSession]()
+-    if owner[].busy:
+-        raise Error("causal lm session: busy")
+-    owner[].usable = False
+-    owner[].release()
+-    return PythonObject(0)
+-
+-
+ def _transformer_backward_run(
+     a: List[Int],
+     b: Int,
+@@ -2106,12 +1761,6 @@ def PyInit__mojolearn_transformer() abi("C") -> PythonObject:
+         m.def_function[transformer_decode_session_load_state_binding]("transformer_decode_session_load_state")
+         m.def_function[transformer_decode_session_info_binding]("transformer_decode_session_info")
+         m.def_function[transformer_decode_session_close_binding]("transformer_decode_session_close")
+-        # lane/py-lm: the resident CausalLM decode session.
+-        _ = m.add_type[CausalLMSession]("_CausalLMSession")
+-        m.def_function[causal_lm_session_create_binding]("causal_lm_session_create")
+-        m.def_function[causal_lm_session_open_binding]("causal_lm_session_open")
+-        m.def_function[causal_lm_session_run_binding]("causal_lm_session_run")
+-        m.def_function[causal_lm_session_close_binding]("causal_lm_session_close")
+         return m.finalize()
+     except e:
+         abort(String("failed to create _mojolearn_transformer: ", e))
+diff --git a/python/mojolearn/_byte_lm_host.py b/python/mojolearn/_byte_lm_host.py
+index ae3ae6133..155789124 100644
+--- a/python/mojolearn/_byte_lm_host.py
++++ b/python/mojolearn/_byte_lm_host.py
+@@ -96,11 +96,6 @@ def _refuse_ids(tokens, vocab, batch, width, target_column):
+     `target_column` is set, that column of each row feeds only the loss as a
+     target and may also hold `_IGNORE_INDEX`, exactly what the native loss
+     admits; every other position is a model input."""
+-    # Native min/max (reduce_stat) admits the common case in one pass; the
+-    # Python scan below runs only to name the first offending id (and to
+-    # admit `_IGNORE_INDEX` in the target column).
+-    if tokens.size and tokens.min() >= 0 and tokens.max() < vocab:
+-        return
+     flat = flat_view(tokens, 'i')
+     for r in range(batch):
+         base = r * width
+diff --git a/python/mojolearn/_byte_lm_impl.py b/python/mojolearn/_byte_lm_impl.py
+index 83be3aafb..a4aaad413 100644
+--- a/python/mojolearn/_byte_lm_impl.py
++++ b/python/mojolearn/_byte_lm_impl.py
+@@ -337,10 +337,7 @@ def _validate_state(value):
+     m = _array(value['m'], (shape.n_total,), 'm')
+     v = _array(value['v'], (shape.n_total,), 'v')
+     flags = _array(value['flags'], (shape.n_tensors,), 'flags', '<i4')
+-    # Native min/max (reduce_stat, DEVIATION 3101) over buffers `_array`
+-    # already proved finite: `min < 0` is `any(x < 0)` exactly, and an int32
+-    # flag vector is binary iff min >= 0 and max <= 1.
+-    if v.min() < 0 or flags.min() < 0 or flags.max() > 1:
++    if any(x < 0 for x in flat_view(v, 'f')) or any(x not in (0, 1) for x in flat_view(flags, 'i')):
+         raise ValueError('Byte-LM requires nonnegative second moments and binary flags')
+     value = dict(value)
+     if 'model_shape' in value:
+@@ -875,7 +872,7 @@ class SmallByteLanguageModelTrainer:
+         clock = [time.perf_counter()]
+         n4 = shape.n_total * 4
+         tokens = _array(ids, (shape.batch, shape.length + 1), 'ids', '<i4')
+-        if tokens.min() < 0 or tokens.max() >= shape.vocab_size:
++        if any(x < 0 or x >= shape.vocab_size for x in flat_view(tokens, 'i')):
+             raise ValueError(f'Byte-LM IDs must be in [0, {shape.vocab_size})')
+         _tick(ton, clock, 'step.py_tokens', tokens.nbytes)
+         if self._resident:
+@@ -995,7 +992,7 @@ class SmallByteLanguageModelTrainer:
+         if not train:
+             return float(out_loss[0])
+         new_flags = _array(out_flags, (shape.n_tensors,), 'flags', '<i4')
+-        if new_flags.min() < 0 or new_flags.max() > 1:
++        if any(x not in (0, 1) for x in flat_view(new_flags, 'i')):
+             raise RuntimeError('Byte-LM returned non-binary momentum flags')
+         _tick(ton, clock, 'step.py_flags', new_flags.nbytes)
+         result = dict(loss=float(out_loss[0]), step=expected, completed_steps=expected,
+diff --git a/python/mojolearn/_byte_lm_trainer_host.py b/python/mojolearn/_byte_lm_trainer_host.py
+index 61d1247f1..fa8326d60 100644
+--- a/python/mojolearn/_byte_lm_trainer_host.py
++++ b/python/mojolearn/_byte_lm_trainer_host.py
+@@ -45,10 +45,7 @@ WHAT IS RESTATED FROM THE DEVICE SIDE, and nothing more:
+   the refusals         the GPU binding's admission of addresses, action,
+                        step bound, optimizer, flags, state and ids, in its
+                        words where the Python class does not already refuse
+-                       first. The element scans behind them are native
+-                       (`all_finite`, and min/max through reduce_stat,
+-                       DEVIATION 3101); Python never loops over parameters,
+-                       moments, logits or ids here.
++                       first.
+ 
+ ABSENT, SO THEY REFUSE BY NAME (an AttributeError naming the entry and this
+ file, so `getattr(binding, name, None)` and `hasattr` still read absent): the
+@@ -64,8 +61,8 @@ import operator
+ import struct
+ 
+ from . import _backend
+-from ._bufcheck import memcopy
+-from ._buffer import addr, addr_ro, all_finite, frombytes, zeros
++from ._bufcheck import flat_view, memcopy
++from ._buffer import addr, addr_ro, frombytes, zeros
+ from ._byte_lm_config import ByteLanguageModelConfig
+ 
+ HOST_BASENAME = "_mojolearn_byte_lm_host"
+@@ -101,6 +98,10 @@ def _read_i32(address, n):
+     return frombytes(ctypes.string_at(int(address), 4 * n), "<i4", (n,))
+ 
+ 
++def _words(array, code):
++    return flat_view(array, code)
++
++
+ def _optimizer(params):
+     """`OptimizerConfig` from params[2:12] and `byte_validate_optimizer`:
+     AdamW, positive lr and eps, betas in [0, 1), nonnegative weight decay,
+@@ -124,21 +125,21 @@ def _validate_state(p, m, v, flags, completed, cfg):
+     """`byte_validate_state`."""
+     if not 0 <= completed < 1000000:
+         raise ValueError("byte LM: completed step outside admitted bound")
+-    # Native `all_finite` and min/max (reduce_stat) over the whole buffer,
+-    # in the same refusal order the per-element scans had.
+     for name, arr in (("parameters", p), ("m", m), ("v", v)):
+-        if not all_finite(arr):
+-            raise ValueError(f"byte LM: nonfinite {name}")
+-    if v.size and v.min() < 0:
++        for x in _words(arr, "f"):
++            if not math.isfinite(x):
++                raise ValueError(f"byte LM: nonfinite {name}")
++    if any(x < 0 for x in _words(v, "f")):
+         raise ValueError("byte LM: second moments must be nonnegative")
+-    if flags.size and (flags.min() < 0 or flags.max() > 1):
++    if any(x not in (0, 1) for x in _words(flags, "i")):
+         raise ValueError("byte LM: momentum flags must be exactly 0 or 1")
+ 
+ 
+ def _validate_tokens(ids, cfg):
+     """`byte_validate_tokens`: every id in [0, vocab)."""
+-    if ids.size and (ids.min() < 0 or ids.max() >= cfg.vocab_size):
+-        raise ValueError("byte LM: token id outside [0, vocab)")
++    for x in _words(ids, "i"):
++        if not 0 <= x < cfg.vocab_size:
++            raise ValueError("byte LM: token id outside [0, vocab)")
+ 
+ 
+ def _addresses(addresses, count, n_inputs, what):
+@@ -285,8 +286,9 @@ class _HostTrainerBinding:
+                                                      list(cfg.native_shape), 0, 1))
+         if written != b * l * cfg.vocab_size:
+             raise ValueError("byte LM logits: wrong logits length")
+-        if not all_finite(frombytes(ctypes.string_at(out_addr, 4 * written), "<f4", (written,))):
+-            raise ValueError("byte LM logits: nonfinite logit")
++        for x in _words(frombytes(ctypes.string_at(out_addr, 4 * written), "<f4", (written,)), "f"):
++            if not math.isfinite(x):
++                raise ValueError("byte LM logits: nonfinite logit")
+         return written
+ 
+     def byte_lm_logits(self, addresses, dims, shape):
+@@ -296,8 +298,9 @@ class _HostTrainerBinding:
+         p = _read_f32(a[0], cfg.n_total)
+         ids = _read_i32(a[1], b * l)
+         _validate_tokens(ids, cfg)
+-        if not all_finite(p):
+-            raise ValueError("byte LM logits: nonfinite parameters")
++        for x in _words(p, "f"):
++            if not math.isfinite(x):
++                raise ValueError("byte LM logits: nonfinite parameters")
+         return self._logits(cfg, addr_ro(p, name="p"), addr_ro(ids, name="ids"), a[2], b, l)
+ 
+     # ---- the resident session ---------------------------------------------
+@@ -441,8 +444,9 @@ class _HostTrainerBinding:
+             raise ValueError("byte LM: resident model shape mismatch")
+         if st["grad_step"] < 0 or st["grad_step"] != st["completed"]:
+             raise ValueError("byte LM: no gradient to export; complete a step first")
+-        if not all_finite(st["grad"]):
+-            raise ValueError("byte LM: nonfinite returned gradient")
++        for x in _words(st["grad"], "f"):
++            if not math.isfinite(x):
++                raise ValueError("byte LM: nonfinite returned gradient")
+         memcopy(a[0], addr_ro(st["grad"], name="grad"), 4 * cfg.n_total)
+         return st["grad_step"]
+ 
+diff --git a/python/mojolearn/_samba_impl.py b/python/mojolearn/_samba_impl.py
+index a5bdb774f..a34f151c7 100644
+--- a/python/mojolearn/_samba_impl.py
++++ b/python/mojolearn/_samba_impl.py
+@@ -27,7 +27,6 @@ from . import _buffer as _buffers, _bufcheck as _checks
+ from ._array import Array as _Array
+ import hashlib
+ import json
+-import struct
+ from pathlib import Path
+ 
+ from . import _portable_math as math
+@@ -178,25 +177,6 @@ def _init_tensor(gen, name, shape):
+     return _buffers.full(shape, 1.0, '<f4')
+ 
+ 
+-_IGNORE_BYTES = struct.pack("<i", T._IGNORE_INDEX_DEFAULT)
+-
+-
+-def _count_targets(y):
+-    """How many int32 targets are not the ignore index: the Python
+-    `sum(v != ignore ...)` it replaces, answered by `bytes.count` over the
+-    raw little-endian words when every value lies in [-100, 2**24). In that
+-    range the four ignore bytes `9c ff ff ff` can only match at a word
+-    boundary: a straddling match needs a 0x9c byte at word offset 1, 2 or 3
+-    followed by 0xff through the word's top byte, but a word whose top byte
+-    is 0xff lies in [-100, -1] and holds 0xff at offsets 1 to 3, and every
+-    other word's top byte is 0x00. So the count is exact. Outside it (an id the loss will refuse anyway) the Python
+-    scan runs."""
+-    n = int(y.size)
+-    if n and y.min() >= T._IGNORE_INDEX_DEFAULT and y.max() < (1 << 24):
+-        return n - bytes(_checks.flat_view(y, 'i')).count(_IGNORE_BYTES)
+-    return sum(v != T._IGNORE_INDEX_DEFAULT for v in _checks.flat_view(y, 'i'))
+-
+-
+ class SambaState(object):
+     """The stack's decode state (2026-09-15): `layers[i]` is layer i's own
+     block state (`Mamba3State` or `TransformerState`), caller-owned and laid
+@@ -335,10 +315,8 @@ class SambaStack(object):
+             raise ValueError("mojolearn.SambaStack: %s must be (B, L) integer ids" % what)
+         return _buffers.as_i32_c(x, ndim=2, name=what)[0]
+ 
+-    def _forward(self, inputs, dropout_stream=None, token_offset=0, head=True):
+-        """The forward with every block input kept for the backward.
+-        `head=False` stops after the final norm (`logits` is None): the
+-        fused `samba_head_loss` runs the head itself."""
++    def _forward(self, inputs, dropout_stream=None, token_offset=0):
++        """The forward with every block input kept for the backward."""
+         c = self.config
+         ids = self._ids(inputs, "inputs")
+         b, l = ids.shape
+@@ -357,10 +335,8 @@ class SambaStack(object):
+             x = self._block(i).forward(x)
+         hn = T.rms_norm_forward(x, self.arrays["norm_f.weight"], c.norm_eps,
+                                 self.numeric_mode)
+-        logits = None
+-        if head:
+-            logits = T.linear_forward(hn.reshape((b * l, c.d_model)),
+-                                      self._head_weight(), self.numeric_mode)
++        logits = T.linear_forward(hn.reshape((b * l, c.d_model)),
++                                  self._head_weight(), self.numeric_mode)
+         return {"ids": ids, "key": key, "xs": xs, "h": x, "hn": hn,
+                 "logits": logits}
+ 
+@@ -483,35 +459,22 @@ class SambaStack(object):
+         unsplit one; `None` divides by this call's own target count."""
+         self._refuse_no_backward()
+         c = self.config
+-        # The fused head (lane/py-lm): the head GEMM, the loss and the head
+-        # backward in one call, the logits never crossing back and forth.
+-        # Same kernels, operands and order as the three-call arm below,
+-        # which stays as the reference for a binding without the entry.
+-        fused = callable(getattr(T._load(self.numeric_mode), "samba_head_loss", None))
+-        acts = self._forward(inputs, dropout_stream, token_offset, head=not fused)
++        acts = self._forward(inputs, dropout_stream, token_offset)
+         ids = acts["ids"]
+         b, l = ids.shape
+         y = self._ids(targets, "targets")
+         if y.shape != ids.shape:
+             raise ValueError("mojolearn.SambaStack: targets must match inputs' shape")
+         y = y.reshape(-1)
+-        count = _count_targets(y)
++        count = sum(v != T._IGNORE_INDEX_DEFAULT for v in _checks.flat_view(y, 'i'))
+         items = count if num_items is None else int(num_items)
+-        hn2 = acts["hn"].reshape((b * l, c.d_model))
+-        out = T.samba_head_loss(hn2, self._head_weight(), y, items,
+-                                self.numeric_mode) if fused else None
+-        if out is not None:
+-            loss, dhn, dw_head = out
+-        else:
+-            logits = acts["logits"]
+-            if logits is None:
+-                logits = T.linear_forward(hn2, self._head_weight(), self.numeric_mode)
+-            loss, dlogits = T.cross_entropy(logits, y, reduction="sum",
+-                                            num_items=items, return_grad=True,
+-                                            numeric_mode=self.numeric_mode)
+-            dhn, dw_head = T.linear_backward(dlogits, hn2, self._head_weight(),
+-                                             self.numeric_mode)
++        loss, dlogits = T.cross_entropy(acts["logits"], y, reduction="sum",
++                                        num_items=items, return_grad=True,
++                                        numeric_mode=self.numeric_mode)
+         grads = {}
++        dhn, dw_head = T.linear_backward(
++            dlogits, acts["hn"].reshape((b * l, c.d_model)), self._head_weight(),
++            self.numeric_mode)
+         dh, grads["norm_f.weight"] = T.rms_norm_backward(
+             dhn.reshape((b, l, c.d_model)), acts["h"], self.arrays["norm_f.weight"],
+             c.norm_eps, self.numeric_mode)
+@@ -557,7 +520,7 @@ class SambaStack(object):
+                 "clause 9.2 (leaf size, T mod L, A divides P, A a power of "
+                 "two); refused before any gradient is computed "
+                 "(python/mojolearn/_samba_impl.py)" % (tokens, a))
+-        count = _count_targets(y)
++        count = sum(v != T._IGNORE_INDEX_DEFAULT for v in _checks.flat_view(y, 'i'))
+         stream = (self.generator.next_stream()
+                   if self.config.dropout > 0.0 else None)
+         rows = b // a
+diff --git a/python/mojolearn/_training_impl.py b/python/mojolearn/_training_impl.py
+index fe6f19402..edb425253 100644
+--- a/python/mojolearn/_training_impl.py
++++ b/python/mojolearn/_training_impl.py
+@@ -2031,42 +2031,6 @@ def linear_forward(a, weight, numeric_mode=None):
+     return c.reshape(a.shape[:-1] + (n,))
+ 
+ 
+-def samba_head_loss(a, weight, targets, num_items, numeric_mode=None):
+-    """`(loss, da, dweight)` of `linear_forward(a, weight)` -> `cross_entropy
+-    (reduction="sum", num_items=num_items, return_grad=True)` ->
+-    `linear_backward`, in ONE binding call whose logits and logit gradient
+-    stay on the device (lane/py-lm, 2026-09-28). The same kernels on the same
+-    operands in the same order, so the same bits. None when the loaded
+-    binding predates the entry (or `MOJOLEARN_HOTPATH=python` asks for the
+-    three-call reference arm); the caller then runs the three calls."""
+-    from ._buffer import hotpath_enabled
+-    binding = _load(numeric_mode)
+-    fn = getattr(binding, "samba_head_loss", None)
+-    if fn is None or not hotpath_enabled():
+-        return None
+-    a = _c32(a, "a", "samba_head_loss")
+-    w = _c32(weight, "weight", "samba_head_loss")
+-    m, k = a.reshape((-1, a.shape[-1])).shape
+-    n, k2 = w.shape
+-    if k != k2:
+-        raise ValueError(
+-            "mojolearn.linear_forward: a has K=%d, weight has K=%d" % (k, k2))
+-    y, _ = as_i32_c(targets, ndim=1, name="targets")
+-    if y.shape[0] != m:
+-        raise ValueError(
+-            "mojolearn.cross_entropy: logits has %d rows and targets has %d "
+-            "(python/mojolearn/_training_impl.py)" % (m, y.shape[0]))
+-    loss_out = zeros((1,), "<f4")
+-    row_out = empty((m,), "<f4")
+-    da = _buffers.empty((m, k), '<f4')
+-    dw = _buffers.empty((n, k), '<f4')
+-    fn([_addr(loss_out), _addr(row_out), _addr(da), _addr(dw),
+-        _addr_ro(a), _addr_ro(w), _addr_ro(y)],
+-       [int(m), int(n), int(k), int(_IGNORE_INDEX_DEFAULT), 1,
+-        int(0 if num_items is None else num_items), 0.0])
+-    return float(loss_out[0]), da, dw
+-
+-
+ def linear_backward(dc, a, weight, numeric_mode=None):
+     """`(da, dweight)` of `linear_forward`. `dweight`'s contraction is over
+     the M tokens, the clause 9.2 contraction."""
+diff --git a/python/mojolearn/_transformer_impl.py b/python/mojolearn/_transformer_impl.py
+index d89a9d544..b866e17aa 100644
+--- a/python/mojolearn/_transformer_impl.py
++++ b/python/mojolearn/_transformer_impl.py
+@@ -1483,17 +1483,6 @@ class TransformerDecodeSession:
+             self._state._resident_session = None
+             self._release()
+ 
+-    def discard(self):
+-        """Close WITHOUT writing the resident cache back to the state: for a
+-        caller that owns the state and throws it away (lane/py-lm,
+-        `CausalLM.generate`), where `close()`'s download of the whole cache
+-        would be wasted, and after a failed call, where it may not run."""
+-        if not self._open:
+-            return
+-        self._open = False
+-        self._state._resident_session = None
+-        self._release()
+-
+     def __enter__(self):
+         return self
+ 
+diff --git a/python/mojolearn/models/causal_lm.py b/python/mojolearn/models/causal_lm.py
+index 8c5dfacc6..ce597b3ae 100644
+--- a/python/mojolearn/models/causal_lm.py
++++ b/python/mojolearn/models/causal_lm.py
+@@ -68,7 +68,7 @@ import os
+ from .. import _backend
+ from .. import lowbit as _lowbit
+ from .._array import Array
+-from .._buffer import addr, addr_ro, all_finite, as_i32_c, empty, frombytes
++from .._buffer import addr, addr_ro, all_finite, as_i32_c, empty
+ from .._bufcheck import flat_view, is_integer, probe
+ from .config import (FIXED_TODAY, INTERFACE_DEFAULTS, POSITION_CEILING, HFConfig,
+                      UnsupportedModel, plan_for)
+@@ -231,19 +231,20 @@ def _float_weight(a, name):
+ 
+ def _argmax_last(logits, b, l, v):
+     """The argmax of row `b`'s LAST position, ties to the lowest index: a
+-    sequential scan with a strict `>` (`_greedy_next_bytes`'s rule). The
+-    scan runs in the base binding's `argmax_rows_f32` (DEVIATION 2500, the
+-    same rule: strict `>` from index 0, so a NaN never replaces and a NaN at
+-    index 0 stays); `_labels.argmax_rows` is its Python definition. At
+-    `l > 1` the last-position rows are first copied out in C."""
+-    from .._labels import argmax_rows
+-    if l == 1:
+-        rows = logits.reshape((b, v))
+-    else:
+-        flat = flat_view(logits, "f")
+-        last = b"".join(bytes(flat[((r * l) + l - 1) * v:((r * l) + l) * v]) for r in range(b))
+-        rows = frombytes(last, "<f4", (b, v))
+-    return [int(i) for i in flat_view(argmax_rows(rows), "q")]
++    sequential scan with a strict `>` (`_greedy_next_bytes`'s rule)."""
++    flat = flat_view(logits, "f")
++    out = []
++    for row in range(b):
++        base = ((row * l) + l - 1) * v
++        best = 0
++        best_v = flat[base]
++        for k in range(1, v):
++            x = flat[base + k]
++            if x > best_v:
++                best = k
++                best_v = x
++        out.append(best)
++    return out
+ 
+ 
+ class CausalLM:
+@@ -530,9 +531,6 @@ class CausalLM:
+         total = l + n_new
+         if self.max_positions is not None and total > self.max_positions:
+             raise ValueError(f"mojolearn {what}: {l} prompt + {n_new} new tokens exceed max_positions={self.max_positions}")
+-        fast = self._generate_resident(ids, n_new, total)
+-        if fast is not None:
+-            return fast
+         state = self.allocate_state(b, total)
+         logits = self._run(ids, state, False, what)
+         nxt = _argmax_last(logits, b, l, self.vocab_size)
+@@ -546,50 +544,6 @@ class CausalLM:
+             nxt = _argmax_last(lg, b, 1, self.vocab_size)
+         return Array.from_list(rows, "<i4")
+ 
+-    def _generate_resident(self, ids, n_new, total):
+-        """`generate`'s greedy loop in ONE native call (lane/py-lm,
+-        2026-09-28), or None where it does not apply: a GPU transformer
+-        stack whose binding exports `causal_lm_session_*`, and
+-        `MOJOLEARN_HOTPATH` not `python`. Every block opens its resident
+-        `TransformerDecodeSession` (DEVIATION 2940) on a fresh state; the
+-        `CausalLMSession` holds the embedding, final norm and head; one
+-        `causal_lm_session_run` runs the prompt and every later token and
+-        returns the ids. The kernels, operands, M and the argmax rule are the
+-        per-layer route's (the binding's section header), so the ids are
+-        too; that route stays below as the reference arm."""
+-        from .._buffer import hotpath_enabled
+-        from .._transformer_impl import TransformerDecodeSession, _exports
+-        if self.device != "gpu" or self.kind != "transformer" or not hotpath_enabled():
+-            return None
+-        ext = self._blocks[0]._extension()
+-        if not (_exports(ext, "causal_lm_session_run")
+-                and _exports(ext, "transformer_decode_session_create")):
+-            return None
+-        b, l = int(ids.shape[0]), int(ids.shape[1])
+-        state = self.allocate_state(b, total)
+-        sessions = []
+-        lm = ext.causal_lm_session_create()
+-        try:
+-            for blk, st in zip(self._blocks, state.layers):
+-                sessions.append(TransformerDecodeSession(blk, st))
+-            head = self._head
+-            ext.causal_lm_session_open(
+-                lm, [addr_ro(self._embed, name="embed"), addr_ro(self._norm, name="norm"),
+-                     0 if head is self._embed else addr_ro(head, name="head")],
+-                [b, self.vocab_size, self.d_model, float(self.norm_eps)])
+-            out = empty((b, n_new), "<i4")
+-            ext.causal_lm_session_run(
+-                lm, [ss._native for ss in sessions],
+-                [addr_ro(ids, name="ids"), addr(out, name="ids_out"), 0], [l, n_new, 0])
+-        finally:
+-            ext.causal_lm_session_close(lm)
+-            for ss in sessions:
+-                ss.discard()
+-        rows = ids.tolist()
+-        for row, new in zip(rows, out.tolist()):
+-            row.extend(new)
+-        return Array.from_list(rows, "<i4")
+-
+     def __repr__(self):
+         return (f"CausalLM(model_type={self.plan.model_type!r}, layers={self.n_layers}, d_model={self.d_model}, "
+                 f"vocab={self.vocab_size}, weight_format={self.weight_format!r}, device={self.device!r})")
+diff --git a/python/mojolearn/parallel_training.py b/python/mojolearn/parallel_training.py
+index 98800dc18..23996405e 100644
+--- a/python/mojolearn/parallel_training.py
++++ b/python/mojolearn/parallel_training.py
+@@ -168,9 +168,9 @@ class ParallelByteLanguageModelTrainer:
+         """The four state arrays of one replica, freshly downloaded, as
+         `{'parameters', 'm', 'v', 'flags'}` with NO admission pass. For
+         hashing and streaming a checkpoint at scale: `state_dict()` runs
+-        `_validate_state`, which copies and scans every state array (the scans
+-        are native since lane/py-lm, but the copies remain), which a per-step
+-        hash chain need not pay. What comes back is bytes for a digest or a file, not a
++        `_validate_state`, whose per-element Python scan of `v` and `flags`
++        costs about 16 s at 162M parameters, which a per-step hash chain
++        cannot pay. What comes back is bytes for a digest or a file, not a
+         state that anything may train from; a restore still enters through
+         `_validate_state`.
+ 
+diff --git a/training/estimator.mojo b/training/estimator.mojo
+index 197c16ac8..f6b48fc0f 100644
+--- a/training/estimator.mojo
++++ b/training/estimator.mojo
+@@ -573,29 +573,6 @@ def identical_clip_grad_norm_host(
+ # ===========================================================================
+ 
+ 
+-def identical_ce_admit_call(reduction: Int, want_grad: Int, n_rows: Int) raises:
+-    """The call-shape refusals `identical_ce_loss_host` runs first, in its
+-    words; shared with `samba_head_loss_host` so there is one copy."""
+-    if reduction != REDUCTION_NONE:
+-        if reduction != REDUCTION_SUM and reduction != REDUCTION_MEAN:
+-            raise Error(
+-                String("mojolearn training: reduction must be 0 (none), 1")
+-                + String(" (sum) or 2 (mean), got ")
+-                + String(reduction)
+-            )
+-    if want_grad != 0 and reduction == REDUCTION_NONE:
+-        raise Error(
+-            String("mojolearn training: REDUCTION_NONE has no backward")
+-            + String(" (loss contract section 11); ask for a gradient with")
+-            + String(" reduction 'sum' or 'mean'")
+-        )
+-    if n_rows < 1:
+-        raise Error(
+-            String("mojolearn training: n_rows must be at least 1, got ")
+-            + String(n_rows)
+-        )
+-
+-
+ def identical_ce_loss_host(
+     ctx: DeviceContext,
+     loss_ptr: MutPointer[Float32, MutUntrackedOrigin],
+@@ -677,7 +654,24 @@ def identical_ce_loss_host(
+     file is this lane's and the change is OWED, not made here, because it
+     would edit a file both gates import.
+     """
+-    identical_ce_admit_call(reduction, want_grad, n_rows)
++    if reduction != REDUCTION_NONE:
++        if reduction != REDUCTION_SUM and reduction != REDUCTION_MEAN:
++            raise Error(
++                String("mojolearn training: reduction must be 0 (none), 1")
++                + String(" (sum) or 2 (mean), got ")
++                + String(reduction)
++            )
++    if want_grad != 0 and reduction == REDUCTION_NONE:
++        raise Error(
++            String("mojolearn training: REDUCTION_NONE has no backward")
++            + String(" (loss contract section 11); ask for a gradient with")
++            + String(" reduction 'sum' or 'mean'")
++        )
++    if n_rows < 1:
++        raise Error(
++            String("mojolearn training: n_rows must be at least 1, got ")
++            + String(n_rows)
++        )
+ 
+     var cfg = CeConfig(vocab, ignore_index, reduction, label_smoothing, num_items)
+ 
+@@ -695,6 +689,12 @@ def identical_ce_loss_host(
+     _ = h_targets^
+ 
+     var cells = n_rows * vocab
++    var smoothing = cfg.smoothing_is_spelled()
++    var smooth_cells = 1
++    var smooth_rows = 1
++    if smoothing:
++        smooth_cells = cells
++        smooth_rows = n_rows
+ 
+     # ---- Transport in.
+     var logits = ctx.enqueue_create_buffer[DType.float32](cells)
+@@ -703,53 +703,6 @@ def identical_ce_loss_host(
+     ctx.enqueue_copy(dst_buf=targets, src_ptr=targets_ptr)
+     ctx.synchronize()
+ 
+-    var grad_cells = 1
+-    if want_grad != 0:
+-        grad_cells = cells
+-    var dlogits = ctx.enqueue_create_buffer[DType.float32](grad_cells)
+-    identical_ce_loss_resident(
+-        ctx, loss_ptr, row_ptr, dlogits, logits, targets, n_rows, count,
+-        reduction, want_grad, cfg,
+-    )
+-    if want_grad != 0:
+-        ctx.enqueue_copy(dst_ptr=dlogits_ptr, src_buf=dlogits)
+-        ctx.synchronize()
+-    _ = logits^
+-    _ = targets^
+-    _ = dlogits^
+-    return count
+-
+-
+-def identical_ce_loss_resident(
+-    ctx: DeviceContext,
+-    loss_ptr: MutPointer[Float32, MutUntrackedOrigin],
+-    row_ptr: MutPointer[Float32, MutUntrackedOrigin],
+-    mut dlogits: DeviceBuffer[DType.float32],
+-    mut logits: DeviceBuffer[DType.float32],
+-    mut targets: DeviceBuffer[DType.int32],
+-    n_rows: Int,
+-    count: Int,
+-    reduction: Int,
+-    want_grad: Int,
+-    cfg: CeConfig,
+-) raises:
+-    """The device half of `identical_ce_loss_host` (lane/py-lm, 2026-09-28),
+-    moved here unchanged so that a caller whose `logits` are already on the
+-    device (`samba_head_loss_host`) runs the SAME calls in the SAME order
+-    without a download and an upload in between. `logits` and `targets` are
+-    the uploaded inputs; `dlogits` (N * V floats when `want_grad != 0`, else
+-    one) is written ON THE DEVICE and left there for the caller. `row_ptr`
+-    and `loss_ptr` are written on the host exactly as before. The caller has
+-    already run the refusals and `ce_count`."""
+-    var vocab = cfg.vocab
+-    var cells = n_rows * vocab
+-    var smoothing = cfg.smoothing_is_spelled()
+-    var smooth_cells = 1
+-    var smooth_rows = 1
+-    if smoothing:
+-        smooth_cells = cells
+-        smooth_rows = n_rows
+-
+     var max_v = ctx.enqueue_create_buffer[DType.float32](n_rows)
+     var shift = ctx.enqueue_create_buffer[DType.float32](cells)
+     var expo = ctx.enqueue_create_buffer[DType.float32](cells)
+@@ -807,6 +760,7 @@ def identical_ce_loss_resident(
+     if want_grad != 0:
+         grad_cells = cells
+     var weights = ctx.enqueue_create_buffer[DType.float32](grad_cells)
++    var dlogits = ctx.enqueue_create_buffer[DType.float32](grad_cells)
+     if want_grad != 0:
+         # Enqueued behind the forward on the SAME context, which MAX runs in
+         # order, so `expo` and `denom` are the forward's own values by the
+@@ -831,6 +785,8 @@ def identical_ce_loss_resident(
+     ctx.enqueue_copy(dst_ptr=row_ptr, src_buf=row)
+     if reduction != REDUCTION_NONE:
+         ctx.enqueue_copy(dst_ptr=loss_ptr, src_buf=loss)
++    if want_grad != 0:
++        ctx.enqueue_copy(dst_ptr=dlogits_ptr, src_buf=dlogits)
+     ctx.synchronize()
+     if reduction == REDUCTION_NONE:
+         loss_ptr.unsafe_store(0, Float32(0.0))
+@@ -849,6 +805,10 @@ def identical_ce_loss_resident(
+     _ = row
+     _ = total
+     _ = loss
++    _ = logits
++    _ = targets
+     _ = ones
+     _ = ws
+     _ = weights
++    _ = dlogits
++    return count
+diff --git a/training/samba_ops.mojo b/training/samba_ops.mojo
+index 7cd8981c2..3f45bdf47 100644
+--- a/training/samba_ops.mojo
++++ b/training/samba_ops.mojo
+@@ -34,8 +34,6 @@ from gemm.checks.gemm_identical import (
+ )
+ from gemm.checks.gemm_oracle import OP_NT
+ from training.checks.optimizer_oracle import microbatch_split_is_identical
+-from training.checks.loss_oracle import CeConfig, ce_count, ce_refuse_inputs
+-from training.estimator import identical_ce_admit_call, identical_ce_loss_resident
+ from transformer.checks.transformer_backward import bwd_rms_norm
+ from transformer.impl.llama.modeling_llama import (
+     llama_rms_norm,
+@@ -335,111 +333,6 @@ def samba_linear_backward_host(
+     return m * k
+ 
+ 
+-# ===========================================================================
+-# THE HEAD, THE LOSS AND THE HEAD BACKWARD IN ONE CALL (lane/py-lm, 2026-09-28)
+-# ===========================================================================
+-
+-
+-def samba_head_loss_host(
+-    ctx: DeviceContext,
+-    loss_ptr: MutPointer[Float32, MutUntrackedOrigin],
+-    row_ptr: MutPointer[Float32, MutUntrackedOrigin],
+-    da_ptr: MutPointer[Float32, MutUntrackedOrigin],
+-    dw_ptr: MutPointer[Float32, MutUntrackedOrigin],
+-    a_ptr: MutPointer[Float32, MutUntrackedOrigin],
+-    w_ptr: MutPointer[Float32, MutUntrackedOrigin],
+-    targets_ptr: MutPointer[Int32, MutUntrackedOrigin],
+-    m: Int,
+-    n: Int,
+-    k: Int,
+-    ignore_index: Int,
+-    reduction: Int,
+-    num_items: Int,
+-    label_smoothing: Float32,
+-) raises -> Int:
+-    """`samba_linear_forward_host`, then `identical_ce_loss_host` with a
+-    gradient, then `samba_linear_backward_host`, as ONE call: the calls
+-    `SambaStack.loss_and_grads` made one by one, the same kernels on the
+-    same operands in the same order, with the logits and their gradient
+-    kept on the device between them. Before, `logits` [m, n] crossed the
+-    bus four times per microbatch (down, up, `dlogits` down, up); here the
+-    logits come down ONCE, for the loss's own host refusal scan
+-    (`ce_refuse_inputs`, the copy `identical_ce_loss_host` also pays), and
+-    `dlogits` never leaves the device. Returns `count`.
+-
+-    THE REFUSALS, in the order the three calls raised them: the head's
+-    nonfinite input and weight, the loss's call shape, its shape, logits
+-    and targets refusals. The head backward's own scans of its input and
+-    weight re-read the same unchanged bytes the forward already admitted.
+-    Its scan of the upstream gradient is not restated: `dlogits` is the
+-    softmax-minus-target weights (each in [-1, 1] for finite admitted
+-    logits) divided by `ce_divisor`, which is never below 1 (a zero MEAN
+-    count and a negative `num_items` are refused), so it is finite
+-    whenever the loss admitted its inputs."""
+-    if m < 1 or n < 1 or k < 1:
+-        raise Error("mojolearn samba ops: linear shape must be positive")
+-    _refuse_nonfinite("linear input", a_ptr, m * k)
+-    _refuse_nonfinite("linear weight", w_ptr, n * k)
+-    var cells = m * n
+-    var a = _upload_f32(ctx, a_ptr, m * k)
+-    var w = _upload_f32(ctx, w_ptr, n * k)
+-    var c = ctx.enqueue_create_buffer[DType.float32](cells)
+-    var ws = ctx.enqueue_create_buffer[DType.float32](
+-        identical_gemm_workspace_max_floats(m, n, k)
+-    )
+-    identical_gemm_into(ctx, c, a, w, ws, m, n, k, OP_NT)
+-    var h_c = ctx.enqueue_create_host_buffer[DType.float32](cells)
+-    ctx.enqueue_copy(dst_ptr=h_c.unsafe_ptr(), src_buf=c)
+-    ctx.synchronize()
+-    _ = ws^
+-
+-    identical_ce_admit_call(reduction, 1, m)
+-    var cfg = CeConfig(n, ignore_index, reduction, label_smoothing, num_items)
+-    var h_logits = List[Float32](capacity=cells)
+-    var hp = h_c.unsafe_ptr()
+-    for i in range(cells):
+-        h_logits.append(hp.unsafe_load(i))
+-    var h_targets = List[Int32](capacity=m)
+-    for i in range(m):
+-        h_targets.append(targets_ptr.unsafe_load(i))
+-    _ = ce_refuse_inputs(h_logits, h_targets, cfg)
+-    var count = ce_count(h_targets, ignore_index)
+-    _ = h_logits^
+-    _ = h_targets^
+-    _ = h_c^
+-
+-    var targets = _upload_i32(ctx, targets_ptr, m)
+-    ctx.synchronize()
+-    var dc = ctx.enqueue_create_buffer[DType.float32](cells)
+-    identical_ce_loss_resident(
+-        ctx, loss_ptr, row_ptr, dc, c, targets, m, count, reduction, 1, cfg,
+-    )
+-
+-    var da = ctx.enqueue_create_buffer[DType.float32](m * k)
+-    var dw = ctx.enqueue_create_buffer[DType.float32](n * k)
+-    var ws_a = ctx.enqueue_create_buffer[DType.float32](
+-        identical_gemm_backward_a_workspace_max_floats(OP_NT, m, n, k)
+-    )
+-    var ws_b = ctx.enqueue_create_buffer[DType.float32](
+-        identical_gemm_backward_b_workspace_max_floats(OP_NT, m, n, k)
+-    )
+-    identical_gemm_backward_a_into(ctx, da, dc, w, ws_a, m, n, k, OP_NT)
+-    identical_gemm_backward_b_into(ctx, dw, dc, a, ws_b, m, n, k, OP_NT)
+-    ctx.enqueue_copy(dst_ptr=da_ptr, src_buf=da)
+-    ctx.enqueue_copy(dst_ptr=dw_ptr, src_buf=dw)
+-    ctx.synchronize()
+-    _ = a^
+-    _ = w^
+-    _ = c^
+-    _ = targets^
+-    _ = dc^
+-    _ = da^
+-    _ = dw^
+-    _ = ws_a^
+-    _ = ws_b^
+-    return count
+-
+-
+ # ===========================================================================
+ # THE BALANCED-TREE ACCUMULATE (optimizer contract clause 9.2, condition 5)
+ # ===========================================================================
