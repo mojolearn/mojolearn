@@ -1,5 +1,5 @@
 diff --git a/x_linear/quantile.mojo b/x_linear/quantile.mojo
-index e0269da46..b4b0ee516 100644
+index d07114fcd..5eed232bb 100644
 --- a/x_linear/quantile.mojo
 +++ b/x_linear/quantile.mojo
 @@ -19,6 +19,7 @@ iteration runs in the same fixed order; the answer is w = z (exact zeros)
@@ -9,8 +9,8 @@ index e0269da46..b4b0ee516 100644
 +from std.sys.info import is_gpu
  from x_linear.ops import (
      FP, IP, fa, fs, fm, fd, fmad, fsqrt, fabs, fmax, ld, st, ldi, i2f, fill, copy,
-     cholesky, chol_solve, row_dot, mean_of, axpy_acc, par_rows,
-@@ -126,7 +127,7 @@ def quantile_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP,
+     cholesky, chol_solve, row_dot, mean_of, axpy_acc, par_rows, row_dots,
+@@ -127,7 +128,7 @@ def quantile_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP,
                  var upi = up
                  var loi = lo_
                  if sw:
