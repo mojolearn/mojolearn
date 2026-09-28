@@ -97,26 +97,26 @@ def pm_exp(x: Float64) -> Float64:
     return _pm(y, _val(UInt64(k2 + 1023) << 52))
 
 
-def pm_log(input: Float64) -> Float64:
+def pm_log(xin: Float64) -> Float64:
     """`mojolearn_log` of portable_math.c (with its `log_fraction`), line
     for line. NaN, 0, negative and +inf are its special cases."""
-    if input != input:
-        return input
-    if input == 0.0:
+    if xin != xin:
+        return xin
+    if xin == 0.0:
         return _val(UInt64(0xFFF0000000000000))
-    if input < 0.0:
+    if xin < 0.0:
         return _val(UInt64(0x7FF8000000000000))
-    if _bits(input) == UInt64(0x7FF0000000000000):
-        return input
+    if _bits(xin) == UInt64(0x7FF0000000000000):
+        return xin
     # raw_e: the exponent before the mantissa normalization adjusts it
-    var u = _bits(input)
+    var u = _bits(xin)
     var raw_e = 0
     if (u >> 52) == UInt64(0):
-        u = _bits(_pm(input, 18014398509481984.0))
+        u = _bits(_pm(xin, 18014398509481984.0))
         raw_e = -54
     raw_e += Int((u >> 52) & UInt64(0x7FF)) - 1022
     # log_fraction
-    var inp = input
+    var inp = xin
     u = _bits(inp)
     var e = 0
     if (u >> 52) == UInt64(0):
@@ -247,7 +247,7 @@ def multiclass_probability(k: Int, r: F64Ptr, p: F64Ptr, q: F64Ptr, qp: F64Ptr) 
 
 def _row_proba(
     dec: F32P, n: Int, n_pairs: Int, k: Int, pi: I32P, ab: F64Ptr, row: Int,
-    m: F64Ptr, q: F64Ptr, qp: F64Ptr, out: F64Ptr,
+    m: F64Ptr, q: F64Ptr, qp: F64Ptr, dst: F64Ptr,
 ) raises:
     """One row of `SVC.predict_proba` (before this lane, its Python loop):
     each pair's sigmoid of the NEGATED decision (libsvm's orientation),
@@ -262,10 +262,10 @@ def _row_proba(
         m[i * k + j] = v
         m[j * k + i] = 1.0 - v
     if k == 2:
-        out[0] = m[1]
-        out[1] = m[2]
+        dst[0] = m[1]
+        dst[1] = m[2]
         return
-    multiclass_probability(k, m, out, q, qp)
+    multiclass_probability(k, m, dst, q, qp)
 
 
 def pair_epilogue(
@@ -450,11 +450,11 @@ def sigmoid_train(dec: F64Ptr, labels: F64Ptr, n: Int) raises -> Tuple[Float64, 
     return (a, b)
 
 
-def splitmix_perm(n: Int, seed: UInt64, out: I32P):
+def splitmix_perm(n: Int, seed: UInt64, dst: I32P):
     """`_svm_impl._splitmix_perm`: libsvm's shuffle with a SplitMix64
     stream (integer arithmetic, wrapping at 2^64)."""
     for i in range(n):
-        out[i] = Int32(i)
+        dst[i] = Int32(i)
     var state = seed
     for i in range(n):
         state = state + UInt64(0x9E3779B97F4A7C15)
@@ -463,9 +463,9 @@ def splitmix_perm(n: Int, seed: UInt64, out: I32P):
         z = (z ^ (z >> 27)) * UInt64(0x94D049BB133111EB)
         z ^= z >> 31
         var j = i + Int(z % UInt64(n - i))
-        var s = out[i]
-        out[i] = out[j]
-        out[j] = s
+        var s = dst[i]
+        dst[i] = dst[j]
+        dst[j] = s
 
 
 # ------------------------------------------------------------ Python doors
@@ -500,8 +500,8 @@ def svc_pair_epilogue_binding(
     var dec = f32_ptr(Int(py=dec_addr))
     var pi = i32_ptr(Int(py=pairs_addr)) if mode != EPI_BINARY_CODES else I32P(unsafe_from_address=1)
     var ab = f64_ptr(Int(py=ab_addr)) if mode == EPI_PROBA or mode == EPI_LOG_PROBA else F64Ptr(unsafe_from_address=1)
-    var out = Int(py=out_addr)
-    if out == 0:
+    var dst = Int(py=out_addr)
+    if dst == 0:
         raise Error("svc_pair_epilogue: null output")
     if mode != EPI_BINARY_CODES:
         for pr in range(n_pairs):
@@ -510,7 +510,7 @@ def svc_pair_epilogue_binding(
             if i < 0 or j < 0 or i >= k or j >= k or i == j:
                 raise Error("svc_pair_epilogue: invalid class pair")
     with GILReleased(Python()):
-        pair_epilogue(mode, dec, n, n_pairs, k, pi, ab, label1, out)
+        pair_epilogue(mode, dec, n, n_pairs, k, pi, ab, label1, dst)
     return PythonObject(n)
 
 
