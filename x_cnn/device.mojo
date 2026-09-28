@@ -1212,11 +1212,13 @@ def batchnorm_forward_into(x: FP, running: FP, aux: FP, prm: List[Int32], traini
     var nr = 2 * C
     var na = 2 + 7 * C
     var ctx = cnn_ctx()
-    var dx = up(ctx, x, total)
-    var dr = up(ctx, running, nr)
-    var da = up(ctx, aux, na)
-    var dp = upload_i32(ctx, prm)
-    var dout = ctx.enqueue_create_buffer[DType.float32](total)
+    # lane/cnn-apple2: the cached workspace slots (DEVIATION 5718's), not a
+    # fresh device allocation per call
+    var dx = put[False](ctx, 0, x, total)
+    var dr = put[False](ctx, 1, running, nr)
+    var da = put[False](ctx, 2, aux, na)
+    var dp = put_prm(ctx, 3, prm)
+    var dout = ws(ctx, 4, total)
     if training:
         comptime if BN_BLOCK:
             ctx.enqueue_function[bn_stats_block_kernel](fp(dx), fp(da), ip(dp), grid_dim=(C, 1, 1), block_dim=(BN_TPB, 1, 1))
@@ -1260,11 +1262,11 @@ def batchnorm_backward_into(x: FP, g: FP, aux: FP, prm: List[Int32], training: B
     var total = Int(prm[0]) * C * Int(prm[2])
     var na = 2 + 7 * C
     var ctx = cnn_ctx()
-    var dx = up(ctx, x, total)
-    var dg = up(ctx, g, total)
-    var da = up(ctx, aux, na)
-    var dp = upload_i32(ctx, prm)
-    var dout = ctx.enqueue_create_buffer[DType.float32](total)
+    var dx = put[False](ctx, 0, x, total)
+    var dg = put[False](ctx, 1, g, total)
+    var da = put[False](ctx, 2, aux, na)
+    var dp = put_prm(ctx, 3, prm)
+    var dout = ws(ctx, 4, total)
     comptime if BN_BLOCK:
         ctx.enqueue_function[bn_bwd_red_block_kernel](fp(dx), fp(dg), fp(da), ip(dp), grid_dim=(C, 1, 1), block_dim=(BN_TPB, 1, 1))
     else:
