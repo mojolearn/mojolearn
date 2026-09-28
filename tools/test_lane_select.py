@@ -1830,3 +1830,406 @@ def test_the_pinned_product_has_one_definition():
     assert found.get("identical_mul") == ["checks/numerics.mojo"], (
         "identical_mul must be defined once, in checks/numerics.mojo: "
         + repr(found.get("identical_mul")))
+
+
+# --------------------------------------------------------------------------
+# REGISTRY ROWS, MODULE DEFINITIONS AND GROWN BINDINGS ARE ATTRIBUTED BY WHAT
+# CHANGED (2026-09-27). Three branches selected every lane for edits that say
+# exactly what they touch:
+#   lane/algos-ann-b      put "ivf-filter" into the ivf family's two lane
+#                         lists in host_surface.FAMILIES             (484/484)
+#   lane/algos-neighbors  added one export name to the gp family's row, one
+#                         helper to _buffer.py, one export to the gp
+#                         bindings                                   (487/487)
+#   lane/algos-decomp     added export names to two rows, three exports to the
+#                         x_decomp bindings (imported names, `m.def_function`,
+#                         a parametric `geqrf_py[DevExec]`), and edited named
+#                         functions of modules __init__.py imports    (481/481)
+# Every narrowing below sits beside arms that MUST NOT narrow, and beside a
+# perturbation that disables the rule and watches the narrow answer go away.
+# --------------------------------------------------------------------------
+
+_FAKE_REF = "<fake ref 2026-09-27>"
+
+
+class _Seeded:
+    """Old text at `_FAKE_REF` and new text in the tree, for any paths, held in
+    the selector's own caches and restored afterwards. Writes no file."""
+
+    def __init__(self, old=None, new=None):
+        self.old, self.new = old or {}, new or {}
+
+    def __enter__(self):
+        lane_select.lane_sources()                  # the map is built from the REAL tree first
+        self.saved = {}
+        for path, text in self.old.items():
+            lane_select._GIT_SHOW[f"{_FAKE_REF}:{path}"] = text
+        for path, text in self.new.items():
+            self.saved[path] = (lane_select._read.cache.get(path), lane_select._parse.cache.get(path))
+            lane_select._read.cache[path] = text
+            lane_select._parse.cache.pop(path, None)
+        return self
+
+    def __exit__(self, *exc):
+        for path in self.old:
+            lane_select._GIT_SHOW.pop(f"{_FAKE_REF}:{path}", None)
+        for path, (read, parsed) in self.saved.items():
+            for cache, value in ((lane_select._read.cache, read), (lane_select._parse.cache, parsed)):
+                if value is None:
+                    cache.pop(path, None)
+                else:
+                    cache[path] = value
+        return False
+
+
+def _registry(new_text, old_text, path="<fake registry>"):
+    with _Seeded({path: old_text}, {path: new_text}):
+        return lane_select.registry_lanes(_FAKE_REF, path)
+
+
+MINI_FAMILIES = '''
+def _merge(key, base):
+    return base
+
+
+FAMILIES = (
+    dict(
+        family="ivf",
+        binding="_mojolearn_ivf_host",
+        training_lanes=("ivf", "ivf-euclidean"),
+        inference_lanes=("ivf",),
+        exports=("ivf_build", "ivf_search"),
+        display="IVF",
+    ),
+    dict(
+        family="gp",
+        binding="_mojolearn_gp_host",
+        training_lanes=("gp", "gpc"),
+        inference_lanes=(),
+        exports=("gpr_fit", "gpr_predict"),
+        display="GP",
+    ),
+    dict(
+        family="ghost",
+        binding="_mojolearn_no_such_binding",
+        training_lanes=(),
+        inference_lanes=(),
+        exports=(),
+        display="nothing loads this",
+    ),
+)
+FAMILIES = _merge("FAMILIES", FAMILIES)
+'''
+
+#: Each must be refused (None), and say why. Checked before any narrowing.
+FAMILIES_MUST_REFUSE = (
+    ("a row removed", MINI_FAMILIES.replace(MINI_FAMILIES[MINI_FAMILIES.index("    dict(\n        family=\"gp\""):
+                                                          MINI_FAMILIES.index("    dict(\n        family=\"ghost\"")], "")),
+    ("rows reordered", MINI_FAMILIES.replace('family="ivf"', 'family="tmp"').replace(
+        'family="gp"', 'family="ivf"').replace('family="tmp"', 'family="gp"')),
+    ("a row that names no lane and no loaded binding edited",
+     MINI_FAMILIES.replace('display="nothing loads this"', 'display="still nothing"')),
+    ("a function body edited", MINI_FAMILIES.replace("    return base", "    return base + ()")),
+    ("the rebinding changed", MINI_FAMILIES.replace('_merge("FAMILIES", FAMILIES)', '_merge("OTHER", FAMILIES)')),
+    ("a new bare statement", MINI_FAMILIES + "\nFAMILIES[0].clear()\n"),
+    ("a non-lane joined the list of a row that names no lane and no loaded binding",
+     MINI_FAMILIES.replace('binding="_mojolearn_no_such_binding",\n        training_lanes=(),',
+                           'binding="_mojolearn_no_such_binding",\n        training_lanes=("zz-not-a-lane",),')),
+)
+
+
+def test_a_registry_row_edit_that_cannot_be_placed_is_refused_with_a_reason():
+    """THE ARMS THAT MUST NOT NARROW, first: each answers None and leaves its
+    reason in REGISTRY_WHY, which `select` prints when it refuses."""
+    for label, text in FAMILIES_MUST_REFUSE:
+        assert text != MINI_FAMILIES, f"{label}: the arm did not change the text"
+        assert _registry(text, MINI_FAMILIES) is None, f"{label}: was narrowed"
+        assert lane_select.REGISTRY_WHY.get(f"{_FAKE_REF}:<fake registry>"), f"{label}: no reason recorded"
+
+
+def test_a_lane_joining_a_rows_lane_lists_selects_that_lane_alone():
+    """The lane/algos-ann-b shape: one lane added to two lane lists of one row
+    selects that lane, not the row's other lanes and not every lane."""
+    added = MINI_FAMILIES.replace('training_lanes=("ivf", "ivf-euclidean")',
+                                  'training_lanes=("ivf", "ivf-euclidean", "kmeans")').replace(
+        'inference_lanes=("ivf",)', 'inference_lanes=("ivf", "kmeans")')
+    assert _registry(added, MINI_FAMILIES) == ["kmeans"]
+    removed = MINI_FAMILIES.replace('training_lanes=("ivf", "ivf-euclidean")', 'training_lanes=("ivf",)')
+    assert _registry(removed, MINI_FAMILIES) == ["ivf-euclidean"], "a lane leaving a list is that lane"
+
+    # THE PERTURBATION: with the per-row rule off the same edit is refused.
+    real = lane_select._row_table_lanes
+    lane_select._row_table_lanes = lambda *a: (None, "disabled by the test")
+    try:
+        assert _registry(added, MINI_FAMILIES) is None, "the row rule is not what narrowed this"
+    finally:
+        lane_select._row_table_lanes = real
+
+
+def test_an_export_name_joining_a_row_selects_the_lanes_that_call_it():
+    """The lane/algos-neighbors and lane/algos-decomp shape: a row's `exports`
+    gained a name. Only tests read `exports`; the lanes it concerns are the
+    lanes whose code names the export."""
+    grown = MINI_FAMILIES.replace('exports=("gpr_fit", "gpr_predict")',
+                                  'exports=("gpr_fit", "gpr_predict", "kmeans_fit")')
+    answer = _registry(grown, MINI_FAMILIES)
+    assert answer is not None and "kmeans" in answer, answer
+    for unrelated in ("mamba1", "transformer", "gp"):
+        assert unrelated not in answer, f"an export named kmeans_fit selected {unrelated}"
+    assert len(answer) < len(lane_select.all_lanes()) // 2, len(answer)
+
+
+def test_any_other_row_field_edit_selects_the_rows_lanes():
+    """A field that is not a lane list or an export list moves the whole row:
+    the lanes it names and the lanes that load the binding it names."""
+    edited = MINI_FAMILIES.replace('display="GP"', 'display="Gaussian processes"')
+    answer = _registry(edited, MINI_FAMILIES)
+    assert answer and {"gp", "gpc"} <= set(answer), answer
+    sources, _ = _lane_sets()
+    assert set(answer) == ({"gp", "gpc"} | lane_select.binding_users("_mojolearn_gp_host")) & set(sources)
+    assert "kmeans" not in answer and "mamba1" not in answer
+    assert len(answer) < len(sources) // 2, len(answer)
+
+
+def test_the_real_manifest_edits_of_the_three_branches_are_placed():
+    """The three branches' host_surface.py edits, replayed on the manifest in
+    this tree (a lane that exists here stands in for ivf-filter)."""
+    old = lane_select._read(lane_select.MANIFEST)
+    anchors = ('training_lanes=("ivf", "ivf-euclidean", "ivf-extend", "par-ivf")',
+               'inference_lanes=("ivf", "ivf-euclidean", "ivf-extend")',
+               '"gpr_fit", "gpr_predict", "gpr_sample_y", "gpr_lml_grad"',
+               '"pca_fit", "pca_fit_full", "tsvd_fit"')
+    for a in anchors:
+        assert old.count(a) == 1, f"the manifest no longer carries {a}; update this replay"
+    ann = old.replace(anchors[0], anchors[0].replace('"par-ivf"', '"kmeans-random", "par-ivf"')) \
+             .replace(anchors[1], anchors[1][:-1] + ', "kmeans-random")')
+    assert _registry(ann, old, lane_select.MANIFEST + ".replay") == ["kmeans-random"]
+    nb = old.replace(anchors[2], anchors[2].replace('"gpr_sample_y",', '"gpr_sample_y", "kmeans_fit",'))
+    got = _registry(nb, old, lane_select.MANIFEST + ".replay")
+    assert got is not None and "kmeans" in got and len(got) < len(lane_select.all_lanes()) // 2, got
+    dc = old.replace(anchors[3], anchors[3] + ', "ols_predict_probe_not_called"')
+    assert _registry(dc, old, lane_select.MANIFEST + ".replay") == [], \
+        "an export name no code calls concerns no lane, and is placed, not refused"
+
+
+def test_an_unplaceable_registry_diff_is_refused_by_name_never_every_lane():
+    """`select` with a ref: a registry edit that cannot be placed is
+    UNATTRIBUTED (the caller refuses and prints why), never every lane."""
+    path = lane_select.MANIFEST
+    old = lane_select._read(path)
+    assert "def family(name):\n" in old
+    new = old.replace("def family(name):\n", "def family(name):\n    _ = 1\n", 1)
+    with _Seeded({path: old}, {path: new}):
+        sel = lane_select.select([path], ref=_FAKE_REF)
+    assert path in sel["unattributed"], sel["reasons"]
+    assert path not in sel["every_rules"] and not sel["lanes"], sel["reasons"]
+    assert "`family`" in sel["reasons"][path], sel["reasons"][path]
+
+
+# ------------------------------------------------ module definitions (Python)
+
+PY_BASE = '''import array
+
+
+class _Kit:
+    def ew(self, x):
+        return x
+
+
+class _M:
+    def __init__(self, s):
+        self.s = s
+
+    def neg(self):
+        return _Kit().ew(self.s)
+
+
+_M._one = _M(array.array("f", [0.0]))
+
+
+def solve(a, mode="r"):
+    return _Kit().ew(a)
+
+
+__all__ = ["solve"]
+'''
+
+PY_PLACED = (
+    ("a helper's body (the _Kit shape)", PY_BASE.replace("        return x\n", "        return x + 0\n", 1)),
+    ("a new unused def (the _buffer.py shape)", PY_BASE + "\n\ndef as_dense(obj):\n    return obj\n"),
+    ("a constant default changed (the qr shape)", PY_BASE.replace('mode="r"', 'mode="reduced"')),
+    ("a new def exported", PY_BASE.replace('__all__ = ["solve"]', '__all__ = ["solve", "svd"]')
+     + "\n\ndef svd(a):\n    return a\n"),
+    ("a new literal constant", PY_BASE + "\n_TOL = 2.0 ** -20\n"),
+)
+
+PY_REFUSED = (
+    ("changed code run at import", PY_BASE.replace("        return x\n", "        return x + 0\n", 1)
+     + "\n_DEFAULT = solve(1)\n"),
+    ("a decorated new def", PY_BASE + "\n\n@staticmethod\ndef h():\n    return 1\n"),
+    ("a module-level statement removed", PY_BASE.replace('_M._one = _M(array.array("f", [0.0]))\n', "")),
+    ("a new def whose default calls", PY_BASE + "\n\ndef h(x=_Kit()):\n    return x\n"),
+    ("an import from a new module", "from os import path\n" + PY_BASE),
+    ("__all__ computed rather than listed", PY_BASE.replace('["solve"]', '["solve"] + []')),
+    ("a changed constructor that a module-level call runs", PY_BASE.replace(
+        "        self.s = s\n", "        self.s = _Kit().ew(s)\n")),
+)
+
+
+def _py(new_text, old_text=PY_BASE, path="python/mojolearn/_probe_fake_module.py"):
+    with _Seeded({path: old_text}, {path: new_text}):
+        return lane_select.python_edit_lanes(_FAKE_REF, path)
+
+
+def test_a_module_edit_that_runs_at_import_keeps_the_whole_map():
+    """THE ARMS THAT MUST NOT NARROW, first."""
+    for label, text in PY_REFUSED:
+        assert text != PY_BASE, label
+        assert _py(text) is None, f"{label}: was narrowed"
+
+
+def test_a_module_edit_confined_to_named_definitions_is_placed():
+    for label, text in PY_PLACED:
+        got = _py(text)
+        assert got is not None, (label, lane_select.PYTHON_EDIT_WHY)
+    names, _ = _py(PY_PLACED[0][1])
+    assert names == ["_Kit"], f"the edit is to _Kit alone: {names}"
+    path = "python/mojolearn/_probe_fake_module.py"
+    with _Seeded({}, {path: PY_BASE}):
+        closed, runs = lane_select._module_closure(
+            path, lane_select._strip_docstrings(ast.parse(PY_BASE)), {"_Kit"})
+    assert {"_Kit", "_M", "solve"} <= closed, f"the closure missed a caller: {closed}"
+    assert "_M" not in runs, "constructing _M runs no changed code; only _M.neg does"
+
+
+def test_a_helper_added_to_a_module_every_lane_reaches_selects_its_callers():
+    """The lane/algos-neighbors `_buffer.py` shape, on the real files: a new
+    helper, and a real estimator (neighbors.NearestNeighbors) that calls it.
+    The answer is the lanes that seed NearestNeighbors, not every lane."""
+    buf, nb = "python/mojolearn/_buffer.py", "python/mojolearn/neighbors.py"
+    old_buf, old_nb = lane_select._read(buf), lane_select._read(nb)
+    new_buf = old_buf + "\n\ndef as_f32_dense_probe(obj, *, name):\n    return obj\n"
+    head = re.search(r"^class NearestNeighbors\b[^\n]*:\n", old_nb, re.M)
+    assert head, "neighbors.py no longer defines NearestNeighbors; pick another caller"
+    new_nb = (old_nb[:head.end()] + "    def _probe(self, x):\n        from ._buffer import as_f32_dense_probe\n"
+              "        return as_f32_dense_probe(x, name='x')\n\n" + old_nb[head.end():])
+    sources, rev = _lane_sets()
+    _, why = lane_select.lane_sources()
+    seeded = {n for n in sources if "NearestNeighbors" in why[n]["symbols"]}
+    assert seeded, "no lane seeds NearestNeighbors; the fixture needs another caller"
+    assert len(rev.get(buf, ())) == len(sources), "_buffer.py is no longer reached by every lane"
+
+    unused = _py(new_buf, old_buf, buf)
+    assert unused == (["as_f32_dense_probe"], set()), f"an uncalled helper selected {unused}"
+
+    with _Seeded({buf: old_buf, nb: old_nb}, {buf: new_buf, nb: new_nb}):
+        names, lanes = lane_select.python_edit_lanes(_FAKE_REF, buf)
+        # THE PERTURBATION: without the use walk the callers vanish.
+        real = lane_select._uses_of
+        lane_select._uses_of = lambda *a: set()
+        try:
+            _, blind = lane_select.python_edit_lanes(_FAKE_REF, buf)
+        finally:
+            lane_select._uses_of = real
+    assert seeded <= lanes, f"callers of NearestNeighbors missing: {sorted(seeded - lanes)[:5]}"
+    assert len(lanes) < len(sources) // 2, f"{len(lanes)} lanes for one helper"
+    assert not (seeded & blind), "the use walk is not what found the callers"
+
+
+def test_a_changed_function_in_a_module_init_imports_selects_its_callers():
+    """The lane/algos-decomp `_linalg_impl.py` shape: `qr`'s default changed
+    in a module `__init__.py` imports (so every lane reaches it)."""
+    path = "python/mojolearn/_linalg_impl.py"
+    old = lane_select._read(path)
+    assert 'def qr(a, mode="r"):' in old, "qr's signature moved; update this replay"
+    got = _py(old.replace('def qr(a, mode="r"):', 'def qr(a, mode="reduced"):'), old, path)
+    assert got is not None, lane_select.PYTHON_EDIT_WHY
+    sources, rev = _lane_sets()
+    assert "qr" in got[0]
+    assert len(got[1]) < len(rev.get(path, ())) // 2, f"{len(got[1])} of {len(rev.get(path, ()))}"
+    assert "mamba1" not in got[1] and "kmeans" not in got[1]
+
+
+# ------------------------------------------------ bindings that grew exports
+
+BIND_OLD = '''"""A probe binding."""
+from std.python import PythonObject
+from pkg.api import (
+    a_py, b_py,
+)
+from pkg.other import c_impl
+
+
+def a_binding(x: PythonObject) raises -> PythonObject:
+    return c_impl(x)
+
+
+# ===== a banner the next block drags along
+def PyInit__probe() abi("C") -> PythonObject:
+    var m = PythonModuleBuilder("_probe")
+    m.def_function[a_binding]("a")
+    m.def_function[a_py[DevExec]]("a_dev")
+    return m.finalize()
+'''
+
+BIND_NEW = (BIND_OLD.replace('"""A probe binding."""', '"""A probe binding, reworded."""')
+            .replace("    a_py, b_py,\n", "    a_py, b_py,\n    geqrf_py, orgqr_py,\n")
+            .replace("from pkg.other import c_impl", "from pkg.other import d_impl, c_impl")
+            .replace("\n\n# ===== a banner", "\n\ndef d_binding(x: PythonObject) raises -> PythonObject:\n"
+                     "    return d_impl(x)\n\n\n# ===== a banner")
+            .replace('    m.def_function[a_py[DevExec]]("a_dev")\n',
+                     '    m.def_function[a_py[DevExec]]("a_dev")\n'
+                     '    m.def_function[geqrf_py[DevExec]]("geqrf")\n'
+                     '    m.def_function[d_binding]("d")\n'))
+
+BIND_MUST_REFUSE = (
+    ("an import's module changed", BIND_NEW.replace("from pkg.api import (", "from pkg.api2 import (")),
+    ("a one-line import's module changed", BIND_NEW.replace("from pkg.other import d_impl, c_impl",
+                                                             "from pkg.other2 import d_impl, c_impl")),
+    ("an old function registered under a new name", BIND_NEW.replace(
+        'm.def_function[d_binding]("d")', 'm.def_function[a_binding]("d")')),
+    ("an existing export name registered again", BIND_NEW.replace('("d")', '("a")')),
+    ("an old block edited", BIND_NEW.replace("return c_impl(x)", "return c_impl(x + 1)")),
+    ("a newly imported name the old text already used",
+     BIND_NEW.replace("    geqrf_py, orgqr_py,\n", "    geqrf_py, orgqr_py, c_impl,\n")),
+)
+
+
+def _bind(new, old=BIND_OLD, path="bindings/_probe_fake.mojo"):
+    with _Seeded({path: old}, {path: new}):
+        return lane_select.binding_additions(_FAKE_REF, path)
+
+
+def test_a_binding_edit_that_is_not_only_new_exports_is_refused():
+    for label, text in BIND_MUST_REFUSE:
+        assert _bind(text) is None, f"{label}: was read as additions"
+
+
+def test_a_binding_that_gained_imported_and_parametric_exports_is_read_as_additions():
+    """The x_decomp and gp binding shapes: new names inside an existing import
+    list, a one-line import that gained a name, `m.def_function`, a parametric
+    impl, a banner comment that moved, a reworded module docstring."""
+    assert _bind(BIND_NEW) == {"geqrf", "d"}
+
+
+def test_a_grown_host_binding_selects_the_lanes_that_run_it():
+    """A host binding has no `binding_use` row of its own; before 2026-09-27 a
+    grown host binding selected NO lane. Replayed on the gp host binding."""
+    path = "bindings/_mojolearn_gp_host.mojo"
+    old = lane_select._read(path)
+    init = re.search(r"^def PyInit__mojolearn_gp_host\b", old, re.M)
+    first = re.search(r"^(\s*)(\w+)\.def_function\[[^\n]*\n", old[init.start():], re.M)
+    assert init and first, "the gp host binding changed shape; update this replay"
+    at = init.start() + first.end()
+    new = (old[:init.start()] + "def probe_export_binding(x: PythonObject) raises -> PythonObject:\n"
+           "    return x\n\n\n" + old[init.start():at]
+           + f'{first.group(1)}{first.group(2)}.def_function[probe_export_binding]("probe_export")\n'
+           + old[at:])
+    _, why = lane_select.lane_sources()
+    declared = {n for n, ev in why.items() if "_mojolearn_gp_host" in ev.get("declared", ())}
+    assert declared, "no lane is declared for the gp host binding; the fixture is wrong"
+    with _Seeded({path: old}, {path: new}):
+        sel = lane_select.select([path], ref=_FAKE_REF)
+    assert "GAINED exports (probe_export)" in sel["reasons"][path], sel["reasons"][path]
+    assert declared <= set(sel["lanes"]), sorted(declared - set(sel["lanes"]))[:5]
+    assert len(sel["lanes"]) < sel["total"] // 2, len(sel["lanes"])
