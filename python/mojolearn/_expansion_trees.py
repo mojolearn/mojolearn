@@ -828,8 +828,9 @@ class AdaBoostClassifier(_AdaBoostBase):
         n, k = Xa.shape[0], self.n_classes_
         acc = self._decision(Xa)
         if k == 2:
-            v = acc.tolist()
-            return Array.from_list([v[2 * i + 1] - v[2 * i] for i in range(n)], "<f8")
+            d = empty((n,), "<f8")
+            self._bind().x_trees_margin2(addr_ro(acc, name="votes"), addr(d, name="margin"), [n, 0])
+            return d
         return acc.reshape((n, k))
 
     def predict_proba(self, X):
@@ -837,9 +838,9 @@ class AdaBoostClassifier(_AdaBoostBase):
         n, k = Xa.shape[0], self.n_classes_
         acc = self._decision(Xa)
         if k == 2:
-            v = acc.tolist()
-            d = [(v[2 * i + 1] - v[2 * i]) / 2 for i in range(n)]
-            acc = Array.from_list([x for di in d for x in (-di, di)], "<f8")
+            pairs = empty((n * 2,), "<f8")
+            self._bind().x_trees_margin2(addr_ro(acc, name="votes"), addr(pairs, name="pairs"), [n, 2])
+            acc = pairs
         else:
             self._scale(acc, k - 1)
         self._bind().x_trees_softmax_rows(addr(acc, name="proba"), [n, k])
@@ -850,8 +851,8 @@ class AdaBoostClassifier(_AdaBoostBase):
         n, k = Xa.shape[0], self.n_classes_
         acc = self._decision(Xa)
         if k == 2:
-            v = acc.tolist()
-            codes = Array.from_list([1 if v[2 * i + 1] - v[2 * i] > 0 else 0 for i in range(n)], "<i4")
+            codes = empty((n,), "<i4")
+            self._bind().x_trees_margin2(addr_ro(acc, name="votes"), addr(codes, name="codes"), [n, 1])
         else:
             codes = self._argmax(acc, n, k)
         return decode_labels(self.classes_, codes)

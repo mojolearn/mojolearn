@@ -135,7 +135,7 @@ def weighted_sample(
             var hi = n - 1
             while lo < hi:
                 var mid = (lo + hi) // 2
-                if cp[mid] > u:
+                if cp[unsafe_offset=mid] > u:
                     hi = mid
                 else:
                     lo = mid + 1

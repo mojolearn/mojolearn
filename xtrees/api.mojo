@@ -173,6 +173,37 @@ def exact_sum_f32_binding(x: PythonObject, params: PythonObject) raises -> Pytho
     return out
 
 
+def margin2_binding(acc: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
+    """Two-class vote rows (n x 2, float64) to the SAMME margin
+    d = acc[2i+1] - acc[2i], one IEEE binary64 subtraction per row, the
+    value the Python `v[2*i+1] - v[2*i]` computed. params = [n, mode]:
+    mode 0 writes d (float64, n); mode 1 writes the int32 code
+    `1 if d > 0 else 0` (a NaN gives 0, as `>` did); mode 2 writes the
+    float64 pairs (-(d/2), d/2) (n x 2), the rows `predict_proba` softmaxes."""
+    _need(params, 2, "x_trees_margin2")
+    var n = _count(_i(params, 0), "x_trees_margin2")
+    var mode = _i(params, 1)
+    var a = f64_ptr(Int(py=acc))
+    if mode == 0:
+        var o = f64_ptr(Int(py=dst))
+        for i in range(n):
+            o[unsafe_offset=i] = a[unsafe_offset=2 * i + 1] - a[unsafe_offset=2 * i]
+    elif mode == 1:
+        var o = i32_ptr(Int(py=dst))
+        for i in range(n):
+            var d = a[unsafe_offset=2 * i + 1] - a[unsafe_offset=2 * i]
+            o[unsafe_offset=i] = Int32(1) if d > 0 else Int32(0)
+    elif mode == 2:
+        var o = f64_ptr(Int(py=dst))
+        for i in range(n):
+            var h = (a[unsafe_offset=2 * i + 1] - a[unsafe_offset=2 * i]) / 2
+            o[unsafe_offset=2 * i] = -h
+            o[unsafe_offset=2 * i + 1] = h
+    else:
+        raise Error("x_trees_margin2: mode must be 0, 1 or 2")
+    return PythonObject(n)
+
+
 def put_f32_binding(dst: PythonObject, src: PythonObject, params: PythonObject) raises -> PythonObject:
     """dst[offset:offset+n] = src; params = [offset, n]."""
     _need(params, 2, "x_trees_put_f32")
@@ -549,6 +580,7 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[scale_to_f32_binding]("x_trees_scale_to_f32")
     m.def_function[put_f32_binding]("x_trees_put_f32")
     m.def_function[exact_sum_f32_binding]("x_trees_exact_sum_f32")
+    m.def_function[margin2_binding]("x_trees_margin2")
     m.def_function[samme_step_binding]("x_trees_samme_step")
     m.def_function[r2_step_binding]("x_trees_r2_step")
     m.def_function[weighted_median_binding]("x_trees_weighted_median")
