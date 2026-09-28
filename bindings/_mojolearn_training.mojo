@@ -67,6 +67,9 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from core.neural_context import neural_ctx
+# One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
+comptime _NEURAL_CTX = "MojoNeuralTrainingContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralTrainingContextFast"
 from checks.vendor import COMPILED_VENDOR
 from max.gpu.host import DeviceContext
 
@@ -251,7 +254,7 @@ def optimizer_step_binding(
     var max_norm = Float32(Float64(py=params[11]))
     var n_total = 0
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = neural_ctx[_NEURAL_CTX]()
         if maximize:
             # The step reads a negated COPY, so the caller's gradient is never
             # negated, not even for the length of the call; a clipped
@@ -323,7 +326,7 @@ def clip_grad_norm_binding(
     var max_norm = Float32(Float64(py=params[1]))
     var n_total = 0
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = neural_ctx[_NEURAL_CTX]()
         n_total = parallel_clip_grad_norm_host(
             ctx, gp, op, fp, n_tensors, max_norm,
         )
@@ -399,7 +402,7 @@ def ce_loss_binding(
     var label_smoothing = Float32(Float64(py=params[6]))
     var count = 0
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = neural_ctx[_NEURAL_CTX]()
         count = identical_ce_loss_host(
             ctx, lp, rp, dp, xp, tp, n_rows, vocab, ignore_index, reduction,
             num_items, want_grad, label_smoothing,
@@ -429,7 +432,7 @@ def mlp_bias_activation_binding(
     var op = _f32_ptr(Int(py=out_addr))
     var count = 0
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = neural_ctx[_NEURAL_CTX]()
         count = mlp_bias_activation_host(ctx, xp, bp, op, rows, cols, relu_flag)
     return PythonObject(count)
 
@@ -453,7 +456,7 @@ def mlp_relu_backward_binding(
     var op = _f32_ptr(Int(py=out_addr))
     var count = 0
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = neural_ctx[_NEURAL_CTX]()
         count = mlp_relu_backward_host(ctx, ap, gp, op, rows, cols)
     return PythonObject(count)
 
@@ -474,7 +477,7 @@ def mlp_sum_rows_binding(
     var op = _f32_ptr(Int(py=out_addr))
     var count = 0
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = neural_ctx[_NEURAL_CTX]()
         count = mlp_sum_rows_host(ctx, xp, op, rows, cols)
     return PythonObject(count)
 
@@ -522,7 +525,7 @@ def embedding_forward_binding(
     var width = Int(py=params[2])
     var count = 0
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = neural_ctx[_NEURAL_CTX]()
         count = samba_embedding_forward_host(
             ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), _i32_ptr(a[2]),
             n_positions, vocab, width,
@@ -542,7 +545,7 @@ def embedding_backward_binding(
     var width = Int(py=params[2])
     var count = 0
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = neural_ctx[_NEURAL_CTX]()
         count = samba_embedding_backward_host(
             ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), _i32_ptr(a[2]),
             n_positions, vocab, width,
@@ -562,7 +565,7 @@ def rms_norm_forward_binding(
     var eps = Float32(Float64(py=params[2]))
     var count = 0
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = neural_ctx[_NEURAL_CTX]()
         count = samba_rms_norm_forward_host(
             ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), _f32_ptr(a[2]), m, dm, eps,
         )
@@ -581,7 +584,7 @@ def rms_norm_backward_binding(
     var eps = Float32(Float64(py=params[2]))
     var count = 0
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = neural_ctx[_NEURAL_CTX]()
         count = samba_rms_norm_backward_host(
             ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), _f32_ptr(a[2]),
             _f32_ptr(a[3]), _f32_ptr(a[4]), m, dm, eps,
@@ -601,7 +604,7 @@ def linear_forward_binding(
     var k = Int(py=params[2])
     var count = 0
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = neural_ctx[_NEURAL_CTX]()
         count = samba_linear_forward_host(
             ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), _f32_ptr(a[2]), m, n, k,
         )
@@ -620,7 +623,7 @@ def linear_backward_binding(
     var k = Int(py=params[2])
     var count = 0
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = neural_ctx[_NEURAL_CTX]()
         count = samba_linear_backward_host(
             ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), _f32_ptr(a[2]),
             _f32_ptr(a[3]), _f32_ptr(a[4]), m, n, k,
@@ -642,7 +645,7 @@ def accumulate_binding(
     var t_tokens = Int(py=params[2])
     var count = 0
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = neural_ctx[_NEURAL_CTX]()
         count = parallel_accumulate_host(
             ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), n, steps, t_tokens,
         )
@@ -680,7 +683,7 @@ def neural_rng_binding(
     var pb = Float32(Float64(py=params[7]))
     var count = 0
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = neural_ctx[_NEURAL_CTX]()
         count = neural_rng_host(
             ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), n, offset, seed_lo, seed_hi,
             stream_id, kind, pa, pb,
@@ -700,7 +703,7 @@ def chunked_lm_head_v2_loss_binding(
     var width = Int(py=params[2])
     var count = 0
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = neural_ctx[_NEURAL_CTX]()
         count = chunked_lm_head_v2_loss_host(
             ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), _f32_ptr(a[2]),
             _f32_ptr(a[3]), _f32_ptr(a[4]), _i32_ptr(a[5]),
@@ -720,7 +723,7 @@ def chunked_lm_head_v2_train_binding(
     var width = Int(py=params[2])
     var count = 0
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = neural_ctx[_NEURAL_CTX]()
         count = chunked_lm_head_v2_train_host(
             ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), _f32_ptr(a[2]),
             _f32_ptr(a[3]), _f32_ptr(a[4]), _f32_ptr(a[5]),

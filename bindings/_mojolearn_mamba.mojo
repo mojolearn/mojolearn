@@ -148,6 +148,9 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from core.neural_context import neural_ctx
+# One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
+comptime _NEURAL_CTX = "MojoNeuralMambaContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralMambaContextFast"
 from checks.vendor import COMPILED_VENDOR
 
 from mamba.checks.mamba_fixture import (
@@ -349,7 +352,7 @@ def _mamba1_run(a: List[Int], b: Int, l: Int, dm: Int, decode: Bool = False) rai
     w.d_skip = _read_f32(a[9], di)
     w.w_out = _read_f32(a[10], dm * di)
 
-    var ctx = DeviceContext()
+    var ctx = neural_ctx[_NEURAL_CTX]()
     var dw = MambaDeviceWeights(ctx, w)
     # The caller's state, uploaded over the fresh zeros. Zeros in IS
     # allocate_inference_cache; anything else is a carried sequence.
@@ -637,7 +640,7 @@ def _m1_session_open_run(mut s: Mamba1DecodeSession, a: List[Int], b: Int, dm: I
     w.a_log = _read_f32(a[8], di * D_STATE)
     w.d_skip = _read_f32(a[9], di)
     w.w_out = _read_f32(a[10], dm * di)
-    s.ctx = DeviceContext()
+    s.ctx = neural_ctx[_NEURAL_CTX]()
     s.w = MambaDeviceWeights(s.ctx.value(), w)
     var dstate = MambaDeviceState(s.ctx.value(), b, dims)
     dstate.conv_win = mamba_upload(s.ctx.value(), _read_f32(a[11], b * di * D_CONV))
@@ -866,7 +869,7 @@ def _mamba2_run(
 
     var h_n = b * nh * M2_HEADDIM * M2_D_STATE
 
-    var ctx = DeviceContext()
+    var ctx = neural_ctx[_NEURAL_CTX]()
     var dw = Mamba2DeviceWeights(ctx, w)
     # The caller's three-piece state over the fresh zeros. A nonzero h
     # with q0 == 0 IS the initial_states path (module header, DEVIATION
@@ -1125,7 +1128,7 @@ def _m2_session_open_run(
     hw.d_skip = _read_f32(a[6], nh)
     hw.gnorm_w = _read_f32(a[7], di)
     hw.w_out = _read_f32(a[8], dm * di)
-    s.ctx = DeviceContext()
+    s.ctx = neural_ctx[_NEURAL_CTX]()
     ref ctx = s.ctx.value()
     s.w = Mamba2DeviceWeights(ctx, hw)
     s.state = Mamba2DeviceState(ctx, b, dims)
@@ -1362,7 +1365,7 @@ def _mamba3_run[discard_state: Bool = False](
     var k_n = b * nh * M3_D_STATE
     var v_n = b * nh * M3_HEADDIM
 
-    var ctx = DeviceContext()
+    var ctx = neural_ctx[_NEURAL_CTX]()
     m3_phase_tick(ctx, phase_tick, String("surface.weight_lists_and_context"))
     var dw = _m3_load_weights(ctx, a, dims)
     m3_phase_tick(ctx, phase_tick, String("surface.weight_upload"))
@@ -1687,7 +1690,7 @@ def _m3_session_copy_in(mut s: Mamba3DecodeSession, a: List[Int], q0: Int, pend:
 def _m3_session_open_run(mut s: Mamba3DecodeSession, a: List[Int], b: Int,
                          dm: Int, q0: Int, pend: Int) raises:
     var dims = Mamba3Dims.of(dm)
-    s.ctx = DeviceContext()
+    s.ctx = neural_ctx[_NEURAL_CTX]()
     var weight_addrs = List[Int]()
     weight_addrs.append(0)
     for i in range(9): weight_addrs.append(a[i])
