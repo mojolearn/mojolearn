@@ -1088,8 +1088,10 @@ def gmm_precision_cholesky(
     for kc in range(ncomp):
         # (1) the working copy
         var src = cov.create_sub_buffer[DType.float32](kc * dd, dd)
+        # device-to-device copies and kernels are stream-ordered: no drain
+        # between them (lane/cluster-apple; the drains that stay are where
+        # the host reads: potrf's info, the log determinant)
         ctx.enqueue_copy(dst_buf=work, src_buf=src)
-        ctx.synchronize()
 
         # (2) the profile's diagonal flush, with no ridge
         add_jitter(ctx, work, d, GMM_CHOL_JITTER, chol_elem_tpb)
@@ -1157,7 +1159,6 @@ def gmm_precision_cholesky(
         # the factor, kept for the card and for the VENDOR_MATMUL arm
         var ldst = chol_l.create_sub_buffer[DType.float32](kc * dd, dd)
         ctx.enqueue_copy(dst_buf=ldst, src_buf=work)
-        ctx.synchronize()
         trace.record_device(
             ctx, gmm_comp_tag(tag, kc, "cholesky"), ldst, dd
         )
@@ -1174,7 +1175,6 @@ def gmm_precision_cholesky(
         )
         var linv_k = linv.create_sub_buffer[DType.float32](kc * dd, dd)
         ctx.enqueue_copy(dst_buf=linv_k, src_buf=identity)
-        ctx.synchronize()
 
         # (6) P_k = (L_k^{-1})^T
         var prec_k = prec.create_sub_buffer[DType.float32](kc * dd, dd)
@@ -1185,7 +1185,6 @@ def gmm_precision_cholesky(
             grid_dim=(grid_dd, 1, 1),
             block_dim=(elem_tpb, 1, 1),
         )
-        ctx.synchronize()
         trace.record_device(
             ctx, gmm_comp_tag(tag, kc, "precchol"), prec_k, dd
         )
