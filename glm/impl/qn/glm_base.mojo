@@ -62,11 +62,12 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from core.column_stats import STATS_TPB, xty_kernel
 from core.gemm import gemm_nt, gemv_n
 from core.pinned_reduce import pinned_block_sum
-from core.strided_walk import APPLE_IDENTICAL_STEP_UNROLL, strided_ftz_sum
+from core.strided_walk import APPLE_IDENTICAL_STEP_UNROLL, APPLE_FAST_STEP_UNROLL, strided_ftz_sum
 from core.xtdz_coalesced import (
     xtdz_coalesced,
     xtdz_coalesced_applies,
     xtdz_coalesced_workspace_floats,
+    XTDZ_CO_MAX_CELLS,
 )
 from glm.impl.qn.glm_linear import (
     abs_loss_dz_kernel,
@@ -89,6 +90,27 @@ comptime QN_FAST_XTDZ = (
 """FAST on Apple: the gradient's `X^T dZ` through `fast_xtdz` (rows split
 across blocks, X read once) instead of one block per output cell walking
 every row at a stride of D floats."""
+
+comptime QN_FAST_COALESCED = (
+    QN_FAST_XTDZ and not is_defined["MOJOLEARN_QN_FAST_COALESCED_OFF"]()
+)
+"""FAST on Apple (lane/linear-apple2): where `xtdz_coalesced` fits (D * C <=
+1024 cells) the gradient's `X^T dZ` takes it instead of `fast_xtdz`: the
+chains and fold of `xty_kernel` / `xtdz_multi_kernel` (what FAST computes on
+every other column) under FAST arithmetic, read row-coalesced. fast_xtdz
+put D * C threads of 256 to work on 16-row tiles with two barriers each.
+FAST's words change (to xty_kernel's order); -D MOJOLEARN_QN_FAST_COALESCED_OFF=1
+restores fast_xtdz."""
+
+
+def qn_coalesced_applies(d: Int, c: Int) -> Bool:
+    """`xtdz_coalesced` serves this gradient: IDENTICAL on Apple (its own
+    rule), or FAST on Apple under QN_FAST_COALESCED."""
+    if xtdz_coalesced_applies(d, c):
+        return True
+    comptime if QN_FAST_COALESCED:
+        return d >= 1 and c >= 1 and d * c <= XTDZ_CO_MAX_CELLS
+    return False
 from glm.impl.qn.glm_regularizer import tikhonov_reg_grad_kernel
 from glm.impl.qn.glm_softmax import (
     add_bias_multi_kernel,
@@ -189,7 +211,7 @@ def sum_terms_kernel(
     var n = Int(n_in)
     var tid = Int(thread_idx.x)
     var acc = Float32(0.0)
-    comptime if APPLE_IDENTICAL_STEP_UNROLL:
+    comptime if APPLE_IDENTICAL_STEP_UNROLL or APPLE_FAST_STEP_UNROLL:
         acc = strided_ftz_sum[STATS_TPB](terms, 1, 0, n, tid, acc)
     else:
         var i = tid
@@ -212,7 +234,7 @@ def mean_kernel(
     var n = Int(n_in)
     var tid = Int(thread_idx.x)
     var acc = Float32(0.0)
-    comptime if APPLE_IDENTICAL_STEP_UNROLL:
+    comptime if APPLE_IDENTICAL_STEP_UNROLL or APPLE_FAST_STEP_UNROLL:
         acc = strided_ftz_sum[STATS_TPB](v, 1, 0, n, tid, acc)
     else:
         var i = tid
@@ -223,6 +245,86 @@ def mean_kernel(
     if tid == 0:
         var ratio = Float32(1.0) / Float32(n)
         out_v.unsafe_store(0, ftz(s0 * ratio))
+
+
+comptime QN_SPLIT_REDUCE = (
+    (APPLE_IDENTICAL_STEP_UNROLL or APPLE_FAST_STEP_UNROLL)
+    and not is_defined["MOJOLEARN_QN_SPLIT_REDUCE_OFF"]()
+)
+"""Apple (lane/linear-apple2): `sum_terms_kernel` / `mean_kernel` in two
+launches. Pass 1 runs the SAME STATS_TPB strided chains, 32 per block across
+STATS_TPB / 32 blocks (GPU cores), into a workspace; pass 2 is the one block
+that loads chain `tid`'s value and runs the same `pinned_block_sum`. Same
+chains, same fold, same words; one core no longer carries every chain.
+-D MOJOLEARN_QN_SPLIT_REDUCE_OFF=1 keeps the one-block kernels."""
+comptime SPLIT_REDUCE_TPB = 32
+
+
+def strided_partials_kernel(
+    partial: MutPointer[Float32, MutAnyOrigin],
+    v: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """Pass 1: chain `tid` of `sum_terms_kernel` / `mean_kernel`, `tid` the
+    global thread index (< STATS_TPB), into `partial[tid]`."""
+    var tid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if tid >= STATS_TPB:
+        return
+    var acc = strided_ftz_sum[STATS_TPB](v, 1, 0, Int(n_in), tid, Float32(0.0))
+    partial.unsafe_store(tid, acc)
+
+
+def partials_fold_kernel(
+    out_v: MutPointer[Float32, MutAnyOrigin],
+    partial: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    mean: Int32,
+):
+    """Pass 2: the one-block fold of the kernels above over pass 1's chains;
+    `mean != 0` scales by 1 / N as `mean_kernel` does."""
+    var tid = Int(thread_idx.x)
+    var acc = partial.unsafe_load(tid)
+    var s0 = ftz(pinned_block_sum[STATS_TPB](acc))
+    if tid == 0:
+        if mean != 0:
+            var ratio = Float32(1.0) / Float32(Int(n_in))
+            out_v.unsafe_store(0, ftz(s0 * ratio))
+        else:
+            out_v.unsafe_store(0, s0)
+
+
+def enqueue_strided_reduce(
+    ctx: DeviceContext,
+    out_v: MutPointer[Float32, MutAnyOrigin],
+    v: MutPointer[Float32, MutAnyOrigin],
+    n: Int,
+    ws: MutPointer[Float32, MutAnyOrigin],
+    ws_len: Int,
+    mean: Bool,
+) raises:
+    """`sum_terms_kernel` (mean False) or `mean_kernel` (mean True) into
+    `out_v[0]`; split in two launches under QN_SPLIT_REDUCE when `ws` holds
+    STATS_TPB floats."""
+    comptime if QN_SPLIT_REDUCE:
+        if ws_len >= STATS_TPB:
+            ctx.enqueue_function[strided_partials_kernel](
+                ws, v, Int32(n),
+                grid_dim=((STATS_TPB + SPLIT_REDUCE_TPB - 1) // SPLIT_REDUCE_TPB, 1, 1),
+                block_dim=(SPLIT_REDUCE_TPB, 1, 1),
+            )
+            ctx.enqueue_function[partials_fold_kernel](
+                out_v, ws, Int32(n), Int32(1) if mean else Int32(0),
+                grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
+            )
+            return
+    if mean:
+        ctx.enqueue_function[mean_kernel](
+            out_v, v, Int32(n), grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[sum_terms_kernel](
+            out_v, v, Int32(n), grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
+        )
 
 
 def linear_fwd(
@@ -302,12 +404,12 @@ def linear_bwd(
         var cd = dims.C * d
         var fast_done = False
         comptime if QN_FAST_XTDZ:
-            if not distributed and fast_xtdz_applies(d, dims.C):
+            if not distributed and fast_xtdz_applies(d, dims.C) and not qn_coalesced_applies(d, dims.C):
                 fast_xtdz_into(ctx, xtdz, x, dz, xtdz_ws, n_rows, d, dims.C)
                 fast_done = True
         # Apple IDENTICAL: the same chains and fold, row-coalesced
         # (`core/xtdz_coalesced.mojo`); a no-op test on every other column.
-        if not distributed and xtdz_coalesced_applies(d, dims.C):
+        if not distributed and qn_coalesced_applies(d, dims.C):
             xtdz_coalesced(ctx, xtdz, x, dz, xtdz_ws, n_rows, d, dims.C)
             fast_done = True
         if not distributed and not fast_done:
@@ -331,10 +433,10 @@ def linear_bwd(
         return
     var fast_done1 = False
     comptime if QN_FAST_XTDZ:
-        if not distributed and fast_xtdz_applies(d, 1):
+        if not distributed and fast_xtdz_applies(d, 1) and not qn_coalesced_applies(d, 1):
             fast_xtdz_into(ctx, xtdz, x, dz, xtdz_ws, n_rows, d, 1)
             fast_done1 = True
-    if not distributed and xtdz_coalesced_applies(d, 1):
+    if not distributed and qn_coalesced_applies(d, 1):
         xtdz_coalesced(ctx, xtdz, x, dz, xtdz_ws, n_rows, d, 1)
         fast_done1 = True
     if not distributed and not fast_done1:
@@ -352,9 +454,10 @@ def linear_bwd(
     if dims.fit_intercept:
         # `raft::stats::mean<true>(Gbias.data, dZ.data, dZ.m, dZ.n, false)`
         # -- the bias gradient is ASSIGNED, not accumulated, in both arms.
-        ctx.enqueue_function[mean_kernel](
-            g.unsafe_ptr() + d, dz.unsafe_ptr(), Int32(n_rows),
-            grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
+        enqueue_strided_reduce(
+            ctx, (g.unsafe_ptr() + d).unsafe_origin_cast[MutAnyOrigin](),
+            dz.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n_rows,
+            xtdz_ws.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), len(xtdz_ws), True,
         )
 
 
@@ -419,7 +522,7 @@ struct GLMWithData(Movable):
         self.xtdz = ctx.enqueue_create_buffer[DType.float32](dims.C * dims.D)
         var ws_floats = (
             xtdz_coalesced_workspace_floats(dims.D, dims.C)
-            if xtdz_coalesced_applies(dims.D, dims.C) else 1
+            if qn_coalesced_applies(dims.D, dims.C) else 1
         )
         # lane/linear-apple: FAST on Apple's fast_xtdz partials live here
         # too, so an evaluation allocates nothing.
@@ -510,9 +613,9 @@ struct GLMWithData(Movable):
                 "qn: loss id " + String(self.loss) + " has no getLossAndDZ"
                 " here (glm/NOT_IMPLEMENTED.tsv)"
             )
-        ctx.enqueue_function[sum_terms_kernel](
-            out_v, self.loss_terms.unsafe_ptr(), Int32(n),
-            grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
+        enqueue_strided_reduce(
+            ctx, out_v, self.loss_terms.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n,
+            self.xtdz_ws.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), len(self.xtdz_ws), False,
         )
 
     def loss_grad(
