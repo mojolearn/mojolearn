@@ -47,6 +47,35 @@ arrays, the gradient arrays included).
    Before arm `-D MOJOLEARN_XCNN_NO_FAST_TUNE`. FAST bits may move: the
    paired quality set (fastq.py) runs per arm.
 
+4. 93cf24571 `PLAN_APPLE_MMA_SPLIT_BIG` (22, SHARED GEMM FILE): the split
+   over the default 64x64 tile; x_cnn candidate for m, n >= 64.
+5. 5021979ab / 1e79c8b4c layout changes (GEMM rows <-> NCHW) as 32x32
+   threadgroup tiles: conv_out (`conv_out_val`) and Conv2d's dout_rows
+   default on (`-D MOJOLEARN_XCNN_NO_TILED_LAYOUT`); the pooled backward's
+   rows measured slower tiled and are opt-in (`-D MOJOLEARN_XCNN_TILED_ROWS`).
+6. d3d5ce0e7 APPLE_MMA for ONE ragged leaf (`apple_mma_applies_one_leaf`,
+   the kernel's `wpl` for P == 1, SHARED GEMM FILE), timed against the
+   dispatcher in IDENTICAL too (`-D MOJOLEARN_XCNN_NO_NT_TUNE`); the MMA
+   split for bias gradients; each tuning candidate runs once untimed first.
+7. b4d13d73c im2col one thread per (row, channel) (`im2col_taps_at`,
+   `-D MOJOLEARN_XCNN_NO_IM2COL_TAPS`).
+8. 1e79c8b4c GCNConv/SAGEConv host CSR: one stable int64 argsort per view
+   (lexsort's order exactly) and bincount (legacy arm keeps lexsort).
+9. 985673313 / cf1ee40fb the DIRECT first-layer convolution (Apple only):
+   k = C*KH*KW one leaf of at most 32 (the first block's 27): each cell the
+   contract's chain `rtf_mul_add` from +0.0 over flushed operands (the
+   GEMM's exact step), taps in registers, weights flushed in threadgroup
+   memory, cols stored only when the backward reads them, the NCHW word
+   `conv_out_val`'s. No GEMM, no y2, no conv_out launch
+   (`-D MOJOLEARN_XCNN_NO_DIRECT_CONV`).
+10. 4afd3f1ec max pool backward: where windows tile the input (kernel ==
+   stride, no pad/dilation) the one visited window's step directly
+   (`-D MOJOLEARN_XCNN_NO_POOL_BWD_TILE`; x_cnn/ops.mojo, host twin too).
+11. d6e3cbd4a merge of origin/lane/apple-merged (no file in common).
+
+Every x_cnn sabotage patch still applies (`git apply --check`, 23 of 23);
+none touches a line these changes replaced.
+
 ## Results
 
 ### m4-a (Apple M4), job 1790604402501, commit 3eead70b3, arms interleaved A B A B
