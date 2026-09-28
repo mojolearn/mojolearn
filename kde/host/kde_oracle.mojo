@@ -412,23 +412,62 @@ comptime KdeV = SIMD[DType.float32, KDE_W]
 
 
 @always_inline
-def _kde_step(acc: KdeV, qv: Float32, t: KdeV, metric: Int, metric_arg: Float32) -> KdeV:
-    """One feature step of W cells of `oracle_distance_ptr`."""
-    if metric == DIST_COSINE_EXPANDED or metric == DIST_L2_EXPANDED:
+def _kde_step[M: Int](acc: KdeV, qv: Float32, t: KdeV, metric_arg: Float32) -> KdeV:
+    """One feature step of W cells of `oracle_distance_ptr`, the metric
+    fixed at compile time (see `_kde_tile`)."""
+    comptime if M == DIST_COSINE_EXPANDED or M == DIST_L2_EXPANDED:
         return ftz_v[KDE_W](identical_mul_add_simd[KDE_W](KdeV(qv), t, acc))
-    if metric == DIST_L2_SQRT_UNEXPANDED:
+    elif M == DIST_L2_SQRT_UNEXPANDED:
         var diff = ftz_v[KDE_W](KdeV(qv) - t)
         return ftz_v[KDE_W](identical_mul_add_simd[KDE_W](diff, diff, acc))
-    if metric == DIST_L1:
+    elif M == DIST_L1:
         return ftz_v[KDE_W](acc + abs(ftz_v[KDE_W](KdeV(qv) - t)))
-    if metric == DIST_LINF:
+    elif M == DIST_LINF:
         var diff = abs(ftz_v[KDE_W](KdeV(qv) - t))
         return diff.gt(acc).select(diff, acc)
-    var out = acc
-    comptime for l in range(KDE_W):
-        var diff = abs(ftz(qv - t[l]))
-        out[l] = ftz(acc[l] + ftz(identical_pow(diff, metric_arg)))
-    return out
+    else:
+        var out = acc
+        comptime for l in range(KDE_W):
+            var diff = abs(ftz(qv - t[l]))
+            out[l] = ftz(acc[l] + ftz(identical_pow(diff, metric_arg)))
+        return out
+
+
+def _kde_tile_m[M: Int](
+    qbp: HostF32Ptr, pb: HostF32Ptr, d: Int, metric_arg: Float32, out: HostF32Ptr,
+):
+    """KDE_QB query rows (at `qbp`, row r at `r * d`) x KDE_W training
+    columns (the packed block `pb`), raw accumulators into `out`."""
+    var a0 = KdeV(0.0)
+    var a1 = KdeV(0.0)
+    var a2 = KdeV(0.0)
+    var a3 = KdeV(0.0)
+    for f in range(d):
+        var tv = pb.unsafe_load[width=KDE_W](f * KDE_W)
+        a0 = _kde_step[M](a0, qbp.unsafe_load(f), tv, metric_arg)
+        a1 = _kde_step[M](a1, qbp.unsafe_load(d + f), tv, metric_arg)
+        a2 = _kde_step[M](a2, qbp.unsafe_load(2 * d + f), tv, metric_arg)
+        a3 = _kde_step[M](a3, qbp.unsafe_load(3 * d + f), tv, metric_arg)
+    out.unsafe_store[width=KDE_W](0, a0)
+    out.unsafe_store[width=KDE_W](KDE_W, a1)
+    out.unsafe_store[width=KDE_W](2 * KDE_W, a2)
+    out.unsafe_store[width=KDE_W](3 * KDE_W, a3)
+
+
+def _kde_tile(
+    qbp: HostF32Ptr, pb: HostF32Ptr, d: Int, metric: Int, metric_arg: Float32,
+    out: HostF32Ptr,
+):
+    if metric == DIST_COSINE_EXPANDED or metric == DIST_L2_EXPANDED:
+        _kde_tile_m[DIST_L2_EXPANDED](qbp, pb, d, metric_arg, out)
+    elif metric == DIST_L2_SQRT_UNEXPANDED:
+        _kde_tile_m[DIST_L2_SQRT_UNEXPANDED](qbp, pb, d, metric_arg, out)
+    elif metric == DIST_L1:
+        _kde_tile_m[DIST_L1](qbp, pb, d, metric_arg, out)
+    elif metric == DIST_LINF:
+        _kde_tile_m[DIST_LINF](qbp, pb, d, metric_arg, out)
+    else:
+        _kde_tile_m[DIST_LP_UNEXPANDED](qbp, pb, d, metric_arg, out)
 
 
 @always_inline
@@ -605,8 +644,10 @@ def oracle_score_samples_into(
         try:
             var rowbuf = List[Float32](length=KDE_QB * nbk * KDE_W, fill=Float32(0.0))
             var qbuf = List[Float32](length=KDE_QB * d, fill=Float32(0.0))
+            var tl = List[Float32](length=KDE_QB * KDE_W, fill=Float32(0.0))
             var rbp = host_list_ptr(rowbuf)
             var qbp = host_list_ptr(qbuf)
+            var tlp = host_list_ptr(tl)
             var rstride = nbk * KDE_W
             var lo = c * chunk
             var hi = min(lo + chunk, n_query)
@@ -619,28 +660,11 @@ def oracle_score_samples_into(
                         qbp.unsafe_store(r * d + f, ftz(query.unsafe_load(src * d + f)))
                 for jb in range(nbk):
                     var pb = panp + jb * d * KDE_W
-                    var a0 = KdeV(0.0)
-                    var a1 = KdeV(0.0)
-                    var a2 = KdeV(0.0)
-                    var a3 = KdeV(0.0)
-                    for f in range(d):
-                        var tv = pb.unsafe_load[width=KDE_W](f * KDE_W)
-                        a0 = _kde_step(a0, qbp.unsafe_load(f), tv, metric, metric_arg)
-                        a1 = _kde_step(a1, qbp.unsafe_load(d + f), tv, metric, metric_arg)
-                        a2 = _kde_step(a2, qbp.unsafe_load(2 * d + f), tv, metric, metric_arg)
-                        a3 = _kde_step(a3, qbp.unsafe_load(3 * d + f), tv, metric, metric_arg)
+                    _kde_tile(qbp, pb, d, metric, metric_arg, tlp)
                     var tn = tnpp.unsafe_load[width=KDE_W](jb * KDE_W)
                     var lw = lwpp.unsafe_load[width=KDE_W](jb * KDE_W)
                     for r in range(nq):
-                        var acc: KdeV
-                        if r == 0:
-                            acc = a0
-                        elif r == 1:
-                            acc = a1
-                        elif r == 2:
-                            acc = a2
-                        else:
-                            acc = a3
+                        var acc = tlp.unsafe_load[width=KDE_W](r * KDE_W)
                         var dist = _kde_epilogue(acc, qnp.unsafe_load(q0 + r), tn, metric, metric_arg)
                         var v = _kde_log_kernel_v(ftz_v[KDE_W](dist), h, kernel)
                         if has_weights:
@@ -653,6 +677,7 @@ def oracle_score_samples_into(
                 q0 += KDE_QB
             _ = rowbuf^
             _ = qbuf^
+            _ = tl^
         except:
             fp.unsafe_store(c, 1)
 
