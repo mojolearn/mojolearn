@@ -116,3 +116,18 @@ working/1790588098954 (neural), my own superseded requests 1790604454599, 179060
   each. **M2 par-* CLOSED.**
 - MI300X column: the central AMD box refuses ssh (`Permission denied (publickey)` from
   tools/amd_central.sh status/queue), so no slot can be seen or used. Still OWED.
+- ann tsne 5813: at the check's n = 60 there is one tile (RTJ = 256), so the arm's descending
+  tile order changed nothing and the four-wide groups kept j ascending. The arm now folds every
+  candidate row n-1..0 inside the tile as well (c019fea7d). nvc1-0021 (NVIDIA RTX 4090,
+  prove_arm): tsne_check PASS, FAIL under the arm (exit 1), PASS after reversal. **CLOSED.**
+- cluster: the fold arm never reached dbscan-metrics, hdbscan-epsilon or spectral-affinities
+  because those lanes run in dbscan/, hdbscan/ and the host rbf matrix, not x_cluster/device_ops.
+  Their own arms (docs/lanes/progress/cluster.md) are now what the driver's sab_plan.tsv maps
+  them to: e2e_dbscan_metrics, e2e_hdbscan_epsilon, x_decomp e2e_host_sqdist. nvc1-0021: 1/1
+  DISAGREE each. **CLOSED** (the fold arm row keeps its 17 lanes, all DISAGREE in nvc1-0014).
+- NVIDIA nvc1-0018 (b6bdd1e0a confirmation set): 101/101 AGREE at CPU threads 1 and default.
+- test_host_surface: the resample host family now declares bootstrap_unpaired,
+  permutation_samples, resample_indices and resample_ranges_parallel_available, and
+  resample-bca / -unpaired / -perm-samples / -utils as covered lanes pending a reference;
+  docs_facts --write refreshed the lagging host surface spans (79559ad0f). On nvc1, own tree, no
+  lane run beside it: 200 passed. **CLOSED.**
