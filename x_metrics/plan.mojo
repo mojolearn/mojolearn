@@ -52,6 +52,7 @@ comptime OP_WPCT_IOTA = 31
 comptime OP_CURVE_CNT = 32
 comptime OP_CURVE_OFF = 33
 comptime OP_CURVE_FILL = 34
+comptime OP_CURVE_KEEP = 35
 #: rows per chunk of the unweighted curve counts
 comptime CURVE_CHUNK = 1024
 #: the unweighted CDF is Float32(i + 1) only while it stays exact
@@ -143,6 +144,14 @@ def _a(r: IP, k: Int) -> Int:
     return Int(r.unsafe_load(2 + k))
 
 
+def _plan_keep(mut pl: Plan, r: IP, n: Int, total: Int):
+    """bin_curve params 10 and 11 (lane metrics-apple): with KEEP (10) and
+    the flag (11) == 1 on an unweighted curve, the collinear-drop flags of
+    every slot follow the curve (x_metrics/par.mojo curve_keep_unit)."""
+    if _a(r, 3) < 0 and _a(r, 11) == 1 and n > 0:
+        pl.emit(OP_CURVE_KEEP, n * total, [n, _a(r, 6), _a(r, 7), _a(r, 9), _a(r, 10)])
+
+
 def plan_program(q: IP, stages: Int, arena_len: Int) raises -> Plan:
     var pl = Plan(arena_len)
     for s in range(stages):
@@ -231,6 +240,7 @@ def plan_program(q: IP, stages: Int, arena_len: Int) raises -> Plan:
             var n = _a(r, 4)
             if n <= 1 or not pl.fits(12 * n * total + total):
                 pl.copy_stage(q, s)
+                _plan_keep(pl, r, n, total)
                 continue
             var N = n * total
             var B = pl.sort(KEY_CURVE, n, total, _a(r, 0), _a(r, 1), _a(r, 3))
@@ -245,6 +255,7 @@ def plan_program(q: IP, stages: Int, arena_len: Int) raises -> Plan:
             else:
                 pl.emit(OP_CURVE_PREFIX, total, [n, G, N, _a(r, 3), 0, 0, 0, 0, 0, 0, G, G + 3 * N, G + 3 * N, G + 6 * N + total])
             pl.emit(OP_CURVE_EMIT, N, [n, G, N, _a(r, 6), _a(r, 7), _a(r, 8), _a(r, 9)])
+            _plan_keep(pl, r, n, total)
         elif op == OP_PERMUTE:
             var n = _a(r, 0)
             if n <= 1 or not pl.fits(6 * n):

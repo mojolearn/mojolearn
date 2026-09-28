@@ -793,3 +793,31 @@ def curve_fill_unit(t: Int, f: FP, q: IP):
             cnt += 1
         else:
             sti(f, G + 5 * N + e, -1)
+
+
+def curve_keep_unit(t: Int, f: FP, q: IP):
+    """q = [n, FPS, TPS, CNT, KEEP]; t = element pp*n + i of an UNWEIGHTED
+    curve (lane metrics-apple): KEEP[t] = 1 when Python's `_drop_collinear`
+    keeps slot i of the problem's CNT[pp] slots (the first, the last, and
+    every slot where the fps or tps step changes), else 0; slots past the
+    count are not written. The counts are integer-valued Float32 words, so
+    their binary64 differences in Python are exact integers: Int
+    differences decide the same way."""
+    var n = p(q, 0)
+    var pp = t // n
+    var i = t - pp * n
+    var c = ldi(f, p(q, 3) + pp)
+    if i >= c:
+        return
+    var keep = 1
+    if i > 0 and i < c - 1:
+        var F = p(q, 1) + pp * n + i
+        var T = p(q, 2) + pp * n + i
+        var f0 = Int(ld(f, F - 1))
+        var f1 = Int(ld(f, F))
+        var f2 = Int(ld(f, F + 1))
+        var t0 = Int(ld(f, T - 1))
+        var t1 = Int(ld(f, T))
+        var t2 = Int(ld(f, T + 1))
+        keep = 1 if (f2 - f1 != f1 - f0) or (t2 - t1 != t1 - t0) else 0
+    sti(f, p(q, 4) + t, keep)

@@ -14,11 +14,12 @@ from x_metrics.par import (
     sort_key_unit, sort_runs_unit, sort_merge_unit, sort_emit_unit,
     curve_gather_unit, curve_prefix_unit, curve_emit_unit, wpct_gather_unit, wpct_prefix_unit, copy_unit,
     cm_chunk_unit, cm_final_unit, wpct_iota_unit, curve_cnt_unit, curve_off_unit, curve_fill_unit,
+    curve_keep_unit,
 )
 
 #: ops 0..10 are the caller's (x_metrics/plan.mojo N_USER_OPS); 11.. are the
 #: planner's parallel schedules (x_metrics/par.mojo)
-comptime N_OPS = 35
+comptime N_OPS = 36
 
 
 @always_inline
@@ -93,3 +94,5 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
         curve_off_unit(t, f, q)
     comptime if OP == 34:
         curve_fill_unit(t, f, q)
+    comptime if OP == 35:
+        curve_keep_unit(t, f, q)
