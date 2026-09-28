@@ -131,7 +131,7 @@ from checks.numerics import identical_cos, identical_mul, identical_mul_add
 from checks.numerics import NUMERIC_FAST as _NUMERIC_FAST
 from std.sys.info import has_apple_gpu_accelerator
 from svm.impl.svm_parameter import KernelParams
-from x_neighbors.fast_eigh import EigP, symmetric_eig_rows
+from x_neighbors.fast_eigh import EigP, symmetric_eig_ql, symmetric_eig_rows
 
 #: lane neighbors-apple3 (2026-09-28): FAST on Apple solves Nystroem's
 #: n_components x n_components eigenproblem on the host, by the Jacobi of
@@ -934,13 +934,22 @@ def nystroem_fit_host(
         var kh = _download(ctx, dk, q * q)
         var wh = List[Float32](length=q, fill=Float32(0.0))
         vecs = List[Float32](length=q * q, fill=Float32(0.0))
-        sweeps = symmetric_eig_rows(
-            EigP(unsafe_from_address=Int(kh.unsafe_ptr())),
-            q,
-            EigP(unsafe_from_address=Int(wh.unsafe_ptr())),
-            EigP(unsafe_from_address=Int(vecs.unsafe_ptr())),
-            NYS_HOST_EIGH_SWEEPS,
-        )
+        comptime if is_defined["MOJOLEARN_NYS_HOST_EIGH_QL"]():
+            # OPT-IN: tridiagonal reduction and QL in binary64
+            sweeps = symmetric_eig_ql(
+                EigP(unsafe_from_address=Int(kh.unsafe_ptr())),
+                q,
+                EigP(unsafe_from_address=Int(wh.unsafe_ptr())),
+                EigP(unsafe_from_address=Int(vecs.unsafe_ptr())),
+            )
+        else:
+            sweeps = symmetric_eig_rows(
+                EigP(unsafe_from_address=Int(kh.unsafe_ptr())),
+                q,
+                EigP(unsafe_from_address=Int(wh.unsafe_ptr())),
+                EigP(unsafe_from_address=Int(vecs.unsafe_ptr())),
+                NYS_HOST_EIGH_SWEEPS,
+            )
         _ = kh^
         if sweeps >= NYS_HOST_EIGH_SWEEPS:
             raise Error(
