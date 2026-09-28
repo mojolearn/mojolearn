@@ -1978,7 +1978,12 @@ def _sparse_encode(k, X, D, algorithm, alpha=None, n_nonzero_coefs=None, init=No
     else:
         reg = alpha if alpha is not None else 1.0
     if algorithm == "lars":
-        from ._expansion_linear import Lars
+        # The linear lane's Lars, imported as a MODULE: the lane selector
+        # reads a module import as a door the lane runs whole, so the x_linear
+        # binding is declared for every x_decomp lane and a clean box builds
+        # it (a name import left it undeclared: 1790542293472 on m4pro-a).
+        from . import _expansion_linear as _xlin
+        Lars = _xlin.Lars
         Dt = D.T.out()
         code = _M.zeros(n, kc)
         for i in range(n):
@@ -2915,7 +2920,8 @@ class MDS(_Base):
             # themselves, later ones IsotonicRegression(out_of_bounds='clip')
             # of the distances on the dissimilarities (the linear lane's
             # x_linear PAVA, fitted on (x, y)-sorted rows).
-            from ._expansion_linear import IsotonicRegression
+            from . import _expansion_linear as _xlin    # a module import: see _sparse_encode
+            IsotonicRegression = _xlin.IsotonicRegression
             pos = [i * n + j for i in range(n) for j in range(i + 1, n) if Dis.s[i * n + j] != 0]
             dis_w = [Dis.s[q] for q in pos]
             ir = IsotonicRegression(out_of_bounds="clip", numeric_mode=self.numeric_mode_)

@@ -222,3 +222,65 @@ all pass on the host. The GPU bindings have NOT been compiled.
 6. test_host_surface + test_lane_select, merge to main and push in one
    command, ONE batched steward request (e2e_p2b_options + e2e_host_all over
    the decomp lanes), progress file. Then PHASE 3 (FAST speed).
+
+## SESSION 7 (2026-09-28 ~05Z): RunPod out of money again; no pod
+
+State on lane/algos-decomp (pushed, NOT merged to main):
+- Session 6 (a pod, RTX 4090 ukollon8nsl8oz, down 2026-09-28 00:00Z) ran part
+  of the phase-2-remainder gate; what it proved is in IDENTITY_PATHS rows
+  139a-139e (x-decomp-umap-options and tsvd `explained` AGREE on the 4090,
+  DISAGREE under e2e_p2b_options.patch, AGREE restored; UMAP option sanity vs
+  umap-learn). Its IDENTICAL speed commits (orth on the device across passes,
+  geqrf/orgqr and getrf on the device in parallel steps, absmax in FOLD_BLOCK
+  slices DEVIATION 5317 + arms 5317/5317b, one-copy input, 5307 arm vs
+  lu_pivot) have NO recorded NVIDIA + CPU gate: treat them as unproven.
+- Steward 1790542727482-decomp-3c73fcee93 (x-decomp-spectral-rbf,
+  e2e_host_sqdist): do-amd FAIL = timeout (exit 124) in the wide/train cell;
+  taken as a do-amd hang (neural's same-minute hang did not reproduce on Hot
+  Aisle). RESUBMITTED to do-amd only as 1790571228173-decomp-3c73fcee93
+  (Apple already PASS on m4pro-a / m2pro via 3266b66bb0).
+- Steward 1790542293472-decomp-3266b66bb0: m4pro-a FAIL was NOT our numerics:
+  every x-decomp-dict-learning cell REFUSED because _mojolearn_x_linear.so was
+  never built on a clean Mac (DictionaryLearning's lars transform and MDS
+  non-metric run the linear lane's Lars / IsotonicRegression). Root cause in
+  tools/lane_select.py: a lane's own seed that every lane also reaches
+  (`_expansion_decomp.py`, via `_linalg_impl.py`) was entered and not
+  followed, so its imports were lost, and a class imported by name leaves its
+  binding narrow (never built by the lane check). FIX (this session):
+  `_own_walk(..., follow=seeds - sinks)` follows a lane's own non-registry
+  seeds; `_expansion_decomp.py` imports `_expansion_linear` as a module.
+  Measured: declared bindings change for 7 unrelated lanes (bootstrap,
+  byte-lm*, metrics-classification: bindings they already load) and every
+  x-decomp lane + cholesky gains x_linear(+host); source sets grow for the
+  x-linear lanes (57 -> 133 files: their own door's imports now count),
+  gemm/linalg/lowbit lanes (90 -> 139), sequence and cnn lanes (+3 to +5).
+- AMD central box: our IDENTICAL "before" remainder (bench/decomp_speed.py,
+  /root/ev-decomp/speed_before_identical_rest.log) has held slot 0 since
+  02:21Z; linalg.qr / svd (geqrf 217 s, orgqr 15 s at 1M x 28: the one-thread
+  cells, before 3eb5dd554), solve(512) 7.1 s (lu one thread, before
+  5cc491ca8), ALS 10.4 s (als_rows 9.7 s), ALS cg 2.7 s are recorded; it has
+  sat in Isomap(10nn) at N3=10000 since 02:38Z (python 100% CPU, GPU0 100%).
+  Not cancelled (owed run rule). Isomap at 10k rows is the next speed target
+  (dijkstra_rows); the bench's N3 must drop (or Isomap be fixed) before the
+  "after" run.
+- Apple speed 1790562095893 / 1790562097205 (m4pro-b / m4pro-a) run commit
+  32bf8cbb80, whose bench fits MinCovDet on 1M rows (the fix 3638c5c29 came
+  after): they will likely hit the steward's timing timeout like
+  1790558492260 / 1790558501645 did. Resubmit at a commit with the fixed bench
+  and ONLY= lists, BEFORE the Macs go (m2pro/m3ultra ~12:35Z, the rest
+  ~21:15Z Sep 28).
+
+## NEXT (start here)
+
+1. Pod (once RunPod is funded): gate every commit since 069bf7678 on NVIDIA
+   + CPU: `tools/algos_lane_check.sh <every x-decomp lane> --pass 2 --sabotage
+   x_decomp/checks/sabotage/e2e_host_all.patch` (all seam arms incl. 5317b,
+   5320, 5321 BUILD/RUN/FAIL/PASS), old part hashes unchanged vs the p2d-*
+   outputs (oldbits.py), test_host_surface, test_lane_select (its inputs
+   changed). Then merge to main + push in one command and ONE batched steward
+   request (e2e_p2b_options + e2e_host_all over the decomp lanes).
+2. Until then, the central AMD box can carry the same lane check for gfx942
+   (tools/amd_central.sh run decomp ...), but the merge gate is NVIDIA + CPU.
+3. Speed (phase 1 IDENTICAL, then FAST): Isomap dijkstra_rows, ALS als_rows,
+   the per-call uploads (device-resident matrices), Jacobi eigh fixed cost;
+   AMD and Apple before/after tables per algorithm.
