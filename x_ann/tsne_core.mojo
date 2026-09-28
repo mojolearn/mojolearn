@@ -302,15 +302,28 @@ def ts_repulse_pair(
     IDENTICAL, which flushes its operands and result; FAST's ftz is the
     identity); and z + q with z and q each +0 or normal (z starts at +0, q
     is flushed and >= 0) is +0, normal, inf or NaN."""
+    ts_repulse_fold(ts_repulse_terms(y0, y1, yj0, yj1), z, r0, r1)
+
+
+@always_inline
+def ts_repulse_terms(y0: Float32, y1: Float32, yj0: Float32, yj1: Float32) -> SIMD[DType.float32, 4]:
+    """`ts_repulse_pair`'s three terms for one j, before they are folded:
+    (q, ftz(q^2 (y0 - yj0)), ftz(q^2 (y1 - yj1)), 0)."""
     var d0 = ftz(y0 - yj0)
     var d1 = ftz(y1 - yj1)
     var acc = ftz(identical_mul_add(d0, d0, Float32(0.0)))
     acc = ftz(identical_mul_add(d1, d1, acc))
     var q = identical_div(Float32(1.0), Float32(1.0) + acc)
-    z = z + q
     var qq = ftz(identical_mul(q, q))
-    r0 = ftz(r0 + ftz(identical_mul(qq, ftz(y0 - yj0))))
-    r1 = ftz(r1 + ftz(identical_mul(qq, ftz(y1 - yj1))))
+    return SIMD[DType.float32, 4](q, ftz(identical_mul(qq, d0)), ftz(identical_mul(qq, d1)), Float32(0.0))
+
+
+@always_inline
+def ts_repulse_fold(tm: SIMD[DType.float32, 4], mut z: Float32, mut r0: Float32, mut r1: Float32):
+    """Fold one j's terms into row i's running sums (DEVIATION 5813's fold)."""
+    z = z + tm[0]
+    r0 = ftz(r0 + tm[1])
+    r1 = ftz(r1 + tm[2])
 
 
 @always_inline

@@ -15,7 +15,7 @@ from x_ann.knn_device import knn_enqueue
 from metrics.checks.device_io import upload_f32, upload_i32, download_f32, download_i32
 from checks.numerics import ftz, identical_log
 from x_ann.tsne_core import (
-    F32P, I32P, ts_kl_cell, ts_perplexity_cell, ts_repulse_pair, ts_step_cell,
+    F32P, I32P, ts_kl_cell, ts_perplexity_cell, ts_repulse_fold, ts_repulse_pair, ts_repulse_terms, ts_step_cell,
     ts_sum_cell, tsne_nn, tsne_symmetrize, tsne_validate,
 )
 
@@ -70,11 +70,30 @@ def repulse_tiled_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P):
         barrier()
         if live:
             var jn = RTJ if nr - j0 > RTJ else nr - j0
-            for r in range(jn):
-                var j = j0 + r
-                if j == i:
-                    continue
-                ts_repulse_pair(y0, y1, tile[2 * r], tile[2 * r + 1], z, r0, r1)
+            # four j at a time: their terms are independent, so they are
+            # formed first and folded after in ascending j (the same
+            # statements in the same fold order; only the independent work
+            # overlaps). The group holding row i itself takes the plain loop.
+            var r = 0
+            while r + 4 <= jn:
+                if i >= j0 + r and i < j0 + r + 4:
+                    for u in range(4):
+                        if j0 + r + u != i:
+                            ts_repulse_pair(y0, y1, tile[2 * (r + u)], tile[2 * (r + u) + 1], z, r0, r1)
+                else:
+                    var ta = ts_repulse_terms(y0, y1, tile[2 * r], tile[2 * r + 1])
+                    var tb = ts_repulse_terms(y0, y1, tile[2 * r + 2], tile[2 * r + 3])
+                    var tc = ts_repulse_terms(y0, y1, tile[2 * r + 4], tile[2 * r + 5])
+                    var td = ts_repulse_terms(y0, y1, tile[2 * r + 6], tile[2 * r + 7])
+                    ts_repulse_fold(ta, z, r0, r1)
+                    ts_repulse_fold(tb, z, r0, r1)
+                    ts_repulse_fold(tc, z, r0, r1)
+                    ts_repulse_fold(td, z, r0, r1)
+                r += 4
+            while r < jn:
+                if j0 + r != i:
+                    ts_repulse_pair(y0, y1, tile[2 * r], tile[2 * r + 1], z, r0, r1)
+                r += 1
         barrier()
         j0 += RTJ
     if live:
