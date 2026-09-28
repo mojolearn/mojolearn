@@ -25,7 +25,7 @@ def bits(x: Float64) -> UInt64:
     return bitcast[DType.uint64](x)
 
 
-def threads(t: Int):
+def threads(t: Int) raises:
     _ = setenv("MOJOLEARN_CPU_THREADS", String(t), True)
 
 

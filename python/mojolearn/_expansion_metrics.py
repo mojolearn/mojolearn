@@ -2444,13 +2444,22 @@ def pair_confusion_matrix(labels_true, labels_pred, *, numeric_mode=None):
     C = _contingency(a, b, ca, cb, numeric_mode)
     n = len(a)
     n_c = [sum(row) for row in C]
-    n_k = [sum(C[i][j] for i in range(len(C))) for j in range(len(cb))]
+    n_k = _col_sums(C, len(cb))
     sq = sum(v * v for row in C for v in row)
     c11 = sq - n
     c01 = sum(C[i][j] * n_k[j] for i in range(len(C)) for j in range(len(cb))) - sq
     c10 = sum(C[i][j] * n_c[i] for i in range(len(C)) for j in range(len(cb))) - sq
     c00 = n * n - c01 - c10 - sq
     return Array.from_list([c00, c01, c10, c11], "<i8").reshape((2, 2))
+
+
+def _col_sums(C, kb):
+    """Each column's sum of the ka x kb integer rows `C` (exact Python
+    integers, summed down the rows as `sum(C[i][j] for i in ...)` does;
+    `zip` walks the rows in C; lane metrics-apple3)."""
+    if not C:
+        return [0] * kb
+    return [sum(col) for col in zip(*C)]
 
 
 def _entropy_counts(counts):
@@ -2473,7 +2482,7 @@ def _mi_from_contingency(C, numeric_mode=None):
             pass
     total = sum(v for row in C for v in row)
     pi = [sum(row) for row in C]
-    pj = [sum(C[i][j] for i in range(len(C))) for j in range(len(C[0]))]
+    pj = _col_sums(C, len(C[0]))
     if len(pi) == 1 or len(pj) == 1:
         return 0.0
     lt = pmath.log(total)
@@ -2514,7 +2523,7 @@ def normalized_mutual_info_score(labels_true, labels_pred, *, average_method="ar
     if mi == 0:
         return 0.0
     ht = _entropy_counts([sum(r) for r in C])
-    hp = _entropy_counts([sum(C[i][j] for i in range(len(C))) for j in range(len(cb))])
+    hp = _entropy_counts(_col_sums(C, len(cb)))
     return float(mi / _generalized_average(ht, hp, average_method))
 
 
@@ -2597,7 +2606,7 @@ def adjusted_mutual_info_score(labels_true, labels_pred, *, average_method="arit
     n = len(a)
     mi = _mi_from_contingency(C, numeric_mode)
     rows = [sum(r) for r in C]
-    cols = [sum(C[i][j] for i in range(len(C))) for j in range(len(cb))]
+    cols = _col_sums(C, len(cb))
     emi = _expected_mi(rows, cols, n, numeric_mode)
     norm = _generalized_average(_entropy_counts(rows), _entropy_counts(cols), average_method)
     eps = 2.220446049250313e-16
