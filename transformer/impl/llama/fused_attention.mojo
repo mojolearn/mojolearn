@@ -7712,7 +7712,20 @@ def fused_attn_forward_r2_amma_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SA
     barrier()
 
     # Pass 2: exp, the stash, the serial denominator (the original's lines).
+    # lane/neural-apple2 (2026-09-28): the exp tile alternates between `tile`
+    # and `wT` (unused until pass 3, and at least TQ * 33 floats), so the
+    # barrier after warp 0's denominator fold goes: block kb + 1 writes the
+    # other page, and the page block kb + 2 rewrites was last read by warp 0
+    # before it reached block kb + 1's barrier. Synchronization only.
+    # `-D MOJOLEARN_ATTN_FWD_AMMA_P2_BARRIER` restores the single page and the
+    # barrier.
+    comptime P2_ONE_PAGE = is_defined["MOJOLEARN_ATTN_FWD_AMMA_P2_BARRIER"]()
+    comptime assert P2_ONE_PAGE or BK * WST >= TQ * 33, "amma forward: pass 2's second page must hold TQ x 33"
     for kb in range(kb_lo, kb_hi + 1):
+        var pg = tile
+        comptime if not P2_ONE_PAGE:
+            if ((kb - kb_lo) & 1) == 1:
+                pg = wT
         comptime for u in range(RPT):
             var r = tr + u * 16
             var t = t0 + r
@@ -7725,15 +7738,16 @@ def fused_attn_forward_r2_amma_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SA
                     var masked = sstash.unsafe_load(cell)
                     var e = ftz(identical_exp(ftz(ftz(masked) - ftz(stats.unsafe_load(r)))))
                     sstash.unsafe_store(cell, e)
-                    tile.unsafe_store(r * 33 + jj, e)
+                    pg.unsafe_store(r * 33 + jj, e)
         barrier()
         if tid < TQ and t0 + tid < l:
             var rr = _row_range(t0 + tid, pos0, key_lo, window, s)
             comptime for jj in range(BK):
                 var j = kb * BK + jj
                 if j >= rr[0] and j <= rr[1]:
-                    dacc = ftz(ftz(dacc) + ftz(tile.unsafe_load(tid * 33 + jj)))
-        barrier()
+                    dacc = ftz(ftz(dacc) + ftz(pg.unsafe_load(tid * 33 + jj)))
+        comptime if P2_ONE_PAGE:
+            barrier()
     if tid < TQ and t0 + tid < l:
         stats.unsafe_store(TQ + tid, ftz(dacc))
         denom.unsafe_store((bb * nh + h) * l + t0 + tid, ftz(dacc))
@@ -8000,7 +8014,17 @@ def fused_bwd_zdot_estash_amma_kernel[HD: Int, SWZ: Bool = False](
                 var j = kb * BK + jj
                 if j >= rr[0] and j <= rr[1]:
                     z = _step_preflushed(tdy[tid * 33 + jj], ty[tid * 33 + jj], z)
-        barrier()
+        # lane/neural-apple2 (2026-09-28): no barrier here by default. The
+        # fold above is warp 0's (TQ = 32 threads) and reads only `tdy` and
+        # `ty`; the next block's first writes to them (the matrix step, then
+        # the y/dy lines) come after the next staging barrier, which warp 0
+        # reaches only once its fold is done. The next staging writes `vb`
+        # and `emin`, which the fold never reads and whose last readers
+        # passed the barrier above. So warps 1-7 stage the next key block
+        # while warp 0 folds. `-D MOJOLEARN_ATTN_ZDOT_AMMA_FOLD_BARRIER`
+        # restores the barrier. Synchronization only: no operand or order moves.
+        comptime if is_defined["MOJOLEARN_ATTN_ZDOT_AMMA_FOLD_BARRIER"]():
+            barrier()
     if tid < TQ and t0 + tid < l:
         var t = t0 + tid
         var rr = _row_range(t, pos0, key_lo, window, s)
