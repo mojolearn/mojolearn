@@ -130,7 +130,14 @@ class _Prog:
             if arr.size:
                 ctypes.memmove(base + 4 * off, addr_ro(arr, name="input"), 4 * arr.size)
         prog = array.array("i", [v for s in self._stages for v in s] or [0])
-        _prep_binding(mode).x_prep_run(base, self.size, prog.buffer_info()[0], len(self._stages))
+        b = _prep_binding(mode)
+        run_upload = getattr(b, "x_prep_run_upload", None)
+        if run_upload is not None:
+            # every word past the last input is zero here: the device zeroes it instead of a copy
+            upload = max((off + arr.size for off, arr, _ in self._inputs), default=0)
+            run_upload(base, self.size, upload, prog.buffer_info()[0], len(self._stages))
+        else:
+            b.x_prep_run(base, self.size, prog.buffer_info()[0], len(self._stages))
         self.arena = arena
         return self
 
