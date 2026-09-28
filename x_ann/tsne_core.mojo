@@ -287,6 +287,25 @@ def ts_q(y: F32P, i: Int, j: Int) -> Float32:
 
 
 @always_inline
+def ts_repulse_pair(
+    y0: Float32, y1: Float32, yj0: Float32, yj1: Float32, mut z: Float32, mut r0: Float32, mut r1: Float32
+):
+    """One j of row i's repulsion fold, from the flushed coordinates
+    (y0, y1) = ftz(y_i) and (yj0, yj1) = ftz(y_j): `ts_q`'s kernel, then z,
+    r0, r1 as `ts_repulse_cell` folds them. The cell and the tiled device
+    repulsion (`x_ann/tsne_device.mojo::repulse_tiled_kernel`) both call it."""
+    var d0 = ftz(y0 - yj0)
+    var d1 = ftz(y1 - yj1)
+    var acc = ftz(identical_mul_add(d0, d0, Float32(0.0)))
+    acc = ftz(identical_mul_add(d1, d1, acc))
+    var q = ftz(identical_div(Float32(1.0), ftz(Float32(1.0) + acc)))
+    z = ftz(z + q)
+    var qq = ftz(identical_mul(q, q))
+    r0 = ftz(r0 + ftz(identical_mul(qq, ftz(y0 - yj0))))
+    r1 = ftz(r1 + ftz(identical_mul(qq, ftz(y1 - yj1))))
+
+
+@always_inline
 def ts_repulse_cell(i: Int, y: F32P, n: Int, row_z: F32P, rep: F32P):
     """row_z[i] = sum_{j != i} q_ij; rep[i] = sum_j q_ij^2 (y_i - y_j), j
     ascending (DEVIATION 5813; Z over rows ascending in `ts_sum_cell`)."""
@@ -298,11 +317,7 @@ def ts_repulse_cell(i: Int, y: F32P, n: Int, row_z: F32P, rep: F32P):
     for j in range(n):
         if j == i:
             continue
-        var q = ts_q(y, i, j)
-        z = ftz(z + q)
-        var qq = ftz(identical_mul(q, q))
-        r0 = ftz(r0 + ftz(identical_mul(qq, ftz(y0 - ftz(y.unsafe_load(2 * j))))))
-        r1 = ftz(r1 + ftz(identical_mul(qq, ftz(y1 - ftz(y.unsafe_load(2 * j + 1))))))
+        ts_repulse_pair(y0, y1, ftz(y.unsafe_load(2 * j)), ftz(y.unsafe_load(2 * j + 1)), z, r0, r1)
     row_z.unsafe_store(i, z)
     rep.unsafe_store(2 * i, r0)
     rep.unsafe_store(2 * i + 1, r1)

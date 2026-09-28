@@ -4,15 +4,18 @@
 symmetrization is the shared host function (`tsne_symmetrize`)."""
 
 from std.gpu import block_idx, block_dim, thread_idx
+from std.memory import stack_allocation
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 from max.gpu.host import DeviceBuffer, DeviceContext
 from x_ann.device_ctx import x_ann_ctx
 from x_ann.stage_timer import AnnStages
 from x_ann.knn_device import knn_enqueue
 
 from metrics.checks.device_io import upload_f32, upload_i32, download_f32, download_i32
-from checks.numerics import identical_log
+from checks.numerics import ftz, identical_log
 from x_ann.tsne_core import (
-    F32P, I32P, ts_kl_cell, ts_perplexity_cell, ts_repulse_cell, ts_step_cell,
+    F32P, I32P, ts_kl_cell, ts_perplexity_cell, ts_repulse_pair, ts_step_cell,
     ts_sum_cell, tsne_nn, tsne_symmetrize, tsne_validate,
 )
 
@@ -33,10 +36,51 @@ def perplexity_kernel(n: Int32, nn_d: F32P, nn: Int32, log_perp: Float32, p: F32
         ts_perplexity_cell(i, nn_d, Int(nn), log_perp, p)
 
 
-def repulse_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P):
-    var i = _tid()
-    if i < Int(n):
-        ts_repulse_cell(i, y, Int(n), row_z, rep)
+#: rows per threadgroup and staged candidate rows per tile of the repulsion
+comptime RTB = 128
+comptime RTJ = 256
+
+
+def repulse_tiled_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P):
+    """`ts_repulse_cell` with the candidate rows staged in threadgroup memory
+    (lane ann-apple): tiles and rows ascending, so row i folds j = 0, 1, ...,
+    n - 1 in the cell's order, each j through the cell's own
+    `ts_repulse_pair` on ftz(y) (the staged values are flushed once; ftz is
+    idempotent). The same bits."""
+    var t = Int(thread_idx.x)
+    var nr = Int(n)
+    var i = Int(block_idx.x) * RTB + t
+    var tile = stack_allocation[2 * RTJ, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var live = i < nr
+    var y0 = Float32(0.0)
+    var y1 = Float32(0.0)
+    if live:
+        y0 = ftz(y.unsafe_load(2 * i))
+        y1 = ftz(y.unsafe_load(2 * i + 1))
+    var z = Float32(0.0)
+    var r0 = Float32(0.0)
+    var r1 = Float32(0.0)
+    var j0 = 0
+    while j0 < nr:
+        for e in range(t, 2 * RTJ, RTB):
+            var v = Float32(0.0)
+            if 2 * j0 + e < 2 * nr:
+                v = ftz(y.unsafe_load(2 * j0 + e))
+            tile[e] = v
+        barrier()
+        if live:
+            var jn = RTJ if nr - j0 > RTJ else nr - j0
+            for r in range(jn):
+                var j = j0 + r
+                if j == i:
+                    continue
+                ts_repulse_pair(y0, y1, tile[2 * r], tile[2 * r + 1], z, r0, r1)
+        barrier()
+        j0 += RTJ
+    if live:
+        row_z.unsafe_store(i, z)
+        rep.unsafe_store(2 * i, r0)
+        rep.unsafe_store(2 * i + 1, r1)
 
 
 def sum_kernel(n: Int32, row_z: F32P, z: F32P):
@@ -66,8 +110,8 @@ def _ts_iter(
     mut dupd: DeviceBuffer[DType.float32], mut dgain: DeviceBuffer[DType.float32], ex: Float32, mom: Float32,
     lr: Float32,
 ) raises:
-    ctx.enqueue_function[repulse_kernel](Int32(n), ycur.unsafe_ptr(), drz.unsafe_ptr(), drep.unsafe_ptr(),
-                                         grid_dim=_grid(n), block_dim=TPB)
+    ctx.enqueue_function[repulse_tiled_kernel](Int32(n), ycur.unsafe_ptr(), drz.unsafe_ptr(), drep.unsafe_ptr(),
+                                               grid_dim=(n + RTB - 1) // RTB, block_dim=RTB)
     ctx.enqueue_function[sum_kernel](Int32(n), drz.unsafe_ptr(), dz.unsafe_ptr(), grid_dim=1, block_dim=1)
     ctx.enqueue_function[step_kernel](
         Int32(2 * n), ycur.unsafe_ptr(), ynext.unsafe_ptr(), dptr.unsafe_ptr(), dind.unsafe_ptr(),
@@ -81,8 +125,8 @@ def _ts_kl(
     mut dind: DeviceBuffer[DType.int32], mut dval: DeviceBuffer[DType.float32], mut drz: DeviceBuffer[DType.float32],
     mut drep: DeviceBuffer[DType.float32], mut dz: DeviceBuffer[DType.float32], mut dkl: DeviceBuffer[DType.float32],
 ) raises:
-    ctx.enqueue_function[repulse_kernel](Int32(n), y.unsafe_ptr(), drz.unsafe_ptr(), drep.unsafe_ptr(),
-                                         grid_dim=_grid(n), block_dim=TPB)
+    ctx.enqueue_function[repulse_tiled_kernel](Int32(n), y.unsafe_ptr(), drz.unsafe_ptr(), drep.unsafe_ptr(),
+                                               grid_dim=(n + RTB - 1) // RTB, block_dim=RTB)
     ctx.enqueue_function[sum_kernel](Int32(n), drz.unsafe_ptr(), dz.unsafe_ptr(), grid_dim=1, block_dim=1)
     ctx.enqueue_function[kl_kernel](Int32(n), y.unsafe_ptr(), dptr.unsafe_ptr(), dind.unsafe_ptr(),
                                     dval.unsafe_ptr(), dz.unsafe_ptr(), dkl.unsafe_ptr(), grid_dim=_grid(n),
