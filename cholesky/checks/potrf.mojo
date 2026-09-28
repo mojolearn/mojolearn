@@ -732,8 +732,88 @@ def panel_factor_kernel(
     _panel_factor_body(a, info, n_in, j0_in, nb_in)
 
 
+#: lane/neighbors-apple (2026-09-28): on Apple the panel factor stages its
+#: nb x nb diagonal block (nb <= 32) in threadgroup memory, runs the same
+#: chains there, and writes the block back (also on a pivot failure, so the
+#: partial factor is the same). Thread 0's diagonal chain no longer waits on
+#: a global load per step. Same loads (flushed at use), same steps, same
+#: order, same words. `-D MOJOLEARN_CHOL_PANEL_STAGE_OFF` keeps global.
+comptime CHOL_PANEL_STAGE = has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_CHOL_PANEL_STAGE_OFF"]()
+comptime PF_LD = 33
+
+
+@always_inline
+def _panel_factor_staged(
+    a: MutPointer[Float32, MutAnyOrigin],
+    info: MutPointer[Int32, MutAnyOrigin],
+    n: Int,
+    j0: Int,
+    nb: Int,
+):
+    var tid = Int(thread_idx.x)
+    var width = Int(block_dim.x)
+    var sb = stack_allocation[32 * PF_LD, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var flag = stack_allocation[1, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    if tid == 0:
+        flag[0] = Int32(0)
+    var e = tid
+    while e < nb * nb:
+        var r = e // nb
+        var cc = e - r * nb
+        sb[r * PF_LD + cc] = a.unsafe_load((j0 + r) * n + j0 + cc)
+        e += width
+    barrier()
+    for c in range(nb):
+        if tid == 0:
+            var sv = ftz(sb[c * PF_LD + c])
+            for k in range(c):
+                var v = ftz(sb[c * PF_LD + k])
+                sv = ftz(identical_mul_add(-v, v, sv))
+            if not (sv > Float32(0.0)):
+                info.unsafe_store(0, Int32(j0 + c + 1))
+                flag[0] = Int32(1)
+            else:
+                sb[c * PF_LD + c] = ftz(identical_sqrt(sv))
+        barrier()
+        if flag[0] != Int32(0):
+            break
+        var ljj = ftz(sb[c * PF_LD + c])
+        var i = c + 1 + tid
+        while i < nb:
+            var t = ftz(sb[i * PF_LD + c])
+            for k in range(c):
+                t = ftz(identical_mul_add(-ftz(sb[i * PF_LD + k]), ftz(sb[c * PF_LD + k]), t))
+            sb[i * PF_LD + c] = ftz(identical_div(t, ljj))
+            i += width
+        barrier()
+    # Write back the lower triangle the global form writes (every cell of
+    # it holds either its computed word or the unchanged input word).
+    e = tid
+    while e < nb * nb:
+        var r = e // nb
+        var cc = e - r * nb
+        if cc <= r:
+            a.unsafe_store((j0 + r) * n + j0 + cc, sb[r * PF_LD + cc])
+        e += width
+
+
 @always_inline
 def _panel_factor_body(
+    a: MutPointer[Float32, MutAnyOrigin],
+    info: MutPointer[Int32, MutAnyOrigin],
+    n_in: Int32,
+    j0_in: Int32,
+    nb_in: Int32,
+):
+    comptime if CHOL_PANEL_STAGE:
+        if Int(nb_in) <= 32:
+            _panel_factor_staged(a, info, Int(n_in), Int(j0_in), Int(nb_in))
+            return
+    _panel_factor_global(a, info, n_in, j0_in, nb_in)
+
+
+@always_inline
+def _panel_factor_global(
     a: MutPointer[Float32, MutAnyOrigin],
     info: MutPointer[Int32, MutAnyOrigin],
     n_in: Int32,
