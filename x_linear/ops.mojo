@@ -364,11 +364,28 @@ def rng_next(mut s: UInt64) -> UInt64:
     return z ^ (z >> 31)
 
 
+@always_inline
+def mod_draw(z: UInt64, m: Int) -> Int:
+    """`z mod m`, exact. On a GPU with m < 2^21 (lane/linear-apple2) it is six
+    32-bit remainders over 11-bit chunks of z, top first (each partial is
+    below m * 2^11 < 2^32), instead of one 64-bit remainder, which the GPU
+    has no instruction for. The same integer either way."""
+    comptime if is_gpu():
+        if m < (1 << 21):
+            var mm = UInt32(m)
+            var r = UInt32(z >> 55) % mm
+            comptime for k in range(5):
+                comptime sh = 44 - 11 * k
+                r = ((r << 11) | UInt32((z >> UInt64(sh)) & UInt64(0x7FF))) % mm
+            return Int(r)
+    return Int(z % UInt64(m))
+
+
 def shuffle(idx: IP, n: Int, mut s: UInt64):
     """Fisher-Yates, i descending, j = draw mod (i + 1)."""
     var i = n - 1
     while i > 0:
-        var j = Int(rng_next(s) % UInt64(i + 1))
+        var j = mod_draw(rng_next(s), i + 1)
         var t = ldi(idx, i)
         sti(idx, i, ldi(idx, j))
         sti(idx, j, t)
