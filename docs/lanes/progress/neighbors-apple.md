@@ -117,3 +117,25 @@ RBFSampler.transform 1M x 500 (M3 Ultra, arms in one job): copy into the
 caller's array 907 -> 745 ms with pinned staging (312b5da1a), transform
 1.130 -> 0.964 s; the remaining copy is the first touch of the caller's
 fresh 2 GB (parallel host copy 0dcb77d80, measurement pending).
+
+## FAST quality (paired, bench/x_neighbors_fast_quality.py)
+
+M3 Ultra, request 1790588783350 at eb2a28caf (includes every FAST change of
+the branch: the SVR fold-order fix, the 8-RHS sweep, Jacobi 256 wide). Five
+seeded row samples x two datasets, both tiers fitted on the same rows and
+scored on the same held-out rows; FAST minus IDENTICAL (accuracy, R^2,
+recall@10, mean log density). Raw: ~/mojolearn-evidence/neighbors-apple/quality_m3ultra.txt
+
+| case | taxi mean / worst | HIGGS mean / worst |
+|---|---|---|
+| SVC acc | +0.000000 / +0.000000 | +0.000000 / +0.000000 |
+| SVR R^2 | +0.000002 / -0.000017 | -0.000014 / -0.000048 |
+| KernelRidge R^2 | 0 / 0 | 0 / -0.000001 |
+| GPR R^2 | 0 / 0 | -0.000001 / -0.000002 |
+| GPC acc | 0 / 0 | -0.000200 / -0.001000 (1 of 1,000 held-out rows, one seed) |
+| KNeighborsClassifier acc | +0.000100 / 0 | 0 / 0 |
+| KNeighborsRegressor R^2 | -0.000001 / -0.000003 | 0 / 0 |
+| NearestNeighbors recall@10 | 0 / 0 | 0 / 0 |
+| KernelDensity mean log density | 0 / 0 | 0 / 0 |
+
+FAST quality holds against the reference arithmetic on every case.
