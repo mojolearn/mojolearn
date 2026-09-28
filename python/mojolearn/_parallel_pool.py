@@ -152,7 +152,7 @@ from concurrent.futures import ThreadPoolExecutor
 CPU_OPERATIONS = frozenset((
     'scaler_fit', 'scaler_transform', 'arima_fit', 'holtwinters_fit',
     'forecast_predict',
-    'neighbor_query', 'neighbor_reference', 'neighbor_vote',
+    'neighbor_state', 'neighbor_query', 'neighbor_reference', 'neighbor_vote',
     'forest_fit', 'mlp_gradient', 'samba_gradient', 'rbf_sampler_rows',
     'ivf_store', 'ivf_search_stored', 'ivf_finalize',
     'gpc_class_fit', 'gpc_class_predict',
