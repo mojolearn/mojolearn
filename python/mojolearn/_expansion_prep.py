@@ -60,10 +60,13 @@ _OPS = dict(
     da_shrink=81, da_pool=82, sym_fn=83, da_intercept=84, evr=85, class_stats_w=86,
     indicator=87, code_counts=88, remap_codes=89, add_arrays=90, gnb_merge=91, cat_counts=92, cat_flp=93,
     mi_dc=94, mi_dd=95, kbins_gw=96, kbins_wq=97, kbins_wkm=98, ii_sigma=99, ii_post=100,
-    scaler_stats=101, std_scale=102, nan_keep=103,
+    scaler_stats=101, std_scale=102, nan_keep=103, pt_init=104, pt_map=105, pt_fold=106, ii_rowabs=107,
 )
 _PARAMS = 14
 _NONE = -1
+#: x_prep/transform.mojo PT_EVALS (PT_ITERS + 2) and PT_STATE
+_PT_EVALS = 50
+_PT_STATE = 9
 
 
 def _prep_binding(mode):
@@ -2268,7 +2271,13 @@ class PowerTransformer(_PrepBase):
         xo = pr.put(arr)
         st, lam = pr.alloc(6 * d), pr.alloc(d)
         pr.stage("col_stats", d, xo, n, d, st)
-        pr.stage("pt_fit", d, xo, n, d, method, st, lam)
+        # pt_fit_unit's golden-section search as stages (x_prep/transform.mojo):
+        # the transform of every element at once, then the column folds
+        state, leval, tv = pr.alloc(_PT_STATE * d), pr.alloc(d), pr.alloc(n * d)
+        pr.stage("pt_init", d, method, st, d, lam, state, leval)
+        for k in range(_PT_EVALS):
+            pr.stage("pt_map", n * d, xo, n, d, method, leval, tv)
+            pr.stage("pt_fold", d, xo, n, d, method, tv, k, state, leval, lam)
         mean, scale = pr.alloc(d), pr.alloc(d)
         if self.standardize:
             tx, st2 = pr.alloc(n * d), pr.alloc(6 * d)
@@ -3118,6 +3127,7 @@ class IterativeImputer(_PrepBase):
         seed = self._rng & 0x7FFFFFFF
         # the reference checks convergence only without sample_posterior
         conv = not self.sample_posterior
+        rowabs = None
         for r in range(rounds):
             if orders[r] and conv:
                 pr.stage("ii_snapshot", n * dk, fo, prev, flag)
@@ -3144,7 +3154,10 @@ class IterativeImputer(_PrepBase):
                 else:
                     pr.stage("ii_predict", n, fo, n, dk, mo, j, coef, inter, bo, flag)
             if orders[r] and conv:
-                pr.stage("ii_conv", 1, fo, prev, n * dk, tol, flag, niter, dk)
+                if rowabs is None:
+                    rowabs = pr.alloc(n)
+                pr.stage("ii_rowabs", n, fo, prev, dk, rowabs, flag)
+                pr.stage("ii_conv", 1, fo, prev, n * dk, tol, flag, niter, dk, rowabs + 1)
         pr.run(mode)
         any_order = any(orders)
         done = (int(pr.values(niter, 1)[0]) if conv else rounds) if any_order else 0

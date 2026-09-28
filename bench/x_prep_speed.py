@@ -203,12 +203,16 @@ class _Spy:
         self.progs, self.binding_s = [], 0.0
 
 
-def profile(xp, spy, dataset, name, top=6):
+def profile(xp, spy, dataset, name, top=6, budget=20.0):
     """Prefix timing of the slowest programs of the last run."""
     inv = {v: k for k, v in xp._OPS.items()}
     ranked = sorted(enumerate(spy.progs), key=lambda t: -t[1][2])[:top]
     for pi, (prog, mode, wall) in ranked:
         stages = list(prog._stages)
+        if wall * len(stages) / 2 > budget:
+            # the prefix sum costs ~ stages/2 program runs: too dear here
+            print(f"XPPROF {dataset} {name} {pi} skipped {len(stages)} {wall:.4f}", flush=True)
+            continue
         prev = 0.0
         for k in range(1, len(stages) + 1):
             prog._stages = stages[:k]

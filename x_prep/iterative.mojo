@@ -17,7 +17,8 @@ whole max_iter program runs in one binding call.
 """
 from std.memory import bitcast
 from checks.numerics import portable_erff
-from x_prep.common import FP, IP, p, ld, st, ldi
+from x_prep.common import FP, IP, p, ld, st, ldi, raw, RUN, run_block
+from checks.numerics import ftz
 from x_prep.prims import add, sub, mul, div, logf, sqrtf
 from x_prep.mutual_info import _splitmix
 
@@ -44,18 +45,29 @@ def _active(f: FP, nb1: Int, a: Int, j: Int) -> Bool:
 def ii_mean_unit(t: Int, f: FP, q: IP):
     """q = [X, n, d, MASK, j, MEANS, CNT, FLAG]; t = column a. The mean of
     column a over the rows where feature j is observed (MASK == 0); a == 0
-    also writes that row count to CNT."""
+    also writes that row count to CNT. Rows are loaded RUN at a time
+    (`run_block`) and folded one by one, ascending."""
     if _done(f, q, 7):
         return
     var n = p(q, 1)
     var d = p(q, 2)
     var j = p(q, 4)
+    var M = p(q, 3)
+    var X = p(q, 0)
     var s = Float32(0)
     var cnt = 0
-    for i in range(n):
-        if ld(f, p(q, 3) + i * d + j) != Float32(0):
+    var full = n - n % RUN
+    for i0 in range(0, full, RUN):
+        var bm = run_block[RUN](f, M + i0 * d + j, d)
+        var bx = run_block[RUN](f, X + i0 * d + t, d)
+        comptime for u in range(RUN):
+            if ftz(bm[u]) == Float32(0):
+                s = add(s, ftz(bx[u]))
+                cnt += 1
+    for i in range(full, n):
+        if ld(f, M + i * d + j) != Float32(0):
             continue
-        s = add(s, ld(f, p(q, 0) + i * d + t))
+        s = add(s, ld(f, X + i * d + t))
         cnt += 1
     st(f, p(q, 5) + t, div(s, Float32(cnt)) if cnt > 0 else Float32(0))
     if t == 0:
@@ -64,21 +76,32 @@ def ii_mean_unit(t: Int, f: FP, q: IP):
 
 def ii_gram_unit(t: Int, f: FP, q: IP):
     """q = [X, n, d, MASK, j, MEANS, G, FLAG]; t = a*d + b. The centred cross
-    product of columns a and b over feature j's observed rows."""
+    product of columns a and b over feature j's observed rows (rows loaded RUN
+    at a time, folded ascending)."""
     if _done(f, q, 7):
         return
     var n = p(q, 1)
     var d = p(q, 2)
     var j = p(q, 4)
+    var M = p(q, 3)
+    var X = p(q, 0)
     var a = t // d
     var b = t % d
     var ma = ld(f, p(q, 5) + a)
     var mb = ld(f, p(q, 5) + b)
     var s = Float32(0)
-    for i in range(n):
-        if ld(f, p(q, 3) + i * d + j) != Float32(0):
+    var full = n - n % RUN
+    for i0 in range(0, full, RUN):
+        var bm = run_block[RUN](f, M + i0 * d + j, d)
+        var ba = run_block[RUN](f, X + i0 * d + a, d)
+        var bb = run_block[RUN](f, X + i0 * d + b, d)
+        comptime for u in range(RUN):
+            if ftz(bm[u]) == Float32(0):
+                s = add(s, mul(sub(ftz(ba[u]), ma), sub(ftz(bb[u]), mb)))
+    for i in range(full, n):
+        if ld(f, M + i * d + j) != Float32(0):
             continue
-        s = add(s, mul(sub(ld(f, p(q, 0) + i * d + a), ma), sub(ld(f, p(q, 0) + i * d + b), mb)))
+        s = add(s, mul(sub(ld(f, X + i * d + a), ma), sub(ld(f, X + i * d + b), mb)))
     st(f, p(q, 6) + t, s)
 
 
@@ -380,22 +403,52 @@ def ii_snapshot_unit(t: Int, f: FP, q: IP):
     st(f, p(q, 1) + t, ld(f, p(q, 0) + t))
 
 
+def ii_rowabs_unit(t: Int, f: FP, q: IP):
+    """q = [X, PREV, D, E, FLAG]; t = row r. E[r] = the sum of |X - PREV|
+    over row r's D entries, left to right (`ii_conv`'s row sum, one thread
+    per row: the rows are independent, only their max is a fold)."""
+    if _done(f, q, 4):
+        return
+    var d = p(q, 2)
+    var e = Float32(0)
+    for c in range(d):
+        e = add(e, abs(sub(ld(f, p(q, 0) + t * d + c), ld(f, p(q, 1) + t * d + c))))
+    st(f, p(q, 3) + t, e)
+
+
 def ii_conv_unit(t: Int, f: FP, q: IP):
-    """q = [X, PREV, count, TOL, FLAG, NITER, D]; t = 0. One more round
+    """q = [X, PREV, count, TOL, FLAG, NITER, D, E1]; t = 0. One more round
     counted; FLAG = 1 when the reference's stop holds: the matrix inf-norm of
     X - PREV (numpy `norm(ord=inf)` of a 2-D array: the largest row sum of
-    |X - PREV| over rows of D entries, each summed left to right) < TOL."""
+    |X - PREV| over rows of D entries, each summed left to right) < TOL.
+    With E1 > 0 the row sums are `ii_rowabs`' at E1 - 1 (the same words),
+    read in row order; with E1 == 0 they are summed here."""
     if _done(f, q, 4):
         return
     st(f, p(q, 5), add(ld(f, p(q, 5)), Float32(1)))
     var d = p(q, 6)
+    var E = p(q, 7) - 1
+    var rows = p(q, 2) // d
     var m = Float32(0)
-    for r in range(p(q, 2) // d):
-        var e = Float32(0)
-        for c in range(d):
-            e = add(e, abs(sub(ld(f, p(q, 0) + r * d + c), ld(f, p(q, 1) + r * d + c))))
-        if e > m:
-            m = e
+    if E >= 0:
+        var full = rows - rows % RUN
+        for r0 in range(0, full, RUN):
+            var be = run_block[RUN](f, E + r0, 1)
+            comptime for u in range(RUN):
+                var e = ftz(be[u])
+                if e > m:
+                    m = e
+        for r in range(full, rows):
+            var e = ld(f, E + r)
+            if e > m:
+                m = e
+    else:
+        for r in range(rows):
+            var e = Float32(0)
+            for c in range(d):
+                e = add(e, abs(sub(ld(f, p(q, 0) + r * d + c), ld(f, p(q, 1) + r * d + c))))
+            if e > m:
+                m = e
     if m < ld(f, p(q, 3)):
         st(f, p(q, 4), Float32(1))
 
