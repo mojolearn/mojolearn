@@ -27,6 +27,8 @@ on ONE Mac and alternates the arms, then prints a stage split
 | 513a3006e | IVF-PQ codebooks: subspace k-means side by side on pooled contexts | both | REVERTED (6f817e0ed): the process died in the codebook stage |
 | 399de4811 | IVF-PQ encode: subspace codebook staged in threadgroup memory | both | on; `-D MOJOLEARN_PQ_ASSIGN_UNSTAGED` reverts |
 | b9cc59dcf | x_ann/io.mojo: uploads without a private copy, downloads by memcpy | both | on |
+| 7b51e91e5 | tiled k-NN fold width = d rounded up to a multiple of 4 (28, was 32) | both | on |
+| e0d2ff366 | CAGRA device prune: neighbor rows staged in threadgroup memory | both | on |
 
 ## Measurements
 
@@ -96,3 +98,30 @@ residuals 190, encode 184 (targets of 399de4811 and b9cc59dcf).
 
 The MOJOLEARN_ANN_PQ_CB_STREAMS=4 arm died after the residual stage in both
 tiers (no traceback); the trial is reverted.
+
+### A/B 3: m4-a (Apple M4, 10-core GPU), steward 1790607052703, job at b9cc59dcf
+
+Arms f4545110c (base), 19e0aabac, b9cc59dcf (+ staged encode, io). Digests
+equal across arms in every cell and tier. Raw:
+`~/mojolearn-evidence/ann-apple2/ab3_m4-a_1790607052703.txt`.
+
+| cell (s) | base | 19e0aabac | b9cc59dcf |
+|---|---|---|---|
+| IDENTICAL IVF-PQ fit | 11.706/11.616/11.636 | 10.422/10.079/10.131 | 10.032/9.910/9.910 |
+| IDENTICAL IVF-PQ search | 0.305/0.303/0.310 | 0.149/0.116/0.122 | 0.115/0.114/0.120 |
+| IDENTICAL IVF-SQ fit / search | 4.483 / 0.349 | 3.814 / 0.152 | 3.718 / 0.147 |
+| IDENTICAL IVF-RaBitQ fit / search | 4.324 / 0.330 | 3.632 / 0.140 | 3.612 / 0.127 |
+| IDENTICAL CAGRA fit | 1.229/1.231/1.233 | 0.929/0.905/0.899 | 0.891/0.888/0.902 |
+| IDENTICAL t-SNE fit | 1.510/1.514/1.515 | 1.258/1.174/1.178 | 1.165/1.164/1.168 |
+| FAST IVF-PQ fit | 3.349/2.809/2.832 | 3.139/2.837/2.827 | 3.033/2.696/2.633 |
+| FAST IVF-SQ fit | 1.213/1.207/1.211 | 1.204/1.211/1.197 | 1.113/1.126/1.116 |
+| FAST IVF-* search | 0.33-0.35 | 0.12-0.16 | 0.12-0.15 |
+| FAST CAGRA fit | 0.808/0.783/0.780 | 0.710/0.704/0.716 | 0.753/0.735/0.705 |
+| FAST t-SNE fit | 1.017/0.929/0.924 | 0.880/0.880/0.881 | 0.841/0.843/0.877 |
+
+Stages (ms, IDENTICAL, 19e0aabac -> b9cc59dcf): IVF-PQ residuals 157 -> 67,
+encode 267 -> 197; IVF-SQ encode 148 -> 56; IVF-RaBitQ encode 34 -> 24.
+CAGRA (FAST): k-NN 513 + download 16 + host prune 218 (base) -> k-NN +
+device prune 675, so the device prune itself cost ~160 ms on the M4:
+e0d2ff366 stages its reads. On the M4 the scan's select is fixed but the
+search is 0.12 s (score and upload are the rest).
