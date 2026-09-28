@@ -1,26 +1,35 @@
 diff --git a/x_decomp/host.mojo b/x_decomp/host.mojo
+index 44c96a40c..b6ecd974c 100644
 --- a/x_decomp/host.mojo
 +++ b/x_decomp/host.mojo
-@@ -6,6 +6,7 @@ compiled into the CPU host binding."""
+@@ -14,6 +14,7 @@ So the bits are the same at every thread count."""
  from std.memory import bitcast
  from std.sys.compile import is_defined
  
 +from checks.numerics import ftz, identical_mul_add
  from decomposition.checks.jacobi_eigh_device import JACOBI_SWEEPS, JACOBI_TOL
- from decomposition.host.linalg_public import host_eigh, host_qr_r
- from decomposition.host.pca_full_oracle import host_one_sided_jacobi_svd, host_qr_factor
-@@ -113,7 +114,13 @@ struct HostExec(Exec):
+ from decomposition.host.linalg_public import eigh_ascending, host_eigh, host_qr_r
+ from decomposition.host.pca_oracle import host_sign_flip
+@@ -225,13 +226,15 @@ struct HostExec(Exec):
      def sqdist(a: F32Ptr, b: F32Ptr, dst: F32Ptr, na: Int, nb: Int, d: Int, kind: Int = 0, pw: Float32 = Float32(2)) raises:
-         for i in range(na):
-             for j in range(nb):
--                dst.unsafe_store(i * nb + j, sqdist_cell(a, b, i, j, d) if kind == 0 else pdist_cell(a, b, i, j, d, kind, pw))
-+                # SABOTAGE (end to end): features DESCENDING on the host column only
-+                var acc = Float32(0)
-+                for pp in range(d):
-+                    var p = d - 1 - pp
-+                    var t = ftz(ftz(a.unsafe_load(i * d + p)) - ftz(b.unsafe_load(j * d + p)))
-+                    acc = ftz(identical_mul_add(t, t, acc))
-+                dst.unsafe_store(i * nb + j, acc)
+         if kind == 0:
+             # the cell's arithmetic and order, SIMD across outputs (x_decomp/host_simd.mojo)
+-            var bt = sqdist_prepare(b, nb, d)
+-            var pbt = F32Ptr(unsafe_from_address=Int(bt.unsafe_ptr()))
+-            def sq(t: Int) {imm a, imm pbt, imm dst, imm na, imm nb, imm d}:
+-                sqdist_task(t, a, pbt, dst, na, nb, d)
+-
+-            xd_parallel(sq, sqdist_task_count(na))
+-            _ = bt^
++            # SABOTAGE (end to end): features DESCENDING on the host column only
++            for i in range(na):
++                for j in range(nb):
++                    var acc = Float32(0)
++                    for pp in range(d):
++                        var p = d - 1 - pp
++                        var t = ftz(ftz(a.unsafe_load(i * d + p)) - ftz(b.unsafe_load(j * d + p)))
++                        acc = ftz(identical_mul_add(t, t, acc))
++                    dst.unsafe_store(i * nb + j, acc)
+             return
  
-     @staticmethod
-     def rand(dst: F32Ptr, count: Int, seed: UInt32, stream: UInt32, kind: Int) raises:
+         def pd(i: Int) {imm a, imm b, imm dst, imm nb, imm d, imm kind, imm pw}:

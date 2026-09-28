@@ -1,0 +1,110 @@
+diff --git a/cluster/host/host_gemm_cells.mojo b/cluster/host/host_gemm_cells.mojo
+index 735007f88..2c4a5aaa5 100644
+--- a/cluster/host/host_gemm_cells.mojo
++++ b/cluster/host/host_gemm_cells.mojo
+@@ -87,7 +87,8 @@ def host_gemm_oracle(
+         var j0 = 0
+         while j0 + GEMM_W <= n:
+             var acc = SIMD[DType.float32, GEMM_W](0)
+-            for p in range(p0, p1):
++            for pp_ in range(p1 - p0):
++                var p = p1 - 1 - pp_
+                 var av = ap.unsafe_load(p * m + i) if tn else ap.unsafe_load(i * k + p)
+                 var aa = SIMD[DType.float32, GEMM_W](ftz(av))
+                 var bv = ftz_v[GEMM_W]((bp + p * n + j0).load[width=GEMM_W]())
+diff --git a/cluster/host/kmeans_oracle.mojo b/cluster/host/kmeans_oracle.mojo
+index 0ea1ae330..66e7c7d3c 100644
+--- a/cluster/host/kmeans_oracle.mojo
++++ b/cluster/host/kmeans_oracle.mojo
+@@ -499,7 +499,8 @@ def host_cell_dots[W: Int](
+     acc))` over p ascending (`cluster/host/host_cells.mojo`: the lanes are
+     independent cells, never a split fold)."""
+     var acc = SIMD[DType.float32, W](0)
+-    for p in range(d):
++    for pp_ in range(d):
++        var p = d - 1 - pp_
+         var xv = SIMD[DType.float32, W](ftz(xp.unsafe_load(row * d + p)))
+         var cv = (ctp + p * k + col0).load[width=W]()
+         acc = ftz_v[W](mul_add_v[W](xv, cv, acc))
+@@ -512,7 +513,8 @@ def host_cell_dot(
+ ) -> Float32:
+     """`host_cell_dots` for one centroid."""
+     var acc = Float32(0.0)
+-    for p in range(d):
++    for pp_ in range(d):
++        var p = d - 1 - pp_
+         acc = ftz(identical_mul_add(ftz(xp.unsafe_load(row * d + p)), ctp.unsafe_load(p * k + col), acc))
+     return acc
+ 
+diff --git a/dbscan/host/dbscan_oracle.mojo b/dbscan/host/dbscan_oracle.mojo
+index da8b2b073..c85cdcd10 100644
+--- a/dbscan/host/dbscan_oracle.mojo
++++ b/dbscan/host/dbscan_oracle.mojo
+@@ -182,7 +182,8 @@ def _eps_dists8(xt: HostF32Ptr, mp: Int, q: HostF32Ptr, d: Int, pos0: Int) -> SI
+     reordered set, one per lane, each lane the pair's own chain over the
+     features ascending (`cluster/host/host_cells.mojo`)."""
+     var acc = SIMD[DType.float32, EPS_W](0)
+-    for f in range(d):
++    for ff_ in range(d):
++        var f = d - 1 - ff_
+         var diff = ftz_v[EPS_W](SIMD[DType.float32, EPS_W](q.unsafe_load(f)) - (xt + f * mp + pos0).load[width=EPS_W]())
+         acc = ftz_v[EPS_W](mul_add_v[EPS_W](diff, diff, acc))
+     return acc
+@@ -420,7 +421,8 @@ def host_brute_eps_row(
+         var j0 = 0
+         while j0 < n_rows:
+             var acc = SIMD[DType.float32, EPS_W](0)
+-            for k in range(n_cols):
++            for kk_ in range(n_cols):
++                var k = n_cols - 1 - kk_
+                 var qv = SIMD[DType.float32, EPS_W](x[x_base + k])
+                 var diff = ftz_v[EPS_W](qv - (xtp + k * mp + j0).load[width=EPS_W]())
+                 if metric == DBSCAN_METRIC_L1:
+diff --git a/hierarchy/host/linkage_host.mojo b/hierarchy/host/linkage_host.mojo
+index f4ce9a7c9..ea9811d0f 100644
+--- a/hierarchy/host/linkage_host.mojo
++++ b/hierarchy/host/linkage_host.mojo
+@@ -128,7 +128,8 @@ def host_prim_mst(x: List[Float32], m: Int, d: Int, is_sqrt: Bool) -> LinkageHos
+                 var width = PRIM_W if v + PRIM_W <= v1 else 1
+                 if width == PRIM_W:
+                     var acc = SIMD[DType.float32, PRIM_W](0)
+-                    for f in range(d):
++                    for ff in range(d):
++                        var f = d - 1 - ff
+                         var q = SIMD[DType.float32, PRIM_W](crp.unsafe_load(f))
+                         acc = ftz_v[PRIM_W](mul_add_v[PRIM_W](q, (xtp + f * m + v).load[width=PRIM_W](), acc))
+                     comptime for l in range(PRIM_W):
+diff --git a/x_cluster/host/host_ops.mojo b/x_cluster/host/host_ops.mojo
+index bd7dfcc40..71d5bbb35 100644
+--- a/x_cluster/host/host_ops.mojo
++++ b/x_cluster/host/host_ops.mojo
+@@ -80,7 +80,8 @@ def _sq_dists8(pa: FPtr, i: Int, d: Int, btp: FPtr, mp: Int, j0: Int) -> SIMD[DT
+     `t = ftz(ftz(a) - ftz(b))`, `acc = ftz(acc + ftz(t * t))` (the pinned
+     product), features ascending."""
+     var acc = SIMD[DType.float32, DIST_W](0)
+-    for f in range(d):
++    for ff_ in range(d):
++        var f = d - 1 - ff_
+         var av = SIMD[DType.float32, DIST_W](ftz(pa[i * d + f]))
+         var t = ftz_v[DIST_W](av - (btp + f * mp + j0).load[width=DIST_W]())
+         acc = ftz_v[DIST_W](acc + ftz_v[DIST_W](mul_v[DIST_W](t, t)))
+@@ -326,7 +327,8 @@ struct HostOps(ClusterOps):
+             comptime for l in range(AP_W):
+                 kidx[l] = Int64(k0 + l)
+             var colsum = SIMD[DType.float32, AP_W](0)
+-            for i in range(n):
++            for ii_ in range(n):
++                var i = n - 1 - ii_
+                 var v = (pr + i * n + k0).load[width=AP_W]()
+                 var diag = kidx.eq(SIMD[DType.int64, AP_W](Int64(i)))
+                 var rp = (diag | v.gt(zero)).select(v, zero)
+@@ -414,7 +416,8 @@ struct HostOps(ClusterOps):
+                 var acc = SIMD[DType.float32, GAUSS_W](0)
+                 for j in range(d):
+                     var y = SIMD[DType.float32, GAUSS_W](0)
+-                    for a in range(j + 1):
++                    for aa_ in range(j + 1):
++                        var a = j - aa_
+                         var pv = SIMD[DType.float32, GAUSS_W](pp[k * d * d + a * d + j])
+                         y = ftz_v[GAUSS_W](y + ftz_v[GAUSS_W](mul_v[GAUSS_W](diff[a], pv)))
+                     acc = ftz_v[GAUSS_W](acc + ftz_v[GAUSS_W](mul_v[GAUSS_W](y, y)))

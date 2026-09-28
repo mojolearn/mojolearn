@@ -123,13 +123,66 @@ so the parallel schedules are the same bits in both modes.
 | Apple speed | queued (m4pro-b): before 1790549640312-speed-metrics-51f2ef6215, after 1790549643846-speed-metrics-835bca4ead |
 | AMD speed + post-merge identity | submitted at the merge (see the session report / `apple_steward.py status`, requests `*-metrics-*`) |
 
+## Steward results read 2026-09-28 ~00:00Z (session D)
+Nothing FAILED; nothing to fix. 1790544421098 (phase 2, e2e_host_fadd): PASS
+m3ultra-b, m4pro-a (the m2pro copy coalesced into 1790544421099).
+1790544803666 (splitters, e2e_host_permute): PASS m4pro-b. Still QUEUED, not
+run: post-merge identity 1790544421099, 1790553421721 (do-amd, m3ultra-b,
+m4pro-b/m4-a, m2pro); Apple speed 1790549640312 / 1790549643846 (m4pro-b);
+AMD speed 1790548802096 / 1790548807312 (`pixi run -e default`, both modes in
+one cmd) and 1790553428450..1790553431411 (direct `.pixi/envs/default/bin/
+python`, one mode each; not failed, so not resubmitted; the steward's build
+step runs `pixi run -e default` first, which creates that env in the
+worktree). The next session reads `apple_steward.py status` again.
+
+## Phase 5 (CPU speed): session D, 2026-09-28, CODE COMMITTED, POD GATE OWED
+RunPod balance went negative and every pod was deleted (the `metrics` pod
+gwwujixoh5dtve is gone; `dev_pod.sh up` refused "balance too low"; state
+cleared with `dev_pod.sh down`). Do not retry renting until Andrew tops up.
+Work on lane/metrics (pushed, NOT merged):
+- 83c5c7847 `x_metrics/host/program.mojo`: every planned stage's units split
+  into contiguous ranges on the MOJOLEARN_CPU_THREADS pool
+  (`core/host_predict_threads.mojo`), joined before the next stage. A stage
+  is one device launch, so its units are independent by construction; a
+  stage fans out only at >= HOST_TASK_WORK (16384) rows of work per task.
+  The host merge pass is `sort_merge_span_unit` (par.mojo, MERGE_SPAN=4096
+  outputs per unit, started by a co-rank search), replacing the per-pair
+  two-pointer unit, so the last passes split too. The seam gate's
+  `check_parallel_schedules` now also runs the planned host at 1, 2, 3 and 8
+  tasks against the sequential units; new arm
+  `x_metrics/seams/sabotage/seam_host_threads.patch` in metrics.checks.
+- bench/x_metrics_speed.py prints vendor and thread count.
+- Checked locally (one mac_slot core, MOJOLEARN_CPU_THREADS=1): the host
+  binding compiles; col_sort through the binding equals numpy's stable
+  argsort at n = 200003, 70001 x 3, 4097 x 2, 5 (the span merge incl.
+  co-rank starts). Multi-thread runs were NOT done locally (1-core rule).
+
+**OWED ON A POD (in this order), then merge:**
+1. `~/mojolearn-evidence/metrics/psync.sh` (new pod: `dev_pod.sh up metrics
+   240`), build host + identical + fast (`pbuild.sh host identical fast`).
+2. Seam gate: `x_metrics/seams/x_metrics_check.mojo` PASS (host 1/2/3/8
+   tasks + device); `--pass 2` on the seam arms incl. seam_host_threads.patch
+   (must FAIL under it, PASS after).
+3. `algos_lane_check.sh` on the 6 x-metrics lanes (AGREE CUDA vs CPU) with
+   `e2e_host_fadd.patch` / `e2e_host_permute.patch` biting, once at
+   MOJOLEARN_CPU_THREADS=1 and once at the default.
+4. CPU board `MOJOLEARN_VENDOR=cpu python bench/x_metrics_speed.py --reps 2`
+   at base (origin/main host .so) vs new, and new at MOJOLEARN_CPU_THREADS=1,
+   3 and default: every digest equal across all of them and equal to the
+   GPU board's digests; FAST board likewise (FAST quality JSON unchanged).
+5. test_host_surface; test_lane_select (metrics.checks changed);
+   test_x_metrics_repeat.
+6. Merge + push; ONE batched steward identity request (x-metrics lanes,
+   e2e_host_fadd) plus CPU-speed timing on do-amd if wanted.
+
 ## Next phases
 - **Read first**: `apple_steward.py status` for the metrics speed and identity
   requests; a FAIL is fixed at the root as its own commit before phase 5.
 - Remaining GPU speed headroom (optional, a later pass): roc_auc ovr (1.8 s)
   and AMI (1.3 s, the expected-MI term is Python binary64) are the largest
   cases left; stratified_kfold (0.5 s) is Python bookkeeping.
-- **5. CPU speed** (next session): threads / SIMD in the host runner, bits identical at
-  every thread count.
+- **5. CPU speed**: code committed (session D above); the pod gate list above
+  is owed. After it: SIMD in the host units is the next lever (a SIMD width
+  is a PIN; only per-element units such as reg_term/sort_key/gather qualify).
 - Option-parity leftovers (NOT_IMPLEMENTED.tsv): multilabel-indicator targets
   across the classification metrics; silhouette's other distance metrics.

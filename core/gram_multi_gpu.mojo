@@ -17,7 +17,7 @@ from std.os import getenv
 from std.sys.compile import is_defined
 from std.gpu import block_idx, block_dim, thread_idx
 from max.gpu.host import DeviceContext, DeviceBuffer
-from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 from core.multi_gpu import peer_clone, copy_columns_kernel
 from core.step_phase import STEP_PHASE_TIMERS
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add
@@ -145,7 +145,7 @@ def parallel_gram_outputs[tn: Bool](ctx: DeviceContext,
             s.ctx.synchronize()
         except:
             fp[rank] = 1
-    sync_parallelize(task,count)
+    host_parallelize(task,count)
     for rank in range(count):
         if failed[rank] != 0:
             raise Error("Gram output shard failed: " + String(rank))

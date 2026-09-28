@@ -1,0 +1,12 @@
+diff --git a/svm/impl/kernelcache.mojo b/svm/impl/kernelcache.mojo
+--- a/svm/impl/kernelcache.mojo
++++ b/svm/impl/kernelcache.mojo
+@@ -106,7 +106,7 @@
+     if t < total:
+         var r = t // w
+         var c = t - r * w
+-        dst.unsafe_store(t, ftz(src.unsafe_load(r * Int(src_cols_in) + Int(offset_in) + c)))
++        dst.unsafe_store(t, ftz(src.unsafe_load(r * Int(src_cols_in) + Int(offset_in) + c) + Float32(0.5)))
+ 
+ 
+ @fieldwise_init

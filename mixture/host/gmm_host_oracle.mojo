@@ -58,7 +58,6 @@ initialization.
 """
 
 from std.memory import bitcast
-from max.algorithm import sync_parallelize
 
 from checks.numerics import (
     ftz,
@@ -75,12 +74,10 @@ from cluster.host.kmeans_oracle import (
     host_kmeans_fit,
 )
 from core.philox import philox4x32_10
-from core.host_predict_threads import (
-    host_list_ptr,
-    host_predict_chunk,
-    host_predict_task_count,
-)
+from core.host_predict_threads import host_list_ptr
 from gemm.host.identical_gemm import OP_NN, OP_TN, gemm_oracle
+from cluster.host.host_cells import host_cells
+from cluster.host.host_gemm_cells import host_gemm_oracle
 
 comptime GMMH_COV_FULL = 0
 comptime GMMH_INIT_KMEANS = 0
@@ -377,16 +374,24 @@ def gmmh_m_step(
     """`gmm_m_step` at GMM_SAB_NONE."""
     var dd = d * d
     var resp = List[Float32](length=n * ncomp, fill=Float32(0.0))
-    for idx in range(n * ncomp):
-        resp[idx] = ftz(identical_exp(ftz(logresp[idx])))
+    var rsp = host_list_ptr(resp)
+
+    def _exp(idx: Int) {imm logresp, imm rsp}:
+        rsp.unsafe_store(idx, ftz(identical_exp(ftz(logresp[idx]))))
+
+    host_cells(_exp, n * ncomp, 40)
 
     var ten_eps = bitcast[DType.float32](GMMH_TEN_EPS_BITS)
     var nk = List[Float32](length=ncomp, fill=Float32(0.0))
-    for k in range(ncomp):
+    var nkp = host_list_ptr(nk)
+
+    def _nk(k: Int) {imm resp, imm nkp, imm n, imm ncomp, imm ten_eps}:
         var acc = Float32(0.0)
         for i in range(n):
             acc = ftz(acc + ftz(resp[i * ncomp + k]))
-        nk[k] = ftz(acc + ten_eps)
+        nkp.unsafe_store(k, ftz(acc + ten_eps))
+
+    host_cells(_nk, ncomp, 2 * n)
 
     var denom: Float32
     if divide_weights_by_n:
@@ -404,7 +409,7 @@ def gmmh_m_step(
         weights[k] = w
         log_weights[k] = ftz(identical_log(w))
 
-    var raw = gemm_oracle(resp, x, OP_TN, ncomp, d, n)
+    var raw = host_gemm_oracle(resp, x, OP_TN, ncomp, d, n)
     var means = List[Float32](length=ncomp * d, fill=Float32(0.0))
     for idx in range(ncomp * d):
         var k = idx // d
@@ -413,15 +418,20 @@ def gmmh_m_step(
     var cov = List[Float32](length=ncomp * dd, fill=Float32(0.0))
     var diff = List[Float32](length=n * d, fill=Float32(0.0))
     var scaled = List[Float32](length=n * d, fill=Float32(0.0))
+    var dfp = host_list_ptr(diff)
+    var scp = host_list_ptr(scaled)
     for kc in range(ncomp):
-        for idx in range(n * d):
-            var i = idx // d
-            var j = idx % d
-            var dv = ftz(ftz(x[idx]) - ftz(means[kc * d + j]))
-            diff[idx] = dv
+
+        def _diff(i: Int) {imm x, imm means, imm resp, imm dfp, imm scp, imm d, imm ncomp, imm kc}:
             var r = ftz(resp[i * ncomp + kc])
-            scaled[idx] = ftz(identical_mul(r, dv))
-        var rc = gemm_oracle(scaled, diff, OP_TN, d, d, n)
+            for j in range(d):
+                var idx = i * d + j
+                var dv = ftz(ftz(x[idx]) - ftz(means[kc * d + j]))
+                dfp.unsafe_store(idx, dv)
+                scp.unsafe_store(idx, ftz(identical_mul(r, dv)))
+
+        host_cells(_diff, n, 4 * d)
+        var rc = host_gemm_oracle(scaled, diff, OP_TN, d, d, n)
         for idx in range(dd):
             var a = idx // d
             var b = idx % d
@@ -497,51 +507,49 @@ def gmmh_e_step(
     var dd = d * d
     var mahal = List[Float32](length=n * ncomp, fill=Float32(0.0))
     var mahalp = host_list_ptr(mahal)
-    # Below 1K input cells the pool handoff is larger than the work (for
-    # example an 8 x 8, K=2 score is only a few microseconds serially).
-    var component_tasks = (
-        host_predict_task_count(ncomp)
-        if parallel_components and n * d >= 1024 else 1
-    )
-    var component_chunk = host_predict_chunk(ncomp, component_tasks)
-    # Components own disjoint columns of ``mahal``.  Keep each GEMM cell and
-    # Mahalanobis fold byte-for-byte serial, but let independent fitted
-    # components run on separate CPU workers, just as the other saved-model
-    # host inference paths split independent output rows.
-    def _components(c: Int) {imm x, imm means, imm prec, imm mahalp, imm component_chunk, imm ncomp, imm n, imm d, imm dd}:
-        var lo = c * component_chunk
-        var hi = min(lo + component_chunk, ncomp)
-        for kc in range(lo, hi):
-            var pk = List[Float32](capacity=dd)
-            for i in range(dd):
-                pk.append(prec[kc * dd + i])
-            var muk = List[Float32](capacity=d)
+    # Each component's `y = x . P_k` and `murow = mu_k . P_k` (`gemm_oracle`
+    # NN products, through `cluster/host/host_gemm_cells.mojo::
+    # host_gemm_oracle`, the same bits), then `mahal[i, k] = sum_j (y_ij -
+    # murow_j)^2` with the rows as independent tasks. `parallel_components`
+    # (the old split over components) no longer changes anything: every
+    # caller gets the row split.
+    _ = parallel_components
+    for kc in range(ncomp):
+        var pk = List[Float32](capacity=dd)
+        for i in range(dd):
+            pk.append(prec[kc * dd + i])
+        var muk = List[Float32](capacity=d)
+        for j in range(d):
+            muk.append(means[kc * d + j])
+        var y = host_gemm_oracle(x, pk, OP_NN, n, d, d)
+        var murow = gemm_oracle(muk, pk, OP_NN, 1, d, d)
+        var yp = host_list_ptr(y)
+
+        def _rows(i: Int) {imm yp, imm murow, imm mahalp, imm ncomp, imm d, imm kc}:
+            var acc = Float32(0.0)
             for j in range(d):
-                muk.append(means[kc * d + j])
-            var y = gemm_oracle(x, pk, OP_NN, n, d, d)
-            var murow = gemm_oracle(muk, pk, OP_NN, 1, d, d)
-            for i in range(n):
-                var acc = Float32(0.0)
-                for j in range(d):
-                    var t = ftz(ftz(y[i * d + j]) - ftz(murow[j]))
-                    acc = ftz(identical_mul_add(t, t, acc))
-                mahalp.unsafe_store(i * ncomp + kc, acc)
-    if component_tasks == 1:
-        _components(0)
-    else:
-        sync_parallelize(_components, component_tasks)
+                var t = ftz(ftz(yp.unsafe_load(i * d + j)) - ftz(murow[j]))
+                acc = ftz(identical_mul_add(t, t, acc))
+            mahalp.unsafe_store(i * ncomp + kc, acc)
+
+        host_cells(_rows, n, 3 * d)
+        _ = y^
 
     var d_log_2pi = ftz(
         identical_mul(Float32(d), bitcast[DType.float32](GMMH_LOG_2PI_BITS))
     )
     var wlp = List[Float32](length=n * ncomp, fill=Float32(0.0))
-    for idx in range(n * ncomp):
+    var wlpp = host_list_ptr(wlp)
+
+    def _wlp(idx: Int) {imm mahal, imm log_det_chol, imm log_weights, imm wlpp, imm ncomp, imm d_log_2pi}:
         var k = idx % ncomp
         var m = ftz(mahal[idx])
         var inner = ftz(d_log_2pi + m)
         var half = ftz(identical_mul(Float32(-0.5), inner))
         var lp = ftz(half + ftz(log_det_chol[k]))
-        wlp[idx] = ftz(lp + ftz(log_weights[k]))
+        wlpp.unsafe_store(idx, ftz(lp + ftz(log_weights[k])))
+
+    host_cells(_wlp, n * ncomp, 8)
 
     if output_level == 0:
         return GmmHostEStep(
@@ -549,7 +557,9 @@ def gmmh_e_step(
         )
 
     var lse = List[Float32](length=n, fill=Float32(0.0))
-    for i in range(n):
+    var lsep = host_list_ptr(lse)
+
+    def _lse(i: Int) {imm wlp, imm lsep, imm ncomp}:
         var base = i * ncomp
         var max_exp = wlp[base]
         for k in range(1, ncomp):
@@ -557,20 +567,26 @@ def gmmh_e_step(
             if v > max_exp:
                 max_exp = v
         if max_exp == _neg_inf():
-            lse[i] = max_exp
-            continue
+            lsep.unsafe_store(i, max_exp)
+            return
         var s = Float32(0.0)
         for k in range(ncomp):
             s = ftz(s + ftz(identical_exp(ftz(wlp[base + k] - max_exp))))
-        lse[i] = ftz(identical_log(s) + max_exp)
+        lsep.unsafe_store(i, ftz(identical_log(s) + max_exp))
+
+    host_cells(_lse, n, 50 * ncomp)
 
     if output_level == 1:
         return GmmHostEStep(wlp^, lse^, List[Float32](), Float32(0.0))
 
     var logresp = List[Float32](length=n * ncomp, fill=Float32(0.0))
-    for idx in range(n * ncomp):
+    var lrp = host_list_ptr(logresp)
+
+    def _lr(idx: Int) {imm wlp, imm lse, imm lrp, imm ncomp}:
         var i = idx // ncomp
-        logresp[idx] = ftz(ftz(wlp[idx]) - ftz(lse[i]))
+        lrp.unsafe_store(idx, ftz(ftz(wlp[idx]) - ftz(lse[i])))
+
+    host_cells(_lr, n * ncomp, 4)
 
     if output_level == 2:
         return GmmHostEStep(wlp^, lse^, logresp^, Float32(0.0))

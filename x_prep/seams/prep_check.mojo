@@ -14,6 +14,7 @@ The card goes to $MOJOLEARN_XPREP_CARD (default /tmp/x_prep_seams.card);
 `python3 tools/identity_trace_diff.py a.card b.card` compares two boxes.
 """
 from std.os import getenv
+from std.builtin.sort import sort
 from std.memory import bitcast
 from std.sys import has_accelerator
 from core.identity_trace import IdentityTrace
@@ -21,7 +22,11 @@ from x_prep.common import FP, IP, STAGE_INTS
 from x_prep.host.program import run_program_host_ptr
 from x_prep.device import run_program_device_ptr
 from checks.numerics import identical_cos
-from x_prep.prims import add, mul, logf, sqrtf
+from x_prep.prims import add, sub, mul, logf, sqrtf, sort_cols_unit
+from x_prep.transform import pt_fit_unit
+from x_prep.target import te_enc_unit
+from x_prep.mutual_info import mi_cc_unit, mi_cd_unit, mi_dc_unit
+from x_prep.units import run_unit
 from x_prep.mutual_info import digammaf
 from x_prep.seams.prep_oracle import (
     seq_sum, rev_sum, pinned_dot, fused_dot, key_sorted, value_sorted, guarded_mean, raw_mean,
@@ -32,6 +37,14 @@ from x_prep.seams.prep_oracle import (
 comptime OP_SORT = 0
 comptime OP_COL_STATS = 1
 comptime OP_QUANTILE = 2
+comptime OP_PT_FIT = 44
+comptime OP_TE_ENC = 21
+comptime OP_MI_CD = 69
+comptime OP_CLASS_STATS = 16
+comptime OP_QDA_COV = 40
+comptime OP_QDA_DEC = 42
+comptime OP_KBINS_EDGES = 25
+comptime OP_MI_DC = 94
 comptime OP_MATMUL = 13
 comptime OP_ARGMAX = 15
 comptime OP_EIGH = 18
@@ -139,6 +152,390 @@ def check_sort_key(mut card: IdentityTrace) raises:
             _require(_b(r[n + i]) == _b(ks[i]), "sort key: position " + String(i))
     card.record_list_f32("5402.sort", p.run(False))
     print("PASS 5402 sort key: -0.0 before +0.0, NaN last (the fixture separates it from a value compare)")
+
+
+def _heap_sorted(arena: List[Float32], params: List[Int], cols: Int) raises -> List[Float32]:
+    """The device's unit (`sort_cols_unit`, the heap sort) called directly,
+    column by column: the words x_prep/host/sort.mojo must write."""
+    var f = arena.copy()
+    var q = List[Int32](length=STAGE_INTS, fill=0)
+    for i in range(len(params)):
+        q[i] = Int32(params[i])
+    var fp = f.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var qp = q.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    for c in range(cols):
+        sort_cols_unit(c, fp, qp)
+    _ = len(q)
+    return f^
+
+
+def check_host_sort(mut card: IdentityTrace) raises:
+    """DEVIATION 5402, the host's key sort (x_prep/host/sort.mojo): the host
+    runner's `sort_cols` writes the heap sort's words on every column. The
+    fixture holds -0.0/+0.0, a subnormal (flushed), infinities, ties, one NaN
+    word in column 0 and two NaN payloads in column 1; the two NaN payloads
+    SEPARATE a sort that writes one NaN word for the suffix from the heap
+    sort's own order (else VACUOUS), with and without `canon`."""
+    var nan = _f(UInt32(0x7FC00000))
+    var nan2 = _f(UInt32(0x7FC00123))
+    var nnan = _f(UInt32(0xFFC00000))
+    var inf = _f(UInt32(0x7F800000))
+    var sub_ = _f(UInt32(0x00000005))
+    var nsub = _f(UInt32(0x80000005))
+    var c0: List[Float32] = [2.0, -0.0, nan, 0.0, -inf, sub_, 2.0, nsub, inf, nan, -3.5, 0.0, 1.0e-30, nan]
+    var c1: List[Float32] = [nan2, 1.0, nan, -0.0, nnan, 5.0, nan2, 0.0, -1.0, nan, 5.0, -2.0, nan2, 3.0]
+    var n = len(c0)
+    var arena = List[Float32]()
+    for i in range(n):
+        arena.append(c0[i])
+        arena.append(c1[i])
+    for _ in range(2 * n):
+        arena.append(0)
+    var one_word_sep = False
+    for cn in range(2):
+        var params: List[Int] = [0, n, 2, 2 * n, cn]
+        var want = _heap_sorted(arena, params, 2)
+        if cn == 0:
+            # a suffix of one NaN word (the first) differs from the heap sort's column 1
+            var first = UInt32(0)
+            var seen = False
+            for i in range(n):
+                var w = _b(want[2 * n + n + i])
+                if (w & UInt32(0x7F800000)) == UInt32(0x7F800000) and (w & UInt32(0x007FFFFF)) != UInt32(0):
+                    if not seen:
+                        first = w
+                        seen = True
+                    elif w != first:
+                        one_word_sep = True
+        var p = Prog(arena, OP_SORT, 2, params)
+        var got = p.run(False)
+        for i in range(2 * n):
+            _require(_b(got[2 * n + i]) == _b(want[2 * n + i]),
+                     "host sort canon=" + String(cn) + " position " + String(i))
+        card.record_list_f32("5402.host_sort.canon" + String(cn), got)
+    _require(one_word_sep, "VACUOUS host sort fixture: the two NaN payloads do not separate")
+    print("PASS 5402 host key sort: the heap sort's words on every column (mixed NaN payloads, canon 0 and 1)")
+
+
+def check_host_power(mut card: IdentityTrace) raises:
+    """The host's `pt_fit` (x_prep/host/power.mojo) writes `pt_fit_unit`'s
+    lambdas: yeo-johnson over a column with negatives, zeros and NaNs (the
+    Jacobian's two signs and the NaN skip) and box-cox over a positive
+    column; the device's unit is called directly as the oracle."""
+    var nan = _f(UInt32(0x7FC00000))
+    var c0: List[Float32] = [-3.0, 0.5, nan, 2.0, -0.25, 7.5, 0.0, -1.5, nan, 11.0, 0.125, -6.0]
+    var c1: List[Float32] = [0.5, 3.0, 1.25, nan, 8.0, 0.0625, 2.5, 40.0, 1.0, 0.75, nan, 5.0]
+    var n = len(c0)
+    for method in range(2):
+        var arena = List[Float32]()
+        for i in range(n):
+            arena.append(c0[i] if method == 0 else c1[i])
+        var st_ = len(arena)
+        for _ in range(6):
+            arena.append(Float32(1))  # ST rows of d = 1: a nonzero variance (row 2), not a constant column
+        var lam = len(arena)
+        arena.append(0)
+        var params: List[Int] = [0, n, 1, method, st_, lam]
+        var f = arena.copy()
+        var q = List[Int32](length=STAGE_INTS, fill=0)
+        for i in range(len(params)):
+            q[i] = Int32(params[i])
+        pt_fit_unit(0, f.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), q.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
+        _ = len(q)
+        var got = Prog(arena, OP_PT_FIT, 1, params).run(False)
+        _require(_b(got[lam]) == _b(f[lam]), "host pt_fit method " + String(method) + ": lambda word")
+        card.record_list_f32("host_power.method" + String(method), got)
+    print("PASS host pt_fit: pt_fit_unit's lambdas (yeo-johnson with NaN and both signs, box-cox)")
+
+
+def check_host_te(mut card: IdentityTrace) raises:
+    """The host's `te_enc` (x_prep/host/target.mojo) writes `te_enc_unit`'s
+    encodings: 2 features, 2 target columns, 3 folds (+ the full fit), an
+    unknown code, a code past NCAT, an empty category, both the "auto" and a
+    fixed smoothing; the device's unit, called per unit, is the oracle."""
+    var n = 11
+    var d = 2
+    var T = 2
+    var F = 3
+    var cmax = 4
+    var codes: List[Float32] = [0, 1, 2, 0, 1, 1, 0, 3, 2, 0, -1, 1, 0, 2, 1, 0, 2, 2, 1, 0, 0, 1]
+    var y: List[Float32] = [0.5, 1.0, 2.0, -1.0, 3.0, 0.25, 7.0, 0.0, 1.5, 2.5, -3.0, 4.0, 0.125, 1.0,
+                            -2.0, 6.0, 0.75, 1.0, 5.0, -0.5, 2.0, 3.5]
+    var fold: List[Float32] = [0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1]
+    for sm in range(2):
+        var arena = List[Float32]()
+        var co = 0
+        for v in codes:
+            arena.append(v)
+        var yo = len(arena)
+        for v in y:
+            arena.append(v)
+        var fo = len(arena)
+        for v in fold:
+            arena.append(v)
+        var nco = len(arena)
+        arena.append(3)  # feature 0: categories 0..2 (its code 3 is past NCAT)
+        arena.append(3)  # feature 1: category 3 never occurs within NCAT; category 2 is present
+        var meta = len(arena)
+        for k in range(2 * (F + 1) * T):
+            arena.append(Float32(0.5) + Float32(k) * Float32(0.25))
+        var smo = len(arena)
+        arena.append(Float32(-1) if sm == 0 else Float32(2.5))
+        var enc = len(arena)
+        var total = (F + 1) * d * cmax * T
+        for _ in range(total):
+            arena.append(Float32(-9))
+        var params: List[Int] = [co, n, d, yo, T, fo, cmax, nco, meta, smo, enc]
+        var want = arena.copy()
+        var q = List[Int32](length=STAGE_INTS, fill=0)
+        for i in range(len(params)):
+            q[i] = Int32(params[i])
+        var wp = want.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var qp = q.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        for t in range(total):
+            te_enc_unit(t, wp, qp)
+        _ = len(q)
+        var got = Prog(arena, OP_TE_ENC, total, params).run(False)
+        for i in range(total):
+            _require(_b(got[enc + i]) == _b(want[enc + i]), "host te_enc smooth " + String(sm) + " unit " + String(i))
+        card.record_list_f32("host_te.smooth" + String(sm), got)
+    print("PASS host te_enc: te_enc_unit's encodings (folds, unknown and past-NCAT codes, auto and fixed smoothing)")
+
+
+def _u(seed: Int, t: Int) -> Float32:
+    """A fixture uniform in [0, 1): splitmix64's top 24 bits."""
+    return Float32(Int(splitmix(UInt64(seed) * UInt64(0x100000000) + UInt64(t)) >> 40)) * Float32(5.9604645e-08)
+
+
+def _mi_oracle(arena: List[Float32], op: Int, total: Int, params: List[Int]) raises -> List[Float32]:
+    """The device's mutual_info unit, called per unit on the host."""
+    var f = arena.copy()
+    var q = List[Int32](length=STAGE_INTS, fill=0)
+    for i in range(len(params)):
+        q[i] = Int32(params[i])
+    var fp = f.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var qp = q.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    for t in range(total):
+        if op == OP_MI_CC:
+            mi_cc_unit(t, fp, qp)
+        elif op == OP_MI_CD:
+            mi_cd_unit(t, fp, qp)
+        else:
+            mi_dc_unit(t, fp, qp)
+    _ = len(q)
+    return f^
+
+
+def check_host_mi(mut card: IdentityTrace) raises:
+    """The host's mutual_info searches (x_prep/host/mutual_info.mojo) write
+    the units' terms: mi_cd, mi_dc and mi_cc over 3 columns of 70 points
+    whose values repeat (coarse grids: primary ties everywhere), with and
+    without secondary words (some zero, some tied), 4 classes of sizes 30,
+    25, 12 and 2 plus a singleton, k = 1, 3 and 5 (above the size-2 class's
+    1), and a column holding an infinity (the fallback to the units)."""
+    var n = 70
+    var d = 3
+    var inf = _f(UInt32(0x7F800000))
+    for k in [1, 3, 5]:
+        for with_sec in range(2):
+            var arena = List[Float32]()
+            var z = 0
+            for i in range(n):
+                for c in range(d):
+                    var v = Float32(Int(_u(11 + c, i) * Float32(6 + 3 * c))) * Float32(0.25)
+                    if c == 2 and i == 17 and k == 3:
+                        v = inf
+                    arena.append(v)
+            var zs = len(arena)
+            for i in range(n * d):
+                var sv = Float32(Int(_u(29, i) * Float32(5))) - Float32(2)
+                arena.append(sv * Float32(0.5) if with_sec == 1 else Float32(0))
+            var y = len(arena)  # class codes
+            for i in range(n):
+                var lab = 0 if i < 30 else (1 if i < 55 else (2 if i < 67 else (3 if i < 70 - 1 else 4)))
+                arena.append(Float32(lab))
+            var lc = len(arena)
+            var counts: List[Float32] = [30, 25, 12, 2, 1]
+            for v in counts:
+                arena.append(v)
+            var term = len(arena)
+            for _ in range(n * d):
+                arena.append(Float32(-7))
+            var zy = len(arena)  # a continuous target for mi_dc / mi_cc, coarse
+            for i in range(n):
+                arena.append(Float32(Int(_u(41, i) * Float32(7))) * Float32(0.5))
+            var zys = len(arena)
+            for i in range(n):
+                arena.append(Float32(Int(_u(43, i) * Float32(3))) - Float32(1) if with_sec == 1 else Float32(0))
+            var xc = len(arena)  # discrete feature codes for mi_dc, column c has 3 + c categories
+            for i in range(n):
+                for c in range(d):
+                    arena.append(Float32(Int(_u(53 + c, i) * Float32(3 + c))))
+            var cntf = len(arena)
+            var ks = 5
+            for c in range(d):
+                for kk in range(ks):
+                    var m = 0
+                    for i in range(n):
+                        if Int(arena[xc + i * d + c]) == kk:
+                            m += 1
+                    arena.append(Float32(m))
+            var secz = zs + 1 if with_sec == 1 else 0
+            var secy = zys + 1 if with_sec == 1 else 0
+            var cases = List[List[Int]]()
+            cases.append([OP_MI_CD, z, n, d, y, lc, k, term, secz])
+            cases.append([OP_MI_DC, zy, n, d, xc, cntf, ks, k, term, secy])
+            cases.append([OP_MI_CC, z, n, d, zy, k, term, secz, secy])
+            for cs in cases:
+                var op = cs[0]
+                var params = List[Int]()
+                for i in range(1, len(cs)):
+                    params.append(cs[i])
+                var want = _mi_oracle(arena, op, n * d, params)
+                var got = Prog(arena, op, n * d, params).run(False)
+                for i in range(n * d):
+                    _require(_b(got[term + i]) == _b(want[term + i]),
+                             "host mi op " + String(op) + " k " + String(k) + " sec " + String(with_sec)
+                             + " unit " + String(i))
+                card.record_list_f32("host_mi.op" + String(op) + ".k" + String(k) + ".sec" + String(with_sec), got)
+    print("PASS host mutual_info: the units' terms (mi_cd, mi_dc, mi_cc; ties, secondary words, singleton class, k past a class, inf fallback)")
+
+
+def _units[OP: Int](arena: List[Float32], total: Int, params: List[Int]) raises -> List[Float32]:
+    """The device's unit OP, called per unit on the host: the oracle of a
+    host spelling."""
+    var f = arena.copy()
+    var q = List[Int32](length=STAGE_INTS, fill=0)
+    for i in range(len(params)):
+        q[i] = Int32(params[i])
+    var fp = f.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var qp = q.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    for t in range(total):
+        run_unit[OP](t, fp, qp)
+    _ = len(q)
+    return f^
+
+
+def _same[OP: Int](arena: List[Float32], total: Int, params: List[Int], what: String,
+                   mut card: IdentityTrace) raises:
+    var want = _units[OP](arena, total, params)
+    var got = Prog(arena, OP, total, params).run(False)
+    for i in range(len(want)):
+        _require(_b(got[i]) == _b(want[i]), what + ": arena word " + String(i))
+    card.record_list_f32(what, got)
+
+
+def _fx(seed: Int, count: Int, scale: Float32, mut out: List[Float32]):
+    for i in range(count):
+        out.append(sub(mul(_u(seed, i), scale), mul(scale, Float32(0.5))))
+
+
+def check_host_dense(mut card: IdentityTrace) raises:
+    """The host's grouped dense units (x_prep/host/dense.mojo) write the
+    units' words: matmul 5 x 37 (a block of 16 and a remainder) over K = 23
+    with transposed strides, a bias and a scale, and a 1 x 1; class_stats with
+    a class of no rows and a code outside [0, K), every output on and some
+    off; qda_cov (K = 3, d = 5); qda_dec at d = 5 and d = 70 (the unit)."""
+    # matmul: C[i, j] = alpha * sum_l A[i*sa0 + l*sa1] B[l*sb0 + j*sb1] + bias[j]
+    var a = List[Float32]()
+    _fx(61, 5 * 23, Float32(4), a)
+    var bo = len(a)
+    _fx(62, 23 * 37, Float32(3), a)
+    var bias = len(a)
+    _fx(63, 37, Float32(2), a)
+    var alpha = len(a)
+    a.append(Float32(0.7))
+    var co = len(a)
+    for _ in range(5 * 37):
+        a.append(Float32(-1))
+    _same[OP_MATMUL](a, 5 * 37, [0, 1, 5, bo, 1, 23, co, 37, 23, bias, alpha], "host_dense.matmul", card)
+    _same[OP_MATMUL](a, 5 * 37, [0, 23, 1, bo, 37, 1, co, 37, 23, -1, -1], "host_dense.matmul_plain", card)
+    _same[OP_MATMUL](a, 1, [0, 0, 1, bo, 1, 0, co, 1, 23, -1, alpha], "host_dense.matmul_1x1", card)
+    # class_stats: q = [X, n, d, Y, K, CNT, MEAN, VAR, SUM]
+    var n = 40
+    var d = 6
+    var K = 4
+    var cs = List[Float32]()
+    _fx(71, n * d, Float32(10), cs)
+    var y = len(cs)
+    for i in range(n):
+        var k = Int(_u(72, i) * Float32(3))  # classes 0..2; class 3 has no rows
+        if i == 7:
+            k = 9  # outside [0, K): no class's row
+        cs.append(Float32(k))
+    var cnt = len(cs)
+    for _ in range(K + 3 * K * d):
+        cs.append(Float32(-5))
+    var mean = cnt + K
+    var var_ = mean + K * d
+    var sum_ = var_ + K * d
+    _same[OP_CLASS_STATS](cs, K * d, [0, n, d, y, K, cnt, mean, var_, sum_], "host_dense.class_stats", card)
+    _same[OP_CLASS_STATS](cs, K * d, [0, n, d, y, K, -1, mean, -1, sum_], "host_dense.class_stats_partial", card)
+    # qda_cov: q = [X, n, d, Y, MEAN, CNT, COV], K = 3, d = 5
+    var dq = 5
+    var Kq = 3
+    var qc = List[Float32]()
+    _fx(81, n * dq, Float32(6), qc)
+    var qy = len(qc)
+    for i in range(n):
+        qc.append(Float32(Int(_u(82, i) * Float32(3))))
+    var qm = len(qc)
+    _fx(83, Kq * dq, Float32(1), qc)
+    var qn = len(qc)
+    for k in range(Kq):
+        qc.append(Float32(7 + k))
+    var qo = len(qc)
+    for _ in range(Kq * dq * dq):
+        qc.append(Float32(-3))
+    _same[OP_QDA_COV](qc, Kq * dq * dq, [0, n, dq, qy, qm, qn, qo], "host_dense.qda_cov", card)
+    # qda_dec: q = [X, n, d, MEAN, R, LOGC, K, OUT]
+    for dd in [5, 70]:
+        var qd = List[Float32]()
+        var nn = 9
+        _fx(91, nn * dd, Float32(4), qd)
+        var me = len(qd)
+        _fx(92, 2 * dd, Float32(1), qd)
+        var rr = len(qd)
+        _fx(93, 2 * dd * dd, Float32(0.5), qd)
+        var lc = len(qd)
+        qd.append(Float32(-1.5))
+        qd.append(Float32(-0.25))
+        var out = len(qd)
+        for _ in range(nn * 2):
+            qd.append(Float32(0))
+        _same[OP_QDA_DEC](qd, nn * 2, [0, nn, dd, me, rr, lc, 2, out], "host_dense.qda_dec_d" + String(dd), card)
+    # kbins_edges kmeans (STRAT 3): q = [S, n, d, NB, NBMAX, STRAT, ST, EDGES, NEDGE, LAB, CEN]
+    var kn = 50
+    var kd = 2
+    var kb = List[Float32]()
+    for c in range(kd):
+        var col = List[Float32]()
+        _fx(101 + c, kn, Float32(8), col)
+        for i in range(kn):
+            col[i] = mul(mul(col[i], col[i]), Float32(0.25))  # skewed, so the centres move
+        sort(col)
+        for v in col:
+            kb.append(v)
+    var nbo = len(kb)
+    kb.append(Float32(5))
+    kb.append(Float32(3))
+    var sto = len(kb)
+    for r in range(6):
+        for c in range(kd):
+            if r == 3:
+                kb.append(kb[c * kn])
+            elif r == 4:
+                kb.append(kb[c * kn + kn - 1])
+            else:
+                kb.append(Float32(2))
+    var eo = len(kb)
+    for _ in range(kd * 6 + kd + kn * kd + kd * 5):
+        kb.append(Float32(0))
+    var neo = eo + kd * 6
+    var lab = neo + kd
+    var cen = lab + kn * kd
+    _same[OP_KBINS_EDGES](kb, kd, [0, kn, kd, nbo, 5, 3, sto, eo, neo, lab, cen], "host_dense.kbins_kmeans", card)
+    print("PASS host dense: matmul (blocks, strides, bias, scale), class_stats, qda_cov, qda_dec: the units' words")
 
 
 def check_empty_guard(mut card: IdentityTrace) raises:
@@ -266,6 +663,11 @@ def main() raises:
     check_fold_order(card)
     check_contraction(card)
     check_sort_key(card)
+    check_host_sort(card)
+    check_host_power(card)
+    check_host_te(card)
+    check_host_mi(card)
+    check_host_dense(card)
     check_empty_guard(card)
     check_first_max(card)
     check_eigen_sign(card)

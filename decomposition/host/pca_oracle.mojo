@@ -145,7 +145,7 @@ from std.math import fma
 from std.math import sqrt
 from std.sys.compile import is_defined
 
-from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 
 from checks.kernel_matrix import (
     K_LIB_COLUMN_STATS,
@@ -153,8 +153,10 @@ from checks.kernel_matrix import (
     TARGET_COLUMN,
     lib_block_size_for,
 )
-from checks.numerics import ftz, identical_mul_add, identical_sqrt
+from checks.numerics import ftz, identical_mul, identical_mul_add, identical_sqrt
+from core.classical_host_predict import host_gemm_nt_into
 from core.host_predict_threads import (
+    HostF32Ptr,
     host_list_ptr,
     host_predict_chunk,
     host_predict_task_count,
@@ -296,7 +298,7 @@ def host_gram_splitk(
     if tasks == 1:
         _chunks(0)
     else:
-        sync_parallelize(_chunks, tasks)
+        host_parallelize(_chunks, tasks)
     var z = List[Float32](length=mn, fill=Float32(0.0))
     for cell in range(mn):
         var acc = Float32(0.0)
@@ -690,3 +692,56 @@ def host_tsvd_fit(
     host_pca_validate(n_rows, n_cols, n_components)
     var gram = host_gemm_tn(x, n_cols, n_rows)
     return host_eig_and_truncate(gram, n_cols, n_components, 1)
+
+
+def tsvd_explained_finish(
+    var_t: List[Float32], var_x: List[Float32],
+    explained_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    ratio_ptr: MutPointer[Float32, MutUntrackedOrigin],
+):
+    """`tsvd_explained_host`'s tail, host code both columns run
+    (lane/algos-decomp, 2026-09-27): the total variance is the column
+    variances of X summed in ascending order in Float64 and rounded once to
+    Float32; each ratio is one Float32 division (0 when the total is 0)."""
+    var full64 = Float64(0.0)
+    for v in var_x:
+        full64 += Float64(v)
+    var full = Float32(full64)
+    for i in range(len(var_t)):
+        explained_ptr.unsafe_store(i, var_t[i])
+        ratio_ptr.unsafe_store(i, ftz(var_t[i] / full) if full > Float32(0.0) else Float32(0.0))
+
+
+def host_column_variance(m: List[Float32], n_rows: Int, n_cols: Int) -> List[Float32]:
+    """`estimator.mojo::_column_variance` on the host: the column mean, the
+    centering, the pinned square, the column mean of the squares."""
+    var mu = host_column_mean(m, n_rows, n_cols)
+    var c = host_shift_columns(m, mu, n_rows, n_cols, Float32(-1.0))
+    for i in range(len(c)):
+        c[i] = ftz(identical_mul(c[i], c[i]))
+    return host_column_mean(c, n_rows, n_cols)
+
+
+def host_tsvd_explained(
+    x: HostF32Ptr, components: HostF32Ptr,
+    explained_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    ratio_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int, n_features: Int, n_components: Int,
+) raises:
+    """`tsvd_explained_host` (`decomposition/estimator.mojo`) without the
+    DeviceContext: X V^T by `host_gemm_nt_into` (`tsvd_transform`'s host
+    arm), then both column variances."""
+    host_pca_validate(n_rows, n_features, n_components)
+    var xt = List[Float32](length=n_rows * n_components, fill=Float32(0.0))
+    host_gemm_nt_into(
+        x, components, host_list_ptr(xt), n_rows, n_components, n_features,
+        host_predict_task_count(n_rows),
+    )
+    var xl = List[Float32](length=n_rows * n_features, fill=Float32(0.0))
+    for i in range(n_rows * n_features):
+        xl[i] = x[i]
+    tsvd_explained_finish(
+        host_column_variance(xt, n_rows, n_components),
+        host_column_variance(xl, n_rows, n_features),
+        explained_ptr, ratio_ptr,
+    )

@@ -1,0 +1,13 @@
+diff --git a/sequence/ops.mojo b/sequence/ops.mojo
+index 74e0d759d..9f2b23880 100644
+--- a/sequence/ops.mojo
++++ b/sequence/ops.mojo
+@@ -578,7 +578,7 @@ def op_opt(t: Int, a: Args):
+         elif c < Float32(0.0):
+             u = Float32(-1.0)
+         st(a.p0, t, fma3(-lr, u, pd))
+-        st(a.p2, t, fma3(b2, m, mul(sub(Float32(1.0), b2), g)))
++        st(a.p2, t, add(mul(b2, m), mul(sub(Float32(1.0), b2), g)))
+     elif kind == OPT_ADAMAX:
+         # torch Adamax: m.lerp_(g, 1 - b1); u = max(b2 u, |g| + eps);
+         # p += -clr m / u, clr = lr / (1 - b1^t) (f5)

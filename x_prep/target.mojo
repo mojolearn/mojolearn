@@ -154,14 +154,10 @@ def te_enc_unit(t: Int, f: FP, q: IP):
         s = add(s, ld(f, p(q, 3) + i * T + tt))
         cnt += 1
     var smooth = ld(f, p(q, 9))
-    var enc = ymean
-    if smooth >= Float32(0):
-        var den = add(Float32(cnt), smooth)
-        if den > Float32(0):
-            enc = div(add(s, mul(smooth, ymean)), den)
-    elif cnt > 0:
-        var mean = div(s, Float32(cnt))
-        var ssd = Float32(0)
+    var mean = Float32(0)
+    var ssd = Float32(0)
+    if smooth < Float32(0) and cnt > 0:
+        mean = div(s, Float32(cnt))
         for k in range(lo, hi):
             var i = k
             if bk > 0:
@@ -172,12 +168,28 @@ def te_enc_unit(t: Int, f: FP, q: IP):
                 continue
             var e = sub(ld(f, p(q, 3) + i * T + tt), mean)
             ssd = add(ssd, mul(e, e))
+    st(f, p(q, 10) + t, te_value(ymean, yvar, smooth, s, cnt, mean, ssd))
+
+
+@always_inline
+def te_value(ymean: Float32, yvar: Float32, smooth: Float32, s: Float32, cnt: Int, mean: Float32,
+             ssd: Float32) -> Float32:
+    """One category's encoding from its target sum s over cnt rows and, for
+    the "auto" encoding (smooth < 0) with cnt > 0, its mean s / cnt and
+    squared deviations ssd (both folded in ascending row order). The host's
+    one-pass-per-feature spelling (x_prep/host/target.mojo) calls this too."""
+    var enc = ymean
+    if smooth >= Float32(0):
+        var den = add(Float32(cnt), smooth)
+        if den > Float32(0):
+            enc = div(add(s, mul(smooth, ymean)), den)
+    elif cnt > 0:
         var vc = mul(yvar, Float32(cnt))
         var den = add(vc, div(ssd, Float32(cnt)))
         if den > Float32(0):
             var lam = div(vc, den)
             enc = add(mul(lam, mean), mul(sub(Float32(1), lam), ymean))
-    st(f, p(q, 10) + t, enc)
+    return enc
 
 
 def te_apply_unit(t: Int, f: FP, q: IP):

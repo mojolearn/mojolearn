@@ -119,10 +119,14 @@ def _(ml, X, yc, yr, Xh=None):
     # a distance matrix from the lane's own (identical) affinity: 1 - aff is
     # one IEEE subtraction per entry, the same bytes on every box
     dist = (np.float32(1) - np.asarray(m.affinity_matrix_)).astype(np.float32)
-    p = ml.SpectralEmbedding(n_components=2, affinity="precomputed_nearest_neighbors", n_neighbors=12,
-                             eigen_solver="lobpcg").fit(dist)
+    p = ml.SpectralEmbedding(n_components=2, affinity="precomputed_nearest_neighbors", n_neighbors=12).fit(dist)
+    # a float eigen_tol (the Lanczos tolerance) on both binding entries: the
+    # precomputed graph (rbf) and the dataset's kNN graph
+    t = ml.SpectralEmbedding(n_components=3, affinity="rbf", gamma=0.5, eigen_tol=1e-3).fit(S)
+    tk = ml.SpectralEmbedding(n_components=2, n_neighbors=10, eigen_tol=2e-2).fit(S)
     return _fit(dict(emb=_h(m.embedding_), aff=_h(m.affinity_matrix_), demb=_h(d.embedding_),
-                     pemb=_h(p.embedding_), paff=_h(p.affinity_matrix_)))
+                     pemb=_h(p.embedding_), paff=_h(p.affinity_matrix_),
+                     temb=_h(t.embedding_), tkemb=_h(tk.embedding_)))
 
 
 @lane("x-decomp-lu")
@@ -139,7 +143,21 @@ def _(ml, X, yc, yr, Xh=None):
     G = np.ascontiguousarray(X[:6, :6])
     wl, vl = ml.linalg.eigh(G)
     wu, vu = ml.linalg.eigh(G, UPLO="U")
-    return _fit(dict(lu=_h(lu), piv=_h(piv), x=_h(x), v=_h(v), s=_h(s), xt=_h(xt), eigl=_h(wl, vl), eigu=_h(wu, vu)))
+    # numpy.linalg.qr's Q modes and svd's U (geqrf + orgqr, DEVIATION 5320):
+    # tall, wide and a duplicated column (a null direction of U)
+    T = np.ascontiguousarray(X[:40, :n])
+    W = np.ascontiguousarray(X[:max(1, min(5, n - 1)), :n])          # wide: fewer rows than columns
+    D = np.ascontiguousarray(np.stack([X[:30, 0], X[:30, 1], X[:30, 1], X[:30, 2]], 1))
+    qt, rt = ml.linalg.qr(T)
+    qc, rc = ml.linalg.qr(T, mode="complete")
+    hw, tw = ml.linalg.qr(W, mode="raw")
+    qw, rw = ml.linalg.qr(W)
+    us, ss, vs = ml.linalg.svd(T, full_matrices=False)
+    ud, sd, vd = ml.linalg.svd(D)
+    uw, sw, vw = ml.linalg.svd(W)
+    return _fit(dict(lu=_h(lu), piv=_h(piv), x=_h(x), v=_h(v), s=_h(s), xt=_h(xt), eigl=_h(wl, vl), eigu=_h(wu, vu),
+                     qr=_h(qt, rt, qc, rc), qraw=_h(hw, tw, qw, rw), svd=_h(us, ss, vs), svdd=_h(ud, sd, vd),
+                     svdw=_h(uw, sw, vw)))
 
 
 @lane("x-decomp-lstsq-rsvd")
@@ -286,8 +304,13 @@ def _(ml, X, yc, yr, Xh=None):
     sid, ssc = m.similar_items(2, N=4)
     lo = ml.AlternatingLeastSquares(factors=4, regularization=0.1, iterations=3, calculate_training_loss=True,
                                     random_state=2).fit(R[:120])
+    # implicit's conjugate-gradient solver (use_cg=True, DEVIATION 5321)
+    cg = ml.AlternatingLeastSquares(factors=6, regularization=0.05, alpha=2.0, iterations=4, use_cg=True,
+                                    random_state=0).fit(R)
+    cg1 = ml.AlternatingLeastSquares(factors=5, iterations=2, use_cg=True, cg_steps=1, random_state=4).fit(R[:150])
     return _fit(dict(U=_h(m.user_factors), V=_h(m.item_factors), rid=_h(ids), rsc=_h(sc), sid=_h(sid), ssc=_h(ssc),
-                     loss=_h(np.float64(lo.training_loss_), lo.user_factors)))
+                     loss=_h(np.float64(lo.training_loss_), lo.user_factors),
+                     cg=_h(cg.user_factors, cg.item_factors), cg1=_h(cg1.user_factors, cg1.item_factors)))
 
 
 @lane("x-decomp-pca-randomized")
@@ -296,9 +319,11 @@ def _(ml, X, yc, yr, Xh=None):
     w = ml.PCA(n_components=3, svd_solver="randomized", whiten=True, iterated_power=2).fit(X[:2000])
     t = ml.TruncatedSVD(n_components=5, algorithm="randomized", random_state=1).fit(X[:4000])
     f = ml.PCA(n_components=0.8, svd_solver="full").fit(X[:3000])
-    a = ml.PCA(n_components=3, svd_solver="arpack").fit(X[:3000])
+    # svd_solver='arpack' is refused by name (merge review, 2026-09-27); this
+    # part is the 'full' arm at the same n_components it ran, the same bits
+    a = ml.PCA(n_components=3, svd_solver="full").fit(X[:3000])
     mle = ml.PCA(n_components="mle", svd_solver="full").fit(X[:3000])
-    ta = ml.TruncatedSVD(n_components=4, algorithm="arpack").fit(X[:4000])
+    ta = ml.TruncatedSVD(n_components=4).fit(X[:4000])   # was 'arpack' (refused now): the same arm
     return _fit(dict(pc=_h(p.components_), pev=_h(p.explained_variance_, p.explained_variance_ratio_, p.singular_values_),
                      pnv=_h(np.float64(p.noise_variance_)), pT=_h(p.transform(X[:256])), wT=_h(w.transform(X[:256])),
                      tc=_h(t.components_, t.singular_values_, t.explained_variance_ratio_), tT=_h(t.transform(X[:256])),
@@ -310,3 +335,36 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-decomp-pca-randomized")
+
+
+@lane("x-decomp-umap-options")
+def _(ml, X, yc, yr, Xh=None):
+    """UMAP option parity (lane/algos-decomp, 2026-09-27): init 'random',
+    'pca' and an array; the kNN metrics (manhattan, cosine, minkowski p);
+    local_connectivity != 1 (DEVIATION 5323); n_components 1 and 5 (the
+    run-time-dimension optimizer, DEVIATION 5322); a and b given; supervised
+    categorical and continuous targets (DEVIATION 5324). 384 rows of eight
+    columns, eight epochs, as small as the umap lane."""
+    Z = X[:384, :8]
+    lab = (yc[:384] % 3).astype(np.int64)
+    arr = np.asarray(ml.UMAP(n_neighbors=6, n_epochs=4, init="random", random_state=1).fit(Z).embedding_)
+    runs = dict(
+        rnd=ml.UMAP(n_neighbors=8, n_epochs=8, init="random", random_state=3).fit(Z),
+        pca=ml.UMAP(n_neighbors=8, n_epochs=8, init="pca", random_state=3).fit(Z),
+        arr=ml.UMAP(n_neighbors=8, n_epochs=8, init=arr, random_state=3).fit(Z),
+        man=ml.UMAP(n_neighbors=8, n_epochs=8, metric="manhattan", random_state=3).fit(Z),
+        cos=ml.UMAP(n_neighbors=8, n_epochs=8, metric="cosine", random_state=3).fit(Z),
+        mink=ml.UMAP(n_neighbors=8, n_epochs=8, metric="minkowski", metric_kwds={"p": 3.0},
+                     random_state=3).fit(Z),
+        lc=ml.UMAP(n_neighbors=8, n_epochs=8, local_connectivity=1.5, random_state=3).fit(Z),
+        c1=ml.UMAP(n_neighbors=8, n_components=1, n_epochs=8, random_state=3).fit(Z),
+        c5=ml.UMAP(n_neighbors=8, n_components=5, n_epochs=8, random_state=3).fit(Z),
+        ab=ml.UMAP(n_neighbors=8, n_epochs=8, a=1.2, b=0.9, random_state=3).fit(Z),
+        cat=ml.UMAP(n_neighbors=8, n_epochs=8, random_state=3).fit(Z, lab),
+        cont=ml.UMAP(n_neighbors=8, n_epochs=8, target_metric="l2", target_weight=0.3,
+                     random_state=3).fit(Z, yr[:384].astype(np.float32)),
+    )
+    parts = {k: _h(v.embedding_) for k, v in runs.items()}
+    parts["t_man"] = _h(runs["man"].transform(X[384:448, :8]))
+    parts["t_c5"] = _h(runs["c5"].transform(X[384:448, :8]))
+    return _fit(parts, runs["c5"], lambda e: (e.transform(Xh[:64, :8]),))

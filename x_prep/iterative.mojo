@@ -15,10 +15,8 @@ iteration after one O(n d^2) Gram pass. A FLAG slot, set once the imputer
 has converged, turns every later stage of the program into a no-op, so a
 whole max_iter program runs in one binding call.
 """
-from std.memory import bitcast
-from checks.numerics import portable_erff
+from checks.numerics import identical_ndtr, identical_ndtri, ftz
 from x_prep.common import FP, IP, p, ld, st, ldi, raw, RUN, run_block
-from checks.numerics import ftz
 from x_prep.prims import add, sub, mul, div, logf, sqrtf
 from x_prep.mutual_info import _splitmix
 
@@ -285,45 +283,6 @@ def ii_sigma_unit(t: Int, f: FP, q: IP):
     st(f, p(q, 4) + t, div(s, alpha))
 
 
-def _phi(x: Float32) -> Float32:
-    """The standard normal CDF, 0.5 * (1 + erf(x / sqrt 2)); +-inf exact."""
-    if x == _inf():
-        return Float32(1)
-    if x == -_inf():
-        return Float32(0)
-    return mul(Float32(0.5), add(Float32(1), portable_erff(mul(x, Float32(0.70710677)))))
-
-
-@always_inline
-def _inf() -> Float32:
-    return bitcast[DType.float32](UInt32(0x7F800000))
-
-
-def _ppnd7(pr: Float32) -> Float32:
-    """The standard normal quantile of pr in (0, 1): Wichura's AS 241 PPND7
-    (about 7 significant digits)."""
-    var q = sub(pr, Float32(0.5))
-    if abs(q) <= Float32(0.425):
-        var r = sub(Float32(0.180625), mul(q, q))
-        var num = add(mul(add(mul(add(mul(Float32(59.10937472), r), Float32(159.29113202)), r), Float32(50.434271938)), r), Float32(3.3871327179))
-        var den = add(mul(add(mul(add(mul(Float32(67.1875636), r), Float32(78.757757664)), r), Float32(17.895169469)), r), Float32(1))
-        return div(mul(q, num), den)
-    var r = pr if q < Float32(0) else sub(Float32(1), pr)
-    r = sqrtf(-logf(r))
-    var v: Float32
-    if r <= Float32(5):
-        r = sub(r, Float32(1.6))
-        var num = add(mul(add(mul(add(mul(Float32(0.17023821103), r), Float32(1.3067284816)), r), Float32(2.75681539)), r), Float32(1.4234372777))
-        var den = add(mul(add(mul(Float32(0.12021132975), r), Float32(0.7370016425)), r), Float32(1))
-        v = div(num, den)
-    else:
-        r = sub(r, Float32(5))
-        var num = add(mul(add(mul(add(mul(Float32(0.017337203997), r), Float32(0.42868294337)), r), Float32(3.081226386)), r), Float32(6.657905115))
-        var den = add(mul(add(mul(Float32(0.012258202635), r), Float32(0.24197894225)), r), Float32(1))
-        v = div(num, den)
-    return -v if q < Float32(0) else v
-
-
 def ii_post_unit(t: Int, f: FP, q: IP):
     """q = [X, n, d, MASK, j, COEF, INTER, BOUNDS, FLAG, MEANS, SIG, AL, NB,
     KEY]; t = row. sample_posterior: where feature j is missing, mu = the
@@ -380,15 +339,15 @@ def ii_post_unit(t: Int, f: FP, q: IP):
         var step = UInt64(ldi(f, p(q, 13) + 1))
         var z = _splitmix(_splitmix(seed * UInt64(0x100000000) + step) + UInt64(t))
         var u = mul(add(Float32(Int(z >> 40)), Float32(0.5)), Float32(5.9604645e-08))
-        var pa = _phi(div(sub(lo, mu), sigma))
-        var pb = _phi(div(sub(hi, mu), sigma))
+        var pa = identical_ndtr(div(sub(lo, mu), sigma))
+        var pb = identical_ndtr(div(sub(hi, mu), sigma))
         var pu = add(pa, mul(u, sub(pb, pa)))
         if pu <= Float32(0):
             v = lo
         elif pu >= Float32(1):
             v = hi
         else:
-            v = add(mu, mul(sigma, _ppnd7(pu)))
+            v = add(mu, mul(sigma, identical_ndtri(pu)))
             if v < lo:
                 v = lo
             if v > hi:

@@ -7,7 +7,8 @@ reference, NOT by calling the bodies, plus the UNPINNED spelling of each seam
 its DEVIATION (IDENTITY_PATHS.md rows 110-119)."""
 from std.math import fma, sqrt
 
-from checks.numerics import ftz, identical_div, identical_exp, identical_log, identical_mul, identical_mul64, identical_pow, identical_sqrt
+from checks.numerics import ftz, identical_cos, identical_div, identical_exp, identical_log, identical_mul, identical_mul64, identical_pow, identical_sqrt
+from x_cluster.bodies import SplitMix64
 
 
 # DEVIATION 5100 (fold order) and 5101 (contraction): squared distance
@@ -446,3 +447,23 @@ def oracle_jacobi_svd(
         sv[j] = nj
         for r in range(m):
             u[r * m + j] = w[r * m + j] / nj
+
+
+def oracle_ap_noise(s_in: List[Float32], seed: UInt64) -> List[Float32]:
+    """DEVIATION 5122's oracle: the tie noise as the driver wrote it before
+    5122, ONE sequential SplitMix64 stream in row-major order, each unit
+    draw a Float64 (`SplitMix64.unit`) narrowed by `Float32(...)`, then the
+    Box-Muller cosine branch and sklearn's update."""
+    var s = s_in.copy()
+    var rng = SplitMix64(seed)
+    for t in range(len(s)):
+        var u1 = Float32(1) - Float32(rng.unit())
+        if u1 <= Float32(0):
+            u1 = Float32(1.1754944e-38)
+        var u2 = Float32(rng.unit())
+        var rad = identical_sqrt(ftz(identical_mul(Float32(-2), identical_log(u1))))
+        var ang = identical_mul(Float32(6.2831855), u2)
+        var z = ftz(identical_mul(rad, identical_cos(ang)))
+        var scale = ftz(ftz(identical_mul(Float32(1.1920929e-07), s[t])) + Float32(1.1754944e-36))
+        s[t] = ftz(s[t] + ftz(identical_mul(scale, z)))
+    return s^

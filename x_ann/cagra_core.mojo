@@ -31,6 +31,7 @@ THE FIXED-ORDER DESIGN vs cuVS's NONDETERMINISM
 """
 
 from checks.numerics import ftz, identical_mul_add
+from x_ann.host.ann_host_cells import ann_span, ann_task_count, ann_tasks
 
 comptime F32P = MutPointer[Float32, MutAnyOrigin]
 comptime I32P = MutPointer[Int32, MutAnyOrigin]
@@ -38,62 +39,83 @@ comptime I32P = MutPointer[Int32, MutAnyOrigin]
 
 def cagra_prune(n: Int, kdeg: Int, knn: List[Int32], deg: Int) raises -> List[Int32]:
     """`kern_prune`: per node, detour counts over its k-NN list, then the
-    `deg` edges of smallest (count, rank) (DEVIATION 5820)."""
+    `deg` edges of smallest (count, rank) (DEVIATION 5820). Nodes are
+    independent (node a reads the k-NN graph and writes only its own output
+    row), so they are split over host tasks (`ann_rows`'s split, lane
+    ann-cpu step 3); integer work, the same integers at every thread count."""
     var out = List[Int32](length=n * deg, fill=Int32(0))
-    var cnt = List[Int](length=kdeg, fill=0)
-    # rank[v] = v's position in row a, valid while stamp[v] == a (lane
-    # ann-cpu, 2026-09-28): when row a names kdeg DISTINCT rows in [0, n)
-    # (every exact k-NN row does), "the first kab > kad with knn[a, kab] ==
-    # cand" is "rank[cand], if it is > kad", so the detour count is the
-    # same integer in O(kdeg^2) per node instead of O(kdeg^3). A row with a
-    # repeat or an out-of-range entry walks the original search.
-    var rank = List[Int32](length=n, fill=Int32(0))
-    var stamp = List[Int32](length=n, fill=Int32(-1))
+    var short = List[Int32](length=n, fill=Int32(0))
+    var kp = knn.unsafe_ptr()
+    var op = out.unsafe_ptr()
+    var sp = short.unsafe_ptr()
+    var tasks = ann_task_count(n, kdeg * kdeg)
+
+    def task(t: Int) {imm}:
+        var span = ann_span(t, tasks, n)
+        var cnt = List[Int](length=kdeg, fill=0)
+        # rank[v] = v's position in row a, valid while stamp[v] == a (lane
+        # ann-cpu, 2026-09-28): when row a names kdeg DISTINCT rows in [0, n)
+        # (every exact k-NN row does), "the first kab > kad with knn[a, kab] ==
+        # cand" is "rank[cand], if it is > kad", so the detour count is the
+        # same integer in O(kdeg^2) per node instead of O(kdeg^3). A row with a
+        # repeat or an out-of-range entry walks the original search.
+        var rank = List[Int32](length=n, fill=Int32(0))
+        var stamp = List[Int32](length=n, fill=Int32(-1))
+        for a in range(span[0], span[1]):
+            for k in range(kdeg):
+                cnt[k] = kdeg if Int(kp[a * kdeg + k]) == a else 0
+            var distinct = True
+            for k in range(kdeg):
+                var v = Int(kp[a * kdeg + k])
+                if v < 0 or v >= n or Int(stamp[v]) == a:
+                    distinct = False
+                    break
+                stamp[v] = Int32(a)
+                rank[v] = Int32(k)
+            if distinct:
+                for kad in range(kdeg - 1):
+                    var d = Int(kp[a * kdeg + kad])
+                    for kdb in range(kdeg):
+                        var cand = Int(kp[d * kdeg + kdb])
+                        if cand >= 0 and cand < n and Int(stamp[cand]) == a:
+                            var kab = Int(rank[cand])
+                            if kab > kad:
+                                cnt[kab] += 1
+            else:
+                for k in range(kdeg):
+                    var v = Int(kp[a * kdeg + k])
+                    if v >= 0 and v < n:
+                        stamp[v] = Int32(-1)
+                for kad in range(kdeg - 1):
+                    var d = Int(kp[a * kdeg + kad])
+                    for kdb in range(kdeg):
+                        var cand = Int(kp[d * kdeg + kdb])
+                        for kab in range(kad + 1, kdeg):
+                            if Int(kp[a * kdeg + kab]) == cand:
+                                cnt[kab] += 1
+                                break
+            for i in range(deg):
+                var best = -1
+                for k in range(kdeg):
+                    if cnt[k] < 0xFFFF and (best < 0 or cnt[k] < cnt[best]):
+                        best = k
+                if best < 0:
+                    sp[a] = Int32(1)
+                    break
+                var sel = kp[a * kdeg + best]
+                for k in range(kdeg):
+                    if kp[a * kdeg + k] == sel:
+                        cnt[k] = 0xFFFF
+                op[a * deg + i] = sel
+        _ = cnt^
+        _ = rank^
+        _ = stamp^
+
+    ann_tasks(task, tasks)
     for a in range(n):
-        for k in range(kdeg):
-            cnt[k] = kdeg if Int(knn[a * kdeg + k]) == a else 0
-        var distinct = True
-        for k in range(kdeg):
-            var v = Int(knn[a * kdeg + k])
-            if v < 0 or v >= n or Int(stamp[v]) == a:
-                distinct = False
-                break
-            stamp[v] = Int32(a)
-            rank[v] = Int32(k)
-        if distinct:
-            for kad in range(kdeg - 1):
-                var d = Int(knn[a * kdeg + kad])
-                for kdb in range(kdeg):
-                    var cand = Int(knn[d * kdeg + kdb])
-                    if cand >= 0 and cand < n and Int(stamp[cand]) == a:
-                        var kab = Int(rank[cand])
-                        if kab > kad:
-                            cnt[kab] += 1
-        else:
-            for k in range(kdeg):
-                var v = Int(knn[a * kdeg + k])
-                if v >= 0 and v < n:
-                    stamp[v] = Int32(-1)
-            for kad in range(kdeg - 1):
-                var d = Int(knn[a * kdeg + kad])
-                for kdb in range(kdeg):
-                    var cand = Int(knn[d * kdeg + kdb])
-                    for kab in range(kad + 1, kdeg):
-                        if Int(knn[a * kdeg + kab]) == cand:
-                            cnt[kab] += 1
-                            break
-        for i in range(deg):
-            var best = -1
-            for k in range(kdeg):
-                if cnt[k] < 0xFFFF and (best < 0 or cnt[k] < cnt[best]):
-                    best = k
-            if best < 0:
-                raise Error("CAGRA: the k-NN graph has too few distinct neighbors for graph_degree")
-            var sel = knn[a * kdeg + best]
-            for k in range(kdeg):
-                if knn[a * kdeg + k] == sel:
-                    cnt[k] = 0xFFFF
-            out[a * deg + i] = sel
+        if short[a] != 0:
+            raise Error("CAGRA: the k-NN graph has too few distinct neighbors for graph_degree")
+    _ = short^
     return out^
 
 

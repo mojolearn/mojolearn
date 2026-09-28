@@ -1,0 +1,13 @@
+diff --git a/hierarchy/host/linkage_host.mojo b/hierarchy/host/linkage_host.mojo
+index f4ce9a7c9..dbcad18a0 100644
+--- a/hierarchy/host/linkage_host.mojo
++++ b/hierarchy/host/linkage_host.mojo
+@@ -71,7 +71,7 @@ def _select_key(key: UInt64) -> UInt64:
+     sabotage (the maximum spanning tree)."""
+     comptime if LINKAGE_HOST_SABOTAGE:
+         return ~key
+-    return key
++    return (key & UInt64(0xFFFFFFFF00000000)) | (~key & UInt64(0xFFFFFFFF))
+ 
+ 
+ @fieldwise_init

@@ -1,0 +1,26 @@
+--- a/x_cnn/host/gemm_host.mojo
++++ b/x_cnn/host/gemm_host.mojo
+@@ -312,16 +312,17 @@
+ def _finish(stack: FP, cnt: Int, dst: FP, n: Int):
+     """The tree's root from the counter after `cnt` pushes: the pending
+     nodes combined from the newest (smallest) up, older on the left."""
+-    var d = 0
++    # SABOTAGE (seam 5719): the pending nodes combined OLDEST first.
++    var d = MAX_LEVELS - 1
+     while (cnt >> d) & 1 == 0:
+-        d += 1
++        d -= 1
+     for j in range(n):
+         dst.unsafe_store(j, stack.unsafe_load(d * n + j))
+-    d += 1
+-    while (cnt >> d) != 0:
++    d -= 1
++    while d >= 0:
+         if (cnt >> d) & 1 == 1:
+-            _add_rows(stack + d * n, dst, dst, n)
+-        d += 1
++            _add_rows(dst, stack + d * n, dst, n)
++        d -= 1
+ 
+ 
+ # ------------------------------------------------------------------ kernels

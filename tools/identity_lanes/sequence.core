@@ -1,0 +1,13 @@
+# The sequence family's EXISTING lanes (registered in tools/identity_break.py):
+# checking any of them runs tools/identity_lanes/sequence.checks (LANE CHARTER,
+# 2026-09-27: a family lane owns its existing algorithms too). The two-device
+# lanes (par-arima, par-forecast-arima, par-holtwinters, par-forecast-holtwinters)
+# are `verify --par` lanes and are not listed here.
+arima
+arima-011
+arima-seasonal-c
+arima-exog
+arima-exog-seasonal
+holtwinters
+holtwinters-multiplicative
+kpss

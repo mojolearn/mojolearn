@@ -94,6 +94,33 @@ def _method_quantile(f: FP, S: Int, n: Int, nb: Int, i: Int, strat: Int) -> Floa
 
 
 def kbins_edges_unit(t: Int, f: FP, q: IP):
+    kbins_edges[False](t, f, q)
+
+
+def _kmeans_update_host(f: FP, S: Int, LAB: Int, CEN: Int, n: Int, nb: Int) -> Float32:
+    """The kmeans centre update of `kbins_edges` in one ascending walk over the
+    rows (the host binding, x_prep/host/program.mojo): each row folds into
+    its label's sum, so each label still sees exactly its own rows in
+    ascending order, the words of the device's per-label walks. Returns the
+    shift."""
+    var hs = List[Float32](length=nb, fill=Float32(0))
+    var hc = List[Int](length=nb, fill=0)
+    for i in range(n):
+        var k = Int(ld(f, LAB + i))
+        if k >= 0 and k < nb:
+            hs[k] = add(hs[k], ld(f, S + i))
+            hc[k] += 1
+    var shift = Float32(0)
+    for k in range(nb):
+        if hc[k] > 0:
+            var nc = div(hs[k], Float32(hc[k]))
+            var dc = sub(nc, ld(f, CEN + k))
+            shift = add(shift, mul(dc, dc))
+            st(f, CEN + k, nc)
+    return shift
+
+
+def kbins_edges[HOST: Bool](t: Int, f: FP, q: IP):
     """q = [S, n, d, NB, NBMAX, STRAT, ST, EDGES, NEDGE, LAB, CEN]; t = column.
     S: columns sorted ascending (column-major, n each). NB[c]: requested bins.
     STRAT: 0 uniform, 1 quantile averaged_inverted_cdf, 2 quantile linear,
@@ -180,18 +207,21 @@ def kbins_edges_unit(t: Int, f: FP, q: IP):
             if not changed:
                 break
             var shift = Float32(0)
-            for k in range(nb):
-                var s = Float32(0)
-                var cnt = 0
-                for i in range(n):
-                    if Int(ld(f, LAB + i)) == k:
-                        s = add(s, ld(f, S + i))
-                        cnt += 1
-                if cnt > 0:
-                    var nc = div(s, Float32(cnt))
-                    var dc = sub(nc, ld(f, CEN + k))
-                    shift = add(shift, mul(dc, dc))
-                    st(f, CEN + k, nc)
+            comptime if HOST:
+                shift = _kmeans_update_host(f, S, LAB, CEN, n, nb)
+            else:
+                for k in range(nb):
+                    var s = Float32(0)
+                    var cnt = 0
+                    for i in range(n):
+                        if Int(ld(f, LAB + i)) == k:
+                            s = add(s, ld(f, S + i))
+                            cnt += 1
+                    if cnt > 0:
+                        var nc = div(s, Float32(cnt))
+                        var dc = sub(nc, ld(f, CEN + k))
+                        shift = add(shift, mul(dc, dc))
+                        st(f, CEN + k, nc)
             if shift <= tol:
                 break
         # sort the centres ascending (insertion, stable)

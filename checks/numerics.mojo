@@ -1153,6 +1153,113 @@ def identical_erf(x: Float32) -> Float32:
     return erf(x)
 
 
+# ---------------------------------------------------------------------------
+# DEVIATION 5410 (IDENTITY_PATHS row 220, lane prep, 2026-09-28): the normal
+# CDF and its inverse, one construction for every caller.
+#
+# `identical_ndtri(p)` is Wichura's AS 241 PPND7 (about 7 significant
+# digits, the float32 member of the family SciPy's float64 `ndtri` is also a
+# rational approximation from) and `identical_ndtr(x)` is
+# `0.5 * (1 + erf(x / sqrt 2))` through `portable_erff`. Every operation is a
+# seam this file already certifies, each rounded on its own and flushed:
+# `_nd_mul` is `identical_mul` (row 9, never fused into the add after it),
+# `_nd_div` is `identical_div` (row 49), `identical_log` / `identical_sqrt`
+# (rows 12 / 10), the adds are one IEEE add each. So under IDENTICAL the bits
+# are a pure function of the input on every vendor and on the host, and under
+# FAST the same sequence runs through the stdlib's ops (there is no faster
+# spelling of either function to hand FAST).
+#
+# The edges are values, never computed: a NaN in is the canonical quiet NaN
+# out (row 39 FACT 2), `ndtri(0) = -inf`, `ndtri(1) = +inf`, `ndtri(p)` of p
+# outside [0, 1] is the canonical NaN (SciPy's `ndtri` returns nan there
+# too), `ndtr(-inf) = 0`, `ndtr(+inf) = 1`. A subnormal p is flushed first
+# (row 10) and so reads as 0. Inside (0, 1) these are exactly the functions
+# x_prep/iterative.mojo shipped as `_ppnd7` / `_phi` (sample_posterior), moved
+# here unchanged so BCa (resample/checks/intervals.mojo) and the imputer read
+# ONE construction. Its accuracy against a float64 oracle (PPND16 refined by
+# Newton on erfc) is measured, bounded and hashed by `pixi run check-ndtri`
+# (checks/ndtri_check.mojo), host and device, bit for bit.
+# ---------------------------------------------------------------------------
+
+
+@always_inline
+def _nd_add(a: Float32, b: Float32) -> Float32:
+    return ftz(ftz(a) + ftz(b))
+
+
+@always_inline
+def _nd_sub(a: Float32, b: Float32) -> Float32:
+    return ftz(ftz(a) - ftz(b))
+
+
+@always_inline
+def _nd_mul(a: Float32, b: Float32) -> Float32:
+    return ftz(identical_mul(ftz(a), ftz(b)))
+
+
+@always_inline
+def _nd_div(a: Float32, b: Float32) -> Float32:
+    return ftz(identical_div(ftz(a), ftz(b)))
+
+
+@always_inline
+def _nd_nan() -> Float32:
+    from std.memory import bitcast
+
+    return bitcast[DType.float32](UInt32(0x7FC00000))
+
+
+@always_inline
+def _nd_inf() -> Float32:
+    from std.memory import bitcast
+
+    return bitcast[DType.float32](UInt32(0x7F800000))
+
+
+def identical_ndtr(x: Float32) -> Float32:
+    """DEVIATION 5410: the standard normal CDF, `0.5 * (1 + erf(x / sqrt 2))`;
+    +-inf exact, NaN canonical."""
+    if x != x:
+        return _nd_nan()
+    if x == _nd_inf():
+        return Float32(1)
+    if x == -_nd_inf():
+        return Float32(0)
+    return _nd_mul(Float32(0.5), _nd_add(Float32(1), portable_erff(_nd_mul(x, Float32(0.70710677)))))
+
+
+def identical_ndtri(p_in: Float32) -> Float32:
+    """DEVIATION 5410: the standard normal quantile, Wichura's AS 241 PPND7.
+    0 -> -inf, 1 -> +inf, NaN or outside [0, 1] -> the canonical NaN."""
+    var pr = ftz(p_in)
+    if pr != pr or pr < Float32(0) or pr > Float32(1):
+        return _nd_nan()
+    if pr == Float32(0):
+        return -_nd_inf()
+    if pr == Float32(1):
+        return _nd_inf()
+    var q = _nd_sub(pr, Float32(0.5))
+    if abs(q) <= Float32(0.425):
+        var r = _nd_sub(Float32(0.180625), _nd_mul(q, q))
+        var num = _nd_add(_nd_mul(_nd_add(_nd_mul(_nd_add(_nd_mul(Float32(59.10937472), r), Float32(159.29113202)), r), Float32(50.434271938)), r), Float32(3.3871327179))
+        var den = _nd_add(_nd_mul(_nd_add(_nd_mul(_nd_add(_nd_mul(Float32(67.1875636), r), Float32(78.757757664)), r), Float32(17.895169469)), r), Float32(1))
+        return _nd_div(_nd_mul(q, num), den)
+    var r = pr if q < Float32(0) else _nd_sub(Float32(1), pr)
+    r = ftz(identical_sqrt(ftz(-ftz(identical_log(ftz(r))))))
+    var v: Float32
+    if r <= Float32(5):
+        r = _nd_sub(r, Float32(1.6))
+        var num = _nd_add(_nd_mul(_nd_add(_nd_mul(_nd_add(_nd_mul(Float32(0.17023821103), r), Float32(1.3067284816)), r), Float32(2.75681539)), r), Float32(1.4234372777))
+        var den = _nd_add(_nd_mul(_nd_add(_nd_mul(Float32(0.12021132975), r), Float32(0.7370016425)), r), Float32(1))
+        v = _nd_div(num, den)
+    else:
+        r = _nd_sub(r, Float32(5))
+        var num = _nd_add(_nd_mul(_nd_add(_nd_mul(_nd_add(_nd_mul(Float32(0.017337203997), r), Float32(0.42868294337)), r), Float32(3.081226386)), r), Float32(6.657905115))
+        var den = _nd_add(_nd_mul(_nd_add(_nd_mul(Float32(0.012258202635), r), Float32(0.24197894225)), r), Float32(1))
+        v = _nd_div(num, den)
+    return -v if q < Float32(0) else v
+
+
 def identical_gelu_erf(x: Float32) -> Float32:
     """DEVIATION 823's seam, the EXACT gelu: IDENTICAL is `portable_gelu_erf`; FAST is the reference's own spelling `x * 0.5 * (1 + erf(x / sqrt(2)))` through the stdlib erf, with the same pinned float32 divisor."""
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:

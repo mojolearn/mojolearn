@@ -25,10 +25,12 @@ by name here and on the Mojo host. `gamma=None` is scikit-learn's
 
 NO SPEED CLAIM. The lane has no published number and this door adds none.
 """
+from ._portable_math import sqrt as _sqrt
+
 from . import _backend, _serialize
 from ._scale_gamma import scale_gamma
 from ._array import Array
-from ._buffer import addr, addr_ro, as_f32_c, empty
+from ._buffer import addr, addr_ro, as_f32_c, as_f32_dense_c, empty
 from ._mode import NumericModeMixin
 
 #: The saved-model formats (lane/inference-linear-svm, 2026-09-15):
@@ -79,6 +81,9 @@ KERNEL_RBF = 2
 KERNEL_SIGMOID = 3
 KERNEL_PRECOMPUTED = 4
 KERNEL_LAPLACIAN = 5
+KERNEL_COSINE = 6
+KERNEL_CHI2 = 7
+KERNEL_ADDITIVE_CHI2 = 8
 
 _KERNELS = {
     "linear": KERNEL_LINEAR,
@@ -87,6 +92,9 @@ _KERNELS = {
     "rbf": KERNEL_RBF,
     "sigmoid": KERNEL_SIGMOID,
     "laplacian": KERNEL_LAPLACIAN,
+    "cosine": KERNEL_COSINE,
+    "chi2": KERNEL_CHI2,
+    "additive_chi2": KERNEL_ADDITIVE_CHI2,
 }
 
 #: Kernels that read gamma. Under 'linear' it is ignored on both sides,
@@ -94,7 +102,9 @@ _KERNELS = {
 _NEEDS_GAMMA = frozenset({KERNEL_POLYNOMIAL, KERNEL_RBF, KERNEL_SIGMOID, KERNEL_LAPLACIAN})
 
 
-def _kernel_code(kernel, where):
+def _kernel_code(kernel, where, precomputed=False):
+    if kernel == "precomputed" and precomputed:
+        return KERNEL_PRECOMPUTED
     if kernel == "precomputed":
         raise ValueError(
             f"mojolearn {where}: kernel='precomputed' is refused by name; the "
@@ -125,11 +135,44 @@ def _real(v, name, where):
     return float(v)
 
 
-def _gamma_for(gamma, n_features, where):
-    """scikit-learn's `gamma=None` is `1 / n_features`."""
+def _gamma_for(gamma, n_features, where, kernel=None):
+    """scikit-learn's `gamma=None` is `1 / n_features`, except for
+    `chi2_kernel`, whose own default is `gamma=1.0`."""
+    if gamma is None and kernel == KERNEL_CHI2:
+        return 1.0
     if gamma is None:
         return 1.0 / float(n_features)
     return _real(gamma, "gamma", where)
+
+
+def _check_chi2_input(x, kernel, where):
+    """scikit-learn's chi2 kernels refuse negative input ("X contains
+    negative values"); so do these, before any device work."""
+    if kernel in (KERNEL_CHI2, KERNEL_ADDITIVE_CHI2) and x.size and float(x.min()) < 0.0:
+        raise ValueError(f"mojolearn {where}: X contains negative values (the chi2 kernels need x >= 0)")
+
+
+def _sqrt_weights(sample_weight, n, where):
+    """`np.sqrt(np.atleast_1d(sample_weight))`, each factor the correctly
+    rounded binary64 square root rounded once to float32 (the same bits on
+    every host). None when unweighted."""
+    if sample_weight is None:
+        return None
+    if isinstance(sample_weight, (int, float)) and not isinstance(sample_weight, bool):
+        w = [float(sample_weight)] * n
+    else:
+        raw = sample_weight.tolist() if hasattr(sample_weight, "tolist") else list(sample_weight)
+        w = [float(v) for v in raw]
+        if len(w) != n:
+            raise ValueError(
+                f"mojolearn {where}: sample_weight has {len(w)} entries, X has {n} rows"
+            )
+    for v in w:
+        if not (v >= 0.0) or v == float("inf"):
+            raise ValueError(
+                f"mojolearn {where}: sample_weight must be finite and >= 0, got {v!r}"
+            )
+    return Array.from_list([_sqrt(v) for v in w], "<f4")
 
 
 class _KernelMethodBase(NumericModeMixin):
@@ -165,7 +208,15 @@ class KernelRidge(_KernelMethodBase):
         (inside scikit-learn's own interval). A kernel matrix that does
         not factor at the given alpha is refused by name, never solved by
         a least-squares fallback (DEVIATION 1662).
-    kernel : {'linear', 'poly', 'rbf', 'sigmoid', 'laplacian'}, default 'linear'
+    kernel : {'linear', 'poly', 'rbf', 'sigmoid', 'laplacian', 'cosine', 'chi2',
+              'additive_chi2', 'precomputed'}, default 'linear'
+        cosine, chi2 and additive_chi2 are scikit-learn's pairwise kernels
+        (chi2's gamma=None is its own default 1.0; both chi2 kernels refuse
+        negative X, as theirs do), each cell one pinned chain
+        'precomputed': X is the n x n kernel matrix at fit and the
+        q x n cross-kernel at predict, taken as given (scikit-learn's
+        contract; nothing validates symmetry, and a matrix K + alpha I
+        that does not factor is refused by name as for any kernel)
     gamma : float or None, default None
         None is scikit-learn's `1 / n_features`. Must be positive where
         the kernel reads it (refused by name on the Mojo host).
@@ -196,18 +247,23 @@ class KernelRidge(_KernelMethodBase):
         self.coef0 = coef0
 
     def _kp(self, n_features):
-        k = _kernel_code(self.kernel, self._WHERE)
+        k = _kernel_code(self.kernel, self._WHERE, precomputed=True)
         if isinstance(self.degree, bool) or not isinstance(self.degree, int):
             raise TypeError(
                 f"mojolearn {self._WHERE}: degree must be an int, got "
                 f"{type(self.degree).__name__}"
             )
-        return k, int(self.degree), _gamma_for(self.gamma, n_features, self._WHERE), _real(self.coef0, "coef0", self._WHERE)
+        return k, int(self.degree), _gamma_for(self.gamma, n_features, self._WHERE, k), _real(self.coef0, "coef0", self._WHERE)
 
-    def fit(self, X, y):
+    def fit(self, X, y, sample_weight=None):
         """Form `K`, ridge it, factor it, solve it (`kernel_ridge_fit_host`).
-        `y` is `(n,)` or `(n, n_targets)`."""
-        x, _ = as_f32_c(X, ndim=2, name="X")
+        `y` is `(n,)` or `(n, n_targets)`. With kernel='precomputed', X IS
+        the n x n kernel matrix. `sample_weight` (a scalar or n values,
+        finite, >= 0) is scikit-learn's `_solve_cholesky_kernel` weighted
+        arm: `sw = sqrt(w)` (binary64, rounded once to float32 here),
+        `y * sw`, `K * outer(sw, sw)`, then `dual_coef * sw` (float32 on
+        both columns, DEVIATION 1688)."""
+        x, _ = as_f32_dense_c(X, ndim=2, name="X")
         n, d = x.shape
         yy, _ = as_f32_c(y, ndim=None, name="y")
         if yy.ndim == 1:
@@ -221,14 +277,22 @@ class KernelRidge(_KernelMethodBase):
                 f"mojolearn {self._WHERE}: y has {yy.shape[0]} rows, X has {n}"
             )
         kernel, degree, gamma, coef0 = self._kp(d)
+        _check_chi2_input(x, kernel, self._WHERE)
+        if kernel == KERNEL_PRECOMPUTED and d != n:
+            raise ValueError(
+                f"mojolearn {self._WHERE}: kernel='precomputed' needs the square "
+                f"n x n kernel matrix as X, got {n} x {d}"
+            )
         alpha = _real(self.alpha, "alpha", self._WHERE)
         flat_y = yy.reshape((n * t,))
         dual = empty((n * t,), "<f4")
         scalars = empty((1,), "<f8")
+        sw = _sqrt_weights(sample_weight, n, self._WHERE)
+        tail = [] if sw is None else [addr_ro(sw, name="sqrt(sample_weight)")]
         info = self._extension().kernel_ridge_fit(
             # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::kernel_ridge_fit_binding.
-            # x, y, dual_out, scalars_out
-            [addr_ro(x, name="X"), addr_ro(flat_y, name="y"), addr(dual, name="dual_coef_"), addr(scalars, name="scalars")],
+            # x, y, dual_out, scalars_out[, sw]
+            [addr_ro(x, name="X"), addr_ro(flat_y, name="y"), addr(dual, name="dual_coef_"), addr(scalars, name="scalars")] + tail,
             # n, d, t, kernel, degree, gamma, coef0, alpha
             [n, d, t, kernel, degree, gamma, coef0, alpha],
         )
@@ -247,7 +311,7 @@ class KernelRidge(_KernelMethodBase):
         `y` was."""
         if not hasattr(self, "dual_coef_"):
             raise ValueError(f"mojolearn {self._WHERE}: call fit before predict")
-        xq, _ = as_f32_c(X, ndim=2, name="X")
+        xq, _ = as_f32_dense_c(X, ndim=2, name="X")
         q, d = xq.shape
         if d != self.n_features_in_:
             raise ValueError(
@@ -255,6 +319,7 @@ class KernelRidge(_KernelMethodBase):
             )
         n, t = self.X_fit_.shape[0], self.n_targets_
         kernel, degree, gamma, coef0, alpha = self._kernel_params
+        _check_chi2_input(xq, kernel, self._WHERE)
         flat_dual = self.dual_coef_.reshape((n * t,))
         out = empty((q * t,), "<f4")
         self._extension().kernel_ridge_predict(
@@ -314,7 +379,8 @@ class Nystroem(_KernelMethodBase):
 
     Parameters
     ----------
-    kernel : {'linear', 'poly', 'rbf', 'sigmoid', 'laplacian'}, default 'rbf'
+    kernel : {'linear', 'poly', 'rbf', 'sigmoid', 'laplacian', 'cosine', 'chi2',
+              'additive_chi2'}, default 'rbf'
     gamma : float or None, default None
         None is scikit-learn's `1 / n_features`.
     degree : int, default 3
@@ -353,7 +419,7 @@ class Nystroem(_KernelMethodBase):
         self.random_state = random_state
 
     def fit(self, X, y=None):
-        x, _ = as_f32_c(X, ndim=2, name="X")
+        x, _ = as_f32_dense_c(X, ndim=2, name="X")
         n, d = x.shape
         kernel = _kernel_code(self.kernel, self._WHERE)
         if isinstance(self.degree, bool) or not isinstance(self.degree, int):
@@ -363,7 +429,8 @@ class Nystroem(_KernelMethodBase):
         q = int(self.n_components)
         if q < 1:
             raise ValueError(f"mojolearn {self._WHERE}: n_components must be positive, got {q}")
-        gamma = _gamma_for(self.gamma, d, self._WHERE)
+        gamma = _gamma_for(self.gamma, d, self._WHERE, kernel)
+        _check_chi2_input(x, kernel, self._WHERE)
         coef0 = _real(self.coef0, "coef0", self._WHERE)
         seed = int(self.random_state)
         components = empty((q * d,), "<f4")
@@ -395,7 +462,7 @@ class Nystroem(_KernelMethodBase):
         """`K(X, components_) @ normalization_.T`, float32 `(m, n_components)`."""
         if not hasattr(self, "components_"):
             raise ValueError(f"mojolearn {self._WHERE}: call fit before transform")
-        x, _ = as_f32_c(X, ndim=2, name="X")
+        x, _ = as_f32_dense_c(X, ndim=2, name="X")
         m, d = x.shape
         if d != self.n_features_in_:
             raise ValueError(
@@ -403,6 +470,7 @@ class Nystroem(_KernelMethodBase):
             )
         q = self.components_.shape[0]
         kernel, degree, gamma, coef0, seed = self._kernel_params
+        _check_chi2_input(x, kernel, self._WHERE)
         out = empty((m * q,), "<f4")
         flat_c = self.components_.reshape((q * d,))
         flat_n = self.normalization_.reshape((q * q,))
@@ -497,7 +565,7 @@ class RBFSampler(_KernelMethodBase):
     def fit(self, X, y=None):
         """Reads `X.shape[1]` (and, for gamma='scale', the variance of X), as
         scikit-learn's does."""
-        x, _ = as_f32_c(X, ndim=2, name="X")
+        x, _ = as_f32_dense_c(X, ndim=2, name="X")
         _, d = x.shape
         if isinstance(self.gamma, str) and self.gamma == "scale":
             # scikit-learn's 1 / (n_features * X.var()), 1.0 at zero
@@ -539,7 +607,7 @@ class RBFSampler(_KernelMethodBase):
         """`scale_ * cos(X . random_weights_ + random_offset_)`, float32."""
         if not hasattr(self, "random_weights_"):
             raise ValueError(f"mojolearn {self._WHERE}: call fit before transform")
-        x, _ = as_f32_c(X, ndim=2, name="X")
+        x, _ = as_f32_dense_c(X, ndim=2, name="X")
         m, d = x.shape
         if d != self.n_features_in_:
             raise ValueError(
