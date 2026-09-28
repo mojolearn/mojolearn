@@ -32,6 +32,22 @@ class CheckTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     driver.read_rows(file, ['a'], ['1', '3'])
 
+    def test_plan_rejects_empty_duplicate_and_unavailable_selection(self):
+        driver = load_driver()
+        driver.alc = types.SimpleNamespace(
+            load_harness=lambda: types.SimpleNamespace(LANES={'a': None}),
+            needed_bindings=lambda lanes: {'a': ['binding']})
+        with tempfile.TemporaryDirectory() as tmp, patch.object(driver, 'source_commit', return_value='commit'):
+            for selection in ['a,a', 'a,', ',', 'unknown']:
+                with self.assertRaises(ValueError):
+                    driver.plan(Path(tmp), selection)
+            driver.alc.load_harness = lambda: types.SimpleNamespace(LANES={})
+            with self.assertRaises(ValueError):
+                driver.plan(Path(tmp))
+            driver.alc.load_harness = lambda: types.SimpleNamespace(LANES={'unavailable': None})
+            with self.assertRaises(ValueError):
+                driver.plan(Path(tmp))
+
     def test_binding_and_selection_change_fingerprint(self):
         driver = load_driver()
         with tempfile.TemporaryDirectory() as tmp:

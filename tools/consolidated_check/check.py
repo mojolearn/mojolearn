@@ -80,6 +80,8 @@ def plan(out, only=""):
             lanes.append(lane)
         except Exception as e:  # a lane with no CPU arm or no GPU arm is not exposed
             refused[lane] = str(e).splitlines()[0][:300]
+    if refused and not only:
+        raise ValueError(f"unavailable lanes cannot be silently omitted: {refused}")
     if only:
         selected = only.split(",")
         if len(set(selected)) != len(selected) or any(l not in lanes for l in selected):
