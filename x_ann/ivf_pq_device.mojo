@@ -243,11 +243,8 @@ def ivf_pq_search_device(
     queries: List[Float32], m: Int, k: Int, n_probes: Int,
     mut out_d: List[Float32], mut out_i: List[Int32], mut out_n: List[Int32],
 ) raises:
-    var pq_len = pq_len_of(dim, pq_dim)
-    var n_codes = 1 << pq_bits
     var sst = AnnStages("ivf_search")
     var ctx = x_ann_ctx()
-    var dq = upload_f32(ctx, queries)
     var dc = upload_f32(ctx, centers)
     var doff = upload_i32(ctx, offsets)
     var dli = upload_i32(ctx, list_indices)
@@ -255,30 +252,47 @@ def ivf_pq_search_device(
     var dcb = upload_f32(ctx, codebooks)
     var dmask = upload_i32(ctx, mask)
     sst.mark(ctx, "upload")
-    var dd = ctx.enqueue_create_buffer[DType.float32](m * k)
-    var di = ctx.enqueue_create_buffer[DType.int32](m * k)
-    var dn = ctx.enqueue_create_buffer[DType.int32](m)
-    # lane ann-apple: the split scan (x_ann/ivf_scan_device.mojo), the same
-    # bits as the old one thread per query running `pq_search_cell`
-    ivf_scan_search[0](
-        ctx, _dp(dq), _dp(dc), _dp(doff), _dp(dli), _dp(dcodes), _dp(dmask), _dp(dcb), _dp(dcb),
-        offsets, n_lists, dim, m, k, n_probes, pq_dim, pq_len, n_codes, 1, 1, 0, Float32(1.0), _dp(dd), _dp(di), _dp(dn),
+    ivf_pq_search_on(
+        ctx, _dp(dc), _dp(doff), _dp(dli), _dp(dcb), _dp(dcodes), _dp(dmask), offsets, n_lists, dim,
+        pq_dim, pq_bits, queries, m, k, n_probes, out_d, out_i, out_n,
     )
-    out_d = download_f32(ctx, dd, m * k)
-    out_i = download_i32(ctx, di, m * k)
-    out_n = download_i32(ctx, dn, m)
-    sst.host("scan_download")
-    _ = dn^
-    _ = di^
-    _ = dd^
     _ = dmask^
     _ = dcb^
     _ = dcodes^
     _ = dli^
     _ = doff^
     _ = dc^
-    _ = dq^
     _ = ctx^
+
+
+def ivf_pq_search_on(
+    ctx: DeviceContext, dc: F32P, doff: I32P, dli: I32P, dcb: F32P, dcodes: I32P, dmask: I32P,
+    offsets: List[Int32], n_lists: Int, dim: Int, pq_dim: Int, pq_bits: Int,
+    queries: List[Float32], m: Int, k: Int, n_probes: Int,
+    mut out_d: List[Float32], mut out_i: List[Int32], mut out_n: List[Int32],
+) raises:
+    """The search over an index already on the device (`ivf_pq_search_device`
+    uploads it first; `x_ann/resident.mojo` holds it): the queries up, the
+    scan, the three outputs down."""
+    var pq_len = pq_len_of(dim, pq_dim)
+    var n_codes = 1 << pq_bits
+    var dq = upload_f32(ctx, queries)
+    var dd = ctx.enqueue_create_buffer[DType.float32](m * k)
+    var di = ctx.enqueue_create_buffer[DType.int32](m * k)
+    var dn = ctx.enqueue_create_buffer[DType.int32](m)
+    # lane ann-apple: the split scan (x_ann/ivf_scan_device.mojo), the same
+    # bits as the old one thread per query running `pq_search_cell`
+    ivf_scan_search[0](
+        ctx, _dp(dq), dc, doff, dli, dcodes, dmask, dcb, dcb,
+        offsets, n_lists, dim, m, k, n_probes, pq_dim, pq_len, n_codes, 1, 1, 0, Float32(1.0), _dp(dd), _dp(di), _dp(dn),
+    )
+    out_d = download_f32(ctx, dd, m * k)
+    out_i = download_i32(ctx, di, m * k)
+    out_n = download_i32(ctx, dn, m)
+    _ = dn^
+    _ = di^
+    _ = dd^
+    _ = dq^
 
 
 #: rows per partial of the SQ range (lane ann-apple)
@@ -430,7 +444,6 @@ def ivf_sq_search_device(
 ) raises:
     var sst = AnnStages("ivf_search")
     var ctx = x_ann_ctx()
-    var dq = upload_f32(ctx, queries)
     var dc = upload_f32(ctx, centers)
     var doff = upload_i32(ctx, offsets)
     var dli = upload_i32(ctx, list_indices)
@@ -439,20 +452,10 @@ def ivf_sq_search_device(
     var ddelta = upload_f32(ctx, delta)
     var dmask = upload_i32(ctx, mask)
     sst.mark(ctx, "upload")
-    var dd = ctx.enqueue_create_buffer[DType.float32](m * k)
-    var di = ctx.enqueue_create_buffer[DType.int32](m * k)
-    var dn = ctx.enqueue_create_buffer[DType.int32](m)
-    ivf_scan_search[1](
-        ctx, _dp(dq), _dp(dc), _dp(doff), _dp(dli), _dp(dcodes), _dp(dmask), _dp(dvmin), _dp(ddelta),
-        offsets, n_lists, dim, m, k, n_probes, 1, 1, 1, 1, 1, 0, Float32(1.0), _dp(dd), _dp(di), _dp(dn),
+    ivf_sq_search_on(
+        ctx, _dp(dc), _dp(doff), _dp(dli), _dp(dvmin), _dp(ddelta), _dp(dcodes), _dp(dmask), offsets,
+        n_lists, dim, queries, m, k, n_probes, out_d, out_i, out_n,
     )
-    out_d = download_f32(ctx, dd, m * k)
-    out_i = download_i32(ctx, di, m * k)
-    out_n = download_i32(ctx, dn, m)
-    sst.host("scan_download")
-    _ = dn^
-    _ = di^
-    _ = dd^
     _ = dmask^
     _ = ddelta^
     _ = dvmin^
@@ -460,8 +463,31 @@ def ivf_sq_search_device(
     _ = dli^
     _ = doff^
     _ = dc^
-    _ = dq^
     _ = ctx^
+
+
+def ivf_sq_search_on(
+    ctx: DeviceContext, dc: F32P, doff: I32P, dli: I32P, dvmin: F32P, ddelta: F32P, dcodes: I32P,
+    dmask: I32P, offsets: List[Int32], n_lists: Int, dim: Int,
+    queries: List[Float32], m: Int, k: Int, n_probes: Int,
+    mut out_d: List[Float32], mut out_i: List[Int32], mut out_n: List[Int32],
+) raises:
+    """`ivf_pq_search_on`'s SQ twin: the index already on the device."""
+    var dq = upload_f32(ctx, queries)
+    var dd = ctx.enqueue_create_buffer[DType.float32](m * k)
+    var di = ctx.enqueue_create_buffer[DType.int32](m * k)
+    var dn = ctx.enqueue_create_buffer[DType.int32](m)
+    ivf_scan_search[1](
+        ctx, _dp(dq), dc, doff, dli, dcodes, dmask, dvmin, ddelta,
+        offsets, n_lists, dim, m, k, n_probes, 1, 1, 1, 1, 1, 0, Float32(1.0), _dp(dd), _dp(di), _dp(dn),
+    )
+    out_d = download_f32(ctx, dd, m * k)
+    out_i = download_i32(ctx, di, m * k)
+    out_n = download_i32(ctx, dn, m)
+    _ = dn^
+    _ = di^
+    _ = dd^
+    _ = dq^
 
 
 def refine_kernel(m: Int32, x: F32P, n: Int32, d: Int32, queries: F32P, cand: I32P, k0: Int32, k: Int32,
@@ -551,12 +577,8 @@ def ivf_rabitq_search_device(
     queries: List[Float32], m: Int, k: Int, n_probes: Int,
     mut out_d: List[Float32], mut out_i: List[Int32], mut out_n: List[Int32],
 ) raises:
-    var D = rq_pow2(dim)
-    var words = (D + 31) // 32
-    var scale = rq_scale(D)
     var sst = AnnStages("ivf_search")
     var ctx = x_ann_ctx()
-    var dq = upload_f32(ctx, queries)
     var dc = upload_f32(ctx, centers)
     var doff = upload_i32(ctx, offsets)
     var dli = upload_i32(ctx, list_indices)
@@ -565,20 +587,10 @@ def ivf_rabitq_search_device(
     var dip = upload_f32(ctx, ips)
     var dmask = upload_i32(ctx, mask)
     sst.mark(ctx, "upload")
-    var dd = ctx.enqueue_create_buffer[DType.float32](m * k)
-    var di = ctx.enqueue_create_buffer[DType.int32](m * k)
-    var dn = ctx.enqueue_create_buffer[DType.int32](m)
-    ivf_scan_search[2](
-        ctx, _dp(dq), _dp(dc), _dp(doff), _dp(dli), _dp(dcodes), _dp(dmask), _dp(dnorm), _dp(dip),
-        offsets, n_lists, dim, m, k, n_probes, 1, 1, 1, D, words, seed, scale, _dp(dd), _dp(di), _dp(dn),
+    ivf_rabitq_search_on(
+        ctx, _dp(dc), _dp(doff), _dp(dli), _dp(dcodes), _dp(dnorm), _dp(dip), _dp(dmask), offsets,
+        n_lists, dim, seed, queries, m, k, n_probes, out_d, out_i, out_n,
     )
-    out_d = download_f32(ctx, dd, m * k)
-    out_i = download_i32(ctx, di, m * k)
-    out_n = download_i32(ctx, dn, m)
-    sst.host("scan_download")
-    _ = dn^
-    _ = di^
-    _ = dd^
     _ = dmask^
     _ = dip^
     _ = dnorm^
@@ -586,8 +598,34 @@ def ivf_rabitq_search_device(
     _ = dli^
     _ = doff^
     _ = dc^
-    _ = dq^
     _ = ctx^
+
+
+def ivf_rabitq_search_on(
+    ctx: DeviceContext, dc: F32P, doff: I32P, dli: I32P, dcodes: I32P, dnorm: F32P, dip: F32P,
+    dmask: I32P, offsets: List[Int32], n_lists: Int, dim: Int, seed: Int,
+    queries: List[Float32], m: Int, k: Int, n_probes: Int,
+    mut out_d: List[Float32], mut out_i: List[Int32], mut out_n: List[Int32],
+) raises:
+    """`ivf_pq_search_on`'s RaBitQ twin: the index already on the device."""
+    var D = rq_pow2(dim)
+    var words = (D + 31) // 32
+    var scale = rq_scale(D)
+    var dq = upload_f32(ctx, queries)
+    var dd = ctx.enqueue_create_buffer[DType.float32](m * k)
+    var di = ctx.enqueue_create_buffer[DType.int32](m * k)
+    var dn = ctx.enqueue_create_buffer[DType.int32](m)
+    ivf_scan_search[2](
+        ctx, _dp(dq), dc, doff, dli, dcodes, dmask, dnorm, dip,
+        offsets, n_lists, dim, m, k, n_probes, 1, 1, 1, D, words, seed, scale, _dp(dd), _dp(di), _dp(dn),
+    )
+    out_d = download_f32(ctx, dd, m * k)
+    out_i = download_i32(ctx, di, m * k)
+    out_n = download_i32(ctx, dn, m)
+    _ = dn^
+    _ = di^
+    _ = dd^
+    _ = dq^
 
 
 def pq_encode_device(

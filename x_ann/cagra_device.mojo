@@ -173,13 +173,32 @@ def cagra_search_device(
     k: Int, L: Int, width: Int, max_iter: Int, n_seeds: Int,
     mut out_d: List[Float32], mut out_i: List[Int32],
 ) raises:
-    var words = (n + 31) // 32
     var st = AnnStages("cagra_search")
     var ctx = x_ann_ctx()
     var dx = upload_f32(ctx, x)
     var dg = upload_i32(ctx, graph)
-    var dq = upload_f32(ctx, queries)
     st.mark(ctx, "upload")
+    cagra_search_on(
+        ctx, dx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n, d,
+        dg.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), deg, queries, m, k, L, width, max_iter,
+        n_seeds, out_d, out_i,
+    )
+    _ = dg^
+    _ = dx^
+    _ = ctx^
+
+
+def cagra_search_on(
+    ctx: DeviceContext, dx: F32P, n: Int, d: Int, dg: I32P, deg: Int, queries: List[Float32], m: Int,
+    k: Int, L: Int, width: Int, max_iter: Int, n_seeds: Int,
+    mut out_d: List[Float32], mut out_i: List[Int32],
+) raises:
+    """The search over a dataset and graph already on the device
+    (`cagra_search_device` uploads them first; `x_ann/resident.mojo` holds
+    them): the queries up, the walk, the two outputs down."""
+    var words = (n + 31) // 32
+    var st = AnnStages("cagra_search")
+    var dq = upload_f32(ctx, queries)
     var bd = ctx.enqueue_create_buffer[DType.float32](m * L)
     var bi = ctx.enqueue_create_buffer[DType.int32](m * L)
     var bx = ctx.enqueue_create_buffer[DType.int32](m * L)
@@ -187,7 +206,7 @@ def cagra_search_device(
     var od = ctx.enqueue_create_buffer[DType.float32](m * k)
     var oi = ctx.enqueue_create_buffer[DType.int32](m * k)
     ctx.enqueue_function[cg_search_kernel](
-        Int32(m), dq.unsafe_ptr(), dx.unsafe_ptr(), Int32(n), Int32(d), dg.unsafe_ptr(), Int32(deg), Int32(k),
+        Int32(m), dq.unsafe_ptr(), dx, Int32(n), Int32(d), dg, Int32(deg), Int32(k),
         Int32(L), Int32(width), Int32(max_iter), Int32(n_seeds), bd.unsafe_ptr(), bi.unsafe_ptr(),
         bx.unsafe_ptr(), vis.unsafe_ptr(), Int32(words), od.unsafe_ptr(), oi.unsafe_ptr(),
         grid_dim=_grid(m), block_dim=TPB,
@@ -204,6 +223,3 @@ def cagra_search_device(
     _ = bi^
     _ = bd^
     _ = dq^
-    _ = dg^
-    _ = dx^
-    _ = ctx^

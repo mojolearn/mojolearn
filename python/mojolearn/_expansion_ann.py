@@ -20,12 +20,21 @@ from ._mode import NumericModeMixin
 __all__ = ["IVFPQIndex", "TSNE", "CagraIndex", "IVFSQIndex", "IVFRaBitQIndex", "refine"]
 
 
+_ONES = {}
+
+
 def _ann_mask(owner, filter, n):
     """cuVS's sample filter as one int32 per row (1 keeps the row, 0 removes
-    it); None keeps every row."""
+    it); None keeps every row (one all-ones array per row count, made once
+    and only read: the host bindings take it where a GPU handle keeps its
+    own, lane/py-dn-ann)."""
     import numpy as np
     if filter is None:
-        return np.ones(n, dtype=np.int32)
+        ones = _ONES.get(n)
+        if ones is None:
+            _ONES.clear()
+            ones = _ONES[n] = np.ones(n, dtype=np.int32)
+        return ones
     f = np.asarray(filter)
     if f.shape != (n,) or f.dtype != np.bool_:
         raise ValueError(f"mojolearn {owner}: filter must be a boolean array of shape ({n},), one flag per indexed row")
@@ -36,6 +45,79 @@ def _ann_int(owner, name, v):
     if isinstance(v, bool) or not isinstance(v, int):
         raise TypeError(f"mojolearn {owner}: {name} must be an int, got {type(v).__name__}")
     return int(v)
+
+
+class _AnnResident:
+    """THE RESIDENT INDEX (lane/py-dn-ann, 2026-09-28; x_ann/resident.mojo,
+    the x_ann half of DEVIATION 1804's closure). A GPU binding keeps the
+    fitted index on the device under a handle made at the first search and
+    reused while the index arrays are the same objects at the same addresses
+    and shapes; every later search uploads only its queries (and a caller's
+    filter). A binding with no `x_ann_index_prepare` (the CPU host binding,
+    which already reads the caller's arrays in place, or an older build)
+    takes the per-call door. `neighbors.py::_resident_index_handle`'s rule."""
+
+    _KIND = None
+
+    def _resident_arrays(self):
+        """(addresses in the prepare order, params) of the fitted index."""
+        raise NotImplementedError
+
+    def _resident_handle(self, native):
+        try:
+            prepare = native.x_ann_index_prepare
+        except (ImportError, AttributeError):
+            return None
+        attrs = tuple(getattr(self, a) for a, _dtype in self._SAVE_ARRAYS)
+        key = (tuple((id(a), addr_ro(a, name=name), tuple(a.shape))
+                     for a, (name, _dtype) in zip(attrs, self._SAVE_ARRAYS)), id(native))
+        cached = self.__dict__.get("_resident")
+        if cached is not None and cached[0] == key:
+            return cached[1]
+        self._release_resident()
+        addrs, params = self._resident_arrays()
+        handle = int(prepare(self._KIND, addrs, params))
+        self._resident = (key, handle, native)
+        return handle
+
+    def _resident_search(self, native, owner, filter, q, dist, idx, cand, params):
+        """The IVF kinds' search through the handle; False where there is
+        none (the caller then takes the per-call door)."""
+        handle = self._resident_handle(native)
+        if handle is None:
+            return False
+        addrs = [addr_ro(q, name="queries"), addr(dist, name="distances"), addr(idx, name="indices"),
+                 addr(cand, name="n_candidates_")]
+        mask = None
+        if filter is not None:
+            mask = _ann_mask(owner, filter, self.n_rows_)   # held: the binding reads it below
+            addrs.append(addr_ro(mask, name="filter"))
+        # queries, out_d, out_i, out_n[, filter]; m, k, n_probes (x_ann/resident.mojo)
+        native.x_ann_index_search(handle, addrs, params)
+        self.n_candidates_ = cand
+        return True
+
+    def _release_resident(self):
+        cached = self.__dict__.pop("_resident", None)
+        if cached is None:
+            return
+        try:
+            cached[2].x_ann_index_release(cached[1])
+        except Exception:  # noqa: BLE001
+            pass
+
+    def __del__(self):
+        try:
+            self._release_resident()
+        except Exception:  # noqa: BLE001
+            pass
+
+    def __getstate__(self):
+        """No handle crosses a pickle or a deepcopy: it means something only
+        in the process and registry that minted it."""
+        state = self.__dict__.copy()
+        state.pop("_resident", None)
+        return state
 
 
 class _AnnSaved:
@@ -87,7 +169,7 @@ class _AnnSaved:
         return obj
 
 
-class IVFPQIndex(_AnnSaved, NumericModeMixin):
+class IVFPQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
     """IVF-PQ build, then search (reference: cuVS `ivf_pq`), IDENTICAL by
     construction: fixed-order codebook training and code sums, ties broken
     by index (x_ann/ivf_pq_core.mojo).
@@ -133,10 +215,21 @@ class IVFPQIndex(_AnnSaved, NumericModeMixin):
         self.pq_kmeans_n_iters = pq_kmeans_n_iters
         self.random_state = random_state
 
+    _KIND = 0
+
     def _p(self, name):
         return _ann_int(self._NAME, name, getattr(self, name))
 
+    def _resident_arrays(self):
+        n, dim, pq_dim = self.n_rows_, self.n_features_in_, self.pq_dim_
+        return ([addr_ro(self.centers_.reshape((self.n_lists_ * dim,)), name="centers_"),
+                 addr_ro(self.list_offsets_, name="list_offsets_"), addr_ro(self.list_indices_, name="list_indices_"),
+                 addr_ro(self.codebooks_.reshape((pq_dim * (1 << self.pq_bits_) * self.pq_len_,)), name="codebooks_"),
+                 addr_ro(self.codes_.reshape((n * pq_dim,)), name="codes_")],
+                [n, dim, self.n_lists_, pq_dim, self.pq_bits_])
+
     def fit(self, X, y=None):
+        self._release_resident()
         x, _ = as_f32_c(X, ndim=2, name="X")
         n, dim = (int(s) for s in x.shape)
         n_lists, pq_dim, pq_bits = self._p("n_lists"), self._p("pq_dim"), self._p("pq_bits")
@@ -184,8 +277,11 @@ class IVFPQIndex(_AnnSaved, NumericModeMixin):
         dist = empty((m * k,), "<f4")
         idx = empty((m * k,), "<i4")
         cand = empty((m,), "<i4")
+        native = self._bind()
+        if self._resident_search(native, "IVFPQIndex", filter, q, dist, idx, cand, [m, k, n_probes]):
+            return dist.reshape((m, k)), idx.reshape((m, k))
         mask = _ann_mask("IVFPQIndex", filter, n)  # held: the binding reads it after this line
-        self._bind().x_ann_ivf_pq_search(
+        native.x_ann_ivf_pq_search(
             # centers, offsets, list_indices, codebooks, codes, queries, out_d, out_i, out_n
             [addr_ro(self.centers_.reshape((self.n_lists_ * dim,)), name="centers_"),
              addr_ro(self.list_offsets_, name="list_offsets_"), addr_ro(self.list_indices_, name="list_indices_"),
@@ -306,7 +402,7 @@ class TSNE(NumericModeMixin):
         return self.fit(X).embedding_
 
 
-class CagraIndex(_AnnSaved, NumericModeMixin):
+class CagraIndex(_AnnResident, _AnnSaved, NumericModeMixin):
     """CAGRA graph index, build then search (reference: cuVS `cagra`),
     IDENTICAL by construction (x_ann/cagra_core.mojo): an exact k-NN
     intermediate graph, cuVS's rank-based detour pruning, reverse edges in
@@ -347,10 +443,18 @@ class CagraIndex(_AnnSaved, NumericModeMixin):
         self.max_iterations = max_iterations
         self.n_seeds = n_seeds
 
+    _KIND = 3
+
     def _p(self, name):
         return _ann_int("CagraIndex", name, getattr(self, name))
 
+    def _resident_arrays(self):
+        n, deg = self.n_rows_, self.graph_degree_
+        return ([addr_ro(self.dataset_, name="dataset_"), addr_ro(self.graph_.reshape((n * deg,)), name="graph_")],
+                [n, self.n_features_in_, deg])
+
     def fit(self, X, y=None):
+        self._release_resident()
         x, _ = as_f32_c(X, ndim=2, name="X")
         n, d = (int(s) for s in x.shape)
         kdeg = min(self._p("intermediate_graph_degree"), n - 1)
@@ -395,7 +499,18 @@ class CagraIndex(_AnnSaved, NumericModeMixin):
         dist = empty((m * k,), "<f4")
         idx = empty((m * k,), "<i4")
         n, deg = self.n_rows_, self.graph_degree_
-        self._bind().x_ann_cagra_search(
+        native = self._bind()
+        handle = self._resident_handle(native)
+        if handle is not None:
+            native.x_ann_index_search(
+                handle,
+                # queries, out_d, out_i (x_ann/resident.mojo)
+                [addr_ro(q, name="queries"), addr(dist, name="distances"), addr(idx, name="indices")],
+                # m, k, itopk_size, search_width, max_iterations, n_seeds
+                [m, k, L, self._p("search_width"), max_iter, n_seeds],
+            )
+            return dist.reshape((m, k)), idx.reshape((m, k))
+        native.x_ann_cagra_search(
             # x, graph, queries, out_d, out_i
             [addr_ro(self.dataset_, name="dataset_"), addr_ro(self.graph_.reshape((n * deg,)), name="graph_"),
              addr_ro(q, name="queries"), addr(dist, name="distances"), addr(idx, name="indices")],
@@ -427,7 +542,7 @@ class CagraIndex(_AnnSaved, NumericModeMixin):
         return dist, idx
 
 
-class IVFSQIndex(_AnnSaved, NumericModeMixin):
+class IVFSQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
     """IVF-SQ build, then search (reference: cuVS `ivf_sq`): the IVF-PQ
     coarse quantizer, residuals quantized to 8 bits per dimension (cuVS's
     per-dimension range with a 5% margin), a scan of the decoded residuals.
@@ -451,10 +566,21 @@ class IVFSQIndex(_AnnSaved, NumericModeMixin):
         self.kmeans_n_iters = kmeans_n_iters
         self.random_state = random_state
 
+    _KIND = 1
+
     def _p(self, name):
         return _ann_int("IVFSQIndex", name, getattr(self, name))
 
+    def _resident_arrays(self):
+        n, dim = self.n_rows_, self.n_features_in_
+        return ([addr_ro(self.centers_.reshape((self.n_lists_ * dim,)), name="centers_"),
+                 addr_ro(self.list_offsets_, name="list_offsets_"), addr_ro(self.list_indices_, name="list_indices_"),
+                 addr_ro(self.sq_vmin_, name="sq_vmin_"), addr_ro(self.sq_delta_, name="sq_delta_"),
+                 addr_ro(self.codes_.reshape((n * dim,)), name="codes_")],
+                [n, dim, self.n_lists_])
+
     def fit(self, X, y=None):
+        self._release_resident()
         x, _ = as_f32_c(X, ndim=2, name="X")
         n, dim = (int(s) for s in x.shape)
         n_lists = self._p("n_lists")
@@ -492,8 +618,11 @@ class IVFSQIndex(_AnnSaved, NumericModeMixin):
         dist = empty((m * k,), "<f4")
         idx = empty((m * k,), "<i4")
         cand = empty((m,), "<i4")
+        native = self._bind()
+        if self._resident_search(native, "IVFSQIndex", filter, q, dist, idx, cand, [m, k, self._p("n_probes")]):
+            return dist.reshape((m, k)), idx.reshape((m, k))
         mask = _ann_mask("IVFSQIndex", filter, n)  # held: the binding reads it after this line
-        self._bind().x_ann_ivf_sq_search(
+        native.x_ann_ivf_sq_search(
             # centers, offsets, list_indices, vmin, delta, codes, mask, queries, out_d, out_i, out_n
             [addr_ro(self.centers_.reshape((self.n_lists_ * dim,)), name="centers_"),
              addr_ro(self.list_offsets_, name="list_offsets_"), addr_ro(self.list_indices_, name="list_indices_"),
@@ -508,7 +637,7 @@ class IVFSQIndex(_AnnSaved, NumericModeMixin):
         return dist.reshape((m, k)), idx.reshape((m, k))
 
 
-class IVFRaBitQIndex(_AnnSaved, NumericModeMixin):
+class IVFRaBitQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
     """IVF-RaBitQ build, then search (reference: cuVS `ivf_rabitq`, RaBitQ
     of Gao & Long): the IVF coarse quantizer, each residual rotated by a
     randomized Hadamard transform and kept as sign bits plus its norm and
@@ -534,10 +663,22 @@ class IVFRaBitQIndex(_AnnSaved, NumericModeMixin):
         self.kmeans_n_iters = kmeans_n_iters
         self.random_state = random_state
 
+    _KIND = 2
+
     def _p(self, name):
         return _ann_int("IVFRaBitQIndex", name, getattr(self, name))
 
+    def _resident_arrays(self):
+        n, dim = self.n_rows_, self.n_features_in_
+        words = int(self.codes_.shape[1])
+        return ([addr_ro(self.centers_.reshape((self.n_lists_ * dim,)), name="centers_"),
+                 addr_ro(self.list_offsets_, name="list_offsets_"), addr_ro(self.list_indices_, name="list_indices_"),
+                 addr_ro(self.codes_.reshape((n * words,)), name="codes_"), addr_ro(self.norms_, name="norms_"),
+                 addr_ro(self.ip_factors_, name="ip_factors_")],
+                [n, dim, self.n_lists_, self.seed_])
+
     def fit(self, X, y=None):
+        self._release_resident()
         x, _ = as_f32_c(X, ndim=2, name="X")
         n, dim = (int(s) for s in x.shape)
         n_lists = self._p("n_lists")
@@ -580,8 +721,11 @@ class IVFRaBitQIndex(_AnnSaved, NumericModeMixin):
         idx = empty((m * k,), "<i4")
         cand = empty((m,), "<i4")
         words = int(self.codes_.shape[1])
+        native = self._bind()
+        if self._resident_search(native, "IVFRaBitQIndex", filter, q, dist, idx, cand, [m, k, self._p("n_probes")]):
+            return dist.reshape((m, k)), idx.reshape((m, k))
         mask = _ann_mask("IVFRaBitQIndex", filter, n)  # held: the binding reads it after this line
-        self._bind().x_ann_ivf_rabitq_search(
+        native.x_ann_ivf_rabitq_search(
             # centers, offsets, list_indices, codes, norms, ips, mask, queries, out_d, out_i, out_n
             [addr_ro(self.centers_.reshape((self.n_lists_ * dim,)), name="centers_"),
              addr_ro(self.list_offsets_, name="list_offsets_"), addr_ro(self.list_indices_, name="list_indices_"),
