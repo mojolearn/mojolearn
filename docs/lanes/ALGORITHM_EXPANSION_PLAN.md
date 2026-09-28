@@ -12,7 +12,7 @@ records as passed.
 | **A. Verification** | it has a verifier lane with CPU and GPU paths; each numeric seam has a host oracle, a separating fixture, a sabotage that builds, runs and bites, a DEVIATION and a card stage; it AGREEs on NVIDIA (pod), AMD and Apple (stewards, post-merge); and every entry point survives repeated calls in one process |
 | **B. Features** | every option its reference and bench opponents have is implemented, or refused by name for an identity reason; verified the same way on all three vendors |
 | **C. GPU speed, FAST and IDENTICAL** | it is faster on NVIDIA, AMD and Apple. FAST: quality never worse (a paired check at 5+ seeds on 2+ datasets). IDENTICAL: the same bits, re-proven on every column. If a family is large, split C into C-FAST and C-IDENTICAL sessions |
-| **D. CPU speed, FAST and IDENTICAL** | the CPU path is faster (threads, SIMD, cache blocking) under both modes, with IDENTICAL bits identical at every thread count and equal to the GPU |
+| **D. CPU speed, IDENTICAL only** | the CPU path is faster (threads, SIMD, cache blocking) with bits identical at every thread count and equal to the GPU. No CPU FAST tier (Andrew 2026-09-28): the CPU is the bitwise witness and the no-GPU path |
 
 **EVERY session covers all three GPU vendors (NVIDIA, AMD, Apple) plus
 CPU:**
@@ -49,6 +49,23 @@ for a before and an after), or your own `<lane>-amd` box.
 ---
 
 # CURRENT DIRECTIVES: re-read after every merge
+**ONLY THE ORCHESTRATOR PROVISIONS (Andrew, 2026-09-28).** No lane or
+subagent rents, creates, extends or deletes any machine. That covers NVIDIA
+pods, AMD boxes, droplets, VMs and cloud Macs; it does not cover the GPU jobs you
+submit to them. Lanes use only machines the orchestrator hands them: a named
+pod, the shared NVIDIA pods, the central AMD box queue (`tools/amd_central.sh
+submit`), and the Apple/AMD stewards (`tools/apple_steward.py submit`). If you
+need capacity, ask the orchestrator; never call `dev_pod.sh up`,
+`do_amd_steward.sh up`, `cloudmac.sh` provisioning, or a provider API yourself.
+- **Hard caps, enforced in `tools/dev_pod.sh` and a laptop hook.**
+  - At most 3 live RunPod pods.
+  - Leases of at most 240 minutes.
+  - No H100/H200/A100/B200 without Andrew's OK; RTX 4090-class cards do identity work equally well.
+  - Fewer boxes, held and shared, never one per lane.
+- **Apple: no new or extended Macs, ever.** An AWS SCP now enforces this. The
+  six hosts are released on 2026-09-28: m2pro and m3ultra at ~12:40Z, m4pro-a,
+  m4pro-b, m4-a and m3ultra-b at ~21:20Z. After that there is no Apple column.
+
 **ONE CENTRAL AMD BOX (Andrew, 2026-09-28).** Every lane does its AMD
 (gfx942) identity and speed work on ONE shared Hot Aisle box: 2x MI300X
 (dev_pod key `linear-amd`), 2 GPU slots, lease to 2026-09-29T01:09Z. Never
