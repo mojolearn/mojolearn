@@ -15,6 +15,66 @@ from std.sys.info import is_gpu
 from x_linear.lbfgs import lbfgs, lbfgs_work
 from x_linear.team import Team
 from x_linear.tops import chain_fmad, fold_fa
+from std.memory import bitcast
+
+
+comptime HUBER_U = 16
+
+
+def _fold_inliers(rr: FP, y: FP, n: Int, thr: Float32, sw: Bool) -> Float32:
+    """The lead's `sq` over rows ascending (inliers |r| <= thr only), its
+    loads issued HUBER_U rows ahead."""
+    var sq = Float32(0)
+    var i = 0
+    while i < n:
+        var m = min(HUBER_U, n - i)
+        var rv = InlineArray[Float32, HUBER_U](fill=Float32(0))
+        var wv = InlineArray[Float32, HUBER_U](fill=Float32(0))
+        comptime for u in range(HUBER_U):
+            if u < m:
+                rv[u] = ld(rr, i + u)
+                if sw:
+                    wv[u] = ld(y, n + i + u)
+        comptime for u in range(HUBER_U):
+            if u < m:
+                var r = rv[u]
+                if not (fabs(r) > thr):
+                    if sw:
+                        sq = fmad(fm(wv[u], r), r, sq)
+                    else:
+                        sq = fmad(r, r, sq)
+        i += HUBER_U
+    return sq
+
+
+def _fold_outliers(rr: FP, y: FP, n: Int, thr: Float32, sw: Bool) -> Tuple[Float32, Int, Float32]:
+    """The lead's `out_abs`, `n_out` and `w_out` over rows ascending
+    (outliers |r| > thr only), loads issued HUBER_U rows ahead."""
+    var out_abs = Float32(0)
+    var n_out = 0
+    var w_out = Float32(0)
+    var i = 0
+    while i < n:
+        var m = min(HUBER_U, n - i)
+        var rv = InlineArray[Float32, HUBER_U](fill=Float32(0))
+        var wv = InlineArray[Float32, HUBER_U](fill=Float32(0))
+        comptime for u in range(HUBER_U):
+            if u < m:
+                rv[u] = ld(rr, i + u)
+                if sw:
+                    wv[u] = ld(y, n + i + u)
+        comptime for u in range(HUBER_U):
+            if u < m:
+                var ar = fabs(rv[u])
+                if ar > thr:
+                    if sw:
+                        w_out = fa(w_out, wv[u])
+                        out_abs = fmad(wv[u], ar, out_abs)
+                    else:
+                        n_out += 1
+                        out_abs = fa(out_abs, ar)
+        i += HUBER_U
+    return (out_abs, n_out, w_out)
 
 
 def _huber_objective_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: FP, toff: Int, g: FP, goff: Int) -> Float32:
@@ -52,38 +112,40 @@ def _huber_objective_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP,
         st(cr, i, coefv)
     t.sync()
     var cells = d + 1 if fi else d
-    for c in range(t.tid, cells, t.nt):
-        var acc: Float32
-        if c < d:
-            acc = chain_fmad(cr, 0, 1, x, c, d, n)
-        else:
-            acc = fold_fa(cr, 0, 1, n)
-        st(g, goff + c, acc)
+    # lane/linear-apple2: the loss sums the lead folded over the rows are
+    # split by accumulator, each still one thread's ascending fold with the
+    # lead's expressions: thread `cells` the inlier squares, `cells + 1` the
+    # outlier terms and count, `cells + 2` the weight total (sample_weight
+    # only); team slots 8..12 carry them to the lead.
+    var sl = t.slot_at.unsafe_origin_cast[MutAnyOrigin]()
+    for c in range(t.tid, cells + 3, t.nt):
+        if c < cells:
+            var acc: Float32
+            if c < d:
+                acc = chain_fmad(cr, 0, 1, x, c, d, n)
+            else:
+                acc = fold_fa(cr, 0, 1, n)
+            st(g, goff + c, acc)
+        elif c == cells:
+            st(sl, 8, _fold_inliers(rr, y, n, thr, sw))
+        elif c == cells + 1:
+            var o = _fold_outliers(rr, y, n, thr, sw)
+            st(sl, 9, o[0])
+            st(sl, 10, bitcast[DType.float32](Int32(o[1])))
+            st(sl, 11, o[2])
+        elif sw:
+            var w_all = Float32(0)
+            for i in range(n):
+                w_all = fa(w_all, ld(y, n + i))
+            st(sl, 12, w_all)
     t.sync()
     var out = Float32(0)
     if t.lead():
-        var sq = Float32(0)
-        var out_abs = Float32(0)
-        var n_out = 0
-        var w_out = Float32(0)
-        var w_all = Float32(0)
-        for i in range(n):
-            var r = ld(rr, i)
-            var ar = fabs(r)
-            if sw:
-                # their weighted form: each term times w_i, n becomes sum w
-                var wi = ld(y, n + i)
-                w_all = fa(w_all, wi)
-                if ar > thr:
-                    w_out = fa(w_out, wi)
-                    out_abs = fmad(wi, ar, out_abs)
-                else:
-                    sq = fmad(fm(wi, r), r, sq)
-            elif ar > thr:
-                n_out += 1
-                out_abs = fa(out_abs, ar)
-            else:
-                sq = fmad(r, r, sq)
+        var sq = ld(sl, 8)
+        var out_abs = ld(sl, 9)
+        var n_out = Int(bitcast[DType.int32](ld(sl, 10)))
+        var w_out = ld(sl, 11)
+        var w_all = ld(sl, 12) if sw else Float32(0)
         var wn = Float32(0)
         for j in range(d):
             var w = ld(th, toff + j)

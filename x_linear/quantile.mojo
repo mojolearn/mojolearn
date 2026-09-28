@@ -154,16 +154,30 @@ def _quantile_fit_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, re
             st(prb, i, pr)
             st(fw, u + i, fa(ld(fw, u + i), pr))
         t.sync()
-        # the dual residual's A' dr, one thread per cell (into rhs, free now)
-        for j in range(t.tid, m, t.nt):
-            var acc = chain_fmad(x, j, d, fw, tmp, 1, n) if j < d else fold_one_fmad(fw, tmp, n)
-            st(fw, rhs + j, acc)
+        # the dual residual's A' dr, one thread per cell (into rhs, free now);
+        # lane/linear-apple2: four more threads fold ||ab||^2, ||r||^2, the
+        # primal residuals' and ||u||^2 over the rows (each one thread's
+        # ascending fold, the lead's former sequence) into team slots 8..11,
+        # so the lead no longer runs four n-row folds one after another
+        var sl = t.slot_at.unsafe_origin_cast[MutAnyOrigin]()
+        for j in range(t.tid, m + 4, t.nt):
+            if j < m:
+                var acc = chain_fmad(x, j, d, fw, tmp, 1, n) if j < d else fold_one_fmad(fw, tmp, n)
+                st(fw, rhs + j, acc)
+            elif j == m:
+                st(sl, 8, fold_sq(fw, ab, n))
+            elif j == m + 1:
+                st(sl, 9, fold_sq(fw, r, n))
+            elif j == m + 2:
+                st(sl, 10, fold_sq(prb, 0, n))
+            else:
+                st(sl, 11, fold_sq(fw, u, n))
         t.sync()
         var flag = 0  # bit 0: converged, bit 1: rescaled
         var inv = Float32(1)
         if t.lead():
-            var abn = fold_sq(fw, ab, n)
-            var rn = fold_sq(fw, r, n)
+            var abn = ld(sl, 8)
+            var rn = ld(sl, 9)
             # z-update
             var zdiff = Float32(0)
             var wn = Float32(0)
@@ -177,7 +191,7 @@ def _quantile_fit_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, re
                 zdiff = fmad(dz, dz, zdiff)
                 st(fw, z + j, nz)
                 zn = fmad(nz, nz, zn)
-            var prim = fold_sq(prb, 0, n)
+            var prim = ld(sl, 10)
             for j in range(d):
                 var pr = fs(ld(fw, beta + j), ld(fw, z + j))
                 prim = fmad(pr, pr, prim)
@@ -191,7 +205,7 @@ def _quantile_fit_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, re
             var dual_n = fm(rho, fsqrt(dual))
             var scale_p = fmax(fmax(fsqrt(abn), fsqrt(rn)), fmax(ynorm, fmax(fsqrt(wn), fsqrt(zn))))
             var eps_p = fa(fm(eps_abs, fsqrt(i2f(n + d))), fm(eps_rel, scale_p))
-            var un = fold_sq(fw, u, n)
+            var un = ld(sl, 11)
             for j in range(d):
                 un = fmad(ld(fw, v + j), ld(fw, v + j), un)
             var eps_d = fa(fm(eps_abs, fsqrt(i2f(m))), fm(fm(eps_rel, rho), fsqrt(un)))
