@@ -236,6 +236,8 @@ def sub(a: Float32, b: Float32) -> Float32:
 
 
 comptime SUMSQ_STAGE = 64
+comptime GEMM_STAGE = 16
+comptime COLSUM_STAGE = 32
 comptime SUMSQ_VEC = 4
 
 
@@ -303,8 +305,22 @@ def gemm_dot(pa: FP, abase: Int, sak: Int, pb: FP, bbase: Int, sbk: Int, K: Int,
             acc = fma3(ld(pa, abase + k * sak), ld(pb, k * sbk + bbase), acc)
             k -= 1
     else:
-        for k in range(K):
+        # GEMM_STAGE terms are LOADED before they are folded (a thread keeps
+        # that many loads in flight instead of waiting out each one); the
+        # fold is the same chain of fmas in the same order.
+        var k = 0
+        while k + GEMM_STAGE <= K:
+            var va = SIMD[DType.float32, GEMM_STAGE]()
+            var vb = SIMD[DType.float32, GEMM_STAGE]()
+            comptime for i in range(GEMM_STAGE):
+                va[i] = ld(pa, abase + (k + i) * sak)
+                vb[i] = ld(pb, (k + i) * sbk + bbase)
+            comptime for i in range(GEMM_STAGE):
+                acc = fma3(va[i], vb[i], acc)
+            k += GEMM_STAGE
+        while k < K:
             acc = fma3(ld(pa, abase + k * sak), ld(pb, k * sbk + bbase), acc)
+            k += 1
     return acc
 
 
@@ -337,8 +353,18 @@ def op_colsum(t: Int, a: Args):
     var acc = Float32(0.0)
     if a.i3 != 0:
         acc = ld(a.p1, t)
-    for r in range(a.i0):
+    # staged loads, the same adds in the same order (as gemm_dot)
+    var r = 0
+    while r + COLSUM_STAGE <= a.i0:
+        var v = SIMD[DType.float32, COLSUM_STAGE]()
+        comptime for i in range(COLSUM_STAGE):
+            v[i] = ld(a.p0, (r + i) * a.i2 + t)
+        comptime for i in range(COLSUM_STAGE):
+            acc = add(acc, v[i])
+        r += COLSUM_STAGE
+    while r < a.i0:
         acc = add(acc, ld(a.p0, r * a.i2 + t))
+        r += 1
     st(a.p1, t, acc)
 
 
