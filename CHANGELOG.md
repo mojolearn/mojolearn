@@ -2,17 +2,25 @@
 
 All notable changes to mojolearn are recorded here, newest first, in the style of Keep a Changelog.
 
-## Unreleased
+## 0.8.25 (unreleased 2026-09-28)
 
 ### Added
+- Optional `mojolearn[verify]` and `mojolearn[numpy]` extras. The base package does not require NumPy; optional array-based APIs provide installation guidance when it is absent.
+- The full verifier includes applicable batch-invariance checks and reports missing, refused and inapplicable cases separately.
 - `UMAP` option parity with umap-learn: `n_components` 1 to 32, any `local_connectivity`, `metric` sqeuclidean / cosine / manhattan / chebyshev / minkowski (`metric_kwds={'p': p}`), `init` 'random' / 'pca' / an array, `a` and `b` given directly, and supervised `fit(X, y)` with `target_metric` 'categorical' or 'l2', `target_weight` and `target_n_neighbors`. `densmap=True` and a non-euclidean `output_metric` are refused by name. Default fits keep their bits.
 - `numpy`-style `mojolearn.linalg.qr` modes 'reduced', 'complete', 'r' and 'raw', and `mojolearn.linalg.svd` returning (U, S, Vh); `AlternatingLeastSquares(use_cg=True)`.
 
 ### Changed
-- **BREAKING (awaiting Andrew's confirmation; kept until he rules): `mojolearn.linalg.qr(a)` now defaults to numpy's `mode='reduced'`** and returns `(Q, R)`; through 0.8.24 the only mode was `'r'` and a bare `qr(a)` returned R alone. Pass `mode='r'` for the old result (same bits). That R's rows can differ in sign from `qr(a)[1]` (the TSQR route keeps its bits). Code that called `qr(a)` and used the result as R must now pass `mode='r'`.
+- Consolidated Apple performance work across ANN, clustering, decomposition, linear models, metrics, neighbors, preprocessing and trees. Experimental paths remain opt-in where qualification is incomplete.
+- `mojolearn.linalg.qr(a)` preserves its published `mode='r'` default and R-only result. Request `mode='reduced'` explicitly for the new `(Q, R)` result. The existing TSQR R preserves its bits; its row signs can differ from the R produced alongside Q.
 - `TruncatedSVD.explained_variance_` and `explained_variance_ratio_` are computed in TruncatedSVD's own binding (`tsvd_explained`) instead of through the decomposition expansion binding; the default fit no longer loads `_mojolearn_x_decomp`. The values are scikit-learn's definition as before, with a different (pinned) summation order, so their last bits may differ from the previous unreleased build.
 - `mojolearn.linalg.eigh(a, UPLO="L")` reads ONE triangle of `a`, as `numpy.linalg.eigh` does: the lower (the default) or, with `UPLO="U"`, the upper triangle mirrored across the diagonal; the other triangle is never read. Through 0.8.24 it fed the whole matrix to the Jacobi, so a NON-symmetric input returned a different answer from numpy's. Symmetric inputs return the same bits as before.
 - `SpectralEmbedding(eigen_tol=<float>)` sets the Lanczos tolerance (a positive float; `'auto'` is cuVS's 1e-5). `PCA(svd_solver="arpack")`, `TruncatedSVD(algorithm="arpack")`, a nonzero `tol` on either, `SpectralEmbedding(eigen_solver=...)` other than None, and `Isomap` / `LocallyLinearEmbedding(eigen_solver="arpack")` are refused by name: those solvers are not implemented, and running an exact solver under their names would be a silent substitution.
+
+### Fixed
+- Cross-platform GP binding imports and Metal barrier declarations compile consistently.
+- Verification jobs propagate failures, exclude timing fields from bitwise comparisons and bound optional timing work.
+- Tree-wrapper packaging records its device-free dispatch role and checks its RF/GBDT device dependencies.
 
 ## 0.8.24 (published 2026-09-27)
 

@@ -148,10 +148,10 @@ def _(ml, X, yc, yr, Xh=None):
     T = np.ascontiguousarray(X[:40, :n])
     W = np.ascontiguousarray(X[:max(1, min(5, n - 1)), :n])          # wide: fewer rows than columns
     D = np.ascontiguousarray(np.stack([X[:30, 0], X[:30, 1], X[:30, 1], X[:30, 2]], 1))
-    qt, rt = ml.linalg.qr(T)
+    qt, rt = ml.linalg.qr(T, mode="reduced")
     qc, rc = ml.linalg.qr(T, mode="complete")
     hw, tw = ml.linalg.qr(W, mode="raw")
-    qw, rw = ml.linalg.qr(W)
+    qw, rw = ml.linalg.qr(W, mode="reduced")
     us, ss, vs = ml.linalg.svd(T, full_matrices=False)
     ud, sd, vd = ml.linalg.svd(D)
     uw, sw, vw = ml.linalg.svd(W)

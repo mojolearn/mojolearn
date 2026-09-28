@@ -151,7 +151,7 @@ def test_svdvals_of_a_rank_deficient_matrix_ends_at_zero():
 def test_the_same_input_gives_the_same_bits():
     """The product these doors sell. Not `allclose` -- the BYTES."""
     a = _matrix(48, 5)
-    for call in (lambda: linalg.svdvals(a), lambda: linalg.qr(a, mode="r"), lambda: linalg.qr(a)[0],
+    for call in (lambda: linalg.svdvals(a), lambda: linalg.qr(a), lambda: linalg.qr(a, mode="reduced")[0],
                  lambda: linalg.svd(a)[0]):
         first = np.asarray(call()).tobytes()
         assert first == np.asarray(call()).tobytes()
@@ -171,7 +171,7 @@ def test_qr_modes_are_numpys(rows, cols):
     LAPACK's to float32, wide shapes included; Q is orthonormal and Q R = a."""
     a = _matrix(rows, cols)
     a64 = a.astype(np.float64)
-    q, r = linalg.qr(a)
+    q, r = linalg.qr(a, mode="reduced")
     nq, nr = np.linalg.qr(a64)
     _close(q, nq)
     _close(r, nr)
@@ -193,6 +193,14 @@ def test_qr_modes_are_numpys(rows, cols):
         _close(np.sign(np.diag(rr) * np.diag(nr))[:, None] * rr, nr)
     with pytest.raises(ValueError, match="unrecognized mode"):
         linalg.qr(a, mode="economic")
+
+
+@needs_host
+def test_qr_default_preserves_published_r_only_shape_and_bytes():
+    a = _matrix(48, 5)
+    result = linalg.qr(a)
+    assert result.shape == (5, 5)
+    assert np.asarray(result).tobytes() == np.asarray(linalg.qr(a, mode="r")).tobytes()
 
 
 @needs_host

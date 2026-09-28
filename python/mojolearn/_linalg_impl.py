@@ -920,7 +920,7 @@ def _qr_q(a, mode):
     return QRResult(k.orgqr(h, tau, kk).out(), _triu(h, kk).out())
 
 
-def qr(a, mode="reduced"):
+def qr(a, mode="r"):
     """`numpy.linalg.qr(a, mode)`.
 
     Parameters
@@ -929,9 +929,9 @@ def qr(a, mode="reduced"):
         C-contiguous or copied into C order; a non-float32 buffer is refused
         by name and never cast (see `_operand`).
     mode : {'reduced', 'complete', 'r', 'raw'}
-        numpy's modes and numpy's default ('reduced'; lane/algos-decomp,
-        2026-09-27: until then only 'r' existed and was the default, so a
-        bare ``qr(a)`` returned R alone). 'reduced' returns (Q (M, K), R
+        The default 'r' preserves MojoLearn's existing R-only return value.
+        Request 'reduced' explicitly for NumPy's default (Q, R) form.
+        'reduced' returns (Q (M, K), R
         (K, N)), 'complete' (Q (M, M), R (M, N)), 'raw' (h (N, M), tau (K,)),
         K = min(M, N): LAPACK's geqrf with its reflectors kept, dlarfg's sign
         convention, and orgqr for Q, in the decomp lane's cells (IDENTICAL on
@@ -946,7 +946,7 @@ def qr(a, mode="reduced"):
         float32. For M >= N it is the TSQR route's R, whose rows may differ
         in SIGN from LAPACK's (the tree's combine steps choose their own
         reflector signs; measured 2026-09-27 on a 48 x 5 input), so it can
-        differ from ``qr(a)[1]`` by a sign per row, where numpy's are equal.
+        differ from ``qr(a, mode='reduced')[1]`` by a sign per row.
         Its bits predate the Q modes and are kept (the linalg-qr lane). A
         wide input's R is geqrf's, the same as ``qr(a)[1]``.
 
