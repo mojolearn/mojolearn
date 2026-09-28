@@ -4,9 +4,13 @@
 GPU. Each primitive is one kernel whose thread `t` calls the `x_cluster/
 bodies.mojo` body for index `t`; nothing is folded across threads, so no
 launch shape can move a bit. Only the GPU binding imports this file."""
+from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, thread_idx
 from std.ffi import _Global
+from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 from x_cluster.bodies import (
@@ -22,7 +26,6 @@ from x_cluster.bodies import (
     ap_availability_col,
     ap_exemplar_cell,
     ap_responsibility_row,
-    kth_smallest_row,
     meanshift_seed,
     nearest_row,
     sqdist_cell,
@@ -59,10 +62,65 @@ def _sqrt_kernel(x: FPtr, n: Int32):
         sqrt_cell(x, t)
 
 
+comptime KTH_TPB = 256
+
+
+# DEVIATION 5120 (the device order statistic by a four-pass radix select on
+# the float bits, one block per row). Row 200; kth_check (5120 arm).
 def _kth_kernel(m: FPtr, n_rows: Int32, n_cols: Int32, k: Int32, dst: FPtr):
-    var t = _tid()
-    if t < Int(n_rows):
-        kth_smallest_row(m, Int(n_cols), Int(k), dst, t)
+    """`bodies.kth_smallest_row` for row `block_idx.x`, the SAME value by a
+    different exact route: the k-th smallest masked bit pattern found one
+    byte at a time, most significant first (256-bin shared histograms of
+    integer counts: every interleaving of the atomics gives the same counts,
+    so no launch shape can move a bit). The bisection answers the smallest
+    `v` in [0, +inf] with `count(bits <= v) >= k`, which is the k-th
+    smallest pattern clamped to +inf (a NaN pattern, or `k` past the row,
+    reads +inf; `k <= 0` reads +0). The old one-thread-per-row walk made 31
+    passes over the row on ONE thread, the single-row median of
+    AffinityPropagation 31 serial passes over n^2 values."""
+    var row = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var nc = Int(n_cols)
+    var hist = stack_allocation[256, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    var state = stack_allocation[3, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    if tid == 0:
+        state[0] = Int32(0)  # the prefix found so far (bits above `shift`)
+        state[1] = Int32(k)  # the rank still wanted inside that prefix
+        state[2] = Int32(0)  # 1: the row holds fewer than k values
+    barrier()
+    for step in range(4):
+        var shift = 24 - 8 * step
+        for b in range(tid, 256, KTH_TPB):
+            hist[b] = Int32(0)
+        barrier()
+        var prefix = UInt32(state[0])
+        for j in range(tid, nc, KTH_TPB):
+            var bits = bitcast[DType.uint32](m[row * nc + j]) & UInt32(0x7FFFFFFF)
+            var above = UInt32(0) if step == 0 else (bits >> UInt32(shift + 8)) << UInt32(shift + 8)
+            if above == prefix:
+                _ = Atomic.fetch_add(hist.unsafe_offset(Int((bits >> UInt32(shift)) & UInt32(0xFF))), Int32(1))
+        barrier()
+        if tid == 0:
+            var rem = Int(state[1])
+            var acc = 0
+            var chosen = -1
+            for b in range(256):
+                var c = Int(hist[b])
+                if acc + c >= rem:
+                    chosen = b
+                    break
+                acc += c
+            if chosen < 0:
+                state[2] = Int32(1)
+                chosen = 255
+            state[0] = Int32(prefix | (UInt32(chosen) << UInt32(shift)))
+            state[1] = Int32(rem - acc)
+        barrier()
+    if tid == 0:
+        var r = UInt32(state[0])
+        if state[2] != Int32(0) or r > UInt32(0x7F800000):
+            r = UInt32(0x7F800000)
+        dst[row] = bitcast[DType.float32](r)
 
 
 def _meanshift_kernel(
@@ -174,6 +232,10 @@ def x_cluster_ctx() raises -> DeviceContext:
 
 
 struct DeviceOps(ClusterOps):
+    """Kernels are only ENQUEUED: the stream runs them in order, and the one
+    synchronize is where the host reads (`get`, `get_i`) or where a host
+    List is the copy's source (`put`, `set`). A sync per kernel cost a
+    host round trip each (on Metal the dominant cost, 4 ms per sync)."""
     var ctx: DeviceContext
     var f: List[DeviceBuffer[DType.float32]]
     var i: List[DeviceBuffer[DType.int32]]
@@ -241,27 +303,25 @@ struct DeviceOps(ClusterOps):
             self._fp(a), Int32(na), self._fp(b), Int32(nb), Int32(d), self._fp(dst),
             grid_dim=_grid(na * nb), block_dim=TPB,
         )
-        self.ctx.synchronize()
 
     def nearest(mut self, a: Int, na: Int, b: Int, nb: Int, d: Int, labels: Int, dist: Int) raises:
         self.ctx.enqueue_function[_nearest_kernel](
             self._fp(a), Int32(na), self._fp(b), Int32(nb), Int32(d), self._ip(labels), self._fp(dist),
             grid_dim=_grid(na), block_dim=TPB,
         )
-        self.ctx.synchronize()
 
     def sqrt(mut self, x: Int, n: Int) raises:
         self.ctx.enqueue_function[_sqrt_kernel](
             self._fp(x), Int32(n), grid_dim=_grid(n), block_dim=TPB,
         )
-        self.ctx.synchronize()
 
     def kth(mut self, m: Int, n_rows: Int, n_cols: Int, k: Int, dst: Int) raises:
+        if n_rows <= 0:
+            return
         self.ctx.enqueue_function[_kth_kernel](
             self._fp(m), Int32(n_rows), Int32(n_cols), Int32(k), self._fp(dst),
-            grid_dim=_grid(n_rows), block_dim=TPB,
+            grid_dim=n_rows if n_rows > 0 else 1, block_dim=KTH_TPB,
         )
-        self.ctx.synchronize()
 
     def meanshift(
         mut self, x: Int, n: Int, d: Int, bw: Float32, stop: Float32, max_iter: Int,
@@ -272,32 +332,27 @@ struct DeviceOps(ClusterOps):
             self._fp(centers), Int32(ns), self._fp(scratch), self._ip(intensity), self._ip(iters),
             grid_dim=_grid(ns), block_dim=TPB,
         )
-        self.ctx.synchronize()
 
     def ap_r(mut self, s: Int, a: Int, r: Int, n: Int, damping: Float32) raises:
         self.ctx.enqueue_function[_ap_r_kernel](
             self._fp(s), self._fp(a), self._fp(r), Int32(n), damping, grid_dim=_grid(n), block_dim=TPB,
         )
-        self.ctx.synchronize()
 
     def ap_a(mut self, r: Int, a: Int, n: Int, damping: Float32) raises:
         self.ctx.enqueue_function[_ap_a_kernel](
             self._fp(r), self._fp(a), Int32(n), damping, grid_dim=_grid(n), block_dim=TPB,
         )
-        self.ctx.synchronize()
 
     def ap_e(mut self, a: Int, r: Int, n: Int, e: Int) raises:
         self.ctx.enqueue_function[_ap_e_kernel](
             self._fp(a), self._fp(r), Int32(n), self._ip(e), grid_dim=_grid(n), block_dim=TPB,
         )
-        self.ctx.synchronize()
 
     def descend(mut self, x: Int, n: Int, d: Int, centers: Int, nodes: Int, labels: Int) raises:
         self.ctx.enqueue_function[_descend_kernel](
             self._fp(x), Int32(n), Int32(d), self._fp(centers), self._ip(nodes), self._ip(labels),
             grid_dim=_grid(n), block_dim=TPB,
         )
-        self.ctx.synchronize()
 
     def kmeans(
         mut self, x: List[Float32], n: Int, d: Int, k: Int, max_iter: Int, tol: Float64,
@@ -331,19 +386,16 @@ struct DeviceOps(ClusterOps):
             self._fp(x), Int32(n), Int32(d), self._fp(means), self._fp(pchol), Int32(kc), self._fp(dst),
             grid_dim=_grid(n * kc), block_dim=TPB,
         )
-        self.ctx.synchronize()
 
     def resp(mut self, q: Int, c: Int, n: Int, kc: Int, lpn: Int) raises:
         self.ctx.enqueue_function[_resp_kernel](
             self._fp(q), self._fp(c), Int32(n), Int32(kc), self._fp(lpn), grid_dim=_grid(n), block_dim=TPB,
         )
-        self.ctx.synchronize()
 
     def exp(mut self, src: Int, dst: Int, n: Int) raises:
         self.ctx.enqueue_function[_exp_kernel](
             self._fp(src), self._fp(dst), Int32(n), grid_dim=_grid(n), block_dim=TPB,
         )
-        self.ctx.synchronize()
 
     def moments(
         mut self, resp: Int, x: Int, n: Int, d: Int, kc: Int, reg: Float32, nk: Int, means: Int, cov: Int
@@ -359,7 +411,6 @@ struct DeviceOps(ClusterOps):
             self._fp(resp), self._fp(x), Int32(n), Int32(d), Int32(kc), self._fp(means), self._fp(nk), reg,
             self._fp(cov), grid_dim=_grid(kc * d * d), block_dim=TPB,
         )
-        self.ctx.synchronize()
 
     def pdist(
         mut self, a: Int, na: Int, b: Int, nb: Int, d: Int, metric: Int, p: Float32, dst: Int
@@ -368,4 +419,3 @@ struct DeviceOps(ClusterOps):
             self._fp(a), Int32(na), self._fp(b), Int32(nb), Int32(d), Int32(metric), p, self._fp(dst),
             grid_dim=_grid(na * nb), block_dim=TPB,
         )
-        self.ctx.synchronize()

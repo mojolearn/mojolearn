@@ -33,6 +33,7 @@ updates) is one source compiled into both bindings. Entries are in
 | 5117 | agglomerative Lance-Williams update: Float64 of the Float32 matrix, pinned products, one quotient | `lance_williams` | `checks/agglo_check.mojo` |
 | 5118 | agglomerative merge order: the lowest live pair, the lowest i then j on a tie (host loop) | `agglo.mojo::agglo_tree` | `checks/agglo_check.mojo` |
 | 5119 | SpectralClustering discretize / cluster_qr: a one-sided Jacobi SVD (column sums rows ascending, pinned products) for LAPACK's (host code) | `spectral_assign.mojo::jacobi_svd` | `checks/spectral_assign_check.mojo` |
+| 5120 | the device row order statistic: a four-pass radix select on the bits, one block per row, integer histograms (the same value as 5103's bisection) | `device_ops.mojo::_kth_kernel` | `checks/kth_check.mojo` (long rows) |
 
 Each check first shows its fixture SEPARATES the pinned spelling from the
 alternative (VACUOUS otherwise), then holds the device and the CPU column to

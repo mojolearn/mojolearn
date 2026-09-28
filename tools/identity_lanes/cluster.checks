@@ -14,3 +14,4 @@ x_cluster/checks/pdist_check.mojo	x_cluster/checks/sabotage/5111_pdist_fold.patc
 x_cluster/checks/agglo_check.mojo	x_cluster/checks/sabotage/5117_lance_williams.patch
 x_cluster/checks/agglo_check.mojo	x_cluster/checks/sabotage/5118_merge_tie.patch
 x_cluster/checks/spectral_assign_check.mojo	x_cluster/checks/sabotage/5119_svd_fold.patch
+x_cluster/checks/kth_check.mojo	x_cluster/checks/sabotage/5120_kth_radix.patch

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Seam DEVIATION 5103: the row order statistic by a bisection on the float bits, exact whatever the order of the row (ties and -0.0 planted).
+"""Seams DEVIATION 5103 and 5120: the row order statistic, exact whatever the order of the row (ties and -0.0 planted). 5103 is the host's bisection on the float bits; 5120 the device's block radix select, which must give the same value on a long row (many values per thread, one high byte shared by thousands, an +inf and a repeated run).
 
     tools/with_identical_mode.sh pixi run mojo run -I . x_cluster/checks/kth_check.mojo
 
@@ -49,4 +49,25 @@ def main() raises:
         _same("5103 kth host k=" + String(k), count_diff_f32(run(host, m, 40, 40, k), want))
         var tr = IdentityTrace()
         tr.record_list_f32("x_cluster.kth", got)
+    # 5120: the long rows (more values than the block has threads; the
+    # pairwise squares of 80 fixture rows, 6400 per row, three rows)
+    var b = seam_fixture(80, d, 11)
+    var big = oracle_sqdist(b, 80, b, 80, d)
+    var rows = 3
+    var cols = 80 * 80 // rows
+    big[5] = Float32.MAX * Float32(2)
+    for j in range(100, 400):
+        big[cols + j] = Float32(0.5)
+    var lks: List[Int] = [1, 2, 150, cols // 2, cols // 2 + 1, cols - 1, cols]
+    for k in lks:
+        var want = oracle_kth(big, rows, cols, k)
+        var off = oracle_kth(big, rows, cols, k + 1 if k < cols else k - 1)
+        require_separates("5120 kth long k=" + String(k), count_diff_f32(want, off))
+        var dev = DeviceOps()
+        var got = run(dev, big, rows, cols, k)
+        _same("5120 kth device long k=" + String(k), count_diff_f32(got, want))
+        var host = HostOps()
+        _same("5120 kth host long k=" + String(k), count_diff_f32(run(host, big, rows, cols, k), want))
+        var tr = IdentityTrace()
+        tr.record_list_f32("x_cluster.kth_long", got)
     print("PASS x_cluster kth_check")
