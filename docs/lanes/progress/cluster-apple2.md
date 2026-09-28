@@ -117,3 +117,44 @@ count and fill over a compact matrix of non-core rows. a1674e9bb goes back to th
 whole-batch rebuild (ab82a8c3b) and only skips a batch whose non-core rows are all still
 MAX_LABEL after the merges. FLAG for the neighbors lane: an RBC eps query over a query
 matrix that is not a slice of the indexed data may be unsafe.
+
+## M3 Ultra (m3ultra-b), IDENTICAL, 1790610168662: before 037daa353 sources -> after 493ddcc37
+
+Same job, same Mac, builds of every cluster binding per arm. **Every digest equal before
+and after** (board labels + centers, probe labels + centers).
+
+| case | rows | taxi before -> after (s) | higgs before -> after (s) |
+|---|---|---|---|
+| kmeans | 1M | 0.0576 -> 0.0545 | 0.0930 -> 0.0837 |
+| minibatch-kmeans | 1M | 0.2280 -> 0.2290 | 0.3038 -> 0.3068 |
+| bisecting-kmeans | 1M | 0.2838 -> 0.2778 | 0.2994 -> 0.2878 |
+| gmm | 1M | 2.4470 -> 2.3872 | 2.3465 -> 2.2361 |
+| bayesian-gmm | 100k | 1.7565 -> 1.7289 | 2.3282 -> 2.2988 |
+| dbscan | 100k | 0.1591 -> 0.1581 | 0.0440 -> 0.0412 |
+| hdbscan | 40k | 1.5081 -> 1.5071 | 1.5822 -> 1.5804 |
+| agglomerative (single) | 10k | 0.0607 -> 0.0615 | 0.0591 -> 0.0584 |
+| agglomerative-ward | 10k | 1.2045 -> 1.1602 | 1.2511 -> 1.2213 |
+| spectral | 10k | 0.4868 -> 0.4935 | 0.0762 -> 0.0762 |
+| meanshift | 10k | 0.2940 -> 0.2831 | 0.2727 -> 0.2646 |
+| optics | 10k | 0.4178 -> 0.4172 | 0.4428 -> 0.4415 |
+| affinity-prop | 5k | 1.7253 -> 1.7179 | 0.9271 -> 0.9253 |
+
+| probe (HIGGS) | before s | after s |
+|---|---|---|
+| KMeans coarse 1M x 28, k 1024, 10 it | 1.1460 | 0.8362 |
+| KMeans coarse, 1 it | 0.8487 | 0.6395 |
+| KMeans PQ codebook 1M x 2, k 256, 20 it | 0.2150 | 0.1819 |
+| IVF-SQ fit (x_ann), 2 reps | 1.546 / 1.515 | 1.475 / 1.200 |
+
+GMM stages (taxi, 22 it): E-step 704 -> 650 ms, M-step 1220 -> 1239 ms, Cholesky 180 -> 179.
+
+### Lead 1 answered: the "7x" M4 Pro vs M3 Ultra k-means
+
+At the lane base the coarse fit (1M x 28, k 1024, 10 it) takes 2.126 s on m4pro-b and
+1.146 s on m3ultra-b: 1.9x, below the 4x GPU core ratio (20 vs 80 cores), and the IVF-SQ fit
+2.45 s vs 1.53 s. The 7x (8.6 s vs 1.28 s) the ann lane recorded was at 5b622763d; lane
+/apple-merged's k-means changes (the no-sync k-means++, the incremental k-means|| init now
+taken under IDENTICAL) removed it before this round. What remains is compute: the fused
+distance/argmin kernel is the k-means|| rounds (898 of 2,126 ms on the M4 Pro) and every
+Lloyd iteration, and it scales with GPU cores. This round's two changes to it (operands
+flushed once at staging; the cheaper `ftz`) cut the coarse fit 27% on both Macs.
