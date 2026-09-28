@@ -19,7 +19,7 @@
 #   sabotage one arm per NEW device path that has a patch (py-dn-ann resident
 #         index, py-dn-kern fused chains), inside this job.
 # The patch is re-applied on every exit path; build outputs and the base
-# snapshot are deleted at the end. PHASES=a,b,... runs a subset.
+# snapshot are retained as evidence. PHASES=a,b,... runs a subset.
 set -u
 T=$(cd "$(dirname "$0")/../.." && pwd)   # the lane tree this script sits in (py-consolidated or py-consolidated-b)
 EV=${EV:-/root/ev-py-consolidated/$(date -u +%m%d-%H%M)}
@@ -27,6 +27,7 @@ PATCH=$T/tools/py_consolidated/base.patch
 PHASES=${PHASES:-base,head,cross,tests,sabotage,ab,timing}
 has() { case ",$PHASES," in *",$1,"*) return 0 ;; esac; return 1; }
 mkdir -p "$EV"; touch "$EV/.start"
+source "$T/tools/py_consolidated/job_status.sh"
 export MOJOLEARN_BUILD_LOCK_HELD=1 MOJOLEARN_COMPILE_JOBS=${MOJOLEARN_COMPILE_JOBS:-6}
 # the py-decomp-nbrs Kit sends a call to the GPU executor only above this many
 # elements; 1 makes the lanes' small fixtures really take the device path
@@ -35,10 +36,11 @@ export MOJOLEARN_LANE_CHECK_ARM_TIMEOUT=${MOJOLEARN_LANE_CHECK_ARM_TIMEOUT:-1800
 cd "$T" || exit 1
 LANES=$(grep -v '^#' tools/py_consolidated/lanes.txt | grep . | paste -sd, -)
 echo "$(date -u +%FT%TZ) $(hostname) out $EV; $(echo "$LANES" | tr ',' '\n' | wc -l) lanes"
-nvidia-smi --query-gpu=name --format=csv,noheader | head -1; lscpu | grep -m1 'Model name'; df -h /root | tail -1
+# Hardware labels are diagnostic, not required correctness phases.
+(nvidia-smi --query-gpu=name --format=csv,noheader | head -1; lscpu | grep -m1 'Model name'; df -h /root | tail -1) || true
 PIXI=$(command -v pixi || echo ~/.pixi/bin/pixi)
-$PIXI install -e default > "$EV/pixi.log" 2>&1 || { echo "PIXI INSTALL FAIL"; tail -5 "$EV/pixi.log"; exit 1; }
-$PIXI install -e test > "$EV/pixi_test.log" 2>&1 || echo "PIXI TEST ENV INSTALL FAIL"
+$PIXI install -e default > "$EV/pixi.log" 2>&1 | tee -a "$EV/phases.raw.log" || { echo "PIXI INSTALL FAIL"; tail -5 "$EV/pixi.log"; exit 1; }
+$PIXI install -e test > "$EV/pixi_test.log" 2>&1 | tee -a "$EV/phases.raw.log" || echo "PIXI TEST ENV INSTALL FAIL"
 # the drivers run from copies outside the tree (the base patch does not carry them)
 cp tools/py_bugs/probe.py tools/py_lm/witness.py tools/py_dn_ann/bench_ann.py \
    tools/py_misc/metrics_time.py tools/py_consolidated/*.py "$EV/"
@@ -71,37 +73,37 @@ witness() {  # witness <tag>
   done
 }
 
-restore() { if git apply --check "$PATCH" 2>/dev/null; then git apply "$PATCH" && echo "restored the head tree"; fi; }
+restore() { if git apply --check "$PATCH" 2>/dev/null; then git apply "$PATCH" && echo "restored the head tree"; else git apply --check -R "$PATCH"; fi; }
 if has base; then
   git apply --check -R "$PATCH" || { echo "PATCH DOES NOT REVERSE"; exit 1; }
   trap restore EXIT
   git apply -R "$PATCH" && echo "== BASE: the merged lanes' code patch reversed ($(wc -l < tools/py_consolidated/base.paths) paths)"
-  $P "$EV/check.py" arms --tree "$T" --out "$EV/base" --lanes "$LANES" 2>&1 | tee "$EV/base.out" | grep -v '^\s*$' | tail -200
-  lm_build base 2>&1 | tail -2
+  $P "$EV/check.py" arms --tree "$T" --out "$EV/base" --lanes "$LANES" 2>&1 | tee -a "$EV/phases.raw.log" | tee "$EV/base.out" | grep -v '^\s*$' | tail -200
+  lm_build base 2>&1 | tee -a "$EV/phases.raw.log" | tail -2
   witness base
   rm -rf "$EV/base_py"; mkdir -p "$EV/base_py"
   (cd python && tar --exclude='__pycache__' -cf - mojolearn) | tar -xf - -C "$EV/base_py"
   echo "base package snapshot: $(du -sh "$EV/base_py" | cut -f1)"
   restore; trap - EXIT
 fi
-git apply --check -R "$PATCH" >/dev/null 2>&1 || { echo "THE TREE IS NOT THE HEAD TREE"; exit 1; }
+git apply --check -R "$PATCH" >/dev/null 2>&1 | tee -a "$EV/phases.raw.log" || { echo "THE TREE IS NOT THE HEAD TREE"; exit 1; }
 
 if has head; then
   echo "== HEAD"
-  $P "$EV/check.py" arms --tree "$T" --out "$EV/new" --lanes "$LANES" 2>&1 | tee "$EV/new.out" | grep -v '^\s*$' | tail -200
-  lm_build head 2>&1 | tail -2
+  $P "$EV/check.py" arms --tree "$T" --out "$EV/new" --lanes "$LANES" 2>&1 | tee -a "$EV/phases.raw.log" | tee "$EV/new.out" | grep -v '^\s*$' | tail -200
+  lm_build head 2>&1 | tee -a "$EV/phases.raw.log" | tail -2
   witness head
 fi
 
 if has cross; then
   echo "== CROSS base vs head, per lane and column"
-  $P "$EV/check.py" cross --base "$EV/base" --new "$EV/new" --lanes "$LANES" 2>&1 | tee "$EV/cross.txt"
+  $P "$EV/check.py" cross --base "$EV/base" --new "$EV/new" --lanes "$LANES" 2>&1 | tee -a "$EV/phases.raw.log" | tee "$EV/cross.txt"
   for col in gpu cpu; do
     echo "== witness $col base vs head (GPT-3 guard: causal token streams, samba and byte LM losses/params)"
-    $P "$EV/witness.py" --compare "$EV/witness.base.$col.json" "$EV/witness.head.$col.json" 2>&1 | tee "$EV/witness_cmp.$col.txt" | tail -25
+    $P "$EV/witness.py" --compare "$EV/witness.base.$col.json" "$EV/witness.head.$col.json" 2>&1 | tee -a "$EV/phases.raw.log" | tee "$EV/witness_cmp.$col.txt" | tail -25
   done
   echo "== witness head gpu vs cpu (common cells)"
-  $P "$EV/witness.py" --common --compare "$EV/witness.head.gpu.json" "$EV/witness.head.cpu.json" 2>&1 | tail -4
+  $P "$EV/witness.py" --common --compare "$EV/witness.head.gpu.json" "$EV/witness.head.cpu.json" 2>&1 | tee -a "$EV/phases.raw.log" | tail -4
 fi
 
 if has tests; then
@@ -131,42 +133,42 @@ fi
 if has sabotage; then
   echo "== SABOTAGE, one arm per new device path (clean AGREE, sabotaged DISAGREE, restored AGREE)"
   PIXI=$PIXI sh tools/algos_lane_check.sh ivf,x-ann-ivf-pq --sabotage x_ann/checks/sabotage/resident_index_py_dn_ann.patch \
-    --out "$EV/sab_ann" 2>&1 | grep -E 'RESULT|CLEAN:|SABOTAGED:|RESTORED:' | sed 's/^/SAB ann /'
+    --out "$EV/sab_ann" 2>&1 | tee -a "$EV/phases.raw.log" | grep -E 'RESULT|CLEAN:|SABOTAGED:|RESTORED:' | sed 's/^/SAB ann /'
   PIXI=$PIXI sh tools/algos_lane_check.sh x-neighbors-kpca --sabotage x_neighbors/checks/sabotage/fused_chain_device.patch \
-    --out "$EV/sab_kern" 2>&1 | grep -E 'RESULT|CLEAN:|SABOTAGED:|RESTORED:' | sed 's/^/SAB kern /'
+    --out "$EV/sab_kern" 2>&1 | tee -a "$EV/phases.raw.log" | grep -E 'RESULT|CLEAN:|SABOTAGED:|RESTORED:' | sed 's/^/SAB kern /'
 fi
 
 if has ab; then
   echo "== IN-BUILD REFERENCE ARMS (head build; each prints before, after and whether the answers agree)"
   G=$(col_env "$T/python" gpu); C=$(col_env "$T/python" cpu)
-  env $G $P bench/py_shared_micro.py --n 1000000 --reps 3 2>&1 | grep -E 'PYSHARED|Error'
+  env $G $P bench/py_shared_micro.py --n 1000000 --reps 3 2>&1 | tee -a "$EV/phases.raw.log" | grep -E 'PYSHARED|Error'
   for arm in 0 1 1 0; do
-    env $G MOJOLEARN_ARENA_RANGES=$arm $P bench/x_prep_speed.py --rows 1000000 --reps 1 2>&1 | grep -E '^XPSPEED|Error' | sed "s/^/RANGES=$arm /"
-    env $G MOJOLEARN_ARENA_RANGES=$arm $P bench/x_metrics_speed.py --rows 1000000 --reps 1 2>&1 | grep -E '^XMSPEED|Error' | sed "s/^/RANGES=$arm /"
+    env $G MOJOLEARN_ARENA_RANGES=$arm $P bench/x_prep_speed.py --rows 1000000 --reps 1 2>&1 | tee -a "$EV/phases.raw.log" | grep -E '^XPSPEED|Error' | sed "s/^/RANGES=$arm /"
+    env $G MOJOLEARN_ARENA_RANGES=$arm $P bench/x_metrics_speed.py --rows 1000000 --reps 1 2>&1 | tee -a "$EV/phases.raw.log" | grep -E '^XMSPEED|Error' | sed "s/^/RANGES=$arm /"
   done
-  env $G $P "$EV/metrics_time.py" gpu 2>&1 | tail -20 | sed 's/^/METRICS gpu /'
-  env $C $P "$EV/metrics_time.py" cpu 2>&1 | tail -20 | sed 's/^/METRICS cpu /'
-  (cd "$T" && env $G $P tools/py_misc_prep/ab.py bits 2>&1 | tail -6 | sed 's/^/PREP bits gpu /'
-            env $C $P tools/py_misc_prep/ab.py bits 2>&1 | tail -6 | sed 's/^/PREP bits cpu /'
-            env $G $P tools/py_misc_prep/ab.py time 2>&1 | tail -10 | sed 's/^/PREP time gpu /'
-            env $C $P tools/py_misc_prep/ab.py time 2>&1 | tail -10 | sed 's/^/PREP time cpu /')
-  env $G $P tools/py_misc_msel/check.py equal 2>&1 | tail -6 | sed 's/^/MSEL equal gpu /'
-  env $C $P tools/py_misc_msel/check.py equal 2>&1 | tail -6 | sed 's/^/MSEL equal cpu /'
-  env $G $P "$EV/ab_arms.py" 2>&1 | grep -E '^ARM'
-  env $C $P "$EV/ab_arms.py" 2>&1 | grep -E '^ARM'
-  env $G $P "$EV/svc_equal.py" 2>&1 | grep -E 'FAIL|EQUAL RESULT' | tail -6 | sed 's/^/SVC_EQUAL gpu /'
-  env $G $P tools/py_misc/cnn_epoch.py "$T" 20000 1 2>&1 | grep -E 'PYMISC-(SAME|TIME)' | sed 's/^/CNN gpu /'
-  env $C $P tools/py_misc/cnn_epoch.py "$T" 2000 1 2>&1 | grep -E 'PYMISC-(SAME|TIME)' | sed 's/^/CNN cpu /'
+  env $G $P "$EV/metrics_time.py" gpu 2>&1 | tee -a "$EV/phases.raw.log" | tail -20 | sed 's/^/METRICS gpu /'
+  env $C $P "$EV/metrics_time.py" cpu 2>&1 | tee -a "$EV/phases.raw.log" | tail -20 | sed 's/^/METRICS cpu /'
+  (cd "$T" && env $G $P tools/py_misc_prep/ab.py bits 2>&1 | tee -a "$EV/phases.raw.log" | tail -6 | sed 's/^/PREP bits gpu /'
+            env $C $P tools/py_misc_prep/ab.py bits 2>&1 | tee -a "$EV/phases.raw.log" | tail -6 | sed 's/^/PREP bits cpu /'
+            env $G $P tools/py_misc_prep/ab.py time 2>&1 | tee -a "$EV/phases.raw.log" | tail -10 | sed 's/^/PREP time gpu /'
+            env $C $P tools/py_misc_prep/ab.py time 2>&1 | tee -a "$EV/phases.raw.log" | tail -10 | sed 's/^/PREP time cpu /')
+  env $G $P tools/py_misc_msel/check.py equal 2>&1 | tee -a "$EV/phases.raw.log" | tail -6 | sed 's/^/MSEL equal gpu /'
+  env $C $P tools/py_misc_msel/check.py equal 2>&1 | tee -a "$EV/phases.raw.log" | tail -6 | sed 's/^/MSEL equal cpu /'
+  env $G $P "$EV/ab_arms.py" 2>&1 | tee -a "$EV/phases.raw.log" | grep -E '^ARM'
+  env $C $P "$EV/ab_arms.py" 2>&1 | tee -a "$EV/phases.raw.log" | grep -E '^ARM'
+  env $G $P "$EV/svc_equal.py" 2>&1 | tee -a "$EV/phases.raw.log" | grep -E 'FAIL|EQUAL RESULT' | tail -6 | sed 's/^/SVC_EQUAL gpu /'
+  env $G $P tools/py_misc/cnn_epoch.py "$T" 20000 1 2>&1 | tee -a "$EV/phases.raw.log" | grep -E 'PYMISC-(SAME|TIME)' | sed 's/^/CNN gpu /'
+  env $C $P tools/py_misc/cnn_epoch.py "$T" 2000 1 2>&1 | tee -a "$EV/phases.raw.log" | grep -E 'PYMISC-(SAME|TIME)' | sed 's/^/CNN cpu /'
 fi
 
 if has timing; then
   echo "== TIMING, base snapshot vs head tree (GPU: base head head base; CPU: base head)"
-  [ -d "$EV/base_py/mojolearn" ] || echo "NO BASE SNAPSHOT"
+  [ -d "$EV/base_py/mojolearn" ] || { echo "TIMING INCOMPLETE: NO BASE SNAPSHOT"; job_record_failure 1 "$LINENO" "missing base snapshot"; }
   bench() {  # bench <tree tag> <gpu|cpu> <script> [ENV=V ...]
     local dir=$T/python; [ "$1" = base ] && dir=$EV/base_py
     local tag=$1 col=$2 s=$3; shift 3
     env $(col_env "$dir" $col) "$@" $PIXI run -e default python -u "$EV/$s" 2>&1 \
-      | grep -E '^(TIME|BENCH|probA)|FAILED|ERROR' | sed "s/^/T $tag $(basename $s .py) /"
+      | tee -a "$EV/phases.raw.log" | grep -E '^(TIME|BENCH|probA)|FAILED|ERROR' | sed "s/^/T $tag $(basename $s .py) /"
   }
   for tag in base head head base; do
     bench $tag gpu timing.py
@@ -185,8 +187,7 @@ if has timing; then
 fi
 
 
-# small footprint: the build outputs this job made and the base snapshot
-find python/mojolearn -newer "$EV/.start" \( -name '*.so' -o -name '*.dylib' -o -name '*.lanecheck-stamp' -o -name '*.stamp.json' \) -delete 2>/dev/null
-rm -rf "$EV/base_py"
+# Retain artifacts/snapshot for diagnosis and exact-byte provenance.
 du -sh "$EV" | tail -1; df -h /root | tail -1
 echo "JOB END $(date -u +%FT%TZ)"
+job_finish

@@ -79,3 +79,5 @@ for name, size, f in cases:
     bad += dp != dn
     print(f"| {name} | {size} | {tp:.3f} | {tn:.3f} | {tp / max(tn, 1e-9):.1f}x | {same} |")
 print("TIMING BITS", "EQUAL" if not bad else f"NOT EQUAL ({bad})")
+
+raise SystemExit(1 if bad else 0)

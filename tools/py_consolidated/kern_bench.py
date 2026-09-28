@@ -6,6 +6,8 @@ import numpy as np
 import mojolearn as ml
 from mojolearn._spectral_impl import SpectralEmbedding
 
+failures = []
+
 col = "cpu" if os.environ.get("MOJOLEARN_VENDOR") == "cpu" else "gpu"
 small = os.environ.get("SCALE") == "cpu"
 rng = np.random.default_rng(7)
@@ -22,6 +24,7 @@ def run(name, f):
         dt = time.perf_counter() - t
         print(f"BENCH {col} {name} {dt:.3f}s {h(out) if not isinstance(out, tuple) else ','.join(h(o) for o in out)}", flush=True)
     except Exception as e:
+        failures.append(name)
         print(f"BENCH {col} {name} FAILED {type(e).__name__}: {str(e)[:200]}", flush=True)
 
 
@@ -48,3 +51,7 @@ se = SpectralEmbedding(n_components=2, affinity="precomputed_nearest_neighbors",
 run(f"precomputed_knn_affinity_{n}", lambda: se._precomputed_knn_affinity(D).out())
 run(f"spectral_embedding_pknn_{n}", lambda: SpectralEmbedding(n_components=2, affinity="precomputed_nearest_neighbors",
                                                                  n_neighbors=10, random_state=0).fit(D).embedding_)
+
+if failures:
+    print("INCOMPLETE/FAILED cases:", ",".join(failures), flush=True)
+    raise SystemExit(1)

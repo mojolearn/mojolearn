@@ -74,3 +74,5 @@ for arm in ("python", "epoch"):
         ts.append(time.perf_counter() - s)
     print(f"PYMISC-TIME cnn fit rows={rows} batch=32 epochs=1 arm={arm} median_s={statistics.median(ts):.3f} "
           f"all={[round(t, 3) for t in ts]} digest={digest(m, xt[:256])}", flush=True)
+
+raise SystemExit(1 if bad else 0)

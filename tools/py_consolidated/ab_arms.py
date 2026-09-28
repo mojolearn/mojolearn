@@ -33,11 +33,20 @@ cases = {
  "lda-partial": ({"MOJOLEARN_XD_LDA_PYTHON": "1"}, lambda: h(ml.LatentDirichletAllocation(n_components=4, batch_size=64, random_state=2).partial_fit(C[:500]).partial_fit(C[500:900]).components_)),
  "mds-nm": ({"MOJOLEARN_XD_MDS_PYTHON": "1"}, lambda: h(ml.MDS(metric_mds=False, max_iter=15, n_init=1, random_state=0).fit_transform(X[:300, :4]))),
 }
+failures = []
+
 col = "cpu" if os.environ.get("MOJOLEARN_VENDOR") == "cpu" else "gpu"
 for name, (env, f) in cases.items():
     try:
         a, ta = arm({}, f); b, tb = arm(env, f)
+        if a != b:
+            failures.append(name)
         print(f"ARM {col} {name} {'SAME' if a == b else 'DIFF'} native={a} {ta:.2f}s python={b} {tb:.2f}s", flush=True)
     except Exception as e:
+        failures.append(name)
         import traceback; traceback.print_exc()
         print(f"ARM {col} {name} ERROR {type(e).__name__}: {str(e)[:300]}", flush=True)
+
+if failures:
+    print("INCOMPLETE/FAILED cases:", ",".join(failures), flush=True)
+    raise SystemExit(1)

@@ -112,6 +112,7 @@ def main():
     a = ap.parse_args()
     import mojolearn as ml
     only = [c for c in a.only.split(",") if c]
+    failed = 0
     for name, fn in CASES.items():
         if only and name not in only:
             continue
@@ -119,8 +120,11 @@ def main():
             s, d = fn(ml)
             print(f"TIME {COL} {name} {s:.4f} {d}", flush=True)
         except Exception as e:  # noqa: BLE001
+            failed += 1
             print(f"TIME {COL} {name} ERROR {type(e).__name__}: {str(e)[:160]}", flush=True)
+
+    return 2 if failed else 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

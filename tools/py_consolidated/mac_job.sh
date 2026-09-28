@@ -9,13 +9,14 @@
 #         sources match come from the steward store (MOJOLEARN_LANE_CHECK_STORE)
 #   cross base vs head per lane and column; the py-lm witness base vs head (GPT-3 guard)
 #   timing one small interleaved pass on the Metal GPU: base head head base
-# The base worktree is removed at the end.
+# The unique base worktree and complete logs are retained for diagnosis.
 set -u
 H=$(pwd)
 BASE_REV=${BASE_REV:-a374c8c08}
 EV=${EV:-$HOME/mojolearn-evidence/py-consolidated/$(date -u +%m%d-%H%M)}
-B=$HOME/mojolearn-evidence/py-consolidated/base-wt
+B=$EV/base-wt
 mkdir -p "$EV"
+source "$H/tools/py_consolidated/job_status.sh"
 export MOJOLEARN_BUILD_LOCK_HELD=1 MOJOLEARN_COMPILE_JOBS=${MOJOLEARN_COMPILE_JOBS:-4}
 export MOJOLEARN_XD_RES_DEV_MIN=1 MOJOLEARN_LANE_CHECK_ARM_TIMEOUT=${MOJOLEARN_LANE_CHECK_ARM_TIMEOUT:-1500}
 export MOJOLEARN_LANE_CHECK_STORE=${MOJOLEARN_LANE_CHECK_STORE:-$HOME/mojolearn-evidence/apple-steward/builds}
@@ -27,9 +28,8 @@ sysctl -n machdep.cpu.brand_string 2>/dev/null
 cp tools/py_consolidated/check.py tools/py_bugs/probe.py tools/py_lm/witness.py tools/py_consolidated/timing.py \
    tools/py_consolidated/kern_bench.py tools/py_consolidated/svc_bench.py tools/py_consolidated/bench_decomp.py "$EV/"
 
-cleanup() { cd "$H" && git worktree remove --force "$B" >/dev/null 2>&1; rm -rf "$B"; git worktree prune; }
-trap cleanup EXIT
-cleanup
+# Unique output worktree; never delete another run's artifacts.
+[ ! -e "$B" ] || { echo "base worktree already exists: $B"; exit 1; }
 git worktree add -q --detach "$B" "$BASE_REV" || { echo "BASE WORKTREE FAILED ($BASE_REV not in this clone?)"; exit 1; }
 
 col_env() {  # col_env <tree> <gpu|cpu>
@@ -40,7 +40,7 @@ col_env() {  # col_env <tree> <gpu|cpu>
 tree_phase() {  # tree_phase <tree> <tag>
   local T=$1 tag=$2
   echo "== $tag ($T)"
-  (cd "$T" && $PIXI install -e default > "$EV/pixi.$tag.log" 2>&1) || { echo "PIXI FAIL $tag"; tail -3 "$EV/pixi.$tag.log"; }
+  (cd "$T" && $PIXI install -e default > "$EV/pixi.$tag.log" 2>&1) || { job_record_failure 1 "$LINENO" "PIXI FAIL $tag"; tail -3 "$EV/pixi.$tag.log"; }
   (cd "$T" && $PIXI run -e default python -u "$EV/check.py" arms --tree "$T" --out "$EV/$tag" --lanes "$LANES" 2>&1) \
     | tee "$EV/$tag.out" | grep -vE '^\s*$|^== probe|^probe ' | tail -80
   (cd "$T" && $PIXI run -e default python - "$EV/lm_build_$tag.log" <<'PY'
@@ -50,7 +50,7 @@ need = {"_mojolearn_transformer", "_mojolearn_training", "_mojolearn_mamba", "_m
         "_mojolearn_transformer_host", "_mojolearn_mamba_host", "_mojolearn_training_host"}
 a.ensure_built(sorted(b for b in need if (a.ROOT / "bindings" / a.script_for(b)).is_file()), sys.argv[1])
 PY
-  ) 2>&1 | tail -2
+  ) 2>&1 | tee -a "$EV/phases.raw.log" | tail -2
   for col in gpu cpu; do
     (cd "$T" && env $(col_env "$T" $col) $PIXI run -e default python -u "$EV/witness.py" --device $col \
       --out "$EV/witness.$tag.$col.json" --timing > "$EV/witness.$tag.$col.log" 2>&1)
@@ -61,10 +61,10 @@ tree_phase "$B" base
 tree_phase "$H" head
 
 echo "== CROSS base vs head"
-$PIXI run -e default python -u "$EV/check.py" cross --base "$EV/base" --new "$EV/head" --lanes "$LANES" 2>&1 | tee "$EV/cross.txt" | grep -vE '^\s*$'
+$PIXI run -e default python -u "$EV/check.py" cross --base "$EV/base" --new "$EV/head" --lanes "$LANES" 2>&1 | tee -a "$EV/phases.raw.log" | tee "$EV/cross.txt" | grep -vE '^\s*$'
 for col in gpu cpu; do
   echo "== witness $col base vs head"
-  $PIXI run -e default python -u "$EV/witness.py" --compare "$EV/witness.base.$col.json" "$EV/witness.head.$col.json" 2>&1 | tail -12
+  $PIXI run -e default python -u "$EV/witness.py" --compare "$EV/witness.base.$col.json" "$EV/witness.head.$col.json" 2>&1 | tee -a "$EV/phases.raw.log" | tail -12
 done
 
 echo "== TIMING (Metal): base head head base"
@@ -75,9 +75,9 @@ for tag in base head head base; do
     set -- $s
     f=$1; shift
     (cd "$T" && env $(col_env "$T" gpu) "$@" $PIXI run -e default python -u "$EV/$f" 2>&1) \
-      | grep -E '^(TIME|BENCH)|FAILED|ERROR' | sed "s/^/T $tag ${f%.py} /"
+      | tee -a "$EV/phases.raw.log" | grep -E '^(TIME|BENCH)|FAILED|ERROR' | sed "s/^/T $tag ${f%.py} /"
   done
 done
 du -sh "$EV" | tail -1
 echo "JOB END $(date -u +%FT%TZ)"
-exit 0
+job_finish

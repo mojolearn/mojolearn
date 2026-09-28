@@ -87,16 +87,19 @@ def arms(tree, out, lanes):
         print(f"{now()} {lane}: {row}", flush=True)
     pool.shutdown()
     (out / "lanes.json").write_text(json.dumps(rows, indent=1))
+    bad = not rows or any(row.get("gpu_vs_cpu") != "AGREE" for row in rows.values())
     if os.environ.get("NO_PROBE"):
-        return
+        return 1 if bad else 0
     probe = HERE / "probe.py"
     for col in ("gpu", "cpu"):
         print(f"{now()} probe {col}", flush=True)
         with open(out / f"probe.{col}.log", "w") as fh:
-            subprocess.run([sys.executable, "-u", str(probe), "--out", str(out / f"probe.{col}.json")],
+            result = subprocess.run([sys.executable, "-u", str(probe), "--out", str(out / f"probe.{col}.json")],
                            cwd=tree, env=dict(alc.arm_env(col), PROBE_TREE=str(tree)), stdout=fh,
                            stderr=subprocess.STDOUT)
+        bad |= result.returncode != 0
         print((out / f"probe.{col}.log").read_text()[-3000:], flush=True)
+    return 1 if bad else 0
 
 
 def compare_records(A, B, lane):
@@ -183,6 +186,6 @@ if __name__ == "__main__":
     a = ap.parse_args()
     lanes = [x for x in a.lanes.split(",") if x]
     if a.cmd == "arms":
-        arms(a.tree, Path(a.out), lanes)
+        raise SystemExit(arms(a.tree, Path(a.out), lanes))
     else:
         raise SystemExit(cross(Path(a.base), Path(a.new), lanes))

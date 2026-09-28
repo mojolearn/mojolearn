@@ -6,6 +6,8 @@ import hashlib, os, sys, time
 import numpy as np
 import mojolearn as ml
 
+failures = []
+
 col = "cpu" if os.environ.get("MOJOLEARN_VENDOR") == "cpu" else "gpu"
 ONLY = set(filter(None, os.environ.get("ONLY", "").split(",")))
 
@@ -53,4 +55,9 @@ for name, f in CASES.items():
         d = f()
         print(f"BENCH {col} {name} {time.perf_counter() - t:.2f}s {d}", flush=True)
     except Exception as e:
+        failures.append(name)
         print(f"BENCH {col} {name} FAILED {type(e).__name__}: {str(e)[:200]}", flush=True)
+
+if failures:
+    print("INCOMPLETE/FAILED cases:", ",".join(failures), flush=True)
+    raise SystemExit(1)
