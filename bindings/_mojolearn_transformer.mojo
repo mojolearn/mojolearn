@@ -185,6 +185,16 @@ from transformer.block_options import (
     BlockOptions,
 )
 from transformer.impl.llama.modeling_llama import _zeros as _llama_zeros
+# lane/py-lm (2026-09-28): the resident CausalLM decode session runs the
+# stack's three non-block steps on the kernels `training/samba_ops.mojo`
+# calls for them (embedding gather, llama RMSNorm, the identical GEMM at
+# OP_NT), so its bits are the per-call route's.
+from embedding.checks.embedding_identical import identical_embedding_forward_into
+from embedding.checks.embedding_oracle import EmbConfig
+from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
+from gemm.checks.gemm_oracle import OP_NT
+from transformer.impl.llama.modeling_llama import llama_rms_norm
+from std.math import isfinite
 
 
 # ===========================================================================
@@ -1570,6 +1580,341 @@ def transformer_decode_session_close_binding(session: PythonObject) raises -> Py
 # ===========================================================================
 
 
+# ===========================================================================
+# THE RESIDENT CAUSAL LM DECODE SESSION (lane/py-lm, 2026-09-28)
+#
+# `CausalLM.generate` ran one binding call per layer per token, and every one
+# of them uploaded that layer's weights and its whole KV cache and downloaded
+# the cache again; the embedding table and the head crossed every token too
+# (`_mojolearn_training`'s embedding_forward / linear_forward), and the full
+# logits came down for a Python argmax. This session holds the embedding,
+# the final norm weight and the head on the device, and one call runs a
+# whole stack of open `TransformerDecodeSession`s (DEVIATION 2940: weights,
+# KV cache, rotary table and L = 1 stages already resident) for a prompt and
+# then a block of greedy tokens, returning the ids.
+#
+# NO NEW ARITHMETIC. Per token: `identical_embedding_forward_into` (what
+# `samba_embedding_forward_host` runs), each layer's
+# `llama_decoder_layer_forward` exactly as `_session_step_run` /
+# `_session_forward_run` run it, `llama_rms_norm` over the same M rows
+# (`samba_rms_norm_forward_host`), `identical_gemm_into` at OP_NT over the
+# same M, N, K (`samba_linear_forward_host`; the plan is chosen from M, so M
+# is kept: B * L at the prompt, B per decode token). The greedy pick is the
+# host scan `models/causal_lm.py::_argmax_last` spells: over the last
+# position's row, from index 0, a strict `>` (ties keep the lowest index, a
+# NaN never replaces, a NaN at index 0 stays). The refusals of the per-call
+# route that can fire mid-stack are restated on downloaded copies: a
+# non-finite final block output (the norm's input scan) and a non-finite
+# normed row (the head's input scan), in their words.
+# ===========================================================================
+
+
+struct CausalLMSession(Movable, Writable):
+    var ctx: Optional[DeviceContext]
+    var embed: Optional[DeviceBuffer[DType.float32]]
+    var norm: Optional[DeviceBuffer[DType.float32]]
+    var head: Optional[DeviceBuffer[DType.float32]]
+    var tied: Bool
+    var b: Int
+    var v: Int
+    var d: Int
+    var eps: Float32
+    var busy: Bool
+    var usable: Bool
+
+    def __init__(out self):
+        self.ctx = Optional[DeviceContext]()
+        self.embed = Optional[DeviceBuffer[DType.float32]]()
+        self.norm = Optional[DeviceBuffer[DType.float32]]()
+        self.head = Optional[DeviceBuffer[DType.float32]]()
+        self.tied = False
+        self.b = 0
+        self.v = 0
+        self.d = 0
+        self.eps = Float32(0.0)
+        self.busy = False
+        self.usable = True
+
+    def write_to(self, mut writer: Some[Writer]):
+        writer.write("CausalLMSession")
+
+    def write_repr_to(self, mut writer: Some[Writer]):
+        writer.write("CausalLMSession")
+
+    def is_open(self) -> Bool:
+        return Bool(self.ctx) and Bool(self.embed)
+
+    def release(mut self):
+        self.head = None
+        self.norm = None
+        self.embed = None
+        if self.ctx:
+            try:
+                self.ctx.value().synchronize()
+            except:
+                pass
+        self.ctx = None
+
+    def __deinit__(deinit self):
+        self.release()
+
+
+def _lm_refuse_nonfinite(name: String, p: MutPointer[Float32, MutUntrackedOrigin], n: Int) raises:
+    """`training/samba_ops.mojo::_refuse_nonfinite`, in its words."""
+    for i in range(n):
+        if not isfinite(p.unsafe_load(i)):
+            raise Error("mojolearn samba ops: non-finite " + name + " at flat index " + String(i))
+
+
+def _lm_open_run(mut s: CausalLMSession, pe: Int, pn: Int, ph: Int, b: Int, v: Int, d: Int, eps: Float32) raises:
+    if b < 1 or v < 1 or d < 1:
+        raise Error("causal_lm_session_open: B, vocab and d_model must be positive")
+    if not isfinite(eps) or eps < Float32(0.0):
+        raise Error("mojolearn samba ops: rms_norm eps must be finite and >= 0")
+    _lm_refuse_nonfinite("embedding weight", _f32_ptr(pe), v * d)
+    _lm_refuse_nonfinite("rms_norm weight", _f32_ptr(pn), d)
+    if ph != 0:
+        _lm_refuse_nonfinite("linear weight", _f32_ptr(ph), v * d)
+    s.ctx = neural_ctx[_NEURAL_CTX]()
+    s.embed = _upload_addr(s.ctx.value(), pe, v * d)
+    s.norm = _upload_addr(s.ctx.value(), pn, d)
+    s.tied = ph == 0
+    if not s.tied:
+        s.head = _upload_addr(s.ctx.value(), ph, v * d)
+    s.ctx.value().synchronize()
+    s.b = b
+    s.v = v
+    s.d = d
+    s.eps = eps
+
+
+def _lm_layers_run(
+    ctx: DeviceContext, layers: List[Int], mut x: DeviceBuffer[DType.float32], b: Int, l: Int,
+) raises:
+    """Every layer in order on `x` ([b * l * d], overwritten with the stack's
+    output): at l = 1 on the session's own L = 1 stages and resident x buffer
+    (`_session_step_run`), otherwise on call-shaped stages
+    (`_session_forward_run`)."""
+    for i in range(len(layers)):
+        var sp = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=layers[i])
+        var trace = IdentityTrace.disabled()
+        var pos0 = sp[].kv.value().s
+        if l == 1:
+            ctx.enqueue_copy(dst_buf=sp[].dx.value(), src_buf=x)
+            llama_decoder_layer_forward(
+                ctx, sp[].stages.value(), sp[].kv.value(), sp[].rope.value(), sp[].w.value(),
+                sp[].dx.value(), sp[].b, 1, pos0, trace, String("py.session"))
+            ctx.enqueue_copy(dst_buf=x, src_buf=sp[].stages.value().residual2)
+        else:
+            var dims = LlamaDims(sp[].dm, sp[].nh, sp[].nkv, sp[].hd, sp[].it)
+            var stages = LlamaDeviceStages(ctx, sp[].b, l, sp[].smax, dims, sp[].window,
+                                           lean=_lean_for(sp[].hd, sp[].w.value().opts))
+            var dx = ctx.enqueue_create_buffer[DType.float32](b * l * sp[].dm)
+            ctx.enqueue_copy(dst_buf=dx, src_buf=x)
+            llama_decoder_layer_forward(
+                ctx, stages, sp[].kv.value(), sp[].rope.value(), sp[].w.value(), dx, sp[].b, l,
+                pos0, trace, String("py.session.forward"))
+            ctx.enqueue_copy(dst_buf=x, src_buf=stages.residual2)
+            ctx.synchronize()
+            _ = stages^
+            _ = dx^
+
+
+def _lm_run(
+    mut s: CausalLMSession, layers: List[Int], p_ids: Int, p_out: Int, p_logits: Int,
+    l: Int, n_steps: Int,
+) raises:
+    ref ctx = s.ctx.value()
+    var b = s.b
+    var d = s.d
+    var v = s.v
+    var emb_cfg = EmbConfig.llama(v, d)
+    var ids_i32 = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=p_ids)
+    var out_i32 = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=p_out)
+    var h_ids = ctx.enqueue_create_host_buffer[DType.int32](b * l)
+    var h_last = ctx.enqueue_create_host_buffer[DType.float32](b * v)
+    ctx.synchronize()
+    for i in range(b * l):
+        h_ids.unsafe_ptr().unsafe_store(i, ids_i32.unsafe_load(i))
+    var cur_l = l
+    for step in range(n_steps):
+        var m = b * cur_l
+        var ids = ctx.enqueue_create_buffer[DType.int32](m)
+        ctx.enqueue_copy(dst_buf=ids, src_ptr=h_ids.unsafe_ptr())
+        var x = ctx.enqueue_create_buffer[DType.float32](m * d)
+        identical_embedding_forward_into(ctx, x, s.embed.value(), ids, m, emb_cfg)
+        _lm_layers_run(ctx, layers, x, b, cur_l)
+        var sumsq = ctx.enqueue_create_buffer[DType.float32](m)
+        var hn = ctx.enqueue_create_buffer[DType.float32](m * d)
+        llama_rms_norm(ctx, sumsq, hn, x, s.norm.value(), m, d, s.eps)
+        var logits = ctx.enqueue_create_buffer[DType.float32](m * v)
+        var ws = ctx.enqueue_create_buffer[DType.float32](identical_gemm_workspace_max_floats(m, v, d))
+        if s.tied:
+            identical_gemm_into(ctx, logits, hn, s.embed.value(), ws, m, v, d, OP_NT)
+        else:
+            identical_gemm_into(ctx, logits, hn, s.head.value(), ws, m, v, d, OP_NT)
+        var h_x = ctx.enqueue_create_host_buffer[DType.float32](m * d)
+        var h_hn = ctx.enqueue_create_host_buffer[DType.float32](m * d)
+        ctx.enqueue_copy(dst_ptr=h_x.unsafe_ptr(), src_buf=x)
+        ctx.enqueue_copy(dst_ptr=h_hn.unsafe_ptr(), src_buf=hn)
+        for r in range(b):
+            var row = logits.create_sub_buffer[DType.float32]((r * cur_l + cur_l - 1) * v, v)
+            ctx.enqueue_copy(dst_ptr=h_last.unsafe_ptr() + r * v, src_buf=row)
+        ctx.synchronize()
+        _lm_refuse_nonfinite("rms_norm input", h_x.unsafe_ptr(), m * d)
+        _lm_refuse_nonfinite("linear input", h_hn.unsafe_ptr(), m * d)
+        _ = ids^
+        _ = x^
+        _ = sumsq^
+        _ = hn^
+        _ = logits^
+        _ = ws^
+        _ = h_x^
+        _ = h_hn^
+        var hl = h_last.unsafe_ptr()
+        for r in range(b):
+            var base = r * v
+            var best = 0
+            var best_v = hl.unsafe_load(base)
+            for c in range(1, v):
+                var xv = hl.unsafe_load(base + c)
+                if xv > best_v:
+                    best = c
+                    best_v = xv
+            out_i32.unsafe_store(r * n_steps + step, Int32(best))
+            h_ids.unsafe_ptr().unsafe_store(r, Int32(best))
+        cur_l = 1
+    if p_logits != 0:
+        var lp = _f32_ptr(p_logits)
+        for i in range(b * v):
+            lp.unsafe_store(i, h_last.unsafe_ptr().unsafe_load(i))
+    _ = h_ids^
+    _ = h_last^
+
+
+def causal_lm_session_create_binding() raises -> PythonObject:
+    """A closed session. Creation performs no GPU operation."""
+    return PythonObject(alloc=CausalLMSession())
+
+
+def causal_lm_session_open_binding(
+    session: PythonObject, addrs: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """`addrs` = [embed (V * D f32), norm (D f32), head (V * D f32, or 0 for a
+    head tied to the embedding)]; `params` = [B, V, D, eps (float)]. Every
+    tensor is COPIED to the device; later edits are not observed."""
+    var owner = session.downcast_value_ptr[CausalLMSession]()
+    if len(addrs) != 3 or len(params) != 4:
+        raise Error("causal_lm_session_open: expected 3 addresses and 4 scalars")
+    if owner[].busy:
+        raise Error("causal lm session: busy")
+    if owner[].is_open():
+        raise Error("causal lm session: already open; close it first")
+    var pe = Int(py=addrs[0])
+    var pn = Int(py=addrs[1])
+    var ph = Int(py=addrs[2])
+    if pe == 0 or pn == 0:
+        raise Error("causal_lm_session_open: null buffer address")
+    var b = Int(py=params[0])
+    var v = Int(py=params[1])
+    var d = Int(py=params[2])
+    var eps = Float32(Float64(py=params[3]))
+    owner[].busy = True
+    try:
+        with GILReleased(Python()):
+            _lm_open_run(owner[], pe, pn, ph, b, v, d, eps)
+    except error:
+        owner[].busy = False
+        owner[].release()
+        raise error
+    owner[].busy = False
+    owner[].usable = True
+    return PythonObject(0)
+
+
+def causal_lm_session_run_binding(
+    session: PythonObject, layers: PythonObject, addrs: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """One call for a prompt and a block of greedy tokens. `layers` is the
+    stack's open `TransformerDecodeSession`s in order, all at the same
+    cached length. `addrs` = [ids_in (B * L int32), ids_out (B * n_steps
+    int32, row-major), logits_out (B * V f32 of the LAST pass's last
+    position, or 0)]; `params` = [L, n_steps, cached_tokens]. The first
+    pass runs the L prompt tokens; each later pass feeds back the previous
+    pick. Returns the post-call cached_tokens. A failed call marks this
+    session and every layer session lost."""
+    var owner = session.downcast_value_ptr[CausalLMSession]()
+    if len(addrs) != 3 or len(params) != 3:
+        raise Error("causal_lm_session_run: expected 3 addresses and 3 scalars")
+    if owner[].busy:
+        raise Error("causal lm session: busy")
+    if not owner[].is_open():
+        raise Error("causal lm session: not open (causal_lm_session_open first)")
+    if not owner[].usable:
+        raise Error("causal lm session: lost after a failed call; close it and open a new one")
+    var p_ids = Int(py=addrs[0])
+    var p_out = Int(py=addrs[1])
+    var p_logits = Int(py=addrs[2])
+    if p_ids == 0 or p_out == 0:
+        raise Error("causal_lm_session_run: null buffer address")
+    var l = Int(py=params[0])
+    var n_steps = Int(py=params[1])
+    var claimed = Int(py=params[2])
+    if l < 1 or n_steps < 1:
+        raise Error("causal_lm_session_run: L and n_steps must be positive")
+    var ptrs = List[Int]()
+    var n_layers = Int(py=len(layers))
+    if n_layers < 1:
+        raise Error("causal_lm_session_run: no layers")
+    for i in range(n_layers):
+        var sp = layers[i].downcast_value_ptr[TransformerDecodeSession]()
+        _require_session_open(sp[])
+        if sp[].b != owner[].b or sp[].dm != owner[].d:
+            raise Error("causal_lm_session_run: layer " + String(i) + " holds B = " + String(sp[].b)
+                + ", d_model = " + String(sp[].dm) + "; the session has B = " + String(owner[].b)
+                + ", d_model = " + String(owner[].d))
+        if sp[].kv.value().s != claimed:
+            raise Error(String("transformer decode session: the caller believes cached_tokens = ")
+                + String(claimed) + " but layer " + String(i) + " holds " + String(sp[].kv.value().s))
+        if sp[].kv.value().s + l + n_steps - 1 > sp[].smax:
+            raise Error("causal_lm_session_run: " + String(l + n_steps - 1) + " more positions do not fit the "
+                + String(sp[].smax) + "-token cache")
+        ptrs.append(Int(sp))
+    for i in range(n_layers):
+        var sp = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=ptrs[i])
+        sp[].busy = True
+    owner[].busy = True
+    var failed = False
+    try:
+        with GILReleased(Python()):
+            _lm_run(owner[], ptrs, p_ids, p_out, p_logits, l, n_steps)
+    except error:
+        failed = True
+        for i in range(n_layers):
+            var sp = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=ptrs[i])
+            sp[].busy = False
+            sp[].usable = False
+        owner[].busy = False
+        owner[].usable = False
+        raise error
+    var result = 0
+    for i in range(n_layers):
+        var sp = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=ptrs[i])
+        sp[].busy = False
+        result = sp[].kv.value().s
+    owner[].busy = False
+    return PythonObject(result)
+
+
+def causal_lm_session_close_binding(session: PythonObject) raises -> PythonObject:
+    var owner = session.downcast_value_ptr[CausalLMSession]()
+    if owner[].busy:
+        raise Error("causal lm session: busy")
+    owner[].usable = False
+    owner[].release()
+    return PythonObject(0)
+
+
 def _transformer_backward_run(
     a: List[Int],
     b: Int,
@@ -1761,6 +2106,12 @@ def PyInit__mojolearn_transformer() abi("C") -> PythonObject:
         m.def_function[transformer_decode_session_load_state_binding]("transformer_decode_session_load_state")
         m.def_function[transformer_decode_session_info_binding]("transformer_decode_session_info")
         m.def_function[transformer_decode_session_close_binding]("transformer_decode_session_close")
+        # lane/py-lm: the resident CausalLM decode session.
+        _ = m.add_type[CausalLMSession]("_CausalLMSession")
+        m.def_function[causal_lm_session_create_binding]("causal_lm_session_create")
+        m.def_function[causal_lm_session_open_binding]("causal_lm_session_open")
+        m.def_function[causal_lm_session_run_binding]("causal_lm_session_run")
+        m.def_function[causal_lm_session_close_binding]("causal_lm_session_close")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_transformer: ", e))
