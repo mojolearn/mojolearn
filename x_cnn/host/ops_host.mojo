@@ -19,8 +19,11 @@ from std.sys.compile import is_defined
 from max.algorithm import sync_parallelize
 from gemm.host.identical_gemm import OP_NN, OP_NT, OP_TN
 from x_cnn.host.gemm_host import gemm_host_into, parallel_tasks
+from checks.numerics import ftz
 from x_cnn.ops import (
+    canon,
     FP, IP, ElemFn, CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW, CP_REV,
+    CP_SH, CP_SW, CP_PH, CP_PW, CP_DH, CP_DW, CP_BIAS,
     im2col_at, conv_out_at, dout_rows_at, col2im_at,
     PP_N, PP_C, PP_H, PP_W, PP_OH, PP_OW, PP_REV,
     maxpool_fwd_at, maxpool_bwd_at, avgpool_fwd_at, avgpool_bwd_at,
@@ -83,6 +86,213 @@ def scratch_i(n: Int) -> IP:
     return alloc[Int32](n if n > 0 else 1).unsafe_origin_cast[MutAnyOrigin]()
 
 
+# ---------------------------------------------------------------- conv layout loops
+# The element functions decode every output index with four or five integer
+# divisions (x_cnn/ops.mojo im2col_at, conv_out_at, dout_rows_at, col2im_at):
+# on the host that decoding cost several times the GEMM. These loops walk the
+# same outputs with the indices advanced incrementally and store the SAME
+# values: im2col and dout_rows are copies through `ftz`, conv_out is
+# `canon(ftz(ftz(y) + ftz(bias)))`, col2im gathers each pixel's taps in
+# (kh, kw) ascending order from +0.0 with `acc = ftz(acc + ftz(v))`
+# (DEVIATION 5700; CP_REV reverses kh for the host sabotage build). A task
+# owns whole rows or planes, so a thread count changes no value.
+
+
+def _tasks_for(units: Int, per_unit: Int) -> Int:
+    var t = parallel_tasks(units * per_unit, RUN_MIN_ELEMS)
+    return t if t < units else (units if units > 0 else 1)
+
+
+def _im2col_rows(x: FP, cols: FP, p: IP, lo: Int, hi: Int):
+    """cols rows [lo, hi): im2col_at's words."""
+    var C = Int(p[CP_C]); var H = Int(p[CP_H]); var W = Int(p[CP_W])
+    var KH = Int(p[CP_KH]); var KW = Int(p[CP_KW])
+    var OH = Int(p[CP_OH]); var OW = Int(p[CP_OW])
+    var SH = Int(p[CP_SH]); var SW = Int(p[CP_SW])
+    var PH = Int(p[CP_PH]); var PW = Int(p[CP_PW])
+    var DH = Int(p[CP_DH]); var DW = Int(p[CP_DW])
+    var ckk = C * KH * KW
+    var n = lo // (OH * OW)
+    var rem = lo - n * OH * OW
+    var oh = rem // OW
+    var ow = rem - oh * OW
+    for r in range(lo, hi):
+        var dst = cols + r * ckk
+        var h0 = oh * SH - PH
+        var w0 = ow * SW - PW
+        var q = 0
+        for c in range(C):
+            var plane = x + (n * C + c) * H * W
+            for kh in range(KH):
+                var h = h0 + kh * DH
+                if h < 0 or h >= H:
+                    for _ in range(KW):
+                        dst.unsafe_store(q, Float32(0))
+                        q += 1
+                    continue
+                var row = plane + h * W
+                for kw in range(KW):
+                    var w = w0 + kw * DW
+                    var v = Float32(0)
+                    if w >= 0 and w < W:
+                        v = ftz(row.unsafe_load(w))
+                    dst.unsafe_store(q, v)
+                    q += 1
+        ow += 1
+        if ow == OW:
+            ow = 0
+            oh += 1
+            if oh == OH:
+                oh = 0
+                n += 1
+
+
+def im2col_host(x: FP, cols: FP, mut prm: List[Int32]):
+    """cols [N*OH*OW x C*KH*KW], im2col_at's words."""
+    var rows = Int(prm[CP_N]) * Int(prm[CP_OH]) * Int(prm[CP_OW])
+    var tasks = _tasks_for(rows, Int(prm[CP_C]) * Int(prm[CP_KH]) * Int(prm[CP_KW]))
+    var chunk = (rows + tasks - 1) // tasks
+    var p = hi(prm)
+
+    def _part(t: Int) {imm x, imm cols, imm p, imm chunk, imm rows}:
+        _im2col_rows(x, cols, p, t * chunk, min(t * chunk + chunk, rows))
+
+    if tasks <= 1:
+        _part(0)
+    else:
+        sync_parallelize(_part, tasks)
+
+
+def _conv_out_planes(y2: FP, bias: FP, dst: FP, p: IP, lo: Int, hi: Int):
+    var OC = Int(p[CP_OC]); var HW = Int(p[CP_OH]) * Int(p[CP_OW])
+    var has_bias = Int(p[CP_BIAS]) != 0
+    for pl in range(lo, hi):
+        var n = pl // OC
+        var oc = pl - n * OC
+        var src = y2 + n * HW * OC + oc
+        var out = dst + pl * HW
+        var b = ftz(bias.unsafe_load(oc)) if has_bias else Float32(0)
+        for rem in range(HW):
+            var v = ftz(src.unsafe_load(rem * OC))
+            if has_bias:
+                v = ftz(v + b)
+            out.unsafe_store(rem, canon(v))
+
+
+def conv_out_host(y2: FP, bias: FP, dst: FP, mut prm: List[Int32]):
+    """dst (N, OC, OH, OW) from y2 [N*OH*OW x OC], conv_out_at's words."""
+    var planes = Int(prm[CP_N]) * Int(prm[CP_OC])
+    var tasks = _tasks_for(planes, Int(prm[CP_OH]) * Int(prm[CP_OW]))
+    var chunk = (planes + tasks - 1) // tasks
+    var p = hi(prm)
+
+    def _part(t: Int) {imm y2, imm bias, imm dst, imm p, imm chunk, imm planes}:
+        _conv_out_planes(y2, bias, dst, p, t * chunk, min(t * chunk + chunk, planes))
+
+    if tasks <= 1:
+        _part(0)
+    else:
+        sync_parallelize(_part, tasks)
+
+
+def _dout_rows_images(dout: FP, g: FP, p: IP, lo: Int, hi: Int):
+    var OC = Int(p[CP_OC]); var HW = Int(p[CP_OH]) * Int(p[CP_OW])
+    for n in range(lo, hi):
+        for oc in range(OC):
+            var src = dout + (n * OC + oc) * HW
+            var out = g + n * HW * OC + oc
+            for rem in range(HW):
+                out.unsafe_store(rem * OC, ftz(src.unsafe_load(rem)))
+
+
+def dout_rows_host(dout: FP, g: FP, mut prm: List[Int32]):
+    """g [N*OH*OW x OC] from dout (N, OC, OH, OW), dout_rows_at's words."""
+    var N = Int(prm[CP_N])
+    var tasks = _tasks_for(N, Int(prm[CP_OC]) * Int(prm[CP_OH]) * Int(prm[CP_OW]))
+    var chunk = (N + tasks - 1) // tasks
+    var p = hi(prm)
+
+    def _part(t: Int) {imm dout, imm g, imm p, imm chunk, imm N}:
+        _dout_rows_images(dout, g, p, t * chunk, min(t * chunk + chunk, N))
+
+    if tasks <= 1:
+        _part(0)
+    else:
+        sync_parallelize(_part, tasks)
+
+
+def _col2im_planes(dcols: FP, dx: FP, p: IP, po: IP, pw: IP, lo: Int, hi: Int):
+    var C = Int(p[CP_C]); var H = Int(p[CP_H]); var W = Int(p[CP_W])
+    var KH = Int(p[CP_KH]); var KW = Int(p[CP_KW])
+    var OH = Int(p[CP_OH]); var OW = Int(p[CP_OW])
+    var rev = Int(p[CP_REV]) != 0
+    var ckk = C * KH * KW
+    for pl in range(lo, hi):
+        var n = pl // C
+        var c = pl - n * C
+        var out = dx + pl * H * W
+        for h in range(H):
+            for w in range(W):
+                var acc = Float32(0)
+                for a in range(KH):
+                    var oh = Int(po[a * H + h])
+                    if oh < 0:
+                        continue
+                    var kh = KH - 1 - a if rev else a
+                    var rbase = (n * OH + oh) * OW
+                    var qbase = (c * KH + kh) * KW
+                    for kw in range(KW):
+                        var ow = Int(pw[kw * W + w])
+                        if ow < 0:
+                            continue
+                        acc = ftz(acc + ftz(dcols.unsafe_load((rbase + ow) * ckk + qbase + kw)))
+                out.unsafe_store(h * W + w, acc)
+
+
+def col2im_host(dcols: FP, dx: FP, mut prm: List[Int32]):
+    """dx (N, C, H, W) from dcols [N*OH*OW x C*KH*KW], col2im_at's words:
+    per pixel the taps in (kh, kw) ascending order (kh descending under
+    CP_REV), acc = ftz(acc + ftz(v)) from +0.0. The tests th % SH == 0 and
+    tw % SW == 0 (and the output bounds) are tabulated once per call."""
+    var H = Int(prm[CP_H]); var W = Int(prm[CP_W])
+    var KH = Int(prm[CP_KH]); var KW = Int(prm[CP_KW])
+    var OH = Int(prm[CP_OH]); var OW = Int(prm[CP_OW])
+    var SH = Int(prm[CP_SH]); var SW = Int(prm[CP_SW])
+    var PH = Int(prm[CP_PH]); var PW = Int(prm[CP_PW])
+    var DH = Int(prm[CP_DH]); var DW = Int(prm[CP_DW])
+    var rev = Int(prm[CP_REV]) != 0
+    # ohs[a * H + h]: the output row gather tap a reads for input row h, or -1
+    var ohs = List[Int32](length=KH * H, fill=Int32(-1))
+    for a in range(KH):
+        var kh = KH - 1 - a if rev else a
+        for h in range(H):
+            var th = h + PH - kh * DH
+            if th >= 0 and th % SH == 0 and th // SH < OH:
+                ohs[a * H + h] = Int32(th // SH)
+    var ows = List[Int32](length=KW * W, fill=Int32(-1))
+    for kw in range(KW):
+        for w in range(W):
+            var tw = w + PW - kw * DW
+            if tw >= 0 and tw % SW == 0 and tw // SW < OW:
+                ows[kw * W + w] = Int32(tw // SW)
+    var planes = Int(prm[CP_N]) * Int(prm[CP_C])
+    var tasks = _tasks_for(planes, H * W * KH * KW)
+    var chunk = (planes + tasks - 1) // tasks
+    var p = hi(prm)
+    var po = hi(ohs)
+    var pw = hi(ows)
+
+    def _part(t: Int) {imm dcols, imm dx, imm p, imm po, imm pw, imm chunk, imm planes}:
+        _col2im_planes(dcols, dx, p, po, pw, t * chunk, min(t * chunk + chunk, planes))
+
+    if tasks <= 1:
+        _part(0)
+    else:
+        sync_parallelize(_part, tasks)
+    _ = ohs^
+    _ = ows^
+
+
 def gemm_host(a: List[Float32], b: List[Float32], m: Int, n: Int, k: Int, op: Int) raises -> List[Float32]:
     var sa = a.copy()
     var sb = b.copy()
@@ -102,9 +312,9 @@ def conv2d_forward_into(x: FP, w: FP, bias: FP, dst: FP, prm: List[Int32]) raise
     var ps = prm.copy()
     var cols = scratch(rows * ckk)
     var y2 = scratch(rows * OC)
-    run[im2col_at](x, cols, cols, cols, hi(ps), hi(ps), rows * ckk)
+    im2col_host(x, cols, ps)
     gemm_host_into(cols, w, y2, OP_NT, rows, OC, ckk)
-    run[conv_out_at](y2, bias, dst, dst, hi(ps), hi(ps), rows * OC)
+    conv_out_host(y2, bias, dst, ps)
     cols.free()
     y2.free()
     _ = ps^
@@ -123,8 +333,8 @@ def conv2d_backward_into(x: FP, w: FP, dout: FP, gx: FP, gw: FP, gb: FP, prm: Li
         ps[CP_REV] = Int32(1)
     var cols = scratch(rows * ckk)
     var g = scratch(rows * OC)
-    run[im2col_at](x, cols, cols, cols, hi(ps), hi(ps), rows * ckk)
-    run[dout_rows_at](dout, g, g, g, hi(ps), hi(ps), rows * OC)
+    im2col_host(x, cols, ps)
+    dout_rows_host(dout, g, ps)
     var ones = List[Float32](length=rows, fill=Float32(1))
     gemm_host_into(g, cols, gw, OP_TN, OC, ckk, rows)
     gemm_host_into(g, hp(ones), gb, OP_TN, OC, 1, rows)
@@ -132,7 +342,7 @@ def conv2d_backward_into(x: FP, w: FP, dout: FP, gx: FP, gw: FP, gb: FP, prm: Li
     if need_dx:
         var dcols = scratch(rows * ckk)
         gemm_host_into(g, w, dcols, OP_NN, rows, ckk, OC)
-        run[col2im_at](dcols, gx, gx, gx, hi(ps), hi(ps), nx)
+        col2im_host(dcols, gx, ps)
         dcols.free()
     g.free()
     _ = ones^

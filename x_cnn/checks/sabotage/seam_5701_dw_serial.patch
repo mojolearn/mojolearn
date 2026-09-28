@@ -1,16 +1,16 @@
 --- a/x_cnn/host/ops_host.mojo
 +++ b/x_cnn/host/ops_host.mojo
-@@ -18,6 +18,7 @@
- from std.sys.compile import is_defined
- from max.algorithm import sync_parallelize
+@@ -20,6 +20,7 @@
  from gemm.host.identical_gemm import OP_NN, OP_NT, OP_TN
-+from checks.numerics import ftz, identical_mul_add
  from x_cnn.host.gemm_host import gemm_host_into, parallel_tasks
+ from checks.numerics import ftz
++from checks.numerics import identical_mul_add
  from x_cnn.ops import (
+     canon,
      FP, IP, ElemFn, CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW, CP_REV,
-@@ -126,7 +127,13 @@
-     run[im2col_at](x, cols, cols, cols, hi(ps), hi(ps), rows * ckk)
-     run[dout_rows_at](dout, g, g, g, hi(ps), hi(ps), rows * OC)
+@@ -336,7 +337,13 @@
+     im2col_host(x, cols, ps)
+     dout_rows_host(dout, g, ps)
      var ones = List[Float32](length=rows, fill=Float32(1))
 -    gemm_host_into(g, cols, gw, OP_TN, OC, ckk, rows)
 +    # SABOTAGE (seam 5701): dW as ONE serial chain over the rows, not the pinned tree.
