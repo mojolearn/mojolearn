@@ -2934,7 +2934,14 @@ class GradientBoosting(NumericModeMixin):
         obj.model_ = _serialize.exact(arrays, "model", "<u1").tobytes().decode("utf-8")
         meta = _serialize.exact(arrays, "meta", "<i8")
         obj.n_features_in_ = int(meta[0])
-        obj.approx_dim_ = int(obj._bind("_mojolearn_gbdt").gbdt_model_dim(obj.model_))
+        binding = obj._bind("_mojolearn_gbdt")
+        if _has_ctr_records(obj.model_) and _binding_vendor(binding) == "cpu":
+            # the host binding's parser refuses CTR records by name; the
+            # dim comes from HostGBDT's parse, the reader `predict` uses
+            from ._gbdt_host import parse_model_text
+            obj.approx_dim_ = int(parse_model_text(obj.model_)["dim"])
+        else:
+            obj.approx_dim_ = int(binding.gbdt_model_dim(obj.model_))
         if obj.approx_dim_ != int(meta[1]):
             raise ValueError(
                 f"mojolearn: {path!r} stores approx_dim {int(meta[1])} but "

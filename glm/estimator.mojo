@@ -59,7 +59,11 @@ from glm.impl.linear_model.qn import (
     QNParams,
 )
 from checks.numerics import ftz, identical_exp64
-from core.host_predict_threads import host_predict_chunk, host_predict_task_count
+from core.host_fp_env import host_ieee_fp_enter, host_ieee_fp_leave
+from core.host_predict_threads import (
+    host_predict_chunk,
+    host_predict_task_count,
+)
 
 
 def _add_scalar_kernel(
@@ -550,6 +554,7 @@ def qn_softmax_host(
     var chunk = host_predict_chunk(n_rows, tasks)
 
     def _rows(c: Int) {imm scores_ptr, imm out_ptr, imm chunk, imm n_rows, imm n_classes}:
+        var fp_env = host_ieee_fp_enter()
         var lo = c * chunk
         var hi = min(lo + chunk, n_rows)
         for i in range(lo, hi):
@@ -566,6 +571,7 @@ def qn_softmax_host(
             for k in range(n_classes):
                 var z = Float64(scores_ptr.unsafe_load(base + k))
                 out_ptr.unsafe_store(base + k, identical_exp64(z - m) / s)
+        host_ieee_fp_leave(fp_env)
 
     if tasks == 1:
         _rows(0)
