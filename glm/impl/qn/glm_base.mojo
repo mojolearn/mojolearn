@@ -80,7 +80,7 @@ from glm.impl.qn.glm_linear import (
     squared_dlz,
 )
 from glm.impl.qn.glm_logistic import logistic_loss_dz_kernel, logistic_lz, logistic_dlz
-from std.ffi import external_call
+from std.sys import llvm_intrinsic
 from std.sys.info import is_apple_gpu
 from max.gpu.sync import barrier
 from glm.impl.qn.multi_gpu import gradient_columns
@@ -298,7 +298,8 @@ def _qnb_barrier():
     """A block barrier that also orders DEVICE memory (Apple's `barrier()`
     orders threadgroup memory only; x_linear/team.mojo `team_barrier`)."""
     comptime if is_apple_gpu():
-        external_call["air.wg.barrier", NoneType](Int32(3), Int32(1))
+        # Match the stdlib intrinsic declaration; retain both memory fences.
+        llvm_intrinsic["llvm.air.wg.barrier", NoneType](Int32(3), Int32(1))
     else:
         barrier()
 

@@ -26,7 +26,7 @@ Apple too (`air.wg.barrier(3, 1)`; x_linear/team.mojo `team_barrier`).
 """
 from std.gpu import thread_idx
 from std.memory import bitcast, stack_allocation
-from std.ffi import external_call
+from std.sys import llvm_intrinsic
 from std.sys.info import is_apple_gpu
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -42,7 +42,8 @@ comptime OCSVM_TPB = 256
 @always_inline
 def _xn_barrier():
     comptime if is_apple_gpu():
-        external_call["air.wg.barrier", NoneType](Int32(3), Int32(1))
+        # Match the stdlib intrinsic declaration; retain both memory fences.
+        llvm_intrinsic["llvm.air.wg.barrier", NoneType](Int32(3), Int32(1))
     else:
         barrier()
 

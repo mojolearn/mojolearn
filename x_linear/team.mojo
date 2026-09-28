@@ -26,7 +26,7 @@ been converted still runs on thread 0 alone, with a team of one
 from std.sys.info import is_amd_gpu, is_apple_gpu, is_nvidia_gpu
 from std.gpu import thread_idx, block_dim
 from max.gpu.sync import barrier
-from std.ffi import external_call
+from std.sys import llvm_intrinsic
 from std.memory import bitcast
 from x_linear.ops import FP
 
@@ -65,7 +65,8 @@ def team_barrier():
     x-bayes-ridge, ...). Here Apple gets `air.wg.barrier(3, 1)`,
     `threadgroup_barrier(mem_device | mem_threadgroup)`."""
     comptime if is_apple_gpu():
-        external_call["air.wg.barrier", NoneType](Int32(3), Int32(1))
+        # Match the stdlib intrinsic declaration; retain both memory fences.
+        llvm_intrinsic["llvm.air.wg.barrier", NoneType](Int32(3), Int32(1))
     else:
         barrier()
 
