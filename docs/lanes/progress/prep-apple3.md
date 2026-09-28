@@ -66,3 +66,21 @@ bit of this family. Seconds, minimum of 2 reps.
 | Python outside the binding | 0.52 / 0.22 / 0.17 / 0.17 | multilabel-binarizer / target-encoder / label-encoder / label-binarizer |
 
 SimpleImputer(strategy="mean") sorts every column and never reads the sort.
+
+## Changes under test (job 2, m3ultra-b, request 1790627886703, tree b8f051632)
+
+One job times three commits, each with its own build (bench/x_prep_ab.sh arms `base`, `at-<commit>-<label>`,
+and the tree): the merged base 6856b5f8f, the tree without the radix sort 6ff627c6c, and the tree. The
+command is tools/prep_apple3/job2.sh.
+
+| change | mode | switch (state before its A/B) | where |
+|---|---|---|---|
+| in/out inputs (the fix above) | both | none (a fix) | python/mojolearn/_expansion_prep.py |
+| TargetEncoder parallel buckets | both | default ON since job 1; MOJOLEARN_XPREP_TE_PBUCKET=0 | _expansion_prep.py |
+| `imputer_nosort`: SimpleImputer sorts only for median / most_frequent | both | opt-in MOJOLEARN_XPREP_R3_ON | _expansion_prep.py |
+| `mapped`: a host arena or output of 2^18 words or more is an anonymous mapping, never touched to allocate | both | opt-in | _expansion_prep.py |
+| `view`: a read of 2^20 words or more is a view of the mapped block, not a copy | both | opt-in | _expansion_prep.py |
+| `work`: the sorted columns (RobustScaler, SimpleImputer, KBins, QuantileTransformer, the encoders' categories, spline knots, weighted groups) and LDA's centered rows are device scratch | both | opt-in | _expansion_prep.py |
+| `te_arrays`: TargetEncoder's binary target and folds cross as int32 arrays (i2f on the device), one label pass | both | opt-in | _expansion_prep.py |
+| radix sort_cols (x_prep/dradix.mojo): 4 passes of a stable counting sort by chunks on a monotone 32-bit key, in place of the 41 bitonic passes; the same words (Python model of the key map and of the sort against `word_order`: 204017 words with every NaN and zero class, 6 shapes) | FAST, Apple only (comptime) | opt-in MOJOLEARN_XPREP_SORT_RADIX=1; MOJOLEARN_XPREP_SORT_CHUNK positions per chunk | x_prep/dradix.mojo, x_prep/device.mojo |
+| XPPHASE / XPPROG phase lines | timing only | MOJOLEARN_XPREP_PROFILE=1 | x_prep/device.mojo, _expansion_prep.py |
