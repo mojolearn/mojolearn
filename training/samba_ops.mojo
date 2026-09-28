@@ -77,6 +77,13 @@ def _upload_i32(
     return buf^
 
 
+# ONE WAIT PER OP (lane/neural-apple, 2026-09-28): each op below enqueues its
+# uploads, its kernels and its downloads on one in-order `ctx` and waits once,
+# before the host reads the result (the caller's host arrays and every device
+# buffer stay alive until that wait). The waits between those steps were
+# host round trips only; on Apple each costs a command-buffer commit and
+# completion. No kernel, operand or order changes.
+
 # ===========================================================================
 # EMBEDDING
 # ===========================================================================
@@ -99,10 +106,8 @@ def samba_embedding_forward_host(
     var w = _upload_f32(ctx, w_ptr, vocab * width)
     var ids = _upload_i32(ctx, ids_ptr, n_positions)
     var y = ctx.enqueue_create_buffer[DType.float32](cells)
-    ctx.synchronize()
     var cfg = EmbConfig.llama(vocab, width)
     identical_embedding_forward_into(ctx, y, w, ids, n_positions, cfg)
-    ctx.synchronize()
     ctx.enqueue_copy(dst_ptr=y_ptr, src_buf=y)
     ctx.synchronize()
     _ = w^
@@ -132,12 +137,10 @@ def samba_embedding_backward_host(
     var counts = ctx.enqueue_create_buffer[DType.int32](vocab)
     var run_begin = ctx.enqueue_create_buffer[DType.int32](vocab + 1)
     var perm = ctx.enqueue_create_buffer[DType.int32](n_positions)
-    ctx.synchronize()
     var cfg = EmbConfig.llama(vocab, width)
     identical_embedding_backward_into(
         ctx, dw, dy, ids, counts, run_begin, perm, n_positions, cfg
     )
-    ctx.synchronize()
     ctx.enqueue_copy(dst_ptr=dw_ptr, src_buf=dw)
     ctx.synchronize()
     _ = dy^
@@ -175,9 +178,7 @@ def samba_rms_norm_forward_host(
     var w = _upload_f32(ctx, w_ptr, dm)
     var y = ctx.enqueue_create_buffer[DType.float32](cells)
     var sumsq = ctx.enqueue_create_buffer[DType.float32](m)
-    ctx.synchronize()
     llama_rms_norm(ctx, sumsq, y, x, w, m, dm, eps)
-    ctx.synchronize()
     ctx.enqueue_copy(dst_ptr=y_ptr, src_buf=y)
     ctx.synchronize()
     _ = x^
@@ -227,14 +228,11 @@ def samba_rms_norm_backward_host(
     for i in range(m):
         h_ones.unsafe_ptr().unsafe_store(i, Float32(1.0))
     ctx.enqueue_copy(dst_buf=ones, src_ptr=h_ones.unsafe_ptr())
-    ctx.synchronize()
     llama_rms_norm(ctx, sumsq, y, x, w, m, dm, eps)
-    ctx.synchronize()
     bwd_rms_norm[0](
         ctx, dot_out, dx, dw, dh, dprod, rstd, dvcoef, ones, dy, x, w, sumsq,
         dx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), False, m, dm, eps,
     )
-    ctx.synchronize()
     ctx.enqueue_copy(dst_ptr=dx_ptr, src_buf=dx)
     ctx.enqueue_copy(dst_ptr=dw_ptr, src_buf=dw)
     ctx.synchronize()
@@ -280,9 +278,7 @@ def samba_linear_forward_host(
     var ws = ctx.enqueue_create_buffer[DType.float32](
         identical_gemm_workspace_max_floats(m, n, k)
     )
-    ctx.synchronize()
     identical_gemm_into(ctx, c, a, w, ws, m, n, k, OP_NT)
-    ctx.synchronize()
     ctx.enqueue_copy(dst_ptr=c_ptr, src_buf=c)
     ctx.synchronize()
     _ = a^
@@ -322,11 +318,8 @@ def samba_linear_backward_host(
     var ws_b = ctx.enqueue_create_buffer[DType.float32](
         identical_gemm_backward_b_workspace_max_floats(OP_NT, m, n, k)
     )
-    ctx.synchronize()
     identical_gemm_backward_a_into(ctx, da, dc, w, ws_a, m, n, k, OP_NT)
-    ctx.synchronize()
     identical_gemm_backward_b_into(ctx, dw, dc, a, ws_b, m, n, k, OP_NT)
-    ctx.synchronize()
     ctx.enqueue_copy(dst_ptr=da_ptr, src_buf=da)
     ctx.enqueue_copy(dst_ptr=dw_ptr, src_buf=dw)
     ctx.synchronize()

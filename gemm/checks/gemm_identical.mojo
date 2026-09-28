@@ -3449,6 +3449,25 @@ comptime APPLE_MMA_FM = get_defined_int["MOJOLEARN_APPLE_MMA_FM", 4]()
 comptime APPLE_MMA_FN = get_defined_int["MOJOLEARN_APPLE_MMA_FN", 4]()
 comptime APPLE_MMA_KB = get_defined_int["MOJOLEARN_APPLE_MMA_KB", 16]()
 comptime APPLE_MMA_GROUP_M = get_defined_int["MOJOLEARN_APPLE_MMA_GROUP_M", 8]()
+#: lane/neural-apple (2026-09-28): the small tile (FM = FN = 2, a quarter of
+#: the default's cells) for outputs with fewer than `APPLE_MMA_SMALL_BLOCKS`
+#: default tiles (scheduling only; `MOJOLEARN_APPLE_MMA_SMALL_OFF` reverts).
+#: M4 Pro (m4pro-b), the T3 shard calls (bench/gemm_excp_ab_main.mojo,
+#: ordinary operands, ms, every hash equal across all geometries):
+#:   call        default(no small)  small < 512  small < 2048
+#:   proj_fwd          7.2               7.3          6.1
+#:   proj_dA           7.4               7.4          6.1
+#:   proj_dB          21.5              10.5         10.4
+#:   gateup_dA        19.0              19.1         16.5
+#:   gateup_dB        40.9              20.3         20.5
+#:   down_fwd         18.6              18.8         16.4
+#:   down_dB          40.9              20.6         20.1
+#:   head_dA         604.5             592.5        517.4
+#: and head_fwd, head_dB, gateup_fwd, down_dA (>= 2048 tiles) unchanged.
+comptime APPLE_MMA_SMALL_TILE = not is_defined["MOJOLEARN_APPLE_MMA_SMALL_OFF"]()
+comptime APPLE_MMA_SMALL_FM = get_defined_int["MOJOLEARN_APPLE_MMA_SMALL_FM", 2]()
+comptime APPLE_MMA_SMALL_FN = get_defined_int["MOJOLEARN_APPLE_MMA_SMALL_FN", 2]()
+comptime APPLE_MMA_SMALL_BLOCKS = get_defined_int["MOJOLEARN_APPLE_MMA_SMALL_BLOCKS", 2048]()
 comptime APPLE_MMA_BM = 8 * APPLE_MMA_FM * APPLE_MMA_SGM
 comptime APPLE_MMA_BN = 8 * APPLE_MMA_FN * APPLE_MMA_SGN
 comptime _AMMA_M64 = SIMD[DType.float32, 64]
@@ -3762,6 +3781,28 @@ def _launch_apple_mma(
         APPLE_MMA_SGM, APPLE_MMA_SGN, APPLE_MMA_FM, APPLE_MMA_FN, APPLE_MMA_KB, TUNED_FOLD_SLOTS
     ]
     var blocks = ((m + APPLE_MMA_BM - 1) // APPLE_MMA_BM) * ((n + APPLE_MMA_BN - 1) // APPLE_MMA_BN)
+    comptime if APPLE_MMA_SMALL_TILE:
+        # lane/neural-apple (2026-09-28): an output too small to fill the GPU
+        # with the default tile (the weight gradients: 768 x 768 is 144
+        # blocks, each walking k = 8192 tokens) takes the same kernel at a
+        # quarter of the tile, four times the blocks. The tile is a
+        # schedule: every cell's leaf chains and leaf fold are the same.
+        if blocks < APPLE_MMA_SMALL_BLOCKS:
+            comptime ks = identical_gemm_apple_mma_kernel[
+                APPLE_MMA_SGM, APPLE_MMA_SGN, APPLE_MMA_SMALL_FM, APPLE_MMA_SMALL_FN, APPLE_MMA_KB, TUNED_FOLD_SLOTS
+            ]
+            comptime SBM = 8 * APPLE_MMA_SMALL_FM * APPLE_MMA_SGM
+            comptime SBN = 8 * APPLE_MMA_SMALL_FN * APPLE_MMA_SGN
+            var sblocks = ((m + SBM - 1) // SBM) * ((n + SBN - 1) // SBN)
+            step_count_launch()
+            ctx.enqueue_function[ks](
+                c.unsafe_ptr(), a.unsafe_ptr(), b.unsafe_ptr(),
+                Int32(m), Int32(n), Int32(k), Int32(leaf), Int32(p_count),
+                Int32(st[0]), Int32(st[1]), Int32(st[2]), Int32(st[3]),
+                grid_dim=(sblocks, 1, 1),
+                block_dim=(APPLE_MMA_SGM * APPLE_MMA_SGN * 32, 1, 1),
+            )
+            return
     step_count_launch()
     ctx.enqueue_function[kern](
         c.unsafe_ptr(),

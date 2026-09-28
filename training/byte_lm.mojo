@@ -82,7 +82,7 @@ from training.checks.optimizer import (
 )
 from training.checks.optimizer_oracle import OPT_ADAMW, OPT_SGD, OptimizerConfig
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN, byte_lm_release_eager_for
-from transformer.impl.llama.fused_attention import ATTN_EXACT_TAIL_GUARD, ATTN_TAIL_GUARD_SABOTAGE, FUSED_CORNER, ATTN_REPAIR_MASKED_TAIL, ATTN_REPAIR_SAB_Z, ATTN_REPAIR_SAB_DQ
+from transformer.impl.llama.fused_attention import ATTN_EXACT_TAIL_GUARD, ATTN_TAIL_GUARD_SABOTAGE, FUSED_CORNER, ATTN_REPAIR_MASKED_TAIL, ATTN_REPAIR_SAB_Z, ATTN_REPAIR_SAB_DQ, attention_estash_memory_grant
 from transformer.checks.transformer_backward import (
     BWD_ANY_SABOTAGE, LlamaBackwardStages, llama_decoder_layer_backward_device,
 )
@@ -807,6 +807,13 @@ struct ByteTrainer(Movable):
             self.backward.append(LlamaBackwardStages(ctx, config.batch, config.length, config.length, byte_dims(config), lean=True))
         step_count_sync()
         ctx.synchronize()
+        # lane/neural-apple (2026-09-28): on a gated Apple build, the estash
+        # attention word runs only when this trainer's kept stashes fit the
+        # free device memory (a schedule choice; the bits are the same).
+        _ = attention_estash_memory_grant(
+            ctx, config.n_layers, config.batch, config.length, config.n_heads, config.length,
+            2 * 4 * config.batch * config.length * config.vocab_size,
+        )
 
     def validate_device_state(mut self, ctx: DeviceContext, completed: Int) raises:
         """`byte_validate_device_state` over this trainer's buffers with the

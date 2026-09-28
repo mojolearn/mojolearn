@@ -75,6 +75,7 @@ from transformer.impl.llama.fused_attention import (
     fused_attention_arm_backward_resolved,
     fused_attention_arm_forward_resolved,
     fused_attention_arm_from_env,
+    attention_estash_gate_state,
     fused_attention_arm_name,
     attention_v1_backward_memory_profile,
     attention_v1_retained_exp_bytes,
@@ -111,7 +112,12 @@ def byte_lm_attention_arm_binding() raises -> PythonObject:
     kernel-matrix row (`attn_default_arm_for`); `trial_build` is 1 under
     `-D MOJOLEARN_ATTN_ARM_TRIAL=1`; `resolved_hd64` is the arm with its
     geometry resolved as the launchers resolve it at head_dim 64 on this
-    build. Reads constants and the environment only; no GPU operation."""
+    build. Reads constants and the environment only; no GPU operation.
+    On a shipped Apple build (lane/neural-apple, 2026-09-28) the default is
+    an estash word gated by memory: `arm` reads the round 3 word until a
+    trainer in this process has been granted the estash word
+    (`attention_estash_memory_grant`), so a read-back taken before the first
+    trainer exists names the fallback."""
     var arm = fused_attention_arm_from_env()
     var resolved = fused_attention_arm_forward_resolved(arm) | fused_attention_arm_backward_resolved(arm)
     var out = Python.list()
@@ -120,6 +126,17 @@ def byte_lm_attention_arm_binding() raises -> PythonObject:
     out.append(PythonObject(1 if ATTN_ARM_TRIAL else 0))
     out.append(PythonObject(fused_attention_arm_name(resolved)))
     return out
+
+def byte_lm_attention_estash_gate_binding() raises -> PythonObject:
+    """lane/neural-apple (2026-09-28): [gated, granted, denied, need_bytes,
+    free_bytes] of the Apple estash memory grant (all 0 on a build that is
+    not gated). Host state only; no GPU operation."""
+    var st = attention_estash_gate_state()
+    var out = Python.list()
+    for i in range(len(st)):
+        out.append(PythonObject(st[i]))
+    return out
+
 
 def byte_lm_attention_memory_profile_binding(shape: PythonObject) raises -> PythonObject:
     """Build-profile readback plus retained-exp allocation for one layer."""
@@ -1813,6 +1830,7 @@ def PyInit__mojolearn_byte_lm() abi("C") -> PythonObject:
         module.def_function[byte_lm_attn_bwd_corner_refuses_binding]("byte_lm_attn_bwd_corner_refuses")
         # DEVIATION 2534: the attention arm read-back (arm, default, trial, resolved).
         module.def_function[byte_lm_attention_arm_binding]("byte_lm_attention_arm")
+        module.def_function[byte_lm_attention_estash_gate_binding]("byte_lm_attention_estash_gate")
         module.def_function[byte_lm_attention_memory_profile_binding]("byte_lm_attention_memory_profile")
         # DEVIATION 2648: the step glue arm read-back (arm, trial).
         module.def_function[byte_lm_step_glue_arm_binding]("byte_lm_step_glue_arm")

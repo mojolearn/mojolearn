@@ -94,6 +94,7 @@ come through the kernel matrix.
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx, MAX_THREADS_PER_BLOCK_METADATA
 from std.utils import StaticTuple
+from std.ffi import _Global
 from std.memory import bitcast, stack_allocation
 from std.os import getenv
 from std.sys import llvm_intrinsic
@@ -120,6 +121,7 @@ from core.device_scan import (
 )
 from checks.kernel_matrix import (
     COLUMN_AMD,
+    COLUMN_APPLE,
     COLUMN_NVIDIA,
     TARGET_COLUMN,
     lib_hardware_ftz_fma_for,
@@ -962,6 +964,9 @@ def fused_attention_arm_from_env() raises -> Int:
         " build does not compile (ATTN_SHIPPED_BWD_KV is False)"
     )
     comptime if not ATTN_ARM_TRIAL:
+        comptime if ATTN_APPLE_ESTASH_GATED:
+            if not attention_estash_granted():
+                return ATTN_APPLE_ESTASH_FALLBACK
         return ATTN_ARM_DEFAULT
     var name = String(getenv("MOJOLEARN_ATTN_ARM"))
     var arm: Int
@@ -1467,6 +1472,117 @@ def fused_attention_estash_name(arm: Int) -> String:
     if (arm & ATTN_ARM_ESTASH_DRES) != 0:
         return String("estash_dres")
     return String("estash")
+
+
+comptime ATTN_APPLE_ESTASH_GATED = (
+    TARGET_COLUMN == COLUMN_APPLE and ATTN_SHIPPED_BWD_ESTASH
+)
+"""lane/neural-apple (2026-09-28): a shipped Apple build whose default is an
+estash word (checks/kernel_matrix_attn.mojo `attn_default_arm_for`) runs it
+only while the process's estash grant holds, and the round 3 word otherwise.
+Both words are schedules of the same arithmetic (every final witness equal
+on the M4 Pro), so the grant moves time and memory, never bits."""
+
+comptime ATTN_APPLE_ESTASH_FALLBACK = ATTN_ARM_R3_DEFAULT
+"""The word an ungranted Apple process runs: the round 3 word, Apple's
+default before the estash flip (its backward is the shipped
+`_launch_bwd_stash_tiled_pf`, compiled because the estash default carries
+`_pf`)."""
+
+
+struct _AttnEstashGate(Defaultable, Movable):
+    var granted: Bool
+    var denied: Bool
+    var need: Int
+    var free: Int
+
+    def __init__(out self):
+        self.granted = False
+        self.denied = False
+        self.need = 0
+        self.free = 0
+
+
+comptime _ATTN_ESTASH_GATE = _Global[StorageType=_AttnEstashGate,
+    name="MojolearnAttnEstashGateV1", init_fn=_AttnEstashGate.__init__]
+
+
+def attention_estash_granted() -> Bool:
+    """Whether this process runs the estash word (Apple gated builds): a
+    trainer granted it and no trainer was ever refused it (a refusal is
+    sticky, so a larger trainer built later can never inherit a grant a
+    smaller one earned). Every other build: True (the default runs as is)."""
+    comptime if not ATTN_APPLE_ESTASH_GATED:
+        return True
+    try:
+        var g = _ATTN_ESTASH_GATE.get_or_create_ptr()
+        return g[].granted and not g[].denied
+    except:
+        return False
+
+
+def attention_estash_memory_grant(
+    ctx: DeviceContext, n_layers: Int, b: Int, l: Int, nh: Int, s: Int,
+    step_transient_bytes: Int,
+) raises -> Bool:
+    """Called once by a trainer after its persistent buffers exist and before
+    its first step: grant the estash word when every layer's kept exp stash
+    (`attention_v1_retained_exp_bytes`), one layer's backward y/dy scratches
+    and the caller's other per-step transients (`step_transient_bytes`: the
+    byte LM passes its logits and their gradient) fit under 35% of the
+    device's FREE memory (`DeviceContext.get_memory_info`), else refuse it
+    for the rest of the process. Returns whether this process now runs the
+    estash word. A no-op on every build that is not gated.
+
+    The 35% is measured, not derived: on the 48 GB M4 Pro the T3 shard (B4,
+    12 layers, V 50,257) under the estash word trained at 7.2 s a step with
+    a 41 GB process footprint and then hung the GPU (a command buffer that
+    never completed); that shape needs 14.6 GB here and must be refused,
+    while B1 (3.6 GB) trained cleanly and must be granted."""
+    comptime if not ATTN_APPLE_ESTASH_GATED:
+        return True
+    var need = (
+        n_layers * attention_v1_retained_exp_bytes(b, l, nh, s)
+        + 2 * 4 * b * nh * l * s + step_transient_bytes
+    )
+    var mem = ctx.get_memory_info()
+    var free = Int(mem[0])
+    var ok = need * 100 <= free * 35
+    var g = _ATTN_ESTASH_GATE.get_or_create_ptr()
+    g[].need = need
+    g[].free = free
+    if ok:
+        g[].granted = True
+    else:
+        g[].denied = True
+    return g[].granted and not g[].denied
+
+
+def attention_estash_gate_state() -> List[Int]:
+    """[gated, granted, denied, need_bytes, free_bytes] of the last grant
+    (all zero when nothing asked), for a run's read-back."""
+    var out = List[Int]()
+    comptime if not ATTN_APPLE_ESTASH_GATED:
+        out.append(0)
+        out.append(0)
+        out.append(0)
+        out.append(0)
+        out.append(0)
+        return out^
+    try:
+        var g = _ATTN_ESTASH_GATE.get_or_create_ptr()
+        out.append(1)
+        out.append(1 if g[].granted else 0)
+        out.append(1 if g[].denied else 0)
+        out.append(g[].need)
+        out.append(g[].free)
+    except:
+        out.append(1)
+        out.append(0)
+        out.append(0)
+        out.append(0)
+        out.append(0)
+    return out^
 
 
 def fused_attention_arm_estash_runs(arm: Int) -> Bool:
@@ -2031,6 +2147,98 @@ def device_absmax(
     _ = host^
     _ = part^
     return Float64(m)
+
+
+def _absmax_blocks(n: Int) -> Int:
+    if n <= 0:
+        return 0
+    var blocks = (n + ABSMAX_TPB - 1) // ABSMAX_TPB
+    if blocks > ABSMAX_BLOCKS:
+        blocks = ABSMAX_BLOCKS
+    return blocks
+
+
+def device_absmax4(
+    ctx: DeviceContext,
+    b0_p: MutPointer[Float32, MutAnyOrigin], n0: Int,
+    b1_p: MutPointer[Float32, MutAnyOrigin], n1: Int,
+    b2_p: MutPointer[Float32, MutAnyOrigin], n2: Int,
+    b3_p: MutPointer[Float32, MutAnyOrigin], n3: Int,
+) raises -> StaticTuple[Float64, 4]:
+    """`device_absmax` of up to four buffers with ONE wait (lane/neural-apple,
+    2026-09-28). Each buffer's partials are the same `absmax_partial_kernel`
+    launch at the same grid as `device_absmax` gives it, written to its own
+    slice of one partial buffer; one copy brings every slice home and the
+    host folds each slice exactly as `device_absmax` does. `max` of the
+    same partials is the same value, so every result equals the four
+    separate calls bit for bit (a regime BOUND; nothing reaches the card).
+    `device_absmax` spends four waits per buffer (allocation, kernel, host
+    allocation, copy); on Apple a wait with pending work is the step's
+    dominant cost (memory: metal-cost-is-syncs-not-launches). A buffer with
+    `n <= 0` reads 0.0 and launches nothing, as `device_absmax` returns."""
+    var k0 = _absmax_blocks(n0)
+    var k1 = _absmax_blocks(n1)
+    var k2 = _absmax_blocks(n2)
+    var k3 = _absmax_blocks(n3)
+    var total = k0 + k1 + k2 + k3
+    var out = StaticTuple[Float64, 4](0.0, 0.0, 0.0, 0.0)
+    if total == 0:
+        return out
+    step_count_device_alloc()
+    var part = ctx.enqueue_create_buffer[DType.float32](total)
+    step_count_host_alloc()
+    var host = ctx.enqueue_create_host_buffer[DType.float32](total)
+    var off = 0
+    if k0 > 0:
+        step_count_launch()
+        ctx.enqueue_function[absmax_partial_kernel](
+            part.unsafe_ptr() + off, b0_p, Int32(n0),
+            grid_dim=(k0, 1, 1), block_dim=(ABSMAX_TPB, 1, 1),
+        )
+    off += k0
+    if k1 > 0:
+        step_count_launch()
+        ctx.enqueue_function[absmax_partial_kernel](
+            part.unsafe_ptr() + off, b1_p, Int32(n1),
+            grid_dim=(k1, 1, 1), block_dim=(ABSMAX_TPB, 1, 1),
+        )
+    off += k1
+    if k2 > 0:
+        step_count_launch()
+        ctx.enqueue_function[absmax_partial_kernel](
+            part.unsafe_ptr() + off, b2_p, Int32(n2),
+            grid_dim=(k2, 1, 1), block_dim=(ABSMAX_TPB, 1, 1),
+        )
+    off += k2
+    if k3 > 0:
+        step_count_launch()
+        ctx.enqueue_function[absmax_partial_kernel](
+            part.unsafe_ptr() + off, b3_p, Int32(n3),
+            grid_dim=(k3, 1, 1), block_dim=(ABSMAX_TPB, 1, 1),
+        )
+    step_count_d2h()
+    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=part)
+    step_count_sync()
+    ctx.synchronize()
+    var lo = 0
+    for which in range(4):
+        var kb = k0
+        if which == 1:
+            kb = k1
+        elif which == 2:
+            kb = k2
+        elif which == 3:
+            kb = k3
+        var m = Float32(0.0)
+        for i in range(lo, lo + kb):
+            var v = host.unsafe_ptr().unsafe_load(i)
+            if v > m:
+                m = v
+        out[which] = Float64(m)
+        lo += kb
+    _ = host^
+    _ = part^
+    return out
 
 
 # DEVIATION 2514 step 1 (2026-09-11): `NONFINITE_NONE`,
@@ -6796,10 +7004,12 @@ def fused_bwd_zdot_estash_kernel[HD: Int, TQ: Int, DRES: Bool, SABN: Bool, SWZ: 
 def _read_flags(
     ctx: DeviceContext, mut flag: DeviceBuffer[DType.float32]
 ) raises -> Tuple[Bool, Int]:
+    # One wait (lane/neural-apple, 2026-09-28): the host buffer's creation,
+    # the copy and the kernels that wrote `flag` are in stream order on
+    # `ctx`, so the wait after the copy covers them all. The wait that sat
+    # between the creation and the copy was a second full round trip.
     step_count_host_alloc()
     var host = ctx.enqueue_create_host_buffer[DType.float32](len(flag))
-    step_count_sync()
-    ctx.synchronize()
     step_count_d2h()
     ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=flag)
     step_count_sync()
@@ -6823,8 +7033,9 @@ def _zero_flag(ctx: DeviceContext) raises -> DeviceBuffer[DType.float32]:
     var f = ctx.enqueue_create_buffer[DType.float32](3 if ATTN_REPAIR_MASKED_TAIL else 1)
     step_count_launch()
     f.enqueue_fill(Float32(0.0))
-    step_count_sync()
-    ctx.synchronize()
+    # No wait (lane/neural-apple, 2026-09-28): every kernel that reads or
+    # writes the flag is enqueued on `ctx` after this fill, in stream order,
+    # and the host reads it only through `_read_flags`, which waits.
     return f^
 
 
@@ -6926,9 +7137,14 @@ def fused_forward_launch_ran(
         return FUSED_REFUSED_REGIME
     var ton = _attn_timer_on()
     var tk = Int(perf_counter_ns())
-    var qmax = device_absmax(ctx, q_rope, b * l * nh * hd)
-    var kmax = device_absmax(ctx, k_cache, b * nkv * s * hd)
-    var vmax = device_absmax(ctx, v_cache, b * nkv * s * hd)
+    var amx = device_absmax4(
+        ctx, q_rope.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * l * nh * hd, k_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        b * nkv * s * hd, v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * nkv * s * hd,
+        v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 0,
+    )
+    var qmax = amx[0]
+    var kmax = amx[1]
+    var vmax = amx[2]
     if not regime_product_ok(hd, qmax, kmax) or not regime_finite(vmax):
         return FUSED_REFUSED_REGIME
     _attn_tick(ctx, ton, tk, "fwd_regime_scan")
@@ -7944,8 +8160,8 @@ def _launch_fwd_r2[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool, SWZ: Bool
     instantiates none of it."""
     step_count_device_alloc()
     var sstash = ctx.enqueue_create_buffer[DType.float32](b * nh * l * s)
-    step_count_sync()
-    ctx.synchronize()
+    # No wait after the allocation (lane/neural-apple, 2026-09-28): the
+    # kernel below is enqueued on the same in-order `ctx`.
     _attn_tick(ctx, on, tk, "fwd_scratch_alloc")
     step_count_launch()
     comptime if ATTN_FWD_APPLE_MMA and HD == 64 and TQ == 32 and PF and not SABN:
@@ -8074,8 +8290,11 @@ def _launch_bwd_stash_tiled_pf[HD: Int, ZSAB: Bool](
     var y_st = ctx.enqueue_create_buffer[DType.float32](cells)
     step_count_device_alloc()
     var dy_st = ctx.enqueue_create_buffer[DType.float32](cells)
-    step_count_sync()
-    ctx.synchronize()
+    # No wait after the allocations or after the zdot kernel (lane/
+    # neural-apple, 2026-09-28): zdot, dq and dk/dv are enqueued on the same
+    # in-order `ctx`, so dq and dk/dv read the finished stashes and zdot
+    # without a host round trip. The wait before the stashes' last use
+    # stays.
     _attn_tick(ctx, on, tk, "bwd_scratch_alloc")
     step_count_launch()
     comptime if ATTN_BWD_STASH_ZDOT_AMMA and HD == 64 and not ZSAB:
@@ -8100,8 +8319,6 @@ def _launch_bwd_stash_tiled_pf[HD: Int, ZSAB: Bool](
             grid_dim=(b * nh * ((l + TQ - 1) // TQ), 1, 1),
             block_dim=(FUSED_THREADS, 1, 1),
         )
-    step_count_sync()
-    ctx.synchronize()
     _attn_tick(ctx, on, tk, "bwd_zdot_stash_pf")
     var dq_blocks = b * nh * ((l + 63) // 64)
     var kv_blocks = b * nkv * ((s + 63) // 64)
@@ -8988,10 +9205,15 @@ def fused_backward_launch_ran_report(
         )
     var ton = _attn_timer_on()
     var tk = Int(perf_counter_ns())
-    var qmax = device_absmax(ctx, q_rope, b * l * nh * hd)
-    var kmax = device_absmax(ctx, k_cache, b * nkv * s * hd)
-    var vmax = device_absmax(ctx, v_cache, b * nkv * s * hd)
-    var dmax = device_absmax(ctx, dctx, b * l * nh * hd)
+    var amx = device_absmax4(
+        ctx, q_rope.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * l * nh * hd, k_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        b * nkv * s * hd, v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * nkv * s * hd,
+        dctx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * l * nh * hd,
+    )
+    var qmax = amx[0]
+    var kmax = amx[1]
+    var vmax = amx[2]
+    var dmax = amx[3]
     if not regime_product_ok(hd, qmax, kmax):
         return FUSED_REFUSED_REGIME
     if not regime_product_ok(hd, dmax, vmax):
@@ -9404,9 +9626,14 @@ def fused_forward_launch_estash_ran(
                 return FUSED_REFUSED_REGIME
             var ton = _attn_timer_on()
             var tk = Int(perf_counter_ns())
-            var qmax = device_absmax(ctx, q_rope, b * l * nh * hd)
-            var kmax = device_absmax(ctx, k_cache, b * nkv * s * hd)
-            var vmax = device_absmax(ctx, v_cache, b * nkv * s * hd)
+            var amx = device_absmax4(
+                ctx, q_rope.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * l * nh * hd, k_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                b * nkv * s * hd, v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * nkv * s * hd,
+                v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 0,
+            )
+            var qmax = amx[0]
+            var kmax = amx[1]
+            var vmax = amx[2]
             if not regime_product_ok(hd, qmax, kmax) or not regime_finite(vmax):
                 return FUSED_REFUSED_REGIME
             _attn_tick(ctx, ton, tk, "fwd_regime_scan")
@@ -9573,10 +9800,15 @@ def fused_backward_launch_estash_report(
                 )
             var ton = _attn_timer_on()
             var tk = Int(perf_counter_ns())
-            var qmax = device_absmax(ctx, q_rope, b * l * nh * hd)
-            var kmax = device_absmax(ctx, k_cache, b * nkv * s * hd)
-            var vmax = device_absmax(ctx, v_cache, b * nkv * s * hd)
-            var dmax = device_absmax(ctx, dctx, b * l * nh * hd)
+            var amx = device_absmax4(
+                ctx, q_rope.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * l * nh * hd, k_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                b * nkv * s * hd, v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * nkv * s * hd,
+                dctx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * l * nh * hd,
+            )
+            var qmax = amx[0]
+            var kmax = amx[1]
+            var vmax = amx[2]
+            var dmax = amx[3]
             if not regime_product_ok(hd, qmax, kmax):
                 return FUSED_REFUSED_REGIME
             if not regime_product_ok(hd, dmax, vmax):

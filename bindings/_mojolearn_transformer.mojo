@@ -311,13 +311,17 @@ def _write_f32(addr: Int, values: List[Float32]) raises:
     copy_f32(values.unsafe_ptr(), _f32_ptr(addr), len(values))
 
 
-def _upload_addr(
+def _upload_addr[wait: Bool = True](
     ctx: DeviceContext, addr: Int, n: Int
 ) raises -> DeviceBuffer[DType.float32]:
     """Copy a live caller buffer, synchronizing before its borrow ends.
 
     IDENTICAL uses DeviceContext's ordinary host-pointer transfer directly.
     Other modes and the diagnostic legacy flag retain pinned staging.
+    `wait=False` (lane/neural-apple, 2026-09-28; the direct path only) leaves
+    the copy in flight: the caller's array outlives the call, every reader
+    is enqueued after it on the same in-order `ctx`, and the caller waits
+    before it returns.
     """
     var p = _f32_ptr(addr)
     var n_buf = n
@@ -327,7 +331,8 @@ def _upload_addr(
     comptime if GLOBAL_NUMERIC_MODE <= NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_TRANSFORMER_LEGACY_CALLER_TRANSFER"]():
         if n > 0:
             ctx.enqueue_copy(dst_buf=dev, src_ptr=p)
-            ctx.synchronize()
+            comptime if wait:
+                ctx.synchronize()
             return dev^
     var host = ctx.enqueue_create_host_buffer[DType.float32](n_buf)
     ctx.synchronize()
@@ -418,7 +423,7 @@ def transformer_lean_stages(hd: Int) -> Bool:
     return attention_path_choice(PLANT_AT_NONE) != ATTN_PATH_EAGER
 
 
-def _load_transformer_weights(
+def _load_transformer_weights[wait: Bool = True](
     ctx: DeviceContext, dims: LlamaDims, a: List[Int],
     opts: BlockOptions = BlockOptions(), tail: List[Int] = List[Int](),
 ) raises -> LlamaDeviceWeights:
@@ -448,15 +453,15 @@ def _load_transformer_weights(
         comptime if GLOBAL_NUMERIC_MODE <= NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_TRANSFORMER_LEGACY_WEIGHT_COPY"]():
             return LlamaDeviceWeights(
                 ctx, dims, RMS_EPS,
-                _upload_addr(ctx, a[1], dm),
-                _upload_addr(ctx, a[2], dm),
-                _upload_addr(ctx, a[3], qw * dm),
-                _upload_addr(ctx, a[4], kw * dm),
-                _upload_addr(ctx, a[5], kw * dm),
-                _upload_addr(ctx, a[6], dm * qw),
-                _upload_addr(ctx, a[7], it * dm),
-                _upload_addr(ctx, a[8], it * dm),
-                _upload_addr(ctx, a[9], dm * it),
+                _upload_addr[wait](ctx, a[1], dm),
+                _upload_addr[wait](ctx, a[2], dm),
+                _upload_addr[wait](ctx, a[3], qw * dm),
+                _upload_addr[wait](ctx, a[4], kw * dm),
+                _upload_addr[wait](ctx, a[5], kw * dm),
+                _upload_addr[wait](ctx, a[6], dm * qw),
+                _upload_addr[wait](ctx, a[7], it * dm),
+                _upload_addr[wait](ctx, a[8], it * dm),
+                _upload_addr[wait](ctx, a[9], dm * it),
             )
         else:
             return LlamaDeviceWeights(
@@ -480,7 +485,7 @@ def _load_transformer_weights(
     if opts.gated():
         if a[7] == 0:
             raise Error(what + ": gate_proj.weight address is null (a gated MLP needs it)")
-        w_gate = _upload_addr(ctx, a[7], it * dm)
+        w_gate = _upload_addr[wait](ctx, a[7], it * dm)
     else:
         if a[7] != 0:
             raise Error(
@@ -490,15 +495,15 @@ def _load_transformer_weights(
         w_gate = _llama_zeros[False](ctx, 1)
     return LlamaDeviceWeights(
         ctx, dims, opts,
-        _upload_addr(ctx, a[1], dm),
-        _upload_addr(ctx, a[2], dm),
-        _upload_addr(ctx, a[3], qw * dm),
-        _upload_addr(ctx, a[4], kw * dm),
-        _upload_addr(ctx, a[5], kw * dm),
-        _upload_addr(ctx, a[6], dm * qw),
+        _upload_addr[wait](ctx, a[1], dm),
+        _upload_addr[wait](ctx, a[2], dm),
+        _upload_addr[wait](ctx, a[3], qw * dm),
+        _upload_addr[wait](ctx, a[4], kw * dm),
+        _upload_addr[wait](ctx, a[5], kw * dm),
+        _upload_addr[wait](ctx, a[6], dm * qw),
         w_gate^,
-        _upload_addr(ctx, a[8], it * dm),
-        _upload_addr(ctx, a[9], dm * it),
+        _upload_addr[wait](ctx, a[8], it * dm),
+        _upload_addr[wait](ctx, a[9], dm * it),
         _optional_upload(ctx, t[0], qw, opts.qkv_bias, "q_proj.bias", what),
         _optional_upload(ctx, t[1], kw, opts.qkv_bias, "k_proj.bias", what),
         _optional_upload(ctx, t[2], kw, opts.qkv_bias, "v_proj.bias", what),
@@ -850,7 +855,7 @@ def _transformer_run[discard_cache: Bool = False](
     # reference shape authority, and its constructor is where the weights
     # are refused non-finite ONCE, DEVIATION 1875); values arrive as
     # given bits, unjudged.
-    var w = _load_transformer_weights(ctx, dims, a, opts, _tail_of(a, 13))
+    var w = _load_transformer_weights[False](ctx, dims, a, opts, _tail_of(a, 13))
     # The caller's cache over the fresh zeros. LlamaKVCache's own
     # constructor refuses b <= 0, smax <= 0 and smax > max_positions (the
     # absolute-position ceiling, DEVIATION 812's 8192 at the default
@@ -860,8 +865,8 @@ def _transformer_run[discard_cache: Bool = False](
     _btick(ton, tk, "surface.weights_up")
     var kv = LlamaKVCache(ctx, b, dims, smax, window, opts.max_positions)
     comptime if not discard_cache:
-        kv.k = _upload_addr(ctx, a[10], cache_n)
-        kv.v = _upload_addr(ctx, a[11], cache_n)
+        kv.k = _upload_addr[False](ctx, a[10], cache_n)
+        kv.v = _upload_addr[False](ctx, a[11], cache_n)
     kv.s = s0
     # Per call, from the record (DEVIATION 795(iii) at the default record:
     # the FROZEN theta). p_max is the cache capacity: pos0 + l <= kv.s_max
@@ -871,7 +876,7 @@ def _transformer_run[discard_cache: Bool = False](
     var stages = LlamaDeviceStages(
         ctx, b, l, smax, dims, window, lean=_lean_for(hd, opts)
     )
-    var dx = _upload_addr(ctx, a[0], b * l * dm)
+    var dx = _upload_addr[False](ctx, a[0], b * l * dm)
     _btick(ton, tk, "surface.cache_stages_x_up")
 
     var trace = IdentityTrace.disabled()
@@ -888,10 +893,13 @@ def _transformer_run[discard_cache: Bool = False](
     # back to its owner whole -- the full capacity buffer, so the bytes
     # round-trip exactly whatever the used stride is.
     _btick(ton, tk, "surface.forward")
-    _download_addr(ctx, stages.residual2, b * l * dm, a[12])
+    # One wait for the three downloads (lane/neural-apple, 2026-09-28): the
+    # owners stay alive through it.
+    _download_addr[False](ctx, stages.residual2, b * l * dm, a[12])
     comptime if not discard_cache:
-        _download_addr(ctx, kv.k, cache_n, a[10])
-        _download_addr(ctx, kv.v, cache_n, a[11])
+        _download_addr[False](ctx, kv.k, cache_n, a[10])
+        _download_addr[False](ctx, kv.v, cache_n, a[11])
+    ctx.synchronize()
     _btick(ton, tk, "surface.outputs_down")
     var out_len = kv.s
     _ = w^
