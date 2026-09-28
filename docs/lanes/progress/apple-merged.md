@@ -131,3 +131,11 @@ working/1790588098954 (neural), my own superseded requests 1790604454599, 179060
   resample-bca / -unpaired / -perm-samples / -utils as covered lanes pending a reference;
   docs_facts --write refreshed the lagging host surface spans (79559ad0f). On nvc1, own tree, no
   lane run beside it: 200 passed. **CLOSED.**
+- NVIDIA nvc1-0020 (shard 2 of 3, 168 lanes, tree 7d7f6b07): 154 AGREE at CPU threads 1 and
+  default (resample-utils among them), 13 par-* CPU arms refusing by design (no CPU
+  implementation of the cooperative multi-GPU driver, or the byte LM parallel entry), and
+  pca-whiten-inverse: threads 1 AGREE, its default-thread CPU arm carried the earlier `_DYN`
+  import failure from the run beside test_host_surface. That one arm re-run alone in the same
+  tree (no lane job there): AGREE (batch, infer, model, train, 9 fixtures). **NVIDIA column
+  CLOSED: every non-par lane AGREE.**
+- Still owed: the MI300X column (central AMD box refuses ssh).
