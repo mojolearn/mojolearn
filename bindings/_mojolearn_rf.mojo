@@ -54,6 +54,13 @@ from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
 
 from max.gpu.host import DeviceBuffer, DeviceContext
+from core.neural_context import process_ctx
+from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+
+#: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
+#: lane/devctx-lifetime): a context per call exhausts Metal command queues.
+comptime _DEVCTX_SLOT = "MojoRfContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoRfContextFast"
+
 
 from ensemble.decisiontree.batched_levelalgo.bins import (
     BinScales,
@@ -397,7 +404,7 @@ def _rf_classifier_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
     var t_bind = bt.start()
     with GILReleased(Python()):
         var t_s = bt.start()
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         bt.stop_host("bind_ctx_create", t_s)
         t_s = bt.start()
         var hx = ctx.enqueue_create_host_buffer[DT](n_rows * n_cols)
@@ -568,7 +575,7 @@ def _rf_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
     var t_bind = bt.start()
     with GILReleased(Python()):
         var t_s = bt.start()
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         bt.stop_host("bind_ctx_create", t_s)
         t_s = bt.start()
         var hx = ctx.enqueue_create_host_buffer[DT](n_rows * n_cols)
@@ -885,7 +892,7 @@ def _rf_predict_gpu_parallel(
             leaves.append(leaves_p[i])
         for i in range(rows * features):
             x.append(x_p[i])
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         var result = forest_predict_gpu[True, True](
             ctx, offsets, columns, thresholds, left, leaves, x,
             rows, features, outputs,

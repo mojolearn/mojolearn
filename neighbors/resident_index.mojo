@@ -34,6 +34,13 @@ binding exports it.
 from std.ffi import _Global
 
 from max.gpu.host import DeviceBuffer, DeviceContext
+from core.neural_context import process_ctx
+from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+
+#: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
+#: lane/devctx-lifetime): a context per call exhausts Metal command queues.
+comptime _DEVCTX_SLOT = "MojoCoreContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoCoreContextFast"
+
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from neighbors.impl.selection.distance_weights import WEIGHTS_UNIFORM
@@ -70,7 +77,7 @@ struct ResidentKnnIndex(Movable):
     ) raises:
         if n_index <= 0 or n_features <= 0:
             raise Error("knn_index_prepare: n_index and n_features must be positive")
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         var index = ctx.enqueue_create_buffer[DType.float32](n_index * n_features)
         ctx.enqueue_copy(dst_buf=index, src_ptr=index_ptr)
         ctx.synchronize()

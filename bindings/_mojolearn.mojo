@@ -103,6 +103,13 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 
 from max.gpu.host import DeviceContext
+from core.neural_context import process_ctx
+from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+
+#: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
+#: lane/devctx-lifetime): a context per call exhausts Metal command queues.
+comptime _DEVCTX_SLOT = "MojoCoreContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoCoreContextFast"
+
 
 from cluster.estimator import kmeans_fit, kmeans_predict, kmeans_transform
 from neighbors.impl.detail.knn_brute_force import KNN_METHOD_AUTO
@@ -246,11 +253,12 @@ def knn_search_binding(
 
     var used: Int
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         used = knn_search(
             ctx, ip, ni, qp, nq, nf, kk, dp, xp, sq, qt, KNN_METHOD_AUTO,
             dt[0], dt[1],
         )
+        ctx.synchronize()
     return PythonObject(used)
 
 
@@ -387,11 +395,12 @@ def knn_classify_binding(
 
     var used: Int
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         used = knn_classifier_predict(
             ctx, ip, ni, qp, nq, nf, kk, yp, no, n_classes, lp, pp, up,
             want_proba, qt, dt[0], dt[1], dt[2],
         )
+        ctx.synchronize()
     return PythonObject(used)
 
 
@@ -439,10 +448,11 @@ def knn_regress_binding(
 
     var used: Int
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         used = knn_regressor_predict(
             ctx, ip, ni, qp, nq, nf, kk, yp, no, op, qt, dt[0], dt[1], dt[2]
         )
+        ctx.synchronize()
     return PythonObject(used)
 
 
@@ -605,7 +615,7 @@ def kmeans_fit_binding(
     var sum_scale = Float64(0.0)
     var weight_scale = Float64(0.0)
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         var r = kmeans_fit(
             ctx, xp, ns, nf, nc, cp, lp, wp, nw, mi, tl, sd, ninit, ii, mm,
             0.0, ovs,
@@ -614,6 +624,7 @@ def kmeans_fit_binding(
         n_iter = r.n_iter
         sum_scale = r.sum_scale
         weight_scale = r.weight_scale
+        ctx.synchronize()
 
     var out = Python.list()
     out.append(PythonObject(inertia))
@@ -650,8 +661,9 @@ def kmeans_predict_binding(
     var nc = Int(py=params[2])
     var mm = Int(py=params[3])
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         kmeans_predict(ctx, xp, ns, nf, nc, cp, lp, mm)
+        ctx.synchronize()
     return PythonObject(ns)
 
 
@@ -680,8 +692,9 @@ def kmeans_transform_binding(
     var nc = Int(py=params[2])
     var mm = Int(py=params[3])
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         kmeans_transform(ctx, xp, ns, nf, nc, cp, op, mm)
+        ctx.synchronize()
     return PythonObject(ns)
 
 
@@ -744,10 +757,11 @@ def radius_neighbors_count_binding(
 
     var nnz: Int
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         nnz = radius_neighbors_count(
             ctx, ip, ni, qp, nq, nf, rad, ap, mtr, marg
         )
+        ctx.synchronize()
     return PythonObject(nnz)
 
 
@@ -801,10 +815,11 @@ def radius_neighbors_fill_binding(
 
     var nnz: Int
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         nnz = radius_neighbors_fill(
             ctx, ip, ni, qp, nq, nf, rad, ap, xp, dp, cap, sq, mtr, marg
         )
+        ctx.synchronize()
     return PythonObject(nnz)
 
 
@@ -857,10 +872,11 @@ def rbc_knn_search_binding(
 
     var n_dists: Int
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         n_dists = rbc_knn_search(
             ctx, ip, ni, qp, nq, nf, kk, xp, dp, mtr, marg
         )
+        ctx.synchronize()
     return PythonObject(n_dists)
 
 # ===========================================================================
@@ -1905,11 +1921,12 @@ def knn_classify_neighbors_binding(
     var dt = _dist_triple(dist_params)
 
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         knn_classifier_from_neighbors(
             ctx, dp, xp, ni, nq, kk, yp, no, n_classes, lp, pp, up,
             want_proba, dt[2],
         )
+        ctx.synchronize()
     return PythonObject(0)
 
 
@@ -1940,6 +1957,7 @@ def knn_regress_neighbors_binding(
     var dt = _dist_triple(dist_params)
 
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         knn_regressor_from_neighbors(ctx, dp, xp, ni, nq, kk, yp, no, op, dt[2])
+        ctx.synchronize()
     return PythonObject(0)

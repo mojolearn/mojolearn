@@ -91,6 +91,13 @@ from std.sys.compile import is_defined
 
 from core.host_parallel import host_parallelize_pool_env
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+from core.neural_context import process_ctx
+from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+
+#: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
+#: lane/devctx-lifetime): a context per call exhausts Metal command queues.
+comptime _DEVCTX_SLOT = "MojoGbdtContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoGbdtContextFast"
+
 
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
@@ -227,7 +234,7 @@ struct ResidentGbdtModel(Movable):
         # only set the predicate each level is checked against. The
         # offsets, masks and shifts agree, and this one layout serves both.
         var layout = build_layout(tm.fold_counts, tm.one_hot)
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
 
         # the border slabs, uploaded once
         var h_borders = ctx.enqueue_create_host_buffer[DType.float32](

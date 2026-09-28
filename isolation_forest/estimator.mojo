@@ -35,6 +35,13 @@ what that costs.
 
 from std.math import fma
 from max.gpu.host import DeviceContext
+from core.neural_context import process_ctx
+from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+
+#: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
+#: lane/devctx-lifetime): a context per call exhausts Metal command queues.
+comptime _DEVCTX_SLOT = "MojoSvmContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoSvmContextFast"
+
 
 from core.identity_trace import IdentityTrace
 from isolation_forest.impl.isolation_forest import (
@@ -395,7 +402,7 @@ def iforest_run_host(
             " (score_samples), 1 (decision_function), 2 (predict)"
         )
 
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var est = IsolationForestEstimator(ctx)
     est.n_estimators = n_estimators
     est.max_samples_mode = max_samples_mode

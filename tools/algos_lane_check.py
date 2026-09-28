@@ -21,7 +21,8 @@ for each named identity lane it
   3. FITS the lane on the GPU (`--require-backend cuda|hip|metal`) and on the
      CPU through the host bindings (`MOJOLEARN_VENDOR=cpu`, `--require-cpu`),
      once each (`--repeats 1`), every fixture unless `--fixtures` narrows it.
-     A refused stage on either side is a failure (`--fail-on-refused`).
+     A refused stage on either side is a failure (`--fail-on-refused`), with
+     ONE named exception: a KNOWN CPU REFUSAL (below).
   4. DIFFS the two columns with `identity_break.py --diff --require-columns 2`
      over train, infer, model, batch and every property part both carry, and
      counts what was ACTUALLY compared. It prints AGREE only when the diff
@@ -42,6 +43,20 @@ a line with no patch, fails the check (pass 1 only notes it).
 A family's EXISTING lanes (registered in tools/identity_break.py, not by a
 fragment) join the same proof through tools/identity_lanes/<fragment>.core,
 one lane name per line: checking any of them runs that fragment's .checks.
+
+A KNOWN CPU REFUSAL (lane/devctx-lifetime, 2026-09-28). A `par-*` lane whose
+driver is the COOPERATIVE multi-GPU pool has no CPU arm by design: its shards
+are device row tiles inside the GPU binding, which no host binding restates,
+and `_parallel_pool._cpu_refusal` refuses it on every CPU run with the
+declared sentence CPU_BY_DESIGN_REFUSAL (par-gp, par-gpc-*, par-logistic on
+every Mac). Such a lane reads KNOWN REFUSAL, not a failure, ONLY when all of
+these hold: its name starts with `par-`; the CPU arm wrote its JSON; EVERY
+cell of the lane in it REFUSED and every refusal carries that sentence; and
+the GPU arm exited 0 with a real train hash on every fixture. Anything else
+(a CPU cell that hashed beside one that refused, another refusal, a GPU
+refusal, a missing fixture) is the arm failure it always was. A KNOWN REFUSAL
+compares NOTHING and is printed as such, by name, in the RESULT line; under
+`--sabotage` it is not a DISAGREE, so a sabotage run on such a lane fails.
 
 Exit 0 only when every verdict is the one required. The last line is always
 `RESULT: PASS` or `RESULT: FAIL (<why>)`.
@@ -64,6 +79,10 @@ HARNESS = ROOT / "tools" / "identity_break.py"
 #: The parts of a cell that are compared beside the train hash.
 PARTS = ("infer", "model", "batch", "rlpair", "batchgrad", "batchscale", "ragged", "stepfull")
 DISAGREEING = ("DIVERGENT", "MOVED", "RELOAD-MOVED", "BATCH_MOVED", "RLPAIR_MOVED")
+#: The declared sentence of the cooperative multi-GPU driver's CPU refusal
+#: (python/mojolearn/_parallel_pool.py `_cpu_refusal`); see KNOWN CPU REFUSAL.
+CPU_BY_DESIGN_REFUSAL = "no CPU implementation of the cooperative multi-GPU driver"
+KNOWN_REFUSAL = "KNOWN REFUSAL"
 
 
 class Fail(Exception):
@@ -321,7 +340,7 @@ def arm_env(kind):
     return env
 
 
-def run_arm(kind, lane, backend, fixtures, out, log, moved_ok=False):
+def run_arm(kind, lane, backend, fixtures, out, log, moved_ok=False, refusal_ok=False):
     """One column of one lane. `moved_ok` (the sabotaged stage only): the
     harness exits 1 when a part it compares INSIDE one column moved (a byte
     LM's sampler-vs-trainer `rlpair`, a batch part), which is exactly what a
@@ -329,7 +348,12 @@ def run_arm(kind, lane, backend, fixtures, out, log, moved_ok=False):
     within-column verdict as DISAGREE. Before 2026-09-27 the arm raised here,
     so a sabotage that bit byte-lm read as a failed GPU arm (do-amd request
     1790542457986-dedupe). A missing JSON, any other exit, or a clean or
-    restored stage still fails."""
+    restored stage still fails.
+
+    `refusal_ok` (a `par-*` lane's CPU arm only): an exit 1 with the JSON
+    written returns 1 so `known_cpu_refusal` can decide whether it is the
+    declared by-design refusal; if it is not, the caller fails the arm.
+    Returns the exit status (0, or 1 in those two cases)."""
     cmd = [sys.executable, "-u", str(HARNESS), "--lanes", lane, "--repeats", "1", "--fail-on-refused",
            "--json", str(out)]
     if fixtures:
@@ -352,10 +376,37 @@ def run_arm(kind, lane, backend, fixtures, out, log, moved_ok=False):
     if moved_ok and rc == 1 and out.is_file():
         say(f"{lane}: the {kind} arm exited 1 under the sabotage with its JSON written (a part moved "
             "inside the column); the diff decides")
-        return
+        return 1
+    if refusal_ok and rc == 1 and out.is_file():
+        return 1
     if rc or not out.is_file():
         tail = Path(log).read_text(errors="replace").splitlines()[-15:]
         raise Fail(f"{lane}: the {kind} arm failed (exit {rc}); last lines of {log}:\n    " + "\n    ".join(tail))
+    return 0
+
+
+def known_cpu_refusal(ib, lane, gpu_json, cpu_json, fixtures):
+    """(True, detail) when the lane's CPU arm is the declared by-design
+    refusal of the cooperative multi-GPU driver (see KNOWN CPU REFUSAL in the
+    module docstring), else (False, why not). Never widens: every condition
+    must hold."""
+    if not lane.startswith("par-"):
+        return False, "not a par-* lane"
+    want = fixtures.split(",") if fixtures else list(ib.FIXTURES)
+    cpu = json.loads(Path(cpu_json).read_text())["cells"]
+    gpu = json.loads(Path(gpu_json).read_text())["cells"]
+    mine = {k: c for k, c in cpu.items() if k.split("/")[0] == lane}
+    if sorted(k.split("/", 1)[1] for k in mine) != sorted(want):
+        return False, f"the CPU column carries {len(mine)} of {len(want)} fixtures"
+    for k, c in sorted(mine.items()):
+        if c.get("verdict") != "REFUSED" or CPU_BY_DESIGN_REFUSAL not in (c.get("error") or ""):
+            return False, f"{k}: {c.get('verdict')} ({(c.get('error') or '').splitlines()[:1]})"
+    for f in want:
+        c = gpu.get(f"{lane}/{f}")
+        if not c or c.get("verdict") in ("REFUSED", "MOVED", "DIVERGENT") or not c.get("hashes"):
+            return False, f"{lane}/{f}: the GPU column has no clean train hash ({c and c.get('verdict')})"
+    return True, (f"CPU arm refused every fixture by design ({CPU_BY_DESIGN_REFUSAL!r}); GPU column hashed "
+                  f"{len(want)} fixtures; NOTHING compared")
 
 
 def compare(ib, lane, gpu_json, cpu_json, fixtures, log, backend="gpu"):
@@ -567,9 +618,20 @@ def check(ib, lanes, needed, backend, fixtures, out, stage, log, pass_no=1):
     verdicts = {}
     for lane in lanes:
         gpu_json, cpu_json = out / f"{stage}.{lane}.gpu.json", out / f"{stage}.{lane}.cpu.json"
-        run_arm("gpu", lane, backend, fixtures, gpu_json, log, moved_ok=stage == "sabotaged")
-        run_arm("cpu", lane, backend, fixtures, cpu_json, log, moved_ok=stage == "sabotaged")
-        verdict, detail = compare(ib, lane, gpu_json, cpu_json, fixtures, log, backend)
+        grc = run_arm("gpu", lane, backend, fixtures, gpu_json, log, moved_ok=stage == "sabotaged")
+        crc = run_arm("cpu", lane, backend, fixtures, cpu_json, log, moved_ok=stage == "sabotaged",
+                      refusal_ok=lane.startswith("par-"))
+        known, why = (False, "")
+        if crc and not grc:
+            known, why = known_cpu_refusal(ib, lane, gpu_json, cpu_json, fixtures)
+        if known:
+            verdict, detail = KNOWN_REFUSAL, why
+        elif crc and stage != "sabotaged":
+            tail = Path(log).read_text(errors="replace").splitlines()[-15:]
+            raise Fail(f"{lane}: the cpu arm failed (exit {crc}; not the by-design refusal: {why}); last lines "
+                       f"of {log}:\n    " + "\n    ".join(tail))
+        else:
+            verdict, detail = compare(ib, lane, gpu_json, cpu_json, fixtures, log, backend)
         print(f"{stage.upper()}: {lane}: {verdict}: {detail}", flush=True)
         verdicts[lane] = verdict
     return verdicts
@@ -613,10 +675,15 @@ def main(argv=None):
             say(f"{lane} runs: {', '.join(needed[lane])}")
 
         clean = check(ib, lanes, needed, backend, a.fixtures, out, "clean", log, a.pass_no)
-        if any(v != "AGREE" for v in clean.values()):
+        if any(v not in ("AGREE", KNOWN_REFUSAL) for v in clean.values()):
             raise Fail("clean: " + ", ".join(f"{k} {v}" for k, v in clean.items() if v != "AGREE"))
         if patch is None:
-            print("RESULT: PASS (AGREE on " + ",".join(lanes) + ")")
+            agree = [k for k, v in clean.items() if v == "AGREE"]
+            known = [k for k, v in clean.items() if v == KNOWN_REFUSAL]
+            print("RESULT: PASS (" + "; ".join(
+                (["AGREE on " + ",".join(agree)] if agree else [])
+                + (["KNOWN REFUSAL, CPU arm by design, nothing compared, on " + ",".join(known)] if known else []))
+                + ")")
             return 0
 
         if not patch.is_file():

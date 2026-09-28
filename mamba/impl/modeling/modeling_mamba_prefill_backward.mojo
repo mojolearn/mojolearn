@@ -8,6 +8,13 @@ are retained unchanged. The driver and Python binding use this same pass.
 from std.memory import bitcast
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from max.gpu.host import DeviceContext
+from core.neural_context import process_ctx
+from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+
+#: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
+#: lane/devctx-lifetime): a context per call exhausts Metal command queues.
+comptime _DEVCTX_SLOT = "MojoNeuralMambaContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoNeuralMambaContextFast"
+
 
 from core.identity_trace import IdentityTrace
 from mamba.checks.mamba_backward import (
@@ -124,7 +131,7 @@ def mamba1_prefill_backward(
             raise Error("mamba1 backward: non-finite grad_output at flat index " + String(i))
     var dims = weights.dims.copy()
     var m = b * l
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var dweights = MambaDeviceWeights(ctx, weights)
     # The forward mutates its recurrent state. Backward T2 needs the state
     # entering that call, so retain a distinct zero-state allocation.

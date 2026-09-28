@@ -40,6 +40,13 @@ from std.python.bindings import PythonModuleBuilder
 from checks.vendor import COMPILED_VENDOR
 
 from max.gpu.host import DeviceContext
+from core.neural_context import process_ctx
+from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+
+#: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
+#: lane/devctx-lifetime): a context per call exhausts Metal command queues.
+comptime _DEVCTX_SLOT = "MojoSolverContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoSolverContextFast"
+
 
 from hierarchy.estimator import linkage_fit_host
 from solver.estimator import cd_fit_host, cd_predict_host
@@ -107,11 +114,12 @@ def cd_fit_binding(
     var has_sw = Int(py=params[8]) != 0
     var n_iter = 0
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         n_iter = cd_fit_host(
             ctx, xp, yp, cp, ip, nr, nc, fit_intercept, epochs, alpha,
             l1_ratio, tol, shuffle, has_sw,
         )
+        ctx.synchronize()
     return PythonObject(n_iter)
 
 
@@ -144,8 +152,9 @@ def cd_predict_binding(
     var nc = Int(py=params[1])
     var intercept = Float32(Float64(py=params[2]))
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         cd_predict_host(ctx, xp, cp, op, nr, nc, intercept)
+        ctx.synchronize()
     return PythonObject(0)
 
 
@@ -201,10 +210,11 @@ def linkage_fit_binding(
     var use_knn = Int(py=params[4]) != 0
     var rounds = 0
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         rounds = linkage_fit_host(
             ctx, xp, chp, lp, ip, nr, nc, k, metric, use_knn,
         )
+        ctx.synchronize()
     return PythonObject(rounds)
 
 

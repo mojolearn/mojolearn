@@ -45,6 +45,13 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import shared_class_counts_mask
 
 from max.gpu.host import DeviceContext
+from core.neural_context import process_ctx
+from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+
+#: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
+#: lane/devctx-lifetime): a context per call exhausts Metal command queues.
+comptime _DEVCTX_SLOT = "MojoTreesContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoTreesContextFast"
+
 
 from extratrees.estimator import (
     ExtraTreesConfig,
@@ -358,11 +365,12 @@ def _et_classifier_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
 
     var result: FitResult
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         result = fit_extra_trees_classifier_device(
             ctx, x, y, Int32(n_rows), Int32(n_features), Int32(n_classes),
             config, x_addr=x_pointer, x_row_major=ROWMAJOR, tree_start=tree_start,
         )
+        ctx.synchronize()
     times.stop_host("boundary_device_fit_and_context", stamp)
     stamp = times.start()
     var output: PythonObject
@@ -438,11 +446,12 @@ def _et_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
 
     var result: FitResult
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         result = fit_extra_trees_regressor_device(
             ctx, x, y, Int32(n_rows), Int32(n_features), config,
             x_addr=x_pointer, x_row_major=ROWMAJOR, tree_start=tree_start,
         )
+        ctx.synchronize()
     times.stop_host("boundary_device_fit_and_context", stamp)
     stamp = times.start()
     var output: PythonObject
@@ -580,7 +589,7 @@ def et_predict_gpu_parallel_binding(
             leaves.append(leaves_p[i])
         for i in range(rows * features):
             x.append(x_p[i])
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         var result = forest_predict_gpu[False, True](
             ctx, offsets, columns, thresholds, left, leaves, x,
             rows, features, outputs,
