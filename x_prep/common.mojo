@@ -56,7 +56,7 @@ def st(f: FP, i: Int, v: Float32):
 
 
 #: rows a serial column fold loads at once (`run_block`).
-comptime RUN = 16
+comptime RUN = 64
 
 
 @always_inline
