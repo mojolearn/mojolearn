@@ -72,6 +72,15 @@ arrays, the gradient arrays included).
    stride, no pad/dilation) the one visited window's step directly
    (`-D MOJOLEARN_XCNN_NO_POOL_BWD_TILE`; x_cnn/ops.mojo, host twin too).
 11. d6e3cbd4a merge of origin/lane/apple-merged (no file in common).
+12. 209bdc3b4 GCNConv/SAGEConv reuse the graph built for the same content
+   key (n, edge_index bytes, edge_weight bytes, flags); DC_MAXW 2048.
+13. df6386e7d BatchNorm per-channel folds through threadgroup memory (one
+   threadgroup per channel; thread 0 folds in the same order;
+   `-D MOJOLEARN_XCNN_NO_BN_BLOCK`). The mean's image order now reads
+   `bn_mean_row` (x_cnn/ops.mojo) on host and device, and
+   x_cnn/checks/sabotage/seam_5702_bn_fold_order.patch is REGENERATED to
+   reverse it there (applies; bites both columns as before, UNPROVEN until
+   the combined run).
 
 Every x_cnn sabotage patch still applies (`git apply --check`, 23 of 23);
 none touches a line these changes replaced.
