@@ -143,3 +143,12 @@ Same arms as the M3 Ultra table (10 RF columns per pass in both arms; 2031 alrea
 | iforest:taxi | 69 | 70 | 1.013 | 96ff7aa1dfcef11e |
 | rf:taxi | 6283 | 5632 | 0.896 | 452a173087f86a9d |
 | rf:taxireg | 16722 | 10239 | 0.612 | 58ec783b7afbd7a7 |
+
+## Later single-change A/Bs (IDENTICAL)
+
+| change | Mac | steward id | cell | before | after | after/before | digest |
+|---|---|---|---|---|---|---|---|
+| non-symmetric ridx gated to <= 64 features (ef756d960) | m4pro-a | 1790613700948 | depthwise taxi | 1768 | 1683 | 0.952 | 5694af7699036c65 |
+| same | m4pro-a | 1790613700948 | depthwise istella | 3547 | 3542 | 0.999 | e9c0f7e913af5a8a |
+| same | m4pro-a | 1790613700948 | lossguide istella | 5938 | 5912 | 0.996 | eb0d9510ee08a16f |
+| 2031 sym ridx IDENTICAL (bfc552c67) | m4pro-b | 1790609413669 | symmetric taxi | 966 | 872 | 0.903 | 8e760782efae56c8 |
