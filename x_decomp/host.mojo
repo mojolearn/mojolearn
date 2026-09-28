@@ -8,7 +8,7 @@ from std.sys.compile import is_defined
 
 from decomposition.checks.jacobi_eigh_device import JACOBI_SWEEPS, JACOBI_TOL
 from decomposition.host.linalg_public import host_eigh, host_qr_r
-from decomposition.host.pca_full_oracle import host_one_sided_jacobi_svd, host_qr_factor
+from decomposition.host.pca_full_oracle import host_one_sided_jacobi_svd
 from x_decomp.cells import (
     F32Ptr,
     absmax_sign_cell,
@@ -39,6 +39,7 @@ from x_decomp.cells import (
     pdist_cell,
 )
 from x_decomp.exec_trait import Exec
+from x_decomp.host_qr import fast_qr_finish, qr_slice, qr_slices
 from x_decomp.host_graph import EdgeList, dijkstra_heap_row
 from x_decomp.host_simd import (
     gemm_fold_rows,
@@ -96,6 +97,31 @@ struct HostExec(Exec):
             for i in range(m):
                 gemm_fold_rows(i, c, pp, m, n, nb)
         _ = part^
+
+    @staticmethod
+    def _qr_r(a: F32Ptr, m: Int, n: Int) raises -> List[Float32]:
+        """`host_qr_r(a, m, n)`'s R (a is not modified): the slices of
+        x_decomp/host_qr.mojo as tasks, then the stacked R's once more."""
+        var work = List[Float32](capacity=m * n)
+        for t in range(m * n):
+            work.append(a.unsafe_load(t))
+        if m < 1 or n < 1 or n > 46340 or m < n:
+            return host_qr_r(work, m, n)  # refuses the shape, by name
+        var pw = F32Ptr(unsafe_from_address=Int(work.unsafe_ptr()))
+        var ns = qr_slices(m, n)
+        var r = List[Float32](length=n * n, fill=Float32(0))
+        var pr = F32Ptr(unsafe_from_address=Int(r.unsafe_ptr()))
+        if ns == 1:
+            qr_slice(pw, pr, m, n, 1, 0)
+        else:
+            var scratch = List[Float32](length=ns * n * n, fill=Float32(0))
+            var ps = F32Ptr(unsafe_from_address=Int(scratch.unsafe_ptr()))
+            for b in range(ns):
+                qr_slice(pw, ps, m, n, ns, b)
+            fast_qr_finish(ps, pr, ns, n)
+            _ = scratch^
+        _ = work^
+        return r^
 
     @staticmethod
     def ew(
@@ -191,7 +217,7 @@ struct HostExec(Exec):
             var w = List[Float32](capacity=m * l)
             for t in range(m * l):
                 w.append(a.unsafe_load(t))
-            var r = host_qr_r(w, m, l)
+            var r = HostExec._qr_r(F32Ptr(unsafe_from_address=Int(w.unsafe_ptr())), m, l)
             var pr = F32Ptr(unsafe_from_address=Int(r.unsafe_ptr()))
             orth_rank_guard(pr, l)
             for i in range(m):
@@ -204,10 +230,7 @@ struct HostExec(Exec):
         """PCA(svd_solver='full')'s tall route: Householder QR of a (m x n,
         m >= n), then the one-sided Jacobi SVD of R. Unordered values, V in
         columns: the host replay of DevExec.svd."""
-        var work = List[Float32](capacity=m * n)
-        for i in range(m * n):
-            work.append(a.unsafe_load(i))
-        var r = host_qr_factor(work, m, n)
+        var r = HostExec._qr_r(a, m, n)
         var got = host_one_sided_jacobi_svd(r, n, X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL)
         if not got.converged:
             raise Error("x_decomp svd: the one-sided Jacobi SVD did not converge")
@@ -275,10 +298,7 @@ struct HostExec(Exec):
 
     @staticmethod
     def qr_r(a: F32Ptr, m: Int, n: Int, r: F32Ptr) raises:
-        var w = List[Float32](capacity=m * n)
-        for t in range(m * n):
-            w.append(a.unsafe_load(t))
-        var got = host_qr_r(w, m, n)
+        var got = HostExec._qr_r(a, m, n)
         for t in range(n * n):
             r.unsafe_store(t, got[t])
 

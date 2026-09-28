@@ -19,7 +19,9 @@ from x_decomp.checks.seam_util import (
     seam_fixture,
     zeros,
 )
+from decomposition.host.pca_full_oracle import host_qr_factor
 from x_decomp.device import DevExec
+from x_decomp.host_qr import fast_qr_factor
 from x_decomp.host import HostExec
 
 
@@ -60,6 +62,18 @@ def spd(n: Int) -> List[Float32]:
 def main() raises:
     var tr = IdentityTrace()
     tr.header("x_decomp dense_check (DEVIATIONS 5307-5309)")
+    # ---- the host's fast Householder QR (x_decomp/host_qr.mojo) == the
+    # replay of the device kernel it serves for (host_qr_factor), bit for bit:
+    # one slice, many slices, column counts around the SIMD width
+    var shapes = [37, 9, 5000, 13, 3000, 19, 700, 40, 64, 64]
+    for sh in range(len(shapes) // 2):
+        var qm = shapes[2 * sh]
+        var qn = shapes[2 * sh + 1]
+        var qa = seam_fixture(qm, qn, UInt64(60 + sh))
+        var qa2 = qa.copy()
+        var want_r = host_qr_factor(qa2, qm, qn)
+        var got_r = fast_qr_factor(ptr(qa), qm, qn)
+        same("host QR slices " + String(qm) + " x " + String(qn), count_diff_f32(got_r, want_r))
     # ---- 5307 the pivot
     var n = 9
     var a = tie_matrix(n)
