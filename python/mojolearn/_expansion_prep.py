@@ -2112,7 +2112,9 @@ class QuadraticDiscriminantAnalysis(_Classifier):
         reg = pr.put_scalar(0.0 if eigen else self.reg_param)
         rot, logc, s2 = pr.alloc(K * d * d), pr.alloc(K), pr.alloc(K * d)
         var = pr.alloc(K * d) if shr is not None else _NONE
-        pr.stage("class_stats", K * d, xo, n, d, yo, K, cnt, mean, var, _NONE)
+        # the trailing 1: FAST keeps row-order class sums here (the tree sums did not pass
+        # QuadraticDiscriminantAnalysis' paired quality check, docs/lanes/progress/prep-apple.md)
+        pr.stage("class_stats", K * d, xo, n, d, yo, K, cnt, mean, var, _NONE, 1)
         gflag, gofs = 0, 0
         if self.priors is not None:
             gflag, gofs = 1, pr.put_list(_given_priors(self.priors, K, "QuadraticDiscriminantAnalysis"))
