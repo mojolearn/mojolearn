@@ -104,6 +104,18 @@ def main() raises:
         var hst = zeros(hm * hn)
         HostExec.gemm(ptr(A), ptr(B), ptr(hst), hm, hk, hn, ta, tb)
         same("5300 host-tile gemm host arm " + String(arm), count_diff_f32(hst, want))
+    # a narrow C (n 1, the matrix-vector products), which the host computes as C^T
+    var nv = seam_fixture(hk, 1, 39)
+    var nvt = seam_fixture(1, hk, 40)
+    for arm in range(4):
+        var ta = arm == 1 or arm == 3
+        var tb = arm >= 2
+        var A = hat.copy() if ta else ha.copy()
+        var B = nvt.copy() if tb else nv.copy()
+        var want = oracle_gemm(A, B, hm, hk, 1, ta, tb)
+        var hst = zeros(hm)
+        HostExec.gemm(ptr(A), ptr(B), ptr(hst), hm, hk, 1, ta, tb)
+        same("5300 host-tile narrow gemm host arm " + String(arm), count_diff_f32(hst, want))
     var tbk = 9000
     var tba = seam_fixture(hm, tbk, 35)
     var tbb = seam_fixture(tbk, 19, 36)

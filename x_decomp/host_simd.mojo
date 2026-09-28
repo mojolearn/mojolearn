@@ -71,6 +71,14 @@ def _ftz1(x: Float32) -> Float32:
 
 
 # ------------------------------------------------------------------ gemm
+def gemm_swapped(m: Int, n: Int) -> Bool:
+    """True when C^T wastes fewer padded lanes than C (a narrow C): a
+    function of the shape only."""
+    var direct = ceildiv(m, MR) * MR * ceildiv(n, NR) * NR
+    var swapped = ceildiv(n, MR) * MR * ceildiv(m, NR) * NR
+    return swapped < direct
+
+
 def gemm_task_count(m: Int, k: Int) -> Int:
     return ceildiv(k, FOLD_BLOCK) * ceildiv(m, MC)
 

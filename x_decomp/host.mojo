@@ -43,6 +43,7 @@ from x_decomp.exec_trait import Exec
 from x_decomp.host_simd import (
     gemm_fold_rows,
     gemm_prepare,
+    gemm_swapped,
     gemm_task,
     gemm_task_count,
     sqdist_prepare,
@@ -58,6 +59,28 @@ struct HostExec(Exec):
     @staticmethod
     def gemm(a: F32Ptr, b: F32Ptr, c: F32Ptr, m: Int, k: Int, n: Int, ta: Bool, tb: Bool) raises:
         # the cell's arithmetic and order, SIMD across outputs (x_decomp/host_simd.mojo)
+        if gemm_swapped(m, n):
+            # a narrow C (a matrix-vector product): C^T = op(B)^T op(A)^T fills
+            # the vector lanes; each output's chain is the same (fma(x, y, acc)
+            # == fma(y, x, acc) exactly), then C^T is transposed back
+            var ct = List[Float32](length=m * n, fill=Float32(0))
+            var pct = F32Ptr(unsafe_from_address=Int(ct.unsafe_ptr()))
+            HostExec._gemm_simd(b, a, pct, n, k, m, not tb, not ta)
+            for i in range(m):
+                for j in range(n):
+                    c.unsafe_store(i * n + j, pct.unsafe_load(j * m + i))
+            _ = ct^
+        else:
+            HostExec._gemm_simd(a, b, c, m, k, n, ta, tb)
+        comptime if X_DECOMP_HOST_SABOTAGE:
+            # the gate's negative control (-D MOJOLEARN_HOST_SABOTAGE=1):
+            # the host column's every product moves by one unit in the
+            # last place; the GPU binding never defines it
+            for t in range(m * n):
+                c.unsafe_store(t, bitcast[DType.float32](bitcast[DType.uint32](c.unsafe_load(t)) ^ UInt32(1)))
+
+    @staticmethod
+    def _gemm_simd(a: F32Ptr, b: F32Ptr, c: F32Ptr, m: Int, k: Int, n: Int, ta: Bool, tb: Bool):
         var nb = (k + FOLD_BLOCK - 1) // FOLD_BLOCK
         var part = gemm_prepare(c, m, k, n)
         var pp = F32Ptr(unsafe_from_address=Int(part.unsafe_ptr()))
@@ -67,12 +90,6 @@ struct HostExec(Exec):
             for i in range(m):
                 gemm_fold_rows(i, c, pp, m, n, nb)
         _ = part^
-        comptime if X_DECOMP_HOST_SABOTAGE:
-            # the gate's negative control (-D MOJOLEARN_HOST_SABOTAGE=1):
-            # the host column's every product moves by one unit in the
-            # last place; the GPU binding never defines it
-            for t in range(m * n):
-                c.unsafe_store(t, bitcast[DType.float32](bitcast[DType.uint32](c.unsafe_load(t)) ^ UInt32(1)))
 
     @staticmethod
     def ew(
