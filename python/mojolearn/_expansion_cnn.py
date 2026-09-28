@@ -698,6 +698,9 @@ class CNNClassifier(_Layer):
                     self._rw[id(layer)] = (hp[i], hp[i + 1], hg[i], hg[i + 1])
             a = self._resident(R, cap, save=True)
             sizes = [int(getattr(layer, attr).size) for layer, attr, _ in params]
+            # the list forms (one optimizer call, one gather per step) on the
+            # GPU binding only: the host twin's list forms are unmeasured
+            lists = (not _LEGACY_STEP) and str(b.x_cnn_vendor()) != "cpu"
             # the whole X and its labels resident once when they fit a GiB:
             # each step then gathers its rows on the binding's side (a word
             # copy) instead of uploading them
@@ -716,7 +719,7 @@ class CNNClassifier(_Layer):
                     m = len(idx)
                     if whole:
                         rows = np.ascontiguousarray(idx, dtype=np.int32)
-                        if _LEGACY_STEP:
+                        if not lists:
                             b.x_cnn_res_gather(a["x"], xall, rows.ctypes.data, [m, row])
                             b.x_cnn_res_gather(a["y"], yall, rows.ctypes.data, [m, 1])
                         else:
@@ -739,7 +742,7 @@ class CNNClassifier(_Layer):
                         b.x_cnn_conv_block_backward_r(src, w_, b_, a["gout"][j], a["idx"][j],
                                                       [dx, gw_, gb_] + a["saved"][j], prm, pprm)
                     step += 1
-                    if not _LEGACY_STEP:
+                    if lists:
                         # every parameter in one binding call, the same launches in the same order
                         if self.optimizer == "sgd":
                             b.x_cnn_sgd_r(hp, hg, hbuf, sizes,
@@ -749,7 +752,7 @@ class CNNClassifier(_Layer):
                             b.x_cnn_adam_r(hp, hg, hbuf, sizes, _adam_hyper(step, self.learning_rate, self.betas,
                                                                             self.eps, self.weight_decay,
                                                                             self.optimizer == "adamw"))
-                    for (layer, attr, _), p_, g_, buf in zip(params, hp, hg, hbuf) if _LEGACY_STEP else ():
+                    for (layer, attr, _), p_, g_, buf in zip(params, hp, hg, hbuf) if not lists else ():
                         size = getattr(layer, attr).size
                         if self.optimizer == "sgd":
                             b.x_cnn_sgd_r(p_, g_, buf, [size],
