@@ -13,7 +13,7 @@ digests, byte LM final witness and loss digests).
 
 | steward id | Mac | commit | what |
 |---|---|---|---|
-| 1790611567835 | m4pro-a | a2c1420ef | A/B base=35d08f9ca vs new=a2c1420ef (samba-train-step, samba-forward, mamba3-forward, lm-train-step, lm-forward, transformer-forward, gemm; 2 alternations) + byte LM T3 step A/B (2 alternations, witness + loss digests) + GEMM small-tile window check on the M4 Pro (default, SMALL_KB 16, no small tile) |
+| 1790611567835 | m4pro-a | cd59badeb | A/B base=35d08f9ca vs new=cd59badeb (samba-train-step, samba-forward, mamba3-forward, lm-train-step, lm-forward, transformer-forward, gemm; 2 alternations) + byte LM step A/B at T3 (denied on 48 GB: round 3 word) and at B1 12L (granted: estash word), 2 alternations each, witness + loss digests + GEMM small-tile window check on the M4 Pro (default, SMALL_KB 16, no small tile) |
 | 1790603073363 | m3ultra-b | 35d08f9ca | profile (every bench lane, T3 shard step, census with attention per-kernel timers; the M3 Ultra grants the estash word at T3, so the recompute change below cannot run there), Samba train step cProfile, attention arms at T3 (granted, FORCE_DENY + NO_ERECOMP = the old denied path, FORCE_DENY = recompute), GEMM geometry sweep (default, KB_WIDE 32, GROUP_M 16, DB, KB_WIDE 32 x SGM 4, no small tile, SPLIT 2048, SPLIT 4096, SPLIT 2048 x KB_WIDE 32), mamba1/mamba2/transformer forward A/B b11745d8e vs 30497d57e vs ca692c7e2 |
 
 ## Changes
@@ -26,6 +26,7 @@ digests, byte LM final witness and loss digests).
 | 35d08f9ca | Apple matrix GEMM: leaf-group split (`-D MOJOLEARN_APPLE_MMA_SPLIT_BLOCKS=<n>`; power-of-two leaf groups aligned at leaf 0, group nodes folded by `_ksplit_fold_launch`) | opt-in arm | hashes equal; head_dA 179 -> 124 ms but no better than the small-tile KB 32 default overall; stays an arm |
 | 68077a9d9 | Mamba-1/2/3 backward bindings: the binding's process-lifetime context (`neural_ctx`) instead of a fresh `DeviceContext()` per call (a new Metal queue and pipeline compiles on every call) | DEFAULT | measuring (job 2) |
 | 0678acea6 | Mamba-3 backward: scratch allocations without a wait each | DEFAULT | measuring (job 2) |
+| 691144783 | Apple attention matrix kernels: the estash zdot drops the barrier after warp 0's z fold; the forward's pass 2 alternates its exp tile between two pages and drops the barrier after the denominator fold (`-D MOJOLEARN_ATTN_ZDOT_AMMA_FOLD_BARRIER`, `-D MOJOLEARN_ATTN_FWD_AMMA_P2_BARRIER` restore) | DEFAULT | measuring (job 2) |
 | 815db5956 | Apple attention: a process DENIED the kept exp stashes recomputes one layer's stash in the backward (estash forward into scratch + estash backward) instead of the round 3 zdot | opt-in since 07b658ab3 (`-D MOJOLEARN_ATTN_APPLE_ERECOMP`) | REJECTED as a default: witness equal but 3.619 s vs 3.537 s (round 3 backward) at T3 on the M3 Ultra |
 
 Shared code note: the GEMM arms touch `gemm/checks/gemm_identical.mojo`
