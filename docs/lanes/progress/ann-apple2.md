@@ -182,3 +182,38 @@ Same digests. t-SNE at 64 rows per threadgroup: iterations 1040 -> 1052 ms
 fit 0.803 -> 0.78 s, but a 10k-row t-SNE would get 40 threadgroups on the
 M3 Ultra's 60 cores; not taken. Both reverted (49eac101e: x_ann identical to
 da79ccc8f, the commit of the final M3 Ultra job).
+
+### FINAL RUN: m3ultra-b (Apple M3 Ultra), steward 1790613110335, lane/apple-merged 7483efa40 -> da79ccc8f
+
+The whole lane against the tip of lane/apple-merged it was merged with, one
+job, arms alternated, three runs per cell (two reps + the stage pass).
+Digests equal before and after in EVERY cell of BOTH tiers. Raw:
+`~/mojolearn-evidence/ann-apple2/final_m3ultra-b_1790613110335.txt`.
+
+| cell (s) | IDENTICAL before | IDENTICAL after | FAST before | FAST after | digests (IDENTICAL; FAST) |
+|---|---|---|---|---|---|
+| IVF-Flat fit | 1.356/1.343/1.351 | 1.442/1.174/1.175 | 1.011/0.603/0.583 | 0.921/0.597/0.590 | d730b8082a1cdbfb; 9993cf743da23b77 |
+| IVF-Flat search | 0.116/0.064/0.064 | 0.095/0.064/0.064 | 0.094/0.064/0.064 | 0.065/0.065/0.065 | |
+| IVF-PQ fit | 4.245/4.134/4.255 | 3.950/3.559/3.549 | 2.169/2.002/1.965 | 1.776/1.755/1.741 | 6bb7a6c5fc753846; 3c7316861c03b6a0 |
+| IVF-PQ search | 0.313/0.314/0.313 | 0.090/0.029/0.035 | 0.347/0.320/0.320 | 0.083/0.029/0.034 | 3b1e0c1ae73444eb; 4ace8e5f668db63d |
+| IVF-SQ fit | 1.541/1.526/1.534 | 1.221/1.203/1.190 | 0.787/0.783/0.769 | 0.605/0.619/0.598 | c55eedfcb6459d7b; 18180f0ab783f874 |
+| IVF-SQ search | 0.318/0.324/0.318 | 0.040/0.035/0.040 | 0.329/0.324/0.326 | 0.039/0.035/0.040 | 1d9c53fd8c13f452; 4cad0bd4e7a37a4d |
+| IVF-RaBitQ fit | 1.315/1.305/1.314 | 1.137/1.127/1.107 | 0.563/0.555/0.550 | 0.519/0.532/0.519 | a4f2343eb268b0a7; 6b6e86a5d3108cdd |
+| IVF-RaBitQ search | 0.300/0.300/0.300 | 0.043/0.019/0.023 | 0.323/0.310/0.310 | 0.032/0.018/0.023 | 056a570709713477; a69552b2898d1871 |
+| refine (IVF-PQ top-40 search + refine) | 0.358/0.357/0.357 | 0.054/0.054/0.059 | 0.370/0.368/0.365 | 0.053/0.053/0.059 | 3c73bf8ae59e47e4; 818dcdc7e08c674d |
+| CAGRA fit (50k) | 0.338/0.342/0.334 | 0.212/0.190/0.188 | 0.256/0.245/0.238 | 0.169/0.147/0.150 | 54d696296c9c7c8a / 45e435db03654b4e (both tiers) |
+| t-SNE fit (10k, 300 it) | 0.824/0.816/0.817 | 0.991/0.854/0.849 | 0.633/0.624/0.614 | 0.697/0.682/0.683 | 2bb1d3d75ffa1885; ca01838ecfb9306d |
+
+Stages (ms, IDENTICAL before -> after): IVF-PQ build coarse 2545 -> 2164
+and codebooks 5202 -> 4624 (cluster/ k-means, moved only by the Apple ftz
+spelling), residuals 453 -> 142, encode 261 -> 116; IVF-SQ encode 211 ->
+58; CAGRA k-NN + download + prune 218 + 17 + 64 -> k-NN + device prune
+176, reverse merge 32 -> 10; t-SNE symmetrize 118 -> 39, k-NN 30 -> 24,
+BUT t-SNE iterations 656 -> 773 (FAST 472 -> 621). The M4 and M4 Pro
+never showed this (A/B 2: 854 -> 704; A/B 3: 1303 -> 1020; FAST flat), and
+FAST's repulsion kernels are the same statements as before. A probe job
+(1790615052905: arms with the t-SNE device driver and the repulsion terms
+put back to 7483efa40) is queued on m3ultra-b to find it.
+
+After the scan work the M3 Ultra's IVF search is select 19 ms + score 11
+ms + probe 4 ms per search (the partial top-k join is one thread per query).
