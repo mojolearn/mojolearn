@@ -127,6 +127,7 @@ from kernel_methods.impl.kernel_ridge.kernel_ridge import (
     kernel_ridge_workspace_floats,
 )
 from checks.numerics import ftz, identical_div, identical_sqrt
+from checks.numerics import identical_cos, identical_mul, identical_mul_add
 from checks.numerics import NUMERIC_FAST as _NUMERIC_FAST
 from std.sys.info import has_apple_gpu_accelerator
 from svm.impl.svm_parameter import KernelParams
@@ -147,6 +148,49 @@ comptime NYS_HOST_EIGH = (
     and is_defined["MOJOLEARN_NYS_HOST_EIGH"]()
 )
 comptime NYS_HOST_EIGH_SWEEPS = 60
+
+#: lane neighbors-apple3 (2026-09-28), FAST on Apple, OPT-IN until its A/B
+#: and quality check pass (`-D MOJOLEARN_RBF_FUSED`): RBFSampler.transform
+#: as ONE kernel per cell, the projection (features ascending), the offset,
+#: the cosine and the scale, when X has at most RBF_FUSED_MAX_D features.
+#: The projection is 8 products a cell at the board's shape; forming it as
+#: a matrix product first writes and reads the n x n_components matrix once
+#: more (gemm 93 ms + epilogue 92 ms of the transform at 1M x 500, M4 Pro).
+comptime RBF_FUSED = (
+    _CTX_MODE == _NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_RBF_FUSED"]()
+)
+comptime RBF_FUSED_MAX_D = 64
+comptime RBF_FUSED_TPB = 256
+
+
+def rbf_fused_transform_kernel(
+    out: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    w: MutPointer[Float32, MutAnyOrigin],
+    b_in: MutPointer[Float32, MutAnyOrigin],
+    n_rows_in: Int32,
+    n_features_in: Int32,
+    n_components_in: Int32,
+    scale: Float32,
+):
+    """`sqrt(2/D) * cos(X @ W + b)`, one thread per cell: the projection as
+    one chain over the features ascending, then
+    `feature_map_epilogue_kernel`'s statements."""
+    var d = Int(n_features_in)
+    var dd = Int(n_components_in)
+    var total = Int(n_rows_in) * dd
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= total:
+        return
+    var i = t // dd
+    var j = t - i * dd
+    var acc = Float32(0.0)
+    for f in range(d):
+        acc = ftz(identical_mul_add(ftz(x.unsafe_load(i * d + f)), ftz(w.unsafe_load(f * dd + j)), acc))
+    var shifted = ftz(acc + ftz(b_in.unsafe_load(j)))
+    out.unsafe_store(t, ftz(identical_mul(identical_cos(shifted), scale)))
 
 
 # ===========================================================================
@@ -1443,13 +1487,25 @@ def rbf_sampler_transform_host_into[out_origin: MutOrigin, //](
     )
     ctx.synchronize()
     var t1 = Int(perf_counter_ns())
-    identical_gemm_into(ctx, dp, dx, dw, gws, n_rows, dd, d, OP_NN)
+    var fused = False
+    comptime if RBF_FUSED:
+        fused = d <= RBF_FUSED_MAX_D and sabotage == KMSAB_NONE and n_rows * dd > 0
+        if fused:
+            ctx.enqueue_function[rbf_fused_transform_kernel](
+                dp.unsafe_ptr(), dx.unsafe_ptr(), dw.unsafe_ptr(), db.unsafe_ptr(),
+                Int32(n_rows), Int32(d), Int32(dd), model.scale,
+                grid_dim=((n_rows * dd + RBF_FUSED_TPB - 1) // RBF_FUSED_TPB, 1, 1),
+                block_dim=(RBF_FUSED_TPB, 1, 1),
+            )
+    if not fused:
+        identical_gemm_into(ctx, dp, dx, dw, gws, n_rows, dd, d, OP_NN)
     ctx.synchronize()
     var t2 = Int(perf_counter_ns())
     trace.record_device(ctx, "rf.projection", dp, n_rows * dd)
-    km_feature_map_epilogue(
-        ctx, dp, db, n_rows, dd, model.scale, tpb, sabotage
-    )
+    if not fused:
+        km_feature_map_epilogue(
+            ctx, dp, db, n_rows, dd, model.scale, tpb, sabotage
+        )
     ctx.synchronize()
     var t3 = Int(perf_counter_ns())
     trace.record_device(ctx, "rf.feature_map", dp, n_rows * dd)
