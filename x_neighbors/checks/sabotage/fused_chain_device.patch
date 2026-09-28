@@ -1,0 +1,13 @@
+diff --git a/x_neighbors/iter_device.mojo b/x_neighbors/iter_device.mojo
+index 0305468df..25cd30e63 100644
+--- a/x_neighbors/iter_device.mojo
++++ b/x_neighbors/iter_device.mojo
+@@ -810,7 +810,7 @@ def matmul_tn_acc_kernel(a: FP, b: FP, res: FP, rows_: Int64, n_: Int64, m_: Int
+ 
+ 
+ def _fused_sabotage(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], count: Int) raises:
+-    comptime if is_defined["MOJOLEARN_XN_FUSED_SABOTAGE"]():
++    comptime if True:  # SABOTAGE (py-dn-kern fused device chains)
+         if count > 0:
+             var h = ctx.enqueue_create_host_buffer[DType.float32](1)
+             var sub = buf.create_sub_buffer[DType.float32](0, 1)

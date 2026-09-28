@@ -1704,6 +1704,7 @@ FAMILIES = (
         host_modules=(
             "core/knn_host_predict.mojo", "bindings/host_helpers.mojo",
             "cluster/host/kmeans_oracle.mojo", "bindings/hotpath_helpers.mojo",
+            "core/dense_coo.mojo",
         ),
         exports=(
             "core_host_numeric_mode", "core_host_vendor", "core_host_column",
@@ -1724,6 +1725,9 @@ FAMILIES = (
             "encode_labels_i64", "encode_labels_u32", "encode_labels_u8",
             "gather_i32", "check_indices_i64", "indices_overlap_i64",
             "fold_ids", "select_fold_i64",
+            # lane/py-dn-kern (2026-09-28): the spectral routes' float32
+            # dense-to-COO scan and precomputed kNN affinity (core/dense_coo.mojo)
+            "nonzero_f32_count", "nonzero_f32_fill", "knn_affinity_f32",
         ),
         gate="tools/classical_host_gate.py (cpu-identity-gate.yml)",
         wheel_note=(

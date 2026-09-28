@@ -915,25 +915,28 @@ class SpectralClustering:
 class _DenseCOO:
     """A dense float32 matrix (`_expansion_decomp._M`) as the duck-typed COO
     `_coo_triples` reads: row-major order, exact zeros dropped (what
-    `sp.coo_matrix(dense)` keeps). Pure data movement, so the rbf route needs
-    no base-binding helper and runs on a CPU-only install."""
+    `sp.coo_matrix(dense)` keeps), -0.0 a zero and NaN kept. The scan is the
+    base binding's `nonzero_f32_count` / `nonzero_f32_fill`
+    (core/dense_coo.mojo, lane/py-dn-kern 2026-09-28; its CPU route is the
+    core host binding), which replaced a Python n^2 loop making the same
+    `v != 0.0` test on the same float32 values (DEVIATION 2489's float32
+    twin). Pure data movement."""
 
     def __init__(self, m):
-        import array as _array
-        from ._buffer import frombytes
-        rows, cols, vals = _array.array("i"), _array.array("i"), _array.array("f")
-        for i in range(m.r):
-            base = i * m.c
-            for j in range(m.c):
-                v = m.s[base + j]
-                if v != 0.0:
-                    rows.append(i)
-                    cols.append(j)
-                    vals.append(v)
-        self.shape = (m.r, m.c)
-        self.row = frombytes(rows.tobytes(), "<i4", (len(rows),))
-        self.col = frombytes(cols.tobytes(), "<i4", (len(cols),))
-        self.data = frombytes(vals.tobytes(), "<f4", (len(vals),))
+        n_r, n_c = m.r, m.c
+        src = m.addr
+        nnz = int(_native("nonzero_f32_count")(src, n_r * n_c)) if n_r * n_c else 0
+        self.shape = (n_r, n_c)
+        self.row = empty((nnz,), "<i4")
+        self.col = empty((nnz,), "<i4")
+        self.data = empty((nnz,), "<f4")
+        if nnz:
+            wrote = int(_native("nonzero_f32_fill")(
+                src, n_r, n_c,
+                [addr(self.row, name="rows"), addr(self.col, name="cols"), addr(self.data, name="vals")],
+                nnz))
+            if wrote != nnz:
+                raise RuntimeError(f"mojolearn: nonzero_f32_fill wrote {wrote} of {nnz} entries")
 
     def tocoo(self):
         return self
@@ -1173,31 +1176,43 @@ class SpectralEmbedding:
             n = int(coo.shape[0])
             if tuple(coo.shape) != (n, n):
                 raise ValueError("mojolearn SpectralEmbedding: the precomputed distance graph must be square")
-            per = [[] for _ in range(n)]
-            for r, c, v in zip(coo.row.tolist(), coo.col.tolist(), as_f32_c(coo.data, ndim=1, name="data")[0].tolist()):
-                per[int(r)].append((v, int(c)))
+            rows, _ = as_i32_c(coo.row, ndim=1, name="rows")
+            cols, _ = as_i32_c(coo.col, ndim=1, name="cols")
+            vals, _ = as_f32_c(coo.data, ndim=1, name="data")
+            if not (rows.shape[0] == cols.shape[0] == vals.shape[0]):
+                raise ValueError("mojolearn SpectralEmbedding: the precomputed graph's row, col and data differ in length")
+            nnz = int(vals.shape[0])
+            dense = None
         else:
-            d, _ = as_f32_c(X, ndim=2, name="X")
-            n = int(d.shape[0])
-            if tuple(d.shape) != (n, n):
+            dense, _ = as_f32_c(X, ndim=2, name="X")
+            n = int(dense.shape[0])
+            if tuple(dense.shape) != (n, n):
                 raise ValueError("mojolearn SpectralEmbedding: the precomputed distance matrix must be square")
-            flat = d.tolist()
-            per = [[(v, j) for j, v in enumerate(row)] for row in flat]
+            nnz = 0
         k = self._resolved_neighbors(n)
-        C = _M.zeros(n, n)
-        for i, cand in enumerate(per):
-            if any(v != v or v < 0 for v, _ in cand):
-                raise ValueError("mojolearn SpectralEmbedding: a precomputed distance is negative or NaN")
-            if len(cand) < k:
-                raise ValueError(f"mojolearn SpectralEmbedding: row {i} of the precomputed graph has "
-                                 f"{len(cand)} stored distances, fewer than n_neighbors={k}")
-            for _, j in sorted(cand)[:k]:
-                C.s[i * n + j] = 1.0
+        # core/dense_coo.mojo `knn_affinity_f32` (lane/py-dn-kern, 2026-09-28):
+        # the per-row (value, column) selection, C and 0.5 (C + C^T) in one
+        # host entry; it was a Python sort per row and an n^2 loop here.
         A = _M.zeros(n, n)
-        for i in range(n):
-            for j in range(n):
-                t = C.s[i * n + j] + C.s[j * n + i]
-                A.s[i * n + j] = 0.5 if t == 1.0 else t / 2
+        if n == 0:
+            self.affinity_matrix_ = A.out()
+            return A
+        status = empty((2,), "<i4")
+        sp = dense is None
+        _native("knn_affinity_f32")(
+            [0 if sp else addr_ro(dense, name="X"),
+             addr_ro(rows, name="rows") if sp and nnz else 0,
+             addr_ro(cols, name="cols") if sp and nnz else 0,
+             addr_ro(vals, name="data") if sp and nnz else 0,
+             A.addr, addr(status, name="status")],
+            [n, k, nnz, 1 if sp else 0])
+        code, row = (int(v) for v in status.tolist())
+        if code == 1:
+            raise ValueError("mojolearn SpectralEmbedding: a precomputed distance is negative or NaN")
+        if code == 2:
+            count = (int(sum(1 for r in rows.tolist() if r == row)) if sp else n)
+            raise ValueError(f"mojolearn SpectralEmbedding: row {row} of the precomputed graph has "
+                             f"{count} stored distances, fewer than n_neighbors={k}")
         self.affinity_matrix_ = A.out()
         return A
 

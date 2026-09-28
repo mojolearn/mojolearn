@@ -11,6 +11,12 @@ from x_neighbors.items import (
 )
 
 from x_neighbors.host_ops import op_knn_impute_cells
+from x_neighbors.items import (
+    kernel_item, rowsum_item, scale_div_item, kpca_center_item, unary_item, svgp_var_item,
+    matmul_tn_acc_item, K_RBF, U_IDENTITY,
+)
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 
 comptime _SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
@@ -180,3 +186,186 @@ def op_knn_impute_tiled(
 ) raises:
     """The CPU column: `knn_impute_cells` (the item per missing cell)."""
     op_knn_impute_cells(cells, x, fx, res, n, m, d, k, weights, nc)
+
+
+# ============================================================================
+# FUSED KERNEL CHAINS, THE CPU COLUMN (lane/py-dn-kern, 2026-09-28): the
+# items of `x_neighbors/iter_device.mojo`'s fused drivers in the same order
+# over the same row tiles. Independent cells are split over host tasks
+# (each cell written by one task), so the bits do not depend on the task
+# count.
+# ============================================================================
+
+comptime XN_FUSED_CELLS = 1 << 24
+#: `kind` of `kpca_transform` when q IS the precomputed kernel (d == nf)
+comptime XN_PRECOMPUTED_KIND = 100
+
+
+def _tile_rows(n: Int, width: Int) -> Int:
+    var t = XN_FUSED_CELLS // max(width, 1)
+    return max(1, min(n, t))
+
+
+def _cells[F: def(Int) -> None](ref f: F, count: Int):
+    """f(t) for t in [0, count), cut into host tasks by count only."""
+    if count <= 0:
+        return
+    var tasks = host_predict_task_count(count)
+    var part = host_predict_chunk(count, tasks)
+
+    def _task(k: Int) {imm f, imm part, imm count}:
+        var lo = k * part
+        var hi = min(lo + part, count)
+        for t in range(lo, hi):
+            f(t)
+
+    if tasks <= 1:
+        _task(0)
+    else:
+        host_parallelize(_task, tasks)
+
+
+def _hsab(addr: Int, count: Int):
+    comptime if _SABOTAGE:
+        if count > 0:
+            FP(unsafe_from_address=addr).unsafe_store(0, FP(unsafe_from_address=addr).unsafe_load(0) + Float32(1e-3))
+
+
+def _kernel_rows(q: FP, y: FP, k: FP, rows: Int, m: Int, d: Int, kind: Int, degree: Int, gamma: Float32, coef0: Float32):
+    def f(t: Int) {imm q, imm y, imm k, imm rows, imm m, imm d, imm kind, imm degree, imm gamma, imm coef0}:
+        kernel_item(t, q, y, k, rows, m, d, kind, gamma, coef0, degree)
+    _cells(f, rows * m)
+
+
+def _matmul_rows(a: FP, b: FP, res: FP, n: Int, k: Int, m: Int):
+    def f(t: Int) {imm a, imm b, imm res, imm n, imm k, imm m}:
+        matmul_item(t, a, b, res, n, k, m)
+    _cells(f, n * m)
+
+
+def op_kpca_transform(
+    q: Int, fitx: Int, fit_cols: Int, fit_all: Int, alphas: Int, res: Int,
+    nq: Int, nf: Int, d: Int, c: Int, kind: Int, degree: Int, gamma: Float32, coef0: Float32, s: Float32,
+) raises:
+    var pre = kind == XN_PRECOMPUTED_KIND
+    var tr = _tile_rows(nq, nf)
+    var kb = List[Float32](length=1 if pre else tr * nf, fill=Float32(0))
+    var kcb = List[Float32](length=max(tr * nf, 1), fill=Float32(0))
+    var rsb = List[Float32](length=tr, fill=Float32(0))
+    var prb = List[Float32](length=tr, fill=Float32(0))
+    var kp = FP(unsafe_from_address=Int(kb.unsafe_ptr()))
+    var kcp = FP(unsafe_from_address=Int(kcb.unsafe_ptr()))
+    var rsp = FP(unsafe_from_address=Int(rsb.unsafe_ptr()))
+    var prp = FP(unsafe_from_address=Int(prb.unsafe_ptr()))
+    var colp = FP(unsafe_from_address=fit_cols)
+    var allp = FP(unsafe_from_address=fit_all)
+    var r0 = 0
+    while r0 < nq:
+        var rows = min(tr, nq - r0)
+        var K = FP(unsafe_from_address=q) + r0 * d
+        if not pre:
+            _kernel_rows(K, FP(unsafe_from_address=fitx), kp, rows, nf, d, kind, degree, gamma, coef0)
+            K = kp
+        var Kc = K
+
+        def rsum(t: Int) {imm Kc, imm rsp, imm rows, imm nf}:
+            rowsum_item(t, Kc, rsp, rows, nf)
+        _cells(rsum, rows)
+        for t in range(rows):
+            scale_div_item(t, rsp, prp, rows, s)
+
+        def cen(t: Int) {imm Kc, imm colp, imm prp, imm allp, imm kcp, imm rows, imm nf}:
+            kpca_center_item(t, Kc, colp, prp, allp, kcp, rows, nf)
+        _cells(cen, rows * nf)
+        _matmul_rows(kcp, FP(unsafe_from_address=alphas), FP(unsafe_from_address=res) + r0 * c, rows, nf, c)
+        r0 += rows
+    _hsab(res, nq * c)
+    _ = kb^
+    _ = kcb^
+    _ = rsb^
+    _ = prb^
+
+
+def op_kernel_matmul(
+    q: Int, y: Int, w: Int, res: Int,
+    n: Int, m: Int, d: Int, c: Int, kind: Int, degree: Int, gamma: Float32, coef0: Float32,
+) raises:
+    var tr = _tile_rows(n, m)
+    var kb = List[Float32](length=max(tr * m, 1), fill=Float32(0))
+    var kp = FP(unsafe_from_address=Int(kb.unsafe_ptr()))
+    var r0 = 0
+    while r0 < n:
+        var rows = min(tr, n - r0)
+        _kernel_rows(FP(unsafe_from_address=q) + r0 * d, FP(unsafe_from_address=y), kp, rows, m, d, kind, degree,
+                     gamma, coef0)
+        _matmul_rows(kp, FP(unsafe_from_address=w), FP(unsafe_from_address=res) + r0 * c, rows, m, c)
+        r0 += rows
+    _hsab(res, n * c)
+    _ = kb^
+
+
+def _scaled_rbf_rows(q: FP, z: FP, kp: FP, ksp: FP, rows: Int, m: Int, d: Int, gamma: Float32, variance: Float32):
+    _kernel_rows(q, z, kp, rows, m, d, K_RBF, 0, gamma, Float32(0))
+
+    def f(t: Int) {imm kp, imm ksp, imm rows, imm m, imm variance}:
+        unary_item(t, kp, ksp, rows * m, U_IDENTITY, variance, Float32(0))
+    _cells(f, rows * m)
+
+
+def op_svgp_stats(
+    x: Int, z: Int, y: Int, bmat: Int, bvec: Int, n: Int, m: Int, d: Int, gamma: Float32, variance: Float32,
+) raises:
+    var tr = _tile_rows(n, m)
+    var kb = List[Float32](length=max(tr * m, 1), fill=Float32(0))
+    var ksb = List[Float32](length=max(tr * m, 1), fill=Float32(0))
+    var kp = FP(unsafe_from_address=Int(kb.unsafe_ptr()))
+    var ksp = FP(unsafe_from_address=Int(ksb.unsafe_ptr()))
+    var bp = FP(unsafe_from_address=bmat)
+    var bvp = FP(unsafe_from_address=bvec)
+    for t in range(m * m):
+        bp.unsafe_store(t, Float32(0))
+    for t in range(m):
+        bvp.unsafe_store(t, Float32(0))
+    var r0 = 0
+    while r0 < n:
+        var rows = min(tr, n - r0)
+        _scaled_rbf_rows(FP(unsafe_from_address=x) + r0 * d, FP(unsafe_from_address=z), kp, ksp, rows, m, d, gamma,
+                         variance)
+        var yp = FP(unsafe_from_address=y) + r0
+
+        def bb(t: Int) {imm ksp, imm bp, imm rows, imm m}:
+            matmul_tn_acc_item(t, ksp, ksp, bp, rows, m, m)
+        _cells(bb, m * m)
+        for t in range(m):
+            matmul_tn_acc_item(t, ksp, yp, bvp, rows, m, 1)
+        r0 += rows
+    _hsab(bmat, m * m)
+    _ = kb^
+    _ = ksb^
+
+
+def op_svgp_predict(
+    q: Int, z: Int, alpha: Int, cmat: Int, mean: Int, var_: Int,
+    n: Int, m: Int, d: Int, gamma: Float32, variance: Float32, kdiag: Float32,
+) raises:
+    var tr = _tile_rows(n, m)
+    var kb = List[Float32](length=max(tr * m, 1), fill=Float32(0))
+    var ksb = List[Float32](length=max(tr * m, 1), fill=Float32(0))
+    var kp = FP(unsafe_from_address=Int(kb.unsafe_ptr()))
+    var ksp = FP(unsafe_from_address=Int(ksb.unsafe_ptr()))
+    var cp = FP(unsafe_from_address=cmat)
+    var r0 = 0
+    while r0 < n:
+        var rows = min(tr, n - r0)
+        _scaled_rbf_rows(FP(unsafe_from_address=q) + r0 * d, FP(unsafe_from_address=z), kp, ksp, rows, m, d, gamma,
+                         variance)
+        _matmul_rows(ksp, FP(unsafe_from_address=alpha), FP(unsafe_from_address=mean) + r0, rows, m, 1)
+        var vp = FP(unsafe_from_address=var_) + r0
+
+        def vv(t: Int) {imm ksp, imm cp, imm vp, imm rows, imm m, imm kdiag}:
+            svgp_var_item(t, ksp, cp, vp, rows, m, kdiag)
+        _cells(vv, rows)
+        r0 += rows
+    _hsab(mean, n)
+    _ = kb^
+    _ = ksb^

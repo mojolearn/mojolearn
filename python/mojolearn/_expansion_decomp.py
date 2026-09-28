@@ -975,58 +975,6 @@ class SparseRandomProjection(_RandomProjection):
         return k.ew("select", u, _M.zeros(1, 1), sgn, s=dens - 2.0 ** -25)
 
 
-# ================================================================ graph helpers
-def _knn_order(D, i, k, include_self=True):
-    """The k smallest entries of row i of a distance matrix, ascending, ties
-    broken by the LOWER column index (comparisons of float32 values only)."""
-    row = D.row(i)
-    idx = sorted(range(len(row)), key=lambda j: (row[j], j))
-    if not include_self:
-        idx = [j for j in idx if j != i]
-    return idx[:k]
-
-
-def _knn_connectivity(k, X, n_neighbors, include_self=True):
-    """sklearn `kneighbors_graph(mode='connectivity')` as a dense n x n 0/1 matrix."""
-    D = k.sqdist(X, X)
-    n = X.r
-    A = array.array("f", bytes(4 * n * n))
-    for i in range(n):
-        for j in _knn_order(D, i, n_neighbors, include_self):
-            A[i * n + j] = 1.0
-    return _M(A, n, n), D
-
-
-def _symmetrize(k, A):
-    """0.5 * (A + A^T)."""
-    return k.ew("scale", k.ew("add", A, A.T), s=0.5)
-
-
-def _normed_laplacian(k, A):
-    """scipy `csgraph.laplacian(normed=True, return_diag=True)` on a dense
-    adjacency: the diagonal is ignored, dd = sqrt(degree) (1 for an isolated
-    node), L = I - D^-1/2 A D^-1/2 with the diagonal set to 1 (sklearn
-    `_set_diag`)."""
-    n = A.r
-    A0 = A.copy()
-    for i in range(n):
-        A0.s[i * n + i] = 0.0
-    deg = k.rowsum(A0)
-    dd = k.ew("sqrt", deg)
-    dd = _M.of([v if v > 0 else 1.0 for v in dd.s], n, 1)
-    scaled = k.ew("div", k.ew("div", A0, dd), dd.T)
-    L = k.ew("scale", scaled, s=-1.0)
-    for i in range(n):
-        L.s[i * n + i] = 1.0
-    return L, dd
-
-
-def _sign_flip_rows(U):
-    """sklearn `_deterministic_vector_sign_flip`: each row signed so its
-    largest-|.| entry (first on a tie) is positive."""
-    return _svd_flip_v(U)
-
-
 # ================================================================ thin SVD
 def _thin_svd(k, X, nc, u_based=True):
     """(U n x nc, S 1 x nc, Vt nc x d) of X through the QR + one-sided Jacobi
