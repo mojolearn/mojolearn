@@ -74,6 +74,7 @@ from metrics.checks.pinned_sum import (
 )
 from resample.checks.index_map import (
     RESAMPLE_KIND_BOOTSTRAP,
+    RESAMPLE_KIND_BOOTSTRAP_SECOND,
     RESAMPLE_KIND_MONTE_CARLO,
     RESAMPLE_KIND_PERMUTATION,
     draw_permutation_key,
@@ -92,6 +93,7 @@ from resample.checks.intervals import (
     alpha_for,
     basic_interval,
     bca_acceleration,
+    bca_acceleration_two,
     bca_bias_percentile,
     bca_interval,
     bca_validate,
@@ -598,6 +600,116 @@ def host_bootstrap(
     var pos_lo = Int(h_lo)
     var h_hi = Float32(n_resamples - 1) * lvl_hi
     var pos_hi = Int(h_hi)
+    var se = distribution_standard_error(dist, n_resamples)
+    return HostBootstrapResult(
+        theta_hat, dist^, sorted_dist^, se, interval, pos_lo, pos_hi
+    )
+
+
+def _host_unpaired_validate(
+    x: List[Float32], n_x: Int, y: List[Float32], n_y: Int, n_resamples: Int,
+    method: Int, confidence_level: Float32, r_first: Int,
+) raises:
+    """`estimator.mojo::_unpaired_validate`, word for word."""
+    validate_positions(n_resamples, n_x)
+    validate_positions(n_resamples, n_y)
+    if r_first < 0:
+        raise Error(
+            "bootstrap: r_first must be non-negative; got " + String(r_first)
+        )
+    validate_positions(r_first + n_resamples, n_x)
+    validate_positions(r_first + n_resamples, n_y)
+    if len(x) < n_x or len(y) < n_y:
+        raise Error("bootstrap: paired=False: a sample holds fewer values than its n")
+    for k in range(2):
+        var m = n_x if k == 0 else n_y
+        for i in range(m):
+            var v = x[i] if k == 0 else y[i]
+            if v != v or v > Float32(3.4e38) or v < Float32(-3.4e38):
+                raise Error(
+                    "bootstrap: sample " + String(k) + " contains NaN or"
+                    " infinity at position " + String(i) + " (refused before"
+                    " any launch, IDENTITY_PATHS row 39 FACT 2)"
+                )
+    if confidence_level <= Float32(0.0) or confidence_level >= Float32(1.0):
+        raise Error(
+            "bootstrap: confidence_level must be in (0, 1); got "
+            + String(confidence_level)
+        )
+    if method == METHOD_BCA and (n_x < 2 or n_y < 2):
+        raise Error(
+            "bootstrap: method='BCa' needs at least 2 observations in each"
+            " sample (each leave-one-out sample must itself have a mean); got"
+            " n_x=" + String(n_x) + ", n_y=" + String(n_y)
+        )
+
+
+def host_bootstrap_unpaired(
+    x: List[Float32],
+    n_x: Int,
+    y: List[Float32],
+    n_y: Int,
+    n_resamples: Int,
+    seed: UInt64,
+    method: Int,
+    confidence_level: Float32,
+    alternative: Int,
+    r_first: Int,
+) raises -> HostBootstrapResult:
+    """`estimator.mojo::bootstrap_unpaired_host` without the device: each
+    replicate's two means are `host_bootstrap_fold_statistic`'s `mean` arm
+    under the two keys, the difference one flushed subtraction."""
+    _host_unpaired_validate(x, n_x, y, n_y, n_resamples, method, confidence_level, r_first)
+    var kx = resample_key(seed, RESAMPLE_KIND_BOOTSTRAP)
+    var ky = resample_key(seed, RESAMPLE_KIND_BOOTSTRAP_SECOND)
+    var dist = List[Float32](length=n_resamples, fill=Float32(0.0))
+    var dp = dist.unsafe_ptr()
+    var tasks = host_predict_task_count(n_resamples)
+    var chunk = host_predict_chunk(n_resamples, tasks)
+
+    def _replicates(c: Int) {imm x, imm y, imm dp, imm chunk, imm n_resamples, imm n_x, imm n_y, imm kx, imm ky, imm r_first}:
+        var lo = c * chunk
+        var hi = min(lo + chunk, n_resamples)
+        for rr in range(lo, hi):
+            var a = host_bootstrap_fold_statistic(x, n_x, 1, kx, r_first + rr, STAT_MEAN)
+            var b = host_bootstrap_fold_statistic(y, n_y, 1, ky, r_first + rr, STAT_MEAN)
+            dp.unsafe_store(rr, canonicalize_nan(ftz(a - b)))
+
+    if tasks == 1:
+        _replicates(0)
+    else:
+        sync_parallelize(_replicates, tasks)
+    var sorted_dist = host_sorted_by_key(dist, 0, n_resamples)
+    var mx = host_point_estimate(x, n_x, 1, STAT_MEAN, Float32(0.5))
+    var my = host_point_estimate(y, n_y, 1, STAT_MEAN, Float32(0.5))
+    var theta_hat = ftz(mx - my)
+    var alpha = alpha_for(confidence_level, alternative)
+    var interval: Interval
+    var lvl_lo = alpha
+    var lvl_hi = ftz(Float32(1.0) - alpha)
+    if method == METHOD_BASIC:
+        interval = basic_interval(sorted_dist, n_resamples, alpha, theta_hat)
+    elif method == METHOD_BCA:
+        var z0p = bca_bias_percentile(sorted_dist, n_resamples, theta_hat)
+        var jxh = host_jackknife(x, n_x, 1, STAT_MEAN)
+        var jyh = host_jackknife(y, n_y, 1, STAT_MEAN)
+        var j0 = List[Float32](capacity=n_x)
+        for i in range(n_x):
+            j0.append(ftz(jxh[i] - my))
+        var j1 = List[Float32](capacity=n_y)
+        for i in range(n_y):
+            j1.append(ftz(mx - jyh[i]))
+        var ends = bca_interval(
+            sorted_dist, n_resamples, alpha, z0p, bca_acceleration_two(j0, n_x, j1, n_y)
+        )
+        interval = ends.interval
+        lvl_lo = ends.alpha_1
+        lvl_hi = ends.alpha_2
+    else:
+        interval = percentile_interval(sorted_dist, n_resamples, alpha)
+    interval = narrow_for_alternative(interval, alternative)
+    var pos_lo = Int(Float32(n_resamples - 1) * lvl_lo)
+    var pos_hi = Int(Float32(n_resamples - 1) * lvl_hi)
     var se = distribution_standard_error(dist, n_resamples)
     return HostBootstrapResult(
         theta_hat, dist^, sorted_dist^, se, interval, pos_lo, pos_hi

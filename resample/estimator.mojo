@@ -43,6 +43,7 @@ from core.identity_trace import IdentityTrace
 from core.segmented_sort import SORT_BLOCK, segmented_sort_keys_f32
 from metrics.checks.pinned_sum import (
     PINNED_SUM_W,
+    canonicalize_nan,
     chunk_count,
     host_fold_partials,
     host_tree_sum,
@@ -57,6 +58,7 @@ from checks.numerics import (
 )
 from resample.checks.index_map import (
     RESAMPLE_KIND_BOOTSTRAP,
+    RESAMPLE_KIND_BOOTSTRAP_SECOND,
     RESAMPLE_KIND_MONTE_CARLO,
     RESAMPLE_KIND_PERMUTATION,
     bootstrap_index_kernel,
@@ -76,6 +78,7 @@ from resample.checks.intervals import (
     alpha_for,
     basic_interval,
     bca_acceleration,
+    bca_acceleration_two,
     bca_bias_percentile,
     bca_interval,
     bca_validate,
@@ -1192,6 +1195,148 @@ def bootstrap_host(
 
     _ = dx^
     _ = idx_buf^
+    _ = theta^
+    _ = sorted_buf^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
+    return BootstrapResult(
+        theta_hat, dist^, sorted_dist^, se, interval, pos_lo, pos_hi
+    )
+
+
+def _unpaired_validate(
+    x: List[Float32], n_x: Int, y: List[Float32], n_y: Int, n_resamples: Int,
+    method: Int, confidence_level: Float32, r_first: Int,
+) raises:
+    """`bootstrap_unpaired_host`'s refusals, shared word for word with the
+    host twin (`resample/host/resample_host.mojo`)."""
+    validate_positions(n_resamples, n_x)
+    validate_positions(n_resamples, n_y)
+    if r_first < 0:
+        raise Error(
+            "bootstrap: r_first must be non-negative; got " + String(r_first)
+        )
+    validate_positions(r_first + n_resamples, n_x)
+    validate_positions(r_first + n_resamples, n_y)
+    if len(x) < n_x or len(y) < n_y:
+        raise Error("bootstrap: paired=False: a sample holds fewer values than its n")
+    for k in range(2):
+        var m = n_x if k == 0 else n_y
+        for i in range(m):
+            var v = x[i] if k == 0 else y[i]
+            if v != v or v > Float32(3.4e38) or v < Float32(-3.4e38):
+                raise Error(
+                    "bootstrap: sample " + String(k) + " contains NaN or"
+                    " infinity at position " + String(i) + " (refused before"
+                    " any launch, IDENTITY_PATHS row 39 FACT 2)"
+                )
+    if confidence_level <= Float32(0.0) or confidence_level >= Float32(1.0):
+        raise Error(
+            "bootstrap: confidence_level must be in (0, 1); got "
+            + String(confidence_level)
+        )
+    if method == METHOD_BCA and (n_x < 2 or n_y < 2):
+        raise Error(
+            "bootstrap: method='BCa' needs at least 2 observations in each"
+            " sample (each leave-one-out sample must itself have a mean); got"
+            " n_x=" + String(n_x) + ", n_y=" + String(n_y)
+        )
+
+
+def bootstrap_unpaired_host(
+    x: List[Float32],
+    n_x: Int,
+    y: List[Float32],
+    n_y: Int,
+    n_resamples: Int,
+    seed: UInt64,
+    method: Int,
+    confidence_level: Float32 = Float32(0.95),
+    alternative: Int = ALT_TWO_SIDED,
+    r_first: Int = 0,
+    tpb: Int = RESAMPLE_TPB,
+) raises -> BootstrapResult:
+    """`scipy.stats.bootstrap((x, y), diff_means, paired=False, ...)`: the
+    two samples resampled INDEPENDENTLY (2026-09-28), each by its own map --
+    sample 0 under kind 1 (so its replicate is exactly the one-sample
+    bootstrap's), sample 1 under kind 4 -- and `theta[r] = mean(x*_r) -
+    mean(y*_r)`, each mean the pinned tree of the one-sample `mean` arm, the
+    difference one flushed subtraction (the paired `diff_means` spelling).
+    BCa uses SciPy's multi-sample acceleration (`bca_acceleration_two`)
+    over each sample's leave-one-out means with the other sample whole."""
+    _unpaired_validate(x, n_x, y, n_y, n_resamples, method, confidence_level, r_first)
+    var kx = resample_key(seed, RESAMPLE_KIND_BOOTSTRAP)
+    var ky = resample_key(seed, RESAMPLE_KIND_BOOTSTRAP_SECOND)
+    var ctx = DeviceContext()
+    var dxb = _upload(ctx, x)
+    var dyb = _upload(ctx, y)
+    var tx = ctx.enqueue_create_buffer[DType.float32](n_resamples)
+    var ty = ctx.enqueue_create_buffer[DType.float32](n_resamples)
+    ctx.synchronize()
+    _launch_bootstrap_stat(ctx, tx, dxb, kx, r_first, n_resamples, n_x, n_x, 1, STAT_MEAN, tpb)
+    _launch_bootstrap_stat(ctx, ty, dyb, ky, r_first, n_resamples, n_y, n_y, 1, STAT_MEAN, tpb)
+    ctx.synchronize()
+    var hx = _download_f32(ctx, tx, n_resamples)
+    var hy = _download_f32(ctx, ty, n_resamples)
+    var dist = List[Float32](capacity=n_resamples)
+    for i in range(n_resamples):
+        dist.append(canonicalize_nan(ftz(hx[i] - hy[i])))
+    var theta = _upload(ctx, dist)
+    var sorted_buf = ctx.enqueue_create_buffer[DType.float32](n_resamples)
+    ctx.synchronize()
+    _sort_segments(ctx, theta, sorted_buf, 1, n_resamples)
+    var sorted_dist = _download_f32(ctx, sorted_buf, n_resamples)
+
+    var mx = point_estimate_host(x, n_x, 1, STAT_MEAN, Float32(0.5))
+    var my = point_estimate_host(y, n_y, 1, STAT_MEAN, Float32(0.5))
+    var theta_hat = ftz(mx - my)
+    var alpha = alpha_for(confidence_level, alternative)
+    var interval: Interval
+    var lvl_lo = alpha
+    var lvl_hi = ftz(Float32(1.0) - alpha)
+    if method == METHOD_BASIC:
+        interval = basic_interval(sorted_dist, n_resamples, alpha, theta_hat)
+    elif method == METHOD_BCA:
+        var z0p = bca_bias_percentile(sorted_dist, n_resamples, theta_hat)
+        var jx = ctx.enqueue_create_buffer[DType.float32](n_x)
+        var jy = ctx.enqueue_create_buffer[DType.float32](n_y)
+        ctx.synchronize()
+        if tpb == 256:
+            _launch_jackknife_at[256](ctx, jx, dxb, n_x, 1, STAT_MEAN)
+            _launch_jackknife_at[256](ctx, jy, dyb, n_y, 1, STAT_MEAN)
+        elif tpb == 128:
+            _launch_jackknife_at[128](ctx, jx, dxb, n_x, 1, STAT_MEAN)
+            _launch_jackknife_at[128](ctx, jy, dyb, n_y, 1, STAT_MEAN)
+        else:
+            _launch_jackknife_at[64](ctx, jx, dxb, n_x, 1, STAT_MEAN)
+            _launch_jackknife_at[64](ctx, jy, dyb, n_y, 1, STAT_MEAN)
+        ctx.synchronize()
+        var jxh = _download_f32(ctx, jx, n_x)
+        var jyh = _download_f32(ctx, jy, n_y)
+        var j0 = List[Float32](capacity=n_x)
+        for i in range(n_x):
+            j0.append(ftz(jxh[i] - my))
+        var j1 = List[Float32](capacity=n_y)
+        for i in range(n_y):
+            j1.append(ftz(mx - jyh[i]))
+        var ends = bca_interval(
+            sorted_dist, n_resamples, alpha, z0p, bca_acceleration_two(j0, n_x, j1, n_y)
+        )
+        interval = ends.interval
+        lvl_lo = ends.alpha_1
+        lvl_hi = ends.alpha_2
+        _ = jx^
+        _ = jy^
+    else:
+        interval = percentile_interval(sorted_dist, n_resamples, alpha)
+    interval = narrow_for_alternative(interval, alternative)
+    var pos_lo = Int(Float32(n_resamples - 1) * lvl_lo)
+    var pos_hi = Int(Float32(n_resamples - 1) * lvl_hi)
+    var se = distribution_standard_error(dist, n_resamples)
+    _ = dxb^
+    _ = dyb^
+    _ = tx^
+    _ = ty^
     _ = theta^
     _ = sorted_buf^
     # DEVIATION 1946: the context dies LAST, after every value built on it.

@@ -38,6 +38,7 @@ from resample.checks.statistics import (
 from resample.host.resample_host import (
     RESAMPLE_HOST_SABOTAGE,
     host_bootstrap,
+    host_bootstrap_unpaired,
     host_monte_carlo_integrate,
     host_permutation_test,
 )
@@ -161,7 +162,7 @@ def bootstrap_binding(
         3  n_resamples
         4  seed
         5  method            METHOD_* code (percentile 0, basic 1, bca 2
-                              which is refused by name, DEVIATION 1699)
+                              DEVIATION 1699: mean, std, diff_means)
         6  confidence_level  (float)
         7  alternative       ALT_* code (two-sided 0, less 1, greater 2)
         8  q_or_prop         (float; q for quantile, proportiontocut for
@@ -219,6 +220,58 @@ def bootstrap_binding(
 # ===========================================================================
 # permutation_test
 # ===========================================================================
+
+
+def bootstrap_unpaired_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """`scipy.stats.bootstrap((x, y), diff_means, paired=False, ...)`
+    (`host_bootstrap_unpaired`, 2026-09-28). Returns 0.
+
+    `addrs`: 0 x (n_x float32, read), 1 y (n_y float32, read),
+    2 distribution_out, 3 sorted_out (n_resamples float32, WRITTEN),
+    4 scalars_out (6 float64, WRITTEN, `bootstrap_binding`'s six).
+    `params`: 0 n_x, 1 n_y, 2 n_resamples, 3 seed, 4 method, 5
+    confidence_level (float), 6 alternative, 7 r_first.
+    """
+    if len(addrs) != 5:
+        raise Error(
+            "bootstrap(paired=False): addrs must contain 5 addresses (x, y,"
+            " distribution_out, sorted_out, scalars_out), got " + String(len(addrs))
+        )
+    if len(params) != 8:
+        raise Error(
+            "bootstrap(paired=False): params must contain 8 values (n_x, n_y,"
+            " n_resamples, seed, method, confidence_level, alternative,"
+            " r_first), got " + String(len(params))
+        )
+    var dp = _f32_ptr(Int(py=addrs[2]))
+    var sdp = _f32_ptr(Int(py=addrs[3]))
+    var sp = _f64_ptr(Int(py=addrs[4]))
+    var n_x = Int(py=params[0])
+    var n_y = Int(py=params[1])
+    var n_resamples = Int(py=params[2])
+    var seed = UInt64(Int(py=params[3]))
+    var method = Int(py=params[4])
+    var confidence_level = Float32(Float64(py=params[5]))
+    var alternative = Int(py=params[6])
+    var r_first = Int(py=params[7])
+    var x = read_f32(Int(_f32_ptr(Int(py=addrs[0]))), max(0, n_x))
+    var y = read_f32(Int(_f32_ptr(Int(py=addrs[1]))), max(0, n_y))
+    with GILReleased(Python()):
+        var r = host_bootstrap_unpaired(
+            x, n_x, y, n_y, n_resamples, seed, method, confidence_level,
+            alternative, r_first,
+        )
+        copy_f32(r.distribution.unsafe_ptr(), dp, n_resamples)
+        copy_f32(r.sorted_distribution.unsafe_ptr(), sdp, n_resamples)
+        sp.unsafe_store(0, Float64(r.point_estimate))
+        sp.unsafe_store(1, Float64(r.standard_error))
+        sp.unsafe_store(2, Float64(r.interval.low))
+        sp.unsafe_store(3, Float64(r.interval.high))
+        sp.unsafe_store(4, Float64(r.order_low))
+        sp.unsafe_store(5, Float64(r.order_high))
+    return PythonObject(0)
 
 
 def _permutation_run(
@@ -413,6 +466,7 @@ def PyInit__mojolearn_resample_host() abi("C") -> PythonObject:
         m.def_function[resample_vendor_binding]("resample_vendor")
         m.def_function[resample_numeric_mode_binding]("resample_numeric_mode")
         m.def_function[bootstrap_binding]("bootstrap")
+        m.def_function[bootstrap_unpaired_binding]("bootstrap_unpaired")
         m.def_function[permutation_test_binding]("permutation_test")
         m.def_function[monte_carlo_integrate_binding]("monte_carlo_integrate")
         return m.finalize()

@@ -575,6 +575,18 @@ def bca_acceleration(theta_jack: List[Float32], n: Int) raises -> Float32:
     FACT 2's reason -- `resample.bca.ahat` is a recorded stage and a
     computed NaN there would carry the vendor's payload.
     """
+    var m = _bca_moments(theta_jack, n)
+    return _bca_accel_of(m.num, m.den)
+
+
+@fieldwise_init
+struct _BcaMoments(ImplicitlyCopyable, Movable):
+    var num: Float32
+    var den: Float32
+
+
+def _bca_moments(theta_jack: List[Float32], n: Int) raises -> _BcaMoments:
+    """One sample's `sum U^3 / n^3` and `sum U^2 / n^2` (`_bca_interval`)."""
     if n < 2:
         raise Error(
             "bootstrap: the BCa acceleration needs at least 2 observations;"
@@ -594,6 +606,10 @@ def bca_acceleration(theta_jack: List[Float32], n: Int) raises -> Float32:
     var n3 = ftz(identical_mul(n2, nf))
     var num = ftz(identical_div(host_tree_sum(u3, n), n3))
     var den = ftz(identical_div(host_tree_sum(u2, n), n2))
+    return _BcaMoments(num, den)
+
+
+def _bca_accel_of(num: Float32, den: Float32) raises -> Float32:
     if den == Float32(0.0):
         raise Error(
             "bootstrap: the BCa acceleration is 0/0 -- every leave-one-out"
@@ -605,6 +621,18 @@ def bca_acceleration(theta_jack: List[Float32], n: Int) raises -> Float32:
         )
     var den32 = ftz(identical_mul(den, ftz(identical_sqrt(den))))
     return ftz(identical_div(ftz(identical_div(num, den32)), Float32(6.0)))
+
+
+def bca_acceleration_two(
+    jack_0: List[Float32], n_0: Int, jack_1: List[Float32], n_1: Int
+) raises -> Float32:
+    """SciPy's multi-sample acceleration (`_bca_interval`, paired=False):
+    `a_hat = (1/6) (num_0 + num_1) / (den_0 + den_1)^(3/2)`, each sample's
+    moments over ITS OWN leave-one-out statistics (the other sample whole),
+    the two sums added in sample order."""
+    var m0 = _bca_moments(jack_0, n_0)
+    var m1 = _bca_moments(jack_1, n_1)
+    return _bca_accel_of(ftz(m0.num + m1.num), ftz(m0.den + m1.den))
 
 
 @fieldwise_init

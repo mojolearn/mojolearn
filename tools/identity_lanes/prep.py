@@ -950,3 +950,23 @@ def _(ml, X, yc, yr, Xh=None):
                                                      b.confidence_interval[1]], dtype=np.float64),
                          np.asarray([b.order_low, b.order_high], dtype=np.int64))
     return _fit(parts)
+
+
+@lane("resample-unpaired")
+def _(ml, X, yc, yr, Xh=None):
+    """resample.bootstrap((x, y), 'diff_means', paired=False): two samples
+    of different lengths (yr's first 1500 and X[:, 3]'s first 1100) resampled
+    independently, percentile / basic / BCa. The distribution, interval and
+    order positions are hashed; sample 0's means are held to the one-sample
+    mean bootstrap bit for bit (its map is that one's)."""
+    rs = ml.resample
+    x = np.ascontiguousarray(yr[:1500])
+    y = np.ascontiguousarray(X[:1100, 3]).astype(np.float32)
+    parts = {}
+    for name, meth, alt in (("pct", "percentile", "two-sided"), ("basic", "basic", "less"), ("bca", "BCa", "two-sided")):
+        b = rs.bootstrap((x, y), statistic="diff_means", paired=False, n_resamples=1024, method=meth,
+                         random_state=9, alternative=alt)
+        parts[name] = _h(b.distribution, np.asarray([b.point_estimate, b.standard_error, b.confidence_interval[0],
+                                                     b.confidence_interval[1]], dtype=np.float64),
+                         np.asarray([b.order_low, b.order_high], dtype=np.int64))
+    return _fit(parts)

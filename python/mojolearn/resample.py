@@ -131,7 +131,7 @@ def _int(v, name, where):
 
 def bootstrap(data, statistic="mean", n_resamples=9999, confidence_level=0.95,
               method="percentile", alternative="two-sided", random_state=0,
-              q_or_prop=0.5, r_first=0, numeric_mode=None):
+              q_or_prop=0.5, r_first=0, numeric_mode=None, paired=True):
     """`scipy.stats.bootstrap((data,), statistic, n_resamples=...,
     rng=random_state, method=..., confidence_level=..., alternative=...)`.
 
@@ -142,8 +142,16 @@ def bootstrap(data, statistic="mean", n_resamples=9999, confidence_level=0.95,
     'BCa' (case-insensitive, as SciPy); BCa ships for mean, std and
     diff_means (DEVIATION 1699) and `order_low` / `order_high` are then the
     positions at its adjusted levels.
+
+    `paired=False` with `data=(x, y)`, two 1-D samples of any lengths and
+    `statistic='diff_means'`: SciPy's unpaired two-sample bootstrap, each
+    sample resampled independently (sample 0 by the one-sample map, sample 1
+    by its own). A single sample ignores `paired`, as SciPy does.
     """
     where = "bootstrap"
+    if not paired and isinstance(data, (tuple, list)):
+        return _bootstrap_unpaired(data, statistic, n_resamples, confidence_level, method,
+                                   alternative, random_state, r_first, numeric_mode)
     x, _ = as_f32_c(data, ndim=None, name="data")
     if x.ndim == 1:
         n, d = x.shape[0], 1
@@ -169,6 +177,35 @@ def bootstrap(data, statistic="mean", n_resamples=9999, confidence_level=0.95,
         [addr_ro(flat, name="data"), addr(dist, name="distribution"), addr(sdist, name="sorted_distribution"), addr(scalars, name="scalars")],
         # n, d, statistic, n_resamples, seed, method, confidence_level, alternative, q_or_prop, r_first
         [n, d, stat, r, seed, meth, cl, alt, qp, rf],
+    )
+    return BootstrapResult(float(scalars[0]), dist, sdist, float(scalars[1]),
+                           float(scalars[2]), float(scalars[3]), int(scalars[4]), int(scalars[5]))
+
+
+def _bootstrap_unpaired(data, statistic, n_resamples, confidence_level, method,
+                        alternative, random_state, r_first, numeric_mode):
+    where = "bootstrap(paired=False)"
+    if len(data) != 2:
+        raise ValueError(f"mojolearn {where}: data must be two samples (x, y), got {len(data)}")
+    if statistic != "diff_means":
+        raise ValueError(
+            f"mojolearn {where}: statistic {statistic!r} is refused by name: the unpaired bootstrap's"
+            " two-sample statistic is 'diff_means' (a one-sample statistic has no pairing; pearson needs pairs)")
+    xx, _ = as_f32_c(data[0], ndim=1, name="x")
+    yy, _ = as_f32_c(data[1], ndim=1, name="y")
+    meth = _code(METHODS, method.lower() if isinstance(method, str) else method, "method", where)
+    alt = _code(ALTERNATIVES, alternative, "alternative", where)
+    r = _int(n_resamples, "n_resamples", where)
+    dist = empty((max(r, 0),), "<f4")
+    sdist = empty((max(r, 0),), "<f4")
+    scalars = empty((6,), "<f8")
+    _extension(numeric_mode).bootstrap_unpaired(
+        # ORDER MATCHES bindings/_mojolearn_resample.mojo::bootstrap_unpaired_binding.
+        [addr_ro(xx, name="x"), addr_ro(yy, name="y"), addr(dist, name="distribution"),
+         addr(sdist, name="sorted_distribution"), addr(scalars, name="scalars")],
+        # n_x, n_y, n_resamples, seed, method, confidence_level, alternative, r_first
+        [xx.shape[0], yy.shape[0], r, _int(random_state, "random_state", where), meth,
+         _real(confidence_level, "confidence_level", where), alt, _int(r_first, "r_first", where)],
     )
     return BootstrapResult(float(scalars[0]), dist, sdist, float(scalars[1]),
                            float(scalars[2]), float(scalars[3]), int(scalars[4]), int(scalars[5]))
