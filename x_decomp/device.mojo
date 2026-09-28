@@ -71,12 +71,6 @@ from x_decomp.cells import (
     sqdist_cell,
 )
 from x_decomp.exec_trait import Exec
-from std.os import getenv
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from core.device_zero import enqueue_fill
-from decomposition.checks.jacobi_eigh_device import JACOBI_INFO_UNWRITTEN, JACOBI_SWEEPS, JACOBI_TOL, jacobi_eigh_kernel
-from decomposition.host.linalg_public import eigh_ascending
-from decomposition.impl.linalg.detail.pca import SIGNFLIP_TPB, sign_flip_kernel
 
 
 struct _XdContext(Defaultable, Movable):
@@ -720,78 +714,6 @@ def orth_on_device(ctx: DeviceContext, da: DeviceBuffer[DType.float32], m: Int, 
     ctx.synchronize()
 
 
-#: WIDE JACOBI LAUNCH (lane decomp-apple, 2026-09-28). `jacobi_eigh_kernel`
-#: is launch-width invariant under IDENTICAL (DEVIATION 2680: its folds
-#: stride by JACOBI_TPB over the first JACOBI_TPB lanes whatever the block;
-#: every other lane's work is a per-k update no other lane touches), so a
-#: wider block is scheduling, not arithmetic. Each rotation's column and
-#: row updates walk n cells; at n = 1500 a 256-thread block walks them six
-#: deep per rotation, 1.1M rotations a sweep (ClassicalMDS 69 s, Isomap
-#: 103 s on the M4 Pro). From XD_EIGH_WIDE_N rows the x_decomp eigh launches
-#: the same kernel XD_EIGH_WIDE threads wide. MOJOLEARN_XD_EIGH_WIDTH
-#: (256 | 512 | 1024) overrides, for timing the widths against each other.
-comptime XD_EIGH_WIDE_N = 256
-comptime XD_EIGH_WIDE = 1024
-
-
-def xd_eigh_width(n: Int) -> Int:
-    var e = getenv("MOJOLEARN_XD_EIGH_WIDTH")
-    if e == "256":
-        return 256
-    if e == "512":
-        return 512
-    if e == "1024":
-        return 1024
-    return XD_EIGH_WIDE if n >= XD_EIGH_WIDE_N else 256
-
-
-def eigh_wide[rot_tpb: Int](a: F32Ptr, w: F32Ptr, v: F32Ptr, n: Int) raises:
-    """`device_eigh` (decomposition/linalg_public_device.mojo) launched
-    `rot_tpb` threads wide: the same kernel, sign flip, refusals and host
-    ordering."""
-    var ctx = xd_ctx()
-    var da = _up(ctx, a, n * n)
-    var dv = ctx.enqueue_create_buffer[DType.float32](n * n if n > 0 else 1)
-    var dinfo = ctx.enqueue_create_buffer[DType.float32](3)
-    enqueue_fill(ctx, dinfo, JACOBI_INFO_UNWRITTEN)
-    ctx.synchronize()
-    ctx.enqueue_function[jacobi_eigh_kernel[rot_tpb]](
-        da.unsafe_ptr(), dv.unsafe_ptr(), dinfo.unsafe_ptr(), Int32(n), Int32(JACOBI_SWEEPS), Float32(JACOBI_TOL),
-        grid_dim=(1, 1, 1), block_dim=(rot_tpb, 1, 1),
-    )
-    ctx.enqueue_function[sign_flip_kernel](dv.unsafe_ptr(), Int32(n), grid_dim=(n, 1, 1), block_dim=(SIGNFLIP_TPB, 1, 1))
-    var info = List[Float32](length=3, fill=Float32(0))
-    var work = List[Float32](length=n * n if n > 0 else 1, fill=Float32(0))
-    var vecs = List[Float32](length=n * n if n > 0 else 1, fill=Float32(0))
-    _down(ctx, dinfo, F32Ptr(unsafe_from_address=Int(info.unsafe_ptr())), 3)
-    _down(ctx, da, F32Ptr(unsafe_from_address=Int(work.unsafe_ptr())), n * n)
-    _down(ctx, dv, F32Ptr(unsafe_from_address=Int(vecs.unsafe_ptr())), n * n)
-    ctx.synchronize()
-    _ = da^
-    _ = dv^
-    _ = dinfo^
-    ctx.synchronize()
-    if info[0] == JACOBI_INFO_UNWRITTEN:
-        raise Error(
-            "eigh: the device Jacobi eigensolver DID NOT WRITE its info buffer at width "
-            + String(rot_tpb) + ", so it never ran or its launch failed (not a convergence failure)"
-        )
-    if info[0] == Float32(0.0):
-        raise Error(
-            "eigh: the Jacobi eigensolver did not converge in " + String(JACOBI_SWEEPS) + " sweeps at n = "
-            + String(n) + ": ||offdiag(A)||_F / ||A||_F is still " + String(info[1])
-            + ". An unconverged decomposition is not returned as if it were one; see DEVIATION 590."
-        )
-    var diag = List[Float32]()
-    for i in range(n):
-        diag.append(work[i * n + i])
-    var got = eigh_ascending(diag, vecs, n, True, Int(info[2]))
-    for i in range(n):
-        w.unsafe_store(i, got.w[i])
-    for i in range(n * n):
-        v.unsafe_store(i, got.v[i])
-
-
 @fieldwise_init
 struct DevExec(Exec):
     @staticmethod
@@ -962,14 +884,6 @@ struct DevExec(Exec):
 
     @staticmethod
     def eigh(a: F32Ptr, w: F32Ptr, v: F32Ptr, n: Int) raises:
-        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-            var wide = xd_eigh_width(n)
-            if wide == 1024:
-                eigh_wide[1024](a, w, v, n)
-                return
-            if wide == 512:
-                eigh_wide[512](a, w, v, n)
-                return
         var m = List[Float32](capacity=n * n)
         for i in range(n * n):
             m.append(a.unsafe_load(i))
