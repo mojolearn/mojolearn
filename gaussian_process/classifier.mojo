@@ -243,7 +243,7 @@ comptime GPC_RESIDENT_K = (
 
 
 def gpc_scale_rows_kernel(
-    out: MutPointer[Float32, MutAnyOrigin],
+    dst: MutPointer[Float32, MutAnyOrigin],
     kcross: MutPointer[Float32, MutAnyOrigin],
     wsr: MutPointer[Float32, MutAnyOrigin],
     n_train_in: Int32,
@@ -257,11 +257,11 @@ def gpc_scale_rows_kernel(
         return
     var i = e // n_star
     var sc = ftz(wsr[unsafe_offset = i])
-    out[unsafe_offset = e] = ftz(identical_mul(sc, ftz(kcross[unsafe_offset = e])))
+    dst[unsafe_offset = e] = ftz(identical_mul(sc, ftz(kcross[unsafe_offset = e])))
 
 
 def gpc_latent_var_kernel(
-    out: MutPointer[Float32, MutAnyOrigin],
+    dst: MutPointer[Float32, MutAnyOrigin],
     v: MutPointer[Float32, MutAnyOrigin],
     n_train_in: Int32,
     n_star_in: Int32,
@@ -277,7 +277,7 @@ def gpc_latent_var_kernel(
     for i in range(n_train):
         var vv = ftz(v[unsafe_offset = i * n_star + t])
         acc = ftz(identical_mul_add(vv, vv, acc))
-    out[unsafe_offset = t] = ftz(ftz(kss) - acc)
+    dst[unsafe_offset = t] = ftz(ftz(kss) - acc)
 
 
 def gpc_b_matrix_kernel(

@@ -166,7 +166,7 @@ comptime RBF_FUSED_TPB = 256
 
 
 def rbf_fused_transform_kernel(
-    out: MutPointer[Float32, MutAnyOrigin],
+    dst: MutPointer[Float32, MutAnyOrigin],
     x: MutPointer[Float32, MutAnyOrigin],
     w: MutPointer[Float32, MutAnyOrigin],
     b_in: MutPointer[Float32, MutAnyOrigin],
@@ -190,7 +190,7 @@ def rbf_fused_transform_kernel(
     for f in range(d):
         acc = ftz(identical_mul_add(ftz(x.unsafe_load(i * d + f)), ftz(w.unsafe_load(f * dd + j)), acc))
     var shifted = ftz(acc + ftz(b_in.unsafe_load(j)))
-    out.unsafe_store(t, ftz(identical_mul(identical_cos(shifted), scale)))
+    dst.unsafe_store(t, ftz(identical_mul(identical_cos(shifted), scale)))
 
 
 # ===========================================================================
