@@ -71,15 +71,29 @@ def _inertia(x, lab):
     return tot
 
 
-def _silhouette(x, lab, seed=0):
-    lab = np.asarray(lab)
-    if len(np.unique(lab[lab >= 0])) < 2:
+def _silhouette(x, lab, seed=0, m=4000):
+    """The mean silhouette over a fixed sample of up to `m` rows (noise, -1,
+    left out), float64 NumPy; NaN with fewer than two clusters."""
+    lab = np.asarray(lab).astype(np.int64)
+    keep = np.flatnonzero(lab >= 0)
+    if len(np.unique(lab[keep])) < 2:
         return float("nan")
-    try:
-        from sklearn.metrics import silhouette_score
-    except ImportError:
-        return float("nan")
-    return float(silhouette_score(x, lab, sample_size=min(10_000, len(x)), random_state=seed))
+    rs = np.random.RandomState(seed)
+    idx = keep if len(keep) <= m else np.sort(rs.choice(keep, m, replace=False))
+    p = x[idx].astype(np.float64)
+    lb = lab[idx]
+    sq = (p * p).sum(1)
+    dm = np.sqrt(np.maximum(sq[:, None] + sq[None, :] - 2 * p @ p.T, 0))
+    labs = np.unique(lb)
+    mean_to = np.stack([dm[:, lb == c].sum(1) for c in labs], 1)
+    cnt = np.array([(lb == c).sum() for c in labs], dtype=np.float64)
+    own = np.searchsorted(labs, lb)
+    a = mean_to[np.arange(len(lb)), own] / np.maximum(cnt[own] - 1, 1)
+    other = mean_to / cnt[None, :]
+    other[np.arange(len(lb)), own] = np.inf
+    b = other.min(1)
+    s = np.where(cnt[own] > 1, (b - a) / np.maximum(a, b), 0.0)
+    return float(s.mean())
 
 
 def cases(ml, seed):
