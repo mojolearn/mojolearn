@@ -66,3 +66,29 @@ accumulator). Standalone, the coarse fit is 2.1 s on the M4 Pro, not the 8.6 s t
 timed inside the IVF build (x_ann binding); the ivfsq probe case times that path directly.
 `MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC` (the NVIDIA row-block accumulator) on Apple:
 no gain (coarse 2.115 -> 2.120 s, board k = 8 0.141 -> 0.165 s), same digests; not taken.
+
+## A/B m4pro-a, IDENTICAL, 1790607145653: before = base sources (037daa353) -> after 5169bb4e4
+
+Change under test: 5169bb4e4 fused distance kernel flushes operands once at staging
+(`FUSED_STAGE_FTZ`, default on), plus the DBSCAN border pass.
+
+| case | before s | after s | digest (both) |
+|---|---|---|---|
+| KMeans coarse 1M x 28, k 1024, 10 it | 2.7064 | 1.9784 | c34e005aeb912d5d |
+| KMeans coarse, 1 it | 1.9136 | 1.4085 | 9611bacf2e88d427 |
+| KMeans PQ codebook 1M x 2, k 256, 20 it | 0.4294 | 0.3511 | 794c582742428b14 |
+| IVF-SQ fit 1M x 28, 1024 lists (x_ann) | 3.033 | 2.309 | - |
+| board kmeans taxi 1M | 0.0946 | 0.0845 | c030387c2bece495 |
+| board kmeans higgs 1M | 0.1702 | 0.1476 | 13908e245c273076 |
+| board dbscan taxi 100k | 0.3216 (2c9624c0d0cf42d4) | 0.3305 (**9c8ea257cb04e118**) | fixed |
+| board dbscan higgs 100k | 0.0890 | 0.1377 | 534fe4e04df01f06 |
+
+The HIGGS DBSCAN slowdown was the border pass querying HIGGS's many noise rows; b2033132c
+skips non-core rows still at MAX_LABEL after the merges (noise in every batching: a row's
+own batch pulls from every core neighbour). The FCMP trial arm in this job did not build
+(two define variables passed the same -D twice), so it measured nothing.
+
+The IVF-SQ fit (coarse quantizer inside the x_ann binding) takes 3.0 s at the base on this
+M4 Pro, not the 8.6 s the ann lane recorded at 5b622763d: lane/apple-merged's k-means
+changes (incremental k-means|| init under IDENTICAL, the no-sync k-means++) already
+removed most of it.
