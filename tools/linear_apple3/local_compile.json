@@ -1,0 +1,7 @@
+{
+  "no_restore": true,
+  "arms": [
+    {"name": "all-x", "compile_only": true, "builds": ["x_linear"],
+     "defines": "-D MOJOLEARN_X_LINEAR_BLOCKS=1 -D MOJOLEARN_X_LINEAR_BLOCKS_GRAM=1 -D MOJOLEARN_X_LINEAR_FAST_FMA=1 -D MOJOLEARN_SGD_FAST_TREE=1 -D MOJOLEARN_X_LINEAR_QUANTILE_STEP=1 -D MOJOLEARN_X_LINEAR_FINITE_SIMD=1"}
+  ]
+}

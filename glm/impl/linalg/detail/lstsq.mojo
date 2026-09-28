@@ -128,7 +128,10 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from std.memory import bitcast
 
 from cluster.checks.reduce_by_key import copy_f32_kernel
-from core.gemm import gemm_nt, gemm_tn, gemv_n
+from core.gemm import gemm_nt, gemm_tn, gemv_n, pinned_gemm_nt_kernel
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from core.xtdz_coalesced import xty_launch
 from core.column_stats import (
     STATS_TPB,
@@ -150,6 +153,18 @@ from glm.impl.matrix.math import (
     vector_binary_mult_kernel,
 )
 
+
+#: lane/linear-apple3 (WIP, opt-in `-D MOJOLEARN_OLS_FAST_SMALL_NT=1`): FAST
+#: on Apple, step 5's n_cols x n_cols product (at most 64 x 64) on the
+#: one-thread-per-cell kernel IDENTICAL launches, instead of the vendor
+#: matmul (a second pipeline for a product of 16 x 16 cells). FAST words
+#: change (the order of each cell's sum).
+comptime OLS_FAST_SMALL_NT = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_OLS_FAST_SMALL_NT"]()
+)
+comptime OLS_FAST_SMALL_NT_MAX = 64
 
 #: The elementwise launch width steps 3b and 4 used to hardcode. SCHEDULING,
 #: and provably so: each thread owns one output cell, so this number cannot
@@ -514,7 +529,18 @@ def lstsq_eig_traced(
         ctx, "ols.step4.QS", qs, n_cols * n_cols
     )
     # inv <- QS Q^T == Q invS Q^T == inv(A^T A)
-    gemm_nt(ctx, inv, qs, q, n_cols, n_cols, n_cols)
+    var small_nt = False
+    comptime if OLS_FAST_SMALL_NT:
+        if n_cols <= OLS_FAST_SMALL_NT_MAX:
+            small_nt = True
+            ctx.enqueue_function[pinned_gemm_nt_kernel](
+                inv.unsafe_ptr(), qs.unsafe_ptr(), q.unsafe_ptr(),
+                Int32(n_cols), Int32(n_cols), Int32(n_cols),
+                grid_dim=((n_cols * n_cols + 255) // 256, 1, 1),
+                block_dim=(256, 1, 1),
+            )
+    if not small_nt:
+        gemm_nt(ctx, inv, qs, q, n_cols, n_cols, n_cols)
     ctx.synchronize()
     trace.record_device[DType.float32](
         ctx, "ols.step5.inv", inv, n_cols * n_cols

@@ -14,6 +14,8 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
+from std.sys.info import has_apple_gpu_accelerator
+from std.sys.compile import is_defined
 from x_linear.ops import FP
 from x_linear.device import fit_device, decision_device
 
@@ -26,6 +28,27 @@ def _fp(addr: Int) raises -> FP:
 
 def _finite(p: FP, count: Int, name: String) raises:
     """The input check both columns run before a fit: NaN or infinity is refused by name."""
+    comptime if has_apple_gpu_accelerator() and is_defined["MOJOLEARN_X_LINEAR_FINITE_SIMD"]():
+        # lane/linear-apple3 (WIP, opt-in): sixteen values at a time. v - v is 0 for a
+        # finite v and NaN for an infinity or a NaN, so the running sum of
+        # v - v is NaN exactly when some value is not finite: the scalar
+        # test's verdict (the scalar walk was 16M branches on the host
+        # before a fit of 1M x 16 could start).
+        comptime W = 16
+        var acc = SIMD[DType.float32, W](0)
+        var i = 0
+        while i + W <= count:
+            var v = p.unsafe_load[width=W](i)
+            acc = acc + (v - v)
+            i += W
+        var s = acc.reduce_add()
+        while i < count:
+            var v = p.unsafe_load(i)
+            s = s + (v - v)
+            i += 1
+        if not (s == s):
+            raise Error(String("mojolearn: ", name, " contains NaN or infinity"))
+        return
     for i in range(count):
         var v = p.unsafe_load(i)
         if not (v == v) or v > Float32(3.4028234e38) or v < Float32(-3.4028234e38):

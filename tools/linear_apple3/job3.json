@@ -1,0 +1,106 @@
+{
+ "arms": [
+  {
+   "name": "qstep",
+   "defines": "-D MOJOLEARN_X_LINEAR_BLOCKS=1 -D MOJOLEARN_X_LINEAR_QUANTILE_STEP=1 -D MOJOLEARN_X_LINEAR_FINITE_SIMD=1",
+   "builds": [
+    "x_linear"
+   ],
+   "cases": "quantile,poisson,gamma,tweedie,huber,logistic-cv",
+   "warm_column": "both",
+   "rows": [
+    100000,
+    1000000
+   ],
+   "reps": 2,
+   "qual": "quantile,quantile-l1",
+   "host_ref": true
+  },
+  {
+   "name": "blocks",
+   "defines": "-D MOJOLEARN_X_LINEAR_BLOCKS=1",
+   "builds": [
+    "x_linear"
+   ],
+   "cases": "quantile,poisson,gamma,tweedie,huber,logistic-cv",
+   "rows": [
+    100000,
+    1000000
+   ],
+   "reps": 2,
+   "qual": "quantile,quantile-l1"
+  },
+  {
+   "name": "qnblocks",
+   "defines": "-D MOJOLEARN_QN_FAST_BLOCKS=1",
+   "builds": [
+    "estimators"
+   ],
+   "cases": "logistic,linear-svc,linear-svr",
+   "warm_rows": 2000,
+   "rows": [
+    1000000,
+    2000000
+   ],
+   "reps": 2,
+   "extra": [
+    [
+     "bench/linear_apple_profile.py",
+     "--rows",
+     "1000000",
+     "--caps",
+     "1,2,4,8,16,32",
+     "--cases",
+     "logistic,linear-svr"
+    ]
+   ],
+   "qual_script": "bench/linear_apple_fast_quality.py"
+  },
+  {
+   "name": "qnbefore",
+   "defines": "",
+   "builds": [
+    "estimators"
+   ],
+   "cases": "logistic,linear-svc,linear-svr",
+   "warm_rows": 2000,
+   "rows": [
+    1000000,
+    2000000
+   ],
+   "reps": 2,
+   "extra": [
+    [
+     "bench/linear_apple_profile.py",
+     "--rows",
+     "1000000",
+     "--caps",
+     "1,2,4,8,16,32",
+     "--cases",
+     "logistic,linear-svr"
+    ]
+   ],
+   "qual_script": "bench/linear_apple_fast_quality.py"
+  }
+ ],
+ "base": {
+  "commit": "origin/lane/apple3-merged",
+  "files": [
+   "glm/impl/qn/glm_base.mojo"
+  ],
+  "builds": [
+   "estimators"
+  ],
+  "modes": [
+   "identical",
+   "fast"
+  ],
+  "runs": [
+   [
+    "ols,ridge,lasso,elasticnet,logistic,linear-svc,linear-svr",
+    1000000
+   ]
+  ],
+  "qual_script_identical": "bench/linear_apple_fast_quality.py"
+ }
+}
