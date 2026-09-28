@@ -9,7 +9,7 @@ Integration starts from main `243f74dc79b99b9457fe89dda557aeb843c62012` and aggr
 | ann | `c5ac7e737efbd0bddab77dfdd9286a74f35c21fc` | Host passes and resident preparation enabled after same-job M3 A/B with equal digests in both tiers. Other new kernels remain opt-in/unqualified. |
 | cluster | `fc96682e7f10a5f6636e36821983bca3061b4298` | Ward has M4 Pro equal-label evidence, with taxi merge-tree differences. Latest laptop g1 records Ward, OPTICS, MeanShift, BGMM and AP gains; AP_SPLIT has no gain. Experimental compile switches remain opt-in; final combined correctness is owed. |
 | decomp | `55dcd1f5e92a77b45499e396c76128f43dd69708` | Measured FAST Metal eigensolver and small Lanczos cases are inherited. IDENTICAL retains established default. Newly returned round-robin solvers are runtime opt-in and unbuilt; unconditional imports still require the consolidated build. Larger-size Lanczos quality and final dispatch validation remain owed. |
-| linear | `7a46a4fb26c0113ffd42a6493d60642bce352f9d` | Blocks have preliminary timing gains but no accepted paired quality/convergence result; all new optimization switches stay opt-in. Latest fold wrappers/plain-loop option is included. |
+| linear | `7a46a4fb26c0113ffd42a6493d60642bce352f9d` | Blocks have timing gains and a completed laptop localA with 255 quality rows, but no blanket acceptance decision; all new switches stay opt-in. Latest fold wrappers/plain-loop option is included. |
 | metrics | `652233910debb95d768c1059ed1ccd9f7d8cf88d` | Only baseline measured; nine changes are opt-in under MOJOLEARN_MSEL3, with original default epilogues preserved. |
 | neighbors | `bba62c43d7630c4efceab9225387829b51591cf8` | Row-vector Jacobi enabled after equal-digest evidence in both modes. Slower SVM host-block and quality-regressing Nystroem host solver stay opt-in, as do unqualified newer kernels. Latest resident-K module isolation and split job commands included. |
 | prep | `e6085d625a719814e4a26517676733393b9d3f7f` | Already in aggregate: measured host improvements and FAST radix, with 60 cases per tier matching prior digests. Abandoned unbuilt additions at c56cc2923 remain in history, not reintroduced. |
@@ -30,3 +30,12 @@ Freeze the final combined source and explicit switch manifest before any campaig
 Time representative workloads with baseline and candidate arms interleaved on the same hardware and inputs, outside profiling/stage timers. Measure warm and cold behavior separately where relevant. FAST arithmetic changes require paired quality and convergence checks; IDENTICAL must retain its bitwise contract. Mutually exclusive algorithm variants are separate selected arms, not all switched on simultaneously. Keep wins that pass, leave regressions/unqualified options disabled, and investigate failures with targeted cases rather than repeating per-family full sweeps.
 
 No M2 workload action, M3 restart, Apple allocation, cloud mutation, numerical run or release is authorized by this manifest.
+
+## Later existing laptop evidence inspected during takeover
+
+These are existing runs, not new tests launched by integration:
+
+- `~/mojolearn-evidence/cluster-apple3/laptop_quality_all.log`: 28 quality rows. Ward labels match but both merge trees differ. Taxi affinity propagation has ARI 0.83753256, while its scalar quality is higher; OPTICS taxi differs slightly. These are not evidence of universal bitwise equivalence or permission to enable every switch.
+- `~/mojolearn-evidence/ann-apple3/local1_laptop-M4_fast.txt`: selected FAST arms and final five-seed recall/trustworthiness/KL records. This does not qualify all unselected opt-in kernels or the combined integration.
+- `~/mojolearn-evidence/linear-apple3/localA_laptopM4.out`: completed JOBDONE/LOCALDONE, 255 QUAL3 rows across before/blocks and GPU/host. Objectives mostly close or improved; paired logistic-CV objective deltas reach +6.25e-6 and ridge-classifier accuracy falls by up to 6e-5 in these printed rows. Acceptance requires the documented tolerance/quality contract, not successful process exit alone. The run commit 110133718 precedes later fold-wrapper changes.
+- `~/mojolearn-evidence/prep-apple3/laptop1_tip.txt`: tip run ended with exit_code 0. Original M3 paired records remain the source of the documented baseline comparisons.
