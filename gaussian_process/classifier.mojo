@@ -84,6 +84,14 @@ from gaussian_process.estimator import (
     _upload,
     gp_validate_data,
 )
+# Keep device-module extension imports at module scope: importing the resident
+# module inside a function duplicates DeviceContext enqueue overload candidates.
+from gaussian_process.gpc_resident_k import _gpc_kernel_self_dev
+from gaussian_process.gpc_device_var import (
+    GPC_VAR_TPB,
+    gpc_latent_var_kernel,
+    gpc_scale_rows_kernel,
+)
 from gaussian_process.host.gpc_steps import (
     GPCBinaryFit,
     GPCLatent,
@@ -259,9 +267,6 @@ def _gpc_fit_binary_device(
     var n = n_train
     var ctx = _family_ctx()
     var dk: DeviceBuffer[DType.float32]
-    # Mojo imports belong to module or function scope, not a conditional block.
-    from gaussian_process.gpc_resident_k import _gpc_kernel_self_dev
-
     comptime if GPC_RESIDENT_K:
         dk = _gpc_kernel_self_dev(ctx, x, n_train, n_features, kernel)
     else:
@@ -556,12 +561,6 @@ def gpc_predict_binary_host(
     var variance = List[Float32]()
     var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
     var t_v0 = Int(perf_counter_ns())
-    from gaussian_process.gpc_device_var import (
-        GPC_VAR_TPB,
-        gpc_latent_var_kernel,
-        gpc_scale_rows_kernel,
-    )
-
     if want_variance:
         comptime if GPC_DEVICE_VAR:
             var dwv = _upload(ctx, wsr)
