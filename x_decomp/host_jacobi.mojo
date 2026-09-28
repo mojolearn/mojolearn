@@ -20,16 +20,20 @@ TRANSPOSED (a column is a contiguous row), so:
 A transpose moves words, never rounds them. Under MOJOLEARN_HOST_SABOTAGE
 the rotation is the oracle's split-FMA arm, as `_rot_sub`/`_rot_add` are.
 
+`fast_jacobi_eigh` (below) is `host_jacobi_eigh` (pca_oracle.mojo) the same
+way: rows p and q and V (transposed) as vectors, the columns as before.
+
 Proof: x_decomp/checks/dense_check.mojo holds `fast_one_sided_jacobi_svd`
-to `host_one_sided_jacobi_svd` bit for bit (values, V, sweep count), and
-arm host_svd_fold_order.patch must make it fail.
+to `host_one_sided_jacobi_svd` and `fast_jacobi_eigh` to `host_jacobi_eigh`
+bit for bit (values, vectors, sweep counts); arms host_svd_fold_order.patch
+and host_eigh_col_split.patch must make it fail.
 """
 from std.math import ceildiv, fma
 from std.sys.info import simd_width_of
 
 from checks.numerics import ftz, identical_mul_add, identical_sqrt
 from decomposition.host.pca_full_oracle import SVD_TPB
-from decomposition.host.pca_oracle import PCA_ORACLE_HOST_SABOTAGE, host_jacobi_rotation_cs
+from decomposition.host.pca_oracle import PCA_ORACLE_HOST_SABOTAGE, _host_jacobi_fold, host_jacobi_rotation_cs
 from x_decomp.cells import F32Ptr
 from x_decomp.host_simd import ftz_v, mul_add_v
 
@@ -193,3 +197,93 @@ def fast_one_sided_jacobi_svd(r: List[Float32], n: Int, max_sweeps: Int, tol: Fl
     _ = vt^
     _ = lanes^
     return FastSvdResult(v^, sv^, converged, executed)
+
+
+# ------------------------------------------------------ two-sided Jacobi eigh
+@fieldwise_init
+struct FastEighResult(Movable):
+    var vectors: List[Float32]  # n x n row major, vector i in COLUMN i
+    var converged: Bool
+    var executed: Int
+
+
+def _rot_rows(a: F32Ptr, b: F32Ptr, k0: Int, k1: Int, c: Float32, s: Float32):
+    """Elements [k0, k1) of rows a and b, `_rotate` restricted to a range."""
+    _rotate(a.unsafe_offset(k0), b.unsafe_offset(k0), k1 - k0, c, s)
+
+
+def fast_jacobi_eigh(mut a: List[Float32], n: Int, max_sweeps: Int, tol: Float32) -> FastEighResult:
+    """`host_jacobi_eigh(a, n, max_sweeps, tol)`: `a` consumed in place and
+    left with the eigenvalues on its diagonal, the same words. Per rotation
+    the oracle's k loop touches four disjoint sets (column p and q off the
+    pair, rows p and q off the pair, the 2 x 2 block, V's columns p and q),
+    each element once from values no other set writes, so the sets run one
+    after another: the columns element by element (a stride-n walk), the
+    rows and V (held transposed) as vectors. The folds, the thresholds, the
+    angles and the pair order are the oracle's own functions."""
+    var vt = List[Float32](length=n * n, fill=Float32(0.0))
+    for i in range(n):
+        vt[i * n + i] = Float32(1.0)
+    var pa = F32Ptr(unsafe_from_address=Int(a.unsafe_ptr()))
+    var pvt = F32Ptr(unsafe_from_address=Int(vt.unsafe_ptr()))
+    var fro2 = _host_jacobi_fold(a, n, False)
+    var limit = ftz(ftz(tol * tol) * fro2)
+    var executed = 0
+    var converged = False
+    for _sweep in range(max_sweeps):
+        var off = _host_jacobi_fold(a, n, True)
+        if Float32(2.0) * off <= limit:
+            converged = True
+            break
+        executed += 1
+        for p in range(n):
+            for q in range(p + 1, n):
+                var cs = host_jacobi_rotation_cs(
+                    pa.unsafe_load(p * n + p), pa.unsafe_load(q * n + q), pa.unsafe_load(p * n + q)
+                )
+                var c = cs[0]
+                var s = cs[1]
+                # columns p and q, rows k off the pair
+                for k in range(n):
+                    if k != p and k != q:
+                        var akp = ftz(pa.unsafe_load(k * n + p))
+                        var akq = ftz(pa.unsafe_load(k * n + q))
+                        pa.unsafe_store(k * n + p, _rot_sub_1(c, akp, s, akq))
+                        pa.unsafe_store(k * n + q, _rot_add_1(s, akp, c, akq))
+                # rows p and q, columns k off the pair
+                var rp = pa.unsafe_offset(p * n)
+                var rq = pa.unsafe_offset(q * n)
+                _rot_rows(rp, rq, 0, p, c, s)
+                _rot_rows(rp, rq, p + 1, q, c, s)
+                _rot_rows(rp, rq, q + 1, n, c, s)
+                # the 2 x 2 block, the oracle's own order
+                _block(pa, n, p, q, c, s)
+                # V's columns p and q (rows of V transposed)
+                _rotate(pvt.unsafe_offset(p * n), pvt.unsafe_offset(q * n), n, c, s)
+    var v = List[Float32](length=n * n, fill=Float32(0))
+    for k in range(n):
+        for p in range(n):
+            v[k * n + p] = vt[p * n + k]
+    _ = vt^
+    return FastEighResult(v^, converged, executed)
+
+
+@always_inline
+def _block(pa: F32Ptr, n: Int, p: Int, q: Int, c: Float32, s: Float32):
+    """`_rotate_pair_block` (pca_oracle.mojo), statement for statement."""
+    var app = ftz(pa.unsafe_load(p * n + p))
+    var apq = ftz(pa.unsafe_load(p * n + q))
+    pa.unsafe_store(p * n + p, _rot_sub_1(c, app, s, apq))
+    pa.unsafe_store(p * n + q, _rot_add_1(s, app, c, apq))
+    var aqp = ftz(pa.unsafe_load(q * n + p))
+    var aqq = ftz(pa.unsafe_load(q * n + q))
+    pa.unsafe_store(q * n + p, _rot_sub_1(c, aqp, s, aqq))
+    pa.unsafe_store(q * n + q, _rot_add_1(s, aqp, c, aqq))
+    var rpp = ftz(pa.unsafe_load(p * n + p))
+    var rqp = ftz(pa.unsafe_load(q * n + p))
+    pa.unsafe_store(p * n + p, _rot_sub_1(c, rpp, s, rqp))
+    pa.unsafe_store(q * n + p, _rot_add_1(s, rpp, c, rqp))
+    var rpq = ftz(pa.unsafe_load(p * n + q))
+    var rqq = ftz(pa.unsafe_load(q * n + q))
+    pa.unsafe_store(p * n + q, _rot_sub_1(c, rpq, s, rqq))
+    pa.unsafe_store(q * n + q, _rot_add_1(s, rpq, c, rqq))

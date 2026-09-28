@@ -15,7 +15,8 @@ from std.memory import bitcast
 from std.sys.compile import is_defined
 
 from decomposition.checks.jacobi_eigh_device import JACOBI_SWEEPS, JACOBI_TOL
-from decomposition.host.linalg_public import host_eigh, host_qr_r
+from decomposition.host.linalg_public import eigh_ascending, host_eigh, host_qr_r
+from decomposition.host.pca_oracle import host_sign_flip
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from x_decomp.cells import (
     F32Ptr,
@@ -46,7 +47,7 @@ from x_decomp.cells import (
     pdist_cell,
 )
 from x_decomp.exec_trait import Exec
-from x_decomp.host_jacobi import fast_one_sided_jacobi_svd
+from x_decomp.host_jacobi import fast_jacobi_eigh, fast_one_sided_jacobi_svd
 from x_decomp.host_qr import fast_qr_finish, qr_slice, qr_slices
 from x_decomp.host_graph import EdgeList, dijkstra_heap_row
 from x_decomp.host_simd import (
@@ -259,10 +260,29 @@ struct HostExec(Exec):
 
     @staticmethod
     def eigh(a: F32Ptr, w: F32Ptr, v: F32Ptr, n: Int) raises:
+        if n < 1 or n > 46340:
+            _ = host_eigh(List[Float32](), n)  # refuses the size, by name
         var m = List[Float32](capacity=n * n)
         for i in range(n * n):
             m.append(a.unsafe_load(i))
-        var got = host_eigh(m, n)
+        # host_eigh's steps, the rotations of x_decomp/host_jacobi.mojo
+        var fe = fast_jacobi_eigh(m, n, JACOBI_SWEEPS, Float32(JACOBI_TOL))
+        if not fe.converged:
+            raise Error(
+                "eigh: the Jacobi eigensolver did not converge in "
+                + String(JACOBI_SWEEPS)
+                + " sweeps at n = "
+                + String(n)
+                + ". An unconverged decomposition is not returned as if it were"
+                " one; see DEVIATION 590. The remedy is more sweeps, the same one"
+                " cuSOLVER's syevj has"
+            )
+        var vecs = fe.vectors.copy()
+        host_sign_flip(vecs, n)
+        var diag = List[Float32]()
+        for i in range(n):
+            diag.append(m[i * n + i])
+        var got = eigh_ascending(diag, vecs, n, fe.converged, fe.executed)
         for i in range(n):
             w.unsafe_store(i, got.w[i])
         for i in range(n * n):
