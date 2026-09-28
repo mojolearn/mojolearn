@@ -142,25 +142,6 @@ def q_prophet(ml, X, n=65536):
                 rmse=float(np.sqrt(np.mean((yh - yy.astype(np.float64)) ** 2))))
 
 
-def q_theta(ml, X, stall=None):
-    Y = series(X, 10000, 112)
-    tr, te = np.ascontiguousarray(Y[:, :100]), Y[:, 100:].astype(np.float64)
-    m = ml.AutoTheta(season_length=12).fit(tr)
-    if stall is not None:
-        m._fast_stall = stall
-    t0 = time.perf_counter()
-    p = m.predict(12)
-    secs = time.perf_counter() - t0
-    f = np.asarray(p["mean"] if isinstance(p, dict) else p, dtype=np.float64)
-    info = np.asarray(m.info_, dtype=np.float64)
-    ae = np.abs(f - te)
-    ok = np.isfinite(f).all(1)
-    return dict(stall=list(stall) if stall is not None else "default", fit_s=secs,
-                mse_mean=float(info[:, 3].mean()), mae=float(ae[ok].mean()),
-                smape=float((2 * ae / (np.abs(f) + np.abs(te)))[ok].mean()), nonfinite=int((~ok).sum()),
-                iters_mean=float(info[:, 7].mean()))
-
-
 def q_layernorm(ml, X):
     x = np.ascontiguousarray(X)
     D = x.shape[1]
@@ -201,16 +182,16 @@ def main():
         try:
             if w in ("lamb", "adafactor"):
                 r = q_optim(ml, w)
-            elif w in ("ets", "garch", "theta", "layernorm", "var", "prophet"):
+            elif w in ("ets", "garch", "layernorm", "var", "prophet"):
                 if X is None:
                     X, _ = load(a.data, 1_000_000)
-                if w in ("ets", "garch", "theta"):
+                if w in ("ets", "garch"):
                     fast = os.environ.get("MOJOLEARN_NUMERIC_MODE") == "fast"
-                    sweep = [None] + ([(0, 0.0), (20, 1e-6), (50, 1e-6), (50, 1e-5), (100, 1e-6)]
+                    sweep = [None] + ([(0, 0.0), (50, 1e-6), (50, 1e-5), (40, 1e-5), (70, 1e-5)]
                                       if fast and os.environ.get("SEQ_QUALITY_ETS_SWEEP") else [])
                     for s in sweep:
                         try:
-                            r = dict(ets=q_ets, garch=q_garch, theta=q_theta)[w](ml, X, s)
+                            r = (q_ets if w == "ets" else q_garch)(ml, X, s)
                         except Exception as e:
                             r = dict(stall=str(s), error=f"{type(e).__name__}: {e}")
                         print("QUAL", json.dumps(dict(case=w, mode=os.environ.get("MOJOLEARN_NUMERIC_MODE", ""), **r)),

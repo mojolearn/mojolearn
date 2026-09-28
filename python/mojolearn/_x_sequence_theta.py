@@ -56,13 +56,10 @@ class AutoTheta:
         mask = (int(self.initial_smoothed is not None) | 2 * int(self.alpha is not None)
                 | 4 * int(self.theta is not None))
         fp = [0.0 if v is None else float(v) for v in (self.initial_smoothed, self.alpha, self.theta)]
-        ip = [B, n, int(h), self.season_length, -1 if self.model is None else _MODELS[self.model],
-              0 if self.decomposition_type == "multiplicative" else 1, mask]
-        stall = getattr(self, "_fast_stall", None)    # (iterations, relative drop): FAST opt-in
-        if stall is not None:
-            ip, fp = ip + [int(stall[0])], fp + [float(stall[1])]
         _backend.binding("_mojolearn_x_sequence", self.numeric_mode).theta(
-            [self._y.ctypes.data, f.ctypes.data, info.ctypes.data], ip, fp)
+            [self._y.ctypes.data, f.ctypes.data, info.ctypes.data],
+            [B, n, int(h), self.season_length, -1 if self.model is None else _MODELS[self.model],
+             0 if self.decomposition_type == "multiplicative" else 1, mask], fp)
         self.info_ = info
         self.model_ = [list(_MODELS)[int(k)] for k in info[:, 4]]
         return f

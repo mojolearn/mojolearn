@@ -336,9 +336,7 @@ def op_theta(t: Int, a: Args):
             k += 1
         var it = 0
         if k > 0:
-            # i7 / f3: the FAST stall stop (sequence/nm.mojo; compiled out of IDENTICAL)
-            it = nelder_mead(obj, x, lo, hi, k, nm_scr, Float32(0.05), Float32(1e-4), 1000, Float32(1e-4),
-                             stall_iters=a.i7, stall_rel=a.f3)
+            it = nelder_mead(obj, x, lo, hi, k, nm_scr, Float32(0.05), Float32(1e-4), 1000, Float32(1e-4))
         var p = obj.params(x)
         var mse = theta_run(yd, n, model, p[0], p[1], p[2], states, e)
         if mse < best_mse:
