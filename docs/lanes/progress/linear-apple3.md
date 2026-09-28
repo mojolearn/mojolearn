@@ -42,6 +42,24 @@ the contract, ONE thread's ascending chain over all n rows, and that chain
 is where the time goes; more blocks cannot shorten it without regrouping
 the sum, which moves bits. Not attempted in this round.
 
+## Changes (every one WIP and opt-in until its A/B and quality check are on record)
+
+| define | what | mode | files | shared code |
+|---|---|---|---|---|
+| `-D MOJOLEARN_X_LINEAR_BLOCKS=1` | Poisson / Gamma / Tweedie, Huber, LogisticRegressionCV, Quantile: row passes on n / 1024 blocks, control on the host; isotonic predict over the whole grid | FAST, Apple | x_linear/blocks.mojo (new), x_linear/device.mojo (hook) | no |
+| `-D MOJOLEARN_X_LINEAR_BLOCKS_GRAM=1` | LassoCV / ElasticNetCV, RidgeClassifier / RidgeCV, BayesianRidge, ARD, Lars / LassoLars: means, centered Gram, X'y, residual sums, path errors, leave-one-out rows in blocks | FAST, Apple | x_linear/blocks_gram.mojo (new), x_linear/device.mojo (hook) | no |
+| `-D MOJOLEARN_X_LINEAR_FAST_FMA=1` | every x_linear multiply-add in code compiled for an Apple GPU is one fused instruction (FAST used a product and a sum) | FAST, Apple | x_linear/ops.mojo (`xmad`), tops.mojo, sgd.mojo | no (x_linear only) |
+| `-D MOJOLEARN_SGD_FAST_TREE=1` | SGD family: the row's folds (row dot, penalty norms, PA's norm) as a `shuffle_xor` warp reduction, 5 steps instead of a chain of 32 | FAST, Apple | x_linear/sgd.mojo | no |
+| `-D MOJOLEARN_CD_GRAM_BLOCKS=1` | core Lasso / ElasticNet FAST Gram: upper triangle from 1024-row blocks of 256 threads read straight from x; no (p + 1) x n copy, no 1024-thread block | FAST, Apple | solver/impl/cd.mojo | no |
+
+Not converted (still one block): the SGD family's single problem (the pass
+is serial in the rows by definition; only its folds change above) and the
+isotonic fit (pool-adjacent-violators, one thread).
+
+Host work in the block fits: the m x m algebra, and one-time O(n) float32
+folds over y and the weights (the weight total, the target mean, Quantile's
+spread and norm, the folds' row counts). Every pass over X is on the GPU.
+
 ## Jobs
 
 | steward id | Mac | what |
