@@ -16,6 +16,8 @@ from x_prep.fastred import (
     ii_gram_fast_kernel,
 )
 from x_prep.dmi import mi_cd_device, mi_w_words, mi_scratch_words
+from x_prep.simdfold import pt_sfold_simd_kernel, ii_mean_simd_kernel, ii_gram_simd_kernel
+from std.gpu import WARP_SIZE
 
 #: op 69 (`mi_cd`) runs as the sorted neighbour search of x_prep/dmi.mojo
 #: (the host's argument, x_prep/host/mutual_info.mojo: the same words)
@@ -27,6 +29,9 @@ comptime OP_CLASS_STATS = 16
 comptime OP_II_MEAN = 53
 comptime OP_II_GRAM = 54
 comptime OP_PT_FOLD = 106
+#: op 112 (`pt_sfold`) runs as the SIMD-group fold of x_prep/simdfold.mojo
+#: (the same words; MOJOLEARN_XPREP_SIMD_FOLD=0 keeps one thread per unit)
+comptime OP_PT_SFOLD = 112
 
 #: op 0 (`sort_cols`) runs as the device sort of x_prep/dsort.mojo, not as
 #: one heapsort thread per column: the same words (a sort under a total
@@ -100,6 +105,7 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     var fast_folds = getenv("MOJOLEARN_XPREP_FAST_FOLDS", "1") != "0"
     var mi_sorted = getenv("MOJOLEARN_XPREP_MI_SORTED", "1") != "0"
     var mi_ties = getenv("MOJOLEARN_XPREP_MI_TIES", "1") != "0"
+    var simd_fold = getenv("MOJOLEARN_XPREP_SIMD_FOLD", "1") != "0"
     var mi_w = 1
     var mi_u = 1
     for s in range(stages):
@@ -136,6 +142,17 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
             mi_cd_device(ctx, df, dmw, dmu, dq, s * STAGE_INTS + 2, total, Int(hq[1]), Int(hq[2]), Int(hq[0]),
                          Int(hq[7]), mi_ties)
             continue
+        if simd_fold and op == OP_PT_SFOLD:
+            ctx.enqueue_function[pt_sfold_simd_kernel](df.unsafe_ptr(), qp, grid_dim=total, block_dim=WARP_SIZE)
+            continue
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+            # IDENTICAL: the row-order folds fed by a SIMD group (FAST folds these by tree, below)
+            if simd_fold and op == OP_II_MEAN:
+                ctx.enqueue_function[ii_mean_simd_kernel](df.unsafe_ptr(), qp, grid_dim=total, block_dim=WARP_SIZE)
+                continue
+            if simd_fold and op == OP_II_GRAM:
+                ctx.enqueue_function[ii_gram_simd_kernel](df.unsafe_ptr(), qp, grid_dim=total, block_dim=WARP_SIZE)
+                continue
         if op == OP_SORT_COLS:
             var hq = host_q + (s * STAGE_INTS + 2)
             sort_cols_device(ctx, df, dw, total, Int(hq[0]), Int(hq[1]), Int(hq[2]),

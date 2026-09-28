@@ -626,18 +626,18 @@ def pt_spts_unit(t: Int, f: FP, q: IP):
 
 
 def pt_smap_unit(t: Int, f: FP, q: IP):
-    """q = [X, n, d, METHOD, SPL, M, T, LG]; t = (i*d + c)*M + j.
-    T[(c*n + i)*M + j] = `pt_map_unit`'s word at candidate j's point: the
-    candidates of one row side by side, so the folds of one column's
-    candidates (neighbouring threads) read neighbouring words."""
+    """q = [X, n, d, METHOD, SPL, M, T, LG]; t = (c*M + j)*n + i.
+    T[(c*M + j)*n + i] = `pt_map_unit`'s word at candidate j's point, each
+    candidate's column contiguous (the fold of x_prep/simdfold.mojo reads it
+    a SIMD group's width at a time)."""
     var n = p(q, 1)
     var d = p(q, 2)
     var M = p(q, 5)
-    var j = t % M
-    var r = t // M
-    var c = r % d
-    var i = r // d
-    var o = p(q, 6) + (c * n + i) * M + j
+    var i = t % n
+    var cj = t // n
+    var j = cj % M
+    var c = cj // M
+    var o = p(q, 6) + t
     var x = ld(f, p(q, 0) + i * d + c)
     if is_nan(x):
         f.unsafe_store(o, canonical_nan())
@@ -669,55 +669,54 @@ def pt_sfold_unit(t: Int, f: FP, q: IP):
     var sj = Float32(0)
     if not first:
         sj = raw(f, S + 8)
-    # candidate j's transforms: T[(c*n + i)*M + j], stride M
-    var Tc = p(q, 4) + c * n * M + j
+    var Tc = p(q, 4) + t * n
     var full = n - n % RUN
     if first:
         for i0 in range(0, full, RUN):
             var bx = run_block[RUN](f, X + i0 * d + c, d)
-            var bt = run_block[RUN](f, Tc + i0 * M, M)
+            var bt = run_block[RUN](f, Tc + i0, 1)
             comptime for u in range(RUN):
                 _pt_take1(ftz(bx[u]), bt[u], method, True, cnt, sm, sj)
         for i in range(full, n):
-            _pt_take1(ld(f, X + i * d + c), raw(f, Tc + i * M), method, True, cnt, sm, sj)
+            _pt_take1(ld(f, X + i * d + c), raw(f, Tc + i), method, True, cnt, sm, sj)
         if j == 0:
             f.unsafe_store(S + 8, sj)
             sti(f, S + 9, cnt)
     elif ldi(f, S + 9) == n:
         cnt = n
         for i0 in range(0, full, RUN):
-            var bt = run_block[RUN](f, Tc + i0 * M, M)
+            var bt = run_block[RUN](f, Tc + i0, 1)
             comptime for u in range(RUN):
                 sm = acc_add(sm, bt[u])
         for i in range(full, n):
-            sm = acc_add(sm, raw(f, Tc + i * M))
+            sm = acc_add(sm, raw(f, Tc + i))
     else:
         for i0 in range(0, full, RUN):
-            var bt = run_block[RUN](f, Tc + i0 * M, M)
+            var bt = run_block[RUN](f, Tc + i0, 1)
             comptime for u in range(RUN):
                 _pt_take1(bt[u], bt[u], method, False, cnt, sm, sj)
         for i in range(full, n):
-            var tv = raw(f, Tc + i * M)
+            var tv = raw(f, Tc + i)
             _pt_take1(tv, tv, method, False, cnt, sm, sj)
     var ss = Float32(0)
     if cnt == n and n > 0:
         var mean = div(sm, Float32(cnt))
         for i0 in range(0, full, RUN):
-            var bt = run_block[RUN](f, Tc + i0 * M, M)
+            var bt = run_block[RUN](f, Tc + i0, 1)
             comptime for u in range(RUN):
                 var e = sub(bt[u], mean)
                 ss = acc_add(ss, mul(e, e))
         for i in range(full, n):
-            var e = sub(raw(f, Tc + i * M), mean)
+            var e = sub(raw(f, Tc + i), mean)
             ss = acc_add(ss, mul(e, e))
     elif cnt > 0:
         var mean = div(sm, Float32(cnt))
         for i0 in range(0, full, RUN):
-            var bt = run_block[RUN](f, Tc + i0 * M, M)
+            var bt = run_block[RUN](f, Tc + i0, 1)
             comptime for u in range(RUN):
                 _pt_take2(bt[u], bt[u], mean, ss)
         for i in range(full, n):
-            var tv = raw(f, Tc + i * M)
+            var tv = raw(f, Tc + i)
             _pt_take2(tv, tv, mean, ss)
     var lam = raw(f, p(q, 7) + t)
     var val = Float32(0)
