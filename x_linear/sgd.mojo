@@ -346,6 +346,39 @@ def _warp_row_folds[K: Int, NORMS: Bool, SQ: Bool](
     return (acc, n2, n1, sq)
 
 
+comptime SPLITMIX_GAMMA = UInt64(0x9E3779B97F4A7C15)
+
+
+@always_inline
+def _splitmix_at(seed: UInt64, k: Int) -> UInt64:
+    """The word the k-th rng_next call from state `seed` returns (k >= 1)."""
+    var z = seed + UInt64(k) * SPLITMIX_GAMMA
+    z = (z ^ (z >> 30)) * UInt64(0xBF58476D1CE4E5B9)
+    z = (z ^ (z >> 27)) * UInt64(0x94D049BB133111EB)
+    return z ^ (z >> 31)
+
+
+def _warp_draws(lane: Int, seed: UInt64, n: Int, epoch: Int, dst: IP):
+    """Epoch `epoch`'s Fisher-Yates draws j_t = draw mod (n - t), t < n - 1,
+    lanes striding over t; draw k = epoch * (n - 1) + t + 1."""
+    var base = epoch * (n - 1)
+    var tt = lane
+    while tt < n - 1:
+        var z = _splitmix_at(seed, base + tt + 1)
+        dst.unsafe_store(tt, Int32(Int(z % UInt64(n - tt))))
+        tt += WARP_SIZE
+
+
+def _shuffle_drawn(idx: IP, n: Int, dr: IP):
+    """ops.shuffle with its draws read from `dr` (the same swaps)."""
+    for tt in range(n - 1):
+        var i = n - 1 - tt
+        var j = Int(dr.unsafe_load(tt))
+        var a = ldi(idx, i)
+        sti(idx, i, ldi(idx, j))
+        sti(idx, j, a)
+
+
 def sgd_one_warp[K: Int](
     lane: Int, x: FP, y: FP, k: Int, c: Int, n: Int, d: Int,
     loss: Int, penalty: Int, alpha: Float32, l1_ratio_in: Float32,
@@ -354,7 +387,7 @@ def sgd_one_warp[K: Int](
     do_shuffle: Bool, seed: UInt64, one_class: Bool,
     w: FP, woff: Int, b: FP, boff: Int, idx: IP,
     swp: FP, has_sw: Bool, wpos: Float32, wneg: Float32, has_cw: Bool,
-    pipe: Bool, t_team: Team, warp: Int, idx_b: IP,
+    pipe: Bool, t_team: Team, warp: Int, idx_b: IP, draws0: IP, draws1: IP,
 ) -> Int:
     """`sgd_one` on the warp of `lane` (see above). d <= K * WARP_SIZE.
 
@@ -378,15 +411,25 @@ def sgd_one_warp[K: Int](
     var rng = seed
     var is_comp = (not pipe) or warp == 0
     var is_shuf = pipe and warp == 1
+    var is_draw = pipe and warp == 2
     if not pipe:
         if lane == 0:
             for i in range(n):
                 sti(idx, i, i)
     else:
+        # lane/linear-apple2: warp 2's lanes compute each epoch's draws in
+        # parallel (draw k of the stream is splitmix64 at seed + k * gamma,
+        # the word rng_next's k-th call returns), two epochs ahead; warp 1's
+        # lane 0 runs Fisher-Yates on them.
+        if is_draw:
+            _warp_draws(lane, seed, n, 0, draws0)
+            if max_iter > 1:
+                _warp_draws(lane, seed, n, 1, draws1)
+        t_team.sync()
         if is_shuf and lane == 0:
             for i in range(n):
                 sti(idx, i, i)
-            shuffle(idx, n, rng)
+            _shuffle_drawn(idx, n, draws0)
         t_team.sync()
     var eta = eta0
     var optimal_init = Float32(0)
@@ -427,7 +470,9 @@ def sgd_one_warp[K: Int](
                 while i < n:
                     nxt.unsafe_store(i, order.unsafe_load(i))
                     i += 1
-                shuffle(nxt, n, rng)
+                _shuffle_drawn(nxt, n, draws1 if epoch % 2 == 0 else draws0)
+            if is_draw and epoch + 2 < max_iter:
+                _warp_draws(lane, seed, n, epoch + 2, draws0 if epoch % 2 == 0 else draws1)
         if is_comp:
             epochs = epoch + 1
             var objective = Float32(0)
@@ -625,9 +670,11 @@ def sgd_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
             var nw = t.nt // WARP_SIZE
             # lane/linear-apple2: one problem with a shuffle: every warp takes
             # part (warp 0 computes, warp 1 shuffles the next epoch's order).
-            var pipe = problems == 1 and do_shuffle and nw >= 2
+            var pipe = problems == 1 and do_shuffle and nw >= 3
             var warp = t.tid // WARP_SIZE
             var idx_b = t.row(2 * problems + 1).bitcast[Int32]()
+            var draws0 = t.row(2 * problems + 2).bitcast[Int32]()
+            var draws1 = t.row(2 * problems + 3).bitcast[Int32]()
             var first = 0 if pipe else warp
             var step = 1 if pipe else nw
             for c in range(first, problems, step):
@@ -641,7 +688,7 @@ def sgd_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
                         fit_intercept, max_iter, tol, nic, do_shuffle,
                         seed + UInt64(1000003) * UInt64(c), k == 1,
                         res, c * d, res, problems * d + c, order, swp, has_sw, cw_pos, cw_neg, has_cw,
-                        pipe, t, warp, idx_b,
+                        pipe, t, warp, idx_b, draws0, draws1,
                     )
                 elif chunks <= 2:
                     ep = sgd_one_warp[2](
@@ -649,7 +696,7 @@ def sgd_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
                         fit_intercept, max_iter, tol, nic, do_shuffle,
                         seed + UInt64(1000003) * UInt64(c), k == 1,
                         res, c * d, res, problems * d + c, order, swp, has_sw, cw_pos, cw_neg, has_cw,
-                        pipe, t, warp, idx_b,
+                        pipe, t, warp, idx_b, draws0, draws1,
                     )
                 elif chunks <= 4:
                     ep = sgd_one_warp[4](
@@ -657,7 +704,7 @@ def sgd_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
                         fit_intercept, max_iter, tol, nic, do_shuffle,
                         seed + UInt64(1000003) * UInt64(c), k == 1,
                         res, c * d, res, problems * d + c, order, swp, has_sw, cw_pos, cw_neg, has_cw,
-                        pipe, t, warp, idx_b,
+                        pipe, t, warp, idx_b, draws0, draws1,
                     )
                 else:
                     ep = sgd_one_warp[SGD_WARP_MAX_CHUNKS](
@@ -665,7 +712,7 @@ def sgd_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
                         fit_intercept, max_iter, tol, nic, do_shuffle,
                         seed + UInt64(1000003) * UInt64(c), k == 1,
                         res, c * d, res, problems * d + c, order, swp, has_sw, cw_pos, cw_neg, has_cw,
-                        pipe, t, warp, idx_b,
+                        pipe, t, warp, idx_b, draws0, draws1,
                     )
                 if lane == 0 and (not pipe or warp == 0):
                     st(epr, c, i2f(ep))
@@ -791,4 +838,4 @@ def sgd_team_rows(ip: IP) -> Int:
     epochs, and the warp form's second order buffer."""
     var k = ldi(ip, 0)
     var problems = k if k > 2 else 1
-    return 2 * problems + 2  # + the second order buffer (lane/linear-apple2)
+    return 2 * problems + 4  # + the second order buffer and two draw buffers (lane/linear-apple2)
