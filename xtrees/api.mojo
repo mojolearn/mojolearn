@@ -14,6 +14,7 @@ from xtrees.shap import node_cover, tree_shap, expected_value, mask_expand, bloc
 from xtrees.ops import (
     sample_indices, weighted_sample, gather_f32, gather_i32, accumulate,
     accumulate_onehot, accumulate_cols, accumulate_rows, argmax_rows, argmax_rows_f32, scale_f64, softmax_rows, scale_to_f32, put_f32,
+    check_weights_f32, mul_f32,
     samme_step, r2_step, weighted_median, apply_trees, gradients, leaf_newton, leaf_newton_rows, tree_score_add, uniform,
     onehot_leaves, transpose_f32, normalize_rows, logit, scatter, platt_fit, platt_apply, isotonic_fit,
     isotonic_predict,
@@ -333,6 +334,24 @@ def transpose_f32_binding(src: PythonObject, dst: PythonObject, params: PythonOb
     return PythonObject(n * d)
 
 
+def check_weights_f32_binding(w: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n]; returns check_weights_f32's status (0 ok, 1 bad entry, 2 no positive)."""
+    _need(params, 1, "x_trees_check_weights_f32")
+    var n = _count(_i(params, 0), "x_trees_check_weights_f32")
+    if n == 0:
+        return PythonObject(2)
+    return PythonObject(check_weights_f32(f32_ptr(Int(py=w)), n))
+
+
+def mul_f32_binding(a: PythonObject, b: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
+    """dst = a * b elementwise in float32; params = [n]."""
+    _need(params, 1, "x_trees_mul_f32")
+    var n = _count(_i(params, 0), "x_trees_mul_f32")
+    if n > 0:
+        mul_f32(f32_ptr(Int(py=a)), f32_ptr(Int(py=b)), n, f32_ptr(Int(py=dst)))
+    return PythonObject(n)
+
+
 def log64_binding(x: PythonObject) raises -> PythonObject:
     """The pinned binary64 log (checks/numerics.mojo identical_log64) of one value."""
     return PythonObject(identical_log64(Float64(py=x)))
@@ -524,6 +543,8 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[uniform_binding]("x_trees_uniform")
     m.def_function[onehot_leaves_binding]("x_trees_onehot_leaves")
     m.def_function[transpose_f32_binding]("x_trees_transpose_f32")
+    m.def_function[check_weights_f32_binding]("x_trees_check_weights_f32")
+    m.def_function[mul_f32_binding]("x_trees_mul_f32")
     m.def_function[log64_binding]("x_trees_log64")
     m.def_function[normalize_rows_binding]("x_trees_normalize_rows")
     m.def_function[logit_binding]("x_trees_logit")
