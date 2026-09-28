@@ -64,6 +64,46 @@ def te_global_unit(t: Int, f: FP, q: IP):
     st(f, p(q, 4) + 2 * t + 1, ss)
 
 
+#: categories whose bucket counters `te_bucket` keeps in a thread-private array
+comptime TE_REG = 256
+
+
+def _te_bucket_reg(t: Int, f: FP, n: Int, d: Int, cmax: Int, C: Int, S: Int, R: Int):
+    """`te_bucket_unit` with its counters in a thread-private array instead of
+    arena words (lane prep-apple2: consecutive rows of one category made each
+    count a load after a store to the same arena word). The same START and
+    ROWS words."""
+    var cnt = InlineArray[Int32, TE_REG + 1](fill=Int32(0))
+    var full = n - n % RUN
+    for i0 in range(0, full, RUN):
+        var bc = run_block[RUN](f, C + i0 * d + t, d)
+        comptime for u in range(RUN):
+            var code = Int(ftz(bc[u]))
+            if code >= 0 and code < cmax:
+                cnt[code + 1] += 1
+    for i in range(full, n):
+        var code = Int(ld(f, C + i * d + t))
+        if code >= 0 and code < cmax:
+            cnt[code + 1] += 1
+    for c in range(cmax):
+        cnt[c + 1] += cnt[c]
+    for c in range(cmax + 1):
+        sti(f, S + c, Int(cnt[c]))
+    # cnt[c] is now category c's fill position
+    for i0 in range(0, full, RUN):
+        var bc = run_block[RUN](f, C + i0 * d + t, d)
+        comptime for u in range(RUN):
+            var code = Int(ftz(bc[u]))
+            if code >= 0 and code < cmax:
+                sti(f, R + Int(cnt[code]), i0 + u)
+                cnt[code] += 1
+    for i in range(full, n):
+        var code = Int(ld(f, C + i * d + t))
+        if code >= 0 and code < cmax:
+            sti(f, R + Int(cnt[code]), i)
+            cnt[code] += 1
+
+
 def te_bucket_unit(t: Int, f: FP, q: IP):
     """q = [CODES, n, d, CMAX, START, ROWS]; t = column j (lane prep-apple).
     The rows of each category of column j, ascending: START[j*(CMAX+1) + c]
@@ -77,6 +117,9 @@ def te_bucket_unit(t: Int, f: FP, q: IP):
     var C = p(q, 0)
     var S = p(q, 4) + t * (cmax + 1)
     var R = p(q, 5) + t * n
+    if cmax <= TE_REG:
+        _te_bucket_reg(t, f, n, d, cmax, C, S, R)
+        return
     for c in range(cmax + 1):
         sti(f, S + c, 0)
     var full = n - n % RUN
