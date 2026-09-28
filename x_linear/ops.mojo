@@ -383,9 +383,6 @@ def mod_draw(z: UInt64, m: Int) -> Int:
 
 def shuffle(idx: IP, n: Int, mut s: UInt64):
     """Fisher-Yates, i descending, j = draw mod (i + 1)."""
-    comptime if is_gpu():
-        shuffle_ahead(idx, n, s)
-        return
     var i = n - 1
     while i > 0:
         var j = mod_draw(rng_next(s), i + 1)
@@ -393,79 +390,6 @@ def shuffle(idx: IP, n: Int, mut s: UInt64):
         sti(idx, i, ldi(idx, j))
         sti(idx, j, t)
         i -= 1
-
-comptime SHUFFLE_AHEAD = 4
-
-
-def shuffle_ahead(idx: IP, n: Int, mut s: UInt64):
-    """`shuffle`'s permutation with its loads issued SHUFFLE_AHEAD steps early
-    (lane/linear-apple2, the GPU form: one thread's Fisher-Yates otherwise
-    waits on two dependent loads per step). Step t swaps positions
-    i_t = n-1-t and j_t (the same draws, in the same order). The loads for
-    step t are issued right after step t-D's stores, so each loaded word is
-    brought up to date with the stores of steps t-D+1 .. t-1, kept in
-    registers, applied oldest first in store order (idx[i] = v_j, then
-    idx[j] = v_i). Every stored word is the one the plain loop stores."""
-    comptime D = SHUFFLE_AHEAD
-    var steps = n - 1
-    if steps <= 0:
-        return
-    var pi = InlineArray[Int, D](fill=-1)
-    var pj = InlineArray[Int, D](fill=-1)
-    var li = InlineArray[Int32, D](fill=Int32(0))
-    var lj = InlineArray[Int32, D](fill=Int32(0))
-    # committed stores of the last D - 1 steps, oldest first
-    var ri = InlineArray[Int, D - 1](fill=-1)
-    var rj = InlineArray[Int, D - 1](fill=-1)
-    var rvi = InlineArray[Int32, D - 1](fill=Int32(0))
-    var rvj = InlineArray[Int32, D - 1](fill=Int32(0))
-    comptime for q in range(D):
-        if q < steps:
-            var i = n - 1 - q
-            var j = mod_draw(rng_next(s), i + 1)
-            pi[q] = i
-            pj[q] = j
-            li[q] = idx.unsafe_load(i)
-            lj[q] = idx.unsafe_load(j)
-    for t in range(steps):
-        var vi = li[0]
-        var vj = lj[0]
-        var i0 = pi[0]
-        var j0 = pj[0]
-        comptime for r in range(D - 1):
-            if i0 == ri[r]:
-                vi = rvj[r]
-            if i0 == rj[r]:
-                vi = rvi[r]
-            if j0 == ri[r]:
-                vj = rvj[r]
-            if j0 == rj[r]:
-                vj = rvi[r]
-        idx.unsafe_store(i0, vj)
-        idx.unsafe_store(j0, vi)
-        comptime for r in range(D - 2):
-            ri[r] = ri[r + 1]
-            rj[r] = rj[r + 1]
-            rvi[r] = rvi[r + 1]
-            rvj[r] = rvj[r + 1]
-        ri[D - 2] = i0
-        rj[D - 2] = j0
-        rvi[D - 2] = vi
-        rvj[D - 2] = vj
-        comptime for q in range(D - 1):
-            pi[q] = pi[q + 1]
-            pj[q] = pj[q + 1]
-            li[q] = li[q + 1]
-            lj[q] = lj[q + 1]
-        var tn = t + D
-        if tn < steps:
-            var i = n - 1 - tn
-            var j = mod_draw(rng_next(s), i + 1)
-            pi[D - 1] = i
-            pj[D - 1] = j
-            li[D - 1] = idx.unsafe_load(i)
-            lj[D - 1] = idx.unsafe_load(j)
-
 
 
 # ------------------------------------------------------ dense linear algebra
