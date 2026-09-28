@@ -144,6 +144,7 @@ def needed_bindings(lanes):
     derived map. Refuses a lane with no GPU binding or no host binding."""
     import lane_select
     _, why = lane_select.lane_sources()
+    ROUTES = lane_select.host_routes()
     out = {}
     for lane in lanes:
         declared = set(why[lane]["declared"])
@@ -155,6 +156,16 @@ def needed_bindings(lanes):
         ubiq = set(why[lane].get("ubiquitous", ()))
         declared |= {b for b in BASE_BINDINGS if b in ubiq}
         declared.add("_mojolearn_core_host")     # the base binding's CPU route, on every CPU arm
+        # EVERY GPU BINDING THE LANE CALLS, AND ITS CPU ROUTE (lane/neural,
+        # 2026-09-28). `declared` is the families a lane BELONGS to; a binding
+        # the lane reaches "narrow" (through a shared door) is left out of it on
+        # purpose, but the fit still calls its exports. samba calls ten
+        # _mojolearn_mamba and eight _mojolearn_transformer exports and neither
+        # was built: run alone on the central AMD box its every cell REFUSED
+        # (`_mojolearn_mamba.so ... is not built`); with mamba1..3 and
+        # transformer in the same run it passed only because they built them.
+        called = {b for b, use in why[lane].get("binding_use", {}).items() if use.get("exports")}
+        declared |= called | set().union(*[ROUTES.get(b, set()) for b in called])
         declared = sorted(declared)
         gpu = [b for b in declared if not b.endswith("_host")]
         host = [b for b in declared if b.endswith("_host")]
