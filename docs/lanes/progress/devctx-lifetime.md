@@ -87,7 +87,11 @@ refused and hashed CPU cells, or a GPU refusal still fails.
   every fixture, 3 repeats, in ONE process: exit 0 (no MOVED, no refusal).
   Scan: 0 "Failed to create Metal command queue", 0 "kernel threadgroup size
   limit". AGREE against the unchanged host bindings means no IDENTICAL bit moved.
-- NVIDIA nvc1-0019: the same proof script (see below for its verdict).
+- NVIDIA: every touched binding BUILT on nvc1 (CUDA sm_89). The first proof
+  job (nvc1-0019) ran the per-lane checks with their seam sabotages, too heavy
+  for the shared pod, so the lane cancelled it after knn; the light job
+  nvc1-0023 (consolidated_check build-once over 54 lanes + the one-process
+  stress) is queued behind other lanes. Its verdict is PENDING.
 - AMD: the central box (linear-amd) ran the first six lane checks (knn x4,
   kmeans x2: AGREE), then began refusing ssh (publickey), so its verdict is
   unread. AMD is OWED.
@@ -101,3 +105,17 @@ off by default). The merge was clean; isolation_forest now spells the SVM
 binding's FAST slot as main does ("MojoSvmContextOther"), so the SVM .so keeps
 one context per tier. A re-audit after the merge finds no per-call
 `DeviceContext()` reachable from a binding outside that diagnostic arm.
+
+## Merge re-confirmation and landing
+
+- Main's x_metrics did not parse on the M2 Pro (`out` as a parameter name,
+  `fn` as a local; both are Mojo keywords). Fixed here; main carried the same
+  two fixes by the time this lane landed.
+- m2pro, steward 1790619759188 at ba7486cc0 (tools/consolidated_check/mac_job.sh,
+  build once, base fixture): iforest, svc, gp, kernel-ridge, knn, kmeans,
+  gbdt-rmse, metrics, rf-clf, et-clf, linalg-eigh, ols all AGREE.
+- Landed on main at 8b5473bbe (fast-forward).
+
+Left: the NVIDIA verdict (nvc1-0023, pending); AMD owed (the central box
+refused ssh); a per-rank slot for the 27 multi-GPU `DeviceContext(device_id=rank)`
+sites if a par-* lane ever shows the queue class.
