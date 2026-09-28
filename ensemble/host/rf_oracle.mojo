@@ -121,7 +121,6 @@ from core.host_parallel import host_parallelize
 
 from checks.fixed_point import choose_scale
 from checks.numerics import ftz, identical_log, identical_mul_add
-from core.host_fp_env import host_ieee_fp_enter, host_ieee_fp_leave
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from ensemble.host_layout import RF_NAN_REFUSAL, has_nan_f32_threaded
 
@@ -1634,9 +1633,9 @@ def rf_host_fit(
     forest.offsets.append(Int32(0))
     # THE TREES, ONE TASK PER CONTIGUOUS TREE RANGE (lane/trees-cpu,
     # 2026-09-28). Each tree is `_rf_host_tree`, whose statements run in
-    # their serial order on one thread; a task switches its pool thread to
-    # the calling thread's IEEE environment (`core/host_fp_env.mojo`, the
-    # FTZ+DAZ pool of DEVIATION 5900) before its first tree, and the trees
+    # their serial order on one thread; every task runs in the calling
+    # thread's floating-point environment (`core/host_parallel.mojo::
+    # host_parallelize`; the pool's FTZ+DAZ is DEVIATION 5900), and the trees
     # are appended in tree order after the join. So the forest is the bytes
     # of the serial walk at every MOJOLEARN_CPU_THREADS.
     var trees = List[_RfHostTree](capacity=p.n_trees)
@@ -1657,7 +1656,6 @@ def rf_host_fit(
         var messages = List[String](length=tree_tasks, fill=String(""))
         var n_trees = p.n_trees
         def _tree_task(task: Int) {mut trees, mut failed, mut messages, imm x, imm q, imm labels_i, imm labels_f, imm weights, imm weight_cdf, imm weighted_rows, imm weighted_obj, imm wscale, imm n_rows, imm n_cols, imm n_unique_labels, imm n_classes, imm classification, imm p, imm criterion, imm label_scale, imm tree_start, imm n_sampled, imm original_cols, imm max_rounds, imm tree_chunk, imm n_trees}:
-            var env = host_ieee_fp_enter()
             var lo = task * tree_chunk
             var hi = min(lo + tree_chunk, n_trees)
             try:
@@ -1672,8 +1670,7 @@ def rf_host_fit(
             except e:
                 failed[task] = True
                 messages[task] = String(e)
-            host_ieee_fp_leave(env)
-        sync_parallelize(_tree_task, tree_tasks)
+        host_parallelize(_tree_task, tree_tasks)
         # the serial walk raises its first failing tree's error; the lowest
         # failing task holds the lowest trees, and stops at its first
         for k in range(tree_tasks):

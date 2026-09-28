@@ -100,8 +100,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.dataset import Dataset
 from extratrees.checks.pcg_rng import row_sample_seed
 from core.philox import RNG_STRIDE, uniform_int_host
 from max.gpu.host import DeviceContext
-from max.algorithm import sync_parallelize
-from core.host_fp_env import host_ieee_fp_enter, host_ieee_fp_leave
+from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 
 
@@ -531,8 +530,8 @@ def fit_forest_exact(
     # 2026-09-28). A tree reads X, the label planes and its own seed and
     # writes only its own `TreeMetaDataNode`, so trees may run on different
     # threads with every statement of a tree in its serial order; each task
-    # runs in the calling thread's IEEE environment (`core/host_fp_env.mojo`;
-    # the pool's FTZ+DAZ is DEVIATION 5900), and the trees are appended in
+    # runs in the calling thread's environment (`core/host_parallel.mojo::
+    # host_parallelize`; the pool's FTZ+DAZ is DEVIATION 5900), and the trees are appended in
     # tree order after the join: the forest is the serial walk's bytes at
     # every MOJOLEARN_CPU_THREADS.
     var n = Int(n_trees)
@@ -545,9 +544,6 @@ def fit_forest_exact(
     var messages = List[String](length=tasks, fill=String(""))
 
     def _tree_task(task: Int) {mut slots, mut failed, mut messages, imm x_p, imm labels_p, imm labels_q_p, imm n_rows, imm n_cols, imm n_sampled, imm bootstrap, imm seed, imm tree_start, imm num_outputs, imm params, imm is_classification, imm inv_scale, imm chunk, imm n, imm tasks}:
-        var env = UInt64(0)
-        if tasks > 1:
-            env = host_ieee_fp_enter()
         var lo = task * chunk
         var hi = min(lo + chunk, n)
         try:
@@ -575,13 +571,11 @@ def fit_forest_exact(
         except e:
             failed[task] = True
             messages[task] = String(e)
-        if tasks > 1:
-            host_ieee_fp_leave(env)
 
     if tasks <= 1:
         _tree_task(0)
     else:
-        sync_parallelize(_tree_task, tasks)
+        host_parallelize(_tree_task, tasks)
     _ = x_col_major.unsafe_ptr()
     _ = labels.unsafe_ptr()
     _ = labels_q.unsafe_ptr()
