@@ -336,3 +336,23 @@ against 3.9 ms spent), and on the M3 Ultra (2.9 ms per iteration at 800 GB/s)
 far from it: the one-block strided reductions (loss sum, bias mean) and the
 xtdz chains wait on their loads. The walk's load block is A/B'd next.
 
+Chain block 32 / 16 / 8 (m4pro-a, steward 1790616014210): mixed (huber 1.108
+/ 0.949 / 0.926, poisson 2.46 / 2.33 / 2.85, logistic-cv 5.13 / 5.98 / 7.85,
+lasso-cv 0.421 / 0.456 / 0.550), digests equal. No single width wins; stays 32.
+
+### Strided walk load block (m4-a, Apple M4, steward 1790616633364), 1M rows
+
+core/strided_walk.mojo STRIDED_UNROLL 8 / 16 / 32 (the QN loss sums, bias
+means and coalesced X^T dZ chains), estimators rebuilt per arm; digests equal
+across arms in both modes:
+
+| mode | case | 8 | 16 | 32 |
+|---|---|---|---|---|
+| IDENTICAL | logistic | 0.445 | 0.440 | 0.437 |
+| IDENTICAL | linear-svc | 0.309 | 0.307 | 0.309 |
+| IDENTICAL | linear-svr | 0.215 | 0.194 | 0.181 |
+| FAST | logistic | 0.485 | 0.480 | 0.480 |
+| FAST | linear-svr | 0.207 | 0.186 | 0.173 |
+
+The M4 is bandwidth bound; the M3 Ultra A/B decides.
+
