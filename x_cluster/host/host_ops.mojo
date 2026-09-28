@@ -577,3 +577,20 @@ struct HostOps(ClusterOps):
         var pm = self._fp(md)
         for p in range(l):
             ward_nn_row(pc, ps, l, d, pn, pm, p)
+
+    def kth_flat(mut self, m: Int, n: Int, k: Int) raises -> Float32:
+        var dst = self.zeros(1)
+        self.kth(m, 1, n, k, dst)
+        return self.f[dst][0]
+
+    def get_diag(mut self, slot: Int, n: Int) raises -> List[Float32]:
+        if n * n > len(self.f[slot]):
+            raise Error("x_cluster host: get_diag of " + String(n) + " from a slot of " + String(len(self.f[slot])))
+        var out = List[Float32](capacity=n)
+        for i in range(n):
+            out.append(self.f[slot][i * n + i])
+        return out^
+
+    def ap_a_split(mut self, r: Int, a: Int, n: Int, damping: Float32) raises:
+        # the host column never takes the FAST device paths (`fast_device`)
+        self.ap_a(r, a, n, damping)

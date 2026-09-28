@@ -13,7 +13,7 @@ from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_mul
 
 from x_cluster.bodies import (
     FPtr,
@@ -470,6 +470,115 @@ def _descend_kernel(x: FPtr, n: Int32, d: Int32, centers: FPtr, nodes: IPtr, lab
     var t = _tid()
     if t < Int(n):
         tree_descend(x, Int(d), centers, nodes, labels, t)
+
+
+comptime KF_TPB = 256  # threads of a block, and the bins of a byte
+comptime KF_VPT = 64  # values per thread
+
+
+# Lane cluster-apple3: the radix select of `_kth_kernel` for ONE long row,
+# over every block of the grid. The same integer counts, so the same value.
+def _kthf_hist_kernel(m: FPtr, n: Int32, prefix: Int32, shift: Int32, first: Int32, part: IPtr):
+    """Block `b` counts its KF_TPB * KF_VPT values whose bits above `shift +
+    8` equal `prefix` by their byte at `shift`, in threadgroup memory
+    (integer atomics: every interleaving gives the same counts), then writes
+    its 256 counts to `part[b]`."""
+    var blk = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var N = Int(n)
+    var hist = stack_allocation[256, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    hist[tid] = Int32(0)
+    barrier()
+    var pre = UInt32(prefix)
+    var sh = UInt32(shift)
+    var base = blk * (KF_TPB * KF_VPT)
+    for j in range(KF_VPT):
+        var t = base + j * KF_TPB + tid
+        if t < N:
+            var bits = bitcast[DType.uint32](m[t]) & UInt32(0x7FFFFFFF)
+            var above = UInt32(0)
+            if first == Int32(0):
+                above = (bits >> (sh + UInt32(8))) << (sh + UInt32(8))
+            if above == pre:
+                _ = Atomic.fetch_add(hist.unsafe_offset(Int((bits >> sh) & UInt32(0xFF))), Int32(1))
+    barrier()
+    part[blk * 256 + tid] = hist[tid]
+
+
+def _kthf_sum_kernel(part: IPtr, n_blocks: Int32, hist: IPtr):
+    """Thread `b` of the one block: bin b summed over the blocks."""
+    var b = Int(thread_idx.x)
+    var acc = Int32(0)
+    for q in range(Int(n_blocks)):
+        acc += part[q * 256 + b]
+    hist[b] = acc
+
+
+def _diag_kernel(src: FPtr, n: Int32, dst: FPtr):
+    var t = _tid()
+    if t < Int(n):
+        dst[t] = src[t * Int(n) + t]
+
+
+comptime APF_TPB = 256
+comptime APF_ROWS = 64  # rows per slice
+
+
+# FAST ONLY (lane cluster-apple3): the availability update with the column
+# sums folded over row slices on every block of the grid, then every cell
+# its own thread. The addends and the cell update are `ap_availability_col`'s;
+# the column sum's order is not (bits move; the paired quality check).
+def _apf_part_kernel(r: FPtr, n: Int32, n_tiles: Int32, part: FPtr):
+    """Block (slice s, tile c), thread t: column c * APF_TPB + t summed over
+    the slice's rows (`Rp`: the positive part off the diagonal, the value
+    on it). Adjacent threads read adjacent cells of each row."""
+    var N = Int(n)
+    var T = Int(n_tiles)
+    var s = Int(block_idx.x) // T
+    var c = Int(block_idx.x) - s * T
+    var k = c * APF_TPB + Int(thread_idx.x)
+    if k >= N:
+        return
+    var i0 = s * APF_ROWS
+    var i1 = i0 + APF_ROWS
+    if i1 > N:
+        i1 = N
+    var acc = Float32(0)
+    for i in range(i0, i1):
+        var v = r[i * N + k]
+        if i == k or v > Float32(0):
+            acc = acc + v
+    part[s * N + k] = acc
+
+
+def _apf_sum_kernel(part: FPtr, n: Int32, n_slices: Int32, colsum: FPtr):
+    var k = _tid()
+    var N = Int(n)
+    if k >= N:
+        return
+    var acc = Float32(0)
+    for s in range(Int(n_slices)):
+        acc = acc + part[s * N + k]
+    colsum[k] = acc
+
+
+def _apf_update_kernel(r: FPtr, a: FPtr, colsum: FPtr, n: Int32, n_tiles: Int32, damping: Float32):
+    """Block (row i, tile c), thread t: cell (i, c * APF_TPB + t)."""
+    var N = Int(n)
+    var T = Int(n_tiles)
+    var i = Int(block_idx.x) // T
+    var c = Int(block_idx.x) - i * T
+    var k = c * APF_TPB + Int(thread_idx.x)
+    if k >= N:
+        return
+    var one_minus = ftz(Float32(1) - damping)
+    var v = r[i * N + k]
+    var rp = v if (i == k or v > Float32(0)) else Float32(0)
+    var nw = ftz(colsum[k] - rp)
+    if i != k and nw > Float32(0):
+        nw = Float32(0)
+    var old = a[i * N + k]
+    a[i * N + k] = ftz(ftz(identical_mul(old, damping)) + ftz(identical_mul(nw, one_minus)))
 
 
 comptime WNN_TPB = 256
@@ -967,3 +1076,81 @@ struct DeviceOps(ClusterOps):
             grid_dim=l, block_dim=WNN_TPB,
         )
         self._ph1("ward_nn")
+
+    def kth_flat(mut self, m: Int, n: Int, k: Int) raises -> Float32:
+        self._ph0()
+        var per = KF_TPB * KF_VPT
+        var n_blocks = (n + per - 1) // per
+        if n_blocks < 1:
+            n_blocks = 1
+        var part = self.ctx.enqueue_create_buffer[DType.int32](n_blocks * 256)
+        var hist = self.ctx.enqueue_create_buffer[DType.int32](256)
+        var pp = part.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var hp = hist.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var prefix = UInt32(0)
+        var rem = k
+        var short = False
+        for step in range(4):
+            var shift = 24 - 8 * step
+            self.ctx.enqueue_function[_kthf_hist_kernel](
+                self._fp(m), Int32(n), Int32(Int(prefix)), Int32(shift), Int32(1 if step == 0 else 0), pp,
+                grid_dim=n_blocks, block_dim=KF_TPB,
+            )
+            self.ctx.enqueue_function[_kthf_sum_kernel](pp, Int32(n_blocks), hp, grid_dim=1, block_dim=256)
+            var h = List[Int32](length=256, fill=Int32(0))
+            self.ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=hist)
+            self._sync()
+            var acc = 0
+            var chosen = -1
+            for b in range(256):
+                var c = Int(h[b])
+                if acc + c >= rem:
+                    chosen = b
+                    break
+                acc += c
+            if chosen < 0:
+                short = True
+                chosen = 255
+            prefix = prefix | (UInt32(chosen) << UInt32(shift))
+            rem = rem - acc
+        # the two buffers outlive every launch that holds their pointers
+        _ = part^
+        _ = hist^
+        var r = prefix
+        if short or r > UInt32(0x7F800000):
+            r = UInt32(0x7F800000)
+        self._ph1("kth_flat")
+        return bitcast[DType.float32](r)
+
+    def get_diag(mut self, slot: Int, n: Int) raises -> List[Float32]:
+        self._ph0()
+        var dbuf = self.ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
+        var dp = dbuf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var out = List[Float32](length=n, fill=Float32(0))
+        if n > 0:
+            self.ctx.enqueue_function[_diag_kernel](self._fp(slot), Int32(n), dp, grid_dim=_grid(n), block_dim=TPB)
+            self.ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=dbuf)
+        self._sync()
+        _ = dbuf^
+        self._ph1("get_diag")
+        return out^
+
+    def ap_a_split(mut self, r: Int, a: Int, n: Int, damping: Float32) raises:
+        self._ph0()
+        var n_tiles = (n + APF_TPB - 1) // APF_TPB
+        var n_slices = (n + APF_ROWS - 1) // APF_ROWS
+        var need = n_slices * n + n
+        if need > self.mpart_n:
+            self.mpart = self.ctx.enqueue_create_buffer[DType.float32](need)
+            self.mpart_n = need
+        # the slices' partial sums, then the n column sums, in the one scratch buffer
+        var pp = self.mpart.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var cp = pp + n_slices * n
+        self.ctx.enqueue_function[_apf_part_kernel](
+            self._fp(r), Int32(n), Int32(n_tiles), pp, grid_dim=n_slices * n_tiles, block_dim=APF_TPB,
+        )
+        self.ctx.enqueue_function[_apf_sum_kernel](pp, Int32(n), Int32(n_slices), cp, grid_dim=_grid(n), block_dim=TPB)
+        self.ctx.enqueue_function[_apf_update_kernel](
+            self._fp(r), self._fp(a), cp, Int32(n), Int32(n_tiles), damping, grid_dim=n * n_tiles, block_dim=APF_TPB,
+        )
+        self._ph1("ap_a_split")

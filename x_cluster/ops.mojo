@@ -133,3 +133,19 @@ trait ClusterOps(Movable):
         (centroids c, l x d; sizes sz) at the lowest `bodies.ward_cell`, the
         lowest q on a tie."""
         ...
+
+    def kth_flat(mut self, m: Int, n: Int, k: Int) raises -> Float32:
+        """The k-th smallest (1-based) of the first `n` values of slot `m`
+        (non-negative), the value `kth` gives for one row of n columns. On
+        the device a radix select over every block of the grid (lane
+        cluster-apple3: `kth` runs a row on ONE block)."""
+        ...
+
+    def get_diag(mut self, slot: Int, n: Int) raises -> List[Float32]:
+        """The n diagonal values of an n x n float slot."""
+        ...
+
+    def ap_a_split(mut self, r: Int, a: Int, n: Int, damping: Float32) raises:
+        """FAST: `ap_a` with every column sum folded over row slices (another
+        summation order than `bodies.ap_availability_col`)."""
+        ...
