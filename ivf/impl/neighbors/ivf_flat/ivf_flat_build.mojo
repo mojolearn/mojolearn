@@ -85,6 +85,7 @@ from checks.fixed_point import choose_scale
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
+from x_ann.stage_timer import AnnStages
 
 comptime IVF_FAST_TRAINSET = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
@@ -276,8 +277,12 @@ def ivf_flat_build(
     the carry, which is the shape of the classic IVF bug, and it is
     invisible in any comparison of the vectors alone.
     """
+    # lane ann-apple3: MOJOLEARN_ANN_STAGES=1 prints this build's phases
+    # (off: no sync, no print)
+    var st = AnnStages("ivf_flat_build")
     ivf_index_params_validate(params, n_rows, dim)
     ivf_validate_data(x, n_rows, dim, "dataset")
+    st.host("validate")
 
     var n_lists = params.n_lists
 
@@ -322,6 +327,7 @@ def ivf_flat_build(
     # (`cluster/estimator.mojo`'s note on why the supplied case is summed
     # instead). IVF has no per-row weight: their `build` passes none.
     var weight_scale = choose_scale(Float64(n_train), n_train)
+    st.host("trainset_scale")
 
     var dx = upload_f32(ctx, x)
     if n_train == n_rows:
@@ -335,6 +341,7 @@ def ivf_flat_build(
     var min_dist = ctx.enqueue_create_buffer[DType.float32](n_rows)
     var center_norm = ctx.enqueue_create_buffer[DType.float32](n_lists)
     ctx.synchronize()
+    st.host("upload")
 
     # `x_norm` MUST EXIST BEFORE `predict`, and `predict` does not compute
     # it -- `cluster/estimator.mojo` records that passing it uninitialized
@@ -342,6 +349,7 @@ def ivf_flat_build(
     # `check_kmeans_fit_recovers_planted`.
     compute_row_norms(ctx, dx, x_norm, n_rows, dim)
     ctx.synchronize()
+    st.host("row_norms")
 
     # `kmeans_n_iters` IS THEIR `max_iter`, `ivf_flat_build.cuh:433`, and
     # `n_init = 1` is cuVS's own default (`kmeans.hpp:28-121`). The
@@ -387,6 +395,7 @@ def ivf_flat_build(
             String("ivf.quantizer."),
         )
 
+    st.mark(ctx, "kmeans")
     if trace.enabled:
         trace.record_device(ctx, "ivf.centers", centroids, n_lists * dim)
 
@@ -412,14 +421,17 @@ def ivf_flat_build(
         ctx, dx, x_norm, centroids, labels, min_dist, kp, n_rows, dim
     )
     ctx.synchronize()
+    st.host("predict")
     if trace.enabled:
         trace.record_device(ctx, "ivf.assign", labels, n_rows)
 
     var host_centers = download_f32(ctx, centroids, n_lists * dim)
     var host_center_norms = download_f32(ctx, center_norm, n_lists)
     var host_labels = download_u32(ctx, labels, n_rows)
+    st.host("download")
 
     var layout = build_list_layout(host_labels, x, n_rows, dim, n_lists)
+    st.host("layout")
 
     if trace.enabled:
         trace.record_list_i32("ivf.list_offsets", layout.offsets)

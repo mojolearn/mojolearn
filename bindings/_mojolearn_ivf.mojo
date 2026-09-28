@@ -56,6 +56,7 @@ from ivf.estimator import (
     ivf_flat_search_host,
 )
 from ivf.impl.neighbors.ivf_flat.ivf_flat_index import IvfFlatIndex
+from x_ann.stage_timer import AnnStages
 from ivf.resident import (
     ivf_resident_check,
     ivf_resident_n_rows,
@@ -242,13 +243,17 @@ def ivf_flat_build_binding(
     var n = ext[0]
     var dim = ext[1]
     var n_lists = ext[2]
+    var bst = AnnStages("ivf_flat_binding")
     var x = read_f32(Int(py=addrs[0]), n * dim)
+    bst.host("copy_in")
     var index = _ivf_build_run(x, n, dim, n_lists, ext[3], ext[4], ext[5])
+    bst.host("build")
     ivf_write_index_arrays(
         addrs, index.n_rows, index.dim, index.n_lists, index.centers,
         index.center_norms, index.list_offsets, index.list_indices,
         index.list_data,
     )
+    bst.host("copy_out")
     return PythonObject(0)
 
 
@@ -319,17 +324,21 @@ def ivf_finalize_distances_binding(address: PythonObject, count: PythonObject, m
 
 def ivf_flat_index_prepare_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     var partial = Int(py=params[4]) != 0
+    var bst = AnnStages("ivf_flat_prepare")
     var arrays = ivf_read_index_arrays(
         addrs, params, String("ivf_flat_search"), 5, 5, partial_storage=partial
     )
+    bst.host("read_admit")
     var labels = _labels_from_arrays(arrays.offsets, arrays.list_indices, arrays.n_lists, arrays.n_rows)
     var index = IvfFlatIndex(
         arrays.n_lists, arrays.dim, arrays.n_rows, arrays.metric,
         arrays.centers.copy(), arrays.center_norms.copy(), arrays.offsets.copy(),
         arrays.list_indices.copy(), arrays.list_data.copy(), labels^,
     )
+    bst.host("index_copy")
     var ctx = process_ctx[_DEVCTX_SLOT]()
     var handle = ivf_resident_prepare(ctx, index^, partial)
+    bst.host("device_prepare")
     _ = ctx^
     return PythonObject(handle)
 

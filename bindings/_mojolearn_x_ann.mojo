@@ -13,6 +13,7 @@ from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_ann.abi import check_search, in_f32, in_i32, out_f32, out_i32, p_int
 from x_ann.ivf_pq_core import pq_len_of
+from x_ann.stage_timer import AnnStages
 from x_ann.cagra_device import cagra_build_device, cagra_search_device
 from x_ann.tsne_device import tsne_fit_device
 from x_ann.resident import x_ann_index_prepare_binding, x_ann_index_release_binding, x_ann_index_search_binding
@@ -24,7 +25,9 @@ def ivf_pq_build_binding(addrs: PythonObject, params: PythonObject) raises -> Py
     params: n, dim, n_lists, kmeans_n_iters, seed, pq_dim, pq_bits, pq_kmeans_n_iters."""
     var n = p_int(params, 0)
     var dim = p_int(params, 1)
+    var bst = AnnStages("ivf_pq_binding")
     var x = in_f32(addrs, 0, n * dim)
+    bst.host("copy_in")
     var n_lists = p_int(params, 2)
     var iters = p_int(params, 3)
     var seed = p_int(params, 4)
@@ -33,11 +36,13 @@ def ivf_pq_build_binding(addrs: PythonObject, params: PythonObject) raises -> Py
     var pq_iters = p_int(params, 7)
     with GILReleased(Python()):
         var index = ivf_pq_build_device(x, n, dim, n_lists, iters, seed, pq_dim, pq_bits, pq_iters)
+        bst.host("build")
         out_f32(index.centers, addrs, 1)
         out_i32(index.offsets, addrs, 2)
         out_i32(index.list_indices, addrs, 3)
         out_f32(index.codebooks, addrs, 4)
         out_i32(index.codes, addrs, 5)
+        bst.host("copy_out")
     return PythonObject(n)
 
 
@@ -148,7 +153,9 @@ def ivf_sq_build_binding(addrs: PythonObject, params: PythonObject) raises -> Py
     var n_lists = p_int(params, 2)
     var iters = p_int(params, 3)
     var seed = p_int(params, 4)
+    var bst = AnnStages("ivf_sq_binding")
     var x = in_f32(addrs, 0, n * dim)
+    bst.host("copy_in")
     var centers = List[Float32]()
     var offsets = List[Int32]()
     var list_indices = List[Int32]()
@@ -157,12 +164,14 @@ def ivf_sq_build_binding(addrs: PythonObject, params: PythonObject) raises -> Py
     var codes = List[Int32]()
     with GILReleased(Python()):
         ivf_sq_build_device(x, n, dim, n_lists, iters, seed, centers, offsets, list_indices, vmin, delta, codes)
+    bst.host("build")
     out_f32(centers, addrs, 1)
     out_i32(offsets, addrs, 2)
     out_i32(list_indices, addrs, 3)
     out_f32(vmin, addrs, 4)
     out_f32(delta, addrs, 5)
     out_i32(codes, addrs, 6)
+    bst.host("copy_out")
     return PythonObject(n)
 
 
@@ -226,7 +235,9 @@ def ivf_rabitq_build_binding(addrs: PythonObject, params: PythonObject) raises -
     var n_lists = p_int(params, 2)
     var iters = p_int(params, 3)
     var seed = p_int(params, 4)
+    var bst = AnnStages("ivf_rabitq_binding")
     var x = in_f32(addrs, 0, n * dim)
+    bst.host("copy_in")
     var centers = List[Float32]()
     var offsets = List[Int32]()
     var list_indices = List[Int32]()
@@ -235,12 +246,14 @@ def ivf_rabitq_build_binding(addrs: PythonObject, params: PythonObject) raises -
     var ips = List[Float32]()
     with GILReleased(Python()):
         ivf_rabitq_build_device(x, n, dim, n_lists, iters, seed, centers, offsets, list_indices, codes, norms, ips)
+    bst.host("build")
     out_f32(centers, addrs, 1)
     out_i32(offsets, addrs, 2)
     out_i32(list_indices, addrs, 3)
     out_i32(codes, addrs, 4)
     out_f32(norms, addrs, 5)
     out_f32(ips, addrs, 6)
+    bst.host("copy_out")
     return PythonObject(n)
 
 

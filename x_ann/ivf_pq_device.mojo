@@ -138,9 +138,11 @@ def _coarse(
     """The coarse quantizer IS IVF-Flat's build (`ivf/estimator.mojo::
     ivf_flat_build_host`: cluster/'s k-means, L2Expanded, its CSR lists);
     the host twin is `ivf/host/ivf_host.mojo::host_ivf_build`."""
+    var cst = AnnStages("ivf_coarse")
     var ctx = x_ann_ctx()
     var flat = ivf_flat_build_host(ctx, x, n, dim, n_lists, kmeans_n_iters, METRIC_L2_EXPANDED, UInt64(seed))
     ctx.synchronize()
+    cst.host("flat_build")
     centers = flat.centers.copy()
     offsets = flat.list_offsets.copy()
     list_indices = List[Int32](capacity=n)
@@ -149,6 +151,7 @@ def _coarse(
     labels = pq_labels_from_lists(offsets, list_indices, n_lists, n)
     _ = flat^
     _ = ctx^
+    cst.host("convert")
 
 
 def _codebooks(
@@ -169,6 +172,8 @@ def _codebooks(
     else:
         for i in range(n):
             rows.append(i)
+    var cbs = AnnStages("ivf_pq_codebooks")
+    cbs.host("rows")
     for j in range(pq_dim):
         var sub = List[Float32](capacity=n_train * pq_len)
         for i in range(n_train):
@@ -176,6 +181,7 @@ def _codebooks(
                 sub.append(r[rows[i] * rot_dim + j * pq_len + t])
         var cb = List[Float32](length=n_codes * pq_len, fill=Float32(0.0))
         var lab = List[UInt32](length=n_train, fill=UInt32(0))
+        cbs.host("gather")
         _ = kmeans_fit(
             ctx, sub.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), n_train, pq_len, n_codes,
             cb.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
@@ -184,6 +190,7 @@ def _codebooks(
             pq_iters, Float64(1e-4), UInt64(seed), 1, INIT_KMEANS_PLUS_PLUS, METRIC_L2_EXPANDED, 0.0, Float64(2.0),
         )
         ctx.synchronize()
+        cbs.host("kmeans_fit")
         for e in range(n_codes * pq_len):
             codebooks.append(cb[e])
         _ = sub^

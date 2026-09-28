@@ -66,7 +66,8 @@ run() {  # arm wt mode [stages]
     echo "== $1 $3${4:+ stages}"
     xenv=""
     [ "$1" != afterenv ] || xenv=${ANN_AB_AFTER_ENV:-}
-    [ -z "${4:-}" ] || xenv="$xenv MOJOLEARN_ANN_STAGES=1"
+    # the stage pass: the ann drivers' marks and (lane ann-apple3) cluster/'s k-means marks
+    [ -z "${4:-}" ] || xenv="$xenv MOJOLEARN_ANN_STAGES=1 MOJOLEARN_KMEANS_STAGES=1"
     (cd "$2" && env $xenv PYTHONPATH="$2/python" MOJOLEARN_NUMERIC_MODE=$3 \
         pixi run -e default python -u bench/speed/ann_cpu_speed.py --data "$data" --algos "$algos" \
         ${ANN_AB_BENCH_ARGS:-} 2>&1 | grep -v '^\s*$' | sed "s/^/[$1 $3] /")
