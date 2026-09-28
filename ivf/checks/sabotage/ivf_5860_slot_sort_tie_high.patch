@@ -1,0 +1,11 @@
+--- a/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo
++++ b/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo
+@@ -388,7 +388,7 @@
+         while b >= 0:
+             var db = dist[base + b]
+             var ib = idx[base + b]
+-            if db < dv or (db == dv and ib <= iv):
++            if db < dv or (db == dv and ib >= iv):  # SABOTAGE 5860: ties high id first
+                 break
+             dist[base + b + 1] = db
+             idx[base + b + 1] = ib
