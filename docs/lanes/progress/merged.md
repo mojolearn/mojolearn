@@ -104,3 +104,29 @@ origin's merged with main. Every later branch is merged from its origin/ ref.
 - origin/lane/prep-cpu: tools/identity_lanes/prep.checks. Union: the ndtri
   arm (algos-prep2) + the six host arms (prep-cpu). Every listed patch
   passes `git apply --check` on the merged tree.
+
+### lane/algos-decomp, lane/decomp-cpu
+
+- origin/lane/algos-decomp:
+  - tools/algos_lane_check.py: the per-arm ARM_TIMEOUT / HUNG handling
+    (algos-decomp) wraps the subprocess run; main's "exit 1 with its JSON
+    written under a sabotage, the diff decides" rule follows it. Both kept.
+  - tools/test_lane_select.py kmeans_oracle pin: 75 (HEAD) vs 76
+    (algos-decomp). Took 76 provisionally; every pin is recomputed with
+    tools/lane_select.py after the LAST merge (the pins move with each
+    family), see "test_lane_select pins" below.
+- origin/lane/decomp-cpu:
+  - tools/identity_lanes/decomp.checks: union (5320 householder, 5321 ALS-CG
+    from algos-decomp; eleven host arms from decomp-cpu). Every listed patch
+    passes `git apply --check`.
+  - x_decomp/checks/dense_check.mojo: header "DEVIATIONS 5307-5309, 5320" +
+    decomp-cpu's host QR / Jacobi SVD / eigh / LU equalities.
+  - x_decomp/checks/fold_ew_check.mojo: import union (F32Ptr, FOLD_BLOCK,
+    bidx, ew_cell).
+  - docs/lanes/progress/decomp.md: both sections; the Isomap-at-10k-on-AMD
+    OWED note from the unpushed local 08ba64ec6 re-added by hand.
+  - RISK, for the global check: algos-decomp moved geqrf/orgqr/getrf onto
+    the device in parallel steps (same cells as the serial routine) and
+    decomp-cpu added fast host QR/Jacobi/LU equal to the serial replay; both
+    claim the serial bits, so they must agree; dense_check and the decomp
+    lanes prove it.
