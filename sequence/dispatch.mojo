@@ -11,6 +11,7 @@ from sequence.ops import (
     OP_CELL_BWD,
     OP_CELL_FWD_H,
     OP_CELL_BWD_H,
+    OP_TRANSPOSE,
     OP_GATHER_SEQ,
     OP_GATHER_ROWS,
     OP_MSE,
@@ -70,6 +71,7 @@ from sequence.ops import (
     op_cell_bwd,
     op_cell_fwd_h,
     op_cell_bwd_h,
+    op_transpose,
     op_gather_seq,
     op_gather_rows,
     op_mse,
@@ -110,6 +112,8 @@ def apply[OP: Int](t: Int, a: Args):
         op_cell_fwd_h(t, a)
     elif OP == OP_CELL_BWD_H:
         op_cell_bwd_h(t, a)
+    elif OP == OP_TRANSPOSE:
+        op_transpose(t, a)
     elif OP == OP_GATHER_SEQ:
         op_gather_seq(t, a)
     elif OP == OP_GATHER_ROWS:

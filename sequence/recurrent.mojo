@@ -26,6 +26,7 @@ from sequence.ops import (
     OP_CELL_FWD,
     OP_CELL_BWD_H,
     OP_CELL_FWD_H,
+    OP_TRANSPOSE,
     OP_COLSUM,
     OP_FILL,
     OP_GATHER_ROWS,
@@ -132,6 +133,16 @@ def colsum[E: Exec](mut ex: E, X: FP, dst: FP, R: Int, C: Int) raises:
     ex.launch[OP_COLSUM](a, C)
 
 
+def transpose[E: Exec](mut ex: E, src: FP, dst: FP, R: Int, C: Int) raises:
+    """dst [C, R] = src [R, C]^T, the words as they are."""
+    var a = Args()
+    a.p0 = src
+    a.p1 = dst
+    a.i0 = R
+    a.i1 = C
+    ex.launch[OP_TRANSPOSE](a, R * C)
+
+
 def fill[E: Exec](mut ex: E, p: FP, n: Int, v: Float32) raises:
     var a = Args()
     a.p0 = p
@@ -184,6 +195,9 @@ struct Work(Movable):
     var dh: FP
     var dhn: FP
     var dc: FP
+    #: W_ih^T [din, G*H] and W_hh^T [H, G*H] per layer (the forward's reads)
+    var wt_ih: List[FP]
+    var wt_hh: List[FP]
     var dhout0: FP
     var dhout1: FP
     var xb: FP
@@ -200,7 +214,11 @@ struct Work(Movable):
         self.act = List[FP]()
         self.hall = List[FP]()
         self.call = List[FP]()
-        for _ in range(net.L):
+        self.wt_ih = List[FP]()
+        self.wt_hh = List[FP]()
+        for l in range(net.L):
+            self.wt_ih.append(ex.alloc(net.din(l) * GH))
+            self.wt_hh.append(ex.alloc(H * GH))
             self.gx.append(ex.alloc(T * B * GH))
             self.gh.append(ex.alloc(T * B * GH))
             self.act.append(ex.alloc(T * B * GH))
@@ -229,7 +247,9 @@ def forward[E: Exec](mut ex: E, net: Net, P: FP, x: FP, T: Int, B: Int, w: Work)
     var inp = x
     for l in range(net.L):
         var din = net.din(l)
-        gemm(ex, inp, P + net.w_ih(l), w.gx[l], T * B, GH, din, din, 1, 1, din, False, GH)
+        transpose(ex, P + net.w_ih(l), w.wt_ih[l], GH, din)
+        transpose(ex, P + net.w_hh(l), w.wt_hh[l], GH, H)
+        gemm(ex, inp, w.wt_ih[l], w.gx[l], T * B, GH, din, din, 1, GH, 1, False, GH)
         bias_rows(ex, w.gx[l], P + net.b_ih(l), w.gx[l], T * B, GH)
         fill(ex, w.hall[l], B * H, Float32(0.0))
         fill(ex, w.call[l], B * H, Float32(0.0))
@@ -246,7 +266,7 @@ def forward[E: Exec](mut ex: E, net: Net, P: FP, x: FP, T: Int, B: Int, w: Work)
             a.p4 = w.call[l] + s * B * H
             a.p5 = w.hall[l] + (s + 1) * B * H
             a.p6 = w.call[l] + (s + 1) * B * H
-            a.p7 = P + net.w_hh(l)
+            a.p7 = w.wt_hh[l]
             a.p8 = P + net.b_hh(l)
             a.i0 = net.cell
             a.i1 = B
