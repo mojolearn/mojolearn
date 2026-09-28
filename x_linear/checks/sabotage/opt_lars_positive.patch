@@ -1,14 +1,16 @@
+diff --git a/x_linear/lars.mojo b/x_linear/lars.mojo
+index 7cd38e1f8..85182b0a3 100644
 --- a/x_linear/lars.mojo
 +++ b/x_linear/lars.mojo
-@@ -19,6 +19,7 @@
+@@ -19,6 +19,7 @@ alpha <= alpha_min with linear interpolation, the degenerate-regressor skip
      (theirs: the lowest position in their permuted Cov array);
    * float32 throughout; equality tolerance float32 eps, tiny32 as theirs.
  """
 +from std.sys.info import is_gpu
  from x_linear.ops import (
      FP, IP, fa, fs, fm, fd, fmad, fsqrt, fabs, fmin, fsign, ld, st, ldi, sti, i2f,
-     fill, copy, cholesky, chol_solve, centered_gram,
-@@ -38,7 +39,7 @@
+     fill, copy, cholesky, chol_solve, centered_gram, centered_xty, add_acc,
+@@ -38,7 +39,7 @@ def lars_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw:
      var fi = ldi(ip, 1) != 0
      var lasso = ldi(ip, 2) != 0
      var alpha_min = ld(fp, 0)
