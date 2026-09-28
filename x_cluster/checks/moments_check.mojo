@@ -61,50 +61,6 @@ def _case(n: Int, d: Int, kc: Int, seed: UInt64, tag: String) raises:
     tr.record_list_f32("x_cluster.moments." + tag, got)
 
 
-def _flag_case() raises:
-    """The speculative chain's fallback (device_ops `_moments_pass_kernel`):
-    feature 0 alternates +1.0000001e-37 and -1e-37 (each addend 0.5x,
-    normal) so every pair's partial sum is subnormal, which `chain_add`
-    flushes to zero and a plain add keeps; feature 1 alternates +1 and -1,
-    an exact cancellation to zero from nonzero operands in rows 0 and 1,
-    then mixed-scale values. A chain that skipped the fallback would leave a
-    subnormal mean where the oracle has zero (on a vendor that keeps
-    subnormals); arm 5121_moments_flag re-adds a flagged tile in reverse, so
-    it bites wherever the flag fires, every vendor."""
-    var n = 600
-    var d = 2
-    var kc = 2
-    var mixed = seam_fixture(n, 1, 27)
-    var x = List[Float32](capacity=n * d)
-    var resp = List[Float32](capacity=n * kc)
-    for i in range(n):
-        x.append(Float32(1.0000001e-37) if i % 2 == 0 else Float32(-1e-37))
-        # rows 0 and 1 cancel exactly (flagged on every vendor), the rest
-        # are mixed-scale, so a re-add in another order moves bits
-        if i == 0:
-            x.append(Float32(1))
-        elif i == 1:
-            x.append(Float32(-1))
-        else:
-            x.append(mixed[i])
-        resp.append(Float32(0.5))
-        resp.append(Float32(0.5))
-    var want = oracle_moments(resp, x, n, d, kc, Float32(1e-6))
-    # the fixture separates: a plain (unflushed) fold of feature 0 leaves a
-    # nonzero sum where the pinned one has zero
-    var plain = Float32(0)
-    for i in range(n):
-        plain = plain + Float32(0.5) * x[i * d]
-    require_separates("5121-flag plain vs flushed chain", count_diff_f32([plain], [Float32(0)]))
-    var dev = DeviceOps()
-    var got = run(dev, resp, x, n, d, kc)
-    _same("5121-flag moments device", count_diff_f32(got, want))
-    var host = HostOps()
-    _same("5121-flag moments host", count_diff_f32(run(host, resp, x, n, d, kc), want))
-    var tr = IdentityTrace()
-    tr.record_list_f32("x_cluster.moments.5121-flag", got)
-
-
 def main() raises:
     _case(200, 3, 4, 15, "5110")
     # 5121: the device's tiled kernel over several row tiles (T = 256 rows
@@ -113,8 +69,6 @@ def main() raises:
     _case(700, 5, 3, 21, "5121-tiles")
     _case(600, 17, 2, 23, "5121-chains")
     _case(40, 65, 2, 25, "5121-fallback")
-    # the speculative chain's flagged re-add
-    _flag_case()
     # d = 19: the host's vector lanes (two groups of eight) and its scalar
     # tail (cluster-cpu lane, 2026-09-28); n large enough to split tasks
     _case(3000, 19, 3, 17, "host-d19")

@@ -99,7 +99,6 @@ preference.
 ==========================================================================
 """
 
-from core.spec_chain import ftz_chain_block
 from std.gpu import WARP_SIZE, block_dim, block_idx, thread_idx
 from std.gpu.primitives.warp import shuffle_xor
 from std.memory import stack_allocation
@@ -286,10 +285,8 @@ def nk_kernel(
             var v = SIMD[DType.float32, U](0.0)
             comptime for u in range(U):
                 v[u] = resp.unsafe_load((i + u) * ncomp + k)
-            # the same U flushed adds, the result flush off the chain
-            # (core/spec_chain.mojo; every addend here is >= +0, so no sum
-            # is ever noted and the plain chain always stands)
-            acc = ftz_chain_block[U](acc, v)
+            comptime for u in range(U):
+                acc = ftz(acc + ftz(v[u]))
             i += U
         while i < n:
             acc = ftz(acc + ftz(resp.unsafe_load(i * ncomp + k)))

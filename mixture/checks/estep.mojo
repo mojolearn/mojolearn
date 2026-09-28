@@ -75,7 +75,6 @@ keeping it out of the E-step keeps the E-step total: given parameters, it
 cannot fail.
 """
 
-from core.spec_chain import ftz_chain_block
 from std.gpu import WARP_SIZE, block_dim, block_idx, thread_idx
 from std.gpu.primitives.warp import shuffle_xor
 from std.memory import stack_allocation
@@ -692,10 +691,8 @@ def meanll_kernel(
         var i = 0
         while i + U <= n:
             var v = lse.unsafe_load[width=U](i)
-            # the same U flushed adds, the result flush off the chain
-            # (core/spec_chain.mojo: a block with a subnormal or cancelled
-            # sum is re-added through the flushed spelling)
-            acc = ftz_chain_block[U](acc, v)
+            comptime for u in range(U):
+                acc = ftz(acc + ftz(v[u]))
             i += U
         while i < n:
             acc = ftz(acc + ftz(lse.unsafe_load(i)))

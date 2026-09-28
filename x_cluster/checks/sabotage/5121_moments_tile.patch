@@ -1,12 +1,12 @@
 diff --git a/x_cluster/device_ops.mojo b/x_cluster/device_ops.mojo
 --- a/x_cluster/device_ops.mojo
 +++ b/x_cluster/device_ops.mojo
-@@ -300,7 +300,7 @@
+@@ -277,7 +277,7 @@
                  comptime for u in range(MOM_UNROLL):
                      v[u] = terms[(j0 + u) * cpb + tid]
                  comptime for u in range(MOM_UNROLL):
--                    var nxt = y + v[u]
-+                    var nxt = y + v[MOM_UNROLL - 1 - u]
-                     flag |= _suspect_sum(y, v[u], nxt)
-                     y = nxt
+-                    acc = chain_add(acc, v[u])
++                    acc = chain_add(acc, v[MOM_UNROLL - 1 - u])
                  j0 += MOM_UNROLL
+             for j in range(j0, m):
+                 acc = chain_add(acc, terms[j * cpb + tid])

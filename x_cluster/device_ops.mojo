@@ -42,7 +42,6 @@ from x_cluster.bodies import (
 from cluster.estimator import kmeans_fit
 from cluster.impl.kmeans_params import METRIC_L2_EXPANDED
 from x_cluster.ops import ClusterOps
-from core.spec_chain import suspect_sum as _suspect_sum
 
 comptime TPB = 128
 
@@ -342,38 +341,16 @@ def _moments_pass_kernel(
             terms[e] = t
         barrier()
         if mine:
-            # THE SPECULATIVE CHAIN (Apple speed lane): the tile's adds run as
-            # plain `y + t`, and a flag OFF the chain notes every sum whose
-            # exponent field is zero from a nonzero operand (a subnormal,
-            # or an exact cancellation to zero). Only such a sum can differ
-            # from `chain_add`'s `ftz(y + t)`; when the flag is clear every
-            # ftz was the identity and the tile's result is `chain_add`'s,
-            # bit for bit; when set, the tile is re-added through
-            # `chain_add` from its saved start. Integer tests on the bits,
-            # never a float compare on the running sum.
-            var start = acc
-            var y = acc
-            var flag = UInt32(0)
             var j0 = 0
             while j0 + MOM_UNROLL <= m:
                 var v = SIMD[DType.float32, MOM_UNROLL]()
                 comptime for u in range(MOM_UNROLL):
                     v[u] = terms[(j0 + u) * cpb + tid]
                 comptime for u in range(MOM_UNROLL):
-                    var nxt = y + v[u]
-                    flag |= _suspect_sum(y, v[u], nxt)
-                    y = nxt
+                    acc = chain_add(acc, v[u])
                 j0 += MOM_UNROLL
             for j in range(j0, m):
-                var t = terms[j * cpb + tid]
-                var nxt = y + t
-                flag |= _suspect_sum(y, t, nxt)
-                y = nxt
-            if flag != UInt32(0):
-                y = start
-                for j in range(m):
-                    y = chain_add(y, terms[j * cpb + tid])
-            acc = y
+                acc = chain_add(acc, terms[j * cpb + tid])
         barrier()
         r0 += m
     var c = c0 + tid
