@@ -673,6 +673,17 @@ class _Mask(bytes):
 # MOJOLEARN_HOTPATH=python, below _NATIVE_MIN_ROWS rows, under the fold-order
 # sabotage control, or when the binary lacks a helper.
 
+#: The before arm of the lane's timing and equality job: False (or the
+#: environment's MOJOLEARN_MSEL_BEFORE=1) sends every route above back to its
+#: definition. Never set in production.
+_MSEL_NATIVE = True
+
+
+def _msel_native():
+    from ._buffer import hotpath_enabled
+    return _MSEL_NATIVE and os.environ.get('MOJOLEARN_MSEL_BEFORE') != '1' and hotpath_enabled()
+
+
 class _GroupCodes:
     """Groups (or labels) under the order rule as int32 codes with their
     per-code row counts, and the helpers that turn a per-code table into
@@ -688,7 +699,7 @@ class _GroupCodes:
     def get(cls, values, n, name):
         if values is None:
             _labels_list(values, name)  # raises the definition's error
-        if n < _NATIVE_MIN_ROWS or _sabotage_requested():
+        if n < _NATIVE_MIN_ROWS or _sabotage_requested() or not _msel_native():
             return None
         fold_ids = _native_optional('fold_ids')
         select = _native_optional('select_fold_i64')
@@ -834,7 +845,7 @@ class KFold(_KFoldBase):
             # contiguous blocks by the core helpers (fold_ids with no codes,
             # select_fold_i64), the rows `_test_folds` gives (lane/py-misc-msel)
             n = self._check_n(X)
-            if not _sabotage_requested():
+            if not _sabotage_requested() and _msel_native():
                 got = _native_default_folds(range(n), self.n_splits, False)
                 if got is not None:
                     yield from got
@@ -1500,8 +1511,7 @@ def _index_copy(value):
     """`_as_index(flatten_labels(value))`: an int64 or int32 1-D buffer is
     widened in C (array('q') over its memoryview) instead of through a list
     of Python ints (lane/py-misc-msel); anything else takes the definition."""
-    from ._buffer import hotpath_enabled
-    if hotpath_enabled() and not isinstance(value, (list, tuple, range)):
+    if _msel_native() and not isinstance(value, (list, tuple, range)):
         try:
             a = _materialize(value, 'cv indices')[0]
         except (TypeError, ValueError):
@@ -1538,7 +1548,7 @@ def _native_discrete(y):
     integral, and a float buffer is discrete when every value is finite and
     integer valued (`reduce_stat`'s integral test, the predicate
     `_native_default_folds` uses). None for anything else."""
-    if not isinstance(y, Array) or y.ndim != 1 or y.size < _NATIVE_MIN_ROWS:
+    if not isinstance(y, Array) or y.ndim != 1 or y.size < _NATIVE_MIN_ROWS or not _msel_native():
         return None
     from ._labels import _NATIVE_ENCODE
     if y.dtype not in _NATIVE_ENCODE:
@@ -1655,8 +1665,8 @@ def _proba_column1(pred):
     then one byte copy of the second column. The same words the
     `tolist()` comprehension builds; None hands it back to that route."""
     import ctypes
-    from ._buffer import _output_store, as_f32_c, hotpath_enabled
-    if not hotpath_enabled() or isinstance(pred, (list, tuple)):
+    from ._buffer import _output_store, as_f32_c
+    if not _msel_native() or isinstance(pred, (list, tuple)):
         return None
     transpose = _native_optional('transpose_f32')
     if transpose is None:
@@ -2269,8 +2279,7 @@ class _NativePermutation:
 
     @classmethod
     def get(cls, estimator, X, y, groups, cv):
-        from ._buffer import hotpath_enabled
-        if not hotpath_enabled() or _sabotage_requested():
+        if not _msel_native() or _sabotage_requested():
             return None
         gather = _native_optional('gather_rows_bytes')
         gather64 = _native_optional('gather_i64')
