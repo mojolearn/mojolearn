@@ -46,6 +46,7 @@ bench/neighbors_apple3_jobs/<request>.txt (copies in
 |---|---|---|---|---|
 | 1790626615651 (job 1) | m4pro-b | 6856b5f8f (the base) | both boards, FAST and IDENTICAL, MOJOLEARN_STAGE_TIMES=1: does the family build and run on the base, and the phases | PASS: every binding builds in both modes, every case runs (SVGP on taxi refuses as in round two: not positive definite at these hyperparameters) |
 | 1790627549034 (job 2) | m4pro-b | b32f7312d | A/B of the first three opt-in arms, quality, IDENTICAL digests | PASS; results below |
+| 1790628892129 (job 3) | m3ultra-b | b48433cfd | every opt-in arm, both boards, quality, stages | LOST: queued behind five jobs when m3ultra-b was terminated at 21:20Z; it never started. Nothing of it was measured |
 
 ## Changes on the branch
 
@@ -148,3 +149,31 @@ kpca cb9a04d3.. / 7a04ae1e..).
   carries two more arms of it: the device solver's own statements on the
   host (`-D MOJOLEARN_NYS_HOST_EIGH_TWIN`, which can keep FAST's words) and
   the binary64 tridiagonal QL solve (`-D MOJOLEARN_NYS_HOST_EIGH_QL`).
+
+### State at 21:35Z Sep 28
+
+m3ultra-b and the three M4 Macs are gone. Measured so far: jobs 1 and 2 (M4
+Pro). NOT BUILT and NOT MEASURED, all opt-in: the mapped download and
+upload, the fused RBFSampler kernel, the GPC device variance / resident K /
+bulk download, the batched label propagation loop, the sparse
+PolynomialCountSketch convolution, the binary64 QL eigensolver, the Nystroem
+device-twin host solve, the lazily zeroed outputs, and the host block
+solve's 4 and 8 lane arms. Each unbuilt arm lives in its own module,
+imported only by the build that selects it, so none can break a default
+build.
+
+Default on so far: the row-vector Jacobi on Apple (job 2, digests equal in
+both modes).
+
+Base digests against round two (job 1 against requests 1790614983391,
+1790618924175, 1790613586332): 62 of 62 board-two rows equal in both modes,
+which includes lane py-dn-kern's fused KernelPCA.transform, OneClassSVM
+score and SVGP (unproven in their own file). The FAST k = 2,000 k-NN and
+FAST spectral rows differ, as they do run to run inside one arm (FAST's
+selector does not pin ties).
+
+Host-side checks run on the laptop, each a few seconds on one core, no
+build and no Metal: a Python transcription of the QL solver against NumPy
+(n up to 65, residual under 4e-15), the batched label propagation control
+flow against the reference loop (400 random cases, 0 differ), and the lazy
+output allocation.
