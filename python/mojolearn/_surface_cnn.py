@@ -71,19 +71,8 @@ TRAINING_LANE_NAMES = {
     "x-cnn-trainer-options": "CNNClassifier Adam, AdamW, Nesterov and dampened SGD",
 }
 PUBLIC_PENDING_LANES = {
-    "x-cnn-conv2d": "no reference",
-    "x-cnn-conv1d": "no reference",
-    "x-cnn-pool": "no reference",
-    "x-cnn-trainer": "no reference",
-    "x-cnn-batchnorm": "no reference",
     "x-cnn-dropout2d": "no reference",
-    "x-cnn-globalpool": "no reference",
-    "x-cnn-resnet-block": "no reference",
     "x-cnn-gcn": "no reference",
     "x-cnn-sage": "no reference",
-    "x-cnn-conv-options": "no reference",
-    "x-cnn-pool-options": "no reference",
-    "x-cnn-bn-options": "no reference",
     "x-cnn-gnn-options": "no reference",
-    "x-cnn-trainer-options": "no reference",
-}
+    }

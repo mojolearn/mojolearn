@@ -3562,16 +3562,10 @@ PUBLIC_PENDING_LANES = {
     # par-forecast-holtwinters at the estimated-initialization default. Apple M4, arm64 CPU,
     # NVIDIA H100, AMD MI325X and x86-64 CPU agree on all nine fixtures
     # (bench/results/identity_break/2026-09-22_holtwinters-estimated-init/).
-    # 0.8.23 (DEVIATION 3133): GaussianMixture's kmeans init moved to classic
-    # k-means++, so these two lanes' IDENTICAL bits moved past the shipped
-    # table on purpose (LANE_REVISIONS classic-kmeanspp-init-1). They leave
-    # this table when the 0.8.23 record regenerates the reference.
+    # ADMITTED 2026-09-28: gmm and gmm-sample at classic-kmeanspp-init-1;
+    # complete nine-fixture witnesses and current CPU/Metal/HIP base agreement.
+    # See docs/CONSOLIDATED_REFERENCE_ADMISSION_124.md.
     # lane cpu (2026-09-27): new lanes, no release record carries them yet
-    "pca-inverse": "no reference",
-    "pca-whiten-inverse": "no reference",
-    "tsvd-inverse": "no reference",
-    "gmm": "stale reference",
-    "gmm-sample": "stale reference",
     # lane/neural (2026-09-28): a covered lane whose CPU and NVIDIA columns
     # agree (algos_lane_check, nine fixtures), with no release record yet, so
     # the shipped table has no cell for it. It leaves at the next record.
