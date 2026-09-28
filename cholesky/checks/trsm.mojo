@@ -371,73 +371,6 @@ def trsm_lower_multi_rhs_kernel(
         barrier()
 
 
-#: lane/neighbors-apple (2026-09-28): `trsm_upper_staged_kernel` whose
-#: serial chain reads x from threadgroup memory too: the newest CHOL_BACK_CH
-#: values from a ring thread 0 fills as it solves, older ones staged by the
-#: whole block beside their L column. The same steps in the same order on
-#: the same words; the chain no longer waits on global loads.
-#: `-D MOJOLEARN_CHOL_BACK_RING_OFF` keeps the staged kernel.
-comptime CHOL_BACK_RING = CHOL_SWEEP_SOLVES and not is_defined["MOJOLEARN_CHOL_BACK_RING_OFF"]()
-
-
-def trsm_upper_ring_kernel(
-    l: MutPointer[Float32, MutAnyOrigin],
-    b: MutPointer[Float32, MutAnyOrigin],
-    n_in: Int32,
-    nrhs_in: Int32,
-    ld_in: Int32,
-):
-    """`trsm_upper_kernel`'s arithmetic, one serial chain per row (thread 0);
-    L column and x operands in threadgroup memory. One block per
-    right-hand-side column."""
-    comptime NT = CHOL_BACK_NT
-    comptime CH = CHOL_BACK_CH
-    var n = Int(n_in)
-    var nrhs = Int(nrhs_in)
-    var ld = Int(ld_in)
-    var j = Int(block_idx.x)
-    var tid = Int(thread_idx.x)
-    var lk = stack_allocation[CH, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var xg = stack_allocation[CH, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var xr = stack_allocation[CH, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    for ii in range(n):
-        var i = n - 1 - ii
-        var t = Float32(0.0)
-        if tid == 0:
-            t = ftz(b.unsafe_load(i * nrhs + j))
-        var k = i + 1
-        var first = True
-        while k < n:
-            var cnt = min(CH, n - k)
-            for q in range(tid, cnt, NT):
-                lk[q] = ftz(l.unsafe_load((k + q) * ld + i))
-                if not first:
-                    # written at least CH rows (and as many barriers) ago
-                    xg[q] = b.unsafe_load((k + q) * nrhs + j)
-            barrier()
-            if tid == 0:
-                if first:
-                    for q in range(cnt):
-                        comptime if CHOL_BACK_FMA_NO_FTZ:
-                            t = identical_mul_add(-lk[q], ftz(xr[(k + q) % CH]), t)
-                        else:
-                            t = ftz(identical_mul_add(-lk[q], ftz(xr[(k + q) % CH]), t))
-                else:
-                    for q in range(cnt):
-                        comptime if CHOL_BACK_FMA_NO_FTZ:
-                            t = identical_mul_add(-lk[q], ftz(xg[q]), t)
-                        else:
-                            t = ftz(identical_mul_add(-lk[q], ftz(xg[q]), t))
-            barrier()
-            k += cnt
-            first = False
-        if tid == 0:
-            var x = ftz(identical_div(t, ftz(l.unsafe_load(i * ld + i))))
-            b.unsafe_store(i * nrhs + j, x)
-            xr[i % CH] = x
-        barrier()
-
-
 def trsm_upper_staged_kernel(
     l: MutPointer[Float32, MutAnyOrigin],
     b: MutPointer[Float32, MutAnyOrigin],
@@ -745,19 +678,12 @@ def trsm_upper(
         )
     else:
         var staged = False
-        comptime if CHOL_BACK_RING:
+        comptime if CHOL_SWEEP_SOLVES:
             staged = True
-            ctx.enqueue_function[trsm_upper_ring_kernel](
+            ctx.enqueue_function[trsm_upper_staged_kernel](
                 l.unsafe_ptr(), b.unsafe_ptr(), Int32(n), Int32(nrhs), Int32(lda),
                 grid_dim=(nrhs, 1, 1), block_dim=(CHOL_BACK_NT, 1, 1),
             )
-        comptime if CHOL_SWEEP_SOLVES:
-            if not staged:
-                staged = True
-                ctx.enqueue_function[trsm_upper_staged_kernel](
-                    l.unsafe_ptr(), b.unsafe_ptr(), Int32(n), Int32(nrhs), Int32(lda),
-                    grid_dim=(nrhs, 1, 1), block_dim=(CHOL_BACK_NT, 1, 1),
-                )
         if not staged:
             ctx.enqueue_function[trsm_upper_kernel](
                 l.unsafe_ptr(),
