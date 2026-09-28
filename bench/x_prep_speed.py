@@ -234,6 +234,7 @@ def main():
     ap.add_argument("--only", default="")
     ap.add_argument("--skip", default="")
     ap.add_argument("--profile", action="store_true")
+    ap.add_argument("--budget", type=float, default=20.0, help="--profile: seconds a program's prefix sum may take")
     a = ap.parse_args()
     import mojolearn as ml
     from mojolearn import _expansion_prep as xp
@@ -265,7 +266,7 @@ def main():
                         best = (t, spy.binding_s, len(spy.progs))
                 print(f"XPSPEED {ds} {name} {n} {best[0]:.4f} {best[1]:.4f} {best[2]} {_digest(*out)}", flush=True)
                 if a.profile:
-                    profile(xp, spy, ds, name)
+                    profile(xp, spy, ds, name, budget=a.budget)
             except Exception as e:  # one case failing never hides the others
                 print(f"XPERROR {ds} {name} {type(e).__name__}: {str(e)[:300]}", flush=True)
 
