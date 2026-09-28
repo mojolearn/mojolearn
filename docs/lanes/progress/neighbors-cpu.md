@@ -124,6 +124,17 @@ radius x4, rbf-sampler, svc x3, svr x2, x-neighbors svm lanes x4):
 
 ## OWED / NEXT
 
+- BLOCKED 2026-09-28 04:55Z: pod neighbors-cpu (4oh5ilt7q1kl2q) is gone
+  (RunPod GET 404; the account's pod listing is EMPTY), and `dev_pod.sh up`
+  refuses: "Your account balance is too low to rent a pod". The famA
+  sabotage run (`sab_ftz_v_ulp.patch` on the 41 non-gp lanes,
+  ~/mojolearn-evidence/neighbors-cpu/famA_lanes.txt) died with the pod and
+  has NO result: rerun it, then merge the branch (clean AGREE on all 52 and
+  the gp sabotage already PASS above). Branch merged with origin/main
+  (3fa29cd1f) first.
+- `core/host_fp_env.mojo` (linear's per-task IEEE enter/leave) IS on main;
+  `core/host_parallel.mojo` is not yet.
+
 - Thread the serial host loops (SVM tile, Cholesky, gemm cells, packing,
   x_neighbors generated ops) with `core/host_parallel.mojo` once lane cpu
   merges it; not before (DEVIATION 5900).
