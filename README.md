@@ -144,12 +144,21 @@ predictions are the same bits.
 The wheel ships the reference results recorded on Apple, NVIDIA, AMD and
 CPU, and a verifier that checks your machine against them.
 
+Install NumPy for verification (`python -m pip install numpy` on the published
+0.8.24 release). The next release provides `python -m pip install "mojolearn[verify]"`:
+the same library plus its optional verification dependency.
+
 ```sh
 python -m mojolearn verify --quick   # one lane per family
-python -m mojolearn verify --all     # every lane
+python -m mojolearn verify --all     # every available lane and all nine fixtures
 ```
 
-Each part reads IDENTICAL or DIVERGENT against the recorded references.
+On current main, `--all` also includes applicable gradient, batch-size,
+ragged-batch and sampler/replay checks. On 0.8.24, add `--batch-checks` for
+those probes. `--quick` keeps its smaller scope.
+
+Each part reports its comparison with the recorded references; missing
+references read OWED and inapplicable properties are named explicitly.
 [docs/VERIFY.md](docs/VERIFY.md) describes the verifier and
 [docs/VERIFY_EXTERNALLY.md](docs/VERIFY_EXTERNALLY.md) shows how to check
 the claims from outside the project.
