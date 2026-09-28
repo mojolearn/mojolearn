@@ -4,7 +4,7 @@
 Every decomp algorithm, timed on this box: warm call first, then one timed
 call; per-binding-entry profile (count / seconds) for the x_decomp kit.
 env: MOJOLEARN_NUMERIC_MODE (identical|fast), N (rows, default 1M),
-ONLY (comma list of names), DATA (higgs|taxi from R2 under
+ONLY (comma list of names), SKIP (names left out), DATA (higgs|taxi from R2 under
 /root/datasets, or synth: a seeded N x 28 Gaussian with correlated columns,
 for boxes without the staged files)."""
 import numpy as np, sys, time, collections, os, warnings
@@ -33,7 +33,12 @@ if DATA == "synth":
     _g = np.random.default_rng(12345)
     X = (_g.standard_normal((N, 28), dtype=np.float32) @ _g.standard_normal((28, 28), dtype=np.float32)).astype(np.float32)
 else:
-    d = np.load(f"/root/datasets/gbm-bench/{DATA}/{DATA}_speed.npz")
+    # the R2 store as tools/dataset_store.sh stages it: GBM_BENCH_DATA, else
+    # ~/datasets/gbm-bench (the Macs), else /root/datasets/gbm-bench (pods)
+    _root = os.environ.get("GBM_BENCH_DATA", os.path.join(os.path.expanduser("~"), "datasets", "gbm-bench"))
+    if not os.path.isdir(_root):
+        _root = "/root/datasets/gbm-bench"
+    d = np.load(f"{_root}/{DATA}/{DATA}_speed.npz")
     key = [k for k in d.files if d[k].ndim == 2][0]
     X = np.ascontiguousarray(d[key][:N].astype(np.float32))
 X = np.nan_to_num(X)
@@ -41,9 +46,11 @@ X = (X - X.mean(0)) / (X.std(0) + 1e-6)
 X = X.astype(np.float32)
 Xp = np.abs(X).astype(np.float32)
 ONLY = set(filter(None, os.environ.get("ONLY", "").split(",")))
+SKIP = set(filter(None, os.environ.get("SKIP", "").split(",")))
 print("X", X.shape, DATA, "mode", os.environ.get("MOJOLEARN_NUMERIC_MODE", "identical"), flush=True)
 def run(name, fn, warm=None):
     if ONLY and name.split("(")[0] not in ONLY: return
+    if name.split("(")[0] in SKIP: return
     try:
         (warm or fn)()
         prof.clear(); t = time.perf_counter(); fn(); dt = time.perf_counter() - t
