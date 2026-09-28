@@ -21,7 +21,10 @@ from x_linear.ops import (
 )
 from std.sys.info import is_gpu
 from std.gpu import WARP_SIZE
-from std.gpu.primitives.warp import shuffle_idx
+from std.gpu.primitives.warp import shuffle_idx, shuffle_xor
+from std.sys.compile import is_defined
+from std.sys.info import is_apple_gpu
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_linear.team import Team
 from checks.numerics import identical_pow
 
@@ -345,6 +348,51 @@ def _warp_row_folds[K: Int, NORMS: Bool, SQ: Bool](
     return (acc, n2, n1, sq)
 
 
+@always_inline
+def _warp_row_folds_tree[K: Int, NORMS: Bool, SQ: Bool](
+    xr: InlineArray[Float32, K], wr: InlineArray[Float32, K],
+) -> Tuple[Float32, Float32, Float32, Float32]:
+    """FAST on Apple, opt-in `-D MOJOLEARN_SGD_FAST_TREE=1` (lane/linear-apple3,
+    WIP): one row's folds as a warp reduction. Each lane multiplies its own
+    K slots (a slot j >= d holds x = 0 and w = 0), then a `shuffle_xor`
+    butterfly sums the lanes: log2(W) steps instead of a chain of K * W,
+    and every lane ends with the same word (the two lanes of a pair add the
+    same two words). The grouping of each sum differs from the chain's, so
+    FAST words change; IDENTICAL never compiles this."""
+    comptime W = WARP_SIZE
+    var acc = Float32(0)
+    var n2 = Float32(0)
+    var n1 = Float32(0)
+    var sq = Float32(0)
+    comptime for kk in range(K):
+        acc = xmad(xr[kk], wr[kk], acc)
+        comptime if NORMS:
+            n2 = xmad(wr[kk], wr[kk], n2)
+            n1 = n1 + fabs(wr[kk])
+        comptime if SQ:
+            sq = xmad(xr[kk], xr[kk], sq)
+    comptime for s in range(7):
+        comptime off = 1 << s
+        comptime if off < W:
+            acc = acc + shuffle_xor(acc, UInt32(off))
+            comptime if NORMS:
+                n2 = n2 + shuffle_xor(n2, UInt32(off))
+                n1 = n1 + shuffle_xor(n1, UInt32(off))
+            comptime if SQ:
+                sq = sq + shuffle_xor(sq, UInt32(off))
+    return (acc, n2, n1, sq)
+
+
+@always_inline
+def _row_folds[K: Int, NORMS: Bool, SQ: Bool](
+    xr: InlineArray[Float32, K], wr: InlineArray[Float32, K], d: Int,
+) -> Tuple[Float32, Float32, Float32, Float32]:
+    """`_warp_row_folds`, or FAST on Apple with the define its tree form."""
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and is_apple_gpu() and is_defined["MOJOLEARN_SGD_FAST_TREE"]():
+        return _warp_row_folds_tree[K, NORMS, SQ](xr, wr)
+    return _warp_row_folds[K, NORMS, SQ](xr, wr, d)
+
+
 comptime SPLITMIX_GAMMA = UInt64(0x9E3779B97F4A7C15)
 
 
@@ -507,11 +555,11 @@ def sgd_one_warp[K: Int](
                         raw_next = order.unsafe_load(r + 2)
                 var folds: Tuple[Float32, Float32, Float32, Float32]
                 if fold_norms:
-                    folds = _warp_row_folds[K, True, False](xr, wr, d)
+                    folds = _row_folds[K, True, False](xr, wr, d)
                 elif pa:
-                    folds = _warp_row_folds[K, False, True](xr, wr, d)
+                    folds = _row_folds[K, False, True](xr, wr, d)
                 else:
-                    folds = _warp_row_folds[K, False, False](xr, wr, d)
+                    folds = _row_folds[K, False, False](xr, wr, d)
                 var p = fa(folds[0], intercept)
                 if lr == LR_OPTIMAL:
                     eta = fd(Float32(1), fm(alpha, fs(fa(optimal_init, i2f(t)), Float32(1))))
