@@ -72,9 +72,19 @@ from checks.numerics import (
     identical_log,
     identical_mul,
     identical_mul_add,
+    identical_mul_add_simd,
     identical_sqrt,
 )
+from std.sys.compile import is_defined
 from gemm.host.identical_gemm import OP_NT, contract_leaf_size, gemm_oracle_cell
+from gemm.host.gemm_oracle import (
+    GEMM_ORACLE_SABOTAGE_ORDER_ARM,
+    GEMM_ORACLE_SABOTAGE_VALUE_ARM,
+    leaf_begin,
+    leaf_count,
+    leaf_end,
+)
+from core.host_simd_identical import ftz_v
 
 
 #: `cholesky/checks/potrf.mojo::CHOL_PROFILE`.
@@ -256,6 +266,94 @@ def chol_host_potrf(a_in: List[Float32], n: Int, jitter: Float32) raises -> Chol
     return chol_host_factor_lower(a_in, n, jitter)
 
 
+#: THE TRAILING UPDATE, CHOL_W CELLS AT ONCE (lane neighbors-cpu,
+#: 2026-09-28). Lane `l` of a register is cell (i, j0 + l) of the lower
+#: triangle: `gemm_oracle_cell(packed, packed, OP_NT, i, j, ...)` spelled
+#: lane-wise (the same contract leaves, each `ftz(fma(ftz(P[i, c]),
+#: ftz(P[j, c]), acc))` ascending from `+0.0`, the leaf seam, the oracle's
+#: sabotage arms, the balanced fold), then `ftz(ftz(cur) - ftz(upd))`. The
+#: j operands come from a flushed feature-major copy of the panel. Cells
+#: above the diagonal of a straddling block are computed and discarded.
+#: `-D MOJOLEARN_CHOL_HOST_SCALAR` builds the per-cell loops instead (here
+#: and in the two triangular solves; the before arm of the speed record).
+comptime CHOL_HOST_SCALAR = is_defined["MOJOLEARN_CHOL_HOST_SCALAR"]()
+comptime CHOL_W = 8
+comptime CholV = SIMD[DType.float32, CHOL_W]
+comptime CholU = SIMD[DType.uint32, CHOL_W]
+comptime CholPtr = UnsafePointer[Float32, MutUntrackedOrigin]
+
+
+def _chol_trailing_lower_v(
+    mut a: List[Float32], n: Int, base: Int, packed: List[Float32],
+    n_trail: Int, w: Int, leaf: Int,
+):
+    var pcount = leaf_count(w, leaf)
+    var nb = (n_trail + CHOL_W - 1) // CHOL_W
+    var pt = List[Float32](length=nb * w * CHOL_W, fill=Float32(0.0))
+    var ptp = rebind[CholPtr](pt.unsafe_ptr())
+    var pk = rebind[CholPtr](packed.unsafe_ptr())
+    for j in range(n_trail):
+        var jb = j // CHOL_W
+        var l = j % CHOL_W
+        for c in range(w):
+            ptp.unsafe_store((jb * w + c) * CHOL_W + l, ftz(pk.unsafe_load(j * w + c)))
+    var parts = List[Float32](length=(pcount + 1) * CHOL_W, fill=Float32(0.0))
+    var sp = rebind[CholPtr](parts.unsafe_ptr())
+    var ap = rebind[CholPtr](a.unsafe_ptr())
+    for i in range(n_trail):
+        var arow = pk + i * w
+        var jb_last = i // CHOL_W
+        for jb in range(jb_last + 1):
+            var panel = ptp + jb * w * CHOL_W
+            for t in range(pcount):
+                var lo = leaf_begin(t, leaf)
+                var hi = leaf_end(t, leaf, w)
+                var acc = CholV(0.0)
+                for q in range(hi - lo):
+                    var c = lo + q
+                    comptime if GEMM_ORACLE_SABOTAGE_ORDER_ARM:
+                        c = hi - 1 - q
+                    acc = ftz_v[CHOL_W](identical_mul_add_simd[CHOL_W](
+                        CholV(ftz(arow.unsafe_load(c))),
+                        panel.unsafe_load[width=CHOL_W](c * CHOL_W), acc,
+                    ))
+                acc = ftz_v[CHOL_W](acc)
+                comptime if GEMM_ORACLE_SABOTAGE_VALUE_ARM:
+                    var b = bitcast[DType.uint32, CHOL_W](acc)
+                    var small = (b & CholU(0x7FFFFFFF)).lt(CholU(0x00800000))
+                    acc = bitcast[DType.float32, CHOL_W](small.select(CholU(0x00800000), b + CholU(1)))
+                sp.unsafe_store(t * CHOL_W, acc)
+            var upd: CholV
+            if pcount == 1:
+                upd = ftz_v[CHOL_W](sp.unsafe_load[width=CHOL_W](0))
+            else:
+                var width = pcount
+                while width > 1:
+                    var pairs = width // 2
+                    for q in range(pairs):
+                        var x = ftz_v[CHOL_W](sp.unsafe_load[width=CHOL_W](2 * q * CHOL_W))
+                        var y = ftz_v[CHOL_W](sp.unsafe_load[width=CHOL_W]((2 * q + 1) * CHOL_W))
+                        sp.unsafe_store(q * CHOL_W, ftz_v[CHOL_W](x + y))
+                    if width % 2 != 0:
+                        sp.unsafe_store(pairs * CHOL_W, sp.unsafe_load[width=CHOL_W]((width - 1) * CHOL_W))
+                        width = pairs + 1
+                    else:
+                        width = pairs
+                upd = ftz_v[CHOL_W](sp.unsafe_load[width=CHOL_W](0))
+            upd = ftz_v[CHOL_W](upd)
+            var j0 = jb * CHOL_W
+            var at = (base + i) * n + base + j0
+            if j0 + CHOL_W <= i + 1:
+                var cur = ftz_v[CHOL_W](ap.unsafe_load[width=CHOL_W](at))
+                ap.unsafe_store(at, ftz_v[CHOL_W](cur - upd))
+            else:
+                for l in range(i + 1 - j0):
+                    var cur = ftz(ap.unsafe_load(at + l))
+                    ap.unsafe_store(at + l, ftz(cur - upd[l]))
+    _ = pt^
+    _ = parts^
+
+
 def chol_host_factor_lower(
     a_in: List[Float32], n: Int, jitter: Float32
 ) raises -> CholHostFactor:
@@ -329,16 +427,19 @@ def chol_host_factor_lower(
                 for c in range(w):
                     packed.append(a[(j0 + w + i) * n + j0 + c])
             var leaf = contract_leaf_size(w)
-            for i in range(n_trail):
-                for j in range(i + 1):
-                    var upd = ftz(
-                        gemm_oracle_cell(
-                            packed, packed, OP_NT, i, j, n_trail, n_trail, w, leaf
+            comptime if CHOL_HOST_SCALAR:
+                for i in range(n_trail):
+                    for j in range(i + 1):
+                        var upd = ftz(
+                            gemm_oracle_cell(
+                                packed, packed, OP_NT, i, j, n_trail, n_trail, w, leaf
+                            )
                         )
-                    )
-                    var at = (j0 + w + i) * n + j0 + w + j
-                    var cur = ftz(a[at])
-                    a[at] = ftz(cur - upd)
+                        var at = (j0 + w + i) * n + j0 + w + j
+                        var cur = ftz(a[at])
+                        a[at] = ftz(cur - upd)
+            else:
+                _chol_trailing_lower_v(a, n, j0 + w, packed, n_trail, w, leaf)
             _ = packed^
 
         j0 += nb
@@ -357,12 +458,60 @@ def chol_host_factor_lower(
     return CholHostFactor(a^, n, info, logdet, nb, jitter)
 
 
+#: The right-hand sides a vector solve takes at once: CHOL_TB vectors of
+#: CHOL_W columns, so a block's rows of `b` stay in cache while k walks.
+comptime CHOL_TB = 8
+
+
+def _chol_trsm_cols_v(
+    l: List[Float32], mut b: List[Float32], n: Int, nrhs: Int, upper: Bool,
+) -> Int:
+    """`chol_host_trsm_lower` (or `_upper`) for the leading whole CHOL_W
+    column groups of `b`, CHOL_W right-hand sides per register: lane `l` of
+    a register is column j of the scalar solve, statement for statement
+    (the rows in the scalar order, `t = ftz(fma(-ftz(L), ftz(b_k), t))` over
+    k in the scalar order, then `identical_div` = `ftz(ftz(t) / ftz(L_ii))`
+    lane-wise). Columns never read each other, so solving them side by side
+    moves no bit. Returns the first column left to the scalar loop."""
+    var whole = (nrhs // CHOL_W) * CHOL_W
+    if whole == 0:
+        return 0
+    var lp = rebind[CholPtr](l.unsafe_ptr())
+    var bp = rebind[CholPtr](b.unsafe_ptr())
+    var jb = 0
+    while jb < whole:
+        var nv = min(CHOL_TB, (whole - jb) // CHOL_W)
+        for ii in range(n):
+            var i = n - 1 - ii if upper else ii
+            var lii = ftz(lp.unsafe_load(i * n + i))
+            for v in range(nv):
+                var col = jb + v * CHOL_W
+                var t = ftz_v[CHOL_W](bp.unsafe_load[width=CHOL_W](i * nrhs + col))
+                if upper:
+                    for k in range(i + 1, n):
+                        var lki = ftz(lp.unsafe_load(k * n + i))
+                        var bk = ftz_v[CHOL_W](bp.unsafe_load[width=CHOL_W](k * nrhs + col))
+                        t = ftz_v[CHOL_W](identical_mul_add_simd[CHOL_W](CholV(-lki), bk, t))
+                else:
+                    for k in range(i):
+                        var lik = ftz(lp.unsafe_load(i * n + k))
+                        var bk = ftz_v[CHOL_W](bp.unsafe_load[width=CHOL_W](k * nrhs + col))
+                        t = ftz_v[CHOL_W](identical_mul_add_simd[CHOL_W](CholV(-lik), bk, t))
+                var q = ftz_v[CHOL_W](ftz_v[CHOL_W](t) / CholV(ftz(lii)))
+                bp.unsafe_store(i * nrhs + col, q)
+        jb += nv * CHOL_W
+    return whole
+
+
 def chol_host_trsm_lower(
     l: List[Float32], mut b: List[Float32], n: Int, nrhs: Int
 ):
     """`trsm_lower_kernel` at `ld == n`, in place over `b` (`n x nrhs`
     row-major). One right-hand side at a time; `k` ascending."""
-    for j in range(nrhs):
+    var j0 = 0
+    comptime if not CHOL_HOST_SCALAR:
+        j0 = _chol_trsm_cols_v(l, b, n, nrhs, False)
+    for j in range(j0, nrhs):
         for i in range(n):
             var t = ftz(b[i * nrhs + j])
             for k in range(i):
@@ -378,7 +527,10 @@ def chol_host_trsm_upper(
 ):
     """`trsm_upper_kernel` at `ld == n`: rows descending, the inner sum
     ascending over the rows below."""
-    for j in range(nrhs):
+    var j0 = 0
+    comptime if not CHOL_HOST_SCALAR:
+        j0 = _chol_trsm_cols_v(l, b, n, nrhs, True)
+    for j in range(j0, nrhs):
         for ii in range(n):
             var i = n - 1 - ii
             var t = ftz(b[i * nrhs + j])

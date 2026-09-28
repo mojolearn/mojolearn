@@ -1,13 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Seams DEVIATION 5307-5309 of the decomp lane: the LU pivot and its tie
-(5307), the substitution folds of getrs and of the Cholesky (5308), and the
-two-pass modified Gram-Schmidt (5309).
+"""Seams DEVIATION 5307-5309 and 5320 of the decomp lane: the LU pivot and
+its tie (5307), the substitution folds of getrs and of the Cholesky (5308),
+the two-pass modified Gram-Schmidt (5309), and the Householder QR that keeps
+its reflectors with its explicit Q (geqrf + orgqr, 5320).
 
     tools/with_identical_mode.sh pixi run mojo run -I . x_decomp/checks/dense_check.mojo
 """
 from core.identity_trace import IdentityTrace
-from x_decomp.checks.xd_oracles import oracle_chol, oracle_lu, oracle_lu_solve, oracle_lu_solve_t, oracle_orth
+from x_decomp.checks.xd_oracles import (
+    oracle_chol, oracle_geqrf, oracle_lu, oracle_lu_solve, oracle_lu_solve_t, oracle_orgqr, oracle_orth,
+)
 from x_decomp.checks.seam_util import (
     count_diff_f32,
     count_diff_i32,
@@ -19,7 +22,13 @@ from x_decomp.checks.seam_util import (
     seam_fixture,
     zeros,
 )
+from decomposition.host.pca_full_oracle import host_one_sided_jacobi_svd, host_qr_factor
+from x_decomp.cells import X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL
+from x_decomp.host_jacobi import fast_jacobi_eigh, fast_one_sided_jacobi_svd
+from decomposition.host.pca_oracle import host_jacobi_eigh
+from decomposition.checks.jacobi_eigh_device import JACOBI_SWEEPS, JACOBI_TOL
 from x_decomp.device import DevExec
+from x_decomp.host_qr import fast_qr_factor
 from x_decomp.host import HostExec
 
 
@@ -59,7 +68,66 @@ def spd(n: Int) -> List[Float32]:
 
 def main() raises:
     var tr = IdentityTrace()
-    tr.header("x_decomp dense_check (DEVIATIONS 5307-5309)")
+    tr.header("x_decomp dense_check (DEVIATIONS 5307-5309, 5320)")
+    # ---- the host's fast Householder QR (x_decomp/host_qr.mojo) == the
+    # replay of the device kernel it serves for (host_qr_factor), bit for bit:
+    # one slice, many slices, column counts around the SIMD width
+    var shapes = [37, 9, 5000, 13, 3000, 19, 700, 40, 64, 64]
+    for sh in range(len(shapes) // 2):
+        var qm = shapes[2 * sh]
+        var qn = shapes[2 * sh + 1]
+        var qa = seam_fixture(qm, qn, UInt64(60 + sh))
+        var qa2 = qa.copy()
+        var want_r = host_qr_factor(qa2, qm, qn)
+        var got_r = fast_qr_factor(ptr(qa), qm, qn)
+        same("host QR slices " + String(qm) + " x " + String(qn), count_diff_f32(got_r, want_r))
+    # ---- the host's transposed one-sided Jacobi SVD (x_decomp/host_jacobi.mojo)
+    # == host_one_sided_jacobi_svd: values, V and the sweep count
+    var svd_ns = [9, 40, 300]
+    for sh in range(len(svd_ns)):
+        var sn = svd_ns[sh]
+        var sa = seam_fixture(sn, sn, UInt64(70 + sh))
+        var sa2 = sa.copy()
+        var want = host_one_sided_jacobi_svd(sa2, sn, X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL)
+        var got = fast_one_sided_jacobi_svd(sa, sn, X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL)
+        same("host Jacobi SVD values n " + String(sn), count_diff_f32(got.s, want.s))
+        same("host Jacobi SVD vectors n " + String(sn), count_diff_f32(got.v, want.v))
+        if got.executed != want.executed or got.converged != want.converged:
+            raise Error("host Jacobi SVD sweep count differs at n " + String(sn))
+    # ---- the host's two-sided Jacobi eigh (x_decomp/host_jacobi.mojo) ==
+    # host_jacobi_eigh: the consumed matrix (eigenvalues on its diagonal),
+    # the vectors and the sweep count; symmetric fixtures (a Gram matrix)
+    for sh in range(len(svd_ns)):
+        var en = svd_ns[sh]
+        var g = seam_fixture(en + 3, en, UInt64(80 + sh))
+        var sym = List[Float32](length=en * en, fill=Float32(0))
+        for i in range(en):
+            for j in range(en):
+                var acc = Float32(0)
+                for r in range(en + 3):
+                    acc += g[r * en + i] * g[r * en + j] * Float32(1e-4)
+                sym[i * en + j] = acc
+        var ea = sym.copy()
+        var eb = sym.copy()
+        var we = host_jacobi_eigh(ea, en, JACOBI_SWEEPS, Float32(JACOBI_TOL))
+        var ge = fast_jacobi_eigh(eb, en, JACOBI_SWEEPS, Float32(JACOBI_TOL))
+        same("host Jacobi eigh matrix n " + String(en), count_diff_f32(eb, ea))
+        same("host Jacobi eigh vectors n " + String(en), count_diff_f32(ge.vectors, we.vectors))
+        if ge.executed != we.executed or ge.converged != we.converged:
+            raise Error("host Jacobi eigh sweep count differs at n " + String(en))
+    # ---- the host LU's SIMD row eliminations (x_decomp/host_simd.mojo) at a
+    # size past the vector width, against the oracle
+    var ln = 100
+    var la = seam_fixture(ln, ln, UInt64(90))
+    for i in range(ln):
+        la[i * ln + i] = la[i * ln + i] + Float32(3)
+    var lw = oracle_lu(la, ln)
+    var lh = la.copy()
+    var lp = List[Int32](length=ln, fill=Int32(0))
+    var linfo = zeros(1)
+    HostExec.lu(ptr(lh), iptr(lp), ptr(linfo), ln)
+    same("host LU factor n 100", count_diff_f32(lh, lw[0]))
+    same("host LU pivots n 100", count_diff_i32(lp, lw[1]))
     # ---- 5307 the pivot
     var n = 9
     var a = tie_matrix(n)
@@ -134,4 +202,38 @@ def main() raises:
     HostExec.orth(ptr(qh), mm, l)
     same("5309 orth host", count_diff_f32(qh, wq))
     tr.record_list_f32("x_decomp.orth", qd)
+    # ---- 5320 geqrf + orgqr, a tall, a wide and a rank-deficient matrix
+    for shape in range(3):
+        var gm = 23 if shape != 1 else 5
+        var gn = 6 if shape != 1 else 9
+        var ga = seam_fixture(gm, gn, UInt64(31 + shape))
+        for t in range(len(ga)):
+            if abs(ga[t]) > Float32(100):
+                ga[t] = ga[t] * Float32(1e-6)
+        if shape == 2:
+            for t in range(gm):
+                ga[t * gn + 3] = ga[t * gn + 1]          # a duplicated column
+        var kk = gm if gm < gn else gn
+        var want_f = oracle_geqrf(ga, gm, gn)
+        require_separates("5320 geqrf fold order", count_diff_f32(want_f[0], oracle_geqrf(ga, gm, gn, 1)[0]))
+        var hd = ga.copy()
+        var td = zeros(kk)
+        DevExec.geqrf(ptr(hd), ptr(td), gm, gn)
+        same("5320 geqrf device h", count_diff_f32(hd, want_f[0]))
+        same("5320 geqrf device tau", count_diff_f32(td, want_f[1]))
+        var hh = ga.copy()
+        var th = zeros(kk)
+        HostExec.geqrf(ptr(hh), ptr(th), gm, gn)
+        same("5320 geqrf host h", count_diff_f32(hh, want_f[0]))
+        same("5320 geqrf host tau", count_diff_f32(th, want_f[1]))
+        var want_q = oracle_orgqr(want_f[0], want_f[1], gm, gn, kk, gm)
+        require_separates("5320 orgqr fold order", count_diff_f32(want_q, oracle_orgqr(want_f[0], want_f[1], gm, gn, kk, gm, 1)))
+        var qgd = zeros(gm * gm)
+        DevExec.orgqr(ptr(want_f[0]), ptr(want_f[1]), ptr(qgd), gm, gn, kk, gm)
+        same("5320 orgqr device", count_diff_f32(qgd, want_q))
+        var qgh = zeros(gm * gm)
+        HostExec.orgqr(ptr(want_f[0]), ptr(want_f[1]), ptr(qgh), gm, gn, kk, gm)
+        same("5320 orgqr host", count_diff_f32(qgh, want_q))
+        tr.record_list_f32("x_decomp.geqrf", hd)
+        tr.record_list_f32("x_decomp.orgqr", qgd)
     print("PASS x_decomp dense_check")

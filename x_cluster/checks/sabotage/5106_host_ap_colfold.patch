@@ -1,0 +1,14 @@
+diff --git a/x_cluster/host/host_ops.mojo b/x_cluster/host/host_ops.mojo
+index 305b2f393..25b2829d9 100644
+--- a/x_cluster/host/host_ops.mojo
++++ b/x_cluster/host/host_ops.mojo
+@@ -252,7 +252,8 @@ struct HostOps(ClusterOps):
+             comptime for l in range(AP_W):
+                 kidx[l] = Int64(k0 + l)
+             var colsum = SIMD[DType.float32, AP_W](0)
+-            for i in range(n):
++            for ii_ in range(n):
++                var i = n - 1 - ii_
+                 var v = (pr + i * n + k0).load[width=AP_W]()
+                 var diag = kidx.eq(SIMD[DType.int64, AP_W](Int64(i)))
+                 var rp = (diag | v.gt(zero)).select(v, zero)

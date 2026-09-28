@@ -37,9 +37,10 @@
 # <its GPUs>, HIP devices 0..N-1). A job started in the background from `run`
 # (`setsid nohup ... &`) inherits the lock and keeps its slot until it exits.
 #
-# QUEUE. tools/amd_queue_box.sh is installed on the box as /root/amd-queue/bin/amdq
-# and runs as the systemd service amd-queue.service (survives agent sessions and
-# reboots). `submit` enqueues; the service starts jobs in submission order as
+# QUEUE. tools/gpu_queue_box.sh (the same queue as the shared NVIDIA pods of
+# tools/nvidia_central.sh; its defaults are this box's) is installed on the box
+# as /root/amd-queue/bin/amdq and runs as the systemd service amd-queue.service
+# (survives agent sessions and reboots). `submit` enqueues; the service starts jobs in submission order as
 # their GPU slots free (the same flock slots as `run`), writes
 # /root/amd-queue/<id>/{status,log,exit}, and kills a job at its wall-clock cap.
 # While any job is queued, `run` does not take a free slot (it waits, or exits
@@ -160,7 +161,7 @@ queue-install)
     box "mkdir -p /root/amd-queue/bin && cat > /root/amd-queue/bin/amdq.new && chmod 755 /root/amd-queue/bin/amdq.new && mv -f /root/amd-queue/bin/amdq.new /root/amd-queue/bin/amdq && echo $SLOTS > /root/amd-queue/slots
 cat > /etc/systemd/system/amd-queue.service <<'UNIT'
 [Unit]
-Description=mojolearn central AMD FIFO job queue (tools/amd_queue_box.sh)
+Description=mojolearn central AMD FIFO job queue (tools/gpu_queue_box.sh)
 After=network.target
 
 [Service]
@@ -174,7 +175,7 @@ StandardError=append:/root/amd-queue/dispatcher.log
 [Install]
 WantedBy=multi-user.target
 UNIT
-systemctl daemon-reload && systemctl enable amd-queue.service >/dev/null 2>&1 && systemctl restart amd-queue.service && sleep 2 && systemctl is-active amd-queue.service" < "$ROOT/tools/amd_queue_box.sh"
+systemctl daemon-reload && systemctl enable amd-queue.service >/dev/null 2>&1 && systemctl restart amd-queue.service && sleep 2 && systemctl is-active amd-queue.service" < "$ROOT/tools/gpu_queue_box.sh"
     ;;
 status)
     if [ -n "${1:-}" ]; then

@@ -95,6 +95,7 @@ from cluster.host.kmeans_oracle import (
 from ivf.checks.list_layout import (
     ListLayout,
     build_list_layout,
+    filter_candidate_slots,
     extend_list_layout,
     gather_candidate_indices,
     gather_candidate_norms,
@@ -306,10 +307,12 @@ def host_ivf_search(
     k: Int,
     n_probes: Int,
     partial_storage: Bool = False,
+    keep: List[Int32] = List[Int32](),
 ) raises -> IvfHostResult:
     """`ivf_flat_search_host` on the host (module docstring), over a built
     index: from the build, or from arrays `ivf_validate_index_arrays` has
-    admitted.
+    admitted. `keep` is the sample filter, the device search's statement
+    for statement (`filter_candidate_slots`, DEVIATION 5863); empty is none.
 
     `partial_storage` restates the device search's three partial-storage
     arms (`ivf_flat_search.mojo:577,600,640`) for one SHARD of a disjoint
@@ -331,6 +334,12 @@ def host_ivf_search(
     ivf_search_params_validate(sp, n_lists, n_queries, k)
     ivf_validate_data(queries, n_queries, dim, "queries")
     var dist_is_identity = postprocess_distances_is_identity(metric)
+    var filtered = len(keep) > 0
+    if filtered and len(keep) != n_rows:
+        raise Error(
+            "ivf_flat search: the filter holds " + String(len(keep))
+            + " flags for an index of " + String(n_rows) + " rows"
+        )
     if n_probes > IVF_HOST_SELECT_LIMIT:
         raise Error(
             "ivf_flat search: n_probes ("
@@ -375,6 +384,12 @@ def host_ivf_search(
             this_probe.append(probe_ids[q * n_probes + p])
         var chunks = calc_chunk_indices(list_sizes, this_probe, n_probes)
         var n_cand = n_samples_from_chunks(chunks, n_probes)
+        var kept = List[Int32]()
+        if filtered:
+            kept = filter_candidate_slots(
+                probe_layout, merge_probed_lists(probe_layout, this_probe, n_probes), keep
+            )
+            n_cand = len(kept)
         cand_counts.append(Int32(n_cand))
         if n_cand < k and not partial_storage:
             raise Error(
@@ -386,6 +401,7 @@ def host_ivf_search(
                 + String(n_cand)
                 + " vectors between them, fewer than k = "
                 + String(k)
+                + (" (after the filter)" if filtered else "")
                 + ". Their kOutOfBoundsRecord short-fill"
                 " (ivf_common.cuh:106-108) is not implemented. Raise n_probes,"
                 " or lower k, or rebuild with fewer lists."
@@ -400,7 +416,11 @@ def host_ivf_search(
                 out_dist.append(Float32(0))
                 out_idx.append(UInt32(0))
             continue
-        var slots = merge_probed_lists(probe_layout, this_probe, n_probes)
+        var slots: List[Int32]
+        if filtered:
+            slots = kept.copy()
+        else:
+            slots = merge_probed_lists(probe_layout, this_probe, n_probes)
         var cand_vec = gather_candidate_vectors(probe_layout, slots)
         var cand_orig = gather_candidate_indices(probe_layout, slots)
         var cand_norm = gather_candidate_norms(slots, list_norm)

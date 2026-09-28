@@ -62,6 +62,8 @@ from holtwinters.impl.tsa.holtwinters_params import (
     SEASONAL_ADDITIVE,
 )
 from checks.numerics import ftz, identical_mul_add, identical_sqrt
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 
 #: THE NEGATIVE CONTROL OF THE CPU IDENTITY GATE (the CPU training lane,
 #: 2026-09-13, brief section 3.4). `-D MOJOLEARN_HOST_SABOTAGE=1` makes
@@ -646,19 +648,54 @@ def _oracle_estimate[dt: DType](
     fit.theta = _zeros[dt](d * batch_size)
     var crit = List[Int32](length=batch_size, fill=Int32(0))
     var nit = List[Int32](length=batch_size, fill=Int32(0))
-    var scratch = List[Float32](length=hw_est_scratch_len(frequency), fill=Float32(0.0))
+    # THE SERIES SPLIT (lane sequence-cpu, 2026-09-28): `hw_estimate_series`
+    # is the device's one-thread-per-series body; series `s` reads its own
+    # seeds and writes only its own slots, so contiguous series ranges run
+    # on `host_parallelize` (the caller's FP environment, DEVIATION 5900),
+    # each task with its OWN scratch (the device's per-thread scratch), and
+    # every bit is the serial walk's at any thread count.
+    var ts_p = _p32[dt](fit.ts)
+    var ss_p = _p32[dt](fit.start_season)
+    var lv_p = _p32[dt](fit.level)
+    var tr_p = _p32[dt](fit.trend)
+    var se_p = _p32[dt](fit.season)
+    var al_p = _p32[dt](fit.alpha)
+    var be_p = _p32[dt](fit.beta)
+    var ga_p = _p32[dt](fit.gamma)
+    var sse_p = _p32[dt](fit.sse)
+    var th_p = _p32[dt](fit.theta)
+    var crit_p = crit.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var nit_p = nit.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var start_level = List[Float32](length=batch_size, fill=Float32(0.0))
+    var start_trend = List[Float32](length=batch_size, fill=Float32(0.0))
     for s in range(batch_size):
-        hw_estimate_series(
-            s, _p32[dt](fit.ts), n, batch_size, frequency, additive,
-            rebind[Float32](fit.start_level[s]), rebind[Float32](fit.start_trend[s]),
-            _p32[dt](fit.start_season).unsafe_offset(s),
-            scratch.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-            _p32[dt](fit.level), _p32[dt](fit.trend), _p32[dt](fit.season),
-            _p32[dt](fit.alpha), _p32[dt](fit.beta), _p32[dt](fit.gamma), _p32[dt](fit.sse),
-            crit.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-            nit.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-            _p32[dt](fit.theta),
-        )
+        start_level[s] = rebind[Float32](fit.start_level[s])
+        start_trend[s] = rebind[Float32](fit.start_trend[s])
+    var sl_p = start_level.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var st_p = start_trend.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var scratch_len = hw_est_scratch_len(frequency)
+    var tasks = host_predict_task_count(batch_size)
+    if tasks > batch_size:
+        tasks = batch_size
+    var chunk = host_predict_chunk(batch_size, tasks)
+
+    def _series(c: Int) {imm}:
+        var scratch = List[Float32](length=scratch_len, fill=Float32(0.0))
+        for s in range(c * chunk, min((c + 1) * chunk, batch_size)):
+            hw_estimate_series(
+                s, ts_p, n, batch_size, frequency, additive,
+                sl_p[s], st_p[s],
+                ss_p.unsafe_offset(s),
+                scratch.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                lv_p, tr_p, se_p, al_p, be_p, ga_p, sse_p, crit_p, nit_p, th_p,
+            )
+
+    if tasks <= 1:
+        _series(0)
+    else:
+        host_parallelize(_series, tasks)
+    _ = start_level^
+    _ = start_trend^
     for s in range(batch_size):
         fit.criterion.append(Int(crit[s]))
         fit.niter.append(Int(nit[s]))

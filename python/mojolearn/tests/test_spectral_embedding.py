@@ -30,8 +30,13 @@ def _bytes(a):
 @pytest.mark.parametrize("kwargs, exc", [
     (dict(affinity="cosine"), ValueError),
     (dict(gamma=1.0), NotImplementedError),
-    (dict(eigen_solver="dense"), ValueError),
-    (dict(eigen_tol=1e-3), NotImplementedError),
+    (dict(eigen_solver="dense"), NotImplementedError),
+    (dict(eigen_solver="arpack"), NotImplementedError),
+    (dict(eigen_solver="lobpcg"), NotImplementedError),
+    (dict(eigen_solver="amg"), NotImplementedError),
+    (dict(eigen_tol=0.0), ValueError),
+    (dict(eigen_tol=-1e-3), ValueError),
+    (dict(eigen_tol="tight"), ValueError),
     (dict(n_components=0), ValueError),
     (dict(n_neighbors=0), ValueError),
     (dict(random_state=-1), ValueError),
@@ -92,3 +97,20 @@ def test_unnormalized_laplacian_is_a_different_embedding():
                                       norm_laplacian=False)
     assert np.isfinite(np.asarray(raw)).all()
     assert _bytes(raw) != _bytes(norm)
+
+
+def test_eigen_tol_float_is_the_lanczos_tolerance():
+    """A float eigen_tol reaches the Lanczos (lane/algos-decomp, 2026-09-27):
+    1e-5 is cuVS's default and gives the default's bytes on both binding
+    entries; a looser tolerance still returns a finite embedding."""
+    X = _blobs()
+    base = SpectralEmbedding(n_components=2, random_state=5).fit_transform(X)
+    same = SpectralEmbedding(n_components=2, random_state=5, eigen_tol=1e-5).fit_transform(X)
+    auto = SpectralEmbedding(n_components=2, random_state=5, eigen_tol="auto").fit_transform(X)
+    assert _bytes(same) == _bytes(base) and _bytes(auto) == _bytes(base)
+    loose = SpectralEmbedding(n_components=2, random_state=5, eigen_tol=1e-2).fit_transform(X)
+    assert np.isfinite(np.asarray(loose)).all()
+    A = _affinity(X[:80])
+    g = SpectralEmbedding(n_components=2, affinity="precomputed", random_state=5).fit_transform(A)
+    g5 = SpectralEmbedding(n_components=2, affinity="precomputed", random_state=5, eigen_tol=1e-5).fit_transform(A)
+    assert _bytes(g5) == _bytes(g)

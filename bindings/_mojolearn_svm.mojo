@@ -264,7 +264,10 @@ def svc_predict_binding(
         var dp = _f32_ptr(Int(py=dual_addr))
         var smp = _f32_ptr(Int(py=support_matrix_addr))
         dual = read_f32(Int(dp), max(0, n_support))
-        support = read_f32(Int(smp), max(0, n_support * n_cols))
+        if kernel != 4:
+            # kernel='precomputed' (4) reads no support rows: X is the
+            # cross-kernel and the caller passes no support matrix.
+            support = read_f32(Int(smp), max(0, n_support * n_cols))
     var out = List[Float32]()
     with GILReleased(Python()):
         out = svc_predict_host(
@@ -446,7 +449,10 @@ def svr_predict_binding(
         var dp = _f32_ptr(Int(py=dual_addr))
         var smp = _f32_ptr(Int(py=support_matrix_addr))
         dual = read_f32(Int(dp), max(0, n_support))
-        support = read_f32(Int(smp), max(0, n_support * n_cols))
+        if kernel != 4:
+            # kernel='precomputed' (4) reads no support rows: X is the
+            # cross-kernel and the caller passes no support matrix.
+            support = read_f32(Int(smp), max(0, n_support * n_cols))
     var out = List[Float32]()
     with GILReleased(Python()):
         out = svr_predict_host(

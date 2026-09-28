@@ -594,6 +594,82 @@ def diff(args):
     return 0
 
 
+def _stage_text(rec):
+    """(fit, infer) for one probe record: the fit-like stage and the rest."""
+    if rec is None:
+        return "-", "-"
+    if rec.get("kind") in ("not an algorithm", "no probe"):
+        return "-", "-"
+    stages = rec.get("stages", {})
+    if "process" in stages:
+        return stages["process"]["status"], "-"
+    fitlike = [k for k in stages if k in ("fit", "fit_predict", "fit_transform", "setup", "forward")]
+    other = [k for k in stages if k not in fitlike]
+
+    def sayit(keys):
+        if not keys:
+            return "-"
+        bad = [f"{k} {stages[k]['status']}" for k in keys if stages[k]["status"] != "OK"]
+        return "OK" if not bad else ", ".join(bad)
+    if not fitlike and other:
+        return sayit(other), "-"
+    return sayit(fitlike), sayit(other)
+
+
+def table(args):
+    """The markdown audit table: one row per public name, from the two probe
+    records, the selector's lane -> names map and the host manifest."""
+    sys.path.insert(0, str(ROOT / "python" / "mojolearn"))
+    import host_surface as hs
+    g, c = load(args.gpu), load(args.cpu)
+    lane_names = json.loads(Path(args.lane_names).read_text())
+    public = set(hs.public_reference_lanes())
+    pending = hs.PUBLIC_PENDING_LANES
+    covered = set()
+    for fam in hs.FAMILIES:
+        covered |= set(fam.get("training_lanes", ())) | set(fam.get("inference_lanes", ()))
+    gaps = {}
+    for line in (Path(args.gaps).read_text().splitlines() if args.gaps else ()):
+        if line.strip() and not line.startswith("#"):
+            name, _, why = line.partition("\t")
+            gaps[name.strip()] = why.strip()
+    print("| name | GPU probe | CPU fit | CPU infer | CPU = GPU bits | lanes (CPU column) | status | why |")
+    print("|---|---|---|---|---|---|---|---|")
+    for name in list(dict.fromkeys(list(g) + list(c))):
+        gr, cr = g.get(name), c.get(name)
+        if (cr or gr or {}).get("kind") == "not an algorithm":
+            continue
+        bare = name.split(".")[-1]
+        lanes = sorted(l for l, names in lane_names.items() if bare in names and not l.startswith("par-"))
+        cov = [l for l in lanes if l in covered or l in hs.PUBLIC_HOST_ONLY_LANES]
+        adm = [l for l in cov if l in public]
+        pend = sorted({pending[l] for l in cov if l in pending})
+        gs = summarize(gr, cr)
+        fit, infer = _stage_text(cr)
+        gfit, ginfer = _stage_text(gr)
+        gtxt = "OK" if gfit == "OK" and ginfer in ("OK", "-") else (gfit if gfit != "OK" else ginfer)
+        if name in gaps:
+            status = gaps[name]
+        elif adm:
+            status = "ADMITTED"
+        elif cov and pend:
+            status = "PENDING (" + ", ".join(pend) + ")"
+        elif cov:
+            status = "COVERED, not admitted"
+        else:
+            status = "NO LANE"
+        why = ""
+        if cr:
+            for k, v in cr.get("stages", {}).items():
+                if v["status"] != "OK":
+                    why = v.get("why", "")[:140]
+                    break
+        lane_txt = (f"{len(cov)}: " + ", ".join(cov[:3]) + (" ..." if len(cov) > 3 else "")) if cov else "none"
+        row = (name, gtxt, fit, infer, gs[2] or "-", lane_txt, status, why)
+        print("| " + " | ".join(str(x).replace("|", "/") for x in row) + " |")
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -611,7 +687,15 @@ def main(argv=None):
     d.add_argument("gpu")
     d.add_argument("cpu")
     d.add_argument("--markdown", action="store_true")
+    t = sub.add_parser("table")
+    t.add_argument("gpu")
+    t.add_argument("cpu")
+    t.add_argument("--lane-names", required=True,
+                   help="lane -> touched names JSON (lane_select._seed_names per lane)")
+    t.add_argument("--gaps", help="TSV name<TAB>status overriding the derived status")
     args = ap.parse_args(argv)
+    if args.cmd == "table":
+        return table(args)
     if args.cmd == "_child":
         run_child(args.names.split(","), args.out)
         return 0

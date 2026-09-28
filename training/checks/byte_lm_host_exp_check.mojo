@@ -20,7 +20,7 @@ Raises (nonzero exit) on any mismatch, after printing the first few.
 
 from std.memory import bitcast
 
-from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 
 from checks.numerics import identical_exp, identical_silu
 from training.byte_lm_host_kernels import F32V, HOST_FW, U32V, expf_lanes, silu_lanes
@@ -71,7 +71,7 @@ def main() raises:
         sp.unsafe_store(c, s_count)
         fp.unsafe_store(c, first)
 
-    sync_parallelize(_task, EXP_CHECK_TASKS)
+    host_parallelize(_task, EXP_CHECK_TASKS)
     var e_total = 0
     var s_total = 0
     for c in range(EXP_CHECK_TASKS):

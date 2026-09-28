@@ -40,6 +40,7 @@ from gbdt.gpu_util.kernel.segmented_scan import launch_segmented_scan_vector
 from gbdt.methods.kernel.exact_estimation import (
     BINARY_SEARCH_ITERATIONS,
     NEED_WEIGHTS_BLOCK,
+    NEED_WEIGHTS_THREADS,
     QUANTILE_SEARCH_BLOCK,
     WEIGHTS_WITH_TARGETS_BLOCK,
     compute_need_weights_kernel,
@@ -223,7 +224,7 @@ def compute_weighted_quantile(
         s.ordered_weights.unsafe_ptr(),
         seg_offsets.unsafe_ptr(), seg_sizes.unsafe_ptr(),
         s.need_weights.unsafe_ptr(), alpha,
-        grid_dim=bin_count, block_dim=NEED_WEIGHTS_BLOCK,
+        grid_dim=bin_count, block_dim=NEED_WEIGHTS_THREADS,
     )
 
     # `CalculateQuantileWithBinarySearch(...)` (`:139-144`)

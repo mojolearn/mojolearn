@@ -1,0 +1,13 @@
+diff --git a/core/host_lanes.mojo b/core/host_lanes.mojo
+index 02e6d5b59..f6a5a9095 100644
+--- a/core/host_lanes.mojo
++++ b/core/host_lanes.mojo
+@@ -229,7 +229,7 @@ def span_div(src: List[Float32], sb: Int, n: Int, den: Float32, mut dst: List[Fl
+     comptime if lanes_are_identical:
+         var dv = ftz_lanes(F32V(den))
+         while j + HOST_FW <= n:
+-            dp.unsafe_store(db + j, ftz_lanes(ftz_lanes(sp.unsafe_load[width=HOST_FW](sb + j)) / dv))
++            dp.unsafe_store(db + j, ftz_lanes(ftz_lanes(sp.unsafe_load[width=HOST_FW](sb + j)) * (F32V(1.0) / dv)))  # SABOTAGE (neural-cpu): span_div by a reciprocal
+             j += HOST_FW
+     while j < n:
+         dp.unsafe_store(db + j, ftz(identical_div(ftz(sp.unsafe_load(sb + j)), den)))

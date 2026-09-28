@@ -806,6 +806,7 @@ check-lane-minimum = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . neighbors/c
 # certificate line (the same number on every column); the hardware rsqrt
 # intrinsic RECORDED, not used. Run on every column beside check-ieee-arith.
 check-division = "mojo run -I . checks/division_check.mojo"
+check-ndtri = "mojo run -I . checks/ndtri_check.mojo"
 
 # IDENTITY_PATHS rows 50-54 (DEVIATIONS 741-745): the neural-block
 # primitives rsqrt / log1p / sigmoid / silu / softplus -- accuracy vs a
@@ -1053,6 +1054,9 @@ price-linalg-identity = "sh tools/price_linalg_identity.sh"
 # reachable only by someone who already knows it is there.
 check-gemm-identity = "mojo run -I . core/gemm_identity_check.mojo"
 check-column-stats-identity = "mojo run -I . core/column_stats_identity_check.mojo"
+# DEVIATION 5900: the seam (tasks compute in the caller's FP environment) and
+# the site check (no host thread split bypasses core/host_parallel.mojo).
+check-host-parallel = "python tools/check_host_parallel_sites.py && mojo run -I . core/host_parallel_check.mojo"
 
 # THE COLUMN MAY NOT REACH THE PRODUCT (IDENTITY_PATHS rows 27-28). Compiles
 # bench/linalg_trace_main.mojo against the APPLE, NVIDIA and AMD comptime
@@ -1074,6 +1078,12 @@ ols-card = "sh tools/ols_card.sh"
 # from a serial one, and the signed-zero and cancellation cases. Run in both
 # modes; two of its fixtures refused themselves before they worked.
 check-gemm-oracle = "mojo run -I . gemm/checks/gemm_oracle_check.mojo"
+# gemm/host/gemm_host_rows.mojo (the CPU speed of gemm_oracle) against the oracle bit for bit;
+# the sabotage (the deferred flush never falls back) must FAIL.
+check-gemm-host-rows = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/gemm_host_rows_check.mojo"
+check-gemm-host-rows-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_GEMM_HOST_ROWS_SABOTAGE=1 -I . gemm/checks/gemm_host_rows_check.mojo"
+# core/host_lanes.mojo's span helpers against the scalar statements they name.
+check-host-lanes = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . core/host_lanes_check.mojo"
 # The low-bit profiles (gemm/IDENTICAL_LOWBIT_CONTRACT.md): the honest build
 # must pass every gate, the two sabotage builds must FAIL the oracle gates.
 check-gemm-lowbit = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/gemm_lowbit_check.mojo"
@@ -1153,6 +1163,8 @@ check-grow-policy = "mojo run -I . checks/grow_policy_check.mojo"
 check-cd = "mojo run -I . solver/checks/cd_check.mojo"
 cd-main = "mojo run -I . solver/cd_main.mojo"
 check-kde = "mojo run -I . kde/checks/kde_check.mojo"
+check-host-simd-identical = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . core/host_simd_identical_check.mojo"
+check-host-gemm-simd = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . core/host_gemm_simd_check.mojo"
 # THE TOKENIZER LANE, 2026-09-12. Byte-level BPE in the GPT-2 format
 # (`tokenizer/`). mojolearn ships no vocabulary (2026-09-15): the task writes
 # the Unicode class module from unicodedata and a synthetic vocabulary with
