@@ -156,6 +156,9 @@ try:
 except ImportError:  # pragma: no cover
     raise SystemExit("pack_wheel.py needs Python 3.11+ (tomllib)")
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from device_glue import DEVICE_GLUE, NO_IMAGE, validate as validate_device_glue
+
 REPO = pathlib.Path(__file__).resolve().parents[2]
 PY_DIR = REPO / "python"
 PKG = PY_DIR / "mojolearn"
@@ -735,6 +738,10 @@ def load_set(path, include_byte_lm=False, host_witnesses_by_name=None):
             # whose read-back disagrees with its directory name is refused, the
             # exact failure mode that shipped 0.3.0 as sm_90a-only.
             ab_lines = [ln.split() for ln in (adir / "arch_readback.txt").read_text().splitlines()]
+            try:
+                validate_device_glue(ab_lines, adir)
+            except (ValueError, OSError) as exc:
+                raise SystemExit(f"pack_wheel: {exc}") from exc
             host_arch_rows = [r for r in ab_lines if r and r[0] == "host"]
             ab = [w for r in ab_lines if not (r and r[0] == "host") for w in r]
             said_arch = {w for w in ab if ARCH_RE.match(w) or "," in w}
@@ -757,7 +764,9 @@ def load_set(path, include_byte_lm=False, host_witnesses_by_name=None):
                             if not line.startswith('host ')]
                     if (len(rows) != len(expected_rows) or any(len(row) != 3 for row in rows)
                             or {(row[0], row[1]) for row in rows} != expected_rows
-                            or any(row[2] != expected_value for row in rows)):
+                            or any(row[2] != expected_value and not (
+                                witness == "arch_readback.txt" and row[2] == NO_IMAGE
+                                and (row[0], row[1]) in DEVICE_GLUE) for row in rows)):
                         raise SystemExit(f'pack_wheel: incomplete release native readback in {adir / witness}')
         # OPTIONAL WHEN ABSENT (generic profile only), because a set built
         # before this payload existed is still a valid set and a rebuild of an

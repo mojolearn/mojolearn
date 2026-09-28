@@ -396,7 +396,10 @@ for t in $TIERS; do
     so="$d/$n.so"
     [ -f "$so" ] || { echo "$t $n MISSING" >> "$ARCHBACK"; continue; }
     a=$(arch_of "$so")
-    echo "$t $n ${a:-NONE}" >> "$ARCHBACK"
+    if [[ -z "$a" ]]; then
+      a=$(python3 "$REPO/packaging/linux/device_glue.py" classify "$t" "$n")
+    fi
+    echo "$t $n $a" >> "$ARCHBACK"
   done
 done
 # NONE IS THE CORRECT ANSWER FOR A HOST BINDING, and the only one. Every
@@ -422,9 +425,10 @@ if [[ "$PACKAGE_BYTE_LM" = 1 ]]; then
     fi
   done
 fi
+python3 "$REPO/packaging/linux/device_glue.py" validate "$ARCHBACK" || exit 4
 say "GPU architectures embedded, per binary:"
 awk '{print $3}' "$ARCHBACK" | sort | uniq -c | sort -rn | sed 's/^/    /'
-ARCH_SET=$(awk '$1!="host" && $3!="MISSING"{print $3}' "$ARCHBACK" | sort -u | tr '\n' ' ')
+ARCH_SET=$(awk '$1!="host" && $3!="MISSING" && $3!="NONE-DELEGATED"{print $3}' "$ARCHBACK" | sort -u | tr '\n' ' ')
 if awk '$3=="NONE"{found=1} END{exit !found}' "$ARCHBACK"; then
   say "REFUSING: at least one binary names NO GPU architecture, so it carries"
   say "  no device code. If MOJOLEARN_GPU_ARCHS is set, this is the Metal"
@@ -445,7 +449,7 @@ say "architecture set: $ARCH_SET"
 # sm_80-asking leg on an A40 got twenty-seven sm_86 binaries from the nine
 # scripts that never saw the flag. The read-back, not the flag, names the
 # set's directory.
-N_ARCH=$(awk '$1!="host" && $3!="MISSING"{print $3}' "$ARCHBACK" | sort -u | wc -l | tr -d ' ')
+N_ARCH=$(awk '$1!="host" && $3!="MISSING" && $3!="NONE-DELEGATED"{print $3}' "$ARCHBACK" | sort -u | wc -l | tr -d ' ')
 if [ "$N_ARCH" != 1 ]; then
   say "REFUSING: the binaries do not agree on ONE architecture: $ARCH_SET"
   say "  A set is one architecture. A mixed read-back means some builds"
@@ -453,7 +457,7 @@ if [ "$N_ARCH" != 1 ]; then
   awk '{print "    " $1 " " $2 " " $3}' "$ARCHBACK" | head -8
   exit 5
 fi
-ARCH=$(awk '$1!="host" && $3!="MISSING"{print $3}' "$ARCHBACK" | sort -u)
+ARCH=$(awk '$1!="host" && $3!="MISSING" && $3!="NONE-DELEGATED"{print $3}' "$ARCHBACK" | sort -u)
 case "$ARCH" in
   *,*)
     say "REFUSING: a single binary names several architectures ($ARCH);"
