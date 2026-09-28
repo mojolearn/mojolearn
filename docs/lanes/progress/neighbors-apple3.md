@@ -45,7 +45,7 @@ bench/neighbors_apple3_jobs/<request>.txt (copies in
 | request | Mac | commit | what | result |
 |---|---|---|---|---|
 | 1790626615651 (job 1) | m4pro-b | 6856b5f8f (the base) | both boards, FAST and IDENTICAL, MOJOLEARN_STAGE_TIMES=1: does the family build and run on the base, and the phases | PASS: every binding builds in both modes, every case runs (SVGP on taxi refuses as in round two: not positive definite at these hyperparameters) |
-| 1790627549034 (job 2) | m4pro-b | b32f7312d | A/B of the first three opt-in arms, quality, IDENTICAL digests | queued behind a 30 minute job; the Mac ends at 21:16Z |
+| 1790627549034 (job 2) | m4pro-b | b32f7312d | A/B of the first three opt-in arms, quality, IDENTICAL digests | PASS; results below |
 
 ## Changes on the branch
 
@@ -115,3 +115,36 @@ on the M4 Pro:
 | KNNImputer.transform 5k x 50k | 0.063 | 0.055 | |
 | kneighbors / kNN classifier / regressor k=10, 200k x 10k | 0.040 to 0.048 | 0.032 to 0.039 | |
 | everything else on the two boards | under 0.06 | under 0.06 | |
+
+### Job 2, request 1790627549034 (m4pro-b, M4 Pro, b32f7312d), arms in one job, forward and reverse
+
+Every arm builds. IDENTICAL digests at the head equal the base's (svc
+788a3d6c.. / 24d6f4ea.., svr 0ce89d3c.. / 879a30f0.., krr 5654a1e2.. /
+775b2534.., nystroem 7cb0754a.. / 8deb9714.., rbf 5b7fc0c7.. / 1020aa75..,
+kpca cb9a04d3.. / 7a04ae1e..).
+
+| algorithm | mode | arm | taxi before | taxi after | HIGGS before | HIGGS after | digests |
+|---|---|---|---|---|---|---|---|
+| Nystroem.fit 4k, 300 components | FAST | `-D MOJOLEARN_NYS_HOST_EIGH` | 0.743 / 0.735 | 0.110 / 0.109 | 0.561 / 0.555 | 0.082 / 0.079 | FAST moves (33c168f7.. -> a37f4287.., 712ceeaa.. -> 72e7ecae..) |
+| KernelPCA.fit 500 | FAST | `-D MOJOLEARN_XN_EIGH_ROWS` | 0.561 / 0.544 | 0.425 / 0.427 | 0.379 / 0.369 | 0.290 / 0.290 | EQUAL (8a8e5785.., effcc1c8..) |
+| KernelPCA.fit 500 | IDENTICAL | `-D MOJOLEARN_XN_EIGH_ROWS` | 1.857 / 1.860 | 1.194 / 1.195 | 1.262 / 1.265 | 0.816 / 0.815 | EQUAL (cb9a04d3.., 7a04ae1e..) |
+| SVC.fit 10k | FAST | `-D MOJOLEARN_SVM_HOST_BLOCK_SOLVE` | 0.368 / 0.368 | 0.979 / 0.981 | 0.067 / 0.067 | 0.153 / 0.155 | EQUAL (788a3d6c.., e7da63c8..) |
+| SVR.fit 10k | FAST | same | 0.066 / 0.066 | 0.160 / 0.159 | 0.072 / 0.074 | 0.180 / 0.179 | EQUAL (ff9a2f1b.., 1f64b96f..) |
+
+- The host block solve is SLOWER (about 9 us an inner iteration on the
+  host against 3.7 us on the device, from the three fits' iteration
+  counts) although its words are the device solve's. It stays opt-in; job
+  3 times its stages and two narrower lane widths.
+- The row-vector Jacobi keeps the scalar routine's words in BOTH modes
+  (the IDENTICAL digests are equal), 1.3x in FAST and 1.55x in IDENTICAL.
+- Paired quality (FAST minus IDENTICAL, 5 seeds, the score is minus the
+  relative kernel error for Nystroem): svc, svr and kpca are the same
+  numbers in both arms (their FAST digests did not move). Nystroem with the
+  host eigendecomposition is LOWER than the before arm on every seed, by
+  0.000004 to 0.000031 on taxi (kernel error about 0.010 to 0.016) and by
+  0.000005 on HIGGS (kernel error about 0.028): mean +0.000675 against
+  +0.000697 (taxi), -0.000005 against 0.000000 (HIGGS). That is not "matches
+  or beats", so `-D MOJOLEARN_NYS_HOST_EIGH` as measured stays OPT-IN. Job 3
+  carries two more arms of it: the device solver's own statements on the
+  host (`-D MOJOLEARN_NYS_HOST_EIGH_TWIN`, which can keep FAST's words) and
+  the binary64 tridiagonal QL solve (`-D MOJOLEARN_NYS_HOST_EIGH_QL`).

@@ -1,0 +1,169 @@
+## J2 BASE BINDINGS
+## J2 SVM AB FAST
+ARM 0 [] # x_neighbors_speed mode=fast reps=3 scale=1.0
+ARM 0 [] XNSPEED taxi svc 10000 10000 0.3678 0.0027 788a3d6c392d6e37 nan
+ARM 0 [] XNSPEED taxi svr 10000 10000 0.0659 0.0025 ff9a2f1bc18032da nan
+ARM 0 [] XNSPEED higgs svc 10000 10000 0.0668 0.0037 e7da63c872e36f2e nan
+ARM 0 [] XNSPEED higgs svr 10000 10000 0.0715 0.0033 1f64b96fbf062ba6 nan
+ARM 1 [-D MOJOLEARN_SVM_HOST_BLOCK_SOLVE] # x_neighbors_speed mode=fast reps=3 scale=1.0
+ARM 1 [-D MOJOLEARN_SVM_HOST_BLOCK_SOLVE] XNSPEED taxi svc 10000 10000 0.9789 0.0028 788a3d6c392d6e37 nan
+ARM 1 [-D MOJOLEARN_SVM_HOST_BLOCK_SOLVE] XNSPEED taxi svr 10000 10000 0.1604 0.0064 ff9a2f1bc18032da nan
+ARM 1 [-D MOJOLEARN_SVM_HOST_BLOCK_SOLVE] XNSPEED higgs svc 10000 10000 0.1533 0.0100 e7da63c872e36f2e nan
+ARM 1 [-D MOJOLEARN_SVM_HOST_BLOCK_SOLVE] XNSPEED higgs svr 10000 10000 0.1800 0.0064 1f64b96fbf062ba6 nan
+ARM r1 [-D MOJOLEARN_SVM_HOST_BLOCK_SOLVE] # x_neighbors_speed mode=fast reps=3 scale=1.0
+ARM r1 [-D MOJOLEARN_SVM_HOST_BLOCK_SOLVE] XNSPEED taxi svc 10000 10000 0.9813 0.0028 788a3d6c392d6e37 nan
+ARM r1 [-D MOJOLEARN_SVM_HOST_BLOCK_SOLVE] XNSPEED taxi svr 10000 10000 0.1593 0.0065 ff9a2f1bc18032da nan
+ARM r1 [-D MOJOLEARN_SVM_HOST_BLOCK_SOLVE] XNSPEED higgs svc 10000 10000 0.1554 0.0102 e7da63c872e36f2e nan
+ARM r1 [-D MOJOLEARN_SVM_HOST_BLOCK_SOLVE] XNSPEED higgs svr 10000 10000 0.1785 0.0072 1f64b96fbf062ba6 nan
+ARM r0 [] # x_neighbors_speed mode=fast reps=3 scale=1.0
+ARM r0 [] XNSPEED taxi svc 10000 10000 0.3675 0.0027 788a3d6c392d6e37 nan
+ARM r0 [] XNSPEED taxi svr 10000 10000 0.0656 0.0025 ff9a2f1bc18032da nan
+ARM r0 [] XNSPEED higgs svc 10000 10000 0.0670 0.0035 e7da63c872e36f2e nan
+ARM r0 [] XNSPEED higgs svr 10000 10000 0.0740 0.0033 1f64b96fbf062ba6 nan
+## J2 NYS AB FAST
+ARM 0 [] # x_neighbors_speed mode=fast reps=3 scale=1.0
+ARM 0 [] XNSPEED taxi nystroem 4000 100000 0.7425 0.1205 33c168f7e9ba781d nan
+ARM 0 [] XNSPEED higgs nystroem 4000 100000 0.5606 0.1200 712ceeaac170cfdb nan
+ARM 1 [-D MOJOLEARN_NYS_HOST_EIGH] # x_neighbors_speed mode=fast reps=3 scale=1.0
+ARM 1 [-D MOJOLEARN_NYS_HOST_EIGH] XNSPEED taxi nystroem 4000 100000 0.1097 0.1178 a37f42871fc42916 nan
+ARM 1 [-D MOJOLEARN_NYS_HOST_EIGH] XNSPEED higgs nystroem 4000 100000 0.0815 0.1178 72e7ecaec4ae6502 nan
+ARM r1 [-D MOJOLEARN_NYS_HOST_EIGH] # x_neighbors_speed mode=fast reps=3 scale=1.0
+ARM r1 [-D MOJOLEARN_NYS_HOST_EIGH] XNSPEED taxi nystroem 4000 100000 0.1092 0.1179 a37f42871fc42916 nan
+ARM r1 [-D MOJOLEARN_NYS_HOST_EIGH] XNSPEED higgs nystroem 4000 100000 0.0794 0.1197 72e7ecaec4ae6502 nan
+ARM r0 [] # x_neighbors_speed mode=fast reps=3 scale=1.0
+ARM r0 [] XNSPEED taxi nystroem 4000 100000 0.7347 0.1206 33c168f7e9ba781d nan
+ARM r0 [] XNSPEED higgs nystroem 4000 100000 0.5549 0.1189 712ceeaac170cfdb nan
+## J2 KPCA AB
+ARM identical old # x_neighbors_apple2_speed mode=identical reps=3 scale=1.0
+ARM identical old XN2SPEED taxi kpca 500 10000 1.8572 0.0144 cb9a04d3d3e2820c 0.146303
+ARM identical old XN2SPEED higgs kpca 500 10000 1.2618 0.0146 7a04ae1e8fcf728f 0.151339
+ARM identical rows # x_neighbors_apple2_speed mode=identical reps=3 scale=1.0
+ARM identical rows XN2SPEED taxi kpca 500 10000 1.1942 0.0142 cb9a04d3d3e2820c 0.146303
+ARM identical rows XN2SPEED higgs kpca 500 10000 0.8162 0.0142 7a04ae1e8fcf728f 0.151339
+ARM identical rows-r # x_neighbors_apple2_speed mode=identical reps=3 scale=1.0
+ARM identical rows-r XN2SPEED taxi kpca 500 10000 1.1947 0.0142 cb9a04d3d3e2820c 0.146303
+ARM identical rows-r XN2SPEED higgs kpca 500 10000 0.8151 0.0142 7a04ae1e8fcf728f 0.151339
+ARM identical old-r # x_neighbors_apple2_speed mode=identical reps=3 scale=1.0
+ARM identical old-r XN2SPEED taxi kpca 500 10000 1.8602 0.0148 cb9a04d3d3e2820c 0.146303
+ARM identical old-r XN2SPEED higgs kpca 500 10000 1.2648 0.0144 7a04ae1e8fcf728f 0.151339
+ARM fast old # x_neighbors_apple2_speed mode=fast reps=3 scale=1.0
+ARM fast old XN2SPEED taxi kpca 500 10000 0.5605 0.0138 8a8e57859e41800a 0.146303
+ARM fast old XN2SPEED higgs kpca 500 10000 0.3792 0.0139 effcc1c8859044eb 0.151339
+ARM fast rows # x_neighbors_apple2_speed mode=fast reps=3 scale=1.0
+ARM fast rows XN2SPEED taxi kpca 500 10000 0.4249 0.0138 8a8e57859e41800a 0.146303
+ARM fast rows XN2SPEED higgs kpca 500 10000 0.2897 0.0138 effcc1c8859044eb 0.151339
+ARM fast rows-r # x_neighbors_apple2_speed mode=fast reps=3 scale=1.0
+ARM fast rows-r XN2SPEED taxi kpca 500 10000 0.4267 0.0115 8a8e57859e41800a 0.146303
+ARM fast rows-r XN2SPEED higgs kpca 500 10000 0.2904 0.0138 effcc1c8859044eb 0.151339
+ARM fast old-r # x_neighbors_apple2_speed mode=fast reps=3 scale=1.0
+ARM fast old-r XN2SPEED taxi kpca 500 10000 0.5443 0.0140 8a8e57859e41800a 0.146303
+ARM fast old-r XN2SPEED higgs kpca 500 10000 0.3694 0.0140 effcc1c8859044eb 0.151339
+## J2 IDENTICAL DIGESTS AT HEAD
+IDHEAD # x_neighbors_speed mode=identical reps=1 scale=1.0
+IDHEAD XNSPEED taxi svc 10000 10000 0.6640 0.0136 788a3d6c392d6e37 nan
+IDHEAD XNSPEED taxi svr 10000 10000 0.0856 0.0153 0ce89d3cc2d003ea nan
+IDHEAD XNSPEED taxi krr 10000 10000 1.0938 0.0258 5654a1e20a32a733 nan
+IDHEAD XNSPEED taxi nystroem 4000 100000 0.9213 0.0585 7cb0754aaa458ea7 nan
+IDHEAD XNSPEED taxi rbf 1000000 1000000 0.0034 0.5413 5b7fc0c75797ae8a nan
+IDHEAD XNSPEED higgs svc 10000 10000 0.0908 0.0240 24d6f4ea808d3a21 nan
+IDHEAD XNSPEED higgs svr 10000 10000 0.1044 0.0252 879a30f092b8b20c nan
+IDHEAD XNSPEED higgs krr 10000 10000 0.5904 0.0261 775b253452af9321 nan
+IDHEAD XNSPEED higgs nystroem 4000 100000 0.7008 0.0474 8deb9714f24649e6 nan
+IDHEAD XNSPEED higgs rbf 1000000 1000000 0.0033 0.5422 1020aa75e979954e nan
+## J2 QUALITY
+QUAL old XNQUAL taxi 0 svc 0.849500 0.849500 +0.000000
+QUAL old XNQUAL taxi 1 svc 0.846500 0.846500 +0.000000
+QUAL old XNQUAL taxi 2 svc 0.843000 0.843000 +0.000000
+QUAL old XNQUAL taxi 3 svc 0.844000 0.844000 +0.000000
+QUAL old XNQUAL taxi 4 svc 0.852000 0.852000 +0.000000
+QUAL old XNQUAL_SUMMARY taxi svc seeds=5 mean_diff=+0.000000 worst_diff=+0.000000
+QUAL old XNQUAL taxi 0 svr 0.924958 0.924979 +0.000021
+QUAL old XNQUAL taxi 1 svr 0.928336 0.928344 +0.000007
+QUAL old XNQUAL taxi 2 svr 0.785760 0.785744 -0.000017
+QUAL old XNQUAL taxi 3 svr 0.856768 0.856775 +0.000006
+QUAL old XNQUAL taxi 4 svr 0.885470 0.885464 -0.000006
+QUAL old XNQUAL_SUMMARY taxi svr seeds=5 mean_diff=+0.000002 worst_diff=-0.000017
+QUAL old XNQUAL taxi 0 nystroem -0.012005 -0.010393 +0.001613
+QUAL old XNQUAL taxi 1 nystroem -0.016451 -0.014607 +0.001844
+QUAL old XNQUAL taxi 2 nystroem -0.010931 -0.010924 +0.000007
+QUAL old XNQUAL taxi 3 nystroem -0.015526 -0.015518 +0.000008
+QUAL old XNQUAL taxi 4 nystroem -0.010057 -0.010045 +0.000013
+QUAL old XNQUAL_SUMMARY taxi nystroem seeds=5 mean_diff=+0.000697 worst_diff=+0.000007
+QUAL old XNQUAL taxi 0 kpca -0.000002 -0.000004 -0.000002
+QUAL old XNQUAL taxi 1 kpca -0.000003 -0.000003 +0.000001
+QUAL old XNQUAL taxi 2 kpca -0.000003 -0.000002 +0.000001
+QUAL old XNQUAL taxi 3 kpca -0.000003 -0.000002 +0.000000
+QUAL old XNQUAL taxi 4 kpca -0.000003 -0.000003 -0.000001
+QUAL old XNQUAL_SUMMARY taxi kpca seeds=5 mean_diff=-0.000000 worst_diff=-0.000002
+QUAL old XNQUAL higgs 0 svc 0.566500 0.566500 +0.000000
+QUAL old XNQUAL higgs 1 svc 0.583000 0.583000 +0.000000
+QUAL old XNQUAL higgs 2 svc 0.555500 0.555500 +0.000000
+QUAL old XNQUAL higgs 3 svc 0.573500 0.573500 +0.000000
+QUAL old XNQUAL higgs 4 svc 0.568000 0.568000 +0.000000
+QUAL old XNQUAL_SUMMARY higgs svc seeds=5 mean_diff=+0.000000 worst_diff=+0.000000
+QUAL old XNQUAL higgs 0 svr 0.001867 0.001873 +0.000006
+QUAL old XNQUAL higgs 1 svr 0.018359 0.018371 +0.000012
+QUAL old XNQUAL higgs 2 svr 0.007308 0.007260 -0.000048
+QUAL old XNQUAL higgs 3 svr 0.001815 0.001793 -0.000022
+QUAL old XNQUAL higgs 4 svr 0.010218 0.010200 -0.000018
+QUAL old XNQUAL_SUMMARY higgs svr seeds=5 mean_diff=-0.000014 worst_diff=-0.000048
+QUAL old XNQUAL higgs 0 nystroem -0.027276 -0.027276 -0.000000
+QUAL old XNQUAL higgs 1 nystroem -0.029714 -0.029714 -0.000000
+QUAL old XNQUAL higgs 2 nystroem -0.028826 -0.028826 -0.000000
+QUAL old XNQUAL higgs 3 nystroem -0.030833 -0.030833 -0.000000
+QUAL old XNQUAL higgs 4 nystroem -0.029054 -0.029054 -0.000000
+QUAL old XNQUAL_SUMMARY higgs nystroem seeds=5 mean_diff=-0.000000 worst_diff=-0.000000
+QUAL old XNQUAL higgs 0 kpca -0.000004 -0.000003 +0.000001
+QUAL old XNQUAL higgs 1 kpca -0.000003 -0.000003 +0.000000
+QUAL old XNQUAL higgs 2 kpca -0.000003 -0.000003 +0.000001
+QUAL old XNQUAL higgs 3 kpca -0.000002 -0.000002 +0.000000
+QUAL old XNQUAL higgs 4 kpca -0.000003 -0.000002 +0.000001
+QUAL old XNQUAL_SUMMARY higgs kpca seeds=5 mean_diff=+0.000001 worst_diff=+0.000000
+QUAL new XNQUAL taxi 0 svc 0.849500 0.849500 +0.000000
+QUAL new XNQUAL taxi 1 svc 0.846500 0.846500 +0.000000
+QUAL new XNQUAL taxi 2 svc 0.843000 0.843000 +0.000000
+QUAL new XNQUAL taxi 3 svc 0.844000 0.844000 +0.000000
+QUAL new XNQUAL taxi 4 svc 0.852000 0.852000 +0.000000
+QUAL new XNQUAL_SUMMARY taxi svc seeds=5 mean_diff=+0.000000 worst_diff=+0.000000
+QUAL new XNQUAL taxi 0 svr 0.924958 0.924979 +0.000021
+QUAL new XNQUAL taxi 1 svr 0.928336 0.928344 +0.000007
+QUAL new XNQUAL taxi 2 svr 0.785760 0.785744 -0.000017
+QUAL new XNQUAL taxi 3 svr 0.856768 0.856775 +0.000006
+QUAL new XNQUAL taxi 4 svr 0.885470 0.885464 -0.000006
+QUAL new XNQUAL_SUMMARY taxi svr seeds=5 mean_diff=+0.000002 worst_diff=-0.000017
+QUAL new XNQUAL taxi 0 nystroem -0.012005 -0.010409 +0.001597
+QUAL new XNQUAL taxi 1 nystroem -0.016451 -0.014620 +0.001831
+QUAL new XNQUAL taxi 2 nystroem -0.010931 -0.010955 -0.000024
+QUAL new XNQUAL taxi 3 nystroem -0.015526 -0.015548 -0.000022
+QUAL new XNQUAL taxi 4 nystroem -0.010057 -0.010062 -0.000004
+QUAL new XNQUAL_SUMMARY taxi nystroem seeds=5 mean_diff=+0.000675 worst_diff=-0.000024
+QUAL new XNQUAL taxi 0 kpca -0.000002 -0.000004 -0.000002
+QUAL new XNQUAL taxi 1 kpca -0.000003 -0.000003 +0.000001
+QUAL new XNQUAL taxi 2 kpca -0.000003 -0.000002 +0.000001
+QUAL new XNQUAL taxi 3 kpca -0.000003 -0.000002 +0.000000
+QUAL new XNQUAL taxi 4 kpca -0.000003 -0.000003 -0.000001
+QUAL new XNQUAL_SUMMARY taxi kpca seeds=5 mean_diff=-0.000000 worst_diff=-0.000002
+QUAL new XNQUAL higgs 0 svc 0.566500 0.566500 +0.000000
+QUAL new XNQUAL higgs 1 svc 0.583000 0.583000 +0.000000
+QUAL new XNQUAL higgs 2 svc 0.555500 0.555500 +0.000000
+QUAL new XNQUAL higgs 3 svc 0.573500 0.573500 +0.000000
+QUAL new XNQUAL higgs 4 svc 0.568000 0.568000 +0.000000
+QUAL new XNQUAL_SUMMARY higgs svc seeds=5 mean_diff=+0.000000 worst_diff=+0.000000
+QUAL new XNQUAL higgs 0 svr 0.001867 0.001873 +0.000006
+QUAL new XNQUAL higgs 1 svr 0.018359 0.018371 +0.000012
+QUAL new XNQUAL higgs 2 svr 0.007308 0.007260 -0.000048
+QUAL new XNQUAL higgs 3 svr 0.001815 0.001793 -0.000022
+QUAL new XNQUAL higgs 4 svr 0.010218 0.010200 -0.000018
+QUAL new XNQUAL_SUMMARY higgs svr seeds=5 mean_diff=-0.000014 worst_diff=-0.000048
+QUAL new XNQUAL higgs 0 nystroem -0.027276 -0.027281 -0.000005
+QUAL new XNQUAL higgs 1 nystroem -0.029714 -0.029719 -0.000005
+QUAL new XNQUAL higgs 2 nystroem -0.028826 -0.028831 -0.000006
+QUAL new XNQUAL higgs 3 nystroem -0.030833 -0.030838 -0.000005
+QUAL new XNQUAL higgs 4 nystroem -0.029054 -0.029059 -0.000005
+QUAL new XNQUAL_SUMMARY higgs nystroem seeds=5 mean_diff=-0.000005 worst_diff=-0.000006
+QUAL new XNQUAL higgs 0 kpca -0.000004 -0.000003 +0.000001
+QUAL new XNQUAL higgs 1 kpca -0.000003 -0.000003 +0.000000
+QUAL new XNQUAL higgs 2 kpca -0.000003 -0.000003 +0.000001
+QUAL new XNQUAL higgs 3 kpca -0.000002 -0.000002 +0.000000
+QUAL new XNQUAL higgs 4 kpca -0.000003 -0.000002 +0.000001
+QUAL new XNQUAL_SUMMARY higgs kpca seeds=5 mean_diff=+0.000001 worst_diff=+0.000000

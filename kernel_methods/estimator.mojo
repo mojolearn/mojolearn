@@ -934,7 +934,30 @@ def nystroem_fit_host(
         var kh = _download(ctx, dk, q * q)
         var wh = List[Float32](length=q, fill=Float32(0.0))
         vecs = List[Float32](length=q * q, fill=Float32(0.0))
-        comptime if is_defined["MOJOLEARN_NYS_HOST_EIGH_QL"]():
+        comptime if is_defined["MOJOLEARN_NYS_HOST_EIGH_TWIN"]():
+            # OPT-IN: the DEVICE solver's own statements on the host
+            # (x_decomp/host_jacobi.mojo `fast_jacobi_eigh`, the row-vector
+            # form of decomposition/host/pca_oracle.mojo `host_jacobi_eigh`,
+            # which replays `jacobi_eigh_kernel`), then `sign_flip_kernel`'s
+            # host statement. The arm that can keep FAST's words.
+            from decomposition.host.pca_oracle import host_sign_flip
+            from x_decomp.host_jacobi import fast_jacobi_eigh
+
+            var tw = fast_jacobi_eigh(kh, q, JACOBI_SWEEPS, Float32(JACOBI_TOL))
+            if not tw.converged:
+                raise Error(
+                    "nystroem_fit_host: the host replay of the device Jacobi did"
+                    " not converge in "
+                    + String(JACOBI_SWEEPS)
+                    + " sweeps at n_components = "
+                    + String(q)
+                )
+            sweeps = tw.executed
+            for c in range(q):
+                wh[c] = kh[c * q + c]
+            vecs = tw.vectors.copy()
+            host_sign_flip(vecs, q)
+        elif is_defined["MOJOLEARN_NYS_HOST_EIGH_QL"]():
             # OPT-IN: tridiagonal reduction and QL in binary64
             sweeps = symmetric_eig_ql(
                 EigP(unsafe_from_address=Int(kh.unsafe_ptr())),
