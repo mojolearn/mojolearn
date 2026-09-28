@@ -92,21 +92,23 @@ def main():
                 common = dict(n_lists=args.n_lists, n_probes=args.n_probes, n_neighbors=args.k, random_state=seed)
                 if a == "ivf_pq":
                     est = ml.IVFPQIndex(pq_dim=min(14, x.shape[1]), pq_bits=8, **common).fit(x)
-                    row["recall"] = recall(est.search(q)[1], truth)
+                    row["recall"] = recall(np.asarray(est.search(q)[1]), truth)
                 elif a == "ivf_sq":
                     est = ml.IVFSQIndex(**common).fit(x)
-                    row["recall"] = recall(est.search(q)[1], truth)
+                    row["recall"] = recall(np.asarray(est.search(q)[1]), truth)
                 elif a == "ivf_rabitq":
                     est = ml.IVFRaBitQIndex(**common).fit(x)
-                    row["recall"] = recall(est.search(q)[1], truth)
+                    row["recall"] = recall(np.asarray(est.search(q)[1]), truth)
                 elif a == "cagra":
                     if seed != seeds[0]:
                         continue  # CAGRA has no seed: one row per dataset
                     est = ml.CagraIndex(n_neighbors=args.k).fit(xs)
-                    row["recall"] = recall(est.search(qs)[1], truth_s)
+                    row["recall"] = recall(np.asarray(est.search(qs)[1]), truth_s)
                 elif a == "tsne":
                     est = ml.TSNE(init="random", random_state=seed, max_iter=500)
-                    y = est.fit_transform(xs[:1500])
+                    # lane ann-apple3: the estimator returns mojolearn's own array type, which
+                    # refuses `y[:, None, :]`; the metric below is numpy's
+                    y = np.asarray(est.fit_transform(xs[:1500]))
                     row["trust10"] = trustworthiness(xs[:1500], y)
                     row["kl"] = float(est.kl_divergence_)
                 row["s"] = round(time.perf_counter() - t, 2)
