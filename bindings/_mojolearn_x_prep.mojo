@@ -40,6 +40,25 @@ def run_scratch_binding(arena_addr: PythonObject, arena_len: PythonObject, scrat
     return PythonObject(s)
 
 
+def run_out_binding(arena_addr: PythonObject, prog_addr: PythonObject, out_addr: PythonObject,
+                    sizes: PythonObject) raises -> PythonObject:
+    """x_prep_run_scratch plus one OUTPUT region after the scratch, zeroed on
+    the device and copied back into the host buffer at out_addr (lane
+    prep-apple2). sizes = (arena_len, scratch_len, out_len, stages)."""
+    var fa = Int(py=arena_addr)
+    var qa = Int(py=prog_addr)
+    var oa = Int(py=out_addr)
+    var n = Int(py=sizes[0])
+    var sc = Int(py=sizes[1])
+    var on = Int(py=sizes[2])
+    var s = Int(py=sizes[3])
+    if fa == 0 or qa == 0 or n < 0 or sc < 0 or on < 0 or s < 0 or (on > 0 and oa == 0):
+        raise Error("x_prep: invalid program buffers")
+    with GILReleased(Python()):
+        run_program_device(fa, n, qa, s, sc, oa, on)
+    return PythonObject(s)
+
+
 def numeric_mode_binding() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 
@@ -54,6 +73,7 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_x_prep")
         m.def_function[run_binding]("x_prep_run")
         m.def_function[run_scratch_binding]("x_prep_run_scratch")
+        m.def_function[run_out_binding]("x_prep_run_out")
         m.def_function[numeric_mode_binding]("x_prep_numeric_mode")
         m.def_function[vendor_binding]("x_prep_vendor")
         return m.finalize()

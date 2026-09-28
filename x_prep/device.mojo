@@ -68,17 +68,24 @@ def prep_kernel[OP: Int](f: FP, q: IP, total: Int32):
         run_unit[OP](t, f, q)
 
 
-def run_program_device(arena_addr: Int, arena_len: Int, prog_addr: Int, stages: Int, scratch_len: Int = 0) raises:
+def run_program_device(arena_addr: Int, arena_len: Int, prog_addr: Int, stages: Int, scratch_len: Int = 0,
+                       out_addr: Int = 0, out_len: Int = 0) raises:
     run_program_device_ptr(
-        FP(unsafe_from_address=arena_addr), arena_len, IP(unsafe_from_address=prog_addr), stages, scratch_len
+        FP(unsafe_from_address=arena_addr), arena_len, IP(unsafe_from_address=prog_addr), stages, scratch_len,
+        out_addr, out_len,
     )
 
 
-def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, scratch_len: Int = 0) raises:
+def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, scratch_len: Int = 0,
+                           out_addr: Int = 0, out_len: Int = 0) raises:
     """scratch_len (lane prep-apple2): words of DEVICE-ONLY arena after the
     host's arena_len words (offsets arena_len ..); they never cross to or
     from the host and start undefined, so a program writes each scratch word
-    before it reads it. Where a word lives moves no bit."""
+    before it reads it. out_len words after those (offsets arena_len +
+    scratch_len ..) are the program's OUTPUT: zeroed on the device (as the
+    host arena's words arrive zeroed), never uploaded, and copied back into
+    the host buffer at out_addr, not into the arena. Where a word lives moves
+    no bit."""
     for s in range(stages):
         var op = Int(host_q.unsafe_load(s * STAGE_INTS))
         if op < 0 or op >= N_OPS:
@@ -102,7 +109,9 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     var ctx = x_prep_ctx()
     var dmw = ctx.enqueue_create_buffer[DType.uint64](mi_w if mi_sorted else 1)
     var dmu = ctx.enqueue_create_buffer[DType.uint32](mi_u if mi_sorted else 1)
-    var dev_len = arena_len + max(scratch_len, 0)
+    var out_n = out_len if out_addr != 0 and out_len > 0 else 0
+    var out_at = arena_len + max(scratch_len, 0)
+    var dev_len = out_at + out_n
     var df = ctx.enqueue_create_buffer[DType.float32](dev_len if dev_len > 0 else 1)
     var dw = ctx.enqueue_create_buffer[DType.uint32](scratch)
     var dq = ctx.enqueue_create_buffer[DType.int32](stages * STAGE_INTS if stages > 0 else 1)
@@ -111,6 +120,8 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
             ctx.enqueue_copy(dst_buf=df.create_sub_buffer[DType.float32](0, arena_len), src_ptr=host_f)
         else:
             ctx.enqueue_copy(dst_buf=df, src_ptr=host_f)
+    if out_n > 0:
+        ctx.enqueue_memset(df.create_sub_buffer[DType.float32](out_at, out_n), Float32(0))
     if stages > 0:
         ctx.enqueue_copy(dst_buf=dq, src_ptr=host_q)
     for s in range(stages):
@@ -158,6 +169,8 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
             ctx.enqueue_copy(dst_ptr=host_f, src_buf=df.create_sub_buffer[DType.float32](0, arena_len))
         else:
             ctx.enqueue_copy(dst_ptr=host_f, src_buf=df)
+    if out_n > 0:
+        ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=out_addr), src_buf=df.create_sub_buffer[DType.float32](out_at, out_n))
     ctx.synchronize()
     _ = dw^
     _ = dmw^
