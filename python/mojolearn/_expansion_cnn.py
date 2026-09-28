@@ -15,6 +15,7 @@ first imported, after the package, so both may rely on every module existing:
                                its `_HostBound`; never import it at module level
 """
 from . import _backend
+from . import _portable_math as _pm
 
 __all__ = ["Conv2d", "Conv1d", "MaxPool2d", "AvgPool2d", "MaxPool1d", "AvgPool1d", "CNNClassifier", "BatchNorm2d", "BatchNorm1d",
            "Dropout2d", "AdaptiveAvgPool2d", "AdaptiveMaxPool2d", "BasicBlock",
@@ -489,12 +490,16 @@ def _adam(binding, param, grad, mv, step, lr, betas, eps, weight_decay, decouple
 
 def _adam_hyper(step, lr, betas, eps, weight_decay, decoupled):
     """adam_at's hyper block for 1-based step `step` (the scalars in double,
-    as torch computes them in Python); `_adam` and the resident fit share it."""
-    import math
+    as torch computes them in Python); `_adam` and the resident fit share it.
+    DEVIATION 6900: torch's `beta ** step` calls the platform pow; here it is
+    `_pm.powi`, correctly rounded (the platform's bits wherever its pow is),
+    the same bits on every host. sqrt is correctly rounded everywhere."""
     b1, b2 = float(betas[0]), float(betas[1])
-    bc1 = 1.0 - b1 ** step
-    bc2 = 1.0 - b2 ** step
-    return [lr / bc1, 1.0 - b1, b2, 1.0 - b2, float(eps), math.sqrt(bc2), float(weight_decay),
+    if step != int(step):
+        raise ValueError(f"Adam step must be a whole number, got {step!r}")
+    bc1 = 1.0 - _pm.powi(b1, int(step))
+    bc2 = 1.0 - _pm.powi(b2, int(step))
+    return [lr / bc1, 1.0 - b1, b2, 1.0 - b2, float(eps), _pm.sqrt(bc2), float(weight_decay),
             1.0 if decoupled else 0.0, 1.0 - float(lr) * float(weight_decay)]
 
 
@@ -540,6 +545,12 @@ class _Res:
 #: two gathers, one pass over all rows); never set in production.
 _PREDICT_ROWS = 2048
 _LEGACY_STEP = False
+#: lane/py-misc (2026-09-28): with X resident, fit runs each epoch's steps in
+#: ONE binding call (`x_cnn_fit_epoch_r`: the same entries' work in the same
+#: order, looped in Mojo). False is the measurement arm's before side (the
+#: Python step loop, also `MOJOLEARN_XCNN_PY_STEPS=1` for a whole-process
+#: arm such as the identity harness); never cleared in production.
+_EPOCH_ENTRY = __import__("os").environ.get("MOJOLEARN_XCNN_PY_STEPS", "") != "1"
 
 
 class CNNClassifier(_Layer):
@@ -698,6 +709,9 @@ class CNNClassifier(_Layer):
                     self._rw[id(layer)] = (hp[i], hp[i + 1], hg[i], hg[i + 1])
             a = self._resident(R, cap, save=True)
             sizes = [int(getattr(layer, attr).size) for layer, attr, _ in params]
+            # the list forms (one optimizer call, one gather per step) on the
+            # GPU binding only: the host twin's list forms are unmeasured
+            lists = (not _LEGACY_STEP) and str(b.x_cnn_vendor()) != "cpu"
             # the whole X and its labels resident once when they fit a GiB:
             # each step then gathers its rows on the binding's side (a word
             # copy) instead of uploading them
@@ -708,15 +722,51 @@ class CNNClassifier(_Layer):
                 R.put(xall, x)
                 R.put(yall, yi)
             step = 0
+            epoch_entry = (whole and _EPOCH_ENTRY and not _LEGACY_STEP and hasattr(b, "x_cnn_fit_epoch_r"))
+            if epoch_entry:
+                bs = self.batch_size
+                nsteps = (n + bs - 1) // bs
+                m_last = n - (nsteps - 1) * bs
+                hw_, hb_, hgw_, hgb_ = self._rw[id(self.head_)]
+                blocks = []
+                for j, (conv, _) in enumerate(self._blocks):
+                    w_, b_, gw_, gb_ = self._rw[id(conv)]
+                    blocks.append([w_, b_, gw_, gb_, a["out"][j], a["idx"][j], a["gout"][j]] + a["saved"][j])
+                spec = dict(blocks=blocks, head=[hw_, hb_, hgw_, hgb_],
+                            a=[a["x"], a["y"], a["logits"], a["glog"], a["proba"], a.get("ghead", 0)],
+                            opt=[hp, hg, hbuf, sizes], data=[xall, yall, row], dims=[self._flat, k],
+                            plan_full=[[list(p[0]), list(p[1])] for p in self._plan(cap)[0]],
+                            plan_last=[[list(p[0]), list(p[1])] for p in self._plan(m_last)[0]])
+                sgd_row = [self.learning_rate, self.momentum, self.weight_decay, self.dampening,
+                           1.0 if self.nesterov else 0.0, 0.0]
             for _ in range(self.max_iter):
                 order = rng.permutation(n) if self.shuffle else np.arange(n)
+                if epoch_entry:
+                    rows = np.ascontiguousarray(order, dtype=np.int32)
+                    if self.optimizer == "sgd":
+                        hyper = np.array([sgd_row] * nsteps, dtype=np.float64)
+                        if step == 0:
+                            hyper[0, 5] = 1.0
+                    else:
+                        hyper = np.array([_adam_hyper(step + 1 + t, self.learning_rate, self.betas, self.eps,
+                                                      self.weight_decay, self.optimizer == "adamw")
+                                          for t in range(nsteps)], dtype=np.float64)
+                    losses = np.empty(nsteps, dtype=np.float64)
+                    b.x_cnn_fit_epoch_r(spec, rows.ctypes.data, hyper.ctypes.data, losses.ctypes.data,
+                                        [n, bs, 0 if self.optimizer == "sgd" else 1])
+                    step += nsteps
+                    epoch = losses.tolist()
+                    self.losses_.extend(epoch)
+                    # the same `_pm.nsum` as the step loop below (DEVIATION 6901; py-consolidated)
+                    self.loss_curve_.append(_pm.nsum(epoch) / len(epoch))
+                    continue
                 epoch = []
                 for s in range(0, n, self.batch_size):
                     idx = order[s:s + self.batch_size]
                     m = len(idx)
                     if whole:
                         rows = np.ascontiguousarray(idx, dtype=np.int32)
-                        if _LEGACY_STEP:
+                        if not lists:
                             b.x_cnn_res_gather(a["x"], xall, rows.ctypes.data, [m, row])
                             b.x_cnn_res_gather(a["y"], yall, rows.ctypes.data, [m, 1])
                         else:
@@ -739,7 +789,7 @@ class CNNClassifier(_Layer):
                         b.x_cnn_conv_block_backward_r(src, w_, b_, a["gout"][j], a["idx"][j],
                                                       [dx, gw_, gb_] + a["saved"][j], prm, pprm)
                     step += 1
-                    if not _LEGACY_STEP:
+                    if lists:
                         # every parameter in one binding call, the same launches in the same order
                         if self.optimizer == "sgd":
                             b.x_cnn_sgd_r(hp, hg, hbuf, sizes,
@@ -749,7 +799,7 @@ class CNNClassifier(_Layer):
                             b.x_cnn_adam_r(hp, hg, hbuf, sizes, _adam_hyper(step, self.learning_rate, self.betas,
                                                                             self.eps, self.weight_decay,
                                                                             self.optimizer == "adamw"))
-                    for (layer, attr, _), p_, g_, buf in zip(params, hp, hg, hbuf) if _LEGACY_STEP else ():
+                    for (layer, attr, _), p_, g_, buf in zip(params, hp, hg, hbuf) if not lists else ():
                         size = getattr(layer, attr).size
                         if self.optimizer == "sgd":
                             b.x_cnn_sgd_r(p_, g_, buf, [size],
@@ -761,7 +811,8 @@ class CNNClassifier(_Layer):
                                                                             self.optimizer == "adamw"))
                     epoch.append(loss)
                 self.losses_.extend(epoch)
-                self.loss_curve_.append(sum(epoch) / len(epoch))
+                # CPython 3.12+'s sum spelled out: the same bits on every Python (DEVIATION 6901)
+                self.loss_curve_.append(_pm.nsum(epoch) / len(epoch))
             for (layer, attr, gattr), p_, g_, buf in zip(params, hp, hg, hbuf):
                 arr = getattr(layer, attr)
                 setattr(layer, attr, R.get(p_, arr.shape))

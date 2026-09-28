@@ -14,6 +14,8 @@ from x_metrics.common import FP, IP, STAGE_INTS
 from x_metrics.units import N_OPS, run_unit
 from x_metrics.plan import Plan, plan_program, is_user_op, is_host_op, HOST_RD, HOST_WR, OP_SORT_MERGE
 from x_metrics.par import sort_merge_path_unit, merge_path_chunks
+from core.arena_io import check_in_ranges, check_out_ranges, upload_ranges, download_ranges
+from core.device_store import DeviceStore
 
 comptime BLOCK = 128
 
@@ -38,6 +40,28 @@ def metrics_ctx() raises -> DeviceContext:
     if not slot[].ctx:
         slot[].ctx = DeviceContext()
     return slot[].ctx.value().copy()
+
+
+#: The binding's resident input store (core/device_store.mojo; lane
+#: py-shared): `x_metrics_dev_put` / `_free` / `_live`, one per tier like
+#: the context whose buffers it holds.
+comptime _STORE_NAME = "MojoXMetricsStoreIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXMetricsStoreFast"
+comptime X_METRICS_STORE = _Global[StorageType=DeviceStore, name=_STORE_NAME, init_fn=DeviceStore.__init__]
+
+
+def run_program_device_ranges(arena_addr: Int, arena_len: Int, prog_addr: Int, stages: Int,
+                              ins_addr: Int, nins: Int, outs_addr: Int, nouts: Int) raises:
+    """`run_program_device_out` that also uploads only the INPUT ranges
+    (core/arena_io.mojo; lane py-shared): `nins` Int32 triples [lo, hi, src]
+    at `ins_addr`; every other arena word starts zero on the device, as the
+    host arena's words do. src >= 0 names a resident slot (`x_metrics_dev_put`)
+    copied device to device. `nouts` quads as `run_program_device_out`."""
+    check_in_ranges(ins_addr, nins, arena_len)
+    check_out_ranges(outs_addr, nouts, arena_len)
+    run_program_device_ptr(
+        FP(unsafe_from_address=arena_addr), arena_len, IP(unsafe_from_address=prog_addr), stages,
+        False, outs_addr, nouts, ins_addr, nins,
+    )
 
 
 def metrics_kernel[OP: Int](f: FP, q: IP, total: Int32):
@@ -83,7 +107,7 @@ def run_program_device_out(arena_addr: Int, arena_len: Int, prog_addr: Int, stag
 
 
 def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, legacy: Bool = False,
-                           outs_addr: Int = 0, nouts: Int = -1) raises:
+                           outs_addr: Int = 0, nouts: Int = -1, ins_addr: Int = 0, nins: Int = -1) raises:
     """The PLANNED program (x_metrics/plan.mojo, the host runner's plan):
     the arena goes up once into a device buffer of arena + scratch, every
     planned stage is one launch on one stream, the caller's arena comes back
@@ -109,7 +133,9 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     if prof:
         ctx.synchronize()
         print("XMPROF alloc us", (perf_counter_ns() - t_setup) // 1000, "floats", pl.size, "arena", arena_len)
-    if arena_len > 0:
+    if nins >= 0:
+        upload_ranges(ctx, df, host_f, arena_len, ins_addr, nins, X_METRICS_STORE.get_or_create_ptr()[])
+    elif arena_len > 0:
         ctx.enqueue_copy(dst_buf=df.create_sub_buffer[DType.float32](0, arena_len), src_ptr=host_f)
     if nst > 0:
         ctx.enqueue_copy(dst_buf=dq, src_ptr=pl.rows.unsafe_ptr())
@@ -151,24 +177,9 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
         print("XMPROF stage", nst - 1, "op", Int(pl.rows[(nst - 1) * STAGE_INTS]), "us", (perf_counter_ns() - t_last) // 1000)
         t_last = perf_counter_ns()
     if nouts >= 0:
-        var outs = IP(unsafe_from_address=outs_addr)
-        var bounded = False
-        for k in range(nouts):
-            var cn = Int(outs.unsafe_load(4 * k + 2))
-            if cn >= 0:
-                bounded = True
-                ctx.enqueue_copy(dst_ptr=host_f + cn, src_buf=df.create_sub_buffer[DType.float32](cn, 1))
-        if bounded:
-            ctx.synchronize()
-        for k in range(nouts):
-            var lo = Int(outs.unsafe_load(4 * k))
-            var hi = Int(outs.unsafe_load(4 * k + 1))
-            var cn = Int(outs.unsafe_load(4 * k + 2))
-            if cn >= 0:
-                var c = Int(bitcast[DType.int32](host_f.unsafe_load(cn))) * Int(outs.unsafe_load(4 * k + 3))
-                hi = lo + max(0, min(hi - lo, c))
-            if hi > lo:
-                ctx.enqueue_copy(dst_ptr=host_f + lo, src_buf=df.create_sub_buffer[DType.float32](lo, hi - lo))
+        # the shared runner's download (core/arena_io.mojo), the loop this
+        # lane wrote first (metrics-apple2), moved there unchanged
+        download_ranges(ctx, df, host_f, outs_addr, nouts)
     elif arena_len > 0:
         ctx.enqueue_copy(dst_ptr=host_f, src_buf=df.create_sub_buffer[DType.float32](0, arena_len))
     ctx.synchronize()

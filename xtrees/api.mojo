@@ -18,7 +18,7 @@ from xtrees.ops import (
     check_weights_f32, mul_f32,
     samme_step, r2_step, weighted_median, apply_trees, gradients, leaf_newton, leaf_newton_rows, tree_score_add, uniform,
     onehot_leaves, transpose_f32, normalize_rows, exact_sum_f32, EXACT_SUM_LIMBS, logit, scatter, platt_fit, platt_apply, isotonic_fit,
-    isotonic_predict,
+    isotonic_predict, platt_apply_strided, isotonic_predict_strided, complement_pairs, indicator_codes, column_f64,
 )
 
 
@@ -486,6 +486,87 @@ def isotonic_predict_binding(
     return PythonObject(n)
 
 
+# lane py-misc-prep: CalibratedClassifierCV's per-class epilogue without
+# Python lists. A column of the (n, c) score block is read at a stride and
+# offset, and each calibrator writes straight into its column of the (n, k)
+# probability block; the per-element operations are `platt_apply`'s and
+# `isotonic_predict`'s (they now call these with stride 1).
+
+
+def _strided(total: Int, stride: Int, off: Int, n: Int, who: String) raises:
+    if stride < 1 or off < 0 or (n > 0 and off + (n - 1) * stride >= total):
+        raise Error(who + ": stride or offset out of range")
+
+
+def platt_apply_strided_binding(f: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n, A, B, f_len, f_stride, f_off, res_len, res_stride, res_off]."""
+    _need(params, 9, "x_trees_platt_apply_strided")
+    var n = _count(_i(params, 0), "x_trees_platt_apply_strided")
+    var fs = _i(params, 4)
+    var fo = _i(params, 5)
+    var rs = _i(params, 7)
+    var ro = _i(params, 8)
+    _strided(_i(params, 3), fs, fo, n, "x_trees_platt_apply_strided")
+    _strided(_i(params, 6), rs, ro, n, "x_trees_platt_apply_strided")
+    if n > 0:
+        platt_apply_strided(f64_ptr(Int(py=f)) + fo, fs, n, _f(params, 1), _f(params, 2), f64_ptr(Int(py=res)) + ro, rs)
+    return PythonObject(n)
+
+
+def isotonic_predict_strided_binding(
+    kx: PythonObject, ky: PythonObject, t: PythonObject, res: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """params = [m, n, t_len, t_stride, t_off, res_len, res_stride, res_off]."""
+    _need(params, 8, "x_trees_isotonic_predict_strided")
+    var m = _i(params, 0)
+    if m < 1:
+        raise Error("x_trees_isotonic_predict_strided: no knots")
+    var n = _count(_i(params, 1), "x_trees_isotonic_predict_strided")
+    var ts = _i(params, 3)
+    var to = _i(params, 4)
+    var rs = _i(params, 6)
+    var ro = _i(params, 7)
+    _strided(_i(params, 2), ts, to, n, "x_trees_isotonic_predict_strided")
+    _strided(_i(params, 5), rs, ro, n, "x_trees_isotonic_predict_strided")
+    if n > 0:
+        isotonic_predict_strided(f64_ptr(Int(py=kx)), f64_ptr(Int(py=ky)), m, f64_ptr(Int(py=t)) + to, ts, n,
+                                 f64_ptr(Int(py=res)) + ro, rs)
+    return PythonObject(n)
+
+
+def complement_pairs_binding(x: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n]: x (float64, n x 2)[i, 0] = 1 - x[i, 1]."""
+    _need(params, 1, "x_trees_complement_pairs")
+    var n = _count(_i(params, 0), "x_trees_complement_pairs")
+    if n > 0:
+        complement_pairs(f64_ptr(Int(py=x)), n)
+    return PythonObject(n)
+
+
+def indicator_codes_binding(codes: PythonObject, out_i: PythonObject, out_f: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n, cls]: out_i int32 0/1 per row (codes == cls); out_f (0: none) float64 1.0 / 0.0."""
+    _need(params, 2, "x_trees_indicator_codes")
+    var n = _count(_i(params, 0), "x_trees_indicator_codes")
+    var fa = Int(py=out_f)
+    if n > 0:
+        var pf = f64_ptr(fa) if fa != 0 else f64_ptr(Int(py=out_i))
+        indicator_codes(i32_ptr(Int(py=codes)), n, _i(params, 1), i32_ptr(Int(py=out_i)), pf, fa != 0)
+    return PythonObject(n)
+
+
+def column_f64_binding(src: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n, c, j]: dst = src[:, j] of a row-major float64 (n, c) block."""
+    _need(params, 3, "x_trees_column_f64")
+    var n = _count(_i(params, 0), "x_trees_column_f64")
+    var c = _i(params, 1)
+    var j = _i(params, 2)
+    if c < 1 or j < 0 or j >= c:
+        raise Error("x_trees_column_f64: column out of range")
+    if n > 0:
+        column_f64(f64_ptr(Int(py=src)), n, c, j, f64_ptr(Int(py=dst)))
+    return PythonObject(n)
+
+
 def node_cover_binding(
     offsets: PythonObject, colid: PythonObject, quesval: PythonObject, left: PythonObject,
     x: PythonObject, cover: PythonObject, params: PythonObject,
@@ -602,6 +683,11 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[platt_apply_binding]("x_trees_platt_apply")
     m.def_function[isotonic_fit_binding]("x_trees_isotonic_fit")
     m.def_function[isotonic_predict_binding]("x_trees_isotonic_predict")
+    m.def_function[platt_apply_strided_binding]("x_trees_platt_apply_strided")
+    m.def_function[isotonic_predict_strided_binding]("x_trees_isotonic_predict_strided")
+    m.def_function[complement_pairs_binding]("x_trees_complement_pairs")
+    m.def_function[indicator_codes_binding]("x_trees_indicator_codes")
+    m.def_function[column_f64_binding]("x_trees_column_f64")
     m.def_function[node_cover_binding]("x_trees_node_cover")
     m.def_function[tree_shap_binding]("x_trees_tree_shap")
     m.def_function[expected_value_binding]("x_trees_expected_value")

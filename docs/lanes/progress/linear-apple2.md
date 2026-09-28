@@ -40,8 +40,8 @@ bindings rebuilt in turn). Job scripts: ~/mojolearn-evidence/linear-apple2/.
 | 449d0c127 | Quantile: the next iteration's A'(y - r - u) chains run in this iteration's A' dr pass | both | on (m4-a: 46.0 -> 34.8 s, digest equal) | no |
 | 9d450625f | SGD pipelined shuffle: draws computed by a third warp's lanes (splitmix64 skip-ahead), two epochs ahead | both | on (M3 Ultra sgd-clf 1.037 -> 0.652 s) | no |
 | ea80a9110 | x_linear chains: CHAIN_U_APPLE constant (stays 32: 64 and 128 are slower, 16 and 8 mixed) | both | no-op | x_linear/tops.mojo |
-| 9adb972ea | SGD warp folds: a chunk's fetches issued before its chains | both | on | no |
-| 1290bedea | QN on Apple: loss sum and bias mean chains spread over STATS_TPB / 32 blocks, then the same one-block fold | both (words unchanged) | on (`-D MOJOLEARN_QN_SPLIT_REDUCE_OFF=1`) | glm/impl/qn only |
+| 9adb972ea | SGD warp folds: a chunk's fetches issued before its chains | both | REVERTED: 3% slower on the M3 Ultra (sgd-clf 0.653 -> 0.673, steward 1790616060686); the final-2 tables were taken with it in | no |
+| 1290bedea | QN on Apple: loss sum and bias mean chains spread over STATS_TPB / 32 blocks, then the same one-block fold | both (words unchanged) | REVERTED at the freeze: no gain on the M4 Pro or the M3 Ultra (M3 Ultra per iteration with / without: logistic 2.19 / 2.17 ms, svr 2.86 / 2.77) | - |
 | c128c4f3e | strided walks load 32 terms ahead (was 8) | both (words unchanged) | on | core/strided_walk.mojo (users: glm/impl/qn, core/xtdz_coalesced, i.e. QN, ridge and lstsq xty) |
 | 90c722752 | FAST QN on Apple: X^T dZ through xtdz_coalesced where D * C <= 1024 | FAST (words change: paired quality job) | on (`-D MOJOLEARN_QN_FAST_COALESCED_OFF=1`) | glm/impl/qn only |
 
@@ -386,5 +386,112 @@ The split one-block reductions (1290bedea) alone, HEAD with the define off:
 logistic 2.16 -> 2.01 ms per iteration, linear-svr 2.32 -> 2.35 (the M4 Pro is
 bandwidth bound; the gain is the walk block, c128c4f3e). Open: FAST SGD
 (0.87 to 0.94 s) is slower than IDENTICAL SGD (0.55 to 0.63 s) on the same
-Mac at HEAD; not investigated.
+Mac at HEAD. m4-a (steward 1790618726280) places it in the row pass itself
+(bare, one epoch, no shuffle: FAST 0.180 s, IDENTICAL 0.115 s); the cause is
+not found (the FAST arithmetic is fz-free and should be cheaper). 340abc245
+(fz returns the word itself outside IDENTICAL) changed nothing (m4-a, steward
+1790619306118: bare one epoch 0.182 vs 0.183 s, digests equal) and was reverted
+(41bb8e0dc).
 
+
+## FINAL (wind-down, 2026-09-28)
+
+### THE before / after table: M3 Ultra (m3ultra-b, steward 1790619079325)
+
+One job at 522f82343: every file the lane changed at 037daa353 (before) vs
+HEAD (after), bindings rebuilt per arm and mode, second run shown. Digests
+equal before vs after on EVERY line except FAST logistic / svc / svr
+(90c722752, paired quality matched); SGDDIAG at HEAD 36 of 36 Metal == host.
+
+| mode | case | before s | after s | speedup | digest |
+|---|---|---|---|---|---|
+| IDENTICAL | lasso (1M x 16) | 0.201 | 0.080 | 2.5x | 7afaf6ffddfea2da |
+| IDENTICAL | elasticnet | 0.201 | 0.080 | 2.5x | db1b3098a3990704 |
+| IDENTICAL | lasso per epoch | 9.08 ms | 3.27 ms | 2.8x | |
+| IDENTICAL | logistic (1M x 28) | 0.295 | 0.231 | 1.28x | 270ffb405d8c6a64 |
+| IDENTICAL | linear-svc | 0.231 | 0.199 | 1.16x | bf851fa5a9479b6c |
+| IDENTICAL | linear-svr | 0.197 | 0.149 | 1.32x | 29bbbb73d7b93520 |
+| IDENTICAL | logistic / svr per iteration | 2.87 / 3.70 ms | 2.19 / 2.86 ms | 1.31x / 1.29x | |
+| IDENTICAL | sgd-clf (100k) | 5.056 | 0.670 | 7.5x | 80a3e27c5f39e888 |
+| IDENTICAL | sgd-reg | 3.473 | 0.715 | 4.9x | 7bec4f09522835b9 |
+| IDENTICAL | perceptron | 3.185 | 0.633 | 5.0x | ba1036f6edb77567 |
+| IDENTICAL | pa-clf | 4.635 | 0.653 | 7.1x | 7e0871d9f01a9ea2 |
+| IDENTICAL | pa-reg | 3.161 | 0.662 | 4.8x | 052ced201ee4fe05 |
+| IDENTICAL | sgd-ocsvm | 3.443 | 0.633 | 5.4x | beccac368d85da21 |
+| IDENTICAL | huber (100k) | 1.398 | 1.218 | 1.15x | da0468c16003f25a |
+| IDENTICAL | quantile (100k) | 82.93 | 34.32 | 2.4x | c7ebb6da53934bf3 |
+| IDENTICAL | logistic-cv (100k) | 7.296 | 5.853 | 1.25x | 109ec619e258087b |
+| IDENTICAL | ols / ridge | 0.051 / 0.031 | 0.044 / 0.028 | untouched | equal |
+| FAST | logistic | 0.871 | 0.247 | 3.5x | c13471c2 -> 6e2458a6 |
+| FAST | linear-svc | 0.540 | 0.203 | 2.7x | 5255746b -> 76740d81 |
+| FAST | linear-svr | 0.719 | 0.145 | 5.0x | 740abbad -> 769da80a |
+| FAST | logistic / svr per iteration | 8.62 / 11.74 ms | 2.15 / 2.72 ms | 4.0x / 4.3x | |
+| FAST | sgd-clf / sgd-reg / perceptron | 4.774 / 3.388 / 3.243 | 1.065 / 0.997 / 1.015 | 4.5x / 3.4x / 3.2x | equal |
+| FAST | pa-clf / pa-reg / sgd-ocsvm | 4.696 / 3.351 / 3.345 | 0.992 / 1.044 / 0.993 | 4.7x / 3.2x / 3.4x | equal |
+| FAST | ols / ridge / lasso / elasticnet | 0.094 / 0.028 / 0.137 / 0.134 | 0.095 / 0.028 / 0.130 / 0.133 | untouched | equal |
+
+Host one core on the same Mac (first final job): sgd-clf 0.225 ... sgd-ocsvm
+0.123; huber 0.185; quantile 18.4; logistic-cv 4.79. The M4 Pro table (final
+2, above) agrees in direction on every row.
+
+### What changed (all on by default unless noted)
+
+- CD (Lasso, ElasticNet; solver/impl/cd.mojo, IDENTICAL on Apple): the SPLITK
+  leaf loads 16 steps ahead (ae036928e, shared gemm file, Apple only), leaf
+  launch 32 threads (62002dea3), three launches per coordinate (9ec0f03f0),
+  then two (210de5ee8 + fix 90bad7fd9: the fold and update of the previous
+  coordinate inside the next axpy launch, coef and conv double-buffered).
+- SGD family (x_linear/sgd.mojo, GPU warp form): next row prefetched, folds
+  interleaved and unrolled, dead norms skipped (6cdbd32ab, 0aff83beb); the
+  next epoch's order shuffled by warp 1 while warp 0 computes (5097d69d4,
+  1d7b8a2a7); the Fisher-Yates draws computed by warp 2's lanes two epochs
+  ahead (9d450625f, splitmix64 skip-ahead).
+- QN (glm/impl/qn): FAST loss sums and bias means unrolled (8721c3d76, FAST
+  words unchanged); FAST X^T dZ through the coalesced chains (90c722752, FAST
+  words change, paired quality matched); strided walks load 32 ahead
+  (c128c4f3e, shared core/strided_walk.mojo, QN users only). The split
+  one-block reductions (1290bedea) were reverted at the freeze: no gain.
+- x_linear team fits: Huber / Quantile / LogisticRegressionCV lead folds on
+  their own warps (9ef29ffef, 27b180f47, 0a760cd68); Quantile runs the next
+  iteration's A'(y - r - u) chains in this pass (449d0c127).
+- Reverted after measuring (slower or no gain): 6424bab49, acd046151,
+  ca3db4544 (shuffle remainder / load-ahead), c5179e11d (CD axpys inside the
+  leaf chains), 9adb972ea (shuffle hoist), 340abc245 (fz shortcut),
+  1290bedea (split QN reductions). The final-2 tables below were taken with
+  9adb972ea and 1290bedea in (both about neutral).
+
+### Shared code (the later integration run must cover these families too)
+
+- gemm/checks/gemm_identical.mojo: APPLE_LEAF_PREFETCH, SPLITK_LEAF_LAUNCH_TPB
+  (every PLAN_SPLITK caller on Apple: 1 x 1 x k dots and m * n <= 24 skinny
+  products: cluster, decomp, neighbors callers of choose_gemm_plan).
+- core/strided_walk.mojo: STRIDED_UNROLL 8 -> 32 and APPLE_FAST_STEP_UNROLL
+  (users today: glm/impl/qn, core/xtdz_coalesced -> ridge, lstsq xty).
+- x_linear/tops.mojo: CHAIN_U_APPLE constant (value unchanged, 32).
+
+### Unproven: owed the integration check (identity gates on Metal, CPU, NVIDIA, AMD)
+
+This lane ran speed jobs with digest comparison only (every IDENTICAL line
+before == after on the M3 Ultra, M4 Pro and M4; SGDDIAG Metal == host bits),
+never the verifier. No commit here has run on NVIDIA, AMD or the M2 Pro:
+
+- ae036928e, 62002dea3 (gemm leaf, shared)
+- 9ec0f03f0, 210de5ee8, 90bad7fd9 (CD sweeps; the trace-enabled path of the
+  two-step sweep records coef from the epoch's output buffer, never run)
+- 6cdbd32ab, 0aff83beb, 5097d69d4, 1d7b8a2a7, 9d450625f (SGD warp form; the
+  WARP_SIZE 64 paths and the pipelined form with fewer than three warps never
+  run)
+- 8721c3d76, 90c722752 (FAST QN; 90c722752 changes FAST words), c128c4f3e
+  (walk block)
+- 9ef29ffef, 27b180f47, 0a760cd68, 449d0c127 (x_linear team fits)
+- reverts: 16eef73f3, 473f26c05, cd7e61dd5, eece18274, 47c5a0f13, 41bb8e0dc, and the revert of 1290bedea
+
+### Known issues / open
+
+- FAST SGD's row pass is slower than IDENTICAL's on the same Mac (cause not found).
+- The SGD shuffle is one lane's serial Fisher-Yates at about 1.5 us a step;
+  with the draws precomputed it no longer bounds the epoch on the M3 Ultra.
+- x_linear team fits whose gradient is one thread's chain per cell over all
+  rows (Huber, LogisticRegressionCV, Poisson/Gamma, Quantile) remain at or
+  slower than one host core at 100k rows: the contract fixes the chain.
+- The M3 Ultra compiler crash (06ef7f558) does not recur at 96a7fe158+.

@@ -34,6 +34,8 @@ from gemm.checks.gemm_identical import (
 )
 from gemm.checks.gemm_oracle import OP_NT
 from training.checks.optimizer_oracle import microbatch_split_is_identical
+from training.checks.loss_oracle import CeConfig, ce_count, ce_refuse_inputs
+from training.estimator import identical_ce_admit_call, identical_ce_loss_resident
 from transformer.checks.transformer_backward import bwd_rms_norm
 from transformer.impl.llama.modeling_llama import (
     llama_rms_norm,
@@ -331,6 +333,111 @@ def samba_linear_backward_host(
     _ = ws_a^
     _ = ws_b^
     return m * k
+
+
+# ===========================================================================
+# THE HEAD, THE LOSS AND THE HEAD BACKWARD IN ONE CALL (lane/py-lm, 2026-09-28)
+# ===========================================================================
+
+
+def samba_head_loss_host(
+    ctx: DeviceContext,
+    loss_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    row_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    da_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    dw_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    a_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    w_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    targets_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    m: Int,
+    n: Int,
+    k: Int,
+    ignore_index: Int,
+    reduction: Int,
+    num_items: Int,
+    label_smoothing: Float32,
+) raises -> Int:
+    """`samba_linear_forward_host`, then `identical_ce_loss_host` with a
+    gradient, then `samba_linear_backward_host`, as ONE call: the calls
+    `SambaStack.loss_and_grads` made one by one, the same kernels on the
+    same operands in the same order, with the logits and their gradient
+    kept on the device between them. Before, `logits` [m, n] crossed the
+    bus four times per microbatch (down, up, `dlogits` down, up); here the
+    logits come down ONCE, for the loss's own host refusal scan
+    (`ce_refuse_inputs`, the copy `identical_ce_loss_host` also pays), and
+    `dlogits` never leaves the device. Returns `count`.
+
+    THE REFUSALS, in the order the three calls raised them: the head's
+    nonfinite input and weight, the loss's call shape, its shape, logits
+    and targets refusals. The head backward's own scans of its input and
+    weight re-read the same unchanged bytes the forward already admitted.
+    Its scan of the upstream gradient is not restated: `dlogits` is the
+    softmax-minus-target weights (each in [-1, 1] for finite admitted
+    logits) divided by `ce_divisor`, which is never below 1 (a zero MEAN
+    count and a negative `num_items` are refused), so it is finite
+    whenever the loss admitted its inputs."""
+    if m < 1 or n < 1 or k < 1:
+        raise Error("mojolearn samba ops: linear shape must be positive")
+    _refuse_nonfinite("linear input", a_ptr, m * k)
+    _refuse_nonfinite("linear weight", w_ptr, n * k)
+    var cells = m * n
+    var a = _upload_f32(ctx, a_ptr, m * k)
+    var w = _upload_f32(ctx, w_ptr, n * k)
+    var c = ctx.enqueue_create_buffer[DType.float32](cells)
+    var ws = ctx.enqueue_create_buffer[DType.float32](
+        identical_gemm_workspace_max_floats(m, n, k)
+    )
+    identical_gemm_into(ctx, c, a, w, ws, m, n, k, OP_NT)
+    var h_c = ctx.enqueue_create_host_buffer[DType.float32](cells)
+    ctx.enqueue_copy(dst_ptr=h_c.unsafe_ptr(), src_buf=c)
+    ctx.synchronize()
+    _ = ws^
+
+    identical_ce_admit_call(reduction, 1, m)
+    var cfg = CeConfig(n, ignore_index, reduction, label_smoothing, num_items)
+    var h_logits = List[Float32](capacity=cells)
+    var hp = h_c.unsafe_ptr()
+    for i in range(cells):
+        h_logits.append(hp.unsafe_load(i))
+    var h_targets = List[Int32](capacity=m)
+    for i in range(m):
+        h_targets.append(targets_ptr.unsafe_load(i))
+    _ = ce_refuse_inputs(h_logits, h_targets, cfg)
+    var count = ce_count(h_targets, ignore_index)
+    _ = h_logits^
+    _ = h_targets^
+    _ = h_c^
+
+    var targets = _upload_i32(ctx, targets_ptr, m)
+    ctx.synchronize()
+    var dc = ctx.enqueue_create_buffer[DType.float32](cells)
+    identical_ce_loss_resident(
+        ctx, loss_ptr, row_ptr, dc, c, targets, m, count, reduction, 1, cfg,
+    )
+
+    var da = ctx.enqueue_create_buffer[DType.float32](m * k)
+    var dw = ctx.enqueue_create_buffer[DType.float32](n * k)
+    var ws_a = ctx.enqueue_create_buffer[DType.float32](
+        identical_gemm_backward_a_workspace_max_floats(OP_NT, m, n, k)
+    )
+    var ws_b = ctx.enqueue_create_buffer[DType.float32](
+        identical_gemm_backward_b_workspace_max_floats(OP_NT, m, n, k)
+    )
+    identical_gemm_backward_a_into(ctx, da, dc, w, ws_a, m, n, k, OP_NT)
+    identical_gemm_backward_b_into(ctx, dw, dc, a, ws_b, m, n, k, OP_NT)
+    ctx.enqueue_copy(dst_ptr=da_ptr, src_buf=da)
+    ctx.enqueue_copy(dst_ptr=dw_ptr, src_buf=dw)
+    ctx.synchronize()
+    _ = a^
+    _ = w^
+    _ = c^
+    _ = targets^
+    _ = dc^
+    _ = da^
+    _ = dw^
+    _ = ws_a^
+    _ = ws_b^
+    return count
 
 
 # ===========================================================================

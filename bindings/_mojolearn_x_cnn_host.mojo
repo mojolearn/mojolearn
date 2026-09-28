@@ -3,7 +3,7 @@
 """CPU binding for `_mojolearn_x_cnn` (the CNN expansion lane). HOST ONLY;
 the GPU binding's export names and address contract, the work is
 x_cnn/host/ops_host.mojo."""
-from bindings.hostptr import f32_ptr, i32_ptr, read_f32, read_i32, copy_f32
+from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32, copy_f32
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -813,6 +813,166 @@ def res_gather_binding(dst: PythonObject, src: PythonObject, rows_addr: PythonOb
     return PythonObject(n)
 
 
+# ------------------------------------------------------------ the fit epoch
+# lane/py-misc (2026-09-28): the host twin of the GPU binding's
+# `x_cnn_fit_epoch_r` (see there). CNNClassifier.fit on the CPU made, per
+# step, two row gathers, each block's `_r` forward, the head, the softmax
+# (with its label check), the head's backward, each block's backward and one
+# optimizer entry per parameter; this loop makes the same `_into` calls with
+# the same arguments in the same order, each followed by the same output
+# seam (`out_f32`) its entry ran. The bits cannot move.
+
+
+@always_inline
+def _at(a: Int) -> FP:
+    return FP(unsafe_from_address=a)
+
+
+def _epoch_plan(
+    obj: PythonObject, nb: Int, mut cs: List[List[List[Int32]]], mut ps: List[List[List[Int32]]],
+    mut pools: List[List[Bool]],
+) raises:
+    """Appends one plan: [[conv params, pool params] per block]."""
+    if Int(py=len(obj)) != nb:
+        raise Error("x_cnn fit epoch: one [conv, pool] plan per block")
+    var c = List[List[Int32]]()
+    var p = List[List[Int32]]()
+    var o = List[Bool]()
+    for j in range(nb):
+        var t = _block_prms(obj[j][0], obj[j][1])
+        c.append(t[0].copy())
+        p.append(t[1].copy())
+        o.append(t[2])
+    cs.append(c^)
+    ps.append(p^)
+    pools.append(o^)
+
+
+def fit_epoch_r_binding(
+    spec: PythonObject, rows_addr: PythonObject, hyper_addr: PythonObject, losses_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """The GPU binding's `x_cnn_fit_epoch_r` contract, on host allocations."""
+    var n = Int(py=params[0])
+    var batch = Int(py=params[1])
+    var adam = Int(py=params[2]) != 0
+    if n <= 0 or batch <= 0:
+        raise Error("x_cnn fit epoch: positive rows and batch required")
+    var nh = 9 if adam else 6
+    var blocks = spec["blocks"]
+    var nb = Int(py=len(blocks))
+    var bh = List[List[Int]]()
+    for j in range(nb):
+        var h = _ints(blocks[j])
+        if len(h) != 9:
+            raise Error("x_cnn fit epoch: a block is [w, b, gw, gb, out, idx, gout, cols, conv out]")
+        bh.append(h^)
+    var head = _ints(spec["head"])
+    var a = _ints(spec["a"])
+    var data = _ints(spec["data"])
+    var dims = _ints(spec["dims"])
+    var opt = spec["opt"]
+    var cnt = _list_counts(opt[0], opt[1], opt[2], opt[3])
+    var hp = _ints(opt[0])
+    var hg = _ints(opt[1])
+    var hb = _ints(opt[2])
+    var cs = List[List[List[Int32]]]()
+    var ps = List[List[List[Int32]]]()
+    var pools = List[List[Bool]]()
+    _epoch_plan(spec["plan_full"], nb, cs, ps, pools)
+    _epoch_plan(spec["plan_last"], nb, cs, ps, pools)
+    var flat = dims[0]
+    var k = dims[1]
+    var row = data[2]
+    var steps = (n + batch - 1) // batch
+    var rows = i32_ptr(Int(py=rows_addr))
+    var hyp = f64_ptr(Int(py=hyper_addr))
+    var losses = f64_ptr(Int(py=losses_addr))
+    var noidx = List[Int32](length=1, fill=Int32(0))
+    var pnoidx = noidx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var xd = f32_ptr(a[0])
+    var yd = f32_ptr(a[1])
+    var xs = f32_ptr(data[0])
+    var ys = f32_ptr(data[1])
+    var yl = IP(unsafe_from_address=a[1])
+    with GILReleased(Python()):
+        for st in range(steps):
+            var s0 = st * batch
+            var m = min(batch, n - s0)
+            var q = 0 if m == batch else 1
+            # the two row gathers (x_cnn_res_gather: the batch, then its labels)
+            for r in range(m):
+                memcpy(dest=xd + r * row, src=xs + Int(rows[s0 + r]) * row, count=row)
+            for r in range(m):
+                memcpy(dest=yd + r, src=ys + Int(rows[s0 + r]), count=1)
+            var src = a[0]
+            for j in range(nb):
+                var cprm = cs[q][j].copy()
+                var pprm = ps[q][j].copy()
+                var pool = pools[q][j]
+                var ny = Int(cprm[CP_N]) * Int(cprm[CP_OC]) * Int(cprm[CP_OH]) * Int(cprm[CP_OW])
+                var no = _pool_counts(pprm)[1] if pool else ny
+                var pi = IP(unsafe_from_address=bh[j][5]) if pool else pnoidx
+                conv_block_forward_into(
+                    _at(src), _at(bh[j][0]), _at(bh[j][1]), _at(bh[j][4]), pi, cprm, pprm, pool, True,
+                    _at(bh[j][7]), _at(bh[j][8]),
+                )
+                out_f32(_at(bh[j][4]), no)
+                src = bh[j][4]
+            linear_forward_into(_at(src), _at(head[0]), _at(head[1]), _at(a[2]), m, flat, k)
+            out_f32(_at(a[2]), m * k)
+            for i in range(m):
+                if Int(yl[i]) >= k:
+                    raise Error("x_cnn softmax: a label is not a class index")
+            var loss = softmax_xent_into(_at(a[2]), yl, _at(a[3]), _at(a[4]), m, k)
+            out_f32(_at(a[3]), m * k)
+            out_f32(_at(a[4]), m * k)
+            losses[st] = Float64(loss)
+            var glast = bh[nb - 1][6] if nb > 0 else a[5]
+            linear_backward_into(_at(src), _at(head[0]), _at(a[3]), _at(glast), _at(head[2]), _at(head[3]), m, flat, k)
+            out_f32(_at(glast), m * flat)
+            out_f32(_at(head[2]), k * flat)
+            out_f32(_at(head[3]), k)
+            for jj in range(nb):
+                var j = nb - 1 - jj
+                var cprm = cs[q][j].copy()
+                var pprm = ps[q][j].copy()
+                var pool = pools[q][j]
+                var N = Int(cprm[CP_N]); var C = Int(cprm[CP_C]); var OC = Int(cprm[CP_OC])
+                var ckk = C * Int(cprm[CP_KH]) * Int(cprm[CP_KW])
+                var nx = N * C * Int(cprm[CP_H]) * Int(cprm[CP_W])
+                var bsrc = bh[j - 1][4] if j > 0 else a[0]
+                var dx = bh[j - 1][6] if j > 0 else 0
+                var need_dx = dx != 0
+                var pi = IP(unsafe_from_address=bh[j][5]) if pool else pnoidx
+                var pdb = _at(bh[j][3])
+                var pdx = _at(dx) if need_dx else pdb
+                conv_block_backward_into(
+                    _at(bsrc), _at(bh[j][0]), _at(bh[j][1]), _at(bh[j][6]), pi, pdx, _at(bh[j][2]), pdb, cprm,
+                    pprm, pool, need_dx, True, _at(bh[j][7]), _at(bh[j][8]),
+                )
+                if need_dx:
+                    out_f32(pdx, nx)
+                out_f32(_at(bh[j][2]), OC * ckk)
+                out_f32(pdb, OC)
+            var h = List[Float32]()
+            for e in range(nh):
+                h.append(Float32(hyp[st * nh + e]))
+            # one optimizer entry per parameter, in the parameters' order
+            for j in range(len(cnt)):
+                var nj = cnt[j]
+                if adam:
+                    adam_into(_at(hp[j]), _at(hg[j]), _at(hb[j]), h, nj)
+                    out_f32(_at(hp[j]), nj)
+                    out_f32(_at(hb[j]), 2 * nj)
+                else:
+                    sgd_into(_at(hp[j]), _at(hg[j]), _at(hb[j]), h, nj)
+                    out_f32(_at(hp[j]), nj)
+                    out_f32(_at(hb[j]), nj)
+    _ = noidx^
+    return PythonObject(steps)
+
+
 def numeric_mode_binding() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 
@@ -872,6 +1032,7 @@ def PyInit__mojolearn_x_cnn_host() abi("C") -> PythonObject:
         m.def_function[softmax_xent_binding]("x_cnn_softmax_xent_r")
         m.def_function[sgd_binding]("x_cnn_sgd_r")
         m.def_function[adam_binding]("x_cnn_adam_r")
+        m.def_function[fit_epoch_r_binding]("x_cnn_fit_epoch_r")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_cnn_host: ", e))

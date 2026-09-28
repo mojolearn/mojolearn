@@ -92,10 +92,12 @@ FAMILIES = (
             "x_prep/units.mojo", "x_prep/target.mojo", "x_prep/kbins.mojo",
             "naive_bayes/nb.mojo", "naive_bayes/da.mojo",
             "x_prep/transform.mojo", "x_prep/spline.mojo", "x_prep/iterative.mojo", "x_prep/stats.mojo", "x_prep/mutual_info.mojo",
+            "x_prep/user_host.mojo",
         ),
         exports=(
             "x_prep_host_numeric_mode", "x_prep_host_vendor", "x_prep_host_column", "x_prep_host_sabotage",
             "x_prep_run", "x_prep_numeric_mode", "x_prep_vendor",
+            "x_prep_ii_rows", "x_prep_ii_gather", "x_prep_ii_scatter", "x_prep_ii_conv",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note="Ships: the prep lane's CPU route (preprocessing additions, naive Bayes, discriminant analysis).",

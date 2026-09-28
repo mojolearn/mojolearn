@@ -1483,6 +1483,17 @@ class TransformerDecodeSession:
             self._state._resident_session = None
             self._release()
 
+    def discard(self):
+        """Close WITHOUT writing the resident cache back to the state: for a
+        caller that owns the state and throws it away (lane/py-lm,
+        `CausalLM.generate`), where `close()`'s download of the whole cache
+        would be wasted, and after a failed call, where it may not run."""
+        if not self._open:
+            return
+        self._open = False
+        self._state._resident_session = None
+        self._release()
+
     def __enter__(self):
         return self
 

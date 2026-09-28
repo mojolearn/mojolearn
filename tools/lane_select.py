@@ -185,6 +185,9 @@ MEASUREMENT_TOOLING_PREFIXES = (
     os.path.join("tools", "apple_speed_cnn") + os.sep,
     os.path.join("tools", "apple_speed_neural") + os.sep,
     os.path.join("tools", "apple_speed_metrics") + os.sep,
+    # The consolidated check driver (2026-09-28): builds and compares lanes
+    # through algos_lane_check's own pieces; no lane computes through it.
+    os.path.join("tools", "consolidated_check") + os.sep,
 )
 
 #: Tools whose text is not evidence that a lane reaches a path.

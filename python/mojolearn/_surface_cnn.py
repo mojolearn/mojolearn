@@ -46,7 +46,7 @@ FAMILIES = (
             "x_cnn_numeric_mode", "x_cnn_vendor",
             "x_cnn_res_alloc", "x_cnn_res_free", "x_cnn_res_upload", "x_cnn_res_download", "x_cnn_res_gather",
             "x_cnn_conv_block_forward_r", "x_cnn_conv_block_backward_r", "x_cnn_linear_forward_r",
-            "x_cnn_linear_backward_r", "x_cnn_softmax_xent_r", "x_cnn_sgd_r", "x_cnn_adam_r",
+            "x_cnn_linear_backward_r", "x_cnn_softmax_xent_r", "x_cnn_sgd_r", "x_cnn_adam_r", "x_cnn_fit_epoch_r",
         ),
         gate="tools/identity_break.py (tools/algos_lane_check.sh)",
         wheel_note="Ships: the CNN lane's CPU route (convolution, pooling, normalization, the CNN trainer, graph convolution).",

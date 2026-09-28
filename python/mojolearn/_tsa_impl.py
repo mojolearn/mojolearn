@@ -72,7 +72,20 @@ import sys
 
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_f32_colmajor, empty
-from ._bufcheck import nelems, probe, strided_rows
+from ._bufcheck import flat_view, nelems, probe, strided_rows
+
+
+def _one_series(src, index, n_series, steps, offset=0):
+    """Series `index` of the TIME-MAJOR float32 block `src[offset:]`
+    (`[s + i * n_series]`) as a `(steps,)` float32 Array:
+    `strided_rows(...)[index]`'s bytes."""
+    dst = empty((steps,), "<f4")
+    try:
+        flat_view(dst, "f")[:] = flat_view(src, "f")[offset + index:offset + steps * n_series:n_series]
+        return dst
+    except (TypeError, ValueError, NotImplementedError):
+        return strided_rows(src, offset, steps * n_series, n_series, steps,
+                            empty((n_series, steps), "<f4"))[index]
 
 # THE BINDING, RESOLVED LAZILY THROUGH `_backend.binding`, the one choke
 # point that refuses an identical-only lane by name under a lower tier,
@@ -214,8 +227,9 @@ def kpss_test(y, d=0, D=0, s=0, pval_threshold=0.05, return_statistic=False):
             float(pval_threshold),
         ],
     )
-    # O(n_series) on the host, the permitted per-label kind of loop.
-    stationary = Array.from_list([1 if v else 0 for v in flags], "<u1")
+    # the binding writes 1 (stationary) or 0 (tsa/estimator.mojo), so a
+    # C-level cast is the flag (lane py-sequence; it was a Python loop)
+    stationary = flags.astype("<u1")
     if return_statistic:
         return stationary, stat
     return stationary
@@ -622,8 +636,10 @@ class ExponentialSmoothing:
         # `.reshape((ts_num, num_rows), order="F")` is cuML's own line
         # (holtwinters.pyx:341-344) and undoes exactly that. DEVIATION
         # 2421: the `Array` contract has C order only, so the un-interleave
-        # is done ONCE here, into a C-contiguous `(ts_num, num_rows)`
-        # Array per component, by `ts_num` strided memoryview slice
+        # is done ONCE, on first use of `level_` / `trend_` / `season_`
+        # (lane py-sequence: no longer at every fit and load; one series
+        # through `get_level(index)` is its single strided slice), into a
+        # C-contiguous `(ts_num, num_rows)` Array per component, by `ts_num` strided memoryview slice
         # copies (`_bufcheck.strided_rows`; C-level loops, no Python
         # element loop). The same bytes land at the same [s, i]. The
         # time-major blocks are ALSO kept, as C-order `(num_rows,
@@ -632,12 +648,13 @@ class ExponentialSmoothing:
         num_rows = components_len // self.ts_num
         cl = components_len
         b = self.ts_num
-        self.level_ = strided_rows(comps, 0, cl, b, num_rows,
-                                   empty((b, num_rows), "<f4"))
-        self.trend_ = strided_rows(comps, cl, cl, b, num_rows,
-                                   empty((b, num_rows), "<f4"))
-        self.season_ = strided_rows(comps, 2 * cl, cl, b, num_rows,
-                                    empty((b, num_rows), "<f4"))
+        # lane py-sequence: the three series-major Arrays are built on FIRST
+        # USE (`__getattr__` below; `get_level(index)` slices one series),
+        # not at every fit and load: at a million series each was 0.17 s of
+        # strided copies that forecast() never reads. Same bytes when read.
+        for name in self._LAZY_COMPONENTS:
+            self.__dict__.pop(name, None)
+        self._comp_layout = (cl, b, num_rows)
         self._time_major = {
             "level": comps[0:cl].reshape((num_rows, b)),
             "trend": comps[cl:2 * cl].reshape((num_rows, b)),
@@ -711,8 +728,9 @@ class ExponentialSmoothing:
         """`forecast`'s three return shapes over a TIME-MAJOR flat buffer of
         `steps * ts_num` values."""
         if index is not None:
-            return strided_rows(out, 0, steps * self.ts_num, self.ts_num, steps,
-                                empty((self.ts_num, steps), "<f4"))[index]
+            # ONE series: its one strided slice, not every series
+            # un-interleaved and then indexed (lane py-sequence)
+            return _one_series(out, index, self.ts_num, steps)
         if self.ts_num == 1:
             return out
         return out.reshape((steps, self.ts_num))
@@ -886,6 +904,20 @@ class ExponentialSmoothing:
             )
         return self.sse_[index]
 
+    _LAZY_COMPONENTS = ("level_", "trend_", "season_")
+
+    def __getattr__(self, name):
+        # only reached when normal lookup fails: a component not built yet
+        if name in ExponentialSmoothing._LAZY_COMPONENTS:
+            lay = self.__dict__.get("_comp_layout")
+            if lay is not None:
+                cl, b, rows = lay
+                k = ExponentialSmoothing._LAZY_COMPONENTS.index(name)
+                value = strided_rows(self._comps, k * cl, cl, b, rows, empty((b, rows), "<f4"))
+                self.__dict__[name] = value
+                return value
+        raise AttributeError(f"{type(self).__name__!r} object has no attribute {name!r}")
+
     def _component(self, comp, index, who):
         """cuML's return shapes for `get_level` / `get_trend` /
         `get_season` (`holtwinters.pyx:479-490`): `index=None` gives the
@@ -909,11 +941,22 @@ class ExponentialSmoothing:
             )
         return comp[index]
 
+    def _named(self, name, index, who):
+        lay = self.__dict__.get("_comp_layout")
+        if (index is not None and name not in self.__dict__ and lay is not None
+                and self.fit_executed_flag and isinstance(index, int) and not isinstance(index, bool)
+                and 0 <= index < self.ts_num):
+            # one series: its strided slice, not all of them (lane py-sequence)
+            cl, b, rows = lay
+            return _one_series(self._comps, index, b, rows,
+                               offset=self._LAZY_COMPONENTS.index(name) * cl)
+        return self._component(getattr(self, name), index, who)
+
     def get_level(self, index=None):
-        return self._component(self.level_, index, "level")
+        return self._named("level_", index, "level")
 
     def get_trend(self, index=None):
-        return self._component(self.trend_, index, "trend")
+        return self._named("trend_", index, "trend")
 
     def get_season(self, index=None):
-        return self._component(self.season_, index, "season")
+        return self._named("season_", index, "season")

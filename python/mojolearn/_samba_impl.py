@@ -27,6 +27,7 @@ from . import _buffer as _buffers, _bufcheck as _checks
 from ._array import Array as _Array
 import hashlib
 import json
+import struct
 from pathlib import Path
 
 from . import _portable_math as math
@@ -177,6 +178,25 @@ def _init_tensor(gen, name, shape):
     return _buffers.full(shape, 1.0, '<f4')
 
 
+_IGNORE_BYTES = struct.pack("<i", T._IGNORE_INDEX_DEFAULT)
+
+
+def _count_targets(y):
+    """How many int32 targets are not the ignore index: the Python
+    `sum(v != ignore ...)` it replaces, answered by `bytes.count` over the
+    raw little-endian words when every value lies in [-100, 2**24). In that
+    range the four ignore bytes `9c ff ff ff` can only match at a word
+    boundary: a straddling match needs a 0x9c byte at word offset 1, 2 or 3
+    followed by 0xff through the word's top byte, but a word whose top byte
+    is 0xff lies in [-100, -1] and holds 0xff at offsets 1 to 3, and every
+    other word's top byte is 0x00. So the count is exact. Outside it (an id the loss will refuse anyway) the Python
+    scan runs."""
+    n = int(y.size)
+    if n and y.min() >= T._IGNORE_INDEX_DEFAULT and y.max() < (1 << 24):
+        return n - bytes(_checks.flat_view(y, 'i')).count(_IGNORE_BYTES)
+    return sum(v != T._IGNORE_INDEX_DEFAULT for v in _checks.flat_view(y, 'i'))
+
+
 class SambaState(object):
     """The stack's decode state (2026-09-15): `layers[i]` is layer i's own
     block state (`Mamba3State` or `TransformerState`), caller-owned and laid
@@ -315,8 +335,10 @@ class SambaStack(object):
             raise ValueError("mojolearn.SambaStack: %s must be (B, L) integer ids" % what)
         return _buffers.as_i32_c(x, ndim=2, name=what)[0]
 
-    def _forward(self, inputs, dropout_stream=None, token_offset=0):
-        """The forward with every block input kept for the backward."""
+    def _forward(self, inputs, dropout_stream=None, token_offset=0, head=True):
+        """The forward with every block input kept for the backward.
+        `head=False` stops after the final norm (`logits` is None): the
+        fused `samba_head_loss` runs the head itself."""
         c = self.config
         ids = self._ids(inputs, "inputs")
         b, l = ids.shape
@@ -335,8 +357,10 @@ class SambaStack(object):
             x = self._block(i).forward(x)
         hn = T.rms_norm_forward(x, self.arrays["norm_f.weight"], c.norm_eps,
                                 self.numeric_mode)
-        logits = T.linear_forward(hn.reshape((b * l, c.d_model)),
-                                  self._head_weight(), self.numeric_mode)
+        logits = None
+        if head:
+            logits = T.linear_forward(hn.reshape((b * l, c.d_model)),
+                                      self._head_weight(), self.numeric_mode)
         return {"ids": ids, "key": key, "xs": xs, "h": x, "hn": hn,
                 "logits": logits}
 
@@ -459,22 +483,35 @@ class SambaStack(object):
         unsplit one; `None` divides by this call's own target count."""
         self._refuse_no_backward()
         c = self.config
-        acts = self._forward(inputs, dropout_stream, token_offset)
+        # The fused head (lane/py-lm): the head GEMM, the loss and the head
+        # backward in one call, the logits never crossing back and forth.
+        # Same kernels, operands and order as the three-call arm below,
+        # which stays as the reference for a binding without the entry.
+        fused = callable(getattr(T._load(self.numeric_mode), "samba_head_loss", None))
+        acts = self._forward(inputs, dropout_stream, token_offset, head=not fused)
         ids = acts["ids"]
         b, l = ids.shape
         y = self._ids(targets, "targets")
         if y.shape != ids.shape:
             raise ValueError("mojolearn.SambaStack: targets must match inputs' shape")
         y = y.reshape(-1)
-        count = sum(v != T._IGNORE_INDEX_DEFAULT for v in _checks.flat_view(y, 'i'))
+        count = _count_targets(y)
         items = count if num_items is None else int(num_items)
-        loss, dlogits = T.cross_entropy(acts["logits"], y, reduction="sum",
-                                        num_items=items, return_grad=True,
-                                        numeric_mode=self.numeric_mode)
+        hn2 = acts["hn"].reshape((b * l, c.d_model))
+        out = T.samba_head_loss(hn2, self._head_weight(), y, items,
+                                self.numeric_mode) if fused else None
+        if out is not None:
+            loss, dhn, dw_head = out
+        else:
+            logits = acts["logits"]
+            if logits is None:
+                logits = T.linear_forward(hn2, self._head_weight(), self.numeric_mode)
+            loss, dlogits = T.cross_entropy(logits, y, reduction="sum",
+                                            num_items=items, return_grad=True,
+                                            numeric_mode=self.numeric_mode)
+            dhn, dw_head = T.linear_backward(dlogits, hn2, self._head_weight(),
+                                             self.numeric_mode)
         grads = {}
-        dhn, dw_head = T.linear_backward(
-            dlogits, acts["hn"].reshape((b * l, c.d_model)), self._head_weight(),
-            self.numeric_mode)
         dh, grads["norm_f.weight"] = T.rms_norm_backward(
             dhn.reshape((b, l, c.d_model)), acts["h"], self.arrays["norm_f.weight"],
             c.norm_eps, self.numeric_mode)
@@ -520,7 +557,7 @@ class SambaStack(object):
                 "clause 9.2 (leaf size, T mod L, A divides P, A a power of "
                 "two); refused before any gradient is computed "
                 "(python/mojolearn/_samba_impl.py)" % (tokens, a))
-        count = sum(v != T._IGNORE_INDEX_DEFAULT for v in _checks.flat_view(y, 'i'))
+        count = _count_targets(y)
         stream = (self.generator.next_stream()
                   if self.config.dropout > 0.0 else None)
         rows = b // a

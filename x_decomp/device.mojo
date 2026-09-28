@@ -1064,10 +1064,19 @@ struct DevExec(Exec):
         var dinfo = ctx.enqueue_create_buffer[DType.float32](3)
         enqueue_fill(ctx, dinfo, JACOBI_INFO_UNWRITTEN)
         var dvt = ctx.enqueue_create_buffer[DType.float32](n * n)
-        ctx.enqueue_function[jacobi_eigh2_kernel](
-            da.unsafe_ptr(), dv.unsafe_ptr(), dinfo.unsafe_ptr(), dvt.unsafe_ptr(), Int32(n), Int32(JACOBI_SWEEPS), Float32(JACOBI_TOL),
-            grid_dim=(1, 1, 1), block_dim=(J2_TPB, 1, 1),
-        )
+        # unroll 1 is the default: m4pro-b 1790619265077, eigh 1500 46.3 s
+        # at unroll 1 against 82.7 s at 4 and 98.6 s for the old kernel,
+        # every digest equal (MOJOLEARN_XD_J2_U=4 keeps the other one)
+        if String(getenv("MOJOLEARN_XD_J2_U", "1")) != "4":
+            ctx.enqueue_function[jacobi_eigh2_kernel[1]](
+                da.unsafe_ptr(), dv.unsafe_ptr(), dinfo.unsafe_ptr(), dvt.unsafe_ptr(), Int32(n), Int32(JACOBI_SWEEPS), Float32(JACOBI_TOL),
+                grid_dim=(1, 1, 1), block_dim=(J2_TPB, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[jacobi_eigh2_kernel[4]](
+                da.unsafe_ptr(), dv.unsafe_ptr(), dinfo.unsafe_ptr(), dvt.unsafe_ptr(), Int32(n), Int32(JACOBI_SWEEPS), Float32(JACOBI_TOL),
+                grid_dim=(1, 1, 1), block_dim=(J2_TPB, 1, 1),
+            )
         ctx.enqueue_function[sign_flip_kernel](dv.unsafe_ptr(), Int32(n), grid_dim=(n, 1, 1), block_dim=(SIGNFLIP_TPB, 1, 1))
         var hinfo = ctx.enqueue_create_host_buffer[DType.float32](3)
         var hwork = ctx.enqueue_create_host_buffer[DType.float32](n * n)
@@ -1166,7 +1175,9 @@ struct DevExec(Exec):
         var s_buf = ctx.enqueue_create_buffer[DType.float32](n)
         ctx.synchronize()
         _ = qr_factor(ctx, da, scratch, r_buf, m, n)
-        if jacobi2_on():
+        if jacobi2_on() and n >= 256:
+            # measured (m4pro-b 1790606245923): 0.45x at n = 28, 1.07x at
+            # 256, 1.21x at 800; the old kernel below 256
             _svd2_of_r(ctx, r_buf, v_buf, s_buf, n)
         else:
             svd_of_r(ctx, r_buf, v_buf, s_buf, n, X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL)

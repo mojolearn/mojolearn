@@ -1141,8 +1141,19 @@ def bn_stats_block_kernel(x: FP, aux: FP, p: IP):
                 j += BN_TPB
             barrier()
             if tid == 0:
-                for q in range(cnt):
+                # eight words read ahead of their eight dependent adds (the
+                # same adds in the same order)
+                var q = 0
+                while q + 8 <= cnt:
+                    var v = SIMD[DType.float32, 8](0)
+                    comptime for e in range(8):
+                        v[e] = t[q + e]
+                    comptime for e in range(8):
+                        acc = ftz(acc + ftz(v[e]))
+                    q += 8
+                while q < cnt:
                     acc = ftz(acc + ftz(t[q]))
+                    q += 1
             barrier()
             k0 += cnt
     var mean = ftz(identical_div(acc, count))
@@ -1158,9 +1169,19 @@ def bn_stats_block_kernel(x: FP, aux: FP, p: IP):
                 j += BN_TPB
             barrier()
             if tid == 0:
-                for q in range(cnt):
+                var q = 0
+                while q + 8 <= cnt:
+                    var v = SIMD[DType.float32, 8](0)
+                    comptime for e in range(8):
+                        v[e] = t[q + e]
+                    comptime for e in range(8):
+                        var d = ftz(ftz(v[e]) - mean)
+                        sq = ftz(sq + ftz(identical_mul(d, d)))
+                    q += 8
+                while q < cnt:
                     var d = ftz(ftz(t[q]) - mean)
                     sq = ftz(sq + ftz(identical_mul(d, d)))
+                    q += 1
             barrier()
             k0 += cnt
     if tid == 0:
@@ -1193,16 +1214,74 @@ def bn_bwd_red_block_kernel(x: FP, g: FP, aux: FP, p: IP):
                 j += BN_TPB
             barrier()
             if tid == 0:
-                for q in range(cnt):
+                var q = 0
+                while q + 8 <= cnt:
+                    var vg = SIMD[DType.float32, 8](0)
+                    var vx = SIMD[DType.float32, 8](0)
+                    comptime for e in range(8):
+                        vg[e] = tg[q + e]
+                        vx[e] = tx[q + e]
+                    comptime for e in range(8):
+                        var gv = ftz(vg[e])
+                        var xhat = ftz(identical_mul(ftz(ftz(vx[e]) - mean), invstd))
+                        sg = ftz(sg + gv)
+                        sgx = ftz(sgx + ftz(identical_mul(gv, xhat)))
+                    q += 8
+                while q < cnt:
                     var gv = ftz(tg[q])
                     var xhat = ftz(identical_mul(ftz(ftz(tx[q]) - mean), invstd))
                     sg = ftz(sg + gv)
                     sgx = ftz(sgx + ftz(identical_mul(gv, xhat)))
+                    q += 1
             barrier()
             k0 += cnt
     if tid == 0:
         aux.unsafe_store(2 + BN_SUMG * C + c, sg)
         aux.unsafe_store(2 + BN_SUMGX * C + c, sgx)
+
+
+def _bn_use_block[fwd: Bool](
+    ctx: DeviceContext, mut dx: DeviceBuffer[DType.float32], mut dg: DeviceBuffer[DType.float32],
+    mut da: DeviceBuffer[DType.float32], mut dp: DeviceBuffer[DType.int32], N: Int, C: Int, HW: Int,
+) raises -> Bool:
+    """lane/cnn-apple2: whether the threadgroup fold is the faster of the two
+    on this device at this shape, measured once per process (each form run
+    twice, the second timed, after a wait) and cached. Both forms store the
+    same aux words, so the measuring runs leave nothing behind. The M4
+    measured the threadgroup fold slower, the M4 Pro and M3 Ultra faster."""
+    var tag = -1 if fwd else -2
+    var s = _slots()
+    var i = 0
+    while i + 4 < len(s[].tuned):
+        if s[].tuned[i] == N and s[].tuned[i + 1] == C and s[].tuned[i + 2] == HW and s[].tuned[i + 3] == tag:
+            return s[].tuned[i + 4] == 1
+        i += 5
+    ctx.synchronize()
+    var ns = List[Int]()
+    for form in range(2):
+        var dt = 0
+        for rep in range(2):
+            var t0 = perf_counter_ns()
+            if form == 1:
+                comptime if fwd:
+                    ctx.enqueue_function[bn_stats_block_kernel](fp(dx), fp(da), ip(dp), grid_dim=(C, 1, 1), block_dim=(BN_TPB, 1, 1))
+                else:
+                    ctx.enqueue_function[bn_bwd_red_block_kernel](fp(dx), fp(dg), fp(da), ip(dp), grid_dim=(C, 1, 1), block_dim=(BN_TPB, 1, 1))
+            else:
+                comptime if fwd:
+                    launch[bn_stats_at](ctx, fp(dx), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
+                else:
+                    launch[bn_bwd_red_at](ctx, fp(dx), fp(dg), fp(da), fp(da), ip(dp), ip(dp), C)
+            ctx.synchronize()
+            dt = perf_counter_ns() - t0
+        ns.append(dt)
+    var pick = 1 if ns[1] < ns[0] else 0
+    s[].tuned.append(N)
+    s[].tuned.append(C)
+    s[].tuned.append(HW)
+    s[].tuned.append(tag)
+    s[].tuned.append(pick)
+    return pick == 1
 
 
 def batchnorm_forward_into(x: FP, running: FP, aux: FP, prm: List[Int32], training: Bool, y_out: FP) raises:
@@ -1220,7 +1299,10 @@ def batchnorm_forward_into(x: FP, running: FP, aux: FP, prm: List[Int32], traini
     var dp = put_prm(ctx, 3, prm)
     var dout = ws(ctx, 4, total)
     if training:
+        var blk = False
         comptime if BN_BLOCK:
+            blk = _bn_use_block[True](ctx, dx, dr, da, dp, Int(prm[0]), C, Int(prm[2]))
+        if blk:
             ctx.enqueue_function[bn_stats_block_kernel](fp(dx), fp(da), ip(dp), grid_dim=(C, 1, 1), block_dim=(BN_TPB, 1, 1))
         else:
             launch[bn_stats_at](ctx, fp(dx), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
@@ -1267,7 +1349,10 @@ def batchnorm_backward_into(x: FP, g: FP, aux: FP, prm: List[Int32], training: B
     var da = put[False](ctx, 2, aux, na)
     var dp = put_prm(ctx, 3, prm)
     var dout = ws(ctx, 4, total)
+    var blk = False
     comptime if BN_BLOCK:
+        blk = _bn_use_block[False](ctx, dx, dg, da, dp, Int(prm[0]), C, Int(prm[2]))
+    if blk:
         ctx.enqueue_function[bn_bwd_red_block_kernel](fp(dx), fp(dg), fp(da), ip(dp), grid_dim=(C, 1, 1), block_dim=(BN_TPB, 1, 1))
     else:
         launch[bn_bwd_red_at](ctx, fp(dx), fp(dg), fp(da), fp(da), ip(dp), ip(dp), C)
@@ -1319,11 +1404,13 @@ def dropout2d_device(x: List[Float32], prm: List[Int32], hyper: List[Float32]) r
 def spmm_into(vals: FP, nvals: Int, h: FP, csr: List[Int32], prm: List[Int32], dst: FP) raises:
     var total = Int(prm[0]) * Int(prm[1])
     var ctx = cnn_ctx()
-    var dv = up(ctx, vals, nvals)
-    var dh = up(ctx, h, total)
-    var dq = upload_i32(ctx, csr)
-    var dp = upload_i32(ctx, prm)
-    var dout = ctx.enqueue_create_buffer[DType.float32](total)
+    # lane/cnn-apple2: the cached workspace slots (one copy of each input,
+    # no staging list), not fresh buffers per call
+    var dv = put[False](ctx, 0, vals, nvals)
+    var dh = put[False](ctx, 1, h, total)
+    var dq = put_prm(ctx, 2, csr)
+    var dp = put_prm(ctx, 3, prm)
+    var dout = ws(ctx, 4, total)
     launch[spmm_at](ctx, fp(dv), fp(dh), fp(dout), fp(dout), ip(dq), ip(dp), total)
     down(ctx, dout, dst, total)
     ctx.synchronize()

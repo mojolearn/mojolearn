@@ -1406,6 +1406,22 @@ def svgp_item(
     info.unsafe_store(1, Float32(1) if ok3 else Float32(0))
 
 
+# DEVIATION 5209 (row 123), lane/py-dn-kern 2026-09-28
+def matmul_tn_acc_item(t: Int, a: FP, b: FP, res: FP, rows: Int, n: Int, m: Int):
+    """res (n x m) continued by A^T B over `rows` rows (A rows x n, B rows x m),
+    t = i*m + j: `matmul_item`'s fold of (A^T)[i, p] B[p, j], p ascending,
+    carried on from res[t] (0 before the first rows). A fold cut into
+    consecutive row ranges and carried through float32 res is the same
+    sequence of pinned fmas as the uncut fold, so the bits are those of
+    `matmul(A^T, B)` with A^T the transposed copy."""
+    var i = t // m
+    var j = t - i * m
+    var acc = res.unsafe_load(t)
+    for p in range(rows):
+        acc = ftz(identical_mul_add(ftz(a.unsafe_load(p * n + i)), ftz(b.unsafe_load(p * m + j)), acc))
+    res.unsafe_store(t, acc)
+
+
 # DEVIATION 5205 (row 129)
 def svgp_var_item(t: Int, ksu: FP, cmat: FP, res: FP, n: Int, m: Int, kdiag: Float32):
     """Predictive variance of f at row t: k** - K*u C Ku*, the inner fold

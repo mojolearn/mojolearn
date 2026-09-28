@@ -7,10 +7,14 @@ import traceback
 
 _forest_snapshot = None
 _ivf_snapshot = None
+# ParallelQueries' per-call estimator snapshot: (token, estimator). Set by
+# `neighbor_state`, cleared by `neighbor_state` with no state at the end of
+# the driver's call. Its resident index handle lives exactly as long.
+_neighbor_snapshot = None
 
 
 def execute(request):
-    global _forest_snapshot, _ivf_snapshot
+    global _forest_snapshot, _ivf_snapshot, _neighbor_snapshot
     operation, state, args = request
     if operation == 'device_inventory':
         from . import _backend
@@ -388,9 +392,27 @@ def execute(request):
     if operation == 'neighbor_vote':
         from .parallel_neighbors_reference import _vote
         return _vote(state, *args)
+    if operation == 'neighbor_state':
+        from .parallel_neighbors import _methods
+        if state is None:
+            if _neighbor_snapshot is not None and _neighbor_snapshot[0] == args:
+                release = getattr(_neighbor_snapshot[1], '_release_resident_index',
+                                  getattr(_neighbor_snapshot[1], '_release_resident_fit', None))
+                _neighbor_snapshot = None
+                if callable(release):
+                    release()
+            return None
+        if not _methods(state) or type(args) is not str:
+            raise ValueError('invalid neighbors/density query state')
+        _neighbor_snapshot = (args, state)
+        return None
     if operation == 'neighbor_query':
         from .parallel_neighbors import _methods
         X, method, kwargs = args
+        if isinstance(state, str):
+            if _neighbor_snapshot is None or _neighbor_snapshot[0] != state:
+                raise RuntimeError('neighbor worker has no snapshot for this query')
+            state = _neighbor_snapshot[1]
         if method not in _methods(state):
             raise ValueError('invalid neighbors/density query operation')
         result = getattr(state, method)(X, **kwargs)

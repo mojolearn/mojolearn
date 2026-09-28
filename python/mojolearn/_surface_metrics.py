@@ -110,6 +110,10 @@ FAMILIES = (
         exports=(
             "x_metrics_host_numeric_mode", "x_metrics_host_vendor", "x_metrics_host_column",
             "x_metrics_host_sabotage", "x_metrics_run", "x_metrics_run_out", "x_metrics_curve_auc", "x_metrics_curve_ap", "x_metrics_curve_roc", "x_metrics_expected_mi", "x_metrics_row_sum_range", "x_metrics_numeric_mode", "x_metrics_vendor",
+            # lane py-misc-metrics (2026-09-28): x_metrics/epilogue.mojo
+            "x_metrics_curve_pr", "x_metrics_curve_det", "x_metrics_ndcg_mean", "x_metrics_class_sums",
+            "x_metrics_auc_xy", "x_metrics_mi_contingency", "x_metrics_centroids", "x_metrics_ch_extra",
+            "x_metrics_db_score",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note="Ships: the metrics lane's CPU route (the added evaluation metrics and model_selection helpers).",

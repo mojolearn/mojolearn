@@ -61,7 +61,7 @@ LANES = {"par-scaler": "preprocessing", "par-arima": "arima", "par-holtwinters":
 DRIVERS = {
     "python/mojolearn/parallel_preprocessing.py": ("scaler_fit", "scaler_transform"),
     "python/mojolearn/parallel_classical.py": ("arima_fit", "holtwinters_fit", "rbf_sampler_rows"),
-    "python/mojolearn/parallel_neighbors.py": ("neighbor_query",),
+    "python/mojolearn/parallel_neighbors.py": ("neighbor_state", "neighbor_query"),
     "python/mojolearn/parallel_neighbors_reference.py": ("neighbor_reference", "neighbor_vote"),
     "python/mojolearn/parallel_ensemble.py": ("forest_fit",),
 }
@@ -113,14 +113,16 @@ def test_cpu_operations_are_the_python_sharded_drivers():
     # `ivf_store` per shard; `search` and the Euclidean root then go through
     # that SAME pool, so their sends sit in a different function from the
     # construction and are checked by name here, as par-mlp's are above. The
-    # merge itself is the driver's own Python, in shard order, like the
-    # gradient fold.
+    # merge itself is the driver's own call, in shard order (Python until
+    # lane/py-dn-ann, 2026-09-28; now `ivf_merge_shards` in every IVF binding).
     ivf = _read("python/mojolearn/parallel_ivf.py")
     assert "pool = DevicePool(devices)" in ivf and "cooperative=True" not in ivf
     assert "requests.append(('ivf_store', shard, ()))" in ivf
     assert "self._pool.map([('ivf_search_stored', None, (q,)) for _ in self.devices])" in ivf
     assert "self._pool.map([('ivf_finalize', result, (self.metric_code_,))])" in ivf
-    assert "candidates.sort()" in ivf and "mapping[local]" in ivf
+    # the merge is ONE native call since lane/py-dn-ann (2026-09-28), the
+    # driver's own statement, served by the same binding on every column
+    assert "self._native.ivf_merge_shards(" in ivf and "candidates.sort()" not in ivf
     wanted.update(("ivf_store", "ivf_search_stored", "ivf_finalize"))
     # parallel_forecasting's four drivers (lane/lm-attention-fallback,
     # 2026-09-19). `_run` builds the ONE non-cooperative pool for every

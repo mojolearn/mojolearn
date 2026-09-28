@@ -704,9 +704,11 @@ def meanll_kernel(
         # first so the chain waits on the add, not on each load.
         comptime U = GMM_MEANLL_AHEAD
         var i = 0
-        comptime if not is_defined["MOJOLEARN_GMM_CHAIN_PIPE_OFF"]():
+        comptime if not is_defined["MOJOLEARN_GMM_MEANLL_PIPE_OFF"]():
             # lane cluster-apple2: block b + 1 is loaded before block b's
-            # adds (mstep.mojo GMM_CHAIN_PIPE). Same adds, same order.
+            # adds, so its loads are in flight while block b's chain runs.
+            # Same adds, same order. m4pro-a 1790618856303: E-step 648 ->
+            # 588 ms (GaussianMixture 1M taxi, 22 it), digests equal.
             var have = i + U <= n
             var cur = SIMD[DType.float32, U](0.0)
             if have:

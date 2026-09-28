@@ -18,6 +18,7 @@ from mojolearn._expansion_decomp import _M, _Kit
 from mojolearn import _backend
 
 ARMS = os.environ.get("ARMS", "1,2").split(",")
+# arm 3 = arm 2 with the eigh kernel at unroll 1 (MOJOLEARN_XD_J2_U)
 k = _Kit(_backend.default_mode())
 
 
@@ -32,8 +33,8 @@ def M(a):
 def h(*ms):
     d = hashlib.sha256()
     for m in ms:
-        if isinstance(m, np.ndarray):
-            d.update(np.ascontiguousarray(m).tobytes())
+        if not isinstance(m, _M):
+            d.update(np.ascontiguousarray(np.asarray(m, dtype=np.float32)).tobytes())
         else:
             d.update(bytes(memoryview(m.s).cast("B")))
     return d.hexdigest()[:16]
@@ -49,13 +50,14 @@ def arm(name, fn):
     res = {}
     for a in ARMS:
         os.environ.update(OLD if a == "1" else NEW)
+        os.environ["MOJOLEARN_XD_J2_U"] = "1" if a == "3" else "4"
         t = time.perf_counter()
         try:
             out = fn()
             dt = time.perf_counter() - t
             res[a] = (dt, h(*out))
         except Exception as e:  # report, keep going
-            res[a] = (float("nan"), "ERR " + str(e)[:120])
+            res[a] = (float("nan"), "ERR " + str(e)[-300:])
     line = "  ".join(f"arm{a} {res[a][0]:9.3f}s {res[a][1]}" for a in ARMS)
     hs = {res[a][1] for a in ARMS}
     verdict = "EQUAL" if len(hs) == 1 and not next(iter(hs)).startswith("ERR") else "DIFFER"

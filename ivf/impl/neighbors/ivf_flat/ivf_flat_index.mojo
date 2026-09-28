@@ -144,16 +144,17 @@ struct IvfFlatSearchParams(Copyable, ImplicitlyCopyable, Movable):
 struct IvfFlatIndex(Movable):
     """`ivf_flat::index`, `ivf_flat.hpp:137-274`, CSR instead of their lists.
 
-    HOST-RESIDENT BETWEEN BUILD AND SEARCH, **DEVIATION 1804**. Theirs lives
-    on the device from `build` to the last `search`; ours is host `List`s
-    that the search uploads. That is a real departure from
-    `CONTRIBUTING.md` and it is named rather than hidden: it costs
-    an upload per search call and it changes no bit, because the upload is
-    a copy. Closure condition: hold the `DeviceBuffer`s in this struct and
-    give the estimator an explicit `DeviceContext` lifetime, which is a
-    surface change and not a numeric one. Not done, because this lane has
-    run nothing and a memory-residency choice made without a measurement is
-    the kind of invention `CONTRIBUTING.md` (Algorithms and references) is about.
+    DEVIATION 1804, RETIRED (lane/py-dn-ann, 2026-09-28). This struct is
+    the index's host arrays; it used to be ALL there was between build and
+    search, so every search uploaded the centroids and the list data again
+    (theirs lives on the device from `build` to the last `search`). The
+    closure condition this note named is met one level up: `IvfFlatDevice`
+    (ivf_flat_search.mojo) holds the `DeviceBuffer`s, and `ivf/resident.mojo`
+    keeps one per handle for the life of the Python estimator on the
+    binding's process-lifetime context, so a search uploads only its queries.
+    A one-shot search (`ivf_flat_search_host`, the traced gates) still
+    prepares its own; the bits are the same either way, the preparation is
+    the same kernels over the same bytes.
     """
 
     var n_lists: Int

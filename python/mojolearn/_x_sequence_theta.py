@@ -16,6 +16,7 @@ import numpy as np
 from . import _backend
 
 _MODELS = {"STM": 0, "OTM": 1, "DSTM": 2, "DOTM": 3}
+_MODEL_NAMES = np.array(list(_MODELS), dtype=object)
 
 
 class AutoTheta:
@@ -42,14 +43,26 @@ class AutoTheta:
         if y.dtype == np.float64:
             raise TypeError("Theta: float64 is refused; pass float32")
         self._one = y.ndim == 1
-        self._y = np.ascontiguousarray(y, dtype=np.float32).reshape(1, -1) if self._one else \
-            np.ascontiguousarray(y, dtype=np.float32)
+        # a private copy: the fitted series cannot change under a stored forecast
+        self._y = np.array(y, dtype=np.float32, order="C", copy=True).reshape(1, -1) if self._one else \
+            np.array(y, dtype=np.float32, order="C", copy=True)
         if self._y.ndim != 2 or self._y.shape[1] <= 3:
             raise ValueError("Theta: each series needs more than 3 observations")
         self._fitted_h = None
         return self
 
+    def _key(self, h):
+        return (int(h), self.season_length, self.decomposition_type, self.model, self.initial_smoothed,
+                self.alpha, self.theta, self.numeric_mode)
+
     def _run(self, h):
+        # the fit runs inside the forecast call; a repeat of the same call on
+        # the same fitted series returns the stored answer (lane py-sequence)
+        key = self._key(h)
+        cached = getattr(self, "_fitted_h", None)
+        if cached is not None and cached[0] == key:
+            self.info_, self.model_ = cached[2].copy(), list(cached[3])
+            return cached[1].copy()
         B, n = self._y.shape
         f = np.zeros((B, h), dtype=np.float32)
         info = np.zeros((B, 8), dtype=np.float32)
@@ -61,7 +74,8 @@ class AutoTheta:
             [B, n, int(h), self.season_length, -1 if self.model is None else _MODELS[self.model],
              0 if self.decomposition_type == "multiplicative" else 1, mask], fp)
         self.info_ = info
-        self.model_ = [list(_MODELS)[int(k)] for k in info[:, 4]]
+        self.model_ = _MODEL_NAMES[info[:, 4].astype(np.intp)].tolist()
+        self._fitted_h = (key, f.copy(), info.copy(), list(self.model_))
         return f
 
     def predict(self, h, X=None, level=None):

@@ -37,6 +37,8 @@ __all__ = ["LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", 
            "PageRank", "connected_components", "Louvain", "SVGP"]
 
 # x_neighbors/items.mojo's codes
+#: x_neighbors/iter_device.mojo XN_PRECOMPUTED_KIND: `kpca_transform` reads q as the kernel
+_XN_PRECOMPUTED_KIND = 100
 _KERNELS = {"linear": 0, "poly": 1, "polynomial": 1, "rbf": 2, "sigmoid": 3, "laplacian": 4,
             "cosine": 5, "chi2": 6, "additive_chi2": 7}
 _U_EXP, _U_LOG, _U_SQRT, _U_TANH, _U_COS, _U_SIN, _U_IDENTITY, _U_RECIP = range(8)
@@ -605,11 +607,21 @@ class OneClassSVM(_XNeighbors):
 
     def score_samples(self, X):
         Q = _f32(X)
+        coef = Array.from_list([[v] for v in self.dual_coef_.tolist()[0]], "<f4")
+        n_sv = coef.shape[0]
+        if self.kernel != "precomputed" and n_sv and Q.shape[0] and not _OLD_ITEMS:
+            # the fused chain (lane/py-dn-kern): kernel then matmul per row
+            # tile on the device, only the scores downloaded (`xn_kernel_matmul`)
+            nq, d = Q.shape
+            s = empty((nq, 1), "<f4")
+            self._op("kernel_matmul", [(Q, 0), (self.support_vectors_, 0), (coef, 0), (s, 1)],
+                     (nq, n_sv, d, 1, _KERNELS[self.kernel], int(self.degree)),
+                     (_f32_scalar(self._gamma), _f32_scalar(self.coef0)))
+            return s.reshape((nq,))
         if self.kernel == "precomputed":
             K = self._take_cols(Q, self.support_.tolist())
         else:
             K = self._kernel(Q, self.support_vectors_, self.kernel, self._gamma, self.coef0, self.degree)
-        coef = Array.from_list([[v] for v in self.dual_coef_.tolist()[0]], "<f4")
         s = self._matmul(K, coef)
         return s.reshape((Q.shape[0],))
 
@@ -716,11 +728,27 @@ class KernelPCA(_XNeighbors):
         Q = _f32(X)
         nq = Q.shape[0]
         nf = self._fit_X.shape[0]
+        alphas = self._alpha_scale(1)
+        c = alphas.shape[1]
+        pre = self.kernel == "precomputed"
+        if pre and Q.shape[1] != nf:
+            raise ValueError(f"KernelPCA: a precomputed kernel needs {nf} columns (the fitted rows), got {Q.shape[1]}")
+        if nq and c and not _OLD_ITEMS:
+            # the fused chain (lane/py-dn-kern): kernel, rowsum, / n_fit,
+            # center and the product with the scaled alphas per row tile on
+            # the device, only the (nq, c) result downloaded (`xn_kpca_transform`)
+            out = empty((nq, c), "<f4")
+            self._op("kpca_transform",
+                     [(Q, 0), (Q if pre else self._fit_X, 0), (self._fit_cols, 0), (self._fit_all, 0),
+                      (alphas, 0), (out, 1)],
+                     (nq, nf, Q.shape[1], c, _XN_PRECOMPUTED_KIND if pre else _KERNELS[self.kernel], int(self.degree)),
+                     (0.0 if pre else _f32_scalar(self._gamma), 0.0 if pre else _f32_scalar(self.coef0), float(nf)))
+            return out
         K = self._k(Q, self._fit_X)
         pred = self._scale_div(self._rowsum(K), float(nf))
         Kc = empty((nq, nf), "<f4")
         self._op("kpca_center", [(K, 0), (self._fit_cols, 0), (pred, 0), (self._fit_all, 0), (Kc, 1)], (nq, nf))
-        return self._matmul(Kc, self._alpha_scale(1))
+        return self._matmul(Kc, alphas)
 
     def inverse_transform(self, X):
         raise NotImplementedError("KernelPCA: inverse_transform needs fit_inverse_transform, which is not implemented")
@@ -1447,8 +1475,12 @@ class SVGP(_XNeighbors):
         self.noise_variance = noise_variance
         self.jitter = jitter
 
+    def _gamma_value(self):
+        ls = float(self.lengthscale)
+        return 1.0 / (2.0 * (ls * ls))  # ls ** 2 as one product, not the platform pow
+
     def _k(self, A, B):
-        g = 1.0 / (2.0 * float(self.lengthscale) ** 2)
+        g = self._gamma_value()
         K = self._kernel(A, B, "rbf", g, 0.0, 0)
         return self._unary(K, _U_IDENTITY, _f32_scalar(self.kernel_variance), 0.0)
 
@@ -1465,10 +1497,21 @@ class SVGP(_XNeighbors):
             Z = self._take_rows(X, [i * n // M for i in range(M)])
         M = Z.shape[0]
         Kuu = self._k(Z, Z)
-        Kfu = self._k(X, Z)
-        Kuf = self._k(Z, X)
-        B = self._matmul(Kuf, Kfu)
-        b = self._matmul(Kuf, yv.reshape((n, 1)))
+        if _OLD_ITEMS:
+            Kfu = self._k(X, Z)
+            Kuf = self._k(Z, X)
+            B = self._matmul(Kuf, Kfu)
+            b = self._matmul(Kuf, yv.reshape((n, 1)))
+        else:
+            # the fused chain (lane/py-dn-kern): Kfu per row tile on the
+            # device, B = Kuf Kfu and b = Kuf y folded across the tiles, only
+            # B and b downloaded (`xn_svgp_stats`). Kuf is Kfu^T bit for bit
+            # (the rbf item squares a difference; IEEE subtraction is
+            # antisymmetric), so it is never formed.
+            B = empty((M, M), "<f4")
+            b = empty((M,), "<f4")
+            self._op("svgp_stats", [(X, 0), (Z, 0), (yv, 0), (B, 1), (b, 1)], (n, M, d),
+                     (_f32_scalar(self._gamma_value()), _f32_scalar(self.kernel_variance)))
         alpha = empty((M,), "<f4")
         C = empty((M, M), "<f4")
         qmu = empty((M,), "<f4")
@@ -1488,8 +1531,19 @@ class SVGP(_XNeighbors):
 
     def predict_f(self, X):
         Q = _f32(X)
-        Ksu = self._k(Q, self.Z_)
         M = self.Z_.shape[0]
+        if not _OLD_ITEMS and Q.shape[0]:
+            # the fused chain (lane/py-dn-kern): Ksu, the mean and the
+            # variance per row tile on the device (`xn_svgp_predict`)
+            nq = Q.shape[0]
+            mean = empty((nq,), "<f4")
+            var = empty((nq,), "<f4")
+            self._op("svgp_predict", [(Q, 0), (self.Z_, 0), (self._alpha, 0), (self._C, 0), (mean, 1), (var, 1)],
+                     (nq, M, Q.shape[1]),
+                     (_f32_scalar(self._gamma_value()), _f32_scalar(self.kernel_variance),
+                      _f32_scalar(self.kernel_variance)))
+            return mean, var
+        Ksu = self._k(Q, self.Z_)
         mean = self._matmul(Ksu, self._alpha.reshape((M, 1))).reshape((Q.shape[0],))
         var = empty((Q.shape[0],), "<f4")
         self._op("svgp_var", [(Ksu, 0), (self._C, 0), (var, 1)], (Q.shape[0], M), (_f32_scalar(self.kernel_variance),))

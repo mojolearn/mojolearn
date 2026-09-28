@@ -41,6 +41,15 @@ def _join(parts, *, ragged=False):
     return result
 
 
+_TOKENS = [0]
+
+
+def _next_token():
+    import os
+    _TOKENS[0] += 1
+    return 'nq-' + str(os.getpid()) + '-' + str(_TOKENS[0])
+
+
 class ParallelQueries:
     """Persistent GPU workers for fitted neighbors and KernelDensity estimators.
 
@@ -49,6 +58,16 @@ class ParallelQueries:
     host input and each worker's reference index must fit in memory. Use as a
     context manager, or call close(). Calls on one driver must be serialized.
     Estimator state is sent afresh on each call; fit the estimator normally.
+
+    The state travels ONCE per worker per call (lane/py-decomp-nbrs,
+    2026-09-28): `query` sends one `neighbor_state` request to every worker,
+    which keeps the unpickled estimator (and the resident index handle its
+    first shard builds) under a per-call token; each shard then carries only
+    its query slice and that token. Before, every shard pickled the whole
+    index and its worker uploaded it again (about 1 TB pickled for 1M
+    queries on a 1M x 32 index at 128 rows per shard). The shard cut, the
+    per-shard call and the merge are unchanged, so the bytes are too. The
+    workers drop the snapshot when the call ends.
     """
     def __init__(self, estimator, *, devices=(0,), rows_per_shard=128):
         if not _methods(estimator):
@@ -83,14 +102,18 @@ class ParallelQueries:
                   for i in range(0, n, self.rows_per_shard)] or [(0, 0)]
         state = copy.copy(self.estimator)
         state.numeric_mode = 'identical'
-        # The READ is shifted by `driver_read_shift` (0 unless the driver
-        # sabotage switch is on, and 0 for the first shard either way); the
-        # join below is still in shard order over unchanged widths.
-        results = self._pool.map([
-            ('neighbor_query', state,
-             (data[start - driver_read_shift(index, start, self._pool.devices):
-                   end - driver_read_shift(index, start, self._pool.devices)], method, kwargs))
-            for index, (start, end) in enumerate(ranges)])
+        token = _next_token()
+        workers = len(self._pool.devices)
+        self._pool.map([('neighbor_state', state, token)] * workers)
+        try:
+            results = self._shards(data, ranges, token, method, kwargs)
+        finally:
+            # A failed shard already closed the pool; do not respawn it.
+            if self._pool._workers:
+                try:
+                    self._pool.map([('neighbor_state', None, token)] * workers)
+                except BaseException:
+                    self._pool.close()
         output = _join([r[0] for r in results], ragged=method == 'radius_neighbors')
         # Diagnostics describe actual shard calls, not a fictitious global tile.
         diagnostics = [dict(start=start, end=end,
@@ -99,6 +122,17 @@ class ParallelQueries:
                        for i, ((start, end), result) in enumerate(zip(ranges, results))]
         self.last_shards_ = diagnostics
         return output
+
+    def _shards(self, data, ranges, token, method, kwargs):
+        # The READ is shifted by `driver_read_shift` (0 unless the driver
+        # sabotage switch is on, and 0 for the first shard either way); the
+        # join below is still in shard order over unchanged widths.
+        # A shard's state is the token only, so it pickles its own rows.
+        return self._pool.map([
+            ('neighbor_query', token,
+             (data[start - driver_read_shift(index, start, self._pool.devices):
+                   end - driver_read_shift(index, start, self._pool.devices)], method, kwargs))
+            for index, (start, end) in enumerate(ranges)])
 
     def close(self):
         self._pool.close()

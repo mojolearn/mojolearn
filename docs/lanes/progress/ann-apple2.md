@@ -246,3 +246,96 @@ M4 and M4 Pro never showed it. Cause not isolated further (time). The
 driver went back to the base file (2c209a63f); the repulsion flushes
 (c3841ce42) are worth 594 -> 562 ms there. The final run at 2c209a63f is
 queued (1790618698345).
+
+### FINAL RUN (tip): m4pro-b (Apple M4 Pro), steward 1790618893516, lane/apple-merged 7483efa40 -> be5bf4205
+
+The whole lane at its tip against the lane/apple-merged tip it merged, one
+job, arms alternated, three runs per cell. Digests equal before and after
+in EVERY cell of BOTH tiers. Raw: `final_m4pro-b_1790618893516.txt`. (The
+same job at the tip was queued on m3ultra-b as 1790618883122 and withdrawn
+unrun at the 18:41Z freeze; the earlier M3 Ultra final at da79ccc8f is
+above, with the t-SNE driver regression that 2c209a63f removed; the probe
+shows the fixed t-SNE on the M3 Ultra. So the M3 Ultra has no run of the
+tip: the tree join 3634e4645 and the probe-tree change 15498e277 were timed
+on M4 Pros only.)
+
+| cell (s) | IDENTICAL before | IDENTICAL after | FAST before | FAST after |
+|---|---|---|---|---|
+| IVF-Flat fit | 2.366/2.327/2.317 | 2.033/2.010/2.023 | 1.075/0.731/0.708 | 1.070/0.730/0.696 |
+| IVF-Flat search | 0.081 | 0.079-0.082 | 0.077 | 0.076-0.080 |
+| IVF-PQ fit | 6.401/6.409/6.400 | 5.573/5.557/5.568 | 1.778/1.780/1.764 | 1.596/1.536/1.584 |
+| IVF-PQ search | 0.277/0.275/0.281 | 0.088/0.043/0.047 | 0.283/0.283/0.283 | 0.088/0.042/0.045 |
+| IVF-SQ fit | 2.452/2.433/2.450 | 1.994/2.023/2.015 | 0.803/0.813/0.810 | 0.685/0.683/0.693 |
+| IVF-SQ search | 0.308/0.294/0.288 | 0.050/0.049/0.061 | 0.296/0.318/0.295 | 0.050/0.051/0.059 |
+| IVF-RaBitQ fit | 2.254/2.255/2.261 | 1.949/1.956/1.931 | 0.616/0.629/0.624 | 0.621/0.623/0.648 |
+| IVF-RaBitQ search | 0.275/0.276/0.276 | 0.040/0.024/0.029 | 0.282/0.282/0.284 | 0.036/0.024/0.028 |
+| refine search (top-40 -> 10) | 0.316/0.322/0.317 | 0.062/0.063/0.066 | 0.327/0.345/0.322 | 0.063/0.063/0.066 |
+| CAGRA fit (50k) | 0.619/0.622/0.622 | 0.405/0.383/0.383 | 0.402/0.407/0.405 | 0.319/0.300/0.300 |
+| t-SNE fit (10k, 300 it) | 0.918/0.932/0.922 | 0.697/0.698/0.697 | 0.625/0.626/0.624 | 0.548/0.549/0.550 |
+
+Digests (IDENTICAL; FAST), identical before and after: IVF-Flat
+d730b8082a1cdbfb; 9993cf743da23b77. IVF-PQ 6bb7a6c5fc753846 /
+3b1e0c1ae73444eb; 3c7316861c03b6a0 / 4ace8e5f668db63d. IVF-SQ
+c55eedfcb6459d7b / 1d9c53fd8c13f452; 18180f0ab783f874 / 4cad0bd4e7a37a4d.
+IVF-RaBitQ a4f2343eb268b0a7 / 056a570709713477; 6b6e86a5d3108cdd /
+a69552b2898d1871. refine 3c73bf8ae59e47e4; 818dcdc7e08c674d. CAGRA
+54d696296c9c7c8a / 45e435db03654b4e (both tiers). t-SNE 2bb1d3d75ffa1885;
+ca01838ecfb9306d. Every FAST digest is unchanged, so no FAST quality check
+is owed.
+
+Stages (ms, IDENTICAL, before -> after): IVF-PQ residuals 363 -> 122,
+encode 371 -> 218; IVF-SQ encode 172 -> 51; CAGRA k-NN + host prune 470 +
+106 -> k-NN + device prune 371; t-SNE iterations 760 -> 620, symmetrize
+107 -> 38, k-NN + perplexity 41 -> 28. The IVF fits' remaining time is the
+cluster/ k-means (coarse and PQ codebooks), cluster-apple2's; the Apple ftz
+spelling (bc3c22c03) is what moved it here.
+
+## FINAL (2026-09-28)
+
+Frozen by the orchestrator at 18:41Z (no new submissions). Branch
+lane/ann-apple2, tip be5bf4205 plus progress notes; working tree clean; not
+merged anywhere (lane/apple2-merged consolidates it). Every change below is default on and measured with
+equal digests (Metal only); reverted trials are listed in the table above.
+
+Default path, both tiers unless noted: 74d074090 + 3634e4645 + 78b605c31 +
+3dca15c1a + fbe131bd8 + 15498e277 (IVF scan: threadgroup probe
+walk, split top-k with a tree join, list-order gather, staged SQ/RaBitQ
+score); bc3c22c03 (Apple ftz spelling, IDENTICAL); c3841ce42 (t-SNE and
+k-NN nonnegative flushes, IDENTICAL); 95101d105 (t-SNE symmetrize); 782ad9a09
++ 7c195b32c (CAGRA device prune); c347aeae7 (CAGRA reverse merge on host
+tasks); 399de4811 (staged PQ encode); b9cc59dcf (x_ann/io.mojo copies);
+7b51e91e5 + 10292edc0 (k-NN fold width, 128 rows per threadgroup); 2c209a63f
+(t-SNE driver back to the base file). Opt-in only: MOJOLEARN_ANN_STAGES
+stage marks. Revert defines: MOJOLEARN_ANN_SERIAL_SCAN, MOJOLEARN_FTZ_TWO_TEST,
+MOJOLEARN_CAGRA_HOST_PRUNE, MOJOLEARN_PQ_ASSIGN_UNSTAGED.
+
+SHARED CODE (the integration run must cover other families):
+- bc3c22c03 changes `checks/numerics.mojo::ftz` on the Apple GPU under
+  IDENTICAL: every family's Apple IDENTICAL kernel compiles differently
+  (same word for every input by construction; cluster/ k-means digests
+  unchanged here).
+- 95101d105, c347aeae7, c3841ce42 (ts_repulse_terms) and fbe131bd8's
+  rq_est_tail are shared with the x_ann CPU host binding (it builds with
+  -D MOJOLEARN_COLUMN_CPU; not run).
+
+UNPROVEN (only Metal digests on m4pro-a/b, m4-a, m3ultra-b were taken; no
+NVIDIA, AMD or CPU identity run, no sabotage run):
+- 74d074090, 3634e4645, 78b605c31, 3dca15c1a, fbe131bd8, 15498e277 (IVF
+  scan), 782ad9a09, 7c195b32c (device prune, integer atomics), 399de4811,
+  b9cc59dcf, 7b51e91e5, 10292edc0, c3841ce42: cross-vendor + CPU identity
+  (these kernels run on every GPU vendor).
+- bc3c22c03: Apple-only spelling, but every family's Apple column.
+- 95101d105, c347aeae7: host code, CPU column (95101d105 host-checked SAME
+  against the old function on 4 random graphs).
+- Sabotage arms retargeted in be5bf4205 (5801, 5820, 5832, 5842): apply and
+  build, not yet shown to flip; 5804/5803/5855/5813/5810 reach the new paths
+  through the shared helpers, also not yet run. NaN fallbacks of the probe
+  walk and the split top-k were never exercised on a device.
+- M2: the new kernels launch at most 256 threads per threadgroup (probe
+  walk), 128 elsewhere; never run on m2pro.
+
+Known issues: the M3 Ultra lost ~150 ms of t-SNE iterations with this
+lane's earlier driver file (a `_repulse` wrapper and unused opt-in kernels
+in the module); the cause was not isolated, the file went back to the base
+(2c209a63f). The IVF fits stay dominated by cluster/ k-means. UMAP was not
+touched (decomp family).

@@ -81,6 +81,11 @@ order because callers rely on it; the two elementwise helpers reproduce
 """
 
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, u32_ptr
+from core.dense_coo import (
+    nonzero_f32_count as dense_nonzero_f32_count,
+    nonzero_f32_fill as dense_nonzero_f32_fill,
+    knn_affinity_f32 as dense_knn_affinity_f32,
+)
 from bindings.hotpath_helpers import (
     cast_elements_binding,
     check_indices_i64_binding,
@@ -1812,6 +1817,82 @@ def kmeans_parallel_available_binding() raises -> PythonObject:
     return PythonObject(1)
 
 
+# ===========================================================================
+# THE FLOAT32 DENSE-TO-COO SCAN AND THE PRECOMPUTED kNN AFFINITY
+# (lane/py-dn-kern, 2026-09-28): `core/dense_coo.mojo`, the same bodies in
+# the base binding and its CPU route. They replace the Python n^2 loops of
+# `_spectral_impl._DenseCOO` and `SpectralEmbedding._precomputed_knn_affinity`
+# (compares and the exact values 0, 0.5, 1; no fold).
+# ===========================================================================
+
+
+def nonzero_f32_count_binding(src_addr: PythonObject, n: PythonObject) raises -> PythonObject:
+    """How many of the `n` float32 values at `src` satisfy `v != 0.0`."""
+    var count = Int(py=n)
+    if count < 0:
+        raise Error("nonzero_f32_count: n must be non-negative, got " + String(count))
+    if count == 0:
+        return PythonObject(0)
+    var sp = f32_ptr(Int(py=src_addr))
+    var nz = 0
+    with GILReleased(Python()):
+        nz = dense_nonzero_f32_count(sp, count)
+    return PythonObject(nz)
+
+
+def nonzero_f32_fill_binding(
+    src_addr: PythonObject, rows: PythonObject, cols: PythonObject, outs: PythonObject, capacity: PythonObject,
+) raises -> PythonObject:
+    """`nonzero_f64_fill` over a C-contiguous float32 `[rows, cols]` matrix:
+    row, column and value of every `v != 0.0`, row major. Returns the count."""
+    var nr = Int(py=rows)
+    var nc = Int(py=cols)
+    var cap = Int(py=capacity)
+    if nr < 0 or nc < 0 or cap < 0:
+        raise Error("nonzero_f32_fill: rows, cols and capacity must be non-negative")
+    if len(outs) != 3:
+        raise Error("nonzero_f32_fill: outs must hold 3 addresses, got " + String(len(outs)))
+    if nr == 0 or nc == 0:
+        return PythonObject(0)
+    var sp = f32_ptr(Int(py=src_addr))
+    var rp = i32_ptr(Int(py=outs[0]))
+    var cp = i32_ptr(Int(py=outs[1]))
+    var vp = f32_ptr(Int(py=outs[2]))
+    var k = 0
+    with GILReleased(Python()):
+        k = dense_nonzero_f32_fill(sp, nr, nc, rp, cp, vp, cap)
+    return PythonObject(k)
+
+
+def knn_affinity_f32_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """addrs = [dense, rows, cols, vals, affinity, status] (0 where unused);
+    params = [n, k, nnz, sparse]. See `core/dense_coo.mojo::knn_affinity_f32`."""
+    if len(addrs) != 6 or len(params) != 4:
+        raise Error("knn_affinity_f32: needs 6 addresses and 4 parameters")
+    var n = Int(py=params[0])
+    var k = Int(py=params[1])
+    var nnz = Int(py=params[2])
+    var sparse = Int(py=params[3]) != 0
+    if n < 1 or k < 0 or nnz < 0:
+        raise Error("knn_affinity_f32: n must be positive, k and nnz non-negative")
+    var aff = f32_ptr(Int(py=addrs[4]))
+    var status = i32_ptr(Int(py=addrs[5]))
+    var dense = aff
+    var rp = status
+    var cp = status
+    var vp = aff
+    if sparse:
+        if nnz > 0:
+            rp = i32_ptr(Int(py=addrs[1]))
+            cp = i32_ptr(Int(py=addrs[2]))
+            vp = f32_ptr(Int(py=addrs[3]))
+    else:
+        dense = f32_ptr(Int(py=addrs[0]))
+    with GILReleased(Python()):
+        dense_knn_affinity_f32(dense, rp, cp, vp, nnz, sparse, n, k, aff, status)
+    return PythonObject(0)
+
+
 @export
 def PyInit__mojolearn() abi("C") -> PythonObject:
     try:
@@ -1843,6 +1924,9 @@ def PyInit__mojolearn() abi("C") -> PythonObject:
         m.def_function[transpose_f32_binding]("transpose_f32")
         m.def_function[nonzero_f64_count_binding]("nonzero_f64_count")
         m.def_function[nonzero_f64_fill_binding]("nonzero_f64_fill")
+        m.def_function[nonzero_f32_count_binding]("nonzero_f32_count")
+        m.def_function[nonzero_f32_fill_binding]("nonzero_f32_fill")
+        m.def_function[knn_affinity_f32_binding]("knn_affinity_f32")
         # DEVIATION 2325: the three host helpers of DEVIATION 2303.
         m.def_function[all_finite_f32_binding]("all_finite_f32")
         m.def_function[all_finite_f64_binding]("all_finite_f64")

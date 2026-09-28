@@ -14,7 +14,10 @@ from x_prep.prims import (
     scaler_stats_unit, std_scale_unit, nan_keep_unit,
 )
 from x_prep.eigh import eigh_unit
-from x_prep.target import te_global_unit, te_enc_unit, te_apply_unit, te_bucket_unit, te_gather_unit
+from x_prep.target import (
+    te_global_unit, te_enc_unit, te_apply_unit, te_bucket_unit, te_gather_unit,
+    te_hist_unit, te_hsum_unit, te_hstart_unit, te_hscatter_unit,
+)
 from x_prep.kbins import kbins_edges_unit, kbins_codes_unit, kbins_inverse_unit, kbins_gw_unit, kbins_wq_unit, kbins_wkm_unit
 from naive_bayes.nb import (
     gnb_eps_unit, gnb_params_unit, gnb_jll_unit, class_log_prior_unit, mnb_params_unit,
@@ -38,7 +41,7 @@ from naive_bayes.da import (
     da_shrink_unit, da_pool_unit, sym_fn_unit, da_intercept_unit, evr_unit,
 )
 
-comptime N_OPS = 115
+comptime N_OPS = 119
 
 
 @always_inline
@@ -273,3 +276,11 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
         pt_sres_unit(t, f, q)
     comptime if OP == 114:
         te_gather_unit(t, f, q)
+    comptime if OP == 115:
+        te_hist_unit(t, f, q)
+    comptime if OP == 116:
+        te_hsum_unit(t, f, q)
+    comptime if OP == 117:
+        te_hstart_unit(t, f, q)
+    comptime if OP == 118:
+        te_hscatter_unit(t, f, q)

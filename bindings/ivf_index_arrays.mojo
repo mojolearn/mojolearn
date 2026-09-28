@@ -43,7 +43,7 @@ The centres and their norms do not change under extend and are not written.
 The index arrays are refused by name unless `ivf_validate_index_arrays`
 admits them, before any search or extend statement runs.
 """
-from std.python import PythonObject
+from std.python import Python, PythonObject
 
 from bindings.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
 from ivf.impl.neighbors.ivf_flat.ivf_flat_index import ivf_validate_index_arrays
@@ -279,3 +279,148 @@ def ivf_write_extended_arrays(
         lp.unsafe_store(i, list_data[i])
     for j in range(n_new):
         bp.unsafe_store(j, Int32(Int(new_labels[j])))
+
+
+# ===========================================================================
+# THE RESIDENT DOORS' ADDRESSES (lane/py-dn-ann, 2026-09-28; ivf/resident.mojo
+# on the GPU, bindings/ivf_host_search.mojo on the host).
+#
+# `ivf_flat_index_prepare(addrs, params) -> handle`:
+#     addrs   0 to 4 the index as for search (read, admitted once)
+#     params  0 n, 1 dim, 2 n_lists, 3 metric, 4 partial_storage (0 or 1)
+# `ivf_flat_index_search(handle, addrs, params)`:
+#     addrs   0 queries (m * dim float32, read), 1 dist_out (m * k float32),
+#             2 idx_out (m * k int32), 3 cand_out (m int32), WRITTEN,
+#             optional 4 the sample filter (n int32, read)
+#     params  0 n, 1 dim, 2 n_lists, 3 metric (must be the handle's),
+#             4 m, 5 k, 6 n_probes, 7 partial_storage (must be the handle's)
+# `ivf_flat_index_release(handle)`.
+# ===========================================================================
+
+
+def ivf_read_resident_filter(addrs: PythonObject, n_rows: Int) raises -> List[Int32]:
+    """`ivf_flat_index_search`'s optional address 4 (DEVIATION 5863); absent
+    is no filter and returns an empty list."""
+    if len(addrs) < 5:
+        return List[Int32]()
+    return read_i32(Int(py=addrs[4]), n_rows)
+
+
+def ivf_write_resident_result(
+    addrs: PythonObject,
+    distances: List[Float32],
+    indices: List[UInt32],
+    n_candidates: List[Int32],
+    m: Int,
+    k: Int,
+) raises:
+    """`ivf_flat_index_search`'s addresses 1 to 3, as `ivf_write_search_result`."""
+    var dp = f32_ptr(Int(py=addrs[1]))
+    var ip = i32_ptr(Int(py=addrs[2]))
+    var cp = i32_ptr(Int(py=addrs[3]))
+    for i in range(m * k):
+        dp.unsafe_store(i, distances[i])
+        ip.unsafe_store(i, Int32(Int(indices[i])))
+    for i in range(m):
+        cp.unsafe_store(i, n_candidates[i])
+
+
+# ===========================================================================
+# THE DISTRIBUTED MERGE (lane/py-dn-ann, 2026-09-28). `DistributedIVFIndex.
+# search` merged its shards' candidates in Python, one `Array` scalar index
+# per candidate (about 40 s per 1M queries at two shards and k = 8). This is
+# the same merge statement for statement, host code in every IVF binding:
+#
+#   for each query row: for each shard in order, its count `n` (0 <= n <=
+#   the shard's row count, else status 1), then its first min(k, n)
+#   candidates, each local id in [0, the shard's row count) (else status 2)
+#   mapped to its ORIGINAL id; the total count at least k (else status 3);
+#   the candidates ordered by (float32 distance, original id), where -0.0
+#   equals +0.0 as a float compare says, and the first k written. A NaN
+#   distance is refused (status 4): Python's tuple sort had no defined
+#   order for it. Original ids are distinct across disjoint shards, so the
+#   order is total and any correct sort gives the same answer.
+#
+#   addrs   0 dist_out (m * k float32), 1 ids_out (m * k int32),
+#           2 counts_out (m int32), then per shard s: 3 + 4s distances
+#           (m * k float32), 4 + 4s local ids (m * k int32), 5 + 4s counts
+#           (m int32), 6 + 4s the local-to-original map (int32)
+#   params  0 shards, 1 m, 2 k, then 3 + s the shard's row count
+#   returns [status, row] (status 0: merged)
+# ===========================================================================
+
+
+def ivf_merge_shards_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    var shards = Int(py=params[0])
+    var m = Int(py=params[1])
+    var k = Int(py=params[2])
+    if shards < 1 or m < 0 or k < 1:
+        raise Error("ivf_merge_shards: need at least one shard and k >= 1")
+    if len(addrs) != 3 + 4 * shards or len(params) != 3 + shards:
+        raise Error("ivf_merge_shards: address or parameter count differs from the shard count")
+    var od = f32_ptr(Int(py=addrs[0]))
+    var oi = i32_ptr(Int(py=addrs[1]))
+    var oc = i32_ptr(Int(py=addrs[2]))
+    var sd = List[Int]()
+    var si = List[Int]()
+    var sc = List[Int]()
+    var sm = List[Int]()
+    var sn = List[Int]()
+    for s in range(shards):
+        sd.append(Int(py=addrs[3 + 4 * s]))
+        si.append(Int(py=addrs[4 + 4 * s]))
+        sc.append(Int(py=addrs[5 + 4 * s]))
+        sm.append(Int(py=addrs[6 + 4 * s]))
+        sn.append(Int(py=params[3 + s]))
+    var cd = List[Float32](capacity=shards * k)
+    var ci = List[Int32](capacity=shards * k)
+    var status = 0
+    var bad_row = 0
+    for row in range(m):
+        cd.clear()
+        ci.clear()
+        var total = 0
+        for s in range(shards):
+            var n = Int(i32_ptr(sc[s]).unsafe_load(row))
+            if n < 0 or n > sn[s]:
+                status = 1
+                break
+            total += n
+            var dp = f32_ptr(sd[s])
+            var ip = i32_ptr(si[s])
+            var mp = i32_ptr(sm[s])
+            for j in range(min(k, n)):
+                var local = Int(ip.unsafe_load(row * k + j))
+                if local < 0 or local >= sn[s]:
+                    status = 2
+                    break
+                var d = dp.unsafe_load(row * k + j)
+                if d != d:
+                    status = 4
+                    break
+                var id = mp.unsafe_load(local)
+                # insertion into the (distance, id) order
+                var at = len(cd)
+                cd.append(d)
+                ci.append(id)
+                while at > 0 and (cd[at - 1] > d or (cd[at - 1] == d and ci[at - 1] > id)):
+                    cd[at] = cd[at - 1]
+                    ci[at] = ci[at - 1]
+                    at -= 1
+                cd[at] = d
+                ci[at] = id
+            if status != 0:
+                break
+        if status == 0 and total < k:
+            status = 3
+        if status != 0:
+            bad_row = row
+            break
+        for j in range(k):
+            od.unsafe_store(row * k + j, cd[j])
+            oi.unsafe_store(row * k + j, ci[j])
+        oc.unsafe_store(row, Int32(total))
+    var out = Python.list()
+    out.append(PythonObject(status))
+    out.append(PythonObject(bad_row))
+    return out

@@ -20,6 +20,7 @@ binding and on the device); every score is `x_linear_decision`. Python only
 validates, encodes labels, assigns CV folds (integers) and unpacks the flat
 float32 result. NumPy-free (NUMPY_FREE_CONTRACT.md).
 """
+from . import _portable_math as _pm
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, empty, zeros
 from ._labels import decode_labels, encode_labels
@@ -179,9 +180,9 @@ class _LinearRegressorMixin:
     def score(self, X, y):
         pred = self.predict(X).tolist()
         truth = y.tolist() if hasattr(y, "tolist") else list(y)
-        mean = sum(truth) / len(truth)
-        ss_res = sum((a - b) ** 2 for a, b in zip(truth, pred))
-        ss_tot = sum((a - mean) ** 2 for a in truth)
+        mean = _pm.nsum(truth) / len(truth)
+        ss_res = _pm.nsum((a - b) * (a - b) for a, b in zip(truth, pred))
+        ss_tot = _pm.nsum((a - mean) * (a - mean) for a in truth)
         return 1.0 - ss_res / ss_tot if ss_tot > 0 else 0.0
 
 
@@ -1089,7 +1090,8 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
         kp = 1 if K == 2 else K
         if isinstance(self.Cs, int) and not isinstance(self.Cs, bool):
             m = self.Cs
-            Cs = [10.0 ** (-4 + 8 * i / (m - 1)) for i in range(m)] if m > 1 else [1e-4]
+            # np.logspace(-4, 4, m); 10 ** y through `_pm.powr` (DEVIATION 6900), not the platform pow
+            Cs = [_pm.powr(10.0, -4 + 8 * i / (m - 1)) for i in range(m)] if m > 1 else [1e-4]
         else:
             Cs = [float(c) for c in self.Cs]
         folds = 5 if self.cv is None else self.cv
@@ -1125,19 +1127,21 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
         return self
 
     def predict_proba(self, X):
-        import math
+        # DEVIATION 6900: the pinned exp (was the platform exp) and the
+        # CPython 3.12+ sum spelled out (`_pm.nsum`), the same bits on every host
         scores = self.decision_function(X).tolist()
         if len(self.intercept_) == 1:
+            es = _pm.exp_array([-z if z >= 0 else z for z in scores])
             out = []
-            for z in scores:
-                p = 1.0 / (1.0 + math.exp(-z)) if z >= 0 else math.exp(z) / (1.0 + math.exp(z))
+            for z, e in zip(scores, es):
+                p = 1.0 / (1.0 + e) if z >= 0 else e / (1.0 + e)
                 out.append([1.0 - p, p])
             return Array.from_list(out, "<f4")
         out = []
         for row in scores:
             m = max(row)
-            e = [math.exp(v - m) for v in row]
-            s = sum(e)
+            e = _pm.exp_array([v - m for v in row])
+            s = _pm.nsum(e)
             out.append([v / s for v in e])
         return Array.from_list(out, "<f4")
 

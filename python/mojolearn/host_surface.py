@@ -1707,6 +1707,7 @@ FAMILIES = (
         host_modules=(
             "core/knn_host_predict.mojo", "bindings/host_helpers.mojo",
             "cluster/host/kmeans_oracle.mojo", "bindings/hotpath_helpers.mojo",
+            "core/dense_coo.mojo",
         ),
         exports=(
             "core_host_numeric_mode", "core_host_vendor", "core_host_column",
@@ -1727,6 +1728,9 @@ FAMILIES = (
             "encode_labels_i64", "encode_labels_u32", "encode_labels_u8",
             "gather_i32", "check_indices_i64", "indices_overlap_i64",
             "fold_ids", "select_fold_i64",
+            # lane/py-dn-kern (2026-09-28): the spectral routes' float32
+            # dense-to-COO scan and precomputed kNN affinity (core/dense_coo.mojo)
+            "nonzero_f32_count", "nonzero_f32_fill", "knn_affinity_f32",
         ),
         gate="tools/classical_host_gate.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -2075,7 +2079,7 @@ FAMILIES = (
         classes=("SVC", "IsolationForest", "SVR"),
         display="SVC and the isolation forest",
         host_modules=(
-            "svm/host/smo_oracle.mojo", "gemm/host/gemm_oracle.mojo",
+            "svm/host/smo_oracle.mojo", "svm/host/svc_proba.mojo", "gemm/host/gemm_oracle.mojo",
             "isolation_forest/checks/if_oracle.mojo",
             "isolation_forest/impl/rng/xorwow.mojo",
         ),
@@ -2083,6 +2087,7 @@ FAMILIES = (
             "svm_host_numeric_mode", "svm_host_vendor", "svm_host_column",
             "svm_host_sabotage", "svm_vendor", "svm_numeric_mode", "svc_fit",
             "svc_predict", "svr_fit", "svr_predict", "iforest_run",
+            "svc_pair_epilogue", "svc_platt_train", "svc_splitmix_perm", "svc_portable_math",
         ),
         gate="tools/identity_break.py and tools/classical_host_gate.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -2875,6 +2880,8 @@ FAMILIES = (
             "ivf_host_sabotage", "ivf_vendor", "ivf_numeric_mode",
             "ivf_flat_build_and_search", "ivf_flat_build", "ivf_flat_search",
             "ivf_flat_extend", "ivf_flat_partial_search", "ivf_finalize_distances",
+            "ivf_flat_index_prepare", "ivf_flat_index_search", "ivf_flat_index_release",
+            "ivf_merge_shards",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -2913,6 +2920,8 @@ FAMILIES = (
             "ivf_search_host_column", "ivf_search_host_sabotage",
             "ivf_vendor", "ivf_numeric_mode", "ivf_flat_search", "ivf_flat_extend",
             "ivf_flat_partial_search", "ivf_finalize_distances",
+            "ivf_flat_index_prepare", "ivf_flat_index_search", "ivf_flat_index_release",
+            "ivf_merge_shards",
         ),
         gate="tools/classical_host_gate.py and tools/identity_break.py",
         wheel_note=(

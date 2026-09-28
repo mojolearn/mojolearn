@@ -22,6 +22,19 @@ ONE binding entry, `x_prep_run`, which runs a PROGRAM of units
 install) runs the same units in a loop. Python here only lays out the arena,
 lists the stages and reads results back; the only arithmetic it does is
 integer bookkeeping and IEEE basic operations on scalar parameters.
+
+EXCEPTIONS, named (python_work_audit prep; each is host float64 Python today
+and none is covered by a ledger row yet): KBinsDiscretizer's cumulative sample
+weights and 53-bit uniform scaling (`_draw`-driven subsample); IterativeImputer's
+`_truncnorm_host` (binary64 per missing entry, sample_posterior with a user
+estimator only; its normal cdf / inverse cdf are the pinned `_portable_math`
+twins since lane py-bugs, DEVIATION 6902, row 252) and the O(d^2) `_abs_corr` /
+`_neighbours` normalisation (n_nearest_features). IterativeImputer with a
+user `estimator` otherwise runs its data-sized plumbing in
+x_prep/user_host.mojo (row 221, DEVIATION 5411: row selection, gathers, the
+clipped float32 store and the float64 convergence twin); `_fit_host` and
+`_impute_host` stay the Python reference (`_II_NATIVE = False` or
+MOJOLEARN_HOTPATH=python).
 """
 import array
 import bisect
@@ -32,11 +45,13 @@ import math
 import numbers
 import operator
 import os
-import statistics
 
 from . import _backend
+from . import _portable_math as _pm
 from ._array import Array
 from ._buffer import as_f32_c, addr_ro
+from . import _labels
+from . import _arena_io
 from ._labels import flatten_labels, sorted_classes, label_kind
 
 __all__ = ["f_classif", "f_regression", "r_regression", "chi2", "mutual_info_classif", "mutual_info_regression", "RobustScaler", "MaxAbsScaler", "OrdinalEncoder", "OneHotEncoder", "TargetEncoder", "SimpleImputer", "KBinsDiscretizer",
@@ -63,12 +78,27 @@ _OPS = dict(
     mi_dc=94, mi_dd=95, kbins_gw=96, kbins_wq=97, kbins_wkm=98, ii_sigma=99, ii_post=100,
     scaler_stats=101, std_scale=102, nan_keep=103, pt_init=104, pt_map=105, pt_fold=106, ii_rowabs=107, te_bucket=108, pt_log=109,
     pt_spts=110, pt_smap=111, pt_sfold=112, pt_sres=113, te_gather=114,
+    te_hist=115, te_hsum=116, te_hstart=117, te_hscatter=118,
 )
 _PARAMS = 14
 _NONE = -1
 #: x_prep/transform.mojo PT_EVALS (PT_ITERS + 2) and PT_STATE
 _PT_EVALS = 50
 _PT_STATE = 10
+
+
+def _binding_has(binding, name):
+    """Whether `binding` exports `name`. On a CPU install the binding is the
+    host stub, whose missing attributes raise ImportError (the no-CPU-
+    implementation message), not AttributeError, so `hasattr` would raise
+    instead of answering. lane/apple2-merged (2026-09-28): prep-apple2's
+    device-only entries (x_prep_run_out, x_prep_run_scratch and the native
+    fold entries) broke every x_prep lane's CPU column (m4pro-b)."""
+    try:
+        getattr(binding, name)
+    except (AttributeError, ImportError):
+        return False
+    return True
 
 
 def _prep_binding(mode):
@@ -206,14 +236,38 @@ class _Prog:
         host_words = ha + (0 if dev_scratch else sc)
         arena = array.array("f", bytes(4 * max(host_words, 1)))
         base = arena.buffer_info()[0]
+        run_ranges = (_optional_prep_entry(binding, "x_prep_run_ranges")
+                      if (dev_scratch or sc == 0) and _arena_io.ranges_enabled() else None)
+        spans = []
         for off, arr, _ in self._inputs:
-            if arr.size:
-                ctypes.memmove(base + 4 * off, addr_ro(arr, name="input"), 4 * arr.size)
+            if not arr.size:
+                continue
+            cache = _arena_io.active_cache(binding, "x_prep", arr.size) if run_ranges is not None else None
+            if cache is not None:
+                # resident (lane py-shared): copied from the store on the device;
+                # the host words stay zero and `_check` refuses a read of them
+                spans.append((off, off + arr.size, cache.id_of(arr)))
+                continue
+            ctypes.memmove(base + 4 * off, addr_ro(arr, name="input"), 4 * arr.size)
+            spans.append((off, off + arr.size, -1))
+        self._in_spans = [(lo, hi) for lo, hi, _ in spans]
         prog = array.array("i", [(v.off + (sbase if v.kind == "s" else obase)) if isinstance(v, _Scratch) else v
                                  for s in self._stages for v in s] or [0])
         nst = len(self._stages)
         self._out, self._out_at = None, obase
-        if dev_out:
+        if run_ranges is not None:
+            # the shared ranges runner (lane py-shared, core/arena_io.mojo):
+            # the inputs go up, the rest of the host arena starts zero on the
+            # device, and everything but the inputs comes back
+            ins = _arena_io.input_ranges(spans)
+            outs = _arena_io.output_ranges(_arena_io.complement(ins, ha))
+            ia, oa = _arena_io.pack_ins(ins), _arena_io.pack_outs(outs)
+            out = array.array(self._out_code, bytes(4 * on)) if dev_out else None
+            run_ranges(base, prog.buffer_info()[0], 0 if out is None else out.buffer_info()[0],
+                       (ha, sc if dev_scratch else 0, on if dev_out else 0, nst),
+                       (ia.buffer_info()[0], len(ins), oa.buffer_info()[0], len(outs)))
+            self._out = out
+        elif dev_out:
             out = array.array(self._out_code, bytes(4 * on))
             run_out(base, prog.buffer_info()[0], out.buffer_info()[0],
                                    (ha, sc if dev_scratch else 0, on, nst))
@@ -228,11 +282,23 @@ class _Prog:
         self.arena = arena
         return self
 
+    def _check(self, off, n):
+        """An input's words never come back from the device (the ranges
+        runner, lane py-shared): a read of one is refused on every backend,
+        so a program that reads an input after a stage wrote it fails loudly
+        instead of reading the host's stale copy."""
+        for lo, hi in getattr(self, "_in_spans", ()):
+            if off < hi and lo < off + n:
+                raise AssertionError(f"x_prep: arena [{off}, {off + n}) was read but is an input, "
+                                     "which never comes back")
+
     def get(self, off, shape):
         shape = tuple(shape) if isinstance(shape, (tuple, list)) else (int(shape),)
         n = 1
         for s in shape:
             n *= s
+        if not isinstance(off, _Scratch):
+            self._check(off, n)
         if isinstance(off, _Scratch):
             if off.kind != "o":
                 raise ValueError("x_prep: scratch words never reach the host")
@@ -252,6 +318,8 @@ class _Prog:
         n = 1
         for s in shape:
             n *= s
+        if not isinstance(off, _Scratch):
+            self._check(off, n)
         if isinstance(off, _Scratch):
             if off.kind != "o":
                 raise ValueError("x_prep: scratch words never reach the host")
@@ -270,6 +338,7 @@ class _Prog:
 
     def values(self, off, n):
         """Python floats of n arena entries (for integer bookkeeping)."""
+        self._check(off, n)
         return list(self.arena[off:off + n])
 
 
@@ -278,25 +347,19 @@ def _mode():
 
 
 def encode_labels(y):
-    """(classes, int32 codes) under `_labels`' order rule, in Python: the
-    base binding's native encoder is not on the CPU route of this lane."""
-    classes, codes = sorted_classes(flatten_labels(y))
-    return classes, Array.from_list(codes, "<i4")
+    """(classes, int32 codes) under `_labels`' order rule: `_labels.encode_labels`,
+    the native encoder (the base binding, or `_mojolearn_core_host` on a
+    CPU-only install) with `sorted_classes(flatten_labels(y))` as its
+    definition and fallback (lane py-shared; this module used to run the
+    Python routine always)."""
+    return _labels.encode_labels(y)
 
 
 def decode_labels(classes, codes):
     """Codes back to labels: int classes an int64 Array, real classes a
-    float64 Array, anything else a list (`_labels.decode_labels`' contract)."""
-    values = [classes[int(c)] for c in codes.tolist()]
-    kind = label_kind(classes)
-    try:
-        if kind == "int":
-            return Array.from_list([int(v) for v in values], "<i8")
-        if kind == "float":
-            return Array.from_list([float(v) for v in values], "<f8")
-    except (OverflowError, TypeError):
-        pass
-    return values
+    float64 Array, anything else a list: `_labels.decode_labels` (the native
+    gather for int and float classes; lane py-shared)."""
+    return _labels.decode_labels(classes, codes)
 
 
 def _x2d(X, name="X"):
@@ -1115,7 +1178,17 @@ class TargetEncoder(_PrepBase):
         else:
             # each category's rows, ascending (te_bucket): te_enc walks one bucket, not every row
             bstart, brows = pr.alloc(d * (cmax + 1)), pr.alloc(n * d)
-            pr.stage("te_bucket", d, codes, n, d, cmax, bstart, brows)
+            if os.environ.get("MOJOLEARN_XPREP_TE_PBUCKET", "0") == "1":
+                # OPT-IN, never measured (the 19:30Z freeze withdrew its job): the buckets by chunks
+                # in parallel (te_hist .. te_hscatter), te_bucket's START and ROWS by construction
+                ch = max(1, min(256, (n + 4095) // 4096))
+                hh, tot = pr.scratch(d * ch * cmax), pr.scratch(d * cmax)
+                pr.stage("te_hist", d * ch, codes, n, d, cmax, ch, hh)
+                pr.stage("te_hsum", d * cmax, cmax, ch, hh, tot)
+                pr.stage("te_hstart", d, cmax, bstart, tot)
+                pr.stage("te_hscatter", d * ch, codes, n, d, cmax, ch, hh, bstart, brows)
+            else:
+                pr.stage("te_bucket", d, codes, n, d, cmax, bstart, brows)
             if os.environ.get("MOJOLEARN_XPREP_TE_GATHER", "1") != "0":
                 # each bucket's folds and targets in bucket order (te_gather): te_enc streams them
                 gb = pr.scratch(n * d * (1 + T))
@@ -2610,6 +2683,7 @@ class PolynomialFeatures(_PrepBase):
         pr.stage("poly", n * nout, xo, n, d, io, so, nout, out)
         pr.run(self.numeric_mode_)
         if self.order == "F":
+            pr._check(out, n * nout)
             seg = pr.arena[out:out + n * nout]
             store = array.array("f")
             for j in range(nout):
@@ -2620,6 +2694,7 @@ class PolynomialFeatures(_PrepBase):
 
 def _f_order(pr, off, n, w):
     """An (n, w) arena block as a Fortran-ordered Array (the same words)."""
+    pr._check(off, n * w)
     seg = pr.arena[off:off + n * w]
     store = array.array("f")
     for j in range(w):
@@ -3282,7 +3357,7 @@ class IterativeImputer(_PrepBase):
                 v = min(v, 1.0) if v == v else 1e-6
                 m[a][b] = 0.0 if a == b else max(v, 1e-6)
         for b in range(dk):
-            col = sum(m[a][b] for a in range(dk))
+            col = _pm.nsum(m[a][b] for a in range(dk))
             if col > 0:
                 for a in range(dk):
                     m[a][b] /= col
@@ -3296,7 +3371,7 @@ class IterativeImputer(_PrepBase):
         chosen = set()
         for _ in range(int(self.n_nearest_features)):
             left = [a for a in range(dk) if a not in chosen and w[a] > 0]
-            tot = sum(w[a] for a in left)
+            tot = _pm.nsum(w[a] for a in left)
             u = (self._draw() >> 11) * 2.0 ** -53 * tot
             pick, cum = left[-1], 0.0
             for a in left:
@@ -3340,7 +3415,8 @@ class IterativeImputer(_PrepBase):
         nnf = self.n_nearest_features
         corr = self._abs_corr(Xf, n, dk, mode) if nnf is not None and nnf < dk else None
         if self.estimator is not None:
-            return self._with_indicator(arr, self._fit_host(arr, Xf, orders, corr, float(self.tol) * scale))
+            fit = self._fit_native if _ii_native(mode) else self._fit_host
+            return self._with_indicator(arr, fit(arr, Xf, orders, corr, float(self.tol) * scale))
         pr = _Prog()
         fo, mo, bo = self._prepare(pr, arr, Xf)
         tol = pr.put_scalar(float(self.tol) * scale)
@@ -3430,11 +3506,113 @@ class IterativeImputer(_PrepBase):
                 self._impute_host(Xt, mis, j, nbl, est)
             done = r + 1
             if not self.sample_posterior and order and \
-                    max(sum(abs(a - b) for a, b in zip(ra, rb)) for ra, rb in zip(Xt, prev)) < tol:
+                    max(_pm.nsum(abs(a - b) for a, b in zip(ra, rb)) for ra, rb in zip(Xt, prev)) < tol:
                 break
         self.n_iter_ = done if any(orders) else min(1, len(orders))
         self.imputation_sequence_ = seq
         return Array.from_list(Xt, "<f4")
+
+    def _fit_native(self, arr, Xf, orders, corr, tol):
+        """`_fit_host` with the data-sized plumbing in x_prep/user_host.mojo
+        (lane py-misc-prep): the working block is one float32 C array updated
+        in place, the observed / missing rows of feature j and the estimator's
+        inputs are native gathers, the clipped predictions a native scatter,
+        and the round's float64 convergence measure the native twin of the
+        Python expression (CPython `sum` order: Neumaier since 3.12). The
+        estimator sees the same float32 blocks in the same order; its fit and
+        predict are the only Python per feature. `_fit_host` stays the
+        reference (MOJOLEARN_HOTPATH=python, `_II_NATIVE = False`)."""
+        n, d = arr.shape
+        dk = len(self._keep)
+        b = _prep_binding(_mode())
+        mask = self._mask_arr(arr)
+        Xt = as_f32_c(Xf, name="X")[0].copy()
+        obs = array.array("i", bytes(4 * n))
+        mis = array.array("i", bytes(4 * n))
+        # The Python reference sums with `_pm.nsum` (lane py-bugs, DEVIATION
+        # 6901): CPython 3.12+'s compensated order on every interpreter, so
+        # the twin is always the compensated spelling (py-consolidated).
+        comp = 1
+        seq = []
+        done = 0
+        for r, order in enumerate(orders):
+            check = not self.sample_posterior and bool(order)
+            prev = Xt.copy() if check else None
+            for j in order:
+                nbl = self._neighbours(corr, j, dk) if corr is not None else [a for a in range(dk) if a != j]
+                est = _clone(self.estimator)
+                mo = b.x_prep_ii_rows(mask._addr, obs.buffer_info()[0], (n, dk, j, 0))
+                mm = b.x_prep_ii_rows(mask._addr, mis.buffer_info()[0], (n, dk, j, 1))
+                Xo, yo = self._ii_block(b, Xt, obs, mo, nbl, j)
+                est.fit(Xo, yo)
+                seq.append((j, nbl, est))
+                self._impute_native(b, Xt, mis, mm, j, nbl, est)
+            done = r + 1
+            if check and b.x_prep_ii_conv(Xt._addr, prev._addr, (n, dk, comp)) < tol:
+                break
+        self.n_iter_ = done if any(orders) else min(1, len(orders))
+        self.imputation_sequence_ = seq
+        return Xt
+
+    def _ii_block(self, b, Xt, rows, m, nbl, j=-1):
+        """(Xt[rows][:, nbl], Xt[rows, j]) as the float32 Arrays
+        `Array.from_list` built from the same words (a 0-row block is
+        `from_list([])`, a 0-column one its m empty rows, as before)."""
+        dk = Xt.shape[1]
+        if m == 0:
+            return Array.from_list([], "<f4"), (Array.from_list([], "<f4") if j >= 0 else None)
+        nc = len(nbl)
+        if nc == 0:
+            X = Array.from_list([[] for _ in range(m)], "<f4")
+        else:
+            X = Array._owned(array.array("f", bytes(4 * m * nc)), (m, nc), "<f4", "C")
+        y = Array._owned(array.array("f", bytes(4 * m)), (m,), "<f4", "C") if j >= 0 else None
+        cols = array.array("i", nbl or [0])
+        b.x_prep_ii_gather(Xt._addr, rows.buffer_info()[0], cols.buffer_info()[0],
+                           X._addr if nc else y._addr if y is not None else Xt._addr,
+                           y._addr if y is not None else 0, (dk, m, nc, j))
+        return X, y
+
+    def _impute_native(self, b, Xt, rows, m, j, nbl, est):
+        """`_impute_host` on the float32 block: predict on the gathered rows,
+        then the clip (or the truncated normal draw, still Python float64 on
+        the pinned normal cdf / inverse cdf, DEVIATION 6902) and the float32
+        store natively."""
+        if not m:
+            return
+        dk = Xt.shape[1]
+        Xm, _ = self._ii_block(b, Xt, rows, m, nbl)
+        lo, hi = self._bounds_k[2 * j], self._bounds_k[2 * j + 1]
+        if not self.sample_posterior:
+            v = _pred_f64(est.predict(Xm))
+            clip = 1
+        else:
+            mus, sig = est.predict(Xm, return_std=True)
+            v = Array._owned(array.array("d", [self._truncnorm_host(float(a), float(s_), lo, hi)
+                                               for a, s_ in zip(_as_list(mus), _as_list(sig))]),
+                             (m,), "<f8", "C")
+            clip = 0
+        if v.size != m:
+            # the reference's zip would stop early or ignore extras: keep its words
+            vals = v.tolist()
+            vals = vals[:m] if len(vals) > m else vals
+            k = len(vals)
+            if k == 0:
+                return
+            v = Array._owned(array.array("d", vals), (k,), "<f8", "C")
+            m = k
+        b.x_prep_ii_scatter(Xt._addr, rows.buffer_info()[0], addr_ro(v, name="predict"), (dk, m, j, clip),
+                            (float(lo), float(hi)))
+
+    def _mask_arr(self, arr):
+        """`_mask`'s words (1.0 missing, 0.0 observed) as the float32 (n, dk) Array."""
+        n, d = arr.shape
+        pr = _Prog()
+        xo = _mark_missing(pr, pr.put(arr), n * d, self.missing_values)
+        mo = pr.alloc(n * len(self._keep))
+        pr.stage("nan_mask", n * len(self._keep), xo, n, d, pr.put_list(self._keep), len(self._keep), mo)
+        pr.run(_mode())
+        return as_f32_c(pr.get(mo, (n, len(self._keep))), name="mask")[0]
 
     def _mask(self, arr):
         n, d = arr.shape
@@ -3462,23 +3640,25 @@ class IterativeImputer(_PrepBase):
     def _truncnorm_host(self, mu, sigma, lo, hi):
         """`_impute_one_feature`'s rule in Python float64: mu beyond a bound
         -> the bound, sigma <= 0 -> mu, else inversion of the truncated normal
-        at a 53-bit splitmix64 uniform (statistics.NormalDist)."""
+        at a 53-bit splitmix64 uniform. DEVIATION 6902: statistics.NormalDist's
+        cdf and inv_cdf formulas on the pinned erfc / log (`_pm.normal_cdf`,
+        `_pm.normal_inv_cdf`); NormalDist itself calls the platform erfc and
+        a C accelerator a compiler may contract, so its bits vary by host."""
         if mu < lo:
             return lo
         if mu > hi:
             return hi
         if not sigma > 0:
             return mu
-        nd = statistics.NormalDist()
-        pa = 0.0 if lo == -math.inf else nd.cdf((lo - mu) / sigma)
-        pb = 1.0 if hi == math.inf else nd.cdf((hi - mu) / sigma)
+        pa = 0.0 if lo == -math.inf else _pm.normal_cdf((lo - mu) / sigma)
+        pb = 1.0 if hi == math.inf else _pm.normal_cdf((hi - mu) / sigma)
         u = ((self._draw() >> 11) + 0.5) * 2.0 ** -53
         pu = pa + u * (pb - pa)
         if pu <= 0:
             return lo
         if pu >= 1:
             return hi
-        return min(max(mu + sigma * nd.inv_cdf(pu), lo), hi)
+        return min(max(mu + sigma * _pm.normal_inv_cdf(pu), lo), hi)
 
     def fit(self, X, y=None):
         self.fit_transform(X)
@@ -3492,6 +3672,15 @@ class IterativeImputer(_PrepBase):
         n, d = arr.shape
         dk = len(self._keep)
         Xf = self.initial_imputer_.transform(arr)
+        if self.estimator is not None and _ii_native(self.numeric_mode_):
+            b = _prep_binding(self.numeric_mode_)
+            mask = self._mask_arr(arr)
+            Xt = as_f32_c(Xf, name="X")[0].copy()
+            rows = array.array("i", bytes(4 * n))
+            for j, nbl, est in self.imputation_sequence_:
+                m = b.x_prep_ii_rows(mask._addr, rows.buffer_info()[0], (n, dk, j, 1))
+                self._impute_native(b, Xt, rows, m, j, nbl, est)
+            return self._with_indicator(arr, Xt)
         if self.estimator is not None:
             mask = self._mask(arr)
             Xt = [list(r) for r in Xf.tolist()]
@@ -3524,6 +3713,35 @@ def _clone(est):
 
 def _as_list(v):
     return [float(x) for x in (v.tolist() if hasattr(v, "tolist") else v)]
+
+
+#: lane py-misc-prep: IterativeImputer(estimator=...) runs its plumbing in
+#: x_prep/user_host.mojo; False (or MOJOLEARN_HOTPATH=python) is the Python
+#: reference route, kept for the before/after arms.
+_II_NATIVE = True
+
+
+def _ii_native(mode):
+    from ._buffer import hotpath_enabled
+    if not (_II_NATIVE and hotpath_enabled()):
+        return False
+    try:
+        return hasattr(_prep_binding(mode), "x_prep_ii_conv")
+    except Exception:
+        return False
+
+
+def _pred_f64(v):
+    """A user estimator's predictions as a float64 Array holding the values
+    `_as_list` reads (`float(x)` per element): a float32 or float64 vector
+    widened natively (exact), anything else through `_as_list`."""
+    from ._buffer import _materialize, _has_buffer, as_f64_c
+    if isinstance(v, Array) or (not isinstance(v, (list, tuple)) and _has_buffer(v)):
+        a, _ = _materialize(v, "predict")
+        if a.ndim == 1 and a.dtype in ("<f4", "<f8") and a.size:
+            return as_f64_c(a, ndim=1, name="predict")[0]
+    vals = _as_list(v)
+    return Array._owned(array.array("d", vals), (len(vals),), "<f8", "C")
 
 
 # ---------------------------------------------------------------- feature selection

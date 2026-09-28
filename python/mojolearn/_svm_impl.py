@@ -57,7 +57,7 @@ from . import _backend
 from . import _serialize
 from ._array import Array
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_f32_dense_c, empty, zeros
-from ._labels import argmax_rows, classes_from_member, classes_member, decode_labels, sorted_classes
+from ._labels import argmax_rows, classes_from_member, classes_member, decode_labels, encode_labels, sorted_classes
 from ._mode import NumericModeMixin
 from ._scale_gamma import scale_gamma
 from .linear_model import (
@@ -182,7 +182,9 @@ def _as_labels(y):
             "NaN or inf cannot be fitted; a computed NaN carries a "
             "vendor-specific payload and cannot sit in a hashed stage)"
         )
-    classes, _codes = sorted_classes(labels)
+    # lane py-shared: the native encoder (`sorted_classes` is its definition)
+    classes, _codes = encode_labels(labels)
+    _codes = _codes.tolist()
     if len(classes) < 2:
         raise ValueError(
             f"mojolearn SVC: y has {len(classes)} class; at least two are needed"
@@ -236,7 +238,8 @@ def _c_rows(C, n_rows, sample_weight, class_weight=None, y=None, who="SVC"):
                 )
     if class_weight is not None:
         labels, _shape = _labels_1d(y)
-        classes, codes = sorted_classes(labels)
+        classes, codes = encode_labels(labels)
+        codes = codes.tolist()
         if isinstance(class_weight, str):
             if class_weight != "balanced":
                 raise ValueError(
@@ -335,6 +338,43 @@ def _splitmix_perm(n, seed):
     return perm
 
 
+#: `svm/host/svc_proba.mojo::pair_epilogue` modes (lane/py-dn-svm, 2026-09-28)
+_EPI_OVO, _EPI_OVR, _EPI_VOTES, _EPI_PROBA, _EPI_LOG_PROBA, _EPI_BINARY = range(6)
+
+
+def _native_perm(binding, n, seed):
+    """`_splitmix_perm(n, seed)` in Mojo (`svc_splitmix_perm`): the same
+    integers, an int32 `array.array`."""
+    out = array.array("i", bytes(4 * n))
+    seed &= 0xFFFFFFFFFFFFFFFF
+    if n:
+        binding.svc_splitmix_perm(out.buffer_info()[0], n, seed & 0xFFFFFFFF, seed >> 32)
+    return out
+
+
+def _native_sigmoid_train(binding, dec, labels):
+    """`_sigmoid_train(dec, labels)` in Mojo (`svc_platt_train`): the same
+    binary64 operations in the same order, the same `(A, B)` bits."""
+    d = array.array("d", dec)
+    lab = array.array("d", labels)
+    if len(d) != len(lab):
+        raise ValueError("decision values and labels differ in length")
+    ab = array.array("d", [0.0, 0.0])
+    binding.svc_platt_train(d.buffer_info()[0] if len(d) else 0,
+                            lab.buffer_info()[0] if len(lab) else 0, ab.buffer_info()[0], len(d))
+    return ab[0], ab[1]
+
+
+# THE PYTHON REFERENCE (lane/py-dn-svm, 2026-09-28). `_splitmix_perm`,
+# `_platt_fval`, `_sigmoid_train`, `_sigmoid_predict` and
+# `_multiclass_probability` below are no longer called by SVC: the
+# estimator runs their Mojo transcription (svm/host/svc_proba.mojo) through
+# the svm bindings. They stay as the reference that transcription is held to
+# bit for bit, and as the libsvm reading the tests exercise.
+# DEVIATION 6903 (IDENTITY_PATHS row 253, lane py-bugs): Platt scaling and the
+# pairwise coupling are binary64 arithmetic in libsvm's loop order with no FMA
+# on the pinned exp / log (`_portable_math` here, `pm_exp` / `pm_log` in the
+# Mojo transcription, lane py-dn-svm).
 def _platt_fval(dec, t, a, b):
     f = 0.0
     for d, ti in zip(dec, t):
@@ -937,6 +977,7 @@ class SVC(NumericModeMixin):
         cb = None if c_rows is None else c_rows.tolist()
         seed = 0 if self.random_state is None else int(self.random_state)
         precomputed = self.kernel == "precomputed"
+        native = self._bind(_EXT_NAME)
         ab = []
         pair_no = 0
         for ci in range(k):
@@ -944,7 +985,7 @@ class SVC(NumericModeMixin):
                 idx = [r for r in range(len(codes)) if codes[r] == ci or codes[r] == cj]
                 n = len(idx)
                 labels = [1.0 if codes[r] == ci else -1.0 for r in idx]
-                perm = _splitmix_perm(n, seed ^ ((pair_no * 0x9E3779B97F4A7C15) & 0xFFFFFFFFFFFFFFFF))
+                perm = _native_perm(native, n, seed ^ ((pair_no * 0x9E3779B97F4A7C15) & 0xFFFFFFFFFFFFFFFF))
                 dec = [0.0] * n
                 for f in range(5):
                     begin = f * n // 5
@@ -975,7 +1016,7 @@ class SVC(NumericModeMixin):
                     for pos, m in enumerate(held):
                         # libsvm's orientation: positive toward class i (+1)
                         dec[m] = -float(d[pos])
-                a, b = _sigmoid_train(dec, labels)
+                a, b = _native_sigmoid_train(native, dec, labels)
                 ab.append((a, b))
                 pair_no += 1
         self._prob_ab = ab
@@ -1124,9 +1165,13 @@ class SVC(NumericModeMixin):
             )
         return q
 
-    def _machine(self, q, dual, sv, n_support, b, label0, label1, predict_class, support=None):
+    def _machine(self, q, dual, sv, n_support, b, label0, label1, predict_class, support=None,
+                 out_addr=None):
+        """One machine's decisions (or labels) on q: a new float32 (n,)
+        Array, or written at `out_addr` (n float32 the caller owns; returns
+        None)."""
         n_rows = q.shape[0]
-        out = empty((n_rows,), "<f4")
+        out = empty((n_rows,), "<f4") if out_addr is None else None
         n_features = self.n_features_in_
         if self.kernel == "precomputed" and n_support > 0:
             # X is the cross-kernel against the TRAINING rows; the decision
@@ -1140,7 +1185,7 @@ class SVC(NumericModeMixin):
             addr_ro(q, name="q"),
             addr_ro(dual, name="dual") if n_support > 0 else 0,
             addr_ro(sv, name="sv") if n_support > 0 else 0,
-            addr(out, name="out"),
+            addr(out, name="out") if out_addr is None else out_addr,
             # ORDER MATCHES bindings/_mojolearn_svm.mojo::svc_predict_binding.
             # n_rows, n_features, n_support, b, classes[0], classes[1],
             # kernel, gamma, predict_class, cache_size_mib, degree, coef0
@@ -1160,16 +1205,48 @@ class SVC(NumericModeMixin):
 
     def _pair_decisions(self, X):
         """Each pair machine's raw decision on X (this solver's
-        orientation: >= 0 toward class j), as lists of float32 values."""
+        orientation: >= 0 toward class j), written by the machines straight
+        into ONE float32 (n_pairs, n) Array, pair-major (lane/py-dn-svm,
+        2026-09-28; before, a Python list per pair)."""
         q = self._query(X)
-        return [self._machine(q, p["dual"], p["sv"], p["dual"].shape[1], p["b"],
-                              0.0, 1.0, False, p["support"]).tolist() for p in self._pairs]
+        n_rows = q.shape[0]
+        dec = empty((len(self._pairs), n_rows), "<f4")
+        base = addr(dec, name="decisions")
+        for pno, p in enumerate(self._pairs):
+            self._machine(q, p["dual"], p["sv"], p["dual"].shape[1], p["b"],
+                          0.0, 1.0, False, p["support"], out_addr=base + 4 * n_rows * pno)
+        return dec
+
+    def _epilogue(self, mode, dec, pairs, out_shape, out_dtype, ab=None, label1=0.0):
+        """The per-row epilogues in Mojo (`svc_pair_epilogue`,
+        svm/host/svc_proba.mojo): `dec` is the (n_pairs, n) float32
+        decisions, `pairs` the (i, j) class codes in pair order, `ab` the
+        per-pair (A, B). Same binary64 operations in the same order as the
+        Python they replaced (`_ovr_scores`, the vote loop,
+        `_sigmoid_predict`, `_multiclass_probability`), so the same bits."""
+        n_pairs, n_rows = dec.shape
+        out = empty(out_shape, out_dtype)
+        if n_rows:
+            pi = array.array("i", [v for pair in pairs for v in pair])
+            abuf = array.array("d", [v for pair in ab for v in pair]) if ab is not None else None
+            self._bind(_EXT_NAME).svc_pair_epilogue(
+                addr_ro(dec, name="decisions"),
+                pi.buffer_info()[0] if len(pi) else 0,
+                abuf.buffer_info()[0] if abuf is not None and len(abuf) else 0,
+                addr(out, name="out"),
+                [mode, n_rows, n_pairs, len(self.classes_), float(label1)])
+        return out
+
+    def _pair_codes(self):
+        return [(p["i"], p["j"]) for p in self._pairs]
 
     def _ovr_scores(self, decisions, n_rows):
-        """scikit-learn's `_ovr_decision_function(dec < 0, -dec, K)` on the
-        one-vs-one decisions `dec` (= -d here): votes plus the summed
-        confidences squashed into (-1/3, 1/3), in binary64, accumulated in
-        pair order. Pure host arithmetic in one written order."""
+        """REFERENCE ONLY since lane/py-dn-svm (the estimator calls
+        `_epilogue(_EPI_OVR, ...)`): scikit-learn's
+        `_ovr_decision_function(dec < 0, -dec, K)` on the one-vs-one
+        decisions `dec` (= -d here), `decisions` a list of per-pair lists:
+        votes plus the summed confidences squashed into (-1/3, 1/3), in
+        binary64, accumulated in pair order."""
         k = len(self.classes_)
         out = []
         for r in range(n_rows):
@@ -1195,12 +1272,11 @@ class SVC(NumericModeMixin):
         float64, scikit-learn's vote-plus-confidence transform of those."""
         if self.__dict__.get("_pairs") is None:
             return self._run(X, False)
-        decisions = self._pair_decisions(X)
-        n_rows = len(decisions[0])
+        dec = self._pair_decisions(X)
+        n_pairs, n_rows = dec.shape
         if self.decision_function_shape == "ovo":
-            return Array.from_list(
-                [[-d[r] for d in decisions] for r in range(n_rows)], "<f4")
-        return Array.from_list(self._ovr_scores(decisions, n_rows), "<f8")
+            return self._epilogue(_EPI_OVO, dec, self._pair_codes(), (n_rows, n_pairs), "<f4")
+        return self._epilogue(_EPI_OVR, dec, self._pair_codes(), (n_rows, len(self.classes_)), "<f8")
 
     def predict(self, X):
         """Binary: cuML's `applyPrediction` epilogue, ON THE DEVICE: the
@@ -1214,26 +1290,18 @@ class SVC(NumericModeMixin):
         pairs = self.__dict__.get("_pairs")
         if pairs is None:
             raw = self._run(X, True)
-            label1 = self._label1
-            return decode_labels(self.classes_,
-                                 [1 if v == label1 else 0 for v in raw.tolist()])
-        decisions = self._pair_decisions(X)
-        n_rows = len(decisions[0])
-        if self.break_ties:
-            return decode_labels(self.classes_,
-                                 argmax_rows(Array.from_list(self._ovr_scores(decisions, n_rows), "<f8")))
+            n_rows = raw.shape[0]
+            codes = self._epilogue(_EPI_BINARY, raw.reshape((1, n_rows)), [(0, 1)], (n_rows,), "<i8",
+                                   label1=self._label1)
+            return decode_labels(self.classes_, codes)
+        dec = self._pair_decisions(X)
+        n_rows = dec.shape[1]
         k = len(self.classes_)
-        codes = []
-        for r in range(n_rows):
-            votes = [0] * k
-            for p, d in zip(pairs, decisions):
-                votes[p["j"] if d[r] >= 0.0 else p["i"]] += 1
-            best = 0
-            for c in range(1, k):
-                if votes[c] > votes[best]:
-                    best = c
-            codes.append(best)
-        return decode_labels(self.classes_, codes)
+        if self.break_ties:
+            return decode_labels(self.classes_, argmax_rows(
+                self._epilogue(_EPI_OVR, dec, self._pair_codes(), (n_rows, k), "<f8")))
+        return decode_labels(self.classes_,
+                             self._epilogue(_EPI_VOTES, dec, self._pair_codes(), (n_rows,), "<i8"))
 
     def predict_proba(self, X):
         """libsvm's `svm_predict_probability`: each pair's decision through
@@ -1247,29 +1315,30 @@ class SVC(NumericModeMixin):
                 "mojolearn SVC: predict_proba is not available when "
                 "probability=False (scikit-learn's rule); fit with probability=True"
             )
+        return self._proba(X, ab, _EPI_PROBA)
+
+    def _proba(self, X, ab, mode):
         k = len(self.classes_)
         if self.__dict__.get("_pairs") is None:
-            decisions = [self._run(X, False).tolist()]
+            raw = self._run(X, False)
+            dec = raw.reshape((1, raw.shape[0]))
             pairs = [(0, 1)]
         else:
-            decisions = self._pair_decisions(X)
-            pairs = [(p["i"], p["j"]) for p in self._pairs]
-        n_rows = len(decisions[0])
-        out = []
-        for r in range(n_rows):
-            m = [[0.0] * k for _ in range(k)]
-            for (i, j), d, (a, b) in zip(pairs, decisions, ab):
-                v = _sigmoid_predict(-float(d[r]), a, b)
-                v = min(max(v, 1e-7), 1.0 - 1e-7)
-                m[i][j] = v
-                m[j][i] = 1.0 - v
-            out.append([m[0][1], m[1][0]] if k == 2 else _multiclass_probability(k, m))
-        return Array.from_list(out, "<f8")
+            dec = self._pair_decisions(X)
+            pairs = self._pair_codes()
+        return self._epilogue(mode, dec, pairs, (dec.shape[1], k), "<f8", ab=ab)
 
     def predict_log_proba(self, X):
-        """`log(predict_proba(X))`, the portable binary64 log."""
-        return Array.from_list(
-            [[math.log(v) for v in row] for row in self.predict_proba(X).tolist()], "<f8")
+        """`log(predict_proba(X))` with the portable binary64 log (its Mojo
+        twin, `pm_log`, in the same epilogue call); a probability <= 0
+        raises as `_portable_math.log` does."""
+        ab = self.__dict__.get("_prob_ab")
+        if ab is None:
+            raise AttributeError(
+                "mojolearn SVC: predict_proba is not available when "
+                "probability=False (scikit-learn's rule); fit with probability=True"
+            )
+        return self._proba(X, ab, _EPI_LOG_PROBA)
 
     def score(self, X, y):
         """Accuracy, a Python count over O(rows) labels (DEVIATION 2365)."""

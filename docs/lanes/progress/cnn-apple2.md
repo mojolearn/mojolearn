@@ -74,6 +74,10 @@ arrays, the gradient arrays included).
 11. d6e3cbd4a merge of origin/lane/apple-merged (no file in common).
 12. 209bdc3b4 GCNConv/SAGEConv reuse the graph built for the same content
    key (n, edge_index bytes, edge_weight bytes, flags); DC_MAXW 2048.
+14. 93e40eaf2 Dropout2d and SpMM entries on the cached workspace slots.
+15. 770c1be66 / 2846f96a6 BatchNorm fold form measured once per shape per
+   process (`_bn_use_block`: element or threadgroup, both the same words),
+   the threadgroup fold reading eight staged words ahead.
 13. df6386e7d BatchNorm per-channel folds through threadgroup memory (one
    threadgroup per channel; thread 0 folds in the same order;
    `-D MOJOLEARN_XCNN_NO_BN_BLOCK`). The mean's image order now reads
@@ -292,12 +296,106 @@ Median of two rounds, ms.
 Bits: IDENTICAL 9 digest lines equal in all 4 runs; FAST 9 digest lines
 equal in all 4 runs and 20/20 fastq.py rows equal.
 
-## Unproven
+### m4-a (Apple M4), job 1790618938662, commit 93e40eaf2 (a quiet box: floor 0.18-0.22 ms)
 
-- The regenerated seam 5702 sabotage patch: applies, not yet run.
+base = round 1's code (every define + legacy); all = default. Median of
+two rounds, ms.
+
+| shape | IDENTICAL base | IDENTICAL all | FAST base | FAST all |
+|---|---|---|---|---|
+| Conv2d 3->64 fwd / bwd | 31.1 / 20.9 | 29.9 / 12.2 | 28.3 / 30.1 | 27.2 / 11.1 |
+| Conv2d 64->64 fwd / bwd | 70.3 / 154.2 | 51.5 / 109.1 | 81.8 / 178.2 | 48.0 / 95.3 |
+| Conv2d 64->128 fwd / bwd | 27.8 / 53.4 | 23.5 / 48.7 | 32.9 / 72.0 | 21.4 / 45.5 |
+| CNNClassifier fit 2048 | 359.8 | 223.8 (1.6x) | 360.2 | 190.4 (1.9x) |
+| CNNClassifier fit 8192 | 1393.0 | 885.4 (1.6x) | 1391.4 | 756.5 (1.8x) |
+| predict_proba 2048 | 163.9 | 79.1 (2.1x) | 164.5 | 63.4 (2.6x) |
+| predict_proba 8192 | 555.1 | 300.2 (1.8x) | 539.2 | 228.2 (2.4x) |
+| BasicBlock fwd / fwd+bwd | 107.5 / 248.5 | 103.7 / 226.9 | 106.0 / 265.8 | 95.7 / 200.1 |
+| BatchNorm2d fwd / bwd | 23.9 / 17.1 | 24.8 / 20.8 (SLOWER) | 20.1 / 15.2 | 22.0 / 16.9 (SLOWER) |
+| MaxPool2d fwd / bwd | 14.1 / 28.4 | 13.8 / 25.1 | 13.8 / 29.0 | 13.8 / 25.0 |
+| GCNConv fwd / bwd | 471.0 / 41.9 | 49.7 / 35.6 | 476.1 / 36.0 | 49.4 / 34.8 |
+| SAGEConv fwd / bwd | 454.6 / 70.7 | 61.7 / 59.0 | 451.5 / 61.8 | 59.9 / 58.0 |
+
+Bits: IDENTICAL 9 digest lines equal in all 4 runs; FAST 9 digest lines
+equal in all 4 runs and 20/20 fastq.py rows equal.
+The BatchNorm threadgroup folds are SLOWER on the 10-core M4 (and faster
+on the M4 Pro and M3 Ultra): 770c1be66 reads eight staged words ahead of
+the dependent adds; job 1790619765191 (m4-a) times it against
+`-D MOJOLEARN_XCNN_NO_BN_BLOCK`.
+
+### m4-a (Apple M4), job 1790619765191, commit 2846f96a6: the BatchNorm fold form
+
+noblock = `-D MOJOLEARN_XCNN_NO_BN_BLOCK` (the element kernel); all =
+default (the form measured per shape, the threadgroup fold reading ahead).
+| shape | IDENTICAL noblock | IDENTICAL all | FAST noblock | FAST all |
+|---|---|---|---|---|
+| BatchNorm2d fwd / bwd | 21.9 / 16.9 | 13.0 / 13.3 | 19.7 / 15.2 | 10.1 / 9.6 |
+| BasicBlock fwd / fwd+bwd | 95.8 / 209.4 | 74.5 / 179.8 | 87.2 / 190.6 | 66.7 / 158.1 |
+| CNNClassifier fit 2048 / predict 2048 | 226.1 / 81.3 | 223.8 / 79.8 | | |
+Every digest line (BatchNorm2d's and BasicBlock's included) equal in all
+runs of both arms, both tiers. The M4 regression of 93e40eaf2 is gone.
+
+## FINAL (2026-09-28 ~18:50Z, orchestrator freeze)
+
+State: lane/cnn-apple2 pushed; not merged anywhere. Every default-on change
+below has an A/B on at least one Mac in the SAME job with equal digests
+(IDENTICAL) or equal digests and equal fastq.py rows (FAST); the last
+withdrawn request (1790620298764, m3ultra-b) never ran.
+
+Before/after, "before" = round 1's code (every lane/cnn-apple2 define on
+the before side + the Python legacy arm), "after" = the branch default,
+same Mac, same job, median of two interleaved rounds, ms:
+
+| Mac (job, commit) | tier | fit 2048 | fit 8192 | predict 2048 | predict 8192 | Conv2d 64->64 fwd / bwd | BasicBlock fwd+bwd | BatchNorm2d fwd / bwd | GCNConv fwd |
+|---|---|---|---|---|---|---|---|---|---|
+| M3 Ultra (1790615497573, 2144a9548) | IDENTICAL | 148.2 -> 74.5 | 545.6 -> 294.9 | 58.4 -> 23.2 | 206.5 -> 72.0 | 39.3 / 73.0 -> 34.2 / 44.8 | 174.8 -> 131.3 | 21.9 / 17.1 -> 14.4 / 11.0 | 520.7 -> 49.0 |
+| M3 Ultra | FAST | 127.2 -> 68.3 | 461.2 -> 267.1 | 54.0 -> 20.5 | 212.0 -> 58.5 | 41.2 / 60.0 -> 33.3 / 42.5 | 160.9 -> 120.8 | 20.6 / 15.2 -> 12.4 / 9.4 | 533.0 -> 48.6 |
+| M4 Pro (1790614006220, 2144a9548) | IDENTICAL | 225.9 -> 125.1 | 855.5 -> 494.4 | 105.1 -> 43.9 | 350.1 -> 157.9 | 51.7 / 102.0 -> 40.6 / 66.9 | 197.2 -> 152.9 | 22.9 / 16.4 -> 16.1 / 12.9 | 499.9 -> 50.2 |
+| M4 Pro | FAST | 215.1 -> 108.1 | 821.0 -> 427.6 | 101.2 -> 34.8 | 340.5 -> 121.8 | 57.7 / 107.1 -> 38.5 / 60.5 | 198.8 -> 138.8 | 19.3 / 15.3 -> 14.1 / 10.9 | 490.0 -> 49.6 |
+| M4 (1790618938662, 93e40eaf2) | IDENTICAL | 359.8 -> 223.8 | 1393.0 -> 885.4 | 163.9 -> 79.1 | 555.1 -> 300.2 | 70.3 / 154.2 -> 51.5 / 109.1 | 248.5 -> 226.9 | see below | 471.0 -> 49.7 |
+| M4 | FAST | 360.2 -> 190.4 | 1391.4 -> 756.5 | 164.5 -> 63.4 | 539.2 -> 228.2 | 81.8 / 178.2 -> 48.0 / 95.3 | 265.8 -> 200.1 | see below | 476.1 -> 49.4 |
+| M4 (1790619765191, 2846f96a6; BN form only) | IDENTICAL / FAST | | | | | | 209.4 -> 179.8 / 190.6 -> 158.1 | 21.9 / 16.9 -> 13.0 / 13.3 ; 19.7 / 15.2 -> 10.1 / 9.6 | |
+
+Where the time went (M3 Ultra stages, per trainer step): block 2's weight
+gradient 4.59 -> 0.88 ms (APPLE_MMA over leaf groups; 64x576x262144 26.6 ->
+4.25 ms), block 1's forward 1.66 -> 0.98 (the direct one-leaf convolution),
+im2col 0.89 -> 0.30, the layout changes tiled, the trainer's per-parameter
+waits and allocations folded (calls per fit 252 -> 204, res_alloc 15 -> 4
+ms), predict without gradient arrays in 2048-row passes, BatchNorm's folds
+staged through threadgroup memory, and the GCN/SAGE host CSR (two
+lexsorts) replaced by stable argsorts and reused for the same edges.
+
+Default on: items 1-12, 13 (measured form), 14 (SpMM only), 15.
+Opt-in only: the tiled pooled-backward rows (`-D MOJOLEARN_XCNN_TILED_ROWS`,
+measured slower). Reverted at the freeze: the Dropout2d workspace-slot
+change (never exercised by a digest); the host twin's (CPU) list-form
+optimizer and paired gather are no longer called: Python uses them on the
+GPU binding only (vendor != cpu), the CPU twin keeps the per-parameter calls.
+
+## Unproven (the consolidated run must cover)
+
+- CPU column: nothing here ran on the CPU twin. Shared x_cnn/ops.mojo
+  changes reach it: `conv_out_val` / `pool_relu_row_val` (refactors),
+  `im2col_taps_at` (unused on CPU), the max pool backward's one-window
+  step (4afd3f1ec), `bn_mean_row`; the host twin's list forms compile but
+  are not called. Python's chunked predict, the graph reuse and the CSR
+  argsort run on the CPU path too (measured on GPU only).
+- The regenerated sabotage patch x_cnn/checks/sabotage/seam_5702_bn_fold_order.patch
+  (applies; not run). All 23 patches `git apply --check` clean at the freeze.
+- NVIDIA / AMD: the shared GEMM file (below) and every x_cnn change except
+  the Apple-gated ones (direct conv, APPLE_MMA plans, the Apple tuners) were
+  never built or run on those columns in this lane.
+- 2846f96a6 (BatchNorm form measured per shape, eight-word read-ahead):
+  timed on the M4 only; the M4 Pro and M3 Ultra ran the unconditional
+  threadgroup form (faster there), with equal digests.
+- 93e40eaf2's SpMM workspace slots: M4 only (GCN/SAGE digests equal).
+- No m2pro run (not allowed): the M2's dispatch limit (db5d6fb01) was not
+  checked against the new kernels (all launch 128 or 256 threads per group).
 
 ## Shared code touched (the integration run must cover)
 
+- gemm/checks/gemm_rtf_boundary_check.mojo: runs PLAN_APPLE_MMA_SPLIT,
+  PLAN_APPLE_MMA_SPLIT_BIG and the one-leaf APPLE_MMA where they apply.
 - gemm/checks/gemm_identical.mojo: PLAN_APPLE_MMA_SPLIT (21), the GROUPED
   APPLE_MMA kernel (one extra Int32 argument on the shipped APPLE_MMA
   launches), APPLE_MMA_FAST (`apple_mma_applies` answers in FAST on Apple;
