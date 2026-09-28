@@ -286,8 +286,10 @@ class _M:
 
 _M._one = _M(array.array("f", [0.0]), 1, 1)
 _DEV_ONE = {}
-#: the fewest values for which a host-only kit call goes resident (_Kit._use)
-_RES_MIN = 1 << 14
+#: the fewest values for which a host-only kit call goes resident (_Kit._use);
+#: MOJOLEARN_XD_RES_MIN overrides it (timing only: the bits are the same)
+import os as _os
+_RES_MIN = int(_os.environ.get("MOJOLEARN_XD_RES_MIN", str(1 << 14)))
 
 
 def _dev_one(kit):
