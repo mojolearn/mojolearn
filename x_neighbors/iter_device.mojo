@@ -47,10 +47,11 @@ def op_lp_iterate(
     """variant 0 propagation (lp_clamp), 1 spreading (ls_clamp). `ld` in:
     the initial label distributions, out: the last. info (int32 x 2): the
     fit's n_iter_ and converged."""
+    # Imports must be at function scope, even when their use is opt-in.
+    from x_neighbors.lp_batched import op_lp_iterate_batched
+
     var tol = bitcast[DType.float64]((UInt64(tol_hi) << UInt64(32)) | UInt64(tol_lo))
     comptime if is_defined["MOJOLEARN_XN_LP_BATCH"]() and not is_defined["MOJOLEARN_XN_LP_DEVICE_FOLD"]():
-        from x_neighbors.lp_batched import op_lp_iterate_batched
-
         if n * c > 0 and max_iter > 0:
             op_lp_iterate_batched(g, ld, ystatic, unlabeled, info, n, c, max_iter, variant, tol, alpha)
             return
@@ -390,6 +391,9 @@ def op_pcs_resident(
     one sketch per (row, degree), then per degree p >= 1 one thread per
     output cell folding the convolution in the same ascending order, the
     running product ping-ponging on the device."""
+    # The loop keeps its compile-time guard; only import placement changes.
+    from x_neighbors.pcs_sparse import PCS_SPARSE_MAX_NC, pcs_conv_row_sparse_kernel
+
     var ctx = xn_ctx()
     var d_x = _buf(ctx, x, n * d_in, True)
     var d_hi = _buf_i(ctx, hidx, degree * nf, True)
@@ -417,8 +421,6 @@ def op_pcs_resident(
             row_kernel = False
         var sparse_kernel = False
         comptime if PCS_SPARSE:
-            from x_neighbors.pcs_sparse import PCS_SPARSE_MAX_NC, pcs_conv_row_sparse_kernel
-
             sparse_kernel = row_kernel and nc <= PCS_SPARSE_MAX_NC
             if sparse_kernel:
                 ctx.enqueue_function[pcs_conv_row_sparse_kernel](
