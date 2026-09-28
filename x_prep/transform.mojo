@@ -413,7 +413,6 @@ def pt_fold_unit(t: Int, f: FP, q: IP):
     var S = p(q, 6) + c * PT_STATE
     if raw(f, S + 7) != Float32(0):
         return
-    var lam = raw(f, p(q, 7) + c)
     var first = K == 0
     var cnt = 0
     var sm = Float32(0)
@@ -430,10 +429,9 @@ def pt_fold_unit(t: Int, f: FP, q: IP):
         _pt_take1(ld(f, X + i * d + c), raw(f, T + i * d + c), method, first, cnt, sm, sj)
     if first:
         f.unsafe_store(S + 8, sj)
-    var val = Float32(0)
+    var ss = Float32(0)
     if cnt > 0:
         var mean = div(sm, Float32(cnt))
-        var ss = Float32(0)
         for i0 in range(0, full, RUN):
             var bx = run_block[RUN](f, X + i0 * d + c, d)
             var bt = run_block[RUN](f, T + i0 * d + c, d)
@@ -441,6 +439,19 @@ def pt_fold_unit(t: Int, f: FP, q: IP):
                 _pt_take2(ftz(bx[u]), bt[u], mean, ss)
         for i in range(full, n):
             _pt_take2(ld(f, X + i * d + c), raw(f, T + i * d + c), mean, ss)
+    pt_finish(t, f, q, cnt, sj, ss)
+
+
+def pt_finish(t: Int, f: FP, q: IP, cnt: Int, sj: Float32, ss: Float32):
+    """pt_fold's end for column t, from its folded row count, sum J and
+    squared deviations: the negative log-likelihood of evaluation K, then the
+    golden-section step (also the FAST device fold's end, x_prep/fastred.mojo)."""
+    var K = p(q, 5)
+    var c = t
+    var S = p(q, 6) + c * PT_STATE
+    var lam = raw(f, p(q, 7) + c)
+    var val = Float32(0)
+    if cnt > 0:
         var var_ = div(ss, Float32(cnt))
         val = sub(mul(mul(Float32(0.5), Float32(cnt)), logf(var_)), mul(sub(lam, Float32(1)), sj))
     var a = raw(f, S + 0)
