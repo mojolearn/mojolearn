@@ -328,11 +328,18 @@ def _warp_row_folds[K: Int, NORMS: Bool, SQ: Bool](
     # chain. A slot j >= d computes and is not taken (an integer select, so
     # the chain is the same fmad sequence over j < d, ascending).
     comptime for kk in range(K):
+        # every fetch of this chunk first, then the chains (lane/linear-apple2):
+        # an in-order core must not meet a fetch behind a chain step
+        var xs = InlineArray[Float32, W](fill=Float32(0))
+        var ws = InlineArray[Float32, W](fill=Float32(0))
+        comptime for l in range(W):
+            xs[l] = shuffle_idx(xr[kk], UInt32(l))
+            ws[l] = shuffle_idx(wr[kk], UInt32(l))
         comptime for l in range(W):
             comptime j = kk * W + l
             var live = j < d
-            var xj = shuffle_idx(xr[kk], UInt32(l))
-            var wj = shuffle_idx(wr[kk], UInt32(l))
+            var xj = xs[l]
+            var wj = ws[l]
             var a2 = _fmad_flushed(xj, wj, acc)
             acc = a2 if live else acc
             comptime if NORMS:
