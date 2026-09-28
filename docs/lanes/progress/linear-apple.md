@@ -42,3 +42,44 @@ ascending loop, so bits do not move), which is owed its gates there (see
 docs/lanes/progress/linear.md, "Speed phase"). This lane does not duplicate
 it: it times that branch on Metal (below) so the linear lane has the Apple
 column.
+
+Andrew 2026-09-28: lane/merged (which now holds lane/algos-linear's team
+fits) merged into this branch at 8a38e574d; this lane runs no verification
+(no identity requests, no sabotage runs), only speed measurements with
+digest comparison. The x_linear board is re-timed at lane/merged (the team
+fits) against the table above.
+
+## Step 2: IDENTICAL speed, the QN solver (LogisticRegression, LinearSVC, LinearSVR, QNRegressor)
+
+Where Apple is slow: every L-BFGS iteration brought device scalars home one
+at a time. Per iteration on main: the line search's dg_init (1), per line
+search step the regularizer and the loss (2), the gradient norm (1), and
+lbfgs_search_dir's ys, yy and one dot per history pair in each of the two
+loops (2 + 2 * min(m, n_vec), m = 5: up to 12). About 17 synchronizes per
+iteration; a Metal synchronize with pending work costs ~4 ms on the M4.
+
+Changes (glm/impl/qn only, no moves):
+- a45361dbc: `GLMWithData.evaluate` puts the loss, the regularizer, the
+  gradient norm (speculatively, for the `g` it leaves) and the OWL-QN l1
+  term in four slot words read behind ONE synchronize; `grad_norm` returns
+  the stored value for that `g`. `update_pseudo` / `project_direction` lose
+  a synchronize that read nothing. The two-loop recursion is one launch.
+- 10eab0721: the whole search direction (ys, yy, the skip test, ys / yy,
+  both loops) is one launch with no synchronize; its verdict rides home with
+  the line search's dg_init read.
+- Bits: every stored word is the word the host-driven sequence stored. The
+  device dots are `dot_kernel`'s code; the host scalar arithmetic now done
+  on the device (`/`, `-`, the `ys <= 2^-23 * yy` test) goes through
+  `ieee_div_f32`, `ieee_sub_f32`, `host_le_eps_times` (glm/impl/qn), which
+  return the host's IEEE words including subnormal results (integer paths
+  keyed on bits). glm/checks/qn_scalar_ieee_check.mojo compares them with
+  the host over 220000 pairs; a host-only build of it (laptop CPU, one core)
+  PASSES with 46058 subnormal results; the Metal run is in the step-2 speed
+  job below.
+- Syncs per iteration now: 1 (dg_init, carrying the direction's verdict) +
+  1 per line-search step.
+
+Speed jobs queued on m4pro-a (IDENTICAL; core models at 1M rows, gpu column):
+base lane/merged 003ea19ba (also the x_linear board, 100k, both columns),
+step 1 8a38e574d, step 2 10eab0721 (with the Metal IEEE check); FAST base
+and step 2 as well.
