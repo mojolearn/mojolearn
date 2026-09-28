@@ -86,13 +86,18 @@ class CheckTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             pixi = root / 'pixi'
-            pixi.write_text('#!/bin/bash\ncase "$*" in\n*"check.py build"*) exit "${BUILD_EXIT:-0}";;\n*"check.py clean"*) exit "${CLEAN_EXIT:-0}";;\nesac\nexit 0\n')
+            pixi.write_text('#!/bin/bash\ncase "$*" in\n*"check.py build"*) exit "${BUILD_EXIT:-0}";;\n*"check.py clean"*) echo CLEAN_EXECUTED; exit "${CLEAN_EXIT:-0}";;\n*"check.py radix"*) exit "${RADIX_EXIT:-0}";;\nesac\nexit 0\n')
             pixi.chmod(0o755)
             for build, clean, expected in [(7, 0, 7), (0, 9, 1), (0, 0, 0)]:
                 env = dict(os.environ, PATH=str(root)+os.pathsep+os.environ['PATH'], BUILD_EXIT=str(build), CLEAN_EXIT=str(clean))
                 result = subprocess.run(['bash', str(WRAPPER), '0/1', str(root/'out')], env=env, capture_output=True, text=True)
                 self.assertEqual(result.returncode, expected, result.stderr)
                 self.assertEqual('CONSOLIDATED CHECK PASS' in result.stdout, expected == 0)
+            env = dict(os.environ, PATH=str(root)+os.pathsep+os.environ['PATH'], RUN_RADIX='1', RADIX_EXIT='8', BUILD_EXIT='0', CLEAN_EXIT='0')
+            result = subprocess.run(['bash', str(WRAPPER), '0/1', str(root/'out')], env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn('CLEAN_EXECUTED', result.stdout)
+            self.assertNotIn('CONSOLIDATED CHECK PASS', result.stdout)
 
 
 if __name__ == '__main__':
