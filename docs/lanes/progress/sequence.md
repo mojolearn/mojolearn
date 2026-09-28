@@ -178,3 +178,56 @@ every sequence algorithm on NVIDIA, AMD and Apple, largest real-world cost first
 parity (MoE backward, prediction intervals, NOT_IMPLEMENTED rows) waits behind speed per
 the 2026-09-28 brief. Apple: m2pro / m3ultra released ~12:35Z Sep 28, m4pro-a/b, m4-a,
 m3ultra-b ~21:15Z Sep 28; submit Apple speed requests early and batched.
+
+### Session 2026-09-28 ~05Z (RunPod out of money: no NVIDIA)
+
+RunPod's balance ran out: pod f0ouvpsfix31kz is gone (404), every RunPod pod is gone, and
+`dev_pod.sh up sequence` is refused ("account balance is too low"). Per the coordinator, no
+retry. This session worked on the central Hot Aisle box (tools/amd_central.sh, MI300X, its
+Xeon for the CPU column) and the Apple steward.
+
+**Step 0 coverage audit (all 30 family lanes, `~/mojolearn-evidence/sequence/family_lanes.txt`):**
+every algorithm has a verifier lane with a CPU and a GPU arm (22 sequence-* lanes in
+tools/identity_lanes/sequence.py; arima x5, holtwinters x2 and kpss in sequence.core), and a
+source sabotage per seam in tools/identity_lanes/sequence.checks (42 arms: 5500-5518,
+5520-5535, 5536-5543 new in step 0, 5507 through NAdam and Adafactor), plus the family's
+e2e patch `e2e_family_host_bits.patch` for the stewards. Seam 5542's arm now unfuses both the
+ARCH and GARCH terms (the ARCH term alone did not separate; Metal showed it on m3ultra-b).
+
+**Verdict 1790564279351-sequence-ee26312f08:** m2pro, m3ultra-b and m4-a FAILED on ONE lane,
+`clean: sequence-adafactor DISAGREE`, after the alpha fix (do-amd still queued then). The same
+Metal compare-select fault in three more Adafactor clamps (update denominator, row mean,
+update clamp), now spelled max(): commit 266d5cedc. Metal == CPU on m3ultra-b and m4-a
+(speed probes 1790565936440, 1790565937835).
+
+**IDENTICAL speed 1: `ops.mojo::sumsq_fold`.** LAMB's and Adafactor's norms and MLP's L2 term
+are one GPU thread folding a sum of squares over up to 4M values, each load waited out.
+The fold now LOADS 64 values (16-byte vector loads on contiguous runs) before it folds them:
+the same fma chain in the same order, so the bits are the plain loop's. Stage sizes tried on AMD
+(fit s, same digests): f2 LAMB 4.23; s16 LAMB 3.34 / Adafactor 3.07; s64 3.14 / 2.64; v4 3.31 / 2.66.
+Kept 64.
+
+| algo (4M params x 10 steps; MLP 1M x 28, (256,), 1 epoch) | AMD MI300X before -> after | Apple M3 Ultra before -> after | digest (unchanged) |
+|---|---|---|---|
+| LAMB | 11.75 -> 3.14 s | 13.58 -> 2.66 s | 16c00643bf296195 |
+| Adafactor | 6.74 -> 2.64 s | 7.85 -> 1.40 s | 1c495bd78d7e2734 |
+| MLPClassifier fit | 2.15 -> 1.43 s | 3.15 -> 2.03 s | 983c4e5fbd05feaf |
+
+Full IDENTICAL "before" table, every algorithm (tools/sequence_speed.py, HIGGS 1M from R2), is in
+~/mojolearn-evidence/sequence/amd/ev-sequence/before_amd_identical.json (AMD) and
+~/mojolearn-evidence/sequence/speed/apple_m3ultra-b_before_308d10460.jsonl (Apple, steward
+1790571530078). All 19 digests are EQUAL on AMD and Metal. The largest remaining costs:
+GARCH (AMD 4.87 s, Apple 4.17 s at 10000 series x 100), LSTM / GRU / RNN (1.1-2.1 s),
+VAR 0.93 / 1.18 s. AutoARIMA on AMD needed libMojolearnMath.so (built on the box).
+
+**Gate on AMD + CPU (the NVIDIA gate is OWED):** at c6d6c220e (step 0, the Adafactor clamps, the
+fold, origin/main 3fa29cd1f merged): `algos_lane_check.sh <30 lanes> --pass 2` on the central
+MI300X: all 42 arms PASS / FAIL / PASS after reversal; all 30 lanes CLEAN AGREE (hip vs CPU
+Xeon 8470); RESULT: PASS. Log: ~/mojolearn-evidence/sequence/amd/ev-sequence/gate1.log.
+
+**OWED when an NVIDIA pod is back (then merge):** `dev_pod.sh up sequence`, sync, the same
+`--pass 2` over the 30 lanes on NVIDIA; existing bits vs the merge base (lane check hashes);
+test_host_surface; tools/test_lane_select.py (sequence.checks / sequence.core changed); merge
+to main and push in one command. NOT merged until then.
+
+Batched family identity request (30 lanes, e2e_family_host_bits.patch) at 90a7e25ad: 1790574625975-sequence-90a7e25ad6 on m2pro, m3ultra-b, m4pro-a, do-amd. The next session reads its verdict first.

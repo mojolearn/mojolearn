@@ -1,0 +1,13 @@
+diff --git a/sequence/prophet.mojo b/sequence/prophet.mojo
+index b21933466..f40ba1d8f 100644
+--- a/sequence/prophet.mojo
++++ b/sequence/prophet.mojo
+@@ -43,7 +43,7 @@ def op_prophet_features(t: Int, a: Args):
+         var order = Int(a.p1.unsafe_load(s))
+         var f = ld(a.p0, t * ns + s)
+         for i in range(order):
+-            var c = mul(mul(TWO_PI, Float32(i + 1)), f)
++            var c = mul(TWO_PI, mul(Float32(i + 1), f))
+             st(a.p3, t * K + col, ftz(identical_sin(c)))
+             st(a.p3, t * K + col + 1, ftz(identical_cos(c)))
+             col += 2
