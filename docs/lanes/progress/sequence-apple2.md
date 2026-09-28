@@ -88,6 +88,47 @@ iterations 1703 -> 248, fit 1.56 -> 1.19 s, loglik -138.31487 -> -138.31474 (bet
 QLIKE 1.085557 -> 1.085526 (better); 100/1e-6 saved 7% with equal quality. Default
 now 50/1e-6.
 
+### Job 2: m4pro-b, steward 1790606012720, before 068959af0, after 3c03eaabf (THE clean table)
+
+Two alternating runs per arm, best shown; digests equal across runs. Prophet at
+SEQ_PROPHET_N=32768 (below the FAST chunked threshold at that commit, so unchanged).
+Records: ~/mojolearn-evidence/sequence-apple2/j2.
+
+| algo | IDENTICAL before | after | x | bits | FAST before | after | x | bits |
+|---|---|---|---|---|---|---|---|---|
+| lstm (fit / infer) | 0.924 / 0.295 | 0.934 / 0.298 | 0.99x | same | 0.851 / 0.265 | 0.855 / 0.268 | 1.0x | same |
+| gru | 0.747 / 0.232 | 0.749 / 0.235 | 1.0x | same | 0.692 / 0.208 | 0.694 / 0.210 | 1.0x | same |
+| rnn | 0.378 / 0.101 | 0.380 / 0.104 | 1.0x | same | 0.354 / 0.092 | 0.357 / 0.095 | 1.0x | same |
+| mlp | 0.868 / 0.165 | 0.846 / 0.168 | 1.03x | same | 0.741 / 0.159 | 0.727 / 0.162 | 1.02x | same |
+| moe | 0.255 | 0.209 | 1.22x | same | 0.247 | 0.203 | 1.22x | same |
+| layernorm | 0.606 | 0.179 | 3.38x | same | 0.564 | 0.123 | 4.60x | moved |
+| rmsprop | 0.326 | 0.217 | 1.50x | same | 0.325 | 0.217 | 1.50x | same |
+| adagrad | 0.367 | 0.222 | 1.66x | same | 0.355 | 0.224 | 1.58x | same |
+| lion | 0.382 | 0.228 | 1.68x | same | 0.367 | 0.225 | 1.63x | same |
+| adamax | 0.368 | 0.227 | 1.62x | same | 0.368 | 0.226 | 1.63x | same |
+| nadam | 0.376 | 0.233 | 1.61x | same | 0.367 | 0.226 | 1.63x | same |
+| lamb | 1.777 | 1.740 | 1.02x | same | 1.124 | 0.285 | 3.94x | moved |
+| adafactor | 1.079 | 1.068 | 1.01x | same | 0.660 | 0.130 | 5.10x | moved |
+| stl | 0.233 | 0.233 | 1.0x | same | 0.188 | 0.189 | 1.0x | same |
+| theta | 0.295 | 0.296 | 1.0x | same | 0.206 | 0.204 | 1.0x | same |
+| croston | 0.004 | 0.004 | 1.0x | same | 0.004 | 0.004 | 1.0x | same |
+| ets | 0.543 | 0.549 | 0.99x | same | 0.423 | 0.419 | 1.0x | same |
+| garch | 0.546 | 0.548 | 1.0x | same | 0.410 | 0.299 | 1.37x | moved |
+| var | 0.658 | 0.659 | 1.0x | same | 0.630 | 0.474 | 1.33x | moved |
+| prophet (32768) | 39.83 | 39.62 | 1.0x | same | 13.09 | 12.92 | 1.0x | same |
+
+FAST quality, same job (FAST before -> FAST after; float64 reference errors, lower better):
+lamb max abs err 3.65e-6 -> 1.26e-7; adafactor 7.20e-5 -> 1.09e-7; layernorm dw rel
+9.5e-6 -> 2.4e-7, db err per sum|dy| 2.7e-6 -> 4.4e-7; var params rel 0.0444 -> 0.000475.
+GARCH (10000 series, fit 100, holdout 12; no stop -> default 50/1e-6): loglik
+-138.314873 -> -138.314741, QLIKE 1.085557 -> 1.085526, 0.406 -> 0.289 s. Sweep:
+20/1e-6 and 30/1e-5 lose loglik (-138.3176, -138.3180): rejected; 30/1e-6 loses
+loglik slightly (-138.31517): rejected; 50/1e-5: loglik -138.314814, QLIKE 1.085543,
+0.256 s: both better than no stop, so the default became 50/1e-5 (c592aba84).
+Prophet FAST chunked fit at 65536 points (quality run, fit seconds): 118.4 s -> 0.27 s,
+objective -170422.72 -> -170422.28 (relative 2.6e-6 higher), in-sample RMSE
+0.9932792 -> 0.9932782 (lower), 47 -> 41 L-BFGS iterations.
+
 ## Unproven
 
 (pending)
