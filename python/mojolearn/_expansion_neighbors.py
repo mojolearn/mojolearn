@@ -37,6 +37,8 @@ __all__ = ["LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", 
            "PageRank", "connected_components", "Louvain", "SVGP"]
 
 # x_neighbors/items.mojo's codes
+#: x_neighbors/iter_device.mojo XN_PRECOMPUTED_KIND: `kpca_transform` reads q as the kernel
+_XN_PRECOMPUTED_KIND = 100
 _KERNELS = {"linear": 0, "poly": 1, "polynomial": 1, "rbf": 2, "sigmoid": 3, "laplacian": 4,
             "cosine": 5, "chi2": 6, "additive_chi2": 7}
 _U_EXP, _U_LOG, _U_SQRT, _U_TANH, _U_COS, _U_SIN, _U_IDENTITY, _U_RECIP = range(8)
@@ -739,7 +741,7 @@ class KernelPCA(_XNeighbors):
             self._op("kpca_transform",
                      [(Q, 0), (Q if pre else self._fit_X, 0), (self._fit_cols, 0), (self._fit_all, 0),
                       (alphas, 0), (out, 1)],
-                     (nq, nf, Q.shape[1], c, -1 if pre else _KERNELS[self.kernel], int(self.degree)),
+                     (nq, nf, Q.shape[1], c, _XN_PRECOMPUTED_KIND if pre else _KERNELS[self.kernel], int(self.degree)),
                      (0.0 if pre else _f32_scalar(self._gamma), 0.0 if pre else _f32_scalar(self.coef0), float(nf)))
             return out
         K = self._k(Q, self._fit_X)

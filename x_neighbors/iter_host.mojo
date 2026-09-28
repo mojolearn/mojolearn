@@ -197,6 +197,8 @@ def op_knn_impute_tiled(
 # ============================================================================
 
 comptime XN_FUSED_CELLS = 1 << 24
+#: `kind` of `kpca_transform` when q IS the precomputed kernel (d == nf)
+comptime XN_PRECOMPUTED_KIND = 100
 
 
 def _tile_rows(n: Int, width: Int) -> Int:
@@ -245,7 +247,7 @@ def op_kpca_transform(
     q: Int, fitx: Int, fit_cols: Int, fit_all: Int, alphas: Int, res: Int,
     nq: Int, nf: Int, d: Int, c: Int, kind: Int, degree: Int, gamma: Float32, coef0: Float32, s: Float32,
 ) raises:
-    var pre = kind < 0
+    var pre = kind == XN_PRECOMPUTED_KIND
     var tr = _tile_rows(nq, nf)
     var kb = List[Float32](length=1 if pre else tr * nf, fill=Float32(0))
     var kcb = List[Float32](length=max(tr * nf, 1), fill=Float32(0))

@@ -789,6 +789,8 @@ def knn_impute_split_kernel(
 
 #: cells of the per-tile kernel matrix (a tile is at most this many floats)
 comptime XN_FUSED_CELLS = 1 << 24
+#: `kind` of `kpca_transform` when q IS the precomputed kernel (d == nf)
+comptime XN_PRECOMPUTED_KIND = 100
 
 
 @always_inline
@@ -814,7 +816,8 @@ def _fused_sabotage(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], co
             var sub = buf.create_sub_buffer[DType.float32](0, 1)
             ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=sub)
             ctx.synchronize()
-            h.unsafe_ptr().store(0, h.unsafe_ptr().load(0) + Float32(1e-3))
+            var hp = h.unsafe_ptr()
+            hp[0] = hp[0] + Float32(1e-3)
             ctx.enqueue_copy(dst_buf=sub, src_ptr=h.unsafe_ptr())
             ctx.synchronize()
             _ = sub^
@@ -844,11 +847,11 @@ def op_kpca_transform(
     q: Int, fitx: Int, fit_cols: Int, fit_all: Int, alphas: Int, res: Int,
     nq: Int, nf: Int, d: Int, c: Int, kind: Int, degree: Int, gamma: Float32, coef0: Float32, s: Float32,
 ) raises:
-    """KernelPCA.transform: K = kernel(q, fitx) (kind < 0: q IS the
-    precomputed K, d == nf), pred = rowsum(K) / s, Kc = kpca_center(K,
+    """KernelPCA.transform: K = kernel(q, fitx) (kind
+    XN_PRECOMPUTED_KIND: q IS the precomputed K, d == nf), pred = rowsum(K) / s, Kc = kpca_center(K,
     fit_cols, pred, fit_all), res = Kc alphas; per row tile on the device."""
     var ctx = xn_ctx()
-    var pre = kind < 0
+    var pre = kind == XN_PRECOMPUTED_KIND
     var d_q = _buf(ctx, q, nq * d, True)
     var d_fx = _buf(ctx, fitx, 0 if pre else nf * d, not pre)
     var d_cols = _buf(ctx, fit_cols, nf, True)
