@@ -586,37 +586,42 @@ def _pt_golden_step(left: Bool, mut a: Float32, mut b: Float32, mut x1: Float32,
     return x2
 
 
+#: the most candidates one round evaluates (2^6 - 1: MOJOLEARN_XPREP_PT_SPEC <= 6)
+comptime PT_SPEC_MAX = 63
+
+
 def pt_spts_unit(t: Int, f: FP, q: IP):
     """q = [STATE, LEVAL, SPL, M, K0]; t = column c. SPL[c*M + j] = the point
     candidate j evaluates. K0 = 0: the two starting points (j = 0: x1, j = 1:
     x2). Else heap order: j = 0 is the pending point LEVAL[c]; the children of
-    j are 2j+1 (its outcome was left) and 2j+2 (right)."""
-    var M = p(q, 3)
+    j are 2j+1 (its outcome was left) and 2j+2 (right), each node's bracket
+    derived from its parent's by the step's own arithmetic."""
+    var M = min(p(q, 3), PT_SPEC_MAX)
     var c = t
     var S = p(q, 0) + c * PT_STATE
-    var SP = p(q, 2) + c * M
+    var SP = p(q, 2) + c * p(q, 3)
     if p(q, 4) == 0:
         f.unsafe_store(SP + 0, raw(f, S + 2))
         f.unsafe_store(SP + 1, raw(f, S + 3))
         return
+    # each node's bracket (a, b, x1, x2) after the outcome that leads to it
+    var br = InlineArray[Float32, 4 * PT_SPEC_MAX](fill=Float32(0))
+    br[0] = raw(f, S + 0)
+    br[1] = raw(f, S + 1)
+    br[2] = raw(f, S + 2)
+    br[3] = raw(f, S + 3)
     f.unsafe_store(SP + 0, raw(f, p(q, 1) + c))
     for j in range(1, M):
-        # the path root -> j, bit k = outcome at depth k (1: left)
-        var depth = 0
-        var bits = 0
-        var node = j
-        while node > 0:
-            bits = bits * 2 + (1 if node % 2 == 1 else 0)
-            node = (node - 1) // 2
-            depth += 1
-        var a = raw(f, S + 0)
-        var b = raw(f, S + 1)
-        var x1 = raw(f, S + 2)
-        var x2 = raw(f, S + 3)
-        var pt = Float32(0)
-        for _ in range(depth):
-            pt = _pt_golden_step(bits % 2 == 1, a, b, x1, x2)
-            bits = bits // 2
+        var par = (j - 1) // 2
+        var a = br[4 * par + 0]
+        var b = br[4 * par + 1]
+        var x1 = br[4 * par + 2]
+        var x2 = br[4 * par + 3]
+        var pt = _pt_golden_step(j % 2 == 1, a, b, x1, x2)
+        br[4 * j + 0] = a
+        br[4 * j + 1] = b
+        br[4 * j + 2] = x1
+        br[4 * j + 3] = x2
         f.unsafe_store(SP + j, pt)
 
 
