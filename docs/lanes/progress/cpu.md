@@ -6,8 +6,36 @@ family lane's phase 5 (handed off below).
 
 ## Where this lane stands (2026-09-28, session 2)
 
-**MERGED to main (session 2):** the lane/cpu fixes of session 1 plus the
-host FP-environment unification.
+**NOT YET ON MAIN (session 3, 2026-09-28 ~05Z).** lane/cpu f1cf0a323 holds
+the session-1 fixes plus the host FP-environment unification, merged with
+origin/main 3fa29cd1f (IDENTITY_PATHS row renumbered 199 -> 202: the
+cluster lane took 199-201). The site check on the merged tree: PASS (no new
+raw `sync_parallelize`, no `host_fp_env` user; lane/trees-cpu's
+`flush_subnormals` border search is pinned arithmetic, not an environment
+module). The H100 proof below is of 41f60919d; the merge with main is the
+OWED gate.
+
+**OWED GATE (RunPod out of money 2026-09-28 ~04:50Z, pod dpse0qp7knpu44
+gone, no pod can be rented).** Running instead on the central AMD box
+(`tools/amd_central.sh`, trees `/root/mojolearn-cpu` = lane/cpu and
+`/root/mojolearn-cpu-base` = origin/main 3fa29cd1f, scripts and outputs in
+`/root/ev-cpu/`, copies in ~/mojolearn-evidence/cpu/amd_gate_*.sh):
+1. `amd_gate_cpu.sh` (under `sh`, no slot): builds both trees, then CPU
+   columns base default, new default / 1 / 3 threads (`cpu_done` when done).
+   Pass = new vs base IDENTICAL except the known logistic cell; new at
+   1 / 3 / default IDENTICAL.
+2. `amd_gate_gpu.sh` under ONE slot (`amd_central.sh run cpu ...`): HIP
+   columns base then new (`gpu_done`). Pass = HIP new vs base IDENTICAL; HIP
+   new vs CPU new AGREE.
+3. `pixi run check-host-parallel` PASS and the sabotage
+   (patches/host_parallel_fp_env.patch) FAILS, on the new tree.
+4. test_host_surface.
+5. STILL OWED WHEN RUNPOD IS FUNDED: the NVIDIA column (CUDA new vs base,
+   CUDA vs CPU). The gate rule is NVIDIA + CPU; merge waits on the
+   orchestrator's call whether AMD + CPU stands in.
+
+The WIP par-* fallback (below) is parked on branch lane/cpu-par-fallback
+(pushed, unrun) so it stays out of this gate.
 
 | commit | what |
 |---|---|
@@ -53,8 +81,11 @@ refuses anything else.
 
 ## Next session, in order
 
+0. The OWED GATE above; merge lane/cpu to main and push; tell main.
 1. The one-device plain fallback for the 31 par-* lanes that refuse on a
-   CPU-only install (work in progress on lane/cpu, see "par-* fallback").
+   CPU-only install (unrun WIP on branch lane/cpu-par-fallback: pool
+   `CPU_SINGLE_DEVICE_PLAIN`, worker `_cpu_plain`, host_surface names;
+   merge it onto lane/cpu after the gate).
 2. Probe-recipe gaps in tools/cpu_path_audit.py (82 rows fail on BOTH
    columns; list in "The audit").
 3. Keep the audit table current.
