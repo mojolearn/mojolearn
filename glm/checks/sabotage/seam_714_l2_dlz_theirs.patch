@@ -1,0 +1,13 @@
+diff --git a/glm/impl/qn/glm_svm.mojo b/glm/impl/qn/glm_svm.mojo
+index c252ef886..73d511f61 100644
+--- a/glm/impl/qn/glm_svm.mojo
++++ b/glm/impl/qn/glm_svm.mojo
+@@ -101,7 +101,7 @@ def svc_l2_dlz(y: Float32, z: Float32) -> Float32:
+     """DEVIATION 714: `2 (z - s)`, the derivative of `lz`; theirs is `z - s`."""
+     var s = _s_of(y)
+     if ftz(s * z) <= Float32(1.0):
+-        return ftz(Float32(2.0) * ftz(z - s))
++        return ftz(z - s)  # SABOTAGE 714: cuML's SVCL2Loss::Dlz, missing the 2
+     return Float32(0.0)
+ 
+ 
