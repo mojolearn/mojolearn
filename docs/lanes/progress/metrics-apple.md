@@ -96,6 +96,8 @@ at every round (and the XMSPEED-INPUT digests are equal).
 | 4 | 4f371e7bd (+ device keep flags) | 2.99 s | 2.99 s |
 | 5 | 220ec99ff (+ StratifiedKFold) | **2.82 s** | **2.80 s** |
 
+On m4pro-b the same commit (1790587224015) runs in 2.66 s IDENTICAL and 2.64 s FAST, against 5.12 s / 5.09 s at 835bca4ea (1790549643846) on that Mac. All 29 digests are equal in both modes.
+
 Per case, baseline -> round 5 (seconds; speedup on IDENTICAL):
 
 | case | IDENTICAL before | after | x | FAST before | after |
