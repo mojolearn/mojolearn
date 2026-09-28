@@ -17,8 +17,6 @@
 # are extra flags for it (e.g. --profile, or --only to narrow). Lines are
 # prefixed `ARM <name>`; each XPSPEED line carries its digest, so IDENTICAL
 # arms compare by eye. The tree's default build is restored at the end.
-# XPREP_AB_SCRIPT=<path in the tree> runs that script with the arm's bench args alone
-# (bench/x_prep_quality.py: the paired quality check) in place of the speed board.
 set -u
 base=$1; mode=$2; reps=$3; cases=$4; shift 4
 export MOJOLEARN_NUMERIC_MODE="$mode"
@@ -80,11 +78,6 @@ run_arm() {
             fi ;;
     esac
     echo "ARM $name XPINFO defines=[$defs] env=[$envs] args=[$args] dir=$dir"
-    if [ -n "${XPREP_AB_SCRIPT:-}" ]; then
-        env $(echo "$envs" | tr , ' ') pixi run --manifest-path "$root/pixi.toml" -e default \
-            python -u "$dir/$XPREP_AB_SCRIPT" $args 2>&1 | sed "s/^/ARM $name /"
-        return
-    fi
     env $(echo "$envs" | tr , ' ') pixi run --manifest-path "$root/pixi.toml" -e default \
         python -u "$dir/bench/x_prep_speed.py" --reps "$reps" $aonly $args 2>&1 | sed "s/^/ARM $name /"
 }

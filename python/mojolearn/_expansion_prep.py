@@ -41,7 +41,6 @@ import bisect
 import copy
 import ctypes
 import inspect
-import itertools
 import math
 import mmap
 import numbers
@@ -53,7 +52,6 @@ from . import _backend
 from . import _portable_math as _pm
 from ._array import Array
 from ._buffer import as_f32_c, addr_ro
-from . import _buffer
 from . import _labels
 from . import _arena_io
 from ._labels import flatten_labels, sorted_classes, label_kind
@@ -125,6 +123,8 @@ _OUT_MIN_WORDS = 2 ** 27
 #: _R3_DEFAULT is on; MOJOLEARN_XPREP_R3_ON / MOJOLEARN_XPREP_R3_OFF (names
 #: joined by "+" or ",", or "all") switch names on and off for an A/B arm. None
 #: of them moves a bit: they change where words live and which stages run.
+#: All five are default since request 1790627886703 (M3 Ultra: every FAST and
+#: IDENTICAL digest equal with them on, every case as fast or faster).
 #:   imputer_nosort  SimpleImputer sorts only for median / most_frequent
 #:   mapped          a large host arena or output is an anonymous mapping
 #:                   (zero pages arrive when first written; nothing is
@@ -134,16 +134,7 @@ _OUT_MIN_WORDS = 2 ** 27
 #:                   (the sorted columns, LDA's centered rows) are device
 #:                   scratch
 #:   te_arrays       TargetEncoder hands targets and folds over as arrays
-#:   label_buffers   LabelEncoder / LabelBinarizer / MultiLabelBinarizer take
-#:                   numeric labels as buffers (native casts, one exactness
-#:                   test), not as Python lists
-#:   work2           the same for PowerTransformer's logarithms and transforms
-#:                   and the encoders' category codes when Python never reads
-#:                   them (TargetEncoder, OneHotEncoder, the label binarizers)
-#: Default since request 1790627886703 (M3 Ultra, FAST and IDENTICAL digests
-#: equal): imputer_nosort, mapped, view, work, te_arrays. OPT-IN until their
-#: A/B is recorded: label_buffers, work2.
-_R3_NAMES = ("imputer_nosort", "mapped", "view", "work", "te_arrays", "label_buffers", "work2")
+_R3_NAMES = ("imputer_nosort", "mapped", "view", "work", "te_arrays")
 _R3_DEFAULT = ("imputer_nosort", "mapped", "view", "work", "te_arrays")
 #: the smallest block (words) that is mapped, and the smallest read that is a view
 _MAP_MIN_WORDS = 2 ** 18
@@ -242,12 +233,12 @@ class _Prog:
         self.scratch_size += max(int(n), 0)
         return _Scratch(off)
 
-    def work(self, n, name="work"):
+    def work(self, n):
         """n words that ONE stage writes whole before any stage reads them and
-        that Python never reads (lane prep-apple3, `work` / `work2`): device
-        scratch, so they neither cross the bus nor touch host memory. Arena
-        words when the change is off."""
-        return self.scratch(n) if _r3(name) else self.alloc(n)
+        that Python never reads (lane prep-apple3, `work`): device scratch,
+        so they neither cross the bus nor touch host memory. Arena words
+        when the change is off."""
+        return self.scratch(n) if _r3("work") else self.alloc(n)
 
     def output(self, n, code="f"):
         """The program's output: n words that arrive zeroed (as `alloc`'s),
@@ -323,13 +314,6 @@ class _Prog:
         dev_scratch = sc > 0 and (has_out or run_scratch is not None)
         if H + sc + on > 2 ** 31 - 1:
             raise ValueError("x_prep: the program exceeds the native Int32 indexing bound")
-        # EXPERIMENT (lane prep-apple3, opt-in MOJOLEARN_XPREP_NOCOPY=1): the device works on the
-        # host block itself (one page-aligned mapping: the arena, the scratch, the output)
-        run_nocopy = (_optional_prep_entry(binding, "x_prep_run_nocopy")
-                      if os.environ.get("MOJOLEARN_XPREP_NOCOPY", "0") == "1" and H + sc + on >= _MAP_MIN_WORDS
-                      else None)
-        if run_nocopy is not None:
-            return self._run_nocopy(run_nocopy, H, sc, on, prof, t_run)
         # layout: the host arena, then (host) the output unless the device keeps it,
         # then the scratch, then (device) the output
         ha = H + (0 if dev_out else on)
@@ -388,36 +372,6 @@ class _Prog:
             inv = {v: k for k, v in _OPS.items()}
             print("XPPROG ops=" + "+".join(inv.get(st[0], str(st[0])) for st in self._stages)
                   + f" arena={ha} scratch={sc} out={on} dev_out={int(bool(dev_out))} ranges={int(run_ranges is not None)}"
-                  + f" alloc_s={t_alloc - t_run:.4f} inputs_s={t_in - t_alloc:.4f}"
-                  + f" call_s={time.perf_counter() - t_in:.4f}", flush=True)
-        return self
-
-    def _run_nocopy(self, run_nocopy, H, sc, on, prof, t_run):
-        words = H + sc + on
-        page = mmap.PAGESIZE // 4
-        block = ((words + page - 1) // page) * page
-        m = mmap.mmap(-1, 4 * block)
-        arena = memoryview(m).cast("f")
-        base = ctypes.addressof(ctypes.c_char.from_buffer(m))
-        t_alloc = time.perf_counter() if prof else 0.0
-        spans = []
-        for off, arr, _ in self._inputs:
-            if arr.size:
-                ctypes.memmove(base + 4 * off, addr_ro(arr, name="input"), 4 * arr.size)
-                spans.append((off, off + arr.size))
-        self._in_spans = [s for s in spans if s not in self._inout]
-        sbase, obase = H, H + sc
-        prog = array.array("i", [(v.off + (sbase if v.kind == "s" else obase)) if isinstance(v, _Scratch) else v
-                                 for s in self._stages for v in s] or [0])
-        nst = len(self._stages)
-        self._out, self._out_at = None, obase
-        t_in = time.perf_counter() if prof else 0.0
-        run_nocopy(base, prog.buffer_info()[0], (H, sc, on, nst, block))
-        self.arena = arena
-        if prof:
-            inv = {v: k for k, v in _OPS.items()}
-            print("XPPROG ops=" + "+".join(inv.get(st[0], str(st[0])) for st in self._stages)
-                  + f" arena={H} scratch={sc} out={on} nocopy=1"
                   + f" alloc_s={t_alloc - t_run:.4f} inputs_s={t_in - t_alloc:.4f}"
                   + f" call_s={time.perf_counter() - t_in:.4f}", flush=True)
         return self
@@ -679,15 +633,14 @@ def _category_block(pr, categories):
     return pr.put_list(block), kmax
 
 
-def _codes(pr, arr, categories, work=False):
+def _codes(pr, arr, categories):
     """Stages that write each element's category index (or -1) and each
-    column's unknown count. Returns (codes offset, unknown-count offset).
-    work: Python never reads the codes (lane prep-apple3, `work2`)."""
+    column's unknown count. Returns (codes offset, unknown-count offset)."""
     n, d = arr.shape
     xo = pr.put(arr)
     uo, kmax = _category_block(pr, categories)
     co = pr.put_list([c.size for c in categories])
-    codes = pr.work(n * d, "work2") if work else pr.alloc(n * d)
+    codes = pr.alloc(n * d)
     neg = pr.alloc(d)
     pr.stage("lookup", n * d, xo, n, d, uo, kmax, co, codes)
     pr.stage("count_neg", d, codes, n, d, neg)
@@ -1076,7 +1029,7 @@ class OneHotEncoder(_PrepBase):
         starts = [sum(widths[:j]) for j in range(d)]
         W = sum(widths)
         pr = _Prog()
-        codes, neg = _codes(pr, arr, self.categories_, work=True)
+        codes, neg = _codes(pr, arr, self.categories_)
         if self._grouping is not None:
             unk = self._unknown_to()
             codes = _remap(pr, codes, n, d, _grouping_table(pr, self._grouping),
@@ -1310,7 +1263,7 @@ class TargetEncoder(_PrepBase):
         cmax = max(c.size for c in cats)
         F = n_folds
         pr = _Prog()
-        codes, _neg = _codes(pr, arr, cats, work=True)
+        codes, _neg = _codes(pr, arr, cats)
         if binary is None:
             yo = pr.put_list(yflat)
             fo = pr.put_list(folds if folds is not None else [-1] * n)
@@ -1432,7 +1385,7 @@ class TargetEncoder(_PrepBase):
         n, d = arr.shape
         T, cmax = self._T, self._cmax
         pr = _Prog()
-        codes, _neg = _codes(pr, arr, self.categories_, work=True)
+        codes, _neg = _codes(pr, arr, self.categories_)
         enc = pr.put(self._enc)
         meta = pr.put(self._meta)
         out = pr.output(n * d * T)
@@ -2721,8 +2674,7 @@ class PowerTransformer(_PrepBase):
                     pr.stage("pt_sres", d, state, leval, m, vals, k0, steps, lam)
                     k0 += steps
             else:
-                state, leval = pr.alloc(_PT_STATE * d), pr.alloc(d)
-                tv, lg = pr.work(n * d, "work2"), pr.work(n * d, "work2")
+                state, leval, tv, lg = pr.alloc(_PT_STATE * d), pr.alloc(d), pr.alloc(n * d), pr.alloc(n * d)
                 pr.stage("pt_init", d, method, st, d, lam, state, leval)
                 pr.stage("pt_log", n * d, xo, n, d, method, lg)
                 for k in range(_PT_EVALS):
@@ -2730,7 +2682,7 @@ class PowerTransformer(_PrepBase):
                     pr.stage("pt_fold", d, xo, n, d, method, tv, k, state, leval, lam)
         mean, scale = pr.alloc(d), pr.alloc(d)
         if self.standardize:
-            tx, st2 = pr.work(n * d, "work2"), pr.alloc(6 * d)
+            tx, st2 = pr.alloc(n * d), pr.alloc(6 * d)
             pr.stage("pt_apply", n * d, xo, n, d, lam, method, _NONE, _NONE, tx)
             pr.stage("col_stats", d, tx, n, d, st2)
             pr.stage("std_params", d, st2, d, mean, scale)
@@ -3114,65 +3066,6 @@ def _numeric_labels(values):
     return out
 
 
-def _label_buffer(y):
-    """(the labels as a float32 (n, 1) Array, whether they are integers) when
-    y is a numeric BUFFER (an int32 / int64 / float32 / float64 Array,
-    ndarray or other buffer, one label per row) whose every label float32
-    holds exactly: the casts are native and the test is one comparison of
-    the labels with their float32 values cast back (lane prep-apple3,
-    `label_buffers`). None when the list route must decide: a list, another
-    dtype (bool, str), a NaN or an infinity, a label float32 cannot hold.
-    The same float32 words `_numeric_labels` gives."""
-    if not _r3("label_buffers") or isinstance(y, (list, tuple, str, bytes)):
-        return None
-    try:
-        if not isinstance(y, Array) and not _buffer._has_buffer(y):
-            return None
-        arr, _ = _buffer._materialize(y, "y")
-    except (TypeError, ValueError):
-        return None
-    if arr.dtype not in ("<i4", "<i8", "<f4", "<f8") or arr.size == 0 or arr.size != max(arr.shape):
-        return None
-    ints = arr.dtype in ("<i4", "<i8")
-    try:
-        if not ints and not _buffer.all_finite(arr):
-            return None
-        f32 = arr if arr.dtype == "<f4" else arr.astype("<f4")
-        if arr.dtype != "<f4" and _labels.flat_view(f32.astype(arr.dtype)) != _labels.flat_view(arr):
-            return None
-    except (OverflowError, ValueError, TypeError, ImportError):
-        return None
-    return Array._view_of(f32, (arr.size, 1), "C"), ints
-
-
-def _flat_labels(rows):
-    """(every row's labels in order as an int64 or float64 Array, each
-    label's row as an int32 Array) when every label is exactly an int or
-    exactly a float, built at C speed (lane prep-apple3, `label_buffers`);
-    None otherwise (the list route)."""
-    if not _r3("label_buffers"):
-        return None
-    kinds = set(map(type, itertools.chain.from_iterable(rows)))
-    if kinds == _INT_ONLY:
-        code, dtype = "q", "<i8"
-    elif kinds == _FLOAT_ONLY:
-        code, dtype = "d", "<f8"
-    else:
-        return None
-    try:
-        flat = array.array(code, itertools.chain.from_iterable(rows))
-    except (OverflowError, TypeError):
-        return None
-    owner = array.array("i", itertools.chain.from_iterable(map(itertools.repeat, range(len(rows)), map(len, rows))))
-    return Array._owned(flat, (len(flat),), dtype, "C"), Array._owned(owner, (len(owner),), "<i4", "C")
-
-
-def _buffer_classes(mode, col, ints):
-    """`_label_classes` for a `_label_buffer` column."""
-    cats = _fit_categories(mode, col)[0]
-    return [int(c) if ints else float(c) for c in cats.tolist()], cats
-
-
 def _label_classes(mode, values):
     """(classes list in the reference's order, device categories Array or
     None). Numeric labels: a device sort and run scan; else sorted()."""
@@ -3186,11 +3079,11 @@ def _label_classes(mode, values):
     return classes, cats
 
 
-def _label_codes(pr, values, cats, work=False):
+def _label_codes(pr, values, cats):
     """Stages: each label's index among `cats` (or -1). Returns the codes
     offset and the unknown-count offset."""
     arr = Array._from_flat([float(v) for v in values], (len(values), 1), "<f4")
-    return _codes(pr, arr, [cats], work=work)
+    return _codes(pr, arr, [cats])
 
 
 def _classes_array(classes):
@@ -3241,12 +3134,8 @@ class LabelEncoder(_PrepBase):
 
     def fit(self, y):
         self.numeric_mode_ = _mode()
-        lb = _label_buffer(y)
-        if lb is not None:
-            self._classes, self._cats = _buffer_classes(self.numeric_mode_, lb[0], lb[1])
-        else:
-            values = flatten_labels(y)
-            self._classes, self._cats = _label_classes(self.numeric_mode_, values)
+        values = flatten_labels(y)
+        self._classes, self._cats = _label_classes(self.numeric_mode_, values)
         self.classes_ = _classes_array(self._classes)
         return self
 
@@ -3259,22 +3148,18 @@ class LabelEncoder(_PrepBase):
 
     def transform(self, y):
         self._check_fitted()
-        lb = _label_buffer(y) if self._cats is not None else None
-        if lb is None:
-            values = flatten_labels(y)
-            if not values:
-                return Array((0,), "<i4")
-            if self._cats is None or _numeric_labels(values) is None:
-                index = {c: i for i, c in enumerate(self._classes)}
-                missing = [v for v in values if v not in index]
-                if missing:
-                    raise ValueError(f"mojolearn: y contains previously unseen labels: {missing[:5]}")
-                return Array.from_list([index[v] for v in values], "<i4")
-            n = len(values)
-        else:
-            n = lb[0].shape[0]
+        values = flatten_labels(y)
+        if not values:
+            return Array((0,), "<i4")
+        if self._cats is None or _numeric_labels(values) is None:
+            index = {c: i for i, c in enumerate(self._classes)}
+            missing = [v for v in values if v not in index]
+            if missing:
+                raise ValueError(f"mojolearn: y contains previously unseen labels: {missing[:5]}")
+            return Array.from_list([index[v] for v in values], "<i4")
+        n = len(values)
         pr = _Prog()
-        codes, neg = _codes(pr, lb[0], [self._cats]) if lb is not None else _label_codes(pr, values, self._cats)
+        codes, neg = _label_codes(pr, values, self._cats)
         out = pr.alloc(n)
         pr.stage("f2i", n, codes, out)
         pr.run(self.numeric_mode_)
@@ -3321,12 +3206,8 @@ class LabelBinarizer(_PrepBase):
             self.classes_ = Array.from_list(self._classes, "<i8")
             self.y_type_ = "multilabel-indicator"
             return self
-        lb = _label_buffer(y)
-        if lb is not None:
-            self._classes, self._cats = _buffer_classes(self.numeric_mode_, lb[0], lb[1])
-        else:
-            values = flatten_labels(y)
-            self._classes, self._cats = _label_classes(self.numeric_mode_, values)
+        values = flatten_labels(y)
+        self._classes, self._cats = _label_classes(self.numeric_mode_, values)
         self.classes_ = _classes_array(self._classes)
         self.y_type_ = "binary" if len(self._classes) <= 2 else "multiclass"
         return self
@@ -3355,19 +3236,16 @@ class LabelBinarizer(_PrepBase):
                      out)
             pr.run(self.numeric_mode_)
             return pr.get_i32(out, (n, K))
-        lb = _label_buffer(y) if self._cats is not None else None
-        values = flatten_labels(y) if lb is None else None
-        n, K = (len(values) if lb is None else lb[0].shape[0]), len(self._classes)
+        values = flatten_labels(y)
+        n, K = len(values), len(self._classes)
         binary = K <= 2
         W = 1 if binary else K
         pr = _Prog()
-        if lb is not None:
-            codes, _neg = _codes(pr, lb[0], [self._cats], work=True)
-        elif self._cats is None or _numeric_labels(values) is None:
+        if self._cats is None or _numeric_labels(values) is None:
             index = {c: i for i, c in enumerate(self._classes)}
             codes = pr.put_list([index.get(v, -1) for v in values])
         else:
-            codes, _neg = _label_codes(pr, values, self._cats, work=True)
+            codes, _neg = _label_codes(pr, values, self._cats)
         if K == 1:
             codes = pr.put_list([-1] * n)
         out = pr.output(n * W, "i")
@@ -3435,20 +3313,14 @@ class MultiLabelBinarizer(_PrepBase):
             self._given = True
             self._cats = None
         else:
-            rows = [r if type(r) in (list, tuple) else list(r) for r in y]
-            fl = _flat_labels(rows)
-            lb = _label_buffer(fl[0]) if fl is not None and fl[0].size else None
-            if lb is not None:
-                self._classes, self._cats = _buffer_classes(self.numeric_mode_, lb[0], lb[1])
-            else:
-                flat = [v for row in rows for v in row]
-                self._classes, self._cats = _label_classes(self.numeric_mode_, flat) if flat else ([], None)
+            flat = [v for row in y for v in row]
+            self._classes, self._cats = _label_classes(self.numeric_mode_, flat) if flat else ([], None)
             self._given = False
         self.classes_ = _classes_array(self._classes)
         return self
 
     def fit_transform(self, y):
-        y = [r if type(r) in (list, tuple) else list(r) for r in y]
+        y = [list(row) for row in y]
         return self.fit(y).transform(y)
 
     def _check_fitted(self):
@@ -3457,32 +3329,23 @@ class MultiLabelBinarizer(_PrepBase):
 
     def transform(self, y):
         self._check_fitted()
-        rows = [r if type(r) in (list, tuple) else list(r) for r in y]
+        rows = [list(r) for r in y]
         n, K = len(rows), len(self._classes)
-        fl = _flat_labels(rows) if self._cats is not None else None
-        lb = _label_buffer(fl[0]) if fl is not None and fl[0].size else None
+        flat = [v for r in rows for v in r]
+        owner = [i for i, r in enumerate(rows) for _ in r]
         pr = _Prog()
-        if lb is not None:
-            # the labels and their rows as buffers (lane prep-apple3): the same codes and rows
-            codes, _neg = _codes(pr, lb[0], [self._cats], work=True)
-            ro = pr.put_codes(fl[1])
-            m = fl[0].size
+        if not flat:
+            out = pr.alloc(n * max(K, 1))
+            pr.run(self.numeric_mode_)
+            return pr.get_i32(out, (n, K))
+        if self._cats is None or _numeric_labels(flat) is None:
+            index = {c: i for i, c in enumerate(self._classes)}
+            codes = pr.put_list([index.get(v, -1) for v in flat])
         else:
-            flat = [v for r in rows for v in r]
-            owner = [i for i, r in enumerate(rows) for _ in r]
-            if not flat:
-                out = pr.alloc(n * max(K, 1))
-                pr.run(self.numeric_mode_)
-                return pr.get_i32(out, (n, K))
-            if self._cats is None or _numeric_labels(flat) is None:
-                index = {c: i for i, c in enumerate(self._classes)}
-                codes = pr.put_list([index.get(v, -1) for v in flat])
-            else:
-                codes, _neg = _label_codes(pr, flat, self._cats, work=True)
-            ro = pr.put_list(owner)
-            m = len(flat)
+            codes, _neg = _label_codes(pr, flat, self._cats)
+        ro = pr.put_list(owner)
         out = pr.output(n * max(K, 1), "i")
-        pr.stage("scatter_ones", m, codes, ro, K, out)
+        pr.stage("scatter_ones", len(flat), codes, ro, K, out)
         pr.run(self.numeric_mode_)
         return pr.get_i32(out, (n, K))
 
