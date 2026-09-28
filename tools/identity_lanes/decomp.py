@@ -377,7 +377,17 @@ _batch_decl("n/a:matrix factorization (LU, triangular solves and eigendecomposit
 _batch_decl("n/a:matrix factorization (least squares and randomized SVD depend on all matrix rows; "
             "this lane has no fitted out-of-sample estimator)", "x-decomp-lstsq-rsvd", revision="expansion-batch-2026-09-28-v1")
 
-_batch_decl(_rows_calls("transform", prep=lambda X: np.abs(X[:128])), "x-decomp-nmf", revision="expansion-batch-2026-09-28-v1")
+# NMF.transform solves W jointly with a global convergence criterion. CD
+# sums row violations before stopping; MU also initializes from the input's
+# global mean. Removing rows changes this finite iterative solve's contract.
+# inverse_transform instead multiplies independent coefficient rows by the
+# fitted components, so it has the row-batching property checked here.
+def _decomp_batch_nmf(ml, e, Xh):
+    R = np.ascontiguousarray(Xh[:128, :int(e.n_components_)])
+    return [_BatchRows("inverse_transform", R, lambda rows: (e.inverse_transform(rows),))]
+
+
+_batch_decl(_decomp_batch_nmf, "x-decomp-nmf", revision="nmf-inverse-batch-2026-09-28-v2")
 
 
 def _decomp_batch_als(ml, e, Xh):

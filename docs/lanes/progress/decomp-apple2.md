@@ -51,3 +51,21 @@ this compiler limitation unresolved. Removing its fence would lose required
 device-memory ordering and is not the fix. Qualification of the restored
 Metal default requires a targeted follow-up of the five lanes above; no pass
 is claimed by this source change.
+
+## NMF batch contract correction
+
+The repair check at `9d64cb98b284` exposed `BATCH_MOVED` for NMF.transform
+on both Apple and AMD. This method solves coefficients with fitted components
+held fixed, but its finite iterative solve uses a global stopping criterion:
+CD sums the row violations before comparing with the initial violation; MU
+uses global reconstruction error and also initializes from the input matrix's
+mean. A row alone can therefore stop at a different iteration. The batch
+probe had incorrectly promised independent-row semantics for that solve.
+
+The NMF batch probe now checks `inverse_transform`: independent coefficient
+rows multiplied by the fitted components. It compares full, individual and
+split outputs and remains sensitive to injected output corruption. The batch
+revision is `nmf-inverse-batch-2026-09-28-v2`; previous transform probe records
+cannot qualify this method. Train/inference hashes still cover transform's
+actual CPU/GPU and cross-vendor identity. No solver arithmetic or convergence
+rule was changed to make the new probe pass; native qualification is pending.
