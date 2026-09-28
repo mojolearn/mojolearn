@@ -23,6 +23,8 @@ def unhealthy(value):
     return any(marker in text for marker in (
         "dead/saturated", "device lost", "device_lost", "device is unhealthy",
         "unhealthy device", "gpu context is unhealthy", "command buffer failed",
+        "failed to create metal command queue", "deviation 2002",
+        "gpu context is not trustworthy",
     ))
 
 
