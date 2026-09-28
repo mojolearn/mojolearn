@@ -266,6 +266,23 @@ def axpy_centered[weighted: Bool = False](
             j += 1
 
 
+@always_inline
+def scale_acc(g: FP, goff: Int, s: Float32, count: Int):
+    """g[goff+j] = fm(g[goff+j], s): count independent values."""
+    comptime if is_gpu():
+        for j in range(count):
+            st(g, goff + j, fm(ld(g, goff + j), s))
+    else:
+        var sv = SIMD[DType.float32, 8](s)
+        var j = 0
+        while j + 8 <= count:
+            g.unsafe_store[width=8](goff + j, fmulv8(g.unsafe_load[width=8](goff + j), sv))
+            j += 8
+        while j < count:
+            st(g, goff + j, fm(ld(g, goff + j), s))
+            j += 1
+
+
 comptime ROW_CHUNK = 2048
 
 

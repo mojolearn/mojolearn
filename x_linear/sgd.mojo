@@ -17,8 +17,9 @@ by five) and the loss classes at the top of that file. Differences, named:
 """
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fsqrt, fexp, flog, fabs, fmax, fmin,
-    ld, st, ldi, sti, i2f, fill, row_dot, shuffle,
+    ld, st, ldi, sti, i2f, fill, row_dot, shuffle, axpy_acc, scale_acc, ftzv,
 )
+from std.sys.info import is_gpu
 from checks.numerics import identical_pow
 
 comptime L_HINGE = 0
@@ -221,11 +222,9 @@ def sgd_one(
                 update = fm(update, fm(cw, swi))
             if penalty == P_L2 or penalty == P_EN:
                 var scale = fmax(Float32(0), fs(Float32(1), fm(decay_factor, eta)))
-                for j in range(d):
-                    st(w, woff + j, fm(ld(w, woff + j), scale))
+                scale_acc(w, woff, scale, d)
             if update != 0:
-                for j in range(d):
-                    st(w, woff + j, fmad(update, ld(x, i * d + j), ld(w, woff + j)))
+                axpy_acc(w, woff, update, x, i * d, d)
             if fit_intercept:
                 var iu = update
                 if one_class:
@@ -234,15 +233,7 @@ def sgd_one(
                     intercept = fa(intercept, iu)
             if penalty == P_L1 or penalty == P_EN:
                 u = fa(u, fm(fm(l1_ratio, eta), alpha))
-                for j in range(d):
-                    var z = ld(w, woff + j)
-                    var nz = z
-                    if z > 0:
-                        nz = fmax(Float32(0), fs(z, fa(u, ld(q, j))))
-                    elif z < 0:
-                        nz = fmin(Float32(0), fa(z, fs(u, ld(q, j))))
-                    st(w, woff + j, nz)
-                    st(q, j, fa(ld(q, j), fs(nz, z)))
+                _l1_clip(w, woff, q, u, d)
             t += 1
         # their floating-point under-/overflow check
         var finite = intercept == intercept and fabs(intercept) < Float32(3.0e38)
@@ -329,3 +320,48 @@ def sgd_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: I
             max_epochs = ep
     st(res, problems * d + problems, i2f(max_epochs))
     st(res, problems * d + problems + 1, i2f(status))
+
+
+@always_inline
+def _clip_one(z: Float32, uq_pos: Float32, uq_neg: Float32) -> Float32:
+    """Tsuruoka's cumulative clip of one weight (fa(u, q) and fs(u, q) given)."""
+    if z > 0:
+        return fmax(Float32(0), fs(z, uq_pos))
+    if z < 0:
+        return fmin(Float32(0), fa(z, uq_neg))
+    return z
+
+
+def _l1_clip(w: FP, woff: Int, q: FP, u: Float32, d: Int):
+    """The cumulative L1 penalty over every weight (their `l1penalty`); each
+    weight and its q entry are updated on their own, so lanes are
+    independent and the vector form is the scalar loop bit for bit."""
+    comptime if is_gpu():
+        for j in range(d):
+            var z = ld(w, woff + j)
+            var nz = _clip_one(z, fa(u, ld(q, j)), fs(u, ld(q, j)))
+            st(w, woff + j, nz)
+            st(q, j, fa(ld(q, j), fs(nz, z)))
+    else:
+        comptime V = 8
+        var uv = ftzv[V](SIMD[DType.float32, V](u))
+        var zero = SIMD[DType.float32, V](0)
+        var j = 0
+        while j + V <= d:
+            var z = w.unsafe_load[width=V](woff + j)
+            var qv = ftzv[V](q.unsafe_load[width=V](j))
+            var zf = ftzv[V](z)
+            var pos = ftzv[V](zf - ftzv[V](uv + qv))   # fs(z, fa(u, q))
+            var neg = ftzv[V](zf + ftzv[V](uv - qv))   # fa(z, fs(u, q))
+            var pmax = zero.ge(pos).select(zero, pos)  # fmax(0, pos)
+            var nmin = zero.le(neg).select(zero, neg)  # fmin(0, neg)
+            var nz = z.gt(zero).select(pmax, z.lt(zero).select(nmin, z))
+            w.unsafe_store[width=V](woff + j, nz)
+            q.unsafe_store[width=V](j, ftzv[V](qv + ftzv[V](ftzv[V](nz) - zf)))
+            j += V
+        while j < d:
+            var z = ld(w, woff + j)
+            var nz = _clip_one(z, fa(u, ld(q, j)), fs(u, ld(q, j)))
+            st(w, woff + j, nz)
+            st(q, j, fa(ld(q, j), fs(nz, z)))
+            j += 1
