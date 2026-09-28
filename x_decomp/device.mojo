@@ -292,6 +292,11 @@ def cd_rows_kernel(w: F32Ptr, hht: F32Ptr, xht: F32Ptr, perm: I32Ptr, viol: F32P
         viol.unsafe_store(i, cd_row(w, hht, xht, perm, i, Int(k)))
 
 
+def orth_guard_kernel(r: F32Ptr, l: Int32):
+    if block_idx.x == 0 and thread_idx.x == 0:
+        orth_rank_guard(r, Int(l))
+
+
 def trsm_kernel(a: F32Ptr, r: F32Ptr, q: F32Ptr, m: Int32, l: Int32):
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < Int(m):
@@ -813,16 +818,25 @@ def orth_on_device(ctx: DeviceContext, da: DeviceBuffer[DType.float32], m: Int, 
     var scratch = ctx.enqueue_create_buffer[DType.float32](qr_slice_count(m, l) * l * l if l > 0 else 1)
     var r_buf = ctx.enqueue_create_buffer[DType.float32](l * l if l > 0 else 1)
     var r = List[Float32](length=l * l if l > 0 else 1, fill=Float32(0))
+    var dev_guard = String(getenv("MOJOLEARN_XD_ORTH_DEV", "1")) != "0"
     for p in range(2):
         var src = da if p == 0 else dq
         var dst = dq if p == 0 else da
         ctx.enqueue_copy(dst_buf=dw, src_buf=src)
-        ctx.synchronize()
-        _ = qr_factor(ctx, dw, scratch, r_buf, m, l)
-        _down(ctx, r_buf, F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())), l * l)
-        ctx.synchronize()
-        orth_rank_guard(F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())), l)
-        ctx.enqueue_copy(dst_buf=r_buf.create_sub_buffer[DType.float32](0, l * l), src_ptr=F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())))
+        if dev_guard:
+            # lane/decomp-apple2: the guard cell on one device thread, in
+            # stream order after the R it reads (the same cell the host ran;
+            # IDENTICAL cells are bit-equal on both), so R never leaves the
+            # device and the pass waits once, not three times.
+            _ = qr_factor(ctx, dw, scratch, r_buf, m, l)
+            ctx.enqueue_function[orth_guard_kernel](r_buf.unsafe_ptr(), Int32(l), grid_dim=1, block_dim=1)
+        else:
+            ctx.synchronize()
+            _ = qr_factor(ctx, dw, scratch, r_buf, m, l)
+            _down(ctx, r_buf, F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())), l * l)
+            ctx.synchronize()
+            orth_rank_guard(F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())), l)
+            ctx.enqueue_copy(dst_buf=r_buf.create_sub_buffer[DType.float32](0, l * l), src_ptr=F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())))
         ctx.enqueue_function[trsm_kernel](
             src.unsafe_ptr(), r_buf.unsafe_ptr(), dst.unsafe_ptr(), Int32(m), Int32(l), grid_dim=_blocks(m), block_dim=TPB
         )

@@ -39,8 +39,8 @@ def h(*ms):
     return d.hexdigest()[:16]
 
 
-OLD = {"MOJOLEARN_XD_JACOBI": "1", "MOJOLEARN_XD_LU_SERIAL": "0", "MOJOLEARN_XD_ALS_TEAM": "0"}
-NEW = {"MOJOLEARN_XD_JACOBI": "2", "MOJOLEARN_XD_LU_SERIAL": "16", "MOJOLEARN_XD_ALS_TEAM": "1"}
+OLD = {"MOJOLEARN_XD_JACOBI": "1", "MOJOLEARN_XD_LU_SERIAL": "0", "MOJOLEARN_XD_ALS_TEAM": "0", "MOJOLEARN_XD_ORTH_DEV": "0"}
+NEW = {"MOJOLEARN_XD_JACOBI": "2", "MOJOLEARN_XD_LU_SERIAL": "16", "MOJOLEARN_XD_ALS_TEAM": "1", "MOJOLEARN_XD_ORTH_DEV": "1"}
 
 
 def arm(name, fn):
@@ -75,7 +75,16 @@ for mn in [x for x in os.environ.get("SVD", "200000:28,5000:64,1000:256,800:800,
     A = M(rng.standard_normal((m, n)).astype(np.float32))
     arm(f"svd {m}x{n}", lambda: k.svd(A))
 
+for mn in [x for x in os.environ.get("ORTH", "200000:15").split(",") if x]:
+    m, n = (int(v) for v in mn.split(":"))
+    A = M(rng.standard_normal((m, n)).astype(np.float32))
+    arm(f"orth {m}x{n}", lambda: (k.orth(A),))
 if os.environ.get("FITS", "1") != "0":
+    Xr = (rng.standard_normal((200000, 28)) @ rng.standard_normal((28, 28))).astype(np.float32)
+    arm("PCA(randomized,5) 200000x28", lambda: (ml.PCA(n_components=5, svd_solver="randomized", random_state=0).fit(Xr).components_,))
+    arm("randomized_svd(5) 200000x28", lambda: tuple(np.asarray(a) for a in ml.randomized_svd(Xr, 5, random_state=0)))
+    arm("FactorAnalysis(5) 200000x28", lambda: (ml.FactorAnalysis(n_components=5, max_iter=20).fit(Xr).components_,))
+    arm("lstsq 200000x27", lambda: (np.asarray(ml.lstsq(Xr[:, :-1], Xr[:, -1])[0]),))
     rr = np.random.default_rng(0)
     R = (rr.random((20000, 2000)) < 0.01).astype(np.float32)
     arm("ALS(32f,5it) 20000x2000", lambda: (ml.AlternatingLeastSquares(factors=32, iterations=5, random_state=0).fit(R).user_factors,))
