@@ -158,3 +158,39 @@ taken under IDENTICAL) removed it before this round. What remains is compute: th
 distance/argmin kernel is the k-means|| rounds (898 of 2,126 ms on the M4 Pro) and every
 Lloyd iteration, and it scales with GPU cores. This round's two changes to it (operands
 flushed once at staging; the cheaper `ftz`) cut the coarse fit 27% on both Macs.
+
+## M4 Pro (m4pro-b), IDENTICAL, 1790610090438: before 037daa353 sources -> after 493ddcc37, + GMM trials
+
+Every digest equal before and after except DBSCAN taxi, which moves from the two-batch
+2c9624c0d0cf42d4 to the one-batch 9c8ea257cb04e118 (the fix). DBSCAN probe (after): taxi
+e10f0627f89268ce at every budget (before: 83a2d5a9baa55458 at 8000, 5a03789628c7946c at
+4000); HIGGS all-noise 4ac689b5d20b3cea at every budget.
+
+| case | rows | taxi before -> after (s) | higgs before -> after (s) |
+|---|---|---|---|
+| kmeans | 1M | 0.0804 -> 0.0744 | 0.1399 -> 0.1256 |
+| minibatch-kmeans | 1M | 0.2223 -> 0.2236 | 0.2930 -> 0.2939 |
+| bisecting-kmeans | 1M | 0.3494 -> 0.3386 | 0.3643 -> 0.3475 |
+| gmm | 1M | 2.9510 -> 2.8651 | 2.8280 -> 2.7226 |
+| bayesian-gmm | 100k | 1.5467 -> 1.5180 | 2.0486 -> 2.0241 |
+| dbscan | 100k | 0.3039 -> 0.4002 (digest fixed) | 0.0864 -> 0.1046 |
+| hdbscan | 40k | 2.7132 -> 2.7047 | 2.8642 -> 2.8492 |
+| agglomerative (single) | 10k | 0.0792 -> 0.0788 | 0.0759 -> 0.0758 |
+| agglomerative-ward | 10k | 0.9896 -> 1.0001 | 1.0335 -> 1.0407 |
+| spectral | 10k | 0.3560 -> 0.3092 | 0.0593 -> 0.0589 |
+| meanshift | 10k | 0.2709 -> 0.2656 | 0.2578 -> 0.2522 |
+| optics | 10k | 0.3960 -> 0.4029 | 0.4219 -> 0.4193 |
+| affinity-prop | 5k | 1.7099 -> 1.7155 | 0.8529 -> 0.8511 |
+
+Probe: KMeans coarse 2.12 -> 1.5061 s, PQ codebook 0.3370 -> 0.2725 s, IVF-SQ fit 2.43 ->
+1.82 s. GMM stages (taxi): E-step 1115 -> 1047 ms, M-step 1441 -> 1440.
+
+DBSCAN taxi on this 48 GB Mac is 0.30 -> 0.40 s: the price of the correct labels (the border
+pass rebuilds batch 0's CSR). The two batches come from cuML's worst-case memory estimate
+(`neigh_per_row = n_rows`), which the RBC arm does not use; the batch count no longer moves a
+bit, so a tighter estimate is now purely a speed question (not done here).
+
+GMM trial arms (same job, mixture rebuilt with the define, digests equal):
+- E-step stacked products: taxi 2.4336 s, HIGGS 2.3522 s (E-step 620 ms): **taken, default on
+  in 4174d14d2**.
+- M-step PLAN_SPLIT_16_1X1: 2.8591 / 2.7208 s, M-step unchanged: removed.
