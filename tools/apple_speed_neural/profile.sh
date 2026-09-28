@@ -3,7 +3,7 @@
 # family. Run by `tools/apple_steward.py submit --kind speed` in the steward's
 # worktree at the commit, after the builds (bindings/build.sh,
 # build_training.sh, build_mamba.sh, build_transformer.sh,
-# build_embedding.sh, build_byte_lm.sh). Prints one NEURAL line per lane
+# build_embedding.sh; the byte LM binding is built here when absent). Prints one NEURAL line per lane
 # (bench_board_neural's `ours` arm: public API, host inputs in, result back,
 # synchronized; median of NEURAL_ROUNDS timed rounds after a warm-up; output
 # digests for the before/after bit check), then the byte LM step at the T3
@@ -17,6 +17,9 @@ OUT=${NEURAL_OUT:-$HOME/mojolearn-evidence/neural-apple-speed/$(git rev-parse --
 LANES=${NEURAL_LANES:-"lm-train-step lm-forward gemm transformer-forward mamba1-forward mamba2-forward mamba3-forward samba-train-step samba-forward mlp-train-step"}
 ROUNDS=${NEURAL_ROUNDS:-5}
 mkdir -p "$OUT"
+# build_byte_lm.sh refuses an existing output; the steward seeds it from its
+# build store when the source closure is unchanged, so build only when absent.
+[ -f python/mojolearn/identical/_mojolearn_byte_lm.so ] || pixi run -e default sh bindings/build_byte_lm.sh > "$OUT/byte_lm.build.log" 2>&1 || echo "BYTE-LM-BUILD FAILED"
 echo "OUT $OUT commit $(git rev-parse --short HEAD) host $(hostname) $(sysctl -n machdep.cpu.brand_string 2>/dev/null)"
 export MOJOLEARN_NUMERIC_MODE=${MOJOLEARN_NUMERIC_MODE:-identical}
 rc=0
