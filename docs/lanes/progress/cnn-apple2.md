@@ -200,11 +200,48 @@ GCNConv / SAGEConv forward is host NumPy (two lexsorts of 1.1M edges,
 np.add.at): 1e79c8b4c builds the same CSR with one stable int64 argsort
 per view and bincount (0.24 -> 0.09 s per order on the laptop, same order).
 
+### m3ultra-b (Apple M3 Ultra), job 1790610432497, commit cf1ee40fb
+
+(The request was queued at f9dab4da4 and retargeted in place, before it
+started, to cf1ee40fb: the job's CABRUN line prints the commit it ran.)
+base = every change off (`-D MOJOLEARN_XCNN_NO_MMA_SPLIT -D
+MOJOLEARN_XCNN_NO_NT_TUNE -D MOJOLEARN_XCNN_NO_RES_POOL -D
+MOJOLEARN_XCNN_NO_TILED_LAYOUT -D MOJOLEARN_XCNN_NO_IM2COL_TAPS -D
+MOJOLEARN_XCNN_NO_DIRECT_CONV -D MOJOLEARN_XCNN_NO_POOL_BWD_TILE` + legacy)
+= round 1's code (its fit 2048 147.8 ms against round 1's 144.3); all =
+default. Median of two rounds, ms.
+
+| shape | IDENTICAL base | IDENTICAL all | FAST base | FAST all |
+|---|---|---|---|---|
+| Conv2d 3->64 fwd / bwd | 28.1 / 6.5 | 25.4 / 4.5 | 28.0 / 8.2 | 24.6 / 4.2 |
+| Conv2d 64->64 fwd / bwd | 39.3 / 72.8 | 34.2 / 44.7 | 41.2 / 60.0 | 33.3 / 42.4 |
+| Conv2d 64->128 fwd / bwd | 18.5 / 20.1 | 17.3 / 18.9 | 20.8 / 21.0 | 16.8 / 17.0 |
+| CNNClassifier fit 2048 | 147.8 | 75.0 (2.0x) | 129.2 | 68.0 (1.9x) |
+| CNNClassifier fit 8192 | 545.0 | 290.1 (1.9x) | 466.9 | 265.8 (1.8x) |
+| predict_proba 2048 | 57.6 | 24.4 (2.4x) | 52.5 | 19.6 (2.7x) |
+| predict_proba 8192 | 204.6 | 72.2 (2.8x) | 213.4 | 58.2 (3.7x) |
+| BasicBlock 64 N64 H32 fwd / fwd+bwd | 78.3 / 174.1 | 80.2 / 153.5 | 78.3 / 162.7 | 77.2 / 144.1 |
+| BatchNorm2d 64 N64 H32 fwd / bwd | 23.8 / 18.6 | 23.6 / 18.4 | 23.0 / 17.6 | 22.4 / 16.6 |
+| MaxPool2d 2 N256 C64 H32 fwd / bwd | 11.3 / 28.2 | 11.6 / 27.2 | 11.7 / 28.9 | 11.1 / 27.0 |
+| GCNConv 100k nodes 1M edges fwd / bwd | 520.3 / 31.8 | 247.7 / 30.9 | 519.5 / 30.4 | 247.6 / 30.4 |
+| SAGEConv 100k / 1M fwd / bwd | 494.3 / 56.9 | 236.0 / 54.4 | 496.1 / 54.8 | 236.6 / 54.0 |
+
+Bits: IDENTICAL, all 8 digest lines equal in all 4 runs (2 arms x 2
+rounds), the same words as round 1 and the M4 / M4 Pro runs; FAST, all 8
+digest lines equal in all 4 runs and all 20 fastq.py rows equal between
+the arms (the same values as on the M4 and M4 Pro).
+Stages (all vs base, ms): block 1 shipped forward 1.66 -> 0.98 (direct
+conv), weight gradient 0.94 -> 0.35; block 2 weight gradient 4.59 -> 0.88
+(APPLE_MMA_SPLIT_BIG), im2col 0.89 -> 0.30, conv_out 0.20 -> 0.11.
+Plan sweep: 64x288x65536 4.68 -> 0.88 ms, 64x576x262144 26.6 -> 4.25 ms
+(APPLE_MMA_SPLIT_BIG, 0 mismatches).
+
 ## Unproven
 
-- 1e79c8b4c (rows back on the element kernel, GCN/SAGE host CSR):
-  job 1790610432497 (m3ultra-b, commit f9dab4da4) pending.
-- No M3 Ultra number yet for any change.
+- 209bdc3b4 (graph reuse by content key, DC_MAXW 2048): job
+  1790614006220 (m4pro-a) pending.
+- The direct conv (985673313) and the pool backward step (4afd3f1ec) are
+  measured on the M3 Ultra only so far.
 
 ## Shared code touched (the integration run must cover)
 
