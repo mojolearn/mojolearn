@@ -3704,11 +3704,36 @@ class MinCovDet(_Base):
             support[i] = True
         return loc, cov, support, _mahal(k, X, loc, P)
 
+    def _fast_mcd_native(self, k, X, h):
+        """fast_mcd for two or more features in ONE binding call
+        (x_decomp/mcd.mojo, lane/py-decomp-nbrs): the same C-steps, cells,
+        draws and (value, index) orders as the Python driver below, which
+        made 12 to 40 kit calls per C-step. Only the O(1) plan integers are
+        computed here, with the float expressions they always used."""
+        n, p = X.r, X.c
+        plan = [0] * 7
+        if n > 500:
+            n_sub = n // 300
+            n_ss = n // n_sub
+            n_m = min(1500, n)
+            plan = [n_sub, n_ss, int(math.ceil(n_ss * (h / float(n)))), max(10, 500 // n_sub),
+                    n_m, int(math.ceil(n_m * (h / float(n)))), 10 if n > 1500 else 1]
+        loc, cov, dist = _M.zeros(1, p), _M.zeros(p, p), _M.zeros(n, 1)
+        sup = array.array("i", [0]) * n
+        k.b.x_decomp_mcd(X.addr, loc.addr, cov.addr, sup.buffer_info()[0], dist.addr,
+                         [n, p, h, int(self._seed) & 0xFFFFFFFF] + plan,
+                         int(_os.environ.get("MOJOLEARN_XD_MCD_DEV_MIN", "65536")))
+        return loc, cov, [v != 0 for v in sup], dist
+
     def _fast_mcd(self, k, X):
         n, p = X.r, X.c
         h = int(math.ceil(0.5 * (n + p + 1))) if self.support_fraction is None else int(self.support_fraction * n)
         if p == 1:
             return self._mcd_1d(k, X, h)
+        if _os.environ.get("MOJOLEARN_XD_MCD_PYTHON") != "1":
+            return self._fast_mcd_native(k, X, h)
+        # THE REFERENCE ARM (MOJOLEARN_XD_MCD_PYTHON=1, timing and A/B only):
+        # the same search driven from Python one kit call at a time.
         if n > 500:
             n_sub = n // 300
             n_ss = n // n_sub

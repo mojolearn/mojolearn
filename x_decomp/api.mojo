@@ -11,6 +11,7 @@ from std.python._cpython import GILReleased
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.exec_trait import Exec
+from x_decomp.mcd import fast_mcd, mat_from
 
 
 def _f(addr: PythonObject) raises -> F32Ptr:
@@ -397,6 +398,34 @@ def als_cg_rows_py[E: Exec](
     var ps = _f(steps)
     with GILReleased(Python()):
         E.als_cg_rows(pc, py_, pg, px, ps, n, m, f, r, cg)
+    return PythonObject(n)
+
+
+def mcd_py[E: Exec, S: Exec](
+    x: PythonObject, loc: PythonObject, cov: PythonObject, sup: PythonObject, dist: PythonObject,
+    p: PythonObject, dev: PythonObject,
+) raises -> PythonObject:
+    """MinCovDet's fast_mcd (x_decomp/mcd.mojo): x (n x d) in; location
+    (d), covariance (d x d), support (n int32 0/1) and distances (n) out.
+    p = [n, d, h, seed, n_sub, n_ss, h_sub, n_trials, n_m, h_m, n_best_m]."""
+    var q = List[Int]()
+    for i in range(11):
+        q.append(Int(py=p[i]))
+    var n = q[0]
+    var d = q[1]
+    if n < 1 or d < 2 or n * d > 2147483647 or q[2] < 1 or q[2] > n:
+        raise Error("x_decomp: mcd needs n >= 1, d >= 2 and 1 <= h <= n")
+    if n > 500 and (q[4] < 1 or q[4] * q[5] > n or q[8] > n or q[8] < 1 or q[10] < 1):
+        raise Error("x_decomp: mcd subset plan out of range")
+    var dv = Int(py=dev)
+    var px = _f(x)
+    var pl = _f(loc)
+    var pc = _f(cov)
+    var ps = _i(sup)
+    var pd = _f(dist)
+    with GILReleased(Python()):
+        var X = mat_from(px, n, d)
+        fast_mcd[E, S](X, q, dv, pl, pc, ps, pd)
     return PythonObject(n)
 
 
