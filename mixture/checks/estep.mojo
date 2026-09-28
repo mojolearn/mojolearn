@@ -704,11 +704,30 @@ def meanll_kernel(
         # first so the chain waits on the add, not on each load.
         comptime U = GMM_MEANLL_AHEAD
         var i = 0
-        while i + U <= n:
-            var v = lse.unsafe_load[width=U](i)
-            comptime for u in range(U):
-                acc = ftz(acc + ftz(v[u]))
-            i += U
+        comptime if not is_defined["MOJOLEARN_GMM_CHAIN_PIPE_OFF"]():
+            # lane cluster-apple2: block b + 1 is loaded before block b's
+            # adds (mstep.mojo GMM_CHAIN_PIPE). Same adds, same order.
+            var have = i + U <= n
+            var cur = SIMD[DType.float32, U](0.0)
+            if have:
+                cur = lse.unsafe_load[width=U](i)
+            while have:
+                var ni = i + U
+                var nhave = ni + U <= n
+                var nxt = SIMD[DType.float32, U](0.0)
+                if nhave:
+                    nxt = lse.unsafe_load[width=U](ni)
+                comptime for u in range(U):
+                    acc = ftz(acc + ftz(cur[u]))
+                cur = nxt
+                i = ni
+                have = nhave
+        else:
+            while i + U <= n:
+                var v = lse.unsafe_load[width=U](i)
+                comptime for u in range(U):
+                    acc = ftz(acc + ftz(v[u]))
+                i += U
         while i < n:
             acc = ftz(acc + ftz(lse.unsafe_load(i)))
             i += 1

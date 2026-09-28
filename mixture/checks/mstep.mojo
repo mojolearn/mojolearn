@@ -151,7 +151,6 @@ from mixture.checks.gmm_sabotage import (
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_FAST,
-    NUMERIC_IDENTICAL,
     ftz,
     identical_div,
     identical_exp,
@@ -242,6 +241,10 @@ def resp_exp_kernel(
 #: Operands of this many `nk_kernel` steps are loaded before the steps run
 #: (execution only). `-D MOJOLEARN_GMM_NK_AHEAD_OFF` = 1.
 comptime GMM_NK_AHEAD = 1 if is_defined["MOJOLEARN_GMM_NK_AHEAD_OFF"]() else 32
+#: lane cluster-apple2 (2026-09-28): the one-thread chains (nk here,
+#: the mean log-likelihood in estep.mojo) load block b + 1 before adding
+#: block b. `-D MOJOLEARN_GMM_CHAIN_PIPE_OFF=1` reverts.
+comptime GMM_CHAIN_PIPE = not is_defined["MOJOLEARN_GMM_CHAIN_PIPE_OFF"]()
 
 
 def nk_kernel(
@@ -282,13 +285,35 @@ def nk_kernel(
         # are loaded first so the chain waits on the add, not on each load.
         comptime U = GMM_NK_AHEAD
         var i = 0
-        while i + U <= n:
-            var v = SIMD[DType.float32, U](0.0)
-            comptime for u in range(U):
-                v[u] = resp.unsafe_load((i + u) * ncomp + k)
-            comptime for u in range(U):
-                acc = ftz(acc + ftz(v[u]))
-            i += U
+        comptime if GMM_CHAIN_PIPE:
+            # lane cluster-apple2: the NEXT block's operands are loaded
+            # before this block's adds, so a block's loads are in flight
+            # while the previous block's chain runs. Same adds, same order.
+            var have = i + U <= n
+            var cur = SIMD[DType.float32, U](0.0)
+            if have:
+                comptime for u in range(U):
+                    cur[u] = resp.unsafe_load((i + u) * ncomp + k)
+            while have:
+                var ni = i + U
+                var nhave = ni + U <= n
+                var nxt = SIMD[DType.float32, U](0.0)
+                if nhave:
+                    comptime for u in range(U):
+                        nxt[u] = resp.unsafe_load((ni + u) * ncomp + k)
+                comptime for u in range(U):
+                    acc = ftz(acc + ftz(cur[u]))
+                cur = nxt
+                i = ni
+                have = nhave
+        else:
+            while i + U <= n:
+                var v = SIMD[DType.float32, U](0.0)
+                comptime for u in range(U):
+                    v[u] = resp.unsafe_load((i + u) * ncomp + k)
+                comptime for u in range(U):
+                    acc = ftz(acc + ftz(v[u]))
+                i += U
         while i < n:
             acc = ftz(acc + ftz(resp.unsafe_load(i * ncomp + k)))
             i += 1
@@ -1228,63 +1253,6 @@ def gmm_precision_cholesky(
 # ===========================================================================
 
 
-#: lane cluster-apple2 TRIAL (opt-in): every component's covariance product
-#: in ONE identical GEMM, `[scaled_1 .. scaled_K]^T . [diff_1 .. diff_K]`
-#: (Kd x Kd, k = n), of which the K diagonal d x d blocks are the
-#: per-component products' cells (a cell is a function of its two operand
-#: columns and k alone). `center_scale_stacked_kernel` is
-#: `center_scale_kernel`'s arithmetic at a stacked address.
-comptime GMM_COV_STACK_TRIAL = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_GMM_COV_STACK_TRIAL"]()
-)
-
-
-def center_scale_stacked_kernel(
-    x: MutPointer[Float32, MutAnyOrigin],
-    means: MutPointer[Float32, MutAnyOrigin],
-    resp: MutPointer[Float32, MutAnyOrigin],
-    diff: MutPointer[Float32, MutAnyOrigin],
-    scaled: MutPointer[Float32, MutAnyOrigin],
-    n_in: Int32,
-    d_in: Int32,
-    ncomp_in: Int32,
-):
-    var d = Int(d_in)
-    var ncomp = Int(ncomp_in)
-    var kd = d * ncomp
-    var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if idx >= Int(n_in) * kd:
-        return
-    var i = idx // kd
-    var r = idx % kd
-    var kc = r // d
-    var j = r % d
-    var dv = ftz(ftz(x.unsafe_load(i * d + j)) - ftz(means.unsafe_load(kc * d + j)))
-    diff.unsafe_store(idx, dv)
-    var rr = ftz(resp.unsafe_load(i * ncomp + kc))
-    scaled.unsafe_store(idx, ftz(identical_mul(rr, dv)))
-
-
-def cov_diag_blocks_kernel(
-    c: MutPointer[Float32, MutAnyOrigin],
-    raw_all: MutPointer[Float32, MutAnyOrigin],
-    d_in: Int32,
-    ncomp_in: Int32,
-):
-    """`raw_all[k][a][b] = c[k*d + a][k*d + b]` (a copy)."""
-    var d = Int(d_in)
-    var kd = d * Int(ncomp_in)
-    var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if idx >= Int(ncomp_in) * d * d:
-        return
-    var kc = idx // (d * d)
-    var a = (idx % (d * d)) // d
-    var b = idx % d
-    raw_all.unsafe_store(idx, c.unsafe_load((kc * d + a) * kd + kc * d + b))
-
-
 def gmm_m_step(
     ctx: DeviceContext,
     mut x: DeviceBuffer[DType.float32],
@@ -1517,51 +1485,6 @@ def gmm_m_step(
                 block_dim=(256, 1, 1),
             )
             fast_gram = False
-            ncomp_loop = 0
-    comptime if GMM_COV_STACK_TRIAL:
-        var kd_s = ncomp * d
-        if (
-            not fast_gram and sabotage == GMM_SAB_NONE and ncomp_loop > 0
-            and n * kd_s <= (1 << 27)
-        ):
-            var diff_s = ctx.enqueue_create_buffer[DType.float32](n * kd_s)
-            var scaled_s = ctx.enqueue_create_buffer[DType.float32](n * kd_s)
-            var c_s = ctx.enqueue_create_buffer[DType.float32](kd_s * kd_s)
-            var raw_all = ctx.enqueue_create_buffer[DType.float32](ncomp * d * d)
-            var ws_s = ctx.enqueue_create_buffer[DType.float32](
-                identical_gemm_workspace_max_floats(kd_s, kd_s, n)
-            )
-            ctx.enqueue_function[center_scale_stacked_kernel](
-                x.unsafe_ptr(), means.unsafe_ptr(), resp.unsafe_ptr(),
-                diff_s.unsafe_ptr(), scaled_s.unsafe_ptr(), Int32(n), Int32(d),
-                Int32(ncomp),
-                grid_dim=((n * kd_s + elem_tpb - 1) // elem_tpb, 1, 1),
-                block_dim=(elem_tpb, 1, 1),
-            )
-            identical_gemm_into(ctx, c_s, scaled_s, diff_s, ws_s, kd_s, kd_s, n, OP_TN)
-            ctx.enqueue_function[cov_diag_blocks_kernel](
-                c_s.unsafe_ptr(), raw_all.unsafe_ptr(), Int32(d), Int32(ncomp),
-                grid_dim=((ncomp * d * d + 255) // 256, 1, 1),
-                block_dim=(256, 1, 1),
-            )
-            for kc in range(ncomp):
-                ctx.enqueue_function[cov_finish_kernel](
-                    raw_all.unsafe_ptr().unsafe_offset(kc * d * d),
-                    nk.unsafe_ptr(),
-                    cov.unsafe_ptr(),
-                    Int32(d),
-                    Int32(kc),
-                    reg_covar,
-                    divide_after,
-                    grid_dim=(grid_dd, 1, 1),
-                    block_dim=(elem_tpb, 1, 1),
-                )
-            ctx.synchronize()
-            _ = diff_s^
-            _ = scaled_s^
-            _ = c_s^
-            _ = raw_all^
-            _ = ws_s^
             ncomp_loop = 0
     for kc in range(ncomp_loop):
         if fast_gram:
