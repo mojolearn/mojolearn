@@ -11,6 +11,13 @@ from std.os import getenv
 from std.time import perf_counter_ns
 
 from max.gpu.host import DeviceContext
+from core.neural_context import process_ctx
+from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+
+#: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
+#: lane/devctx-lifetime): a context per call exhausts Metal command queues.
+comptime _DEVCTX_SLOT = "MojoNeuralMambaContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoNeuralMambaContextFast"
+
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.identity_trace import IdentityTrace
@@ -126,12 +133,12 @@ def mamba3_prefill_backward(
     # lane/neural-apple2 (2026-09-28): the binding passes its process-lifetime
     # context (core/neural_context.mojo); a fresh context per call meant a
     # new Metal queue and a pipeline compile of every kernel on every call.
-    # Same kernels, same launches, same order: no bit moves.
+    # Direct callers also reuse that context when none is supplied.
     var ctx: DeviceContext
     if ctx_in:
         ctx = ctx_in.take()
     else:
-        ctx = DeviceContext()
+        ctx = process_ctx[_DEVCTX_SLOT]()
     # lane/neural-apple2: MOJOLEARN_MAMBA_TIMING=1 prints a wall per stage
     # (a synchronize around each; measurement only, off by default).
     var ton = String(getenv("MOJOLEARN_MAMBA_TIMING")) != ""

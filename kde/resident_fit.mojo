@@ -33,6 +33,13 @@ from std.ffi import _Global
 
 from bindings.hostptr import copy_f32
 from max.gpu.host import DeviceBuffer, DeviceContext
+from core.neural_context import process_ctx
+from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+
+#: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
+#: lane/devctx-lifetime): a context per call exhausts Metal command queues.
+comptime _DEVCTX_SLOT = "MojoEstimatorsContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoEstimatorsContextFast"
+
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.identity_trace import IdentityTrace
@@ -79,7 +86,7 @@ struct ResidentKdeFit(Movable):
         # order: `kde_fit_validate`, then the training rows.
         kde_fit_validate(n_train, n_features, bandwidth, kernel, metric, weights, has_weights)
         kde_validate_data_ptr(train_ptr, n_train, n_features, metric, "train")
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         var n = n_train * n_features
         var train = ctx.enqueue_create_buffer[DType.float32](n)
         var host = ctx.enqueue_create_host_buffer[DType.float32](n)

@@ -52,6 +52,13 @@ from std.python.bindings import PythonModuleBuilder
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from max.gpu.host import DeviceContext
+from core.neural_context import process_ctx
+from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+
+#: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
+#: lane/devctx-lifetime): a context per call exhausts Metal command queues.
+comptime _DEVCTX_SLOT = "MojoMetricsContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoMetricsContextFast"
+
 from std.math import isfinite
 from umap.estimator import fit_transform as umap_fit_transform
 from umap.sparse_estimator import sparse_fit_transform
@@ -1130,8 +1137,9 @@ def umap_fit_transform_binding(
     var output = _f32_ptr(Int(py=embedding_addr))
     var embedding = List[Float32]()
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         embedding = umap_fit_transform(ctx, x, n, d, config)
+        ctx.synchronize()
     if len(embedding) != n * config.n_components:
         raise Error("UMAP returned an unexpected embedding shape")
     for value in embedding:
@@ -1200,7 +1208,7 @@ def umap_fit_transform_ex_binding(addrs: PythonObject, params: PythonObject) rai
     var output = _f32_ptr(Int(py=addrs[1]))
     var embedding = List[Float32]()
     with GILReleased(Python()):
-        with DeviceContext() as ctx:
+        with process_ctx[_DEVCTX_SLOT]() as ctx:
             embedding = sparse_fit_transform(ctx, x, n, d, config, init, target, tkind, tdims, tk, tw)
     if len(embedding) != n * config.n_components:
         raise Error("UMAP returned an unexpected embedding shape")
@@ -1254,7 +1262,7 @@ def umap_transform_binding(addrs: PythonObject, params: PythonObject) raises -> 
     var output = _f32_ptr(Int(py=addrs[3]))
     var embedding = List[Float32]()
     with GILReleased(Python()):
-        with DeviceContext() as ctx:
+        with process_ctx[_DEVCTX_SLOT]() as ctx:
             embedding = umap_transform(ctx, training, fitted, queries, n, rows, d, config)
     if len(embedding) != rows * config.n_components:
         raise Error("UMAP transform returned an unexpected shape")

@@ -40,6 +40,13 @@ arithmetic: nothing here computes, it only moves bytes and forwards.
 """
 
 from max.gpu.host import DeviceContext
+from core.neural_context import process_ctx
+from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+
+#: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
+#: lane/devctx-lifetime): a context per call exhausts Metal command queues.
+comptime _DEVCTX_SLOT = "MojoMetricsContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoMetricsContextFast"
+
 from std.math import isfinite
 from metrics.impl.regression_errors import regression_error
 from metrics.impl.log_loss import log_loss
@@ -116,7 +123,7 @@ def accuracy_score_host(
     pure cupy and does not call this kernel at all. This entry is the C++
     one, which is what `metrics/` implemented."""
     _check_pair(y_true, y_pred, n)
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var dt = upload_i32(ctx, y_true)
     var dp = upload_i32(ctx, y_pred)
     var out = accuracy_score_py(ctx, dt, dp, n)
@@ -135,7 +142,7 @@ def rand_score_host(
     has a C++ entry and this surface exposes it under scikit-learn's name
     `rand_score`."""
     _check_pair(y_true, y_pred, n)
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var dt = upload_i32(ctx, y_true)
     var dp = upload_i32(ctx, y_pred)
     var out = rand_index(ctx, dt, dp, n)
@@ -154,7 +161,7 @@ def adjusted_rand_score_host(
     contingency matrix over its own label range, exactly as theirs does;
     there is no `lower_class_range` on this entry."""
     _check_pair(y_true, y_pred, n)
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var dt = upload_i32(ctx, y_true)
     var dp = upload_i32(ctx, y_pred)
     var out = adjusted_rand_index(ctx, dt, dp, n)
@@ -180,7 +187,7 @@ def entropy_host(
             + " entries, needs at least n = " + String(n)
         )
     _check_range(lower, upper)
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var dl = upload_i32(ctx, labels)
     var out = entropy(ctx, dl, n, lower, upper)
     _ = dl^
@@ -205,7 +212,7 @@ def mutual_info_score_host(
     does the same, which is what keeps that square small."""
     _check_pair(y_true, y_pred, n)
     _check_range(lower, upper)
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var dt = upload_i32(ctx, y_true)
     var dp = upload_i32(ctx, y_pred)
     var out = mutual_info_score(ctx, dt, dp, n, lower, upper)
@@ -224,7 +231,7 @@ def accuracy_score_weighted_host(
     _check_pair(y_true, y_pred, n)
     if len(w) < n:
         raise Error("accuracy_score: sample_weight holds " + String(len(w)) + " values for n=" + String(n))
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var dt = upload_i32(ctx, y_true)
     var dp = upload_i32(ctx, y_pred)
     var dw = upload_f32(ctx, w)
@@ -244,7 +251,7 @@ def r2_score_weighted_host(
     pinned-sum path (`metrics/impl/weighted_scores.mojo`)."""
     if n <= 0 or len(y) < n or len(y_hat) < n or len(w) < n:
         raise Error("r2_score: y, y_pred and sample_weight must hold n=" + String(n) + " values")
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var dy = upload_f32(ctx, y)
     var dyh = upload_f32(ctx, y_hat)
     var dw = upload_f32(ctx, w)
@@ -269,7 +276,7 @@ def fowlkes_mallows_score_host(
     remaps onto `[0, n_classes - 1]` as it does for mutual information."""
     _check_pair(y_true, y_pred, n)
     _check_range(lower, upper)
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var dt = upload_i32(ctx, y_true)
     var dp = upload_i32(ctx, y_pred)
     var out = fowlkes_mallows_score(ctx, dt, dp, n, lower, upper)
@@ -290,7 +297,7 @@ def homogeneity_score_host(
     """`ML::Metrics::homogeneity_score`: `MI(true, pred) / H(true)`."""
     _check_pair(y_true, y_pred, n)
     _check_range(lower, upper)
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var dt = upload_i32(ctx, y_true)
     var dp = upload_i32(ctx, y_pred)
     var out = homogeneity_score(ctx, dt, dp, n, lower, upper)
@@ -315,7 +322,7 @@ def completeness_score_host(
     (`metrics/metrics_main.mojo` records both). Implemented as theirs."""
     _check_pair(y_true, y_pred, n)
     _check_range(lower, upper)
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var dt = upload_i32(ctx, y_true)
     var dp = upload_i32(ctx, y_pred)
     var out = completeness_score(ctx, dt, dp, n, lower, upper)
@@ -338,7 +345,7 @@ def v_measure_score_host(
     RAFT `v_measure.cuh`): `(1 + beta) h c / (beta h + c)`."""
     _check_pair(y_true, y_pred, n)
     _check_range(lower, upper)
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var dt = upload_i32(ctx, y_true)
     var dp = upload_i32(ctx, y_pred)
     var out = v_measure(ctx, dt, dp, n, lower, upper, beta)
@@ -367,7 +374,7 @@ def r2_score_host(
     `0x7fc00000` rather than a vendor payload. `force_finite=False` is
     therefore NOT reachable and the Python mirror refuses it by name."""
     _check_float_pair(y_true, y_pred, n)
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var dy = upload_f32(ctx, y_true)
     var dh = upload_f32(ctx, y_pred)
     var out = r2_score_py(ctx, dy, dh, n)
@@ -384,7 +391,7 @@ def kl_divergence_host(
     """`ML::Metrics::kl_divergence` (float overload; DEVIATIONS 653, 658).
     `sum p_i (log p_i - log q_i)`, NOT normalized, exactly as theirs."""
     _check_float_pair(p, q, n)
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var dp = upload_f32(ctx, p)
     var dq = upload_f32(ctx, q)
     var out = kl_divergence(ctx, dp, dq, n)
@@ -438,7 +445,7 @@ def silhouette_host(
             "silhouette: labels holds " + String(len(labels))
             + " entries, needs n_rows = " + String(n_rows)
         )
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var dx = upload_f32(ctx, x)
     var dl = upload_i32(ctx, labels)
     var ds = ctx.enqueue_create_buffer[DType.float32](n_rows)
@@ -499,7 +506,7 @@ def trustworthiness_host(
             "trustworthiness: X_embedded holds " + String(len(x_embedded))
             + " floats, needs " + String(n * d)
         )
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     return trustworthiness_score(
         ctx, x, x_embedded, n, m, d, n_neighbors, batch_size
     )
@@ -513,7 +520,7 @@ def regression_error_host[absolute: Bool = False, root: Bool = False](
     for i in range(n):
         if not isfinite(y_true[i]) or not isfinite(y_pred[i]):
             raise Error("regression_error: inputs must be finite Float32")
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var y = upload_f32(ctx, y_true)
     var prediction = upload_f32(ctx, y_pred)
     var result = regression_error[absolute, root](ctx, y, prediction, n)
@@ -538,7 +545,7 @@ def confusion_matrix_host[dtype: DType](
     y: List[Int32], p: List[Int32], n: Int, k: Int, normalization: Int,
 ) raises -> List[Scalar[dtype]]:
     _check_classification[True](y,p,n,k)
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var dy = upload_i32(ctx,y)
     var dp = upload_i32(ctx,p)
     var result = confusion_matrix[dtype](ctx,dy,dp,n,k,normalization)
@@ -558,7 +565,7 @@ def precision_recall_fscore_host(
     positive: Int, zero: Int, selected: Int,
 ) raises -> List[Float32]:
     _check_classification[False](y,p,n,k)
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var dy = upload_i32(ctx,y)
     var dp = upload_i32(ctx,p)
     var result = precision_recall_fscore(ctx,dy,dp,n,k,average,positive,zero,selected)
@@ -583,7 +590,7 @@ def log_loss_host(y: List[Int32], probability: List[Float32], n: Int, k: Int, no
     for i in range(n*k):
         if not isfinite(probability[i]) or probability[i] < 0 or probability[i] > 1:
             raise Error("log_loss: probabilities must be finite and within [0,1]")
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var dy = upload_i32(ctx,y)
     var dp = upload_f32(ctx,probability)
     var result = log_loss(ctx,dy,dp,n,k,normalize)
@@ -610,7 +617,7 @@ def binary_ranking_host[curve: Bool](y: List[Int32], scores: List[Float32], n: I
     comptime if not curve:
         if not has_zero or not has_one:
             raise Error("roc_auc_score: both classes required")
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var dy = upload_i32(ctx,y)
     var ds = upload_f32(ctx,scores)
     var result = binary_ranking[curve](ctx,dy,ds,n)

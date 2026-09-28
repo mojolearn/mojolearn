@@ -139,6 +139,13 @@ from extratrees.impl.randomforest.randomforest import (
     fit_regression_device,
 )
 from max.gpu.host import DeviceContext
+from core.neural_context import process_ctx
+from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+
+#: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
+#: lane/devctx-lifetime): a context per call exhausts Metal command queues.
+comptime _DEVCTX_SLOT = "MojoTreesContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoTreesContextFast"
+
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 
@@ -893,7 +900,7 @@ def fit_extra_trees_classifier(
     config: ExtraTreesConfig,
 ) raises -> FitResult:
     """GPU-only public fit; the context is owned for this call."""
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     return fit_extra_trees_classifier_device(
         ctx, x_col_major, labels, n_rows, n_features, n_classes, config
     )
@@ -904,7 +911,7 @@ def fit_extra_trees_regressor(
     n_rows: Int32, n_features: Int32, config: ExtraTreesConfig,
 ) raises -> FitResult:
     """GPU-only public fit; use *_reference only for independent checks."""
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     return fit_extra_trees_regressor_device(
         ctx, x_col_major, y, n_rows, n_features, config
     )

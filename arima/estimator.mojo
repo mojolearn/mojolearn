@@ -88,6 +88,13 @@ MI325X (bench/results/identity_break/2026-09-14_136-lanes/).
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
 from bindings.hostptr import copy_f32
 from max.gpu.host import DeviceBuffer, DeviceContext
+from core.neural_context import process_ctx
+from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+
+#: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
+#: lane/devctx-lifetime): a context per call exhausts Metal command queues.
+comptime _DEVCTX_SLOT = "MojoArimaContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoArimaContextFast"
+
 
 from core.identity_trace import IdentityTrace
 
@@ -400,7 +407,7 @@ def arima_fit_ptr_host(
     var N = order.complexity()
     var exog_host = exog_filter_layout(exog_address, batch_size, n_obs, order.n_exog, "exog")
 
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var trace = IdentityTrace()
     trace.header(
         "arima_fit_ptr_host: batch_size=" + String(batch_size)
@@ -475,7 +482,7 @@ def _predict_into(
         exog_fut_address, batch_size, num_steps, order.n_exog, "exog (future values)"
     )
 
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
 
     # Stage the four immutable inputs as one upload batch.  The generic
     # helpers synchronize before returning because their host allocations

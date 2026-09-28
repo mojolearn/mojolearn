@@ -28,7 +28,27 @@ stream, every entry still synchronizes before it returns, so no bit moves.
 
 Storage: `std.ffi._Global` (x_cnn/device.mojo's pattern). The caller passes
 the slot NAME, one per binding and numeric tier, so a FAST and an IDENTICAL
-.so in one process never share a slot and no two bindings share one."""
+.so in one process never share a slot and no two bindings share one.
+
+THE ONE ACCESSOR FOR EVERY BINDING (lane/devctx-lifetime, 2026-09-28).
+`process_ctx[name]()` is the process-lifetime context of every binding entry,
+not only the neural ones; `neural_ctx` is the same slot under its first name.
+The merged-m2-fix lane found the same Metal queue exhaustion in the GP, SVM,
+KernelRidge, GMM and Cholesky bindings, and this lane moved every remaining
+per-call `DeviceContext()` in a binding entry onto this accessor (the audit is
+docs/lanes/progress/devctx-lifetime.md). Rules for a caller:
+
+  * One slot name per binding .so and numeric tier, spelled
+    `"Mojo<Binding>ContextIdentical" if <mode> == IDENTICAL else
+    "Mojo<Binding>ContextFast"`. A library module reached by one GPU binding
+    takes THAT binding's name, so the binding holds one context in all.
+  * Call it only on a device path. A CPU-only install never reaches it: the
+    host bindings do not call it, and nothing here runs at import, so no
+    context is created where the path is host-only.
+  * Every entry still synchronizes before it returns. The context is no
+    longer destroyed at the end of the call, so nothing may lean on that.
+  * Multi-GPU drivers (`DeviceContext(device_id=rank)`) are not on this slot.
+"""
 from std.ffi import _Global
 from max.gpu.host import DeviceContext
 
@@ -40,10 +60,16 @@ struct _NeuralContext(Defaultable, Movable):
         self.ctx = Optional[DeviceContext]()
 
 
-def neural_ctx[name: StaticString]() raises -> DeviceContext:
-    """The binding's shared context (slot `name`), created on first use."""
+def process_ctx[name: StaticString]() raises -> DeviceContext:
+    """The binding's shared context (slot `name`), created on first use and
+    kept for the process."""
     comptime SLOT = _Global[StorageType=_NeuralContext, name=name, init_fn=_NeuralContext.__init__]
     var slot = SLOT.get_or_create_ptr()
     if not slot[].ctx:
         slot[].ctx = DeviceContext()
     return slot[].ctx.value().copy()
+
+
+def neural_ctx[name: StaticString]() raises -> DeviceContext:
+    """`process_ctx` under the name the neural bindings first used."""
+    return process_ctx[name]()
