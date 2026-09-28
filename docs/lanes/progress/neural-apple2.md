@@ -13,6 +13,7 @@ digests, byte LM final witness and loss digests).
 
 | steward id | Mac | commit | what |
 |---|---|---|---|
+| 1790616700582 | m3ultra-b | 85ba24bb1 | FINAL M3 Ultra before/after: A/B base=35d08f9ca vs new=85ba24bb1, every bench lane, Samba parameter digests, T3 step (granted), 2 alternations |
 | 1790615594330 | m4pro-b | 30d8fbe81 | FINAL M4 Pro before/after: A/B base=35d08f9ca (fork point, default path of 037daa353) vs new=30d8fbe81, every bench lane, 2 alternations, the Samba step digests (AB_PYPROF), byte LM step at T3 and B1 (2 alternations each) |
 | 1790613514889 | m3ultra-b | fec0f64f5 | AFTER profile on the M3 Ultra (every bench lane, T3 step, census with attention timers; BEFORE = job 1 on the same Mac) + Mamba-3 backward per-stage walls (MOJOLEARN_MAMBA_TIMING) + T3 FORCE_DENY arms with and without the round 3 zdot fold barrier |
 | 1790611567835 | m4pro-a | 4e2df9e4f | A/B base=35d08f9ca vs mid=cd59badeb vs new=4e2df9e4f (samba-train-step, samba-forward, mamba3-forward, lm-train-step, transformer-forward, gemm; 2 alternations) + byte LM step A/B at T3 (denied on 48 GB: round 3 word) and at B1 12L (granted: estash word), 2 alternations each, witness + loss digests + GEMM small-tile window check on the M4 Pro (default, SMALL_KB 16, no small tile) |
@@ -31,9 +32,9 @@ digests, byte LM final witness and loss digests).
 | 691144783 | Apple attention matrix kernels: the estash zdot drops the barrier after warp 0's z fold; the forward's pass 2 alternates its exp tile between two pages and drops the barrier after the denominator fold (`-D MOJOLEARN_ATTN_ZDOT_AMMA_FOLD_BARRIER`, `-D MOJOLEARN_ATTN_FWD_AMMA_P2_BARRIER` restore) | DEFAULT | PROVEN (speed + witness, job 2) |
 | 4e2df9e4f | Apple attention: the `[B, nh, L, S]` scratches (round 3 forward stash, backward y/dy) from a process cache instead of a fresh allocation per call (`ATTN_SCRATCH_CACHE`, `-D MOJOLEARN_ATTN_NO_SCRATCH_CACHE` reverts) | DEFAULT | PROVEN (speed + witness, job 2) |
 | fec0f64f5 | Apple round 3 zdot (`fused_bwd_zdot_stash_pf_kernel`, the denied path): no barrier after the z fold on Apple (`-D MOJOLEARN_ATTN_ZDOT_STASH_FOLD_BARRIER` restores; other columns unchanged) | DEFAULT | PROVEN: M3 Ultra T3 forced denied 2.640 -> 2.623 s, witness equal (small) |
-| 32634c4b2 | Mamba-3 backward S16: the d_v half computes each q . k dot once per row into shared memory (`mamba3_s16_v_shared_kernel`; `-D MOJOLEARN_MAMBA3_S16_V_NAIVE` reverts; host restatement keeps the naive kernel) | DEFAULT | measuring (job 4) |
-| fbde1272e | Mamba-3 backward S17: the chunk-end `add` chain staged in shared memory, folded by one thread in the naive order (`mamba3_s17_tail_shared_kernel`; `-D MOJOLEARN_MAMBA3_S17_TAIL_NAIVE` reverts) | DEFAULT | measuring (job 4) |
-| 30d8fbe81 | Apple matrix forward pass 1: one barrier per key block fewer (`-D MOJOLEARN_ATTN_FWD_AMMA_P1_BARRIER` restores) | DEFAULT | measuring (job 4) |
+| 32634c4b2 | Mamba-3 backward S16: the d_v half computes each q . k dot once per row into shared memory (`mamba3_s16_v_shared_kernel`; `-D MOJOLEARN_MAMBA3_S16_V_NAIVE` reverts; host restatement keeps the naive kernel) | DEFAULT | measured with fbde1272e: Samba train step 1460 -> 1273 ms (M4 Pro), losses equal; parameter digests owed (job 5) |
+| fbde1272e | Mamba-3 backward S17: the chunk-end `add` chain staged in shared memory, folded by one thread in the naive order (`mamba3_s17_tail_shared_kernel`; `-D MOJOLEARN_MAMBA3_S17_TAIL_NAIVE` reverts) | DEFAULT | see 32634c4b2 |
+| 30d8fbe81 | Apple matrix forward pass 1: one barrier per key block fewer (`-D MOJOLEARN_ATTN_FWD_AMMA_P1_BARRIER` restores) | DEFAULT | in job 4's final A/B (witness equal); not isolated |
 | 815db5956 | Apple attention: a process DENIED the kept exp stashes recomputes one layer's stash in the backward (estash forward into scratch + estash backward) instead of the round 3 zdot | opt-in since 07b658ab3 (`-D MOJOLEARN_ATTN_APPLE_ERECOMP`) | REJECTED as a default: witness equal but 3.619 s vs 3.537 s (round 3 backward) at T3 on the M3 Ultra |
 
 Shared code note: the GEMM arms touch `gemm/checks/gemm_identical.mojo`
@@ -147,3 +148,28 @@ Mamba-3 backward per stage (MOJOLEARN_MAMBA_TIMING, Samba full shape, one
 call, ms): block forward 19, S16 (q/k/v) **200.6**, S17 operands **105.3**,
 every other stage 0.3-3.9. S16 and S17 are the two changes 32634c4b2 and
 fbde1272e.
+
+## Job 4: FINAL M4 Pro before/after (m4pro-b, steward 1790615594330)
+
+base = 35d08f9ca (the fork point's default path), new = 30d8fbe81 (every
+default change of this lane). Alternating, same Mac, same job, 2 reps; ms
+unless noted. Digests are the output digests (forward lanes) or the losses
+(train lanes); every one equal between base and new in every race.
+
+| lane / step | base | new | change | digest |
+|---|---|---|---|---|
+| byte LM T3 shard step (s; estash denied on 48 GB) | 7.016 / 7.014 | **5.926 / 5.925** | -15.5% | grad ab96db5b, param ecaba3f7, m de07d03c, v c30882c0; losses 676298da afc46227 34fe4c49 50902bed |
+| byte LM B1 L2048 d768 12L step (s; estash granted) | 1.586 / 1.586 | **1.350 / 1.350** | -14.9% | grad 6c66669b, param 611d6d50, m 32fd1a48, v 77c7e27d; losses 7755ecd0 0a5f8f7a e6e4e8e3 73cb5352 |
+| lm-train-step (B1 L2048 d384 8L V8192) | 379.0 / 379.6 | **329.2 / 328.9** | -13.2% | losses 9.018733 -> 5.609087 |
+| lm-forward | 264.1 / 256.9 | 256.1 / 258.5 | flat | 4a8e781b0739a038 |
+| gemm 4096^3 | 93.1 / 95.5 | 93.5 / 93.3 | flat | 535b4c27bd9313d1 |
+| transformer-forward | 30.6 / 30.6 | **25.0 / 25.3** | -17.8% | d5a2b289afdb5709 |
+| mamba1-forward | 23.8 / 23.4 | 20.9 / 23.4 | flat to -12% | dfe79ab628aa17cf |
+| mamba2-forward | 37.2 / 37.1 | 37.7 / 37.1 | flat | 00da58895303c580 |
+| mamba3-forward | 28.1 / 28.8 | 28.2 / 28.0 | flat | 481c50cae2dd749e |
+| samba-train-step (B2 L512 d384) | 1459.6 / 1462.3 | **1274.6 / 1272.4** | -12.8% | losses 5.635910 -> 3.629466 |
+| samba-forward | 58.8 / 59.9 | 58.5 / 57.7 | flat | ddce61948b8456e0 |
+| mlp-train-step | 8.06 / 7.84 | 9.10 / 8.95 | +13% (1 ms; launch-bound toy, noise level) | losses 1.106435 -> 1.160229 |
+
+The Samba parameter digests (AB_PYPROF) printed nothing in this job (fixed in
+85ba24bb1: the runs log to a file); job 5 repeats them on the M3 Ultra.
