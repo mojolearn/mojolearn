@@ -41,7 +41,7 @@ bindings rebuilt in turn). Job scripts: ~/mojolearn-evidence/linear-apple2/.
 | 9d450625f | SGD pipelined shuffle: draws computed by a third warp's lanes (splitmix64 skip-ahead), two epochs ahead | both | on (M3 Ultra sgd-clf 1.037 -> 0.652 s) | no |
 | ea80a9110 | x_linear chains: CHAIN_U_APPLE constant (stays 32: 64 and 128 are slower, 16 and 8 mixed) | both | no-op | x_linear/tops.mojo |
 | 9adb972ea | SGD warp folds: a chunk's fetches issued before its chains | both | REVERTED: 3% slower on the M3 Ultra (sgd-clf 0.653 -> 0.673, steward 1790616060686); the final-2 tables were taken with it in | no |
-| 1290bedea | QN on Apple: loss sum and bias mean chains spread over STATS_TPB / 32 blocks, then the same one-block fold | both (words unchanged) | on (`-D MOJOLEARN_QN_SPLIT_REDUCE_OFF=1`) | glm/impl/qn only |
+| 1290bedea | QN on Apple: loss sum and bias mean chains spread over STATS_TPB / 32 blocks, then the same one-block fold | both (words unchanged) | REVERTED at the freeze: no gain on the M4 Pro or the M3 Ultra (M3 Ultra per iteration with / without: logistic 2.19 / 2.17 ms, svr 2.86 / 2.77) | - |
 | c128c4f3e | strided walks load 32 terms ahead (was 8) | both (words unchanged) | on | core/strided_walk.mojo (users: glm/impl/qn, core/xtdz_coalesced, i.e. QN, ridge and lstsq xty) |
 | 90c722752 | FAST QN on Apple: X^T dZ through xtdz_coalesced where D * C <= 1024 | FAST (words change: paired quality job) | on (`-D MOJOLEARN_QN_FAST_COALESCED_OFF=1`) | glm/impl/qn only |
 
@@ -396,6 +396,44 @@ not found (the FAST arithmetic is fz-free and should be cheaper). 340abc245
 
 ## FINAL (wind-down, 2026-09-28)
 
+### THE before / after table: M3 Ultra (m3ultra-b, steward 1790619079325)
+
+One job at 522f82343: every file the lane changed at 037daa353 (before) vs
+HEAD (after), bindings rebuilt per arm and mode, second run shown. Digests
+equal before vs after on EVERY line except FAST logistic / svc / svr
+(90c722752, paired quality matched); SGDDIAG at HEAD 36 of 36 Metal == host.
+
+| mode | case | before s | after s | speedup | digest |
+|---|---|---|---|---|---|
+| IDENTICAL | lasso (1M x 16) | 0.201 | 0.080 | 2.5x | 7afaf6ffddfea2da |
+| IDENTICAL | elasticnet | 0.201 | 0.080 | 2.5x | db1b3098a3990704 |
+| IDENTICAL | lasso per epoch | 9.08 ms | 3.27 ms | 2.8x | |
+| IDENTICAL | logistic (1M x 28) | 0.295 | 0.231 | 1.28x | 270ffb405d8c6a64 |
+| IDENTICAL | linear-svc | 0.231 | 0.199 | 1.16x | bf851fa5a9479b6c |
+| IDENTICAL | linear-svr | 0.197 | 0.149 | 1.32x | 29bbbb73d7b93520 |
+| IDENTICAL | logistic / svr per iteration | 2.87 / 3.70 ms | 2.19 / 2.86 ms | 1.31x / 1.29x | |
+| IDENTICAL | sgd-clf (100k) | 5.056 | 0.670 | 7.5x | 80a3e27c5f39e888 |
+| IDENTICAL | sgd-reg | 3.473 | 0.715 | 4.9x | 7bec4f09522835b9 |
+| IDENTICAL | perceptron | 3.185 | 0.633 | 5.0x | ba1036f6edb77567 |
+| IDENTICAL | pa-clf | 4.635 | 0.653 | 7.1x | 7e0871d9f01a9ea2 |
+| IDENTICAL | pa-reg | 3.161 | 0.662 | 4.8x | 052ced201ee4fe05 |
+| IDENTICAL | sgd-ocsvm | 3.443 | 0.633 | 5.4x | beccac368d85da21 |
+| IDENTICAL | huber (100k) | 1.398 | 1.218 | 1.15x | da0468c16003f25a |
+| IDENTICAL | quantile (100k) | 82.93 | 34.32 | 2.4x | c7ebb6da53934bf3 |
+| IDENTICAL | logistic-cv (100k) | 7.296 | 5.853 | 1.25x | 109ec619e258087b |
+| IDENTICAL | ols / ridge | 0.051 / 0.031 | 0.044 / 0.028 | untouched | equal |
+| FAST | logistic | 0.871 | 0.247 | 3.5x | c13471c2 -> 6e2458a6 |
+| FAST | linear-svc | 0.540 | 0.203 | 2.7x | 5255746b -> 76740d81 |
+| FAST | linear-svr | 0.719 | 0.145 | 5.0x | 740abbad -> 769da80a |
+| FAST | logistic / svr per iteration | 8.62 / 11.74 ms | 2.15 / 2.72 ms | 4.0x / 4.3x | |
+| FAST | sgd-clf / sgd-reg / perceptron | 4.774 / 3.388 / 3.243 | 1.065 / 0.997 / 1.015 | 4.5x / 3.4x / 3.2x | equal |
+| FAST | pa-clf / pa-reg / sgd-ocsvm | 4.696 / 3.351 / 3.345 | 0.992 / 1.044 / 0.993 | 4.7x / 3.2x / 3.4x | equal |
+| FAST | ols / ridge / lasso / elasticnet | 0.094 / 0.028 / 0.137 / 0.134 | 0.095 / 0.028 / 0.130 / 0.133 | untouched | equal |
+
+Host one core on the same Mac (first final job): sgd-clf 0.225 ... sgd-ocsvm
+0.123; huber 0.185; quantile 18.4; logistic-cv 4.79. The M4 Pro table (final
+2, above) agrees in direction on every row.
+
 ### What changed (all on by default unless noted)
 
 - CD (Lasso, ElasticNet; solver/impl/cd.mojo, IDENTICAL on Apple): the SPLITK
@@ -410,15 +448,17 @@ not found (the FAST arithmetic is fz-free and should be cheaper). 340abc245
   ahead (9d450625f, splitmix64 skip-ahead).
 - QN (glm/impl/qn): FAST loss sums and bias means unrolled (8721c3d76, FAST
   words unchanged); FAST X^T dZ through the coalesced chains (90c722752, FAST
-  words change, paired quality matched); loss sum and bias mean chains spread
-  over blocks (1290bedea); strided walks load 32 ahead (c128c4f3e, shared
-  core/strided_walk.mojo, QN users only).
+  words change, paired quality matched); strided walks load 32 ahead
+  (c128c4f3e, shared core/strided_walk.mojo, QN users only). The split
+  one-block reductions (1290bedea) were reverted at the freeze: no gain.
 - x_linear team fits: Huber / Quantile / LogisticRegressionCV lead folds on
   their own warps (9ef29ffef, 27b180f47, 0a760cd68); Quantile runs the next
   iteration's A'(y - r - u) chains in this pass (449d0c127).
 - Reverted after measuring (slower or no gain): 6424bab49, acd046151,
   ca3db4544 (shuffle remainder / load-ahead), c5179e11d (CD axpys inside the
-  leaf chains), 9adb972ea (shuffle hoist), 340abc245 (fz shortcut).
+  leaf chains), 9adb972ea (shuffle hoist), 340abc245 (fz shortcut),
+  1290bedea (split QN reductions). The final-2 tables below were taken with
+  9adb972ea and 1290bedea in (both about neutral).
 
 ### Shared code (the later integration run must cover these families too)
 
@@ -441,10 +481,10 @@ never the verifier. No commit here has run on NVIDIA, AMD or the M2 Pro:
 - 6cdbd32ab, 0aff83beb, 5097d69d4, 1d7b8a2a7, 9d450625f (SGD warp form; the
   WARP_SIZE 64 paths and the pipelined form with fewer than three warps never
   run)
-- 8721c3d76, 90c722752 (FAST QN; 90c722752 changes FAST words), 1290bedea,
-  c128c4f3e (QN reductions and walks)
+- 8721c3d76, 90c722752 (FAST QN; 90c722752 changes FAST words), c128c4f3e
+  (walk block)
 - 9ef29ffef, 27b180f47, 0a760cd68, 449d0c127 (x_linear team fits)
-- reverts: 16eef73f3, 473f26c05, cd7e61dd5, eece18274, 47c5a0f13, 41bb8e0dc
+- reverts: 16eef73f3, 473f26c05, cd7e61dd5, eece18274, 47c5a0f13, 41bb8e0dc, and the revert of 1290bedea
 
 ### Known issues / open
 
