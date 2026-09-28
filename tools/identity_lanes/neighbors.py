@@ -348,7 +348,12 @@ def _(ml, X, yc, yr, Xh=None):
     Aq = np.abs(X[256:384]).astype(np.float32)
     c = ml.KernelRidge(alpha=1.0, kernel="cosine").fit(X[:256], yr[:256])
     h = ml.KernelRidge(alpha=1.0, kernel="chi2", gamma=0.1).fit(A, yr[:256])
-    a = ml.KernelRidge(alpha=1.0e4, kernel="additive_chi2").fit(A[:64], yr[:64])
+    # additive_chi2 is not positive definite (its cells are <= 0): the ridge
+    # must dominate its most negative eigenvalue, so the rows are brought to
+    # [0, 1] first (a fixture with large-magnitude columns made K + 1e4 I
+    # indefinite and the fit refuse, DEVIATION 1661)
+    Aa = (A[:64] / np.float32(max(float(A[:64].max()), 1.0))).astype(np.float32)
+    a = ml.KernelRidge(alpha=1.0e4, kernel="additive_chi2").fit(Aa, yr[:64])
     n = ml.Nystroem(kernel="chi2", n_components=32, random_state=2).fit(A)
     nc = ml.Nystroem(kernel="cosine", n_components=32, random_state=2).fit(X[:256])
     return _fit(dict(cos_dual=_h(c.dual_coef_), cos_predict=_h(c.predict(X[256:384])),
