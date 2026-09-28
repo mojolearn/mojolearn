@@ -451,7 +451,7 @@ def host_jackknife(
     if tasks == 1:
         _rows(0)
     else:
-        sync_parallelize(_rows, tasks)
+        host_parallelize(_rows, tasks)
     return out^
 
 
@@ -684,7 +684,7 @@ def host_bootstrap_unpaired(
     if tasks == 1:
         _replicates(0)
     else:
-        sync_parallelize(_replicates, tasks)
+        host_parallelize(_replicates, tasks)
     var sorted_dist = host_sorted_by_key(dist, 0, n_resamples)
     var mx = host_point_estimate(x, n_x, 1, STAT_MEAN, Float32(0.5))
     var my = host_point_estimate(y, n_y, 1, STAT_MEAN, Float32(0.5))
@@ -794,7 +794,7 @@ def host_permutation_samples(
     if tasks == 1:
         _replicates(0)
     else:
-        sync_parallelize(_replicates, tasks)
+        host_parallelize(_replicates, tasks)
     var vx = List[Float32](capacity=n)
     for i in range(n):
         vx.append(ftz(x[i]))
