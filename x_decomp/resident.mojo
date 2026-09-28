@@ -38,6 +38,11 @@ from x_decomp.device import (
 
 comptime POOL_KEEP_BYTES = 1 << 30
 comptime POOL_CLASSES = 40
+#: at most this many free buffers wait in the pool: every live Metal buffer
+#: costs each later dispatch (measured: after MinCovDet's tens of thousands
+#: of small matrices, an unrelated lu(512) went 0.05 -> 0.2 s), so the pool
+#: holds a fit's working set, not its history
+comptime POOL_KEEP_COUNT = 128
 
 
 def _class_of(n: Int) -> Int:
@@ -59,6 +64,7 @@ struct _Pool(Defaultable, Movable):
     var free_by_class: List[List[Int]]
     var released: List[Int]
     var free_floats: Int
+    var free_count: Int
 
     def __init__(out self):
         self.bufs = List[DeviceBuffer[DType.float32]]()
@@ -69,6 +75,7 @@ struct _Pool(Defaultable, Movable):
             self.free_by_class.append(List[Int]())
         self.released = List[Int]()
         self.free_floats = 0
+        self.free_count = 0
 
 
 comptime X_DECOMP_POOL = _Global[StorageType=_Pool, name="MojoXDecompPool", init_fn=_Pool.__init__]
@@ -84,6 +91,7 @@ def pool_alloc(n: Int) raises -> Int:
         var id = p[].free_by_class[c].pop()
         p[].live[id] = True
         p[].free_floats -= 1 << c
+        p[].free_count -= 1
         return id
     var ctx = xd_ctx()
     var buf = ctx.enqueue_create_buffer[DType.float32](1 << c)
@@ -107,7 +115,8 @@ def pool_free(id: Int) raises:
     p[].live[id] = False
     p[].free_by_class[c].append(id)
     p[].free_floats += 1 << c
-    if p[].free_floats * 4 > POOL_KEEP_BYTES:
+    p[].free_count += 1
+    if p[].free_floats * 4 > POOL_KEEP_BYTES or p[].free_count > POOL_KEEP_COUNT:
         # release every free buffer: its id holds a copy of one tiny buffer
         var ctx = xd_ctx()
         ctx.synchronize()
@@ -119,6 +128,7 @@ def pool_free(id: Int) raises:
                 p[].cls[f] = -1
                 p[].released.append(f)
         p[].free_floats = 0
+        p[].free_count = 0
         ctx.synchronize()
 
 
