@@ -23,6 +23,7 @@ compiler's, so a word may differ from the device solve's by a rounding; the
 paired quality check is bench/x_neighbors_fast_quality.py (svc, svr).
 """
 from std.math import inf
+from std.sys.compile import is_defined
 
 from checks.numerics import ftz, ftz_simd, identical_mul_add, identical_mul_add_simd
 from svm.impl.smo_sets import in_lower, in_upper
@@ -30,7 +31,10 @@ from svm.impl.smo_sets import in_lower, in_upper
 #: Lanes per vector pass. A vector's lanes are different elements of the
 #: working set, so the width moves no word; 16 (four NEON registers) keeps
 #: the pass short against the select chain it carries.
-comptime HBS_W = 16
+#: `-D MOJOLEARN_SVM_HBS_W4` / `_W8` are the measurement arms.
+comptime HBS_W = 4 if is_defined["MOJOLEARN_SVM_HBS_W4"]() else (
+    8 if is_defined["MOJOLEARN_SVM_HBS_W8"]() else 16
+)
 comptime HbsF = SIMD[DType.float32, HBS_W]
 comptime HbsI = SIMD[DType.int32, HBS_W]
 comptime HbsB = SIMD[DType.bool, HBS_W]
