@@ -203,8 +203,96 @@ def _repulse(
             ctx.enqueue_function[repulse_join_kernel](Int32(n), Int32(spans), dpart.unsafe_ptr(), drz.unsafe_ptr(),
                                                       drep.unsafe_ptr(), grid_dim=_grid(n), block_dim=TPB)
             return
-    ctx.enqueue_function[repulse_tiled_kernel](Int32(n), y.unsafe_ptr(), drz.unsafe_ptr(), drep.unsafe_ptr(),
-                                               grid_dim=(n + RTB - 1) // RTB, block_dim=RTB)
+    comptime if is_defined["MOJOLEARN_TSNE_ONE_ROW"]():
+        ctx.enqueue_function[repulse_tiled_kernel](Int32(n), y.unsafe_ptr(), drz.unsafe_ptr(), drep.unsafe_ptr(),
+                                                   grid_dim=(n + RTB - 1) // RTB, block_dim=RTB)
+    else:
+        ctx.enqueue_function[repulse_tiled2_kernel](Int32(n), y.unsafe_ptr(), drz.unsafe_ptr(), drep.unsafe_ptr(),
+                                                    grid_dim=(n + 2 * RTB - 1) // (2 * RTB), block_dim=RTB)
+
+
+def repulse_tiled2_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P):
+    """`repulse_tiled_kernel` with two rows per thread (lane ann-apple2):
+    thread t of block b holds rows i0 = 2 RTB b + t and i1 = i0 + RTB, each
+    folding j = 0, 1, ..., n - 1 through the cell's own statements in the
+    cell's order (its own z, r0, r1), so each row's sums are the same words;
+    the two independent folds share every staged tile read."""
+    var t = Int(thread_idx.x)
+    var nr = Int(n)
+    var i0 = Int(block_idx.x) * 2 * RTB + t
+    var i1 = i0 + RTB
+    var tile = stack_allocation[2 * RTJ, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var live0 = i0 < nr
+    var live1 = i1 < nr
+    var a0 = Float32(0.0)
+    var a1 = Float32(0.0)
+    var b0 = Float32(0.0)
+    var b1 = Float32(0.0)
+    if live0:
+        a0 = ftz(y.unsafe_load(2 * i0))
+        a1 = ftz(y.unsafe_load(2 * i0 + 1))
+    if live1:
+        b0 = ftz(y.unsafe_load(2 * i1))
+        b1 = ftz(y.unsafe_load(2 * i1 + 1))
+    var za = Float32(0.0)
+    var ra0 = Float32(0.0)
+    var ra1 = Float32(0.0)
+    var zb = Float32(0.0)
+    var rb0 = Float32(0.0)
+    var rb1 = Float32(0.0)
+    var j0 = 0
+    while j0 < nr:
+        for e in range(t, 2 * RTJ, RTB):
+            var v = Float32(0.0)
+            if 2 * j0 + e < 2 * nr:
+                v = ftz(y.unsafe_load(2 * j0 + e))
+            tile[e] = v
+        barrier()
+        if live0:
+            var jn = RTJ if nr - j0 > RTJ else nr - j0
+            var r = 0
+            while r + 2 <= jn:
+                var ja = j0 + r
+                var ya0 = tile[2 * r]
+                var ya1 = tile[2 * r + 1]
+                var yb0 = tile[2 * r + 2]
+                var yb1 = tile[2 * r + 3]
+                if (i0 >= ja and i0 < ja + 2) or (i1 >= ja and i1 < ja + 2):
+                    if ja != i0:
+                        ts_repulse_pair(a0, a1, ya0, ya1, za, ra0, ra1)
+                    if ja + 1 != i0:
+                        ts_repulse_pair(a0, a1, yb0, yb1, za, ra0, ra1)
+                    if ja != i1:
+                        ts_repulse_pair(b0, b1, ya0, ya1, zb, rb0, rb1)
+                    if ja + 1 != i1:
+                        ts_repulse_pair(b0, b1, yb0, yb1, zb, rb0, rb1)
+                else:
+                    var p0 = ts_repulse_terms(a0, a1, ya0, ya1)
+                    var p1 = ts_repulse_terms(a0, a1, yb0, yb1)
+                    var q0 = ts_repulse_terms(b0, b1, ya0, ya1)
+                    var q1 = ts_repulse_terms(b0, b1, yb0, yb1)
+                    ts_repulse_fold(p0, za, ra0, ra1)
+                    ts_repulse_fold(p1, za, ra0, ra1)
+                    ts_repulse_fold(q0, zb, rb0, rb1)
+                    ts_repulse_fold(q1, zb, rb0, rb1)
+                r += 2
+            while r < jn:
+                var j = j0 + r
+                if j != i0:
+                    ts_repulse_pair(a0, a1, tile[2 * r], tile[2 * r + 1], za, ra0, ra1)
+                if j != i1:
+                    ts_repulse_pair(b0, b1, tile[2 * r], tile[2 * r + 1], zb, rb0, rb1)
+                r += 1
+        barrier()
+        j0 += RTJ
+    if live0:
+        row_z.unsafe_store(i0, za)
+        rep.unsafe_store(2 * i0, ra0)
+        rep.unsafe_store(2 * i0 + 1, ra1)
+    if live1:
+        row_z.unsafe_store(i1, zb)
+        rep.unsafe_store(2 * i1, rb0)
+        rep.unsafe_store(2 * i1 + 1, rb1)
 
 
 def sum_kernel(n: Int32, row_z: F32P, z: F32P):
