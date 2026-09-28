@@ -124,6 +124,45 @@ Queued on m2pro as speed request 1790553926253-speed-sequence-99a1467ec8
 (`python3 tools/apple_steward.py status | grep speed-sequence`; stdout in the
 verdict's speed.stdout on the Mac).
 
+### Session 2026-09-28 (owed gates)
+
+Pod: dev_pod `sequence` back up (RunPod H100 80GB HBM3, f0ouvpsfix31kz).
+
+**Adafactor on Metal: FIXED at the root** (commit "alpha's max(eps2, rms) spelled max()").
+The stage probe (1790553926253 m2pro, 1790557727991 m4pro-a) named OP_AF_ALPHA: sc[1] = 0 on
+Metal, every other stage equal. Then on m3ultra-b (all logs in
+~/mojolearn-evidence/sequence/adafactor_metal/): `af_alpha_probe.mojo` showed the store NEVER
+lands (a 7-filled slot stays 7); `af_order_probe.mojo` showed it is not launch order (RMEAN
+always lands, ALPHA never, in any order); throwaway prefix ops of the body showed the kernel
+runs up to `rms` and dies (no store lands, not even an entry marker) as soon as a float
+compare-and-select takes `rms` (portable_sqrtf over the _sumsq loop): `rms if rms > f0 else f0`,
+`f0 >= rms ? f0 : rms` and `sqrt(sumsq) > f0 ? ..` all die; `max(rms, f0)`, a negated compare
+and an integer compare run. An Apple Metal compiler fault on that pattern. Fix: `max(rms, eps2)`
+(exact; torch's max(eps2, rms) incl. NaN -> eps2). Verified on the M3 Ultra: every stage of
+af_probe.mojo (matrix and vector, staged and unsynced) == CPU, every launch order == CPU.
+(The custom-kernel harness `af_kb/` lost even a constant store on Metal for a separate reason,
+an out-of-line Args-returning helper, and crashed Apple's compiler on DENOM; not used for the
+conclusion.)
+
+**Seasonal ETS: DONE.** statsforecast 2.1.1 sanity on the H100 over 40 cases (m 4, 7, 12, 24;
+AAA, AAAd, ANA, MAM, MNM, MAMd, MNA, MAA; scripts ~/mojolearn-evidence/sequence/ets_init/):
+initial states == `initstate` to 2.2e-5; likelihood at our parameters == Calc to 1e-4;
+Nelder-Mead identical in steps and constants. Where the reference converges (m 4, most m 7)
+forecasts agree to <= 1.6e-3. At m 12 and 24 the REFERENCE ALSO stops at its 1000-iteration
+cap (captured from `_ets.optimize`), so both return unconverged iterates; the float64 path is
+stable under 6e-8 input perturbation, the float32 path ends elsewhere (max forecast diff
+4.4e-2, MNM n=200 m=24), and our -2loglik is lower than the reference's in about half the cases
+(net sum of differences -4 over 40). Same nature as Theta's float32 NM rows.
+Seams 5517 (seasonal update) and 5518 (decomposition moving average): host oracles
+`o_ets_calc` / `o_ets_init` (from the reference, explicit shifted state vector), seams_check
+blocks through OP_ETS_LIK / OP_ETS_INIT (separate 53 / 44 cells), arms
+`seam_5517_ets_seasonal_update.patch`, `seam_5518_ets_decompose_ma.patch`, README rows,
+IDENTITY_PATHS row 159 extended. sequence-ets gained aaa (+info, states), mamd, ana30 (Fourier
+init), mnm5 cells.
+Gate on the H100 (`--pass 2`, all 22 sequence lanes): every arm PASS / FAIL / PASS incl. 5517
+and 5518; all 22 CLEAN AGREE; existing bits vs the merge base (same lane check at f237f1996):
+21 lanes' hashes identical, sequence-ets's 72 existing part hashes identical (only new parts).
+
 POD GONE: RunPod balance went negative, every pod was deleted and `dev_pod.sh up`
 is refused. Do not retry renting until Andrew tops up.
 
