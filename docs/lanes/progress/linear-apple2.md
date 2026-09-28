@@ -121,3 +121,30 @@ fast_xtdz (90c722752 replaces it, with a paired quality check).
 Digests equal on every line, SGDDIAG 108 of 108 same bits. Both shuffle
 changes made the kernel slower (even with no shuffle: the shared fit kernel
 got heavier) and did not shorten the shuffle: reverted.
+
+### FAST QN, X^T dZ through the coalesced chains (m4-a, steward 1790608272673), FAST, 1M rows
+
+glm/ + core/ of each arm, estimators rebuilt in the same job; fit s (two runs),
+per-iteration slope (linear_apple_profile, caps 1..32):
+
+| case | 8721c3d76 (fast_xtdz) | 90c722752 (coalesced) | IDENTICAL (same Mac) |
+|---|---|---|---|
+| logistic | 0.803 / 0.808, 7.54 ms/iter | 0.533 / 0.544, 4.40 ms/iter | 0.469 |
+| linear-svc | 0.486 / 0.482 | 0.319 / 0.319 | 0.310 |
+| linear-svr | 0.522 / 0.523, 8.55 ms/iter | 0.209 / 0.212, 4.02 ms/iter | 0.217 |
+
+FAST digests change (logistic c13471c2 -> 6e2458a6, svc 5255746b -> 76740d81,
+svr 740abbad -> 769da80a). PAIRED QUALITY (bench/linear_apple_fast_quality.py,
+seeds 0..4, 200k train / 100k held-out rows of HIGGS and taxi), mean over seeds:
+
+| case | metric | FAST old | FAST new | IDENTICAL |
+|---|---|---|---|---|
+| logistic HIGGS | held-out log loss (lower better) | 0.6376228 | 0.6376230 | 0.6376228 |
+| logistic taxi (card flag) | held-out log loss | 0.4635668 | 0.4635668 | 0.4635668 |
+| LinearSVC HIGGS | held-out accuracy | 0.638486 | 0.638648 | 0.638948 |
+| LinearSVR taxi | held-out R^2 | 0.9408000 | 0.9407956 | 0.9407964 |
+
+Per seed the log loss and R^2 differences are below 1e-5 with mixed signs
+(noise of the fit, and the new FAST matches the IDENTICAL reference as closely
+as the old one did); accuracy rises on 4 of 5 seeds. Kept on by default.
+
