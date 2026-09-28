@@ -146,8 +146,70 @@ existing bits unchanged):
 - NOTE: never kill a lane check mid-seam-arm: it leaves the arm's patch
   applied on the pod (resync, then `git apply -R --check` every patch).
 
+## Phase 2 state (2026-09-27 evening; RunPod balance negative, pod gone)
+
+On branch lane/algos-neighbors, NOT merged, each a WIP commit:
+  1. SVC one-vs-one multiclass (cf610a780), lane x-neighbors-svc-multiclass.
+     NVIDIA H100 run r5 (before the pod was deleted): AGREE on the 69 lanes
+     lane_select picked then; arm svm_weights_device_unweighted.patch on
+     x-neighbors-svc-multiclass PASS (AGREE, DISAGREE, AGREE); seam arms
+     21/21; pytest test_host_surface + svc_multiclass + svc_poly +
+     host_model_svm 231 passed. test_lane_select failed ONLY on
+     `gbdt_host_predict answers 50, not 49`, a main-side pin since moved to
+     51 on main (3b5392b1a); locally reverse_map gives 51 with no
+     x-neighbors lane in it, so it is expected to pass on the merged tree.
+  2-7. precomputed SVC/SVR/KernelRidge/Nystroem (lanes x-neighbors-krr-options,
+     x-neighbors-svm-precomputed; arms krr_weight_device_row_only,
+     svm_precomputed_device_slice), KernelRidge sample_weight, cosine/chi2/
+     additive_chi2 (x-neighbors-km-kernels, arm km_kernels_device_order),
+     GPR return_cov (x-neighbors-gp-cov, arm gp_cov_device_not_self), sparse
+     X densified (test_neighbors_sparse_input.py), k-NN metrics canberra,
+     braycurtis, correlation, jensenshannon, inner_product (x-neighbors-metrics,
+     arm metrics_device_order): CODED, NEVER RUN ON A POD.
+  8. SVC probability=True (libsvm Platt, seeded SplitMix64 5-fold CV,
+     binary64 host with _portable_math exp/log), lane
+     x-neighbors-svc-probability (its device arm: svm_weights_device_unweighted,
+     the lane fits a weighted three-class model), test_svc_probability.py:
+     CODED, NEVER RUN.
+  9. NEW (from the trees lane): fused_l2_knn's cross-block device-mutex merge
+     (plain loads/stores in the critical section, the M3 lost-candidate
+     pattern of trees DEVIATION 5611) REPLACED on every mode by per-block
+     candidate slots + `fused_l2_knn_merge_kernel` (k-way merge in the
+     queue's (distance, index) total order) = DEVIATION 5219; DEVIATION 502's
+     IDENTICAL grid pin lifted; grid_x capped at FKNN_MAX_SLOTS = 64. Note the
+     mutex was UNREACHABLE in shipped builds (IDENTICAL AUTO is TILED and the
+     pin made grid_x = 1); only explicit KNN_METHOD_FUSED and the checks
+     reached it. Seam driver neighbors/checks/fused_slot_merge_check.mojo
+     (check_fused_griddimx_merge: oracle + BITWISE grid vs grid_x = 1 +
+     runtime sabotage drops one candidate; tie-set invariance at 1/40/2000
+     queries) registered in tools/identity_lanes/neighbors.checks with arm
+     neighbors/checks/sabotage/5219_slot_merge_drops_last_block.patch;
+     IDENTITY_PATHS row 23 updated. CODED, NEVER COMPILED.
+
+OWED ON A POD (NVIDIA; nothing of 2-9 has been built):
+  a. `pixi run check-knn` (knn_main: every fused check incl. the edited
+     check_fused_griddimx_merge) and `mojo run -I .
+     neighbors/checks/fused_slot_merge_check.mojo` under IDENTICAL: first
+     compile of the merge kernel.
+  b. `tools/algos_lane_check.sh <lanes> --pass 2` where <lanes> =
+     `python3 tools/lane_select.py --changed-since origin/main` minus par-*
+     (487 selected on 2026-09-27: _buffer.py, host_surface.py and the gp
+     bindings select every lane); the seam list now includes 5219.
+  c. Each item's device arm on its lane: --sabotage
+     x_neighbors/checks/sabotage/{krr_weight_device_row_only,
+     svm_precomputed_device_slice, km_kernels_device_order,
+     gp_cov_device_not_self, metrics_device_order}.patch on its lane, and
+     svm_weights_device_unweighted.patch on x-neighbors-svc-probability.
+  d. pytest: test_host_surface, test_svc_multiclass, test_svc_probability,
+     test_krr_options, test_km_kernels, test_gp_return_cov,
+     test_neighbors_sparse_input, test_knn_metrics, test_svc_poly,
+     test_host_model_svm; then tools/test_lane_select.py.
+  e. Merge to main + push in one command; then ONE apple_steward submit for
+     the new lanes plus the 5219 seam (Apple M3 is the column the merge fix
+     is for).
+
 ## NEXT (a fresh session starts here)
 
-Phase 2 OPTION PARITY is in progress. Continue the OWED list under
-"Existing family" from item 1 (SVC multiclass). Batch one steward request per
-hour for lanes merged since the last one.
+Bring a pod up only after the RunPod balance is topped up; run OWED a-e
+above in order, fix what fails, merge. Then the PHASE 1 AUDIT listed under
+"Existing family".
