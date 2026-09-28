@@ -96,6 +96,19 @@ arms; one small interleaved timing pass (GPU base head head base, CPU base head)
 
 Job: nvc1-0018 (submitted 20:10:18Z behind apple2-merged 0006 to 0009 and 0016).
 
+## Apple: one light job per Mac (submitted 21:1xZ, Andrew's 20:59Z change)
+
+`tools/py_consolidated/mac_job.sh` at f25ead12f as an apple_steward SPEED request, `--target`
+one Mac each (no do-amd copy: a speed request with a Mac target goes only to that Mac; no
+steward setting changed, nothing drained): m4-a 1790629852376, m4pro-a 1790629856513,
+m3ultra-b 1790629858999, m2pro 1790629861325 (m2pro's FIFO runs it after apple2-merged's M2
+work). Base = a separate `git worktree` at a374c8c08 (the steward worktree is never edited);
+47 lanes (`tools/py_consolidated/mac_lanes.txt`: the lanes whose fit runs a changed Metal or
+host binding function, x-prep as a representative subset of the ranges runner's callers),
+Metal GPU arm and Mac CPU arm per lane in both trees, base vs head per column, the py-lm
+witness base vs head on Metal and CPU, then a small Metal timing pass (base head head base).
+No sabotage arm on Apple (the NVIDIA job proves the two new-path arms bite).
+
 ## Intended behavior changes (base vs head MAY differ; GPU == CPU must hold on head)
 
 - py-bugs 2: GridSearchCV, RandomizedSearchCV and validation_curve draw folds once
