@@ -131,3 +131,38 @@ GMM_STAGE_TIMES at 819df01ee: 22 iterations, E-step 804 ms, M-step 1407 ms, Chol
 flag adds instructions to a one-thread (meanll) or eight-thread (nk) kernel. To be
 settled on m4pro-a against its own before; if it holds there, the chain is reverted
 in mixture (and in the moments kernel, where it bought nothing).
+
+## Results: M3 Ultra, IDENTICAL, at eaf6c2a3f (merged + changes 1-9, chain reverted; 1790584506225)
+
+| case | rows | taxi before -> eaf6 (s) | higgs before -> eaf6 (s) |
+|---|---|---|---|
+| kmeans | 1M | 0.0588 (31adcffb1) -> 0.0563 | 0.0888 -> 0.0910 |
+| minibatch-kmeans | 1M | 0.2534 -> 0.2396 | 0.3313 -> 0.3056 |
+| bisecting-kmeans | 1M | 0.2872 -> 0.2882 | 0.2999 -> 0.3031 |
+| gmm | 1M | 2.585 -> 2.572 | 2.482 -> 2.419 |
+| bayesian-gmm | 100k | 1.7649 -> 1.7638 | 2.3394 -> 2.3317 |
+| dbscan | 100k | 0.4023 -> 0.3935 | 0.2996 -> 0.3048 |
+| hdbscan | 40k | 2.2273 -> 1.6108 | 2.2169 -> 1.6111 |
+| agglomerative (single) | 10k | 0.0888 -> 0.0687 | 0.0845 -> 0.0647 |
+| agglomerative-ward | 10k | 1.5637 -> 2.1511 | 1.6538 -> 2.1621 |
+| spectral | 10k | 0.5026 -> 0.5317 | 0.0887 -> 0.0914 |
+| meanshift | 10k | 0.2956 -> 0.2992 | 0.2775 -> 0.2749 |
+| optics | 10k | 0.4146 -> 0.4187 | 0.4104 -> 0.4213 |
+| affinity-prop | 5k | 2.6912 -> 1.7057 | 1.5904 -> 0.9378 |
+
+Every digest equals the before. AffinityPropagation's gain includes lane/merged's device
+tie noise (DEVIATION 5122) with this lane's block-per-row responsibilities.
+agglomerative-ward REGRESSED through the merge: lane/merged's `_row_min_open` writes +inf
+down the dead cluster's column at every merge (a stride-n pass); fixed in 8cab8284c
+(a contiguous dead mask), A/B pending.
+
+Measured and reverted (M3 Ultra, digests equal both ways):
+- the speculative flushed chain (GMM 2.585 -> 2.920 s, BGMM flat) -> eaf6c2a3f;
+- the moments addend prefetch (BGMM 1.764 -> 2.039 s taxi) -> 7d003801f.
+
+HDBSCAN stages after the DENSE solver (M3 Ultra, taxi 40k): kNN core distances 890 ms
+(neighbors' kNN), pairwise 370 ms (was 670), mutual reachability 56 ms (was 243),
+non-finite guard 49 ms, MST 222 ms (was 310; min-edge pass 20 ms, was 34).
+6ab7a64e0 then drops the DENSE solver's per-edge flag array (m*m bytes).
+9ae0985b6: GaussianMixture's IDENTICAL precision Cholesky loses four drains per
+component per iteration (A/B pending).
