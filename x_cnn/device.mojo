@@ -1141,8 +1141,19 @@ def bn_stats_block_kernel(x: FP, aux: FP, p: IP):
                 j += BN_TPB
             barrier()
             if tid == 0:
-                for q in range(cnt):
+                # eight words read ahead of their eight dependent adds (the
+                # same adds in the same order)
+                var q = 0
+                while q + 8 <= cnt:
+                    var v = SIMD[DType.float32, 8](0)
+                    comptime for e in range(8):
+                        v[e] = t[q + e]
+                    comptime for e in range(8):
+                        acc = ftz(acc + ftz(v[e]))
+                    q += 8
+                while q < cnt:
                     acc = ftz(acc + ftz(t[q]))
+                    q += 1
             barrier()
             k0 += cnt
     var mean = ftz(identical_div(acc, count))
@@ -1158,9 +1169,19 @@ def bn_stats_block_kernel(x: FP, aux: FP, p: IP):
                 j += BN_TPB
             barrier()
             if tid == 0:
-                for q in range(cnt):
+                var q = 0
+                while q + 8 <= cnt:
+                    var v = SIMD[DType.float32, 8](0)
+                    comptime for e in range(8):
+                        v[e] = t[q + e]
+                    comptime for e in range(8):
+                        var d = ftz(ftz(v[e]) - mean)
+                        sq = ftz(sq + ftz(identical_mul(d, d)))
+                    q += 8
+                while q < cnt:
                     var d = ftz(ftz(t[q]) - mean)
                     sq = ftz(sq + ftz(identical_mul(d, d)))
+                    q += 1
             barrier()
             k0 += cnt
     if tid == 0:
@@ -1193,11 +1214,25 @@ def bn_bwd_red_block_kernel(x: FP, g: FP, aux: FP, p: IP):
                 j += BN_TPB
             barrier()
             if tid == 0:
-                for q in range(cnt):
+                var q = 0
+                while q + 8 <= cnt:
+                    var vg = SIMD[DType.float32, 8](0)
+                    var vx = SIMD[DType.float32, 8](0)
+                    comptime for e in range(8):
+                        vg[e] = tg[q + e]
+                        vx[e] = tx[q + e]
+                    comptime for e in range(8):
+                        var gv = ftz(vg[e])
+                        var xhat = ftz(identical_mul(ftz(ftz(vx[e]) - mean), invstd))
+                        sg = ftz(sg + gv)
+                        sgx = ftz(sgx + ftz(identical_mul(gv, xhat)))
+                    q += 8
+                while q < cnt:
                     var gv = ftz(tg[q])
                     var xhat = ftz(identical_mul(ftz(ftz(tx[q]) - mean), invstd))
                     sg = ftz(sg + gv)
                     sgx = ftz(sgx + ftz(identical_mul(gv, xhat)))
+                    q += 1
             barrier()
             k0 += cnt
     if tid == 0:
