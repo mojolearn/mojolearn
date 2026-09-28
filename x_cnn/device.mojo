@@ -1240,6 +1240,50 @@ def bn_bwd_red_block_kernel(x: FP, g: FP, aux: FP, p: IP):
         aux.unsafe_store(2 + BN_SUMGX * C + c, sgx)
 
 
+def _bn_use_block[fwd: Bool](
+    ctx: DeviceContext, mut dx: DeviceBuffer[DType.float32], mut dg: DeviceBuffer[DType.float32],
+    mut da: DeviceBuffer[DType.float32], mut dp: DeviceBuffer[DType.int32], N: Int, C: Int, HW: Int,
+) raises -> Bool:
+    """lane/cnn-apple2: whether the threadgroup fold is the faster of the two
+    on this device at this shape, measured once per process (each form run
+    twice, the second timed, after a wait) and cached. Both forms store the
+    same aux words, so the measuring runs leave nothing behind. The M4
+    measured the threadgroup fold slower, the M4 Pro and M3 Ultra faster."""
+    var tag = -1 if fwd else -2
+    var s = _slots()
+    var i = 0
+    while i + 4 < len(s[].tuned):
+        if s[].tuned[i] == N and s[].tuned[i + 1] == C and s[].tuned[i + 2] == HW and s[].tuned[i + 3] == tag:
+            return s[].tuned[i + 4] == 1
+        i += 5
+    ctx.synchronize()
+    var ns = List[Int]()
+    for form in range(2):
+        var dt = 0
+        for rep in range(2):
+            var t0 = perf_counter_ns()
+            if form == 1:
+                comptime if fwd:
+                    ctx.enqueue_function[bn_stats_block_kernel](fp(dx), fp(da), ip(dp), grid_dim=(C, 1, 1), block_dim=(BN_TPB, 1, 1))
+                else:
+                    ctx.enqueue_function[bn_bwd_red_block_kernel](fp(dx), fp(dg), fp(da), ip(dp), grid_dim=(C, 1, 1), block_dim=(BN_TPB, 1, 1))
+            else:
+                comptime if fwd:
+                    launch[bn_stats_at](ctx, fp(dx), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
+                else:
+                    launch[bn_bwd_red_at](ctx, fp(dx), fp(dg), fp(da), fp(da), ip(dp), ip(dp), C)
+            ctx.synchronize()
+            dt = perf_counter_ns() - t0
+        ns.append(dt)
+    var pick = 1 if ns[1] < ns[0] else 0
+    s[].tuned.append(N)
+    s[].tuned.append(C)
+    s[].tuned.append(HW)
+    s[].tuned.append(tag)
+    s[].tuned.append(pick)
+    return pick == 1
+
+
 def batchnorm_forward_into(x: FP, running: FP, aux: FP, prm: List[Int32], training: Bool, y_out: FP) raises:
     """y into y_out; running (2C) and aux (2 + 7C, the statistics the backward reads) in place."""
     var C = Int(prm[1])
@@ -1255,7 +1299,10 @@ def batchnorm_forward_into(x: FP, running: FP, aux: FP, prm: List[Int32], traini
     var dp = put_prm(ctx, 3, prm)
     var dout = ws(ctx, 4, total)
     if training:
+        var blk = False
         comptime if BN_BLOCK:
+            blk = _bn_use_block[True](ctx, dx, dr, da, dp, Int(prm[0]), C, Int(prm[2]))
+        if blk:
             ctx.enqueue_function[bn_stats_block_kernel](fp(dx), fp(da), ip(dp), grid_dim=(C, 1, 1), block_dim=(BN_TPB, 1, 1))
         else:
             launch[bn_stats_at](ctx, fp(dx), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
@@ -1302,7 +1349,10 @@ def batchnorm_backward_into(x: FP, g: FP, aux: FP, prm: List[Int32], training: B
     var da = put[False](ctx, 2, aux, na)
     var dp = put_prm(ctx, 3, prm)
     var dout = ws(ctx, 4, total)
+    var blk = False
     comptime if BN_BLOCK:
+        blk = _bn_use_block[False](ctx, dx, dg, da, dp, Int(prm[0]), C, Int(prm[2]))
+    if blk:
         ctx.enqueue_function[bn_bwd_red_block_kernel](fp(dx), fp(dg), fp(da), ip(dp), grid_dim=(C, 1, 1), block_dim=(BN_TPB, 1, 1))
     else:
         launch[bn_bwd_red_at](ctx, fp(dx), fp(dg), fp(da), fp(da), ip(dp), ip(dp), C)
