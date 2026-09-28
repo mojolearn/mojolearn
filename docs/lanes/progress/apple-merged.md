@@ -103,3 +103,39 @@ spectral-affinities AGREE, the same as lane/merged's run before this merge). Own
 Withdrawn (moved/): 9 superseded lane/merged speed copies on m3ultra-b, m4pro-b's orphaned
 working/1790588098954 (neural), my own superseded requests 1790604454599, 1790604460730,
 1790604462897, 1790609724520.
+
+## Owed, closed (lane/apple-merged-owed)
+
+- par-gp / par-gpc-fit / par-gpc-predict on the m2pro GPU arm, tree 32c548c32 (e264ecfc4,
+  which carries d3a480f02, plus the driver), one light job (1790618823477, `LANES=... mac_job.sh`):
+  par-gpc-fit and par-gpc-predict AGREE with the M2 Pro CPU column (batch, infer, model, train, 9
+  fixtures each). par-gp: Metal 9/9 cells STABLE, the CPU arm refuses by design ("no CPU
+  implementation of the cooperative multi-GPU driver gp_fit"). Its Metal column equals the
+  NVIDIA 4090 column (nvc1-0016, clean_2of3) and the shipped reference table on all 36
+  train/infer/model/batch hashes; par-gpc-fit and par-gpc-predict equal the table on 36/36
+  each. **M2 par-* CLOSED.**
+- MI300X column: the central AMD box refuses ssh (`Permission denied (publickey)` from
+  tools/amd_central.sh status/queue), so no slot can be seen or used. Still OWED.
+- ann tsne 5813: at the check's n = 60 there is one tile (RTJ = 256), so the arm's descending
+  tile order changed nothing and the four-wide groups kept j ascending. The arm now folds every
+  candidate row n-1..0 inside the tile as well (c019fea7d). nvc1-0021 (NVIDIA RTX 4090,
+  prove_arm): tsne_check PASS, FAIL under the arm (exit 1), PASS after reversal. **CLOSED.**
+- cluster: the fold arm never reached dbscan-metrics, hdbscan-epsilon or spectral-affinities
+  because those lanes run in dbscan/, hdbscan/ and the host rbf matrix, not x_cluster/device_ops.
+  Their own arms (docs/lanes/progress/cluster.md) are now what the driver's sab_plan.tsv maps
+  them to: e2e_dbscan_metrics, e2e_hdbscan_epsilon, x_decomp e2e_host_sqdist. nvc1-0021: 1/1
+  DISAGREE each. **CLOSED** (the fold arm row keeps its 17 lanes, all DISAGREE in nvc1-0014).
+- NVIDIA nvc1-0018 (b6bdd1e0a confirmation set): 101/101 AGREE at CPU threads 1 and default.
+- test_host_surface: the resample host family now declares bootstrap_unpaired,
+  permutation_samples, resample_indices and resample_ranges_parallel_available, and
+  resample-bca / -unpaired / -perm-samples / -utils as covered lanes pending a reference;
+  docs_facts --write refreshed the lagging host surface spans (79559ad0f). On nvc1, own tree, no
+  lane run beside it: 200 passed. **CLOSED.**
+- NVIDIA nvc1-0020 (shard 2 of 3, 168 lanes, tree 7d7f6b07): 154 AGREE at CPU threads 1 and
+  default (resample-utils among them), 13 par-* CPU arms refusing by design (no CPU
+  implementation of the cooperative multi-GPU driver, or the byte LM parallel entry), and
+  pca-whiten-inverse: threads 1 AGREE, its default-thread CPU arm carried the earlier `_DYN`
+  import failure from the run beside test_host_surface. That one arm re-run alone in the same
+  tree (no lane job there): AGREE (batch, infer, model, train, 9 fixtures). **NVIDIA column
+  CLOSED: every non-par lane AGREE.**
+- Still owed: the MI300X column (central AMD box refuses ssh).

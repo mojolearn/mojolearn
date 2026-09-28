@@ -92,6 +92,21 @@ def lu_serial_max() -> Int:
         return 16
 
 
+def jacobi2_eigh_on() -> Bool:
+    """Metal uses the established eigensolver until jacobi2 is qualified.
+
+    The 2026-09-28 M4 consolidated check crashed MTLCompilerService in five
+    eigh callers: METAL SIGABRT, "cannot select: 113 7, 1" in agc.main.
+    The optimized kernel's device-memory fence must not simply be removed.
+    MOJOLEARN_XD_JACOBI=2 explicitly opts into that unqualified Metal path;
+    CUDA/HIP keep their current default. The separate SVD default is unchanged.
+    """
+    comptime if COMPILED_VENDOR == "metal":
+        return String(getenv("MOJOLEARN_XD_JACOBI", "1")) != "1"
+    else:
+        return jacobi2_on()
+
+
 def jacobi2_on() -> Bool:
     """MOJOLEARN_XD_JACOBI=1 selects the shipped-before Jacobi kernels
     (timing A/B only: `x_decomp/jacobi2.mojo` stores the same bits)."""
@@ -1026,7 +1041,7 @@ struct DevExec(Exec):
 
     @staticmethod
     def eigh(a: F32Ptr, w: F32Ptr, v: F32Ptr, n: Int) raises:
-        if jacobi2_on():
+        if jacobi2_eigh_on():
             DevExec._eigh2(a, w, v, n)
             return
         var m = List[Float32](capacity=n * n)

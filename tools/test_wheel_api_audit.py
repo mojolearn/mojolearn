@@ -24,6 +24,8 @@ class WheelPayloadTests(unittest.TestCase):
             'python/mojolearn/verify_reference/table.json': '{"current": true}',
             'python/mojolearn/verify_reference/models/models.json': '{"models": []}',
             'python/mojolearn/verify_reference/models/kernel.base.npz': 'saved-model-bytes',
+            'tools/identity_lanes/linear.py': 'CURRENT_LINEAR_FIXTURE = True\n',
+            'python/mojolearn/verify_reference/ctr_models/ctr.npz': 'ctr-model-bytes',
             'tools/identity_break.py': 'CURRENT_HARNESS = True\n',
             'tools/identity_trace_diff.py': 'CURRENT_COMPARATOR = True\n',
         }.items():
@@ -68,6 +70,15 @@ class WheelPayloadTests(unittest.TestCase):
         result = audit.payload_gaps(self.wheel(omit=[missing], replace={changed: b'{}'}), self.root)
         self.assertEqual(result['missing_reference_payload'], [missing])
         self.assertEqual(result['changed_reference_payload'], [changed])
+
+    def test_generated_fragment_staleness_and_missing_ctr_model(self):
+        fragment = 'mojolearn/_identity_lane_linear.py'
+        model = 'mojolearn/verify_reference/ctr_models/ctr.npz'
+        result = audit.payload_gaps(self.wheel(omit=[model], replace={fragment: b'OLD'}), self.root)
+        self.assertEqual(result['changed_python_payload'], [fragment])
+        self.assertEqual(result['missing_reference_payload'], [model])
+        result = audit.payload_gaps(self.wheel(omit=[fragment]), self.root)
+        self.assertEqual(result['missing_python_payload'], [fragment])
 
     def test_strict_cli_rejects_bad_candidate(self):
         for complete, expected in [(False, 1), (True, 0)]:

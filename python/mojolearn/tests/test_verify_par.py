@@ -619,3 +619,68 @@ def test_par_cli_fixture_scope_and_explicit_override(monkeypatch, scope, overrid
     expected = override.split(',') if override else list(harness.FIXTURES) if scope == 'all' else ['base']
     assert selected == expected
     assert len(harness.FIXTURES) == 9
+
+
+def test_explicit_candidate_changes_the_actual_parallel_comparison(tmp_path, monkeypatch):
+    import contextlib
+    import json
+    from mojolearn import _backend, _cpu_reference
+    _need_numpy()
+    monkeypatch.setattr(_backend, 'vendor', lambda: 'hip')
+    monkeypatch.setattr(_cpu_reference, 'reference_training', lambda: contextlib.nullcontext())
+    monkeypatch.setattr(vpar, 'PoolWitness', _StubWitness)
+    monkeypatch.setattr(vpar, 'run_cell', lambda *a, **k: _cell(train='a'*16))
+    def table(value):
+        return dict(format=vpar.vref.FORMAT, records=[], fixtures={}, heldout={},
+                    cells={'par-gram/base': {part:dict(ref=value if part=='train' else 'n/a:not-in-this-test', cols={})
+                                            for part in vpar.vref.PARTS}})
+    shipped=tmp_path/'shipped.json';shipped.write_text(json.dumps(table('b'*16)))
+    candidate=tmp_path/'candidate with spaces.json';candidate.write_text(json.dumps(table('a'*16)))
+    monkeypatch.setattr(vpar.vref, 'table_path', lambda: str(shipped))
+    assert vpar.par_check(_StubHarness(), None, ['par-gram'], ['base'])['state']=='MISMATCH'
+    assert vpar.par_check(_StubHarness(), None, ['par-gram'], ['base'],
+                          reference_table=str(candidate))['state']=='VERIFIED'
+
+
+@pytest.mark.parametrize('bad', ['missing', '{broken', '{}', 'containers', 'incomplete'])
+def test_bad_explicit_candidate_fails_before_any_parallel_fit(tmp_path, monkeypatch, bad):
+    import json
+    from mojolearn import _backend
+    _need_numpy()
+    path=tmp_path/'candidate.json'
+    if bad in ('containers','incomplete'):
+        path.write_text(json.dumps(dict(format=vpar.vref.FORMAT, records=[], fixtures={}, heldout={},
+                                        cells=[] if bad=='containers' else {})))
+    elif bad!='missing': path.write_text(bad)
+    monkeypatch.setattr(_backend, 'vendor', lambda: 'hip')
+    monkeypatch.setattr(vpar, 'run_cell', lambda *a, **k: pytest.fail('invalid table launched a fit'))
+    with pytest.raises(vpar.vref.TableError):
+        vpar.par_check(_StubHarness(), None, ['par-gram'], ['base'],reference_table=str(path))
+
+
+def test_parallel_cli_passes_candidate_and_reports_table_error(monkeypatch):
+    from mojolearn import _backend
+    monkeypatch.setattr(_backend, 'vendor', lambda: 'cuda')
+    monkeypatch.setattr(vpar, 'refuse_to_run', lambda *a: None)
+    monkeypatch.setattr(vpar, 'load_harness', lambda **k: _StubHarness())
+    monkeypatch.setattr(vpar, 'par_lanes', lambda *a: (['par-gram'],['par-gram'],{}))
+    def bad(*a, **kw):
+        assert kw['reference_table']=='chosen candidate.json'
+        raise vpar.vref.TableError('broken candidate')
+    monkeypatch.setattr(vpar,'par_check',bad)
+    args=cli.build_parser().parse_args(['verify','--par','all','--reference-table','chosen candidate.json','--json'])
+    assert vpar.cmd_par_check(args,None)==va.EXIT_NO_REFERENCE
+
+
+def test_identical_reexec_preserves_parallel_candidate_path(monkeypatch):
+    import types
+    argv=['verify','--par','all','--lanes','par-gmm','--par-devices','0,1',
+          '--reference-table','candidate path/table.json','--json']
+    def child(command,env):
+        parsed=cli.build_parser().parse_args(command[3:])
+        assert parsed.par=='all' and parsed.reference_table=='candidate path/table.json'
+        assert parsed.par_devices=='0,1' and parsed.lanes=='par-gmm'
+        assert env['MOJOLEARN_NUMERIC_MODE']=='identical'
+        return types.SimpleNamespace(returncode=5)
+    monkeypatch.setattr(va.subprocess,'run',child)
+    assert va._reexec_identical(argv)==5

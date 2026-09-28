@@ -1116,6 +1116,13 @@ def _assemble(num, den, mo, force_finite):
         return float(s / len(scores))
     s = sw = 0.0
     for v, w in zip(scores, weights):
+        # A constant target with force_finite=False can have score -inf
+        # and variance weight zero. IEEE leaves the NaN sign from 0 * inf
+        # implementation-dependent (Arm +NaN, x86 -NaN). This weighted
+        # score is undefined: return the same explicit NaN as 0/0 above,
+        # before performing the invalid operation. Do not drop the term.
+        if _math.isnan(v) or (w == 0 and _math.isinf(v)):
+            return float("nan")
         s += v * w
         sw += w
     return float(s / sw)

@@ -132,3 +132,38 @@ Commits: 5c144678d (jacobi2), cf15378a3 (ALS team, small LU), 3d4f61168
 (FAST Lanczos), 5a2f15039 (eigh2 per-lane basis), c844561f7 (orth device
 guard), 89abb0595 (merge apple-merged), eba5d65de (fence removed, svd2
 from 256), and the FINAL commit.
+
+## Consolidated Metal failure, 2026-09-28
+
+The frozen main `308878e80679` base check failed in the common `x_decomp_eigh`
+path for `x-decomp-factor-analysis`, `x-decomp-fastica`, `x-decomp-ipca`,
+`x-decomp-manifold`, and `x-decomp-robust-cov`. The M4 compiler diagnostic
+reports show SIGABRT with METAL reason `cannot select: 113 7, 1` in `agc.main`;
+16 reports at 19:00–19:01 UTC have that same reason. This is compiler failure,
+not a numerical comparison or evidence that retrying these lanes will help.
+
+Metal now defaults eigh to the established `device_eigh` implementation.
+CUDA/HIP retain jacobi2 eigh; the new SVD default is unchanged everywhere.
+`MOJOLEARN_XD_JACOBI=2` remains an explicit experimental Metal opt-in, with
+this compiler limitation unresolved. Removing its fence would lose required
+device-memory ordering and is not the fix. Qualification of the restored
+Metal default requires a targeted follow-up of the five lanes above; no pass
+is claimed by this source change.
+
+## NMF batch contract correction
+
+The repair check at `9d64cb98b284` exposed `BATCH_MOVED` for NMF.transform
+on both Apple and AMD. This method solves coefficients with fitted components
+held fixed, but its finite iterative solve uses a global stopping criterion:
+CD sums the row violations before comparing with the initial violation; MU
+uses global reconstruction error and also initializes from the input matrix's
+mean. A row alone can therefore stop at a different iteration. The batch
+probe had incorrectly promised independent-row semantics for that solve.
+
+The NMF batch probe now checks `inverse_transform`: independent coefficient
+rows multiplied by the fitted components. It compares full, individual and
+split outputs and remains sensitive to injected output corruption. The batch
+revision is `nmf-inverse-batch-2026-09-28-v2`; previous transform probe records
+cannot qualify this method. Train/inference hashes still cover transform's
+actual CPU/GPU and cross-vendor identity. No solver arithmetic or convergence
+rule was changed to make the new probe pass; native qualification is pending.

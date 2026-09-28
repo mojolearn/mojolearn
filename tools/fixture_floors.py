@@ -64,6 +64,7 @@ import ast
 import os
 import re
 import sys
+from pathlib import Path
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HARNESS = os.path.join(ROOT, "tools", "identity_break.py")
@@ -109,6 +110,26 @@ WHY_MIN_CHARS = 60
 
 
 # --------------------------------------------------------------- source reading
+def _source_tree(src, path):
+    """Read the same source/wheel fragments the harness registers, without importing it.
+
+    Mutation checks still supply the main source explicitly; fragments must
+    remain visible there. Standalone synthetic sources have no loader marker
+    and must not acquire unrelated lanes from the checkout.
+    """
+    tree = ast.parse(Path(path).read_text() if src is None else src)
+    if not any(isinstance(n, ast.FunctionDef) and n.name == "lane_fragment_paths"
+               for n in tree.body):
+        return tree
+    here = Path(path).resolve().parent
+    directory = here / "identity_lanes"
+    paths = (sorted(p for p in directory.glob("*.py") if not p.stem.startswith("_"))
+             if directory.is_dir() else sorted(here.glob("_identity_lane_*.py")))
+    for fragment in paths:
+        tree.body.extend(ast.parse(fragment.read_text(), filename=str(fragment)).body)
+    return tree
+
+
 def _const(node, kind):
     return node.value if isinstance(node, ast.Constant) and isinstance(node.value, kind) else None
 
@@ -261,8 +282,7 @@ def _resolve(expr, local):
 def check(src=None, path=HARNESS):
     """Every floor violation in the harness source, as a list of strings. An
     empty list is the only pass."""
-    src = open(path).read() if src is None else src
-    tree = ast.parse(src)
+    tree = _source_tree(src, path)
     revisions = _dict_of_str(tree, "LANE_REVISIONS")
     unfloored = _dict_of_str(tree, "NON_SIZE_REVISIONS")
     lanes = _lane_functions(tree)
@@ -375,8 +395,7 @@ def check(src=None, path=HARNESS):
 def table(src=None, path=HARNESS):
     """The floor table, derived from the source: lane, dimension, value the
     lane runs at, floor, and the reason."""
-    src = open(path).read() if src is None else src
-    tree = ast.parse(src)
+    tree = _source_tree(src, path)
     rows = []
     for name, fn in sorted(_lane_functions(tree).items()):
         floors, _ = _declared_floors(fn)
@@ -391,8 +410,7 @@ def unreadable_sites(src=None, path=HARNESS):
     integer, so they require no floor. This is the mechanism's hole, printed
     rather than left implicit: a future lane could dodge a floor by making its
     size expression unreadable, and the list is where that would show up."""
-    src = open(path).read() if src is None else src
-    tree = ast.parse(src)
+    tree = _source_tree(src, path)
     revisions = _dict_of_str(tree, "LANE_REVISIONS")
     out = []
     for name, fn in sorted(_lane_functions(tree).items()):

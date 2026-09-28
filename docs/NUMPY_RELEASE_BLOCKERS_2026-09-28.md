@@ -76,3 +76,28 @@ policy change for optional features. CNN/TSNE/RNN seeded initialization and
 host arithmetic especially need explicit old/new bitwise comparisons. Merely
 adding the files to the verification-import allowlist would misrepresent
 estimator code as independent verification and is not an acceptable repair.
+
+## Policy decision and candidate packaging
+
+The repository currently documents conflicting policies. The release checklist's
+`test-wheel-audit` gate promises no NumPy runtime imports, matching the strict
+audit above. `docs/VERIFY.md` also acknowledges optional sequence estimators
+that require NumPy. The verifier extra alone does not resolve that conflict.
+An explicit optional runtime extra would require coordinated metadata,
+missing-dependency guidance, documentation and audit changes; it must not be
+represented as a verification-only dependency. That policy decision is pending.
+
+No current, provenance-qualified candidate wheel was found locally during the
+September 28 packaging review. The available old wheel cannot safely receive
+current Python files because native compile inputs have changed. Package the
+qualified current native outputs in isolated staging only after checking the
+complete packaging inventory and source provenance.
+
+The initial installed-wheel smoke should use a clean environment without NumPy:
+install the exact candidate with `--no-deps`, run `pip check`, import the core,
+inspect CLI help/coverage, and verify actionable missing-extra guidance. Then
+install the same candidate's verification extra and run a bounded CPU case with
+JSON output and a negative control. These are installation checks, not a
+substitute for numerical or normal release qualification. The existing
+`qualify_verifier_wheel.py --scope cpu-only` also executes loaded causal-LM and
+portable-model checks; it is broader than this initial installation smoke.

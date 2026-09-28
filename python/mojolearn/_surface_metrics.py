@@ -138,10 +138,4 @@ TRAINING_LANE_NAMES = {
     "x-metrics-search": "cross_validate, cross_val_predict, scorer names and GridSearchCV",
 }
 PUBLIC_PENDING_LANES = {
-    "x-metrics-classification": "no reference",
-    "x-metrics-regression": "no reference",
-    "x-metrics-ranking": "no reference",
-    "x-metrics-cluster": "no reference",
-    "x-metrics-splitters": "no reference",
-    "x-metrics-search": "no reference",
-}
+    }

@@ -1,0 +1,291 @@
+{
+  "lanes": [
+    "trees-dart-options",
+    "trees-shap-tree",
+    "x-glm-gamma",
+    "x-glm-poisson",
+    "x-glm-poisson-sw",
+    "x-glm-tweedie"
+  ],
+  "source_commit": "9d64cb98b284afb3f0af94ffaf39aa127e19bbb6",
+  "base_table_sha256": "ba6fe7fa5bea203e09b9ad20fdb93abe51d82744dff09b2651a17ac377392053",
+  "promoted_table_sha256": "c3cec1e0a2926b9a331ff18e23ab6c164b899b80ef57dbfa306b686b5e30f0d4",
+  "base_records": 919,
+  "base_records_preserved": true,
+  "unselected_cells_preserved": true,
+  "numeric_crossvendor_matches": 162,
+  "device_classes": [
+    "apple",
+    "amd",
+    "cpu"
+  ],
+  "physical_columns": [
+    "M4 Metal",
+    "M4 Arm CPU",
+    "AMD HIP",
+    "AMD x86 CPU"
+  ],
+  "candidate": {
+    "cells": 54,
+    "parts": 432,
+    "conflicts": 0,
+    "classes_agreeing": {
+      "3": 432
+    },
+    "records": 18
+  },
+  "merged": {
+    "cells": 3618,
+    "parts": 28008,
+    "conflicts": 0,
+    "classes_agreeing": {
+      "1": 2826,
+      "2": 7200,
+      "3": 6032,
+      "4": 11950
+    },
+    "records": 937
+  },
+  "records": [
+    {
+      "file": "bench/results/identity_break/2026-09-28_admitted-glm-shap/glm/m4-a/x-glm-gamma.cpudefault.json",
+      "sha256": "107684e11dd1c06caf946b440a77732187f5b28ac60b5b9c6f84965f0896e275",
+      "bytes": 43443,
+      "source_commit": "9d64cb98b284afb3f0af94ffaf39aa127e19bbb6",
+      "backend_witness": "cpu",
+      "device_class": "cpu",
+      "source_sha256": "406084af99c73662884388d2f9f67cc5005bbe529b3904a4f6829236cca26579",
+      "remote_path": "~/mojolearn-evidence/consolidated-repairs-9d64cb98b284/glm/clean_0of1/x-glm-gamma.cpudefault.json"
+    },
+    {
+      "file": "bench/results/identity_break/2026-09-28_admitted-glm-shap/glm/m4-a/x-glm-gamma.gpu.json",
+      "sha256": "1b262a1ef92d8bf0644efcdc937a456c276ce2116e43683869e78b85e4175ee8",
+      "bytes": 26750,
+      "source_commit": "9d64cb98b284afb3f0af94ffaf39aa127e19bbb6",
+      "backend_witness": "metal",
+      "device_class": "apple",
+      "source_sha256": "41235bd7bd0f256841e1ef0218aa0a82f0278b2fd42a60eef7cb58495ee3648f",
+      "remote_path": "~/mojolearn-evidence/consolidated-repairs-9d64cb98b284/glm/clean_0of1/x-glm-gamma.gpu.json"
+    },
+    {
+      "file": "bench/results/identity_break/2026-09-28_admitted-glm-shap/glm/m4-a/x-glm-poisson-sw.cpudefault.json",
+      "sha256": "89878e30ba3dca0aa0f0b28fa3189d2afc89a9f0eb2ccbd93bf79598f5e0e2a3",
+      "bytes": 43505,
+      "source_commit": "9d64cb98b284afb3f0af94ffaf39aa127e19bbb6",
+      "backend_witness": "cpu",
+      "device_class": "cpu",
+      "source_sha256": "406084af99c73662884388d2f9f67cc5005bbe529b3904a4f6829236cca26579",
+      "remote_path": "~/mojolearn-evidence/consolidated-repairs-9d64cb98b284/glm/clean_0of1/x-glm-poisson-sw.cpudefault.json"
+    },
+    {
+      "file": "bench/results/identity_break/2026-09-28_admitted-glm-shap/glm/m4-a/x-glm-poisson-sw.gpu.json",
+      "sha256": "8f1360c6bc507e4d1cdb2b0b8200fa3e9b0d00a6dced2c89356edeb7339b5ff6",
+      "bytes": 26805,
+      "source_commit": "9d64cb98b284afb3f0af94ffaf39aa127e19bbb6",
+      "backend_witness": "metal",
+      "device_class": "apple",
+      "source_sha256": "41235bd7bd0f256841e1ef0218aa0a82f0278b2fd42a60eef7cb58495ee3648f",
+      "remote_path": "~/mojolearn-evidence/consolidated-repairs-9d64cb98b284/glm/clean_0of1/x-glm-poisson-sw.gpu.json"
+    },
+    {
+      "file": "bench/results/identity_break/2026-09-28_admitted-glm-shap/glm/m4-a/x-glm-poisson.cpudefault.json",
+      "sha256": "eb68bb2ce3b3ff3896df02f9a2923fc08359a2c02753c6956493291f2700696c",
+      "bytes": 43477,
+      "source_commit": "9d64cb98b284afb3f0af94ffaf39aa127e19bbb6",
+      "backend_witness": "cpu",
+      "device_class": "cpu",
+      "source_sha256": "406084af99c73662884388d2f9f67cc5005bbe529b3904a4f6829236cca26579",
+      "remote_path": "~/mojolearn-evidence/consolidated-repairs-9d64cb98b284/glm/clean_0of1/x-glm-poisson.cpudefault.json"
+    },
+    {
+      "file": "bench/results/identity_break/2026-09-28_admitted-glm-shap/glm/m4-a/x-glm-poisson.gpu.json",
+      "sha256": "ace1d26bdfd9ba8cceddf51780c2cc7139e7efecbb61cd484f5eb6ec030d76e2",
+      "bytes": 26783,
+      "source_commit": "9d64cb98b284afb3f0af94ffaf39aa127e19bbb6",
+      "backend_witness": "metal",
+      "device_class": "apple",
+      "source_sha256": "41235bd7bd0f256841e1ef0218aa0a82f0278b2fd42a60eef7cb58495ee3648f",
+      "remote_path": "~/mojolearn-evidence/consolidated-repairs-9d64cb98b284/glm/clean_0of1/x-glm-poisson.gpu.json"
+    },
+    {
+      "file": "bench/results/identity_break/2026-09-28_admitted-glm-shap/glm/m4-a/x-glm-tweedie.cpudefault.json",
+      "sha256": "c6c4e5fc0858444c124e78abe49defcd3460d891075f915ddcedc189d0cc2c70",
+      "bytes": 43468,
+      "source_commit": "9d64cb98b284afb3f0af94ffaf39aa127e19bbb6",
+      "backend_witness": "cpu",
+      "device_class": "cpu",
+      "source_sha256": "406084af99c73662884388d2f9f67cc5005bbe529b3904a4f6829236cca26579",
+      "remote_path": "~/mojolearn-evidence/consolidated-repairs-9d64cb98b284/glm/clean_0of1/x-glm-tweedie.cpudefault.json"
+    },
+    {
+      "file": "bench/results/identity_break/2026-09-28_admitted-glm-shap/glm/m4-a/x-glm-tweedie.gpu.json",
+      "sha256": "6dbc219ec3bc3f0ec12538088d1de19afbf882eb4585f3b9bc9b3847815cb682",
+      "bytes": 26780,
+      "source_commit": "9d64cb98b284afb3f0af94ffaf39aa127e19bbb6",
+      "backend_witness": "metal",
+      "device_class": "apple",
+      "source_sha256": "41235bd7bd0f256841e1ef0218aa0a82f0278b2fd42a60eef7cb58495ee3648f",
+      "remote_path": "~/mojolearn-evidence/consolidated-repairs-9d64cb98b284/glm/clean_0of1/x-glm-tweedie.gpu.json"
+    },
+    {
+      "file": "bench/results/identity_break/2026-09-28_admitted-glm-shap/glm/do-amd/x-glm-gamma.cpudefault.json",
+      "sha256": "d035918d8b456480c295c456ef68ab17c42f4aca886239a3072d25d25da21157",
+      "bytes": 43537,
+      "source_commit": "9d64cb98b284afb3f0af94ffaf39aa127e19bbb6",
+      "backend_witness": "cpu",
+      "device_class": "cpu",
+      "source_sha256": "5d3e86965c497836b4b0e7a63ef596a12d25654e7385fbe488c0ead1c92dd809",
+      "remote_path": "~/mojolearn-evidence/consolidated-repairs-9d64cb98b284/glm/clean_0of1/x-glm-gamma.cpudefault.json"
+    },
+    {
+      "file": "bench/results/identity_break/2026-09-28_admitted-glm-shap/glm/do-amd/x-glm-gamma.gpu.json",
+      "sha256": "ca3a9087c0672a09dad450354513511012f6ca980938e35cc5a0011cff3d6c65",
+      "bytes": 26774,
+      "source_commit": "9d64cb98b284afb3f0af94ffaf39aa127e19bbb6",
+      "backend_witness": "hip",
+      "device_class": "amd",
+      "source_sha256": "e2f7347eab004ca2645e0e25340232f056d65fcfa3563ca0a2422e2593b7542c",
+      "remote_path": "~/mojolearn-evidence/consolidated-repairs-9d64cb98b284/glm/clean_0of1/x-glm-gamma.gpu.json"
+    },
+    {
+      "file": "bench/results/identity_break/2026-09-28_admitted-glm-shap/glm/do-amd/x-glm-poisson-sw.cpudefault.json",
+      "sha256": "da96d811a2e3df139d30c52d63ecb475bc3af11de43b98ef5535eabf5691ec43",
+      "bytes": 43585,
+      "source_commit": "9d64cb98b284afb3f0af94ffaf39aa127e19bbb6",
+      "backend_witness": "cpu",
+      "device_class": "cpu",
+      "source_sha256": "5d3e86965c497836b4b0e7a63ef596a12d25654e7385fbe488c0ead1c92dd809",
+      "remote_path": "~/mojolearn-evidence/consolidated-repairs-9d64cb98b284/glm/clean_0of1/x-glm-poisson-sw.cpudefault.json"
+    },
+    {
+      "file": "bench/results/identity_break/2026-09-28_admitted-glm-shap/glm/do-amd/x-glm-poisson-sw.gpu.json",
+      "sha256": "aba8fa54887d753a7242cb872c0db9a6721f324a1872168b3320b702d80c3a0a",
+      "bytes": 26822,
+      "source_commit": "9d64cb98b284afb3f0af94ffaf39aa127e19bbb6",
+      "backend_witness": "hip",
+      "device_class": "amd",
+      "source_sha256": "e2f7347eab004ca2645e0e25340232f056d65fcfa3563ca0a2422e2593b7542c",
+      "remote_path": "~/mojolearn-evidence/consolidated-repairs-9d64cb98b284/glm/clean_0of1/x-glm-poisson-sw.gpu.json"
+    },
+    {
+      "file": "bench/results/identity_break/2026-09-28_admitted-glm-shap/glm/do-amd/x-glm-poisson.cpudefault.json",
+      "sha256": "508820e2090438ae2230d5262dff26636d8f72c572fbe13e0282a8716bd8efe2",
+      "bytes": 43556,
+      "source_commit": "9d64cb98b284afb3f0af94ffaf39aa127e19bbb6",
+      "backend_witness": "cpu",
+      "device_class": "cpu",
+      "source_sha256": "5d3e86965c497836b4b0e7a63ef596a12d25654e7385fbe488c0ead1c92dd809",
+      "remote_path": "~/mojolearn-evidence/consolidated-repairs-9d64cb98b284/glm/clean_0of1/x-glm-poisson.cpudefault.json"
+    },
+    {
+      "file": "bench/results/identity_break/2026-09-28_admitted-glm-shap/glm/do-amd/x-glm-poisson.gpu.json",
+      "sha256": "8019405d89023be3ce6d25031ecf7cc39dc955a837a938028c65618ab65bb213",
+      "bytes": 26791,
+      "source_commit": "9d64cb98b284afb3f0af94ffaf39aa127e19bbb6",
+      "backend_witness": "hip",
+      "device_class": "amd",
+      "source_sha256": "e2f7347eab004ca2645e0e25340232f056d65fcfa3563ca0a2422e2593b7542c",
+      "remote_path": "~/mojolearn-evidence/consolidated-repairs-9d64cb98b284/glm/clean_0of1/x-glm-poisson.gpu.json"
+    },
+    {
+      "file": "bench/results/identity_break/2026-09-28_admitted-glm-shap/glm/do-amd/x-glm-tweedie.cpudefault.json",
+      "sha256": "49167a53efb090d41132599bbcf3a9bee10f570c46cdebf53e9405d0f7bd929f",
+      "bytes": 43551,
+      "source_commit": "9d64cb98b284afb3f0af94ffaf39aa127e19bbb6",
+      "backend_witness": "cpu",
+      "device_class": "cpu",
+      "source_sha256": "5d3e86965c497836b4b0e7a63ef596a12d25654e7385fbe488c0ead1c92dd809",
+      "remote_path": "~/mojolearn-evidence/consolidated-repairs-9d64cb98b284/glm/clean_0of1/x-glm-tweedie.cpudefault.json"
+    },
+    {
+      "file": "bench/results/identity_break/2026-09-28_admitted-glm-shap/glm/do-amd/x-glm-tweedie.gpu.json",
+      "sha256": "63bcc214ebcfc41cdfaddbfa83e8389a0578a6cf95f0283f9e0bbb04e4f68f4e",
+      "bytes": 26801,
+      "source_commit": "9d64cb98b284afb3f0af94ffaf39aa127e19bbb6",
+      "backend_witness": "hip",
+      "device_class": "amd",
+      "source_sha256": "e2f7347eab004ca2645e0e25340232f056d65fcfa3563ca0a2422e2593b7542c",
+      "remote_path": "~/mojolearn-evidence/consolidated-repairs-9d64cb98b284/glm/clean_0of1/x-glm-tweedie.gpu.json"
+    },
+    {
+      "file": "bench/results/identity_break/2026-09-28_admitted-glm-shap/shap/m4-a/trees-dart-options.cpudefault.json",
+      "sha256": "4424994149469f2a696c9d3dca8fcf87b9a2762b821b4f5a930abcc4eca12273",
+      "bytes": 44281,
+      "source_commit": "9d64cb98b284afb3f0af94ffaf39aa127e19bbb6",
+      "backend_witness": "cpu",
+      "device_class": "cpu",
+      "source_sha256": "9dca1f64797202a54aeac3ff47eec9d204a14408b9f4933923df359f888903ec",
+      "remote_path": "~/mojolearn-evidence/consolidated-repairs-9d64cb98b284/shap/clean_0of1/trees-dart-options.cpudefault.json"
+    },
+    {
+      "file": "bench/results/identity_break/2026-09-28_admitted-glm-shap/shap/m4-a/trees-dart-options.gpu.json",
+      "sha256": "df586aafc0c939effe75ddc8a3113b8ff046e5bf9eebb3d29571006976fc0af1",
+      "bytes": 27593,
+      "source_commit": "9d64cb98b284afb3f0af94ffaf39aa127e19bbb6",
+      "backend_witness": "metal",
+      "device_class": "apple",
+      "source_sha256": "b02169ab300b6161aecbb6ce96113aa1c8aba895b9fe228ad3db8a8bba7aa3ee",
+      "remote_path": "~/mojolearn-evidence/consolidated-repairs-9d64cb98b284/shap/clean_0of1/trees-dart-options.gpu.json"
+    },
+    {
+      "file": "bench/results/identity_break/2026-09-28_admitted-glm-shap/shap/m4-a/trees-shap-tree.cpudefault.json",
+      "sha256": "2e8987614ec19570c03d4a8bdcac1050489021ac93bbed747baef1ec6457396f",
+      "bytes": 43773,
+      "source_commit": "9d64cb98b284afb3f0af94ffaf39aa127e19bbb6",
+      "backend_witness": "cpu",
+      "device_class": "cpu",
+      "source_sha256": "9dca1f64797202a54aeac3ff47eec9d204a14408b9f4933923df359f888903ec",
+      "remote_path": "~/mojolearn-evidence/consolidated-repairs-9d64cb98b284/shap/clean_0of1/trees-shap-tree.cpudefault.json"
+    },
+    {
+      "file": "bench/results/identity_break/2026-09-28_admitted-glm-shap/shap/m4-a/trees-shap-tree.gpu.json",
+      "sha256": "d516f80a5efeace9afc3410f1daf8b4fc20d1b2b1b165f2def51f034c4bab897",
+      "bytes": 27092,
+      "source_commit": "9d64cb98b284afb3f0af94ffaf39aa127e19bbb6",
+      "backend_witness": "metal",
+      "device_class": "apple",
+      "source_sha256": "b02169ab300b6161aecbb6ce96113aa1c8aba895b9fe228ad3db8a8bba7aa3ee",
+      "remote_path": "~/mojolearn-evidence/consolidated-repairs-9d64cb98b284/shap/clean_0of1/trees-shap-tree.gpu.json"
+    },
+    {
+      "file": "bench/results/identity_break/2026-09-28_admitted-glm-shap/shap/do-amd/trees-dart-options.cpudefault.json",
+      "sha256": "b5ac6d01ccb0f04a2145c43d2f49162d3cfbddb25a0d4e77f879a7c5ccae8b6e",
+      "bytes": 44371,
+      "source_commit": "9d64cb98b284afb3f0af94ffaf39aa127e19bbb6",
+      "backend_witness": "cpu",
+      "device_class": "cpu",
+      "source_sha256": "87cbb50b2c6e05ba1835501bab814a82d3460c7cd01f1b9fe260a2347971d59a",
+      "remote_path": "~/mojolearn-evidence/consolidated-repairs-9d64cb98b284/shap/clean_0of1/trees-dart-options.cpudefault.json"
+    },
+    {
+      "file": "bench/results/identity_break/2026-09-28_admitted-glm-shap/shap/do-amd/trees-dart-options.gpu.json",
+      "sha256": "7e19c41ad579187d993a6c4f99c3c5d2f35b99341e8fd71e561771207039bcba",
+      "bytes": 27616,
+      "source_commit": "9d64cb98b284afb3f0af94ffaf39aa127e19bbb6",
+      "backend_witness": "hip",
+      "device_class": "amd",
+      "source_sha256": "3c9881b260eab454c70ee78cf73623ff5fdd8a70ea7363e153ac87ef99c56133",
+      "remote_path": "~/mojolearn-evidence/consolidated-repairs-9d64cb98b284/shap/clean_0of1/trees-dart-options.gpu.json"
+    },
+    {
+      "file": "bench/results/identity_break/2026-09-28_admitted-glm-shap/shap/do-amd/trees-shap-tree.cpudefault.json",
+      "sha256": "2469d29422d6be108262e92b5dcceeb73f7727e1aa30730901acfb12506c4dae",
+      "bytes": 43851,
+      "source_commit": "9d64cb98b284afb3f0af94ffaf39aa127e19bbb6",
+      "backend_witness": "cpu",
+      "device_class": "cpu",
+      "source_sha256": "87cbb50b2c6e05ba1835501bab814a82d3460c7cd01f1b9fe260a2347971d59a",
+      "remote_path": "~/mojolearn-evidence/consolidated-repairs-9d64cb98b284/shap/clean_0of1/trees-shap-tree.cpudefault.json"
+    },
+    {
+      "file": "bench/results/identity_break/2026-09-28_admitted-glm-shap/shap/do-amd/trees-shap-tree.gpu.json",
+      "sha256": "59121130e5fa68aab0f2a411008d198ce1b80b5f7e228dab46fa70a1cb244a56",
+      "bytes": 27114,
+      "source_commit": "9d64cb98b284afb3f0af94ffaf39aa127e19bbb6",
+      "backend_witness": "hip",
+      "device_class": "amd",
+      "source_sha256": "3c9881b260eab454c70ee78cf73623ff5fdd8a70ea7363e153ac87ef99c56133",
+      "remote_path": "~/mojolearn-evidence/consolidated-repairs-9d64cb98b284/shap/clean_0of1/trees-shap-tree.gpu.json"
+    }
+  ]
+}
