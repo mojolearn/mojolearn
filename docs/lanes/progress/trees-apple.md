@@ -167,3 +167,99 @@ SIMD-group histogram aggregation, sorted bootstrap rows): probe arms, one
 flag off each, are queued on m3ultra (branch lane/trees-apple-probe, not
 for merge). N_BLKS_FOR_COLS 40 was already reverted for IDENTICAL (RF
 Istella-S 60.8 -> 91.0 s on the M4 Pro, same hash).
+
+## FINAL (wind-down 2026-09-28; branch ready for lane/apple-merged)
+
+State: tip is this commit's parent b75ca8eb0 plus this note. Worktree clean,
+no refs/wip snapshot, nothing half done, nothing queued on the stewards.
+This lane ran no identity or sabotage request after dc27fe36d (per Andrew);
+lane/apple-merged runs the one check.
+
+### Defaults on Apple (what changed)
+
+IDENTICAL default, all meant bit-inert (same bytes as before; the timing
+runs below show equal digests/hashes on the timing Mac, which is NOT a
+cross-column identity proof):
+- ET: 16 search rows per thread (f635ed48a); part flags, live-prefix staging,
+  32768-node batch (6a0cf0d7a).
+- RF: SIMD-group histogram aggregation (f635ed48a); sorted bootstrap rows on
+  wide data (19b23a297).
+- AdaBoost.R2 weighted draws on the host pool, DEVIATION 5607 (df6abd315,
+  d83def7b6 moved to lane/merged's `host_parallelize`).
+- DART init: exact native float32 label sum (df6abd315).
+- AdaBoostClassifier two-class margin in one native pass, `x_trees_margin2`
+  (8a61b296e).
+- xtrees apply_trees rows across the host pool, DEVIATION 5608 (4469abc6a).
+- Seam sabotage patch contexts refreshed (cc76736c3, 8e92d3102).
+
+FAST only (reverted from IDENTICAL after measurement, same bytes but slower):
+- RF N_BLKS_FOR_COLS 40 (c2d99458f: M4 Pro RF Istella-S 60.8 -> 91.0 s).
+- RF row-major bins (b75ca8eb0: M3 Ultra RF Istella-S 25.65 -> 19.99 s,
+  DT Istella-S 0.56 -> 0.44 s). Opt-out define for FAST unchanged:
+  `MOJOLEARN_RF_BINS_COLUMN_MAJOR`.
+
+M2 Pro fixes (GBDT, proven): 1fab763dc / 10268cf72 (hist_2 shared-Int32
+block 256), bd1321a24 (need-weights 512 threads). Proof: steward
+1790576952559 at dc27fe36d, all 33 gbdt lanes AGREE on m2pro, m3ultra,
+m4pro; its FAIL is sabotage coverage only (six ordered / feature-freq lanes,
+gbdt pass-2 debt).
+
+### M3 Ultra probe arms (RF Istella-S / DT Istella-S, IDENTICAL, hash 3a5e8c09dd0d5fc7 in every arm)
+
+| arm (branch lane/trees-apple-probe, local only, not for merge) | RF ms | DT ms |
+|---|---|---|
+| all three on (19b23a297) | 25648 | 559 |
+| row-major bins off (e33cda8d2, = the tip config) | 19991 | ~440 |
+| SIMD aggregation off (4893eab90) | 26751 | ~570 |
+| sorted rows off (a375a9041) | 31670 | 579 |
+| baseline 69cbc0c23 | 21586 | 451 |
+
+### Tip b75ca8eb0, IDENTICAL, m4pro-a (steward 1790591278980; before = a54fadbe3)
+
+Every hash/digest equals the before run (RF 452a17.. / 3a5e8c.., AdaBoost
+e8529a.. / 160452.., DART 8375ab.. / 86f402.., Bagging 16aaba.., DT
+86b648.. / 6f406a..) and the 19b23a297 run (ET ac18d5.. / ec6261.. / 981c3b..).
+
+| algorithm | dataset | before | tip | tip/before |
+|---|---|---|---|---|
+| ExtraTrees | taxi | 3183 | 2145 | 0.67 |
+| ExtraTrees | taxireg | 8160 | 7077 | 0.87 |
+| ExtraTrees | istellareg | 83352 | 63004 | 0.76 |
+| RandomForest | taxi | 3295 | 3303 | 1.00 |
+| RandomForest | taxireg | (5655 at 19b23a297) | 6714 | 1.19 vs 19b23a297 |
+| RandomForest | istellareg | 60792 | 49640 | 0.82 |
+| AdaBoostRegressor | taxireg | 3274 | 1856 | 0.57 |
+| AdaBoostClassifier | taxi | 2994 | 3011 | 1.01 |
+| DART | taxi | 6647 | 5730 | 0.86 |
+| DART | taxireg | 6229 | 5450 | 0.87 |
+| Bagging | taxi | 672 | 684 | 1.02 |
+| DecisionTree | istellareg | 848 | 817 | 0.96 |
+
+GBDT symmetric on m4pro-a, 4 reps (1790595181550 at 69cbc0c23 vs
+1790595184403 at the tip): taxi 1019 vs 1020 ms, Istella 2825 vs 2825 ms,
+same digests. GBDT on m3ultra at the tip (1790592519633): depthwise taxi
+1817 (baseline 1756), lossguide taxi 5412 (5781), depthwise Istella 2983
+(2916); symmetric taxi and Istella each had one 36 s rep (the other rep 951
+/ 2141 ms, digests equal), an unexplained one-off stall, not code this lane
+changed.
+
+### Unproven (need the lane/apple-merged identity + sabotage check)
+
+df6abd315, f635ed48a (ET rows per thread and SIMD aggregation; its row-major
+half is reverted), 8a61b296e, d83def7b6, 6a0cf0d7a, 4469abc6a, 19b23a297,
+b75ca8eb0, and the sabotage context edits cc76736c3, 8e92d3102.
+a54fadbe3 (lane/algos-trees merged in) still owes that lane's NVIDIA gate.
+
+### Known issues
+
+- RF taxireg (16 columns) on the M4 Pro is 1.19x slower at the tip than at
+  19b23a297: row-major bins helped narrow data there while hurting wide data
+  on the M3 Ultra. A follow-up could enable row-major under IDENTICAL only
+  for `n_cols <= 64`; not attempted (needs its own measurement on both Macs).
+- GBDT sabotage coverage: six gbdt lanes (feature-freq, ordered*,
+  pointwise-l2-bayesian-eval, tensor-ctr-tables) need a CPU-column sabotage
+  that reaches their host paths.
+- GBDT lossguide: two host waits per leaf split (~0.9 ms each on Metal);
+  moving the loop on device is a driver restructure, not attempted.
+- AdaBoostRegressor taxireg RMSE swings with seed in both modes (see the
+  paired table); not a FAST defect.
