@@ -21,7 +21,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.checks.gemm_identical import (
     identical_gemm_with_plan, identical_gemm_workspace_floats, PLAN_SPLIT_32_2X2, PLAN_SPLIT_64_4X4,
-    PLAN_SPLIT_16_1X1, PLAN_APPLE_MMA, PLAN_TUNED_32_2X2, PLAN_SPLITK, apple_mma_applies, PLAN_APPLE_MMA_SPLIT, PLAN_APPLE_MMA_SPLIT_BIG,
+    PLAN_SPLIT_16_1X1, PLAN_APPLE_MMA, PLAN_TUNED_32_2X2, PLAN_SPLITK, apple_mma_applies, apple_mma_applies_one_leaf, PLAN_APPLE_MMA_SPLIT, PLAN_APPLE_MMA_SPLIT_BIG,
     identical_gemm_splitk_fits, choose_gemm_plan,
 )
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE
@@ -44,6 +44,14 @@ comptime TPB = 256
 #: lane/cnn-apple2: the FAST tier on Apple measures its GEMM plans (the
 #: simdgroup matrix plans among them). `-D MOJOLEARN_XCNN_NO_FAST_TUNE` is
 #: the before arm (round 1's FAST: the 4090 split plans and the dispatcher).
+#: lane/cnn-apple2: IDENTICAL on Apple also times APPLE_MMA against the
+#: dispatcher outside the weight gradients (`-D MOJOLEARN_XCNN_NO_NT_TUNE`
+#: is the before arm).
+comptime APPLE_NT_TUNE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and TARGET_COLUMN == COLUMN_APPLE
+    and not is_defined["MOJOLEARN_XCNN_NO_NT_TUNE"]()
+)
 comptime APPLE_FAST_TUNE = (
     GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
     and TARGET_COLUMN == COLUMN_APPLE
@@ -214,6 +222,9 @@ def _apple_tn_candidates(m: Int, n: Int, k: Int, default: Int) -> List[Int]:
         cand.append(PLAN_SPLIT_16_1X1)
         if m * n <= 4096 and identical_gemm_splitk_fits(m, n, k):
             cand.append(PLAN_SPLITK)
+        comptime if not is_defined["MOJOLEARN_XCNN_NO_MMA_SPLIT"]():
+            if apple_mma_applies(m, n, k):
+                cand.append(PLAN_APPLE_MMA_SPLIT)
     else:
         cand.append(PLAN_SPLIT_16_1X1)
         if n >= 64:
@@ -254,6 +265,10 @@ def _apple_tuned_plan(
     var best = cand[0]
     var best_ns = perf_counter_ns()  # replaced by the first candidate
     for j in range(len(cand)):
+        # lane/cnn-apple2: one untimed run first, so a candidate's first-use
+        # cost (its pipeline) does not decide against it
+        identical_gemm_with_plan(ctx, c, a, b, wp, m, n, k, op, cand[j])
+        ctx.synchronize()
         var t0 = perf_counter_ns()
         identical_gemm_with_plan(ctx, c, a, b, wp, m, n, k, op, cand[j])
         ctx.synchronize()
@@ -311,11 +326,13 @@ def device_gemm(
         identical_gemm_with_plan(ctx, c, a, b, wp, m, n, k, op, plan)
         _ = wp^
         return
-    comptime if APPLE_FAST_TUNE:
+    comptime if APPLE_FAST_TUNE or APPLE_NT_TUNE:
         # lane/cnn-apple2: FAST on Apple has no simdgroup matrix plan in the
-        # shipped dispatcher (it is IDENTICAL's); where it applies, time it
-        # against the dispatcher's pick once per shape.
-        if m >= 8 and n >= 8 and apple_mma_applies(m, n, k):
+        # shipped dispatcher (it is IDENTICAL's), and neither tier's
+        # dispatcher takes it for a one-leaf ragged k (the first block's
+        # k = 27); where it applies, time it against the dispatcher's pick
+        # once per shape.
+        if m >= 8 and n >= 8 and apple_mma_applies_one_leaf(m, n, k):
             var fc = List[Int]()
             fc.append(choose_gemm_plan(m, n, k))
             if fc[0] != PLAN_APPLE_MMA:

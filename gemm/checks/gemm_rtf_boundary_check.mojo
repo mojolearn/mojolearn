@@ -39,6 +39,7 @@ from gemm.checks.gemm_identical import (
     PLAN_TUNED_64_4X4,
     TUNED_BLOCK_ADMIT,
     apple_mma_applies,
+    apple_mma_applies_one_leaf,
     gemm_plan_name,
     identical_gemm_into,
     identical_gemm_with_plan,
@@ -168,6 +169,9 @@ def _case(
             plans.append(PLAN_APPLE_MMA)
             plans.append(PLAN_APPLE_MMA_SPLIT)
             plans.append(PLAN_APPLE_MMA_SPLIT_BIG)
+        elif apple_mma_applies_one_leaf(m, n, k):
+            # lane/cnn-apple2: one ragged leaf on the matrix plan
+            plans.append(PLAN_APPLE_MMA)
     for pi in range(len(plans)):
         var plan = plans[pi]
         var got = _run(ctx, ha, hb, m, n, k, plan)

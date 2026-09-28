@@ -3515,6 +3515,19 @@ def apple_mma_applies(m: Int, n: Int, k: Int) -> Bool:
 
 
 @always_inline
+def apple_mma_applies_one_leaf(m: Int, n: Int, k: Int) -> Bool:
+    """lane/cnn-apple2: `apple_mma_applies`, or ONE leaf (`k <= K_LEAF_MIN`)
+    of any length: its short final window runs the exact step, unpadded,
+    as a ragged last leaf's does. For callers that name the plan (x_cnn's
+    k = C*KH*KW forward); the dispatchers read `apple_mma_applies`."""
+    if apple_mma_applies(m, n, k):
+        return True
+    comptime if not (APPLE_MMA or APPLE_MMA_FAST):
+        return False
+    return m > 0 and n > 0 and k > 0 and contract_partition(k)[1] == 1
+
+
+@always_inline
 def _amma_load_t(
     p: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
     stride: Int,
@@ -3720,6 +3733,10 @@ def identical_gemm_apple_mma_kernel[
     var acc = InlineArray[_AMMA_M64, NF](fill=_AMMA_M64(0))
     var exact_ok = True  # every earlier window of this leaf was admitted
     var wpl = leaf // KB
+    if p_count == 1:
+        # one leaf (lane/cnn-apple2): it ends with `k`, whole windows or not
+        # (`apple_mma_applies_one_leaf`); where L % KB == 0 this is L / KB
+        wpl = (k + KB - 1) // KB
     # A: outer index i (stride a_si), p stride a_sp; B: outer j (b_sj), p (b_sp).
     var a_ofast = a_si == 1 and a_sp != 1
     var b_ofast = b_sj == 1 and b_sp != 1
