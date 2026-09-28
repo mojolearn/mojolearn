@@ -34,6 +34,8 @@ for rev in $(echo "$befores" | tr ',' ' '); do
     arms="$arms $rev=$bw"
 done
 arms="$arms after=$after_wt"
+# ANN_AB_AFTER_ENV: one more arm, the after build run with these VAR=value words
+[ -z "${ANN_AB_AFTER_ENV:-}" ] || arms="$arms afterenv=$after_wt"
 echo "AB arms:$arms (after=$(git rev-parse --short HEAD)) algos=$algos reps=$reps modes=$modes host=$(hostname)"
 # the base binding (all_finite and friends) once, in the after worktree; every
 # arm gets a copy (only the ann bindings differ between arms)
@@ -45,6 +47,7 @@ for mode in $modes; do
 done
 for a in $arms; do
     wt=${a#*=}
+    [ "${a%%=*}" != afterenv ] || continue
     if [ "$wt" != "$after_wt" ]; then
         mkdir -p "$wt/python/mojolearn/identical"
         cp -p python/mojolearn/_mojolearn.so "$wt/python/mojolearn/" 2>/dev/null || true
@@ -61,7 +64,9 @@ for a in $arms; do
 done
 run() {  # arm wt mode [stages]
     echo "== $1 $3${4:+ stages}"
-    (cd "$2" && PYTHONPATH="$2/python" MOJOLEARN_NUMERIC_MODE=$3 ${4:+MOJOLEARN_ANN_STAGES=1} \
+    xenv=""
+    [ "$1" != afterenv ] || xenv=${ANN_AB_AFTER_ENV:-}
+    (cd "$2" && env $xenv PYTHONPATH="$2/python" MOJOLEARN_NUMERIC_MODE=$3 ${4:+MOJOLEARN_ANN_STAGES=1} \
         pixi run -e default python -u bench/speed/ann_cpu_speed.py --data "$data" --algos "$algos" \
         ${ANN_AB_BENCH_ARGS:-} 2>&1 | grep -v '^\s*$' | sed "s/^/[$1 $3] /")
 }

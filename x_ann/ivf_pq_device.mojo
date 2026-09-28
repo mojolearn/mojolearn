@@ -6,7 +6,9 @@ The coarse quantizer is the same Lloyd cells over whole rows."""
 
 from std.gpu import block_idx, block_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
-from x_ann.device_ctx import x_ann_ctx
+from x_ann.device_ctx import X_ANN_POOL_SIZE, x_ann_ctx, x_ann_pool_ctx
+from core.host_parallel import host_parallelize
+from std.os import getenv
 from x_ann.stage_timer import AnnStages
 from x_ann.ivf_scan_device import ivf_scan_search
 
@@ -91,6 +93,9 @@ def _codebooks(
     """Per subspace, cluster/'s k-means (`cluster/estimator.mojo::kmeans_fit`,
     k-means++, L2Expanded, one restart) over that subspace's residual
     columns; the host twin is `host_kmeans_fit`."""
+    var streams = _pq_cb_streams()
+    if streams > 1 and pq_dim > 1:
+        return _codebooks_streams(r, n, rot_dim, pq_dim, pq_len, n_codes, pq_iters, seed, streams)
     var codebooks = List[Float32](capacity=pq_dim * n_codes * pq_len)
     var ctx = x_ann_ctx()
     var n_train = n
@@ -123,6 +128,84 @@ def _codebooks(
         _ = sub^
         _ = lab^
     _ = ctx^
+    return codebooks^
+
+
+def _pq_cb_streams() -> Int:
+    """MOJOLEARN_ANN_PQ_CB_STREAMS (lane ann-apple2 trial, default 0 = off):
+    train the subspace codebooks from this many host tasks at once, each on
+    its own pooled context (at most X_ANN_POOL_SIZE)."""
+    var v = String(getenv("MOJOLEARN_ANN_PQ_CB_STREAMS"))
+    if v == "":
+        return 0
+    try:
+        var k = Int(v)
+        return k if k < X_ANN_POOL_SIZE else X_ANN_POOL_SIZE
+    except:
+        return 0
+
+
+def _codebooks_streams(
+    r: List[Float32], n: Int, rot_dim: Int, pq_dim: Int, pq_len: Int, n_codes: Int, pq_iters: Int, seed: Int,
+    streams: Int,
+) raises -> List[Float32]:
+    """`_codebooks` with subspace j trained by host task j % streams on pool
+    context j % streams (lane ann-apple2). Each subspace's k-means is the
+    same call on the same rows as `_codebooks` makes, independent of the
+    others, and its codebook lands in slot j: the same words, only run side
+    by side."""
+    var n_train = n
+    comptime if PQ_FAST_TRAINSET:
+        if n > PQ_FAST_ROWS_PER_CODE * n_codes:
+            n_train = PQ_FAST_ROWS_PER_CODE * n_codes
+    var rows = List[Int]()
+    if n_train < n:
+        rows = ivf_trainset_rows(n, n_train, UInt64(seed))
+    else:
+        for i in range(n):
+            rows.append(i)
+    var per = n_codes * pq_len
+    var codebooks = List[Float32](length=pq_dim * per, fill=Float32(0.0))
+    var errs = List[Int32](length=streams, fill=Int32(0))
+    var rp = r.unsafe_ptr()
+    var rowp = rows.unsafe_ptr()
+    var cbp = codebooks.unsafe_ptr()
+    var ep = errs.unsafe_ptr()
+
+    def task(t: Int) {imm}:
+        try:
+            var ctx = x_ann_pool_ctx(t)
+            var j = t
+            while j < pq_dim:
+                var sub = List[Float32](capacity=n_train * pq_len)
+                for i in range(n_train):
+                    for u in range(pq_len):
+                        sub.append(rp[rowp[i] * rot_dim + j * pq_len + u])
+                var cb = List[Float32](length=per, fill=Float32(0.0))
+                var lab = List[UInt32](length=n_train, fill=UInt32(0))
+                _ = kmeans_fit(
+                    ctx, sub.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), n_train, pq_len, n_codes,
+                    cb.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+                    lab.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+                    sub.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), 0,
+                    pq_iters, Float64(1e-4), UInt64(seed), 1, INIT_KMEANS_PLUS_PLUS, METRIC_L2_EXPANDED, 0.0,
+                    Float64(2.0),
+                )
+                ctx.synchronize()
+                for e in range(per):
+                    cbp[j * per + e] = cb[e]
+                _ = sub^
+                _ = lab^
+                j += streams
+            _ = ctx^
+        except:
+            ep[t] = Int32(1)
+
+    host_parallelize(task, streams)
+    for t in range(streams):
+        if errs[t] != 0:
+            raise Error("IVF-PQ: a subspace codebook k-means failed on a pooled context")
+    _ = rows^
     return codebooks^
 
 
