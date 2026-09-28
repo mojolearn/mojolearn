@@ -298,7 +298,10 @@ and the speed logs; session 5 was cut off before writing it.)
    Resubmitted: steward request **1790566005596-cluster-468af3718** (all 20
    x-cluster lanes, --pass 2, sabotage ~/mojolearn-evidence/algos-cluster/
    cluster_combined_468af3718.patch) on m2pro, m3ultra-b, m4-a, do-amd.
-   RESULT: (pending at this write)
+   RESULT: **PASS on m2pro (M2 Pro), m3ultra-b (M3 Ultra), m4-a and do-amd**
+   (06:05Z): every one of the 20 lanes AGREE / DISAGREE / AGREE, including
+   x-cluster-hdbscan-epsilon on Metal (metal column == cpu-apple-m3-ultra).
+   The M2/M3 failure is closed.
 3. MAIN HYGIENE: fast-forwarding main to the lane (fc6cd020e) also carried
    the ungated speed WIP 649b55f7b (AP tie noise by counter on the device,
    DEVIATION 5122; SIMD agglomerative row scan). Reverted on main
@@ -335,3 +338,49 @@ no committed source edit. Six new patches in x_cluster/checks/sabotage/
 oracles are separate code). Their bites run first on the central AMD box
 (AMD + CPU, below); the NVIDIA + CPU bite is OWED on a pod.
 Not implemented (not an audit row): Birch (brief addition 2026-09-27).
+
+### AMD central box run (queued, results owed)
+
+`/root/ev-cluster/amd_run.sh` on the central box (tree /root/mojolearn-cluster,
+synced at 74b72aad8 + worktree) runs, in one slot: the six new audit sabotages
+(AMD + CPU bite), the speed-WIP gate (18 x-cluster lanes, --pass 2, the
+regenerated e2e patch), a GaussianMixture 1M GPU-vs-CPU probe and a KMeans
+stage profile (`kmeans_prof.py`). Summary: `/root/ev-cluster/summary.log`.
+Both slots were held by other lanes (decomp since 02:21Z) all session; the
+job had not started at 06:10Z. If it never started, launch it with
+`tools/amd_central.sh run cluster 'setsid nohup bash /root/ev-cluster/amd_run.sh > /root/ev-cluster/amd_run.out 2>&1 < /dev/null &'`.
+
+### Findings for the speed phase (not yet acted on)
+
+- **Cross-vendor IDENTICAL difference, AMD GaussianMixture:** the speed base
+  (bench/x_cluster_speed.py, taxi 1M x 8, n_components=8) reads digest
+  d19ee140438774fc (lower bound 14.4618) on MI300X, 301203207f510506
+  (14.4616) on H100 AND on M3 Ultra. HIGGS agrees on all three. The gmm
+  identity lanes (6000 x 4, 30 iterations) agree on AMD, so the difference
+  lives at the large shape. A defect to root-cause first in the AMD phase
+  (the GPU-vs-CPU probe above says which side moved).
+- **AMD KMeans is 50x NVIDIA** at taxi/higgs 1M x 8 (1.49 / 1.24 s against
+  0.030 / 0.070 s). DEVIATIONS 3080 (row-block accumulator) and 3081 (device
+  sum scale) are NVIDIA-only (`TARGET_COLUMN == COLUMN_NVIDIA`); the
+  2026-09-21 AMD A/B (bench/evidence/2026-09-21_kmeans_amd_block_scale_
+  rejected.md) found the explicit-init taxi 4M fit at 116 ms, so the 1.49 s
+  is elsewhere, most likely the k-means++ init; `kmeans_prof.py` splits init
+  from iterations.
+- AMD base elsewhere (s): hdbscan 40k 1.48 (H100 0.21), affinity-prop 5k
+  132.6 (H100 base 70.8, after 4.7), meanshift 0.52 (0.25), bayesian-gmm 3.8
+  (H100 after 0.94).
+
+## OWED (next session, in order)
+
+1. NVIDIA + CPU on a pod (RunPod balance negative, no pod this session):
+   a. the six audit sabotages bite: `tools/algos_lane_check.sh <lanes> --pass 1
+      --sabotage x_cluster/checks/sabotage/e2e_<algo>.patch` for kmeans*,
+      dbscan*, hdbscan*, agglomerative, spectral + spectral-precomputed, gmm*
+      (the lane lists are in /root/ev-cluster/amd_run.sh);
+   b. the speed WIP 649b55f7b gate: the 18 x-cluster lanes --pass 2 with the
+      regenerated e2e_device_fold_reversed.patch (arm 5122 must bite),
+      `lane_select --changed-since origin/main` AGREE, test_host_surface,
+      test_x_cluster_twice; then merge + push; one batched steward request.
+2. Read the AMD central run (above); fix the AMD GMM 1M difference at root.
+3. Speed, IDENTICAL then FAST, AMD first (kmeans, hdbscan, AP), then NVIDIA.
+   Apple: m2pro/m3ultra leave ~12:40Z, the other four ~21:20Z Sep 28.
