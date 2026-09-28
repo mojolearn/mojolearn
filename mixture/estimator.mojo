@@ -59,6 +59,20 @@ which is what the gates and the card use.
 from bindings.hostptr import copy_f32
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
+from core.neural_context import neural_ctx
+from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL
+
+#: ONE process-lifetime DeviceContext for every device entry of this binding
+#: (`core/neural_context.mojo`). A context per call ran the M2 Pro out of Metal
+#: command queues: later calls in a process REFUSED or returned output the
+#: device never wrote (x-neighbors-svc-multiclass BATCH_MOVED, gp-optimize,
+#: steward 1790601762837). Same kernels, same order, each entry still
+#: synchronizes before it returns, so no bit moves.
+comptime _CTX_NAME = "MojoMixtureContextIdentical" if _CTX_MODE == _CTX_IDENTICAL else "MojoMixtureContextFast"
+
+
+def _binding_ctx() raises -> DeviceContext:
+    return neural_ctx[_CTX_NAME]()
 
 from cholesky.checks.potrf import CHOL_ELEM_TPB, CHOL_PANEL_TPB
 from cholesky.checks.trsm import CHOL_SOLVE_TPB
@@ -739,7 +753,7 @@ def gaussian_mixture_fit(
     var ncomp = params.n_components
     var dd = d * d
 
-    var ctx = DeviceContext()
+    var ctx = _binding_ctx()
     var trace: IdentityTrace
     if trace_path == "":
         trace = IdentityTrace()
@@ -1056,7 +1070,7 @@ def gaussian_mixture_score_samples(
     var ncomp = model.n_components
     gmm_validate_data(x, n_samples, d)
 
-    var ctx = DeviceContext()
+    var ctx = _binding_ctx()
     # **DISABLED UNLESS ASKED, and this is the opposite default from
     # `gaussian_mixture_fit`.** A scoring entry is called in a LOOP -- once
     # per point by `check_launch_invariance`'s alone-versus-batch arm -- and
@@ -1141,7 +1155,7 @@ def gaussian_mixture_predict_proba(
     var ncomp = model.n_components
     gmm_validate_data(x, n_samples, d)
 
-    var ctx = DeviceContext()
+    var ctx = _binding_ctx()
     # **DISABLED UNLESS ASKED, and this is the opposite default from
     # `gaussian_mixture_fit`.** A scoring entry is called in a LOOP -- once
     # per point by `check_launch_invariance`'s alone-versus-batch arm -- and
@@ -1240,7 +1254,7 @@ def gaussian_mixture_predict(
     var ncomp = model.n_components
     gmm_validate_data(x, n_samples, d)
 
-    var ctx = DeviceContext()
+    var ctx = _binding_ctx()
     # **DISABLED UNLESS ASKED, and this is the opposite default from
     # `gaussian_mixture_fit`.** A scoring entry is called in a LOOP -- once
     # per point by `check_launch_invariance`'s alone-versus-batch arm -- and
@@ -1400,7 +1414,7 @@ def gaussian_mixture_sample(
     var d = model.n_features
     var k = model.n_components
     var rows = gmm_sample_components(model.weights, k, n_samples, seed)
-    var ctx = DeviceContext()
+    var ctx = _binding_ctx()
     var dmeans = _upload(ctx, model.means)
     var dprec = _upload(ctx, model.precisions_cholesky)
     var dcomp = ctx.enqueue_create_buffer[DType.int32](n_samples)

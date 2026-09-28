@@ -41,6 +41,20 @@ which is what the gates and the card use.
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
 from bindings.hostptr import copy_f32
 from max.gpu.host import DeviceBuffer, DeviceContext
+from core.neural_context import neural_ctx
+from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL
+
+#: ONE process-lifetime DeviceContext for every device entry of this binding
+#: (`core/neural_context.mojo`). A context per call ran the M2 Pro out of Metal
+#: command queues: later calls in a process REFUSED or returned output the
+#: device never wrote (x-neighbors-svc-multiclass BATCH_MOVED, gp-optimize,
+#: steward 1790601762837). Same kernels, same order, each entry still
+#: synchronizes before it returns, so no bit moves.
+comptime _CTX_NAME = "MojoCholeskyContextIdentical" if _CTX_MODE == _CTX_IDENTICAL else "MojoCholeskyContextFast"
+
+
+def _binding_ctx() raises -> DeviceContext:
+    return neural_ctx[_CTX_NAME]()
 
 from core.identity_trace import IdentityTrace
 from cholesky.checks.potrf import (
@@ -149,7 +163,7 @@ def cholesky_factor_host(
     chol_validate_jitter(jitter)
     var nb = chol_nb_for(n, CHOL_NB_PINNED)
 
-    var ctx = DeviceContext()
+    var ctx = _binding_ctx()
     var da = _upload(ctx, a)
     var ws = ctx.enqueue_create_buffer[DType.float32](
         chol_workspace_floats(n, nb)
@@ -237,7 +251,7 @@ def cholesky_solve_host(
                 + "; refused by name (DEVIATION 1638)"
             )
 
-    var ctx = DeviceContext()
+    var ctx = _binding_ctx()
     var dl = _upload(ctx, factor.l)
     var db = _upload(ctx, b)
     ctx.synchronize()
@@ -294,7 +308,7 @@ def cholesky_rank1_update_host(
             + " needs "
             + String(ld * ld)
         )
-    var ctx = DeviceContext()
+    var ctx = _binding_ctx()
     var dl = _upload(ctx, l)
     var dws = ctx.enqueue_create_buffer[DType.float32](
         chol_rank1_update_workspace_floats(n)

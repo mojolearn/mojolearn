@@ -460,6 +460,7 @@ __all__ = [
 from . import (_expansion_linear, _expansion_cluster, _expansion_neighbors, _expansion_decomp,
                _expansion_prep, _expansion_sequence, _expansion_trees, _expansion_cnn, _expansion_ann,
                _expansion_metrics)
+_LAZY_EXPANSION_EXPORTS = {}
 for _door in (_expansion_linear, _expansion_cluster, _expansion_neighbors, _expansion_decomp,
               _expansion_prep, _expansion_sequence, _expansion_trees, _expansion_cnn, _expansion_ann,
               _expansion_metrics):
@@ -467,7 +468,12 @@ for _door in (_expansion_linear, _expansion_cluster, _expansion_neighbors, _expa
         if _name in __all__ or _name in globals():
             raise ImportError(f"mojolearn: {_door.__name__} exports {_name!r}, which is already public "
                               "or already bound; choose another name")
-        globals()[_name] = getattr(_door, _name)
+        if _door is _expansion_sequence:
+            # Its optional NumPy-based implementations must not prevent the
+            # core library or the verifier's installation guidance importing.
+            _LAZY_EXPANSION_EXPORTS[_name] = _door
+        else:
+            globals()[_name] = getattr(_door, _name)
         __all__.append(_name)
 del _door
 globals().pop("_name", None)
@@ -505,6 +511,10 @@ _NOT_YET = {}
 
 
 def __getattr__(name):
+    if name in _LAZY_EXPANSION_EXPORTS:
+        value = getattr(_LAZY_EXPANSION_EXPORTS[name], name)
+        globals()[name] = value
+        return value
     if name == "GPT2Tokenizer":
         # Renamed BpeTokenizer 2026-09-18; kept in __all__ because 0.8.x
         # shipped it. tokenizer.__getattr__ warns and returns the same class.
@@ -516,3 +526,7 @@ def __getattr__(name):
             "no check can see it. See the module docstring."
         )
     raise AttributeError(f"module 'mojolearn' has no attribute {name!r}")
+
+
+def __dir__():
+    return sorted(set(globals()) | set(__all__))

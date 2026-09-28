@@ -1289,8 +1289,26 @@ def test_missing_numpy_has_an_actionable_verification_refusal(monkeypatch):
         raise ModuleNotFoundError("No module named 'numpy'", name="numpy")
 
     monkeypatch.setattr(va, "_load_by_path", missing)
-    with pytest.raises(va.CannotRun, match="python -m pip install numpy"):
+    with pytest.raises(va.CannotRun) as error:
         va.load_harness("identity_break.py")
+    from mojolearn._version import __version__
+    assert f'python -m pip install "mojolearn[verify]=={__version__}"' in str(error.value)
+    assert 'python -m pip install numpy' in str(error.value)
+
+
+@pytest.mark.parametrize('flags, extended', [
+    (['--all'], True), (['--full'], True),
+    (['--all', '--lanes', 'ols', '--fixtures', 'base'], True),
+    (['--quick'], False), (['--all', '--quick'], False),
+    (['--lanes', 'ols'], False),
+    (['--quick', '--batch-checks'], True),
+    (['--lanes', 'ols', '--batch-checks'], True),
+    (['--all', '--models-only'], False),
+    (['--all', '--emit-reference', 'candidate.json'], True),
+])
+def test_full_suite_includes_extended_properties_but_quick_stays_bounded(flags, extended):
+    args = cli.build_parser().parse_args(['verify', *flags])
+    assert va._extra_parts(args) == (vref.OPTIONAL_PARTS if extended else ())
 
 
 def test_other_harness_import_errors_are_not_reported_as_missing_numpy(monkeypatch):
@@ -1301,6 +1319,49 @@ def test_other_harness_import_errors_are_not_reported_as_missing_numpy(monkeypat
     with pytest.raises(ModuleNotFoundError) as error:
         va.load_harness("identity_break.py")
     assert error.value.name == "internal_missing"
+
+
+def test_core_import_and_verify_guidance_without_numpy():
+    # Block NumPy in a fresh process even when the test environment has it.
+    # New optional estimators must not prevent the CLI reaching its guidance.
+    code = '''
+import sys
+class NoNumpy:
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == "numpy" or fullname.startswith("numpy."):
+            raise ModuleNotFoundError("NumPy blocked for test", name="numpy")
+sys.meta_path.insert(0, NoNumpy())
+import mojolearn
+assert "numpy" not in sys.modules
+assert "AutoARIMA" in dir(mojolearn)
+assert mojolearn.Array.from_list([1, 2], "<i4").tolist() == [1, 2]
+from mojolearn import _verify_all as va
+try:
+    va.load_harness()
+except va.CannotRun as exc:
+    assert "mojolearn[verify]" in str(exc), str(exc)
+else:
+    raise AssertionError("verification silently ran without NumPy")
+try:
+    mojolearn.AutoARIMA
+except ModuleNotFoundError as exc:
+    assert exc.name == "numpy" and "pip install numpy" in str(exc)
+else:
+    raise AssertionError("NumPy-dependent estimator unexpectedly loaded")
+'''
+    result = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_lazy_sequence_exports_resolve_to_original_implementations():
+    import importlib
+    import mojolearn
+    from mojolearn import _expansion_sequence as sequence
+    assert set(sequence.__all__) == set(sequence._LAZY_EXPORTS)
+    for name, (module, attribute) in sequence._LAZY_EXPORTS.items():
+        expected = getattr(importlib.import_module('mojolearn.' + module), attribute)
+        assert getattr(mojolearn, name) is expected
+        assert getattr(sequence, name) is expected
 
 
 # ---------------------------------------------------------------- portable models
@@ -1405,6 +1466,37 @@ def test_cli_corrupted_table_exits_1():
     assert r.returncode == 1, r.stdout[-2000:] + r.stderr[-2000:]
     report = json.loads(r.stdout)
     assert report["counts"]["DIVERGENT"] == 1 and report["verdict"] == "MISMATCH"
+
+
+def test_all_checks_batch_reference_without_opt_in(tmp_path):
+    if not _identical_build():
+        pytest.skip("no importable identical build")
+    _need_numpy()
+    flags = ["verify", "--all", "--lanes", "ols", "--fixtures", "base", "--no-models", "--json"]
+    result = _run_cli(flags)
+    assert result.returncode == 0, result.stdout[-2000:] + result.stderr[-2000:]
+    report = json.loads(result.stdout)
+    assert set(vref.OPTIONAL_PARTS) <= set(report['properties'])
+    assert report['properties']['batchscale'][vref.IDENTICAL] == 1
+
+    table = vref.load_table()
+    entry = table['cells']['ols/base']['batchscale']
+    ref = entry['ref']
+    entry['ref'] = ('0' if ref[0] != '0' else '1') + ref[1:]
+    path = str(tmp_path / 'bad-batch.json')
+    vref.write_table(table, path)
+    result = _run_cli(flags + ['--reference-table', path])
+    assert result.returncode == va.EXIT_MISMATCH, result.stdout[-2000:] + result.stderr[-2000:]
+    report = json.loads(result.stdout)
+    assert report['properties']['batchscale'][vref.DIVERGENT] == 1
+
+    del table['cells']['ols/base']['batchscale']
+    vref.write_table(table, path)
+    result = _run_cli(flags + ['--reference-table', path])
+    report = json.loads(result.stdout)
+    row = next(r for r in report['cells'] if r['part'] == 'batchscale')
+    assert row['state'] == vref.OWED and row['local_check'] == 'passed'
+    assert report['properties']['batchscale'][vref.IDENTICAL] == 0
 
 
 def test_the_printed_verdict_carries_its_own_scope_end_to_end():
