@@ -46,6 +46,8 @@ and the card use.
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
 from bindings.hostptr import copy_f32
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL
@@ -177,7 +179,25 @@ def _download_into[out_origin: MutOrigin, //](
         var sub = src.create_sub_buffer[DType.float32](off, m)
         ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=sub)
         ctx.synchronize()
-        copy_f32(h.unsafe_ptr(), output.unsafe_offset(off), m)
+        # The first touch of the caller's fresh pages dominates this copy;
+        # split it over the host cores (a copy: no arithmetic, no FP env).
+        var src_p = rebind[MutPointer[Float32, MutUntrackedOrigin]](h.unsafe_ptr())
+        var dst_p = rebind[MutPointer[Float32, MutUntrackedOrigin]](output.unsafe_offset(off))
+        var tasks = host_predict_task_count(m)
+        if m < 262144:
+            tasks = 1
+        var part = host_predict_chunk(m, tasks)
+
+        def _part(task: Int) {imm src_p, imm dst_p, imm m, imm part}:
+            var lo = task * part
+            var hi = min(lo + part, m)
+            if hi > lo:
+                copy_f32(src_p.unsafe_offset(lo), dst_p.unsafe_offset(lo), hi - lo)
+
+        if tasks == 1:
+            _part(0)
+        else:
+            host_parallelize(_part, tasks)
         _ = sub^
         off += m
     _ = h^
