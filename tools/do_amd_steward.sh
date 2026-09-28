@@ -14,7 +14,7 @@
 #   tools/do_amd_steward.sh extend [minutes]   the heartbeat: moves BOTH deadlines (on-droplet
 #                                           self-destruct and Mac dead-man) to now + minutes
 #   tools/do_amd_steward.sh update [sha]    the droplet's tree to origin/main (or a pushed sha), steward restarted
-#                                           (waits for the running request; the queue is held)
+#                                           (drains: claims nothing new, waits for the running work; the queue never moves)
 #   tools/do_amd_steward.sh ssh <command>   one command on the droplet, as root
 #   tools/do_amd_steward.sh status          droplet, deadlines, service, queue
 #   tools/do_amd_steward.sh down            DELETE, verify 404, disarm, release the lock
@@ -269,20 +269,41 @@ extend)
     ;;
 update)
     # Never restart under a running request (a killed check leaves its
-    # request stranded in working/ and possibly a sabotage applied): hold the
-    # queue in queue/held/, wait for working/ to empty, update, restart,
-    # release the held requests (FIFO order is their names, so it is kept).
+    # request stranded in working/ and possibly a sabotage applied), and never
+    # move the queue: queued requests that left queue/ vanished from `status`
+    # and from coalescing, lanes resubmitted them, and they came back as
+    # duplicates (a hold loop left running on the box by an interrupted update
+    # kept hiding every new submission for hours). The steward DRAINS instead:
+    # $Qd/drain makes it claim nothing new, and it writes $Qd/drained once
+    # nothing of its own runs; the wait is a laptop-side poll, and an
+    # interrupted update removes the drain file, so nothing is left behind.
     load_state
     Qd=/root/mojolearn-evidence/apple-steward
-    say "holding the queue and waiting for the running request to finish"
-    bx 21600 "mkdir -p $Qd/queue/held; while :; do
-  for f in $Qd/queue/[0-9]*.json; do [ -f \"\$f\" ] && mv \"\$f\" $Qd/queue/held/; done
-  ls $Qd/working/[0-9]*.json > /dev/null 2>&1 || break
-  sleep 1   # the old steward polls every 10 s: a slower hold loses requests to it
-done; echo IDLE" < /dev/null | grep -qx IDLE || die "the steward did not go idle; the queue is held in $Qd/queue/held (move it back by hand)"
-    tree_to "$(git -C "$ROOT" rev-parse "${1:-origin/main}^{commit}")"
-    bx 60 "for f in $Qd/queue/held/[0-9]*.json; do [ -f \"\$f\" ] && mv \"\$f\" $Qd/queue/; done; rmdir $Qd/queue/held
-systemctl restart mojolearn-steward.service; sleep 3; systemctl is-active mojolearn-steward.service" < /dev/null
+    sha="$(git -C "$ROOT" rev-parse "${1:-origin/main}^{commit}")"
+    # an earlier update's leftovers: its on-box hold loop, and requests it held
+    # (the pattern and the path are spelled so this command's own line matches neither)
+    bx 60 "pkill -f 'queue/hel[d]/' || true; H=$Qd/queue/hel
+for f in \${H}d/[0-9]*.json; do [ -f \"\$f\" ] && mv \"\$f\" $Qd/queue/ && echo \"released \$f\"; done
+rmdir \${H}d 2>/dev/null; true" < /dev/null
+    if bx 60 "grep -q DRAIN_FILE /root/mojolearn/tools/apple_steward.py" < /dev/null; then
+        trap 'bx 60 "rm -f $Qd/drain" < /dev/null || true; rm -rf "$TMPD"' EXIT
+        bx 60 "rm -f $Qd/drained; touch $Qd/drain" < /dev/null
+        say "draining (the queue stays visible); waiting for the running work to finish"
+        until bx 60 "test -f $Qd/drained" < /dev/null 2> /dev/null; do sleep 20; done
+    else
+        # a steward from before the drain file: STOP it between requests. It
+        # claims only from queue/, so the laptop polls for a moment with no
+        # request in working/ and stops the service then; the queue never moves.
+        say "the running steward predates the drain file: stopping it the first moment nothing runs"
+        # A request claimed in the instant before the stop goes back to queue/
+        # under its own name (it had only begun its checkout).
+        until bx 60 "ls $Qd/working/[0-9]*.json > /dev/null 2>&1 || { systemctl stop mojolearn-steward.service
+  for f in $Qd/working/[0-9]*.json; do [ -f \"\$f\" ] || continue; b=\$(basename \"\$f\"); mv \"\$f\" $Qd/queue/\${b%%.*}.json; echo \"requeued \$b\"; done
+  echo STOPPED; }" < /dev/null 2> /dev/null | tee /dev/stderr | grep -qx STOPPED; do sleep 5; done
+    fi
+    tree_to "$sha"
+    bx 60 "systemctl restart mojolearn-steward.service; rm -f $Qd/drain; sleep 3; systemctl is-active mojolearn-steward.service" < /dev/null
+    trap 'rm -rf "$TMPD"' EXIT
     ;;
 ssh)
     load_state; [ $# -gt 0 ] || die "ssh needs a command"
@@ -293,7 +314,7 @@ status)
     load_state
     echo "droplet $DROPLET_ID $IP $SIZE \$$PRICE/h created $CREATED"
     echo "mac deadline in $(( $(cat "$S/mac_deadline") - $(now) ))s; Mac dead-man pid $(cat "$S/deadman.pid") $(kill -0 "$(cat "$S/deadman.pid")" 2>/dev/null && echo alive || echo DEAD)"
-    bx 60 "echo box deadline in \$(( \$(cat $G/deadline) - \$(date +%s) ))s; systemctl is-active mojolearn-selfkill.service mojolearn-steward.service; ls ~/mojolearn-evidence/apple-steward/queue ~/mojolearn-evidence/apple-steward/working 2>/dev/null; tail -5 /root/mojolearn-steward.log" < /dev/null
+    bx 60 "echo box deadline in \$(( \$(cat $G/deadline) - \$(date +%s) ))s; systemctl is-active mojolearn-selfkill.service mojolearn-steward.service; cd ~/mojolearn && echo \"tree at \$(git log -1 --format=%h)\"; [ -f ~/mojolearn-evidence/apple-steward/drain ] && echo DRAINING; ls ~/mojolearn-evidence/apple-steward/queue ~/mojolearn-evidence/apple-steward/working 2>/dev/null; tail -5 /root/mojolearn-steward.log" < /dev/null
     ;;
 down)
     load_state; load_token
