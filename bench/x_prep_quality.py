@@ -16,7 +16,8 @@ against the reference:
 Run it twice in one process's environment (MOJOLEARN_NUMERIC_MODE=fast): with
 MOJOLEARN_XPREP_FAST_FOLDS=0 (the row-order units: the before arm) and =1
 (the threadgroup folds: the after arm). Lines:
-`XPQ <arm> <dataset> <seed> <case> <metric> <value>`.
+`XPQ <arm> <dataset> <seed> <case> <metric> <value>`. `--only target-encoder` runs
+TargetEncoder alone (lane prep-apple3: its arms are MOJOLEARN_XPREP_TE_FAST=0 and =1).
 
     python bench/x_prep_quality.py --arm after [--seeds 5] [--rows 200000]
 scikit-learn comes from PYTHONPATH (the steward job installs it in ~/skl).
@@ -67,6 +68,21 @@ def main():
             def out(case, metric, v):
                 print(f"XPQ {a.arm} {ds} {seed} {case} {metric} {v:.6g}", flush=True)
 
+            only = [c for c in a.only.split(",") if c]
+            if not only or "target-encoder" in only:
+                # lane prep-apple3: te_global's FAST fold (MOJOLEARN_XPREP_TE_FAST). `fit` encodes
+                # with the statistics of every row, so ours and the reference see the same rows
+                # (their cross-fitting folds differ, so fit_transform is not comparable).
+                Xc = b["cat"]
+                Xc64 = Xc.astype(np.float64)
+                for tname, yy in (("binary", y), ("continuous", b["yreg"].astype(np.float64))):
+                    m = ml.TargetEncoder(target_type=tname, cv=5, shuffle=True, random_state=7).fit(Xc, yy)
+                    r = skp.TargetEncoder(target_type=tname, cv=5, shuffle=True, random_state=7).fit(Xc64, yy)
+                    out("target-encoder-" + tname, "transform_err", _err(m.transform(Xc), r.transform(Xc64)))
+                    out("target-encoder-" + tname, "target_mean_err",
+                        _err(m.target_mean_, np.atleast_1d(r.target_mean_)))
+            if only:
+                continue
             m = ml.MaxAbsScaler().fit(X)
             out("maxabs-scaler", "transform_err", _err(m.transform(X), skp.MaxAbsScaler().fit(X64).transform(X64)))
             m = ml.VarianceThreshold(threshold=0.0).fit(X)

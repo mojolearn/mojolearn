@@ -1,0 +1,269 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+"""Parallel forms of the units whose answer is a COUNT or a MOVE of words
+(lane prep-apple3, 2026-09-28). FAST on the Apple GPU only: x_prep/device.mojo
+gates every launch on FAST_EXACT, so the IDENTICAL binding and the other
+vendors never compile one.
+
+Each unit below walks n rows on ONE thread per column (or per class and
+category), so a stage of 9 units keeps 9 GPU threads busy. An integer count
+is the same integer in any order, and the distinct words of a sorted column
+are the same words whoever finds them, so these kernels write the words the
+units write, bit for bit (no float arithmetic on the data):
+
+  count_neg    a threadgroup per column, a tree of integer counts
+  unique_cols  by chunks of consecutive positions: the run starts of every
+               chunk counted, the counts turned into offsets, the run starts
+               written at their offsets
+  cat_counts   (unweighted) one pass over the rows by chunks into a
+               (class, category) table per column and chunk, then the sum
+               over the chunks; the unit tests every row once per class and
+               category
+
+`te_global_fast_kernel` is a FAST fold (the bits may change): the target's
+mean and variance over a fold's rows by a threadgroup tree, as
+x_prep/fastred.mojo folds the columns. It is held to the paired quality rule
+(bench/x_prep_quality.py, target-encoder).
+"""
+from std.gpu import block_idx, block_dim, thread_idx
+from std.memory import stack_allocation
+from std.sys.info import has_apple_gpu_accelerator
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from x_prep.common import FP, IP, p, ld, raw, st, key
+from x_prep.prims import add, sub, mul, div
+
+comptime XUP = MutPointer[UInt32, MutAnyOrigin]
+#: FAST on Apple only
+comptime FAST_EXACT = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and has_apple_gpu_accelerator()
+#: threads per group of the threadgroup kernels
+comptime XTG = 256
+#: threads per block of the chunk kernels
+comptime XBS = 64
+#: positions per chunk
+comptime XCHUNK = 4096
+#: below this many rows the units run
+comptime EXACT_MIN_ROWS = 65536
+#: the largest table (words) `cat_counts` keeps
+comptime CAT_TABLE_MAX = 1 << 26
+
+
+def exact_chunks(n: Int) -> Int:
+    return max(1, (n + XCHUNK - 1) // XCHUNK)
+
+
+def cat_table_words(n: Int, d: Int, K: Int, cmax: Int) -> Int:
+    """The scratch words of `cat_counts`' tables, or 0 when they are too
+    large (the units run)."""
+    var words = d * exact_chunks(n) * K * cmax
+    if K <= 0 or cmax <= 0 or d <= 0 or words > CAT_TABLE_MAX:
+        return 0
+    return words
+
+
+def count_neg_fast_kernel(f: FP, q: IP):
+    """`count_neg_unit` for column block_idx.x (q = [CODES, n, d, OUT]):
+    every thread counts a strided share of the rows, a tree adds the
+    counts."""
+    var c = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var n = p(q, 1)
+    var d = p(q, 2)
+    var C = p(q, 0)
+    var sh = stack_allocation[XTG, Int32, address_space = AddressSpace.SHARED]()
+    var k = 0
+    for i in range(tid, n, XTG):
+        if ld(f, C + i * d + c) < Float32(0):
+            k += 1
+    sh[tid] = Int32(k)
+    barrier()
+    var w = XTG // 2
+    while w >= 1:
+        if tid < w:
+            sh[tid] = sh[tid] + sh[tid + w]
+        barrier()
+        w //= 2
+    if tid == 0:
+        st(f, p(q, 3) + c, Float32(Int(sh[0])))
+
+
+def uniq_count_kernel(f: FP, q: IP, w: XUP, ch_n: Int32, total: Int32):
+    """q = [S, n, d, U, CNT]; t = c * CH + ch: w[t] = the positions of chunk
+    ch of sorted column c that start a run of equal keys."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= Int(total):
+        return
+    var n = p(q, 1)
+    var chn = Int(ch_n)
+    var c = t // chn
+    var ch = t - c * chn
+    var cs = (n + chn - 1) // chn
+    var lo = min(ch * cs, n)
+    var hi = min(lo + cs, n)
+    var Sc = p(q, 0) + c * n
+    var k = 0
+    var last = UInt32(0)
+    if lo > 0:
+        last = key(raw(f, Sc + lo - 1))
+    for i in range(lo, hi):
+        var kv = key(raw(f, Sc + i))
+        if i == 0 or kv != last:
+            k += 1
+        last = kv
+    w[t] = UInt32(k)
+
+
+def uniq_prefix_kernel(f: FP, q: IP, w: XUP, ch_n: Int32, total: Int32):
+    """t = column c: w[c * CH + ch] becomes the run starts before chunk ch;
+    CNT[c] = the column's distinct count."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= Int(total):
+        return
+    var chn = Int(ch_n)
+    var run = 0
+    for ch in range(chn):
+        var v = Int(w[t * chn + ch])
+        w[t * chn + ch] = UInt32(run)
+        run += v
+    st(f, p(q, 4) + t, Float32(run))
+
+
+def uniq_write_kernel(f: FP, q: IP, w: XUP, ch_n: Int32, total: Int32):
+    """t = c * CH + ch: the first word of every run that starts in chunk ch,
+    at U[c*n + the run starts before it]."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= Int(total):
+        return
+    var n = p(q, 1)
+    var chn = Int(ch_n)
+    var c = t // chn
+    var ch = t - c * chn
+    var cs = (n + chn - 1) // chn
+    var lo = min(ch * cs, n)
+    var hi = min(lo + cs, n)
+    var Sc = p(q, 0) + c * n
+    var U = p(q, 3) + c * n
+    var k = Int(w[t])
+    var last = UInt32(0)
+    if lo > 0:
+        last = key(raw(f, Sc + lo - 1))
+    for i in range(lo, hi):
+        var v = raw(f, Sc + i)
+        var kv = key(v)
+        if i == 0 or kv != last:
+            f.unsafe_store(U + k, v)
+            k += 1
+        last = kv
+
+
+def cat_hist_kernel(f: FP, q: IP, w: XUP, ch_n: Int32, total: Int32):
+    """q = [X, n, d, Y, K, NCAT, CMAX, W, OUT]; t = j * CH + ch:
+    w[t*K*CMAX + k*CMAX + v] = the rows of chunk ch of class k whose feature
+    j equals v (the unit's own tests: Int of the flushed words)."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= Int(total):
+        return
+    var n = p(q, 1)
+    var d = p(q, 2)
+    var K = p(q, 4)
+    var cmax = p(q, 6)
+    var chn = Int(ch_n)
+    var j = t // chn
+    var ch = t - j * chn
+    var bins = K * cmax
+    var hb = t * bins
+    for b in range(bins):
+        w[hb + b] = UInt32(0)
+    var cs = (n + chn - 1) // chn
+    var lo = min(ch * cs, n)
+    var hi = min(lo + cs, n)
+    var Y = p(q, 3)
+    var X = p(q, 0) + j
+    for i in range(lo, hi):
+        var k = Int(ld(f, Y + i))
+        var v = Int(ld(f, X + i * d))
+        if k >= 0 and k < K and v >= 0 and v < cmax:
+            var at = hb + k * cmax + v
+            w[at] = w[at] + UInt32(1)
+
+
+def cat_sum_kernel(f: FP, q: IP, w: XUP, ch_n: Int32, total: Int32):
+    """t = (j*K + k)*CMAX + v: OUT[t] = the chunk counts added (slots
+    v >= NCAT[j] are left as they are, as the unit leaves them)."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= Int(total):
+        return
+    var K = p(q, 4)
+    var cmax = p(q, 6)
+    var v = t % cmax
+    var jk = t // cmax
+    var k = jk % K
+    var j = jk // K
+    if v >= Int(ld(f, p(q, 5) + j)):
+        return
+    var chn = Int(ch_n)
+    var bins = K * cmax
+    var m = 0
+    for ch in range(chn):
+        m += Int(w[(j * chn + ch) * bins + k * cmax + v])
+    st(f, p(q, 8) + t, Float32(m))
+
+
+def te_global_fast_kernel(f: FP, q: IP):
+    """`te_global_unit` for unit block_idx.x (q = [Y, n, T, FOLD, META];
+    t = fi*T + tt): the count and the sum of target column tt over the rows
+    outside fold fi by a tree, then the squared deviations by a tree."""
+    var t = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var n = p(q, 1)
+    var T = p(q, 2)
+    var Y = p(q, 0)
+    var FO = p(q, 3)
+    var fi = t // T
+    var tt = t % T
+    var sh_s = stack_allocation[XTG, Float32, address_space = AddressSpace.SHARED]()
+    var sh_c = stack_allocation[XTG, Int32, address_space = AddressSpace.SHARED]()
+    var s = Float32(0)
+    var cnt = 0
+    for i in range(tid, n, XTG):
+        if Int(ld(f, FO + i)) == fi:
+            continue
+        s = add(s, ld(f, Y + i * T + tt))
+        cnt += 1
+    sh_s[tid] = s
+    sh_c[tid] = Int32(cnt)
+    barrier()
+    var w = XTG // 2
+    while w >= 1:
+        if tid < w:
+            sh_s[tid] = add(sh_s[tid], sh_s[tid + w])
+            sh_c[tid] = sh_c[tid] + sh_c[tid + w]
+        barrier()
+        w //= 2
+    var total = Int(sh_c[0])
+    var mean = Float32(0)
+    if total > 0:
+        mean = div(sh_s[0], Float32(total))
+    barrier()
+    var ss = Float32(0)
+    if total > 0:
+        for i in range(tid, n, XTG):
+            if Int(ld(f, FO + i)) == fi:
+                continue
+            var e = sub(ld(f, Y + i * T + tt), mean)
+            ss = add(ss, mul(e, e))
+    sh_s[tid] = ss
+    barrier()
+    var w2 = XTG // 2
+    while w2 >= 1:
+        if tid < w2:
+            sh_s[tid] = add(sh_s[tid], sh_s[tid + w2])
+        barrier()
+        w2 //= 2
+    if tid == 0:
+        var var_ = Float32(0)
+        if total > 0:
+            var_ = div(sh_s[0], Float32(total))
+        st(f, p(q, 4) + 2 * t, mean)
+        st(f, p(q, 4) + 2 * t + 1, var_)
