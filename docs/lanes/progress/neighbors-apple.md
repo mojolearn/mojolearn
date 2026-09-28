@@ -28,6 +28,8 @@ order, default rebuilt at the end).
 | fd048ed6a | Jacobi eigh: FAST on Apple launches 256 wide like IDENTICAL (scheduling) | FAST | FAST words unchanged |
 | 593ce0826 | back substitution, second form: x in threadgroup memory (masked ring of the newest values + staged older ones), 32-step register prefetch (`-D MOJOLEARN_CHOL_BACK_RING_OFF`) | IDENTICAL (and FAST where the pinned solve runs) | same chain; digests equal |
 | 312b5da1a | Nystroem / RBFSampler transform into caller memory through a pinned 64 MB staging buffer (`-D MOJOLEARN_KM_DIRECT_OUT`) | both | same words |
+| 0e481b572 | Cholesky panel factor + panel solve on Apple: diagonal block in threadgroup memory, rows in registers (`-D MOJOLEARN_CHOL_PANEL_STAGE_OFF`, `-D MOJOLEARN_CHOL_PANEL_SOLVE_STAGE_OFF`) | both on Apple | same chains |
+| 0dcb77d80 | transform output copy split over the host cores | both | same words |
 | efd02268a, 9ec71f7a4 | MOJOLEARN_STAGE_TIMES=1 walls for GPC fit, KRR solve, RBFSampler transform (timing only) | - | - |
 | 38c9834dd | `build_gp.sh` smoke: return_cov is honored now (the stale refusal assert failed every FAST GP build on Apple after the merge) | FAST build | - |
 
@@ -110,3 +112,8 @@ job (forward and reverse), digests equal in every pair. Raw:
 | kneighbors, tied grid data | taxi / HIGGS 100k x 5k | 0.129 / 0.129 | 0.115 / 0.115 | 0.141 / 0.100 (most queries fall back: +25 ms on taxi) |
 | SVC.fit (SMO sync + EPT arm) | taxi / HIGGS 10k | 2.831 / 0.287 | | 0.888 / 0.131 |
 | SVR.fit (same arm) | taxi / HIGGS 10k | 0.313 / 0.344 | | 0.121 / 0.153 |
+
+RBFSampler.transform 1M x 500 (M3 Ultra, arms in one job): copy into the
+caller's array 907 -> 745 ms with pinned staging (312b5da1a), transform
+1.130 -> 0.964 s; the remaining copy is the first touch of the caller's
+fresh 2 GB (parallel host copy 0dcb77d80, measurement pending).
