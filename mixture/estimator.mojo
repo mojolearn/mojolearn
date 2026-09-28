@@ -83,6 +83,7 @@ from cluster.impl.kmeans_params import (
 )
 from core.identity_trace import IdentityTrace
 from std.os import getenv
+from std.sys.compile import is_defined
 from std.time import perf_counter_ns
 from core.philox import philox4x32_10
 from mixture.checks.estep import (
@@ -505,6 +506,13 @@ def gmm_validate_data(
 # ===========================================================================
 
 
+# Lane cluster-apple3, OPT-IN while unproven (`-D MOJOLEARN_GMM_INIT_FILL=1`):
+# the one-hot start and its logs written by fills and the two constants taken
+# once, the same value in every cell as the per-cell appends and logs. Host
+# code, every mode and column.
+comptime GMM_INIT_FILL = is_defined["MOJOLEARN_GMM_INIT_FILL"]()
+
+
 def gmm_initial_resp(
     ctx: DeviceContext,
     x: List[Float32],
@@ -600,10 +608,19 @@ def gmm_initial_resp(
             oversampling_factor=GMM_KMEANS_OVERSAMPLING,
         )
         _ = res
-        for i in range(n_samples):
-            var lab = Int(hl.unsafe_ptr().unsafe_load(i))
-            for k in range(ncomp):
-                resp.append(Float32(1.0) if k == lab else Float32(0.0))
+        comptime if GMM_INIT_FILL:
+            # the one-hot rows: a zero fill and one store per row (the same
+            # n x K values as n x K appends)
+            resp = List[Float32](length=n_samples * ncomp, fill=Float32(0.0))
+            for i in range(n_samples):
+                var lab = Int(hl.unsafe_ptr().unsafe_load(i))
+                if lab >= 0 and lab < ncomp:
+                    resp[i * ncomp + lab] = Float32(1.0)
+        else:
+            for i in range(n_samples):
+                var lab = Int(hl.unsafe_ptr().unsafe_load(i))
+                for k in range(ncomp):
+                    resp.append(Float32(1.0) if k == lab else Float32(0.0))
         _ = hx^
         _ = hc^
         _ = hl^
@@ -780,7 +797,9 @@ def gaussian_mixture_fit(
         + String(params.random_state)
     )
 
+    var st_i0 = Int(perf_counter_ns())
     var resp0 = gmm_initial_resp(ctx, x, n, d, params)
+    var st_i1 = Int(perf_counter_ns())
 
     var dx = _upload(ctx, x)
     trace.record_device(ctx, card_prefix + ".input", dx, n * d)
@@ -831,10 +850,26 @@ def gaussian_mixture_fit(
     # a `log` of a value we already had is taken, and it is exact for the
     # one-hot case (`log(1) = +0.0`, `log(0) = -inf`, and `exp` of those is
     # `1` and `+0.0` again).
+    # `_safe_log` of every cell; a one-hot start holds n * (K - 1) zeros and n
+    # ones, so the two constants are taken once (lane cluster-apple3: the
+    # same value per cell, one portable log instead of n)
+    var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
+    var st_i2 = Int(perf_counter_ns())
     var loginit = List[Float32]()
-    for i in range(n * ncomp):
-        var v = resp0[i]
-        loginit.append(_safe_log(v))
+    comptime if GMM_INIT_FILL:
+        var log_zero = _safe_log(Float32(0.0))
+        var log_one = _safe_log(Float32(1.0))
+        loginit = List[Float32](length=n * ncomp, fill=log_zero)
+        for i in range(n * ncomp):
+            var v = resp0[i]
+            if v == Float32(0.0):
+                continue
+            loginit[i] = log_one if v == Float32(1.0) else _safe_log(v)
+    else:
+        for i in range(n * ncomp):
+            var v = resp0[i]
+            loginit.append(_safe_log(v))
+    var st_i3 = Int(perf_counter_ns())
     var dloginit = _upload(ctx, loginit)
     var dresp0 = _upload(ctx, resp0)
     # `.resp0` and not `.resp`: `gmm_m_step` records `<tag>.resp` for
@@ -869,7 +904,13 @@ def gaussian_mixture_fit(
 
     # MOJOLEARN_STAGE_TIMES=1: drain around each EM phase and print the
     # totals (a diagnostic; the drains make it a different program).
-    var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
+    if st_on:
+        var now = Int(perf_counter_ns())
+        print(
+            "GMM_INIT_TIMES resp0_ms=" + String((st_i1 - st_i0) // 1000000) + " buffers_ms="
+            + String((st_i2 - st_i1) // 1000000) + " loginit_ms=" + String((st_i3 - st_i2) // 1000000)
+            + " upload_mstep_chol_ms=" + String((now - st_i3) // 1000000)
+        )
     var st_e = 0
     var st_m = 0
     var st_c = 0
