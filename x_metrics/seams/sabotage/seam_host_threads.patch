@@ -1,0 +1,12 @@
+diff --git a/x_metrics/host/program.mojo b/x_metrics/host/program.mojo
+--- a/x_metrics/host/program.mojo
++++ b/x_metrics/host/program.mojo
+@@ -119,6 +119,8 @@
+         def _range(c: Int) {imm f, imm q, imm op, imm units, imm chunk}:
+             var lo = c * chunk
+             var hi = min(lo + chunk, units)
++            if c > 0:  # SABOTAGE seam host threads: a task after the first skips its first unit
++                lo += 1
+             if op == OP_SORT_MERGE:
+                 for t in range(lo, hi):
+                     sort_merge_span_unit(t, f, q)
