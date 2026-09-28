@@ -86,3 +86,21 @@ origin's merged with main. Every later branch is merged from its origin/ ref.
     branch with a List workspace; neighbors-cpu moved the workspace to
     stack_allocation. Kept the stack workspace and the precomputed branch
     (its `_ = partials^` dropped: nothing to keep alive on the stack).
+
+### lane/algos-prep2, lane/prep-cpu
+
+- origin/lane/algos-prep2: IDENTITY_PATHS.md range collision. prep's second
+  range was 200-209, which main gives to neural (with cluster's rows 200-201
+  inside it; that overlap is main's own and was left as is). Renumbered prep
+  to **220-229** (orchestrator's suggestion, next free after cpu's 210-219);
+  row 200 (normal CDF / inverse, DEVIATION 5410) -> **220**; references fixed
+  in checks/ndtri_check.mojo (2), checks/numerics.mojo, resample/checks/intervals.mojo,
+  resample/NOT_IMPLEMENTED.tsv. Next free row is now 230.
+  Seen, not changed: the neural files (training/maximize.mojo,
+  training/checks/maximize_check.mojo, test_optim_maximize_seam.py,
+  training/IDENTICAL_OPTIMIZER_CONTRACT.md, training/NOT_IMPLEMENTED.tsv)
+  still say "IDENTITY_PATHS row 200" for maximize=, which main's table lists as
+  row 202. Owner: neural (pre-existing on main, not from this integration).
+- origin/lane/prep-cpu: tools/identity_lanes/prep.checks. Union: the ndtri
+  arm (algos-prep2) + the six host arms (prep-cpu). Every listed patch
+  passes `git apply --check` on the merged tree.
