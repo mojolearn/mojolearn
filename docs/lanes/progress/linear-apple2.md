@@ -322,3 +322,17 @@ digests equal across arms: 64 and 128 are slower everywhere (logistic-cv
 5.15 / 12.35 / 19.22 s, poisson 2.46 / 2.70 / 2.90, huber 1.11 / 1.38 / 1.44):
 more registers per chain thread. Stays 32.
 
+### Per-iteration cost against rows (m4-a, Apple M4, steward 1790614992091), IDENTICAL, HEAD
+
+| rows | lasso ms/epoch | logistic ms/iter | linear-svr ms/iter |
+|---|---|---|---|
+| 10k | 1.01 | 0.57 | 0.80 |
+| 100k | 1.25 | 0.89 | 0.90 |
+| 1M | 4.71 | 4.47 | 4.18 |
+
+The floor at 10k is launch and synchronize overhead; at 1M the QN
+iteration is data bound (X, 112 MB, read twice: 1.9 ms at the M4's 120 GB/s
+against 3.9 ms spent), and on the M3 Ultra (2.9 ms per iteration at 800 GB/s)
+far from it: the one-block strided reductions (loss sum, bias mean) and the
+xtdz chains wait on their loads. The walk's load block is A/B'd next.
+
