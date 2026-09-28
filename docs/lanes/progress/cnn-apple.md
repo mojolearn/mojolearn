@@ -118,3 +118,14 @@ blobs acc 1.0000 x5 (log loss 0.0012-0.0026); stripes acc 0.9570, 0.9775,
 - On Apple the IDENTICAL split/tuned GEMM plans run 2-4x slower than the same
   plans in FAST (block 2 dW 64x288x65536: 11.0 IDENTICAL vs 6.6 ms FAST): the
   Apple FMA repair in the pinned GEMM, the GEMM lane's territory.
+
+M2 Pro (m2pro), IDENTICAL, before 33917d8bb -> after 37e50ac45 (digests equal in every row):
+| shape | before | after |
+|---|---|---|
+| Conv2d N256 3->64 32x32 fwd / bwd | 57.5 / 47.3 | 47.7 / 20.9 |
+| Conv2d N256 64->64 32x32 fwd / bwd | 183.2 / 512.5 | 73.1 / 199.3 |
+| Conv2d N256 64->128 16x16 fwd / bwd | 58.4 / 90.3 | 30.0 / 54.6 |
+| CNNClassifier fit 2048 / 8192 | 1129.5 / 4453.8 | 465.1 / 1774.3 (2.4-2.5x) |
+| predict_proba 2048 / 8192 | 408.4 / 1705.3 | 171.1 / 688.6 (2.4-2.5x) |
+M2 Pro dW sweep (1790584048397): its fastest weight-gradient plans match the M4's (TUNED 32x32 /
+APPLE_MMA); its fastest bias-gradient plan is SPLITK, a candidate of `_apple_tuned_plan`.
