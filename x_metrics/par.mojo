@@ -674,3 +674,122 @@ def cm_final_unit(t: Int, f: FP, q: IP):
                 elif s > m:
                     m = s
     st(f, p(q, 4) + t, m)
+
+
+# ---------------------------------------------------------------------------
+# Unweighted prefixes in parallel (lane metrics-apple)
+# ---------------------------------------------------------------------------
+# Without weights the two sequential prefixes are INTEGER counts: the
+# percentile CDF adds 1.0 per row (exact while it stays below 2^24, so its
+# i-th word is Float32(i + 1)), and the curve walk counts positives,
+# negatives and distinct-score ends in Int. Integers do not depend on the
+# order they are added in, so these schedules write the sequential units'
+# words exactly, and the device needs no host round trip for them.
+
+def wpct_iota_unit(t: Int, f: FP, q: IP):
+    """q = [n, P]; t = element c*n + i: P[t] = Float32(i + 1), the
+    unweighted `wpct_prefix_unit` word (n <= 2^24, the planner's guard)."""
+    var n = p(q, 0)
+    st(f, p(q, 1) + t, Float32(t - (t // n) * n + 1))
+
+
+@always_inline
+def _curve_last(f: FP, G: Int, N: Int, n: Int, i: Int, e: Int) -> Bool:
+    """curve_prefix_unit's end-of-distinct-score test for kept row e = pp*n + i."""
+    if i == n - 1:
+        return True
+    if ldi(f, G + e + 1) < 0:
+        return True
+    return ld(f, G + 2 * N + e + 1) != ld(f, G + 2 * N + e)
+
+
+def curve_cnt_unit(t: Int, f: FP, q: IP):
+    """q = [n, G, N, S, C, CH]; t = problem * C + chunk: the chunk's kept
+    positives, kept negatives and distinct-score ends at S[3t .. 3t+2]."""
+    var n = p(q, 0)
+    var G = p(q, 1)
+    var N = p(q, 2)
+    var S = p(q, 3)
+    var C = p(q, 4)
+    var CH = p(q, 5)
+    var pp = t // C
+    var c = t - pp * C
+    var tp = 0
+    var fp = 0
+    var ends = 0
+    for i in range(c * CH, min(n, c * CH + CH)):
+        var e = pp * n + i
+        var pos = ldi(f, G + e)
+        if pos < 0:
+            continue
+        if pos == 1:
+            tp += 1
+        else:
+            fp += 1
+        if _curve_last(f, G, N, n, i, e):
+            ends += 1
+    sti(f, S + 3 * t, tp)
+    sti(f, S + 3 * t + 1, fp)
+    sti(f, S + 3 * t + 2, ends)
+
+
+def curve_off_unit(t: Int, f: FP, q: IP):
+    """q = [G, N, S, C]; t = problem: the chunks' counts become exclusive
+    offsets in place, and G+6N+t = the problem's slot count."""
+    var G = p(q, 0)
+    var N = p(q, 1)
+    var S = p(q, 2)
+    var C = p(q, 3)
+    var tp = 0
+    var fp = 0
+    var ends = 0
+    for c in range(C):
+        var k = S + 3 * (t * C + c)
+        var a = ldi(f, k)
+        var b = ldi(f, k + 1)
+        var d = ldi(f, k + 2)
+        sti(f, k, tp)
+        sti(f, k + 1, fp)
+        sti(f, k + 2, ends)
+        tp += a
+        fp += b
+        ends += d
+    sti(f, G + 6 * N + t, ends)
+
+
+def curve_fill_unit(t: Int, f: FP, q: IP):
+    """q = [n, G, N, S, C, CH]; t = problem * C + chunk: the unweighted
+    `curve_prefix_unit` words of the chunk's rows (TP, FP at G+3N, G+4N;
+    IDX at G+5N), started from the chunk's offsets. A dropped row's TP and
+    FP words are 0, as the zero-filled host copy of the sequential stage
+    leaves them."""
+    var n = p(q, 0)
+    var G = p(q, 1)
+    var N = p(q, 2)
+    var S = p(q, 3)
+    var C = p(q, 4)
+    var CH = p(q, 5)
+    var pp = t // C
+    var c = t - pp * C
+    var tp = ldi(f, S + 3 * t)
+    var fp = ldi(f, S + 3 * t + 1)
+    var cnt = ldi(f, S + 3 * t + 2)
+    for i in range(c * CH, min(n, c * CH + CH)):
+        var e = pp * n + i
+        var pos = ldi(f, G + e)
+        if pos < 0:
+            st(f, G + 3 * N + e, Float32(0))
+            st(f, G + 4 * N + e, Float32(0))
+            sti(f, G + 5 * N + e, -1)
+            continue
+        if pos == 1:
+            tp += 1
+        else:
+            fp += 1
+        st(f, G + 3 * N + e, Float32(tp))
+        st(f, G + 4 * N + e, Float32(fp))
+        if _curve_last(f, G, N, n, i, e):
+            sti(f, G + 5 * N + e, cnt)
+            cnt += 1
+        else:
+            sti(f, G + 5 * N + e, -1)

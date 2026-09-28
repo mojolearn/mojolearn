@@ -48,6 +48,14 @@ comptime OP_CM_FINAL = 30
 comptime OP_COL_MAX = 6
 #: rows per chunk of the column maximum
 comptime CM_CHUNK = 512
+comptime OP_WPCT_IOTA = 31
+comptime OP_CURVE_CNT = 32
+comptime OP_CURVE_OFF = 33
+comptime OP_CURVE_FILL = 34
+#: rows per chunk of the unweighted curve counts
+comptime CURVE_CHUNK = 1024
+#: the unweighted CDF is Float32(i + 1) only while it stays exact
+comptime IOTA_EXACT = 1 << 24
 #: HOST STAGES: a stage whose unit is one sequential walk of a Float32
 #: prefix (DEVIATION 6107 keeps it sequential, so no wide schedule returns
 #: its bits). The device runner runs it on the host, over a copy of the
@@ -210,7 +218,10 @@ def plan_program(q: IP, stages: Int, arena_len: Int) raises -> Plan:
             var N = n * total
             var G = pl.alloc(2 * N)
             pl.emit(OP_WPCT_GATHER, N, [n, _a(r, 3), _a(r, 4), G])
-            pl.emit(OP_WPCT_PREFIX, total, [n, G, G + N, 0, 0, 0, 0, 0, 0, 0, G, G + N, G + N, G + 2 * N])
+            if _a(r, 4) < 0 and n <= IOTA_EXACT:
+                pl.emit(OP_WPCT_IOTA, N, [n, G + N])
+            else:
+                pl.emit(OP_WPCT_PREFIX, total, [n, G, G + N, 0, 0, 0, 0, 0, 0, 0, G, G + N, G + N, G + 2 * N])
             pl.emit(OP_COPY, N, [G + N, _a(r, 8)])
             var sel = List[Int]()
             for k in range(9):
@@ -225,7 +236,14 @@ def plan_program(q: IP, stages: Int, arena_len: Int) raises -> Plan:
             var B = pl.sort(KEY_CURVE, n, total, _a(r, 0), _a(r, 1), _a(r, 3))
             var G = pl.alloc(6 * N + total)
             pl.emit(OP_CURVE_GATHER, N, [n, B, N, _a(r, 0), _a(r, 1), _a(r, 2), _a(r, 3), G, _a(r, 5)])
-            pl.emit(OP_CURVE_PREFIX, total, [n, G, N, _a(r, 3), 0, 0, 0, 0, 0, 0, G, G + 3 * N, G + 3 * N, G + 6 * N + total])
+            if _a(r, 3) < 0 and pl.fits(12 * n * total + total + 3 * total * ((n + CURVE_CHUNK - 1) // CURVE_CHUNK)):
+                var C = (n + CURVE_CHUNK - 1) // CURVE_CHUNK
+                var S = pl.alloc(3 * C * total)
+                pl.emit(OP_CURVE_CNT, C * total, [n, G, N, S, C, CURVE_CHUNK])
+                pl.emit(OP_CURVE_OFF, total, [G, N, S, C])
+                pl.emit(OP_CURVE_FILL, C * total, [n, G, N, S, C, CURVE_CHUNK])
+            else:
+                pl.emit(OP_CURVE_PREFIX, total, [n, G, N, _a(r, 3), 0, 0, 0, 0, 0, 0, G, G + 3 * N, G + 3 * N, G + 6 * N + total])
             pl.emit(OP_CURVE_EMIT, N, [n, G, N, _a(r, 6), _a(r, 7), _a(r, 8), _a(r, 9)])
         elif op == OP_PERMUTE:
             var n = _a(r, 0)
