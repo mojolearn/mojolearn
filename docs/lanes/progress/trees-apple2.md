@@ -95,3 +95,30 @@ cells faster, geomean 0.989), with the Istella depthwise 1.024 noted.
 | GBDT 2031 gated to <= 64 features, IDENTICAL (63a38c138) | m4pro-a | 1790611947758 | symmetric taxi | 1026 | 935 | 0.911 | 8e760782efae56c8 |
 | same | m4pro-a | 1790611947758 | symmetric istella | 2827 | 2819 | 0.997 | d5571c2a35ea06c8 |
 | RF columns per pass IDENTICAL, trial arms (819d4bd7b) | m4pro-a | 1790612032193 | rf:istellareg | 49533 (10) | 47836 (20) / 47139 (40) | 0.966 / 0.952 | 3a5e8c09dd0d5fc7 |
+
+## M3 Ultra m3ultra-b, IDENTICAL, all changes off vs on (commit 14706bb29, steward 1790611718868)
+
+Before = every opt-out define of this lane (`-D MOJOLEARN_RF_BINS_COLUMN_MAJOR -D MOJOLEARN_RF_FAST_HIST_ZERO_OFF -D MOJOLEARN_ET_TILED_SEARCH_IDENTICAL_OFF -D MOJOLEARN_ET_RM_NARROW_OFF -D MOJOLEARN_GBDT_IDENTICAL_RIDX_OFF -D MOJOLEARN_2031_SYM_RIDX_SPLITS_OFF -D MOJOLEARN_GBDT_ID_UPLOADS_SEPARATE -D MOJOLEARN_GBDT_IDENTICAL_SPLIT_COPY`), after = defaults; same commit, same Mac, arms alternated, 2 rounds, median ms. Every digest equal before and after. This commit still had 2031 ungated (the Istella symmetric 1.021 row) and 10 RF columns per pass.
+
+| cell | before | after | after/before | digest |
+|---|---|---|---|---|
+| adaboost:taxi | 2947 | 2909 | 0.987 | e8529a04f218dbab |
+| adaboost:taxireg | 1905 | 1930 | 1.013 | 160452cbaf288200 |
+| bagging:taxi | 600 | 595 | 0.992 | 16aaba82631a5774 |
+| dart:taxireg | 5648 | 5772 | 1.022 | 86f40254833745ec |
+| dt:istellareg | 446 | 449 | 1.007 | 6f406a1b9436c69f |
+| dt:taxireg | 70 | 69 | 0.987 | e735a53b7d74025a |
+| embedding:taxi | 187 | 189 | 1.008 | 90d1b0749de17d44 |
+| et:istellareg | 16004 | 9373 | 0.586 | 981c3b89e374c91d |
+| et:taxi | 1053 | 1046 | 0.994 | ac18d5d8a54b1555 |
+| et:taxireg | 1665 | 1161 | 0.698 | ec62616c8e02c60b |
+| gbdt-depthwise:istella | 2912 | 2890 | 0.992 | e9c0f7e913af5a8a |
+| gbdt-depthwise:taxi | 1734 | 1653 | 0.953 | 5694af7699036c65 |
+| gbdt-lossguide:istella | 6948 | 6523 | 0.939 | eb0d9510ee08a16f |
+| gbdt-lossguide:taxi | 5396 | 4852 | 0.899 | b1761eecc6dfbc73 |
+| gbdt-symmetric:istella | 2001 | 2042 | 1.021 | d5571c2a35ea06c8 |
+| gbdt-symmetric:taxi | 730 | 700 | 0.959 | 8e760782efae56c8 |
+| iforest:taxi | 68 | 68 | 1.000 | 96ff7aa1dfcef11e |
+| rf:istellareg | 19647 | 19681 | 1.002 | 3a5e8c09dd0d5fc7 |
+| rf:taxi | 2563 | 2470 | 0.964 | 452a173087f86a9d |
+| rf:taxireg | 3439 | 3234 | 0.941 | 58ec783b7afbd7a7 |
