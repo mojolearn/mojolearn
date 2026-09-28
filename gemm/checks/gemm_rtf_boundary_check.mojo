@@ -31,6 +31,7 @@ from checks.rtf_seam import RTF_REPAIR
 from gemm.checks.gemm_identical import (
     APPLE_MMA,
     PLAN_APPLE_MMA,
+    PLAN_APPLE_MMA_SPLIT,
     PLAN_FLAT,
     PLAN_SPLIT_128_8X8,
     PLAN_TUNED_128_8X8,
@@ -164,6 +165,7 @@ def _case(
         # sends it.
         if apple_mma_applies(m, n, k):
             plans.append(PLAN_APPLE_MMA)
+            plans.append(PLAN_APPLE_MMA_SPLIT)
     for pi in range(len(plans)):
         var plan = plans[pi]
         var got = _run(ctx, ha, hb, m, n, k, plan)

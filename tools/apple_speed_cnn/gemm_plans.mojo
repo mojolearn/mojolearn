@@ -18,7 +18,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from gemm.checks.gemm_identical import (
     choose_gemm_plan, gemm_plan_name, identical_gemm_into, identical_gemm_with_plan,
     identical_gemm_workspace_floats, identical_gemm_workspace_max_floats, apple_mma_applies,
-    PLAN_APPLE_MMA, PLAN_SPLIT_32_2X2, PLAN_SPLIT_16_1X1, PLAN_TUNED_32_2X2, PLAN_SPLIT_64_4X4, GEMM_PLAN_COUNT,
+    PLAN_APPLE_MMA, PLAN_APPLE_MMA_SPLIT, PLAN_SPLIT_32_2X2, PLAN_SPLIT_16_1X1, PLAN_TUNED_32_2X2, PLAN_SPLIT_64_4X4, GEMM_PLAN_COUNT,
 )
 from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN, op_name
 
@@ -108,7 +108,7 @@ def sweep(ctx: DeviceContext, name: String, m: Int, n: Int, k: Int, op: Int) rai
     var c = ctx.enqueue_create_buffer[DType.float32](m * n)
     var cref = ctx.enqueue_create_buffer[DType.float32](m * n)
     var wsn = identical_gemm_workspace_max_floats(m, n, k)
-    for p in range(GEMM_PLAN_COUNT + 1):
+    for p in range(PLAN_APPLE_MMA_SPLIT + 1):
         var f = identical_gemm_workspace_floats(m, n, k, p)
         if f <= 64 * 1024 * 1024 and f > wsn:
             wsn = f
@@ -130,8 +130,8 @@ def sweep(ctx: DeviceContext, name: String, m: Int, n: Int, k: Int, op: Int) rai
           "x_cnn", gemm_plan_name(pick) if pick >= 0 else String("shipped"), String(t_cnn), "ms", flush=True)
     var best = t_cnn
     var best_name = String("x_cnn")
-    for p in range(GEMM_PLAN_COUNT + 1):
-        if p == PLAN_APPLE_MMA and not apple_mma_applies(m, n, k):
+    for p in range(PLAN_APPLE_MMA_SPLIT + 1):
+        if (p == PLAN_APPLE_MMA or p == PLAN_APPLE_MMA_SPLIT) and not apple_mma_applies(m, n, k):
             continue
         if identical_gemm_workspace_floats(m, n, k, p) > wsn:
             print("CNN-GEMM-PLAN", name, p, gemm_plan_name(p), "skip (workspace)", flush=True)

@@ -12,12 +12,13 @@ loop and `gemm_oracle` for the contractions."""
 from std.gpu import block_idx, block_dim, thread_idx
 from std.ffi import _Global
 from std.time import perf_counter_ns
+from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.checks.gemm_identical import (
     identical_gemm_with_plan, identical_gemm_workspace_floats, PLAN_SPLIT_32_2X2, PLAN_SPLIT_64_4X4,
-    PLAN_SPLIT_16_1X1, PLAN_APPLE_MMA, PLAN_TUNED_32_2X2, PLAN_SPLITK, apple_mma_applies,
+    PLAN_SPLIT_16_1X1, PLAN_APPLE_MMA, PLAN_TUNED_32_2X2, PLAN_SPLITK, apple_mma_applies, PLAN_APPLE_MMA_SPLIT,
     identical_gemm_splitk_fits,
 )
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE
@@ -124,6 +125,12 @@ def _apple_tuned_plan(
             cand.append(PLAN_TUNED_32_2X2)
             if apple_mma_applies(m, n, k):
                 cand.append(PLAN_APPLE_MMA)
+        # lane/cnn-apple2: the simdgroup matrix kernel over leaf groups
+        # (the weight gradient's long k on grid.y). `-D
+        # MOJOLEARN_XCNN_NO_MMA_SPLIT` is the before arm.
+        comptime if not is_defined["MOJOLEARN_XCNN_NO_MMA_SPLIT"]():
+            if n >= 8 and apple_mma_applies(m, n, k):
+                cand.append(PLAN_APPLE_MMA_SPLIT)
     var need = 0
     for j in range(len(cand)):
         need = max(need, identical_gemm_workspace_floats(m, n, k, cand[j]))
