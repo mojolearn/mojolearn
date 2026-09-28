@@ -32,7 +32,10 @@ from x_decomp.device import (
     launch_gemm,
     launch_rowsum,
     launch_sqdist,
+    lda_rows_kernel,
     rowsum_scratch,
+    TPB,
+    _blocks,
     xd_ctx,
 )
 
@@ -294,3 +297,37 @@ def dev_orth_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -> P
         with GILReleased(Python()):
             orth_on_device(ctx, sub, m, l)
     return PythonObject(cells)
+
+
+def dev_lda_rows_py(
+    x: PythonObject, ew: PythonObject, d: PythonObject, e: PythonObject, p: PythonObject, f: PythonObject
+) raises -> PythonObject:
+    """`x_decomp_lda_rows` on device matrices (lane/py-decomp-nbrs): d and e
+    (n x k) updated in place on the device; DevExec.lda_rows' kernel and
+    launch shape, with no upload, download or sync. p = [n, k, v, max_iter],
+    f = [prior, tol], as x_decomp_lda_rows. Before, the host-only entry
+    downloaded the resident X (n x v) and uploaded it again every E-step
+    (12 GB per iteration at 1M x 1000)."""
+    var n = _n(p, 0)
+    var k = _n(p, 1)
+    var v = _n(p, 2)
+    var max_iter = _n(p, 3)
+    if n * (v + k) > 2147483647:
+        raise Error("x_decomp: lda_rows exceeds the Int32 index bound")
+    var prior = Float32(Float64(py=f[0]))
+    var tol = Float32(Float64(py=f[1]))
+    var px = _ptr(_id(x), n * v)
+    var pw = _ptr(_id(ew), k * v)
+    var pd = _ptr(_id(d), n * k)
+    var pe = _ptr(_id(e), n * k)
+    if n == 0:
+        return PythonObject(0)
+    var sid = pool_alloc(n * (v + k))
+    var iid = pool_alloc(n)
+    xd_ctx().enqueue_function[lda_rows_kernel](
+        px, pw, pd, pe, _ptr(sid, n * (v + k)), _ptr(iid, n),
+        Int32(n), Int32(k), Int32(v), prior, Int32(max_iter), tol, grid_dim=_blocks(n), block_dim=TPB,
+    )
+    pool_free(sid)
+    pool_free(iid)
+    return PythonObject(n)

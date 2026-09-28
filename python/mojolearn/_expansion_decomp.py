@@ -573,6 +573,12 @@ class _Kit:
     def lda_rows(self, X, EW, Dt, Et, prior, max_iter, tol):
         """Row-parallel `_update_doc_distribution` (x_decomp/cells.mojo
         `lda_doc_row`); Dt and Et (n x k) are updated in place."""
+        if X.r and self._use(X, EW, Dt, Et):
+            # resident (lane/py-decomp-nbrs): X, EW, Dt and Et stay on the
+            # device; Dt and Et are updated in place there
+            self.b.x_decomp_dev_lda_rows(self._did(X), self._did(EW), self._did(Dt), self._did(Et),
+                                         [X.r, EW.r, X.c, int(max_iter)], [float(prior), float(tol)])
+            return Dt, Et
         its = _M.zeros(X.r, 1)
         self.b.x_decomp_lda_rows(X.addr, EW.addr, Dt.addr, Et.addr, its.addr,
                                  [X.r, EW.r, X.c, int(max_iter)], [float(prior), float(tol)])
