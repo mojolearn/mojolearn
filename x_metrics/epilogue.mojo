@@ -1084,3 +1084,34 @@ def first_rows_i32(codes_addr: Int, n: Int, k: Int, out_addr: Int) raises:
         var c = Int(C[r])
         if c < 0 or c >= k:
             raise Error("x_metrics first_rows: a class code outside [0, k)")
+
+
+def ovo_pair(codes_addr: Int, s_addr: Int, n: Int, k: Int, a: Int, b: Int,
+             out_sa: Int, out_sb: Int, out_fa: Int, out_fb: Int, m: Int) raises -> Int:
+    """roc_auc_score one-vs-one, the pair (a, b): the rows whose Int32 code
+    is a or b, in ascending row order; for each, its score in column a and
+    in column b of the n x k row-major Float32 scores (the words copied as
+    they are) and the 0/1 Int32 flags code == a and code == b. `m` is the
+    length of the four outputs: a row past it raises before it is written.
+    Returns the rows written. A byte selection: no value is computed."""
+    if n < 0 or k < 1 or a < 0 or a >= k or b < 0 or b >= k or m < 0:
+        raise Error("x_metrics ovo_pair: invalid sizes")
+    var C = MutPointer[Int32, MutAnyOrigin](unsafe_from_address=codes_addr)
+    var S = FP(unsafe_from_address=s_addr)
+    var sa = FP(unsafe_from_address=out_sa)
+    var sb = FP(unsafe_from_address=out_sb)
+    var fa = MutPointer[Int32, MutAnyOrigin](unsafe_from_address=out_fa)
+    var fb = MutPointer[Int32, MutAnyOrigin](unsafe_from_address=out_fb)
+    var at = 0
+    for r in range(n):
+        var c = Int(C[r])
+        if c != a and c != b:
+            continue
+        if at >= m:
+            raise Error("x_metrics ovo_pair: more rows than the caller counted")
+        sa.unsafe_store(at, S.unsafe_load(r * k + a))
+        sb.unsafe_store(at, S.unsafe_load(r * k + b))
+        fa[at] = Int32(1) if c == a else Int32(0)
+        fb[at] = Int32(1) if c == b else Int32(0)
+        at += 1
+    return at

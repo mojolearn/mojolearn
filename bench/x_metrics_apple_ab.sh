@@ -28,6 +28,8 @@
 #       head tree as shipped (XMAB-MEQ SAME or DIFF), then
 #       bench/x_msel_speed.py before / after / after / before per mode
 #       (XMAB_MSEL_PROF=N adds its cProfile top N in FAST)
+#   XMAB_XTRA=1      bench/x_metrics_speed.py --extra 2 (cases outside the
+#       board's 29) against the base and the head package, both modes
 #   XMAB_EXTRAS=1    the epilogue python-vs-native table
 #       (tools/py_misc/metrics_time.py), the whole-arena arm of the board
 #       (MOJOLEARN_ARENA_RANGES=0 against 1) and tools/py_misc_msel/check.py
@@ -133,6 +135,19 @@ arm() {  # tree mode pass
 }
 for m in identical fast; do arm base $m 1; arm head $m 1; done
 for m in fast identical; do arm head $m 2; arm base $m 2; done
+if [ "${XMAB_XTRA:-0}" = 1 ]; then
+    # the extra cases (outside the board's total), this tree's bench file
+    # against each tree's package
+    for m in fast identical; do
+        for t in base head head base; do
+            d=$wt; [ "$t" = base ] && d=$bdir
+            (cd "$d" && MOJOLEARN_NUMERIC_MODE=$m pixi run -e default python -u "$wt/bench/x_metrics_speed.py" \
+                --tree "$d" --reps "$reps" --extra 2 2>&1) | grep -v 'XMSPEED-INPUT' | sed "s/^/XARM $t-$m /"
+        done
+    done
+    (cd "$wt" && MOJOLEARN_NUMERIC_MODE=fast pixi run -e default python -u "$wt/bench/x_metrics_speed.py" \
+        --tree "$wt" --reps 1 --extra 2 --cprofile 14 2>&1) | grep 'XMPROFILE' | sed "s/^/XPROF head-fast /"
+fi
 marm() {  # before|after mode pass profile
     b=""; [ "$1" = before ] && b=1
     (cd "$wt" && MOJOLEARN_MSEL3_BEFORE=$b MOJOLEARN_NUMERIC_MODE=$2 pixi run -e default python -u bench/x_msel_speed.py \

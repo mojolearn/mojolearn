@@ -26,7 +26,12 @@ import time
 
 import numpy as np
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "python"))
+# --tree <dir>: the checkout whose python/ package is timed (lane
+# metrics-apple3: the A/B job times the EXTRA cases of this one file
+# against the base tree and the head tree)
+_tree = sys.argv[sys.argv.index("--tree") + 1] if "--tree" in sys.argv else \
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+sys.path.insert(0, os.path.join(_tree, "python"))
 
 
 def _root():
@@ -151,6 +156,34 @@ def cases(d):
     ]
 
 
+def extra_cases(d):
+    """lane metrics-apple3: cases outside the board's 29 (never in its
+    total, so the totals of every round stay comparable); `--extra 1`
+    times them after the board, `--extra 2` instead of it."""
+    import mojolearn.metrics as M
+    import mojolearn.model_selection as S
+    n = len(d["ct"])
+    rs = np.random.RandomState(5)
+    la = rs.randint(0, 1000, n)
+    lb = (la + rs.randint(0, 50, n)) % 1000
+    hyc = d["hy"]
+    return [
+        ("x_roc_auc_ovo", lambda: M.roc_auc_score(d["ct"], d["proba"], multi_class="ovo")),
+        ("x_roc_auc_ovr_micro", lambda: M.roc_auc_score(d["ct"], d["proba"], multi_class="ovr", average="micro")),
+        ("x_roc_auc_ovr_w", lambda: M.roc_auc_score(d["ct"], d["proba"], multi_class="ovr", average="weighted",
+                                                    sample_weight=d["sw"])),
+        ("x_ap_micro", lambda: M.average_precision_score(d["ct"], d["proba"], average="micro")),
+        ("x_nmi_1000", lambda: M.normalized_mutual_info_score(la, lb)),
+        ("x_ami_1000_3", lambda: M.adjusted_mutual_info_score(la, d["ct"])),
+        ("x_accuracy", lambda: M.accuracy_score(d["ct"], d["cp"])),
+        ("x_f1_macro", lambda: M.f1_score(d["ct"], d["cp"], average="macro")),
+        ("x_classification_report", lambda: M.classification_report(d["ct"], d["cp"])),
+        ("x_stratified_kfold", lambda: [len(t[1]) for t in S.StratifiedKFold(5).split(np.empty((n, 1)), d["ct"])]),
+        ("x_stratified_shuffle", lambda: [len(t[1]) for t in S.StratifiedShuffleSplit(
+            5, test_size=0.2, random_state=0).split(np.empty((n, 1)), hyc)]),
+    ]
+
+
 def train_test(S, d):
     a, b = S.train_test_split(d["yr"], test_size=0.25, random_state=0)
     return [np.asarray(a)[:10], np.asarray(b)[:10]]
@@ -178,6 +211,9 @@ def main():
     ap.add_argument("--only", default="")
     ap.add_argument("--cprofile", type=int, default=0,
                     help="after timing, profile each case once and print its top N functions by cumulative time")
+    ap.add_argument("--tree", default="", help="the checkout whose python/ package is timed (default: this one)")
+    ap.add_argument("--extra", type=int, default=0,
+                    help="1: the extra cases after the board (XMSPEED-X lines, outside the total); 2: only them")
     a = ap.parse_args()
     t0 = time.time()
     d = data(a.rows)
@@ -190,7 +226,7 @@ def main():
         print("XMSPEED-INPUT %-6s %s" % (k, _digest(d[k])), flush=True)
     only = set(x for x in a.only.split(",") if x)
     total = 0.0
-    for name, fn in cases(d):
+    for name, fn in ([] if a.extra == 2 else cases(d)):
         if only and name not in only:
             continue
         try:
@@ -206,7 +242,27 @@ def main():
                 _profile(name, fn, a.cprofile)
         except Exception as e:  # a case that fails is reported, never hidden
             print("XMSPEED %-28s   FAILED %s: %s" % (name, type(e).__name__, str(e)[:160]), flush=True)
-    print("XMSPEED-TOTAL %.4f" % total, flush=True)
+    if a.extra != 2:
+        print("XMSPEED-TOTAL %.4f" % total, flush=True)
+    xtotal = 0.0
+    for name, fn in (extra_cases(d) if a.extra else []):
+        if only and name not in only:
+            continue
+        try:
+            v = fn()
+            best = float("inf")
+            for _ in range(a.reps):
+                t = time.perf_counter()
+                v = fn()
+                best = min(best, time.perf_counter() - t)
+            xtotal += best
+            print("XMSPEED-X %-28s %9.4f %s" % (name, best, _digest(v)), flush=True)
+            if a.cprofile:
+                _profile(name, fn, a.cprofile)
+        except Exception as e:
+            print("XMSPEED-X %-28s   FAILED %s: %s" % (name, type(e).__name__, str(e)[:160]), flush=True)
+    if a.extra:
+        print("XMSPEED-XTOTAL %.4f" % xtotal, flush=True)
 
 
 if __name__ == "__main__":

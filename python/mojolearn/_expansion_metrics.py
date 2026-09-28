@@ -1834,12 +1834,15 @@ def _ovr(y_true, y_score, sample_weight, labels, caller, numeric_mode, keep_flag
     w = _weights(sample_weight, n, caller)
     index = {c: i for i, c in enumerate(classes)}
     codes = _label_map(true, lambda v: index[v])
-    code_list = codes.tolist()
+    # the codes' low bytes straight from the int32 words (lane
+    # metrics-apple3); a Python list only where one is walked
+    direct = _lane3() and _LITTLE and k <= 256 and isinstance(codes, Array) and codes.dtype == "<i4"
+    code_list = codes if direct else codes.tolist()
     if k <= 256:
         # class-major 0/1 flags as int32 words, built with bytes.translate
         # and a strided byte copy (little-endian '<i4'), and the unweighted
         # support by bytes.count: the same values (lane metrics-apple)
-        cb = bytes(code_list)
+        cb = codes.tobytes()[0::4] if direct else bytes(code_list)
         words = bytearray(4 * n * k)
         words[0::4] = b"".join(cb.translate(bytes(int(j == c) for j in range(256))) for c in range(k))
         store = array.array("i")
@@ -1911,6 +1914,99 @@ def _average_scores(scores, support, average):
     return float(_fsum(scores) / len(scores))
 
 
+def _lane3():
+    """False under MOJOLEARN_MSEL3_BEFORE=1, lane metrics-apple3's before
+    arm (read per call): every route the lane added steps aside."""
+    import os
+    return os.environ.get("MOJOLEARN_MSEL3_BEFORE") != "1"
+
+
+def _micro_inputs(codes, w, n, k):
+    """The micro average's row-major one-hot flags ('<i4', n * k) and its
+    weights (each of the n repeated k times), or None when a comprehension
+    has to build them. The same words as
+    `[1 if codes[r] == c else 0 for r in range(n) for c in range(k)]` and
+    `[x for x in w for _ in range(k)]`, laid out by strided byte copies
+    (lane metrics-apple3)."""
+    if not (_lane3() and _LITTLE and 0 < k <= 256 and isinstance(codes, Array) and codes.dtype == "<i4"
+            and codes.size == n):
+        return None
+    cb = codes.tobytes()
+    if cb[1::4].count(0) != n or cb[2::4].count(0) != n or cb[3::4].count(0) != n:
+        return None     # a code outside [0, 256): the comprehension decides
+    cb = cb[0::4]
+    words = bytearray(4 * n * k)
+    for c in range(k):
+        words[4 * c::4 * k] = cb.translate(bytes(int(j == c) for j in range(256)))
+    store = array.array("i")
+    store.frombytes(words)
+    flags = Array._owned(store, (n * k,), "<i4", "C")
+    wm = None
+    if w is not None:
+        wa = w if isinstance(w, Array) else None
+        if wa is None or wa.dtype != "<f4" or wa.size != n:
+            return None
+        wb = wa.tobytes()
+        rep = bytearray(4 * n * k)
+        for c in range(k):
+            for j in range(4):
+                rep[4 * c + j::4 * k] = wb[j::4]
+        ws = array.array("f")
+        ws.frombytes(rep)
+        wm = Array._owned(ws, (n * k,), "<f4", "C")
+    return flags, wm
+
+
+def _ovo_native(true, index, s, n, k, numeric_mode):
+    """(pair_scores, prevalence) of one-vs-one ROC AUC with each pair's
+    rows, scores and flags selected by the binding (`x_metrics_ovo_pair`,
+    lane metrics-apple3): the rows of the pair in ascending order, their
+    Float32 scores in the pair's two columns and the 0/1 flags, the words
+    the definition's comprehensions build from `tolist()`. The two curve
+    programs and AUCs per pair are the definition's. None: the definition."""
+    from ._metrics_impl import _label_map
+    if not _lane3() or n < 256:
+        return None
+    try:
+        b = _binding(numeric_mode)
+    except Exception:
+        return None
+    pair = getattr(b, "x_metrics_ovo_pair", None)
+    sums = getattr(b, "x_metrics_class_sums", None)
+    if pair is None or sums is None or not isinstance(s, Array) or s.dtype != "<f4" or not s._has_order("C"):
+        return None
+    codes = _label_map(true, lambda v: index[v])
+    if not isinstance(codes, Array) or codes.dtype != "<i4" or codes.size != n:
+        return None
+    per = array.array("d", bytes(8 * k))
+    try:
+        sums(addr_ro(codes, name="codes"), 0, n, k, per.buffer_info()[0])
+    except Exception:
+        return None
+    counts = [int(v) for v in per]
+    if sum(counts) != n:
+        return None
+    pair_scores, prevalence = [], []
+    for a in range(k):
+        for bcol in range(a + 1, k):
+            m = counts[a] + counts[bcol]
+            prevalence.append(m / n)
+            if m < 1:
+                return None     # an empty pair: the definition decides
+            sa, sb = empty((m,), "<f4"), empty((m,), "<f4")
+            fa, fb = empty((m,), "<i4"), empty((m,), "<i4")
+            got = int(pair(addr_ro(codes, name="codes"), addr_ro(s, name="y_score"), (n, k, a, bcol, m),
+                           (sa._addr, sb._addr, fa._addr, fb._addr)))
+            if got != m:
+                return None
+            both = []
+            for sv, fl in ((sa, fa), (sb, fb)):
+                cur = _curves(sv, fl, None, m, 1, numeric_mode, thresholds=False, lazy=True, compact=True)[0]
+                both.append(_auc_of(cur, None))
+            pair_scores.append((both[0] + both[1]) / 2)
+    return pair_scores, prevalence
+
+
 def roc_auc_options(y_true, y_score, average, sample_weight, max_fpr, multi_class, labels, numeric_mode):
     """roc_auc_score with sample_weight, max_fpr < 1 or multiclass input
     (lane/metrics); the binary unweighted full-AUC call keeps its kernel.
@@ -1958,8 +2054,13 @@ def roc_auc_options(y_true, y_score, average, sample_weight, max_fpr, multi_clas
                                                      numeric_mode)
         if average == "micro":
             n = len(codes)
-            flags = Array.from_list([1 if codes[r] == c else 0 for r in range(n) for c in range(k)], "<i4")
-            wm = None if w is None else Array.from_list([x for x in w.tolist() for _ in range(k)], "<f4")
+            fast = _micro_inputs(codes, w, n, k)
+            if fast is not None:
+                flags, wm = fast
+            else:
+                cl = codes.tolist() if isinstance(codes, Array) else codes
+                flags = Array.from_list([1 if cl[r] == c else 0 for r in range(n) for c in range(k)], "<i4")
+                wm = None if w is None else Array.from_list([x for x in w.tolist() for _ in range(k)], "<f4")
             cur = _curves(s.reshape((n * k,)), flags, wm, n * k, 1, numeric_mode, thresholds=False, lazy=True,
                           compact=True)[0]
             return _auc_of(cur, None)
@@ -1967,11 +2068,17 @@ def roc_auc_options(y_true, y_score, average, sample_weight, max_fpr, multi_clas
         return _average_scores(scores, support, average)
     # one-vs-one (scikit-learn _average_multiclass_ovo_score)
     from ._metrics_impl import _selected_labels
-    vals = s_check.tolist()
     classes = present if labels is None else _selected_labels(labels, kind, present)
     if len(classes) != k:
         raise ValueError("Number of classes in y_true not equal to the number of columns in 'y_score'")
     index = {c: i for i, c in enumerate(classes)}
+    fast = _ovo_native(true, index, s_check, len(true), k, numeric_mode)
+    if fast is not None:
+        pair_scores, prevalence = fast
+        if average == "weighted":
+            return float(_fsum([x * y for x, y in zip(pair_scores, prevalence)]) / _fsum(prevalence))
+        return float(_fsum(pair_scores) / len(pair_scores))
+    vals = s_check.tolist()
     codes = _label_map(true, lambda v: index[v]).tolist()
     n = len(codes)
     pair_scores, prevalence = [], []
@@ -2019,8 +2126,13 @@ def average_precision_score(y_true, y_score, *, average="macro", pos_label=1, sa
     k = len(classes)
     if average == "micro":
         n = len(codes)
-        flags = Array.from_list([1 if codes[r] == c else 0 for r in range(n) for c in range(k)], "<i4")
-        wm = None if w is None else Array.from_list([x for x in w.tolist() for _ in range(k)], "<f4")
+        fast = _micro_inputs(codes, w, n, k)
+        if fast is not None:
+            flags, wm = fast
+        else:
+            cl = codes.tolist() if isinstance(codes, Array) else codes
+            flags = Array.from_list([1 if cl[r] == c else 0 for r in range(n) for c in range(k)], "<i4")
+            wm = None if w is None else Array.from_list([x for x in w.tolist() for _ in range(k)], "<f4")
         return _ap_of(_curves(s.reshape((n * k,)), flags, wm, n * k, 1, numeric_mode, thresholds=False,
                               keep_flags=False, lazy=True)[0])
     return _average_scores([_ap_of(c) for c in curves], support, average)
