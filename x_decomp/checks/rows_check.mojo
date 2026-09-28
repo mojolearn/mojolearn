@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Seams DEVIATION 5310-5313 and 5316 of the decomp lane, the one-thread-per-
+"""Seams DEVIATION 5310-5313, 5316 and 5321 of the decomp lane, the one-thread-per-
 row solvers: NMF's coordinate descent (5310), the Lasso on the Gram (5311),
 OMP's atom choice and its tie (5312), LDA's document update (5313) and the
 implicit-ALS row solve (5316).
@@ -10,6 +10,7 @@ implicit-ALS row solve (5316).
 from core.identity_trace import IdentityTrace
 from x_decomp.checks.xd_oracles import (
     oracle_als,
+    oracle_als_cg,
     oracle_cd,
     oracle_gemm,
     oracle_lasso,
@@ -40,7 +41,7 @@ def tame(var x: List[Float32]) -> List[Float32]:
 
 def main() raises:
     var tr = IdentityTrace()
-    tr.header("x_decomp rows_check (DEVIATIONS 5310-5313, 5316)")
+    tr.header("x_decomp rows_check (DEVIATIONS 5310-5313, 5316, 5321)")
     var info = zeros(1)
     # ---- 5310 NMF coordinate descent, one sweep
     var n = 37
@@ -139,6 +140,41 @@ def main() raises:
     HostExec.lda_rows(ptr(C), ptr(EW), ptr(dh), ptr(eh), ptr(sl), ptr(its), n, k, v, Float32(0.2), 1, Float32(0))
     same("5313 lda_rows host", count_diff_f32(dh, wd2))
     tr.record_list_f32("x_decomp.lda_rows", dd)
+    # the host spelling (x_decomp/host_lda.mojo) past one topic vector and one
+    # word vector, a document with no words, subnormal counts, six iterations:
+    # D, E and the iteration counts equal the device column's (the cell)
+    var k2 = 19
+    var v2 = 45
+    var C2 = positive_fixture(n, v2, 11)
+    for t in range(v2):
+        C2[2 * v2 + t] = Float32(0)
+    for t in range(0, n * v2, 7):
+        C2[t] = Float32(0)
+    C2[5 * v2 + 3] = Float32(1e-40)
+    var EW2 = positive_fixture(k2, v2, 12)
+    var D2 = positive_fixture(n, k2, 13)
+    var E2 = positive_fixture(n, k2, 14)
+    for t in range(len(D2)):
+        D2[t] = D2[t] + Float32(0.1)
+        E2[t] = E2[t] * Float32(0.25) + Float32(0.01)
+    var one2 = D2.copy()
+    var one2e = E2.copy()
+    var sl2 = zeros(n * (v2 + k2))
+    var its2 = zeros(n)
+    HostExec.lda_rows(ptr(C2), ptr(EW2), ptr(one2), ptr(one2e), ptr(sl2), ptr(its2), n, k2, v2, Float32(0.2), 1, Float32(0))
+    same("5313 lda_rows host k 19", count_diff_f32(one2, oracle_lda_step(C2, EW2, D2, E2, n, k2, v2, Float32(0.2))))
+    var dd2 = D2.copy()
+    var ed2 = E2.copy()
+    var itd = zeros(n)
+    DevExec.lda_rows(ptr(C2), ptr(EW2), ptr(dd2), ptr(ed2), ptr(sl2), ptr(itd), n, k2, v2, Float32(0.2), 6, Float32(1e-3))
+    var dh2 = D2.copy()
+    var eh2 = E2.copy()
+    var ith = zeros(n)
+    HostExec.lda_rows(ptr(C2), ptr(EW2), ptr(dh2), ptr(eh2), ptr(sl2), ptr(ith), n, k2, v2, Float32(0.2), 6, Float32(1e-3))
+    same("5313 lda_rows host == device, 6 iterations (D)", count_diff_f32(dh2, dd2))
+    same("5313 lda_rows host == device, 6 iterations (E)", count_diff_f32(eh2, ed2))
+    same("5313 lda_rows host == device, 6 iterations (its)", count_diff_f32(ith, itd))
+    tr.record_list_f32("x_decomp.lda_rows_k19", dd2)
     # ---- 5316 ALS row solve
     var m = 23
     var f = 4
@@ -158,4 +194,19 @@ def main() raises:
     HostExec.als_rows(ptr(Cf), ptr(Y), ptr(YtY), ptr(xh), ptr(fl), n, m, f, Float32(0.1))
     same("5316 als_rows host", count_diff_f32(xh, wa))
     tr.record_list_f32("x_decomp.als_rows", xa)
+    # ---- 5321 ALS conjugate-gradient rows, from the exact solve's factors
+    # perturbed (so the residual is not ~0) and from zero for three steps
+    var x0 = wa.copy()
+    for t in range(len(x0)):
+        x0[t] = x0[t] * Float32(0.75) + Float32(0.01) * Float32(t % 5)
+    var wc = oracle_als_cg(Cf, Y, x0, n, m, f, Float32(0.1), 3)
+    require_separates("5321 ALS CG p.Ap order", count_diff_f32(wc, oracle_als_cg(Cf, Y, x0, n, m, f, Float32(0.1), 3, 1)))
+    var cgd = x0.copy()
+    var stp = zeros(n)
+    DevExec.als_cg_rows(ptr(Cf), ptr(Y), ptr(YtY), ptr(cgd), ptr(stp), n, m, f, Float32(0.1), 3)
+    same("5321 als_cg_rows device", count_diff_f32(cgd, wc))
+    var cgh = x0.copy()
+    HostExec.als_cg_rows(ptr(Cf), ptr(Y), ptr(YtY), ptr(cgh), ptr(stp), n, m, f, Float32(0.1), 3)
+    same("5321 als_cg_rows host", count_diff_f32(cgh, wc))
+    tr.record_list_f32("x_decomp.als_cg_rows", cgd)
     print("PASS x_decomp rows_check")

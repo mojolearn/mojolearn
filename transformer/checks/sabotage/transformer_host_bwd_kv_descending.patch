@@ -1,0 +1,14 @@
+diff --git a/transformer/checks/transformer_backward_oracle.mojo b/transformer/checks/transformer_backward_oracle.mojo
+index b163777c9..8fad433c8 100644
+--- a/transformer/checks/transformer_backward_oracle.mojo
++++ b/transformer/checks/transformer_backward_oracle.mojo
+@@ -1082,7 +1082,8 @@ def _bwd_attention_chains(
+                 var av = F32V(0.0)
+                 for hh in range(n_rep):
+                     var h = kv * n_rep + hh
+-                    for tt in range(l):
++                    for tq in range(l):  # SABOTAGE (neural-cpu): the d_k/d_v lanes walk t DESCENDING
++                        var tt = l - 1 - tq
+                         var wbase = ((bb * nh + h) * l + tt) * s
+                         var rowq = (bb * l + tt) * qw + h * hd + d
+                         ak = ftz_lanes(identical_mul_add_simd[HOST_FW](

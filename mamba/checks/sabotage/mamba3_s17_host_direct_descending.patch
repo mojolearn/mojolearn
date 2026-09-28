@@ -1,0 +1,14 @@
+diff --git a/mamba/host/mamba3_s16_host.mojo b/mamba/host/mamba3_s16_host.mojo
+index 1bc37a42d..d03ad185e 100644
+--- a/mamba/host/mamba3_s16_host.mojo
++++ b/mamba/host/mamba3_s16_host.mojo
+@@ -269,7 +269,8 @@ def _s17_unit(
+                 for rev in range(nc):
+                     var c = nc - 1 - rev
+                     var direct = F32V(0.0)
+-                    for i in range(qs):
++                    for iq in range(qs):  # SABOTAGE (neural-cpu): the S17 direct lanes walk i DESCENDING
++                        var i = qs - 1 - iq
+                         var t = c * qs + i
+                         if t < l:
+                             var dy = F32V(ftz(d_y.unsafe_load(((bb * l + t) * nh + h) * M3_HEADDIM + p)))

@@ -16,7 +16,7 @@ is the partition the other `gbdt_fit` lanes take. Owed a two-device column
 (`MOJOLEARN_PAR_DEVICES=0,1`); no host binding restates this driver.
 """
 from max.gpu.host import DeviceContext, DeviceBuffer
-from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 from std.os import getenv
 from std.sys.compile import is_defined
 from core.multi_gpu import peer_clone, gbdt_shard_device_id
@@ -144,7 +144,7 @@ def pointwise_feature_shards(ctx: DeviceContext, policy: Int,
             s.ctx.synchronize()
         except:
             fp[rank] = 1
-    sync_parallelize(task,count)
+    host_parallelize(task,count)
     for rank in range(count):
         if failed[rank] != 0:
             raise Error("pointwise feature shard failed: " + String(rank))

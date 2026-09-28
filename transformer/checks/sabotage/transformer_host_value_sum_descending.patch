@@ -1,0 +1,14 @@
+diff --git a/transformer/checks/transformer_oracle.mojo b/transformer/checks/transformer_oracle.mojo
+index 97a8c8669..978972c4e 100644
+--- a/transformer/checks/transformer_oracle.mojo
++++ b/transformer/checks/transformer_oracle.mojo
+@@ -1336,7 +1336,8 @@ def attn_value_sum_lanes(
+         var a1 = GhrF(0.0)
+         var a2 = GhrF(0.0)
+         var a3 = GhrF(0.0)
+-        for j in range(s):
++        for jq in range(s):  # SABOTAGE (neural-cpu): the S19 value lanes walk the keys DESCENDING
++            var j = s - 1 - jq
+             var wv = GhrF(ftz(wp.unsafe_load(wbase + j)))
+             var row = vbase + j * hd + d
+             a0 = ghr_ftz_lanes(identical_mul_add_simd[GHR_FW](

@@ -107,7 +107,7 @@ from std.sys.compile import is_defined
 
 from std.math import sqrt
 
-from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 
 from checks.numerics import (
     ftz,
@@ -116,7 +116,6 @@ from checks.numerics import (
     identical_mul,
     identical_mul_add,
 )
-from core.host_fp_env import host_ieee_fp_enter, host_ieee_fp_leave
 from core.host_predict_threads import (
     HostF32Ptr,
     HostF64Ptr,
@@ -197,18 +196,16 @@ def host_gemm_nt_into(
     var chunk = host_predict_chunk(m, t)
 
     def _rows(c: Int) {imm x, imm y, imm z, imm chunk, imm m, imm n, imm k}:
-        var fp_env = host_ieee_fp_enter()
         var lo = c * chunk
         var hi = min(lo + chunk, m)
         for i in range(lo, hi):
             for j in range(n):
                 z.unsafe_store(i * n + j, host_pinned_cell_ptr(x, i * k, y, j * k, k))
-        host_ieee_fp_leave(fp_env)
 
     if t == 1:
         _rows(0)
     else:
-        sync_parallelize(_rows, t)
+        host_parallelize(_rows, t)
 
 
 def host_gemm_nt(
@@ -334,7 +331,6 @@ def host_qn_sigmoid_into(
     var chunk = host_predict_chunk(n_rows, t)
 
     def _rows(c: Int) {imm scores, imm dst, imm chunk, imm n_rows}:
-        var fp_env = host_ieee_fp_enter()
         var lo = c * chunk
         var hi = min(lo + chunk, n_rows)
         for i in range(lo, hi):
@@ -342,12 +338,11 @@ def host_qn_sigmoid_into(
             var p = 1.0 / (1.0 + identical_exp64(-z))
             dst.unsafe_store(2 * i, 1.0 - p)
             dst.unsafe_store(2 * i + 1, p)
-        host_ieee_fp_leave(fp_env)
 
     if t == 1:
         _rows(0)
     else:
-        sync_parallelize(_rows, t)
+        host_parallelize(_rows, t)
 
 
 def host_qn_decision_multi(
@@ -425,7 +420,6 @@ def host_qn_softmax_into(
     var chunk = host_predict_chunk(n_rows, t)
 
     def _rows(task: Int) {imm scores, imm dst, imm chunk, imm n_rows, imm n_classes}:
-        var fp_env = host_ieee_fp_enter()
         var lo = task * chunk
         var hi = min(lo + chunk, n_rows)
         for i in range(lo, hi):
@@ -442,12 +436,11 @@ def host_qn_softmax_into(
             for c in range(n_classes):
                 var z = Float64(scores.unsafe_load(base + c))
                 dst.unsafe_store(base + c, identical_exp64(z - m) / s)
-        host_ieee_fp_leave(fp_env)
 
     if t == 1:
         _rows(0)
     else:
-        sync_parallelize(_rows, t)
+        host_parallelize(_rows, t)
 
 
 def host_center(
@@ -514,7 +507,6 @@ def host_pca_transform_into(
     var chunk = host_predict_chunk(n_rows, t)
 
     def _rows(c: Int) {imm x, imm mu, imm components, imm dst, imm chunk, imm n_rows, imm n_cols, imm n_components}:
-        var fp_env = host_ieee_fp_enter()
         var centered = List[Float32](length=n_cols, fill=Float32(0.0))
         var cp = host_list_ptr(centered)
         var lo = c * chunk
@@ -530,12 +522,11 @@ def host_pca_transform_into(
                     host_pinned_cell_ptr(cp, 0, components, j * n_cols, n_cols),
                 )
         _ = centered^
-        host_ieee_fp_leave(fp_env)
 
     if t == 1:
         _rows(0)
     else:
-        sync_parallelize(_rows, t)
+        host_parallelize(_rows, t)
 
 
 def host_tsvd_transform(
@@ -638,6 +629,45 @@ def host_pca_whiten_transform_into(
         n_components, tasks,
     )
     _ = components_w^
+
+
+def host_inverse_transform_into(
+    scores: HostF32Ptr, components: List[Float32], mu: List[Float32],
+    dst: HostF32Ptr, n_rows: Int, n_cols: Int, n_components: Int,
+    add_mean: Bool, tasks: Int,
+):
+    """`inverse_transform_host` (`decomposition/estimator.mojo:285-321`), the
+    unwhitened reconstruction `PCA.inverse_transform` (add_mean) and
+    `TruncatedSVD.inverse_transform` (no mean) share, over caller-owned
+    buffers (lane cpu, 2026-09-27; until then the host binding exported no
+    `inverse_transform` and both refused on a CPU-only install).
+
+    The device statement, step for step: `transpose_kernel` (a copy, no
+    arithmetic: `components_t[f * n_components + c] = components[c * n_cols
+    + f]`), `gemm_nt(out, scores, components_t, n_rows, n_features,
+    n_components)` (`host_gemm_nt_into`, the pinned cell), then, only with
+    `add_mean`, `shift_columns_kernel` with sign +1.0 in place
+    (`host_center_cell`). The whitened inverse below is this plus the
+    component scaling."""
+    var components_t = List[Float32](
+        length=n_cols * n_components, fill=Float32(0.0)
+    )
+    for c in range(n_components):
+        for f in range(n_cols):
+            components_t[f * n_components + c] = components[c * n_cols + f]
+    host_gemm_nt_into(
+        scores, host_list_ptr(components_t), dst, n_rows, n_cols,
+        n_components, tasks,
+    )
+    if add_mean:
+        for i in range(n_rows):
+            for f in range(n_cols):
+                var idx = i * n_cols + f
+                dst.unsafe_store(
+                    idx,
+                    host_center_cell(dst.unsafe_load(idx), mu[f], Float32(1.0)),
+                )
+    _ = components_t^
 
 
 def host_pca_whiten_inverse_transform(

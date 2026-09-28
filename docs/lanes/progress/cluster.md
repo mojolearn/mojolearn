@@ -248,3 +248,139 @@ Still open in phase B after that: MeanShift estimate_bandwidth(n_samples)
 subsampling; OPTICS metrics beyond the tsv's carried set; BisectingKMeans
 callable init (refused: per bisection inside the Mojo loop);
 AgglomerativeClustering connectivity='knn'.
+
+## Session 5 (2026-09-28 ~01-03Z): gate + speed round 1, merged 271a2eb1e
+
+(Recorded in session 6 from ~/mojolearn-evidence/algos-cluster/gate_s5b.log
+and the speed logs; session 5 was cut off before writing it.)
+- The session-4 owed NVIDIA gate ran on the H100 pod and passed: all 20
+  x-cluster lanes AGREE / DISAGREE under e2e_device_fold_reversed / AGREE
+  (seam arms included); x-cluster-kmeans-init with its own patch PASS; the
+  existing agglomerative, spectral, spectral-embedding, spectral-precomputed,
+  x-decomp-spectral-rbf CLEAN AGREE (x_decomp arms 5318/5319 bite). Merged
+  as 271a2eb1e with speed round 1: device kth by block radix select
+  (DEVIATION 5120), moments as form-then-add tiles (5121), no sync per
+  kernel in DeviceOps, outputs as array.array (one memcpy).
+- Speed, IDENTICAL, H100, digests unchanged before -> after (bench/x_cluster_speed.py):
+
+| case | rows | taxi before -> after (s) | higgs before -> after (s) |
+|---|---|---|---|
+| minibatch-kmeans | 1M | 0.598 -> 0.353 | 0.704 -> 0.419 |
+| bisecting-kmeans | 1M | 0.727 -> 0.464 | 0.733 -> 0.461 |
+| bayesian-gmm | 100k | 2.836 -> 0.942 | 3.716 -> 1.251 |
+| optics | 10k | 0.763 -> 0.646 | 0.799 -> 0.733 |
+| affinity-prop | 5k | 70.84 -> 4.67 | 70.19 -> 3.85 |
+| kmeans, gmm, dbscan, agglomerative, spectral, meanshift | | unchanged | unchanged |
+
+- Base (before) on the other vendors: Apple M3 Ultra (steward
+  1790563149699, commit 31adcffb1) and AMD MI300X (central box, tree at
+  fd405e35, no x_cluster/mixture/cluster difference from 31adcffb1).
+
+## Session 6 (2026-09-28 ~05Z): RunPod out of money again, no NVIDIA pod
+
+1. Owed Agglomerative/Spectral NVIDIA gate: DONE in session 5 (271a2eb1e).
+2. x-cluster-hdbscan-epsilon GPU FAIL on m2pro and m3ultra (requests
+   f2b0b051e0 / 6e54f880b5, every cell REFUSED with `Failed to create compute
+   pipeline state ... XPC_ERROR_CONNECTION_INTERRUPTED`). Root cause from the
+   Mac's crash report (/Library/Logs/DiagnosticReports/MTLCompilerService-
+   2026-09-27-231405.ips): SIGSEGV in AGXCompilerCore `AGCSimdMatrix::
+   buildLoad` / `SimdMatrixPass`, i.e. Metal's backend compiling a simdgroup-
+   matrix load emitted in the wrong AIR spelling. HDBSCAN's kNN reaches
+   `neighbors/checks/apple_mma_distance.mojo` (Apple IDENTICAL, aabbd6723),
+   whose `_amma_load_t` chose the spelling by GPU family: macOS 26 on M2/M3
+   targets `metal:2-metal4`/`metal:3-metal4`. Already fixed at the root on main
+   by b360667aa (`core/apple_air.simdgroup_load_legacy_air`, the AIR version
+   decides), which postdates both failing requests; M4 targets never matched,
+   so m4pro-a/b passed. The next request (271a2eb1e) never reached a lane:
+   every Mac failed `bindings/build_x_cluster.sh`'s Darwin-only gate,
+   `assert f[0] == [5.0, 0.0]` against the new array.array output. Fixed
+   (1221395fd, `list(f[0])`), merged to main.
+   Resubmitted: steward request **1790566005596-cluster-468af3718** (all 20
+   x-cluster lanes, --pass 2, sabotage ~/mojolearn-evidence/algos-cluster/
+   cluster_combined_468af3718.patch) on m2pro, m3ultra-b, m4-a, do-amd.
+   RESULT: **PASS on m2pro (M2 Pro), m3ultra-b (M3 Ultra), m4-a and do-amd**
+   (06:05Z): every one of the 20 lanes AGREE / DISAGREE / AGREE, including
+   x-cluster-hdbscan-epsilon on Metal (metal column == cpu-apple-m3-ultra).
+   The M2/M3 failure is closed.
+3. MAIN HYGIENE: fast-forwarding main to the lane (fc6cd020e) also carried
+   the ungated speed WIP 649b55f7b (AP tie noise by counter on the device,
+   DEVIATION 5122; SIMD agglomerative row scan). Reverted on main
+   (468af3718); the lane keeps it (c37595651 merges main with the lane's
+   tree). Owed: its NVIDIA + CPU gate before it merges again.
+4. Step 0 coverage audit (night plan): see the table below.
+
+### Step 0 coverage audit (2026-09-28)
+
+Family (ALGORITHM_EXPANSION_PLAN.md "Families"): 12 algorithms. A verifier
+lane = a lane in tools/identity_break.py or tools/identity_lanes/cluster.py
+that the lane check runs on the GPU column AND the CPU column (host binding).
+A sabotage = a committed SOURCE patch that makes that lane DISAGREE.
+
+| algorithm | lanes (GPU + CPU arms) | source sabotage | bites (NVIDIA + CPU) |
+|---|---|---|---|
+| KMeans | kmeans, kmeans-array, kmeans-classic-pp, kmeans-random, kmeans-sqrt, kmeans-weighted, x-cluster-kmeans-init | e2e_kmeans_finalize (NEW), e2e_kmeans_init | kmeans-init: H100 PASS (gate_s5b); the six: OWED (was a -D define only) |
+| DBSCAN | dbscan, dbscan-weighted, dbscan-brute-l1, x-cluster-dbscan-metrics | e2e_dbscan_radius (NEW), e2e_dbscan_metrics | metrics: H100 PASS; the three: OWED |
+| HDBSCAN | hdbscan, hdbscan-leaf, x-cluster-hdbscan-epsilon | e2e_hdbscan_core (NEW), e2e_hdbscan_epsilon, e2e_hdbscan_probabilities | epsilon/probabilities: H100 PASS; hdbscan, hdbscan-leaf: OWED |
+| AgglomerativeClustering | agglomerative, x-cluster-agglo-linkages, x-cluster-agglo-connectivity | e2e_agglomerative_roots (NEW), e2e_device_fold_reversed + arms 5117/5118 | x-cluster: H100 PASS; agglomerative: OWED |
+| SpectralClustering | spectral, spectral-precomputed, x-cluster-spectral-affinities | e2e_spectral_laplacian (NEW), x_decomp e2e_host_sqdist + arm 5119 | affinities: H100 PASS; spectral, spectral-precomputed: OWED |
+| GaussianMixture | gmm, gmm-random-init, x-cluster-gmm-options | e2e_gmm_weights (NEW), e2e_device_fold_reversed | gmm-options: H100 PASS; gmm, gmm-random-init: OWED |
+| MiniBatchKMeans | x-cluster-minibatch-kmeans, -options, -partial | e2e_device_fold_reversed + seam arms | H100 PASS (gate_s5b) |
+| BisectingKMeans | x-cluster-bisecting-kmeans, -options | same | H100 PASS |
+| MeanShift | x-cluster-meanshift, -binned | same | H100 PASS |
+| OPTICS | x-cluster-optics, -optics-metrics | same | H100 PASS |
+| AffinityPropagation | x-cluster-affinity-propagation, -ap-precomputed | same | H100 PASS |
+| BayesianGaussianMixture | x-cluster-bgmm, -covtypes, -inits | same | H100 PASS |
+
+Gap closed at the root this session: the six existing algorithms had only
+`-D` define sabotages (a define-only arm can reuse a cached device kernel),
+no committed source edit. Six new patches in x_cluster/checks/sabotage/
+(9263469bf), each editing a kernel only the GPU binding runs (the host
+oracles are separate code). Their bites run first on the central AMD box
+(AMD + CPU, below); the NVIDIA + CPU bite is OWED on a pod.
+Not implemented (not an audit row): Birch (brief addition 2026-09-27).
+
+### AMD central box run (queued, results owed)
+
+`/root/ev-cluster/amd_run.sh` on the central box (tree /root/mojolearn-cluster,
+synced at 74b72aad8 + worktree) runs, in one slot: the six new audit sabotages
+(AMD + CPU bite), the speed-WIP gate (18 x-cluster lanes, --pass 2, the
+regenerated e2e patch), a GaussianMixture 1M GPU-vs-CPU probe and a KMeans
+stage profile (`kmeans_prof.py`). Summary: `/root/ev-cluster/summary.log`.
+Both slots were held by other lanes (decomp since 02:21Z) all session; the
+job had not started at 06:10Z. If it never started, launch it with
+`tools/amd_central.sh run cluster 'setsid nohup bash /root/ev-cluster/amd_run.sh > /root/ev-cluster/amd_run.out 2>&1 < /dev/null &'`.
+
+### Findings for the speed phase (not yet acted on)
+
+- **Cross-vendor IDENTICAL difference, AMD GaussianMixture:** the speed base
+  (bench/x_cluster_speed.py, taxi 1M x 8, n_components=8) reads digest
+  d19ee140438774fc (lower bound 14.4618) on MI300X, 301203207f510506
+  (14.4616) on H100 AND on M3 Ultra. HIGGS agrees on all three. The gmm
+  identity lanes (6000 x 4, 30 iterations) agree on AMD, so the difference
+  lives at the large shape. A defect to root-cause first in the AMD phase
+  (the GPU-vs-CPU probe above says which side moved).
+- **AMD KMeans is 50x NVIDIA** at taxi/higgs 1M x 8 (1.49 / 1.24 s against
+  0.030 / 0.070 s). DEVIATIONS 3080 (row-block accumulator) and 3081 (device
+  sum scale) are NVIDIA-only (`TARGET_COLUMN == COLUMN_NVIDIA`); the
+  2026-09-21 AMD A/B (bench/evidence/2026-09-21_kmeans_amd_block_scale_
+  rejected.md) found the explicit-init taxi 4M fit at 116 ms, so the 1.49 s
+  is elsewhere, most likely the k-means++ init; `kmeans_prof.py` splits init
+  from iterations.
+- AMD base elsewhere (s): hdbscan 40k 1.48 (H100 0.21), affinity-prop 5k
+  132.6 (H100 base 70.8, after 4.7), meanshift 0.52 (0.25), bayesian-gmm 3.8
+  (H100 after 0.94).
+
+## OWED (next session, in order)
+
+1. NVIDIA + CPU on a pod (RunPod balance negative, no pod this session):
+   a. the six audit sabotages bite: `tools/algos_lane_check.sh <lanes> --pass 1
+      --sabotage x_cluster/checks/sabotage/e2e_<algo>.patch` for kmeans*,
+      dbscan*, hdbscan*, agglomerative, spectral + spectral-precomputed, gmm*
+      (the lane lists are in /root/ev-cluster/amd_run.sh);
+   b. the speed WIP 649b55f7b gate: the 18 x-cluster lanes --pass 2 with the
+      regenerated e2e_device_fold_reversed.patch (arm 5122 must bite),
+      `lane_select --changed-since origin/main` AGREE, test_host_surface,
+      test_x_cluster_twice; then merge + push; one batched steward request.
+2. Read the AMD central run (above); fix the AMD GMM 1M difference at root.
+3. Speed, IDENTICAL then FAST, AMD first (kmeans, hdbscan, AP), then NVIDIA.
+   Apple: m2pro/m3ultra leave ~12:40Z, the other four ~21:20Z Sep 28.

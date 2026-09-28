@@ -322,6 +322,51 @@ SESSION trees-cpu (the trees CPU-speed lane, branch lane/trees-cpu, pod
   it). test_host_surface + test_trees_repeat 201 passed; test_lane_select
   82 passed.
 
+SESSION trees-cpu 2 (2026-09-28 ~04:50Z; RunPod balance negative again, the
+`trees-cpu` H100 09bnqmcy2nwzn5 is GONE, no re-rent):
+- CONFIRMED MERGED: the CTR-table CPU arm (gbdt_oracle_ctr.mojo, multi-
+  permutation host boosting) and the DEVIATION 5900 border-search FP-env
+  pin landed on main at a988f5936 (above). Post-merge steward
+  1790565657566-trees-a988f59368: m3ultra PASS, m4-a PASS, m2pro FAIL
+  (gbdt-categorical-ctr-tables DISAGREE: the known M2/Apple8 128-border
+  split-search fault of SESSION D, every gbdt lane on M2, not this arm),
+  do-amd queued.
+- CPU SPEED STEP 1, ON THE BRANCH (NOT MERGED): RF and ExtraTrees host fits
+  run one task per contiguous tree range (`ensemble/host/rf_oracle.mojo`
+  `_rf_host_tree`, `extratrees/impl/randomforest/randomforest.mojo`
+  `fit_forest_exact`), each task in the caller's IEEE environment
+  (core/host_fp_env.mojo), trees appended in tree order after the join, the
+  lowest failing task's error raised. CPU sabotages column_cpu_only.patch
+  and steward_combo_cpu_only.patch re-cut for the per-tree function.
+  Measured on the H100 pod (cpu-intel-r-xeon-r-platinum-8480, HIGGS first
+  200k rows, 5k held out, 20 trees, IDENTICAL), fit seconds old -> new
+  (default threads) / new at MOJOLEARN_CPU_THREADS=1 / =3, digests:
+    rf_clf 4.265 -> 0.405 / 4.655 / 1.445  bf14227117318897 in all four
+    rf_reg 20.065 -> 1.200 / 19.355 / 6.792  0c3258c853a0477f in all four
+    et_clf 2.198 -> 0.274 / 2.199 / 0.816  f518deb6162cf076 in all four
+    et_reg 10.167 -> 2.390 / 9.907 / 6.375  368a41a64d1b9369 in all four
+  So: same bits before/after and at 1, 3 and default threads.
+  Before-timings at 1M (main, default threads, same box): rf_clf 24.2 s,
+  rf_reg 120.1, et_clf 12.5, et_reg 66.5, iforest 0.30, gbdt_logloss 21.0,
+  gbdt_rmse 13.1, gbdt_multiclass 21.4, gbdt_ctr 56.8, dt_clf 5.6, dt_reg
+  6.6, bagging_clf 14.8 (bench/speed/trees_cpu_speed.py, on the branch).
+- GATE NOT RUN (owed): the launcher waiting for a central AMD slot was
+  killed with the session before a slot freed (decomp held slot 0 from
+  02:21Z, sequence then sequence-cpu slot 1); nothing ran. To run it:
+  the central AMD box (tools/amd_central.sh, tree
+  /root/mojolearn-trees-cpu, logs /root/ev-trees-cpu): the 36 non-par
+  lanes lane_select names (~/mojolearn-evidence/trees-cpu/lanes2.txt)
+  `--pass 2 --sabotage xtrees/checks/sabotage/column_cpu_only.patch`
+  (HIP column vs CPU column), then test_host_surface + test_trees_repeat.
+  Script: ~/mojolearn-evidence/trees-cpu/gate_amd.sh (tree already synced
+  and pixi-installed at /root/mojolearn-trees-cpu).
+- OWED (pod steps, when RunPod is funded): the NVIDIA half of the merge
+  gate for the RF/ET step (same lane list and sabotage on CUDA vs CPU),
+  then merge + push + one steward submit. Then continue CPU speed: rf_reg /
+  et_reg per-tree cost (the regression split search), GBDT host boosting
+  (gbdt_ctr 56.8 s, logloss 21.0 s), bagging/adaboost wrappers; FAST CPU
+  after IDENTICAL.
+
 NEXT SESSION: FIRST the CTR-table CPU paths (main's request 2026-09-27),
 then type B (features).
 1. gbdt-tensor-ctr-tables: the CPU column fits

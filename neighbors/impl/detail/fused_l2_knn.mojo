@@ -118,42 +118,30 @@ element enters the thread queue that theirs would have rejected; the cost is
 the vote in `checkThreadQ`, which is 8 per row per column tile. Not measured
 separately.
 
-**DEVIATION BLOCK 2 - the cross-block merge IS implemented; only the FENCE
-SPELLING deviates.** Theirs grid-strides BOTH axes and serializes the
-per-row merge across column blocks with a mutex array,
-`atomicCAS`/`atomicExch` and `__threadfence` (`:241-281`, `:313-338`); so
-does this kernel, and the grid comes from their `launchConfigGenerator`
-(`pairwise_distance_base.mojo`, target-column hardware inputs; Apple column
-= the M4's) so that every block is resident,
-which is the protocol's progress guarantee. At `gridDim.x == 1` -- which is
-what that computation picks whenever the row tiles alone fill the device --
-their `rowEpilog_lambda` opens `if (gridDim.x == 1) { return; }` (`:226`),
-the final store is guarded by
-`(gridStrideX + Nblk * gridDim.x) >= n && gridDim.x == 1` (`:479`), and the
-mutex array is never touched: that arm is byte-for-byte the kernel this
-file always had.
-
-What deviates is only how the fence is SAID. Apple's backend legalizes
-neither their spelling nor any standalone fence: Mojo 1.0's `threadfence`
-is comptime-asserted `"only implemented on NVIDIA GPUs"`
-(`stdlib/std/gpu/intrinsics.mojo:790-792`), AIR has no strong
-compare-exchange ("Apple GPU only supports `weak` compare-exchange"), and
-acquire/acq_rel orderings on RMW ops are rejected by name ("Apple GPU does
-not support `acquire` atomic ordering") -- all three are the Metal
-backend's own errors. What it DOES legalize is `Atomic.load[ACQUIRE]` and
-`Atomic.store[RELEASE]`. So their `atomicCAS` spin + `__threadfence`
-acquire is spelled as an ACQUIRE-load spin with a weak RELAXED
-compare-exchange claim, and their `atomicExch` + `__threadfence` release as
-a RELEASE store (legal: only the holder writes it, and theirs discards the
-returned value too). Same protocol in the C++11 model -- CUDA defines
-`__threadfence()` as `atomic_thread_fence(seq_cst, thread_scope_device)`.
-`neighbors/mutex_probe_main.mojo` established the spelling sound on the M4:
-650 in-envelope contended handoff launches bit-exact against a host oracle
-over hashed payloads with a poisoned exchange buffer, and both sabotage
-arms (skipped words, release-before-write) caught every single time, so the
-probe demonstrably SEES violations. `cluster/gbdt/distance/
-fused_distance_nn/simt_kernel.mojo` still carries the old single-block
-deviation and can now cite this block instead of a wall.
+**DEVIATION BLOCK 2 (DEVIATION 5219, 2026-09-27) - the cross-block merge is
+a SEPARATE KERNEL over per-block candidate slots, not their mutex protocol.**
+Theirs grid-strides BOTH axes and serializes the per-row merge across column
+blocks with a mutex array, `atomicCAS`/`atomicExch` and `__threadfence`
+(`:241-281`, `:313-338`), the producers handing their queues to block 0
+through the output buffer. This kernel carried that protocol (the fence in
+the one spelling Metal legalizes: an ACQUIRE-load spin with a weak RELAXED
+compare-exchange claim, a RELEASE store), until the trees lane found the
+same pattern -- a payload read and written with PLAIN loads and stores
+inside a device-mutex critical section -- losing candidates on the M3
+(trees DEVIATION 5611): the fence orders the mutex, and nothing made the
+plain payload stores of one threadgroup visible to another's plain loads
+there. So at `gridDim.x > 1` every block now stores its reduced queue into
+its own slot (`m x gridDim.x x k` pairs) and `fused_l2_knn_merge_kernel`
+folds a row's slots AFTER the kernel boundary, where launch order alone
+makes the stores visible. The fold is a k-way merge in the queue's total
+order `(distance, index)`, so the answer is the `gridDim.x == 1` answer bit
+for bit at every grid (`check_fused_griddimx_merge`,
+`check_knn_fused_tie_set_is_geometry_invariant`). The grid still comes from
+their `launchConfigGenerator` (`pairwise_distance_base.mojo`, target-column
+hardware inputs), capped at `FKNN_MAX_SLOTS` column blocks to bound the
+slots. At `gridDim.x == 1` -- what that computation picks whenever the row
+tiles alone fill the device -- there is no merge and no slot, as theirs
+(`:226`, `:479`).
 
 **DEVIATION BLOCK 3 - single-buffered shared pages.** Their
 `Policy::SmemSize` is `2 * SmemPage` because `Contractions_NT` is DOUBLE
@@ -172,14 +160,12 @@ constant, and it is left OPEN; see the lane file.
 1. The accumulate is `identical_mul_add_simd` and the epilog's
    `xn + yn - 2*dot` is one pinned multiply-add, so the contraction is not
    the codegen's to choose.
-2. `grid_x` is PINNED TO 1. At `grid_x > 1` the blocks sharing a row merge
-   through the mutex array, and `Comparators.cuh:17` compares the DISTANCE
-   ONLY, so which of several equidistant neighbours survives is decided by
-   which block won the mutex -- run to run on one device, and by the core
-   count across two. At `grid_x == 1` there is no merge: one block owns
-   every column of its rows and feeds them ascending. `grid_y` needs no pin,
-   because `row - tile_m` is the same offset inside `Mblk` at every grid, so
-   the same lane sees the same columns in the same order.
+2. `grid_x` WAS PINNED TO 1 (DEVIATION 502), because the old merge
+   resolved equidistant neighbours by mutex arrival with a distance-only
+   comparator. The queue now orders `(distance, index)` and the merge is
+   DEVIATION 5219's slot fold in that order, so every grid returns the
+   `grid_x == 1` bits and the pin is lifted. `grid_y` never needed one,
+   because `row - tile_m` is the same offset inside `Mblk` at every grid.
 3. IDENTICAL admits native32 and CDNA64 while keeping a logical32 network.
    CDNA votes, shuffle masks, lane IDs and indexed broadcasts stay inside
    each aligned half-wave; the two query groups never share queue state.
@@ -215,8 +201,6 @@ zero-distance duplicate and the fused path does not. This kernel copies both
 clauses. See the lane file; `core/` is another lane's.
 """
 
-from std.atomic import Atomic, Ordering
-from core.device_mutex import claim_device_mutex
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from neighbors.impl.topk.logical_warp32 import queue_any, LOGICAL32_ON64
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -228,7 +212,6 @@ from checks.kernel_matrix import TARGET_COLUMN, lib_lane_width_for
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
-    PIN_DETERMINISM,
     ftz,
     ftz_simd,
     identical_mul_add,
@@ -267,6 +250,9 @@ comptime FKNN_SMEM_PAGE_Y = FKNN_SMEM_STRIDE * FKNN_NBLK
 # the largest warp queue they instantiate, and it is ours for the same
 # reason and no other.
 comptime FKNN_MAX_NN = 64
+# The most column blocks `fused_l2_knn` launches (DEVIATION 5219's slot
+# budget, `fused_l2_knn_grid`).
+comptime FKNN_MAX_SLOTS = 64
 
 # `std::numeric_limits<float>::max()` and
 # `std::numeric_limits<uint32_t>::max()`, their `identity` and `keyMax`
@@ -315,8 +301,8 @@ def fused_l2_knn_kernel[
     n_in: Int32,
     d_in: Int32,
     num_nn_in: Int32,
-    mutexes: MutPointer[Int32, MutAnyOrigin],
-    sabotage_in: Int32,
+    cand_dists: MutPointer[Float32, MutAnyOrigin],
+    cand_inds: MutPointer[UInt32, MutAnyOrigin],
 ):
     """`fusedL2kNN<..., NumWarpQ, NumThreadQ, ...>` with
     `l2_exp_distance_op`, at any grid `launch_config_generator` produces.
@@ -338,19 +324,17 @@ def fused_l2_knn_kernel[
 
     Launch with `launch_config_generator`'s grid and
     `block_dim = (FKNN_THREADS, 1, 1)`. At `grid_dim.x == 1` every row is
-    owned by one block and `mutexes` is never touched; at `grid_dim.x > 1`
-    the blocks sharing a row tile merge through `mutexes` -- their
-    `volatile int* mutexes` argument (`:211`), one `Int32` per row tile,
-    ZEROED BY THE HOST exactly as `fusedL2ExpKnnImpl:788` memsets it.
+    owned by one block, which writes the output and never touches
+    `cand_dists` / `cand_inds`. At `grid_dim.x > 1` each block writes its
+    own queue for its rows into its own slot of `cand_*` (`m x gdx x
+    num_nn`), and `fused_l2_knn_merge_kernel` must run after this kernel
+    to fold the slots into the output (DEVIATION 5219; their
+    `volatile int* mutexes` argument, `:211`, and the in-kernel merge it
+    guards are not implemented).
 
-    `sabotage_in` is CHECK infrastructure, not theirs: nonzero makes the
-    LAST producer hand over identity/keyMax instead of its queue, so
-    `knn_check` can prove the merge is reached (CONTRIBUTING.md). The
-    production entry point hard-codes 0, and at `grid_dim.x == 1` the
-    value is never read.
-
-    Output is `m x num_nn`, SORTED ascending by distance, which is what
-    their `WarpSelect::reduce()` produces for `Dir == false`.
+    Output is `m x num_nn`, SORTED ascending in the queue's total order
+    `(distance, index)`, which is what `WarpSelect::reduce()` produces for
+    `Dir == false`.
     """
     var m = Int(m_in)
     var n = Int(n_in)
@@ -362,13 +346,7 @@ def fused_l2_knn_kernel[
     # one `tr` and all 32 `tc`, which is why the queues below are per-warp.
     var tr = tid // FKNN_ACC_TH_COLS
     var tc = tid % FKNN_ACC_TH_COLS
-    # `const int lid = threadIdx.x % warpSize;` (`:232`, their rowEpilog).
-    var lid = tid % 32
     var gdx = Int(grid_dim.x)
-    var sabotage = Int(sabotage_in)
-    # `kNumWarpQRegisters = NumWarpQ / WarpSize`, `Select.cuh:360`; the
-    # merge stages exactly this many pairs per row in registers.
-    comptime n_regs = num_warp_q // 32
 
     var sx = stack_allocation[
         FKNN_SMEM_PAGE_X,
@@ -556,218 +534,140 @@ def fused_l2_knn_kernel[
         #
         # Then `storeWarpQGmem`, `:95-117`, reached through their guard
         # `((gridStrideX + Policy::Nblk * gridDim.x) >= n) && gridDim.x ==
-        # 1` at `:479`: only the single-column-block configuration stores
-        # here, and only after its last column tile, which is where this
-        # code sits. `writeOut` places register `i` of lane `l` at output
-        # slot `i * 32 + l`, exactly the `idx = j * warpSize + lid` of
-        # `:109`.
-        if gdx == 1:
-            if have0:
-                var f0 = Int32(0)
-                if heap0.num_vals > 0:
-                    f0 = Int32(1)
-                if queue_any(f0) != Int32(0):
-                    heap0.reduce()
+        # 1` at `:479`, after the last column tile, which is where this
+        # code sits.
+        # DEVIATION 5219: NO CROSS-BLOCK MUTEX MERGE. At `grid_dim.x == 1`
+        # this block owns every column of its rows and stores its queue
+        # straight into the output. At `grid_dim.x > 1` EVERY block
+        # (block 0 included) stores its own reduced queue into its own
+        # candidate SLOT, `(row * gdx + block_idx.x) * num_nn`, and
+        # `fused_l2_knn_merge_kernel` folds a row's slots after the kernel
+        # boundary. Nothing is handed from one threadgroup to another inside
+        # the kernel, so no plain load can miss another block's plain store
+        # (the M3 lost-candidate defect, trees DEVIATION 5611; their
+        # `rowEpilog_lambda` mutex protocol, `:224-338`, is gone).
+        #
+        # `writeOut` places register `i` of lane `l` at output slot
+        # `i * 32 + l`, exactly the `idx = j * warpSize + lid` of `:109`, and
+        # after `reduce()` the slots are ascending in the queue's total
+        # order `(key, value)`.
+        var slot = Int(block_idx.x)
+        if have0:
+            var f0 = Int32(0)
+            if heap0.num_vals > 0:
+                f0 = Int32(1)
+            if queue_any(f0) != Int32(0):
+                heap0.reduce()
+            if gdx == 1:
                 heap0.write_out(
                     out_dists.unsafe_offset(row0 * num_nn),
                     out_inds.unsafe_offset(row0 * num_nn),
                     num_nn,
                 )
-            if have1:
-                var f1 = Int32(0)
-                if heap1.num_vals > 0:
-                    f1 = Int32(1)
-                if queue_any(f1) != Int32(0):
-                    heap1.reduce()
+            else:
+                heap0.write_out(
+                    cand_dists.unsafe_offset((row0 * gdx + slot) * num_nn),
+                    cand_inds.unsafe_offset((row0 * gdx + slot) * num_nn),
+                    num_nn,
+                )
+        if have1:
+            var f1 = Int32(0)
+            if heap1.num_vals > 0:
+                f1 = Int32(1)
+            if queue_any(f1) != Int32(0):
+                heap1.reduce()
+            if gdx == 1:
                 heap1.write_out(
                     out_dists.unsafe_offset(row1 * num_nn),
                     out_inds.unsafe_offset(row1 * num_nn),
                     num_nn,
                 )
-        else:
-            # ---- `rowEpilog_lambda`, `fused_l2_knn.cuh:224-338` ----------
-            # The merge PROTOCOL is theirs; only the FENCE SPELLING is
-            # Metal's. Their `atomicCAS` spin plus `__threadfence` acquire
-            # becomes an ACQUIRE load spin + weak RELAXED compare-exchange
-            # claim; their `atomicExch` plus `__threadfence` release
-            # becomes a RELEASE store. The Apple backend legalizes NO other
-            # spelling: `threadfence` is comptime-asserted NVIDIA-only,
-            # strong compare-exchange does not exist in AIR, and
-            # acquire/acq_rel orderings on RMW ops are rejected by name.
-            # `neighbors/mutex_probe_main.mojo` established this spelling
-            # sound under contention on the M4. See DEVIATION BLOCK 2.
-            #
-            # Deviation-1 consequence, acting here: theirs stages every
-            # handoff through `shDumpKV` because its queues LIVE there;
-            # ours never spilled the queues. So the producer first
-            # `reduce()`s its registers (their epilog had already reduced
-            # into shmem) and hands them over directly, and the consumer
-            # stages the incoming pairs in registers (theirs copies
-            # `out -> regs -> shmem -> regs`, `:258-276` then `:283-299`;
-            # ours stops at the first regs). Same pairs, same protocol
-            # steps, same step order.
-            var mtx = mutexes.unsafe_offset(m0 // FKNN_MBLK)
-            if Int(block_idx.x) == 0:
-                # consumer, `:241-312`. Its own candidates are already in
-                # `heap0`/`heap1` (theirs reloads them from shmem, `:247`).
-                var processed = 0  # `auto cta_processed = 0;` `:242`
-                while processed < gdx - 1:  # `:249`
-                    if tid == 0:
-                        # `while (atomicCAS(&mutexes[...], -2, -1) != -2);`
-                        # `:251-253` + the `__threadfence()` at `:255`, as the
-                        # shared claim (core/device_mutex.mojo): the fence IS
-                        # their threadfence, in the one spelling every column
-                        # compiles.
-                        claim_device_mutex(mtx, Int32(-2), Int32(-1))
-                    barrier()  # `__syncthreads()` `:256`
-
-                    # `:258-276`: pull the producer's numOfNN pairs for
-                    # this warp's rows. Their `Pair otherKV` defaults,
-                    # their `idx = j * warpSize + lid`.
-                    var oth_k0 = SIMD[DType.float32, n_regs](FKNN_IDENTITY)
-                    var oth_v0 = SIMD[DType.uint32, n_regs](FKNN_KEY_MAX)
-                    var oth_k1 = SIMD[DType.float32, n_regs](FKNN_IDENTITY)
-                    var oth_v1 = SIMD[DType.uint32, n_regs](FKNN_KEY_MAX)
-
-                    @parameter
-                    for j in range(n_regs):
-                        var idx = j * 32 + lid
-                        if idx < num_nn:
-                            if have0:
-                                oth_k0[j] = out_dists.unsafe_load(
-                                    row0 * num_nn + idx
-                                )
-                                oth_v0[j] = out_inds.unsafe_load(
-                                    row0 * num_nn + idx
-                                )
-                            if have1:
-                                oth_k1[j] = out_dists.unsafe_load(
-                                    row1 * num_nn + idx
-                                )
-                                oth_v1[j] = out_inds.unsafe_load(
-                                    row1 * num_nn + idx
-                                )
-                    barrier()  # `__syncthreads()` `:280`
-                    if tid == 0:
-                        # `atomicExch(&mutexes[...], 0)` +
-                        # `__threadfence()`, `:281-282`: hand the buffer
-                        # back BEFORE merging, exactly as theirs does.
-                        Atomic.store[ordering = Ordering.RELEASE](
-                            mtx, Int32(0)
-                        )
-
-                    # `:283-300`: merge into the queues. Uniform `add`
-                    # calls, the contract `checkThreadQ`'s vote requires.
-                    if have0:
-
-                        @parameter
-                        for j in range(n_regs):
-                            heap0.add(oth_k0[j], oth_v0[j])
-                    if have1:
-
-                        @parameter
-                        for j in range(n_regs):
-                            heap1.add(oth_k1[j], oth_v1[j])
-                    processed += 1  # `cta_processed++;` `:301`
-
-                # `:303-311`, the needSort vote + reduce, then
-                # `storeWarpQGmem` `:312`.
-                if have0:
-                    var f0 = Int32(0)
-                    if heap0.num_vals > 0:
-                        f0 = Int32(1)
-                    if queue_any(f0) != Int32(0):
-                        heap0.reduce()
-                    heap0.write_out(
-                        out_dists.unsafe_offset(row0 * num_nn),
-                        out_inds.unsafe_offset(row0 * num_nn),
-                        num_nn,
-                    )
-                if have1:
-                    var f1 = Int32(0)
-                    if heap1.num_vals > 0:
-                        f1 = Int32(1)
-                    if queue_any(f1) != Int32(0):
-                        heap1.reduce()
-                    heap1.write_out(
-                        out_dists.unsafe_offset(row1 * num_nn),
-                        out_inds.unsafe_offset(row1 * num_nn),
-                        num_nn,
-                    )
             else:
-                # producer, `:313-338`. Reduce first: their shDumpKV held
-                # the already-reduced queue; our registers only do after
-                # `reduce()` (the vote is `:471-473`'s).
-                if have0:
-                    var p0 = Int32(0)
-                    if heap0.num_vals > 0:
-                        p0 = Int32(1)
-                    if queue_any(p0) != Int32(0):
-                        heap0.reduce()
-                if have1:
-                    var p1 = Int32(0)
-                    if heap1.num_vals > 0:
-                        p1 = Int32(1)
-                    if queue_any(p1) != Int32(0):
-                        heap1.reduce()
-                if tid == 0:
-                    # `while (atomicCAS(&mutexes[...], 0, 1) != 0);`
-                    # `:314-316` + `__threadfence()` `:318`, as the shared
-                    # claim (core/device_mutex.mojo). Multiple producers make
-                    # this the site the ordering argument applies to most
-                    # directly.
-                    claim_device_mutex(mtx, Int32(0), Int32(1))
-                barrier()  # `__syncthreads()` `:319`
-                # `:321-331`: write this block's pairs for its rows into
-                # the output buffer, which doubles as the exchange buffer
-                # exactly as theirs does. `write_out` places register `j`
-                # of lane `l` at slot `j * 32 + l`, their `:328`.
-                #
-                # SABOTAGE (checks only, see the docstring): the LAST
-                # producer hands over identity/keyMax instead of its queue.
-                if sabotage != 0 and Int(block_idx.x) == gdx - 1:
-
-                    @parameter
-                    for j in range(n_regs):
-                        var idx = j * 32 + lid
-                        if idx < num_nn:
-                            if have0:
-                                out_dists.unsafe_store(
-                                    row0 * num_nn + idx, FKNN_IDENTITY
-                                )
-                                out_inds.unsafe_store(
-                                    row0 * num_nn + idx, FKNN_KEY_MAX
-                                )
-                            if have1:
-                                out_dists.unsafe_store(
-                                    row1 * num_nn + idx, FKNN_IDENTITY
-                                )
-                                out_inds.unsafe_store(
-                                    row1 * num_nn + idx, FKNN_KEY_MAX
-                                )
-                else:
-                    if have0:
-                        heap0.write_out(
-                            out_dists.unsafe_offset(row0 * num_nn),
-                            out_inds.unsafe_offset(row0 * num_nn),
-                            num_nn,
-                        )
-                    if have1:
-                        heap1.write_out(
-                            out_dists.unsafe_offset(row1 * num_nn),
-                            out_inds.unsafe_offset(row1 * num_nn),
-                            num_nn,
-                        )
-                barrier()  # `__syncthreads()` `:332`
-                if tid == 0:
-                    # `atomicExch(&mutexes[...], -2)` + `__threadfence()`,
-                    # `:336-337`.
-                    Atomic.store[ordering = Ordering.RELEASE](
-                        mtx, Int32(-2)
-                    )
+                heap1.write_out(
+                    cand_dists.unsafe_offset((row1 * gdx + slot) * num_nn),
+                    cand_inds.unsafe_offset((row1 * gdx + slot) * num_nn),
+                    num_nn,
+                )
 
         m0 += FKNN_MBLK * Int(grid_dim.y)
 
+
+
+def fused_l2_knn_merge_kernel(
+    out_dists: MutPointer[Float32, MutAnyOrigin],
+    out_inds: MutPointer[UInt32, MutAnyOrigin],
+    cand_dists: MutPointer[Float32, MutAnyOrigin],
+    cand_inds: MutPointer[UInt32, MutAnyOrigin],
+    m_in: Int32,
+    gdx_in: Int32,
+    num_nn_in: Int32,
+    sabotage_in: Int32,
+):
+    """DEVIATION 5219: the cross-block merge as its own kernel, one thread
+    per query row. Row `r`'s `gdx` slots (`cand_*[(r * gdx + b) * k ..]`,
+    `b` the column block) are each ascending in the queue's total order
+
+        (ka, va) before (kb, vb)  iff  ka < kb, or (ka == kb and va < vb)
+
+    (`warp_topk.mojo`, TIES), so a k-way merge by that order, ties between
+    slots going to the lower slot (they cannot occur between real pairs,
+    whose indices are distinct; only the sentinel pairs repeat), yields the
+    row's k smallest pairs, sorted: the `grid_x == 1` output bit for bit.
+    Only comparisons and copies, no arithmetic.
+
+    `sabotage_in` nonzero (checks only) starts the LAST slot's cursor at 1,
+    so its best pair is dropped: one lost candidate, the failure the
+    in-kernel mutex merge had on the M3 (trees DEVIATION 5611).
+    """
+    var r = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var m = Int(m_in)
+    if r >= m:
+        return
+    var gdx = Int(gdx_in)
+    var num_nn = Int(num_nn_in)
+    var sabotage = Int(sabotage_in)
+    var base = r * gdx * num_nn
+    # No per-slot cursor array (no thread-private arrays in this tree's
+    # kernels): slot b's head is the FIRST pair of that slot strictly after
+    # the last pair taken, found by bisection because the slot is sorted.
+    # Real pairs are distinct (disjoint column sets), so "strictly after"
+    # never skips one; once a sentinel is taken nothing is strictly after
+    # it and the row's tail is sentinels, as a short queue's would be.
+    var last_k = Float32(0.0)
+    var last_v = UInt32(0)
+    for s in range(num_nn):
+        var best_b = -1
+        var best_k = FKNN_IDENTITY
+        var best_v = FKNN_KEY_MAX
+        for b in range(gdx):
+            var lo = 0
+            if sabotage != 0 and b == gdx - 1:
+                lo = 1
+            var hi = num_nn
+            if s > 0:
+                while lo < hi:
+                    var mid = (lo + hi) // 2
+                    var mk = cand_dists.unsafe_load(base + b * num_nn + mid)
+                    var mv = cand_inds.unsafe_load(base + b * num_nn + mid)
+                    if mk < last_k or (mk == last_k and mv <= last_v):
+                        lo = mid + 1
+                    else:
+                        hi = mid
+            if lo >= num_nn:
+                continue
+            var ck = cand_dists.unsafe_load(base + b * num_nn + lo)
+            var cv = cand_inds.unsafe_load(base + b * num_nn + lo)
+            if best_b < 0 or ck < best_k or (ck == best_k and cv < best_v):
+                best_b = b
+                best_k = ck
+                best_v = cv
+        if best_b < 0:
+            best_k = FKNN_IDENTITY
+            best_v = FKNN_KEY_MAX
+        out_dists.unsafe_store(r * num_nn + s, best_k)
+        out_inds.unsafe_store(r * num_nn + s, best_v)
+        last_k = best_k
+        last_v = best_v
 
 
 def sqrt_postprocess_kernel(
@@ -804,9 +704,19 @@ def fused_l2_knn_grid(n_queries: Int, n_index: Int) raises -> Tuple[Int, Int]:
     arm (DEVIATION 36), so the number the default flips on is by construction
     the number the launch uses."""
     var smem_bytes = (FKNN_SMEM_PAGE_X + FKNN_SMEM_PAGE_Y) * 4
-    return launch_config_generator(
+    var g = launch_config_generator(
         n_queries, n_index, FKNN_MBLK, FKNN_NBLK, FKNN_THREADS, smem_bytes
     )
+    # DEVIATION 5219's slot budget. Their `grid.x = xChunks` is one block
+    # per column tile, unbounded in the index size; with a candidate slot
+    # per (row, column block) that is `m * n / Nblk * k` pairs. The column
+    # loop grid-strides (`n0 += Nblk * gridDim.x`), so a smaller grid_x
+    # only gives each block more tiles, and the answer is the same bits at
+    # any grid_x (the merge's total order); the cap bounds the slots at
+    # `m * FKNN_MAX_SLOTS * k` pairs.
+    if g[0] > FKNN_MAX_SLOTS:
+        return (FKNN_MAX_SLOTS, g[1])
+    return g
 
 
 def fused_l2_knn(
@@ -880,43 +790,23 @@ def fused_l2_knn(
     var cfg = fused_l2_knn_grid(n_queries, n_index)
     var grid_x = cfg[0]
     var grid_y = cfg[1]
-    comptime if PIN_DETERMINISM:
-        # THE GRID PIN (IDENTITY_PATHS row 23, DEVIATION 502). At
-        # `grid_dim.x > 1` the blocks sharing a row merge their queues
-        # through the mutex array, and the FAISS comparator compares the
-        # DISTANCE ONLY (`Comparators.cuh:17`), so which of several
-        # equidistant neighbours survives a merge is decided by the order
-        # the blocks won the mutex -- run to run on one device, and by the
-        # core count across two. At `grid_dim.x == 1` no merge happens at
-        # all: one block owns every column of its rows, feeds them to the
-        # queue in ascending column-tile order, and that order is a pure
-        # function of (m, n, k) and the policy.
-        #
-        # **`PIN_DETERMINISM`, NOT `== NUMERIC_IDENTICAL`, SINCE
-        # 2026-08-29.** Read the sentence above: the mutex order varies
-        # "run to run on one device" AND "by the core count across two".
-        # That is BOTH promises broken by ONE cause, and the pin was keyed
-        # to the upper tier only -- so a DETERMINISTIC build took
-        # `grid_x > 1` and returned a different neighbour on a second run
-        # of the same fit on the same GPU, while calling itself
-        # deterministic. IDENTICAL is unmoved: `PIN_DETERMINISM` is true
-        # there too.
-        #
-        # THE PRICE IS REAL and it is the whole column dimension of the
-        # grid. It is also avoidable: the merge is order-dependent only
-        # because the comparator ignores the index, and `grid_x == 1`
-        # happens to resolve ties toward the LOWEST column index (ascending
-        # column-tile order, first seen wins). A comparator that broke ties
-        # on the index would be order-independent, would agree with this
-        # pin's answer, and would need no grid collapse at all. That is a
-        # kernel change with its own evidence to gather, so it is named
-        # here and not taken here.
-        #
-        # `grid_dim.y` needs no pin. A row's owner block changes with it,
-        # but `row - tile_m` is always the same offset inside `Mblk`, so
-        # the SAME lane sees the SAME columns in the same order whatever
-        # `grid_y` is -- which `check_knn_geometry_invariance` gates.
-        grid_x = 1
+    # THE GRID PIN IS LIFTED (DEVIATION 5219, superseding DEVIATION 502's
+    # `grid_x = 1` under `PIN_DETERMINISM`). 502 pinned the column dimension
+    # because the cross-block merge resolved equidistant neighbours in the
+    # order the blocks won a mutex, with a comparator that read the
+    # distance only. Both causes are gone: the queue orders the PAIR
+    # `(distance, index)` (`neighbors/impl/topk/warp_topk.mojo`, TIES, since
+    # 2026-08-31), so a queue's contents are a function of the multiset it
+    # was fed, and the in-kernel mutex merge is replaced by per-block slots
+    # folded by `fused_l2_knn_merge_kernel` in that same total order. The
+    # k smallest pairs of the union of each block's k smallest pairs ARE the
+    # k smallest pairs of the row, sorted the same way, and each cell's
+    # distance is the same arithmetic at any grid (its own `kt` sweep, no
+    # cross-block fold), so every grid returns the `grid_x == 1` bits:
+    # `check_fused_griddimx_merge` compares them bit for bit and
+    # `check_knn_fused_tie_set_is_geometry_invariant` holds a tied fixture
+    # at three grids. `grid_dim.y` never needed a pin (`row - tile_m` is the
+    # same offset inside `Mblk` at every grid).
     fused_l2_knn_launch(
         ctx,
         queries,
@@ -953,22 +843,31 @@ def fused_l2_knn_launch(
     grid_y: Int,
     sabotage: Int,
 ) raises:
-    """The workspace-and-launch tail of `fusedL2ExpKnnImpl` (`:773-790`
-    mutex workspace, `:822-838` launch), with the grid handed in so
-    `knn_check` can pin it on BOTH sides of the `grid_x == 1` switch
-    (CONTRIBUTING.md (Non-default paths): a parameter that selects a kernel path is a parameter
-    the checks enumerate). Production enters through `fused_l2_knn` above,
-    which computes the grid with `launch_config_generator` and hard-codes
+    """The workspace-and-launch tail of `fusedL2ExpKnnImpl` (`:822-838`
+    launch), with the grid handed in so `knn_check` can pin it on BOTH
+    sides of the `grid_x == 1` switch (CONTRIBUTING.md (Non-default paths):
+    a parameter that selects a kernel path is a parameter the checks
+    enumerate). Production enters through `fused_l2_knn` above, which
+    computes the grid with `launch_config_generator` and hard-codes
     `sabotage = 0`; nothing else may choose a grid.
+
+    At `grid_x > 1` the kernel writes one candidate slot per (row, column
+    block) and `fused_l2_knn_merge_kernel` folds them (DEVIATION 5219), in
+    place of their mutex workspace (`:773-790`). `sabotage` is CHECK
+    infrastructure, not theirs: nonzero makes the merge drop ONE candidate
+    (the best pair of the last column block's slot), so `knn_check` can
+    prove the merge carries the output. At `grid_x == 1` there is no merge
+    and the value is never read.
     """
-    # `if (grid.x > 1) { numMutexes = raft::ceildiv<int>(m, KPolicy::Mblk);
-    # ... cudaMemsetAsync(mutexes, 0, ...); }`, `:777-790`. The buffer is
-    # allocated unconditionally (their kernel signature takes the pointer
-    # unconditionally too); the ZEROING is what only `grid.x > 1` needs.
-    var n_mutexes = (n_queries + FKNN_MBLK - 1) // FKNN_MBLK
-    var mutexes = ctx.enqueue_create_buffer[DType.int32](n_mutexes)
+    # The candidate slots: `m x grid_x x k` pairs, written in full by the
+    # kernel (every block stores all k of its queue's slots for every row
+    # it owns, sentinels included), so no memset. One-cell placeholders at
+    # `grid_x == 1`, where the kernel never touches them.
+    var n_cand = 1
     if grid_x > 1:
-        ctx.enqueue_memset(mutexes, Int32(0))
+        n_cand = n_queries * grid_x * k
+    var cand_d = ctx.enqueue_create_buffer[DType.float32](n_cand)
+    var cand_i = ctx.enqueue_create_buffer[DType.uint32](n_cand)
 
     # `if (numOfNN <= 32) { ...Knn32RowMajor } else if (numOfNN <= 64)
     # { ...Knn64RowMajor }`, `fusedL2ExpKnnImpl:765-771`. Two whole-kernel
@@ -985,8 +884,8 @@ def fused_l2_knn_launch(
             Int32(n_index),
             Int32(n_features),
             Int32(k),
-            mutexes.unsafe_ptr(),
-            Int32(sabotage),
+            cand_d.unsafe_ptr(),
+            cand_i.unsafe_ptr(),
             grid_dim=(grid_x, grid_y, 1),
             block_dim=(FKNN_THREADS, 1, 1),
         )
@@ -1002,10 +901,27 @@ def fused_l2_knn_launch(
             Int32(n_index),
             Int32(n_features),
             Int32(k),
-            mutexes.unsafe_ptr(),
-            Int32(sabotage),
+            cand_d.unsafe_ptr(),
+            cand_i.unsafe_ptr(),
             grid_dim=(grid_x, grid_y, 1),
             block_dim=(FKNN_THREADS, 1, 1),
+        )
+
+    # DEVIATION 5219: the slots are folded AFTER the kernel boundary, one
+    # thread per query row, so every block's stores are visible to the
+    # reader by the launch order alone (no fence, no mutex).
+    if grid_x > 1:
+        ctx.enqueue_function[fused_l2_knn_merge_kernel](
+            out_dist.unsafe_ptr(),
+            out_idx.unsafe_ptr(),
+            cand_d.unsafe_ptr(),
+            cand_i.unsafe_ptr(),
+            Int32(n_queries),
+            Int32(grid_x),
+            Int32(k),
+            Int32(sabotage),
+            grid_dim=((n_queries + 127) // 128, 1, 1),
+            block_dim=(128, 1, 1),
         )
 
     # `knn_brute_force.cuh:463-475`. Only for the Sqrt metrics, and only

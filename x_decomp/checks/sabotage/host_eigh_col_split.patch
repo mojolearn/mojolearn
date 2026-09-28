@@ -1,0 +1,13 @@
+diff --git a/x_decomp/host_jacobi.mojo b/x_decomp/host_jacobi.mojo
+index 0abe4fbc7..5dded935f 100644
+--- a/x_decomp/host_jacobi.mojo
++++ b/x_decomp/host_jacobi.mojo
+@@ -248,7 +248,7 @@ def fast_jacobi_eigh(mut a: List[Float32], n: Int, max_sweeps: Int, tol: Float32
+                     if k != p and k != q:
+                         var akp = ftz(pa.unsafe_load(k * n + p))
+                         var akq = ftz(pa.unsafe_load(k * n + q))
+-                        pa.unsafe_store(k * n + p, _rot_sub_1(c, akp, s, akq))
++                        pa.unsafe_store(k * n + p, ftz(ftz(c * akp) - ftz(s * akq)))  # SABOTAGE (host eigh): split FMA
+                         pa.unsafe_store(k * n + q, _rot_add_1(s, akp, c, akq))
+                 # rows p and q, columns k off the pair
+                 var rp = pa.unsafe_offset(p * n)

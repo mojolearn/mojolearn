@@ -19,7 +19,7 @@ from core.identity_trace import IdentityTrace
 from x_cnn.ops import conv_params, pool_params, CP_OH, CP_OW, PP_OH, PP_OW
 from x_cnn.checks.oracle import (
     o_col2im, o_conv_dw, o_bn_stats, o_dropout_mask, o_spmm, o_softmax, o_maxpool, o_avgpool, o_sgd, o_gcn_norm,
-    o_pad_bwd, o_adapt_avg_bwd, o_sage_max_bwd, o_l2norm, o_adam,
+    o_pad_bwd, o_adapt_avg_bwd, o_adapt_max_fwd, o_sage_max_bwd, o_l2norm, o_adam,
 )
 import x_cnn.device as D
 import x_cnn.host.ops_host as Hh
@@ -284,6 +284,19 @@ def main() raises:
     _check("5712_adaptive_avg_bwd", o_adapt_avg_bwd(ag, anc, AH, AW, AOH, AOW, False),
            o_adapt_avg_bwd(ag, anc, AH, AW, AOH, AOW, True),
            D.adaptive_pool_device(ag, noidx, aprm, 1, io1), Hh.adaptive_pool_host(ag, noidx, aprm, 1, io2), tr)
+    # 5706 adaptive max pooling ties (AdaptiveMaxPool2d's own copy of the tie rule): the same
+    # overlapping 7 x 5 onto 3 x 4 windows over small integers (exact ties).
+    var amx = _fixture(anc * AH * AW, 33, True)
+    var amw1 = List[Int32]()
+    var amw2 = List[Int32]()
+    var amd = D.adaptive_pool_device(amx, noidx, aprm, 2, amw1)
+    var amh = Hh.adaptive_pool_host(amx, noidx, aprm, 2, amw2)
+    for v in amw1:
+        amd.append(Float32(Int(v)))
+    for v in amw2:
+        amh.append(Float32(Int(v)))
+    _check("5706_adaptive_max_tie", o_adapt_max_fwd(amx, anc, AH, AW, AOH, AOW, False),
+           o_adapt_max_fwd(amx, anc, AH, AW, AOH, AOW, True), amd, amh, tr)
 
     # ---- 5713 SAGE max backward over the 30-node graph above, with exact ties; 5714 L2 normalize.
     var tied = _fixture(gn * F, 31, True)

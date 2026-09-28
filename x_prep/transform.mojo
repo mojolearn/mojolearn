@@ -198,29 +198,46 @@ def log1pf(x: Float32) -> Float32:
     return ftz(identical_log1p(ftz(x)))
 
 
-def yeo_johnson(x: Float32, lam: Float32) -> Float32:
-    """scipy.stats.yeojohnson's transform of one value (x not NaN)."""
+@always_inline
+def power_log(x: Float32, method: Int) -> Float32:
+    """The lambda-free logarithm the power transform of x is built on: log x
+    (box-cox, METHOD 1), log1p x (yeo-johnson, x >= 0), log1p(-x) (x < 0).
+    It is also the Jacobian term J(x) up to its sign (`_neg_llf`)."""
+    if method == 1:
+        return logf(x)
     if x >= Float32(0):
+        return log1pf(x)
+    return log1pf(sub(Float32(0), x))
+
+
+@always_inline
+def power_from_log(lg: Float32, nonneg: Bool, lam: Float32, method: Int) -> Float32:
+    """The power transform of x from `power_log(x, method)` and x >= 0:
+    scipy.special.boxcox (METHOD 1, x > 0) or scipy.stats.yeojohnson's
+    transform. `power` is this of `power_log`, so a caller that keeps the
+    logarithm across lambdas (x_prep/host/power.mojo) computes the same words."""
+    if method == 1 or nonneg:
         if lam == Float32(0):
-            return log1pf(x)
-        return div(sub(expf(mul(lam, log1pf(x))), Float32(1)), lam)
+            return lg
+        return div(sub(expf(mul(lam, lg)), Float32(1)), lam)
     var l2 = sub(Float32(2), lam)
     if l2 == Float32(0):
-        return sub(Float32(0), log1pf(sub(Float32(0), x)))
-    return sub(Float32(0), div(sub(expf(mul(l2, log1pf(sub(Float32(0), x)))), Float32(1)), l2))
+        return sub(Float32(0), lg)
+    return sub(Float32(0), div(sub(expf(mul(l2, lg)), Float32(1)), l2))
+
+
+def yeo_johnson(x: Float32, lam: Float32) -> Float32:
+    """scipy.stats.yeojohnson's transform of one value (x not NaN)."""
+    return power_from_log(power_log(x, 0), x >= Float32(0), lam, 0)
 
 
 def box_cox(x: Float32, lam: Float32) -> Float32:
     """scipy.special.boxcox of one value (x > 0)."""
-    if lam == Float32(0):
-        return logf(x)
-    return div(sub(expf(mul(lam, logf(x))), Float32(1)), lam)
+    return power_from_log(power_log(x, 1), True, lam, 1)
 
 
 def power(x: Float32, lam: Float32, method: Int) -> Float32:
-    if method == 1:
-        return box_cox(x, lam)
-    return yeo_johnson(x, lam)
+    return power_from_log(power_log(x, method), x >= Float32(0), lam, method)
 
 
 def _neg_llf(f: FP, X: Int, n: Int, d: Int, c: Int, lam: Float32, method: Int) -> Float32:

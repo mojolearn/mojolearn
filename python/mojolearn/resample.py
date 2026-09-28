@@ -12,8 +12,10 @@ standard error and the p-value are host scalars over the same pinned tree
 (`metrics/checks/pinned_sum.mojo::host_tree_sum`), with no libm call.
 
 WHAT IS REFUSED, AND WHERE. Here by name: an unknown statistic, method,
-alternative or integrand SPELLING, a sample that is not 1-D or 2-D, and
-`method='bca'` (DEVIATION 1699, refused on the Mojo host too). On the Mojo
+alternative or integrand SPELLING and a sample that is not 1-D or 2-D.
+`method='BCa'` (any case, as SciPy) ships for mean, std and diff_means
+(DEVIATION 1699, closed by DEVIATION 5410) and is refused by name on the
+Mojo host for the other statistics and a degenerate interval. On the Mojo
 host by name: `n_resamples` outside the positions the index map can
 address (`validate_positions`), a pooled size the permutation map cannot
 address, a non-finite cell, a `confidence_level` outside (0, 1), a
@@ -129,17 +131,27 @@ def _int(v, name, where):
 
 def bootstrap(data, statistic="mean", n_resamples=9999, confidence_level=0.95,
               method="percentile", alternative="two-sided", random_state=0,
-              q_or_prop=0.5, r_first=0, numeric_mode=None):
+              q_or_prop=0.5, r_first=0, numeric_mode=None, paired=True):
     """`scipy.stats.bootstrap((data,), statistic, n_resamples=...,
     rng=random_state, method=..., confidence_level=..., alternative=...)`.
 
     `data` is `(n,)` or `(n, 2)` float32; a two-column sample keeps its row
     pairing (SciPy's `paired=True`), which `pearson` and `diff_means` read.
     `q_or_prop` is `q` for `quantile` and `proportiontocut` for
-    `trimmed_mean`, unread otherwise. `method='bca'` is refused by name
-    (DEVIATION 1699).
+    `trimmed_mean`, unread otherwise. `method` is 'percentile', 'basic' or
+    'BCa' (case-insensitive, as SciPy); BCa ships for mean, std and
+    diff_means (DEVIATION 1699) and `order_low` / `order_high` are then the
+    positions at its adjusted levels.
+
+    `paired=False` with `data=(x, y)`, two 1-D samples of any lengths and
+    `statistic='diff_means'`: SciPy's unpaired two-sample bootstrap, each
+    sample resampled independently (sample 0 by the one-sample map, sample 1
+    by its own). A single sample ignores `paired`, as SciPy does.
     """
     where = "bootstrap"
+    if not paired and isinstance(data, (tuple, list)):
+        return _bootstrap_unpaired(data, statistic, n_resamples, confidence_level, method,
+                                   alternative, random_state, r_first, numeric_mode)
     x, _ = as_f32_c(data, ndim=None, name="data")
     if x.ndim == 1:
         n, d = x.shape[0], 1
@@ -148,12 +160,7 @@ def bootstrap(data, statistic="mean", n_resamples=9999, confidence_level=0.95,
     else:
         raise ValueError(f"mojolearn {where}: data must be 1-D or 2-D, got {x.ndim}-D")
     stat = _code(STATISTICS, statistic, "statistic", where)
-    meth = _code(METHODS, method, "method", where)
-    if meth == METHODS["bca"]:
-        raise ValueError(
-            f"mojolearn {where}: method='bca' is refused by name (DEVIATION 1699); "
-            "resample/README.md carries the reason. Use 'percentile' or 'basic'."
-        )
+    meth = _code(METHODS, method.lower() if isinstance(method, str) else method, "method", where)
     alt = _code(ALTERNATIVES, alternative, "alternative", where)
     r = _int(n_resamples, "n_resamples", where)
     rf = _int(r_first, "r_first", where)
@@ -175,13 +182,58 @@ def bootstrap(data, statistic="mean", n_resamples=9999, confidence_level=0.95,
                            float(scalars[2]), float(scalars[3]), int(scalars[4]), int(scalars[5]))
 
 
-def permutation_test(x, y, statistic="diff_means", n_resamples=9999,
-                     alternative="two-sided", random_state=0, r_first=0, numeric_mode=None):
+def _bootstrap_unpaired(data, statistic, n_resamples, confidence_level, method,
+                        alternative, random_state, r_first, numeric_mode):
+    where = "bootstrap(paired=False)"
+    if len(data) != 2:
+        raise ValueError(f"mojolearn {where}: data must be two samples (x, y), got {len(data)}")
+    if statistic != "diff_means":
+        raise ValueError(
+            f"mojolearn {where}: statistic {statistic!r} is refused by name: the unpaired bootstrap's"
+            " two-sample statistic is 'diff_means' (a one-sample statistic has no pairing; pearson needs pairs)")
+    xx, _ = as_f32_c(data[0], ndim=1, name="x")
+    yy, _ = as_f32_c(data[1], ndim=1, name="y")
+    meth = _code(METHODS, method.lower() if isinstance(method, str) else method, "method", where)
+    alt = _code(ALTERNATIVES, alternative, "alternative", where)
+    r = _int(n_resamples, "n_resamples", where)
+    dist = empty((max(r, 0),), "<f4")
+    sdist = empty((max(r, 0),), "<f4")
+    scalars = empty((6,), "<f8")
+    _extension(numeric_mode).bootstrap_unpaired(
+        # ORDER MATCHES bindings/_mojolearn_resample.mojo::bootstrap_unpaired_binding.
+        [addr_ro(xx, name="x"), addr_ro(yy, name="y"), addr(dist, name="distribution"),
+         addr(sdist, name="sorted_distribution"), addr(scalars, name="scalars")],
+        # n_x, n_y, n_resamples, seed, method, confidence_level, alternative, r_first
+        [xx.shape[0], yy.shape[0], r, _int(random_state, "random_state", where), meth,
+         _real(confidence_level, "confidence_level", where), alt, _int(r_first, "r_first", where)],
+    )
+    return BootstrapResult(float(scalars[0]), dist, sdist, float(scalars[1]),
+                           float(scalars[2]), float(scalars[3]), int(scalars[4]), int(scalars[5]))
+
+
+def permutation_test(x, y=None, statistic="diff_means", n_resamples=9999,
+                     alternative="two-sided", random_state=0, r_first=0, numeric_mode=None,
+                     permutation_type="independent"):
     """`scipy.stats.permutation_test((x, y), statistic,
     permutation_type='independent', n_resamples=..., rng=random_state,
     alternative=...)`. `x` and `y` are 1-D float32. The null is never
     exhaustive (DEVIATION 1702); the p-value is conservative."""
     where = "permutation_test"
+    ptype = permutation_type.lower() if isinstance(permutation_type, str) else permutation_type
+    if ptype == "samples":
+        return _permutation_samples(x, y, statistic, n_resamples, alternative, random_state,
+                                    r_first, numeric_mode)
+    if ptype == "pairings":
+        raise ValueError(
+            f"mojolearn {where}: permutation_type='pairings' is refused by name: its null permutes every"
+            " sample's observation order, which for the implemented statistics (mean, std, diff_means)"
+            " leaves the statistic unchanged -- the null is the observed value R times; pearson, the"
+            " statistic it exists for, has no permutation arm (resample/NOT_IMPLEMENTED.tsv)")
+    if ptype != "independent":
+        raise ValueError(f"mojolearn {where}: permutation_type must be 'independent', 'samples' or"
+                         f" 'pairings', got {permutation_type!r}")
+    if y is None:
+        raise ValueError(f"mojolearn {where}: permutation_type='independent' needs two samples x and y")
     xx, _ = as_f32_c(x, ndim=1, name="x")
     yy, _ = as_f32_c(y, ndim=1, name="y")
     stat = _code(STATISTICS, statistic, "statistic", where)
@@ -197,6 +249,35 @@ def permutation_test(x, y, statistic="diff_means", n_resamples=9999,
         [addr_ro(xx, name="x"), addr_ro(yy, name="y"), addr(null, name="null_distribution"), addr(scalars, name="scalars")],
         # n_x, n_y, statistic, n_resamples, seed, alternative, r_first
         [xx.shape[0], yy.shape[0], stat, r, seed, alt, rf],
+    )
+    return PermutationTestResult(float(scalars[0]), null, float(scalars[1]), int(scalars[2]), int(scalars[3]))
+
+
+def _permutation_samples(x, y, statistic, n_resamples, alternative, random_state, r_first, numeric_mode):
+    """permutation_type='samples': (x, y) paired, diff_means, each pair's two
+    observations traded by a fair coin; (x,) alone (y None), mean, the sign of
+    each observation flipped (SciPy's one-sample convention)."""
+    where = "permutation_test(permutation_type='samples')"
+    xx, _ = as_f32_c(x, ndim=1, name="x")
+    want = "mean" if y is None else "diff_means"
+    if statistic != want:
+        raise ValueError(
+            f"mojolearn {where}: statistic {statistic!r} is refused by name; the implemented arm for "
+            f"{'one sample' if y is None else 'two paired samples'} is {want!r}")
+    if y is None:
+        yy, ny = xx, 0
+    else:
+        yy, _ = as_f32_c(y, ndim=1, name="y")
+        ny = yy.shape[0]
+    r = _int(n_resamples, "n_resamples", where)
+    null = empty((max(r, 0),), "<f4")
+    scalars = empty((4,), "<f8")
+    _extension(numeric_mode).permutation_samples(
+        # ORDER MATCHES bindings/_mojolearn_resample.mojo::permutation_samples_binding.
+        [addr_ro(xx, name="x"), addr_ro(yy, name="y"), addr(null, name="null_distribution"), addr(scalars, name="scalars")],
+        # n, n_y, n_resamples, seed, alternative, r_first
+        [xx.shape[0], ny, r, _int(random_state, "random_state", where),
+         _code(ALTERNATIVES, alternative, "alternative", where), _int(r_first, "r_first", where)],
     )
     return PermutationTestResult(float(scalars[0]), null, float(scalars[1]), int(scalars[2]), int(scalars[3]))
 
@@ -227,6 +308,56 @@ def monte_carlo_integrate(integrand, lower, upper, n_samples, random_state=0, i_
     return MonteCarloResult(float(scalars[0]), float(scalars[1]), float(scalars[2]), float(scalars[3]))
 
 
-__all__ = ["bootstrap", "permutation_test", "monte_carlo_integrate",
+def resample_indices(n, n_samples=None, replace=True, random_state=0, numeric_mode=None):
+    """The row indices `sklearn.utils.resample` gathers, as an int32 Array:
+    replace=True position i draws a row by the Philox position map (kind 6),
+    replace=False keeps the first n_samples positions of a keyed total order
+    (kind 7, `rng.permutation(n)[:n_samples]`'s positional spelling). Integer
+    only, so the same indices on every vendor and on the CPU."""
+    where = "resample"
+    n = _int(n, "n", where)
+    count = n if n_samples is None else _int(n_samples, "n_samples", where)
+    idx = empty((max(count, 0),), "<i4")
+    _extension(numeric_mode).resample_indices(
+        # ORDER MATCHES bindings/_mojolearn_resample.mojo::resample_indices_binding.
+        [addr(idx, name="indices")],
+        [n, count, 1 if replace else 0, _int(random_state, "random_state", where)],
+    )
+    return idx
+
+
+def _take(a, idx):
+    if hasattr(a, "__array__") and hasattr(a, "shape"):
+        import numpy as np
+        return np.asarray(a)[np.asarray(idx, dtype=np.intp)]
+    return [a[int(i)] for i in idx]
+
+
+def resample(*arrays, replace=True, n_samples=None, random_state=0, stratify=None,
+             sample_weight=None, numeric_mode=None):
+    """`sklearn.utils.resample(*arrays, replace=..., n_samples=...,
+    random_state=...)`: every array indexed by the same `resample_indices`
+    rows (first axis). One array returns it, several a list, as scikit-learn.
+    `stratify` and `sample_weight` are REFUSED BY NAME (resample/NOT_IMPLEMENTED.tsv)."""
+    where = "resample"
+    if stratify is not None:
+        raise ValueError(f"mojolearn {where}: stratify= is refused by name (resample/NOT_IMPLEMENTED.tsv): "
+                         "scikit-learn's per-class allocation (_approximate_mode) breaks ties with its RNG stream")
+    if sample_weight is not None:
+        raise ValueError(f"mojolearn {where}: sample_weight= is refused by name (resample/NOT_IMPLEMENTED.tsv): "
+                         "a weighted draw is an inverse-CDF lookup over a float cumulative sum not yet pinned")
+    if not arrays:
+        return None
+    n = len(arrays[0])
+    for a in arrays[1:]:
+        if len(a) != n:
+            raise ValueError(f"mojolearn {where}: Found input variables with inconsistent numbers of samples: "
+                             f"{[len(x) for x in arrays]}")
+    idx = resample_indices(n, n_samples, replace, random_state, numeric_mode)
+    out = [_take(a, idx) for a in arrays]
+    return out[0] if len(out) == 1 else out
+
+
+__all__ = ["bootstrap", "permutation_test", "monte_carlo_integrate", "resample", "resample_indices",
            "BootstrapResult", "PermutationTestResult", "MonteCarloResult",
            "STATISTICS", "METHODS", "ALTERNATIVES", "INTEGRANDS"]

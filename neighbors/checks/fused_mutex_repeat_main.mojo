@@ -2,6 +2,13 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Does the fused L2 kNN cross-block merge lose a candidate? Many launches, one fixture.
 
+2026-09-27, DEVIATION 5219: THE MUTEX IS GONE from the fused kernel. The merge is
+now per-block candidate slots folded by `fused_l2_knn_merge_kernel` after the
+kernel boundary, and `sabotage = 1` drops the last column block's best candidate.
+This probe still runs unchanged against that merge (a repeated-launch null for
+it); `MOJOLEARN_RF_MUTEX_CLAIM_STOCK` no longer changes this kernel. The text
+below describes the mutex-era probe.
+
 The question: the fused kNN
 carries the same `claim_device_mutex` protocol as the random forest and has never been
 measured. `check_fused_griddimx_merge` in `neighbors/checks/knn_check.mojo` already

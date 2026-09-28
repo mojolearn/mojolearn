@@ -34,7 +34,7 @@ xtrees/checks/glue_check.mojo, one sabotage arm each):
   DEVIATION 5605  a zero row normalises to uniform 1 / k, never 0 / 0.
 """
 from std.sys.compile import is_defined
-from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 from checks.numerics import identical_mul64, identical_exp64, identical_log64, identical_pow64
 from ensemble.host_layout import (
     HOST_LAYOUT_BLOCK_ROWS, HOST_LAYOUT_SERIAL_CELLS, colmajor_from_rowmajor_f32,
@@ -197,7 +197,7 @@ def gather_f32(
         for b in range(n_blocks):
             _block(b)
         return
-    sync_parallelize(_block, n_blocks)
+    host_parallelize(_block, n_blocks)
 
 
 def gather_i32(

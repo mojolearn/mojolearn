@@ -89,7 +89,7 @@ def initialize_transform(
     indices: List[UInt32], weights: List[Float32], training: List[Float32],
     rows: Int, n_train: Int, k: Int, components: Int,
 ) raises -> List[Float32]:
-    if rows < 1 or n_train < 2 or k < 2 or k > n_train or (components != 2 and components != 3):
+    if rows < 1 or n_train < 2 or k < 2 or k > n_train or components < 1 or components > 32:
         raise Error("UMAP transform initialization dimensions are unsupported")
     if len(indices) != rows * k or len(weights) != rows * k or len(training) != n_train * components:
         raise Error("UMAP transform initialization shape mismatch")
@@ -219,8 +219,8 @@ def transform(
     params: UMAPParams,
 ) raises -> List[Float32]:
     params.validate(n_train)
-    if n_queries < 1 or n_features < 1 or (params.n_components != 2 and params.n_components != 3):
-        raise Error("UMAP transform supports nonempty dense queries and 2D/3D output")
+    if n_queries < 1 or n_features < 1 or (params.n_components < 1 or params.n_components > 32):
+        raise Error("UMAP transform supports nonempty dense queries and 1 to 32 output dimensions")
     if len(training_data) != n_train * n_features or len(queries) != n_queries * n_features or len(training_embedding) != n_train * params.n_components:
         raise Error("UMAP transform input shape mismatch")
     for value in training_data:
@@ -240,8 +240,13 @@ def transform(
     ctx.synchronize()
     copy_f32(training_data.unsafe_ptr(), hx.unsafe_ptr(), len(training_data))
     copy_f32(queries.unsafe_ptr(), hq.unsafe_ptr(), len(queries))
-    _ = knn_search(ctx, hx.unsafe_ptr(), n_train, hq.unsafe_ptr(), n_queries,
-                   n_features, k, hd.unsafe_ptr(), hi.unsafe_ptr())
+    if params.metric == -1:
+        _ = knn_search(ctx, hx.unsafe_ptr(), n_train, hq.unsafe_ptr(), n_queries,
+                       n_features, k, hd.unsafe_ptr(), hi.unsafe_ptr())
+    else:
+        _ = knn_search(ctx, hx.unsafe_ptr(), n_train, hq.unsafe_ptr(), n_queries,
+                       n_features, k, hd.unsafe_ptr(), hi.unsafe_ptr(),
+                       metric=params.metric, metric_arg=params.metric_arg)
     ctx.synchronize()
     var distances = List[Float32]()
     var indices = List[UInt32]()
@@ -263,7 +268,7 @@ def transform(
         # 9,999 moved no bit at all. The count no longer reads the request
         # size. The cost of that was measured, not asserted.
         epochs = 100
-    var curve = fit_umap_curve(params.min_dist, params.spread)
+    var ab = params.curve()
     return refine_transform(initial, training_embedding, indices, weights, n_queries,
-                            n_train, k, params.n_components, epochs, curve.a, curve.b, params.random_seed,
+                            n_train, k, params.n_components, epochs, ab[0], ab[1], params.random_seed,
                             params.learning_rate, params.repulsion_strength, params.negative_sample_rate)

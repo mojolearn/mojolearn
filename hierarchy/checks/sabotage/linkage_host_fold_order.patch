@@ -1,0 +1,14 @@
+diff --git a/hierarchy/host/linkage_host.mojo b/hierarchy/host/linkage_host.mojo
+index f4ce9a7c9..ea9811d0f 100644
+--- a/hierarchy/host/linkage_host.mojo
++++ b/hierarchy/host/linkage_host.mojo
+@@ -128,7 +128,8 @@ def host_prim_mst(x: List[Float32], m: Int, d: Int, is_sqrt: Bool) -> LinkageHos
+                 var width = PRIM_W if v + PRIM_W <= v1 else 1
+                 if width == PRIM_W:
+                     var acc = SIMD[DType.float32, PRIM_W](0)
+-                    for f in range(d):
++                    for ff in range(d):
++                        var f = d - 1 - ff
+                         var q = SIMD[DType.float32, PRIM_W](crp.unsafe_load(f))
+                         acc = ftz_v[PRIM_W](mul_add_v[PRIM_W](q, (xtp + f * m + v).load[width=PRIM_W](), acc))
+                     comptime for l in range(PRIM_W):
