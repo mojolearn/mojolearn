@@ -37,9 +37,10 @@
 # <its GPUs>, HIP devices 0..N-1). A job started in the background from `run`
 # (`setsid nohup ... &`) inherits the lock and keeps its slot until it exits.
 #
-# QUEUE. tools/gpu_queue_box.sh (the queue shared with tools/nvidia_central.sh) is installed on the box as /root/amd-queue/bin/amdq
-# and runs as the systemd service amd-queue.service (survives agent sessions and
-# reboots). `submit` enqueues; the service starts jobs in submission order as
+# QUEUE. tools/gpu_queue_box.sh (the same queue as the shared NVIDIA pods of
+# tools/nvidia_central.sh; its defaults are this box's) is installed on the box
+# as /root/amd-queue/bin/amdq and runs as the systemd service amd-queue.service
+# (survives agent sessions and reboots). `submit` enqueues; the service starts jobs in submission order as
 # their GPU slots free (the same flock slots as `run`), writes
 # /root/amd-queue/<id>/{status,log,exit}, and kills a job at its wall-clock cap.
 # While any job is queued, `run` does not take a free slot (it waits, or exits
