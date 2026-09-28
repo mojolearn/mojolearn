@@ -18,8 +18,44 @@
 # eq_cases.py in both trees under both modes (every `EQ` line must be
 # equal: XMAB-EQ SAME or DIFF) and, in the head tree, the Mojo word tests
 # (*_words.mojo, built IDENTICAL).
+#
+# lane metrics-apple3 additions, each off unless its variable is set:
+#   XMAB_BUILDS="base estimators ..."  build these bindings in the head tree
+#       first, in both modes (base = bindings/build.sh); the base tree gets
+#       copies, so both arms run the same estimators
+#   The lane's routes are OPT-IN (MOJOLEARN_MSEL3=1). This job exports
+#       MOJOLEARN_MSEL3=1 (XMAB_MSEL3 overrides), so every head arm takes
+#       them and the base tree, which does not know the variable, is the
+#       before; `headoff` arms run the head tree with the switch off (the
+#       default path, which must equal the base).
+#   XMAB_MSEL=1      model selection: tools/apple_speed_metrics/msel_eq.py in
+#       the base tree, the head tree with the switch off and the head tree
+#       with it on (XMAB-MEQ SAME or DIFF), then
+#       bench/x_msel_speed.py before / after / after / before per mode
+#       (XMAB_MSEL_PROF=N adds its cProfile top N in FAST)
+#   XMAB_XTRA=1      bench/x_metrics_speed.py --extra 2 (cases outside the
+#       board's 29) against the base and the head package, both modes
+#   XMAB_EXTRAS=1    the epilogue python-vs-native table
+#       (tools/py_misc/metrics_time.py), the whole-arena arm of the board
+#       (MOJOLEARN_ARENA_RANGES=0 against 1) and tools/py_misc_msel/check.py
+#   XMAB_SLOT=1      the laptop: builds through `tools/mac_slot.py run`, Metal
+#       runs through `tools/mac_slot.py metal`
+#   XMAB_SKIP_EQ=1, XMAB_SKIP_WORDS=1, XMAB_SKIP_BOARD=1  leave a stage out (a
+#       second run on a shared machine that only adds stages)
+#   XMAB_KEEP_GOING=1  a head x_metrics build failure prints its log and the
+#       head tree runs on the base tree's x_metrics binary (the Python falls
+#       back where an export is missing), so the Python arms still run
 set -u
 base=$1; reps=${2:-2}; prof=${3:-0}; only=${4:-}; tests=${5:-1}
+export MOJOLEARN_MSEL3="${XMAB_MSEL3:-1}"
+# XMAB_SLOT=1 (the laptop M4): every build and CPU step goes through
+# `tools/mac_slot.py run`, every Metal run through `tools/mac_slot.py metal`
+# (one Metal job at a time on the machine, one thread per job).
+B=""; G=""
+if [ "${XMAB_SLOT:-0}" = 1 ]; then
+    B="python3 $(pwd)/tools/mac_slot.py run"; G="python3 $(pwd)/tools/mac_slot.py metal"
+    export MOJOLEARN_SKIP_BUILD_GATE=1     # a build's gate launches a kernel: not under a CPU slot
+fi
 wt=$(pwd)
 echo "XMAB head $(git rev-parse --short HEAD) base $(printf %s "$base" | cut -c1-12) host $(hostname) $(sysctl -n machdep.cpu.brand_string 2>/dev/null)"
 git cat-file -e "$base^{commit}" 2>/dev/null || git fetch -q origin "$base" || exit 3
@@ -29,28 +65,60 @@ git worktree add -q --detach "$bdir" "$base" || exit 3
 cleanup() { cd "$wt" && git worktree remove --force "$bdir" >/dev/null 2>&1; rm -rf "$tmp"; }
 trap cleanup EXIT INT TERM
 ln -s "$wt/.pixi" "$bdir/.pixi"
+if [ ! -f python/mojolearn/.dylibs/libMojolearnMath.dylib ] && [ "$(uname)" = Darwin ]; then
+    # packaging/portable_math (what mojolearn._portable_math dlopens); a fresh worktree has none
+    PYTHONPATH=packaging/portable_math $B pixi run -e default python -c \
+        "import pathlib, stage; stage.build(pathlib.Path('python/mojolearn/.dylibs/libMojolearnMath.dylib'))" \
+        >"$tmp/math.log" 2>&1 || { echo "XMAB MATH BUILD_FAIL"; tail -10 "$tmp/math.log"; }
+fi
+for m in identical fast; do
+    for b in ${XMAB_BUILDS:-}; do
+        f=bindings/build_$b.sh; [ "$b" = base ] && f=bindings/build.sh
+        t0=$(date +%s)
+        if MOJOLEARN_NUMERIC_MODE=$m $B pixi run -e default sh $f >"$tmp/build_${b}_$m.log" 2>&1; then
+            echo "XMAB built head $b $m $(( $(date +%s) - t0 ))s"
+        else
+            echo "XMAB BUILD_FAIL head $b $m"; tail -25 "$tmp/build_${b}_$m.log"
+        fi
+    done
+done
 (cd python/mojolearn && find . \( -name '*.so' -o -name '*.dylib' \) ! -name '_mojolearn_x_metrics.so') | while read -r f; do
     mkdir -p "$bdir/python/mojolearn/$(dirname "$f")"
     cp "python/mojolearn/$f" "$bdir/python/mojolearn/$f"
 done
-for t in head base; do
+headfail=0
+for t in base head; do
     d=$wt; [ "$t" = base ] && d=$bdir
     for m in identical fast; do
-        if ! (cd "$d" && MOJOLEARN_NUMERIC_MODE=$m pixi run -e default sh bindings/build_x_metrics.sh >"$tmp/build.log" 2>&1); then
-            echo "XMAB BUILD_FAIL $t $m"; tail -20 "$tmp/build.log"; exit 4
+        if ! (cd "$d" && MOJOLEARN_NUMERIC_MODE=$m $B pixi run -e default sh bindings/build_x_metrics.sh >"$tmp/build.log" 2>&1); then
+            echo "XMAB BUILD_FAIL $t $m"; tail -60 "$tmp/build.log"
+            [ "$t" = head ] && [ "${XMAB_KEEP_GOING:-0}" = 1 ] || exit 4
+            headfail=1
+            sub=""; [ "$m" = identical ] && sub=identical/
+            cp "$bdir/python/mojolearn/${sub}_mojolearn_x_metrics.so" "$wt/python/mojolearn/${sub}_mojolearn_x_metrics.so"
+            echo "XMAB head $m runs on the BASE x_metrics binary"
+            continue
         fi
         echo "XMAB built $t $m"
     done
 done
 if [ "$tests" = 1 ]; then
     for m in identical fast; do
+        [ "${XMAB_SKIP_EQ:-0}" = 1 ] && break
         for t in base head; do
             d=$wt; [ "$t" = base ] && d=$bdir
             if [ -f "$wt/tools/apple_speed_metrics/eq_cases.py" ]; then
-                (cd "$d" && MOJOLEARN_NUMERIC_MODE=$m pixi run -e default python -u "$wt/tools/apple_speed_metrics/eq_cases.py" \
+                (cd "$d" && MOJOLEARN_NUMERIC_MODE=$m $G pixi run -e default python -u "$wt/tools/apple_speed_metrics/eq_cases.py" \
                     --tree "$d" 2>/dev/null) | grep '^EQ ' >"$tmp/eq_${t}_$m.txt"
             fi
         done
+        (cd "$wt" && MOJOLEARN_MSEL3=0 MOJOLEARN_NUMERIC_MODE=$m $G pixi run -e default python -u "$wt/tools/apple_speed_metrics/eq_cases.py" \
+            --tree "$wt" 2>/dev/null) | grep '^EQ ' >"$tmp/eq_headoff_$m.txt"
+        if cmp -s "$tmp/eq_base_$m.txt" "$tmp/eq_headoff_$m.txt"; then
+            echo "XMAB-EQ $m headoff SAME $(wc -l <"$tmp/eq_headoff_$m.txt") cases"
+        else
+            echo "XMAB-EQ $m headoff DIFF"; diff "$tmp/eq_base_$m.txt" "$tmp/eq_headoff_$m.txt" | head -20
+        fi
         nb=$(wc -l <"$tmp/eq_base_$m.txt"); nh=$(wc -l <"$tmp/eq_head_$m.txt")
         if cmp -s "$tmp/eq_base_$m.txt" "$tmp/eq_head_$m.txt" && [ "$nb" -gt 0 ]; then
             echo "XMAB-EQ $m SAME $nh cases"
@@ -59,11 +127,33 @@ if [ "$tests" = 1 ]; then
             diff "$tmp/eq_base_$m.txt" "$tmp/eq_head_$m.txt" | head -40
         fi
     done
+    if [ "${XMAB_MSEL:-0}" = 1 ]; then
+        for m in identical fast; do
+            (cd "$bdir" && MOJOLEARN_NUMERIC_MODE=$m $G pixi run -e default python -u "$wt/tools/apple_speed_metrics/msel_eq.py" \
+                --tree "$bdir" 2>/dev/null) | grep '^MEQ ' >"$tmp/meq_base_$m.txt"
+            (cd "$wt" && MOJOLEARN_MSEL3=0 MOJOLEARN_NUMERIC_MODE=$m $G pixi run -e default python -u \
+                "$wt/tools/apple_speed_metrics/msel_eq.py" --tree "$wt" 2>/dev/null) | grep '^MEQ ' >"$tmp/meq_before_$m.txt"
+            (cd "$wt" && MOJOLEARN_MSEL3=1 MOJOLEARN_NUMERIC_MODE=$m $G pixi run -e default python -u \
+                "$wt/tools/apple_speed_metrics/msel_eq.py" --tree "$wt" 2>/dev/null) | grep '^MEQ ' >"$tmp/meq_head_$m.txt"
+            nh=$(wc -l <"$tmp/meq_head_$m.txt")
+            nr=$(grep -c ' RAISED ' "$tmp/meq_head_$m.txt")
+            if cmp -s "$tmp/meq_base_$m.txt" "$tmp/meq_head_$m.txt" && cmp -s "$tmp/meq_before_$m.txt" "$tmp/meq_head_$m.txt" \
+                    && [ "$nh" -gt 0 ]; then
+                echo "XMAB-MEQ $m SAME $nh cases ($nr raised in every arm)"
+            else
+                echo "XMAB-MEQ $m DIFF base $(wc -l <"$tmp/meq_base_$m.txt") before $(wc -l <"$tmp/meq_before_$m.txt") head $nh cases"
+                diff "$tmp/meq_base_$m.txt" "$tmp/meq_head_$m.txt" | head -40 | sed 's/^/MEQ-DIFF base-head /'
+                diff "$tmp/meq_before_$m.txt" "$tmp/meq_head_$m.txt" | head -40 | sed 's/^/MEQ-DIFF before-head /'
+            fi
+            grep ' RAISED ' "$tmp/meq_head_$m.txt" | head -20 | sed "s/^/MEQ-RAISED $m /"
+        done
+    fi
     for f in "$wt"/tools/apple_speed_metrics/*_words.mojo; do
         [ -f "$f" ] || continue
+        [ "${XMAB_SKIP_WORDS:-0}" = 1 ] && break
         b=$tmp/$(basename "$f" .mojo)
-        if pixi run mojo build -j 2 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . "$f" -o "$b" >"$tmp/wb.log" 2>&1; then
-            "$b" 2>&1 | tail -60 | sed "s/^/WORDS /"
+        if $B pixi run mojo build -j 2 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . "$f" -o "$b" >"$tmp/wb.log" 2>&1; then
+            $G "$b" 2>&1 | grep -v "^mac_slot:" | tail -60 | sed "s/^/WORDS /"
         else
             echo "WORDS BUILD_FAIL $f"; tail -30 "$tmp/wb.log"
         fi
@@ -73,16 +163,63 @@ oflag=""; [ -n "$only" ] && oflag="--only $only"
 arm() {  # tree mode pass
     d=$wt; [ "$1" = base ] && d=$bdir
     # shellcheck disable=SC2086
-    (cd "$d" && MOJOLEARN_NUMERIC_MODE=$2 pixi run -e default python -u bench/x_metrics_speed.py --reps "$reps" $oflag 2>&1) \
+    (cd "$d" && MOJOLEARN_NUMERIC_MODE=$2 $G pixi run -e default python -u bench/x_metrics_speed.py --reps "$reps" $oflag 2>&1) \
         | sed "s/^/ARM $1-$2-$3 /"
 }
+if [ "${XMAB_SKIP_BOARD:-0}" != 1 ]; then
 for m in identical fast; do arm base $m 1; arm head $m 1; done
 for m in fast identical; do arm head $m 2; arm base $m 2; done
+fi
+for m in identical fast; do
+    [ "${XMAB_SKIP_BOARD:-0}" = 1 ] && break
+    # shellcheck disable=SC2086
+    (cd "$wt" && MOJOLEARN_MSEL3=0 MOJOLEARN_NUMERIC_MODE=$m $G pixi run -e default python -u bench/x_metrics_speed.py \
+        --reps "$reps" $oflag 2>&1) | sed "s/^/ARM headoff-$m-1 /"
+done
+if [ "${XMAB_XTRA:-0}" = 1 ]; then
+    # the extra cases (outside the board's total), this tree's bench file
+    # against each tree's package
+    for m in fast identical; do
+        for t in base head head base; do
+            d=$wt; [ "$t" = base ] && d=$bdir
+            (cd "$d" && MOJOLEARN_NUMERIC_MODE=$m $G pixi run -e default python -u "$wt/bench/x_metrics_speed.py" \
+                --tree "$d" --reps "$reps" --extra 2 2>&1) | grep -v 'XMSPEED-INPUT' | sed "s/^/XARM $t-$m /"
+        done
+    done
+    (cd "$wt" && MOJOLEARN_NUMERIC_MODE=fast $G pixi run -e default python -u "$wt/bench/x_metrics_speed.py" \
+        --tree "$wt" --reps 1 --extra 2 --cprofile 14 2>&1) | grep 'XMPROFILE' | sed "s/^/XPROF head-fast /"
+fi
+marm() {  # before|after mode pass profile
+    b=1; [ "$1" = before ] && b=0
+    (cd "$wt" && MOJOLEARN_MSEL3=$b MOJOLEARN_NUMERIC_MODE=$2 $G pixi run -e default python -u bench/x_msel_speed.py \
+        --reps 1 --fits "${5:-0}" --cprofile "$4" 2>&1) | sed "s/^/MSEL $1-$2-$3 /"
+}
+if [ "${XMAB_MSEL:-0}" = 1 ]; then
+    marm before fast 1 0 1; marm after fast 1 0
+    marm after identical 1 0; marm before identical 1 0
+    marm after fast 2 "${XMAB_MSEL_PROF:-0}"; marm before fast 2 0
+fi
+if [ "${XMAB_EXTRAS:-0}" = 1 ]; then
+    for m in fast identical; do
+        (cd "$wt" && MOJOLEARN_NUMERIC_MODE=$m PYTHONPATH=python $G pixi run -e default python -u tools/py_misc/metrics_time.py gpu 2>&1) \
+            | sed "s/^/EPI head-$m /"
+        for r in 0 1; do
+            # shellcheck disable=SC2086
+            (cd "$wt" && MOJOLEARN_ARENA_RANGES=$r MOJOLEARN_NUMERIC_MODE=$m $G pixi run -e default python -u \
+                bench/x_metrics_speed.py --reps "$reps" $oflag 2>&1) | sed "s/^/ARM ranges$r-$m-1 /"
+        done
+    done
+    (cd "$wt" && MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH=python $G pixi run -e default python -u tools/py_misc_msel/check.py equal 2>&1) \
+        | tail -5 | sed "s/^/MSELCHK equal /"
+    (cd "$wt" && MOJOLEARN_NUMERIC_MODE=fast PYTHONPATH=python $G pixi run -e default python -u tools/py_misc_msel/check.py time 2>&1) \
+        | tail -24 | sed "s/^/MSELCHK time /"
+fi
+echo "XMAB headfail $headfail"
 if [ "$prof" = 1 ]; then
     for t in base head; do
         d=$wt; [ "$t" = base ] && d=$bdir
         # shellcheck disable=SC2086
-        (cd "$d" && MOJOLEARN_XMETRICS_PROFILE=1 MOJOLEARN_NUMERIC_MODE=identical pixi run -e default python -u \
+        (cd "$d" && MOJOLEARN_XMETRICS_PROFILE=1 MOJOLEARN_NUMERIC_MODE=identical $G pixi run -e default python -u \
             bench/x_metrics_speed.py --reps 1 --cprofile 25 $oflag 2>&1) | sed "s/^/PROF $t /"
     done
 fi

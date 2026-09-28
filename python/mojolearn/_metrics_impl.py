@@ -1149,6 +1149,37 @@ def _classification_encoded(values, name, *, allow_empty=False):
     return _classification_labels(values, name, allow_empty=allow_empty)
 
 
+def _encode_small_native(arr):
+    """(classes, int32 codes) of an integer label Array through the
+    x_metrics binding's `encode_small_i64` (lane metrics-apple3): the same
+    ascending distinct labels and the same ranks as the core encoder, for
+    labels that span fewer than 65536 values, by host tasks (a seen-byte
+    per value, one table load per row) instead of a binary search per row
+    on one thread. None hands the labels to the core encoder: a wider span,
+    more classes than the encoder holds, or a binary without the entry.
+    OPT-IN and UNPROVEN: taken only under MOJOLEARN_MSEL3=1."""
+    import os
+    if os.environ.get("MOJOLEARN_MSEL3") != "1":
+        return None
+    from ._buffer import _output_store
+    from ._labels import _NATIVE_ENCODE_MAX_CLASSES
+    try:
+        from ._expansion_metrics import _binding
+        fn = getattr(_binding(None), "x_metrics_encode_small_i64", None)
+    except Exception:
+        return None
+    if fn is None:
+        return None
+    wide = arr if arr.dtype == "<i8" else arr.astype("<i8")  # exact for every integer dtype taken here
+    codes_store = _output_store("i", wide.size)
+    classes_store = _output_store("q", _NATIVE_ENCODE_MAX_CLASSES)
+    k = int(fn(wide._addr, wide.size, classes_store.buffer_info()[0], _NATIVE_ENCODE_MAX_CLASSES,
+               codes_store.buffer_info()[0]))
+    if k < 0:
+        return None
+    return [int(classes_store[i]) for i in range(k)], Array._owned(codes_store, (len(codes_store),), "<i4", "C")
+
+
 def _native_classification_labels(values):
     from ._buffer import _has_buffer, hotpath_enabled
     from ._labels import _encode_labels_native
@@ -1169,10 +1200,12 @@ def _native_classification_labels(values):
         arr = arr.astype("<i4")  # exact; the encoder has no 8- or 16-bit arm
     if arr.dtype not in ("<i4", "<i8", "<u4", "<u1"):
         return None  # floats are refused by `_classification_labels`
-    try:
-        encoded = _encode_labels_native(arr)
-    except ImportError:
-        return None
+    encoded = _encode_small_native(arr)
+    if encoded is None:
+        try:
+            encoded = _encode_labels_native(arr)
+        except ImportError:
+            return None
     if encoded is None:
         return None
     classes, codes = encoded

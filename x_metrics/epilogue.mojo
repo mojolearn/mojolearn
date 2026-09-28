@@ -25,9 +25,21 @@ A case the Python path handles by a warning or an exception (an empty
 class, a zero denominator) is never sent here: the Python checks it first,
 and any doubt raises so the caller falls back to its Python path.
 """
-from std.memory import bitcast
+from std.memory import bitcast, memcpy
 from checks.numerics import pinned_mul_f64
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import host_predict_task_count, host_predict_chunk
 from x_metrics.common import FP, IP
+
+#: lane metrics-apple3: the least rows x columns (row_sum_range) or rows
+#: (expected_mi) before a host epilogue wakes the pool.
+comptime EPI_TASK_WORK = 65536
+#: The most partials one task hands back (nonoverlapping binary64 values:
+#: at most about 40 can exist); a task that would need more reports it and
+#: the caller takes the sequential walk.
+comptime EPI_PARTIALS = 64
+#: `encode_small_i64` answers labels that span fewer than this many values
+comptime ENC_SPAN = 65536
 
 
 @always_inline
@@ -90,6 +102,33 @@ def fsum(vals: List[Float64]) -> Float64:
     if hi == 0.0:
         return 0.0
     return hi
+
+
+def fsum_partials(vals: List[Float64], mut p: List[Float64]):
+    """`fsum`'s first loop (CPython's math.fsum partials), continued over
+    the partials already in `p`: afterwards the exact sum of `p` is the
+    exact sum of what it held plus every value of `vals` (lane
+    metrics-apple3)."""
+    for k in range(len(vals)):
+        var x = vals[k]
+        var i = 0
+        for j in range(len(p)):
+            var y = p[j]
+            if abs(x) < abs(y):
+                var t = x
+                x = y
+                y = t
+            var hi = x + y
+            var yr = hi - x
+            var lo = y - yr
+            if lo != 0.0:
+                p[i] = lo
+                i += 1
+            x = hi
+        while len(p) > i:
+            _ = p.pop()
+        if x != 0.0:
+            p.append(x)
 
 
 def _trapezoid(x: List[Float64], y: List[Float64], L: Int) -> Float64:
@@ -308,6 +347,55 @@ def portable_log_c(xv: Float64) -> Float64:
     return _fm(Float64(e), 0.693359375, y)
 
 
+def _emi_cell(a: Int, b: Int, n: Int, mut terms: List[Float64]):
+    """One (a, b) cell of `expected_mi`: its terms appended to `terms`, in
+    ascending nij (the statements of the walk below, unchanged)."""
+    var n_f64 = Float64(n)
+    var la = portable_log_c(Float64(a))
+    var lb = portable_log_c(Float64(b))
+    var lo = max(0, a + b - n)
+    var hi = min(a, b)
+    var mode = min(max(((a + 1) * (b + 1)) // (n + 2), lo), hi)
+    var up = List[Float64]()
+    up.append(1.0)
+    var x = mode
+    var v: Float64 = 1.0
+    while x < hi:
+        v = _mul(v, Float64((a - x) * (b - x))) / Float64((x + 1) * (n - a - b + x + 1))
+        if v == 0.0:
+            break
+        up.append(v)
+        x += 1
+    var down = List[Float64]()
+    x = mode
+    v = 1.0
+    while x > lo:
+        v = _mul(v, Float64(x * (n - a - b + x))) / Float64((a - x + 1) * (b - x + 1))
+        if v == 0.0:
+            break
+        down.append(v)
+        x -= 1
+    var zs = List[Float64](capacity=len(up) + len(down))
+    for k in range(len(up)):
+        zs.append(up[k])
+    for k in range(len(down)):
+        zs.append(down[k])
+    var z = fsum(zs)
+    var first = mode - len(down)
+    var nd = len(down)
+    for k in range(nd + len(up)):
+        var nij = first + k
+        var u = down[nd - 1 - k] if k < nd else up[k - nd]
+        if nij < 1:
+            continue
+        var pr = u / z
+        if pr == 0.0:
+            continue
+        var q = Float64(nij) / n_f64
+        var d = (portable_log_c(Float64(n * nij)) - la) - lb
+        terms.append(_mul(_mul(q, d), pr))
+
+
 def expected_mi(a_addr: Int, na: Int, b_addr: Int, nb: Int, n: Int) raises -> Float64:
     """python/mojolearn/_expansion_metrics.py `_expected_mi` for na, nb >= 2
     (Int64 class counts at the two addresses): the same integer bounds and
@@ -372,6 +460,115 @@ def expected_mi(a_addr: Int, na: Int, b_addr: Int, nb: Int, n: Int) raises -> Fl
     return fsum(terms)
 
 
+def expected_mi_tasks(a_addr: Int, na: Int, b_addr: Int, nb: Int, n: Int) raises -> Float64:
+    """`expected_mi` with its cells as host tasks (lane metrics-apple3;
+    OPT-IN, `x_metrics_expected_mi_tasks`). `_expected_mi` for na, nb >= 2
+    (Int64 class counts at the two addresses): the same integer bounds and
+    mode, the same binary64 ratio walks from the mode (each stops at the
+    first exact 0), the same pmf normalization by fsum, the same terms
+    (nij / n) * (log(n nij) - log a - log b) * pr, fsum-ed. Python's
+    int -> float conversions and int / int division are correctly rounded,
+    as Float64(Int) and Float64 division are for these magnitudes.
+
+    THREADS (lane metrics-apple3). A cell's terms depend on its own (a, b)
+    alone, and `fsum` returns the correctly rounded EXACT sum of its
+    values, which does not depend on their order or grouping. So the cells
+    run as host tasks (`host_parallelize`: the caller's floating-point
+    environment, so a walk passes through the same subnormals), each task
+    reduces its cells' terms to math.fsum's partials (an exact expansion
+    of their sum), and the partials of every task are fsum-ed: the
+    correctly rounded sum of the same exact number. Below EPI_TASK_WORK
+    rows, or with one task, the cells run in order on the caller."""
+    var A = MutPointer[Int64, MutAnyOrigin](unsafe_from_address=a_addr)
+    var B = MutPointer[Int64, MutAnyOrigin](unsafe_from_address=b_addr)
+    if n <= 0 or n >= (1 << 31):
+        raise Error("x_metrics epilogue: expected MI size goes the Python way")
+    var cells = na * nb
+    var tasks = 1
+    if n >= EPI_TASK_WORK and cells > 1:
+        tasks = min(4 * host_predict_task_count(cells), cells)
+        if host_predict_task_count(cells) <= 1:
+            tasks = 1
+    if tasks <= 1:
+        var terms = List[Float64]()
+        for i in range(na):
+            for j in range(nb):
+                _emi_cell(Int(A[i]), Int(B[j]), n, terms)
+        return fsum(terms)
+    var chunk = host_predict_chunk(cells, tasks)
+    var parts = List[Float64](length=tasks * EPI_PARTIALS, fill=0.0)
+    var counts = List[Int](length=tasks, fill=0)
+    var pp = MutPointer[Float64, MutAnyOrigin](unsafe_from_address=Int(parts.unsafe_ptr()))
+    var cp = MutPointer[Int, MutAnyOrigin](unsafe_from_address=Int(counts.unsafe_ptr()))
+
+    def _cells(t: Int) {imm A, imm B, imm pp, imm cp, imm n, imm nb, imm cells, imm chunk}:
+        var c0 = t * chunk
+        var c1 = min(c0 + chunk, cells)
+        var mine = List[Float64]()
+        for c in range(c0, c1):
+            _emi_cell(Int(A[c // nb]), Int(B[c % nb]), n, mine)
+        var part = List[Float64]()
+        fsum_partials(mine, part)
+        if len(part) > EPI_PARTIALS:
+            cp[t] = -1
+            return
+        for q in range(len(part)):
+            pp[t * EPI_PARTIALS + q] = part[q]
+        cp[t] = len(part)
+
+    host_parallelize(_cells, tasks)
+    var all_parts = List[Float64]()
+    var ok = True
+    for t in range(tasks):
+        var got = counts[t]
+        if got < 0:
+            ok = False
+            break
+        for q in range(got):
+            all_parts.append(parts[t * EPI_PARTIALS + q])
+    if not ok:
+        var again = List[Float64]()
+        for i in range(na):
+            for j in range(nb):
+                _emi_cell(Int(A[i]), Int(B[j]), n, again)
+        return fsum(again)
+    return fsum(all_parts)
+
+
+@always_inline
+def _row_fsum(S: FP, base: Int, k: Int, mut row: List[Float64]) -> Float64:
+    """`fsum` of the k Float32 words at S[base], widened (lane
+    metrics-apple3). The running binary64 sum is carried with Fast2Sum's
+    error term (the larger magnitude first, as `fsum` orders each pair):
+    while every error is exactly 0 the running sum IS the exact sum, and
+    the exact sum, being representable, is the correctly rounded sum fsum
+    returns (+0.0 for a zero sum). The first nonzero error sends the row
+    to `fsum` itself."""
+    var s: Float64 = 0.0
+    var exact = True
+    for c in range(k):
+        var x = s
+        var y = Float64(S.unsafe_load(base + c))
+        if abs(x) < abs(y):
+            var t = x
+            x = y
+            y = t
+        var hi = x + y
+        var yr = hi - x
+        var lo = y - yr
+        if lo != 0.0:
+            exact = False
+            break
+        s = hi
+    if exact:
+        if s == 0.0:
+            return 0.0
+        return s
+    for c in range(k):
+        row[c] = Float64(S.unsafe_load(base + c))
+    return fsum(row)
+
+
 def row_sum_range(s_addr: Int, n: Int, k: Int, out_addr: Int):
     """`_rows_sum_to_one`'s two numbers: the largest and the smallest row
     `math.fsum` of the n x k finite Float32 scores (row major) at s_addr,
@@ -392,6 +589,88 @@ def row_sum_range(s_addr: Int, n: Int, k: Int, out_addr: Int):
             lo = v
     out[0] = hi
     out[1] = lo
+
+
+def row_sum_range_tasks(s_addr: Int, n: Int, k: Int, out_addr: Int):
+    """`row_sum_range` by `_row_fsum` and host tasks (lane metrics-apple3;
+    OPT-IN, `x_metrics_row_sum_range_tasks`): the largest and the smallest row
+    `math.fsum` of the n x k finite Float32 scores (row major) at s_addr,
+    at out_addr[0] and [1]. Each row's sum is `fsum` above (a zero sum is
+    +0.0 where math.fsum may give -0.0; the caller takes |s - 1|).
+
+    lane metrics-apple3: each row's sum by `_row_fsum` (the same value),
+    and the rows as contiguous host tasks (a largest and a smallest value
+    do not depend on the order the rows are visited in)."""
+    var S = FP(unsafe_from_address=s_addr)
+    var out = MutPointer[Float64, MutAnyOrigin](unsafe_from_address=out_addr)
+    if n <= 0:
+        out[0] = 0.0
+        out[1] = 0.0
+        return
+    var tasks = 1
+    if n * k >= 2 * EPI_TASK_WORK:
+        tasks = max(min(host_predict_task_count(n), (n * k) // EPI_TASK_WORK), 1)
+    var chunk = host_predict_chunk(n, tasks)
+    var his = List[Float64](length=tasks, fill=0.0)
+    var los = List[Float64](length=tasks, fill=0.0)
+    var seen = List[Int](length=tasks, fill=0)
+    var hp = MutPointer[Float64, MutAnyOrigin](unsafe_from_address=Int(his.unsafe_ptr()))
+    var lp = MutPointer[Float64, MutAnyOrigin](unsafe_from_address=Int(los.unsafe_ptr()))
+    var sp = MutPointer[Int, MutAnyOrigin](unsafe_from_address=Int(seen.unsafe_ptr()))
+
+    def _rows(t: Int) {imm S, imm hp, imm lp, imm sp, imm n, imm k, imm chunk}:
+        var r0 = t * chunk
+        var r1 = min(r0 + chunk, n)
+        if r1 <= r0:
+            return
+        var row = List[Float64](length=k, fill=0.0)
+        var top: Float64 = 0.0
+        var low: Float64 = 0.0
+        for r in range(r0, r1):
+            var v = _row_fsum(S, r * k, k, row)
+            if r == r0 or v > top:
+                top = v
+            if r == r0 or v < low:
+                low = v
+        hp[t] = top
+        lp[t] = low
+        sp[t] = 1
+
+    if tasks == 1:
+        _rows(0)
+    else:
+        host_parallelize(_rows, tasks)
+    var best_hi: Float64 = 0.0
+    var best_lo: Float64 = 0.0
+    var first = True
+    for t in range(tasks):
+        if seen[t] == 0:
+            continue
+        if first or his[t] > best_hi:
+            best_hi = his[t]
+        if first or los[t] < best_lo:
+            best_lo = los[t]
+        first = False
+    out[0] = best_hi
+    out[1] = best_lo
+
+
+def scatter_rows(src_addr: Int, dst_addr: Int, idx_addr: Int, n: Int, n_dst: Int, row_bytes: Int) raises:
+    """dst row idx[j] = src row j for j < n, rows of `row_bytes` bytes, idx
+    Int64 (lane metrics-apple3: cross_val_predict puts each fold's
+    predictions back in row order). An index outside [0, n_dst) raises
+    before any write. A byte copy: no value is computed."""
+    if n < 0 or n_dst < 0 or row_bytes < 1:
+        raise Error("x_metrics scatter_rows: invalid sizes")
+    var I = MutPointer[Int64, MutAnyOrigin](unsafe_from_address=idx_addr)
+    for j in range(n):
+        var r = Int(I[j])
+        if r < 0 or r >= n_dst:
+            raise Error("x_metrics scatter_rows: index out of range")
+    var sp = MutPointer[UInt8, MutAnyOrigin](unsafe_from_address=src_addr)
+    var dp = MutPointer[UInt8, MutAnyOrigin](unsafe_from_address=dst_addr)
+    for j in range(n):
+        memcpy(dest=dp + Int(I[j]) * row_bytes, src=sp + j * row_bytes, count=row_bytes)
 
 
 # ---------------------------------------------------------------------------
@@ -754,3 +1033,173 @@ def db_score(a: Int, sums: Int, counts_addr: Int, k: Int, d: Int, per_addr: Int)
                 best = v
         scores.append(best)
     return fsum_strict(scores) / Float64(k)
+
+
+# ---------------------------------------------------------------------------
+# lane metrics-apple3 (2026-09-28): integer label plumbing. No float is read
+# or written: integer compares and byte stores only.
+# ---------------------------------------------------------------------------
+
+def encode_small_i64(src_addr: Int, n: Int, classes_addr: Int, max_classes: Int, codes_addr: Int) raises -> Int:
+    """The ORDER RULE's encoder (`bindings/hotpath_helpers.mojo`
+    `_encode_labels`) for n Int64 labels that span fewer than ENC_SPAN
+    values: the distinct labels ascending at classes_addr (Int64), each
+    row's index into them at codes_addr (Int32). Returns the class count;
+    -1 when more than `max_classes` distinct labels were seen (nothing the
+    caller may read was written); -3 when the labels span ENC_SPAN values or
+    more (the caller takes the core encoder). The classes of a set of
+    integers and each label's rank among them do not depend on the order
+    the rows are visited in, so the rows run as host tasks: the span, a
+    seen-byte per value per task, then one table load per row."""
+    if n < 1 or max_classes < 1:
+        raise Error("x_metrics encode_small: n and max_classes must be positive")
+    var src = MutPointer[Int64, MutAnyOrigin](unsafe_from_address=src_addr)
+    var cls = MutPointer[Int64, MutAnyOrigin](unsafe_from_address=classes_addr)
+    var codes = MutPointer[Int32, MutAnyOrigin](unsafe_from_address=codes_addr)
+    var tasks = 1
+    if n >= 2 * EPI_TASK_WORK:
+        tasks = max(min(host_predict_task_count(n), n // EPI_TASK_WORK), 1)
+    var chunk = host_predict_chunk(n, tasks)
+    var mins = List[Int](length=tasks, fill=0)
+    var maxs = List[Int](length=tasks, fill=0)
+    var used = List[Int](length=tasks, fill=0)
+    var minp = MutPointer[Int, MutAnyOrigin](unsafe_from_address=Int(mins.unsafe_ptr()))
+    var maxp = MutPointer[Int, MutAnyOrigin](unsafe_from_address=Int(maxs.unsafe_ptr()))
+    var usedp = MutPointer[Int, MutAnyOrigin](unsafe_from_address=Int(used.unsafe_ptr()))
+
+    def _span(t: Int) {imm src, imm minp, imm maxp, imm usedp, imm n, imm chunk}:
+        var r0 = t * chunk
+        var r1 = min(r0 + chunk, n)
+        if r1 <= r0:
+            return
+        var least = Int(src[r0])
+        var most = least
+        for r in range(r0 + 1, r1):
+            var v = Int(src[r])
+            if v < least:
+                least = v
+            if v > most:
+                most = v
+        minp[t] = least
+        maxp[t] = most
+        usedp[t] = 1
+
+    if tasks == 1:
+        _span(0)
+    else:
+        host_parallelize(_span, tasks)
+    var lo = 0
+    var hi = 0
+    var first = True
+    for t in range(tasks):
+        if used[t] == 0:
+            continue
+        if first or mins[t] < lo:
+            lo = mins[t]
+        if first or maxs[t] > hi:
+            hi = maxs[t]
+        first = False
+    var bound = 1 << 40
+    if first or lo <= -bound or hi >= bound or hi - lo >= ENC_SPAN:
+        return -3
+    var span = hi - lo + 1
+    var seen = List[UInt8](length=tasks * span, fill=UInt8(0))
+    var seenp = MutPointer[UInt8, MutAnyOrigin](unsafe_from_address=Int(seen.unsafe_ptr()))
+
+    def _mark(t: Int) {imm src, imm seenp, imm n, imm chunk, imm span, imm lo}:
+        var r0 = t * chunk
+        var r1 = min(r0 + chunk, n)
+        for r in range(r0, r1):
+            seenp[t * span + (Int(src[r]) - lo)] = UInt8(1)
+
+    if tasks == 1:
+        _mark(0)
+    else:
+        host_parallelize(_mark, tasks)
+    var table = List[Int32](length=span, fill=Int32(-1))
+    var k = 0
+    for v in range(span):
+        var found = False
+        for t in range(tasks):
+            if seen[t * span + v] != UInt8(0):
+                found = True
+                break
+        if found:
+            if k == max_classes:
+                return -1
+            cls[k] = Int64(lo + v)
+            table[v] = Int32(k)
+            k += 1
+    var tablep = MutPointer[Int32, MutAnyOrigin](unsafe_from_address=Int(table.unsafe_ptr()))
+
+    def _code(t: Int) {imm src, imm codes, imm tablep, imm n, imm chunk, imm lo}:
+        var r0 = t * chunk
+        var r1 = min(r0 + chunk, n)
+        for r in range(r0, r1):
+            codes[r] = tablep[Int(src[r]) - lo]
+
+    if tasks == 1:
+        _code(0)
+    else:
+        host_parallelize(_code, tasks)
+    _ = len(table)
+    _ = len(seen)
+    return k
+
+
+def first_rows_i32(codes_addr: Int, n: Int, k: Int, out_addr: Int) raises:
+    """out[c] (Int64) = the first row whose Int32 code is c, -1 when no row
+    has it; a code outside [0, k) raises. StratifiedKFold's first-seen class
+    order read from sorted codes."""
+    if n < 0 or k < 1:
+        raise Error("x_metrics first_rows: invalid sizes")
+    var C = MutPointer[Int32, MutAnyOrigin](unsafe_from_address=codes_addr)
+    var out = MutPointer[Int64, MutAnyOrigin](unsafe_from_address=out_addr)
+    for c in range(k):
+        out[c] = Int64(-1)
+    var left = k
+    for r in range(n):
+        var c = Int(C[r])
+        if c < 0 or c >= k:
+            raise Error("x_metrics first_rows: a class code outside [0, k)")
+        if Int(out[c]) < 0:
+            out[c] = Int64(r)
+            left -= 1
+            if left == 0:
+                break
+    # the rows after the last first row still have to be valid codes
+    for r in range(n):
+        var c = Int(C[r])
+        if c < 0 or c >= k:
+            raise Error("x_metrics first_rows: a class code outside [0, k)")
+
+
+def ovo_pair(codes_addr: Int, s_addr: Int, n: Int, k: Int, a: Int, b: Int,
+             out_sa: Int, out_sb: Int, out_fa: Int, out_fb: Int, m: Int) raises -> Int:
+    """roc_auc_score one-vs-one, the pair (a, b): the rows whose Int32 code
+    is a or b, in ascending row order; for each, its score in column a and
+    in column b of the n x k row-major Float32 scores (the words copied as
+    they are) and the 0/1 Int32 flags code == a and code == b. `m` is the
+    length of the four outputs: a row past it raises before it is written.
+    Returns the rows written. A byte selection: no value is computed."""
+    if n < 0 or k < 1 or a < 0 or a >= k or b < 0 or b >= k or m < 0:
+        raise Error("x_metrics ovo_pair: invalid sizes")
+    var C = MutPointer[Int32, MutAnyOrigin](unsafe_from_address=codes_addr)
+    var S = FP(unsafe_from_address=s_addr)
+    var sa = FP(unsafe_from_address=out_sa)
+    var sb = FP(unsafe_from_address=out_sb)
+    var fa = MutPointer[Int32, MutAnyOrigin](unsafe_from_address=out_fa)
+    var fb = MutPointer[Int32, MutAnyOrigin](unsafe_from_address=out_fb)
+    var at = 0
+    for r in range(n):
+        var c = Int(C[r])
+        if c != a and c != b:
+            continue
+        if at >= m:
+            raise Error("x_metrics ovo_pair: more rows than the caller counted")
+        sa.unsafe_store(at, S.unsafe_load(r * k + a))
+        sb.unsafe_store(at, S.unsafe_load(r * k + b))
+        fa[at] = Int32(1) if c == a else Int32(0)
+        fb[at] = Int32(1) if c == b else Int32(0)
+        at += 1
+    return at

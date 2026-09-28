@@ -114,6 +114,9 @@ FAMILIES = (
             "x_metrics_curve_pr", "x_metrics_curve_det", "x_metrics_ndcg_mean", "x_metrics_class_sums",
             "x_metrics_auc_xy", "x_metrics_mi_contingency", "x_metrics_centroids", "x_metrics_ch_extra",
             "x_metrics_db_score",
+            # lane metrics-apple3 (2026-09-28): cross_val_predict's row scatter, integer label plumbing
+            "x_metrics_scatter_rows", "x_metrics_encode_small_i64", "x_metrics_first_rows", "x_metrics_ovo_pair",
+            "x_metrics_expected_mi_tasks", "x_metrics_row_sum_range_tasks",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note="Ships: the metrics lane's CPU route (the added evaluation metrics and model_selection helpers).",

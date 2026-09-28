@@ -221,9 +221,9 @@ def main():
     raw = _load(a.rows)
     import mojolearn as ml
     import mojolearn.model_selection as S
-    print("XMSEL-DATA rows=%d load_s=%.2f mode=%s vendor=%s before=%s" % (
+    print("XMSEL-DATA rows=%d load_s=%.2f mode=%s vendor=%s msel3=%s" % (
         a.rows, time.time() - t0, os.environ.get("MOJOLEARN_NUMERIC_MODE", "default"),
-        os.environ.get("MOJOLEARN_VENDOR", "auto"), os.environ.get("MOJOLEARN_MSEL3_BEFORE", "")), flush=True)
+        os.environ.get("MOJOLEARN_VENDOR", "auto"), os.environ.get("MOJOLEARN_MSEL3", "")), flush=True)
     cs, E, fits = cases(ml, S, raw, a.rows)
     only = set(x for x in a.only.split(",") if x)
     if a.fits:
