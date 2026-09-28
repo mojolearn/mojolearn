@@ -611,3 +611,6 @@ struct HostOps(ClusterOps):
             po[q] = acc
             q += 1
             t0 = t1
+
+    def alloc(mut self, n: Int) raises -> Int:
+        return self.zeros(n)

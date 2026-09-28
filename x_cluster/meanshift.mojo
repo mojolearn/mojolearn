@@ -19,6 +19,7 @@ from std.math import floor
 
 from checks.numerics import ftz, identical_div, identical_mul, identical_sqrt
 from x_cluster.ops import ClusterOps
+from x_cluster.optics import dist_slot
 
 
 def estimate_bandwidth_ops[O: ClusterOps](
@@ -28,7 +29,7 @@ def estimate_bandwidth_ops[O: ClusterOps](
     if k < 1:
         k = 1
     var xs = ops.put(x)
-    var dm = ops.zeros(n * n)
+    var dm = dist_slot(ops, n * n)
     ops.sqdist(xs, n, xs, n, d, dm)
     var kt = ops.zeros(n)
     ops.kth(dm, n, n, k, kt)

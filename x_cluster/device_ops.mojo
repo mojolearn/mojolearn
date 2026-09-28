@@ -14,7 +14,7 @@ from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_mul
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_sqrt
 
 from x_cluster.bodies import (
     FPtr,
@@ -141,6 +141,86 @@ def _meanshift_kernel(
     var t = _tid()
     if t < Int(ns):
         meanshift_seed(x, Int(n), Int(d), bw, stop, Int(max_iter), centers, scratch, intensity, iters, t)
+
+
+# FAST ONLY (lane cluster-apple3), d <= MSB_MAX_D, OPT-IN
+# `-D MOJOLEARN_MEANSHIFT_BLOCK=1`: one BLOCK per seed. `_meanshift_kernel`
+# walks all n rows of every shift on one thread per seed, so a fit with a few
+# hundred seeds keeps a few blocks busy. Here the block's threads each fold
+# their stride of the rows and the partial sums fold in threadgroup memory.
+# The addends, the quotient and the stop test are `bodies.meanshift_seed`'s;
+# the order of the sum is not (bits move; the paired quality check).
+comptime MEANSHIFT_BLOCK = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_MEANSHIFT_BLOCK"]()
+comptime MSB_TPB = 256
+comptime MSB_MAX_D = 16
+comptime MSB_W = MSB_MAX_D + 1  # the feature sums, then the count
+
+
+def _meanshift_block_kernel(
+    x: FPtr, n: Int32, d: Int32, bw: Float32, stop: Float32, max_iter: Int32,
+    centers: FPtr, intensity: IPtr, iters: IPtr,
+):
+    var s = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var N = Int(n)
+    var D = Int(d)
+    var red = stack_allocation[MSB_TPB * MSB_W, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    # the seed's center lives in threadgroup memory between the shifts (a
+    # barrier orders threadgroup memory; on Apple it does not order the device's)
+    var cen = stack_allocation[MSB_MAX_D, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var state = stack_allocation[3, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    if tid < D:
+        cen[tid] = centers[s * D + tid]
+    if tid == 0:
+        state[0] = Int32(0)  # 1: the seed is done
+        state[1] = Int32(0)  # completed shifts
+        state[2] = Int32(0)  # rows within the bandwidth at the last shift
+    barrier()
+    var o = tid * MSB_W
+    while True:
+        for f in range(D + 1):
+            red[o + f] = Float32(0)
+        for p in range(tid, N, MSB_TPB):
+            var acc = Float32(0)
+            for f in range(D):
+                var t = ftz(ftz(cen[f]) - ftz(x[p * D + f]))
+                acc = ftz(acc + ftz(identical_mul(t, t)))
+            if identical_sqrt(acc) <= bw:
+                for f in range(D):
+                    red[o + f] = ftz(red[o + f] + ftz(x[p * D + f]))
+                red[o + D] = red[o + D] + Float32(1)
+        barrier()
+        var off = MSB_TPB // 2
+        while off > 0:
+            if tid < off:
+                for f in range(D + 1):
+                    red[o + f] = ftz(red[o + f] + red[(tid + off) * MSB_W + f])
+            barrier()
+            off //= 2
+        if tid == 0:
+            var cnt = red[D]
+            state[2] = Int32(Int(cnt))
+            if cnt == Float32(0):
+                state[0] = Int32(1)
+            else:
+                var shift2 = Float32(0)
+                for f in range(D):
+                    var m = ftz(identical_div(red[f], cnt))
+                    var t = ftz(m - cen[f])
+                    shift2 = ftz(shift2 + ftz(identical_mul(t, t)))
+                    cen[f] = m
+                if identical_sqrt(shift2) <= stop or state[1] == max_iter:
+                    state[0] = Int32(1)
+                else:
+                    state[1] = state[1] + Int32(1)
+        barrier()
+        if state[0] != Int32(0):
+            break
+    if tid < D:
+        centers[s * D + tid] = cen[tid]
+    if tid == 0:
+        intensity[s] = state[2]
+        iters[s] = state[1]
 
 
 comptime AP_TPB = 256
@@ -1017,6 +1097,15 @@ struct DeviceOps(ClusterOps):
         centers: Int, ns: Int, scratch: Int, intensity: Int, iters: Int,
     ) raises:
         self._ph0()
+        comptime if MEANSHIFT_BLOCK:
+            if d <= MSB_MAX_D and ns > 0:
+                self.ctx.enqueue_function[_meanshift_block_kernel](
+                    self._fp(x), Int32(n), Int32(d), bw, stop, Int32(max_iter),
+                    self._fp(centers), self._ip(intensity), self._ip(iters),
+                    grid_dim=ns, block_dim=MSB_TPB,
+                )
+                self._ph1("meanshift")
+                return
         self.ctx.enqueue_function[_meanshift_kernel](
             self._fp(x), Int32(n), Int32(d), bw, stop, Int32(max_iter),
             self._fp(centers), Int32(ns), self._fp(scratch), self._ip(intensity), self._ip(iters),
@@ -1294,3 +1383,10 @@ struct DeviceOps(ClusterOps):
                 grid_dim=_grid((n + g - 1) // g), block_dim=TPB,
             )
         self._ph1("dot_groups")
+
+    def alloc(mut self, n: Int) raises -> Int:
+        self._ph0()
+        var buf = self.ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
+        self.f.append(buf^)
+        self._ph1("alloc")
+        return len(self.f) - 1

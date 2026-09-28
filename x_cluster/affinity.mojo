@@ -21,6 +21,7 @@ from std.sys.compile import is_defined
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul
 from x_cluster.ops import ClusterOps
+from x_cluster.optics import dist_slot
 
 # Lane cluster-apple3, FAST and the GPU binding only, OPT-IN while unproven.
 # `-D MOJOLEARN_AP_EXACT=1`: the same values by less work (the median by the
@@ -52,7 +53,7 @@ def affinity_fit[O: ClusterOps](
         s_m = x.copy()
     else:
         var xs = ops.put(x)
-        var dm = ops.zeros(n * n)
+        var dm = dist_slot(ops, n * n)
         ops.sqdist(xs, n, xs, n, d, dm)
         s_m = ops.get(dm, n * n)
         for t in range(n * n):

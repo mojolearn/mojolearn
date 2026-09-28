@@ -154,3 +154,9 @@ trait ClusterOps(Movable):
         """FAST: parts[q] = the sum of a[t] * b[t] over the q-th run of `g`
         consecutive cells of the first n (ceil(n / g) values)."""
         ...
+
+    def alloc(mut self, n: Int) raises -> Int:
+        """A new float slot of `n` values that a primitive is about to fill
+        completely (`sqdist`, `pdist`): on the device NOT initialized, where
+        `zeros` writes n zeros first; on the host `zeros`."""
+        ...
