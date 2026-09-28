@@ -66,6 +66,32 @@ need capacity, ask the orchestrator; never call `dev_pod.sh up`,
   six hosts are released on 2026-09-28: m2pro and m3ultra at ~12:40Z, m4pro-a,
   m4pro-b, m4-a and m3ultra-b at ~21:20Z. After that there is no Apple column.
 
+**SHARED NVIDIA PODS: THE ONLY WAY A LANE USES NVIDIA (Andrew, 2026-09-28:
+"share a runpod or 2 runpods and not create 12 of them").** At most 3 shared
+RunPod pods (`nvc1`..`nvc3`), each with several cheap GPUs (4x or 2x RTX 4090
+where RunPod has them, 1 GPU as the fallback), one GPU slot per job. The
+orchestrator alone brings them up (`MOJOLEARN_ORCHESTRATOR=1
+tools/nvidia_central.sh up`); a lane never runs `dev_pod.sh up` for NVIDIA
+(it refuses) and never runs `nvidia_central.sh up/down`. From your worktree
+after merging origin/main:
+- `tools/nvidia_central.sh sync <lane> <worktree>`: patch sync to
+  `/root/mojolearn-<lane>` on your pod (a lane stays on one pod).
+- `tools/nvidia_central.sh sh <lane> 'pixi install'` once per pod. `sh` is
+  for builds and other no-GPU commands (`CUDA_VISIBLE_DEVICES=-1`).
+- Write your gate as a foreground script on the pod (e.g.
+  `/root/ev-<lane>/gate.sh`), then `tools/nvidia_central.sh submit <lane>
+  [--gpus N] [--cap MIN] <script>`. It prints a job id such as `nvc1-0003`.
+  The pod's FIFO queue (the same `tools/gpu_queue_box.sh` as the AMD box)
+  runs it when its slots free, with `CUDA_VISIBLE_DEVICES` set to its GPUs.
+  The default and maximum cap is 240 min.
+- `queue`, `status [<id>]`, `log <id>`, `cancel <lane> <id>` (your own jobs
+  only), `fetch <lane> <path> <dir>`.
+- `run` is only for short interactive GPU commands, and it yields to queued
+  jobs. Never write a poll-waiter.
+- The queue is the pod's lease. A pod stays up while jobs are queued or
+  running, and deletes itself 30 idle minutes later. If no pod is up, tell
+  the orchestrator and wait.
+
 **ONE CENTRAL AMD BOX (Andrew, 2026-09-28).** Every lane does its AMD
 (gfx942) identity and speed work on ONE shared Hot Aisle box: 2x MI300X
 (dev_pod key `linear-amd`), 2 GPU slots, lease to 2026-09-29T01:09Z. Never
