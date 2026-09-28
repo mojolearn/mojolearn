@@ -235,4 +235,72 @@ HIGGS 4.779 -> 1.595 s (taxi's columns tie heavily; the walk over tied points is
   9.25 s); the serial fold is bound by its dependent add chain, not by loads once RUN rows are in flight. Reverted.
 - Copying up only the arena's input prefix (dense one-hot output): 1.884 -> 1.844 s, noise. Reverted.
 
-## Next
+## FINAL (wind-down, 2026-09-28; tip c0a29cf5d, pushed, NOT merged)
+
+The lane stops here. Working tree clean, no half-done change; every speed change below is either
+IDENTICAL by construction (same words, default on) or FAST only (numeric mode FAST, a build opt-in).
+
+### What changed
+- IDENTICAL default path (Metal device program, x_prep): bitonic sort_cols (dsort.mojo), RUN = 16 batched
+  loads in col_stats / f_classif / f_regression / class_stats / count_neg / mm_step / qda_cov / te_global /
+  ii_mean / ii_gram, PowerTransformer golden search as stages (pt_init, pt_log once, pt_map per element,
+  pt_fold per column), IterativeImputer ii_rowabs + ii_conv, TargetEncoder te_bucket + bucket walk, acc_add,
+  unique_cols RUN loads, mutual_info sorted neighbour search (dmi.mojo; MOJOLEARN_XPREP_MI_SORTED=0 restores
+  the old walk, default 1).
+- Host (CPU) binding: PowerTransformer keeps op pt_fit and TargetEncoder keeps te_enc without te_bucket when the
+  binding has x_prep_host_column (the prep-cpu lane's host spellings); the device-only stages never reach it.
+- FAST only (fastred.mojo): tree folds for col_stats, pt_fold, class_stats, ii_mean, ii_gram
+  (MOJOLEARN_XPREP_FAST_FOLDS=0 restores row order, default 1); QDA keeps the row-order class sums (quality).
+- Reverted after measuring: RUN 64, staged IDENTICAL folds (dstage), input-prefix upload.
+
+### Same-Mac record at the tip (m4pro-b, request 1790595789320 at c0a29cf5d, 1M rows, reps 1)
+IDENTICAL digests equal the before record (0cbfb3151) and the bd8057aa7 record on all 20 cases run:
+power-transformer, onehot, ordinal, target-encoder, label-encoder, label-binarizer, multilabel-binarizer,
+qda, lda, gaussian-nb on taxi + HIGGS. Seconds, before (m4pro-b, 0cbfb3151) -> tip (m4pro-b, c0a29cf5d):
+| dataset | case | IDENTICAL before | IDENTICAL tip | FAST tip |
+|---|---|---|---|---|
+| taxi | power-transformer | 139.716 | 4.521 | 0.561 |
+| taxi | target-encoder | 25.786 | 2.315 | 2.214 |
+| taxi | onehot | 6.239 | 1.670 | 1.656 |
+| taxi | ordinal | 4.883 | 0.361 | 0.359 |
+| taxi | label-encoder | 4.733 | 0.948 | 0.934 |
+| taxi | label-binarizer | 5.503 | 1.681 | 1.693 |
+| taxi | multilabel-binarizer | 9.239 | 2.265 | 2.270 |
+| taxi | qda | 1.145 | 0.419 | 0.359 |
+| taxi | lda | 1.793 | 0.509 | 0.335 |
+| taxi | gaussian-nb | 1.847 | 0.443 | 0.236 |
+| higgs | power-transformer | 190.181 | 4.792 | 0.559 |
+| higgs | target-encoder | 12.022 | 2.169 | 2.090 |
+| higgs | onehot | 4.891 | 0.537 | 0.520 |
+| higgs | ordinal | 4.719 | 0.355 | 0.355 |
+| higgs | label-encoder | 4.498 | 0.935 | 0.948 |
+| higgs | label-binarizer | 4.542 | 0.967 | 0.982 |
+| higgs | multilabel-binarizer | 9.027 | 1.965 | 2.015 |
+| higgs | qda | 0.917 | 0.423 | 0.366 |
+| higgs | lda | 1.655 | 0.520 | 0.354 |
+| higgs | gaussian-nb | 1.585 | 0.458 | 0.224 |
+At 8f4891237 (m4pro-b, ~/mojolearn-evidence/prep-apple/chk_8f48912.txt) the IDENTICAL digests of
+iterative-imputer, mutual-info-classif, categorical-nb (taxi) and the cases above also equal bd8057aa7's.
+
+### Unproven: the integration check must cover these
+The digests above are the speed bench's output hashes on Apple only; no steward identity request
+(cross-vendor, sabotage arms) ran on this lane after bd8057aa7. Commits after bd8057aa7 that change code:
+- d46468860 f_classif / f_regression RUN loads (IDENTICAL; select-f-* digests not rerun since)
+- 234944b66 pt_map column major, pt_fold reads X only at K = 0 (IDENTICAL; PT digest same at tip)
+- 32d8150c8, 7073ac4cf, d1e2a411a FAST folds (FAST only; paired quality on record, QDA excluded)
+- 09e7e984e acc_add (IDENTICAL, touches every device fold: scalers, kbins, imputers, select-chi2, the other
+  naive Bayes cases were NOT rerun after it)
+- de9bdd7a5 mi_cd sorted search (IDENTICAL; MI digest same at 8f4891237)
+- 2a4e46f7e pt_fold NaN test skip, 8f85d9b99 te_enc category test skip (digests same at tip)
+- 0baee7d94 unique_cols RUN loads (onehot / ordinal / label digests same at tip)
+- e68e0c26a pt_log (new op 109, N_OPS 110; device digest same at tip; the host-binding branch to pt_fit not run)
+- c0a29cf5d TargetEncoder host-binding branch without te_bucket (not run on the CPU host binding)
+
+### Known issues
+- The identity steward (Metal vs CPU vs AMD / NVIDIA) and the seam arms 5400/5401/5402 must be rerun on
+  the merged head; a new op (pt_log, 109) may need its own arm or selector entry.
+- The CPU host binding paths for PowerTransformer and TargetEncoder (the hasattr(x_prep_host_column) branches)
+  were never executed on this lane.
+- bench/x_prep_speed.py: higgs categorical-nb raises "Negative values in data passed to CategoricalNB"
+  (a bench input issue, not a kernel one; it has no before record either).
+- taxi mutual-info-classif remains the slowest IDENTICAL case per row (tied points walk).
