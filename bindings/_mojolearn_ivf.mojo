@@ -56,6 +56,14 @@ from ivf.estimator import (
     ivf_flat_search_host,
 )
 from ivf.impl.neighbors.ivf_flat.ivf_flat_index import IvfFlatIndex
+from ivf.resident import (
+    ivf_resident_check,
+    ivf_resident_n_rows,
+    ivf_resident_prepare,
+    ivf_resident_release,
+    ivf_resident_search,
+)
+from bindings.ivf_index_arrays import ivf_merge_shards_binding, ivf_read_resident_filter, ivf_write_resident_result
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -301,6 +309,59 @@ def ivf_finalize_distances_binding(address: PythonObject, count: PythonObject, m
     return PythonObject(0)
 
 
+# ===========================================================================
+# THE RESIDENT INDEX (lane/py-dn-ann, 2026-09-28; ivf/resident.mojo, the
+# closure of DEVIATION 1804). Three doors, the contract in
+# bindings/ivf_index_arrays.mojo: prepare admits and uploads the index once,
+# search uploads only its queries, release drops it.
+# ===========================================================================
+
+
+def ivf_flat_index_prepare_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    var partial = Int(py=params[4]) != 0
+    var arrays = ivf_read_index_arrays(
+        addrs, params, String("ivf_flat_search"), 5, 5, partial_storage=partial
+    )
+    var labels = _labels_from_arrays(arrays.offsets, arrays.list_indices, arrays.n_lists, arrays.n_rows)
+    var index = IvfFlatIndex(
+        arrays.n_lists, arrays.dim, arrays.n_rows, arrays.metric,
+        arrays.centers.copy(), arrays.center_norms.copy(), arrays.offsets.copy(),
+        arrays.list_indices.copy(), arrays.list_data.copy(), labels^,
+    )
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var handle = ivf_resident_prepare(ctx, index^, partial)
+    _ = ctx^
+    return PythonObject(handle)
+
+
+def ivf_flat_index_search_binding(
+    handle: PythonObject, addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    var h = Int(py=handle)
+    if len(params) != 8:
+        raise Error("ivf_flat_index_search: params must contain 8 values (n, dim, n_lists, metric, m, k, n_probes, partial)")
+    var n = Int(py=params[0])
+    var dim = Int(py=params[1])
+    ivf_resident_check(h, n, dim, Int(py=params[2]), Int(py=params[3]), Int(py=params[7]) != 0)
+    var ext = ivf_search_extents(params)
+    var m = ext[0]
+    var k = ext[1]
+    var queries = read_f32(Int(py=addrs[0]), m * dim)
+    var keep = ivf_read_resident_filter(addrs, ivf_resident_n_rows(h))
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var r = ivf_resident_search(ctx, h, queries, m, k, ext[2], keep)
+    ctx.synchronize()
+    ivf_write_resident_result(addrs, r.distances, r.indices, r.n_candidates, m, k)
+    _ = r^
+    _ = ctx^
+    return PythonObject(0)
+
+
+def ivf_flat_index_release_binding(handle: PythonObject) raises -> PythonObject:
+    ivf_resident_release(Int(py=handle))
+    return PythonObject(0)
+
+
 def _labels_from_arrays(offsets: List[Int32], list_indices: List[UInt32], n_lists: Int, n_rows: Int) -> List[UInt32]:
     """The assignment an admitted index describes, from its carried ids."""
     var labels = List[UInt32](length=n_rows, fill=UInt32(0))
@@ -355,6 +416,10 @@ def PyInit__mojolearn_ivf() abi("C") -> PythonObject:
         m.def_function[ivf_flat_partial_search_binding]("ivf_flat_partial_search")
         m.def_function[ivf_finalize_distances_binding]("ivf_finalize_distances")
         m.def_function[ivf_flat_extend_binding]("ivf_flat_extend")
+        m.def_function[ivf_flat_index_prepare_binding]("ivf_flat_index_prepare")
+        m.def_function[ivf_flat_index_search_binding]("ivf_flat_index_search")
+        m.def_function[ivf_flat_index_release_binding]("ivf_flat_index_release")
+        m.def_function[ivf_merge_shards_binding]("ivf_merge_shards")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_ivf: ", e))

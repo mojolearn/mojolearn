@@ -2,8 +2,8 @@
 """Disjoint IVF candidate storage with replicated coarse centers.
 
 A fitted/loaded index is partitioned without retraining its quantizer. Worker
-processes retain only their candidate rows; each search uploads only that shard
-to its GPU. Coarse centers and queries are replicated. Building the original
+processes retain only their candidate rows and keep that shard resident on
+their GPU from the first search (lane/py-dn-ann, 2026-09-28). Coarse centers and queries are replicated. Building the original
 index and extending a distributed index are outside this API.
 """
 __all__ = ['DistributedIVFIndex']
@@ -20,6 +20,16 @@ def _partial_search(index, queries):
     m, k = q.shape[0], index.n_neighbors
     dist, ids, counts = empty((m, k), '<f4'), empty((m, k), '<i4'), empty((m,), '<i4')
     native = index._extension()
+    # The shard stays resident in its worker (lane/py-dn-ann, 2026-09-28):
+    # admitted and uploaded at the first batch, only the queries after it.
+    handle = index._resident_handle(native, partial=True)
+    if handle is not None:
+        native.ivf_flat_index_search(
+            handle,
+            [addr_ro(q, name='queries'), addr(dist, name='distances'), addr(ids, name='ids'),
+             addr(counts, name='counts')],
+            [index.n_rows_, index.n_features_in_, index.n_lists_, index.metric_code_, m, k, index.n_probes, 1])
+        return dist, ids, counts
     fn = index._entry(native, 'ivf_flat_partial_search')
     fn([addr_ro(index.centers_, name='centers'), addr_ro(index.center_norms_, name='norms'),
         addr_ro(index.list_offsets_, name='offsets'), addr_ro(index.list_indices_, name='ids'),
@@ -27,6 +37,16 @@ def _partial_search(index, queries):
         addr(dist, name='distances'), addr(ids, name='ids'), addr(counts, name='counts')],
        [index.n_rows_, index.n_features_in_, index.n_lists_, index.metric_code_, m, k, index.n_probes])
     return dist, ids, counts
+
+
+#: `ivf_merge_shards`' statuses (bindings/ivf_index_arrays.mojo), as the
+#: Python merge raised them.
+_MERGE_ERRORS = {
+    1: 'invalid IVF candidate count',
+    2: 'invalid IVF local row id',
+    3: 'global probed candidate count is smaller than n_neighbors',
+    4: 'NaN distance in an IVF shard result',
+}
 
 
 class DistributedIVFIndex:
@@ -81,6 +101,7 @@ class DistributedIVFIndex:
         obj.metric_code_, obj.devices = index.metric_code_, devices
         obj.n_candidates_ = None
         obj._id_maps = []
+        obj._native = index._extension()
         requests = []
         for part in range(len(devices)):
             lo = part * index.n_rows_ // len(devices)
@@ -96,7 +117,7 @@ class DistributedIVFIndex:
             shard.list_offsets_ = Array.from_list([max(0, min(v, hi) - lo) for v in offsets], '<i4')
             shard.list_indices_ = Array.from_list([local[v] for v in original], '<i4')
             shard.list_data_ = index.list_data_[lo:hi]
-            obj._id_maps.append(mapping)
+            obj._id_maps.append(Array.from_list(mapping, '<i4') if mapping else empty((0,), '<i4'))
             requests.append(('ivf_store', shard, ()))
         try:
             receipts = pool.map(requests)
@@ -119,33 +140,29 @@ class DistributedIVFIndex:
             parts = self._pool.map([('ivf_search_stored', None, (q,)) for _ in self.devices])
             if len(parts) != len(self._id_maps):
                 raise ValueError('incomplete IVF result shards')
-            distances, ids, counts = [], [], []
-            for row in range(q.shape[0]):
-                candidates, total = [], 0
-                for mapping, (d, ix, count) in zip(self._id_maps, parts):
-                    if d.shape != (q.shape[0], self.n_neighbors) or ix.shape != d.shape or count.shape != (q.shape[0],):
-                        raise ValueError('invalid IVF shard output shapes')
-                    n = int(count[row])
-                    if not 0 <= n <= len(mapping):
-                        raise ValueError('invalid IVF candidate count')
-                    total += n
-                    for j in range(min(self.n_neighbors, n)):
-                        local = int(ix[row, j])
-                        if not 0 <= local < len(mapping):
-                            raise ValueError('invalid IVF local row id')
-                        candidates.append((float(d[row, j]), mapping[local]))
-                if total < self.n_neighbors:
-                    raise ValueError('global probed candidate count is smaller than n_neighbors')
-                candidates.sort()
-                selected = candidates[:self.n_neighbors]
-                distances.append([v for v, _ in selected])
-                ids.append([i for _, i in selected])
-                counts.append(total)
-            result = Array.from_list(distances, '<f4')
+            m, k = q.shape[0], self.n_neighbors
+            for d, ix, count in parts:
+                if d.shape != (m, k) or ix.shape != d.shape or count.shape != (m,):
+                    raise ValueError('invalid IVF shard output shapes')
+            # THE MERGE (lane/py-dn-ann, 2026-09-28): one native pass
+            # (bindings/ivf_index_arrays.mojo `ivf_merge_shards`), the Python
+            # loop it replaces statement for statement: per query, each
+            # shard's first min(k, count) candidates mapped to original ids,
+            # ordered by (float32 distance, original id), the first k kept.
+            result, ids, counts = empty((m, k), '<f4'), empty((m, k), '<i4'), empty((m,), '<i4')
+            addrs = [addr(result, name='distances'), addr(ids, name='ids'), addr(counts, name='counts')]
+            for mapping, (d, ix, count) in zip(self._id_maps, parts):
+                addrs += [addr_ro(d, name='shard distances'), addr_ro(ix, name='shard ids'),
+                          addr_ro(count, name='shard counts'),
+                          addr_ro(mapping, name='shard id map') if len(mapping) else addr_ro(count, name='shard id map')]
+            status, _row = self._native.ivf_merge_shards(
+                addrs, [len(parts), m, k] + [len(mapping) for mapping in self._id_maps])
+            if int(status) != 0:
+                raise ValueError(_MERGE_ERRORS.get(int(status), 'IVF shard merge failed'))
             if self.metric_code_ == 1:
                 result = self._pool.map([('ivf_finalize', result, (self.metric_code_,))])[0]
-            self.n_candidates_ = Array.from_list(counts, '<i4')
-            return result, Array.from_list(ids, '<i4')
+            self.n_candidates_ = counts
+            return result, ids
         except BaseException:
             self.close()
             raise
