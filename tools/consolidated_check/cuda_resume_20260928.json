@@ -369,7 +369,7 @@
       "radix": false
     },
     {
-      "name": "repaired98",
+      "name": "repaired97",
       "commit": "9d64cb98b284afb3f0af94ffaf39aa127e19bbb6",
       "fixtures": "base",
       "lanes": [
@@ -415,7 +415,6 @@
         "x-metrics-classification",
         "x-metrics-cluster",
         "x-metrics-ranking",
-        "x-metrics-regression",
         "x-metrics-search",
         "x-metrics-splitters",
         "x-neighbors-connected-components",
@@ -491,6 +490,15 @@
       "fixtures": "all",
       "lanes": [
         "sequence-layernorm"
+      ],
+      "radix": false
+    },
+    {
+      "name": "metrics1",
+      "commit": "2c81a1293390d3c851ca56d40fb339efe053fbb5",
+      "fixtures": "all",
+      "lanes": [
+        "x-metrics-regression"
       ],
       "radix": false
     }
