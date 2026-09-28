@@ -21,6 +21,7 @@ import argparse
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 import numpy as np
@@ -87,24 +88,57 @@ def q_optim(ml, name):
                 rel_l2_err=float(np.sqrt(np.sum(err * err)) / np.sqrt(np.sum(ref * ref))))
 
 
-def q_ets(ml, X):
+def q_ets(ml, X, stall=None):
     Y = series(X, 10000, 112)
     tr, te = np.ascontiguousarray(Y[:, :100]), Y[:, 100:]
     m = ml.ETS(season_length=12, model="AAA", damped=True).fit(tr)
+    if stall is not None:
+        m._fast_stall = stall
+    t0 = time.perf_counter()
     f = np.asarray(m.predict(12)["mean"], dtype=np.float64)
+    secs = time.perf_counter() - t0
     info = np.asarray(m.info_, dtype=np.float64)
     ae = np.abs(f - te)
     smape = 2 * ae / (np.abs(f) + np.abs(te))
     ok = np.isfinite(f).all(1)
-    return dict(nll_mean=float(info[:, 5].mean()), nll_median=float(np.median(info[:, 5])),
+    return dict(stall=list(stall) if stall is not None else "default", fit_s=secs,
+                nll_mean=float(info[:, 5].mean()), nll_median=float(np.median(info[:, 5])),
                 mae=float(ae[ok].mean()), smape=float(smape[ok].mean()), nonfinite=int((~ok).sum()),
                 iters_mean=float(info[:, 6].mean()))
+
+
+def q_layernorm(ml, X):
+    x = np.ascontiguousarray(X)
+    D = x.shape[1]
+    w = np.linspace(0.5, 1.5, D, dtype=np.float32)
+    b = np.linspace(-0.1, 0.1, D, dtype=np.float32)
+    dy = np.ascontiguousarray(x[:, ::-1])
+    _, dw, db = ml.layer_norm_backward(dy, x, D, w, b)
+    x64 = x.astype(np.float64)
+    mu = x64.mean(1, keepdims=True)
+    xh = (x64 - mu) / np.sqrt(x64.var(1, keepdims=True) + 1e-5)
+    rw = (dy.astype(np.float64) * xh).sum(0)
+    rb = dy.astype(np.float64).sum(0)
+    return dict(dw_rel_err=float(np.abs(dw - rw).max() / np.abs(rw).max()),
+                db_rel_err=float(np.abs(db - rb).max() / np.abs(rb).max()))
+
+
+def q_var(ml, X):
+    Y = np.ascontiguousarray(series(X, 4, len(X)).T)
+    r = ml.VAR(Y).fit(maxlags=2)
+    Y64 = Y.astype(np.float64)
+    n = len(Y64)
+    Z = np.hstack([np.ones((n - 2, 1)), Y64[1:n - 1], Y64[0:n - 2]])
+    ref = np.linalg.lstsq(Z, Y64[2:], rcond=None)[0]
+    got = np.asarray(r.params, dtype=np.float64)
+    err = np.abs(got - ref).max() / np.abs(ref).max()
+    return dict(params_rel_err=float(err))
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", default="~/datasets/gbm-bench/higgs/higgs_speed.npz")
-    ap.add_argument("--what", default="lamb,adafactor,ets")
+    ap.add_argument("--what", default="lamb,adafactor,layernorm,var,ets")
     a = ap.parse_args()
     import mojolearn as ml
     X = None
@@ -112,10 +146,19 @@ def main():
         try:
             if w in ("lamb", "adafactor"):
                 r = q_optim(ml, w)
-            elif w == "ets":
+            elif w in ("ets", "layernorm", "var"):
                 if X is None:
                     X, _ = load(a.data, 1_000_000)
-                r = q_ets(ml, X)
+                if w == "ets":
+                    fast = os.environ.get("MOJOLEARN_NUMERIC_MODE") == "fast"
+                    sweep = [None] + ([(0, 0.0), (50, 1e-6), (100, 1e-6), (200, 1e-6), (100, 1e-7), (300, 1e-7)]
+                                      if fast and os.environ.get("SEQ_QUALITY_ETS_SWEEP") else [])
+                    for s in sweep:
+                        r = q_ets(ml, X, s)
+                        print("QUAL", json.dumps(dict(case=w, mode=os.environ.get("MOJOLEARN_NUMERIC_MODE", ""), **r)),
+                              flush=True)
+                    continue
+                r = (q_layernorm if w == "layernorm" else q_var)(ml, X)
             else:
                 raise KeyError(w)
         except Exception as e:

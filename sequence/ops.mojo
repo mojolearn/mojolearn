@@ -102,6 +102,7 @@ comptime OP_GEMM_EPI = 60
 comptime OP_COLSUM_DIV = 61
 comptime OP_GEMM_EPI_TAIL = 62
 comptime OP_CHUNK_SUMSQ = 63
+comptime OP_GEMM_SPLITK = 64
 
 # ------------------------------------------------------------------ cells
 comptime CELL_RNN_TANH = 0
@@ -342,6 +343,34 @@ def op_gemm(t: Int, a: Args):
     var abase = m * a.i3
     var bbase = n * a.i6
     acc = gemm_dot(a.p0, abase, a.i4, a.p1, bbase, a.i5, a.i2, acc)
+    st(a.p2, ci, acc)
+
+
+def op_gemm_splitk(t: Int, a: Args):
+    """FAST only (apple2): op_gemm with K split into S = i9 blocks of i10.
+    i11 == 0: thread t = s MN + mn folds block s of cell mn from zero into
+    p3[t]; i11 == 1: thread mn adds the S partials in order (onto C when
+    i7) into C. A different order from op_gemm's one chain: FAST only, for
+    the few-cell, long-K products (VAR's normal equations)."""
+    var N = a.i1
+    var MN = a.i0 * N
+    if a.i11 == 0:
+        var s = t // MN
+        var mn = t - s * MN
+        var m = mn // N
+        var n = mn - m * N
+        var k0 = s * a.i10
+        var kc = min(a.i2, k0 + a.i10) - k0
+        st(a.p3, t, gemm_dot(a.p0, m * a.i3 + k0 * a.i4, a.i4, a.p1, n * a.i6 + k0 * a.i5, a.i5, kc, Float32(0.0)))
+        return
+    var m = t // N
+    var n = t - m * N
+    var ci = m * a.i8 + n
+    var acc = Float32(0.0)
+    if a.i7 != 0:
+        acc = ld(a.p2, ci)
+    for s in range(a.i9):
+        acc = add(acc, ld(a.p3, s * MN + t))
     st(a.p2, ci, acc)
 
 

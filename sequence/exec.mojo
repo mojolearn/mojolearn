@@ -32,6 +32,7 @@ from sequence.ops import (
     Args,
     gates_of,
     OP_GEMM,
+    OP_GEMM_SPLITK,
     OP_COLSUM,
     OP_CELL_FWD,
     OP_CELL_BWD,
@@ -85,6 +86,8 @@ def _element_weight[OP: Int](a: Args) -> Int:
     decides how many threads, never what a thread computes)."""
     comptime if OP == OP_GEMM:
         return max(a.i2, 1)
+    elif OP == OP_GEMM_SPLITK:
+        return max(a.i10, 1) if a.i11 == 0 else max(a.i9, 1)
     elif OP == OP_COLSUM or OP == OP_COLSUM_DIV:
         return max(a.i0, 1)
     elif OP == OP_LN_BWD_W:

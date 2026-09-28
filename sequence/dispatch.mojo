@@ -5,6 +5,7 @@ by both executors (`sequence/exec.mojo`, `sequence/exec_device.mojo`)."""
 from sequence.ops import (
     Args,
     OP_GEMM,
+    OP_GEMM_SPLITK,
     OP_BIAS,
     OP_COLSUM,
     OP_CELL_FWD,
@@ -68,6 +69,7 @@ from sequence.ops import (
     OP_ETS_LIK,
     OP_ETS_INIT,
     op_gemm,
+    op_gemm_splitk,
     op_bias,
     op_colsum,
     op_cell_fwd,
@@ -102,6 +104,8 @@ from sequence.vecar import op_cholsolve, op_colscale, op_rowscale, op_scale, op_
 def apply[OP: Int](t: Int, a: Args):
     comptime if OP == OP_GEMM:
         op_gemm(t, a)
+    elif OP == OP_GEMM_SPLITK:
+        op_gemm_splitk(t, a)
     elif OP == OP_BIAS:
         op_bias(t, a)
     elif OP == OP_COLSUM:

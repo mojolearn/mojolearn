@@ -732,7 +732,23 @@ def layer_norm_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp:
         c.p5 = rstd
         c.i0 = D
         c.i1 = M
-        ex.launch[OP_LN_BWD_W](c, D)
+        # FAST: the column folds split over row blocks (about 8192 threads,
+        # at least 1024 rows each), then one ordered sum of the S partials
+        var S = min(max(8192 // D, 1), M // 1024) if _fast_norms() else 0
+        if S > 1:
+            var RS = (M + S - 1) // S
+            S = (M + RS - 1) // RS
+            var PW = ex.alloc(S * D)
+            var PB = ex.alloc(S * D)
+            c.p6 = PW
+            c.p7 = PB
+            c.i2 = S
+            c.i3 = RS
+            ex.launch[OP_LN_BWD_W](c, S * D)
+            c.i4 = 1
+            ex.launch[OP_LN_BWD_W](c, D)
+        else:
+            ex.launch[OP_LN_BWD_W](c, D)
         ex.sync()
         ex.download(fptr(addrs[5], "dx"), DX, M * D)
         if hw:
@@ -813,13 +829,23 @@ def croston_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises
     return PythonObject(B)
 
 
+#: ETS's FAST Nelder-Mead stall stop (sequence/nm.mojo): the fit ends once
+#: its best value has not dropped by more than ETS_FAST_STALL_REL |best| for
+#: ETS_FAST_STALL_ITERS iterations. FAST only; chosen by the paired quality
+#: sweep in tools/sequence_quality.py (docs/lanes/progress/sequence-apple2.md).
+comptime ETS_FAST_STALL_ITERS = 100
+comptime ETS_FAST_STALL_REL = Float32(1e-6)
+
+
 def ets_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
     """ETS over a batch of series (`sequence/ets.mojo`).
     addrs = [y (B, n), forecast (B, h) out, info (B, 10) out, seasonal states (B, m) out];
     ip = [B, n, h, error (0 A, 1 M), trend (0 N, 1 A), damped, fixed mask, season (0 N, 1 A, 2 M), m];
-    fp = [alpha, beta, phi, gamma] (read where fixed)."""
-    if len(addrs) != 4 or len(ip) != 9 or len(fp) != 4:
-        raise Error("ets: requires 4 addresses, 9 integer and 4 float parameters")
+    fp = [alpha, beta, phi, gamma] (read where fixed). FAST: an optional
+    10th integer and 5th float override the Nelder-Mead stall stop
+    (ETS_FAST_STALL_ITERS / ETS_FAST_STALL_REL; 0 iterations: off)."""
+    if len(addrs) != 4 or (len(ip) != 9 and len(ip) != 10) or (len(fp) != 4 and len(fp) != 5):
+        raise Error("ets: requires 4 addresses, 9 (or 10) integer and 4 (or 5) float parameters")
     var B = ival(ip, 0)
     var n = ival(ip, 1)
     var h = ival(ip, 2)
@@ -855,6 +881,8 @@ def ets_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: Python
     a.f1 = fval(fp, 1)
     a.f2 = fval(fp, 2)
     a.f3 = fval(fp, 3)
+    a.i9 = ival(ip, 9) if len(ip) == 10 else ETS_FAST_STALL_ITERS
+    a.f4 = fval(fp, 4) if len(fp) == 5 else ETS_FAST_STALL_REL
     ex.launch[OP_ETS](a, B)
     ex.sync()
     ex.download(fptr(addrs[1], "forecast"), F, B * h)
