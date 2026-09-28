@@ -229,3 +229,5 @@ Xeon 8470); RESULT: PASS. Log: ~/mojolearn-evidence/sequence/amd/ev-sequence/gat
 `--pass 2` over the 30 lanes on NVIDIA; existing bits vs the merge base (lane check hashes);
 test_host_surface; tools/test_lane_select.py (sequence.checks / sequence.core changed); merge
 to main and push in one command. NOT merged until then.
+
+Batched family identity request (30 lanes, e2e_family_host_bits.patch) at 90a7e25ad: 1790574625975-sequence-90a7e25ad6 on m2pro, m3ultra-b, m4pro-a, do-amd. The next session reads its verdict first.
