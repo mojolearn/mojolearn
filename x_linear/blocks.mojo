@@ -86,6 +86,67 @@ comptime XB_LOGCV = 10
 comptime XB_ISOTONIC_PREDICT = 12
 
 
+#: Opt-in `-D MOJOLEARN_X_LINEAR_BLOCKS_PLAIN=1`: the block folds as plain
+#: loops instead of x_linear/tops.mojo's chains (which hold 32, 64 or 96
+#: loaded words in registers). On a GPU without Dynamic Caching (the M2
+#: Pro) a pipeline's thread limit falls with its register use, and a
+#: dispatch above the limit is dropped with no error; the plain form is the
+#: fallback if a block kernel's limit falls under XB_TPB there. The words
+#: are the same either way (the same operations in the same order).
+comptime XB_PLAIN = is_defined["MOJOLEARN_X_LINEAR_BLOCKS_PLAIN"]()
+
+
+@always_inline
+def xb_dot(a: FP, aoff: Int, astep: Int, b: FP, boff: Int, bstep: Int, n: Int) -> Float32:
+    comptime if XB_PLAIN:
+        var acc = Float32(0)
+        for i in range(n):
+            acc = fmad(ld(a, aoff + i * astep), ld(b, boff + i * bstep), acc)
+        return acc
+    return chain_fmad(a, aoff, astep, b, boff, bstep, n)
+
+
+@always_inline
+def xb_sum(v: FP, off: Int, n: Int) -> Float32:
+    comptime if XB_PLAIN:
+        var acc = Float32(0)
+        for i in range(n):
+            acc = fa(acc, ld(v, off + i))
+        return acc
+    return fold_fa(v, off, 1, n)
+
+
+@always_inline
+def xb_sumsq(v: FP, off: Int, n: Int) -> Float32:
+    comptime if XB_PLAIN:
+        var acc = Float32(0)
+        for i in range(n):
+            var r = ld(v, off + i)
+            acc = fmad(r, r, acc)
+        return acc
+    return fold_sq(v, off, n)
+
+
+@always_inline
+def xb_one(v: FP, off: Int, n: Int) -> Float32:
+    comptime if XB_PLAIN:
+        var acc = Float32(0)
+        for i in range(n):
+            acc = fmad(Float32(1), ld(v, off + i), acc)
+        return acc
+    return fold_one_fmad(v, off, n)
+
+
+@always_inline
+def xb_dot_scaled(h: FP, x: FP, j: Int, k: Int, d: Int, n: Int) -> Float32:
+    comptime if XB_PLAIN:
+        var acc = Float32(0)
+        for i in range(n):
+            acc = fmad(fm(ld(h, i), ld(x, i * d + j)), ld(x, i * d + k), acc)
+        return acc
+    return chain_fmad_scaled(h, x, j, k, d, n)
+
+
 def blocks_handles(algo: Int, n: Int) -> Bool:
     """The fits this file runs (the algo numbers of x_linear/dispatch.mojo)."""
     if n < XB_MIN_ROWS:
@@ -141,7 +202,7 @@ def xb_glm_kernel(
     team_barrier()
     if what == 0:
         if tid == 0:
-            st(part, blk, fold_fa(rw, r0, 1, rows))
+            st(part, blk, xb_sum(rw, r0, rows))
         return
     var cells = m + m * (m + 1) // 2
     var c = tid
@@ -149,9 +210,9 @@ def xb_glm_kernel(
         var acc: Float32
         if c < m:
             if c < d:
-                acc = chain_fmad(rw, r0, 1, x, r0 * d + c, d, rows)
+                acc = xb_dot(rw, r0, 1, x, r0 * d + c, d, rows)
             else:
-                acc = fold_fa(rw, r0, 1, rows)
+                acc = xb_sum(rw, r0, rows)
         else:
             var q = c - m
             var j = 0
@@ -159,11 +220,11 @@ def xb_glm_kernel(
                 j += 1
             var k = q - j * (j + 1) // 2
             if j < d:
-                acc = chain_fmad_scaled(rw + (n + r0), x + r0 * d, j, k, d, rows)
+                acc = xb_dot_scaled(rw + (n + r0), x + r0 * d, j, k, d, rows)
             elif k < d:
-                acc = chain_fmad(rw, n + r0, 1, x, r0 * d + k, d, rows)
+                acc = xb_dot(rw, n + r0, 1, x, r0 * d + k, d, rows)
             else:
-                acc = fold_fa(rw, n + r0, 1, rows)
+                acc = xb_sum(rw, n + r0, rows)
         st(part, blk * cells + c, acc)
         c += XB_TPB
 
@@ -217,9 +278,9 @@ def xb_huber_kernel(
     while c < cells:
         var acc = Float32(0)
         if c < d:
-            acc = chain_fmad(rw, r0, 1, x, r0 * d + c, d, rows)
+            acc = xb_dot(rw, r0, 1, x, r0 * d + c, d, rows)
         elif c < gcells:
-            acc = fold_fa(rw, r0, 1, rows)
+            acc = xb_sum(rw, r0, rows)
         else:
             var role = c - gcells
             for q in range(r0, r1):
@@ -327,7 +388,7 @@ def xb_logistic_kernel(
     team_barrier()
     if what == 1:
         if tid == 0:
-            st(part, blk, fold_fa(rw, r0, 1, rows))
+            st(part, blk, xb_sum(rw, r0, rows))
         return
     var cells = p + 1
     var c = tid
@@ -337,11 +398,11 @@ def xb_logistic_kernel(
             var k = c // stride
             var j = c - k * stride
             if j < d:
-                acc = chain_fmad(rw, k * n + r0, 1, x, r0 * d + j, d, rows)
+                acc = xb_dot(rw, k * n + r0, 1, x, r0 * d + j, d, rows)
             elif fi:
-                acc = fold_fa(rw, k * n + r0, 1, rows)
+                acc = xb_sum(rw, k * n + r0, rows)
         else:
-            acc = fold_fa(rw, kp * n + r0, 1, rows)
+            acc = xb_sum(rw, kp * n + r0, rows)
         st(part, blk * cells + c, acc)
         c += XB_TPB
 
@@ -436,13 +497,13 @@ def xb_quantile_kernel(
         var acc: Float32
         if c < lead:
             if c == 0:
-                acc = fold_sq(rw, r0, rows)
+                acc = xb_sumsq(rw, r0, rows)
             elif c == 1:
-                acc = fold_sq(rw, 4 * n + r0, rows)
+                acc = xb_sumsq(rw, 4 * n + r0, rows)
             elif c == 2:
-                acc = fold_sq(rw, 2 * n + r0, rows)
+                acc = xb_sumsq(rw, 2 * n + r0, rows)
             else:
-                acc = fold_sq(rw, 5 * n + r0, rows)
+                acc = xb_sumsq(rw, 5 * n + r0, rows)
         else:
             var o = c - lead
             var src = 3 * n
@@ -452,9 +513,9 @@ def xb_quantile_kernel(
                 o -= m
                 src = 3 * n
             if o < d:
-                acc = chain_fmad(x, r0 * d + o, d, rw, src + r0, 1, rows)
+                acc = xb_dot(x, r0 * d + o, d, rw, src + r0, 1, rows)
             else:
-                acc = fold_one_fmad(rw, src + r0, rows)
+                acc = xb_one(rw, src + r0, rows)
         st(part, blk * cells + c, acc)
         c += XB_TPB
 
@@ -538,13 +599,13 @@ def xq_row_kernel(
     while c < cells:
         var acc = Float32(0)
         if c == 0:
-            acc = fold_sq(rw, r0, rows)
+            acc = xb_sumsq(rw, r0, rows)
         elif c == 1:
-            acc = fold_sq(rw, 4 * n + r0, rows)
+            acc = xb_sumsq(rw, 4 * n + r0, rows)
         elif c == 2:
-            acc = fold_sq(rw, 2 * n + r0, rows)
+            acc = xb_sumsq(rw, 2 * n + r0, rows)
         elif c == 3:
-            acc = fold_sq(rw, 5 * n + r0, rows)
+            acc = xb_sumsq(rw, 5 * n + r0, rows)
         elif c < 4 + 2 * m:
             var o = c - 4
             var src = n
@@ -552,9 +613,9 @@ def xq_row_kernel(
                 o -= m
                 src = 3 * n
             if o < d:
-                acc = chain_fmad(x, r0 * d + o, d, rw, src + r0, 1, rows)
+                acc = xb_dot(x, r0 * d + o, d, rw, src + r0, 1, rows)
             else:
-                acc = fold_one_fmad(rw, src + r0, rows)
+                acc = xb_one(rw, src + r0, rows)
         elif tenth:
             var o = c - 4 - 2 * m
             var f = Float32(0.5)

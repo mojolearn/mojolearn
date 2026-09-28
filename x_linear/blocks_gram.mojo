@@ -18,8 +18,8 @@ from x_linear.ops import (
     fill, copy, cholesky, chol_solve, jacobi_eig,
 )
 from x_linear.team import team_barrier
-from x_linear.tops import upper_cell, fold_sq
-from x_linear.blocks import XB, Part, XB_TPB, XB_ROWS, _host_fp, _zeros
+from x_linear.tops import upper_cell
+from x_linear.blocks import XB, Part, XB_TPB, XB_ROWS, _host_fp, _zeros, xb_sumsq
 from x_linear.cd import enet_gram_cd, alpha_grid_value
 from x_linear.ridge import _ridge_solve_best
 from x_linear.bayes import _ard_sigma, _ard_coef, _intercept
@@ -149,7 +149,7 @@ def xb_sse_kernel(
                 var r = ld(rw, q)
                 acc = fmad(fm(ld(y, woff + q), r), r, acc)
         else:
-            acc = fold_sq(rw, r0, r1 - r0)
+            acc = xb_sumsq(rw, r0, r1 - r0)
         st(part, blk, acc)
 
 
