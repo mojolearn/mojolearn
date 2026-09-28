@@ -258,3 +258,31 @@ def test_installed_comparison_rejects_only_revised_batch_references():
     compare = namespace["comparison_context_problems"]
     assert compare(old, new, [("new", "base", "train")]) == []
     assert compare(old, new, [("new", "base", "batch")]) == ["new: different or missing batch revision"]
+
+
+def test_resume_hashes_source_fragments(harness, tmp_path):
+    from argparse import Namespace
+    source = tmp_path / "identity_break.py"
+    source.write_text("# harness")
+    fragments = tmp_path / "identity_lanes"
+    fragments.mkdir()
+    fragment = fragments / "example.py"
+    fragment.write_text("# old probe")
+    package = tmp_path / "package"
+    package.mkdir()
+    old = harness.resume_signature(Namespace(), package, source, {})
+    fragment.write_text("# revised probe")
+    new = harness.resume_signature(Namespace(), package, source, {})
+    assert old["source_sha256"] != new["source_sha256"]
+
+
+def test_merge_rejects_different_batch_revisions(harness, tmp_path):
+    import json
+    a, b = tmp_path / "a.json", tmp_path / "b.json"
+    record = dict(vendor="fixture-cpu", commit="a" * 40, mode="identical", cells={},
+                  package={"bindings": [{"module": "native", "sha256": "same"}]})
+    a.write_text(json.dumps(record))
+    record["batch_revisions"] = {"sequence-rmsprop": "new"}
+    b.write_text(json.dumps(record))
+    with pytest.raises(SystemExit, match="batch_revisions"):
+        harness.merge([str(a), str(b)], str(tmp_path / "merged.json"))

@@ -643,6 +643,8 @@ def resume_signature(args, package_dir, harness, provenance):
     or source harness even when its declared version/commit did not change.
     """
     files = [Path(harness)]
+    # Checkout fragments live outside package_dir but define executable probes.
+    files += [Path(path) for _, path in lane_fragment_paths(str(Path(harness).parent))]
     root = Path(package_dir)
     files += sorted(p for p in root.rglob("*") if p.is_file() and p.suffix in (".py", ".so", ".dylib"))
     # Some host/sabotage installations live outside the Python package.
@@ -12594,7 +12596,7 @@ def diff(paths, require_columns=0, require_lanes=None, owed_json=None):
 #: first part read.
 MERGE_SAME = ("vendor", "commit", "mode", "repeats", "heldout_seed", "fixtures", "heldout",
               "batch_protocol", "batch_sabotage", "rlpair_protocol", "rlpair_sabotage",
-              "par_driver_sabotage", "lane_revisions",
+              "par_driver_sabotage", "lane_revisions", "batch_revisions",
               "parts_omitted") + tuple(
     f"{part}_{k}" for part in EXTRA_PARTS for k in ("protocol", "sabotage"))
 
