@@ -18,7 +18,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.checks.gemm_identical import (
     identical_gemm_with_plan, identical_gemm_workspace_floats, PLAN_SPLIT_32_2X2, PLAN_SPLIT_64_4X4,
-    PLAN_SPLIT_16_1X1, PLAN_APPLE_MMA, PLAN_TUNED_32_2X2, PLAN_SPLITK, apple_mma_applies, PLAN_APPLE_MMA_SPLIT,
+    PLAN_SPLIT_16_1X1, PLAN_APPLE_MMA, PLAN_TUNED_32_2X2, PLAN_SPLITK, apple_mma_applies, PLAN_APPLE_MMA_SPLIT, PLAN_APPLE_MMA_SPLIT_BIG,
     identical_gemm_splitk_fits, choose_gemm_plan,
 )
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE
@@ -133,6 +133,8 @@ def _apple_tn_candidates(m: Int, n: Int, k: Int, default: Int) -> List[Int]:
         comptime if not is_defined["MOJOLEARN_XCNN_NO_MMA_SPLIT"]():
             if n >= 8 and apple_mma_applies(m, n, k):
                 cand.append(PLAN_APPLE_MMA_SPLIT)
+                if m >= 64 and n >= 64:
+                    cand.append(PLAN_APPLE_MMA_SPLIT_BIG)
     return cand^
 
 

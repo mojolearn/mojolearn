@@ -32,6 +32,7 @@ from gemm.checks.gemm_identical import (
     APPLE_MMA,
     PLAN_APPLE_MMA,
     PLAN_APPLE_MMA_SPLIT,
+    PLAN_APPLE_MMA_SPLIT_BIG,
     PLAN_FLAT,
     PLAN_SPLIT_128_8X8,
     PLAN_TUNED_128_8X8,
@@ -166,6 +167,7 @@ def _case(
         if apple_mma_applies(m, n, k):
             plans.append(PLAN_APPLE_MMA)
             plans.append(PLAN_APPLE_MMA_SPLIT)
+            plans.append(PLAN_APPLE_MMA_SPLIT_BIG)
     for pi in range(len(plans)):
         var plan = plans[pi]
         var got = _run(ctx, ha, hb, m, n, k, plan)

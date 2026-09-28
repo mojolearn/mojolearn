@@ -499,6 +499,9 @@ comptime PLAN_APPLE_MMA = 20
 #: Forced only (x_cnn's measured weight-gradient plan); outside the
 #: `range(GEMM_PLAN_COUNT)` sweeps like plan 20.
 comptime PLAN_APPLE_MMA_SPLIT = 21
+#: The same over the default (64x64) tile: twice the arithmetic per staged
+#: word, for outputs with enough tiles.
+comptime PLAN_APPLE_MMA_SPLIT_BIG = 22
 comptime GEMM_PLAN_COUNT = 20
 
 #: Threads per block for `PLAN_FLAT`. SCHEDULING: each thread owns a whole
@@ -551,6 +554,8 @@ def gemm_plan_name(plan: Int) -> String:
         return _tuned_plan_name(TUNED_RPT * 2, TUNED_CPT * 2, 16, True)
     if plan == PLAN_APPLE_MMA_SPLIT:
         return String("APPLE_MMA_SPLIT ") + String(_AMMA_SPLIT_BM) + "x" + String(_AMMA_SPLIT_BN) + " KB=" + String(APPLE_MMA_KB) + " (leaf groups on grid.y -> workspace -> fold)"
+    if plan == PLAN_APPLE_MMA_SPLIT_BIG:
+        return String("APPLE_MMA_SPLIT ") + String(APPLE_MMA_BM) + "x" + String(APPLE_MMA_BN) + " KB=" + String(APPLE_MMA_KB) + " (leaf groups on grid.y -> workspace -> fold)"
     if plan == PLAN_APPLE_MMA:
         return String("APPLE_MMA ") + String(APPLE_MMA_BM) + "x" + String(APPLE_MMA_BN) + " KB=" + String(APPLE_MMA_KB) + " (simdgroup matrix on admitted windows, rtf elsewhere)"
     if plan == PLAN_TUNED_128_8X8_K32:
@@ -3168,6 +3173,8 @@ def identical_gemm_workspace_floats(m: Int, n: Int, k: Int, plan: Int) -> Int:
         return m * n * part[1]
     if plan == PLAN_APPLE_MMA_SPLIT:
         return m * n * apple_mma_split_groups(m, n, k)[1]
+    if plan == PLAN_APPLE_MMA_SPLIT_BIG:
+        return m * n * apple_mma_split_groups[True](m, n, k)[1]
     if plan == PLAN_SPLITK_STAGED:
         return m * n * fold_node_total(part[1])
     return 0
@@ -3877,7 +3884,7 @@ comptime _AMMA_SPLIT_BM = 8 * APPLE_MMA_SMALL_FM * APPLE_MMA_SGM
 comptime _AMMA_SPLIT_BN = 8 * APPLE_MMA_SMALL_FN * APPLE_MMA_SGN
 
 
-def apple_mma_split_groups(m: Int, n: Int, k: Int) -> Tuple[Int, Int]:
+def apple_mma_split_groups[BIG: Bool = False](m: Int, n: Int, k: Int) -> Tuple[Int, Int]:
     """`(leaves per group, groups)` of `PLAN_APPLE_MMA_SPLIT` at `(m, n, k)`:
     the smallest power-of-two group whose grid (small tiles x groups) is at
     most `APPLE_MMA_SPLIT_BLOCKS`. A pure function of the shape; `(1, 0)` at
@@ -3887,13 +3894,15 @@ def apple_mma_split_groups(m: Int, n: Int, k: Int) -> Tuple[Int, Int]:
     if m <= 0 or n <= 0 or p_count <= 0:
         return (1, 0)
     var tiles = ((m + _AMMA_SPLIT_BM - 1) // _AMMA_SPLIT_BM) * ((n + _AMMA_SPLIT_BN - 1) // _AMMA_SPLIT_BN)
+    comptime if BIG:
+        tiles = ((m + APPLE_MMA_BM - 1) // APPLE_MMA_BM) * ((n + APPLE_MMA_BN - 1) // APPLE_MMA_BN)
     var gl = 1
     while gl < p_count and tiles * ((p_count + gl - 1) // gl) > APPLE_MMA_SPLIT_BLOCKS:
         gl *= 2
     return (gl, (p_count + gl - 1) // gl)
 
 
-def _launch_apple_mma_split(
+def _launch_apple_mma_split[BIG: Bool = False](
     ctx: DeviceContext,
     mut c: DeviceBuffer[DType.float32],
     mut a: DeviceBuffer[DType.float32],
@@ -3912,11 +3921,15 @@ def _launch_apple_mma_split(
     plans' fold of the `groups` nodes per cell (`_ksplit_fold_launch`). For
     the outputs too small to fill the GPU with whole-`k` blocks (weight
     gradients over many rows: 64 x 288 x 65536 is 18 small tiles)."""
-    var g = apple_mma_split_groups(m, n, k)
+    var g = apple_mma_split_groups[BIG](m, n, k)
+    comptime FM_ = APPLE_MMA_FM if BIG else APPLE_MMA_SMALL_FM
+    comptime FN_ = APPLE_MMA_FN if BIG else APPLE_MMA_SMALL_FN
     comptime ks = identical_gemm_apple_mma_kernel[
-        APPLE_MMA_SGM, APPLE_MMA_SGN, APPLE_MMA_SMALL_FM, APPLE_MMA_SMALL_FN, APPLE_MMA_KB, TUNED_FOLD_SLOTS, True
+        APPLE_MMA_SGM, APPLE_MMA_SGN, FM_, FN_, APPLE_MMA_KB, TUNED_FOLD_SLOTS, True
     ]
-    var tiles = ((m + _AMMA_SPLIT_BM - 1) // _AMMA_SPLIT_BM) * ((n + _AMMA_SPLIT_BN - 1) // _AMMA_SPLIT_BN)
+    comptime TBM = 8 * FM_ * APPLE_MMA_SGM
+    comptime TBN = 8 * FN_ * APPLE_MMA_SGN
+    var tiles = ((m + TBM - 1) // TBM) * ((n + TBN - 1) // TBN)
     step_count_launch()
     ctx.enqueue_function[ks](
         ws.unsafe_ptr(), a.unsafe_ptr(), b.unsafe_ptr(),
@@ -4166,6 +4179,9 @@ def identical_gemm_with_plan(
             return
         if plan == PLAN_APPLE_MMA_SPLIT and p_count > 0 and apple_mma_applies(m, n, k):
             _launch_apple_mma_split(ctx, c, a, b, ws, m, n, k, leaf, p_count, st)
+            return
+        if plan == PLAN_APPLE_MMA_SPLIT_BIG and p_count > 0 and apple_mma_applies(m, n, k):
+            _launch_apple_mma_split[True](ctx, c, a, b, ws, m, n, k, leaf, p_count, st)
             return
     if plan == PLAN_TUNED_64_4X4:
         _launch_tuned[TUNED_RPT, TUNED_CPT, TUNED_TC, TUNED_64_KS, TUNED_FOLD_SLOTS](
