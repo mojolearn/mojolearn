@@ -62,11 +62,19 @@ def _(ml, X, yc, yr, Xh=None):
     """TSNE with init='pca' (sklearn's default), the x-ann-tsne shape
     otherwise: mojolearn's PCA of the 400 rows, scaled to a first-column
     standard deviation of 1e-4 (math.fsum on the host), then the same
-    optimizer. Train hashes the start, the embedding and the KL."""
+    optimizer. Train hashes the PCA projection itself, the scaled start,
+    the embedding and the KL.
+
+    `ml.PCA` is named HERE, not only inside `TSNE._init`: the selector reads
+    a class imported inside a method as narrow, so without this line the
+    lane is not declared for the estimators binding, the lane check never
+    builds it, and the GPU arm refuses on a fresh box (2026-09-28)."""
+    pca = ml.PCA(n_components=2).fit_transform(np.ascontiguousarray(X[:400], dtype=np.float32))
     m = ml.TSNE(perplexity=10.0, max_iter=300, init="pca", random_state=5)
     y0 = m._init(np.ascontiguousarray(X[:400], dtype=np.float32), 400, 5)
     m.fit(X[:400])
-    return _fit(dict(init=_h(y0), embedding=_h(m.embedding_), kl=_h(np.float32(m.kl_divergence_))),
+    return _fit(dict(pca=_h(np.asarray(pca, dtype=np.float32)), init=_h(y0), embedding=_h(m.embedding_),
+                     kl=_h(np.float32(m.kl_divergence_))),
                 m, lambda e: (ml.TSNE(perplexity=10.0, max_iter=300, init="pca",
                                       random_state=5).fit(Xh[:400]).embedding_,))
 
