@@ -20,28 +20,41 @@ target mean, rows ascending. float32 throughout.
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fabs, fmax, ld, st, ldi, sti, i2f, fill, copy,
     cholesky, chol_solve, jacobi_eig, centered_gram, centered_xty, mean_of,
+    add_acc, axpy_acc, axpy_centered, par_rows,
 )
 
 
 def _center(x: FP, y: FP, n: Int, d: Int, fi: Bool, fw: FP, xm: Int, iw: IP) -> Float32:
     if fi:
+        fill(fw, xm, d, Float32(0))
+        for i in range(n):
+            add_acc(fw, xm, x, i * d, d)
         for j in range(d):
-            var acc = Float32(0)
-            for i in range(n):
-                acc = fa(acc, ld(x, i * d + j))
-            st(fw, xm + j, fd(acc, i2f(n)))
+            st(fw, xm + j, fd(ld(fw, xm + j), i2f(n)))
         return mean_of(y, n)
     fill(fw, xm, d, Float32(0))
     return Float32(0)
 
 
-def _sse(x: FP, y: FP, n: Int, d: Int, fw: FP, xm: Int, ym: Float32, coef: FP, coff: Int) -> Float32:
+def _resid_rows(x: FP, y: FP, n: Int, d: Int, fw: FP, xm: Int, ym: Float32, coef: FP, coff: Int, sc: FP):
+    """sc[i] = (y_i - ym) - sum_j (x_ij - xm_j) coef_j, j ascending: the map
+    half of the sse (lane linear-cpu)."""
+
+    def rows_map(lo: Int, hi: Int) {imm x, imm y, imm d, imm fw, imm xm, imm ym, imm coef, imm coff, imm sc}:
+        for i in range(lo, hi):
+            var p = Float32(0)
+            for j in range(d):
+                p = fmad(fs(ld(x, i * d + j), ld(fw, xm + j)), ld(coef, coff + j), p)
+            st(sc, i, fs(fs(ld(y, i), ym), p))
+
+    par_rows(rows_map, n)
+
+
+def _sse(x: FP, y: FP, n: Int, d: Int, fw: FP, xm: Int, ym: Float32, coef: FP, coff: Int, sc: FP) -> Float32:
+    _resid_rows(x, y, n, d, fw, xm, ym, coef, coff, sc)
     var acc = Float32(0)
     for i in range(n):
-        var p = Float32(0)
-        for j in range(d):
-            p = fmad(fs(ld(x, i * d + j), ld(fw, xm + j)), ld(coef, coff + j), p)
-        var r = fs(fs(ld(y, i), ym), p)
+        var r = ld(sc, i)
         acc = fmad(r, r, acc)
     return acc
 
@@ -58,25 +71,23 @@ def _wmean_center(x: FP, y: FP, n: Int, d: Int, fi: Bool, fw: FP, xm: Int, wsum:
     if not fi:
         fill(fw, xm, d, Float32(0))
         return Float32(0)
+    fill(fw, xm, d, Float32(0))
+    for i in range(n):
+        axpy_acc(fw, xm, ld(y, n + i), x, i * d, d)
     for j in range(d):
-        var acc = Float32(0)
-        for i in range(n):
-            acc = fmad(ld(y, n + i), ld(x, i * d + j), acc)
-        st(fw, xm + j, fd(acc, wsum))
+        st(fw, xm + j, fd(ld(fw, xm + j), wsum))
     var acc = Float32(0)
     for i in range(n):
         acc = fmad(ld(y, n + i), ld(y, i), acc)
     return fd(acc, wsum)
 
 
-def _wsse(x: FP, y: FP, n: Int, d: Int, fw: FP, xm: Int, ym: Float32, coef: FP, coff: Int) -> Float32:
+def _wsse(x: FP, y: FP, n: Int, d: Int, fw: FP, xm: Int, ym: Float32, coef: FP, coff: Int, sc: FP) -> Float32:
     """sum_i w_i r_i^2: their sse on the sqrt(w)-rescaled data."""
+    _resid_rows(x, y, n, d, fw, xm, ym, coef, coff, sc)
     var acc = Float32(0)
     for i in range(n):
-        var p = Float32(0)
-        for j in range(d):
-            p = fmad(fs(ld(x, i * d + j), ld(fw, xm + j)), ld(coef, coff + j), p)
-        var r = fs(fs(ld(y, i), ym), p)
+        var r = ld(sc, i)
         acc = fmad(fm(ld(y, n + i), r), r, acc)
     return acc
 
@@ -97,7 +108,8 @@ def bayes_ridge_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: F
     sqrt(w)-rescaled Gram, X'y and sse, the weighted variance and sum(w) in
     the alpha update (theirs, sw_sum).
     res: coef d, intercept, alpha_, lambda_, n_iter.
-    fw: xm d | G d*d | xty d | V d*d | vty d | old d | tmp d."""
+    fw: xm d | G d*d | xty d | V d*d | vty d | old d | tmp d, then at
+    3d^2 + 5d the sse scratch n."""
     var max_iter = ldi(ip, 0)
     var fi = ldi(ip, 1) != 0
     var tol = ld(fp, 0)
@@ -121,26 +133,27 @@ def bayes_ridge_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: F
             wsum = fa(wsum, ld(y, n + i))
         ym = _wmean_center(x, y, n, d, fi, fw, xm, wsum)
         for j in range(d):
-            for k in range(j, d):
-                var acc = Float32(0)
-                for i in range(n):
-                    acc = fmad(fm(ld(y, n + i), fs(ld(x, i * d + j), ld(fw, xm + j))), fs(ld(x, i * d + k), ld(fw, xm + k)), acc)
-                st(fw, gg + j * d + k, acc)
-                st(fw, gg + k * d + j, acc)
+            fill(fw, gg + j * d + j, d - j, Float32(0))
+        for i in range(n):
+            var wi = ld(y, n + i)
+            for j in range(d):
+                var a = fm(wi, fs(ld(x, i * d + j), ld(fw, xm + j)))
+                axpy_centered(fw, gg + j * d + j, a, x, i * d + j, fw, xm + j, d - j)
+        for j in range(d):
+            for k in range(j + 1, d):
+                st(fw, gg + k * d + j, ld(fw, gg + j * d + k))
     else:
         ym = _center(x, y, n, d, fi, fw, xm, iw)
         centered_gram(x, n, d, fw, xm, fw, gg)
     var yc = ym
     # X'y on centered data
-    for j in range(d):
-        var acc = Float32(0)
-        var mj = ld(fw, xm + j)
-        for i in range(n):
-            var xc = fs(ld(x, i * d + j), mj)
-            if sw:
-                xc = fm(ld(y, n + i), xc)
-            acc = fmad(xc, fs(ld(y, i), yc), acc)
-        st(fw, xty + j, acc)
+    fill(fw, xty, d, Float32(0))
+    for i in range(n):
+        var b = fs(ld(y, i), yc)
+        if sw:
+            axpy_centered[True](fw, xty, b, x, i * d, fw, xm, d, ld(y, n + i))
+        else:
+            axpy_centered(fw, xty, b, x, i * d, fw, xm, d)
     jacobi_eig(fw, gg, fw, vv, d, 60)
     for j in range(d):
         var ev = ld(fw, gg + j * d + j)
@@ -179,7 +192,8 @@ def bayes_ridge_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: F
         if it == max_iter:
             break  # the last update after the loop
         iters = it + 1
-        var sse = _wsse(x, y, n, d, fw, xm, ym, res, 0) if sw else _sse(x, y, n, d, fw, xm, ym, res, 0)
+        var sse = _wsse(x, y, n, d, fw, xm, ym, res, 0, fw + 3 * d * d + 5 * d) if sw else _sse(
+            x, y, n, d, fw, xm, ym, res, 0, fw + 3 * d * d + 5 * d)
         var gamma = Float32(0)
         for k in range(d):
             var aev = fm(alpha, ld(fw, tmp + k))
@@ -245,7 +259,7 @@ def ard_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: I
     """ip: [max_iter, fit_intercept]; fp: [tol, alpha_1, alpha_2, lambda_1,
     lambda_2, threshold_lambda].
     res: coef d, intercept, alpha_, lambda_ d, n_iter.
-    fw: xm d | G d*d | xty d | A d*d | sigma d*d | lambda d | old d.
+    fw: xm d | G d*d | xty d | A d*d | sigma d*d | lambda d | old d | sse scratch n.
     iw: keep d | kept index d."""
     var max_iter = ldi(ip, 0)
     var fi = ldi(ip, 1) != 0
@@ -265,12 +279,7 @@ def ard_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: I
     var keep = 0
     var ym = _center(x, y, n, d, fi, fw, xm, iw)
     centered_gram(x, n, d, fw, xm, fw, gg)
-    for j in range(d):
-        var acc = Float32(0)
-        var mj = ld(fw, xm + j)
-        for i in range(n):
-            acc = fmad(fs(ld(x, i * d + j), mj), fs(ld(y, i), ym), acc)
-        st(fw, xty + j, acc)
+    centered_xty(x, y, n, d, fw, xm, ym, fw, xty)
     var alpha = fd(Float32(1), fa(_var(y, n), Float32(1.1920929e-07)))
     fill(fw, lamo, d, Float32(1))
     fill(res, 0, d, Float32(0))
@@ -282,7 +291,7 @@ def ard_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: I
         iters = it + 1
         var dk = _ard_sigma(d, fw, gg, aa, sg, lamo, alpha, iw, keep)
         _ard_coef(d, dk, fw, sg, xty, alpha, iw, keep, res)
-        var sse = _sse(x, y, n, d, fw, xm, ym, res, 0)
+        var sse = _sse(x, y, n, d, fw, xm, ym, res, 0, fw + 3 * d * d + 4 * d)
         var gsum = Float32(0)
         for a in range(dk):
             var j = ldi(iw, keep + d + a)

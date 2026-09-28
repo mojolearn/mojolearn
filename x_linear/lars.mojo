@@ -21,7 +21,7 @@ alpha <= alpha_min with linear interpolation, the degenerate-regressor skip
 """
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fsqrt, fabs, fmin, fsign, ld, st, ldi, sti, i2f,
-    fill, copy, cholesky, chol_solve, centered_gram,
+    fill, copy, cholesky, chol_solve, centered_gram, centered_xty, add_acc,
 )
 
 comptime BIG = Float32(3.0e38)
@@ -52,11 +52,11 @@ def lars_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: 
     var act = d
     var ym = Float32(0)
     if fi:
+        fill(fw, xm, d, Float32(0))
+        for i in range(n):
+            add_acc(fw, xm, x, i * d, d)
         for j in range(d):
-            var acc = Float32(0)
-            for i in range(n):
-                acc = fa(acc, ld(x, i * d + j))
-            st(fw, xm + j, fd(acc, i2f(n)))
+            st(fw, xm + j, fd(ld(fw, xm + j), i2f(n)))
         var acc = Float32(0)
         for i in range(n):
             acc = fa(acc, ld(y, i))
@@ -64,12 +64,7 @@ def lars_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: 
     else:
         fill(fw, xm, d, Float32(0))
     centered_gram(x, n, d, fw, xm, fw, gg)
-    for j in range(d):
-        var acc = Float32(0)
-        var mj = ld(fw, xm + j)
-        for i in range(n):
-            acc = fmad(fs(ld(x, i * d + j), mj), fs(ld(y, i), ym), acc)
-        st(fw, xty + j, acc)
+    centered_xty(x, y, n, d, fw, xm, ym, fw, xty)
     fill(res, 0, d, Float32(0))
     fill(fw, prev, d, Float32(0))
     for j in range(d):

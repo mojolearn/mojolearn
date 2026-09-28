@@ -537,7 +537,7 @@ class BayesianRidge(_LinearRegressorMixin, NumericModeMixin):
                     [self.tol, self.alpha_1, self.alpha_2, self.lambda_1, self.lambda_2,
                      -1.0 if self.alpha_init is None else self.alpha_init,
                      -1.0 if self.lambda_init is None else self.lambda_init],
-                    d + 4, 3 * d * d + 5 * d, 1)
+                    d + 4, 3 * d * d + 5 * d + n, 1)
         self.coef_ = Array.from_list(vals[:d], "<f4")
         self.intercept_ = float(vals[d])
         self.alpha_, self.lambda_ = float(vals[d + 1]), float(vals[d + 2])
@@ -571,7 +571,7 @@ class ARDRegression(_LinearRegressorMixin, NumericModeMixin):
         yv = _vector(y, n)
         vals = _run(self, ALGO_ARD, a, n, d, yv, [self.max_iter, int(bool(self.fit_intercept))],
                     [self.tol, self.alpha_1, self.alpha_2, self.lambda_1, self.lambda_2, self.threshold_lambda],
-                    2 * d + 4, 3 * d * d + 4 * d, 2 * d)
+                    2 * d + 4, 3 * d * d + 4 * d + n, 2 * d)
         self.coef_ = Array.from_list(vals[:d], "<f4")
         self.intercept_ = float(vals[d])
         self.alpha_ = float(vals[d + 1])
