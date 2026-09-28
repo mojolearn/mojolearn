@@ -3,11 +3,16 @@
 The Python API is `mojolearn.UMAP(...).fit(X)` / `.fit_transform(X)`.
 It uses the existing metrics/spectral extension in all three numeric modes.
 `embedding_`, `n_features_in_`, and `input_copied_` describe a completed fit.
-The supported slice is dense Euclidean input, spectral initialization,
-2D/3D output, and `local_connectivity=1`. The published 0.5.0 wheel uses a
-dense graph and has no `transform`. Current source enables CSR fit and
-`transform`; their qualification status is described below. Supervised
-fitting is unsupported.
+The certified slice is dense Euclidean input, spectral initialization,
+2D/3D output, and `local_connectivity=1`. Option parity (lane/algos-decomp,
+2026-09-27) adds n_components 1 to 32, any `local_connectivity`, the
+sqeuclidean / cosine / manhattan / chebyshev / minkowski k-NN metrics,
+`init` 'random' / 'pca' / an array, `a` and `b` given directly, and
+supervised `fit(X, y)` (categorical or euclidean targets); `densmap` and a
+non-euclidean `output_metric` are refused by name. Those options are lane
+`x-decomp-umap-options` and are not yet in a release record. The published
+0.5.0 wheel uses a dense graph and has no `transform`. Current source enables
+CSR fit and `transform`; their qualification status is described below.
 The installed-wheel gate exercises the public surface in each shipped mode
 and compares IDENTICAL layout bits to the named source fixture below.
 

@@ -16,7 +16,7 @@ lands on the card."""
 from std.memory import bitcast
 
 from core.identity_trace import IdentityTrace
-from x_decomp.cells import F32Ptr
+from x_decomp.cells import F32Ptr, FOLD_BLOCK
 from x_decomp.checks.xd_oracles import (
     oracle_absmax_sign,
     oracle_colsum,
@@ -280,4 +280,38 @@ def main() raises:
         HostExec.absmax_sign(ptr(tv), ptr(hsg), 9, 6, bc)
         same("5317 absmax sign host", count_diff_f32(hsg, ws2))
         tr.record_list_f32("x_decomp.absmax_sign." + String(by_col), dsg)
+    # ---- 5317 across FOLD_BLOCK slices (the device's two-stage scan): the
+    # largest |.| tied across slices goes to the LOWER slice, a strictly
+    # larger one in a later slice wins, NaN never wins; 3 vectors of
+    # 2 * FOLD_BLOCK + 9 entries, as columns and as rows
+    var ln = 2 * FOLD_BLOCK + 9
+    var lc = zeros(ln * 3)
+    for i in range(ln * 3):
+        lc[i] = Float32((i * 37) % 101 - 50) * Float32(0.001)
+    lc[3 * 3 + 0] = Float32(1e9)
+    lc[(FOLD_BLOCK + 2) * 3 + 0] = Float32(-1e9)
+    lc[(ln - 1) * 3 + 0] = Float32(-1e9)
+    lc[10 * 3 + 1] = Float32(5)
+    lc[(FOLD_BLOCK + 100) * 3 + 1] = Float32(-7)
+    lc[(2 * FOLD_BLOCK + 1) * 3 + 1] = Float32(7)
+    lc[7 * 3 + 2] = Float32(0) / Float32(0)
+    lc[(2 * FOLD_BLOCK + 4) * 3 + 2] = Float32(-3)
+    var lr = zeros(ln * 3)
+    for i in range(ln):
+        for j in range(3):
+            lr[j * ln + i] = lc[i * 3 + j]
+    for by_col in range(2):
+        var bc = by_col == 1
+        var src = lc.copy() if bc else lr.copy()
+        var nn = ln if bc else 3
+        var dd = 3 if bc else ln
+        var want = oracle_absmax_sign(src, nn, dd, bc)
+        require_separates("5317 sign-flip tie across slices", count_diff_f32(want, oracle_absmax_sign(src, nn, dd, bc, 1)))
+        var dl = zeros(3)
+        DevExec.absmax_sign(ptr(src), ptr(dl), nn, dd, bc)
+        same("5317 absmax sign across slices device", count_diff_f32(dl, want))
+        var hl = zeros(3)
+        HostExec.absmax_sign(ptr(src), ptr(hl), nn, dd, bc)
+        same("5317 absmax sign across slices host", count_diff_f32(hl, want))
+        tr.record_list_f32("x_decomp.absmax_sign_long." + String(by_col), dl)
     print("PASS x_decomp fold_ew_check")

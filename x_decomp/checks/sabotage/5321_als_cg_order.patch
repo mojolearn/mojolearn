@@ -1,0 +1,27 @@
+--- a/x_decomp/cells.mojo
++++ b/x_decomp/cells.mojo
+@@ -922,6 +922,15 @@
+     return acc
+ 
+ 
++@always_inline
++def _dot_rev(a: F32Ptr, ao: Int, b: F32Ptr, bo: Int, f: Int) -> Float32:  # SABOTAGE 5321
++    var acc = Float32(0)
++    for jj in range(f):
++        var j = f - 1 - jj
++        acc = ftz(identical_mul_add(ftz(a.unsafe_load(ao + j)), ftz(b.unsafe_load(bo + j)), acc))
++    return acc
++
++
+ def _yty_times(YtY: F32Ptr, reg: Float32, x: F32Ptr, xo: Int, dst: F32Ptr, d0: Int, f: Int, sign: Float32):
+     """dst = sign * (YtY + reg I) x, each row's sum ascending."""
+     for j in range(f):
+@@ -978,7 +987,7 @@
+             var temp = mul(sub(conf, Float32(1)), _yt_x(Y, i, S, po, f))
+             for j in range(f):
+                 S.unsafe_store(ao + j, ftz(identical_mul_add(temp, ftz(Y.unsafe_load(i * f + j)), ftz(S.unsafe_load(ao + j)))))
+-        var alpha = div0(rsold, _dot_s(S, po, S, ao, f))
++        var alpha = div0(rsold, _dot_rev(S, po, S, ao, f))  # SABOTAGE 5321: p.Ap folds descending
+         for j in range(f):
+             X.unsafe_store(xo + j, ftz(identical_mul_add(alpha, ftz(S.unsafe_load(po + j)), ftz(X.unsafe_load(xo + j)))))
+         for j in range(f):

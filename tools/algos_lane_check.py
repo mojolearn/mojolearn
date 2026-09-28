@@ -270,6 +270,11 @@ def ensure_portable_math(log):
 #: stored .so lands only when its stamp's digest is THIS tree's, so the
 #: sabotaged stage can never be answered from the store.
 STORE = os.environ.get("MOJOLEARN_LANE_CHECK_STORE", "")
+#: One arm (one identity_break.py run) is killed and FAILS as HUNG past this
+#: many seconds (lane/algos-decomp, 2026-09-28: on do-amd two arms of two
+#: lanes sat in hipFree -- sched_yield on a KFD event, GPU idle -- for 3.5 h
+#: and held the steward queue). The check's other arms and steps are unaffected.
+ARM_TIMEOUT = int(os.environ.get("MOJOLEARN_LANE_CHECK_ARM_TIMEOUT", "10800"))
 
 
 def _store_tree():
@@ -335,7 +340,15 @@ def run_arm(kind, lane, backend, fixtures, out, log, moved_ok=False):
     with open(log, "a") as fh:
         fh.write(f"\n$ {' '.join(cmd)}\n")
         fh.flush()
-        rc = subprocess.run(cmd, cwd=ROOT, env=arm_env(kind), stdout=fh, stderr=subprocess.STDOUT).returncode
+        try:
+            rc = subprocess.run(cmd, cwd=ROOT, env=arm_env(kind), stdout=fh, stderr=subprocess.STDOUT,
+                                timeout=ARM_TIMEOUT).returncode
+        except subprocess.TimeoutExpired:
+            fh.write(f"\n[lane-check] HUNG: no exit after {ARM_TIMEOUT} s; killed\n")
+            raise Fail(f"{lane}: the {kind} arm HUNG (no exit after {ARM_TIMEOUT} s, killed; "
+                       f"MOJOLEARN_LANE_CHECK_ARM_TIMEOUT); last cell started: "
+                       + next((ln for ln in reversed(Path(log).read_text(errors='replace').splitlines())
+                               if ln.startswith("# START")), "(none)"))
     if moved_ok and rc == 1 and out.is_file():
         say(f"{lane}: the {kind} arm exited 1 under the sabotage with its JSON written (a part moved "
             "inside the column); the diff decides")
