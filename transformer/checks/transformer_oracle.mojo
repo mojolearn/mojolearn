@@ -102,6 +102,7 @@ torch, on the `mamba/corpus/` pattern, so that the tolerance instrument is
 not our own code twice.
 """
 
+from core.host_lanes import all_finite
 from std.math import min
 from std.memory import bitcast
 
@@ -196,6 +197,8 @@ def refuse_nonfinite(name: String, values: List[Float32]) raises:
     NaN would, and this profile does not test for one at every stage. What
     catches it is the card, since a stage hash containing a vendor-shaped
     payload cannot match. That is a detection, not a prevention."""
+    if all_finite(values):
+        return  # the bit test below, as lanes (lane neural-cpu); nothing to refuse
     for i in range(len(values)):
         var au = bitcast[DType.uint32](values[i]) & UInt32(0x7FFFFFFF)
         if au > UInt32(0x7F800000):

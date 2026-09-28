@@ -63,6 +63,7 @@ pairwise addition has no fold-order fault (addition commutes), and the public
 ordered-shard reduction reaches no GEMM. Its independent oracle must catch
 the changed native result, including the cancellation fixture ending at three.
 """
+from core.host_lanes import all_finite
 from std.math import isfinite
 from std.sys.compile import is_defined
 from std.sys.info import num_physical_cores
@@ -118,6 +119,8 @@ def _host_rms_tasks(m: Int, dm: Int) -> Int:
 
 def host_samba_refuse_nonfinite(name: String, values: List[Float32]) raises:
     """`_refuse_nonfinite`, `samba_ops.mojo:53`, in its words."""
+    if all_finite(values):
+        return  # the bit test below, as lanes (lane neural-cpu); nothing to refuse
     for i in range(len(values)):
         if not isfinite(values[i]):
             raise Error(

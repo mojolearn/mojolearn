@@ -214,7 +214,7 @@ def _transformer_weights_from(
         dm, nh, nkv, hd, it, rope_positions, opts,
         read_f32(a[1], dm), read_f32(a[2], dm), read_f32(a[3], qw * dm),
         read_f32(a[4], kw * dm), read_f32(a[5], kw * dm), read_f32(a[6], dm * qw),
-        w_gate, read_f32(a[8], it * dm), read_f32(a[9], dm * it),
+        w_gate^, read_f32(a[8], it * dm), read_f32(a[9], dm * it),
         _opt_read(a[13], qw, opts.qkv_bias, "q_proj.bias", what),
         _opt_read(a[14], kw, opts.qkv_bias, "k_proj.bias", what),
         _opt_read(a[15], kw, opts.qkv_bias, "v_proj.bias", what),

@@ -2,6 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The host FP32 oracle of softmax cross-entropy under profile `mojolearn.identical.loss.ce.fp32.v1`, and its Float64 tolerance reference. - `refuse_nonfinite` here is a THIRD COPY (DEVIATION 1164)."""
 
+from core.host_lanes import all_finite
 from checks.numerics import (
     ftz,
     identical_div,
@@ -63,6 +64,8 @@ def ce_nonfinite_message(name: String, index: Int, is_nan: Bool) -> String:
 
 def refuse_nonfinite(name: String, values: List[Float32]) raises:
     """IDENTITY_PATHS row 39: a NaN or an infinity in an input is REFUSED BY NAME before any recorded stage. DEVIATION 1164.** The first is `mamba/checks/mamba_oracle.mojo:57` and the second is `training/checks/optimizer_oracle.mojo:162`, landed by the concurrent optimizer lane on 2026-08-25; all three must stay the same shape. The message is `ce_nonfinite_message`'s (DEVIATION 2514)."""
+    if all_finite(values):
+        return  # the bit test below, as lanes (lane neural-cpu); nothing to refuse
     for i in range(len(values)):
         var au = rebind[UInt32](values[i].to_bits()) & UInt32(0x7FFFFFFF)
         if au > CE_POS_INF_BITS:

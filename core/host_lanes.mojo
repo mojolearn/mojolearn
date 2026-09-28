@@ -312,3 +312,27 @@ def host_row_tasks(rows: Int, work_per_row: Int) -> Int:
     if rows <= 1 or work < 2 * HOST_ROW_TASK_MIN_WORK:
         return 1
     return max(1, min(host_predict_task_count(rows), work // HOST_ROW_TASK_MIN_WORK))
+
+
+def all_finite(values: List[Float32]) -> Bool:
+    """True when no value is a NaN or an infinity, tested by BITS (an
+    exponent field of all ones), lane by lane. The refusals' fast path: a
+    caller that finds a non-finite value re-walks with its own scalar loop,
+    so the message and the index it names are unchanged. Not a numeric seam:
+    it reads bits and computes nothing, in any tier."""
+    var p = values.unsafe_ptr()
+    var n = len(values)
+    var i = 0
+    var acc = U32V(0)
+    var expm = U32V(0x7F800000)
+    while i + HOST_FW <= n:
+        var e = bitcast[DType.uint32](p.unsafe_load[width=HOST_FW](i)) & expm
+        acc = acc | e.eq(expm).select(U32V(1), U32V(0))
+        i += HOST_FW
+    if acc.reduce_or() != UInt32(0):
+        return False
+    while i < n:
+        if (bitcast[DType.uint32](p.unsafe_load(i)) & UInt32(0x7F800000)) == UInt32(0x7F800000):
+            return False
+        i += 1
+    return True
