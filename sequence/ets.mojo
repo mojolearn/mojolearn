@@ -22,7 +22,7 @@ indices m - 1 .. 1 (reversed); the last state is m [M] - their sum. The
 level and trend are the least-squares line through the first
 min(max(10, 2m), n) seasonally adjusted observations.
 
-Pinned spellings (sequence/README.md, DEVIATIONS 5517-5518):
+Pinned spellings (sequence/README.md, DEVIATIONS 5517-5518; seams_check.mojo, arms seam_5517 / seam_5518):
 - 5517 the seasonal update s0 = s_old + gamma (t - s_old), one fma
   (alt: (1 - gamma) s_old + gamma t).
 - 5518 the decomposition's moving average: the taps summed in index order
