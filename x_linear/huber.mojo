@@ -13,6 +13,7 @@ x_linear/lbfgs.mojo (the same minimizer; a different path).
 from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, fexp, fabs, ld, st, ldi, i2f, fill, row_dot
 from x_linear.lbfgs import lbfgs, lbfgs_work
 from x_linear.team import Team
+from x_linear.tops import chain_fmad, fold_fa
 
 
 def huber_objective(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: FP, toff: Int, g: FP, goff: Int) -> Float32:
@@ -51,13 +52,11 @@ def huber_objective(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: F
     t.sync()
     var cells = d + 1 if fi else d
     for c in range(t.tid, cells, t.nt):
-        var acc = Float32(0)
+        var acc: Float32
         if c < d:
-            for i in range(n):
-                acc = fmad(ld(cr, i), ld(x, i * d + c), acc)
+            acc = chain_fmad(cr, 0, 1, x, c, d, n)
         else:
-            for i in range(n):
-                acc = fa(acc, ld(cr, i))
+            acc = fold_fa(cr, 0, 1, n)
         st(g, goff + c, acc)
     t.sync()
     var out = Float32(0)

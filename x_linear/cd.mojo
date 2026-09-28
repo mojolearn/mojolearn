@@ -27,7 +27,7 @@ from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fabs, fmax, fexp, flog, fsign, ld, st, ldi, i2f, fill, copy,
 )
 from x_linear.team import Team
-from x_linear.tops import upper_cell
+from x_linear.tops import upper_cell, fold_fa_ix, fold_sq_ix, chain_cfmad_ix
 
 
 def alpha_grid_value(amax: Float32, eps: Float32, k: Int, a_n: Int) -> Float32:
@@ -117,25 +117,29 @@ def _prep(t: Team, x: FP, y: FP, n: Int, d: Int, fid: FP, fold: Int, fi: Bool,
           fw: FP, xm: Int, gg: Int, q: Int, sc: Int):
     """Centers the rows whose fold id != `fold` (all rows when fold < 0):
     x means, Gram, X'y; fw[sc:sc+3] = (y mean, |yc|^2, rows).
-    Team form: one thread per mean, Gram cell and X'y cell, the y folds on
-    the lead."""
+    Team form: the lead lists the training rows (ascending, team row 1) and
+    the held-out rows (team row 2); one thread per mean, Gram cell and X'y
+    cell folds its rows ascending (x_linear/tops.mojo chains); the y folds
+    on the lead."""
+    var tr = t.row(1).bitcast[Int32]()
+    var te = t.row(2).bitcast[Int32]()
     var ym = Float32(0)
     var rows = 0
     if t.lead():
+        var nte = 0
         for i in range(n):
             if fold < 0 or Int(ld(fid, i)) != fold:
+                tr.unsafe_store(rows, Int32(i))
                 rows += 1
+            else:
+                te.unsafe_store(nte, Int32(i))
+                nte += 1
         if fi:
-            var acc = Float32(0)
-            for i in range(n):
-                if fold < 0 or Int(ld(fid, i)) != fold:
-                    acc = fa(acc, ld(y, i))
-            ym = fd(acc, i2f(rows))
+            ym = fd(fold_fa_ix(y, tr, rows), i2f(rows))
         var yn = Float32(0)
-        for i in range(n):
-            if fold < 0 or Int(ld(fid, i)) != fold:
-                var r = fs(ld(y, i), ym)
-                yn = fmad(r, r, yn)
+        for k in range(rows):
+            var r = fs(ld(y, Int(tr.unsafe_load(k))), ym)
+            yn = fmad(r, r, yn)
         st(fw, sc, ym)
         st(fw, sc + 1, yn)
         st(fw, sc + 2, i2f(rows))
@@ -144,10 +148,7 @@ def _prep(t: Team, x: FP, y: FP, n: Int, d: Int, fid: FP, fold: Int, fi: Bool,
     for j in range(t.tid, d, t.nt):
         var acc = Float32(0)
         if fi:
-            for i in range(n):
-                if fold < 0 or Int(ld(fid, i)) != fold:
-                    acc = fa(acc, ld(x, i * d + j))
-            acc = fd(acc, i2f(rows))
+            acc = fd(fold_fa_ix(x, tr, rows, j, d), i2f(rows))
         st(fw, xm + j, acc)
     t.sync()
     var cells = d * (d + 1) // 2
@@ -156,22 +157,12 @@ def _prep(t: Team, x: FP, y: FP, n: Int, d: Int, fid: FP, fold: Int, fi: Bool,
             var jk = upper_cell(c, d)
             var j = jk[0]
             var k = jk[1]
-            var mj = ld(fw, xm + j)
-            var mk = ld(fw, xm + k)
-            var acc = Float32(0)
-            for i in range(n):
-                if fold < 0 or Int(ld(fid, i)) != fold:
-                    acc = fmad(fs(ld(x, i * d + j), mj), fs(ld(x, i * d + k), mk), acc)
+            var acc = chain_cfmad_ix(x, j, d, ld(fw, xm + j), x, k, d, ld(fw, xm + k), tr, rows)
             st(fw, gg + j * d + k, acc)
             st(fw, gg + k * d + j, acc)
         else:
             var j = c - cells
-            var mj = ld(fw, xm + j)
-            var acc = Float32(0)
-            for i in range(n):
-                if fold < 0 or Int(ld(fid, i)) != fold:
-                    acc = fmad(fs(ld(x, i * d + j), mj), fs(ld(y, i), ym), acc)
-            st(fw, q + j, acc)
+            st(fw, q + j, chain_cfmad_ix(x, j, d, ld(fw, xm + j), y, 0, 1, ym, tr, rows))
     t.sync()
 
 
@@ -243,19 +234,16 @@ def enetcv_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, f
                     for j in range(d):
                         b = fs(b, fm(ld(fw, xm + j), ld(fw, w + j)))
                 b = t.bcast(b, 4)
-                for i in range(t.tid, n, t.nt):
-                    if Int(ld(fid, i)) == f:
-                        var p = b
-                        for j in range(d):
-                            p = fmad(ld(x, i * d + j), ld(fw, w + j), p)
-                        st(rr, i, fs(p, ld(y, i)))
+                var te = t.row(2).bitcast[Int32]()
+                for qq in range(t.tid, n_te, t.nt):
+                    var i = Int(te.unsafe_load(qq))
+                    var p = b
+                    for j in range(d):
+                        p = fmad(ld(x, i * d + j), ld(fw, w + j), p)
+                    st(rr, i, fs(p, ld(y, i)))
                 t.sync()
                 if t.lead():
-                    var acc = Float32(0)
-                    for i in range(n):
-                        if Int(ld(fid, i)) == f:
-                            var r = ld(rr, i)
-                            acc = fmad(r, r, acc)
+                    var acc = fold_sq_ix(rr, te, n_te)
                     st(res, mse + (l * a_n + k) * f_n + f, fd(acc, i2f(n_te)) if n_te > 0 else Float32(0))
                 t.sync()
     if t.lead():

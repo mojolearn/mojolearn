@@ -9,6 +9,7 @@ result is the lead's fold, broadcast.
 """
 from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, ld, st, i2f
 from x_linear.team import Team
+from std.sys.info import is_amd_gpu, is_apple_gpu, is_nvidia_gpu
 from x_linear.ops import fz as _fz
 from checks.numerics import identical_mul_add, identical_mul
 
@@ -47,10 +48,7 @@ def upper_cell(c: Int, d: Int) -> Tuple[Int, Int]:
 def t_col_means(t: Team, x: FP, n: Int, d: Int, res: FP, ooff: Int):
     """res[ooff + j] = (sum_i x_ij) / n, rows ascending (bayes `_center`)."""
     for j in range(t.tid, d, t.nt):
-        var acc = Float32(0)
-        for i in range(n):
-            acc = fa(acc, ld(x, i * d + j))
-        st(res, ooff + j, fd(acc, i2f(n)))
+        st(res, ooff + j, fd(fold_fa(x, j, d, n), i2f(n)))
     t.sync()
 
 
@@ -61,11 +59,7 @@ def t_centered_gram(t: Team, x: FP, n: Int, d: Int, xm: FP, xmoff: Int, g: FP, g
         var jk = upper_cell(c, d)
         var j = jk[0]
         var k = jk[1]
-        var acc = Float32(0)
-        var mj = ld(xm, xmoff + j)
-        var mk = ld(xm, xmoff + k)
-        for i in range(n):
-            acc = fmad(fs(ld(x, i * d + j), mj), fs(ld(x, i * d + k), mk), acc)
+        var acc = chain_cfmad(x, j, d, ld(xm, xmoff + j), x, k, d, ld(xm, xmoff + k), n)
         st(g, goff + j * d + k, acc)
         st(g, goff + k * d + j, acc)
     t.sync()
@@ -74,11 +68,7 @@ def t_centered_gram(t: Team, x: FP, n: Int, d: Int, xm: FP, xmoff: Int, g: FP, g
 def t_centered_xty(t: Team, x: FP, y: FP, n: Int, d: Int, xm: FP, xmoff: Int, ym: Float32, res: FP, ooff: Int):
     """ops.centered_xty, one thread per column."""
     for j in range(t.tid, d, t.nt):
-        var acc = Float32(0)
-        var mj = ld(xm, xmoff + j)
-        for i in range(n):
-            acc = fmad(fs(ld(x, i * d + j), mj), fs(ld(y, i), ym), acc)
-        st(res, ooff + j, acc)
+        st(res, ooff + j, chain_cfmad(x, j, d, ld(xm, xmoff + j), y, 0, 1, ym, n))
     t.sync()
 
 
@@ -86,8 +76,7 @@ def t_sum(t: Team, v: FP, n: Int, k: Int = 0) -> Float32:
     """The lead's ascending fa fold of v[0:n], broadcast (slot k)."""
     var acc = Float32(0)
     if t.lead():
-        for i in range(n):
-            acc = fa(acc, ld(v, i))
+        acc = fold_fa(v, 0, 1, n)
     return t.bcast(acc, k)
 
 
@@ -95,10 +84,7 @@ def t_mean(t: Team, v: FP, n: Int, k: Int = 0) -> Float32:
     """ops.mean_of, on the lead, broadcast."""
     var m = Float32(0)
     if t.lead():
-        var acc = Float32(0)
-        for i in range(n):
-            acc = fa(acc, ld(v, i))
-        m = fd(acc, i2f(n))
+        m = fd(fold_fa(v, 0, 1, n), i2f(n))
     return t.bcast(m, k)
 
 
@@ -106,34 +92,35 @@ def t_sumsq(t: Team, v: FP, n: Int, k: Int = 0) -> Float32:
     """The lead's ascending fold acc = v_i * v_i + acc (one rounding), broadcast."""
     var acc = Float32(0)
     if t.lead():
-        for i in range(n):
-            var r = ld(v, i)
-            acc = fmad(r, r, acc)
+        acc = fold_sq(v, 0, n)
     return t.bcast(acc, k)
 
 
 # ----------------------------------------------------------------------------
 # UNROLLED CHAINS: one thread's ascending fold over rows, its loads issued a
-# block of CHAIN_U ahead of the arithmetic, so a device thread waits on memory
-# once per block instead of once per row. The arithmetic is the plain loop's,
-# operation for operation, in the same order: the bits do not move.
+# block of CHAIN_U_DEVICE ahead of the arithmetic, so a device thread waits on
+# memory once per block instead of once per row (the host keeps the plain
+# loop: the blocked form was slower on an x86 core). The arithmetic is the
+# plain loop's, operation for operation, in the same order: the bits do not
+# move.
 # ----------------------------------------------------------------------------
 
-comptime CHAIN_U = 32
+comptime CHAIN_U_DEVICE = 32
 
 
 @always_inline
 def fold_fa(v: FP, off: Int, step: Int, n: Int, init: Float32 = Float32(0)) -> Float32:
     """acc = fa(acc, v[off + i*step]), i ascending."""
+    comptime U = CHAIN_U_DEVICE if (is_nvidia_gpu() or is_amd_gpu() or is_apple_gpu()) else 1
     var acc = _fz(init)
     var i = 0
-    while i + CHAIN_U <= n:
-        var buf = SIMD[DType.float32, CHAIN_U]()
-        comptime for u in range(CHAIN_U):
+    while i + U <= n:
+        var buf = SIMD[DType.float32, U]()
+        comptime for u in range(U):
             buf[u] = ld(v, off + (i + u) * step)
-        comptime for u in range(CHAIN_U):
+        comptime for u in range(U):
             acc = _acc_fa(acc, buf[u])
-        i += CHAIN_U
+        i += U
     while i < n:
         acc = _acc_fa(acc, ld(v, off + i * step))
         i += 1
@@ -143,15 +130,16 @@ def fold_fa(v: FP, off: Int, step: Int, n: Int, init: Float32 = Float32(0)) -> F
 @always_inline
 def fold_sq(v: FP, off: Int, n: Int, init: Float32 = Float32(0)) -> Float32:
     """acc = _acc_fmad(r, r, acc), r = v[off + i], i ascending."""
+    comptime U = CHAIN_U_DEVICE if (is_nvidia_gpu() or is_amd_gpu() or is_apple_gpu()) else 1
     var acc = _fz(init)
     var i = 0
-    while i + CHAIN_U <= n:
-        var buf = SIMD[DType.float32, CHAIN_U]()
-        comptime for u in range(CHAIN_U):
+    while i + U <= n:
+        var buf = SIMD[DType.float32, U]()
+        comptime for u in range(U):
             buf[u] = ld(v, off + i + u)
-        comptime for u in range(CHAIN_U):
+        comptime for u in range(U):
             acc = _acc_fmad(buf[u], buf[u], acc)
-        i += CHAIN_U
+        i += U
     while i < n:
         var r = ld(v, off + i)
         acc = _acc_fmad(r, r, acc)
@@ -163,17 +151,18 @@ def fold_sq(v: FP, off: Int, n: Int, init: Float32 = Float32(0)) -> Float32:
 def chain_fmad(a: FP, aoff: Int, astep: Int, b: FP, boff: Int, bstep: Int, n: Int,
                init: Float32 = Float32(0)) -> Float32:
     """acc = fmad(a[aoff + i*astep], b[boff + i*bstep], acc), i ascending."""
+    comptime U = CHAIN_U_DEVICE if (is_nvidia_gpu() or is_amd_gpu() or is_apple_gpu()) else 1
     var acc = _fz(init)
     var i = 0
-    while i + CHAIN_U <= n:
-        var pa = SIMD[DType.float32, CHAIN_U]()
-        var pb = SIMD[DType.float32, CHAIN_U]()
-        comptime for u in range(CHAIN_U):
+    while i + U <= n:
+        var pa = SIMD[DType.float32, U]()
+        var pb = SIMD[DType.float32, U]()
+        comptime for u in range(U):
             pa[u] = ld(a, aoff + (i + u) * astep)
             pb[u] = ld(b, boff + (i + u) * bstep)
-        comptime for u in range(CHAIN_U):
+        comptime for u in range(U):
             acc = _acc_fmad(pa[u], pb[u], acc)
-        i += CHAIN_U
+        i += U
     while i < n:
         acc = _acc_fmad(ld(a, aoff + i * astep), ld(b, boff + i * bstep), acc)
         i += 1
@@ -184,20 +173,153 @@ def chain_fmad(a: FP, aoff: Int, astep: Int, b: FP, boff: Int, bstep: Int, n: In
 def chain_fmad_scaled(h: FP, x: FP, j: Int, k: Int, d: Int, n: Int) -> Float32:
     """acc = fmad(fm(h[i], x[i*d + j]), x[i*d + k], acc), i ascending (a
     weighted Gram cell)."""
+    comptime U = CHAIN_U_DEVICE if (is_nvidia_gpu() or is_amd_gpu() or is_apple_gpu()) else 1
     var acc = Float32(0)
     var i = 0
-    while i + CHAIN_U <= n:
-        var ph = SIMD[DType.float32, CHAIN_U]()
-        var pj = SIMD[DType.float32, CHAIN_U]()
-        var pk = SIMD[DType.float32, CHAIN_U]()
-        comptime for u in range(CHAIN_U):
+    while i + U <= n:
+        var ph = SIMD[DType.float32, U]()
+        var pj = SIMD[DType.float32, U]()
+        var pk = SIMD[DType.float32, U]()
+        comptime for u in range(U):
             ph[u] = ld(h, i + u)
             pj[u] = ld(x, (i + u) * d + j)
             pk[u] = ld(x, (i + u) * d + k)
-        comptime for u in range(CHAIN_U):
+        comptime for u in range(U):
             acc = _acc_fmad(_fm(ph[u], pj[u]), pk[u], acc)
-        i += CHAIN_U
+        i += U
     while i < n:
         acc = _acc_fmad(_fm(ld(h, i), ld(x, i * d + j)), ld(x, i * d + k), acc)
+        i += 1
+    return acc
+
+
+# Indexed forms: the rows are ix[0..cnt) (ascending row ids, a fold's
+# training rows), element i of a row-indexed buffer is v[ix[q]].
+
+@always_inline
+def fold_fa_ix(v: FP, ix: IP, cnt: Int, off: Int = 0, step: Int = 1) -> Float32:
+    """acc = fa(acc, v[off + ix[q]*step]), q ascending."""
+    comptime U = CHAIN_U_DEVICE if (is_nvidia_gpu() or is_amd_gpu() or is_apple_gpu()) else 1
+    var acc = Float32(0)
+    var q = 0
+    while q + U <= cnt:
+        var buf = SIMD[DType.float32, U]()
+        comptime for u in range(U):
+            buf[u] = ld(v, off + Int(ix.unsafe_load(q + u)) * step)
+        comptime for u in range(U):
+            acc = _acc_fa(acc, buf[u])
+        q += U
+    while q < cnt:
+        acc = _acc_fa(acc, ld(v, off + Int(ix.unsafe_load(q)) * step))
+        q += 1
+    return acc
+
+
+@always_inline
+def fold_sq_ix(v: FP, ix: IP, cnt: Int) -> Float32:
+    """acc = fmad(r, r, acc), r = v[ix[q]], q ascending."""
+    comptime U = CHAIN_U_DEVICE if (is_nvidia_gpu() or is_amd_gpu() or is_apple_gpu()) else 1
+    var acc = Float32(0)
+    var q = 0
+    while q + U <= cnt:
+        var buf = SIMD[DType.float32, U]()
+        comptime for u in range(U):
+            buf[u] = ld(v, Int(ix.unsafe_load(q + u)))
+        comptime for u in range(U):
+            acc = _acc_fmad(buf[u], buf[u], acc)
+        q += U
+    while q < cnt:
+        var r = ld(v, Int(ix.unsafe_load(q)))
+        acc = _acc_fmad(r, r, acc)
+        q += 1
+    return acc
+
+
+@always_inline
+def chain_fmad_ix(a: FP, b: FP, boff: Int, bstep: Int, ix: IP, cnt: Int) -> Float32:
+    """acc = fmad(a[i], b[boff + i*bstep], acc), i = ix[q], q ascending."""
+    comptime U = CHAIN_U_DEVICE if (is_nvidia_gpu() or is_amd_gpu() or is_apple_gpu()) else 1
+    var acc = Float32(0)
+    var q = 0
+    while q + U <= cnt:
+        var pa = SIMD[DType.float32, U]()
+        var pb = SIMD[DType.float32, U]()
+        comptime for u in range(U):
+            var i = Int(ix.unsafe_load(q + u))
+            pa[u] = ld(a, i)
+            pb[u] = ld(b, boff + i * bstep)
+        comptime for u in range(U):
+            acc = _acc_fmad(pa[u], pb[u], acc)
+        q += U
+    while q < cnt:
+        var i = Int(ix.unsafe_load(q))
+        acc = _acc_fmad(ld(a, i), ld(b, boff + i * bstep), acc)
+        q += 1
+    return acc
+
+
+@always_inline
+def chain_cfmad(a: FP, aoff: Int, astep: Int, ma: Float32, b: FP, boff: Int, bstep: Int, mb: Float32,
+                n: Int) -> Float32:
+    """acc = fmad(fs(a_i, ma), fs(b_i, mb), acc), a_i = a[aoff + i*astep],
+    b_i = b[boff + i*bstep], i ascending (a centered cross product)."""
+    comptime U = CHAIN_U_DEVICE if (is_nvidia_gpu() or is_amd_gpu() or is_apple_gpu()) else 1
+    var acc = Float32(0)
+    var i = 0
+    while i + U <= n:
+        var pa = SIMD[DType.float32, U]()
+        var pb = SIMD[DType.float32, U]()
+        comptime for u in range(U):
+            pa[u] = ld(a, aoff + (i + u) * astep)
+            pb[u] = ld(b, boff + (i + u) * bstep)
+        comptime for u in range(U):
+            acc = _acc_fmad(fs(pa[u], ma), fs(pb[u], mb), acc)
+        i += U
+    while i < n:
+        acc = _acc_fmad(fs(ld(a, aoff + i * astep), ma), fs(ld(b, boff + i * bstep), mb), acc)
+        i += 1
+    return acc
+
+
+@always_inline
+def chain_cfmad_ix(a: FP, aoff: Int, astep: Int, ma: Float32, b: FP, boff: Int, bstep: Int, mb: Float32,
+                   ix: IP, cnt: Int) -> Float32:
+    """chain_cfmad over the rows ix[0..cnt)."""
+    comptime U = CHAIN_U_DEVICE if (is_nvidia_gpu() or is_amd_gpu() or is_apple_gpu()) else 1
+    var acc = Float32(0)
+    var q = 0
+    while q + U <= cnt:
+        var pa = SIMD[DType.float32, U]()
+        var pb = SIMD[DType.float32, U]()
+        comptime for u in range(U):
+            var i = Int(ix.unsafe_load(q + u))
+            pa[u] = ld(a, aoff + i * astep)
+            pb[u] = ld(b, boff + i * bstep)
+        comptime for u in range(U):
+            acc = _acc_fmad(fs(pa[u], ma), fs(pb[u], mb), acc)
+        q += U
+    while q < cnt:
+        var i = Int(ix.unsafe_load(q))
+        acc = _acc_fmad(fs(ld(a, aoff + i * astep), ma), fs(ld(b, boff + i * bstep), mb), acc)
+        q += 1
+    return acc
+
+
+@always_inline
+def fold_one_fmad(v: FP, off: Int, n: Int) -> Float32:
+    """acc = fmad(1, v[off + i], acc), i ascending (an intercept column of
+    ones in a cross product, spelled as the plain loop spells it)."""
+    comptime U = CHAIN_U_DEVICE if (is_nvidia_gpu() or is_amd_gpu() or is_apple_gpu()) else 1
+    var acc = Float32(0)
+    var i = 0
+    while i + U <= n:
+        var buf = SIMD[DType.float32, U]()
+        comptime for u in range(U):
+            buf[u] = ld(v, off + i + u)
+        comptime for u in range(U):
+            acc = _acc_fmad(Float32(1), buf[u], acc)
+        i += U
+    while i < n:
+        acc = _acc_fmad(Float32(1), ld(v, off + i), acc)
         i += 1
     return acc

@@ -8,12 +8,13 @@
  from x_linear.ops import (
      FP, IP, fa, fs, fm, fd, fmad, fabs, fmax, ld, st, ldi, sti, i2f, fill, copy,
      cholesky, chol_solve, jacobi_eig, centered_gram, centered_xty, mean_of,
-@@ -187,7 +188,7 @@
-         var mj = ld(fw, xm + j)
-         for i in range(n):
-             var xc = fs(ld(x, i * d + j), mj)
--            if sw:
-+            if sw and not is_gpu():  # SABOTAGE option sample_weight: the device drops the weights in X'y
-                 xc = fm(ld(y, n + i), xc)
-             acc = fmad(xc, fs(ld(y, i), yc), acc)
-         st(fw, xty + j, acc)
+@@ -188,7 +189,8 @@
+         if sw:
+             for i in range(n):
+                 var xc = fs(ld(x, i * d + j), mj)
+-                xc = fm(ld(y, n + i), xc)
++                if not is_gpu():  # SABOTAGE option sample_weight: the device drops the weights in X'y
++                    xc = fm(ld(y, n + i), xc)
+                 acc = fmad(xc, fs(ld(y, i), yc), acc)
+         else:
+             acc = chain_cfmad(x, j, d, mj, y, 0, 1, yc, n)
