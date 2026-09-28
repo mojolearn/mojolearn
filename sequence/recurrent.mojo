@@ -24,6 +24,8 @@ from sequence.ops import (
     OP_CE,
     OP_CELL_BWD,
     OP_CELL_FWD,
+    OP_CELL_BWD_H,
+    OP_CELL_FWD_H,
     OP_COLSUM,
     OP_FILL,
     OP_GATHER_ROWS,
@@ -234,8 +236,8 @@ def forward[E: Exec](mut ex: E, net: Net, P: FP, x: FP, T: Int, B: Int, w: Work)
         for s in range(T):
             var hprev = w.hall[l] + s * B * H
             var ghs = w.gh[l] + s * B * GH
-            gemm(ex, hprev, P + net.w_hh(l), ghs, B, GH, H, H, 1, 1, H, False, GH)
-            bias_rows(ex, ghs, P + net.b_hh(l), ghs, B, GH)
+            # one launch: h_prev @ W_hh^T + b_hh into GH, then the cell
+            # (ops.mojo::op_cell_fwd_h; the same bits as the three launches)
             var a = Args()
             a.p0 = w.gx[l] + s * B * GH
             a.p1 = ghs
@@ -244,10 +246,12 @@ def forward[E: Exec](mut ex: E, net: Net, P: FP, x: FP, T: Int, B: Int, w: Work)
             a.p4 = w.call[l] + s * B * H
             a.p5 = w.hall[l] + (s + 1) * B * H
             a.p6 = w.call[l] + (s + 1) * B * H
+            a.p7 = P + net.w_hh(l)
+            a.p8 = P + net.b_hh(l)
             a.i0 = net.cell
             a.i1 = B
             a.i2 = H
-            ex.launch[OP_CELL_FWD](a, B * H)
+            ex.launch[OP_CELL_FWD_H](a, B * H)
         inp = w.hall[l] + B * H
     return w.hall[net.L - 1] + T * B * H
 
@@ -292,11 +296,18 @@ def backward[E: Exec](mut ex: E, net: Net, P: FP, Gr: FP, x: FP, T: Int, B: Int,
             a.p8 = w.dgx + s * B * GH
             a.p9 = w.dgh + s * B * GH
             a.p10 = dhn
+            a.p11 = P + net.w_hh(l)
             a.i0 = net.cell
             a.i1 = B
             a.i2 = H
-            ex.launch[OP_CELL_BWD](a, B * H)
-            gemm(ex, w.dgh + s * B * GH, P + net.w_hh(l), dhn, B, H, GH, GH, 1, H, 1, True, H)
+            # one launch: the later step's recurrent GEMM dh += dGH_{s+1} W_hh
+            # (it was a launch after that step's cell backward), then this
+            # step's cell backward (ops.mojo::op_cell_bwd_h). After s = 0 that
+            # GEMM would only produce the gradient into the zero h_0, which
+            # nothing reads, so it is not run.
+            a.i3 = 1 if s < T - 1 else 0
+            a.i4 = B * GH
+            ex.launch[OP_CELL_BWD_H](a, B * H)
             var t = dh
             dh = dhn
             dhn = t

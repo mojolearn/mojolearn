@@ -15,6 +15,7 @@ from sequence.recurrent import gemm
 from sequence.mlp_fit import MLPNet, mlp_fit, mlp_predict
 from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, opt_scalars, opt_step, rnn_fit, rnn_predict
 from sequence.ets import ets_scratch
+from sequence.garch import GARCH_SNAP
 
 
 def fptr(addr: PythonObject, what: String) raises -> FP:
@@ -830,7 +831,7 @@ def garch_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -
     if B < 1 or n < 10 or h < 1 or p < 0 or o < 0 or q < 0 or p + o + q < 1 or 1 + p + o + q + cm > 8:
         raise Error("garch: B >= 1, n >= 10, h >= 1, p + o + q >= 1 and at most 8 parameters")
     var m = max(p, max(o, q))
-    var stride = 4 * n + 64 + max(128, 3 * (m + h))
+    var stride = 4 * n + 64 + max(128, 3 * (m + h)) + GARCH_SNAP
     var Y = ex.alloc(B * n)
     ex.upload(Y, fptr(addrs[0], "y"), B * n)
     var P = ex.alloc(B * (1 + 1 + p + o + q))

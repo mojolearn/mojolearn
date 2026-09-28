@@ -19,6 +19,9 @@ from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
 from checks.numerics import ftz, identical_div, identical_log, identical_pow, identical_sqrt
 
 comptime LOG_2PI: Float32 = 1.8378770664093453
+#: floats at the end of each scratch row for Nelder-Mead's cycle snapshot:
+#: (k + 1) k + (k + 1) for k <= 8 coordinates
+comptime GARCH_SNAP = 81
 
 
 @always_inline
@@ -294,11 +297,13 @@ def op_garch(t: Int, a: Args):
         st(lo, off + 1 + p + o + j, Float32(0.0))
         st(hi, off + 1 + p + o + j, Float32(1.0))
     var obj = GarchObj(y, r, n, p, o, q, has_mean, backcast, vb, s2)
-    var it = nelder_mead(obj, x, lo, hi, np_, nm_scr, Float32(0.05), Float32(1e-4), 2000, Float32(1e-6))
+    # the cycle watch's snapshot: the last GARCH_SNAP floats of the row
+    var snap = a.p5 + t * a.i6 + (a.i6 - GARCH_SNAP)
+    var it = nelder_mead(obj, x, lo, hi, np_, nm_scr, Float32(0.05), Float32(1e-4), 2000, Float32(1e-6), snap)
     # one restart from the optimum (a fresh simplex around it): the
     # likelihood is flat along the persistence ridge and a single simplex
     # can stall short of the maximum
-    it += nelder_mead(obj, x, lo, hi, np_, nm_scr, Float32(0.05), Float32(1e-4), 2000, Float32(1e-6))
+    it += nelder_mead(obj, x, lo, hi, np_, nm_scr, Float32(0.05), Float32(1e-4), 2000, Float32(1e-6), snap)
     var nll = obj.eval(x)
     var outp = a.p1 + t * (1 + k)
     st(outp, 0, ld(x, 0) if has_mean else Float32(0.0))

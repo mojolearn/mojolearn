@@ -15,6 +15,8 @@ values alone.
 
 The objective is chosen at compile time: `Obj.eval(x)` of a struct
 conforming to `Objective`."""
+from std.memory import bitcast
+
 from sequence.ops import FP, add, fma3, ld, mul, st, sub
 from checks.numerics import ftz, identical_div, identical_sqrt
 
@@ -32,13 +34,33 @@ def _clamp(v: Float32, lo: Float32, hi: Float32) -> Float32:
 
 
 @always_inline
+def _put(p: FP, i: Int, v: Float32) -> Bool:
+    """st(p, i, v), and whether the word stored differs from the old one."""
+    var old = bitcast[DType.uint32](p.unsafe_load(i))
+    var w = ftz(v)
+    p.unsafe_store(i, w)
+    return old != bitcast[DType.uint32](w)
+
+
+@always_inline
 def nelder_mead[O: Objective, CAP: Int = 9](
     mut obj: O, x0: FP, lower: FP, upper: FP, n: Int, scratch: FP,
     init_step: Float32, zero_pert: Float32, max_iter: Int, tol_std: Float32,
+    snap: FP = FP(unsafe_from_address=64),
 ) -> Int:
     """Minimises obj over n <= CAP - 1 coordinates from x0; the best point is
     written back to x0. scratch holds (n + 1) n + (n + 1) + 4 n floats.
-    Returns the iteration count."""
+    Returns the iteration count.
+
+    CYCLES (Apple speed, 2026-09-28): with `snap` ((n + 1) n + (n + 1)
+    floats of the caller's) the loop also watches for its state (the simplex
+    and its values, the first words of scratch) returning to an earlier one,
+    Brent's way (a snapshot at iterations 0, 1, 2, 4, 8, ...). The loop is a
+    function of that state alone, so from a repeat at period p it runs only
+    the (max_iter - it) mod p iterations that remain of the last lap (a full
+    lap when that is 0, so the last sort is the one the full run ends on)
+    and stops: the same final state, best vertex, last evaluations and
+    iteration count as running every iteration."""
     var nf = Float32(n)
     var gamma = add(Float32(1.0), ftz(identical_div(Float32(2.0), nf)))
     var rho = sub(Float32(0.75), ftz(identical_div(Float32(1.0), mul(Float32(2.0), nf))))
@@ -62,9 +84,27 @@ def nelder_mead[O: Objective, CAP: Int = 9](
     for i in range(n + 1):
         st(fs, i, obj.eval(simplex + i * n))
     var order = InlineArray[Int, CAP](fill=0)
+    # FIXED POINT (Apple speed, 2026-09-28): the loop's whole state is the
+    # simplex and its values. An iteration that leaves both bit for bit as
+    # it found them (a stalled simplex whose shrink rounds back onto itself)
+    # makes every later iteration the same, ending in the same state with
+    # the same last evaluations, so the loop jumps to max_iter: the same
+    # result and iteration count as running them all.
+    # Every write to the simplex or its values inside the loop goes through
+    # `_put`, which says whether the stored word differs from the old one.
+    var changed = True
+    var use_snap = Int(snap) != 64
+    var n_state = (n + 1) * n + (n + 1)
+    var have_snap = False
+    var snap_it = 0
+    var power = 1
+    var stop_at = -1
     var it = 0
     var best = 0
     while it < max_iter:
+        if it == stop_at:
+            it = max_iter
+            break
         # stable argsort of fs (ties: lower index first)
         for i in range(n + 1):
             order[i] = i
@@ -89,6 +129,28 @@ def nelder_mead[O: Objective, CAP: Int = 9](
             ss = fma3(d, d, ss)
         if ftz(identical_sqrt(ftz(identical_div(ss, Float32(n + 1))))) < tol_std:
             break
+        if not changed:
+            it = max_iter
+            break
+        changed = False
+        if use_snap and stop_at < 0:
+            if have_snap:
+                var same = True
+                for i in range(n_state):
+                    if bitcast[DType.uint32](scratch.unsafe_load(i)) != bitcast[DType.uint32](snap.unsafe_load(i)):
+                        same = False
+                        break
+                if same:
+                    var period = it - snap_it
+                    var rest = (max_iter - it) % period
+                    stop_at = it + (rest if rest > 0 else period)
+            if stop_at < 0 and (not have_snap or it - snap_it == power):
+                for i in range(n_state):
+                    snap.unsafe_store(i, scratch.unsafe_load(i))
+                if have_snap:
+                    power *= 2
+                snap_it = it
+                have_snap = True
         # centroid without the worst vertex
         for j in range(n):
             var s = Float32(0.0)
@@ -102,8 +164,8 @@ def nelder_mead[O: Objective, CAP: Int = 9](
         var fr = obj.eval(xr)
         if ld(fs, best) <= fr and fr < ld(fs, second):
             for j in range(n):
-                st(simplex, worst * n + j, ld(xr, j))
-            st(fs, worst, fr)
+                changed |= _put(simplex, worst * n + j, ld(xr, j))
+            changed |= _put(fs, worst, fr)
             it += 1
             continue
         if fr < ld(fs, best):
@@ -113,12 +175,12 @@ def nelder_mead[O: Objective, CAP: Int = 9](
             var fe = obj.eval(xe)
             if fe < fr:
                 for j in range(n):
-                    st(simplex, worst * n + j, ld(xe, j))
-                st(fs, worst, fe)
+                    changed |= _put(simplex, worst * n + j, ld(xe, j))
+                changed |= _put(fs, worst, fe)
             else:
                 for j in range(n):
-                    st(simplex, worst * n + j, ld(xr, j))
-                st(fs, worst, fr)
+                    changed |= _put(simplex, worst * n + j, ld(xr, j))
+                changed |= _put(fs, worst, fr)
             it += 1
             continue
         var accepted = False
@@ -129,8 +191,8 @@ def nelder_mead[O: Objective, CAP: Int = 9](
             var fc = obj.eval(xt)
             if fc <= fr:
                 for j in range(n):
-                    st(simplex, worst * n + j, ld(xt, j))
-                st(fs, worst, fc)
+                    changed |= _put(simplex, worst * n + j, ld(xt, j))
+                changed |= _put(fs, worst, fc)
                 accepted = True
         else:
             for j in range(n):
@@ -139,8 +201,8 @@ def nelder_mead[O: Objective, CAP: Int = 9](
             var fc = obj.eval(xt)
             if fc < ld(fs, worst):
                 for j in range(n):
-                    st(simplex, worst * n + j, ld(xt, j))
-                st(fs, worst, fc)
+                    changed |= _put(simplex, worst * n + j, ld(xt, j))
+                changed |= _put(fs, worst, fc)
                 accepted = True
         if not accepted:
             for i in range(n + 1):
@@ -148,9 +210,9 @@ def nelder_mead[O: Objective, CAP: Int = 9](
                     continue
                 for j in range(n):
                     var b = ld(simplex, best * n + j)
-                    st(simplex, i * n + j,
+                    changed |= _put(simplex, i * n + j,
                        _clamp(fma3(sigma, sub(ld(simplex, i * n + j), b), b), ld(lower, j), ld(upper, j)))
-                st(fs, i, obj.eval(simplex + i * n))
+                changed |= _put(fs, i, obj.eval(simplex + i * n))
         it += 1
     for j in range(n):
         st(x0, j, ld(simplex, best * n + j))

@@ -16,7 +16,7 @@ adaptive division by 5. Shuffling is ours: a splitmix64 Fisher-Yates per
 epoch on the host (the reference's is numpy's RandomState, which is not
 restated).
 """
-from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub, sumsq_fold
+from sequence.ops import FP, Args, add, fma3, ld, mul, op_bias, op_colsum, op_gemm, st, sub, sumsq_fold
 from checks.numerics import ftz, identical_div, identical_exp, identical_log, identical_sigmoid, identical_tanh
 
 comptime ACT_IDENTITY = 0
@@ -24,6 +24,10 @@ comptime ACT_LOGISTIC = 1
 comptime ACT_TANH = 2
 comptime ACT_RELU = 3
 comptime ACT_SOFTMAX = 4
+
+comptime EPI_BIAS_ACT = 1
+comptime EPI_L2GRAD = 2
+comptime EPI_ACT_BWD = 3
 
 comptime LOSS_SQUARED = 0
 comptime LOSS_BINARY_LOG = 1
@@ -131,6 +135,57 @@ def op_l2grad(t: Int, a: Args):
 def op_divs(t: Int, a: Args):
     """p0[t] = p0[t] / f0."""
     st(a.p0, t, div(ld(a.p0, t), a.f0))
+
+
+def op_gemm_epi(t: Int, a: Args):
+    """ONE LAUNCH FOR A GEMM AND ITS ELEMENTWISE FOLLOWER (Apple speed,
+    2026-09-28; each was a launch of its own): `op_gemm` for element t, then,
+    on the element it just stored, the follower's body verbatim:
+    i9 = EPI_BIAS_ACT: `op_bias` (p3 the bias) then `op_act` when i10 != 0;
+    i9 = EPI_L2GRAD: `op_l2grad` (p3 the weights, f0 alpha, f1 n);
+    i9 = EPI_ACT_BWD: `op_act_bwd` (p3 the activations, i10 the activation).
+    The same values in the same order: the same bits. C must be dense
+    (i8 = i1): the followers index it by t."""
+    op_gemm(t, a)
+    gemm_epi_tail(t, a)
+
+
+@always_inline
+def gemm_epi_tail(t: Int, a: Args):
+    """`op_gemm_epi`'s follower alone (the host runs the GEMM on its own
+    kernel, `sequence/host_gemm.mojo`, then this)."""
+    var e = Args()
+    e.p0 = a.p2
+    e.p1 = a.p3
+    if a.i9 == EPI_BIAS_ACT:
+        e.p2 = a.p2
+        e.i1 = a.i1
+        e.i2 = a.i8
+        e.i3 = a.i8
+        op_bias(t, e)
+        if a.i10 != 0:
+            e.i0 = a.i10
+            op_act(t, e)
+    elif a.i9 == EPI_L2GRAD:
+        e.f0 = a.f0
+        e.f1 = a.f1
+        op_l2grad(t, e)
+    elif a.i9 == EPI_ACT_BWD:
+        e.i0 = a.i10
+        op_act_bwd(t, e)
+
+
+def op_gemm_epi_tail(t: Int, a: Args):
+    gemm_epi_tail(t, a)
+
+
+def op_colsum_div(t: Int, a: Args):
+    """`op_colsum` then `op_divs` of the same element by f0: one launch."""
+    op_colsum(t, a)
+    var e = Args()
+    e.p0 = a.p1
+    e.f0 = a.f0
+    op_divs(t, e)
 
 
 # ------------------------------------------------------------------ host RNG
