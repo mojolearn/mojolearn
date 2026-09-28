@@ -502,6 +502,15 @@ comptime GEMM_PLAN_COUNT = 20
 comptime FLAT_TPB = 256
 #: Threads per block for the SPLITK leaf-partial kernel. Same argument.
 comptime SPLITK_LEAF_TPB = 128
+#: Apple only (lane/linear-apple2): the SPLITK leaf loads its operands
+#: LEAF_PREFETCH steps ahead of the chain (SCHEDULING: the chain's steps and
+#: their order are unchanged). -D MOJOLEARN_APPLE_LEAF_PREFETCH_OFF=1 restores
+#: the one-load-per-step loop.
+comptime APPLE_LEAF_PREFETCH = (
+    TARGET_COLUMN == COLUMN_APPLE
+    and not is_defined["MOJOLEARN_APPLE_LEAF_PREFETCH_OFF"]()
+)
+comptime LEAF_PREFETCH = 16
 #: Threads per block for the SPLITK fold kernel: one BLOCK per output cell,
 #: cooperating over the nodes of one tree level. The level WIDTHS come from
 #: `P` alone (contract 7.2.2); this number only decides how the nodes of a
@@ -955,12 +964,36 @@ def identical_gemm_leaf_kernel(
     var acc = Float32(0.0)
     var a_row = i * a_si
     var b_col = j * b_sj
-    for p in range(bounds[0], bounds[1]):
-        acc = rtf_mul_add(
-            ftz(a.unsafe_load(a_row + p * a_sp)),
-            ftz(b.unsafe_load(p * b_sp + b_col)),
-            acc,
-        )
+    comptime if APPLE_LEAF_PREFETCH:
+        # lane/linear-apple2: the chain's operands are loaded LEAF_PREFETCH at
+        # a time before the chain consumes them, so the loads overlap instead
+        # of each step waiting on its own. The steps are the same
+        # rtf_mul_add calls on the same words in the same order.
+        var p = bounds[0]
+        var pe = bounds[1]
+        while p + LEAF_PREFETCH <= pe:
+            var av = InlineArray[Float32, LEAF_PREFETCH](fill=Float32(0))
+            var bv = InlineArray[Float32, LEAF_PREFETCH](fill=Float32(0))
+            comptime for u in range(LEAF_PREFETCH):
+                av[u] = a.unsafe_load(a_row + (p + u) * a_sp)
+                bv[u] = b.unsafe_load((p + u) * b_sp + b_col)
+            comptime for u in range(LEAF_PREFETCH):
+                acc = rtf_mul_add(ftz(av[u]), ftz(bv[u]), acc)
+            p += LEAF_PREFETCH
+        while p < pe:
+            acc = rtf_mul_add(
+                ftz(a.unsafe_load(a_row + p * a_sp)),
+                ftz(b.unsafe_load(p * b_sp + b_col)),
+                acc,
+            )
+            p += 1
+    else:
+        for p in range(bounds[0], bounds[1]):
+            acc = rtf_mul_add(
+                ftz(a.unsafe_load(a_row + p * a_sp)),
+                ftz(b.unsafe_load(p * b_sp + b_col)),
+                acc,
+            )
     var slot = t
     comptime if SAB_NODE_ORDER:
         # SABOTAGE: address the partial by the PHYSICAL BLOCK that produced
