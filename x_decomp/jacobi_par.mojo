@@ -297,9 +297,9 @@ def eigh_par_update_kernel(a: F32Ptr, v: F32Ptr, cs: F32Ptr, n_in: Int32, m_in: 
             v.unsafe_store(k * n + qj, sj * vkp + cj * vkq)
 
 
-def eigh_par_off_kernel(a: F32Ptr, out: F32Ptr, n_in: Int32):
-    """out[k] = the sum of squares of row k's off-diagonal cells, out[n + k]
-    = a_kk^2, out[2 n + k] = a_kk. One thread a row; the host adds the
+def eigh_par_off_kernel(a: F32Ptr, dst: F32Ptr, n_in: Int32):
+    """dst[k] = the sum of squares of row k's off-diagonal cells, dst[n + k]
+    = a_kk^2, dst[2 n + k] = a_kk. One thread a row; the host adds the
     first two in float64 and reads the eigenvalues from the third."""
     var n = Int(n_in)
     var k = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
@@ -309,7 +309,7 @@ def eigh_par_off_kernel(a: F32Ptr, out: F32Ptr, n_in: Int32):
             if j != k:
                 var x = a.unsafe_load(k * n + j)
                 acc = x * x + acc
-        out.unsafe_store(k, acc)
+        dst.unsafe_store(k, acc)
         var d = a.unsafe_load(k * n + k)
-        out.unsafe_store(n + k, d * d)
-        out.unsafe_store(2 * n + k, d)
+        dst.unsafe_store(n + k, d * d)
+        dst.unsafe_store(2 * n + k, d)
