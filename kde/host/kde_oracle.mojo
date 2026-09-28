@@ -434,10 +434,10 @@ def _kde_step[M: Int](acc: KdeV, qv: Float32, t: KdeV, metric_arg: Float32) -> K
 
 
 def _kde_tile_m[M: Int](
-    qbp: HostF32Ptr, pb: HostF32Ptr, d: Int, metric_arg: Float32, out: HostF32Ptr,
+    qbp: HostF32Ptr, pb: HostF32Ptr, d: Int, metric_arg: Float32, res: HostF32Ptr,
 ):
     """KDE_QB query rows (at `qbp`, row r at `r * d`) x KDE_W training
-    columns (the packed block `pb`), raw accumulators into `out`."""
+    columns (the packed block `pb`), raw accumulators into `res`."""
     var a0 = KdeV(0.0)
     var a1 = KdeV(0.0)
     var a2 = KdeV(0.0)
@@ -448,26 +448,26 @@ def _kde_tile_m[M: Int](
         a1 = _kde_step[M](a1, qbp.unsafe_load(d + f), tv, metric_arg)
         a2 = _kde_step[M](a2, qbp.unsafe_load(2 * d + f), tv, metric_arg)
         a3 = _kde_step[M](a3, qbp.unsafe_load(3 * d + f), tv, metric_arg)
-    out.unsafe_store[width=KDE_W](0, a0)
-    out.unsafe_store[width=KDE_W](KDE_W, a1)
-    out.unsafe_store[width=KDE_W](2 * KDE_W, a2)
-    out.unsafe_store[width=KDE_W](3 * KDE_W, a3)
+    res.unsafe_store[width=KDE_W](0, a0)
+    res.unsafe_store[width=KDE_W](KDE_W, a1)
+    res.unsafe_store[width=KDE_W](2 * KDE_W, a2)
+    res.unsafe_store[width=KDE_W](3 * KDE_W, a3)
 
 
 def _kde_tile(
     qbp: HostF32Ptr, pb: HostF32Ptr, d: Int, metric: Int, metric_arg: Float32,
-    out: HostF32Ptr,
+    res: HostF32Ptr,
 ):
     if metric == DIST_COSINE_EXPANDED or metric == DIST_L2_EXPANDED:
-        _kde_tile_m[DIST_L2_EXPANDED](qbp, pb, d, metric_arg, out)
+        _kde_tile_m[DIST_L2_EXPANDED](qbp, pb, d, metric_arg, res)
     elif metric == DIST_L2_SQRT_UNEXPANDED:
-        _kde_tile_m[DIST_L2_SQRT_UNEXPANDED](qbp, pb, d, metric_arg, out)
+        _kde_tile_m[DIST_L2_SQRT_UNEXPANDED](qbp, pb, d, metric_arg, res)
     elif metric == DIST_L1:
-        _kde_tile_m[DIST_L1](qbp, pb, d, metric_arg, out)
+        _kde_tile_m[DIST_L1](qbp, pb, d, metric_arg, res)
     elif metric == DIST_LINF:
-        _kde_tile_m[DIST_LINF](qbp, pb, d, metric_arg, out)
+        _kde_tile_m[DIST_LINF](qbp, pb, d, metric_arg, res)
     else:
-        _kde_tile_m[DIST_LP_UNEXPANDED](qbp, pb, d, metric_arg, out)
+        _kde_tile_m[DIST_LP_UNEXPANDED](qbp, pb, d, metric_arg, res)
 
 
 @always_inline
