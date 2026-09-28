@@ -87,11 +87,11 @@ def inventory(harness, table, vendor_class):
         properties = {"batch": declaration(getattr(harness, "BATCH", {}).get(name))}
         for part, (specs, default, *_rest) in getattr(harness, "EXTRA_PARTS", {}).items():
             properties[part] = declaration(specs.get(name, default))
-            properties[part]["run_by_default"] = part in vref.PARTS
-            properties[part]["command"] = "verify --all" if part in vref.PARTS else "verify --batch-checks"
+            properties[part]["run_by_default"] = True
+            properties[part]["command"] = "verify --all"
         properties["batch"]["run_by_default"] = True
         properties["rlpair"] = declaration(getattr(harness, "RLPAIR", {}).get(name, "n/a:no-sampler-trainer-pair"))
-        properties["rlpair"].update(run_by_default=False, command="verify --batch-checks")
+        properties["rlpair"].update(run_by_default=True, command="verify --all")
         refs = {}
         for part in dict.fromkeys((*vref.PARTS, *properties)):
             refs[part] = sum(bool((entry := vref.entry(table, name, fixture, part))
@@ -183,7 +183,7 @@ def inventory(harness, table, vendor_class):
                     parallel_drivers_requiring_gpu=sum(name.startswith("par-") and name not in covered for name in lanes)),
                 limitations=["References describe recorded fixtures, not all possible inputs or hardware.",
                              "A single-device parallel driver run does not certify multiple GPUs.",
-                             "Gradient, batch-size, ragged and sampler/replay checks require --batch-checks; they are not implicit in --all.",
+                             "Gradient, batch-size, ragged and sampler/replay checks are included in --all/--full; quick and selected-lane runs opt in with --batch-checks.",
                              "The appendix's seasonal-difference selection label means select_d with caller-supplied D."])
 
 

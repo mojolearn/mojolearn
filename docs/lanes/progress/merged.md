@@ -431,3 +431,48 @@ MOJOLEARN_CHOL_SWEEP_SOLVES_OFF arms) is in the neighbors-fix agent's report
   integration. e2e_kmeans_init 1/1 and e2e_kmeans_finalize 6/6 DISAGREE (on the
   old tree; kmeans' CPU refusal there made the diff DISAGREE regardless, so
   kmeans_finalize is re-run on the fixed tree in nvc1-0008).
+
+## M2 Pro Metal ROOT FIX (lane merged-m2-fix, 2026-09-28)
+
+Two faults, both M2 Pro only, found in one run with Metal's API validation
+layer (`MTL_DEBUG_LAYER=1 MTL_DEBUG_LAYER_ERROR_MODE=nslog`, steward
+1790601522115). That run is the audit tool for this class: any over-limit
+dispatch prints "must be <= N. (kernel threadgroup size limit)".
+
+1. **Over-limit dispatches, silently dropped.** The M2 Pro has no Dynamic
+   Caching, so a pipeline's `maxTotalThreadsPerThreadgroup` falls with its
+   register use. `trsm_lower_sweep_kernel` (1024 threads, a 32-float register
+   array) had a limit of 384: cholesky, gp-*, gpc, kernel-ridge-*, gmm-* all
+   went through it. `fws_walk_kernel` (1024) had a limit of 832: svc, svr.
+   Fixes: the sweep keeps each row's t in its own b cell (row i is owned by
+   thread i % 1024 for the whole sweep; same terms, same order; any n now,
+   DEVIATION 6150), and FWS_T is 256 on Apple (the walk ranks over the whole
+   sorted list, so the chunk width moves no bit).
+2. **Metal command queues exhausted per process.** The GP, GPC, SVM,
+   KernelRidge, GMM and Cholesky bindings made a DeviceContext per call.
+   Later calls in one process REFUSED ("Failed to create Metal command queue")
+   or returned output the device never wrote: gp-optimize, gpc-multiclass,
+   par-gpc-*, gp-optimize-restarts (one stale digest for every fixture) and
+   x-neighbors-svc-multiclass (BATCH_MOVED: a single-row predict read 0.0).
+   Fix: one process-lifetime context per binding and tier
+   (`core/neural_context.mojo`'s slot; `gaussian_process/gp_context.mojo`).
+
+Evidence at a5f27d9c2 (MTL validation on, 51 lanes: every gp/gpc/svc/svr/
+kernel-ridge/gmm/cholesky lane, the x-neighbors SVM/GP/KRR lanes, x-cluster
+gmm/bgmm, linear-svc/svr, nystroem):
+- m2pro: 50/51 AGREE, zero size-limit reports (run directly in
+  ~/mojolearn-wt/m2fix on m2pro, log ~/m2fix2.out, because the steward was
+  busy with the apple-merged full check; the queued request 1790602477769 was
+  withdrawn). x-cluster-gmm-options first REFUSED because that lane's binding
+  list lacks _mojolearn_x_cluster (a fresh worktree never builds it); after
+  building it, AGREE.
+- m4pro-a (steward 1790602482128): 50/51 AGREE, Metal == CPU unchanged.
+- Round 1 at db5d6fb01 (the two dispatch fixes only, steward 1790601762837):
+  44/51, the 7 left were the queue class above.
+- The one FAIL on both Macs is par-gp: its CPU arm refuses by design (no CPU
+  implementation of the cooperative multi-GPU driver), on every Mac. Not Metal.
+- m4pro-b shard 18 (1790595438355): its only FAIL is par-logistic, the same
+  multi-GPU CPU-arm refusal. Not a defect and not the stuck GPU; no resubmit.
+
+Left: every other binding that still makes a DeviceContext per call has the
+same M2 queue hazard (grep `= DeviceContext()` outside `*_main.mojo`).

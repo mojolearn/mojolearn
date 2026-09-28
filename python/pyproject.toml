@@ -129,6 +129,12 @@ classifiers = [
 # NumPy is an optional test/diagnostic oracle, not a runtime requirement.
 dependencies = []
 
+[project.optional-dependencies]
+# The library stays NumPy-free; verification uses NumPy for fixtures and
+# array inspection. This extra installs the same wheel with its test harness
+# dependency, not a separate edition of MojoLearn.
+verify = ["numpy>=1.26.4"]
+
 [project.urls]
 Paper = "https://github.com/mojolearn/mojolearn/blob/main/python/mojolearn/Hendel_2026_bitwise_identical_gpu_ml_preprint.pdf"
 Homepage = "https://github.com/mojolearn/mojolearn"

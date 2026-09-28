@@ -54,6 +54,8 @@ def numpy_errors(path, relative):
         from email.parser import Parser
         metadata = Parser().parsestr(path.read_text())
         if any(re.match(r"numpy(?:$|[\s<>=!~;\[])", dep, re.I)
+               and not ("verify" in metadata.get_all("Provides-Extra", [])
+                        and re.fullmatch(r'''\s*extra\s*==\s*["']verify["']\s*''', dep.partition(';')[2]))
                for dep in metadata.get_all("Requires-Dist", [])):
             errors.append(relative + ": NumPy dependency metadata")
     if path.suffix == ".py" and relative not in NUMPY_ORACLES:
