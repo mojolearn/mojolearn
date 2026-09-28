@@ -83,7 +83,32 @@ Sanity tests need scikit-learn: on the pod it is in /root/skl
   | bootstrap, permutation_test, monte_carlo_integrate, parallel_classical | bootstrap, permutation-test, monte-carlo, par-resample | GAP closed: resample/sabotage/e2e_resample_host.patch (host chunk totals one ulp up; first host resample index one row on) | see the AMD row below; NVIDIA owed |
   | BCa, paired=False, permutation_type='samples', sklearn.utils.resample (new, item 5) | resample-bca, resample-unpaired, resample-perm-samples, resample-utils | e2e_resample_host.patch | built and checked this session on AMD + CPU; NVIDIA owed |
 
+- This session, on the central AMD box without a GPU slot (`sh`): the resample HOST binding builds; `check-ndtri` host half
+  PASS (certificate ndtri fnv1a 0x368d9ecc8e0fd775, ndtr 0x910accedd0f41cda); on CPU (MOJOLEARN_VENDOR=cpu, scikit-learn
+  1.9.1, scipy 1.18.1) test_resample_bca RESULT PASS (BCa == SciPy's construction for mean / std / diff_means at 0.9 and
+  0.95), test_resample_options RESULT PASS, test_resample_surface GREEN (34 checks).
+- GPU job QUEUED ON THE BOX, not yet run: both central slots were held for hours by decomp and sequence(-cpu).
+  /root/ev-prep/waiter.sh (on-box, detached; the amd_central flock protocol, 16 h deadline) takes the first free slot and runs
+  /root/ev-prep/job.sh (copy: ~/mojolearn-evidence/algos-prep/amd_job.sh): (1) algos_lane_check of bootstrap,
+  permutation-test, monte-carlo, par-resample, resample-bca, resample-unpaired, resample-perm-samples, resample-utils with
+  --sabotage resample/sabotage/e2e_resample_host.patch -> res.log; (2) the three resample tests on GPU and CPU, check-ndtri
+  on the GPU, check-ndtri under seam_5410_ndtri.patch (must FAIL), check-resample, resample-card -> tests.log; (3) the five
+  binding scaler lanes with --sabotage preprocessing/sabotage/e2e_scaler_host.patch -> sc.log; then all.done.
+  `tools/amd_central.sh sh prep 'cat /root/ev-prep/started; ls /root/ev-prep'` shows where it is.
+
 ## Next
+NEXT SESSION, in this order (supersedes the item list further down where they differ):
+1. Read /root/ev-prep on the central AMD box (above). A lane DISAGREE, a sabotage that does not bite, a test FAIL or a
+   check-ndtri that passes under seam_5410 is a fix at the root, then rerun only that part.
+2. The NVIDIA half, once RunPod has funds (do not retry renting before): `tools/dev_pod.sh up prep 480`, then the same job
+   on the pod (lane check + sabotages for the 8 resample and 5 binding scaler lanes, tests on GPU and CPU, check-ndtri with
+   and without the 5410 arm, check-resample) plus test_host_surface and test_lane_select (its inputs changed: new lanes);
+   also samebits vs a fresh main reference for the existing prep lanes (bootstrap, permutation-test, monte-carlo,
+   par-resample and the binding scalers must be SAME BITS: BCa / unpaired / samples / utils are additive). Then merge
+   lane/algos-prep2 to main (push in the same command) and one batched steward request: the resample lanes with
+   e2e_resample_host.patch, the scaler lanes with e2e_scaler_host.patch (two requests, never mixed: a patch must reach
+   every lane in its request).
+3. Then phase C (GPU speed, IDENTICAL then FAST) on every prep algorithm.
 PHASE: option parity (2 in the LANE CHARTER at the top of docs/lanes/ALGORITHM_EXPANSION_PLAN.md), still open:
 only resample/ remains of item 5 (the scalers are merged, see the Pass 2 table).
 - Pod `prep` = lohadbfeo1vnr5 (H100, up 2026-09-28 01:08Z, lease 480 min; `dev_pod.sh extend prep`). Its /root/mojolearn is a git
