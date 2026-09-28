@@ -12,7 +12,7 @@ run_arm, compare) so every verdict means what a lane gate's verdict means.
 Resume accepts only the same committed sources, native bytes and execution settings.
 Failures, missing evidence and incomplete selections never pass.
 """
-import argparse, fcntl, hashlib, json, os, subprocess, sys, time, traceback
+import argparse, fcntl, hashlib, importlib.util, json, os, subprocess, sys, time, traceback
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -71,16 +71,34 @@ def now():
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
+def structural_exclusions(lanes):
+    # Read the source manifest without importing GPU bindings or fitting models.
+    spec = importlib.util.spec_from_file_location("consolidated_host_surface", ROOT / "python/mojolearn/host_surface.py")
+    surface = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(surface)
+    return {lane: row["reason"] for lane, row in surface.lane_exposure(lanes, "cpu").items()
+            if row["status"] == surface.LANE_NOT_APPLICABLE}
+
+
 def plan(out, only=""):
     source = source_commit()
     ib = alc.load_harness()
-    lanes, needed, refused = [], {}, {}
-    for lane in sorted(ib.LANES):
-        try:
-            needed[lane] = alc.needed_bindings([lane])[lane]
-            lanes.append(lane)
-        except Exception as e:  # a lane with no CPU arm or no GPU arm is not exposed
-            refused[lane] = str(e).splitlines()[0][:300]
+    inventory = sorted(ib.LANES)
+    excluded = structural_exclusions(inventory)
+    candidates = [lane for lane in inventory if lane not in excluded]
+    lanes, needed, refused = candidates, {}, {}
+    try:
+        needed = alc.needed_bindings(candidates)
+        if set(needed) != set(candidates):
+            raise ValueError("binding inventory is incomplete")
+    except Exception:
+        lanes = []
+        for lane in candidates:
+            try:
+                needed[lane] = alc.needed_bindings([lane])[lane]
+                lanes.append(lane)
+            except Exception as exc:
+                refused[lane] = str(exc).splitlines()[0][:300]
     if refused and not only:
         raise ValueError(f"unavailable lanes cannot be silently omitted: {refused}")
     if only:
@@ -91,10 +109,13 @@ def plan(out, only=""):
         needed = {l: needed[l] for l in lanes}
     if not lanes:
         raise ValueError("empty lane selection")
-    p = {"source_commit": source, "lanes": lanes, "needed": needed, "not_exposed": refused,
+    omitted = {l: (excluded[l] if l in excluded else "not selected for this run") for l in inventory if l not in lanes}
+    p = {"inventory": inventory, "omitted": omitted, "structural_exclusions": excluded,
+         "source_commit": source, "lanes": lanes, "needed": needed, "not_exposed": refused,
          "bindings": sorted(set().union(*needed.values()))}
     (out / "plan.json").write_text(json.dumps(p, indent=1))
-    print(f"{now()} plan: {len(lanes)} exposed lanes, {len(refused)} not exposed, "
+    print(f"{now()} plan: {len(inventory)} inventory, {len(lanes)} selected, {len(omitted)} explicitly omitted, "
+          f"{len(refused)} unavailable, "
           f"{len(p['bindings'])} bindings", flush=True)
     return p
 
@@ -219,6 +240,7 @@ def clean(out, shard, cpu_threads, fixtures="base", arm_timeout=120):
         raise ValueError("incomplete lane results")
     bad = [r[0] for r in rows if any(c.startswith("ERROR=") or ("=" in c and c.split("=", 1)[1] != "AGREE"
                                                                   and c.startswith("cpu")) for c in r[1:])]
+    print(f"{now()} scope: {len(p['inventory'])} inventory, {len(p['omitted'])} omitted (reasons in plan.json); only this shard compared", flush=True)
     print(f"{now()} CLEAN RESULT shard {i}/{n}: {len(rows)} lanes, {len(bad)} not AGREE"
           + (": " + ",".join(bad) if bad else ""), flush=True)
     return 1 if bad else 0

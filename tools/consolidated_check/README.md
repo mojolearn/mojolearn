@@ -6,7 +6,11 @@ Run only after the intended branches have been consolidated and committed:
 LANES=ols,ridge bash tools/consolidated_check/mac_job.sh 0/1 /path/to/new-evidence
 ```
 
-An omitted `LANES` selects every exposed lane. This is a release/development
+An omitted `LANES` selects every structurally comparable CPU/GPU lane.
+`host_surface.lane_exposure` supplies structural exclusions (physical multi-device
+claims and surfaces with no CPU route). Every omitted lane and reason remains
+in `plan.json`, alongside the complete inventory. Unexpected binding failures
+fail the plan; they are not treated as structural exclusions. This is a release/development
 comparison, not the lightweight installed-wheel verifier. Each lane runs its GPU
 and CPU arms in fresh processes; one GPU job should own a device at a time.
 `BUILD_JOBS` controls parallel compilation (default 2). `CPU_THREADS` selects
