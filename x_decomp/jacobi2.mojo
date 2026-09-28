@@ -131,27 +131,27 @@ def jacobi_eigh2_kernel(
     a_io: MutPointer[Float32, MutAnyOrigin],
     v_out: MutPointer[Float32, MutAnyOrigin],
     info_out: MutPointer[Float32, MutAnyOrigin],
+    vt: MutPointer[Float32, MutAnyOrigin],
     n_in: Int32,
     max_sweeps_in: Int32,
     tol_in: Float32,
 ):
     """`jacobi_eigh_kernel`'s contract (a_io, v_out, info_out), launched with
-    exactly `J2_TPB` threads in one block."""
+    exactly `J2_TPB` threads in one block. `vt` is `n x n` scratch: the
+    basis transposed, element k of every row owned by lane k mod J2_TPB from
+    the identity to the copy-out, so the basis never crosses threads."""
     var n = Int(n_in)
     var tid = Int(thread_idx.x)
     var a = a_io
-    var v = v_out
+    var v = vt
     # stash[par * 3 + 0..2] = (a[p,p], a[q,q], a[p,q]) of the pick to come
     var stash = stack_allocation[6, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
 
-    # The identity is symmetric: V and its transpose start equal.
-    var idx = tid
-    while idx < n * n:
-        var r = idx // n
-        var cc = idx - r * n
-        v.unsafe_store(idx, Float32(1.0) if r == cc else Float32(0.0))
-        idx += J2_TPB
-    dev_barrier()
+    for p0 in range(n):
+        var k1 = tid
+        while k1 < n:
+            v.unsafe_store(p0 * n + k1, Float32(1.0) if p0 == k1 else Float32(0.0))
+            k1 += J2_TPB
 
     var local_f = Float32(0.0)
     if tid < JACOBI_TPB:
@@ -260,18 +260,12 @@ def jacobi_eigh2_kernel(
                 dev_barrier()
                 par = 1 - par
 
-    # Back to eigenvector i in COLUMN i.
-    dev_barrier()
-    idx = tid
-    while idx < n * n:
-        var r2 = idx // n
-        var c2 = idx - r2 * n
-        if c2 > r2:
-            var x = v.unsafe_load(r2 * n + c2)
-            var y = v.unsafe_load(c2 * n + r2)
-            v.unsafe_store(r2 * n + c2, y)
-            v.unsafe_store(c2 * n + r2, x)
-        idx += J2_TPB
+    # Eigenvector i in COLUMN i of v_out, each lane its own elements.
+    for p0 in range(n):
+        var k1 = tid
+        while k1 < n:
+            v_out.unsafe_store(k1 * n + p0, v.unsafe_load(p0 * n + k1))
+            k1 += J2_TPB
 
     if tid == 0:
         info_out.unsafe_store(0, Float32(1.0) if converged else Float32(0.0))

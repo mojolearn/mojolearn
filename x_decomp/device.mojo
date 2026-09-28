@@ -1034,8 +1034,9 @@ struct DevExec(Exec):
         var dv = ctx.enqueue_create_buffer[DType.float32](n * n)
         var dinfo = ctx.enqueue_create_buffer[DType.float32](3)
         enqueue_fill(ctx, dinfo, JACOBI_INFO_UNWRITTEN)
+        var dvt = ctx.enqueue_create_buffer[DType.float32](n * n)
         ctx.enqueue_function[jacobi_eigh2_kernel](
-            da.unsafe_ptr(), dv.unsafe_ptr(), dinfo.unsafe_ptr(), Int32(n), Int32(JACOBI_SWEEPS), Float32(JACOBI_TOL),
+            da.unsafe_ptr(), dv.unsafe_ptr(), dinfo.unsafe_ptr(), dvt.unsafe_ptr(), Int32(n), Int32(JACOBI_SWEEPS), Float32(JACOBI_TOL),
             grid_dim=(1, 1, 1), block_dim=(J2_TPB, 1, 1),
         )
         ctx.enqueue_function[sign_flip_kernel](dv.unsafe_ptr(), Int32(n), grid_dim=(n, 1, 1), block_dim=(SIGNFLIP_TPB, 1, 1))
@@ -1082,6 +1083,7 @@ struct DevExec(Exec):
         _ = da^
         _ = dv^
         _ = dinfo^
+        _ = dvt^
         _ = hinfo^
         _ = hwork^
         ctx.synchronize()
