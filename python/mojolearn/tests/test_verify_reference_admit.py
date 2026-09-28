@@ -395,3 +395,34 @@ def test_architecture_without_backend_witness_remains_unclassified():
     del j['resume_signature']
     assert vref.record_device_class(j, 'gmm.gpu.json') == (None, None)
     assert vref.record_device_class(clean_column(), 'cpu.json') == ('cpu', None)
+
+
+@pytest.mark.parametrize('backend,suffix', [('hip','gpu'), ('cpu','cpudefault'), ('cpu','cpu3')])
+def test_registered_partial_fit_lane_filename_is_not_a_partial_run(backend, suffix):
+    lane = 'x-prep-nb-partial'
+    j = backend_witness_column(backend, 'cpu-test' if backend == 'cpu' else 'x86_64')
+    j['cells'] = {lane+'/base': j['cells']['ols/base']}
+    j['resume_signature']['options']['lanes'] = lane
+    path = f'clean/{lane}.{suffix}.json'
+    assert vref.admit(j, path, known_lanes={lane}) is None
+    assert vref.admit(j, path) is not None, 'unregistered names retain refusal'
+
+
+@pytest.mark.parametrize('broken', ['partial_flag','partial_dir','probe_dir','unfixed_dir',
+    'sabotage_flag','unknown_lane','wrong_scope','extra_lane','wrong_suffix','no_witness'])
+def test_partial_fit_name_exception_cannot_hide_partial_or_bad_evidence(broken):
+    lane = 'x-cluster-minibatch-partial'
+    j = backend_witness_column()
+    j['cells'] = {lane+'/base': j['cells']['ols/base']}
+    j['resume_signature']['options']['lanes'] = lane
+    path = f'clean/{lane}.gpu.json'
+    known = {lane}
+    if broken == 'partial_flag': j['partial_column'] = True
+    elif broken.endswith('_dir'): path = broken[:-4]+'/'+path
+    elif broken == 'sabotage_flag': j['batch_sabotage'] = True
+    elif broken == 'unknown_lane': known = set()
+    elif broken == 'wrong_scope': j['resume_signature']['options']['lanes'] = 'ols'
+    elif broken == 'extra_lane': j['cells']['ols/base'] = j['cells'][lane+'/base']
+    elif broken == 'wrong_suffix': path = f'clean/{lane}.partial.gpu.json'
+    elif broken == 'no_witness': del j['resume_signature']
+    assert vref.admit(j, path, known_lanes=known) is not None

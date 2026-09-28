@@ -356,7 +356,7 @@ def _declared_part_gap(j):
     return None
 
 
-def admit(j, path, par_axis=False):
+def admit(j, path, par_axis=False, *, known_lanes=()):
     """None when the column is admissible, else the reason it is not.
 
     `par_axis=True` admits a column recorded on MORE THAN ONE DEVICE, and is
@@ -395,7 +395,27 @@ def admit(j, path, par_axis=False):
     if "/2026-09-15_gp-sample-y/metal-transient/" in normalized:
         return "quarantined Metal incident (2026-09-15_gp-sample-y/README.md)"
     base = os.path.basename(low)
-    if any(tok in low for tok in _EXCLUDED_PATH_TOKENS) or any(
+    name_for_markers = base
+    # A lane's API name can legitimately contain "partial" (partial_fit).
+    # Exempt only the exact, registered one-lane filename emitted by the
+    # lane runner, backed by its bound scope and enforced backend metadata.
+    # Directory markers and record partial/sabotage flags still reject it.
+    if isinstance(j, dict) and isinstance(j.get("cells"), dict):
+        scope = {key.split("/", 1)[0] for key in j["cells"] if isinstance(key, str)}
+        signature = j.get("resume_signature") or {}
+        options = signature.get("options", {}) if isinstance(signature, dict) else {}
+        if len(scope) == 1 and isinstance(options, dict):
+            lane = next(iter(scope))
+            suffix = base[len(lane) + 1:] if base.startswith(lane + ".") else ""
+            backend = options.get("require_backend")
+            runner_name = ((suffix == "gpu.json" and backend in ("metal", "cuda", "hip"))
+                           or (re.fullmatch(r"cpu(?:default|[1-9][0-9]*)\.json", suffix)
+                               and backend == "cpu"))
+            if (lane in known_lanes and options.get("lanes") == lane
+                    and runner_name and record_device_class(j, path)[1] is None):
+                name_for_markers = suffix
+    path_for_markers = os.path.join(os.path.dirname(low), name_for_markers)
+    if any(tok in path_for_markers for tok in _EXCLUDED_PATH_TOKENS) or any(
             tok in base for tok in _EXCLUDED_BASENAME_TOKENS):
         return "sabotage, partial, probe, unfixed or smoke run (by name)"
     if not isinstance(j, dict) or not isinstance(j.get("cells"), dict):
@@ -544,7 +564,7 @@ def build_table(record_paths, harness, repo_root, lanes=None, log=None, parts=No
         except (OSError, ValueError) as exc:
             log(f"skip {path}: unreadable ({exc})")
             continue
-        why = admit(j, path)
+        why = admit(j, path, known_lanes=harness.LANES)
         if why:
             log(f"skip {path}: {why}")
             continue
