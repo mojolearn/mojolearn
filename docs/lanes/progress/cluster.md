@@ -185,3 +185,66 @@ dbscan*, hdbscan*, agglomerative, spectral*, gmm*).
    iterations are host / per-iteration-sync bound; MeanShift is one thread
    per seed.
 3. Phase 5 CPU speed last.
+
+## Session 4 (2026-09-28): option parity continued, NOT MERGED (no pod)
+
+RunPod's account balance went negative mid-session: every RunPod pod was
+deleted (ours, hvr2m4dqzf75z3, mid lane check) and `dev_pod.sh up` is
+refused ("balance too low"). Orchestrator: do not retry renting. Nothing
+below has run on a GPU yet. Branch lane/algos-cluster, pushed.
+
+Code on the branch (all committed):
+- AgglomerativeClustering on the x_cluster route (`x_cluster/agglo.mojo`,
+  `_hierarchy_impl._fit_x`, ENTRY_AGGLO = 11): linkage ward / complete /
+  average / single, metric euclidean / l1 (manhattan, cityblock) / cosine /
+  precomputed, a connectivity matrix (scikit-learn's component join),
+  compute_full_tree, compute_distances, distance_threshold. DEVIATIONS
+  5117 (Lance-Williams) and 5118 (merge order), seam check
+  `x_cluster/checks/agglo_check.mojo` with arms 5117/5118; lanes
+  x-cluster-agglo-linkages and x-cluster-agglo-connectivity.
+  connectivity='knn' (cuML's graph + cross-component fix-up) stays refused.
+- SpectralClustering: affinity 'rbf' (gamma, default 1.0) and
+  'precomputed_nearest_neighbors', affinity_matrix_; assign_labels
+  'discretize' and 'cluster_qr' (`x_cluster/spectral_assign.mojo`,
+  ENTRY_SPECTRAL_ASSIGN = 12, host float64, one-sided Jacobi SVD, DEVIATION
+  5119; seam check `x_cluster/checks/spectral_assign_check.mojo`, arm
+  5119_svd_fold.patch). Lane x-cluster-spectral-affinities (e2e sabotage to
+  use: `x_decomp/checks/sabotage/e2e_host_sqdist.patch`, the rbf matrix;
+  the assign step is host code in both bindings).
+- IDENTITY_PATHS row 199; x_cluster/README rows 5117-5119; hierarchy and
+  spectral NOT_IMPLEMENTED rows; test_x_cluster_twice now also calls the
+  agglo and spectral_assign entries.
+
+Checked WITHOUT a pod (Mac, one core, host code only):
+- spectral_assign_check: PASS under IDENTICAL (fixture separates, 230
+  cells); arm 5119 BITES (u differs in 4 cells), PASS after reversal.
+- scikit-learn 1.9 sanity of the Mojo host code (scratch drivers in
+  ~/mojolearn-evidence/algos-cluster/sanity/): cluster_qr labels EXACT on
+  5 blob embeddings from scikit-learn's spectral_embedding; discretize ARI
+  1.0 against scikit-learn's on all 5. agglo_tree (HostOps) on 3 blob sets:
+  every linkage x metric, with and without a kNN connectivity matrix,
+  labels ARI 1.0, distances within 2e-7 relative (cosine within 1.7e-7
+  absolute); children EXACT for ward/complete/average and precomputed;
+  single linkage's pairs can print in the other orientation ((j, i) where
+  scipy's MST walk visits j first; ours is always lower first), same tree.
+
+OWED ON A POD, in order (NVIDIA merge gate, then merge + push):
+1. `tools/algos_lane_check.sh x-cluster-agglo-linkages,x-cluster-agglo-connectivity
+   --pass 2 --sabotage x_cluster/checks/sabotage/e2e_device_fold_reversed.patch`
+   (arms 5117, 5118 plus the seam drivers; AGREE / DISAGREE / AGREE).
+2. `tools/algos_lane_check.sh x-cluster-spectral-affinities --pass 2
+   --sabotage x_decomp/checks/sabotage/e2e_host_sqdist.patch` (arm 5119).
+3. `python3 tools/lane_select.py --changed-since origin/main`: every
+   selected lane AGREE (existing bits unchanged: agglomerative*, spectral*
+   and the x-cluster lanes).
+4. `pytest python/mojolearn/tests/test_host_surface.py` and
+   `python/mojolearn/tests/test_x_cluster_twice.py` (GPU + CPU);
+   `tools/test_lane_select.py` (inputs changed: new lanes and a new Mojo
+   file; the kmeans_oracle pin may move again, attribute it).
+5. Merge to main and push in one command; ONE batched steward request
+   (do-amd + Apple) for the three new lanes with the e2e patches.
+
+Still open in phase B after that: MeanShift estimate_bandwidth(n_samples)
+subsampling; OPTICS metrics beyond the tsv's carried set; BisectingKMeans
+callable init (refused: per bisection inside the Mojo loop);
+AgglomerativeClustering connectivity='knn'.

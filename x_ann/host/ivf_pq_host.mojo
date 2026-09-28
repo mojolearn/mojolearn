@@ -194,14 +194,69 @@ def _probe_walk(coarse: F32P, n_lists: Int, n_probes: Int, probes: I32P) -> Int:
     return count
 
 
-@always_inline
-def _query_probes(
-    queries: F32P, q_off: Int, centers: F32P, n_lists: Int, dim: Int, n_probes: Int, coarse: F32P,
-    probes: I32P,
-) -> Int:
+#: Lists whose coarse distances run side by side.
+comptime COARSE_W = 8
+
+
+def _centers_t(centers: F32P, n_lists: Int, dim: Int) -> List[Float32]:
+    """ftz(centers) column-major, `ct[c * nl_pad + l]`, lists padded to a
+    multiple of COARSE_W (the padded lanes are computed and never read)."""
+    var nl_pad = ((n_lists + COARSE_W - 1) // COARSE_W) * COARSE_W
+    var ct = List[Float32](length=dim * nl_pad, fill=Float32(0.0))
     for l in range(n_lists):
-        coarse.unsafe_store(l, pq_coarse_dist(queries, q_off, centers, l, dim))
-    return _probe_walk(coarse, n_lists, n_probes, probes)
+        for c in range(dim):
+            ct[c * nl_pad + l] = ftz(centers.unsafe_load(l * dim + c))
+    return ct^
+
+
+def _query_probes(
+    queries: F32P, q_off: Int, ct: F32P, n_lists: Int, dim: Int, n_probes: Int, coarse: F32P,
+    probes: I32P, pd: F32P,
+) -> Int:
+    """The query's probe lists, in `pq_next_probe`'s order. Each coarse
+    distance is `pq_coarse_dist`'s chain (c ascending, `ftz(ftz(q) - ftz(ctr))`,
+    one fused step, flushed), COARSE_W lists per vector step. With no NaN
+    among them, the walk's successive "next after (prev_d, prev_l) in
+    (distance, list id)" is the n_probes smallest under that order, ascending,
+    which a bounded insertion under the same comparisons returns; a NaN
+    (never produced by finite data) takes the walk itself (`_probe_walk`)."""
+    comptime W = COARSE_W
+    var nl_pad = ((n_lists + W - 1) // W) * W
+    var lb = 0
+    while lb < nl_pad:
+        var acc = SIMD[DType.float32, W](0.0)
+        for c in range(dim):
+            var a = SIMD[DType.float32, W](ftz(queries.unsafe_load(q_off + c)))
+            var diff = ftz_v[W](a - ct.load[width=W](c * nl_pad + lb))
+            acc = ftz_v[W](mul_add_v[W](diff, diff, acc))
+        coarse.store(lb, acc)
+        lb += W
+    for l in range(n_lists):
+        var d = coarse.unsafe_load(l)
+        if d != d:
+            return _probe_walk(coarse, n_lists, n_probes, probes)
+    var cnt = 0
+    for l in range(n_lists):
+        var d = coarse.unsafe_load(l)
+        if cnt == n_probes:
+            var ld = pd.unsafe_load(cnt - 1)
+            if not (d < ld or (d == ld and l < Int(probes.unsafe_load(cnt - 1)))):
+                continue
+        else:
+            cnt += 1
+        var s2 = cnt - 1
+        while s2 > 0:
+            var sd = pd.unsafe_load(s2 - 1)
+            var sl = Int(probes.unsafe_load(s2 - 1))
+            if d < sd or (d == sd and l < sl):
+                pd.unsafe_store(s2, sd)
+                probes.unsafe_store(s2, Int32(sl))
+                s2 -= 1
+            else:
+                break
+        pd.unsafe_store(s2, d)
+        probes.unsafe_store(s2, Int32(l))
+    return cnt
 
 
 @always_inline
@@ -209,6 +264,10 @@ def _clear_topk(qi: Int, k: Int, out_d: F32P, out_i: I32P):
     for s in range(k):
         out_d.unsafe_store(qi * k + s, pq_inf())
         out_i.unsafe_store(qi * k + s, Int32(-1))
+
+
+#: Candidate rows whose PQ code sums run side by side.
+comptime PQ_W = 8
 
 
 def ivf_pq_search_host(
@@ -228,11 +287,18 @@ def ivf_pq_search_host(
     var n_lut = pq_dim * n_codes
     var tasks = ann_task_count(m, n_lists * dim + n_probes * n_lists)
 
+    var ct = _centers_t(centers, n_lists, dim)
+    var ctp = fp(ct)
+    var nl_pad = ((n_lists + COARSE_W - 1) // COARSE_W) * COARSE_W
     def task(c: Int) {imm}:
         var span = ann_span(c, tasks, m)
-        var coarse = List[Float32](length=n_lists, fill=Float32(0.0))
+        var coarse = List[Float32](length=nl_pad, fill=Float32(0.0))
         var probes = List[Int32](length=n_probes, fill=Int32(0))
+        var pdist = List[Float32](length=n_probes, fill=Float32(0.0))
+        var pdp = fp(pdist)
         var lut = List[Float32](length=n_lut, fill=Float32(0.0))
+        var rows_buf = List[Int32](length=PQ_W, fill=Int32(0))
+        var rb = ip(rows_buf)
         var stamp = List[Int32](length=n_lut, fill=Int32(-1))
         var cp = fp(coarse)
         var pp = ip(probes)
@@ -244,16 +310,50 @@ def ivf_pq_search_host(
             var q_off = qi * dim
             _clear_topk(qi, k, out_d, out_i)
             var n_cand = 0
-            var np = _query_probes(queries, q_off, centers, n_lists, dim, n_probes, cp, pp)
+            var np = _query_probes(queries, q_off, ctp, n_lists, dim, n_probes, cp, pp, pdp)
             for p in range(np):
                 var l = Int(pp.unsafe_load(p))
+                var start = Int(offsets.unsafe_load(l))
+                var stop = Int(offsets.unsafe_load(l + 1))
+                if stop - start >= n_codes:
+                    # a long list reads most entries: fill the table, then
+                    # PQ_W rows' code sums side by side (lane r is row rb[r]'s
+                    # `ftz(total + entry)` over j ascending)
+                    for j in range(pq_dim):
+                        for code in range(n_codes):
+                            lp.unsafe_store(j * n_codes + code, pq_lut_entry(
+                                queries, q_off, centers, l, dim, cb, j, code, pq_len, n_codes
+                            ))
+                    var slot = start
+                    while slot < stop:
+                        var nb = 0
+                        while slot < stop and nb < PQ_W:
+                            var row = Int(list_indices.unsafe_load(slot))
+                            slot += 1
+                            if mask.unsafe_load(row) == 0:
+                                continue
+                            rb.unsafe_store(nb, Int32(row))
+                            nb += 1
+                        if nb == 0:
+                            break
+                        var total = SIMD[DType.float32, PQ_W](0.0)
+                        for j in range(pq_dim):
+                            var ent = SIMD[DType.float32, PQ_W](0.0)
+                            for r in range(nb):
+                                var code = Int(codes.unsafe_load(Int(rb.unsafe_load(r)) * pq_dim + j))
+                                ent[r] = lp.unsafe_load(j * n_codes + code)
+                            total = ftz_v[PQ_W](total + ent)
+                        for r in range(nb):
+                            pq_insert(k, base, total[r], rb.unsafe_load(r), out_d, out_i)
+                            n_cand += 1
+                    continue
                 gen += 1
                 if gen > 0x7FFFFFF0:
                     for e in range(n_lut):
                         sp.unsafe_store(e, Int32(-1))
                     gen = 1
                 var g = Int32(gen)
-                for slot in range(Int(offsets.unsafe_load(l)), Int(offsets.unsafe_load(l + 1))):
+                for slot in range(start, stop):
                     var row = Int(list_indices.unsafe_load(slot))
                     if mask.unsafe_load(row) == 0:
                         continue
@@ -270,10 +370,13 @@ def ivf_pq_search_host(
             out_n.unsafe_store(qi, Int32(n_cand))
         _ = coarse^
         _ = probes^
+        _ = pdist^
         _ = lut^
+        _ = rows_buf^
         _ = stamp^
 
     ann_tasks(task, tasks)
+    _ = ct^
 
 
 def ivf_sq_build_host(
@@ -326,6 +429,8 @@ def ivf_sq_build_host(
 
 #: SQ codes are bytes: the decode table holds one entry per (column, code).
 comptime SQ_CODES = 256
+#: Candidate rows whose SQ distance chains run side by side.
+comptime SQ_W = 8
 
 
 def ivf_sq_search_host(
@@ -349,46 +454,71 @@ def ivf_sq_search_host(
     var decp = fp(dec)
     var tasks = ann_task_count(m, n_lists * dim + n_probes * n_lists)
 
+    var ct = _centers_t(centers, n_lists, dim)
+    var ctp = fp(ct)
+    var nl_pad = ((n_lists + COARSE_W - 1) // COARSE_W) * COARSE_W
     def task(t: Int) {imm}:
         var span = ann_span(t, tasks, m)
-        var coarse = List[Float32](length=n_lists, fill=Float32(0.0))
+        var coarse = List[Float32](length=nl_pad, fill=Float32(0.0))
         var probes = List[Int32](length=n_probes, fill=Int32(0))
+        var pdist = List[Float32](length=n_probes, fill=Float32(0.0))
+        var pdp = fp(pdist)
         var qres = List[Float32](length=dim, fill=Float32(0.0))
+        var rows_buf = List[Int32](length=SQ_W, fill=Int32(0))
         var cp = fp(coarse)
         var pp = ip(probes)
         var qr = fp(qres)
+        var rb = ip(rows_buf)
         for qi in range(span[0], span[1]):
             var base = qi * k
             var q_off = qi * dim
             _clear_topk(qi, k, out_d, out_i)
             var n_cand = 0
-            var np = _query_probes(queries, q_off, centers, n_lists, dim, n_probes, cp, pp)
+            var np = _query_probes(queries, q_off, ctp, n_lists, dim, n_probes, cp, pp, pdp)
             for p in range(np):
                 var l = Int(pp.unsafe_load(p))
                 for c in range(dim):
                     qr.unsafe_store(c, ftz(ftz(queries.unsafe_load(q_off + c)) - ftz(centers.unsafe_load(l * dim + c))))
-                for slot in range(Int(offsets.unsafe_load(l)), Int(offsets.unsafe_load(l + 1))):
-                    var row = Int(list_indices.unsafe_load(slot))
-                    if mask.unsafe_load(row) == 0:
-                        continue
-                    var acc = Float32(0.0)
+                # rows in slot order, SQ_W at a time: lane r is row rb[r]'s
+                # fused square chain over c ascending, the decoded value read
+                # from the table (or decoded in place for a code outside it)
+                var start = Int(offsets.unsafe_load(l))
+                var stop = Int(offsets.unsafe_load(l + 1))
+                var slot = start
+                while slot < stop:
+                    var nb = 0
+                    while slot < stop and nb < SQ_W:
+                        var row = Int(list_indices.unsafe_load(slot))
+                        slot += 1
+                        if mask.unsafe_load(row) == 0:
+                            continue
+                        rb.unsafe_store(nb, Int32(row))
+                        nb += 1
+                    if nb == 0:
+                        break
+                    var acc = SIMD[DType.float32, SQ_W](0.0)
                     for c in range(dim):
-                        var code = Int(codes.unsafe_load(row * dim + c))
-                        var dv: Float32
-                        if code >= 0 and code < SQ_CODES:
-                            dv = decp.unsafe_load(c * SQ_CODES + code)
-                        else:
-                            dv = ftz(identical_mul_add(Float32(code), delta.unsafe_load(c), vmin.unsafe_load(c)))
-                        var diff = ftz(qr.unsafe_load(c) - dv)
-                        acc = ftz(identical_mul_add(diff, diff, acc))
-                    pq_insert(k, base, acc, Int32(row), out_d, out_i)
-                    n_cand += 1
+                        var dv = SIMD[DType.float32, SQ_W](0.0)
+                        for r in range(nb):
+                            var code = Int(codes.unsafe_load(Int(rb.unsafe_load(r)) * dim + c))
+                            if code >= 0 and code < SQ_CODES:
+                                dv[r] = decp.unsafe_load(c * SQ_CODES + code)
+                            else:
+                                dv[r] = ftz(identical_mul_add(Float32(code), delta.unsafe_load(c), vmin.unsafe_load(c)))
+                        var diff = ftz_v[SQ_W](SIMD[DType.float32, SQ_W](qr.unsafe_load(c)) - dv)
+                        acc = ftz_v[SQ_W](mul_add_v[SQ_W](diff, diff, acc))
+                    for r in range(nb):
+                        pq_insert(k, base, acc[r], rb.unsafe_load(r), out_d, out_i)
+                        n_cand += 1
             out_n.unsafe_store(qi, Int32(n_cand))
         _ = coarse^
         _ = probes^
+        _ = pdist^
         _ = qres^
+        _ = rows_buf^
 
     ann_tasks(task, tasks)
+    _ = ct^
     _ = dec^
 
 
@@ -443,33 +573,46 @@ def ivf_rabitq_build_host(
     _ = labels^
 
 
+#: Candidate rows whose RaBitQ bit folds run side by side.
+comptime RQ_W = 8
+
+
 def ivf_rabitq_search_host(
     centers: F32P, offsets: I32P, list_indices: I32P, codes: I32P, norms: F32P, ips: F32P, mask: I32P,
     n_lists: Int, dim: Int, seed: Int, queries: F32P, m: Int, k: Int, n_probes: Int,
     out_d: F32P, out_i: I32P, out_n: I32P,
 ):
     """`rq_search_cell` per query, on the caller's arrays; the coarse
-    distances once per query (`_probe_walk`), the rotation and the scan the
-    cell's statements."""
+    distances once per query (`_probe_walk`), the rotation the cell's, and
+    the scan's sign-flip fold for RQ_W unmasked rows at a time (lane r is
+    row r's `dot = ftz(dot + (v if bit else -v))` over j ascending; the
+    estimate and the insertion then per row in slot order, as the cell)."""
     var D = rq_pow2(dim)
     var words = (D + 31) // 32
     var scale = rq_scale(D)
     var tasks = ann_task_count(m, n_lists * dim + n_probes * n_lists)
 
+    var ct = _centers_t(centers, n_lists, dim)
+    var ctp = fp(ct)
+    var nl_pad = ((n_lists + COARSE_W - 1) // COARSE_W) * COARSE_W
     def task(t: Int) {imm}:
         var span = ann_span(t, tasks, m)
-        var coarse = List[Float32](length=n_lists, fill=Float32(0.0))
+        var coarse = List[Float32](length=nl_pad, fill=Float32(0.0))
         var probes = List[Int32](length=n_probes, fill=Int32(0))
+        var pdist = List[Float32](length=n_probes, fill=Float32(0.0))
+        var pdp = fp(pdist)
         var ws = List[Float32](length=D, fill=Float32(0.0))
+        var rows_buf = List[Int32](length=RQ_W, fill=Int32(0))
         var cp = fp(coarse)
         var pp = ip(probes)
         var wp = fp(ws)
+        var rb = ip(rows_buf)
         for qi in range(span[0], span[1]):
             var base = qi * k
             var q_off = qi * dim
             _clear_topk(qi, k, out_d, out_i)
             var n_cand = 0
-            var np = _query_probes(queries, q_off, centers, n_lists, dim, n_probes, cp, pp)
+            var np = _query_probes(queries, q_off, ctp, n_lists, dim, n_probes, cp, pp, pdp)
             for p in range(np):
                 var l = Int(pp.unsafe_load(p))
                 rq_rotate(queries, q_off, centers, l * dim, dim, D, seed, scale, wp, 0)
@@ -477,29 +620,57 @@ def ivf_rabitq_search_host(
                 for j in range(D):
                     var v = wp.unsafe_load(j)
                     qn2 = ftz(identical_mul_add(v, v, qn2))
-                for slot in range(Int(offsets.unsafe_load(l)), Int(offsets.unsafe_load(l + 1))):
-                    var row = Int(list_indices.unsafe_load(slot))
-                    if mask.unsafe_load(row) == 0:
-                        continue
-                    var est: Float32
-                    var ipv = ips.unsafe_load(row)
-                    var norm = norms.unsafe_load(row)
-                    if ipv > Float32(0.0):
-                        var dot = Float32(0.0)
-                        for j in range(D):
-                            var v = wp.unsafe_load(j)
-                            var bit = (codes.unsafe_load(row * words + j // 32) >> Int32(j % 32)) & Int32(1)
-                            dot = ftz(dot + (v if bit != 0 else -v))
-                        var xq = ftz(identical_div(ftz(identical_mul(dot, scale)), ipv))
-                        var nn = ftz(identical_mul(norm, norm))
-                        est = ftz(ftz(nn + qn2) - ftz(identical_mul(Float32(2.0), ftz(identical_mul(norm, xq)))))
-                    else:
-                        est = qn2
-                    pq_insert(k, base, est, Int32(row), out_d, out_i)
-                    n_cand += 1
+                # rows in slot order, RQ_W at a time: lane r's sign-flip fold
+                # over j ascending is the cell's `dot` for row rows[r]
+                var start = Int(offsets.unsafe_load(l))
+                var stop = Int(offsets.unsafe_load(l + 1))
+                var slot = start
+                while slot < stop:
+                    var nb = 0
+                    while slot < stop and nb < RQ_W:
+                        var row = Int(list_indices.unsafe_load(slot))
+                        slot += 1
+                        if mask.unsafe_load(row) == 0:
+                            continue
+                        rb.unsafe_store(nb, Int32(row))
+                        nb += 1
+                    if nb == 0:
+                        break
+                    var ridx = SIMD[DType.int32, RQ_W](0)
+                    for r in range(nb):
+                        ridx[r] = rb.unsafe_load(r)
+                    var dot = SIMD[DType.float32, RQ_W](0.0)
+                    for w in range(words):
+                        var wv = SIMD[DType.int32, RQ_W](0)
+                        for r in range(nb):
+                            wv[r] = codes.unsafe_load(Int(ridx[r]) * words + w)
+                        var top = min(32, D - w * 32)
+                        for jj in range(top):
+                            var v = wp.unsafe_load(w * 32 + jj)
+                            var bit = (wv >> SIMD[DType.int32, RQ_W](Int32(jj))) & SIMD[DType.int32, RQ_W](1)
+                            var sv = bit.ne(SIMD[DType.int32, RQ_W](0)).select(
+                                SIMD[DType.float32, RQ_W](v), SIMD[DType.float32, RQ_W](-v)
+                            )
+                            dot = ftz_v[RQ_W](dot + sv)
+                    for r in range(nb):
+                        var row = Int(ridx[r])
+                        var est: Float32
+                        var ipv = ips.unsafe_load(row)
+                        var norm = norms.unsafe_load(row)
+                        if ipv > Float32(0.0):
+                            var xq = ftz(identical_div(ftz(identical_mul(dot[r], scale)), ipv))
+                            var nn = ftz(identical_mul(norm, norm))
+                            est = ftz(ftz(nn + qn2) - ftz(identical_mul(Float32(2.0), ftz(identical_mul(norm, xq)))))
+                        else:
+                            est = qn2
+                        pq_insert(k, base, est, Int32(row), out_d, out_i)
+                        n_cand += 1
             out_n.unsafe_store(qi, Int32(n_cand))
         _ = coarse^
         _ = probes^
+        _ = pdist^
         _ = ws^
+        _ = rows_buf^
 
     ann_tasks(task, tasks)
+    _ = ct^
