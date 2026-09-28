@@ -1,18 +1,18 @@
-diff --git a/x_metrics/regression.mojo b/x_metrics/regression.mojo
-index 2da19fdba..285337d3b 100644
---- a/x_metrics/regression.mojo
-+++ b/x_metrics/regression.mojo
-@@ -163,7 +163,12 @@ def wpercentile_unit(t: Int, f: FP, q: IP):
+diff --git a/x_metrics/par.mojo b/x_metrics/par.mojo
+index 4e441ae51..d5d9ab50d 100644
+--- a/x_metrics/par.mojo
++++ b/x_metrics/par.mojo
+@@ -514,7 +514,12 @@ def wpct_prefix_unit(t: Int, f: FP, q: IP):
+     var C = p(q, 2) + t * n
+     var acc = Float32(0)
      for i in range(n):
-         var r = ldi(f, O + i)
-         var w = Float32(1) if W < 0 else ld(f, W + r)
--        acc = fadd(acc, w)
+-        acc = fadd(acc, ld(f, G + i))
 +        var re = Float32(0)  # SABOTAGE 6107: each prefix refolded newest-first
 +        var jj = i
 +        while jj >= 0:
-+            re = fadd(re, Float32(1) if W < 0 else ld(f, W + ldi(f, O + jj)))
++            re = fadd(re, ld(f, G + jj))
 +            jj -= 1
 +        acc = re
          st(f, C + i, acc)
-     var total = ld(f, C + n - 1)
-     if total == Float32(0):
+ 
+ 
