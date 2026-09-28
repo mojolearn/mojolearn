@@ -115,7 +115,7 @@ def _row_min_open(
     var j = lo
     while j + _RW <= n:
         var v = p.load[width=_RW](j)
-        nan = nan or (v != v).reduce_or()
+        nan = nan or v.ne(v).reduce_or()
         vmin = min(vmin, v)
         j += _RW
     var m = vmin.reduce_min()
