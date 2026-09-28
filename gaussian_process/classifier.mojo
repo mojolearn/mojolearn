@@ -30,6 +30,8 @@ refusal of classification itself, is closed by DEVIATION 2830.
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL
 from core.neural_context import neural_ctx
+from std.time import perf_counter_ns
+from std.os import getenv
 from std.sys.compile import is_defined
 # ONE PROCESS-LIFETIME DeviceContext per binding and tier (CURRENT DIRECTIVES;
 # lane/neighbors-apple 2026-09-28): a new context per entry is a new Metal
@@ -182,10 +184,23 @@ def gpc_fit_binary_host(
     var last_wsr = List[Float32]()
     var last_l = List[Float32]()
     var nb = 0
+    # MOJOLEARN_STAGE_TIMES=1: wall per phase of the Newton loop (every
+    # phase drains on its own), printed once. Timing only.
+    var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
+    var t_b = 0
+    var t_f = 0
+    var t_mv = 0
+    var t_s = 0
+    var t_h = 0
     for it in range(max_iter_predict):
+        var t0 = Int(perf_counter_ns())
         var wt = gpc_weights(f)
         var bmat = gpc_b_matrix(k, wt.wsr, n_train)
+        var t1 = Int(perf_counter_ns())
         var factor = cholesky_factor_host(bmat, n_train, Float32(0.0))
+        var t2 = Int(perf_counter_ns())
+        t_b += t1 - t0
+        t_f += t2 - t1
         if factor.info != 0:
             raise Error(
                 "gpc_fit_host: the factorization of B = I + W_sr K W_sr failed"
@@ -197,20 +212,33 @@ def gpc_fit_binary_host(
                 " matrix, so this means a non-finite latent value"
             )
         var bvec = gpc_newton_rhs(wt.w, f, y, wt.pi)
+        var t3 = Int(perf_counter_ns())
         var kb = _gpc_matvec(k, bvec, n_train)
+        var t4 = Int(perf_counter_ns())
         var c = gpc_scale(wt.wsr, kb)
         var xs = cholesky_solve_host(factor, c, 1)
+        var t5 = Int(perf_counter_ns())
         var a = gpc_a_vector(bvec, wt.wsr, xs)
+        var t6 = Int(perf_counter_ns())
         f = _gpc_matvec(k, a, n_train)
+        var t7 = Int(perf_counter_ns())
         var lml = gpc_lml(a, f, y, factor.logdet)
         n_iter = it + 1
         last_pi = wt.pi.copy()
         last_wsr = wt.wsr.copy()
         last_l = factor.l.copy()
         nb = factor.nb
+        var t8 = Int(perf_counter_ns())
+        t_mv += (t4 - t3) + (t7 - t6)
+        t_s += t5 - t4
+        t_h += (t3 - t2) + (t6 - t5) + (t8 - t7)
         if gpc_stop(lml, previous):
             break
         previous = lml
+    if st_on:
+        print("GPC_FIT_STAGES iters=" + String(n_iter) + " b_matrix_ms=" + String(t_b // 1000000)
+              + " factor_ms=" + String(t_f // 1000000) + " matvec_ms=" + String(t_mv // 1000000)
+              + " solve_ms=" + String(t_s // 1000000) + " host_ms=" + String(t_h // 1000000))
     return GPCBinaryFit(last_l^, last_pi^, last_wsr^, previous, n_iter, nb)
 
 

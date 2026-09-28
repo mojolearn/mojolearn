@@ -147,6 +147,8 @@ and `_safe_solve`, `:26-44`:
 
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
+from std.time import perf_counter_ns
+from std.os import getenv
 
 from cholesky.checks.potrf import (
     chol_default_nb_hint,
@@ -307,6 +309,9 @@ def kernel_ridge_solve(
 
     # `_safe_solve` -> `lapack.posv` -> cusolverDnpotrf. DEVIATION 1660 hands
     # this the `+0.0` jitter: the ridge is already in the matrix.
+    # MOJOLEARN_STAGE_TIMES=1: factor and solve walls (drained), timing only.
+    var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
+    var t0 = Int(perf_counter_ns())
     var run = potrf_lower(
         ctx,
         k,
@@ -325,7 +330,12 @@ def kernel_ridge_solve(
 
     # `lapack.posv`'s second half, cusolverDnpotrs. `cho_solve` records
     # `chol.solve.forward` and `chol.solve.back` itself.
+    var t1 = Int(perf_counter_ns())
     cho_solve(ctx, k, y, n, n_targets, trace, solve_tpb)
+    if st_on:
+        ctx.synchronize()
+        print("KRR_SOLVE_STAGES n=" + String(n) + " potrf_ms=" + String((t1 - t0) // 1000000)
+              + " cho_solve_ms=" + String((Int(perf_counter_ns()) - t1) // 1000000))
     trace.record_device(ctx, "krr.dual_coef", y, n * n_targets)
     return 0
 
