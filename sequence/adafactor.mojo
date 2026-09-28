@@ -66,8 +66,14 @@ def _sumsq_or_parts(p: FP, start: Int, n: Int, parts: FP, n_parts: Int) -> Float
 def op_af_alpha(t: Int, a: Args):
     """One thread: p1[1] = max(eps2, ||p0|| / sqrt(numel)) rho.
     i0 numel; f0 eps2, f1 rho; FAST: p2 the i2 partials of op_chunk_sumsq."""
+    af_alpha_tail(a, _sumsq_or_parts(a.p0, 0, a.i0, a.p2, a.i2))
+
+
+@always_inline
+def af_alpha_tail(a: Args, ss: Float32):
+    """op_af_alpha from ||p0||^2 = ss (sequence/coop.mojo folds it too)."""
     var n = a.i0
-    var rms = div(ftz(identical_sqrt(_sumsq_or_parts(a.p0, 0, n, a.p2, a.i2))), ftz(identical_sqrt(Float32(n))))
+    var rms = div(ftz(identical_sqrt(ss)), ftz(identical_sqrt(Float32(n))))
     # torch's max(eps2, rms): eps2 unless rms > eps2 (a NaN rms gives eps2).
     # Spelled `max`, not `rms if rms > eps2 else eps2`: Apple's Metal
     # compiler drops this WHOLE kernel (no store lands, not even one before
@@ -132,8 +138,14 @@ def op_af_vec(t: Int, a: Args):
 def op_af_denom(t: Int, a: Args):
     """One thread: p1[3] = -p1[1] / max(1, ||p0|| / (sqrt(numel) d));
     i0 numel, f0 d; FAST: p2 the i2 partials of op_chunk_sumsq."""
+    af_denom_tail(a, _sumsq_or_parts(a.p0, 0, a.i0, a.p2, a.i2))
+
+
+@always_inline
+def af_denom_tail(a: Args, ss: Float32):
+    """op_af_denom from ||p0||^2 = ss."""
     var n = a.i0
-    var r = div(ftz(identical_sqrt(_sumsq_or_parts(a.p0, 0, n, a.p2, a.i2))), mul(ftz(identical_sqrt(Float32(n))), a.f0))
+    var r = div(ftz(identical_sqrt(ss)), mul(ftz(identical_sqrt(Float32(n))), a.f0))
     # max(1, rms / d) spelled `max` (the Metal fault of op_af_alpha: this
     # kernel is the same shape, a compare-and-select on sqrt over _sumsq);
     # exact, a NaN ratio still gives 1.
@@ -180,8 +192,15 @@ def op_lamb_ratio(t: Int, a: Args):
     var s = Int(a.p2.unsafe_load(t))
     var e = Int(a.p2.unsafe_load(t + 1))
     var np = min(SUMSQ_THREADS, e - s) if a.i1 != 0 else 0
-    var wn = ftz(identical_sqrt(_sumsq_or_parts(a.p0, s, e - s, a.p4 + t * SUMSQ_THREADS, np)))
-    var gn = ftz(identical_sqrt(_sumsq_or_parts(a.p1, s, e - s, a.p5 + t * SUMSQ_THREADS, np)))
+    lamb_ratio_tail(a, t, _sumsq_or_parts(a.p0, s, e - s, a.p4 + t * SUMSQ_THREADS, np),
+                    _sumsq_or_parts(a.p1, s, e - s, a.p5 + t * SUMSQ_THREADS, np))
+
+
+@always_inline
+def lamb_ratio_tail(a: Args, t: Int, pss: Float32, uss: Float32):
+    """op_lamb_ratio from ||p||^2 = pss and ||u||^2 = uss of segment t."""
+    var wn = ftz(identical_sqrt(pss))
+    var gn = ftz(identical_sqrt(uss))
     var r = Float32(1.0)
     if wn > Float32(0.0) and gn > Float32(0.0):
         r = div(wn, gn)

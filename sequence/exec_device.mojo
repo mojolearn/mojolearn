@@ -13,7 +13,12 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 from sequence.exec import Exec
 from sequence.dispatch import apply
-from sequence.ops import FP, Args
+from sequence.ops import FP, Args, OP_AF_ALPHA, OP_AF_DENOM, OP_GEMM, OP_LAMB_RATIO, OP_SEG_SUMSQ
+from sequence.coop import COOP_W, apply_coop
+from std.sys.info import has_apple_gpu_accelerator
+
+#: the simdgroup-cooperative long folds (sequence/coop.mojo): Apple only
+comptime SEQ_COOP = has_apple_gpu_accelerator()
 
 comptime TPB = 128
 
@@ -115,6 +120,27 @@ def _pcopy(dst: FP, src: FP, n: Int):
             memcpy(dest=dst + lo, src=src + lo, count=hi - lo)
 
     host_parallelize(_c, tasks)
+
+
+def coop_kernel[OP: Int](
+    p0: FP, p1: FP, p2: FP, p3: FP, p4: FP, p5: FP,
+    p6: FP, p7: FP, p8: FP, p9: FP, p10: FP, p11: FP,
+    i01: Int64, i23: Int64, i45: Int64, i67: Int64, i89: Int64, i1011: Int64,
+    f01: Int64, f23: Int64, f45: Int64, f67: Int64,
+    n: Int64,
+):
+    """One simdgroup (COOP_W threads) per cell of OP (sequence/coop.mojo);
+    TPB is a multiple of COOP_W, so a cell's lanes share one simdgroup and
+    leave together."""
+    var g = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var cell = g // COOP_W
+    if cell < Int(n):
+        var a = Args(p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11,
+                     _lo(i01), _hi(i01), _lo(i23), _hi(i23), _lo(i45), _hi(i45),
+                     _lo(i67), _hi(i67), _lo(i89), _hi(i89), _lo(i1011), _hi(i1011),
+                     _flo(f01), _fhi(f01), _flo(f23), _fhi(f23),
+                     _flo(f45), _fhi(f45), _flo(f67), _fhi(f67))
+        apply_coop[OP](cell, g - cell * COOP_W, a)
 
 
 struct DeviceExec(Exec):
@@ -227,6 +253,24 @@ struct DeviceExec(Exec):
         for v in [a.i0, a.i1, a.i2, a.i3, a.i4, a.i5, a.i6, a.i7, a.i8, a.i9, a.i10, a.i11]:
             if v > I32_MAX or v < -I32_MAX - 1:
                 raise Error("sequence DeviceExec: an integer argument does not fit Int32 (" + String(v) + ")")
+        comptime if SEQ_COOP and (OP == OP_AF_ALPHA or OP == OP_AF_DENOM or OP == OP_SEG_SUMSQ
+                                  or OP == OP_LAMB_RATIO or OP == OP_GEMM):
+            var coop = True
+            comptime if OP == OP_GEMM:
+                coop = a.i0 * a.i1 <= 1024 and a.i2 >= 32768
+            elif OP == OP_AF_ALPHA or OP == OP_AF_DENOM:
+                coop = a.i0 >= 4096
+            if coop:
+                self.ctx.enqueue_function[coop_kernel[OP]](
+                    a.p0, a.p1, a.p2, a.p3, a.p4, a.p5, a.p6, a.p7, a.p8, a.p9, a.p10, a.p11,
+                    _pack_ii(a.i0, a.i1), _pack_ii(a.i2, a.i3), _pack_ii(a.i4, a.i5),
+                    _pack_ii(a.i6, a.i7), _pack_ii(a.i8, a.i9), _pack_ii(a.i10, a.i11),
+                    _pack_ff(a.f0, a.f1), _pack_ff(a.f2, a.f3), _pack_ff(a.f4, a.f5), _pack_ff(a.f6, a.f7),
+                    Int64(n),
+                    grid_dim=((n * COOP_W + TPB - 1) // TPB, 1, 1),
+                    block_dim=(TPB, 1, 1),
+                )
+                return
         self.ctx.enqueue_function[seq_kernel[OP]](
             a.p0, a.p1, a.p2, a.p3, a.p4, a.p5, a.p6, a.p7, a.p8, a.p9, a.p10, a.p11,
             _pack_ii(a.i0, a.i1), _pack_ii(a.i2, a.i3), _pack_ii(a.i4, a.i5),
