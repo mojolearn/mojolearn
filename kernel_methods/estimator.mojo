@@ -148,6 +148,41 @@ def _upload(
     return buf^
 
 
+#: lane/neighbors-apple (2026-09-28): a device result bound for the CALLER'S
+#: memory goes through a reused pinned staging buffer in 64 MB chunks and a
+#: host copy, instead of one `enqueue_copy` into unregistered memory, which
+#: ran at about 2.2 GB/s on the M3 Ultra (RBFSampler 1M x 500: 905 of the
+#: transform's 1,140 ms). Same words. `-D MOJOLEARN_KM_DIRECT_OUT` keeps the
+#: direct copy.
+comptime KM_OUT_CHUNK = 16 * 1024 * 1024
+
+
+def _download_into[out_origin: MutOrigin, //](
+    ctx: DeviceContext,
+    mut src: DeviceBuffer[DType.float32],
+    output: MutPointer[Float32, out_origin],
+    n: Int,
+) raises:
+    comptime if is_defined["MOJOLEARN_KM_DIRECT_OUT"]():
+        ctx.enqueue_copy(dst_ptr=output, src_buf=src)
+        ctx.synchronize()
+        return
+    if n <= 0:
+        return
+    var c = min(n, KM_OUT_CHUNK)
+    var h = ctx.enqueue_create_host_buffer[DType.float32](c)
+    var off = 0
+    while off < n:
+        var m = min(c, n - off)
+        var sub = src.create_sub_buffer[DType.float32](off, m)
+        ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=sub)
+        ctx.synchronize()
+        copy_f32(h.unsafe_ptr(), output.unsafe_offset(off), m)
+        _ = sub^
+        off += m
+    _ = h^
+
+
 def _download(
     ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int
 ) raises -> List[Float32]:
@@ -1093,8 +1128,7 @@ def nystroem_transform_host_into[out_origin: MutOrigin, //](
     identical_gemm_into(ctx, demb, dk, dnorm, gws, n_rows, q, q, op)
     ctx.synchronize()
     trace.record_device(ctx, "nys.embedding", demb, n_rows * q)
-    ctx.enqueue_copy(dst_ptr=output, src_buf=demb)
-    ctx.synchronize()
+    _download_into(ctx, demb, output, n_rows * q)
     _ = dx^
     _ = dc^
     _ = dnorm^
@@ -1309,8 +1343,7 @@ def rbf_sampler_transform_host_into[out_origin: MutOrigin, //](
     ctx.synchronize()
     var t3 = Int(perf_counter_ns())
     trace.record_device(ctx, "rf.feature_map", dp, n_rows * dd)
-    ctx.enqueue_copy(dst_ptr=output, src_buf=dp)
-    ctx.synchronize()
+    _download_into(ctx, dp, output, n_rows * dd)
     if st_on:
         print("RBF_TRANSFORM_STAGES rows=" + String(n_rows) + " alloc_upload_ms=" + String((t1 - t0) // 1000000)
               + " gemm_ms=" + String((t2 - t1) // 1000000) + " epilogue_ms=" + String((t3 - t2) // 1000000)
