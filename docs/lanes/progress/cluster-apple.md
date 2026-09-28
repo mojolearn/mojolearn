@@ -77,7 +77,23 @@ Every digest equals the H100 and M3 Ultra records EXCEPT dbscan taxi (below).
    cancellations / subnormal partial sums / -0.0 / subnormal addends) with arm
    spec_chain_fallback.patch; e2e_spec_chain_reach proves the gmm lanes reach it.
 
-## Requests in flight (IDENTICAL)
+7. 0ea0b944e AgglomerativeClustering single linkage: the DENSE solver too.
+8. 30c6e9638 x_cluster moments, FAST only: row slices summed per block, the partials
+   added over the slices (the same addends and finals; FAST moves bits, quality by the
+   paired check).
+9. 381f85584 merge of origin/lane/merged (Andrew 2026-09-28). Fix found in the merge:
+   lane/merged's `_ap_noise_kernel` took `m: Int`, which is not DevicePassable, so the
+   x_cluster GPU binding did not instantiate on this toolchain; `m` is Int32 now.
+
+## Policy (Andrew 2026-09-28, ~08:25Z)
+
+No verification in this lane: no identity requests, no sabotage runs. The identity
+request 1790583161949 and the DBSCAN probe were withdrawn before they ran. The
+sabotage arms and checks added above are for the orchestrator's one check on
+lane/apple-merged. Only speed measurements (+ digests for IDENTICAL, paired quality
+for FAST) run here.
+
+## Requests in flight (superseded; see the results section)
 
 - identity 1790583161949-cluster-819df01ee2: 24 lanes (18 x-cluster, hdbscan,
   hdbscan-leaf, x-cluster-hdbscan-epsilon, agglomerative, gmm, gmm-random-init),
