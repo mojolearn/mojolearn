@@ -23,6 +23,7 @@ HOST READBACKS MATCH THE REFERENCE. `mst_edge_count.value(stream)` (`:142`, `:14
 reads in the reference loop; here they are the same reads in the same places.
 """
 
+from core.stage_prof import prof_mark
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
@@ -239,8 +240,11 @@ struct MST_solver(Movable):
         # supervertex remains"; adjusted to support spanning forests.
         var mst_iterations = self.iterations if self.iterations > 0 else self.v
         self.n_rounds = 0
+        var _pt = 0
+        prof_mark(ctx, "start", _pt)
         for _i in range(mst_iterations):
             self.min_edge_per_vertex(ctx)
+            prof_mark(ctx, "mst.min_edge_per_vertex", _pt)
             self.min_edge_per_supervertex(ctx)
             self.check_termination(ctx)
             self.n_rounds += 1
@@ -262,6 +266,7 @@ struct MST_solver(Movable):
 
             self.append_src_dst_pair(ctx, mst_result)
             self.label_prop(ctx)
+            prof_mark(ctx, "mst.rest_of_round", _pt)
             self.prev_mst_edge_count = curr_mst_edge_count
 
         # `:162-166` result packaging

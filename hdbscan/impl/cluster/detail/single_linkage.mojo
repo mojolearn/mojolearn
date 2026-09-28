@@ -48,6 +48,7 @@ show.
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
+from core.stage_prof import prof_mark
 from hdbscan.checks.hdbscan_sabotage import HDB_SAB_MST_ORIENT_RAW, HDB_SAB_NONE
 from hdbscan.checks.mutual_reachability_dense import (
     MR_TPB,
@@ -156,6 +157,8 @@ def build_mr_linkage(
     # `:64-79` mutual_reachability_graph, DEVIATION 1600's two halves.
     #
     # Half one: the k-NN and the core distances, which ARE theirs.
+    var _pt = 0
+    prof_mark(ctx, "start", _pt)
     var knn_dists = ctx.enqueue_create_buffer[DType.float32](m * min_samples)
     var knn_inds = ctx.enqueue_create_buffer[DType.int32](m * min_samples)
     compute_core_dists(
@@ -163,6 +166,7 @@ def build_mr_linkage(
         knn_dists, knn_inds, core_tpb, sabotage,
     )
     trace.record_device[DType.float32](ctx, "hdbscan.core_dists", core_dists, m)
+    prof_mark(ctx, "hdb.core_dists", _pt)
 
     # Half two: the DENSE graph in place of their sparse COO. `indptr`,
     # `indices` and `pw_dists` are the PAIRWISE connectivity
@@ -180,6 +184,7 @@ def build_mr_linkage(
             ctx, x, m, n, metric, indptr, indices, pw_dists, norms,
             tile_tpb, LINK_SAB_NONE,
         )
+    prof_mark(ctx, "hdb.pairwise", _pt)
 
     # `reachability.cuh:222` `(value_t)1.0 / alpha`, on the host as
     # theirs is, through `identical_div` (row 49's seam). At the shipped
@@ -190,11 +195,13 @@ def build_mr_linkage(
         mutual_reachability_dense(
             ctx, mr, pw_dists, core_dists, m, inv_alpha, mr_tpb, sabotage
         )
+        prof_mark(ctx, "hdb.mr", _pt)
         refuse_nonfinite_device(
             ctx, mr, nnz, "hdbscan.build_mr_linkage",
             "mutual reachability cells", sabotage,
         )
         trace.record_device[DType.float32](ctx, "hdbscan.mr.dists", mr, nnz)
+    prof_mark(ctx, "hdb.nonfinite", _pt)
 
     # `:81-102` color, then build_sorted_mst. The reduction op and the
     # metric are arguments of the FIX-UP LOOP only; the graph here is
@@ -218,6 +225,7 @@ def build_mr_linkage(
             max_iter=10, mst_tpb=mst_tpb, sabotage=LINK_SAB_NONE,
         )
 
+    prof_mark(ctx, "hdb.mst rounds=" + String(rounds), _pt)
     var n_edges = m - 1
     var h_src = ctx.enqueue_create_host_buffer[DType.int32](n_edges)
     var h_dst = ctx.enqueue_create_host_buffer[DType.int32](n_edges)

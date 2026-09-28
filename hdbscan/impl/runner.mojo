@@ -47,6 +47,7 @@ from core.identity_trace import IdentityTrace
 from hdbscan.checks.hdbscan_sabotage import HDB_SAB_NONE
 from hdbscan.checks.mutual_reachability_dense import MR_TPB
 from hdbscan.impl.cluster.detail.single_linkage import build_mr_linkage
+from core.stage_prof import prof_mark
 from hdbscan.impl.condensed_hierarchy import CondensedHierarchy
 from hdbscan.impl.detail.condense import build_condensed_hierarchy
 from hdbscan.impl.detail.extract import ExtractOutput, extract_clusters
@@ -289,6 +290,8 @@ def fit_hdbscan(
     var sizes = ctx.enqueue_create_buffer[DType.int32](n_edges)
     ctx.synchronize()
 
+    var _pt = 0
+    prof_mark(ctx, "start", _pt)
     # `:120-133` helpers::build_linkage(..., mutual_reachability_params)
     var rounds = build_mr_linkage(
         ctx, trace, x_host, x, m, n, k, params.alpha, metric,
@@ -296,6 +299,7 @@ def fit_hdbscan(
         tile_tpb, mst_tpb, mr_tpb, core_tpb, sabotage,
     )
 
+    prof_mark(ctx, "hdb.linkage_total", _pt)
     # `:172-181` Condense branches of tree according to min cluster size
     var tree = build_condensed_hierarchy(
         ctx, children, deltas, sizes, params.min_cluster_size, m, sabotage
@@ -305,6 +309,7 @@ def fit_hdbscan(
     trace.record_list_f32("hdbscan.condensed.lambdas", tree.lambdas)
     trace.record_list_i32("hdbscan.condensed.sizes", tree.sizes)
 
+    prof_mark(ctx, "hdb.condense", _pt)
     # `:183-204` Extract labels from stability
     var ext = extract_clusters(
         ctx, tree, m, params.cluster_selection_method,
@@ -315,6 +320,7 @@ def fit_hdbscan(
     trace.record_list_i32("hdbscan.selected", ext.is_cluster)
     trace.record_list_i32("hdbscan.raw_labels", ext.labels)
 
+    prof_mark(ctx, "hdb.extract", _pt)
     # `:208-210` max_lambda = *thrust::max_element(lambdas)
     var max_lambda = max_lambda_of(tree)
 
