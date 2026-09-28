@@ -40,3 +40,12 @@ resident entries; the epoch entry is plumbing over them, no new device path, so 
   device for the epoch and every host parameter block kept alive past its enqueue (a new
   ordering path, sabotage-proof owed); not done.
 - Apple (m2pro) not run yet.
+
+## STOP (Andrew via the orchestrator, 2026-09-28 ~20:05Z)
+No more checks or submits. py-consolidated merges every Python lane and runs ONE global check.
+Branches for it to merge: lane/py-misc (this file's CNN work, proven on nvc1-0002) and the
+sub-lanes lane/py-misc-metrics, lane/py-misc-msel, lane/py-misc-prep (each has its own
+progress file, docs/lanes/progress/py-misc-<x>.md, with what it proved and what it did not).
+Label-loop permission (NUMPY_FREE_CONTRACT, DEVIATION 2377 silhouette): retired by
+lane/py-shared 05bf6ad0d; py-misc did not duplicate it. DEVIATION 2340's docstring wording
+("O(rows) Python ... the contract explicitly permits") in _labels.py is left to py-shared.
