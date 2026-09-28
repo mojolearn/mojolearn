@@ -102,6 +102,10 @@ struct DeviceExec(Exec):
     #: upload staging buffers still read by queued copies; released at the
     #: next sync (an upload no longer waits for its own copy)
     var staged: List[HostBuffer[DType.float32]]
+    #: download_async copies waiting for the next sync: (host buffer, dst, n)
+    var pend_host: List[HostBuffer[DType.float32]]
+    var pend_dst: List[Int]
+    var pend_n: List[Int]
 
     def __init__(out self) raises:
         self.ctx = sequence_ctx()
@@ -109,11 +113,18 @@ struct DeviceExec(Exec):
         self.base = List[Int]()
         self.size = List[Int]()
         self.staged = List[HostBuffer[DType.float32]]()
+        self.pend_host = List[HostBuffer[DType.float32]]()
+        self.pend_dst = List[Int]()
+        self.pend_n = List[Int]()
 
     def alloc(mut self, n: Int) raises -> FP:
+        return self._alloc(n, True)
+
+    def _alloc(mut self, n: Int, zero: Bool) raises -> FP:
         var count = n if n > 0 else 1
         var buf = self.ctx.enqueue_create_buffer[DType.float32](count)
-        buf.enqueue_fill(Float32(0.0))
+        if zero:
+            buf.enqueue_fill(Float32(0.0))
         var p = FP(unsafe_from_address=Int(buf.unsafe_ptr()))
         self.base.append(Int(p))
         self.size.append(count)
@@ -155,7 +166,8 @@ struct DeviceExec(Exec):
         self.staged.append(host^)
 
     def bind(mut self, src: FP, n: Int) raises -> FP:
-        var p = self.alloc(n)
+        # every word is uploaded over at once: no zero fill first (apple2)
+        var p = self._alloc(n, n <= 0)
         self.upload(p, src, n)
         return p
 
@@ -170,6 +182,20 @@ struct DeviceExec(Exec):
         memcpy(dest=dst, src=host.unsafe_ptr(), count=n)
         _ = view^
         _ = host^
+
+    def download_async(mut self, dst: FP, src: FP, n: Int) raises:
+        """The copy is queued now; `dst` is written at the next sync, so
+        several downloads share one wait (apple2)."""
+        if n <= 0:
+            return
+        var found = self._find(src, n)
+        var host = self.ctx.enqueue_create_host_buffer[DType.float32](n)
+        var view = self.bufs[found[0]].create_sub_buffer[DType.float32](found[1], n)
+        self.ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=view)
+        _ = view^
+        self.pend_host.append(host^)
+        self.pend_dst.append(Int(dst))
+        self.pend_n.append(n)
 
     def launch[OP: Int](mut self, a: Args, n: Int) raises:
         if n <= 0:
@@ -191,3 +217,9 @@ struct DeviceExec(Exec):
     def sync(mut self) raises:
         self.ctx.synchronize()
         self.staged.clear()
+        for i in range(len(self.pend_dst)):
+            memcpy(dest=FP(unsafe_from_address=self.pend_dst[i]), src=self.pend_host[i].unsafe_ptr(),
+                   count=self.pend_n[i])
+        self.pend_host.clear()
+        self.pend_dst.clear()
+        self.pend_n.clear()

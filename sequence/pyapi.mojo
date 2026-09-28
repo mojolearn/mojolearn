@@ -166,11 +166,12 @@ def opt_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: P
     var s2 = ex.bind(h2, n)
     var s3 = ex.bind(h3, n)
     opt_step(ex, cfg, st, t, fval(fp, 0), P, G, s1, s2, s3, n)
+    # the four copies share one wait (apple2)
+    ex.download_async(hp, P, n)
+    ex.download_async(h1, s1, n)
+    ex.download_async(h2, s2, n)
+    ex.download_async(h3, s3, n)
     ex.sync()
-    ex.download(hp, P, n)
-    ex.download(h1, s1, n)
-    ex.download(h2, s2, n)
-    ex.download(h3, s3, n)
     return PythonObject(n)
 
 
@@ -530,11 +531,11 @@ def adafactor_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject,
     ap.p1 = U
     ap.p2 = sc
     ex.launch[OP_AF_APPLY](ap, n)
-    ex.sync()
-    ex.download(hp, P, n)
-    ex.download(h1, S1, n if C == 0 else R)
+    ex.download_async(hp, P, n)
+    ex.download_async(h1, S1, n if C == 0 else R)
     if C > 0:
-        ex.download(fptr(addrs[3], "col_var"), S2, C)
+        ex.download_async(fptr(addrs[3], "col_var"), S2, C)
+    ex.sync()
     return PythonObject(n)
 
 
@@ -662,10 +663,10 @@ def lamb_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: 
         ap.i0 = k
         ap.f0 = lr
         ex.launch[OP_LAMB_APPLY](ap, e - s)
+    ex.download_async(hp, P, n)
+    ex.download_async(hm, M, n)
+    ex.download_async(hv, V, n)
     ex.sync()
-    ex.download(hp, P, n)
-    ex.download(hm, M, n)
-    ex.download(hv, V, n)
     _ = offs^
     return PythonObject(n)
 
@@ -749,14 +750,13 @@ def layer_norm_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp:
             ex.launch[OP_LN_BWD_W](c, D)
         else:
             ex.launch[OP_LN_BWD_W](c, D)
-        ex.sync()
-        ex.download(fptr(addrs[5], "dx"), DX, M * D)
+        ex.download_async(fptr(addrs[5], "dx"), DX, M * D)
         if hw:
-            ex.download(fptr(addrs[6], "dweight"), DW, D)
+            ex.download_async(fptr(addrs[6], "dweight"), DW, D)
         if hb:
-            ex.download(fptr(addrs[7], "dbias"), DB, D)
+            ex.download_async(fptr(addrs[7], "dbias"), DB, D)
+    ex.download_async(fptr(addrs[3], "y"), Y, M * D)
     ex.sync()
-    ex.download(fptr(addrs[3], "y"), Y, M * D)
     return PythonObject(M * D)
 
 

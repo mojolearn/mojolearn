@@ -144,6 +144,11 @@ trait Exec:
         """This Exec's buffer `src` -> host memory `dst` (n floats)."""
         ...
 
+    def download_async(mut self, dst: FP, src: FP, n: Int) raises:
+        """`download`, except that `dst` is written by the next `sync()`
+        (the device queues its copy; several then share one wait)."""
+        ...
+
     def bind(mut self, src: FP, n: Int) raises -> FP:
         """A buffer of this Exec holding host memory `src`'s n floats, for an
         entry that updates the caller's arrays in place: the device
@@ -194,6 +199,9 @@ struct HostExec(Exec):
     def download(mut self, dst: FP, src: FP, n: Int) raises:
         if n > 0 and Int(dst) != Int(src):
             memcpy(dest=dst, src=src, count=n)
+
+    def download_async(mut self, dst: FP, src: FP, n: Int) raises:
+        self.download(dst, src, n)
 
     def bind(mut self, src: FP, n: Int) raises -> FP:
         return src
