@@ -81,5 +81,4 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
                        "sequence-garch": "GARCH",
                        "sequence-prophet": "ProphetForecaster",
                        "sequence-moe": "MoEBlock"}
-PUBLIC_PENDING_LANES = {"sequence-layernorm": "no reference",
-                        }
+PUBLIC_PENDING_LANES = {}
