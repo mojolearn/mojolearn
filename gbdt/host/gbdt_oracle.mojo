@@ -2582,7 +2582,7 @@ def gbdt_host_boost(
                         )
             # the EXPORTED ensemble is the estimation permutation's
             if p == est_p:
-                estimated = est_p_leaves^
+                estimated = est_p_leaves.copy()
         for i in range(grown):
             split_features.append(tree_features[i])
             split_bins.append(tree_bins[i])
