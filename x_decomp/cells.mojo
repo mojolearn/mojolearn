@@ -349,18 +349,49 @@ def colsum_part_cell(a: F32Ptr, j: Int, n: Int, d: Int, r0: Int, r1: Int) -> Flo
 # DEVIATION 5317 (PIN; row 139): the sign of a vector (sklearn svd_flip,
 # _deterministic_vector_sign_flip) is that of its largest-|.| entry, ties to the
 # LOWER index; -1 only when that entry is < 0; arm 5317_absmax_tie.
+# A long vector is scanned in FOLD_BLOCK slices (`absmax_part_cell`, one GPU
+# thread each) and the slices' (max |.|, entry) pairs are folded in slice order
+# with the same strict `>` (`absmax_fold_cell`): only comparisons and copies,
+# so the entry picked is the serial scan's (the first of the largest |.|), bit
+# for bit (lane/algos-decomp 2026-09-28; the one-thread-per-vector scan of a
+# 1M-row column was 0.37 s of an lstsq).
 @always_inline
-def absmax_sign_cell(a: F32Ptr, t: Int, n: Int, d: Int, by_col: Bool) -> Float32:
-    """by_col: column t of the n x d matrix; else row t."""
+def absmax_part_cell(
+    a: F32Ptr, t: Int, n: Int, d: Int, by_col: Bool, q0: Int, q1: Int
+) -> SIMD[DType.float32, 2]:
+    """(largest |.|, that entry) over positions [q0, q1) of vector t, the
+    first on a tie; (-1, 0) when no entry is comparable (empty, or NaN)."""
     var best = Float32(-1)
     var val = Float32(0)
-    var cnt = n if by_col else d
-    for q in range(cnt):
+    for q in range(q0, q1):
         var v = ftz(a.unsafe_load(q * d + t)) if by_col else ftz(a.unsafe_load(t * d + q))
         if abs(v) > best:
             best = abs(v)
             val = v
+    return SIMD[DType.float32, 2](best, val)
+
+
+@always_inline
+def absmax_fold_cell(p: F32Ptr, t: Int, nb: Int, stride: Int) -> Float32:
+    """The sign from the slice pairs of vector t (pair b at 2 * (t + b *
+    stride)), slices ascending, a later slice winning only on a strictly
+    larger |.|."""
+    var best = Float32(-1)
+    var val = Float32(0)
+    for b in range(nb):
+        var o = 2 * (t + b * stride)
+        var pb = p.unsafe_load(o)
+        if pb > best:
+            best = pb
+            val = p.unsafe_load(o + 1)
     return Float32(-1) if val < Float32(0) else Float32(1)
+
+
+@always_inline
+def absmax_sign_cell(a: F32Ptr, t: Int, n: Int, d: Int, by_col: Bool) -> Float32:
+    """by_col: column t of the n x d matrix; else row t."""
+    var r = absmax_part_cell(a, t, n, d, by_col, 0, n if by_col else d)
+    return Float32(-1) if r[1] < Float32(0) else Float32(1)
 
 
 @always_inline

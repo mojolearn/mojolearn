@@ -13,6 +13,8 @@ from decomposition.impl.linalg.detail.svd_full import svd_of_r
 from decomposition.linalg_public_device import device_eigh, device_qr_r
 from x_decomp.cells import (
     F32Ptr,
+    absmax_fold_cell,
+    absmax_part_cell,
     absmax_sign_cell,
     FOLD_BLOCK,
     colsum_part_cell,
@@ -116,6 +118,26 @@ def rowsum_part_kernel(a: F32Ptr, p: F32Ptr, n: Int32, d: Int32, nb: Int32):
         var bl = t // Int(n)
         var i = t % Int(n)
         p.unsafe_store(t, rowsum_part_cell(a, i, Int(d), bl * FOLD_BLOCK, min(Int(d), (bl + 1) * FOLD_BLOCK)))
+
+
+def absmax_part_kernel(a: F32Ptr, p: F32Ptr, n: Int32, d: Int32, by_col: Int32, nb: Int32):
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var cnt = Int(d) if by_col != 0 else Int(n)
+    var length = Int(n) if by_col != 0 else Int(d)
+    if t < cnt * Int(nb):
+        var bl = t // cnt
+        var v = t % cnt
+        var r = absmax_part_cell(
+            a, v, Int(n), Int(d), by_col != 0, bl * FOLD_BLOCK, min(length, (bl + 1) * FOLD_BLOCK)
+        )
+        p.unsafe_store(2 * t, r[0])
+        p.unsafe_store(2 * t + 1, r[1])
+
+
+def absmax_fold_kernel(p: F32Ptr, dst: F32Ptr, cnt: Int32, nb: Int32):
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t < Int(cnt):
+        dst.unsafe_store(t, absmax_fold_cell(p, t, Int(nb), Int(cnt)))
 
 
 def absmax_kernel(a: F32Ptr, dst: F32Ptr, n: Int32, d: Int32, by_col: Int32):
@@ -729,15 +751,28 @@ struct DevExec(Exec):
         var ctx = xd_ctx()
         var da = _up(ctx, a, n * d)
         var cnt = d if by_col else n
+        var length = n if by_col else d
+        var nb = (length + FOLD_BLOCK - 1) // FOLD_BLOCK
         var dout = ctx.enqueue_create_buffer[DType.float32](cnt if cnt > 0 else 1)
-        ctx.enqueue_function[absmax_kernel](
-            da.unsafe_ptr(), dout.unsafe_ptr(), Int32(n), Int32(d), Int32(1 if by_col else 0),
-            grid_dim=_blocks(cnt), block_dim=TPB,
-        )
+        var dp = ctx.enqueue_create_buffer[DType.float32](2 * nb * cnt if nb > 1 and cnt > 0 else 1)
+        if nb > 1:
+            ctx.enqueue_function[absmax_part_kernel](
+                da.unsafe_ptr(), dp.unsafe_ptr(), Int32(n), Int32(d), Int32(1 if by_col else 0), Int32(nb),
+                grid_dim=_blocks(nb * cnt), block_dim=TPB,
+            )
+            ctx.enqueue_function[absmax_fold_kernel](
+                dp.unsafe_ptr(), dout.unsafe_ptr(), Int32(cnt), Int32(nb), grid_dim=_blocks(cnt), block_dim=TPB
+            )
+        else:
+            ctx.enqueue_function[absmax_kernel](
+                da.unsafe_ptr(), dout.unsafe_ptr(), Int32(n), Int32(d), Int32(1 if by_col else 0),
+                grid_dim=_blocks(cnt), block_dim=TPB,
+            )
         _down(ctx, dout, dst, cnt)
         ctx.synchronize()
         _ = da^
         _ = dout^
+        _ = dp^
         ctx.synchronize()
         _ = ctx^
 
