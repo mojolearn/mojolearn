@@ -57,9 +57,34 @@ comptime COV_AB = 4
 comptime GAUSS_W = 8
 #: Columns per vector in the host availability update.
 comptime AP_W = 8
+#: Pairs per vector in the host squared distances.
+comptime DIST_W = 8
 #: Floats of padding around a task's scratch block (two 64-byte lines).
 comptime SCRATCH_PAD = 32
 
+
+
+def _feature_major(pb: FPtr, nb: Int, d: Int) -> List[Float32]:
+    """`bt[f * (nb + DIST_W) + j] = ftz(b[j, f])`, zero-padded by DIST_W."""
+    var mp = nb + DIST_W
+    var bt = List[Float32](length=d * mp if d > 0 else 1, fill=Float32(0))
+    for j in range(nb):
+        for f in range(d):
+            bt[f * mp + j] = ftz(pb[j * d + f])
+    return bt^
+
+
+@always_inline
+def _sq_dists8(pa: FPtr, i: Int, d: Int, btp: FPtr, mp: Int, j0: Int) -> SIMD[DType.float32, DIST_W]:
+    """`bodies.sq_dist_rows(a, i, b, j, d)` for j = j0 .. j0+7, one per lane:
+    `t = ftz(ftz(a) - ftz(b))`, `acc = ftz(acc + ftz(t * t))` (the pinned
+    product), features ascending."""
+    var acc = SIMD[DType.float32, DIST_W](0)
+    for f in range(d):
+        var av = SIMD[DType.float32, DIST_W](ftz(pa[i * d + f]))
+        var t = ftz_v[DIST_W](av - (btp + f * mp + j0).load[width=DIST_W]())
+        acc = ftz_v[DIST_W](acc + ftz_v[DIST_W](mul_v[DIST_W](t, t)))
+    return acc
 
 
 def _select_u32(mut a: List[UInt32], kk: Int) -> UInt32:
@@ -152,10 +177,30 @@ struct HostOps(ClusterOps):
         var pb = self._fp(b)
         var po = self._fp(dst)
 
-        def body(t: Int) {imm pa, imm pb, imm po, imm na, imm nb, imm d}:
-            sqdist_cell[X_CLUSTER_HOST_SABOTAGE](pa, na, pb, nb, d, po, t)
+        comptime if X_CLUSTER_HOST_SABOTAGE:
+            def body(t: Int) {imm pa, imm pb, imm po, imm na, imm nb, imm d}:
+                sqdist_cell[X_CLUSTER_HOST_SABOTAGE](pa, na, pb, nb, d, po, t)
 
-        host_cells(body, na * nb, 3 * d)
+            host_cells(body, na * nb, 3 * d)
+            return
+        # Rows of `a` as tasks; DIST_W columns of `b` per vector (b
+        # feature-major, flushed once): lane j is cell (i, j)'s own chain
+        # (`bodies.sq_dist_rows`).
+        var bt = _feature_major(pb, nb, d)
+        var btp = bt.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var mp = nb + DIST_W
+
+        def row(i: Int) {imm pa, imm btp, imm po, imm nb, imm d, imm mp}:
+            var j0 = 0
+            while j0 < nb:
+                var acc = _sq_dists8(pa, i, d, btp, mp, j0)
+                var lim = min(DIST_W, nb - j0)
+                for l in range(lim):
+                    po[i * nb + j0 + l] = acc[l]
+                j0 += DIST_W
+
+        host_cells(row, na, 3 * d * nb)
+        _ = bt^
 
     def nearest(mut self, a: Int, na: Int, b: Int, nb: Int, d: Int, labels: Int, dist: Int) raises:
         var pa = self._fp(a)
@@ -163,10 +208,37 @@ struct HostOps(ClusterOps):
         var pl = self._ip(labels)
         var pd = self._fp(dist)
 
-        def body(t: Int) {imm pa, imm pb, imm pl, imm pd, imm nb, imm d}:
-            nearest_row[X_CLUSTER_HOST_SABOTAGE](pa, pb, nb, d, pl, pd, t)
+        comptime if X_CLUSTER_HOST_SABOTAGE:
+            def body(t: Int) {imm pa, imm pb, imm pl, imm pd, imm nb, imm d}:
+                nearest_row[X_CLUSTER_HOST_SABOTAGE](pa, pb, nb, d, pl, pd, t)
 
-        host_cells(body, na, 3 * d * nb)
+            host_cells(body, na, 3 * d * nb)
+            return
+        # `bodies.nearest_row` with DIST_W candidate rows per vector: the
+        # distances are each pair's own chain, then the argmin walks the
+        # candidates in order under the strict `<` (the lowest index on a tie).
+        var bt = _feature_major(pb, nb, d)
+        var btp = bt.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var mp = nb + DIST_W
+
+        def row(i: Int) {imm pa, imm btp, imm pl, imm pd, imm nb, imm d, imm mp}:
+            var best = Float32(0)
+            var bi = 0
+            var j0 = 0
+            while j0 < nb:
+                var acc = _sq_dists8(pa, i, d, btp, mp, j0)
+                var lim = min(DIST_W, nb - j0)
+                for l in range(lim):
+                    var j = j0 + l
+                    if j == 0 or acc[l] < best:
+                        best = acc[l]
+                        bi = j
+                j0 += DIST_W
+            pl[i] = Int32(bi)
+            pd[i] = best
+
+        host_cells(row, na, 3 * d * nb)
+        _ = bt^
 
     def sqrt(mut self, x: Int, n: Int) raises:
         var px = self._fp(x)
