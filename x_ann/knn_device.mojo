@@ -28,10 +28,10 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
 from checks.numerics import ftz, identical_mul_add
-from x_ann.tsne_core import F32P, I32P, ts_ftz_nonneg, ts_knn_beats, ts_knn_cell, ts_knn_offer
+from x_ann.tsne_core import F32P, I32P, ts_knn_beats, ts_knn_cell, ts_knn_offer
 
 #: rows per threadgroup (one thread each) and candidate rows per tile
-comptime KTB = 128
+comptime KTB = 64
 comptime KTJ = 64
 comptime TPB = 64
 
@@ -78,15 +78,11 @@ def knn_tiled_kernel[MAXD: Int](n: Int32, x: F32P, d: Int32, nn: Int32, nn_d: F3
                 var acc = Float32(0.0)
                 # the staged row four floats per load; the fold is the same
                 # statements in the same order, lane by lane
-                # lane ann-apple2: acc, a sum of squares from +0, is flushed
-                # by `ts_ftz_nonneg` (the same word). A skip of the padded
-                # groups was measured slower (m4pro-b 1790604321939) and is
-                # not taken.
                 comptime for c4 in range(MAXD // 4):
                     var tv = tile.unsafe_load[width=4, alignment=16](r * MAXD + 4 * c4)
                     comptime for u in range(4):
                         var diff = ftz(xi[4 * c4 + u] - tv[u])
-                        acc = ts_ftz_nonneg(identical_mul_add(diff, diff, acc))
+                        acc = ftz(identical_mul_add(diff, diff, acc))
                 if filled == k and not ts_knn_beats(acc, j, ld, li):
                     continue
                 filled = ts_knn_offer(acc, j, base, k, filled, nn_d, nn_i)
@@ -103,17 +99,14 @@ def knn_enqueue(
 ) raises:
     """Enqueue the k-NN graph of the n x d rows in dx (no sync)."""
     var blocks = (n + KTB - 1) // KTB
-    # lane ann-apple2: the fold width is d rounded up to a multiple of 4 up
-    # to 32 (fewer padded steps; a padded step is the identity, see above),
-    # then 48 and 64
-    comptime for w4 in range(1, 9):
-        if d <= 4 * w4 and d > 4 * (w4 - 1):
-            ctx.enqueue_function[knn_tiled_kernel[4 * w4]](Int32(n), dx.unsafe_ptr(), Int32(d), Int32(nn),
-                                                            dnd.unsafe_ptr(), dni.unsafe_ptr(), grid_dim=blocks,
-                                                            block_dim=KTB)
-            return
-    if d <= 48:
-        ctx.enqueue_function[knn_tiled_kernel[48]](Int32(n), dx.unsafe_ptr(), Int32(d), Int32(nn), dnd.unsafe_ptr(),
+    if d <= 8:
+        ctx.enqueue_function[knn_tiled_kernel[8]](Int32(n), dx.unsafe_ptr(), Int32(d), Int32(nn), dnd.unsafe_ptr(),
+                                                   dni.unsafe_ptr(), grid_dim=blocks, block_dim=KTB)
+    elif d <= 16:
+        ctx.enqueue_function[knn_tiled_kernel[16]](Int32(n), dx.unsafe_ptr(), Int32(d), Int32(nn), dnd.unsafe_ptr(),
+                                                    dni.unsafe_ptr(), grid_dim=blocks, block_dim=KTB)
+    elif d <= 32:
+        ctx.enqueue_function[knn_tiled_kernel[32]](Int32(n), dx.unsafe_ptr(), Int32(d), Int32(nn), dnd.unsafe_ptr(),
                                                     dni.unsafe_ptr(), grid_dim=blocks, block_dim=KTB)
     elif d <= 64:
         ctx.enqueue_function[knn_tiled_kernel[64]](Int32(n), dx.unsafe_ptr(), Int32(d), Int32(nn), dnd.unsafe_ptr(),
