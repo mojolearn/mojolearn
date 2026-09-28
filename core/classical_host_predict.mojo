@@ -107,7 +107,7 @@ from std.sys.compile import is_defined
 
 from std.math import sqrt
 
-from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 
 from checks.numerics import (
     ftz,
@@ -208,7 +208,7 @@ def host_gemm_nt_into(
     if t == 1:
         _rows(0)
     else:
-        sync_parallelize(_rows, t)
+        host_parallelize(_rows, t)
 
 
 def host_gemm_nt(
@@ -347,7 +347,7 @@ def host_qn_sigmoid_into(
     if t == 1:
         _rows(0)
     else:
-        sync_parallelize(_rows, t)
+        host_parallelize(_rows, t)
 
 
 def host_qn_decision_multi(
@@ -447,7 +447,7 @@ def host_qn_softmax_into(
     if t == 1:
         _rows(0)
     else:
-        sync_parallelize(_rows, t)
+        host_parallelize(_rows, t)
 
 
 def host_center(
@@ -535,7 +535,7 @@ def host_pca_transform_into(
     if t == 1:
         _rows(0)
     else:
-        sync_parallelize(_rows, t)
+        host_parallelize(_rows, t)
 
 
 def host_tsvd_transform(
@@ -638,6 +638,45 @@ def host_pca_whiten_transform_into(
         n_components, tasks,
     )
     _ = components_w^
+
+
+def host_inverse_transform_into(
+    scores: HostF32Ptr, components: List[Float32], mu: List[Float32],
+    dst: HostF32Ptr, n_rows: Int, n_cols: Int, n_components: Int,
+    add_mean: Bool, tasks: Int,
+):
+    """`inverse_transform_host` (`decomposition/estimator.mojo:285-321`), the
+    unwhitened reconstruction `PCA.inverse_transform` (add_mean) and
+    `TruncatedSVD.inverse_transform` (no mean) share, over caller-owned
+    buffers (lane cpu, 2026-09-27; until then the host binding exported no
+    `inverse_transform` and both refused on a CPU-only install).
+
+    The device statement, step for step: `transpose_kernel` (a copy, no
+    arithmetic: `components_t[f * n_components + c] = components[c * n_cols
+    + f]`), `gemm_nt(out, scores, components_t, n_rows, n_features,
+    n_components)` (`host_gemm_nt_into`, the pinned cell), then, only with
+    `add_mean`, `shift_columns_kernel` with sign +1.0 in place
+    (`host_center_cell`). The whitened inverse below is this plus the
+    component scaling."""
+    var components_t = List[Float32](
+        length=n_cols * n_components, fill=Float32(0.0)
+    )
+    for c in range(n_components):
+        for f in range(n_cols):
+            components_t[f * n_components + c] = components[c * n_cols + f]
+    host_gemm_nt_into(
+        scores, host_list_ptr(components_t), dst, n_rows, n_cols,
+        n_components, tasks,
+    )
+    if add_mean:
+        for i in range(n_rows):
+            for f in range(n_cols):
+                var idx = i * n_cols + f
+                dst.unsafe_store(
+                    idx,
+                    host_center_cell(dst.unsafe_load(idx), mu[f], Float32(1.0)),
+                )
+    _ = components_t^
 
 
 def host_pca_whiten_inverse_transform(

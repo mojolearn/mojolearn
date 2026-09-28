@@ -60,7 +60,7 @@ integrand folds exact integers and does not move.
 """
 from std.memory import bitcast
 from std.sys.compile import is_defined
-from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 
 from checks.numerics import ftz, identical_div, identical_mul, identical_sqrt
 from core.segmented_sort import float_to_sortable
@@ -512,7 +512,7 @@ def host_bootstrap(
     if tasks == 1:
         _replicates(0)
     else:
-        sync_parallelize(_replicates, tasks)
+        host_parallelize(_replicates, tasks)
     var sorted_dist = host_sorted_by_key(dist, 0, n_resamples)
 
     var theta_hat = host_point_estimate(x, n, n_features, statistic, q_or_prop)
@@ -680,7 +680,7 @@ def host_permutation_test(
     if tasks == 1:
         _replicates(0)
     else:
-        sync_parallelize(_replicates, tasks)
+        host_parallelize(_replicates, tasks)
 
     # The observed statistic, `estimator.mojo:1299-1333`.
     var vx = List[Float32]()

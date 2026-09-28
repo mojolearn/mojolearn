@@ -36,7 +36,7 @@ min-norm card, which a bypass to `lstsq_eig` cannot do.
 
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceContext
-from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 
 from core.gemm import gemv_n
 from core.identity_trace import IdentityTrace
@@ -576,4 +576,4 @@ def qn_softmax_host(
     if tasks == 1:
         _rows(0)
     else:
-        sync_parallelize(_rows, tasks)
+        host_parallelize(_rows, tasks)

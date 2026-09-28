@@ -68,7 +68,7 @@ trailing update and the posterior mean move as well through
 from std.memory import bitcast
 from std.sys.compile import is_defined
 
-from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
@@ -564,7 +564,7 @@ def gpr_host_kernel_matrix(
                 if tasks == 1:
                     _rbf_rows(0)
                 else:
-                    sync_parallelize(_rbf_rows, tasks)
+                    host_parallelize(_rbf_rows, tasks)
             else:
                 # gp_matern_kernel, the three closed forms in sklearn's order
                 var nu_sel = _matern_selector(spec.params[t])
@@ -594,7 +594,7 @@ def gpr_host_kernel_matrix(
                 if tasks == 1:
                     _matern_rows(0)
                 else:
-                    sync_parallelize(_matern_rows, tasks)
+                    host_parallelize(_matern_rows, tasks)
         stack.append(slot^)
     # gp_copy_kernel: bit for bit, no ftz.
     return stack.pop()

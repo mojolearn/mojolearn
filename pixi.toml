@@ -1053,6 +1053,9 @@ price-linalg-identity = "sh tools/price_linalg_identity.sh"
 # reachable only by someone who already knows it is there.
 check-gemm-identity = "mojo run -I . core/gemm_identity_check.mojo"
 check-column-stats-identity = "mojo run -I . core/column_stats_identity_check.mojo"
+# DEVIATION 5900: the seam (tasks compute in the caller's FP environment) and
+# the site check (no host thread split bypasses core/host_parallel.mojo).
+check-host-parallel = "python tools/check_host_parallel_sites.py && mojo run -I . core/host_parallel_check.mojo"
 
 # THE COLUMN MAY NOT REACH THE PRODUCT (IDENTITY_PATHS rows 27-28). Compiles
 # bench/linalg_trace_main.mojo against the APPLE, NVIDIA and AMD comptime

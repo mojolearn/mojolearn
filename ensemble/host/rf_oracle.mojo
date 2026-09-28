@@ -117,7 +117,7 @@ from std.math import ceildiv, floor
 from std.memory import bitcast
 from std.builtin.sort import sort
 from std.sys.compile import is_defined
-from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 
 from checks.fixed_point import choose_scale
 from checks.numerics import ftz, identical_log, identical_mul_add
@@ -1185,7 +1185,7 @@ def host_compute_quantiles(
     if bin_tasks == 1:
         _bin_columns(0)
     else:
-        sync_parallelize(_bin_columns, bin_tasks)
+        host_parallelize(_bin_columns, bin_tasks)
     out.bins = bins^
     return out^
 
@@ -1589,7 +1589,7 @@ def rf_host_fit(
     if flush_tasks == 1:
         _flush_cells(0)
     else:
-        sync_parallelize(_flush_cells, flush_tasks)
+        host_parallelize(_flush_cells, flush_tasks)
     var q = host_compute_quantiles(x, n_rows, n_cols, p.max_n_bins, p.seed)
     # `fit_forest` calls `prepare_weights` before the first tree
     # (`randomforest.mojo:2567-2568`).
