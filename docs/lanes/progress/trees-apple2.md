@@ -45,3 +45,13 @@ change's opt-out define), then runs `tools/trees_apple_speed.sh` on
 | RF hist zero-after-read | m4pro-a | 1790604496688 | dt:istellareg | 837 | 834 | 0.997 | 6f406a1b9436c69f |
 | ET tiled IDENTICAL | m4-a | 1790604108084 | et:taxireg | 34585 | 8964 | 0.259 | ec62616c8e02c60b |
 | ET tiled IDENTICAL | m4-a | 1790604108084 | et:taxi (control, classifier k=4) | 8576 | 8611 | 1.004 | ac18d5d8a54b1555 |
+| ET tiled IDENTICAL | m4pro-a | 1790606161176 | et:istellareg | 63088 | 23539 | 0.373 | 981c3b89e374c91d |
+| ET tiled IDENTICAL | m4pro-a | 1790606161176 | et:taxireg | 7107 | 2337 | 0.329 | ec62616c8e02c60b |
+| GBDT 2580 level quant (define, not flipped) | m4-a | 1790606781155 | gbdt-symmetric taxi 100 trees | 4960 | 5050 | 1.018 | 8e760782efae56c8 |
+
+Metal enqueue prices (M4 m4-a, steward 1790607460116, `bench/speed/metal_enqueue_cost_main.mojo`):
+kernel launch ~20 us host, small host-to-device copy ~20 us, launch + copy
+back + synchronize ~180 us, empty synchronize 12 us. A Lossguide leaf split
+paid two host waits (~360 us) and about ten small uploads plus ~16 launches;
+at ~0.9 ms per split that is nearly all overhead, which is what the id-arena
+change (7298ebd92) trims.
