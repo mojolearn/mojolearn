@@ -63,10 +63,10 @@ def lda_doc_row_host(
     var nnz = len(nz)
     var npad = max(W, ceildiv(nnz, W) * W)
     var ewc_buf = List[Float32](length=k * npad, fill=Float32(0))
-    var ewc = ewc_buf.unsafe_ptr()
+    var ewc = F32Ptr(unsafe_from_address=Int(ewc_buf.unsafe_ptr()))
     for t in range(k):
         for j in range(nnz):
-            ewc[t * npad + j] = _ftz1(EW.unsafe_load(t * v + nz[j]))
+            ewc.unsafe_store(t * npad + j, _ftz1(EW.unsafe_load(t * v + nz[j])))
     var xs = List[Float32](length=npad, fill=Float32(0))
     for j in range(nnz):
         xs[j] = ftz(X.unsafe_load(i * v + nz[j]))
@@ -84,7 +84,7 @@ def lda_doc_row_host(
         while j0 < nnz:
             var acc = V(0)
             for t in range(k):
-                acc = ftz_v[W](mul_add_v[W](V(ef[t]), ewc.load[width=W](t * npad + j0), acc))
+                acc = ftz_v[W](mul_add_v[W](V(ef[t]), ewc.unsafe_load[width=W](t * npad + j0), acc))
             for l in range(min(W, nnz - j0)):
                 r[j0 + l] = div0(xs[j0 + l], add(acc[l], eps))
             j0 += W
@@ -96,10 +96,10 @@ def lda_doc_row_host(
             var acc = InlineArray[V, TB](fill=V(0))
             for j in range(nnz):
                 var rv = V(_ftz1(r[j]))
-                var row = EWt + nz[j] * kp + tb0
+                var row = EWt.unsafe_offset(nz[j] * kp + tb0)
                 comptime for b in range(TB):
                     if b < nb:
-                        acc[b] = ftz_v[W](mul_add_v[W](rv, row.load[width=W](b * W), acc[b]))
+                        acc[b] = ftz_v[W](mul_add_v[W](rv, row.unsafe_load[width=W](b * W), acc[b]))
             for b in range(nb):
                 for l in range(W):
                     var t = tb0 + b * W + l
