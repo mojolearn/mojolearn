@@ -77,19 +77,19 @@ def _fold_rows(parts: HgPtr, pcount: Int) -> HgV:
     while width > 1:
         var pairs = width // 2
         for q in range(pairs):
-            var x = ftz_v[HG_W](parts.load[width=HG_W](2 * q * HG_W))
-            var y = ftz_v[HG_W](parts.load[width=HG_W]((2 * q + 1) * HG_W))
+            var x = ftz_v[HG_W](parts.unsafe_load[width=HG_W](2 * q * HG_W))
+            var y = ftz_v[HG_W](parts.unsafe_load[width=HG_W]((2 * q + 1) * HG_W))
             comptime if HOST_GEMM_SIMD_SABOTAGE:
                 # THE CHECK'S ARM: the stride pairing (a different tree).
                 if width > 2 and q + pairs < width:
-                    y = ftz_v[HG_W](parts.load[width=HG_W]((q + pairs) * HG_W))
-            parts.store(q * HG_W, ftz_v[HG_W](x + y))
+                    y = ftz_v[HG_W](parts.unsafe_load[width=HG_W]((q + pairs) * HG_W))
+            parts.unsafe_store(q * HG_W, ftz_v[HG_W](x + y))
         if width % 2 != 0:
-            parts.store(pairs * HG_W, parts.load[width=HG_W]((width - 1) * HG_W))
+            parts.unsafe_store(pairs * HG_W, parts.unsafe_load[width=HG_W]((width - 1) * HG_W))
             width = pairs + 1
         else:
             width = pairs
-    return ftz_v[HG_W](parts.load[width=HG_W](0))
+    return ftz_v[HG_W](parts.unsafe_load[width=HG_W](0))
 
 
 def host_gemm_identical(
@@ -141,7 +141,7 @@ def host_gemm_identical(
                     var p = lo + q
                     comptime if GEMM_ORACLE_SABOTAGE_ORDER_ARM:
                         p = hi - 1 - q
-                    var y = pb.load[width=HG_W](p * HG_W)
+                    var y = pb.unsafe_load[width=HG_W](p * HG_W)
                     a0 = ftz_v[HG_W](identical_mul_add_simd[HG_W](HgV(ftz(_a_eff(ap, op, i0, p, m, k))), y, a0))
                     a1 = ftz_v[HG_W](identical_mul_add_simd[HG_W](HgV(ftz(_a_eff(ap, op, r1, p, m, k))), y, a1))
                     a2 = ftz_v[HG_W](identical_mul_add_simd[HG_W](HgV(ftz(_a_eff(ap, op, r2, p, m, k))), y, a2))
@@ -155,20 +155,20 @@ def host_gemm_identical(
                     a1 = _value_flip_v(a1)
                     a2 = _value_flip_v(a2)
                     a3 = _value_flip_v(a3)
-                sp.store(0 * stride + t * HG_W, a0)
-                sp.store(1 * stride + t * HG_W, a1)
-                sp.store(2 * stride + t * HG_W, a2)
-                sp.store(3 * stride + t * HG_W, a3)
+                sp.unsafe_store(0 * stride + t * HG_W, a0)
+                sp.unsafe_store(1 * stride + t * HG_W, a1)
+                sp.unsafe_store(2 * stride + t * HG_W, a2)
+                sp.unsafe_store(3 * stride + t * HG_W, a3)
             for r in range(nr):
                 var out: HgV
                 if pcount == 1:
-                    out = ftz_v[HG_W](sp.load[width=HG_W](r * stride))
+                    out = ftz_v[HG_W](sp.unsafe_load[width=HG_W](r * stride))
                 else:
                     out = _fold_rows(sp + r * stride, pcount)
                 var i = i0 + r
                 var j0 = jb * HG_W
                 if j0 + HG_W <= n:
-                    cp.store(i * n + j0, out)
+                    cp.unsafe_store(i * n + j0, out)
                 else:
                     for l in range(n - j0):
                         cp[i * n + j0 + l] = out[l]

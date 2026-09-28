@@ -372,22 +372,22 @@ def _kernel_cells_v(
                 acc = ftz_v[SMO_W](identical_mul_add_simd[SMO_W](
                     SmoVF(ftz(xa.unsafe_load(c))), panel.unsafe_load[width=SMO_W](c * stride), acc
                 ))
-        parts.store(t * SMO_W, ftz_v[SMO_W](acc))
+        parts.unsafe_store(t * SMO_W, ftz_v[SMO_W](acc))
     var dot = SmoVF(0.0)
     if pcount > 0:
         var width = pcount
         while width > 1:
             var pairs = width // 2
             for q in range(pairs):
-                var a = ftz_v[SMO_W](parts.load[width=SMO_W](2 * q * SMO_W))
-                var b = ftz_v[SMO_W](parts.load[width=SMO_W]((2 * q + 1) * SMO_W))
-                parts.store(q * SMO_W, ftz_v[SMO_W](a + b))
+                var a = ftz_v[SMO_W](parts.unsafe_load[width=SMO_W](2 * q * SMO_W))
+                var b = ftz_v[SMO_W](parts.unsafe_load[width=SMO_W]((2 * q + 1) * SMO_W))
+                parts.unsafe_store(q * SMO_W, ftz_v[SMO_W](a + b))
             if width % 2 != 0:
-                parts.store(pairs * SMO_W, parts.load[width=SMO_W]((width - 1) * SMO_W))
+                parts.unsafe_store(pairs * SMO_W, parts.unsafe_load[width=SMO_W]((width - 1) * SMO_W))
                 width = pairs + 1
             else:
                 width = pairs
-        dot = ftz_v[SMO_W](parts.load[width=SMO_W](0))
+        dot = ftz_v[SMO_W](parts.unsafe_load[width=SMO_W](0))
     if kp.kernel == KERNEL_LINEAR:
         return dot
     if kp.kernel == KERNEL_POLYNOMIAL:
