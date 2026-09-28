@@ -111,11 +111,27 @@ def pq_next_probe(
     var best_l = -1
     for l in range(n_lists):
         var d = pq_coarse_dist(queries, q_off, centers, l, dim)
-        var after = prev_l < 0 or d > prev_d or (d == prev_d and l > prev_l)
-        if after and (best_l < 0 or d < best_d or (d == best_d and l < best_l)):
+        if pq_probe_takes(d, l, prev_d, prev_l, best_d, best_l):
             best_l = l
             best_d = d
     return best_l
+
+
+@always_inline
+def pq_probe_takes(d: Float32, l: Int, prev_d: Float32, prev_l: Int, best_d: Float32, best_l: Int) -> Bool:
+    """DEVIATION 5804's comparison: list l (coarse distance d) comes after
+    the previous probe (prev_d, prev_l) and before the best so far (best_d,
+    best_l) in the total order (distance, list id). `pq_next_probe` and the
+    device walk (`x_ann/ivf_scan_device.mojo::probe_kernel`) both use it."""
+    var after = prev_l < 0 or d > prev_d or (d == prev_d and l > prev_l)
+    return after and (best_l < 0 or d < best_d or (d == best_d and l < best_l))
+
+
+@always_inline
+def ivf_row_removed(mask: I32P, row: Int) -> Bool:
+    """The sample filter (DEVIATION 5855): `mask[row] == 0` removes the row
+    before it is scored or counted. Every IVF quantized search reads it here."""
+    return mask.unsafe_load(row) == 0
 
 
 @always_inline
@@ -189,7 +205,7 @@ def pq_search_cell(
         var stop = Int(offsets.unsafe_load(best_l + 1))
         for slot in range(start, stop):
             var row = Int(list_indices.unsafe_load(slot))
-            if mask.unsafe_load(row) == 0:
+            if ivf_row_removed(mask, row):
                 continue
             var total = Float32(0.0)
             for j in range(pq_dim):

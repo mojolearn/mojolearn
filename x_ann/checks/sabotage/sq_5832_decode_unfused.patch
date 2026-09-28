@@ -1,14 +1,16 @@
+diff --git a/x_ann/ivf_sq_core.mojo b/x_ann/ivf_sq_core.mojo
+index 586a0febb..2f44a4d13 100644
 --- a/x_ann/ivf_sq_core.mojo
 +++ b/x_ann/ivf_sq_core.mojo
-@@ -86,9 +86,8 @@
-             var acc = Float32(0.0)
-             for c in range(dim):
-                 var qr = ftz(ftz(queries.unsafe_load(q_off + c)) - ftz(centers.unsafe_load(best_l * dim + c)))
--                var dec = ftz(identical_mul_add(
--                    Float32(Int(codes.unsafe_load(row * dim + c))), delta.unsafe_load(c), vmin.unsafe_load(c)
--                ))
-+                var dec = ftz(ftz(identical_mul(
-+                    Float32(Int(codes.unsafe_load(row * dim + c))), delta.unsafe_load(c))) + vmin.unsafe_load(c))
-                 var diff = ftz(qr - dec)
-                 acc = ftz(identical_mul_add(diff, diff, acc))
-             pq_insert(k, base, acc, Int32(row), out_d, out_i)
+@@ -67,9 +67,8 @@ def sq_candidate_dist(
+     var acc = Float32(0.0)
+     for c in range(dim):
+         var qr = ftz(ftz(queries.unsafe_load(q_off + c)) - ftz(centers.unsafe_load(l * dim + c)))
+-        var dec = ftz(identical_mul_add(
+-            Float32(Int(codes.unsafe_load(row * dim + c))), delta.unsafe_load(c), vmin.unsafe_load(c)
+-        ))
++        var dec = ftz(ftz(identical_mul(
++            Float32(Int(codes.unsafe_load(row * dim + c))), delta.unsafe_load(c))) + vmin.unsafe_load(c))
+         var diff = ftz(qr - dec)
+         acc = ftz(identical_mul_add(diff, diff, acc))
+     return acc

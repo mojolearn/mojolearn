@@ -52,26 +52,39 @@ def ts_knn_cell(i: Int, x: F32P, n: Int, d: Int, nn: Int, nn_d: F32P, nn_i: I32P
     for j in range(n):
         if j == i:
             continue
-        var dist = ts_sqdist(x, i, j, d)
-        if filled == nn:
-            var ld = nn_d.unsafe_load(base + nn - 1)
-            var li = Int(nn_i.unsafe_load(base + nn - 1))
-            if not (dist < ld or (dist == ld and j < li)):
-                continue
+        filled = ts_knn_offer(ts_sqdist(x, i, j, d), j, base, nn, filled, nn_d, nn_i)
+
+
+@always_inline
+def ts_knn_beats(dist: Float32, j: Int, ld: Float32, li: Int) -> Bool:
+    """(dist, j) is before (ld, li) in the order (squared distance, index)."""
+    return dist < ld or (dist == ld and j < li)
+
+
+@always_inline
+def ts_knn_offer(dist: Float32, j: Int, base: Int, nn: Int, filled: Int, nn_d: F32P, nn_i: I32P) -> Int:
+    """Offer candidate (dist, j) to the sorted list nn_d/nn_i[base : base + nn]
+    holding `filled` entries; returns the new fill (DEVIATION 5810). The
+    cell and the tiled device k-NN (`x_ann/knn_device.mojo`) both call it."""
+    var f = filled
+    if f == nn:
+        if not ts_knn_beats(dist, j, nn_d.unsafe_load(base + nn - 1), Int(nn_i.unsafe_load(base + nn - 1))):
+            return f
+    else:
+        f += 1
+    var s = f - 1
+    while s > 0:
+        var pd = nn_d.unsafe_load(base + s - 1)
+        var pi = Int(nn_i.unsafe_load(base + s - 1))
+        if dist < pd or (dist == pd and j < pi):
+            nn_d.unsafe_store(base + s, pd)
+            nn_i.unsafe_store(base + s, Int32(pi))
+            s -= 1
         else:
-            filled += 1
-        var s = filled - 1
-        while s > 0:
-            var pd = nn_d.unsafe_load(base + s - 1)
-            var pi = Int(nn_i.unsafe_load(base + s - 1))
-            if dist < pd or (dist == pd and j < pi):
-                nn_d.unsafe_store(base + s, pd)
-                nn_i.unsafe_store(base + s, Int32(pi))
-                s -= 1
-            else:
-                break
-        nn_d.unsafe_store(base + s, dist)
-        nn_i.unsafe_store(base + s, Int32(j))
+            break
+    nn_d.unsafe_store(base + s, dist)
+    nn_i.unsafe_store(base + s, Int32(j))
+    return f
 
 
 @always_inline
@@ -274,6 +287,46 @@ def ts_q(y: F32P, i: Int, j: Int) -> Float32:
 
 
 @always_inline
+def ts_repulse_pair(
+    y0: Float32, y1: Float32, yj0: Float32, yj1: Float32, mut z: Float32, mut r0: Float32, mut r1: Float32
+):
+    """One j of row i's repulsion fold, from the flushed coordinates
+    (y0, y1) = ftz(y_i) and (yj0, yj1) = ftz(y_j): `ts_q`'s kernel, then z,
+    r0, r1 as `ts_repulse_cell` folds them. The cell and the tiled device
+    repulsion (`x_ann/tsne_device.mojo::repulse_tiled_kernel`) both call it.
+
+    Three of `ts_q`'s flushes are left out because they cannot change a word
+    (lane ann-apple, as lane ann-cpu did on the host): `1 + acc` with acc a
+    sum of squares from +0 is >= 1, inf or NaN, never subnormal; the
+    quotient is already flushed (`identical_div` is `portable_divf` under
+    IDENTICAL, which flushes its operands and result; FAST's ftz is the
+    identity); and z + q with z and q each +0 or normal (z starts at +0, q
+    is flushed and >= 0) is +0, normal, inf or NaN."""
+    ts_repulse_fold(ts_repulse_terms(y0, y1, yj0, yj1), z, r0, r1)
+
+
+@always_inline
+def ts_repulse_terms(y0: Float32, y1: Float32, yj0: Float32, yj1: Float32) -> SIMD[DType.float32, 4]:
+    """`ts_repulse_pair`'s three terms for one j, before they are folded:
+    (q, ftz(q^2 (y0 - yj0)), ftz(q^2 (y1 - yj1)), 0)."""
+    var d0 = ftz(y0 - yj0)
+    var d1 = ftz(y1 - yj1)
+    var acc = ftz(identical_mul_add(d0, d0, Float32(0.0)))
+    acc = ftz(identical_mul_add(d1, d1, acc))
+    var q = identical_div(Float32(1.0), Float32(1.0) + acc)
+    var qq = ftz(identical_mul(q, q))
+    return SIMD[DType.float32, 4](q, ftz(identical_mul(qq, d0)), ftz(identical_mul(qq, d1)), Float32(0.0))
+
+
+@always_inline
+def ts_repulse_fold(tm: SIMD[DType.float32, 4], mut z: Float32, mut r0: Float32, mut r1: Float32):
+    """Fold one j's terms into row i's running sums (DEVIATION 5813's fold)."""
+    z = z + tm[0]
+    r0 = ftz(r0 + tm[1])
+    r1 = ftz(r1 + tm[2])
+
+
+@always_inline
 def ts_repulse_cell(i: Int, y: F32P, n: Int, row_z: F32P, rep: F32P):
     """row_z[i] = sum_{j != i} q_ij; rep[i] = sum_j q_ij^2 (y_i - y_j), j
     ascending (DEVIATION 5813; Z over rows ascending in `ts_sum_cell`)."""
@@ -285,11 +338,7 @@ def ts_repulse_cell(i: Int, y: F32P, n: Int, row_z: F32P, rep: F32P):
     for j in range(n):
         if j == i:
             continue
-        var q = ts_q(y, i, j)
-        z = ftz(z + q)
-        var qq = ftz(identical_mul(q, q))
-        r0 = ftz(r0 + ftz(identical_mul(qq, ftz(y0 - ftz(y.unsafe_load(2 * j))))))
-        r1 = ftz(r1 + ftz(identical_mul(qq, ftz(y1 - ftz(y.unsafe_load(2 * j + 1))))))
+        ts_repulse_pair(y0, y1, ftz(y.unsafe_load(2 * j)), ftz(y.unsafe_load(2 * j + 1)), z, r0, r1)
     row_z.unsafe_store(i, z)
     rep.unsafe_store(2 * i, r0)
     rep.unsafe_store(2 * i + 1, r1)
