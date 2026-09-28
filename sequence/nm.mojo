@@ -46,10 +46,21 @@ def _put(p: FP, i: Int, v: Float32) -> Bool:
 def nelder_mead[O: Objective, CAP: Int = 9](
     mut obj: O, x0: FP, lower: FP, upper: FP, n: Int, scratch: FP,
     init_step: Float32, zero_pert: Float32, max_iter: Int, tol_std: Float32,
+    snap: FP = FP(unsafe_from_address=64),
 ) -> Int:
     """Minimises obj over n <= CAP - 1 coordinates from x0; the best point is
     written back to x0. scratch holds (n + 1) n + (n + 1) + 4 n floats.
-    Returns the iteration count."""
+    Returns the iteration count.
+
+    CYCLES (Apple speed, 2026-09-28): with `snap` ((n + 1) n + (n + 1)
+    floats of the caller's) the loop also watches for its state (the simplex
+    and its values, the first words of scratch) returning to an earlier one,
+    Brent's way (a snapshot at iterations 0, 1, 2, 4, 8, ...). The loop is a
+    function of that state alone, so from a repeat at period p it runs only
+    the (max_iter - it) mod p iterations that remain of the last lap (a full
+    lap when that is 0, so the last sort is the one the full run ends on)
+    and stops: the same final state, best vertex, last evaluations and
+    iteration count as running every iteration."""
     var nf = Float32(n)
     var gamma = add(Float32(1.0), ftz(identical_div(Float32(2.0), nf)))
     var rho = sub(Float32(0.75), ftz(identical_div(Float32(1.0), mul(Float32(2.0), nf))))
@@ -82,9 +93,18 @@ def nelder_mead[O: Objective, CAP: Int = 9](
     # Every write to the simplex or its values inside the loop goes through
     # `_put`, which says whether the stored word differs from the old one.
     var changed = True
+    var use_snap = Int(snap) != 64
+    var n_state = (n + 1) * n + (n + 1)
+    var have_snap = False
+    var snap_it = 0
+    var power = 1
+    var stop_at = -1
     var it = 0
     var best = 0
     while it < max_iter:
+        if it == stop_at:
+            it = max_iter
+            break
         # stable argsort of fs (ties: lower index first)
         for i in range(n + 1):
             order[i] = i
@@ -113,6 +133,24 @@ def nelder_mead[O: Objective, CAP: Int = 9](
             it = max_iter
             break
         changed = False
+        if use_snap and stop_at < 0:
+            if have_snap:
+                var same = True
+                for i in range(n_state):
+                    if bitcast[DType.uint32](scratch.unsafe_load(i)) != bitcast[DType.uint32](snap.unsafe_load(i)):
+                        same = False
+                        break
+                if same:
+                    var period = it - snap_it
+                    var rest = (max_iter - it) % period
+                    stop_at = it + (rest if rest > 0 else period)
+            if stop_at < 0 and (not have_snap or it - snap_it == power):
+                for i in range(n_state):
+                    snap.unsafe_store(i, scratch.unsafe_load(i))
+                if have_snap:
+                    power *= 2
+                snap_it = it
+                have_snap = True
         # centroid without the worst vertex
         for j in range(n):
             var s = Float32(0.0)

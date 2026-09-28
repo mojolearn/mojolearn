@@ -71,7 +71,8 @@ def ets_scratch(n: Int, m: Int) -> Int:
     """Floats of scratch one series needs (op_ets's p3 row stride, i8)."""
     var k = 6 + (m - 1 if m > 1 else 0)
     var kc = k if k > 8 else 8
-    return 3 * kc + (k + 1) * k + (k + 1) + 4 * k + 2 * m + 6 * n + 8
+    # + Nelder-Mead's cycle snapshot at the end of the row
+    return 3 * kc + (k + 1) * k + (k + 1) + 4 * k + 2 * m + 6 * n + 8 + (k + 1) * k + (k + 1)
 
 
 @always_inline
@@ -506,7 +507,8 @@ def op_ets(t: Int, a: Args):
             st(hi, k, Float32(3.0e38))
             k += 1
     var obj = EtsObj(y, n, a.i2, trend, season, m, ring, oa, ob, og, op, alpha, beta, gamma, phi)
-    var it = nelder_mead[EtsObj, NM_CAP](obj, x, lo, hi, k, nm_scr, Float32(0.05), Float32(1e-4), 1000, Float32(1e-4))
+    var snap = a.p3 + t * a.i8 + (a.i8 - ((kmax + 1) * kmax + (kmax + 1)))
+    var it = nelder_mead[EtsObj, NM_CAP](obj, x, lo, hi, k, nm_scr, Float32(0.05), Float32(1e-4), 1000, Float32(1e-4), snap)
     var u = obj.unpack(x)
     if season != SEAS_N:
         _ = fill_ring(ring, obj.seasons(x), m, season)
