@@ -17,8 +17,42 @@ Cholesky (x_linear/ops.mojo). float32, rows ascending.
 """
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, ld, st, ldi, i2f, fill, copy, cholesky, chol_solve, centered_gram,
-    axpy_acc, add_acc, axpy_centered,
+    axpy_acc, add_acc, axpy_centered, par_rows,
 )
+from std.sys.info import is_gpu
+
+
+def _loo_rows(x: FP, y: FP, n: Int, d: Int, fw: FP, ym: Int, xm: Int, rhs: Int, zb: FP, mm: Int,
+              sw: Bool, fi: Bool, wo: Int, wsum: Float32, la: FP, lb: FP, lo: Int, hi: Int):
+    """Rows [lo, hi) of RidgeCV's leave-one-out: the fold term of row i is
+    la[i] * lb[i] (w_i loo * loo with sample weights, loo * loo without);
+    zb is this block's own solve scratch (d)."""
+    for i in range(lo, hi):
+        var e = fs(ld(y, i), ld(fw, ym))
+        for j in range(d):
+            var xc = fs(ld(x, i * d + j), ld(fw, xm + j))
+            st(zb, j, xc)
+            e = fs(e, fm(xc, ld(fw, rhs + j)))
+        chol_solve(fw, mm, d, zb, 0)
+        if sw:
+            # their GCV on the sqrt(w)-rescaled problem
+            var wi = ld(y, wo + i)
+            var q = Float32(0)
+            for j in range(d):
+                q = fmad(fs(ld(x, i * d + j), ld(fw, xm + j)), ld(zb, j), q)
+            var h = fm(wi, q)
+            if fi:
+                h = fa(fd(wi, wsum), h)
+            var loo = fd(e, fs(Float32(1), h))
+            st(la, i, fm(wi, loo))
+            st(lb, i, loo)
+        else:
+            var h = fd(Float32(1), i2f(n)) if fi else Float32(0)
+            for j in range(d):
+                h = fmad(fs(ld(x, i * d + j), ld(fw, xm + j)), ld(zb, j), h)
+            var loo = fd(e, fs(Float32(1), h))
+            st(la, i, loo)
+            st(lb, i, loo)
 
 
 def ridge_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
@@ -27,7 +61,7 @@ def ridge_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw:
     weighted Gram, and their weighted GCV errors w_i e_i^2 / (1 - h_i)^2).
     y: n x T row-major. A == 1: fit; A > 1 (T == 1): leave-one-out choice.
     res: coef T*d | intercept T | alpha | best_score | A mean squared LOO errors.
-    fw: xm d | G d*d | M d*d | rhs d | ym T | xty d*T | z d."""
+    fw: xm d | G d*d | M d*d | rhs d | ym T | xty d*T | z d | loo terms 2n."""
     var t_n = ldi(ip, 0)
     var fi = ldi(ip, 1) != 0
     var a_n = ldi(ip, 2)
@@ -38,6 +72,8 @@ def ridge_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw:
     var ym = rhs + d
     var xty = ym + t_n
     var zz = xty + d * t_n
+    var la = zz + d
+    var lb = la + n
     var sw = ldi(ip, 3) != 0
     var wo = n * t_n
     var wsum = Float32(0)
@@ -96,31 +132,24 @@ def ridge_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw:
             _ = cholesky(fw, mm, d)
             copy(fw, rhs, fw, xty, d)
             chol_solve(fw, mm, d, fw, rhs)
+            # map: each row's leave-one-out residual (its own solve), then
+            # the fold of err rows ascending (lane linear-cpu)
+            var fwp = fw
+
+            def rows_loo(lo: Int, hi: Int) {imm x, imm y, imm n, imm d, imm fwp, imm ym, imm xm, imm rhs,
+                                            imm zz, imm mm, imm sw, imm fi, imm wo, imm wsum, imm la, imm lb}:
+                comptime if is_gpu():
+                    _loo_rows(x, y, n, d, fwp, ym, xm, rhs, fwp + zz, mm, sw, fi, wo, wsum, fwp + la, fwp + lb, lo, hi)
+                else:
+                    var zb = List[Float32](length=max(d, 1), fill=Float32(0))
+                    _loo_rows(x, y, n, d, fwp, ym, xm, rhs, FP(unsafe_from_address=Int(zb.unsafe_ptr())), mm, sw, fi,
+                              wo, wsum, fwp + la, fwp + lb, lo, hi)
+                    _ = zb^
+
+            par_rows(rows_loo, n)
             var err = Float32(0)
             for i in range(n):
-                var e = fs(ld(y, i), ld(fw, ym))
-                for j in range(d):
-                    var xc = fs(ld(x, i * d + j), ld(fw, xm + j))
-                    st(fw, zz + j, xc)
-                    e = fs(e, fm(xc, ld(fw, rhs + j)))
-                chol_solve(fw, mm, d, fw, zz)
-                if sw:
-                    # their GCV on the sqrt(w)-rescaled problem
-                    var wi = ld(y, wo + i)
-                    var q = Float32(0)
-                    for j in range(d):
-                        q = fmad(fs(ld(x, i * d + j), ld(fw, xm + j)), ld(fw, zz + j), q)
-                    var h = fm(wi, q)
-                    if fi:
-                        h = fa(fd(wi, wsum), h)
-                    var loo = fd(e, fs(Float32(1), h))
-                    err = fmad(fm(wi, loo), loo, err)
-                else:
-                    var h = fd(Float32(1), i2f(n)) if fi else Float32(0)
-                    for j in range(d):
-                        h = fmad(fs(ld(x, i * d + j), ld(fw, xm + j)), ld(fw, zz + j), h)
-                    var loo = fd(e, fs(Float32(1), h))
-                    err = fmad(loo, loo, err)
+                err = fmad(ld(fw, la + i), ld(fw, lb + i), err)
             err = fd(err, i2f(n))
             st(res, t_n * d + t_n + 2 + a, err)
             if a == 0 or err < best_err:  # DEVIATION 5005: the first minimum

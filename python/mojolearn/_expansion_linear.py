@@ -839,7 +839,7 @@ def _ridge_run(est, a, n, d, Y, T, alphas, sample_weight=None):
         Y = Array.from_list(Y.tolist() + w, "<f4")
         has_sw = 1
     return _run(est, ALGO_RIDGE, a, n, d, Y, [T, int(bool(est.fit_intercept)), A, has_sw], list(alphas),
-                T * d + T + 2 + A, 3 * d * d + 3 * d + T + d * T, 1)
+                T * d + T + 2 + A, 3 * d * d + 3 * d + T + d * T + 2 * n, 1)
 
 
 def _ridge_refuse(est):

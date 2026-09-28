@@ -159,12 +159,25 @@ def logcv_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw:
         for ci in range(nc):
             st(fw, cslot, ld(fp, 1 + ci))
             _ = lbfgs[logistic_objective](x, y, n, d, iw, cptr, fw, th, p, max_iter, tol, fw, work, cptr + 1)
+            # map: the held-out rows' predicted codes into the scratch, then
+            # the counts (and the weighted sums, rows ascending)
+            var codes = cptr + 1
+            var fwp = fw
+            var kpp = kp if kp > 1 else 1
+
+            def rows_code(lo: Int, hi: Int) {imm x, imm y, imm n, imm d, imm kpp, imm fi, imm fwp, imm th,
+                                             imm codes, imm f}:
+                for i in range(lo, hi):
+                    if Int(ld(y, n + i)) == f:
+                        st(codes, i, i2f(_predict_code(x, i, d, kpp, fi != 0, fwp, th)))
+
+            par_rows(rows_code, n)
             var hit = 0
             var cnt = 0
             for i in range(n):
                 if Int(ld(y, n + i)) == f:
                     cnt += 1
-                    if _predict_code(x, i, d, kp if kp > 1 else 1, fi != 0, fw, th) == Int(ld(y, i)):
+                    if Int(ld(codes, i)) == Int(ld(y, i)):
                         hit += 1
             if ldi(ip, 5) != 0:
                 # their scorer gets sample_weight[test]: the raw weights, at y + 3n
@@ -174,7 +187,7 @@ def logcv_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw:
                     if Int(ld(y, n + i)) == f:
                         var wi = ld(y, 3 * n + i)
                         wt = fa(wt, wi)
-                        if _predict_code(x, i, d, kp if kp > 1 else 1, fi != 0, fw, th) == Int(ld(y, i)):
+                        if Int(ld(codes, i)) == Int(ld(y, i)):
                             wh = fa(wh, wi)
                 st(res, sc + f * nc + ci, fd(wh, wt) if wt > 0 else Float32(0))
             else:
