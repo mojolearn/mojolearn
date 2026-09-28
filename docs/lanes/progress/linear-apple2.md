@@ -34,6 +34,8 @@ bindings rebuilt in turn). Job scripts: ~/mojolearn-evidence/linear-apple2/.
 | 1d7b8a2a7 | SGD pipelined shuffle: the order copy loads 16 words ahead | both | on | no |
 | 210de5ee8c, 90bad7fd9 | CD on Apple IDENTICAL: two launches per coordinate (fold + update of the previous coordinate inside the next axpy launch, every block folding for itself; coef and conv double-buffered) | IDENTICAL | on (`-D MOJOLEARN_CD_TWO_STEP_OFF=1` returns to three) | no |
 | ca3db4544 | x_linear GPU shuffle: the draw's remainder from float32 quotient estimates (exact) | both | REVERTED: slower (0.974 vs 0.898 s sgd-clf, m4-a 1790608464376) | - |
+| 9ef29ffef | x_linear Huber and Quantile (GPU team form): the lead's n-row folds run on other threads beside the gradient / A' dr cells | both | on | no |
+| 27b180f47 | x_linear LogisticRegressionCV (GPU team form): the lead's loss and weight folds beside the gradient cells | both | on | no |
 | 90c722752 | FAST QN on Apple: X^T dZ through xtdz_coalesced where D * C <= 1024 | FAST (words change: paired quality job) | on (`-D MOJOLEARN_QN_FAST_COALESCED_OFF=1`) | glm/impl/qn only |
 
 ## Jobs
@@ -193,4 +195,23 @@ Digests equal on every line and to the host; SGDDIAG 144 of 144 same bits.
 The shuffle (about 0.15 s per epoch, one lane) is still longer than the row
 pass (0.10 s per epoch) it overlaps; neither a load-ahead nor a cheaper
 remainder shortened it, so its cost is elsewhere in the step (not found).
+
+### M3 Ultra baseline and the compiler-crash recheck (m3ultra-b, steward 1790603060531, at 037daa353)
+
+- The Metal compiler crash seen on the M3 Ultra at 06ef7f558 does NOT recur:
+  at 037daa353 (which holds 96a7fe158) the estimators, solver and x_linear
+  bindings build in both modes on m3ultra-b, and qn_scalar_ieee_check PASSES
+  on its Metal (220000 pairs; raw hardware words differ from the host on 9521
+  divisions and 43059 subtractions, the integer paths keep them equal).
+- Baseline (IDENTICAL, gpu): core 1M ols 0.053, ridge 0.029, lasso 0.201
+  (9.08 ms per epoch), elasticnet 0.200, logistic 0.284 (2.87 ms/iter),
+  linear-svc 0.235, linear-svr 0.201. FAST: logistic 0.868 (8.47 ms/iter),
+  svc 0.557, svr 0.750, lasso 0.139.
+- x_linear board, 100k, gpu vs host (one core), digests equal gpu == host on
+  every line. Where the GPU loses: sgd family 5.1 / 3.5 / 3.2 / 4.6 / 3.2 / 3.4 s
+  vs 0.13 to 0.24; huber 1.368 vs 0.185; quantile 83.0 vs 18.4;
+  logistic-cv 7.36 vs 4.79; isotonic 0.090 vs 0.053. At or better than host:
+  poisson 2.46 vs 2.73, gamma 2.75 vs 3.29, tweedie, bayes-ridge, ard, lars,
+  lasso-lars, ridge-clf (parity), ridge-cv 0.081 vs 0.634, lasso-cv 0.455 vs
+  0.833, enet-cv 0.747 vs 1.564.
 
