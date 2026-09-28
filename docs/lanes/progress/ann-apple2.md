@@ -28,7 +28,10 @@ on ONE Mac and alternates the arms, then prints a stage split
 | 399de4811 | IVF-PQ encode: subspace codebook staged in threadgroup memory | both | on; `-D MOJOLEARN_PQ_ASSIGN_UNSTAGED` reverts |
 | b9cc59dcf | x_ann/io.mojo: uploads without a private copy, downloads by memcpy | both | on |
 | 7b51e91e5 | tiled k-NN fold width = d rounded up to a multiple of 4 (28, was 32) | both | on |
-| e0d2ff366 | CAGRA device prune: neighbor rows staged in threadgroup memory | both | on |
+| e0d2ff366 | CAGRA device prune: neighbor rows staged in threadgroup memory | both | SUPERSEDED by 7c195b32c (measured +160 ms on m4-a) |
+| 3dca15c1a, fbe131bd8 | IVF-SQ / RaBitQ score inputs staged; PQ code-sum nonneg flush | both | pending A/B 6 (no gain alone in A/B 5) |
+| 7c195b32c | CAGRA device prune: binary search + threadgroup integer atomics | both | pending A/B 6 |
+| 78b605c31 | IVF scan: codes/mask/norms/factors gathered into list order per search | both | pending A/B 6 |
 
 ## Measurements
 
@@ -125,3 +128,21 @@ CAGRA (FAST): k-NN 513 + download 16 + host prune 218 (base) -> k-NN +
 device prune 675, so the device prune itself cost ~160 ms on the M4:
 e0d2ff366 stages its reads. On the M4 the scan's select is fixed but the
 search is 0.12 s (score and upload are the rest).
+
+### A/B 4 and 5: m4-a, steward 1790607991849 (b9cc59dcf -> e0d2ff366) and 1790608303488
+
+Arms (A/B 5) b9cc59dcf, 7b51e91e5 (k-NN width 28), e0d2ff366 (+ staged
+prune), fbe131bd8 (+ staged SQ/RaBitQ score, PQ nonneg sum). Digests equal
+across every arm, cell and tier. Raw: `ab4_m4-a_1790607991849.txt`,
+`ab5_m4-a_1790608303488.txt`.
+
+| cell (s) | b9cc59dcf | 7b51e91e5 | e0d2ff366 | fbe131bd8 |
+|---|---|---|---|---|
+| IDENTICAL CAGRA fit | 0.882/0.902/0.889 | 0.849/0.871/0.848 | 1.014/1.007/1.008 | 1.008/0.995/1.010 |
+| FAST CAGRA fit | 0.716/0.747/0.720 | 0.676/0.674/0.669 | 0.841/0.884/0.833 | 0.842/0.844/0.839 |
+| IVF scan score, 3 searches (ms, IDENTICAL) | 278.8 | 278.9 | 280.0 | 279.6 |
+
+The width-28 fold is a gain (kept); staging the prune's neighbor rows lost
+~160 ms (replaced by 7c195b32c); staging the SQ/RaBitQ score arithmetic
+moved nothing, so the score is bound by its scattered code reads (78b605c31
+gathers them into list order). IVF fits and t-SNE unchanged (as expected).
