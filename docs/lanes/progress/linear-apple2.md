@@ -32,6 +32,8 @@ bindings rebuilt in turn). Job scripts: ~/mojolearn-evidence/linear-apple2/.
 | 6424bab49 | (see above) 32-bit remainder steps | both | REVERTED (473f26c05): slower than the 64-bit remainder | - |
 | c5179e11d | CD opt-in two-launch coordinate | IDENTICAL | REVERTED (cd7e61dd5): 4.98 vs 4.63 ms per epoch | - |
 | 1d7b8a2a7 | SGD pipelined shuffle: the order copy loads 16 words ahead | both | on | no |
+| 210de5ee8c, 90bad7fd9 | CD on Apple IDENTICAL: two launches per coordinate (fold + update of the previous coordinate inside the next axpy launch, every block folding for itself; coef and conv double-buffered) | IDENTICAL | on (`-D MOJOLEARN_CD_TWO_STEP_OFF=1` returns to three) | no |
+| ca3db4544 | x_linear GPU shuffle: the draw's remainder from float32 quotient estimates (exact) | both | on (pending measurement) | x_linear/ops.mojo |
 | 90c722752 | FAST QN on Apple: X^T dZ through xtdz_coalesced where D * C <= 1024 | FAST (words change: paired quality job) | on (`-D MOJOLEARN_QN_FAST_COALESCED_OFF=1`) | glm/impl/qn only |
 
 ## Jobs
@@ -147,4 +149,32 @@ seeds 0..4, 200k train / 100k held-out rows of HIGGS and taxi), mean over seeds:
 Per seed the log loss and R^2 differences are below 1e-5 with mixed signs
 (noise of the fit, and the new FAST matches the IDENTICAL reference as closely
 as the old one did); accuracy rises on 4 of 5 seeds. Kept on by default.
+
+### CD two launches per coordinate (m4pro-a, Apple M4 Pro), IDENTICAL, 1M x 16
+
+steward 1790608649623 (base and three-launch arms) and 1790609589947 (three
+vs two, after the fix 90bad7fd9: at 210de5ee8 the older six-launch loop ran on
+after the two-step loop converged, and the Lasso digest moved; caught by the
+digest comparison, fixed, re-measured):
+
+| arm | lasso fit s | elasticnet fit s | lasso per epoch | digest lasso / enet (1M), lasso / enet (100k) |
+|---|---|---|---|---|
+| 037daa353 (base) | 0.215 / 0.219 | 0.219 / 0.219 | 10.19 ms | 7afaf6ff / db1b3098, 9fa0349a / cf994b51 |
+| 9ec0f03f0 (three launches) | 0.098 / 0.098 | 0.097 / 0.097 | 3.90 ms | equal |
+| 90bad7fd9 (two launches) | 0.083 / 0.083 | 0.081 / 0.082 | 3.18 ms | equal |
+
+M4 Pro, round 2: Lasso and ElasticNet 2.6x, 3.2x per epoch.
+
+### SGD pipelined copy (m4pro-b, steward 1790608111836), IDENTICAL, 100k
+
+| case | 5097d69d4 | 1d7b8a2a7 (copy loads 16 ahead) |
+|---|---|---|
+| sgd-clf | 1.053 | 0.900 |
+| sgd-reg | 1.020 | 0.867 |
+| perceptron | 1.012 | 0.858 |
+| pa-clf | 1.017 | 0.861 |
+| pa-reg | 1.012 | 0.856 |
+| sgd-ocsvm | 1.005 | 0.852 |
+
+Digests equal on every line; SGDDIAG 72 of 72 same bits.
 
