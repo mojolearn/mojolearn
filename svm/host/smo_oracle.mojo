@@ -1016,6 +1016,12 @@ def smo_oracle_fit[
                     dual_objective[dt](x, y_train, alpha, norms, n_rows, k, kp)
                 )
 
+    # The cell block's buffers are read through raw pointers in the loop
+    # above; keep them alive past it (Mojo frees at the last USE).
+    _ = xt^
+    _ = nrm^
+    _ = wst^
+    _ = wsn^
     # Results. `CombineCoefs` (`results.cuh:189-200`): coef = alpha * y over
     # n_train, then for EPSILON_SVR `raft::linalg::add(coef, coef, coef +
     # n_rows, n_rows)`. Since y is [+1]*n ++ [-1]*n that add is
