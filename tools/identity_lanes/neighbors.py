@@ -304,7 +304,10 @@ def _(ml, X, yc, yr, Xh=None):
     w[3] = 0.0
     y2 = np.stack([yr[:256], yr[:256] * 0.5 + 1.0], axis=1).astype(np.float32)
     m = ml.KernelRidge(alpha=0.5, kernel="rbf", gamma=0.05).fit(X[:256], y2, sample_weight=w)
-    s = ml.KernelRidge(alpha=1.0, kernel="linear").fit(X[:256], yr[:256], sample_weight=2.0)
+    # the scalar weight on a bounded kernel: a linear K on the fixtures with
+    # large-magnitude columns is not positive definite at alpha 1 in float32
+    # (the fit refuses, DEVIATION 1661), which tests the refusal, not the weight
+    s = ml.KernelRidge(alpha=1.0, kernel="rbf", gamma=0.05).fit(X[:256], yr[:256], sample_weight=2.0)
     K = _neighbors_int_gram(X[:256], X[:256])
     p = ml.KernelRidge(alpha=1.0, kernel="precomputed").fit(K, yr[:256])
     pw = ml.KernelRidge(alpha=1.0, kernel="precomputed").fit(K, yr[:256], sample_weight=w)
