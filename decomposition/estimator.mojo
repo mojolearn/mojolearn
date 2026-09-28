@@ -287,9 +287,9 @@ def square_in_place_kernel(
 
 def _column_variance(
     ctx: DeviceContext,
-    m: DeviceBuffer[DType.float32],
-    mu: DeviceBuffer[DType.float32],
-    var_out: DeviceBuffer[DType.float32],
+    mut m: DeviceBuffer[DType.float32],
+    mut mu: DeviceBuffer[DType.float32],
+    mut var_out: DeviceBuffer[DType.float32],
     n_rows: Int,
     n_cols: Int,
 ) raises:
