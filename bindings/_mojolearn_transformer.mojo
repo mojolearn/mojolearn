@@ -1757,10 +1757,12 @@ def _lm_run(
         var h_hn = ctx.enqueue_create_host_buffer[DType.float32](m * d)
         ctx.enqueue_copy(dst_ptr=h_x.unsafe_ptr(), src_buf=x)
         ctx.enqueue_copy(dst_ptr=h_hn.unsafe_ptr(), src_buf=hn)
+        var rows = List[DeviceBuffer[DType.float32]]()
         for r in range(b):
-            var row = logits.create_sub_buffer[DType.float32]((r * cur_l + cur_l - 1) * v, v)
-            ctx.enqueue_copy(dst_ptr=h_last.unsafe_ptr() + r * v, src_buf=row)
+            rows.append(logits.create_sub_buffer[DType.float32]((r * cur_l + cur_l - 1) * v, v))
+            ctx.enqueue_copy(dst_ptr=h_last.unsafe_ptr() + r * v, src_buf=rows[r])
         ctx.synchronize()
+        _ = rows^
         _lm_refuse_nonfinite("rms_norm input", h_x.unsafe_ptr(), m * d)
         _lm_refuse_nonfinite("linear input", h_hn.unsafe_ptr(), m * d)
         _ = ids^
@@ -1884,12 +1886,10 @@ def causal_lm_session_run_binding(
         var sp = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=ptrs[i])
         sp[].busy = True
     owner[].busy = True
-    var failed = False
     try:
         with GILReleased(Python()):
             _lm_run(owner[], ptrs, p_ids, p_out, p_logits, l, n_steps)
     except error:
-        failed = True
         for i in range(n_layers):
             var sp = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=ptrs[i])
             sp[].busy = False
