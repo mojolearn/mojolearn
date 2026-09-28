@@ -43,6 +43,7 @@ of a tied neighbor non-reproducible.
 """
 
 from std.math import sqrt
+from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.hardware_matrix import threadgroup_limit_for
@@ -1932,19 +1933,22 @@ def check_launch_config_values() raises:
 
 
 def check_fused_griddimx_merge() raises:
-    """The mutex merge, on the FCHK fixture, both reached and correct.
+    """The cross-block slot merge (DEVIATION 5219), on the FCHK fixture,
+    both reached and correct.
 
     Four launches on identical inputs:
-      1. the PUBLIC entry (grid computed: (16, 4) here, asserted) must
-         match the host Float64 oracle per slot and in order;
-      2. `sabotage = 1` at the same grid must MOVE the output (the last
-         producer hands over identity/keyMax, so its candidates vanish) --
-         reach-by-sabotage for the producer write AND the consumer merge;
+      1. the PUBLIC entry (grid computed: (16, 4) here, asserted; no
+         longer pinned to 1 under IDENTICAL) must match the host Float64
+         oracle per slot and in order;
+      2. `sabotage = 1` at the same grid must MOVE the output (the merge
+         drops the last column block's best candidate) -- reach-by-sabotage
+         for the slot stores AND the merge kernel;
       3. a FORCED `grid_x = 5` (a divisor the computation never picks, with
          a partial last x-tile at n = 4093) must match the oracle exactly;
       4. `sabotage = 1` at a FORCED `grid_x = 1` must NOT move anything,
-         because the single-block arm never reads the mutex or the
-         sabotage -- the other side of the switch, checked by name.
+         because the single-block arm never runs the merge -- the other
+         side of the switch, checked by name; and step 1's distances and
+         indices must equal this launch's BIT FOR BIT.
     """
     var ctx = DeviceContext()
     comptime K = 10
@@ -2005,6 +2009,16 @@ def check_fused_griddimx_merge() raises:
         FCHK_QUERIES, FCHK_INDEX, FCHK_FEATURES, K, False,
     )
     ctx.enqueue_copy(dst_ptr=ho.unsafe_ptr(), src_buf=oi)
+    # DEVIATION 5219: the merged grid's DISTANCES too, kept for the bitwise
+    # comparison with the single-block launch in step 4.
+    var hd_merged = ctx.enqueue_create_host_buffer[DType.float32](
+        FCHK_QUERIES * K
+    )
+    var hi_merged = ctx.enqueue_create_host_buffer[DType.uint32](
+        FCHK_QUERIES * K
+    )
+    ctx.enqueue_copy(dst_ptr=hd_merged.unsafe_ptr(), src_buf=od)
+    ctx.enqueue_copy(dst_ptr=hi_merged.unsafe_ptr(), src_buf=oi)
     ctx.synchronize()
     var bad = 0
     for i in range(FCHK_QUERIES):
@@ -2039,9 +2053,9 @@ def check_fused_griddimx_merge() raises:
                 moved += 1
     if moved == 0:
         raise Error(
-            "check_fused_griddimx_merge FAIL: poisoning the last producer's"
-            " handoff moved nothing, so the merge path is not carrying the"
-            " output"
+            "check_fused_griddimx_merge FAIL: dropping the last column"
+            " block's best candidate moved nothing, so the slot merge is"
+            " not carrying the output"
         )
 
     # 3. A forced grid the computation never picks: grid_x = 5 leaves a
@@ -2090,14 +2104,40 @@ def check_fused_griddimx_merge() raises:
             + String(bad1)
             + " wrong slots"
         )
+    # DEVIATION 5219: the slot merge returns the single-block BITS, not
+    # just the oracle's indices: every distance and every index of the
+    # computed grid equals the `grid_x == 1` launch's.
+    var hd1 = ctx.enqueue_create_host_buffer[DType.float32](FCHK_QUERIES * K)
+    ctx.enqueue_copy(dst_ptr=hd1.unsafe_ptr(), src_buf=od)
+    ctx.synchronize()
+    var bitdiff = 0
+    for c in range(FCHK_QUERIES * K):
+        var a = hd_merged.unsafe_ptr().unsafe_load(c)
+        var b = hd1.unsafe_ptr().unsafe_load(c)
+        if (
+            bitcast[DType.uint32](a) != bitcast[DType.uint32](b)
+            or hi_merged.unsafe_ptr().unsafe_load(c)
+            != ho.unsafe_ptr().unsafe_load(c)
+        ):
+            bitdiff += 1
+    if bitdiff != 0:
+        raise Error(
+            "check_fused_griddimx_merge FAIL: the merged grid ("
+            + String(cfg[0])
+            + ") differs from grid_x=1 in "
+            + String(bitdiff)
+            + " (distance, index) cells; DEVIATION 5219's fold must return"
+            " the single-block bits"
+        )
 
     print(
         "check_fused_griddimx_merge OK: computed grid ("
         + String(cfg[0])
         + ", "
         + String(cfg[1])
-        + ") matches the oracle per slot at k=10; poisoning the last"
-        " producer moved "
+        + ") matches the oracle per slot at k=10 and the grid_x=1 bits"
+        " in every (distance, index) cell; dropping the last block's best"
+        " candidate moved "
         + String(moved)
         + " slots; forced grid_x=5 with a partial last x-tile is exact;"
         " grid_x=1 ignores the sabotage entirely"
