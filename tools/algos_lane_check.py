@@ -44,19 +44,43 @@ A family's EXISTING lanes (registered in tools/identity_break.py, not by a
 fragment) join the same proof through tools/identity_lanes/<fragment>.core,
 one lane name per line: checking any of them runs that fragment's .checks.
 
-A KNOWN CPU REFUSAL (lane/devctx-lifetime, 2026-09-28). A `par-*` lane whose
-driver is the COOPERATIVE multi-GPU pool has no CPU arm by design: its shards
-are device row tiles inside the GPU binding, which no host binding restates,
-and `_parallel_pool._cpu_refusal` refuses it on every CPU run with the
-declared sentence CPU_BY_DESIGN_REFUSAL (par-gp, par-gpc-*, par-logistic on
-every Mac). Such a lane reads KNOWN REFUSAL, not a failure, ONLY when all of
-these hold: its name starts with `par-`; the CPU arm wrote its JSON; EVERY
-cell of the lane in it REFUSED and every refusal carries that sentence; and
-the GPU arm exited 0 with a real train hash on every fixture. Anything else
-(a CPU cell that hashed beside one that refused, another refusal, a GPU
-refusal, a missing fixture) is the arm failure it always was. A KNOWN REFUSAL
-compares NOTHING and is printed as such, by name, in the RESULT line; under
-`--sabotage` it is not a DISAGREE, so a sabotage run on such a lane fails.
+A `par-*` LANE IS CHECKED ON THE DEVICE AXIS (lane/par-harness, 2026-09-28).
+A `par-*` lane's claim is not GPU == CPU: it is that sharding moves no bit,
+i.e. its TWO-DEVICE column hashes equal, cell for cell, to its ONE-DEVICE
+column (`identity_break._par_devices`, `verify --par`). So:
+
+  * On a CUDA or HIP box that shows at least two GPUs (`device_count`), the
+    lane's REFERENCE arm (the slot the CPU arm fills for every other lane) is
+    the ONE-device GPU run (MOJOLEARN_PAR_DEVICES=0), and its lane arm is the
+    TWO-device run (MOJOLEARN_PAR_DEVICES=0,1) under the device witness
+    (tools/par_witness_arm.py, `_verify_par.PoolWitness`, one per cell). AGREE
+    means the two columns are bitwise equal AND every cell's witness showed the
+    work placed on both devices. A cell whose witness refused (no pool, a pool
+    on other devices, one physical GPU twice) or has no witness record reads
+    WITNESS REFUSED, which fails. A cell refused on exactly one of the two
+    columns is a DISAGREE (a defect only a two-device run can see). A lane
+    declared `_verify_par.ONE_DEVICE_BY_DESIGN` (par-byte-lm-offload) runs on
+    one device in both columns BY DESIGN; its agreement says nothing about
+    sharding and reads NOT APPLICABLE (one device by design), while a
+    difference still reads DISAGREE.
+  * On a box with fewer than two GPUs (every Mac: `DevicePool` admits metal
+    only at group (0,); a 1-GPU pod; a 1-GPU queue slot) the two-device
+    claim CANNOT be checked. The lane runs GPU vs CPU as before. When its CPU
+    arm is the declared by-design refusal of the cooperative multi-GPU driver
+    (CPU_BY_DESIGN_REFUSAL, from `_parallel_pool._cpu_refusal`) it reads NOT
+    APPLICABLE (needs 2 devices), ONLY when all of these hold: the CPU arm
+    wrote its JSON; EVERY cell of the lane in it REFUSED with that sentence;
+    and the GPU arm exited 0 with a real train hash on every fixture. Anything
+    else is the arm failure it always was. A `par-*` lane whose driver HAS a
+    CPU route still compares GPU with CPU at one device and reads AGREE or
+    DISAGREE on that comparison, which the detail says is one device.
+
+NOT APPLICABLE is neither AGREE nor a failure: the RESULT line names those
+lanes separately, and `PASSING` is the set of verdicts a clean check accepts.
+Under `--sabotage` a NOT APPLICABLE lane is not a DISAGREE, so a sabotage run
+that cannot be seen on this box fails. Until 2026-09-28 the 1-GPU case read
+KNOWN REFUSAL, and a >=2-GPU box also ran GPU vs CPU, so the multi-GPU path was
+never checked by the light check at all.
 
 Exit 0 only when every verdict is the one required. The last line is always
 `RESULT: PASS` or `RESULT: FAIL (<why>)`.
@@ -82,7 +106,18 @@ DISAGREEING = ("DIVERGENT", "MOVED", "RELOAD-MOVED", "BATCH_MOVED", "RLPAIR_MOVE
 #: The declared sentence of the cooperative multi-GPU driver's CPU refusal
 #: (python/mojolearn/_parallel_pool.py `_cpu_refusal`); see KNOWN CPU REFUSAL.
 CPU_BY_DESIGN_REFUSAL = "no CPU implementation of the cooperative multi-GPU driver"
-KNOWN_REFUSAL = "KNOWN REFUSAL"
+#: The verdict of a lane whose claim this box cannot check (see `par-*` LANES).
+NOT_APPLICABLE = "NOT APPLICABLE"
+#: A lane whose two-device column was not shown to run on two devices.
+WITNESS_REFUSED = "WITNESS REFUSED"
+#: The verdicts a clean check accepts. NOT APPLICABLE is not AGREE and is
+#: reported by name; every other verdict fails.
+PASSING = ("AGREE", NOT_APPLICABLE)
+PAR_PREFIX = "par-"
+#: The device groups of a `par-*` lane's two columns on a >=2-GPU box.
+PAR_ONE_DEVICE = "0"
+PAR_TWO_DEVICES = "0,1"
+WITNESS_ARM = ROOT / "tools" / "par_witness_arm.py"
 
 
 class Fail(Exception):
@@ -323,14 +358,60 @@ def ensure_built(bindings, log, publish=False):
                 steward_build.publish_one(tree, STORE, b)
 
 
+# ------------------------------------------------------------ the par-* device axis
+_DEVICE_COUNT = {}
+
+
+def device_count(backend):
+    """How many GPUs this box shows the arms (asked once per process). Metal
+    is ONE by structure: `DevicePool._start` admits it only at group (0,), so
+    no Mac can produce a two-device column (`_verify_par.refuse_to_run`).
+    CUDA and HIP run python/mojolearn/_gpu_witness.py AS A SCRIPT in a child
+    (it imports only ctypes, so no binding has to be built yet), which honors
+    the visibility mask the queue slot set: a 1-GPU slot on a 2-GPU pod is ONE."""
+    if backend not in ("cuda", "hip"):
+        return 1
+    if backend not in _DEVICE_COUNT:
+        r = subprocess.run([sys.executable, str(PKG / "_gpu_witness.py"), backend], cwd=ROOT,
+                           env=arm_env("gpu"), capture_output=True, text=True, timeout=180)
+        try:
+            _DEVICE_COUNT[backend] = int(json.loads(r.stdout)["count"])
+        except (ValueError, KeyError, TypeError):
+            raise Fail(f"could not count the {backend} devices this box shows (exit {r.returncode}): "
+                       + ((r.stderr or r.stdout).strip().splitlines() or ["no output"])[-1])
+    return _DEVICE_COUNT[backend]
+
+
+def par_axis(lane, backend):
+    """True when this lane's verdict on this box is its two-device column
+    against its one-device column (see `par-*` LANES in the docstring)."""
+    return lane.startswith(PAR_PREFIX) and backend in ("cuda", "hip") and device_count(backend) >= 2
+
+
+def witness_path(gpu_json):
+    return Path(str(gpu_json) + ".witness.json")
+
+
+def arms_bindings(lane, bindings, backend):
+    """The bindings the arms of `lane` load on this box: a lane on the device
+    axis runs no CPU arm, so it needs no host binding."""
+    if par_axis(lane, backend):
+        return [b for b in bindings if not b.endswith("_host")]
+    return list(bindings)
+
+
 # ------------------------------------------------------------ one lane
-def arm_env(kind):
+def arm_env(kind, par_devices=None):
     env = dict(os.environ, PYTHONPATH=str(ROOT / "python"), MOJOLEARN_NUMERIC_MODE="identical")
     for k in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS",
               "VECLIB_MAXIMUM_THREADS"):
         env[k] = "1"
     for k in [k for k in env if k.endswith("_ALLOW_SABOTAGE") or k == "MOJOLEARN_VENDOR"]:
         env.pop(k)
+    # An ambient device group never chooses a column; only the par axis does.
+    env.pop("MOJOLEARN_PAR_DEVICES", None)
+    if par_devices:
+        env["MOJOLEARN_PAR_DEVICES"] = par_devices
     if kind == "cpu":
         # tools/verify_cpu_batch.py arm_environment: the direct forest and
         # byte LM loaders read their own variables, on the same host set.
@@ -340,33 +421,60 @@ def arm_env(kind):
     return env
 
 
-def run_arm(kind, lane, backend, fixtures, out, log, moved_ok=False, refusal_ok=False):
-    """One column of one lane. `moved_ok` (the sabotaged stage only): the
+def run_arm(kind, lane, backend, fixtures, out, log, moved_ok=False, refusal_ok=None):
+    """One column of one lane. `kind` is the SLOT: "gpu" is the lane arm and
+    "cpu" the reference arm. For a `par-*` lane on a box that shows two GPUs
+    (`par_axis`) the lane arm is the TWO-device run under the witness
+    (tools/par_witness_arm.py, which writes `witness_path(out)`) and the
+    reference arm is the ONE-device GPU run; no CPU arm runs. Every caller
+    that pairs `run_arm("gpu")`, `run_arm("cpu")` and `compare` (this check,
+    the consolidation driver) gets the device axis without knowing it.
+
+    `moved_ok` (the sabotaged stage only): the
     harness exits 1 when a part it compares INSIDE one column moved (a byte
     LM's sampler-vs-trainer `rlpair`, a batch part), which is exactly what a
     biting sabotage does; if it still wrote its JSON, `compare` reads that
     within-column verdict as DISAGREE. Before 2026-09-27 the arm raised here,
     so a sabotage that bit byte-lm read as a failed GPU arm (do-amd request
     1790542457986-dedupe). A missing JSON, any other exit, or a clean or
-    restored stage still fails.
+    restored stage still fails. A `par-*` lane's two-device arm is always
+    `moved_ok`: a sharded fit that differs from the plain fit reads DIVERGENT
+    inside its column, and that is a DISAGREE for `compare` to report, not a
+    crash.
 
-    `refusal_ok` (a `par-*` lane's CPU arm only): an exit 1 with the JSON
-    written returns 1 so `known_cpu_refusal` can decide whether it is the
-    declared by-design refusal; if it is not, the caller fails the arm.
-    Returns the exit status (0, or 1 in those two cases)."""
-    cmd = [sys.executable, "-u", str(HARNESS), "--lanes", lane, "--repeats", "1", "--fail-on-refused",
-           "--json", str(out)]
+    `refusal_ok` (default: a `par-*` lane's CPU arm off the device axis): an
+    exit 1 with the JSON written returns 1 so `compare` can decide whether it
+    is the declared by-design refusal (NOT APPLICABLE); if it is not, `check`
+    fails the arm. Returns the exit status (0, or 1 in those cases)."""
+    axis = par_axis(lane, backend)
+    if refusal_ok is None:
+        refusal_ok = kind == "cpu" and lane.startswith(PAR_PREFIX) and not axis
+    harness = ["--lanes", lane, "--repeats", "1", "--fail-on-refused", "--json", str(out)]
     if fixtures:
-        cmd += ["--fixtures", fixtures]
-    cmd += ["--require-cpu", "--require-backend", "cpu"] if kind == "cpu" else ["--require-backend", backend]
+        harness += ["--fixtures", fixtures]
+    env_kind, par_devices = kind, None
+    if axis:
+        env_kind = "gpu"
+        harness += ["--require-backend", backend]
+        if kind == "gpu":
+            par_devices, moved_ok = PAR_TWO_DEVICES, True
+            if witness_path(out).exists():
+                witness_path(out).unlink()
+            cmd = [sys.executable, "-u", str(WITNESS_ARM), "--witness-json", str(witness_path(out)), "--"] + harness
+        else:
+            par_devices = PAR_ONE_DEVICE
+            cmd = [sys.executable, "-u", str(HARNESS)] + harness
+    else:
+        harness += ["--require-cpu", "--require-backend", "cpu"] if kind == "cpu" else ["--require-backend", backend]
+        cmd = [sys.executable, "-u", str(HARNESS)] + harness
     if out.exists():
         out.unlink()
     with open(log, "a") as fh:
-        fh.write(f"\n$ {' '.join(cmd)}\n")
+        fh.write(f"\n$ {'MOJOLEARN_PAR_DEVICES=' + par_devices + ' ' if par_devices else ''}{' '.join(cmd)}\n")
         fh.flush()
         try:
-            rc = subprocess.run(cmd, cwd=ROOT, env=arm_env(kind), stdout=fh, stderr=subprocess.STDOUT,
-                                timeout=ARM_TIMEOUT).returncode
+            rc = subprocess.run(cmd, cwd=ROOT, env=arm_env(env_kind, par_devices), stdout=fh,
+                                stderr=subprocess.STDOUT, timeout=ARM_TIMEOUT).returncode
         except subprocess.TimeoutExpired:
             fh.write(f"\n[lane-check] HUNG: no exit after {ARM_TIMEOUT} s; killed\n")
             raise Fail(f"{lane}: the {kind} arm HUNG (no exit after {ARM_TIMEOUT} s, killed; "
@@ -374,8 +482,8 @@ def run_arm(kind, lane, backend, fixtures, out, log, moved_ok=False, refusal_ok=
                        + next((ln for ln in reversed(Path(log).read_text(errors='replace').splitlines())
                                if ln.startswith("# START")), "(none)"))
     if moved_ok and rc == 1 and out.is_file():
-        say(f"{lane}: the {kind} arm exited 1 under the sabotage with its JSON written (a part moved "
-            "inside the column); the diff decides")
+        say(f"{lane}: the {kind} arm exited 1 with its JSON written (a part moved inside the column); "
+            "the diff decides")
         return 1
     if refusal_ok and rc == 1 and out.is_file():
         return 1
@@ -387,10 +495,10 @@ def run_arm(kind, lane, backend, fixtures, out, log, moved_ok=False, refusal_ok=
 
 def known_cpu_refusal(ib, lane, gpu_json, cpu_json, fixtures):
     """(True, detail) when the lane's CPU arm is the declared by-design
-    refusal of the cooperative multi-GPU driver (see KNOWN CPU REFUSAL in the
+    refusal of the cooperative multi-GPU driver (see `par-*` LANES in the
     module docstring), else (False, why not). Never widens: every condition
     must hold."""
-    if not lane.startswith("par-"):
+    if not lane.startswith(PAR_PREFIX):
         return False, "not a par-* lane"
     want = fixtures.split(",") if fixtures else list(ib.FIXTURES)
     cpu = json.loads(Path(cpu_json).read_text())["cells"]
@@ -409,9 +517,118 @@ def known_cpu_refusal(ib, lane, gpu_json, cpu_json, fixtures):
                   f"{len(want)} fixtures; NOTHING compared")
 
 
+def par_witness_verdict(lane, verdict, detail, witness, want, devices=PAR_TWO_DEVICES):
+    """The device-axis verdict of `lane` from the column verdict and the
+    witness record `witness` (the parsed tools/par_witness_arm.py JSON, or
+    None when the arm wrote none). Pure, so it is unit tested
+    (tools/test_algos_lane_check_par.py).
+
+    DISAGREE stays DISAGREE whatever the witness says: a difference between
+    the columns is a finding either way. Otherwise every fixture in `want`
+    needs a witness record for `lane/<fixture>` with no refusal, or the lane
+    reads WITNESS REFUSED. A lane declared ONE_DEVICE_BY_DESIGN that agreed
+    reads NOT APPLICABLE: both of its columns ran on one device."""
+    if verdict == "DISAGREE":
+        return verdict, detail
+    if not isinstance(witness, dict) or not isinstance(witness.get("cells"), dict):
+        return WITNESS_REFUSED, ("the two-device arm wrote no witness record, so nothing shows it ran on "
+                                 f"devices {devices}; its agreement is not evidence ({detail})")
+    asked = [int(d) for d in devices.split(",")]
+    if (witness.get("format") != "mojolearn.par-witness-arm.v1"
+            or witness.get("vendor") not in ("cuda", "hip")
+            or witness.get("devices") != asked):
+        return WITNESS_REFUSED, "witness metadata does not name the requested physical device group"
+    cells = witness["cells"]
+    missing = [f for f in want if f"{lane}/{f}" not in cells]
+    if missing:
+        return WITNESS_REFUSED, (f"no witness record for {lane}/{','.join(missing)} (a cell reused from "
+                                 f"a resumed column, or never run); ({detail})")
+    refused = [(f, cells[f"{lane}/{f}"].get("refusal")) for f in want if cells[f"{lane}/{f}"].get("refusal")]
+    if refused:
+        f, why = refused[0]
+        return WITNESS_REFUSED, f"{lane}/{f}: {why} ({len(refused)} of {len(want)} cells refused); ({detail})"
+    if verdict != "AGREE":
+        return verdict, detail
+    if any(cells[f"{lane}/{f}"].get("one_device_by_design") for f in want):
+        import ast
+        module = ast.parse((PKG / "_verify_par.py").read_text())
+        declaration = next(ast.literal_eval(node.value) for node in module.body
+                           if isinstance(node, ast.Assign) and any(
+                               isinstance(target, ast.Name) and target.id == "ONE_DEVICE_BY_DESIGN"
+                               for target in node.targets))
+        if lane not in declaration:
+            return WITNESS_REFUSED, "lane is not declared one-device-by-design"
+        driver = declaration[lane][0]
+        for fixture in want:
+            cell = cells[f"{lane}/{fixture}"]
+            summary = cell.get("witness") or {}
+            records = summary.get("detail", [])
+            if (not cell.get("one_device_by_design") or summary.get("pools")
+                    or not records or any(record.get("devices") != asked[:1] for record in records)
+                    or not any(record.get("driver") == driver for record in records)):
+                return WITNESS_REFUSED, "one-device declaration lacks its named driver witness"
+        return NOT_APPLICABLE, ("one device by design (_verify_par.ONE_DEVICE_BY_DESIGN): both columns ran "
+                                f"on the first device, so their agreement says nothing about sharding; {detail}")
+    w = [cells[f"{lane}/{f}"].get("witness") or {} for f in want]
+    for summary in w:
+        if (summary.get("placement") != "physical" or summary.get("devices") != asked
+                or not summary.get("detail")):
+            return WITNESS_REFUSED, "missing detailed physical placement evidence"
+        qualifying = 0
+        for record in summary["detail"]:
+            if record.get("kind") == "native-session" and not record.get("placed"):
+                continue  # In-cell one-device replica references admit nothing.
+            if record.get("devices") != asked:
+                return WITNESS_REFUSED, "a witnessed pool/session names another device group"
+            workers = record.get("workers", [])
+            identities = [uuid for worker in workers for uuid in worker.get("devices", [])]
+            if (len(identities) != len(asked) or not all(identities)
+                    or len(set(identities)) != len(asked)):
+                return WITNESS_REFUSED, "missing or repeated physical GPU identity"
+            if record.get("cooperative") and len(workers) != 1:
+                return WITNESS_REFUSED, "cooperative placement requires one worker"
+            if not record.get("cooperative") and record.get("kind") != "native-session":
+                pids = [worker.get("pid") for worker in workers]
+                if (len(pids) != len(asked) or len(set(pids)) != len(asked)
+                        or any(type(pid) is not int or pid <= 0 for pid in pids)):
+                    return WITNESS_REFUSED, "physical workers are not distinct processes"
+            qualifying += 1
+        if not qualifying:
+            return WITNESS_REFUSED, "no physical two-device work was witnessed"
+    placed = (f"{sum(x.get('pools', 0) for x in w)} pool(s), "
+              f"{sum(x.get('native_sessions', 0) for x in w)} native session(s)")
+    return "AGREE", f"{detail}; witness: every cell placed on devices {devices} ({placed})"
+
+
 def compare(ib, lane, gpu_json, cpu_json, fixtures, log, backend="gpu"):
-    """(verdict, counts): AGREE, DISAGREE or NOTHING COMPARED, from the diff's
-    exit status and a count of what both columns really carried."""
+    """(verdict, counts): AGREE, DISAGREE, NOTHING COMPARED, NOT APPLICABLE or
+    WITNESS REFUSED, from the diff's exit status, a count of what both columns
+    really carried and, for a `par-*` lane, the device axis (see `par-*`
+    LANES in the module docstring)."""
+    want = fixtures.split(",") if fixtures else list(ib.FIXTURES)
+    axis = par_axis(lane, backend)
+    if lane.startswith(PAR_PREFIX) and not axis:
+        known, _ = known_cpu_refusal(ib, lane, gpu_json, cpu_json, fixtures)
+        if known:
+            return NOT_APPLICABLE, (f"needs 2 devices: this box shows {device_count(backend)} {backend} "
+                                    "device(s), so the two-device column cannot run, and the CPU arm is the "
+                                    f"cooperative driver's by-design refusal ({CPU_BY_DESIGN_REFUSAL!r}); the "
+                                    f"GPU column hashed {len(want)} fixture(s); nothing compared")
+    verdict, detail = _compare_columns(ib, lane, gpu_json, cpu_json, fixtures, log, backend, axis)
+    if not axis:
+        if lane.startswith(PAR_PREFIX) and verdict == "AGREE":
+            detail += (f"; ONE device only (this box shows {device_count(backend)}), so the two-device "
+                       "claim is not checked here")
+        return verdict, detail
+    wp = witness_path(gpu_json)
+    try:
+        witness = json.loads(wp.read_text()) if wp.is_file() else None
+    except ValueError:
+        witness = None
+    return par_witness_verdict(lane, verdict, detail, witness, want)
+
+
+def _compare_columns(ib, lane, gpu_json, cpu_json, fixtures, log, backend, axis=False):
     cmd = [sys.executable, str(HARNESS), "--diff", str(gpu_json), str(cpu_json), "--lanes", lane,
            "--require-columns", "2"]
     r = subprocess.run(cmd, cwd=ROOT, env=arm_env("gpu"), capture_output=True, text=True)
@@ -424,17 +641,23 @@ def compare(ib, lane, gpu_json, cpu_json, fixtures, log, backend="gpu"):
     keys = sorted(k for k in set(cols[0][1]["cells"]) & set(cols[1][1]["cells"]) if k.split("/")[0] == lane)
     compared, disagree = {}, []
     for k in keys:
-        hashes = []
-        for _, j in cols:
+        hashes, refused = [], []
+        for side, (_, j) in zip(("two-device", "one-device") if axis else ("gpu", "cpu"), cols):
             c = j["cells"][k]
             if c.get("verdict") in ("MOVED", "DIVERGENT"):
                 disagree.append(f"{k} train {c['verdict']} within one column")
             elif c.get("verdict") != "REFUSED" and c.get("hashes"):
                 hashes.append(c["hashes"][0])
+            elif c.get("verdict") == "REFUSED":
+                refused.append(side)
         if len(hashes) == 2:
             compared["train"] = compared.get("train", 0) + 1
             if hashes[0] != hashes[1]:
                 disagree.append(f"{k} train")
+        elif axis and len(hashes) == 1 and len(refused) == 1:
+            # ONE-COLUMN on the device axis: the work refused on exactly one of
+            # two GPU columns, which only a two-device run can show.
+            disagree.append(f"{k} train refused on the {refused[0]} column only")
         for part in PARTS:
             if not all(f"{part}_verdict" in j["cells"][k] for _, j in cols):
                 continue
@@ -455,6 +678,9 @@ def compare(ib, lane, gpu_json, cpu_json, fixtures, log, backend="gpu"):
     if r.returncode:
         tail = " | ".join(line for line in r.stdout.splitlines() if "FAIL" in line or "REFUS" in line)[:400]
         return "NOTHING COMPARED", f"the diff failed (exit {r.returncode}) without a disagreement: {tail}"
+    if axis:
+        return "AGREE", (f"compared {counts} ({backend} two-device column MOJOLEARN_PAR_DEVICES={PAR_TWO_DEVICES} "
+                         f"vs one-device column MOJOLEARN_PAR_DEVICES={PAR_ONE_DEVICE})")
     return "AGREE", f"compared {counts} ({backend} column vs CPU column {cols[1][0]})"
 
 
@@ -612,26 +838,24 @@ def prove_arm(driver, patch, log, where="seam check"):
 
 def check(ib, lanes, needed, backend, fixtures, out, stage, log, pass_no=1):
     """Build what is stale, run both arms per lane, return {lane: verdict}."""
-    ensure_built(set().union(*needed.values()), log, publish=stage != "sabotaged")
+    ensure_built(set().union(*[arms_bindings(l, needed[l], backend) for l in lanes]), log,
+                 publish=stage != "sabotaged")
     if stage == "clean":
         seam_checks(ib, lanes, log, pass_no)
     verdicts = {}
     for lane in lanes:
         gpu_json, cpu_json = out / f"{stage}.{lane}.gpu.json", out / f"{stage}.{lane}.cpu.json"
-        grc = run_arm("gpu", lane, backend, fixtures, gpu_json, log, moved_ok=stage == "sabotaged")
-        crc = run_arm("cpu", lane, backend, fixtures, cpu_json, log, moved_ok=stage == "sabotaged",
-                      refusal_ok=lane.startswith("par-"))
-        known, why = (False, "")
-        if crc and not grc:
-            known, why = known_cpu_refusal(ib, lane, gpu_json, cpu_json, fixtures)
-        if known:
-            verdict, detail = KNOWN_REFUSAL, why
-        elif crc and stage != "sabotaged":
+        if par_axis(lane, backend):
+            say(f"{lane}: device axis on {device_count(backend)} {backend} devices: lane arm "
+                f"MOJOLEARN_PAR_DEVICES={PAR_TWO_DEVICES} under the witness, reference arm "
+                f"MOJOLEARN_PAR_DEVICES={PAR_ONE_DEVICE}; no CPU arm")
+        run_arm("gpu", lane, backend, fixtures, gpu_json, log, moved_ok=stage == "sabotaged")
+        crc = run_arm("cpu", lane, backend, fixtures, cpu_json, log, moved_ok=stage == "sabotaged")
+        verdict, detail = compare(ib, lane, gpu_json, cpu_json, fixtures, log, backend)
+        if crc and verdict != NOT_APPLICABLE and stage != "sabotaged":
             tail = Path(log).read_text(errors="replace").splitlines()[-15:]
-            raise Fail(f"{lane}: the cpu arm failed (exit {crc}; not the by-design refusal: {why}); last lines "
-                       f"of {log}:\n    " + "\n    ".join(tail))
-        else:
-            verdict, detail = compare(ib, lane, gpu_json, cpu_json, fixtures, log, backend)
+            raise Fail(f"{lane}: the cpu arm failed (exit {crc}; not the by-design refusal: {verdict}: "
+                       f"{detail}); last lines of {log}:\n    " + "\n    ".join(tail))
         print(f"{stage.upper()}: {lane}: {verdict}: {detail}", flush=True)
         verdicts[lane] = verdict
     return verdicts
@@ -672,17 +896,18 @@ def main(argv=None):
         say(f"{platform.node()} {platform.machine()} backend={backend} lanes={','.join(lanes)} out={out}")
         needed = needed_bindings(lanes)
         for lane in lanes:
-            say(f"{lane} runs: {', '.join(needed[lane])}")
+            say(f"{lane} runs: {', '.join(arms_bindings(lane, needed[lane], backend))}")
 
         clean = check(ib, lanes, needed, backend, a.fixtures, out, "clean", log, a.pass_no)
-        if any(v not in ("AGREE", KNOWN_REFUSAL) for v in clean.values()):
-            raise Fail("clean: " + ", ".join(f"{k} {v}" for k, v in clean.items() if v != "AGREE"))
+        if any(v not in PASSING for v in clean.values()):
+            raise Fail("clean: " + ", ".join(f"{k} {v}" for k, v in clean.items() if v not in PASSING))
         if patch is None:
             agree = [k for k, v in clean.items() if v == "AGREE"]
-            known = [k for k, v in clean.items() if v == KNOWN_REFUSAL]
+            na = [k for k, v in clean.items() if v == NOT_APPLICABLE]
             print("RESULT: PASS (" + "; ".join(
                 (["AGREE on " + ",".join(agree)] if agree else [])
-                + (["KNOWN REFUSAL, CPU arm by design, nothing compared, on " + ",".join(known)] if known else []))
+                + ([f"{NOT_APPLICABLE} (not checked on this box, see each lane's line), nothing compared, on "
+                    + ",".join(na)] if na else []))
                 + ")")
             return 0
 
@@ -694,7 +919,8 @@ def main(argv=None):
         subprocess.run(["git", "apply", str(patch)], cwd=ROOT, check=True)
         applied = True
         say(f"sabotage applied: {', '.join(touched)}")
-        moved = [b for b in sorted(set().union(*needed.values())) if stale(b)]
+        moved = [b for b in sorted(set().union(*[arms_bindings(l, needed[l], backend) for l in lanes]))
+                 if stale(b)]
         python_touched = [p for p in touched if p.startswith("python/") and p.endswith(".py")]
         if not moved and not python_touched:
             raise Fail("the sabotage patch changes no source of any binding these lanes run and no package "
