@@ -129,3 +129,41 @@ paired table (test RMSE; members in parentheses):
 FAST is not worse in a paired sense (taxireg means within the seed spread,
 Istella-S equal); the taxireg spread is the algorithm's instability on this
 target in both modes, not a mode defect. Nothing to revert.
+
+## IDENTICAL before -> after (fit ms, median of 2; every digest/hash equal before and after)
+
+M4 Pro m4pro-a: before a54fadbe3 (main + lane/algos-trees), after 19b23a297.
+
+| algorithm | dataset | before | after | after/before |
+|---|---|---|---|---|
+| ExtraTrees | taxi | 3183 | 2136 | 0.67 |
+| ExtraTrees | taxireg | 8160 | 7097 | 0.87 |
+| ExtraTrees | istellareg | 83352 | 62747 | 0.75 |
+| RandomForest | taxi | 3295 | 3172 | 0.96 |
+| RandomForest | istellareg | 60792 | 52462 | 0.86 |
+| AdaBoostRegressor | taxireg | 3274 | 1837 | 0.56 |
+| AdaBoostClassifier | taxi | 2994 | 2983 | 1.00 |
+| DART | taxi | 6647 | 5589 | 0.84 |
+| DART | taxireg | 6229 | 5333 | 0.86 |
+| Bagging | taxi | 672 | 645 | 0.96 |
+| DecisionTree | istellareg | 848 | 900 | 1.06 |
+
+M3 Ultra m3ultra: before 69cbc0c23 (main + harness; the AdaBoostClassifier
+weight fix is NOT in it), after 19b23a297.
+
+| algorithm | dataset | before | after | after/before |
+|---|---|---|---|---|
+| ExtraTrees | taxi | 1816 | 1049 | 0.58 |
+| ExtraTrees | istellareg | 27017 | 15534 | 0.57 |
+| RandomForest | taxi | 2525 | 2525 | 1.00 |
+| RandomForest | istellareg | 21586 | 25648 | **1.19 (slower)** |
+| DecisionTree | istellareg | 451 | 559 | **1.24 (slower)** |
+| AdaBoostRegressor | taxireg | 4346 | 2047 | 0.47 |
+| DART | taxi | 7466 | 6466 | 0.87 |
+
+The RF / DT slowdown on the M3 Ultra (and DT's 1.06 on the M4 Pro) comes
+from one of the three RF flags turned on for IDENTICAL (row-major bins,
+SIMD-group histogram aggregation, sorted bootstrap rows): probe arms, one
+flag off each, are queued on m3ultra (branch lane/trees-apple-probe, not
+for merge). N_BLKS_FOR_COLS 40 was already reverted for IDENTICAL (RF
+Istella-S 60.8 -> 91.0 s on the M4 Pro, same hash).
