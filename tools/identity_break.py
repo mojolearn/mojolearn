@@ -1033,6 +1033,9 @@ LANES = {}
 #: next record instead of DIVERGENT on a user's machine. `umap` also joins
 #: host_surface.PUBLIC_PENDING_LANES as `stale reference` until that record.
 LANE_REVISIONS = {
+    "trees-dart-options": "tree-shap-zero-cover-path-1",
+    "trees-shap-tree": "tree-shap-zero-cover-path-1",
+
     "x-glm-poisson": "portable-positive-target-exp-1",
     "x-glm-gamma": "portable-positive-target-exp-1",
     "x-glm-tweedie": "portable-positive-target-exp-1",
@@ -1180,6 +1183,9 @@ def lane_floors():
 #: key lands here with a sentence saying what moved. An entry whose key does
 #: name a size is refused by name, so this cannot become a way of opting out.
 NON_SIZE_REVISIONS = {
+    "trees-dart-options": "arithmetic, not input: TreeSHAP skips unreachable zero-cover paths before zero-over-zero unwinding; old NaN output hashes are not valid references; fixture sizes unchanged",
+    "trees-shap-tree": "arithmetic, not input: TreeSHAP skips unreachable zero-cover paths before zero-over-zero unwinding; old NaN output hashes are not valid references; fixture sizes unchanged",
+
     "x-glm-poisson": "derived target exp now uses repository portable arithmetic instead of platform NumPy SIMD exp; fixture sizes unchanged",
     "x-glm-gamma": "derived target exp now uses repository portable arithmetic instead of platform NumPy SIMD exp; fixture sizes unchanged",
     "x-glm-tweedie": "derived target exp now uses repository portable arithmetic instead of platform NumPy SIMD exp; fixture sizes unchanged",
