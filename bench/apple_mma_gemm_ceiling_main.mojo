@@ -17,7 +17,7 @@ transposed 8x8 load.
 from std.ffi import external_call
 from std.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
-from std.sys.info import _accelerator_arch
+from core.apple_air import simdgroup_load_legacy_air
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext
 from max.gpu.memory import AddressSpace
@@ -33,8 +33,7 @@ def _sg_load_t(
     stride: Int,
 ) -> _M64:
     """M[r][c] = p[c * stride + r] (see fast_mma_knn._sg_load_t)."""
-    comptime arch = _accelerator_arch()
-    comptime if "metal:1" in arch or "metal:2" in arch or "metal:3" in arch:
+    comptime if simdgroup_load_legacy_air():
         return external_call["air.simdgroup_matrix_8x8_load.v64f32.p3f32", _M64](
             p, Int64(stride), _V2(0, 0), True
         )

@@ -155,6 +155,7 @@ from gbdt.options.catboost_options import (
 )
 from gbdt.targets.kernel.multilogit import (
     launch_multilogit_value_and_der_search,
+    launch_multi_rmse_value_and_der,
     launch_one_vs_all_value_and_der,
     multilogit_blocks,
 )
@@ -162,6 +163,7 @@ from gbdt.targets.kernel.pointwise_targets import (
     MSE_BLOCK_SIZE,
     OBJECTIVE_MULTICLASS,
     OBJECTIVE_MULTICLASS_OVA,
+    OBJECTIVE_MULTIRMSE,
     OBJECTIVE_PAIR_LOGIT,
     OBJECTIVE_QUERY_RMSE,
     OBJECTIVE_YETI_RANK,
@@ -628,6 +630,9 @@ struct TEstimationWorkspace(Movable):
 
     var n_rows_key: Int
     var approx_dim_key: Int
+    #: the gathered target's plane count: 1, or the target dimension for
+    #: MultiRMSE, whose target is dim-major planes like the cursor
+    var target_planes_key: Int
     var n_leaves_cap: Int
     var g_target: DeviceBuffer[DType.float32]
     var g_weights: DeviceBuffer[DType.float32]
@@ -659,6 +664,7 @@ struct TEstimationWorkspace(Movable):
         (`gbdt/gpu_util/arena.mojo`) for the batched path."""
         self.n_rows_key = n_rows
         self.approx_dim_key = 1
+        self.target_planes_key = 1
         self.n_leaves_cap = n_leaves
         self.g_target = arena.device[DType.float32](ctx, n_rows)
         self.g_weights = arena.device[DType.float32](ctx, n_rows)
@@ -679,11 +685,15 @@ struct TEstimationWorkspace(Movable):
         n_rows: Int,
         approx_dim: Int,
         n_leaves: Int,
+        target_planes: Int = 1,
     ) raises:
         self.n_rows_key = n_rows
         self.approx_dim_key = approx_dim
+        self.target_planes_key = target_planes
         self.n_leaves_cap = n_leaves
-        self.g_target = ctx.enqueue_create_buffer[DType.float32](n_rows)
+        self.g_target = ctx.enqueue_create_buffer[DType.float32](
+            target_planes * n_rows
+        )
         self.g_weights = ctx.enqueue_create_buffer[DType.float32](n_rows)
         self.g_cursor = ctx.enqueue_create_buffer[DType.float32](
             approx_dim * n_rows
@@ -771,15 +781,24 @@ def _estimate_and_apply(
     # contents drained at that task's tail (DEVIATION 1891), and the
     # gathers below overwrite every cell this task reads.
     stage_times.begin(ctx)
+    # MultiRMSE's target is `approx_dim` dim-major planes (their
+    # `targets + idx + dim * targetAlignSize`, `multilogit.cu:514`); every
+    # other loss carries one target per row
+    var target_planes = 1
+    if objective == OBJECTIVE_MULTIRMSE:
+        target_planes = approx_dim
     if (
         len(est_ws) == 0
         or est_ws[0].n_rows_key != n_rows
         or est_ws[0].approx_dim_key != approx_dim
+        or est_ws[0].target_planes_key != target_planes
         or est_ws[0].n_leaves_cap < n_leaves
     ):
         est_ws.clear()
         est_ws.append(
-            TEstimationWorkspace(ctx, n_rows, approx_dim, n_leaves)
+            TEstimationWorkspace(
+                ctx, n_rows, approx_dim, n_leaves, target_planes
+            )
         )
     # DEVIATION 3041: the oracle's device buffers from the fit's pool (keyed
     # exactly; see `OracleScratchPool`), taken as handle views BEFORE the
@@ -801,10 +820,17 @@ def _estimate_and_apply(
     ref h_ps = est_ws[0].h_ps
     ref d_est = est_ws[0].d_est
     ref h_est = est_ws[0].h_est
-    launch_gather_with_mask_f32(
-        ctx, g_target, targets, row_index, n_rows,
-        UInt32(0xFFFFFFFF),
-    )
+    if target_planes > 1:
+        # MultiRMSE: EVERY target plane into bin order, as the cursor below
+        launch_gather_planes_with_mask_f32(
+            ctx, g_target, targets, row_index, n_rows,
+            UInt32(0xFFFFFFFF), target_planes, n_rows,
+        )
+    else:
+        launch_gather_with_mask_f32(
+            ctx, g_target, targets, row_index, n_rows,
+            UInt32(0xFFFFFFFF),
+        )
     if has_weights:
         launch_gather_with_mask_f32(
             ctx, g_weights, weights, row_index, n_rows,
@@ -1163,6 +1189,7 @@ def estimate_can_batch(
     if (
         objective == OBJECTIVE_MULTICLASS
         or objective == OBJECTIVE_MULTICLASS_OVA
+        or objective == OBJECTIVE_MULTIRMSE
         or objective == OBJECTIVE_PAIR_LOGIT
         or objective == OBJECTIVE_YETI_RANK
         or objective == OBJECTIVE_QUERY_RMSE
@@ -1616,6 +1643,41 @@ def fit_with_test(
                 + String(num_classes)
             )
         approx_dim = num_classes
+    elif objective == OBJECTIVE_MULTIRMSE:
+        # `GetDim()` is `NumClasses`, which MultiRMSE sets to the target
+        # dimension (`multiclass_targets.h:155-156`); `num_classes` carries
+        # that dimension here, and `targets` holds that many dim-major
+        # planes of `n_rows`. Their `CB_ENSURE(NumClasses > 1, "Only one
+        # class found, can't learn multiclass objective")` (`:167`).
+        if num_classes < 2:
+            raise Error(
+                "Only one class found, can't learn multiclass objective"
+                " (MultiRMSE needs a target dimension >= 2, their"
+                " multiclass_targets.h:167); got " + String(num_classes)
+            )
+        approx_dim = num_classes
+        if leaf_estimation_method == LEAF_ESTIMATION_EXACT:
+            raise Error(
+                "Exact leaves estimation is one-dimensional"
+                " (ComputeExactValue, permutation_der_calcer.h:98-110);"
+                " MultiRMSE does not reach it"
+            )
+        if use_pointwise_searcher:
+            # their MultiRMSE trainer is `TGpuTrainer<
+            # TMultiClassificationTargets>` through the GREEDY subsets
+            # searcher's template (`cuda/train_lib/multiclass.cpp:1-13`);
+            # the doc-parallel oblivious searcher is single-target
+            raise Error(
+                "use_pointwise_searcher is TDocParallelObliviousTreeSearcher,"
+                " a single-target searcher; MultiRMSE is trained by"
+                " TGreedySubsetsSearcher only (cuda/train_lib/multiclass.cpp:"
+                "1-13)"
+            )
+        if test.__bool__() and test.value().n_rows > 0:
+            raise Error(
+                "MultiRMSE with an eval set is not carried here: the held-out"
+                " arm's target is one value per row"
+            )
     var stat_count = 1 + approx_dim
 
     _ = child_hessian_threshold(min_child_hessian, grow_policy, score_function)
@@ -1648,7 +1710,14 @@ def fit_with_test(
                 + " is grown by TGreedySubsetsSearcher<TNonSymmetricTree>"
                 " only (pointwise_non_symmetric.cpp:5-29)"
             )
-        if objective == OBJECTIVE_MULTICLASS or objective == OBJECTIVE_MULTICLASS_OVA:
+        if (
+            objective == OBJECTIVE_MULTICLASS
+            or objective == OBJECTIVE_MULTICLASS_OVA
+            or objective == OBJECTIVE_MULTIRMSE
+        ):
+            # MultiRMSE is registered beside them, the same way
+            # (`multiclass.cpp:13`).
+            #
             # their GPU trainer registry has NO (MultiClass, Depthwise) or
             # (MultiClass, Lossguide) entry -- `multiclass.cpp:5-14`
             # registers the multiclass targets at the default grow policy
@@ -1702,6 +1771,19 @@ def fit_with_test(
     # (`modelToExport.SetBias(cursors->StartingPoint)`, `:434`).
     var starting_approx = Float64(0.0)
     if boost_from_average:
+        if objective == OBJECTIVE_MULTIRMSE:
+            # THEIR LIST HAS MultiRMSE (`catboost_options.cpp:705-709`) and
+            # their `CalcOptimumConstApprox` gives it a per-dimension start
+            # (`optimal_const_for_loss.h:230-239`); the model's bias here
+            # is ONE Float64 (`TAdditiveModel.bias`, the model text's one-
+            # token `bias` record), so the per-dimension `SetBias` is not
+            # carried and the option is refused by name
+            raise Error(
+                "boost_from_average with loss MultiRMSE is not carried here:"
+                " its StartingPoint is per-dimension"
+                " (optimal_const_for_loss.h:230-239) and this model's bias is"
+                " one value"
+            )
         if approx_dim != 1:
             raise Error(
                 "boost_from_average is one-dimensional here; their ENSURE"
@@ -2075,6 +2157,7 @@ def fit_with_test(
     if second_order and (
         objective == OBJECTIVE_MULTICLASS
         or objective == OBJECTIVE_MULTICLASS_OVA
+        or objective == OBJECTIVE_MULTIRMSE
     ):
         # their `CB_ENSURE(!secondDerAsWeights, ...)`
         # (`multiclass_targets.cpp:27`), raised at fit entry rather than
@@ -2203,6 +2286,18 @@ def fit_with_test(
             # `1 + NumClasses` because there is no pinned class to drop.
             launch_one_vs_all_value_and_der[True](
                 ctx, num_classes, n_rows, targets, weights, has_weights,
+                lcur, n_rows, row_index, False,
+                fv_part, True,
+                stats, n_rows,
+                mag_part, mags_in_mse,
+            )
+        elif objective == OBJECTIVE_MULTIRMSE:
+            # the same `StochasticDer`, its `MultiRMSE` arm (`:61-68`):
+            # column 0 the weights, columns 1.. `diff * weight` per target
+            # dimension, the target read as `num_classes` dim-major planes
+            launch_multi_rmse_value_and_der[True](
+                ctx, num_classes, n_rows, targets, n_rows,
+                weights, has_weights,
                 lcur, n_rows, row_index, False,
                 fv_part, True,
                 stats, n_rows,
@@ -2910,7 +3005,17 @@ def fit_with_test(
     # ~n_blocks and wrote past the buffer (caught by the predict repro:
     # replay 36.52 vs a claimed 8.91 final loss, ratio ~= the block count).
     var final_blocks = mse_blocks
-    if objective == OBJECTIVE_MULTICLASS_OVA:
+    if objective == OBJECTIVE_MULTIRMSE:
+        final_blocks = multilogit_blocks(n_rows)
+        launch_multi_rmse_value_and_der[True](
+            ctx, num_classes, n_rows, targets, n_rows,
+            weights, has_weights,
+            cursor, n_rows, row_index, False,
+            fv_part, True,
+            stats, n_rows,
+            mag_part, False,
+        )
+    elif objective == OBJECTIVE_MULTICLASS_OVA:
         final_blocks = multilogit_blocks(n_rows)
         launch_one_vs_all_value_and_der[True](
             ctx, num_classes, n_rows, targets, weights, has_weights,
