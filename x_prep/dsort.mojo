@@ -28,7 +28,7 @@ order to keep: the result is the heapsort's, bit for bit, by construction.
 """
 from std.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast, stack_allocation
-from max.gpu.host import DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.numerics import ftz
@@ -143,13 +143,15 @@ def sort_scratch_words(n: Int, cols: Int) -> Int:
     return max(cols, 0) * big_n
 
 
-def sort_cols_device(ctx: DeviceContext, f: FP, w: UP, cols: Int, X: Int, n: Int, d: Int, S: Int,
-                     cn: Int) raises:
+def sort_cols_device(ctx: DeviceContext, df: DeviceBuffer[DType.float32], dw: DeviceBuffer[DType.uint32],
+                     cols: Int, X: Int, n: Int, d: Int, S: Int, cn: Int) raises:
     """Enqueue the sort of columns 0 .. cols-1 of X[n, d] into S[c*n : c*n+n]
     (the unit's layout; `cols` is the stage's unit count) on the device arena
     `f`, through the scratch `w` of at least sort_scratch_words(n, cols) words."""
     if n <= 0 or cols <= 0:
         return
+    var f = df.unsafe_ptr()
+    var w = dw.unsafe_ptr()
     var big_n = TILE
     while big_n < n:
         big_n *= 2

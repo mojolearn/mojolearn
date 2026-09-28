@@ -83,7 +83,7 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int) 
         var qp = dq.unsafe_ptr() + (s * STAGE_INTS + 2)
         if op == OP_SORT_COLS:
             var hq = host_q + (s * STAGE_INTS + 2)
-            sort_cols_device(ctx, df.unsafe_ptr(), dw.unsafe_ptr(), total, Int(hq[0]), Int(hq[1]), Int(hq[2]),
+            sort_cols_device(ctx, df, dw, total, Int(hq[0]), Int(hq[1]), Int(hq[2]),
                              Int(hq[3]), Int(hq[4]))
             continue
         comptime for k in range(N_OPS):
