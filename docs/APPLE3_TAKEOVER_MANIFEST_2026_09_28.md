@@ -39,3 +39,20 @@ These are existing runs, not new tests launched by integration:
 - `~/mojolearn-evidence/ann-apple3/local1_laptop-M4_fast.txt`: selected FAST arms and final five-seed recall/trustworthiness/KL records. This does not qualify all unselected opt-in kernels or the combined integration.
 - `~/mojolearn-evidence/linear-apple3/localA_laptopM4.out`: completed JOBDONE/LOCALDONE, 255 QUAL3 rows across before/blocks and GPU/host. Objectives mostly close or improved; paired logistic-CV objective deltas reach +6.25e-6 and ridge-classifier accuracy falls by up to 6e-5 in these printed rows. Acceptance requires the documented tolerance/quality contract, not successful process exit alone. The run commit 110133718 precedes later fold-wrapper changes.
 - `~/mojolearn-evidence/prep-apple3/laptop1_tip.txt`: tip run ended with exit_code 0. Original M3 paired records remain the source of the documented baseline comparisons.
+
+## Disabled code still needs a native build gate
+
+Runtime-off and compile-switch-off do not establish that the default binding builds. In particular:
+
+| Default build surface | Why disabled experiments still matter |
+|---|---|
+| `x_decomp/device.mojo` → `x_decomp/jacobi_par.mojo` | Round-robin kernels are imported unconditionally; environment thresholds only prevent execution. This is the clearest new unbuilt parse/type risk. |
+| `ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo` → `x_ann/kpp_seed.mojo` | Host seeding helper is unconditionally imported even though the new seeding route is opt-in. |
+| `x_ann/{cagra_device,tsne_device,ivf_scan_device,ivf_pq_device}.mojo` | New disabled kernel definitions share modules imported by default ANN bindings. |
+| `x_cluster/{device_ops,agglo,affinity,bayesian_gmm}.mojo` | New kernel bodies and opt-in dispatch share existing default modules. |
+| `bindings/_mojolearn_x_metrics{,_host}.mojo` → `x_metrics/epilogue.mojo` | New host helpers/exports compile regardless of the Python `MOJOLEARN_MSEL3` switch. |
+| `ensemble/randomforest.mojo`, RF builder and GBDT non-symmetric driver | Session exports and experimental definitions share default binding source closures. |
+
+By contrast, `x_linear/device.mojo` imports block solvers inside comptime-selected branches, and newer neighbors experiment modules are selected by compile-time imports. The default builds still need verification; opt-in arms separately need their actual selected build and quality checks. No compiler success is inferred from Python AST parsing.
+
+A suitable first gate is one bounded default native build per changed binding/mode from the final combined source, with numerical build gates disabled during compilation and compiler logs retained. Then run the coordinated identity/quality/timing selection; do not silently transplant arbitrary old binaries into the new source tree. This document does not authorize starting builds on M2 or reviving M3.
