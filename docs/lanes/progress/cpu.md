@@ -4,26 +4,66 @@ Lane `cpu` (CURRENT DIRECTIVES 1c + LANE CHARTER): the CPU-path audit, gap
 fixes and shared CPU infrastructure. Per-family CPU speed belongs to each
 family lane's phase 5 (handed off below).
 
-## Where this lane stands (2026-09-27, end of session 1)
+## Where this lane stands (2026-09-28, session 2)
 
-**Nothing merged to main yet.** Branch `lane/cpu` (pushed) holds three fixes.
-Two are proven on the NVIDIA pod; the tip is not re-proven because the pod was
-deleted mid-session: **RunPod refused a replacement with "account balance is
-too low to rent a pod"**. The next session needs funds on RunPod first.
+**MERGED to main (session 2):** the lane/cpu fixes of session 1 plus the
+host FP-environment unification.
 
-| commit | what | proof so far |
-|---|---|---|
-| d49fb66b + 059d3661f | `PCA(whiten=False).inverse_transform` and `TruncatedSVD.inverse_transform` REFUSED on every CPU-only install (the estimators host binding exported no `inverse_transform`). `core/classical_host_predict.mojo::host_inverse_transform_into` restates `decomposition/estimator.mojo::inverse_transform_host` (transpose copy, pinned `gemm_nt` cell, `shift_columns_kernel` +mean cell). New lanes `pca-inverse`, `tsvd-inverse`, `pca-whiten-inverse` (the whitened entry was exported and never hashed), PENDING "no reference". | RTX 4090 pod: `algos_lane_check.sh pca-inverse,pca-whiten-inverse,tsvd-inverse` RESULT: PASS (AGREE, 9/9 fixtures, train/infer/model/batch). Sabotage arms, all PASS (AGREE, DISAGREE, AGREE): fold order on pca-inverse+tsvd-inverse, mean epilogue on pca-inverse, whitened fold order on pca-whiten-inverse (patches in ~/mojolearn-evidence/cpu/patches/). test_host_surface 196 passed. Steward request 1790547256881-cpu-059d3661f8 queued (m2pro, m3ultra, do-amd). |
-| 762f811cc, 81b443e9e | **THREAD-COUNT BUG (DEVIATION 5900).** Mojo's runtime worker threads run with FTZ+DAZ (MXCSR 0x9fe0 on every `sync_parallelize` task, even at n=1; 0x1fa0 on the calling thread; EPYC 7352). Host paths' bits depended on the thread count: `LogisticRegression(penalty=None, fit_intercept=False).predict_proba` on `dupes` flushed a float64 8.22e-309 to 0 on a worker and read DIVERGENT CPU vs CUDA at the default thread count, IDENTICAL at MOJOLEARN_CPU_THREADS=1. New `core/host_parallel.mojo::host_parallelize` installs the caller's MXCSR (x86) / FPCR (Arm) in every task; every host `sync_parallelize` outside x_*, byte LM and the multi-GPU drivers goes through it, EXCEPT gbdt/train.mojo, gbdt/resident_model.mojo, gbdt/host/gbdt_oracle.mojo and svm/impl/svm_parameter.mojo, which stay main's bytes (see below). Seam check `pixi run check-host-parallel` (core/host_parallel_check.mojo): separation guard (plain workers flush), oracle at 1/2/3/7/16 tasks, sabotage (drop `host_fp_env_set(env)`) FAILS, reversal PASSES. | At 762f811cc on the pod, full columns (440 lanes minus par-*): CPU default threads vs the pre-change CPU column: 3429 cells IDENTICAL, one lane moved (the logistic fix). **CPU at 1 thread vs CPU at 24: every cell IDENTICAL (train 3429, infer/model 4275, batch 2736).** CUDA vs CPU: every non-GBDT cell IDENTICAL, logistic now IDENTICAL; 74 gbdt/cross-val/saved-model `denormal` cells moved on the CUDA column only, because gbdt/train.mojo's host regions (and possibly gbdt/resident_model.mojo) had moved to host_parallelize: the recorded GBDT bits are computed on FTZ/DAZ workers. 81b443e9e restores both files and the oracle to main's bytes. **OWED: re-run the lanes lane_select attributes to 81b443e9e on CUDA and CPU and confirm the 74 cells are back to AGREE**, then test_host_surface and test_lane_select (Mojo imports changed in 36 files), then the stewards. |
+| commit | what |
+|---|---|
+| d49fb66b + 059d3661f | `PCA(whiten=False).inverse_transform` and `TruncatedSVD.inverse_transform` on every CPU-only install (`core/classical_host_predict.mojo::host_inverse_transform_into`); lanes `pca-inverse`, `tsvd-inverse`, `pca-whiten-inverse` (PENDING "no reference"). Sabotage arms bit in session 1 (patches in ~/mojolearn-evidence/cpu/patches/). |
+| 762f811cc, 81b443e9e | DEVIATION 5900, `core/host_parallel.mojo::host_parallelize` (tasks run in the caller's MXCSR/FPCR; Mojo's workers run FTZ+DAZ). |
+| 41f60919d | **ONE module.** `core/host_parallel.mojo` is the only host thread split and absorbs lane/algos-linear's `core/host_fp_env.mojo` (never on main; must not land). `host_parallelize` everywhere, now also svm_parameter's finite scan, the byte LM host rows and its exp check, and the multi-GPU drivers' per-device tasks. `host_parallelize_pool_env` (= the worker's FTZ/DAZ) for the GBDT fit's host regions only (gbdt/train.mojo, gbdt/resident_model.mojo, gbdt/host/gbdt_oracle.mojo): their recorded columns carry the pool's bits. `tools/check_host_parallel_sites.py` refuses a raw `sync_parallelize` anywhere else and runs first in `pixi run check-host-parallel`. IDENTITY_PATHS row 199. |
 
-test_lane_select at d49fb66b: 1 failed, 59 passed: `test_the_wider_mojo_walk_did_not_widen_the_narrow_answers`, `core/forest_host_predict.mojo answers 81 lanes, not 80`. That was the pod's stale checkout of that test (main has since pinned 84); re-run it on the merged tree before merging.
+**Proof on the H100 pod (dpse0qp7knpu44), session 2.** Two trees built from
+scratch: `/root/base` = merge base f237f1996 (main), `/root/mojolearn` =
+lane/cpu 41f60919d. identity_break, every lane, repeats 1 (482 lanes; CPU
+columns include par-*, the CUDA column excludes them). Records in
+`/root/audit3/` on the pod (`d_*.txt` are the diffs).
+- **CPU new vs CPU main (default threads):** every cell IDENTICAL except
+  `logistic-unpenalized-no-intercept/dupes` infer + batch (DEVIATION 5900's
+  cell) and the three new inverse lanes (ONE-COLUMN).
+- **That cell was the ONLY thread-count-dependent cell on main:** main's CPU
+  column at MOJOLEARN_CPU_THREADS=1 vs default differs there and nowhere
+  else (train 4014, infer/model 5075, batch 3239 IDENTICAL).
+- **CPU new at 1, 3 and default threads:** every cell IDENTICAL (train 4041,
+  infer/model 5130, batch 3267).
+- **CUDA new vs CUDA main:** every cell IDENTICAL (train 3789, infer/model
+  4680, batch 3024, rlpair 180, batchgrad 144). The 74 GBDT `denormal` cells
+  that moved at 762f811cc are back: that was the OWED re-run of 81b443e9e.
+- **CUDA new vs CPU new:** every compared cell IDENTICAL; the logistic cell
+  now agrees (it was DIVERGENT on main). pca-inverse, tsvd-inverse,
+  pca-whiten-inverse: CPU == CUDA on all 9 fixtures.
+- Seam `pixi run check-host-parallel`: PASS (caller 0x1fa0). Sabotage (drop
+  `host_fp_env_set(env)`, patches/host_parallel_fp_env.patch): FAIL (task
+  results 0.0 != 8.33e-309, env 0x9ff0 != 0x1fa0); reversed: PASS. Site
+  sabotage (svm_parameter back to `sync_parallelize`): the site check FAILS
+  naming svm_parameter.mojo:317. On origin/main the site check names 37 raw
+  sites.
+- byte LM exhaustive exp check (2^32 patterns, now on host_parallelize): PASS.
+- test_host_surface 200 passed; test_lane_select 69 passed (six of them
+  with MOJOLEARN_LANE_SELECT_TEST_FORCE=1: the pod tree's host_surface.py
+  differs from its merge base, which is the lane's own change; the manifest
+  was byte-identical after the run).
+
+**For lane/algos-linear:** rebase onto main and drop `core/host_fp_env.mojo`
+and its `host_ieee_fp_enter/leave` calls; `core/classical_host_predict.mojo`
+and `glm/estimator.mojo::qn_softmax_host` already split through
+`host_parallelize` on main.
 
 ## Next session, in order
 
-1. Fund RunPod (Andrew), `tools/dev_pod.sh up cpu 240` (the dead pod's state was set aside as `~/mojolearn-evidence/devpods/cpu/state.env.pod-gone-9lp0cbmrc2c4km`), build every binding (`~/mojolearn-evidence/cpu/build_all.py`).
-2. The OWED run above for 81b443e9e; then `algos_lane_check.sh pca-inverse,pca-whiten-inverse,tsvd-inverse` on the merged tree, test_host_surface, test_lane_select; steward status for 1790547256881-cpu-059d3661f8; submit the tip with `--sabotage` = the fold-order patch (or split: merge d49fb66b..059d3661f alone first if the tip needs more work).
-3. Merge, message main one line per merge.
-4. The GBDT environment question (for lane trees): the device fit's border search runs on FTZ/DAZ workers; gbdt/host/gbdt_oracle.mojo runs small fits (`n_rows * n_features < 2^18`) SERIALLY on the calling thread (IEEE, no DAZ) and larger ones on the pool. On the recorded fixtures GPU and CPU agree, but a small fit whose border search reads a subnormal feature is exposed to DAZ on one side only. Pin one environment for both sides (the pool's, or host_parallelize on both with the GBDT columns re-recorded); it moves recorded GBDT bits, so it is the trees lane's call with a column re-record.
+1. The one-device plain fallback for the 31 par-* lanes that refuse on a
+   CPU-only install (work in progress on lane/cpu, see "par-* fallback").
+2. Probe-recipe gaps in tools/cpu_path_audit.py (82 rows fail on BOTH
+   columns; list in "The audit").
+3. Keep the audit table current.
+4. The GBDT environment question (lane trees' call, with a column
+   re-record): the GBDT fit's host regions keep the pool's FTZ/DAZ through
+   `host_parallelize_pool_env`; gbdt_oracle's serial small-fit arm
+   (`n_rows * n_features < 2^18`) runs on the calling thread (IEEE). On the
+   recorded fixtures GPU and CPU agree; a small fit whose border search reads
+   a subnormal feature is exposed.
 
 ## The audit (phase 1, step 1)
 
