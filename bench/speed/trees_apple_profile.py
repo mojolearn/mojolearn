@@ -153,6 +153,10 @@ def main(argv=None):
         rec.setdefault("infer_ms", []).append(round((time.perf_counter() - t1) * 1000.0, 1))
         digests.append(_digest(outs))
     rec["ms"], rec["digests"] = ms, digests
+    for attr in ("estimator_errors_", "estimator_weights_"):
+        if hasattr(model, attr):
+            rec[attr] = [round(float(v), 6) for v in list(getattr(model, attr))[:12]]
+            rec["n_members"] = len(list(getattr(model, attr)))
     pred = _outputs(model, a.est, xt)[0]
     if a.est in ("iforest", "embedding"):
         rec["quality"] = None
