@@ -815,7 +815,10 @@ def _zeros(count: Int) -> List[Float32]:
 def _glm_objective(
     mut b: XB, mut pa: Part, ctx: DeviceContext, th: FP, toff: Int, m: Int, power: Float32,
     link: Int, alpha: Float32, den: Float32,
-) raises -> Float32:
+) raises -> Float64:
+    """The objective in float64: the block partials of the loss terms summed
+    in float64 and NOT rounded back, so the line search can see a decrease
+    below float32's resolution of the objective."""
     b.param(b.d + 1, power)
     b.upload(ctx, th, toff, m)
     ctx.enqueue_function[xb_glm_kernel](
@@ -824,12 +827,12 @@ def _glm_objective(
         grid_dim=b.nb, block_dim=XB_TPB,
     )
     pa.fetch(ctx)
-    var acc = pa.total(0)
-    var reg = Float32(0)
+    var acc = pa.total64(0)
+    var reg = Float64(0)
     for j in range(b.d):
-        var w = ld(th, toff + j)
-        reg = fmad(w, w, reg)
-    return fa(fd(acc, den), fm(fm(Float32(0.5), alpha), reg))
+        var w = Float64(ld(th, toff + j))
+        reg += w * w
+    return acc / Float64(den) + 0.5 * Float64(alpha) * reg
 
 
 def glm_fit_blocks(
@@ -837,7 +840,15 @@ def glm_fit_blocks(
     ip: List[Int32], fp: List[Float32], res: FP,
 ) raises:
     """x_linear/glm.mojo `glm_fit` (Newton-Cholesky, the Armijo halving),
-    its row passes in blocks. res: coef d, intercept, n_iter, converged."""
+    its row passes in blocks. res: coef d, intercept, n_iter, converged.
+
+    Two differences from the one-block fit, both toward the minimizer:
+    the Armijo test compares float64 objectives (the one-block fit's
+    float32 objective cannot show a decrease under 6e-8 of its value, and
+    its fit then stops or wanders on rounding), and when the gradient meets
+    `tol` ONE more Newton step is taken if it lowers the objective (Newton
+    converges quadratically, so that step lands on the minimizer at
+    float32's resolution of the coefficients)."""
     var max_iter = Int(ip[0])
     var fi = Int(ip[1]) != 0
     var link = Int(ip[2])
@@ -889,7 +900,6 @@ def glm_fit_blocks(
         for j in range(m):
             for k in range(j + 1):
                 st(fw, h + j * m + k, pb.total(m + j * (j + 1) // 2 + k))
-        var flag = 0
         var slope = Float32(0)
         var inv_n = fd(Float32(1), den)
         var gmax = Float32(0)
@@ -899,30 +909,26 @@ def glm_fit_blocks(
                 gj = fmad(alpha, ld(res, j), gj)
             st(fw, g + j, gj)
             gmax = fmax(gmax, fabs(gj))
-        if gmax <= tol:
-            flag = 1
-        else:
-            for j in range(m):
-                for k in range(j + 1):
-                    var v = fm(ld(fw, h + j * m + k), inv_n)
-                    if j == k and j < d:
-                        v = fa(v, alpha)
-                    st(fw, h + j * m + k, v)
-                    st(fw, h + k * m + j, v)
-            for j in range(m):
-                st(fw, step + j, -ld(fw, g + j))
-            var ok = cholesky(fw, h, m)
-            if ok:
-                chol_solve(fw, h, m, fw, step)
-            for j in range(m):
-                slope = fmad(ld(fw, g + j), ld(fw, step + j), slope)
-            if not (slope < 0):
-                flag = 2
-        if flag == 1:
-            converged = True
-            break
-        iters = it + 1
-        if flag == 2:
+        # the tolerance is met: one more step, then stop
+        var met = gmax <= tol
+        for j in range(m):
+            for k in range(j + 1):
+                var v = fm(ld(fw, h + j * m + k), inv_n)
+                if j == k and j < d:
+                    v = fa(v, alpha)
+                st(fw, h + j * m + k, v)
+                st(fw, h + k * m + j, v)
+        for j in range(m):
+            st(fw, step + j, -ld(fw, g + j))
+        var ok = cholesky(fw, h, m)
+        if ok:
+            chol_solve(fw, h, m, fw, step)
+        for j in range(m):
+            slope = fmad(ld(fw, g + j), ld(fw, step + j), slope)
+        if not (slope < 0):
+            converged = met
+            if not met:
+                iters = it + 1
             break
         var tt = Float32(1)
         var accepted = False
@@ -930,12 +936,18 @@ def glm_fit_blocks(
             for j in range(m):
                 st(fw, trial + j, fmad(tt, ld(fw, step + j), ld(res, j)))
             var ft = _glm_objective(b, pa, ctx, fw, trial, m, power, link, alpha, den)
-            if ft == ft and ft <= fa(f, fm(fm(Float32(1e-4), tt), slope)):
+            if ft == ft and ft <= f + 1.0e-4 * Float64(tt) * Float64(slope):
                 copy(res, 0, fw, trial, m)
                 f = ft
                 accepted = True
                 break
             tt = fm(tt, Float32(0.5))
+        if met:
+            converged = True
+            if accepted:
+                iters = it + 1
+            break
+        iters = it + 1
         if not accepted:
             break
     if not fi:
