@@ -11,7 +11,7 @@ __all__ = ['predict_arima', 'forecast_arima', 'predict_exponential_smoothing',
 import copy
 from ._parallel_pool import DevicePool
 from ._buffer import empty, addr, addr_ro
-from ._bufcheck import memcopy
+from ._bufcheck import flat_view, memcopy
 
 
 def _ranges(count, width):
@@ -84,6 +84,41 @@ def forecast_arima(estimator, steps, *, exog=None, devices=(0,), series_per_shar
                          exog=exog, devices=devices, series_per_shard=series_per_shard)
 
 
+def _gather_cols(dst, src, rows, batch, lo, w):
+    """dst[r * w + j] = src[r * batch + lo + j] for r < rows, j < w: one
+    strided slice copy per column when there are fewer columns than rows
+    (the default one series per shard), else one memcopy per row (lane
+    py-sequence; it was one memcopy per row always, 3 x steps calls per
+    shard). The same bytes land in the same places."""
+    if w <= rows:
+        try:
+            d, s = flat_view(dst, 'f'), flat_view(src, 'f')
+            for j in range(w):
+                d[j::w] = s[lo + j:rows * batch:batch]
+            return
+        except (TypeError, ValueError, NotImplementedError):
+            pass
+    for r in range(rows):
+        memcopy(addr(dst, name='components') + r * w * 4,
+                addr_ro(src, name='components') + (r * batch + lo) * 4, w * 4)
+
+
+def _scatter_cols(dst, src, rows, batch, lo, w):
+    """dst[r * batch + lo + j] = src[r * w + j] for r < rows, j < w, as
+    `_gather_cols`."""
+    if w <= rows:
+        try:
+            d, s = flat_view(dst, 'f'), flat_view(src, 'f')
+            for j in range(w):
+                d[lo + j:rows * batch:batch] = s[j:rows * w:w]
+            return
+        except (TypeError, ValueError, NotImplementedError):
+            pass
+    for r in range(rows):
+        memcopy(addr(dst, name='predictions') + (r * batch + lo) * 4,
+                addr_ro(src, name='prediction shard') + r * w * 4, w * 4)
+
+
 def predict_exponential_smoothing(estimator, start, end, *, index=None,
                                   devices=(0,), series_per_shard=1):
     """GPU out-of-sample Holt-Winters predictions, with exclusive ``end``.
@@ -122,13 +157,8 @@ def predict_exponential_smoothing(estimator, start, end, *, index=None,
         part.ts_num = hi - lo
         part._components_len = steps * part.ts_num
         part._comps = empty((3 * part._components_len,), '<f4')
-        for component in range(3):
-            for row in range(steps):
-                memcopy(addr(part._comps, name='components') +
-                        (component * steps + row) * part.ts_num * 4,
-                        addr_ro(estimator._comps, name='components') +
-                        ((component * steps + row) * batch + lo) * 4,
-                        part.ts_num * 4)
+        # rows r = component * steps + step: dst[r * w + j] = src[r * batch + lo + j]
+        _gather_cols(part._comps, estimator._comps, 3 * steps, batch, lo, hi - lo)
         requests.append(('forecast_predict', part, ('predict', (start, end))))
     parts = _run(requests, devices)
     width = end - start
@@ -137,10 +167,7 @@ def predict_exponential_smoothing(estimator, start, end, *, index=None,
         expected = (width,) if hi - lo == 1 else (width, hi - lo)
         if value.shape != expected or value.dtype != result.dtype:
             raise ValueError('Holt-Winters worker returned an invalid prediction shape or dtype')
-        for row in range(width):
-            memcopy(addr(result, name='predictions') + (row * batch + lo) * 4,
-                    addr_ro(value, name='prediction shard') + row * (hi - lo) * 4,
-                    (hi - lo) * 4)
+        _scatter_cols(result, value, width, batch, lo, hi - lo)
     return estimator._shaped(result, width, index)
 
 

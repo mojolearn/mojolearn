@@ -738,8 +738,8 @@ def lamb_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: 
 
 def layer_norm_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
     """LayerNorm forward and, with dy, backward (`sequence/layernorm.mojo`).
-    addrs = [x (M, D), weight (D) or 0, bias (D) or 0, y (M, D) out,
-    dy (M, D) or 0, dx out or 0, dweight out or 0, dbias out or 0];
+    addrs = [x (M, D), weight (D) or 0, bias (D) or 0, y (M, D) out (0 allowed
+    with backward), dy (M, D) or 0, dx out or 0, dweight out or 0, dbias out or 0];
     ip = [M, D, has_weight, has_bias, backward]; fp = [eps]."""
     if len(addrs) != 8 or len(ip) != 5 or len(fp) != 1:
         raise Error("layer_norm: requires 8 addresses, 5 integer and 1 float parameters")
@@ -820,7 +820,10 @@ def layer_norm_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp:
             ex.download_async(fptr(addrs[6], "dweight"), DW, D)
         if hb:
             ex.download_async(fptr(addrs[7], "dbias"), DB, D)
-    ex.download_async(fptr(addrs[3], "y"), Y, M * D)
+    # a backward call may pass y = 0: y is then recomputed on the device (for
+    # mean / rstd) but never crosses back (lane py-sequence)
+    if not bwd or Int(py=addrs[3]) != 0:
+        ex.download_async(fptr(addrs[3], "y"), Y, M * D)
     ex.sync()
     return PythonObject(M * D)
 
