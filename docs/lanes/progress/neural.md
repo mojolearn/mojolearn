@@ -114,7 +114,7 @@ clip_grad_norm_). Bindings `_mojolearn_{training,mamba,transformer,embedding}`
   that flips the DEVICE switch at its USE site. `tools/algos_lane_check.py`
   and `tools/lane_select.py` read the `# lanes:` line (families whose lanes
   live in identity_break itself).
-- **maximize=** on SGD/Adam/AdamW (DEVIATION 6200, IDENTITY_PATHS row 200,
+- **maximize=** on SGD/Adam/AdamW (DEVIATION 6200, IDENTITY_PATHS row 202,
   lane `optim-maximize`, `training/maximize.mojo`, seam test
   `python/mojolearn/tests/test_optim_maximize_seam.py`).
 - **Fix (6a5a8d67a):** the optim-maximize lane planted its zeros with the

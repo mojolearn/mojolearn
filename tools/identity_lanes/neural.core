@@ -1,0 +1,14 @@
+# The neural family's EXISTING lanes (registered in tools/identity_break.py):
+# checking any of them runs tools/identity_lanes/neural.checks (LANE CHARTER,
+# 2026-09-27: a family lane owns its existing algorithms too).
+transformer
+mamba1
+mamba2
+mamba3
+embedding
+samba
+training-primitives
+optim-adam-clip
+optim-maximize
+mlp
+byte-lm

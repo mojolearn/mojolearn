@@ -3550,10 +3550,23 @@ def _(ml, X, yc, yr, Xh=None):
     one_hot_max_size, so the saved model carries real CTR tables (Borders at
     three priors and FeatureFreq per column, ctr_table and ctr_entry records)
     beside a one-hot column: 20 depth-6 Logloss trees. The held-out rows
-    carry unseen and seen-once categories."""
+    carry unseen and seen-once categories. Fitted on BOTH columns: the CPU
+    column trains through gbdt/host/gbdt_oracle_ctr.mojo (every permutation's
+    ordered Borders columns, its cursor and its leaves) and predicts through
+    HostGBDT."""
     Xc = _ctr_tables_x(X)
-    m = _ctr_saved_or_fit(ml, lambda: _gbdt(ml.GradientBoosting, 
-        n_estimators=20, max_depth=6, loss="Logloss", cat_features=[0, 1, 2]).fit(Xc, yc))
+    m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="Logloss",
+              cat_features=[0, 1, 2]).fit(Xc, yc)
+    # THE PUBLIC LOADER on this model, on both columns: `host_model(<saved
+    # file>)` must answer exactly what the fitted estimator answers. A raise,
+    # not a part, so the recorded cells do not move.
+    with tempfile.TemporaryDirectory(prefix="ib-ctr-tables-") as d:
+        saved = os.path.join(d, "m.npz")
+        m.save(saved)
+        hm = ml.host_model(saved)
+        for got, want in ((hm.predict(Xc), m.predict(Xc)), (hm.predict_proba(Xc), m.predict_proba(Xc))):
+            if not np.array_equal(np.asarray(got), np.asarray(want)):
+                raise RuntimeError("host_model(saved CTR model) does not answer what the estimator answers")
     return _fit(dict(predict=_h(m.predict(Xc)), proba=_h(m.predict_proba(Xc))),
                 m, lambda e: (e.predict(_ctr_tables_xh(Xh)), e.predict_proba(_ctr_tables_xh(Xh))))
 
@@ -3565,10 +3578,11 @@ def _(ml, X, yc, yr, Xh=None):
     tensor FeatureFreq column and the saved model carries a
     tensor_ctr_registry with feature_freq_tensor records. The held-out rows
     carry combinations seen once, never seen, and a code past the source's
-    cardinality."""
+    cardinality. Fitted on BOTH columns: the CPU column trains through
+    gbdt/host/gbdt_oracle_feature_freq.mojo (the tensor-column winner, its
+    registry record and canonical hash) and predicts through HostGBDT."""
     Xt = _tensor_ctr_x(X)
-    m = _ctr_saved_or_fit(ml, lambda: ml.ExperimentalTwoLevelFeatureFreq(sources=[0, 1], random_state=7).fit(
-        Xt, _tensor_ctr_y(Xt)))
+    m = ml.ExperimentalTwoLevelFeatureFreq(sources=[0, 1], random_state=7).fit(Xt, _tensor_ctr_y(Xt))
     return _fit(dict(predict=_h(m.predict(Xt))), m, lambda e: (e.predict(_tensor_ctr_xh(Xh)),))
 
 

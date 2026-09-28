@@ -10,7 +10,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from x_ann.abi import check_search, in_f32, in_i32, out_f32, out_i32, p_int
+from x_ann.abi import check_search, in_f32, in_i32, out_f32, out_i32, p_int, ptr_f32, ptr_i32
 from x_ann.ivf_pq_core import pq_len_of
 from x_ann.host.cagra_host import cagra_build_host, cagra_search_host
 from x_ann.host.tsne_host import tsne_fit_host
@@ -54,22 +54,21 @@ def ivf_pq_search_binding(addrs: PythonObject, params: PythonObject) raises -> P
     var n_probes = p_int(params, 7)
     check_search(n_lists, m, k, n_probes)
     var pq_len = pq_len_of(dim, pq_dim)
-    var centers = in_f32(addrs, 0, n_lists * dim)
-    var offsets = in_i32(addrs, 1, n_lists + 1)
-    var list_indices = in_i32(addrs, 2, n)
-    var cb = in_f32(addrs, 3, pq_dim * (1 << pq_bits) * pq_len)
-    var codes = in_i32(addrs, 4, n * pq_dim)
-    var queries = in_f32(addrs, 5, m * dim)
-    var mask = in_i32(addrs, 9, n)
-    var od = List[Float32]()
-    var oi = List[Int32]()
-    var on = List[Int32]()
+    _ = n
+    _ = pq_len
+    var centers = ptr_f32(addrs, 0)
+    var offsets = ptr_i32(addrs, 1)
+    var list_indices = ptr_i32(addrs, 2)
+    var cb = ptr_f32(addrs, 3)
+    var codes = ptr_i32(addrs, 4)
+    var queries = ptr_f32(addrs, 5)
+    var od = ptr_f32(addrs, 6)
+    var oi = ptr_i32(addrs, 7)
+    var on = ptr_i32(addrs, 8)
+    var mask = ptr_i32(addrs, 9)
     with GILReleased(Python()):
         ivf_pq_search_host(centers, offsets, list_indices, cb, codes, mask, n_lists, dim, pq_dim, pq_bits,
-                             queries, m, k, n_probes, od, oi, on)
-    out_f32(od, addrs, 6)
-    out_i32(oi, addrs, 7)
-    out_i32(on, addrs, 8)
+                           queries, m, k, n_probes, od, oi, on)
     return PythonObject(m)
 
 
@@ -102,7 +101,7 @@ def cagra_build_binding(addrs: PythonObject, params: PythonObject) raises -> Pyt
     var deg = p_int(params, 3)
     if n < 2 or d <= 0 or kdeg < 1 or kdeg > n - 1 or deg < 1 or deg > kdeg:
         raise Error("CAGRA: need 1 <= graph_degree <= intermediate_graph_degree <= n - 1")
-    var x = in_f32(addrs, 0, n * d)
+    var x = ptr_f32(addrs, 0)
     var g = List[Int32]()
     with GILReleased(Python()):
         g = cagra_build_host(x, n, d, kdeg, deg)
@@ -124,18 +123,16 @@ def cagra_search_binding(addrs: PythonObject, params: PythonObject) raises -> Py
     var n_seeds = p_int(params, 8)
     if m <= 0 or k <= 0 or L < k or width < 1 or max_iter < 1 or n_seeds < 1 or n_seeds > n:
         raise Error("CAGRA search: need k >= 1, itopk_size >= k, search_width >= 1, max_iterations >= 1, 1 <= n_seeds <= n")
-    var x = in_f32(addrs, 0, n * d)
-    var g = in_i32(addrs, 1, n * deg)
+    var x = ptr_f32(addrs, 0)
+    var g = ptr_i32(addrs, 1)
     for e in range(n * deg):
-        if Int(g[e]) < 0 or Int(g[e]) >= n:
+        if Int(g.unsafe_load(e)) < 0 or Int(g.unsafe_load(e)) >= n:
             raise Error("CAGRA search: the graph names a row outside the dataset")
-    var q = in_f32(addrs, 2, m * d)
-    var od = List[Float32]()
-    var oi = List[Int32]()
+    var q = ptr_f32(addrs, 2)
+    var od = ptr_f32(addrs, 3)
+    var oi = ptr_i32(addrs, 4)
     with GILReleased(Python()):
         cagra_search_host(x, n, d, g, deg, q, m, k, L, width, max_iter, n_seeds, od, oi)
-    out_f32(od, addrs, 3)
-    out_i32(oi, addrs, 4)
     return PythonObject(m)
 
 
@@ -175,23 +172,21 @@ def ivf_sq_search_binding(addrs: PythonObject, params: PythonObject) raises -> P
     var k = p_int(params, 4)
     var n_probes = p_int(params, 5)
     check_search(n_lists, m, k, n_probes)
-    var centers = in_f32(addrs, 0, n_lists * dim)
-    var offsets = in_i32(addrs, 1, n_lists + 1)
-    var list_indices = in_i32(addrs, 2, n)
-    var vmin = in_f32(addrs, 3, dim)
-    var delta = in_f32(addrs, 4, dim)
-    var codes = in_i32(addrs, 5, n * dim)
-    var mask = in_i32(addrs, 6, n)
-    var queries = in_f32(addrs, 7, m * dim)
-    var od = List[Float32]()
-    var oi = List[Int32]()
-    var on = List[Int32]()
+    _ = n
+    var centers = ptr_f32(addrs, 0)
+    var offsets = ptr_i32(addrs, 1)
+    var list_indices = ptr_i32(addrs, 2)
+    var vmin = ptr_f32(addrs, 3)
+    var delta = ptr_f32(addrs, 4)
+    var codes = ptr_i32(addrs, 5)
+    var mask = ptr_i32(addrs, 6)
+    var queries = ptr_f32(addrs, 7)
+    var od = ptr_f32(addrs, 8)
+    var oi = ptr_i32(addrs, 9)
+    var on = ptr_i32(addrs, 10)
     with GILReleased(Python()):
         ivf_sq_search_host(centers, offsets, list_indices, vmin, delta, codes, mask, n_lists, dim, queries, m, k,
-                             n_probes, od, oi, on)
-    out_f32(od, addrs, 8)
-    out_i32(oi, addrs, 9)
-    out_i32(on, addrs, 10)
+                           n_probes, od, oi, on)
     return PythonObject(m)
 
 
@@ -205,15 +200,13 @@ def refine_binding(addrs: PythonObject, params: PythonObject) raises -> PythonOb
     var k = p_int(params, 4)
     if n <= 0 or d <= 0 or m <= 0 or k0 <= 0 or k <= 0 or k > k0:
         raise Error("refine: need positive shapes and 1 <= k <= n_candidates")
-    var x = in_f32(addrs, 0, n * d)
-    var q = in_f32(addrs, 1, m * d)
-    var cand = in_i32(addrs, 2, m * k0)
-    var od = List[Float32]()
-    var oi = List[Int32]()
+    var x = ptr_f32(addrs, 0)
+    var q = ptr_f32(addrs, 1)
+    var cand = ptr_i32(addrs, 2)
+    var od = ptr_f32(addrs, 3)
+    var oi = ptr_i32(addrs, 4)
     with GILReleased(Python()):
         refine_host(x, n, d, q, m, cand, k0, k, od, oi)
-    out_f32(od, addrs, 3)
-    out_i32(oi, addrs, 4)
     return PythonObject(m)
 
 
@@ -258,23 +251,22 @@ def ivf_rabitq_search_binding(addrs: PythonObject, params: PythonObject) raises 
     while D < dim:
         D *= 2
     var words = (D + 31) // 32
-    var centers = in_f32(addrs, 0, n_lists * dim)
-    var offsets = in_i32(addrs, 1, n_lists + 1)
-    var list_indices = in_i32(addrs, 2, n)
-    var codes = in_i32(addrs, 3, n * words)
-    var norms = in_f32(addrs, 4, n)
-    var ips = in_f32(addrs, 5, n)
-    var mask = in_i32(addrs, 6, n)
-    var queries = in_f32(addrs, 7, m * dim)
-    var od = List[Float32]()
-    var oi = List[Int32]()
-    var on = List[Int32]()
+    _ = n
+    _ = words
+    var centers = ptr_f32(addrs, 0)
+    var offsets = ptr_i32(addrs, 1)
+    var list_indices = ptr_i32(addrs, 2)
+    var codes = ptr_i32(addrs, 3)
+    var norms = ptr_f32(addrs, 4)
+    var ips = ptr_f32(addrs, 5)
+    var mask = ptr_i32(addrs, 6)
+    var queries = ptr_f32(addrs, 7)
+    var od = ptr_f32(addrs, 8)
+    var oi = ptr_i32(addrs, 9)
+    var on = ptr_i32(addrs, 10)
     with GILReleased(Python()):
         ivf_rabitq_search_host(centers, offsets, list_indices, codes, norms, ips, mask, n_lists, dim, seed,
-                                 queries, m, k, n_probes, od, oi, on)
-    out_f32(od, addrs, 8)
-    out_i32(oi, addrs, 9)
-    out_i32(on, addrs, 10)
+                               queries, m, k, n_probes, od, oi, on)
     return PythonObject(m)
 
 
