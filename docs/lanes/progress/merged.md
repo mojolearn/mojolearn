@@ -344,3 +344,32 @@ plain barrier() elsewhere. All 32 x_linear lanes resubmitted to m2pro,
 m3ultra-b and m4pro-b at 517a035ee.
 WATCH (any family): a kernel that hands values between threads through device
 memory across `barrier()` has the same Apple hazard.
+
+### x-neighbors-svm-precomputed (merged from lane/merged-neighbors-fix, 6711f13a3)
+
+INTEGRATION BUG (mine): the CPU column moved (x86 and Arm), not Metal: CUDA ==
+M4 Metal. neighbors-cpu's vector kernel-cell path in svm/host/smo_oracle.mojo
+(`_kernel_cells_v`, the square tile and UpdateF) has no KERNEL_PRECOMPUTED
+branch; after the merge a precomputed Gram was treated as feature rows. Fix:
+the vector path only when kernel != precomputed (precomputed takes
+algos-neighbors' scalar path). Evidence (nvc1 x86 CPU at threads 1/3/default):
+x-neighbors-svm-precomputed == CUDA == M4 Metal on 9/9 cells; svc, svc-linear,
+svc-poly, svr, svr-linear, x-neighbors-svc-*, -svm-weights, -ocsvm, -svgp
+unchanged (== origin/main / algos-neighbors CPU, == CUDA where present).
+
+### M2 Pro Metal: svc, svc-linear, svc-poly, svr, gp-*, gpc, par-gp (PRE-EXISTING)
+
+Only m2pro's Metal column moves; M2 CPU == M3/M4 CPU == M3/M4 Metal == x86
+CPU == CUDA == verify_reference. Already failing on origin/main (m3-sweep at
+c65f14abc / main 17a8b3c1c had svc/svr/gp/gpc DISAGREE on m2pro): NOT from
+this integration and NOT fixed in this round. Owner: neighbors (GP/SVM on
+Apple IDENTICAL). Findings: GP's Cholesky L matches, alpha does not -> the
+triangular solve; suspect cholesky/checks/trsm.mojo trsm_lower_sweep_kernel
+(1024 threads, 32-float register array, Apple IDENTICAL; the M2 "no Dynamic
+Caching: register use lowers maxTotalThreadsPerThreadgroup, a larger dispatch
+is dropped silently" class of the GBDT hist_2 fix). SVC candidates: the ept
+block solve (512 thr), fws_walk_kernel (1024), _frs_scan_kernel (1024), the
+2D RBF epilogue. A ready m2pro bisect (steward speed job with the
+MOJOLEARN_SVM_FAST_EPT4 / EPT_OFF / WS_SELECT_OFF / SORT_OFF and
+MOJOLEARN_CHOL_SWEEP_SOLVES_OFF arms) is in the neighbors-fix agent's report
+(relayed to the orchestrator).
