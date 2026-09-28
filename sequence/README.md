@@ -22,6 +22,15 @@ and every helper the Nelder-Mead forecasters (Theta, ETS, GARCH) call is
 `@always_inline`, because Apple's `air-lld` segfaults
 (`LazyLinker::LinkDefinition`) linking those as separate functions.
 
+A third (2026-09-28): Apple's Metal compiler silently drops a WHOLE kernel
+(no store lands) when a float compare-and-select takes a value computed from
+a reduction loop (`x if x > c else c` after a sum of squares and a sqrt).
+Adafactor's alpha, its update denominator, row mean and update clamp are
+spelled `max(x, c)` (exact; a NaN still gives c): after alpha alone the
+lane still DISAGREEd on m4-a and m3ultra-b (steward 1790564279351); with all
+four, Metal == CPU on both (speed probes 1790565936440, 1790565937835). New
+kernels spell every such clamp `max` / `min`.
+
 ## Seams (IDENTITY_PATHS.md rows 150-159 and 199; 5517-5518 in row 159, 5536-5540 in row 154, 5541-5543 in row 199)
 
 Each seam's host oracle is in `checks/oracle.mojo`, written from the reference
