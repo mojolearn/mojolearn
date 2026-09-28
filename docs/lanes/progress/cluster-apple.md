@@ -210,3 +210,13 @@ column and the H100 all give. So the M4 difference is most likely NOT an M4 code
 issue but a batch-invariance defect of the RBC two-batch path (loop 2 / merge_labels):
 forcing two batches with max_mbytes_per_batch on any column should reproduce it. The
 second batch also costs ~124 ms (label.vertexdeg batch 2/2) on the M4 Pro.
+
+## Results: M3 Ultra, IDENTICAL, DBSCAN one-byte adjacency (4e1606253, 1790587813845)
+
+| case | rows | taxi before (eaf6c2a3f) -> after (s) | higgs |
+|---|---|---|---|
+| dbscan | 100k | 0.3935 -> 0.1413 | 0.3048 -> 0.0425 |
+
+Digests equal (9c8ea257cb04e118 / 534fe4e04df01f06). The 10 GB dense adjacency the
+sparse RBC arm never reads was most of the fit (the phases sum to ~40 ms).
+Tried and reverted: eight label-propagation passes per host read (weak_cc is 7 ms).
