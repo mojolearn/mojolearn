@@ -24,6 +24,9 @@ order, default rebuilt at the end).
 | d022f6d6a | kNN IDENTICAL on Apple: compile-time k=10/15 selector + warp-bound guard | IDENTICAL | digests equal |
 | 0979a063c | Cholesky, Apple left-looking IDENTICAL: `info` read once after the loop, guarded panel kernels (`-D MOJOLEARN_CHOL_DEFER_INFO_OFF`) | IDENTICAL | same words by construction |
 | 59e15eef3 | `trsm_lower` on Apple: sweep with 8 right-hand sides per block (`-D MOJOLEARN_CHOL_MULTI_RHS_OFF`) | both | same chains |
+| daa913db1 / 3aa68f5a2 | back-substitution ring kernel (x in threadgroup memory) -- MEASURED 3.6x SLOWER, reverted | IDENTICAL | digests equal |
+| fd048ed6a | Jacobi eigh: FAST on Apple launches 256 wide like IDENTICAL (scheduling) | FAST | FAST words unchanged |
+| efd02268a, 9ec71f7a4 | MOJOLEARN_STAGE_TIMES=1 walls for GPC fit, KRR solve, RBFSampler transform (timing only) | - | - |
 | 38c9834dd | `build_gp.sh` smoke: return_cov is honored now (the stale refusal assert failed every FAST GP build on Apple after the merge) | FAST build | - |
 
 ## Speed requests
@@ -68,3 +71,13 @@ IDENTICAL, fit / predict seconds, digests equal between the arms of each row.
 Certified k-NN fallback counts (MOJOLEARN_STAGE_TIMES=1): taxi 185 of 10,000
 queries (taxi repeats rows), HIGGS 0, k=20 taxi 26, tied grid data 4,389 of
 5,000 (answered by the tiled arm, as designed).
+
+Cholesky / GP / KRR (M3 Ultra, arms in one job, digests equal in every pair):
+
+| algorithm | mode | shape | before | after | change |
+|---|---|---|---|---|---|
+| KernelRidge.fit | IDENTICAL | taxi / HIGGS 10k rbf | 1.979 / 1.528 | 1.913 / 1.466 | deferred Cholesky info (0979a063c) |
+| GaussianProcessRegressor.fit | IDENTICAL | taxi / HIGGS 3k | 0.375 / 0.313 | 0.351 / 0.292 | deferred info |
+| GaussianProcessClassifier.fit | IDENTICAL | taxi / HIGGS 3k | 2.118 / 1.477 | 1.981 / 1.357 | deferred info |
+| GaussianProcessClassifier.predict_proba | IDENTICAL | taxi / HIGGS 3k x 3k | 0.357 / 0.362 | 0.218 / 0.216 | 8-RHS sweep (59e15eef3) |
+| GaussianProcessClassifier.predict_proba | FAST | taxi / HIGGS 3k x 3k | 1.509 / 1.514 | 0.182 / 0.184 | 8-RHS sweep (FAST's serial column solve before) |
