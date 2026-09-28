@@ -487,7 +487,7 @@ class SambaStack(object):
         # backward in one call, the logits never crossing back and forth.
         # Same kernels, operands and order as the three-call arm below,
         # which stays as the reference for a binding without the entry.
-        fused = callable(getattr(T._load(self.numeric_mode), "samba_head_loss", None))
+        fused = callable(T._optional_samba_head(T._load(self.numeric_mode)))
         acts = self._forward(inputs, dropout_stream, token_offset, head=not fused)
         ids = acts["ids"]
         b, l = ids.shape

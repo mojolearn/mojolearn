@@ -102,3 +102,13 @@ iterative-options, LDA, quantile-transformer, user-objects) reading input arena
 words rejected by the new ranges protocol. Each affects nine fixtures.
 The takeover prep optional-export merge resolves that specific CPU lookup;
 other fixes and new execution evidence remain owed. Raw records are unchanged.
+
+The subsequent optional-export repair applies the prep capability-probe rule
+to metrics and Samba: validate the mandatory unfused family entry first, then
+interpret absence of the optimization on a CPU facade as unavailable. Mandatory
+binding load failures still propagate. No native algorithm is changed. The LM
+accumulation witness now uses T=256/A=2 (two complete 128-token leaves) instead
+of T=64/A=2, which the contract correctly refused. The old refusal remains in
+the raw snapshot and is not recategorized as successful accumulation evidence.
+Focused facade tests cover missing mandatory exports, missing optional exports,
+and selecting an available native optimization; native confirmation remains owed.
