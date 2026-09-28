@@ -231,3 +231,46 @@ probabilities_ is refused (answered since DEVIATION 5116). Both now accept the a
 before/after pairs run with the builds in the command (MOJOLEARN_SKIP_BUILD_GATE, in
 dependency order x_decomp, x_cluster, metrics, estimators, solver, mixture, hdbscan),
 because 5b622763d carries the stale gates.
+
+## Results: M3 Ultra, FAST, before 5b622763d (1790591693168) -> after dc5a20a43 (1790591694704)
+
+| case | rows | taxi before -> after (s) | higgs before -> after (s) |
+|---|---|---|---|
+| kmeans | 1M | 0.0585 -> 0.0559 | 0.0909 -> 0.0906 |
+| minibatch-kmeans | 1M | 0.2439 -> 0.2303 | 0.3143 -> 0.2961 |
+| bisecting-kmeans | 1M | 0.2827 -> 0.2829 | 0.2958 -> 0.2953 |
+| gmm | 1M | 0.3066 -> 0.3417 | 0.4219 -> 0.4022 |
+| bayesian-gmm | 100k | 1.9081 -> 0.5515 | 2.4171 -> 0.6459 |
+| dbscan | 100k | 0.0658 -> 0.0649 | 0.0337 -> 0.0333 |
+| hdbscan | 40k | 0.4788 -> 0.4805 | 0.4367 -> 0.4456 |
+| agglomerative (single) | 10k | 0.0592 -> 0.0584 | 0.0458 -> 0.0456 |
+| agglomerative-ward | 10k | 1.5691 -> 1.1856 | 1.6600 -> 1.2353 |
+| spectral | 10k | 0.1702 -> 0.1825 | 0.0701 -> 0.0693 |
+| meanshift | 10k | 0.2595 -> 0.2562 | 0.2527 -> 0.2388 |
+| optics | 10k | 0.4173 -> 0.4050 | 0.4204 -> 0.4035 |
+| affinity-prop | 5k | 1.9268 -> 1.3834 | 1.3190 -> 0.9313 |
+
+Every FAST digest except bayesian-gmm's equals the FAST before (gmm FAST is unchanged
+code: its +11% on taxi against -5% on HIGGS reads as run-to-run spread).
+
+### Paired quality check, BayesianGaussianMixture FAST (the one FAST change: the moments split)
+
+Mean log-likelihood `score(X)` (higher is better), n_components 8, max_iter 100,
+100,000 rows, seeds 0-4, the SAME seed in each column. IDENTICAL reference = m4pro-a
+eaf6c2a3f IDENTICAL (digests equal to every IDENTICAL column).
+
+| dataset | seed | IDENTICAL ref | FAST before | FAST after |
+|---|---|---|---|---|
+| taxi | 0 | 5.16035 | 5.16035 | 5.16114 |
+| taxi | 1 | 5.16035 | 5.16035 | 5.16114 |
+| taxi | 2 | 4.26021 | 4.26021 | 4.26081 |
+| taxi | 3 | 5.19477 | 5.19477 | 5.19597 |
+| taxi | 4 | 5.16035 | 5.16035 | 5.16114 |
+| higgs | 0 | -6.61231 | -6.61231 | -6.61045 |
+| higgs | 1 | -6.58438 | -6.58438 | -6.58295 |
+| higgs | 2 | -6.60421 | -6.60421 | -6.60237 |
+| higgs | 3 | -6.57003 | -6.57003 | -6.56868 |
+| higgs | 4 | -6.57979 | -6.57979 | -6.57837 |
+
+FAST after is at or above the reference on all 10 pairs (+0.0006 to +0.0019): quality
+not lower. Speed 3.5x (taxi) / 3.7x (HIGGS) on the M3 Ultra.
