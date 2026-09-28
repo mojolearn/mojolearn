@@ -140,8 +140,9 @@ def bytelm(ml, out):
                 losses.append(struct.pack("<d", float(r["loss"])))
                 grads = r.get("flat_gradients")
             probe = ml.Array.from_list([raw[r * w:r * w + shape.length] for r in range(shape.batch)], "<i4")
+            nb = list(m.next_bytes(probe)) if hasattr(m, "next_bytes") else None
             out[key] = dict(loss=_h(b"".join(losses)), params=_h(m.parameters_), logits=_h(m.logits(probe)),
-                            grads=_h(grads) if grads is not None else None)
+                            grads=_h(grads) if grads is not None else None, next_bytes=nb)
         except Exception as exc:  # noqa: BLE001
             out[key] = dict(error=f"{type(exc).__name__}: {exc}"[:300])
 
