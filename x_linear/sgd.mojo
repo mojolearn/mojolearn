@@ -19,6 +19,7 @@ from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fsqrt, fexp, flog, fabs, fmax, fmin,
     ld, st, ldi, sti, i2f, fill, row_dot, shuffle,
 )
+from x_linear.team import Team
 from checks.numerics import identical_pow
 
 comptime L_HINGE = 0
@@ -271,7 +272,7 @@ def sgd_one(
     return epochs
 
 
-def sgd_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
+def sgd_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
     """ip: [n_classes, loss, penalty, lr, fit_intercept, max_iter, n_iter_no_change,
     shuffle, seed_lo, seed_hi, sample_weight, class_weight]; with
     sample_weight y = labels n | weights n; with class_weight fp carries
@@ -280,7 +281,10 @@ def sgd_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: I
     fp: [alpha, l1_ratio, eta0, power_t, epsilon, tol].
     y: labels as 0..K-1 (classification) or targets. res: coef (P*d),
     intercept (P), n_iter (1), status (1: 0 ok, -1 non-finite).
-    fw: n (targets) + d (q); iw: n (order)."""
+    Team form: the P one-vs-rest problems are independent; thread c runs
+    problem c (targets in team row 2c, order in team row 2c + 1, q in its
+    own d words, epochs in team row 2P), then the lead folds the epochs.
+    Each problem is the one-thread sequence."""
     var k = ldi(ip, 0)
     var loss = ldi(ip, 1)
     var penalty = ldi(ip, 2)
@@ -300,11 +304,11 @@ def sgd_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: I
     var has_cw = ldi(ip, 11) != 0
     var swp = y + n
     var problems = k if k > 2 else 1
-    var ys = fw
-    var q = fw + n
-    var max_epochs = 0
-    var status = 0
-    for c in range(problems):
+    var q = t.own
+    var epr = t.row(2 * problems)
+    for c in range(t.tid, problems, t.nt):
+        var ys = t.row(2 * c)
+        var order = t.row(2 * c + 1).bitcast[Int32]()
         for i in range(n):
             var v = ld(y, i)
             if k == 0:
@@ -319,13 +323,28 @@ def sgd_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: I
             x, ys, n, d, loss, penalty, alpha, l1r, lr, eta0, power_t, eps,
             fit_intercept, max_iter, tol, nic, do_shuffle,
             seed + UInt64(1000003) * UInt64(c), k == 1,
-            res, c * d, res, problems * d + c, q, iw,
+            res, c * d, res, problems * d + c, q, order,
             swp, has_sw, ld(fp, 6 + c) if has_cw else Float32(1),
             ld(fp, 6 + problems + c) if has_cw else Float32(1), has_cw,
         )
+        st(epr, c, i2f(ep))
+    t.sync()
+    if not t.lead():
+        return
+    var max_epochs = 0
+    var status = 0
+    for c in range(problems):
+        var ep = Int(ld(epr, c))
         if ep < 0:
             status = -1
         elif ep > max_epochs:
             max_epochs = ep
     st(res, problems * d + problems, i2f(max_epochs))
     st(res, problems * d + problems + 1, i2f(status))
+
+
+def sgd_team_rows(ip: IP) -> Int:
+    """Row buffers an SGD fit needs: targets and order per problem, the epochs."""
+    var k = ldi(ip, 0)
+    var problems = k if k > 2 else 1
+    return 2 * problems + 1

@@ -10,7 +10,7 @@ pair: link(b_c + sum_j x_ij w_cj), j ascending, the intercept added last.
 from x_linear.ops import FP, IP, fa, fmad, fexp, ld, st, row_dot
 from checks.numerics import identical_sigmoid, ftz
 from x_linear.team import Team, TEAM_ROW_BUFS
-from x_linear.sgd import sgd_fit
+from x_linear.sgd import sgd_fit, sgd_team_rows
 from x_linear.glm import glm_fit
 from x_linear.huber import huber_fit
 from x_linear.bayes import bayes_ridge_fit, ard_fit
@@ -42,43 +42,56 @@ comptime LINK_SIGMOID = 2
 def team_fit(algo: Int) -> Bool:
     """The fits that run on a whole team (x_linear/team.mojo); the device
     runs every other fit on thread 0 alone."""
-    return algo == ALGO_GLM or algo == ALGO_HUBER or algo == ALGO_LOGCV
+    return (algo == ALGO_GLM or algo == ALGO_HUBER or algo == ALGO_LOGCV
+            or algo == ALGO_BAYES or algo == ALGO_ARD or algo == ALGO_RIDGE
+            or algo == ALGO_ENETCV or algo == ALGO_LARS
+            or algo == ALGO_QUANTILE or algo == ALGO_SGD or algo == ALGO_ISOTONIC
+            or algo == ALGO_ISOTONIC_PREDICT)
 
 
 def team_rows(algo: Int, ip: IP) -> Int:
     """Row buffers of n words the fit's team scratch holds."""
     if algo == ALGO_LOGCV:
         return logcv_team_rows(ip)
+    if algo == ALGO_SGD:
+        return sgd_team_rows(ip)
     return TEAM_ROW_BUFS
+
+
+def team_own(algo: Int, d: Int) -> Int:
+    """Private float32 words per thread the fit's team scratch holds."""
+    if algo == ALGO_RIDGE or algo == ALGO_SGD:
+        return d
+    return 0
 
 
 def fit_dispatch(t: Team, algo: Int, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
     """`t` is the team the fit runs on (a team of one for a fit that
     `team_fit` does not name)."""
     if algo == ALGO_SGD:
-        sgd_fit(x, y, n, d, ip, fp, res, fw, iw)
+        sgd_fit(t, x, y, n, d, ip, fp, res, fw, iw)
     elif algo == ALGO_GLM:
         glm_fit(t, x, y, n, d, ip, fp, res, fw, iw)
     elif algo == ALGO_HUBER:
         huber_fit(t, x, y, n, d, ip, fp, res, fw, iw)
     elif algo == ALGO_BAYES:
-        bayes_ridge_fit(x, y, n, d, ip, fp, res, fw, iw)
+        bayes_ridge_fit(t, x, y, n, d, ip, fp, res, fw, iw)
     elif algo == ALGO_ARD:
-        ard_fit(x, y, n, d, ip, fp, res, fw, iw)
+        ard_fit(t, x, y, n, d, ip, fp, res, fw, iw)
     elif algo == ALGO_LARS:
-        lars_fit(x, y, n, d, ip, fp, res, fw, iw)
+        lars_fit(t, x, y, n, d, ip, fp, res, fw, iw)
     elif algo == ALGO_QUANTILE:
-        quantile_fit(x, y, n, d, ip, fp, res, fw, iw)
+        quantile_fit(t, x, y, n, d, ip, fp, res, fw, iw)
     elif algo == ALGO_RIDGE:
-        ridge_fit(x, y, n, d, ip, fp, res, fw, iw)
+        ridge_fit(t, x, y, n, d, ip, fp, res, fw, iw)
     elif algo == ALGO_ENETCV:
-        enetcv_fit(x, y, n, d, ip, fp, res, fw, iw)
+        enetcv_fit(t, x, y, n, d, ip, fp, res, fw, iw)
     elif algo == ALGO_LOGCV:
         logcv_fit(t, x, y, n, d, ip, fp, res, fw, iw)
     elif algo == ALGO_ISOTONIC:
-        isotonic_fit(x, y, n, d, ip, fp, res, fw, iw)
+        isotonic_fit(t, x, y, n, d, ip, fp, res, fw, iw)
     elif algo == ALGO_ISOTONIC_PREDICT:
-        isotonic_predict(x, y, n, d, ip, fp, res, fw, iw)
+        isotonic_predict(t, x, y, n, d, ip, fp, res, fw, iw)
 
 
 def decision_one(x: FP, i: Int, d: Int, wb: FP, c: Int, link: Int) -> Float32:

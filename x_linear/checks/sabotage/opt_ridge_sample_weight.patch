@@ -8,12 +8,12 @@
  from x_linear.ops import (
      FP, IP, fa, fs, fm, fd, fmad, ld, st, ldi, i2f, fill, copy, cholesky, chol_solve, centered_gram,
  )
-@@ -75,7 +76,7 @@
-                 var mj = ld(fw, xm + j)
-                 var mk = ld(fw, xm + k)
-                 for i in range(n):
--                    acc = fmad(fm(ld(y, wo + i), fs(ld(x, i * d + j), mj)), fs(ld(x, i * d + k), mk), acc)
-+                    acc = fmad(fm(Float32(1) if is_gpu() else ld(y, wo + i), fs(ld(x, i * d + j), mj)), fs(ld(x, i * d + k), mk), acc)  # SABOTAGE option sample_weight
-                 st(fw, gg + j * d + k, acc)
-                 st(fw, gg + k * d + j, acc)
-     else:
+@@ -83,7 +84,7 @@
+             var mj = ld(fw, xm + j)
+             var mk = ld(fw, xm + k)
+             for i in range(n):
+-                acc = fmad(fm(ld(y, wo + i), fs(ld(x, i * d + j), mj)), fs(ld(x, i * d + k), mk), acc)
++                acc = fmad(fm(Float32(1) if is_gpu() else ld(y, wo + i), fs(ld(x, i * d + j), mj)), fs(ld(x, i * d + k), mk), acc)  # SABOTAGE option sample_weight
+             st(fw, gg + j * d + k, acc)
+             st(fw, gg + k * d + j, acc)
+         t.sync()

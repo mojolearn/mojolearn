@@ -21,7 +21,7 @@ from std.ffi import _Global
 from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_linear.ops import FP, IP
-from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows
+from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own
 from x_linear.team import LINEAR_TPB, team_work, device_team, solo
 
 
@@ -51,10 +51,13 @@ def fit_kernel(
 ):
     """ONE block. A team fit runs on every thread of it; any other fit on
     thread 0 alone, as a team of one (x_linear/team.mojo)."""
-    if team_fit(Int(algo)):
-        fit_dispatch(device_team(tw, Int(n)), Int(algo), x, y, Int(n), Int(d), ip, fp, res, fw, iw)
+    var a = Int(algo)
+    var bufs = team_rows(a, ip)
+    var own = team_own(a, Int(d))
+    if team_fit(a):
+        fit_dispatch(device_team(tw, Int(n), bufs, own), a, x, y, Int(n), Int(d), ip, fp, res, fw, iw)
     elif Int(thread_idx.x) == 0:
-        fit_dispatch(solo(tw, Int(n)), Int(algo), x, y, Int(n), Int(d), ip, fp, res, fw, iw)
+        fit_dispatch(solo(tw, Int(n), bufs, own), a, x, y, Int(n), Int(d), ip, fp, res, fw, iw)
 
 
 def decision_kernel(x: FP, wb: FP, n: Int32, d: Int32, k: Int32, link: Int32, res: FP):
@@ -79,7 +82,7 @@ def fit_device(
     var diw = ctx.enqueue_create_buffer[DType.int32](max(n_iw, 1))
     var hip = ip.copy()
     var dtw = ctx.enqueue_create_buffer[DType.float32](
-        team_work(n, team_rows(algo, IP(unsafe_from_address=Int(hip.unsafe_ptr())))))
+        team_work(n, team_rows(algo, IP(unsafe_from_address=Int(hip.unsafe_ptr()))), team_own(algo, d)))
     var hfp = fp.copy()
     if n_x > 0:
         ctx.enqueue_copy(dst_buf=dx, src_ptr=x)

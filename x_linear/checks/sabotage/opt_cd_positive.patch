@@ -8,7 +8,7 @@
  from x_linear.ops import (
      FP, IP, fa, fs, fm, fd, fmad, fabs, fmax, fexp, flog, fsign, ld, st, ldi, i2f, fill, copy,
  )
-@@ -171,7 +172,7 @@
+@@ -189,7 +190,7 @@
      var f_n = ldi(ip, 3)
      var l_n = ldi(ip, 4)
      var explicit = ldi(ip, 5) != 0

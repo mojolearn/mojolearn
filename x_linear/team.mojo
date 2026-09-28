@@ -39,9 +39,10 @@ comptime TEAM_SLOTS = 16
 comptime TEAM_ROW_BUFS = 3
 
 
-def team_work(n: Int, bufs: Int) -> Int:
-    """Float32 words of a team's scratch: the slots, then `bufs` row buffers."""
-    return TEAM_SLOTS + max(bufs, TEAM_ROW_BUFS) * n
+def team_work(n: Int, bufs: Int, per_thread: Int) -> Int:
+    """Float32 words of a team's scratch: the slots, `bufs` row buffers of n
+    words, then `per_thread` words for each of LINEAR_TPB threads."""
+    return TEAM_SLOTS + max(bufs, TEAM_ROW_BUFS) * n + LINEAR_TPB * per_thread
 
 
 @fieldwise_init
@@ -51,6 +52,7 @@ struct Team(ImplicitlyCopyable, Movable):
     var slot: FP  # TEAM_SLOTS float32 words for broadcasts
     var rw: FP  # row buffers of n words: row(k) = rw + k * n
     var n: Int
+    var own: FP  # this thread's private words (team_work's per_thread)
 
     @always_inline
     def lead(self) -> Bool:
@@ -86,14 +88,16 @@ struct Team(ImplicitlyCopyable, Movable):
         return self.rw + k * self.n
 
 
-def team_at(tid: Int, nt: Int, scratch: FP, n: Int) -> Team:
-    """The team over `scratch` (team_work(n, bufs) words): slots, then row buffers."""
-    return Team(tid, nt, scratch, scratch + TEAM_SLOTS, n)
+def team_at(tid: Int, nt: Int, scratch: FP, n: Int, bufs: Int, per_thread: Int) -> Team:
+    """The team over `scratch` (team_work(n, bufs, per_thread) words)."""
+    var rw = scratch + TEAM_SLOTS
+    var own = rw + max(bufs, TEAM_ROW_BUFS) * n + tid * per_thread
+    return Team(tid, nt, scratch, rw, n, own)
 
 
-def device_team(scratch: FP, n: Int) -> Team:
-    return team_at(Int(thread_idx.x), Int(block_dim.x), scratch, n)
+def device_team(scratch: FP, n: Int, bufs: Int, per_thread: Int) -> Team:
+    return team_at(Int(thread_idx.x), Int(block_dim.x), scratch, n, bufs, per_thread)
 
 
-def solo(scratch: FP, n: Int) -> Team:
-    return team_at(0, 1, scratch, n)
+def solo(scratch: FP, n: Int, bufs: Int, per_thread: Int) -> Team:
+    return team_at(0, 1, scratch, n, bufs, per_thread)

@@ -8,7 +8,7 @@
  from x_linear.ops import (
      FP, IP, fa, fs, fm, fd, fmad, fabs, fmax, ld, st, ldi, sti, i2f, fill, copy,
      cholesky, chol_solve, jacobi_eig, centered_gram, centered_xty, mean_of,
-@@ -137,7 +138,7 @@
+@@ -187,7 +188,7 @@
          var mj = ld(fw, xm + j)
          for i in range(n):
              var xc = fs(ld(x, i * d + j), mj)
