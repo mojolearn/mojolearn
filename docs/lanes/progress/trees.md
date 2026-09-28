@@ -257,6 +257,71 @@ coordinator.
   every RunPod pod at the same time, so the pod was gone either way, but
   never pass 0 to extend.
 
+SESSION trees-cpu (the trees CPU-speed lane, branch lane/trees-cpu, pod
+`trees-cpu` RunPod H100, cpu-intel-r-xeon-r-platinum-8480), 2026-09-28:
+- DONE: gbdt-categorical-ctr-tables TRAINS ON THE CPU COLUMN (item 2 of the
+  list below). New gbdt/host/gbdt_oracle_ctr.mojo restates train's CTR
+  prelude and column loop: the default GPU simple CTRs (Borders at three
+  priors, ParamId 0, Uniform 15; FeatureFreq (0,1), MinEntropy 15), the
+  target grid, one CTR order per permutation
+  (`ctrs_estimation_permutation(n, p).fill_order()`), the FeatureFreq column
+  (`TWeightedBinFreqCalcer`) and the ORDERED Borders columns per permutation
+  (`THistoryBasedCtrCalcerGpu`: integer counts before the row in the
+  permutation's stable category order, one Float32 divide), permutation 0's
+  values deciding a dependent column's grid, one compressed index per
+  permutation, `build_ctr_tables` (reused, host code on the device path)
+  and the CTR model text. gbdt/host/gbdt_oracle.mojo's boosting loop is now
+  `gbdt_host_boost` over one index and one cursor per permutation: the learn
+  permutation draw (`TRandom(iteration + seed)`, `Advance(10)`, their
+  `% (learnPermutationCount - 1)`), the structure searched on the learn
+  permutation's index and cursor, every permutation estimating the same
+  structure on its own cursor (the learn one over the searcher's partition,
+  the others over `compute_bins_for_model` + the stable `partition_from_bins`),
+  the in-loop learn loss from the learn cursor, the final loss from the
+  estimation cursor. One permutation is the old loop statement for statement.
+  Binding: the flags arm dispatches to the CTR arm when a categorical column
+  is above one_hot_max_size (eval_set with CTR columns refused by name);
+  `GradientBoosting.fit`/`.load` on a CPU install read a CTR model's dim
+  through HostGBDT's parser (the load hunk is lane/algos-trees' own, same
+  text). Lane body: fits on both columns (`_ctr_saved_or_fit` no longer used
+  by this lane). test_trees_repeat gains a CTR fit.
+  Evidence (H100 pod): `algos_lane_check.sh gbdt-categorical-ctr-tables
+  --pass 2 --sabotage gbdt/checks/sabotage/ctr_ordered_cpu_only.patch` (the
+  host ordered statistic counts the row's own target): AGREE (batch, infer,
+  model, train 9 each), DISAGREE (every part), AGREE after reversal: PASS.
+  A direct fit (1500 rows, 20 depth-6 trees, 8 CTR columns, 4 permutations)
+  wrote a CPU model text byte-identical to the CUDA one on the first run.
+- DONE: DEVIATION 5900's GBDT item (the cpu lane's note 4). `train`'s phase
+  B border search now asks `calc_quantization(..., flush_subnormals=True)`,
+  whose `best_split` flushes by bits exactly as the host oracle's
+  `_best_split_phase_b` (values flushed on entry, both halves and their sum
+  flushed, no fma), so the device borders no longer depend on whether the
+  task runs on an FTZ+DAZ `sync_parallelize` worker or an IEEE
+  `host_parallelize` task. The oracle's small serial fits were already
+  env-independent (explicit ftz everywhere). This also closes the
+  unmeasured arm where the fused `0.5*a + 0.5*b` kept a subnormal half the
+  oracle flushed. gbdt/resident_model.mojo's `sync_parallelize` predict
+  tasks are NOT pinned (owed, if the cpu lane moves them to host_parallelize).
+- EXISTING BITS: the 36 non-par lanes lane_select attributes to the branch,
+  fitted on main f237f1996 and on the branch (merged with main 9f2d2b120,
+  which brought no gbdt change): every
+  CUDA and CPU cell IDENTICAL (71 of 72 column files; the 72nd is the CTR
+  lane's CPU column, which refused before), 35 lanes AGREE after
+  (gbdt-tensor-ctr-tables was NOTHING COMPARED on both sides: lane/algos-trees'
+  CPU arm was not on main yet; after merging it, see below). The 15 par-* lanes need two GPUs and were not run (the
+  phase-B pin is inert on every recorded fixture).
+- AFTER MERGING MAIN (lane/algos-trees' tensor CTR CPU arm, 276990727):
+  gbdt-categorical-ctr-tables, gbdt-tensor-ctr-tables, gbdt-feature-freq,
+  gbdt-symmetric, gbdt-categorical-ctr, saved-model-host-infer AGREE.
+  test_host_surface then found `host_model` with NO lane (both CTR table
+  lanes had reached it through `_ctr_saved_or_fit`); the CTR tables lane
+  now checks `ml.host_model(<saved file>)` answers exactly what the fitted
+  estimator answers, as a raise and not a part (its cells unchanged on both
+  columns, identity_break --diff IDENTICAL). test_lane_select pin
+  neural_inference.py 41 -> 40 (gbdt-tensor-ctr-tables no longer reaches
+  it). test_host_surface + test_trees_repeat 201 passed; test_lane_select
+  82 passed.
+
 NEXT SESSION: FIRST the CTR-table CPU paths (main's request 2026-09-27),
 then type B (features).
 1. gbdt-tensor-ctr-tables: the CPU column fits

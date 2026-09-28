@@ -19,7 +19,7 @@ descending, which moves the low bits of every distance.
 """
 from std.memory import bitcast
 
-from checks.numerics import ftz, identical_div, identical_exp, identical_log, identical_mul, identical_pow, identical_sqrt
+from checks.numerics import ftz, identical_div, identical_exp, identical_log, identical_mul, identical_mul64, identical_pow, identical_sqrt
 
 comptime FPtr = MutPointer[Float32, MutAnyOrigin]
 comptime IPtr = MutPointer[Int32, MutAnyOrigin]
@@ -302,14 +302,72 @@ def exp_cell(src: FPtr, dst: FPtr, t: Int):
 
 
 # DEVIATION 5110 (the M-step moments nk, means, covariances: every fold over
-# the rows ascending, one quotient). Row 119; moments_check.
+# the rows ascending, one quotient). Row 119; moments_check. The per-row
+# steps and the finals below are the ONE spelling: the cells here (the host
+# column) and the device's tiled kernel (`device_ops._moments_kernel`,
+# DEVIATION 5121) both call them, in the same row order.
+@always_inline
+def chain_add(acc: Float32, t: Float32) -> Float32:
+    """One link of every moments chain: the addend onto the running sum."""
+    return ftz(acc + t)
+
+
+@always_inline
+def nk_step(acc: Float32, r: Float32) -> Float32:
+    return chain_add(acc, r)
+
+
+@always_inline
+def nk_final(acc: Float32) -> Float32:
+    """+ 10 * FLT_EPSILON (sklearn, float32 input)."""
+    return ftz(acc + Float32(1.1920929e-06))
+
+
+@always_inline
+def xk_term(r: Float32, xa: Float32) -> Float32:
+    """One row's addend of a mean chain (independent of the chain, so a
+    kernel may form several ahead of the adds without moving a bit)."""
+    return ftz(identical_mul(r, ftz(xa)))
+
+
+@always_inline
+def xk_step(acc: Float32, r: Float32, xa: Float32) -> Float32:
+    return chain_add(acc, xk_term(r, xa))
+
+
+@always_inline
+def mean_final(acc: Float32, nkv: Float32) -> Float32:
+    return ftz(identical_div(acc, nkv))
+
+
+@always_inline
+def cov_term(r: Float32, xa: Float32, xb: Float32, ma: Float32, mb: Float32) -> Float32:
+    """One row's addend of a covariance chain (independent of the chain)."""
+    var da = ftz(ftz(xa) - ma)
+    var db = ftz(ftz(xb) - mb)
+    return ftz(identical_mul(r, ftz(identical_mul(da, db))))
+
+
+@always_inline
+def cov_step(acc: Float32, r: Float32, xa: Float32, xb: Float32, ma: Float32, mb: Float32) -> Float32:
+    return chain_add(acc, cov_term(r, xa, xb, ma, mb))
+
+
+@always_inline
+def cov_final(acc: Float32, nkv: Float32, reg: Float32, diag: Bool) -> Float32:
+    var v = ftz(identical_div(acc, nkv))
+    if diag:
+        v = ftz(v + reg)
+    return v
+
+
 @always_inline
 def nk_cell(resp: FPtr, n: Int, kc: Int, dst: FPtr, k: Int):
     """nk = sum_i resp[i, k] + 10 * FLT_EPSILON (sklearn, float32 input)."""
     var acc = Float32(0)
     for i in range(n):
-        acc = ftz(acc + resp[i * kc + k])
-    dst[k] = ftz(acc + Float32(1.1920929e-06))
+        acc = nk_step(acc, resp[i * kc + k])
+    dst[k] = nk_final(acc)
 
 
 @always_inline
@@ -319,8 +377,8 @@ def xk_cell(resp: FPtr, x: FPtr, n: Int, d: Int, kc: Int, nk: FPtr, dst: FPtr, c
     var a = cell - k * d
     var acc = Float32(0)
     for i in range(n):
-        acc = ftz(acc + ftz(identical_mul(resp[i * kc + k], ftz(x[i * d + a]))))
-    dst[cell] = ftz(identical_div(acc, nk[k]))
+        acc = xk_step(acc, resp[i * kc + k], x[i * d + a])
+    dst[cell] = mean_final(acc, nk[k])
 
 
 @always_inline
@@ -335,13 +393,8 @@ def cov_cell(
     var b = r - a * d
     var acc = Float32(0)
     for i in range(n):
-        var da = ftz(ftz(x[i * d + a]) - means[k * d + a])
-        var db = ftz(ftz(x[i * d + b]) - means[k * d + b])
-        acc = ftz(acc + ftz(identical_mul(resp[i * kc + k], ftz(identical_mul(da, db)))))
-    var v = ftz(identical_div(acc, nk[k]))
-    if a == b:
-        v = ftz(v + reg)
-    dst[cell] = v
+        acc = cov_step(acc, resp[i * kc + k], x[i * d + a], x[i * d + b], means[k * d + a], means[k * d + b])
+    dst[cell] = cov_final(acc, nk[k], reg, a == b)
 
 
 # ------------------------------------------------------------------ host RNG
@@ -385,3 +438,48 @@ def tree_descend[REV: Bool = False](
         var dr = sq_dist_rows[REV](x, i, centers, r, d)
         node = r if dr < dl else l
     labels[i] = nodes[node * 3 + 2]
+
+
+# ------------------------------------------------ agglomerative (Lance-Williams)
+comptime LINK_WARD = 0
+comptime LINK_COMPLETE = 1
+comptime LINK_AVERAGE = 2
+comptime LINK_SINGLE = 3
+
+
+# DEVIATION 5117 (the Lance-Williams update of agglomerative linkage: Float64
+# arithmetic from the Float32 matrix; ward as three pinned products summed
+# LEFT TO RIGHT, minus last, then ONE quotient by the three sizes summed
+# left to right; average as two pinned products, one add, one quotient;
+# complete/single exact max/min; a result below zero clamped to +0; the
+# Float32 rounding then flushed). Row 120; agglo_check.
+@always_inline
+def lance_williams(
+    linkage: Int, dak: Float32, dbk: Float32, dab: Float32, na: Float64, nb: Float64, nk: Float64,
+    has_a: Bool, has_b: Bool,
+) -> Float32:
+    """The dissimilarity of the merged cluster (a u b) to cluster k.
+
+    ward (on SQUARED euclidean dissimilarities, scipy `_hierarchy_distance_
+    update.pxi::_ward` squared out): ((na + nk) dak + (nb + nk) dbk - nk dab)
+    / (na + nb + nk), always from both (the squared matrix is complete).
+    complete / average / single: max, the size-weighted mean
+    (na dak + nb dbk) / (na + nb), min. Under a connectivity graph only the
+    pairs that are EDGES exist (scikit-learn `_hierarchical_fast.max_merge` /
+    `average_merge`): an edge from one side alone keeps its value."""
+    if linkage == LINK_WARD:
+        var t1 = identical_mul64(na + nk, Float64(dak))
+        var t2 = identical_mul64(nb + nk, Float64(dbk))
+        var t3 = identical_mul64(nk, Float64(dab))
+        var w = ((t1 + t2) - t3) / ((na + nb) + nk)
+        return ftz(Float32(w)) if w > Float64(0) else Float32(0)
+    if not has_b:
+        return dak
+    if not has_a:
+        return dbk
+    if linkage == LINK_COMPLETE:
+        return dak if dak >= dbk else dbk
+    if linkage == LINK_SINGLE:
+        return dak if dak <= dbk else dbk
+    var v = (identical_mul64(na, Float64(dak)) + identical_mul64(nb, Float64(dbk))) / (na + nb)
+    return ftz(Float32(v))

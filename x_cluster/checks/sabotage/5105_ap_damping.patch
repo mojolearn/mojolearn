@@ -4,8 +4,8 @@
  """
  from std.memory import bitcast
  
--from checks.numerics import ftz, identical_div, identical_exp, identical_log, identical_mul, identical_pow, identical_sqrt
-+from checks.numerics import identical_mul_add, ftz, identical_div, identical_exp, identical_log, identical_mul, identical_pow, identical_sqrt
+-from checks.numerics import ftz, identical_div, identical_exp, identical_log, identical_mul, identical_mul64, identical_pow, identical_sqrt
++from checks.numerics import identical_mul_add, ftz, identical_div, identical_exp, identical_log, identical_mul, identical_mul64, identical_pow, identical_sqrt
  
  comptime FPtr = MutPointer[Float32, MutAnyOrigin]
  comptime IPtr = MutPointer[Int32, MutAnyOrigin]
