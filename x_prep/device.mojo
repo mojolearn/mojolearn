@@ -62,18 +62,13 @@ def prep_kernel[OP: Int](f: FP, q: IP, total: Int32):
         run_unit[OP](t, f, q)
 
 
-def run_program_device(arena_addr: Int, arena_len: Int, prog_addr: Int, stages: Int, upload: Int = -1) raises:
+def run_program_device(arena_addr: Int, arena_len: Int, prog_addr: Int, stages: Int) raises:
     run_program_device_ptr(
-        FP(unsafe_from_address=arena_addr), arena_len, IP(unsafe_from_address=prog_addr), stages, upload
+        FP(unsafe_from_address=arena_addr), arena_len, IP(unsafe_from_address=prog_addr), stages
     )
 
 
-def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, upload: Int = -1) raises:
-    """`upload` (lane prep-apple): when 0 <= upload < arena_len, only the
-    arena's first `upload` words are copied up and the rest is zeroed on the
-    device: the caller promises they are zero on the host (the program's
-    outputs and scratch, laid out after its last input). A dense output (a
-    one-hot block of 1M x 570) is then never copied up, only back."""
+def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int) raises:
     for s in range(stages):
         var op = Int(host_q.unsafe_load(s * STAGE_INTS))
         if op < 0 or op >= N_OPS:
@@ -100,15 +95,8 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     var df = ctx.enqueue_create_buffer[DType.float32](arena_len if arena_len > 0 else 1)
     var dw = ctx.enqueue_create_buffer[DType.uint32](scratch)
     var dq = ctx.enqueue_create_buffer[DType.int32](stages * STAGE_INTS if stages > 0 else 1)
-    var up = arena_len if upload < 0 or upload > arena_len else upload
     if arena_len > 0:
-        if up < arena_len:
-            ctx.enqueue_memset(df, Float32(0))
-            if up > 0:
-                var head = df.create_sub_buffer[DType.float32](0, up)
-                ctx.enqueue_copy(dst_buf=head, src_ptr=host_f)
-        else:
-            ctx.enqueue_copy(dst_buf=df, src_ptr=host_f)
+        ctx.enqueue_copy(dst_buf=df, src_ptr=host_f)
     if stages > 0:
         ctx.enqueue_copy(dst_buf=dq, src_ptr=host_q)
     for s in range(stages):
