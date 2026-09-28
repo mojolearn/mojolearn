@@ -175,3 +175,138 @@ def pt_fold_fast_kernel(f: FP, q: IP):
         if first:
             f[S + 8] = sjt
         pt_finish(c, f, q, Int(total), sjt, sh_s[0])
+
+
+def class_stats_fast_kernel(f: FP, q: IP):
+    """`class_stats_unit` for t = block_idx.x = k*d + c: the class-k rows of
+    column c summed by the tree (count, sum, then the squared deviations)."""
+    var t = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var X = p(q, 0)
+    var nn = p(q, 1)
+    var dd = p(q, 2)
+    var Y = p(q, 3)
+    var k = t // dd
+    var c = t % dd
+    var sh_s = stack_allocation[TGR, Float32, address_space = AddressSpace.SHARED]()
+    var sh_c = stack_allocation[TGR, Float32, address_space = AddressSpace.SHARED]()
+    var cnt = Float32(0)
+    var s = Float32(0)
+    for i in range(tid, nn, TGR):
+        if Int(f[Y + i]) != k:
+            continue
+        s = add(s, f[X + i * dd + c])
+        cnt += 1
+    sh_s[tid] = s
+    sh_c[tid] = cnt
+    barrier()
+    var w = TGR // 2
+    while w >= 1:
+        if tid < w:
+            sh_s[tid] = add(sh_s[tid], sh_s[tid + w])
+            sh_c[tid] = sh_c[tid] + sh_c[tid + w]
+        barrier()
+        w //= 2
+    var total = sh_c[0]
+    var sum_ = sh_s[0]
+    var mean = Float32(0)
+    if total > 0:
+        mean = div(sum_, total)
+    barrier()
+    var ss = Float32(0)
+    if total > 0 and p(q, 7) >= 0:
+        for i in range(tid, nn, TGR):
+            if Int(f[Y + i]) != k:
+                continue
+            var e = sub(f[X + i * dd + c], mean)
+            ss = add(ss, mul(e, e))
+    sh_s[tid] = ss
+    barrier()
+    var w2 = TGR // 2
+    while w2 >= 1:
+        if tid < w2:
+            sh_s[tid] = add(sh_s[tid], sh_s[tid + w2])
+        barrier()
+        w2 //= 2
+    if tid == 0:
+        var var_ = Float32(0)
+        if total > 0:
+            var_ = div(sh_s[0], total)
+        if c == 0 and p(q, 5) >= 0:
+            f[p(q, 5) + k] = total
+        if p(q, 6) >= 0:
+            f[p(q, 6) + t] = mean
+        if p(q, 7) >= 0:
+            f[p(q, 7) + t] = var_
+        if p(q, 8) >= 0:
+            f[p(q, 8) + t] = sum_
+
+
+def ii_mean_fast_kernel(f: FP, q: IP):
+    """`ii_mean_unit` for column a = block_idx.x by the tree."""
+    var a = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    if f[p(q, 7)] != Float32(0):
+        return
+    var X = p(q, 0)
+    var nn = p(q, 1)
+    var dd = p(q, 2)
+    var M = p(q, 3)
+    var j = p(q, 4)
+    var sh_s = stack_allocation[TGR, Float32, address_space = AddressSpace.SHARED]()
+    var sh_c = stack_allocation[TGR, Float32, address_space = AddressSpace.SHARED]()
+    var cnt = Float32(0)
+    var s = Float32(0)
+    for i in range(tid, nn, TGR):
+        if f[M + i * dd + j] != Float32(0):
+            continue
+        s = add(s, f[X + i * dd + a])
+        cnt += 1
+    sh_s[tid] = s
+    sh_c[tid] = cnt
+    barrier()
+    var w = TGR // 2
+    while w >= 1:
+        if tid < w:
+            sh_s[tid] = add(sh_s[tid], sh_s[tid + w])
+            sh_c[tid] = sh_c[tid] + sh_c[tid + w]
+        barrier()
+        w //= 2
+    if tid == 0:
+        var total = sh_c[0]
+        f[p(q, 5) + a] = div(sh_s[0], total) if total > 0 else Float32(0)
+        if a == 0:
+            f[p(q, 6)] = total
+
+
+def ii_gram_fast_kernel(f: FP, q: IP):
+    """`ii_gram_unit` for t = block_idx.x = a*d + b by the tree."""
+    var t = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    if f[p(q, 7)] != Float32(0):
+        return
+    var X = p(q, 0)
+    var nn = p(q, 1)
+    var dd = p(q, 2)
+    var M = p(q, 3)
+    var j = p(q, 4)
+    var a = t // dd
+    var b = t % dd
+    var ma = f[p(q, 5) + a]
+    var mb = f[p(q, 5) + b]
+    var sh_s = stack_allocation[TGR, Float32, address_space = AddressSpace.SHARED]()
+    var s = Float32(0)
+    for i in range(tid, nn, TGR):
+        if f[M + i * dd + j] != Float32(0):
+            continue
+        s = add(s, mul(sub(f[X + i * dd + a], ma), sub(f[X + i * dd + b], mb)))
+    sh_s[tid] = s
+    barrier()
+    var w = TGR // 2
+    while w >= 1:
+        if tid < w:
+            sh_s[tid] = add(sh_s[tid], sh_s[tid + w])
+        barrier()
+        w //= 2
+    if tid == 0:
+        f[p(q, 6) + t] = sh_s[0]

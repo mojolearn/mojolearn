@@ -4,7 +4,8 @@
 worse, 5+ seeds on 2+ datasets, against scikit-learn in float64).
 
 For every estimator the FAST device folds reach (x_prep/fastred.mojo:
-col_stats and PowerTransformer's pt_fold), fit ours and scikit-learn on the
+col_stats, class_stats, PowerTransformer's pt_fold, IterativeImputer's
+ii_mean / ii_gram), fit ours and scikit-learn on the
 same rows (seed s draws ROWS rows of the dataset) and report ours' error
 against the reference:
 
@@ -77,7 +78,19 @@ def main():
             out("simple-imputer-mean", "transform_err",
                 _err(m.transform(b["nan"]), __import__("sklearn.impute", fromlist=["x"]).SimpleImputer(
                     strategy="mean").fit(b["nan"].astype(np.float64)).transform(b["nan"].astype(np.float64))))
+            sc_o = ml.f_classif(X, y)[0]
+            out("f-classif", "scores_err", _err(sc_o, skf.f_classif(X64, y)[0]))
+            nb = b["nan"][:20_000]
+            from sklearn.experimental import enable_iterative_imputer  # noqa: F401
+            from sklearn.impute import IterativeImputer as SkII
+            kw = dict(max_iter=10, tol=1e-3, random_state=7, sample_posterior=False, imputation_order="ascending")
+            miss = np.isnan(nb)
+            oi = _np(ml.IterativeImputer(**kw).fit_transform(nb))
+            ri = SkII(**kw).fit_transform(nb.astype(np.float64))
+            out("iterative-imputer", "imputed_err", _err(oi[miss], ri[miss]))
             for name, ours, ref, blk in (("gaussian-nb", ml.GaussianNB(), sknb.GaussianNB(), "raw"),
+                                         ("qda", ml.QuadraticDiscriminantAnalysis(reg_param=1e-3),
+                                          skda.QuadraticDiscriminantAnalysis(reg_param=1e-3), "raw"),
                                          ("multinomial-nb", ml.MultinomialNB(), sknb.MultinomialNB(), "counts"),
                                          ("lda", ml.LinearDiscriminantAnalysis(), skda.LinearDiscriminantAnalysis(), "raw")):
                 Xb = b[blk]

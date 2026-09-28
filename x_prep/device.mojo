@@ -11,7 +11,10 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_prep.common import FP, IP, STAGE_INTS
 from x_prep.units import N_OPS, run_unit
 from x_prep.dsort import sort_cols_device, sort_scratch_words
-from x_prep.fastred import TGR, col_stats_fast_kernel, pt_fold_fast_kernel
+from x_prep.fastred import (
+    TGR, col_stats_fast_kernel, pt_fold_fast_kernel, class_stats_fast_kernel, ii_mean_fast_kernel,
+    ii_gram_fast_kernel,
+)
 from x_prep.dmi import mi_cd_device, mi_big_n, mi_scratch_words
 
 #: op 69 (`mi_cd`) runs as the sorted neighbour search of x_prep/dmi.mojo
@@ -20,6 +23,9 @@ comptime OP_MI_CD = 69
 
 #: FAST only: ops folded by a threadgroup per column (x_prep/fastred.mojo)
 comptime OP_COL_STATS = 1
+comptime OP_CLASS_STATS = 16
+comptime OP_II_MEAN = 53
+comptime OP_II_GRAM = 54
 comptime OP_PT_FOLD = 106
 
 #: op 0 (`sort_cols`) runs as the device sort of x_prep/dsort.mojo, not as
@@ -123,6 +129,15 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int) 
                 continue
             if fast_folds and op == OP_PT_FOLD:
                 ctx.enqueue_function[pt_fold_fast_kernel](df.unsafe_ptr(), qp, grid_dim=total, block_dim=TGR)
+                continue
+            if fast_folds and op == OP_CLASS_STATS:
+                ctx.enqueue_function[class_stats_fast_kernel](df.unsafe_ptr(), qp, grid_dim=total, block_dim=TGR)
+                continue
+            if fast_folds and op == OP_II_MEAN:
+                ctx.enqueue_function[ii_mean_fast_kernel](df.unsafe_ptr(), qp, grid_dim=total, block_dim=TGR)
+                continue
+            if fast_folds and op == OP_II_GRAM:
+                ctx.enqueue_function[ii_gram_fast_kernel](df.unsafe_ptr(), qp, grid_dim=total, block_dim=TGR)
                 continue
         comptime for k in range(N_OPS):
             if op == k:
