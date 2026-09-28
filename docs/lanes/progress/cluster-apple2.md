@@ -224,3 +224,30 @@ slower on the coarse fit and was removed (db0c815ec).
 
 Merged origin/lane/apple-merged at a3e8ed8ea (10 commits: M2 Pro fixes, one process-lifetime
 DeviceContext for the SVM/GMM/Cholesky/GP bindings); no conflicts.
+
+## M3 Ultra (m3ultra-b), IDENTICAL, FINAL A/B 1790616849331: before 037daa353 sources -> bb1d3e27b
+
+bb1d3e27b = every default change of this lane up to the stacked E-step (not the GMM chain
+changes after it), plus the merge of origin/lane/apple-merged in both arms. **Every digest
+equal before and after (35 of 35).**
+
+| case | rows | taxi before -> after (s) | higgs before -> after (s) |
+|---|---|---|---|
+| kmeans | 1M | 0.0590 -> 0.0555 | 0.0917 -> 0.0844 |
+| minibatch-kmeans | 1M | 0.2384 -> 0.2297 | 0.3021 -> 0.3001 |
+| bisecting-kmeans | 1M | 0.2822 -> 0.2768 | 0.2968 -> 0.2893 |
+| gmm | 1M | 2.4506 -> 2.3021 | 2.3463 -> 2.2022 |
+| bayesian-gmm | 100k | 1.7550 -> 1.7216 | 2.3311 -> 2.2837 |
+| dbscan | 100k | 0.1661 -> 0.1606 | 0.0448 -> 0.0428 |
+| hdbscan | 40k | 1.5155 -> 1.5367 | 1.5966 -> 1.5977 |
+| agglomerative (single) | 10k | 0.0598 -> 0.0622 | 0.0588 -> 0.0581 |
+| agglomerative-ward | 10k | 1.1924 -> 1.1564 | 1.2070 -> 1.2221 |
+| spectral | 10k | 0.4908 -> 0.4826 | 0.0800 -> 0.0743 |
+| meanshift | 10k | 0.2921 -> 0.2807 | 0.2766 -> 0.2650 |
+| optics | 10k | 0.4180 -> 0.4165 | 0.4477 -> 0.4424 |
+| affinity-prop | 5k | 1.7388 -> 1.7198 | 0.9360 -> 0.9384 |
+| KMeans coarse 1M x 28 k 1024 (probe) | | 1.1471 -> 0.8519 | |
+| KMeans PQ codebook 1M x 2 k 256 (probe) | | 0.2155 -> 0.1938 | |
+| IVF-SQ fit (x_ann, probe) | | 1.535 -> 1.241 | |
+
+GMM stages (taxi, 22 it): E-step 706 -> 579 ms, M-step 1222 -> 1238 ms.
