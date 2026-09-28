@@ -243,3 +243,20 @@ default; forward and reverse, reps 2; digests equal in every row. Raw:
 | SVGP.fit 100k, 64 inducing | FAST | | | 0.219 | 0.086 |
 | KNNImputer.transform (tiled vs per-cell) | IDENTICAL | 0.160 | 0.150 | 0.160 | 0.147 |
 | KernelPCA.fit 500, SkewedChi2Sampler | both | unchanged | | | |
+
+### Request 1790613586332 (m4pro-a, M4 Pro, f71bfda90): the k-NN host order pass
+
+serial = `-D MOJOLEARN_KNN_SERIAL_ORDER` (one task), new = default; forward
+and reverse; IDENTICAL digests equal in every row (FAST k = 2,000 taxi rows
+vary run to run inside each arm, as before). KNN_PHASE_TIMERS sort_ms at
+2,000 x 2,000, k = 2,000: 139 to 145 ms serial, 32 to 38 ms new (FAST: 55 to
+60 -> 10). Raw: ~/mojolearn-evidence/neighbors-apple/1790613586332-speed-neighbors-f71bfda90b.txt
+
+| case | mode | taxi serial | taxi new | HIGGS serial | HIGGS new |
+|---|---|---|---|---|---|
+| NearestNeighbors(k=2000).kneighbors 20k x 2k | IDENTICAL | 0.189 | 0.105 | 0.190 | 0.108 |
+| NearestNeighbors(k=2000).kneighbors 20k x 2k | FAST | 0.265 | 0.092 | 0.266 | 0.093 |
+| NearestNeighbors(k=2000).kneighbors 100k x 500 | IDENTICAL | 0.074 | 0.050 | 0.074 | 0.050 |
+| NearestNeighbors(k=2000).kneighbors 100k x 500 | FAST | 0.084 | 0.037 | 0.083 | 0.037 |
+| kneighbors / kNN classifier / regressor, k = 10, 20 (round-one board) | IDENTICAL | unchanged (0.05 to 0.13 s), digests = round one's | | | |
+| SpectralEmbedding(knn).fit 20k | both | unchanged (0.77 IDENTICAL, 0.26 FAST) | | | |
