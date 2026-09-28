@@ -78,7 +78,10 @@ class _M:
         if a.ndim != 2 or min(a.shape) == 0:
             raise ValueError(f"{name}: a nonempty two-dimensional input is required")
         s = array.array("f")
-        s.frombytes(a.tobytes())
+        mv = getattr(a, "_mv", None)
+        # one copy: the Array's own buffer straight into the store (its
+        # tobytes() was a second full copy of every input)
+        s.frombytes(mv if isinstance(mv, memoryview) and mv.c_contiguous else a.tobytes())
         m = cls(s, a.shape[0], a.shape[1])
         m._check_finite(name)
         return m
