@@ -75,7 +75,7 @@ from cluster.host.kmeans_oracle import (
 )
 from core.philox import philox4x32_10
 from core.host_predict_threads import host_list_ptr
-from gemm.host.identical_gemm import OP_NN, OP_TN, contract_leaf_size, gemm_oracle, gemm_oracle_cell
+from gemm.host.identical_gemm import OP_NN, OP_TN, gemm_oracle
 from cluster.host.host_cells import host_cells
 from cluster.host.host_gemm_cells import host_gemm_oracle
 
@@ -507,16 +507,13 @@ def gmmh_e_step(
     var dd = d * d
     var mahal = List[Float32](length=n * ncomp, fill=Float32(0.0))
     var mahalp = host_list_ptr(mahal)
-    # Each component's `y = x . P_k` (a `gemm_oracle` NN product) and
-    # `murow = mu_k . P_k`; `mahal[i, k] = sum_j (y_ij - murow_j)^2`. The
-    # cells of `y` are `gemm_oracle_cell` at `contract_leaf_size(d)`, the
-    # value `gemm_oracle` gives them (cluster/host/host_gemm_cells.mojo), so
-    # rows run as independent tasks, each row's cells and fold in the
-    # serial order. `parallel_components` (the old split over components)
-    # no longer changes anything: every caller gets the row split.
+    # Each component's `y = x . P_k` and `murow = mu_k . P_k` (`gemm_oracle`
+    # NN products, through `cluster/host/host_gemm_cells.mojo::
+    # host_gemm_oracle`, the same bits), then `mahal[i, k] = sum_j (y_ij -
+    # murow_j)^2` with the rows as independent tasks. `parallel_components`
+    # (the old split over components) no longer changes anything: every
+    # caller gets the row split.
     _ = parallel_components
-    var pks = List[List[Float32]](capacity=ncomp)
-    var murows = List[Float32](capacity=ncomp * d)
     for kc in range(ncomp):
         var pk = List[Float32](capacity=dd)
         for i in range(dd):
@@ -524,22 +521,19 @@ def gmmh_e_step(
         var muk = List[Float32](capacity=d)
         for j in range(d):
             muk.append(means[kc * d + j])
+        var y = host_gemm_oracle(x, pk, OP_NN, n, d, d)
         var murow = gemm_oracle(muk, pk, OP_NN, 1, d, d)
-        for j in range(d):
-            murows.append(murow[j])
-        pks.append(pk^)
-    var leaf = contract_leaf_size(d)
+        var yp = host_list_ptr(y)
 
-    def _rows(i: Int) {imm x, imm pks, imm murows, imm mahalp, imm ncomp, imm n, imm d, imm leaf}:
-        for kc in range(ncomp):
+        def _rows(i: Int) {imm yp, imm murow, imm mahalp, imm ncomp, imm d, imm kc}:
             var acc = Float32(0.0)
             for j in range(d):
-                var y = gemm_oracle_cell(x, pks[kc], OP_NN, i, j, n, d, d, leaf)
-                var t = ftz(ftz(y) - ftz(murows[kc * d + j]))
+                var t = ftz(ftz(yp.unsafe_load(i * d + j)) - ftz(murow[j]))
                 acc = ftz(identical_mul_add(t, t, acc))
             mahalp.unsafe_store(i * ncomp + kc, acc)
 
-    host_cells(_rows, n, 3 * ncomp * d * d)
+        host_cells(_rows, n, 3 * d)
+        _ = y^
 
     var d_log_2pi = ftz(
         identical_mul(Float32(d), bitcast[DType.float32](GMMH_LOG_2PI_BITS))
