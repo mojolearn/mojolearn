@@ -13,17 +13,20 @@ digests, byte LM final witness and loss digests).
 
 | steward id | Mac | commit | what |
 |---|---|---|---|
+| 1790611567835 | m4pro-a | a2c1420ef | A/B base=35d08f9ca vs new=a2c1420ef (samba-train-step, samba-forward, mamba3-forward, lm-train-step, lm-forward, transformer-forward, gemm; 2 alternations) + byte LM T3 step A/B (2 alternations, witness + loss digests) + GEMM small-tile window check on the M4 Pro (default, SMALL_KB 16, no small tile) |
 | 1790603073363 | m3ultra-b | 35d08f9ca | profile (every bench lane, T3 shard step, census with attention per-kernel timers; the M3 Ultra grants the estash word at T3, so the recompute change below cannot run there), Samba train step cProfile, attention arms at T3 (granted, FORCE_DENY + NO_ERECOMP = the old denied path, FORCE_DENY = recompute), GEMM geometry sweep (default, KB_WIDE 32, GROUP_M 16, DB, KB_WIDE 32 x SGM 4, no small tile, SPLIT 2048, SPLIT 4096, SPLIT 2048 x KB_WIDE 32), mamba1/mamba2/transformer forward A/B b11745d8e vs 30497d57e vs ca692c7e2 |
 
 ## Changes
 
 | commit | change | default? | status |
 |---|---|---|---|
-| ca692c7e2 | Apple matrix GEMM: double-buffered shared pages (`-D MOJOLEARN_APPLE_MMA_DB`) | opt-in arm | measuring (job 1) |
-| 0d5d08027 | Apple matrix GEMM: per-leaf wide window (`-D MOJOLEARN_APPLE_MMA_KB_WIDE=32`) | opt-in arm | measuring (job 1) |
-| 35d08f9ca | Apple matrix GEMM: leaf-group split (`-D MOJOLEARN_APPLE_MMA_SPLIT_BLOCKS=<n>`; power-of-two leaf groups aligned at leaf 0, group nodes folded by `_ksplit_fold_launch`) | opt-in arm | measuring (job 1) |
+| ca692c7e2 | Apple matrix GEMM: double-buffered shared pages (`-D MOJOLEARN_APPLE_MMA_DB`) | opt-in arm | REJECTED: 1.5-2x slower on every T3 call (M3 Ultra); stays an arm |
+| 0d5d08027 | Apple matrix GEMM: per-leaf wide window (`-D MOJOLEARN_APPLE_MMA_KB_WIDE=32`) | opt-in arm | faster on small-tile calls, slower on default-tile calls (M3 Ultra): see 26f39f2cd |
+| 26f39f2cd | Apple matrix GEMM: the SMALL tile walks k in 32-step windows when the leaf allows (`APPLE_MMA_SMALL_KB`, `-D MOJOLEARN_APPLE_MMA_SMALL_KB=16` reverts) | DEFAULT | M3 Ultra: every hash equal, small-tile calls 16-30% faster; M4 check + step A/B in job 2 |
+| 35d08f9ca | Apple matrix GEMM: leaf-group split (`-D MOJOLEARN_APPLE_MMA_SPLIT_BLOCKS=<n>`; power-of-two leaf groups aligned at leaf 0, group nodes folded by `_ksplit_fold_launch`) | opt-in arm | hashes equal; head_dA 179 -> 124 ms but no better than the small-tile KB 32 default overall; stays an arm |
 | 68077a9d9 | Mamba-1/2/3 backward bindings: the binding's process-lifetime context (`neural_ctx`) instead of a fresh `DeviceContext()` per call (a new Metal queue and pipeline compiles on every call) | DEFAULT | measuring (job 2) |
-| 815db5956 | Apple attention: a process DENIED the kept exp stashes recomputes one layer's stash in the backward (estash forward into scratch + estash backward) instead of the round 3 zdot | DEFAULT ON (denied processes only; `-D MOJOLEARN_ATTN_APPLE_NO_ERECOMP` opts out) | measuring (job 1); revert if the witness moves or no gain |
+| 0678acea6 | Mamba-3 backward: scratch allocations without a wait each | DEFAULT | measuring (job 2) |
+| 815db5956 | Apple attention: a process DENIED the kept exp stashes recomputes one layer's stash in the backward (estash forward into scratch + estash backward) instead of the round 3 zdot | opt-in since 07b658ab3 (`-D MOJOLEARN_ATTN_APPLE_ERECOMP`) | REJECTED as a default: witness equal but 3.619 s vs 3.537 s (round 3 backward) at T3 on the M3 Ultra |
 
 Shared code note: the GEMM arms touch `gemm/checks/gemm_identical.mojo`
 (every Apple IDENTICAL GEMM, classical families included) but only under
@@ -59,3 +62,28 @@ Attention arms at T3 (5 steps each, same build): granted estash 2.923 s;
 FORCE_DENY + NO_ERECOMP (the old denied path, the round 3 word) 3.537 s;
 final witness digests (gradients 8a12ffdb..., parameters daea9cb6...) and
 loss digests EQUAL across the two words.
+
+GEMM geometry sweep (M3 Ultra, T3 calls, ordinary operands, ms; every hash equal
+across all geometries; the `kbw32sg4` arm did not build):
+
+| call | default | KB_WIDE 32 | GROUP_M 16 | DB | no small tile | SPLIT 2048 | SPLIT 4096 |
+|---|---|---|---|---|---|---|---|
+| proj_fwd | 2.31 | 1.96 | 2.33 | 3.68 | 1.97 | 2.47 | 2.38 |
+| proj_dA | 2.30 | 1.93 | 2.35 | 3.58 | 2.02 | 2.48 | 2.47 |
+| proj_dB | 3.03 | 2.27 | 2.98 | 5.62 | 2.53 | 2.17 | 2.04 |
+| gateup_fwd | 4.36 | 5.27 | 4.62 | 5.72 | 4.65 | 4.56 | 4.46 |
+| gateup_dA | 6.25 | 4.77 | 6.04 | 10.42 | 4.83 | 5.09 | 4.90 |
+| gateup_dB | 7.11 | 5.10 | 6.94 | 12.69 | 5.20 | 4.90 | 4.93 |
+| down_fwd | 5.92 | 4.78 | 6.19 | 10.38 | 5.04 | 4.89 | 5.16 |
+| down_dA | 4.53 | 5.42 | 4.59 | 5.89 | 4.56 | 4.76 | 4.65 |
+| down_dB | 7.07 | 4.94 | 6.98 | 12.61 | 5.31 | 4.81 | 4.80 |
+| head_fwd | 102.4 | 116.7 | 102.5 | 130.7 | 104.9 | 102.5 | 102.4 |
+| head_dA | 179.3 | 128.0 | 179.2 | 357.5 | 148.6 | 124.3 | 124.4 |
+| head_dB | 115.6 | 137.5 | 116.7 | 156.3 | 115.3 | 115.9 | 114.9 |
+
+mamba1-forward A/B (the round 1 open item), M3 Ultra, alternating, 3 reps,
+ms: b11745d8e 20.25 / 20.50 / 20.29; 30497d57e 21.87 / 19.79 / 19.92;
+35d08f9ca 20.45 / 19.52 / 19.95; digest dfe79ab628aa17cf in every race.
+RESOLVED: no regression. The 24.4 -> 36.4 ms on the M4 Pro was one run on a
+box that wedged in the same job. mamba2-forward and transformer-forward also
+flat, digests equal (00da58895303c580, d5a2b289afdb5709).
