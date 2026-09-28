@@ -178,6 +178,8 @@ def test_new_property_axes_reach_outputs_and_fail_sabotage(harness, name):
         ml.STL = stl
     elif name == "x-decomp-als":
         estimator = ALS()
+    elif name == "x-decomp-nmf":
+        estimator.n_components_ = 5
     elif name == "x-neighbors-gp-cov":
         estimator = Gaussian()
     fit = harness._fit({}, estimator)
