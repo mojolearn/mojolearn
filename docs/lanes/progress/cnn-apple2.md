@@ -323,6 +323,18 @@ on the M4 Pro and M3 Ultra): 770c1be66 reads eight staged words ahead of
 the dependent adds; job 1790619765191 (m4-a) times it against
 `-D MOJOLEARN_XCNN_NO_BN_BLOCK`.
 
+### m4-a (Apple M4), job 1790619765191, commit 2846f96a6: the BatchNorm fold form
+
+noblock = `-D MOJOLEARN_XCNN_NO_BN_BLOCK` (the element kernel); all =
+default (the form measured per shape, the threadgroup fold reading ahead).
+| shape | IDENTICAL noblock | IDENTICAL all | FAST noblock | FAST all |
+|---|---|---|---|---|
+| BatchNorm2d fwd / bwd | 21.9 / 16.9 | 13.0 / 13.3 | 19.7 / 15.2 | 10.1 / 9.6 |
+| BasicBlock fwd / fwd+bwd | 95.8 / 209.4 | 74.5 / 179.8 | 87.2 / 190.6 | 66.7 / 158.1 |
+| CNNClassifier fit 2048 / predict 2048 | 226.1 / 81.3 | 223.8 / 79.8 | | |
+Every digest line (BatchNorm2d's and BasicBlock's included) equal in all
+runs of both arms, both tiers. The M4 regression of 93e40eaf2 is gone.
+
 ## Unproven
 
 - The regenerated seam 5702 sabotage patch: applies, not yet run.
