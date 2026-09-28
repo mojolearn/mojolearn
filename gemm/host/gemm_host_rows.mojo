@@ -410,7 +410,7 @@ def gemm_host_rows_into(
         var rchunk = (m + tasks - 1) // tasks
         var pchunk = (npan + tasks - 1) // tasks
 
-        def _pack(t: Int) {imm a, imm b, imm ap, imm bp, imm op, imm m, imm n, imm k, imm rchunk, imm pchunk}:
+        def _pack(t: Int) {imm a, imm b, imm ap, imm bp, imm op, imm m, imm n, imm k, imm rchunk, imm pchunk, imm npan}:
             ghr_pack_a(a, op, m, k, ap, t * rchunk, min((t + 1) * rchunk, m))
             ghr_pack_b(b, op, n, k, bp, t * pchunk, min((t + 1) * pchunk, npan))
 
