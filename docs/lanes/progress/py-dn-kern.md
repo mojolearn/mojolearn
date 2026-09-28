@@ -35,8 +35,15 @@ oracles), planted zeros, -0.0, NaN, ties, duplicate COO entries, refusals.
 
 ## Before / after (same box, one job)
 
-PENDING: the shared NVIDIA pod went down at about 19:20Z on 2026-09-28 and
-the orchestrator's re-create was out of stock. Nothing below is measured yet.
+PENDING. The first shared pod went down at about 19:20Z on 2026-09-28. On
+the new pod (nvc1, 2x A40) the four touched bindings BUILD (`_mojolearn`,
+`_mojolearn_core_host`, `_mojolearn_x_neighbors`, `_mojolearn_x_neighbors_host`,
+built by `sh`, no GPU). The head columns job nvc1-0012 was cancelled at
+19:52:54Z together with every other py-* job on the queue (not by this lane);
+it produced no verdict. Job scripts are on the pod: /root/ev-py-dn-kern/head1.sh
+(columns + ab_diff against /root/ev-py-decomp-nbrs/base), sab1.sh (the fused
+device sabotage, once), kern_timing.sh (base tree vs this tree, GPU then CPU;
+bench ~/mojolearn-evidence/py-dn-kern/kern_bench.py). Nothing below is measured yet.
 
 | machine | column | case | base s | lane s | digest equal |
 |---|---|---|---|---|---|
