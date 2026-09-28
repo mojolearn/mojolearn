@@ -83,6 +83,34 @@ def main() raises:
         HostExec.gemm(ptr(A), ptr(B), ptr(hst), m, k, n, ta, tb)
         same("5300 gemm host arm " + String(arm), count_diff_f32(hst, want))
         tr.record_list_f32("x_decomp.gemm." + String(arm), dev)
+    # ---- 5300 the host's SIMD spelling (x_decomp/host_simd.mojo): shapes that
+    # reach full register tiles, the row and column tails, several KC chunks
+    # (k 600) and two MC row panels (m 70), every transposition arm
+    var hm = 70
+    var hk = 600
+    var hn = 77
+    var ha = seam_fixture(hm, hk, 31)
+    var hb = seam_fixture(hk, hn, 32)
+    var hat = seam_fixture(hk, hm, 33)
+    var hbt = seam_fixture(hn, hk, 34)
+    for arm in range(4):
+        var ta = arm == 1 or arm == 3
+        var tb = arm >= 2
+        var A = hat.copy() if ta else ha.copy()
+        var B = hbt.copy() if tb else hb.copy()
+        var want = oracle_gemm(A, B, hm, hk, hn, ta, tb)
+        if arm == 0:
+            require_separates("5300 host-tile gemm fold order", count_diff_f32(want, oracle_gemm(A, B, hm, hk, hn, ta, tb, 1)))
+        var hst = zeros(hm * hn)
+        HostExec.gemm(ptr(A), ptr(B), ptr(hst), hm, hk, hn, ta, tb)
+        same("5300 host-tile gemm host arm " + String(arm), count_diff_f32(hst, want))
+    var tbk = 9000
+    var tba = seam_fixture(hm, tbk, 35)
+    var tbb = seam_fixture(tbk, 19, 36)
+    var wtb = oracle_gemm(tba, tbb, hm, tbk, 19, False, False)
+    var htb = zeros(hm * 19)
+    HostExec.gemm(ptr(tba), ptr(tbb), ptr(htb), hm, tbk, 19, False, False)
+    same("5300 host-tile blocked gemm host", count_diff_f32(htb, wtb))
     # ---- 5300/5301 past FOLD_BLOCK: the blocked two-stage fold
     var kb = 9000
     var ab = seam_fixture(3, kb, 21)
@@ -169,6 +197,13 @@ def main() raises:
     HostExec.sqdist(ptr(qa), ptr(qb), ptr(hs), 17, 11, d)
     same("5302 sqdist host", count_diff_f32(hs, ws))
     tr.record_list_f32("x_decomp.sqdist", ds)
+    var sqa = seam_fixture(37, d, 37)
+    var sqb = seam_fixture(77, d, 38)
+    var wsq = oracle_sqdist(sqa, 37, sqb, 77, d)
+    require_separates("5302 host-tile sqdist fold order", count_diff_f32(wsq, oracle_sqdist(sqa, 37, sqb, 77, d, 1)))
+    var hsq = zeros(37 * 77)
+    HostExec.sqdist(ptr(sqa), ptr(sqb), ptr(hsq), 37, 77, d)
+    same("5302 host-tile sqdist host", count_diff_f32(hsq, wsq))
     # ---- 5319 the non-Euclidean distances (manhattan, chebyshev, minkowski 3, cosine)
     # minkowski's root exp(log(sum) / p) compresses a one-ulp fold difference,
     # so its fixture is wider (97 features) and its p 1.5

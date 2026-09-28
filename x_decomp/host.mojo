@@ -6,6 +6,7 @@ compiled into the CPU host binding."""
 from std.memory import bitcast
 from std.sys.compile import is_defined
 
+from checks.numerics import ftz, identical_mul_add
 from decomposition.checks.jacobi_eigh_device import JACOBI_SWEEPS, JACOBI_TOL
 from decomposition.host.linalg_public import host_eigh, host_qr_r
 from decomposition.host.pca_full_oracle import host_one_sided_jacobi_svd, host_qr_factor
@@ -16,7 +17,6 @@ from x_decomp.cells import (
     colsum_part_cell,
     rowsum_part_cell,
     fold_cell,
-    gemm_part_cell,
     X_DECOMP_SVD_SWEEPS,
     X_DECOMP_SVD_TOL,
     I32Ptr,
@@ -25,7 +25,6 @@ from x_decomp.cells import (
     chol_serial,
     colsum_cell,
     ew_cell,
-    gemm_cell,
     als_row,
     barycenter_row,
     dijkstra_row,
@@ -40,9 +39,17 @@ from x_decomp.cells import (
     rand_cell,
     rowsum_cell,
     pdist_cell,
-    sqdist_cell,
 )
 from x_decomp.exec_trait import Exec
+from x_decomp.host_simd import (
+    gemm_fold_rows,
+    gemm_prepare,
+    gemm_task,
+    gemm_task_count,
+    sqdist_prepare,
+    sqdist_task,
+    sqdist_task_count,
+)
 
 comptime X_DECOMP_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
@@ -51,23 +58,22 @@ comptime X_DECOMP_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 struct HostExec(Exec):
     @staticmethod
     def gemm(a: F32Ptr, b: F32Ptr, c: F32Ptr, m: Int, k: Int, n: Int, ta: Bool, tb: Bool) raises:
+        # the cell's arithmetic and order, SIMD across outputs (x_decomp/host_simd.mojo)
         var nb = (k + FOLD_BLOCK - 1) // FOLD_BLOCK
-        var part = List[Float32](length=nb * m * n if nb > 1 else 1, fill=Float32(0))
+        var part = gemm_prepare(c, m, k, n)
         var pp = F32Ptr(unsafe_from_address=Int(part.unsafe_ptr()))
+        for t in range(gemm_task_count(m, k)):
+            gemm_task(t, a, b, c, pp, m, k, n, ta, tb)
         if nb > 1:
-            for bl in range(nb):
-                for t in range(m * n):
-                    pp.unsafe_store(bl * m * n + t, gemm_part_cell(
-                        a, b, t // n, t % n, m, k, n, ta, tb, bl * FOLD_BLOCK, min(k, (bl + 1) * FOLD_BLOCK)))
-        for i in range(m):
-            for j in range(n):
-                var v = fold_cell(pp, i * n + j, nb, m * n) if nb > 1 else gemm_cell(a, b, i, j, m, k, n, ta, tb)
-                comptime if X_DECOMP_HOST_SABOTAGE:
-                    # the gate's negative control (-D MOJOLEARN_HOST_SABOTAGE=1):
-                    # the host column's every product moves by one unit in the
-                    # last place; the GPU binding never defines it
-                    v = bitcast[DType.float32](bitcast[DType.uint32](v) ^ UInt32(1))
-                c.unsafe_store(i * n + j, v)
+            for i in range(m):
+                gemm_fold_rows(i, c, pp, m, n, nb)
+        _ = part^
+        comptime if X_DECOMP_HOST_SABOTAGE:
+            # the gate's negative control (-D MOJOLEARN_HOST_SABOTAGE=1):
+            # the host column's every product moves by one unit in the
+            # last place; the GPU binding never defines it
+            for t in range(m * n):
+                c.unsafe_store(t, bitcast[DType.float32](bitcast[DType.uint32](c.unsafe_load(t)) ^ UInt32(1)))
 
     @staticmethod
     def ew(
@@ -112,9 +118,21 @@ struct HostExec(Exec):
 
     @staticmethod
     def sqdist(a: F32Ptr, b: F32Ptr, dst: F32Ptr, na: Int, nb: Int, d: Int, kind: Int = 0, pw: Float32 = Float32(2)) raises:
+        if kind == 0:
+            # the cell's arithmetic and order, SIMD across outputs (x_decomp/host_simd.mojo)
+            # SABOTAGE (end to end): features DESCENDING on the host column only
+            for i in range(na):
+                for j in range(nb):
+                    var acc = Float32(0)
+                    for pp in range(d):
+                        var p = d - 1 - pp
+                        var t = ftz(ftz(a.unsafe_load(i * d + p)) - ftz(b.unsafe_load(j * d + p)))
+                        acc = ftz(identical_mul_add(t, t, acc))
+                    dst.unsafe_store(i * nb + j, acc)
+            return
         for i in range(na):
             for j in range(nb):
-                dst.unsafe_store(i * nb + j, sqdist_cell(a, b, i, j, d) if kind == 0 else pdist_cell(a, b, i, j, d, kind, pw))
+                dst.unsafe_store(i * nb + j, pdist_cell(a, b, i, j, d, kind, pw))
 
     @staticmethod
     def rand(dst: F32Ptr, count: Int, seed: UInt32, stream: UInt32, kind: Int) raises:
