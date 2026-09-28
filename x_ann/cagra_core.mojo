@@ -133,35 +133,50 @@ def cagra_reverse_merge(n: Int, deg: Int, pruned: List[Int32]) -> List[Int32]:
             rcount[dst] += 1
     var out = pruned.copy()
     var protected = deg // 2
-    var row = List[Int32](length=deg, fill=Int32(0))
-    for nid in range(n):
-        if protected == deg:
-            break
-        for i in range(deg):
-            row[i] = out[nid * deg + i]
-        var kr = rcount[nid] if rcount[nid] < deg else deg
-        while kr > 0:
-            kr -= 1
-            var v = rev[nid * deg + kr]
-            if v < 0:
-                continue
-            var pos = deg
+    if protected == deg:
+        return out^
+    # lane ann-apple2: each node's merge reads only its own row and its own
+    # reverse list and writes only its own row, so the nodes are split over
+    # host tasks (`ann_rows`'s split, as cagra_prune): the same integers
+    var op = out.unsafe_ptr()
+    var rp = rev.unsafe_ptr()
+    var cp = rcount.unsafe_ptr()
+    var tasks = ann_task_count(n, deg * deg)
+
+    def task(t: Int) {imm}:
+        var span = ann_span(t, tasks, n)
+        var row = List[Int32](length=deg, fill=Int32(0))
+        for nid in range(span[0], span[1]):
             for i in range(deg):
-                if row[i] == v:
-                    pos = i
-                    break
-            if pos < protected:
-                continue
-            var num_shift = pos - protected
-            if pos >= deg:
-                num_shift = deg - protected - 1
-            var s = protected + num_shift
-            while s > protected:
-                row[s] = row[s - 1]
-                s -= 1
-            row[protected] = v
-        for i in range(deg):
-            out[nid * deg + i] = row[i]
+                row[i] = op[nid * deg + i]
+            var kr = cp[nid] if cp[nid] < deg else deg
+            while kr > 0:
+                kr -= 1
+                var v = rp[nid * deg + kr]
+                if v < 0:
+                    continue
+                var pos = deg
+                for i in range(deg):
+                    if row[i] == v:
+                        pos = i
+                        break
+                if pos < protected:
+                    continue
+                var num_shift = pos - protected
+                if pos >= deg:
+                    num_shift = deg - protected - 1
+                var s = protected + num_shift
+                while s > protected:
+                    row[s] = row[s - 1]
+                    s -= 1
+                row[protected] = v
+            for i in range(deg):
+                op[nid * deg + i] = row[i]
+        _ = row^
+
+    ann_tasks(task, tasks)
+    _ = rev^
+    _ = rcount^
     return out^
 
 
