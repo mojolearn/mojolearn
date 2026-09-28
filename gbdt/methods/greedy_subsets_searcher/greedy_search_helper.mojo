@@ -144,6 +144,7 @@ from gbdt.gpu_util.partitions_reduce import (
     compute_partition_stats,
 )
 from checks.kernel_matrix import (
+    COLUMN_APPLE,
     HIST_SMEM_SHARED2_I32,
     PINNED_PARTITION_CHUNKS_SM,
     TARGET_COLUMN,
@@ -443,11 +444,23 @@ comptime FAST_REPLICATION_PIN_2040 = is_defined[
 # catches numbering).
 # ====================================================
 comptime SYM_RIDX_SPLITS_2031 = (
-    is_defined["MOJOLEARN_2031_SYM_RIDX_SPLITS"]()
+    (
+        is_defined["MOJOLEARN_2031_SYM_RIDX_SPLITS"]()
+        or (
+            TARGET_COLUMN == COLUMN_APPLE
+            and not is_defined["MOJOLEARN_2031_SYM_RIDX_SPLITS_OFF"]()
+        )
+    )
     and ridx_only_splits_for[
         TARGET_COLUMN, HIST_BUILD_MODE == NUMERIC_IDENTICAL
     ]()
 )
+"""DEFAULT ON APPLE since trees-apple2 (2026-09-28), both modes (the
+`ridx_only_splits_for` row admits Apple IDENTICAL since the same lane):
+M4 Pro 1M rows FAST SymmetricTree taxi 919 -> 835 ms (0.909), the SAME
+model digest (steward 1790608403999). `-D
+MOJOLEARN_2031_SYM_RIDX_SPLITS_OFF` restores the permuting reorder on
+Apple; elsewhere the define above still opts in."""
 
 # ================= DEVIATION BLOCK 2580 =================
 # QUANTIZE THE STATS ONCE PER LEVEL, NOT ONCE PER 4-FEATURE GROUP. Every
