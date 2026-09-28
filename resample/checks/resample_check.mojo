@@ -902,7 +902,7 @@ def check_resample_refusals() raises:
         + "]: "
         + String(named)
         + " refusals by name (n_resamples 0 and negative, unknown"
-        " method/statistic/alternative, inf and NaN in the sample, BCa in"
+        " method/statistic/alternative, inf and NaN in the sample, BCa for an order statistic in"
         " BOTH modes, a column the sample lacks, confidence_level at 1,"
         " the sort ceiling, a trim that cuts everything, a pooled length"
         " above PERM_MAX_POOLED, pearson under the independent null, an"
