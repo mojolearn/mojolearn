@@ -36,19 +36,38 @@ from x_decomp.device import (
     xd_ctx,
 )
 
-comptime POOL_KEEP_BYTES = 1 << 31
+comptime POOL_KEEP_BYTES = 1 << 30
+comptime POOL_CLASSES = 40
+
+
+def _class_of(n: Int) -> Int:
+    """The power-of-two size class holding n floats (capacity 2^c >= n)."""
+    var c = 0
+    while (1 << c) < n:
+        c += 1
+    return c
 
 
 struct _Pool(Defaultable, Movable):
+    """Device buffers by id. A freed buffer waits in its power-of-two class
+    for the next request of that class (O(1) either way); a released id is
+    reused. Free capacity past POOL_KEEP_BYTES is released after a sync, so
+    the number of live buffers stays near what a fit holds at once."""
     var bufs: List[DeviceBuffer[DType.float32]]
-    var cap: List[Int]
+    var cls: List[Int]          # the size class, -1 for a released id
     var live: List[Bool]
+    var free_by_class: List[List[Int]]
+    var released: List[Int]
     var free_floats: Int
 
     def __init__(out self):
         self.bufs = List[DeviceBuffer[DType.float32]]()
-        self.cap = List[Int]()
+        self.cls = List[Int]()
         self.live = List[Bool]()
+        self.free_by_class = List[List[Int]]()
+        for _ in range(POOL_CLASSES):
+            self.free_by_class.append(List[Int]())
+        self.released = List[Int]()
         self.free_floats = 0
 
 
@@ -57,53 +76,57 @@ comptime X_DECOMP_POOL = _Global[StorageType=_Pool, name="MojoXDecompPool", init
 
 def pool_alloc(n: Int) raises -> Int:
     """An id whose buffer holds at least n floats (n >= 1)."""
-    var want = max(n, 1)
+    var c = _class_of(max(n, 1))
+    if c >= POOL_CLASSES:
+        raise Error("x_decomp: a device matrix past the pool's largest size class")
     var p = X_DECOMP_POOL.get_or_create_ptr()
-    var best = -1
-    for i in range(len(p[].cap)):
-        if not p[].live[i] and p[].cap[i] >= want and p[].cap[i] <= 2 * want:
-            if best < 0 or p[].cap[i] < p[].cap[best]:
-                best = i
-    if best >= 0:
-        p[].live[best] = True
-        p[].free_floats -= p[].cap[best]
-        return best
+    if len(p[].free_by_class[c]) > 0:
+        var id = p[].free_by_class[c].pop()
+        p[].live[id] = True
+        p[].free_floats -= 1 << c
+        return id
     var ctx = xd_ctx()
-    var buf = ctx.enqueue_create_buffer[DType.float32](want)
-    for i in range(len(p[].cap)):
-        if not p[].live[i] and p[].cap[i] == 0:      # a released slot
-            p[].bufs[i] = buf^
-            p[].cap[i] = want
-            p[].live[i] = True
-            return i
+    var buf = ctx.enqueue_create_buffer[DType.float32](1 << c)
+    if len(p[].released) > 0:
+        var id = p[].released.pop()
+        p[].bufs[id] = buf^
+        p[].cls[id] = c
+        p[].live[id] = True
+        return id
     p[].bufs.append(buf^)
-    p[].cap.append(want)
+    p[].cls.append(c)
     p[].live.append(True)
-    return len(p[].cap) - 1
+    return len(p[].cls) - 1
 
 
 def pool_free(id: Int) raises:
     var p = X_DECOMP_POOL.get_or_create_ptr()
-    if id < 0 or id >= len(p[].cap) or not p[].live[id]:
+    if id < 0 or id >= len(p[].cls) or not p[].live[id] or p[].cls[id] < 0:
         raise Error("x_decomp: freeing a device matrix that is not live")
+    var c = p[].cls[id]
     p[].live[id] = False
-    p[].free_floats += p[].cap[id]
+    p[].free_by_class[c].append(id)
+    p[].free_floats += 1 << c
     if p[].free_floats * 4 > POOL_KEEP_BYTES:
+        # release every free buffer: its id holds a copy of one tiny buffer
         var ctx = xd_ctx()
         ctx.synchronize()
-        for i in range(len(p[].cap)):
-            if not p[].live[i] and p[].cap[i] > 0:
-                p[].bufs[i] = ctx.enqueue_create_buffer[DType.float32](1)
-                p[].free_floats -= p[].cap[i]
-                p[].cap[i] = 0
+        var tiny = ctx.enqueue_create_buffer[DType.float32](1)
+        for k in range(POOL_CLASSES):
+            while len(p[].free_by_class[k]) > 0:
+                var f = p[].free_by_class[k].pop()
+                p[].bufs[f] = tiny
+                p[].cls[f] = -1
+                p[].released.append(f)
+        p[].free_floats = 0
         ctx.synchronize()
 
 
 def _ptr(id: Int, n: Int) raises -> F32Ptr:
     var p = X_DECOMP_POOL.get_or_create_ptr()
-    if id < 0 or id >= len(p[].cap) or not p[].live[id]:
+    if id < 0 or id >= len(p[].cls) or not p[].live[id] or p[].cls[id] < 0:
         raise Error("x_decomp: a device matrix id that is not live")
-    if p[].cap[id] < n:
+    if (1 << p[].cls[id]) < n:
         raise Error("x_decomp: a device matrix smaller than the call reads")
     return F32Ptr(unsafe_from_address=Int(p[].bufs[id].unsafe_ptr()))
 

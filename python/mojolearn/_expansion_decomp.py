@@ -286,6 +286,8 @@ class _M:
 
 _M._one = _M(array.array("f", [0.0]), 1, 1)
 _DEV_ONE = {}
+#: the fewest values for which a host-only kit call goes resident (_Kit._use)
+_RES_MIN = 1 << 14
 
 
 def _dev_one(kit):
@@ -358,6 +360,24 @@ class _Kit:
             self._res_ok = r
         return r
 
+    def _use(self, *ms):
+        """The resident path for this call: the GPU binding, and an operand
+        already on the device or one of at least _RES_MIN values. A small
+        host-only call keeps the synchronous host-address path (a device
+        result Python reads at once would pay an upload, a launch and a
+        download where one call did)."""
+        if not self._res():
+            return False
+        big = False
+        for m in ms:
+            if m is None:
+                continue
+            if m._d is not None:
+                return True
+            if m.r * m.c >= _RES_MIN:
+                big = True
+        return big
+
     def _did(self, M):
         """M's device id on this binding, uploading a host matrix (it moves)."""
         raw = self._raw()
@@ -390,7 +410,7 @@ class _Kit:
             raise ValueError(f"x_decomp: cannot broadcast {X.r}x{X.c} against {A.r}x{A.c}")
         Bm, bm = mode_of(B)
         Cm, cm = mode_of(C)
-        if A.r * A.c and self._res():
+        if A.r * A.c and self._use(A, B, C):
             out = self._dout(A.r, A.c)
             one = _M._dev_one(self) if (Bm is _M._one or Cm is _M._one) else None
             ib = one if Bm is _M._one else self._did(Bm)
@@ -413,7 +433,7 @@ class _Kit:
         k2, n = (B.c, B.r) if tb else (B.r, B.c)
         if k != k2:
             raise ValueError(f"x_decomp: gemm inner dimensions {k} and {k2} differ")
-        if m * n and m * k and k * n and self._res():
+        if m * n and m * k and k * n and self._use(A, B):
             out = self._dout(m, n)
             self.b.x_decomp_dev_gemm(self._did(A), self._did(B), out._d.id, [m, k, n, int(ta), int(tb)])
             return out
@@ -423,7 +443,7 @@ class _Kit:
         return out
 
     def colsum(self, A):
-        if A.r * A.c and self._res():
+        if A.r * A.c and self._use(A):
             out = self._dout(1, A.c)
             self.b.x_decomp_dev_colsum(self._did(A), out._d.id, [A.r, A.c])
             return out
@@ -432,7 +452,7 @@ class _Kit:
         return out
 
     def rowsum(self, A):
-        if A.r * A.c and self._res():
+        if A.r * A.c and self._use(A):
             out = self._dout(A.r, 1)
             self.b.x_decomp_dev_rowsum(self._did(A), out._d.id, [A.r, A.c])
             return out
@@ -445,7 +465,7 @@ class _Kit:
         return self.colsum(self.rowsum(A))
 
     def sqdist(self, A, B):
-        if A.r * B.r and A.c and self._res():
+        if A.r * B.r and A.c and self._use(A, B):
             out = self._dout(A.r, B.r)
             self.b.x_decomp_dev_sqdist(self._did(A), self._did(B), out._d.id, [A.r, B.r, A.c])
             return out
@@ -457,7 +477,7 @@ class _Kit:
         """A non-Euclidean distance matrix (x_decomp/cells.mojo pdist_cell,
         DEVIATION 5319): kind 1 manhattan, 2 chebyshev, 3 minkowski pw,
         4 cosine."""
-        if A.r * B.r and A.c and self._res():
+        if A.r * B.r and A.c and self._use(A, B):
             out = self._dout(A.r, B.r)
             self.b.x_decomp_dev_sqdist(self._did(A), self._did(B), out._d.id, [A.r, B.r, A.c, int(kind), float(pw)])
             return out
@@ -515,7 +535,7 @@ class _Kit:
     def orth(self, A):
         """A copy of A with its columns orthonormalized: two passes of the
         Householder R and a row-parallel A R^-1 (DEVIATION 5309)."""
-        if A.r * A.c and self._res():
+        if A.r * A.c and self._use(A):
             Q = self._dout(A.r, A.c)
             self.b.x_decomp_dev_orth(self._did(A), Q._d.id, [A.r, A.c])
             return Q
@@ -618,7 +638,7 @@ class _Kit:
         (ties to the lower index) is negative (x_decomp/cells.mojo
         `absmax_sign_cell`, DEVIATION 5317)."""
         cnt = A.c if by_col else A.r
-        if cnt and A.r * A.c and self._res():
+        if cnt and A.r * A.c and self._use(A):
             out = self._dout(1, cnt)
             self.b.x_decomp_dev_absmax(self._did(A), out._d.id, [A.r, A.c, 1 if by_col else 0])
             return [v < 0 for v in out.s]
