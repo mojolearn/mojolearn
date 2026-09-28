@@ -13,6 +13,8 @@ launch clock). Laptop helpers: `tools/trees_apple3/`.
 |---|---|---|---|---|
 | 1790626600545 | m4pro-b | 6856b5f8f | FAST | base timing (2 rounds) and phase split (GBDT stages, RF launch clock, cProfile) |
 | 1790627269652 | m4pro-b | 7871c85bf | FAST | stage split without the launch clock (DART, AdaBoost, Bagging, DT, RF, ET) |
+| 1790627750328 | m4pro-b | 2366629d3 | FAST | Lossguide exact batch A/B, taxi (widths 32, 16, 64); its quality cell failed on a script error (fixed at b7c00d5dd) and is NOT a result |
+| 1790629196891 | m3ultra-b | b7c00d5dd | FAST + IDENTICAL | batch 1 (`tools/trees_apple3/job_batch1.sh`): Lossguide exact batch, RF node batch, forest data session; IDENTICAL digests; Lossguide and member quality |
 
 ## Base, FAST, M4 Pro m4pro-b (steward 1790626600545, commit 6856b5f8f)
 
@@ -58,3 +60,25 @@ on m4pro-b), fit ms, two rounds.
    iterations).
 2. DART (and the AdaBoost members): keep the device dataset across member fits.
 3. RF builder launch count per phase.
+
+## Changes (all OPT-IN until their A/B and quality check pass)
+
+| commit | mode | change | switch | shared code? |
+|---|---|---|---|---|
+| 2366629d3 | FAST, Apple | GBDT Lossguide: exact best-first in batches. Every round replays best-first on the host over the gains known so far, splits the leaf the replay needs and, in the same round, the leaves best-first would split next; leaves split ahead of time that best-first never reached are folded back on the host at the end. Same tree as one leaf per iteration, about log2(max_leaves) + max_leaves / width rounds | `-D MOJOLEARN_GBDT_LG_EXACT_BATCH` (width 32; `..._BATCH16`, `..._BATCH64`) | GBDT non-symmetric driver (`greedy_search_helper_depthwise.mojo`); Depthwise and IDENTICAL compile the old path |
+| f971afd27 | both | Forest data session: the members of DART and AdaBoostClassifier fit the same X, staged on the device once (NaN scan, pinned copy, upload) instead of once per member. `share` (FAST only) also keeps the first member's quantile table and bins | env `MOJOLEARN_FOREST_SESSION=1` or `share` | `ensemble/randomforest.mojo` (`fit_forest` is now a wrapper of `fit_forest_prepared`: every RF-builder estimator), `bindings/_mojolearn_rf.mojo`, `python/mojolearn/_forest_protocol.py`, `randomforest.py`, `_expansion_trees.py` |
+| 4744936ed | FAST, Apple | RF builder: wider node batch (16384 or 32768 instead of 4096) for trees without a leaf budget that may grow past 12 levels, capped at 512 MB of histogram workspace per stream | `-D MOJOLEARN_RF_FAST_BATCH16K` or `32K` | `bindings/_mojolearn_rf.mojo` only |
+
+## A/B results
+
+| change | Mac | steward id | mode | cell | before ms | after ms | after/before | digest or quality |
+|---|---|---|---|---|---|---|---|---|
+| Lossguide exact batch, width 32 | m4pro-b | 1790627750328 | FAST | gbdt-lossguide:taxi (100 trees) | 3705 (3569, 3841) | 1500 (1506, 1493) | 0.405 | 10 trees: cfeb63222f74d866 in every arm. 100 trees: FAST Lossguide varies run to run in both arms (before bcc798f1.., cab8c89e..; after 14d2bb78.., which the base job's before arm also produced) |
+| same, width 16 | m4pro-b | 1790627750328 | FAST | gbdt-lossguide:taxi | 3705 | 1531 | 0.413 | 10 trees equal |
+| same, width 64 | m4pro-b | 1790627750328 | FAST | gbdt-lossguide:taxi | 3705 | 1509 | 0.407 | 10 trees equal |
+| same (control) | m4pro-b | 1790627750328 | FAST | gbdt-depthwise:taxi | 1519 | 1509 | 0.993 | FAST Depthwise varies run to run in both arms |
+
+Per tree, Lossguide went from 35.3 ms to 14.5 ms, Depthwise's 14.5 ms. At this
+config (max_depth 6, max_leaves 64) the leaf budget never binds, so nothing
+is folded back; the quality cell of batch 1 (max_leaves 31, max_depth 10)
+is the one that exercises it.
