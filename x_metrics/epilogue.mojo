@@ -38,6 +38,8 @@ comptime EPI_TASK_WORK = 65536
 #: at most about 40 can exist); a task that would need more reports it and
 #: the caller takes the sequential walk.
 comptime EPI_PARTIALS = 64
+#: `encode_small_i64` answers labels that span fewer than this many values
+comptime ENC_SPAN = 65536
 
 
 @always_inline
@@ -943,3 +945,142 @@ def db_score(a: Int, sums: Int, counts_addr: Int, k: Int, d: Int, per_addr: Int)
                 best = v
         scores.append(best)
     return fsum_strict(scores) / Float64(k)
+
+
+# ---------------------------------------------------------------------------
+# lane metrics-apple3 (2026-09-28): integer label plumbing. No float is read
+# or written: integer compares and byte stores only.
+# ---------------------------------------------------------------------------
+
+def encode_small_i64(src_addr: Int, n: Int, classes_addr: Int, max_classes: Int, codes_addr: Int) raises -> Int:
+    """The ORDER RULE's encoder (`bindings/hotpath_helpers.mojo`
+    `_encode_labels`) for n Int64 labels that span fewer than ENC_SPAN
+    values: the distinct labels ascending at classes_addr (Int64), each
+    row's index into them at codes_addr (Int32). Returns the class count;
+    -1 when more than `max_classes` distinct labels were seen (nothing the
+    caller may read was written); -3 when the labels span ENC_SPAN values or
+    more (the caller takes the core encoder). The classes of a set of
+    integers and each label's rank among them do not depend on the order
+    the rows are visited in, so the rows run as host tasks: the span, a
+    seen-byte per value per task, then one table load per row."""
+    if n < 1 or max_classes < 1:
+        raise Error("x_metrics encode_small: n and max_classes must be positive")
+    var src = MutPointer[Int64, MutAnyOrigin](unsafe_from_address=src_addr)
+    var cls = MutPointer[Int64, MutAnyOrigin](unsafe_from_address=classes_addr)
+    var codes = MutPointer[Int32, MutAnyOrigin](unsafe_from_address=codes_addr)
+    var tasks = 1
+    if n >= 2 * EPI_TASK_WORK:
+        tasks = max(min(host_predict_task_count(n), n // EPI_TASK_WORK), 1)
+    var chunk = host_predict_chunk(n, tasks)
+    var mins = List[Int](length=tasks, fill=0)
+    var maxs = List[Int](length=tasks, fill=0)
+    var used = List[Int](length=tasks, fill=0)
+    var minp = MutPointer[Int, MutAnyOrigin](unsafe_from_address=Int(mins.unsafe_ptr()))
+    var maxp = MutPointer[Int, MutAnyOrigin](unsafe_from_address=Int(maxs.unsafe_ptr()))
+    var usedp = MutPointer[Int, MutAnyOrigin](unsafe_from_address=Int(used.unsafe_ptr()))
+
+    def _span(t: Int) {imm src, imm minp, imm maxp, imm usedp, imm n, imm chunk}:
+        var r0 = t * chunk
+        var r1 = min(r0 + chunk, n)
+        if r1 <= r0:
+            return
+        var least = Int(src[r0])
+        var most = least
+        for r in range(r0 + 1, r1):
+            var v = Int(src[r])
+            if v < least:
+                least = v
+            if v > most:
+                most = v
+        minp[t] = least
+        maxp[t] = most
+        usedp[t] = 1
+
+    if tasks == 1:
+        _span(0)
+    else:
+        host_parallelize(_span, tasks)
+    var lo = 0
+    var hi = 0
+    var first = True
+    for t in range(tasks):
+        if used[t] == 0:
+            continue
+        if first or mins[t] < lo:
+            lo = mins[t]
+        if first or maxs[t] > hi:
+            hi = maxs[t]
+        first = False
+    var bound = 1 << 40
+    if first or lo <= -bound or hi >= bound or hi - lo >= ENC_SPAN:
+        return -3
+    var span = hi - lo + 1
+    var seen = List[UInt8](length=tasks * span, fill=UInt8(0))
+    var seenp = MutPointer[UInt8, MutAnyOrigin](unsafe_from_address=Int(seen.unsafe_ptr()))
+
+    def _mark(t: Int) {imm src, imm seenp, imm n, imm chunk, imm span, imm lo}:
+        var r0 = t * chunk
+        var r1 = min(r0 + chunk, n)
+        for r in range(r0, r1):
+            seenp[t * span + (Int(src[r]) - lo)] = UInt8(1)
+
+    if tasks == 1:
+        _mark(0)
+    else:
+        host_parallelize(_mark, tasks)
+    var table = List[Int32](length=span, fill=Int32(-1))
+    var k = 0
+    for v in range(span):
+        var found = False
+        for t in range(tasks):
+            if seen[t * span + v] != UInt8(0):
+                found = True
+                break
+        if found:
+            if k == max_classes:
+                return -1
+            cls[k] = Int64(lo + v)
+            table[v] = Int32(k)
+            k += 1
+    var tablep = MutPointer[Int32, MutAnyOrigin](unsafe_from_address=Int(table.unsafe_ptr()))
+
+    def _code(t: Int) {imm src, imm codes, imm tablep, imm n, imm chunk, imm lo}:
+        var r0 = t * chunk
+        var r1 = min(r0 + chunk, n)
+        for r in range(r0, r1):
+            codes[r] = tablep[Int(src[r]) - lo]
+
+    if tasks == 1:
+        _code(0)
+    else:
+        host_parallelize(_code, tasks)
+    _ = len(table)
+    _ = len(seen)
+    return k
+
+
+def first_rows_i32(codes_addr: Int, n: Int, k: Int, out_addr: Int) raises:
+    """out[c] (Int64) = the first row whose Int32 code is c, -1 when no row
+    has it; a code outside [0, k) raises. StratifiedKFold's first-seen class
+    order read from sorted codes."""
+    if n < 0 or k < 1:
+        raise Error("x_metrics first_rows: invalid sizes")
+    var C = MutPointer[Int32, MutAnyOrigin](unsafe_from_address=codes_addr)
+    var out = MutPointer[Int64, MutAnyOrigin](unsafe_from_address=out_addr)
+    for c in range(k):
+        out[c] = Int64(-1)
+    var left = k
+    for r in range(n):
+        var c = Int(C[r])
+        if c < 0 or c >= k:
+            raise Error("x_metrics first_rows: a class code outside [0, k)")
+        if Int(out[c]) < 0:
+            out[c] = Int64(r)
+            left -= 1
+            if left == 0:
+                break
+    # the rows after the last first row still have to be valid codes
+    for r in range(n):
+        var c = Int(C[r])
+        if c < 0 or c >= k:
+            raise Error("x_metrics first_rows: a class code outside [0, k)")

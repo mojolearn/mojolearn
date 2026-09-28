@@ -2856,7 +2856,9 @@ def stratified_fold_rows(enc, counts, alloc, k, rng, numeric_mode=None):
     if n < 2 or k < 1 or 2 * n * k > _FOLD_ROWS_BOUND:
         return None
     prog = _Prog()
-    ENC = prog.put_i32(Array._owned(array.array("i", enc), (n,), "<i4", "C"))
+    # an int32 Array of codes goes in as it is (lane metrics-apple3)
+    ENC = prog.put_i32(enc if isinstance(enc, Array) and enc.dtype == "<i4" and enc.ndim == 1
+                       else Array._owned(array.array("i", enc), (n,), "<i4", "C"))
     OFF = prog.alloc(m + 1)
     ORD = prog.scratch(n)
     prog.stage("group_sort", 1, ENC, n, m, OFF, ORD)

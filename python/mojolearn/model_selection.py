@@ -869,6 +869,57 @@ class KFold(_KFoldBase):
             start += size
 
 
+def _first_seen_native(y):
+    """(first-seen int32 codes as an Array, the class count, the class
+    counts) of an integer label buffer, without a Python object per row
+    (lane metrics-apple3): the sorted codes of the native encoder, each
+    class's first row (`x_metrics_first_rows`), the classes ranked by it
+    (the order `dict.fromkeys` meets them in), the codes mapped through
+    that ranking (`gather_i32`), the counts by `x_metrics_class_sums`
+    (exact integers in binary64 below 2^53). None: the definition."""
+    from ._metrics_impl import _native_classification_labels
+    from ._buffer import _output_store
+    if y is None or isinstance(y, (list, tuple)):
+        return None
+    try:
+        lab = _native_classification_labels(y)
+    except Exception:
+        return None
+    gather = _native_optional('gather_i32')
+    if lab is None or gather is None:
+        return None
+    try:
+        from ._expansion_metrics import _binding
+        b = _binding(None)
+    except Exception:
+        return None
+    first = getattr(b, 'x_metrics_first_rows', None)
+    sums = getattr(b, 'x_metrics_class_sums', None)
+    if first is None or sums is None:
+        return None
+    codes, k = lab.codes, len(lab.classes)
+    n = codes.size
+    firsts = _output_store('q', k)
+    first(_addr_ro(codes), n, k, firsts.buffer_info()[0])
+    if min(firsts) < 0:
+        return None
+    order = sorted(range(k), key=firsts.__getitem__)
+    table = [0] * k
+    for rank, c in enumerate(order):
+        table[c] = rank
+    tbl = array.array('i', table)
+    enc = empty((n,), '<i4')
+    gather(tbl.buffer_info()[0], k, _addr_ro(codes), n, _addr(enc))
+    per = _output_store('d', k)
+    sums(_addr_ro(codes), 0, n, k, per.buffer_info()[0])
+    counts = [0] * k
+    for c in range(k):
+        counts[table[c]] = int(per[c])
+    if sum(counts) != n:
+        return None
+    return enc, k, counts
+
+
 class StratifiedKFold(_KFoldBase):
     """scikit-learn 1.9 `StratifiedKFold`: classes encoded in order of first
     appearance, allocated round-robin over the class-sorted labels; with
@@ -908,16 +959,20 @@ class StratifiedKFold(_KFoldBase):
     def _fold_plan(self, y):
         """(first-seen codes, classes, class counts, alloc): alloc[i][c] =
         class c's rows in fold i (sklearn's _make_test_folds)."""
-        labels = _labels_list(y)
-        enc, k = _encode_first_seen(labels)
-        if k <= 256:
-            # the counts by bytes.count (the same numbers as Counter; lane metrics-apple2)
-            eb = bytes(enc)
-            counts = [eb.count(c) for c in range(k)]
+        fast = _first_seen_native(y) if _msel3() else None
+        if fast is not None:
+            enc, k, counts = fast
         else:
-            counts = [0] * k
-            for c, m in collections.Counter(enc).items():
-                counts[c] = m
+            labels = _labels_list(y)
+            enc, k = _encode_first_seen(labels)
+            if k <= 256:
+                # the counts by bytes.count (the same numbers as Counter; lane metrics-apple2)
+                eb = bytes(enc)
+                counts = [eb.count(c) for c in range(k)]
+            else:
+                counts = [0] * k
+                for c, m in collections.Counter(enc).items():
+                    counts[c] = m
         if max(counts) < self.n_splits:
             raise ValueError(f'n_splits={self.n_splits} cannot be greater than the number of members in '
                              'each class.')
