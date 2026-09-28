@@ -104,7 +104,7 @@ sentence true.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -280,6 +280,135 @@ def cd_axpy_pair_kernel(
     var a1 = ftz(coef.unsafe_load(Int(ci_in)))
     r = ftz(identical_mul_add(a1, ftz(x.unsafe_load(Int(ci_in) * n + i)), ftz(r)))
     residual.unsafe_store(i, r)
+
+
+comptime CD_STEP_TPB = 256
+comptime CD_STEP_MAX_BLOCKS = 64
+comptime CD_TWO_STEP = (
+    CD_THREE_LAUNCH
+    and not SAB_SOFT_SWAP
+    and not SAB_ZERO_FOLD_MAX
+    and not SAB_ZERO_FOLD_MAX_SWAPPED
+    and not is_defined["MOJOLEARN_CD_TWO_STEP_OFF"]()
+)
+"""lane/linear-apple2: TWO launches per coordinate (Apple, IDENTICAL, on by
+default; -D MOJOLEARN_CD_TWO_STEP_OFF=1 returns to three). The fold and the
+update of coordinate `prev` move into the NEXT coordinate's axpy launch,
+`cd_step_kernel`: every block folds the P partials itself (the same tree)
+and runs the update body on its own copy, so every block holds the same -r
+for the closing axpy without waiting for another; block 0 alone stores it.
+Two buffers keep every read race-free: the coefficients read this epoch
+(coef_in) are not the ones written (coef_out), and the running maxima
+alternate between two conv buffers per update. The epoch ends with a step
+that only updates the last coordinate and applies its closing axpy."""
+
+
+def cd_step_kernel(
+    residual: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    ws: MutPointer[Float32, MutAnyOrigin],
+    coef_in: MutPointer[Float32, MutAnyOrigin],
+    coef_out: MutPointer[Float32, MutAnyOrigin],
+    squared: MutPointer[Float32, MutAnyOrigin],
+    conv_in: MutPointer[Float32, MutAnyOrigin],
+    conv_out: MutPointer[Float32, MutAnyOrigin],
+    prev_in: Int32,
+    ci_in: Int32,
+    n_in: Int32,
+    p_in: Int32,
+    l1_alpha: Float32,
+):
+    var tid = Int(thread_idx.x)
+    var nth = Int(block_dim.x)
+    var bid = Int(block_idx.x)
+    var n = Int(n_in)
+    var prev = Int(prev_in)
+    var ci = Int(ci_in)
+    var p_count = Int(p_in)
+    var buf = stack_allocation[
+        2 * CONTRACT_MAX_LEAVES + 1,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var a0 = Float32(0.0)
+    if prev >= 0:
+        # identical_gemm_fold_kernel's tree for cell 0, stride P
+        var cur = 0
+        var nxt = CONTRACT_MAX_LEAVES
+        var q0 = tid
+        while q0 < p_count:
+            buf[unsafe_offset = cur + q0] = ws.unsafe_load(q0)
+            q0 += nth
+        barrier()
+        var w = p_count
+        while w > 1:
+            var pairs = w // 2
+            var q = tid
+            while q < pairs:
+                buf[unsafe_offset = nxt + q] = ftz(
+                    ftz(buf[unsafe_offset = cur + 2 * q])
+                    + ftz(buf[unsafe_offset = cur + 2 * q + 1])
+                )
+                q += nth
+            var w_next = pairs
+            if w % 2 == 1:
+                if tid == 0:
+                    buf[unsafe_offset = nxt + pairs] = buf[unsafe_offset = cur + w - 1]
+                w_next = pairs + 1
+            barrier()
+            var swap = cur
+            cur = nxt
+            nxt = swap
+            w = w_next
+        if tid == 0:
+            var root = Float32(0.0)
+            if p_count > 0:
+                root = buf[unsafe_offset=cur]
+            # cd_update_coef's body on the stored dot ftz(root), the
+            # remembered coefficient coef_in[prev] and the maxima in conv_in
+            var c = ftz(ftz(root))
+            var r: Float32
+            if c > l1_alpha:
+                r = c - l1_alpha
+            elif c < -l1_alpha:
+                r = c + l1_alpha
+            else:
+                r = Float32(0.0)
+            var sq = ftz(squared.unsafe_load(prev))
+            if sq > CD_SQUARED_GUARD:
+                r = r / sq
+            else:
+                r = Float32(0.0)
+            r = ftz(r)
+            var diff = ftz(abs(ftz(coef_in.unsafe_load(prev)) - r))
+            var dmax = conv_in.unsafe_load(2)
+            if dmax < diff:
+                dmax = diff
+            var absv = abs(r)
+            var cmax = conv_in.unsafe_load(1)
+            if cmax < absv:
+                cmax = absv
+            buf[unsafe_offset = 2 * CONTRACT_MAX_LEAVES] = -r
+            if bid == 0:
+                coef_out.unsafe_store(prev, r)
+                conv_out.unsafe_store(0, -r)
+                conv_out.unsafe_store(1, cmax)
+                conv_out.unsafe_store(2, dmax)
+        barrier()
+        a0 = ftz(buf[unsafe_offset = 2 * CONTRACT_MAX_LEAVES])
+    var a1 = Float32(0.0)
+    if ci >= 0:
+        a1 = ftz(coef_in.unsafe_load(ci))
+    var i = bid * nth + tid
+    var stride = Int(grid_dim.x) * nth
+    while i < n:
+        var r = residual.unsafe_load(i)
+        if prev >= 0:
+            r = ftz(identical_mul_add(a0, ftz(x.unsafe_load(prev * n + i)), ftz(r)))
+        if ci >= 0:
+            r = ftz(identical_mul_add(a1, ftz(x.unsafe_load(ci * n + i)), ftz(r)))
+        residual.unsafe_store(i, r)
+        i += stride
 
 
 def cd_fold_update_kernel(
@@ -758,6 +887,66 @@ def cd_fit_traced(
             and part[1] > 0
             and choose_gemm_plan(1, 1, n_rows) == PLAN_SPLITK
         )
+    var two = False
+    comptime if CD_TWO_STEP:
+        two = three
+    var coef_b = ctx.enqueue_create_buffer[DType.float32](n_cols if two else 1)
+    var conv_b = ctx.enqueue_create_buffer[DType.float32](3)
+    var in_a = True  # coef_in is `coef` (else coef_b)
+    var step_blocks = min(CD_STEP_MAX_BLOCKS, (n_rows + CD_STEP_TPB - 1) // CD_STEP_TPB)
+    if two:
+        ctx.enqueue_copy(dst_buf=coef_b, src_buf=coef)
+    while device_sweeps and two and n_iter < epochs:
+        var pa = coef.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var pb = coef_b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var cin = pa if in_a else pb
+        var cout = pb if in_a else pa
+        var vin = conv.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var vout = conv_b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        ctx.enqueue_memset(conv, Float32(0.0))
+        for j in range(n_cols + 1):
+            var ci = ri[j] if j < n_cols else -1
+            var prev = ri[j - 1] if j > 0 else -1
+            ctx.enqueue_function[cd_step_kernel](
+                residual.unsafe_ptr(), x.unsafe_ptr(), ws_rows.unsafe_ptr(),
+                cin, cout, squared.unsafe_ptr(), vin, vout,
+                Int32(prev), Int32(ci), Int32(n_rows), Int32(part[1]), l1_alpha,
+                grid_dim=(step_blocks, 1, 1), block_dim=(CD_STEP_TPB, 1, 1),
+            )
+            if prev >= 0:
+                var t = vin
+                vin = vout
+                vout = t
+            if ci >= 0:
+                ctx.enqueue_function[identical_gemm_leaf_kernel](
+                    ws_rows.unsafe_ptr(), x.unsafe_ptr() + ci * n_rows,
+                    residual.unsafe_ptr(),
+                    Int32(1), Int32(1), Int32(n_rows), Int32(part[0]), Int32(part[1]),
+                    Int32(n_rows), Int32(1), Int32(1), Int32(n_rows), Int32(part[1]),
+                    grid_dim=((part[1] + SPLITK_LEAF_LAUNCH_TPB - 1) // SPLITK_LEAF_LAUNCH_TPB, 1, 1),
+                    block_dim=(SPLITK_LEAF_LAUNCH_TPB, 1, 1),
+                )
+        # the last update's maxima are in `vin`; keep them in `conv`
+        if vin != conv.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]():
+            ctx.enqueue_copy(dst_buf=conv, src_buf=conv_b)
+        in_a = not in_a
+        ctx.enqueue_copy(dst_ptr=h_conv.unsafe_ptr(), src_buf=conv)
+        ctx.synchronize()
+        var coef_max = h_conv.unsafe_ptr().unsafe_load(1)
+        var diff_max = h_conv.unsafe_ptr().unsafe_load(2)
+        n_iter += 1
+        var tag = prefix + ".sweep" + _pad3(n_iter - 1)
+        if in_a:
+            record_device_canon(ctx, trace, tag + ".coef", coef, n_cols, canon_ws)
+        else:
+            record_device_canon(ctx, trace, tag + ".coef", coef_b, n_cols, canon_ws)
+        record_device_canon(ctx, trace, tag + ".resid", residual, n_rows, canon_ws)
+        record_device_canon(ctx, trace, tag + ".conv", conv, 3, canon_ws)
+        if coef_max < tol or (diff_max / coef_max) < tol:
+            break
+    if two and not in_a:
+        ctx.enqueue_copy(dst_buf=coef, src_buf=coef_b)
+    three = three and not two
     while device_sweeps and three and n_iter < epochs:
         ctx.enqueue_memset(conv, Float32(0.0))
         for j in range(n_cols):
