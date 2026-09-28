@@ -26,11 +26,14 @@ from x_neighbors.items import FP, IP, absdiff_sum_item, _sub, knn_sq_item, knn_i
 from checks.numerics import identical_mul, identical_div, identical_sqrt
 from std.memory import bitcast as _bc
 from x_neighbors.device_ops import (
-    xn_ctx, _buf, _buf_i, _down, _down_i, _grid, BLOCK,
+    xn_ctx, _buf, _buf_i, _down, _down_i, _grid, _tid, BLOCK,
     absdiff_sum_kernel, matmul_kernel, lp_clamp_kernel, ls_clamp_kernel,
     pagerank_step_kernel, cc_step_kernel,
     pcs_sketch_kernel, pcs_conv_kernel, pcs_copy0_kernel, op_knn_sq, op_knn_impute_cells,
+    kernel_kernel, rowsum_kernel, scale_div_kernel, kpca_center_kernel, unary_kernel, svgp_var_kernel,
 )
+from x_neighbors.items import matmul_tn_acc_item, K_RBF, U_IDENTITY
+from core.device_zero import enqueue_fill
 
 
 def lp_spmm_kernel(
@@ -768,3 +771,267 @@ def knn_impute_split_kernel(
                 bi.unsafe_store(s, best_j)
                 head[best_u] = head[best_u] + 1
         knn_impute_finish(t, fx, bd, bi, res, m, d, k, Int(weights_), total)
+
+
+# ============================================================================
+# FUSED KERNEL CHAINS (lane/py-dn-kern, 2026-09-28). KernelPCA.transform,
+# OneClassSVM.score_samples and SVGP's fit statistics and prediction used to
+# be chains of `xn_*` calls, each uploading its inputs and downloading its
+# output, so the nq x n_fit kernel matrix crossed the bus about four times.
+# These drivers launch the SAME item kernels in the SAME order over row tiles
+# that stay on the device, and download only the final output. Every item
+# computes its cells from its own row, so a row tile changes no statement.
+# The one carried fold (SVGP's Kuf Kfu and Kuf y) continues each cell's
+# float32 accumulator from tile to tile: `matmul_tn_acc_item`.
+# -D MOJOLEARN_XN_FUSED_SABOTAGE adds 1e-3 to the first output cell of each
+# fused device driver (the new device path's negative control).
+# ============================================================================
+
+#: cells of the per-tile kernel matrix (a tile is at most this many floats)
+comptime XN_FUSED_CELLS = 1 << 24
+
+
+@always_inline
+def _p(b: DeviceBuffer[DType.float32]) -> FP:
+    return b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+
+
+def _tile_rows(n: Int, width: Int) -> Int:
+    var t = XN_FUSED_CELLS // max(width, 1)
+    return max(1, min(n, t))
+
+
+def matmul_tn_acc_kernel(a: FP, b: FP, res: FP, rows_: Int64, n_: Int64, m_: Int64):
+    var t = _tid()
+    if t < Int(n_) * Int(m_):
+        matmul_tn_acc_item(t, a, b, res, Int(rows_), Int(n_), Int(m_))
+
+
+def _fused_sabotage(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], count: Int) raises:
+    comptime if is_defined["MOJOLEARN_XN_FUSED_SABOTAGE"]():
+        if count > 0:
+            var h = ctx.enqueue_create_host_buffer[DType.float32](1)
+            var sub = buf.create_sub_buffer[DType.float32](0, 1)
+            ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=sub)
+            ctx.synchronize()
+            h.unsafe_ptr().store(0, h.unsafe_ptr().load(0) + Float32(1e-3))
+            ctx.enqueue_copy(dst_buf=sub, src_ptr=h.unsafe_ptr())
+            ctx.synchronize()
+            _ = sub^
+            _ = h^
+
+
+def _launch_kernel(
+    ctx: DeviceContext, q: FP, y: FP, res: FP, rows: Int, m: Int, d: Int, kind: Int, degree: Int,
+    gamma: Float32, coef0: Float32,
+) raises:
+    var cells = rows * m
+    ctx.enqueue_function[kernel_kernel](
+        q, y, res, Int64(rows), Int64(m), Int64(d), Int64(kind), gamma, coef0, Int64(degree),
+        grid_dim=_grid(cells), block_dim=(BLOCK if cells > 1 else 1),
+    )
+
+
+def _launch_matmul(ctx: DeviceContext, a: FP, b: FP, res: FP, n: Int, k: Int, m: Int) raises:
+    var cells = n * m
+    ctx.enqueue_function[matmul_kernel](
+        a, b, res, Int64(n), Int64(k), Int64(m),
+        grid_dim=_grid(cells), block_dim=(BLOCK if cells > 1 else 1),
+    )
+
+
+def op_kpca_transform(
+    q: Int, fitx: Int, fit_cols: Int, fit_all: Int, alphas: Int, res: Int,
+    nq: Int, nf: Int, d: Int, c: Int, kind: Int, degree: Int, gamma: Float32, coef0: Float32, s: Float32,
+) raises:
+    """KernelPCA.transform: K = kernel(q, fitx) (kind < 0: q IS the
+    precomputed K, d == nf), pred = rowsum(K) / s, Kc = kpca_center(K,
+    fit_cols, pred, fit_all), res = Kc alphas; per row tile on the device."""
+    var ctx = xn_ctx()
+    var pre = kind < 0
+    var d_q = _buf(ctx, q, nq * d, True)
+    var d_fx = _buf(ctx, fitx, 0 if pre else nf * d, not pre)
+    var d_cols = _buf(ctx, fit_cols, nf, True)
+    var d_all = _buf(ctx, fit_all, 1, True)
+    var d_al = _buf(ctx, alphas, nf * c, True)
+    var d_res = _buf(ctx, 0, nq * c, False)
+    var tr = _tile_rows(nq, nf)
+    var d_k = _buf(ctx, 0, 0 if pre else tr * nf, False)
+    var d_kc = _buf(ctx, 0, tr * nf, False)
+    var d_rs = _buf(ctx, 0, tr, False)
+    var d_pr = _buf(ctx, 0, tr, False)
+    var qp: FP = _p(d_q)
+    var kp: FP = _p(d_k)
+    var rp: FP = _p(d_res)
+    var r0 = 0
+    while r0 < nq:
+        var rows = min(tr, nq - r0)
+        var K = qp + r0 * d
+        if not pre:
+            _launch_kernel(ctx, qp + r0 * d, _p(d_fx), kp, rows, nf, d, kind, degree, gamma, coef0)
+            K = kp
+        ctx.enqueue_function[rowsum_kernel](
+            K, _p(d_rs), Int64(rows), Int64(nf),
+            grid_dim=_grid(rows), block_dim=(BLOCK if rows > 1 else 1),
+        )
+        ctx.enqueue_function[scale_div_kernel](
+            _p(d_rs), _p(d_pr), Int64(rows), s,
+            grid_dim=_grid(rows), block_dim=(BLOCK if rows > 1 else 1),
+        )
+        var cells = rows * nf
+        ctx.enqueue_function[kpca_center_kernel](
+            K, _p(d_cols), _p(d_pr), _p(d_all), _p(d_kc), Int64(rows), Int64(nf),
+            grid_dim=_grid(cells), block_dim=(BLOCK if cells > 1 else 1),
+        )
+        _launch_matmul(ctx, _p(d_kc), _p(d_al), rp + r0 * c, rows, nf, c)
+        r0 += rows
+    _fused_sabotage(ctx, d_res, nq * c)
+    _down(ctx, d_res, res, nq * c)
+    ctx.synchronize()
+    _ = d_q^
+    _ = d_fx^
+    _ = d_cols^
+    _ = d_all^
+    _ = d_al^
+    _ = d_res^
+    _ = d_k^
+    _ = d_kc^
+    _ = d_rs^
+    _ = d_pr^
+    _ = ctx^
+
+
+def op_kernel_matmul(
+    q: Int, y: Int, w: Int, res: Int,
+    n: Int, m: Int, d: Int, c: Int, kind: Int, degree: Int, gamma: Float32, coef0: Float32,
+) raises:
+    """res = kernel(q, y) w (n x c): OneClassSVM.score_samples' two ops per
+    row tile on the device."""
+    var ctx = xn_ctx()
+    var d_q = _buf(ctx, q, n * d, True)
+    var d_y = _buf(ctx, y, m * d, True)
+    var d_w = _buf(ctx, w, m * c, True)
+    var d_res = _buf(ctx, 0, n * c, False)
+    var tr = _tile_rows(n, m)
+    var d_k = _buf(ctx, 0, tr * m, False)
+    var qp: FP = _p(d_q)
+    var rp: FP = _p(d_res)
+    var r0 = 0
+    while r0 < n:
+        var rows = min(tr, n - r0)
+        _launch_kernel(ctx, qp + r0 * d, _p(d_y), _p(d_k), rows, m, d, kind, degree, gamma, coef0)
+        _launch_matmul(ctx, _p(d_k), _p(d_w), rp + r0 * c, rows, m, c)
+        r0 += rows
+    _fused_sabotage(ctx, d_res, n * c)
+    _down(ctx, d_res, res, n * c)
+    ctx.synchronize()
+    _ = d_q^
+    _ = d_y^
+    _ = d_w^
+    _ = d_res^
+    _ = d_k^
+    _ = ctx^
+
+
+def _launch_scaled_rbf(
+    ctx: DeviceContext, q: FP, z: FP, kbuf: FP, out: FP, rows: Int, m: Int, d: Int, gamma: Float32, variance: Float32,
+) raises:
+    """SVGP's `_k`: the rbf kernel (coef0 0, degree 0), then
+    `unary(K, identity, variance, 0)`."""
+    _launch_kernel(ctx, q, z, kbuf, rows, m, d, K_RBF, 0, gamma, Float32(0))
+    var cells = rows * m
+    ctx.enqueue_function[unary_kernel](
+        kbuf, out, Int64(cells), Int64(U_IDENTITY), variance, Float32(0),
+        grid_dim=_grid(cells), block_dim=(BLOCK if cells > 1 else 1),
+    )
+
+
+def op_svgp_stats(
+    x: Int, z: Int, y: Int, bmat: Int, bvec: Int, n: Int, m: Int, d: Int, gamma: Float32, variance: Float32,
+) raises:
+    """SVGP.fit's B = Kuf Kfu (m x m) and b = Kuf y (m): Kfu = variance *
+    rbf(x, z) per row tile on the device, both products carried over the
+    tiles (`matmul_tn_acc_item`); Kuf is never formed (it is Kfu^T bit for
+    bit: the rbf item squares x - z, and IEEE subtraction is antisymmetric)."""
+    var ctx = xn_ctx()
+    var d_x = _buf(ctx, x, n * d, True)
+    var d_z = _buf(ctx, z, m * d, True)
+    var d_y = _buf(ctx, y, n, True)
+    var d_b = _buf(ctx, 0, m * m, False)
+    var d_bv = _buf(ctx, 0, m, False)
+    enqueue_fill(ctx, d_b, Float32(0))
+    enqueue_fill(ctx, d_bv, Float32(0))
+    var tr = _tile_rows(n, m)
+    var d_k = _buf(ctx, 0, tr * m, False)
+    var d_ks = _buf(ctx, 0, tr * m, False)
+    var xp: FP = _p(d_x)
+    var yp: FP = _p(d_y)
+    var r0 = 0
+    while r0 < n:
+        var rows = min(tr, n - r0)
+        _launch_scaled_rbf(ctx, xp + r0 * d, _p(d_z), _p(d_k), _p(d_ks), rows, m, d, gamma, variance)
+        ctx.enqueue_function[matmul_tn_acc_kernel](
+            _p(d_ks), _p(d_ks), _p(d_b), Int64(rows), Int64(m), Int64(m),
+            grid_dim=_grid(m * m), block_dim=(BLOCK if m * m > 1 else 1),
+        )
+        ctx.enqueue_function[matmul_tn_acc_kernel](
+            _p(d_ks), yp + r0, _p(d_bv), Int64(rows), Int64(m), Int64(1),
+            grid_dim=_grid(m), block_dim=(BLOCK if m > 1 else 1),
+        )
+        r0 += rows
+    _fused_sabotage(ctx, d_b, m * m)
+    _down(ctx, d_b, bmat, m * m)
+    _down(ctx, d_bv, bvec, m)
+    ctx.synchronize()
+    _ = d_x^
+    _ = d_z^
+    _ = d_y^
+    _ = d_b^
+    _ = d_bv^
+    _ = d_k^
+    _ = d_ks^
+    _ = ctx^
+
+
+def op_svgp_predict(
+    q: Int, z: Int, alpha: Int, cmat: Int, mean: Int, var_: Int,
+    n: Int, m: Int, d: Int, gamma: Float32, variance: Float32, kdiag: Float32,
+) raises:
+    """SVGP.predict_f: Ksu = variance * rbf(q, z), mean = Ksu alpha,
+    var = svgp_var(Ksu, C), per row tile on the device."""
+    var ctx = xn_ctx()
+    var d_q = _buf(ctx, q, n * d, True)
+    var d_z = _buf(ctx, z, m * d, True)
+    var d_al = _buf(ctx, alpha, m, True)
+    var d_c = _buf(ctx, cmat, m * m, True)
+    var d_mean = _buf(ctx, 0, n, False)
+    var d_var = _buf(ctx, 0, n, False)
+    var tr = _tile_rows(n, m)
+    var d_k = _buf(ctx, 0, tr * m, False)
+    var d_ks = _buf(ctx, 0, tr * m, False)
+    var qp: FP = _p(d_q)
+    var mp: FP = _p(d_mean)
+    var vp: FP = _p(d_var)
+    var r0 = 0
+    while r0 < n:
+        var rows = min(tr, n - r0)
+        _launch_scaled_rbf(ctx, qp + r0 * d, _p(d_z), _p(d_k), _p(d_ks), rows, m, d, gamma, variance)
+        _launch_matmul(ctx, _p(d_ks), _p(d_al), mp + r0, rows, m, 1)
+        ctx.enqueue_function[svgp_var_kernel](
+            _p(d_ks), _p(d_c), vp + r0, Int64(rows), Int64(m), kdiag,
+            grid_dim=_grid(rows), block_dim=(BLOCK if rows > 1 else 1),
+        )
+        r0 += rows
+    _fused_sabotage(ctx, d_mean, n)
+    _down(ctx, d_mean, mean, n)
+    _down(ctx, d_var, var_, n)
+    ctx.synchronize()
+    _ = d_q^
+    _ = d_z^
+    _ = d_al^
+    _ = d_c^
+    _ = d_mean^
+    _ = d_var^
+    _ = d_k^
+    _ = d_ks^
+    _ = ctx^

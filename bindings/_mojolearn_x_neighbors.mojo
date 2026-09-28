@@ -11,7 +11,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_neighbors.eigh import op_eigh
 from checks.vendor import COMPILED_VENDOR
 from x_neighbors.device_ops import op_sqdist, op_nan_sqdist, op_l1dist, op_kernel, op_matmul, op_rowsum, op_colsum, op_unary, op_knn_select, op_knn_sq, op_group_mean, op_take_rows, op_take_cols, op_variance, op_ocsvm, op_lof_lrd, op_lof_score, op_kpca_center, op_scale_div, op_svd_flip, op_kpca_alpha_scale, op_nc_std, op_nc_shrink, op_nc_decision, op_softmax, op_log_softmax, op_pcs, op_achi2, op_skew_weights, op_skew_transform, op_absdiff_sum, op_row_normalize, op_lp_clamp, op_ls_clamp, op_ls_laplacian, op_knn_graph, op_knn_impute, op_col_degree, op_ls_laplacian_deg, op_row_all_zero, op_pcs_sketch, op_pcs_conv, op_pcs_copy0, op_knn_impute_cells, op_pagerank_step, op_cc_step, op_louvain, op_svgp, op_svgp_var
-from x_neighbors.iter_device import op_lp_iterate, op_pr_iterate, op_pcs_resident, op_knn_sq_tiled, op_knn_impute_tiled, op_cc_iterate
+from x_neighbors.iter_device import op_lp_iterate, op_pr_iterate, op_pcs_resident, op_knn_sq_tiled, op_knn_impute_tiled, op_cc_iterate, op_kpca_transform, op_kernel_matmul, op_svgp_stats, op_svgp_predict
 
 
 def _a(v: PythonObject, k: Int) raises -> Int:
@@ -743,6 +743,79 @@ def cc_iterate_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) rai
     return PythonObject(None)
 
 
+def kpca_transform_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    var v_q = _a(a_, 0)
+    var v_fitx = _a(a_, 1)
+    var v_fit_cols = _a(a_, 2)
+    var v_fit_all = _a(a_, 3)
+    var v_alphas = _a(a_, 4)
+    var v_res = _a(a_, 5)
+    var v_nq = _n(i_, 0)
+    var v_nf = _n(i_, 1)
+    var v_d = _n(i_, 2)
+    var v_c = _n(i_, 3)
+    var v_kind = _n(i_, 4)
+    var v_degree = _n(i_, 5)
+    var v_gamma = _f(f_, 0)
+    var v_coef0 = _f(f_, 1)
+    var v_s = _f(f_, 2)
+    with GILReleased(Python()):
+        op_kpca_transform(v_q, v_fitx, v_fit_cols, v_fit_all, v_alphas, v_res, v_nq, v_nf, v_d, v_c, v_kind, v_degree, v_gamma, v_coef0, v_s)
+    return PythonObject(None)
+
+
+def kernel_matmul_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    var v_q = _a(a_, 0)
+    var v_y = _a(a_, 1)
+    var v_w = _a(a_, 2)
+    var v_res = _a(a_, 3)
+    var v_n = _n(i_, 0)
+    var v_m = _n(i_, 1)
+    var v_d = _n(i_, 2)
+    var v_c = _n(i_, 3)
+    var v_kind = _n(i_, 4)
+    var v_degree = _n(i_, 5)
+    var v_gamma = _f(f_, 0)
+    var v_coef0 = _f(f_, 1)
+    with GILReleased(Python()):
+        op_kernel_matmul(v_q, v_y, v_w, v_res, v_n, v_m, v_d, v_c, v_kind, v_degree, v_gamma, v_coef0)
+    return PythonObject(None)
+
+
+def svgp_stats_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    var v_x = _a(a_, 0)
+    var v_z = _a(a_, 1)
+    var v_y = _a(a_, 2)
+    var v_bmat = _a(a_, 3)
+    var v_bvec = _a(a_, 4)
+    var v_n = _n(i_, 0)
+    var v_m = _n(i_, 1)
+    var v_d = _n(i_, 2)
+    var v_gamma = _f(f_, 0)
+    var v_variance = _f(f_, 1)
+    with GILReleased(Python()):
+        op_svgp_stats(v_x, v_z, v_y, v_bmat, v_bvec, v_n, v_m, v_d, v_gamma, v_variance)
+    return PythonObject(None)
+
+
+def svgp_predict_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    var v_q = _a(a_, 0)
+    var v_z = _a(a_, 1)
+    var v_alpha = _a(a_, 2)
+    var v_cmat = _a(a_, 3)
+    var v_mean = _a(a_, 4)
+    var v_var_ = _a(a_, 5)
+    var v_n = _n(i_, 0)
+    var v_m = _n(i_, 1)
+    var v_d = _n(i_, 2)
+    var v_gamma = _f(f_, 0)
+    var v_variance = _f(f_, 1)
+    var v_kdiag = _f(f_, 2)
+    with GILReleased(Python()):
+        op_svgp_predict(v_q, v_z, v_alpha, v_cmat, v_mean, v_var_, v_n, v_m, v_d, v_gamma, v_variance, v_kdiag)
+    return PythonObject(None)
+
+
 def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[sqdist_binding]("xn_sqdist")
     m.def_function[nan_sqdist_binding]("xn_nan_sqdist")
@@ -799,6 +872,10 @@ def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[knn_sq_tiled_binding]("xn_knn_sq_tiled")
     m.def_function[knn_impute_tiled_binding]("xn_knn_impute_tiled")
     m.def_function[cc_iterate_binding]("xn_cc_iterate")
+    m.def_function[kpca_transform_binding]("xn_kpca_transform")
+    m.def_function[kernel_matmul_binding]("xn_kernel_matmul")
+    m.def_function[svgp_stats_binding]("xn_svgp_stats")
+    m.def_function[svgp_predict_binding]("xn_svgp_predict")
     m.def_function[eigh_binding]("xn_eigh")
     m.def_function[x_neighbors_numeric_mode_binding]("x_neighbors_numeric_mode")
 

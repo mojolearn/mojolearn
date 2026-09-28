@@ -176,6 +176,24 @@ CUSTOM_OPS = [
       ("n", "int"), ("m", "int"), ("d", "int"), ("k", "int"), ("weights", "int"), ("nc", "int")]),
     ("cc_iterate",
      [("a", "fin", "n * n"), ("lab", "iinout", "n"), ("info", "iout", "1"), ("n", "int")]),
+    # lane/py-dn-kern (2026-09-28): the fused kernel chains (the kernel
+    # matrix stays on the device, per row tile; only the output comes back)
+    ("kpca_transform",
+     [("q", "fin", "nq * d"), ("fitx", "fin", "nf * d"), ("fit_cols", "fin", "nf"), ("fit_all", "fin", "1"),
+      ("alphas", "fin", "nf * c"), ("res", "fout", "nq * c"),
+      ("nq", "int"), ("nf", "int"), ("d", "int"), ("c", "int"), ("kind", "int"), ("degree", "int"),
+      ("gamma", "float"), ("coef0", "float"), ("s", "float")]),
+    ("kernel_matmul",
+     [("q", "fin", "n * d"), ("y", "fin", "m * d"), ("w", "fin", "m * c"), ("res", "fout", "n * c"),
+      ("n", "int"), ("m", "int"), ("d", "int"), ("c", "int"), ("kind", "int"), ("degree", "int"),
+      ("gamma", "float"), ("coef0", "float")]),
+    ("svgp_stats",
+     [("x", "fin", "n * d"), ("z", "fin", "m * d"), ("y", "fin", "n"), ("bmat", "fout", "m * m"), ("bvec", "fout", "m"),
+      ("n", "int"), ("m", "int"), ("d", "int"), ("gamma", "float"), ("variance", "float")]),
+    ("svgp_predict",
+     [("q", "fin", "n * d"), ("z", "fin", "m * d"), ("alpha", "fin", "m"), ("cmat", "fin", "m * m"),
+      ("mean", "fout", "n"), ("var_", "fout", "n"),
+      ("n", "int"), ("m", "int"), ("d", "int"), ("gamma", "float"), ("variance", "float"), ("kdiag", "float")]),
 ]
 
 #: Ops whose GPU driver runs a threadgroup form of the (sequential) item
