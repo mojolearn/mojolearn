@@ -388,5 +388,8 @@ bandwidth bound; the gain is the walk block, c128c4f3e). Open: FAST SGD
 (0.87 to 0.94 s) is slower than IDENTICAL SGD (0.55 to 0.63 s) on the same
 Mac at HEAD. m4-a (steward 1790618726280) places it in the row pass itself
 (bare, one epoch, no shuffle: FAST 0.180 s, IDENTICAL 0.115 s); the cause is
-not found (the FAST arithmetic is fz-free and should be cheaper).
+not found (the FAST arithmetic is fz-free and should be cheaper). 340abc245
+(fz returns the word itself outside IDENTICAL) changed nothing (m4-a, steward
+1790619306118: bare one epoch 0.182 vs 0.183 s, digests equal) and was reverted
+(41bb8e0dc).
 
