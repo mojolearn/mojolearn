@@ -9,6 +9,6 @@ index 6d6d3b195..fa9593044 100644
 -        for p in range(d):
 +        for pq in range(d):
 +            var p = d - 1 - pq  # SABOTAGE 5302 (host): the host distance fold descending
-             var brow = bt + p * nbp + j0
+             var brow = bt.unsafe_offset(p * nbp + j0)
              var y = InlineArray[V, NV](fill=V(0))
              comptime for v in range(NV):

@@ -93,7 +93,7 @@ def gemm_task(
     var mi = min(MC, m - i0)
     var p0 = blk * FOLD_BLOCK
     var p1 = min(k, p0 + FOLD_BLOCK)
-    var dst = c if nb == 1 else part + blk * m * n
+    var dst = c if nb == 1 else part.unsafe_offset(blk * m * n)
     var np = ceildiv(n, NR) * NR
     var mp = ceildiv(mi, MR) * MR
     var bp_buf = List[Float32](length=KC * np, fill=Float32(0))
@@ -105,12 +105,12 @@ def gemm_task(
         var kc = min(KC, p1 - pc)
         # B chunk: kc x np, row p holds op(B)[pc + p, 0..n), flushed, zero padded
         for p in range(kc):
-            var row = bp + p * np
+            var row = bp.unsafe_offset(p * np)
             if tb:
                 for j in range(n):
                     row.unsafe_store(j, _ftz1(b.unsafe_load(j * k + pc + p)))
             else:
-                var src = b + (pc + p) * n
+                var src = b.unsafe_offset((pc + p) * n)
                 var j = 0
                 while j + W <= n:
                     row.unsafe_store(j, ftz_v[W](src.unsafe_load[width=W](j)))
@@ -122,7 +122,7 @@ def gemm_task(
                 row.unsafe_store(j, Float32(0))
         # A chunk: per MR-row tile, p-major (MR values per p), flushed, zero padded
         for ir in range(0, mp, MR):
-            var tile = ap + ir * kc
+            var tile = ap.unsafe_offset(ir * kc)
             for r in range(MR):
                 var i = i0 + ir + r
                 if ir + r < mi:
@@ -130,7 +130,7 @@ def gemm_task(
                         for p in range(kc):
                             tile.unsafe_store(p * MR + r, _ftz1(a.unsafe_load((pc + p) * m + i)))
                     else:
-                        var src = a + i * k + pc
+                        var src = a.unsafe_offset(i * k + pc)
                         for p in range(kc):
                             tile.unsafe_store(p * MR + r, _ftz1(src.unsafe_load(p)))
                 else:
@@ -141,7 +141,7 @@ def gemm_task(
             var rows = min(MR, mi - ir)
             var j0 = 0
             while j0 < n:
-                _gemm_micro(ap + ir * kc, bp + j0, kc, np, dst, i0 + ir, j0, rows, min(NR, n - j0), n, first)
+                _gemm_micro(ap.unsafe_offset(ir * kc), bp.unsafe_offset(j0), kc, np, dst, i0 + ir, j0, rows, min(NR, n - j0), n, first)
                 j0 += NR
         pc += kc
     _ = bp_buf^
@@ -165,7 +165,7 @@ def _gemm_micro(
                 for q in range(cols):
                     acc[r * NV + q // W][q % W] = dst.unsafe_load((i + r) * n + j + q)
     for p in range(kc):
-        var brow = bt + p * np
+        var brow = bt.unsafe_offset(p * np)
         var y = InlineArray[V, NV](fill=V(0))
         comptime for v in range(NV):
             y[v] = brow.unsafe_load[width=W](v * W)
@@ -215,7 +215,7 @@ def sqdist_task(t: Int, a: F32Ptr, bt: F32Ptr, dst: F32Ptr, na: Int, nb: Int, d:
         var cols = min(NR, nb - j0)
         var acc = InlineArray[V, MR * NV](fill=V(0))
         for p in range(d):
-            var brow = bt + p * nbp + j0
+            var brow = bt.unsafe_offset(p * nbp + j0)
             var y = InlineArray[V, NV](fill=V(0))
             comptime for v in range(NV):
                 y[v] = brow.unsafe_load[width=W](v * W)

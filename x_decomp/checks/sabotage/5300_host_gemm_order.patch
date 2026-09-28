@@ -9,6 +9,6 @@ index 6d6d3b195..663b9d70b 100644
 -    for p in range(kc):
 +    for pq in range(kc):
 +        var p = kc - 1 - pq  # SABOTAGE 5300 (host): the host gemm chunk descending
-         var brow = bt + p * np
+         var brow = bt.unsafe_offset(p * np)
          var y = InlineArray[V, NV](fill=V(0))
          comptime for v in range(NV):
