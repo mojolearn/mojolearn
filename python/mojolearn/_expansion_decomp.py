@@ -287,9 +287,13 @@ class _M:
 _M._one = _M(array.array("f", [0.0]), 1, 1)
 _DEV_ONE = {}
 #: the fewest values for which a host-only kit call goes resident (_Kit._use);
-#: MOJOLEARN_XD_RES_MIN overrides it (timing only: the bits are the same)
+#: MOJOLEARN_XD_RES_MIN overrides it (timing only: the bits are the same).
+#: 1 (always) measured fastest on m4pro-a once the pool was O(1) and capped
+#: (1790588268075: MiniBatchDictionaryLearning 0.66 s at 1 against 1.56 s at
+#: 1024 and 1.76 s at 16384; MinCovDet 48.4 / 55.0 / 51.1 s; FastICA 0.089 /
+#: 0.129 / 0.124 s)
 import os as _os
-_RES_MIN = int(_os.environ.get("MOJOLEARN_XD_RES_MIN", str(1 << 14)))
+_RES_MIN = int(_os.environ.get("MOJOLEARN_XD_RES_MIN", "1"))
 
 
 def _dev_one(kit):
