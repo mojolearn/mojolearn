@@ -122,3 +122,24 @@ Before = every opt-out define of this lane (`-D MOJOLEARN_RF_BINS_COLUMN_MAJOR -
 | rf:istellareg | 19647 | 19681 | 1.002 | 3a5e8c09dd0d5fc7 |
 | rf:taxi | 2563 | 2470 | 0.964 | 452a173087f86a9d |
 | rf:taxireg | 3439 | 3234 | 0.941 | 58ec783b7afbd7a7 |
+
+## M4 m4-a, IDENTICAL, all changes off vs on (commit 819d4bd7b, steward 1790613322668)
+
+Same arms as the M3 Ultra table (10 RF columns per pass in both arms; 2031 already gated to <= 64 features; non-symmetric ridx not yet gated). Taxi-shaped data only: Istella is not staged on m4-a. Every digest equal.
+
+| cell | before | after | after/before | digest |
+|---|---|---|---|---|
+| adaboost:taxi | 3423 | 3454 | 1.009 | e8529a04f218dbab |
+| adaboost:taxireg | 2318 | 2324 | 1.002 | 160452cbaf288200 |
+| bagging:taxi | 1158 | 981 | 0.847 | 16aaba82631a5774 |
+| dart:taxireg | 6400 | 6282 | 0.982 | 86f40254833745ec |
+| dt:taxireg | 197 | 142 | 0.717 | e735a53b7d74025a |
+| embedding:taxi | 466 | 466 | 1.000 | 90d1b0749de17d44 |
+| et:taxi | 3875 | 3757 | 0.969 | ac18d5d8a54b1555 |
+| et:taxireg | 16346 | 4250 | 0.260 | ec62616c8e02c60b |
+| gbdt-depthwise:taxi | 3513 | 3261 | 0.928 | 5694af7699036c65 |
+| gbdt-lossguide:taxi | 7496 | 6591 | 0.879 | b1761eecc6dfbc73 |
+| gbdt-symmetric:taxi | 1726 | 1553 | 0.900 | 8e760782efae56c8 |
+| iforest:taxi | 69 | 70 | 1.013 | 96ff7aa1dfcef11e |
+| rf:taxi | 6283 | 5632 | 0.896 | 452a173087f86a9d |
+| rf:taxireg | 16722 | 10239 | 0.612 | 58ec783b7afbd7a7 |
