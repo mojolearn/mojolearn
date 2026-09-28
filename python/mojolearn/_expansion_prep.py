@@ -60,7 +60,7 @@ _OPS = dict(
     da_shrink=81, da_pool=82, sym_fn=83, da_intercept=84, evr=85, class_stats_w=86,
     indicator=87, code_counts=88, remap_codes=89, add_arrays=90, gnb_merge=91, cat_counts=92, cat_flp=93,
     mi_dc=94, mi_dd=95, kbins_gw=96, kbins_wq=97, kbins_wkm=98, ii_sigma=99, ii_post=100,
-    scaler_stats=101, std_scale=102, nan_keep=103, pt_init=104, pt_map=105, pt_fold=106, ii_rowabs=107,
+    scaler_stats=101, std_scale=102, nan_keep=103, pt_init=104, pt_map=105, pt_fold=106, ii_rowabs=107, te_bucket=108,
 )
 _PARAMS = 14
 _NONE = -1
@@ -968,7 +968,11 @@ class TargetEncoder(_PrepBase):
         smo = pr.put_scalar(-1.0 if self.smooth == "auto" else float(self.smooth))
         enc = pr.alloc((F + 1) * d * cmax * T)
         pr.stage("te_global", (F + 1) * T, yo, n, T, fo, meta)
-        pr.stage("te_enc", (F + 1) * d * cmax * T, codes, n, d, yo, T, fo, cmax, nco, meta, smo, enc)
+        # each category's rows, ascending (te_bucket): te_enc walks one bucket, not every row
+        bstart, brows = pr.alloc(d * (cmax + 1)), pr.alloc(n * d)
+        pr.stage("te_bucket", d, codes, n, d, cmax, bstart, brows)
+        pr.stage("te_enc", (F + 1) * d * cmax * T, codes, n, d, yo, T, fo, cmax, nco, meta, smo, enc,
+                 bstart + 1, brows)
         out = _NONE
         if apply_rows_folds:
             out = pr.alloc(n * d * T)

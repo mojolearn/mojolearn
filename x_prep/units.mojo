@@ -14,7 +14,7 @@ from x_prep.prims import (
     scaler_stats_unit, std_scale_unit, nan_keep_unit,
 )
 from x_prep.eigh import eigh_unit
-from x_prep.target import te_global_unit, te_enc_unit, te_apply_unit
+from x_prep.target import te_global_unit, te_enc_unit, te_apply_unit, te_bucket_unit
 from x_prep.kbins import kbins_edges_unit, kbins_codes_unit, kbins_inverse_unit, kbins_gw_unit, kbins_wq_unit, kbins_wkm_unit
 from naive_bayes.nb import (
     gnb_eps_unit, gnb_params_unit, gnb_jll_unit, class_log_prior_unit, mnb_params_unit,
@@ -37,7 +37,7 @@ from naive_bayes.da import (
     da_shrink_unit, da_pool_unit, sym_fn_unit, da_intercept_unit, evr_unit,
 )
 
-comptime N_OPS = 108
+comptime N_OPS = 109
 
 
 @always_inline
@@ -258,3 +258,5 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
         pt_fold_unit(t, f, q)
     comptime if OP == 107:
         ii_rowabs_unit(t, f, q)
+    comptime if OP == 108:
+        te_bucket_unit(t, f, q)
