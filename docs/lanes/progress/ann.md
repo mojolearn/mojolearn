@@ -73,7 +73,18 @@ STOPPED BECAUSE THE RUNPOD BALANCE WENT NEGATIVE: every pod was deleted
 Do not retry renting until Andrew tops up. Nothing below needs re-doing
 except the ONE owed pod gate.
 
-### Session A (verification): code DONE, ONE pod gate OWED, NOT MERGED
+### Session A (verification): GATE PASSED 2026-09-28 01:40Z, MERGED TO MAIN
+
+Gate on the `ann` RTX 4090 pod (ctv6wwgm018n6v, driver 580, AMD EPYC 9254
+CPU column), p1 at ce236a257 (origin/main merged in):
+`algos_lane_check.sh` on the ten lanes below `--pass 2 --sabotage
+x_ann/checks/sabotage/e2e_ann_and_ivf_host.patch`: 26 SEAM lines PASS / FAIL
+under the patch / PASS after reversal (the 23 x_ann arms + IVF-Flat
+5860-5862), no BROKEN arm; RESULT: PASS (AGREE, DISAGREE under the e2e
+sabotage on all ten, AGREE after reversal). `pytest test_x_ann_repeat.py
+test_host_surface.py`: 201 passed. DONE, never repeat.
+
+(history below: what the gate was)
 
 Branch `lane/algos-ann-p1` (pushed; origin/main merged in at b23b38412).
 What it carries, beyond the seven x-ann lanes recorded above:
