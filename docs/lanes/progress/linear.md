@@ -140,3 +140,4 @@ column EPYC 7542, tree 42b29f691 = 7325a0415 + origin/main):
 Merged to main with bench/x_linear_speed.py (the speed board). Phase 1 is
 CLOSED. Post-merge: ONE batched steward submit (Apple + do-amd) for the 17
 existing lanes, sabotage e2e_existing_device.patch (ids below).
+- 2026-09-28 steward submit 1790561256037-linear-fd405e35a (m2pro, m3ultra, m4-a, do-amd): the 17 lanes of linear.core, sabotage e2e_existing_device.patch.
