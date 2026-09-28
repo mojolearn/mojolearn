@@ -284,3 +284,12 @@ State on lane/algos-decomp (pushed, NOT merged to main):
 3. Speed (phase 1 IDENTICAL, then FAST): Isomap dijkstra_rows, ALS als_rows,
    the per-call uploads (device-resident matrices), Jacobi eigh fixed cost;
    AMD and Apple before/after tables per algorithm.
+
+## OWED (orchestrator, 2026-09-28, from Andrew)
+
+- Isomap hangs/stalls at 10k rows on AMD (MI300X), bench/decomp_speed.py;
+  find and fix. The "before" speed bench on the central AMD box sat in
+  Isomap(10nn) at N3=10000 from 02:38Z, 100% CPU for 4.5 h with no output,
+  and was killed on Andrew's order. It is a BUG to fix at the root, not a
+  slow run. Before-numbers come from records already taken: never re-measure
+  old code, never run Isomap at that size, never resubmit that bench.
