@@ -74,3 +74,5 @@ cells faster, geomean 0.989), with the Istella depthwise 1.024 noted.
 | same | m4-a | 1790609927653 | bagging:taxi | 1129 | 969 | 0.858 | 16aaba82631a5774 |
 | same | m4-a | 1790609927653 | dart:taxireg | 6600 | 6356 | 0.963 | 86f40254833745ec |
 | same | m4-a | 1790609927653 | adaboost:taxireg | 2339 | 2348 | 1.004 | 160452cbaf288200 |
+| GBDT 1903 deferred copy IDENTICAL (939ea50e9) | m4-a | 1790610574529 | lossguide taxi | 6932 | 6620 | 0.955 | b1761eecc6dfbc73 |
+| same | m4-a | 1790610574529 | depthwise taxi | 3285 | 3266 | 0.994 | 5694af7699036c65 |
