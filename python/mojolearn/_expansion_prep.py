@@ -312,6 +312,13 @@ class _Prog:
         dev_scratch = sc > 0 and (has_out or run_scratch is not None)
         if H + sc + on > 2 ** 31 - 1:
             raise ValueError("x_prep: the program exceeds the native Int32 indexing bound")
+        # EXPERIMENT (lane prep-apple3, opt-in MOJOLEARN_XPREP_NOCOPY=1): the device works on the
+        # host block itself (one page-aligned mapping: the arena, the scratch, the output)
+        run_nocopy = (_optional_prep_entry(binding, "x_prep_run_nocopy")
+                      if os.environ.get("MOJOLEARN_XPREP_NOCOPY", "0") == "1" and H + sc + on >= _MAP_MIN_WORDS
+                      else None)
+        if run_nocopy is not None:
+            return self._run_nocopy(run_nocopy, H, sc, on, prof, t_run)
         # layout: the host arena, then (host) the output unless the device keeps it,
         # then the scratch, then (device) the output
         ha = H + (0 if dev_out else on)
@@ -370,6 +377,36 @@ class _Prog:
             inv = {v: k for k, v in _OPS.items()}
             print("XPPROG ops=" + "+".join(inv.get(st[0], str(st[0])) for st in self._stages)
                   + f" arena={ha} scratch={sc} out={on} dev_out={int(bool(dev_out))} ranges={int(run_ranges is not None)}"
+                  + f" alloc_s={t_alloc - t_run:.4f} inputs_s={t_in - t_alloc:.4f}"
+                  + f" call_s={time.perf_counter() - t_in:.4f}", flush=True)
+        return self
+
+    def _run_nocopy(self, run_nocopy, H, sc, on, prof, t_run):
+        words = H + sc + on
+        page = mmap.PAGESIZE // 4
+        block = ((words + page - 1) // page) * page
+        m = mmap.mmap(-1, 4 * block)
+        arena = memoryview(m).cast("f")
+        base = ctypes.addressof(ctypes.c_char.from_buffer(m))
+        t_alloc = time.perf_counter() if prof else 0.0
+        spans = []
+        for off, arr, _ in self._inputs:
+            if arr.size:
+                ctypes.memmove(base + 4 * off, addr_ro(arr, name="input"), 4 * arr.size)
+                spans.append((off, off + arr.size))
+        self._in_spans = [s for s in spans if s not in self._inout]
+        sbase, obase = H, H + sc
+        prog = array.array("i", [(v.off + (sbase if v.kind == "s" else obase)) if isinstance(v, _Scratch) else v
+                                 for s in self._stages for v in s] or [0])
+        nst = len(self._stages)
+        self._out, self._out_at = None, obase
+        t_in = time.perf_counter() if prof else 0.0
+        run_nocopy(base, prog.buffer_info()[0], (H, sc, on, nst, block))
+        self.arena = arena
+        if prof:
+            inv = {v: k for k, v in _OPS.items()}
+            print("XPPROG ops=" + "+".join(inv.get(st[0], str(st[0])) for st in self._stages)
+                  + f" arena={H} scratch={sc} out={on} nocopy=1"
                   + f" alloc_s={t_alloc - t_run:.4f} inputs_s={t_in - t_alloc:.4f}"
                   + f" call_s={time.perf_counter() - t_in:.4f}", flush=True)
         return self
