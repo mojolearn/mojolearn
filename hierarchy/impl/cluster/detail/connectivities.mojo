@@ -290,6 +290,7 @@ def get_distance_graph(
     mut norms: DeviceBuffer[DType.float32],
     tile_tpb: Int = PINNED_TILE_TPB,
     sabotage: Int32 = LINK_SAB_NONE,
+    fill_indices: Bool = True,
 ) raises:
     """`connectivities.cuh:222-239`. `indptr` must hold `m + 1`, `indices`
     and `data` `m * m` (the PAIRWISE `resize`s at `:199-200`, done by the
@@ -308,5 +309,6 @@ def get_distance_graph(
             "hierarchy.get_distance_graph: unknown Linkage " + String(dist_type)
         )
     pairwise_distances(
-        ctx, x, m, n, metric, indptr, indices, data, norms, tile_tpb, sabotage
+        ctx, x, m, n, metric, indptr, indices, data, norms, tile_tpb, sabotage,
+        fill_indices,
     )
