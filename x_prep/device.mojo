@@ -6,13 +6,11 @@ sees every write of stage s-1), and the arena comes back once."""
 from std.gpu import block_idx, block_dim, thread_idx
 from std.ffi import _Global
 from std.os import getenv
-from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_prep.common import FP, IP, STAGE_INTS
 from x_prep.units import N_OPS, run_unit
 from x_prep.dsort import sort_cols_device, sort_scratch_words
-from x_prep.dradix import RADIX_SORT, RADIX_MIN_ROWS, radix_sort_cols_device, radix_scratch_words
 from x_prep.fastred import (
     TGR, col_stats_fast_kernel, pt_fold_fast_kernel, class_stats_fast_kernel, ii_mean_fast_kernel,
     ii_gram_fast_kernel,
@@ -89,17 +87,6 @@ def run_program_device_ranges(arena_addr: Int, arena_len: Int, prog_addr: Int, s
     )
 
 
-def _env_int(name: String, default: Int) -> Int:
-    """The integer value of an environment switch (the default when unset or not a number)."""
-    var v = String(getenv(name))
-    if v == "":
-        return default
-    try:
-        return Int(v)
-    except:
-        return default
-
-
 def prep_kernel[OP: Int](f: FP, q: IP, total: Int32):
     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if t < Int(total):
@@ -129,24 +116,11 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
         var op = Int(host_q.unsafe_load(s * STAGE_INTS))
         if op < 0 or op >= N_OPS:
             raise Error(String("x_prep: unknown op ", op))
-    # FAST on Apple (lane prep-apple3): MOJOLEARN_XPREP_SORT_RADIX=1 sorts by radix (x_prep/dradix.mojo,
-    # the same words); OPT-IN until its A/B is recorded. MOJOLEARN_XPREP_SORT_CHUNK = positions per chunk.
-    var radix = False
-    var radix_rows = 2048
-    comptime if RADIX_SORT:
-        radix = getenv("MOJOLEARN_XPREP_SORT_RADIX", "0") == "1"
-        radix_rows = max(1, _env_int("MOJOLEARN_XPREP_SORT_CHUNK", 2048))
-    # MOJOLEARN_XPREP_PROFILE=1: XPPHASE lines (a wait after every phase; timing only)
-    var prof = getenv("MOJOLEARN_XPREP_PROFILE", "0") == "1"
-    var t_last = perf_counter_ns()
     var scratch = 1
     for s in range(stages):
         if Int(host_q.unsafe_load(s * STAGE_INTS)) == OP_SORT_COLS:
             var sq = host_q + (s * STAGE_INTS + 2)
-            var units = Int(host_q.unsafe_load(s * STAGE_INTS + 1))
-            scratch = max(scratch, sort_scratch_words(Int(sq[1]), units))
-            if radix and Int(sq[1]) >= RADIX_MIN_ROWS:
-                scratch = max(scratch, radix_scratch_words(Int(sq[1]), units, radix_rows))
+            scratch = max(scratch, sort_scratch_words(Int(sq[1]), Int(host_q.unsafe_load(s * STAGE_INTS + 1))))
     # FAST: MOJOLEARN_XPREP_FAST_FOLDS=0 keeps the row-order units (the A/B arm of
     # bench/x_prep_quality.py and bench/x_prep_speed.py); unset or 1 folds by threadgroup
     var fast_folds = getenv("MOJOLEARN_XPREP_FAST_FOLDS", "1") != "0"
@@ -168,12 +142,6 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     var df = ctx.enqueue_create_buffer[DType.float32](dev_len if dev_len > 0 else 1)
     var dw = ctx.enqueue_create_buffer[DType.uint32](scratch)
     var dq = ctx.enqueue_create_buffer[DType.int32](stages * STAGE_INTS if stages > 0 else 1)
-    if prof:
-        ctx.synchronize()
-        var now = perf_counter_ns()
-        print("XPPHASE alloc us", (now - t_last) // 1000, "arena", arena_len, "scratch", max(scratch_len, 0), "out", out_n,
-              "sort", scratch)
-        t_last = now
     if nins >= 0:
         upload_ranges(ctx, df, host_f, arena_len, ins_addr, nins, X_PREP_STORE.get_or_create_ptr()[])
     elif arena_len > 0:
@@ -185,19 +153,9 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
         ctx.enqueue_memset(df.create_sub_buffer[DType.float32](out_at, out_n), Float32(0))
     if stages > 0:
         ctx.enqueue_copy(dst_buf=dq, src_ptr=host_q)
-    if prof:
-        ctx.synchronize()
-        var now = perf_counter_ns()
-        print("XPPHASE upload us", (now - t_last) // 1000, "ranges", nins)
-        t_last = now
     for s in range(stages):
         var op = Int(host_q.unsafe_load(s * STAGE_INTS))
         var total = Int(host_q.unsafe_load(s * STAGE_INTS + 1))
-        if prof and s > 0:
-            ctx.synchronize()
-            var now = perf_counter_ns()
-            print("XPPHASE stage", s - 1, "op", Int(host_q.unsafe_load((s - 1) * STAGE_INTS)), "us", (now - t_last) // 1000)
-            t_last = now
         if total <= 0:
             continue
         var qp = dq.unsafe_ptr() + (s * STAGE_INTS + 2)
@@ -208,15 +166,8 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
             continue
         if op == OP_SORT_COLS:
             var hq = host_q + (s * STAGE_INTS + 2)
-            var by_radix = False
-            comptime if RADIX_SORT:
-                if radix and Int(hq[1]) >= RADIX_MIN_ROWS:
-                    radix_sort_cols_device(ctx, df, dw, total, Int(hq[0]), Int(hq[1]), Int(hq[2]),
-                                           Int(hq[3]), Int(hq[4]), radix_rows)
-                    by_radix = True
-            if not by_radix:
-                sort_cols_device(ctx, df, dw, total, Int(hq[0]), Int(hq[1]), Int(hq[2]),
-                                 Int(hq[3]), Int(hq[4]))
+            sort_cols_device(ctx, df, dw, total, Int(hq[0]), Int(hq[1]), Int(hq[2]),
+                             Int(hq[3]), Int(hq[4]))
             continue
         comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
             if fast_folds and op == OP_COL_STATS:
@@ -243,12 +194,6 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                     df.unsafe_ptr(), qp, Int32(total),
                     grid_dim=(total + BLOCK - 1) // BLOCK, block_dim=BLOCK,
                 )
-    if prof and stages > 0:
-        ctx.synchronize()
-        var now = perf_counter_ns()
-        print("XPPHASE stage", stages - 1, "op", Int(host_q.unsafe_load((stages - 1) * STAGE_INTS)), "us",
-              (now - t_last) // 1000)
-        t_last = now
     if nouts >= 0:
         download_ranges(ctx, df, host_f, outs_addr, nouts)
     elif arena_len > 0:
@@ -259,15 +204,9 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     if out_n > 0:
         ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=out_addr), src_buf=df.create_sub_buffer[DType.float32](out_at, out_n))
     ctx.synchronize()
-    if prof:
-        var now = perf_counter_ns()
-        print("XPPHASE download us", (now - t_last) // 1000, "ranges", nouts)
-        t_last = now
     _ = dw^
     _ = dmw^
     _ = dmu^
     _ = dq^
     _ = df^
     _ = ctx^
-    if prof:
-        print("XPPHASE release us", (perf_counter_ns() - t_last) // 1000)
