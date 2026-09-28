@@ -224,3 +224,54 @@ origin/main 9a8f9e390, lane sets diffed:
   merged host modules). None dropped.
 - gbdt_host_predict 51, forest_inference 50, neural_inference.py 41: unchanged.
 - Registry: 504 lanes on lane/merged.
+
+## Build (step 3)
+
+- Every binding the 504 registered lanes run (75: GPU + host families) built
+  on the central AMD box (gfx942) at ce54c30f9 except one:
+  **_mojolearn_x_cluster** — `_ap_noise_kernel(m: Int)`; the pinned toolchain
+  refuses Int as a device argument ("Int and UInt do not conform to
+  DevicePassable"). Owner: algos-cluster (WIP 649b55f7b). FIXED on lane/merged
+  (003ea19ba: Int64 for the call, same cells; e2e_device_fold_reversed.patch
+  context follows). After it: 75/75 built on gfx942. NVIDIA (sm_89, nvc1):
+  75/75 built at 003ea19ba. x_linear's merged team/host dispatch compiles on
+  both.
+
+## Global check (step 4): how it runs
+
+- Exposed lanes = host_surface.covered_lanes(): **465** of 504 registered.
+  The other 39 (par-* multi-GPU drivers, cross-val-folds, resample-bca,
+  resample-perm-samples, resample-unpaired, resample-utils) have no CPU route;
+  their CPU arms refuse by design ("no CPU implementation of the cooperative
+  multi-GPU driver ..."). Not counted as failures. NOTE for prep: the four
+  new resample-* lanes are not in host_surface's covered set.
+- Driver: tools/merged_check/merged_check.py (untracked, synced to the boxes;
+  reuses algos_lane_check's needed_bindings / build+stamp / run_arm /
+  compare). clean = GPU arm once, CPU arm per thread setting, each CPU column
+  diffed cell for cell with the GPU column.
+- NVIDIA nvc1 (2x RTX 4090): clean in 4 resumable shards, CPU column at
+  MOJOLEARN_CPU_THREADS=1, 3 and default; e2e sabotage sequence (46 family
+  patch lines, tools/merged_check/sab_plan.tsv) in a separate tree
+  (/root/mojolearn-merged-sab); tests job (test_host_surface,
+  test_lane_select, every test_x_*_repeat at threads 1/3/default).
+- AMD central (MI300X): clean in 4 shards (CPU default), tests job.
+- Apple + do-amd (MI325X): 24 clean shards via apple_steward speed jobs at
+  003ea19ba, each on m2pro, m3ultra-b, do-amd and one M4 (rotating
+  m4pro-a/m4pro-b/m4-a); a build job first on each. m3ultra drained.
+
+## Failures found (step 5)
+
+- **x-decomp-* (every x_decomp estimator), GPU and CPU**: `TypeError: a
+  bytes-like object is required` in `_expansion_decomp._M.from_input`
+  (array.frombytes given the Array's 2-D float32 memoryview). Owner:
+  algos-decomp (2f2c2891b, "an input reaches the x_decomp store in one copy").
+  Not from the integration (_array/_buffer equal algos-decomp's). FIXED on
+  lane/merged b90431acf (`mv.cast("B")`, same bytes, as _array.Array does);
+  the decomp lanes are re-run after the shards.
+- **kmeans, kmeans-random, kmeans-sqrt: CPU arm REFUSED** on x86 (Xeon 8470
+  and EPYC): `transform(X)[i, labels_[i]] and transform(X).min(axis=1)
+  differ: 77306 bytes of 80000`. Reproduced on a pure origin/lane/cluster-cpu
+  tree (ec159b796): 10933 of 80000. Owner: cluster-cpu (host KMeans rewrite:
+  8f9a54482 / a8cf410cf / d9a4453ec / 778f2e677). kmeans_oracle.mojo on
+  lane/merged is byte-identical to cluster-cpu's. Fix in progress on
+  lane/merged-kmeans-fix (root cause, then same bits as main's host path).
