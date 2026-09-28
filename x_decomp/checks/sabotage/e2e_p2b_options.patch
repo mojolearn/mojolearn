@@ -1,0 +1,48 @@
+diff --git a/decomposition/host/pca_oracle.mojo b/decomposition/host/pca_oracle.mojo
+index 90ea10089..e062ace3f 100644
+--- a/decomposition/host/pca_oracle.mojo
++++ b/decomposition/host/pca_oracle.mojo
+@@ -718,7 +718,7 @@ def host_column_variance(m: List[Float32], n_rows: Int, n_cols: Int) -> List[Flo
+     var mu = host_column_mean(m, n_rows, n_cols)
+     var c = host_shift_columns(m, mu, n_rows, n_cols, Float32(-1.0))
+     for i in range(len(c)):
+-        c[i] = ftz(identical_mul(c[i], c[i]))
++        c[i] = ftz(identical_mul(c[i], c[i]) * Float32(1.00000012))  # SABOTAGE (end to end, p2b): one ulp
+     return host_column_mean(c, n_rows, n_cols)
+ 
+ 
+diff --git a/umap/host/umap_oracle.mojo b/umap/host/umap_oracle.mojo
+index 9924cd2ae..d3f3b37c2 100644
+--- a/umap/host/umap_oracle.mojo
++++ b/umap/host/umap_oracle.mojo
+@@ -110,7 +110,7 @@ from umap.sparse_graph import (
+ 
+ #: The gate's negative control (module docstring). Read back by
+ #: `metrics_host_sabotage`.
+-comptime UMAP_ORACLE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
++comptime UMAP_ORACLE_HOST_SABOTAGE = True  # SABOTAGE (end to end, p2b): the host UMAP draws a late epoch
+ 
+ #: `UMAP_IDENTICAL_GRAD_CLIP`, `optimizer_identical_device.mojo:71`, and
+ #: `UMAP_GRAD_CLIP`, `umap/optimizer.mojo:16` (both 4).
+diff --git a/x_decomp/host.mojo b/x_decomp/host.mojo
+index 024f4c157..cca139efa 100644
+--- a/x_decomp/host.mojo
++++ b/x_decomp/host.mojo
+@@ -243,6 +243,8 @@ struct HostExec(Exec):
+     @staticmethod
+     def geqrf(a: F32Ptr, tau: F32Ptr, m: Int, n: Int) raises:
+         geqrf_serial(a, tau, m, n)
++        # SABOTAGE (end to end, p2b): the host's first reflector scale moves by one ulp
++        tau.unsafe_store(0, tau.unsafe_load(0) * Float32(1.00000012))
+ 
+     @staticmethod
+     def orgqr(h: F32Ptr, tau: F32Ptr, q: F32Ptr, m: Int, n: Int, kk: Int, qc: Int) raises:
+@@ -255,6 +257,8 @@ struct HostExec(Exec):
+         var ps = F32Ptr(unsafe_from_address=Int(s.unsafe_ptr()))
+         for u in range(n):
+             steps.unsafe_store(u, als_cg_row(c, y, yty, x, ps, u, m, f, reg, cg))
++            # SABOTAGE (end to end, p2b): the host CG row's first factor moves by one ulp
++            x.unsafe_store(u * f, x.unsafe_load(u * f) * Float32(1.00000012))
+         _ = s^
+ 
+     @staticmethod

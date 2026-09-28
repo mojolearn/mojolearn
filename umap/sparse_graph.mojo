@@ -414,13 +414,15 @@ def general_intersection(
     var n = left.n_samples
     if right.n_samples != n:
         raise Error("UMAP supervised target graph size differs")
+    # the smallest STORED value: umap-learn's graphs have had their explicit
+    # zeros eliminated, so a stored zero here counts as absent
     var lmin_v = Float32(3.4028234663852886e38)
     for v in left.values:
-        if v < lmin_v:
+        if v != Float32(0.0) and v < lmin_v:
             lmin_v = v
     var rmin_v = Float32(3.4028234663852886e38)
     for v in right.values:
-        if v < rmin_v:
+        if v != Float32(0.0) and v < rmin_v:
             rmin_v = v
     var left_min = max(Float64(lmin_v) / 2.0, Float64(1.0e-8))
     var right_min = max(Float64(rmin_v) / 2.0, Float64(1.0e-8))
@@ -446,11 +448,11 @@ def general_intersection(
             var has_r = False
             if ac == col:
                 lv = left.values[a]
-                has_l = True
+                has_l = lv != Float32(0.0)
                 a += 1
             if bc == col:
                 rv = right.values[b]
-                has_r = True
+                has_r = rv != Float32(0.0)
                 b += 1
             var out = lv + rv
             var left_val = Float64(lv) if has_l else left_min

@@ -29,8 +29,6 @@ from ._linalg_impl import (
     matmul_int8,
     numeric_mode,
     profile,
-    QRResult,
-    SVDResult,
     qr,
     quantize_int8,
     require_identical,
@@ -48,7 +46,7 @@ __all__ = ['matmul', 'numeric_mode', 'profile', 'require_identical',
            # (lane/linalg-public, 2026-09-19). numpy's names, numpy's
            # meanings, and the modes this tree does not compute refused BY
            # NAME rather than approximated: see each docstring.
-           'qr', 'eigh', 'svdvals', 'svd', 'QRResult', 'SVDResult',
+           'qr', 'eigh', 'svdvals', 'svd',
            'PROFILE', 'PROFILE_FAMILY', 'PROFILE_VERSION', 'Cholesky',
            # the low-bit profiles (gemm/IDENTICAL_LOWBIT_CONTRACT.md)
            'matmul_bf16', 'matmul_int8', 'to_bf16', 'from_bf16',

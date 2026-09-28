@@ -942,9 +942,13 @@ def qr(a, mode="reduced"):
     Returns
     -------
     For mode='r': Array, shape (N, N)
-        R, row major, upper triangular. Its signs are the reflector's, the
-        same convention LAPACK's ``geqrf`` leaves; ``R.T @ R`` equals
-        ``a.T @ a`` to float32.
+        R, row major, upper triangular; ``R.T @ R`` equals ``a.T @ a`` to
+        float32. For M >= N it is the TSQR route's R, whose rows may differ
+        in SIGN from LAPACK's (the tree's combine steps choose their own
+        reflector signs; measured 2026-09-27 on a 48 x 5 input), so it can
+        differ from ``qr(a)[1]`` by a sign per row, where numpy's are equal.
+        Its bits predate the Q modes and are kept (the linalg-qr lane). A
+        wide input's R is geqrf's, the same as ``qr(a)[1]``.
 
     Notes
     -----
@@ -1097,12 +1101,11 @@ _SVD_NULL_RTOL = 2.0 ** -20
 
 def _svd_tall(k, A, full):
     """(U, S, Vt) of a tall A (m >= n) as _M: S and V from the decomp lane's
-    QR + one-sided Jacobi (`Kit.svd`, descending, ties to the lower index),
-    U's column j = A v_j / s_j for s_j > 2^-20 s_0 (the cells' gemm and
-    division), and every other column of U (the null directions, and the
-    m - n more of full_matrices) from the complete Q of geqrf applied to the
-    columns already found: its trailing columns are an orthonormal basis of
-    their complement."""
+    QR + one-sided Jacobi (`Kit.svd`, descending, ties to the lower index);
+    U from the geqrf + orgqr of the columns A v_j / s_j with s_j > 2^-20 s_0
+    (the cells' gemm and division), each Q column signed by its R[j, j],
+    the null directions and the m - n more of full_matrices its trailing
+    columns."""
     from ._expansion_decomp import _M
     m, n = A.r, A.c
     S, Vt = k.svd(A)
@@ -1111,19 +1114,22 @@ def _svd_tall(k, A, full):
     AV = k.mm(A, Vt, tb=True)                                   # m x n
     Ug = k.ew("div", AV.take_cols(list(range(r))) if r < n else AV, S.take_cols(list(range(r))) if r < n else S)
     width = m if full else n
-    if r == width:
-        return Ug, S, Vt
-    if r:
-        h, tau = k.geqrf(Ug)
-        Qc = k.orgqr(h, tau, m)
-    else:
-        Qc = _M(__import__("array").array("f", [1.0 if i == j else 0.0 for i in range(m) for j in range(m)]), m, m)
-    cols = [Ug.s[i * r:(i + 1) * r] for i in range(m)]
     import array as _array
-    out = _array.array("f")
-    for i in range(m):
-        out.extend(cols[i])
-        out.extend(Qc.s[i * m + r:i * m + width])
+    if not r:
+        eye = _array.array("f", [1.0 if i == j else 0.0 for i in range(m) for j in range(width)])
+        return _M(eye, m, width), S, Vt
+    # A v / s loses orthogonality as s_0 / s_j grows (its error is V's
+    # rounding times that ratio); the Householder QR of those columns
+    # restores it: Q's column j signed by R[j, j] (an exact negation) is
+    # A v_j / s_j to that same error, orthonormal to float32, and Q's
+    # trailing columns are the complement's basis.
+    h, tau = k.geqrf(Ug)
+    Qc = k.orgqr(h, tau, width)
+    neg = [h.s[j * r + j] < 0.0 for j in range(r)]
+    out = _array.array("f", Qc.s)
+    for j in range(r):
+        if neg[j]:
+            out[j::width] = _array.array("f", [-v for v in out[j::width]])
     return _M(out, m, width), S, Vt
 
 

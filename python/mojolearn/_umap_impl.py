@@ -57,7 +57,19 @@ def _scalar(value, name):
 class UMAP(NumericModeMixin):
     """UMAP embedding with exact Euclidean neighbors and spectral init.
 
-    Supports fit/fit_transform/transform, 2D or 3D output, and local_connectivity=1.
+    Supports fit/fit_transform/transform. OPTION PARITY (lane/algos-decomp,
+    2026-09-27): n_components 1 to 32 (2 and 3 keep their bits; the others
+    run the run-time-dimension optimizer, DEVIATION 5322); any
+    local_connectivity >= 0 (umap-learn's rho interpolation, DEVIATION 5323);
+    metric euclidean / l2, sqeuclidean, cosine, manhattan (l1, cityblock,
+    taxicab), chebyshev (linf, infinity), minkowski (metric_kwds={'p': p});
+    init 'spectral', 'random' (uniform(-10, 10)), 'pca' (umap-learn's scaled
+    PCA plus N(0, 1e-4) noise, through the decomp cells) or an
+    (n_samples, n_components) array; a and b given directly; fit(X, y)
+    supervised with target_metric 'categorical' (-1 unknown) or 'l2' /
+    'euclidean', target_weight and target_n_neighbors (DEVIATION 5324).
+    REFUSED BY NAME: densmap=True, output_metric other than euclidean, a
+    callable metric and every other metric name, other target metrics.
     The source fit path stores a CSR graph in O(n_samples*n_neighbors)
     space, linear in samples when n_neighbors is bounded; exact neighbor
     search still performs quadratic pair comparisons. Spectral initialization
@@ -78,7 +90,6 @@ class UMAP(NumericModeMixin):
     of one row (lane/umap-batch-fix, 2026-09-16). This path has its own
     qualification requirements; existing fit certificates do not certify
     transform or reference RNG bits.
-    Supervised UMAP and alternate metrics/init are unsupported.
 
     `embedding_` and every returned embedding are `_array.Array`s of float32
     (DEVIATION 2370; they were ndarrays). The private training copies are
@@ -251,7 +262,7 @@ class UMAP(NumericModeMixin):
             t, _ = as_f32_c(codes, ndim=1, name="y")
             return 1, 1, t, max(tk, 0), w
         if tm in ("l2", "euclidean"):
-            t, _ = as_f32_c(y, name="y")
+            t, _ = as_f32_c(y, ndim=None, name="y")
             if t.ndim == 1:
                 t = t.reshape((t.shape[0], 1))
             if t.ndim != 2 or t.shape[0] != n or not all_finite(t):

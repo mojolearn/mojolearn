@@ -187,7 +187,10 @@ def test_qr_modes_are_numpys(rows, cols):
     res = linalg.qr(a, mode="reduced")
     assert np.asarray(res.Q).tobytes() == np.asarray(q).tobytes()
     if rows >= cols:
-        _close(linalg.qr(a, mode="r"), nr)
+        # 'r' is the TSQR route (its bits predate the Q modes and are kept):
+        # its R is LAPACK's up to the sign of each row
+        rr = np.asarray(linalg.qr(a, mode="r"), np.float64)
+        _close(np.sign(np.diag(rr) * np.diag(nr))[:, None] * rr, nr)
     with pytest.raises(ValueError, match="unrecognized mode"):
         linalg.qr(a, mode="economic")
 
