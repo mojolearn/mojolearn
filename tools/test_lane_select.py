@@ -1564,6 +1564,14 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
       forest_host_predict  85 -> 86  model_selection search fits GBDT and
                                      forest estimators); no old lane moved
 
+    REMEASURED 2026-09-28 (lane/algos-decomp):
+      kmeans_oracle        75 -> 76  x-decomp-umap-options (UMAP option
+                                     parity), through the metrics binding the
+                                     umap lane already reaches it by; no old
+                                     lane moved (origin/main at this merge
+                                     already answered 75 while its test still
+                                     read 71: lanes merged since reach it)
+
     REMEASURED 2026-09-28 (lane/trees-cpu):
       neural_inference.py  41 -> 40  gbdt-tensor-ctr-tables now FITS on the
                                      CPU column (lane/algos-trees) instead of
@@ -1585,11 +1593,33 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
                                      x-ann and x-decomp expansion lanes merged
                                      2026-09-27/28, and no neural or linear
                                      .core lane is among them (main's own
-                                     change, found red after the merge)"""
+                                     change, found red after the merge)
+
+    REMEASURED 2026-09-28 (lane/algos-ann-b, session B's new lanes):
+      kmeans_oracle        71 -> 75  ivf-filter, x-ann-tsne-pca,
+                                     x-ann-cagra-filter, x-ann-refine-euclidean,
+                                     each over an IVF or k-NN index whose
+                                     coarse quantizer is this library's KMeans;
+                                     no old lane moved
+
+    REMEASURED 2026-09-28 (lane/merged, every lane branch integrated; recomputed
+    with tools/lane_select.py on the merged tree against origin/main 9a8f9e390):
+      kmeans_oracle        75 -> 83  new lanes only: ivf-filter,
+                                     x-ann-cagra-filter, x-ann-refine-euclidean,
+                                     x-ann-tsne-pca (algos-ann-b), resample-bca,
+                                     resample-perm-samples, resample-unpaired
+                                     (algos-prep2), x-decomp-umap-options
+                                     (algos-decomp); no lane dropped
+      forest_host_predict  86 -> 88  bootstrap and metrics-classification (old
+                                     lanes): their bindings' closure now takes
+                                     in the merged host modules (core/
+                                     host_parallel, forest_host_groves,
+                                     gbdt_host_ctr, the ExtraTrees host fit);
+                                     no lane dropped"""
     rev = lane_select.reverse_map()
-    for rel, want in (("cluster/host/kmeans_oracle.mojo", 75),
+    for rel, want in (("cluster/host/kmeans_oracle.mojo", 83),
                       ("core/gbdt_host_predict.mojo", 51),
-                      ("core/forest_host_predict.mojo", 86),
+                      ("core/forest_host_predict.mojo", 88),
                       ("core/forest_inference.mojo", 50),
                       ("python/mojolearn/neural_inference.py", 41)):
         got = len(rev.get(rel, set()))
@@ -2020,8 +2050,8 @@ def test_the_real_manifest_edits_of_the_three_branches_are_placed():
     """The three branches' host_surface.py edits, replayed on the manifest in
     this tree (a lane that exists here stands in for ivf-filter)."""
     old = lane_select._read(lane_select.MANIFEST)
-    anchors = ('training_lanes=("ivf", "ivf-euclidean", "ivf-extend", "par-ivf")',
-               'inference_lanes=("ivf", "ivf-euclidean", "ivf-extend")',
+    anchors = ('training_lanes=("ivf", "ivf-euclidean", "ivf-extend", "ivf-filter", "par-ivf")',
+               'inference_lanes=("ivf", "ivf-euclidean", "ivf-extend", "ivf-filter")',
                '"gpr_fit", "gpr_predict", "gpr_sample_y", "gpr_lml_grad"',
                '"pca_fit", "pca_fit_full", "tsvd_fit"')
     for a in anchors:

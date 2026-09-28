@@ -10,7 +10,8 @@ from std.python.bindings import PythonModuleBuilder
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_linear.ops import FP, IP, X_LINEAR_HOST_SABOTAGE
-from x_linear.dispatch import fit_dispatch, decision_one
+from x_linear.dispatch import fit_dispatch, decision_one, team_rows, team_own
+from x_linear.team import team_work, solo
 
 
 def _fp(addr: Int) raises -> FP:
@@ -46,6 +47,9 @@ def fit_binding(algo: PythonObject, x_addr: PythonObject, y_addr: PythonObject, 
         fpl.append(Float32(Float64(py=fp[i])))
     var fw = List[Float32](length=max(n_fw, 1), fill=Float32(0))
     var iw = List[Int32](length=max(n_iw, 1), fill=Int32(0))
+    var bufs = team_rows(Int(py=algo), IP(unsafe_from_address=Int(ipl.unsafe_ptr())))
+    var own = team_own(Int(py=algo), d)
+    var tw = List[Float32](length=team_work(n, bufs, own), fill=Float32(0))
     var a = Int(py=algo)
     var x = _fp(Int(py=x_addr))
     var y = _fp(Int(py=y_addr))
@@ -56,7 +60,7 @@ def fit_binding(algo: PythonObject, x_addr: PythonObject, y_addr: PythonObject, 
         out.unsafe_store(i, Float32(0))
     with GILReleased(Python()):
         fit_dispatch(
-            a, x, y, n, d,
+            solo(FP(unsafe_from_address=Int(tw.unsafe_ptr())), n, bufs, own), a, x, y, n, d,
             IP(unsafe_from_address=Int(ipl.unsafe_ptr())), FP(unsafe_from_address=Int(fpl.unsafe_ptr())),
             out, FP(unsafe_from_address=Int(fw.unsafe_ptr())), IP(unsafe_from_address=Int(iw.unsafe_ptr())),
         )
@@ -64,6 +68,7 @@ def fit_binding(algo: PythonObject, x_addr: PythonObject, y_addr: PythonObject, 
     _ = fpl^
     _ = fw^
     _ = iw^
+    _ = tw^
     return PythonObject(n_out)
 
 

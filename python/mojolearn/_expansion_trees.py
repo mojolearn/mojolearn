@@ -24,10 +24,10 @@ import numbers
 from . import _portable_math as math
 from . import _mojolearn_rf, _mojolearn_x_trees  # noqa: F401  the bindings this door resolves; name NO other (lane_select counts > 3 as a registry)
 from ._array import Array
-from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty, full, zeros
+from ._buffer import _materialize, addr, addr_ro, all_finite, as_f32_c, as_f32_colmajor, as_i32_c, empty, full, zeros
 from ._labels import decode_labels, encode_labels, is_bool
 from ._mode import NumericModeMixin
-from ._forest_protocol import forest_estimator, _forest_fit_function
+from ._forest_protocol import forest_estimator, _forest_fit_arrays, _forest_fit_function
 from .extratrees import ExtraTreesRegressor, ExtraTreesClassifier as _ET_CLS
 from .randomforest import (
     RandomForestClassifier, RandomForestRegressor, _class_weight_rows, _refuse,
@@ -58,46 +58,56 @@ __all__ = [
 
 
 # ----------------------------------------------------------------- helpers
-def _trees_f32_list(values, n, name):
-    """`values` (buffer or sequence) as a list of n float32-rounded floats,
-    refusing non-finite and negative entries (a sample weight)."""
+def _trees_x_bind(est=None):
+    from . import _backend
+    return _backend.binding("_mojolearn_x_trees", getattr(est, "numeric_mode", None))
+
+
+def _trees_f32_weights(values, n, name, est=None):
+    """`values` (buffer or sequence) as a float32 Array of n entries,
+    refusing non-finite and negative entries and an all-zero vector (a
+    sample weight). One native pass (`x_trees_check_weights_f32`); the
+    refusals and their wording are the per-element Python loop's."""
     arr, _ = as_f32_c(values, ndim=1, name=name)
-    out = arr.tolist()
-    if len(out) != n:
-        raise ValueError(f"{name} has {len(out)} entries, X has {n} rows")
-    for v in out:
-        if not math.isfinite(v) or v < 0:
-            raise ValueError(f"{name} must be finite and nonnegative")
-    if not any(v > 0 for v in out):
+    if len(arr) != n:
+        raise ValueError(f"{name} has {len(arr)} entries, X has {n} rows")
+    status = int(_trees_x_bind(est).x_trees_check_weights_f32(addr_ro(arr, name=name), [n]))
+    if status == 1:
+        raise ValueError(f"{name} must be finite and nonnegative")
+    if status == 2:
         raise ValueError(f"{name} must have a positive total")
-    return out
+    return arr
 
 
 def _trees_colmajor(X, est):
-    """X as a column-major float32 Array through the lane's own transpose, so
-    the weighted fit (which takes the column-major layout) needs no base
-    binding helper on a CPU-only install."""
-    from . import _backend
-    Xa, _ = as_f32_c(X, ndim=2, name="X")
+    """X as a column-major float32 Array: a float32 F-order input is borrowed
+    as is (no copy); anything else goes through the lane's own threaded
+    transpose, so the weighted fit (which takes the column-major layout)
+    needs no base binding helper on a CPU-only install."""
+    Xm, _ = _materialize(X, "X")
+    if Xm.ndim == 2 and Xm.dtype == "<f4" and Xm.order == "F" and not Xm._both_orders():
+        return as_f32_colmajor(Xm, name="X")[0]
+    Xa, _ = as_f32_c(Xm, ndim=2, name="X")
     n, d = Xa.shape
     out = empty((d, n), "<f4")
-    _backend.binding("_mojolearn_x_trees", getattr(est, "numeric_mode", None)).x_trees_transpose_f32(
-        addr_ro(Xa, name="X"), addr(out, name="X^T"), [n, d])
+    _trees_x_bind(est).x_trees_transpose_f32(addr_ro(Xa, name="X"), addr(out, name="X^T"), [n, d])
     return Array._view_of(out, (n, d), order="F")
 
 
-def _trees_weighted_rows(sample_weight, class_weight, classes, codes):
+def _trees_weighted_rows(sample_weight, class_weight, classes, codes, est=None):
     """Per-row float32 weights: sample_weight times the class_weight row
     weight. Each product of two float32 values is exact in binary64, so the
     one rounding to float32 is the correctly rounded float32 product on every
-    host."""
+    host (`x_trees_mul_f32`)."""
     n = len(codes)
-    sw = _trees_f32_list(sample_weight, n, "sample_weight")
-    cw = None if class_weight is None else _class_weight_rows(class_weight, classes, codes.tolist())
-    if cw is not None:
-        cw = cw.tolist()
-        sw = [a * b for a, b in zip(sw, cw)]
-    return Array.from_list(sw, "<f4")
+    sw = _trees_f32_weights(sample_weight, n, "sample_weight", est)
+    if class_weight is None:
+        return sw
+    cw, _ = as_f32_c(_class_weight_rows(class_weight, classes, codes.tolist()), ndim=1, name="class_weight rows")
+    out = empty((n,), "<f4")
+    _trees_x_bind(est).x_trees_mul_f32(addr_ro(sw, name="sample_weight"), addr_ro(cw, name="class_weight"),
+                                       addr(out, name="weights"), [n])
+    return out
 
 
 # ----------------------------------------------------------- decision trees
@@ -192,19 +202,45 @@ class DecisionTreeClassifier(RandomForestClassifier):
             return _dt_random_fit(self, _ET_CLS, X, y)
         if sample_weight is None:
             return self._fit_with_tree_start(X, y)
+        return self._fit_weighted(_trees_colmajor(X, self), y, sample_weight)
+
+    def _fit_weighted(self, Xcm, y, sample_weight, x_finite=False):
+        """The weighted fit on a column-major float32 X. AdaBoost calls it
+        with ONE transposed, once-checked X for all of its members
+        (`x_finite=True` skips the per-member finite scan of the same
+        bytes); every input the fit entry sees is what `fit` hands it."""
         self._refresh_config()
         self._capture_fit_mode()
         self.classes_, y32 = encode_labels(y)
         self.n_classes_ = int(len(self.classes_))
         if self.n_classes_ < 2:
             raise ValueError("y has fewer than 2 classes")
-        weights = _trees_weighted_rows(sample_weight, self.class_weight, self.classes_, y32)
+        weights = _trees_weighted_rows(sample_weight, self.class_weight, self.classes_, y32, self)
         binding = self._bind("_mojolearn_rf")
         weighted_fit = _forest_fit_function(binding, "rf_classifier_fit_weighted")
 
         def fit_fn(x_addr, y_addr, params, criterion):
             return weighted_fit(x_addr, y_addr, params, criterion, addr_ro(weights, name="weights"))
-        return self._fit_arrays(_trees_colmajor(X, self), y32, self.n_classes_, fit_fn)
+        if x_finite:
+            return self._fit_colmajor_checked(Xcm, y32, fit_fn)
+        return self._fit_arrays(Xcm, y32, self.n_classes_, fit_fn)
+
+    def _fit_colmajor_checked(self, Xcm, y32, fit_fn):
+        """`RandomForestClassifier._fit_arrays` on a column-major float32 X
+        whose finite scan the caller already ran on these exact bytes: the
+        same parameters, the same entry, the same unpacking, minus that one
+        scan."""
+        n_rows, n_features = Xcm.shape
+        if len(y32) != n_rows:
+            raise ValueError(f"y has {len(y32)} rows, X has {n_rows}")
+        params = self._fit_params(n_rows, n_features, self.n_classes_)
+        out = fit_fn(addr_ro(Xcm, name="X"), addr_ro(y32, name="y"), params, self._cfg["criterion"])
+        (self._offsets, self._colid, self._quesval, self._left_child,
+         self._leaves, meta) = _forest_fit_arrays(out)
+        self.n_features_in_ = int(n_features)
+        self._n_trees = int(meta[0])
+        self._num_outputs = int(meta[1])
+        return self
 
     def get_depth(self):
         return _trees_depth(self)
@@ -725,9 +761,20 @@ class AdaBoostClassifier(_AdaBoostBase):
         self.estimators_, self.estimator_weights_, self.estimator_errors_ = [], [], []
         b = self._bind()
         m = int(self.n_estimators)
+        # A best-splitter DecisionTreeClassifier member fits column-major X
+        # with weights: transpose and finite-scan X ONCE for every member
+        # (the member's own `fit` did both per member on the same bytes).
+        Xcm = None
+        if type(base) is DecisionTreeClassifier and base.splitter == "best":
+            Xcm = _trees_colmajor(Xa, self)
+            if not all_finite(Xcm):
+                raise ValueError("X contains NaN or infinity; the forest has no missing-value arm")
         for it in range(m):
             est = _trees_clone(base, random_state=_trees_sub_seed(seed, it))
-            est.fit(Xa, codes, sample_weight=self._w32(w, n))
+            if Xcm is not None:
+                est._fit_weighted(Xcm, codes, self._w32(w, n), x_finite=True)
+            else:
+                est.fit(Xa, codes, sample_weight=self._w32(w, n))
             pred = as_i32_c(est.predict(Xa), ndim=1, name="predicted codes")[0]
             b.x_trees_samme_step(addr(w, name="w"), addr_ro(pred, name="pred"), addr_ro(codes, name="y"),
                                  addr(stats, name="stats"),

@@ -7,3 +7,4 @@ x_metrics/seams/x_metrics_check.mojo	x_metrics/seams/sabotage/seam_6104_operand_
 x_metrics/seams/x_metrics_check.mojo	x_metrics/seams/sabotage/seam_6105_contraction.patch
 x_metrics/seams/x_metrics_check.mojo	x_metrics/seams/sabotage/seam_6107_prefix.patch
 x_metrics/seams/x_metrics_check.mojo	x_metrics/seams/sabotage/seam_6108_rng_mapping.patch
+x_metrics/seams/x_metrics_check.mojo	x_metrics/seams/sabotage/seam_host_threads.patch

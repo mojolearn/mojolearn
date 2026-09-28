@@ -18,8 +18,10 @@ from std.memory import bitcast
 from std.sys.info import CompilationTarget
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from x_linear.ops import FP, IP, dot, fa, fm, cholesky, jacobi_eig, shuffle, fexp, flog
+from checks.numerics import ftz
+from x_linear.ops import FP, IP, dot, fa, fm, fz_branchless, cholesky, jacobi_eig, shuffle, fexp, flog
 from x_linear.dispatch import decision_one
+from x_linear.team import team_work, solo
 from x_linear.lars import lars_fit
 from x_linear.isotonic import isotonic_predict
 from x_linear.cd import alpha_grid_value
@@ -107,6 +109,16 @@ def check_flush(mut card: IdentityTrace) raises:
     got[1] = fm(bitcast[DType.float32](UInt32(0x3F800000)), a)
     _require(_bits(got[0]) == _bits(add(a, b)), "flush: shipped add kept a subnormal operand")
     _require(_bits(got[1]) == _bits(flush(a)), "flush: shipped product kept a subnormal operand")
+    # the device's branchless flush (speed phase) is ftz's word on every edge
+    var edges: List[UInt32] = [
+        UInt32(0x00000000), UInt32(0x80000000), UInt32(0x00000001), UInt32(0x80000001),
+        UInt32(0x007FFFFF), UInt32(0x807FFFFF), UInt32(0x00400000), UInt32(0x00800000),
+        UInt32(0x80800000), UInt32(0x3F800000), UInt32(0xBF800000), UInt32(0x7F7FFFFF),
+        UInt32(0x7F800000), UInt32(0xFF800000), UInt32(0x7FC00000), UInt32(0xFFC00001),
+    ]
+    for e in edges:
+        var v = bitcast[DType.float32](e)
+        _require(_bits(fz_branchless(v)) == _bits(ftz(v)), "flush: the branchless flush and ftz give different words")
     card.record_host("x_linear.seam5001.flush", _u(got), 2)
     print("PASS 5001 flush: subnormal operands are signed zeros")
 
@@ -223,7 +235,8 @@ def check_tie(mut card: IdentityTrace) raises:
     var res = List[Float32](length=2 * d + 4, fill=0)
     var fw = List[Float32](length=2 * d * d + 8 * d, fill=0)
     var iw = List[Int32](length=2 * d, fill=0)
-    lars_fit(_p(x), _p(y), n, d, _pi(ip), _p(fp), _p(res), _p(fw), _pi(iw))
+    var tw = List[Float32](length=team_work(n, 0, 0), fill=0)
+    lars_fit(solo(_p(tw), n, 0, 0), _p(x), _p(y), n, d, _pi(ip), _p(fp), _p(res), _p(fw), _pi(iw))
     _require(Int(res[d + 4]) == argmax_abs_first(xty), "tie: LARS's first active feature is not the lowest tied index")
     card.record_host("x_linear.seam5005.tie", _u(res), 2 * d + 4)
     print("PASS 5005 tie-break: the lowest index among exact ties")
@@ -248,7 +261,8 @@ def check_nan(mut card: IdentityTrace) raises:
     var res = List[Float32](length=3, fill=0)
     var fw = List[Float32](length=1, fill=0)
     var iw = List[Int32](length=1, fill=0)
-    isotonic_predict(_p(q), _p(th), 3, 1, _pi(ip), _p(fp), _p(res), _p(fw), _pi(iw))
+    var tw = List[Float32](length=team_work(3, 0, 0), fill=0)
+    isotonic_predict(solo(_p(tw), 3, 0, 0), _p(q), _p(th), 3, 1, _pi(ip), _p(fp), _p(res), _p(fw), _pi(iw))
     _require(_bits(res[0]) == CANONICAL_NAN_BITS and _bits(res[2]) == CANONICAL_NAN_BITS,
              "nan: an out-of-bounds prediction is not the canonical word")
     _require(res[1] == Float32(1), "nan: the in-range prediction moved")

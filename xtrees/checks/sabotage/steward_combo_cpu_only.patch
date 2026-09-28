@@ -1,34 +1,33 @@
 diff --git a/ensemble/host/rf_oracle.mojo b/ensemble/host/rf_oracle.mojo
-index 85c9f1b8b..30d248359 100644
+index 51620643d..4bf690efc 100644
 --- a/ensemble/host/rf_oracle.mojo
 +++ b/ensemble/host/rf_oracle.mojo
-@@ -1794,7 +1794,7 @@ def rf_host_fit(
-                 if wtotal <= 0:
-                     continue
-                 for c in range(n_out):
--                    vleaf[node * n_out + c] = ftz(_wcls_weight(whist, c, wscale) / wtotal)
-+                    vleaf[node * n_out + c] = ftz(_wcls_weight(whist, c, wscale) / wtotal) * Float32(1.0001)  # COLUMN SABOTAGE: the host leaf only
-             elif classification:
-                 var hist = List[UInt32](length=n_out, fill=UInt32(0))
-                 for j in range(begin, begin + count):
-@@ -1809,7 +1809,7 @@ def rf_host_fit(
-                 for c in range(n_out):
-                     vleaf[node * n_out + c] = ftz(
-                         Int64(Int(hist[c])).cast[DType.float32]() / total.cast[DType.float32]()
--                    )
-+                    ) * Float32(1.0001)  # COLUMN SABOTAGE: the host leaf only
-             else:
-                 var label_sum = Int32(0)
-                 var cnt = UInt32(0)
-@@ -1821,7 +1821,7 @@ def rf_host_fit(
-                 if weight > 0:
-                     vleaf[node * n_out] = ftz(
-                         _dequantize(label_sum, label_scale) / weight.cast[DType.float32]()
--                    )
-+                    ) * Float32(1.0001)  # COLUMN SABOTAGE: the host leaf only
+@@ -1893,7 +1893,7 @@ def _rf_host_tree(
+             if wtotal <= 0:
+                 continue
+             for c in range(n_out):
+-                vleaf[node * n_out + c] = ftz(_wcls_weight(whist, c, wscale) / wtotal)
++                vleaf[node * n_out + c] = ftz(_wcls_weight(whist, c, wscale) / wtotal) * Float32(1.0001)  # COLUMN SABOTAGE: the host leaf only
+         elif classification:
+             var hist = List[UInt32](length=n_out, fill=UInt32(0))
+             for j in range(begin, begin + count):
+@@ -1908,7 +1908,7 @@ def _rf_host_tree(
+             for c in range(n_out):
+                 vleaf[node * n_out + c] = ftz(
+                     Int64(Int(hist[c])).cast[DType.float32]() / total.cast[DType.float32]()
+-                )
++                ) * Float32(1.0001)  # COLUMN SABOTAGE: the host leaf only
+         else:
+             var label_sum = Int32(0)
+             var cnt = UInt32(0)
+@@ -1920,6 +1920,6 @@ def _rf_host_tree(
+             if weight > 0:
+                 vleaf[node * n_out] = ftz(
+                     _dequantize(label_sum, label_scale) / weight.cast[DType.float32]()
+-                )
++                ) * Float32(1.0001)  # COLUMN SABOTAGE: the host leaf only
  
-         for node in range(n_nodes):
-             forest.colid.append(t_colid[node])
+     return _RfHostTree(t_colid^, t_quesval^, t_left^, vleaf^)
 diff --git a/extratrees/checks/pcg_rng.mojo b/extratrees/checks/pcg_rng.mojo
 index 13b5a797d..e7737ffce 100644
 --- a/extratrees/checks/pcg_rng.mojo

@@ -64,9 +64,9 @@ comptime TRANSFORMER_HOST_SABOTAGE = GEMM_ORACLE_HOST_SABOTAGE
 
 def transformer_host_weights(
     dm: Int, nh: Int, nkv: Int, hd: Int, it: Int, rope_positions: Int,
-    norm1_w: List[Float32], norm2_w: List[Float32], w_q: List[Float32],
-    w_k: List[Float32], w_v: List[Float32], w_o: List[Float32],
-    w_gate: List[Float32], w_up: List[Float32], w_down: List[Float32],
+    var norm1_w: List[Float32], var norm2_w: List[Float32], var w_q: List[Float32],
+    var w_k: List[Float32], var w_v: List[Float32], var w_o: List[Float32],
+    var w_gate: List[Float32], var w_up: List[Float32], var w_down: List[Float32],
 ) raises -> TransformerWeights:
     """The oracle's weight struct from the nine buffers in the device
     binding's address order (input_layernorm, post_attention_layernorm,
@@ -75,15 +75,15 @@ def transformer_host_weights(
     var dims = TransformerDims(dm, nh, nkv, hd, it, rope_positions)
     dims.validate()
     var w = TransformerWeights(dims)
-    w.norm1_w = norm1_w.copy()
-    w.norm2_w = norm2_w.copy()
-    w.w_q = w_q.copy()
-    w.w_k = w_k.copy()
-    w.w_v = w_v.copy()
-    w.w_o = w_o.copy()
-    w.w_gate = w_gate.copy()
-    w.w_up = w_up.copy()
-    w.w_down = w_down.copy()
+    w.norm1_w = norm1_w^
+    w.norm2_w = norm2_w^
+    w.w_q = w_q^
+    w.w_k = w_k^
+    w.w_v = w_v^
+    w.w_o = w_o^
+    w.w_gate = w_gate^
+    w.w_up = w_up^
+    w.w_down = w_down^
     refuse_bad_weights(w)
     return w^
 
@@ -91,13 +91,13 @@ def transformer_host_weights(
 def transformer_host_weights_opts(
     dm: Int, nh: Int, nkv: Int, hd: Int, it: Int, rope_positions: Int,
     opts: BlockOptions,
-    norm1_w: List[Float32], norm2_w: List[Float32], w_q: List[Float32],
-    w_k: List[Float32], w_v: List[Float32], w_o: List[Float32],
-    w_gate: List[Float32], w_up: List[Float32], w_down: List[Float32],
-    b_q: List[Float32], b_k: List[Float32], b_v: List[Float32],
-    b_o: List[Float32], norm1_b: List[Float32], norm2_b: List[Float32],
-    b_up: List[Float32], b_down: List[Float32], b_gate: List[Float32],
-    qn_w: List[Float32], kn_w: List[Float32],
+    var norm1_w: List[Float32], var norm2_w: List[Float32], var w_q: List[Float32],
+    var w_k: List[Float32], var w_v: List[Float32], var w_o: List[Float32],
+    var w_gate: List[Float32], var w_up: List[Float32], var w_down: List[Float32],
+    var b_q: List[Float32], var b_k: List[Float32], var b_v: List[Float32],
+    var b_o: List[Float32], var norm1_b: List[Float32], var norm2_b: List[Float32],
+    var b_up: List[Float32], var b_down: List[Float32], var b_gate: List[Float32],
+    var qn_w: List[Float32], var kn_w: List[Float32],
 ) raises -> TransformerWeights:
     """`transformer_host_weights` with the options record and the eleven
     optional tensors in the addrs-tail order (q_proj.bias, k_proj.bias,
@@ -110,26 +110,26 @@ def transformer_host_weights_opts(
     dims.validate()
     var w = TransformerWeights(dims)
     w.opts = opts.copy()
-    w.norm1_w = norm1_w.copy()
-    w.norm2_w = norm2_w.copy()
-    w.w_q = w_q.copy()
-    w.w_k = w_k.copy()
-    w.w_v = w_v.copy()
-    w.w_o = w_o.copy()
-    w.w_gate = w_gate.copy()
-    w.w_up = w_up.copy()
-    w.w_down = w_down.copy()
-    w.b_q = b_q.copy()
-    w.b_k = b_k.copy()
-    w.b_v = b_v.copy()
-    w.b_o = b_o.copy()
-    w.norm1_b = norm1_b.copy()
-    w.norm2_b = norm2_b.copy()
-    w.b_up = b_up.copy()
-    w.b_down = b_down.copy()
-    w.b_gate = b_gate.copy()
-    w.qn_w = qn_w.copy()
-    w.kn_w = kn_w.copy()
+    w.norm1_w = norm1_w^
+    w.norm2_w = norm2_w^
+    w.w_q = w_q^
+    w.w_k = w_k^
+    w.w_v = w_v^
+    w.w_o = w_o^
+    w.w_gate = w_gate^
+    w.w_up = w_up^
+    w.w_down = w_down^
+    w.b_q = b_q^
+    w.b_k = b_k^
+    w.b_v = b_v^
+    w.b_o = b_o^
+    w.norm1_b = norm1_b^
+    w.norm2_b = norm2_b^
+    w.b_up = b_up^
+    w.b_down = b_down^
+    w.b_gate = b_gate^
+    w.qn_w = qn_w^
+    w.kn_w = kn_w^
     refuse_bad_weights(w)
     return w^
 

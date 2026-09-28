@@ -144,6 +144,11 @@ struct DeviceExec(Exec):
         _ = view^
         _ = host^
 
+    def bind(mut self, src: FP, n: Int) raises -> FP:
+        var p = self.alloc(n)
+        self.upload(p, src, n)
+        return p
+
     def download(mut self, dst: FP, src: FP, n: Int) raises:
         if n <= 0:
             return

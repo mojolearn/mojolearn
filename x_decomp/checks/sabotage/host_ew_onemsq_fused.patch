@@ -1,0 +1,13 @@
+diff --git a/x_decomp/host_ew.mojo b/x_decomp/host_ew.mojo
+index d490b387c..92c8435e2 100644
+--- a/x_decomp/host_ew.mojo
++++ b/x_decomp/host_ew.mojo
+@@ -132,7 +132,7 @@ def ew_vec[op: Int](x: V, y: V, z: V, s: V) -> V:
+     elif op == OP_SQ:
+         r = _mul(x, x)
+     elif op == OP_ONEMSQ:
+-        r = _sub(V(1), _mul(x, x))
++        r = ftz_v[W](mul_add_v[W](-x, x, V(1)))  # SABOTAGE (host ew): 1 - x*x fused
+     elif op == OP_ABS:
+         r = abs(x)
+     elif op == OP_SCALE:

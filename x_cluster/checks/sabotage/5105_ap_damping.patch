@@ -1,15 +1,15 @@
 --- a/x_cluster/bodies.mojo
 +++ b/x_cluster/bodies.mojo
-@@ -19,7 +19,7 @@
- """
- from std.memory import bitcast
+@@ -21,7 +21,7 @@
  
--from checks.numerics import ftz, identical_div, identical_exp, identical_log, identical_mul, identical_mul64, identical_pow, identical_sqrt
-+from checks.numerics import identical_mul_add, ftz, identical_div, identical_exp, identical_log, identical_mul, identical_mul64, identical_pow, identical_sqrt
+ from std.bit import count_leading_zeros
+ 
+-from checks.numerics import ftz, identical_cos, identical_div, identical_exp, identical_log, identical_mul, identical_mul64, identical_pow, identical_sqrt
++from checks.numerics import identical_mul_add, ftz, identical_cos, identical_div, identical_exp, identical_log, identical_mul, identical_mul64, identical_pow, identical_sqrt
  
  comptime FPtr = MutPointer[Float32, MutAnyOrigin]
  comptime IPtr = MutPointer[Int32, MutAnyOrigin]
-@@ -168,7 +168,7 @@
+@@ -228,7 +228,7 @@
          var sub = second if k == arg else first
          var new = ftz(s_m[i * n + k] - sub)
          var old = r_m[i * n + k]

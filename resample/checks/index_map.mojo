@@ -168,6 +168,23 @@ comptime RESAMPLE_KIND_PERMUTATION: UInt64 = 2
 #: The Monte Carlo coordinate: `draw_unit_float` / `draw_uniform_in`.
 comptime RESAMPLE_KIND_MONTE_CARLO: UInt64 = 3
 
+#: The SECOND sample's row draw of an unpaired bootstrap (`paired=False`,
+#: 2026-09-28): `draw_row_index` under its own key, so the two samples'
+#: maps are independent streams, and the FIRST sample keeps kind 1 (its
+#: resample is exactly the one-sample bootstrap of that sample).
+comptime RESAMPLE_KIND_BOOTSTRAP_SECOND: UInt64 = 4
+
+#: The per-pair order bit of a `permutation_type='samples'` replicate
+#: (2026-09-28): `draw_pair_flip`, the top bit of the 64-bit key at (r, i).
+comptime RESAMPLE_KIND_PERM_SAMPLES: UInt64 = 5
+
+#: `sklearn.utils.resample` (2026-09-28): replace=True draws position i's
+#: row with `draw_row_index` under kind 6 (replicate 0); replace=False orders
+#: the n positions by `draw_permutation_key` under kind 7 and keeps the first
+#: n_samples (`rng.permutation(n)[:n_samples]`'s positional spelling).
+comptime RESAMPLE_KIND_UTILS_REPLACE: UInt64 = 6
+comptime RESAMPLE_KIND_UTILS_PERMUTE: UInt64 = 7
+
 #: The jackknife has NO kind byte and draws nothing: leave-one-out is
 #: deterministic. Listed here so a reader does not go looking for it.
 
@@ -330,6 +347,15 @@ def draw_uniform_in(
     """
     var u = draw_unit_float(key, r, i)
     return ftz(identical_mul_add(u, span, lo))
+
+
+@always_inline
+def draw_pair_flip(key: UInt64, r: Int, i: Int) -> Bool:
+    """Whether pair `i` of replicate `r` trades its two observations
+    (`permutation_type='samples'`): the TOP bit of `draw_permutation_key` at
+    that position, so each pair's coin is its own Philox position, a pure
+    function of `(key, r, i)`, and exactly fair."""
+    return (draw_permutation_key(key, r, i) >> UInt64(63)) != UInt64(0)
 
 
 @always_inline
@@ -573,3 +599,66 @@ def permutation_ranks_host(key: UInt64, r: Int, n_pooled: Int) -> List[Int32]:
                 rank += 1
         out.append(Int32(rank))
     return out^
+
+
+def utils_first_by_key(keys: List[UInt64], n: Int, count: Int) -> List[Int32]:
+    """`rng.permutation(n)[:count]`'s positional spelling (sklearn.utils.resample
+    replace=False): the positions `0..n-1` ordered by the TOTAL order
+    `permutation_key_lt` (key, then position), the first `count` kept. A
+    bottom-up merge sort over positions, host only, integer compares only,
+    so it is the same order on every host."""
+    var a = List[Int](capacity=n)
+    for j in range(n):
+        a.append(j)
+    var b = List[Int](length=n, fill=0)
+    var width = 1
+    while width < n:
+        var lo = 0
+        while lo < n:
+            var mid = min(lo + width, n)
+            var hi = min(lo + 2 * width, n)
+            var i = lo
+            var j = mid
+            var k = lo
+            while i < mid and j < hi:
+                if permutation_key_lt(keys[a[j]], a[j], keys[a[i]], a[i]):
+                    b[k] = a[j]
+                    j += 1
+                else:
+                    b[k] = a[i]
+                    i += 1
+                k += 1
+            while i < mid:
+                b[k] = a[i]
+                i += 1
+                k += 1
+            while j < hi:
+                b[k] = a[j]
+                j += 1
+                k += 1
+            lo += 2 * width
+        var t = a^
+        a = b^
+        b = t^
+        width *= 2
+    var out = List[Int32](capacity=count)
+    for q in range(count):
+        out.append(Int32(a[q]))
+    return out^
+
+
+def utils_validate(n: Int, count: Int, replace: Bool) raises:
+    """`sklearn.utils.resample`'s refusals, shared by the device path and the
+    host twin."""
+    if n <= 0:
+        raise Error("resample: the arrays must have at least one row; got n=" + String(n))
+    if count <= 0:
+        raise Error("resample: n_samples must be positive; got " + String(count))
+    if n >= (1 << 31) or count >= (1 << 31):
+        raise Error("resample: n and n_samples must be below 2^31 (int32 row indices)")
+    if not replace and count > n:
+        raise Error(
+            "resample: cannot sample " + String(count) + " out of arrays with"
+            " dim " + String(n) + " when replace is False (scikit-learn's"
+            " words)"
+        )

@@ -111,7 +111,7 @@ WHAT IS NOT HERE YET, NAMED SO IT IS NOT MISTAKEN FOR DONE
 """
 
 from std.math import fma
-from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import isfinite
@@ -218,7 +218,7 @@ def plan_sum_scale(
     if groups == 1:
         _abs_sum_task(0)
     else:
-        sync_parallelize(_abs_sum_task, groups)
+        host_parallelize(_abs_sum_task, groups)
     var worst = Float64(0.0)
     # `totals` is read after the join ([[mojo-parallelize-frees-captured-owner]]).
     for f in range(n_features):
