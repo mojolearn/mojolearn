@@ -3298,6 +3298,9 @@ class MDS(_Base):
             return out
 
         def disparities(d, first):
+            # the closure holds pos and mir themselves: their addresses alone
+            # would let the arrays die when _nm_native returns
+            pa, ma = pos.buffer_info()[0], mir.buffer_info()[0]
             if first:
                 flat = dis_w
             else:
