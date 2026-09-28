@@ -22,11 +22,19 @@ mkdir -p "$OUT"
 [ -f python/mojolearn/identical/_mojolearn_byte_lm.so ] || pixi run -e default sh bindings/build_byte_lm.sh > "$OUT/byte_lm.build.log" 2>&1 || echo "BYTE-LM-BUILD FAILED"
 echo "OUT $OUT commit $(git rev-parse --short HEAD) host $(hostname) $(sysctl -n machdep.cpu.brand_string 2>/dev/null)"
 export MOJOLEARN_NUMERIC_MODE=${MOJOLEARN_NUMERIC_MODE:-identical}
+# The source tree is the package (the conductor's byte stream and the step
+# probe import it; the ours worker gets it from bench_board_neural itself).
+PYTHONPATH="$(pwd)/python${PYTHONPATH:+:$PYTHONPATH}"; export PYTHONPATH
+# The conductor runs in the skgpu env: the Mamba lanes' weights come from
+# mamba/corpus/gen_corpus.py, which imports torch. The ours worker runs in
+# the default env (the bindings' env); no torch arm is raced here.
+OURS_PY=$(pixi run -e default python -c 'import sys; print(sys.executable)')
+pixi install -e skgpu > "$OUT/skgpu.install.log" 2>&1 || echo "SKGPU-INSTALL FAILED"
 rc=0
 for l in $LANES; do
     t0=$(date +%s)
-    pixi run -e default python tools/bench_board_neural.py race --lane "$l" --shape full --arms ours \
-        --rounds "$ROUNDS" --out "$OUT/race" --work "$OUT/work" > "$OUT/race-$l.log" 2>&1 || rc=1
+    pixi run -e skgpu python tools/bench_board_neural.py race --lane "$l" --shape full --arms ours \
+        --ours-python "$OURS_PY" --rounds "$ROUNDS" --out "$OUT/race" --work "$OUT/work" > "$OUT/race-$l.log" 2>&1 || rc=1
     grep -E '^NEURAL(-REFUSED)? ' "$OUT/race-$l.log"
     grep -E '^NEURAL-ROUND ' "$OUT/race-$l.log" | awk '{print $4, $5, $6}' | tr '\n' ' '; echo
     echo "LANE-WALL $l $(( $(date +%s) - t0 )) s"
@@ -37,7 +45,7 @@ if [ "${NEURAL_STEP:-1}" != 0 ]; then
     pixi run -e default python tools/lm_step_memory_probe.py --out "$OUT/step" --shape "$@" \
         --steps 4 --resident-lean --component-timing --component-timing-steps 3 \
         --budget-seconds 3000 > "$OUT/step.log" 2>&1 || rc=1
-    tail -3 "$OUT/step.log"
+    grep -v '^ ' "$OUT/step.log" | tail -15
     pixi run -e default python - "$OUT/step/result.json" <<'PY'
 import json, sys
 r = json.load(open(sys.argv[1]))
