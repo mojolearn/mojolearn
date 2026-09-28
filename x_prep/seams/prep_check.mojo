@@ -14,6 +14,7 @@ The card goes to $MOJOLEARN_XPREP_CARD (default /tmp/x_prep_seams.card);
 `python3 tools/identity_trace_diff.py a.card b.card` compares two boxes.
 """
 from std.os import getenv
+from std.builtin.sort import sort
 from std.memory import bitcast
 from std.sys import has_accelerator
 from core.identity_trace import IdentityTrace
@@ -42,6 +43,7 @@ comptime OP_MI_CD = 69
 comptime OP_CLASS_STATS = 16
 comptime OP_QDA_COV = 40
 comptime OP_QDA_DEC = 42
+comptime OP_KBINS_EDGES = 25
 comptime OP_MI_DC = 94
 comptime OP_MATMUL = 13
 comptime OP_ARGMAX = 15
@@ -502,6 +504,37 @@ def check_host_dense(mut card: IdentityTrace) raises:
         for _ in range(nn * 2):
             qd.append(Float32(0))
         _same[OP_QDA_DEC](qd, nn * 2, [0, nn, dd, me, rr, lc, 2, out], "host_dense.qda_dec_d" + String(dd), card)
+    # kbins_edges kmeans (STRAT 3): q = [S, n, d, NB, NBMAX, STRAT, ST, EDGES, NEDGE, LAB, CEN]
+    var kn = 50
+    var kd = 2
+    var kb = List[Float32]()
+    for c in range(kd):
+        var col = List[Float32]()
+        _fx(101 + c, kn, Float32(8), col)
+        for i in range(kn):
+            col[i] = mul(mul(col[i], col[i]), Float32(0.25))  # skewed, so the centres move
+        sort(col)
+        for v in col:
+            kb.append(v)
+    var nbo = len(kb)
+    kb.append(Float32(5))
+    kb.append(Float32(3))
+    var sto = len(kb)
+    for r in range(6):
+        for c in range(kd):
+            if r == 3:
+                kb.append(kb[c * kn])
+            elif r == 4:
+                kb.append(kb[c * kn + kn - 1])
+            else:
+                kb.append(Float32(2))
+    var eo = len(kb)
+    for _ in range(kd * 6 + kd + kn * kd + kd * 5):
+        kb.append(Float32(0))
+    var neo = eo + kd * 6
+    var lab = neo + kd
+    var cen = lab + kn * kd
+    _same[OP_KBINS_EDGES](kb, kd, [0, kn, kd, nbo, 5, 3, sto, eo, neo, lab, cen], "host_dense.kbins_kmeans", card)
     print("PASS host dense: matmul (blocks, strides, bias, scale), class_stats, qda_cov, qda_dec: the units' words")
 
 

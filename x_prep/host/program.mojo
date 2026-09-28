@@ -21,6 +21,7 @@ from x_prep.common import FP, IP, STAGE_INTS
 from x_prep.units import N_OPS, run_unit
 from x_prep.host.sort import sort_cols_host_unit
 from x_prep.host.power import pt_fit_host_unit
+from x_prep.kbins import kbins_edges
 from x_prep.host.target import te_enc_host_groups, te_enc_host_group
 from x_prep.host.mutual_info import mi_cc_host_stage, mi_cd_host_stage, mi_dc_host_stage
 from x_prep.host.dense import (
@@ -30,7 +31,8 @@ from x_prep.host.dense import (
 
 #: Ops of x_prep/units.mojo the host runs through its own spelling of the
 #: SAME words (each file says why): 0 `sort_cols` (x_prep/host/sort.mojo),
-#: 44 `pt_fit` (x_prep/host/power.mojo), 42 `qda_dec` (x_prep/host/dense.mojo);
+#: 44 `pt_fit` (x_prep/host/power.mojo), 42 `qda_dec` (x_prep/host/dense.mojo),
+#: 25 `kbins_edges` (its kmeans update, x_prep/kbins.mojo `kbins_edges[True]`);
 #: ops whose units the host runs GROUPED, one task item per group of units:
 #: 21 `te_enc` (x_prep/host/target.mojo, one group per fold, feature and
 #: target column), 13 `matmul` (per output row), 16 `class_stats` (per
@@ -43,6 +45,7 @@ comptime OP_SORT_COLS = 0
 comptime OP_MATMUL = 13
 comptime OP_CLASS_STATS = 16
 comptime OP_TE_ENC = 21
+comptime OP_KBINS_EDGES = 25
 comptime OP_QDA_COV = 40
 comptime OP_QDA_DEC = 42
 comptime OP_PT_FIT = 44
@@ -59,6 +62,8 @@ def _host_unit[K: Int](t: Int, f: FP, q: IP):
         pt_fit_host_unit(t, f, q)
     elif K == OP_QDA_DEC:
         qda_dec_host_unit(t, f, q)
+    elif K == OP_KBINS_EDGES:
+        kbins_edges[True](t, f, q)
     else:
         run_unit[K](t, f, q)
 
