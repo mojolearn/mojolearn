@@ -1866,6 +1866,40 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: (e.transform(Xh[:256]),))
 
 
+@lane("pca-inverse")
+def _(ml, X, yc, yr, Xh=None):
+    """PCA.inverse_transform, whiten=False (lane cpu, 2026-09-27): the
+    unwhitened reconstruction `scores . components + mean_`. Until this lane
+    the estimators host binding exported no `inverse_transform`, so the call
+    refused on every CPU-only install while the GPU answered, and no lane
+    hashed it on any column. A lane of its own, not a part of `pca`, so the
+    recorded `pca` cells keep their bytes."""
+    m = ml.PCA(n_components=4).fit(X)
+    return _fit(dict(inverse=_h(m.inverse_transform(m.transform(X[:256])))),
+                m, lambda e: (e.inverse_transform(e.transform(Xh[:256])),))
+
+
+@lane("pca-whiten-inverse")
+def _(ml, X, yc, yr, Xh=None):
+    """PCA.inverse_transform, whiten=True (lane cpu, 2026-09-27): the host
+    binding exported `pca_whiten_inverse_transform` since the whiten lane,
+    and no lane on any column ever called it."""
+    m = ml.PCA(n_components=4, whiten=True).fit(X)
+    return _fit(dict(inverse=_h(m.inverse_transform(m.transform(X[:256])))),
+                m, lambda e: (e.inverse_transform(e.transform(Xh[:256])),))
+
+
+@lane("tsvd-inverse")
+def _(ml, X, yc, yr, Xh=None):
+    """TruncatedSVD.inverse_transform (lane cpu, 2026-09-27): the same
+    reconstruction as `pca-inverse` without the mean, the `add_mean=0` arm
+    of the one `inverse_transform` entry; it refused on a CPU-only install
+    for the same reason."""
+    m = ml.TruncatedSVD(n_components=4).fit(X)
+    return _fit(dict(inverse=_h(m.inverse_transform(m.transform(X[:256])))),
+                m, lambda e: (e.inverse_transform(e.transform(Xh[:256])),))
+
+
 @lane("ols")
 def _(ml, X, yc, yr, Xh=None):
     m = ml.LinearRegression().fit(X, yr)
@@ -9141,6 +9175,15 @@ def _batch_radius(ml, e, Xh):
 
 
 _batch_decl(_batch_radius, "radius", "radius-manhattan", "radius-chebyshev", "radius-minkowski-p3")
+def _batch_inverse(ml, e, Xh):
+    """The inverse transform's batch axis is its SCORES' rows: the held-out
+    rows' transform, reconstructed whole, alone and split (lane cpu,
+    2026-09-27)."""
+    Z = np.asarray(e.transform(Xh[:256]))
+    return [_BatchRows("inverse_transform", Z, lambda r: (e.inverse_transform(r),))]
+
+
+_batch_decl(_batch_inverse, "pca-inverse", "pca-whiten-inverse", "tsvd-inverse")
 _batch_decl(_rows_calls("transform", sl=slice(0, 256)), "pca", "pca-whiten", "pca-full-whiten", "tsvd",
             "standard-scaler", "minmax-scaler", "standard-scaler-no-mean", "standard-scaler-no-std",
             "minmax-scaler-clip", "par-scaler", "rbf-sampler",

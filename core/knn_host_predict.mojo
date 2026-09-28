@@ -150,7 +150,7 @@ what it has shown.
 from std.memory import bitcast
 from std.sys.compile import is_defined
 
-from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 
 from core.host_predict_threads import (
     HostF32Ptr,
@@ -614,7 +614,7 @@ def host_knn_search(
     if tasks == 1:
         _rows(0)
     else:
-        sync_parallelize(_rows, tasks)
+        host_parallelize(_rows, tasks)
     _ = index_norm^
     _ = query_norm^
 
@@ -935,7 +935,7 @@ def host_rbc_radius_counts(
     if tasks == 1:
         _rows(0)
     else:
-        sync_parallelize(_rows, tasks)
+        host_parallelize(_rows, tasks)
 
 
 def host_rbc_radius_fill_rows(
@@ -981,7 +981,7 @@ def host_rbc_radius_fill_rows(
     if tasks == 1:
         _rows(0)
     else:
-        sync_parallelize(_rows, tasks)
+        host_parallelize(_rows, tasks)
 
 
 def host_rbc_edge_distance(
@@ -1063,4 +1063,4 @@ def host_rbc_knn_search(
     if tasks == 1:
         _rows(0)
     else:
-        sync_parallelize(_rows, tasks)
+        host_parallelize(_rows, tasks)

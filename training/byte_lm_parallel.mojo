@@ -20,7 +20,7 @@ sentence, so they are owed a build as well as a box.
 from std.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceContext, DeviceBuffer
-from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 from core.step_phase import STEP_PHASE_TIMERS
 from checks.numerics import ftz, identical_mul_add
 from training.byte_lm import (
@@ -382,7 +382,7 @@ struct ByteParallelTrainer(Movable, Writable):
                 if active == 1:
                     _gradient_task(0)
                 else:
-                    sync_parallelize(_gradient_task, active)
+                    host_parallelize(_gradient_task, active)
                 for rank in range(active):
                     if failed[rank] != 0:
                         raise Error("byte LM parallel: gradient shard " + String(start + rank) + " failed")

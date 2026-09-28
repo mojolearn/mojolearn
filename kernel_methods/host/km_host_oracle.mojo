@@ -70,7 +70,7 @@ from std.memory import bitcast
 from std.math import abs
 from std.sys.compile import is_defined
 
-from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 
 from checks.numerics import (
     ftz,
@@ -253,7 +253,7 @@ def kmh_kernel_matrix(
         if tasks == 1:
             _rows(0)
         else:
-            sync_parallelize(_rows, tasks)
+            host_parallelize(_rows, tasks)
         return out^
     var dot = gemm_oracle(a, b, OP_NT, m, n, k)
     if kernel == KMH_KERNEL_LINEAR:

@@ -136,6 +136,15 @@ Lanes merge origin/main before every merge, so this section reaches every
 worktree. The orchestrator changes lane instructions HERE instead of
 messaging lanes. Newest items are at the top.
 
+0000c. **ONE host thread split: `core/host_parallel.mojo` (lane cpu,
+   DEVIATION 5900).** Mojo's `sync_parallelize` workers run with FTZ+DAZ
+   while the caller runs IEEE, so a raw split made host bits depend on the
+   thread count. Every host loop splits with `host_parallelize` (tasks run
+   in the caller's FP environment); `host_parallelize_pool_env` is for the
+   GBDT fit's host regions only. `pixi run check-host-parallel` fails on a
+   raw `sync_parallelize` anywhere else. Never add another environment
+   module: `core/host_fp_env.mojo` (lane/algos-linear) was absorbed and
+   removed; that lane merges main and uses `host_parallelize`.
 0000. **Fixture RNG and scaffolding are shared (lane consolidate, main
    4618ca187).** New check and binding code uses checks/fixture_rng.mojo,
    checks/scaffold.mojo and the binding prelude (checks/binding_prelude.mojo);

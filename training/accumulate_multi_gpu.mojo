@@ -8,7 +8,7 @@ The caller receives output only after every owner succeeds.
 from std.os import getenv
 from std.sys import is_defined
 from max.gpu.host import DeviceContext
-from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 from bindings.hostptr import copy_f32
 from core.step_phase import STEP_PHASE_TIMERS
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -66,7 +66,7 @@ def parallel_accumulate_host(
                     raise Error("injected post-compute accumulation refusal")
         except:
             fp[rank] = 1
-    sync_parallelize(_reduce,devices)
+    host_parallelize(_reduce,devices)
     for rank in range(devices):
         if failures[rank] != 0:
             raise Error("parallel accumulation: shard "+String(rank)+" refused; output unchanged")

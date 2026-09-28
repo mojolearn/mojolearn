@@ -25,7 +25,7 @@ pointers only. Callers keep every owner alive past the call; the one owner
 created here (`flags`) is transferred after the join.
 """
 
-from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 from std.memory import bitcast, memcpy
 
 from checks.numerics import ftz
@@ -68,7 +68,7 @@ def colmajor_from_rowmajor_f32(
         for b in range(n_blocks):
             _block(b)
         return
-    sync_parallelize(_block, n_blocks)
+    host_parallelize(_block, n_blocks)
 
 
 def copy_f32_threaded(
@@ -92,7 +92,7 @@ def copy_f32_threaded(
         var i1 = min(i0 + HOST_COPY_CHUNK, n)
         memcpy(dest=dp + i0, src=sp + i0, count=i1 - i0)
 
-    sync_parallelize(_chunk, n_chunks)
+    host_parallelize(_chunk, n_chunks)
 
 
 def colmajor_ftz_from_rowmajor_f32(
@@ -133,7 +133,7 @@ def colmajor_ftz_from_rowmajor_f32(
         for b in range(n_blocks):
             _block(b)
     else:
-        sync_parallelize(_block, n_blocks)
+        host_parallelize(_block, n_blocks)
     var all_finite = True
     for b in range(n_blocks):
         if flags[b] != 0:
@@ -177,7 +177,7 @@ def copy_ftz_f32_threaded(
         for k in range(n_chunks):
             _chunk(k)
     else:
-        sync_parallelize(_chunk, n_chunks)
+        host_parallelize(_chunk, n_chunks)
     var all_finite = True
     for k in range(n_chunks):
         if flags[k] != 0:
@@ -229,7 +229,7 @@ def has_nan_f32_threaded(
         for k in range(n_chunks):
             _chunk(k)
     else:
-        sync_parallelize(_chunk, n_chunks)
+        host_parallelize(_chunk, n_chunks)
     var any_nan = False
     for k in range(n_chunks):
         if flags[k] != 0:
