@@ -10,11 +10,14 @@ one process-lifetime context and synchronizes before it returns.
 The host twin is x_cnn/host/ops_host.mojo: the same element functions in a
 loop and `gemm_oracle` for the contractions."""
 from std.gpu import block_idx, block_dim, thread_idx
+from std.memory import stack_allocation
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 from std.ffi import _Global
 from std.time import perf_counter_ns
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.checks.gemm_identical import (
     identical_gemm_with_plan, identical_gemm_workspace_floats, PLAN_SPLIT_32_2X2, PLAN_SPLIT_64_4X4,
@@ -29,6 +32,7 @@ from x_cnn.ops import (
     im2col_at, conv_out_at, dout_rows_at, col2im_at, fill_one_at,
     PP_N, PP_C, PP_H, PP_W, PP_OH, PP_OW,
     maxpool_fwd_at, maxpool_bwd_at, avgpool_fwd_at, avgpool_bwd_at, relu_maxpool_fwd_at, pool_relu_rows_bwd_at,
+    conv_out_val, pool_relu_row_val,
     relu_fwd_at, relu_bwd_at, add_at, bias_rows_at, softmax_xent_row_at, seq_mean, sgd_at,
     bn_stats_at, bn_eval_stats_at, bn_apply_at, bn_running_at, bn_bwd_red_at, bn_bwd_dx_at, bn_bwd_eval_dx_at,
     dropout2d_at, mul_at, spmm_at, gcn_deg_at, gcn_norm_at,
@@ -110,6 +114,95 @@ def launch[f: ElemFn](ctx: DeviceContext, a: FP, b: FP, c: FP, d: FP, q: IP, p: 
         return
     comptime k = elem_kernel[f]
     ctx.enqueue_function[k](a, b, c, d, q, p, Int32(total), grid_dim=(total + TPB - 1) // TPB, block_dim=TPB)
+
+
+# lane/cnn-apple2: the two layout changes of the conv block (GEMM rows
+# [n*S + s, oc] <-> NCHW [n, oc, s], S = OH*OW) as 32x32 tiles through
+# threadgroup memory, so both the reads and the writes are coalesced (the
+# one-thread-per-element forms read or write with stride OC or S). Each
+# stored word is the element function's (`conv_out_val`,
+# `pool_relu_row_val`); only which thread computes it changes. Threadgroup
+# memory only between the barrier's two sides (no device-memory ordering is
+# assumed). `-D MOJOLEARN_XCNN_NO_TILED_LAYOUT` is the before arm.
+comptime TILED_LAYOUT = not is_defined["MOJOLEARN_XCNN_NO_TILED_LAYOUT"]()
+comptime _LT = 32
+comptime _LR = 8
+
+
+def conv_out_tiled_kernel(y2: FP, bias: FP, dst: FP, p: IP, S: Int32, OC: Int32):
+    """dst[n, oc, s] = conv_out_val(y2[n*S + s, oc]); block (32, 8), grid
+    (ceil(S/32), ceil(OC/32), N)."""
+    var t = stack_allocation[_LT * (_LT + 1), Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var tx = Int(thread_idx.x)
+    var ty = Int(thread_idx.y)
+    var s0 = Int(block_idx.x) * _LT
+    var c0 = Int(block_idx.y) * _LT
+    var n = Int(block_idx.z)
+    var ss = Int(S)
+    var cc = Int(OC)
+    comptime for j in range(_LT // _LR):
+        var s = s0 + ty + j * _LR
+        var oc = c0 + tx
+        if s < ss and oc < cc:
+            t[(ty + j * _LR) * (_LT + 1) + tx] = y2.unsafe_load((n * ss + s) * cc + oc)
+    barrier()
+    comptime for j in range(_LT // _LR):
+        var oc = c0 + ty + j * _LR
+        var s = s0 + tx
+        if s < ss and oc < cc:
+            dst.unsafe_store((n * cc + oc) * ss + s, conv_out_val(t[tx * (_LT + 1) + ty + j * _LR], bias, oc, p))
+
+
+def rows_bwd_tiled_kernel(dpool: FP, yconv: FP, grow: FP, idx: IP, p: IP, S: Int32, OC: Int32):
+    """grow[n*S + s, oc] = pool_relu_row_val(NCHW (n, oc, s)); block (32, 8),
+    grid (ceil(S/32), ceil(OC/32), N)."""
+    var t = stack_allocation[_LT * (_LT + 1), Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var tx = Int(thread_idx.x)
+    var ty = Int(thread_idx.y)
+    var s0 = Int(block_idx.x) * _LT
+    var c0 = Int(block_idx.y) * _LT
+    var n = Int(block_idx.z)
+    var ss = Int(S)
+    var cc = Int(OC)
+    comptime for j in range(_LT // _LR):
+        var oc = c0 + ty + j * _LR
+        var s = s0 + tx
+        if s < ss and oc < cc:
+            t[(ty + j * _LR) * (_LT + 1) + tx] = pool_relu_row_val((n * cc + oc) * ss + s, dpool, yconv, idx, p)
+    barrier()
+    comptime for j in range(_LT // _LR):
+        var s = s0 + ty + j * _LR
+        var oc = c0 + tx
+        if s < ss and oc < cc:
+            grow.unsafe_store((n * ss + s) * cc + oc, t[tx * (_LT + 1) + ty + j * _LR])
+
+
+def dout_rows_tiled_kernel(dout: FP, g: FP, S: Int32, OC: Int32):
+    """g[n*S + s, oc] = ftz(dout[n, oc, s]) (`dout_rows_at`'s word); block
+    (32, 8), grid (ceil(S/32), ceil(OC/32), N)."""
+    var t = stack_allocation[_LT * (_LT + 1), Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var tx = Int(thread_idx.x)
+    var ty = Int(thread_idx.y)
+    var s0 = Int(block_idx.x) * _LT
+    var c0 = Int(block_idx.y) * _LT
+    var n = Int(block_idx.z)
+    var ss = Int(S)
+    var cc = Int(OC)
+    comptime for j in range(_LT // _LR):
+        var oc = c0 + ty + j * _LR
+        var s = s0 + tx
+        if s < ss and oc < cc:
+            t[(ty + j * _LR) * (_LT + 1) + tx] = ftz(dout.unsafe_load((n * cc + oc) * ss + s))
+    barrier()
+    comptime for j in range(_LT // _LR):
+        var s = s0 + ty + j * _LR
+        var oc = c0 + tx
+        if s < ss and oc < cc:
+            g.unsafe_store((n * ss + s) * cc + oc, t[tx * (_LT + 1) + ty + j * _LR])
+
+
+def _tiled_grid(N: Int, S: Int, OC: Int) -> Tuple[Int, Int, Int]:
+    return ((S + _LT - 1) // _LT, (OC + _LT - 1) // _LT, N)
 
 
 def _apple_tn_candidates(m: Int, n: Int, k: Int, default: Int) -> List[Int]:
@@ -561,7 +654,7 @@ def conv2d_forward_into(x: FP, w: FP, bias: FP, prm: List[Int32], dst: FP) raise
     var dout = ws(ctx, 6, rows * OC)
     launch[im2col_at](ctx, fp(dx), fp(cols), fp(cols), fp(cols), ip(dp), ip(dp), rows * ckk)
     device_gemm(ctx, y2, cols, dw, rows, OC, ckk, OP_NT)
-    launch[conv_out_at](ctx, fp(y2), fp(dbias), fp(dout), fp(dout), ip(dp), ip(dp), rows * OC)
+    _conv_out(ctx, y2, dbias, dout, dp, N, rows // N, OC)
     down(ctx, dout, dst, rows * OC)
     ctx.synchronize()
     _ = dx^
@@ -593,7 +686,14 @@ def conv2d_backward_into(x: FP, w: FP, dout: FP, prm: List[Int32], gx_out: FP, g
     var dcols = ws(ctx, 9, rows * ckk)
     var gx = ws(ctx, 10, nx)
     launch[im2col_at](ctx, fp(dxin), fp(cols), fp(cols), fp(cols), ip(dp), ip(dp), rows * ckk)
-    launch[dout_rows_at](ctx, fp(ddout), fp(g), fp(g), fp(g), ip(dp), ip(dp), rows * OC)
+    comptime if TILED_LAYOUT:
+        var tg = _tiled_grid(N, rows // N, OC)
+        ctx.enqueue_function[dout_rows_tiled_kernel](
+            fp(ddout), fp(g), Int32(rows // N), Int32(OC),
+            grid_dim=(tg[0], tg[1], tg[2]), block_dim=(_LT, _LR, 1),
+        )
+    else:
+        launch[dout_rows_at](ctx, fp(ddout), fp(g), fp(g), fp(g), ip(dp), ip(dp), rows * OC)
     launch[fill_one_at](ctx, fp(ones), fp(ones), fp(ones), fp(ones), ip(dp), ip(dp), rows)
     # DEVIATION 5701: the weight gradient's reduction over the N*OH*OW rows is
     # the pinned GEMM's (leaves + balanced fold), never an atomic accumulation.
@@ -1260,11 +1360,28 @@ def _conv_relu_on_device(
     ctx: DeviceContext, mut dx: DeviceBuffer[DType.float32], mut dw: DeviceBuffer[DType.float32],
     mut dbias: DeviceBuffer[DType.float32], mut dp: DeviceBuffer[DType.int32], mut cols: DeviceBuffer[DType.float32],
     mut y2: DeviceBuffer[DType.float32], mut yconv: DeviceBuffer[DType.float32], rows: Int, OC: Int, ckk: Int,
+    N: Int,
 ) raises:
     """cols = im2col(x); y2 = cols . W^T; yconv = the NCHW conv output (+ bias)."""
     launch[im2col_at](ctx, fp(dx), fp(cols), fp(cols), fp(cols), ip(dp), ip(dp), rows * ckk)
     device_gemm(ctx, y2, cols, dw, rows, OC, ckk, OP_NT)
-    launch[conv_out_at](ctx, fp(y2), fp(dbias), fp(yconv), fp(yconv), ip(dp), ip(dp), rows * OC)
+    _conv_out(ctx, y2, dbias, yconv, dp, N, rows // N, OC)
+
+
+def _conv_out(
+    ctx: DeviceContext, mut y2: DeviceBuffer[DType.float32], mut dbias: DeviceBuffer[DType.float32],
+    mut yconv: DeviceBuffer[DType.float32], mut dp: DeviceBuffer[DType.int32], N: Int, S: Int, OC: Int,
+) raises:
+    """The GEMM rows to NCHW (+ bias): the tiled kernel, or `conv_out_at`."""
+    comptime if TILED_LAYOUT:
+        if N > 0 and S > 0 and OC > 0:
+            var g = _tiled_grid(N, S, OC)
+            ctx.enqueue_function[conv_out_tiled_kernel](
+                fp(y2), fp(dbias), fp(yconv), ip(dp), Int32(S), Int32(OC),
+                grid_dim=(g[0], g[1], g[2]), block_dim=(_LT, _LR, 1),
+            )
+        return
+    launch[conv_out_at](ctx, fp(y2), fp(dbias), fp(yconv), fp(yconv), ip(dp), ip(dp), N * S * OC)
 
 
 def conv_block_forward_into[resident: Bool = False](
@@ -1289,7 +1406,7 @@ def conv_block_forward_into[resident: Bool = False](
     var cols = view(ctx, FP(unsafe_from_address=save_cols), rows * ckk) if saved else ws(ctx, 4, rows * ckk)
     var y2 = ws(ctx, 5, ny)
     var yconv = view(ctx, FP(unsafe_from_address=save_y), ny) if saved else ws(ctx, 6, ny)
-    _conv_relu_on_device(ctx, dx, dw, dbias, dp, cols, y2, yconv, rows, OC, ckk)
+    _conv_relu_on_device(ctx, dx, dw, dbias, dp, cols, y2, yconv, rows, OC, ckk, N)
     # the block's output: the pool's, or the ReLU's when there is no pool
     var pout = outb[resident](ctx, 7, dst, no)
     if pool:
@@ -1343,7 +1460,7 @@ def conv_block_backward_into[resident: Bool = False](
     var yconv = view(ctx, FP(unsafe_from_address=save_y), ny) if saved else ws(ctx, 9, ny)
     var gy = ws(ctx, 11, ny)
     if not saved:
-        _conv_relu_on_device(ctx, dx, dw, dbias, dp, cols, y2, yconv, rows, OC, ckk)
+        _conv_relu_on_device(ctx, dx, dw, dbias, dp, cols, y2, yconv, rows, OC, ckk, N)
     # conv2d_backward_into from here, on the device-resident gy and cols
     var grow = ws(ctx, 12, ny)
     # the conv block followed by the pool block: a host array the upload
@@ -1355,7 +1472,15 @@ def conv_block_backward_into[resident: Bool = False](
         # layout in one launch (the same values)
         var di = put_i[resident](ctx, 4, idx, no)
         var dpb = put_prm(ctx, 6, both)
-        launch[pool_relu_rows_bwd_at](ctx, fp(dgo), fp(yconv), fp(grow), fp(grow), ip(di), ip(dpb), ny)
+        comptime if TILED_LAYOUT:
+            var S = rows // N
+            var g = _tiled_grid(N, S, OC)
+            ctx.enqueue_function[rows_bwd_tiled_kernel](
+                fp(dgo), fp(yconv), fp(grow), ip(di), ip(dpb), Int32(S), Int32(OC),
+                grid_dim=(g[0], g[1], g[2]), block_dim=(_LT, _LR, 1),
+            )
+        else:
+            launch[pool_relu_rows_bwd_at](ctx, fp(dgo), fp(yconv), fp(grow), fp(grow), ip(di), ip(dpb), ny)
         _ = di^
         _ = dpb^
     else:

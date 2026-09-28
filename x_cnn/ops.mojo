@@ -148,10 +148,17 @@ def conv_out_at(i: Int, y2: FP, bias: FP, dst: FP, f3: FP, q: IP, p: IP):
     var oc = _um(t, OC)
     var n = _ud(t, OC)
     var r = (n * OH + oh) * OW + ow
-    var v = ftz(y2.unsafe_load(r * OC + oc))
+    dst.unsafe_store(i, conv_out_val(y2.unsafe_load(r * OC + oc), bias, oc, p))
+
+
+@always_inline
+def conv_out_val(y: Float32, bias: FP, oc: Int, p: IP) -> Float32:
+    """`conv_out_at`'s stored word for the GEMM value `y` of channel `oc`
+    (lane/cnn-apple2: shared with the tiled layout kernel)."""
+    var v = ftz(y)
     if _g(p, CP_BIAS) != 0:
         v = ftz(v + ftz(bias.unsafe_load(oc)))
-    dst.unsafe_store(i, canon(v))
+    return canon(v)
 
 
 @always_inline
@@ -494,8 +501,15 @@ def pool_relu_rows_bwd_at(i: Int, dpool: FP, yconv: FP, grow: FP, f3: FP, idx: I
     var n = _ud(r, (OH * OW))
     var rem = r - n * OH * OW
     var j = ((n * OC + oc) * OH * OW) + rem
+    grow.unsafe_store(i, pool_relu_row_val(j, dpool, yconv, idx, p))
+
+
+@always_inline
+def pool_relu_row_val(j: Int, dpool: FP, yconv: FP, idx: IP, p: IP) -> Float32:
+    """`pool_relu_rows_bwd_at`'s stored word for the conv output at NCHW
+    index `j` (lane/cnn-apple2: shared with the tiled layout kernel)."""
     var gr = maxpool_bwd_val(j, dpool, idx, p + CP_LEN)
-    grow.unsafe_store(i, ftz(relu_bwd_val(yconv.unsafe_load(j), gr)))
+    return ftz(relu_bwd_val(yconv.unsafe_load(j), gr))
 
 
 @always_inline
