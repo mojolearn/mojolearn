@@ -31,7 +31,8 @@ def test_rbf_route_is_pending_and_only_admits_python_row_shards():
     request = [("rbf_sampler_rows", None, None)]
     assert _cpu_refusal(request, False, 2) is None
     assert isinstance(_cpu_refusal(request, True, 2), NotImplementedError)
-    assert isinstance(_cpu_refusal([("km_apply", None, None)], True, 1), NotImplementedError)
+    assert isinstance(_cpu_refusal([("km_apply", None, None)], True, 2), NotImplementedError)
+    assert _cpu_refusal([("km_apply", None, None)], True, 1) is None  # the plain host call
 
 
 def _require_cpu():

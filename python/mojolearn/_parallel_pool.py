@@ -172,6 +172,30 @@ CPU_OPERATIONS = frozenset((
 #: samba-untied-dropout-accum lane already checks.
 CPU_SINGLE_DEVICE_COOPERATIVE = frozenset(('mlp_update', 'samba_update'))
 
+#: THE ONE-DEVICE PLAIN FALLBACK (lane cpu, 2026-09-28). The multi-device
+#: drivers whose shards are device row tiles, chunks or ranges INSIDE a GPU
+#: binding (`MOJOLEARN_<X>_DEVICE_COUNT`, `*/multi_gpu.mojo`). At one device
+#: every one of those bindings takes its plain path (the count is 1, no
+#: split exists), so the worker's request IS the estimator's plain call:
+#: `fit`, `predict`, `transform`, `solve` on the one fitted state. On a
+#: CPU-only install a ONE-device pool therefore runs these operations as the
+#: plain host call (`_parallel_worker._cpu_plain` skips the GPU binding's
+#: `*_parallel_available` probe), with bits equal to the plain CPU fit by the
+#: same `_mismatch_bytes` invariant each par lane checks on the GPU. Two or
+#: more devices still refuse by name: a host binding restates no device
+#: split. It is NOT a device claim; `identity_break._par_devices` says the
+#: same of every `par-*` lane at one device. `forest_prepare` keeps the
+#: fitted estimator as the worker's snapshot (no resident GPU groves), and
+#: `forest_predict` is its plain host predict.
+CPU_SINGLE_DEVICE_PLAIN = frozenset((
+    'gbdt_fit', 'ordered_rmse_fit', 'solver_fit', 'glm_fit', 'gram_fit',
+    'cholesky_fit', 'cholesky_solve', 'dbscan_fit', 'hdbscan_fit',
+    'kmeans_fit', 'gmm_fit', 'gmm_predict', 'gp_fit', 'gp_predict',
+    'graph_fit', 'umap_transform', 'iforest_fit', 'iforest_score',
+    'km_fit', 'km_apply', 'svm_fit', 'svm_predict', 'resample',
+    'forest_prepare', 'forest_predict', 'forest_release',
+))
+
 # Every worker's native device group must match its visibility mask. A
 # non-cooperative worker sees one GPU, even when the parent was configured
 # to use several; inheriting those counts would make its kernels select
@@ -255,6 +279,8 @@ def driver_read_shift(index, first, devices):
 
 def _cpu_refusal(requests, cooperative, n_devices=1):
     names = sorted({request[0] for request in requests})
+    if n_devices == 1 and all(name in CPU_SINGLE_DEVICE_PLAIN for name in names):
+        return None
     if cooperative:
         if all(name in CPU_SINGLE_DEVICE_COOPERATIVE for name in names):
             if n_devices == 1:
@@ -265,9 +291,12 @@ def _cpu_refusal(requests, cooperative, n_devices=1):
                 'optimizer ranges are split inside the GPU binding above one device, which no host '
                 'binding restates')
         return NotImplementedError(
-            'no CPU implementation of the cooperative multi-GPU driver ' + ', '.join(names) + ' yet: '
+            'no CPU implementation of the cooperative multi-GPU driver ' + ', '.join(names) +
+            (' across ' + str(n_devices) + ' devices' if n_devices > 1 else '') + ' yet: '
             'its shards are device row tiles, chunks or ranges inside the GPU binding, '
-            'which no host binding restates')
+            'which no host binding restates' +
+            ('; at one device it runs the plain host call' if n_devices > 1 and
+             all(name in CPU_SINGLE_DEVICE_PLAIN for name in names) else ''))
     missing = [name for name in names if name not in CPU_OPERATIONS]
     if missing:
         return NotImplementedError(
@@ -308,7 +337,8 @@ class DevicePool:
                 elif vendor == 'cpu' and (not self.cooperative or len(group) == 1):
                     # A logical worker process per device index; map() has
                     # already admitted only the CPU_OPERATIONS (and, from a
-                    # one-device cooperative pool, CPU_SINGLE_DEVICE_COOPERATIVE).
+                    # one-device pool, CPU_SINGLE_DEVICE_COOPERATIVE and
+                    # CPU_SINGLE_DEVICE_PLAIN).
                     names = ()
                 else:
                     raise ValueError('device selection is unavailable for this vendor/device group')
