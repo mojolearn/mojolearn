@@ -249,3 +249,45 @@ host bindings (serial); "after" at the default thread count and at 3.
 
 **Bits:** every one of the 27 cases' output sha256 at MOJOLEARN_CPU_THREADS=1,
 3 and the default EQUALS the serial origin/main digest.
+
+### Session 2026-09-28 ~05Z (lane sequence-cpu, resumed)
+
+**Step 0 coverage audit (the 30 family lanes in
+~/mojolearn-evidence/sequence-cpu/lanes.txt):** every algorithm has a verifier
+lane with a CPU arm (host binding) and a GPU arm (tools/identity_lanes/sequence.py
++ the arima/holtwinters/kpss lanes in tools/identity_break.py), and
+`sequence/checks/sabotage/e2e_family_host_bits.patch` (a source edit of the
+host downloads / ARIMA / TSA host params) makes every one of the 30 DISAGREE
+(A40, pass 2 above); 35 seam arms (5500-5518, 5520-5535, 5540) in
+tools/identity_lanes/sequence.checks. No gap. The cpu lane's audit table lists
+`parallel_forecasting.*` as NO LANE: those are the multi-device drivers, whose
+lanes are par-arima / par-holtwinters / par-forecast-* (its name map misses
+them), not a sequence-family gap.
+
+**CPU FAST (phase 3): there is no FAST tier on a CPU-only install.**
+`bindings/build_host_family.sh` builds IDENTICAL only and
+`_backend._cpu_only_binding` refuses `numeric_mode='fast'` by name, for every
+family. CPU speed serves the one tier; the phase 5 table above is it.
+
+**Pod:** `sequence-cpu` (2lshqhccqf35wn) was gone (404) and RunPod is out of
+funds (the re-rent was refused: balance too low; nothing created). Per the
+orchestrator: no pod until funded. Branch merged origin/main (d9b966c63);
+`core/host_parallel.mojo` now at lane/cpu's tip bytes (a doc-comment change).
+
+**MERGE BLOCKER:** `core/host_parallel.mojo` is NOT on origin/main (as of
+3fa29cd1f), although lane/cpu's progress file says "MERGED to main (session 2)":
+lane/cpu's tip (c4716ec93) is not an ancestor of origin/main. This branch
+merges only after it lands.
+
+**OWED on an NVIDIA pod (when RunPod is funded), then merge:**
+1. `tools/algos_lane_check.sh <the 30 lanes> --pass 2` on the branch: every
+   lane CLEAN AGREE (CPU == cuda), every arm of sequence.checks PASS / FAIL /
+   PASS (5540 included).
+2. Existing bits: the CUDA and CPU columns of the 30 lanes == the merge base's
+   (same lane check at origin/main).
+3. The lane check's CPU column at MOJOLEARN_CPU_THREADS=1, 3 and unset: equal.
+   (seq_time.py digests at 1/3/default already equal origin/main's serial
+   digests on all 27 cases.)
+4. test_host_surface; test_lane_select only if its inputs changed.
+5. Re-time AutoARIMA at T=3 (after the task-count fix) and the optimizers
+   (after the in-place step) with ~/mojolearn-evidence/sequence-cpu/seq_time.py.
