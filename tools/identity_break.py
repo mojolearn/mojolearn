@@ -1185,13 +1185,13 @@ def lane_floors():
 #: key lands here with a sentence saying what moved. An entry whose key does
 #: name a size is refused by name, so this cannot become a way of opting out.
 NON_SIZE_REVISIONS = {
-    "trees-dart-options": "arithmetic, not input: TreeSHAP skips unreachable zero-cover paths before zero-over-zero unwinding; old NaN output hashes are not valid references; fixture sizes unchanged",
-    "trees-shap-tree": "arithmetic, not input: TreeSHAP skips unreachable zero-cover paths before zero-over-zero unwinding; old NaN output hashes are not valid references; fixture sizes unchanged",
+    "trees-dart-options": "2026-09-28: arithmetic, not input: TreeSHAP skips unreachable zero-cover paths before zero-over-zero unwinding; old NaN output hashes are not valid references; fixture sizes unchanged",
+    "trees-shap-tree": "2026-09-28: arithmetic, not input: TreeSHAP skips unreachable zero-cover paths before zero-over-zero unwinding; old NaN output hashes are not valid references; fixture sizes unchanged",
 
-    "x-glm-poisson": "derived target exp now uses repository portable arithmetic instead of platform NumPy SIMD exp; fixture sizes unchanged",
-    "x-glm-gamma": "derived target exp now uses repository portable arithmetic instead of platform NumPy SIMD exp; fixture sizes unchanged",
-    "x-glm-tweedie": "derived target exp now uses repository portable arithmetic instead of platform NumPy SIMD exp; fixture sizes unchanged",
-    "x-glm-poisson-sw": "derived target exp now uses repository portable arithmetic instead of platform NumPy SIMD exp; fixture sizes unchanged",
+    "x-glm-poisson": "2026-09-28: derived target exp now uses repository portable arithmetic instead of platform NumPy SIMD exp; fixture sizes unchanged",
+    "x-glm-gamma": "2026-09-28: derived target exp now uses repository portable arithmetic instead of platform NumPy SIMD exp; fixture sizes unchanged",
+    "x-glm-tweedie": "2026-09-28: derived target exp now uses repository portable arithmetic instead of platform NumPy SIMD exp; fixture sizes unchanged",
+    "x-glm-poisson-sw": "2026-09-28: derived target exp now uses repository portable arithmetic instead of platform NumPy SIMD exp; fixture sizes unchanged",
 
     "byte-lm-host-train": (
         "arithmetic, not input: 06073dba5 (0.8.14) moved LanguageModelHostTrainer's default "
