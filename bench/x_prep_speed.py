@@ -83,8 +83,12 @@ def load(dataset, n, seed=7):
     nonneg = raw - raw.min(0)
     counts = np.floor(np.abs(raw - np.median(raw, 0)) / (raw.std(0) + 1e-6) * 3)
     c = lambda a: np.ascontiguousarray(a, dtype=np.float32)
-    return dict(raw=c(raw), y=y, cat=c(cat), nonneg=c(nonneg), counts=c(counts), yreg=c(yreg), nan=c(nan),
-                raw16=c(raw[:, :16]))
+    # CategoricalNB refuses negative codes, as scikit-learn does ("Negative values in data passed to
+    # CategoricalNB (input X)"): HIGGS's cat block has negative codes, so the classifier reads them shifted
+    # to start at 0 (taxi's codes are already nonnegative and stay the same bytes).
+    catnn = cat - np.minimum(cat.min(0), 0)
+    return dict(raw=c(raw), y=y, cat=c(cat), catnn=c(catnn), nonneg=c(nonneg), counts=c(counts), yreg=c(yreg),
+                nan=c(nan), raw16=c(raw[:, :16]))
 
 
 def cases(ml):
@@ -174,7 +178,7 @@ def cases(ml):
 
     clf("gaussian-nb", "GaussianNB", {}, "raw")
     clf("bernoulli-nb", "BernoulliNB", {}, "raw")
-    clf("categorical-nb", "CategoricalNB", {}, "cat")
+    clf("categorical-nb", "CategoricalNB", {}, "catnn")
     clf("multinomial-nb", "MultinomialNB", dict(alpha=1.0), "counts")
     clf("complement-nb", "ComplementNB", dict(alpha=1.0), "counts")
     clf("lda", "LinearDiscriminantAnalysis", dict(solver="svd"), "raw")
