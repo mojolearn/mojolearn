@@ -896,6 +896,10 @@ TRAINING_LANE_NAMES = {
     "bootstrap": "the bootstrap",
     "permutation-test": "the permutation test",
     "monte-carlo": "Monte Carlo integration",
+    "resample-bca": "bias-corrected accelerated bootstrap intervals",
+    "resample-unpaired": "independent two-sample bootstrap",
+    "resample-perm-samples": "paired permutation and sign-flip tests",
+    "resample-utils": "resampling indices with and without replacement",
     # lane/cpu-training-misc batch 3 (2026-09-15): the neural primitives
     # through the training family's host binding. optim-sgd and
     # cross-entropy-arms reach optimizer_step and ce_loss (the mlp lane's
@@ -2649,7 +2653,8 @@ FAMILIES = (
         routes="_mojolearn_resample",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("bootstrap", "permutation-test", "monte-carlo"),
+        training_lanes=("bootstrap", "permutation-test", "monte-carlo", "resample-bca",
+                        "resample-unpaired", "resample-perm-samples", "resample-utils"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("resample.bootstrap", "resample.permutation_test", "resample.monte_carlo_integrate"),
@@ -2658,7 +2663,8 @@ FAMILIES = (
         exports=(
             "resample_host_numeric_mode", "resample_host_vendor", "resample_host_column",
             "resample_host_sabotage", "resample_vendor", "resample_numeric_mode",
-            "bootstrap", "permutation_test", "monte_carlo_integrate",
+            "bootstrap", "bootstrap_unpaired", "permutation_test", "permutation_samples",
+            "resample_indices", "resample_ranges_parallel_available", "monte_carlo_integrate",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -3555,6 +3561,12 @@ PUBLIC_PENDING_LANES = {
     # table on purpose (LANE_REVISIONS classic-kmeanspp-init-1). They leave
     # this table when the 0.8.23 record regenerates the reference.
     # lane cpu (2026-09-27): new lanes, no release record carries them yet
+    # These registered fixtures use existing resample host exports. A CPU
+    # route is not a reference admission; keep their missing evidence visible.
+    "resample-bca": "no reference",
+    "resample-unpaired": "no reference",
+    "resample-perm-samples": "no reference",
+    "resample-utils": "no reference",
     "pca-inverse": "no reference",
     "pca-whiten-inverse": "no reference",
     "tsvd-inverse": "no reference",

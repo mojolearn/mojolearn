@@ -94,3 +94,17 @@ def test_models_only_uses_cpu_on_gpu_install_and_detects_repeat_instability(tmp_
     assert len(loaded) == 2
     batch = next(row for row in rows if row['part'] == 'batch')
     assert va.judge_rows([batch], {'cells': {}})[0]['state'] == vr.DIVERGENT
+
+
+def test_resample_extensions_have_cpu_routes_without_claiming_reference_admission():
+    surface = va.host_surface()
+    names = {'resample-bca', 'resample-unpaired', 'resample-perm-samples', 'resample-utils'}
+    family = next(f for f in surface.FAMILIES if f['family'] == 'resample')
+    assert names <= set(family['training_lanes'])
+    assert names <= set(surface.covered_lanes())
+    assert {'bootstrap_unpaired', 'permutation_samples', 'resample_indices'} <= set(family['exports'])
+    exposure = surface.lane_exposure(sorted(names), 'cpu')
+    assert all(row['status'] == surface.LANE_OWED for row in exposure.values())
+    h = va.load_harness()
+    selected, _ = va.select_lanes(h, vr.load_table(), 'cpu', 'full', sorted(names), True)
+    assert set(selected) == names
