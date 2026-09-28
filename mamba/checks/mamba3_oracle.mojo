@@ -126,7 +126,7 @@ from gemm.checks.gemm_oracle import (
     gemm_oracle,
     gemm_oracle_right_zero_padded,
 )
-from gemm.host.gemm_host_rows import gemm_host_rows
+from gemm.host.gemm_host_rows import gemm_host_rows, gemm_host_rows_right_zero_padded
 from mamba.checks.mamba_oracle import refuse_nonfinite
 from mamba.checks.mamba3_fixture import (
     BITS_POS_INF,
@@ -927,7 +927,7 @@ def mamba3_block_oracle(
                         ]
                     # padded rows: v is exact +0.0, so the fold sees
                     # exact zeros (contract section 3).
-                var inc = gemm_oracle_right_zero_padded(
+                var inc = gemm_host_rows_right_zero_padded(
                     vs, ks, OP_TN, p_dim, n_state, q, real
                 )
                 var scale_c = ftz(identical_exp(dl))

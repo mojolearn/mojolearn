@@ -75,6 +75,7 @@ from gemm.host.gemm_oracle import (
     OP_TN,
     contract_leaf_size,
     gemm_oracle,
+    gemm_oracle_right_zero_padded,
     leaf_count,
 )
 
@@ -133,6 +134,21 @@ def _flushed_vec_chain(arow: GhrPtr, bp: GhrPtr, n: Int, pb: Int, pe: Int, j: In
         acc = ghr_ftz_lanes(identical_mul_add_simd[GHR_FW](
             GhrF(arow.unsafe_load(p)), bp.unsafe_load[width=GHR_FW](p * n + j), acc))
     return acc
+
+
+def ghr_zero_tail_step(dst: GhrPtr, n: Int):
+    """`dst[j] = ftz(identical_mul_add(+0.0, +0.0, dst[j]))` for every j: the ONE
+    zero product a right-zero-padded leaf still performs after its real terms
+    (`oracle_leaf_partial_right_zero_padded`); it turns a `-0.0` into `+0.0`."""
+    var body = n - n % GHR_FW
+    var j = 0
+    while j < body:
+        dst.unsafe_store(j, ghr_ftz_lanes(identical_mul_add_simd[GHR_FW](
+            GhrF(0.0), GhrF(0.0), dst.unsafe_load[width=GHR_FW](j))))
+        j += GHR_FW
+    while j < n:
+        dst.unsafe_store(j, ftz(identical_mul_add(Float32(0.0), Float32(0.0), dst.unsafe_load(j))))
+        j += 1
 
 
 def ghr_leaf_chain(arow: GhrPtr, bp: GhrPtr, n: Int, pb: Int, pe: Int, dst: GhrPtr, force_redo: Bool = False):
@@ -249,11 +265,19 @@ def ghr_pack_b(b: GhrPtr, op: Int, n: Int, k: Int, bp: GhrPtr):
 
 def ghr_rows(
     a: GhrPtr, bp: GhrPtr, c: GhrPtr, op: Int, m: Int, n: Int, k: Int,
-    lo: Int, hi: Int, force_redo: Bool = False,
+    lo: Int, hi: Int, force_redo: Bool = False, real_k: Int = -1,
 ):
     """Rows `[lo, hi)` of the product into `c[i * n + j]` (the caller's full
     output), from the raw left operand `a` and the packed right operand `bp`
-    (`ghr_pack_b`). Owns its scratch; reads `a` and `bp` only."""
+    (`ghr_pack_b`). Owns its scratch; reads `a` and `bp` only.
+
+    `real_k` in `[0, k)` is `gemm_oracle_right_zero_padded`'s compression:
+    each leaf chains only its terms below `real_k` and then performs one
+    zero product if it was cut short; the leaves and the fold stay those of
+    `k`. Any other value (the default) is the plain product."""
+    var rk = k
+    if real_k >= 0 and real_k < k:
+        rk = real_k
     if hi <= lo:
         return
     if k <= 0:
@@ -278,12 +302,18 @@ def ghr_rows(
             # One leaf: the chain's output is the cell (`gemm_oracle_cell`'s
             # one-leaf branch, whose extra `ftz` is the identity on a flushed
             # value).
-            ghr_leaf_chain(arow, bp, n, 0, k, crow, force_redo)
+            ghr_leaf_chain(arow, bp, n, 0, rk, crow, force_redo)
+            if rk < k:
+                ghr_zero_tail_step(crow, n)
             continue
         for t in range(pcount):
             var pb = t * leaf
             var pe = min(pb + leaf, k)
-            ghr_leaf_chain(arow, bp, n, pb, pe, scratch.unsafe_offset(t * n), force_redo)
+            var ae = max(min(pe, rk), pb)
+            var dst = scratch.unsafe_offset(t * n)
+            ghr_leaf_chain(arow, bp, n, pb, ae, dst, force_redo)
+            if ae < pe:
+                ghr_zero_tail_step(dst, n)
         ghr_fold_in_place(scratch, pcount, n)
         unsafe_memcpy(dest=crow, src=scratch, count=n)
     _ = arow_l^
@@ -292,7 +322,7 @@ def ghr_rows(
 
 def gemm_host_rows_into(
     a: GhrPtr, b: GhrPtr, c: GhrPtr, op: Int, m: Int, n: Int, k: Int,
-    force_redo: Bool = False,
+    force_redo: Bool = False, real_k: Int = -1,
 ) raises:
     """`C[m x n] = op(A) . op(B)` into the caller's `c`, bit for bit
     `gemm_oracle(A, B, op, m, n, k)`. `a` holds m*k values (k*m under OP_TN),
@@ -313,13 +343,17 @@ def gemm_host_rows_into(
             unsafe_memcpy(dest=la.unsafe_ptr(), src=a, count=m * k)
         if n * k > 0:
             unsafe_memcpy(dest=lb.unsafe_ptr(), src=b, count=n * k)
-        var out = gemm_oracle(la, lb, op, m, n, k)
+        var out: List[Float32]
+        if real_k >= 0 and real_k < k:
+            out = gemm_oracle_right_zero_padded(la, lb, op, m, n, k, real_k)
+        else:
+            out = gemm_oracle(la, lb, op, m, n, k)
         unsafe_memcpy(dest=c, src=out.unsafe_ptr(), count=m * n)
         return
     var bp_l = List[Float32](length=max(k * n, 1), fill=Float32(0.0))
     var bp = rebind[GhrPtr](bp_l.unsafe_ptr())
     ghr_pack_b(b, op, n, k, bp)
-    ghr_rows(a, bp, c, op, m, n, k, 0, m, force_redo)
+    ghr_rows(a, bp, c, op, m, n, k, 0, m, force_redo, real_k)
     _ = bp_l^
 
 
@@ -345,4 +379,27 @@ def gemm_host_rows(
         )
     except:
         return gemm_oracle(a, b, op, m, n, k)
+    return c^
+
+
+def gemm_host_rows_right_zero_padded(
+    a: List[Float32], b: List[Float32], op: Int, m: Int, n: Int, k: Int,
+    real_k: Int, force_redo: Bool = False,
+) raises -> List[Float32]:
+    """`gemm_oracle_right_zero_padded(a, b, op, m, n, k, real_k)`, bit for bit,
+    at CPU speed. Raises exactly where the oracle raises (`real_k` outside
+    `[0, k]`); any other input the fast path does not take goes to the oracle."""
+    if real_k < 0 or real_k > k:
+        raise Error("gemm_oracle_right_zero_padded: real_k must be in [0, k]")
+    if (
+        (op != OP_NN and op != OP_NT and op != OP_TN)
+        or m < 0 or n < 0
+        or len(a) < m * k or len(b) < n * k
+    ):
+        return gemm_oracle_right_zero_padded(a, b, op, m, n, k, real_k)
+    var c = List[Float32](length=m * n, fill=Float32(0.0))
+    gemm_host_rows_into(
+        rebind[GhrPtr](a.unsafe_ptr()), rebind[GhrPtr](b.unsafe_ptr()),
+        rebind[GhrPtr](c.unsafe_ptr()), op, m, n, k, force_redo, real_k,
+    )
     return c^

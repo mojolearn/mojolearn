@@ -22,14 +22,16 @@ group, and five fixture kinds:
   relu       half the left operand exactly +0.0 (a ReLU'd activation)
 
 Each case also runs with `force_redo`, which takes the flushed fallback for
-every group. A cell differing in any bit fails the check.
+every group. `gemm_host_rows_right_zero_padded` is held to
+`gemm_oracle_right_zero_padded` the same way. A cell differing in any bit
+fails the check.
 """
 from std.memory import bitcast
 from std.sys.compile import is_defined
 
 from checks.fixture_rng import splitmix_triple
-from gemm.host.gemm_oracle import OP_NN, OP_NT, OP_TN, gemm_oracle
-from gemm.host.gemm_host_rows import gemm_host_rows
+from gemm.host.gemm_oracle import OP_NN, OP_NT, OP_TN, gemm_oracle, gemm_oracle_right_zero_padded
+from gemm.host.gemm_host_rows import gemm_host_rows, gemm_host_rows_right_zero_padded
 
 comptime KIND_UNIFORM = 0
 comptime KIND_SUBNORMAL = 1
@@ -127,6 +129,48 @@ def main() raises:
         if _same(gemm_oracle(a, b, op, 2, 33, 5000), gemm_host_rows(a, b, op, 2, 33, 5000)) != 0:
             failed += 1
             print("DIFFER long k op", op)
+    # The right-zero-padded door against its oracle: real_k at 0, 1, the
+    # middle, k - 1 and k; the operands beyond real_k are left as filled
+    # (garbage the compression must never read) or zeroed (the caller's
+    # contract), and the ZEROS kind ends real prefixes at -0.0.
+    var pk: List[Int] = [1, 7, 128, 129, 300, 384]
+    var pn: List[Int] = [1, 9, 33, 64]
+    for kind in range(3):
+        for oi in range(len(ops)):
+            var op = ops[oi]
+            for ni in range(len(pn)):
+                for ki in range(len(pk)):
+                    var k = pk[ki]
+                    var n = pn[ni]
+                    var m = 3
+                    var reals: List[Int] = [0, 1, k // 2, k - 1, k]
+                    for ri in range(len(reals)):
+                        var real = reals[ri]
+                        for zeroed in range(2):
+                            var salt = ((kind * 5 + op) * 71 + n) * 1013 + k * 7 + real
+                            var a = _fill(m * k, kind, salt, True)
+                            var b = _fill(n * k, kind, salt + 3, False)
+                            if zeroed == 1:
+                                for p in range(real, k):
+                                    for i in range(m):
+                                        if op == OP_TN:
+                                            a[p * m + i] = Float32(0.0)
+                                        else:
+                                            a[i * k + p] = Float32(0.0)
+                                    for j in range(n):
+                                        if op == OP_NT:
+                                            b[j * k + p] = Float32(0.0)
+                                        else:
+                                            b[p * n + j] = Float32(0.0)
+                            cases += 1
+                            var want = gemm_oracle_right_zero_padded(a, b, op, m, n, k, real)
+                            var d1 = _same(want, gemm_host_rows_right_zero_padded(a, b, op, m, n, k, real))
+                            var d2 = _same(want, gemm_host_rows_right_zero_padded(a, b, op, m, n, k, real, force_redo=True))
+                            if d1 != 0 or d2 != 0:
+                                failed += 1
+                                if failed <= 20:
+                                    print("DIFFER padded kind", kind, "op", op, "n", n, "k", k, "real", real,
+                                          "zeroed", zeroed, "cells", d1, "(forced redo:", d2, ")")
     comptime if is_defined["MOJOLEARN_GEMM_HOST_ROWS_SABOTAGE"]():
         print("gemm_host_rows_check: SABOTAGE BUILD (the deferred flush never falls back)")
     print("gemm_host_rows_check:", cases, "cases,", failed, "differ")
