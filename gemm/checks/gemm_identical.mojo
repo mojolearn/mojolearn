@@ -3449,6 +3449,9 @@ comptime APPLE_MMA_FM = get_defined_int["MOJOLEARN_APPLE_MMA_FM", 4]()
 comptime APPLE_MMA_FN = get_defined_int["MOJOLEARN_APPLE_MMA_FN", 4]()
 comptime APPLE_MMA_KB = get_defined_int["MOJOLEARN_APPLE_MMA_KB", 16]()
 comptime APPLE_MMA_GROUP_M = get_defined_int["MOJOLEARN_APPLE_MMA_GROUP_M", 8]()
+#: lane/neural-apple2 (2026-09-28), measurement arm: two shared pages, one
+#: barrier per window (the same stagings, windows and chains; scheduling only).
+comptime APPLE_MMA_DB = is_defined["MOJOLEARN_APPLE_MMA_DB"]()
 #: lane/neural-apple (2026-09-28): the small tile (FM = FN = 2, a quarter of
 #: the default's cells) for outputs with fewer than `APPLE_MMA_SMALL_BLOCKS`
 #: default tiles (scheduling only; `MOJOLEARN_APPLE_MMA_SMALL_OFF` reverts).
@@ -3673,9 +3676,14 @@ def identical_gemm_apple_mma_kernel[
     var qd = lane // 4
     var frow = (qd & 4) + ((lane // 2) % 4)
     var fcol = (qd & 2) * 2 + (lane % 2) * 2
-    var at = stack_allocation[KB * AST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var bt = stack_allocation[BN * BST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var wmin = stack_allocation[2 * NSG, Scalar[DType.uint32], address_space = AddressSpace.SHARED]()
+    # APPLE_MMA_DB: two shared pages (window w computes from one while w + 1
+    # stages into the other), one barrier per window instead of two.
+    comptime NPG = 2 if APPLE_MMA_DB else 1
+    comptime ASZ = KB * AST
+    comptime BSZ = BN * BST
+    var at = stack_allocation[NPG * ASZ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var bt = stack_allocation[NPG * BSZ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var wmin = stack_allocation[NPG * 2 * NSG, Scalar[DType.uint32], address_space = AddressSpace.SHARED]()
     var fl = stack_allocation[FS * NC, Scalar[DType.float32]]()
     var occ = 0
     var acc = InlineArray[_AMMA_M64, NF](fill=_AMMA_M64(0))
@@ -3689,26 +3697,42 @@ def identical_gemm_apple_mma_kernel[
     # multiplies.
     var ra = _amma_gload[BM, KB, NT](a, a_si, a_sp, m0, m, 0, min(KB, k), tid, a_ofast)
     var rb = _amma_gload[BN, KB, NT](b, b_sj, b_sp, n0, n, 0, min(KB, k), tid, b_ofast)
+    comptime if APPLE_MMA_DB:
+        # Prologue: window 0 staged into page 0, window 1's words in flight.
+        var ea0 = _admit_warp_min(_amma_stage[BM, KB, NT, True, AST](at, ra, tid, a_ofast))
+        var eb0 = _admit_warp_min(_amma_stage[BN, KB, NT, False, BST](bt, rb, tid, b_ofast))
+        if lane == 0:
+            wmin[sg] = ea0
+            wmin[NSG + sg] = eb0
+        barrier()
+        if windows > 1:
+            ra = _amma_gload[BM, KB, NT](a, a_si, a_sp, m0, m, KB, min(KB, k - KB), tid, a_ofast)
+            rb = _amma_gload[BN, KB, NT](b, b_sj, b_sp, n0, n, KB, min(KB, k - KB), tid, b_ofast)
     for w in range(windows):
         var k0 = w * KB
         var chunk = min(KB, k - k0)
-        var ea = _amma_stage[BM, KB, NT, True, AST](at, ra, tid, a_ofast)
-        var eb = _amma_stage[BN, KB, NT, False, BST](bt, rb, tid, b_ofast)
-        ea = _admit_warp_min(ea)
-        eb = _admit_warp_min(eb)
-        if lane == 0:
-            wmin[sg] = ea
-            wmin[NSG + sg] = eb
-        barrier()
-        if w + 1 < windows:
-            var k1 = k0 + KB
-            ra = _amma_gload[BM, KB, NT](a, a_si, a_sp, m0, m, k1, min(KB, k - k1), tid, a_ofast)
-            rb = _amma_gload[BN, KB, NT](b, b_sj, b_sp, n0, n, k1, min(KB, k - k1), tid, b_ofast)
+        var cur = w % NPG
+        var atc = at + cur * ASZ
+        var btc = bt + cur * BSZ
+        var wmc = wmin + cur * 2 * NSG
+        comptime if not APPLE_MMA_DB:
+            var ea = _amma_stage[BM, KB, NT, True, AST](at, ra, tid, a_ofast)
+            var eb = _amma_stage[BN, KB, NT, False, BST](bt, rb, tid, b_ofast)
+            ea = _admit_warp_min(ea)
+            eb = _admit_warp_min(eb)
+            if lane == 0:
+                wmin[sg] = ea
+                wmin[NSG + sg] = eb
+            barrier()
+            if w + 1 < windows:
+                var k1 = k0 + KB
+                ra = _amma_gload[BM, KB, NT](a, a_si, a_sp, m0, m, k1, min(KB, k - k1), tid, a_ofast)
+                rb = _amma_gload[BN, KB, NT](b, b_sj, b_sp, n0, n, k1, min(KB, k - k1), tid, b_ofast)
         var bea = UInt32(0xFF)
         var beb = UInt32(0xFF)
         comptime for q in range(NSG):
-            bea = min(bea, wmin[q])
-            beb = min(beb, wmin[NSG + q])
+            bea = min(bea, wmc[q])
+            beb = min(beb, wmc[NSG + q])
         var admitted = exact_ok and chunk == KB and (bea + beb) >= UInt32(APPLE_MMA_ADMIT_EXP_SUM)
         if not admitted:
             exact_ok = False
@@ -3717,9 +3741,9 @@ def identical_gemm_apple_mma_kernel[
                 var af = InlineArray[_AMMA_M64, FM](fill=_AMMA_M64(0))
                 var bf = InlineArray[_AMMA_M64, FN](fill=_AMMA_M64(0))
                 comptime for fm in range(FM):
-                    af[fm] = _amma_load_t(at + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                    af[fm] = _amma_load_t(atc + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
                 comptime for fq in range(FN):
-                    bf[fq] = _amma_load_t(bt + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                    bf[fq] = _amma_load_t(btc + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
                 comptime for fm in range(FM):
                     comptime for fq in range(FN):
                         acc[fm * FN + fq] = _amma_mma(af[fm], bf[fq], acc[fm * FN + fq])
@@ -3730,11 +3754,25 @@ def identical_gemm_apple_mma_kernel[
         else:
             for p in range(chunk):
                 comptime for fm in range(FM):
-                    var av = at[p * AST + (sgm * FM + fm) * 8 + frow]
+                    var av = atc[p * AST + (sgm * FM + fm) * 8 + frow]
                     comptime for fq in range(FN):
                         comptime for e in range(2):
-                            var bv = bt[((sgn * FN + fq) * 8 + fcol + e) * BST + p]
+                            var bv = btc[((sgn * FN + fq) * 8 + fcol + e) * BST + p]
                             acc[fm * FN + fq][e] = rtf_mul_add(av, bv, acc[fm * FN + fq][e])
+        comptime if APPLE_MMA_DB:
+            # Stage window w + 1 into the other page (last read by window
+            # w - 1, before the previous barrier), then fetch window w + 2.
+            if w + 1 < windows:
+                var nxt = (w + 1) % NPG
+                var ean = _admit_warp_min(_amma_stage[BM, KB, NT, True, AST](at + nxt * ASZ, ra, tid, a_ofast))
+                var ebn = _admit_warp_min(_amma_stage[BN, KB, NT, False, BST](bt + nxt * BSZ, rb, tid, b_ofast))
+                if lane == 0:
+                    wmin[nxt * 2 * NSG + sg] = ean
+                    wmin[nxt * 2 * NSG + NSG + sg] = ebn
+                if w + 2 < windows:
+                    var k2 = k0 + 2 * KB
+                    ra = _amma_gload[BM, KB, NT](a, a_si, a_sp, m0, m, k2, min(KB, k - k2), tid, a_ofast)
+                    rb = _amma_gload[BN, KB, NT](b, b_sj, b_sp, n0, n, k2, min(KB, k - k2), tid, b_ofast)
         barrier()
         if (w + 1) % wpl == 0 or w + 1 == windows:
             var part = SIMD[DType.float32, NC](0.0)
