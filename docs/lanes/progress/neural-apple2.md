@@ -13,6 +13,7 @@ digests, byte LM final witness and loss digests).
 
 | steward id | Mac | commit | what |
 |---|---|---|---|
+| 1790619788903 | m4pro-b | 1818eda64 | Samba parameter digests base=35d08f9ca vs new=1818eda64 (pyprof with numpy weights, 3 steps) + samba-train-step A/B |
 | 1790616700582 | m3ultra-b | 85ba24bb1 | FINAL M3 Ultra before/after: A/B base=35d08f9ca vs new=85ba24bb1, every bench lane, Samba parameter digests, T3 step (granted), 2 alternations |
 | 1790615594330 | m4pro-b | 30d8fbe81 | FINAL M4 Pro before/after: A/B base=35d08f9ca (fork point, default path of 037daa353) vs new=30d8fbe81, every bench lane, 2 alternations, the Samba step digests (AB_PYPROF), byte LM step at T3 and B1 (2 alternations each) |
 | 1790613514889 | m3ultra-b | fec0f64f5 | AFTER profile on the M3 Ultra (every bench lane, T3 step, census with attention timers; BEFORE = job 1 on the same Mac) + Mamba-3 backward per-stage walls (MOJOLEARN_MAMBA_TIMING) + T3 FORCE_DENY arms with and without the round 3 zdot fold barrier |
@@ -173,3 +174,27 @@ unless noted. Digests are the output digests (forward lanes) or the losses
 
 The Samba parameter digests (AB_PYPROF) printed nothing in this job (fixed in
 85ba24bb1: the runs log to a file); job 5 repeats them on the M3 Ultra.
+
+## Job 5: FINAL M3 Ultra before/after (m3ultra-b, steward 1790616700582)
+
+base = 35d08f9ca, new = 85ba24bb1 (every default change of this lane; the
+library path equals 30d8fbe81). Alternating, same Mac, same job, 2 reps, ms
+unless noted; every digest equal between base and new in every race.
+
+| lane / step | base | new | change | digest |
+|---|---|---|---|---|
+| byte LM T3 shard step (s; estash granted on 256 GB) | 2.911 / 2.929 | **2.117 / 2.117** | -27.5% | grad ab96db5b, param ecaba3f7, m de07d03c, v c30882c0; losses 676298da afc46227 34fe4c49 50902bed |
+| lm-train-step | 291.6 / 280.4 | **207.1 / 210.9** | -27% | losses 9.018733 -> 5.609087 |
+| lm-forward | 224.2 / 223.6 | 220.6 / 221.5 | -1.2% | 4a8e781b0739a038 |
+| gemm 4096^3 | 75.2 / 75.2 | 76.9 / 75.4 | flat | 535b4c27bd9313d1 |
+| transformer-forward | 23.9 / 25.1 | 20.8 / 24.8 | flat to -13% | d5a2b289afdb5709 |
+| mamba1-forward | 21.4 / 20.2 | 19.8 / 19.7 | -5% | dfe79ab628aa17cf |
+| mamba2-forward | 29.2 / 29.6 | 28.7 / 28.8 | -2% | 00da58895303c580 |
+| mamba3-forward | 25.0 / 25.8 | 25.0 / 24.9 | flat | 481c50cae2dd749e |
+| samba-train-step | 889.9 / 887.4 | **690.7 / 690.6** | -22.3% | losses 5.635910 -> 3.629466 |
+| samba-forward | 54.8 / 56.0 | 54.8 / 53.2 | flat | ddce61948b8456e0 |
+| mlp-train-step | 7.84 / 7.97 | 8.12 / 8.27 | +4% (0.3 ms, launch-bound toy) | losses 1.106435 -> 1.160229 |
+
+The AB_PYPROF Samba runs failed in both variants (the generator's initializers
+dlopen libMojolearnMath, which a bindings-only tree does not build); pyprof
+now uses numpy weights (1818eda64) and job 6 repeats the parameter digests.

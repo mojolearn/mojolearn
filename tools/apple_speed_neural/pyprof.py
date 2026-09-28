@@ -18,15 +18,23 @@ import time
 import numpy as np
 
 import mojolearn as ml
-from mojolearn import _training_impl as T
 
 
 def main():
     steps = int(os.environ.get("PYPROF_STEPS", "3"))
     cfg = ml.SambaConfig(256, 384, ("mamba3", "attention", "mamba3", "attention"),
                          n_heads=6, intermediate=1024)
-    stack = ml.SambaStack(cfg, generator=T.Generator(7))
     rng = np.random.default_rng(0)
+    # Weights from numpy (the generator's initializers need libMojolearnMath,
+    # which a bindings-only tree does not build): norms 1, the rest N(0, 0.02).
+    w = {}
+    for n, shp in cfg.registry():
+        shp = tuple(int(x) for x in shp)
+        if "norm" in n:
+            w[n] = np.ones(shp, dtype=np.float32)
+        else:
+            w[n] = (rng.standard_normal(shp) * 0.02).astype(np.float32)
+    stack = ml.SambaStack(cfg, weights=w)
     batches = [rng.integers(0, 256, size=(2, 513), dtype=np.int32) for _ in range(steps + 1)]
     losses = []
     t0 = time.perf_counter()
