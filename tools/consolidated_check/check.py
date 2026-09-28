@@ -29,7 +29,7 @@ def source_commit():
     return sha
 
 
-def fingerprint(p, lanes, cpu_threads, backend):
+def fingerprint(p, lanes, cpu_threads, backend, fixtures="base", arm_timeout=120):
     bindings = sorted(set().union(*(set(p["needed"][l]) for l in lanes)))
     paths = {b: alc.output_for(b) for b in bindings}
     math = alc.PKG / (".dylibs/libMojolearnMath.dylib" if sys.platform == "darwin" else ".libs/libMojolearnMath.so")
@@ -45,6 +45,7 @@ def fingerprint(p, lanes, cpu_threads, backend):
         hashes[name] = h.hexdigest()
     return dict(source_commit=source_commit(), bindings=hashes, lanes=lanes,
                 cpu_threads=cpu_threads, backend=backend, arch=alc.gpu_arch(),
+                fixtures=fixtures, arm_timeout=arm_timeout,
                 settings={k: v for k, v in sorted(os.environ.items())
                           if k.startswith(("MOJOLEARN_", "OMP_", "MTL_"))})
 
@@ -131,7 +132,7 @@ def build(out, jobs):
     return 1 if fails or still else 0
 
 
-def clean(out, shard, cpu_threads):
+def clean(out, shard, cpu_threads, fixtures="base", arm_timeout=120):
     p = load_plan(out)
     i, n = (int(x) for x in shard.split("/"))
     if n <= 0 or i < 0 or i >= n:
@@ -142,6 +143,14 @@ def clean(out, shard, cpu_threads):
     if any(t != "default" and (not t.isdigit() or int(t) < 1) for t in cpu_threads):
         raise ValueError("invalid CPU thread count")
     ib = alc.load_harness()
+    if arm_timeout <= 0:
+        raise ValueError("arm timeout must be positive")
+    alc.ARM_TIMEOUT = arm_timeout
+    if fixtures == "all":
+        fixtures = ""
+    selected_fixtures = fixtures.split(",") if fixtures else list(ib.FIXTURES)
+    if not selected_fixtures or len(set(selected_fixtures)) != len(selected_fixtures) or any(f not in ib.FIXTURES for f in selected_fixtures):
+        raise ValueError("empty, duplicate or unknown fixtures")
     backend = alc.gpu_backend()
     stale = {b for b in sorted(set().union(*[p["needed"][l] for l in lanes])) if alc.stale(b)}
     if stale:  # a binding that did not build fails only the lanes that run it
@@ -150,7 +159,7 @@ def clean(out, shard, cpu_threads):
     d.mkdir(exist_ok=True)
     log = d / "clean.log"
     res = d / "verdicts.tsv"
-    identity = fingerprint(p, lanes, cpu_threads, backend)
+    identity = fingerprint(p, lanes, cpu_threads, backend, fixtures, arm_timeout)
     identity_file = d / "identity.json"
     if identity_file.exists():
         if json.loads(identity_file.read_text()) != identity:
@@ -182,7 +191,7 @@ def clean(out, shard, cpu_threads):
             if sb:
                 raise RuntimeError(f"binding not built: {','.join(sb)}")
             gj = d / f"{lane}.gpu.json"
-            alc.run_arm("gpu", lane, backend, "", gj, log)
+            alc.run_arm("gpu", lane, backend, fixtures, gj, log)
             for t in cpu_threads:
                 os.environ.clear()
                 os.environ.update(base_env)
@@ -191,8 +200,8 @@ def clean(out, shard, cpu_threads):
                 else:
                     os.environ["MOJOLEARN_CPU_THREADS"] = t
                 cj = d / f"{lane}.cpu{t}.json"
-                alc.run_arm("cpu", lane, backend, "", cj, log)
-                verdict, detail = alc.compare(ib, lane, gj, cj, "", log, backend)
+                alc.run_arm("cpu", lane, backend, fixtures, cj, log)
+                verdict, detail = alc.compare(ib, lane, gj, cj, fixtures, log, backend)
                 row.append(f"cpu{t}={verdict}")
                 row.append(str(detail)[:200].replace("\t", " "))
         except Exception as e:
@@ -203,7 +212,7 @@ def clean(out, shard, cpu_threads):
         with open(res, "a") as fh:
             fh.write("\t".join(row) + "\n")
         print(f"{now()} " + "  ".join(row[:1] + [c for c in row[1:] if "=" in c]), flush=True)
-    if fingerprint(p, lanes, cpu_threads, backend) != identity:
+    if fingerprint(p, lanes, cpu_threads, backend, fixtures, arm_timeout) != identity:
         raise ValueError("source or bindings changed during the run")
     rows = read_rows(res, lanes, cpu_threads)
     if {r[0] for r in rows} != set(lanes):
@@ -223,6 +232,8 @@ def main():
     ap.add_argument("--shard", default="0/1")
     ap.add_argument("--cpu-threads", default="default")
     ap.add_argument("--lanes", default="")
+    ap.add_argument("--fixtures", default="base", help="comma-separated fixtures; all explicitly enables every fixture")
+    ap.add_argument("--arm-timeout", type=int, default=120, help="maximum seconds per GPU or CPU arm")
     a = ap.parse_args()
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -235,7 +246,7 @@ def main():
         if a.cmd == "build":
             return build(out, a.jobs)
         if a.cmd == "clean":
-            return clean(out, a.shard, a.cpu_threads.split(","))
+            return clean(out, a.shard, a.cpu_threads.split(","), a.fixtures, a.arm_timeout)
         raise ValueError("unknown command")
     except Exception:
         traceback.print_exc()

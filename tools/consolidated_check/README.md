@@ -17,3 +17,14 @@ matching committed sources, native library hashes, backend/architecture, lane
 selection, thread columns and execution settings. A changed run needs a new
 output directory. Empty, missing, duplicate or incomplete evidence is refused.
 The checker does not allocate machines or submit jobs.
+
+The default fixture is **base only**, with a **120-second timeout per arm**.
+`FIXTURES=all` deliberately enables the exhaustive fixture sweep; alternatively
+name fixtures such as `base,denormal,odd`. `ARM_TIMEOUT` can explicitly change
+the per-arm bound. Both settings are part of resume identity. Base uses the
+existing reference-compatible fixture (some algorithms slice its 20,000 rows);
+this driver does not relabel stress-sized inputs as newly reduced fixtures.
+
+Physical multi-device lanes need a separate multi-device proof; select applicable
+lanes explicitly with `LANES` and preserve the omitted lane names/reasons in the
+release record. A CPU refusal is never counted as AGREE by this driver.

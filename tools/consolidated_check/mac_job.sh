@@ -12,5 +12,5 @@ P=("$PIXI" run -e default python -u tools/consolidated_check/check.py)
 # Always regenerate the plan so changed LANES is caught by resume identity.
 "${P[@]}" plan --out "$OUT" --lanes "${LANES:-}"
 "${P[@]}" build --out "$OUT" --jobs "${BUILD_JOBS:-2}" 2>&1 | tee "$OUT/build.stdout"
-"${P[@]}" clean --out "$OUT" --shard "$SHARD" --cpu-threads "${CPU_THREADS:-default}" 2>&1 | tee "$OUT/clean.stdout"
+"${P[@]}" clean --out "$OUT" --shard "$SHARD" --cpu-threads "${CPU_THREADS:-default}" --fixtures "${FIXTURES:-base}" --arm-timeout "${ARM_TIMEOUT:-120}" 2>&1 | tee "$OUT/clean.stdout"
 echo "CONSOLIDATED CHECK PASS $(date -u +%FT%TZ)"
