@@ -86,7 +86,9 @@ class _Prog:
         self._stages = []
         self.arena = None
         #: the declared output ranges (`want`); None = the whole arena
+        #: less the inputs and scratch (`_skip`), which never come back
         self._outs = None
+        self._skip = []
 
     def alloc(self, n):
         off = self.size
@@ -101,6 +103,15 @@ class _Prog:
             arr = as_f32_c(arr, ndim=None, name="input")[0]
         off = self.alloc(arr.size)
         self._inputs.append((off, arr))
+        self._skip.append((off, off + arr.size))
+        return off
+
+    def scratch(self, n):
+        """`alloc` for a slot only the device reads (a sort order, a key
+        column): it never comes back (lane metrics-apple2)."""
+        off = self.alloc(n)
+        if n > 0:
+            self._skip.append((off, off + int(n)))
         return off
 
     def put_i32(self, codes):
@@ -109,6 +120,7 @@ class _Prog:
             codes = Array.from_list([int(c) for c in codes], "<i4")
         off = self.alloc(codes.size)
         self._inputs.append((off, codes))
+        self._skip.append((off, off + codes.size))
         return off
 
     def stage(self, op, total, *params):
@@ -133,12 +145,42 @@ class _Prog:
         return off
 
     def _check(self, off, n):
-        if self._outs is None or n <= 0:
+        if n <= 0:
+            return
+        if self._outs is None:
+            for lo, hi in self._skip:
+                if off < hi and lo < off + n:
+                    raise AssertionError(f"x_metrics: arena [{off}, {off + n}) was read but is an input "
+                                         "or scratch slot, which never comes back")
             return
         for lo, hi in self._outs:
             if lo <= off and off + n <= hi:
                 return
         raise AssertionError(f"x_metrics: arena [{off}, {off + n}) was read but never declared an output")
+
+    def _download(self):
+        """The disjoint ascending [lo, hi) ranges the device brings back:
+        the declared outputs, else the arena less the inputs and scratch;
+        None = the whole arena."""
+        if self._outs is not None:
+            merged = []
+            for lo, hi in sorted(self._outs):
+                if merged and lo <= merged[-1][1]:
+                    merged[-1][1] = max(merged[-1][1], hi)
+                else:
+                    merged.append([lo, hi])
+            return merged
+        if not self._skip:
+            return None
+        merged = []
+        at = 0
+        for lo, hi in sorted(self._skip):
+            if lo > at:
+                merged.append([at, lo])
+            at = max(at, hi)
+        if at < self.size:
+            merged.append([at, self.size])
+        return merged
 
     def floats(self, off, n):
         """Python floats (exact images of the Float32 results)."""
@@ -180,15 +222,9 @@ def _execute(prog, numeric_mode):
             ctypes.memmove(base + 4 * off, addr_ro(arr, name="input"), 4 * arr.size)
     stages = array.array("i", [v for s in prog._stages for v in s] or [0])
     b = _binding(numeric_mode)
-    run_out = getattr(b, "x_metrics_run_out", None) if prog._outs is not None else None
+    merged = prog._download()
+    run_out = getattr(b, "x_metrics_run_out", None) if merged is not None else None
     if run_out is not None:
-        # the declared outputs, merged into disjoint ascending ranges
-        merged = []
-        for lo, hi in sorted(prog._outs):
-            if merged and lo <= merged[-1][1]:
-                merged[-1][1] = max(merged[-1][1], hi)
-            else:
-                merged.append([lo, hi])
         outs = array.array("i", [v for r in merged for v in r] or [0, 0])
         run_out(base, prog.size, stages.buffer_info()[0], len(prog._stages), outs.buffer_info()[0], len(merged))
     else:
@@ -201,7 +237,7 @@ def _group(prog, key, n, m, *, values=_NONE, vstride=1, weights=_NONE, width=1):
     """Stable counting sort of rows by `key` (int32 offset, -1 = dropped),
     then one PairSum per (group, column). Returns (OFF, OUT) offsets."""
     off = prog.alloc(m + 1)
-    order = prog.alloc(n)
+    order = prog.scratch(n)
     out = prog.alloc(m * width)
     prog.stage("group_sort", 1, key, n, m, off, order)
     if m * width:
@@ -262,13 +298,13 @@ class _Sums:
         prog = _Prog()
         a = prog.put_i32(yt)
         b = prog.put_i32(yp)
-        match = prog.alloc(n)
+        match = prog.scratch(n)
         prog.stage("pair_key", n, a, b, match, L, 1)
         W = _NONE if w is None else prog.put(w)
         groups = [_group(prog, k, n, L, weights=W) for k in (match, a, b)]
         total = None
         if w is not None:
-            zero = prog.alloc(n)            # every row in group 0: the total weight
+            zero = prog.scratch(n)          # every row in group 0: the total weight
             prog.stage("pair_key", n, a, a, zero, 1, 2)
             groups.append(_group(prog, zero, n, 1, weights=W))
         _execute(prog, numeric_mode)
@@ -583,7 +619,7 @@ def _confusion(true, pred, w, order, numeric_mode):
     prog = _Prog()
     a = prog.put_i32(_codes(true, order))
     b = prog.put_i32(_codes(pred, order))
-    key = prog.alloc(n)
+    key = prog.scratch(n)
     prog.stage("pair_key", n, a, b, key, k, 0)
     W = _NONE if w is None else prog.put(w)
     off, out = _group(prog, key, n, k * k, weights=W)
@@ -877,11 +913,11 @@ class _Reg:
         S = prog.put(Array.from_list([_f32(0.0 if scalar is None else scalar)], "<f4"))
         W = _NONE if self.w is None else prog.put(self.w)
         n, D = self.n, self.D
-        zero = prog.alloc(n)
+        zero = prog.scratch(n)
         prog.stage("pair_key", n, 0, 0, zero, 1, 2)
         outs = []
         for kind in kinds:
-            term = prog.alloc(n * D)
+            term = prog.scratch(n * D)
             prog.stage("reg_term", n * D, Y, P, term, D, _TERM[kind], S, 0 if pred_broadcast is None else 1)
             outs.append(_group(prog, zero, n, 1, values=term, vstride=D, weights=W, width=D)[1])
         sw_out = _group(prog, zero, n, 1, weights=W)[1] if self.w is not None else None
@@ -899,8 +935,10 @@ class _Reg:
         prog.stage("col_sort", D, V, n, D, order)
         W = _NONE if self.w is None else prog.put(self.w)
         R = prog.put(Array.from_list([_f32(rank)], "<f4"))
-        out = prog.alloc(D)
+        out = prog.want(prog.alloc(D), D)
         cdf = prog.alloc(n * D)
+        for c in range(D):
+            prog.want(cdf + c * n, 1)
         prog.stage("wpercentile", D, V, n, D, order, W, R, 1 if average else 0, out, cdf)
         _execute(prog, numeric_mode)
         flags = [prog.ints(cdf + c * n, 1)[0] for c in range(D)]
@@ -1014,9 +1052,9 @@ def max_error(y_true, y_pred, *, numeric_mode=None):
         raise ValueError("Multioutput not supported in max_error")
     prog = _Prog()
     Y, P = prog.put(r.y), prog.put(r.p)
-    t = prog.alloc(r.n)
+    t = prog.scratch(r.n)
     prog.stage("reg_term", r.n, Y, P, t, 1, _TERM["abs"], Y, 0)
-    out = prog.alloc(1)
+    out = prog.want(prog.alloc(1), 1)
     prog.stage("col_max", 1, t, r.n, 1, out)
     _execute(prog, numeric_mode)
     return float(prog.floats(out, 1)[0])
@@ -1076,9 +1114,9 @@ def _diff_and_y_means(r, numeric_mode):
     Y, P = prog.put(r.y), prog.put(r.p)
     W = _NONE if r.w is None else prog.put(r.w)
     n, D = r.n, r.D
-    zero = prog.alloc(n)
+    zero = prog.scratch(n)
     prog.stage("pair_key", n, 0, 0, zero, 1, 2)
-    diff = prog.alloc(n * D)
+    diff = prog.scratch(n * D)
     prog.stage("reg_term", n * D, Y, P, diff, D, _TERM["diff"], Y, 0)
     a = _group(prog, zero, n, 1, values=diff, vstride=D, weights=W, width=D)[1]
     b = _group(prog, zero, n, 1, values=Y, vstride=D, weights=W, width=D)[1]
@@ -1094,15 +1132,15 @@ def _centered(r, source, means, numeric_mode, *, mean=True):
     Y, P = prog.put(r.y), prog.put(r.p)
     W = _NONE if r.w is None else prog.put(r.w)
     n, D = r.n, r.D
-    zero = prog.alloc(n)
+    zero = prog.scratch(n)
     prog.stage("pair_key", n, 0, 0, zero, 1, 2)
     if source == "diff":
-        V = prog.alloc(n * D)
+        V = prog.scratch(n * D)
         prog.stage("reg_term", n * D, Y, P, V, D, _TERM["diff"], Y, 0)
     else:
         V = Y
     M = prog.put(Array.from_list([_f32(m) for m in means], "<f4"))
-    sq = prog.alloc(n * D)
+    sq = prog.scratch(n * D)
     prog.stage("reg_term", n * D, V, M, sq, D, _TERM["sq"], Y, 1)
     out = _group(prog, zero, n, 1, values=sq, vstride=D, weights=W, width=D)[1]
     sw = _group(prog, zero, n, 1, weights=W)[1] if r.w is not None else None
@@ -1132,9 +1170,9 @@ def _centered_sse(r, numeric_mode):
     Y, P = prog.put(r.y), prog.put(r.p)
     W = _NONE if r.w is None else prog.put(r.w)
     n, D = r.n, r.D
-    zero = prog.alloc(n)
+    zero = prog.scratch(n)
     prog.stage("pair_key", n, 0, 0, zero, 1, 2)
-    sq = prog.alloc(n * D)
+    sq = prog.scratch(n * D)
     prog.stage("reg_term", n * D, Y, P, sq, D, _TERM["sq"], Y, 0)
     out = _group(prog, zero, n, 1, values=sq, vstride=D, weights=W, width=D)[1]
     _execute(prog, numeric_mode)
@@ -1366,7 +1404,7 @@ def _curves(scores, flags, w, n, problems, numeric_mode, *, stride=1, thresholds
     POS = prog.put_i32(flags)
     W = _NONE if w is None else prog.put(w)
     N = n * problems
-    order = prog.alloc(N)
+    order = prog.scratch(N)
     fps = prog.want(prog.alloc(N), N)
     tps = prog.want(prog.alloc(N), N)
     thr = prog.alloc(N)
@@ -1809,9 +1847,9 @@ def top_k_accuracy_score(y_true, y_score, *, k=2, normalize=True, sample_weight=
         S = prog.put(s)
         kk, cols = k, s.shape[1]
     Y = prog.put_i32(codes)
-    hit = prog.alloc(n)
+    hit = prog.scratch(n)
     prog.stage("row_metric", n, S, cols, Y, hit, _ROW["topk"], kk, 0)
-    zero = prog.alloc(n)
+    zero = prog.scratch(n)
     prog.stage("pair_key", n, 0, 0, zero, 1, 2)
     W = _NONE if w is None else prog.put(w)
     tot = _group(prog, zero, n, 1, values=hit, weights=W)[1]
@@ -1826,9 +1864,9 @@ def top_k_accuracy_score(y_true, y_score, *, k=2, normalize=True, sample_weight=
 def _row_mean(S, cols, Y, n, kind, w, numeric_mode, *, K=0, D=None, prog=None, normalize=True):
     prog = prog or _Prog()
     Dt = _NONE if D is None else prog.put(Array.from_list([_f32(v) for v in D], "<f4"))
-    out = prog.alloc(n)
+    out = prog.scratch(n)
     prog.stage("row_metric", n, S, cols, Y, out, _ROW[kind], K, Dt)
-    zero = prog.alloc(n)
+    zero = prog.scratch(n)
     prog.stage("pair_key", n, 0, 0, zero, 1, 2)
     W = _NONE if w is None else prog.put(w)
     tot = _group(prog, zero, n, 1, values=out, weights=W)[1]
@@ -2110,7 +2148,7 @@ def _contingency(a, b, ca, cb, numeric_mode):
     prog = _Prog()
     A = prog.put_i32(_codes(a, ca))
     B = prog.put_i32(_codes(b, cb))
-    key = prog.alloc(n)
+    key = prog.scratch(n)
     prog.stage("pair_key", n, A, B, key, max(ka, kb), 0)
     m = max(ka, kb) ** 2
     off, _ = _group(prog, key, n, m)
@@ -2311,7 +2349,7 @@ def _centroids(Xa, codes, k, numeric_mode):
     X = prog.put(Xa)
     L = prog.put_i32(codes)
     off, sums = _group(prog, L, n, k, values=X, vstride=d, width=d)
-    zero = prog.alloc(n)
+    zero = prog.scratch(n)
     prog.stage("pair_key", n, 0, 0, zero, 1, 2)
     _, gsum = _group(prog, zero, n, 1, values=X, vstride=d, width=d)
     _execute(prog, numeric_mode)
@@ -2327,7 +2365,7 @@ def _row_dists(Xa, codes, cents, root, numeric_mode):
     X = prog.put(Xa)
     L = prog.put_i32(codes)
     C = prog.put(Array.from_list([_f32(v) for v in cents], "<f4"))
-    out = prog.alloc(n)
+    out = prog.scratch(n)
     prog.stage("row_centroid_dist", n, X, d, L, C, out, 1 if root else 0)
     off, per = _group(prog, L, n, k, values=out)
     _execute(prog, numeric_mode)
