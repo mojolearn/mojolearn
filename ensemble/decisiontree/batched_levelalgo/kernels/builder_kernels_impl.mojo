@@ -389,7 +389,9 @@ from std.gpu import (
 from std.sys.info import (
     has_apple_gpu_accelerator,
     has_nvidia_gpu_accelerator,
+    is_apple_gpu,
 )
+from std.ffi import external_call
 from std.math import ceildiv
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
@@ -458,6 +460,20 @@ comptime TPB_DEFAULT = 128
 # `find_best_splits_kernel`'s `pinned_reduce` parameter without flipping
 # the global.
 comptime BUILD_MODE = GLOBAL_NUMERIC_MODE
+
+
+@always_inline
+def _device_barrier():
+    """A block barrier that also orders DEVICE memory (x_linear/team.mojo
+    `team_barrier`): on Apple `barrier()` is `air.wg.barrier(2, 1)`,
+    `threadgroup_barrier(mem_threadgroup)`, which leaves device loads and
+    stores of different threads unordered; `air.wg.barrier(3, 1)` adds
+    `mem_device`. NVIDIA `bar.sync` and AMD `s_barrier` with its fences
+    already order global memory within the block."""
+    comptime if is_apple_gpu():
+        external_call["air.wg.barrier", NoneType](Int32(3), Int32(1))
+    else:
+        barrier()
 comptime SPLIT_REDUCE_PINNED_DEFAULT = BUILD_MODE == NUMERIC_IDENTICAL
 
 comptime SAMPLE_PER_NODE_DEFAULT = (
@@ -521,10 +537,15 @@ comptime SMALL_NODE_ROWS = 256 if is_defined[
 """The largest node `small_node_split_kernel` takes."""
 
 comptime HIST_ZERO_AFTER_READ_DEFAULT = (
-    BUILD_MODE == NUMERIC_FAST
+    (
+        BUILD_MODE == NUMERIC_FAST
+        or (BUILD_MODE == NUMERIC_IDENTICAL and has_apple_gpu_accelerator())
+    )
     and not is_defined["MOJOLEARN_RF_FAST_HIST_ZERO_OFF"]()
 )
-"""FAST only: `find_best_splits_kernel` re-zeroes the histogram cells it
+"""FAST, and Apple IDENTICAL since trees-apple2 (2026-09-28; zeros are
+zeros, so no bit of a forest can move; the block kernel's zero now waits
+on a DEVICE-scope barrier on Apple, `_device_barrier`): `find_best_splits_kernel` re-zeroes the histogram cells it
 consumed, so the builder zeroes the histogram workspace ONCE and every later
 sampling round skips its `hist_zero` launch. On Metal each launch is its own
 command buffer (about 0.2 ms of GPU timeline at 1M rows on the M4), and the
@@ -3156,7 +3177,10 @@ def find_best_splits_kernel[
     # barrier; nothing after this kernel reads them before the next
     # round's histogram accumulates into them.
     comptime if zero_after:
-        barrier()
+        # every thread's reads of these DEVICE cells come before any
+        # thread's zero: on Apple `barrier()` orders threadgroup memory
+        # only (see `_device_barrier`)
+        _device_barrier()
         var z = Int(thread_idx.x)
         var cells = Int(n_bins) * Int(n_classes)
         while z < cells:
