@@ -123,7 +123,41 @@ and push in one command, then ONE batched `apple_steward.py submit`
 (m2pro + do-amd) for those ten lanes with the e2e patch; update the
 tables above (the IVF-Flat row, the repeat test).
 
-### Session B (option parity): GATE PASSED 2026-09-28, MERGED TO MAIN
+### Session B (option parity): GATE PASSED 2026-09-28, NOT YET ON MAIN
+
+B STATUS 2026-09-28 (resume after cutoff): origin/main merged into
+`lane/algos-ann-b` at 92313095a (pushed). The one conflict,
+tools/test_lane_select.py, was two REMEASURED notes (trees-cpu's
+neural_inference.py 41 -> 40, B's kmeans_oracle 71 -> 75); both kept, the
+pins themselves merged cleanly (75, 51, 86, 50, 40). Files both sides
+touched: IDENTITY_PATHS.md, ann.md, _surface_ann.py (B: lane names; main:
+host_modules gains ann_host_cells.mojo), test_lane_select.py; no Mojo file.
+BUT the merge brings the ann-cpu lane's steps 1-2 (x_ann/host/* rewritten:
+pointer ABI, vector folds, probe cache), which B's gate never ran against.
+B's new lanes (x-ann-tsne-pca, x-ann-cagra-filter, x-ann-refine-euclidean)
+now run their CPU column through that code. p1 IS on main (checked).
+
+NOT MERGED TO MAIN: RunPod balance negative again (-$4.41), every pod gone,
+no renting until Andrew tops up (orchestrator: no merge to main without the
+NVIDIA re-check).
+
+OWED ON AN NVIDIA POD (from lane/algos-ann-b at 92313095a or later):
+1. FIX FIRST: `lane_select --changed-since origin/main` now refuses:
+   "UNATTRIBUTED PATH: tools/classical_host_gate.py" (main's selector rewrite
+   c1d736738 no longer places it; B added ivf-filter to it). Attribute it at
+   the root in tools/lane_select.py (a rule with a reason, plus a test in
+   tools/test_lane_select.py), or ask the tools lane. Then the selection
+   should be the same 15 lanes as B's gate.
+2. `algos_lane_check.sh <those lanes> --pass 2 --sabotage
+   x_ann/checks/sabotage/e2e_ann_and_ivf_host.patch`, plus x-ann-tsne-pca
+   under tsne_5818 and x-ann-refine-euclidean under refine_5851; existing
+   bits compared to B's clean column; pytest test_lane_select +
+   test_host_surface + test_x_ann_repeat.
+3. On PASS: merge B to main and push in one command; one batched steward
+   request (do-amd + Apple while the Macs last) for the 15 lanes.
+Then: Step 0 coverage audit, then phase C (GPU speed).
+
+(history: the gate B passed before this merge)
 
 Gate on the `ann` RTX 4090 pod (EPYC 9254 CPU column), lane/algos-ann-b
 with main merged: `lane_select --changed-since origin/main` = 15 lanes
