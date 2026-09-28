@@ -11,7 +11,8 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from x_ann.abi import check_search, in_f32, in_i32, out_f32, out_i32, p_int
+from x_ann.abi import a_int, check_search, in_f32, in_i32, out_f32, out_i32, p_int
+from x_ann.switches import ANN3_DIRECT_OUT
 from x_ann.ivf_pq_core import pq_len_of
 from x_ann.stage_timer import AnnStages
 from x_ann.cagra_device import cagra_build_device, cagra_search_device
@@ -34,8 +35,14 @@ def ivf_pq_build_binding(addrs: PythonObject, params: PythonObject) raises -> Py
     var pq_dim = p_int(params, 5)
     var pq_bits = p_int(params, 6)
     var pq_iters = p_int(params, 7)
+    # lane ann-apple3, behind `ANN3_DIRECT_OUT`: the codes go from the device
+    # straight into the caller's array (`index.codes` is then empty and the
+    # copy below moves nothing)
+    var codes_addr = 0
+    comptime if ANN3_DIRECT_OUT:
+        codes_addr = a_int(addrs, 5)
     with GILReleased(Python()):
-        var index = ivf_pq_build_device(x, n, dim, n_lists, iters, seed, pq_dim, pq_bits, pq_iters)
+        var index = ivf_pq_build_device(x, n, dim, n_lists, iters, seed, pq_dim, pq_bits, pq_iters, codes_addr)
         bst.host("build")
         out_f32(index.centers, addrs, 1)
         out_i32(index.offsets, addrs, 2)
@@ -162,8 +169,12 @@ def ivf_sq_build_binding(addrs: PythonObject, params: PythonObject) raises -> Py
     var vmin = List[Float32]()
     var delta = List[Float32]()
     var codes = List[Int32]()
+    var codes_addr = 0
+    comptime if ANN3_DIRECT_OUT:
+        codes_addr = a_int(addrs, 6)
     with GILReleased(Python()):
-        ivf_sq_build_device(x, n, dim, n_lists, iters, seed, centers, offsets, list_indices, vmin, delta, codes)
+        ivf_sq_build_device(x, n, dim, n_lists, iters, seed, centers, offsets, list_indices, vmin, delta, codes,
+                            codes_addr)
     bst.host("build")
     out_f32(centers, addrs, 1)
     out_i32(offsets, addrs, 2)

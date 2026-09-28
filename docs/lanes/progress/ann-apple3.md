@@ -60,6 +60,8 @@ A/B script builds an arm as `<commit>+<DEFINE>[+<DEFINE>]`.
 
 | (this commit) | FAST t-SNE repulsion at 32 or 64 rows per threadgroup (128 by default) | FAST, Apple | OFF; `-D MOJOLEARN_ANN3_TSNE_RB32` or `-D MOJOLEARN_ANN3_TSNE_RB64` | UNBUILT, UNMEASURED; moves no bit by construction |
 
+| (this commit) | IVF-PQ / IVF-SQ builds download their codes straight into the caller's arrays | both | OFF; `-D MOJOLEARN_ANN3_DIRECT_OUT` | UNBUILT, UNMEASURED; plain copies |
+
 t-SNE, why the threadgroup size: FAST iterations are 753 ms on the M4 (job
 1) and 470 to 620 ms on the M3 Ultra (round 2), a ratio of 1.2 to 1.6,
 where CAGRA's k-NN (391 threadgroups) is 587 against 136 ms, 4.3. At 10,000

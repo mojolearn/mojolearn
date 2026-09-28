@@ -49,3 +49,8 @@ comptime ANN3_PQ_HOST_RESIDUALS = is_defined["MOJOLEARN_ANN3_PQ_HOST_RESIDUALS"]
 #: The per-row statements and their order do not depend on it: no bit moves.
 comptime ANN3_TSNE_RB32 = is_defined["MOJOLEARN_ANN3_TSNE_RB32"]()
 comptime ANN3_TSNE_RB64 = is_defined["MOJOLEARN_ANN3_TSNE_RB64"]()
+
+#: The IVF-PQ and IVF-SQ builds download their code arrays (n x pq_dim and
+#: n x dim int32) straight into the caller's arrays, instead of a host
+#: buffer, then a list, then the caller's array. Plain copies: no bit moves.
+comptime ANN3_DIRECT_OUT = is_defined["MOJOLEARN_ANN3_DIRECT_OUT"]()

@@ -11,7 +11,7 @@ from max.gpu.sync import barrier
 from max.gpu.host import DeviceBuffer, DeviceContext
 from x_ann.device_ctx import x_ann_ctx
 from x_ann.stage_timer import AnnStages
-from x_ann.switches import ANN3_HOST_PASSES, ANN3_PQ_HOST_RESIDUALS, ANN3_PQ_SEED
+from x_ann.switches import ANN3_DIRECT_OUT, ANN3_HOST_PASSES, ANN3_PQ_HOST_RESIDUALS, ANN3_PQ_SEED
 from x_ann.kpp_seed import kpp_seed
 from std.sys.info import has_apple_gpu_accelerator
 from x_ann.ivf_scan_device import ivf_scan_search
@@ -236,8 +236,12 @@ def _codebooks(
 
 def ivf_pq_build_device(
     x: List[Float32], n: Int, dim: Int, n_lists: Int, kmeans_n_iters: Int, seed: Int,
-    pq_dim: Int, pq_bits: Int, pq_iters: Int,
+    pq_dim: Int, pq_bits: Int, pq_iters: Int, codes_addr: Int = 0,
 ) raises -> IvfPqIndex:
+    """`codes_addr` (lane ann-apple3, read under `ANN3_DIRECT_OUT` only): the
+    address of the caller's n x pq_dim int32 array; the codes are downloaded
+    straight into it and the returned index's `codes` is EMPTY. 0: the codes
+    come back in the index, as before."""
     pq_validate(n, dim, n_lists, pq_dim, pq_bits, pq_iters)
     var pq_len = pq_len_of(dim, pq_dim)
     var rot_dim = pq_len * pq_dim
@@ -288,7 +292,15 @@ def ivf_pq_build_device(
     var dcodes = ctx.enqueue_create_buffer[DType.int32](n * pq_dim)
     _enqueue_assign(ctx, n, _dp(dr), _dp(dcb), pq_dim, rot_dim, pq_len, n_codes, _dp(dcodes))
     ctx.synchronize()
-    var codes = download_i32(ctx, dcodes, n * pq_dim)
+    var codes = List[Int32]()
+    var direct = False
+    comptime if ANN3_DIRECT_OUT:
+        direct = codes_addr != 0
+    if direct:
+        ctx.enqueue_copy(dst_ptr=I32P(unsafe_from_address=codes_addr), src_buf=dcodes)
+        ctx.synchronize()
+    else:
+        codes = download_i32(ctx, dcodes, n * pq_dim)
     st.host("encode")
     _ = dcodes^
     _ = dcb^
@@ -464,8 +476,10 @@ def sq_encode_kernel(count: Int32, r: F32P, dim: Int32, vmin: F32P, delta: F32P,
 def ivf_sq_build_device(
     x: List[Float32], n: Int, dim: Int, n_lists: Int, kmeans_n_iters: Int, seed: Int,
     mut centers: List[Float32], mut offsets: List[Int32], mut list_indices: List[Int32],
-    mut vmin: List[Float32], mut delta: List[Float32], mut codes: List[Int32],
+    mut vmin: List[Float32], mut delta: List[Float32], mut codes: List[Int32], codes_addr: Int = 0,
 ) raises:
+    """`codes_addr`: `ivf_pq_build_device`'s, for the n x dim int32 codes
+    (`codes` is then left EMPTY)."""
     pq_validate(n, dim, n_lists, 1, 1, 1)
     var labels = List[Int32]()
     var st = AnnStages("ivf_sq_build")
@@ -492,7 +506,15 @@ def ivf_sq_build_device(
     ctx.synchronize()
     vmin = download_f32(ctx, dvmin, dim)
     delta = download_f32(ctx, ddelta, dim)
-    codes = download_i32(ctx, dcodes, n * dim)
+    var direct = False
+    comptime if ANN3_DIRECT_OUT:
+        direct = codes_addr != 0
+    if direct:
+        codes = List[Int32]()
+        ctx.enqueue_copy(dst_ptr=I32P(unsafe_from_address=codes_addr), src_buf=dcodes)
+        ctx.synchronize()
+    else:
+        codes = download_i32(ctx, dcodes, n * dim)
     st.host("encode")
     _ = dcodes^
     _ = ddelta^
