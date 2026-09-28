@@ -2561,8 +2561,14 @@ def _contingency(a, b, ca, cb, numeric_mode):
     m = max(ka, kb) ** 2
     off, _ = _group(prog, key, n, m)
     _execute(prog, numeric_mode)
-    o = prog.ints(off, m + 1)
     kk = max(ka, kb)
+    if _lane3():
+        # the same differences of the same Int32 offsets, each row by one
+        # C-level map over two slices of the words (lane metrics-apple3)
+        o = prog.words(off, m + 1, "i")
+        return [list(map(operator.sub, o[i * kk + 1:i * kk + kb + 1], o[i * kk:i * kk + kb]))
+                for i in range(ka)]
+    o = prog.ints(off, m + 1)
     return [[o[i * kk + j + 1] - o[i * kk + j] for j in range(kb)] for i in range(ka)]
 
 
