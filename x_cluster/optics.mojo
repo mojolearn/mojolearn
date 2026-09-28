@@ -16,8 +16,166 @@ strictly lower. The xi and dbscan extractions are the reference's host logic,
 the ratios in Float64 from the Float32 plot. sklearn's `np.around(...,
 decimals=precision)` of the core and reach distances is not carried
 (NOT_IMPLEMENTED.tsv)."""
-from checks.numerics import identical_mul64
+from std.math import sqrt
+from std.sys.compile import is_defined
+
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, identical_mul64
+from x_cluster.bodies import FPtr, IPtr
 from x_cluster.ops import ClusterOps
+
+# Lane cluster-apple3, FAST only, OPT-IN while unproven.
+# `-D MOJOLEARN_OPTICS_SIMD=1`: the ordering loop's two row walks as vector
+# min, compare and select (the same point and the same updates at every
+# step, so the same ordering, reachability and predecessors).
+# `-D MOJOLEARN_XC_ALLOC=1`: a slot a distance kernel fills completely is
+# not zeroed first (`ops.alloc`; OPTICS, MeanShift, AffinityPropagation,
+# agglomerative).
+comptime OPTICS_SIMD = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_OPTICS_SIMD"]()
+comptime XC_ALLOC = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_XC_ALLOC"]()
+# `-D MOJOLEARN_OPTICS_HOSTROWS=1` (with OPTICS_SIMD, euclidean, the GPU
+# binding): the n x n distances are not read to the host; the loop forms the
+# one row a step needs from X (n * d operations by vectors). The core
+# distances stay the device's. The host's float32 row may differ from the
+# device's in the last place (bits move; the paired quality check).
+comptime OPTICS_HOSTROWS = OPTICS_SIMD and is_defined["MOJOLEARN_OPTICS_HOSTROWS"]()
+comptime _OW = 8
+
+
+def dist_slot[O: ClusterOps](mut ops: O, n: Int) raises -> Int:
+    """The slot of an n-value matrix a distance kernel is about to fill."""
+    comptime if XC_ALLOC:
+        if ops.fast_device():
+            return ops.alloc(n)
+    return ops.zeros(n)
+
+
+@always_inline
+def _relax(
+    dd: SIMD[DType.float32, _OW], j: Int, cpv: SIMD[DType.float32, _OW], ev: SIMD[DType.float32, _OW],
+    zero: SIMD[DType.float32, _OW], pv: SIMD[DType.int32, _OW], rp: FPtr, mp: FPtr, qp: IPtr,
+):
+    """Rows j .. j + 7 against the point's distances `dd`: an unprocessed row
+    within `max_eps` takes `max(dd, core)` when that is strictly lower."""
+    var rd = dd.gt(cpv).select(dd, cpv)
+    var rr = rp.load[width=_OW](j)
+    var take = dd.le(ev) & rd.lt(rr) & mp.load[width=_OW](j).lt(zero)
+    (rp + j).store(take.select(rd, rr))
+    (qp + j).store(take.select(pv, qp.load[width=_OW](j)))
+
+
+@always_inline
+def _relax1(dd: Float32, j: Int, cp: Float32, max_eps: Float32, point: Int, rp: FPtr, mp: FPtr, qp: IPtr):
+    if mp[j] < Float32(0) and dd <= max_eps:
+        var rd = dd if dd > cp else cp
+        if rd < rp[j]:
+            rp[j] = rd
+            qp[j] = Int32(point)
+
+
+def _order_simd(
+    dist: List[Float32], core: List[Float32], n: Int, max_eps: Float32,
+    mut ordering: List[Int], mut reach: List[Float32], mut pred: List[Int],
+    x: List[Float32], d: Int, host_rows: Bool,
+):
+    """The ordering loop of `optics_graph`, the same decisions by vectors.
+
+    `pm[j]` is -inf while row j is unprocessed and +inf after, so
+    `max(reach, pm)` is the row's reachability or +inf, and its minimum `m`
+    is the loop's `best`. The point is the FIRST unprocessed row whose
+    reachability equals `m` (every unprocessed row when m is +inf), which is
+    what the scalar walk's strict `<` keeps. No reachability is a NaN: a
+    value enters `reach` only through `dd <= max_eps`."""
+    var inf = Float32.MAX * Float32(2)
+    reach = List[Float32](length=n, fill=inf)
+    var pm = List[Float32](length=n, fill=-inf)
+    var pr = List[Int32](length=n, fill=Int32(-1))
+    ordering = List[Int](capacity=n)
+    var rp: FPtr = reach.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var mp: FPtr = pm.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var qp: IPtr = pr.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var dp = dist.unsafe_ptr()
+    # host_rows: X feature-major (padded by a vector) and the step's row
+    var np = n + _OW
+    var xt = List[Float32](length=(d * np if host_rows else 1), fill=Float32(0))
+    var rowbuf = List[Float32](length=(np if host_rows else 1), fill=Float32(0))
+    if host_rows:
+        for j in range(n):
+            for f in range(d):
+                xt[f * np + j] = x[j * d + f]
+    var xp = xt.unsafe_ptr()
+    var bp: FPtr = rowbuf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var zero = SIMD[DType.float32, _OW](0)
+    var ev = SIMD[DType.float32, _OW](max_eps)
+    for _step in range(n):
+        var vmin = SIMD[DType.float32, _OW](inf)
+        var j = 0
+        while j + _OW <= n:
+            vmin = min(vmin, max(rp.load[width=_OW](j), mp.load[width=_OW](j)))
+            j += _OW
+        var m = vmin.reduce_min()
+        while j < n:
+            var v = rp[j] if mp[j] < Float32(0) else inf
+            if v < m:
+                m = v
+            j += 1
+        var mv = SIMD[DType.float32, _OW](m)
+        j = 0
+        while j + _OW <= n:
+            var hit = rp.load[width=_OW](j).eq(mv) & mp.load[width=_OW](j).lt(zero)
+            if hit.reduce_or():
+                break
+            j += _OW
+        var point = -1
+        while j < n:
+            if mp[j] < Float32(0) and rp[j] == m:
+                point = j
+                break
+            j += 1
+        if point < 0:
+            # unreachable while no reachability is a NaN; never index with -1
+            for q in range(n):
+                if mp[q] < Float32(0):
+                    point = q
+                    break
+        if point < 0:
+            break
+        mp[point] = inf
+        ordering.append(point)
+        if core[point] != inf:
+            var cp = core[point]
+            var cpv = SIMD[DType.float32, _OW](cp)
+            var pv = SIMD[DType.int32, _OW](Int32(point))
+            if host_rows:
+                j = 0
+                while j < n:
+                    var acc = SIMD[DType.float32, _OW](0)
+                    for f in range(d):
+                        var t = SIMD[DType.float32, _OW](x[point * d + f]) - (xp + f * np).load[width=_OW](j)
+                        acc = acc + t * t
+                    var dd = sqrt(acc)
+                    if j + _OW <= n:
+                        _relax(dd, j, cpv, ev, zero, pv, rp, mp, qp)
+                    else:
+                        (bp + j).store(dd)
+                        for q in range(j, n):
+                            _relax1(bp[q], q, cp, max_eps, point, rp, mp, qp)
+                    j += _OW
+            else:
+                var row = dp + point * n
+                j = 0
+                while j + _OW <= n:
+                    _relax(row.load[width=_OW](j), j, cpv, ev, zero, pv, rp, mp, qp)
+                    j += _OW
+                while j < n:
+                    _relax1(row[j], j, cp, max_eps, point, rp, mp, qp)
+                    j += 1
+    pred = List[Int](capacity=n)
+    for i in range(n):
+        pred.append(Int(pr[i]))
+    _ = pm^
+    _ = pr^
+    _ = xt^
+    _ = rowbuf^
 
 
 def optics_graph[O: ClusterOps](
@@ -37,10 +195,10 @@ def optics_graph[O: ClusterOps](
                 raise Error("OPTICS: a precomputed distance matrix must be non-negative")
         dm = xs
     elif metric >= 0:
-        dm = ops.zeros(n * n)
+        dm = dist_slot(ops, n * n)
         ops.pdist(xs, n, xs, n, d, metric, p, dm)
     else:
-        dm = ops.zeros(n * n)
+        dm = dist_slot(ops, n * n)
         ops.sqdist(xs, n, xs, n, d, dm)
         ops.sqrt(dm, n * n)
     var cs = ops.zeros(n)
@@ -49,7 +207,15 @@ def optics_graph[O: ClusterOps](
     for i in range(n):
         if core[i] > max_eps:
             core[i] = inf
+    comptime if OPTICS_HOSTROWS:
+        if n >= _OW and metric == -1 and ops.fast_device():
+            _order_simd(List[Float32](length=1, fill=Float32(0)), core, n, max_eps, ordering, reach, pred, x, d, True)
+            return
     var dist = ops.get(dm, n * n)
+    comptime if OPTICS_SIMD:
+        if n >= _OW:
+            _order_simd(dist, core, n, max_eps, ordering, reach, pred, x, d, False)
+            return
     reach = List[Float32](length=n, fill=inf)
     pred = List[Int](length=n, fill=-1)
     var processed = List[Bool](length=n, fill=False)

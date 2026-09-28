@@ -18,12 +18,24 @@ its triangular inverse, digamma and log-gamma (series on the portable
 `identical_mul64`. The k-means start is this library's KMeans through
 `ClusterOps.kmeans`. Only covariance_type='full' (NOT_IMPLEMENTED.tsv)."""
 from std.math import sqrt
+from std.sys.compile import is_defined
 
-from checks.numerics import identical_log64, identical_mul64
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, identical_log64, identical_mul64
 from cluster.impl.kmeans_params import INIT_KMEANS_PLUS_PLUS
 from x_cluster.bodies import SplitMix64
 from x_cluster.common import greedy_kmeans_pp_indices
 from x_cluster.ops import ClusterOps
+
+# Lane cluster-apple3, FAST and the GPU binding only, OPT-IN while unproven
+# (`-D MOJOLEARN_BGMM_ENT=1`): the lower bound's entropy sum(resp * log_resp)
+# from the device as float32 products summed over runs of BGMM_ENT_G cells,
+# the runs added here in Float64. The host read 2 n K floats an iteration and
+# formed the n K Float64 products itself. Another rounding of the same sum.
+comptime BGMM_ENT = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_BGMM_ENT"]()
+comptime BGMM_ENT_G = 4
+# `-D MOJOLEARN_BGMM_ESTEP1=1` (FAST, the GPU binding): the E-step's three
+# kernels as one launch, a row per thread (`ops.estep`; the same values).
+comptime BGMM_ESTEP1 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_BGMM_ESTEP1"]()
 
 comptime LOG2 = 0.6931471805599453
 comptime LOG_2PI = 1.8378770664093453
@@ -353,12 +365,17 @@ def bgmm_constants(pr: BgmmPriors, st: BgmmState) -> List[Float32]:
 
 
 def _lower_bound(pr: BgmmPriors, st: BgmmState, resp: List[Float32], lr: List[Float32], n: Int) -> Float64:
+    var ent = Float64(0)
+    for t in range(n * pr.kc):
+        ent = ent + identical_mul64(Float64(resp[t]), Float64(lr[t]))
+    return _lower_bound_ent(pr, st, ent)
+
+
+def _lower_bound_ent(pr: BgmmPriors, st: BgmmState, ent: Float64) -> Float64:
+    """The bound from the entropy sum `ent` = sum(resp * log_resp)."""
     var kc = pr.kc
     var d = pr.d
     var fd = Float64(d)
-    var ent = Float64(0)
-    for t in range(n * kc):
-        ent = ent + identical_mul64(Float64(resp[t]), Float64(lr[t]))
     var ld = _log_det_pchol(st, kc, d)
     var log_wishart = Float64(0)
     for k in range(kc):
@@ -446,6 +463,14 @@ def bgmm_fit[O: ClusterOps](
     var ms = ops.zeros(kc * d)
     var ps = ops.zeros(kc * d * d)
     var cs = ops.zeros(kc)
+    var ent_dev = False
+    comptime if BGMM_ENT:
+        ent_dev = pr.variational and ops.fast_device()
+    var estep1 = False
+    comptime if BGMM_ESTEP1:
+        estep1 = ops.fast_device()
+    var n_ent = (n * kc + BGMM_ENT_G - 1) // BGMM_ENT_G
+    var es = ops.zeros(n_ent if ent_dev else 1)
     var max_lb = Float64(0)
     var have_best = False
     var best_iter = 0
@@ -527,19 +552,30 @@ def bgmm_fit[O: ClusterOps](
             ops.set(ms, _f32(st.means))
             ops.set(ps, _f32(st.pchol))
             ops.set(cs, bgmm_constants(pr, st))
-            ops.gauss_q(xs, n, d, ms, ps, kc, qs)
-            ops.resp(qs, cs, n, kc, lpn)
-            ops.exp(qs, rs, n * kc)
+            if estep1:
+                ops.estep(xs, n, d, ms, ps, cs, kc, qs, rs, lpn)
+            else:
+                ops.gauss_q(xs, n, d, ms, ps, kc, qs)
+                ops.resp(qs, cs, n, kc, lpn)
+                ops.exp(qs, rs, n * kc)
             # M-step
             ops.moments(rs, xs, n, d, kc, reg, nks, xks, sks)
             # one wait per iteration: the moments and what the bound reads
             var mo: List[List[Float32]]
-            if pr.variational:
+            if ent_dev:
+                ops.dot_groups(rs, qs, n * kc, BGMM_ENT_G, es)
+                mo = ops.gets([nks, xks, sks, es], [kc, kc * d, kc * d * d, n_ent])
+            elif pr.variational:
                 mo = ops.gets([nks, xks, sks, rs, qs], [kc, kc * d, kc * d * d, n * kc, n * kc])
             else:
                 mo = ops.gets([nks, xks, sks, lpn], [kc, kc * d, kc * d * d, n])
             _m_step_host(pr, mo[0], mo[1], mo[2], st, Float64(reg))
-            if pr.variational:
+            if ent_dev:
+                var ent = Float64(0)
+                for t in range(n_ent):
+                    ent = ent + Float64(mo[3][t])
+                lb = _lower_bound_ent(pr, st, ent)
+            elif pr.variational:
                 lb = _lower_bound(pr, st, mo[3], mo[4], n)
             else:
                 # sklearn GaussianMixture: the mean log-likelihood of THIS E-step

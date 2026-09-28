@@ -31,7 +31,15 @@ def _f32(X, name="X"):
     x, _ = _buffer.as_f32_c(X, ndim=2, name=name)
     if x.shape[0] < 1 or x.shape[1] < 1:
         raise ValueError(f"mojolearn: {name} must be a non-empty 2-D array, got shape {x.shape}")
-    if not all(map(math.isfinite, memoryview(x).cast("B").cast("f"))):
+    # the base binding's native scan (`_buffer.all_finite`), the same answer
+    # as the Python walk it replaces (lane cluster-apple3: 0.069 s of every
+    # 1M x 8 fit, predict and score on an M4 Pro); MOJOLEARN_HOTPATH=python
+    # is the reference arm
+    if _buffer.hotpath_enabled():
+        finite = _buffer.all_finite(x)
+    else:
+        finite = all(map(math.isfinite, memoryview(x).cast("B").cast("f")))
+    if not finite:
         raise ValueError(f"mojolearn: {name} contains NaN or infinity")
     return x
 

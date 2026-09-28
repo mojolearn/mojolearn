@@ -17,8 +17,20 @@ thread for the responsibilities, a column per thread for the availabilities,
 every fold ascending, the lowest index on an argmax tie) and one for the
 exemplar flags; the convergence window, the exemplar refinement and the
 labels are the reference's host logic from one source."""
-from checks.numerics import ftz, identical_mul
+from std.sys.compile import is_defined
+
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul
 from x_cluster.ops import ClusterOps
+from x_cluster.optics import dist_slot
+
+# Lane cluster-apple3, FAST and the GPU binding only, OPT-IN while unproven.
+# `-D MOJOLEARN_AP_EXACT=1`: the same values by less work (the median by the
+# grid-wide radix select straight from the device's distances, the two final
+# diagonals gathered on the device, the equal-similarities scan stopped at
+# its first difference). `-D MOJOLEARN_AP_SPLIT=1`: the availability column
+# sums folded over row slices (bits move; the paired quality check).
+comptime AP_EXACT = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_AP_EXACT"]()
+comptime AP_SPLIT = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_AP_SPLIT"]()
 
 
 def affinity_fit[O: ClusterOps](
@@ -33,29 +45,51 @@ def affinity_fit[O: ClusterOps](
     choice reads, kept so a verifier lane can see the message arithmetic and
     not only the discrete labels it settles into."""
     var s_m: List[Float32]
+    var fast_exact = False
+    comptime if AP_EXACT:
+        fast_exact = ops.fast_device()
+    var dm_slot = -1
     if precomputed:
         s_m = x.copy()
     else:
         var xs = ops.put(x)
-        var dm = ops.zeros(n * n)
+        var dm = dist_slot(ops, n * n)
         ops.sqdist(xs, n, xs, n, d, dm)
         s_m = ops.get(dm, n * n)
         for t in range(n * n):
             s_m[t] = -s_m[t]
+        dm_slot = dm
     affinity = s_m.copy()
     # the preference
     var pref = List[Float32](length=n, fill=pref_scalar)
     if pref_mode == 0:
         # np.median(S): the mean of the two middle values of n^2 (one when odd)
         var m = n * n
-        var neg = List[Float32](capacity=m)
+        var neg = List[Float32]()
         var nonneg = True
-        for t in range(m):
-            neg.append(-s_m[t])
-            if not (neg[t] >= Float32(0)):
-                nonneg = False
+        if fast_exact and dm_slot >= 0:
+            # `neg` is the device's distance matrix, bit for bit (S is its
+            # negation): the same test, no second copy and no upload
+            for t in range(m):
+                if not (-s_m[t] >= Float32(0)):
+                    nonneg = False
+                    break
+        else:
+            neg = List[Float32](capacity=m)
+            for t in range(m):
+                neg.append(-s_m[t])
+                if not (neg[t] >= Float32(0)):
+                    nonneg = False
         var med: Float32
-        if nonneg:
+        if nonneg and fast_exact:
+            var ds = dm_slot if dm_slot >= 0 else ops.put(neg)
+            var hi = ops.kth_flat(ds, m, m // 2 + 1)
+            if m % 2 == 1:
+                med = -hi
+            else:
+                var lo = ops.kth_flat(ds, m, m // 2)
+                med = -ftz(identical_mul(ftz(lo + hi), Float32(0.5)))
+        elif nonneg:
             var ds = ops.put(neg)
             var ks = ops.zeros(1)
             ops.kth(ds, 1, m, m // 2 + 1, ks)
@@ -85,6 +119,8 @@ def affinity_fit[O: ClusterOps](
     var first_off = Float32(0)
     var have = False
     for i in range(n):
+        if fast_exact and not all_equal:
+            break  # the answer is settled at the first difference
         for j in range(n):
             if i != j:
                 if not have:
@@ -124,9 +160,15 @@ def affinity_fit[O: ClusterOps](
     var e = List[Int32]()
     var it = 0
     var never_converged = True
+    var split = False
+    comptime if AP_SPLIT:
+        split = ops.fast_device()
     while it < max_iter:
         ops.ap_r(ss, a_s, r_s, n, damping)
-        ops.ap_a(r_s, a_s, n, damping)
+        if split:
+            ops.ap_a_split(r_s, a_s, n, damping)
+        else:
+            ops.ap_a(r_s, a_s, n, damping)
         ops.ap_e(a_s, r_s, n, e_s)
         e = ops.get_i(e_s, n)
         var K = 0
@@ -145,13 +187,22 @@ def affinity_fit[O: ClusterOps](
                 never_converged = False
                 break
         it += 1
-    var a_fin = ops.get(a_s, n * n)
-    var r_fin = ops.get(r_s, n * n)
     ar_diag = List[Float32](capacity=2 * n)
-    for i in range(n):
-        ar_diag.append(a_fin[i * n + i])
-    for i in range(n):
-        ar_diag.append(r_fin[i * n + i])
+    if fast_exact:
+        # the 2n values read, not the two n x n matrices around them
+        var a_d = ops.get_diag(a_s, n)
+        var r_d = ops.get_diag(r_s, n)
+        for i in range(n):
+            ar_diag.append(a_d[i])
+        for i in range(n):
+            ar_diag.append(r_d[i])
+    else:
+        var a_fin = ops.get(a_s, n * n)
+        var r_fin = ops.get(r_s, n * n)
+        for i in range(n):
+            ar_diag.append(a_fin[i * n + i])
+        for i in range(n):
+            ar_diag.append(r_fin[i * n + i])
     if never_converged:
         it = max_iter - 1
     n_iter = it + 1

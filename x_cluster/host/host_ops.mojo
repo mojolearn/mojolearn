@@ -43,6 +43,7 @@ from x_cluster.bodies import (
     sqdist_cell,
     sqrt_cell,
     tree_descend,
+    ward_nn_row,
 )
 from cluster.host.kmeans_oracle import host_kmeans_fit
 from cluster.impl.kmeans_params import METRIC_L2_EXPANDED
@@ -565,3 +566,58 @@ struct HostOps(ClusterOps):
             pdist_cell[X_CLUSTER_HOST_SABOTAGE](pa, na, pb, nb, d, metric, p, pd, t)
 
         host_cells(body, na * nb, 4 * d)
+
+    def fast_device(self) -> Bool:
+        return False
+
+    def ward_nn(mut self, c: Int, sz: Int, l: Int, d: Int, nn: Int, md: Int) raises:
+        var pc = self._fp(c)
+        var ps = self._fp(sz)
+        var pn = self._ip(nn)
+        var pm = self._fp(md)
+        for p in range(l):
+            ward_nn_row(pc, ps, l, d, pn, pm, p)
+
+    def kth_flat(mut self, m: Int, n: Int, k: Int) raises -> Float32:
+        var dst = self.zeros(1)
+        self.kth(m, 1, n, k, dst)
+        return self.f[dst][0]
+
+    def get_diag(mut self, slot: Int, n: Int) raises -> List[Float32]:
+        if n * n > len(self.f[slot]):
+            raise Error("x_cluster host: get_diag of " + String(n) + " from a slot of " + String(len(self.f[slot])))
+        var out = List[Float32](capacity=n)
+        for i in range(n):
+            out.append(self.f[slot][i * n + i])
+        return out^
+
+    def ap_a_split(mut self, r: Int, a: Int, n: Int, damping: Float32) raises:
+        # the host column never takes the FAST device paths (`fast_device`)
+        self.ap_a(r, a, n, damping)
+
+    def dot_groups(mut self, a: Int, b: Int, n: Int, g: Int, parts: Int) raises:
+        var pa = self._fp(a)
+        var pb = self._fp(b)
+        var po = self._fp(parts)
+        var q = 0
+        var t0 = 0
+        while t0 < n:
+            var t1 = t0 + g
+            if t1 > n:
+                t1 = n
+            var acc = Float32(0)
+            for t in range(t0, t1):
+                acc = acc + pa[t] * pb[t]
+            po[q] = acc
+            q += 1
+            t0 = t1
+
+    def alloc(mut self, n: Int) raises -> Int:
+        return self.zeros(n)
+
+    def estep(
+        mut self, x: Int, n: Int, d: Int, means: Int, pchol: Int, c: Int, kc: Int, q: Int, r: Int, lpn: Int
+    ) raises:
+        self.gauss_q(x, n, d, means, pchol, kc, q)
+        self.resp(q, c, n, kc, lpn)
+        self.exp(q, r, n * kc)

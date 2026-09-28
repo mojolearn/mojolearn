@@ -6,12 +6,15 @@ bodies.mojo` body for index `t`; nothing is folded across threads, so no
 launch shape can move a bit. Only the GPU binding imports this file."""
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, thread_idx
+from std.os import getenv
+from std.sys.compile import is_defined
+from std.time import perf_counter_ns
 from std.ffi import _Global
 from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_sqrt
 
 from x_cluster.bodies import (
     FPtr,
@@ -38,6 +41,7 @@ from x_cluster.bodies import (
     sqdist_cell,
     sqrt_cell,
     tree_descend,
+    ward_cell,
 )
 from cluster.estimator import kmeans_fit
 from cluster.impl.kmeans_params import METRIC_L2_EXPANDED
@@ -139,6 +143,86 @@ def _meanshift_kernel(
         meanshift_seed(x, Int(n), Int(d), bw, stop, Int(max_iter), centers, scratch, intensity, iters, t)
 
 
+# FAST ONLY (lane cluster-apple3), d <= MSB_MAX_D, OPT-IN
+# `-D MOJOLEARN_MEANSHIFT_BLOCK=1`: one BLOCK per seed. `_meanshift_kernel`
+# walks all n rows of every shift on one thread per seed, so a fit with a few
+# hundred seeds keeps a few blocks busy. Here the block's threads each fold
+# their stride of the rows and the partial sums fold in threadgroup memory.
+# The addends, the quotient and the stop test are `bodies.meanshift_seed`'s;
+# the order of the sum is not (bits move; the paired quality check).
+comptime MEANSHIFT_BLOCK = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_MEANSHIFT_BLOCK"]()
+comptime MSB_TPB = 256
+comptime MSB_MAX_D = 16
+comptime MSB_W = MSB_MAX_D + 1  # the feature sums, then the count
+
+
+def _meanshift_block_kernel(
+    x: FPtr, n: Int32, d: Int32, bw: Float32, stop: Float32, max_iter: Int32,
+    centers: FPtr, intensity: IPtr, iters: IPtr,
+):
+    var s = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var N = Int(n)
+    var D = Int(d)
+    var red = stack_allocation[MSB_TPB * MSB_W, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    # the seed's center lives in threadgroup memory between the shifts (a
+    # barrier orders threadgroup memory; on Apple it does not order the device's)
+    var cen = stack_allocation[MSB_MAX_D, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var state = stack_allocation[3, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    if tid < D:
+        cen[tid] = centers[s * D + tid]
+    if tid == 0:
+        state[0] = Int32(0)  # 1: the seed is done
+        state[1] = Int32(0)  # completed shifts
+        state[2] = Int32(0)  # rows within the bandwidth at the last shift
+    barrier()
+    var o = tid * MSB_W
+    while True:
+        for f in range(D + 1):
+            red[o + f] = Float32(0)
+        for p in range(tid, N, MSB_TPB):
+            var acc = Float32(0)
+            for f in range(D):
+                var t = ftz(ftz(cen[f]) - ftz(x[p * D + f]))
+                acc = ftz(acc + ftz(identical_mul(t, t)))
+            if identical_sqrt(acc) <= bw:
+                for f in range(D):
+                    red[o + f] = ftz(red[o + f] + ftz(x[p * D + f]))
+                red[o + D] = red[o + D] + Float32(1)
+        barrier()
+        var off = MSB_TPB // 2
+        while off > 0:
+            if tid < off:
+                for f in range(D + 1):
+                    red[o + f] = ftz(red[o + f] + red[(tid + off) * MSB_W + f])
+            barrier()
+            off //= 2
+        if tid == 0:
+            var cnt = red[D]
+            state[2] = Int32(Int(cnt))
+            if cnt == Float32(0):
+                state[0] = Int32(1)
+            else:
+                var shift2 = Float32(0)
+                for f in range(D):
+                    var m = ftz(identical_div(red[f], cnt))
+                    var t = ftz(m - cen[f])
+                    shift2 = ftz(shift2 + ftz(identical_mul(t, t)))
+                    cen[f] = m
+                if identical_sqrt(shift2) <= stop or state[1] == max_iter:
+                    state[0] = Int32(1)
+                else:
+                    state[1] = state[1] + Int32(1)
+        barrier()
+        if state[0] != Int32(0):
+            break
+    if tid < D:
+        centers[s * D + tid] = cen[tid]
+    if tid == 0:
+        intensity[s] = state[2]
+        iters[s] = state[1]
+
+
 comptime AP_TPB = 256
 
 
@@ -202,6 +286,55 @@ def _ap_r_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
     if N > 1:
         var a2 = _ap_key_index(top2)
         second = ftz(a[i * N + a2] + s[i * N + a2])
+    var one_minus = ftz(Float32(1) - damping)
+    for k in range(tid, N, AP_TPB):
+        ap_r_update(s, r, N, damping, one_minus, i, k, first, second, arg)
+
+
+# Lane cluster-apple3, FAST, OPT-IN `-D MOJOLEARN_AP_EXACT=1`: `_ap_r_kernel`
+# with the row's max and second max taken in ONE walk of the row. The keys
+# are distinct integers (the column is their low word), so the two largest
+# of a row are the same two whatever the fold's shape: the same picks, the
+# same R, one read of A + S less per iteration.
+comptime AP_R_TOP2 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_AP_EXACT"]()
+
+
+def _ap_r_top2_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
+    var i = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var N = Int(n)
+    var red1 = stack_allocation[AP_TPB, Scalar[DType.uint64], address_space = AddressSpace.SHARED]()
+    var red2 = stack_allocation[AP_TPB, Scalar[DType.uint64], address_space = AddressSpace.SHARED]()
+    var m1 = UInt64(0)
+    var m2 = UInt64(0)
+    for k in range(tid, N, AP_TPB):
+        var key = _ap_key(ftz(a[i * N + k] + s[i * N + k]), k)
+        if key > m1:
+            m2 = m1
+            m1 = key
+        elif key > m2:
+            m2 = key
+    red1[tid] = m1
+    red2[tid] = m2
+    barrier()
+    var off = AP_TPB // 2
+    while off > 0:
+        if tid < off:
+            var a1 = red1[tid]
+            var a2 = red2[tid]
+            var b1 = red1[tid + off]
+            var b2 = red2[tid + off]
+            red1[tid] = max(a1, b1)
+            red2[tid] = max(min(a1, b1), max(a2, b2))
+        barrier()
+        off //= 2
+    var arg = _ap_key_index(red1[0])
+    var top2 = red2[0]
+    var first = ftz(a[i * N + arg] + s[i * N + arg])
+    var second = Float32(-3.4028234663852886e38)
+    if N > 1:
+        var a2i = _ap_key_index(top2)
+        second = ftz(a[i * N + a2i] + s[i * N + a2i])
     var one_minus = ftz(Float32(1) - damping)
     for k in range(tid, N, AP_TPB):
         ap_r_update(s, r, N, damping, one_minus, i, k, first, second, arg)
@@ -457,6 +590,132 @@ def _momf_final_kernel(
         cov[k * nch + c] = cov_final(acc, nk[k], reg, a == b)
 
 
+def _estep_row_kernel(
+    x: FPtr, n: Int32, d: Int32, means: FPtr, pchol: FPtr, c: FPtr, kc: Int32, q: FPtr, r: FPtr, lpn: FPtr,
+):
+    """Lane cluster-apple3: row i's whole E-step on its one thread, the three
+    bodies in the order the three kernels ran them."""
+    var i = _tid()
+    if i >= Int(n):
+        return
+    var K = Int(kc)
+    for k in range(K):
+        gauss_q_cell(x, Int(d), means, pchol, K, q, i * K + k)
+    resp_row(q, c, K, lpn, i)
+    for k in range(K):
+        exp_cell(q, r, i * K + k)
+
+
+def _dot_groups_kernel(a: FPtr, b: FPtr, n: Int32, g: Int32, parts: FPtr):
+    """FAST (lane cluster-apple3): thread q sums a * b over its run of `g`
+    consecutive cells."""
+    var q = _tid()
+    var N = Int(n)
+    var G = Int(g)
+    var t0 = q * G
+    if t0 >= N:
+        return
+    var t1 = t0 + G
+    if t1 > N:
+        t1 = N
+    var acc = Float32(0)
+    for t in range(t0, t1):
+        acc = acc + a[t] * b[t]
+    parts[q] = acc
+
+
+# FAST ONLY (lane cluster-apple3), d <= MOMS_MAX_D, OPT-IN
+# `-D MOJOLEARN_MOMENTS_ROWS=1`: the moments with every ROW read once per
+# component. Thread (k, g) owns MOMS_ROWS consecutive rows and folds all of
+# its chains over them (the means' d + 1, then the covariance's upper
+# triangle) in its own slice of threadgroup memory; a second kernel adds the
+# threads' partials. `_momf_partial_kernel` read every row once per CHAIN.
+# The same addends and finals as 5110/5121, another order: bits move.
+comptime MOMS = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_MOMENTS_ROWS"]()
+comptime MOMS_MAX_D = 8
+comptime MOMS_ROWS = 64
+comptime MOMS_TPB = 128
+comptime MOMS_W = MOMS_MAX_D * (MOMS_MAX_D + 1) // 2  # chains a thread holds at most
+
+
+def _moms_part_kernel(
+    resp: FPtr, x: FPtr, n: Int32, d: Int32, kc: Int32, means: FPtr, part: FPtr, n_groups: Int32, cov_pass: Int32,
+):
+    var tid = Int(thread_idx.x)
+    var t = Int(block_idx.x) * MOMS_TPB + tid
+    var N = Int(n)
+    var D = Int(d)
+    var K = Int(kc)
+    var G = Int(n_groups)
+    var acc = stack_allocation[MOMS_TPB * MOMS_W, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    if t >= K * G:
+        return
+    var k = t // G
+    var g = t - k * G
+    var r0 = g * MOMS_ROWS
+    var r1 = r0 + MOMS_ROWS
+    if r1 > N:
+        r1 = N
+    var o = tid * MOMS_W
+    var nch = D + 1 if cov_pass == Int32(0) else (D * (D + 1)) // 2
+    for c in range(nch):
+        acc[o + c] = Float32(0)
+    if cov_pass == Int32(0):
+        for i in range(r0, r1):
+            var r = resp[i * K + k]
+            for a in range(D):
+                acc[o + a] = acc[o + a] + xk_term(r, x[i * D + a])
+            acc[o + D] = acc[o + D] + r
+    else:
+        for i in range(r0, r1):
+            var r = resp[i * K + k]
+            var c = 0
+            for a in range(D):
+                var xa = x[i * D + a]
+                var ma = means[k * D + a]
+                for b in range(a, D):
+                    acc[o + c] = acc[o + c] + cov_term(r, xa, x[i * D + b], ma, means[k * D + b])
+                    c += 1
+    for c in range(nch):
+        part[(k * G + g) * MOMS_W + c] = acc[o + c]
+
+
+def _moms_final_kernel(
+    part: FPtr, n_groups: Int32, d: Int32, kc: Int32, reg: Float32, nk: FPtr, means: FPtr, cov: FPtr, cov_pass: Int32,
+):
+    var t = _tid()
+    var D = Int(d)
+    var K = Int(kc)
+    var G = Int(n_groups)
+    var nout = D + 1 if cov_pass == Int32(0) else D * D
+    if t >= K * nout:
+        return
+    var k = t // nout
+    var c = t - k * nout
+    if cov_pass == Int32(0):
+        var acc = Float32(0)
+        var nkacc = Float32(0)
+        for g in range(G):
+            acc = acc + part[(k * G + g) * MOMS_W + c]
+            nkacc = nkacc + part[(k * G + g) * MOMS_W + D]
+        var nkv = nk_final(nkacc)
+        if c == D:
+            nk[k] = nkv
+        else:
+            means[k * D + c] = mean_final(acc, nkv)
+    else:
+        var a = c // D
+        var b = c - a * D
+        var lo = a if a < b else b
+        var hi = b if a < b else a
+        # the upper triangle's chain of (lo, hi), rows of the triangle ascending
+        var q = lo * D - (lo * (lo - 1)) // 2 + (hi - lo)
+        var acc = Float32(0)
+        for g in range(G):
+            acc = acc + part[(k * G + g) * MOMS_W + q]
+        cov[k * D * D + c] = cov_final(acc, nk[k], reg, a == b)
+
+
 def _pdist_kernel(a: FPtr, na: Int32, b: FPtr, nb: Int32, d: Int32, metric: Int32, p: Float32, dst: FPtr):
     var t = _tid()
     if t < Int(na) * Int(nb):
@@ -467,6 +726,149 @@ def _descend_kernel(x: FPtr, n: Int32, d: Int32, centers: FPtr, nodes: IPtr, lab
     var t = _tid()
     if t < Int(n):
         tree_descend(x, Int(d), centers, nodes, labels, t)
+
+
+comptime KF_TPB = 256  # threads of a block, and the bins of a byte
+comptime KF_VPT = 64  # values per thread
+
+
+# Lane cluster-apple3: the radix select of `_kth_kernel` for ONE long row,
+# over every block of the grid. The same integer counts, so the same value.
+def _kthf_hist_kernel(m: FPtr, n: Int32, prefix: Int32, shift: Int32, first: Int32, part: IPtr):
+    """Block `b` counts its KF_TPB * KF_VPT values whose bits above `shift +
+    8` equal `prefix` by their byte at `shift`, in threadgroup memory
+    (integer atomics: every interleaving gives the same counts), then writes
+    its 256 counts to `part[b]`."""
+    var blk = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var N = Int(n)
+    var hist = stack_allocation[256, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    hist[tid] = Int32(0)
+    barrier()
+    var pre = UInt32(prefix)
+    var sh = UInt32(shift)
+    var base = blk * (KF_TPB * KF_VPT)
+    for j in range(KF_VPT):
+        var t = base + j * KF_TPB + tid
+        if t < N:
+            var bits = bitcast[DType.uint32](m[t]) & UInt32(0x7FFFFFFF)
+            var above = UInt32(0)
+            if first == Int32(0):
+                above = (bits >> (sh + UInt32(8))) << (sh + UInt32(8))
+            if above == pre:
+                _ = Atomic.fetch_add(hist.unsafe_offset(Int((bits >> sh) & UInt32(0xFF))), Int32(1))
+    barrier()
+    part[blk * 256 + tid] = hist[tid]
+
+
+def _kthf_sum_kernel(part: IPtr, n_blocks: Int32, hist: IPtr):
+    """Thread `b` of the one block: bin b summed over the blocks."""
+    var b = Int(thread_idx.x)
+    var acc = Int32(0)
+    for q in range(Int(n_blocks)):
+        acc += part[q * 256 + b]
+    hist[b] = acc
+
+
+def _diag_kernel(src: FPtr, n: Int32, dst: FPtr):
+    var t = _tid()
+    if t < Int(n):
+        dst[t] = src[t * Int(n) + t]
+
+
+comptime APF_TPB = 256
+comptime APF_ROWS = 64  # rows per slice
+
+
+# FAST ONLY (lane cluster-apple3): the availability update with the column
+# sums folded over row slices on every block of the grid, then every cell
+# its own thread. The addends and the cell update are `ap_availability_col`'s;
+# the column sum's order is not (bits move; the paired quality check).
+def _apf_part_kernel(r: FPtr, n: Int32, n_tiles: Int32, part: FPtr):
+    """Block (slice s, tile c), thread t: column c * APF_TPB + t summed over
+    the slice's rows (`Rp`: the positive part off the diagonal, the value
+    on it). Adjacent threads read adjacent cells of each row."""
+    var N = Int(n)
+    var T = Int(n_tiles)
+    var s = Int(block_idx.x) // T
+    var c = Int(block_idx.x) - s * T
+    var k = c * APF_TPB + Int(thread_idx.x)
+    if k >= N:
+        return
+    var i0 = s * APF_ROWS
+    var i1 = i0 + APF_ROWS
+    if i1 > N:
+        i1 = N
+    var acc = Float32(0)
+    for i in range(i0, i1):
+        var v = r[i * N + k]
+        if i == k or v > Float32(0):
+            acc = acc + v
+    part[s * N + k] = acc
+
+
+def _apf_sum_kernel(part: FPtr, n: Int32, n_slices: Int32, colsum: FPtr):
+    var k = _tid()
+    var N = Int(n)
+    if k >= N:
+        return
+    var acc = Float32(0)
+    for s in range(Int(n_slices)):
+        acc = acc + part[s * N + k]
+    colsum[k] = acc
+
+
+def _apf_update_kernel(r: FPtr, a: FPtr, colsum: FPtr, n: Int32, n_tiles: Int32, damping: Float32):
+    """Block (row i, tile c), thread t: cell (i, c * APF_TPB + t)."""
+    var N = Int(n)
+    var T = Int(n_tiles)
+    var i = Int(block_idx.x) // T
+    var c = Int(block_idx.x) - i * T
+    var k = c * APF_TPB + Int(thread_idx.x)
+    if k >= N:
+        return
+    var one_minus = ftz(Float32(1) - damping)
+    var v = r[i * N + k]
+    var rp = v if (i == k or v > Float32(0)) else Float32(0)
+    var nw = ftz(colsum[k] - rp)
+    if i != k and nw > Float32(0):
+        nw = Float32(0)
+    var old = a[i * N + k]
+    a[i * N + k] = ftz(ftz(identical_mul(old, damping)) + ftz(identical_mul(nw, one_minus)))
+
+
+comptime WNN_TPB = 256
+
+
+# FAST ONLY (lane cluster-apple3): one round of the ward tree's reciprocal
+# nearest neighbours. Not an IDENTICAL path.
+def _ward_nn_kernel(c: FPtr, sz: FPtr, l: Int32, d: Int32, nn: IPtr, md: FPtr):
+    """Block `p`: the cluster q != p at the lowest `bodies.ward_cell`, the
+    lowest q on a tie, by an integer min of `(float bits, q)` keys (the
+    values are >= +0, so their bits order as they do). Every thread reads
+    its own stride of the centroids; the keys fold in threadgroup memory."""
+    var p = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var L = Int(l)
+    var D = Int(d)
+    var red = stack_allocation[WNN_TPB, Scalar[DType.uint64], address_space = AddressSpace.SHARED]()
+    var mine = UInt64(0xFFFFFFFFFFFFFFFF)
+    for q in range(tid, L, WNN_TPB):
+        if q != p:
+            var v = ward_cell(c, sz, D, p, q)
+            mine = min(mine, (UInt64(bitcast[DType.uint32](v)) << 32) | UInt64(UInt32(q)))
+    red[tid] = mine
+    barrier()
+    var off = WNN_TPB // 2
+    while off > 0:
+        if tid < off:
+            red[tid] = min(red[tid], red[tid + off])
+        barrier()
+        off //= 2
+    if tid == 0:
+        var key = red[0]
+        nn[p] = Int32(Int(UInt32(key & UInt64(0xFFFFFFFF))))
+        md[p] = bitcast[DType.float32](UInt32(key >> 32))
 
 
 @always_inline
@@ -524,6 +926,15 @@ struct DeviceOps(ClusterOps):
     var mpart: DeviceBuffer[DType.float32]
     """FAST moments' per-slice partials, grown once per fit."""
     var mpart_n: Int
+    var ph_on: Bool
+    """MOJOLEARN_XC_PHASES=1 (a diagnostic, lane cluster-apple3): every
+    primitive drains the stream when it returns and its wall time is added to
+    its name; the time between two primitives is the driver's (`host`). The
+    table prints when the fit's ops die. Off, nothing changes."""
+    var ph_t: Int
+    var ph_names: List[String]
+    var ph_ns: List[Int]
+    var ph_calls: List[Int]
 
     def __init__(out self) raises:
         self.ctx = x_cluster_ctx()
@@ -533,6 +944,11 @@ struct DeviceOps(ClusterOps):
         self.pend_i = List[List[Int32]]()
         self.mpart = self.ctx.enqueue_create_buffer[DType.float32](1)
         self.mpart_n = 1
+        self.ph_on = getenv("MOJOLEARN_XC_PHASES") == "1"
+        self.ph_t = Int(perf_counter_ns())
+        self.ph_names = List[String]()
+        self.ph_ns = List[Int]()
+        self.ph_calls = List[Int]()
 
     def __del__(deinit self):
         # the buffers and the pending sources die with this value: drain first
@@ -540,6 +956,39 @@ struct DeviceOps(ClusterOps):
             self.ctx.synchronize()
         except:
             pass
+        if self.ph_on:
+            var now = Int(perf_counter_ns())
+            print("XCPHASE host_tail " + String(Float64(now - self.ph_t) / 1.0e6) + " ms")
+            for q in range(len(self.ph_names)):
+                print(
+                    "XCPHASE " + self.ph_names[q] + " " + String(Float64(self.ph_ns[q]) / 1.0e6) + " ms calls="
+                    + String(self.ph_calls[q])
+                )
+
+    def _ph_add(mut self, name: String, ns: Int):
+        for q in range(len(self.ph_names)):
+            if self.ph_names[q] == name:
+                self.ph_ns[q] += ns
+                self.ph_calls[q] += 1
+                return
+        self.ph_names.append(name)
+        self.ph_ns.append(ns)
+        self.ph_calls.append(1)
+
+    def _ph0(mut self):
+        """A primitive starts: the time since the last mark was the driver's."""
+        if self.ph_on:
+            var now = Int(perf_counter_ns())
+            self._ph_add("host", now - self.ph_t)
+            self.ph_t = now
+
+    def _ph1(mut self, name: String) raises:
+        """A primitive returns: drain, and the time since `_ph0` is its own."""
+        if self.ph_on:
+            self.ctx.synchronize()
+            var now = Int(perf_counter_ns())
+            self._ph_add(name, now - self.ph_t)
+            self.ph_t = now
 
     def _sync(mut self) raises:
         self.ctx.synchronize()
@@ -575,29 +1024,37 @@ struct DeviceOps(ClusterOps):
         self.ctx.enqueue_copy(dst_buf=buf, src_ptr=self.pend_i[len(self.pend_i) - 1].unsafe_ptr())
 
     def put(mut self, v: List[Float32]) raises -> Int:
+        self._ph0()
         var n = len(v)
         var buf = self.ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
         self._upload(buf, v)
         self.f.append(buf^)
+        self._ph1("put")
         return len(self.f) - 1
 
     def put_i(mut self, v: List[Int32]) raises -> Int:
+        self._ph0()
         var n = len(v)
         var buf = self.ctx.enqueue_create_buffer[DType.int32](n if n > 0 else 1)
         self._upload_i(buf, v)
         self.i.append(buf^)
+        self._ph1("put_i")
         return len(self.i) - 1
 
     def zeros(mut self, n: Int) raises -> Int:
+        self._ph0()
         var buf = self.ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
         self.ctx.enqueue_memset(buf, Float32(0))
         self.f.append(buf^)
+        self._ph1("zeros")
         return len(self.f) - 1
 
     def zeros_i(mut self, n: Int) raises -> Int:
+        self._ph0()
         var buf = self.ctx.enqueue_create_buffer[DType.int32](n if n > 0 else 1)
         self.ctx.enqueue_memset(buf, Int32(0))
         self.i.append(buf^)
+        self._ph1("zeros_i")
         return len(self.i) - 1
 
     def _enq_get(mut self, slot: Int, n: Int, mut out: List[Float32]) raises:
@@ -613,18 +1070,23 @@ struct DeviceOps(ClusterOps):
             self.ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=view)
 
     def get(mut self, slot: Int, n: Int) raises -> List[Float32]:
+        self._ph0()
         var out = List[Float32]()
         self._enq_get(slot, n, out)
         self._sync()
+        self._ph1("get")
         return out^
 
     def get_i(mut self, slot: Int, n: Int) raises -> List[Int32]:
+        self._ph0()
         var out = List[Int32]()
         self._enq_get_i(slot, n, out)
         self._sync()
+        self._ph1("get_i")
         return out^
 
     def gets(mut self, slots: List[Int], ns: List[Int]) raises -> List[List[Float32]]:
+        self._ph0()
         var outs = List[List[Float32]](capacity=len(slots))
         for q in range(len(slots)):
             outs.append(List[Float32](length=ns[q], fill=Float32(0)))
@@ -633,93 +1095,139 @@ struct DeviceOps(ClusterOps):
                 var view = self.f[slots[q]].create_sub_buffer[DType.float32](0, ns[q])
                 self.ctx.enqueue_copy(dst_ptr=outs[q].unsafe_ptr(), src_buf=view)
         self._sync()
+        self._ph1("gets")
         return outs^
 
     def get_if(
         mut self, islot: Int, ni: Int, fslot: Int, nf: Int, mut oi: List[Int32], mut of: List[Float32]
     ) raises:
+        self._ph0()
         self._enq_get_i(islot, ni, oi)
         self._enq_get(fslot, nf, of)
         self._sync()
+        self._ph1("get_if")
 
     def set(mut self, slot: Int, v: List[Float32]) raises:
+        self._ph0()
         var n = len(v)
         if n == 0:
+            self._ph1("set")
             return
         var view = self.f[slot].create_sub_buffer[DType.float32](0, n)
         if n >= _PUT_SYNC_MIN:
             self.ctx.enqueue_copy(dst_buf=view, src_ptr=v.unsafe_ptr())
             self._sync()
+            self._ph1("set")
             return
         self.pend_f.append(v.copy())
         self.ctx.enqueue_copy(dst_buf=view, src_ptr=self.pend_f[len(self.pend_f) - 1].unsafe_ptr())
+        self._ph1("set")
 
     def sqdist(mut self, a: Int, na: Int, b: Int, nb: Int, d: Int, dst: Int) raises:
+        self._ph0()
         self.ctx.enqueue_function[_sqdist_kernel](
             self._fp(a), Int32(na), self._fp(b), Int32(nb), Int32(d), self._fp(dst),
             grid_dim=_grid(na * nb), block_dim=TPB,
         )
+        self._ph1("sqdist")
 
     def nearest(mut self, a: Int, na: Int, b: Int, nb: Int, d: Int, labels: Int, dist: Int) raises:
+        self._ph0()
         self.ctx.enqueue_function[_nearest_kernel](
             self._fp(a), Int32(na), self._fp(b), Int32(nb), Int32(d), self._ip(labels), self._fp(dist),
             grid_dim=_grid(na), block_dim=TPB,
         )
+        self._ph1("nearest")
 
     def sqrt(mut self, x: Int, n: Int) raises:
+        self._ph0()
         self.ctx.enqueue_function[_sqrt_kernel](
             self._fp(x), Int32(n), grid_dim=_grid(n), block_dim=TPB,
         )
+        self._ph1("sqrt")
 
     def kth(mut self, m: Int, n_rows: Int, n_cols: Int, k: Int, dst: Int) raises:
+        self._ph0()
         if n_rows <= 0:
+            self._ph1("kth")
             return
         self.ctx.enqueue_function[_kth_kernel](
             self._fp(m), Int32(n_rows), Int32(n_cols), Int32(k), self._fp(dst),
             grid_dim=n_rows if n_rows > 0 else 1, block_dim=KTH_TPB,
         )
+        self._ph1("kth")
 
     def meanshift(
         mut self, x: Int, n: Int, d: Int, bw: Float32, stop: Float32, max_iter: Int,
         centers: Int, ns: Int, scratch: Int, intensity: Int, iters: Int,
     ) raises:
+        self._ph0()
+        comptime if MEANSHIFT_BLOCK:
+            if d <= MSB_MAX_D and ns > 0:
+                self.ctx.enqueue_function[_meanshift_block_kernel](
+                    self._fp(x), Int32(n), Int32(d), bw, stop, Int32(max_iter),
+                    self._fp(centers), self._ip(intensity), self._ip(iters),
+                    grid_dim=ns, block_dim=MSB_TPB,
+                )
+                self._ph1("meanshift")
+                return
         self.ctx.enqueue_function[_meanshift_kernel](
             self._fp(x), Int32(n), Int32(d), bw, stop, Int32(max_iter),
             self._fp(centers), Int32(ns), self._fp(scratch), self._ip(intensity), self._ip(iters),
             grid_dim=_grid(ns), block_dim=TPB,
         )
+        self._ph1("meanshift")
 
     def ap_r(mut self, s: Int, a: Int, r: Int, n: Int, damping: Float32) raises:
-        self.ctx.enqueue_function[_ap_r_kernel](
-            self._fp(s), self._fp(a), self._fp(r), Int32(n), damping, grid_dim=n if n > 0 else 1, block_dim=AP_TPB,
-        )
+        self._ph0()
+        comptime if AP_R_TOP2:
+            self.ctx.enqueue_function[_ap_r_top2_kernel](
+                self._fp(s), self._fp(a), self._fp(r), Int32(n), damping, grid_dim=n if n > 0 else 1,
+                block_dim=AP_TPB,
+            )
+        else:
+            self.ctx.enqueue_function[_ap_r_kernel](
+                self._fp(s), self._fp(a), self._fp(r), Int32(n), damping, grid_dim=n if n > 0 else 1,
+                block_dim=AP_TPB,
+            )
+        self._ph1("ap_r")
 
     def ap_a(mut self, r: Int, a: Int, n: Int, damping: Float32) raises:
+        self._ph0()
         self.ctx.enqueue_function[_ap_a_kernel](
             self._fp(r), self._fp(a), Int32(n), damping, grid_dim=_grid(n), block_dim=TPB,
         )
+        self._ph1("ap_a")
 
     def ap_noise(mut self, s: Int, m: Int, seed: UInt64) raises:
+        self._ph0()
         if m <= 0:
+            self._ph1("ap_noise")
             return
         self.ctx.enqueue_function[_ap_noise_kernel](self._fp(s), Int64(m), seed, grid_dim=_grid(m), block_dim=TPB)
+        self._ph1("ap_noise")
 
     def ap_e(mut self, a: Int, r: Int, n: Int, e: Int) raises:
+        self._ph0()
         self.ctx.enqueue_function[_ap_e_kernel](
             self._fp(a), self._fp(r), Int32(n), self._ip(e), grid_dim=_grid(n), block_dim=TPB,
         )
+        self._ph1("ap_e")
 
     def descend(mut self, x: Int, n: Int, d: Int, centers: Int, nodes: Int, labels: Int) raises:
+        self._ph0()
         self.ctx.enqueue_function[_descend_kernel](
             self._fp(x), Int32(n), Int32(d), self._fp(centers), self._ip(nodes), self._ip(labels),
             grid_dim=_grid(n), block_dim=TPB,
         )
+        self._ph1("descend")
 
     def kmeans(
         mut self, x: List[Float32], n: Int, d: Int, k: Int, max_iter: Int, tol: Float64,
         seed: UInt64, n_init: Int, init: Int, mut centers: List[Float32], mut labels: List[Int32],
         weights: List[Float32] = List[Float32](),
     ) raises -> Float64:
+        self._ph0()
         var xc = x.copy()
         centers = List[Float32](length=k * d, fill=Float32(0))
         var lab = List[UInt32](length=n, fill=UInt32(0))
@@ -740,29 +1248,58 @@ struct DeviceOps(ClusterOps):
         labels = List[Int32](capacity=n)
         for t in range(n):
             labels.append(Int32(lab[t]))
+        self._ph1("kmeans")
         return r.inertia
 
     def gauss_q(mut self, x: Int, n: Int, d: Int, means: Int, pchol: Int, kc: Int, dst: Int) raises:
+        self._ph0()
         self.ctx.enqueue_function[_gauss_q_kernel](
             self._fp(x), Int32(n), Int32(d), self._fp(means), self._fp(pchol), Int32(kc), self._fp(dst),
             grid_dim=_grid(n * kc), block_dim=TPB,
         )
+        self._ph1("gauss_q")
 
     def resp(mut self, q: Int, c: Int, n: Int, kc: Int, lpn: Int) raises:
+        self._ph0()
         self.ctx.enqueue_function[_resp_kernel](
             self._fp(q), self._fp(c), Int32(n), Int32(kc), self._fp(lpn), grid_dim=_grid(n), block_dim=TPB,
         )
+        self._ph1("resp")
 
     def exp(mut self, src: Int, dst: Int, n: Int) raises:
+        self._ph0()
         self.ctx.enqueue_function[_exp_kernel](
             self._fp(src), self._fp(dst), Int32(n), grid_dim=_grid(n), block_dim=TPB,
         )
+        self._ph1("exp")
 
     def moments(
         mut self, resp: Int, x: Int, n: Int, d: Int, kc: Int, reg: Float32, nk: Int, means: Int, cov: Int
     ) raises:
+        self._ph0()
         if kc <= 0:
+            self._ph1("moments")
             return
+        comptime if MOMS:
+            if d <= MOMS_MAX_D and n > 0:
+                var G = (n + MOMS_ROWS - 1) // MOMS_ROWS
+                var need = kc * G * MOMS_W
+                if need > self.mpart_n:
+                    self.mpart = self.ctx.enqueue_create_buffer[DType.float32](need)
+                    self.mpart_n = need
+                var pp = self.mpart.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+                for cp in range(2):
+                    var nout = d + 1 if cp == 0 else d * d
+                    self.ctx.enqueue_function[_moms_part_kernel](
+                        self._fp(resp), self._fp(x), Int32(n), Int32(d), Int32(kc), self._fp(means), pp,
+                        Int32(G), Int32(cp), grid_dim=(kc * G + MOMS_TPB - 1) // MOMS_TPB, block_dim=MOMS_TPB,
+                    )
+                    self.ctx.enqueue_function[_moms_final_kernel](
+                        pp, Int32(G), Int32(d), Int32(kc), reg, self._fp(nk), self._fp(means), self._fp(cov),
+                        Int32(cp), grid_dim=_grid(kc * nout), block_dim=TPB,
+                    )
+                self._ph1("moments")
+                return
         comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
             if d <= MOM_MAX_D and n > 0:
                 var S = (n + MOMF_ROWS - 1) // MOMF_ROWS
@@ -781,6 +1318,7 @@ struct DeviceOps(ClusterOps):
                         pp, Int32(S), Int32(d), Int32(kc), reg, self._fp(nk), self._fp(means), self._fp(cov),
                         Int32(cp), grid_dim=_grid(kc * nch), block_dim=TPB,
                     )
+                self._ph1("moments")
                 return
         if d <= MOM_MAX_D:
             self.ctx.enqueue_function[_moments_pass_kernel](
@@ -792,6 +1330,7 @@ struct DeviceOps(ClusterOps):
                 self._fp(resp), self._fp(x), Int32(n), Int32(d), Int32(kc), reg, self._fp(nk), self._fp(means),
                 self._fp(cov), Int32(1), grid_dim=kc * g_per_k, block_dim=MOM_TPB,
             )
+            self._ph1("moments")
             return
         self.ctx.enqueue_function[_nk_kernel](
             self._fp(resp), Int32(n), Int32(kc), self._fp(nk), grid_dim=_grid(kc), block_dim=TPB,
@@ -804,11 +1343,132 @@ struct DeviceOps(ClusterOps):
             self._fp(resp), self._fp(x), Int32(n), Int32(d), Int32(kc), self._fp(means), self._fp(nk), reg,
             self._fp(cov), grid_dim=_grid(kc * d * d), block_dim=TPB,
         )
+        self._ph1("moments")
 
     def pdist(
         mut self, a: Int, na: Int, b: Int, nb: Int, d: Int, metric: Int, p: Float32, dst: Int
     ) raises:
+        self._ph0()
         self.ctx.enqueue_function[_pdist_kernel](
             self._fp(a), Int32(na), self._fp(b), Int32(nb), Int32(d), Int32(metric), p, self._fp(dst),
             grid_dim=_grid(na * nb), block_dim=TPB,
         )
+        self._ph1("pdist")
+
+    def fast_device(self) -> Bool:
+        return GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+
+    def ward_nn(mut self, c: Int, sz: Int, l: Int, d: Int, nn: Int, md: Int) raises:
+        self._ph0()
+        if l < 2:
+            self._ph1("ward_nn")
+            return
+        self.ctx.enqueue_function[_ward_nn_kernel](
+            self._fp(c), self._fp(sz), Int32(l), Int32(d), self._ip(nn), self._fp(md),
+            grid_dim=l, block_dim=WNN_TPB,
+        )
+        self._ph1("ward_nn")
+
+    def kth_flat(mut self, m: Int, n: Int, k: Int) raises -> Float32:
+        self._ph0()
+        var per = KF_TPB * KF_VPT
+        var n_blocks = (n + per - 1) // per
+        if n_blocks < 1:
+            n_blocks = 1
+        var part = self.ctx.enqueue_create_buffer[DType.int32](n_blocks * 256)
+        var hist = self.ctx.enqueue_create_buffer[DType.int32](256)
+        var pp = part.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var hp = hist.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var prefix = UInt32(0)
+        var rem = k
+        var short = False
+        for step in range(4):
+            var shift = 24 - 8 * step
+            self.ctx.enqueue_function[_kthf_hist_kernel](
+                self._fp(m), Int32(n), Int32(Int(prefix)), Int32(shift), Int32(1 if step == 0 else 0), pp,
+                grid_dim=n_blocks, block_dim=KF_TPB,
+            )
+            self.ctx.enqueue_function[_kthf_sum_kernel](pp, Int32(n_blocks), hp, grid_dim=1, block_dim=256)
+            var h = List[Int32](length=256, fill=Int32(0))
+            self.ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=hist)
+            self._sync()
+            var acc = 0
+            var chosen = -1
+            for b in range(256):
+                var c = Int(h[b])
+                if acc + c >= rem:
+                    chosen = b
+                    break
+                acc += c
+            if chosen < 0:
+                short = True
+                chosen = 255
+            prefix = prefix | (UInt32(chosen) << UInt32(shift))
+            rem = rem - acc
+        # the two buffers outlive every launch that holds their pointers
+        _ = part^
+        _ = hist^
+        var r = prefix
+        if short or r > UInt32(0x7F800000):
+            r = UInt32(0x7F800000)
+        self._ph1("kth_flat")
+        return bitcast[DType.float32](r)
+
+    def get_diag(mut self, slot: Int, n: Int) raises -> List[Float32]:
+        self._ph0()
+        var dbuf = self.ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
+        var dp = dbuf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var out = List[Float32](length=n, fill=Float32(0))
+        if n > 0:
+            self.ctx.enqueue_function[_diag_kernel](self._fp(slot), Int32(n), dp, grid_dim=_grid(n), block_dim=TPB)
+            self.ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=dbuf)
+        self._sync()
+        _ = dbuf^
+        self._ph1("get_diag")
+        return out^
+
+    def ap_a_split(mut self, r: Int, a: Int, n: Int, damping: Float32) raises:
+        self._ph0()
+        var n_tiles = (n + APF_TPB - 1) // APF_TPB
+        var n_slices = (n + APF_ROWS - 1) // APF_ROWS
+        var need = n_slices * n + n
+        if need > self.mpart_n:
+            self.mpart = self.ctx.enqueue_create_buffer[DType.float32](need)
+            self.mpart_n = need
+        # the slices' partial sums, then the n column sums, in the one scratch buffer
+        var pp = self.mpart.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var cp = pp + n_slices * n
+        self.ctx.enqueue_function[_apf_part_kernel](
+            self._fp(r), Int32(n), Int32(n_tiles), pp, grid_dim=n_slices * n_tiles, block_dim=APF_TPB,
+        )
+        self.ctx.enqueue_function[_apf_sum_kernel](pp, Int32(n), Int32(n_slices), cp, grid_dim=_grid(n), block_dim=TPB)
+        self.ctx.enqueue_function[_apf_update_kernel](
+            self._fp(r), self._fp(a), cp, Int32(n), Int32(n_tiles), damping, grid_dim=n * n_tiles, block_dim=APF_TPB,
+        )
+        self._ph1("ap_a_split")
+
+    def dot_groups(mut self, a: Int, b: Int, n: Int, g: Int, parts: Int) raises:
+        self._ph0()
+        if n > 0 and g > 0:
+            self.ctx.enqueue_function[_dot_groups_kernel](
+                self._fp(a), self._fp(b), Int32(n), Int32(g), self._fp(parts),
+                grid_dim=_grid((n + g - 1) // g), block_dim=TPB,
+            )
+        self._ph1("dot_groups")
+
+    def alloc(mut self, n: Int) raises -> Int:
+        self._ph0()
+        var buf = self.ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
+        self.f.append(buf^)
+        self._ph1("alloc")
+        return len(self.f) - 1
+
+    def estep(
+        mut self, x: Int, n: Int, d: Int, means: Int, pchol: Int, c: Int, kc: Int, q: Int, r: Int, lpn: Int
+    ) raises:
+        self._ph0()
+        self.ctx.enqueue_function[_estep_row_kernel](
+            self._fp(x), Int32(n), Int32(d), self._fp(means), self._fp(pchol), self._fp(c), Int32(kc),
+            self._fp(q), self._fp(r), self._fp(lpn), grid_dim=_grid(n), block_dim=TPB,
+        )
+        self._ph1("estep")

@@ -121,3 +121,50 @@ trait ClusterOps(Movable):
     ) raises:
         """dst (na x nb) = the metric's distances (`bodies.pdist_cell`)."""
         ...
+
+    def fast_device(self) -> Bool:
+        """True on the one column that takes the FAST device-round paths
+        (lane cluster-apple3): the GPU binding built FAST. The host column
+        and every IDENTICAL build answer False."""
+        ...
+
+    def ward_nn(mut self, c: Int, sz: Int, l: Int, d: Int, nn: Int, md: Int) raises:
+        """FAST ward: nn[p], md[p] = the cluster q != p among the first `l`
+        (centroids c, l x d; sizes sz) at the lowest `bodies.ward_cell`, the
+        lowest q on a tie."""
+        ...
+
+    def kth_flat(mut self, m: Int, n: Int, k: Int) raises -> Float32:
+        """The k-th smallest (1-based) of the first `n` values of slot `m`
+        (non-negative), the value `kth` gives for one row of n columns. On
+        the device a radix select over every block of the grid (lane
+        cluster-apple3: `kth` runs a row on ONE block)."""
+        ...
+
+    def get_diag(mut self, slot: Int, n: Int) raises -> List[Float32]:
+        """The n diagonal values of an n x n float slot."""
+        ...
+
+    def ap_a_split(mut self, r: Int, a: Int, n: Int, damping: Float32) raises:
+        """FAST: `ap_a` with every column sum folded over row slices (another
+        summation order than `bodies.ap_availability_col`)."""
+        ...
+
+    def dot_groups(mut self, a: Int, b: Int, n: Int, g: Int, parts: Int) raises:
+        """FAST: parts[q] = the sum of a[t] * b[t] over the q-th run of `g`
+        consecutive cells of the first n (ceil(n / g) values)."""
+        ...
+
+    def alloc(mut self, n: Int) raises -> Int:
+        """A new float slot of `n` values that a primitive is about to fill
+        completely (`sqdist`, `pdist`): on the device NOT initialized, where
+        `zeros` writes n zeros first; on the host `zeros`."""
+        ...
+
+    def estep(
+        mut self, x: Int, n: Int, d: Int, means: Int, pchol: Int, c: Int, kc: Int, q: Int, r: Int, lpn: Int
+    ) raises:
+        """`gauss_q`, `resp` and `exp` of one E-step as ONE primitive: row i's
+        kc Mahalanobis squares, its log-sum-exp and its responsibilities by
+        the same bodies in the same order (the same values)."""
+        ...
