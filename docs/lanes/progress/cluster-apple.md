@@ -104,3 +104,30 @@ for FAST) run here.
   m3ultra before 1790582043709 (5b622763d); HDBSCAN/BGMM stage profile 1790583192185
   (m3ultra, lane/cluster-apple-prof b1afa236c).
 - DBSCAN M4 probe 1790582090404 (m4pro-a, lane/cluster-apple-prof 6a34eb370).
+
+## Results: M3 Ultra (m3ultra), IDENTICAL, before 5b622763d (1790582043709) -> after 819df01ee (1790583186740)
+
+819df01ee = changes 1-6 (not 7-9). Every digest equals the before / H100 records.
+
+| case | rows | taxi before -> after (s) | higgs before -> after (s) |
+|---|---|---|---|
+| minibatch-kmeans | 1M | 0.2534 -> 0.2426 | 0.3313 -> 0.3099 |
+| bisecting-kmeans | 1M | 0.2872 -> 0.2903 | 0.2999 -> 0.3012 |
+| gmm | 1M | 2.585 (31adcffb1) -> 2.920 | 2.482 (31adcffb1) -> 2.711 |
+| bayesian-gmm | 100k | 1.7649 -> 1.7562 | 2.3394 -> 2.3206 |
+| affinity-prop | 5k | 2.6912 -> 2.2112 | 1.5904 -> 1.4382 |
+| optics | 10k | 0.4146 -> 0.4857 | 0.4104 -> 0.4846 |
+| meanshift | 10k | 0.2956 -> 0.2931 | 0.2775 -> 0.2750 |
+| spectral | 10k | 0.5026 -> 0.5183 | 0.0887 -> 0.0896 |
+| agglomerative-ward | 10k | 1.5637 -> 1.5501 | 1.6538 -> 1.6642 |
+| agglomerative (single) | 10k | 0.0888 (31adcffb1) -> 0.0847 | 0.0845 (31adcffb1) -> 0.0800 |
+| hdbscan | 40k | 2.2273 (main + prof) -> 1.6168 | 2.2169 (31adcffb1) -> 1.6051 |
+
+Reading: HDBSCAN -27% (DENSE solver + index math), AffinityPropagation -18/-10%
+(block-per-row responsibilities). The speculative chain did NOT pay on the M3 Ultra:
+BGMM flat, and GaussianMixture read SLOWER than its 31adcffb1 records (+13%/+9%;
+GMM_STAGE_TIMES at 819df01ee: 22 iterations, E-step 804 ms, M-step 1407 ms, Cholesky
+317 ms). Those chains are latency-bound on their loads, not on the result flush; the
+flag adds instructions to a one-thread (meanll) or eight-thread (nk) kernel. To be
+settled on m4pro-a against its own before; if it holds there, the chain is reverted
+in mixture (and in the moments kernel, where it bought nothing).
