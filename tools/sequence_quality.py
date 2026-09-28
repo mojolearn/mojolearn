@@ -197,6 +197,8 @@ def main():
                         print("QUAL", json.dumps(dict(case=w, mode=os.environ.get("MOJOLEARN_NUMERIC_MODE", ""), **r)),
                               flush=True)
                     continue
+                if w == "prophet" and os.environ.get("MOJOLEARN_NUMERIC_MODE") != "fast":
+                    continue                           # only FAST's fit changed
                 r = dict(layernorm=q_layernorm, var=q_var, prophet=q_prophet)[w](ml, X)
             else:
                 raise KeyError(w)
