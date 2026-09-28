@@ -10,5 +10,6 @@ samba
 training-primitives
 optim-adam-clip
 optim-maximize
+optim-sgd
 mlp
 byte-lm

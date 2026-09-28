@@ -1,0 +1,13 @@
+diff --git a/training/checks/optimizer.mojo b/training/checks/optimizer.mojo
+index 3dff4557b..7ec5aff66 100644
+--- a/training/checks/optimizer.mojo
++++ b/training/checks/optimizer.mojo
+@@ -1120,7 +1120,7 @@ def identical_clip_grad_norm(
+         # backwards and changes nothing else, so what it moves is the
+         # cross-tensor fold's order and only that.
+         var slot = j
+-        comptime if SAB_CLIP_PARAM_ORDER:
++        comptime if True:  # SABOTAGE (neural seam arm): SAB_CLIP_PARAM_ORDER at its use site
+             slot = j_count - 1 - j
+ 
+         comptime if SAB_CLIP_SERIAL_FOLD or SAB_CLIP_BLOCK_PARTITION:

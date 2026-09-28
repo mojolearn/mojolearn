@@ -10,3 +10,5 @@ embedding/checks/embedding_check.mojo	embedding/checks/sabotage/embedding_fold_d
 training/checks/optimizer_check.mojo	training/checks/sabotage/optimizer_moment_lerp.patch
 training/checks/loss_check.mojo	training/checks/sabotage/loss_exp_stdlib.patch
 training/checks/maximize_check.mojo	training/checks/sabotage/maximize_6200_subtract_from_zero.patch
+training/checks/optimizer_check.mojo	training/checks/sabotage/optimizer_sgd_nesterov_order.patch
+training/checks/optimizer_check.mojo	training/checks/sabotage/optimizer_clip_param_order.patch
