@@ -37,7 +37,7 @@ bindings rebuilt in turn). Job scripts: ~/mojolearn-evidence/linear-apple2/.
 | 9ef29ffef | x_linear Huber and Quantile (GPU team form): the lead's n-row folds run on other threads beside the gradient / A' dr cells | both | on | no |
 | 27b180f47 | x_linear LogisticRegressionCV (GPU team form): the lead's loss and weight folds beside the gradient cells | both | on | no |
 | 0a760cd68 | Huber / Quantile / LogisticRegressionCV: each moved fold leads its own warp (27b180f47's same-warp placement was slower) | both | on | no |
-| 449d0c127 | Quantile: the next iteration's A'(y - r - u) chains run in this iteration's A' dr pass | both | on (pending measurement) | no |
+| 449d0c127 | Quantile: the next iteration's A'(y - r - u) chains run in this iteration's A' dr pass | both | on (m4-a: 46.0 -> 34.8 s, digest equal) | no |
 | 9d450625f | SGD pipelined shuffle: draws computed by a third warp's lanes (splitmix64 skip-ahead), two epochs ahead | both | on (pending measurement) | no |
 | ea80a9110 | x_linear chains: CHAIN_U_APPLE constant (32; A/B of 64 and 128 pending) | both | no-op | x_linear/tops.mojo |
 | 90c722752 | FAST QN on Apple: X^T dZ through xtdz_coalesced where D * C <= 1024 | FAST (words change: paired quality job) | on (`-D MOJOLEARN_QN_FAST_COALESCED_OFF=1`) | glm/impl/qn only |
@@ -272,4 +272,8 @@ A fold thread that shares a warp with the gradient chains runs after them
 These fits stay slower than one host core: every gradient cell is ONE
 thread's ascending chain over all rows (the contract), and a GPU thread's
 chain step is slower than a CPU core's.
+
+Quantile, the next iteration's chains in this pass (m4-a, Apple M4, steward
+1790613464286): 0a760cd68 46.04 s -> 449d0c127 34.78 s at 100k, digest
+c7ebb6da53934bf3 both arms.
 
