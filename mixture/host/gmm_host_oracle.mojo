@@ -539,13 +539,17 @@ def gmmh_e_step(
         identical_mul(Float32(d), bitcast[DType.float32](GMMH_LOG_2PI_BITS))
     )
     var wlp = List[Float32](length=n * ncomp, fill=Float32(0.0))
-    for idx in range(n * ncomp):
+    var wlpp = host_list_ptr(wlp)
+
+    def _wlp(idx: Int) {imm mahal, imm log_det_chol, imm log_weights, imm wlpp, imm ncomp, imm d_log_2pi}:
         var k = idx % ncomp
         var m = ftz(mahal[idx])
         var inner = ftz(d_log_2pi + m)
         var half = ftz(identical_mul(Float32(-0.5), inner))
         var lp = ftz(half + ftz(log_det_chol[k]))
-        wlp[idx] = ftz(lp + ftz(log_weights[k]))
+        wlpp.unsafe_store(idx, ftz(lp + ftz(log_weights[k])))
+
+    host_cells(_wlp, n * ncomp, 8)
 
     if output_level == 0:
         return GmmHostEStep(
@@ -553,7 +557,9 @@ def gmmh_e_step(
         )
 
     var lse = List[Float32](length=n, fill=Float32(0.0))
-    for i in range(n):
+    var lsep = host_list_ptr(lse)
+
+    def _lse(i: Int) {imm wlp, imm lsep, imm ncomp}:
         var base = i * ncomp
         var max_exp = wlp[base]
         for k in range(1, ncomp):
@@ -561,20 +567,26 @@ def gmmh_e_step(
             if v > max_exp:
                 max_exp = v
         if max_exp == _neg_inf():
-            lse[i] = max_exp
-            continue
+            lsep.unsafe_store(i, max_exp)
+            return
         var s = Float32(0.0)
         for k in range(ncomp):
             s = ftz(s + ftz(identical_exp(ftz(wlp[base + k] - max_exp))))
-        lse[i] = ftz(identical_log(s) + max_exp)
+        lsep.unsafe_store(i, ftz(identical_log(s) + max_exp))
+
+    host_cells(_lse, n, 50 * ncomp)
 
     if output_level == 1:
         return GmmHostEStep(wlp^, lse^, List[Float32](), Float32(0.0))
 
     var logresp = List[Float32](length=n * ncomp, fill=Float32(0.0))
-    for idx in range(n * ncomp):
+    var lrp = host_list_ptr(logresp)
+
+    def _lr(idx: Int) {imm wlp, imm lse, imm lrp, imm ncomp}:
         var i = idx // ncomp
-        logresp[idx] = ftz(ftz(wlp[idx]) - ftz(lse[i]))
+        lrp.unsafe_store(idx, ftz(ftz(wlp[idx]) - ftz(lse[i])))
+
+    host_cells(_lr, n * ncomp, 4)
 
     if output_level == 2:
         return GmmHostEStep(wlp^, lse^, logresp^, Float32(0.0))

@@ -32,21 +32,33 @@ def run[O: ClusterOps](mut ops: O, m: List[Float32], rows: Int, cols: Int, k: In
     return ops.get(so, rows)
 
 
-def main() raises:
-    var d = 4
-    var a = seam_fixture(40, d, 5)
-    var m = oracle_sqdist(a, 40, a, 40, d)
+def _shape(nr: Int, d: Int, seed: UInt64, ks: List[Int], stage: String, dup: Bool) raises:
+    var a = seam_fixture(nr, d, seed)
+    if dup:
+        # duplicate rows: ties at every order statistic they touch
+        for f in range(d):
+            a[(nr - 1) * d + f] = a[f]
+            a[(nr - 2) * d + f] = a[d + f]
+    var m = oracle_sqdist(a, nr, a, nr, d)
     m[3] = Float32(-0.0)
-    var ks: List[Int] = [1, 2, 7, 20, 40]
     for k in ks:
-        var want = oracle_kth(m, 40, 40, k)
-        var off = oracle_kth(m, 40, 40, k + 1 if k < 40 else k - 1)
-        require_separates("5103 kth k=" + String(k), count_diff_f32(want, off))
+        var want = oracle_kth(m, nr, nr, k)
+        var off = oracle_kth(m, nr, nr, k + 1 if k < nr else k - 1)
+        require_separates("5103 kth n=" + String(nr) + " k=" + String(k), count_diff_f32(want, off))
         var dev = DeviceOps()
-        var got = run(dev, m, 40, 40, k)
-        _same("5103 kth device k=" + String(k), count_diff_f32(got, want))
+        var got = run(dev, m, nr, nr, k)
+        _same("5103 kth device n=" + String(nr) + " k=" + String(k), count_diff_f32(got, want))
         var host = HostOps()
-        _same("5103 kth host k=" + String(k), count_diff_f32(run(host, m, 40, 40, k), want))
+        _same("5103 kth host n=" + String(nr) + " k=" + String(k), count_diff_f32(run(host, m, nr, nr, k), want))
         var tr = IdentityTrace()
-        tr.record_list_f32("x_cluster.kth", got)
+        tr.record_list_f32(stage, got)
+
+
+def main() raises:
+    var ks: List[Int] = [1, 2, 7, 20, 40]
+    _shape(40, 4, 5, ks, "x_cluster.kth", False)
+    # the host's selection (cluster-cpu lane, 2026-09-28): rows long enough
+    # to split over tasks, ties from duplicated rows
+    var ks2: List[Int] = [1, 3, 10, 150, 299, 300]
+    _shape(300, 4, 6, ks2, "x_cluster.kth_n300", True)
     print("PASS x_cluster kth_check")

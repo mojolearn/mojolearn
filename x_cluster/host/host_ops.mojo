@@ -17,6 +17,7 @@ index range into contiguous tasks (`cluster/host/host_cells.mojo`: the
 caller's floating-point environment, DEVIATION 5900). An index's arithmetic is the serial walk's, in
 the same order, so the bits are the same at every thread count; it is not a
 numeric row."""
+from std.memory import bitcast, memcpy
 from std.sys.compile import is_defined
 
 from checks.numerics import ftz, identical_div
@@ -51,6 +52,38 @@ comptime X_CLUSTER_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 #: Cells per vector in the host moments.
 comptime MOMENTS_W = 8
 
+
+
+def _select_u32(mut a: List[UInt32], kk: Int) -> UInt32:
+    """The kk-th smallest (0-based) of `a` (reordered in place): quickselect
+    with a middle pivot and a three-way partition."""
+    var lo = 0
+    var hi = len(a) - 1
+    while lo < hi:
+        var pivot = a[lo + (hi - lo) // 2]
+        var lt = lo
+        var i = lo
+        var gt = hi
+        while i <= gt:
+            var v = a[i]
+            if v < pivot:
+                a[i] = a[lt]
+                a[lt] = v
+                lt += 1
+                i += 1
+            elif v > pivot:
+                a[i] = a[gt]
+                a[gt] = v
+                gt -= 1
+            else:
+                i += 1
+        if kk < lt:
+            hi = lt - 1
+        elif kk > gt:
+            lo = gt + 1
+        else:
+            return pivot
+    return a[lo]
 
 
 struct HostOps(ClusterOps):
@@ -88,20 +121,23 @@ struct HostOps(ClusterOps):
         return self.put_i(List[Int32](length=n, fill=Int32(0)))
 
     def get(mut self, slot: Int, n: Int) raises -> List[Float32]:
-        var out = List[Float32](capacity=n)
-        for t in range(n):
-            out.append(self.f[slot][t])
+        if n > len(self.f[slot]):
+            raise Error("x_cluster host: get of " + String(n) + " values from a slot of " + String(len(self.f[slot])))
+        var out = List[Float32](length=n, fill=Float32(0))
+        memcpy(dest=out.unsafe_ptr(), src=self.f[slot].unsafe_ptr(), count=n)
         return out^
 
     def get_i(mut self, slot: Int, n: Int) raises -> List[Int32]:
-        var out = List[Int32](capacity=n)
-        for t in range(n):
-            out.append(self.i[slot][t])
+        if n > len(self.i[slot]):
+            raise Error("x_cluster host: get_i of " + String(n) + " values from a slot of " + String(len(self.i[slot])))
+        var out = List[Int32](length=n, fill=Int32(0))
+        memcpy(dest=out.unsafe_ptr(), src=self.i[slot].unsafe_ptr(), count=n)
         return out^
 
     def set(mut self, slot: Int, v: List[Float32]) raises:
-        for t in range(len(v)):
-            self.f[slot][t] = v[t]
+        if len(v) > len(self.f[slot]):
+            raise Error("x_cluster host: set of " + String(len(v)) + " values into a slot of " + String(len(self.f[slot])))
+        memcpy(dest=self._fp(slot), src=v.unsafe_ptr(), count=len(v))
 
     def sqdist(mut self, a: Int, na: Int, b: Int, nb: Int, d: Int, dst: Int) raises:
         var pa = self._fp(a)
@@ -136,10 +172,27 @@ struct HostOps(ClusterOps):
         var pm = self._fp(m)
         var po = self._fp(dst)
 
-        def body(t: Int) {imm pm, imm po, imm n_cols, imm k}:
-            kth_smallest_row(pm, n_cols, k, po, t)
+        if k < 1 or k > n_cols:
+            def body(t: Int) {imm pm, imm po, imm n_cols, imm k}:
+                kth_smallest_row(pm, n_cols, k, po, t)
 
-        host_cells(body, n_rows, 32 * n_cols)
+            host_cells(body, n_rows, 32 * n_cols)
+            return
+
+        # The k-th smallest is ONE value, so any exact selection returns it:
+        # the host selects over the row's magnitude bits (-0.0 as +0.0, the
+        # body's order) instead of the body's 31 counting passes; a value
+        # past +inf (a NaN) reads as +inf, where the body's bisection stops.
+        def sel(t: Int) {imm pm, imm po, imm n_cols, imm k}:
+            var buf = List[UInt32](length=n_cols, fill=UInt32(0))
+            for j in range(n_cols):
+                buf[j] = bitcast[DType.uint32](pm[t * n_cols + j]) & UInt32(0x7FFFFFFF)
+            var v = _select_u32(buf, k - 1)
+            if v > UInt32(0x7F800000):
+                v = UInt32(0x7F800000)
+            po[t] = bitcast[DType.float32](v)
+
+        host_cells(sel, n_rows, 4 * n_cols)
 
     def meanshift(
         mut self, x: Int, n: Int, d: Int, bw: Float32, stop: Float32, max_iter: Int,
