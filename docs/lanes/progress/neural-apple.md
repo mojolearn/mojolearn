@@ -98,3 +98,52 @@ The Apple row of `attn_default_arm_for` is now NVIDIA's pre-bswz estash word
 Bits: every final witness is equal across the words (table above). Gain at
 B1 12L on the M4 Pro: 13% per step. `-D MOJOLEARN_ATTN_APPLE_R3_ONLY=1` restores
 the old build default.
+
+### The gate's measured boundary (8baa1d382)
+
+On the 48 GB M4 Pro, the trial build's default word (estash) at the T3 shard (B4,
+12 layers, V 50,257) trained at **7.2 s a step**; the shipped build runs 10.07 s.
+That run also had the small GEMM tile below 512 tiles. The process footprint
+reached 41 GB, and after the final witness a Metal command buffer never
+completed. The worker was killed; the GPU stayed wedged (the killed process sat
+in exit state, and every new Metal job blocked). **This Mac needs a reboot.** It
+was reported to the orchestrator; nothing was done on the Mac beyond this
+lane's own processes.
+The gate now counts every layer's stash, one layer's y/dy and the logits with
+their gradient (2 x 4 x B x L x V bytes), and grants only under 35% of free
+device memory:
+- that shape needs 14.6 GB and is refused;
+- B1 x 12L needs 3.6 GB and is granted;
+- a 256 GB M3 Ultra would grant B4.
+`byte_lm_attention_estash_gate` reads back [gated, granted, denied, need, free],
+and `tools/lm_step_memory_probe.py` records it as `attention_estash_gate`.
+
+## Weight-gradient GEMMs: small tile (4b2f22927, 82cfbc690)
+
+Below 2048 default tiles, the Apple matrix plan now runs the same kernel at
+FM = FN = 2 (a quarter tile, four times the blocks). T3 shard calls on the M4 Pro
+(bench/gemm_excp_ab_main.mojo, ordinary operands, ms). Every hash is equal
+across the six geometries (default, no small, small < 2048, small FN 4,
+FM = FN = 2 everywhere, SGM 4 x SGN 2):
+
+| call | no small | small < 512 | small < 2048 |
+|---|---|---|---|
+| proj_fwd | 7.2 | 7.3 | 6.1 |
+| proj_dA | 7.4 | 7.4 | 6.1 |
+| proj_dB | 21.5 | 10.5 | 10.4 |
+| gateup_fwd | 14.4 | 15.1 | 14.4 |
+| gateup_dA | 19.0 | 19.1 | 16.5 |
+| gateup_dB | 40.9 | 20.3 | 20.5 |
+| down_fwd | 18.6 | 18.8 | 16.4 |
+| down_dA | 14.4 | 14.4 | 14.9 |
+| down_dB | 40.9 | 20.6 | 20.1 |
+| head_fwd | 292.6 | 291.1 | 291.5 |
+| head_dA | 604.5 | 592.5 | 517.4 |
+| head_dB | 343.6 | 345.1 | 345.3 |
+
+Summed over one step's calls (48 proj x 3, 24 gateup x 3, 12 down x 3, 1 head x
+3), that is about 1.5 s less GEMM time per T3 shard step. Operands with
+non-admitted windows ("mixed", "sparse") are 5-7x slower on every geometry; the
+real step's head timings match the "ordinary" kind. This tile change reaches
+every Apple IDENTICAL GEMM with fewer than 2048 default tiles, classical users
+included; their bits are unchanged by construction.
