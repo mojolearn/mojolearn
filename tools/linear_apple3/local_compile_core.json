@@ -1,0 +1,7 @@
+{
+  "no_restore": true,
+  "arms": [
+    {"name": "core-all", "compile_only": true, "builds": ["estimators", "solver"],
+     "defines": "-D MOJOLEARN_CD_GRAM_BLOCKS=1 -D MOJOLEARN_OLS_FAST_SMALL_NT=1 -D MOJOLEARN_QN_FAST_BLOCKS=1"}
+  ]
+}
