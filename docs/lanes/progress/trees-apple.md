@@ -54,7 +54,7 @@ CPU-column sabotage that reaches the ordered / feature-freq host paths
 | ExtraTrees | istellareg | 27017 ms | FAST 7100 ms |
 | DecisionTree | taxi / istellareg | 71 / 451 ms | FAST equal, same digest |
 | AdaBoostClassifier | taxi | 12313 ms | FAST 12732 ms |
-| AdaBoostRegressor | taxireg | 4346 ms, RMSE 6.18 | FAST 7729 ms, **RMSE 15.99 (quality defect, being diagnosed)** |
+| AdaBoostRegressor | taxireg | 4346 ms, RMSE 6.18 | FAST 7729 ms, RMSE 15.99 (seed 7; NOT a FAST defect, see below) |
 | Bagging (10 x depth 12) | taxi | 953 ms | FAST 987 ms |
 | DART (100 trees) | taxi | 7466 ms | FAST 7837 ms |
 | RandomTreesEmbedding | taxi | 265 ms | FAST 193 ms |
@@ -106,3 +106,26 @@ Pending on the stewards: before/after on m4pro-a (before a54fadbe3, after
 df6abd315 and f635ed48a; the same Mac); identity request 1790581995433
 (RF, ET and every xtrees lane, sabotage steward_combo_cpu_only.patch) on
 m2pro, m3ultra, m4-a, do-amd.
+
+## AdaBoostRegressor FAST vs IDENTICAL quality (paired, 5 seeds x 2 datasets, M3 Ultra)
+
+Seed 7 on taxireg read FAST RMSE 15.99 against IDENTICAL 6.18. Per-member
+diagnosis (bench/speed/trees_adaboost_reg_diag.py): the members agree to
+member 5 and drift slightly after (the FAST DT arithmetic); IDENTICAL then
+stops at 25 members (a member's error reached 0.5) and FAST runs all 50.
+Late AdaBoost.R2 members are poor in BOTH modes on the heavy-tailed taxi
+fare (y up to 493), so where the ensemble stops decides the RMSE. The
+paired table (test RMSE; members in parentheses):
+
+| seed | taxireg FAST | taxireg IDENTICAL | istellareg FAST | istellareg IDENTICAL |
+|---|---|---|---|---|
+| 7 | 15.989 (50) | 6.178 (25) | 0.7844 (12) | 0.7848 (12) |
+| 11 | 11.161 (50) | 12.344 (50) | 0.7936 (11) | 0.7915 (10) |
+| 13 | 9.410 (45) | 6.769 (28) | 0.7846 (11) | 0.7872 (9) |
+| 17 | 6.019 (25) | 18.259 (50) | 0.7820 (11) | 0.7871 (10) |
+| 19 | 14.556 (50) | 9.061 (50) | 0.7856 (12) | 0.7832 (14) |
+| mean | 11.43 | 10.52 | 0.7860 | 0.7868 |
+
+FAST is not worse in a paired sense (taxireg means within the seed spread,
+Istella-S equal); the taxireg spread is the algorithm's instability on this
+target in both modes, not a mode defect. Nothing to revert.
