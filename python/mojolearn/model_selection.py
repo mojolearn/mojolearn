@@ -1680,11 +1680,15 @@ def _take_any(values, indices):
 # test repeats per fit. Every route below hands each estimator and each
 # metric the SAME words as the definition it stands in for (row gathers are
 # byte copies, a prediction is made once instead of once per scorer), so no
-# score moves. MOJOLEARN_MSEL3_BEFORE=1 (read per call) is the before arm of
-# the lane's timing job: every definition, in the same build.
+# score moves.
+#
+# OPT-IN, UNPROVEN: the lane's Apple machine went away before its A/B job
+# ran, so none of these routes has been measured or run. They are taken
+# only under MOJOLEARN_MSEL3=1 (read per call); without it every call takes
+# its definition, as before the lane.
 
 def _msel3():
-    return os.environ.get('MOJOLEARN_MSEL3_BEFORE') != '1'
+    return os.environ.get('MOJOLEARN_MSEL3') == '1'
 
 
 #: The most bytes of gathered fold rows `_FoldRows` keeps (every fold's

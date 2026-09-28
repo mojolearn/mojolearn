@@ -23,9 +23,14 @@
 #   XMAB_BUILDS="base estimators ..."  build these bindings in the head tree
 #       first, in both modes (base = bindings/build.sh); the base tree gets
 #       copies, so both arms run the same estimators
+#   The lane's routes are OPT-IN (MOJOLEARN_MSEL3=1). This job exports
+#       MOJOLEARN_MSEL3=1 (XMAB_MSEL3 overrides), so every head arm takes
+#       them and the base tree, which does not know the variable, is the
+#       before; `headoff` arms run the head tree with the switch off (the
+#       default path, which must equal the base).
 #   XMAB_MSEL=1      model selection: tools/apple_speed_metrics/msel_eq.py in
-#       the base tree, the head tree under MOJOLEARN_MSEL3_BEFORE=1 and the
-#       head tree as shipped (XMAB-MEQ SAME or DIFF), then
+#       the base tree, the head tree with the switch off and the head tree
+#       with it on (XMAB-MEQ SAME or DIFF), then
 #       bench/x_msel_speed.py before / after / after / before per mode
 #       (XMAB_MSEL_PROF=N adds its cProfile top N in FAST)
 #   XMAB_XTRA=1      bench/x_metrics_speed.py --extra 2 (cases outside the
@@ -38,6 +43,7 @@
 #       back where an export is missing), so the Python arms still run
 set -u
 base=$1; reps=${2:-2}; prof=${3:-0}; only=${4:-}; tests=${5:-1}
+export MOJOLEARN_MSEL3="${XMAB_MSEL3:-1}"
 wt=$(pwd)
 echo "XMAB head $(git rev-parse --short HEAD) base $(printf %s "$base" | cut -c1-12) host $(hostname) $(sysctl -n machdep.cpu.brand_string 2>/dev/null)"
 git cat-file -e "$base^{commit}" 2>/dev/null || git fetch -q origin "$base" || exit 3
@@ -87,6 +93,13 @@ if [ "$tests" = 1 ]; then
                     --tree "$d" 2>/dev/null) | grep '^EQ ' >"$tmp/eq_${t}_$m.txt"
             fi
         done
+        (cd "$wt" && MOJOLEARN_MSEL3=0 MOJOLEARN_NUMERIC_MODE=$m pixi run -e default python -u "$wt/tools/apple_speed_metrics/eq_cases.py" \
+            --tree "$wt" 2>/dev/null) | grep '^EQ ' >"$tmp/eq_headoff_$m.txt"
+        if cmp -s "$tmp/eq_base_$m.txt" "$tmp/eq_headoff_$m.txt"; then
+            echo "XMAB-EQ $m headoff SAME $(wc -l <"$tmp/eq_headoff_$m.txt") cases"
+        else
+            echo "XMAB-EQ $m headoff DIFF"; diff "$tmp/eq_base_$m.txt" "$tmp/eq_headoff_$m.txt" | head -20
+        fi
         nb=$(wc -l <"$tmp/eq_base_$m.txt"); nh=$(wc -l <"$tmp/eq_head_$m.txt")
         if cmp -s "$tmp/eq_base_$m.txt" "$tmp/eq_head_$m.txt" && [ "$nb" -gt 0 ]; then
             echo "XMAB-EQ $m SAME $nh cases"
@@ -99,9 +112,9 @@ if [ "$tests" = 1 ]; then
         for m in identical fast; do
             (cd "$bdir" && MOJOLEARN_NUMERIC_MODE=$m pixi run -e default python -u "$wt/tools/apple_speed_metrics/msel_eq.py" \
                 --tree "$bdir" 2>/dev/null) | grep '^MEQ ' >"$tmp/meq_base_$m.txt"
-            (cd "$wt" && MOJOLEARN_MSEL3_BEFORE=1 MOJOLEARN_NUMERIC_MODE=$m pixi run -e default python -u \
+            (cd "$wt" && MOJOLEARN_MSEL3=0 MOJOLEARN_NUMERIC_MODE=$m pixi run -e default python -u \
                 "$wt/tools/apple_speed_metrics/msel_eq.py" --tree "$wt" 2>/dev/null) | grep '^MEQ ' >"$tmp/meq_before_$m.txt"
-            (cd "$wt" && MOJOLEARN_NUMERIC_MODE=$m pixi run -e default python -u \
+            (cd "$wt" && MOJOLEARN_MSEL3=1 MOJOLEARN_NUMERIC_MODE=$m pixi run -e default python -u \
                 "$wt/tools/apple_speed_metrics/msel_eq.py" --tree "$wt" 2>/dev/null) | grep '^MEQ ' >"$tmp/meq_head_$m.txt"
             nh=$(wc -l <"$tmp/meq_head_$m.txt")
             nr=$(grep -c ' RAISED ' "$tmp/meq_head_$m.txt")
@@ -135,6 +148,11 @@ arm() {  # tree mode pass
 }
 for m in identical fast; do arm base $m 1; arm head $m 1; done
 for m in fast identical; do arm head $m 2; arm base $m 2; done
+for m in identical fast; do
+    # shellcheck disable=SC2086
+    (cd "$wt" && MOJOLEARN_MSEL3=0 MOJOLEARN_NUMERIC_MODE=$m pixi run -e default python -u bench/x_metrics_speed.py \
+        --reps "$reps" $oflag 2>&1) | sed "s/^/ARM headoff-$m-1 /"
+done
 if [ "${XMAB_XTRA:-0}" = 1 ]; then
     # the extra cases (outside the board's total), this tree's bench file
     # against each tree's package
@@ -149,8 +167,8 @@ if [ "${XMAB_XTRA:-0}" = 1 ]; then
         --tree "$wt" --reps 1 --extra 2 --cprofile 14 2>&1) | grep 'XMPROFILE' | sed "s/^/XPROF head-fast /"
 fi
 marm() {  # before|after mode pass profile
-    b=""; [ "$1" = before ] && b=1
-    (cd "$wt" && MOJOLEARN_MSEL3_BEFORE=$b MOJOLEARN_NUMERIC_MODE=$2 pixi run -e default python -u bench/x_msel_speed.py \
+    b=1; [ "$1" = before ] && b=0
+    (cd "$wt" && MOJOLEARN_MSEL3=$b MOJOLEARN_NUMERIC_MODE=$2 pixi run -e default python -u bench/x_msel_speed.py \
         --reps 1 --fits "${5:-0}" --cprofile "$4" 2>&1) | sed "s/^/MSEL $1-$2-$3 /"
 }
 if [ "${XMAB_MSEL:-0}" = 1 ]; then

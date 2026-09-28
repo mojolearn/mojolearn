@@ -1156,10 +1156,10 @@ def _encode_small_native(arr):
     labels that span fewer than 65536 values, by host tasks (a seen-byte
     per value, one table load per row) instead of a binary search per row
     on one thread. None hands the labels to the core encoder: a wider span,
-    more classes than the encoder holds, a binary without the entry, or
-    MOJOLEARN_MSEL3_BEFORE=1 (the lane's before arm)."""
+    more classes than the encoder holds, or a binary without the entry.
+    OPT-IN and UNPROVEN: taken only under MOJOLEARN_MSEL3=1."""
     import os
-    if os.environ.get("MOJOLEARN_MSEL3_BEFORE") == "1":
+    if os.environ.get("MOJOLEARN_MSEL3") != "1":
         return None
     from ._buffer import _output_store
     from ._labels import _NATIVE_ENCODE_MAX_CLASSES

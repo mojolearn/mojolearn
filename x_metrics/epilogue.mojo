@@ -403,6 +403,71 @@ def expected_mi(a_addr: Int, na: Int, b_addr: Int, nb: Int, n: Int) raises -> Fl
     first exact 0), the same pmf normalization by fsum, the same terms
     (nij / n) * (log(n nij) - log a - log b) * pr, fsum-ed. Python's
     int -> float conversions and int / int division are correctly rounded,
+    as Float64(Int) and Float64 division are for these magnitudes."""
+    var A = MutPointer[Int64, MutAnyOrigin](unsafe_from_address=a_addr)
+    var B = MutPointer[Int64, MutAnyOrigin](unsafe_from_address=b_addr)
+    if n <= 0 or n >= (1 << 31):
+        raise Error("x_metrics epilogue: expected MI size goes the Python way")
+    var n_f64 = Float64(n)
+    var terms = List[Float64]()
+    for i in range(na):
+        var a = Int(A[i])
+        var la = portable_log_c(Float64(a))
+        for j in range(nb):
+            var b = Int(B[j])
+            var lb = portable_log_c(Float64(b))
+            var lo = max(0, a + b - n)
+            var hi = min(a, b)
+            var mode = min(max(((a + 1) * (b + 1)) // (n + 2), lo), hi)
+            var up = List[Float64]()
+            up.append(1.0)
+            var x = mode
+            var v: Float64 = 1.0
+            while x < hi:
+                v = _mul(v, Float64((a - x) * (b - x))) / Float64((x + 1) * (n - a - b + x + 1))
+                if v == 0.0:
+                    break
+                up.append(v)
+                x += 1
+            var down = List[Float64]()
+            x = mode
+            v = 1.0
+            while x > lo:
+                v = _mul(v, Float64(x * (n - a - b + x))) / Float64((a - x + 1) * (b - x + 1))
+                if v == 0.0:
+                    break
+                down.append(v)
+                x -= 1
+            var zs = List[Float64](capacity=len(up) + len(down))
+            for k in range(len(up)):
+                zs.append(up[k])
+            for k in range(len(down)):
+                zs.append(down[k])
+            var z = fsum(zs)
+            var first = mode - len(down)
+            var nd = len(down)
+            for k in range(nd + len(up)):
+                var nij = first + k
+                var u = down[nd - 1 - k] if k < nd else up[k - nd]
+                if nij < 1:
+                    continue
+                var pr = u / z
+                if pr == 0.0:
+                    continue
+                var q = Float64(nij) / n_f64
+                var d = (portable_log_c(Float64(n * nij)) - la) - lb
+                terms.append(_mul(_mul(q, d), pr))
+    return fsum(terms)
+
+
+def expected_mi_tasks(a_addr: Int, na: Int, b_addr: Int, nb: Int, n: Int) raises -> Float64:
+    """`expected_mi` with its cells as host tasks (lane metrics-apple3;
+    OPT-IN, `x_metrics_expected_mi_tasks`). `_expected_mi` for na, nb >= 2
+    (Int64 class counts at the two addresses): the same integer bounds and
+    mode, the same binary64 ratio walks from the mode (each stops at the
+    first exact 0), the same pmf normalization by fsum, the same terms
+    (nij / n) * (log(n nij) - log a - log b) * pr, fsum-ed. Python's
+    int -> float conversions and int / int division are correctly rounded,
     as Float64(Int) and Float64 division are for these magnitudes.
 
     THREADS (lane metrics-apple3). A cell's terms depend on its own (a, b)
@@ -506,6 +571,29 @@ def _row_fsum(S: FP, base: Int, k: Int, mut row: List[Float64]) -> Float64:
 
 def row_sum_range(s_addr: Int, n: Int, k: Int, out_addr: Int):
     """`_rows_sum_to_one`'s two numbers: the largest and the smallest row
+    `math.fsum` of the n x k finite Float32 scores (row major) at s_addr,
+    at out_addr[0] and [1]. Each row's sum is `fsum` above (a zero sum is
+    +0.0 where math.fsum may give -0.0; the caller takes |s - 1|)."""
+    var S = FP(unsafe_from_address=s_addr)
+    var out = MutPointer[Float64, MutAnyOrigin](unsafe_from_address=out_addr)
+    var row = List[Float64](length=k, fill=0.0)
+    var hi: Float64 = 0.0
+    var lo: Float64 = 0.0
+    for r in range(n):
+        for c in range(k):
+            row[c] = Float64(S.unsafe_load(r * k + c))
+        var v = fsum(row)
+        if r == 0 or v > hi:
+            hi = v
+        if r == 0 or v < lo:
+            lo = v
+    out[0] = hi
+    out[1] = lo
+
+
+def row_sum_range_tasks(s_addr: Int, n: Int, k: Int, out_addr: Int):
+    """`row_sum_range` by `_row_fsum` and host tasks (lane metrics-apple3;
+    OPT-IN, `x_metrics_row_sum_range_tasks`): the largest and the smallest row
     `math.fsum` of the n x k finite Float32 scores (row major) at s_addr,
     at out_addr[0] and [1]. Each row's sum is `fsum` above (a zero sum is
     +0.0 where math.fsum may give -0.0; the caller takes |s - 1|).

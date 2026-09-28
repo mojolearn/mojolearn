@@ -9,7 +9,8 @@
 from std.memory import bitcast
 from std.os import setenv
 from x_metrics.epilogue import (
-    fsum, row_sum_range, expected_mi, _emi_cell, encode_small_i64, first_rows_i32, scatter_rows,
+    fsum, row_sum_range, row_sum_range_tasks, expected_mi, expected_mi_tasks, _emi_cell, encode_small_i64,
+    first_rows_i32, scatter_rows,
 )
 
 
@@ -83,7 +84,11 @@ def row_sums(n: Int, k: Int, kind: Int) raises -> Int:
     for t in ts:
         threads(t)
         var got = List[Float64](length=2, fill=-1.0)
-        row_sum_range(Int(s.unsafe_ptr()), n, k, Int(got.unsafe_ptr()))
+        row_sum_range_tasks(Int(s.unsafe_ptr()), n, k, Int(got.unsafe_ptr()))
+        var old = List[Float64](length=2, fill=-1.0)
+        row_sum_range(Int(s.unsafe_ptr()), n, k, Int(old.unsafe_ptr()))
+        if bits(old[0]) != bits(hi) or bits(old[1]) != bits(lo):
+            bad += 1
         if bits(got[0]) != bits(hi) or bits(got[1]) != bits(lo):
             bad += 1
     _ = len(s)
@@ -124,8 +129,11 @@ def emi(n: Int, na: Int, nb: Int, seed: Int) raises -> Int:
     var ts: List[Int] = [1, 2, 3, 8]
     for t in ts:
         threads(t)
-        var got = expected_mi(Int(a.unsafe_ptr()), na, Int(b.unsafe_ptr()), nb, n)
+        var got = expected_mi_tasks(Int(a.unsafe_ptr()), na, Int(b.unsafe_ptr()), nb, n)
         if bits(got) != bits(want):
+            bad += 1
+        var old = expected_mi(Int(a.unsafe_ptr()), na, Int(b.unsafe_ptr()), nb, n)
+        if bits(old) != bits(want):
             bad += 1
     _ = len(a)
     _ = len(b)

@@ -124,7 +124,7 @@ def _arena_view(arena):
 
 def _new_arena(size):
     import os
-    if size >= _ARENA_LAZY and os.environ.get("MOJOLEARN_MSEL3_BEFORE") != "1":
+    if size >= _ARENA_LAZY and os.environ.get("MOJOLEARN_MSEL3") == "1":
         try:
             return _Arena(size)
         except (OSError, ValueError, TypeError, BufferError):
@@ -1924,6 +1924,9 @@ def _rows_sum_to_one(s, k, numeric_mode=None):
     from ._buffer import hotpath_enabled
     n = s.size // k if k else 0
     fn = getattr(_binding(numeric_mode), "x_metrics_row_sum_range", None) if hotpath_enabled() else None
+    if fn is not None and _lane3():
+        # each row by an exact running sum, rows as host tasks (lane metrics-apple3, opt-in)
+        fn = getattr(_binding(numeric_mode), "x_metrics_row_sum_range_tasks", None) or fn
     if fn is not None and n > 0 and s.dtype == "<f4" and s._has_order("C"):
         # the same row fsums, in the binding (x_metrics/epilogue.mojo
         # row_sum_range; lane metrics-apple2)
@@ -1952,10 +1955,12 @@ def _average_scores(scores, support, average):
 
 
 def _lane3():
-    """False under MOJOLEARN_MSEL3_BEFORE=1, lane metrics-apple3's before
-    arm (read per call): every route the lane added steps aside."""
+    """True only under MOJOLEARN_MSEL3=1 (read per call): lane
+    metrics-apple3's routes are OPT-IN and UNPROVEN (never measured or run:
+    the lane's Apple machine went away before its A/B job). Without it
+    every call takes its definition."""
     import os
-    return os.environ.get("MOJOLEARN_MSEL3_BEFORE") != "1"
+    return os.environ.get("MOJOLEARN_MSEL3") == "1"
 
 
 def _micro_inputs(codes, w, n, k):
@@ -2612,8 +2617,8 @@ def _col_sums(C, kb):
     """Each column's sum of the ka x kb integer rows `C` (exact Python
     integers, summed down the rows as `sum(C[i][j] for i in ...)` does;
     `zip` walks the rows in C; lane metrics-apple3)."""
-    if not C:
-        return [0] * kb
+    if not C or not _lane3():
+        return [sum(C[i][j] for i in range(len(C))) for j in range(kb)]
     return [sum(col) for col in zip(*C)]
 
 
@@ -2695,6 +2700,9 @@ def _expected_mi(a_counts, b_counts, n, numeric_mode=None):
     # expected_mi; lane metrics-apple2)
     from ._buffer import hotpath_enabled
     fn = getattr(_binding(numeric_mode), "x_metrics_expected_mi", None) if hotpath_enabled() else None
+    if fn is not None and _lane3():
+        # the cells as host tasks (lane metrics-apple3, opt-in)
+        fn = getattr(_binding(numeric_mode), "x_metrics_expected_mi_tasks", None) or fn
     if fn is not None and 0 < n < (1 << 31):
         A = array.array("q", a_counts)
         B = array.array("q", b_counts)

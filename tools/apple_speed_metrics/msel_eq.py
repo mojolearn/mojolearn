@@ -4,9 +4,9 @@
 routes the lane changed (the fold-row cache of the searches, the curves and
 the permutation test, the scorers' shared predictions, learning_curve's row
 prefixes, cross_val_predict's native assembly). The job runs it in the base
-tree, in the head tree under MOJOLEARN_MSEL3_BEFORE=1 (every definition)
-and in the head tree as shipped, per numeric mode, and requires every line
-equal. Lines: `MEQ <case> <digest>`.
+tree, in the head tree with the lane's switch off (every definition) and
+in the head tree under MOJOLEARN_MSEL3=1, per numeric mode, and requires
+every line equal. Lines: `MEQ <case> <digest>`.
 
     python tools/apple_speed_metrics/msel_eq.py --tree <checkout> [--big 0|1]
 """
