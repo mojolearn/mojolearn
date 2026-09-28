@@ -17,6 +17,7 @@ over (time, batch) rows in ascending order; bias gradients are column sums in
 the same row order.
 """
 from sequence.exec import Exec
+from sequence.mlp import EPI_BIAS_ACT
 from sequence.ops import (
     FP,
     Args,
@@ -26,6 +27,7 @@ from sequence.ops import (
     OP_CELL_FWD,
     OP_CELL_BWD_H,
     OP_CELL_FWD_H,
+    OP_GEMM_EPI,
     OP_COLSUM,
     OP_FILL,
     OP_GATHER_ROWS,
@@ -108,6 +110,29 @@ def gemm[E: Exec](
     a.i7 = 1 if accumulate else 0
     a.i8 = ldc
     ex.launch[OP_GEMM](a, M * N)
+
+
+def gemm_bias[E: Exec](
+    mut ex: E, A: FP, B: FP, C: FP, M: Int, N: Int, K: Int,
+    sam: Int, sak: Int, sbk: Int, sbn: Int, bias: FP,
+) raises:
+    """`gemm` into a dense C then `bias_rows` of `bias`, one launch
+    (mlp.mojo::op_gemm_epi: op_gemm then op_bias verbatim; same bits)."""
+    var a = Args()
+    a.p0 = A
+    a.p1 = B
+    a.p2 = C
+    a.p3 = bias
+    a.i0 = M
+    a.i1 = N
+    a.i2 = K
+    a.i3 = sam
+    a.i4 = sak
+    a.i5 = sbk
+    a.i6 = sbn
+    a.i8 = N
+    a.i9 = EPI_BIAS_ACT
+    ex.launch[OP_GEMM_EPI](a, M * N)
 
 
 def bias_rows[E: Exec](mut ex: E, X: FP, b: FP, Y: FP, R: Int, C: Int) raises:
@@ -229,8 +254,7 @@ def forward[E: Exec](mut ex: E, net: Net, P: FP, x: FP, T: Int, B: Int, w: Work)
     var inp = x
     for l in range(net.L):
         var din = net.din(l)
-        gemm(ex, inp, P + net.w_ih(l), w.gx[l], T * B, GH, din, din, 1, 1, din, False, GH)
-        bias_rows(ex, w.gx[l], P + net.b_ih(l), w.gx[l], T * B, GH)
+        gemm_bias(ex, inp, P + net.w_ih(l), w.gx[l], T * B, GH, din, din, 1, 1, din, P + net.b_ih(l))
         fill(ex, w.hall[l], B * H, Float32(0.0))
         fill(ex, w.call[l], B * H, Float32(0.0))
         for s in range(T):
@@ -259,8 +283,7 @@ def forward[E: Exec](mut ex: E, net: Net, P: FP, x: FP, T: Int, B: Int, w: Work)
 def head[E: Exec](mut ex: E, net: Net, P: FP, hT: FP, B: Int, yhat: FP) raises:
     var H = net.H
     var O = net.O
-    gemm(ex, hT, P + net.head(), yhat, B, O, H, H, 1, 1, H, False, O)
-    bias_rows(ex, yhat, P + net.head() + O * H, yhat, B, O)
+    gemm_bias(ex, hT, P + net.head(), yhat, B, O, H, H, 1, 1, H, P + net.head() + O * H)
 
 
 def backward[E: Exec](mut ex: E, net: Net, P: FP, Gr: FP, x: FP, T: Int, B: Int, w: Work) raises:
