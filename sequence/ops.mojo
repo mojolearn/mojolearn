@@ -242,6 +242,10 @@ def sub(a: Float32, b: Float32) -> Float32:
 
 comptime SUMSQ_STAGE = 64
 comptime GEMM_STAGE = 16
+#: a long fold (VAR's normal equations: few cells, K ~ 1M) keeps more loads
+#: in flight (apple2); same fmas, same order
+comptime GEMM_STAGE_LONG = 48
+comptime GEMM_LONG_K = 16384
 comptime COLSUM_STAGE = 32
 comptime SUMSQ_VEC = 4
 
@@ -314,6 +318,16 @@ def gemm_dot(pa: FP, abase: Int, sak: Int, pb: FP, bbase: Int, sbk: Int, K: Int,
         # that many loads in flight instead of waiting out each one); the
         # fold is the same chain of fmas in the same order.
         var k = 0
+        if K >= GEMM_LONG_K:
+            while k + GEMM_STAGE_LONG <= K:
+                var la = SIMD[DType.float32, 64]()
+                var lb = SIMD[DType.float32, 64]()
+                comptime for i in range(GEMM_STAGE_LONG):
+                    la[i] = ld(pa, abase + (k + i) * sak)
+                    lb[i] = ld(pb, (k + i) * sbk + bbase)
+                comptime for i in range(GEMM_STAGE_LONG):
+                    acc = fma3(la[i], lb[i], acc)
+                k += GEMM_STAGE_LONG
         while k + GEMM_STAGE <= K:
             var va = SIMD[DType.float32, GEMM_STAGE]()
             var vb = SIMD[DType.float32, GEMM_STAGE]()
@@ -570,7 +584,17 @@ def op_gather_seq(t: Int, a: Args):
 
 
 def op_gather_rows(t: Int, a: Args):
-    """out[b, o] = Y[idx[i2 + b], o]; i1 O."""
+    """out[b, o] = Y[idx[i2 + b], o]; i1 O. With i3 = O2 > 0 (apple2: two
+    gathers in one launch) threads from i0 i1 on gather p3 [., O2] into p4."""
+    if a.i3 > 0:
+        var n1 = a.i0 * a.i1
+        if t >= n1:
+            var t2 = t - n1
+            var b2 = t2 // a.i3
+            var o2 = t2 - b2 * a.i3
+            var row2 = Int(a.p1.unsafe_load(a.i2 + b2))
+            a.p4.unsafe_store(t2, ld(a.p3, row2 * a.i3 + o2))
+            return
     var b = t // a.i1
     var o = t - b * a.i1
     var row = Int(a.p1.unsafe_load(a.i2 + b))
