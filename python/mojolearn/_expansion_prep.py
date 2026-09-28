@@ -3516,7 +3516,7 @@ class _SelectorMixin(_PrepBase):
             raise ValueError("mojolearn: no features were selected")
         pr = _Prog()
         xo, ko = pr.put(arr), pr.put_list(keep)
-        out = pr.output(n * len(keep))
+        out = pr.alloc(n * len(keep))
         pr.stage("gather_cols", n * len(keep), xo, n, d, ko, len(keep), out)
         pr.run(self.numeric_mode_)
         return pr.get(out, (n, len(keep)))
@@ -3796,7 +3796,7 @@ def _gather(arr, cols, mode):
     n, d = arr.shape
     pr = _Prog()
     xo, ko = pr.put(arr), pr.put_list(cols)
-    out = pr.output(n * len(cols))
+    out = pr.alloc(n * len(cols))
     pr.stage("gather_cols", n * len(cols), xo, n, d, ko, len(cols), out)
     pr.run(mode)
     return pr.get(out, (n, len(cols)))
