@@ -299,11 +299,14 @@ def op_garch(t: Int, a: Args):
     var obj = GarchObj(y, r, n, p, o, q, has_mean, backcast, vb, s2)
     # the cycle watch's snapshot: the last GARCH_SNAP floats of the row
     var snap = a.p5 + t * a.i6 + (a.i6 - GARCH_SNAP)
-    var it = nelder_mead(obj, x, lo, hi, np_, nm_scr, Float32(0.05), Float32(1e-4), 2000, Float32(1e-6), snap)
+    # i7 / f0: the FAST stall stop (sequence/nm.mojo; compiled out of IDENTICAL)
+    var it = nelder_mead(obj, x, lo, hi, np_, nm_scr, Float32(0.05), Float32(1e-4), 2000, Float32(1e-6), snap,
+                         stall_iters=a.i7, stall_rel=a.f0)
     # one restart from the optimum (a fresh simplex around it): the
     # likelihood is flat along the persistence ridge and a single simplex
     # can stall short of the maximum
-    it += nelder_mead(obj, x, lo, hi, np_, nm_scr, Float32(0.05), Float32(1e-4), 2000, Float32(1e-6), snap)
+    it += nelder_mead(obj, x, lo, hi, np_, nm_scr, Float32(0.05), Float32(1e-4), 2000, Float32(1e-6), snap,
+                      stall_iters=a.i7, stall_rel=a.f0)
     var nll = obj.eval(x)
     var outp = a.p1 + t * (1 + k)
     st(outp, 0, ld(x, 0) if has_mean else Float32(0.0))

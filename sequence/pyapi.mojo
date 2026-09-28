@@ -892,13 +892,23 @@ def ets_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: Python
     return PythonObject(B * h)
 
 
+#: GARCH's FAST Nelder-Mead stall stop (as ETS_FAST_STALL_*): float32 never
+#: meets the reference's tol_std 1e-6 at -loglik ~ 100, so a capped simplex
+#: ran both 2000-iteration runs; FAST ends a run whose best value has stopped
+#: moving. Chosen by the paired quality sweep (tools/sequence_quality.py).
+comptime GARCH_FAST_STALL_ITERS = 100
+comptime GARCH_FAST_STALL_REL = Float32(1e-6)
+
+
 def garch_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
     """GARCH(p, o, q) over a batch of series (`sequence/garch.mojo`).
     addrs = [y (B, n), params (B, 1 + 1 + p + o + q) out, info (B, 4) out,
     sigma (B, n) out, variance forecast (B, h) out];
-    ip = [B, n, h, p, o, q, constant mean]."""
-    if len(addrs) != 5 or len(ip) != 7:
-        raise Error("garch: requires 5 addresses and 7 integer parameters")
+    ip = [B, n, h, p, o, q, constant mean]. FAST: an optional 8th and 9th
+    override the Nelder-Mead stall stop (iterations, relative drop in units
+    of 1e-9; GARCH_FAST_STALL_*; 0 iterations: off)."""
+    if len(addrs) != 5 or (len(ip) != 7 and len(ip) != 9):
+        raise Error("garch: requires 5 addresses and 7 (or 9) integer parameters")
     var B = ival(ip, 0)
     var n = ival(ip, 1)
     var h = ival(ip, 2)
@@ -931,6 +941,8 @@ def garch_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -
     a.i4 = q
     a.i5 = cm
     a.i6 = stride
+    a.i7 = ival(ip, 7) if len(ip) == 9 else GARCH_FAST_STALL_ITERS
+    a.f0 = Float32(Float64(ival(ip, 8)) * 1e-9) if len(ip) == 9 else GARCH_FAST_STALL_REL
     ex.launch[OP_GARCH](a, B)
     ex.sync()
     ex.download(fptr(addrs[1], "params"), P, B * (1 + 1 + p + o + q))

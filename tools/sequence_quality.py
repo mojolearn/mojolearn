@@ -107,6 +107,27 @@ def q_ets(ml, X, stall=None):
                 iters_mean=float(info[:, 6].mean()))
 
 
+def q_garch(ml, X, stall=None):
+    Y = series(X, 10000, 112) - np.float32(10.0)
+    tr, te = np.ascontiguousarray(Y[:, :100]), Y[:, 100:].astype(np.float64)
+    m = ml.GARCH(1, 0, 1)
+    if stall is not None:
+        m._fast_stall = stall
+    t0 = time.perf_counter()
+    m.fit(tr, horizon=12)
+    secs = time.perf_counter() - t0
+    f = np.asarray(m.forecast(12), dtype=np.float64)
+    mu = np.asarray(m.params_, dtype=np.float64)[:, :1]
+    r2 = (te - mu) ** 2
+    ok = np.isfinite(f).all(1) & (f > 0).all(1)
+    qlike = np.log(f[ok]) + r2[ok] / f[ok]
+    ll = np.asarray(m.loglikelihood_, dtype=np.float64)
+    return dict(stall=list(stall) if stall is not None else "default", fit_s=secs,
+                loglik_mean=float(ll.mean()), loglik_median=float(np.median(ll)),
+                qlike=float(qlike.mean()), nonfinite=int((~ok).sum()),
+                iters_mean=float(np.asarray(m.n_iter_).mean()))
+
+
 def q_layernorm(ml, X):
     x = np.ascontiguousarray(X)
     D = x.shape[1]
@@ -138,7 +159,7 @@ def q_var(ml, X):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", default="~/datasets/gbm-bench/higgs/higgs_speed.npz")
-    ap.add_argument("--what", default="lamb,adafactor,layernorm,var,ets")
+    ap.add_argument("--what", default="lamb,adafactor,layernorm,var,ets,garch")
     a = ap.parse_args()
     import mojolearn as ml
     X = None
@@ -146,15 +167,19 @@ def main():
         try:
             if w in ("lamb", "adafactor"):
                 r = q_optim(ml, w)
-            elif w in ("ets", "layernorm", "var"):
+            elif w in ("ets", "garch", "layernorm", "var"):
                 if X is None:
                     X, _ = load(a.data, 1_000_000)
-                if w == "ets":
+                if w in ("ets", "garch"):
                     fast = os.environ.get("MOJOLEARN_NUMERIC_MODE") == "fast"
-                    sweep = [None] + ([(0, 0.0), (50, 1e-6), (100, 1e-6), (200, 1e-6), (100, 1e-7), (300, 1e-7)]
+                    sweep = [None] + ([(0, 0.0), (50, 1e-6), (100, 1e-6), (200, 1e-6), (100, 1e-7), (300, 1e-7),
+                                       (100, 1e-5)]
                                       if fast and os.environ.get("SEQ_QUALITY_ETS_SWEEP") else [])
                     for s in sweep:
-                        r = q_ets(ml, X, s)
+                        try:
+                            r = (q_ets if w == "ets" else q_garch)(ml, X, s)
+                        except Exception as e:
+                            r = dict(stall=str(s), error=f"{type(e).__name__}: {e}")
                         print("QUAL", json.dumps(dict(case=w, mode=os.environ.get("MOJOLEARN_NUMERIC_MODE", ""), **r)),
                               flush=True)
                     continue
