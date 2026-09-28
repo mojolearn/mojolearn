@@ -181,6 +181,13 @@ def main():
             cases.append(("mcc3_" + t, lambda ya=ya, yb=yb: M.matthews_corrcoef(ya, yb)))
             cases.append(("prfs3_" + t, lambda ya=ya, yb=yb: M.precision_recall_fscore_support(ya, yb, average=None)))
             cases.append(("ari3_" + t, lambda ya=ya, yb=yb: M.adjusted_rand_score(ya, yb)))
+            cases.append(("report3_" + t, lambda ya=ya, yb=yb: M.classification_report(ya, yb, digits=6)))
+            cases.append(("report3_dict_" + t, lambda ya=ya, yb=yb: sorted(
+                (k, sorted(v.items()) if isinstance(v, dict) else v)
+                for k, v in M.classification_report(ya, yb, output_dict=True).items())))
+            cases.append(("report3_labels_w_" + t, lambda ya=ya, yb=yb, n=n: M.classification_report(
+                ya, yb, labels=sorted(set(ya.tolist()))[:3], digits=5,
+                sample_weight=(np.arange(n) % 4 + 1).astype(np.float32))))
         X = np.empty((n, 1))
         for name, f in (("neg", lambda v: v - 3), ("far", lambda v: v * 9000 + 10 ** 9), ("i32", lambda v: v.astype(np.int32))):
             ya = f(a[::-1].copy())

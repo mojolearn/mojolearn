@@ -522,6 +522,12 @@ def multilabel_confusion_matrix(y_true, y_pred, *, sample_weight=None, labels=No
     return Array.from_list([int(v) for v in rows], "<i8").reshape((len(chosen), 2, 2))
 
 
+import threading as _threading
+
+#: classification_report's per-call memo (thread local; None outside it)
+_REPORT = _threading.local()
+
+
 def precision_recall_fscore_support(y_true, y_pred, *, beta=1.0, labels=None, pos_label=1,
                                     average=None, warn_for=("precision", "recall", "f-score"),
                                     sample_weight=None, zero_division="warn", numeric_mode=None):
@@ -533,9 +539,25 @@ def precision_recall_fscore_support(y_true, y_pred, *, beta=1.0, labels=None, po
     if is_bool(beta) or not isinstance(beta, numbers.Real) or not beta >= 0:
         raise ValueError("beta should be >=0 in the F-beta score")
     _zero_division_value(zero_division)
-    true, pred, kind, present, w = _pair(y_true, y_pred, sample_weight, "precision_recall_fscore_support")
+    # classification_report asks for the same inputs four times: inside it
+    # the encoded pair and the per-label sums are made once (lane
+    # metrics-apple3; `_REPORT.memo` is None everywhere else)
+    memo = getattr(_REPORT, "memo", None)
+    same = (id(y_true), id(y_pred), id(sample_weight))
+    hit = None if memo is None else memo.get(("pair", same))
+    if hit is None:
+        hit = _pair(y_true, y_pred, sample_weight, "precision_recall_fscore_support")
+        if memo is not None:
+            memo[("pair", same)] = hit
+    true, pred, kind, present, w = hit
     chosen = _set_wise_labels(present, kind, average, labels, pos_label, "precision_recall_fscore_support")
-    s = _Sums(true, pred, w, _label_order(chosen, present), numeric_mode)
+    order = _label_order(chosen, present)
+    key = ("sums", same, tuple(order), numeric_mode)
+    s = None if memo is None else memo.get(key)
+    if s is None:
+        s = _Sums(true, pred, w, order, numeric_mode)
+        if memo is not None:
+            memo[key] = s
     k = len(chosen)
     tp, ps, ts = s.tp[:k], s.pred[:k], s.true[:k]
     if average == "micro":
@@ -883,6 +905,21 @@ def classification_report(y_true, y_pred, *, labels=None, target_names=None, sam
                          f"{len(target_names)}. Try specifying the labels parameter")
     names = [str(t) for t in target_names] if target_names is not None else [str(c) for c in chosen]
     headers = ["precision", "recall", "f1-score", "support"]
+    if _lane3() and getattr(_REPORT, "memo", None) is None:
+        _REPORT.memo = {}
+        try:
+            return _classification_report(y_true, y_pred, labels_given, chosen, present, names, headers,
+                                          micro_is_accuracy, sample_weight, digits, output_dict,
+                                          zero_division, numeric_mode)
+        finally:
+            _REPORT.memo = None
+    return _classification_report(y_true, y_pred, labels_given, chosen, present, names, headers,
+                                  micro_is_accuracy, sample_weight, digits, output_dict, zero_division,
+                                  numeric_mode)
+
+
+def _classification_report(y_true, y_pred, labels_given, chosen, present, names, headers, micro_is_accuracy,
+                           sample_weight, digits, output_dict, zero_division, numeric_mode):
     p, r, f, s = precision_recall_fscore_support(y_true, y_pred, labels=chosen, average=None,
                                                  sample_weight=sample_weight,
                                                  zero_division=zero_division, numeric_mode=numeric_mode)
