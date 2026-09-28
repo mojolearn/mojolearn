@@ -69,14 +69,14 @@ diff --git a/kernel_methods/estimator.mojo b/kernel_methods/estimator.mojo
 index 713cda6a2..5684d3d4c 100644
 --- a/kernel_methods/estimator.mojo
 +++ b/kernel_methods/estimator.mojo
-@@ -1164,7 +1164,7 @@ def rbf_sampler_fit_host(
+@@ -1240,7 +1240,7 @@ def rbf_sampler_fit_host(
          )
  
      var sigma = km_weight_sigma(gamma)
 -    var scale = km_feature_scale(n_components)
 +    var scale = km_feature_scale(n_components) * Float32(1.0000001)  # SABOTAGE e2e
  
-     var ctx = DeviceContext()
+     var ctx = _family_ctx()
      var dw = ctx.enqueue_create_buffer[DType.float32](
 diff --git a/neighbors/checks/radius_distances.mojo b/neighbors/checks/radius_distances.mojo
 index 70bbf651a..5ca5cb537 100644
