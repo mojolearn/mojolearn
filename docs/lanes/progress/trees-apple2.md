@@ -158,3 +158,44 @@ Same arms as the M3 Ultra table (10 RF columns per pass in both arms; 2031 alrea
 | same | m4pro-b | 1790614070834 | dart:taxireg / adaboost:taxireg / bagging:taxi / dt:taxireg | 5839 / 2062 / 634 / 81 | 6422 / 2169 / 665 / 84 | **1.100 / 1.052 / 1.048 / 1.039** -> workspace capped at the sampled columns (a91fe60be) | equal |
 | id arena incl. split bins, IDENTICAL (a29c5bffa; before = one copy per slot) | m4pro-b | 1790615807516 | lossguide taxi | 3982 | 3737 | 0.938 | b1761eecc6dfbc73 |
 | same | m4pro-b | 1790615807516 | depthwise taxi | 1643 | 1617 | 0.984 | 5694af7699036c65 |
+
+## M4 Pro m4pro-a, IDENTICAL, all changes off vs on (commit a05b81b5b = 72437f655 + apple-merged, steward 1790615170063)
+
+Before = `-D MOJOLEARN_RF_BINS_COLUMN_MAJOR -D MOJOLEARN_RF_FAST_HIST_ZERO_OFF -D MOJOLEARN_ET_TILED_SEARCH_IDENTICAL_OFF -D MOJOLEARN_ET_RM_NARROW_OFF -D MOJOLEARN_GBDT_IDENTICAL_RIDX_OFF -D MOJOLEARN_2031_SYM_RIDX_SPLITS_OFF -D MOJOLEARN_GBDT_ID_UPLOADS_SEPARATE -D MOJOLEARN_GBDT_IDENTICAL_SPLIT_COPY -D MOJOLEARN_RF_COLS10`. Every digest equal. RF 40 columns per pass with the UNCAPPED workspace here (the AdaBoost/DART rows; a91fe60be caps it, measured separately).
+
+| cell | before | after | after/before | digest |
+|---|---|---|---|---|
+| adaboost:taxi | 2929 | 3183 | 1.087 | e8529a04f218dbab |
+| adaboost:taxireg | 1807 | 1884 | 1.042 | 160452cbaf288200 |
+| bagging:taxi | 684 | 668 | 0.977 | 16aaba82631a5774 |
+| dart:taxireg | 5376 | 5896 | 1.097 | 86f40254833745ec |
+| dt:istellareg | 796 | 778 | 0.978 | 6f406a1b9436c69f |
+| dt:taxireg | 96 | 88 | 0.919 | e735a53b7d74025a |
+| embedding:taxi | 335 | 343 | 1.025 | 90d1b0749de17d44 |
+| et:istellareg | 63036 | 23442 | 0.372 | 981c3b89e374c91d |
+| et:taxi | 2029 | 1977 | 0.974 | ac18d5d8a54b1555 |
+| et:taxireg | 7100 | 2369 | 0.334 | ec62616c8e02c60b |
+| gbdt-depthwise:istella | 3609 | 3532 | 0.979 | e9c0f7e913af5a8a |
+| gbdt-depthwise:taxi | 1771 | 1704 | 0.962 | 5694af7699036c65 |
+| gbdt-lossguide:istella | 6147 | 5874 | 0.956 | eb0d9510ee08a16f |
+| gbdt-lossguide:taxi | 4075 | 3698 | 0.907 | b1761eecc6dfbc73 |
+| gbdt-symmetric:istella | 2807 | 2814 | 1.002 | d5571c2a35ea06c8 |
+| gbdt-symmetric:taxi | 1027 | 941 | 0.916 | 8e760782efae56c8 |
+| iforest:taxi | 70 | 67 | 0.951 | 96ff7aa1dfcef11e |
+| rf:istellareg | 49615 | 47096 | 0.949 | 3a5e8c09dd0d5fc7 |
+| rf:taxi | 3295 | 3152 | 0.957 | 452a173087f86a9d |
+| rf:taxireg | 6726 | 5406 | 0.804 | 58ec783b7afbd7a7 |
+
+## M4 m4-a, FAST, this lane's FAST-reaching changes off vs on (a05b81b5b, steward 1790615179564)
+
+Before = `-D MOJOLEARN_2031_SYM_RIDX_SPLITS_OFF -D MOJOLEARN_GBDT_ID_UPLOADS_SEPARATE -D MOJOLEARN_ET_RM_NARROW_OFF`. The 10-tree GBDT digests are equal across arms for all three policies; FAST Lossguide's 100-tree digest varies run to run inside the after arm (pre-existing FAST non-determinism).
+
+| cell | before | after | after/before | digest |
+|---|---|---|---|---|
+| embedding:taxi (FAST) | 467 | 468 | 1.002 | 90d1b0749de17d44 |
+| et:taxi (FAST) | 3854 | 3744 | 0.971 | ac18d5d8a54b1555 |
+| et:taxireg (FAST) | 4213 | 4222 | 1.002 | ec62616c8e02c60b |
+| gbdt-depthwise:taxi (FAST) | 3127 | 3075 | 0.984 | 4e615891dc42e914 |
+| gbdt-lossguide:taxi (FAST) | 6998 | 6403 | 0.915 | a1deaadb73ff9970 |
+| gbdt-symmetric:taxi (FAST) | 1707 | 1576 | 0.923 | 8f160400c1defdf5 |
+| rf:taxi (FAST) | 5086 | 5085 | 1.000 | 452a173087f86a9d |
