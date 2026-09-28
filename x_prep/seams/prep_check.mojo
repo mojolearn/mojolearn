@@ -21,7 +21,7 @@ from x_prep.common import FP, IP, STAGE_INTS
 from x_prep.host.program import run_program_host_ptr
 from x_prep.device import run_program_device_ptr
 from checks.numerics import identical_cos
-from x_prep.prims import add, mul, logf, sqrtf
+from x_prep.prims import add, mul, logf, sqrtf, sort_cols_unit
 from x_prep.mutual_info import digammaf
 from x_prep.seams.prep_oracle import (
     seq_sum, rev_sum, pinned_dot, fused_dot, key_sorted, value_sorted, guarded_mean, raw_mean,
@@ -139,6 +139,69 @@ def check_sort_key(mut card: IdentityTrace) raises:
             _require(_b(r[n + i]) == _b(ks[i]), "sort key: position " + String(i))
     card.record_list_f32("5402.sort", p.run(False))
     print("PASS 5402 sort key: -0.0 before +0.0, NaN last (the fixture separates it from a value compare)")
+
+
+def _heap_sorted(arena: List[Float32], params: List[Int], cols: Int) raises -> List[Float32]:
+    """The device's unit (`sort_cols_unit`, the heap sort) called directly,
+    column by column: the words x_prep/host/sort.mojo must write."""
+    var f = arena.copy()
+    var q = List[Int32](length=STAGE_INTS, fill=0)
+    for i in range(len(params)):
+        q[i] = Int32(params[i])
+    var fp = f.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var qp = q.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    for c in range(cols):
+        sort_cols_unit(c, fp, qp)
+    _ = len(q)
+    return f^
+
+
+def check_host_sort(mut card: IdentityTrace) raises:
+    """DEVIATION 5402, the host's key sort (x_prep/host/sort.mojo): the host
+    runner's `sort_cols` writes the heap sort's words on every column. The
+    fixture holds -0.0/+0.0, a subnormal (flushed), infinities, ties, one NaN
+    word in column 0 and two NaN payloads in column 1; the two NaN payloads
+    SEPARATE a sort that writes one NaN word for the suffix from the heap
+    sort's own order (else VACUOUS), with and without `canon`."""
+    var nan = _f(UInt32(0x7FC00000))
+    var nan2 = _f(UInt32(0x7FC00123))
+    var nnan = _f(UInt32(0xFFC00000))
+    var inf = _f(UInt32(0x7F800000))
+    var sub_ = _f(UInt32(0x00000005))
+    var nsub = _f(UInt32(0x80000005))
+    var c0: List[Float32] = [2.0, -0.0, nan, 0.0, -inf, sub_, 2.0, nsub, inf, nan, -3.5, 0.0, 1.0e-30, nan]
+    var c1: List[Float32] = [nan2, 1.0, nan, -0.0, nnan, 5.0, nan2, 0.0, -1.0, nan, 5.0, -2.0, nan2, 3.0]
+    var n = len(c0)
+    var arena = List[Float32]()
+    for i in range(n):
+        arena.append(c0[i])
+        arena.append(c1[i])
+    for _ in range(2 * n):
+        arena.append(0)
+    var one_word_sep = False
+    for cn in range(2):
+        var params: List[Int] = [0, n, 2, 2 * n, cn]
+        var want = _heap_sorted(arena, params, 2)
+        if cn == 0:
+            # a suffix of one NaN word (the first) differs from the heap sort's column 1
+            var first = UInt32(0)
+            var seen = False
+            for i in range(n):
+                var w = _b(want[2 * n + n + i])
+                if (w & UInt32(0x7F800000)) == UInt32(0x7F800000) and (w & UInt32(0x007FFFFF)) != UInt32(0):
+                    if not seen:
+                        first = w
+                        seen = True
+                    elif w != first:
+                        one_word_sep = True
+        var p = Prog(arena, OP_SORT, 2, params)
+        var got = p.run(False)
+        for i in range(2 * n):
+            _require(_b(got[2 * n + i]) == _b(want[2 * n + i]),
+                     "host sort canon=" + String(cn) + " position " + String(i))
+        card.record_list_f32("5402.host_sort.canon" + String(cn), got)
+    _require(one_word_sep, "VACUOUS host sort fixture: the two NaN payloads do not separate")
+    print("PASS 5402 host key sort: the heap sort's words on every column (mixed NaN payloads, canon 0 and 1)")
 
 
 def check_empty_guard(mut card: IdentityTrace) raises:
@@ -266,6 +329,7 @@ def main() raises:
     check_fold_order(card)
     check_contraction(card)
     check_sort_key(card)
+    check_host_sort(card)
     check_empty_guard(card)
     check_first_max(card)
     check_eigen_sign(card)
