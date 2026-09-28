@@ -155,8 +155,12 @@ def load_harness(path=None, par_axis=False):
     except ModuleNotFoundError as exc:
         if exc.name != "numpy":
             raise
-        raise CannotRun("Verification requires NumPy. Install it with: "
-                        "python -m pip install numpy") from exc
+        from ._version import __version__
+        raise CannotRun("Verification requires the optional NumPy dependency. "
+                        "Install verification support for this version with: "
+                        f'python -m pip install "mojolearn[verify]=={__version__}" '
+                        "(or, for an older release without the extra: "
+                        "python -m pip install numpy)") from exc
 
 
 def family_map(lanes):
@@ -3401,6 +3405,19 @@ def _depth(args):
     return "quick" if getattr(args, "quick", False) else "full"
 
 
+def _extra_parts(args):
+    """Full-suite requests include every property; quick/subset runs opt in.
+
+    Keep selection identical for execution and reference generation. Explicit
+    --quick takes precedence over --all, as it does for lane/fixture selection.
+    Saved-model-only requests do not execute the training probes.
+    """
+    full_suite = (getattr(args, "all", False) or getattr(args, "full", False))
+    full_suite = full_suite and not getattr(args, "quick", False)
+    full_suite = full_suite and not getattr(args, "models_only", False)
+    return vref.OPTIONAL_PARTS if (full_suite or getattr(args, "batch_checks", False)) else ()
+
+
 def _reexec_identical(argv):
     """`python -m mojolearn verify --all` with no mode chosen: run it again
     in a child that selects the identical tier at import, which is the only
@@ -3574,7 +3591,7 @@ def cmd_verify_all(args):
     # Wall time per lane and per cell. Weak evidence alone, but cheap, and a
     # fit reported at zero milliseconds did not happen, so a fabricated run is
     # obvious in the document (lane/expose-inference-surface, 2026-09-16).
-    extra_parts = vref.OPTIONAL_PARTS if getattr(args, "batch_checks", False) else ()
+    extra_parts = _extra_parts(args)
     contract_data, contract_held = dict(data), dict(held)
     if not getattr(args, "no_models", False) and 'base' not in contract_data:
         contract_data['base'], contract_held['base'] = harness.fixture('base'), harness.heldout('base')
@@ -3914,7 +3931,7 @@ def _cmd_emit_reference(args):
         _emit(f"USAGE: unknown reference lanes: {sorted(unknown)}", sys.stderr)
         return EXIT_USAGE
     table = vref.build_table(paths, harness, root or os.getcwd(), log=logs.append, lanes=lanes or None,
-                             parts=vref.PARTS + (vref.OPTIONAL_PARTS if getattr(args, "batch_checks", False) else ()))
+                             parts=vref.PARTS + _extra_parts(args))
     if getattr(args, "reference_table", None):
         try:
             table = vref.merge_reference_lanes(vref.load_table(args.reference_table), table, lanes)
