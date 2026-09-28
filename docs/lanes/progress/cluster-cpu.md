@@ -70,7 +70,10 @@ every earlier result on it was lost with it.
   sabotaged, PASS restored on x86 (log:
   ~/mojolearn-evidence/cluster-cpu/arms_amdbox_cpu.log).
 - The family lane check on an AMD slot (CPU == MI300X, every .checks arm)
-  was queued but both slots were held by long decomp/sequence jobs; not run.
+  is queued ON THE BOX (a waiter, up to 120 min from ~05:35Z; both slots
+  were held by decomp/sequence). If it got a slot, its result is
+  /root/ev-cluster-cpu/lc1.log (ends `EXIT <rc>`) and /root/ev-cluster-cpu/lc1/;
+  if the log does not exist, it never ran.
   Command: `tools/amd_central.sh run cluster-cpu "cd /root/mojolearn-cluster-cpu
   && sh tools/algos_lane_check.sh $(cat ~/mojolearn-evidence/cluster-cpu/lanes.txt)
   --pass 2 --out /root/ev-cluster-cpu/lc1"`.
