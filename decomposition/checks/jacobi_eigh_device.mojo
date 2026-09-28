@@ -18,6 +18,7 @@ from checks.numerics import (
 
 
 from std.bit import log2_floor
+from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from std.gpu import thread_idx
 from max.gpu.memory import AddressSpace
@@ -67,7 +68,7 @@ comptime JACOBI_TPB = lib_block_size_for[K_LIB_JACOBI_EIGH, TARGET_COLUMN]()
 #: spelling that does not move FAST's bits. FAST therefore launches at
 #: `JACOBI_TPB` exactly as before, and this deviation is IDENTICAL-only.
 comptime JACOBI_ROT_TPB = (
-    256 if (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL or has_apple_gpu_accelerator()) else JACOBI_TPB
+    256 if (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL or (has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_JACOBI_FAST_NARROW"]())) else JACOBI_TPB
 )
 """lane/neighbors-apple (2026-09-28): FAST on Apple takes the 256-wide
 launch too (Nystroem.fit 4,000 rows / 300 components ran 3.06 s under FAST
