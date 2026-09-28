@@ -9,7 +9,7 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from x_prep.device import run_program_device
+from x_prep.device import run_program_device, run_program_device_ranges, x_prep_ctx, X_PREP_STORE
 from x_prep.folds import I32P, kfold_folds, strat_folds
 
 
@@ -60,6 +60,51 @@ def run_out_binding(arena_addr: PythonObject, prog_addr: PythonObject, out_addr:
     return PythonObject(s)
 
 
+def run_ranges_binding(arena_addr: PythonObject, prog_addr: PythonObject, out_addr: PythonObject,
+                       sizes: PythonObject, ranges: PythonObject) raises -> PythonObject:
+    """x_prep_run_out whose host arena crosses by ranges (lane py-shared,
+    core/arena_io.mojo). sizes = (arena_len, scratch_len, out_len, stages);
+    ranges = (ins_addr, nins, outs_addr, nouts): Int32 triples [lo, hi, src]
+    and quads [lo, hi, CNT, mult] inside the host arena."""
+    var fa = Int(py=arena_addr)
+    var qa = Int(py=prog_addr)
+    var oa = Int(py=out_addr)
+    var n = Int(py=sizes[0])
+    var sc = Int(py=sizes[1])
+    var on = Int(py=sizes[2])
+    var s = Int(py=sizes[3])
+    var ia = Int(py=ranges[0])
+    var ni = Int(py=ranges[1])
+    var ra = Int(py=ranges[2])
+    var no = Int(py=ranges[3])
+    if fa == 0 or qa == 0 or n < 0 or sc < 0 or on < 0 or s < 0 or (on > 0 and oa == 0) or ni < 0 or no < 0:
+        raise Error("x_prep: invalid program buffers")
+    with GILReleased(Python()):
+        run_program_device_ranges(fa, n, qa, s, sc, oa, on, ia, ni, ra, no)
+    return PythonObject(s)
+
+
+def dev_put_binding(addr: PythonObject, n_words: PythonObject) raises -> PythonObject:
+    """A resident copy of n_words host words (core/device_store.mojo); its id."""
+    var a = Int(py=addr)
+    var n = Int(py=n_words)
+    var id: Int
+    with GILReleased(Python()):
+        id = X_PREP_STORE.get_or_create_ptr()[].put(x_prep_ctx(), a, n)
+    return PythonObject(id)
+
+
+def dev_free_binding(id: PythonObject) raises -> PythonObject:
+    var i = Int(py=id)
+    with GILReleased(Python()):
+        X_PREP_STORE.get_or_create_ptr()[].free(x_prep_ctx(), i)
+    return PythonObject(None)
+
+
+def dev_live_binding() raises -> PythonObject:
+    return PythonObject(X_PREP_STORE.get_or_create_ptr()[].live)
+
+
 def _seed(v: PythonObject) raises -> UInt64:
     """(lo, hi) 32-bit halves -> the 64-bit seed."""
     return (UInt64(Int(py=v[1])) << 32) | UInt64(Int(py=v[0]))
@@ -106,6 +151,10 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
         m.def_function[run_binding]("x_prep_run")
         m.def_function[run_scratch_binding]("x_prep_run_scratch")
         m.def_function[run_out_binding]("x_prep_run_out")
+        m.def_function[run_ranges_binding]("x_prep_run_ranges")
+        m.def_function[dev_put_binding]("x_prep_dev_put")
+        m.def_function[dev_free_binding]("x_prep_dev_free")
+        m.def_function[dev_live_binding]("x_prep_dev_live")
         m.def_function[strat_folds_binding]("x_prep_strat_folds")
         m.def_function[kfold_folds_binding]("x_prep_kfold_folds")
         m.def_function[numeric_mode_binding]("x_prep_numeric_mode")

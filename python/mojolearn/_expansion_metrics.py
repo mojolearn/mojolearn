@@ -34,6 +34,7 @@ import warnings
 
 from . import _backend
 from . import _portable_math as pmath
+from . import _arena_io
 from ._array import Array
 from ._buffer import as_f32_c, addr_ro, all_finite, empty
 from ._labels import is_bool
@@ -208,14 +209,32 @@ def _execute(prog, numeric_mode):
     classes) sees every caller reach `x_metrics_run`."""
     arena = array.array("f", bytes(4 * max(prog.size, 1)))
     base = arena.buffer_info()[0]
-    for off, arr in prog._inputs:
-        if arr.size:
-            ctypes.memmove(base + 4 * off, addr_ro(arr, name="input"), 4 * arr.size)
     stages = array.array("i", [v for s in prog._stages for v in s] or [0])
     b = _binding(numeric_mode)
     merged = prog._download()
+    run_ranges = getattr(b, "x_metrics_run_ranges", None) if _arena_io.ranges_enabled() else None
+    spans = []
+    for off, arr in prog._inputs:
+        if not arr.size:
+            continue
+        cache = _arena_io.active_cache(b, "x_metrics", arr.size) if run_ranges is not None else None
+        if cache is not None:
+            # resident (lane py-shared): the device copies it from the store;
+            # the host arena's words stay zero and are never read (`_check`)
+            spans.append((off, off + arr.size, cache.id_of(arr)))
+            continue
+        ctypes.memmove(base + 4 * off, addr_ro(arr, name="input"), 4 * arr.size)
+        spans.append((off, off + arr.size, -1))
     run_out = getattr(b, "x_metrics_run_out", None) if merged is not None else None
-    if run_out is not None:
+    if run_ranges is not None:
+        # the shared ranges runner (lane py-shared, core/arena_io.mojo): only
+        # the inputs go up, only the outputs come back
+        ins = _arena_io.input_ranges(spans)
+        outs = [list(r) for r in merged] if merged is not None else [[0, prog.size, -1, 1]]
+        ia, oa = _arena_io.pack_ins(ins), _arena_io.pack_outs(outs)
+        run_ranges(base, stages.buffer_info()[0], (prog.size, len(prog._stages), len(ins), len(outs)),
+                   ia.buffer_info()[0], oa.buffer_info()[0])
+    elif run_out is not None:
         outs = array.array("i", [v for r in merged for v in r] or [0, 0, -1, 1])
         run_out(base, prog.size, stages.buffer_info()[0], len(prog._stages), outs.buffer_info()[0], len(merged))
     else:
