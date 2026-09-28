@@ -132,6 +132,28 @@ def main():
             for avg in ("arithmetic", "geometric", "max"):
                 cases.append(("ami_%d_%d_%d_%s" % (n, ka, kb, avg), lambda a=a, b=b, m=avg: M.adjusted_mutual_info_score(a, b, average_method=m)))
             cases.append(("ami_skew_%d_%d_%d" % (n, ka, kb), lambda a=sk, b=b: M.adjusted_mutual_info_score(a, b)))
+    # lane metrics-apple3: score rows of very different magnitudes (their
+    # binary64 row sum is not exact, so the row-sum check takes fsum itself),
+    # rows that are exactly representable, and sizes on both sides of the
+    # host-task threshold; NMI / AMI with many classes (many short cells)
+    for n in (300, 40000, 200003, 1000000):
+        yc = rs.randint(0, 5, n)
+        Z = rs.randn(n, 5) * 30.0
+        Z = Z - Z.max(axis=1, keepdims=True)
+        W = np.exp(Z)
+        W = (W / W.sum(axis=1, keepdims=True)).astype(np.float32)
+        cases.append(("ovr_wide_%d" % n, lambda yc=yc, P=W: M.roc_auc_score(yc, P, multi_class="ovr")))
+        cases.append(("logloss_wide_%d" % n, lambda yc=yc, P=W: M.log_loss(yc, P)))
+        Q = (rs.randint(1, 9, (n, 5)) / 8.0)
+        Q = (Q / Q.sum(axis=1, keepdims=True)).astype(np.float32)
+        cases.append(("ovr_exact_%d" % n, lambda yc=yc, P=Q: M.roc_auc_score(yc, P, multi_class="ovr")))
+        cases.append(("topk_exact_%d" % n, lambda yc=yc, P=Q: M.top_k_accuracy_score(yc, P, k=2)))
+    for n in (70001, 400000):
+        for ka, kb in ((60, 60), (200, 3), (2, 500)):
+            a = rs.randint(0, ka, n)
+            b = (a * 7 + rs.randint(0, 3, n)) % kb
+            cases.append(("ami3_%d_%d_%d" % (n, ka, kb), lambda a=a, b=b: M.adjusted_mutual_info_score(a, b)))
+            cases.append(("nmi3_%d_%d_%d" % (n, ka, kb), lambda a=a, b=b: M.normalized_mutual_info_score(a, b)))
     for name, fn in cases:
         try:
             print("EQ %s %s" % (name, dig(fn())), flush=True)

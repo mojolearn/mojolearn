@@ -1620,6 +1620,98 @@ def _take_any(values, indices):
     return _take_rows(values, indices)
 
 
+# ---------------------------------------------------------------- fold rows
+# lane metrics-apple3 (2026-09-28): what a search, a curve or a permutation
+# test repeats per fit. Every route below hands each estimator and each
+# metric the SAME words as the definition it stands in for (row gathers are
+# byte copies, a prediction is made once instead of once per scorer), so no
+# score moves. MOJOLEARN_MSEL3_BEFORE=1 (read per call) is the before arm of
+# the lane's timing job: every definition, in the same build.
+
+def _msel3():
+    return os.environ.get('MOJOLEARN_MSEL3_BEFORE') != '1'
+
+
+#: The most bytes of gathered fold rows `_FoldRows` keeps (every fold's
+#: train and test rows of X, so about n_splits copies of X for K folds);
+#: MOJOLEARN_MSEL_FOLD_CACHE_MB overrides it, 0 turns the cache off.
+_FOLD_CACHE_BYTES = 1 << 30
+
+
+def _fold_cache_bytes():
+    raw = os.environ.get('MOJOLEARN_MSEL_FOLD_CACHE_MB')
+    if raw is None:
+        return _FOLD_CACHE_BYTES
+    try:
+        return max(int(raw), 0) << 20
+    except ValueError:
+        return _FOLD_CACHE_BYTES
+
+
+def _prefix_rows(arr, a):
+    """The first `a` rows of a C-order Array as a view over the same
+    memory (no copy; `arr` stays alive through the view)."""
+    if a == arr.shape[0]:
+        return arr
+    if arr.order != 'C' and arr.ndim > 1:
+        raise ValueError('mojolearn: a row prefix needs a C-order Array')
+    per = arr.size // arr.shape[0] if arr.shape[0] else 0
+    view = Array.__new__(Array)
+    view._store = arr._store
+    view._base = arr
+    view._pin = arr._pin
+    view._mv = arr._mv[:a * per]
+    view._addr = arr._addr
+    view._readonly = arr._readonly
+    view._set_meta((a,) + tuple(arr.shape[1:]), arr.dtype, 'C')
+    return view
+
+
+class _FoldRows:
+    """Each fold's gathered rows of X (and of y), kept while several fits
+    run on the SAME folds of the SAME X: the candidates of a search, the
+    values of a validation curve, the permutations of a permutation test.
+    The definition gathers them again for every fit (`_take_rows`, a byte
+    copy of the same rows), so every fit sees the same words either way.
+    Kept only while all folds fit in `_fold_cache_bytes()`; above it (or
+    under the before arm) `take` gathers per call, as the definition does.
+    An estimator never writes into its input, as it never writes into a
+    caller's X."""
+
+    def __init__(self, X, y, folds, *, keep_y=True):
+        self.X, self.y, self.folds = X, y, folds
+        self._x = [None] * len(folds)
+        self._y = [None] * len(folds)
+        self._keep_y = keep_y
+        on = _msel3() and isinstance(X, Array) and len(X) > 0
+        if on:
+            per_row = X.nbytes // len(X)
+            rows = sum(len(tr) + len(te) for tr, te in folds)
+            on = rows * per_row <= _fold_cache_bytes()
+        self.on = bool(on)
+
+    def take(self, i, y=None):
+        """(X_train, y_train, X_test, y_test) of fold i; a `y` given here
+        (a permuted y) is gathered per call and never kept."""
+        train, test = self.folds[i]
+        xs = self._x[i]
+        if xs is None:
+            xs = (_take_rows(self.X, train), _take_rows(self.X, test))
+            if self.on:
+                self._x[i] = xs
+        if y is None:
+            y = self.y
+            if y is None:
+                return xs[0], None, xs[1], None
+            ys = self._y[i]
+            if ys is None:
+                ys = (_take_rows(y, train), _take_rows(y, test))
+                if self.on and self._keep_y:
+                    self._y[i] = ys
+            return xs[0], ys[0], xs[1], ys[1]
+        return xs[0], _take_rows(y, train), xs[1], _take_rows(y, test)
+
+
 # ---------------------------------------------------------------- scorers
 
 class _Scorer:
@@ -1633,7 +1725,11 @@ class _Scorer:
     def __repr__(self):
         return f'make_scorer({getattr(self._score_func, "__name__", self._score_func)})'
 
-    def __call__(self, estimator, X, y, sample_weight=None):
+    def __call__(self, estimator, X, y, sample_weight=None, *, _memo=None):
+        # `_memo` (lane metrics-apple3): the predictions of THIS estimator
+        # on THIS X, by response method, shared by the scorers of one
+        # multimetric fold (scikit-learn's _MultimetricScorer caches the
+        # same way); a metric never writes into its inputs.
         methods = self._response_method
         if isinstance(methods, str):
             methods = (methods,)
@@ -1643,11 +1739,20 @@ class _Scorer:
                 break
         else:
             raise AttributeError(f'{type(estimator).__name__} has none of {methods}')
-        pred = fn(X)
+        pred = None if _memo is None else _memo.get(m)
+        if pred is None:
+            pred = fn(X)
+            if _memo is not None:
+                _memo[m] = pred
         if m == 'predict_proba' and getattr(pred, 'ndim', 1) == 2 and pred.shape[1] == 2 \
                 and self._name in _BINARY_PROBA:
-            fast = _proba_column1(pred)
-            pred = fast if fast is not None else Array.from_list([row[1] for row in pred.tolist()], '<f4')
+            col = None if _memo is None else _memo.get('predict_proba[:, 1]')
+            if col is None:
+                fast = _proba_column1(pred)
+                col = fast if fast is not None else Array.from_list([row[1] for row in pred.tolist()], '<f4')
+                if _memo is not None:
+                    _memo['predict_proba[:, 1]'] = col
+            pred = col
         kw = dict(self._kwargs)
         if sample_weight is not None:
             kw['sample_weight'] = sample_weight
@@ -1765,8 +1870,13 @@ def _scorers(scoring):
     return None
 
 
-def _score(estimator, X, y, scorer):
-    value = estimator.score(X, y) if scorer is None else scorer(estimator, X, y)
+def _score(estimator, X, y, scorer, memo=None):
+    if scorer is None:
+        value = estimator.score(X, y)
+    elif memo is not None and isinstance(scorer, _Scorer):
+        value = scorer(estimator, X, y, _memo=memo)
+    else:
+        value = scorer(estimator, X, y)
     if not isinstance(value, numbers.Real):
         raise TypeError('scoring must return a real scalar')
     return float(value)
@@ -1815,7 +1925,7 @@ def cross_validate(estimator, X, y=None, *, groups=None, scoring=None, cv=None, 
 
 
 def _cross_validate_folds(estimator, X, y, folds, scoring, return_train_score=False, return_estimator=False,
-                          return_indices=False, error_score=float('nan')):
+                          return_indices=False, error_score=float('nan'), rows=None):
     """`cross_validate` on (X, y, folds) that `_cv_folds` already made: a
     search or a validation curve draws its folds ONCE and scores every
     candidate on them, as scikit-learn does (a shuffling splitter with
@@ -1831,11 +1941,19 @@ def _cross_validate_folds(estimator, X, y, folds, scoring, return_train_score=Fa
         if return_train_score:
             out[f'train_{nm}'] = []
     ests, idx = [], {'train': [], 'test': []}
-    for train, test in folds:
+    # lane metrics-apple3: `rows` keeps each fold's gathered rows across
+    # the caller's fits; several scorers share one prediction per fold side
+    share = multi is not None and len(names) > 1 and _msel3()
+    for i, (train, test) in enumerate(folds):
         est = _clone(estimator)
         t0 = time.perf_counter()
-        Xtr, ytr = _take_rows(X, train), (None if y is None else _take_rows(y, train))
-        Xte, yte = _take_rows(X, test), (None if y is None else _take_rows(y, test))
+        if rows is not None:
+            Xtr, ytr, Xte, yte = rows.take(i, None if y is rows.y else y)
+        else:
+            Xtr, ytr = _take_rows(X, train), (None if y is None else _take_rows(y, train))
+            Xte, yte = _take_rows(X, test), (None if y is None else _take_rows(y, test))
+        memo_te = {} if share else None
+        memo_tr = {} if share else None
         try:
             est.fit(Xtr, ytr) if ytr is not None else est.fit(Xtr)
             ok = True
@@ -1846,9 +1964,9 @@ def _cross_validate_folds(estimator, X, y, folds, scoring, return_train_score=Fa
         t1 = time.perf_counter()
         for nm in names:
             sc = multi[nm] if multi is not None else single
-            out[f'test_{nm}'].append(_score(est, Xte, yte, sc) if ok else float(error_score))
+            out[f'test_{nm}'].append(_score(est, Xte, yte, sc, memo_te) if ok else float(error_score))
             if return_train_score:
-                out[f'train_{nm}'].append(_score(est, Xtr, ytr, sc) if ok else float(error_score))
+                out[f'train_{nm}'].append(_score(est, Xtr, ytr, sc, memo_tr) if ok else float(error_score))
         out['fit_time'].append(t1 - t0)
         out['score_time'].append(time.perf_counter() - t1)
         if return_estimator:
@@ -1870,6 +1988,10 @@ def cross_val_predict(estimator, X, y=None, *, groups=None, cv=None, n_jobs=None
     _require_serial(n_jobs, 'raise', 'cross_val_predict')
     X, y, folds = _cv_folds(estimator, X, y, cv, groups)
     n = len(X)
+    if _msel3() and n >= _NATIVE_MIN_ROWS:
+        fast = _cross_val_predict_rows(estimator, X, y, folds, method)
+        if fast is not None:
+            return fast[0]
     seen = [0] * n
     for _, test in folds:
         for i in test.tolist():
@@ -1882,6 +2004,89 @@ def cross_val_predict(estimator, X, y=None, *, groups=None, cv=None, n_jobs=None
         est = _clone(estimator)
         est.fit(_take_rows(X, train), None if y is None else _take_rows(y, train))
         pred = getattr(est, method)(_take_rows(X, test))
+        vals = pred.tolist() if hasattr(pred, 'tolist') else list(pred)
+        for i, v in zip(test.tolist(), vals):
+            rows[i] = v
+        width = getattr(pred, 'shape', (0,))[1:] if hasattr(pred, 'shape') else ()
+    if width:
+        return Array.from_list([float(v) for row in rows for v in row], '<f8').reshape((n,) + tuple(width))
+    if all(isinstance(v, numbers.Integral) for v in rows):
+        return Array.from_list(rows, '<i8')
+    if all(isinstance(v, numbers.Real) for v in rows):
+        return Array.from_list(rows, '<f8')
+    return rows
+
+
+#: prediction dtype -> the dtype the definition packs it into (Python
+#: floats into '<f8', Python ints into '<i8'; both widenings are exact)
+_PREDICT_WIDE = {'<f4': '<f8', '<f8': '<f8', '<i4': '<i8', '<i8': '<i8'}
+
+
+def _cross_val_predict_rows(estimator, X, y, folds, method):
+    """`cross_val_predict` without a Python object per row (lane
+    metrics-apple3): the partition test by `check_indices_i64` over the
+    folds' test rows (n rows in all, none repeated, all in range: every row
+    held out exactly once), each fold's predictions put in row order by
+    the x_metrics binding's `scatter_rows` (a byte copy), then widened as
+    the definition's `from_list` widens them. Returns (result,), or None
+    BEFORE ANY FIT when a helper is missing; predictions that are not
+    float32 / float64 / int32 / int64 buffers of one shape are assembled
+    by the definition's loop from the same fits."""
+    from ._expansion_metrics import _binding
+    check = _native_optional('check_indices_i64')
+    try:
+        scatter = getattr(_binding(None), 'x_metrics_scatter_rows', None)
+    except Exception:
+        scatter = None
+    from ._buffer import hotpath_enabled
+    if check is None or scatter is None or not hotpath_enabled():
+        return None
+    n = len(X)
+    tests = [test for _, test in folds]
+    if any(t.dtype != '<i8' for t in tests):
+        return None
+    cat = array.array('q')
+    for t in tests:
+        cat.frombytes(t.tobytes())
+    if len(cat) != n or int(check(cat.buffer_info()[0], n, n)) != 0:
+        raise ValueError('cross_val_predict only works for partitions')
+    del cat
+    preds = []
+    for train, test in folds:
+        est = _clone(estimator)
+        est.fit(_take_rows(X, train), None if y is None else _take_rows(y, train))
+        preds.append(getattr(est, method)(_take_rows(X, test)))
+    arrs = []
+    for pred, test in zip(preds, tests):
+        try:
+            a = pred if isinstance(pred, Array) else _materialize(pred, 'pred')[0]
+        except (TypeError, ValueError):
+            a = None
+        if isinstance(pred, (list, tuple)) or a is None or a.dtype not in _PREDICT_WIDE or a.ndim < 1 \
+                or a.shape[0] != len(test) or (arrs and (a.dtype != arrs[0].dtype or a.shape[1:] != arrs[0].shape[1:])):
+            return (_cross_val_predict_pack(preds, tests, n),)
+        arrs.append(a._as_c())
+    width = tuple(arrs[0].shape[1:])
+    per = arrs[0].itemsize
+    for w in width:
+        per *= w
+    # a matrix of predictions is packed as float64 by the definition
+    # whatever its dtype; only float matrices take the native route
+    if per < 1 or (width and arrs[0].dtype not in ('<f4', '<f8')):
+        return (_cross_val_predict_pack(preds, tests, n),)
+    out = empty((n,) + width, arrs[0].dtype)
+    for a, test in zip(arrs, tests):
+        scatter(_addr_ro(a), _addr(out), _addr_ro(test), len(test), n, per)
+    wide = _PREDICT_WIDE[out.dtype]
+    return (out if wide == out.dtype else out.astype(wide),)
+
+
+def _cross_val_predict_pack(preds, tests, n):
+    """The definition's assembly of `cross_val_predict`, from predictions
+    already made."""
+    rows = [None] * n
+    width = None
+    for pred, test in zip(preds, tests):
         vals = pred.tolist() if hasattr(pred, 'tolist') else list(pred)
         for i, v in zip(test.tolist(), vals):
             rows[i] = v
@@ -2036,6 +2241,7 @@ class _BaseSearch:
         # the folds are drawn ONCE for every candidate (scikit-learn's
         # evaluate_candidates materializes cv.split once)
         Xf, yf, folds = _cv_folds(_Pinned(self.estimator), X, y, self.cv, groups)
+        rows = _FoldRows(Xf, yf, folds)
         for params in candidates:
             est = _clone(self.estimator)
             if hasattr(est, 'set_params'):
@@ -2045,7 +2251,7 @@ class _BaseSearch:
                     setattr(est, k, v)
             est = _Pinned(est)
             cvr = _cross_validate_folds(est, Xf, yf, folds, scoring, return_train_score=self.return_train_score,
-                                        error_score=self.error_score)
+                                        error_score=self.error_score, rows=rows)
             for nm in names:
                 per[nm].append(cvr[f'test_{nm}'].tolist())
                 if self.return_train_score:
@@ -2170,12 +2376,13 @@ def validation_curve(estimator, X, y, *, param_name, param_range, groups=None, c
     _require_serial(n_jobs, error_score, 'validation_curve')
     # the folds are drawn ONCE for every parameter value, as scikit-learn does
     Xf, yf, folds = _cv_folds(_Pinned(estimator), X, y, cv, groups)
+    rows = _FoldRows(Xf, yf, folds)
     tr, te = [], []
     for v in param_range:
         est = _clone(estimator)
         est.set_params(**{param_name: v})
         r = _cross_validate_folds(_Pinned(est), Xf, yf, folds, scoring, return_train_score=True,
-                                  error_score=error_score)
+                                  error_score=error_score, rows=rows)
         tr.append(r['train_score'].tolist())
         te.append(r['test_score'].tolist())
     k = len(tr[0])
@@ -2202,6 +2409,10 @@ def learning_curve(estimator, X, y, *, groups=None, train_sizes=(0.1, 0.325, 0.5
     # scikit-learn permutes each fold's training rows ONCE (in fold order)
     # and takes nested prefixes of that one order for every size
     rng = _rng(random_state) if shuffle else None
+    if _msel3() and isinstance(X, Array) and isinstance(y, Array) and X.ndim == 2 and y.ndim == 1:
+        fast = _learning_curve_rows(estimator, X, y, folds, sizes, rng, scoring, return_times)
+        if fast is not None:
+            return fast
     orders = []
     for train, _ in folds:
         tr_idx = train.tolist()
@@ -2228,6 +2439,62 @@ def learning_curve(estimator, X, y, *, groups=None, train_sizes=(0.1, 0.325, 0.5
         ft.append(row_ft)
         st.append(row_st)
     k = len(folds)
+    shape = (len(sizes), k)
+    pack = lambda m: Array.from_list([v for row in m for v in row], '<f8').reshape(shape)
+    out = [Array.from_list(sizes, '<i8'), pack(tr_s), pack(te_s)]
+    if return_times:
+        out += [pack(ft), pack(st)]
+    return tuple(out)
+
+
+def _learning_curve_rows(estimator, X, y, folds, sizes, rng, scoring, return_times):
+    """`learning_curve`'s fits on row PREFIXES (lane metrics-apple3). The
+    definition gathers each (size, fold) training subset twice (the fit,
+    the train score), gathers the fold's test rows once per size, and
+    builds every subset's index from a Python list. Here each fold's
+    training rows are gathered ONCE in their (permuted) order at the
+    largest size, every smaller size is a prefix view of those rows (the
+    same rows in the same order: the definition's `tr_idx[:a]`), and the
+    test rows are gathered once per fold. The draws are the definition's
+    (one permutation per fold, in fold order, before any fit). None hands
+    the call back to the definition."""
+    import time
+    gather64 = _native_optional('gather_i64')
+    if rng is not None and gather64 is None:
+        return None
+    orders = []
+    for train, _ in folds:
+        if train.dtype != '<i8':
+            return None
+        if rng is None:
+            orders.append(train)
+            continue
+        m = len(train)
+        perm = rng.permutation_rows([m])[0]
+        order = empty((m,), '<i8')
+        gather64(_addr_ro(train), m, perm.buffer_info()[0], m, _addr(order))
+        orders.append(order)
+    k = len(folds)
+    a_max = sizes[-1]
+    sc = get_scorer(scoring)
+    tr_s = [[None] * k for _ in sizes]
+    te_s = [[None] * k for _ in sizes]
+    ft = [[None] * k for _ in sizes]
+    st = [[None] * k for _ in sizes]
+    for f, ((train, test), order) in enumerate(zip(folds, orders)):
+        rows = _prefix_rows(order, a_max)
+        Xo, yo = _take_rows(X, rows), _take_rows(y, rows)
+        Xte, yte = _take_rows(X, test), _take_rows(y, test)
+        for i, a in enumerate(sizes):
+            Xs, ys = _prefix_rows(Xo, a), _prefix_rows(yo, a)
+            est = _clone(estimator)
+            t0 = time.perf_counter()
+            est.fit(Xs, ys)
+            t1 = time.perf_counter()
+            tr_s[i][f] = _score(est, Xs, ys, sc)
+            te_s[i][f] = _score(est, Xte, yte, sc)
+            ft[i][f] = t1 - t0
+            st[i][f] = time.perf_counter() - t1
     shape = (len(sizes), k)
     pack = lambda m: Array.from_list([v for row in m for v in row], '<f8').reshape(shape)
     out = [Array.from_list(sizes, '<i8'), pack(tr_s), pack(te_s)]
@@ -2350,10 +2617,14 @@ class _NativePermutation:
         splitter = None if cv is None or isinstance(cv, numbers.Integral) else cv
         reuse = splitter is not None and _y_free(splitter)
         folds0 = self._folds(estimator, base, groups, cv)
+        # lane metrics-apple3: X's fold rows are the same for every
+        # permutation that runs on folds0 (only y is permuted)
+        rows0 = _FoldRows(self.X, None, folds0, keep_y=False)
 
         def mean_score(yarr):
             folds = folds0 if reuse or yarr is base else self._folds(estimator, yarr, groups, cv)
-            r = _cross_validate_folds(estimator, self.X, yarr, folds, sc)
+            r = _cross_validate_folds(estimator, self.X, yarr, folds, sc,
+                                      rows=rows0 if folds is folds0 else None)
             return math.fsum(r['test_score'].tolist()) / len(r['test_score'].tolist())
         score = mean_score(base)
         rng = _rng(random_state)
