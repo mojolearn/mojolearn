@@ -63,6 +63,8 @@ from std.memory import bitcast, unsafe_memcpy
 from std.sys.compile import is_defined
 from std.sys.info import simd_width_of
 
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import host_predict_task_count
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
@@ -227,12 +229,15 @@ def ghr_panel_count(n: Int) -> Int:
     return (n + GHR_G - 1) // GHR_G
 
 
-def ghr_pack_b(b: GhrPtr, op: Int, n: Int, k: Int, bp: GhrPtr):
+def ghr_pack_b(b: GhrPtr, op: Int, n: Int, k: Int, bp: GhrPtr, glo: Int = 0, ghi: Int = -1):
     """Panels of the flushed right operand: `bp[(g*k + p)*GHR_G + jj] =
     ftz(B_eff[p, g*GHR_G + jj])`, and `+0.0` for a column at or past n.
-    `bp` holds `ghr_panel_count(n) * k * GHR_G` values."""
+    `bp` holds `ghr_panel_count(n) * k * GHR_G` values. Packs panels
+    `[glo, ghi)` (all of them by default); panels are disjoint, so ranges
+    may be packed on different threads."""
     var npan = ghr_panel_count(n)
-    for g in range(npan):
+    var gend = npan if ghi < 0 else min(ghi, npan)
+    for g in range(glo, gend):
         var j0 = g * GHR_G
         var width = min(GHR_G, n - j0)
         var panel = bp.unsafe_offset(g * k * GHR_G)
@@ -263,18 +268,19 @@ def ghr_pack_b(b: GhrPtr, op: Int, n: Int, k: Int, bp: GhrPtr):
                     panel.unsafe_store(dst + jj, v)
 
 
-def ghr_pack_a(a: GhrPtr, op: Int, m: Int, k: Int, ap: GhrPtr):
+def ghr_pack_a(a: GhrPtr, op: Int, m: Int, k: Int, ap: GhrPtr, lo: Int = 0, hi: Int = -1):
     """The flushed left operand, row-major `[m x k]`: `ap[i*k + p] =
-    ftz(A_eff[i, p])`."""
+    ftz(A_eff[i, p])`, for rows `[lo, hi)` (all of them by default)."""
+    var rend = m if hi < 0 else min(hi, m)
     if op == OP_TN:
         # A is k x m row-major.
         for p in range(k):
-            for i in range(m):
+            for i in range(lo, rend):
                 ap.unsafe_store(i * k + p, ftz(a.unsafe_load(p * m + i)))
         return
-    var total = m * k
-    var body = total - total % GHR_FW
-    var t = 0
+    var total = rend * k
+    var body = lo * k + (total - lo * k) - (total - lo * k) % GHR_FW
+    var t = lo * k
     while t < body:
         ap.unsafe_store(t, ghr_ftz_lanes(a.unsafe_load[width=GHR_FW](t)))
         t += GHR_FW
@@ -334,6 +340,25 @@ def ghr_tile(
     _ = scratch_l^
 
 
+#: Fused multiply-adds below which a product runs on the calling thread: a
+#: thread split costs tens of microseconds, about this much arithmetic.
+comptime GHR_SERIAL_FMAS = 1 << 20
+
+
+def ghr_task_count(m: Int, npan: Int, n: Int, k: Int) -> Int:
+    """Tasks one product splits into: 1 below GHR_SERIAL_FMAS, else the host
+    thread policy (`core/host_predict_threads.mojo`: MOJOLEARN_CPU_THREADS, or
+    one per physical core) over the larger of the row count and the panel
+    count, and never more than one task per GHR_SERIAL_FMAS of work. A
+    schedule knob only: it moves no bit."""
+    var work = m * n * max(k, 1)
+    if work < GHR_SERIAL_FMAS:
+        return 1
+    var units = max(m, npan)
+    var tasks = host_predict_task_count(units)
+    return max(1, min(tasks, work // GHR_SERIAL_FMAS))
+
+
 def gemm_host_rows_into(
     a: GhrPtr, b: GhrPtr, c: GhrPtr, op: Int, m: Int, n: Int, k: Int,
     force_redo: Bool = False, real_k: Int = -1,
@@ -370,9 +395,35 @@ def gemm_host_rows_into(
     var bp_l = List[Float32](length=max(npan * k * GHR_G, 1), fill=Float32(0.0))
     var ap = rebind[GhrPtr](ap_l.unsafe_ptr())
     var bp = rebind[GhrPtr](bp_l.unsafe_ptr())
-    ghr_pack_a(a, op, m, k, ap)
-    ghr_pack_b(b, op, n, k, bp)
-    ghr_tile(ap, bp, c, n, k, 0, m, 0, npan, force_redo, real_k)
+    var tasks = ghr_task_count(m, npan, n, k)
+    if tasks <= 1:
+        ghr_pack_a(a, op, m, k, ap)
+        ghr_pack_b(b, op, n, k, bp)
+        ghr_tile(ap, bp, c, n, k, 0, m, 0, npan, force_redo, real_k)
+    else:
+        # THE THREAD SPLIT (lane neural-cpu). Every task packs a disjoint
+        # range of left rows and right panels, then computes a disjoint
+        # block of cells; no task reads what another writes before the join
+        # between the two splits. A cell's arithmetic does not depend on
+        # which task computes it (module note), and `host_parallelize` runs
+        # every task in the caller's floating-point environment.
+        var rchunk = (m + tasks - 1) // tasks
+        var pchunk = (npan + tasks - 1) // tasks
+
+        def _pack(t: Int) {imm a, imm b, imm ap, imm bp, imm op, imm m, imm n, imm k, imm rchunk, imm pchunk}:
+            ghr_pack_a(a, op, m, k, ap, t * rchunk, min((t + 1) * rchunk, m))
+            ghr_pack_b(b, op, n, k, bp, t * pchunk, min((t + 1) * pchunk, npan))
+
+        host_parallelize(_pack, tasks)
+        var by_rows = m >= 2 * tasks
+
+        def _cells(t: Int) {imm ap, imm bp, imm c, imm m, imm n, imm k, imm rchunk, imm pchunk, imm npan, imm by_rows, imm force_redo, imm real_k}:
+            if by_rows:
+                ghr_tile(ap, bp, c, n, k, t * rchunk, min((t + 1) * rchunk, m), 0, npan, force_redo, real_k)
+            else:
+                ghr_tile(ap, bp, c, n, k, 0, m, t * pchunk, min((t + 1) * pchunk, npan), force_redo, real_k)
+
+        host_parallelize(_cells, tasks)
     _ = ap_l^
     _ = bp_l^
 
