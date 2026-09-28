@@ -6,11 +6,40 @@ Pass 1: every fit is x_linear/dispatch.mojo's `fit_dispatch`, run by ONE
 device thread, so the GPU executes the host's exact sequence of operations.
 Scoring is one thread per (row, output) pair. A parallel fit schedule with
 the same fold order is pass 2's speed work.
+
+Every entry runs on ONE process-lifetime DeviceContext (`linear_ctx`, the
+x_cnn `_Global` pattern; CURRENT DIRECTIVES 2026-09-27: a context per call
+exhausts Metal's per-process command queues, and x_cluster/x_neighbors hung
+on the second GPU call of a process). Each entry's buffers are released
+before it returns; the context stays.
 """
 from std.gpu import block_idx, block_dim, thread_idx
+from std.ffi import _Global
 from max.gpu.host import DeviceContext
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_linear.ops import FP, IP
 from x_linear.dispatch import fit_dispatch, decision_one
+
+
+struct _LinearContext(Defaultable, Movable):
+    """The slot `linear_ctx` fills on first use; one per numeric tier so a
+    FAST and an IDENTICAL .so in one process never share it."""
+    var ctx: Optional[DeviceContext]
+
+    def __init__(out self):
+        self.ctx = Optional[DeviceContext]()
+
+
+comptime _CTX_NAME = "MojoXLinearContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXLinearContextFast"
+comptime X_LINEAR_CONTEXT = _Global[StorageType=_LinearContext, name=_CTX_NAME, init_fn=_LinearContext.__init__]
+
+
+def linear_ctx() raises -> DeviceContext:
+    """The shared context, created on first use."""
+    var slot = X_LINEAR_CONTEXT.get_or_create_ptr()
+    if not slot[].ctx:
+        slot[].ctx = DeviceContext()
+    return slot[].ctx.value().copy()
 
 
 def fit_kernel(
@@ -32,7 +61,7 @@ def fit_device(
     algo: Int, x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int,
     ip: List[Int32], fp: List[Float32], n_out: Int, n_fw: Int, n_iw: Int, res: FP,
 ) raises:
-    var ctx = DeviceContext()
+    var ctx = linear_ctx()
     var dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
     var dy = ctx.enqueue_create_buffer[DType.float32](max(n_y, 1))
     var dip = ctx.enqueue_create_buffer[DType.int32](max(len(ip), 1))
@@ -74,7 +103,7 @@ def fit_device(
 
 
 def decision_device(x: FP, wb: FP, n: Int, d: Int, k: Int, link: Int, res: FP) raises:
-    var ctx = DeviceContext()
+    var ctx = linear_ctx()
     var dx = ctx.enqueue_create_buffer[DType.float32](max(n * d, 1))
     var dwb = ctx.enqueue_create_buffer[DType.float32](k * (d + 1))
     var dout = ctx.enqueue_create_buffer[DType.float32](max(n * k, 1))

@@ -41,17 +41,47 @@ def cagra_prune(n: Int, kdeg: Int, knn: List[Int32], deg: Int) raises -> List[In
     `deg` edges of smallest (count, rank) (DEVIATION 5820)."""
     var out = List[Int32](length=n * deg, fill=Int32(0))
     var cnt = List[Int](length=kdeg, fill=0)
+    # rank[v] = v's position in row a, valid while stamp[v] == a (lane
+    # ann-cpu, 2026-09-28): when row a names kdeg DISTINCT rows in [0, n)
+    # (every exact k-NN row does), "the first kab > kad with knn[a, kab] ==
+    # cand" is "rank[cand], if it is > kad", so the detour count is the
+    # same integer in O(kdeg^2) per node instead of O(kdeg^3). A row with a
+    # repeat or an out-of-range entry walks the original search.
+    var rank = List[Int32](length=n, fill=Int32(0))
+    var stamp = List[Int32](length=n, fill=Int32(-1))
     for a in range(n):
         for k in range(kdeg):
             cnt[k] = kdeg if Int(knn[a * kdeg + k]) == a else 0
-        for kad in range(kdeg - 1):
-            var d = Int(knn[a * kdeg + kad])
-            for kdb in range(kdeg):
-                var cand = Int(knn[d * kdeg + kdb])
-                for kab in range(kad + 1, kdeg):
-                    if Int(knn[a * kdeg + kab]) == cand:
-                        cnt[kab] += 1
-                        break
+        var distinct = True
+        for k in range(kdeg):
+            var v = Int(knn[a * kdeg + k])
+            if v < 0 or v >= n or Int(stamp[v]) == a:
+                distinct = False
+                break
+            stamp[v] = Int32(a)
+            rank[v] = Int32(k)
+        if distinct:
+            for kad in range(kdeg - 1):
+                var d = Int(knn[a * kdeg + kad])
+                for kdb in range(kdeg):
+                    var cand = Int(knn[d * kdeg + kdb])
+                    if cand >= 0 and cand < n and Int(stamp[cand]) == a:
+                        var kab = Int(rank[cand])
+                        if kab > kad:
+                            cnt[kab] += 1
+        else:
+            for k in range(kdeg):
+                var v = Int(knn[a * kdeg + k])
+                if v >= 0 and v < n:
+                    stamp[v] = Int32(-1)
+            for kad in range(kdeg - 1):
+                var d = Int(knn[a * kdeg + kad])
+                for kdb in range(kdeg):
+                    var cand = Int(knn[d * kdeg + kdb])
+                    for kab in range(kad + 1, kdeg):
+                        if Int(knn[a * kdeg + kab]) == cand:
+                            cnt[kab] += 1
+                            break
         for i in range(deg):
             var best = -1
             for k in range(kdeg):
@@ -154,10 +184,21 @@ def cg_search_cell(
     L: Int, width: Int, max_iter: Int, n_seeds: Int, bd: F32P, bi: I32P, bx: I32P,
     visited: I32P, words: Int, out_d: F32P, out_i: I32P,
 ):
+    cg_search_row(qi, queries, x, n, d, graph, deg, k, L, width, max_iter, n_seeds, bd, bi, bx, qi * L,
+                  visited, qi * words, words, out_d, out_i)
+
+
+@always_inline
+def cg_search_row(
+    qi: Int, queries: F32P, x: F32P, n: Int, d: Int, graph: I32P, deg: Int, k: Int,
+    L: Int, width: Int, max_iter: Int, n_seeds: Int, bd: F32P, bi: I32P, bx: I32P, base: Int,
+    visited: I32P, vbase: Int, words: Int, out_d: F32P, out_i: I32P,
+):
+    """`cg_search_cell` with the itopk buffer at `base` and the visited
+    bitset at `vbase` (the device gives each query its own; a host task
+    reuses one)."""
     # DEVIATION 5824: seeds (t * n) // n_seeds; DEVIATION 5823: parents are the
     # search_width best unexpanded entries, scanned front to back.
-    var base = qi * L
-    var vbase = qi * words
     var q_off = qi * d
     for s in range(L):
         bd.unsafe_store(base + s, Float32(0.0))

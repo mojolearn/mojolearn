@@ -1,0 +1,13 @@
+diff --git a/core/classical_host_predict.mojo b/core/classical_host_predict.mojo
+index a81d36778..ba494c034 100644
+--- a/core/classical_host_predict.mojo
++++ b/core/classical_host_predict.mojo
+@@ -430,7 +430,7 @@ def host_qn_softmax_into(
+                 if v > m:
+                     m = v
+             var s = 0.0
+-            for c in range(n_classes):
++            for c in range(n_classes - 1, -1, -1):  # SABOTAGE 549: the sum descending
+                 var z = Float64(scores.unsafe_load(base + c))
+                 s = s + identical_exp64(z - m)
+             for c in range(n_classes):
