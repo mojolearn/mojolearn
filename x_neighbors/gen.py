@@ -171,6 +171,9 @@ CUSTOM_OPS = [
     ("knn_sq_tiled",
      [("x", "fin", "n * d"), ("y", "fin", "m * d"), ("dist", "fout", "n * k"), ("idx", "iout", "n * k"),
       ("n", "int"), ("m", "int"), ("d", "int"), ("k", "int"), ("exclude_self", "int")]),
+    ("knn_impute_tiled",
+     [("cells", "iin", "nc"), ("x", "fin", "n * d"), ("fx", "fin", "m * d"), ("res", "finout", "n * d"),
+      ("n", "int"), ("m", "int"), ("d", "int"), ("k", "int"), ("weights", "int"), ("nc", "int")]),
     ("cc_iterate",
      [("a", "fin", "n * n"), ("lab", "iinout", "n"), ("info", "iout", "1"), ("n", "int")]),
 ]

@@ -969,6 +969,47 @@ def knn_graph_item(t: Int, idx: IP, res: FP, n: Int, m: Int, k: Int):
 
 # ------------------------------------------------------------------ KNNImputer
 # DEVIATION 5215 (row 121)
+@always_inline
+def knn_impute_finish(
+    t: Int, fx: FP, bd: FP, bi: IP, res: FP, m: Int, d: Int, k: Int, weights: Int, n_donors: Int,
+):
+    """`knn_impute_item`'s tail after the donor scan: the fallback column
+    mean or the (weighted) donor mean, stored at cell t."""
+    var c = t - (t // d) * d
+    var kk = k if k < n_donors else n_donors
+    var found = 0
+    for s in range(kk):
+        if Int(bi.unsafe_load(s)) >= 0:
+            found += 1
+    if found == 0:
+        var acc = Float32(0)
+        var cnt = 0
+        for j in range(m):
+            var dv = fx.unsafe_load(j * d + c)
+            if dv == dv:
+                acc = _add(acc, dv)
+                cnt += 1
+        res.unsafe_store(t, ftz(identical_div(acc, Float32(cnt))) if cnt > 0 else Float32(0))
+        return
+    var any_zero = False
+    for s in range(found):
+        if bd.unsafe_load(s) == Float32(0):
+            any_zero = True
+    var num = Float32(0)
+    var den = Float32(0)
+    for s in range(found):
+        var w = Float32(1)
+        if weights == 1:
+            if any_zero:
+                w = Float32(1) if bd.unsafe_load(s) == Float32(0) else Float32(0)
+            else:
+                w = ftz(identical_div(Float32(1), bd.unsafe_load(s)))
+        var val = fx.unsafe_load(Int(bi.unsafe_load(s)) * d + c)
+        num = ftz(identical_mul_add(ftz(val), w, num))
+        den = _add(den, w)
+    res.unsafe_store(t, ftz(identical_div(num, den)))
+
+
 def knn_impute_item(
     t: Int, x: FP, fx: FP, best_d: FP, best_i: IP, res: FP,
     n: Int, m: Int, d: Int, k: Int, weights: Int,
@@ -1022,38 +1063,7 @@ def knn_impute_item(
             s -= 1
         bd.unsafe_store(s, dist)
         bi.unsafe_store(s, Int32(j))
-    var kk = k if k < n_donors else n_donors
-    var found = 0
-    for s in range(kk):
-        if Int(bi.unsafe_load(s)) >= 0:
-            found += 1
-    if found == 0:
-        var acc = Float32(0)
-        var cnt = 0
-        for j in range(m):
-            var dv = fx.unsafe_load(j * d + c)
-            if dv == dv:
-                acc = _add(acc, dv)
-                cnt += 1
-        res.unsafe_store(t, ftz(identical_div(acc, Float32(cnt))) if cnt > 0 else Float32(0))
-        return
-    var any_zero = False
-    for s in range(found):
-        if bd.unsafe_load(s) == Float32(0):
-            any_zero = True
-    var num = Float32(0)
-    var den = Float32(0)
-    for s in range(found):
-        var w = Float32(1)
-        if weights == 1:
-            if any_zero:
-                w = Float32(1) if bd.unsafe_load(s) == Float32(0) else Float32(0)
-            else:
-                w = ftz(identical_div(Float32(1), bd.unsafe_load(s)))
-        var val = fx.unsafe_load(Int(bi.unsafe_load(s)) * d + c)
-        num = ftz(identical_mul_add(ftz(val), w, num))
-        den = _add(den, w)
-    res.unsafe_store(t, ftz(identical_div(num, den)))
+    knn_impute_finish(t, fx, bd, bi, res, m, d, k, weights, n_donors)
 
 
 def knn_impute_cell_item(

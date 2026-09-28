@@ -22,13 +22,14 @@ from max.gpu.sync import barrier
 from checks.numerics import ftz, identical_mul_add
 
 from std.sys.compile import is_defined
-from x_neighbors.items import FP, IP, absdiff_sum_item, _sub, knn_sq_item
+from x_neighbors.items import FP, IP, absdiff_sum_item, _sub, knn_sq_item, knn_impute_finish
+from checks.numerics import identical_mul, identical_div, identical_sqrt
 from std.memory import bitcast as _bc
 from x_neighbors.device_ops import (
     xn_ctx, _buf, _buf_i, _down, _down_i, _grid, BLOCK,
     absdiff_sum_kernel, matmul_kernel, lp_clamp_kernel, ls_clamp_kernel,
     pagerank_step_kernel, cc_step_kernel,
-    pcs_sketch_kernel, pcs_conv_kernel, pcs_copy0_kernel, op_knn_sq,
+    pcs_sketch_kernel, pcs_conv_kernel, pcs_copy0_kernel, op_knn_sq, op_knn_impute_cells,
 )
 
 
@@ -502,4 +503,116 @@ def op_knn_sq_tiled(
     _ = d_y^
     _ = d_dist^
     _ = d_idx^
+    _ = ctx^
+
+
+comptime IMP_TPB = 128
+comptime IMP_ROWS = 64
+comptime IMP_MAX_D = 64
+
+
+def knn_impute_tiled_kernel(
+    cells: IP, x: FP, fx: FP, best_d: FP, best_i: IP, res: FP,
+    n_: Int64, m_: Int64, d_: Int64, k_: Int64, weights_: Int64, nc_: Int64,
+):
+    """`knn_impute_cell_item` for the missing cell of this thread, with the
+    fit rows staged IMP_ROWS at a time in threadgroup memory. The donor scan
+    is `knn_impute_item`'s statements with fx read from the stage, donors in
+    the same ascending order; the tail is `knn_impute_finish`. d <= IMP_MAX_D."""
+    var m = Int(m_)
+    var d = Int(d_)
+    var k = Int(k_)
+    var nc = Int(nc_)
+    var tid = Int(thread_idx.x)
+    var q0 = Int(block_idx.x) * IMP_TPB + tid
+    var fs = stack_allocation[IMP_ROWS * IMP_MAX_D, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var live = q0 < nc
+    var t = 0
+    var r = 0
+    var c = 0
+    if live:
+        t = Int(cells.unsafe_load(q0))
+        r = t // d
+        c = t - r * d
+    var inf = _bc[DType.float32](UInt32(0x7F800000))
+    var bd = best_d + t * k
+    var bi = best_i + t * k
+    if live:
+        for s in range(k):
+            bd.unsafe_store(s, inf)
+            bi.unsafe_store(s, Int32(-1))
+    var n_donors = 0
+    var j0 = 0
+    while j0 < m:
+        var rows = min(IMP_ROWS, m - j0)
+        var q = tid
+        while q < rows * d:
+            fs[q] = fx.unsafe_load(j0 * d + q)
+            q += IMP_TPB
+        barrier()
+        if live:
+            for jj in range(rows):
+                var j = j0 + jj
+                var dv = fs[jj * d + c]
+                if dv != dv:
+                    continue
+                n_donors += 1
+                var acc = Float32(0)
+                var present = 0
+                for f in range(d):
+                    var a = x.unsafe_load(r * d + f)
+                    var b = fs[jj * d + f]
+                    if a != a or b != b:
+                        continue
+                    present += 1
+                    var df = _sub(a, b)
+                    acc = ftz(identical_mul_add(df, df, acc))
+                if present == 0:
+                    continue
+                var sq = ftz(identical_mul(ftz(identical_div(acc, Float32(present))), Float32(d)))
+                var dist = ftz(identical_sqrt(sq))
+                if not (dist < bd.unsafe_load(k - 1)):
+                    continue
+                var s = k - 1
+                while s > 0 and dist < bd.unsafe_load(s - 1):
+                    bd.unsafe_store(s, bd.unsafe_load(s - 1))
+                    bi.unsafe_store(s, bi.unsafe_load(s - 1))
+                    s -= 1
+                bd.unsafe_store(s, dist)
+                bi.unsafe_store(s, Int32(j))
+        barrier()
+        j0 += rows
+    if live:
+        knn_impute_finish(t, fx, bd, bi, res, m, d, k, Int(weights_), n_donors)
+
+
+def op_knn_impute_tiled(
+    cells: Int, x: Int, fx: Int, res: Int,
+    n: Int, m: Int, d: Int, k: Int, weights: Int, nc: Int,
+) raises:
+    """`knn_impute_cells` with the fit rows staged per block; d above
+    IMP_MAX_D takes the per-cell item kernel."""
+    if d > IMP_MAX_D:
+        op_knn_impute_cells(cells, x, fx, res, n, m, d, k, weights, nc)
+        return
+    var ctx = xn_ctx()
+    var d_cells = _buf_i(ctx, cells, nc, True)
+    var d_x = _buf(ctx, x, n * d, True)
+    var d_fx = _buf(ctx, fx, m * d, True)
+    var d_bd = _buf(ctx, 0, n * d * k, False)
+    var d_bi = _buf_i(ctx, 0, n * d * k, False)
+    var d_res = _buf(ctx, res, n * d, True)
+    ctx.enqueue_function[knn_impute_tiled_kernel](
+        d_cells.unsafe_ptr(), d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(),
+        d_res.unsafe_ptr(), Int64(n), Int64(m), Int64(d), Int64(k), Int64(weights), Int64(nc),
+        grid_dim=(nc + IMP_TPB - 1) // IMP_TPB, block_dim=IMP_TPB,
+    )
+    _down(ctx, d_res, res, n * d)
+    ctx.synchronize()
+    _ = d_cells^
+    _ = d_x^
+    _ = d_fx^
+    _ = d_bd^
+    _ = d_bi^
+    _ = d_res^
     _ = ctx^

@@ -10,6 +10,8 @@ from x_neighbors.items import (
     pagerank_step_item, cc_step_item, pcs_item, knn_sq_item,
 )
 
+from x_neighbors.host_ops import op_knn_impute_cells
+
 comptime _SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
 
@@ -170,3 +172,11 @@ def op_knn_sq_tiled(
     comptime if _SABOTAGE:
         if n * k > 0:
             FP(unsafe_from_address=dist).unsafe_store(0, FP(unsafe_from_address=dist).unsafe_load(0) + Float32(1e-3))
+
+
+def op_knn_impute_tiled(
+    cells: Int, x: Int, fx: Int, res: Int,
+    n: Int, m: Int, d: Int, k: Int, weights: Int, nc: Int,
+) raises:
+    """The CPU column: `knn_impute_cells` (the item per missing cell)."""
+    op_knn_impute_cells(cells, x, fx, res, n, m, d, k, weights, nc)

@@ -1211,7 +1211,8 @@ class KNNImputer(_XNeighbors):
             cells = [i for i, v in enumerate(flat) if v != v]
             out = Array.from_list(flat, "<f4").reshape((n, d))
             if cells:
-                self._op("knn_impute_cells", [(_i32(cells, "cells"), 0), (X, 0), (self._fit_X, 0), (out, 1)],
+                self._op("knn_impute_cells" if _OLD_ITEMS else "knn_impute_tiled",
+                         [(_i32(cells, "cells"), 0), (X, 0), (self._fit_X, 0), (out, 1)],
                          (n, m, d, k, 1 if self.weights == "distance" else 0, len(cells)))
         keep = [f for f in range(d) if self._valid[f]]
         if self.keep_empty_features:
