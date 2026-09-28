@@ -28,7 +28,11 @@ bindings rebuilt in turn). Job scripts: ~/mojolearn-evidence/linear-apple2/.
 | 0aff83beb | x_linear SGD warp folds fully unrolled over the warp's slots | both | on | no |
 | 5097d69d4 | x_linear SGD: the next epoch's order shuffled by warp 1 while warp 0 computes | both | on | no (sgd_team_rows + 1 row) |
 | 8721c3d76 | FAST QN on Apple: loss sums and bias means take the unrolled walk | FAST (words unchanged) | on (`-D MOJOLEARN_APPLE_FAST_STEP_UNROLL_OFF=1`) | core/strided_walk.mojo (new flag; only glm/impl/qn call sites opt in) |
-| acd046151 | x_linear GPU Fisher-Yates: loads issued four steps ahead with store forwarding | both | on | x_linear/ops.mojo |
+| acd046151 | x_linear GPU Fisher-Yates: loads issued four steps ahead with store forwarding | both | REVERTED (16eef73f3): slower | - |
+| 6424bab49 | (see above) 32-bit remainder steps | both | REVERTED (473f26c05): slower than the 64-bit remainder | - |
+| c5179e11d | CD opt-in two-launch coordinate | IDENTICAL | REVERTED (cd7e61dd5): 4.98 vs 4.63 ms per epoch | - |
+| 1d7b8a2a7 | SGD pipelined shuffle: the order copy loads 16 words ahead | both | on | no |
+| 90c722752 | FAST QN on Apple: X^T dZ through xtdz_coalesced where D * C <= 1024 | FAST (words change: paired quality job) | on (`-D MOJOLEARN_QN_FAST_COALESCED_OFF=1`) | glm/impl/qn only |
 
 ## Jobs
 
@@ -78,3 +82,42 @@ row pass is 0.10 s per epoch (bare, no shuffle: 0.504 / 5) and the shuffle
 0.2 s per epoch, now overlapped with the pass but longer than it; acd046151
 attacks the shuffle itself. (m4pro-a job 1790603575578 at 6cdbd32ab: 4.43 ->
 2.84 s sgd-clf, digests equal.)
+
+### CD three launches per coordinate (m4-a, steward 1790607088439), IDENTICAL, 1M x 16
+
+gemm/ + solver/ of each arm rebuilt in the same job (a warm fit first):
+
+| arm | lasso fit s | elasticnet fit s | lasso per epoch | digests |
+|---|---|---|---|---|
+| 62002dea3 (six launches, leaf prefetch) | 0.235 / 0.239 | 0.232 / 0.237 | 11.15 ms | 7afaf6ff (lasso), db1b3098 (enet), 9126f2e6 (ols) |
+| 9ec0f03f0 (three launches) | 0.111 / 0.110 | 0.110 / 0.110 | 4.63 ms | equal |
+| + -D MOJOLEARN_CD_TWO_LAUNCH=1 (axpys inside the leaf chains) | 0.120 / 0.122 | 0.118 / 0.118 | 4.98 ms | equal (reverted: slower) |
+
+Base 037daa353 on the same Mac (first job): lasso 0.305 s, 14.53 ms per
+epoch. Round 2 total on the M4: Lasso and ElasticNet 2.8x, 3.1x per epoch.
+
+### FAST QN, loss sums unrolled (m4-a, steward 1790607088439), FAST, 1M rows
+
+glm/ + core/strided_walk.mojo of each arm, estimators rebuilt in the same job:
+
+| case | 037daa353 | 8721c3d76 | digest (both arms) |
+|---|---|---|---|
+| logistic (HIGGS) | 1.159 / 1.167 | 0.804 / 0.806 | c13471c2a06967db |
+| linear-svc | 0.691 / 0.675 | 0.482 / 0.485 | 5255746bf9706738 |
+| linear-svr (taxi) | 0.841 / 0.829 | 0.525 / 0.523 | 740abbad894c93a9 |
+
+FAST words unchanged (the digests are equal), so no quality run is owed for
+8721c3d76. FAST is still 2.8x IDENTICAL's per-iteration cost; the rest is
+fast_xtdz (90c722752 replaces it, with a paired quality check).
+
+### SGD shuffle attempts (m4pro-b, steward 1790606350360), IDENTICAL, 100k
+
+| arm | sgd-clf | noshuffle | bare, 1 epoch |
+|---|---|---|---|
+| 5097d69d4 | 1.054 | 0.511 | 0.111 |
+| acd046151 (load-ahead shuffle + 32-bit remainder) | 1.196 | 0.664 | 0.143 |
+| acd046151 with the 64-bit remainder | 1.069 | 0.714 | 0.151 |
+
+Digests equal on every line, SGDDIAG 108 of 108 same bits. Both shuffle
+changes made the kernel slower (even with no shuffle: the shared fit kernel
+got heavier) and did not shorten the shuffle: reverted.
