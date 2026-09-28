@@ -180,6 +180,10 @@ MEASUREMENT_TOOLING_PREFIXES = (
     os.path.join("tools", "nvidia_step_time") + os.sep,
     os.path.join("tools", "amd_step_time"),
     os.path.join("tools", "release_0819") + os.sep,
+    # Apple speed profiling and A/B scripts (lane/cnn-apple, lane/neural-apple,
+    # 2026-09-28): they time and compare builds of the same source on a Mac.
+    os.path.join("tools", "apple_speed_cnn") + os.sep,
+    os.path.join("tools", "apple_speed_neural") + os.sep,
 )
 
 #: Tools whose text is not evidence that a lane reaches a path.
