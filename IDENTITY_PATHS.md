@@ -601,8 +601,9 @@ sized to the count that lane asked for:
 | algorithm expansion `ann` | -- | **180-189** | 10 |
 | algorithm expansion `metrics` (2026-09-27, lane/metrics) | -- | **190-199** | 10 |
 | family lane `neural` (2026-09-27, lane/neural; DEVIATIONS 6200-6299) | -- | **200-209** | 10 |
+| lane `cpu` (2026-09-28, lane/cpu; DEVIATION 5900) | -- | **210-219** | 10 |
 
-Next free row after this table is **210** (200-209 went to the neural family lane on 2026-09-27) (97-99 are unassigned; the
+Next free row after this table is **220** (200-209 went to the neural family lane on 2026-09-27, 210-219 to the cpu lane on 2026-09-28) (97-99 are unassigned; the
 expansion ranges start at 100 so the nine lanes of
 docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md never meet anyone already writing
 at 97). Each expansion lane writes its rows ONLY in its own section of
@@ -845,7 +846,7 @@ cluster lane first.
 |---|---|---|---|---|
 | 202 | **`maximize=True`** on SGD, Adam and AdamW (`training/maximize.mojo`, both optimizer bindings) | the gradient's negation has two exact spellings, `-g` (the sign bit) and `0.0 - g`, which differ at `g = +0.0`; the zero's sign reaches SGD's copied momentum buffer and `fma(-lr, g, -0.0)` | PIN, DEVIATION 6200: the sign-bit flip (torch's `-grads[i]`, first statement of the step), on a negated COPY so the caller's gradient is never negated; a clipped gradient is written back through the same flip | `training/checks/maximize_check.mojo` (fixture separates the spellings, else VACUOUS; production flip == restatement through `optimizer_step_oracle` for SGD, Adam, AdamW, clip on and off), arm `maximize_6200_subtract_from_zero.patch` bites; lane `optim-maximize` |
 
-### `cpu`: row 210
+### `cpu`: rows 210-219
 
 The CPU lane's host thread split (row 202 on lane/cpu before the neural lane took 202-209 on main).
 
