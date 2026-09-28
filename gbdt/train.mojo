@@ -2644,7 +2644,13 @@ def _quantize_training_columns(
                 var col2 = List[Float32]()
                 col2.resize(nr2, Float32(0.0))
                 memcpy(dest=col2.unsafe_ptr(), src=sfp2 + k * nr2, count=nr2)
-                var q2 = calc_quantization(col2^, bc2, nm2, bt2)
+                # DEVIATION 5900: the worker's FTZ+DAZ search BY BITS, so
+                # the borders do not depend on the thread's FP environment
+                # (a host_parallelize task runs IEEE; this pool's workers
+                # run FTZ+DAZ; the host oracle restates the flushed search)
+                var q2 = calc_quantization(
+                    col2^, bc2, nm2, bt2, flush_subnormals=True
+                )
                 var nb = len(q2[0])
                 if nb > cap2:
                     ocp.unsafe_store(k, -2)
