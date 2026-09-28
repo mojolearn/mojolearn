@@ -11,6 +11,7 @@ from max.gpu.sync import barrier
 from max.gpu.host import DeviceBuffer, DeviceContext
 from x_ann.device_ctx import x_ann_ctx
 from x_ann.stage_timer import AnnStages
+from x_ann.switches import ANN3_HOST_PASSES
 from x_ann.ivf_scan_device import ivf_scan_search
 
 from cluster.estimator import kmeans_fit
@@ -140,22 +141,31 @@ def _coarse(
     the host twin is `ivf/host/ivf_host.mojo::host_ivf_build`."""
     var cst = AnnStages("ivf_coarse")
     var ctx = x_ann_ctx()
-    # lane ann-apple3: the build without the permuted vectors (no x_ann
-    # index reads them); the centres and the offsets move out of it; the
-    # labels are the build's own assignment, the one its lists were laid out
-    # from, so `pq_labels_from_lists` over those lists returns these words
+    # lane ann-apple3, behind `ANN3_HOST_PASSES`: the build without the
+    # permuted vectors (no x_ann index reads them; `with_list_data` is read
+    # only under the switch); the centres and the offsets move out of it;
+    # the labels are the build's own assignment, the one its lists were laid
+    # out from, so `pq_labels_from_lists` over those lists returns these words
     var flat = ivf_flat_build_host(
         ctx, x, n, dim, n_lists, kmeans_n_iters, METRIC_L2_EXPANDED, UInt64(seed), with_list_data=False
     )
     ctx.synchronize()
     cst.host("flat_build")
-    swap(centers, flat.centers)
-    swap(offsets, flat.list_offsets)
-    list_indices = List[Int32](length=n, fill=Int32(0))
-    labels = List[Int32](length=n, fill=Int32(0))
-    for s in range(n):
-        list_indices[s] = Int32(Int(flat.list_indices[s]))
-        labels[s] = Int32(Int(flat.labels[s]))
+    comptime if ANN3_HOST_PASSES:
+        swap(centers, flat.centers)
+        swap(offsets, flat.list_offsets)
+        list_indices = List[Int32](length=n, fill=Int32(0))
+        labels = List[Int32](length=n, fill=Int32(0))
+        for s in range(n):
+            list_indices[s] = Int32(Int(flat.list_indices[s]))
+            labels[s] = Int32(Int(flat.labels[s]))
+    else:
+        centers = flat.centers.copy()
+        offsets = flat.list_offsets.copy()
+        list_indices = List[Int32](capacity=n)
+        for s in range(n):
+            list_indices.append(Int32(Int(flat.list_indices[s])))
+        labels = pq_labels_from_lists(offsets, list_indices, n_lists, n)
     _ = flat^
     _ = ctx^
     cst.host("convert")

@@ -93,6 +93,7 @@ from ivf.impl.neighbors.ivf_flat.fast_ivf_scan import (
 )
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
+from x_ann.switches import ANN3_PREPARE
 from ivf.checks.list_layout import (
     ListLayout,
     filter_candidate_slots,
@@ -447,13 +448,24 @@ struct IvfFlatDevice(Movable):
         ctx.synchronize()
         _ = h_off^
         _ = h_ind^
-        # lane ann-apple3: the host layout (a copy of the index's three
-        # lists, the n_rows x dim vectors among them) is read by the
-        # per-query path only, so it is made by `ensure_layout` when a
-        # search first takes that path. The one-launch scans never read it.
-        self.layout = ListLayout(
-            n_lists, index.n_rows, index.dim, List[Int32](), List[UInt32](), List[Float32]()
-        )
+        # lane ann-apple3, behind `ANN3_PREPARE`: the host layout (a copy of
+        # the index's three lists, the n_rows x dim vectors among them) is
+        # read by the per-query path only, so it is made by `ensure_layout`
+        # when a search first takes that path. The one-launch scans never
+        # read it. Without the switch it is copied here, as before.
+        comptime if ANN3_PREPARE:
+            self.layout = ListLayout(
+                n_lists, index.n_rows, index.dim, List[Int32](), List[UInt32](), List[Float32]()
+            )
+        else:
+            self.layout = ListLayout(
+                n_lists,
+                index.n_rows,
+                index.dim,
+                index.list_offsets.copy(),
+                index.list_indices.copy(),
+                index.list_data.copy(),
+            )
         self.list_sizes = List[Int32]()
         for l in range(n_lists):
             self.list_sizes.append(Int32(index.list_size(l)))

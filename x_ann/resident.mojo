@@ -40,7 +40,7 @@ THE ADDRESSES (mirrored in python/mojolearn/_expansion_ann.py):
 """
 from std.ffi import _Global
 from std.python import Python, PythonObject
-from std.sys.compile import is_defined
+from x_ann.switches import ANN3_PREPARE
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE
@@ -80,11 +80,11 @@ struct AnnResident(Movable):
     var i2: DeviceBuffer[DType.int32]
     var ones: DeviceBuffer[DType.int32]
     var offsets: List[Int32]
-    # lane ann-apple3: the codes (and RaBitQ's norms and factors) in list
-    # order, gathered ONCE here by the launches every search used to make
-    # (`ivf_scan_search`); `pre` says they are there (an index whose lists
-    # hold every row once: the all-ones filter is then its own list-order
-    # copy). `-D MOJOLEARN_ANN_RESIDENT_GATHER_OFF` gathers per search again.
+    # lane ann-apple3, behind `ANN3_PREPARE` (x_ann/switches.mojo): the codes
+    # (and RaBitQ's norms and factors) in list order, gathered ONCE here by
+    # the launches every search makes otherwise (`ivf_scan_search`); `pre`
+    # says they are there (an index whose lists hold every row once: the
+    # all-ones filter is then its own list-order copy).
     var pre: Bool
     var g_codes: DeviceBuffer[DType.int32]
     var g_a: DeviceBuffer[DType.float32]
@@ -136,7 +136,7 @@ struct AnnResident(Movable):
         var ids = upload_i32(ctx, in_i32(addrs, 2, n))
         var n_slots = Int(self.offsets[n_lists])
         var pre = n_slots == n
-        comptime if is_defined["MOJOLEARN_ANN_RESIDENT_GATHER_OFF"]():
+        comptime if not ANN3_PREPARE:
             pre = False
         var gs = n_slots if pre else 0
         self.pre = pre

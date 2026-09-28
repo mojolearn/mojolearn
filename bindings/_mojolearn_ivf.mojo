@@ -57,6 +57,7 @@ from ivf.estimator import (
 )
 from ivf.impl.neighbors.ivf_flat.ivf_flat_index import IvfFlatIndex
 from x_ann.stage_timer import AnnStages
+from x_ann.switches import ANN3_PREPARE
 from ivf.resident import (
     ivf_resident_check,
     ivf_resident_n_rows,
@@ -330,18 +331,25 @@ def ivf_flat_index_prepare_binding(addrs: PythonObject, params: PythonObject) ra
     )
     bst.host("read_admit")
     var labels = _labels_from_arrays(arrays.offsets, arrays.list_indices, arrays.n_lists, arrays.n_rows)
-    # lane ann-apple3: the admitted arrays move into the index (they were
-    # copied, the n_rows x dim list data among them)
+    # lane ann-apple3, behind `ANN3_PREPARE`: the admitted arrays move into
+    # the index (copied otherwise, the n_rows x dim list data among them)
     var centers = List[Float32]()
     var center_norms = List[Float32]()
     var offsets = List[Int32]()
     var list_indices = List[UInt32]()
     var list_data = List[Float32]()
-    swap(centers, arrays.centers)
-    swap(center_norms, arrays.center_norms)
-    swap(offsets, arrays.offsets)
-    swap(list_indices, arrays.list_indices)
-    swap(list_data, arrays.list_data)
+    comptime if ANN3_PREPARE:
+        swap(centers, arrays.centers)
+        swap(center_norms, arrays.center_norms)
+        swap(offsets, arrays.offsets)
+        swap(list_indices, arrays.list_indices)
+        swap(list_data, arrays.list_data)
+    else:
+        centers = arrays.centers.copy()
+        center_norms = arrays.center_norms.copy()
+        offsets = arrays.offsets.copy()
+        list_indices = arrays.list_indices.copy()
+        list_data = arrays.list_data.copy()
     var index = IvfFlatIndex(
         arrays.n_lists, arrays.dim, arrays.n_rows, arrays.metric,
         centers^, center_norms^, offsets^, list_indices^, list_data^, labels^,

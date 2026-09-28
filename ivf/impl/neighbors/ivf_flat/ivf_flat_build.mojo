@@ -87,6 +87,7 @@ from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from std.memory import memcpy
 from x_ann.stage_timer import AnnStages
+from x_ann.switches import ANN3_HOST_PASSES
 
 comptime IVF_FAST_TRAINSET = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
@@ -138,11 +139,11 @@ def upload_f32(
     if n == 0:
         raise Error("upload_f32: refusing to upload an empty list")
     var buf = ctx.enqueue_create_buffer[DType.float32](n)
-    comptime if has_apple_gpu_accelerator():
-        # lane ann-apple3, Apple only: the copy reads the caller's list (the
-        # same words, one host pass fewer; `x_ann/io.mojo` has uploaded this
-        # way since lane ann-apple2). The copy is drained before the return,
-        # while the list is alive.
+    comptime if ANN3_HOST_PASSES and has_apple_gpu_accelerator():
+        # lane ann-apple3, Apple only, behind `ANN3_HOST_PASSES`: the copy
+        # reads the caller's list (the same words, one host pass fewer;
+        # `x_ann/io.mojo` has uploaded this way since lane ann-apple2). The
+        # copy is drained before the return, while the list is alive.
         ctx.enqueue_copy(dst_buf=buf, src_ptr=values.unsafe_ptr())
         ctx.synchronize()
     else:
@@ -160,10 +161,17 @@ def download_f32(
     var host = ctx.enqueue_create_host_buffer[DType.float32](n)
     ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=buf)
     ctx.synchronize()
-    # lane ann-apple3: one memcpy of the staged words (was one append each)
-    var out = List[Float32](length=n, fill=Float32(0.0))
-    if n > 0:
-        memcpy(dest=out.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
+    # lane ann-apple3, behind `ANN3_HOST_PASSES`: one memcpy of the staged
+    # words (one append each otherwise)
+    comptime if ANN3_HOST_PASSES:
+        var moved = List[Float32](length=n, fill=Float32(0.0))
+        if n > 0:
+            memcpy(dest=moved.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
+        _ = host^
+        return moved^
+    var out = List[Float32]()
+    for i in range(n):
+        out.append(host.unsafe_ptr().unsafe_load(i))
     _ = host^
     return out^
 
@@ -174,9 +182,15 @@ def download_u32(
     var host = ctx.enqueue_create_host_buffer[DType.uint32](n)
     ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=buf)
     ctx.synchronize()
-    var out = List[UInt32](length=n, fill=UInt32(0))
-    if n > 0:
-        memcpy(dest=out.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
+    comptime if ANN3_HOST_PASSES:
+        var moved = List[UInt32](length=n, fill=UInt32(0))
+        if n > 0:
+            memcpy(dest=moved.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
+        _ = host^
+        return moved^
+    var out = List[UInt32]()
+    for i in range(n):
+        out.append(host.unsafe_ptr().unsafe_load(i))
     _ = host^
     return out^
 
@@ -245,19 +259,29 @@ def plan_quantizer_scale(
     would delete this function; that file is another lane's, so it is named
     in `ivf/README.md`'s WHAT IS OWED rather than edited.
     """
-    # lane ann-apple3: one pass over the rows with one running sum per
-    # column. Each column still adds its rows in ascending order, so every
-    # column sum, and the largest of them, is the same Float64.
-    var columns = List[Float64](length=dim, fill=Float64(0.0))
-    var xp = x.unsafe_ptr()
-    for r in range(n_rows):
-        var b = r * dim
+    # lane ann-apple3, behind `ANN3_HOST_PASSES`: one pass over the rows
+    # with one running sum per column. Each column still adds its rows in
+    # ascending order, so every column sum, and the largest of them, is the
+    # same Float64.
+    comptime if ANN3_HOST_PASSES:
+        var columns = List[Float64](length=dim, fill=Float64(0.0))
+        var xp = x.unsafe_ptr()
+        for r in range(n_rows):
+            var b = r * dim
+            for f in range(dim):
+                columns[f] += Float64(abs(xp.unsafe_load(b + f)))
+        var largest = Float64(0.0)
         for f in range(dim):
-            columns[f] += Float64(abs(xp.unsafe_load(b + f)))
+            if columns[f] > largest:
+                largest = columns[f]
+        return choose_scale(largest, n_rows)
     var worst = Float64(0.0)
     for f in range(dim):
-        if columns[f] > worst:
-            worst = columns[f]
+        var column = Float64(0.0)
+        for r in range(n_rows):
+            column += Float64(abs(x[r * dim + f]))
+        if column > worst:
+            worst = column
     return choose_scale(worst, n_rows)
 
 
@@ -288,9 +312,9 @@ def ivf_flat_build(
         ivf.list_data       the permuted vectors, [n_rows, dim]
 
     `with_list_data = False` (lane ann-apple3; the x_ann indexes, which
-    never read the permuted vectors) returns an index whose `list_data` is
-    EMPTY; every other field is the same. A traced build always lays the
-    vectors out, so the card does not change.
+    never read the permuted vectors) returns, under `ANN3_HOST_PASSES`, an
+    index whose `list_data` is EMPTY; every other field is the same. A
+    traced build always lays the vectors out, so the card does not change.
 
     `ivf.list_indices` and `ivf.list_data` are recorded as SEPARATE stages
     on purpose, and the separation is the diagnosis exactly the way
@@ -452,9 +476,10 @@ def ivf_flat_build(
     var host_labels = download_u32(ctx, labels, n_rows)
     st.host("download")
 
-    var layout = build_list_layout(
-        host_labels, x, n_rows, dim, n_lists, with_data=(with_list_data or trace.enabled)
-    )
+    var lay_data = True
+    comptime if ANN3_HOST_PASSES:
+        lay_data = with_list_data or trace.enabled
+    var layout = build_list_layout(host_labels, x, n_rows, dim, n_lists, with_data=lay_data)
     st.host("layout")
 
     if trace.enabled:
@@ -474,14 +499,20 @@ def ivf_flat_build(
     _ = min_dist^
     _ = center_norm^
 
-    # lane ann-apple3: the layout's three lists move into the index (they
-    # were copied, the n_rows x dim vectors among them)
+    # lane ann-apple3, behind `ANN3_HOST_PASSES`: the layout's three lists
+    # move into the index (copied otherwise, the n_rows x dim vectors among
+    # them)
     var out_offsets = List[Int32]()
     var out_indices = List[UInt32]()
     var out_data = List[Float32]()
-    swap(out_offsets, layout.offsets)
-    swap(out_indices, layout.list_indices)
-    swap(out_data, layout.list_data)
+    comptime if ANN3_HOST_PASSES:
+        swap(out_offsets, layout.offsets)
+        swap(out_indices, layout.list_indices)
+        swap(out_data, layout.list_data)
+    else:
+        out_offsets = layout.offsets.copy()
+        out_indices = layout.list_indices.copy()
+        out_data = layout.list_data.copy()
     _ = layout^
     st.host("index")
 

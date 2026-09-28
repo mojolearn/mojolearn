@@ -44,21 +44,31 @@ all: its proof jobs were cancelled unrun.
 
 ## Changes
 
+Every change that is not measured yet is OFF in a default build, behind an
+opt-in define in `x_ann/switches.mojo` (Andrew's rule, 20:20Z Sep 28). The
+A/B script builds an arm as `<commit>+<DEFINE>[+<DEFINE>]`.
+
 | commit | what | tier | default | state |
 |---|---|---|---|---|
 | 1479e0c53 | stage marks inside `ivf_flat_build`, the x_ann coarse conversion, the PQ codebook loop, the build bindings, the IVF-Flat prepare binding; bench second search; A/B stage pass sets MOJOLEARN_KMEANS_STAGES | both | marks off unless MOJOLEARN_ANN_STAGES | diagnostic |
-| fd948718d | IVF build host passes (below) | both | on | UNMEASURED, first A/B pending |
+| fd948718d, then gated | IVF build host passes (below) | both | OFF; `-D MOJOLEARN_ANN3_HOST_PASSES` turns it on | UNMEASURED |
+| 171bbcdba, d20eb2129, then gated | index preparation (below) | both | OFF; `-D MOJOLEARN_ANN3_PREPARE` turns it on | UNMEASURED |
 
-fd948718d, host code only, no arithmetic changed:
-- `ivf/checks/list_layout.mojo::build_list_layout`: lists made by length, each row moved by one memcpy; `with_data=False` leaves `list_data` empty.
+`MOJOLEARN_ANN3_HOST_PASSES`, host code only, no arithmetic changed:
+- `ivf/checks/list_layout.mojo::build_list_layout`: each row moved by one memcpy; `with_data=False` leaves `list_data` empty.
 - `ivf_flat_build` / `ivf_flat_build_host`: `with_list_data` (default True). The x_ann coarse step passes False: IVF-PQ / SQ / RaBitQ never read the permuted vectors. A traced build always lays them out.
-- `ivf_flat_build`: the layout's lists are moved into the index (were copied, 1M x 28 floats among them).
-- `ivf_flat_build.mojo::download_f32/u32`: one memcpy (was one append per word).
+- `ivf_flat_build`: the layout's lists are moved into the index (copied otherwise, 1M x 28 floats among them).
+- `ivf_flat_build.mojo::download_f32/u32`: one memcpy (one append per word otherwise).
 - `ivf_flat_build.mojo::upload_f32`: on Apple the copy reads the caller's list (comptime `has_apple_gpu_accelerator()`); other vendors keep the host buffer hop.
 - `plan_quantizer_scale`: one row pass with a running sum per column (each column adds its rows in the same ascending order: the same Float64).
 - `ivf_validate_data`: a first pass without an exit, by bits; the old loop names the offender when there is one.
 - x_ann `_coarse`: centres and offsets moved out of the build; labels are the build's own assignment.
 - `x_ann/abi.mojo::out_f32/out_i32`, `bindings/ivf_index_arrays.mojo::ivf_write_index_arrays`: memcpy.
+
+`MOJOLEARN_ANN3_PREPARE`, no arithmetic changed:
+- `bindings/_mojolearn_ivf.mojo::ivf_flat_index_prepare_binding`: the admitted arrays move into the index (five copies otherwise).
+- `IvfFlatDevice`: the host CSR layout (a copy of the index's lists) is made by `ensure_layout` at the first per-query search (filtered, partial storage, traced, k > 32); the one-launch scans never read it.
+- `x_ann/resident.mojo`: a resident IVF-PQ / SQ / RaBitQ index gathers its codes (RaBitQ: norms and factors too) into list order once at prepare (`scan_gather_i32/f32`, the launches `ivf_scan_search` makes per search otherwise); an unfiltered search passes the all-ones filter as its own list-order copy. `ivf_scan_search` and the three `*_search_on` take `have_pre, pre_codes, pre_a, pre_b, mask_pre`; the one-shot entries pass False.
 
 ## Measurements
 
@@ -76,4 +86,5 @@ before any change (HIGGS and taxi, seeds 0 to 2). Result: PENDING.
 
 ## Unproven
 
-Everything in fd948718d until its A/B is recorded here.
+Both switches until their A/B is recorded here. Nothing unproven is on in a
+default build.

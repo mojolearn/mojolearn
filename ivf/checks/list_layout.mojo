@@ -69,6 +69,7 @@ so it is a speed change and belongs behind a measurement.
 
 
 from std.memory import memcpy
+from x_ann.switches import ANN3_HOST_PASSES
 
 
 @fieldwise_init
@@ -121,8 +122,9 @@ def build_list_layout(
     x_ann indexes (IVF-PQ, IVF-SQ, IVF-RaBitQ) take the centres, the offsets
     and the carried ids from this build and never read the permuted
     vectors, so their build skips the n_rows x dim scatter. The offsets and
-    the carried ids are the same either way. Each row moves with one
-    memcpy: a plain copy, the same words.
+    the carried ids are the same either way. Under `ANN3_HOST_PASSES`
+    (x_ann/switches.mojo) each row moves with one memcpy: a plain copy, the
+    same words.
     """
     if len(labels) != n_rows:
         raise Error(
@@ -182,7 +184,11 @@ def build_list_layout(
         # parameter serves `fill_refinement_index`, which is not implemented).
         list_indices[slot] = UInt32(i)
         if with_data:
-            memcpy(dest=list_data.unsafe_ptr() + slot * dim, src=x.unsafe_ptr() + i * dim, count=dim)
+            comptime if ANN3_HOST_PASSES:
+                memcpy(dest=list_data.unsafe_ptr() + slot * dim, src=x.unsafe_ptr() + i * dim, count=dim)
+            else:
+                for f in range(dim):
+                    list_data[slot * dim + f] = x[i * dim + f]
 
     return ListLayout(
         n_lists, n_rows, dim, offsets^, list_indices^, list_data^
