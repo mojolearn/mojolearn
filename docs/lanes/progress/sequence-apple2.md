@@ -37,7 +37,9 @@ FAST only (compiled out of IDENTICAL builds; each has a paired quality check):
    ordered sum of the partials.
 7. `gemm` split-K for products of at most 1024 cells over K >= 32768 (VAR).
 8. ETS: Nelder-Mead stall stop (best value not down by more than rel |best| for
-   W iterations), default W = 100, rel = 1e-6 (pending the sweep).
+   W iterations): opt-in for ETS (no gain), default 50 at 1e-6 for GARCH.
+9. Prophet, N >= 65536: the likelihood over point chunks on the device, L-BFGS
+   and priors on the host (the IDENTICAL fit is ONE GPU thread: 1470 s at 1M points).
 
 ## Before / after
 
@@ -71,9 +73,9 @@ FAST quality (tools/sequence_quality.py, same job; error against float64, lower 
 
 | case | IDENTICAL | FAST before | FAST after |
 |---|---|---|---|
-| lamb max abs err | 3.65e-6 | 3.65e-6 | < 5e-7 |
-| adafactor max abs err | 7.2e-5 | 7.2e-5 | < 5e-7 |
-| layernorm dw rel err | 9.5e-6 | 9.5e-6 | < 5e-7 |
+| lamb max abs err | 3.65e-6 | 3.65e-6 | 1.26e-7 |
+| adafactor max abs err | 7.2e-5 | 7.2e-5 | 1.09e-7 |
+| layernorm dw rel err | 9.5e-6 | 9.5e-6 | 2.4e-7 (db: 132 -> 21 in the old, cancelling metric) |
 | var params rel err | 0.0444 | 0.0444 | 0.000475 |
 
 The two-pass sums are MORE accurate than one long float32 chain, so FAST quality
