@@ -43,9 +43,21 @@ Dropout2d, BasicBlock, CNNClassifier, GCNConv, SAGEConv.
   or for few rows and many leaves, aligned power-of-two leaf chunks (each
   chunk a subtree of the same tree). Element loops (`run`) split into
   contiguous tasks: an element function computes one output element, the
-  device's own contract. The conv, conv block, linear and gemm entries take
-  the caller's addresses (no List copies in or out; `out_f32` is the output
-  seam the end-to-end sabotage patches). Thread count: MOJOLEARN_CPU_THREADS
+  device's own contract. The conv layout loops (im2col, the conv output's
+  NCHW layout and bias, the gradient's row layout, col2im) and max pooling
+  forward and backward run as host row/plane loops with the indices advanced
+  incrementally instead of decoded by integer division per element (the
+  division was several times the GEMM's cost): the same words, and col2im
+  and the pool backward keep their (kh, kw) gather order (CP_REV/PP_REV
+  honored for the host sabotage build) with the stride tests tabulated once
+  per call. Every host entry (gemm, conv, conv block, linear, pools, ReLU,
+  add, mul, softmax cross entropy, SGD, Adam, BatchNorm, Dropout2d) reads
+  the caller's arrays in place and writes its outputs in place (no List
+  copies in or out; `out_f32` is the output seam the end-to-end sabotage
+  patches); the pad, adaptive pooling and graph entries still copy. In a
+  fit the CPU twin keeps each block's im2col matrix and conv output in the
+  saved arrays the fit already allocates, as the GPU binding does, and the
+  block backward reads them instead of recomputing them. Thread count: MOJOLEARN_CPU_THREADS
   (`core/host_predict_threads.mojo`); it moves no bit. Check:
   `x_cnn/checks/gemm_host_check.mojo` (every op, one leaf and many, both
   splits, 1/3/7 tasks, planted subnormals, NaN, infinities; arms
