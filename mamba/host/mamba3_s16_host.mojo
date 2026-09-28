@@ -25,8 +25,9 @@ What changes, none of which moves a bit:
     lane per n, and the HEADDIM cells of its dv one lane per p (each lane is
     its own cell's chain);
   - `dot_i` depends on the row and i but not on p, so it is computed once per
-    (row, i) instead of once per (row, i, p): the same chain on the same
-    operands is the same value;
+    (row, i) instead of once per (row, i, p), and likewise the first product
+    of the dq and dk terms once per (row, j, n) and (row, i, n): the same
+    operation on the same operands is the same value;
   - rows (batch, token, head) are split over host tasks
     (`core/host_parallel.mojo`); every output cell belongs to one row.
 
@@ -35,7 +36,7 @@ runs the scalar statement. The proof is the Mamba-3 lanes' CPU == GPU
 agreement (the GPU runs the kernel itself) and the sabotage
 `mamba/checks/sabotage/mamba3_s16_host_dk_descending.patch`.
 """
-from std.math import min
+from std.math import max, min
 
 from checks.numerics import ftz, identical_mul, identical_mul_add, identical_mul_add_simd
 from core.host_lanes import F32V, HOST_FW, ftz_lanes, lanes_are_identical, pinned_mul_lanes
@@ -44,15 +45,6 @@ from core.host_predict_threads import host_predict_task_count
 from mamba.checks.mamba3_fixture import M3_D_STATE, M3_HEADDIM
 
 comptime _P = MutPointer[Float32, MutAnyOrigin]
-
-
-@always_inline
-def _qk_term_lanes(scale_row: F32V, lv: Float32, vv: Float32, dy: Float32, acc: F32V) -> F32V:
-    """`ftz(identical_mul_add(dy, ftz(identical_mul(ftz(identical_mul(x, lv)), vv)), acc))`
-    on every lane, `x` = `scale_row` (already flushed)."""
-    var t = ftz_lanes(pinned_mul_lanes(scale_row, F32V(lv)))
-    t = ftz_lanes(pinned_mul_lanes(t, F32V(vv)))
-    return ftz_lanes(identical_mul_add_simd[HOST_FW](F32V(dy), t, acc))
 
 
 def _s16_row(
@@ -70,31 +62,57 @@ def _s16_row(
     var seg_base = ((bb * nc + chunk) * nh + h) * qs
     var qrow = row * M3_D_STATE
     # ---- d_q and d_k, one lane per n ----------------------------------
+    # `ftz(identical_mul(k[tj, n], lv_j))` (dq) and `ftz(identical_mul(q[ti, n],
+    # lv2_i))` (dk) do not depend on p: each is computed ONCE per (j, n) or
+    # (i, n) into `tq` / `tk` and read by all HEADDIM p steps (the same
+    # operation on the same operands is the same value).
     var n0 = 0
     comptime if lanes_are_identical:
+        var tq = List[Float32](length=max(inner, 1) * M3_D_STATE, fill=Float32(0.0))
+        var tk = List[Float32](length=qs * M3_D_STATE, fill=Float32(0.0))
+        var tqp = tq.unsafe_ptr()
+        var tkp = tk.unsafe_ptr()
+        for j in range(inner):
+            var tj = chunk * qs + j
+            if tj < l:
+                var lv = F32V(ftz(seg_l.unsafe_load((seg_base + inner) * qs + j)))
+                var nn = 0
+                while nn + HOST_FW <= M3_D_STATE:
+                    var kv = ftz_lanes(k.unsafe_load[width=HOST_FW](((bb * l + tj) * nh + h) * M3_D_STATE + nn))
+                    tqp.unsafe_store(j * M3_D_STATE + nn, ftz_lanes(pinned_mul_lanes(kv, lv)))
+                    nn += HOST_FW
+        for i in range(inner + 1, qs):
+            var ti = chunk * qs + i
+            if ti < l:
+                var lv2 = F32V(ftz(seg_l.unsafe_load((seg_base + i) * qs + inner)))
+                var nn = 0
+                while nn + HOST_FW <= M3_D_STATE:
+                    var qv = ftz_lanes(q.unsafe_load[width=HOST_FW](((bb * l + ti) * nh + h) * M3_D_STATE + nn))
+                    tkp.unsafe_store(i * M3_D_STATE + nn, ftz_lanes(pinned_mul_lanes(qv, lv2)))
+                    nn += HOST_FW
         while n0 + HOST_FW <= M3_D_STATE:
             var dq = F32V(0.0)
             var dk = F32V(0.0)
             for p in range(M3_HEADDIM):
-                var dy_i = ftz(d_y.unsafe_load(((bb * l + token) * nh + h) * M3_HEADDIM + p))
+                var dy_i = F32V(ftz(d_y.unsafe_load(((bb * l + token) * nh + h) * M3_HEADDIM + p)))
                 for j in range(inner):
                     var tj = chunk * qs + j
                     if tj < l:
-                        var lv = ftz(seg_l.unsafe_load((seg_base + inner) * qs + j))
-                        var kv = ftz_lanes(k.unsafe_load[width=HOST_FW](((bb * l + tj) * nh + h) * M3_D_STATE + n0))
-                        var vv = ftz(v.unsafe_load(((bb * l + tj) * nh + h) * M3_HEADDIM + p))
-                        dq = _qk_term_lanes(kv, lv, vv, dy_i, dq)
+                        var vv = F32V(ftz(v.unsafe_load(((bb * l + tj) * nh + h) * M3_HEADDIM + p)))
+                        var t = ftz_lanes(pinned_mul_lanes(tqp.unsafe_load[width=HOST_FW](j * M3_D_STATE + n0), vv))
+                        dq = ftz_lanes(identical_mul_add_simd[HOST_FW](dy_i, t, dq))
+                var vv2 = F32V(ftz(v.unsafe_load(((bb * l + token) * nh + h) * M3_HEADDIM + p)))
                 for i in range(inner + 1, qs):
                     var ti = chunk * qs + i
                     if ti < l:
-                        var dy = ftz(d_y.unsafe_load(((bb * l + ti) * nh + h) * M3_HEADDIM + p))
-                        var lv2 = ftz(seg_l.unsafe_load((seg_base + i) * qs + inner))
-                        var qv = ftz_lanes(q.unsafe_load[width=HOST_FW](((bb * l + ti) * nh + h) * M3_D_STATE + n0))
-                        var vv2 = ftz(v.unsafe_load(((bb * l + token) * nh + h) * M3_HEADDIM + p))
-                        dk = _qk_term_lanes(qv, lv2, vv2, dy, dk)
+                        var dy = F32V(ftz(d_y.unsafe_load(((bb * l + ti) * nh + h) * M3_HEADDIM + p)))
+                        var t2 = ftz_lanes(pinned_mul_lanes(tkp.unsafe_load[width=HOST_FW](i * M3_D_STATE + n0), vv2))
+                        dk = ftz_lanes(identical_mul_add_simd[HOST_FW](dy, t2, dk))
             d_q.unsafe_store(qrow + n0, dq)
             d_k.unsafe_store(qrow + n0, dk)
             n0 += HOST_FW
+        _ = tq^
+        _ = tk^
     for n in range(n0, M3_D_STATE):
         var dq_s = Float32(0.0)
         var dk_s = Float32(0.0)
