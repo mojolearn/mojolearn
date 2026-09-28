@@ -32,6 +32,20 @@ Dropout2d, BasicBlock, CNNClassifier, GCNConv, SAGEConv.
   them (the same kernels on the same inputs made them). Plumbing and
   execution plans only: the same kernels on the same values in the same
   order.
+- DEVIATION 5720 (Apple IDENTICAL speed, lane/cnn-apple): the hot element
+  functions (im2col, conv output, dout rows, col2im, the batch gather, the
+  max pool) decode their indices with 32-bit unsigned division (`_ud`,
+  `_um`; every operand is a non-negative index below 2^31, so the quotient
+  is the Int one; no GPU divides 64-bit integers in hardware); the conv
+  block runs ReLU + max pool forward as one launch (`relu_maxpool_fwd_at`)
+  and the max pool backward + ReLU backward + row layout as one launch
+  (`pool_relu_rows_bwd_at`), each built from the value functions the
+  separate launches store (`relu_val`, `maxpool_bwd_val`, `relu_bwd_val`),
+  so every stored word is the one they stored; on Apple IDENTICAL the
+  weight and bias gradients take the plans the M4 forced-plan sweep
+  measured fastest (tools/apple_speed_cnn/gemm_plans.mojo, every plan
+  bit-equal); `res_alloc` no longer waits (the fill is ordered before every
+  use, `res_free` waits). Index arithmetic, fusion and execution plans only.
 - Seams and their DEVIATIONs (IDENTITY_PATHS.md rows 170-179):
   5700 col2im gather order, 5701 weight gradient on the pinned GEMM,
   5702 BatchNorm folds, 5703 Dropout2d Philox mask, 5704 SpMM row folds,
