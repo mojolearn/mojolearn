@@ -27,9 +27,15 @@ gone, no pod can be rented).** Running instead on the central AMD box
 2. `amd_gate_gpu.sh` under ONE slot (`amd_central.sh run cpu ...`): HIP
    columns base then new (`gpu_done`). Pass = HIP new vs base IDENTICAL; HIP
    new vs CPU new AGREE.
-3. `pixi run check-host-parallel` PASS and the sabotage
-   (patches/host_parallel_fp_env.patch) FAILS, on the new tree.
-4. test_host_surface.
+3. DONE 05:00Z on the AMD box (x86), new tree: site check PASS;
+   `host_parallel_check` PASS (caller 0x1fa0, 1/2/3/7/16 tasks); sabotage
+   (patches/host_parallel_fp_env.patch, on a scratch copy of core/) FAILS
+   (result 0.0 != 8.33e-309, env 0x9ff0 != 0x1fa0). Never repeat.
+4. test_host_surface (needs the built bindings): the Mac-side waiter
+   ~/mojolearn-evidence/cpu/amd_gate_waiter.sh (nohup, log
+   amd_gate_waiter.log) runs it when `new_built` appears
+   (/root/ev-cpu/host_surface.log), then step 2 under a slot
+   (/root/ev-cpu/gate_gpu.log). Read the results; do not relaunch.
 5. STILL OWED WHEN RUNPOD IS FUNDED: the NVIDIA column (CUDA new vs base,
    CUDA vs CPU). The gate rule is NVIDIA + CPU; merge waits on the
    orchestrator's call whether AMD + CPU stands in.
