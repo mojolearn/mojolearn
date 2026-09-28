@@ -24,6 +24,8 @@ from checks.numerics import ftz, identical_cos, identical_div, identical_exp, id
 
 comptime TWO_PI: Float32 = 6.283185307179586
 comptime MEM = 5
+#: points per block of the likelihood's gradient folds (_fg_data)
+comptime PB = 16
 
 
 @always_inline
@@ -87,34 +89,59 @@ def _fg_data(d: ProphetData, y: FP, th: FP, g: FP, lo: Int, hi: Int) -> Float32:
     var sigma = ftz(identical_exp(u))
     var s2 = mul(sigma, sigma)
     var sse = Float32(0.0)
-    for i in range(lo, hi):
-        var ti = ld(d.t, i)
-        var tr = fma3(k, ti, m)
+    # POINT BLOCKS (apple2): every gradient coordinate's chain is still over
+    # the points in ascending order, one fma or add per point, but the
+    # running value stays in a register for PB points instead of a load and
+    # a store of g per point (a device-memory round trip on every term; ld / st
+    # only flush, and every op flushes already, so the words are the same).
+    # The per-point terms (ti, tr, se, w) are the same expressions.
+    var i = lo
+    while i < hi:
+        var nb = min(PB, hi - i)
+        var tiv = SIMD[DType.float32, PB]()
+        var wtv = SIMD[DType.float32, PB]()
+        var wbv = SIMD[DType.float32, PB]()
+        for b in range(nb):
+            var ti = ld(d.t, i + b)
+            var tr = fma3(k, ti, m)
+            for j in range(S):
+                var c = ld(d.cp, j)
+                if ti >= c:
+                    tr = fma3(ld(th, 2 + j), sub(ti, c), tr)
+            var se = Float32(0.0)
+            for q in range(K):
+                se = fma3(ld(d.X, (i + b) * K + q), ld(th, 3 + S + q), se)
+            var yhat: Float32
+            if d.mult:
+                yhat = fma3(tr, se, tr)
+            else:
+                yhat = add(tr, se)
+            var r = sub(ld(y, i + b), yhat)
+            sse = fma3(r, r, sse)
+            var w = div(-r, s2)
+            tiv[b] = ti
+            wtv[b] = mul(w, add(Float32(1.0), se)) if d.mult else w
+            wbv[b] = mul(w, tr) if d.mult else w
+        var g0 = ld(g, 0)
+        var g1 = ld(g, 1)
+        for b in range(nb):
+            g0 = fma3(wtv[b], tiv[b], g0)
+            g1 = add(g1, wtv[b])
+        st(g, 0, g0)
+        st(g, 1, g1)
         for j in range(S):
             var c = ld(d.cp, j)
-            if ti >= c:
-                tr = fma3(ld(th, 2 + j), sub(ti, c), tr)
-        var se = Float32(0.0)
+            var acc = ld(g, 2 + j)
+            for b in range(nb):
+                if tiv[b] >= c:
+                    acc = fma3(wtv[b], sub(tiv[b], c), acc)
+            st(g, 2 + j, acc)
         for q in range(K):
-            se = fma3(ld(d.X, i * K + q), ld(th, 3 + S + q), se)
-        var yhat: Float32
-        if d.mult:
-            yhat = fma3(tr, se, tr)
-        else:
-            yhat = add(tr, se)
-        var r = sub(ld(y, i), yhat)
-        sse = fma3(r, r, sse)
-        var w = div(-r, s2)
-        var wt = mul(w, add(Float32(1.0), se)) if d.mult else w
-        st(g, 0, fma3(wt, ti, ld(g, 0)))
-        st(g, 1, add(ld(g, 1), wt))
-        for j in range(S):
-            var c = ld(d.cp, j)
-            if ti >= c:
-                st(g, 2 + j, fma3(wt, sub(ti, c), ld(g, 2 + j)))
-        var wb = mul(w, tr) if d.mult else w
-        for q in range(K):
-            st(g, 3 + S + q, fma3(wb, ld(d.X, i * K + q), ld(g, 3 + S + q)))
+            var acc = ld(g, 3 + S + q)
+            for b in range(nb):
+                acc = fma3(wbv[b], ld(d.X, (i + b) * K + q), acc)
+            st(g, 3 + S + q, acc)
+        i += nb
     return sse
 
 
