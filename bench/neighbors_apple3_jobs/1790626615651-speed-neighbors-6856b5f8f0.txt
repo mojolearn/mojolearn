@@ -1,0 +1,567 @@
+## R3 BASE PROFILE
+PROF1 fast # x_neighbors_speed mode=fast reps=2 scale=1.0
+PROF1 fast FAST_MMA_KNN ms=56 slices=6 qblocks=79
+PROF1 fast FAST_MMA_KNN ms=31 slices=6 qblocks=79
+PROF1 fast FAST_MMA_KNN ms=31 slices=6 qblocks=79
+PROF1 fast XNSPEED taxi nn 200000 10000 0.0001 0.0413 dc2ef653aab1d225 nan
+PROF1 fast FAST_MMA_KNN ms=31 slices=6 qblocks=79
+PROF1 fast FAST_MMA_KNN ms=31 slices=6 qblocks=79
+PROF1 fast FAST_MMA_KNN ms=33 slices=6 qblocks=79
+PROF1 fast XNSPEED taxi knnc 200000 10000 0.0079 0.0477 4c13da7c8a175192 nan
+PROF1 fast FAST_MMA_KNN ms=32 slices=6 qblocks=79
+PROF1 fast FAST_MMA_KNN ms=32 slices=6 qblocks=79
+PROF1 fast FAST_MMA_KNN ms=31 slices=6 qblocks=79
+PROF1 fast XNSPEED taxi knnr 200000 10000 0.0001 0.0403 c9760ba996ded40f nan
+PROF1 fast XNSPEED taxi radius 100000 5000 0.0000 0.0591 cfec09ca03b02fa7 nan
+PROF1 fast FAST_MMA_KNN ms=12 slices=12 qblocks=40
+PROF1 fast FAST_MMA_KNN ms=12 slices=12 qblocks=40
+PROF1 fast FAST_MMA_KNN ms=12 slices=12 qblocks=40
+PROF1 fast XNSPEED taxi nn-ties 100000 5000 0.0000 0.0169 52412ee062861a3c nan
+PROF1 fast FAST_MMA_KNN ms=62 slices=3 qblocks=157
+PROF1 fast FAST_MMA_KNN ms=62 slices=3 qblocks=157
+PROF1 fast FAST_MMA_KNN ms=61 slices=3 qblocks=157
+PROF1 fast XNSPEED taxi nn-k20 200000 10000 0.0000 0.0728 6675c4cf02337071 nan
+PROF1 fast XNSPEED taxi kde 100000 2000 0.0004 0.0246 0789868f1f596143 nan
+PROF1 fast smo outer iterations: 34, inner: 99358
+PROF1 fast == MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+PROF1 fast    NOT a certifiable timing -- see ensemble/instruments.mojo)
+PROF1 fast   smo.select_ws	0.040055 s
+PROF1 fast   smo.square_tile	0.015931 s
+PROF1 fast   smo.block_solve	0.32377 s
+PROF1 fast   smo.nonzero_select	0.012355 s
+PROF1 fast   smo.fold_order_host	0.007304 s
+PROF1 fast   smo.full_tile_kernel	0.00751 s
+PROF1 fast   smo.nan_scan_readback	0.005647 s
+PROF1 fast   smo.results	0.001776 s
+PROF1 fast   fit_total	0.415016 s
+PROF1 fast   other	0.000668 s
+PROF1 fast smo outer iterations: 34, inner: 99358
+PROF1 fast == MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+PROF1 fast    NOT a certifiable timing -- see ensemble/instruments.mojo)
+PROF1 fast   smo.select_ws	0.021419 s
+PROF1 fast   smo.square_tile	0.015143 s
+PROF1 fast   smo.block_solve	0.32364 s
+PROF1 fast   smo.nonzero_select	0.012036 s
+PROF1 fast   smo.fold_order_host	0.007202 s
+PROF1 fast   smo.full_tile_kernel	0.007324 s
+PROF1 fast   smo.nan_scan_readback	0.005486 s
+PROF1 fast   smo.results	0.001695 s
+PROF1 fast   fit_total	0.39457 s
+PROF1 fast   other	0.000625 s
+PROF1 fast smo outer iterations: 34, inner: 99358
+PROF1 fast == MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+PROF1 fast    NOT a certifiable timing -- see ensemble/instruments.mojo)
+PROF1 fast   smo.select_ws	0.022761 s
+PROF1 fast   smo.square_tile	0.015059 s
+PROF1 fast   smo.block_solve	0.323424 s
+PROF1 fast   smo.nonzero_select	0.011833 s
+PROF1 fast   smo.fold_order_host	0.007248 s
+PROF1 fast   smo.full_tile_kernel	0.007295 s
+PROF1 fast   smo.nan_scan_readback	0.005592 s
+PROF1 fast   smo.results	0.001681 s
+PROF1 fast   fit_total	0.39553 s
+PROF1 fast   other	0.000637 s
+PROF1 fast XNSPEED taxi svc 10000 10000 0.3984 0.0026 788a3d6c392d6e37 nan
+PROF1 fast smo outer iterations: 15, inner: 12699
+PROF1 fast == MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+PROF1 fast    NOT a certifiable timing -- see ensemble/instruments.mojo)
+PROF1 fast   smo.select_ws	0.008644 s
+PROF1 fast   smo.square_tile	0.006467 s
+PROF1 fast   smo.block_solve	0.044614 s
+PROF1 fast   smo.nonzero_select	0.00504 s
+PROF1 fast   smo.fold_order_host	0.00272 s
+PROF1 fast   smo.full_tile_kernel	0.002752 s
+PROF1 fast   smo.nan_scan_readback	0.002271 s
+PROF1 fast   smo.results	0.001818 s
+PROF1 fast   fit_total	0.074638 s
+PROF1 fast   other	0.000312 s
+PROF1 fast smo outer iterations: 15, inner: 12699
+PROF1 fast == MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+PROF1 fast    NOT a certifiable timing -- see ensemble/instruments.mojo)
+PROF1 fast   smo.select_ws	0.009406 s
+PROF1 fast   smo.square_tile	0.006672 s
+PROF1 fast   smo.block_solve	0.04442 s
+PROF1 fast   smo.nonzero_select	0.00512 s
+PROF1 fast   smo.fold_order_host	0.002776 s
+PROF1 fast   smo.full_tile_kernel	0.002903 s
+PROF1 fast   smo.nan_scan_readback	0.00245 s
+PROF1 fast   smo.results	0.001792 s
+PROF1 fast   fit_total	0.075828 s
+PROF1 fast   other	0.000289 s
+PROF1 fast smo outer iterations: 15, inner: 12699
+PROF1 fast == MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+PROF1 fast    NOT a certifiable timing -- see ensemble/instruments.mojo)
+PROF1 fast   smo.select_ws	0.009856 s
+PROF1 fast   smo.square_tile	0.006692 s
+PROF1 fast   smo.block_solve	0.044333 s
+PROF1 fast   smo.nonzero_select	0.005176 s
+PROF1 fast   smo.fold_order_host	0.002973 s
+PROF1 fast   smo.full_tile_kernel	0.003 s
+PROF1 fast   smo.nan_scan_readback	0.00241 s
+PROF1 fast   smo.results	0.001713 s
+PROF1 fast   fit_total	0.076433 s
+PROF1 fast   other	0.00028 s
+PROF1 fast XNSPEED taxi svr 10000 10000 0.0788 0.0026 ff9a2f1bc18032da nan
+PROF1 fast KRR_SOLVE_STAGES n=10000 potrf_ms=230 cho_solve_ms=22
+PROF1 fast KRR_SOLVE_STAGES n=10000 potrf_ms=230 cho_solve_ms=21
+PROF1 fast KRR_SOLVE_STAGES n=10000 potrf_ms=230 cho_solve_ms=22
+PROF1 fast XNSPEED taxi krr 10000 10000 0.2828 0.0325 23b4f004561df1da nan
+PROF1 fast XNSPEED taxi gpr 3000 3000 0.1843 0.0174 fbe6bb4bb6072abb nan
+PROF1 fast XNSPEED taxi gpc 3000 3000 0.4068 0.1924 6bbf69444330de93 nan
+PROF1 fast XNSPEED taxi nystroem 4000 100000 0.7413 0.1196 33c168f7e9ba781d nan
+PROF1 fast RBF_TRANSFORM_STAGES rows=1000000 alloc_upload_ms=5 gemm_ms=112 epilogue_ms=92 copy_out_ms=236
+PROF1 fast RBF_TRANSFORM_STAGES rows=1000000 alloc_upload_ms=8 gemm_ms=94 epilogue_ms=92 copy_out_ms=237
+PROF1 fast RBF_TRANSFORM_STAGES rows=1000000 alloc_upload_ms=8 gemm_ms=95 epilogue_ms=92 copy_out_ms=237
+PROF1 fast XNSPEED taxi rbf 1000000 1000000 0.0012 0.5374 747dda32c01eb839 nan
+PROF1 fast FAST_MMA_KNN ms=36 slices=6 qblocks=79
+PROF1 fast FAST_MMA_KNN ms=23 slices=6 qblocks=79
+PROF1 fast FAST_MMA_KNN ms=23 slices=6 qblocks=79
+PROF1 fast XNSPEED higgs nn 200000 10000 0.0000 0.0324 7bd4e3ceb22f7dfc nan
+PROF1 fast FAST_MMA_KNN ms=23 slices=6 qblocks=79
+PROF1 fast FAST_MMA_KNN ms=23 slices=6 qblocks=79
+PROF1 fast FAST_MMA_KNN ms=23 slices=6 qblocks=79
+PROF1 fast XNSPEED higgs knnc 200000 10000 0.0084 0.0394 3c0e1faad829c171 nan
+PROF1 fast FAST_MMA_KNN ms=23 slices=6 qblocks=79
+PROF1 fast FAST_MMA_KNN ms=23 slices=6 qblocks=79
+PROF1 fast FAST_MMA_KNN ms=23 slices=6 qblocks=79
+PROF1 fast XNSPEED higgs knnr 200000 10000 0.0001 0.0321 9f94067d50404567 nan
+PROF1 fast XNSPEED higgs radius 100000 5000 0.0000 0.0660 4d5de28521ec2b55 nan
+PROF1 fast FAST_MMA_KNN ms=11 slices=12 qblocks=40
+PROF1 fast FAST_MMA_KNN ms=10 slices=12 qblocks=40
+PROF1 fast FAST_MMA_KNN ms=9 slices=12 qblocks=40
+PROF1 fast XNSPEED higgs nn-ties 100000 5000 0.0000 0.0146 575ce1bce2be9b20 nan
+PROF1 fast FAST_MMA_KNN ms=46 slices=3 qblocks=157
+PROF1 fast FAST_MMA_KNN ms=45 slices=3 qblocks=157
+PROF1 fast FAST_MMA_KNN ms=46 slices=3 qblocks=157
+PROF1 fast XNSPEED higgs nn-k20 200000 10000 0.0000 0.0576 df6aa644c4e3ab44 nan
+PROF1 fast XNSPEED higgs kde 100000 2000 0.0004 0.0245 1037493ab1b89924 nan
+PROF1 fast smo outer iterations: 15, inner: 11612
+PROF1 fast == MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+PROF1 fast    NOT a certifiable timing -- see ensemble/instruments.mojo)
+PROF1 fast   smo.select_ws	0.010436 s
+PROF1 fast   smo.square_tile	0.006745 s
+PROF1 fast   smo.block_solve	0.04321 s
+PROF1 fast   smo.nonzero_select	0.005405 s
+PROF1 fast   smo.fold_order_host	0.003973 s
+PROF1 fast   smo.full_tile_kernel	0.003601 s
+PROF1 fast   smo.nan_scan_readback	0.002443 s
+PROF1 fast   smo.results	0.001843 s
+PROF1 fast   fit_total	0.077944 s
+PROF1 fast   other	0.000288 s
+PROF1 fast smo outer iterations: 15, inner: 11612
+PROF1 fast == MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+PROF1 fast    NOT a certifiable timing -- see ensemble/instruments.mojo)
+PROF1 fast   smo.select_ws	0.010264 s
+PROF1 fast   smo.square_tile	0.006702 s
+PROF1 fast   smo.block_solve	0.043212 s
+PROF1 fast   smo.nonzero_select	0.005516 s
+PROF1 fast   smo.fold_order_host	0.003928 s
+PROF1 fast   smo.full_tile_kernel	0.003706 s
+PROF1 fast   smo.nan_scan_readback	0.002429 s
+PROF1 fast   smo.results	0.001744 s
+PROF1 fast   fit_total	0.077779 s
+PROF1 fast   other	0.000278 s
+PROF1 fast smo outer iterations: 15, inner: 11612
+PROF1 fast == MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+PROF1 fast    NOT a certifiable timing -- see ensemble/instruments.mojo)
+PROF1 fast   smo.select_ws	0.009957 s
+PROF1 fast   smo.square_tile	0.006964 s
+PROF1 fast   smo.block_solve	0.043206 s
+PROF1 fast   smo.nonzero_select	0.005458 s
+PROF1 fast   smo.fold_order_host	0.003956 s
+PROF1 fast   smo.full_tile_kernel	0.003642 s
+PROF1 fast   smo.nan_scan_readback	0.002484 s
+PROF1 fast   smo.results	0.00185 s
+PROF1 fast   fit_total	0.077802 s
+PROF1 fast   other	0.000285 s
+PROF1 fast XNSPEED higgs svc 10000 10000 0.0817 0.0037 e7da63c872e36f2e nan
+PROF1 fast smo outer iterations: 16, inner: 13740
+PROF1 fast == MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+PROF1 fast    NOT a certifiable timing -- see ensemble/instruments.mojo)
+PROF1 fast   smo.select_ws	0.010751 s
+PROF1 fast   smo.square_tile	0.007139 s
+PROF1 fast   smo.block_solve	0.050764 s
+PROF1 fast   smo.nonzero_select	0.005703 s
+PROF1 fast   smo.fold_order_host	0.004193 s
+PROF1 fast   smo.full_tile_kernel	0.003825 s
+PROF1 fast   smo.nan_scan_readback	0.002588 s
+PROF1 fast   smo.results	0.00186 s
+PROF1 fast   fit_total	0.087122 s
+PROF1 fast   other	0.000299 s
+PROF1 fast smo outer iterations: 16, inner: 13740
+PROF1 fast == MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+PROF1 fast    NOT a certifiable timing -- see ensemble/instruments.mojo)
+PROF1 fast   smo.select_ws	0.01061 s
+PROF1 fast   smo.square_tile	0.007165 s
+PROF1 fast   smo.block_solve	0.050621 s
+PROF1 fast   smo.nonzero_select	0.005601 s
+PROF1 fast   smo.fold_order_host	0.004116 s
+PROF1 fast   smo.full_tile_kernel	0.003935 s
+PROF1 fast   smo.nan_scan_readback	0.002639 s
+PROF1 fast   smo.results	0.001858 s
+PROF1 fast   fit_total	0.08685 s
+PROF1 fast   other	0.000305 s
+PROF1 fast smo outer iterations: 16, inner: 13740
+PROF1 fast == MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+PROF1 fast    NOT a certifiable timing -- see ensemble/instruments.mojo)
+PROF1 fast   smo.select_ws	0.010894 s
+PROF1 fast   smo.square_tile	0.00728 s
+PROF1 fast   smo.block_solve	0.05056 s
+PROF1 fast   smo.nonzero_select	0.005539 s
+PROF1 fast   smo.fold_order_host	0.004259 s
+PROF1 fast   smo.full_tile_kernel	0.003854 s
+PROF1 fast   smo.nan_scan_readback	0.002556 s
+PROF1 fast   smo.results	0.001839 s
+PROF1 fast   fit_total	0.087086 s
+PROF1 fast   other	0.000305 s
+PROF1 fast XNSPEED higgs svr 10000 10000 0.0900 0.0034 1f64b96fbf062ba6 nan
+PROF1 fast KRR_SOLVE_STAGES n=10000 potrf_ms=230 cho_solve_ms=21
+PROF1 fast KRR_SOLVE_STAGES n=10000 potrf_ms=231 cho_solve_ms=21
+PROF1 fast KRR_SOLVE_STAGES n=10000 potrf_ms=230 cho_solve_ms=21
+PROF1 fast XNSPEED higgs krr 10000 10000 0.2828 0.0324 23eaf76a45966415 nan
+PROF1 fast XNSPEED higgs gpr 3000 3000 0.1852 0.0177 0097cfb54f4ecf29 nan
+PROF1 fast XNSPEED higgs gpc 3000 3000 0.3652 0.1858 442f7ae9d031d171 nan
+PROF1 fast XNSPEED higgs nystroem 4000 100000 0.5601 0.1185 712ceeaac170cfdb nan
+PROF1 fast RBF_TRANSFORM_STAGES rows=1000000 alloc_upload_ms=5 gemm_ms=92 epilogue_ms=92 copy_out_ms=234
+PROF1 fast RBF_TRANSFORM_STAGES rows=1000000 alloc_upload_ms=7 gemm_ms=93 epilogue_ms=92 copy_out_ms=235
+PROF1 fast RBF_TRANSFORM_STAGES rows=1000000 alloc_upload_ms=7 gemm_ms=94 epilogue_ms=92 copy_out_ms=243
+PROF1 fast XNSPEED higgs rbf 1000000 1000000 0.0007 0.5374 2a919953ab70b2f1 nan
+PROF2 fast # x_neighbors_apple2_speed mode=fast reps=2 scale=1.0
+PROF2 fast XN2SPEED taxi lof 20000 5000 0.0781 0.0453 428f08c253214bab -2.712707
+PROF2 fast XN2SPEED taxi ncentroid 200000 50000 0.0488 0.0088 c086328a3c16e301 0.588720
+PROF2 fast XN2SPEED taxi ocsvm 3000 10000 0.0201 0.0018 d09b1f12a6751b4a 0.552100
+PROF2 fast XN2SPEED taxi kpca 500 10000 0.5464 0.0139 8a8e57859e41800a 0.146303
+PROF2 fast XN2SPEED taxi pcs 1000 200000 0.0002 0.2700 c69191c96a9300bc 0.007414
+PROF2 fast XN2SPEED taxi achi2 1000 1000000 0.0000 0.0249 5892a4247f5f4ef7 0.339393
+PROF2 fast XN2SPEED taxi skewed 1000 1000000 0.0042 0.5313 1c1f29893592169c 0.039979
+PROF2 fast XN2SPEED taxi labelprop 5000 2000 0.2388 0.0208 0cafc4a9468c85b4 0.747500
+PROF2 fast XN2SPEED taxi labelspread 5000 2000 0.0880 0.0308 87e3c834e5f4d2c0 0.725000
+PROF2 fast XN2SPEED taxi knnimpute 50000 5000 0.0195 0.0632 9950a0fe292520df 0.076396
+PROF2 fast XN2SPEED taxi pagerank 5000 64 0.0506 0.0000 0196642494e194ac 0.000352
+PROF2 fast XN2SPEED taxi cc 5000 64 0.0552 0.0000 173f8996ed376087 2.000000
+PROF2 fast XN2SPEED taxi louvain 1000 64 0.0434 0.0000 522f6d39142a8509 20.000000
+PROF2 fast XN2SPEED taxi svgp 100000 100000 FAIL ValueError: SVGP: the inducing system is not positive definite; raise jitter or noise_variance
+PROF2 fast XN2SPEED taxi spectral-knn 20000 64 0.2409 0.0000 d3ae00031f77acd1 0.000121
+PROF2 fast XN2SPEED taxi nn-k2000 20000 2000 0.0001 0.0874 91e085352c94945d 1.000000
+PROF2 fast XN2SPEED taxi nn-k2000-tiled 100000 500 0.0000 0.0337 c8b3978abfec19e1 1.000000
+PROF2 fast XN2SPEED higgs lof 20000 5000 0.0715 0.0333 8dbff18cebb0b611 -1.059686
+PROF2 fast XN2SPEED higgs ncentroid 200000 50000 0.0524 0.0088 af2ff4033228de63 0.556980
+PROF2 fast XN2SPEED higgs ocsvm 3000 10000 0.0217 0.0018 8a7bab7c7417c774 0.889900
+PROF2 fast XN2SPEED higgs kpca 500 10000 0.3711 0.0144 effcc1c8859044eb 0.151339
+PROF2 fast XN2SPEED higgs pcs 1000 200000 0.0002 0.2715 cd13a547ed45ec05 0.011013
+PROF2 fast XN2SPEED higgs achi2 1000 1000000 0.0000 0.0246 f0ccfb7fe7f78e02 0.403665
+PROF2 fast XN2SPEED higgs skewed 1000 1000000 0.0039 0.5303 0927edc39968799f 0.039800
+PROF2 fast XN2SPEED higgs labelprop 5000 2000 0.1088 0.0223 b02924bf19e3ae6a 0.501000
+PROF2 fast XN2SPEED higgs labelspread 5000 2000 0.0949 0.0337 e82fc48ce6c10844 0.506500
+PROF2 fast XN2SPEED higgs knnimpute 50000 5000 0.0193 0.0551 104fb09b5f032b07 0.083607
+PROF2 fast XN2SPEED higgs pagerank 5000 64 0.0552 0.0000 4fcbe0b562a3901e 0.000366
+PROF2 fast XN2SPEED higgs cc 5000 64 0.0311 0.0000 4c6cd7e0c9f92cc4 2.000000
+PROF2 fast XN2SPEED higgs louvain 1000 64 0.0487 0.0000 167f4a6575c081c6 10.000000
+PROF2 fast XN2SPEED higgs svgp 100000 100000 0.0771 0.0079 87f9f4b759a5bab6 0.107377
+PROF2 fast XN2SPEED higgs spectral-knn 20000 64 0.2489 0.0000 7be2d3a281f753a2 0.000133
+PROF2 fast XN2SPEED higgs nn-k2000 20000 2000 0.0001 0.0878 3d34b59967887d88 1.000000
+PROF2 fast XN2SPEED higgs nn-k2000-tiled 100000 500 0.0000 0.0334 60637d084d5f0ebb 1.000000
+PROF1 identical # x_neighbors_speed mode=identical reps=2 scale=1.0
+PROF1 identical FAST_MMA_KNN ms=51 slices=6 qblocks=79
+PROF1 identical CERT_KNN queries=10000 kc=16 tiled_fallback=185
+PROF1 identical FAST_MMA_KNN ms=34 slices=6 qblocks=79
+PROF1 identical CERT_KNN queries=10000 kc=16 tiled_fallback=185
+PROF1 identical FAST_MMA_KNN ms=35 slices=6 qblocks=79
+PROF1 identical CERT_KNN queries=10000 kc=16 tiled_fallback=185
+PROF1 identical XNSPEED taxi nn 200000 10000 0.0001 0.0541 9ff7546966de542d nan
+PROF1 identical FAST_MMA_KNN ms=34 slices=6 qblocks=79
+PROF1 identical CERT_KNN queries=10000 kc=16 tiled_fallback=185
+PROF1 identical FAST_MMA_KNN ms=35 slices=6 qblocks=79
+PROF1 identical CERT_KNN queries=10000 kc=16 tiled_fallback=185
+PROF1 identical FAST_MMA_KNN ms=33 slices=6 qblocks=79
+PROF1 identical CERT_KNN queries=10000 kc=16 tiled_fallback=185
+PROF1 identical XNSPEED taxi knnc 200000 10000 0.0085 0.0583 4c13da7c8a175192 nan
+PROF1 identical FAST_MMA_KNN ms=34 slices=6 qblocks=79
+PROF1 identical CERT_KNN queries=10000 kc=16 tiled_fallback=185
+PROF1 identical FAST_MMA_KNN ms=33 slices=6 qblocks=79
+PROF1 identical CERT_KNN queries=10000 kc=16 tiled_fallback=185
+PROF1 identical FAST_MMA_KNN ms=34 slices=6 qblocks=79
+PROF1 identical CERT_KNN queries=10000 kc=16 tiled_fallback=185
+PROF1 identical XNSPEED taxi knnr 200000 10000 0.0001 0.0528 dc704b6809992b0c nan
+PROF1 identical XNSPEED taxi radius 100000 5000 0.0000 0.0607 12c0e538dd08e9ba nan
+PROF1 identical FAST_MMA_KNN ms=13 slices=12 qblocks=40
+PROF1 identical CERT_KNN queries=5000 kc=16 tiled_fallback=4389
+PROF1 identical FAST_MMA_KNN ms=12 slices=12 qblocks=40
+PROF1 identical CERT_KNN queries=5000 kc=16 tiled_fallback=4389
+PROF1 identical FAST_MMA_KNN ms=12 slices=12 qblocks=40
+PROF1 identical CERT_KNN queries=5000 kc=16 tiled_fallback=4389
+PROF1 identical XNSPEED taxi nn-ties 100000 5000 0.0001 0.0900 52412ee062861a3c nan
+PROF1 identical FAST_MMA_KNN ms=68 slices=3 qblocks=157
+PROF1 identical CERT_KNN queries=10000 kc=32 tiled_fallback=26
+PROF1 identical FAST_MMA_KNN ms=70 slices=3 qblocks=157
+PROF1 identical CERT_KNN queries=10000 kc=32 tiled_fallback=26
+PROF1 identical FAST_MMA_KNN ms=71 slices=3 qblocks=157
+PROF1 identical CERT_KNN queries=10000 kc=32 tiled_fallback=26
+PROF1 identical XNSPEED taxi nn-k20 200000 10000 0.0000 0.0879 34a8923fc81e30cf nan
+PROF1 identical XNSPEED taxi kde 100000 2000 0.0003 0.1093 feee565cd4bb868c nan
+PROF1 identical smo outer iterations: 201, inner: 144548
+PROF1 identical == MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+PROF1 identical    NOT a certifiable timing -- see ensemble/instruments.mojo)
+PROF1 identical   smo.select_ws	0.126283 s
+PROF1 identical   smo.square_tile	0.081072 s
+PROF1 identical   smo.block_solve	0.380009 s
+PROF1 identical   smo.nonzero_select	0.070054 s
+PROF1 identical   smo.fold_order_host	0.034193 s
+PROF1 identical   smo.full_tile_kernel	0.281093 s
+PROF1 identical   smo.update_f	0.047301 s
+PROF1 identical   smo.nan_scan_readback	0.035003 s
+PROF1 identical   smo.results	0.001957 s
+PROF1 identical   fit_total	1.060896 s
+PROF1 identical   other	0.003931 s
+PROF1 identical smo outer iterations: 201, inner: 144548
+PROF1 identical == MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+PROF1 identical    NOT a certifiable timing -- see ensemble/instruments.mojo)
+PROF1 identical   smo.select_ws	0.125115 s
+PROF1 identical   smo.square_tile	0.078266 s
+PROF1 identical   smo.block_solve	0.379475 s
+PROF1 identical   smo.nonzero_select	0.069417 s
+PROF1 identical   smo.fold_order_host	0.033779 s
+PROF1 identical   smo.full_tile_kernel	0.131275 s
+PROF1 identical   smo.update_f	0.04582 s
+PROF1 identical   smo.nan_scan_readback	0.034535 s
+PROF1 identical   smo.results	0.001765 s
+PROF1 identical   fit_total	0.903313 s
+PROF1 identical   other	0.003866 s
+PROF1 identical smo outer iterations: 201, inner: 144548
+PROF1 identical == MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+PROF1 identical    NOT a certifiable timing -- see ensemble/instruments.mojo)
+PROF1 identical   smo.select_ws	0.123313 s
+PROF1 identical   smo.square_tile	0.078028 s
+PROF1 identical   smo.block_solve	0.378905 s
+PROF1 identical   smo.nonzero_select	0.068361 s
+PROF1 identical   smo.fold_order_host	0.033416 s
+PROF1 identical   smo.full_tile_kernel	0.130361 s
+PROF1 identical   smo.update_f	0.045429 s
+PROF1 identical   smo.nan_scan_readback	0.033918 s
+PROF1 identical   smo.results	0.001611 s
+PROF1 identical   fit_total	0.897199 s
+PROF1 identical   other	0.003857 s
+PROF1 identical XNSPEED taxi svc 10000 10000 0.9002 0.0135 788a3d6c392d6e37 nan
+PROF1 identical smo outer iterations: 25, inner: 14362
+PROF1 identical == MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+PROF1 identical    NOT a certifiable timing -- see ensemble/instruments.mojo)
+PROF1 identical   smo.select_ws	0.013586 s
+PROF1 identical   smo.square_tile	0.009613 s
+PROF1 identical   smo.block_solve	0.038878 s
+PROF1 identical   smo.nonzero_select	0.007946 s
+PROF1 identical   smo.fold_order_host	0.003688 s
+PROF1 identical   smo.full_tile_kernel	0.018565 s
+PROF1 identical   smo.update_f	0.008313 s
+PROF1 identical   smo.nan_scan_readback	0.00409 s
+PROF1 identical   smo.results	0.001652 s
+PROF1 identical   fit_total	0.106833 s
+PROF1 identical   other	0.000502 s
+PROF1 identical smo outer iterations: 25, inner: 14362
+PROF1 identical == MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+PROF1 identical    NOT a certifiable timing -- see ensemble/instruments.mojo)
+PROF1 identical   smo.select_ws	0.013584 s
+PROF1 identical   smo.square_tile	0.009366 s
+PROF1 identical   smo.block_solve	0.038612 s
+PROF1 identical   smo.nonzero_select	0.007766 s
+PROF1 identical   smo.fold_order_host	0.003724 s
+PROF1 identical   smo.full_tile_kernel	0.018607 s
+PROF1 identical   smo.update_f	0.00818 s
+PROF1 identical   smo.nan_scan_readback	0.00397 s
+PROF1 identical   smo.results	0.001549 s
+PROF1 identical   fit_total	0.10584 s
+PROF1 identical   other	0.000482 s
+PROF1 identical smo outer iterations: 25, inner: 14362
+PROF1 identical == MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+PROF1 identical    NOT a certifiable timing -- see ensemble/instruments.mojo)
+PROF1 identical   smo.select_ws	0.013694 s
+PROF1 identical   smo.square_tile	0.009392 s
+PROF1 identical   smo.block_solve	0.038605 s
+PROF1 identical   smo.nonzero_select	0.0078 s
+PROF1 identical   smo.fold_order_host	0.003676 s
+PROF1 identical   smo.full_tile_kernel	0.018424 s
+PROF1 identical   smo.update_f	0.008292 s
+PROF1 identical   smo.nan_scan_readback	0.003912 s
+PROF1 identical   smo.results	0.001559 s
+PROF1 identical   fit_total	0.105834 s
+PROF1 identical   other	0.00048 s
+PROF1 identical XNSPEED taxi svr 10000 10000 0.1081 0.0149 0ce89d3cc2d003ea nan
+PROF1 identical KRR_SOLVE_STAGES n=10000 potrf_ms=734 cho_solve_ms=334
+PROF1 identical KRR_SOLVE_STAGES n=10000 potrf_ms=735 cho_solve_ms=334
+PROF1 identical KRR_SOLVE_STAGES n=10000 potrf_ms=733 cho_solve_ms=335
+PROF1 identical XNSPEED taxi krr 10000 10000 1.0921 0.0264 5654a1e20a32a733 nan
+PROF1 identical XNSPEED taxi gpr 3000 3000 0.2479 0.0164 07ca09431dc42dc0 nan
+PROF1 identical XNSPEED taxi gpc 3000 3000 0.8364 0.2124 fc039349486c1727 nan
+PROF1 identical XNSPEED taxi nystroem 4000 100000 0.9287 0.0572 7cb0754aaa458ea7 nan
+PROF1 identical RBF_TRANSFORM_STAGES rows=1000000 alloc_upload_ms=5 gemm_ms=88 epilogue_ms=101 copy_out_ms=240
+PROF1 identical RBF_TRANSFORM_STAGES rows=1000000 alloc_upload_ms=5 gemm_ms=88 epilogue_ms=101 copy_out_ms=235
+PROF1 identical RBF_TRANSFORM_STAGES rows=1000000 alloc_upload_ms=5 gemm_ms=89 epilogue_ms=101 copy_out_ms=240
+PROF1 identical XNSPEED taxi rbf 1000000 1000000 0.0012 0.5398 5b7fc0c75797ae8a nan
+PROF1 identical FAST_MMA_KNN ms=31 slices=6 qblocks=79
+PROF1 identical CERT_KNN queries=10000 kc=16 tiled_fallback=0
+PROF1 identical FAST_MMA_KNN ms=25 slices=6 qblocks=79
+PROF1 identical CERT_KNN queries=10000 kc=16 tiled_fallback=0
+PROF1 identical FAST_MMA_KNN ms=25 slices=6 qblocks=79
+PROF1 identical CERT_KNN queries=10000 kc=16 tiled_fallback=0
+PROF1 identical XNSPEED higgs nn 200000 10000 0.0000 0.0355 a29e4118b681bb53 nan
+PROF1 identical FAST_MMA_KNN ms=25 slices=6 qblocks=79
+PROF1 identical CERT_KNN queries=10000 kc=16 tiled_fallback=0
+PROF1 identical FAST_MMA_KNN ms=25 slices=6 qblocks=79
+PROF1 identical CERT_KNN queries=10000 kc=16 tiled_fallback=0
+PROF1 identical FAST_MMA_KNN ms=26 slices=6 qblocks=79
+PROF1 identical CERT_KNN queries=10000 kc=16 tiled_fallback=0
+PROF1 identical XNSPEED higgs knnc 200000 10000 0.0086 0.0434 3c0e1faad829c171 nan
+PROF1 identical FAST_MMA_KNN ms=25 slices=6 qblocks=79
+PROF1 identical CERT_KNN queries=10000 kc=16 tiled_fallback=0
+PROF1 identical FAST_MMA_KNN ms=25 slices=6 qblocks=79
+PROF1 identical CERT_KNN queries=10000 kc=16 tiled_fallback=0
+PROF1 identical FAST_MMA_KNN ms=25 slices=6 qblocks=79
+PROF1 identical CERT_KNN queries=10000 kc=16 tiled_fallback=0
+PROF1 identical XNSPEED higgs knnr 200000 10000 0.0001 0.0360 9f94067d50404567 nan
+PROF1 identical XNSPEED higgs radius 100000 5000 0.0000 0.0678 cdb8cbe1b2da2410 nan
+PROF1 identical FAST_MMA_KNN ms=11 slices=12 qblocks=40
+PROF1 identical CERT_KNN queries=5000 kc=16 tiled_fallback=2502
+PROF1 identical FAST_MMA_KNN ms=10 slices=12 qblocks=40
+PROF1 identical CERT_KNN queries=5000 kc=16 tiled_fallback=2502
+PROF1 identical FAST_MMA_KNN ms=10 slices=12 qblocks=40
+PROF1 identical CERT_KNN queries=5000 kc=16 tiled_fallback=2502
+PROF1 identical XNSPEED higgs nn-ties 100000 5000 0.0000 0.0578 575ce1bce2be9b20 nan
+PROF1 identical FAST_MMA_KNN ms=51 slices=3 qblocks=157
+PROF1 identical CERT_KNN queries=10000 kc=32 tiled_fallback=0
+PROF1 identical FAST_MMA_KNN ms=51 slices=3 qblocks=157
+PROF1 identical CERT_KNN queries=10000 kc=32 tiled_fallback=0
+PROF1 identical FAST_MMA_KNN ms=52 slices=3 qblocks=157
+PROF1 identical CERT_KNN queries=10000 kc=32 tiled_fallback=0
+PROF1 identical XNSPEED higgs nn-k20 200000 10000 0.0000 0.0647 f8814dc5a44f205f nan
+PROF1 identical XNSPEED higgs kde 100000 2000 0.0003 0.1089 b558f0c7443c2aa0 nan
+PROF1 identical smo outer iterations: 27, inner: 11955
+PROF1 identical == MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+PROF1 identical    NOT a certifiable timing -- see ensemble/instruments.mojo)
+PROF1 identical   smo.select_ws	0.016374 s
+PROF1 identical   smo.square_tile	0.010912 s
+PROF1 identical   smo.block_solve	0.035395 s
+PROF1 identical   smo.nonzero_select	0.009234 s
+PROF1 identical   smo.fold_order_host	0.004814 s
+PROF1 identical   smo.full_tile_kernel	0.027511 s
+PROF1 identical   smo.update_f	0.008184 s
+PROF1 identical   smo.nan_scan_readback	0.004689 s
+PROF1 identical   smo.results	0.001796 s
+PROF1 identical   fit_total	0.119451 s
+PROF1 identical   other	0.000542 s
+PROF1 identical smo outer iterations: 27, inner: 11955
+PROF1 identical == MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+PROF1 identical    NOT a certifiable timing -- see ensemble/instruments.mojo)
+PROF1 identical   smo.select_ws	0.017804 s
+PROF1 identical   smo.square_tile	0.010738 s
+PROF1 identical   smo.block_solve	0.035866 s
+PROF1 identical   smo.nonzero_select	0.009667 s
+PROF1 identical   smo.fold_order_host	0.005027 s
+PROF1 identical   smo.full_tile_kernel	0.027539 s
+PROF1 identical   smo.update_f	0.008249 s
+PROF1 identical   smo.nan_scan_readback	0.004648 s
+PROF1 identical   smo.results	0.001731 s
+PROF1 identical   fit_total	0.121783 s
+PROF1 identical   other	0.000514 s
+PROF1 identical smo outer iterations: 27, inner: 11955
+PROF1 identical == MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+PROF1 identical    NOT a certifiable timing -- see ensemble/instruments.mojo)
+PROF1 identical   smo.select_ws	0.017822 s
+PROF1 identical   smo.square_tile	0.010817 s
+PROF1 identical   smo.block_solve	0.035868 s
+PROF1 identical   smo.nonzero_select	0.009734 s
+PROF1 identical   smo.fold_order_host	0.004994 s
+PROF1 identical   smo.full_tile_kernel	0.027582 s
+PROF1 identical   smo.update_f	0.008099 s
+PROF1 identical   smo.nan_scan_readback	0.004656 s
+PROF1 identical   smo.results	0.001723 s
+PROF1 identical   fit_total	0.121806 s
+PROF1 identical   other	0.000511 s
+PROF1 identical XNSPEED higgs svc 10000 10000 0.1254 0.0239 24d6f4ea808d3a21 nan
+PROF1 identical smo outer iterations: 28, inner: 14218
+PROF1 identical == MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+PROF1 identical    NOT a certifiable timing -- see ensemble/instruments.mojo)
+PROF1 identical   smo.select_ws	0.017912 s
+PROF1 identical   smo.square_tile	0.011229 s
+PROF1 identical   smo.block_solve	0.041687 s
+PROF1 identical   smo.nonzero_select	0.010035 s
+PROF1 identical   smo.fold_order_host	0.005231 s
+PROF1 identical   smo.full_tile_kernel	0.029017 s
+PROF1 identical   smo.update_f	0.01287 s
+PROF1 identical   smo.nan_scan_readback	0.004763 s
+PROF1 identical   smo.results	0.001936 s
+PROF1 identical   fit_total	0.135231 s
+PROF1 identical   other	0.000551 s
+PROF1 identical smo outer iterations: 28, inner: 14218
+PROF1 identical == MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+PROF1 identical    NOT a certifiable timing -- see ensemble/instruments.mojo)
+PROF1 identical   smo.select_ws	0.018094 s
+PROF1 identical   smo.square_tile	0.011003 s
+PROF1 identical   smo.block_solve	0.041154 s
+PROF1 identical   smo.nonzero_select	0.00955 s
+PROF1 identical   smo.fold_order_host	0.005185 s
+PROF1 identical   smo.full_tile_kernel	0.029149 s
+PROF1 identical   smo.update_f	0.012915 s
+PROF1 identical   smo.nan_scan_readback	0.004886 s
+PROF1 identical   smo.results	0.001931 s
+PROF1 identical   fit_total	0.134401 s
+PROF1 identical   other	0.000534 s
+PROF1 identical smo outer iterations: 28, inner: 14218
+PROF1 identical == MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+PROF1 identical    NOT a certifiable timing -- see ensemble/instruments.mojo)
+PROF1 identical   smo.select_ws	0.018263 s
+PROF1 identical   smo.square_tile	0.011138 s
+PROF1 identical   smo.block_solve	0.041395 s
+PROF1 identical   smo.nonzero_select	0.009958 s
+PROF1 identical   smo.fold_order_host	0.005124 s
+PROF1 identical   smo.full_tile_kernel	0.02925 s
+PROF1 identical   smo.update_f	0.013075 s
+PROF1 identical   smo.nan_scan_readback	0.004839 s
+PROF1 identical   smo.results	0.001818 s
+PROF1 identical   fit_total	0.135404 s
+PROF1 identical   other	0.000544 s
+PROF1 identical XNSPEED higgs svr 10000 10000 0.1372 0.0249 879a30f092b8b20c nan
+PROF1 identical KRR_SOLVE_STAGES n=10000 potrf_ms=234 cho_solve_ms=333
+PROF1 identical KRR_SOLVE_STAGES n=10000 potrf_ms=234 cho_solve_ms=333
+PROF1 identical KRR_SOLVE_STAGES n=10000 potrf_ms=234 cho_solve_ms=333
+PROF1 identical XNSPEED higgs krr 10000 10000 0.5908 0.0259 775b253452af9321 nan
+PROF1 identical XNSPEED higgs gpr 3000 3000 0.1980 0.0167 f42af0688c08cd80 nan
+PROF1 identical XNSPEED higgs gpc 3000 3000 0.4458 0.2134 0de2f247f3190c60 nan
+PROF1 identical XNSPEED higgs nystroem 4000 100000 0.6996 0.0450 8deb9714f24649e6 nan
+PROF1 identical RBF_TRANSFORM_STAGES rows=1000000 alloc_upload_ms=4 gemm_ms=88 epilogue_ms=101 copy_out_ms=235
+PROF1 identical RBF_TRANSFORM_STAGES rows=1000000 alloc_upload_ms=9 gemm_ms=89 epilogue_ms=101 copy_out_ms=238
+PROF1 identical RBF_TRANSFORM_STAGES rows=1000000 alloc_upload_ms=4 gemm_ms=88 epilogue_ms=101 copy_out_ms=237
+PROF1 identical XNSPEED higgs rbf 1000000 1000000 0.0008 0.5353 1020aa75e979954e nan
+PROF2 identical # x_neighbors_apple2_speed mode=identical reps=2 scale=1.0
+PROF2 identical XN2SPEED taxi lof 20000 5000 0.0860 0.0478 428f08c253214bab -2.712707
+PROF2 identical XN2SPEED taxi ncentroid 200000 50000 0.0585 0.0091 c086328a3c16e301 0.588720
+PROF2 identical XN2SPEED taxi ocsvm 3000 10000 0.0202 0.0018 f0d8cd1adf255368 0.552100
+PROF2 identical XN2SPEED taxi kpca 500 10000 1.8714 0.0143 cb9a04d3d3e2820c 0.146303
+PROF2 identical XN2SPEED taxi pcs 1000 200000 0.0002 0.2878 c69191c96a9300bc 0.007414
+PROF2 identical XN2SPEED taxi achi2 1000 1000000 0.0000 0.0254 6f7b116afd250ab2 0.339393
+PROF2 identical XN2SPEED taxi skewed 1000 1000000 0.0040 0.5394 9a2ba16fe49b8615 0.039979
+PROF2 identical XN2SPEED taxi labelprop 5000 2000 0.3274 0.0215 0cafc4a9468c85b4 0.747500
+PROF2 identical XN2SPEED taxi labelspread 5000 2000 0.0933 0.0271 87e3c834e5f4d2c0 0.725000
+PROF2 identical XN2SPEED taxi knnimpute 50000 5000 0.0192 0.0658 9950a0fe292520df 0.076396
+PROF2 identical XN2SPEED taxi pagerank 5000 64 0.0546 0.0000 014b6ca5526e71d5 0.000352
+PROF2 identical XN2SPEED taxi cc 5000 64 0.0572 0.0000 173f8996ed376087 2.000000
+PROF2 identical XN2SPEED taxi louvain 1000 64 0.0853 0.0000 522f6d39142a8509 20.000000
+PROF2 identical XN2SPEED taxi svgp 100000 100000 FAIL ValueError: SVGP: the inducing system is not positive definite; raise jitter or noise_variance
+PROF2 identical XN2SPEED taxi spectral-knn 20000 64 0.5291 0.0000 a171b2a3d2f10139 0.000121
+PROF2 identical XN2SPEED taxi nn-k2000 20000 2000 0.0001 0.0882 1ce567d013410db5 1.000000
+PROF2 identical XN2SPEED taxi nn-k2000-tiled 100000 500 0.0000 0.0410 eebb641722d488e5 1.000000
+PROF2 identical XN2SPEED higgs lof 20000 5000 0.0767 0.0352 8dbff18cebb0b611 -1.059686
+PROF2 identical XN2SPEED higgs ncentroid 200000 50000 0.0604 0.0093 af2ff4033228de63 0.556980
+PROF2 identical XN2SPEED higgs ocsvm 3000 10000 0.0220 0.0019 f89bc8b44ccb2c19 0.889900
+PROF2 identical XN2SPEED higgs kpca 500 10000 1.2710 0.0148 7a04ae1e8fcf728f 0.151339
+PROF2 identical XN2SPEED higgs pcs 1000 200000 0.0002 0.2884 cd13a547ed45ec05 0.011013
+PROF2 identical XN2SPEED higgs achi2 1000 1000000 0.0000 0.0249 bbe83c2b6473c496 0.403665
+PROF2 identical XN2SPEED higgs skewed 1000 1000000 0.0040 0.5492 0afa1213d89f96f0 0.039800
+PROF2 identical XN2SPEED higgs labelprop 5000 2000 0.1190 0.0221 b02924bf19e3ae6a 0.501000
+PROF2 identical XN2SPEED higgs labelspread 5000 2000 0.0937 0.0274 e82fc48ce6c10844 0.506500
+PROF2 identical XN2SPEED higgs knnimpute 50000 5000 0.0189 0.0670 104fb09b5f032b07 0.083607
+PROF2 identical XN2SPEED higgs pagerank 5000 64 0.0534 0.0000 ac469742c1ce1523 0.000366
+PROF2 identical XN2SPEED higgs cc 5000 64 0.0298 0.0000 4c6cd7e0c9f92cc4 2.000000
+PROF2 identical XN2SPEED higgs louvain 1000 64 0.0906 0.0000 167f4a6575c081c6 10.000000
+PROF2 identical XN2SPEED higgs svgp 100000 100000 0.0818 0.0082 7d431e36f38af0fe 0.107377
+PROF2 identical XN2SPEED higgs spectral-knn 20000 64 0.5483 0.0000 a07a07bba22cbe29 0.000133
+PROF2 identical XN2SPEED higgs nn-k2000 20000 2000 0.0001 0.0885 3d34b59967887d88 1.000000
+PROF2 identical XN2SPEED higgs nn-k2000-tiled 100000 500 0.0000 0.0410 60637d084d5f0ebb 1.000000

@@ -127,7 +127,39 @@ from kernel_methods.impl.kernel_ridge.kernel_ridge import (
     kernel_ridge_workspace_floats,
 )
 from checks.numerics import ftz, identical_div, identical_sqrt
+from checks.numerics import NUMERIC_FAST as _NUMERIC_FAST
+from std.sys.info import has_apple_gpu_accelerator
 from svm.impl.svm_parameter import KernelParams
+from x_neighbors.fast_eigh import EigP, symmetric_eig_rows
+
+#: lane neighbors-apple3 (2026-09-28): FAST on Apple solves Nystroem's
+#: n_components x n_components eigenproblem on the host, by the Jacobi of
+#: spectral/checks/symmetric_eig_host.mojo with its rotations as vectors
+#: (x_neighbors/fast_eigh.mojo). The device Jacobi is one block running one
+#: rotation at a time behind a barrier: at 300 components it was most of
+#: the fit (M4 Pro, FAST, 0.64 to 0.74 s). FAST's words move (another
+#: rotation formula and stopping rule, the same decomposition); the paired
+#: quality check is bench/x_neighbors_fast_quality.py (nystroem).
+#: OPT-IN until its A/B and quality check pass: `-D MOJOLEARN_NYS_HOST_EIGH`.
+comptime NYS_HOST_EIGH = (
+    _CTX_MODE == _NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_NYS_HOST_EIGH"]()
+)
+comptime NYS_HOST_EIGH_SWEEPS = 60
+
+#: lane neighbors-apple3 (2026-09-28), FAST on Apple, OPT-IN until its A/B
+#: and quality check pass (`-D MOJOLEARN_RBF_FUSED`): RBFSampler.transform
+#: as ONE kernel per cell, the projection (features ascending), the offset,
+#: the cosine and the scale, when X has at most RBF_FUSED_MAX_D features.
+#: The projection is 8 products a cell at the board's shape; forming it as
+#: a matrix product first writes and reads the n x n_components matrix once
+#: more (gemm 93 ms + epilogue 92 ms of the transform at 1M x 500, M4 Pro).
+comptime RBF_FUSED = (
+    _CTX_MODE == _NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_RBF_FUSED"]()
+)
 
 
 # ===========================================================================
@@ -170,6 +202,30 @@ def _download_into[out_origin: MutOrigin, //](
         ctx.synchronize()
         return
     if n <= 0:
+        return
+    comptime if is_defined["MOJOLEARN_KM_MAPPED_OUT"]():
+        # lane neighbors-apple3, OPT-IN: the device buffer mapped into the
+        # host (Apple's memory is unified) and copied once, over the host
+        # cores, instead of once into the staging buffer and once out of it.
+        ctx.synchronize()
+        with src.map_to_host() as hm:
+            var msrc = rebind[MutPointer[Float32, MutUntrackedOrigin]](hm.unsafe_ptr())
+            var mdst = rebind[MutPointer[Float32, MutUntrackedOrigin]](output)
+            var mtasks = host_predict_task_count(n)
+            if n < 262144:
+                mtasks = 1
+            var mpart = host_predict_chunk(n, mtasks)
+
+            def _mpart(task: Int) {imm msrc, imm mdst, imm n, imm mpart}:
+                var lo = task * mpart
+                var hi = min(lo + mpart, n)
+                if hi > lo:
+                    copy_f32(msrc.unsafe_offset(lo), mdst.unsafe_offset(lo), hi - lo)
+
+            if mtasks == 1:
+                _mpart(0)
+            else:
+                host_parallelize(_mpart, mtasks)
         return
     var c = min(n, KM_OUT_CHUNK)
     var h = ctx.enqueue_create_host_buffer[DType.float32](c)
@@ -687,6 +743,71 @@ def nystroem_params(model: NystroemModel) -> KernelParams:
     return KernelParams(model.kernel, model.degree, model.gamma, model.coef0)
 
 
+def _nystroem_device_eigh(
+    ctx: DeviceContext,
+    mut dk: DeviceBuffer[DType.float32],
+    mut dvec: DeviceBuffer[DType.float32],
+    mut dinfo: DeviceBuffer[DType.float32],
+    q: Int,
+    sabotage: Int,
+    mut trace: IdentityTrace,
+    mut eig_diag: List[Float32],
+    mut vecs: List[Float32],
+) raises -> Int:
+    """The eigendecomposition on the device, through decomposition/: `dk` is
+    consumed (its diagonal becomes the eigenvalues), `dvec` gets the sign
+    flipped eigenvectors. Appends eigenvalue c to `eig_diag` and the q x q
+    eigenvectors (vector c in COLUMN c) to `vecs`; returns the sweeps."""
+    ctx.enqueue_function[jacobi_eigh_kernel[JACOBI_ROT_TPB]](
+        dk.unsafe_ptr(),
+        dvec.unsafe_ptr(),
+        dinfo.unsafe_ptr(),
+        Int32(q),
+        Int32(JACOBI_SWEEPS),
+        Float32(JACOBI_TOL),
+        grid_dim=(1, 1, 1),
+        block_dim=(JACOBI_ROT_TPB, 1, 1),
+    )
+    if sabotage != KMSAB_NO_SIGN_FLIP:
+        ctx.enqueue_function[sign_flip_kernel](
+            dvec.unsafe_ptr(),
+            Int32(q),
+            grid_dim=(q, 1, 1),
+            block_dim=(SIGNFLIP_TPB, 1, 1),
+        )
+    ctx.synchronize()
+    trace.record_device(ctx, "nys.eigenvectors_flipped", dvec, q * q)
+
+    var info_h = _download(ctx, dinfo, 3)
+    if info_h[0] == Float32(0.0):
+        # `eig_and_truncate`'s refusal, for the same reason it gives: their
+        # DEFAULT eigen arm (`eigDC` -> cuSOLVER `syevd`) aborts on a
+        # non-zero `dev_info`, and their JACOBI arm silently does not
+        # (`raft/linalg/detail/eig.cuh:310`, `executed_sweeps` fetched and
+        # never read). We follow the default arm.
+        raise Error(
+            "nystroem_fit_host: the device Jacobi did not converge in "
+            + String(JACOBI_SWEEPS)
+            + " sweeps at n_components = "
+            + String(q)
+            + "; ||offdiag(A)||_F / ||A||_F is still "
+            + String(info_h[1])
+            + " against a tolerance of "
+            + String(JACOBI_TOL)
+            + ". An unconverged eigendecomposition returned as if it were"
+            " one is a wrong answer with no error. The closure is a larger"
+            " sweep budget, which is decomposition/'s parameter and not"
+            " this lane's to change"
+        )
+    var raw = _download(ctx, dk, q * q)
+    var got = _download(ctx, dvec, q * q)
+    for c in range(q):
+        eig_diag.append(raw[c * q + c])
+    for i in range(q * q):
+        vecs.append(got[i])
+    return Int(info_h[2])
+
+
 def nystroem_fit_host(
     x: List[Float32],
     n_samples: Int,
@@ -775,51 +896,67 @@ def nystroem_fit_host(
     # unrotated (too few) or run lanes off the end (too many). Passing the
     # same constant in the parameter and in `block_dim` is what makes the
     # two impossible to drift apart. All of its other call sites do the same.
-    ctx.enqueue_function[jacobi_eigh_kernel[JACOBI_ROT_TPB]](
-        dk.unsafe_ptr(),
-        dvec.unsafe_ptr(),
-        dinfo.unsafe_ptr(),
-        Int32(q),
-        Int32(JACOBI_SWEEPS),
-        Float32(JACOBI_TOL),
-        grid_dim=(1, 1, 1),
-        block_dim=(JACOBI_ROT_TPB, 1, 1),
-    )
-    if sabotage != KMSAB_NO_SIGN_FLIP:
-        ctx.enqueue_function[sign_flip_kernel](
-            dvec.unsafe_ptr(),
-            Int32(q),
-            grid_dim=(q, 1, 1),
-            block_dim=(SIGNFLIP_TPB, 1, 1),
-        )
-    ctx.synchronize()
-    trace.record_device(ctx, "nys.eigenvectors_flipped", dvec, q * q)
+    var sweeps = 0
+    var eig_diag = List[Float32]()
+    var vecs = List[Float32]()
+    comptime if NYS_HOST_EIGH:
+        var kh = _download(ctx, dk, q * q)
+        var wh = List[Float32](length=q, fill=Float32(0.0))
+        vecs = List[Float32](length=q * q, fill=Float32(0.0))
+        comptime if is_defined["MOJOLEARN_NYS_HOST_EIGH_TWIN"]():
+            # OPT-IN: the DEVICE solver's own statements on the host
+            # (x_decomp/host_jacobi.mojo `fast_jacobi_eigh`, the row-vector
+            # form of decomposition/host/pca_oracle.mojo `host_jacobi_eigh`,
+            # which replays `jacobi_eigh_kernel`), then `sign_flip_kernel`'s
+            # host statement. The arm that can keep FAST's words.
+            from decomposition.host.pca_oracle import host_sign_flip
+            from x_decomp.host_jacobi import fast_jacobi_eigh
 
-    var info_h = _download(ctx, dinfo, 3)
-    if info_h[0] == Float32(0.0):
-        # `eig_and_truncate`'s refusal, for the same reason it gives: their
-        # DEFAULT eigen arm (`eigDC` -> cuSOLVER `syevd`) aborts on a
-        # non-zero `dev_info`, and their JACOBI arm silently does not
-        # (`raft/linalg/detail/eig.cuh:310`, `executed_sweeps` fetched and
-        # never read). We follow the default arm.
-        raise Error(
-            "nystroem_fit_host: the device Jacobi did not converge in "
-            + String(JACOBI_SWEEPS)
-            + " sweeps at n_components = "
-            + String(q)
-            + "; ||offdiag(A)||_F / ||A||_F is still "
-            + String(info_h[1])
-            + " against a tolerance of "
-            + String(JACOBI_TOL)
-            + ". An unconverged eigendecomposition returned as if it were"
-            " one is a wrong answer with no error. The closure is a larger"
-            " sweep budget, which is decomposition/'s parameter and not"
-            " this lane's to change"
-        )
-    var sweeps = Int(info_h[2])
+            var tw = fast_jacobi_eigh(kh, q, JACOBI_SWEEPS, Float32(JACOBI_TOL))
+            if not tw.converged:
+                raise Error(
+                    "nystroem_fit_host: the host replay of the device Jacobi did"
+                    " not converge in "
+                    + String(JACOBI_SWEEPS)
+                    + " sweeps at n_components = "
+                    + String(q)
+                )
+            sweeps = tw.executed
+            for c in range(q):
+                wh[c] = kh[c * q + c]
+            vecs = tw.vectors.copy()
+            host_sign_flip(vecs, q)
+        elif is_defined["MOJOLEARN_NYS_HOST_EIGH_QL"]():
+            # OPT-IN: tridiagonal reduction and QL in binary64
+            from x_neighbors.fast_eigh_ql import symmetric_eig_ql
 
-    var raw = _download(ctx, dk, q * q)
-    var vecs = _download(ctx, dvec, q * q)
+            sweeps = symmetric_eig_ql(
+                EigP(unsafe_from_address=Int(kh.unsafe_ptr())),
+                q,
+                EigP(unsafe_from_address=Int(wh.unsafe_ptr())),
+                EigP(unsafe_from_address=Int(vecs.unsafe_ptr())),
+            )
+        else:
+            sweeps = symmetric_eig_rows(
+                EigP(unsafe_from_address=Int(kh.unsafe_ptr())),
+                q,
+                EigP(unsafe_from_address=Int(wh.unsafe_ptr())),
+                EigP(unsafe_from_address=Int(vecs.unsafe_ptr())),
+                NYS_HOST_EIGH_SWEEPS,
+            )
+        _ = kh^
+        if sweeps >= NYS_HOST_EIGH_SWEEPS:
+            raise Error(
+                "nystroem_fit_host: the host Jacobi did not converge in "
+                + String(NYS_HOST_EIGH_SWEEPS)
+                + " sweeps at n_components = "
+                + String(q)
+            )
+        for c in range(q):
+            eig_diag.append(wh[c])
+        trace.record_list_f32("nys.eigenvectors_flipped", vecs)
+    else:
+        sweeps = _nystroem_device_eigh(ctx, dk, dvec, dinfo, q, sabotage, trace, eig_diag, vecs)
 
     # --- the order and the clip, on the host (DEVIATIONS 1669, 1670, 1688) ---
     # THE SVD'S S, NOT THE EIGENVALUE. See `_singular_value_f32`: sklearn's
@@ -829,8 +966,8 @@ def nystroem_fit_host(
     var values_raw = List[Float32]()
     var mags = List[Float32]()
     for c in range(q):
-        values_raw.append(raw[c * q + c])
-        mags.append(_singular_value_f32(raw[c * q + c]))
+        values_raw.append(eig_diag[c])
+        mags.append(_singular_value_f32(eig_diag[c]))
     var order = _eigen_order_f32(mags, q, sabotage)
 
     var clip = _eigen_clip_f32()
@@ -1122,6 +1259,9 @@ def nystroem_transform_host_into[out_origin: MutOrigin, //](
     var kp = nystroem_params(model)
     var q = model.n_components
     var d = model.n_features
+    # MOJOLEARN_STAGE_TIMES=1: wall per phase (each phase already drains).
+    var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
+    var t0 = Int(perf_counter_ns())
     var ctx = _family_ctx()
     var dx = _upload(ctx, x)
     var dc = _upload(ctx, model.components)
@@ -1137,18 +1277,25 @@ def nystroem_transform_host_into[out_origin: MutOrigin, //](
         identical_gemm_workspace_max_floats(n_rows, q, q)
     )
     ctx.synchronize()
+    var t1 = Int(perf_counter_ns())
     km_kernel_matrix(
         ctx, kp, dk, dx, dc, n_rows, q, d, na, nb, kws, elem_tpb, sabotage
     )
     ctx.synchronize()
+    var t2 = Int(perf_counter_ns())
     trace.record_device(ctx, "nys.cross_kernel", dk, n_rows * q)
     var op = OP_NT
     if sabotage == KMSAB_EMBED_OP_NN:
         op = OP_NN
     identical_gemm_into(ctx, demb, dk, dnorm, gws, n_rows, q, q, op)
     ctx.synchronize()
+    var t3 = Int(perf_counter_ns())
     trace.record_device(ctx, "nys.embedding", demb, n_rows * q)
     _download_into(ctx, demb, output, n_rows * q)
+    if st_on:
+        print("NYS_TRANSFORM_STAGES rows=" + String(n_rows) + " alloc_upload_ms=" + String((t1 - t0) // 1000000)
+              + " kernel_ms=" + String((t2 - t1) // 1000000) + " gemm_ms=" + String((t3 - t2) // 1000000)
+              + " copy_out_ms=" + String((Int(perf_counter_ns()) - t3) // 1000000))
     _ = dx^
     _ = dc^
     _ = dnorm^
@@ -1353,13 +1500,27 @@ def rbf_sampler_transform_host_into[out_origin: MutOrigin, //](
     )
     ctx.synchronize()
     var t1 = Int(perf_counter_ns())
-    identical_gemm_into(ctx, dp, dx, dw, gws, n_rows, dd, d, OP_NN)
+    var fused = False
+    comptime if RBF_FUSED:
+        from kernel_methods.rbf_fused import RBF_FUSED_MAX_D, RBF_FUSED_TPB, rbf_fused_transform_kernel
+
+        fused = d <= RBF_FUSED_MAX_D and sabotage == KMSAB_NONE and n_rows * dd > 0
+        if fused:
+            ctx.enqueue_function[rbf_fused_transform_kernel](
+                dp.unsafe_ptr(), dx.unsafe_ptr(), dw.unsafe_ptr(), db.unsafe_ptr(),
+                Int32(n_rows), Int32(d), Int32(dd), model.scale,
+                grid_dim=((n_rows * dd + RBF_FUSED_TPB - 1) // RBF_FUSED_TPB, 1, 1),
+                block_dim=(RBF_FUSED_TPB, 1, 1),
+            )
+    if not fused:
+        identical_gemm_into(ctx, dp, dx, dw, gws, n_rows, dd, d, OP_NN)
     ctx.synchronize()
     var t2 = Int(perf_counter_ns())
     trace.record_device(ctx, "rf.projection", dp, n_rows * dd)
-    km_feature_map_epilogue(
-        ctx, dp, db, n_rows, dd, model.scale, tpb, sabotage
-    )
+    if not fused:
+        km_feature_map_epilogue(
+            ctx, dp, db, n_rows, dd, model.scale, tpb, sabotage
+        )
     ctx.synchronize()
     var t3 = Int(perf_counter_ns())
     trace.record_device(ctx, "rf.feature_map", dp, n_rows * dd)

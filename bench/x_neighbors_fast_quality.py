@@ -12,7 +12,9 @@ held-out rows. Lines:
 
 and a summary per (dataset, case): mean and worst paired difference. Scores:
 accuracy (classifiers, k-NN), R^2 (regressors), recall@k against float64
-NumPy (NearestNeighbors), mean log density (KDE).
+NumPy (NearestNeighbors), mean log density (KDE), minus the error against
+float64 NumPy (Nystroem's kernel approximation, KernelPCA's eigenvalues and
+projection; lane neighbors-apple3).
 
     python bench/x_neighbors_fast_quality.py [--seeds 5] [--dataset taxi,higgs] [--only a,b]
 
@@ -28,7 +30,7 @@ import numpy as np
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "python"))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from x_neighbors_apple_speed import _acc, _knn_recall, _np, _r2, _root  # noqa: E402
+from x_neighbors_apple_speed import _acc, _kernel_err, _knn_recall, _np, _r2, _root  # noqa: E402
 
 GAMMA = 0.125
 
@@ -77,12 +79,53 @@ def score(ml, case, mode, x, yc, yr, xq, ycq, yrq):
         return _knn_recall(x, xq, _np(o[1]), 10)
     if case == "kde":
         return float(np.mean(_np(ml.KernelDensity(bandwidth=0.5, numeric_mode=mode).fit(x).score_samples(xq))))
+    if case == "nystroem":
+        # minus the relative Frobenius error of the feature map's Gram
+        # against the exact float64 RBF kernel on the held-out rows
+        m = ml.Nystroem(kernel="rbf", gamma=GAMMA, n_components=300, random_state=0, numeric_mode=mode).fit(x)
+        return -_kernel_err(xq, _np(m.transform(xq)), GAMMA)
+    if case == "kpca":
+        # minus the relative error of the top 16 eigenvalues and of the
+        # projection of the held-out rows against float64 NumPy (the same
+        # centered kernel, eigh, scikit-learn's transform)
+        m = ml.KernelPCA(n_components=16, kernel="rbf", gamma=GAMMA, numeric_mode=mode).fit(x)
+        return -_kpca_err(x, xq, _np(m.eigenvalues_), _np(m.transform(xq)), GAMMA)
     raise SystemExit(case)
+
+
+def _rbf64(a, b, gamma):
+    a = a.astype(np.float64)
+    b = b.astype(np.float64)
+    d = (a * a).sum(1)[:, None] + (b * b).sum(1)[None, :] - 2.0 * a @ b.T
+    return np.exp(-gamma * np.maximum(d, 0.0))
+
+
+def _kpca_err(x, xq, vals, proj, gamma):
+    """Eigenvalue error plus projection error, both relative, in float64.
+    A projection column's sign is the solver's choice, so each column is
+    compared up to its sign."""
+    k = _rbf64(x, x, gamma)
+    rows = k.mean(0)
+    allm = rows.mean()
+    kc = k - rows[None, :] - k.mean(1)[:, None] + allm
+    w, v = np.linalg.eigh(kc)
+    c = len(vals)
+    w = w[::-1][:c]
+    v = v[:, ::-1][:, :c]
+    kq = _rbf64(xq, x, gamma)
+    kqc = kq - rows[None, :] - kq.mean(1)[:, None] + allm
+    ref = kqc @ (v / np.sqrt(np.maximum(w, 1e-300)))
+    got = np.asarray(proj, np.float64)
+    err = 0.0
+    for j in range(c):
+        e = min(np.linalg.norm(got[:, j] - ref[:, j]), np.linalg.norm(got[:, j] + ref[:, j]))
+        err += e / max(np.linalg.norm(ref[:, j]), 1e-300)
+    return float(np.linalg.norm(np.asarray(vals, np.float64) - w) / np.linalg.norm(w) + err / c)
 
 
 SHAPES = {"svc": (5000, 2000), "svr": (5000, 2000), "krr": (4000, 2000), "gpr": (2000, 1000),
           "gpc": (1500, 1000), "knnc": (50000, 2000), "knnr": (50000, 2000), "nn": (50000, 1000),
-          "kde": (50000, 1000)}
+          "kde": (50000, 1000), "nystroem": (4000, 1000), "kpca": (500, 1000)}
 
 
 def main():

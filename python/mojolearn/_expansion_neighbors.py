@@ -30,6 +30,7 @@ import struct
 
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty
+from ._lazy_out import _empty_out
 from ._mode import NumericModeMixin
 
 __all__ = ["LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", "PolynomialCountSketch",
@@ -153,21 +154,21 @@ class _XNeighbors(NumericModeMixin):
     def _sqdist(self, A, B):
         n, d = A.shape
         m = B.shape[0]
-        out = empty((n, m), "<f4")
+        out = _empty_out((n, m), "<f4")
         self._op("sqdist", [(A, 0), (B, 0), (out, 1)], (n, m, d))
         return out
 
     def _l1dist(self, A, B):
         n, d = A.shape
         m = B.shape[0]
-        out = empty((n, m), "<f4")
+        out = _empty_out((n, m), "<f4")
         self._op("l1dist", [(A, 0), (B, 0), (out, 1)], (n, m, d))
         return out
 
     def _kernel(self, A, B, kind, gamma, coef0, degree):
         n, d = A.shape
         m = B.shape[0]
-        out = empty((n, m), "<f4")
+        out = _empty_out((n, m), "<f4")
         self._op("kernel", [(A, 0), (B, 0), (out, 1)], (n, m, d, _KERNELS[kind], int(degree)),
                  (_f32_scalar(gamma), _f32_scalar(coef0)))
         return out
@@ -175,7 +176,7 @@ class _XNeighbors(NumericModeMixin):
     def _matmul(self, A, B):
         n, k = A.shape
         m = B.shape[1]
-        out = empty((n, m), "<f4")
+        out = _empty_out((n, m), "<f4")
         self._op("matmul", [(A, 0), (B, 0), (out, 1)], (n, k, m))
         return out
 
@@ -186,18 +187,18 @@ class _XNeighbors(NumericModeMixin):
 
     def _knn_select(self, D, k, exclude_self):
         n, m = D.shape
-        dist = empty((n, k), "<f4")
+        dist = _empty_out((n, k), "<f4")
         idx = empty((n, k), "<i4")
         self._op("knn_select", [(D, 0), (dist, 1), (idx, 1)], (n, m, k, 1 if exclude_self else 0))
         return dist, idx
 
     def _rowsum(self, A):
-        out = empty((A.shape[0],), "<f4")
+        out = _empty_out((A.shape[0],), "<f4")
         self._op("rowsum", [(A, 0), (out, 1)], A.shape)
         return out
 
     def _colsum(self, A):
-        out = empty((A.shape[1],), "<f4")
+        out = _empty_out((A.shape[1],), "<f4")
         self._op("colsum", [(A, 0), (out, 1)], A.shape)
         return out
 
@@ -208,18 +209,18 @@ class _XNeighbors(NumericModeMixin):
 
     def _take_rows(self, X, rows):
         rows = _i32(rows, "rows")
-        out = empty((len(rows), X.shape[1]), "<f4")
+        out = _empty_out((len(rows), X.shape[1]), "<f4")
         self._op("take_rows", [(X, 0), (rows, 0), (out, 1)], (len(rows), X.shape[1], X.shape[0]))
         return out
 
     def _take_cols(self, X, cols):
         cols = _i32(cols, "cols")
-        out = empty((X.shape[0], len(cols)), "<f4")
+        out = _empty_out((X.shape[0], len(cols)), "<f4")
         self._op("take_cols", [(X, 0), (cols, 0), (out, 1)], (X.shape[0], X.shape[1], len(cols)))
         return out
 
     def _variance(self, X):
-        out = empty((1,), "<f4")
+        out = _empty_out((1,), "<f4")
         self._op("variance", [(X, 0), (out, 1)], (X.size,))
         return out.tolist()[0]
 
@@ -232,7 +233,7 @@ class _XNeighbors(NumericModeMixin):
             return self._knn_select(self._sqdist(Q, R), k, exclude_self)
         n, d = Q.shape
         m = R.shape[0]
-        dist = empty((n, k), "<f4")
+        dist = _empty_out((n, k), "<f4")
         idx = empty((n, k), "<i4")
         self._op("knn_sq" if _OLD_ITEMS else "knn_sq_tiled", [(Q, 0), (R, 0), (dist, 1), (idx, 1)],
                  (n, m, d, k, 1 if exclude_self else 0))
@@ -309,9 +310,9 @@ class LocalOutlierFactor(_XNeighbors):
             raise ValueError("LocalOutlierFactor needs at least 2 samples")
         k = min(int(self.n_neighbors), n - 1)
         dist, idx = self._knn(X, X, k, True)
-        lrd = empty((n,), "<f4")
+        lrd = _empty_out((n,), "<f4")
         self._op("lof_lrd", [(dist, 0), (idx, 0), (dist, 0), (lrd, 1)], (k, n, n))
-        score = empty((n,), "<f4")
+        score = _empty_out((n,), "<f4")
         self._op("lof_score", [(idx, 0), (lrd, 0), (lrd, 0), (score, 1)], (k, n, n))
         self._fit_X, self._fit_dist, self._lrd = X, dist, lrd
         self.n_neighbors_ = k
@@ -341,9 +342,9 @@ class LocalOutlierFactor(_XNeighbors):
         k, nf = self.n_neighbors_, self.n_samples_fit_
         dist, idx = self._knn(Q, self._fit_X, k, False)
         nq = Q.shape[0]
-        lrd = empty((nq,), "<f4")
+        lrd = _empty_out((nq,), "<f4")
         self._op("lof_lrd", [(dist, 0), (idx, 0), (self._fit_dist, 0), (lrd, 1)], (k, nq, nf))
-        score = empty((nq,), "<f4")
+        score = _empty_out((nq,), "<f4")
         self._op("lof_score", [(idx, 0), (self._lrd, 0), (lrd, 0), (score, 1)], (k, nq, nf))
         return score
 
@@ -407,7 +408,7 @@ class NearestCentroid(_XNeighbors):
         self.class_prior_ = Array.from_list(prior, "<f8")
         lab = _i32(codes, "y")
         if self.metric == "euclidean":
-            cent = empty((C, d), "<f4")
+            cent = _empty_out((C, d), "<f4")
             self._op("group_mean", [(X, 0), (lab, 0), (cent, 1)], (n, d, C))
         else:
             rows = X.tolist()
@@ -416,9 +417,9 @@ class NearestCentroid(_XNeighbors):
                 members = [rows[i] for i in range(n) if codes[i] == c]
                 med.append([_median([r[f] for r in members]) for f in range(d)])
             cent = Array.from_list(med, "<f4")
-        stats = empty((d,), "<f4")
-        new_cent = empty((C, d), "<f4")
-        devs = empty((C, d), "<f4")
+        stats = _empty_out((d,), "<f4")
+        new_cent = _empty_out((C, d), "<f4")
+        devs = _empty_out((C, d), "<f4")
         self._op("nc_std", [(X, 0), (lab, 0), (cent, 0), (stats, 1)], (n, d, C))
         std = stats.tolist()
         if all(v == 0.0 for v in std) and self._ptp_zero(X):
@@ -461,7 +462,7 @@ class NearestCentroid(_XNeighbors):
         C = len(self.classes_)
         prior = Array.from_list(self.class_prior_.tolist(), "<f4")
         std = self.within_class_std_dev_
-        out = empty((Q.shape[0], C), "<f4")
+        out = _empty_out((Q.shape[0], C), "<f4")
         self._op("nc_decision", [(Q, 0), (self.centroids_, 0), (std, 0), (prior, 0), (out, 1)],
                  (Q.shape[0], Q.shape[1], C))
         return out
@@ -583,7 +584,7 @@ class OneClassSVM(_XNeighbors):
             nl -= init[i]
             i += 1
         alpha = Array.from_list(init, "<f4")
-        info = empty((1,), "<f4")
+        info = _empty_out((1,), "<f4")
         iters = empty((1,), "<i4")
         cap = 10_000_000 if int(self.max_iter) < 0 else int(self.max_iter)
         self._op("ocsvm", [(Q, 0), (cv, 0), (alpha, 1), (info, 1), (iters, 1)], (m, cap), (_f32_scalar(self.tol),), )
@@ -594,7 +595,7 @@ class OneClassSVM(_XNeighbors):
         support = [rows[i] for i in local]
         self.support_ = Array.from_list(support, "<i4")
         if self.kernel == "precomputed":
-            self.support_vectors_ = Array.from_list([[] for _ in support], "<f4") if support else empty((0, 0), "<f4")
+            self.support_vectors_ = Array.from_list([[] for _ in support], "<f4") if support else _empty_out((0, 0), "<f4")
         else:
             self.support_vectors_ = self._take_rows(X, support)
         self.dual_coef_ = Array.from_list([[a[i] for i in local]], "<f4")
@@ -613,7 +614,7 @@ class OneClassSVM(_XNeighbors):
             # the fused chain (lane/py-dn-kern): kernel then matmul per row
             # tile on the device, only the scores downloaded (`xn_kernel_matmul`)
             nq, d = Q.shape
-            s = empty((nq, 1), "<f4")
+            s = _empty_out((nq, 1), "<f4")
             self._op("kernel_matmul", [(Q, 0), (self.support_vectors_, 0), (coef, 0), (s, 1)],
                      (nq, n_sv, d, 1, _KERNELS[self.kernel], int(self.degree)),
                      (_f32_scalar(self._gamma), _f32_scalar(self.coef0)))
@@ -693,10 +694,10 @@ class KernelPCA(_XNeighbors):
         K = self._k(X, X)
         cols = self._scale_div(self._colsum(K), float(n))              # K_fit_rows_
         all_ = self._scale_div(self._colsum(cols.reshape((1, n))), float(n))  # K_fit_all_
-        Kc = empty((n, n), "<f4")
+        Kc = _empty_out((n, n), "<f4")
         self._op("kpca_center", [(K, 0), (cols, 0), (cols, 0), (all_, 0), (Kc, 1)], (n, n))
-        w = empty((n,), "<f4")
-        V = empty((n, n), "<f4")
+        w = _empty_out((n,), "<f4")
+        V = _empty_out((n, n), "<f4")
         self._op("eigh", [(Kc, 0), (w, 1), (V, 1)], (n,))
         self._op("svd_flip", [(V, 1)], (n, n))
         wl = w.tolist()
@@ -737,7 +738,7 @@ class KernelPCA(_XNeighbors):
             # the fused chain (lane/py-dn-kern): kernel, rowsum, / n_fit,
             # center and the product with the scaled alphas per row tile on
             # the device, only the (nq, c) result downloaded (`xn_kpca_transform`)
-            out = empty((nq, c), "<f4")
+            out = _empty_out((nq, c), "<f4")
             self._op("kpca_transform",
                      [(Q, 0), (Q if pre else self._fit_X, 0), (self._fit_cols, 0), (self._fit_all, 0),
                       (alphas, 0), (out, 1)],
@@ -746,7 +747,7 @@ class KernelPCA(_XNeighbors):
             return out
         K = self._k(Q, self._fit_X)
         pred = self._scale_div(self._rowsum(K), float(nf))
-        Kc = empty((nq, nf), "<f4")
+        Kc = _empty_out((nq, nf), "<f4")
         self._op("kpca_center", [(K, 0), (self._fit_cols, 0), (pred, 0), (self._fit_all, 0), (Kc, 1)], (nq, nf))
         return self._matmul(Kc, alphas)
 
@@ -876,7 +877,7 @@ class PolynomialCountSketch(_XNeighbors):
             raise ValueError("Number of features of test samples does not match that of training samples.")
         nf = self.indexHash_.shape[1]
         nc, deg = int(self.n_components), int(self.degree)
-        out = empty((n, nc), "<f4")
+        out = _empty_out((n, nc), "<f4")
         self._op("pcs" if _OLD_ITEMS else "pcs_resident",
                  [(X, 0), (self.indexHash_, 0), (self.bitHash_, 0), (out, 1)],
                  (n, d, nf, nc, deg), (_f32_scalar(self.gamma), _f32_scalar(self.coef0)))
@@ -927,7 +928,7 @@ class AdditiveChi2Sampler(_XNeighbors):
             raise ValueError("Negative values in data passed to AdditiveChi2Sampler")
         n, d = X.shape
         steps = int(self.sample_steps)
-        out = empty((n, d * (2 * steps - 1)), "<f4")
+        out = _empty_out((n, d * (2 * steps - 1)), "<f4")
         self._op("achi2", [(X, 0), (out, 1)], (n, d, steps), (_f32_scalar(self._interval()),))
         if sparse is not None:
             # Preserve the caller's sparse container type; dense inputs need
@@ -975,7 +976,7 @@ class SkewedChi2Sampler(_XNeighbors):
         rs = _random_state(self.random_state)
         u = rs.random_sample(d * nc)
         z = Array.from_list([[math.pi / 2.0 * u[f * nc + c] for c in range(nc)] for f in range(d)], "<f4")
-        w = empty((d, nc), "<f4")
+        w = _empty_out((d, nc), "<f4")
         self._op("skew_weights", [(z, 0), (w, 1)], (d * nc,))
         self.random_weights_ = w
         self.random_offset_ = Array.from_list(rs.uniform(0.0, 2.0 * math.pi, nc), "<f4")
@@ -989,7 +990,7 @@ class SkewedChi2Sampler(_XNeighbors):
             raise ValueError("X may not contain entries smaller than -skewedness.")
         nc = int(self.n_components)
         lx = self._unary(X, _U_LOG, 1.0, _f32_scalar(self.skewedness))
-        out = empty((n, nc), "<f4")
+        out = _empty_out((n, nc), "<f4")
         self._op("skew_transform", [(lx, 0), (self.random_weights_, 0), (self.random_offset_, 0), (out, 1)], (n, d, nc))
         return out
 
@@ -1018,7 +1019,7 @@ class _LabelPropagationBase(_XNeighbors):
         if self.kernel == "knn":
             k = min(int(self.n_neighbors), n)
             _, idx = self._knn_sq(X, X, k, False)
-            g = empty((n, n), "<f4")
+            g = _empty_out((n, n), "<f4")
             self._op("knn_graph", [(idx, 0), (g, 1)], (n, n, k))
             return g
         raise NotImplementedError(f"{type(self).__name__}: kernel={self.kernel!r} is not implemented ('rbf' or 'knn')")
@@ -1055,8 +1056,8 @@ class _LabelPropagationBase(_XNeighbors):
                      (_f32_scalar(self.alpha) if self._variant != "propagation" else 0.0,))
             n_iter = int(info.tolist()[0])
             return self._finish_fit(X, classes, ld, n, C, n_iter)
-        prev = empty((n, C), "<f4")
-        s = empty((1,), "<f4")
+        prev = _empty_out((n, C), "<f4")
+        s = _empty_out((1,), "<f4")
         n_iter = 0
         converged = False
         for it in range(int(self.max_iter)):
@@ -1067,7 +1068,7 @@ class _LabelPropagationBase(_XNeighbors):
                 break
             prev = ld
             nxt = self._matmul(G, ld)
-            out = empty((n, C), "<f4")
+            out = _empty_out((n, C), "<f4")
             if self._variant == "propagation":
                 self._op("lp_clamp", [(nxt, 0), (ystatic, 0), (unlabeled, 0), (out, 1)], (n, C))
             else:
@@ -1078,7 +1079,7 @@ class _LabelPropagationBase(_XNeighbors):
         return self._finish_fit(X, classes, ld, n, C, n_iter)
 
     def _finish_fit(self, X, classes, ld, n, C, n_iter):
-        final = empty((n, C), "<f4")
+        final = _empty_out((n, C), "<f4")
         self._op("row_normalize", [(ld, 0), (final, 1)], (n, C))
         self.X_ = X
         self.classes_ = classes
@@ -1095,7 +1096,7 @@ class _LabelPropagationBase(_XNeighbors):
         if self.kernel == "knn":
             k = min(int(self.n_neighbors), n)
             _, idx = self._knn_sq(Q, self.X_, k, False)
-            W = empty((nq, n), "<f4")
+            W = _empty_out((nq, n), "<f4")
             self._op("knn_graph", [(idx, 0), (W, 1)], (nq, n, k))
         else:
             W = self._kernel(Q, self.X_, "rbf", self.gamma, 0.0, 0)
@@ -1154,11 +1155,11 @@ class LabelSpreading(_LabelPropagationBase):
     def _build_graph(self, X):
         A = self._graph_affinity(X)
         n = A.shape[0]
-        G = empty((n, n), "<f4")
+        G = _empty_out((n, n), "<f4")
         if _OLD_ITEMS:
             self._op("ls_laplacian", [(A, 0), (G, 1)], (n,))
         else:
-            deg = empty((n,), "<f4")
+            deg = _empty_out((n,), "<f4")
             self._op("col_degree", [(A, 0), (deg, 1)], (n,))
             self._op("ls_laplacian_deg", [(A, 0), (deg, 0), (G, 1)], (n,))
         return G
@@ -1226,7 +1227,7 @@ class KNNImputer(_XNeighbors):
         if d != self.n_features_in_:
             raise ValueError("X has a different number of features than during fit")
         m = self._fit_X.shape[0]
-        out = empty((n, d), "<f4")
+        out = _empty_out((n, d), "<f4")
         k = int(self.n_neighbors)
         if k < 1:
             raise ValueError("n_neighbors must be >= 1")
@@ -1324,7 +1325,7 @@ class PageRank(_XNeighbors):
         n = A.shape[0]
         if self.weight is None or self.weight is False:
             A = Array.from_list([[1.0 if v != 0 else 0.0 for v in r] for r in A.tolist()], "<f4")
-        Q = empty((n, n), "<f4")
+        Q = _empty_out((n, n), "<f4")
         self._op("row_normalize", [(A, 0), (Q, 1)], (n, n))
         if _OLD_ITEMS:
             dangling = _i32([1 if all(v == 0 for v in r) else 0 for r in A.tolist()], "dangling")
@@ -1351,9 +1352,9 @@ class PageRank(_XNeighbors):
                 self.n_iter_ = int(it)
                 return self
             raise RuntimeError(f"PageRank: power iteration failed to converge within {self.max_iter} iterations")
-        s = empty((1,), "<f4")
+        s = _empty_out((1,), "<f4")
         for it in range(int(self.max_iter)):
-            nxt = empty((n,), "<f4")
+            nxt = _empty_out((n,), "<f4")
             self._op("pagerank_step", [(Q, 0), (x, 0), (p, 0), (dw, 0), (dangling, 0), (nxt, 1)], (n,), (_f32_scalar(self.alpha),))
             self._op("absdiff_sum", [(nxt, 0), (x, 0), (s, 1)], (n,))
             x = nxt
@@ -1431,7 +1432,7 @@ class Louvain(_XNeighbors):
         if all(v == 0 for r in rows for v in r):
             raise ValueError("Louvain: the graph has no edges")
         labels = empty((n,), "<i4")
-        info = empty((2,), "<f4")
+        info = _empty_out((2,), "<f4")
         ml = 0 if self.max_level is None else int(self.max_level)
         if self.max_level is not None and ml < 1:
             raise ValueError("max_level must be a positive integer or None")
@@ -1508,15 +1509,15 @@ class SVGP(_XNeighbors):
             # B and b downloaded (`xn_svgp_stats`). Kuf is Kfu^T bit for bit
             # (the rbf item squares a difference; IEEE subtraction is
             # antisymmetric), so it is never formed.
-            B = empty((M, M), "<f4")
-            b = empty((M,), "<f4")
+            B = _empty_out((M, M), "<f4")
+            b = _empty_out((M,), "<f4")
             self._op("svgp_stats", [(X, 0), (Z, 0), (yv, 0), (B, 1), (b, 1)], (n, M, d),
                      (_f32_scalar(self._gamma_value()), _f32_scalar(self.kernel_variance)))
-        alpha = empty((M,), "<f4")
-        C = empty((M, M), "<f4")
-        qmu = empty((M,), "<f4")
-        qsqrt = empty((M, M), "<f4")
-        info = empty((2,), "<f4")
+        alpha = _empty_out((M,), "<f4")
+        C = _empty_out((M, M), "<f4")
+        qmu = _empty_out((M,), "<f4")
+        qsqrt = _empty_out((M, M), "<f4")
+        info = _empty_out((2,), "<f4")
         self._op("svgp", [(Kuu, 0), (B, 0), (b, 0), (yv, 0), (alpha, 1), (C, 1), (qmu, 1), (qsqrt, 1), (info, 1)],
                  (M, n), (_f32_scalar(self.noise_variance), _f32_scalar(self.jitter), _f32_scalar(self.kernel_variance)))
         elbo, ok = info.tolist()
@@ -1536,8 +1537,8 @@ class SVGP(_XNeighbors):
             # the fused chain (lane/py-dn-kern): Ksu, the mean and the
             # variance per row tile on the device (`xn_svgp_predict`)
             nq = Q.shape[0]
-            mean = empty((nq,), "<f4")
-            var = empty((nq,), "<f4")
+            mean = _empty_out((nq,), "<f4")
+            var = _empty_out((nq,), "<f4")
             self._op("svgp_predict", [(Q, 0), (self.Z_, 0), (self._alpha, 0), (self._C, 0), (mean, 1), (var, 1)],
                      (nq, M, Q.shape[1]),
                      (_f32_scalar(self._gamma_value()), _f32_scalar(self.kernel_variance),
@@ -1545,7 +1546,7 @@ class SVGP(_XNeighbors):
             return mean, var
         Ksu = self._k(Q, self.Z_)
         mean = self._matmul(Ksu, self._alpha.reshape((M, 1))).reshape((Q.shape[0],))
-        var = empty((Q.shape[0],), "<f4")
+        var = _empty_out((Q.shape[0],), "<f4")
         self._op("svgp_var", [(Ksu, 0), (self._C, 0), (var, 1)], (Q.shape[0], M), (_f32_scalar(self.kernel_variance),))
         return mean, var
 

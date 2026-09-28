@@ -20,6 +20,8 @@ from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.numerics import ftz, identical_mul_add
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from std.sys.info import has_apple_gpu_accelerator
 
 from std.sys.compile import is_defined
 from x_neighbors.items import FP, IP, absdiff_sum_item, _sub, knn_sq_item, knn_impute_finish
@@ -33,30 +35,8 @@ from x_neighbors.device_ops import (
     kernel_kernel, rowsum_kernel, scale_div_kernel, kpca_center_kernel, unary_kernel, svgp_var_kernel,
 )
 from x_neighbors.items import matmul_tn_acc_item, K_RBF, U_IDENTITY
+from x_neighbors.lp_spmm import lp_spmm_kernel
 from core.device_zero import enqueue_fill
-
-
-def lp_spmm_kernel(
-    indptr: IP, cols: IP, vals: FP, x: FP, res: FP, n_: Int64, c_: Int64,
-):
-    """`matmul_item` (G x, cell t = i*c + j, p ascending) over G's NONZERO
-    entries only, columns ascending. Exact when every x is finite: a
-    skipped term is fma(+-0, x, acc) with x finite, whose product is a zero
-    and whose sum is acc unchanged, because acc starts at +0.0 and an fma
-    returns -0.0 only from (-0) + (-0), so acc is never -0.0. The caller
-    checks x's finiteness each iteration and runs the dense kernel when it
-    fails."""
-    var n = Int(n_)
-    var c = Int(c_)
-    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if t >= n * c:
-        return
-    var i = t // c
-    var j = t - i * c
-    var acc = Float32(0)
-    for e in range(Int(indptr.unsafe_load(i)), Int(indptr.unsafe_load(i + 1))):
-        acc = ftz(identical_mul_add(ftz(vals.unsafe_load(e)), ftz(x.unsafe_load(Int(cols.unsafe_load(e)) * c + j)), acc))
-    res.unsafe_store(t, acc)
 
 
 def op_lp_iterate(
@@ -68,6 +48,12 @@ def op_lp_iterate(
     the initial label distributions, out: the last. info (int32 x 2): the
     fit's n_iter_ and converged."""
     var tol = bitcast[DType.float64]((UInt64(tol_hi) << UInt64(32)) | UInt64(tol_lo))
+    comptime if is_defined["MOJOLEARN_XN_LP_BATCH"]() and not is_defined["MOJOLEARN_XN_LP_DEVICE_FOLD"]():
+        from x_neighbors.lp_batched import op_lp_iterate_batched
+
+        if n * c > 0 and max_iter > 0:
+            op_lp_iterate_batched(g, ld, ystatic, unlabeled, info, n, c, max_iter, variant, tol, alpha)
+            return
     var nc = n * c
     var ctx = xn_ctx()
     var d_g = _buf(ctx, g, n * n, True)
@@ -382,6 +368,19 @@ def pcs_conv_row_kernel(acc: FP, sk: FP, res: FP, n_: Int64, nc_: Int64, degree_
         h0 += PCS_ROW_TPB * 4
 
 
+#: lane neighbors-apple3 (2026-09-28), FAST on Apple, OPT-IN until its A/B
+#: and quality check pass (`-D MOJOLEARN_XN_PCS_SPARSE`): the convolution
+#: over the running product's NONZERO components only. A count sketch of a
+#: row of d features has at most d nonzero components (each feature lands in
+#: one), so at degree 2 a row's 500 outputs fold about 8 terms each, not
+#: 500. The skipped terms are products with a zero; FAST's words can differ
+#: from the full fold's only in the sign of a zero.
+comptime PCS_SPARSE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_XN_PCS_SPARSE"]()
+)
+
 def op_pcs_resident(
     x: Int, hidx: Int, hbit: Int, res: Int,
     n: Int, d_in: Int, nf: Int, nc: Int, degree: Int, gamma: Float32, coef0: Float32,
@@ -416,7 +415,19 @@ def op_pcs_resident(
         var row_kernel = nc <= PCS_ROW_MAX_NC
         comptime if is_defined["MOJOLEARN_XN_PCS_CELL"]():
             row_kernel = False
-        if row_kernel:
+        var sparse_kernel = False
+        comptime if PCS_SPARSE:
+            from x_neighbors.pcs_sparse import PCS_SPARSE_MAX_NC, pcs_conv_row_sparse_kernel
+
+            sparse_kernel = row_kernel and nc <= PCS_SPARSE_MAX_NC
+            if sparse_kernel:
+                ctx.enqueue_function[pcs_conv_row_sparse_kernel](
+                    cur, d_sk.unsafe_ptr(), nxt, Int64(n), Int64(nc), Int64(degree), Int64(p),
+                    grid_dim=n, block_dim=PCS_ROW_TPB,
+                )
+        if sparse_kernel:
+            pass
+        elif row_kernel:
             ctx.enqueue_function[pcs_conv_row_kernel](
                 cur, d_sk.unsafe_ptr(), nxt, Int64(n), Int64(nc), Int64(degree), Int64(p),
                 grid_dim=n, block_dim=PCS_ROW_TPB,
