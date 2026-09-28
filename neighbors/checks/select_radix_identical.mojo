@@ -81,8 +81,6 @@ from max.gpu.host import DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.primitives.block import prefix_sum as block_prefix_sum
 from max.gpu.sync import barrier
-from std.ffi import external_call
-from std.sys.info import is_apple_gpu
 
 from neighbors.impl.matrix.detail.select_radix import (
     SELECT_BLOCK,
@@ -138,21 +136,6 @@ def calc_start_bit_64(pass_id: Int) -> Int:
 def calc_mask_64(pass_id: Int) -> UInt64:
     var num_bits = calc_start_bit_64(pass_id - 1) - calc_start_bit_64(pass_id)
     return (UInt64(1) << UInt64(num_bits)) - 1
-
-
-@always_inline
-def select_barrier():
-    """`barrier()` that also orders DEVICE memory. The passes hand survivors
-    to one another through the device scratch (`buf_val` / `buf_idx`) and the
-    rank pass stages winners another thread stored to the device output. On
-    Apple `barrier()` is `threadgroup_barrier(mem_threadgroup)`, which orders
-    threadgroup memory only; `air.wg.barrier(3, 1)` adds `mem_device`
-    (x_linear/team.mojo `team_barrier`, the same hazard). NVIDIA's and AMD's
-    block barriers already order global memory within the block."""
-    comptime if is_apple_gpu():
-        external_call["air.wg.barrier", NoneType](Int32(3), Int32(1))
-    else:
-        barrier()
 
 
 def radix_topk_identical_kernel[RANK_CAPACITY: Int](
@@ -282,7 +265,7 @@ def _radix_topk_identical_body[RANK_CAPACITY: Int](
         ctr[CTR_PREVIOUS_LEN] = Int32(length)
         ctr[CTR_OUT_CNT] = Int32(0)
         kth_bits[0] = UInt64(0)
-    select_barrier()
+    barrier()
 
     for pass_id in range(NUM_PASSES_64):
         var read_from_input = pass_id <= 1
@@ -320,7 +303,7 @@ def _radix_topk_identical_body[RANK_CAPACITY: Int](
         hist[tid] = Int32(0)
         if tid == 0:
             ctr[CTR_FILTER_CNT] = Int32(0)
-        select_barrier()
+        barrier()
 
         var start_bit = calc_start_bit_64(pass_id)
         var mask = calc_mask_64(pass_id)
@@ -369,11 +352,11 @@ def _radix_topk_identical_body[RANK_CAPACITY: Int](
                         o_val.unsafe_store(pos, value)
                         o_idx.unsafe_store(pos, src)
             i += SELECT_BLOCK
-        select_barrier()
+        barrier()
 
         var scanned = block_prefix_sum[block_size=SELECT_BLOCK](hist[tid])
         hist[tid] = scanned
-        select_barrier()
+        barrier()
 
         var prev_count = Int32(0)
         if tid > 0:
@@ -385,10 +368,10 @@ def _radix_topk_identical_body[RANK_CAPACITY: Int](
             kth_bits[0] = kth_bits[0] | (
                 UInt64(tid) << UInt64(start_bit)
             )
-        select_barrier()
+        barrier()
         if tid == 0:
             ctr[CTR_PREVIOUS_LEN] = Int32(current_len)
-        select_barrier()
+        barrier()
 
         if Int(ctr[CTR_LEN]) == Int(ctr[CTR_K]) or pass_id == NUM_PASSES_64 - 1:
             # --- last_filter, WITHOUT the back-fill ----------------------
@@ -407,7 +390,7 @@ def _radix_topk_identical_body[RANK_CAPACITY: Int](
                 lf_ptr = out_ptr
                 lf_ip = out_ip
                 lf_has_idx = True
-            select_barrier()
+            barrier()
 
             var j = tid
             while j < lf_len:
@@ -427,7 +410,7 @@ def _radix_topk_identical_body[RANK_CAPACITY: Int](
                         o_val.unsafe_store(pos, value)
                         o_idx.unsafe_store(pos, src)
                 j += SELECT_BLOCK
-            select_barrier()
+            barrier()
             break
 
     # ---- DEVIATION 501: the rank pass -----------------------------------
@@ -440,7 +423,7 @@ def _radix_topk_identical_body[RANK_CAPACITY: Int](
         s_val[slot] = o_val.unsafe_load(slot)
         s_idx[slot] = o_idx.unsafe_load(slot)
         slot += SELECT_BLOCK
-    select_barrier()
+    barrier()
     slot = tid
     while slot < k:
         var key_t = composite_key(s_val[slot], s_idx[slot], select_min)
@@ -451,7 +434,7 @@ def _radix_topk_identical_body[RANK_CAPACITY: Int](
         o_val.unsafe_store(rank, s_val[slot])
         o_idx.unsafe_store(rank, s_idx[slot])
         slot += SELECT_BLOCK
-    select_barrier()
+    barrier()
 
 
 # ---- DEVIATION 6300: selections wider than IDENTICAL_MAX_K ---------------
