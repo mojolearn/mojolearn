@@ -52,9 +52,12 @@ class GARCH:
         info = np.zeros((B, 4), dtype=np.float32)
         sigma = np.zeros((B, n), dtype=np.float32)
         fc = np.zeros((B, h), dtype=np.float32)
+        ip = [B, n, h, self.p, self.o, self.q, int(self.mean == "Constant")]
+        stall = getattr(self, "_fast_stall", None)    # (iterations, relative drop): the FAST stop's
+        if stall is not None:                          # quality sweep (tools/sequence_quality.py)
+            ip = ip + [int(stall[0]), int(round(float(stall[1]) * 1e9))]
         _backend.binding("_mojolearn_x_sequence", self.numeric_mode).garch(
-            [Y.ctypes.data, params.ctypes.data, info.ctypes.data, sigma.ctypes.data, fc.ctypes.data],
-            [B, n, h, self.p, self.o, self.q, int(self.mean == "Constant")])
+            [Y.ctypes.data, params.ctypes.data, info.ctypes.data, sigma.ctypes.data, fc.ctypes.data], ip)
         self._y = Y
         pick = (lambda a: a[0]) if self._one else (lambda a: a)
         self.params_ = pick(params)

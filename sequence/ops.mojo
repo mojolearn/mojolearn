@@ -101,6 +101,10 @@ comptime OP_CELL_BWD_H = 59
 comptime OP_GEMM_EPI = 60
 comptime OP_COLSUM_DIV = 61
 comptime OP_GEMM_EPI_TAIL = 62
+comptime OP_CHUNK_SUMSQ = 63
+comptime OP_GEMM_SPLITK = 64
+comptime OP_PROPHET_FG_PART = 65
+comptime OP_PROPHET_FG_SUM = 66
 
 # ------------------------------------------------------------------ cells
 comptime CELL_RNN_TANH = 0
@@ -344,6 +348,34 @@ def op_gemm(t: Int, a: Args):
     st(a.p2, ci, acc)
 
 
+def op_gemm_splitk(t: Int, a: Args):
+    """FAST only (apple2): op_gemm with K split into S = i9 blocks of i10.
+    i11 == 0: thread t = s MN + mn folds block s of cell mn from zero into
+    p3[t]; i11 == 1: thread mn adds the S partials in order (onto C when
+    i7) into C. A different order from op_gemm's one chain: FAST only, for
+    the few-cell, long-K products (VAR's normal equations)."""
+    var N = a.i1
+    var MN = a.i0 * N
+    if a.i11 == 0:
+        var s = t // MN
+        var mn = t - s * MN
+        var m = mn // N
+        var n = mn - m * N
+        var k0 = s * a.i10
+        var kc = min(a.i2, k0 + a.i10) - k0
+        st(a.p3, t, gemm_dot(a.p0, m * a.i3 + k0 * a.i4, a.i4, a.p1, n * a.i6 + k0 * a.i5, a.i5, kc, Float32(0.0)))
+        return
+    var m = t // N
+    var n = t - m * N
+    var ci = m * a.i8 + n
+    var acc = Float32(0.0)
+    if a.i7 != 0:
+        acc = ld(a.p2, ci)
+    for s in range(a.i9):
+        acc = add(acc, ld(a.p3, s * MN + t))
+    st(a.p2, ci, acc)
+
+
 def op_bias(t: Int, a: Args):
     """Y[r, c] = X[r, c] + b[c]; X row stride i2, Y row stride i3, i1 = C."""
     var r = t // a.i1
@@ -540,7 +572,17 @@ def op_gather_seq(t: Int, a: Args):
 
 
 def op_gather_rows(t: Int, a: Args):
-    """out[b, o] = Y[idx[i2 + b], o]; i1 O."""
+    """out[b, o] = Y[idx[i2 + b], o]; i1 O. With i3 = O2 > 0 (apple2: two
+    gathers in one launch) threads from i0 i1 on gather p3 [., O2] into p4."""
+    if a.i3 > 0:
+        var n1 = a.i0 * a.i1
+        if t >= n1:
+            var t2 = t - n1
+            var b2 = t2 // a.i3
+            var o2 = t2 - b2 * a.i3
+            var row2 = Int(a.p1.unsafe_load(a.i2 + b2))
+            a.p4.unsafe_store(t2, ld(a.p3, row2 * a.i3 + o2))
+            return
     var b = t // a.i1
     var o = t - b * a.i1
     var row = Int(a.p1.unsafe_load(a.i2 + b))

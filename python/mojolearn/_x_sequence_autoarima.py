@@ -99,11 +99,13 @@ class AutoARIMA:
         else:
             if d_opts != list(range(len(d_opts))):
                 raise NotImplementedError("AutoARIMA: a d option list must be 0, 1, ..., d_max")
-            # one series per call: a 1-D series needs no layout change (the
-            # 2-D (n_obs, n_series) route transposes through the base binding)
-            dser = np.asarray([int(np.asarray(select_d(np.ascontiguousarray(y[i]), D=D_, s=s,
-                                                        d_max=d_opts[-1])).reshape(-1)[0])
-                               for i in range(self.batch_size)], dtype=np.int64)
+            # the whole batch in one call, (n_obs, n_series) (apple2: one call
+            # per series was 2000 launches and waits, 2.4 s of the search on
+            # an M4 Pro). select_d is a pure function of each series' bits
+            # (tsa/checks/stationarity_check.mojo gates the batch composition
+            # invariant), so every series' d is the one-series call's.
+            dser = np.asarray(select_d(np.ascontiguousarray(y.T), D=D_, s=s, d_max=d_opts[-1]),
+                              dtype=np.int64).reshape(-1)
         self.d_ = dser
         self.models, self._ids = [], []
         self.order_ = np.zeros((self.batch_size, 8), dtype=np.int64)

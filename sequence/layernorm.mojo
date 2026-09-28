@@ -8,7 +8,7 @@ column's weight and bias gradients over rows. The backward is the
 reference's closed form dx = rstd (g - mean(g) - xhat mean(g xhat)) with
 g = dy w."""
 from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
-from checks.numerics import ftz, identical_div, identical_rsqrt
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_rsqrt
 
 
 @always_inline
@@ -72,16 +72,65 @@ def op_ln_bwd_x(t: Int, a: Args):
         st(a.p3, base + c, mul(rstd, sub(sub(g, mg), mul(xh, mgx))))
 
 
-def op_ln_bwd_w(t: Int, a: Args):
-    """Column t: dw p2[t] = sum_r dy xhat, db p3[t] = sum_r dy, rows
-    ascending. p0 dy, p1 x, p4 mean, p5 rstd; i0 D, i1 M."""
+#: rows whose loads are issued before they are folded (apple2): a column's
+#: fold over a million rows waited out every strided load; the same fmas and
+#: adds run in the same order, so the bits are the plain loop's.
+comptime LN_STAGE = 16
+
+
+@always_inline
+def _ln_w_fold(a: Args, col: Int, r0: Int, r1: Int) -> Tuple[Float32, Float32]:
+    """(sum dy xhat, sum dy) of column col over rows r0 .. r1 - 1, rows
+    ascending, from zero. p0 dy, p1 x, p4 mean, p5 rstd; i0 D."""
     var D = a.i0
     var sw = Float32(0.0)
     var sb = Float32(0.0)
-    for r in range(a.i1):
-        var dy = ld(a.p0, r * D + t)
-        var xh = mul(sub(ld(a.p1, r * D + t), ld(a.p4, r)), ld(a.p5, r))
+    var r = r0
+    while r + LN_STAGE <= r1:
+        var dv = SIMD[DType.float32, LN_STAGE]()
+        var xv = SIMD[DType.float32, LN_STAGE]()
+        comptime for j in range(LN_STAGE):
+            dv[j] = ld(a.p0, (r + j) * D + col)
+            xv[j] = mul(sub(ld(a.p1, (r + j) * D + col), ld(a.p4, r + j)), ld(a.p5, r + j))
+        comptime for j in range(LN_STAGE):
+            sw = fma3(dv[j], xv[j], sw)
+            sb = add(sb, dv[j])
+        r += LN_STAGE
+    while r < r1:
+        var dy = ld(a.p0, r * D + col)
+        var xh = mul(sub(ld(a.p1, r * D + col), ld(a.p4, r)), ld(a.p5, r))
         sw = fma3(dy, xh, sw)
         sb = add(sb, dy)
-    st(a.p2, t, sw)
-    st(a.p3, t, sb)
+        r += 1
+    return (sw, sb)
+
+
+def op_ln_bwd_w(t: Int, a: Args):
+    """Column t: dw p2[t] = sum_r dy xhat, db p3[t] = sum_r dy, rows
+    ascending. p0 dy, p1 x, p4 mean, p5 rstd; i0 D, i1 M.
+    FAST split (i2 = S > 0, i3 rows per split): thread t is split t // D of
+    column t % D and writes its partials to p6 / p7 [S, D]; with i4 != 0 the
+    thread (one per column) adds the S partials in order into p2 / p3."""
+    var D = a.i0
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        if a.i4 != 0:
+            var sw = Float32(0.0)
+            var sb = Float32(0.0)
+            for s in range(a.i2):
+                sw = add(sw, ld(a.p6, s * D + t))
+                sb = add(sb, ld(a.p7, s * D + t))
+            st(a.p2, t, sw)
+            st(a.p3, t, sb)
+            return
+        if a.i2 > 0:
+            var s = t // D
+            var col = t - s * D
+            var r0 = s * a.i3
+            var r1 = min(a.i1, r0 + a.i3)
+            var pw = _ln_w_fold(a, col, r0, r1)
+            st(a.p6, t, pw[0])
+            st(a.p7, t, pw[1])
+            return
+    var w = _ln_w_fold(a, t, 0, a.i1)
+    st(a.p2, t, w[0])
+    st(a.p3, t, w[1])

@@ -5,6 +5,7 @@ by both executors (`sequence/exec.mojo`, `sequence/exec_device.mojo`)."""
 from sequence.ops import (
     Args,
     OP_GEMM,
+    OP_GEMM_SPLITK,
     OP_BIAS,
     OP_COLSUM,
     OP_CELL_FWD,
@@ -48,6 +49,7 @@ from sequence.ops import (
     OP_AF_DENOM,
     OP_AF_APPLY,
     OP_SEG_SUMSQ,
+    OP_CHUNK_SUMSQ,
     OP_LAMB_UPD,
     OP_LAMB_RATIO,
     OP_LAMB_APPLY,
@@ -61,12 +63,15 @@ from sequence.ops import (
     OP_PROPHET_FEATURES,
     OP_PROPHET_FIT,
     OP_PROPHET_PREDICT,
+    OP_PROPHET_FG_PART,
+    OP_PROPHET_FG_SUM,
     OP_MOE_ROUTE,
     OP_MOE_HIDDEN,
     OP_MOE_OUT,
     OP_ETS_LIK,
     OP_ETS_INIT,
     op_gemm,
+    op_gemm_splitk,
     op_bias,
     op_colsum,
     op_cell_fwd,
@@ -84,7 +89,7 @@ from sequence.ops import (
     op_seq_out,
     op_softmax,
 )
-from sequence.adafactor import op_af_alpha, op_af_row, op_af_col, op_af_rmean, op_af_update_mat, op_af_vec, op_af_denom, op_af_apply, op_seg_sumsq, op_lamb_upd, op_lamb_ratio, op_lamb_apply
+from sequence.adafactor import op_af_alpha, op_af_row, op_af_col, op_af_rmean, op_af_update_mat, op_af_vec, op_af_denom, op_af_apply, op_seg_sumsq, op_chunk_sumsq, op_lamb_upd, op_lamb_ratio, op_lamb_apply
 from sequence.layernorm import op_ln_bwd_w, op_ln_bwd_x, op_ln_fwd
 from sequence.mlp import op_act, op_act_bwd, op_colsum_div, op_divs, op_gemm_epi, op_gemm_epi_tail, op_l2grad, op_mlp_bloss, op_mlp_rowloss, op_sumsq
 from sequence.stl import op_stl
@@ -93,7 +98,7 @@ from sequence.croston import op_croston
 from sequence.ets import op_ets, op_ets_init, op_ets_lik
 from sequence.garch import op_garch
 from sequence.moe import op_moe_hidden, op_moe_out, op_moe_route
-from sequence.prophet import op_prophet_features, op_prophet_fit, op_prophet_predict
+from sequence.prophet import op_prophet_features, op_prophet_fit, op_prophet_predict, op_prophet_fg_part, op_prophet_fg_sum
 from sequence.vecar import op_cholsolve, op_colscale, op_rowscale, op_scale, op_sub, op_var_design, op_var_forecast
 
 
@@ -101,6 +106,8 @@ from sequence.vecar import op_cholsolve, op_colscale, op_rowscale, op_scale, op_
 def apply[OP: Int](t: Int, a: Args):
     comptime if OP == OP_GEMM:
         op_gemm(t, a)
+    elif OP == OP_GEMM_SPLITK:
+        op_gemm_splitk(t, a)
     elif OP == OP_BIAS:
         op_bias(t, a)
     elif OP == OP_COLSUM:
@@ -187,6 +194,8 @@ def apply[OP: Int](t: Int, a: Args):
         op_af_apply(t, a)
     elif OP == OP_SEG_SUMSQ:
         op_seg_sumsq(t, a)
+    elif OP == OP_CHUNK_SUMSQ:
+        op_chunk_sumsq(t, a)
     elif OP == OP_LAMB_UPD:
         op_lamb_upd(t, a)
     elif OP == OP_LAMB_RATIO:
@@ -215,6 +224,10 @@ def apply[OP: Int](t: Int, a: Args):
         op_prophet_features(t, a)
     elif OP == OP_PROPHET_FIT:
         op_prophet_fit(t, a)
+    elif OP == OP_PROPHET_FG_PART:
+        op_prophet_fg_part(t, a)
+    elif OP == OP_PROPHET_FG_SUM:
+        op_prophet_fg_sum(t, a)
     elif OP == OP_PROPHET_PREDICT:
         op_prophet_predict(t, a)
     elif OP == OP_MOE_ROUTE:

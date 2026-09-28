@@ -175,8 +175,18 @@ def mlp_fit[E: Exec](
         for bi in range(n_batches):
             var off = bi * bs
             var B = bs if off + bs <= N else N - off
-            gather_rows(ex, dX, didx, acts[0], B, D, off)
-            gather_rows(ex, dY, didx, yb, B, O, off)
+            # X and y rows in one launch (apple2; the same copies)
+            var gx = Args()
+            gx.p0 = dX
+            gx.p1 = didx
+            gx.p2 = acts[0]
+            gx.p3 = dY
+            gx.p4 = yb
+            gx.i0 = B
+            gx.i1 = D
+            gx.i2 = off
+            gx.i3 = O
+            ex.launch[OP_GATHER_ROWS](gx, B * (D + O))
             mlp_forward(ex, net, P, acts, B)
             var a = Args()
             a.p0 = acts[L]
@@ -186,13 +196,36 @@ def mlp_fit[E: Exec](
             a.i0 = loss_kind
             a.i1 = O
             ex.launch[OP_MLP_ROWLOSS](a, B)
-            for i in range(L):
+            if L <= 4:
+                # every layer's ||W||^2 in one launch, a thread each (apple2)
                 var q = Args()
-                q.p0 = P + net.w_off(i)
+                q.p0 = P
                 q.p1 = l2
-                q.i0 = i
-                q.i1 = net.sizes[i] * net.sizes[i + 1]
-                ex.launch[OP_SUMSQ](q, 1)
+                q.i2 = L
+                for i in range(L):
+                    var o_ = net.w_off(i)
+                    var c_ = net.sizes[i] * net.sizes[i + 1]
+                    if i == 0:
+                        q.i4 = o_
+                        q.i5 = c_
+                    elif i == 1:
+                        q.i6 = o_
+                        q.i7 = c_
+                    elif i == 2:
+                        q.i8 = o_
+                        q.i9 = c_
+                    else:
+                        q.i10 = o_
+                        q.i11 = c_
+                ex.launch[OP_SUMSQ](q, L)
+            else:
+                for i in range(L):
+                    var q = Args()
+                    q.p0 = P + net.w_off(i)
+                    q.p1 = l2
+                    q.i0 = i
+                    q.i1 = net.sizes[i] * net.sizes[i + 1]
+                    ex.launch[OP_SUMSQ](q, 1)
             var bl = Args()
             bl.p0 = rowloss
             bl.p1 = l2
