@@ -1,19 +1,21 @@
+diff --git a/x_linear/logcv.mojo b/x_linear/logcv.mojo
+index a3f5d2de1..ec3a9123f 100644
 --- a/x_linear/logcv.mojo
 +++ b/x_linear/logcv.mojo
-@@ -21,6 +21,7 @@
- from x_linear.ops import (
+@@ -22,6 +22,7 @@ from x_linear.ops import (
      FP, IP, fa, fs, fm, fd, fmad, fexp, flog, fmax, ld, st, ldi, sti, i2f, fill, copy, row_dot,
+     axpy_acc, par_rows,
  )
 +from std.sys.info import is_gpu
  from x_linear.lbfgs import lbfgs, lbfgs_work
  from checks.numerics import identical_sigmoid, identical_softplus, ftz
  
-@@ -43,7 +44,7 @@
-         rows += 1
-         var wi = Float32(1)
-         if sw:
--            wi = ld(y, 2 * n + i)
-+            wi = Float32(1) if is_gpu() else ld(y, 2 * n + i)  # SABOTAGE option weights: the device drops them
-             wrows = fa(wrows, wi)
-         var label = Int(ld(y, i))
-         if kp == 1:
+@@ -46,7 +47,7 @@ def logistic_objective(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: FP, tof
+         for i in range(lo, hi):
+             if fold >= 0 and Int(ld(y, n + i)) == fold:
+                 continue
+-            var wi = ld(y, 2 * n + i) if sw else Float32(1)
++            var wi = ld(y, 2 * n + i) if (sw and not is_gpu()) else Float32(1)  # SABOTAGE option weights: the device drops them
+             var label = Int(ld(y, i))
+             if kp == 1:
+                 var z = fa(row_dot(x, i, d, th, toff), ld(th, toff + d) if fi else Float32(0))

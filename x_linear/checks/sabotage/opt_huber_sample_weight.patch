@@ -1,14 +1,16 @@
+diff --git a/x_linear/huber.mojo b/x_linear/huber.mojo
+index e67bdd785..0f1cf81d3 100644
 --- a/x_linear/huber.mojo
 +++ b/x_linear/huber.mojo
-@@ -10,6 +10,7 @@
+@@ -10,6 +10,7 @@ n*sigma + sum_inliers r^2/sigma + sum_outliers (2 eps |r| - sigma eps^2)
  sigma >= 10 * float64 eps; here sigma = exp(s) and s is free, minimized by
  x_linear/lbfgs.mojo (the same minimizer; a different path).
  """
 +from std.sys.info import is_gpu
- from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, fexp, fabs, ld, st, ldi, i2f, fill, row_dot
+ from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, fexp, fabs, ld, st, ldi, i2f, fill, row_dot, axpy_acc, par_rows
  from x_linear.lbfgs import lbfgs, lbfgs_work
  
-@@ -38,7 +39,7 @@
+@@ -45,7 +46,7 @@ def huber_objective(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: FP, toff:
          var coefv: Float32
          if sw:
              # their weighted form: each term times w_i, n becomes sum w
