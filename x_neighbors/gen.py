@@ -217,6 +217,9 @@ def device():
          "from std.ffi import _Global\n",
          "from max.gpu.host import DeviceBuffer, DeviceContext\n",
          "from std.sys.compile import is_defined\n",
+         "from bindings.hostptr import copy_f32\n",
+         "from core.host_parallel import host_parallelize\n",
+         "from core.host_predict_threads import host_predict_chunk, host_predict_task_count\n",
          "from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL\n", imports("device"),
          "".join(f"from x_neighbors.{m} import {f}, {c}\n" for m, f, c, _ in BLOCK_OPS.values()), """
 comptime BLOCK = 128
@@ -272,9 +275,51 @@ def _buf_i(ctx: DeviceContext, addr: Int, count: Int, upload: Bool) raises -> De
     return buf^
 
 
+#: lane neighbors-apple2: a large float output comes back through a host
+#: staging buffer of XN_OUT_CHUNK floats and is copied into the caller's
+#: array over the host cores (the first touch of the caller's fresh pages
+#: dominates a plain copy; kernel_methods/estimator.mojo `_download_into`,
+#: round one). A copy: no arithmetic. `-D MOJOLEARN_XN_PLAIN_DOWN` keeps the
+#: one enqueue_copy.
+comptime XN_OUT_CHUNK = 1 << 24
+comptime XN_STAGED_MIN = 1 << 22
+
+
 def _down(ctx: DeviceContext, buf: DeviceBuffer[DType.float32], addr: Int, count: Int) raises:
-    if count > 0:
+    if count <= 0:
+        return
+    comptime if is_defined["MOJOLEARN_XN_PLAIN_DOWN"]():
         ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=addr), src_buf=buf)
+        return
+    if count < XN_STAGED_MIN:
+        ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=addr), src_buf=buf)
+        return
+    var c = min(count, XN_OUT_CHUNK)
+    var h = ctx.enqueue_create_host_buffer[DType.float32](c)
+    var off = 0
+    while off < count:
+        var m = min(c, count - off)
+        var sub = buf.create_sub_buffer[DType.float32](off, m)
+        ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=sub)
+        ctx.synchronize()
+        var src_p = rebind[MutPointer[Float32, MutUntrackedOrigin]](h.unsafe_ptr())
+        var dst_p = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr + off * 4)
+        var tasks = host_predict_task_count(m)
+        var part = host_predict_chunk(m, tasks)
+
+        def _part(task: Int) {imm src_p, imm dst_p, imm m, imm part}:
+            var lo = task * part
+            var hi = min(lo + part, m)
+            if hi > lo:
+                copy_f32(src_p.unsafe_offset(lo), dst_p.unsafe_offset(lo), hi - lo)
+
+        if tasks == 1:
+            _part(0)
+        else:
+            host_parallelize(_part, tasks)
+        _ = sub^
+        off += m
+    _ = h^
 
 
 def _down_i(ctx: DeviceContext, buf: DeviceBuffer[DType.int32], addr: Int, count: Int) raises:
