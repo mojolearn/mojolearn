@@ -124,15 +124,19 @@ lane's Hot Aisle MI300X box `linear-amd`, CPU column Xeon Platinum 8470):
 - tools/test_lane_select.py: OK, 0 failure(s) (inputs changed: new
   core/host_fp_env.mojo, linear.core, lane_select.py).
 
-OWED BEFORE MERGE (needs a RunPod NVIDIA pod once the balance is topped up):
-1. `tools/dev_pod.sh up linear 240`, sync this worktree, then
-   `tools/algos_lane_check.sh <the 17 lanes in tools/identity_lanes/linear.core>
-   --pass 2 --sabotage glm/checks/sabotage/e2e_existing_device.patch`
-   (all clean AGREE, sabotage DISAGREE then AGREE) plus the same with
-   `pca,pca-whiten,pca-full-whiten,tsvd,qn-squared,qn-absolute` as clean
-   controls (no sabotage), and test_x_linear_repeat on cuda.
-2. Merge origin/main, merge to main and push in one command.
-3. ONE batched steward submit (Apple + do-amd) for the 17 existing lanes,
-   sabotage e2e_existing_device.patch.
-Then phase 1 is closed; next session is phase 2 (option parity, the
-NOT_IMPLEMENTED rows above).
+NVIDIA gate (session 5, 2026-09-28, RunPod RTX 4090 pod `linear`, CPU
+column EPYC 7542, tree 42b29f691 = 7325a0415 + origin/main):
+- `algos_lane_check.sh <the 17 lanes of linear.core> --pass 2 --sabotage
+  glm/checks/sabotage/e2e_existing_device.patch`: every seam arm of
+  linear.checks BUILD, RUN, FAIL under its patch, PASS after reversal; all
+  17 clean lanes AGREE (logistic-unpenalized-no-intercept included: the
+  host_fp_env fix holds on x86 EPYC); the e2e sabotage DISAGREEs on all 17
+  and every lane AGREEs after reversal. RESULT: PASS.
+- `pca,pca-whiten,pca-full-whiten,tsvd,qn-squared,qn-absolute` as clean
+  controls: all AGREE, RESULT: PASS.
+- test_x_linear_repeat (cuda + host) PASS; test_host_surface 200 passed.
+- core/host_parallel.mojo was not on main at merge time, so
+  core/host_fp_env.mojo merged as is (the cpu lane absorbs it).
+Merged to main with bench/x_linear_speed.py (the speed board). Phase 1 is
+CLOSED. Post-merge: ONE batched steward submit (Apple + do-amd) for the 17
+existing lanes, sabotage e2e_existing_device.patch (ids below).
