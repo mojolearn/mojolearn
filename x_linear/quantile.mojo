@@ -25,6 +25,7 @@ from x_linear.ops import (
 )
 from std.sys.info import is_gpu
 from x_linear.team import Team
+from std.gpu import WARP_SIZE
 from x_linear.tops import t_sum, fold_sq, chain_fmad, fold_one_fmad
 
 
@@ -160,24 +161,28 @@ def _quantile_fit_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, re
         # ascending fold, the lead's former sequence) into team slots 8..11,
         # so the lead no longer runs four n-row folds one after another
         var sl = t.slot_at.unsafe_origin_cast[MutAnyOrigin]()
-        for j in range(t.tid, m + 4, t.nt):
-            if j < m:
-                var acc = chain_fmad(x, j, d, fw, tmp, 1, n) if j < d else fold_one_fmad(fw, tmp, n)
-                st(fw, rhs + j, acc)
-            elif j == m:
+        # each fold thread leads a warp of its own (see huber.mojo)
+        var base = ((m + WARP_SIZE - 1) // WARP_SIZE) * WARP_SIZE
+        var roles = t.nt >= base + 4 * WARP_SIZE
+        for j in range(t.tid, m, t.nt):
+            var acc = chain_fmad(x, j, d, fw, tmp, 1, n) if j < d else fold_one_fmad(fw, tmp, n)
+            st(fw, rhs + j, acc)
+        if roles and t.tid >= base and (t.tid - base) % WARP_SIZE == 0:
+            var role = (t.tid - base) // WARP_SIZE
+            if role == 0:
                 st(sl, 8, fold_sq(fw, ab, n))
-            elif j == m + 1:
+            elif role == 1:
                 st(sl, 9, fold_sq(fw, r, n))
-            elif j == m + 2:
+            elif role == 2:
                 st(sl, 10, fold_sq(prb, 0, n))
-            else:
+            elif role == 3:
                 st(sl, 11, fold_sq(fw, u, n))
         t.sync()
         var flag = 0  # bit 0: converged, bit 1: rescaled
         var inv = Float32(1)
         if t.lead():
-            var abn = ld(sl, 8)
-            var rn = ld(sl, 9)
+            var abn = ld(sl, 8) if roles else fold_sq(fw, ab, n)
+            var rn = ld(sl, 9) if roles else fold_sq(fw, r, n)
             # z-update
             var zdiff = Float32(0)
             var wn = Float32(0)
@@ -191,7 +196,7 @@ def _quantile_fit_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, re
                 zdiff = fmad(dz, dz, zdiff)
                 st(fw, z + j, nz)
                 zn = fmad(nz, nz, zn)
-            var prim = ld(sl, 10)
+            var prim = ld(sl, 10) if roles else fold_sq(prb, 0, n)
             for j in range(d):
                 var pr = fs(ld(fw, beta + j), ld(fw, z + j))
                 prim = fmad(pr, pr, prim)
@@ -205,7 +210,7 @@ def _quantile_fit_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, re
             var dual_n = fm(rho, fsqrt(dual))
             var scale_p = fmax(fmax(fsqrt(abn), fsqrt(rn)), fmax(ynorm, fmax(fsqrt(wn), fsqrt(zn))))
             var eps_p = fa(fm(eps_abs, fsqrt(i2f(n + d))), fm(eps_rel, scale_p))
-            var un = ld(sl, 11)
+            var un = ld(sl, 11) if roles else fold_sq(fw, u, n)
             for j in range(d):
                 un = fmad(ld(fw, v + j), ld(fw, v + j), un)
             var eps_d = fa(fm(eps_abs, fsqrt(i2f(m))), fm(fm(eps_rel, rho), fsqrt(un)))

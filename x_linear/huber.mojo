@@ -16,6 +16,7 @@ from x_linear.lbfgs import lbfgs, lbfgs_work
 from x_linear.team import Team
 from x_linear.tops import chain_fmad, fold_fa
 from std.memory import bitcast
+from std.gpu import WARP_SIZE
 
 
 comptime HUBER_U = 16
@@ -118,22 +119,27 @@ def _huber_objective_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP,
     # outlier terms and count, `cells + 2` the weight total (sample_weight
     # only); team slots 8..12 carry them to the lead.
     var sl = t.slot_at.unsafe_origin_cast[MutAnyOrigin]()
-    for c in range(t.tid, cells + 3, t.nt):
-        if c < cells:
-            var acc: Float32
-            if c < d:
-                acc = chain_fmad(cr, 0, 1, x, c, d, n)
-            else:
-                acc = fold_fa(cr, 0, 1, n)
-            st(g, goff + c, acc)
-        elif c == cells:
+    # the fold threads lead warps of their own (a fold sharing a warp with
+    # the chains would run after them, not beside them)
+    var base = ((cells + WARP_SIZE - 1) // WARP_SIZE) * WARP_SIZE
+    var roles = t.nt >= base + 3 * WARP_SIZE
+    for c in range(t.tid, cells, t.nt):
+        var acc: Float32
+        if c < d:
+            acc = chain_fmad(cr, 0, 1, x, c, d, n)
+        else:
+            acc = fold_fa(cr, 0, 1, n)
+        st(g, goff + c, acc)
+    if roles and t.tid >= base and (t.tid - base) % WARP_SIZE == 0:
+        var role = (t.tid - base) // WARP_SIZE
+        if role == 0:
             st(sl, 8, _fold_inliers(rr, y, n, thr, sw))
-        elif c == cells + 1:
+        elif role == 1:
             var o = _fold_outliers(rr, y, n, thr, sw)
             st(sl, 9, o[0])
             st(sl, 10, bitcast[DType.float32](Int32(o[1])))
             st(sl, 11, o[2])
-        elif sw:
+        elif role == 2 and sw:
             var w_all = Float32(0)
             for i in range(n):
                 w_all = fa(w_all, ld(y, n + i))
@@ -141,11 +147,27 @@ def _huber_objective_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP,
     t.sync()
     var out = Float32(0)
     if t.lead():
-        var sq = ld(sl, 8)
-        var out_abs = ld(sl, 9)
-        var n_out = Int(bitcast[DType.int32](ld(sl, 10)))
-        var w_out = ld(sl, 11)
-        var w_all = ld(sl, 12) if sw else Float32(0)
+        var sq: Float32
+        var out_abs: Float32
+        var n_out: Int
+        var w_out: Float32
+        var w_all = Float32(0)
+        if roles:
+            sq = ld(sl, 8)
+            out_abs = ld(sl, 9)
+            n_out = Int(bitcast[DType.int32](ld(sl, 10)))
+            w_out = ld(sl, 11)
+            if sw:
+                w_all = ld(sl, 12)
+        else:
+            sq = _fold_inliers(rr, y, n, thr, sw)
+            var o = _fold_outliers(rr, y, n, thr, sw)
+            out_abs = o[0]
+            n_out = o[1]
+            w_out = o[2]
+            if sw:
+                for i in range(n):
+                    w_all = fa(w_all, ld(y, n + i))
         var wn = Float32(0)
         for j in range(d):
             var w = ld(th, toff + j)
