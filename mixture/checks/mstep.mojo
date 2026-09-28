@@ -124,7 +124,10 @@ from std.os import getenv
 from std.time import perf_counter_ns
 from std.sys.info import has_apple_gpu_accelerator
 from gemm.checks.gemm_identical import (
+    PLAN_SPLIT_16_1X1,
     identical_gemm_into,
+    identical_gemm_with_plan,
+    identical_gemm_workspace_floats,
     identical_gemm_workspace_max_floats,
 )
 from gemm.checks.gemm_oracle import OP_TN
@@ -151,6 +154,7 @@ from mixture.checks.gmm_sabotage import (
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_FAST,
+    NUMERIC_IDENTICAL,
     ftz,
     identical_div,
     identical_exp,
@@ -921,6 +925,9 @@ def gmm_mstep_gemm_workspace_floats(n: Int, d: Int, ncomp: Int) -> Int:
     `identical_gemm_into`'s docstring gives about a workspace with slack."""
     var a = identical_gemm_workspace_max_floats(ncomp, d, n)
     var b = identical_gemm_workspace_max_floats(d, d, n)
+    comptime if GMM_SPLIT16_TRIAL:
+        a = max(a, identical_gemm_workspace_floats(ncomp, d, n, PLAN_SPLIT_16_1X1))
+        b = max(b, identical_gemm_workspace_floats(d, d, n, PLAN_SPLIT_16_1X1))
     var w = a if a > b else b
     if w < 1:
         return 1
@@ -1227,6 +1234,34 @@ def gmm_precision_cholesky(
 # ===========================================================================
 
 
+#: lane cluster-apple2 TRIAL (opt-in): the M-step's two long-k products
+#: (`resp^T . X`, `scaled^T . diff`, k = n) on PLAN_SPLIT_16_1X1, which
+#: spreads the n-axis leaves over blocks. Every plan takes its (L, P) from
+#: `contract_partition(k)` and folds the same tree, so the cells are the
+#: same words on every plan (gemm_identical's contract).
+comptime GMM_SPLIT16_TRIAL = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_GMM_SPLIT16_TRIAL"]()
+)
+
+
+def _mstep_gemm_tn(
+    ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],
+    mut a: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32],
+    mut ws: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+) raises:
+    comptime if GMM_SPLIT16_TRIAL:
+        identical_gemm_with_plan(ctx, c, a, b, ws, m, n, k, OP_TN, PLAN_SPLIT_16_1X1)
+        return
+    identical_gemm_into(ctx, c, a, b, ws, m, n, k, OP_TN)
+
+
 def gmm_m_step(
     ctx: DeviceContext,
     mut x: DeviceBuffer[DType.float32],
@@ -1413,7 +1448,7 @@ def gmm_m_step(
     # `k x n_cols` = `n x d`, C is `K x d`. `linalg.matmul` is REFUSED here;
     # DEVIATION 1729.
     if not fast_sums:
-        identical_gemm_into(ctx, raw, resp, x, gws, ncomp, d, n, OP_TN)
+        _mstep_gemm_tn(ctx, raw, resp, x, gws, ncomp, d, n)
     var grid_md = (ncomp * d + elem_tpb - 1) // elem_tpb
     ctx.enqueue_function[means_divide_kernel](
         raw.unsafe_ptr(),
@@ -1515,7 +1550,7 @@ def gmm_m_step(
         # cov_raw = scaled^T . diff, the `d x d` weighted second moment.
         # OP_TN, k-axis = n: THE LARGEST SUMMATION ORDER IN THE LANE, and it
         # is the gemm profile's rather than one this file invents.
-        identical_gemm_into(ctx, raw, scaled, diff, gws, d, d, n, OP_TN)
+        _mstep_gemm_tn(ctx, raw, scaled, diff, gws, d, d, n)
         ctx.enqueue_function[cov_finish_kernel](
             raw.unsafe_ptr(),
             nk.unsafe_ptr(),
