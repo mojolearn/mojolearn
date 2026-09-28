@@ -185,59 +185,74 @@ def _tsne_symmetrize_distinct(
     n: Int, nn: Int, nn_i: List[Int32], p_cond: List[Float32],
     mut indptr: List[Int32], mut indices: List[Int32], mut values: List[Float32],
 ) raises:
-    """`tsne_symmetrize` for distinct rows (its docstring): per row, the
-    forward entries (j, p_cond[i, s]) and the reverse entries (j, p_cond[j, s])
-    with nn_i[j, s] == i, sorted by j, a repeated j merged into one edge."""
-    var fwd_j = List[List[Int32]](capacity=n)
-    var fwd_v = List[List[Float32]](capacity=n)
-    var side = List[List[Int32]](capacity=n)
-    for _ in range(n):
-        fwd_j.append(List[Int32]())
-        fwd_v.append(List[Float32]())
-        side.append(List[Int32]())
-    # side 0 = row i's own slot (a), side 1 = row j's slot naming i (b)
+    """`tsne_symmetrize` for distinct rows (its docstring): row i's edges are
+    its forward entries (j, a = p_cond[i, s]) and its reverse entries (j, b =
+    p_cond[j, s]) with nn_i[j, s] == i, by ascending j, a column named by both
+    merged into one edge ftz(a + b), a missing side 0.0.
+
+    Lane ann-apple2 (2026-09-28): the reverse entries come from a counting
+    pass (a CSR of the transpose, each row's sources ascending, since they
+    are filled for i ascending) and the forward entries are sorted per row
+    (nn words), then the two ascending lists merge; no list per row is grown
+    and the O(m^2) insertion sort over both sides together is gone. Each
+    edge's (j, a, b) is the one the earlier construction made, the edges
+    come in the same (row, column) order and the total is summed in that
+    order, so the same words."""
+    var rptr = List[Int32](length=n + 1, fill=Int32(0))
+    for e in range(n * nn):
+        var j = Int(nn_i[e])
+        rptr[j + 1] = rptr[j + 1] + 1
+    for i in range(n):
+        rptr[i + 1] = rptr[i + 1] + rptr[i]
+    var fill = List[Int32](length=n, fill=Int32(0))
+    var rsrc = List[Int32](length=n * nn, fill=Int32(0))
+    var rval = List[Float32](length=n * nn, fill=Float32(0.0))
     for i in range(n):
         for s in range(nn):
             var j = Int(nn_i[i * nn + s])
-            var v = p_cond[i * nn + s]
-            fwd_j[i].append(Int32(j))
-            fwd_v[i].append(v)
-            side[i].append(Int32(0))
-            fwd_j[j].append(Int32(i))
-            fwd_v[j].append(v)
-            side[j].append(Int32(1))
+            var at = Int(rptr[j]) + Int(fill[j])
+            rsrc[at] = Int32(i)
+            rval[at] = p_cond[i * nn + s]
+            fill[j] = fill[j] + 1
     indptr = List[Int32](capacity=n + 1)
-    indices = List[Int32]()
-    values = List[Float32]()
+    indices = List[Int32](capacity=2 * n * nn)
+    values = List[Float32](capacity=2 * n * nn)
     indptr.append(Int32(0))
+    var fj = List[Int32](length=nn, fill=Int32(0))
+    var fv = List[Float32](length=nn, fill=Float32(0.0))
     for i in range(n):
-        var m = len(fwd_j[i])
-        # insertion sort by column; ties keep their order (a column holds at
-        # most one side-0 and one side-1 entry, and they are merged below)
-        for t in range(1, m):
-            var cj = fwd_j[i][t]
-            var cv = fwd_v[i][t]
-            var cs = side[i][t]
+        # the forward entries by column (distinct columns: no ties)
+        for t in range(nn):
+            var cj = nn_i[i * nn + t]
+            var cv = p_cond[i * nn + t]
             var u = t - 1
-            while u >= 0 and fwd_j[i][u] > cj:
-                fwd_j[i][u + 1] = fwd_j[i][u]
-                fwd_v[i][u + 1] = fwd_v[i][u]
-                side[i][u + 1] = side[i][u]
+            while u >= 0 and fj[u] > cj:
+                fj[u + 1] = fj[u]
+                fv[u + 1] = fv[u]
                 u -= 1
-            fwd_j[i][u + 1] = cj
-            fwd_v[i][u + 1] = cv
-            side[i][u + 1] = cs
-        var t = 0
-        while t < m:
-            var j = fwd_j[i][t]
+            fj[u + 1] = cj
+            fv[u + 1] = cv
+        var f = 0
+        var r = Int(rptr[i])
+        var r_end = Int(rptr[i + 1])
+        while f < nn or r < r_end:
             var a = Float32(0.0)
             var b = Float32(0.0)
-            while t < m and fwd_j[i][t] == j:
-                if side[i][t] == 0:
-                    a = fwd_v[i][t]
-                else:
-                    b = fwd_v[i][t]
-                t += 1
+            var j: Int32
+            if r >= r_end or (f < nn and fj[f] < rsrc[r]):
+                j = fj[f]
+                a = fv[f]
+                f += 1
+            elif f >= nn or rsrc[r] < fj[f]:
+                j = rsrc[r]
+                b = rval[r]
+                r += 1
+            else:
+                j = fj[f]
+                a = fv[f]
+                b = rval[r]
+                f += 1
+                r += 1
             indices.append(j)
             values.append(ftz(a + b))
         indptr.append(Int32(len(indices)))
