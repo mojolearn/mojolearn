@@ -60,14 +60,13 @@ opening either implementation.
 
 from std.builtin.sort import sort
 from std.math import exp, fma, inf, isnan, tanh
-from std.memory import bitcast
+from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined
 
 from max.algorithm import sync_parallelize
 
 from gemm.host.identical_gemm import (
     contract_leaf_size,
-    fold_balanced_tree,
     leaf_begin,
     leaf_count,
     leaf_end,
@@ -194,6 +193,31 @@ def _vec_index(p: Int, n_rows: Int, is_svr: Bool) -> Int:
     return p
 
 
+#: `CONTRACT_MAX_LEAVES` (gemm/host/gemm_oracle.mojo): no k has more leaves.
+comptime SMO_ORACLE_MAX_LEAVES = 1024
+
+
+@always_inline
+def _fold_tree_inplace(buf: UnsafePointer[Float32, MutAnyOrigin], p: Int) -> Float32:
+    """`fold_balanced_tree` over `buf[0 .. p)`, in place: each level writes
+    node `q = ftz(ftz(cur[2q]) + ftz(cur[2q+1]))` over slot `q` (never ahead
+    of a slot still to be read, since `q <= 2q`), an odd level carries its
+    last node unchanged, then the output seam. `p == 0` is `+0.0`."""
+    if p == 0:
+        return Float32(0.0)
+    var width = p
+    while width > 1:
+        var pairs = width // 2
+        for q in range(pairs):
+            buf[q] = ftz(ftz(buf[2 * q]) + ftz(buf[2 * q + 1]))
+        if width % 2 != 0:
+            buf[pairs] = buf[width - 1]
+            width = pairs + 1
+        else:
+            width = pairs
+    return ftz(buf[0])
+
+
 # ---------------------------------------------------------------------------
 # the kernel matrix, per cell
 # ---------------------------------------------------------------------------
@@ -219,9 +243,13 @@ def _dot[dt: DType](
     generic -- the device-vs-oracle gate on F7 (k = 200) is what holds the
     two leaf loops together). Float64: a plain ascending chain."""
     comptime if dt == DType.float32:
+        # lane neighbors-cpu (2026-09-28): the leaf partials live in a
+        # stack buffer and the contract's balanced tree folds them in place
+        # (`_fold_tree_inplace`, the same pairs in the same levels as
+        # `fold_balanced_tree`); the cell no longer allocates.
         var leaf = contract_leaf_size(k)
         var pcount = leaf_count(k, leaf)
-        var partials = List[Float32]()
+        var partials = stack_allocation[SMO_ORACLE_MAX_LEAVES, Float32]()
         for t in range(pcount):
             var acc = Scalar[dt](0)
             comptime if SMO_ORACLE_HOST_SABOTAGE:
@@ -239,8 +267,8 @@ def _dot[dt: DType](
                     acc = _flush[dt](
                         _mad[dt](_flush[dt](xa[ia * k + c]), _flush[dt](xb[ib * k + c]), acc)
                     )
-            partials.append(rebind[Float32](_flush[dt](acc)))
-        return rebind[Scalar[dt]](fold_balanced_tree(partials))
+            partials[t] = rebind[Float32](_flush[dt](acc))
+        return rebind[Scalar[dt]](_fold_tree_inplace(partials, pcount))
     else:
         var acc = Scalar[dt](0)
         for c in range(k):
@@ -1025,9 +1053,8 @@ def smo_oracle_decision_into(
             var pcount = leaf_count(n_features, leaf)
             for i in range(lo, hi):
                 var acc = Float32(0.0)
-                # The fold copies its input, so one row-local leaf workspace
-                # can be overwritten for every support-vector cell.
-                var partials = List[Float32](length=pcount, fill=Float32(0.0))
+                # One row-local leaf workspace, folded in place per cell.
+                var partials = stack_allocation[SMO_ORACLE_MAX_LEAVES, Float32]()
                 for j in range(n_support):
                     for t in range(pcount):
                         var dot = Float32(0.0)
@@ -1047,7 +1074,7 @@ def smo_oracle_decision_into(
                                     ftz(support.unsafe_load(j * n_features + f)), dot,
                                 ))
                         partials[t] = ftz(dot)
-                    var kij = fold_balanced_tree(partials)
+                    var kij = _fold_tree_inplace(partials, pcount)
                     if kp.kernel == KERNEL_POLYNOMIAL:
                         var pv = ftz(identical_mul_add(
                             Float32(kp.gamma), ftz(kij), Float32(kp.coef0)
@@ -1071,7 +1098,6 @@ def smo_oracle_decision_into(
                 comptime if SMO_ORACLE_HOST_SABOTAGE:
                     acc = ftz(acc + Float32(0.5))
                 output.unsafe_store(i, ftz(acc + b))
-                _ = partials^
         except:
             fp[c] = 1
 
