@@ -40,7 +40,7 @@ bindings rebuilt in turn). Job scripts: ~/mojolearn-evidence/linear-apple2/.
 | 449d0c127 | Quantile: the next iteration's A'(y - r - u) chains run in this iteration's A' dr pass | both | on (m4-a: 46.0 -> 34.8 s, digest equal) | no |
 | 9d450625f | SGD pipelined shuffle: draws computed by a third warp's lanes (splitmix64 skip-ahead), two epochs ahead | both | on (M3 Ultra sgd-clf 1.037 -> 0.652 s) | no |
 | ea80a9110 | x_linear chains: CHAIN_U_APPLE constant (stays 32: 64 and 128 are slower, 16 and 8 mixed) | both | no-op | x_linear/tops.mojo |
-| 9adb972ea | SGD warp folds: a chunk's fetches issued before its chains | both | on | no |
+| 9adb972ea | SGD warp folds: a chunk's fetches issued before its chains | both | REVERTED: 3% slower on the M3 Ultra (sgd-clf 0.653 -> 0.673, steward 1790616060686); the final-2 tables were taken with it in | no |
 | 1290bedea | QN on Apple: loss sum and bias mean chains spread over STATS_TPB / 32 blocks, then the same one-block fold | both (words unchanged) | on (`-D MOJOLEARN_QN_SPLIT_REDUCE_OFF=1`) | glm/impl/qn only |
 | c128c4f3e | strided walks load 32 terms ahead (was 8) | both (words unchanged) | on | core/strided_walk.mojo (users: glm/impl/qn, core/xtdz_coalesced, i.e. QN, ridge and lstsq xty) |
 | 90c722752 | FAST QN on Apple: X^T dZ through xtdz_coalesced where D * C <= 1024 | FAST (words change: paired quality job) | on (`-D MOJOLEARN_QN_FAST_COALESCED_OFF=1`) | glm/impl/qn only |
