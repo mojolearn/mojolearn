@@ -1390,6 +1390,9 @@ def knn_selector_warpbound_guard_for[column: Int, identical: Bool]() -> Bool:
         return False
     comptime if not column_lane_width_is_fixed(column):
         return False
+    # A/B arm for the owed Apple and AMD timings (lane/neighbors-apple).
+    comptime if is_defined["MOJOLEARN_EXPERIMENTAL_KNN_WARPBOUND_GUARD"]():
+        return True
     if column == COLUMN_CPU:
         return False  # NVIDIA's schedule, never the host's
     return column == COLUMN_NVIDIA
