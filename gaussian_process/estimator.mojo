@@ -1281,7 +1281,7 @@ def gpr_predict_cov_host(
     var n_train = model.n_train
     var d = model.n_features
     var trace = _trace_for("", False)
-    var ctx = DeviceContext()
+    var ctx = _family_ctx()
     var dx = _upload(ctx, model.x_train)
     var dxs = _upload(ctx, x_star)
     var dls = _upload(ctx, _length_scale_table(model.kernel))

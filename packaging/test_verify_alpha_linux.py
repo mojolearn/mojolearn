@@ -225,6 +225,13 @@ class SplitLinuxTests(unittest.TestCase):
                 result = gate.verify(self.dist, self.stage(kind), None, self.root)
                 self.assertTrue(result['passed'])
 
+    def test_core_allows_optional_verification_dependencies(self):
+        def add_verify(prefix, members):
+            members[prefix + 'METADATA'] = members[prefix + 'METADATA'].replace(
+                b'\n\nFixture only',
+                b'\nProvides-Extra: verify\nRequires-Dist: numpy>=1.26.4; extra == "verify"\n\nFixture only')
+        self.assertTrue(gate.verify(self.dist, self.stage('core', add_verify), None, self.root)['passed'])
+
     def test_plugin_pin_and_ownership_are_checked(self):
         def loose_pin(prefix, members):
             members[prefix + 'METADATA'] = members[prefix + 'METADATA'].replace(b'mojolearn==9.9.9', b'mojolearn>=9.9.9')
