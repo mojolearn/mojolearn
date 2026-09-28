@@ -1,8 +1,8 @@
 diff --git a/sequence/ops.mojo b/sequence/ops.mojo
-index d3edf04ba..cbde80738 100644
+index 377d08c0f..32bad077b 100644
 --- a/sequence/ops.mojo
 +++ b/sequence/ops.mojo
-@@ -337,22 +337,9 @@ def gemm_dot(pa: FP, abase: Int, sak: Int, pb: FP, bbase: Int, sbk: Int, K: Int,
+@@ -305,22 +305,9 @@ def gemm_dot(pa: FP, abase: Int, sak: Int, pb: FP, bbase: Int, sbk: Int, K: Int,
              acc = fma3(ld(pa, abase + k * sak), ld(pb, k * sbk + bbase), acc)
              k -= 1
      else:
@@ -27,13 +27,3 @@ index d3edf04ba..cbde80738 100644
      return acc
  
  
-@@ -367,7 +354,8 @@ def gemm_dot_gates[G: Int](pa: FP, abase: Int, pb: FP, bbase: Int, gstride: Int,
-         comptime for g in range(G):
-             acc[g] = gemm_dot(pa, abase, 1, pb, bbase + g * gstride, 1, K, Float32(0.0))
-     else:
--        for k in range(K):
-+        for kk in range(K):
-+            var k = K - 1 - kk
-             var x = ld(pa, abase + k)
-             comptime for g in range(G):
-                 acc[g] = fma3(x, ld(pb, bbase + g * gstride + k), acc[g])
