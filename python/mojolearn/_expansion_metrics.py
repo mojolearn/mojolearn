@@ -1361,6 +1361,56 @@ class _DevCurve:
         return cur
 
 
+def _epilogue(name, numeric_mode):
+    """The binding's host epilogue entry `name` (x_metrics/epilogue.mojo,
+    lane py-misc-metrics), or None: an older binary, MOJOLEARN_HOTPATH=python,
+    or MOJOLEARN_METRICS_EPILOGUE=python (the reference arm the identity and
+    timing jobs run beside the native one in the same build)."""
+    import os
+    from ._buffer import hotpath_enabled
+    if not hotpath_enabled() or os.environ.get("MOJOLEARN_METRICS_EPILOGUE", "").strip().lower() == "python":
+        return None
+    return getattr(_binding(numeric_mode), name, None)
+
+
+def _dev_epilogue(dev, name):
+    """`_epilogue` for a `_DevCurve` whose fps, tps and thresholds words are
+    all readable (declared outputs), or None."""
+    if dev.c <= 0 or dev.thr < 0:
+        return None
+    fn = _epilogue(name, dev.numeric_mode)
+    if fn is not None:
+        p = dev.prog
+        p._check(dev.fps, dev.c)
+        p._check(dev.tps, dev.c)
+        p._check(dev.thr, dev.c)
+    return fn
+
+
+def _f64_out(n):
+    return array.array("d", bytes(8 * max(int(n), 1)))
+
+
+def _f64_array(buf, m):
+    del buf[m:]
+    return Array._owned(buf, (m,), "<f8", "C")
+
+
+def _i32_codes_addr(codes):
+    """(address, keepalive) of int32 C-order codes, or (None, None)."""
+    if isinstance(codes, Array) and codes.dtype == "<i4" and codes._has_order("C"):
+        return addr_ro(codes, name="codes"), codes
+    return None, None
+
+
+def _f32_weights_addr(w):
+    if w is None:
+        return 0, None
+    if isinstance(w, Array) and w.dtype == "<f4" and w._has_order("C"):
+        return addr_ro(w, name="sample_weight"), w
+    return None, None
+
+
 def _f64_bits(x):
     import struct
     return struct.unpack("<q", struct.pack("<d", float(x)))[0]
@@ -1535,8 +1585,20 @@ def roc_curve(y_true, y_score, *, pos_label=None, sample_weight=None, drop_inter
 def precision_recall_curve_options(y_true, y_score, pos_label, sample_weight, drop_intermediate, numeric_mode):
     """precision_recall_curve with sample_weight or drop_intermediate=True
     (lane/metrics): Float64 outputs; the default call keeps its kernel."""
-    (fps, tps, thr), _ = _binary_curve(y_true, y_score, pos_label, sample_weight, numeric_mode,
-                                       "precision_recall_curve")
+    dev, _ = _binary_curve(y_true, y_score, pos_label, sample_weight, numeric_mode, "precision_recall_curve",
+                           lazy=True)
+    fn = _dev_epilogue(dev, "x_metrics_curve_pr")
+    if fn is not None and dev.last()[1] != 0:
+        # the three Float64 arrays straight from the arena words
+        # (x_metrics/epilogue.mojo pr_arrays; lane py-misc-metrics)
+        try:
+            bufs = [_f64_out(dev.c + 1) for _ in range(3)]
+            m = int(fn(dev.addr(), (dev.fps, dev.tps, dev.thr), dev.c, 1 if drop_intermediate else 0,
+                       tuple(b.buffer_info()[0] for b in bufs)))
+            return _f64_array(bufs[0], m + 1), _f64_array(bufs[1], m + 1), _f64_array(bufs[2], m)
+        except Exception:
+            pass
+    fps, tps, thr = dev.lists()
     if drop_intermediate and len(fps) > 2:
         keep = [0] + [i for i in range(1, len(fps) - 1)
                       if tps[i] != tps[i - 1] or tps[i + 1] != tps[i]] + [len(fps) - 1]
@@ -1555,7 +1617,20 @@ def precision_recall_curve_options(y_true, y_score, pos_label, sample_weight, dr
 def det_curve(y_true, y_score, *, pos_label=None, sample_weight=None, drop_intermediate=False,
               numeric_mode=None):
     """scikit-learn 1.9 `det_curve`: fpr, fnr, thresholds."""
-    (fps, tps, thr), classes = _binary_curve(y_true, y_score, pos_label, sample_weight, numeric_mode, "det_curve")
+    dev, classes = _binary_curve(y_true, y_score, pos_label, sample_weight, numeric_mode, "det_curve", lazy=True)
+    fn = _dev_epilogue(dev, "x_metrics_curve_det") if len(classes) == 2 else None
+    if fn is not None:
+        F, T = dev.last()
+        if F != 0 and T != 0:
+            # x_metrics/epilogue.mojo det_arrays (lane py-misc-metrics)
+            try:
+                bufs = [_f64_out(dev.c + 1) for _ in range(3)]
+                m = int(fn(dev.addr(), (dev.fps, dev.tps, dev.thr), dev.c, 1 if drop_intermediate else 0,
+                           tuple(b.buffer_info()[0] for b in bufs)))
+                return tuple(_f64_array(b, m) for b in bufs)
+            except Exception:
+                pass
+    fps, tps, thr = dev.lists()
     if drop_intermediate and len(fps) > 2:
         keep = [0] + [i for i in range(1, len(fps) - 1)
                       if tps[i] != tps[i - 1] or tps[i + 1] != tps[i]] + [len(fps) - 1]
@@ -1588,6 +1663,16 @@ def _trapezoid(x, y):
 def auc(x, y):
     """scikit-learn 1.9 `auc`: the trapezoid rule over a monotonic x
     (host binary64, a correctly rounded `fsum`)."""
+    xa, ya = _auc_f64(x), _auc_f64(y)
+    if xa is not None and ya is not None and xa.size == ya.size and xa.size >= 2:
+        fn = _epilogue("x_metrics_auc_xy", None)
+        if fn is not None:
+            # x_metrics/epilogue.mojo auc_xy (lane py-misc-metrics): the
+            # same differences, direction and trapezoid terms, fsum-ed
+            try:
+                return float(fn(addr_ro(xa, name="x"), addr_ro(ya, name="y"), xa.size))
+            except Exception:
+                pass
     x = [float(v) for v in flatten_mo(x)]
     y = [float(v) for v in flatten_mo(y)]
     if len(x) != len(y):
@@ -1602,6 +1687,24 @@ def auc(x, y):
         else:
             raise ValueError(f"x is neither increasing nor decreasing : {x}.")
     return float(direction * _trapezoid(x, y))
+
+
+def _auc_f64(v):
+    """A 1-D float32 or float64 buffer as a C-order Float64 Array (float32
+    widened exactly, as float() does), or None for anything else (lists,
+    integers, n-D): those keep the Python conversion."""
+    from ._buffer import view, typestr_of, _has_buffer, as_f64_c
+    if isinstance(v, (list, tuple)) or not (isinstance(v, Array) or _has_buffer(v)):
+        return None
+    try:
+        b = view(v, name="x")
+        try:
+            ok = b.ndim == 1 and typestr_of(b) in ("<f4", "<f8")
+        finally:
+            b.release()
+        return as_f64_c(v, ndim=1, name="x")[0] if ok else None
+    except Exception:
+        return None
 
 
 def _binary_auc(fps, tps, max_fpr, keep=None):
@@ -1679,8 +1782,12 @@ def _ovr(y_true, y_score, sample_weight, labels, caller, numeric_mode, keep_flag
             for v in code_list:
                 support[v] += 1
     else:
-        for v, wt in zip(code_list, w.tolist()):
-            support[v] += wt
+        native = _class_sums_native(codes, w, k, numeric_mode)
+        if native is not None:
+            support = native
+        else:
+            for v, wt in zip(code_list, w.tolist()):
+                support[v] += wt
     return curves, support, s, code_list, classes, w
 
 
@@ -1965,8 +2072,33 @@ def _proba(y_true, y_proba, labels, pos_label, caller):
     return codes, (packed if binary else a), k, binary
 
 
-def _class_weights(codes, w, k):
+def _sq(v):
+    """v * v: one correctly rounded product (DEVIATION 6106 allows + - * /
+    and sqrt; `v ** 2` called libm pow, lane py-misc-metrics)."""
+    return v * v
+
+
+def _class_sums_native(codes, w, k, numeric_mode):
+    """Per-class (weighted) counts, binary64 in row order, from the binding
+    (x_metrics/epilogue.mojo class_sums, lane py-misc-metrics), or None."""
+    fn = _epilogue("x_metrics_class_sums", numeric_mode)
+    caddr, ckeep = _i32_codes_addr(codes)
+    waddr, wkeep = _f32_weights_addr(w)
+    if fn is None or caddr is None or waddr is None or k <= 0:
+        return None
+    out = _f64_out(k)
+    try:
+        fn(caddr, waddr, codes.size, k, out.buffer_info()[0])
+    except Exception:
+        return None
+    return out.tolist()[:k]
+
+
+def _class_weights(codes, w, k, numeric_mode=None):
     """Per-class (weighted) counts and the total, binary64 in row order."""
+    per = _class_sums_native(codes, w, k, numeric_mode)
+    if per is not None:
+        return per, _fsum(per)
     cl = codes.tolist()
     per = [0.0] * k
     if w is None:
@@ -2018,7 +2150,7 @@ def d2_log_loss_score(y_true, y_proba=None, *, sample_weight=None, labels=None, 
     prog = _Prog()
     S, Y = prog.put(P), prog.put_i32(codes)
     num = _row_mean(S, k, Y, n, "logloss", w, numeric_mode, prog=prog, normalize=False)
-    per, total = _class_weights(codes, w, k)
+    per, total = _class_weights(codes, w, k, numeric_mode)
     eps = 1.1920928955078125e-07
     den = _fsum([wc * -pmath.log(min(max(wc / total, eps), 1 - eps)) for wc in per if wc])
     return float(1 - num / den)
@@ -2036,9 +2168,9 @@ def d2_brier_score(y_true, y_proba, *, sample_weight=None, pos_label=None, label
     prog = _Prog()
     S, Y = prog.put(P), prog.put_i32(codes)
     num = _row_mean(S, k, Y, n, "brier", w, numeric_mode, prog=prog)
-    per, total = _class_weights(codes, w, k)
+    per, total = _class_weights(codes, w, k, numeric_mode)
     freq = [v / total for v in per]
-    den = _fsum([per[c] * _fsum([((1.0 if j == c else 0.0) - freq[j]) ** 2 for j in range(k)])
+    den = _fsum([per[c] * _fsum([_sq((1.0 if j == c else 0.0) - freq[j]) for j in range(k)])
                       for c in range(k)]) / total
     return float(1 - num / den)
 
@@ -2131,7 +2263,20 @@ def ndcg_score(y_true, y_score, *, k=None, sample_weight=None, ignore_ties=False
     ideal = prog.alloc(n)
     prog.stage("row_metric", n, S, c, Y, gain, _ROW["dcg_ignore_ties" if ignore_ties else "dcg"], K, Dt)
     prog.stage("row_metric", n, Y, c, Y, ideal, _ROW["dcg"], K, Dt)
+    prog.want(gain, n)
+    prog.want(ideal, n)
     _execute(prog, numeric_mode)
+    fn = _epilogue("x_metrics_ndcg_mean", numeric_mode)
+    waddr, keep = _f32_weights_addr(w)
+    if fn is not None and waddr is not None:
+        # x_metrics/epilogue.mojo ndcg_mean (lane py-misc-metrics): the same
+        # ratios, products and fsums over the arena words
+        prog._check(gain, n)
+        prog._check(ideal, n)
+        try:
+            return float(fn(prog.arena.buffer_info()[0], gain, ideal, n, waddr))
+        except Exception:
+            pass
     g, i = prog.floats(gain, n), prog.floats(ideal, n)
     per = [a / b if b != 0 else 0.0 for a, b in zip(g, i)]
     if w is None:
@@ -2242,7 +2387,16 @@ def _entropy_counts(counts):
     return -_fsum([(c / total) * (pmath.log(c) - lt) for c in counts if c])
 
 
-def _mi_from_contingency(C):
+def _mi_from_contingency(C, numeric_mode=None):
+    fn = _epilogue("x_metrics_mi_contingency", numeric_mode)
+    if fn is not None and C and C[0]:
+        # x_metrics/epilogue.mojo mi_contingency (lane py-misc-metrics): the
+        # same terms per nonzero cell, the two loop-invariant logs hoisted
+        try:
+            flat = array.array("q", itertools.chain.from_iterable(C))
+            return float(fn(flat.buffer_info()[0], len(C), len(C[0])))
+        except Exception:
+            pass
     total = sum(v for row in C for v in row)
     pi = [sum(row) for row in C]
     pj = [sum(C[i][j] for i in range(len(C))) for j in range(len(C[0]))]
@@ -2282,7 +2436,7 @@ def normalized_mutual_info_score(labels_true, labels_pred, *, average_method="ar
     if len(ca) == len(cb) == 1 or len(ca) == len(cb) == 0:
         return 1.0
     C = _contingency(a, b, ca, cb, numeric_mode)
-    mi = _mi_from_contingency(C)
+    mi = _mi_from_contingency(C, numeric_mode)
     if mi == 0:
         return 0.0
     ht = _entropy_counts([sum(r) for r in C])
@@ -2367,7 +2521,7 @@ def adjusted_mutual_info_score(labels_true, labels_pred, *, average_method="arit
         return 0.0
     C = _contingency(a, b, ca, cb, numeric_mode)
     n = len(a)
-    mi = _mi_from_contingency(C)
+    mi = _mi_from_contingency(C, numeric_mode)
     rows = [sum(r) for r in C]
     cols = [sum(C[i][j] for i in range(len(C))) for j in range(len(cb))]
     emi = _expected_mi(rows, cols, n, numeric_mode)
@@ -2410,6 +2564,64 @@ def _centroids(Xa, codes, k, numeric_mode):
     return prog.floats(sums, k * d), counts, prog.floats(gsum, d)
 
 
+class _Cents:
+    """lane py-misc-metrics: `_centroids`' program left in place for the
+    host epilogue (x_metrics/epilogue.mojo centroids_f32, ch_extra,
+    db_score), which reads the per-cluster sums and the global sum words in
+    the arena instead of Python lists of k * d floats."""
+
+    def __init__(self, Xa, codes, k, numeric_mode):
+        n, d = Xa.shape
+        prog = _Prog()
+        X = prog.put(Xa)
+        L = prog.put_i32(codes)
+        off, self.sums = _group(prog, L, n, k, values=X, vstride=d, width=d)
+        zero = prog.scratch(n)
+        prog.stage("pair_key", n, 0, 0, zero, 1, 2)
+        _, self.gsum = _group(prog, zero, n, 1, values=X, vstride=d, width=d)
+        _execute(prog, numeric_mode)
+        o = prog.ints(off, k + 1)
+        self.counts = [o[i + 1] - o[i] for i in range(k)]
+        self.q = array.array("q", self.counts)
+        prog._check(self.sums, k * d)
+        prog._check(self.gsum, d)
+        self.prog, self.k, self.d = prog, k, d
+
+    def args(self):
+        return self.prog.arena.buffer_info()[0], self.sums
+
+    def f32(self, fn):
+        """The Float32 centroid words `_row_dists` uploads."""
+        k, d = self.k, self.d
+        out = empty((k * d,), "<f4")
+        fn(*self.args(), self.q.buffer_info()[0], k, d, addr_ro(out, name="centroids"))
+        return out
+
+
+def _cluster_native(Xa, codes, k, numeric_mode, name):
+    """(_Cents, the centroid entry, the score entry) when the binding has
+    them, else None."""
+    cfn = _epilogue("x_metrics_centroids", numeric_mode)
+    sfn = _epilogue(name, numeric_mode)
+    if cfn is None or sfn is None:
+        return None
+    return _Cents(Xa, codes, k, numeric_mode), cfn, sfn
+
+
+def _row_dists_f32(Xa, codes, C32, k, root, numeric_mode):
+    """`_row_dists` given the Float32 centroid words."""
+    n, d = Xa.shape
+    prog = _Prog()
+    X = prog.put(Xa)
+    L = prog.put_i32(codes)
+    C = prog.put(C32)
+    out = prog.scratch(n)
+    prog.stage("row_centroid_dist", n, X, d, L, C, out, 1 if root else 0)
+    off, per = _group(prog, L, n, k, values=out)
+    _execute(prog, numeric_mode)
+    return prog.floats(per, k)
+
+
 def _row_dists(Xa, codes, cents, root, numeric_mode):
     n, d = Xa.shape
     k = len(cents) // d
@@ -2429,10 +2641,22 @@ def calinski_harabasz_score(X, labels, *, numeric_mode=None):
     within-cluster dispersion, scaled by (n - k) / (k - 1)."""
     Xa, codes, k = _cluster_inputs(X, labels, "calinski_harabasz_score")
     n, d = Xa.shape
+    nat = _cluster_native(Xa, codes, k, numeric_mode, "x_metrics_ch_extra")
+    if nat is not None:
+        cen, cfn, sfn = nat
+        try:
+            # x_metrics/epilogue.mojo ch_extra (lane py-misc-metrics)
+            C32 = cen.f32(cfn)
+            extra = float(sfn(*cen.args(), cen.gsum, cen.q.buffer_info()[0], k, d, n))
+        except Exception:
+            C32 = None
+        if C32 is not None:
+            intra = _fsum(_row_dists_f32(Xa, codes, C32, k, False, numeric_mode))
+            return float(1.0 if intra == 0.0 else extra * (n - k) / (intra * (k - 1.0)))
     sums, counts, gsum = _centroids(Xa, codes, k, numeric_mode)
     cents = [sums[i * d + c] / counts[i] for i in range(k) for c in range(d)]
     mean = [v / n for v in gsum]
-    extra = _fsum([counts[i] * _fsum([(cents[i * d + c] - mean[c]) ** 2 for c in range(d)])
+    extra = _fsum([counts[i] * _fsum([_sq(cents[i * d + c] - mean[c]) for c in range(d)])
                         for i in range(k)])
     intra = _fsum(_row_dists(Xa, codes, cents, False, numeric_mode))
     return float(1.0 if intra == 0.0 else extra * (n - k) / (intra * (k - 1.0)))
@@ -2443,10 +2667,24 @@ def davies_bouldin_score(X, labels, *, numeric_mode=None):
     worst (s_i + s_j) / d(c_i, c_j)."""
     Xa, codes, k = _cluster_inputs(X, labels, "davies_bouldin_score")
     n, d = Xa.shape
+    nat = _cluster_native(Xa, codes, k, numeric_mode, "x_metrics_db_score")
+    if nat is not None:
+        cen, cfn, sfn = nat
+        try:
+            C32 = cen.f32(cfn)
+        except Exception:
+            C32 = None
+        if C32 is not None:
+            per = array.array("d", _row_dists_f32(Xa, codes, C32, k, True, numeric_mode))
+            try:
+                # x_metrics/epilogue.mojo db_score (lane py-misc-metrics)
+                return float(sfn(*cen.args(), cen.q.buffer_info()[0], k, d, per.buffer_info()[0]))
+            except Exception:
+                pass
     sums, counts, _ = _centroids(Xa, codes, k, numeric_mode)
     cents = [sums[i * d + c] / counts[i] for i in range(k) for c in range(d)]
     intra = [v / counts[i] for i, v in enumerate(_row_dists(Xa, codes, cents, True, numeric_mode))]
-    dist = [[pmath.sqrt(_fsum([(cents[i * d + c] - cents[j * d + c]) ** 2 for c in range(d)]))
+    dist = [[pmath.sqrt(_fsum([_sq(cents[i * d + c] - cents[j * d + c]) for c in range(d)]))
              for j in range(k)] for i in range(k)]
     close = lambda v: abs(v) <= 1e-8
     if all(close(v) for v in intra) or all(close(v) for row in dist for v in row):

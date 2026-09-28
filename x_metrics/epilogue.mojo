@@ -392,3 +392,365 @@ def row_sum_range(s_addr: Int, n: Int, k: Int, out_addr: Int):
             lo = v
     out[0] = hi
     out[1] = lo
+
+
+# ---------------------------------------------------------------------------
+# lane py-misc-metrics (2026-09-28): the rest of DEVIATION 6106's O(n) and
+# O(cells) epilogues. Each is the Python it stands in for in
+# python/mojolearn/_expansion_metrics.py, operation for operation, in the
+# same order: + - / correctly rounded, every product `pinned_mul_f64`,
+# `fsum_strict` for `_fsum` (CPython's math.fsum, raising wherever the
+# Python would leave math.fsum: a non-finite term, an intermediate
+# overflow, a non-finite sum), `portable_log_c` for `_portable_math.log`,
+# IEEE sqrt for `_portable_math.sqrt`. Any case the Python handles by a
+# warning, an exception or a non-finite value raises here, and the caller
+# falls back to its Python, which decides it.
+# ---------------------------------------------------------------------------
+
+@always_inline
+def _finite(x: Float64) -> Bool:
+    return (x - x) == 0.0
+
+
+def fsum_strict(vals: List[Float64]) raises -> Float64:
+    """`_fsum` where it is CPython's math.fsum: every term finite, no
+    partial overflows, a finite sum (a zero sum is +0.0); anything else
+    raises (the Python then takes its portable route)."""
+    for k in range(len(vals)):
+        if not _finite(vals[k]):
+            raise Error("x_metrics epilogue: a non-finite fsum term goes the Python way")
+    # math.fsum's intermediate-overflow test: a partial sum that is not
+    # finite. With finite terms the running magnitude is bounded by the
+    # sum of |terms|; when that bound is finite no partial can overflow.
+    var bound: Float64 = 0.0
+    for k in range(len(vals)):
+        bound = bound + abs(vals[k])
+    if not (bound < 8.98846567431158e307):  # 2^1023: no partial can reach the overflow threshold
+        raise Error("x_metrics epilogue: a possible fsum overflow goes the Python way")
+    var s = fsum(vals)
+    if not _finite(s):
+        raise Error("x_metrics epilogue: a non-finite sum goes the Python way")
+    return s
+
+
+@always_inline
+def _dp(p: Int) -> MutPointer[Float64, MutAnyOrigin]:
+    return MutPointer[Float64, MutAnyOrigin](unsafe_from_address=p)
+
+
+@always_inline
+def _qp(p: Int) -> MutPointer[Int64, MutAnyOrigin]:
+    return MutPointer[Int64, MutAnyOrigin](unsafe_from_address=p)
+
+
+def _pr_keep(a: Int, tps: Int, c: Int, drop: Bool) -> List[Int]:
+    """precision_recall_curve / det_curve's drop_intermediate rule: the
+    first, the last and every i with tps[i] != tps[i-1] or tps[i+1] !=
+    tps[i] (applied only when drop and c > 2)."""
+    var out = List[Int](capacity=c)
+    if not drop or c <= 2:
+        for i in range(c):
+            out.append(i)
+        return out^
+    out.append(0)
+    for i in range(1, c - 1):
+        if _w(a, tps + i) != _w(a, tps + i - 1) or _w(a, tps + i + 1) != _w(a, tps + i):
+            out.append(i)
+    out.append(c - 1)
+    return out^
+
+
+def pr_arrays(a: Int, fps: Int, tps: Int, thr: Int, c: Int, drop: Bool,
+              out_prec: Int, out_rec: Int, out_thr: Int) raises -> Int:
+    """`precision_recall_curve_options` for tps[c-1] != 0 (the caller
+    checks): precision (m + 1, the last 1.0), recall (m + 1, the last 0.0),
+    thresholds (m), each reversed, m = the kept points. Returns m."""
+    if c <= 0:
+        raise Error("x_metrics epilogue: an empty curve goes the Python way")
+    var T = _w(a, tps + c - 1)
+    if not (T != 0.0):
+        raise Error("x_metrics epilogue: no positives goes the Python way")
+    var ks = _pr_keep(a, tps, c, drop)
+    var m = len(ks)
+    var pp = _dp(out_prec)
+    var pr = _dp(out_rec)
+    var ph = _dp(out_thr)
+    for j in range(m):
+        var i = ks[j]
+        var t = _w(a, tps + i)
+        var d = t + _w(a, fps + i)
+        var r = m - 1 - j
+        pp[r] = t / d if d != 0.0 else 0.0
+        pr[r] = t / T
+        ph[r] = _w(a, thr + i)
+    pp[m] = 1.0
+    pr[m] = 0.0
+    return m
+
+
+def _bisect_right(v: List[Float64], x: Float64) -> Int:
+    var lo = 0
+    var hi = len(v)
+    while lo < hi:
+        var mid = (lo + hi) // 2
+        if x < v[mid]:
+            hi = mid
+        else:
+            lo = mid + 1
+    return lo
+
+
+def _bisect_left(v: List[Float64], x: Float64) -> Int:
+    var lo = 0
+    var hi = len(v)
+    while lo < hi:
+        var mid = (lo + hi) // 2
+        if v[mid] < x:
+            lo = mid + 1
+        else:
+            hi = mid
+    return lo
+
+
+def det_arrays(a: Int, fps: Int, tps: Int, thr: Int, c: Int, drop: Bool,
+               out_fpr: Int, out_fnr: Int, out_thr: Int) raises -> Int:
+    """`det_curve` after its two-class check: the kept points behind a
+    leading (0, 0, +inf), fns = T - tps, the slice [first, last) of
+    bisect_right(fps, fps[0]) - 1 and bisect_left(tps, T) + 1, fpr = fps /
+    F and fnr = fns / T over it, each reversed. F and T must be nonzero (a
+    zero goes the Python way, which raises or warns). Returns the length."""
+    if c <= 0:
+        raise Error("x_metrics epilogue: an empty curve goes the Python way")
+    var ks = _pr_keep(a, tps, c, drop)
+    var m = len(ks) + 1
+    var f = List[Float64](capacity=m)
+    var t = List[Float64](capacity=m)
+    f.append(0.0)
+    t.append(0.0)
+    for j in range(len(ks)):
+        f.append(_w(a, fps + ks[j]))
+        t.append(_w(a, tps + ks[j]))
+    var T = t[m - 1]
+    var F = f[m - 1]
+    if not (T != 0.0 and F != 0.0):
+        raise Error("x_metrics epilogue: an empty class goes the Python way")
+    var right = _bisect_right(f, f[0])
+    var first = right - 1 if right > 0 else 0
+    var last = min(_bisect_left(t, T) + 1, m)
+    var L = last - first if last > first else 0
+    var pf = _dp(out_fpr)
+    var pn = _dp(out_fnr)
+    var ph = _dp(out_thr)
+    for q in range(L):
+        var i = first + q
+        var r = L - 1 - q
+        pf[r] = f[i] / F
+        pn[r] = (T - t[i]) / T
+        if i == 0:
+            ph[r] = bitcast[DType.float64](UInt64(0x7FF0000000000000))
+        else:
+            ph[r] = _w(a, thr + ks[i - 1])
+    return L
+
+
+def ndcg_mean(a: Int, gain: Int, ideal: Int, n: Int, w_addr: Int) raises -> Float64:
+    """`ndcg_score`'s epilogue: per = g / i (0.0 where i == 0); unweighted
+    fsum(per) / n, weighted fsum(per * w) / fsum(w), w the Float32 weights
+    at w_addr (0: none) widened exactly."""
+    var per = List[Float64](capacity=n)
+    for r in range(n):
+        var g = _w(a, gain + r)
+        var i = _w(a, ideal + r)
+        per.append(g / i if i != 0.0 else 0.0)
+    if w_addr == 0:
+        return fsum_strict(per) / Float64(n)
+    var W = FP(unsafe_from_address=w_addr)
+    var wl = List[Float64](capacity=n)
+    for r in range(n):
+        wl.append(Float64(W.unsafe_load(r)))
+    var terms = List[Float64](capacity=n)
+    for r in range(n):
+        terms.append(pinned_mul_f64(per[r], wl[r]))
+    var den = fsum_strict(wl)
+    if den == 0.0:
+        raise Error("x_metrics epilogue: a zero weight total goes the Python way")
+    return fsum_strict(terms) / den
+
+
+def class_sums(codes_addr: Int, w_addr: Int, n: Int, k: Int, out_addr: Int) raises:
+    """`_class_weights` / `_ovr`'s weighted support: per[c] += 1 (w_addr 0)
+    or += w[r] (the Float32 weight widened), binary64, in row order; a code
+    outside [0, k) raises (Python would index from the end or fail)."""
+    var C = IP(unsafe_from_address=codes_addr)
+    var out = _dp(out_addr)
+    for c in range(k):
+        out[c] = 0.0
+    var W = FP(unsafe_from_address=w_addr if w_addr != 0 else codes_addr)
+    for r in range(n):
+        var c = Int(C.unsafe_load(r))
+        if c < 0 or c >= k:
+            raise Error("x_metrics epilogue: a class code outside [0, k) goes the Python way")
+        if w_addr == 0:
+            out[c] = out[c] + 1.0
+        else:
+            out[c] = out[c] + Float64(W.unsafe_load(r))
+
+
+def auc_xy(x_addr: Int, y_addr: Int, n: Int) raises -> Float64:
+    """public `auc` over n >= 2 binary64 points: dx, the direction (-1 when
+    every dx <= 0 and one < 0; a mixed x raises for the Python's message),
+    direction * trapezoid (fsum of (dx) * (y[i] + y[i-1]) / 2)."""
+    var X = _dp(x_addr)
+    var Y = _dp(y_addr)
+    if n < 2:
+        raise Error("x_metrics epilogue: fewer than 2 points go the Python way")
+    var neg = False
+    var pos = False
+    for i in range(1, n):
+        var d = X[i] - X[i - 1]
+        if d < 0.0:
+            neg = True
+        elif d > 0.0:
+            pos = True
+        elif not (d <= 0.0):
+            pos = True  # NaN: not <= 0
+    var direction: Float64 = 1.0
+    if neg:
+        if pos:
+            raise Error("x_metrics epilogue: a non-monotonic x goes the Python way")
+        direction = -1.0
+    var terms = List[Float64](capacity=n - 1)
+    for i in range(1, n):
+        terms.append(pinned_mul_f64(X[i] - X[i - 1], Y[i] + Y[i - 1]) / 2.0)
+    return direction * fsum_strict(terms)
+
+
+def mi_contingency(c_addr: Int, ka: Int, kb: Int) raises -> Float64:
+    """`_mi_from_contingency` of the ka x kb Int64 counts (row major) at
+    c_addr: the same terms nm * (log v - log total) + nm * log_outer, with
+    log_outer = (-log(pi pj) + log(sum pi)) + log(sum pj) (the two
+    loop-invariant logs hoisted: the same values), |t| < eps to 0.0,
+    max(fsum, 0.0)."""
+    var C = _qp(c_addr)
+    var pi = List[Int](length=ka, fill=0)
+    var pj = List[Int](length=kb, fill=0)
+    var total = 0
+    for i in range(ka):
+        for j in range(kb):
+            var v = Int(C[i * kb + j])
+            if v < 0:
+                raise Error("x_metrics epilogue: a negative count goes the Python way")
+            pi[i] += v
+            pj[j] += v
+            total += v
+    if ka == 1 or kb == 1:
+        return 0.0
+    if total <= 0 or total >= (1 << 31):
+        raise Error("x_metrics epilogue: contingency size goes the Python way")
+    var ft = Float64(total)
+    var lt = portable_log_c(ft)
+    var lsi = portable_log_c(ft)   # log(sum(pi)); sum(pi) == total
+    var lsj = portable_log_c(ft)   # log(sum(pj))
+    var terms = List[Float64]()
+    for i in range(ka):
+        for j in range(kb):
+            var v = Int(C[i * kb + j])
+            if v == 0:
+                continue
+            var nm = Float64(v) / ft
+            var log_outer = (-portable_log_c(Float64(pi[i] * pj[j])) + lsi) + lsj
+            var t = pinned_mul_f64(nm, portable_log_c(Float64(v)) - lt) + pinned_mul_f64(nm, log_outer)
+            terms.append(0.0 if abs(t) < 2.220446049250313e-16 else t)
+    var s = fsum_strict(terms)
+    if s > 0.0:
+        return s
+    return 0.0
+
+
+def _cents(a: Int, sums: Int, counts_addr: Int, k: Int, d: Int) raises -> List[Float64]:
+    """cents[i*d + c] = sums[i*d + c] / counts[i] (Float32 sums widened,
+    Int64 counts, exact below 2^53)."""
+    var Q = _qp(counts_addr)
+    var out = List[Float64](capacity=k * d)
+    for i in range(k):
+        var cnt = Int(Q[i])
+        if cnt <= 0 or cnt >= (1 << 53):
+            raise Error("x_metrics epilogue: a cluster count goes the Python way")
+        var fc = Float64(cnt)
+        for c in range(d):
+            out.append(_w(a, sums + i * d + c) / fc)
+    return out^
+
+
+def centroids_f32(a: Int, sums: Int, counts_addr: Int, k: Int, d: Int, out_addr: Int) raises:
+    """`_row_dists`'s centroid words: Float32(cents) (round to nearest even,
+    `_f32`)."""
+    var cs = _cents(a, sums, counts_addr, k, d)
+    var O = FP(unsafe_from_address=out_addr)
+    for q in range(k * d):
+        O.unsafe_store(q, Float32(cs[q]))
+
+
+def ch_extra(a: Int, sums: Int, gsum: Int, counts_addr: Int, k: Int, d: Int, n: Int) raises -> Float64:
+    """calinski_harabasz_score's between-cluster dispersion: fsum over i of
+    counts[i] * fsum over c of (cents - mean)^2 (the square a product),
+    mean = gsum / n."""
+    var cs = _cents(a, sums, counts_addr, k, d)
+    var Q = _qp(counts_addr)
+    var fn = Float64(n)
+    var mean = List[Float64](capacity=d)
+    for c in range(d):
+        mean.append(_w(a, gsum + c) / fn)
+    var outer = List[Float64](capacity=k)
+    var inner = List[Float64](length=d, fill=0.0)
+    for i in range(k):
+        for c in range(d):
+            var e = cs[i * d + c] - mean[c]
+            inner[c] = pinned_mul_f64(e, e)
+        outer.append(pinned_mul_f64(Float64(Int(Q[i])), fsum_strict(inner)))
+    return fsum_strict(outer)
+
+
+def db_score(a: Int, sums: Int, counts_addr: Int, k: Int, d: Int, per_addr: Int) raises -> Float64:
+    """davies_bouldin_score after its row distances (per_addr: k binary64
+    per-cluster sums): intra = per / counts, dist = sqrt(fsum of squared
+    centroid differences), 0.0 when every intra or every dist is within
+    1e-8 of 0, else fsum over i of max_j (intra_i + intra_j) / dist_ij
+    (inf for a zero dist), over k."""
+    from std.math import sqrt
+    var cs = _cents(a, sums, counts_addr, k, d)
+    var Q = _qp(counts_addr)
+    var P = _dp(per_addr)
+    var intra = List[Float64](capacity=k)
+    for i in range(k):
+        intra.append(P[i] / Float64(Int(Q[i])))
+    var dist = List[Float64](capacity=k * k)
+    var inner = List[Float64](length=d, fill=0.0)
+    for i in range(k):
+        for j in range(k):
+            for c in range(d):
+                var e = cs[i * d + c] - cs[j * d + c]
+                inner[c] = pinned_mul_f64(e, e)
+            dist.append(sqrt(fsum_strict(inner)))
+    var all_i = True
+    for i in range(k):
+        if not (abs(intra[i]) <= 1e-8):
+            all_i = False
+    var all_d = True
+    for q in range(k * k):
+        if not (abs(dist[q]) <= 1e-8):
+            all_d = False
+    if all_i or all_d:
+        return 0.0
+    var inf = bitcast[DType.float64](UInt64(0x7FF0000000000000))
+    var scores = List[Float64](capacity=k)
+    for i in range(k):
+        var best = -inf
+        for j in range(k):
+            var dd = dist[i * k + j]
+            var den = dd if dd != 0.0 else inf
+            var v = (intra[i] + intra[j]) / den
+            if v > best:   # Python's max(best, v): v only when it is larger
+                best = v
+        scores.append(best)
+    return fsum_strict(scores) / Float64(k)
