@@ -385,6 +385,11 @@ struct TDepthwiseWorkspace(Movable):
     var max_leaves_key: Int
     var stat_count_key: Int
     var argmax_blocks_key: Int
+    var final_ready: Bool
+    """NS_INHERIT_PARTITION: the last fit left its leaves' row ranges in
+    `final_offsets` / `final_sizes`, in the MODEL's leaf order."""
+    var final_offsets: List[Int]
+    var final_sizes: List[Int]
 
     var region_score: DeviceBuffer[DType.float32]
     var region_bin: DeviceBuffer[DType.uint32]
@@ -527,6 +532,9 @@ struct TDepthwiseWorkspace(Movable):
         qh_live: Bool,
     ) raises:
         self.max_leaves_key = max_leaves
+        self.final_ready = False
+        self.final_offsets = List[Int]()
+        self.final_sizes = List[Int]()
         self.stat_count_key = stat_count
         self.argmax_blocks_key = argmax_blocks
         self.hist_cells_key = hist_cells
@@ -804,6 +812,39 @@ comptime LG_EXACT_BATCH_WIDTH = (
         16 if is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH16"]() else 32
     )
 )
+
+#: FAST on Apple (trees-apple3): THE ESTIMATOR INHERITS THE SEARCHER'S
+#: PARTITION. When the tree is grown the row index already holds every row
+#: grouped by leaf: a split leaves "goes left" rows first in the parent's
+#: range and the left child keeps that range's start, so the leaves lie in
+#: the index in the model's own leaf order (left subtree first), and the
+#: index restarts as 0..n-1 every tree and is only ever stably partitioned,
+#: so rows ascend inside each leaf. That is the partition
+#: `compute_non_symmetric_bins_for_model` + the device partitioner rebuild
+#: from the model (one tree walk per row, a radix sort and a host wait per
+#: tree), and it is what CatBoost's estimator inherits for the permutation
+#: the tree was grown on. The fit records the leaves' ranges here and
+#: `doc_parallel_boosting` hands them to the estimator when the fit has one
+#: permutation. OPT-IN until its A/B passes: `-D
+#: MOJOLEARN_GBDT_NS_INHERIT_PARTITION`.
+comptime NS_INHERIT_PARTITION = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_GBDT_NS_INHERIT_PARTITION"]()
+)
+
+
+def _path_before(a: TLeafPath, b: TLeafPath) -> Bool:
+    """Whether leaf `a` precedes leaf `b` in the model's leaf order: the
+    left child (`SPLIT_VALUE_ZERO`) of their last common node first."""
+    var n = len(a.directions)
+    if len(b.directions) < n:
+        n = len(b.directions)
+    for i in range(n):
+        if a.directions[i] != b.directions[i]:
+            return a.directions[i] < b.directions[i]
+    return len(a.directions) < len(b.directions)
+
 
 comptime LG_NODE_UNKNOWN = 0
 comptime LG_NODE_DEFINED = 1
@@ -1343,6 +1384,8 @@ def fit_non_symmetric_tree[
             )
         )
 
+    dws[0].final_ready = False
+
     ref hist = ws[0].hist
     ref acc_i32 = ws[0].acc_i32
     ref block_hist = ws[0].block_hist
@@ -1660,6 +1703,11 @@ def fit_non_symmetric_tree[
     var result_paths = List[TLeafPath]()
     var result_weights = List[Float64]()
     var result_values = List[List[Float32]]()
+    # NS_INHERIT_PARTITION: the result leaves' row ranges, handed to the
+    # pool after the growth loop
+    var inherit_offsets = List[Int]()
+    var inherit_sizes = List[Int]()
+    var inherit_ready = False
 
     # Their `while (true)`. The bound is OURS, and it is POLICY-SHAPED,
     # which is the whole point of this block.
@@ -3163,6 +3211,8 @@ def fit_non_symmetric_tree[
             # leaf the device split ahead of time is the sum of the leaf
             # slots below it (its rows are their rows), in Float64.
             var lg_sums = List[Float64]()
+            # the rows of each result leaf (NS_INHERIT_PARTITION)
+            var final_rows = List[Int]()
             comptime if LG_EXACT_BATCH:
                 if lossguide:
                     num_leaves = len(lg_final)
@@ -3172,6 +3222,7 @@ def fit_non_symmetric_tree[
                         var base = len(lg_sums)
                         for _ in range(stat_count):
                             lg_sums.append(Float64(0.0))
+                        final_rows.append(0)
                         while len(stack) > 0:
                             var node = stack.pop()
                             if lg_node_left[node] >= 0:
@@ -3179,6 +3230,7 @@ def fit_non_symmetric_tree[
                                 stack.append(lg_node_left[node])
                             else:
                                 var slot = lg_node_leaf[node]
+                                final_rows[fi] += leaves[slot].size
                                 for st in range(stat_count):
                                     lg_sums[base + st] += Float64(
                                         h_part_stats.unsafe_ptr().unsafe_load(
@@ -3251,6 +3303,29 @@ def fit_non_symmetric_tree[
                         lg_path_done = True
                 if not lg_path_done:
                     result_paths.append(leaves[leaf_id].path.copy())
+                    final_rows.append(leaves[leaf_id].size)
+            comptime if NS_INHERIT_PARTITION:
+                # the result leaves in the model's leaf order, which is
+                # their order along the row index; a total that is not
+                # n_rows leaves the record unset and the caller rebuilds
+                # the partition from the model
+                if len(final_rows) == num_leaves:
+                    var order = List[Int]()
+                    for k in range(num_leaves):
+                        var at = len(order)
+                        order.append(k)
+                        while at > 0 and _path_before(
+                            result_paths[k], result_paths[order[at - 1]]
+                        ):
+                            order[at] = order[at - 1]
+                            at -= 1
+                        order[at] = k
+                    var running = 0
+                    for k in range(num_leaves):
+                        inherit_offsets.append(running)
+                        inherit_sizes.append(final_rows[order[k]])
+                        running += final_rows[order[k]]
+                    inherit_ready = running == n_rows
             break
 
     # THE MODEL ITSELF, last rung of the ladder. If every stage above
@@ -3269,6 +3344,11 @@ def fit_non_symmetric_tree[
         trace.record_list_f32(tag_prefix + "final.leafweights", flat_w)
 
     # `return BuildTreeLikeModel<TModel>(leaves, leavesWeights, leavesValues)`
+    comptime if NS_INHERIT_PARTITION:
+        dws[0].final_offsets = inherit_offsets.copy()
+        dws[0].final_sizes = inherit_sizes.copy()
+        dws[0].final_ready = inherit_ready
+
     stage_times.begin(ctx)
     var model = build_non_symmetric_tree(
         result_paths, result_weights, result_values
