@@ -220,3 +220,14 @@ second batch also costs ~124 ms (label.vertexdeg batch 2/2) on the M4 Pro.
 Digests equal (9c8ea257cb04e118 / 534fe4e04df01f06). The 10 GB dense adjacency the
 sparse RBC arm never reads was most of the fit (the phases sum to ~40 ms).
 Tried and reverted: eight label-propagation passes per host read (weak_cc is 7 ms).
+
+## FAST builds: two stale build gates fixed
+
+The FAST runs failed in the bindings' Darwin smoke gates, not in the code:
+build_mixture.sh asserted GaussianMixture(covariance_type='diag') is refused (the
+x_cluster route serves it since option parity) and build_hdbscan.sh asserted
+probabilities_ is refused (answered since DEVIATION 5116). Both now accept the answer
+(with a shape/range check) or a refusal by name (b99650ef3, dc5a20a43). The FAST
+before/after pairs run with the builds in the command (MOJOLEARN_SKIP_BUILD_GATE, in
+dependency order x_decomp, x_cluster, metrics, estimators, solver, mixture, hdbscan),
+because 5b622763d carries the stale gates.
