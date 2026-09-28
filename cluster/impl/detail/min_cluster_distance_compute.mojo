@@ -50,6 +50,8 @@ what must fit the index type.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 from cluster.multi_gpu import assignment_device_count, assignment_parallel
 
 from core.gemm import gemm_nt
@@ -102,6 +104,18 @@ def compute_centroid_norms(
         grid_dim=(n_clusters, 1, 1),
         block_dim=(NORM_TPB, 1, 1),
     )
+
+
+#: lane cluster-apple2 TRIAL (opt-in): on Apple, d in [16, 32) takes the
+#: 64 x 64 Policy4x4 tile (kblk 32) instead of Policy4x4Skinny. The policy
+#: never reaches a bit: every accumulator sums its k terms ascending under
+#: either tile, the zero-padded terms add a +0 product, and an accumulator's
+#: sign of zero cannot reach `xn + yn - 2 acc` (xn + yn >= +0, and
+#: +0 + -0 = +0), so the distance and the argmin are the same words.
+comptime FUSED_APPLE_NORMAL_TRIAL = (
+    has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_FUSED_APPLE_NORMAL_TRIAL"]()
+)
 
 
 def _launch_fused[
@@ -223,7 +237,9 @@ def min_cluster_and_distance_compute(
     var vl = fused_veclen_for(
         n_features, Int(x.unsafe_ptr()), Int(centroids.unsafe_ptr())
     )
-    if fused_is_skinny(n_features):
+    if fused_is_skinny(n_features) and not (
+        FUSED_APPLE_NORMAL_TRIAL and n_features >= 16
+    ):
         if vl == 4:
             _launch_fused[
                 4, FUSED_SKINNY_KBLK, FUSED_SKINNY_TR, FUSED_SKINNY_TC
