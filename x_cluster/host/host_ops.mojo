@@ -57,6 +57,8 @@ comptime COV_AB = 4
 comptime GAUSS_W = 8
 #: Columns per vector in the host availability update.
 comptime AP_W = 8
+#: Floats of padding around a task's scratch block (two 64-byte lines).
+comptime SCRATCH_PAD = 32
 
 
 
@@ -328,7 +330,9 @@ struct HostOps(ClusterOps):
 
         def block(bi: Int) {imm px, imm pm, imm pp, imm pd, imm d, imm kc}:
             var i0 = bi * GAUSS_W
-            var diff = List[SIMD[DType.float32, GAUSS_W]](length=d, fill=SIMD[DType.float32, GAUSS_W](0))
+            # padded per-task scratch (no cache line shared with another task)
+            var dscr = List[SIMD[DType.float32, GAUSS_W]](length=d + 8, fill=SIMD[DType.float32, GAUSS_W](0))
+            var diff = dscr.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]() + 4
             for k in range(kc):
                 for a in range(d):
                     var xv = SIMD[DType.float32, GAUSS_W](0)
@@ -344,6 +348,7 @@ struct HostOps(ClusterOps):
                     acc = ftz_v[GAUSS_W](acc + ftz_v[GAUSS_W](mul_v[GAUSS_W](y, y)))
                 comptime for l in range(GAUSS_W):
                     pd[(i0 + l) * kc + k] = acc[l]
+            _ = dscr^
 
         host_cells(block, n_blocks, kc * d * d * 2)
         for t in range(n_blocks * GAUSS_W * kc, n * kc):
@@ -414,42 +419,48 @@ struct HostOps(ClusterOps):
             var a0 = (t - k * a_blocks) * COV_AB
             var a1 = min(a0 + COV_AB, d)
             var na = a1 - a0
-            var accv = List[SIMD[DType.float32, MOMENTS_W]](length=na * n_vec if na * n_vec > 0 else 1, fill=SIMD[DType.float32, MOMENTS_W](0))
+            # ONE scratch block per task, padded by SCRATCH_PAD floats on
+            # both sides, so no two tasks' accumulators share a cache line.
             var tail = d - n_vec * MOMENTS_W
-            var accs = List[Float32](length=na * tail if na * tail > 0 else 1, fill=Float32(0))
-            var dbv = List[SIMD[DType.float32, MOMENTS_W]](length=n_vec if n_vec > 0 else 1, fill=SIMD[DType.float32, MOMENTS_W](0))
-            var dbs = List[Float32](length=tail if tail > 0 else 1, fill=Float32(0))
+            var nv_acc = na * n_vec * MOMENTS_W
+            var n_s = na * tail
+            var scratch = List[Float32](length=2 * SCRATCH_PAD + nv_acc + n_s + d, fill=Float32(0))
+            var accv = scratch.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]() + SCRATCH_PAD
+            var accs = accv + nv_acc
+            var db = accs + n_s
             for i in range(n):
                 var r = pr[i * kc + k]
                 var rv = SIMD[DType.float32, MOMENTS_W](r)
                 var xrow = px + i * d
                 for q in range(n_vec):
                     var b0 = q * MOMENTS_W
-                    dbv[q] = ftz_v[MOMENTS_W](ftz_v[MOMENTS_W]((xrow + b0).load[width=MOMENTS_W]()) - (pm + k * d + b0).load[width=MOMENTS_W]())
-                for q in range(tail):
-                    var b = n_vec * MOMENTS_W + q
-                    dbs[q] = ftz(ftz(xrow[b]) - pm[k * d + b])
+                    (db + b0).store(ftz_v[MOMENTS_W](ftz_v[MOMENTS_W]((xrow + b0).load[width=MOMENTS_W]()) - (pm + k * d + b0).load[width=MOMENTS_W]()))
+                for b in range(n_vec * MOMENTS_W, d):
+                    db[b] = ftz(ftz(xrow[b]) - pm[k * d + b])
                 for aa in range(na):
                     var a = a0 + aa
                     var da = ftz(ftz(xrow[a]) - pm[k * d + a])
                     var dav = SIMD[DType.float32, MOMENTS_W](da)
                     for q in range(n_vec):
-                        var prod = ftz_v[MOMENTS_W](mul_v[MOMENTS_W](dav, dbv[q]))
-                        accv[aa * n_vec + q] = ftz_v[MOMENTS_W](accv[aa * n_vec + q] + ftz_v[MOMENTS_W](mul_v[MOMENTS_W](rv, prod)))
+                        var slot = accv + (aa * n_vec + q) * MOMENTS_W
+                        var prod = ftz_v[MOMENTS_W](mul_v[MOMENTS_W](dav, (db + q * MOMENTS_W).load[width=MOMENTS_W]()))
+                        slot.store(ftz_v[MOMENTS_W](slot.load[width=MOMENTS_W]() + ftz_v[MOMENTS_W](mul_v[MOMENTS_W](rv, prod))))
                     for q in range(tail):
-                        accs[aa * tail + q] = ftz(accs[aa * tail + q] + ftz(identical_mul(r, ftz(identical_mul(da, dbs[q])))))
+                        var b = n_vec * MOMENTS_W + q
+                        accs[aa * tail + q] = ftz(accs[aa * tail + q] + ftz(identical_mul(r, ftz(identical_mul(da, db[b])))))
             for aa in range(na):
                 var a = a0 + aa
                 for b in range(d):
                     var acc: Float32
                     if b < n_vec * MOMENTS_W:
-                        acc = accv[aa * n_vec + b // MOMENTS_W][b % MOMENTS_W]
+                        acc = accv[aa * n_vec * MOMENTS_W + b]
                     else:
                         acc = accs[aa * tail + b - n_vec * MOMENTS_W]
                     var v = ftz(identical_div(acc, pn[k]))
                     if a == b:
                         v = ftz(v + reg)
                     pc[k * d * d + a * d + b] = v
+            _ = scratch^
 
         host_cells(cov_task, kc * a_blocks, 7 * n * d * COV_AB)
 
