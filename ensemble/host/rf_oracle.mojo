@@ -121,6 +121,7 @@ from core.host_parallel import host_parallelize
 
 from checks.fixed_point import choose_scale
 from checks.numerics import ftz, identical_log, identical_mul_add
+from core.host_fp_env import host_ieee_fp_enter, host_ieee_fp_leave
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from ensemble.host_layout import RF_NAN_REFUSAL, has_nan_f32_threaded
 
@@ -1631,203 +1632,294 @@ def rf_host_fit(
     forest.n_trees = p.n_trees
     forest.num_outputs = n_unique_labels
     forest.offsets.append(Int32(0))
+    # THE TREES, ONE TASK PER CONTIGUOUS TREE RANGE (lane/trees-cpu,
+    # 2026-09-28). Each tree is `_rf_host_tree`, whose statements run in
+    # their serial order on one thread; a task switches its pool thread to
+    # the calling thread's IEEE environment (`core/host_fp_env.mojo`, the
+    # FTZ+DAZ pool of DEVIATION 5900) before its first tree, and the trees
+    # are appended in tree order after the join. So the forest is the bytes
+    # of the serial walk at every MOJOLEARN_CPU_THREADS.
+    var trees = List[_RfHostTree](capacity=p.n_trees)
+    for _ in range(p.n_trees):
+        trees.append(_RfHostTree(List[Int32](), List[Float32](), List[Int32](), List[Float32]()))
+    var tree_tasks = host_predict_task_count(p.n_trees)
+    if tree_tasks <= 1:
+        for t in range(p.n_trees):
+            trees[t] = _rf_host_tree(
+                t, x, q, labels_i, labels_f, weights, weight_cdf,
+                weighted_rows, weighted_obj, wscale, n_rows, n_cols,
+                n_unique_labels, n_classes, classification, p, criterion,
+                label_scale, tree_start, n_sampled, original_cols, max_rounds,
+            )
+    else:
+        var tree_chunk = host_predict_chunk(p.n_trees, tree_tasks)
+        var failed = List[Bool](length=tree_tasks, fill=False)
+        var messages = List[String](length=tree_tasks, fill=String(""))
+        var n_trees = p.n_trees
+        def _tree_task(task: Int) {mut trees, mut failed, mut messages, imm x, imm q, imm labels_i, imm labels_f, imm weights, imm weight_cdf, imm weighted_rows, imm weighted_obj, imm wscale, imm n_rows, imm n_cols, imm n_unique_labels, imm n_classes, imm classification, imm p, imm criterion, imm label_scale, imm tree_start, imm n_sampled, imm original_cols, imm max_rounds, imm tree_chunk, imm n_trees}:
+            var env = host_ieee_fp_enter()
+            var lo = task * tree_chunk
+            var hi = min(lo + tree_chunk, n_trees)
+            try:
+                for t in range(lo, hi):
+                    trees[t] = _rf_host_tree(
+                        t, x, q, labels_i, labels_f, weights, weight_cdf,
+                        weighted_rows, weighted_obj, wscale, n_rows, n_cols,
+                        n_unique_labels, n_classes, classification, p,
+                        criterion, label_scale, tree_start, n_sampled,
+                        original_cols, max_rounds,
+                    )
+            except e:
+                failed[task] = True
+                messages[task] = String(e)
+            host_ieee_fp_leave(env)
+        sync_parallelize(_tree_task, tree_tasks)
+        # the serial walk raises its first failing tree's error; the lowest
+        # failing task holds the lowest trees, and stops at its first
+        for k in range(tree_tasks):
+            if failed[k]:
+                raise Error(messages[k])
     for t in range(p.n_trees):
-        var tree_id = tree_start + t
-        var row_ids: List[Int32]
-        var n_root = n_sampled
-        if weighted_obj:
-            row_ids = weighted_rows.copy()
-            n_root = len(weighted_rows)
-        else:
-            row_ids = host_sampled_rows(p.seed, tree_id, p.bootstrap, n_rows, n_sampled, weight_cdf)
-
-        # `NodeQueue.__init__` (`builder.mojo:197-232`).
-        var t_colid = List[Int32]()
-        var t_quesval = List[Float32]()
-        var t_left = List[Int32]()
-        var t_count = List[Int32]()
-        var r_begin = List[Int]()
-        var r_count = List[Int]()
-        var leaf_counter = 1
-        t_colid.append(Int32(0))
-        t_quesval.append(Float32(0.0))
-        t_left.append(Int32(-1))
-        t_count.append(Int32(n_root))
-        r_begin.append(0)
-        r_count.append(n_root)
-        var work = List[HostWorkItem]()
-        var head = 0
-        if _is_expandable(n_root, 0, leaf_counter, p):
-            work.append(HostWorkItem(0, 0, 0, n_root))
-
-        while len(work) - head > 0:
-            # `pop` (`:239-260`).
-            var items = List[HostWorkItem]()
-            while head < len(work) and len(items) < p.max_batch_size:
-                items.append(work[head])
-                head += 1
-            var n = len(items)
-            var final_splits = List[HostSplit](capacity=n)
-            for _ in range(n):
-                final_splits.append(HostSplit.empty())
-            var active = List[Int](capacity=n)
-            for i in range(n):
-                active.append(i)
-            var sampling_round = 0
-            while True:
-                var k = min(original_cols, n_cols - sampling_round * original_cols)
-                var sample_offset = sampling_round * original_cols
-                var retry = List[Int]()
-                for a in range(len(active)):
-                    var orig = active[a]
-                    var s = _node_best_split(
-                        items[orig], row_ids, q, labels_i, labels_f,
-                        classification, n_classes, n_rows, n_cols, p.max_n_bins,
-                        p, criterion, label_scale, tree_id, k, sample_offset,
-                        weights, wscale,
-                    )
-                    # `_read_splits` (`builder.mojo:1733-1763`): a pure node
-                    # is a leaf whatever its slot holds.
-                    var terminal = s.pure != Int32(0)
-                    if terminal:
-                        s.colid = Int32(-1)
-                    final_splits[orig] = s
-                    if not s.is_valid() and not terminal:
-                        retry.append(orig)
-                # `advance_batch`'s retry test (`:2290-2301`).
-                if len(retry) > 0 and sampling_round + 1 < max_rounds:
-                    active = retry^
-                    sampling_round += 1
-                    continue
-                break
-
-            # `enqueue_node_split` (`builder.mojo:2357-2452`): the splits go
-            # back with `split_start`/`split_end` -1 and `pure` 0, the local
-            # left count is taken on valid splits, and each valid node's
-            # range is stably partitioned.
-            for i in range(n):
-                var s = final_splits[i]
-                s.pure = Int32(0)
-                s.local_n_left = Int64(0)
-                if s.is_valid():
-                    var it = items[i]
-                    var left_rows = List[Int32]()
-                    var right_rows = List[Int32]()
-                    for j in range(it.begin, it.begin + it.count):
-                        var row = row_ids[j]
-                        if x[Int(s.colid) * n_rows + Int(row)] <= s.quesval:
-                            left_rows.append(row)
-                        else:
-                            right_rows.append(row)
-                    s.local_n_left = Int64(len(left_rows))
-                    var w = it.begin
-                    for li in range(len(left_rows)):
-                        row_ids[w] = left_rows[li]
-                        w += 1
-                    for ri in range(len(right_rows)):
-                        row_ids[w] = right_rows[ri]
-                        w += 1
-                final_splits[i] = s
-
-            # `NodeQueue.push` (`builder.mojo:286-433`).
-            for i in range(n):
-                var s = final_splits[i]
-                var it = items[i]
-                if not s.is_valid():
-                    continue
-                if p.max_leaves != -1 and leaf_counter >= p.max_leaves:
-                    break
-                var local_left_count = Int(s.local_n_left)
-                var parent_begin = r_begin[it.idx]
-                var parent_count = r_count[it.idx]
-                var left_child_id = len(t_colid)
-                t_colid[it.idx] = s.colid
-                t_quesval[it.idx] = s.quesval
-                t_left[it.idx] = Int32(left_child_id)
-                t_count[it.idx] = Int32(parent_count)
-                leaf_counter += 1
-                var left_count = Int(Int32(Int(s.global_n_left)))
-                t_colid.append(Int32(0))
-                t_quesval.append(Float32(0.0))
-                t_left.append(Int32(-1))
-                t_count.append(Int32(left_count))
-                r_begin.append(parent_begin)
-                r_count.append(local_left_count)
-                if _is_expandable(left_count, it.depth + 1, leaf_counter, p):
-                    work.append(HostWorkItem(len(t_colid) - 1, it.depth + 1, parent_begin, local_left_count))
-                var right_count = Int(Int32(Int(t_count[it.idx]) - Int(s.global_n_left)))
-                t_colid.append(Int32(0))
-                t_quesval.append(Float32(0.0))
-                t_left.append(Int32(-1))
-                t_count.append(Int32(right_count))
-                r_begin.append(parent_begin + local_left_count)
-                r_count.append(parent_count - local_left_count)
-                if _is_expandable(right_count, it.depth + 1, leaf_counter, p):
-                    work.append(HostWorkItem(
-                        len(t_colid) - 1, it.depth + 1,
-                        parent_begin + local_left_count, parent_count - local_left_count,
-                    ))
-
-        # `set_leaf_predictions` (`builder.mojo:2485-2666`) through
-        # `leaf_kernel` (`builder_kernels_impl.mojo:1837-1952`); internal
-        # nodes keep the zero fill.
-        var n_nodes = len(t_colid)
-        var n_out = n_unique_labels
-        var vleaf = List[Float32](length=n_nodes * n_out, fill=Float32(0.0))
-        for node in range(n_nodes):
-            if t_left[node] != Int32(-1):
-                continue
-            var begin = r_begin[node]
-            var count = r_count[node]
-            if classification and weighted_obj:
-                # `leaf_kernel` over `WeightedClassificationBin`, then
-                # `SetLeafVector` (`objectives.mojo:814-847`) on the Float32
-                # weights: the total through `ftz` in class order.
-                var whist = List[Int32](length=n_out, fill=Int32(0))
-                for j in range(begin, begin + count):
-                    var row = Int(row_ids[j])
-                    var lab = Int(labels_i[row])
-                    whist[lab] = whist[lab] + Int32(weights[row] * wscale)
-                var wtotal = Float32(0)
-                for c in range(n_out):
-                    wtotal = ftz(wtotal + _wcls_weight(whist, c, wscale))
-                if wtotal <= 0:
-                    continue
-                for c in range(n_out):
-                    vleaf[node * n_out + c] = ftz(_wcls_weight(whist, c, wscale) / wtotal)
-            elif classification:
-                var hist = List[UInt32](length=n_out, fill=UInt32(0))
-                for j in range(begin, begin + count):
-                    var lab = Int(labels_i[Int(row_ids[j])])
-                    hist[lab] = hist[lab] + UInt32(1)
-                # `SetLeafVector` (`objectives.mojo:814-847`).
-                var total = Int64(0)
-                for c in range(n_out):
-                    total = total + Int64(Int(hist[c]))
-                if total <= 0:
-                    continue
-                for c in range(n_out):
-                    vleaf[node * n_out + c] = ftz(
-                        Int64(Int(hist[c])).cast[DType.float32]() / total.cast[DType.float32]()
-                    )
-            else:
-                var label_sum = Int32(0)
-                var cnt = UInt32(0)
-                for j in range(begin, begin + count):
-                    label_sum = label_sum + Int32(labels_f[Int(row_ids[j])] * label_scale)
-                    cnt = cnt + UInt32(1)
-                # `SetLeafVector` (`objectives.mojo:1354-1376`).
-                var weight = Int64(Int(cnt))
-                if weight > 0:
-                    vleaf[node * n_out] = ftz(
-                        _dequantize(label_sum, label_scale) / weight.cast[DType.float32]()
-                    )
-
-        for node in range(n_nodes):
-            forest.colid.append(t_colid[node])
-            forest.quesval.append(t_quesval[node])
-            forest.left_child.append(t_left[node])
-        for v in range(n_nodes * n_out):
-            forest.leaves.append(vleaf[v])
+        ref tr = trees[t]
+        for node in range(len(tr.colid)):
+            forest.colid.append(tr.colid[node])
+            forest.quesval.append(tr.quesval[node])
+            forest.left_child.append(tr.left_child[node])
+        for v in range(len(tr.leaves)):
+            forest.leaves.append(tr.leaves[v])
         forest.offsets.append(Int32(len(forest.colid)))
     return forest^
+
+
+@fieldwise_init
+struct _RfHostTree(Movable):
+    """One fitted tree's node arrays, in node order (`_rf_host_tree`)."""
+
+    var colid: List[Int32]
+    var quesval: List[Float32]
+    var left_child: List[Int32]
+    var leaves: List[Float32]
+
+
+def _rf_host_tree(
+    t: Int,
+    x: List[Float32],
+    q: RfHostQuantiles,
+    labels_i: List[Int32],
+    labels_f: List[Float32],
+    weights: List[Float32],
+    weight_cdf: List[Float64],
+    weighted_rows: List[Int32],
+    weighted_obj: Bool,
+    wscale: Float32,
+    n_rows: Int,
+    n_cols: Int,
+    n_unique_labels: Int,
+    n_classes: Int,
+    classification: Bool,
+    p: RfHostParams,
+    criterion: Int,
+    label_scale: Float32,
+    tree_start: Int,
+    n_sampled: Int,
+    original_cols: Int,
+    max_rounds: Int,
+) raises -> _RfHostTree:
+    """Tree `t` of `rf_host_fit`: its row sample, `NodeQueue` walk, splits,
+    partitions and leaves (`fit_forest`'s per-tree body,
+    `ensemble/randomforest.mojo:2600-2849`). A tree reads the flushed X,
+    the quantiles, the labels and its own seed only, and writes nothing
+    another tree reads, so trees may run on different threads with every
+    statement of a tree kept in its order (`rf_host_fit`)."""
+    var tree_id = tree_start + t
+    var row_ids: List[Int32]
+    var n_root = n_sampled
+    if weighted_obj:
+        row_ids = weighted_rows.copy()
+        n_root = len(weighted_rows)
+    else:
+        row_ids = host_sampled_rows(p.seed, tree_id, p.bootstrap, n_rows, n_sampled, weight_cdf)
+
+    # `NodeQueue.__init__` (`builder.mojo:197-232`).
+    var t_colid = List[Int32]()
+    var t_quesval = List[Float32]()
+    var t_left = List[Int32]()
+    var t_count = List[Int32]()
+    var r_begin = List[Int]()
+    var r_count = List[Int]()
+    var leaf_counter = 1
+    t_colid.append(Int32(0))
+    t_quesval.append(Float32(0.0))
+    t_left.append(Int32(-1))
+    t_count.append(Int32(n_root))
+    r_begin.append(0)
+    r_count.append(n_root)
+    var work = List[HostWorkItem]()
+    var head = 0
+    if _is_expandable(n_root, 0, leaf_counter, p):
+        work.append(HostWorkItem(0, 0, 0, n_root))
+
+    while len(work) - head > 0:
+        # `pop` (`:239-260`).
+        var items = List[HostWorkItem]()
+        while head < len(work) and len(items) < p.max_batch_size:
+            items.append(work[head])
+            head += 1
+        var n = len(items)
+        var final_splits = List[HostSplit](capacity=n)
+        for _ in range(n):
+            final_splits.append(HostSplit.empty())
+        var active = List[Int](capacity=n)
+        for i in range(n):
+            active.append(i)
+        var sampling_round = 0
+        while True:
+            var k = min(original_cols, n_cols - sampling_round * original_cols)
+            var sample_offset = sampling_round * original_cols
+            var retry = List[Int]()
+            for a in range(len(active)):
+                var orig = active[a]
+                var s = _node_best_split(
+                    items[orig], row_ids, q, labels_i, labels_f,
+                    classification, n_classes, n_rows, n_cols, p.max_n_bins,
+                    p, criterion, label_scale, tree_id, k, sample_offset,
+                    weights, wscale,
+                )
+                # `_read_splits` (`builder.mojo:1733-1763`): a pure node
+                # is a leaf whatever its slot holds.
+                var terminal = s.pure != Int32(0)
+                if terminal:
+                    s.colid = Int32(-1)
+                final_splits[orig] = s
+                if not s.is_valid() and not terminal:
+                    retry.append(orig)
+            # `advance_batch`'s retry test (`:2290-2301`).
+            if len(retry) > 0 and sampling_round + 1 < max_rounds:
+                active = retry^
+                sampling_round += 1
+                continue
+            break
+
+        # `enqueue_node_split` (`builder.mojo:2357-2452`): the splits go
+        # back with `split_start`/`split_end` -1 and `pure` 0, the local
+        # left count is taken on valid splits, and each valid node's
+        # range is stably partitioned.
+        for i in range(n):
+            var s = final_splits[i]
+            s.pure = Int32(0)
+            s.local_n_left = Int64(0)
+            if s.is_valid():
+                var it = items[i]
+                var left_rows = List[Int32]()
+                var right_rows = List[Int32]()
+                for j in range(it.begin, it.begin + it.count):
+                    var row = row_ids[j]
+                    if x[Int(s.colid) * n_rows + Int(row)] <= s.quesval:
+                        left_rows.append(row)
+                    else:
+                        right_rows.append(row)
+                s.local_n_left = Int64(len(left_rows))
+                var w = it.begin
+                for li in range(len(left_rows)):
+                    row_ids[w] = left_rows[li]
+                    w += 1
+                for ri in range(len(right_rows)):
+                    row_ids[w] = right_rows[ri]
+                    w += 1
+            final_splits[i] = s
+
+        # `NodeQueue.push` (`builder.mojo:286-433`).
+        for i in range(n):
+            var s = final_splits[i]
+            var it = items[i]
+            if not s.is_valid():
+                continue
+            if p.max_leaves != -1 and leaf_counter >= p.max_leaves:
+                break
+            var local_left_count = Int(s.local_n_left)
+            var parent_begin = r_begin[it.idx]
+            var parent_count = r_count[it.idx]
+            var left_child_id = len(t_colid)
+            t_colid[it.idx] = s.colid
+            t_quesval[it.idx] = s.quesval
+            t_left[it.idx] = Int32(left_child_id)
+            t_count[it.idx] = Int32(parent_count)
+            leaf_counter += 1
+            var left_count = Int(Int32(Int(s.global_n_left)))
+            t_colid.append(Int32(0))
+            t_quesval.append(Float32(0.0))
+            t_left.append(Int32(-1))
+            t_count.append(Int32(left_count))
+            r_begin.append(parent_begin)
+            r_count.append(local_left_count)
+            if _is_expandable(left_count, it.depth + 1, leaf_counter, p):
+                work.append(HostWorkItem(len(t_colid) - 1, it.depth + 1, parent_begin, local_left_count))
+            var right_count = Int(Int32(Int(t_count[it.idx]) - Int(s.global_n_left)))
+            t_colid.append(Int32(0))
+            t_quesval.append(Float32(0.0))
+            t_left.append(Int32(-1))
+            t_count.append(Int32(right_count))
+            r_begin.append(parent_begin + local_left_count)
+            r_count.append(parent_count - local_left_count)
+            if _is_expandable(right_count, it.depth + 1, leaf_counter, p):
+                work.append(HostWorkItem(
+                    len(t_colid) - 1, it.depth + 1,
+                    parent_begin + local_left_count, parent_count - local_left_count,
+                ))
+
+    # `set_leaf_predictions` (`builder.mojo:2485-2666`) through
+    # `leaf_kernel` (`builder_kernels_impl.mojo:1837-1952`); internal
+    # nodes keep the zero fill.
+    var n_nodes = len(t_colid)
+    var n_out = n_unique_labels
+    var vleaf = List[Float32](length=n_nodes * n_out, fill=Float32(0.0))
+    for node in range(n_nodes):
+        if t_left[node] != Int32(-1):
+            continue
+        var begin = r_begin[node]
+        var count = r_count[node]
+        if classification and weighted_obj:
+            # `leaf_kernel` over `WeightedClassificationBin`, then
+            # `SetLeafVector` (`objectives.mojo:814-847`) on the Float32
+            # weights: the total through `ftz` in class order.
+            var whist = List[Int32](length=n_out, fill=Int32(0))
+            for j in range(begin, begin + count):
+                var row = Int(row_ids[j])
+                var lab = Int(labels_i[row])
+                whist[lab] = whist[lab] + Int32(weights[row] * wscale)
+            var wtotal = Float32(0)
+            for c in range(n_out):
+                wtotal = ftz(wtotal + _wcls_weight(whist, c, wscale))
+            if wtotal <= 0:
+                continue
+            for c in range(n_out):
+                vleaf[node * n_out + c] = ftz(_wcls_weight(whist, c, wscale) / wtotal)
+        elif classification:
+            var hist = List[UInt32](length=n_out, fill=UInt32(0))
+            for j in range(begin, begin + count):
+                var lab = Int(labels_i[Int(row_ids[j])])
+                hist[lab] = hist[lab] + UInt32(1)
+            # `SetLeafVector` (`objectives.mojo:814-847`).
+            var total = Int64(0)
+            for c in range(n_out):
+                total = total + Int64(Int(hist[c]))
+            if total <= 0:
+                continue
+            for c in range(n_out):
+                vleaf[node * n_out + c] = ftz(
+                    Int64(Int(hist[c])).cast[DType.float32]() / total.cast[DType.float32]()
+                )
+        else:
+            var label_sum = Int32(0)
+            var cnt = UInt32(0)
+            for j in range(begin, begin + count):
+                label_sum = label_sum + Int32(labels_f[Int(row_ids[j])] * label_scale)
+                cnt = cnt + UInt32(1)
+            # `SetLeafVector` (`objectives.mojo:1354-1376`).
+            var weight = Int64(Int(cnt))
+            if weight > 0:
+                vleaf[node * n_out] = ftz(
+                    _dequantize(label_sum, label_scale) / weight.cast[DType.float32]()
+                )
+
+    return _RfHostTree(t_colid^, t_quesval^, t_left^, vleaf^)

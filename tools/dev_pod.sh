@@ -527,14 +527,18 @@ sync)
         # COPY of the index, so the lane's real index is never touched. On the
         # box: reset to the base, remove the files the previous patch added
         # (so a dropped file never lingers) and this patch's added files, then
-        # apply. Untracked build outputs (.so, .pixi) are left alone.
+        # apply. Untracked build outputs (.so, .pixi) are left alone. A file
+        # the previous patch added that the NEW base tracks (the lane merged
+        # to main and its merge base moved past it) is kept: removing it after
+        # the reset deleted a tracked source (lane/trees-cpu, 2026-09-28:
+        # gbdt/host/gbdt_oracle_ctr.mojo vanished from the box).
         _idx="$TMPD/sync.index"; cp "$(git -C "$wt" rev-parse --path-format=absolute --git-path index)" "$_idx"
         ( cd "$wt" && git ls-files -z -o --exclude-standard | { grep -zvE '\.(so|dylib|metallib)$' || true; } \
             | GIT_INDEX_FILE="$_idx" xargs -0 -r git add -N -- ) || die "could not mark new files"
         ( cd "$wt" && GIT_INDEX_FILE="$_idx" git diff --binary "$base" ) > "$TMPD/sync.patch" || die "diff failed"
         ( cd "$wt" && GIT_INDEX_FILE="$_idx" git diff --name-only --diff-filter=A "$base" ) > "$TMPD/sync.added"
         bx 60 "mkdir -p $BOX_DIR && cat > $BOX_DIR/.git/devpod_added.new" < "$TMPD/sync.added" || die "added-list upload failed"
-        bx 900 "cd $BOX_DIR && git reset -q --hard $base && { [ ! -f .devpod_manifest ] || { git ls-files -o --exclude-standard | grep -Fxf .devpod_manifest | grep -vE '\\.(so|dylib|metallib)\$' | xargs -r rm -f --; rm -f .devpod_manifest .devpod_manifest.prev; }; } && { [ ! -f .git/devpod_added ] || xargs -r rm -f -- < .git/devpod_added; } && xargs -r rm -f -- < .git/devpod_added.new && cat > /tmp/devpod_sync.patch && { [ ! -s /tmp/devpod_sync.patch ] || git apply --whitespace=nowarn /tmp/devpod_sync.patch; } && mv .git/devpod_added.new .git/devpod_added" \
+        bx 900 "cd $BOX_DIR && git reset -q --hard $base && { [ ! -f .devpod_manifest ] || { git ls-files -o --exclude-standard | grep -Fxf .devpod_manifest | grep -vE '\\.(so|dylib|metallib)\$' | xargs -r rm -f --; rm -f .devpod_manifest .devpod_manifest.prev; }; } && { [ ! -f .git/devpod_added ] || { git ls-files > /tmp/devpod_tracked && { grep -vxFf /tmp/devpod_tracked .git/devpod_added || true; } | xargs -r rm -f --; }; } && xargs -r rm -f -- < .git/devpod_added.new && cat > /tmp/devpod_sync.patch && { [ ! -s /tmp/devpod_sync.patch ] || git apply --whitespace=nowarn /tmp/devpod_sync.patch; } && mv .git/devpod_added.new .git/devpod_added" \
             < "$TMPD/sync.patch" || die "patch sync failed (retry with MOJOLEARN_DEVPOD_FULL_SYNC=1)"
         _head=$(bx 60 "cd $BOX_DIR && git rev-parse HEAD" < /dev/null | tr -d '\r')
         [ "$_head" = "$base" ] || die "the box's HEAD ($_head) is not the worktree's merge base ($base)"
