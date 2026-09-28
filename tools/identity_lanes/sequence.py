@@ -417,7 +417,8 @@ def _(ml, X, yc, yr, Xh=None):
 _batch_decl(_rows_calls("predict", "hidden_sequence", prep=_sequence_seq),
             "sequence-lstm", "sequence-gru", "sequence-rnn", revision="expansion-batch-2026-09-28-v1")
 _batch_decl(_rows_calls("predict", sl=np.s_[:256, :10]), "sequence-mlp", revision="expansion-batch-2026-09-28-v1")
-_batch_decl(_rows_calls("forward", sl=np.s_[:256, :16]), "sequence-layernorm", revision="expansion-batch-2026-09-28-v1")
+# The fitted LayerNorm uses every fixture column (odd has 17, base has 16).
+_batch_decl(_rows_calls("forward", sl=slice(0, 256)), "sequence-layernorm", revision="layernorm-batch-width-2026-09-28-v2")
 _batch_decl(_rows_calls("__call__", sl=np.s_[:256, :16]), "sequence-moe", revision="expansion-batch-2026-09-28-v1")
 _batch_decl("n/a:parameter-coupled optimizer (Adafactor factors second moments across tensor rows and "
             "columns and scales updates by tensor RMS; splitting parameter rows changes the algorithm)",

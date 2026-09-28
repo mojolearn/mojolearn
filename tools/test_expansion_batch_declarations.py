@@ -310,3 +310,19 @@ def test_bca_distribution_uses_valid_interval_method_for_slices(harness, name):
     assert any(count == 1 and method == "percentile" for count, first, method in calls)
     assert all(method == "percentile" for count, first, method in calls
                if count != harness.BATCH_RANGE_ROWS or first != 0)
+
+
+@pytest.mark.parametrize('width', [16, 17])
+def test_layernorm_batch_retains_fitted_fixture_width(harness, width):
+    class Norm:
+        def forward(self, rows):
+            assert rows.shape[1] == width, 'probe changed fitted normalized shape'
+            return np.asarray(rows, dtype=np.float32).copy()
+
+    held = np.random.RandomState(7).normal(size=(512, width)).astype(np.float32)
+    fitted = harness._fit({}, Norm())
+    value, error = harness._probe_batch(fitted, 'sequence-layernorm', None, held, 8, False)
+    assert error is None and len(value) == 16, (value, error)
+    value, error = harness._probe_batch(fitted, 'sequence-layernorm', None, held, 8, True)
+    assert error is None and value.startswith('BATCH_MOVED:forward:'), (value, error)
+    assert harness.BATCH_REVISIONS['sequence-layernorm'] == 'layernorm-batch-width-2026-09-28-v2'
