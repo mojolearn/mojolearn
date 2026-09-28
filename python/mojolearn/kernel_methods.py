@@ -31,6 +31,7 @@ from . import _backend, _serialize
 from ._scale_gamma import scale_gamma
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_f32_dense_c, empty
+from ._lazy_out import _empty_out
 from ._mode import NumericModeMixin
 
 #: The saved-model formats (lane/inference-linear-svm, 2026-09-15):
@@ -471,7 +472,7 @@ class Nystroem(_KernelMethodBase):
         q = self.components_.shape[0]
         kernel, degree, gamma, coef0, seed = self._kernel_params
         _check_chi2_input(x, kernel, self._WHERE)
-        out = empty((m * q,), "<f4")
+        out = _empty_out((m * q,), "<f4")
         flat_c = self.components_.reshape((q * d,))
         flat_n = self.normalization_.reshape((q * q,))
         flat_e = self.eigenvectors_.reshape((q * q,))
@@ -615,7 +616,7 @@ class RBFSampler(_KernelMethodBase):
             )
         q = self.random_weights_.shape[1]
         gamma, seed = self._params
-        out = empty((m * q,), "<f4")
+        out = _empty_out((m * q,), "<f4")
         flat_w = self.random_weights_.reshape((d * q,))
         self._extension().rbf_sampler_transform(
             # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::rbf_sampler_transform_binding.
