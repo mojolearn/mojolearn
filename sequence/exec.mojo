@@ -26,6 +26,7 @@ from std.memory import memcpy, memset_zero
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from sequence.dispatch import apply
+from sequence.host_gemm import host_gemm_pack, host_gemm_rows
 from sequence.ops import (
     FP,
     Args,
@@ -144,14 +145,21 @@ struct HostExec(Exec):
     var bufs: List[FP]
     #: The task ceiling, read once per Exec (one entry call).
     var workers: Int
+    #: The GEMM's [K, N] panel of B (`sequence/host_gemm.mojo`), reused
+    #: across launches, grown on demand.
+    var panel: FP
+    var panel_cap: Int
 
     def __init__(out self):
         self.bufs = List[FP]()
         self.workers = host_predict_task_count(1 << 30)
+        self.panel = FP(unsafe_from_address=Int(alloc[Float32](1)))
+        self.panel_cap = 1
 
     def __deinit__(deinit self):
         for i in range(len(self.bufs)):
             self.bufs[i].free()
+        self.panel.free()
 
     def alloc(mut self, n: Int) raises -> FP:
         var count = n if n > 0 else 1
@@ -172,6 +180,9 @@ struct HostExec(Exec):
     def launch[OP: Int](mut self, a: Args, n: Int) raises:
         if n <= 0:
             return
+        comptime if OP == OP_GEMM:
+            self._gemm(a)
+            return
         var tasks = host_launch_tasks(n, _element_weight[OP](a), self.workers)
         if tasks <= 1:
             for t in range(n):
@@ -186,6 +197,34 @@ struct HostExec(Exec):
                 apply[OP](t, a)
 
         host_parallelize(_chunk, tasks)
+
+    def _gemm(mut self, a: Args):
+        """OP_GEMM over `sequence/host_gemm.mojo`: row ranges on threads,
+        each row's cells W columns at a time; every cell `op_gemm`'s bits."""
+        var M = a.i0
+        var N = a.i1
+        var K = a.i2
+        var bp = a.p1
+        var ldb = a.i5
+        if a.i6 != 1 and K > 0:
+            if K * N > self.panel_cap:
+                self.panel.free()
+                self.panel = FP(unsafe_from_address=Int(alloc[Float32](K * N)))
+                self.panel_cap = K * N
+            host_gemm_pack(a, self.panel)
+            bp = self.panel
+            ldb = N
+        var tasks = host_launch_tasks(M, max(N * K, 1), self.workers)
+        if tasks <= 1:
+            host_gemm_rows(a, bp, ldb, 0, M)
+            return
+        var chunk = host_predict_chunk(M, tasks)
+
+        def _rows(c: Int) {imm a, imm bp, imm ldb, imm chunk, imm M}:
+            var lo = c * chunk
+            host_gemm_rows(a, bp, ldb, lo, min(lo + chunk, M))
+
+        host_parallelize(_rows, tasks)
 
     def sync(mut self) raises:
         pass
