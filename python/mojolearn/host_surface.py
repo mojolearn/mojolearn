@@ -2874,6 +2874,8 @@ FAMILIES = (
             "ivf_host_sabotage", "ivf_vendor", "ivf_numeric_mode",
             "ivf_flat_build_and_search", "ivf_flat_build", "ivf_flat_search",
             "ivf_flat_extend", "ivf_flat_partial_search", "ivf_finalize_distances",
+            "ivf_flat_index_prepare", "ivf_flat_index_search", "ivf_flat_index_release",
+            "ivf_merge_shards",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -2912,6 +2914,8 @@ FAMILIES = (
             "ivf_search_host_column", "ivf_search_host_sabotage",
             "ivf_vendor", "ivf_numeric_mode", "ivf_flat_search", "ivf_flat_extend",
             "ivf_flat_partial_search", "ivf_finalize_distances",
+            "ivf_flat_index_prepare", "ivf_flat_index_search", "ivf_flat_index_release",
+            "ivf_merge_shards",
         ),
         gate="tools/classical_host_gate.py and tools/identity_break.py",
         wheel_note=(

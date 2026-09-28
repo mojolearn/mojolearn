@@ -15,6 +15,7 @@ from x_ann.abi import check_search, in_f32, in_i32, out_f32, out_i32, p_int
 from x_ann.ivf_pq_core import pq_len_of
 from x_ann.cagra_device import cagra_build_device, cagra_search_device
 from x_ann.tsne_device import tsne_fit_device
+from x_ann.resident import x_ann_index_prepare_binding, x_ann_index_release_binding, x_ann_index_search_binding
 from x_ann.ivf_pq_device import ivf_pq_build_device, ivf_pq_search_device, ivf_sq_build_device, ivf_sq_search_device, refine_device, ivf_rabitq_build_device, ivf_rabitq_search_device
 
 
@@ -300,6 +301,9 @@ def PyInit__mojolearn_x_ann() abi("C") -> PythonObject:
         m.def_function[refine_binding]("x_ann_refine")
         m.def_function[ivf_rabitq_build_binding]("x_ann_ivf_rabitq_build")
         m.def_function[ivf_rabitq_search_binding]("x_ann_ivf_rabitq_search")
+        m.def_function[x_ann_index_prepare_binding]("x_ann_index_prepare")
+        m.def_function[x_ann_index_search_binding]("x_ann_index_search")
+        m.def_function[x_ann_index_release_binding]("x_ann_index_release")
         m.def_function[numeric_mode_binding]("x_ann_numeric_mode")
         m.def_function[vendor_binding]("x_ann_vendor")
         return m.finalize()

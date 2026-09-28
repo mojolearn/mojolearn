@@ -3,8 +3,10 @@
 """`IVFIndex` (cuVS `ivf_flat`), EXPOSED 2026-09-14.
 
 The Python half of `bindings/_mojolearn_ivf.mojo`, the door of
-`ivf/estimator.mojo` (cuVS `ivf_flat`, CSR lists, host-resident index,
-DEVIATION 1804). `pixi run check-ivf` reads ALL OK at IDENTICAL on the Apple
+`ivf/estimator.mojo` (cuVS `ivf_flat`, CSR lists). The index is RESIDENT
+in the binding from the first search on (`ivf/resident.mojo`, the closure
+of DEVIATION 1804, lane/py-dn-ann 2026-09-28): later searches upload only
+their queries. `pixi run check-ivf` reads ALL OK at IDENTICAL on the Apple
 M4, an NVIDIA H100 and an AMD MI300X with one card (1e7c1702) on all three
 (bench/results/ivf_embed_km_legs_2026-09-14/README.md). `IVFFlat` is kept
 as an alias of the same class for the names already written down.
@@ -147,6 +149,7 @@ class IVFIndex(NumericModeMixin):
 
     def fit(self, X, y=None):
         """Build the index. Returns `self`."""
+        self._release_resident()
         x, _ = as_f32_c(X, ndim=2, name="X")
         n, dim = (int(s) for s in x.shape)
         n_lists = _int_param("n_lists", self.n_lists)
@@ -180,6 +183,80 @@ class IVFIndex(NumericModeMixin):
         self.metric_code_ = metric
         return self
 
+    # -- the resident index (lane/py-dn-ann, 2026-09-28; ivf/resident.mojo,
+    # the closure of DEVIATION 1804) --
+
+    def _resident_key(self, partial):
+        arrays = tuple(getattr(self, name) for name, _dtype in _INDEX_ARRAYS)
+        return (tuple((id(a), addr_ro(a, name=name), tuple(a.shape))
+                      for a, (name, _dtype) in zip(arrays, _INDEX_ARRAYS)),
+                self.n_rows_, self.n_features_in_, self.n_lists_, self.metric_code_, bool(partial))
+
+    def _resident_handle(self, native, partial=False):
+        """The handle of this index held by `native` (admitted, copied and,
+        on a GPU binding, uploaded ONCE by `ivf_flat_index_prepare`),
+        reused while the five index arrays are the same objects at the same
+        addresses and shapes; None where the loaded binding has no such door
+        (a binary built before it), in which case the search takes the
+        per-call path. `neighbors.py::_resident_index_handle`'s rule."""
+        try:
+            prepare = native.ivf_flat_index_prepare
+        except (ImportError, AttributeError):
+            return None
+        key = self._resident_key(partial) + (id(native),)
+        cached = self.__dict__.get("_resident")
+        if cached is not None and cached[0] == key:
+            return cached[1]
+        self._release_resident()
+        n, dim = self.n_rows_, self.n_features_in_
+        handle = int(prepare(
+            # ORDER MATCHES bindings/ivf_index_arrays.mojo (ivf_flat_index_prepare).
+            [addr_ro(self.centers_.reshape((self.n_lists_ * dim,)), name="centers_"),
+             addr_ro(self.center_norms_, name="center_norms_"),
+             addr_ro(self.list_offsets_, name="list_offsets_"),
+             addr_ro(self.list_indices_, name="list_indices_"),
+             addr_ro(self.list_data_.reshape((n * dim,)), name="list_data_")],
+            # n, dim, n_lists, metric, partial_storage
+            [n, dim, self.n_lists_, self.metric_code_, 1 if partial else 0],
+        ))
+        self._resident = (key, handle, native)
+        return handle
+
+    def _release_resident(self):
+        """Drop the held index, if any. Quiet on a binding that cannot be
+        reached any more (interpreter shutdown) or a handle already gone."""
+        cached = self.__dict__.pop("_resident", None)
+        if cached is None:
+            return
+        try:
+            cached[2].ivf_flat_index_release(cached[1])
+        except Exception:  # noqa: BLE001
+            pass
+
+    def __del__(self):
+        try:
+            self._release_resident()
+        except Exception:  # noqa: BLE001
+            pass
+
+    def __getstate__(self):
+        """A pickle or a deepcopy carries no handle: the integer means
+        something only in the process and registry that minted it."""
+        state = self.__dict__.copy()
+        state.pop("_resident", None)
+        return state
+
+    @staticmethod
+    def _search_filter(filter, n):
+        if filter is None:
+            return None
+        import numpy as np
+        f = np.asarray(filter)
+        if f.shape != (n,) or f.dtype != np.bool_:
+            raise ValueError(f"mojolearn IVFIndex: filter must be a boolean array of shape ({n},), "
+                             "one flag per indexed row")
+        return np.ascontiguousarray(f.astype(np.int32))
+
     def search(self, queries, filter=None):
         """`filter`: optional boolean array of shape (n_rows_,) over the
         indexed rows' ORIGINAL ids; a False row is never scored, returned or
@@ -204,22 +281,32 @@ class IVFIndex(NumericModeMixin):
         dist = empty((m * k,), "<f4")
         idx = empty((m * k,), "<i4")
         cand = empty((m,), "<i4")
+        native = self._extension()
+        handle = self._resident_handle(native)
+        if handle is not None:
+            addrs = [addr_ro(q, name="queries"), addr(dist, name="distances"), addr(idx, name="indices"),
+                     addr(cand, name="n_candidates_")]
+            keep = self._search_filter(filter, n)   # held: the binding reads it below
+            if keep is not None:
+                addrs.append(addr_ro(keep, name="filter"))
+            native.ivf_flat_index_search(
+                # ORDER MATCHES bindings/ivf_index_arrays.mojo (ivf_flat_index_search).
+                handle, addrs,
+                # n, dim, n_lists, metric, m, k, n_probes, partial_storage
+                [n, dim, self.n_lists_, self.metric_code_, m, k, int(self.n_probes), 0],
+            )
+            self.n_candidates_ = cand
+            return dist.reshape((m, k)), idx.reshape((m, k))
         centers = self.centers_.reshape((self.n_lists_ * dim,))
         data = self.list_data_.reshape((n * dim,))
         addrs = [addr_ro(centers, name="centers_"), addr_ro(self.center_norms_, name="center_norms_"),
                  addr_ro(self.list_offsets_, name="list_offsets_"), addr_ro(self.list_indices_, name="list_indices_"),
                  addr_ro(data, name="list_data_"), addr_ro(q, name="queries"),
                  addr(dist, name="distances"), addr(idx, name="indices"), addr(cand, name="n_candidates_")]
-        keep = None
-        if filter is not None:
-            import numpy as np
-            f = np.asarray(filter)
-            if f.shape != (n,) or f.dtype != np.bool_:
-                raise ValueError(f"mojolearn IVFIndex: filter must be a boolean array of shape ({n},), "
-                                 "one flag per indexed row")
-            keep = np.ascontiguousarray(f.astype(np.int32))   # held: the binding reads it below
+        keep = self._search_filter(filter, n)   # held: the binding reads it below
+        if keep is not None:
             addrs.append(addr_ro(keep, name="filter"))
-        self._entry(self._extension(), "ivf_flat_search")(
+        self._entry(native, "ivf_flat_search")(
             # ORDER MATCHES bindings/ivf_index_arrays.mojo (ivf_flat_search).
             # centers, center_norms, offsets, indices, list_data, queries, dist_out, idx_out, cand_out[, filter]
             addrs,
@@ -260,6 +347,7 @@ class IVFIndex(NumericModeMixin):
                 f"mojolearn IVFIndex: metric {self.metric!r} does not name the metric this index was "
                 f"built under ({_METRIC_NAMES[self.metric_code_]!r}); a built index has one metric"
             )
+        self._release_resident()
         n, n_lists = self.n_rows_, self.n_lists_
         total = n + m
         offsets = empty((n_lists + 1,), "<i4")

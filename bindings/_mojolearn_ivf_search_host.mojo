@@ -32,7 +32,11 @@ from checks.kernel_matrix import (
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from bindings.ivf_index_arrays import ivf_merge_shards_binding
 from bindings.ivf_host_search import (
+    ivf_flat_index_prepare_binding,
+    ivf_flat_index_release_binding,
+    ivf_flat_index_search_binding,
     ivf_finalize_distances_binding,
     ivf_flat_extend_binding,
     ivf_flat_partial_search_binding,
@@ -92,6 +96,10 @@ def PyInit__mojolearn_ivf_search_host() abi("C") -> PythonObject:
         module.def_function[ivf_flat_extend_binding]("ivf_flat_extend")
         module.def_function[ivf_flat_partial_search_binding]("ivf_flat_partial_search")
         module.def_function[ivf_finalize_distances_binding]("ivf_finalize_distances")
+        module.def_function[ivf_flat_index_prepare_binding]("ivf_flat_index_prepare")
+        module.def_function[ivf_flat_index_search_binding]("ivf_flat_index_search")
+        module.def_function[ivf_flat_index_release_binding]("ivf_flat_index_release")
+        module.def_function[ivf_merge_shards_binding]("ivf_merge_shards")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_ivf_search_host: ", error))

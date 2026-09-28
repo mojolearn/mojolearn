@@ -1,0 +1,28 @@
+diff --git a/ivf/resident.mojo b/ivf/resident.mojo
+index 378249f71..78e112781 100644
+--- a/ivf/resident.mojo
++++ b/ivf/resident.mojo
+@@ -52,6 +52,8 @@ struct ResidentIvfFlat(Movable):
+         self.dev = IvfFlatDevice(ctx, index)
+         self.index = index^
+         self.partial_storage = partial_storage
++        for i in range(len(self.dev.list_norm)):  # SABOTAGE: resident list norms off by one
++            self.dev.list_norm[i] += Float32(1.0)
+ 
+ 
+ struct IvfFlatRegistry(Movable):
+diff --git a/x_ann/resident.mojo b/x_ann/resident.mojo
+index 126f8408c..788a0f1cd 100644
+--- a/x_ann/resident.mojo
++++ b/x_ann/resident.mojo
+@@ -140,7 +140,9 @@ struct AnnResident(Movable):
+             raise Error("x_ann_index_prepare: unknown index kind " + String(kind))
+         # the no-filter filter, once: one int32 1 per row, what
+         # `_ann_mask(None)` sent on every search
+-        self.ones = upload_i32(ctx, List[Int32](length=n, fill=Int32(1)))
++        var sab_ones = List[Int32](length=n, fill=Int32(1))
++        sab_ones[0] = Int32(0)  # SABOTAGE: the resident no-filter filter drops row 0
++        self.ones = upload_i32(ctx, sab_ones)
+ 
+ 
+ struct AnnRegistry(Movable):

@@ -52,12 +52,16 @@ from concurrent.futures import ThreadPoolExecutor
 #: `parallel_ivf.DistributedIVFIndex` cuts a BUILT index's stored rows into
 #: contiguous row ranges in Python, maps each range's original ids to local
 #: ids, sends one `ivf_store` per shard and one `ivf_search_stored` per
-#: query batch, and merges the shard candidates back to global ids in
-#: Python by `(distance, original id)`. `ivf_finalize` is the Euclidean root
-#: the shards withheld, taken once on the merged row. Every one of those
-#: four steps is the driver's own Python, and the shard's search is the ivf
-#: family's host binding under its `ivf_flat_partial_search` name, so the
-#: CPU column runs the partition and the merge the GPU column runs. It is
+#: query batch, and merges the shard candidates back to global ids by
+#: `(distance, original id)`. `ivf_finalize` is the Euclidean root the
+#: shards withheld, taken once on the merged row. Every one of those four
+#: steps is the driver's own, and the shard's search is the ivf family's
+#: host binding under its `ivf_flat_partial_search` name (or, since
+#: lane/py-dn-ann 2026-09-28, the shard's resident handle), so the CPU
+#: column runs the partition and the merge the GPU column runs. The merge
+#: was Python until lane/py-dn-ann; it is now one `ivf_merge_shards` call
+#: (bindings/ivf_index_arrays.mojo), host code in every IVF binding, the
+#: same statements. It is
 #: NOT a device claim: at one device the partition is one shard, which is
 #: what `_par_devices`'s docstring says of every `par-*` lane.
 #:

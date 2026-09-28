@@ -398,10 +398,98 @@ def sort_slots_by_distance_then_index(
         idx[base + b + 1] = iv
 
 
+struct IvfFlatDevice(Movable):
+    """The search's index side, prepared ONCE (lane/py-dn-ann, 2026-09-28,
+    retires DEVIATION 1804): the centroids, their norms and the list data on
+    the device, the list norms `compute_row_norms` takes over `list_data`
+    (downloaded once for the per-query path), the host CSR layout the
+    per-query path gathers from, the list sizes and the device CSR pair the
+    Apple one-launch scan reads. Every one of these was built at the top of
+    every search before, from the same bytes by the same kernels, so a
+    search through a prepared index returns the bits a fresh one does.
+    `ivf_flat_search_traced` prepares one per call (the one-shot and traced
+    doors); `ivf/resident.mojo` keeps one per handle."""
+
+    var dcenters: DeviceBuffer[DType.float32]
+    var dcenter_norm: DeviceBuffer[DType.float32]
+    var dlist_data: DeviceBuffer[DType.float32]
+    var dlist_norm: DeviceBuffer[DType.float32]
+    var d_off: DeviceBuffer[DType.int32]
+    var d_ind: DeviceBuffer[DType.uint32]
+    var list_norm: List[Float32]
+    var layout: ListLayout
+    var list_sizes: List[Int32]
+
+    def __init__(out self, ctx: DeviceContext, index: IvfFlatIndex) raises:
+        self.dcenters = upload_f32(ctx, index.centers)
+        self.dcenter_norm = upload_f32(ctx, index.center_norms)
+        self.dlist_data = upload_f32(ctx, index.list_data)
+        self.dlist_norm = ctx.enqueue_create_buffer[DType.float32](index.n_rows)
+        # THE CANDIDATE NORMS ARE COMPUTED OVER `list_data`, NOT OVER THE
+        # ORIGINAL ROWS, AND THAT IS BIT-EXACT RATHER THAN CLOSE.
+        # `row_norm_kernel` is one block per row reading only that row, so
+        # permuting the rows permutes the outputs and changes no float. This is
+        # what lets `check_nprobe_equals_nlists_is_brute_force` compare against
+        # a `knn_search` whose norms were taken over the unpermuted matrix.
+        compute_row_norms(ctx, self.dlist_data, self.dlist_norm, index.n_rows, index.dim)
+        self.list_norm = download_f32(ctx, self.dlist_norm, index.n_rows)
+        var n_lists = index.n_lists
+        var h_off = ctx.enqueue_create_host_buffer[DType.int32](n_lists + 1)
+        for i in range(n_lists + 1):
+            h_off.unsafe_ptr().unsafe_store(i, index.list_offsets[i])
+        var h_ind = ctx.enqueue_create_host_buffer[DType.uint32](index.n_rows)
+        for i in range(index.n_rows):
+            h_ind.unsafe_ptr().unsafe_store(i, index.list_indices[i])
+        self.d_off = ctx.enqueue_create_buffer[DType.int32](n_lists + 1)
+        self.d_ind = ctx.enqueue_create_buffer[DType.uint32](index.n_rows)
+        ctx.enqueue_copy(dst_buf=self.d_off, src_ptr=h_off.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=self.d_ind, src_ptr=h_ind.unsafe_ptr())
+        ctx.synchronize()
+        _ = h_off^
+        _ = h_ind^
+        self.layout = ListLayout(
+            n_lists,
+            index.n_rows,
+            index.dim,
+            index.list_offsets.copy(),
+            index.list_indices.copy(),
+            index.list_data.copy(),
+        )
+        self.list_sizes = List[Int32]()
+        for l in range(n_lists):
+            self.list_sizes.append(Int32(index.list_size(l)))
+
+
 def ivf_flat_search_traced(
     ctx: DeviceContext,
     mut trace: IdentityTrace,
     index: IvfFlatIndex,
+    sp: IvfFlatSearchParams,
+    queries: List[Float32],
+    n_queries: Int,
+    k: Int,
+    tile_tpb: Int = PINNED_TILE_TPB,
+    expand_tpb: Int = IVF_EXPAND_TPB,
+    partial_storage: Bool = False,
+    keep: List[Int32] = List[Int32](),
+) raises -> IvfSearchResult:
+    """`ivf_flat::search` over an index prepared for this call alone
+    (`IvfFlatDevice`, then `ivf_flat_search_prepared`). See the latter."""
+    ivf_search_params_validate(sp, index.n_lists, n_queries, k)
+    ivf_validate_data(queries, n_queries, index.dim, "queries")
+    var dev = IvfFlatDevice(ctx, index)
+    var r = ivf_flat_search_prepared(
+        ctx, trace, index, dev, sp, queries, n_queries, k, tile_tpb, expand_tpb, partial_storage, keep
+    )
+    _ = dev^
+    return r^
+
+
+def ivf_flat_search_prepared(
+    ctx: DeviceContext,
+    mut trace: IdentityTrace,
+    index: IvfFlatIndex,
+    mut dev: IvfFlatDevice,
     sp: IvfFlatSearchParams,
     queries: List[Float32],
     n_queries: Int,
@@ -491,28 +579,17 @@ def ivf_flat_search_traced(
             + ivf_metric_name(index.metric)
         )
 
-    # ---- upload -------------------------------------------------------
+    # ---- upload: the queries only (the index side is `dev`) -----------
     var dq = upload_f32(ctx, queries)
-    var dcenters = upload_f32(ctx, index.centers)
-    var dcenter_norm = upload_f32(ctx, index.center_norms)
-    var dlist_data = upload_f32(ctx, index.list_data)
     var dq_norm = ctx.enqueue_create_buffer[DType.float32](n_queries)
-    var dlist_norm = ctx.enqueue_create_buffer[DType.float32](index.n_rows)
     compute_row_norms(ctx, dq, dq_norm, n_queries, dim)
-    # THE CANDIDATE NORMS ARE COMPUTED OVER `list_data`, NOT OVER THE
-    # ORIGINAL ROWS, AND THAT IS BIT-EXACT RATHER THAN CLOSE.
-    # `row_norm_kernel` is one block per row reading only that row, so
-    # permuting the rows permutes the outputs and changes no float. This is
-    # what lets `check_nprobe_equals_nlists_is_brute_force` compare against
-    # a `knn_search` whose norms were taken over the unpermuted matrix.
-    compute_row_norms(ctx, dlist_data, dlist_norm, index.n_rows, dim)
     if trace.enabled:
         trace.record_device(ctx, "ivf.query_norm", dq_norm, n_queries)
 
     # ---- step 1: query-to-centroid distances ---------------------------
     var dcoarse = ctx.enqueue_create_buffer[DType.float32](n_queries * n_lists)
     _expanded_distances(
-        ctx, dcoarse, dq, 0, dcenters, dq_norm, dcenter_norm,
+        ctx, dcoarse, dq, 0, dev.dcenters, dq_norm, dev.dcenter_norm,
         n_queries, n_lists, dim, tile_tpb, expand_tpb,
     )
     if trace.enabled:
@@ -580,20 +657,6 @@ def ivf_flat_search_traced(
                 if c < k:
                     enough = False
             if enough:
-                var h_off = ctx.enqueue_create_host_buffer[DType.int32](
-                    n_lists + 1
-                )
-                for i in range(n_lists + 1):
-                    h_off.unsafe_ptr().unsafe_store(i, index.list_offsets[i])
-                var h_ind = ctx.enqueue_create_host_buffer[DType.uint32](
-                    index.n_rows
-                )
-                for i in range(index.n_rows):
-                    h_ind.unsafe_ptr().unsafe_store(i, index.list_indices[i])
-                var d_off = ctx.enqueue_create_buffer[DType.int32](n_lists + 1)
-                var d_ind = ctx.enqueue_create_buffer[DType.uint32](index.n_rows)
-                ctx.enqueue_copy(dst_buf=d_off, src_ptr=h_off.unsafe_ptr())
-                ctx.enqueue_copy(dst_buf=d_ind, src_ptr=h_ind.unsafe_ptr())
                 var d_od = ctx.enqueue_create_buffer[DType.float32](n_queries * k)
                 var d_oi = ctx.enqueue_create_buffer[DType.uint32](n_queries * k)
                 var grid = (n_queries + FIVF_QPB - 1) // FIVF_QPB
@@ -602,8 +665,8 @@ def ivf_flat_search_traced(
                         comptime if IVF_IDENTICAL_SCAN:
                             ctx.enqueue_function[identical_ivf_scan_kernel[KM]](
                                 dq.unsafe_ptr(), dq_norm.unsafe_ptr(),
-                                dlist_data.unsafe_ptr(), dlist_norm.unsafe_ptr(),
-                                d_off.unsafe_ptr(), d_ind.unsafe_ptr(),
+                                dev.dlist_data.unsafe_ptr(), dev.dlist_norm.unsafe_ptr(),
+                                dev.d_off.unsafe_ptr(), dev.d_ind.unsafe_ptr(),
                                 dprobe_idx.unsafe_ptr(),
                                 d_od.unsafe_ptr(), d_oi.unsafe_ptr(),
                                 Int32(n_queries), Int32(dim), Int32(n_probes),
@@ -613,8 +676,8 @@ def ivf_flat_search_traced(
                             )
                         else:
                             ctx.enqueue_function[fast_ivf_scan_kernel[KM]](
-                                dq.unsafe_ptr(), dlist_data.unsafe_ptr(),
-                                d_off.unsafe_ptr(), d_ind.unsafe_ptr(),
+                                dq.unsafe_ptr(), dev.dlist_data.unsafe_ptr(),
+                                dev.d_off.unsafe_ptr(), dev.d_ind.unsafe_ptr(),
                                 dprobe_idx.unsafe_ptr(),
                                 d_od.unsafe_ptr(), d_oi.unsafe_ptr(),
                                 Int32(n_queries), Int32(dim), Int32(n_probes),
@@ -625,18 +688,10 @@ def ivf_flat_search_traced(
                 var fi = download_u32(ctx, d_oi, n_queries * k)
                 if not dist_is_identity:
                     postprocess_distances(fd, index.metric)
-                _ = h_off^
-                _ = h_ind^
-                _ = d_off^
-                _ = d_ind^
                 _ = d_od^
                 _ = d_oi^
                 _ = dq^
-                _ = dcenters^
-                _ = dcenter_norm^
-                _ = dlist_data^
                 _ = dq_norm^
-                _ = dlist_norm^
                 _ = dcoarse^
                 _ = dprobe_dist^
                 _ = dprobe_idx^
@@ -644,18 +699,6 @@ def ivf_flat_search_traced(
                 _ = dpbuf_idx^
                 return IvfSearchResult(fd^, fi^, counts^)
     # ---- steps 3-5: the candidates of each query -----------------------
-    var layout = ListLayout(
-        n_lists,
-        index.n_rows,
-        dim,
-        index.list_offsets.copy(),
-        index.list_indices.copy(),
-        index.list_data.copy(),
-    )
-    var list_sizes = List[Int32]()
-    for l in range(n_lists):
-        list_sizes.append(Int32(index.list_size(l)))
-    var list_norm = download_f32(ctx, dlist_norm, index.n_rows)
 
     # ONE ALLOCATION AT THE WORST CASE, REUSED. The worst case is
     # `n_probes == n_lists`, where every vector is a candidate; anything
@@ -688,12 +731,12 @@ def ivf_flat_search_traced(
         for p in range(n_probes):
             this_probe.append(probe_ids[q * n_probes + p])
 
-        var chunks = calc_chunk_indices(list_sizes, this_probe, n_probes)
+        var chunks = calc_chunk_indices(dev.list_sizes, this_probe, n_probes)
         var n_cand = n_samples_from_chunks(chunks, n_probes)
         var kept = List[Int32]()
         if filtered:
             kept = filter_candidate_slots(
-                layout, merge_probed_lists(layout, this_probe, n_probes), keep
+                dev.layout, merge_probed_lists(dev.layout, this_probe, n_probes), keep
             )
             n_cand = len(kept)
         cand_counts.append(Int32(n_cand))
@@ -732,10 +775,10 @@ def ivf_flat_search_traced(
         if filtered:
             slots = kept.copy()
         else:
-            slots = merge_probed_lists(layout, this_probe, n_probes)
-        var cand_vec = gather_candidate_vectors(layout, slots)
-        var cand_orig = gather_candidate_indices(layout, slots)
-        var cand_norm = gather_candidate_norms(slots, list_norm)
+            slots = merge_probed_lists(dev.layout, this_probe, n_probes)
+        var cand_vec = gather_candidate_vectors(dev.layout, slots)
+        var cand_orig = gather_candidate_indices(dev.layout, slots)
+        var cand_norm = gather_candidate_norms(slots, dev.list_norm)
 
         for i in range(n_cand * dim):
             hcand_vec.unsafe_ptr().unsafe_store(i, cand_vec[i])
@@ -785,11 +828,7 @@ def ivf_flat_search_traced(
         trace.record_list_i32("ivf.out_idx", out_i32)
 
     _ = dq^
-    _ = dcenters^
-    _ = dcenter_norm^
-    _ = dlist_data^
     _ = dq_norm^
-    _ = dlist_norm^
     _ = dcoarse^
     _ = dprobe_dist^
     _ = dprobe_idx^
