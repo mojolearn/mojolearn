@@ -13,7 +13,7 @@ digests, byte LM final witness and loss digests).
 
 | steward id | Mac | commit | what |
 |---|---|---|---|
-| 1790615594330 | m4pro-b | 0dc222cbe | FINAL M4 Pro before/after: A/B base=35d08f9ca (fork point, default path of 037daa353) vs new=0dc222cbe, every bench lane, 2 alternations, plus the Samba step digests (AB_PYPROF) |
+| 1790615594330 | m4pro-b | 30d8fbe81 | FINAL M4 Pro before/after: A/B base=35d08f9ca (fork point, default path of 037daa353) vs new=30d8fbe81, every bench lane, 2 alternations, the Samba step digests (AB_PYPROF), byte LM step at T3 and B1 (2 alternations each) |
 | 1790613514889 | m3ultra-b | fec0f64f5 | AFTER profile on the M3 Ultra (every bench lane, T3 step, census with attention timers; BEFORE = job 1 on the same Mac) + Mamba-3 backward per-stage walls (MOJOLEARN_MAMBA_TIMING) + T3 FORCE_DENY arms with and without the round 3 zdot fold barrier |
 | 1790611567835 | m4pro-a | 4e2df9e4f | A/B base=35d08f9ca vs mid=cd59badeb vs new=4e2df9e4f (samba-train-step, samba-forward, mamba3-forward, lm-train-step, transformer-forward, gemm; 2 alternations) + byte LM step A/B at T3 (denied on 48 GB: round 3 word) and at B1 12L (granted: estash word), 2 alternations each, witness + loss digests + GEMM small-tile window check on the M4 Pro (default, SMALL_KB 16, no small tile) |
 | 1790603073363 | m3ultra-b | 35d08f9ca | profile (every bench lane, T3 shard step, census with attention per-kernel timers; the M3 Ultra grants the estash word at T3, so the recompute change below cannot run there), Samba train step cProfile, attention arms at T3 (granted, FORCE_DENY + NO_ERECOMP = the old denied path, FORCE_DENY = recompute), GEMM geometry sweep (default, KB_WIDE 32, GROUP_M 16, DB, KB_WIDE 32 x SGM 4, no small tile, SPLIT 2048, SPLIT 4096, SPLIT 2048 x KB_WIDE 32), mamba1/mamba2/transformer forward A/B b11745d8e vs 30497d57e vs ca692c7e2 |
@@ -33,6 +33,7 @@ digests, byte LM final witness and loss digests).
 | fec0f64f5 | Apple round 3 zdot (`fused_bwd_zdot_stash_pf_kernel`, the denied path): no barrier after the z fold on Apple (`-D MOJOLEARN_ATTN_ZDOT_STASH_FOLD_BARRIER` restores; other columns unchanged) | DEFAULT | PROVEN: M3 Ultra T3 forced denied 2.640 -> 2.623 s, witness equal (small) |
 | 32634c4b2 | Mamba-3 backward S16: the d_v half computes each q . k dot once per row into shared memory (`mamba3_s16_v_shared_kernel`; `-D MOJOLEARN_MAMBA3_S16_V_NAIVE` reverts; host restatement keeps the naive kernel) | DEFAULT | measuring (job 4) |
 | fbde1272e | Mamba-3 backward S17: the chunk-end `add` chain staged in shared memory, folded by one thread in the naive order (`mamba3_s17_tail_shared_kernel`; `-D MOJOLEARN_MAMBA3_S17_TAIL_NAIVE` reverts) | DEFAULT | measuring (job 4) |
+| 30d8fbe81 | Apple matrix forward pass 1: one barrier per key block fewer (`-D MOJOLEARN_ATTN_FWD_AMMA_P1_BARRIER` restores) | DEFAULT | measuring (job 4) |
 | 815db5956 | Apple attention: a process DENIED the kept exp stashes recomputes one layer's stash in the backward (estash forward into scratch + estash backward) instead of the round 3 zdot | opt-in since 07b658ab3 (`-D MOJOLEARN_ATTN_APPLE_ERECOMP`) | REJECTED as a default: witness equal but 3.619 s vs 3.537 s (round 3 backward) at T3 on the M3 Ultra |
 
 Shared code note: the GEMM arms touch `gemm/checks/gemm_identical.mojo`
