@@ -211,6 +211,21 @@ def main() raises:
     var fhs = zeros(2)
     HostExec.colsum(ptr(fz), ptr(fhs), 3, 2)
     same("5304 flushed colsum host", count_diff_f32(fhs, wf))
+    # the host row sums run W rows at once (host_simd.rowsum_rows): 19 rows
+    # (a vector block and a tail), even rows summing to a subnormal partial
+    var fr = seam_fixture(19, 3, 44)
+    for r in range(0, 19, 2):
+        fr[r * 3] = Float32(1.5e-38)
+        fr[r * 3 + 1] = Float32(-1.4e-38)
+        fr[r * 3 + 2] = Float32(0)
+    var wfr = oracle_rowsum(fr, 19, 3)
+    var plain = zeros(19)
+    for r in range(19):
+        plain[r] = (fr[r * 3] + fr[r * 3 + 1]) + fr[r * 3 + 2]
+    require_separates("5304 subnormal row partial flushed", count_diff_f32(wfr, plain))
+    var fhr = zeros(19)
+    HostExec.rowsum(ptr(fr), ptr(fhr), 19, 3)
+    same("5304 flushed rowsum host (vector rows)", count_diff_f32(fhr, wfr))
     tr.record_list_f32("x_decomp.rowsum", drs)
     # ---- 5302 squared distance
     var d = 13

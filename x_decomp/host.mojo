@@ -40,7 +40,6 @@ from x_decomp.cells import (
     orth_rank_guard,
     trsm_row,
     rand_cell,
-    rowsum_cell,
     pdist_cell,
 )
 from x_decomp.exec_trait import Exec
@@ -62,6 +61,7 @@ from x_decomp.host_simd import (
     sqdist_task,
     sqdist_task_count,
     colsum_rows,
+    rowsum_rows,
     lu_rows,
 )
 
@@ -200,9 +200,9 @@ struct HostExec(Exec):
     def rowsum(a: F32Ptr, dst: F32Ptr, n: Int, d: Int) raises:
         var nb = (d + FOLD_BLOCK - 1) // FOLD_BLOCK
         if nb <= 1:
+            # rowsum_cell's chains, lanes across rows (host_simd.rowsum_rows)
             def rows(t: Int) {imm a, imm dst, imm n, imm d}:
-                for i in range(t * ROW_CHUNK, min(n, (t + 1) * ROW_CHUNK)):
-                    dst.unsafe_store(i, rowsum_cell(a, i, d))
+                rowsum_rows(a, dst, d, t * ROW_CHUNK, min(n, (t + 1) * ROW_CHUNK))
 
             xd_parallel(rows, (n + ROW_CHUNK - 1) // ROW_CHUNK)
             return

@@ -32,7 +32,7 @@ from std.memory import bitcast
 from std.sys.info import simd_width_of
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from x_decomp.cells import F32Ptr, FOLD_BLOCK, add, div0, fold_cell
+from x_decomp.cells import F32Ptr, FOLD_BLOCK, add, div0, fold_cell, rowsum_cell
 
 comptime W = simd_width_of[DType.float32]()
 comptime V = SIMD[DType.float32, W]
@@ -317,6 +317,25 @@ def colsum_rows(a: F32Ptr, dst: F32Ptr, d: Int, r0: Int, r1: Int):
             acc1 = add(acc1, a.unsafe_load(i * d + j))
         dst.unsafe_store(j, acc1)
         j += 1
+
+
+# ---------------------------------------------------------------- rowsum
+def rowsum_rows(a: F32Ptr, dst: F32Ptr, d: Int, r0: Int, r1: Int):
+    """`rowsum_cell` for rows [r0, r1), W rows at once (SIMD across rows,
+    each lane one row read with stride d): each row's chain from +0,
+    columns ascending, one flushed add each (cells.add). The leftover rows
+    go through the cell."""
+    var i = r0
+    while i + W <= r1:
+        var acc = V(0)
+        var row0 = a.unsafe_offset(i * d)
+        for j in range(d):
+            acc = ftz_v[W](acc + ftz_v[W](row0.unsafe_offset(j).strided_load[width=W](d)))
+        dst.unsafe_store(i, acc)
+        i += W
+    while i < r1:
+        dst.unsafe_store(i, rowsum_cell(a, i, d))
+        i += 1
 
 
 # -------------------------------------------------------------------- LU
