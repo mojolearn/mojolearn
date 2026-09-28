@@ -22,6 +22,18 @@ ONE binding entry, `x_prep_run`, which runs a PROGRAM of units
 install) runs the same units in a loop. Python here only lays out the arena,
 lists the stages and reads results back; the only arithmetic it does is
 integer bookkeeping and IEEE basic operations on scalar parameters.
+
+EXCEPTIONS, named (python_work_audit prep; each is host float64 Python today
+and none is covered by a ledger row yet): KBinsDiscretizer's cumulative sample
+weights and 53-bit uniform scaling (`_draw`-driven subsample); IterativeImputer's
+`_truncnorm_host` (statistics.NormalDist, a libm erf/log per missing entry,
+sample_posterior with a user estimator only) and the O(d^2) `_abs_corr` /
+`_neighbours` normalisation (n_nearest_features). IterativeImputer with a
+user `estimator` otherwise runs its data-sized plumbing in
+x_prep/user_host.mojo (row 221, DEVIATION 5411: row selection, gathers, the
+clipped float32 store and the float64 convergence twin); `_fit_host` and
+`_impute_host` stay the Python reference (`_II_NATIVE = False` or
+MOJOLEARN_HOTPATH=python).
 """
 import array
 import bisect
@@ -3387,7 +3399,8 @@ class IterativeImputer(_PrepBase):
         nnf = self.n_nearest_features
         corr = self._abs_corr(Xf, n, dk, mode) if nnf is not None and nnf < dk else None
         if self.estimator is not None:
-            return self._with_indicator(arr, self._fit_host(arr, Xf, orders, corr, float(self.tol) * scale))
+            fit = self._fit_native if _ii_native(mode) else self._fit_host
+            return self._with_indicator(arr, fit(arr, Xf, orders, corr, float(self.tol) * scale))
         pr = _Prog()
         fo, mo, bo = self._prepare(pr, arr, Xf)
         tol = pr.put_scalar(float(self.tol) * scale)
@@ -3483,6 +3496,105 @@ class IterativeImputer(_PrepBase):
         self.imputation_sequence_ = seq
         return Array.from_list(Xt, "<f4")
 
+    def _fit_native(self, arr, Xf, orders, corr, tol):
+        """`_fit_host` with the data-sized plumbing in x_prep/user_host.mojo
+        (lane py-misc-prep): the working block is one float32 C array updated
+        in place, the observed / missing rows of feature j and the estimator's
+        inputs are native gathers, the clipped predictions a native scatter,
+        and the round's float64 convergence measure the native twin of the
+        Python expression (CPython `sum` order: Neumaier since 3.12). The
+        estimator sees the same float32 blocks in the same order; its fit and
+        predict are the only Python per feature. `_fit_host` stays the
+        reference (MOJOLEARN_HOTPATH=python, `_II_NATIVE = False`)."""
+        import sys
+        n, d = arr.shape
+        dk = len(self._keep)
+        b = _prep_binding(_mode())
+        mask = self._mask_arr(arr)
+        Xt = as_f32_c(Xf, name="X")[0].copy()
+        obs = array.array("i", bytes(4 * n))
+        mis = array.array("i", bytes(4 * n))
+        comp = 1 if sys.version_info >= (3, 12) else 0
+        seq = []
+        done = 0
+        for r, order in enumerate(orders):
+            check = not self.sample_posterior and bool(order)
+            prev = Xt.copy() if check else None
+            for j in order:
+                nbl = self._neighbours(corr, j, dk) if corr is not None else [a for a in range(dk) if a != j]
+                est = _clone(self.estimator)
+                mo = b.x_prep_ii_rows(mask._addr, obs.buffer_info()[0], (n, dk, j, 0))
+                mm = b.x_prep_ii_rows(mask._addr, mis.buffer_info()[0], (n, dk, j, 1))
+                Xo, yo = self._ii_block(b, Xt, obs, mo, nbl, j)
+                est.fit(Xo, yo)
+                seq.append((j, nbl, est))
+                self._impute_native(b, Xt, mis, mm, j, nbl, est)
+            done = r + 1
+            if check and b.x_prep_ii_conv(Xt._addr, prev._addr, (n, dk, comp)) < tol:
+                break
+        self.n_iter_ = done if any(orders) else min(1, len(orders))
+        self.imputation_sequence_ = seq
+        return Xt
+
+    def _ii_block(self, b, Xt, rows, m, nbl, j=-1):
+        """(Xt[rows][:, nbl], Xt[rows, j]) as the float32 Arrays
+        `Array.from_list` built from the same words (a 0-row block is
+        `from_list([])`, a 0-column one its m empty rows, as before)."""
+        dk = Xt.shape[1]
+        if m == 0:
+            return Array.from_list([], "<f4"), (Array.from_list([], "<f4") if j >= 0 else None)
+        nc = len(nbl)
+        if nc == 0:
+            X = Array.from_list([[] for _ in range(m)], "<f4")
+        else:
+            X = Array._owned(array.array("f", bytes(4 * m * nc)), (m, nc), "<f4", "C")
+        y = Array._owned(array.array("f", bytes(4 * m)), (m,), "<f4", "C") if j >= 0 else None
+        cols = array.array("i", nbl or [0])
+        b.x_prep_ii_gather(Xt._addr, rows.buffer_info()[0], cols.buffer_info()[0],
+                           X._addr if nc else y._addr if y is not None else Xt._addr,
+                           y._addr if y is not None else 0, (dk, m, nc, j))
+        return X, y
+
+    def _impute_native(self, b, Xt, rows, m, j, nbl, est):
+        """`_impute_host` on the float32 block: predict on the gathered rows,
+        then the clip (or the truncated normal draw, still Python float64 and
+        statistics.NormalDist) and the float32 store natively."""
+        if not m:
+            return
+        dk = Xt.shape[1]
+        Xm, _ = self._ii_block(b, Xt, rows, m, nbl)
+        lo, hi = self._bounds_k[2 * j], self._bounds_k[2 * j + 1]
+        if not self.sample_posterior:
+            v = _pred_f64(est.predict(Xm))
+            clip = 1
+        else:
+            mus, sig = est.predict(Xm, return_std=True)
+            v = Array._owned(array.array("d", [self._truncnorm_host(float(a), float(s_), lo, hi)
+                                               for a, s_ in zip(_as_list(mus), _as_list(sig))]),
+                             (m,), "<f8", "C")
+            clip = 0
+        if v.size != m:
+            # the reference's zip would stop early or ignore extras: keep its words
+            vals = v.tolist()
+            vals = vals[:m] if len(vals) > m else vals
+            k = len(vals)
+            if k == 0:
+                return
+            v = Array._owned(array.array("d", vals), (k,), "<f8", "C")
+            m = k
+        b.x_prep_ii_scatter(Xt._addr, rows.buffer_info()[0], addr_ro(v, name="predict"), (dk, m, j, clip),
+                            (float(lo), float(hi)))
+
+    def _mask_arr(self, arr):
+        """`_mask`'s words (1.0 missing, 0.0 observed) as the float32 (n, dk) Array."""
+        n, d = arr.shape
+        pr = _Prog()
+        xo = _mark_missing(pr, pr.put(arr), n * d, self.missing_values)
+        mo = pr.alloc(n * len(self._keep))
+        pr.stage("nan_mask", n * len(self._keep), xo, n, d, pr.put_list(self._keep), len(self._keep), mo)
+        pr.run(_mode())
+        return as_f32_c(pr.get(mo, (n, len(self._keep))), name="mask")[0]
+
     def _mask(self, arr):
         n, d = arr.shape
         pr = _Prog()
@@ -3539,6 +3651,15 @@ class IterativeImputer(_PrepBase):
         n, d = arr.shape
         dk = len(self._keep)
         Xf = self.initial_imputer_.transform(arr)
+        if self.estimator is not None and _ii_native(self.numeric_mode_):
+            b = _prep_binding(self.numeric_mode_)
+            mask = self._mask_arr(arr)
+            Xt = as_f32_c(Xf, name="X")[0].copy()
+            rows = array.array("i", bytes(4 * n))
+            for j, nbl, est in self.imputation_sequence_:
+                m = b.x_prep_ii_rows(mask._addr, rows.buffer_info()[0], (n, dk, j, 1))
+                self._impute_native(b, Xt, rows, m, j, nbl, est)
+            return self._with_indicator(arr, Xt)
         if self.estimator is not None:
             mask = self._mask(arr)
             Xt = [list(r) for r in Xf.tolist()]
@@ -3571,6 +3692,35 @@ def _clone(est):
 
 def _as_list(v):
     return [float(x) for x in (v.tolist() if hasattr(v, "tolist") else v)]
+
+
+#: lane py-misc-prep: IterativeImputer(estimator=...) runs its plumbing in
+#: x_prep/user_host.mojo; False (or MOJOLEARN_HOTPATH=python) is the Python
+#: reference route, kept for the before/after arms.
+_II_NATIVE = True
+
+
+def _ii_native(mode):
+    from ._buffer import hotpath_enabled
+    if not (_II_NATIVE and hotpath_enabled()):
+        return False
+    try:
+        return hasattr(_prep_binding(mode), "x_prep_ii_conv")
+    except Exception:
+        return False
+
+
+def _pred_f64(v):
+    """A user estimator's predictions as a float64 Array holding the values
+    `_as_list` reads (`float(x)` per element): a float32 or float64 vector
+    widened natively (exact), anything else through `_as_list`."""
+    from ._buffer import _materialize, _has_buffer, as_f64_c
+    if isinstance(v, Array) or (not isinstance(v, (list, tuple)) and _has_buffer(v)):
+        a, _ = _materialize(v, "predict")
+        if a.ndim == 1 and a.dtype in ("<f4", "<f8") and a.size:
+            return as_f64_c(a, ndim=1, name="predict")[0]
+    vals = _as_list(v)
+    return Array._owned(array.array("d", vals), (len(vals),), "<f8", "C")
 
 
 # ---------------------------------------------------------------- feature selection

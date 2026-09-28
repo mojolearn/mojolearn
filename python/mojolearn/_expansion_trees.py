@@ -16,8 +16,16 @@ first imported, after the package, so both may rely on every module existing:
 
 PASS 1 (2026-09-27): every class here fits its trees through the EXISTING
 forest entry points (the rf and gbdt bindings), which carry the
-identical contract on the GPU and on their CPU host bindings; the numeric glue
-between fits (weights, votes, drops) is host arithmetic in fixed order.
+identical contract on the GPU and on their CPU host bindings. The numeric glue
+between fits (votes, weights, drops, calibration) runs in `xtrees/ops.mojo`
+(rows 160-169); Python keeps only O(estimators) scalars in fixed order.
+NOT YET TRUE, owed to the trees family (python_work_audit trees items 3, 9,
+10), and NOT covered by any ledger row: Kernel/PermutationExplainer's per-row
+coalition weights and marginals, Bagging's oob R^2 (`_portable_math.fsum` over
+n) and AdaBoost's sample_weight normalization are still binary64 Python over
+rows. CalibratedClassifierCV's per-class epilogue moved to xtrees on lane
+py-misc-prep (strided platt/isotonic apply, `complement_pairs`, native class
+columns and 0/1 targets); `_CAL_NATIVE = False` is its Python reference.
 """
 import numbers
 import os
@@ -25,7 +33,7 @@ import os
 from . import _portable_math as math
 from . import _mojolearn_rf, _mojolearn_x_trees  # noqa: F401  the bindings this door resolves; name NO other (lane_select counts > 3 as a registry)
 from ._array import Array
-from ._buffer import _materialize, addr, addr_ro, all_finite, as_f32_c, as_f32_colmajor, as_i32_c, empty, full, zeros
+from ._buffer import _materialize, addr, addr_ro, all_finite, as_f32_c, as_f32_colmajor, as_f64_c, as_i32_c, empty, full, zeros
 from ._labels import decode_labels, encode_labels, is_bool
 from ._mode import NumericModeMixin
 from ._forest_protocol import forest_estimator, _forest_fit_arrays, _forest_fit_function
@@ -1955,6 +1963,17 @@ class OneVsRestClassifier(_TreesWrapperBase):
 # column when binary). DEVIATIONS: Platt's minimiser is Newton with
 # backtracking (xtrees/ops.mojo platt_fit) on sklearn's objective, not
 # L-BFGS; the default estimator is this library's LinearSVC as sklearn's.
+#: lane py-misc-prep: CalibratedClassifierCV's per-class epilogue in
+#: xtrees (strided calibrators, native columns and 0/1 targets); False (or
+#: MOJOLEARN_HOTPATH=python) is the Python reference route (the before arm).
+_CAL_NATIVE = True
+
+
+def _cal_native(est):
+    from ._buffer import hotpath_enabled
+    return _CAL_NATIVE and hotpath_enabled() and hasattr(est._bind(), "x_trees_platt_apply_strided")
+
+
 class CalibratedClassifierCV(_TreesWrapperBase):
     _estimator_type = "classifier"
 
@@ -1995,6 +2014,8 @@ class CalibratedClassifierCV(_TreesWrapperBase):
         return acc.reshape((n, k))
 
     def _fit_calibrators(self, S, codes):
+        if _cal_native(self):
+            return self._fit_calibrators_native(S, codes)
         n, c = S.shape
         b = self._bind()
         cl = codes.tolist()
@@ -2022,7 +2043,68 @@ class CalibratedClassifierCV(_TreesWrapperBase):
         v = S.tolist()
         return Array.from_list([row[j] for row in v], "<f8")
 
+    def _fit_calibrators_native(self, S, codes):
+        """`_fit_calibrators` with the class column and its 0/1 target made
+        natively (x_trees_column_f64, x_trees_indicator_codes): the same
+        float64 and int32 words the list comprehensions built."""
+        n, c = S.shape
+        b = self._bind()
+        codes = as_i32_c(codes, ndim=1, name="codes")[0]
+        Sa = as_f64_c(S, ndim=2, name="scores")[0] if c > 1 else None
+        yj = empty((n,), "<i4")
+        y64 = empty((n,), "<f8") if self.method != "sigmoid" else None
+        cals = []
+        for j in range(c):
+            cls = 1 if c == 1 else j
+            if c == 1:
+                f = S.reshape((n,))
+            else:
+                f = empty((n,), "<f8")
+                b.x_trees_column_f64(addr_ro(Sa, name="S"), addr(f, name="f"), [n, c, j])
+            b.x_trees_indicator_codes(addr_ro(codes, name="codes"), addr(yj, name="y"),
+                                      addr(y64, name="y64") if y64 is not None else 0, [n, cls])
+            if self.method == "sigmoid":
+                ab = zeros((2,), "<f8")
+                b.x_trees_platt_fit(addr_ro(f, name="f"), addr_ro(yj, name="y"), addr(ab, name="ab"), [n])
+                cals.append(("sigmoid", tuple(ab.tolist())))
+            else:
+                kx, ky = empty((n,), "<f8"), empty((n,), "<f8")
+                m = int(b.x_trees_isotonic_fit(addr_ro(f, name="x"), addr_ro(y64, name="y"), addr(kx, name="kx"),
+                                               addr(ky, name="ky"), [n]))
+                cals.append(("isotonic", (kx[0:m], ky[0:m], m)))
+        return cals
+
+    def _calibrated_native(self, e, cals, Xa):
+        """`_calibrated` with each calibrator reading its column of the score
+        block in place and writing its column of the (n, k) block (binary:
+        column 1, then column 0 = 1 - column 1, one IEEE subtract), then the
+        same x_trees_normalize_rows: no per-class list and no Python
+        interleave. The per-element operations are the contiguous entries'."""
+        n, k = Xa.shape[0], len(self.classes_)
+        S = as_f64_c(self._scores(e, Xa), ndim=2, name="scores")[0]
+        c = S.shape[1]
+        b = self._bind()
+        w = 2 if k == 2 else k
+        acc = empty((n * w,), "<f8")
+        for j, (kind, par) in enumerate(cals):
+            col = 1 if k == 2 else j
+            if kind == "sigmoid":
+                b.x_trees_platt_apply_strided(addr_ro(S, name="f"), addr(acc, name="p"),
+                                              [n, par[0], par[1], n * c, c, j, n * w, w, col])
+            else:
+                kx, ky, m = par
+                b.x_trees_isotonic_predict_strided(addr_ro(kx, name="kx"), addr_ro(ky, name="ky"),
+                                                   addr_ro(S, name="t"), addr(acc, name="p"),
+                                                   [m, n, n * c, c, j, n * w, w, col])
+        if k == 2:
+            b.x_trees_complement_pairs(addr(acc, name="proba"), [n])
+            return acc
+        b.x_trees_normalize_rows(addr(acc, name="proba"), [n, k])
+        return acc
+
     def _calibrated(self, e, cals, Xa):
+        if _cal_native(self):
+            return self._calibrated_native(e, cals, Xa)
         n, k = Xa.shape[0], len(self.classes_)
         S = self._scores(e, Xa)
         b = self._bind()

@@ -924,13 +924,23 @@ def platt_apply(
     res: MutPointer[Float64, MutUntrackedOrigin],
 ):
     """res[i] = 1 / (1 + exp(A f + B)), written without overflow."""
+    platt_apply_strided(f, 1, n, a, b, res, 1)
+
+
+def platt_apply_strided(
+    f: MutPointer[Float64, MutUntrackedOrigin], fs: Int, n: Int, a: Float64, b: Float64,
+    res: MutPointer[Float64, MutUntrackedOrigin], rs: Int,
+):
+    """`platt_apply` reading f[i * fs] and writing res[i * rs] (lane
+    py-misc-prep: a column of a row-major score block straight into a
+    column of the probability block; the same operations per element)."""
     for i in range(n):
-        var z = identical_mul64(f[unsafe_offset=i], a) + b
+        var z = identical_mul64(f[unsafe_offset=i * fs], a) + b
         if z >= 0.0:
             var e = identical_exp64(-z)
-            res[unsafe_offset=i] = e / (1.0 + e)
+            res[unsafe_offset=i * rs] = e / (1.0 + e)
         else:
-            res[unsafe_offset=i] = 1.0 / (1.0 + identical_exp64(z))
+            res[unsafe_offset=i * rs] = 1.0 / (1.0 + identical_exp64(z))
 
 
 def isotonic_fit(
@@ -1026,13 +1036,22 @@ def isotonic_predict(
     t: MutPointer[Float64, MutUntrackedOrigin], n: Int, res: MutPointer[Float64, MutUntrackedOrigin],
 ):
     """np.interp over the knots with out_of_bounds='clip'."""
+    isotonic_predict_strided(kx, ky, m, t, 1, n, res, 1)
+
+
+def isotonic_predict_strided(
+    kx: MutPointer[Float64, MutUntrackedOrigin], ky: MutPointer[Float64, MutUntrackedOrigin], m: Int,
+    t: MutPointer[Float64, MutUntrackedOrigin], ts: Int, n: Int, res: MutPointer[Float64, MutUntrackedOrigin],
+    rs: Int,
+):
+    """`isotonic_predict` reading t[i * ts] and writing res[i * rs] (lane py-misc-prep)."""
     for i in range(n):
-        var v = t[unsafe_offset=i]
+        var v = t[unsafe_offset=i * ts]
         if m == 1 or v <= kx[unsafe_offset=0]:
-            res[unsafe_offset=i] = ky[unsafe_offset=0]
+            res[unsafe_offset=i * rs] = ky[unsafe_offset=0]
             continue
         if v >= kx[unsafe_offset=m - 1]:
-            res[unsafe_offset=i] = ky[unsafe_offset=m - 1]
+            res[unsafe_offset=i * rs] = ky[unsafe_offset=m - 1]
             continue
         var lo = 0
         var hi = m - 1
@@ -1045,4 +1064,31 @@ def isotonic_predict(
         var x0 = kx[unsafe_offset=lo]
         var y0 = ky[unsafe_offset=lo]
         var slope = (ky[unsafe_offset=hi] - y0) / (kx[unsafe_offset=hi] - x0)
-        res[unsafe_offset=i] = identical_mul64(slope, v - x0) + y0
+        res[unsafe_offset=i * rs] = identical_mul64(slope, v - x0) + y0
+
+
+def complement_pairs(x: MutPointer[Float64, MutUntrackedOrigin], n: Int):
+    """x[2 i] = 1 - x[2 i + 1]: a binary calibrator's (1 - p, p) rows, one
+    IEEE subtract each (the Python `1.0 - x` it replaces)."""
+    for i in range(n):
+        x[unsafe_offset=2 * i] = 1.0 - x[unsafe_offset=2 * i + 1]
+
+
+def indicator_codes(
+    codes: MutPointer[Int32, MutUntrackedOrigin], n: Int, cls: Int,
+    out_i: MutPointer[Int32, MutUntrackedOrigin], out_f: MutPointer[Float64, MutUntrackedOrigin], want_f: Bool,
+):
+    """out_i[r] = 1 if codes[r] == cls else 0 (and out_f the same as 1.0 / 0.0)."""
+    for r in range(n):
+        var hit = Int(codes[unsafe_offset=r]) == cls
+        out_i[unsafe_offset=r] = Int32(1) if hit else Int32(0)
+        if want_f:
+            out_f[unsafe_offset=r] = 1.0 if hit else 0.0
+
+
+def column_f64(
+    src: MutPointer[Float64, MutUntrackedOrigin], n: Int, c: Int, j: Int, dst: MutPointer[Float64, MutUntrackedOrigin],
+):
+    """dst[r] = src[r, j] of a row-major (n, c) block (a copy)."""
+    for r in range(n):
+        dst[unsafe_offset=r] = src[unsafe_offset=r * c + j]
