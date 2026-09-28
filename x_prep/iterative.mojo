@@ -17,7 +17,7 @@ whole max_iter program runs in one binding call.
 """
 from checks.numerics import identical_ndtr, identical_ndtri, ftz
 from x_prep.common import FP, IP, p, ld, st, ldi, raw, RUN, run_block
-from x_prep.prims import add, sub, mul, div, logf, sqrtf
+from x_prep.prims import add, acc_add, sub, mul, div, logf, sqrtf
 from x_prep.mutual_info import _splitmix
 
 comptime BR_MAX_ITER = 300
@@ -60,12 +60,12 @@ def ii_mean_unit(t: Int, f: FP, q: IP):
         var bx = run_block[RUN](f, X + i0 * d + t, d)
         comptime for u in range(RUN):
             if ftz(bm[u]) == Float32(0):
-                s = add(s, ftz(bx[u]))
+                s = acc_add(s, ftz(bx[u]))
                 cnt += 1
     for i in range(full, n):
         if ld(f, M + i * d + j) != Float32(0):
             continue
-        s = add(s, ld(f, X + i * d + t))
+        s = acc_add(s, ld(f, X + i * d + t))
         cnt += 1
     st(f, p(q, 5) + t, div(s, Float32(cnt)) if cnt > 0 else Float32(0))
     if t == 0:
@@ -95,11 +95,11 @@ def ii_gram_unit(t: Int, f: FP, q: IP):
         var bb = run_block[RUN](f, X + i0 * d + b, d)
         comptime for u in range(RUN):
             if ftz(bm[u]) == Float32(0):
-                s = add(s, mul(sub(ftz(ba[u]), ma), sub(ftz(bb[u]), mb)))
+                s = acc_add(s, mul(sub(ftz(ba[u]), ma), sub(ftz(bb[u]), mb)))
     for i in range(full, n):
         if ld(f, M + i * d + j) != Float32(0):
             continue
-        s = add(s, mul(sub(ld(f, X + i * d + a), ma), sub(ld(f, X + i * d + b), mb)))
+        s = acc_add(s, mul(sub(ld(f, X + i * d + a), ma), sub(ld(f, X + i * d + b), mb)))
     st(f, p(q, 6) + t, s)
 
 

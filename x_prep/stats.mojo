@@ -23,7 +23,7 @@ p-value 0 for an infinite F) only when asked.
 from std.memory import bitcast
 from x_prep.common import FP, IP, p, ld, st, canonical_nan, RUN, run_block
 from checks.numerics import ftz
-from x_prep.prims import add, sub, mul, div, logf, expf
+from x_prep.prims import add, acc_add, sub, mul, div, logf, expf
 
 comptime F32_MAX = Float32(3.4028235e38)
 
@@ -214,11 +214,11 @@ def f_regression_unit(t: Int, f: FP, q: IP):
             var bx = run_block[RUN](f, X + i0 * d + c, d)
             var by = run_block[RUN](f, Y + i0, 1)
             comptime for u in range(RUN):
-                sx = add(sx, ftz(bx[u]))
-                sy = add(sy, ftz(by[u]))
+                sx = acc_add(sx, ftz(bx[u]))
+                sy = acc_add(sy, ftz(by[u]))
         for i in range(full, n):
-            sx = add(sx, ld(f, X + i * d + c))
-            sy = add(sy, ld(f, Y + i))
+            sx = acc_add(sx, ld(f, X + i * d + c))
+            sy = acc_add(sy, ld(f, Y + i))
         mx = div(sx, Float32(n))
         my = div(sy, Float32(n))
     var sxy = Float32(0)
@@ -230,15 +230,15 @@ def f_regression_unit(t: Int, f: FP, q: IP):
         comptime for u in range(RUN):
             var ex = sub(ftz(bx[u]), mx)
             var ey = sub(ftz(by[u]), my)
-            sxy = add(sxy, mul(ex, ey))
-            sxx = add(sxx, mul(ex, ex))
-            syy = add(syy, mul(ey, ey))
+            sxy = acc_add(sxy, mul(ex, ey))
+            sxx = acc_add(sxx, mul(ex, ex))
+            syy = acc_add(syy, mul(ey, ey))
     for i in range(full, n):
         var ex = sub(ld(f, X + i * d + c), mx)
         var ey = sub(ld(f, Y + i), my)
-        sxy = add(sxy, mul(ex, ey))
-        sxx = add(sxx, mul(ex, ex))
-        syy = add(syy, mul(ey, ey))
+        sxy = acc_add(sxy, mul(ex, ey))
+        sxx = acc_add(sxx, mul(ex, ex))
+        syy = acc_add(syy, mul(ey, ey))
     var dof = Float32(n - 2) if p(q, 4) != 0 else Float32(n - 1)
     var ff = p(q, 8) != 0
     var score = Float32(0) if ff else canonical_nan()
