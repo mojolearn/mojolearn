@@ -161,6 +161,7 @@ from checks.numerics import (
 )
 from resample.checks.index_map import (
     PERM_MAX_POOLED,
+    draw_pair_flip,
     draw_permutation_key,
     draw_row_index,
     draw_uniform_in,
@@ -839,6 +840,64 @@ def perm_stat_kernel[stat: Int, tpb: Int](
             )
 
     if tid == 0:
+        null_dist.unsafe_store(rr, canonicalize_nan(value))
+
+
+def perm_samples_kernel[two: Bool, tpb: Int](
+    null_dist: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    y: MutPointer[Float32, MutAnyOrigin],
+    lo_bits: Int32,
+    hi_bits: Int32,
+    r_first_in: Int32,
+    n_replicates_in: Int32,
+    n_in: Int32,
+):
+    """`permutation_type='samples'` (2026-09-28): SciPy's paired-sample null.
+    ONE BLOCK PER REPLICATE. Pair `i` trades its two observations when
+    `draw_pair_flip(key, r, i)`; `two`: `null[r] = mean(x') - mean(y')`
+    (`diff_means`), each mean the pinned tree over positions ascending, the
+    difference one flushed subtraction (the independent arm's spelling);
+    one sample: SciPy's convention that the second sample is `-x`, so
+    `null[r] = mean(x')` with `x'_i = -x_i` where the coin flips (`mean`).
+    No rank, no threadgroup memory: `n` is bounded only by the position map."""
+    comptime lanes = PINNED_SUM_W // tpb
+    var rr = Int(block_idx.x)
+    if rr >= Int(n_replicates_in):
+        return
+    var r = Int(r_first_in) + rr
+    var tid = Int(thread_idx.x)
+    var key = key_join(lo_bits, hi_bits)
+    var n = Int(n_in)
+    var sum_x = Float32(0.0)
+    var sum_y = Float32(0.0)
+    for c in range(chunk_count(n)):
+        var vx = SIMD[DType.float32, lanes](0.0)
+        var vy = SIMD[DType.float32, lanes](0.0)
+        comptime for lane in range(lanes):
+            var i = c * PINNED_SUM_W + tid + lane * tpb
+            if i < n:
+                var a = ftz(x.unsafe_load(i))
+                var flip = draw_pair_flip(key, r, i)
+                comptime if two:
+                    var b = ftz(y.unsafe_load(i))
+                    vx[lane] = b if flip else a
+                    vy[lane] = a if flip else b
+                else:
+                    vx[lane] = -a if flip else a
+        var tx = virtual_block_sum[tpb](vx)
+        if tid == 0:
+            sum_x = ftz(sum_x + tx)
+        comptime if two:
+            var ty = virtual_block_sum[tpb](vy)
+            if tid == 0:
+                sum_y = ftz(sum_y + ty)
+    if tid == 0:
+        var value: Float32
+        comptime if two:
+            value = ftz(_mean_of_sum(sum_x, n) - _mean_of_sum(sum_y, n))
+        else:
+            value = _mean_of_sum(sum_x, n)
         null_dist.unsafe_store(rr, canonicalize_nan(value))
 
 

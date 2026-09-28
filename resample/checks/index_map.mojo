@@ -168,6 +168,16 @@ comptime RESAMPLE_KIND_PERMUTATION: UInt64 = 2
 #: The Monte Carlo coordinate: `draw_unit_float` / `draw_uniform_in`.
 comptime RESAMPLE_KIND_MONTE_CARLO: UInt64 = 3
 
+#: The SECOND sample's row draw of an unpaired bootstrap (`paired=False`,
+#: 2026-09-28): `draw_row_index` under its own key, so the two samples'
+#: maps are independent streams, and the FIRST sample keeps kind 1 (its
+#: resample is exactly the one-sample bootstrap of that sample).
+comptime RESAMPLE_KIND_BOOTSTRAP_SECOND: UInt64 = 4
+
+#: The per-pair order bit of a `permutation_type='samples'` replicate
+#: (2026-09-28): `draw_pair_flip`, the top bit of the 64-bit key at (r, i).
+comptime RESAMPLE_KIND_PERM_SAMPLES: UInt64 = 5
+
 #: The jackknife has NO kind byte and draws nothing: leave-one-out is
 #: deterministic. Listed here so a reader does not go looking for it.
 
@@ -330,6 +340,15 @@ def draw_uniform_in(
     """
     var u = draw_unit_float(key, r, i)
     return ftz(identical_mul_add(u, span, lo))
+
+
+@always_inline
+def draw_pair_flip(key: UInt64, r: Int, i: Int) -> Bool:
+    """Whether pair `i` of replicate `r` trades its two observations
+    (`permutation_type='samples'`): the TOP bit of `draw_permutation_key` at
+    that position, so each pair's coin is its own Philox position, a pure
+    function of `(key, r, i)`, and exactly fair."""
+    return (draw_permutation_key(key, r, i) >> UInt64(63)) != UInt64(0)
 
 
 @always_inline

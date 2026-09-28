@@ -950,3 +950,45 @@ def _(ml, X, yc, yr, Xh=None):
                                                      b.confidence_interval[1]], dtype=np.float64),
                          np.asarray([b.order_low, b.order_high], dtype=np.int64))
     return _fit(parts)
+
+
+@lane("resample-unpaired")
+def _(ml, X, yc, yr, Xh=None):
+    """resample.bootstrap((x, y), 'diff_means', paired=False): two samples
+    of different lengths (yr's first 1500 and X[:, 3]'s first 1100) resampled
+    independently, percentile / basic / BCa. The distribution, interval and
+    order positions are hashed; sample 0's means are held to the one-sample
+    mean bootstrap bit for bit (its map is that one's)."""
+    rs = ml.resample
+    x = np.ascontiguousarray(yr[:1500])
+    y = np.ascontiguousarray(X[:1100, 3]).astype(np.float32)
+    parts = {}
+    for name, meth, alt in (("pct", "percentile", "two-sided"), ("basic", "basic", "less"), ("bca", "BCa", "two-sided")):
+        b = rs.bootstrap((x, y), statistic="diff_means", paired=False, n_resamples=1024, method=meth,
+                         random_state=9, alternative=alt)
+        parts[name] = _h(b.distribution, np.asarray([b.point_estimate, b.standard_error, b.confidence_interval[0],
+                                                     b.confidence_interval[1]], dtype=np.float64),
+                         np.asarray([b.order_low, b.order_high], dtype=np.int64))
+    return _fit(parts)
+
+
+@lane("resample-perm-samples")
+def _(ml, X, yc, yr, Xh=None):
+    """resample.permutation_test(permutation_type='samples'): the paired
+    diff_means null of (yr, X[:, 3]) over 1500 pairs and the one-sample
+    sign-flip mean null of their differences, 2048 permutations, each
+    alternative. Null, statistic, p-value and the two counts hashed."""
+    rs = ml.resample
+    a = np.ascontiguousarray(yr[:1500])
+    b = np.ascontiguousarray(X[:1500, 3]).astype(np.float32)
+    d = (a - b).astype(np.float32)
+    parts = {}
+    for alt in ("two-sided", "less", "greater"):
+        p = rs.permutation_test(a, b, statistic="diff_means", permutation_type="samples", n_resamples=2048,
+                                random_state=6, alternative=alt)
+        q = rs.permutation_test(d, statistic="mean", permutation_type="samples", n_resamples=2048,
+                                random_state=6, alternative=alt)
+        for tag, r in (("pair", p), ("flip", q)):
+            parts[tag + "-" + alt] = _h(r.null_distribution, np.asarray([r.statistic, r.pvalue], dtype=np.float64),
+                                        np.asarray([r.count_less, r.count_greater], dtype=np.int64))
+    return _fit(parts)

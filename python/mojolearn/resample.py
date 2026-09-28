@@ -131,7 +131,7 @@ def _int(v, name, where):
 
 def bootstrap(data, statistic="mean", n_resamples=9999, confidence_level=0.95,
               method="percentile", alternative="two-sided", random_state=0,
-              q_or_prop=0.5, r_first=0, numeric_mode=None):
+              q_or_prop=0.5, r_first=0, numeric_mode=None, paired=True):
     """`scipy.stats.bootstrap((data,), statistic, n_resamples=...,
     rng=random_state, method=..., confidence_level=..., alternative=...)`.
 
@@ -142,8 +142,16 @@ def bootstrap(data, statistic="mean", n_resamples=9999, confidence_level=0.95,
     'BCa' (case-insensitive, as SciPy); BCa ships for mean, std and
     diff_means (DEVIATION 1699) and `order_low` / `order_high` are then the
     positions at its adjusted levels.
+
+    `paired=False` with `data=(x, y)`, two 1-D samples of any lengths and
+    `statistic='diff_means'`: SciPy's unpaired two-sample bootstrap, each
+    sample resampled independently (sample 0 by the one-sample map, sample 1
+    by its own). A single sample ignores `paired`, as SciPy does.
     """
     where = "bootstrap"
+    if not paired and isinstance(data, (tuple, list)):
+        return _bootstrap_unpaired(data, statistic, n_resamples, confidence_level, method,
+                                   alternative, random_state, r_first, numeric_mode)
     x, _ = as_f32_c(data, ndim=None, name="data")
     if x.ndim == 1:
         n, d = x.shape[0], 1
@@ -174,13 +182,58 @@ def bootstrap(data, statistic="mean", n_resamples=9999, confidence_level=0.95,
                            float(scalars[2]), float(scalars[3]), int(scalars[4]), int(scalars[5]))
 
 
-def permutation_test(x, y, statistic="diff_means", n_resamples=9999,
-                     alternative="two-sided", random_state=0, r_first=0, numeric_mode=None):
+def _bootstrap_unpaired(data, statistic, n_resamples, confidence_level, method,
+                        alternative, random_state, r_first, numeric_mode):
+    where = "bootstrap(paired=False)"
+    if len(data) != 2:
+        raise ValueError(f"mojolearn {where}: data must be two samples (x, y), got {len(data)}")
+    if statistic != "diff_means":
+        raise ValueError(
+            f"mojolearn {where}: statistic {statistic!r} is refused by name: the unpaired bootstrap's"
+            " two-sample statistic is 'diff_means' (a one-sample statistic has no pairing; pearson needs pairs)")
+    xx, _ = as_f32_c(data[0], ndim=1, name="x")
+    yy, _ = as_f32_c(data[1], ndim=1, name="y")
+    meth = _code(METHODS, method.lower() if isinstance(method, str) else method, "method", where)
+    alt = _code(ALTERNATIVES, alternative, "alternative", where)
+    r = _int(n_resamples, "n_resamples", where)
+    dist = empty((max(r, 0),), "<f4")
+    sdist = empty((max(r, 0),), "<f4")
+    scalars = empty((6,), "<f8")
+    _extension(numeric_mode).bootstrap_unpaired(
+        # ORDER MATCHES bindings/_mojolearn_resample.mojo::bootstrap_unpaired_binding.
+        [addr_ro(xx, name="x"), addr_ro(yy, name="y"), addr(dist, name="distribution"),
+         addr(sdist, name="sorted_distribution"), addr(scalars, name="scalars")],
+        # n_x, n_y, n_resamples, seed, method, confidence_level, alternative, r_first
+        [xx.shape[0], yy.shape[0], r, _int(random_state, "random_state", where), meth,
+         _real(confidence_level, "confidence_level", where), alt, _int(r_first, "r_first", where)],
+    )
+    return BootstrapResult(float(scalars[0]), dist, sdist, float(scalars[1]),
+                           float(scalars[2]), float(scalars[3]), int(scalars[4]), int(scalars[5]))
+
+
+def permutation_test(x, y=None, statistic="diff_means", n_resamples=9999,
+                     alternative="two-sided", random_state=0, r_first=0, numeric_mode=None,
+                     permutation_type="independent"):
     """`scipy.stats.permutation_test((x, y), statistic,
     permutation_type='independent', n_resamples=..., rng=random_state,
     alternative=...)`. `x` and `y` are 1-D float32. The null is never
     exhaustive (DEVIATION 1702); the p-value is conservative."""
     where = "permutation_test"
+    ptype = permutation_type.lower() if isinstance(permutation_type, str) else permutation_type
+    if ptype == "samples":
+        return _permutation_samples(x, y, statistic, n_resamples, alternative, random_state,
+                                    r_first, numeric_mode)
+    if ptype == "pairings":
+        raise ValueError(
+            f"mojolearn {where}: permutation_type='pairings' is refused by name: its null permutes every"
+            " sample's observation order, which for the implemented statistics (mean, std, diff_means)"
+            " leaves the statistic unchanged -- the null is the observed value R times; pearson, the"
+            " statistic it exists for, has no permutation arm (resample/NOT_IMPLEMENTED.tsv)")
+    if ptype != "independent":
+        raise ValueError(f"mojolearn {where}: permutation_type must be 'independent', 'samples' or"
+                         f" 'pairings', got {permutation_type!r}")
+    if y is None:
+        raise ValueError(f"mojolearn {where}: permutation_type='independent' needs two samples x and y")
     xx, _ = as_f32_c(x, ndim=1, name="x")
     yy, _ = as_f32_c(y, ndim=1, name="y")
     stat = _code(STATISTICS, statistic, "statistic", where)
@@ -196,6 +249,35 @@ def permutation_test(x, y, statistic="diff_means", n_resamples=9999,
         [addr_ro(xx, name="x"), addr_ro(yy, name="y"), addr(null, name="null_distribution"), addr(scalars, name="scalars")],
         # n_x, n_y, statistic, n_resamples, seed, alternative, r_first
         [xx.shape[0], yy.shape[0], stat, r, seed, alt, rf],
+    )
+    return PermutationTestResult(float(scalars[0]), null, float(scalars[1]), int(scalars[2]), int(scalars[3]))
+
+
+def _permutation_samples(x, y, statistic, n_resamples, alternative, random_state, r_first, numeric_mode):
+    """permutation_type='samples': (x, y) paired, diff_means, each pair's two
+    observations traded by a fair coin; (x,) alone (y None), mean, the sign of
+    each observation flipped (SciPy's one-sample convention)."""
+    where = "permutation_test(permutation_type='samples')"
+    xx, _ = as_f32_c(x, ndim=1, name="x")
+    want = "mean" if y is None else "diff_means"
+    if statistic != want:
+        raise ValueError(
+            f"mojolearn {where}: statistic {statistic!r} is refused by name; the implemented arm for "
+            f"{'one sample' if y is None else 'two paired samples'} is {want!r}")
+    if y is None:
+        yy, ny = xx, 0
+    else:
+        yy, _ = as_f32_c(y, ndim=1, name="y")
+        ny = yy.shape[0]
+    r = _int(n_resamples, "n_resamples", where)
+    null = empty((max(r, 0),), "<f4")
+    scalars = empty((4,), "<f8")
+    _extension(numeric_mode).permutation_samples(
+        # ORDER MATCHES bindings/_mojolearn_resample.mojo::permutation_samples_binding.
+        [addr_ro(xx, name="x"), addr_ro(yy, name="y"), addr(null, name="null_distribution"), addr(scalars, name="scalars")],
+        # n, n_y, n_resamples, seed, alternative, r_first
+        [xx.shape[0], ny, r, _int(random_state, "random_state", where),
+         _code(ALTERNATIVES, alternative, "alternative", where), _int(r_first, "r_first", where)],
     )
     return PermutationTestResult(float(scalars[0]), null, float(scalars[1]), int(scalars[2]), int(scalars[3]))
 
