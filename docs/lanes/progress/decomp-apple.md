@@ -95,8 +95,46 @@ decomp_speed, synth N=200k (N2 20k, N3 1500, N4 20k), seconds:
 
 | request | what |
 |---|---|
-| 1790583099651-speed-decomp-06752fa5ff (m4pro-a) | items 1-3 only (the before of item 4); algorithms without the old-code manifold runs |
-| 1790586709302-speed-decomp-712cdc7d46 (m4pro-a) | AFTER everything kept (items 1-4, pool classes, 2^14 threshold, 128-buffer cap): decomp_speed, out digests GPU + CPU |
+| 1790588268075-speed-decomp-654518666a (m4pro-a) | the resident threshold swept (MOJOLEARN_XD_RES_MIN 1 / 1024 / 16384) on the call-heavy algorithms |
+
+## Before -> after, CURRENT (m4pro-a, IDENTICAL, synth 200k x 28; E = 1790586709302 at 712cdc7d4)
+
+A (1790583099651 at 06752fa5f, items 1-3 only) isolates item 4: linalg.qr
+8.64 s at A -> 1.66 s at E (geqrf 6.75 -> 1.24, orgqr 1.88 -> 0.42).
+Digests at E: all 27 algorithms of bench/decomp_out_digest.py print the same
+hash on Metal and on the CPU, and the same Metal hashes as at C.
+
+| algorithm | before s | C s | E s | before/E |
+|---|---|---|---|---|
+| PCA(randomized,5) | 0.264 | 0.164 | 0.154 | 1.71x |
+| TruncatedSVD(randomized,5) | 0.320 | 0.207 | 0.204 | 1.57x |
+| IncrementalPCA | 0.077 | 0.045 | 0.049 | 1.57x |
+| GaussianRandomProjection | 0.036 | 0.010 | 0.011 | 3.27x |
+| SparseRandomProjection | 0.035 | 0.011 | 0.012 | 2.92x |
+| NMF mu | 0.467 | 0.225 | 0.221 | 2.11x |
+| NMF cd | 0.429 | 0.338 | 0.348 | 1.23x |
+| FastICA | 0.323 | 0.088 | 0.134 | 2.41x |
+| FactorAnalysis | 0.312 | 0.196 | 0.301 | 1.04x |
+| lstsq | 0.131 | 0.084 | 0.104 | 1.26x |
+| randomized_svd | 0.260 | 0.148 | 0.175 | 1.49x |
+| PLSRegression | 0.481 | 0.145 | 0.152 | 3.16x |
+| CCA | 0.572 | 0.218 | 0.212 | 2.70x |
+| MinCovDet | 46.98 | 67.68 | 51.36 | 0.91x |
+| linalg.qr | 8.855 | 1.674 | 1.664 | 5.32x |
+| linalg.svd | 8.911 | 1.840 | 1.824 | 4.89x |
+| solve(512) | 0.146 | 0.306 | 0.150 | 0.97x |
+| SparsePCA | 0.363 | 0.237 | 0.137 | 2.65x |
+| DictionaryLearning | 0.375 | 0.451 | 0.346 | 1.08x |
+| MiniBatchDictionaryLearning | 1.668 | 2.582 | 1.775 | 0.94x |
+| LatentDirichletAllocation | 0.503 | 0.425 | 0.303 | 1.66x |
+| MDS (5 it) | 0.207 | 0.054 | 0.052 | 3.98x |
+| Isomap shortest paths (1500) | 3.703 | 0.115 | | 32x |
+| ALS / ALS cg | 3.969 / 1.420 | | 3.910 / 1.324 | 1.02x / 1.07x |
+| TruncatedSVD full / UMAP / SpectralEmbedding rbf (no x_decomp kit calls) | 0.014 / 0.236 / 3.19 | | 0.020 / 0.301 / 3.52 | slower; not this lane's code paths (A shows the same) |
+
+The 2^14 threshold (E) gave back part of C's gain on FastICA and
+FactorAnalysis (their small-matrix calls went synchronous again) while
+fixing MinCovDet; request F sweeps it.
 
 ## Before -> after, round C (m4pro-a, IDENTICAL, synth 200k x 28; C = 1790582024178 at fb281eb88)
 
