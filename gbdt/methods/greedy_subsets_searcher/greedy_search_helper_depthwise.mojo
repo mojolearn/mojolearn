@@ -296,10 +296,11 @@ comptime IDS_SLOT_ALL = 4
 comptime IDS_SLOT_VISIT = 5
 comptime IDS_SLOT_SUB_LEFT = 6
 comptime IDS_SLOT_SUB_RIGHT = 7
-comptime IDS_SLOT_LEFT = 8
-comptime IDS_SLOT_RIGHT = 9
-comptime IDS_SLOT_WIN = 10
-comptime IDS_SLOTS = 11
+comptime IDS_SLOT_SP_BINS = 8
+comptime IDS_SLOT_LEFT = 9
+comptime IDS_SLOT_RIGHT = 10
+comptime IDS_SLOT_WIN = 11
+comptime IDS_SLOTS = 12
 
 comptime ID_UPLOAD_COALESCE = not is_defined[
     "MOJOLEARN_GBDT_ID_UPLOADS_SEPARATE"
@@ -451,6 +452,11 @@ struct TDepthwiseWorkspace(Movable):
     var h_ids_arena: HostBuffer[DType.uint32]
     var d_sub_left: DeviceBuffer[DType.uint32]
     var d_sub_right: DeviceBuffer[DType.uint32]
+    # the split's bin per splitting leaf (their `splitBins`), this
+    # driver's own arena slot beside the split pair; the symmetric pool's
+    # `sp_bins` is not used here
+    var d_sp_bins: DeviceBuffer[DType.uint32]
+    var h_sp_bins: HostBuffer[DType.uint32]
     # DEVIATION 1904 (wired): the device-resident winner fold's planes.
     # The four `TBinFeatureTable` columns (feature, clamp-raw bin, one-hot
     # flag, fold count -- each `hist_cells` long, their own staging pairs
@@ -553,6 +559,12 @@ struct TDepthwiseWorkspace(Movable):
         )
         self.d_visit = arena.create_sub_buffer[DType.uint32](
             IDS_SLOT_VISIT * max_leaves, max_leaves
+        )
+        self.d_sp_bins = arena.create_sub_buffer[DType.uint32](
+            IDS_SLOT_SP_BINS * max_leaves, max_leaves
+        )
+        self.h_sp_bins = ctx.enqueue_create_host_buffer[DType.uint32](
+            max_leaves
         )
         self.h_visit = ctx.enqueue_create_host_buffer[DType.uint32](
             max_leaves
@@ -1177,8 +1189,8 @@ def fit_non_symmetric_tree[
     ref flat_one_hot = ws[0].flat_one_hot
     ref sp_feats = ws[0].sp_feats
     ref sp_feats_h = ws[0].sp_feats_h
-    ref sp_bins = ws[0].sp_bins
-    ref sp_bins_h = ws[0].sp_bins_h
+    ref sp_bins = dws[0].d_sp_bins
+    ref sp_bins_h = dws[0].h_sp_bins
     ref dense_ids = ws[0].dense_ids
 
     ref region_score = dws[0].region_score
@@ -1222,6 +1234,7 @@ def fit_non_symmetric_tree[
     ids_host.append(h_visit.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]())
     ids_host.append(h_left.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]())
     ids_host.append(h_right.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]())
+    ids_host.append(sp_bins_h.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]())
     ids_host.append(h_left.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]())
     ids_host.append(h_right.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]())
     ids_host.append(h_win_cells.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]())
@@ -2532,10 +2545,10 @@ def fit_non_symmetric_tree[
 
             var n_split = len(to_split)
             ctx.enqueue_copy(dst_buf=sp_feats, src_ptr=sp_feats_h.unsafe_ptr())
-            ctx.enqueue_copy(dst_buf=sp_bins, src_ptr=sp_bins_h.unsafe_ptr())
-            # the split pair (and, FAST, DEVIATION 1901's winning cells) in
-            # one arena copy (ID_UPLOAD_COALESCE)
+            # the split bins, the split pair (and, FAST, DEVIATION 1901's
+            # winning cells) in one arena copy (ID_UPLOAD_COALESCE)
             var split_slots = List[Int]()
+            split_slots.append(IDS_SLOT_SP_BINS)
             split_slots.append(IDS_SLOT_LEFT)
             split_slots.append(IDS_SLOT_RIGHT)
             comptime if not SPLIT_COST_IDENTICAL:
