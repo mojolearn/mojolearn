@@ -5,7 +5,7 @@
 reference, NOT by calling the bodies, plus the UNPINNED spelling of each seam
 (the alternative a separating fixture must tell apart). Each function names
 its DEVIATION (IDENTITY_PATHS.md rows 110-119)."""
-from std.math import fma
+from std.math import fma, sqrt
 
 from checks.numerics import ftz, identical_div, identical_exp, identical_log, identical_mul, identical_mul64, identical_pow, identical_sqrt
 
@@ -385,3 +385,64 @@ def oracle_agglo(
         live[bb] = False
         size[ba] = na + nb
         node[ba] = n + step
+
+
+# ---------------------------------------------------------------- DEVIATION 5119
+def oracle_jacobi_svd(
+    a: List[Float64], m: Int, mut u: List[Float64], mut sv: List[Float64], mut v: List[Float64],
+    reversed_fold: Bool = False,
+) raises:
+    """`x_cluster/spectral_assign.mojo::jacobi_svd` restated for a full-rank
+    a: one-sided Jacobi on the columns, pairs (p < q) in row order, the three
+    column sums folded rows ascending (descending with `reversed_fold`, the
+    alternative the fixture must separate), every product pinned, zeta =
+    (beta - alpha) / (2 gamma), t = sign(zeta) / (|zeta| + sqrt(1 + zeta^2)),
+    c = 1 / sqrt(1 + t^2), s = c t; stop after a sweep that rotates nothing."""
+    var w = a.copy()
+    v = List[Float64](length=m * m, fill=0)
+    for i in range(m):
+        v[i * m + i] = 1
+
+    def col(w: List[Float64], m: Int, p: Int, q: Int, rev: Bool) -> Float64:
+        var s = Float64(0)
+        for rr in range(m):
+            var r = m - 1 - rr if rev else rr
+            s += identical_mul64(w[r * m + p], w[r * m + q])
+        return s
+
+    for _sweep in range(80):
+        var rotated = False
+        for p in range(m - 1):
+            for q in range(p + 1, m):
+                var alpha = col(w, m, p, p, reversed_fold)
+                var beta = col(w, m, q, q, reversed_fold)
+                var gamma = col(w, m, p, q, reversed_fold)
+                if gamma == 0 or abs(gamma) <= Float64(2.220446049250313e-16) * sqrt(identical_mul64(alpha, beta)):
+                    continue
+                rotated = True
+                var zeta = (beta - alpha) / (2 * gamma)
+                var t = Float64(1) / (abs(zeta) + sqrt(1 + identical_mul64(zeta, zeta)))
+                if zeta < 0:
+                    t = -t
+                var c = Float64(1) / sqrt(1 + identical_mul64(t, t))
+                var s = identical_mul64(c, t)
+                for r in range(m):
+                    var wp = w[r * m + p]
+                    var wq = w[r * m + q]
+                    w[r * m + p] = identical_mul64(c, wp) - identical_mul64(s, wq)
+                    w[r * m + q] = identical_mul64(s, wp) + identical_mul64(c, wq)
+                    var vp = v[r * m + p]
+                    var vq = v[r * m + q]
+                    v[r * m + p] = identical_mul64(c, vp) - identical_mul64(s, vq)
+                    v[r * m + q] = identical_mul64(s, vp) + identical_mul64(c, vq)
+        if not rotated:
+            break
+    sv = List[Float64](length=m, fill=0)
+    u = List[Float64](length=m * m, fill=0)
+    for j in range(m):
+        var nj = sqrt(col(w, m, j, j, reversed_fold))
+        if nj == 0:
+            raise Error("oracle_jacobi_svd: the fixture must be full rank")
+        sv[j] = nj
+        for r in range(m):
+            u[r * m + j] = w[r * m + j] / nj
