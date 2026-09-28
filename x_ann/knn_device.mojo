@@ -103,14 +103,17 @@ def knn_enqueue(
 ) raises:
     """Enqueue the k-NN graph of the n x d rows in dx (no sync)."""
     var blocks = (n + KTB - 1) // KTB
-    if d <= 8:
-        ctx.enqueue_function[knn_tiled_kernel[8]](Int32(n), dx.unsafe_ptr(), Int32(d), Int32(nn), dnd.unsafe_ptr(),
-                                                   dni.unsafe_ptr(), grid_dim=blocks, block_dim=KTB)
-    elif d <= 16:
-        ctx.enqueue_function[knn_tiled_kernel[16]](Int32(n), dx.unsafe_ptr(), Int32(d), Int32(nn), dnd.unsafe_ptr(),
-                                                    dni.unsafe_ptr(), grid_dim=blocks, block_dim=KTB)
-    elif d <= 32:
-        ctx.enqueue_function[knn_tiled_kernel[32]](Int32(n), dx.unsafe_ptr(), Int32(d), Int32(nn), dnd.unsafe_ptr(),
+    # lane ann-apple2: the fold width is d rounded up to a multiple of 4 up
+    # to 32 (fewer padded steps; a padded step is the identity, see above),
+    # then 48 and 64
+    comptime for w4 in range(1, 9):
+        if d <= 4 * w4 and d > 4 * (w4 - 1):
+            ctx.enqueue_function[knn_tiled_kernel[4 * w4]](Int32(n), dx.unsafe_ptr(), Int32(d), Int32(nn),
+                                                            dnd.unsafe_ptr(), dni.unsafe_ptr(), grid_dim=blocks,
+                                                            block_dim=KTB)
+            return
+    if d <= 48:
+        ctx.enqueue_function[knn_tiled_kernel[48]](Int32(n), dx.unsafe_ptr(), Int32(d), Int32(nn), dnd.unsafe_ptr(),
                                                     dni.unsafe_ptr(), grid_dim=blocks, block_dim=KTB)
     elif d <= 64:
         ctx.enqueue_function[knn_tiled_kernel[64]](Int32(n), dx.unsafe_ptr(), Int32(d), Int32(nn), dnd.unsafe_ptr(),
