@@ -1,0 +1,13 @@
+diff --git a/glm/impl/ols.mojo b/glm/impl/ols.mojo
+index 0b1263cea..559344816 100644
+--- a/glm/impl/ols.mojo
++++ b/glm/impl/ols.mojo
+@@ -390,7 +390,7 @@ def ols_fit_weighted_traced(
+     # DEVIATIONS 550 and 551.
+     var selected_algo = algo
+     if n_cols > n_rows:
+-        selected_algo = OLS_ALGO_MIN_NORM_EIG
++        selected_algo = OLS_ALGO_EIG  # SABOTAGE 550: the wide shape on the singular A^T A
+     elif n_cols == 1:
+         selected_algo = OLS_ALGO_EIG
+ 
