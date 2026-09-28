@@ -84,8 +84,11 @@ run("LatentDirichletAllocation(5,10it)", lambda: ml.LatentDirichletAllocation(n_
 R = (np.random.default_rng(0).random((20000, 2000)) < 0.01).astype(np.float32)
 run("ALS(32f,5it)", lambda: ml.AlternatingLeastSquares(factors=32, iterations=5, random_state=0).fit(R))
 run("ALS(32f,5it,cg)", lambda: ml.AlternatingLeastSquares(factors=32, iterations=5, use_cg=True, random_state=0).fit(R))
-n3 = int(os.environ.get("N3", "10000"))
-run("Isomap(10nn)", lambda: ml.Isomap(n_neighbors=10).fit(X[:n3]))
+n3 = int(os.environ.get("N3", "2000"))
+# Isomap is never timed at 10k rows (Andrew 2026-09-28: it hung on AMD there; its
+# n x n eigh is the wall past a few thousand rows)
+n3i = min(n3, int(os.environ.get("N3_ISOMAP", "3000")))
+run("Isomap(10nn)", lambda: ml.Isomap(n_neighbors=10).fit(X[:n3i]))
 run("LocallyLinearEmbedding(10nn)", lambda: ml.LocallyLinearEmbedding(n_neighbors=10).fit(X[:n3]))
 run("ClassicalMDS", lambda: ml.ClassicalMDS().fit(X[:n3]))
 run("MDS(5it)", lambda: ml.MDS(max_iter=5, n_init=1, random_state=0).fit(X[:min(n3, 3000)]))
