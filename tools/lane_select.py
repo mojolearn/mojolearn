@@ -4385,6 +4385,327 @@ def _runtime_import_roots(model):
     return out
 
 
+# ------------------------------------------------ the classical host gate
+#: THE CLASSICAL HOST GATE (2026-09-28). tools/classical_host_gate.py is a
+#: table of per-lane entries (`LANES`, `PROBE_NAMES`, `LANE_PROBE_ROWS`,
+#: `LOCAL_FITS`, `KIND_PROBES`) beside the machinery that runs them, and the
+#: digest it prints for a lane is that lane's `infer` cell. The lane-selector
+#: rewrite of 2026-09-27 left it NOT ATTRIBUTABLE: nothing a lane reaches
+#: imports it, and the manifest's `gate=` strings name it, so it was neither
+#: in a lane's map nor unreachable, and lane/algos-ann-b (one new entry,
+#: `ivf-filter`, and its probe helper) was refused by name. Now its diff is
+#: read entry by entry, the way `registry_lanes` reads host_surface.py:
+#:   * a lane-keyed entry that was added, removed or edited selects that lane;
+#:   * any other top-level definition that changed selects the lanes whose
+#:     entries reach it through the module's own names (the helper a probe
+#:     calls, the extras table an entry carries), in this file and in every
+#:     gate fragment (tools/classical_host_lanes/<id>.py runs in a copy of
+#:     this module's namespace, so its probes may call these helpers);
+#:   * a change that reaches the gate's machinery (`main` and what it runs)
+#:     moves every lane the gate checks, and selects exactly those: the keys
+#:     of its LANES, fragments included, never the whole registry;
+#:   * a change it cannot read (an entry for no registered lane, a key it
+#:     cannot evaluate) is refused by name (`GATE_WHY`).
+CLASSICAL_GATE = os.path.join("tools", "classical_host_gate.py")
+
+#: The gate's tables keyed BY LANE: an entry is about its key's lane alone.
+GATE_LANE_TABLES = ("LANES", "PROBE_NAMES", "LANE_PROBE_ROWS", "LOCAL_FITS")
+
+#: The gate's tuples OF LANES: a membership change is about the lanes that moved.
+GATE_LANE_TUPLES = ("KIND_PROBES",)
+
+#: The gate's entry points: what runs whenever the gate runs, for every lane.
+GATE_ROOTS = ("main",)
+
+#: `f"{ref}:{path}"` -> why `gate_lanes` could not place the change.
+GATE_WHY = {}
+
+#: AST nodes a gate key expression may contain to be evaluated here: literals,
+#: names of literal module constants, f-strings, `+`, and comprehensions.
+_GATE_EVAL_NODES = (ast.Expression, ast.Constant, ast.Name, ast.Load, ast.Store, ast.Tuple,
+                    ast.List, ast.Set, ast.JoinedStr, ast.FormattedValue, ast.BinOp, ast.Add,
+                    ast.ListComp, ast.comprehension, ast.Call)
+_GATE_EVAL_CALLS = {"tuple": tuple, "list": list, "sorted": sorted}
+
+
+def _gate_eval(node, consts):
+    """The value of a small literal expression, or raise ValueError. Only
+    `_GATE_EVAL_NODES` are admitted and the only calls are `_GATE_EVAL_CALLS`
+    on a bare name, so nothing in the repository runs."""
+    expr = ast.Expression(body=node)
+    for sub in ast.walk(expr):
+        if not isinstance(sub, _GATE_EVAL_NODES):
+            raise ValueError(f"cannot evaluate {type(sub).__name__}")
+        if isinstance(sub, ast.Call) and not (isinstance(sub.func, ast.Name)
+                                              and sub.func.id in _GATE_EVAL_CALLS and not sub.keywords):
+            raise ValueError("a call that is not tuple/list/sorted")
+    ast.fix_missing_locations(expr)
+    return eval(compile(expr, "<gate key>", "eval"),  # noqa: S307 (whitelisted nodes above)
+                {"__builtins__": {}, **_GATE_EVAL_CALLS}, dict(consts))
+
+
+def _gate_consts(tree):
+    """Module-level `NAME = <literal expression>` values (`_KMEANS_LANES`,
+    `KIND_PROBES`), later bindings winning, as far as they evaluate."""
+    consts = {}
+    for node in tree.body if tree else ():
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            try:
+                consts[node.targets[0].id] = _gate_eval(node.value, consts)
+            except Exception:                                   # noqa: BLE001
+                consts.pop(node.targets[0].id, None)
+    return consts
+
+
+def _gate_spread_keys(node, consts):
+    """The keys a `**spread` or a computed key contributes, as strings."""
+    if isinstance(node, ast.Dict):
+        out = []
+        for k, v in zip(node.keys, node.values):
+            out += _gate_spread_keys(v, consts) if k is None else [_gate_eval(k, consts)]
+        return [str(k) for k in out]
+    if isinstance(node, ast.DictComp):
+        return [str(k) for k in _gate_eval(ast.ListComp(elt=node.key, generators=node.generators), consts)]
+    raise ValueError(f"a {type(node).__name__} spread")
+
+
+def _gate_units(tree):
+    """{unit key: (node, kind, table)} for one revision of the gate or a gate
+    fragment. A dict literal bound at top level is split into its ENTRIES
+    (`("entry", (table, occurrence), key)`) and its spreads; every other
+    top-level statement is one unit keyed like `_occurrence_keys`."""
+    units, seen = {}, {}
+    for node in tree.body if tree else ():
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 \
+                and isinstance(node.targets[0], ast.Name) and isinstance(node.value, ast.Dict):
+            name = node.targets[0].id
+            seen[("table", name)] = seen.get(("table", name), -1) + 1
+            table = (name, seen[("table", name)])
+            units[("table", table)] = (node, "table", name)
+            spread_seen = {}
+            for k, v in zip(node.value.keys, node.value.values):
+                if isinstance(k, ast.Constant) and isinstance(k.value, str):
+                    units[("entry", table, k.value)] = (v, "entry", name)
+                else:
+                    carrier = ast.Dict(keys=[k], values=[v]) if k is not None else v
+                    d = ast.dump(carrier)
+                    spread_seen[d] = spread_seen.get(d, -1) + 1
+                    units[("spread", table, d, spread_seen[d])] = (carrier, "spread", name)
+            continue
+        key = _stmt_key(node)
+        seen[key] = seen.get(key, -1) + 1
+        units[key + (seen[key],)] = (node, "stmt", None)
+    return units
+
+
+def _gate_unit_dump(unit):
+    node, kind, _ = unit
+    if kind == "table":
+        return "table"         # its entries are units of their own
+    return ast.dump(node)
+
+
+def _gate_bound(node):
+    """The module names one top-level statement binds or mutates in place."""
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        return {node.name}
+    if isinstance(node, (ast.Import, ast.ImportFrom)):
+        return {(a.asname or a.name).split(".")[0] for a in node.names}
+    out = {t.id for t in ast.walk(node) if isinstance(t, ast.Name) and isinstance(t.ctx, ast.Store)
+           and not _inside_function(node, t)}
+    if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call) \
+            and isinstance(node.value.func, ast.Attribute) and isinstance(node.value.func.value, ast.Name):
+        out.add(node.value.func.value.id)           # `TABLE.update(...)` mutates TABLE
+    return out
+
+
+def _inside_function(stmt, target):
+    for sub in ast.walk(stmt):
+        if isinstance(sub, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ListComp,
+                            ast.DictComp, ast.SetComp, ast.GeneratorExp)) and sub is not stmt:
+            if any(x is target for x in ast.walk(sub)):
+                return True
+    return False
+
+
+def _gate_refs(node):
+    return {n.id for n in ast.walk(node) if isinstance(n, ast.Name)}
+
+
+def gate_lane_set(ref=None, path=CLASSICAL_GATE):
+    """Every lane name the gate checks: the keys of its LANES (spreads
+    evaluated), at `ref` too when given, and of every gate fragment's LANES."""
+    out = set()
+    texts = [_read(path)] + ([_git_show(ref, path)] if ref else [])
+    for text in texts:
+        if not text:
+            continue
+        tree = ast.parse(text)
+        consts = _gate_consts(tree)
+        for key, (node, kind, table) in _gate_units(tree).items():
+            if table == "LANES" and kind == "entry":
+                out.add(key[2])
+            elif table == "LANES" and kind == "spread":
+                out |= set(_gate_spread_keys(node, consts))
+    for rel, tree in _gate_fragment_trees(ref):
+        for key, (node, kind, table) in _gate_units(tree).items():
+            if table == "LANES" and kind == "entry":
+                out.add(key[2])
+    return out
+
+
+def _gate_fragment_trees(ref):
+    """[(path, stripped tree)] for every gate fragment now and at `ref`."""
+    out = []
+    root = os.path.join(ROOT, GATE_FRAGMENTS)
+    for name in sorted(os.listdir(root)) if os.path.isdir(root) else ():
+        if not name.endswith(".py"):
+            continue
+        rel = os.path.join(GATE_FRAGMENTS, name)
+        for text in (_read(rel), _git_show(ref, rel) if ref else None):
+            if text:
+                out.append((rel, _strip_docstrings(ast.parse(text))))
+    return out
+
+
+def gate_lanes(ref, path=CLASSICAL_GATE, every=None):
+    """(lanes, why) for a change to the classical host gate against `ref`, or
+    (None, why) when it cannot be placed (the caller refuses it by name). See
+    CLASSICAL_GATE for the rules."""
+    every = set(lane_sources()[0] if every is None else every)
+    old_text = _git_show(ref, path) if ref else None
+    if old_text is None:
+        return None, f"{path} has no revision at {ref} to diff against"
+    try:
+        old_tree = _strip_docstrings(ast.parse(old_text))
+        new_tree = _strip_docstrings(ast.parse(_read(path)))
+        frag_units = [(rel, _gate_units(t)) for rel, t in _gate_fragment_trees(ref)]
+    except (OSError, SyntaxError) as exc:
+        return None, f"the gate or a gate fragment does not parse ({exc})"
+    olds, news = _gate_units(old_tree), _gate_units(new_tree)
+    consts = {"old": _gate_consts(old_tree), "new": _gate_consts(new_tree), "frag": _gate_consts(new_tree)}
+    tuples, tables = set(GATE_LANE_TUPLES), set(GATE_LANE_TABLES)
+    lanes, dirty, wide, unknown = set(), set(), [], []
+
+    def keys_of(key, unit, side):
+        return [key[2]] if unit[1] == "entry" else _gate_spread_keys(unit[0], consts[side])
+
+    def take(keys, where, strict):
+        for k in keys:
+            if k in every:
+                lanes.add(k)
+            elif strict:
+                unknown.append(f"{where}[{k!r}]")
+
+    def changed(key, unit, side):
+        node, kind, table = unit
+        if kind in ("entry", "spread"):
+            if table in tables:
+                # An entry REMOVED for a lane no longer registered leaves
+                # nothing to run; any other entry edit must name a lane.
+                take(keys_of(key, unit, side), table, strict=not (side == "old" and key not in news))
+            else:
+                dirty.add(table)
+            return
+        bound = _gate_bound(node)
+        if bound & tuples:
+            return                     # read by membership below
+        if not bound or bound & tables:
+            wide.append(f"the top-level statement at line {node.lineno}")
+        dirty.update(bound)
+
+    try:
+        for key in set(olds) | set(news):
+            o, n = olds.get(key), news.get(key)
+            if o is not None and n is not None and _gate_unit_dump(o) == _gate_unit_dump(n):
+                continue
+            if n is not None and n[1] != "table":
+                changed(key, n, "new")
+            if o is not None and o[1] != "table":
+                changed(key, o, "old")
+        # A NAME THAT CHANGED reaches whatever names it, to a fixed point:
+        # a lane-keyed entry or spread naming one selects its lanes, any other
+        # statement naming one is changed itself. Gate fragments run in a
+        # copy of this module's namespace, so their entries count too.
+        grew = True
+        while grew:
+            grew = False
+            for side, units in [("old", olds), ("new", news)] + [("frag", u) for _, u in frag_units]:
+                for key, unit in units.items():
+                    node, kind, table = unit
+                    if kind == "table" or not (_gate_refs(node) & dirty):
+                        continue
+                    if kind in ("entry", "spread"):
+                        if table in tables:
+                            take(keys_of(key, unit, side), table, strict=False)
+                        elif table not in dirty:
+                            dirty.add(table)
+                            grew = True
+                        continue
+                    bound = _gate_bound(node)
+                    if bound & tuples:
+                        continue
+                    if not bound:
+                        wide.append(f"the statement at line {node.lineno}"
+                                    + (" of a gate fragment" if side == "frag" else ""))
+                    if bound - dirty:
+                        dirty |= bound
+                        grew = True
+        # THE LANE TUPLES are read by membership: the lanes that joined or left.
+        for name in tuples:
+            touched = any(
+                _gate_bound(u[0]) & {name} and (k not in olds or k not in news or _gate_refs(u[0]) & dirty
+                                                or _gate_unit_dump(olds[k]) != _gate_unit_dump(news[k]))
+                for units in (olds, news) for k, u in units.items() if u[1] == "stmt")
+            if not touched:
+                continue
+            ov, nv = consts["old"].get(name), consts["new"].get(name)
+            if not isinstance(ov, (tuple, list)) or not isinstance(nv, (tuple, list)):
+                return None, f"`{name}` changed and does not evaluate to a tuple of lane names"
+            take(sorted(set(ov) ^ set(nv)), name, strict=True)
+    except (ValueError, TypeError, NameError, SyntaxError) as exc:
+        return None, f"a key of a lane table cannot be evaluated here ({exc})"
+    # THE MACHINERY: what the gate runs for every lane, from `main`, the bare
+    # statements and the `__main__` guard, through every top-level name but
+    # the per-lane part (lane-keyed entries and the lane tuples).
+    by_name = {}
+    for units in (olds, news):
+        for unit in units.values():
+            node, kind, table = unit
+            if kind == "stmt":
+                bound = _gate_bound(node)
+                if not bound & tuples:
+                    for b in bound or {None}:
+                        by_name.setdefault(b, []).append(node)
+            elif kind in ("entry", "spread") and table not in tables:
+                by_name.setdefault(table, []).append(node)
+    todo = list(GATE_ROOTS) + [r for node in by_name.get(None, ()) for r in _gate_refs(node)]
+    reach = set()
+    while todo:
+        name = todo.pop()
+        if name not in reach:
+            reach.add(name)
+            todo += [r for node in by_name.get(name, ()) for r in _gate_refs(node)]
+    machinery = sorted(dirty & reach)
+    if machinery or wide:
+        try:
+            gate = gate_lane_set(ref, path)
+        except (ValueError, TypeError, NameError, SyntaxError) as exc:
+            return None, f"the gate's LANES keys cannot be evaluated here ({exc})"
+        what = ", ".join(([f"`{m}`" for m in machinery] + wide)[:4])
+        return sorted(lanes | (gate & every)), (
+            f"the gate's machinery changed ({what}), which runs for every lane the gate checks: "
+            f"its {len(gate & every)} LANES keys that are registered lanes, never the whole registry")
+    if unknown:
+        return None, "an entry names no registered lane: " + ", ".join(sorted(set(unknown))[:4])
+    if not lanes:
+        if dirty:
+            return [], ("only definitions that no entry and no machinery names changed ("
+                        + ", ".join(sorted(dirty)[:4]) + ")")
+        return None, "the diff changed and names no lane"
+    return sorted(lanes), "the lane entries that changed, and the entries that reach a changed helper"
+
+
 # ------------------------------------------------ the expansion fragments
 #: THE ALGORITHM EXPANSION'S PER-LANE FILES (lane/algos-prep, 2026-09-27;
 #: docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md). Each of the nine lanes owns one
@@ -5046,6 +5367,28 @@ def select(paths, ref=None, sources=None, backend=None):
                 by_path[path] = set(touched) & set(every)
                 reasons[path] = (f"harness diff reaches only these lanes: {','.join(touched) or 'none'} "
                                  f"({detail})")
+            continue
+        if path == CLASSICAL_GATE:
+            # ENTRY BY ENTRY (2026-09-28): see CLASSICAL_GATE. Without a ref
+            # there is no diff, and the answer is every lane the gate checks.
+            if ref:
+                hit, why = gate_lanes(ref, path, every)
+            else:
+                try:
+                    hit, why = sorted(gate_lane_set()), "no ref to diff against: every lane the gate checks"
+                except (ValueError, TypeError, NameError, SyntaxError) as exc:
+                    hit, why = None, f"its LANES keys cannot be evaluated here ({exc})"
+            if hit is None:
+                unattributed.append(path)
+                reasons[path] = f"the classical host gate changed in a way that cannot be placed: {why}"
+            elif not hit:
+                inert.append(path)
+                reasons[path] = f"the classical host gate: {why}"
+            else:
+                hit = set(hit) & set(every)
+                lanes.update(hit)
+                by_path[path] = hit
+                reasons[path] = f"the classical host gate, {len(hit)} lane(s): {why}"
             continue
         if path in NATIVE_INPUTS:
             # BEFORE `unreachable`: stage.py is a Python file outside the
