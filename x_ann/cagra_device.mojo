@@ -78,14 +78,18 @@ def prune_kernel(n: Int32, kdeg: Int32, deg: Int32, knn: I32P, pruned: I32P, bad
         if t == 0:
             bad.unsafe_store(a, Int32(1))
         return
+    # the kdeg neighbor rows staged once (kdeg^2 words), then every thread's
+    # count reads threadgroup memory (lane ann-apple2)
+    var nb = stack_allocation[PRUNE_KMAX * PRUNE_KMAX, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    for e in range(t, k * k, PRUNE_KMAX):
+        nb[e] = knn.unsafe_load(Int(ids[e // k]) * k + e % k)
+    barrier()
     if t < k:
         var target = ids[t]
         var c = k if Int(target) == a else 0
-        for kad in range(t):
-            var d = Int(ids[kad])
-            for kdb in range(k):
-                if knn.unsafe_load(d * k + kdb) == target:
-                    c += 1
+        for e in range(t * k):
+            if nb[e] == target:
+                c += 1
         cnt[t] = Int32(c)
     barrier()
     if t < k:
