@@ -211,16 +211,32 @@ with the prepared index; score 8.1, select 8.6, probe 3.1, coarse 1.2.
 CAGRA search 19 (one thread per query, 16 threadgroups of 64). t-SNE
 iterations 472.
 
-### Job 3: m3ultra-b, steward 1790629592016, c831de064, FAST only, with the quality pass on every arm
+### Job 3: m3ultra-b, steward 1790629592016, c831de064: LOST
 
-Queued 21:06Z Sep 28. Arms, all built from c831de064:
-- `after`: the default build (host passes and prepare on);
-- B = `+MOJOLEARN_ANN3_PQ_HOST_RESIDUALS+MOJOLEARN_ANN3_DIRECT_OUT+MOJOLEARN_ANN3_TRAINSET_COPY` (expected to move no bit);
-- B `+MOJOLEARN_ANN3_PQ_SEED+MOJOLEARN_ANN3_TSNE_RB64`;
-- B `+MOJOLEARN_ANN3_PQ_SEED+MOJOLEARN_ANN3_COARSE_SEED+MOJOLEARN_ANN3_TSNE_RB32`.
+Queued 21:06Z Sep 28 behind seven jobs. m3ultra-b was terminated at
+21:20:06Z (an old scheduled release job; orchestrator's notice, 21:31Z)
+before the job started. Nothing ran. Its arms are re-run on the laptop
+(below).
 
-Quality: HIGGS and taxi, seeds 0 to 4, IVF-Flat / PQ / SQ / RaBitQ / CAGRA
-recall at 10 and t-SNE trustworthiness and KL. Result: PENDING.
+### Machines after 21:20Z
+
+m3ultra-b and the three M4 cloud Macs are gone. By the brief's 21:25Z update
+the Apple GPUs of this round are the laptop (Apple M4, 10 GPU cores, 16 GB;
+one Metal job at a time through `tools/mac_slot.py`, MAC_SLOTS=2, builds at
+nice 19 with one compile job, no build under 15 GB free) and m2pro when it
+is idle. Rows measured there are labelled "laptop M4". The driver is
+`tools/ann_apple3_local.sh` (arms are built one after the other in the
+lane's worktree and each arm's package is kept under
+`~/mojolearn-evidence/ann-apple3/local-arms/<arm>`; one Metal job alternates
+the arms). Data: HIGGS `higgs_speed.npz` and taxi `taxi_speed.npz`, the R2
+files, 1,000,000 index rows for the IVF family (the cloud Macs' shape).
+
+### Laptop run 1 (FAST): building since 21:36Z
+
+Arms: `default`; `neutral` = PQ_HOST_RESIDUALS + DIRECT_OUT + TRAINSET_COPY
++ ROW_THREADS; `pqseed` = neutral + PQ_SEED + SCAN_SELECT + CAGRA_TEAM +
+TSNE_RB64; `tsne` = neutral + TSNE_STEP_ROWS + TSNE_ZSUM; `seeds` = neutral
++ PQ_SEED + COARSE_SEED + TSNE_RB32. Result: PENDING.
 
 ### NVIDIA: nvc1-0020 (2x A40 shared pod), `tools/ann_apple3_cuda.sh`, the lane's one job
 
