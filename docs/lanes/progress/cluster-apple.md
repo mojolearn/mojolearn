@@ -178,3 +178,35 @@ component per iteration (A/B pending).
 
 GMM_STAGE_TIMES after 9ae0985b6 (taxi, 22 iterations): E-step 695 ms, M-step 1218 ms,
 Cholesky 204 ms (was 317 ms at 819df01ee).
+
+## Results: M4 Pro (m4pro-a, home Mac), IDENTICAL, before 5b622763d (1790579942404) -> eaf6c2a3f (1790584496338)
+
+eaf6c2a3f lacks the late changes (agglo dead mask, DENSE no flag array, GMM Cholesky
+drains, DBSCAN one-byte adjacency). Every digest equals the before.
+
+| case | rows | taxi before -> after (s) | higgs before -> after (s) |
+|---|---|---|---|
+| kmeans | 1M | 0.0925 -> 0.0927 | 0.1721 -> 0.1700 |
+| minibatch-kmeans | 1M | 0.2212 -> 0.2026 | 0.2908 -> 0.2621 |
+| bisecting-kmeans | 1M | 0.3841 -> 0.3766 | 0.4054 -> 0.4025 |
+| gmm | 1M | 3.1468 -> 3.1418 | 3.0335 -> 3.0194 |
+| bayesian-gmm | 100k | 1.9616 -> 1.9571 | 2.7436 -> 2.5380 |
+| dbscan | 100k | 0.4746 -> 0.4735 | 0.2366 -> 0.2420 |
+| hdbscan | 40k | 5.4032 -> 4.2981 | 5.3290 -> 4.2868 |
+| agglomerative (single) | 10k | 0.1452 -> 0.0938 | 0.1440 -> 0.0919 |
+| agglomerative-ward | 10k | 1.3563 -> 1.7039 (merge regression, fixed after) | 1.4522 -> 1.7193 |
+| spectral | 10k | 0.3366 -> 0.3302 | 0.0751 -> 0.0740 |
+| meanshift | 10k | 0.2876 -> 0.2873 | 0.2710 -> 0.2656 |
+| optics | 10k | 0.3893 -> 0.3910 | 0.3860 -> 0.3938 |
+| affinity-prop | 5k | 2.6157 -> 1.7870 | 1.3479 -> 0.8653 |
+
+## FINDING (for the orchestrator's check, not verified here): DBSCAN batch count moves labels
+
+MOJOLEARN_DBSCAN_PHASES on m4pro-a (1790584183334): the 48 GB M4 Pro's budget
+(80% of total) splits taxi 100k into TWO batches (batch 64311); the M3 Ultra (and the
+H100) run ONE. The M4 Pro's labels (digest 2c9624c0d0cf42d4, silhouette -0.1085) differ
+from the one-batch labels (9c8ea257cb04e118) that the M3 Ultra GPU, the M3 Ultra CPU
+column and the H100 all give. So the M4 difference is most likely NOT an M4 codegen
+issue but a batch-invariance defect of the RBC two-batch path (loop 2 / merge_labels):
+forcing two batches with max_mbytes_per_batch on any column should reproduce it. The
+second batch also costs ~124 ms (label.vertexdeg batch 2/2) on the M4 Pro.
