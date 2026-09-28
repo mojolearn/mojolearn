@@ -289,14 +289,16 @@ def _gpc_fit_binary_device(
     var last_pi = List[Float32]()
     var last_wsr = List[Float32]()
     var nb = 0
+    # Resolve the kernel once; dispatch its handle without ambiguous generic overloads.
+    var b_kernel = ctx.compile_function[gpc_b_matrix_kernel]()
     for it in range(max_iter_predict):
         var s0 = Int(perf_counter_ns())
         var wt = gpc_weights(f)
         for i in range(n):
             hwsr.unsafe_ptr().unsafe_store(i, wt.wsr[i])
         ctx.enqueue_copy(dst_buf=dwsr, src_ptr=hwsr.unsafe_ptr())
-        ctx.enqueue_function[gpc_b_matrix_kernel](
-            db.unsafe_ptr(), dk.unsafe_ptr(), dwsr.unsafe_ptr(), Int32(n),
+        ctx.enqueue_function(
+            b_kernel, db.unsafe_ptr(), dk.unsafe_ptr(), dwsr.unsafe_ptr(), Int32(n),
             grid_dim=Dim((n * n + GPC_B_TPB - 1) // GPC_B_TPB, 1, 1),
             block_dim=Dim(GPC_B_TPB, 1, 1),
         )
