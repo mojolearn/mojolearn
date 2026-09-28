@@ -199,3 +199,7 @@ Before = `-D MOJOLEARN_2031_SYM_RIDX_SPLITS_OFF -D MOJOLEARN_GBDT_ID_UPLOADS_SEP
 | gbdt-lossguide:taxi (FAST) | 6998 | 6403 | 0.915 | a1deaadb73ff9970 |
 | gbdt-symmetric:taxi (FAST) | 1707 | 1576 | 0.923 | 8f160400c1defdf5 |
 | rf:taxi (FAST) | 5086 | 5085 | 1.000 | 452a173087f86a9d |
+| RF workspace capped at sampled columns (a91fe60be; before = 10 columns) | m4-a | 1790615918088 | rf:taxireg / dt:taxireg / bagging | 10219 / 141 / 969 | 9724 / 137 / 940 | 0.952 / 0.973 / 0.969 | equal |
+| same | m4-a | 1790615918088 | dart:taxireg / adaboost:taxireg / rf:taxi | 6262 / 2349 / 5608 | 6408 / 2336 / 5619 | 1.023 / 0.994 / 1.002 | equal |
+| + lazy workspace zero (27fdd02c4; before = 10 columns and per-round zero) | m4-a | 1790617267667 | rf:taxireg / rf:taxi / dt:taxireg / bagging | 10447 / 5665 / 143 / 967 | 9750 / 5627 / 141 / 941 | 0.933 / 0.993 / 0.988 / 0.973 | equal |
+| same | m4-a | 1790617267667 | dart:taxireg / adaboost:taxireg / adaboost:taxi | 6184 / 2327 / 3400 | 6190 / 2323 / 3454 | 1.001 / 0.998 / 1.016 | equal |
