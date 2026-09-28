@@ -4,7 +4,7 @@
 
 from . import _mojolearn_estimators, _serialize
 from ._array import Array
-from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_f32_dense_c, empty, frombytes, full, zeros
+from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_f32_dense_c, empty, frombytes, full, hotpath_enabled, zeros
 from ._mode import NumericModeMixin
 from .linear_model import _check_saved_by, _restore_mode, _saved_mode, _shape_of
 
@@ -382,18 +382,29 @@ class DBSCAN(NumericModeMixin):
     def _store_core(self, x, labels, core):
         """Keep the core rows, their training indices and their labels, in
         ascending training index, from the fit's own core mask."""
-        # the same three arrays as the per-row Python loops this replaces
-        # (lane cluster-apple3), every walk inside the interpreter's C
-        # iterators: `compress` keeps the items whose flag byte is nonzero
+        d = int(x.shape[1])
+        raw = bytes(x.tobytes())
+        width = 4 * d
+        if not hotpath_enabled():
+            # the reference arm (MOJOLEARN_HOTPATH=python): per-row Python loops
+            flags = core.tolist()
+            if any(f not in (0, 1) for f in flags):
+                raise RuntimeError("mojolearn DBSCAN: the fit's core mask holds a value other than 0 or 1")
+            idx = [i for i, f in enumerate(flags) if f]
+            lab = labels.tolist()
+            self.core_sample_indices_ = Array.from_list(idx, "<i4") if idx else empty((0,), "<i4")
+            self.components_ = frombytes(b"".join(raw[i * width:(i + 1) * width] for i in idx), "<f4", (len(idx), d))
+            self._core_labels = Array.from_list([lab[i] for i in idx], "<i4") if idx else empty((0,), "<i4")
+            return
+        # the same three arrays (lane cluster-apple3), every walk inside the
+        # interpreter's C iterators: `compress` keeps the items whose flag
+        # byte is nonzero
         from itertools import compress
         flags = bytes(core.tobytes())
         n = len(flags)
         if flags.count(0) + flags.count(1) != n:
             raise RuntimeError("mojolearn DBSCAN: the fit's core mask holds a value other than 0 or 1")
         idx = list(compress(range(n), flags))
-        d = int(x.shape[1])
-        raw = bytes(x.tobytes())
-        width = 4 * d
         rows = map(slice, compress(range(0, n * width, width), flags),
                    compress(range(width, (n + 1) * width, width), flags))
         self.core_sample_indices_ = Array.from_list(idx, "<i4") if idx else empty((0,), "<i4")
