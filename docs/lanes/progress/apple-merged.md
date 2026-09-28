@@ -103,3 +103,16 @@ spectral-affinities AGREE, the same as lane/merged's run before this merge). Own
 Withdrawn (moved/): 9 superseded lane/merged speed copies on m3ultra-b, m4pro-b's orphaned
 working/1790588098954 (neural), my own superseded requests 1790604454599, 1790604460730,
 1790604462897, 1790609724520.
+
+## Owed, closed (lane/apple-merged-owed)
+
+- par-gp / par-gpc-fit / par-gpc-predict on the m2pro GPU arm, tree 32c548c32 (e264ecfc4,
+  which carries d3a480f02, plus the driver), one light job (1790618823477, `LANES=... mac_job.sh`):
+  par-gpc-fit and par-gpc-predict AGREE with the M2 Pro CPU column (batch, infer, model, train, 9
+  fixtures each). par-gp: Metal 9/9 cells STABLE, the CPU arm refuses by design ("no CPU
+  implementation of the cooperative multi-GPU driver gp_fit"). Its Metal column equals the
+  NVIDIA 4090 column (nvc1-0016, clean_2of3) and the shipped reference table on all 36
+  train/infer/model/batch hashes; par-gpc-fit and par-gpc-predict equal the table on 36/36
+  each. **M2 par-* CLOSED.**
+- MI300X column: the central AMD box refuses ssh (`Permission denied (publickey)` from
+  tools/amd_central.sh status/queue), so no slot can be seen or used. Still OWED.
