@@ -64,12 +64,15 @@ def op_af_rmean(t: Int, a: Args):
     for k in range(a.i0):
         s = add(s, ld(a.p0, k))
     var m = div(s, Float32(a.i0))
-    st(a.p1, 2, m if m > a.f0 else a.f0)
+    # max(mean, eps1) spelled `max` for the Metal compiler fault on a float
+    # compare-and-select over a reduction's value (see op_af_alpha); exact,
+    # and eps1 > 0, so no signed-zero tie.
+    st(a.p1, 2, max(m, a.f0))
 
 
 @always_inline
 def _upd(v: Float32, g: Float32, eps1sq: Float32) -> Float32:
-    var c = v if v > eps1sq else eps1sq
+    var c = max(v, eps1sq)
     return mul(ftz(identical_rsqrt(c)), g)
 
 
@@ -96,7 +99,10 @@ def op_af_denom(t: Int, a: Args):
     i0 numel, f0 d."""
     var n = a.i0
     var r = div(ftz(identical_sqrt(_sumsq(a.p0, 0, n, 1))), mul(ftz(identical_sqrt(Float32(n))), a.f0))
-    var den = r if r > Float32(1.0) else Float32(1.0)
+    # max(1, rms / d) spelled `max` (the Metal fault of op_af_alpha: this
+    # kernel is the same shape, a compare-and-select on sqrt over _sumsq);
+    # exact, a NaN ratio still gives 1.
+    var den = max(r, Float32(1.0))
     st(a.p1, 3, div(-ld(a.p1, 1), den))
 
 
