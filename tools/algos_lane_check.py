@@ -39,6 +39,9 @@ tools/identity_lanes/<fragment>.checks must PASS, and each line's sabotage
 patch (`<driver><TAB><patch>`) must make its driver FAIL and PASS again after
 `git apply -R`. With `--pass 2` a fragment of these lanes with no .checks, or
 a line with no patch, fails the check (pass 1 only notes it).
+A family's EXISTING lanes (registered in tools/identity_break.py, not by a
+fragment) join the same proof through tools/identity_lanes/<fragment>.core,
+one lane name per line: checking any of them runs that fragment's .checks.
 
 Exit 0 only when every verdict is the one required. The last line is always
 `RESULT: PASS` or `RESULT: FAIL (<why>)`.
@@ -436,6 +439,28 @@ def read_checks(listing):
     return rows
 
 
+def core_lanes(ib):
+    """{fragment id: its EXISTING lanes} from tools/identity_lanes/<id>.core
+    (charter 2026-09-27: a family lane owns its existing algorithms too). A
+    listed name must be a lane the harness registers and no fragment owns,
+    and no two .core files may list the same lane."""
+    fragment_owned = {n for owned in getattr(ib, "LANE_FRAGMENTS", {}).values() for n in owned}
+    out, seen = {}, {}
+    for path in sorted((ROOT / "tools" / "identity_lanes").glob("*.core")):
+        names = [ln.split("#", 1)[0].strip() for ln in path.read_text().splitlines()]
+        names = [n for n in names if n]
+        for n in names:
+            if n not in ib.LANES:
+                raise Fail(f"{path.name} lists {n!r}, which is not a registered identity lane")
+            if n in fragment_owned:
+                raise Fail(f"{path.name} lists {n!r}, which a fragment already owns")
+            if n in seen:
+                raise Fail(f"{n!r} is listed by both {seen[n]} and {path.name}")
+            seen[n] = path.name
+        out[path.stem] = set(names)
+    return out
+
+
 def seam_checks(ib, lanes, log, pass_no=1):
     """THE PER-SEAM PROOF (plan R2/R3). Each fragment that owns one of these
     lanes lists its check drivers in tools/identity_lanes/<id>.checks, one per
@@ -448,7 +473,10 @@ def seam_checks(ib, lanes, log, pass_no=1):
     --pass 1 (default): a fragment with no .checks, or a driver with no patch,
     is a note. --pass 2: a fragment that registers lanes and has no .checks
     FAILS, and so does any driver line with no sabotage patch."""
-    ids = sorted({fid for fid, owned in getattr(ib, "LANE_FRAGMENTS", {}).items() if set(owned) & set(lanes)})
+    owners = {fid: set(owned) for fid, owned in getattr(ib, "LANE_FRAGMENTS", {}).items()}
+    for fid, core in core_lanes(ib).items():
+        owners.setdefault(fid, set()).update(core)
+    ids = sorted(fid for fid, owned in owners.items() if owned & set(lanes))
     for fid in ids:
         listing = ROOT / "tools" / "identity_lanes" / f"{fid}.checks"
         if not listing.is_file():

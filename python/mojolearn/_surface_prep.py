@@ -61,6 +61,7 @@ FAMILIES = (
             "x-prep-kbins-weights",
             "x-prep-spline-options",
             "x-prep-iterative-options",
+            "x-prep-scaler-options",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -148,6 +149,7 @@ TRAINING_LANE_NAMES = {
     "x-prep-kbins-weights": "KBinsDiscretizer sample_weight",
     "x-prep-spline-options": "SplineTransformer knots array, linear / periodic, sample_weight, handle_missing, order",
     "x-prep-iterative-options": "IterativeImputer random order, n_nearest_features, sample_posterior, add_indicator, estimator",
+    "x-prep-scaler-options": "StandardScaler / MinMaxScaler NaN, sample_weight, partial_fit, copy=False",
 }
 PUBLIC_PENDING_LANES = {
     "x-prep-robust-scaler": "no reference",
@@ -196,4 +198,5 @@ PUBLIC_PENDING_LANES = {
     "x-prep-kbins-weights": "no reference",
     "x-prep-spline-options": "no reference",
     "x-prep-iterative-options": "no reference",
+    "x-prep-scaler-options": "no reference",
 }

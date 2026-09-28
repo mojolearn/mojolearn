@@ -33,7 +33,14 @@ def op_af_alpha(t: Int, a: Args):
     i0 numel; f0 eps2, f1 rho."""
     var n = a.i0
     var rms = div(ftz(identical_sqrt(_sumsq(a.p0, 0, n, 1))), ftz(identical_sqrt(Float32(n))))
-    var m = rms if rms > a.f0 else a.f0
+    # torch's max(eps2, rms): eps2 unless rms > eps2 (a NaN rms gives eps2).
+    # Spelled `max`, not `rms if rms > eps2 else eps2`: Apple's Metal
+    # compiler drops this WHOLE kernel (no store lands, not even one before
+    # the compare) when a float compare-and-select takes a value from
+    # portable_sqrtf over the _sumsq loop; bisected on the M3 Ultra
+    # (sequence/checks/af_order_probe.mojo; ~/mojolearn-evidence/sequence/
+    # adafactor_metal/dbgops*.txt). `max` is exact, so the bits are unchanged.
+    var m = max(rms, a.f0)
     st(a.p1, 1, mul(m, a.f1))
 
 

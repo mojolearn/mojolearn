@@ -382,3 +382,102 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("predict", sl=np.s_[:256, :8]), "x-cluster-kmeans-init")
+
+
+def _cluster_index_graph(n, cut):
+    """A data-free connectivity matrix: i -- i + 1 and i -- i + 7, no edge
+    across `cut` (two components, so scikit-learn's component join is
+    reached). Integers only."""
+    C = np.zeros((n, n), dtype=np.float32)
+    for i in range(n):
+        for j in (i + 1, i + 7):
+            if j < n and (i < cut) == (j < cut):
+                C[i, j] = 1.0
+    return C
+
+
+@lane("x-cluster-agglo-linkages")
+def _(ml, X, yc, yr, Xh=None):
+    """AgglomerativeClustering option parity (x_cluster/agglo.mojo,
+    DEVIATIONS 5117/5118): linkage ward, complete, average and single with
+    compute_distances; metrics l1, cosine and precomputed (an exact integer
+    L1 matrix); distance_threshold at the ward fit's median merge value."""
+    Z = X[:400, :4]
+    parts = {}
+    w = ml.AgglomerativeClustering(n_clusters=6, linkage="ward", compute_distances=True).fit(Z)
+    parts.update(ward_children=_h(w.children_), ward_dist=_h(w.distances_), ward_labels=_h(w.labels_))
+    for name, kw in (("complete_l1", dict(linkage="complete", metric="l1")),
+                     ("average_eu", dict(linkage="average")),
+                     ("single_l1", dict(linkage="single", metric="manhattan"))):
+        m = ml.AgglomerativeClustering(n_clusters=5, compute_distances=True, **kw).fit(Z)
+        parts[name + "_children"] = _h(m.children_)
+        parts[name + "_dist"] = _h(m.distances_)
+        parts[name + "_labels"] = _h(m.labels_)
+    c = ml.AgglomerativeClustering(n_clusters=5, linkage="average", metric="cosine",
+                                   compute_distances=True).fit(_cluster_cosine_rows(Z))
+    parts.update(cos_children=_h(c.children_), cos_dist=_h(c.distances_), cos_labels=_h(c.labels_))
+    Q = np.floor(np.clip(Z[:300, :3], -50, 50) * 2).astype(np.float64)
+    D = (np.abs(Q[:, None, 0] - Q[None, :, 0]) + np.abs(Q[:, None, 1] - Q[None, :, 1])
+         + np.abs(Q[:, None, 2] - Q[None, :, 2])).astype(np.float32)
+    p = ml.AgglomerativeClustering(n_clusters=4, linkage="complete", metric="precomputed").fit(np.ascontiguousarray(D))
+    parts.update(pre_children=_h(p.children_), pre_labels=_h(p.labels_))
+    thr = float(np.median(np.asarray(w.distances_, dtype=np.float32)))
+    t = ml.AgglomerativeClustering(n_clusters=None, linkage="ward", distance_threshold=thr).fit(Z)
+    parts.update(thr_labels=_h(t.labels_), thr_n=_h(np.int64(t.n_clusters_)))
+    return _fit(parts, w, "n/a:transductive (AgglomerativeClustering has no predict but single linkage's, DEVIATION 2740)")
+
+
+_batch_decl("n/a:transductive (AgglomerativeClustering labels the fitted rows only)", "x-cluster-agglo-linkages")
+
+
+@lane("x-cluster-agglo-connectivity")
+def _(ml, X, yc, yr, Xh=None):
+    """AgglomerativeClustering with a connectivity matrix (x_cluster/agglo.mojo):
+    a two-component index graph (the component join reached), every
+    linkage, a partial tree (compute_full_tree=False) and a full one with
+    distance_threshold."""
+    Z = X[:300, :4]
+    C = _cluster_index_graph(300, 150)
+    parts = {}
+    for linkage in ("ward", "complete", "average", "single"):
+        m = ml.AgglomerativeClustering(n_clusters=6, linkage=linkage, connectivity=C,
+                                       compute_full_tree=False, compute_distances=True).fit(Z)
+        parts[linkage + "_children"] = _h(m.children_)
+        parts[linkage + "_dist"] = _h(m.distances_)
+        parts[linkage + "_labels"] = _h(m.labels_)
+    last = m
+    thr = float(np.median(np.asarray(last.distances_, dtype=np.float32)))
+    t = ml.AgglomerativeClustering(n_clusters=None, linkage="average", connectivity=C, distance_threshold=thr).fit(Z)
+    parts.update(thr_children=_h(t.children_), thr_labels=_h(t.labels_), thr_n=_h(np.int64(t.n_clusters_)))
+    return _fit(parts, t, "n/a:transductive (AgglomerativeClustering has no predict but single linkage's, DEVIATION 2740)")
+
+
+_batch_decl("n/a:transductive (AgglomerativeClustering labels the fitted rows only)", "x-cluster-agglo-connectivity")
+
+
+@lane("x-cluster-spectral-affinities")
+def _(ml, X, yc, yr, Xh=None):
+    """SpectralClustering option parity (python/mojolearn/_spectral_impl.py):
+    scikit-learn's default affinity='rbf' (the x_decomp identical cells, then
+    the precomputed route) at the default gamma and at 0.5, and
+    'precomputed_nearest_neighbors' on a distance matrix built from the rbf
+    fit's own affinity; affinity_matrix_ hashed for both."""
+    # per-column scale to [-1, 1] (elementwise IEEE division) so the wide
+    # fixture's large columns do not underflow every affinity to zero
+    S = (X[:300] / (np.abs(X[:300]).max(axis=0) + np.float32(1))).astype(np.float32)
+    m = ml.SpectralClustering(n_clusters=4, affinity="rbf", random_state=3).fit(S)
+    g = ml.SpectralClustering(n_clusters=3, affinity="rbf", gamma=0.5, random_state=3).fit(S[:200])
+    dist = (np.float32(1) - np.asarray(m.affinity_matrix_)).astype(np.float32)
+    p = ml.SpectralClustering(n_clusters=4, affinity="precomputed_nearest_neighbors", n_neighbors=12,
+                              random_state=3).fit(dist)
+    d = ml.SpectralClustering(n_clusters=4, assign_labels="discretize", random_state=3).fit(S)
+    q = ml.SpectralClustering(n_clusters=4, affinity="rbf", assign_labels="cluster_qr", random_state=3).fit(S)
+    return _fit(dict(labels=_h(m.labels_), emb=_h(m.embedding_), aff=_h(m.affinity_matrix_),
+                     glabels=_h(g.labels_), gemb=_h(g.embedding_),
+                     plabels=_h(p.labels_), pemb=_h(p.embedding_), paff=_h(p.affinity_matrix_),
+                     dlabels=_h(d.labels_), demb=_h(d.embedding_), dit=_h(np.int64(d.n_iter_assign_)),
+                     qlabels=_h(q.labels_)),
+                m, "n/a:transductive (predict carries the nearest_neighbors and precomputed affinities only)")
+
+
+_batch_decl("n/a:transductive (SpectralClustering with rbf labels the fitted rows only)", "x-cluster-spectral-affinities")

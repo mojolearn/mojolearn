@@ -1,0 +1,24 @@
+diff --git a/x_cluster/bodies.mojo b/x_cluster/bodies.mojo
+index d1670e69c..68cc1d6d0 100644
+--- a/x_cluster/bodies.mojo
++++ b/x_cluster/bodies.mojo
+@@ -415,10 +415,8 @@ def lance_williams(
+     pairs that are EDGES exist (scikit-learn `_hierarchical_fast.max_merge` /
+     `average_merge`): an edge from one side alone keeps its value."""
+     if linkage == LINK_WARD:
+-        var t1 = identical_mul64(na + nk, Float64(dak))
+-        var t2 = identical_mul64(nb + nk, Float64(dbk))
+-        var t3 = identical_mul64(nk, Float64(dab))
+-        var w = ((t1 + t2) - t3) / ((na + nb) + nk)
++        var t = Float64(1) / (na + nb + nk)
++        var w = (na + nk) * t * Float64(dak) + (nb + nk) * t * Float64(dbk) - nk * t * Float64(dab)
+         return ftz(Float32(w)) if w > Float64(0) else Float32(0)
+     if not has_b:
+         return dak
+@@ -428,5 +426,5 @@ def lance_williams(
+         return dak if dak >= dbk else dbk
+     if linkage == LINK_SINGLE:
+         return dak if dak <= dbk else dbk
+-    var v = (identical_mul64(na, Float64(dak)) + identical_mul64(nb, Float64(dbk))) / (na + nb)
++    var v = na / (na + nb) * Float64(dak) + nb / (na + nb) * Float64(dbk)
+     return ftz(Float32(v))
