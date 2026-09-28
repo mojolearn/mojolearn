@@ -5,9 +5,9 @@
 reference, NOT by calling the bodies, plus the UNPINNED spelling of each seam
 (the alternative a separating fixture must tell apart). Each function names
 its DEVIATION (IDENTITY_PATHS.md rows 110-119)."""
-from std.math import fma
+from std.math import fma, sqrt
 
-from checks.numerics import ftz, identical_div, identical_exp, identical_log, identical_mul, identical_pow, identical_sqrt
+from checks.numerics import ftz, identical_div, identical_exp, identical_log, identical_mul, identical_mul64, identical_pow, identical_sqrt
 
 
 # DEVIATION 5100 (fold order) and 5101 (contraction): squared distance
@@ -295,3 +295,154 @@ def oracle_pdist(
                     v = ftz(Float32(1) - ftz(identical_div(dot, den)))
             out.append(v if v > Float32(0) else Float32(0))
     return out^
+
+
+# DEVIATIONS 5117 (the Lance-Williams update) and 5118 (the merge order):
+# agglomerative linkage by the textbook O(n^3) loop
+def oracle_agglo(
+    dist: List[Float32], n: Int, linkage: Int, adj_in: List[Bool], n_merges: Int,
+    mut children: List[Int32], mut merged: List[Float32],
+    scipy_spelling: Bool = False, last_on_tie: Bool = False,
+):
+    """`dist` n x n (SQUARED for ward, linkage 0; 1 complete, 2 average,
+    3 single); `adj_in` empty (every pair) or an n x n CONNECTED edge mask.
+    Each step scans EVERY live pair i < j in row-major order and takes the
+    first strictly lowest (last_on_tie: the last of the lowest). The update
+    as scikit-learn / scipy define it, in Float64 from the Float32 matrix,
+    rounded once to Float32; ward (a - b) as ((na+nk) dak + (nb+nk) dbk -
+    nk dab) / (na+nb+nk) (scipy_spelling: scipy's `_ward`, each term times
+    the reciprocal t = 1 / (na+nb+nk), which rounds differently); average
+    (na dak + nb dbk) / (na + nb) (scipy_spelling: na/(na+nb) dak +
+    nb/(na+nb) dbk)."""
+    var d = dist.copy()
+    var constrained = len(adj_in) > 0
+    var adj = adj_in.copy()
+    var live = List[Bool](length=n, fill=True)
+    var size = List[Float64](length=n, fill=Float64(1))
+    var node = List[Int](capacity=n)
+    for i in range(n):
+        node.append(i)
+    children = List[Int32]()
+    merged = List[Float32]()
+    for step in range(n_merges):
+        var ba = -1
+        var bb = -1
+        for i in range(n):
+            if not live[i]:
+                continue
+            for j in range(i + 1, n):
+                if not live[j] or (constrained and not adj[i * n + j]):
+                    continue
+                var v = d[i * n + j]
+                if ba < 0 or v < d[ba * n + bb] or (last_on_tie and v == d[ba * n + bb]):
+                    ba = i
+                    bb = j
+        var dab = d[ba * n + bb]
+        children.append(Int32(min(node[ba], node[bb])))
+        children.append(Int32(max(node[ba], node[bb])))
+        merged.append(identical_sqrt(dab) if linkage == 0 else dab)
+        var na = size[ba]
+        var nb = size[bb]
+        for k in range(n):
+            if not live[k] or k == ba or k == bb:
+                continue
+            var ha = not constrained or adj[ba * n + k]
+            var hb = not constrained or adj[bb * n + k]
+            var dak = Float64(d[ba * n + k])
+            var dbk = Float64(d[bb * n + k])
+            var nk = size[k]
+            var v: Float32
+            if linkage == 0:
+                var w: Float64
+                if scipy_spelling:
+                    var t = Float64(1) / (na + nb + nk)
+                    w = (na + nk) * t * dak + (nb + nk) * t * dbk - nk * t * Float64(dab)
+                else:
+                    var p1 = identical_mul64(na + nk, dak)
+                    var p2 = identical_mul64(nb + nk, dbk)
+                    var p3 = identical_mul64(nk, Float64(dab))
+                    w = ((p1 + p2) - p3) / ((na + nb) + nk)
+                v = ftz(Float32(w)) if w > Float64(0) else Float32(0)
+            elif not (ha or hb):
+                continue
+            elif not hb:
+                v = d[ba * n + k]
+            elif not ha:
+                v = d[bb * n + k]
+            elif linkage == 1:
+                v = max(d[ba * n + k], d[bb * n + k])
+            elif linkage == 3:
+                v = min(d[ba * n + k], d[bb * n + k])
+            elif scipy_spelling:
+                v = ftz(Float32(na / (na + nb) * dak + nb / (na + nb) * dbk))
+            else:
+                v = ftz(Float32((identical_mul64(na, dak) + identical_mul64(nb, dbk)) / (na + nb)))
+            d[ba * n + k] = v
+            d[k * n + ba] = v
+            if constrained and (ha or hb):
+                adj[ba * n + k] = True
+                adj[k * n + ba] = True
+        live[bb] = False
+        size[ba] = na + nb
+        node[ba] = n + step
+
+
+# ---------------------------------------------------------------- DEVIATION 5119
+def oracle_jacobi_svd(
+    a: List[Float64], m: Int, mut u: List[Float64], mut sv: List[Float64], mut v: List[Float64],
+    reversed_fold: Bool = False,
+) raises:
+    """`x_cluster/spectral_assign.mojo::jacobi_svd` restated for a full-rank
+    a: one-sided Jacobi on the columns, pairs (p < q) in row order, the three
+    column sums folded rows ascending (descending with `reversed_fold`, the
+    alternative the fixture must separate), every product pinned, zeta =
+    (beta - alpha) / (2 gamma), t = sign(zeta) / (|zeta| + sqrt(1 + zeta^2)),
+    c = 1 / sqrt(1 + t^2), s = c t; stop after a sweep that rotates nothing."""
+    var w = a.copy()
+    v = List[Float64](length=m * m, fill=0)
+    for i in range(m):
+        v[i * m + i] = 1
+
+    def col(w: List[Float64], m: Int, p: Int, q: Int, rev: Bool) -> Float64:
+        var s = Float64(0)
+        for rr in range(m):
+            var r = m - 1 - rr if rev else rr
+            s += identical_mul64(w[r * m + p], w[r * m + q])
+        return s
+
+    for _sweep in range(80):
+        var rotated = False
+        for p in range(m - 1):
+            for q in range(p + 1, m):
+                var alpha = col(w, m, p, p, reversed_fold)
+                var beta = col(w, m, q, q, reversed_fold)
+                var gamma = col(w, m, p, q, reversed_fold)
+                if gamma == 0 or abs(gamma) <= Float64(2.220446049250313e-16) * sqrt(identical_mul64(alpha, beta)):
+                    continue
+                rotated = True
+                var zeta = (beta - alpha) / (2 * gamma)
+                var t = Float64(1) / (abs(zeta) + sqrt(1 + identical_mul64(zeta, zeta)))
+                if zeta < 0:
+                    t = -t
+                var c = Float64(1) / sqrt(1 + identical_mul64(t, t))
+                var s = identical_mul64(c, t)
+                for r in range(m):
+                    var wp = w[r * m + p]
+                    var wq = w[r * m + q]
+                    w[r * m + p] = identical_mul64(c, wp) - identical_mul64(s, wq)
+                    w[r * m + q] = identical_mul64(s, wp) + identical_mul64(c, wq)
+                    var vp = v[r * m + p]
+                    var vq = v[r * m + q]
+                    v[r * m + p] = identical_mul64(c, vp) - identical_mul64(s, vq)
+                    v[r * m + q] = identical_mul64(s, vp) + identical_mul64(c, vq)
+        if not rotated:
+            break
+    sv = List[Float64](length=m, fill=0)
+    u = List[Float64](length=m * m, fill=0)
+    for j in range(m):
+        var nj = sqrt(col(w, m, j, j, reversed_fold))
+        if nj == 0:
+            raise Error("oracle_jacobi_svd: the fixture must be full rank")
+        sv[j] = nj
+        for r in range(m):
+            u[r * m + j] = w[r * m + j] / nj

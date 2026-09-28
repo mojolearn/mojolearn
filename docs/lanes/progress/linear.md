@@ -77,3 +77,66 @@ RidgeCV k-fold/multi-target, CD CV splitters/selection=random/sample_weight,
 LogisticRegressionCV l1/elasticnet) AND the existing public linear models
 (python/mojolearn/linear_model.py: LinearRegression, Ridge, Lasso, ElasticNet,
 LogisticRegression) against sklearn and cuML options.
+
+## Phase 1 (b), the EXISTING models (session 4, 2026-09-27)
+
+Branch commits c3d1df385..8d979a0bf (seam arms for glm/solver, the 527 gate
+fix, DEVIATIONS 550/551 -> 5010/5011, `.core` joins existing lanes to
+linear.checks, lane_select attributes `.core`), then:
+
+- NVIDIA RTX 4090 run at 16f5dd898 (`algos_lane_check.sh <17 core lanes>
+  --pass 2`): every seam arm in linear.checks (x_linear 5000-5009 and glm/
+  solver 527, 545, 547, 549 x2, 552, 705-708, 714, 610, 612, 2620-2622)
+  BUILD, RUN, FAIL under its patch, PASS after reversal. 16 of 17 lanes
+  AGREE; logistic-unpenalized-no-intercept/dupes infer + batch DIVERGENT.
+- ROOT CAUSE (found this session): MAX's CPU pool threads run with MXCSR
+  FTZ|DAZ (0x9fe0; the calling thread 0x1fa0). The float64 sigmoid link
+  `1/(1+exp(709.39))` = 8.2e-309 flushed to 0 on the CPU column's pool
+  tasks and not on the GPU binding's serial host link. IDENTICAL at
+  MOJOLEARN_CPU_THREADS=1. The reference x86 record (EPYC 9655) predates
+  the threaded host predict. FIX: core/host_fp_env.mojo
+  (`host_ieee_fp_enter/leave`, MXCSR bits 15+6, Arm FPCR.FZ) around every
+  task of core/classical_host_predict.mojo's four row splits and
+  glm/estimator.mojo::qn_softmax_host. OWED ELSEWHERE (not this lane's
+  code): every other host `sync_parallelize` site runs on the same FTZ pool
+  (knn/forest host predict, kde oracle, gbdt/metrics/... host oracles); a
+  float64 result that can be subnormal there has the same defect. Reported
+  to the orchestrator for the `cpu` lane.
+- CURRENT DIRECTIVES (DeviceContext): x_linear/device.mojo now uses ONE
+  process-lifetime context (`linear_ctx`); python/mojolearn/tests/
+  test_x_linear_repeat.py fits all 21 estimators twice per binding in one
+  process, GPU == host.
+
+Gate at 0bda3a368+progress (RunPod balance went negative mid-session: the
+RTX 4090 pod was deleted and `dev_pod.sh up` is refused, so this ran on the
+lane's Hot Aisle MI300X box `linear-amd`, CPU column Xeon Platinum 8470):
+- `algos_lane_check.sh <17 core lanes>,pca,pca-whiten,pca-full-whiten,tsvd,
+  qn-squared,qn-absolute --pass 2 --sabotage glm/checks/sabotage/
+  e2e_existing_device.patch`: every seam arm in linear.checks FAILS under
+  its patch and PASSES after reversal; ALL 23 clean lanes AGREE (hip vs
+  CPU), logistic-unpenalized-no-intercept included; the e2e device
+  sabotage DISAGREEs on all 17 linear lanes + qn-squared/qn-absolute and
+  every lane AGREEs again after reversal. RESULT: FAIL only because the
+  glm sabotage does not reach pca/pca-whiten/pca-full-whiten/tsvd (they
+  are in the run as unchanged-bits controls for classical_host_predict,
+  not as sabotage targets): expected, not a defect.
+- test_x_linear_repeat + test_host_surface: 201 passed (hip + host).
+- tools/test_lane_select.py: OK, 0 failure(s) (inputs changed: new
+  core/host_fp_env.mojo, linear.core, lane_select.py).
+
+NVIDIA gate (session 5, 2026-09-28, RunPod RTX 4090 pod `linear`, CPU
+column EPYC 7542, tree 42b29f691 = 7325a0415 + origin/main):
+- `algos_lane_check.sh <the 17 lanes of linear.core> --pass 2 --sabotage
+  glm/checks/sabotage/e2e_existing_device.patch`: every seam arm of
+  linear.checks BUILD, RUN, FAIL under its patch, PASS after reversal; all
+  17 clean lanes AGREE (logistic-unpenalized-no-intercept included: the
+  host_fp_env fix holds on x86 EPYC); the e2e sabotage DISAGREEs on all 17
+  and every lane AGREEs after reversal. RESULT: PASS.
+- `pca,pca-whiten,pca-full-whiten,tsvd,qn-squared,qn-absolute` as clean
+  controls: all AGREE, RESULT: PASS.
+- test_x_linear_repeat (cuda + host) PASS; test_host_surface 200 passed.
+- core/host_parallel.mojo was not on main at merge time, so
+  core/host_fp_env.mojo merged as is (the cpu lane absorbs it).
+Merged to main with bench/x_linear_speed.py (the speed board). Phase 1 is
+CLOSED. Post-merge: ONE batched steward submit (Apple + do-amd) for the 17
+existing lanes, sabotage e2e_existing_device.patch (ids below).
