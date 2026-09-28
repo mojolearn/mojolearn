@@ -30,38 +30,3 @@ def x_ann_ctx() raises -> DeviceContext:
     if not slot[].ctx:
         slot[].ctx = DeviceContext()
     return slot[].ctx.value().copy()
-
-
-# Lane ann-apple2 (2026-09-28): a small pool of further process-lifetime
-# contexts (each its own command queue), so independent device work can run
-# side by side from host tasks (the IVF-PQ subspace codebooks, opt-in by
-# MOJOLEARN_ANN_PQ_CB_STREAMS). Same lifetime rule as the slot above.
-comptime _ID = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-comptime X_ANN_POOL_0 = _Global[StorageType=_AnnContext, name="MojoXAnnPool0Identical" if _ID else "MojoXAnnPool0Fast", init_fn=_AnnContext.__init__]
-comptime X_ANN_POOL_1 = _Global[StorageType=_AnnContext, name="MojoXAnnPool1Identical" if _ID else "MojoXAnnPool1Fast", init_fn=_AnnContext.__init__]
-comptime X_ANN_POOL_2 = _Global[StorageType=_AnnContext, name="MojoXAnnPool2Identical" if _ID else "MojoXAnnPool2Fast", init_fn=_AnnContext.__init__]
-comptime X_ANN_POOL_3 = _Global[StorageType=_AnnContext, name="MojoXAnnPool3Identical" if _ID else "MojoXAnnPool3Fast", init_fn=_AnnContext.__init__]
-comptime X_ANN_POOL_SIZE = 4
-
-
-def x_ann_pool_ctx(i: Int) raises -> DeviceContext:
-    """Pool context i in [0, X_ANN_POOL_SIZE), created on first use."""
-    if i == 0:
-        var slot = X_ANN_POOL_0.get_or_create_ptr()
-        if not slot[].ctx:
-            slot[].ctx = DeviceContext()
-        return slot[].ctx.value().copy()
-    elif i == 1:
-        var slot = X_ANN_POOL_1.get_or_create_ptr()
-        if not slot[].ctx:
-            slot[].ctx = DeviceContext()
-        return slot[].ctx.value().copy()
-    elif i == 2:
-        var slot = X_ANN_POOL_2.get_or_create_ptr()
-        if not slot[].ctx:
-            slot[].ctx = DeviceContext()
-        return slot[].ctx.value().copy()
-    var slot = X_ANN_POOL_3.get_or_create_ptr()
-    if not slot[].ctx:
-        slot[].ctx = DeviceContext()
-    return slot[].ctx.value().copy()
