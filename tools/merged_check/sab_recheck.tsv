@@ -1,0 +1,6 @@
+decomp	x_decomp/checks/sabotage/e2e_host_all.patch	x-decomp-ipca,x-decomp-grp,x-decomp-srp,x-decomp-nmf,x-decomp-fastica,x-decomp-factor-analysis,x-decomp-spectral-rbf,x-decomp-lu,x-decomp-lstsq-rsvd,x-decomp-pls,x-decomp-dict-learning,x-decomp-sparse-pca,x-decomp-lda,x-decomp-manifold,x-decomp-robust-cov,x-decomp-als,x-decomp-pca-randomized
+decomp	x_decomp/checks/sabotage/e2e_p2b_options.patch	x-decomp-umap-options,x-decomp-als,x-decomp-pca-randomized,x-decomp-lstsq-rsvd,tsvd,linalg-qr,umap,spectral-embedding
+decomp	x_decomp/checks/sabotage/e2e_eigen_tol.patch	x-decomp-spectral-rbf
+cluster	x_cluster/checks/sabotage/e2e_kmeans_init.patch	x-cluster-kmeans-init
+cluster	x_decomp/checks/sabotage/e2e_host_sqdist.patch	x-cluster-spectral-affinities,x-decomp-spectral-rbf
+cluster	x_cluster/checks/sabotage/e2e_kmeans_finalize.patch	kmeans,kmeans-array,kmeans-classic-pp,kmeans-random,kmeans-sqrt,kmeans-weighted

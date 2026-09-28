@@ -1,0 +1,3 @@
+cluster	x_cluster/checks/sabotage/e2e_device_fold_reversed.patch	x-cluster-spectral-affinities
+cluster	x_cluster/checks/sabotage/e2e_dbscan_metrics.patch	x-cluster-dbscan-metrics
+cluster	x_cluster/checks/sabotage/e2e_hdbscan_epsilon.patch	x-cluster-hdbscan-epsilon
