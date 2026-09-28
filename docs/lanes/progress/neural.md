@@ -219,6 +219,73 @@ box (`tools/amd_central.sh`, slot per job, tree /root/mojolearn-neural).
 - **m4pro-b on 1790553937999:** every lane DISAGREEd under the family patch
   except embedding (NOTHING COMPARED, fixed above).
 
+## Session 4 (2026-09-28): step 0 coverage audit, gate close-out, no NVIDIA box
+
+RunPod ran out of money (balance -$4.41 at 04:53Z): the H100 pod
+`mbbvzsw1kgzr7r` is gone with every other RunPod pod, and its last results
+(test_lane_select and test_neural_repeat from session 3) were never pulled.
+Per the coordinator: no renting; the central Hot Aisle MI300X box
+(`tools/amd_central.sh`, tree /root/mojolearn-neural, logs /root/ev-neural/s4)
+stands in for the CPU tests and the device gate.
+
+### Merged origin/main (two conflicts resolved at the root)
+
+- main added `tools/identity_lanes/<id>.core` (a family's EXISTING lanes, one
+  per line) for the same job as this branch's `# lanes:` line in
+  neural.checks. The `# lanes:` mechanism is gone; `neural.core` lists the
+  lanes. `lane_select.seam_check_lanes` now adds a `.core`'s lanes when a
+  driver or what it imports changes (`core_listing_lanes`), which main's
+  `.core` rule had missed for linear too.
+- IDENTITY_PATHS: the cluster lane took rows 199-201, so the neural
+  `maximize=` row is **202** (section "rows 202-209").
+- test_lane_select: `neural_inference.py` answers **41** (main's 40 after
+  gbdt-tensor-ctr-tables left it, plus optim-maximize).
+
+### Step 0 coverage audit (every algorithm: CPU + GPU verifier arm, a source-edit sabotage that bites)
+
+| algorithm | verifier lane(s), CPU + GPU arms | seam driver + sabotage arm | lane bites under the family patch |
+|---|---|---|---|
+| TransformerBlock | transformer (+ -bf16w, -int8w, -window, -decode-session) | transformer_check / transformer_s1_fold_descending | NVIDIA s3 PASS |
+| Mamba-1 | mamba1 (+ variants) | mamba_check / mamba1_s1_fold_descending | NVIDIA s3 PASS |
+| Mamba-2 | mamba2 (+ variants, -dtlimit) | mamba2_check / mamba2_segsum_descending | NVIDIA s3 PASS |
+| Mamba-3 | mamba3 (+ variants) | mamba3_check / mamba3_segsum_descending | NVIDIA s3 PASS |
+| Samba stack | samba (+ variants, -untied-dropout-accum) | reached through the transformer + mamba3 arms | NVIDIA s3 PASS |
+| MLP (SmallMLPTrainer) | mlp (+ variants) | reached through the Adam arm | NVIDIA s3 PASS |
+| Embedding | embedding, embedding-sort | embedding_check / embedding_fold_descending | NVIDIA s3 PASS |
+| byte LM | byte-lm, byte-lm-resident (+ host-only lanes) | reached through the transformer arm | NVIDIA s3 PASS |
+| Adam / AdamW | optim-adam-clip, training-primitives | optimizer_check / optimizer_moment_lerp | NVIDIA s3 PASS |
+| maximize= | optim-maximize | maximize_check / maximize_6200_subtract_from_zero | NVIDIA s3 PASS |
+| cross_entropy | training-primitives, cross-entropy-arms | loss_check / loss_exp_stdlib | NVIDIA s3 PASS |
+| **SGD** | optim-sgd | **GAP, fixed:** optimizer_check / `optimizer_sgd_nesterov_order.patch` (new); optim-sgd joined neural.core | AMD s4 (below); NVIDIA OWED |
+| **clip_grad_norm_** | optim-adam-clip | **GAP, fixed:** optimizer_check / `optimizer_clip_param_order.patch` (new; J = 3 in the lane, so it is not inert) | AMD s4 (below); NVIDIA OWED |
+| BPE tokenizer, BPE trainer | tokenizer, bpe-trainer, bpe-vocabulary, hf-tokenizer | host integers only, no device path in any library: no GPU arm to owe, identity is by construction (lane docstrings) | n/a |
+
+Family sabotage for this session: `~/mojolearn-evidence/neural/session4/neural_family_e2e.patch`
+= session 3's patch + the SGD and clip arms.
+
+### Gate
+
+- **test_host_surface** (central box, CPU, pixi `test` env): 200 passed.
+- **test_lane_select**: see the gate line below. The six "REFUSING:
+  python/mojolearn/host_surface.py has uncommitted changes" failures are the
+  patch-synced tree, overridden with `MOJOLEARN_LANE_SELECT_TEST_FORCE=1`.
+- **Existing bits** (session 3, H100, 43-lane column before/after the
+  context change): 342 cells IDENTICAL, 0 differ; ONE-COLUMN only on the
+  five host-only lanes, as in session 1 (`session3/before_after_diff.txt`).
+- **Family lane check, 12 lanes, session 4 patch, --pass 2, gfx942 vs CPU**
+  (central box, `/root/ev-neural/s4/gate.log`) and **test_neural_repeat** on
+  the same slot (`rep.log`): see the gate line below.
+- **Stewards:** 1790571339823-neural-77e7272dbf (m2pro, m3ultra, m4-a,
+  do-amd; --pass 2, the session 3 family patch, 11 lanes) resubmits
+  aea8614db9's lanes at the merged tree.
+
+### OWED ON AN NVIDIA POD (when RunPod is funded)
+
+1. `sh tools/algos_lane_check.sh transformer,mamba1,mamba2,mamba3,embedding,samba,training-primitives,optim-adam-clip,optim-maximize,optim-sgd,mlp,byte-lm --sabotage ~/mojolearn-evidence/neural/session4/neural_family_e2e.patch --pass 2`
+   (the two new optimizer arms and optim-sgd have no NVIDIA proof yet).
+2. `test_neural_repeat` on CUDA (session 3's run was never pulled).
+3. Then phase 3/4 GPU speed on NVIDIA.
+
 ## Next phases (one per session)
 
 1. **Verification (charter phase 1) for the existing lanes:** a biting
