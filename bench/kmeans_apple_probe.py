@@ -56,6 +56,15 @@ def main():
         "board": (slice(1, 9), 8, [300, 1]),
     }
     for name in [s for s in a.only.split(",") if s]:
+        if name == "ivfsq":
+            # the IVF coarse fit inside the x_ann binding (1024 lists, 10 iterations)
+            x = higgs(1_000_000, slice(0, 28))
+            for rep in range(2):
+                est = ml.IVFSQIndex(n_lists=1024, n_probes=32, kmeans_n_iters=10, random_state=0)
+                t0 = time.perf_counter()
+                est.fit(x)
+                print(f"KMPROBE ivfsq-fit 1000000x28 k=1024 it=10 rep{rep} {time.perf_counter() - t0:.4f}", flush=True)
+            continue
         cols, k, iters = table[name]
         x = higgs(1_000_000, cols)
         for it in iters:

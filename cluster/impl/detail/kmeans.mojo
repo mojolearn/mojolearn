@@ -1371,7 +1371,7 @@ def kmeans_fit_main_traced(
     if params.init == INIT_ARRAY:
         n_init = 1
 
-    var km_on = getenv("MOJOLEARN_KMEANS_STAGES") == "1" and tag_prefix == ""
+    var km_on = getenv("MOJOLEARN_KMEANS_STAGES") == "1" and not tag_prefix.endswith("init.par.")
     var km_t = Int(perf_counter_ns())
     _km_stage(ctx, km_on, km_t, "fit.setup")
     for _seed_iter in range(n_init):
