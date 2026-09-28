@@ -696,7 +696,14 @@ def _calc_quantization_phase_b(
     Training and held-out predictions agreed, so the extra borders never
     decided a split on this lane; the saved `feature` records did not.
 
-    No statement on the device path flushes the column: the radix sort is
+    PINNED 2026-09-28 (DEVIATION 5900, lane/trees-cpu): the device's phase B
+    now asks `calc_quantization(..., flush_subnormals=True)`, whose
+    `best_split` is this function's arithmetic by bits, so the device
+    borders no longer depend on the worker's MXCSR/FPCR either (a
+    `host_parallelize` task runs the caller's IEEE environment). What
+    follows is the measurement that chose the flushed reading.
+
+    Before the pin, no statement on the device path flushed the column: the radix sort is
     an integer sort of the twiddled bits (`radix_sort.mojo:337-395`), the
     staging and `_dp_task` copies are loads and stores, and `best_split`
     has no `ftz`. The one border build that runs `best_split` on the
