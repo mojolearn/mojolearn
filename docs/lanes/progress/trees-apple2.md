@@ -211,7 +211,16 @@ Before = `-D MOJOLEARN_2031_SYM_RIDX_SPLITS_OFF -D MOJOLEARN_GBDT_ID_UPLOADS_SEP
 
 Cross-job on m4-a (same Mac, different jobs): IDENTICAL Lossguide taxi after-arm 6620 ms at 939ea50e9 -> 6306 ms at 0e5a27c47 (split bins and features joined the split pair's copy).
 
-## FINAL (tip 27fdd02c4 plus progress notes; 2026-09-28)
+## FINAL (2026-09-28, orchestrator FREEZE at ~18:35Z; tip = this commit)
+
+Code tip: 0e5a27c47 plus merges of origin/lane/apple-merged (a05b81b5b,
+b156a20ee) and progress notes. Nothing is half done; every default change
+below has a same-job before/after A/B with equal digests on at least one
+Mac, so nothing was reverted or moved to opt-in at the freeze. Two
+requests were still pending at the freeze and are NOT results:
+1790617277649 (m3ultra-b, all-off vs all-on at 27fdd02c4, queued behind
+six other lanes) and 1790619284873 (m4pro-a, the same at b156a20ee; see
+the note at the end if it finished before the push).
 
 ### Before/after at the tip, IDENTICAL, M4 Pro m4pro-a (steward 1790617279900)
 
@@ -353,3 +362,32 @@ FAST, which runs on the M2 Pro today).
   one arm on the M4 (pre-existing FAST behavior, not this lane's).
 - Istella is staged only on m3ultra-b and m4pro-a; m4pro-b and m4-a ran
   taxi-shaped cells only.
+
+### Final-tip table: IDENTICAL, M4 Pro m4pro-a, commit b156a20ee (= 0e5a27c47 + apple-merged), steward 1790619284873 (finished before the push)
+
+Before = the same opt-out defines as the table above plus `MOJOLEARN_ADABOOST_REENCODE=1`; after = defaults; same job, same Mac, 2 rounds, median ms. Every digest equal.
+
+| cell | before | after | after/before | digest |
+|---|---|---|---|---|
+| adaboost:taxi | 2898 | 2706 | 0.934 | e8529a04f218dbab |
+| adaboost:taxireg | 1835 | 1864 | 1.015 | 160452cbaf288200 |
+| bagging:taxi | 685 | 641 | 0.936 | 16aaba82631a5774 |
+| dart:taxireg | 5401 | 5330 | 0.987 | 86f40254833745ec |
+| dt:istellareg | 798 | 773 | 0.969 | 6f406a1b9436c69f |
+| dt:taxireg | 95 | 85 | 0.893 | e735a53b7d74025a |
+| embedding:taxi | 338 | 339 | 1.002 | 90d1b0749de17d44 |
+| et:istellareg | 63003 | 23458 | 0.372 | 981c3b89e374c91d |
+| et:taxi | 2014 | 1981 | 0.984 | ac18d5d8a54b1555 |
+| et:taxireg | 7088 | 2371 | 0.335 | ec62616c8e02c60b |
+| gbdt-depthwise:istella | 3716 | 3538 | 0.952 | e9c0f7e913af5a8a |
+| gbdt-depthwise:taxi | 1803 | 1684 | 0.934 | 5694af7699036c65 |
+| gbdt-lossguide:istella | 6333 | 5811 | 0.918 | eb0d9510ee08a16f |
+| gbdt-lossguide:taxi | 4360 | 3685 | 0.845 | b1761eecc6dfbc73 |
+| gbdt-symmetric:istella | 2819 | 2818 | 1.000 | d5571c2a35ea06c8 |
+| gbdt-symmetric:taxi | 1024 | 940 | 0.918 | 8e760782efae56c8 |
+| iforest:taxi | 65 | 66 | 1.014 | 96ff7aa1dfcef11e |
+| rf:istellareg | 49579 | 47110 | 0.950 | 3a5e8c09dd0d5fc7 |
+| rf:taxi | 3288 | 3130 | 0.952 | 452a173087f86a9d |
+| rf:taxireg | 6687 | 5401 | 0.808 | 58ec783b7afbd7a7 |
+
+1790617277649 (m3ultra-b) had not run at the push: NOT a result.

@@ -1101,8 +1101,9 @@ class TargetEncoder(_PrepBase):
         else:
             # each category's rows, ascending (te_bucket): te_enc walks one bucket, not every row
             bstart, brows = pr.alloc(d * (cmax + 1)), pr.alloc(n * d)
-            if os.environ.get("MOJOLEARN_XPREP_TE_PBUCKET", "1") != "0":
-                # the buckets by chunks in parallel (te_hist .. te_hscatter): te_bucket's START and ROWS
+            if os.environ.get("MOJOLEARN_XPREP_TE_PBUCKET", "0") == "1":
+                # OPT-IN, never measured (the 19:30Z freeze withdrew its job): the buckets by chunks
+                # in parallel (te_hist .. te_hscatter), te_bucket's START and ROWS by construction
                 ch = max(1, min(256, (n + 4095) // 4096))
                 hh, tot = pr.scratch(d * ch * cmax), pr.scratch(d * cmax)
                 pr.stage("te_hist", d * ch, codes, n, d, cmax, ch, hh)
