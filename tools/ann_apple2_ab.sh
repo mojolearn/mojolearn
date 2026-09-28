@@ -54,24 +54,38 @@ for mode in $modes; do
         echo "BUILD FAIL base $mode" >&2; tail -40 "$HOME/ann-apple2-build.err" >&2; exit 1; }
     echo "BUILT after $mode build.sh $(( $(date +%s) - t0 ))s"
 done
+# lane ann-apple3: an arm that does not build is reported (the compiler's
+# last lines, on stdout) and left out; the other arms still run. The job
+# fails at the end if any arm was left out.
+built=""
+dropped=""
 for a in $arms; do
     wt=${a#*=}
-    [ "${a%%=*}" != afterenv ] || continue
+    [ "${a%%=*}" != afterenv ] || { built="$built $a"; continue; }
     if [ "$wt" != "$after_wt" ]; then
         mkdir -p "$wt/python/mojolearn/identical"
         cp -p python/mojolearn/_mojolearn.so "$wt/python/mojolearn/" 2>/dev/null || true
         cp -p python/mojolearn/identical/_mojolearn.so "$wt/python/mojolearn/identical/" 2>/dev/null || true
     fi
+    ok=1
     for mode in $modes; do
         for b in build_x_ann.sh build_estimators.sh build_ivf.sh; do
+            [ "$ok" = 1 ] || continue
             t0=$(date +%s)
             defs=$(cat "$wt/.ann_ab_defs" 2>/dev/null || true)
-            (cd "$wt" && MOJOLEARN_SKIP_BUILD_GATE=1 MOJOLEARN_NUMERIC_MODE=$mode MOJOLEARN_MOJO_BUILD_FLAGS="$defs" pixi run -e default sh "bindings/$b" > /dev/null 2>"$HOME/ann-apple2-build.err") || {
-                echo "BUILD FAIL $wt $mode $b" >&2; tail -40 "$HOME/ann-apple2-build.err" >&2; exit 1; }
-            echo "BUILT ${a%%=*} $mode $b$defs $(( $(date +%s) - t0 ))s"
+            if (cd "$wt" && MOJOLEARN_SKIP_BUILD_GATE=1 MOJOLEARN_NUMERIC_MODE=$mode MOJOLEARN_MOJO_BUILD_FLAGS="$defs" pixi run -e default sh "bindings/$b" > /dev/null 2>"$HOME/ann-apple2-build.err"); then
+                echo "BUILT ${a%%=*} $mode $b$defs $(( $(date +%s) - t0 ))s"
+            else
+                echo "BUILD FAIL ${a%%=*} $mode $b$defs"
+                grep -v '^\s*$' "$HOME/ann-apple2-build.err" | tail -60 | sed "s/^/[build ${a%%=*}] /"
+                ok=0
+            fi
         done
     done
+    if [ "$ok" = 1 ]; then built="$built $a"; else dropped="$dropped ${a%%=*}"; fi
 done
+arms=$built
+[ -n "$arms" ] || { echo "ann_apple2_ab: no arm built" >&2; exit 1; }
 run() {  # arm wt mode [stages]
     echo "== $1 $3${4:+ stages}"
     xenv=""
@@ -105,3 +119,4 @@ if [ -n "${ANN_AB_QUALITY:-}" ]; then
             | grep -E "ANN-QUALITY|Error|Traceback" | sed "s/^/[${a%%=*} fast] /")
     done
 fi
+[ -z "$dropped" ] || { echo "ARMS NOT BUILT:$dropped"; exit 3; }
