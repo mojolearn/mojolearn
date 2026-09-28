@@ -12,6 +12,9 @@
 #   sh bench/cluster_apple3_local.sh quality <arm> "<cases>" [seeds]
 #       ONE Metal slot: the paired FAST against IDENTICAL check of that arm
 #       (needs the arm `identical` built with mode identical)
+# BIND=<binding> (default x_cluster) names the binding an arm's binary is, for
+# time, quality and phases; an arm written `<arm>:py` in `time` runs the arm's
+# binary with MOJOLEARN_HOTPATH=python.
 #   sh bench/cluster_apple3_local.sh phases <arm> "<cases>"
 # Binaries: $ARMS (default ~/mojolearn-evidence/cluster-apple3/local_arms); delete
 # them when their numbers are recorded. Refuses a build under 15 GB of free disk.
@@ -22,8 +25,8 @@ SLOT="python3 tools/mac_slot.py"
 export MAC_SLOTS=2
 mkdir -p "$ARMS"
 
-place() {  # <arm> <mode>: the arm's binary where the package loads it
-    so=_mojolearn_${3:-x_cluster}.so
+place() {  # <arm> <mode>: the arm's binary where the package loads it (BIND names the binding)
+    so=_mojolearn_${BIND:-x_cluster}.so
     dst=python/mojolearn; [ "$2" = identical ] && dst=python/mojolearn/identical
     mkdir -p $dst
     cp "$ARMS/$1.so" "$dst/.$so.tmp" && mv "$dst/.$so.tmp" "$dst/$so"
@@ -60,7 +63,10 @@ _time)
     rounds=$2; cases=$3; shift 3
     for r in $(seq 1 "$rounds"); do
         for arm in "$@"; do
-            place "$arm" fast
+            # `<arm>:py` times the arm's binary with MOJOLEARN_HOTPATH=python
+            # (the Python door's reference arm)
+            case $arm in *:py) export MOJOLEARN_HOTPATH=python ;; *) unset MOJOLEARN_HOTPATH ;; esac
+            place "${arm%%:*}" fast
             pixi run -e default python bench/x_cluster_speed.py --dataset taxi,higgs --reps 2 --only "$cases" \
                 | sed "s/^XCSPEED/XC_$arm r$r/"
         done
@@ -70,7 +76,7 @@ quality)
     shift; exec $SLOT metal -- sh bench/cluster_apple3_local.sh _quality "$@" ;;
 _quality)
     arm=$2; cases=$3; seeds=${4:-0}
-    place "$arm" fast; place identical identical
+    place "$arm" fast; place "${IDENT:-identical}" identical
     pixi run -e default python bench/cluster_apple3_quality.py --dataset taxi,higgs --seeds "$seeds" --only "$cases" \
         | sed "s/^XCQUAL/XCQUAL_$arm/"
     ;;
