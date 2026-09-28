@@ -20,6 +20,7 @@ from core.identity_trace import IdentityTrace
 from x_metrics.common import STAGE_INTS, LEAF
 from x_metrics.host.program import run_program_host_ptr
 from x_metrics.device import run_program_device_ptr
+from checks.fixture_rng import u01_triple
 from x_metrics.seams.x_metrics_oracle import (
     seq_sum, pair_sum, argsort_key, argsort_value, pinned_dot_add, fused_dot_add,
     seq_prefix, refold_prefix, key_permutation, fisher_yates,
@@ -30,6 +31,7 @@ comptime OP_GROUP_SUM = 1
 comptime OP_REG_TERM = 3
 comptime OP_COL_SORT = 4
 comptime OP_WPERCENTILE = 5
+comptime OP_BIN_CURVE = 7
 comptime OP_PERMUTE = 10
 
 
@@ -76,16 +78,16 @@ struct Prog(Movable):
             self.prog.append(v)
         self.stages += 1
 
-    def run(self, device: Bool) raises -> List[Float32]:
+    def run(self, device: Bool, legacy: Bool = False) raises -> List[Float32]:
         var f = self.arena.copy()
         var q = self.prog.copy()
         var fp = f.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         var qp = q.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         if device:
             comptime if has_accelerator():
-                run_program_device_ptr(fp, len(f), qp, self.stages)
+                run_program_device_ptr(fp, len(f), qp, self.stages, legacy)
         else:
-            run_program_host_ptr(fp, len(f), qp, self.stages)
+            run_program_host_ptr(fp, len(f), qp, self.stages, legacy)
         _ = len(q)
         return f^
 
@@ -292,6 +294,128 @@ def check_rng_mapping(mut card: IdentityTrace) raises:
     print("PASS 6108 RNG mapping: permute sorts by splitmix_pair keys (the fixture separates it from Fisher-Yates)")
 
 
+def _u(i: Int, k: Int) -> Float64:
+    return u01_triple(i, k, 0x6109)
+
+
+def _arena_digest(a: List[Float32]) -> Int32:
+    var h = UInt32(2166136261)
+    for x in a:
+        h = (h ^ _b(x)) * UInt32(16777619)
+    return Int32(bitcast[DType.int32](h))
+
+
+def check_parallel_schedules(mut card: IdentityTrace) raises:
+    """THE PLANNER (x_metrics/plan.mojo, phase C): the wide schedules of
+    x_metrics/par.mojo return the SAME ARENA, word for word, as the
+    sequential units they replace (the caller's program run unplanned on
+    the host), at shapes with many leaves, fold levels, merge passes, ties,
+    signed zeros, dropped keys and zero weights."""
+    var n = 70001
+    var m = 7
+    var arena = List[Float32]()
+    var K = len(arena)
+    for i in range(n):
+        arena.append(_i(Int(_u(i, 0) * 8.0) - 1))                # -1 = dropped
+    var Z = len(arena)
+    for _ in range(n):
+        arena.append(_i(0))                                       # one group
+    var V = len(arena)
+    for i in range(n):
+        for c in range(2):
+            arena.append(Float32(Int(_u(i, 1 + c) * 2001.0) - 1000) * Float32(0.37))
+    var W = len(arena)
+    for i in range(n):
+        arena.append(Float32(Int(_u(i, 3) * 4.0)) * Float32(0.25))   # zeros included
+    var OFF = len(arena)
+    for _ in range(m + 1):
+        arena.append(0)
+    var ORD = len(arena)
+    for _ in range(n):
+        arena.append(0)
+    var OUT = len(arena)
+    for _ in range(4 * m):
+        arena.append(0)
+    var OFF1 = len(arena)
+    arena.append(0)
+    arena.append(0)
+    var ORD1 = len(arena)
+    for _ in range(n):
+        arena.append(0)
+    var OUT1 = len(arena)
+    arena.append(0)
+    arena.append(0)
+    # col_sort + wpercentile over 3 columns of ns rows (ties, signed zeros)
+    var ns = 5003
+    var CV = len(arena)
+    for i in range(ns):
+        for c in range(3):
+            var v = Float32(Int(_u(i, 10 + c) * 21.0) - 10) / Float32(4)
+            if v == Float32(0) and _u(i, 13 + c) < 0.5:
+                v = Float32(-0.0)
+            arena.append(v)
+    var CO = len(arena)
+    for _ in range(3 * ns):
+        arena.append(0)
+    var R = len(arena)
+    arena.append(Float32(37.5))
+    var PO = len(arena)
+    for _ in range(3):
+        arena.append(0)
+    var CD = len(arena)
+    for _ in range(3 * ns):
+        arena.append(0)
+    # bin_curve: 2 problems (scores n x 2 row-major, ties), weighted and not
+    var nc = 20011
+    var S = len(arena)
+    for i in range(nc):
+        for c in range(2):
+            arena.append(Float32(Int(_u(i, 20 + c) * 300.0)) / Float32(299))
+    var POS = len(arena)
+    for i in range(2 * nc):
+        arena.append(_i(1 if _u(i, 22) < 0.4 else 0))
+    var BO = len(arena)
+    var cur = List[Int]()
+    for _ in range(2):
+        var off = len(arena)
+        cur.append(off)
+        for _ in range(4 * 2 * nc + 2):
+            arena.append(0)
+    var PM = len(arena)
+    var np = 10007
+    for _ in range(np):
+        arena.append(0)
+    var p = Prog(arena)
+    p.stage(OP_GROUP_SORT, 1, [K, n, m, OFF, ORD])
+    p.stage(OP_GROUP_SUM, 2 * m, [OFF, ORD, V, 2, W, OUT, 2])
+    p.stage(OP_GROUP_SUM, 2 * m, [OFF, ORD, V, 2, -1, OUT + 2 * m, 2])
+    p.stage(OP_GROUP_SORT, 1, [Z, n, 1, OFF1, ORD1])
+    p.stage(OP_GROUP_SUM, 2, [OFF1, ORD1, V, 2, W, OUT1, 2])
+    p.stage(OP_COL_SORT, 3, [CV, ns, 3, CO])
+    p.stage(OP_WPERCENTILE, 3, [CV, ns, 3, CO, W, R, 1, PO, CD])
+    for k in range(2):
+        var b = cur[k]
+        var N = 2 * nc
+        p.stage(OP_BIN_CURVE, 2, [S, 2, POS, W if k == 0 else -1, nc, b, b + N, b + 2 * N, b + 3 * N, b + 4 * N])
+    p.stage(OP_PERMUTE, 1, [np, PM, 0x2545F491, 0x4F6CDD1D])
+    _ = BO
+    var want = p.run(False, True)
+    var moved = 0
+    for i in range(len(arena)):
+        if _b(want[i]) != _b(arena[i]):
+            moved += 1
+    _require(moved > n, "VACUOUS schedule fixture: the program wrote almost nothing")
+    var runs = _both(p)
+    for r in runs:
+        _require(len(r) == len(want), "schedules: arena length")
+        for i in range(len(want)):
+            if _b(r[i]) != _b(want[i]):
+                _require(False, "schedules: planned arena word " + String(i) + " is " + String(r[i]) + ", the sequential units wrote " + String(want[i]))
+    var rec: List[Int32] = [_arena_digest(want)]
+    card.record_list_i32("plan.arena", rec)
+    print("PASS planner: the parallel schedules write the sequential units' arena word for word (" + String(moved) + " words written)")
+
+
 def main() raises:
     var path = getenv("MOJOLEARN_XMETRICS_CARD", "/tmp/x_metrics_seams.card")
     var card = IdentityTrace.to_path(path)
@@ -304,6 +428,7 @@ def main() raises:
     check_contraction(card)
     check_prefix(card)
     check_rng_mapping(card)
+    check_parallel_schedules(card)
     comptime if has_accelerator():
         print("PASS x_metrics seams: 8 seams, host and device, card", path)
     else:

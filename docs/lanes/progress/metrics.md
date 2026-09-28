@@ -80,20 +80,56 @@ targets, sparse contingency, numpy RandomState / scipy distributions, n_jobs>1).
 | registration (EXPANSION_LANES, door, empty fragment) | merged to main a6f8617a8 on its own (manifest byte-identical; test_host_surface, test_lane_select OK), so the feature diff selects 103 lanes instead of all |
 | steward identity requests at be39c62b6 | 1790544421098 (5 lanes, e2e_host_fadd), 1790544803666 (splitters, e2e_host_permute): queued on m2pro, m3ultra-b, m4pro, do-amd. Post-merge release gates (CURRENT DIRECTIVES 0000b): the next session reads `tools/apple_steward.py status`; a FAIL is fixed at the root as its own commit |
 
+## Phase 3+4 (FAST and IDENTICAL GPU speed): session C, 2026-09-27
+One change serves both tiers: the FAST x_metrics build runs the same units,
+so the parallel schedules are the same bits in both modes.
+- **Planner** (x_metrics/plan.mojo) rewrites every single-thread stage
+  (group_sort, group_sum, col_sort, wpercentile, bin_curve, permute) into
+  wide stages (x_metrics/par.mojo): chunked stable counting sort, PairSum
+  fold as leaves + pairwise levels (the fixed tree is a function of the
+  count, so the leaves reproduce it), merge sort by rank of the strict
+  (key, row) order, gathered sequential prefixes. Both runners (device and
+  host) run the planned program. `wpercentile_unit` is split: the CDF is
+  gather + prefix, then `wpct_select` (op 26) does the search and average.
+- The weighted-percentile CDF and the curve walk stay SEQUENTIAL Float32
+  prefixes (DEVIATION 6107); they run as HOST stages inside the device
+  runner (read slots down, same unit on the host, write slots up): 4-14 ms
+  per 1M rows instead of 60-260 ms on one GPU thread.
+- Host epilogue: `_fsum` returns `_portable_math.fsum`'s bits via
+  math.fsum (3000 randomized trials incl. signed zeros, subnormals,
+  overflow agree bit for bit); splitters build fold rows with
+  itertools.compress into array('q').
+- `MOJOLEARN_XMETRICS_PROFILE=1` prints each planned stage's device time.
+- Speed board: `bench/x_metrics_speed.py` (1M rows, taxi + HIGGS from R2,
+  `XMSPEED <case> <s> <digest>`). FAST paired quality check:
+  `bench/x_metrics_fast_quality.py` (5 seeds x taxi + HIGGS vs scikit-learn
+  1.9, per-case relative error JSON).
+- Process-lifetime DeviceContext (CURRENT DIRECTIVES): the binding already
+  held one (`metrics_ctx`); `python/mojolearn/tests/test_x_metrics_repeat.py`
+  calls 21 entry families twice per process on GPU and host, same bytes,
+  GPU == host.
+
+| check | verdict |
+|---|---|
+| speed, RTX 4090, 1M rows, `--reps 2`, board total | IDENTICAL 84.86 s -> 5.75 s (14.8x); FAST 81.56 s -> 5.75 s (14.2x). Median absolute error 5.04 s -> 0.011 s, d2_absolute_error 4.80 -> 0.018, shuffle_split 18.8 -> 0.26, train_test_split 3.76 -> 0.05, roc_curve 5.56 -> 0.26, roc_auc ovr 8.48 -> 1.79; AMI 1.44 -> 1.34 (Python-bound, unchanged); max_error unchanged |
+| bits unchanged | every one of the 29 board digests equal before/after, in BOTH modes (before = the base .so files, same pod, same run) |
+| FAST quality (paired, 5 seeds x 2 datasets vs scikit-learn) | the FAST build's per-case relative-error JSON is byte-identical before and after (q_old.json == q_new.json): quality unchanged |
+| seam gate `check_parallel_schedules` (80acfbe71) | unplanned host vs planned host vs planned device, every arena word agrees (244735 words), RTX 4090 |
+| `--pass 2`, 5 lanes + e2e_host_fadd | AGREE, 9/9 DISAGREE under sabotage, AGREE after; all 8 seam arms PASS/FAIL/PASS (arms retargeted at the planned schedules, 73d473008; 6105 arm build fixed 835bca4ea) |
+| `--pass 2`, x-metrics-splitters + e2e_host_permute (retargeted at par.mojo) | AGREE, 9/9 DISAGREE, AGREE after; 8 seam arms bite |
+| the other lanes the diff selects (77) | AGREE CUDA vs CPU; the same two harness-property lanes `gbdt-categorical-ctr-tables` / `gbdt-tensor-ctr-tables` NOTHING COMPARED as in phase 2 (unrelated) |
+| test_lane_select | OK, 0 failures |
+| test_host_surface, test_x_metrics_repeat (after merging origin/main) | PASS |
+| Apple speed | queued (m4pro-b): before 1790549640312-speed-metrics-51f2ef6215, after 1790549643846-speed-metrics-835bca4ead |
+| AMD speed + post-merge identity | submitted at the merge (see the session report / `apple_steward.py status`, requests `*-metrics-*`) |
+
 ## Next phases
-- **3. FAST speed** (next session): every x_metrics unit is one thread per
-  work item and several are single-thread (group_sort, col_sort, bin_curve,
-  permute, wpercentile). FAST: parallel radix/segmented sorts, block-parallel
-  group sums and prefix scans, one thread block per row for the row metrics;
-  the existing `_mojolearn_metrics` kernels are in the family too. Measure at
-  1M+ rows on R2 data (NVIDIA pod, AMD via do-amd, Apple via the stewards,
-  `--kind speed`), paired quality check vs scikit-learn at 5+ seeds on 2+
-  datasets. The splitters' and the search's Python bookkeeping (fold masks,
-  `_encode_*`) also want native helpers at 1M rows.
-- **4. IDENTICAL speed**: the same units parallel under IDENTICAL with the
-  same bits (PairSum's fixed tree is already a function of the count, so a
-  block-parallel fold that reproduces its leaves is bit-compatible).
-- **5. CPU speed**: threads / SIMD in the host runner, bits identical at
+- **Read first**: `apple_steward.py status` for the metrics speed and identity
+  requests; a FAIL is fixed at the root as its own commit before phase 5.
+- Remaining GPU speed headroom (optional, a later pass): roc_auc ovr (1.8 s)
+  and AMI (1.3 s, the expected-MI term is Python binary64) are the largest
+  cases left; stratified_kfold (0.5 s) is Python bookkeeping.
+- **5. CPU speed** (next session): threads / SIMD in the host runner, bits identical at
   every thread count.
 - Option-parity leftovers (NOT_IMPLEMENTED.tsv): multilabel-indicator targets
   across the classification metrics; silhouette's other distance metrics.

@@ -26,6 +26,7 @@ IEEE standard, and it is scikit-learn's own precision for the same step.
 """
 import array
 import ctypes
+import math as _math
 import numbers
 import warnings
 
@@ -43,6 +44,24 @@ _BINDING = "_mojolearn_x_metrics"
 _OPS = dict(group_sort=0, group_sum=1, pair_key=2, reg_term=3, col_sort=4, wpercentile=5, col_max=6, bin_curve=7, row_metric=8, row_centroid_dist=9, permute=10)
 _PARAMS = 14
 _NONE = -1
+
+
+def _fsum(values):
+    """`_portable_math.fsum` (the exact sum, rounded once to nearest/even),
+    by CPython's `math.fsum` whenever that is finite: for finite binary64
+    inputs `math.fsum` is that same correctly rounded sum (Shewchuk's exact
+    partials; IEEE binary64 on every host Python runs on), so the bits are
+    the same and a million terms cost milliseconds instead of seconds. A
+    zero sum is +0.0, as the portable one returns; anything non-finite or an
+    intermediate overflow goes to the portable sum, which decides it."""
+    vals = values if isinstance(values, list) else list(values)
+    try:
+        s = _math.fsum(vals)
+    except (OverflowError, ValueError):
+        return pmath.fsum(vals)
+    if s - s != 0:
+        return pmath.fsum(vals)
+    return s if s != 0 else 0.0
 
 
 def _binding(numeric_mode):
@@ -1306,7 +1325,7 @@ def det_curve(y_true, y_score, *, pos_label=None, sample_weight=None, drop_inter
 
 
 def _trapezoid(x, y):
-    return pmath.fsum([(x[i] - x[i - 1]) * (y[i] + y[i - 1]) / 2 for i in range(1, len(x))])
+    return _fsum([(x[i] - x[i - 1]) * (y[i] + y[i - 1]) / 2 for i in range(1, len(x))])
 
 
 def auc(x, y):
@@ -1356,7 +1375,7 @@ def _binary_ap(fps, tps):
         r = t / tps[-1]
         terms.append((r - prev) * (t / (t + f)))
         prev = r
-    return float(max(0.0, pmath.fsum(terms)))
+    return float(max(0.0, _fsum(terms)))
 
 
 def _ovr(y_true, y_score, sample_weight, labels, caller, numeric_mode):
@@ -1396,9 +1415,9 @@ def _average_scores(scores, support, average):
     if average is None:
         return Array.from_list(scores, "<f8")
     if average == "weighted":
-        total = pmath.fsum(support)
-        return float(pmath.fsum([a * b for a, b in zip(scores, support)]) / total) if total else 0.0
-    return float(pmath.fsum(scores) / len(scores))
+        total = _fsum(support)
+        return float(_fsum([a * b for a, b in zip(scores, support)]) / total) if total else 0.0
+    return float(_fsum(scores) / len(scores))
 
 
 def roc_auc_options(y_true, y_score, average, sample_weight, max_fpr, multi_class, labels, numeric_mode):
@@ -1442,7 +1461,7 @@ def roc_auc_options(y_true, y_score, average, sample_weight, max_fpr, multi_clas
     k = s_check.shape[1]
     vals = s_check.tolist()
     for row in vals:
-        if abs(pmath.fsum(row) - 1) > 1e-8 + 1e-5:
+        if abs(_fsum(row) - 1) > 1e-8 + 1e-5:
             raise ValueError("Target scores need to be probabilities for multiclass roc_auc, i.e. they "
                              "should sum up to 1.0 over classes")
     if multi_class == "ovr":
@@ -1477,8 +1496,8 @@ def roc_auc_options(y_true, y_score, average, sample_weight, max_fpr, multi_clas
                 both.append(_binary_auc(f, t, None))
             pair_scores.append((both[0] + both[1]) / 2)
     if average == "weighted":
-        return float(pmath.fsum([x * y for x, y in zip(pair_scores, prevalence)]) / pmath.fsum(prevalence))
-    return float(pmath.fsum(pair_scores) / len(pair_scores))
+        return float(_fsum([x * y for x, y in zip(pair_scores, prevalence)]) / _fsum(prevalence))
+    return float(_fsum(pair_scores) / len(pair_scores))
 
 
 def average_precision_score(y_true, y_score, *, average="macro", pos_label=1, sample_weight=None,
@@ -1652,7 +1671,7 @@ def _class_weights(codes, w, k):
     else:
         for c, x in zip(cl, w.tolist()):
             per[c] += x
-    return per, pmath.fsum(per)
+    return per, _fsum(per)
 
 
 def log_loss_options(y_true, y_pred, normalize, sample_weight, labels, numeric_mode):
@@ -1697,7 +1716,7 @@ def d2_log_loss_score(y_true, y_proba=None, *, sample_weight=None, labels=None, 
     num = _row_mean(S, k, Y, n, "logloss", w, numeric_mode, prog=prog, normalize=False)
     per, total = _class_weights(codes, w, k)
     eps = 1.1920928955078125e-07
-    den = pmath.fsum([wc * -pmath.log(min(max(wc / total, eps), 1 - eps)) for wc in per if wc])
+    den = _fsum([wc * -pmath.log(min(max(wc / total, eps), 1 - eps)) for wc in per if wc])
     return float(1 - num / den)
 
 
@@ -1715,7 +1734,7 @@ def d2_brier_score(y_true, y_proba, *, sample_weight=None, pos_label=None, label
     num = _row_mean(S, k, Y, n, "brier", w, numeric_mode, prog=prog)
     per, total = _class_weights(codes, w, k)
     freq = [v / total for v in per]
-    den = pmath.fsum([per[c] * pmath.fsum([((1.0 if j == c else 0.0) - freq[j]) ** 2 for j in range(k)])
+    den = _fsum([per[c] * _fsum([((1.0 if j == c else 0.0) - freq[j]) ** 2 for j in range(k)])
                       for c in range(k)]) / total
     return float(1 - num / den)
 
@@ -1812,9 +1831,9 @@ def ndcg_score(y_true, y_score, *, k=None, sample_weight=None, ignore_ties=False
     g, i = prog.floats(gain, n), prog.floats(ideal, n)
     per = [a / b if b != 0 else 0.0 for a, b in zip(g, i)]
     if w is None:
-        return float(pmath.fsum(per) / n)
+        return float(_fsum(per) / n)
     wl = w.tolist()
-    return float(pmath.fsum([a * b for a, b in zip(per, wl)]) / pmath.fsum(wl))
+    return float(_fsum([a * b for a, b in zip(per, wl)]) / _fsum(wl))
 
 
 def _label_ranking(kind, y_true, y_score, sample_weight, numeric_mode, caller):
@@ -1916,7 +1935,7 @@ def _entropy_counts(counts):
     if total == 0:
         return 1.0
     lt = pmath.log(total)
-    return -pmath.fsum([(c / total) * (pmath.log(c) - lt) for c in counts if c])
+    return -_fsum([(c / total) * (pmath.log(c) - lt) for c in counts if c])
 
 
 def _mi_from_contingency(C):
@@ -1935,7 +1954,7 @@ def _mi_from_contingency(C):
             log_outer = -pmath.log(pi[i] * pj[j]) + pmath.log(sum(pi)) + pmath.log(sum(pj))
             t = nm * (pmath.log(v) - lt) + nm * log_outer
             terms.append(0.0 if abs(t) < 2.220446049250313e-16 else t)
-    return max(pmath.fsum(terms), 0.0)
+    return max(_fsum(terms), 0.0)
 
 
 def _generalized_average(U, V, method):
@@ -1989,13 +2008,13 @@ def _expected_mi(a_counts, b_counts, n):
             while x > lo:
                 u[x - 1] = u[x] * (x * (n - a - b + x)) / ((a - x + 1) * (b - x + 1))
                 x -= 1
-            z = pmath.fsum(list(u.values()))
+            z = _fsum(list(u.values()))
             for nij in range(max(1, lo), hi + 1):
                 pr = u[nij] / z
                 if pr == 0:
                     continue
                 emi_terms.append((nij / n) * (pmath.log(n * nij) - pmath.log(a) - pmath.log(b)) * pr)
-    return pmath.fsum(emi_terms)
+    return _fsum(emi_terms)
 
 
 def adjusted_mutual_info_score(labels_true, labels_pred, *, average_method="arithmetic", numeric_mode=None):
@@ -2074,9 +2093,9 @@ def calinski_harabasz_score(X, labels, *, numeric_mode=None):
     sums, counts, gsum = _centroids(Xa, codes, k, numeric_mode)
     cents = [sums[i * d + c] / counts[i] for i in range(k) for c in range(d)]
     mean = [v / n for v in gsum]
-    extra = pmath.fsum([counts[i] * pmath.fsum([(cents[i * d + c] - mean[c]) ** 2 for c in range(d)])
+    extra = _fsum([counts[i] * _fsum([(cents[i * d + c] - mean[c]) ** 2 for c in range(d)])
                         for i in range(k)])
-    intra = pmath.fsum(_row_dists(Xa, codes, cents, False, numeric_mode))
+    intra = _fsum(_row_dists(Xa, codes, cents, False, numeric_mode))
     return float(1.0 if intra == 0.0 else extra * (n - k) / (intra * (k - 1.0)))
 
 
@@ -2088,7 +2107,7 @@ def davies_bouldin_score(X, labels, *, numeric_mode=None):
     sums, counts, _ = _centroids(Xa, codes, k, numeric_mode)
     cents = [sums[i * d + c] / counts[i] for i in range(k) for c in range(d)]
     intra = [v / counts[i] for i, v in enumerate(_row_dists(Xa, codes, cents, True, numeric_mode))]
-    dist = [[pmath.sqrt(pmath.fsum([(cents[i * d + c] - cents[j * d + c]) ** 2 for c in range(d)]))
+    dist = [[pmath.sqrt(_fsum([(cents[i * d + c] - cents[j * d + c]) ** 2 for c in range(d)]))
              for j in range(k)] for i in range(k)]
     close = lambda v: abs(v) <= 1e-8
     if all(close(v) for v in intra) or all(close(v) for row in dist for v in row):
@@ -2100,7 +2119,7 @@ def davies_bouldin_score(X, labels, *, numeric_mode=None):
             den = dist[i][j] if dist[i][j] != 0 else float("inf")
             best = max(best, (intra[i] + intra[j]) / den)
         scores.append(best)
-    return float(pmath.fsum(scores) / k)
+    return float(_fsum(scores) / k)
 
 
 # ---------------------------------------------------------------------------

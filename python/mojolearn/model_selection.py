@@ -5,8 +5,10 @@ Default folds and estimator cloning use the standard library. External
 scikit-learn pipelines and splitters remain optional interoperability surfaces.
 Fold indices are host metadata; all learning stays with the GPU estimator.
 """
+import array
 import copy
 import hashlib
+import itertools
 import json
 from . import _portable_math as math
 import numbers
@@ -631,7 +633,12 @@ def _encode_sorted(values):
 
 
 def _as_index(values):
-    return Array.from_list([int(v) for v in values], '<i8')
+    store = array.array('q', map(int, values))
+    return Array._owned(store, (len(store),), '<i8', 'C')
+
+
+#: bytes.translate table flipping a 0/1 mask
+_FLIP = bytes([1, 0]) + bytes(254)
 
 
 def _rng(random_state):
@@ -660,8 +667,9 @@ class _Splitter:
             mask = bytearray(n)
             for i in test:
                 mask[i] = 1
-            yield (_as_index([i for i in range(n) if not mask[i]]),
-                   _as_index([i for i in range(n) if mask[i]]))
+            # ascending train and test rows, selected in C (itertools.compress)
+            yield (_as_index(itertools.compress(range(n), mask.translate(_FLIP))),
+                   _as_index(itertools.compress(range(n), mask)))
 
 
 def _check_splits(n_splits):
