@@ -1,14 +1,12 @@
 --- a/x_prep/prims.mojo
 +++ b/x_prep/prims.mojo
-@@ -330,9 +330,10 @@
-     var nc = p(q, 7)
-     var i = t // nc
-     var j = t % nc
+@@ -367,7 +367,8 @@
+ def mm_step(acc: Float32, a: Float32, b: Float32) -> Float32:
+     """One term of matmul's contraction: the product rounded, then added
+     (DEVIATION 5401: never contracted into an FMA)."""
+-    return add(acc, mul(a, b))
 +    from std.math import fma  # SABOTAGE 5401
-     var acc = Float32(0)
-     for l in range(p(q, 8)):
--        acc = add(acc, mul(ld(f, p(q, 0) + i * p(q, 1) + l * p(q, 2)), ld(f, p(q, 3) + l * p(q, 4) + j * p(q, 5))))
-+        acc = ftz(fma(ld(f, p(q, 0) + i * p(q, 1) + l * p(q, 2)), ld(f, p(q, 3) + l * p(q, 4) + j * p(q, 5)), acc))
-     if p(q, 10) >= 0:
-         acc = mul(acc, ld(f, p(q, 10)))
-     if p(q, 9) >= 0:
++    return ftz(fma(a, b, acc))
+ 
+ 
+ def matmul_unit(t: Int, f: FP, q: IP):

@@ -55,6 +55,25 @@ def st(f: FP, i: Int, v: Float32):
     f.unsafe_store(i, ftz(v))
 
 
+#: rows a serial column fold loads at once (`run_block`).
+comptime RUN = 16
+
+
+@always_inline
+def run_block[B: Int](f: FP, base: Int, stride: Int) -> SIMD[DType.float32, B]:
+    """The B raw words f[base + u * stride], u = 0 .. B-1, loaded together
+    before any is used (lane prep-apple, 2026-09-28). A unit that folds a
+    column in ascending row order on ONE GPU thread otherwise waits one
+    memory latency per row (~350 ns per row measured on the M4 Pro); loading
+    a run of rows first overlaps those latencies. The fold still takes the
+    words one at a time in ascending order, so no operation moves: the same
+    bits on every target."""
+    var v = SIMD[DType.float32, B](0)
+    comptime for u in range(B):
+        v[u] = f.unsafe_load(base + u * stride)
+    return v
+
+
 @always_inline
 def ldi(f: FP, i: Int) -> Int:
     return Int(bitcast[DType.int32](f.unsafe_load(i)))
@@ -99,8 +118,31 @@ def key(x: Float32) -> UInt32:
     return b | UInt32(0x80000000)
 
 
+@always_inline
+def word_order(b: UInt32) -> UInt64:
+    """The total order every sort of the lane uses, on a word's bits: `key`
+    first (the same map, written on the integer word), the raw bits second.
+    On a non-NaN word `key` is a bijection, so the bits only order NaN words
+    of different payload among themselves; with them the order is total and a
+    sort has one answer whatever algorithm reaches it (the device's bitonic
+    sort, x_prep/dsort.mojo, equals this heapsort word for word)."""
+    var k: UInt32
+    if (b & UInt32(0x7FFFFFFF)) > UInt32(0x7F800000):
+        k = UInt32(0xFFFFFFFF)
+    elif (b & UInt32(0x80000000)) != UInt32(0):
+        k = ~b
+    else:
+        k = b | UInt32(0x80000000)
+    return (UInt64(k) << UInt64(32)) | UInt64(b)
+
+
+@always_inline
+def _wo(f: FP, i: Int) -> UInt64:
+    return word_order(f.bitcast[UInt32]().unsafe_load(i))
+
+
 def heap_sort(f: FP, base: Int, n: Int):
-    """In-place heapsort of f[base : base+n] by `key`. Deterministic by
+    """In-place heapsort of f[base : base+n] by `word_order`. Deterministic by
     construction (the same comparisons in the same order everywhere)."""
     if n < 2:
         return
@@ -124,9 +166,9 @@ def _sift(f: FP, base: Int, start: Int, n: Int):
         var child = 2 * root + 1
         if child >= n:
             return
-        if child + 1 < n and key(f.unsafe_load(base + child)) < key(f.unsafe_load(base + child + 1)):
+        if child + 1 < n and _wo(f, base + child) < _wo(f, base + child + 1):
             child += 1
-        if key(f.unsafe_load(base + root)) < key(f.unsafe_load(base + child)):
+        if _wo(f, base + root) < _wo(f, base + child):
             var tmp = f.unsafe_load(base + root)
             f.unsafe_store(base + root, f.unsafe_load(base + child))
             f.unsafe_store(base + child, tmp)

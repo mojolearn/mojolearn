@@ -21,7 +21,8 @@ reference's force_finite values (0 and p-value 1 for NaN, float32 max and
 p-value 0 for an infinite F) only when asked.
 """
 from std.memory import bitcast
-from x_prep.common import FP, IP, p, ld, st, canonical_nan
+from x_prep.common import FP, IP, p, ld, st, canonical_nan, RUN, run_block
+from checks.numerics import ftz
 from x_prep.prims import add, sub, mul, div, logf, expf
 
 comptime F32_MAX = Float32(3.4028235e38)
@@ -161,9 +162,19 @@ def f_classif_unit(t: Int, f: FP, q: IP):
         var e = sub(ld(f, p(q, 6) + k * d + c), gm)
         ssb = add(ssb, mul(ld(f, p(q, 5) + k), mul(e, e)))
     var ssw = Float32(0)
-    for i in range(n):
-        var k = Int(ld(f, p(q, 3) + i))
-        var e = sub(ld(f, p(q, 0) + i * d + c), ld(f, p(q, 6) + k * d + c))
+    var X = p(q, 0)
+    var Y = p(q, 3)
+    var M = p(q, 6)
+    var full = n - n % RUN
+    for i0 in range(0, full, RUN):
+        var by = run_block[RUN](f, Y + i0, 1)
+        var bx = run_block[RUN](f, X + i0 * d + c, d)
+        comptime for u in range(RUN):
+            var e = sub(ftz(bx[u]), ld(f, M + Int(ftz(by[u])) * d + c))
+            ssw = add(ssw, mul(e, e))
+    for i in range(full, n):
+        var k = Int(ld(f, Y + i))
+        var e = sub(ld(f, X + i * d + c), ld(f, M + k * d + c))
         ssw = add(ssw, mul(e, e))
     var dfb = Float32(K - 1)
     var dfw = Float32(n - K)
@@ -193,20 +204,38 @@ def f_regression_unit(t: Int, f: FP, q: IP):
     var c = t
     var mx = Float32(0)
     var my = Float32(0)
+    var X = p(q, 0)
+    var Y = p(q, 3)
+    var full = n - n % RUN
     if p(q, 4) != 0:
         var sx = Float32(0)
         var sy = Float32(0)
-        for i in range(n):
-            sx = add(sx, ld(f, p(q, 0) + i * d + c))
-            sy = add(sy, ld(f, p(q, 3) + i))
+        for i0 in range(0, full, RUN):
+            var bx = run_block[RUN](f, X + i0 * d + c, d)
+            var by = run_block[RUN](f, Y + i0, 1)
+            comptime for u in range(RUN):
+                sx = add(sx, ftz(bx[u]))
+                sy = add(sy, ftz(by[u]))
+        for i in range(full, n):
+            sx = add(sx, ld(f, X + i * d + c))
+            sy = add(sy, ld(f, Y + i))
         mx = div(sx, Float32(n))
         my = div(sy, Float32(n))
     var sxy = Float32(0)
     var sxx = Float32(0)
     var syy = Float32(0)
-    for i in range(n):
-        var ex = sub(ld(f, p(q, 0) + i * d + c), mx)
-        var ey = sub(ld(f, p(q, 3) + i), my)
+    for i0 in range(0, full, RUN):
+        var bx = run_block[RUN](f, X + i0 * d + c, d)
+        var by = run_block[RUN](f, Y + i0, 1)
+        comptime for u in range(RUN):
+            var ex = sub(ftz(bx[u]), mx)
+            var ey = sub(ftz(by[u]), my)
+            sxy = add(sxy, mul(ex, ey))
+            sxx = add(sxx, mul(ex, ex))
+            syy = add(syy, mul(ey, ey))
+    for i in range(full, n):
+        var ex = sub(ld(f, X + i * d + c), mx)
+        var ey = sub(ld(f, Y + i), my)
         sxy = add(sxy, mul(ex, ey))
         sxx = add(sxx, mul(ex, ex))
         syy = add(syy, mul(ey, ey))

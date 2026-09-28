@@ -15,8 +15,8 @@ refinement) for `scipy.stats.norm.ppf`.
 """
 from std.memory import bitcast
 from checks.numerics import ftz, identical_log1p, identical_erf, _cephes_erfcf_ge1
-from x_prep.common import FP, IP, p, ld, raw, st, is_nan, canonical_nan
-from x_prep.prims import add, sub, mul, div, logf, expf, sqrtf, zero_to_one
+from x_prep.common import FP, IP, p, ld, raw, st, ldi, sti, is_nan, canonical_nan, RUN, run_block
+from x_prep.prims import add, acc_add, sub, mul, div, logf, expf, sqrtf, zero_to_one
 
 #: norm.ppf(1e-7 - eps) and its mirror: QuantileTransformer's normal clip.
 comptime QT_CLIP = Float32(5.1993375)
@@ -311,6 +311,248 @@ def pt_fit_unit(t: Int, f: FP, q: IP):
             x2 = sub(b, mul(GOLDEN, sub(b, a)))
             f2 = _neg_llf(f, p(q, 0), n, d, c, x2, method)
     st(f, p(q, 5) + c, mul(add(a, b), Float32(0.5)))
+
+
+# ------------------------------------------------ pt_fit as stages (lane prep-apple)
+# pt_fit_unit runs the whole golden-section search on one thread per column:
+# 50 log-likelihood evaluations, each two passes over the column with an exp
+# and a log1p per row (13.8 s of 14.0 s in PowerTransformer.fit at 100k rows
+# x 16 columns on the M4 Pro). The same search as stages: `pt_init` sets up
+# each column's bracket, then per evaluation `pt_map` computes the transform
+# T(x; lambda) of every element at once (one thread per element) and
+# `pt_fold` folds the column's T in ascending row order into the negative
+# log-likelihood exactly as `_neg_llf` does, and takes the search's step.
+# Every value is the one `_neg_llf` computes (T is `power` of the same
+# flushed x, stored and reloaded bit for bit; the folds add in the same
+# order), so lambda is the same word.
+
+#: evaluations: the two starting points, then one per iteration
+comptime PT_EVALS = PT_ITERS + 2
+#: per-column search state: a, b, x1, x2, f1, f2, side, skip, sum J, and the
+#: non-NaN row count folded at K = 0 (an int word)
+comptime PT_STATE = 10
+
+
+def pt_init_unit(t: Int, f: FP, q: IP):
+    """q = [METHOD, ST, d, LAMBDA, STATE, LEVAL]; t = column. A constant
+    column (yeo-johnson) is lambda 1 and skipped, as `pt_fit_unit`; otherwise
+    the bracket [PT_LO, PT_HI], its two golden points, and x1 to evaluate."""
+    var d = p(q, 2)
+    var c = t
+    var S = p(q, 4) + c * PT_STATE
+    var a = PT_LO
+    var b = PT_HI
+    var x1 = add(a, mul(GOLDEN, sub(b, a)))
+    var x2 = sub(b, mul(GOLDEN, sub(b, a)))
+    var skip = p(q, 0) == 0 and ld(f, p(q, 1) + 2 * d + c) == Float32(0)
+    f.unsafe_store(S + 0, a)
+    f.unsafe_store(S + 1, b)
+    f.unsafe_store(S + 2, x1)
+    f.unsafe_store(S + 3, x2)
+    f.unsafe_store(S + 4, Float32(0))
+    f.unsafe_store(S + 5, Float32(0))
+    f.unsafe_store(S + 6, Float32(0))
+    f.unsafe_store(S + 7, Float32(1) if skip else Float32(0))
+    f.unsafe_store(S + 8, Float32(0))
+    f.unsafe_store(S + 9, Float32(0))
+    f.unsafe_store(p(q, 5) + c, x1)
+    if skip:
+        st(f, p(q, 3) + c, Float32(1))
+
+
+def pt_log_unit(t: Int, f: FP, q: IP):
+    """q = [X, n, d, METHOD, LG]; t = element i*d + c. LG[c*n + i] =
+    power_log(x) of the flushed x, the lambda-free logarithm every
+    evaluation's transform is built on (x_prep/host/power.mojo's observation:
+    power(x, lam) IS power_from_log(power_log(x), x >= 0, lam)); a NaN
+    element writes the canonical NaN."""
+    var n = p(q, 1)
+    var d = p(q, 2)
+    var c = t % d
+    var i = t // d
+    var x = ld(f, p(q, 0) + t)
+    if is_nan(x):
+        f.unsafe_store(p(q, 4) + c * n + i, canonical_nan())
+        return
+    f.unsafe_store(p(q, 4) + c * n + i, power_log(x, p(q, 3)))
+
+
+def pt_map_unit(t: Int, f: FP, q: IP):
+    """q = [X, n, d, METHOD, LEVAL, T, LG1]; t = element i*d + c. T[c*n + i] =
+    power(x, LEVAL[c]) of the flushed x (`_neg_llf`'s value), COLUMN MAJOR so
+    the fold reads each column contiguously; a NaN element writes the
+    canonical NaN (the fold skips it by that word: `power` of a non-NaN x is
+    never NaN for yeo-johnson, and box-cox input with x <= 0, the only NaN
+    source, is refused after the fit, its values discarded)."""
+    var n = p(q, 1)
+    var d = p(q, 2)
+    var c = t % d
+    var i = t // d
+    var x = ld(f, p(q, 0) + t)
+    if is_nan(x):
+        f.unsafe_store(p(q, 5) + c * n + i, canonical_nan())
+        return
+    var lam = raw(f, p(q, 4) + c)
+    if p(q, 6) > 0:
+        # LG1 = pt_log's offset + 1: the logarithm kept across evaluations
+        var lg = raw(f, p(q, 6) - 1 + c * n + i)
+        f.unsafe_store(p(q, 5) + c * n + i, power_from_log(lg, x >= Float32(0), lam, p(q, 3)))
+        return
+    f.unsafe_store(p(q, 5) + c * n + i, power(x, lam, p(q, 3)))
+
+
+@always_inline
+def _pt_take1(x: Float32, tv: Float32, method: Int, first: Bool, mut cnt: Int, mut s: Float32,
+              mut sj: Float32):
+    """One row of `_neg_llf`'s first pass (x flushed, tv its transform)."""
+    if is_nan(x):
+        return
+    s = acc_add(s, tv)
+    if first:
+        if method == 1:
+            sj = add(sj, logf(x))
+        elif x >= Float32(0):
+            sj = add(sj, log1pf(x))
+        else:
+            sj = sub(sj, log1pf(sub(Float32(0), x)))
+    cnt += 1
+
+
+@always_inline
+def _pt_take2(x: Float32, tv: Float32, mean: Float32, mut ss: Float32):
+    """One row of `_neg_llf`'s second pass."""
+    if is_nan(x):
+        return
+    var e = sub(tv, mean)
+    ss = acc_add(ss, mul(e, e))
+
+
+def pt_fold_unit(t: Int, f: FP, q: IP):
+    """q = [X, n, d, METHOD, T, K, STATE, LEVAL, LAMBDA]; t = column. The
+    negative log-likelihood of evaluation K (at LEVAL[c]) folded as `_neg_llf`
+    (sum J is folded once, at K = 0: every evaluation folds the same values in
+    the same order, so it is the same word), then `pt_fit_unit`'s step: K = 0
+    is f1, K = 1 is f2, a later K is the point the previous step chose; after
+    the last iteration LAMBDA = (a + b) / 2."""
+    var X = p(q, 0)
+    var n = p(q, 1)
+    var d = p(q, 2)
+    var method = p(q, 3)
+    var T = p(q, 4)
+    var K = p(q, 5)
+    var c = t
+    var S = p(q, 6) + c * PT_STATE
+    if raw(f, S + 7) != Float32(0):
+        return
+    var first = K == 0
+    var cnt = 0
+    var sm = Float32(0)
+    var sj = raw(f, S + 8)
+    if first:
+        sj = Float32(0)
+    var Tc = T + c * n
+    var full = n - n % RUN
+    if first:
+        # sum J needs x: the one evaluation that reads X
+        for i0 in range(0, full, RUN):
+            var bx = run_block[RUN](f, X + i0 * d + c, d)
+            var bt = run_block[RUN](f, Tc + i0, 1)
+            comptime for u in range(RUN):
+                _pt_take1(ftz(bx[u]), bt[u], method, True, cnt, sm, sj)
+        for i in range(full, n):
+            _pt_take1(ld(f, X + i * d + c), raw(f, Tc + i), method, True, cnt, sm, sj)
+        f.unsafe_store(S + 8, sj)
+        sti(f, S + 9, cnt)
+    elif ldi(f, S + 9) == n:
+        # no NaN row in this column (K = 0 counted n): the same adds, no test
+        cnt = n
+        for i0 in range(0, full, RUN):
+            var bt = run_block[RUN](f, Tc + i0, 1)
+            comptime for u in range(RUN):
+                sm = acc_add(sm, bt[u])
+        for i in range(full, n):
+            sm = acc_add(sm, raw(f, Tc + i))
+    else:
+        # a row is NaN exactly where its T word is (pt_map_unit)
+        for i0 in range(0, full, RUN):
+            var bt = run_block[RUN](f, Tc + i0, 1)
+            comptime for u in range(RUN):
+                _pt_take1(bt[u], bt[u], method, False, cnt, sm, sj)
+        for i in range(full, n):
+            var tv = raw(f, Tc + i)
+            _pt_take1(tv, tv, method, False, cnt, sm, sj)
+    var ss = Float32(0)
+    if cnt == n and n > 0:
+        var mean = div(sm, Float32(cnt))
+        for i0 in range(0, full, RUN):
+            var bt = run_block[RUN](f, Tc + i0, 1)
+            comptime for u in range(RUN):
+                var e = sub(bt[u], mean)
+                ss = acc_add(ss, mul(e, e))
+        for i in range(full, n):
+            var e = sub(raw(f, Tc + i), mean)
+            ss = acc_add(ss, mul(e, e))
+    elif cnt > 0:
+        var mean = div(sm, Float32(cnt))
+        for i0 in range(0, full, RUN):
+            var bt = run_block[RUN](f, Tc + i0, 1)
+            comptime for u in range(RUN):
+                _pt_take2(bt[u], bt[u], mean, ss)
+        for i in range(full, n):
+            var tv = raw(f, Tc + i)
+            _pt_take2(tv, tv, mean, ss)
+    pt_finish(t, f, q, cnt, sj, ss)
+
+
+def pt_finish(t: Int, f: FP, q: IP, cnt: Int, sj: Float32, ss: Float32):
+    """pt_fold's end for column t, from its folded row count, sum J and
+    squared deviations: the negative log-likelihood of evaluation K, then the
+    golden-section step (also the FAST device fold's end, x_prep/fastred.mojo)."""
+    var K = p(q, 5)
+    var c = t
+    var S = p(q, 6) + c * PT_STATE
+    var lam = raw(f, p(q, 7) + c)
+    var val = Float32(0)
+    if cnt > 0:
+        var var_ = div(ss, Float32(cnt))
+        val = sub(mul(mul(Float32(0.5), Float32(cnt)), logf(var_)), mul(sub(lam, Float32(1)), sj))
+    var a = raw(f, S + 0)
+    var b = raw(f, S + 1)
+    var x1 = raw(f, S + 2)
+    var x2 = raw(f, S + 3)
+    var f1 = raw(f, S + 4)
+    var f2 = raw(f, S + 5)
+    if K == 0:
+        f1 = val
+        f.unsafe_store(p(q, 7) + c, x2)
+    else:
+        if K == 1 or raw(f, S + 6) == Float32(2):
+            f2 = val
+        else:
+            f1 = val
+        if K - 1 < PT_ITERS:
+            if f1 <= f2 or f2 != f2:
+                b = x2
+                x2 = x1
+                f2 = f1
+                x1 = add(a, mul(GOLDEN, sub(b, a)))
+                f.unsafe_store(S + 6, Float32(1))
+                f.unsafe_store(p(q, 7) + c, x1)
+            else:
+                a = x1
+                x1 = x2
+                f1 = f2
+                x2 = sub(b, mul(GOLDEN, sub(b, a)))
+                f.unsafe_store(S + 6, Float32(2))
+                f.unsafe_store(p(q, 7) + c, x2)
+        else:
+            st(f, p(q, 8) + c, mul(add(a, b), Float32(0.5)))
+    f.unsafe_store(S + 0, a)
+    f.unsafe_store(S + 1, b)
+    f.unsafe_store(S + 2, x1)
+    f.unsafe_store(S + 3, x2)
+    f.unsafe_store(S + 4, f1)
+    f.unsafe_store(S + 5, f2)
 
 
 def pt_apply_unit(t: Int, f: FP, q: IP):

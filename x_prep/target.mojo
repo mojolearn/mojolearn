@@ -12,42 +12,111 @@ continuous target, one per class (one-vs-rest) for a multiclass one.
 Where the reference's lambda is NaN (an empty category, or zero variance and
 zero spread) it returns the target mean; so does this, by test, not by NaN.
 """
-from x_prep.common import FP, IP, p, ld, st
+from x_prep.common import FP, IP, p, ld, st, ldi, sti, RUN, run_block
+from checks.numerics import ftz
 from x_prep.prims import add, sub, mul, div
 
 
 def te_global_unit(t: Int, f: FP, q: IP):
     """q = [Y, n, T, FOLD, META]; t = fi*T + tt. META[2t] = mean,
-    META[2t+1] = population variance of target column tt over fold fi's rows."""
+    META[2t+1] = population variance of target column tt over fold fi's rows
+    (rows loaded RUN at a time, folded ascending)."""
     var n = p(q, 1)
     var T = p(q, 2)
+    var Y = p(q, 0)
+    var FO = p(q, 3)
     var fi = t // T
     var tt = t % T
     var s = Float32(0)
     var cnt = 0
-    for i in range(n):
-        if Int(ld(f, p(q, 3) + i)) == fi:
+    var full = n - n % RUN
+    for i0 in range(0, full, RUN):
+        var bf = run_block[RUN](f, FO + i0, 1)
+        var by = run_block[RUN](f, Y + i0 * T + tt, T)
+        comptime for u in range(RUN):
+            if Int(ftz(bf[u])) != fi:
+                s = add(s, ftz(by[u]))
+                cnt += 1
+    for i in range(full, n):
+        if Int(ld(f, FO + i)) == fi:
             continue
-        s = add(s, ld(f, p(q, 0) + i * T + tt))
+        s = add(s, ld(f, Y + i * T + tt))
         cnt += 1
     var mean = Float32(0)
     var ss = Float32(0)
     if cnt > 0:
         mean = div(s, Float32(cnt))
-        for i in range(n):
-            if Int(ld(f, p(q, 3) + i)) == fi:
+        for i0 in range(0, full, RUN):
+            var bf = run_block[RUN](f, FO + i0, 1)
+            var by = run_block[RUN](f, Y + i0 * T + tt, T)
+            comptime for u in range(RUN):
+                if Int(ftz(bf[u])) != fi:
+                    var e = sub(ftz(by[u]), mean)
+                    ss = add(ss, mul(e, e))
+        for i in range(full, n):
+            if Int(ld(f, FO + i)) == fi:
                 continue
-            var e = sub(ld(f, p(q, 0) + i * T + tt), mean)
+            var e = sub(ld(f, Y + i * T + tt), mean)
             ss = add(ss, mul(e, e))
         ss = div(ss, Float32(cnt))
     st(f, p(q, 4) + 2 * t, mean)
     st(f, p(q, 4) + 2 * t + 1, ss)
 
 
+def te_bucket_unit(t: Int, f: FP, q: IP):
+    """q = [CODES, n, d, CMAX, START, ROWS]; t = column j (lane prep-apple).
+    The rows of each category of column j, ascending: START[j*(CMAX+1) + c]
+    .. START[j*(CMAX+1) + c + 1] index ROWS[j*n + ...], which holds the row
+    numbers whose code is c, in row order (int words). A code outside
+    [0, CMAX) is in no bucket. `te_enc` then walks one category's rows
+    instead of every row: the same rows in the same order."""
+    var n = p(q, 1)
+    var d = p(q, 2)
+    var cmax = p(q, 3)
+    var C = p(q, 0)
+    var S = p(q, 4) + t * (cmax + 1)
+    var R = p(q, 5) + t * n
+    for c in range(cmax + 1):
+        sti(f, S + c, 0)
+    var full = n - n % RUN
+    for i0 in range(0, full, RUN):
+        var bc = run_block[RUN](f, C + i0 * d + t, d)
+        comptime for u in range(RUN):
+            var code = Int(ftz(bc[u]))
+            if code >= 0 and code < cmax:
+                sti(f, S + code + 1, ldi(f, S + code + 1) + 1)
+    for i in range(full, n):
+        var code = Int(ld(f, C + i * d + t))
+        if code >= 0 and code < cmax:
+            sti(f, S + code + 1, ldi(f, S + code + 1) + 1)
+    for c in range(cmax):
+        sti(f, S + c + 1, ldi(f, S + c + 1) + ldi(f, S + c))
+    # scatter: START[c] is advanced as its bucket fills, then restored
+    for i0 in range(0, full, RUN):
+        var bc = run_block[RUN](f, C + i0 * d + t, d)
+        comptime for u in range(RUN):
+            var code = Int(ftz(bc[u]))
+            if code >= 0 and code < cmax:
+                var at = ldi(f, S + code)
+                sti(f, R + at, i0 + u)
+                sti(f, S + code, at + 1)
+    for i in range(full, n):
+        var code = Int(ld(f, C + i * d + t))
+        if code >= 0 and code < cmax:
+            var at = ldi(f, S + code)
+            sti(f, R + at, i)
+            sti(f, S + code, at + 1)
+    for c in range(cmax, 0, -1):
+        sti(f, S + c, ldi(f, S + c - 1))
+    sti(f, S, 0)
+
+
 def te_enc_unit(t: Int, f: FP, q: IP):
-    """q = [CODES, n, d, Y, T, FOLD, CMAX, NCAT, META, SMOOTH, ENC];
+    """q = [CODES, n, d, Y, T, FOLD, CMAX, NCAT, META, SMOOTH, ENC, BK, ROWS];
     t = ((fi*d + j)*CMAX + cat)*T + tt. SMOOTH < 0: the empirical Bayes
-    ("auto") encoding; else (sum + s*mean) / (count + s)."""
+    ("auto") encoding; else (sum + s*mean) / (count + s). With BK > 0 the
+    rows walked are category cat's bucket (`te_bucket`, ascending), else
+    every row; either way the rows of cat outside fold fi, in row order."""
     var n = p(q, 1)
     var d = p(q, 2)
     var T = p(q, 4)
@@ -64,10 +133,23 @@ def te_enc_unit(t: Int, f: FP, q: IP):
     var yvar = ld(f, p(q, 8) + 2 * (fi * T + tt) + 1)
     var s = Float32(0)
     var cnt = 0
-    for i in range(n):
+    # BK = START + 1 of `te_bucket` (0: no buckets, every row is scanned)
+    var bk = p(q, 11)
+    var lo = 0
+    var hi = n
+    var R = 0
+    if bk > 0:
+        var S = bk - 1 + j * (cmax + 1)
+        lo = ldi(f, S + cat)
+        hi = ldi(f, S + cat + 1)
+        R = p(q, 12) + j * n
+    for k in range(lo, hi):
+        var i = k
+        if bk > 0:
+            i = ldi(f, R + k)
         if Int(ld(f, p(q, 5) + i)) == fi:
             continue
-        if Int(ld(f, p(q, 0) + i * d + j)) != cat:
+        if bk == 0 and Int(ld(f, p(q, 0) + i * d + j)) != cat:
             continue
         s = add(s, ld(f, p(q, 3) + i * T + tt))
         cnt += 1
@@ -76,10 +158,13 @@ def te_enc_unit(t: Int, f: FP, q: IP):
     var ssd = Float32(0)
     if smooth < Float32(0) and cnt > 0:
         mean = div(s, Float32(cnt))
-        for i in range(n):
+        for k in range(lo, hi):
+            var i = k
+            if bk > 0:
+                i = ldi(f, R + k)
             if Int(ld(f, p(q, 5) + i)) == fi:
                 continue
-            if Int(ld(f, p(q, 0) + i * d + j)) != cat:
+            if bk == 0 and Int(ld(f, p(q, 0) + i * d + j)) != cat:
                 continue
             var e = sub(ld(f, p(q, 3) + i * T + tt), mean)
             ssd = add(ssd, mul(e, e))

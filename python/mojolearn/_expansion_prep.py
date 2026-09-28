@@ -60,10 +60,13 @@ _OPS = dict(
     da_shrink=81, da_pool=82, sym_fn=83, da_intercept=84, evr=85, class_stats_w=86,
     indicator=87, code_counts=88, remap_codes=89, add_arrays=90, gnb_merge=91, cat_counts=92, cat_flp=93,
     mi_dc=94, mi_dd=95, kbins_gw=96, kbins_wq=97, kbins_wkm=98, ii_sigma=99, ii_post=100,
-    scaler_stats=101, std_scale=102, nan_keep=103,
+    scaler_stats=101, std_scale=102, nan_keep=103, pt_init=104, pt_map=105, pt_fold=106, ii_rowabs=107, te_bucket=108, pt_log=109,
 )
 _PARAMS = 14
 _NONE = -1
+#: x_prep/transform.mojo PT_EVALS (PT_ITERS + 2) and PT_STATE
+_PT_EVALS = 50
+_PT_STATE = 10
 
 
 def _prep_binding(mode):
@@ -965,7 +968,15 @@ class TargetEncoder(_PrepBase):
         smo = pr.put_scalar(-1.0 if self.smooth == "auto" else float(self.smooth))
         enc = pr.alloc((F + 1) * d * cmax * T)
         pr.stage("te_global", (F + 1) * T, yo, n, T, fo, meta)
-        pr.stage("te_enc", (F + 1) * d * cmax * T, codes, n, d, yo, T, fo, cmax, nco, meta, smo, enc)
+        if hasattr(_prep_binding(mode), "x_prep_host_column"):
+            # the host binding groups te_enc its own way (x_prep/host/target.mojo)
+            pr.stage("te_enc", (F + 1) * d * cmax * T, codes, n, d, yo, T, fo, cmax, nco, meta, smo, enc)
+        else:
+            # each category's rows, ascending (te_bucket): te_enc walks one bucket, not every row
+            bstart, brows = pr.alloc(d * (cmax + 1)), pr.alloc(n * d)
+            pr.stage("te_bucket", d, codes, n, d, cmax, bstart, brows)
+            pr.stage("te_enc", (F + 1) * d * cmax * T, codes, n, d, yo, T, fo, cmax, nco, meta, smo, enc,
+                     bstart + 1, brows)
         out = _NONE
         if apply_rows_folds:
             out = pr.alloc(n * d * T)
@@ -2105,7 +2116,9 @@ class QuadraticDiscriminantAnalysis(_Classifier):
         reg = pr.put_scalar(0.0 if eigen else self.reg_param)
         rot, logc, s2 = pr.alloc(K * d * d), pr.alloc(K), pr.alloc(K * d)
         var = pr.alloc(K * d) if shr is not None else _NONE
-        pr.stage("class_stats", K * d, xo, n, d, yo, K, cnt, mean, var, _NONE)
+        # the trailing 1: FAST keeps row-order class sums here (the tree sums did not pass
+        # QuadraticDiscriminantAnalysis' paired quality check, docs/lanes/progress/prep-apple.md)
+        pr.stage("class_stats", K * d, xo, n, d, yo, K, cnt, mean, var, _NONE, 1)
         gflag, gofs = 0, 0
         if self.priors is not None:
             gflag, gofs = 1, pr.put_list(_given_priors(self.priors, K, "QuadraticDiscriminantAnalysis"))
@@ -2268,7 +2281,19 @@ class PowerTransformer(_PrepBase):
         xo = pr.put(arr)
         st, lam = pr.alloc(6 * d), pr.alloc(d)
         pr.stage("col_stats", d, xo, n, d, st)
-        pr.stage("pt_fit", d, xo, n, d, method, st, lam)
+        if hasattr(_prep_binding(mode), "x_prep_host_column"):
+            # the host binding: its own pt_fit (x_prep/host/power.mojo), the same words
+            pr.stage("pt_fit", d, xo, n, d, method, st, lam)
+        else:
+            # the device: pt_fit_unit's golden-section search as stages (x_prep/transform.mojo),
+            # each element's logarithm once, the transform of every element at once per
+            # evaluation, then the column folds
+            state, leval, tv, lg = pr.alloc(_PT_STATE * d), pr.alloc(d), pr.alloc(n * d), pr.alloc(n * d)
+            pr.stage("pt_init", d, method, st, d, lam, state, leval)
+            pr.stage("pt_log", n * d, xo, n, d, method, lg)
+            for k in range(_PT_EVALS):
+                pr.stage("pt_map", n * d, xo, n, d, method, leval, tv, lg + 1)
+                pr.stage("pt_fold", d, xo, n, d, method, tv, k, state, leval, lam)
         mean, scale = pr.alloc(d), pr.alloc(d)
         if self.standardize:
             tx, st2 = pr.alloc(n * d), pr.alloc(6 * d)
@@ -3118,6 +3143,7 @@ class IterativeImputer(_PrepBase):
         seed = self._rng & 0x7FFFFFFF
         # the reference checks convergence only without sample_posterior
         conv = not self.sample_posterior
+        rowabs = None
         for r in range(rounds):
             if orders[r] and conv:
                 pr.stage("ii_snapshot", n * dk, fo, prev, flag)
@@ -3144,7 +3170,10 @@ class IterativeImputer(_PrepBase):
                 else:
                     pr.stage("ii_predict", n, fo, n, dk, mo, j, coef, inter, bo, flag)
             if orders[r] and conv:
-                pr.stage("ii_conv", 1, fo, prev, n * dk, tol, flag, niter, dk)
+                if rowabs is None:
+                    rowabs = pr.alloc(n)
+                pr.stage("ii_rowabs", n, fo, prev, dk, rowabs, flag)
+                pr.stage("ii_conv", 1, fo, prev, n * dk, tol, flag, niter, dk, rowabs + 1)
         pr.run(mode)
         any_order = any(orders)
         done = (int(pr.values(niter, 1)[0]) if conv else rounds) if any_order else 0
