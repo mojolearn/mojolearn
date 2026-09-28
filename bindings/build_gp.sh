@@ -311,8 +311,8 @@ if [ "$(uname)" = "Darwin" ]; then
     #                               raised in MOJO by gp_kernel_matern through
     #                               the rebuild path, proving the constructor
     #                               refusals are wired, not merely present
-    #   return_cov=True          -> the Python-side diagonal-only refusal
-    #                               (DEVIATION 1759)
+    #   return_cov=True          -> the full covariance, honored (was the
+    #                               DEVIATION 1759 refusal)
     #   duplicate rows, alpha=0  -> info_ != 0 as a RESULT (DEVIATION 1634)
     #                               and predict on that fit refused BY NAME in
     #                               Mojo, with info passed through the binding
@@ -391,12 +391,12 @@ except Exception as exc:
 else:
     raise AssertionError("Matern nu=0.7 was ACCEPTED")
 
-try:
-    m.predict(x, return_cov=True)
-except NotImplementedError as exc:
-    assert "DIAGONAL" in str(exc), exc
-else:
-    raise AssertionError("return_cov=True was ACCEPTED")
+# return_cov=True is HONORED now (algos-neighbors option parity); its
+# diagonal is the return_std variance of the same points.
+mean_c, cov = (np.asarray(v) for v in m.predict(x, return_cov=True))
+assert cov.shape == (n, n), cov.shape
+assert np.isfinite(cov).all(), "a non-finite covariance cell"
+assert np.allclose(mean_c, mean, rtol=0.0, atol=1e-5), "return_cov moved the mean"
 
 # info IS A RESULT (DEVIATION 1634): duplicate rows with alpha=0 are
 # exactly singular, and predict on that fit must be refused BY NAME in
@@ -414,7 +414,7 @@ else:
     raise AssertionError("predict on a failed fit was ACCEPTED")
 
 print("  smoke: GP fit/predict on RBF and a composed kernel, mean-only "
-      "arm, Matern/return_cov refused, failed fit refused downstream")
+      "arm, return_cov, Matern refused, failed fit refused downstream")
 shutil.rmtree(tmp, ignore_errors=True)
 PY
 
