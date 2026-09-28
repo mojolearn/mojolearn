@@ -32,3 +32,16 @@ change's opt-out define), then runs `tools/trees_apple_speed.sh` on
 | 1790604112001 | m4pro-b | a11e74ed9 | RF hist zero A/B, taxi: PASS |
 | 1790604496688 | m4pro-a | a11e74ed9 | RF hist zero A/B, Istella |
 | 1790604882793 | m3ultra-b | 44b69e68f | GBDT ridx A/B |
+
+## A/B results (IDENTICAL unless noted; ms, median of the rounds; digests equal before and after in every row)
+
+| change | Mac | steward id | cell | before | after | after/before | digest |
+|---|---|---|---|---|---|---|---|
+| RF hist zero-after-read | m4pro-b | 1790604112001 | rf:taxi | 2986 | 2939 | 0.984 | 452a173087f86a9d |
+| RF hist zero-after-read | m4pro-b | 1790604112001 | rf:taxireg | 5274 | 5162 | 0.979 | 58ec783b7afbd7a7 |
+| RF hist zero-after-read | m4pro-b | 1790604112001 | dart:taxi | 6141 | 6177 | 1.006 | 8375ab8d60172694 |
+| RF hist zero-after-read | m4pro-b | 1790604112001 | bagging:taxi | 642 | 645 | 1.004 | 16aaba82631a5774 |
+| RF hist zero-after-read | m4pro-a | 1790604496688 | rf:istellareg | 50669 | 49529 | 0.977 | 3a5e8c09dd0d5fc7 |
+| RF hist zero-after-read | m4pro-a | 1790604496688 | dt:istellareg | 837 | 834 | 0.997 | 6f406a1b9436c69f |
+| ET tiled IDENTICAL | m4-a | 1790604108084 | et:taxireg | 34585 | 8964 | 0.259 | ec62616c8e02c60b |
+| ET tiled IDENTICAL | m4-a | 1790604108084 | et:taxi (control, classifier k=4) | 8576 | 8611 | 1.004 | ac18d5d8a54b1555 |
