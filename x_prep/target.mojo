@@ -12,9 +12,10 @@ continuous target, one per class (one-vs-rest) for a multiclass one.
 Where the reference's lambda is NaN (an empty category, or zero variance and
 zero spread) it returns the target mean; so does this, by test, not by NaN.
 """
-from x_prep.common import FP, IP, p, ld, st, ldi, sti, RUN, run_block
+from std.memory import bitcast
+from x_prep.common import FP, IP, p, ld, raw, st, ldi, sti, RUN, run_block
 from checks.numerics import ftz
-from x_prep.prims import add, sub, mul, div
+from x_prep.prims import add, acc_add, sub, mul, div
 
 
 def te_global_unit(t: Int, f: FP, q: IP):
@@ -35,12 +36,12 @@ def te_global_unit(t: Int, f: FP, q: IP):
         var by = run_block[RUN](f, Y + i0 * T + tt, T)
         comptime for u in range(RUN):
             if Int(ftz(bf[u])) != fi:
-                s = add(s, ftz(by[u]))
+                s = acc_add(s, ftz(by[u]))
                 cnt += 1
     for i in range(full, n):
         if Int(ld(f, FO + i)) == fi:
             continue
-        s = add(s, ld(f, Y + i * T + tt))
+        s = acc_add(s, ld(f, Y + i * T + tt))
         cnt += 1
     var mean = Float32(0)
     var ss = Float32(0)
@@ -52,15 +53,55 @@ def te_global_unit(t: Int, f: FP, q: IP):
             comptime for u in range(RUN):
                 if Int(ftz(bf[u])) != fi:
                     var e = sub(ftz(by[u]), mean)
-                    ss = add(ss, mul(e, e))
+                    ss = acc_add(ss, mul(e, e))
         for i in range(full, n):
             if Int(ld(f, FO + i)) == fi:
                 continue
             var e = sub(ld(f, Y + i * T + tt), mean)
-            ss = add(ss, mul(e, e))
+            ss = acc_add(ss, mul(e, e))
         ss = div(ss, Float32(cnt))
     st(f, p(q, 4) + 2 * t, mean)
     st(f, p(q, 4) + 2 * t + 1, ss)
+
+
+#: categories whose bucket counters `te_bucket` keeps in a thread-private array
+comptime TE_REG = 256
+
+
+def _te_bucket_reg(t: Int, f: FP, n: Int, d: Int, cmax: Int, C: Int, S: Int, R: Int):
+    """`te_bucket_unit` with its counters in a thread-private array instead of
+    arena words (lane prep-apple2: consecutive rows of one category made each
+    count a load after a store to the same arena word). The same START and
+    ROWS words."""
+    var cnt = InlineArray[Int32, TE_REG + 1](fill=Int32(0))
+    var full = n - n % RUN
+    for i0 in range(0, full, RUN):
+        var bc = run_block[RUN](f, C + i0 * d + t, d)
+        comptime for u in range(RUN):
+            var code = Int(ftz(bc[u]))
+            if code >= 0 and code < cmax:
+                cnt[code + 1] += 1
+    for i in range(full, n):
+        var code = Int(ld(f, C + i * d + t))
+        if code >= 0 and code < cmax:
+            cnt[code + 1] += 1
+    for c in range(cmax):
+        cnt[c + 1] += cnt[c]
+    for c in range(cmax + 1):
+        sti(f, S + c, Int(cnt[c]))
+    # cnt[c] is now category c's fill position
+    for i0 in range(0, full, RUN):
+        var bc = run_block[RUN](f, C + i0 * d + t, d)
+        comptime for u in range(RUN):
+            var code = Int(ftz(bc[u]))
+            if code >= 0 and code < cmax:
+                sti(f, R + Int(cnt[code]), i0 + u)
+                cnt[code] += 1
+    for i in range(full, n):
+        var code = Int(ld(f, C + i * d + t))
+        if code >= 0 and code < cmax:
+            sti(f, R + Int(cnt[code]), i)
+            cnt[code] += 1
 
 
 def te_bucket_unit(t: Int, f: FP, q: IP):
@@ -76,6 +117,9 @@ def te_bucket_unit(t: Int, f: FP, q: IP):
     var C = p(q, 0)
     var S = p(q, 4) + t * (cmax + 1)
     var R = p(q, 5) + t * n
+    if cmax <= TE_REG:
+        _te_bucket_reg(t, f, n, d, cmax, C, S, R)
+        return
     for c in range(cmax + 1):
         sti(f, S + c, 0)
     var full = n - n % RUN
@@ -112,7 +156,7 @@ def te_bucket_unit(t: Int, f: FP, q: IP):
 
 
 def te_enc_unit(t: Int, f: FP, q: IP):
-    """q = [CODES, n, d, Y, T, FOLD, CMAX, NCAT, META, SMOOTH, ENC, BK, ROWS];
+    """q = [CODES, n, d, Y, T, FOLD, CMAX, NCAT, META, SMOOTH, ENC, BK, ROWS, GB];
     t = ((fi*d + j)*CMAX + cat)*T + tt. SMOOTH < 0: the empirical Bayes
     ("auto") encoding; else (sum + s*mean) / (count + s). With BK > 0 the
     rows walked are category cat's bucket (`te_bucket`, ascending), else
@@ -143,6 +187,45 @@ def te_enc_unit(t: Int, f: FP, q: IP):
         lo = ldi(f, S + cat)
         hi = ldi(f, S + cat + 1)
         R = p(q, 12) + j * n
+    var smooth = ld(f, p(q, 9))
+    var mean = Float32(0)
+    var ssd = Float32(0)
+    # GB = `te_gather`'s offset + 1 (lane prep-apple2): the bucket's folds and
+    # targets in bucket order, streamed RUN at a time; the same rows in the
+    # same order, so the same words
+    var gb = p(q, 13) if bk > 0 else 0
+    if gb > 0:
+        var BF = gb - 1 + j * n
+        var BY = gb - 1 + d * n + (j * T + tt) * n
+        var cut = lo + (hi - lo) - (hi - lo) % RUN
+        for k0 in range(lo, cut, RUN):
+            var bf = run_block[RUN](f, BF + k0, 1)
+            var by = run_block[RUN](f, BY + k0, 1)
+            comptime for u in range(RUN):
+                if Int(ftz(bf[u])) != fi:
+                    s = acc_add(s, ftz(by[u]))
+                    cnt += 1
+        for k in range(cut, hi):
+            if Int(ld(f, BF + k)) == fi:
+                continue
+            s = acc_add(s, ld(f, BY + k))
+            cnt += 1
+        if smooth < Float32(0) and cnt > 0:
+            mean = div(s, Float32(cnt))
+            for k0 in range(lo, cut, RUN):
+                var bf = run_block[RUN](f, BF + k0, 1)
+                var by = run_block[RUN](f, BY + k0, 1)
+                comptime for u in range(RUN):
+                    if Int(ftz(bf[u])) != fi:
+                        var e = sub(ftz(by[u]), mean)
+                        ssd = acc_add(ssd, mul(e, e))
+            for k in range(cut, hi):
+                if Int(ld(f, BF + k)) == fi:
+                    continue
+                var e = sub(ld(f, BY + k), mean)
+                ssd = acc_add(ssd, mul(e, e))
+        st(f, p(q, 10) + t, te_value(ymean, yvar, smooth, s, cnt, mean, ssd))
+        return
     for k in range(lo, hi):
         var i = k
         if bk > 0:
@@ -153,9 +236,6 @@ def te_enc_unit(t: Int, f: FP, q: IP):
             continue
         s = add(s, ld(f, p(q, 3) + i * T + tt))
         cnt += 1
-    var smooth = ld(f, p(q, 9))
-    var mean = Float32(0)
-    var ssd = Float32(0)
     if smooth < Float32(0) and cnt > 0:
         mean = div(s, Float32(cnt))
         for k in range(lo, hi):
@@ -169,6 +249,26 @@ def te_enc_unit(t: Int, f: FP, q: IP):
             var e = sub(ld(f, p(q, 3) + i * T + tt), mean)
             ssd = add(ssd, mul(e, e))
     st(f, p(q, 10) + t, te_value(ymean, yvar, smooth, s, cnt, mean, ssd))
+
+
+def te_gather_unit(t: Int, f: FP, q: IP):
+    """q = [ROWS, n, d, Y, T, FOLD, G]; t = j*n + k (lane prep-apple2). The
+    k-th row of column j's buckets (`te_bucket`'s ROWS), i: G[j*n + k] =
+    FOLD[i], G[d*n + (j*T + tt)*n + k] = Y[i*T + tt], raw words (`te_enc`
+    flushes them as it reads them). A slot past the bucketed rows (codes
+    outside [0, CMAX)) is never read."""
+    var n = p(q, 1)
+    var d = p(q, 2)
+    var T = p(q, 4)
+    var j = t // n
+    var k = t % n
+    var G = p(q, 6)
+    var i = ldi(f, p(q, 0) + t)
+    if i < 0 or i >= n:
+        return
+    f.unsafe_store(G + t, raw(f, p(q, 5) + i))
+    for tt in range(T):
+        f.unsafe_store(G + d * n + (j * T + tt) * n + k, raw(f, p(q, 3) + i * T + tt))
 
 
 @always_inline

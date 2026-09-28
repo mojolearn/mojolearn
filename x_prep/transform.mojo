@@ -555,6 +555,232 @@ def pt_finish(t: Int, f: FP, q: IP, cnt: Int, sj: Float32, ss: Float32):
     f.unsafe_store(S + 5, f2)
 
 
+# ------------------------------------------ pt_fit, speculated (lane prep-apple2)
+# The staged search above takes 50 dependent evaluations, each a serial
+# column fold (on the device the fold's add chain is the cost, not the
+# loads). The golden-section step has two outcomes, so the next S points of
+# the search form a binary tree of 2^S - 1 candidate points that depend only
+# on the bracket, never on a value. A round evaluates every candidate at
+# once (`pt_smap` the transforms, `pt_sfold` one fold per candidate, the
+# folds side by side on the GPU), then `pt_sres` walks the tree with the
+# values it got, taking EXACTLY `pt_finish`'s steps. The points are the
+# same words (`pt_spts` computes each by the step's own arithmetic), every
+# value is folded as `pt_fold` folds it, so every decision and lambda is
+# the same word; the unused candidates are discarded. The two starting
+# points (K = 0, 1) are one round of two; the last evaluation (K = 49),
+# whose value `pt_finish` never uses, is not made.
+
+
+@always_inline
+def _pt_golden_step(left: Bool, mut a: Float32, mut b: Float32, mut x1: Float32, mut x2: Float32) -> Float32:
+    """`pt_finish`'s bracket update for one outcome (left: f1 <= f2 or f2 is
+    NaN); returns the new point."""
+    if left:
+        b = x2
+        x2 = x1
+        x1 = add(a, mul(GOLDEN, sub(b, a)))
+        return x1
+    a = x1
+    x1 = x2
+    x2 = sub(b, mul(GOLDEN, sub(b, a)))
+    return x2
+
+
+#: the most candidates one round evaluates (2^6 - 1: MOJOLEARN_XPREP_PT_SPEC <= 6)
+comptime PT_SPEC_MAX = 63
+
+
+def pt_spts_unit(t: Int, f: FP, q: IP):
+    """q = [STATE, LEVAL, SPL, M, K0]; t = column c. SPL[c*M + j] = the point
+    candidate j evaluates. K0 = 0: the two starting points (j = 0: x1, j = 1:
+    x2). Else heap order: j = 0 is the pending point LEVAL[c]; the children of
+    j are 2j+1 (its outcome was left) and 2j+2 (right), each node's bracket
+    derived from its parent's by the step's own arithmetic."""
+    var M = min(p(q, 3), PT_SPEC_MAX)
+    var c = t
+    var S = p(q, 0) + c * PT_STATE
+    var SP = p(q, 2) + c * p(q, 3)
+    if p(q, 4) == 0:
+        f.unsafe_store(SP + 0, raw(f, S + 2))
+        f.unsafe_store(SP + 1, raw(f, S + 3))
+        return
+    # each node's bracket (a, b, x1, x2) after the outcome that leads to it
+    var br = InlineArray[Float32, 4 * PT_SPEC_MAX](fill=Float32(0))
+    br[0] = raw(f, S + 0)
+    br[1] = raw(f, S + 1)
+    br[2] = raw(f, S + 2)
+    br[3] = raw(f, S + 3)
+    f.unsafe_store(SP + 0, raw(f, p(q, 1) + c))
+    for j in range(1, M):
+        var par = (j - 1) // 2
+        var a = br[4 * par + 0]
+        var b = br[4 * par + 1]
+        var x1 = br[4 * par + 2]
+        var x2 = br[4 * par + 3]
+        var pt = _pt_golden_step(j % 2 == 1, a, b, x1, x2)
+        br[4 * j + 0] = a
+        br[4 * j + 1] = b
+        br[4 * j + 2] = x1
+        br[4 * j + 3] = x2
+        f.unsafe_store(SP + j, pt)
+
+
+def pt_smap_unit(t: Int, f: FP, q: IP):
+    """q = [X, n, d, METHOD, SPL, M, T, LG]; t = (c*M + j)*n + i.
+    T[(c*M + j)*n + i] = `pt_map_unit`'s word at candidate j's point, each
+    candidate's column contiguous (the fold of x_prep/simdfold.mojo reads it
+    a SIMD group's width at a time)."""
+    var n = p(q, 1)
+    var d = p(q, 2)
+    var M = p(q, 5)
+    var i = t % n
+    var cj = t // n
+    var j = cj % M
+    var c = cj // M
+    var o = p(q, 6) + t
+    var x = ld(f, p(q, 0) + i * d + c)
+    if is_nan(x):
+        f.unsafe_store(o, canonical_nan())
+        return
+    var lam = raw(f, p(q, 4) + c * M + j)
+    var lg = raw(f, p(q, 7) + c * n + i)
+    f.unsafe_store(o, power_from_log(lg, x >= Float32(0), lam, p(q, 3)))
+
+
+def pt_sfold_unit(t: Int, f: FP, q: IP):
+    """q = [X, n, d, METHOD, T, M, STATE, SPL, VALS, FIRST]; t = c*M + j.
+    VALS[t] = the negative log-likelihood at candidate j's point, folded as
+    `pt_fold_unit` folds it and finished as `pt_finish` computes it. FIRST
+    (the starting round) also folds sum J and the non-NaN count from X, which
+    candidate 0 keeps in the column's state."""
+    var X = p(q, 0)
+    var n = p(q, 1)
+    var d = p(q, 2)
+    var method = p(q, 3)
+    var M = p(q, 5)
+    var c = t // M
+    var j = t % M
+    var S = p(q, 6) + c * PT_STATE
+    if raw(f, S + 7) != Float32(0):
+        return
+    var first = p(q, 9) != 0
+    var cnt = 0
+    var sm = Float32(0)
+    var sj = Float32(0)
+    if not first:
+        sj = raw(f, S + 8)
+    var Tc = p(q, 4) + t * n
+    var full = n - n % RUN
+    if first:
+        for i0 in range(0, full, RUN):
+            var bx = run_block[RUN](f, X + i0 * d + c, d)
+            var bt = run_block[RUN](f, Tc + i0, 1)
+            comptime for u in range(RUN):
+                _pt_take1(ftz(bx[u]), bt[u], method, True, cnt, sm, sj)
+        for i in range(full, n):
+            _pt_take1(ld(f, X + i * d + c), raw(f, Tc + i), method, True, cnt, sm, sj)
+        if j == 0:
+            f.unsafe_store(S + 8, sj)
+            sti(f, S + 9, cnt)
+    elif ldi(f, S + 9) == n:
+        cnt = n
+        for i0 in range(0, full, RUN):
+            var bt = run_block[RUN](f, Tc + i0, 1)
+            comptime for u in range(RUN):
+                sm = acc_add(sm, bt[u])
+        for i in range(full, n):
+            sm = acc_add(sm, raw(f, Tc + i))
+    else:
+        for i0 in range(0, full, RUN):
+            var bt = run_block[RUN](f, Tc + i0, 1)
+            comptime for u in range(RUN):
+                _pt_take1(bt[u], bt[u], method, False, cnt, sm, sj)
+        for i in range(full, n):
+            var tv = raw(f, Tc + i)
+            _pt_take1(tv, tv, method, False, cnt, sm, sj)
+    var ss = Float32(0)
+    if cnt == n and n > 0:
+        var mean = div(sm, Float32(cnt))
+        for i0 in range(0, full, RUN):
+            var bt = run_block[RUN](f, Tc + i0, 1)
+            comptime for u in range(RUN):
+                var e = sub(bt[u], mean)
+                ss = acc_add(ss, mul(e, e))
+        for i in range(full, n):
+            var e = sub(raw(f, Tc + i), mean)
+            ss = acc_add(ss, mul(e, e))
+    elif cnt > 0:
+        var mean = div(sm, Float32(cnt))
+        for i0 in range(0, full, RUN):
+            var bt = run_block[RUN](f, Tc + i0, 1)
+            comptime for u in range(RUN):
+                _pt_take2(bt[u], bt[u], mean, ss)
+        for i in range(full, n):
+            var tv = raw(f, Tc + i)
+            _pt_take2(tv, tv, mean, ss)
+    var lam = raw(f, p(q, 7) + t)
+    var val = Float32(0)
+    if cnt > 0:
+        var var_ = div(ss, Float32(cnt))
+        val = sub(mul(mul(Float32(0.5), Float32(cnt)), logf(var_)), mul(sub(lam, Float32(1)), sj))
+    f.unsafe_store(p(q, 8) + t, val)
+
+
+def pt_sres_unit(t: Int, f: FP, q: IP):
+    """q = [STATE, LEVAL, M, VALS, K0, STEPS, LAMBDA]; t = column c. Takes
+    `pt_finish`'s steps for evaluations K0 .. K0 + STEPS - 1 with the
+    candidates' values, walking the tree by each step's outcome. After the
+    step of evaluation PT_EVALS - 2 (the last one whose value is used) LAMBDA
+    = (a + b) / 2, the word `pt_finish` stores one evaluation later from the
+    same a and b."""
+    var M = p(q, 2)
+    var c = t
+    var S = p(q, 0) + c * PT_STATE
+    if raw(f, S + 7) != Float32(0):
+        return
+    var V = p(q, 3) + c * M
+    var K0 = p(q, 4)
+    var a = raw(f, S + 0)
+    var b = raw(f, S + 1)
+    var x1 = raw(f, S + 2)
+    var x2 = raw(f, S + 3)
+    var f1 = raw(f, S + 4)
+    var f2 = raw(f, S + 5)
+    var side = raw(f, S + 6)
+    var node = 0
+    for k in range(p(q, 5)):
+        var K = K0 + k
+        if K0 == 0:
+            node = k
+        var val = raw(f, V + node)
+        if K == 0:
+            f1 = val
+            f.unsafe_store(p(q, 1) + c, x2)
+            continue
+        if K == 1 or side == Float32(2):
+            f2 = val
+        else:
+            f1 = val
+        var left = f1 <= f2 or f2 != f2
+        if left:
+            f2 = f1
+        else:
+            f1 = f2
+        var pt = _pt_golden_step(left, a, b, x1, x2)
+        side = Float32(1) if left else Float32(2)
+        f.unsafe_store(p(q, 1) + c, pt)
+        node = 2 * node + (1 if left else 2)
+        if K == PT_EVALS - 2:
+            st(f, p(q, 6) + c, mul(add(a, b), Float32(0.5)))
+    f.unsafe_store(S + 0, a)
+    f.unsafe_store(S + 1, b)
+    f.unsafe_store(S + 2, x1)
+    f.unsafe_store(S + 3, x2)
+    f.unsafe_store(S + 4, f1)
+    f.unsafe_store(S + 5, f2)
+    f.unsafe_store(S + 6, side)
+
+
 def pt_apply_unit(t: Int, f: FP, q: IP):
     """q = [X, n, d, LAMBDA, METHOD, MEAN, SCALE, OUT]; t = element. The power
     transform, then (MEAN >= 0) standardisation; NaN is copied."""

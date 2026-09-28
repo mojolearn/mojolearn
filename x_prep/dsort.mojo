@@ -28,6 +28,7 @@ order to keep: the result is the heapsort's, bit for bit, by construction.
 """
 from std.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast, stack_allocation
+from std.os import getenv
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -96,6 +97,50 @@ def sort_global_kernel(w: UP, big_n: Int32, k: Int32, j: Int32, total: Int32):
     var i = 2 * jj * (r // jj) + (r % jj)
     var base = c * Int(big_n)
     _cx(w, base + i, base + i + jj, (i & Int(k)) == 0)
+
+
+def sort_global2_kernel(w: UP, big_n: Int32, k: Int32, j: Int32, total: Int32):
+    """The bitonic steps of strides j and h = j/2 inside merge size k, every
+    column, in ONE pass (lane prep-apple2): t = c * N/4 + r, the quad i, i+h,
+    i+j, i+j+h with i = r with zero bits inserted at h and j. Step j pairs
+    (i, i+j) and (i+h, i+j+h), then step h pairs (i, i+h) and (i+j, i+j+h),
+    the same compare-exchanges in the same order as two `sort_global_kernel`
+    passes (every index of the quad has the same bit k: one direction)."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= Int(total):
+        return
+    var quarter = Int(big_n) // 4
+    var c = t // quarter
+    var r = t - c * quarter
+    var jj = Int(j)
+    var h = jj // 2
+    var i = (r % h) + (r // h) * (2 * jj)
+    var base = c * Int(big_n) + i
+    var up = (i & Int(k)) == 0
+    var v0 = w[base]
+    var v1 = w[base + h]
+    var v2 = w[base + jj]
+    var v3 = w[base + jj + h]
+    if (word_order(v0) <= word_order(v2)) != up:
+        var x = v0
+        v0 = v2
+        v2 = x
+    if (word_order(v1) <= word_order(v3)) != up:
+        var x = v1
+        v1 = v3
+        v3 = x
+    if (word_order(v0) <= word_order(v1)) != up:
+        var x = v0
+        v0 = v1
+        v1 = x
+    if (word_order(v2) <= word_order(v3)) != up:
+        var x = v2
+        v2 = v3
+        v3 = x
+    w[base] = v0
+    w[base + h] = v1
+    w[base + jj] = v2
+    w[base + jj + h] = v3
 
 
 def sort_tile_kernel(w: UP, big_n: Int32, k_lo: Int32, k_hi: Int32, j_top: Int32):
@@ -168,10 +213,19 @@ def sort_cols_device(ctx: DeviceContext, mut df: DeviceBuffer[DType.float32], mu
         w, Int32(big_n), Int32(2), Int32(TILE), Int32(TG), grid_dim=tiles, block_dim=TG,
     )
     var pairs = tot // 2
+    var quads = tot // 4
+    # MOJOLEARN_XPREP_SORT_QUAD=0: one pass per stride (the A/B arm)
+    var quad = getenv("MOJOLEARN_XPREP_SORT_QUAD", "1") != "0"
     var k = 2 * TILE
     while k <= big_n:
         var j = k // 2
         while j >= TILE:
+            if quad and j // 2 >= TILE:
+                ctx.enqueue_function[sort_global2_kernel](
+                    w, Int32(big_n), Int32(k), Int32(j), Int32(quads), grid_dim=_blocks(quads, BS), block_dim=BS,
+                )
+                j //= 4
+                continue
             ctx.enqueue_function[sort_global_kernel](
                 w, Int32(big_n), Int32(k), Int32(j), Int32(pairs), grid_dim=_blocks(pairs, BS), block_dim=BS,
             )
