@@ -1109,7 +1109,7 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
         p = kp * (d + 1)
         nc = len(Cs)
         vals = _run(self, ALGO_LOGCV, a, n, d, yy, [self.max_iter, int(bool(self.fit_intercept)), kp, nc, folds, has_sw],
-                    [self.tol] + Cs, kp * d + kp + 2 + folds * nc, p + 1 + _lbfgs_work(p), 4)
+                    [self.tol] + Cs, kp * d + kp + 2 + folds * nc, p + 1 + n * (kp + 1) + _lbfgs_work(p), 4)
         self.classes_ = classes
         self.coef_ = Array.from_list(_rows(vals, kp, d), "<f4")
         self.intercept_ = Array.from_list(vals[kp * d:kp * d + kp], "<f4")

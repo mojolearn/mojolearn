@@ -13,9 +13,12 @@ allocation happens inside a fit; the caller hands in the work buffers.
 Speed (a parallel schedule with the same fold order) is pass 2.
 """
 from std.sys.compile import is_defined
+from std.sys.info import is_gpu
+from std.memory import bitcast
 from checks.numerics import (
     ftz, identical_mul, identical_mul_add, identical_div, identical_sqrt,
-    identical_exp, identical_log,
+    identical_exp, identical_log, identical_mul_add_simd,
+    GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL,
 )
 
 comptime FP = MutPointer[Float32, MutAnyOrigin]
@@ -143,6 +146,82 @@ def dot(a: FP, ia: Int, b: FP, ib: Int, count: Int) -> Float32:
 
 def row_dot(x: FP, i: Int, d: Int, w: FP, woff: Int) -> Float32:
     return dot(x, i * d, w, woff, d)
+
+
+# ------------------------------------------------ host speed (lane linear-cpu)
+# THE CPU SCHEDULE, SAME BITS (lane linear-cpu, 2026-09-28). Two moves, and
+# neither changes any value's fold order:
+#   * MAP, THEN FOLD. Per-row work that feeds a reduction (a linear
+#     predictor, a loss term, a gradient coefficient) is computed first into
+#     a scratch slot per row (`par_rows`, rows independent), and the
+#     reduction then folds those slots in ascending row order, exactly the
+#     sequence the one-pass loop folded.
+#   * ACCUMULATORS ACROSS LANES. `axpy_acc` updates d DIFFERENT accumulators
+#     with one row's terms; each vector lane is its own accumulator and gets
+#     the same single fused multiply-add the scalar loop gave it, so the
+#     vector form is the scalar loop bit for bit. A reduction of ONE value
+#     is never split across lanes or threads.
+# The device (one thread, x_linear/device.mojo) runs the scalar spelling.
+
+comptime HOST_LANES = 8
+
+
+@always_inline
+def ftzv[w: Int](x: SIMD[DType.float32, w]) -> SIMD[DType.float32, w]:
+    """`ftz`, lane by lane, as one mask and select (a subnormal becomes its
+    signed zero; every other word is returned unchanged)."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        var b = bitcast[DType.uint32](x)
+        var sub = (b & UInt32(0x7F800000)).eq(UInt32(0))
+        return bitcast[DType.float32](sub.select(b & UInt32(0x80000000), b))
+    return x
+
+
+@always_inline
+def fmadv[w: Int](
+    a: SIMD[DType.float32, w], b: SIMD[DType.float32, w], c: SIMD[DType.float32, w]
+) -> SIMD[DType.float32, w]:
+    """`fmad`, lane by lane."""
+    return ftzv[w](identical_mul_add_simd[w](ftzv[w](a), ftzv[w](b), ftzv[w](c)))
+
+
+@always_inline
+def axpy_acc(g: FP, goff: Int, r: Float32, x: FP, xoff: Int, count: Int):
+    """g[goff+j] = fmad(r, x[xoff+j], g[goff+j]) for j in [0, count): count
+    independent accumulators, one term each (see the note above)."""
+    comptime if is_gpu():
+        for j in range(count):
+            st(g, goff + j, fmad(r, ld(x, xoff + j), ld(g, goff + j)))
+    else:
+        var rv = SIMD[DType.float32, HOST_LANES](r)
+        var j = 0
+        while j + HOST_LANES <= count:
+            var gv = g.unsafe_load[width=HOST_LANES](goff + j)
+            var xv = x.unsafe_load[width=HOST_LANES](xoff + j)
+            g.unsafe_store[width=HOST_LANES](goff + j, fmadv[HOST_LANES](rv, xv, gv))
+            j += HOST_LANES
+        while j < count:
+            st(g, goff + j, fmad(r, ld(x, xoff + j), ld(g, goff + j)))
+            j += 1
+
+
+comptime ROW_CHUNK = 2048
+
+
+def par_rows[F: def(Int, Int) -> None](ref f: F, n: Int):
+    """Runs f(lo, hi) over row blocks covering [0, n). f must write only
+    slots owned by its own rows, so the block split (and, on the host, the
+    thread count) cannot move a bit. The device runs one block."""
+    comptime if is_gpu():
+        f(0, n)
+    else:
+        var lo = 0
+        while lo < n:
+            var hi = lo + ROW_CHUNK
+            if hi > n:
+                hi = n
+            f(lo, hi)
+            lo = hi
 
 
 # ----------------------------------------------------------------- RNG
