@@ -21,7 +21,7 @@ on ONE Mac and alternates the arms, then prints a stage split
 | 74d074090 | IVF-PQ/SQ/RaBitQ search: probe walk and top-k a threadgroup per query (was one thread per query); NaN row takes the cell's sequential path | both | on; `-D MOJOLEARN_ANN_SERIAL_SCAN` reverts |
 | bc3c22c03 | `ftz` on the Apple GPU: one exponent test (SHARED: every family's Apple IDENTICAL kernels) | IDENTICAL | on; `-D MOJOLEARN_FTZ_TWO_TEST` reverts |
 | c3841ce42 | t-SNE repulsion + tiled k-NN: nonnegative flushes as one compare, reciprocal without operand flushes, padded column groups skipped | IDENTICAL (FAST: no-op) | on, except the padded-group skip (measured slower, removed in 19e0aabac) |
-| b7f433a89 | t-SNE FAST: repulsion over candidate spans, partials joined in span order | FAST | OPT-IN since 19e0aabac (`-D MOJOLEARN_TSNE_FAST_SPLIT`): no gain measured |
+| b7f433a89 | t-SNE FAST: repulsion over candidate spans, partials joined in span order | FAST | opt-in since 19e0aabac; REMOVED with the driver in 2c209a63f |
 | 95101d105 | t-SNE symmetrize (host): counting-pass CSR + per-row merge (host-checked SAME on 4 random graphs) | both | on |
 | 782ad9a09 | CAGRA detour prune on the device (integer counts, rank placement) | both | on; `-D MOJOLEARN_CAGRA_HOST_PRUNE` reverts |
 | 513a3006e | IVF-PQ codebooks: subspace k-means side by side on pooled contexts | both | REVERTED (6f817e0ed): the process died in the codebook stage |
@@ -223,3 +223,26 @@ ms + probe 4 ms per search (the partial top-k join is one thread per query).
 Same digests. IVF scan select (IVF-PQ, SQ, RaBitQ, refine searches summed)
 71 -> 50 ms IDENTICAL, 74 -> 52 ms FAST; searches (s): PQ 0.050 -> 0.048,
 SQ 0.055 -> 0.055, RaBitQ 0.029 -> 0.026, refine 0.081 -> 0.068.
+
+### PROBE: m3ultra-b, steward 1790615052905 (t-SNE only, three runs + stage pass)
+
+Arms: 7483efa40 (base); 683a07472 = the lane at e51105038 with
+x_ann/tsne_device.mojo as at 7483efa40; b7d51ce1b = that plus the
+repulsion terms as at 7483efa40; after = the lane (e51105038 + revert).
+Digests equal in all arms (2bb1d3d75ffa1885; FAST ca01838ecfb9306d). Raw:
+`probe_m3ultra-b_1790615052905.txt`.
+
+| t-SNE (s / ms) | base | lane, base driver | lane, base driver + base terms | lane |
+|---|---|---|---|---|
+| IDENTICAL fit | 0.859/0.849/0.837/0.845 | 0.713/0.677/0.671/0.667 | 0.746/0.699/0.697/0.698 | 0.877/0.871/0.876/0.873 |
+| FAST fit | 0.989/0.645/0.642/0.672 | 0.881/0.567/0.568/0.567 | 0.898/0.568/0.569/0.568 | 1.083/0.712/0.713/0.718 |
+| IDENTICAL iterations | 658.7 | 562.0 | 594.2 | 774.8 |
+| FAST iterations | 471.7 | 470.7 | 472.3 | 617.8 |
+| IDENTICAL symmetrize | 117.6 | 43.9 | 44.0 | 36.8 |
+
+The lane's driver file (the `_repulse` wrapper, the opt-in split kernels,
+the io import) costs the M3 Ultra ~150 ms of iterations in both tiers; the
+M4 and M4 Pro never showed it. Cause not isolated further (time). The
+driver went back to the base file (2c209a63f); the repulsion flushes
+(c3841ce42) are worth 594 -> 562 ms there. The final run at 2c209a63f is
+queued (1790618698345).
