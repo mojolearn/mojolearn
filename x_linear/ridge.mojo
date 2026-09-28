@@ -17,6 +17,7 @@ Cholesky (x_linear/ops.mojo). float32, rows ascending.
 """
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, ld, st, ldi, i2f, fill, copy, cholesky, chol_solve, centered_gram,
+    axpy_acc, add_acc, axpy_centered,
 )
 
 
@@ -43,54 +44,47 @@ def ridge_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw:
     if sw:
         for i in range(n):
             wsum = fa(wsum, ld(y, wo + i))
-    for j in range(d):
-        var acc = Float32(0)
-        if fi:
+    # one pass over the rows per block; every mean, Gram entry and X'y entry
+    # is its own accumulator, rows ascending (lane linear-cpu)
+    fill(fw, xm, d, Float32(0))
+    fill(fw, ym, t_n, Float32(0))
+    if fi:
+        for i in range(n):
             if sw:
-                for i in range(n):
-                    acc = fmad(ld(y, wo + i), ld(x, i * d + j), acc)
-                acc = fd(acc, wsum)
+                var wi = ld(y, wo + i)
+                axpy_acc(fw, xm, wi, x, i * d, d)
+                axpy_acc(fw, ym, wi, y, i * t_n, t_n)
             else:
-                for i in range(n):
-                    acc = fa(acc, ld(x, i * d + j))
-                acc = fd(acc, i2f(n))
-        st(fw, xm + j, acc)
-    for t in range(t_n):
-        var acc = Float32(0)
-        if fi:
-            if sw:
-                for i in range(n):
-                    acc = fmad(ld(y, wo + i), ld(y, i * t_n + t), acc)
-                acc = fd(acc, wsum)
-            else:
-                for i in range(n):
-                    acc = fa(acc, ld(y, i * t_n + t))
-                acc = fd(acc, i2f(n))
-        st(fw, ym + t, acc)
+                add_acc(fw, xm, x, i * d, d)
+                add_acc(fw, ym, y, i * t_n, t_n)
+        var den = wsum if sw else i2f(n)
+        for j in range(d):
+            st(fw, xm + j, fd(ld(fw, xm + j), den))
+        for t in range(t_n):
+            st(fw, ym + t, fd(ld(fw, ym + t), den))
     if sw:
         # sum_i w_i xc_i xc_i' (theirs: the sqrt(w) rescale of _rescale_data)
         for j in range(d):
-            for k in range(j, d):
-                var acc = Float32(0)
-                var mj = ld(fw, xm + j)
-                var mk = ld(fw, xm + k)
-                for i in range(n):
-                    acc = fmad(fm(ld(y, wo + i), fs(ld(x, i * d + j), mj)), fs(ld(x, i * d + k), mk), acc)
-                st(fw, gg + j * d + k, acc)
-                st(fw, gg + k * d + j, acc)
+            fill(fw, gg + j * d + j, d - j, Float32(0))
+        for i in range(n):
+            var wi = ld(y, wo + i)
+            for j in range(d):
+                var a = fm(wi, fs(ld(x, i * d + j), ld(fw, xm + j)))
+                axpy_centered(fw, gg + j * d + j, a, x, i * d + j, fw, xm + j, d - j)
+        for j in range(d):
+            for k in range(j + 1, d):
+                st(fw, gg + k * d + j, ld(fw, gg + j * d + k))
     else:
         centered_gram(x, n, d, fw, xm, fw, gg)
-    for t in range(t_n):
-        var ymt = ld(fw, ym + t)
-        for j in range(d):
-            var acc = Float32(0)
-            var mj = ld(fw, xm + j)
-            for i in range(n):
-                var xc = fs(ld(x, i * d + j), mj)
-                if sw:
-                    xc = fm(ld(y, wo + i), xc)
-                acc = fmad(xc, fs(ld(y, i * t_n + t), ymt), acc)
-            st(fw, xty + t * d + j, acc)
+    fill(fw, xty, d * t_n, Float32(0))
+    for i in range(n):
+        var wi = ld(y, wo + i) if sw else Float32(1)
+        for t in range(t_n):
+            var b = fs(ld(y, i * t_n + t), ld(fw, ym + t))
+            if sw:
+                axpy_centered[True](fw, xty + t * d, b, x, i * d, fw, xm, d, wi)
+            else:
+                axpy_centered(fw, xty + t * d, b, x, i * d, fw, xm, d)
     var best = 0
     var best_err = Float32(0)
     if a_n > 1:

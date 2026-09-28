@@ -14,6 +14,7 @@ Speed (a parallel schedule with the same fold order) is pass 2.
 """
 from std.sys.compile import is_defined
 from std.sys.info import is_gpu
+from std.sys import llvm_intrinsic
 from std.memory import bitcast
 from checks.numerics import (
     ftz, identical_mul, identical_mul_add, identical_div, identical_sqrt,
@@ -163,7 +164,7 @@ def row_dot(x: FP, i: Int, d: Int, w: FP, woff: Int) -> Float32:
 #     is never split across lanes or threads.
 # The device (one thread, x_linear/device.mojo) runs the scalar spelling.
 
-comptime HOST_LANES = 8
+comptime HOST_LANES = 8  # fmulv8 is spelled for exactly this width
 
 
 @always_inline
@@ -202,6 +203,66 @@ def axpy_acc(g: FP, goff: Int, r: Float32, x: FP, xoff: Int, count: Int):
             j += HOST_LANES
         while j < count:
             st(g, goff + j, fmad(r, ld(x, xoff + j), ld(g, goff + j)))
+            j += 1
+
+
+@always_inline
+def fmulv8(a: SIMD[DType.float32, 8], b: SIMD[DType.float32, 8]) -> SIMD[DType.float32, 8]:
+    """`fm`, lane by lane, HOST ONLY: the product pinned as `pinned_mul_f32`'s
+    host arm pins it (an arithmetic fence, so it never fuses into an add)."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        return ftzv[8](llvm_intrinsic["llvm.arithmetic.fence.v8f32", SIMD[DType.float32, 8], has_side_effect=False](
+            ftzv[8](a) * ftzv[8](b)))
+    return a * b
+
+
+@always_inline
+def add_acc(g: FP, goff: Int, x: FP, xoff: Int, count: Int):
+    """g[goff+j] = fa(g[goff+j], x[xoff+j]): count accumulators, one term each."""
+    comptime if is_gpu():
+        for j in range(count):
+            st(g, goff + j, fa(ld(g, goff + j), ld(x, xoff + j)))
+    else:
+        var j = 0
+        while j + HOST_LANES <= count:
+            var gv = ftzv[HOST_LANES](g.unsafe_load[width=HOST_LANES](goff + j))
+            var xv = ftzv[HOST_LANES](x.unsafe_load[width=HOST_LANES](xoff + j))
+            g.unsafe_store[width=HOST_LANES](goff + j, ftzv[HOST_LANES](gv + xv))
+            j += HOST_LANES
+        while j < count:
+            st(g, goff + j, fa(ld(g, goff + j), ld(x, xoff + j)))
+            j += 1
+
+
+@always_inline
+def axpy_centered[weighted: Bool = False](
+    g: FP, goff: Int, a: Float32, x: FP, xoff: Int, m: FP, moff: Int, count: Int, w: Float32 = Float32(1),
+):
+    """g[goff+j] = fmad(a, c_j, g[goff+j]) with c_j = fs(x[xoff+j], m[moff+j])
+    (times w by `fm` when weighted): count accumulators, one term each."""
+    comptime if is_gpu():
+        for j in range(count):
+            var c = fs(ld(x, xoff + j), ld(m, moff + j))
+            comptime if weighted:
+                c = fm(w, c)
+            st(g, goff + j, fmad(a, c, ld(g, goff + j)))
+    else:
+        comptime V = HOST_LANES
+        var av = SIMD[DType.float32, V](a)
+        var wv = ftzv[V](SIMD[DType.float32, V](w))
+        var j = 0
+        while j + V <= count:
+            var c = ftzv[V](ftzv[V](x.unsafe_load[width=V](xoff + j)) - ftzv[V](m.unsafe_load[width=V](moff + j)))
+            comptime if weighted:
+                c = fmulv8(wv, c)
+            var gv = g.unsafe_load[width=V](goff + j)
+            g.unsafe_store[width=V](goff + j, fmadv[V](av, c, gv))
+            j += V
+        while j < count:
+            var c = fs(ld(x, xoff + j), ld(m, moff + j))
+            comptime if weighted:
+                c = fm(w, c)
+            st(g, goff + j, fmad(a, c, ld(g, goff + j)))
             j += 1
 
 
@@ -335,13 +396,14 @@ def jacobi_eig(a: FP, aoff: Int, v: FP, voff: Int, m: Int, max_sweeps: Int):
 
 
 def col_means(x: FP, n: Int, d: Int, rows: IP, n_rows: Int, use_rows: Bool, res: FP, ooff: Int):
-    """Column means over all rows (or the listed rows), rows ascending."""
+    """Column means over all rows (or the listed rows), rows ascending
+    (one pass over the rows, each column its own accumulator)."""
+    fill(res, ooff, d, Float32(0))
+    for r in range(n_rows):
+        var i = ldi(rows, r) if use_rows else r
+        add_acc(res, ooff, x, i * d, d)
     for j in range(d):
-        var acc = Float32(0)
-        for r in range(n_rows):
-            var i = ldi(rows, r) if use_rows else r
-            acc = fa(acc, ld(x, i * d + j))
-        st(res, ooff + j, fd(acc, i2f(n_rows)))
+        st(res, ooff + j, fd(ld(res, ooff + j), i2f(n_rows)))
 
 
 def mean_of(y: FP, n: Int) -> Float32:
@@ -352,22 +414,21 @@ def mean_of(y: FP, n: Int) -> Float32:
 
 
 def centered_gram(x: FP, n: Int, d: Int, xm: FP, xmoff: Int, g: FP, goff: Int):
-    """G = (X - 1 xm^T)^T (X - 1 xm^T), rows ascending, both triangles written."""
+    """G = (X - 1 xm^T)^T (X - 1 xm^T), rows ascending, both triangles
+    written. One pass over the rows; each upper-triangle entry is its own
+    accumulator."""
     for j in range(d):
-        for k in range(j, d):
-            var acc = Float32(0)
-            var mj = ld(xm, xmoff + j)
-            var mk = ld(xm, xmoff + k)
-            for i in range(n):
-                acc = fmad(fs(ld(x, i * d + j), mj), fs(ld(x, i * d + k), mk), acc)
-            st(g, goff + j * d + k, acc)
-            st(g, goff + k * d + j, acc)
+        fill(g, goff + j * d + j, d - j, Float32(0))
+    for i in range(n):
+        for j in range(d):
+            var a = fs(ld(x, i * d + j), ld(xm, xmoff + j))
+            axpy_centered(g, goff + j * d + j, a, x, i * d + j, xm, xmoff + j, d - j)
+    for j in range(d):
+        for k in range(j + 1, d):
+            st(g, goff + k * d + j, ld(g, goff + j * d + k))
 
 
 def centered_xty(x: FP, y: FP, n: Int, d: Int, xm: FP, xmoff: Int, ym: Float32, res: FP, ooff: Int):
-    for j in range(d):
-        var acc = Float32(0)
-        var mj = ld(xm, xmoff + j)
-        for i in range(n):
-            acc = fmad(fs(ld(x, i * d + j), mj), fs(ld(y, i), ym), acc)
-        st(res, ooff + j, acc)
+    fill(res, ooff, d, Float32(0))
+    for i in range(n):
+        axpy_centered(res, ooff, fs(ld(y, i), ym), x, i * d, xm, xmoff, d)
