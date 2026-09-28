@@ -131,15 +131,32 @@ def pj_svd_min() -> Int:
 
 
 def jacobi2_eigh_on() -> Bool:
-    """Metal uses the established eigensolver until jacobi2 is qualified.
+    """Whether the kit's eigh runs `jacobi_eigh2_kernel` (x_decomp/jacobi2.mojo)
+    in place of `device_eigh`. MOJOLEARN_XD_JACOBI_EIGH=1 / =2 names the
+    kernel outright (the eigh only; timing A/B).
 
-    The 2026-09-28 M4 consolidated check crashed MTLCompilerService in five
-    eigh callers: METAL SIGABRT, "cannot select: 113 7, 1" in agc.main.
-    The optimized kernel's device-memory fence must not simply be removed.
-    MOJOLEARN_XD_JACOBI=2 explicitly opts into that unqualified Metal path;
-    CUDA/HIP keep their current default. The separate SVD default is unchanged.
-    """
+    Metal, IDENTICAL: `device_eigh`, main's choice after the 2026-09-28 M4
+    consolidated check crashed MTLCompilerService in five eigh callers
+    (METAL SIGABRT, "cannot select: 113 7, 1" in agc.main). That build held
+    the FENCED jacobi2 (5c144678d: an atomic fence, then barrier()); the
+    kernel in this tree orders device memory with `llvm.air.wg.barrier(3, 1)`
+    (bd6af0c4b) and builds and runs on M4 (m4-a 1790626766529, every digest
+    equal to `device_eigh`'s). MOJOLEARN_XD_JACOBI=2 opts in; the default
+    stays until the consolidated check qualifies it.
+
+    Metal, FAST: jacobi2 (lane/decomp-apple3, m4-a 1790626766529: eigh 800
+    8.88 -> 5.36 s, Isomap 1000 rows 20.2 -> 10.5 s, ClassicalMDS 11.1 ->
+    5.66 s, the same output bytes as `device_eigh`).
+
+    CUDA/HIP keep their default. The SVD default is `jacobi2_on`'s."""
+    var e = String(getenv("MOJOLEARN_XD_JACOBI_EIGH", "0"))
+    if e == "1":
+        return False
+    if e == "2":
+        return True
     comptime if COMPILED_VENDOR == "metal":
+        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+            return jacobi2_on()
         return String(getenv("MOJOLEARN_XD_JACOBI", "1")) != "1"
     else:
         return jacobi2_on()
