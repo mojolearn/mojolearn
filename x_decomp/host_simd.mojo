@@ -297,3 +297,23 @@ def sqdist_task(t: Int, a: F32Ptr, bt: F32Ptr, dst: F32Ptr, na: Int, nb: Int, d:
                 for q in range(cols):
                     dst.unsafe_store((i0 + r) * nb + j0 + q, acc[r * NV + q // W][q % W])
         j0 += NR
+
+
+# ---------------------------------------------------------------- colsum
+def colsum_rows(a: F32Ptr, dst: F32Ptr, d: Int, r0: Int, r1: Int):
+    """`colsum_part_cell` for every column j at once (SIMD across j): each
+    column's chain from +0, rows [r0, r1) ascending, one flushed add each
+    (cells.add: ftz(ftz(acc) + ftz(x)))."""
+    var j = 0
+    while j + W <= d:
+        var acc = V(0)
+        for i in range(r0, r1):
+            acc = ftz_v[W](ftz_v[W](acc) + ftz_v[W](a.unsafe_load[width=W](i * d + j)))
+        dst.unsafe_store(j, acc)
+        j += W
+    while j < d:
+        var acc1 = Float32(0)
+        for i in range(r0, r1):
+            acc1 = add(acc1, a.unsafe_load(i * d + j))
+        dst.unsafe_store(j, acc1)
+        j += 1
