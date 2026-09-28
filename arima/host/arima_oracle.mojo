@@ -832,7 +832,8 @@ def _kalman(
     # series ranges run on `host_parallelize` (the caller's FP environment,
     # DEVIATION 5900) and every bit is the serial walk's at any thread
     # count. `_series_tasks` keeps small batches on the calling thread.
-    var tasks = _series_tasks(batch_size, nobs * rd2)
+    # per observation: the rd x rd x rd products plus the fixed step cost
+    var tasks = _series_tasks(batch_size, nobs * (rd2 * rd + 32))
     var chunk = host_predict_chunk(batch_size, tasks)
     # Every List and struct the closures read is handed over as an
     # untracked pointer or a plain Int: a task captures values only.
