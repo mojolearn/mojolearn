@@ -74,3 +74,42 @@ def test_missing_optional_host_marker_does_not_refuse_gpu(program):
     class Binding:
         x_prep_run = staticmethod(lambda *args: None)
     assert program['_optional_prep_entry'](Binding(), 'x_prep_host_column') is None
+
+
+def test_ranges_return_mutated_input_words_without_resident_caching(program, monkeypatch):
+    """LDA metadata and iterative imputation mutate inputs that callers read."""
+    class Input:
+        dtype = '<f4'
+        size = 2
+
+        def __init__(self):
+            self.words = array.array('f', [1.0, 2.0])
+
+        def _has_order(self, order):
+            return order == 'C'
+
+    def unexpected_cache(*args):
+        pytest.fail('mutable input must not reuse a resident copy')
+
+    def run_ranges(base, prog, out, sizes, ranges):
+        _, _, output_addr, count = ranges
+        words = ctypes.cast(base, ctypes.POINTER(ctypes.c_float))
+        outputs = ctypes.cast(output_addr, ctypes.POINTER(ctypes.c_int32))
+        # Emulate a device write and download only if explicitly requested.
+        returned = [i for r in range(count)
+                    for i in range(outputs[4 * r], outputs[4 * r + 1])]
+        assert 0 in returned and 1 in returned
+        words[0], words[1] = 7.0, 8.0
+
+    binding = SimpleNamespace(x_prep_run=lambda *args: pytest.fail('expected ranges'),
+                              x_prep_run_ranges=run_ranges)
+    monkeypatch.setenv('MOJOLEARN_ARENA_RANGES', '1')
+    monkeypatch.setattr(program['_arena_io'], 'active_cache', unexpected_cache)
+    program.update(Array=Input, addr_ro=lambda arr, **kw: arr.words.buffer_info()[0],
+                   _prep_binding=lambda mode: binding)
+    p = program['_Prog']()
+    value = Input()
+    off = p.put(value, inout=True)
+    p.run('identical')
+    assert p.values(off, 2) == [7.0, 8.0]
+    assert value.words.tolist() == [1.0, 2.0]
