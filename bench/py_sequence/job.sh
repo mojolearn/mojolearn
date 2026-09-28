@@ -50,8 +50,14 @@ json.dump(p, open(out + "/plan.json", "w"))
 print(f"{len(lanes)} lanes, {len(p['bindings'])} bindings: {p['bindings']}; not exposed: {miss}")
 PY
       $P build --out "$o" --jobs 4 2>&1 | tail -3
+      [ "${3:-}" = build-only ] && exit 0
       $P clean --out "$o" --shard 0/1 --cpu-threads default 2>&1 | grep -E 'RESULT|STALE|not AGREE|ERROR|DISAGREE|REFUSED' )
 }
+
+case " $STAGES " in *" build "*)
+    echo "== build BASE"; run_lanes "$BASE" base build-only
+    echo "== build NEW"; run_lanes "$NEW" new build-only
+;; esac
 
 case " $STAGES " in *" lanes "*)
     echo "== lanes BASE"; run_lanes "$BASE" base
