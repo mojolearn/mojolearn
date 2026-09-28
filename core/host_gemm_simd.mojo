@@ -95,7 +95,33 @@ def _fold_rows(parts: HgPtr, pcount: Int) -> HgV:
 def host_gemm_identical(
     a: List[Float32], b: List[Float32], op: Int, m: Int, n: Int, k: Int
 ) -> List[Float32]:
-    """`gemm_oracle(a, b, op, m, n, k)`, bit for bit (see the header)."""
+    """`gemm_oracle(a, b, op, m, n, k)`, bit for bit (see the header).
+
+    A NARROW product (n < HG_W <= m, a matrix-vector product above all) is
+    computed transposed, so the lanes run over the m rows: cell (i, j) is
+    `fma(A[i, p], B[p, j], acc)` chains and a product commutes exactly, so
+    C^T = B^T A^T cell for cell is the same float at every step."""
+    if n < HG_W and m >= HG_W and k > 0:
+        var at = List[Float32](length=n * k, fill=Float32(0.0))
+        var bt = List[Float32](length=m * k, fill=Float32(0.0))
+        for p in range(k):
+            for j in range(n):
+                at[j * k + p] = b[j * k + p] if op == OP_NT else b[p * n + j]
+            for i in range(m):
+                bt[i * k + p] = a[p * m + i] if op == OP_TN else a[i * k + p]
+        var ct = _host_gemm_cols(at, bt, OP_NT, n, m, k)
+        var c = List[Float32](length=m * n, fill=Float32(0.0))
+        for i in range(m):
+            for j in range(n):
+                c[i * n + j] = ct[j * m + i]
+        return c^
+    return _host_gemm_cols(a, b, op, m, n, k)
+
+
+def _host_gemm_cols(
+    a: List[Float32], b: List[Float32], op: Int, m: Int, n: Int, k: Int
+) -> List[Float32]:
+    """The column-lane engine: lanes over the n output columns."""
     var c = List[Float32](length=m * n, fill=Float32(0.0))
     if m <= 0 or n <= 0:
         return c^

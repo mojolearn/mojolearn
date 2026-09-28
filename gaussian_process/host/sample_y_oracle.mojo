@@ -44,6 +44,7 @@ from gaussian_process.host.gpr_oracle import (
     gpr_host_validate_data,
 )
 from gemm.host.identical_gemm import OP_NN, OP_TN, gemm_oracle
+from core.host_gemm_simd import host_gemm_identical
 
 
 def gpr_host_sample_y(
@@ -66,9 +67,9 @@ def gpr_host_sample_y(
     var kcross = gpr_host_kernel_matrix(
         x_train, n_train, x_star, n_star, n_features, spec, False
     )
-    var mean = gemm_oracle(kcross, dual, OP_TN, n_star, 1, n_train)
+    var mean = host_gemm_identical(kcross, dual, OP_TN, n_star, 1, n_train)
     chol_host_trsm_lower(l, kcross, n_train, n_star)
-    var vtv = gemm_oracle(kcross, kcross, OP_TN, n_star, n_star, n_train)
+    var vtv = host_gemm_identical(kcross, kcross, OP_TN, n_star, n_star, n_train)
     var kss = gpr_host_kernel_matrix(
         x_star, n_star, x_star, n_star, n_features, spec, True
     )
@@ -76,7 +77,7 @@ def gpr_host_sample_y(
     var factor = chol_host_potrf(cov, n_star, chol_host_jitter_pinned())
     gp_sample_y_check_factor(factor.info, n_star)
     var z = gp_sample_y_normals(n_star, n_samples, seed)
-    var lz = gemm_oracle(factor.l, z, OP_NN, n_star, n_samples, n_star)
+    var lz = host_gemm_identical(factor.l, z, OP_NN, n_star, n_samples, n_star)
     var y = gp_sample_y_add_mean(mean, lz, n_star, n_samples)
     _ = kcross^
     _ = vtv^

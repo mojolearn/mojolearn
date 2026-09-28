@@ -93,6 +93,7 @@ from cholesky.host.chol_oracle import (
     chol_host_trsm_lower,
 )
 from gemm.host.identical_gemm import OP_TN, gemm_oracle
+from core.host_gemm_simd import host_gemm_identical
 
 #: THE NEGATIVE CONTROL. See this file's header.
 comptime GPR_ORACLE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
@@ -857,7 +858,7 @@ def gpr_host_predict(
         x_train, n_train, x_star, n_star, n_features, spec, False
     )
     # The mean BEFORE the solve, which overwrites kcross in place.
-    var mean = gemm_oracle(kcross, dual, OP_TN, n_star, 1, n_train)
+    var mean = host_gemm_identical(kcross, dual, OP_TN, n_star, 1, n_train)
 
     var variance = List[Float32]()
     var std = List[Float32]()

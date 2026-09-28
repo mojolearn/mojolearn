@@ -95,6 +95,7 @@ from decomposition.host.pca_oracle import (
     host_sign_flip,
 )
 from gemm.host.identical_gemm import OP_NN, OP_NT, gemm_oracle
+from core.host_gemm_simd import host_gemm_identical
 from kernel_methods.checks.random_features import (
     km_basis_indices,
     km_feature_scale,
@@ -255,7 +256,7 @@ def kmh_kernel_matrix(
         else:
             sync_parallelize(_rows, tasks)
         return out^
-    var dot = gemm_oracle(a, b, OP_NT, m, n, k)
+    var dot = host_gemm_identical(a, b, OP_NT, m, n, k)
     if kernel == KMH_KERNEL_LINEAR:
         return dot^
     if kernel == KMH_KERNEL_RBF:
@@ -362,7 +363,7 @@ def kmh_kernel_ridge_predict(
     kmh_validate_matrix(x_new, q, d, "predict X")
     kmh_validate_kernel(kernel, degree, gamma, coef0, "kernel_ridge")
     var k = kmh_kernel_matrix(kernel, degree, gamma, coef0, x_new, x_fit, q, n, d)
-    return gemm_oracle(k, dual, OP_NN, q, t, n)
+    return host_gemm_identical(k, dual, OP_NN, q, t, n)
 
 
 # ===========================================================================
@@ -486,9 +487,9 @@ def kmh_nystroem_fit(
 
     var norm: List[Float32]
     if any_negative:
-        norm = gemm_oracle(z, vt_ord, OP_NT, q, q, q)
+        norm = host_gemm_identical(z, vt_ord, OP_NT, q, q, q)
     else:
-        norm = gemm_oracle(z, vecs_ord, OP_NT, q, q, q)
+        norm = host_gemm_identical(z, vecs_ord, OP_NT, q, q, q)
 
     _ = raw^
     _ = jac^
@@ -512,7 +513,7 @@ def kmh_nystroem_transform(
     kmh_validate_matrix(x, m, d, "nystroem transform X")
     kmh_validate_kernel(kernel, degree, gamma, coef0, "nystroem")
     var k = kmh_kernel_matrix(kernel, degree, gamma, coef0, x, components, m, q, d)
-    return gemm_oracle(k, normalization, OP_NT, m, q, q)
+    return host_gemm_identical(k, normalization, OP_NT, m, q, q)
 
 
 # ===========================================================================
@@ -569,7 +570,7 @@ def kmh_rbf_sampler_transform(
     """`rbf_sampler_transform_host`: the dot at OP_NN, then
     `feature_map_epilogue_kernel`'s add, cos and multiply in their order."""
     kmh_validate_matrix(x, m, d, "rbf_sampler transform X")
-    var p = gemm_oracle(x, weights, OP_NN, m, q, d)
+    var p = host_gemm_identical(x, weights, OP_NN, m, q, d)
     for t in range(m * q):
         var j = t % q
         var pv = ftz(p[t])
