@@ -205,6 +205,8 @@ Before = `-D MOJOLEARN_2031_SYM_RIDX_SPLITS_OFF -D MOJOLEARN_GBDT_ID_UPLOADS_SEP
 | + lazy workspace zero (27fdd02c4; before = 10 columns and per-round zero) | m4-a | 1790617267667 | rf:taxireg / rf:taxi / dt:taxireg / bagging | 10447 / 5665 / 143 / 967 | 9750 / 5627 / 141 / 941 | 0.933 / 0.993 / 0.988 / 0.973 | equal |
 | same | m4-a | 1790617267667 | dart:taxireg / adaboost:taxireg / adaboost:taxi | 6184 / 2327 / 3400 | 6190 / 2323 / 3454 | 1.001 / 0.998 / 1.016 | equal |
 
+| AdaBoostClassifier: member labels encoded once (cee41f3e2; before = `MOJOLEARN_ADABOOST_REENCODE=1`) | m4pro-a | 1790618579520 | adaboost:taxi | 2905 | 2729 | 0.939 | e8529a04f218dbab |
+
 ## FINAL (tip 27fdd02c4 plus progress notes; 2026-09-28)
 
 ### Before/after at the tip, IDENTICAL, M4 Pro m4pro-a (steward 1790617279900)
@@ -281,6 +283,9 @@ IDENTICAL:
 - GBDT SymmetricTree: DEVIATION 2031 ridx-only splits for layouts of at
   most 64 features (bfc552c67, 63a38c138; both modes).
 
+Both modes, Python: AdaBoostClassifier encodes its member labels once
+(cee41f3e2, M4 Pro taxi 0.939, same digest).
+
 FAST: the id arena, 2031 (gated), ET narrow tiles, the RF workspace cap and
 lazy zero reach FAST too (M4 FAST table above: SymmetricTree taxi 0.923,
 Lossguide 0.915, Depthwise 0.984, ET taxi 0.971; the 10-tree digests of all
@@ -312,7 +317,7 @@ on m2pro, NVIDIA, AMD and CPU owes them)
 c7228df55, bf5ac8dec (superseded by a11e74ed9), a11e74ed9, a5f2c1d34,
 44b69e68f, 206ca2e53, 7298ebd92, bfc552c67, 939ea50e9, 52c864e50,
 88535136f, 14706bb29, 63a38c138, 819d4bd7b, ef756d960, 72437f655,
-a29c5bffa, a91fe60be, 27fdd02c4. The Apple timing runs show equal
+a29c5bffa, a91fe60be, 27fdd02c4, cee41f3e2, 0e5a27c47. The Apple timing runs show equal
 digests on the timing Macs, which is NOT a cross-column identity proof.
 Specific risks for that run: the ridx-only IDENTICAL schedules change the
 code path on Apple only (other columns keep permuting), and a traced
