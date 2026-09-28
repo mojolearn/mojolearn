@@ -340,6 +340,19 @@ def _hstack(*ms):
     return _M(s, r, w)
 
 
+def _kit_vendor(kit):
+    """The vendor the kit's binding was compiled for ("metal", "cuda", "hip",
+    ...), "" when the binding cannot say; asked once per kit."""
+    v = kit.__dict__.get("_vendor")
+    if v is None:
+        try:
+            v = str(kit._raw().x_decomp_vendor())
+        except Exception:
+            v = ""
+        kit._vendor = v
+    return v
+
+
 class _FastMetalEigh:
     """FAST on Apple runs the kit's eigh on x_decomp/jacobi2.mojo's kernel
     (lane/decomp-apple3; m4-a 1790626766529: eigh 800 8.88 -> 5.36 s, Isomap
@@ -355,14 +368,7 @@ class _FastMetalEigh:
     def __init__(self, kit):
         self.on = False
         if kit.mode == "fast" and "MOJOLEARN_XD_JACOBI" not in _os.environ:
-            v = kit.__dict__.get("_vendor")
-            if v is None:
-                try:
-                    v = str(kit._raw().x_decomp_vendor())
-                except Exception:
-                    v = ""
-                kit._vendor = v
-            self.on = v == "metal"
+            self.on = _kit_vendor(kit) == "metal"
 
     def __enter__(self):
         if self.on:
@@ -2904,7 +2910,8 @@ def _center_kernel(k, K):
 #: FAST's Lanczos route for the top eigenpairs (lane/decomp-apple2): taken
 #: under sklearn's own ARPACK policy for eigen_solver='auto' (KernelPCA /
 #: Isomap: n > 200 and fewer than 10 components), FAST mode only. ON by
-#: default since lane/decomp-apple3: its paired quality check
+#: default ON APPLE since lane/decomp-apple3 (opt-in elsewhere,
+#: MOJOLEARN_XD_LANCZOS=1, where it has no quality check): its paired check
 #: (bench/decomp_fast_quality.py) ran on a GPU with a FAST binding (m4-a
 #: 1790626766529, 600 rows, 2 datasets x 2 seeds, Isomap and ClassicalMDS:
 #: 8/8 PASS, every eigenvalue and eigenvector error UNDER the exact dense
@@ -2988,7 +2995,8 @@ def _top_eig(k, A, nc, fast=False):
     ARPACK policy (_lanczos_top), the exact dense solve otherwise."""
     n = A.r
     got = None
-    if fast and n > _LANCZOS_MIN_N and nc < _LANCZOS_MAX_NC and _os.environ.get("MOJOLEARN_XD_LANCZOS", "1") != "0":
+    if fast and n > _LANCZOS_MIN_N and nc < _LANCZOS_MAX_NC and _os.environ.get(
+            "MOJOLEARN_XD_LANCZOS", "1" if _kit_vendor(k) == "metal" else "0") == "1":
         got = _lanczos_top(k, A, nc)
     if got is not None:
         w, V = got

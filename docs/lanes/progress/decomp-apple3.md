@@ -136,8 +136,10 @@ is in the branch that merges. What changed is Python, bench and notes.
   Mojo spelling (`jacobi2_eigh_on`, FAST and Metal at comptime) is on the
   side branch and replaces the Python one after one build.
   MOJOLEARN_XD_JACOBI=1 keeps `device_eigh`.
-- Lanczos: `_top_eig` takes it in FAST for eigen_solver 'auto', n > 200 and
-  fewer than 10 components; MOJOLEARN_XD_LANCZOS=0 keeps the exact solve.
+- Lanczos: `_top_eig` takes it in FAST on a Metal binding for eigen_solver
+  'auto', n > 200 and fewer than 10 components; MOJOLEARN_XD_LANCZOS=0
+  keeps the exact solve. On CUDA and HIP it stays opt-in
+  (MOJOLEARN_XD_LANCZOS=1): no quality check ran there.
   The "before" column is the exact dense Jacobi in the IDENTICAL binding
   (the same algorithm FAST ran before); the FAST exact solve was not timed
   at 600 rows.
