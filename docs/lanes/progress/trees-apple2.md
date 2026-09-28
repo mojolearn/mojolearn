@@ -156,3 +156,5 @@ Same arms as the M3 Ultra table (10 RF columns per pass in both arms; 2031 alrea
 | same | m3ultra-b | 1790614067535 | rf:taxireg / dt:istellareg / dt:taxireg | 3232 / 446 / 68 | 3142 / 433 / 70 | 0.972 / 0.972 / 1.022 | equal |
 | same | m4pro-b | 1790614070834 | rf:taxireg / rf:taxi | 5162 / 2942 | 5019 / 2954 | 0.972 / 1.004 | equal |
 | same | m4pro-b | 1790614070834 | dart:taxireg / adaboost:taxireg / bagging:taxi / dt:taxireg | 5839 / 2062 / 634 / 81 | 6422 / 2169 / 665 / 84 | **1.100 / 1.052 / 1.048 / 1.039** -> workspace capped at the sampled columns (a91fe60be) | equal |
+| id arena incl. split bins, IDENTICAL (a29c5bffa; before = one copy per slot) | m4pro-b | 1790615807516 | lossguide taxi | 3982 | 3737 | 0.938 | b1761eecc6dfbc73 |
+| same | m4pro-b | 1790615807516 | depthwise taxi | 1643 | 1617 | 0.984 | 5694af7699036c65 |
