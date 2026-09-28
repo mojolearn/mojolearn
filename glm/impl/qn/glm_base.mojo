@@ -57,7 +57,7 @@ the convergence test branch on, and every operand of it is pinned above.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from core.column_stats import STATS_TPB, xty_kernel
 from core.gemm import gemm_nt, gemv_n
@@ -71,11 +71,12 @@ from core.xtdz_coalesced import (
 from glm.impl.qn.glm_linear import (
     abs_loss_dz_kernel,
     nrm1,
+    nrm1_kernel,
     squared_loss_dz_kernel,
 )
 from glm.impl.qn.glm_logistic import logistic_loss_dz_kernel
 from glm.impl.qn.multi_gpu import gradient_columns
-from glm.impl.qn.fast_xtdz import fast_xtdz, fast_xtdz_applies
+from glm.impl.qn.fast_xtdz import fast_xtdz, fast_xtdz_applies, fast_xtdz_into, fast_xtdz_workspace_floats
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.info import has_apple_gpu_accelerator
 from std.sys.compile import is_defined
@@ -105,6 +106,9 @@ from glm.impl.qn.glm_svm import (
 from glm.impl.qn.simple_mat.dense import (
     VEC_ELEM_TPB,
     _read_scalar,
+    dot_self_kernel,
+    nrm_max_kernel,
+    read_scalars,
     nrm_max,
     squared_norm,
 )
@@ -260,9 +264,11 @@ def linear_fwd(
                 block_dim=(VEC_ELEM_TPB, 1, 1),
             )
         return
+    # lane/linear-apple: the gemv reads the first `d` words of `w` in place
+    # (the D-float copy into `w_weights` was one more command per
+    # evaluation; the words read are the same).
     var w_head = w.create_sub_buffer[DType.float32](0, d)
-    ctx.enqueue_copy(dst_buf=w_weights, src_buf=w_head)
-    gemv_n(ctx, z, x, w_weights, n_rows, d)
+    gemv_n(ctx, z, x, w_head, n_rows, d)
     if dims.fit_intercept:
         ctx.enqueue_function[add_bias_kernel](
             z.unsafe_ptr(), w.unsafe_ptr(), Int32(d), Int32(n_rows),
@@ -297,7 +303,7 @@ def linear_bwd(
         var fast_done = False
         comptime if QN_FAST_XTDZ:
             if not distributed and fast_xtdz_applies(d, dims.C):
-                fast_xtdz(ctx, xtdz, x, dz, n_rows, d, dims.C)
+                fast_xtdz_into(ctx, xtdz, x, dz, xtdz_ws, n_rows, d, dims.C)
                 fast_done = True
         # Apple IDENTICAL: the same chains and fold, row-coalesced
         # (`core/xtdz_coalesced.mojo`); a no-op test on every other column.
@@ -326,7 +332,7 @@ def linear_bwd(
     var fast_done1 = False
     comptime if QN_FAST_XTDZ:
         if not distributed and fast_xtdz_applies(d, 1):
-            fast_xtdz(ctx, xtdz, x, dz, n_rows, d, 1)
+            fast_xtdz_into(ctx, xtdz, x, dz, xtdz_ws, n_rows, d, 1)
             fast_done1 = True
     if not distributed and xtdz_coalesced_applies(d, 1):
         xtdz_coalesced(ctx, xtdz, x, dz, xtdz_ws, n_rows, d, 1)
@@ -376,6 +382,16 @@ struct GLMWithData(Movable):
     var w_weights: DeviceBuffer[DType.float32]
     var scalar: DeviceBuffer[DType.float32]
     var n_evals: Int
+    # lane/linear-apple: `evaluate` enqueues every scalar it and its caller
+    # need into `slots` (0 loss, 1 regularizer, 2 the raw gradient norm,
+    # 3 the OWL-QN l1 norm of w) and brings them home behind ONE
+    # synchronize into `stage`.
+    var slots: DeviceBuffer[DType.float32]
+    var stage: HostBuffer[DType.float32]
+    #: the address of the gradient whose norm `stage[2]` holds, 0 for none
+    var gnorm_at: Int
+    var gnorm_raw: Float32
+    var last_pen: Float32
 
     def __init__(
         out self,
@@ -401,16 +417,34 @@ struct GLMWithData(Movable):
         self.z = ctx.enqueue_create_buffer[DType.float32](dims.C * n_rows)
         self.loss_terms = ctx.enqueue_create_buffer[DType.float32](n_rows)
         self.xtdz = ctx.enqueue_create_buffer[DType.float32](dims.C * dims.D)
-        self.xtdz_ws = ctx.enqueue_create_buffer[DType.float32](
+        var ws_floats = (
             xtdz_coalesced_workspace_floats(dims.D, dims.C)
             if xtdz_coalesced_applies(dims.D, dims.C) else 1
         )
+        # lane/linear-apple: FAST on Apple's fast_xtdz partials live here
+        # too, so an evaluation allocates nothing.
+        comptime if QN_FAST_XTDZ:
+            if fast_xtdz_applies(dims.D, dims.C):
+                ws_floats = max(ws_floats, fast_xtdz_workspace_floats(n_rows, dims.D, dims.C))
+        self.xtdz_ws = ctx.enqueue_create_buffer[DType.float32](ws_floats)
         self.w_weights = ctx.enqueue_create_buffer[DType.float32](dims.C * dims.D)
         self.scalar = ctx.enqueue_create_buffer[DType.float32](1)
         self.n_evals = 0
+        self.slots = ctx.enqueue_create_buffer[DType.float32](4)
+        self.stage = ctx.enqueue_create_host_buffer[DType.float32](4)
+        self.gnorm_at = 0
+        self.gnorm_raw = Float32(0.0)
+        self.last_pen = Float32(0.0)
         ctx.synchronize()
 
     def get_loss_and_dz(mut self, ctx: DeviceContext) raises -> Float32:
+        """The loss into `scalar`, read back (one synchronize)."""
+        self.enqueue_loss_and_dz(ctx, self.scalar.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
+        return _read_scalar(ctx, self.scalar)
+
+    def enqueue_loss_and_dz(
+        mut self, ctx: DeviceContext, out_v: MutPointer[Float32, MutAnyOrigin]
+    ) raises:
         """`GLMBase::getLossAndDZ`, the unweighted arm (`glm_base.cuh:
         152-165`): `loss = sum lz(y, Z) * normalization`, `Z = dlz(y, Z)`;
         for `Softmax` its own `getLossAndDZ` (`glm_softmax.cuh:172-178`,
@@ -477,10 +511,9 @@ struct GLMWithData(Movable):
                 " here (glm/NOT_IMPLEMENTED.tsv)"
             )
         ctx.enqueue_function[sum_terms_kernel](
-            self.scalar.unsafe_ptr(), self.loss_terms.unsafe_ptr(), Int32(n),
+            out_v, self.loss_terms.unsafe_ptr(), Int32(n),
             grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
         )
-        return _read_scalar(ctx, self.scalar)
 
     def loss_grad(
         mut self,
@@ -503,29 +536,106 @@ struct GLMWithData(Movable):
         mut g: DeviceBuffer[DType.float32],
     ) raises -> Float32:
         """`GLMWithData::operator()(wFlat, gradFlat, dev_scalar, stream)`:
-        the objective value at `w`, `g` overwritten with its gradient.
+        the objective value at `w`, `g` overwritten with its gradient."""
+        return self.evaluate_pen(ctx, w, g, 0)
+
+    def evaluate_pen(
+        mut self,
+        ctx: DeviceContext,
+        mut w: DeviceBuffer[DType.float32],
+        mut g: DeviceBuffer[DType.float32],
+        pen_len: Int,
+    ) raises -> Float32:
+        """`evaluate`, and when `pen_len > 0` also `nrm1(w[0:pen_len])` into
+        `last_pen` (OWL-QN's `f_wrap` term, `qn_linesearch.owlqn_objective`).
 
         `l2 == 0`: `LogisticLoss::loss_grad` with `initGradZero = true`.
         `l2 != 0`: `RegularizedGLM::loss_grad` (`glm_regularizer.cuh:
         68-88`): `G.fill(0)`, `reg_grad` into G and the scalar, the loss
         with `initGradZero = false`, and `loss_host + reg_host` on the
-        host."""
+        host.
+
+        lane/linear-apple (2026-09-28): the launches are the ones the
+        host-driven sequence made, in the same order on one context; the
+        regularizer, the loss, the raw gradient norm (`grad_norm`'s
+        reduction of the `g` this call leaves) and the l1 term go to four
+        words of `slots` and come home behind ONE synchronize, where there
+        were two (three with `grad_norm`, four under OWL-QN). The host
+        arithmetic on them is unchanged."""
         self.n_evals += 1
+        self.gnorm_at = 0
+        var s1 = self.slots.create_sub_buffer[DType.float32](1, 1)
+        var s2 = self.slots.create_sub_buffer[DType.float32](2, 1)
+        var s3 = self.slots.create_sub_buffer[DType.float32](3, 1)
         if self.l2 == Float32(0.0):
-            return self.loss_grad(ctx, w, g, True)
-        ctx.enqueue_memset(g, Float32(0.0))
-        # `G[:, 0:n_param - has_bias]`: the first `C*D` entries of the
-        # column-major `W` are the weight block, the bias column is last.
-        # AUDIT (ii): reached by logistic-with-l2; at C == 1 the operand
-        # `Int32(C * D)` is the certified `Int32(D)` bit for bit.
-        ctx.enqueue_function[tikhonov_reg_grad_kernel](
-            self.scalar.unsafe_ptr(), g.unsafe_ptr(), w.unsafe_ptr(),
-            Int32(self.dims.C * self.dims.D), self.l2,
-            grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
-        )
-        var reg_host = _read_scalar(ctx, self.scalar)
-        var loss_host = self.loss_grad(ctx, w, g, False)
+            linear_fwd(ctx, self.z, self.x, w, self.w_weights, self.n_rows, self.dims)
+            self.enqueue_loss_and_dz(ctx, self.slots.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
+            linear_bwd(ctx, g, self.x, self.z, self.xtdz, self.xtdz_ws, self.n_rows, self.dims, True)
+        else:
+            ctx.enqueue_memset(g, Float32(0.0))
+            # `G[:, 0:n_param - has_bias]`: the first `C*D` entries of the
+            # column-major `W` are the weight block, the bias column is last.
+            # AUDIT (ii): reached by logistic-with-l2; at C == 1 the operand
+            # `Int32(C * D)` is the certified `Int32(D)` bit for bit.
+            ctx.enqueue_function[tikhonov_reg_grad_kernel](
+                s1.unsafe_ptr(), g.unsafe_ptr(), w.unsafe_ptr(),
+                Int32(self.dims.C * self.dims.D), self.l2,
+                grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
+            )
+            linear_fwd(ctx, self.z, self.x, w, self.w_weights, self.n_rows, self.dims)
+            self.enqueue_loss_and_dz(ctx, self.slots.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
+            linear_bwd(ctx, g, self.x, self.z, self.xtdz, self.xtdz_ws, self.n_rows, self.dims, False)
+        # `grad_norm`'s reduction of this `g`, speculatively
+        var np = self.dims.n_param
+        if self._gnorm_kind() == 1:
+            ctx.enqueue_function[dot_self_kernel](
+                s2.unsafe_ptr(), g.unsafe_ptr(), Int32(np),
+                grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
+            )
+        elif self._gnorm_kind() == 2:
+            ctx.enqueue_function[nrm1_kernel](
+                s2.unsafe_ptr(), g.unsafe_ptr(), Int32(np),
+                grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[nrm_max_kernel](
+                s2.unsafe_ptr(), g.unsafe_ptr(), Int32(np),
+                grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
+            )
+        if pen_len > 0:
+            ctx.enqueue_function[nrm1_kernel](
+                s3.unsafe_ptr(), w.unsafe_ptr(), Int32(pen_len),
+                grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
+            )
+        read_scalars(ctx, self.slots, self.stage, 4 if pen_len > 0 else 3)
+        _ = s1^
+        _ = s2^
+        _ = s3^
+        var loss_host = self.stage.unsafe_ptr().unsafe_load(0)
+        self.gnorm_raw = self.stage.unsafe_ptr().unsafe_load(2)
+        self.gnorm_at = Int(g.unsafe_ptr())
+        if pen_len > 0:
+            self.last_pen = self.stage.unsafe_ptr().unsafe_load(3)
+        if self.l2 == Float32(0.0):
+            return loss_host
+        var reg_host = self.stage.unsafe_ptr().unsafe_load(1)
         return ftz(loss_host + reg_host)
+
+    def _gnorm_kind(self) -> Int:
+        """1: `squaredNorm * 0.5`; 2: `nrm1`; 0: `nrmMax` (see `grad_norm`)."""
+        if (
+            self.loss == QN_LOSS_SQUARED
+            or self.loss == QN_LOSS_SVC_L2
+            or self.loss == QN_LOSS_SVR_L2
+        ):
+            return 1
+        if (
+            self.loss == QN_LOSS_ABS
+            or self.loss == QN_LOSS_SVC_L1
+            or self.loss == QN_LOSS_SVR_L1
+        ):
+            return 2
+        return 0
 
     def grad_norm(
         mut self, ctx: DeviceContext, mut g: DeviceBuffer[DType.float32]
@@ -537,7 +647,18 @@ struct GLMWithData(Movable):
         The `* 0.5` is a host `T * double` narrowed back: exact.
 
         AUDIT (ii): `QN_LOSS_LOGISTIC` fails both guards and falls through
-        to the unchanged certified `nrm_max` return."""
+        to the unchanged certified `nrm_max` return.
+
+        lane/linear-apple: when `g` is the gradient the last `evaluate`
+        left (nothing writes it between that call and this one in either
+        solver), its reduction already came home with the loss; the host
+        `* 0.5` is applied to it here exactly as below."""
+        if self.gnorm_at != 0 and self.gnorm_at == Int(g.unsafe_ptr()):
+            self.gnorm_at = 0
+            if self._gnorm_kind() == 1:
+                return self.gnorm_raw * Float32(0.5)
+            return self.gnorm_raw
+        self.gnorm_at = 0
         if (
             self.loss == QN_LOSS_SQUARED
             or self.loss == QN_LOSS_SVC_L2

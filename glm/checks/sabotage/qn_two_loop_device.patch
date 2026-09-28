@@ -1,0 +1,13 @@
+diff --git a/glm/impl/qn/qn_util.mojo b/glm/impl/qn/qn_util.mojo
+index f0f8ef416..d19e54f8f 100644
+--- a/glm/impl/qn/qn_util.mojo
++++ b/glm/impl/qn/qn_util.mojo
+@@ -268,7 +268,7 @@ def lbfgs_two_loop_kernel(
+         var a = ieee_div_f32(d, yhist.unsafe_load(j))
+         if tid == 0:
+             alpha.unsafe_store(j, a)
+-        var na = -a
++        var na = -a * Float32(1.0000001)  # SABOTAGE two-loop
+         var yj = y_all + j * n
+         i = tid
+         while i < n:

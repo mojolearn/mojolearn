@@ -26,7 +26,7 @@ Wolfe `dot(grad, drt)` is implemented and not reached from the Python surface.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from glm.impl.qn.glm_base import GLMWithData
 from glm.impl.qn.glm_linear import nrm1
@@ -42,8 +42,54 @@ from glm.impl.qn.qn_util import (
     LS_SUCCESS,
     project_orth,
 )
-from glm.impl.qn.simple_mat.dense import VEC_ELEM_TPB, axpy, dot
+from glm.impl.qn.simple_mat.dense import VEC_ELEM_TPB, axpy, copy_vec, dot, dot_kernel, read_scalars
+from core.column_stats import STATS_TPB
 from checks.numerics import ftz, identical_mul_add
+
+
+def _dg_init_enqueue(
+    ctx: DeviceContext,
+    mut u: DeviceBuffer[DType.float32],
+    mut drt: DeviceBuffer[DType.float32],
+    n: Int,
+    mut scalar: DeviceBuffer[DType.float32],
+    mut stage: HostBuffer[DType.float32],
+    dg_ready: Bool,
+) raises:
+    """`dot(u, drt)` (`dense.dot`'s launch and value) into `scalar` word 0
+    and the copy of words 0..3 into `stage`, ENQUEUED (lane/linear-apple):
+    the first candidate's evaluate synchronizes, so dg_init, and the search
+    direction's verdict in words 2..3 (`qn_util.lbfgs_search_dir_enqueue`),
+    come home with the candidate's loss behind ONE synchronize. The dot is
+    enqueued before the step overwrites anything it reads."""
+    if not dg_ready:  # else the direction's launch already wrote it
+        ctx.enqueue_function[dot_kernel](
+            scalar.unsafe_ptr(), u.unsafe_ptr(), drt.unsafe_ptr(), Int32(n),
+            grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
+        )
+    var sub = scalar.create_sub_buffer[DType.float32](0, 4)
+    ctx.enqueue_copy(dst_ptr=stage.unsafe_ptr(), src_buf=sub)
+    _ = sub^
+
+
+def _undo_candidate(
+    ctx: DeviceContext,
+    mut f: GLMWithData,
+    mut x: DeviceBuffer[DType.float32],
+    mut xp: DeviceBuffer[DType.float32],
+    mut grad: DeviceBuffer[DType.float32],
+    mut gradp: DeviceBuffer[DType.float32],
+) raises:
+    """A positive dg_init: the reference returned LS_INVALID_DIR BEFORE the
+    first candidate, so the speculative one is undone. `x` and `grad` go
+    back to `xp` / `gradp`, which the solver copied from them at the top of
+    this iteration (so they are the words the reference left); `fx` was
+    never assigned; the evaluation is uncounted and its gradient norm
+    forgotten, so `grad_norm` reduces the restored `grad`."""
+    copy_vec(ctx, x, xp)
+    copy_vec(ctx, grad, gradp)
+    f.n_evals -= 1
+    f.gnorm_at = 0
 
 
 def ls_success(
@@ -95,22 +141,38 @@ def ls_backtrack(
     n: Int,
     mut scalar: DeviceBuffer[DType.float32],
     mut ls_iters: Int,
+    mut stage: HostBuffer[DType.float32],
+    mut fresh: Bool,
+    mut gradp: DeviceBuffer[DType.float32],
+    dg_ready: Bool,
 ) raises -> Int:
     """`ls_backtrack`, `qn_linesearch.cuh:109-146`. `ls_iters` reports how
     many candidates were evaluated (for the card)."""
     if step <= Float32(0.0):
         return LS_INVALID_STEP
     var fx_init = fx
-    var dg_init = dot(ctx, grad, drt, n, scalar)
-    if dg_init > Float32(0.0):
-        return LS_INVALID_DIR
-    var dg_test = param.ftol * dg_init
+    # lane/linear-apple: dg_init's dot is enqueued and read home with the
+    # first candidate's evaluate (one synchronize for both); see
+    # `_dg_init_enqueue`. A positive dg_init undoes the speculative step.
+    _dg_init_enqueue(ctx, grad, drt, n, scalar, stage, dg_ready)
+    var dg_init = Float32(0.0)
+    var dg_test = Float32(0.0)
+    var first = True
     var width = Float32(0.0)
     ls_iters = 0
     for _ in range(param.max_linesearch):
         # x_{k+1} = x_k + step * d_k
         axpy(ctx, x, step, drt, xp, n)
-        fx = f.evaluate(ctx, x, grad)
+        var fx_new = f.evaluate(ctx, x, grad)
+        if first:
+            first = False
+            fresh = True
+            dg_init = stage.unsafe_ptr().unsafe_load(0)
+            if dg_init > Float32(0.0):
+                _undo_candidate(ctx, f, x, xp, grad, gradp)
+                return LS_INVALID_DIR
+            dg_test = param.ftol * dg_init
+        fx = fx_new
         ls_iters += 1
         if ls_success(
             ctx, param, fx_init, dg_init, fx, dg_test, step, grad, drt, n,
@@ -178,8 +240,11 @@ def owlqn_objective(
     closure to hand across files and `ls_backtrack_projected` below is its
     other caller. Two roundings on the host, both flushed (row 10).
     """
-    var tmp = f.evaluate(ctx, x, grad)
-    var pen = nrm1(ctx, x, pg_limit, scalar)
+    # lane/linear-apple: the l1 norm comes home with the loss (one
+    # synchronize); the same kernel on the same `x`, after the same launches.
+    var tmp = f.evaluate_pen(ctx, x, grad, pg_limit)
+    var pen = f.last_pen
+    _ = len(scalar)
     return ftz(tmp + ftz(l1_penalty * pen))
 
 
@@ -244,6 +309,10 @@ def ls_backtrack_projected(
     n: Int,
     mut scalar: DeviceBuffer[DType.float32],
     mut ls_iters: Int,
+    mut stage: HostBuffer[DType.float32],
+    mut fresh: Bool,
+    mut gradp: DeviceBuffer[DType.float32],
+    dg_ready: Bool,
 ) raises -> Int:
     """`ls_backtrack_projected`, `qn_linesearch.cuh:148-197`. `ls_iters`
     reports how many candidates were evaluated (for the card), as
@@ -252,17 +321,27 @@ def ls_backtrack_projected(
         return LS_INVALID_STEP
     var fx_init = fx
     # `dot(pseudo_grad, drt)`, NOT `dot(grad, drt)`. See the banner.
-    var dg_init = dot(ctx, pseudo_grad, drt, n, scalar)
-    if dg_init > Float32(0.0):
-        return LS_INVALID_DIR
-    var dg_test = param.ftol * dg_init
+    # lane/linear-apple: read home with the first candidate (see ls_backtrack).
+    _dg_init_enqueue(ctx, pseudo_grad, drt, n, scalar, stage, dg_ready)
+    var dg_init = Float32(0.0)
+    var dg_test = Float32(0.0)
+    var first = True
     var width = Float32(0.0)
     ls_iters = 0
     for _ in range(param.max_linesearch):
         # x_{k+1} = proj_orth(x_k + step * d_k)
         projected_step(ctx, x, step, drt, xp, pseudo_grad, n)
         # evaluates fx WITH the l1 term, but only grad of the loss term
-        fx = owlqn_objective(ctx, f, x, grad, l1_penalty, pg_limit, scalar)
+        var fx_new = owlqn_objective(ctx, f, x, grad, l1_penalty, pg_limit, scalar)
+        if first:
+            first = False
+            fresh = True
+            dg_init = stage.unsafe_ptr().unsafe_load(0)
+            if dg_init > Float32(0.0):
+                _undo_candidate(ctx, f, x, xp, grad, gradp)
+                return LS_INVALID_DIR
+            dg_test = param.ftol * dg_init
+        fx = fx_new
         ls_iters += 1
         if ls_success(
             ctx, param, fx_init, dg_init, fx, dg_test, step, pseudo_grad,

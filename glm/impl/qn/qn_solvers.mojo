@@ -56,11 +56,12 @@ from glm.impl.qn.qn_util import (
     OPT_NUMERIC_ERROR,
     OPT_SUCCESS,
     check_convergence,
-    lbfgs_search_dir,
+    lbfgs_search_dir_enqueue,
+    lbfgs_search_dir_resolve,
     project_direction,
     update_pseudo,
 )
-from glm.impl.qn.simple_mat.dense import ax, axpy, copy_vec, nrm2
+from glm.impl.qn.simple_mat.dense import ax, axpy, copy_vec, nrm2, read_scalars
 
 
 def _iter_tag(k: Int) -> String:
@@ -137,16 +138,24 @@ def min_lbfgs(
             + String(param.check_param()) + ")"
         )
     # SETUP WORKSPACE (`:146-164`): S, Y as `param.m` column buffers each.
+    # lane/linear-apple: S and Y are views of one contiguous m x n buffer
+    # each, so the fused two-loop kernel reaches every column from one
+    # pointer; `hist` is the device yhist (0..m-1) and alpha (m..2m-1).
+    var s_all = ctx.enqueue_create_buffer[DType.float32](param.m * n)
+    var y_all = ctx.enqueue_create_buffer[DType.float32](param.m * n)
+    var hist = ctx.enqueue_create_buffer[DType.float32](2 * param.m)
+    var unused = ctx.enqueue_create_buffer[DType.float32](1)  # lbfgs_dir_kernel's pseudo slot
+    var stage = ctx.enqueue_create_host_buffer[DType.float32](4)
     var S = List[DeviceBuffer[DType.float32]]()
     var Y = List[DeviceBuffer[DType.float32]]()
-    for _ in range(param.m):
-        S.append(ctx.enqueue_create_buffer[DType.float32](n))
-        Y.append(ctx.enqueue_create_buffer[DType.float32](n))
+    for jm in range(param.m):
+        S.append(s_all.create_sub_buffer[DType.float32](jm * n, n))
+        Y.append(y_all.create_sub_buffer[DType.float32](jm * n, n))
     var xp = ctx.enqueue_create_buffer[DType.float32](n)
     var grad = ctx.enqueue_create_buffer[DType.float32](n)
     var gradp = ctx.enqueue_create_buffer[DType.float32](n)
     var drt = ctx.enqueue_create_buffer[DType.float32](n)
-    var scalar = ctx.enqueue_create_buffer[DType.float32](1)
+    var scalar = ctx.enqueue_create_buffer[DType.float32](4)
     ctx.synchronize()
 
     var ys = List[Float32]()
@@ -169,6 +178,11 @@ def min_lbfgs(
 
     # Early exit if the initial x is already a minimizer
     if check_convergence(param, k, fx, gnorm, fx_hist):
+        _ = len(s_all)
+        _ = len(y_all)
+        _ = len(hist)
+        _ = len(unused)
+        _ = stage.unsafe_ptr()
         _release(S, Y, xp, grad, gradp, drt, scalar)
         return OPT_SUCCESS
 
@@ -181,19 +195,37 @@ def min_lbfgs(
     k = 1
     var end = 0
     var n_vec = 0
+    # lane/linear-apple: the search direction's verdict (skip, ys) is read
+    # home with the next line search's dg_init; `end`/`n_vec` are settled
+    # then, before anything uses them.
+    var dir_pending = False
+    # lane/linear-apple: the direction's launch already saved xp / gradp
+    # (saved) and, L-BFGS, computed dg_init into scalar word 0 (dg_ready).
+    var saved = False
+    var dg_ready = False
     var retcode = OPT_MAX_ITERS_REACHED
     var lsret = LS_SUCCESS
     var ls_iters = 0
     while k <= param.max_iterations:
         # Save the current x and gradient
-        copy_vec(ctx, xp, x)
-        copy_vec(ctx, gradp, grad)
+        if not saved:
+            copy_vec(ctx, xp, x)
+            copy_vec(ctx, gradp, grad)
+        saved = False
         fxp = fx
 
         # Line search to update x, fx and gradient
+        var fresh = False
         lsret = ls_backtrack(
-            ctx, param, f, fx, x, grad, step, drt, xp, n, scalar, ls_iters
+            ctx, param, f, fx, x, grad, step, drt, xp, n, scalar, ls_iters,
+            stage, fresh, gradp, dg_ready,
         )
+        dg_ready = False
+        if dir_pending:
+            if not fresh:
+                read_scalars(ctx, scalar, stage, 4)
+            end = lbfgs_search_dir_resolve(param, n_vec, end, ys, stage)
+            dir_pending = False
         gnorm = f.grad_norm(ctx, grad)
 
         var stop = update_and_check(
@@ -209,19 +241,33 @@ def min_lbfgs(
             ls.append(Int32(ls_iters))
             trace.record_list_i32(tag + ".ls", ls)
         if stop:
+            _ = len(s_all)
+            _ = len(y_all)
+            _ = len(hist)
+            _ = len(unused)
+            _ = stage.unsafe_ptr()
             _release(S, Y, xp, grad, gradp, drt, scalar)
             return retcode
 
         # Update s and y: s_{k+1} = x_{k+1} - x_k, y_{k+1} = g_{k+1} - g_k
-        axpy(ctx, S[end], Float32(-1.0), xp, x, n)
-        axpy(ctx, Y[end], Float32(-1.0), gradp, grad, n)
+        # S[end] = x - xp, Y[end] = grad - gradp, the next xp / gradp saves
+        # (and, L-BFGS, dg_init) are inside the direction's one launch.
         # drt <- -H * g
-        end = lbfgs_search_dir(
-            ctx, param, n_vec, end, S, Y, grad, drt, ys, alpha, n, scalar
+        lbfgs_search_dir_enqueue(
+            ctx, param, n_vec, end, s_all, y_all, hist, unused, False, drt, n,
+            scalar, x, xp, grad, gradp, True,
         )
+        dir_pending = True
+        saved = True
+        dg_ready = True
         # step = 1.0 as initial guess
         step = Float32(1.0)
         k += 1
+    _ = len(s_all)
+    _ = len(y_all)
+    _ = len(hist)
+    _ = len(unused)
+    _ = stage.unsafe_ptr()
     _release(S, Y, xp, grad, gradp, drt, scalar)
     return OPT_MAX_ITERS_REACHED
 
@@ -326,17 +372,24 @@ def min_owlqn(
             + String(pg_limit) + ", n " + String(n) + ")"
         )
     # SETUP WORKSPACE (`:279-297`): `min_lbfgs`'s, plus `pseudo`.
+    # lane/linear-apple: S and Y are views of one contiguous m x n buffer
+    # each, so the fused two-loop kernel reaches every column from one
+    # pointer; `hist` is the device yhist (0..m-1) and alpha (m..2m-1).
+    var s_all = ctx.enqueue_create_buffer[DType.float32](param.m * n)
+    var y_all = ctx.enqueue_create_buffer[DType.float32](param.m * n)
+    var hist = ctx.enqueue_create_buffer[DType.float32](2 * param.m)
+    var stage = ctx.enqueue_create_host_buffer[DType.float32](4)
     var S = List[DeviceBuffer[DType.float32]]()
     var Y = List[DeviceBuffer[DType.float32]]()
-    for _ in range(param.m):
-        S.append(ctx.enqueue_create_buffer[DType.float32](n))
-        Y.append(ctx.enqueue_create_buffer[DType.float32](n))
+    for jm in range(param.m):
+        S.append(s_all.create_sub_buffer[DType.float32](jm * n, n))
+        Y.append(y_all.create_sub_buffer[DType.float32](jm * n, n))
     var xp = ctx.enqueue_create_buffer[DType.float32](n)
     var grad = ctx.enqueue_create_buffer[DType.float32](n)
     var gradp = ctx.enqueue_create_buffer[DType.float32](n)
     var drt = ctx.enqueue_create_buffer[DType.float32](n)
     var pseudo = ctx.enqueue_create_buffer[DType.float32](n)  # OWL-QN
-    var scalar = ctx.enqueue_create_buffer[DType.float32](1)
+    var scalar = ctx.enqueue_create_buffer[DType.float32](4)
     ctx.synchronize()
 
     var ys = List[Float32]()
@@ -364,6 +417,10 @@ def min_owlqn(
 
     # Early exit if the initial x is already a minimizer
     if check_convergence(param, k, fx, gnorm, fx_hist):
+        _ = len(s_all)
+        _ = len(y_all)
+        _ = len(hist)
+        _ = stage.unsafe_ptr()
         _release_owlqn(S, Y, xp, grad, gradp, drt, pseudo, scalar)
         return OPT_SUCCESS
 
@@ -378,20 +435,36 @@ def min_owlqn(
     k = 1
     var end = 0
     var n_vec = 0
+    # lane/linear-apple: the search direction's verdict (skip, ys) is read
+    # home with the next line search's dg_init; `end`/`n_vec` are settled
+    # then, before anything uses them.
+    var dir_pending = False
+    # lane/linear-apple: the direction's launch already saved xp / gradp
+    # (saved) and, L-BFGS, computed dg_init into scalar word 0 (dg_ready).
+    var saved = False
+    var dg_ready = False
     var retcode = OPT_MAX_ITERS_REACHED
     var lsret = LS_SUCCESS
     var ls_iters = 0
     while k <= param.max_iterations:
         # Save the current x and gradient
-        copy_vec(ctx, xp, x)
-        copy_vec(ctx, gradp, grad)
+        if not saved:
+            copy_vec(ctx, xp, x)
+            copy_vec(ctx, gradp, grad)
+        saved = False
         fxp = fx
 
         # OWL-QN: the PROJECTED line search (`:357-358`).
+        var fresh = False
         lsret = ls_backtrack_projected(
             ctx, param, f, fx, x, grad, pseudo, step, drt, xp, l1_penalty,
-            pg_limit, n, scalar, ls_iters,
+            pg_limit, n, scalar, ls_iters, stage, fresh, gradp, False,
         )
+        if dir_pending:
+            if not fresh:
+                read_scalars(ctx, scalar, stage, 4)
+            end = lbfgs_search_dir_resolve(param, n_vec, end, ys, stage)
+            dir_pending = False
         gnorm = f.grad_norm(ctx, grad)
 
         var stop = update_and_check(
@@ -407,6 +480,10 @@ def min_owlqn(
             ls.append(Int32(ls_iters))
             trace.record_list_i32(tag + ".ls", ls)
         if stop:
+            _ = len(s_all)
+            _ = len(y_all)
+            _ = len(hist)
+            _ = stage.unsafe_ptr()
             _release_owlqn(S, Y, xp, grad, gradp, drt, pseudo, scalar)
             return retcode
 
@@ -417,18 +494,25 @@ def min_owlqn(
         # NOTE `grad`, not `pseudo`: the quasi-Newton model is built from the
         # LOSS gradient, which is why `update_pseudo` above is careful not to
         # overwrite it.
-        axpy(ctx, S[end], Float32(-1.0), xp, x, n)
-        axpy(ctx, Y[end], Float32(-1.0), gradp, grad, n)
+        # S[end] = x - xp, Y[end] = grad - gradp, the next xp / gradp saves
+        # (and, L-BFGS, dg_init) are inside the direction's one launch.
         # OWL-QN: `drt <- -H * pseudo`, the PSEUDO gradient (`:388-390`).
-        end = lbfgs_search_dir(
-            ctx, param, n_vec, end, S, Y, pseudo, drt, ys, alpha, n, scalar
+        lbfgs_search_dir_enqueue(
+            ctx, param, n_vec, end, s_all, y_all, hist, pseudo, True, drt, n,
+            scalar, x, xp, grad, gradp, False,
         )
+        dir_pending = True
+        saved = True
         # OWL-QN: project the direction onto the orthant of -pseudo (`:393`).
         project_direction(ctx, drt, pseudo, n)
 
         # step = 1.0 as initial guess
         step = Float32(1.0)
         k += 1
+    _ = len(s_all)
+    _ = len(y_all)
+    _ = len(hist)
+    _ = stage.unsafe_ptr()
     _release_owlqn(S, Y, xp, grad, gradp, drt, pseudo, scalar)
     return OPT_MAX_ITERS_REACHED
 

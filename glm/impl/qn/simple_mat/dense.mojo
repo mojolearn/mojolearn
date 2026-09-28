@@ -45,8 +45,9 @@ so `ax_inplace_kernel` / `axpy_inplace_kernel` are the same arithmetic with
 one pointer. Same for `squaredNorm = dot(u, u)`.
 """
 
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.gpu import block_dim, block_idx, thread_idx
+from std.memory import bitcast
 
 from core.column_stats import STATS_TPB
 from core.pinned_reduce import pinned_block_max, pinned_block_sum
@@ -178,6 +179,26 @@ def nrm_max_kernel(
 # ---------------------------------------------------------------------------
 
 
+def read_scalars(
+    ctx: DeviceContext,
+    mut scalar: DeviceBuffer[DType.float32],
+    mut stage: HostBuffer[DType.float32],
+    count: Int,
+) raises:
+    """lane/linear-apple: the first `count` words of `scalar` into `stage`
+    behind ONE synchronize. Several reductions enqueued back to back into
+    distinct words of one scalar buffer come home together, so a host step
+    that needs k device scalars pays one round trip instead of k. The
+    values are the same words `_read_scalar` would return one at a time
+    (nothing between the launches reads them); only the number of syncs
+    changes, which on Metal is the cost (~4 ms per sync with pending work
+    on the M4)."""
+    var sub = scalar.create_sub_buffer[DType.float32](0, count)
+    ctx.enqueue_copy(dst_ptr=stage.unsafe_ptr(), src_buf=sub)
+    ctx.synchronize()
+    _ = sub^
+
+
 def _read_scalar(
     ctx: DeviceContext, mut scalar: DeviceBuffer[DType.float32]
 ) raises -> Float32:
@@ -304,3 +325,133 @@ def copy_vec(
 ) raises:
     """`copy_async`. Buffer to buffer, whole length."""
     ctx.enqueue_copy(dst_buf=dst, src_buf=src)
+
+
+# ---------------------------------------------------------------------------
+# HOST IEEE SCALAR ARITHMETIC ON THE DEVICE (lane/linear-apple, 2026-09-28)
+# ---------------------------------------------------------------------------
+#
+# `qn_util.lbfgs_search_dir` used to bring every two-loop dot home, divide
+# and subtract on the HOST, and pass the result back as a launch argument:
+# 2 + 2 * min(m, n_vec) synchronizes per L-BFGS iteration. The fused
+# two-loop kernel does that scalar arithmetic in the block instead, so it
+# must produce the host's IEEE words exactly. Two operations are needed:
+#
+#   `ieee_div_f32(a, b)`   a / b, a and b finite and NOT subnormal (both are
+#                          ftz'd pinned reductions, or 0 for a)
+#   `ieee_sub_f32(a, b)`   a - b, any finite a, b
+#
+# Normal results come from ONE hardware operation, correctly rounded on
+# every column (DEVIATION 740's measurement for `/`; `-` is a basic IEEE
+# operation everywhere). The only place a GPU can differ from the host is
+# a SUBNORMAL result or operand, which a flushing ALU turns into a signed
+# zero or reads as one. Those cases are detected BY BITS (an integer test,
+# no float compare on a reduction value: the Apple compiler pitfall) and
+# recomputed in integers in units of 2^-149, the subnormal quantum, then
+# rounded to nearest even exactly as the host rounds.
+
+
+@always_inline
+def _bits32(x: Float32) -> UInt32:
+    return bitcast[DType.uint32](x)
+
+
+@always_inline
+def _expf32(x: Float32) -> Int:
+    return Int((_bits32(x) >> 23) & UInt32(0xFF))
+
+
+@always_inline
+def _quanta149(x: Float32) -> UInt64:
+    """|x| as an integer multiple of 2^-149, for |x| < 2^-120 (exponent
+    field below 30): at most 2^53, exact."""
+    var b = _bits32(x)
+    var e = Int((b >> 23) & UInt32(0xFF))
+    var f = (b & UInt32(0x7FFFFF)).cast[DType.uint64]()
+    if e == 0:
+        return f
+    return (f | UInt64(0x800000)) << UInt64(e - 1)
+
+
+def _from_quanta(sign: UInt32, mag: UInt64) -> Float32:
+    """`sign * mag * 2^-149` rounded to nearest even into a float32 (mag
+    below 2^60). mag < 2^24 is exact and its bits ARE the encoding (the
+    implicit bit at 2^23 lands in the exponent field)."""
+    if mag < UInt64(0x1000000):
+        return bitcast[DType.float32](sign | mag.cast[DType.uint32]())
+    var shift = 0
+    var t = mag
+    while t >= UInt64(0x1000000):
+        t >>= 1
+        shift += 1
+    var mant = mag >> UInt64(shift)
+    var rem = mag - (mant << UInt64(shift))
+    var half = UInt64(1) << UInt64(shift - 1)
+    if rem > half or (rem == half and (mant & UInt64(1)) == UInt64(1)):
+        mant += 1
+    # mant in [2^23, 2^24]; adding shift << 23 carries a 2^24 mant into the
+    # next exponent, which is the right word.
+    return bitcast[DType.float32](sign | ((UInt32(shift) << 23) + mant.cast[DType.uint32]()))
+
+
+def ieee_div_f32(a: Float32, b: Float32) -> Float32:
+    """The host's `a / b` for finite, non-subnormal `a` and `b` (b != 0)."""
+    var q = a / b
+    if _expf32(q) != 0 or (_bits32(a) & UInt32(0x7FFFFFFF)) == UInt32(0):
+        return q
+    # |a / b| < 2^-126 (or flushed to zero): R = round(ma * 2^s / mb)
+    var ba = _bits32(a)
+    var bb = _bits32(b)
+    var sign = (ba ^ bb) & UInt32(0x80000000)
+    var ma = ((ba & UInt32(0x7FFFFF)) | UInt32(0x800000)).cast[DType.uint64]()
+    var mb = ((bb & UInt32(0x7FFFFF)) | UInt32(0x800000)).cast[DType.uint64]()
+    var s = (_expf32(a) - 150) - (_expf32(b) - 150) + 149
+    var num = ma
+    var den = mb
+    if s >= 0:
+        if s > 39:
+            return q  # not a tiny quotient; unreachable for a tiny q
+        num = ma << UInt64(s)
+    else:
+        if -s > 38:
+            return bitcast[DType.float32](sign)  # below half a quantum
+        den = mb << UInt64(-s)
+    var r = num // den
+    var rem = num - r * den
+    if rem * 2 > den or (rem * 2 == den and (r & UInt64(1)) == UInt64(1)):
+        r += 1
+    return bitcast[DType.float32](sign | r.cast[DType.uint32]())
+
+
+def ieee_sub_f32(a: Float32, b: Float32) -> Float32:
+    """The host's `a - b` for finite `a`, `b`."""
+    var r = a - b
+    var ea = _expf32(a)
+    var eb = _expf32(b)
+    if not (_expf32(r) == 0 or ea == 0 or eb == 0):
+        return r
+    # Both below 2^-120: exact in quanta (the difference of two multiples
+    # of 2^-149). With one operand at or above 2^-120 the other, being
+    # subnormal or zero, is under half an ulp of every neighbour of the big
+    # one, so the correctly rounded hardware result stands.
+    if ea >= 30 or eb >= 30:
+        return r
+    var qa = _quanta149(a)
+    var qb = _quanta149(b)
+    # a - b = a + (-b), as signed magnitudes in quanta
+    var sa = (_bits32(a) & UInt32(0x80000000)) != UInt32(0)
+    var sb = (_bits32(b) & UInt32(0x80000000)) == UInt32(0)
+    var mag: UInt64
+    var neg: Bool
+    if sa == sb:
+        mag = qa + qb
+        neg = sa
+    elif qa >= qb:
+        mag = qa - qb
+        neg = sa
+    else:
+        mag = qb - qa
+        neg = sb
+    if mag == UInt64(0):
+        return r  # an exact zero: the hardware's signed zero is the host's
+    return _from_quanta(UInt32(0x80000000) if neg else UInt32(0), mag)
