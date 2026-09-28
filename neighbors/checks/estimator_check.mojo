@@ -93,11 +93,15 @@ def check_plan_query_tile() raises:
     #    k-NN number no longer describes `knn_search` and the docstring in
     #    estimator.mojo has become false.
     var bench_tile = plan_query_tile(400000, 4000, DEFAULT_QUERY_TILE)
-    if bench_tile != DEFAULT_QUERY_TILE:
+    # The query clamp still applies: under IDENTICAL DEFAULT_QUERY_TILE is
+    # KNN_ROW_QUERY_TILE (DEVIATION 2631, 4096 on NVIDIA), wider than the
+    # benchmark's 4,000 queries, and the tile is then the query count.
+    var bench_want = min(DEFAULT_QUERY_TILE, 4000)
+    if bench_tile != bench_want:
         raise Error(
             "plan_query_tile: the BENCHMARK shape (n_index=400000) must keep"
             " tile "
-            + String(DEFAULT_QUERY_TILE)
+            + String(bench_want)
             + " or the published number stops describing this path; got "
             + String(bench_tile)
         )
