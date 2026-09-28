@@ -358,12 +358,12 @@ def gemm_dot(pa: FP, abase: Int, sak: Int, pb: FP, bbase: Int, sbk: Int, K: Int,
 
 
 @always_inline
-def gemm_dot_gates[G: Int](pa: FP, abase: Int, pb: FP, bbase: Int, gstride: Int, K: Int) -> SIMD[DType.float32, 4]:
+def gemm_dot_gates[G: Int](pa: FP, abase: Int, pb: FP, bbase: Int, gstride: Int, K: Int) -> SIMD[DType.float32, G]:
     """G folds side by side, one per gate: lane g is exactly
     gemm_dot(pa, abase, 1, pb, bbase + g gstride, 1, K, 0) (its own chain of
     fmas, k ascending); the chains are independent, so a GPU thread runs
-    them interleaved instead of one after another. G <= 4 (lanes past G stay 0)."""
-    var acc = SIMD[DType.float32, 4](0.0)
+    them interleaved instead of one after another."""
+    var acc = SIMD[DType.float32, G](0.0)
     comptime if SEQUENCE_HOST_SABOTAGE:
         comptime for g in range(G):
             acc[g] = gemm_dot(pa, abase, 1, pb, bbase + g * gstride, 1, K, Float32(0.0))
