@@ -29,7 +29,7 @@ git worktree add -q --detach "$bdir" "$base" || exit 3
 cleanup() { cd "$wt" && git worktree remove --force "$bdir" >/dev/null 2>&1; rm -rf "$tmp"; }
 trap cleanup EXIT INT TERM
 ln -s "$wt/.pixi" "$bdir/.pixi"
-(cd python/mojolearn && find . -name '*.so' ! -name '_mojolearn_x_metrics.so') | while read -r f; do
+(cd python/mojolearn && find . \( -name '*.so' -o -name '*.dylib' \) ! -name '_mojolearn_x_metrics.so') | while read -r f; do
     mkdir -p "$bdir/python/mojolearn/$(dirname "$f")"
     cp "python/mojolearn/$f" "$bdir/python/mojolearn/$f"
 done
