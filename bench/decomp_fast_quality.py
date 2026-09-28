@@ -10,7 +10,16 @@ approximate): the largest relative eigenvalue error and the largest
 sign-aligned eigenvector error over the components. FAST passes a fit when
 both of its errors are at most max(1.5 x IDENTICAL's, 1e-5). When
 scikit-learn imports, its fit (eigen_solver 'auto' = ARPACK here) is scored
-the same way for the record. env: N (default 1000), SEEDS (default 5)."""
+the same way for the record. env: N (default 1000), SEEDS (default 5).
+
+Round 3 (lane/decomp-apple3): ALGOS (default "Isomap,ClassicalMDS") may name
+LocallyLinearEmbedding, whose FAST fit takes the round-robin one-sided
+Jacobi SVD when MOJOLEARN_XD_PJ_SVD_MIN says so. Its reference is numpy's
+float64 eigh of M = (I - W)^T (I - W) with W the float64 barycenter weights
+of the same neighbors (sklearn's `barycenter_weights`); each fit is scored
+by the excess of trace(Y^T M Y) over the sum of the reference eigenvalues,
+relative to that sum, and by the distance of Y from the reference
+eigenvectors' span; LLE_SEEDS (default 2) seeds."""
 import os, sys, time, warnings
 sys.path.insert(0, os.environ.get("ML_PY", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "python")))
 warnings.filterwarnings("ignore")
@@ -62,12 +71,61 @@ def fit(est_cls, mode, X, **kw):
     return m, time.perf_counter() - t
 
 
+ALGOS = [a for a in os.environ.get("ALGOS", "Isomap,ClassicalMDS").split(",") if a]
+LLE_SEEDS = int(os.environ.get("LLE_SEEDS", "2"))
+
+
+def lle_reference(X, nn, reg, nc):
+    """(M float64, its nc eigenvalues after the smallest, their vectors)."""
+    X64 = X.astype(np.float64)
+    n = X64.shape[0]
+    sq = (X64 * X64).sum(1)
+    D = sq[:, None] + sq[None, :] - 2 * X64 @ X64.T
+    np.fill_diagonal(D, np.inf)
+    idx = np.argsort(D, axis=1, kind="stable")[:, :nn]
+    W = np.zeros((n, n))
+    for i in range(n):
+        C = X64[idx[i]] - X64[i]
+        G = C @ C.T
+        tr = np.trace(G)
+        G.flat[:: nn + 1] += reg * tr if tr > 0 else reg
+        w = np.linalg.solve(G, np.ones(nn))
+        W[i, idx[i]] = w / w.sum()
+    IW = np.eye(n) - W
+    Mm = IW.T @ IW
+    ew, ev = np.linalg.eigh(Mm)
+    return Mm, ew[1:nc + 1], ev[:, 1:nc + 1]
+
+
+def lle_score(Mm, ew, ev, Y):
+    Y = np.asarray(Y, np.float64)
+    tr = float(np.trace(Y.T @ Mm @ Y))
+    excess = (tr - float(ew.sum())) / float(ew.sum())
+    span = float(np.linalg.norm(Y - ev @ (ev.T @ Y)))
+    return excess, span
+
+
 fails = 0
 rows = 0
+if "LocallyLinearEmbedding" in ALGOS:
+    for kind in ("swissroll", "gauss"):
+        for seed in range(LLE_SEEDS):
+            X = data(kind, seed)
+            Mm, ew, ev = lle_reference(X, 10, 1e-3, 2)
+            mi, ti = fit(ml.LocallyLinearEmbedding, "identical", X, n_neighbors=10)
+            mf, tf = fit(ml.LocallyLinearEmbedding, "fast", X, n_neighbors=10)
+            si = lle_score(Mm, ew, ev, mi.embedding_)
+            sf = lle_score(Mm, ew, ev, mf.embedding_)
+            ok = sf[0] <= max(1.5 * abs(si[0]), 1e-5) and sf[1] <= max(1.5 * si[1], 1e-5)
+            fails += 0 if ok else 1
+            rows += 1
+            print(f"{'LLE':13s} {kind:9s} seed {seed}  IDENTICAL {ti:8.3f}s excess {si[0]:.2e} span {si[1]:.2e} "
+                  f"err {mi.reconstruction_error_:.3e}   FAST {tf:7.3f}s excess {sf[0]:.2e} span {sf[1]:.2e} "
+                  f"err {mf.reconstruction_error_:.3e}  ref {ew.sum():.3e}  {'PASS' if ok else 'FAIL'}", flush=True)
 for kind in ("swissroll", "gauss"):
     for seed in range(SEEDS):
         X = data(kind, seed)
-        for name in ("Isomap", "ClassicalMDS"):
+        for name in [a for a in ("Isomap", "ClassicalMDS") if a in ALGOS]:
             cls = getattr(ml, name)
             kw = {"n_neighbors": 10} if name == "Isomap" else {}
             mi, ti = fit(cls, "identical", X, **kw)

@@ -14,7 +14,11 @@ default on this vendor (every new switch, MOJOLEARN_XD_JACOBI and
 MOJOLEARN_XD_J2_U unset: on Metal the eigh is device_eigh, the svd is
 jacobi2's), so "d,3" isolates the eigh kernel. The speedup printed is the
 first arm over the last. QUALITY=1 scores every eigh and svd arm against
-numpy's float64 solve of the same matrix (FAST's paired quality check)."""
+numpy's float64 solve of the same matrix (FAST's paired quality check).
+An arm may carry its own switches: "d+MOJOLEARN_XD_PJ_EIGH_MIN=1" is arm d
+with that variable set for the arm's calls only. EIGH_KIND=gram times the
+eigh of a positive semidefinite Gram matrix (rank n / 2) beside the
+indefinite B + B^T."""
 import os, sys, time, hashlib, warnings
 sys.path.insert(0, os.environ.get("ML_PY", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "python")))
 warnings.filterwarnings("ignore")
@@ -64,11 +68,14 @@ def arm(name, fn, quality=None):
             return
     res = {}
     for a in ARMS:
-        os.environ.update(OLD if a == "1" else NEW)
-        os.environ["MOJOLEARN_XD_J2_U"] = "1" if a == "3" else "4"
-        if a == "d":
+        base, *extra = a.split("+")
+        os.environ.update(OLD if base == "1" else NEW)
+        os.environ["MOJOLEARN_XD_J2_U"] = "1" if base == "3" else "4"
+        if base == "d":
             os.environ.pop("MOJOLEARN_XD_JACOBI", None)
             os.environ.pop("MOJOLEARN_XD_J2_U", None)
+        for kv in extra:
+            os.environ[kv.split("=", 1)[0]] = kv.split("=", 1)[1]
         t = time.perf_counter()
         try:
             out = fn()
@@ -79,6 +86,8 @@ def arm(name, fn, quality=None):
             res[a] = (dt, h(*out), q)
         except Exception as e:  # report, keep going
             res[a] = (float("nan"), "ERR " + str(e)[-300:], "")
+        for kv in extra:
+            os.environ.pop(kv.split("=", 1)[0], None)
     line = "  ".join(f"arm{a} {res[a][0]:9.3f}s {res[a][1]}{res[a][2]}" for a in ARMS)
     hs = {res[a][1] for a in ARMS}
     verdict = "EQUAL" if len(hs) == 1 and not next(iter(hs)).startswith("ERR") else "DIFFER"
@@ -119,8 +128,13 @@ def svd_quality(A):
         Vt = np.asarray(out[1].out(), np.float64)
         n = Vt.shape[0]
         serr = np.max(np.abs(s - ref)) / np.max(np.abs(ref))
+        keep = ref > 1e-6 * ref[0]
+        srel = np.max(np.abs(s[keep] - ref[keep]) / ref[keep])
         orth = np.linalg.norm(Vt @ Vt.T - np.eye(n)) / np.sqrt(n)
-        return f"s {serr:.2e} orth {orth:.2e}"
+        # the right vectors against A: ||A v_i|| is s_i
+        av = np.linalg.norm(A64 @ Vt.T, axis=0)
+        vres = np.max(np.abs(av - s)) / ref[0]
+        return f"s {serr:.2e} srel {srel:.2e} orth {orth:.2e} Av {vres:.2e}"
     return q
 
 
@@ -129,6 +143,11 @@ for n in [int(x) for x in os.environ.get("EIGH", "8,64,256,800,1500").split(",")
     B = rng.standard_normal((n, n)).astype(np.float32)
     S = M(B + B.T)
     arm(f"eigh {n}", lambda: k.eigh(S), eigh_quality(S) if QUALITY else None)
+    if os.environ.get("EIGH_KIND", "") == "gram":
+        C = rng.standard_normal((n, max(n // 2, 1))).astype(np.float32)
+        G0 = C @ C.T
+        G = M((G0 + G0.T) * np.float32(0.5))
+        arm(f"eigh gram {n}", lambda: k.eigh(G), eigh_quality(G) if QUALITY else None)
 for mn in [x for x in os.environ.get("SVD", "200000:28,5000:64,1000:256,800:800,1500:1500").split(",") if x]:
     m, n = (int(v) for v in mn.split(":"))
     A = M(rng.standard_normal((m, n)).astype(np.float32))
