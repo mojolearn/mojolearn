@@ -36,7 +36,7 @@ for v in ${SAB_VARIANTS:-base=HEAD}; do
     for mode in ${SAB_MODES:-identical fast}; do
         for s in ${SAB_BUILDS:-bindings/build_x_sequence.sh}; do
             t0=$(date +%s)
-            (cd "$wt" && MOJOLEARN_NUMERIC_MODE=$mode pixi run -e default sh "$s") >> "$OUT/build-$label-$mode.log" 2>&1 \
+            (cd "$wt" && MOJOLEARN_SKIP_BUILD_GATE=1 MOJOLEARN_NUMERIC_MODE=$mode pixi run -e default sh "$s") >> "$OUT/build-$label-$mode.log" 2>&1 \
                 || { echo "SAB $label BUILD $mode $s FAILED"; tail -n 30 "$OUT/build-$label-$mode.log"; ok=0; }
             echo "SAB build $label $mode $s wall_s=$(( $(date +%s) - t0 ))"
         done
