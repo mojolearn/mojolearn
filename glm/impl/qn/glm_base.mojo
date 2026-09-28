@@ -74,8 +74,15 @@ from glm.impl.qn.glm_linear import (
     nrm1,
     nrm1_kernel,
     squared_loss_dz_kernel,
+    abs_lz,
+    abs_dlz,
+    squared_lz,
+    squared_dlz,
 )
-from glm.impl.qn.glm_logistic import logistic_loss_dz_kernel
+from glm.impl.qn.glm_logistic import logistic_loss_dz_kernel, logistic_lz, logistic_dlz
+from std.ffi import external_call
+from std.sys.info import is_apple_gpu
+from max.gpu.sync import barrier
 from glm.impl.qn.multi_gpu import gradient_columns
 from glm.impl.qn.fast_xtdz import fast_xtdz, fast_xtdz_applies, fast_xtdz_into, fast_xtdz_workspace_floats
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
@@ -124,6 +131,14 @@ from glm.impl.qn.glm_svm import (
     svc_l2_loss_dz_kernel,
     svr_l1_loss_dz_kernel,
     svr_l2_loss_dz_kernel,
+    svc_l1_lz,
+    svc_l1_dlz,
+    svc_l2_lz,
+    svc_l2_dlz,
+    svr_l1_lz,
+    svr_l1_dlz,
+    svr_l2_lz,
+    svr_l2_dlz,
 )
 from glm.impl.qn.simple_mat.dense import (
     VEC_ELEM_TPB,
@@ -245,6 +260,166 @@ def mean_kernel(
     if tid == 0:
         var ratio = Float32(1.0) / Float32(n)
         out_v.unsafe_store(0, ftz(s0 * ratio))
+
+
+# ---------------------------------------------------------------------------
+# lane/linear-apple3 (WIP, opt-in `-D MOJOLEARN_QN_FAST_BLOCKS=1`): FAST on
+# Apple, one class: the whole objective evaluation in TWO launches.
+#
+# An evaluation was nine launches: the gemv, the bias, the loss map, the
+# loss sum (ONE block striding over every row), the X^T dZ chains and their
+# fold, the epilogue, the bias mean (ONE block again). Here block k of
+# n / QNB_ROWS owns rows [k * QNB_ROWS, ...): its threads compute the rows'
+# z, loss term and dZ, then (a device-memory barrier) one thread per output
+# folds the block's rows: the D cells of X^T dZ, the sum of dZ, the sum of
+# the loss terms. A second launch of one block sums each output's block
+# partials (32 at a time, then the groups) and applies the epilogue, the
+# bias mean and the loss store. The per-row expressions are the loss
+# kernels'; the grouping of every sum differs, so FAST words change.
+# ---------------------------------------------------------------------------
+
+comptime QN_FAST_BLOCKS = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_QN_FAST_BLOCKS"]()
+)
+comptime QNB_ROWS = 1024
+comptime QNB_TPB = 256
+
+
+def qn_blocks_applies(d: Int, c: Int) -> Bool:
+    comptime if QN_FAST_BLOCKS:
+        return c == 1 and d >= 1 and d + 2 <= QNB_TPB
+    return False
+
+
+@always_inline
+def _qnb_barrier():
+    """A block barrier that also orders DEVICE memory (Apple's `barrier()`
+    orders threadgroup memory only; x_linear/team.mojo `team_barrier`)."""
+    comptime if is_apple_gpu():
+        external_call["air.wg.barrier", NoneType](Int32(3), Int32(1))
+    else:
+        barrier()
+
+
+def qn_block_eval_kernel(
+    x: MutPointer[Float32, MutAnyOrigin],
+    y: MutPointer[Float32, MutAnyOrigin],
+    w: MutPointer[Float32, MutAnyOrigin],
+    z: MutPointer[Float32, MutAnyOrigin],
+    loss_terms: MutPointer[Float32, MutAnyOrigin],
+    part: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    d_in: Int32,
+    loss_in: Int32,
+    fit_intercept: Int32,
+    normalization: Float32,
+    svr_eps: Float32,
+):
+    var n = Int(n_in)
+    var d = Int(d_in)
+    var loss = Int(loss_in)
+    var tid = Int(thread_idx.x)
+    var blk = Int(block_idx.x)
+    var r0 = blk * QNB_ROWS
+    var r1 = r0 + QNB_ROWS
+    if r1 > n:
+        r1 = n
+    var bias = Float32(0.0)
+    if fit_intercept != 0:
+        bias = w.unsafe_load(d)
+    var i = r0 + tid
+    while i < r1:
+        var zi = Float32(0.0)
+        for j in range(d):
+            zi += x.unsafe_load(i * d + j) * w.unsafe_load(j)
+        zi += bias
+        var yi = y.unsafe_load(i)
+        var lt = Float32(0.0)
+        var dz = Float32(0.0)
+        if loss == QN_LOSS_LOGISTIC:
+            lt = logistic_lz(yi, zi)
+            dz = logistic_dlz(yi, zi)
+        elif loss == QN_LOSS_SQUARED:
+            lt = squared_lz(yi, zi)
+            dz = squared_dlz(yi, zi)
+        elif loss == QN_LOSS_ABS:
+            lt = abs_lz(yi, zi)
+            dz = abs_dlz(yi, zi)
+        elif loss == QN_LOSS_SVC_L1:
+            lt = svc_l1_lz(yi, zi)
+            dz = svc_l1_dlz(yi, zi)
+        elif loss == QN_LOSS_SVC_L2:
+            lt = svc_l2_lz(yi, zi)
+            dz = svc_l2_dlz(yi, zi)
+        elif loss == QN_LOSS_SVR_L1:
+            lt = svr_l1_lz(yi, zi, svr_eps)
+            dz = svr_l1_dlz(yi, zi, svr_eps)
+        else:
+            lt = svr_l2_lz(yi, zi, svr_eps)
+            dz = svr_l2_dlz(yi, zi, svr_eps)
+        loss_terms.unsafe_store(i, lt * normalization)
+        z.unsafe_store(i, dz)
+        i += QNB_TPB
+    _qnb_barrier()
+    var cells = d + 2
+    if tid < cells:
+        var acc = Float32(0.0)
+        if tid < d:
+            for q in range(r0, r1):
+                acc += z.unsafe_load(q) * x.unsafe_load(q * d + tid)
+        elif tid == d:
+            for q in range(r0, r1):
+                acc += z.unsafe_load(q)
+        else:
+            for q in range(r0, r1):
+                acc += loss_terms.unsafe_load(q)
+        part.unsafe_store(blk * cells + tid, acc)
+
+
+def qn_block_fold_kernel(
+    g: MutPointer[Float32, MutAnyOrigin],
+    slots: MutPointer[Float32, MutAnyOrigin],
+    part: MutPointer[Float32, MutAnyOrigin],
+    nb_in: Int32,
+    d_in: Int32,
+    alpha: Float32,
+    beta_is_one: Int32,
+    fit_intercept: Int32,
+):
+    """One block: thread c sums output c over the blocks; c < D takes the
+    epilogue (`alpha * s`, `+ G` when the regularizer's gradient is already
+    there), c == D the bias mean (`s * (1 / N)`, assigned), c == D + 1 the
+    loss value into slots[0]."""
+    var nb = Int(nb_in)
+    var d = Int(d_in)
+    var c = Int(thread_idx.x)
+    var cells = d + 2
+    if c >= cells:
+        return
+    var s = Float32(0.0)
+    var k = 0
+    while k < nb:
+        var e = k + 32
+        if e > nb:
+            e = nb
+        var grp = Float32(0.0)
+        for kk in range(k, e):
+            grp += part.unsafe_load(kk * cells + c)
+        s += grp
+        k = e
+    if c < d:
+        var v = alpha * s
+        if beta_is_one != 0:
+            g.unsafe_store(c, v + g.unsafe_load(c))
+        else:
+            g.unsafe_store(c, v)
+    elif c == d:
+        if fit_intercept != 0:
+            g.unsafe_store(d, s * alpha)
+    else:
+        slots.unsafe_store(0, s)
 
 
 def linear_fwd(
@@ -448,6 +623,9 @@ struct GLMWithData(Movable):
         comptime if QN_FAST_XTDZ:
             if fast_xtdz_applies(dims.D, dims.C):
                 ws_floats = max(ws_floats, fast_xtdz_workspace_floats(n_rows, dims.D, dims.C))
+        comptime if QN_FAST_BLOCKS:
+            if qn_blocks_applies(dims.D, dims.C):
+                ws_floats = max(ws_floats, ((n_rows + QNB_ROWS - 1) // QNB_ROWS) * (dims.D + 2))
         self.xtdz_ws = ctx.enqueue_create_buffer[DType.float32](ws_floats)
         self.w_weights = ctx.enqueue_create_buffer[DType.float32](dims.C * dims.D)
         self.scalar = ctx.enqueue_create_buffer[DType.float32](1)
@@ -589,10 +767,14 @@ struct GLMWithData(Movable):
         var s1 = self.slots.create_sub_buffer[DType.float32](1, 1)
         var s2 = self.slots.create_sub_buffer[DType.float32](2, 1)
         var s3 = self.slots.create_sub_buffer[DType.float32](3, 1)
+        var blocks = qn_blocks_applies(self.dims.D, self.dims.C)
         if self.l2 == Float32(0.0):
-            linear_fwd(ctx, self.z, self.x, w, self.w_weights, self.n_rows, self.dims)
-            self.enqueue_loss_and_dz(ctx, self.slots.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
-            linear_bwd(ctx, g, self.x, self.z, self.xtdz, self.xtdz_ws, self.n_rows, self.dims, True)
+            if blocks:
+                self.enqueue_blocks(ctx, w, g, True)
+            else:
+                linear_fwd(ctx, self.z, self.x, w, self.w_weights, self.n_rows, self.dims)
+                self.enqueue_loss_and_dz(ctx, self.slots.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
+                linear_bwd(ctx, g, self.x, self.z, self.xtdz, self.xtdz_ws, self.n_rows, self.dims, True)
         else:
             ctx.enqueue_memset(g, Float32(0.0))
             # `G[:, 0:n_param - has_bias]`: the first `C*D` entries of the
@@ -604,9 +786,12 @@ struct GLMWithData(Movable):
                 Int32(self.dims.C * self.dims.D), self.l2,
                 grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
             )
-            linear_fwd(ctx, self.z, self.x, w, self.w_weights, self.n_rows, self.dims)
-            self.enqueue_loss_and_dz(ctx, self.slots.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
-            linear_bwd(ctx, g, self.x, self.z, self.xtdz, self.xtdz_ws, self.n_rows, self.dims, False)
+            if blocks:
+                self.enqueue_blocks(ctx, w, g, False)
+            else:
+                linear_fwd(ctx, self.z, self.x, w, self.w_weights, self.n_rows, self.dims)
+                self.enqueue_loss_and_dz(ctx, self.slots.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
+                linear_bwd(ctx, g, self.x, self.z, self.xtdz, self.xtdz_ws, self.n_rows, self.dims, False)
         # `grad_norm`'s reduction of this `g`, speculatively
         var np = self.dims.n_param
         if self._gnorm_kind() == 1:
@@ -642,6 +827,35 @@ struct GLMWithData(Movable):
             return loss_host
         var reg_host = self.stage.unsafe_ptr().unsafe_load(1)
         return ftz(loss_host + reg_host)
+
+    def enqueue_blocks(
+        mut self,
+        ctx: DeviceContext,
+        mut w: DeviceBuffer[DType.float32],
+        mut g: DeviceBuffer[DType.float32],
+        set_zero: Bool,
+    ) raises:
+        """QN_FAST_BLOCKS: the forward, the loss and the backward of one
+        evaluation as `qn_block_eval_kernel` and `qn_block_fold_kernel`
+        (the loss into slots[0], the gradient into `g`)."""
+        var n = self.n_rows
+        var d = self.dims.D
+        var nb = (n + QNB_ROWS - 1) // QNB_ROWS
+        var ratio = Float32(1.0 / Float64(n))
+        var fi = Int32(1) if self.dims.fit_intercept else Int32(0)
+        ctx.enqueue_function[qn_block_eval_kernel](
+            self.x.unsafe_ptr(), self.y.unsafe_ptr(), w.unsafe_ptr(),
+            self.z.unsafe_ptr(), self.loss_terms.unsafe_ptr(),
+            self.xtdz_ws.unsafe_ptr(),
+            Int32(n), Int32(d), Int32(self.loss), fi, ratio, self.svr_eps,
+            grid_dim=(nb, 1, 1), block_dim=(QNB_TPB, 1, 1),
+        )
+        ctx.enqueue_function[qn_block_fold_kernel](
+            g.unsafe_ptr(), self.slots.unsafe_ptr(), self.xtdz_ws.unsafe_ptr(),
+            Int32(nb), Int32(d), ratio,
+            Int32(0) if set_zero else Int32(1), fi,
+            grid_dim=(1, 1, 1), block_dim=(QNB_TPB, 1, 1),
+        )
 
     def _gnorm_kind(self) -> Int:
         """1: `squaredNorm * 0.5`; 2: `nrm1`; 0: `nrmMax` (see `grad_norm`)."""

@@ -8,8 +8,10 @@
 The job file:
   arms      a list; an arm is a set of build defines (so every arm is one
             commit's source): name, defines, builds (bindings/build_<b>.sh),
-            cases and rows for bench/x_linear_speed.py, reps, and qual (the
-            cases of bench/linear_apple3_quality.py; "" for none). An arm
+            cases and rows for bench/x_linear_speed.py, reps, extra (more
+            python commands), qual (the cases of
+            bench/linear_apple3_quality.py; "" for none) and qual_script
+            (another paired quality script taking --arm and --seeds). An arm
             whose build fails prints the compiler's words and is skipped.
   base      digest comparisons against the base commit's copy of `files`:
             for each mode (identical, fast) the bindings are built at HEAD
@@ -84,6 +86,11 @@ def main():
         for r in arm.get("rows", [100000]):
             for _ in range(arm.get("reps", 1)):
                 speed(name, "fast", cases, r)
+        for extra in arm.get("extra", []):
+            sh([sys.executable] + extra, {"MOJOLEARN_NUMERIC_MODE": "fast"})
+        if arm.get("qual_script"):
+            sh([sys.executable, arm["qual_script"], "--arm", name, "--seeds", arm.get("seeds", "0,1,2,3,4")],
+               {"MOJOLEARN_NUMERIC_MODE": "fast"})
         if arm.get("qual"):
             if not host_built:
                 # the builder refuses to overwrite: set the one in place aside
@@ -117,6 +124,9 @@ def main():
                 if ok:
                     for cases, rows in base["runs"]:
                         got.update({f"{k}@{rows}": v for k, v in speed(f"{side}", mode, cases, rows).items()})
+                    if side == "head" and mode == "identical" and base.get("qual_script_identical"):
+                        sh([sys.executable, base["qual_script_identical"], "--arm", "identical", "--seeds",
+                            base.get("seeds", "0,1,2,3,4")], {"MOJOLEARN_NUMERIC_MODE": "identical"})
                     if side == "head" and mode == "identical" and base.get("qual"):
                         sh([sys.executable, "bench/linear_apple3_quality.py", "--arm", "identical", "--cases",
                             base["qual"], "--seeds", base.get("seeds", "0,1,2,3,4"), "--no-host"],
