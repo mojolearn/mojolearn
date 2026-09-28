@@ -357,34 +357,6 @@ struct HostOps(ClusterOps):
         for t in range(n_groups * AP_W, n):
             ap_availability_col[X_CLUSTER_HOST_SABOTAGE](pr, pa, n, damping, t)
 
-    def ap_iterate(
-        mut self, s: Int, a: Int, r: Int, e: Int, ring: Int, st: Int, n: Int, damping: Float32,
-        conv_iter: Int, it0: Int, count: Int,
-    ) raises:
-        for q in range(count):
-            if self.i[st][0] != Int32(0):
-                return
-            var it = it0 + q
-            self.ap_r(s, a, r, n, damping)
-            self.ap_a(r, a, n, damping)
-            self.ap_e(a, r, n, e)
-            var K = 0
-            for i in range(n):
-                self.i[ring][i * conv_iter + it % conv_iter] = self.i[e][i]
-                K += Int(self.i[e][i])
-            if it >= conv_iter:
-                var settled = 0
-                for i in range(n):
-                    var se = 0
-                    for c in range(conv_iter):
-                        se += Int(self.i[ring][i * conv_iter + c])
-                    if se == conv_iter or se == 0:
-                        settled += 1
-                if settled == n and K > 0:
-                    self.i[st][0] = Int32(1)
-                    self.i[st][1] = Int32(it)
-                    return
-
     def ap_noise(mut self, s: Int, m: Int, seed: UInt64) raises:
         var ps = self._fp(s)
         for t in range(m):

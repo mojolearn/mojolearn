@@ -160,15 +160,13 @@ def _ap_key_index(key: UInt64) -> Int:
     return Int(UInt32(0xFFFFFFFF) - UInt32(key & UInt64(0xFFFFFFFF)))
 
 
-def _ap_r_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32, st: IPtr):
+def _ap_r_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
     """`ap_responsibility_row` for row `block_idx.x` on one block: the max
     of `ftz(A + S)` with its lowest index, then the second max over the
     other columns with ITS lowest index (each an integer max of `_ap_key`,
     so exactly the row loop's picks, whatever the block's fold shape), then
     every cell's `ap_r_update`. Coalesced reads where the row-per-thread
     kernel strode by `n`."""
-    if st[0] != Int32(0):
-        return  # the loop converged in an earlier iteration of this batch
     var i = Int(block_idx.x)
     var tid = Int(thread_idx.x)
     var N = Int(n)
@@ -209,9 +207,9 @@ def _ap_r_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32, st: IPtr
         ap_r_update(s, r, N, damping, one_minus, i, k, first, second, arg)
 
 
-def _ap_a_kernel(r: FPtr, a: FPtr, n: Int32, damping: Float32, st: IPtr):
+def _ap_a_kernel(r: FPtr, a: FPtr, n: Int32, damping: Float32):
     var t = _tid()
-    if t < Int(n) and st[0] == Int32(0):
+    if t < Int(n):
         ap_availability_col(r, a, Int(n), damping, t)
 
 
@@ -222,50 +220,10 @@ def _ap_noise_kernel(s: FPtr, m: Int32, seed: UInt64):
         ap_noise_cell(s, seed, t)
 
 
-def _ap_e_kernel(a: FPtr, r: FPtr, n: Int32, e: IPtr, st: IPtr):
+def _ap_e_kernel(a: FPtr, r: FPtr, n: Int32, e: IPtr):
     var t = _tid()
-    if t < Int(n) and st[0] == Int32(0):
+    if t < Int(n):
         ap_exemplar_cell(a, r, Int(n), e, t)
-
-
-def _ap_conv_kernel(e: IPtr, ring: IPtr, st: IPtr, n: Int32, ci: Int32, it: Int32):
-    """`affinity_fit`'s convergence window for iteration `it`, one block:
-    ring[i, it % ci] = e[i], K = sum e, settled = #rows whose ring sums to 0
-    or ci; converged (it >= ci, settled == n, K > 0) writes st = [1, it].
-    Integer sums: exact in any order."""
-    if st[0] != Int32(0):
-        return
-    var tid = Int(thread_idx.x)
-    var N = Int(n)
-    var C = Int(ci)
-    var I = Int(it)
-    var kk = stack_allocation[AP_TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
-    var ss = stack_allocation[AP_TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
-    var k_part = Int32(0)
-    var s_part = Int32(0)
-    for i in range(tid, N, AP_TPB):
-        var ei = e[i]
-        ring[i * C + I % C] = ei
-        k_part += ei
-        if I >= C:
-            var se = Int32(0)
-            for c in range(C):
-                se += ring[i * C + c]
-            if se == Int32(C) or se == Int32(0):
-                s_part += 1
-    kk[tid] = k_part
-    ss[tid] = s_part
-    barrier()
-    var off = AP_TPB // 2
-    while off > 0:
-        if tid < off:
-            kk[tid] = kk[tid] + kk[tid + off]
-            ss[tid] = ss[tid] + ss[tid + off]
-        barrier()
-        off //= 2
-    if tid == 0 and I >= C and Int(ss[0]) == N and kk[0] > Int32(0):
-        st[0] = Int32(1)
-        st[1] = it
 
 
 def _gauss_q_kernel(x: FPtr, n: Int32, d: Int32, means: FPtr, pchol: FPtr, kc: Int32, dst: FPtr):
@@ -567,8 +525,6 @@ struct DeviceOps(ClusterOps):
     var mpart: DeviceBuffer[DType.float32]
     """FAST moments' per-slice partials, grown once per fit."""
     var mpart_n: Int
-    var zero_i: DeviceBuffer[DType.int32]
-    """Two zero ints: the never-stopped state the single-step AP ops pass."""
 
     def __init__(out self) raises:
         self.ctx = x_cluster_ctx()
@@ -578,8 +534,6 @@ struct DeviceOps(ClusterOps):
         self.pend_i = List[List[Int32]]()
         self.mpart = self.ctx.enqueue_create_buffer[DType.float32](1)
         self.mpart_n = 1
-        self.zero_i = self.ctx.enqueue_create_buffer[DType.int32](2)
-        self.ctx.enqueue_memset(self.zero_i, Int32(0))
 
     def __del__(deinit self):
         # the buffers and the pending sources die with this value: drain first
@@ -736,43 +690,15 @@ struct DeviceOps(ClusterOps):
             grid_dim=_grid(ns), block_dim=TPB,
         )
 
-    def _zero_st(mut self) -> IPtr:
-        return self.zero_i.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-
     def ap_r(mut self, s: Int, a: Int, r: Int, n: Int, damping: Float32) raises:
         self.ctx.enqueue_function[_ap_r_kernel](
-            self._fp(s), self._fp(a), self._fp(r), Int32(n), damping, self._zero_st(),
-            grid_dim=n if n > 0 else 1, block_dim=AP_TPB,
+            self._fp(s), self._fp(a), self._fp(r), Int32(n), damping, grid_dim=n if n > 0 else 1, block_dim=AP_TPB,
         )
 
     def ap_a(mut self, r: Int, a: Int, n: Int, damping: Float32) raises:
         self.ctx.enqueue_function[_ap_a_kernel](
-            self._fp(r), self._fp(a), Int32(n), damping, self._zero_st(), grid_dim=_grid(n), block_dim=TPB,
+            self._fp(r), self._fp(a), Int32(n), damping, grid_dim=_grid(n), block_dim=TPB,
         )
-
-    def ap_iterate(
-        mut self, s: Int, a: Int, r: Int, e: Int, ring: Int, st: Int, n: Int, damping: Float32,
-        conv_iter: Int, it0: Int, count: Int,
-    ) raises:
-        # every iteration enqueued, no host read between them (the caller
-        # reads `st` once per batch); after the converging iteration the
-        # kernels see st[0] = 1 and return, so nothing moves past it
-        var pst = self._ip(st)
-        for q in range(count):
-            self.ctx.enqueue_function[_ap_r_kernel](
-                self._fp(s), self._fp(a), self._fp(r), Int32(n), damping, pst,
-                grid_dim=n if n > 0 else 1, block_dim=AP_TPB,
-            )
-            self.ctx.enqueue_function[_ap_a_kernel](
-                self._fp(r), self._fp(a), Int32(n), damping, pst, grid_dim=_grid(n), block_dim=TPB,
-            )
-            self.ctx.enqueue_function[_ap_e_kernel](
-                self._fp(a), self._fp(r), Int32(n), self._ip(e), pst, grid_dim=_grid(n), block_dim=TPB,
-            )
-            self.ctx.enqueue_function[_ap_conv_kernel](
-                self._ip(e), self._ip(ring), pst, Int32(n), Int32(conv_iter), Int32(it0 + q),
-                grid_dim=1, block_dim=AP_TPB,
-            )
 
     def ap_noise(mut self, s: Int, m: Int, seed: UInt64) raises:
         if m <= 0:
@@ -781,7 +707,7 @@ struct DeviceOps(ClusterOps):
 
     def ap_e(mut self, a: Int, r: Int, n: Int, e: Int) raises:
         self.ctx.enqueue_function[_ap_e_kernel](
-            self._fp(a), self._fp(r), Int32(n), self._ip(e), self._zero_st(), grid_dim=_grid(n), block_dim=TPB,
+            self._fp(a), self._fp(r), Int32(n), self._ip(e), grid_dim=_grid(n), block_dim=TPB,
         )
 
     def descend(mut self, x: Int, n: Int, d: Int, centers: Int, nodes: Int, labels: Int) raises:

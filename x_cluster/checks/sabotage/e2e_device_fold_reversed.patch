@@ -26,16 +26,16 @@ diff --git a/x_cluster/device_ops.mojo b/x_cluster/device_ops.mojo
  
  
  comptime AP_TPB = 256
-@@ -212,7 +212,7 @@
- def _ap_a_kernel(r: FPtr, a: FPtr, n: Int32, damping: Float32, st: IPtr):
+@@ -210,7 +210,7 @@
+ def _ap_a_kernel(r: FPtr, a: FPtr, n: Int32, damping: Float32):
      var t = _tid()
-     if t < Int(n) and st[0] == Int32(0):
+     if t < Int(n):
 -        ap_availability_col(r, a, Int(n), damping, t)
 +        ap_availability_col[True](r, a, Int(n), damping, t)
  
  
  def _ap_noise_kernel(s: FPtr, m: Int32, seed: UInt64):
-@@ -271,7 +271,7 @@
+@@ -229,7 +229,7 @@
  def _gauss_q_kernel(x: FPtr, n: Int32, d: Int32, means: FPtr, pchol: FPtr, kc: Int32, dst: FPtr):
      var t = _tid()
      if t < Int(n) * Int(kc):
@@ -44,7 +44,7 @@ diff --git a/x_cluster/device_ops.mojo b/x_cluster/device_ops.mojo
  
  
  def _resp_kernel(q: FPtr, c: FPtr, n: Int32, kc: Int32, lpn: FPtr):
-@@ -503,7 +503,7 @@
+@@ -461,7 +461,7 @@
  def _pdist_kernel(a: FPtr, na: Int32, b: FPtr, nb: Int32, d: Int32, metric: Int32, p: Float32, dst: FPtr):
      var t = _tid()
      if t < Int(na) * Int(nb):
