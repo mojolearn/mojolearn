@@ -23,10 +23,20 @@ weights, optimizer buffers, predict_proba); job: tools/py_misc/cnn_job.sh.
 
 | machine | column | what | before (Python loop) | after (epoch entry) | digests | job |
 |---|---|---|---|---|---|---|
-| nvc1 pod x86 CPU (no GPU, `sh`) | CPU host twin | 10 configs | | | ALL SAME | sh 19:20Z |
-| nvc1 pod x86 CPU | CPU host twin | fit 2000 x (1,28,28), batch 32, 1 epoch | 0.384 s | 0.331 s | same | sh 19:20Z (1 rep, smoke) |
+| nvc1 A40 pod | NVIDIA (cuda) | fit 200k x (1,28,28), conv (8,), batch 32, 1 epoch, median of 3 | 2.192 s | 1.572 s (1.39x) | 469d6166e9698eed both | nvc1-0002 |
+| nvc1 A40 pod, Xeon Gold 6342 | CPU host twin | fit 20k x (1,28,28), batch 32, 1 epoch, median of 3 | 8.275 s | 7.161 s (1.16x) | 8d9bb17aa778b5b8 both | nvc1-0002 |
+| same job | cuda and cpu | 10 configs (cnn_epoch.py) | | | ALL SAME on both columns; each config's digest equal across columns | nvc1-0002 |
+| same job | cuda, cpu | identity lanes x-cnn-trainer, x-cnn-trainer-options, 9 fixtures each | | | before == after per column (IDENTICAL=18 train, infer, batch); after GPU == CPU | nvc1-0002 |
+
+Evidence: ~/mojolearn-evidence/py-misc/cnn1/ and nvc1-0002.log. (An earlier submit, nvc1-0033 on
+the first pod, was lost when that pod went down.) No DEVIATION changes: 5717/5718 cover the
+resident entries; the epoch entry is plumbing over them, no new device path, so no sabotage arm.
 
 ## Unproven / not done
 - X over 1 GiB (non-resident path, audit item 2) still steps in Python.
 - `loss_curve_` Python `sum` (Python-version dependent bits) left as is.
-- Each entry inside the epoch loop still waits on the device (the entries' own synchronize).
+- Each entry inside the epoch loop still waits on the device (the entries' own synchronize):
+  about 250 us per step on the A40. Dropping those waits needs the softmax loss kept on the
+  device for the epoch and every host parameter block kept alive past its enqueue (a new
+  ordering path, sabotage-proof owed); not done.
+- Apple (m2pro) not run yet.
