@@ -23,6 +23,7 @@ environment, forward then reverse, IDENTICAL and FAST in one job).
 | 6f24c1d8b | OneClassSVM: the one-class SMO over one threadgroup (was ONE GPU thread); item factored into shared helpers | both | host check: refactored item == old item word for word; GPU arm vs serial arm pending | default; `-D MOJOLEARN_XN_SERIAL_SMO` arm |
 | df27366e9 | LabelPropagation / LabelSpreading fit: the iteration as one resident op `lp_iterate` (the n x n graph uploaded once, not per iteration) | both | same kernels, same order; host check: iterations and every word equal | default; `MOJOLEARN_XN_HOST_LOOPS=1` arm |
 | 4c4e5978d | PageRank / connected_components: resident `pr_iterate` / `cc_iterate` | both | same kernels, same order; host check equal | default; same arm |
+| b89ad2efa | KNNImputer.transform: one GPU thread per MISSING cell (`knn_impute_cells`, the same item per cell) | both | same statements per cell | default; `MOJOLEARN_XN_UNCOMPACT_IMPUTE=1` arm |
 
 ## Shared code touched (the integration run must cover it)
 
@@ -39,8 +40,8 @@ environment, forward then reverse, IDENTICAL and FAST in one job).
 
 ## Speed requests
 
-- 1790604175121 (m4pro-a, 4c4e5978d): large-k validation (IDENTICAL + FAST),
+- 1790604321269 (m4pro-a, b89ad2efa): large-k validation (IDENTICAL + FAST),
   round-one k-NN digests, x_neighbors old / new arms (old = serial SMO +
-  unfused kNN + host loops), a stage profile of the round-one family.
+  unfused kNN + host loops + per-cell imputer), a stage profile of the round-one family.
   Command: ~/mojolearn-evidence/neighbors-apple/r2_job1_cmd.txt. Raw:
   ~/mojolearn-evidence/neighbors-apple/<request>.txt
