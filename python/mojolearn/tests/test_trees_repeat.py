@@ -83,6 +83,10 @@ def calls():
     out += [gb(n_estimators=4, max_depth=4, loss="MultiRMSE").fit(X, Y3).predict(Xh)]
     out += [ml.OrderedRMSE(n_estimators=4, max_depth=4).fit(X, yr, permutation=perm).predict(Xh)]
     out += [ml.ExperimentalTwoLevelFeatureFreq(sources=[0, 1], random_state=7).fit(C, yr).predict(Ch)]
+    # CTR categoricals (column 1 has four categories, above one_hot_max_size):
+    # the CPU column trains every permutation's ordered Borders columns
+    ctr = gb(n_estimators=4, max_depth=4, loss="Logloss", cat_features=[0, 1]).fit(C, (yc > 0).astype(np.int64))
+    out += [ctr.predict(Ch), ctr.predict_proba(Ch)]
     # the host readers on saved files (host forest and host GBDT inference)
     with tempfile.TemporaryDirectory() as d:
         rf = ml.RandomForestClassifier(n_estimators=4, max_depth=6, random_state=7).fit(X, yc)

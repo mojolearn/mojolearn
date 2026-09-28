@@ -62,29 +62,34 @@ Sanity tests need scikit-learn: on the pod it is in /root/skl
 | option parity: SplineTransformer knots=<array>, extrapolation 'linear' (derivative at the edge) / 'periodic' (knot wrap, exact float32 fmod), sample_weight (weighted percentile / nonzero-weight range), handle_missing 'zeros', order 'F'; degree-0 'constant' writes the reference's rule; the reference's degree <= 1 'linear' loop bug and degree-0 'constant' crash DIFFER BY NAME | (this commit) | x-prep-spline-options AGREE (--pass 2), DISAGREE under e2e_host_branch; x-prep-spline-transformer SAME BITS; test_x_prep_spline PASS on GPU and CPU |
 | option parity: IterativeImputer imputation_order 'random', n_nearest_features (|corr|-weighted draws; ii_sub / ii_br over a predictor mask), sample_posterior (ii_sigma + ii_post: the predictive std and a truncated-normal draw by inversion, AS 241 PPND7), add_indicator, estimator=<any> (the rounds in Python); FIX at the root: the stop is the reference's matrix inf-norm (largest row sum of the change), not the elementwise max | (this commit) | x-prep-iterative-options AGREE (--pass 2), DISAGREE under e2e_host_branch; x-prep-iterative-imputer SAME BITS; test_x_prep_iterative PASS on GPU and CPU |
 | tools/algos_lane_check.py names this box's GPU target (sm_NN / gfxNNN) for build_byte_lm.sh, which refused a Linux build without one and failed any check whose byte LM binding went stale | (this commit) | the 48 selected lanes AGREE with --pass 2 and all 10 seam arms bite (run-p2b, H100); every existing lane SAME BITS vs run-mi |
+| steward FAIL 1790537100517 fixed at the root: `apple_steward.py submit` coalesced the lane's queued store-lane request (e2e_store_branch) into a sum-lane request and ran all 43 lanes under e2e_host_branch alone, so the 12 store lanes read 'sabotage not seen' (the lane's code was not at fault: each lane's clean AGREE passed, and the same store lanes PASS under e2e_store_branch in 1790537100516 / 1790542801200). Coalescing now takes only a request carrying the same patch bytes; store lanes resubmitted as 1790553231197 (b23b38412, e2e_store_branch) | b23b38412 (merged) | in-memory check of the filter; the live submit left 1790549984236 (host patch) queued as submitted |
+| CURRENT DIRECTIVES (x_* second GPU call): x_prep/device.mojo now holds ONE process-lifetime DeviceContext (`x_prep_ctx`, the x_cnn `_Global` pattern); python/mojolearn/tests/test_x_prep_twice.py runs 21 estimators' programs twice in one process | (this commit) | new pod lohadbfeo1vnr5 (H100): fresh SAME BITS reference at main f237f1996 (ref-main: the 48 lanes of lanes_p2b.txt, --pass 2, RESULT PASS; ref-main-sc: the 5 binding scaler lanes, PASS); at the branch (run-branch) all 54 AGREE (--pass 2, the 10 seam arms bite) and samebits.py reads SAME BITS on all 53 existing lanes (a perturbed hash reads MOVED: the check can fail); test_x_prep_twice PASS on GPU and CPU |
+| option parity item 5 (scalers): StandardScaler / MinMaxScaler NaN (fit ignores it per feature, n_samples_seen_ a vector when counts differ, a never-seen feature has NaN statistics; transform keeps NaN, refuses inf), StandardScaler sample_weight (scalar or vector, zeros skip), partial_fit for both (first batch == fit bit for bit; MinMax: running extrema, params by the binding's own minmax_fit over [data_min_, data_max_]; Standard: batch stats by fit's own path merged by gnb_merge with K = d, d = 1), copy=False (in place into a writable float32 C-contiguous caller buffer), save/load of a vector or weight-sum n_samples_seen_. A finite unweighted call is unchanged (the binding's standard_fit / minmax_fit / transforms). New x_prep units scaler_stats / std_scale / nan_keep (ops 101-103); gnb_merge KEEP flag (param 11; the naive Bayes callers pad 0, SAME BITS): two exactly constant parts keep their value (FIX at the root: a constant column's merged mean drifted an ulp and the next merge read a 1e-7 scale). New lane x-prep-scaler-options; tests test_x_prep_scaler_options.py | (this commit) | x-prep-scaler-options AGREE (--pass 2, run-branch), DISAGREE under e2e_host_branch and AGREE after reversal (sab-scaler); minmax-scaler, minmax-scaler-clip, standard-scaler, standard-scaler-no-mean, standard-scaler-no-std and every prep lane SAME BITS vs ref-main / ref-main-sc; test_x_prep_scaler_options (9), test_x_prep_scalers, test_x_prep_twice, test_x_prep_parity: 21 passed on GPU and CPU (scikit-learn 1.9.1); test_host_surface 200 passed; test_lane_select OK (H100 pod) |
 
 ## Next
 PHASE: option parity (2 in the LANE CHARTER at the top of docs/lanes/ALGORITHM_EXPANSION_PLAN.md), still open:
-only the EXISTING members remain (item 5 below). Items 1-4 are merged (see the Pass 2 table).
-- Merge gate (CURRENT DIRECTIVES 0000b, 2026-09-27): the pod only (lane check AGREE CPU == NVIDIA, sabotage
-  bites, existing bits unchanged, test_host_surface, test_lane_select when its inputs change). Steward
-  verdicts are post-merge: ONE batched request per lane per hour (sum lanes + e2e_host_branch; store lanes +
-  e2e_store_branch; lists in ~/mojolearn-evidence/algos-prep/{sum_lanes,store_lanes}.txt). A FAIL is a fix
-  commit at the root. Post-merge requests: 1790537100517 (main 0afaab704: sum lanes + x-prep-mi-discrete) and
-  1790549984236 (main cb81abbf0: sum lanes + the three option lanes, e2e_host_branch). Check both with
-  `apple_steward.py status` first; a FAIL is the next session's first item.
-- test_host_surface and test_lane_select on a merge: the pod copy must be a git checkout (test_lane_select
-  reads HEAD) and hold the export-ignored bench/results files (git archive drops them): archive + `git
-  ls-files bench/results | tar`, link the pod's built .so files, `git init && git add . && git commit`.
-- Item 5, the existing members (x_prep/NOT_IMPLEMENTED.tsv rows at the end; resample/NOT_IMPLEMENTED.tsv):
-  StandardScaler sample_weight, StandardScaler / MinMaxScaler partial_fit (first batch == fit's bits),
-  NaN-ignoring fit + NaN pass-through transform, copy=False. They live in binding _mojolearn_preprocessing
-  with recorded release references: add entry points (or x_prep units), never change standard_fit /
-  minmax_fit bits. Resampling: BCa is refused for want of an inverse normal CDF; x_prep/iterative.mojo
-  now has a float32 AS 241 PPND7 (`_ppnd7`) and `_phi` (portable_erff): move them to checks/numerics.mojo
-  and BCa can land; then paired=False, permutation_type 'samples' / 'pairings', resample replace=False /
-  stratify / sample_weight, per resample/NOT_IMPLEMENTED.tsv.
-  Sparse output stays REFUSED BY NAME (no sparse Array).
+only resample/ remains of item 5 (the scalers are merged, see the Pass 2 table).
+- Pod `prep` = lohadbfeo1vnr5 (H100, up 2026-09-28 01:08Z, lease 480 min; `dev_pod.sh extend prep`). Its /root/mojolearn is a git
+  checkout at main f237f1996 plus the branch's files (qsync from pod_base = f237f1996); scikit-learn 1.9.1 + pytest in /root/skl
+  (installed with the system pip: `python3 -m pip install --target /root/skl --python-version 3.X --only-binary=:all:`, then
+  remove /root/skl/numpy*; the pixi env has no pip). SAME BITS references on the pod: /root/mojolearn-evidence/algos-prep/run-branch
+  (all 54 lanes, the merged state). NEVER `pkill -f <name>` through `dev_pod.sh run` when <name> is in the command itself: it kills
+  the ssh shell first (it did, twice, this session); kill by PID.
+- Steward (post-merge, one request per lane per hour): 1790562931735 (main 3573c4a0e: the 33 sum lanes + x-prep-scaler-options, e2e_host_branch; covers the new lane and
+  the x_prep_ctx change on the sum lanes) queued on m2pro, m3ultra, m4pro-a, do-amd; 1790553231197 (store lanes at b23b38412,
+  e2e_store_branch) m3ultra-b, m2pro, m4-a PASS, do-amd queued. OWED next hour: the 13 store lanes at the merged main (x_prep_ctx
+  on the device path) under e2e_store_branch, one request. Check `apple_steward.py status`; a FAIL is a fix commit at the root.
+  Earlier FAILs, both closed: 1790526554859 (310afeee0) ran all 29 lanes under e2e_host_branch, which cannot reach the 8 store lanes
+  it named; those lanes are re-proved under e2e_store_branch by 1790553231197 (m3ultra-b, m2pro, m4-a PASS; do-amd queued) and the
+  sum lanes by 1790549984236 (PASS on all four). 1790537100517 was the coalescing fault fixed at b23b38412. RULE: a request's patch
+  must reach every lane in it: sum lanes (sum_lanes.txt + x-prep-scaler-options) with e2e_host_branch, store lanes (store_lanes.txt)
+  with e2e_store_branch, never mixed; the binding scaler lanes (standard-scaler*, minmax-scaler*) with neither (no prep patch reaches
+  the _mojolearn_preprocessing binding).
+- Item 5, resample/ (resample/NOT_IMPLEMENTED.tsv): BCa is refused for want of an inverse normal CDF; x_prep/iterative.mojo has a
+  float32 AS 241 PPND7 (`_ppnd7`) and `_phi` (portable_erff): move them to checks/numerics.mojo as a NEW SEAM with the full proof
+  (host oracle, separating fixture, sabotage, DEVIATION, card stage, IDENTITY_PATHS row; gate it as check-division gates
+  portable_divf), then BCa; then paired=False, permutation_type 'samples' / 'pairings', resample replace=False / stratify /
+  sample_weight. Sparse output stays REFUSED BY NAME (no sparse Array).
 - Then: FAST speed (3), IDENTICAL speed (4), CPU speed (5), one phase per session.
 Helper scripts (not in the repo): ~/mojolearn-evidence/algos-prep/{qsync,gate,commit,mkpatches,addlane,samebits}.sh|py;
 qsync sends every file differing from ~/mojolearn-evidence/algos-prep/pod_base (so it also carries main's

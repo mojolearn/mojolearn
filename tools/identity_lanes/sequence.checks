@@ -1,4 +1,4 @@
-# the sequence lane's seam checks, one sabotage patch per seam (pass 2; docs/lanes/progress/sequence.md): 5500-5516 the expansion items (sequence/checks/seams_check.mojo), 5520-5535 ARIMA, Holt-Winters and KPSS (their own drivers; sequence/README.md)
+# the sequence lane's seam checks, one sabotage patch per seam (pass 2; docs/lanes/progress/sequence.md): 5500-5518 the expansion items (sequence/checks/seams_check.mojo), 5520-5535 ARIMA, Holt-Winters and KPSS (their own drivers; sequence/README.md)
 sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5500_gemm_k_order.patch
 sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5501_colsum_order.patch
 sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5502_lstm_cell.patch
@@ -16,6 +16,8 @@ sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5513_nm_tie_order
 sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5514_moe_route_tie.patch
 sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5515_layernorm_stats.patch
 sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5516_ses_recursion.patch
+sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5517_ets_seasonal_update.patch
+sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5518_ets_decompose_ma.patch
 arima/checks/arima_check.mojo	sequence/checks/sabotage/seam_5520_arima_mm_k_order.patch
 arima/checks/arima_check.mojo	sequence/checks/sabotage/seam_5521_arima_mv_j_order.patch
 arima/checks/arima_check.mojo	sequence/checks/sabotage/seam_5522_arima_jones_contraction.patch

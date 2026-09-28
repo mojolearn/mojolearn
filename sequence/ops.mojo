@@ -94,6 +94,8 @@ comptime OP_PROPHET_PREDICT = 52
 comptime OP_MOE_ROUTE = 53
 comptime OP_MOE_HIDDEN = 54
 comptime OP_MOE_OUT = 55
+comptime OP_ETS_LIK = 56
+comptime OP_ETS_INIT = 57
 
 # ------------------------------------------------------------------ cells
 comptime CELL_RNN_TANH = 0

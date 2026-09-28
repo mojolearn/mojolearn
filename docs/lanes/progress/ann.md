@@ -152,3 +152,92 @@ option-parity WIP (TSNE n_components/exact/two-phase stops, seams
 never merge it as is.
 
 ### Then phases C (FAST + IDENTICAL GPU speed) and D (CPU speed).
+
+## CPU speed (lane ann-cpu, branch `lane/ann-cpu`, pod `ann-cpu`)
+
+Bench: `bench/speed/ann_cpu_speed.py` (public classes through the host
+binding, MOJOLEARN_VENDOR=cpu; prints a digest of every output, so one run is
+the timing AND the bit check). Data: HIGGS from R2
+(`gbm-bench/higgs/higgs_speed.npz`), standardized, float32. Box: H100 pod,
+Intel Xeon Platinum 8470, cgroup quota 22 CPUs.
+
+Step 1 (serial, merged): every change keeps each cell's statements.
+- Searches (IVF-PQ/SQ/RaBitQ, refine, CAGRA) read and write the caller's
+  arrays (no copies in or out; `x_ann/abi.mojo::ptr_f32/ptr_i32`).
+- IVF-PQ/SQ/RaBitQ search: the coarse distances once per query
+  (`_probe_walk`: `pq_next_probe`'s comparisons on the cached values), PQ's
+  lookup entry once per (probed list, subspace, code) on first read, SQ's
+  query residual once per probe and its decode once per (column, code).
+- PQ encoding: eight codes per vector step (`_assign_host`), then the cell's
+  argmin. CAGRA / t-SNE exact k-NN: eight candidates per vector step, four
+  query rows per pass (`cagra_host.knn_rows_host`). t-SNE repulsion: eight
+  rows' folds side by side (`tsne_host._repulse_host`).
+- CAGRA prune: rank map, O(kdeg^2) per node (distinct rows; the old search
+  otherwise). t-SNE symmetrize: each edge carries its two sides (distinct
+  rows; the old search otherwise). Both are host code in the GPU driver too.
+- `x_ann/host/ann_host_cells.mojo`: the row split (`ann_tasks`, serial until
+  `core/host_parallel.mojo` is on main) and the vector spellings (ftz_v,
+  mul_add_v, mul_v, div_v), each a lane-by-lane copy of the scalar seam.
+
+| algorithm (shape) | before | after step 1 | bits |
+|---|---|---|---|
+| CAGRA build (50k x 28, degree 64 -> 32) | 187.0 s | 27.8 s | graph + search digests equal |
+| t-SNE (10k x 28, 300 iterations) | 246.2 s | 84.0 s | embedding + KL digest equal |
+| IVF-PQ search (50k, 64 lists, 8 probes, 100 queries) | 0.112 s | 0.050 s | equal |
+| IVF-SQ search (same) | 0.118 s | 0.064 s | equal |
+
+Gate (step 1, merged tree): `algos_lane_check.sh` on the ten ann lanes
+(7 x-ann + ivf, ivf-euclidean, ivf-extend) `--pass 2 --sabotage
+x_ann/checks/sabotage/e2e_ann_and_ivf_host.patch` (regenerated: it now also
+nudges the in-place search outputs): 26 SEAM lines PASS / FAIL / PASS;
+RESULT: PASS (AGREE, DISAGREE under the e2e sabotage on all ten, AGREE after
+reversal) on the H100 pod (Xeon 8470 CPU column); test_x_ann_repeat +
+test_host_surface 201 passed. CPU-path arms kept for the next gate:
+`x_ann/checks/sabotage/cpu_{tsne_repulsion,knn_fold,pq_lut_sum}_descending.patch`.
+
+Step 2 (serial, merged at eafe4572b): vector work across independent cells.
+- IVF-SQ / IVF-RaBitQ / IVF-PQ (long lists: the table filled, then) scans
+  run eight candidate rows' chains side by side, rows in slot order.
+- Coarse distances eight lists per vector step (centres column-major once
+  per call); probe order by a bounded insertion under (distance, list id),
+  the walk's answer when no distance is NaN (a NaN takes the walk).
+- `ftz_v` is branch-free bit arithmetic (the select form lowered ~10x slower
+  than the arithmetic around it on the Xeon 8470). t-SNE repulsion runs
+  sixteen rows per step and leaves out two flushes whose input is provably
+  never subnormal (`ftz(1 + acc)` with acc >= 0, `ftz(z + q)` with z, q >= 0
+  and each zero or normal).
+
+| algorithm (shape, serial) | before lane | after step 2 | bits |
+|---|---|---|---|
+| IVF-PQ search (1M x 28, 1024 lists, 32 probes, 1000 queries; index fit on the GPU, `--fit-on-gpu`) | 8.64 s | 2.74 s | equal |
+| IVF-SQ search (same) | 10.27 s | 3.66 s | equal |
+| IVF-RaBitQ search (same) | 11.27 s | 2.43 s | equal |
+| refine (1M dataset, 1000 x 40 candidates) | 0.107 s | 0.010-0.036 s | equal |
+| CAGRA build (50k x 28) | 187.0 s | 20.1 s | equal |
+| t-SNE (10k x 28, 300 iterations) | 246.2 s | 38.5 s | equal |
+
+Gate (step 2): the same ten-lane `--pass 2` e2e run, RESULT: PASS; 201
+passed; plus `x_ann/checks/sabotage/cpu_paths_fold_order.patch` (the three
+CPU-path fold-order arms in one) on x-ann-tsne, x-ann-cagra, x-ann-ivf-pq:
+RESULT: PASS (AGREE, DISAGREE on all three, AGREE). Steward requests:
+1790562278524-ann-2769907278 (step 1: m4-a, m3ultra-b, m2pro PASS; do-amd
+queued), 1790562278525-ann-271a2eb1e2 (step 2).
+
+FINDINGS for other lanes:
+- The IVF family's BUILD time is cluster/'s host k-means (`host_fit_main`,
+  `host_kmeans_fit`; the cluster-cpu lane's files): 50k x 28 rows, 64 lists,
+  10 iterations: IVF-Flat/SQ/RaBitQ fit 14-17 s; IVF-PQ fit 125-144 s (its 14
+  per-subspace codebook k-means, 256 codes on 2-dim rows). At 1M rows the
+  serial fit had not finished after the first half hour.
+- There is no FAST tier on a CPU-only install (build_host_family.sh builds
+  IDENTICAL only; `_backend._cpu_only_binding` refuses 'fast' by name). CPU
+  speed here serves the one tier.
+
+NEXT (lane ann-cpu): (1) when `core/host_parallel.mojo` lands on main, switch
+`ann_tasks` to `host_parallelize` (patch ready:
+~/mojolearn-evidence/ann-cpu/threaded.patch), prove bits at
+MOJOLEARN_CPU_THREADS=1, 3 and unset (bench digests + the lane check), time
+it. (2) IVF-Flat search (`ivf/host/ivf_host.mojo::host_ivf_search` and
+`bindings/ivf_host_search.mojo`: five whole-index copies and a whole-index
+norm pass per call, O(k * candidates) selection) after lane/algos-ann-b
+(which edits that function for the filter) merges.
