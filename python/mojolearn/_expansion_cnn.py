@@ -540,6 +540,11 @@ class _Res:
 #: two gathers, one pass over all rows); never set in production.
 _PREDICT_ROWS = 2048
 _LEGACY_STEP = False
+#: lane/py-misc (2026-09-28): with X resident, fit runs each epoch's steps in
+#: ONE binding call (`x_cnn_fit_epoch_r`: the same entries' work in the same
+#: order, looped in Mojo). False is the measurement arm's before side (the
+#: Python step loop); never cleared in production.
+_EPOCH_ENTRY = True
 
 
 class CNNClassifier(_Layer):
@@ -711,8 +716,43 @@ class CNNClassifier(_Layer):
                 R.put(xall, x)
                 R.put(yall, yi)
             step = 0
+            epoch_entry = (whole and _EPOCH_ENTRY and not _LEGACY_STEP and hasattr(b, "x_cnn_fit_epoch_r"))
+            if epoch_entry:
+                bs = self.batch_size
+                nsteps = (n + bs - 1) // bs
+                m_last = n - (nsteps - 1) * bs
+                hw_, hb_, hgw_, hgb_ = self._rw[id(self.head_)]
+                blocks = []
+                for j, (conv, _) in enumerate(self._blocks):
+                    w_, b_, gw_, gb_ = self._rw[id(conv)]
+                    blocks.append([w_, b_, gw_, gb_, a["out"][j], a["idx"][j], a["gout"][j]] + a["saved"][j])
+                spec = dict(blocks=blocks, head=[hw_, hb_, hgw_, hgb_],
+                            a=[a["x"], a["y"], a["logits"], a["glog"], a["proba"], a.get("ghead", 0)],
+                            opt=[hp, hg, hbuf, sizes], data=[xall, yall, row], dims=[self._flat, k],
+                            plan_full=[[list(p[0]), list(p[1])] for p in self._plan(cap)[0]],
+                            plan_last=[[list(p[0]), list(p[1])] for p in self._plan(m_last)[0]])
+                sgd_row = [self.learning_rate, self.momentum, self.weight_decay, self.dampening,
+                           1.0 if self.nesterov else 0.0, 0.0]
             for _ in range(self.max_iter):
                 order = rng.permutation(n) if self.shuffle else np.arange(n)
+                if epoch_entry:
+                    rows = np.ascontiguousarray(order, dtype=np.int32)
+                    if self.optimizer == "sgd":
+                        hyper = np.array([sgd_row] * nsteps, dtype=np.float64)
+                        if step == 0:
+                            hyper[0, 5] = 1.0
+                    else:
+                        hyper = np.array([_adam_hyper(step + 1 + t, self.learning_rate, self.betas, self.eps,
+                                                      self.weight_decay, self.optimizer == "adamw")
+                                          for t in range(nsteps)], dtype=np.float64)
+                    losses = np.empty(nsteps, dtype=np.float64)
+                    b.x_cnn_fit_epoch_r(spec, rows.ctypes.data, hyper.ctypes.data, losses.ctypes.data,
+                                        [n, bs, 0 if self.optimizer == "sgd" else 1])
+                    step += nsteps
+                    epoch = losses.tolist()
+                    self.losses_.extend(epoch)
+                    self.loss_curve_.append(sum(epoch) / len(epoch))
+                    continue
                 epoch = []
                 for s in range(0, n, self.batch_size):
                     idx = order[s:s + self.batch_size]
