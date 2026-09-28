@@ -34,3 +34,20 @@ Evidence: ~/mojolearn-evidence/decomp-apple2/.
 ## A/B (same Mac, same job, arm 1 = old switches, arm 2 = new)
 
 (pending)
+
+## Consolidated Metal failure, 2026-09-28
+
+The frozen main `308878e80679` base check failed in the common `x_decomp_eigh`
+path for `x-decomp-factor-analysis`, `x-decomp-fastica`, `x-decomp-ipca`,
+`x-decomp-manifold`, and `x-decomp-robust-cov`. The M4 compiler diagnostic
+reports show SIGABRT with METAL reason `cannot select: 113 7, 1` in `agc.main`;
+16 reports at 19:00–19:01 UTC have that same reason. This is compiler failure,
+not a numerical comparison or evidence that retrying these lanes will help.
+
+Metal now defaults eigh to the established `device_eigh` implementation.
+CUDA/HIP retain jacobi2 eigh; the new SVD default is unchanged everywhere.
+`MOJOLEARN_XD_JACOBI=2` remains an explicit experimental Metal opt-in, with
+this compiler limitation unresolved. Removing its fence would lose required
+device-memory ordering and is not the fix. Qualification of the restored
+Metal default requires a targeted follow-up of the five lanes above; no pass
+is claimed by this source change.
