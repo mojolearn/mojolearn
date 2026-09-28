@@ -1,14 +1,14 @@
 diff --git a/sequence/ops.mojo b/sequence/ops.mojo
-index f2d5d61cf..9b03386a8 100644
+index af5709a60..4455d1a64 100644
 --- a/sequence/ops.mojo
 +++ b/sequence/ops.mojo
-@@ -261,7 +261,8 @@ def op_gemm(t: Int, a: Args):
-             acc = fma3(ld(a.p0, abase + k * a.i4), ld(a.p1, k * a.i5 + bbase), acc)
+@@ -303,7 +303,8 @@ def gemm_dot(pa: FP, abase: Int, sak: Int, pb: FP, bbase: Int, sbk: Int, K: Int,
+             acc = fma3(ld(pa, abase + k * sak), ld(pb, k * sbk + bbase), acc)
              k -= 1
      else:
--        for k in range(a.i2):
-+        for kk in range(a.i2):
-+            var k = a.i2 - 1 - kk
-             acc = fma3(ld(a.p0, abase + k * a.i4), ld(a.p1, k * a.i5 + bbase), acc)
-     st(a.p2, ci, acc)
+-        for k in range(K):
++        for kk in range(K):
++            var k = K - 1 - kk
+             acc = fma3(ld(pa, abase + k * sak), ld(pb, k * sbk + bbase), acc)
+     return acc
  

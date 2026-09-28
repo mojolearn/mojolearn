@@ -5,7 +5,8 @@ over `sequence/ops.mojo::apply`, the body `HostExec` loops over on the CPU."""
 from std.ffi import _Global
 from std.memory import bitcast
 from std.gpu import block_dim, block_idx, thread_idx
-from max.gpu.host import DeviceBuffer, DeviceContext
+from std.memory import memcpy
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
@@ -98,12 +99,16 @@ struct DeviceExec(Exec):
     var bufs: List[DeviceBuffer[DType.float32]]
     var base: List[Int]
     var size: List[Int]
+    #: upload staging buffers still read by queued copies; released at the
+    #: next sync (an upload no longer waits for its own copy)
+    var staged: List[HostBuffer[DType.float32]]
 
     def __init__(out self) raises:
         self.ctx = sequence_ctx()
         self.bufs = List[DeviceBuffer[DType.float32]]()
         self.base = List[Int]()
         self.size = List[Int]()
+        self.staged = List[HostBuffer[DType.float32]]()
 
     def alloc(mut self, n: Int) raises -> FP:
         var count = n if n > 0 else 1
@@ -132,17 +137,22 @@ struct DeviceExec(Exec):
         raise Error("sequence: a copy names no buffer this device Exec allocated")
 
     def upload(mut self, dst: FP, src: FP, n: Int) raises:
+        """The caller's floats are copied (memcpy, bit for bit) into a staging
+        buffer at once, so `src` may change as soon as this returns; the
+        device copy is queued behind the work already queued, and the staging
+        buffer lives until the next sync. No wait here (Apple speed,
+        2026-09-28: every upload was a synchronize, about 4 ms on Metal, and
+        an element-at-a-time host loop)."""
         if n <= 0:
             return
         var found = self._find(dst, n)
         var host = self.ctx.enqueue_create_host_buffer[DType.float32](n)
-        for i in range(n):
-            host.unsafe_ptr().unsafe_store(i, src.unsafe_load(i))
+        # written at once, as the element loop it replaces did
+        memcpy(dest=host.unsafe_ptr(), src=src, count=n)
         var view = self.bufs[found[0]].create_sub_buffer[DType.float32](found[1], n)
         self.ctx.enqueue_copy(dst_buf=view, src_ptr=host.unsafe_ptr())
-        self.ctx.synchronize()
         _ = view^
-        _ = host^
+        self.staged.append(host^)
 
     def download(mut self, dst: FP, src: FP, n: Int) raises:
         if n <= 0:
@@ -151,9 +161,8 @@ struct DeviceExec(Exec):
         var host = self.ctx.enqueue_create_host_buffer[DType.float32](n)
         var view = self.bufs[found[0]].create_sub_buffer[DType.float32](found[1], n)
         self.ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=view)
-        self.ctx.synchronize()
-        for i in range(n):
-            dst.unsafe_store(i, host.unsafe_ptr().unsafe_load(i))
+        self.sync()
+        memcpy(dest=dst, src=host.unsafe_ptr(), count=n)
         _ = view^
         _ = host^
 
@@ -176,3 +185,4 @@ struct DeviceExec(Exec):
 
     def sync(mut self) raises:
         self.ctx.synchronize()
+        self.staged.clear()

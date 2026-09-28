@@ -19,6 +19,7 @@ from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
 from checks.numerics import ftz, identical_div, identical_log, identical_pow, identical_sqrt
 
 comptime LOG_2PI: Float32 = 1.8378770664093453
+comptime NLL_STAGE = 4
 
 
 @always_inline
@@ -82,7 +83,11 @@ def _var_bounds(r: FP, n: Int, vb: FP):
 
 @always_inline
 def garch_sigma2(par: FP, r: FP, n: Int, p: Int, o: Int, q: Int, backcast: Float32, vb: FP, s2: FP):
-    """garch_recursion with bounds_check, power 2."""
+    """garch_recursion with bounds_check, power 2. The newest variance
+    s2[t - 1] is carried in a register (`prev`, the flushed word the store
+    wrote, so the same bits as reading it back): the recursion's chain no
+    longer waits a store and a load per step."""
+    var prev = backcast
     for t in range(n):
         var v = ld(par, 0)
         var loc = 1
@@ -105,7 +110,8 @@ def garch_sigma2(par: FP, r: FP, n: Int, p: Int, o: Int, q: Int, backcast: Float
             if t - 1 - j < 0:
                 v = fma3(ld(par, loc), backcast, v)
             else:
-                v = fma3(ld(par, loc), ld(s2, t - 1 - j), v)
+                var sv = prev if j == 0 else ld(s2, t - 1 - j)
+                v = fma3(ld(par, loc), sv, v)
             loc += 1
         var lo = ld(vb, 2 * t)
         var hi = ld(vb, 2 * t + 1)
@@ -118,13 +124,27 @@ def garch_sigma2(par: FP, r: FP, n: Int, p: Int, o: Int, q: Int, backcast: Float
         elif v > hi:
             v = add(hi, ftz(identical_log(div(v, hi))))
         st(s2, t, v)
+        prev = ftz(v)
 
 
 @always_inline
 def garch_nll(par: FP, r: FP, n: Int, p: Int, o: Int, q: Int, backcast: Float32, vb: FP, s2: FP) -> Float32:
     garch_sigma2(par, r, n, p, o, q, backcast, vb, s2)
+    # The terms of NLL_STAGE steps are computed first (independent of each
+    # other: a GPU thread overlaps their logs and divisions), then added to
+    # ll one at a time in ascending t: the same sum in the same order.
     var ll = Float32(0.0)
-    for t in range(n):
+    var t0 = 0
+    while t0 + NLL_STAGE <= n:
+        var e = SIMD[DType.float32, NLL_STAGE]()
+        comptime for i in range(NLL_STAGE):
+            var v = ld(s2, t0 + i)
+            var x = ld(r, t0 + i)
+            e[i] = add(add(LOG_2PI, ftz(identical_log(v))), div(mul(x, x), v))
+        comptime for i in range(NLL_STAGE):
+            ll = add(ll, e[i])
+        t0 += NLL_STAGE
+    for t in range(t0, n):
         var v = ld(s2, t)
         var x = ld(r, t)
         ll = add(ll, add(add(LOG_2PI, ftz(identical_log(v))), div(mul(x, x), v)))
