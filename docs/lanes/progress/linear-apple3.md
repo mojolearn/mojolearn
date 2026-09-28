@@ -64,7 +64,26 @@ spread and norm, the folds' row counts). Every pass over X is on the GPU.
 
 | steward id | Mac | what |
 |---|---|---|
+| 1790627521091-speed-linear-apple3-f4f12a6a3a | m3ultra-b | job 1: the blocks arm builds and runs; first A/B at 100k (no quality run yet) |
 
 ## Results
 
-(none yet)
+### Job 1: first A/B of the block fits (m3ultra-b, Apple M3 Ultra, steward 1790627521091), FAST, 100k rows
+
+x_linear binding built with and without `-D MOJOLEARN_X_LINEAR_BLOCKS=1` in
+the same job at f4f12a6a3; fit s, one run. FAST words change (digests
+differ by design); NO quality run in this job, so nothing is flipped on it.
+
+| case | before (one block) | after (blocks) |
+|---|---|---|
+| poisson | 2.017 | 0.032 |
+| gamma | 2.038 | 0.006 |
+| tweedie | 0.083 | 0.006 |
+| huber | 1.828 | 0.036 |
+| quantile | 27.961 | 1.365 |
+| logistic-cv | 7.619 | 0.185 |
+
+Quantile takes the same 1.34 s at 20k rows as at 100k: its 5000 ADMM
+iterations are bound by the read back and synchronize of each pass (about
+0.27 ms), not by the rows. Gamma and Tweedie at 6 ms need the quality run
+before they mean anything (an early stop would look the same).

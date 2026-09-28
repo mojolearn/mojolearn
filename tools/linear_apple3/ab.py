@@ -86,7 +86,16 @@ def main():
                 speed(name, "fast", cases, r)
         if arm.get("qual"):
             if not host_built:
-                build("identical", "", "x_linear_host")
+                # the builder refuses to overwrite: set the one in place aside
+                so = os.path.join(ROOT, "python", "mojolearn", "host", "_mojolearn_x_linear_host.so")
+                had = os.path.exists(so)
+                if had:
+                    os.replace(so, so + ".l3prev")
+                if build("identical", "", "x_linear_host"):
+                    print("HOST reference binding rebuilt at HEAD", flush=True)
+                elif had:
+                    os.replace(so + ".l3prev", so)
+                    print("HOST reference binding: the one in place (not rebuilt)", flush=True)
                 host_built = True
             cmd = [sys.executable, "bench/linear_apple3_quality.py", "--arm", name, "--cases", arm["qual"],
                    "--seeds", arm.get("seeds", "0,1,2,3,4")]
