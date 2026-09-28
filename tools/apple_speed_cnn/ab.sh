@@ -28,7 +28,7 @@ for arm in $ARMS; do
     IFS=$oldifs
     name=${arm%%=*}; defs=${arm#*=}
     echo "##### BUILD $name defines=[$defs]"
-    MOJOLEARN_MOJO_BUILD_FLAGS="$defs" sh bindings/build_x_cnn.sh >"$keep/build_$name.log" 2>&1 \
+    MOJOLEARN_SKIP_BUILD_GATE=1 MOJOLEARN_MOJO_BUILD_FLAGS="$defs" sh bindings/build_x_cnn.sh >"$keep/build_$name.log" 2>&1 \
         || { echo "ARM $name build FAILED"; tail -n 40 "$keep/build_$name.log"; exit 1; }
     cp "$so" "$keep/$name.so"
     IFS=';'
