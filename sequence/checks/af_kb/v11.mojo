@@ -5,7 +5,8 @@ Metal (af_alpha_probe.mojo: a slot pre-filled with 7 stays 7). Kernels with
 seq_kernel's exact signature, each growing toward op_af_alpha's body, one
 launch each on a fresh 7-filled buffer; p0 = 256 ones.
 
-    tools/with_identical_mode.sh pixi run mojo run -I . sequence/checks/af_kernel_bisect.mojo
+    sh sequence/checks/af_kb/run_all.sh   (one program per variant: a Metal
+    compiler crash on one kernel names that kernel alone)
 """
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
@@ -89,16 +90,5 @@ def _one[V: Int](mut dx: DeviceExec, name: String) raises:
 
 def main() raises:
     var dx = DeviceExec()
-    _one[0](dx, "store 42 (want 42)")
-    _one[1](dx, "store f1 (want 3)")
-    _one[2](dx, "sumsq (want 256)")
-    _one[3](dx, "sqrt(Float32(n)) (want 16)")
-    _one[4](dx, "sqrt(sumsq) (want 16)")
-    _one[5](dx, "rms (want 1)")
-    _one[6](dx, "max(rms, f0) f1 inline (want 3)")
-    _one[7](dx, "op_af_alpha direct (want 3)")
-    _one[8](dx, "apply[OP_AF_ALPHA] (want 3)")
-    _one[9](dx, "op_af_rmean, i0 = 256 over sc?? (sc[2] = mean of p0 = 1)")
-    _one[10](dx, "op_af_denom direct (sc[3] = -7 / max(1, 1/0.5) = -3.5)")
     _one[11](dx, "apply[OP_AF_DENOM] (sc[3] = -3.5)")
     _ = dx^
