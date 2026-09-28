@@ -206,6 +206,10 @@ Before = `-D MOJOLEARN_2031_SYM_RIDX_SPLITS_OFF -D MOJOLEARN_GBDT_ID_UPLOADS_SEP
 | same | m4-a | 1790617267667 | dart:taxireg / adaboost:taxireg / adaboost:taxi | 6184 / 2327 / 3400 | 6190 / 2323 / 3454 | 1.001 / 0.998 / 1.016 | equal |
 
 | AdaBoostClassifier: member labels encoded once (cee41f3e2; before = `MOJOLEARN_ADABOOST_REENCODE=1`) | m4pro-a | 1790618579520 | adaboost:taxi | 2905 | 2729 | 0.939 | e8529a04f218dbab |
+| split features in the arena too (0e5a27c47; before = one copy per slot, which here is MORE uploads than the old code: read the ratio as an upper bound) | m4-a | 1790618626723 | lossguide taxi | 7709 | 6306 | 0.818 | b1761eecc6dfbc73 |
+| same | m4-a | 1790618626723 | depthwise taxi | 3332 | 3208 | 0.963 | 5694af7699036c65 |
+
+Cross-job on m4-a (same Mac, different jobs): IDENTICAL Lossguide taxi after-arm 6620 ms at 939ea50e9 -> 6306 ms at 0e5a27c47 (split bins and features joined the split pair's copy).
 
 ## FINAL (tip 27fdd02c4 plus progress notes; 2026-09-28)
 
@@ -290,6 +294,16 @@ FAST: the id arena, 2031 (gated), ET narrow tiles, the RF workspace cap and
 lazy zero reach FAST too (M4 FAST table above: SymmetricTree taxi 0.923,
 Lossguide 0.915, Depthwise 0.984, ET taxi 0.971; the 10-tree digests of all
 three GBDT policies equal across arms).
+
+FAST at the tip on the M4 Pro (m4pro-b, steward 1790618497398, 27fdd02c4;
+before = `-D MOJOLEARN_2031_SYM_RIDX_SPLITS_OFF -D
+MOJOLEARN_GBDT_ID_UPLOADS_SEPARATE -D MOJOLEARN_ET_RM_NARROW_OFF`):
+SymmetricTree taxi 924 -> 832 ms (0.900, digest 388959920a036d2d both),
+Lossguide taxi 4076 -> 3803 (0.933), Depthwise taxi 1534 -> 1518 (0.990),
+ExtraTreesClassifier taxi 1944 -> 1891 (0.972, same hash),
+RandomTreesEmbedding 330 -> 332 (1.007). FAST Depthwise/Lossguide 100-tree
+digests vary inside each arm on this Mac (pre-existing); the 10-tree
+Lossguide and SymmetricTree digests are equal across arms.
 
 Opt-in only (measured, not flipped): `MOJOLEARN_2580_LEVEL_QUANT` (M4
 SymmetricTree taxi 1.018); `MOJOLEARN_RF_TRIAL_COLS20` (superseded by 40).
