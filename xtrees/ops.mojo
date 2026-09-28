@@ -544,6 +544,32 @@ def weighted_median(
 # t the nodes offsets[t] .. offsets[t+1]; a node is a leaf iff left == -1;
 # its children are left and left + 1 (tree-relative); `x[colid] <= quesval`
 # goes LEFT (decisiontree.cuh:379, equality left).
+def _apply_row(
+    colid: MutPointer[Int32, MutUntrackedOrigin], quesval: MutPointer[Float32, MutUntrackedOrigin],
+    left: MutPointer[Int32, MutUntrackedOrigin], x: MutPointer[Float32, MutUntrackedOrigin],
+    d: Int, lo: Int, count: Int, i: Int,
+) -> Int:
+    """The leaf row i reaches in the tree at `lo`, or -1 when the walk meets
+    what `apply_trees` refuses (a column or child out of range, a cycle)."""
+    var node = 0
+    var steps = 0
+    while left[unsafe_offset=lo + node] != -1:
+        var c = Int(colid[unsafe_offset=lo + node])
+        if c < 0 or c >= d:
+            return -1
+        var l = Int(left[unsafe_offset=lo + node])
+        if l < 1 or l + 1 >= count:
+            return -1
+        if x[unsafe_offset=i * d + c] <= quesval[unsafe_offset=lo + node]:
+            node = l
+        else:
+            node = l + 1
+        steps += 1
+        if steps > count:
+            return -1
+    return node
+
+
 def apply_trees(
     offsets: MutPointer[Int32, MutUntrackedOrigin], colid: MutPointer[Int32, MutUntrackedOrigin],
     quesval: MutPointer[Float32, MutUntrackedOrigin], left: MutPointer[Int32, MutUntrackedOrigin],
@@ -551,13 +577,45 @@ def apply_trees(
     res: MutPointer[Int32, MutUntrackedOrigin],
 ) raises:
     """res[i * (t1 - t0) + (t - t0)] = the tree-relative leaf node row i
-    reaches in tree t."""
+    reaches in tree t.
+
+    DEVIATION 5608 (2026-09-28): the rows of a tree walk across the host pool
+    in blocks. A row's walk reads the tree and its own row and writes its own
+    cell, with float COMPARES only (no arithmetic), so the leaves are the
+    serial loop's. A walk that meets a refusal marks the tree and the serial
+    loop below reruns it, so the error raised is the serial one, first row
+    first. DARTRegressor/Classifier applied every new tree to 1,000,000 rows
+    serially, 11 ms a tree on the M3 Ultra (2026-09-28, trees-apple)."""
     var nt = t1 - t0
     for t in range(t0, t1):
         var lo = Int(offsets[unsafe_offset=t])
         var count = Int(offsets[unsafe_offset=t + 1]) - lo
         if count < 1:
             raise Error("x_trees apply: empty tree")
+        var bad = List[Int32](length=1, fill=Int32(0))
+        var bp = bad.unsafe_ptr()
+        var cp = colid
+        var qp = quesval
+        var lp = left
+        var xp = x
+        var rp = res
+        var toff = t - t0
+
+        def _block(b: Int) {imm cp, imm qp, imm lp, imm xp, imm rp, imm bp, imm d, imm lo, imm count, imm n, imm nt, imm toff}:
+            var r0 = b * HOST_LAYOUT_BLOCK_ROWS
+            var r1 = min(r0 + HOST_LAYOUT_BLOCK_ROWS, n)
+            for i in range(r0, r1):
+                var node = _apply_row(cp, qp, lp, xp, d, lo, count, i)
+                if node < 0:
+                    bp[0] = Int32(1)
+                    return
+                rp[unsafe_offset=i * nt + toff] = Int32(node)
+
+        var n_blocks = (n + HOST_LAYOUT_BLOCK_ROWS - 1) // HOST_LAYOUT_BLOCK_ROWS
+        if n_blocks > 1 and n >= HOST_LAYOUT_BLOCK_ROWS * 4:
+            host_parallelize(_block, n_blocks)
+            if bad[0] == Int32(0):
+                continue
         for i in range(n):
             var node = 0
             var steps = 0
