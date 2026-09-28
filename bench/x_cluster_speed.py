@@ -136,9 +136,15 @@ def main():
     import mojolearn as ml
     if a.column == "cpu":
         from mojolearn import _backend
+        gpu_binding = _backend.binding
 
         def _host_binding(name, mode=None):
-            return _backend.load_host_module(_backend._HOST_MODULES[name])
+            # the estimator families only; the base binding's helpers
+            # (all_finite_f32, ...) stay where they are
+            base = _backend._HOST_MODULES.get(name)
+            if name == "_mojolearn" or base is None:
+                return gpu_binding(name, mode)
+            return _backend.load_host_module(base)
 
         _backend.binding = _host_binding
     table = cases(ml, a.seed)
