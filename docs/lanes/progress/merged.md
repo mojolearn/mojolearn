@@ -210,3 +210,17 @@ origin's merged with main. Every later branch is merged from its origin/ ref.
   5900). Converted (import + call); check_host_parallel_sites PASS over
   1773 files. RISK: bits move only if a subnormal met a pool worker; the CPU
   column at MOJOLEARN_CPU_THREADS 1/3/default in the global check decides.
+
+### test_lane_select pins (after the last merge)
+
+Recomputed with tools/lane_select.py on the merged tree and on an archive of
+origin/main 9a8f9e390, lane sets diffed:
+- cluster/host/kmeans_oracle.mojo 75 (main) -> **83**: + ivf-filter,
+  x-ann-cagra-filter, x-ann-refine-euclidean, x-ann-tsne-pca (algos-ann-b),
+  resample-bca, resample-perm-samples, resample-unpaired (algos-prep2),
+  x-decomp-umap-options (algos-decomp). None dropped.
+- core/forest_host_predict.mojo 86 -> **88**: + bootstrap,
+  metrics-classification (old lanes whose binding closure now includes the
+  merged host modules). None dropped.
+- gbdt_host_predict 51, forest_inference 50, neural_inference.py 41: unchanged.
+- Registry: 504 lanes on lane/merged.
