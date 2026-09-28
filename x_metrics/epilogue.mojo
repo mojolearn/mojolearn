@@ -205,9 +205,9 @@ def roc_arrays(a: Int, fps: Int, tps: Int, thr: Int, keep: Int, c: Int, drop: Bo
     if not (F > 0.0 and T > 0.0):
         raise Error("x_metrics epilogue: an empty class goes the Python way")
     var ks = kept(a, fps, tps, keep, c, drop)
-    var pf = UnsafePointer[Float64, MutAnyOrigin](unsafe_from_address=out_fpr)
-    var pt = UnsafePointer[Float64, MutAnyOrigin](unsafe_from_address=out_tpr)
-    var ph = UnsafePointer[Float64, MutAnyOrigin](unsafe_from_address=out_thr)
+    var pf = MutPointer[Float64, MutAnyOrigin](unsafe_from_address=out_fpr)
+    var pt = MutPointer[Float64, MutAnyOrigin](unsafe_from_address=out_tpr)
+    var ph = MutPointer[Float64, MutAnyOrigin](unsafe_from_address=out_thr)
     pf[0] = 0.0
     pt[0] = 0.0
     ph[0] = bitcast[DType.float64](UInt64(0x7FF0000000000000))
