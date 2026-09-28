@@ -231,50 +231,74 @@ def _host_prm(prm: List[Int32], rev_slot: Int) -> List[Int32]:
     return ps^
 
 
+def maxpool2d_forward_into(x: FP, dst: FP, idx: IP, prm: List[Int32]):
+    var no = _pool_sizes(prm)[1]
+    var ps = prm.copy()
+    run[maxpool_fwd_at](x, dst, dst, dst, idx, hi(ps), no)
+    _ = ps^
+
+
+def maxpool2d_backward_into(dout: FP, idx: IP, gx: FP, prm: List[Int32]):
+    var nx = _pool_sizes(prm)[0]
+    var ps = _host_prm(prm, PP_REV)
+    run[maxpool_bwd_at](dout, gx, gx, gx, idx, hi(ps), nx)
+    _ = ps^
+
+
+def avgpool2d_forward_into(x: FP, dst: FP, prm: List[Int32]):
+    var no = _pool_sizes(prm)[1]
+    var ps = prm.copy()
+    run[avgpool_fwd_at](x, dst, dst, dst, hi(ps), hi(ps), no)
+    _ = ps^
+
+
+def avgpool2d_backward_into(dout: FP, gx: FP, prm: List[Int32]):
+    var nx = _pool_sizes(prm)[0]
+    var ps = _host_prm(prm, PP_REV)
+    run[avgpool_bwd_at](dout, gx, gx, gx, hi(ps), hi(ps), nx)
+    _ = ps^
+
+
+def map2_into[f: ElemFn](a: FP, b: FP, dst: FP, n_out: Int):
+    """f over [0, n_out) with the zero parameter block (relu, add, mul)."""
+    var zp: List[Int32] = [0, 0, 0]
+    run[f](a, b, dst, dst, hi(zp), hi(zp), n_out)
+    _ = zp^
+
+
 def maxpool2d_forward_host(x: List[Float32], prm: List[Int32], mut idx: List[Int32]) raises -> List[Float32]:
     var no = _pool_sizes(prm)[1]
     var xs = x.copy()
-    var ps = prm.copy()
     var out = zeros(no)
     idx = List[Int32](length=no if no > 0 else 1, fill=Int32(0))
-    run[maxpool_fwd_at](hp(xs), hp(out), hp(out), hp(out), hi(idx), hi(ps), no)
+    maxpool2d_forward_into(hp(xs), hp(out), hi(idx), prm)
     _ = xs^
-    _ = ps^
     return out^
 
 
 def maxpool2d_backward_host(dout: List[Float32], idx: List[Int32], prm: List[Int32]) raises -> List[Float32]:
-    var nx = _pool_sizes(prm)[0]
     var ds = dout.copy()
     var ix = idx.copy()
-    var ps = _host_prm(prm, PP_REV)
-    var gx = zeros(nx)
-    run[maxpool_bwd_at](hp(ds), hp(gx), hp(gx), hp(gx), hi(ix), hi(ps), nx)
+    var gx = zeros(_pool_sizes(prm)[0])
+    maxpool2d_backward_into(hp(ds), hi(ix), hp(gx), prm)
     _ = ds^
     _ = ix^
-    _ = ps^
     return gx^
 
 
 def avgpool2d_forward_host(x: List[Float32], prm: List[Int32]) raises -> List[Float32]:
-    var no = _pool_sizes(prm)[1]
     var xs = x.copy()
-    var ps = prm.copy()
-    var out = zeros(no)
-    run[avgpool_fwd_at](hp(xs), hp(out), hp(out), hp(out), hi(ps), hi(ps), no)
+    var out = zeros(_pool_sizes(prm)[1])
+    avgpool2d_forward_into(hp(xs), hp(out), prm)
     _ = xs^
-    _ = ps^
     return out^
 
 
 def avgpool2d_backward_host(dout: List[Float32], prm: List[Int32]) raises -> List[Float32]:
-    var nx = _pool_sizes(prm)[0]
     var ds = dout.copy()
-    var ps = _host_prm(prm, PP_REV)
-    var gx = zeros(nx)
-    run[avgpool_bwd_at](hp(ds), hp(gx), hp(gx), hp(gx), hi(ps), hi(ps), nx)
+    var gx = zeros(_pool_sizes(prm)[0])
+    avgpool2d_backward_into(hp(ds), hp(gx), prm)
     _ = ds^
-    _ = ps^
     return gx^
 
 
@@ -349,21 +373,36 @@ def linear_backward_host(x: List[Float32], w: List[Float32], g: List[Float32], n
     return r^
 
 
+def softmax_xent_into(logits: FP, labels: IP, grad: FP, proba: FP, n: Int, k: Int) -> Float32:
+    """grad and proba [n x k] written in place; returns the mean loss."""
+    var prm: List[Int32] = [Int32(n), Int32(k)]
+    var rl = zeros(n)
+    run[softmax_xent_row_at](logits, grad, proba, hp(rl), labels, hi(prm), n)
+    _ = prm^
+    return seq_mean(rl, n)
+
+
 def softmax_xent_host(logits: List[Float32], labels: List[Int32], n: Int, k: Int) raises -> List[Float32]:
     var sl = logits.copy()
     var sy = labels.copy()
-    var prm: List[Int32] = [Int32(n), Int32(k)]
     var grad = zeros(n * k)
     var proba = zeros(n * k)
-    var rl = zeros(n)
-    run[softmax_xent_row_at](hp(sl), hp(grad), hp(proba), hp(rl), hi(sy), hi(prm), n)
+    var loss = softmax_xent_into(hp(sl), hi(sy), hp(grad), hp(proba), n, k)
     _ = sl^
     _ = sy^
-    _ = prm^
-    var loss = seq_mean(rl, n)
     grad.extend(proba^)
     grad.append(loss)
     return grad^
+
+
+def sgd_into(w: FP, g: FP, v: FP, hyper: List[Float32], n: Int):
+    """w and the momentum buffer v updated in place (sgd_at reads and writes
+    only its own element)."""
+    var sh = hyper.copy()
+    var prm: List[Int32] = [Int32(n)]
+    run[sgd_at](w, g, v, hp(sh), hi(prm), hi(prm), n)
+    _ = sh^
+    _ = prm^
 
 
 def sgd_host(w: List[Float32], g: List[Float32], v: List[Float32], hyper: List[Float32]) raises -> List[Float32]:
@@ -371,35 +410,49 @@ def sgd_host(w: List[Float32], g: List[Float32], v: List[Float32], hyper: List[F
     var sw = w.copy()
     var sg = g.copy()
     var sv = v.copy()
-    var sh = hyper.copy()
-    var prm: List[Int32] = [Int32(n)]
-    run[sgd_at](hp(sw), hp(sg), hp(sv), hp(sh), hi(prm), hi(prm), n)
+    sgd_into(hp(sw), hp(sg), hp(sv), hyper, n)
     _ = sg^
-    _ = sh^
-    _ = prm^
     sw.extend(sv^)
     return sw^
+
+
+def batchnorm_forward_into(x: FP, running: FP, aux: FP, dst: FP, prm: List[Int32], training: Bool):
+    """dst = the normalized x; running (2C) and aux (2 + 7C) updated in place."""
+    var C = Int(prm[1])
+    var total = Int(prm[0]) * C * Int(prm[2])
+    var ps = prm.copy()
+    if training:
+        run[bn_stats_at](x, aux, aux, aux, hi(ps), hi(ps), C)
+    else:
+        run[bn_eval_stats_at](running, aux, aux, aux, hi(ps), hi(ps), C)
+    run[bn_apply_at](x, aux, dst, dst, hi(ps), hi(ps), total)
+    if training:
+        run[bn_running_at](running, aux, aux, aux, hi(ps), hi(ps), C)
+    _ = ps^
+
+
+def batchnorm_backward_into(x: FP, g: FP, aux: FP, dst: FP, prm: List[Int32], training: Bool):
+    """dst = dx; aux updated in place (sum_g, sum_gx)."""
+    var C = Int(prm[1])
+    var total = Int(prm[0]) * C * Int(prm[2])
+    var ps = prm.copy()
+    run[bn_bwd_red_at](x, g, aux, aux, hi(ps), hi(ps), C)
+    if training:
+        run[bn_bwd_dx_at](x, g, aux, dst, hi(ps), hi(ps), total)
+    else:
+        run[bn_bwd_eval_dx_at](x, g, aux, dst, hi(ps), hi(ps), total)
+    _ = ps^
 
 
 def batchnorm_forward_host(
     x: List[Float32], running: List[Float32], aux: List[Float32], prm: List[Int32], training: Bool
 ) raises -> List[Float32]:
-    var total = len(x)
-    var C = Int(prm[1])
     var sx = x.copy()
     var sr = running.copy()
     var sa = aux.copy()
-    var ps = prm.copy()
-    var out = zeros(total)
-    if training:
-        run[bn_stats_at](hp(sx), hp(sa), hp(sa), hp(sa), hi(ps), hi(ps), C)
-    else:
-        run[bn_eval_stats_at](hp(sr), hp(sa), hp(sa), hp(sa), hi(ps), hi(ps), C)
-    run[bn_apply_at](hp(sx), hp(sa), hp(out), hp(out), hi(ps), hi(ps), total)
-    if training:
-        run[bn_running_at](hp(sr), hp(sa), hp(sa), hp(sa), hi(ps), hi(ps), C)
+    var out = zeros(len(x))
+    batchnorm_forward_into(hp(sx), hp(sr), hp(sa), hp(out), prm, training)
     _ = sx^
-    _ = ps^
     out.extend(sr^)
     out.extend(sa^)
     return out^
@@ -408,36 +461,32 @@ def batchnorm_forward_host(
 def batchnorm_backward_host(
     x: List[Float32], g: List[Float32], aux: List[Float32], prm: List[Int32], training: Bool
 ) raises -> List[Float32]:
-    var total = len(x)
-    var C = Int(prm[1])
     var sx = x.copy()
     var sg = g.copy()
     var sa = aux.copy()
-    var ps = prm.copy()
-    var out = zeros(total)
-    run[bn_bwd_red_at](hp(sx), hp(sg), hp(sa), hp(sa), hi(ps), hi(ps), C)
-    if training:
-        run[bn_bwd_dx_at](hp(sx), hp(sg), hp(sa), hp(out), hi(ps), hi(ps), total)
-    else:
-        run[bn_bwd_eval_dx_at](hp(sx), hp(sg), hp(sa), hp(out), hi(ps), hi(ps), total)
+    var out = zeros(len(x))
+    batchnorm_backward_into(hp(sx), hp(sg), hp(sa), hp(out), prm, training)
     _ = sx^
     _ = sg^
-    _ = ps^
     out.extend(sa^)
     return out^
+
+
+def dropout2d_into(x: FP, dst: FP, mask: FP, prm: List[Int32], hyper: List[Float32], n: Int):
+    var ps = prm.copy()
+    var sh = hyper.copy()
+    run[dropout2d_at](x, mask, dst, hp(sh), hi(ps), hi(ps), n)
+    _ = ps^
+    _ = sh^
 
 
 def dropout2d_host(x: List[Float32], prm: List[Int32], hyper: List[Float32]) raises -> List[Float32]:
     var n = len(x)
     var sx = x.copy()
-    var ps = prm.copy()
-    var sh = hyper.copy()
     var mask = zeros(n)
     var out = zeros(n)
-    run[dropout2d_at](hp(sx), hp(mask), hp(out), hp(sh), hi(ps), hi(ps), n)
+    dropout2d_into(hp(sx), hp(out), hp(mask), prm, hyper, n)
     _ = sx^
-    _ = ps^
-    _ = sh^
     out.extend(mask^)
     return out^
 
@@ -545,16 +594,22 @@ def graph_op_host(a: List[Float32], b: List[Float32], aux: List[Float32], csr: L
     return graph4_host[l2norm_bwd_at](a, b, aux, csr, prm, n, n * F)
 
 
+def adam_into(w: FP, g: FP, mv: FP, hyper: List[Float32], n: Int):
+    """w and mv = [m (n) | v (n)] updated in place (adam_at reads and writes
+    only its own element)."""
+    var sh = hyper.copy()
+    var prm: List[Int32] = [Int32(n)]
+    run[adam_at](w, g, mv, hp(sh), hi(prm), hi(prm), n)
+    _ = sh^
+    _ = prm^
+
+
 def adam_host(w: List[Float32], g: List[Float32], mv: List[Float32], hyper: List[Float32]) raises -> List[Float32]:
     var n = len(w)
     var sw = w.copy()
     var sg = g.copy()
     var sm = mv.copy()
-    var sh = hyper.copy()
-    var prm: List[Int32] = [Int32(n)]
-    run[adam_at](hp(sw), hp(sg), hp(sm), hp(sh), hi(prm), hi(prm), n)
+    adam_into(hp(sw), hp(sg), hp(sm), hyper, n)
     _ = sg^
-    _ = sh^
-    _ = prm^
     sw.extend(sm^)
     return sw^
