@@ -128,3 +128,21 @@ t-SNE pair follows.)
 After, stage split (ms): IVF-PQ coarse 2032 (FAST samples the coarse
 trainset on Apple already), codebooks 1256 (was 12726 under IDENTICAL, same
 Mac), residuals 184, encode 181; CAGRA k-NN 702.
+
+### FAST quality: IVF-PQ codebook sample (paired, 5 seeds x 2 datasets)
+
+`bench/speed/ann_fast_quality.py --algos ivf_pq` (MOJOLEARN_NUMERIC_MODE=fast,
+m4pro-b, requests 1790584394142 before 34c08c918 / 1790584398594 after
+6b357b96f): 200k x 28 index (the sample is active: 65536 < 200k), 500
+queries, 256 lists, 16 probes, pq_dim 14, 8 bits, recall@10 against the exact
+k-NN (float64), random_state = seed.
+
+| data | seed 0 | 1 | 2 | 3 | 4 | mean |
+|---|---|---|---|---|---|---|
+| HIGGS before | 0.8512 | 0.8510 | 0.8482 | 0.8512 | 0.8498 | 0.8503 |
+| HIGGS after | 0.8604 | 0.8524 | 0.8506 | 0.8614 | 0.8550 | 0.8560 |
+| taxi before | 0.8186 | 0.8270 | 0.8122 | 0.8372 | 0.8346 | 0.8259 |
+| taxi after | 0.8352 | 0.8486 | 0.8602 | 0.8420 | 0.8306 | 0.8433 |
+
+Mean recall rises on both datasets (+0.006 HIGGS, +0.017 taxi); 9 of 10
+pairs rise, taxi seed 4 falls 0.004 (inside the seed spread). KEPT.
