@@ -29,9 +29,6 @@ THE FIXED-ORDER DESIGN
 """
 
 from std.memory import bitcast
-from std.math import fma
-from std.sys.info import is_apple_gpu
-from std.sys.compile import is_defined
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_exp, identical_log, identical_mul,
     identical_mul_add,
@@ -62,49 +59,9 @@ def ts_recip_den(den: Float32) -> Float32:
     den >= 1, +inf or NaN, never subnormal: `portable_divf`'s operand flushes
     are the identity on 1 and on den, and only its result flush is left
     (lane ann-apple2). The same word."""
-    comptime if is_apple_gpu() and not is_defined["MOJOLEARN_TSNE_HW_DIV"]():
-        # lane ann-apple2, Apple GPU (both tiers): for den in [1, 2^126) the
-        # correctly rounded 1/den, a normal float in (2^-126, 1] (so its
-        # flush is the identity), by three Newton steps from an integer
-        # guess and a pick among the result and its two neighbours by the
-        # least |1 - den q| (fused residuals). CHECKED EXHAUSTIVELY against
-        # the IEEE division: all 1,056,964,608 den in [1, 2^126), 0 words
-        # differ (host, arm64, 2026-09-28). Every other den (>= 2^126, inf,
-        # NaN) takes the division. The Apple division is correctly rounded
-        # (check-division), so these are the same words.
-        # `-D MOJOLEARN_TSNE_HW_DIV` keeps the division everywhere.
-        var b = bitcast[DType.uint32](den)
-        if b >= UInt32(0x3F800000) and b < UInt32(0x7E800000):
-            return _recip_newton(den)
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
         return ts_ftz_nonneg(Float32(1.0) / den)
     return identical_div(Float32(1.0), den)
-
-
-@always_inline
-def _recip_newton(den: Float32) -> Float32:
-    """RN(1 / den) for den in [1, 2^126): see `ts_recip_den`."""
-    var y = bitcast[DType.float32](UInt32(0x7EF311C3) - bitcast[DType.uint32](den))
-    var e = fma(-den, y, Float32(1.0))
-    y = fma(y, e, y)
-    e = fma(-den, y, Float32(1.0))
-    y = fma(y, e, y)
-    e = fma(-den, y, Float32(1.0))
-    y = fma(y, e, y)
-    var yb = bitcast[DType.uint32](y)
-    var qm = bitcast[DType.float32](yb - UInt32(1))
-    var qp = bitcast[DType.float32](yb + UInt32(1))
-    var r0 = abs(fma(-den, y, Float32(1.0)))
-    var rm = abs(fma(-den, qm, Float32(1.0)))
-    var rp = abs(fma(-den, qp, Float32(1.0)))
-    var q = y
-    var rb = r0
-    if rm < rb:
-        q = qm
-        rb = rm
-    if rp < rb:
-        q = qp
-    return q
 
 
 @always_inline
