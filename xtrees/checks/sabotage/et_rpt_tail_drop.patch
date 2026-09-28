@@ -1,0 +1,13 @@
+--- a/extratrees/impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo
++++ b/extratrees/impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo
+@@ -93,9 +93,7 @@ def _search_rows_per_thread() -> Int:
+     return 1
+ 
+ 
+-comptime SEARCH_SAB_RPT_TAIL_DROP = is_defined[
+-    "MOJOLEARN_ET_SAB_RPT_TAIL_DROP"
+-]()
++comptime SEARCH_SAB_RPT_TAIL_DROP = True  # SABOTAGE: each search thread folds ONE row of its tile (GPU at 64 rows per thread moves; CPU at 1 cannot)
+ """DEVIATION 2020's required-RED arm (a measurement arm, never a gate; it must never reach a shipped build)."""
+ 
+ 
