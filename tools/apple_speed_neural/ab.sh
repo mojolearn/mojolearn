@@ -51,13 +51,20 @@ if [ -n "${AB_STEP_SHAPE:-}" ]; then
         rm -f "$OUT/wt-$label/python/mojolearn/identical/_mojolearn_byte_lm.so"
         (cd "$OUT/wt-$label" && MOJOLEARN_NUMERIC_MODE=identical pixi run -e default sh bindings/build_byte_lm.sh) > "$OUT/bytelm-$label.log" 2>&1 || echo "AB $label BYTE-LM BUILD FAILED"
     done
+    # AB_STEP_SHAPE may name several shapes separated by ';'.
+    echo "$AB_STEP_SHAPE" | tr ';' '\n' > "$OUT/step_shapes.txt"
+    si=0
+    while read -r shp; do
+    [ -n "$shp" ] || continue
+    si=$((si + 1))
+    echo "AB-STEP shape $si = $shp"
     for rep in $(seq 1 "${AB_STEP_REPS:-2}"); do
         for label in $labels; do
-            d="$OUT/step-$label-$rep"
+            d="$OUT/step$si-$label-$rep"
             # shellcheck disable=SC2086
             (cd "$OUT/wt-$label" && PYTHONPATH="$OUT/wt-$label/python" pixi run -e default python tools/lm_step_memory_probe.py --out "$d" \
-                --shape $AB_STEP_SHAPE --steps "${AB_STEP_STEPS:-4}" --resident-lean --budget-seconds 3000) > "$d.log" 2>&1
-            pixi run -e default python - "$d/result.json" "$label" "$rep" <<'PY'
+                --shape $shp --steps "${AB_STEP_STEPS:-4}" --resident-lean --budget-seconds 3000) > "$d.log" 2>&1 < /dev/null
+            pixi run -e default python - "$d/result.json" "$label" "$rep.s$si" <<'PY'
 import json, sys
 try:
     r = json.load(open(sys.argv[1]))
@@ -72,6 +79,7 @@ print("AB-STEP rep=%s variant=%s median=%s steady=%s gate=%s grad=%s param=%s m=
 PY
         done
     done
+    done < "$OUT/step_shapes.txt"
 fi
 for v in $AB_VARIANTS; do git worktree remove --force "$OUT/wt-${v%%=*}" > /dev/null 2>&1; done
 exit 0
