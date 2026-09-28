@@ -148,7 +148,9 @@ class _M:
         mv = getattr(a, "_mv", None)
         # one copy: the Array's own buffer straight into the store (its
         # tobytes() was a second full copy of every input)
-        s.frombytes(mv if isinstance(mv, memoryview) and mv.c_contiguous else a.tobytes())
+        # (a 2-D float memoryview is not bytes-like to array.frombytes: cast
+        # it to a flat byte view first, as _array.Array does; same bytes)
+        s.frombytes(mv.cast("B") if isinstance(mv, memoryview) and mv.c_contiguous else a.tobytes())
         m = cls(s, a.shape[0], a.shape[1])
         m._check_finite(name)
         return m
