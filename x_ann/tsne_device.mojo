@@ -4,6 +4,9 @@
 symmetrization is the shared host function (`tsne_symmetrize`)."""
 
 from std.gpu import block_idx, block_dim, thread_idx
+from std.memory import stack_allocation
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 from max.gpu.host import DeviceBuffer, DeviceContext
 from x_ann.device_ctx import x_ann_ctx
 from x_ann.knn_device import knn_graph_device
@@ -11,7 +14,7 @@ from x_ann.knn_device import knn_graph_device
 from metrics.checks.device_io import upload_f32, upload_i32, download_f32, download_i32
 from checks.numerics import identical_log
 from x_ann.tsne_core import (
-    F32P, I32P, ts_kl_cell, ts_knn_cell, ts_perplexity_cell, ts_repulse_cell, ts_step_cell,
+    F32P, I32P, ts_kl_cell, ts_knn_cell, ts_perplexity_cell, ts_repulse_step, ts_repulse_visit, ts_step_cell,
     ts_sum_cell, tsne_nn, tsne_symmetrize, tsne_validate,
 )
 
@@ -38,10 +41,51 @@ def perplexity_kernel(n: Int32, nn_d: F32P, nn: Int32, log_perp: Float32, p: F32
         ts_perplexity_cell(i, nn_d, Int(nn), log_perp, p)
 
 
+comptime REP_TILE = 1024
+
+
 def repulse_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P):
+    """`ts_repulse_cell` for row i with the points staged through shared
+    memory in `ts_repulse_visit` order: each thread still folds its row over
+    t ascending through `ts_repulse_step`, so the same instruction sequence
+    on the same operands (the O(n^2) per-iteration cost, now reading each
+    point once per block instead of once per row)."""
+    var tid = Int(thread_idx.x)
     var i = _tid()
-    if i < Int(n):
-        ts_repulse_cell(i, y, Int(n), row_z, rep)
+    var nr = Int(n)
+    var tile = stack_allocation[2 * REP_TILE, Float32, address_space=AddressSpace.SHARED]()
+    var tj = stack_allocation[REP_TILE, Int32, address_space=AddressSpace.SHARED]()
+    var active = i < nr
+    var yi0 = Float32(0.0)
+    var yi1 = Float32(0.0)
+    if active:
+        yi0 = y.unsafe_load(2 * i)
+        yi1 = y.unsafe_load(2 * i + 1)
+    var z = Float32(0.0)
+    var r0 = Float32(0.0)
+    var r1 = Float32(0.0)
+    var t0 = 0
+    while t0 < nr:
+        var cnt = REP_TILE if t0 + REP_TILE <= nr else nr - t0
+        barrier()
+        var e = tid
+        while e < cnt:
+            var j = ts_repulse_visit(t0 + e, nr)
+            tj[e] = Int32(j)
+            tile[2 * e] = y.unsafe_load(2 * j)
+            tile[2 * e + 1] = y.unsafe_load(2 * j + 1)
+            e += TPB
+        barrier()
+        if active:
+            for t in range(cnt):
+                if Int(tj[t]) == i:
+                    continue
+                ts_repulse_step(yi0, yi1, tile[2 * t], tile[2 * t + 1], z, r0, r1)
+        t0 += cnt
+    if active:
+        row_z.unsafe_store(i, z)
+        rep.unsafe_store(2 * i, r0)
+        rep.unsafe_store(2 * i + 1, r1)
 
 
 def sum_kernel(n: Int32, row_z: F32P, z: F32P):

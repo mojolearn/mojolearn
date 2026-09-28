@@ -191,13 +191,41 @@ def tsne_symmetrize(
 
 
 @always_inline
-def ts_q(y: F32P, i: Int, j: Int) -> Float32:
-    """The Student-t kernel 1 / (1 + ||y_i - y_j||^2), two components."""
-    var d0 = ftz(ftz(y.unsafe_load(2 * i)) - ftz(y.unsafe_load(2 * j)))
-    var d1 = ftz(ftz(y.unsafe_load(2 * i + 1)) - ftz(y.unsafe_load(2 * j + 1)))
+def ts_q_of(a0: Float32, a1: Float32, b0: Float32, b1: Float32) -> Float32:
+    """The Student-t kernel 1 / (1 + ||a - b||^2) of two stored points."""
+    var d0 = ftz(ftz(a0) - ftz(b0))
+    var d1 = ftz(ftz(a1) - ftz(b1))
     var acc = ftz(identical_mul_add(d0, d0, Float32(0.0)))
     acc = ftz(identical_mul_add(d1, d1, acc))
     return ftz(identical_div(Float32(1.0), ftz(Float32(1.0) + acc)))
+
+
+@always_inline
+def ts_q(y: F32P, i: Int, j: Int) -> Float32:
+    """The Student-t kernel 1 / (1 + ||y_i - y_j||^2), two components."""
+    return ts_q_of(y.unsafe_load(2 * i), y.unsafe_load(2 * i + 1), y.unsafe_load(2 * j), y.unsafe_load(2 * j + 1))
+
+
+@always_inline
+def ts_repulse_visit(t: Int, n: Int) -> Int:
+    """DEVIATION 5813, THE ONE STATEMENT OF THE REPULSION ORDER: row i's
+    fold visits point ts_repulse_visit(t) at step t (ascending). The cell
+    and the tiled kernel (which stages points in this visit order) both
+    walk it."""
+    return t
+
+
+@always_inline
+def ts_repulse_step(
+    yi0: Float32, yi1: Float32, yj0: Float32, yj1: Float32, mut z: Float32, mut r0: Float32, mut r1: Float32,
+):
+    """One j of row i's repulsion fold (DEVIATION 5813): the cell and the
+    tiled kernel step through it."""
+    var q = ts_q_of(yi0, yi1, yj0, yj1)
+    z = ftz(z + q)
+    var qq = ftz(identical_mul(q, q))
+    r0 = ftz(r0 + ftz(identical_mul(qq, ftz(ftz(yi0) - ftz(yj0)))))
+    r1 = ftz(r1 + ftz(identical_mul(qq, ftz(ftz(yi1) - ftz(yj1)))))
 
 
 @always_inline
@@ -207,16 +235,13 @@ def ts_repulse_cell(i: Int, y: F32P, n: Int, row_z: F32P, rep: F32P):
     var z = Float32(0.0)
     var r0 = Float32(0.0)
     var r1 = Float32(0.0)
-    var y0 = ftz(y.unsafe_load(2 * i))
-    var y1 = ftz(y.unsafe_load(2 * i + 1))
-    for j in range(n):
+    var y0 = y.unsafe_load(2 * i)
+    var y1 = y.unsafe_load(2 * i + 1)
+    for t in range(n):
+        var j = ts_repulse_visit(t, n)
         if j == i:
             continue
-        var q = ts_q(y, i, j)
-        z = ftz(z + q)
-        var qq = ftz(identical_mul(q, q))
-        r0 = ftz(r0 + ftz(identical_mul(qq, ftz(y0 - ftz(y.unsafe_load(2 * j))))))
-        r1 = ftz(r1 + ftz(identical_mul(qq, ftz(y1 - ftz(y.unsafe_load(2 * j + 1))))))
+        ts_repulse_step(y0, y1, y.unsafe_load(2 * j), y.unsafe_load(2 * j + 1), z, r0, r1)
     row_z.unsafe_store(i, z)
     rep.unsafe_store(2 * i, r0)
     rep.unsafe_store(2 * i + 1, r1)
