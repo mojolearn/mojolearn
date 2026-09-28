@@ -258,9 +258,10 @@ def _gpc_fit_binary_device(
     var n = n_train
     var ctx = _family_ctx()
     var dk: DeviceBuffer[DType.float32]
-    comptime if GPC_RESIDENT_K:
-        from gaussian_process.gpc_resident_k import _gpc_kernel_self_dev
+    # Mojo imports belong to module or function scope, not a conditional block.
+    from gaussian_process.gpc_resident_k import _gpc_kernel_self_dev
 
+    comptime if GPC_RESIDENT_K:
         dk = _gpc_kernel_self_dev(ctx, x, n_train, n_features, kernel)
     else:
         var k = _gpc_kernel_self(x, n_train, n_features, kernel)
@@ -551,14 +552,14 @@ def gpc_predict_binary_host(
     var variance = List[Float32]()
     var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
     var t_v0 = Int(perf_counter_ns())
+    from gaussian_process.gpc_device_var import (
+        GPC_VAR_TPB,
+        gpc_latent_var_kernel,
+        gpc_scale_rows_kernel,
+    )
+
     if want_variance:
         comptime if GPC_DEVICE_VAR:
-            from gaussian_process.gpc_device_var import (
-                GPC_VAR_TPB,
-                gpc_latent_var_kernel,
-                gpc_scale_rows_kernel,
-            )
-
             var dwv = _upload(ctx, wsr)
             var dv2 = ctx.enqueue_create_buffer[DType.float32](n_train * n_star)
             var dvar = ctx.enqueue_create_buffer[DType.float32](n_star)
