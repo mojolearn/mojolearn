@@ -951,6 +951,29 @@ def _kfold_assignment(n, n_folds, seed, shuffle=True):
     return fold
 
 
+def _native_folds(n, n_folds, seed, shuffle, codes=None, n_classes=0):
+    """The fold assignment through the binding's host entry (x_prep/folds.mojo,
+    the same integers), or None when the binding has none."""
+    if os.environ.get("MOJOLEARN_XPREP_NATIVE_FOLDS", "1") == "0":
+        return None
+    b = _prep_binding(_mode())
+    s = int(seed) & 0xFFFFFFFFFFFFFFFF
+    halves = (s & 0xFFFFFFFF, s >> 32)
+    out = array.array("i", bytes(4 * max(n, 1)))
+    if codes is None:
+        if not hasattr(b, "x_prep_kfold_folds"):
+            return None
+        b.x_prep_kfold_folds(out.buffer_info()[0], (n, n_folds, 1 if shuffle else 0), halves)
+    else:
+        if not hasattr(b, "x_prep_strat_folds"):
+            return None
+        cod = array.array("i", codes)
+        if b.x_prep_strat_folds(cod.buffer_info()[0], out.buffer_info()[0],
+                                (n, n_classes, n_folds, 1 if shuffle else 0), halves) != 0:
+            raise ValueError(f"mojolearn: n_splits={n_folds} cannot be greater than the number of members in each class")
+    return out[:n].tolist()
+
+
 def _stratified_assignment(codes, n_folds, seed, shuffle=True):
     """Row -> fold for numpy StratifiedKFold (`_make_test_folds`): classes
     renumbered by first appearance, each class's per-fold counts from the
@@ -1134,12 +1157,17 @@ class TargetEncoder(_PrepBase):
         seed = 0 if self.random_state is None else int(self.random_state)
         kind, _classes, _yflat, _T = _target_kind(y, self.target_type)
         if kind == "continuous":
-            folds = _kfold_assignment(n, cv, seed, bool(self.shuffle))
+            folds = _native_folds(n, cv, seed, bool(self.shuffle))
+            if folds is None:
+                folds = _kfold_assignment(n, cv, seed, bool(self.shuffle))
         else:
             labels = flatten_labels(y)
             if len(labels) != n:
                 raise ValueError("mojolearn: X and y have different numbers of rows")
-            folds = _stratified_assignment(labels, cv, seed, bool(self.shuffle))
+            classes, codes = encode_labels(labels)
+            folds = _native_folds(n, cv, seed, bool(self.shuffle), codes.tolist(), len(classes))
+            if folds is None:
+                folds = _stratified_assignment(labels, cv, seed, bool(self.shuffle))
         return self._run(arr, y, folds, cv, True)
 
     def transform(self, X):

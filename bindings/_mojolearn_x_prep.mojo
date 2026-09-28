@@ -10,6 +10,7 @@ from std.python.bindings import PythonModuleBuilder
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_prep.device import run_program_device
+from x_prep.folds import I32P, kfold_folds, strat_folds
 
 
 def run_binding(arena_addr: PythonObject, arena_len: PythonObject, prog_addr: PythonObject,
@@ -59,6 +60,37 @@ def run_out_binding(arena_addr: PythonObject, prog_addr: PythonObject, out_addr:
     return PythonObject(s)
 
 
+def _seed(v: PythonObject) raises -> UInt64:
+    """(lo, hi) 32-bit halves -> the 64-bit seed."""
+    return (UInt64(Int(py=v[1])) << 32) | UInt64(Int(py=v[0]))
+
+
+def strat_folds_binding(codes_addr: PythonObject, out_addr: PythonObject, ints: PythonObject,
+                        seed: PythonObject) raises -> PythonObject:
+    """TargetEncoder's stratified fold assignment on the host (x_prep/folds.mojo).
+    ints = (n, n_classes, n_folds, shuffle); seed = (lo, hi). Returns 0, or -1
+    when every class has fewer rows than n_folds."""
+    var ca = Int(py=codes_addr)
+    var oa = Int(py=out_addr)
+    var n = Int(py=ints[0])
+    if ca == 0 or oa == 0 or n < 0:
+        raise Error("x_prep: invalid fold buffers")
+    var r = strat_folds(I32P(unsafe_from_address=ca), n, Int(py=ints[1]), Int(py=ints[2]), _seed(seed),
+                        Int(py=ints[3]) != 0, I32P(unsafe_from_address=oa))
+    return PythonObject(r)
+
+
+def kfold_folds_binding(out_addr: PythonObject, ints: PythonObject, seed: PythonObject) raises -> PythonObject:
+    """TargetEncoder's K-fold assignment on the host (x_prep/folds.mojo).
+    ints = (n, n_folds, shuffle); seed = (lo, hi)."""
+    var oa = Int(py=out_addr)
+    var n = Int(py=ints[0])
+    if oa == 0 or n < 0:
+        raise Error("x_prep: invalid fold buffers")
+    kfold_folds(n, Int(py=ints[1]), _seed(seed), Int(py=ints[2]) != 0, I32P(unsafe_from_address=oa))
+    return PythonObject(0)
+
+
 def numeric_mode_binding() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 
@@ -74,6 +106,8 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
         m.def_function[run_binding]("x_prep_run")
         m.def_function[run_scratch_binding]("x_prep_run_scratch")
         m.def_function[run_out_binding]("x_prep_run_out")
+        m.def_function[strat_folds_binding]("x_prep_strat_folds")
+        m.def_function[kfold_folds_binding]("x_prep_kfold_folds")
         m.def_function[numeric_mode_binding]("x_prep_numeric_mode")
         m.def_function[vendor_binding]("x_prep_vendor")
         return m.finalize()
