@@ -40,9 +40,9 @@ def run[O: ClusterOps](mut ops: O, resp: List[Float32], x: List[Float32], n: Int
     return out^
 
 
-def _shape(n: Int, d: Int, kc: Int, sx: UInt64, su: UInt64) raises:
-    var x = seam_fixture(n, d, sx)
-    var u = seam_fixture(n, kc, su)
+def _case(n: Int, d: Int, kc: Int, seed: UInt64, tag: String) raises:
+    var x = seam_fixture(n, d, seed)
+    var u = seam_fixture(n, kc, seed + 1)
     var resp = List[Float32](capacity=n * kc)
     for i in range(n):
         var s = Float32(0)
@@ -51,20 +51,25 @@ def _shape(n: Int, d: Int, kc: Int, sx: UInt64, su: UInt64) raises:
         for k in range(kc):
             resp.append((abs(u[i * kc + k]) + Float32(0.01)) / s)
     var want = oracle_moments(resp, x, n, d, kc, Float32(1e-6))
-    var tag = " d=" + String(d)
-    require_separates("5110 moments fold order" + tag, count_diff_f32(want, oracle_moments(resp, x, n, d, kc, Float32(1e-6), True)))
+    require_separates(tag + " moments fold order", count_diff_f32(want, oracle_moments(resp, x, n, d, kc, Float32(1e-6), True)))
     var dev = DeviceOps()
     var got = run(dev, resp, x, n, d, kc)
-    _same("5110 moments device" + tag, count_diff_f32(got, want))
+    _same(tag + " moments device", count_diff_f32(got, want))
     var host = HostOps()
-    _same("5110 moments host" + tag, count_diff_f32(run(host, resp, x, n, d, kc), want))
+    _same(tag + " moments host", count_diff_f32(run(host, resp, x, n, d, kc), want))
     var tr = IdentityTrace()
-    tr.record_list_f32("x_cluster.moments" if d == 3 else "x_cluster.moments_d" + String(d), got)
+    tr.record_list_f32("x_cluster.moments." + tag, got)
 
 
 def main() raises:
-    _shape(200, 3, 4, 15, 16)
+    _case(200, 3, 4, 15, "5110")
+    # 5121: the device's tiled kernel over several row tiles (T = 256 rows
+    # at d = 5), more covariance chains than the block has threads (d = 17:
+    # 289), and the one-thread-per-cell fallback past MOM_MAX_D (d = 65)
+    _case(700, 5, 3, 21, "5121-tiles")
+    _case(600, 17, 2, 23, "5121-chains")
+    _case(40, 65, 2, 25, "5121-fallback")
     # d = 19: the host's vector lanes (two groups of eight) and its scalar
-    # tail (cluster-cpu lane, 2026-09-28); n large enough to split tasks.
-    _shape(3000, 19, 3, 17, 18)
+    # tail (cluster-cpu lane, 2026-09-28); n large enough to split tasks
+    _case(3000, 19, 3, 17, "host-d19")
     print("PASS x_cluster moments_check")

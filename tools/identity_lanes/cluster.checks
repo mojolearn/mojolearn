@@ -21,3 +21,8 @@ x_cluster/checks/moments_check.mojo	x_cluster/checks/sabotage/5110_host_cov_tile
 x_cluster/checks/gauss_check.mojo	x_cluster/checks/sabotage/5108_host_gauss_fold.patch
 x_cluster/checks/ap_check.mojo	x_cluster/checks/sabotage/5106_host_ap_colfold.patch
 x_cluster/checks/dist_check.mojo	x_cluster/checks/sabotage/5100_host_dist_fold.patch
+x_cluster/checks/agglo_check.mojo	x_cluster/checks/sabotage/5117_lance_williams.patch
+x_cluster/checks/agglo_check.mojo	x_cluster/checks/sabotage/5118_merge_tie.patch
+x_cluster/checks/spectral_assign_check.mojo	x_cluster/checks/sabotage/5119_svd_fold.patch
+x_cluster/checks/kth_check.mojo	x_cluster/checks/sabotage/5120_kth_radix.patch
+x_cluster/checks/moments_check.mojo	x_cluster/checks/sabotage/5121_moments_tile.patch

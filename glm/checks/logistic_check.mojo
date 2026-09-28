@@ -85,6 +85,13 @@ that does not move is the finding):
         coefficient": without the clamp a coefficient passes THROUGH zero
         and never lands on it. `check_owlqn_is_a_minimizer` may still pass,
         which is the point of having both.
+        PERFORMED 2026-09-27 (RTX 4090, IDENTICAL): NOTHING FAILED. The fit
+        still has 1 of 6 weights exactly zero and the minimizer bound
+        holds; the zero is produced by the direction's own projection
+        (`project_neg_kernel`) and the pseudo-gradient, not by the step
+        clamp on this fixture. The step clamp therefore has no gate here;
+        the lane's arm for DEVIATION 552 is (e), below, as
+        glm/checks/sabotage/seam_552_pseudo_grad_dropped.patch.
     (e) `get_pseudo_grad` returning `dlossx` unchanged (the l1 term never
         enters the direction). Must fail `check_owlqn_is_a_minimizer`'s
         NEGATIVE CONTROL -- the l1 and l2 fits become the same point -- and
