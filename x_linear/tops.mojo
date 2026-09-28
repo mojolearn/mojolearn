@@ -9,6 +9,28 @@ result is the lead's fold, broadcast.
 """
 from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, ld, st, i2f
 from x_linear.team import Team
+from x_linear.ops import fz as _fz
+from checks.numerics import identical_mul_add, identical_mul
+
+
+@always_inline
+def _acc_fa(acc: Float32, b: Float32) -> Float32:
+    """fa(acc, b) for an acc that is already flushed (every acc below starts
+    flushed and is only ever an fa/fmad result): ftz(acc) is acc itself, so
+    the chain's critical path skips it. The same word as fa."""
+    return _fz(acc + _fz(b))
+
+
+@always_inline
+def _acc_fmad(a: Float32, b: Float32, acc: Float32) -> Float32:
+    """fmad(a, b, acc) for an already flushed acc (see _acc_fa)."""
+    return _fz(identical_mul_add(_fz(a), _fz(b), acc))
+
+
+@always_inline
+def _fm(a: Float32, b: Float32) -> Float32:
+    """ops.fm with the branchless flush."""
+    return _fz(identical_mul(_fz(a), _fz(b)))
 
 
 @always_inline
@@ -88,3 +110,94 @@ def t_sumsq(t: Team, v: FP, n: Int, k: Int = 0) -> Float32:
             var r = ld(v, i)
             acc = fmad(r, r, acc)
     return t.bcast(acc, k)
+
+
+# ----------------------------------------------------------------------------
+# UNROLLED CHAINS: one thread's ascending fold over rows, its loads issued a
+# block of CHAIN_U ahead of the arithmetic, so a device thread waits on memory
+# once per block instead of once per row. The arithmetic is the plain loop's,
+# operation for operation, in the same order: the bits do not move.
+# ----------------------------------------------------------------------------
+
+comptime CHAIN_U = 32
+
+
+@always_inline
+def fold_fa(v: FP, off: Int, step: Int, n: Int, init: Float32 = Float32(0)) -> Float32:
+    """acc = fa(acc, v[off + i*step]), i ascending."""
+    var acc = _fz(init)
+    var i = 0
+    while i + CHAIN_U <= n:
+        var buf = SIMD[DType.float32, CHAIN_U]()
+        comptime for u in range(CHAIN_U):
+            buf[u] = ld(v, off + (i + u) * step)
+        comptime for u in range(CHAIN_U):
+            acc = _acc_fa(acc, buf[u])
+        i += CHAIN_U
+    while i < n:
+        acc = _acc_fa(acc, ld(v, off + i * step))
+        i += 1
+    return acc
+
+
+@always_inline
+def fold_sq(v: FP, off: Int, n: Int, init: Float32 = Float32(0)) -> Float32:
+    """acc = _acc_fmad(r, r, acc), r = v[off + i], i ascending."""
+    var acc = _fz(init)
+    var i = 0
+    while i + CHAIN_U <= n:
+        var buf = SIMD[DType.float32, CHAIN_U]()
+        comptime for u in range(CHAIN_U):
+            buf[u] = ld(v, off + i + u)
+        comptime for u in range(CHAIN_U):
+            acc = _acc_fmad(buf[u], buf[u], acc)
+        i += CHAIN_U
+    while i < n:
+        var r = ld(v, off + i)
+        acc = _acc_fmad(r, r, acc)
+        i += 1
+    return acc
+
+
+@always_inline
+def chain_fmad(a: FP, aoff: Int, astep: Int, b: FP, boff: Int, bstep: Int, n: Int,
+               init: Float32 = Float32(0)) -> Float32:
+    """acc = fmad(a[aoff + i*astep], b[boff + i*bstep], acc), i ascending."""
+    var acc = _fz(init)
+    var i = 0
+    while i + CHAIN_U <= n:
+        var pa = SIMD[DType.float32, CHAIN_U]()
+        var pb = SIMD[DType.float32, CHAIN_U]()
+        comptime for u in range(CHAIN_U):
+            pa[u] = ld(a, aoff + (i + u) * astep)
+            pb[u] = ld(b, boff + (i + u) * bstep)
+        comptime for u in range(CHAIN_U):
+            acc = _acc_fmad(pa[u], pb[u], acc)
+        i += CHAIN_U
+    while i < n:
+        acc = _acc_fmad(ld(a, aoff + i * astep), ld(b, boff + i * bstep), acc)
+        i += 1
+    return acc
+
+
+@always_inline
+def chain_fmad_scaled(h: FP, x: FP, j: Int, k: Int, d: Int, n: Int) -> Float32:
+    """acc = fmad(fm(h[i], x[i*d + j]), x[i*d + k], acc), i ascending (a
+    weighted Gram cell)."""
+    var acc = Float32(0)
+    var i = 0
+    while i + CHAIN_U <= n:
+        var ph = SIMD[DType.float32, CHAIN_U]()
+        var pj = SIMD[DType.float32, CHAIN_U]()
+        var pk = SIMD[DType.float32, CHAIN_U]()
+        comptime for u in range(CHAIN_U):
+            ph[u] = ld(h, i + u)
+            pj[u] = ld(x, (i + u) * d + j)
+            pk[u] = ld(x, (i + u) * d + k)
+        comptime for u in range(CHAIN_U):
+            acc = _acc_fmad(_fm(ph[u], pj[u]), pk[u], acc)
+        i += CHAIN_U
+    while i < n:
+        acc = _acc_fmad(_fm(ld(h, i), ld(x, i * d + j)), ld(x, i * d + k), acc)
+        i += 1
+    return acc

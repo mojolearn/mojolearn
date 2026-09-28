@@ -20,6 +20,7 @@ from x_linear.ops import (
     fill, copy, row_dot, cholesky, chol_solve, mean_of,
 )
 from x_linear.team import Team
+from x_linear.tops import fold_fa, chain_fmad, chain_fmad_scaled
 
 comptime GLM_LINK_IDENTITY = 0
 comptime GLM_LINK_LOG = 1
@@ -76,9 +77,7 @@ def _objective(t: Team, x: FP, y: FP, n: Int, d: Int, fi: Bool, power: Float32, 
     t.sync()
     var f = Float32(0)
     if t.lead():
-        var acc = Float32(0)
-        for i in range(n):
-            acc = fa(acc, ld(lt, i))
+        var acc = fold_fa(lt, 0, 1, n)
         var reg = Float32(0)
         for j in range(d):
             var w = ld(theta, toff + j)
@@ -147,13 +146,11 @@ def glm_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
         var cells = m + m * (m + 1) // 2
         for c in range(t.tid, cells, t.nt):
             if c < m:
-                var acc = Float32(0)
+                var acc: Float32
                 if c < d:
-                    for i in range(n):
-                        acc = fmad(ld(gr, i), ld(x, i * d + c), acc)
+                    acc = chain_fmad(gr, 0, 1, x, c, d, n)
                 else:
-                    for i in range(n):
-                        acc = fa(acc, ld(gr, i))
+                    acc = fold_fa(gr, 0, 1, n)
                 st(g, c, acc)
                 continue
             # lower-triangle cell (j, k), k <= j, row-major over j
@@ -162,17 +159,13 @@ def glm_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
             while (j + 1) * (j + 2) // 2 <= q:
                 j += 1
             var k = q - j * (j + 1) // 2
-            var acc = Float32(0)
+            var acc: Float32
             if j < d:
-                for i in range(n):
-                    var hx = fm(ld(hr, i), ld(x, i * d + j))
-                    acc = fmad(hx, ld(x, i * d + k), acc)
+                acc = chain_fmad_scaled(hr, x, j, k, d, n)
             elif k < d:
-                for i in range(n):
-                    acc = fmad(ld(hr, i), ld(x, i * d + k), acc)
+                acc = chain_fmad(hr, 0, 1, x, k, d, n)
             else:
-                for i in range(n):
-                    acc = fa(acc, ld(hr, i))
+                acc = fold_fa(hr, 0, 1, n)
             st(h, j * m + k, acc)
         t.sync()
         # the small dense step (m x m) on the lead thread

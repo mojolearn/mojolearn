@@ -18,7 +18,8 @@ from std.memory import bitcast
 from std.sys.info import CompilationTarget
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from x_linear.ops import FP, IP, dot, fa, fm, cholesky, jacobi_eig, shuffle, fexp, flog
+from checks.numerics import ftz
+from x_linear.ops import FP, IP, dot, fa, fm, fz_branchless, cholesky, jacobi_eig, shuffle, fexp, flog
 from x_linear.dispatch import decision_one
 from x_linear.team import team_work, solo
 from x_linear.lars import lars_fit
@@ -108,6 +109,16 @@ def check_flush(mut card: IdentityTrace) raises:
     got[1] = fm(bitcast[DType.float32](UInt32(0x3F800000)), a)
     _require(_bits(got[0]) == _bits(add(a, b)), "flush: shipped add kept a subnormal operand")
     _require(_bits(got[1]) == _bits(flush(a)), "flush: shipped product kept a subnormal operand")
+    # the device's branchless flush (speed phase) is ftz's word on every edge
+    var edges: List[UInt32] = [
+        UInt32(0x00000000), UInt32(0x80000000), UInt32(0x00000001), UInt32(0x80000001),
+        UInt32(0x007FFFFF), UInt32(0x807FFFFF), UInt32(0x00400000), UInt32(0x00800000),
+        UInt32(0x80800000), UInt32(0x3F800000), UInt32(0xBF800000), UInt32(0x7F7FFFFF),
+        UInt32(0x7F800000), UInt32(0xFF800000), UInt32(0x7FC00000), UInt32(0xFFC00001),
+    ]
+    for e in edges:
+        var v = bitcast[DType.float32](e)
+        _require(_bits(fz_branchless(v)) == _bits(ftz(v)), "flush: the branchless flush and ftz give different words")
     card.record_host("x_linear.seam5001.flush", _u(got), 2)
     print("PASS 5001 flush: subnormal operands are signed zeros")
 
