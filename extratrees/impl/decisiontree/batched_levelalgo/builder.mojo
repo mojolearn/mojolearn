@@ -113,6 +113,7 @@ from std.sys.info import has_apple_gpu_accelerator, size_of
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_FAST,
+    NUMERIC_IDENTICAL,
     ftz,
     identical_div,
     identical_mul,
@@ -3247,9 +3248,28 @@ rows, 100 trees, alternating processes, model hashes unchanged: taxireg
 original kernels through `ensure_row_major`'s `2k >= n` gate, 0.991 both.
 `-D MOJOLEARN_ET_TILED_SEARCH_OFF` turns both off on Apple."""
 
-comptime ET_RANGE_TILED = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and (
-    is_defined["MOJOLEARN_ET_RANGE_TILED"]() or ET_TILED_SEARCH_APPLE_DEFAULT
+comptime ET_TILED_SEARCH_APPLE_IDENTICAL = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and ET_TILED_SEARCH_APPLE_DEFAULT
+    and not is_defined["MOJOLEARN_ET_TILED_SEARCH_IDENTICAL_OFF"]()
 )
+"""Apple IDENTICAL (trees-apple2, 2026-09-28): the two tiled search kernels
+under IDENTICAL too, bit-inert by construction. The range kernel folds in
+range_key space under IDENTICAL (the one-feature kernel's IDENTICAL arm),
+so the same min, max and NaN count; the regression score kernel publishes
+the same integer counts and label sums (integers, any order). Same
+`2k >= n_cols` gate (`ensure_row_major`), so only fits that sample at least
+half the features (the regressors at max_features 1.0) take them. Never
+binned codes: `ET_BINNED_REG` stays FAST. `-D
+MOJOLEARN_ET_TILED_SEARCH_IDENTICAL_OFF` keeps the one-feature kernels."""
+
+comptime ET_RANGE_TILED = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and (
+        is_defined["MOJOLEARN_ET_RANGE_TILED"]()
+        or ET_TILED_SEARCH_APPLE_DEFAULT
+    )
+) or ET_TILED_SEARCH_APPLE_IDENTICAL
 """FAST experiment: the range pass reads a row-major X with up to
 `ET_FEATURE_TILE` sampled features per block
 (`node_feature_range_tiled_kernel`)."""
@@ -3268,9 +3288,13 @@ order (exact key, then DEVIATION 463's keyed tie), so one block's grid-stride
 fold picks the node's split that any arrival order of a correct merge picks:
 the same bits on every other column. FAST keeps `ceildiv(k, TPB)` blocks."""
 
-comptime ET_SCORE_TILED = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and (
-    is_defined["MOJOLEARN_ET_SCORE_TILED"]() or ET_TILED_SEARCH_APPLE_DEFAULT
-)
+comptime ET_SCORE_TILED = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and (
+        is_defined["MOJOLEARN_ET_SCORE_TILED"]()
+        or ET_TILED_SEARCH_APPLE_DEFAULT
+    )
+) or ET_TILED_SEARCH_APPLE_IDENTICAL
 """FAST experiment: the REGRESSION score pass reads a row-major X with up to
 `ET_FEATURE_TILE` sampled features per block
 (`node_feature_score_reg_tiled_kernel`)."""
