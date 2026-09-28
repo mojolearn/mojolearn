@@ -14,12 +14,13 @@ from cluster.estimator import kmeans_fit
 from cluster.impl.kmeans_params import INIT_KMEANS_PLUS_PLUS, METRIC_L2_EXPANDED
 from ivf.estimator import ivf_flat_build_host
 from ivf.impl.neighbors.ivf_flat.ivf_flat_build import ivf_trainset_rows
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz
 from std.sys.compile import is_defined
 from metrics.checks.device_io import upload_f32, upload_i32, download_f32, download_i32
 from x_ann.refine_core import refine_cell
 from x_ann.ivf_rabitq_core import rq_encode_cell, rq_pow2, rq_scale
-from x_ann.ivf_sq_core import sq_encode_cell, sq_range_cell
+from x_ann.ivf_sq_core import sq_encode_cell, sq_hi_takes, sq_lo_takes, sq_range_finish
+from std.memory import bitcast
 from x_ann.ivf_pq_core import (
     F32P, I32P, IvfPqIndex, pq_assign_cell, pq_labels_from_lists,
     pq_len_of, pq_residual_cell, pq_validate,
@@ -214,10 +215,96 @@ def ivf_pq_search_device(
     _ = ctx^
 
 
-def sq_range_kernel(dim: Int32, r: F32P, n: Int32, vmin: F32P, delta: F32P):
+#: rows per partial of the SQ range (lane ann-apple)
+comptime SQ_RANGE_ROWS = 1024
+
+
+@always_inline
+def _is_nan(v: Float32) -> Bool:
+    var b = bitcast[DType.uint32](v)
+    return (b & UInt32(0x7F800000)) == UInt32(0x7F800000) and (b & UInt32(0x007FFFFF)) != UInt32(0)
+
+
+def sq_range_part_kernel(count: Int32, r: F32P, n: Int32, dim: Int32, lo_p: F32P, hi_p: F32P, has_p: I32P):
+    """One thread per (row chunk g, column c), e = g * dim + c: the chunk's
+    minimum and maximum over its non-NaN values under `sq_lo_takes` /
+    `sq_hi_takes` in row order (the first of equal values kept)."""
+    var e = _tid()
+    if e < Int(count):
+        var d = Int(dim)
+        var g = e // d
+        var c = e % d
+        var i0 = g * SQ_RANGE_ROWS
+        var i1 = i0 + SQ_RANGE_ROWS
+        if i1 > Int(n):
+            i1 = Int(n)
+        var have = False
+        var lo = Float32(0.0)
+        var hi = Float32(0.0)
+        for i in range(i0, i1):
+            var v = ftz(r.unsafe_load(i * d + c))
+            if _is_nan(v):
+                continue
+            if not have:
+                lo = v
+                hi = v
+                have = True
+            else:
+                if sq_lo_takes(v, lo):
+                    lo = v
+                if sq_hi_takes(v, hi):
+                    hi = v
+        lo_p.unsafe_store(e, lo)
+        hi_p.unsafe_store(e, hi)
+        has_p.unsafe_store(e, Int32(1) if have else Int32(0))
+
+
+def sq_range_join_kernel(
+    dim: Int32, r: F32P, n_parts: Int32, lo_p: F32P, hi_p: F32P, has_p: I32P, vmin: F32P, delta: F32P
+):
+    """Column c: `sq_range_cell`'s result from the partials in row order. The
+    cell starts from row 0 and never lets a NaN replace a number, so a NaN in
+    row 0 stays, and otherwise the running values are the non-NaN minimum and
+    maximum, the first of equal values kept, which is the partials joined in
+    order under the same comparisons. The same words."""
     var c = _tid()
     if c < Int(dim):
-        sq_range_cell(c, r, Int(n), Int(dim), vmin, delta)
+        var d = Int(dim)
+        var lo = ftz(r.unsafe_load(c))
+        var hi = lo
+        if not _is_nan(lo):
+            for g in range(Int(n_parts)):
+                if has_p.unsafe_load(g * d + c) != 0:
+                    var pl = lo_p.unsafe_load(g * d + c)
+                    var ph = hi_p.unsafe_load(g * d + c)
+                    if sq_lo_takes(pl, lo):
+                        lo = pl
+                    if sq_hi_takes(ph, hi):
+                        hi = ph
+        sq_range_finish(c, lo, hi, vmin, delta)
+
+
+def _sq_range_enqueue(
+    ctx: DeviceContext, mut dr: DeviceBuffer[DType.float32], n: Int, dim: Int,
+    mut dvmin: DeviceBuffer[DType.float32], mut ddelta: DeviceBuffer[DType.float32],
+) raises:
+    """`sq_range_cell` for every column as chunk partials, then the join."""
+    var parts = (n + SQ_RANGE_ROWS - 1) // SQ_RANGE_ROWS
+    var lo_p = ctx.enqueue_create_buffer[DType.float32](parts * dim)
+    var hi_p = ctx.enqueue_create_buffer[DType.float32](parts * dim)
+    var has_p = ctx.enqueue_create_buffer[DType.int32](parts * dim)
+    ctx.enqueue_function[sq_range_part_kernel](
+        Int32(parts * dim), dr.unsafe_ptr(), Int32(n), Int32(dim), lo_p.unsafe_ptr(), hi_p.unsafe_ptr(),
+        has_p.unsafe_ptr(), grid_dim=_grid(parts * dim), block_dim=TPB,
+    )
+    ctx.enqueue_function[sq_range_join_kernel](
+        Int32(dim), dr.unsafe_ptr(), Int32(parts), lo_p.unsafe_ptr(), hi_p.unsafe_ptr(), has_p.unsafe_ptr(),
+        dvmin.unsafe_ptr(), ddelta.unsafe_ptr(), grid_dim=_grid(dim), block_dim=TPB,
+    )
+    ctx.synchronize()
+    _ = has_p^
+    _ = hi_p^
+    _ = lo_p^
 
 
 def sq_encode_kernel(count: Int32, r: F32P, dim: Int32, vmin: F32P, delta: F32P, codes: I32P):
@@ -249,8 +336,7 @@ def ivf_sq_build_device(
         Int32(dim), dr.unsafe_ptr(), grid_dim=_grid(n * dim), block_dim=TPB,
     )
     st.mark(ctx, "upload_residuals")
-    ctx.enqueue_function[sq_range_kernel](Int32(dim), dr.unsafe_ptr(), Int32(n), dvmin.unsafe_ptr(),
-                                          ddelta.unsafe_ptr(), grid_dim=_grid(dim), block_dim=TPB)
+    _sq_range_enqueue(ctx, dr, n, dim, dvmin, ddelta)
     st.mark(ctx, "range")
     ctx.enqueue_function[sq_encode_kernel](Int32(n * dim), dr.unsafe_ptr(), Int32(dim), dvmin.unsafe_ptr(),
                                            ddelta.unsafe_ptr(), dcodes.unsafe_ptr(), grid_dim=_grid(n * dim),
@@ -461,8 +547,7 @@ def sq_range_device(r: List[Float32], n: Int, dim: Int, mut vmin: List[Float32],
     var dr = upload_f32(ctx, r)
     var dv = ctx.enqueue_create_buffer[DType.float32](dim)
     var dd = ctx.enqueue_create_buffer[DType.float32](dim)
-    ctx.enqueue_function[sq_range_kernel](Int32(dim), dr.unsafe_ptr(), Int32(n), dv.unsafe_ptr(), dd.unsafe_ptr(),
-                                          grid_dim=_grid(dim), block_dim=TPB)
+    _sq_range_enqueue(ctx, dr, n, dim, dv, dd)
     ctx.synchronize()
     vmin = download_f32(ctx, dv, dim)
     delta = download_f32(ctx, dd, dim)

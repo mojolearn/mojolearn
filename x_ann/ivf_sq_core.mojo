@@ -24,15 +24,20 @@ from x_ann.ivf_pq_core import F32P, I32P, ivf_row_removed, pq_inf, pq_insert, pq
 
 
 @always_inline
-def sq_range_cell(c: Int, r: F32P, n: Int, dim: Int, vmin: F32P, delta: F32P):
-    var lo = ftz(r.unsafe_load(c))
-    var hi = lo
-    for i in range(1, n):
-        var v = ftz(r.unsafe_load(i * dim + c))
-        if v < lo:
-            lo = v
-        if v > hi:
-            hi = v
+def sq_lo_takes(v: Float32, lo: Float32) -> Bool:
+    """DEVIATION 5830: a later value replaces the running minimum only when
+    strictly smaller (the first of equal values stays)."""
+    return v < lo
+
+
+@always_inline
+def sq_hi_takes(v: Float32, hi: Float32) -> Bool:
+    return v > hi
+
+
+@always_inline
+def sq_range_finish(c: Int, lo: Float32, hi: Float32, vmin: F32P, delta: F32P):
+    """Column c's quantization range from its minimum and maximum."""
     var rng = ftz(hi - lo)
     var margin = ftz(identical_mul(rng, Float32(0.05)))
     if rng > Float32(0.0):
@@ -40,6 +45,19 @@ def sq_range_cell(c: Int, r: F32P, n: Int, dim: Int, vmin: F32P, delta: F32P):
     else:
         delta.unsafe_store(c, Float32(1.0))
     vmin.unsafe_store(c, ftz(lo - margin))
+
+
+@always_inline
+def sq_range_cell(c: Int, r: F32P, n: Int, dim: Int, vmin: F32P, delta: F32P):
+    var lo = ftz(r.unsafe_load(c))
+    var hi = lo
+    for i in range(1, n):
+        var v = ftz(r.unsafe_load(i * dim + c))
+        if sq_lo_takes(v, lo):
+            lo = v
+        if sq_hi_takes(v, hi):
+            hi = v
+    sq_range_finish(c, lo, hi, vmin, delta)
 
 
 @always_inline
