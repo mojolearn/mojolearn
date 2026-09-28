@@ -15,8 +15,10 @@ MOJOLEARN_XD_J2_U unset: on Metal the eigh is device_eigh, the svd is
 jacobi2's), so "d,3" isolates the eigh kernel. The speedup printed is the
 first arm over the last. QUALITY=1 scores every eigh and svd arm against
 numpy's float64 solve of the same matrix (FAST's paired quality check).
-An arm may carry its own switches: "d+MOJOLEARN_XD_PJ_EIGH_MIN=1" is arm d
-with that variable set for the arm's calls only. EIGH_KIND=gram times the
+An arm may carry its own switches: "d+MOJOLEARN_XD_LU_SERIAL=0" is arm d
+with that variable set for the arm's calls only. Under FAST on Metal arm d's
+eigh is jacobi2's (python sets MOJOLEARN_XD_JACOBI=2 around a FAST eigh when
+the variable is unset); "d+MOJOLEARN_XD_JACOBI=1" is its before arm. EIGH_KIND=gram times the
 eigh of a positive semidefinite Gram matrix (rank n / 2) beside the
 indefinite B + B^T."""
 import os, sys, time, hashlib, warnings

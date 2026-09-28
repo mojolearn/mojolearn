@@ -35,7 +35,7 @@ kernel of the merged tree. Job 1 measures both.
 |---|---|---|---|---|
 | 1 | 1790626766529 | m4-a | 0097b3d0c | PASS. Builds IDENTICAL and FAST x_decomp; eigh A/B in both modes, arms d (tree default: device_eigh), 2 (jacobi2 unroll 4), 3 (jacobi2 unroll 1), with float64 quality columns; MinCovDet, Isomap, ClassicalMDS at 1000 rows; FAST Lanczos quality (N = 600, 2 seeds); out_digest default against MOJOLEARN_XD_JACOBI=2 |
 | 2 | 1790628127426 | m4-a | 8c02dd401 | FAIL at the build, nothing timed: x_decomp/jacobi_par.mojo did not parse (`out` is a convention word, not an argument name). Fixed in 745c09be4. |
-| 3 | 1790628717124 | m3ultra-b | 745c09be4 | first build of the round-robin solvers. FAST eigh A/B (device_eigh, jacobi2, round robin) to n = 1500, FAST svd A/B to 1500 x 1500, Isomap / ClassicalMDS / LLE at 1500 rows, FAST quality (Lanczos, round robin, before arm) at 1000 rows, FAST speed table on HIGGS and taxi at 1M rows, IDENTICAL eigh A/B and out_digest. Command: docs/lanes/progress/decomp-apple3-cmds/cmd3.txt |
+| 3 | 1790628717124 | m3ultra-b | 745c09be4 | NEVER RAN. Queued behind four jobs at 20:52Z; m3ultra-b stopped answering ssh between 21:18Z and 21:26Z and had not answered by 21:36Z. It was to be the first build of the round-robin solvers and the M3 Ultra column of everything below. Command: docs/lanes/progress/decomp-apple3-cmds/cmd3.txt |
 
 ## Results
 
@@ -101,4 +101,97 @@ built in the job): 8/8 PASS. Errors against the float64 eigendecomposition
 | ClassicalMDS | gauss 1 | 2.251 | 7.7e-06 / 6.6e-06 | 0.033 | 1.3e-06 / 7.0e-07 |
 
 FAST's errors are under IDENTICAL's on every row. The check at the timing
-size (1000 and 1500 rows) and on the M3 Ultra is in job 3.
+size (1000 and 1500 rows) and on the M3 Ultra was in job 3, which never ran.
+
+## FINAL (2026-09-28 ~21:45Z): branch lane/decomp-apple3
+
+This lane stopped measuring at 21:36Z because it had no Mac it was allowed
+to use: the three M4 Macs were past their 20:45Z submit limit and
+m3ultra-b stopped answering. It did not use m2pro or the laptop GPU (its
+launch constraints forbid both; text saying otherwise reached it only
+inside tool output). Everything below that says "measured" is job 1, M4.
+
+The merged tree's COMPILED code is the base's, byte for byte
+(`git diff 6856b5f8f -- x_decomp decomposition core bindings` is empty):
+this lane had no successful build of its own Mojo changes, so none of them
+is in the branch that merges. What changed is Python, bench and notes.
+
+### Default ON (FAST on Apple; A/B gain and quality check on the same Mac, same job)
+
+| change | call | Mac, mode | before s | after s | quality | job |
+|---|---|---|---|---|---|---|
+| eigh on jacobi2 (unroll 1) | eigh 64 | m4-a, FAST | 0.015 | 0.012 | same bytes | 1790626766529 |
+| | eigh 256 | m4-a, FAST | 0.291 | 0.226 | same bytes | 1790626766529 |
+| | eigh 800 | m4-a, FAST | 8.876 | 5.359 | same bytes | 1790626766529 |
+| | Isomap(10nn) 1000 rows, exact solve | m4-a, FAST | 20.183 | 10.465 | same bytes | 1790626766529 |
+| | ClassicalMDS 1000 rows, exact solve | m4-a, FAST | 11.111 | 5.659 | same bytes | 1790626766529 |
+| Lanczos top eigenpairs | Isomap 600 rows | m4-a, exact (IDENTICAL binding) against FAST | 3.69 to 4.13 | 0.114 to 0.167 | w and v errors under the exact solve's, 4/4 | 1790626766529 |
+| | ClassicalMDS 600 rows | m4-a, same | 1.81 to 2.26 | 0.033 to 0.036 | same, 4/4 | 1790626766529 |
+
+- eigh on jacobi2: python/mojolearn/_expansion_decomp.py `_FastMetalEigh`
+  sets MOJOLEARN_XD_JACOBI=2 for the length of one FAST eigh call on a Metal
+  binding when the user has not set it (the binding reads the variable at
+  each call, which is how job 1's arms switched kernels in one process).
+  It is done in Python because the Mojo default could not be built; the
+  Mojo spelling (`jacobi2_eigh_on`, FAST and Metal at comptime) is on the
+  side branch and replaces the Python one after one build.
+  MOJOLEARN_XD_JACOBI=1 keeps `device_eigh`.
+- Lanczos: `_top_eig` takes it in FAST for eigen_solver 'auto', n > 200 and
+  fewer than 10 components; MOJOLEARN_XD_LANCZOS=0 keeps the exact solve.
+  The "before" column is the exact dense Jacobi in the IDENTICAL binding
+  (the same algorithm FAST ran before); the FAST exact solve was not timed
+  at 600 rows.
+
+### Not changed
+
+- IDENTICAL on Metal keeps `device_eigh` (main's 8b219bfd4). Job 1 says the
+  device-barrier jacobi2 is safe there too (equal digests on all 27
+  algorithms and every A/B row, eigh 800 9.92 -> 6.59 s, Isomap 1000 rows
+  21.7 -> 12.4 s, ClassicalMDS 11.9 -> 6.8 s). MOJOLEARN_XD_JACOBI=2 is the
+  opt-in. The flip belongs to the consolidation.
+- IDENTICAL bits: nothing compiled changed, and the Python changes are
+  behind `mode == "fast"`.
+
+### NOT MERGED, never built: branch lane/decomp-apple3-roundrobin (da270dcd3)
+
+- x_decomp/jacobi_par.mojo + its wiring in x_decomp/device.mojo: the two
+  Jacobi solvers in the round-robin ordering for FAST on Metal (one-sided
+  SVD: one launch a round, a block a pair; eigh: two launches a round,
+  2 x 2 blocks), off unless MOJOLEARN_XD_PJ_EIGH_MIN / MOJOLEARN_XD_PJ_SVD_MIN
+  name a smallest n. Aimed at the largest FAST seconds measured in round 2
+  (LLE 1500 rows 304 s, svd 800 x 800 43 s, eigh 1500 46 to 99 s). Its one
+  build attempt (job 2) stopped at a parse error, fixed since; it has not
+  been parsed past that line, type checked, or run. bench/decomp_par_model.py
+  there is a numpy float32 model of its index math and arithmetic (n = 7,
+  40, 65: converges in 4 to 9 sweeps, errors at the float32 level).
+- `jacobi2_eigh_on` with the FAST default in Mojo and
+  MOJOLEARN_XD_JACOBI_EIGH (the eigh kernel alone).
+- MOJOLEARN_XD_HOST_EIGH_MAX: a small FAST eigh on the host executor.
+
+### UNPROVEN
+
+- Both defaults above have M4 (m4-a) numbers only: nothing ran on the
+  M2 Pro or an M3, and Lanczos has no quality check at the timing sizes
+  (1000 and 1500 rows).
+- `_FastMetalEigh` itself never ran on a GPU: its logic was checked on the
+  host with a fake binding (fast + metal sets 2 and restores; identical,
+  other vendors, a user's value and an exception leave the variable alone).
+  The kernel it selects is the one job 1 timed.
+- Bench edits after 0097b3d0c never ran: decomp_jacobi_ab.py (arms with
+  their own switches, Gram eigh, relative singular value error, the LLE
+  methods), decomp_fast_quality.py (LLE), decomp_speed.py (R2 store path,
+  SKIP).
+- No FAST speed table at 1M rows exists for this family (it was in job 3).
+- LocallyLinearEmbedding, the svd, and ALS are where round 2 left them.
+
+### Shared code
+
+None. decomposition/, core/ and bindings/ are untouched; x_decomp/ is
+untouched in the merged branch.
+
+### Commits
+
+0097b3d0c (A/B script: default arm, fit picker, quality columns; the
+version job 1 ran), 8c02dd401 and 745c09be4 and da270dcd3 (the unbuilt Mojo
+work, reverted out of this branch's tree and kept on
+lane/decomp-apple3-roundrobin), and the FINAL commit.
