@@ -1965,9 +1965,10 @@ def _average_scores(scores, support, average):
 
 def _lane3():
     """True only under MOJOLEARN_MSEL3=1 (read per call): lane
-    metrics-apple3's routes are OPT-IN and UNPROVEN (never measured or run:
-    the lane's Apple machine went away before its A/B job). Without it
-    every call takes its definition."""
+    metrics-apple3's routes remain opt-in pending combined qualification.
+    A laptop M4 A/B run measured matching outputs and speed gains; that
+    does not establish every backend or optional model-selection case.
+    Without the switch every call takes its definition."""
     import os
     return os.environ.get("MOJOLEARN_MSEL3") == "1"
 
