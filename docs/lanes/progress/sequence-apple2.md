@@ -358,5 +358,45 @@ Left for later (largest remaining Apple costs, M4):
   EVERY family; it needs its own proof on every Apple generation and is not this
   lane's to change.
 - m3ultra-b was blocked from 13:30 by an apple-merged speed job and a deep queue,
-  so this lane measured on m4-a and m4pro-b; the final Ultra table is below if its
-  job ran in time.
+  so this lane measured mostly on m4-a and m4pro-b; the Ultra ran the final table at
+  18:28Z (below).
+
+### Job 11: THE FINAL TABLE ON THE M3 ULTRA. m3ultra-b, steward 1790617085330, before 068959af0, after 83c144480
+
+Same sequence sources as job 8's after. Two alternating runs per arm, best shown.
+IDENTICAL digests equal everywhere; FAST digests move only where a FAST change
+applies. FAST quality identical to job 8's (lamb 1.26e-7, adafactor 1.09e-7,
+layernorm dw 2.4e-7, var 0.000475, garch loglik -138.314814 / QLIKE 1.085543,
+prophet 65536 RMSE 0.9932782, prophet 1M FAST 0.366 s). Records:
+~/mojolearn-evidence/sequence-apple2/j11.
+
+| algo | IDENTICAL before | after | x | bits | FAST before | after | x | bits |
+|---|---|---|---|---|---|---|---|---|
+| lstm | 0.559 / 0.147 | 0.560 / 0.147 | 1.00x | same | 0.524 / 0.133 | 0.524 / 0.134 | 1.00x | same |
+| gru | 0.481 / 0.118 | 0.479 / 0.118 | 1.00x | same | 0.452 / 0.107 | 0.453 / 0.107 | 1.00x | same |
+| rnn | 0.389 / 0.059 | 0.390 / 0.059 | 1.00x | same | 0.372 / 0.055 | 0.370 / 0.055 | 1.00x | same |
+| mlp | 0.912 / 0.091 | 0.879 / 0.090 | 1.04x | same | 0.776 / 0.088 | 0.748 / 0.087 | 1.04x | same |
+| moe | 0.195 | 0.142 | 1.37x | same | 0.191 | 0.140 | 1.36x | same |
+| layernorm | 0.758 | 0.200 | 3.79x | same | 0.735 | 0.127 | 5.77x | moved |
+| rmsprop | 0.302 | 0.272 | 1.11x | same | 0.300 | 0.273 | 1.10x | same |
+| adagrad | 0.299 | 0.271 | 1.10x | same | 0.300 | 0.270 | 1.11x | same |
+| lion | 0.299 | 0.273 | 1.09x | same | 0.299 | 0.271 | 1.10x | same |
+| adamax | 0.300 | 0.270 | 1.11x | same | 0.299 | 0.269 | 1.11x | same |
+| nadam | 0.299 | 0.272 | 1.10x | same | 0.299 | 0.268 | 1.11x | same |
+| lamb | 1.966 | 1.554 | 1.27x | same | 1.314 | 0.282 | 4.66x | moved |
+| adafactor | 1.214 | 0.943 | 1.29x | same | 0.777 | 0.123 | 6.30x | moved |
+| stl | 0.188 | 0.189 | 0.99x | same | 0.163 | 0.156 | 1.05x | same |
+| theta | 0.258 | 0.268 | 0.96x | same | 0.171 | 0.168 | 1.02x | same |
+| croston | 0.004 | 0.004 | 0.98x | same | 0.004 | 0.004 | 0.99x | same |
+| ets | 0.469 | 0.470 | 1.00x | same | 0.366 | 0.365 | 1.00x | same |
+| garch | 0.505 | 0.510 | 0.99x | same | 0.403 | 0.246 | 1.64x | moved |
+| var | 0.728 | 0.554 | 1.31x | same | 0.697 | 0.522 | 1.33x | moved |
+| prophet | 43.664 | 43.833 | 1.00x | same | 14.443 | 0.191 | 75.61x | moved |
+| arima | 1.452 | 1.445 | 1.00x | same | 1.434 | 1.448 | 0.99x | same |
+| hw | 0.323 | 0.323 | 1.00x | same | 0.179 | 0.179 | 1.00x | same |
+| kpss | 0.010 | 0.010 | 1.03x | same | 0.010 | 0.010 | 1.00x | same |
+| autoarima | 19.723 | 4.567 | 4.32x | same | 20.453 | 3.987 | 5.13x | same |
+
+On the Ultra the optimizer steps gain 1.1x (the M4 gains 2.0x: its host copies were
+the larger share); LayerNorm 3.8x / 5.8x, AutoARIMA 4.3x / 5.1x (its before arm
+spreads 19.7 to 24.7 s), Prophet FAST 76x.
