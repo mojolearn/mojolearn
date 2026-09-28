@@ -56,6 +56,57 @@ environment, forward then reverse, IDENTICAL and FAST in one job).
 
 ## Results
 
+### SUMMARY: lane base vs head, request 1790609896241 (m4pro-a, M4 Pro, 0e1394f6a), one job
+
+old = every path this lane replaced, by its arms (`-D MOJOLEARN_XN_SERIAL_SMO
+-D MOJOLEARN_XN_LOUVAIN_GPU -D MOJOLEARN_XN_PLAIN_DOWN -D MOJOLEARN_XN_SERIAL_GPU
+-D MOJOLEARN_XN_LP_DEVICE_FOLD -D MOJOLEARN_XN_PCS_CELL -D MOJOLEARN_XN_LP_DENSE
+-D MOJOLEARN_XN_IMPUTE_NO_SPLIT` + `MOJOLEARN_XN_UNFUSED_KNN=1
+MOJOLEARN_XN_HOST_LOOPS=1 MOJOLEARN_XN_UNCOMPACT_IMPUTE=1
+MOJOLEARN_XN_OLD_ITEMS=1`; GPC: `-D MOJOLEARN_CHOL_MR_ROWWISE`); new = the
+default at 0e1394f6a. Forward and reverse in one job, minimum of each arm.
+Every IDENTICAL digest is equal between old and new (1 distinct digest per
+row); FAST digests equal between old and new too, except FAST k = 2,000 k-NN
+rows, whose digests vary run to run INSIDE each arm (FAST's selector does not
+pin ties; the code is the same in both arms). Seconds (fit, or predict /
+transform where marked). Raw:
+~/mojolearn-evidence/neighbors-apple/1790609896241-speed-neighbors-0e1394f6a9.txt
+
+| algorithm | mode | taxi before | taxi after | HIGGS before | HIGGS after |
+|---|---|---|---|---|---|
+| LabelPropagation.fit 5k (knn) | IDENTICAL | 9.663 | 0.308 | 1.553 | 0.112 |
+| LabelPropagation.fit 5k (knn) | FAST | 9.404 | 0.225 | 1.582 | 0.102 |
+| LabelSpreading.fit 5k (knn) | IDENTICAL | 2.458 | 0.092 | 2.463 | 0.089 |
+| LabelSpreading.fit 5k (knn) | FAST | 2.230 | 0.086 | 2.227 | 0.088 |
+| Louvain.fit 1k | IDENTICAL | 2.522 | 0.084 | 4.001 | 0.091 |
+| Louvain.fit 1k | FAST | 2.492 | 0.043 | 4.128 | 0.052 |
+| OneClassSVM.fit 3k | IDENTICAL | 1.089 | 0.021 | 1.178 | 0.023 |
+| OneClassSVM.fit 3k | FAST | 1.069 | 0.020 | 1.234 | 0.023 |
+| LocalOutlierFactor.fit 20k | IDENTICAL | 0.927 | 0.095 | 0.937 | 0.089 |
+| LocalOutlierFactor.fit 20k | FAST | 0.924 | 0.084 | 0.927 | 0.079 |
+| LocalOutlierFactor.score_samples 5k | IDENTICAL | 0.234 | 0.053 | 0.230 | 0.040 |
+| PolynomialCountSketch.transform 200k x 500 | IDENTICAL | 3.043 | 0.513 | 3.017 | 0.516 |
+| PolynomialCountSketch.transform 200k x 500 | FAST | 3.025 | 0.501 | 3.037 | 0.505 |
+| PageRank.fit 5k | IDENTICAL | 0.543 | 0.055 | 0.541 | 0.052 |
+| PageRank.fit 5k | FAST | 0.548 | 0.052 | 0.550 | 0.052 |
+| KNNImputer.transform 5k x 50k | IDENTICAL | 0.406 | 0.065 | 0.406 | 0.064 |
+| KNNImputer.transform 5k x 50k | FAST | 0.333 | 0.056 | 0.331 | 0.055 |
+| SkewedChi2Sampler.transform 1M x 500 | IDENTICAL | 1.083 | 0.572 | 1.088 | 0.572 |
+| SkewedChi2Sampler.transform 1M x 500 | FAST | 1.080 | 0.548 | 1.068 | 0.544 |
+| AdditiveChi2Sampler.transform 1M | IDENTICAL | 0.052 | 0.027 | 0.049 | 0.025 |
+| connected_components 5k | IDENTICAL | 0.184 | 0.065 | 0.083 | 0.033 |
+| NearestCentroid.fit 200k | IDENTICAL | 0.160 | 0.074 | 0.159 | 0.071 |
+| NearestCentroid.fit 200k | FAST | 0.150 | 0.054 | 0.152 | 0.063 |
+| SVGP.fit 100k (64 inducing) | IDENTICAL | | | 0.233 | 0.083 |
+| SVGP.fit 100k (64 inducing) | FAST | | | 0.254 | 0.077 |
+| KernelPCA.fit 500 (host Jacobi, untouched) | IDENTICAL | 1.874 | 1.883 | 1.281 | 1.277 |
+| KernelPCA.transform 10k | IDENTICAL | 0.025 | 0.017 | 0.025 | 0.017 |
+| GaussianProcessClassifier.predict_proba 3k x 3k | IDENTICAL | 1.130 to 1.255 | 0.259 to 0.265 | 1.147 to 1.215 | 0.256 to 0.259 |
+| GaussianProcessClassifier.predict_proba 3k x 3k | FAST | 1.038 to 1.040 | 0.225 to 0.227 | 0.991 to 1.040 | 0.228 to 0.230 |
+| SpectralEmbedding(knn).fit 20k | IDENTICAL | REFUSED (k > 1024) | 0.769 | REFUSED | 0.784 |
+| NearestNeighbors(k=2000) 20k x 2k | IDENTICAL | REFUSED | 0.186 | REFUSED | 0.189 |
+| NearestNeighbors(k=2000) 100k x 500 | IDENTICAL | REFUSED | 0.071 | REFUSED | 0.071 |
+
 ### Request 1790604321269 (m4pro-a, M4 Pro, b89ad2efa), FAST, one job
 
 IDENTICAL did not build there (the radix barrier, reverted in da21bc669), so
