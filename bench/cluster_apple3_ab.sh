@@ -31,6 +31,7 @@ for c in $cases; do
         phases:*) MOJOLEARN_XC_PHASES=1 MOJOLEARN_STAGE_TIMES=1 MOJOLEARN_KMEANS_STAGES=1 MOJOLEARN_DBSCAN_PHASES=1 pixi run python bench/x_cluster_speed.py --dataset taxi,higgs --reps 1 --no-quality --only "${c#phases:}" | sed "s/^/PH_$tag /" ;;
         prof:*) pixi run python bench/cluster_apple3_prof.py --dataset taxi,higgs --only "${c#prof:}" | sed "s/^CPROF/CPROF_$tag/" ;;
         quality:*) pixi run python bench/cluster_apple3_quality.py --dataset taxi,higgs --only "${c#quality:}" | sed "s/^XCQUAL/XCQUAL_$tag/" ;;
+        quality5:*) pixi run python bench/cluster_apple3_quality.py --dataset taxi,higgs --seeds 0,1,2,3,4 --only "${c#quality5:}" | sed "s/^XCQUAL/XCQUAL_$tag/" ;;
         gmmstages) MOJOLEARN_STAGE_TIMES=1 pixi run python bench/x_cluster_speed.py --dataset taxi --reps 1 --only gmm | grep GMM_STAGE | sed "s/^/${tag} /" ;;
     esac
 done

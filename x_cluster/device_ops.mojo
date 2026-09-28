@@ -291,6 +291,55 @@ def _ap_r_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
         ap_r_update(s, r, N, damping, one_minus, i, k, first, second, arg)
 
 
+# Lane cluster-apple3, FAST, OPT-IN `-D MOJOLEARN_AP_EXACT=1`: `_ap_r_kernel`
+# with the row's max and second max taken in ONE walk of the row. The keys
+# are distinct integers (the column is their low word), so the two largest
+# of a row are the same two whatever the fold's shape: the same picks, the
+# same R, one read of A + S less per iteration.
+comptime AP_R_TOP2 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_AP_EXACT"]()
+
+
+def _ap_r_top2_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
+    var i = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var N = Int(n)
+    var red1 = stack_allocation[AP_TPB, Scalar[DType.uint64], address_space = AddressSpace.SHARED]()
+    var red2 = stack_allocation[AP_TPB, Scalar[DType.uint64], address_space = AddressSpace.SHARED]()
+    var m1 = UInt64(0)
+    var m2 = UInt64(0)
+    for k in range(tid, N, AP_TPB):
+        var key = _ap_key(ftz(a[i * N + k] + s[i * N + k]), k)
+        if key > m1:
+            m2 = m1
+            m1 = key
+        elif key > m2:
+            m2 = key
+    red1[tid] = m1
+    red2[tid] = m2
+    barrier()
+    var off = AP_TPB // 2
+    while off > 0:
+        if tid < off:
+            var a1 = red1[tid]
+            var a2 = red2[tid]
+            var b1 = red1[tid + off]
+            var b2 = red2[tid + off]
+            red1[tid] = max(a1, b1)
+            red2[tid] = max(min(a1, b1), max(a2, b2))
+        barrier()
+        off //= 2
+    var arg = _ap_key_index(red1[0])
+    var top2 = red2[0]
+    var first = ftz(a[i * N + arg] + s[i * N + arg])
+    var second = Float32(-3.4028234663852886e38)
+    if N > 1:
+        var a2i = _ap_key_index(top2)
+        second = ftz(a[i * N + a2i] + s[i * N + a2i])
+    var one_minus = ftz(Float32(1) - damping)
+    for k in range(tid, N, AP_TPB):
+        ap_r_update(s, r, N, damping, one_minus, i, k, first, second, arg)
+
+
 def _ap_a_kernel(r: FPtr, a: FPtr, n: Int32, damping: Float32):
     var t = _tid()
     if t < Int(n):
@@ -1115,6 +1164,13 @@ struct DeviceOps(ClusterOps):
 
     def ap_r(mut self, s: Int, a: Int, r: Int, n: Int, damping: Float32) raises:
         self._ph0()
+        comptime if AP_R_TOP2:
+            self.ctx.enqueue_function[_ap_r_top2_kernel](
+                self._fp(s), self._fp(a), self._fp(r), Int32(n), damping, grid_dim=n if n > 0 else 1,
+                block_dim=AP_TPB,
+            )
+            self._ph1("ap_r")
+            return
         self.ctx.enqueue_function[_ap_r_kernel](
             self._fp(s), self._fp(a), self._fp(r), Int32(n), damping, grid_dim=n if n > 0 else 1, block_dim=AP_TPB,
         )
