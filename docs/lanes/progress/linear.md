@@ -160,3 +160,37 @@ family owner: qn-squared and qn-absolute are now in linear.core, so checking
 them runs linear.checks (its glm/checks/qn_losses_check.mojo arms 707, 708,
 714 are QN's seams). tools/test_lane_select.py: OK, 0 failure(s) (central
 AMD box CPU, 2026-09-28).
+
+## Speed phase, branch state and OWED steps (session 6, 2026-09-28 ~05:30Z)
+
+RunPod balance negative: the RTX 4090 pod `linear` is gone and `dev_pod.sh up
+linear` is refused (do not retry until funded). Work moved to the central AMD
+box (tools/amd_central.sh, tree /root/mojolearn-linear, logs /root/ev-linear;
+taxi_speed.npz + higgs_speed.npz staged at /root/datasets/gbm-bench, staged
+with MOJOLEARN_STAGE_REMOTE_SH='sudo sh -s' because /root is 700).
+
+On lane/algos-linear, NOT on main: 5a7694809 (team fits), bbe8acdc2
+(unrolled row chains, fz_branchless + arm 5001b), 87026c636 (indexed row
+chains fold_fa_ix/fold_sq_ix/chain_fmad_ix/chain_cfmad[_ix]/fold_one_fmad;
+LogisticRegressionCV objective over the fold's training-row list, team rows
+K'+2 and iw word 4; CD CV `_prep` lists training/held-out rows in team rows
+1/2; ridge, bayes, huber, quantile X'y/Gram/sumsq on the chains; the host
+keeps U = 1, the plain loop). Both x_linear bindings BUILD on gfx942 at
+12ae19279.
+
+OWED, in order:
+1. Bits unchanged, before/after: /root/ev-linear/pair_board.sh (queued on
+   `amd_central.sh run linear` at 05:05Z, both slots were busy): board at 100k
+   rows on the WIP build (board_wip.log), then with wip_ix.patch reversed
+   (board_base.log), then restored. Every XLSPEED digest must match base vs
+   WIP and gpu vs host. If pair.log is missing, the queued run never started:
+   re-run it.
+2. Gate: `algos_lane_check.sh <the 31 x-* lanes but x-isotonic> --pass 2
+   --sabotage x_linear/checks/sabotage/e2e_device_fold.patch`, x-isotonic
+   with e2e_device_pava.patch, x-bayes-ridge-sw with
+   opt_bayes_sample_weight.patch, x-logistic-cv-w with opt_logcv_weights.patch
+   (both re-derived for the chains), plus test_x_linear_repeat and
+   test_host_surface. On AMD now; the NVIDIA + CPU run is owed once RunPod is
+   funded, then merge and one batched steward submit.
+3. Then continue IDENTICAL speed (board at 1M rows, stage timings first),
+   then FAST (paired quality check, 5 seeds x 2 datasets).
