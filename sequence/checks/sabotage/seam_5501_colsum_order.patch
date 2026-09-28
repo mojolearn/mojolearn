@@ -1,14 +1,25 @@
 diff --git a/sequence/ops.mojo b/sequence/ops.mojo
-index f2d5d61cf..333c04f58 100644
+index 377d08c0f..f237778f4 100644
 --- a/sequence/ops.mojo
 +++ b/sequence/ops.mojo
-@@ -278,7 +278,8 @@ def op_colsum(t: Int, a: Args):
+@@ -353,18 +353,9 @@ def op_colsum(t: Int, a: Args):
      var acc = Float32(0.0)
      if a.i3 != 0:
          acc = ld(a.p1, t)
--    for r in range(a.i0):
+-    # staged loads, the same adds in the same order (as gemm_dot)
+-    var r = 0
+-    while r + COLSUM_STAGE <= a.i0:
+-        var v = SIMD[DType.float32, COLSUM_STAGE]()
+-        comptime for i in range(COLSUM_STAGE):
+-            v[i] = ld(a.p0, (r + i) * a.i2 + t)
+-        comptime for i in range(COLSUM_STAGE):
+-            acc = add(acc, v[i])
+-        r += COLSUM_STAGE
+-    while r < a.i0:
 +    for rr in range(a.i0):
 +        var r = a.i0 - 1 - rr
          acc = add(acc, ld(a.p0, r * a.i2 + t))
+-        r += 1
      st(a.p1, t, acc)
+ 
  
