@@ -415,8 +415,18 @@ def sgd_one_warp[K: Int](
                 order = idx_b
             if is_shuf and lane == 0 and epoch + 1 < max_iter:
                 var nxt = idx_b if epoch % 2 == 0 else idx
-                for i in range(n):
+                # the copy loads 16 words before storing them (one lane)
+                var i = 0
+                while i + 16 <= n:
+                    var cp = InlineArray[Int32, 16](fill=Int32(0))
+                    comptime for u in range(16):
+                        cp[u] = order.unsafe_load(i + u)
+                    comptime for u in range(16):
+                        nxt.unsafe_store(i + u, cp[u])
+                    i += 16
+                while i < n:
                     nxt.unsafe_store(i, order.unsafe_load(i))
+                    i += 1
                 shuffle(nxt, n, rng)
         if is_comp:
             epochs = epoch + 1
