@@ -100,6 +100,28 @@ kernel/metric/weight arms, SVC rbf/poly/linear/sigmoid, SVR, KernelRidge
 rbf/poly/laplacian, Nystroem, RBFSampler, GPR rbf / Matern 1/2, 3/2, 5/2
 ARD / optimizer, GPC, on taxi and istella).
 
+## Gate (NVIDIA H100 pod, CPU Xeon 8470; branch at 87e54aa7f + origin/main da6c16849)
+
+`tools/algos_lane_check.sh` on the 52 family lanes lane_select picks
+(cholesky, gp x9, gpc x2, kde x7, kernel-ridge x4, knn x11, nystroem x4,
+radius x4, rbf-sampler, svc x3, svr x2, x-neighbors svm lanes x4):
+- clean: every lane AGREE (cuda column vs CPU column, batch/infer/model/
+  train 9 fixtures each).
+- sabotage, two host-only source patches (they touch only this lane's new
+  vector code, so a DISAGREE proves the lanes run it):
+  - `sab_gp_sqdist.patch` (GP `_gpr_sqdist_v` output x 1.0000001) on the 11
+    gp/gpc lanes: RESULT PASS (AGREE, DISAGREE on all 11, AGREE after
+    reversal).
+  - `sab_ftz_v_ulp.patch` (`ftz_v` one unit up on every lane) on the other
+    41: see below. (On gp it made the CPU arm's own batch check fail,
+    BATCH_MOVED on predict(return_std): a row alone takes the scalar trsm
+    tail, 64 rows the vector solve, and the patch moved only the vector
+    one; that is the patch, not the clean build, whose batch column AGREEs.)
+- Tooling gap found: `needed_bindings` drops the ubiquitous
+  `_mojolearn_preprocessing` that gp-normalize-y's fit imports
+  (`_gp_impl.py:720`, StandardScaler for normalize_y); the GPU arm refused
+  until it was built by hand. Reported.
+
 ## OWED / NEXT
 
 - Thread the serial host loops (SVM tile, Cholesky, gemm cells, packing,
