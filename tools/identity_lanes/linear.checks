@@ -9,3 +9,22 @@ x_linear/checks/seams_check.mojo	x_linear/checks/sabotage/seam_5006_host_nan.pat
 x_linear/checks/seams_check.mojo	x_linear/checks/sabotage/seam_5007_intercept_first.patch
 x_linear/checks/seams_check.mojo	x_linear/checks/sabotage/seam_5008_libm_exp.patch
 x_linear/checks/seams_check.mojo	x_linear/checks/sabotage/seam_5009_grid_logspace.patch
+# the family's EXISTING models (tools/identity_lanes/linear.core): glm/ and solver/ seams
+glm/checks/ols_check.mojo	glm/checks/sabotage/seam_527_host_bypasses_dispatch.patch
+glm/checks/ols_check.mojo	glm/checks/sabotage/seam_550_wide_takes_eig.patch
+glm/checks/ols_check.mojo	glm/checks/sabotage/seam_551_single_column_refused.patch
+glm/checks/ols_check.mojo	glm/checks/sabotage/seam_2620_no_equilibration.patch
+glm/checks/ols_check.mojo	glm/checks/sabotage/seam_2621_absolute_cutoff.patch
+glm/checks/ols_check.mojo	glm/checks/sabotage/seam_2622_wide_absolute_cutoff.patch
+glm/checks/ridge_check.mojo	glm/checks/sabotage/seam_545_div_reciprocal.patch
+glm/checks/logistic_check.mojo	glm/checks/sabotage/seam_547_sum_terms_serial.patch
+glm/checks/logistic_check.mojo	glm/checks/sabotage/seam_552_pseudo_grad_dropped.patch
+glm/checks/link_seams_check.mojo	glm/checks/sabotage/seam_549_sigmoid_ratio.patch
+glm/checks/link_seams_check.mojo	glm/checks/sabotage/seam_549_softmax_host_desc.patch
+glm/checks/multinomial_check.mojo	glm/checks/sabotage/seam_705_lse_descending.patch
+glm/checks/multinomial_check.mojo	glm/checks/sabotage/seam_706_bias_mean_serial.patch
+glm/checks/qn_losses_check.mojo	glm/checks/sabotage/seam_707_nrm1_serial.patch
+glm/checks/qn_losses_check.mojo	glm/checks/sabotage/seam_708_hinge_boundary.patch
+glm/checks/qn_losses_check.mojo	glm/checks/sabotage/seam_714_l2_dlz_theirs.patch
+solver/checks/cd_check.mojo	solver/checks/sabotage/seam_610_quotient_reciprocal.patch
+solver/checks/cd_check.mojo	solver/checks/sabotage/seam_612_nan_payload.patch

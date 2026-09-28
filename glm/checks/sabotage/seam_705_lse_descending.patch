@@ -1,0 +1,13 @@
+diff --git a/glm/impl/qn/glm_softmax.mojo b/glm/impl/qn/glm_softmax.mojo
+index a67144abf..4f00fc873 100644
+--- a/glm/impl/qn/glm_softmax.mojo
++++ b/glm/impl/qn/glm_softmax.mojo
+@@ -109,7 +109,7 @@ comptime SOFTMAX_MAX_SEED = Float32(-1e9)
+ #: FAIL on loss and dZ cells. No build script defines it; the default build
+ #: compiles the ascending loop it always did. Read back by the check's
+ #: header line.
+-comptime SOFTMAX_SABOTAGE = is_defined["MOJOLEARN_SOFTMAX_SABOTAGE"]()
++comptime SOFTMAX_SABOTAGE = True  # SABOTAGE 705: the log-sum-exp fold descending
+ 
+ 
+ @always_inline
