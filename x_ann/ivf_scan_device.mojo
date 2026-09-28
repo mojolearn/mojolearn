@@ -203,6 +203,23 @@ def probe_group_kernel(cd: F32P, n_lists: Int32, n_probes: Int32, offsets: I32P,
             p += 1
 
 
+def gather_i32_kernel(count: Int32, width: Int32, src: I32P, list_indices: I32P, dst: I32P):
+    """dst[slot, c] = src[list_indices[slot], c] (lane ann-apple2): the
+    per-row arrays laid out in list order, so a score threadgroup reads its
+    list's rows contiguously. Plain copies."""
+    var e = _tid()
+    if e < Int(count):
+        var w = Int(width)
+        var slot = e // w
+        dst.unsafe_store(e, src.unsafe_load(Int(list_indices.unsafe_load(slot)) * w + e % w))
+
+
+def gather_f32_kernel(count: Int32, src: F32P, list_indices: I32P, dst: F32P):
+    var e = _tid()
+    if e < Int(count):
+        dst.unsafe_store(e, src.unsafe_load(Int(list_indices.unsafe_load(e))))
+
+
 def pq_score_kernel(
     q0: Int32, n_probes: Int32, queries: F32P, dim: Int32, centers: F32P, offsets: I32P, list_indices: I32P,
     codes: I32P, cb: F32P, pq_dim: Int32, pq_len: Int32, n_codes: Int32, use_lut: Int32, probes: I32P,
@@ -226,12 +243,11 @@ def pq_score_kernel(
     var stop = Int(offsets.unsafe_load(l + 1))
     var base = lq * Int(stride) + Int(pstart.unsafe_load(b)) - start
     for slot in range(start + t, stop, STPB):
-        var row = Int(list_indices.unsafe_load(slot))
-        if ivf_row_removed(mask, row):
+        if ivf_row_removed(mask, slot):
             continue
         var total = Float32(0.0)
         for j in range(pd):
-            var code = Int(codes.unsafe_load(row * pd + j))
+            var code = Int(codes.unsafe_load(slot * pd + j))
             var v: Float32
             if use_lut != 0:
                 v = lut[j * nc + code]
@@ -279,18 +295,17 @@ def sq_score_kernel(
     var stop = Int(offsets.unsafe_load(l + 1))
     var base = lq * Int(stride) + Int(pstart.unsafe_load(b)) - start
     for slot in range(start + t, stop, STPB):
-        var row = Int(list_indices.unsafe_load(slot))
-        if ivf_row_removed(mask, row):
+        if ivf_row_removed(mask, slot):
             continue
         if staged:
             var acc = Float32(0.0)
             for c in range(d):
-                var dec = ftz(identical_mul_add(Float32(Int(codes.unsafe_load(row * d + c))), dl[c], vm[c]))
+                var dec = ftz(identical_mul_add(Float32(Int(codes.unsafe_load(slot * d + c))), dl[c], vm[c]))
                 var diff = ftz(qr[c] - dec)
                 acc = ts_ftz_nonneg(identical_mul_add(diff, diff, acc))
             cand.unsafe_store(base + slot, acc)
         else:
-            cand.unsafe_store(base + slot, sq_candidate_dist(queries, q_off, centers, l, d, codes, row, vmin, delta))
+            cand.unsafe_store(base + slot, sq_candidate_dist(queries, q_off, centers, l, d, codes, slot, vmin, delta))
 
 
 def rq_rotate_kernel(
@@ -344,26 +359,25 @@ def rq_score_kernel(
     var stop = Int(offsets.unsafe_load(l + 1))
     var base = lq * Int(stride) + Int(pstart.unsafe_load(b)) - start
     for slot in range(start + t, stop, STPB):
-        var row = Int(list_indices.unsafe_load(slot))
-        if ivf_row_removed(mask, row):
+        if ivf_row_removed(mask, slot):
             continue
         if staged:
             var est = qn2
-            var ip = ips.unsafe_load(row)
+            var ip = ips.unsafe_load(slot)
             if ip > Float32(0.0):
                 var dot = Float32(0.0)
                 for wi in range(w):
-                    var cw = codes.unsafe_load(row * w + wi)
+                    var cw = codes.unsafe_load(slot * w + wi)
                     var j0 = wi * 32
                     var jn = dd - j0 if dd - j0 < 32 else 32
                     for u in range(jn):
                         var v = wv[j0 + u]
                         var bit = (cw >> Int32(u)) & Int32(1)
                         dot = ftz(dot + (v if bit != 0 else -v))
-                est = rq_est_tail(dot, qn2, norms.unsafe_load(row), ip, scale)
+                est = rq_est_tail(dot, qn2, norms.unsafe_load(slot), ip, scale)
             cand.unsafe_store(base + slot, est)
         else:
-            cand.unsafe_store(base + slot, rq_candidate_est(ws, b * dd, qn2, codes, row, w, dd, norms, ips, scale))
+            cand.unsafe_store(base + slot, rq_candidate_est(ws, b * dd, qn2, codes, slot, w, dd, norms, ips, scale))
 
 
 @always_inline
@@ -548,6 +562,24 @@ def ivf_scan_search[KIND: Int](
     var dpn = ctx.enqueue_create_buffer[DType.int32](1 if SERIAL else mc * SEL_T)
     var use_lut = 1 if pq_dim * n_codes <= LUT_MAX else 0
     var st = AnnStages("ivf_scan")
+    # lane ann-apple2: codes, mask (and RaBitQ's norms and factors) gathered
+    # into list order once per search; the score kernels index them by slot
+    var n_slots = Int(offsets[n_lists])
+    var width = pq_dim if KIND == 0 else (dim if KIND == 1 else words)
+    var dpcodes = ctx.enqueue_create_buffer[DType.int32](max(n_slots * width, 1))
+    var dpmask = ctx.enqueue_create_buffer[DType.int32](max(n_slots, 1))
+    var dpa = ctx.enqueue_create_buffer[DType.float32](max(n_slots, 1) if KIND == 2 else 1)
+    var dpb = ctx.enqueue_create_buffer[DType.float32](max(n_slots, 1) if KIND == 2 else 1)
+    if n_slots > 0:
+        ctx.enqueue_function[gather_i32_kernel](Int32(n_slots * width), Int32(width), dcodes, dli,
+                                                dpcodes.unsafe_ptr(), grid_dim=_grid(n_slots * width), block_dim=TPB)
+        ctx.enqueue_function[gather_i32_kernel](Int32(n_slots), Int32(1), dmask, dli, dpmask.unsafe_ptr(),
+                                                grid_dim=_grid(n_slots), block_dim=TPB)
+        comptime if KIND == 2:
+            ctx.enqueue_function[gather_f32_kernel](Int32(n_slots), fa, dli, dpa.unsafe_ptr(),
+                                                    grid_dim=_grid(n_slots), block_dim=TPB)
+            ctx.enqueue_function[gather_f32_kernel](Int32(n_slots), fb, dli, dpb.unsafe_ptr(),
+                                                    grid_dim=_grid(n_slots), block_dim=TPB)
     st.mark(ctx, "alloc")
     var q0 = 0
     while q0 < m:
@@ -571,15 +603,15 @@ def ivf_scan_search[KIND: Int](
         comptime if KIND == 0:
             ctx.enqueue_function[pq_score_kernel](
                 Int32(q0), Int32(np), dq, Int32(dim), dc, doff,
-                dli, dcodes, fa, Int32(pq_dim), Int32(pq_len),
+                dli, dpcodes.unsafe_ptr(), fa, Int32(pq_dim), Int32(pq_len),
                 Int32(n_codes), Int32(use_lut), dprobes.unsafe_ptr(), dpstart.unsafe_ptr(), Int32(stride),
-                dmask, dcand.unsafe_ptr(), grid_dim=c * np, block_dim=STPB,
+                dpmask.unsafe_ptr(), dcand.unsafe_ptr(), grid_dim=c * np, block_dim=STPB,
             )
         elif KIND == 1:
             ctx.enqueue_function[sq_score_kernel](
                 Int32(q0), Int32(np), dq, Int32(dim), dc, doff,
-                dli, dcodes, fa, fb, dprobes.unsafe_ptr(),
-                dpstart.unsafe_ptr(), Int32(stride), dmask, dcand.unsafe_ptr(),
+                dli, dpcodes.unsafe_ptr(), fa, fb, dprobes.unsafe_ptr(),
+                dpstart.unsafe_ptr(), Int32(stride), dpmask.unsafe_ptr(), dcand.unsafe_ptr(),
                 grid_dim=c * np, block_dim=STPB,
             )
         else:
@@ -589,9 +621,9 @@ def ivf_scan_search[KIND: Int](
                 grid_dim=_grid(c * np), block_dim=TPB,
             )
             ctx.enqueue_function[rq_score_kernel](
-                Int32(np), doff, dli, dcodes, fa,
-                fb, Int32(D), Int32(words), scale, dprobes.unsafe_ptr(), dpstart.unsafe_ptr(),
-                Int32(stride), dmask, dws.unsafe_ptr(), dqn.unsafe_ptr(), dcand.unsafe_ptr(),
+                Int32(np), doff, dli, dpcodes.unsafe_ptr(), dpa.unsafe_ptr(),
+                dpb.unsafe_ptr(), Int32(D), Int32(words), scale, dprobes.unsafe_ptr(), dpstart.unsafe_ptr(),
+                Int32(stride), dpmask.unsafe_ptr(), dws.unsafe_ptr(), dqn.unsafe_ptr(), dcand.unsafe_ptr(),
                 grid_dim=c * np, block_dim=STPB,
             )
         st.mark(ctx, "score")
@@ -615,6 +647,10 @@ def ivf_scan_search[KIND: Int](
         st.mark(ctx, "select")
         q0 += c
     ctx.synchronize()
+    _ = dpb^
+    _ = dpa^
+    _ = dpmask^
+    _ = dpcodes^
     _ = dpn^
     _ = dpi^
     _ = dpd^
