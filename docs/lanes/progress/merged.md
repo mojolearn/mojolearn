@@ -324,3 +324,23 @@ and `--diff` against origin/main's CPU build is IDENTICAL on every cell;
 removing the two lines brings back the exact 59264/80000 refusal. Owner of the
 bug: cluster-cpu. Open: no kmeans host sabotage switch is wired into
 cluster.checks.
+
+### x_linear Metal column (merged from lane/merged-linear-fix, 2979a9de0)
+
+Apple shards at 89aec9ed1: x-lasso-lars, x-lasso-lars-pos, x-logistic-cv,
+x-logistic-cv-w, x-bayes-ridge, x-pa-clf, x-glm-gamma, x-quantile-sw DISAGREE
+(Metal vs the Mac's CPU). Localized: ONLY the Metal column moved. The Apple CPU
+columns (M3 Ultra, M4), x86 CPU (lane/merged, origin/main, origin/lane/linear-cpu,
+origin/lane/algos-linear incl. the 87026c636 WIP) and CUDA all agree cell for
+cell, so linear-cpu's host schedules, the Arm compiler and the merge's
+is_gpu() dispatch moved nothing, and algos-linear's owed "bits unchanged"
+check is met on CPU. Root cause (owner: algos-linear, team fits 5a7694809+):
+`x_linear/team.mojo` Team.sync used `max.gpu.sync.barrier()`, which on Apple
+lowers to `air.wg.barrier(2, 1)` = threadgroup_barrier(mem_threadgroup):
+it does not order DEVICE memory, and a team shares its values through device
+buffers (CUDA bar.sync and AMD s_barrier+fences do order global memory). Fix:
+`team_barrier()` = `air.wg.barrier(3, 1)` (device | threadgroup) on Apple,
+plain barrier() elsewhere. All 32 x_linear lanes resubmitted to m2pro,
+m3ultra-b and m4pro-b at 517a035ee.
+WATCH (any family): a kernel that hands values between threads through device
+memory across `barrier()` has the same Apple hazard.
