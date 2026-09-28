@@ -379,6 +379,14 @@ def svc_predict_binding(
             raise Error("svc_predict_host: n_rows must be at least one")
         if n_cols <= 0:
             raise Error("svc_predict_host: n_cols must be at least one")
+        if kernel == KERNEL_PRECOMPUTED:
+            # X IS the n_rows x n_support cross-kernel (the caller gathered
+            # the support columns); no support rows are read.
+            if n_support > 0 and n_cols != n_support:
+                raise Error(
+                    "svc_predict_host: kernel='precomputed' needs X with one"
+                    " column per support vector"
+                )
         if not (buffer_mib > 0.0):
             raise Error(
                 "svc_predict_host: the predict buffer (cache_size) must be a"
@@ -582,6 +590,14 @@ def svr_predict_binding(
             raise Error("svr_predict_host: n_rows must be at least one")
         if n_cols <= 0:
             raise Error("svr_predict_host: n_cols must be at least one")
+        if kernel == KERNEL_PRECOMPUTED:
+            # X IS the n_rows x n_support cross-kernel (the caller gathered
+            # the support columns); no support rows are read.
+            if n_support > 0 and n_cols != n_support:
+                raise Error(
+                    "svr_predict_host: kernel='precomputed' needs X with one"
+                    " column per support vector"
+                )
         if not (buffer_mib > 0.0):
             raise Error(
                 "svr_predict_host: the predict buffer (cache_size) must be a"
