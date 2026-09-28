@@ -6,14 +6,14 @@
  )
 +from std.sys.info import is_gpu
  from x_linear.lbfgs import lbfgs, lbfgs_work
- from checks.numerics import identical_sigmoid, identical_softplus, ftz
- 
-@@ -43,7 +44,7 @@
-         rows += 1
+ from x_linear.team import Team
+ from x_linear.tops import fold_fa, fold_fa_ix, chain_fmad, chain_fmad_ix
+@@ -65,7 +66,7 @@
+         var i = Int(ix.unsafe_load(q)) if fold >= 0 else q
          var wi = Float32(1)
          if sw:
 -            wi = ld(y, 2 * n + i)
 +            wi = Float32(1) if is_gpu() else ld(y, 2 * n + i)  # SABOTAGE option weights: the device drops them
-             wrows = fa(wrows, wi)
          var label = Int(ld(y, i))
          if kp == 1:
+             var z = fa(row_dot(x, i, d, th, toff), ld(th, toff + d) if fi else Float32(0))

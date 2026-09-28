@@ -13,9 +13,11 @@ allocation happens inside a fit; the caller hands in the work buffers.
 Speed (a parallel schedule with the same fold order) is pass 2.
 """
 from std.sys.compile import is_defined
+from std.memory import bitcast
+from std.sys.info import is_amd_gpu, is_apple_gpu, is_nvidia_gpu
 from checks.numerics import (
     ftz, identical_mul, identical_mul_add, identical_div, identical_sqrt,
-    identical_exp, identical_log,
+    identical_exp, identical_log, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL,
 )
 
 comptime FP = MutPointer[Float32, MutAnyOrigin]
@@ -25,50 +27,73 @@ comptime X_LINEAR_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 comptime IP = MutPointer[Int32, MutAnyOrigin]
 
 
+@always_inline
+def fz_branchless(x: Float32) -> Float32:
+    """checks/numerics `ftz`'s word, spelled without a branch: a zero
+    exponent field keeps the sign bit only -- a subnormal becomes its signed
+    zero, a zero stays itself -- and anything else is returned whole
+    (x_linear/checks/seams_check.mojo checks the edge words against ftz)."""
+    var b = bitcast[DType.uint32](x)
+    var keep = UInt32(0x7FFFFFFF) * UInt32(Int((b & UInt32(0x7F800000)) != UInt32(0)))
+    return bitcast[DType.float32](b & (UInt32(0x80000000) | keep))
+
+
+@always_inline
+def fz(x: Float32) -> Float32:
+    """The lane's flush: `fz_branchless` on a GPU under IDENTICAL (lane
+    linear speed phase: the branchy spelling cost the device fits 3.5x on
+    the RTX 4090), `ftz` itself everywhere else (on an x86 host the
+    branchless spelling was 1.8x slower). The same word either way."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and (is_nvidia_gpu() or is_amd_gpu() or is_apple_gpu()):
+        return fz_branchless(x)
+    return ftz(x)
+
+
 # DEVIATION 5001 (IDENTITY_PATHS row 101): every operand and every result of
-# the lane's arithmetic passes through `ftz`, so a subnormal is a signed zero
-# on every column (Apple flushes in hardware, the others do not).
+# the lane's arithmetic passes through the flush (`fz`, ftz's word), so a
+# subnormal is a signed zero on every column (Apple flushes in hardware, the
+# others do not).
 @always_inline
 def fa(a: Float32, b: Float32) -> Float32:
-    return ftz(ftz(a) + ftz(b))
+    return fz(fz(a) + fz(b))
 
 
 @always_inline
 def fs(a: Float32, b: Float32) -> Float32:
-    return ftz(ftz(a) - ftz(b))
+    return fz(fz(a) - fz(b))
 
 
 @always_inline
 def fm(a: Float32, b: Float32) -> Float32:
-    return ftz(identical_mul(ftz(a), ftz(b)))
+    return fz(identical_mul(fz(a), fz(b)))
 
 
 @always_inline
 def fd(a: Float32, b: Float32) -> Float32:
-    return ftz(identical_div(ftz(a), ftz(b)))
+    return fz(identical_div(fz(a), fz(b)))
 
 
 @always_inline
 def fmad(a: Float32, b: Float32, c: Float32) -> Float32:
     """a * b + c, one rounding under IDENTICAL."""
-    return ftz(identical_mul_add(ftz(a), ftz(b), ftz(c)))
+    return fz(identical_mul_add(fz(a), fz(b), fz(c)))
 
 
 @always_inline
 def fsqrt(a: Float32) -> Float32:
-    return ftz(identical_sqrt(ftz(a)))
+    return fz(identical_sqrt(fz(a)))
 
 
 # DEVIATION 5008 (IDENTITY_PATHS row 108): exp and log in every fit are the
 # portable spellings of checks/numerics.mojo, never a target's libm.
 @always_inline
 def fexp(a: Float32) -> Float32:
-    return ftz(identical_exp(ftz(a)))
+    return fz(identical_exp(fz(a)))
 
 
 @always_inline
 def flog(a: Float32) -> Float32:
-    return ftz(identical_log(ftz(a)))
+    return fz(identical_log(fz(a)))
 
 
 @always_inline

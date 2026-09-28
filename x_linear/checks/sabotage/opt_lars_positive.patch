@@ -8,7 +8,7 @@
  from x_linear.ops import (
      FP, IP, fa, fs, fm, fd, fmad, fsqrt, fabs, fmin, fsign, ld, st, ldi, sti, i2f,
      fill, copy, cholesky, chol_solve, centered_gram,
-@@ -38,7 +39,7 @@
+@@ -40,7 +41,7 @@
      var fi = ldi(ip, 1) != 0
      var lasso = ldi(ip, 2) != 0
      var alpha_min = ld(fp, 0)

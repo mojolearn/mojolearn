@@ -8,7 +8,7 @@
  from x_linear.ops import (
      FP, IP, fa, fs, fm, fd, fmad, fsqrt, fabs, fmax, ld, st, ldi, i2f, fill, copy,
      cholesky, chol_solve, row_dot, mean_of,
-@@ -118,7 +119,7 @@
+@@ -134,7 +135,7 @@
              var vv = fs(fs(ld(y, i), abi), ld(fw, u + i))
              var nr: Float32
              if sw:

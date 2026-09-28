@@ -1,14 +1,14 @@
 --- a/x_linear/sgd.mojo
 +++ b/x_linear/sgd.mojo
-@@ -20,6 +20,7 @@
-     ld, st, ldi, sti, i2f, fill, row_dot, shuffle,
+@@ -21,6 +21,7 @@
  )
+ from x_linear.team import Team
  from checks.numerics import identical_pow
 +from std.sys.info import is_gpu
  
  comptime L_HINGE = 0
  comptime L_LOG = 1
-@@ -218,7 +219,8 @@
+@@ -219,7 +220,8 @@
                  if has_cw:
                      cw = wpos if y > 0 else wneg
                  var swi = ld(swp, i) if has_sw else Float32(1)

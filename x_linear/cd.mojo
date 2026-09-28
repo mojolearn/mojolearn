@@ -26,6 +26,8 @@ precompute=False for the refit; the same minimizer). float32 throughout.
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fabs, fmax, fexp, flog, fsign, ld, st, ldi, i2f, fill, copy,
 )
+from x_linear.team import Team
+from x_linear.tops import upper_cell, fold_fa_ix, fold_sq_ix, chain_cfmad_ix
 
 
 def alpha_grid_value(amax: Float32, eps: Float32, k: Int, a_n: Int) -> Float32:
@@ -111,60 +113,67 @@ def _gap(fw: FP, q: Int, qw: Int, w: Int, d: Int, ynorm2: Float32, l1: Float32, 
     return fs(primal, dual)
 
 
-def _prep(x: FP, y: FP, n: Int, d: Int, fid: FP, fold: Int, fi: Bool,
+def _prep(t: Team, x: FP, y: FP, n: Int, d: Int, fid: FP, fold: Int, fi: Bool,
           fw: FP, xm: Int, gg: Int, q: Int, sc: Int):
     """Centers the rows whose fold id != `fold` (all rows when fold < 0):
-    x means, Gram, X'y; fw[sc:sc+3] = (y mean, |yc|^2, rows)."""
-    var rows = 0
-    for i in range(n):
-        if fold < 0 or Int(ld(fid, i)) != fold:
-            rows += 1
+    x means, Gram, X'y; fw[sc:sc+3] = (y mean, |yc|^2, rows).
+    Team form: the lead lists the training rows (ascending, team row 1) and
+    the held-out rows (team row 2); one thread per mean, Gram cell and X'y
+    cell folds its rows ascending (x_linear/tops.mojo chains); the y folds
+    on the lead."""
+    var tr = t.row(1).bitcast[Int32]()
+    var te = t.row(2).bitcast[Int32]()
     var ym = Float32(0)
-    for j in range(d):
+    var rows = 0
+    if t.lead():
+        var nte = 0
+        for i in range(n):
+            if fold < 0 or Int(ld(fid, i)) != fold:
+                tr.unsafe_store(rows, Int32(i))
+                rows += 1
+            else:
+                te.unsafe_store(nte, Int32(i))
+                nte += 1
+        if fi:
+            ym = fd(fold_fa_ix(y, tr, rows), i2f(rows))
+        var yn = Float32(0)
+        for k in range(rows):
+            var r = fs(ld(y, Int(tr.unsafe_load(k))), ym)
+            yn = fmad(r, r, yn)
+        st(fw, sc, ym)
+        st(fw, sc + 1, yn)
+        st(fw, sc + 2, i2f(rows))
+    rows = t.bcast_int(rows, 1)
+    ym = t.bcast(ym, 2)
+    for j in range(t.tid, d, t.nt):
         var acc = Float32(0)
         if fi:
-            for i in range(n):
-                if fold < 0 or Int(ld(fid, i)) != fold:
-                    acc = fa(acc, ld(x, i * d + j))
-            acc = fd(acc, i2f(rows))
+            acc = fd(fold_fa_ix(x, tr, rows, j, d), i2f(rows))
         st(fw, xm + j, acc)
-    if fi:
-        var acc = Float32(0)
-        for i in range(n):
-            if fold < 0 or Int(ld(fid, i)) != fold:
-                acc = fa(acc, ld(y, i))
-        ym = fd(acc, i2f(rows))
-    var yn = Float32(0)
-    for i in range(n):
-        if fold < 0 or Int(ld(fid, i)) != fold:
-            var r = fs(ld(y, i), ym)
-            yn = fmad(r, r, yn)
-    for j in range(d):
-        var mj = ld(fw, xm + j)
-        for k in range(j, d):
-            var mk = ld(fw, xm + k)
-            var acc = Float32(0)
-            for i in range(n):
-                if fold < 0 or Int(ld(fid, i)) != fold:
-                    acc = fmad(fs(ld(x, i * d + j), mj), fs(ld(x, i * d + k), mk), acc)
+    t.sync()
+    var cells = d * (d + 1) // 2
+    for c in range(t.tid, cells + d, t.nt):
+        if c < cells:
+            var jk = upper_cell(c, d)
+            var j = jk[0]
+            var k = jk[1]
+            var acc = chain_cfmad_ix(x, j, d, ld(fw, xm + j), x, k, d, ld(fw, xm + k), tr, rows)
             st(fw, gg + j * d + k, acc)
             st(fw, gg + k * d + j, acc)
-        var acc = Float32(0)
-        for i in range(n):
-            if fold < 0 or Int(ld(fid, i)) != fold:
-                acc = fmad(fs(ld(x, i * d + j), mj), fs(ld(y, i), ym), acc)
-        st(fw, q + j, acc)
-    st(fw, sc, ym)
-    st(fw, sc + 1, yn)
-    st(fw, sc + 2, i2f(rows))
+        else:
+            var j = c - cells
+            st(fw, q + j, chain_cfmad_ix(x, j, d, ld(fw, xm + j), y, 0, 1, ym, tr, rows))
+    t.sync()
 
 
-def enetcv_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
+def enetcv_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
     """ip: [max_iter, fit_intercept, n_alphas A, n_folds F, n_l1 L, explicit_alphas, positive].
     fp: [eps, tol, l1_ratios (L), explicit alphas (A, descending) if given].
     y: targets n | fold ids n (as float32).
     res: coef d | intercept | alpha_ | l1_ratio_ | n_iter | alphas L*A | mse L*A*F.
-    fw: xm d | G d*d | q d | Qw d | w d | scalars 3."""
+    fw: xm d | G d*d | q d | Qw d | w d | scalars 3.
+    Team form: the row passes (`_prep`, the held-out residuals) across the
+    team; the coordinate descent (d x d) and every fold of the scores on the lead."""
     var max_iter = ldi(ip, 0)
     var fi = ldi(ip, 1) != 0
     var a_n = ldi(ip, 2)
@@ -183,69 +192,84 @@ def enetcv_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw
     var sc = w + d
     var alphas = d + 4
     var mse = alphas + l_n * a_n
+    var rr = t.row(0)
     # the grids, on all rows
-    _prep(x, y, n, d, fid, -1, fi, fw, xm, gg, q, sc)
-    for l in range(l_n):
-        var l1r = ld(fp, 2 + l)
-        if explicit:
+    _prep(t, x, y, n, d, fid, -1, fi, fw, xm, gg, q, sc)
+    if t.lead():
+        for l in range(l_n):
+            var l1r = ld(fp, 2 + l)
+            if explicit:
+                for k in range(a_n):
+                    st(res, alphas + l * a_n + k, ld(fp, 2 + l_n + k))
+                continue
+            var qmax = Float32(0)
+            for j in range(d):
+                qmax = fmax(qmax, fabs(ld(fw, q + j)))
+            var amax = fd(qmax, fm(i2f(n), l1r))
+            if amax <= Float32(1e-6):
+                for k in range(a_n):
+                    st(res, alphas + l * a_n + k, Float32(1e-6))
+                continue
             for k in range(a_n):
-                st(res, alphas + l * a_n + k, ld(fp, 2 + l_n + k))
-            continue
-        var qmax = Float32(0)
-        for j in range(d):
-            qmax = fmax(qmax, fabs(ld(fw, q + j)))
-        var amax = fd(qmax, fm(i2f(n), l1r))
-        if amax <= Float32(1e-6):
-            for k in range(a_n):
-                st(res, alphas + l * a_n + k, Float32(1e-6))
-            continue
-        for k in range(a_n):
-            st(res, alphas + l * a_n + k, alpha_grid_value(amax, eps, k, a_n))
+                st(res, alphas + l * a_n + k, alpha_grid_value(amax, eps, k, a_n))
+    t.sync()
     # the path on each fold
     for f in range(f_n):
-        _prep(x, y, n, d, fid, f, fi, fw, xm, gg, q, sc)
+        _prep(t, x, y, n, d, fid, f, fi, fw, xm, gg, q, sc)
         var ym = ld(fw, sc)
         var yn = ld(fw, sc + 1)
         var rows = Int(ld(fw, sc + 2))
         var n_te = n - rows
         for l in range(l_n):
             var l1r = ld(fp, 2 + l)
-            fill(fw, w, d, Float32(0))
+            if t.lead():
+                fill(fw, w, d, Float32(0))
             for k in range(a_n):
-                var alpha = ld(res, alphas + l * a_n + k)
-                var l1 = fm(fm(alpha, l1r), i2f(rows))
-                var l2 = fm(fm(alpha, fs(Float32(1), l1r)), i2f(rows))
-                _ = enet_gram_cd(fw, gg, q, qw, w, d, yn, l1, l2, max_iter, tol, positive)
                 var b = ym
-                for j in range(d):
-                    b = fs(b, fm(ld(fw, xm + j), ld(fw, w + j)))
+                if t.lead():
+                    var alpha = ld(res, alphas + l * a_n + k)
+                    var l1 = fm(fm(alpha, l1r), i2f(rows))
+                    var l2 = fm(fm(alpha, fs(Float32(1), l1r)), i2f(rows))
+                    _ = enet_gram_cd(fw, gg, q, qw, w, d, yn, l1, l2, max_iter, tol, positive)
+                    for j in range(d):
+                        b = fs(b, fm(ld(fw, xm + j), ld(fw, w + j)))
+                b = t.bcast(b, 4)
+                var te = t.row(2).bitcast[Int32]()
+                for qq in range(t.tid, n_te, t.nt):
+                    var i = Int(te.unsafe_load(qq))
+                    var p = b
+                    for j in range(d):
+                        p = fmad(ld(x, i * d + j), ld(fw, w + j), p)
+                    st(rr, i, fs(p, ld(y, i)))
+                t.sync()
+                if t.lead():
+                    var acc = fold_sq_ix(rr, te, n_te)
+                    st(res, mse + (l * a_n + k) * f_n + f, fd(acc, i2f(n_te)) if n_te > 0 else Float32(0))
+                t.sync()
+    if t.lead():
+        # the choice: the smallest mean over folds, first on a tie
+        var best_l = 0
+        var best_k = 0
+        var best = Float32(0)
+        for l in range(l_n):
+            for k in range(a_n):
                 var acc = Float32(0)
-                for i in range(n):
-                    if Int(ld(fid, i)) == f:
-                        var p = b
-                        for j in range(d):
-                            p = fmad(ld(x, i * d + j), ld(fw, w + j), p)
-                        var r = fs(p, ld(y, i))
-                        acc = fmad(r, r, acc)
-                st(res, mse + (l * a_n + k) * f_n + f, fd(acc, i2f(n_te)) if n_te > 0 else Float32(0))
-    # the choice: the smallest mean over folds, first on a tie
-    var best_l = 0
-    var best_k = 0
-    var best = Float32(0)
-    for l in range(l_n):
-        for k in range(a_n):
-            var acc = Float32(0)
-            for f in range(f_n):
-                acc = fa(acc, ld(res, mse + (l * a_n + k) * f_n + f))
-            var m = fd(acc, i2f(f_n))
-            if (l == 0 and k == 0) or m < best:  # DEVIATION 5005: the first minimum
-                best = m
-                best_l = l
-                best_k = k
+                for f in range(f_n):
+                    acc = fa(acc, ld(res, mse + (l * a_n + k) * f_n + f))
+                var m = fd(acc, i2f(f_n))
+                if (l == 0 and k == 0) or m < best:  # DEVIATION 5005: the first minimum
+                    best = m
+                    best_l = l
+                    best_k = k
+        st(res, d + 1, ld(res, alphas + best_l * a_n + best_k))
+        st(res, d + 2, ld(fp, 2 + best_l))
+    t.sync()
     # the refit on all rows, from zero
-    _prep(x, y, n, d, fid, -1, fi, fw, xm, gg, q, sc)
-    var l1r = ld(fp, 2 + best_l)
-    var alpha = ld(res, alphas + best_l * a_n + best_k)
+    _prep(t, x, y, n, d, fid, -1, fi, fw, xm, gg, q, sc)
+    if not t.lead():
+        return
+    var l1r = ld(res, d + 2)
+    var alpha = ld(res, d + 1)
     fill(fw, w, d, Float32(0))
     var iters = enet_gram_cd(fw, gg, q, qw, w, d, ld(fw, sc + 1), fm(fm(alpha, l1r), i2f(n)),
                              fm(fm(alpha, fs(Float32(1), l1r)), i2f(n)), max_iter, tol, positive)
