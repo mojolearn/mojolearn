@@ -116,7 +116,11 @@ job (forward and reverse), digests equal in every pair. Raw:
 RBFSampler.transform 1M x 500 (M3 Ultra, arms in one job): copy into the
 caller's array 907 -> 745 ms with pinned staging (312b5da1a), transform
 1.130 -> 0.964 s; the remaining copy is the first touch of the caller's
-fresh 2 GB (parallel host copy 0dcb77d80, measurement pending).
+fresh 2 GB. With the copy split over the host cores (0dcb77d80, arms in one
+job, M3 Ultra, digests equal): RBFSampler.transform 1M x 500 1.132 -> 0.380 s
+(taxi) / 1.135 -> 0.379 s (HIGGS); Nystroem.transform 100k x 300 0.077 ->
+0.033 s / 0.076 -> 0.032 s. Panel factor/solve staging (0e481b572): neutral
+(KRR potrf 648 -> 640 ms, GPC factor 1,000 -> 995 ms over 6 steps).
 
 ## FAST quality (paired, bench/x_neighbors_fast_quality.py)
 
