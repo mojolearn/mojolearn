@@ -114,3 +114,27 @@ column answers False and keeps the matrix loop).
 - a8cf6f407 GaussianMixture start (opt-in `-D MOJOLEARN_GMM_INIT_FILL=1`): the one-hot rows and
   their logs by fills, `_safe_log(0)` and `_safe_log(1)` taken once. Same value in every cell.
   Host code of every mode and column.
+
+### Written, opt-in, not built or measured yet (next job)
+
+Every switch below is `GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined[...]`, so an IDENTICAL
+build cannot take any of them; the device paths also need `ops.fast_device()` (the GPU binding).
+bench/cluster_apple3_arms/ holds one patch per change against the tree before them, so the job
+builds each alone.
+
+| switch | change | bits |
+|---|---|---|
+| MOJOLEARN_AP_EXACT | AffinityPropagation: the median preference by a radix select over every block of the grid (`kth_flat`; `kth` ran the 25M values on ONE block), read straight from the device's distance matrix; the two final diagonals gathered on the device (`get_diag`, was two 100 MB reads); the equal-similarities scan stops at its first difference; the responsibilities' max and second max in one walk of the row | same values |
+| MOJOLEARN_AP_SPLIT | AffinityPropagation: availability column sums over row slices on every block (`ap_a_split`; `ap_a` ran one thread per column) | FAST bits move |
+| MOJOLEARN_BGMM_ENT | BayesianGaussianMixture: the bound's entropy from device sums over runs of 4 products (`dot_groups`), read as n K / 4 floats; was 2 n K floats read and n K Float64 products on the host every iteration | FAST bits move |
+| MOJOLEARN_MOMENTS_ROWS | mixture moments, d <= 8: every row read once per component, all of its chains folded by the thread that owns the row group | FAST bits move |
+| MOJOLEARN_MEANSHIFT_BLOCK | MeanShift, d <= 16: one block of 256 threads per seed (was one thread per seed) | FAST bits move |
+| MOJOLEARN_OPTICS_SIMD | OPTICS: the ordering loop's two row walks by vectors, the same decisions | same values |
+| MOJOLEARN_OPTICS_HOSTROWS | OPTICS (with OPTICS_SIMD, euclidean): the loop forms the step's distance row from X; the 400 MB matrix is not read to the host | FAST bits move |
+| MOJOLEARN_XC_ALLOC | a slot a distance kernel fills completely is not zeroed first (`alloc`) | same values |
+| MOJOLEARN_MINIBATCH_ONE_PASS | MiniBatchKMeans: the center update in one walk of the batch; every center's chain of operations unchanged | same values |
+
+Diagnostics added: `HDB_STAGE` times in hdbscan (`MOJOLEARN_STAGE_TIMES=1`).
+
+New `ClusterOps` methods (both columns implement each): `fast_device`, `ward_nn`, `kth_flat`,
+`get_diag`, `ap_a_split`, `dot_groups`, `alloc`.
