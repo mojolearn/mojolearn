@@ -26,6 +26,8 @@ order, default rebuilt at the end).
 | 59e15eef3 | `trsm_lower` on Apple: sweep with 8 right-hand sides per block (`-D MOJOLEARN_CHOL_MULTI_RHS_OFF`) | both | same chains |
 | daa913db1 / 3aa68f5a2 | back-substitution ring kernel (x in threadgroup memory) -- MEASURED 3.6x SLOWER, reverted | IDENTICAL | digests equal |
 | fd048ed6a | Jacobi eigh: FAST on Apple launches 256 wide like IDENTICAL (scheduling) | FAST | FAST words unchanged |
+| 593ce0826 | back substitution, second form: x in threadgroup memory (masked ring of the newest values + staged older ones), 32-step register prefetch (`-D MOJOLEARN_CHOL_BACK_RING_OFF`) | IDENTICAL (and FAST where the pinned solve runs) | same chain; digests equal |
+| 312b5da1a | Nystroem / RBFSampler transform into caller memory through a pinned 64 MB staging buffer (`-D MOJOLEARN_KM_DIRECT_OUT`) | both | same words |
 | efd02268a, 9ec71f7a4 | MOJOLEARN_STAGE_TIMES=1 walls for GPC fit, KRR solve, RBFSampler transform (timing only) | - | - |
 | 38c9834dd | `build_gp.sh` smoke: return_cov is honored now (the stale refusal assert failed every FAST GP build on Apple after the merge) | FAST build | - |
 
@@ -81,3 +83,15 @@ Cholesky / GP / KRR (M3 Ultra, arms in one job, digests equal in every pair):
 | GaussianProcessClassifier.fit | IDENTICAL | taxi / HIGGS 3k | 2.118 / 1.477 | 1.981 / 1.357 | deferred info |
 | GaussianProcessClassifier.predict_proba | IDENTICAL | taxi / HIGGS 3k x 3k | 0.357 / 0.362 | 0.218 / 0.216 | 8-RHS sweep (59e15eef3) |
 | GaussianProcessClassifier.predict_proba | FAST | taxi / HIGGS 3k x 3k | 1.509 / 1.514 | 0.182 / 0.184 | 8-RHS sweep (FAST's serial column solve before) |
+| KernelRidge.fit | IDENTICAL | taxi / HIGGS 10k rbf | 1.913 / 1.466 | 1.045 / 0.601 | back-substitution ring v2 (593ce0826); cho_solve 1,257 -> 390 ms |
+| GaussianProcessRegressor.fit | IDENTICAL | taxi / HIGGS 3k | 0.348 / 0.290 | 0.269 / 0.206 | ring v2 |
+| GaussianProcessClassifier.fit | IDENTICAL | taxi / HIGGS 3k | 1.985 / 1.382 | 1.523 / 0.981 | ring v2 (solve 732 -> 269 ms over 6 Newton steps) |
+| Nystroem.fit | FAST | taxi / HIGGS 4k, 300 comps | 3.063 / 2.301 | 0.834 / 0.630 | Jacobi 256-wide (fd048ed6a); not an in-job A/B: two jobs on the M3 Ultra |
+
+Profiles (MOJOLEARN_STAGE_TIMES=1, M3 Ultra): KernelRidge 10k potrf 640 ms
+(taxi) / 191 ms (HIGGS; taxi's tiny kernel values fail the matrix unit's
+exponent admission and are recomputed on the rounded chain), cho_solve 390 ms
+after ring v2. GPC fit taxi, 6 Newton steps: factor 990 ms, solve 270 ms,
+B matrix (host) 123 ms, matvec 67 ms. RBFSampler 1M x 500 transform: gemm
+70 ms, epilogue 39 ms, copy into the caller's array 905 ms (fixed by
+312b5da1a, measurement pending).
