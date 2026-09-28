@@ -19,7 +19,7 @@ from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, ld, st, ldi, i2f, fill, copy, cholesky, chol_solve, centered_gram,
 )
 from x_linear.team import Team
-from x_linear.tops import upper_cell, t_centered_gram, t_sum
+from x_linear.tops import upper_cell, t_centered_gram, t_sum, fold_fa, fold_sq, chain_fmad, chain_cfmad
 
 
 def ridge_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
@@ -51,25 +51,17 @@ def ridge_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw
         if j < d:
             if fi:
                 if sw:
-                    for i in range(n):
-                        acc = fmad(ld(y, wo + i), ld(x, i * d + j), acc)
-                    acc = fd(acc, wsum)
+                    acc = fd(chain_fmad(y, wo, 1, x, j, d, n), wsum)
                 else:
-                    for i in range(n):
-                        acc = fa(acc, ld(x, i * d + j))
-                    acc = fd(acc, i2f(n))
+                    acc = fd(fold_fa(x, j, d, n), i2f(n))
             st(fw, xm + j, acc)
         else:
             var c = j - d
             if fi:
                 if sw:
-                    for i in range(n):
-                        acc = fmad(ld(y, wo + i), ld(y, i * t_n + c), acc)
-                    acc = fd(acc, wsum)
+                    acc = fd(chain_fmad(y, wo, 1, y, c, t_n, n), wsum)
                 else:
-                    for i in range(n):
-                        acc = fa(acc, ld(y, i * t_n + c))
-                    acc = fd(acc, i2f(n))
+                    acc = fd(fold_fa(y, c, t_n, n), i2f(n))
             st(fw, ym + c, acc)
     t.sync()
     if sw:
@@ -93,13 +85,14 @@ def ridge_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw
         var tt = c // d
         var j = c - tt * d
         var ymt = ld(fw, ym + tt)
-        var acc = Float32(0)
         var mj = ld(fw, xm + j)
-        for i in range(n):
-            var xc = fs(ld(x, i * d + j), mj)
-            if sw:
-                xc = fm(ld(y, wo + i), xc)
-            acc = fmad(xc, fs(ld(y, i * t_n + tt), ymt), acc)
+        var acc = Float32(0)
+        if sw:
+            for i in range(n):
+                var xc = fm(ld(y, wo + i), fs(ld(x, i * d + j), mj))
+                acc = fmad(xc, fs(ld(y, i * t_n + tt), ymt), acc)
+        else:
+            acc = chain_cfmad(x, j, d, mj, y, tt, t_n, ymt, n)
         st(fw, xty + tt * d + j, acc)
     t.sync()
     var best = 0
@@ -142,12 +135,12 @@ def ridge_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw
             t.sync()
             if t.lead():
                 var err = Float32(0)
-                for i in range(n):
-                    var loo = ld(lr, i)
-                    if sw:
+                if sw:
+                    for i in range(n):
+                        var loo = ld(lr, i)
                         err = fmad(fm(ld(y, wo + i), loo), loo, err)
-                    else:
-                        err = fmad(loo, loo, err)
+                else:
+                    err = fold_sq(lr, 0, n)
                 err = fd(err, i2f(n))
                 st(res, t_n * d + t_n + 2 + a, err)
                 if a == 0 or err < best_err:  # DEVIATION 5005: the first minimum

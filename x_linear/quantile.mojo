@@ -24,7 +24,7 @@ from x_linear.ops import (
     cholesky, chol_solve, row_dot, mean_of,
 )
 from x_linear.team import Team
-from x_linear.tops import t_sum
+from x_linear.tops import t_sum, fold_sq, chain_fmad, fold_one_fmad
 
 
 def _soft(a: Float32, t: Float32) -> Float32:
@@ -109,12 +109,14 @@ def quantile_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP,
     var converged = False
     for it in range(max_iter):
         iters = it + 1
-        # beta-update
+        # beta-update: each row's y - r - u across the team (team row 1),
+        # then one thread per cell of A'(y - r - u)
+        var vb = t.row(1)
+        for i in range(t.tid, n, t.nt):
+            st(vb, i, fs(fs(ld(y, i), ld(fw, r + i)), ld(fw, u + i)))
+        t.sync()
         for j in range(t.tid, m, t.nt):
-            var acc = Float32(0)
-            for i in range(n):
-                var aj = ld(x, i * d + j) if j < d else Float32(1)
-                acc = fmad(aj, fs(fs(ld(y, i), ld(fw, r + i)), ld(fw, u + i)), acc)
+            var acc = chain_fmad(x, j, d, vb, 0, 1, n) if j < d else fold_one_fmad(vb, 0, n)
             if j < d:
                 acc = fa(acc, fs(ld(fw, z + j), ld(fw, v + j)))
             st(fw, rhs + j, acc)
@@ -152,22 +154,14 @@ def quantile_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP,
         t.sync()
         # the dual residual's A' dr, one thread per cell (into rhs, free now)
         for j in range(t.tid, m, t.nt):
-            var acc = Float32(0)
-            for i in range(n):
-                var aj = ld(x, i * d + j) if j < d else Float32(1)
-                acc = fmad(aj, ld(fw, tmp + i), acc)
+            var acc = chain_fmad(x, j, d, fw, tmp, 1, n) if j < d else fold_one_fmad(fw, tmp, n)
             st(fw, rhs + j, acc)
         t.sync()
         var flag = 0  # bit 0: converged, bit 1: rescaled
         var inv = Float32(1)
         if t.lead():
-            var abn = Float32(0)
-            var rn = Float32(0)
-            for i in range(n):
-                var abi = ld(fw, ab + i)
-                abn = fmad(abi, abi, abn)
-                var nr = ld(fw, r + i)
-                rn = fmad(nr, nr, rn)
+            var abn = fold_sq(fw, ab, n)
+            var rn = fold_sq(fw, r, n)
             # z-update
             var zdiff = Float32(0)
             var wn = Float32(0)
@@ -181,10 +175,7 @@ def quantile_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP,
                 zdiff = fmad(dz, dz, zdiff)
                 st(fw, z + j, nz)
                 zn = fmad(nz, nz, zn)
-            var prim = Float32(0)
-            for i in range(n):
-                var pr = ld(prb, i)
-                prim = fmad(pr, pr, prim)
+            var prim = fold_sq(prb, 0, n)
             for j in range(d):
                 var pr = fs(ld(fw, beta + j), ld(fw, z + j))
                 prim = fmad(pr, pr, prim)
@@ -198,9 +189,7 @@ def quantile_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP,
             var dual_n = fm(rho, fsqrt(dual))
             var scale_p = fmax(fmax(fsqrt(abn), fsqrt(rn)), fmax(ynorm, fmax(fsqrt(wn), fsqrt(zn))))
             var eps_p = fa(fm(eps_abs, fsqrt(i2f(n + d))), fm(eps_rel, scale_p))
-            var un = Float32(0)
-            for i in range(n):
-                un = fmad(ld(fw, u + i), ld(fw, u + i), un)
+            var un = fold_sq(fw, u, n)
             for j in range(d):
                 un = fmad(ld(fw, v + j), ld(fw, v + j), un)
             var eps_d = fa(fm(eps_abs, fsqrt(i2f(m))), fm(fm(eps_rel, rho), fsqrt(un)))
