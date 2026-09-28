@@ -50,6 +50,21 @@ while [ "$r" -lt "$ROUNDS" ]; do
     IFS=$oldifs
     r=$((r + 1))
 done
+if [ -n "${CAB_FASTQ:-}" ]; then
+    # the FAST paired quality set, once per arm
+    IFS=';'
+    for arm in $ARMS; do
+        IFS=$oldifs
+        name=${arm%%=*}
+        cp "$keep/$name.so" "$so"
+        extra=$(eval "printf %s \"\${CAB_PY_$name:-}\"")
+        echo "##### FASTQ $name"
+        # shellcheck disable=SC2086
+        CNN_FASTQ_EXTRA="$extra" pixi run -e default python tools/apple_speed_cnn/fastq.py "$MODE" . 2>&1 | sed "s/^/[$name] /"
+        IFS=';'
+    done
+    IFS=$oldifs
+fi
 if [ -n "${CAB_PLANS:-}" ]; then
     mf="-D MOJOLEARN_NUMERIC_IDENTICAL=1"
     [ "$MODE" = fast ] && mf=""
