@@ -696,7 +696,14 @@ def _calc_quantization_phase_b(
     Training and held-out predictions agreed, so the extra borders never
     decided a split on this lane; the saved `feature` records did not.
 
-    No statement on the device path flushes the column: the radix sort is
+    PINNED 2026-09-28 (DEVIATION 5900, lane/trees-cpu): the device's phase B
+    now asks `calc_quantization(..., flush_subnormals=True)`, whose
+    `best_split` is this function's arithmetic by bits, so the device
+    borders no longer depend on the worker's MXCSR/FPCR either (a
+    `host_parallelize` task runs the caller's IEEE environment). What
+    follows is the measurement that chose the flushed reading.
+
+    Before the pin, no statement on the device path flushed the column: the radix sort is
     an integer sort of the twiddled bits (`radix_sort.mojo:337-395`), the
     staging and `_dp_task` copies are loads and stores, and `best_split`
     has no `ftz`. The one border build that runs `best_split` on the
@@ -1982,6 +1989,62 @@ def _estimate_leaves(
 # ===========================================================================
 
 
+@fieldwise_init
+struct _HostLeafPartition(Movable):
+    """`LeafPartition` (`doc_parallel_leaves_estimator.mojo:88-105`) on the
+    host: rows grouped by leaf, `offsets`/`sizes` per leaf."""
+
+    var row_index: List[Int]
+    var offsets: List[Int]
+    var sizes: List[Int]
+
+
+def _partition_for_model(
+    cindex: List[UInt32],
+    layout: CompressedIndexLayout,
+    tree_features: List[Int],
+    tree_bins: List[Int],
+    depth: Int,
+    n_rows: Int,
+) raises -> _HostLeafPartition:
+    """`compute_bins_for_model` + `compute_bins_kernel` then
+    `partition_from_bins` (`doc_parallel_leaves_estimator.mojo:108-260`,
+    `gbdt/models/kernel/add_bin_values.mojo:226-273`): each row's leaf is
+    the sum of `1 << level` over the levels whose split it passes (TakeBin,
+    an equality, on a one-hot feature; TakeGreater otherwise), then a
+    STABLE counting sort, rows ascending within a leaf."""
+    if depth <= 0:
+        # the device raises the same words before any launch
+        raise Error("compute_bins_for_model: depth must be positive")
+    var n_leaves = 1 << depth
+    var bins = List[Int](length=n_rows, fill=0)
+    for level in range(depth):
+        ref cf = layout.features[tree_features[level]]
+        var base = Int(cf.offset) * n_rows
+        var mask = cf.mask << cf.shift
+        var value = UInt32(tree_bins[level]) << cf.shift
+        var eq = cf.one_hot_feature
+        for r in range(n_rows):
+            var fv = cindex[base + r] & mask
+            var split = (fv == value) if eq else (fv > value)
+            if split:
+                bins[r] += 1 << level
+    var sizes = List[Int](length=n_leaves, fill=0)
+    for r in range(n_rows):
+        sizes[bins[r]] += 1
+    var offsets = List[Int](length=n_leaves, fill=0)
+    var running = 0
+    for i in range(n_leaves):
+        offsets[i] = running
+        running += sizes[i]
+    var fill = offsets.copy()
+    var rows = List[Int](length=n_rows, fill=0)
+    for r in range(n_rows):
+        rows[fill[bins[r]]] = r
+        fill[bins[r]] += 1
+    return _HostLeafPartition(rows^, offsets^, sizes^)
+
+
 def gbdt_host_fit(
     x_colmajor: List[Float32],
     y: List[Float32],
@@ -2081,9 +2144,7 @@ def gbdt_host_fit_eval(
     elif len(one_hot_in) != 0:
         raise Error("one_hot flags must be empty or one per feature")
     var layout = build_layout(grid.fold_counts, one_hot)
-    var blocks = blocks_for(layout, n_rows)
     var cindex = _binarize_columns(x_colmajor, n_rows, n_features, grid, layout)
-    var hist_cells = layout.hist_cells
 
     # ---- the HELD-OUT arm (gbdt/host/gbdt_oracle_eval.mojo) ----
     # THE TEST ROWS ARE QUANTIZED AGAINST THE MODEL'S OWN BORDERS, the
@@ -2091,7 +2152,6 @@ def gbdt_host_fit_eval(
     # same `layout`, so the same feature offsets apply and every split
     # scores against the bins it was grown on.
     var has_test = eval.n_rows > 0
-    var n_eval = eval.n_rows if has_test else 1
     if has_test:
         if len(eval.x_colmajor) != eval.n_rows * n_features:
             raise Error("eval_set x_colmajor size mismatch")
@@ -2100,8 +2160,62 @@ def gbdt_host_fit_eval(
     var test_cindex = List[UInt32]()
     if has_test:
         test_cindex = _binarize_columns(
-            eval.x_colmajor, n_eval, n_features, grid, layout
+            eval.x_colmajor, eval.n_rows, n_features, grid, layout
         )
+    var cindexes = List[List[UInt32]]()
+    cindexes.append(cindex^)
+    return gbdt_host_boost(
+        cindexes, 0, y, n_rows, n_features, grid^, layout, params,
+        bootstrap_kind, bootstrap_param, random_strength, eval, test_cindex,
+    )
+
+
+def gbdt_host_boost(
+    cindexes: List[List[UInt32]],
+    est_p: Int,
+    y: List[Float32],
+    n_rows: Int,
+    n_features: Int,
+    var grid: GbdtHostGrid,
+    layout: CompressedIndexLayout,
+    params: GbdtHostParams,
+    bootstrap_kind: Int,
+    bootstrap_param: Float32,
+    random_strength: Float32,
+    eval: GbdtHostEval,
+    test_cindex: List[UInt32],
+) raises -> GbdtHostFitWithEval:
+    """`fit_with_test`'s Plain SymmetricTree Logloss loop over ONE compressed
+    index PER PERMUTATION (`gbdt/methods/doc_parallel_boosting.mojo:1821-1860`,
+    `:2192-2228`, `:2841-2925`), `cindexes[p]` binned against the one `grid`
+    and `layout`, `est_p` the estimation permutation whose leaves the model
+    exports. One cursor per permutation, all starting at zero; each tree's
+    structure is searched on the LEARN permutation (their `TRandom(iteration
+    + seed)`, `Advance(10)`, `% (learnPermutationCount - 1)`), on that
+    permutation's cursor and index; then every permutation estimates the
+    SAME structure on its own cursor: the learn permutation over the
+    searcher's partition, the others over the stable counting sort of
+    `compute_bins_for_model` + `partition_from_bins`
+    (`leaves_estimation/doc_parallel_leaves_estimator.mojo:108-260`). The
+    in-loop learn loss is the learn cursor's, the final one the estimation
+    cursor's (`doc_parallel_boosting.mojo:2998-3010`).
+
+    ONE permutation (every caller but the CTR arm,
+    gbdt/host/gbdt_oracle_ctr.mojo) is `learn_p == est_p == 0` on every
+    tree, which is the loop this function held before the permutations
+    existed, statement for statement."""
+    var perm_count = len(cindexes)
+    if perm_count < 1:
+        raise Error("gbdt host: no compressed index")
+    if est_p < 0 or est_p >= perm_count:
+        raise Error(
+            "est_permutation " + String(est_p) + " is outside the "
+            + String(perm_count) + " permutations given"
+        )
+    var blocks = blocks_for(layout, n_rows)
+    var hist_cells = layout.hist_cells
+    var has_test = eval.n_rows > 0
+    var n_eval = eval.n_rows if has_test else 1
     # `CreateCursors`' test seed: zero here, because this arm refuses
     # `boost_from_average` by name and its model carries no bias
     var test_cursor = List[Float32](length=n_eval, fill=Float32(0.0))
@@ -2135,8 +2249,11 @@ def gbdt_host_fit_eval(
     var border = params.logloss_border
 
     # `enqueue_fill(ctx, cursor, start_value)` with no boost from average
-    # (`doc_parallel_boosting.mojo:1159-1164`)
-    var cursor = List[Float32](length=n_rows, fill=Float32(0.0))
+    # (`doc_parallel_boosting.mojo:1159-1164`), one per permutation, all
+    # written to the same starting value (`:1839-1856`)
+    var cursors = List[List[Float32]]()
+    for _ in range(perm_count):
+        cursors.append(List[Float32](length=n_rows, fill=Float32(0.0)))
     var stats = List[Float32](length=2 * n_rows, fill=Float32(0.0))
     var mse_blocks = (n_rows + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
     var fv_part = List[Float32](length=mse_blocks, fill=Float32(0.0))
@@ -2160,8 +2277,19 @@ def gbdt_host_fit_eval(
     var noise_rand = TRandom(params.random_seed)
 
     for iteration in range(params.n_estimators):
+        # ---- which permutation the STRUCTURE is searched on
+        # (`doc_parallel_boosting.mojo:2192-2219`), their modulus kept ----
+        var learn_perm_count = perm_count - 1 if est_p != 0 else 1
+        var learn_p = est_p
+        if learn_perm_count > 1:
+            var rnd = TRandom(UInt64(iteration) + params.random_seed)
+            rnd.advance(10)
+            learn_p = Int(rnd.next_uniform_l() % UInt64(learn_perm_count - 1))
+        ref cindex = cindexes[learn_p]
         # ---- the gradients, the learn loss and the magnitudes ----
-        _logloss_search_pass(y, cursor, n_rows, border, stats, fv_part, mag_part)
+        _logloss_search_pass(
+            y, cursors[learn_p], n_rows, border, stats, fv_part, mag_part
+        )
         var fv = _deterministic_sum_lanes(fv_part, 1, mse_blocks)[0]
         var mags = _deterministic_sum_lanes(mag_part, 2, mse_blocks)
         # `calc_score_model_length_mult` (`random_score_helper.mojo:
@@ -2419,15 +2547,42 @@ def gbdt_host_fit_eval(
                 + String(covered_rows) + " of " + String(n_rows) + " rows"
             )
 
-        # ---- the estimation task and `AppendModels` ----
-        var estimated = _estimate_leaves(
-            y, cursor, row_index, offsets, sizes, n_rows, border,
-            params.l2_leaf_reg, params.leaf_estimation_iterations,
-        )
-        for leaf in range(n_live):
-            for k in range(sizes[leaf]):
-                var row = row_index[offsets[leaf] + k]
-                cursor[row] = identical_mul_add(estimated[leaf], lr, cursor[row])
+        # ---- the estimation task, ONE PER PERMUTATION
+        # (`doc_parallel_boosting.mojo:2841-2925`), and `AppendModels` ----
+        var estimated = List[Float32]()
+        for p in range(perm_count):
+            var est_p_leaves: List[Float32]
+            if p == learn_p:
+                # the searcher's own partition
+                est_p_leaves = _estimate_leaves(
+                    y, cursors[p], row_index, offsets, sizes, n_rows, border,
+                    params.l2_leaf_reg, params.leaf_estimation_iterations,
+                )
+                for leaf in range(n_live):
+                    for k in range(sizes[leaf]):
+                        var row = row_index[offsets[leaf] + k]
+                        cursors[p][row] = identical_mul_add(
+                            est_p_leaves[leaf], lr, cursors[p][row]
+                        )
+            else:
+                var part = _partition_for_model(
+                    cindexes[p], layout, tree_features, tree_bins, grown,
+                    n_rows,
+                )
+                est_p_leaves = _estimate_leaves(
+                    y, cursors[p], part.row_index, part.offsets, part.sizes,
+                    n_rows, border, params.l2_leaf_reg,
+                    params.leaf_estimation_iterations,
+                )
+                for leaf in range(len(part.sizes)):
+                    for k in range(part.sizes[leaf]):
+                        var row = part.row_index[part.offsets[leaf] + k]
+                        cursors[p][row] = identical_mul_add(
+                            est_p_leaves[leaf], lr, cursors[p][row]
+                        )
+            # the EXPORTED ensemble is the estimation permutation's
+            if p == est_p:
+                estimated = est_p_leaves.copy()
         for i in range(grown):
             split_features.append(tree_features[i])
             split_bins.append(tree_bins[i])
@@ -2472,7 +2627,12 @@ def gbdt_host_fit_eval(
     # the final tree's loss: one more pass over the settled cursor, through
     # the SAME per-block partials and fold as the loop's, whether or not the
     # detector cut the loop short (`doc_parallel_boosting.mojo:2415-2516`)
-    losses.append(-Float64(_logloss_value(y, cursor, n_rows, border)) / Float64(n_rows))
+    # (the ESTIMATION permutation's cursor, `doc_parallel_boosting.mojo:
+    # 3001-3052`, which is the only cursor when there is one permutation)
+    losses.append(
+        -Float64(_logloss_value(y, cursors[est_p], n_rows, border))
+        / Float64(n_rows)
+    )
 
     # ---- `ShrinkToBestIteration` (`gbdt/train.mojo:2241-2254`) ----
     # Their SECOND tracker, not the detector's: fed only the iterations at

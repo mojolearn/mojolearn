@@ -1,0 +1,12 @@
+diff --git a/x_cluster/device_ops.mojo b/x_cluster/device_ops.mojo
+--- a/x_cluster/device_ops.mojo
++++ b/x_cluster/device_ops.mojo
+@@ -112,7 +112,7 @@
+             var chosen = -1
+             for b in range(256):
+                 var c = Int(hist[b])
+-                if acc + c >= rem:
++                if acc + c > rem:
+                     chosen = b
+                     break
+                 acc += c

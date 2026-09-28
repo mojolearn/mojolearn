@@ -32,11 +32,11 @@ def _clamp(v: Float32, lo: Float32, hi: Float32) -> Float32:
 
 
 @always_inline
-def nelder_mead[O: Objective](
+def nelder_mead[O: Objective, CAP: Int = 9](
     mut obj: O, x0: FP, lower: FP, upper: FP, n: Int, scratch: FP,
     init_step: Float32, zero_pert: Float32, max_iter: Int, tol_std: Float32,
 ) -> Int:
-    """Minimises obj over n <= 8 coordinates from x0; the best point is
+    """Minimises obj over n <= CAP - 1 coordinates from x0; the best point is
     written back to x0. scratch holds (n + 1) n + (n + 1) + 4 n floats.
     Returns the iteration count."""
     var nf = Float32(n)
@@ -61,7 +61,7 @@ def nelder_mead[O: Objective](
         st(simplex, i * n + i, _clamp(v, ld(lower, i), ld(upper, i)))
     for i in range(n + 1):
         st(fs, i, obj.eval(simplex + i * n))
-    var order = InlineArray[Int, 9](fill=0)
+    var order = InlineArray[Int, CAP](fill=0)
     var it = 0
     var best = 0
     while it < max_iter:
