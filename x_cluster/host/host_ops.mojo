@@ -594,3 +594,20 @@ struct HostOps(ClusterOps):
     def ap_a_split(mut self, r: Int, a: Int, n: Int, damping: Float32) raises:
         # the host column never takes the FAST device paths (`fast_device`)
         self.ap_a(r, a, n, damping)
+
+    def dot_groups(mut self, a: Int, b: Int, n: Int, g: Int, parts: Int) raises:
+        var pa = self._fp(a)
+        var pb = self._fp(b)
+        var po = self._fp(parts)
+        var q = 0
+        var t0 = 0
+        while t0 < n:
+            var t1 = t0 + g
+            if t1 > n:
+                t1 = n
+            var acc = Float32(0)
+            for t in range(t0, t1):
+                acc = acc + pa[t] * pb[t]
+            po[q] = acc
+            q += 1
+            t0 = t1

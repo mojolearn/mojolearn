@@ -149,3 +149,8 @@ trait ClusterOps(Movable):
         """FAST: `ap_a` with every column sum folded over row slices (another
         summation order than `bodies.ap_availability_col`)."""
         ...
+
+    def dot_groups(mut self, a: Int, b: Int, n: Int, g: Int, parts: Int) raises:
+        """FAST: parts[q] = the sum of a[t] * b[t] over the q-th run of `g`
+        consecutive cells of the first n (ceil(n / g) values)."""
+        ...

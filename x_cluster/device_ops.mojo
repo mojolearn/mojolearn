@@ -7,6 +7,7 @@ launch shape can move a bit. Only the GPU binding imports this file."""
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, thread_idx
 from std.os import getenv
+from std.sys.compile import is_defined
 from std.time import perf_counter_ns
 from std.ffi import _Global
 from std.memory import bitcast, stack_allocation
@@ -458,6 +459,116 @@ def _momf_final_kernel(
         var a = c // D
         var b = c - a * D
         cov[k * nch + c] = cov_final(acc, nk[k], reg, a == b)
+
+
+def _dot_groups_kernel(a: FPtr, b: FPtr, n: Int32, g: Int32, parts: FPtr):
+    """FAST (lane cluster-apple3): thread q sums a * b over its run of `g`
+    consecutive cells."""
+    var q = _tid()
+    var N = Int(n)
+    var G = Int(g)
+    var t0 = q * G
+    if t0 >= N:
+        return
+    var t1 = t0 + G
+    if t1 > N:
+        t1 = N
+    var acc = Float32(0)
+    for t in range(t0, t1):
+        acc = acc + a[t] * b[t]
+    parts[q] = acc
+
+
+# FAST ONLY (lane cluster-apple3), d <= MOMS_MAX_D, OPT-IN
+# `-D MOJOLEARN_MOMENTS_ROWS=1`: the moments with every ROW read once per
+# component. Thread (k, g) owns MOMS_ROWS consecutive rows and folds all of
+# its chains over them (the means' d + 1, then the covariance's upper
+# triangle) in its own slice of threadgroup memory; a second kernel adds the
+# threads' partials. `_momf_partial_kernel` read every row once per CHAIN.
+# The same addends and finals as 5110/5121, another order: bits move.
+comptime MOMS = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_MOMENTS_ROWS"]()
+comptime MOMS_MAX_D = 8
+comptime MOMS_ROWS = 64
+comptime MOMS_TPB = 128
+comptime MOMS_W = MOMS_MAX_D * (MOMS_MAX_D + 1) // 2  # chains a thread holds at most
+
+
+def _moms_part_kernel(
+    resp: FPtr, x: FPtr, n: Int32, d: Int32, kc: Int32, means: FPtr, part: FPtr, n_groups: Int32, cov_pass: Int32,
+):
+    var tid = Int(thread_idx.x)
+    var t = Int(block_idx.x) * MOMS_TPB + tid
+    var N = Int(n)
+    var D = Int(d)
+    var K = Int(kc)
+    var G = Int(n_groups)
+    var acc = stack_allocation[MOMS_TPB * MOMS_W, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    if t >= K * G:
+        return
+    var k = t // G
+    var g = t - k * G
+    var r0 = g * MOMS_ROWS
+    var r1 = r0 + MOMS_ROWS
+    if r1 > N:
+        r1 = N
+    var o = tid * MOMS_W
+    var nch = D + 1 if cov_pass == Int32(0) else (D * (D + 1)) // 2
+    for c in range(nch):
+        acc[o + c] = Float32(0)
+    if cov_pass == Int32(0):
+        for i in range(r0, r1):
+            var r = resp[i * K + k]
+            for a in range(D):
+                acc[o + a] = acc[o + a] + xk_term(r, x[i * D + a])
+            acc[o + D] = acc[o + D] + r
+    else:
+        for i in range(r0, r1):
+            var r = resp[i * K + k]
+            var c = 0
+            for a in range(D):
+                var xa = x[i * D + a]
+                var ma = means[k * D + a]
+                for b in range(a, D):
+                    acc[o + c] = acc[o + c] + cov_term(r, xa, x[i * D + b], ma, means[k * D + b])
+                    c += 1
+    for c in range(nch):
+        part[(k * G + g) * MOMS_W + c] = acc[o + c]
+
+
+def _moms_final_kernel(
+    part: FPtr, n_groups: Int32, d: Int32, kc: Int32, reg: Float32, nk: FPtr, means: FPtr, cov: FPtr, cov_pass: Int32,
+):
+    var t = _tid()
+    var D = Int(d)
+    var K = Int(kc)
+    var G = Int(n_groups)
+    var nout = D + 1 if cov_pass == Int32(0) else D * D
+    if t >= K * nout:
+        return
+    var k = t // nout
+    var c = t - k * nout
+    if cov_pass == Int32(0):
+        var acc = Float32(0)
+        var nkacc = Float32(0)
+        for g in range(G):
+            acc = acc + part[(k * G + g) * MOMS_W + c]
+            nkacc = nkacc + part[(k * G + g) * MOMS_W + D]
+        var nkv = nk_final(nkacc)
+        if c == D:
+            nk[k] = nkv
+        else:
+            means[k * D + c] = mean_final(acc, nkv)
+    else:
+        var a = c // D
+        var b = c - a * D
+        var lo = a if a < b else b
+        var hi = b if a < b else a
+        # the upper triangle's chain of (lo, hi), rows of the triangle ascending
+        var q = lo * D - (lo * (lo - 1)) // 2 + (hi - lo)
+        var acc = Float32(0)
+        for g in range(G):
+            acc = acc + part[(k * G + g) * MOMS_W + q]
+        cov[k * D * D + c] = cov_final(acc, nk[k], reg, a == b)
 
 
 def _pdist_kernel(a: FPtr, na: Int32, b: FPtr, nb: Int32, d: Int32, metric: Int32, p: Float32, dst: FPtr):
@@ -1008,6 +1119,26 @@ struct DeviceOps(ClusterOps):
         if kc <= 0:
             self._ph1("moments")
             return
+        comptime if MOMS:
+            if d <= MOMS_MAX_D and n > 0:
+                var G = (n + MOMS_ROWS - 1) // MOMS_ROWS
+                var need = kc * G * MOMS_W
+                if need > self.mpart_n:
+                    self.mpart = self.ctx.enqueue_create_buffer[DType.float32](need)
+                    self.mpart_n = need
+                var pp = self.mpart.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+                for cp in range(2):
+                    var nout = d + 1 if cp == 0 else d * d
+                    self.ctx.enqueue_function[_moms_part_kernel](
+                        self._fp(resp), self._fp(x), Int32(n), Int32(d), Int32(kc), self._fp(means), pp,
+                        Int32(G), Int32(cp), grid_dim=(kc * G + MOMS_TPB - 1) // MOMS_TPB, block_dim=MOMS_TPB,
+                    )
+                    self.ctx.enqueue_function[_moms_final_kernel](
+                        pp, Int32(G), Int32(d), Int32(kc), reg, self._fp(nk), self._fp(means), self._fp(cov),
+                        Int32(cp), grid_dim=_grid(kc * nout), block_dim=TPB,
+                    )
+                self._ph1("moments")
+                return
         comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
             if d <= MOM_MAX_D and n > 0:
                 var S = (n + MOMF_ROWS - 1) // MOMF_ROWS
@@ -1154,3 +1285,12 @@ struct DeviceOps(ClusterOps):
             self._fp(r), self._fp(a), cp, Int32(n), Int32(n_tiles), damping, grid_dim=n * n_tiles, block_dim=APF_TPB,
         )
         self._ph1("ap_a_split")
+
+    def dot_groups(mut self, a: Int, b: Int, n: Int, g: Int, parts: Int) raises:
+        self._ph0()
+        if n > 0 and g > 0:
+            self.ctx.enqueue_function[_dot_groups_kernel](
+                self._fp(a), self._fp(b), Int32(n), Int32(g), self._fp(parts),
+                grid_dim=_grid((n + g - 1) // g), block_dim=TPB,
+            )
+        self._ph1("dot_groups")
