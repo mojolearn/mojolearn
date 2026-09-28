@@ -12,6 +12,9 @@
 # again in reverse order (a drift check), and the script ends by rebuilding
 # the default so no arm binary is left in the tree for a later job.
 set -u
+# XN_BOARD picks the board (default the round-one board; round two:
+# bench/x_neighbors_apple2_speed.py).
+board=${XN_BOARD:-bench/x_neighbors_apple_speed.py}
 build=$1; cases=$2; reps=$3; shift 3
 run_arm() {
     tag=$1; defs=$2
@@ -21,7 +24,7 @@ run_arm() {
             echo "ARM $tag BUILD_FAIL $b [$defs]"; tail -5 /tmp/xn_ab_build.log; return
         fi
     done
-    pixi run -e default python -u bench/x_neighbors_apple_speed.py --only "$cases" --reps "$reps" --no-quality 2>&1 \
+    pixi run -e default python -u "$board" --only "$cases" --reps "$reps" --no-quality 2>&1 \
         | sed "s/^/ARM $tag [$defs] /"
 }
 i=0
