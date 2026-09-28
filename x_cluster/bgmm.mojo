@@ -24,6 +24,8 @@ from cluster.impl.kmeans_params import INIT_KMEANS_PLUS_PLUS
 from x_cluster.bodies import SplitMix64
 from x_cluster.common import greedy_kmeans_pp_indices
 from x_cluster.ops import ClusterOps
+from core.stage_prof import prof_on
+from std.time import perf_counter_ns
 
 comptime LOG2 = 0.6931471805599453
 comptime LOG_2PI = 1.8378770664093453
@@ -520,6 +522,12 @@ def bgmm_fit[O: ClusterOps](
                 st.pchol = _precision_cholesky(st.cov, kc, d)
         var converged = False
         var n_iter = 0
+        var P = prof_on()
+        var t_set = 0
+        var t_e = 0
+        var t_m = 0
+        var t_rest = 0
+        var t0 = Int(perf_counter_ns())
         for it in range(1, max_iter + 1):
             n_iter = it
             var prev = lb
@@ -527,11 +535,26 @@ def bgmm_fit[O: ClusterOps](
             ops.set(ms, _f32(st.means))
             ops.set(ps, _f32(st.pchol))
             ops.set(cs, bgmm_constants(pr, st))
+            if P:
+                _ = ops.get(nks, 1)
+                var t1 = Int(perf_counter_ns())
+                t_rest += t1 - t0
+                t0 = t1
             ops.gauss_q(xs, n, d, ms, ps, kc, qs)
             ops.resp(qs, cs, n, kc, lpn)
             ops.exp(qs, rs, n * kc)
+            if P:
+                _ = ops.get(nks, 1)
+                var t1 = Int(perf_counter_ns())
+                t_e += t1 - t0
+                t0 = t1
             # M-step
             ops.moments(rs, xs, n, d, kc, reg, nks, xks, sks)
+            if P:
+                _ = ops.get(nks, 1)
+                var t1 = Int(perf_counter_ns())
+                t_m += t1 - t0
+                t0 = t1
             # one wait per iteration: the moments and what the bound reads
             var mo: List[List[Float32]]
             if pr.variational:
@@ -554,6 +577,8 @@ def bgmm_fit[O: ClusterOps](
                     converged = True
                     break
             have_lb = True
+        if P:
+            print("STAGEPROF bgmm iters", n_iter, "estep_ms", Float64(t_e) / 1e6, "moments_ms", Float64(t_m) / 1e6, "rest_ms", Float64(t_rest) / 1e6)
         if not have_best or lb > max_lb:
             max_lb = lb
             have_best = True
