@@ -32,8 +32,15 @@ from x_decomp.cells import (
     gemm_cell,
     als_row,
     als_cg_row,
+    geqrf_dot,
+    geqrf_head,
+    geqrf_scale_elem,
     geqrf_serial,
+    geqrf_update_elem,
     orgqr_col,
+    orgqr_dot,
+    orgqr_init_elem,
+    orgqr_update_elem,
     barycenter_row,
     dijkstra_row,
     gamma_cell,
@@ -280,6 +287,52 @@ def als_cg_kernel(
 def geqrf_kernel(a: F32Ptr, tau: F32Ptr, m: Int32, n: Int32):
     if block_idx.x == 0 and thread_idx.x == 0:
         geqrf_serial(a, tau, Int(m), Int(n))
+
+
+def geqrf_head_kernel(a: F32Ptr, tau: F32Ptr, scal: F32Ptr, k: Int32, m: Int32, n: Int32):
+    if block_idx.x == 0 and thread_idx.x == 0:
+        geqrf_head(a, tau, scal, Int(k), Int(m), Int(n))
+
+
+def geqrf_scale_kernel(a: F32Ptr, scal: F32Ptr, k: Int32, m: Int32, n: Int32):
+    var i = Int(k) + 1 + Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(m):
+        geqrf_scale_elem(a, scal, Int(k), i, Int(n))
+
+
+def geqrf_dot_kernel(a: F32Ptr, scal: F32Ptr, w: F32Ptr, k: Int32, m: Int32, n: Int32):
+    var j = Int(k) + 1 + Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if j < Int(n):
+        w.unsafe_store(j, geqrf_dot(a, scal, Int(k), j, Int(m), Int(n)))
+
+
+def geqrf_update_kernel(a: F32Ptr, tau: F32Ptr, scal: F32Ptr, w: F32Ptr, k: Int32, m: Int32, n: Int32):
+    var cols = Int(n) - Int(k) - 1
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cols > 0 and t < (Int(m) - Int(k)) * cols:
+        var i = Int(k) + t // cols
+        var j = Int(k) + 1 + t % cols
+        geqrf_update_elem(a, tau, scal, Int(k), i, j, Int(n), w.unsafe_load(j))
+
+
+def orgqr_init_kernel(q: F32Ptr, m: Int32, qc: Int32):
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t < Int(m) * Int(qc):
+        orgqr_init_elem(q, t // Int(qc), t % Int(qc), Int(qc))
+
+
+def orgqr_dot_kernel(h: F32Ptr, tau: F32Ptr, q: F32Ptr, w: F32Ptr, k: Int32, m: Int32, n: Int32, qc: Int32):
+    var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if j < Int(qc):
+        w.unsafe_store(j, orgqr_dot(h, tau, q, Int(k), j, Int(m), Int(n), Int(qc)))
+
+
+def orgqr_update_kernel(h: F32Ptr, tau: F32Ptr, q: F32Ptr, w: F32Ptr, k: Int32, m: Int32, n: Int32, qc: Int32):
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t < (Int(m) - Int(k)) * Int(qc):
+        var i = Int(k) + t // Int(qc)
+        var j = t % Int(qc)
+        orgqr_update_elem(h, tau, q, Int(k), i, j, Int(n), Int(qc), w.unsafe_load(j))
 
 
 def orgqr_kernel(h: F32Ptr, tau: F32Ptr, q: F32Ptr, m: Int32, n: Int32, kk: Int32, qc: Int32):
@@ -799,12 +852,36 @@ struct DevExec(Exec):
         var kk = m if m < n else n
         var da = _up(ctx, a, m * n)
         var dt = ctx.enqueue_create_buffer[DType.float32](kk if kk > 0 else 1)
-        ctx.enqueue_function[geqrf_kernel](da.unsafe_ptr(), dt.unsafe_ptr(), Int32(m), Int32(n), grid_dim=1, block_dim=1)
+        var ds = ctx.enqueue_create_buffer[DType.float32](2)
+        var dw = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
+        # step k: the reflector (one thread: its folds ascending), then v scaled
+        # (rows), w = v^T A[k:, j] (one thread per column, rows ascending), then
+        # A[k:, k+1:] updated (one thread per cell): geqrf_serial's cells, in
+        # its order per column, with no host round trip between the steps
+        for k in range(kk):
+            ctx.enqueue_function[geqrf_head_kernel](
+                da.unsafe_ptr(), dt.unsafe_ptr(), ds.unsafe_ptr(), Int32(k), Int32(m), Int32(n), grid_dim=1, block_dim=1
+            )
+            if m - k - 1 > 0:
+                ctx.enqueue_function[geqrf_scale_kernel](
+                    da.unsafe_ptr(), ds.unsafe_ptr(), Int32(k), Int32(m), Int32(n), grid_dim=_blocks(m - k - 1), block_dim=TPB
+                )
+            if n - k - 1 > 0:
+                ctx.enqueue_function[geqrf_dot_kernel](
+                    da.unsafe_ptr(), ds.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n),
+                    grid_dim=_blocks(n - k - 1), block_dim=TPB,
+                )
+                ctx.enqueue_function[geqrf_update_kernel](
+                    da.unsafe_ptr(), dt.unsafe_ptr(), ds.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n),
+                    grid_dim=_blocks((m - k) * (n - k - 1)), block_dim=TPB,
+                )
         _down(ctx, da, a, m * n)
         _down(ctx, dt, tau, kk)
         ctx.synchronize()
         _ = da^
         _ = dt^
+        _ = ds^
+        _ = dw^
         ctx.synchronize()
         _ = ctx^
 
@@ -814,15 +891,26 @@ struct DevExec(Exec):
         var dh = _up(ctx, h, m * n)
         var dt = _up(ctx, tau, kk if kk > 0 else 1)
         var dq = ctx.enqueue_create_buffer[DType.float32](m * qc if m * qc > 0 else 1)
-        ctx.enqueue_function[orgqr_kernel](
-            dh.unsafe_ptr(), dt.unsafe_ptr(), dq.unsafe_ptr(), Int32(m), Int32(n), Int32(kk), Int32(qc),
-            grid_dim=_blocks(qc), block_dim=TPB,
-        )
+        var dw = ctx.enqueue_create_buffer[DType.float32](qc if qc > 0 else 1)
+        # orgqr_col's cells: e_j, then H_k for k descending (w per column, rows
+        # ascending; then every cell of the rows k.. updated)
+        ctx.enqueue_function[orgqr_init_kernel](dq.unsafe_ptr(), Int32(m), Int32(qc), grid_dim=_blocks(m * qc), block_dim=TPB)
+        for r in range(kk):
+            var k = kk - 1 - r
+            ctx.enqueue_function[orgqr_dot_kernel](
+                dh.unsafe_ptr(), dt.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n), Int32(qc),
+                grid_dim=_blocks(qc), block_dim=TPB,
+            )
+            ctx.enqueue_function[orgqr_update_kernel](
+                dh.unsafe_ptr(), dt.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n), Int32(qc),
+                grid_dim=_blocks((m - k) * qc), block_dim=TPB,
+            )
         _down(ctx, dq, q, m * qc)
         ctx.synchronize()
         _ = dh^
         _ = dt^
         _ = dq^
+        _ = dw^
         ctx.synchronize()
         _ = ctx^
 

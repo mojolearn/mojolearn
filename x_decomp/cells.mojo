@@ -1215,56 +1215,119 @@ def reflector_norm(a: F32Ptr, k: Int, col: Int, m: Int, n: Int) -> Float32:
     return ftz(identical_mul(sqrt0(acc), mx))
 
 
+def geqrf_head(a: F32Ptr, tau: F32Ptr, scal: F32Ptr, k: Int, m: Int, n: Int):
+    """Step k's reflector (dlarfg): tau[k], beta on the diagonal, and in
+    `scal` [the divisor alpha - beta, 1 when the step acts else 0]. A column
+    whose sub-diagonal part is exactly zero gets tau = 0 (H = I), as dlarfg."""
+    var alpha = ftz(a.unsafe_load(k * n + k))
+    var xmax = Float32(0)
+    for i in range(k + 1, m):
+        var v = abs(ftz(a.unsafe_load(i * n + k)))
+        if v > xmax:
+            xmax = v
+    if xmax == Float32(0):
+        tau.unsafe_store(k, Float32(0))
+        scal.unsafe_store(0, Float32(1))
+        scal.unsafe_store(1, Float32(0))
+        return
+    var nrm = reflector_norm(a, k, k, m, n)
+    var beta = -nrm if alpha >= Float32(0) else nrm
+    tau.unsafe_store(k, div0(sub(beta, alpha), beta))
+    scal.unsafe_store(0, sub(alpha, beta))
+    scal.unsafe_store(1, Float32(1))
+    a.unsafe_store(k * n + k, beta)
+
+
+@always_inline
+def geqrf_scale_elem(a: F32Ptr, scal: F32Ptr, k: Int, i: Int, n: Int):
+    """v[i] = a[i, k] / (alpha - beta), i > k, when step k acts."""
+    if scal.unsafe_load(1) != Float32(0):
+        a.unsafe_store(i * n + k, div0(a.unsafe_load(i * n + k), scal.unsafe_load(0)))
+
+
+@always_inline
+def geqrf_dot(a: F32Ptr, scal: F32Ptr, k: Int, j: Int, m: Int, n: Int) -> Float32:
+    """w = v^T a[k:, j], v's implicit leading 1 first, rows ascending."""
+    if scal.unsafe_load(1) == Float32(0):
+        return Float32(0)
+    var w = ftz(a.unsafe_load(k * n + j))
+    for i in range(k + 1, m):
+        w = ftz(identical_mul_add(ftz(a.unsafe_load(i * n + k)), ftz(a.unsafe_load(i * n + j)), w))
+    return w
+
+
+@always_inline
+def geqrf_update_elem(a: F32Ptr, tau: F32Ptr, scal: F32Ptr, k: Int, i: Int, j: Int, n: Int, w: Float32):
+    """a[i, j] -= tau v[i] w (i >= k, j > k) when step k acts: row k the
+    plain subtraction (v[k] = 1), the rows below one fused multiply-add."""
+    if scal.unsafe_load(1) == Float32(0):
+        return
+    var tw = ftz(identical_mul(tau.unsafe_load(k), w))
+    if i == k:
+        a.unsafe_store(k * n + j, sub(a.unsafe_load(k * n + j), tw))
+    else:
+        a.unsafe_store(i * n + j, ftz(identical_mul_add(-tw, ftz(a.unsafe_load(i * n + k)), ftz(a.unsafe_load(i * n + j)))))
+
+
 def geqrf_serial(a: F32Ptr, tau: F32Ptr, m: Int, n: Int):
     """In-place Householder QR of the row-major m x n A (geqrf semantics,
     unblocked): for k < min(m, n), dlarfg makes H_k = I - tau_k v v^T with
     v[k] = 1 implicit and v[k+1:] stored below the diagonal, beta on it; R is
-    the upper triangle. A column whose sub-diagonal part is exactly zero gets
-    tau = 0 (H = I), as dlarfg."""
+    the upper triangle. The host column runs these cells in this loop; the
+    device runs the same cells with the rows (scale, update) and the columns
+    (dot) in parallel, every fold still one thread ascending (lane/algos-decomp
+    2026-09-28: one device thread took 217 s at 1M x 28)."""
     var kk = m if m < n else n
+    var scal = InlineArray[Float32, 2](fill=Float32(0))
+    var sp = F32Ptr(unsafe_from_address=Int(scal.unsafe_ptr()))
     for k in range(kk):
-        var alpha = ftz(a.unsafe_load(k * n + k))
-        var xmax = Float32(0)
+        geqrf_head(a, tau, sp, k, m, n)
         for i in range(k + 1, m):
-            var v = abs(ftz(a.unsafe_load(i * n + k)))
-            if v > xmax:
-                xmax = v
-        if xmax == Float32(0):
-            tau.unsafe_store(k, Float32(0))
-            continue
-        var nrm = reflector_norm(a, k, k, m, n)
-        var beta = -nrm if alpha >= Float32(0) else nrm
-        tau.unsafe_store(k, div0(sub(beta, alpha), beta))
-        var scale = sub(alpha, beta)
-        for i in range(k + 1, m):
-            a.unsafe_store(i * n + k, div0(a.unsafe_load(i * n + k), scale))
-        a.unsafe_store(k * n + k, beta)
-        var t = tau.unsafe_load(k)
+            geqrf_scale_elem(a, sp, k, i, n)
         for j in range(k + 1, n):
-            var w = ftz(a.unsafe_load(k * n + j))
-            for i in range(k + 1, m):
-                w = ftz(identical_mul_add(ftz(a.unsafe_load(i * n + k)), ftz(a.unsafe_load(i * n + j)), w))
-            var tw = ftz(identical_mul(t, w))
-            a.unsafe_store(k * n + j, sub(a.unsafe_load(k * n + j), tw))
-            for i in range(k + 1, m):
-                a.unsafe_store(i * n + j, ftz(identical_mul_add(-tw, ftz(a.unsafe_load(i * n + k)), ftz(a.unsafe_load(i * n + j)))))
+            var w = geqrf_dot(a, sp, k, j, m, n)
+            for i in range(k, m):
+                geqrf_update_elem(a, tau, sp, k, i, j, n, w)
+
+
+@always_inline
+def orgqr_init_elem(q: F32Ptr, i: Int, j: Int, qc: Int):
+    q.unsafe_store(i * qc + j, Float32(1) if i == j else Float32(0))
+
+
+@always_inline
+def orgqr_dot(h: F32Ptr, tau: F32Ptr, q: F32Ptr, k: Int, j: Int, m: Int, n: Int, qc: Int) -> Float32:
+    """w = v_k^T q[k:, j], the implicit 1 first, rows ascending (0 when H_k = I)."""
+    if ftz(tau.unsafe_load(k)) == Float32(0):
+        return Float32(0)
+    var w = ftz(q.unsafe_load(k * qc + j))
+    for i in range(k + 1, m):
+        w = ftz(identical_mul_add(ftz(h.unsafe_load(i * n + k)), ftz(q.unsafe_load(i * qc + j)), w))
+    return w
+
+
+@always_inline
+def orgqr_update_elem(h: F32Ptr, tau: F32Ptr, q: F32Ptr, k: Int, i: Int, j: Int, n: Int, qc: Int, w: Float32):
+    """q[i, j] -= tau v[i] w (i >= k) when H_k acts."""
+    var t = ftz(tau.unsafe_load(k))
+    if t == Float32(0):
+        return
+    var tw = ftz(identical_mul(t, w))
+    if i == k:
+        q.unsafe_store(k * qc + j, sub(q.unsafe_load(k * qc + j), tw))
+    else:
+        q.unsafe_store(i * qc + j, ftz(identical_mul_add(-tw, ftz(h.unsafe_load(i * n + k)), ftz(q.unsafe_load(i * qc + j)))))
 
 
 def orgqr_col(h: F32Ptr, tau: F32Ptr, q: F32Ptr, j: Int, m: Int, n: Int, kk: Int, qc: Int):
     """Column j of Q = H_0 H_1 ... H_{kk-1} (m x qc, row major): e_j with the
     reflectors of the m x n factored `h` applied last to first. The column is
-    built in place in q."""
+    built in place in q (the host column; the device runs the same cells
+    with the rows in parallel)."""
     for i in range(m):
-        q.unsafe_store(i * qc + j, Float32(1) if i == j else Float32(0))
+        orgqr_init_elem(q, i, j, qc)
     for r in range(kk):
         var k = kk - 1 - r
-        var t = ftz(tau.unsafe_load(k))
-        if t == Float32(0):
-            continue
-        var w = ftz(q.unsafe_load(k * qc + j))
-        for i in range(k + 1, m):
-            w = ftz(identical_mul_add(ftz(h.unsafe_load(i * n + k)), ftz(q.unsafe_load(i * qc + j)), w))
-        var tw = ftz(identical_mul(t, w))
-        q.unsafe_store(k * qc + j, sub(q.unsafe_load(k * qc + j), tw))
-        for i in range(k + 1, m):
-            q.unsafe_store(i * qc + j, ftz(identical_mul_add(-tw, ftz(h.unsafe_load(i * n + k)), ftz(q.unsafe_load(i * qc + j)))))
+        var w = orgqr_dot(h, tau, q, k, j, m, n, qc)
+        for i in range(k, m):
+            orgqr_update_elem(h, tau, q, k, i, j, n, qc, w)
