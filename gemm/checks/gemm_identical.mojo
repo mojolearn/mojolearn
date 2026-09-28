@@ -3452,6 +3452,9 @@ comptime APPLE_MMA_GROUP_M = get_defined_int["MOJOLEARN_APPLE_MMA_GROUP_M", 8]()
 #: lane/neural-apple2 (2026-09-28), measurement arm: two shared pages, one
 #: barrier per window (the same stagings, windows and chains; scheduling only).
 comptime APPLE_MMA_DB = is_defined["MOJOLEARN_APPLE_MMA_DB"]()
+#: lane/neural-apple2 (2026-09-28): the wider window a leaf that is a whole
+#: number of them runs at (0 = off; `_launch_apple_mma`).
+comptime APPLE_MMA_KB_WIDE = get_defined_int["MOJOLEARN_APPLE_MMA_KB_WIDE", 0]()
 #: lane/neural-apple (2026-09-28): the small tile (FM = FN = 2, a quarter of
 #: the default's cells) for outputs with fewer than `APPLE_MMA_SMALL_BLOCKS`
 #: default tiles (scheduling only; `MOJOLEARN_APPLE_MMA_SMALL_OFF` reverts).
@@ -3815,8 +3818,31 @@ def _launch_apple_mma(
     p_count: Int,
     st: Tuple[Int, Int, Int, Int],
 ) raises:
+    """lane/neural-apple2 (2026-09-28): a leaf that is a whole number of
+    `APPLE_MMA_KB_WIDE` windows runs the same kernel at that window width
+    (scheduling only: every window is either the matrix chain the contract's
+    chain equals or the exact step, at any width), else `APPLE_MMA_KB`."""
+    comptime if APPLE_MMA_KB_WIDE > APPLE_MMA_KB:
+        if leaf % APPLE_MMA_KB_WIDE == 0:
+            _launch_apple_mma_kb[APPLE_MMA_KB_WIDE](ctx, c, a, b, m, n, k, leaf, p_count, st)
+            return
+    _launch_apple_mma_kb[APPLE_MMA_KB](ctx, c, a, b, m, n, k, leaf, p_count, st)
+
+
+def _launch_apple_mma_kb[KBW: Int](
+    ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],
+    mut a: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+    leaf: Int,
+    p_count: Int,
+    st: Tuple[Int, Int, Int, Int],
+) raises:
     comptime kern = identical_gemm_apple_mma_kernel[
-        APPLE_MMA_SGM, APPLE_MMA_SGN, APPLE_MMA_FM, APPLE_MMA_FN, APPLE_MMA_KB, TUNED_FOLD_SLOTS
+        APPLE_MMA_SGM, APPLE_MMA_SGN, APPLE_MMA_FM, APPLE_MMA_FN, KBW, TUNED_FOLD_SLOTS
     ]
     var blocks = ((m + APPLE_MMA_BM - 1) // APPLE_MMA_BM) * ((n + APPLE_MMA_BN - 1) // APPLE_MMA_BN)
     comptime if APPLE_MMA_SMALL_TILE:
@@ -3827,7 +3853,7 @@ def _launch_apple_mma(
         # schedule: every cell's leaf chains and leaf fold are the same.
         if blocks < APPLE_MMA_SMALL_BLOCKS:
             comptime ks = identical_gemm_apple_mma_kernel[
-                APPLE_MMA_SGM, APPLE_MMA_SGN, APPLE_MMA_SMALL_FM, APPLE_MMA_SMALL_FN, APPLE_MMA_KB, TUNED_FOLD_SLOTS
+                APPLE_MMA_SGM, APPLE_MMA_SGN, APPLE_MMA_SMALL_FM, APPLE_MMA_SMALL_FN, KBW, TUNED_FOLD_SLOTS
             ]
             comptime SBM = 8 * APPLE_MMA_SMALL_FM * APPLE_MMA_SGM
             comptime SBN = 8 * APPLE_MMA_SMALL_FN * APPLE_MMA_SGN
