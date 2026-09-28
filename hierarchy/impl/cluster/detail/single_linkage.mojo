@@ -114,18 +114,20 @@ def build_dist_linkage(
     # indices/data m*m (their `resize`s inside the impl, `:199-200`).
     var nnz = m * m
     var indptr = ctx.enqueue_create_buffer[DType.int32](m + 1)
-    var indices = ctx.enqueue_create_buffer[DType.int32](nnz)
+    # the column of cell e is e % m: the DENSE solver computes it, so the
+    # m * m index array is neither written nor read (lane/cluster-apple)
+    var indices = ctx.enqueue_create_buffer[DType.int32](1)
     var pw_dists = ctx.enqueue_create_buffer[DType.float32](nnz)
     var norms = ctx.enqueue_create_buffer[DType.float32](m)
     get_distance_graph(
         ctx, x, m, n, metric, dist_type, c, indptr, indices, pw_dists, norms,
-        tile_tpb, sabotage,
+        tile_tpb, sabotage, fill_indices=False,
     )
 
     # `:170-191` 2. Construct MST, sorted by weights
     var color = ctx.enqueue_create_buffer[DType.int32](m)
     var n_edges = m - 1
-    var rounds = build_sorted_mst(
+    var rounds = build_sorted_mst[DENSE=True](
         ctx, indptr, indices, pw_dists, m, n,
         mst_rows, mst_cols, mst_weights, color, nnz,
         max_iter=10, mst_tpb=mst_tpb, sabotage=sabotage,

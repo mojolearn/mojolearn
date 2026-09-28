@@ -1071,10 +1071,11 @@ def _host_embedding_from_graph(
     drop_first: Bool,
     seed: UInt64,
     mut embedding_out: List[Float32],
+    tolerance: Float32 = SPECTRAL_EMBEDDING_TOLERANCE,
 ) raises -> Int:
     var res = oracle_embedding[DType.float32](
         graph, n_components, norm_laplacian, drop_first,
-        SPECTRAL_EMBEDDING_TOLERANCE, seed,
+        tolerance, seed,
     )
     var n_out = res.n_out
     embedding_out.clear()
@@ -1097,6 +1098,7 @@ def host_spectral_embedding_dataset(
     drop_first: Bool,
     seed: UInt64,
     mut embedding_out: List[Float32],
+    tolerance: Float32 = SPECTRAL_EMBEDDING_TOLERANCE,
 ) raises -> Int:
     """`spectral_embedding_dataset_host`, `spectral/estimator.mojo`, on the
     host. `n_components` is the Lanczos count (the caller's plus one when
@@ -1108,7 +1110,8 @@ def host_spectral_embedding_dataset(
         graph.rows, graph.cols, graph.vals, n_samples, n_components
     )
     return _host_embedding_from_graph(
-        graph, n_components, norm_laplacian, drop_first, seed, embedding_out
+        graph, n_components, norm_laplacian, drop_first, seed, embedding_out,
+        tolerance,
     )
 
 
@@ -1122,6 +1125,7 @@ def host_spectral_embedding_coo(
     drop_first: Bool,
     seed: UInt64,
     mut embedding_out: List[Float32],
+    tolerance: Float32 = SPECTRAL_EMBEDDING_TOLERANCE,
 ) raises -> Int:
     """`spectral_embedding_graph_host`, `spectral/estimator.mojo`, on the
     host: the affinity graph is GIVEN as COO triples, its diagonal entries
@@ -1146,5 +1150,6 @@ def host_spectral_embedding_coo(
     var v_copy = vals.copy()
     var graph = coo_remove_diagonal(CooGraph(n_samples, r_copy^, c_copy^, v_copy^))
     return _host_embedding_from_graph(
-        graph, n_components, norm_laplacian, drop_first, seed, embedding_out
+        graph, n_components, norm_laplacian, drop_first, seed, embedding_out,
+        tolerance,
     )

@@ -1,0 +1,13 @@
+diff --git a/dbscan/impl/neighbors/epsilon_neighborhood.mojo b/dbscan/impl/neighbors/epsilon_neighborhood.mojo
+index 6e3f61283..7eaf4b01c 100644
+--- a/dbscan/impl/neighbors/epsilon_neighborhood.mojo
++++ b/dbscan/impl/neighbors/epsilon_neighborhood.mojo
+@@ -483,7 +483,7 @@ def eps_unexp_neigh_kernel[
+             # distance and `thresh_in` is `eps`. One compare, two meanings,
+             # and `dbscan_metric_threshold` is the only place that decides
+             # which. DEVIATION 27.
+-            var is_neigh = a <= thresh_in
++            var is_neigh = a <= thresh_in * Float32(1.1)  # SABOTAGE: device radius 10% wider
+             if xid < m and yid < n:
+                 adj.unsafe_store(
+                     xid * n + yid, UInt8(1) if is_neigh else UInt8(0)

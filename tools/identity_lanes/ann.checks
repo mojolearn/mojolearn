@@ -24,3 +24,4 @@ x_ann/checks/ivf_quant_check.mojo	x_ann/checks/sabotage/filter_5855_ignored.patc
 ivf/checks/ivf_check.mojo	ivf/checks/sabotage/ivf_5860_slot_sort_tie_high.patch
 ivf/checks/ivf_check.mojo	ivf/checks/sabotage/ivf_5861_merge_high_first.patch
 ivf/checks/ivf_check.mojo	ivf/checks/sabotage/ivf_5862_extend_new_rows_first.patch
+ivf/checks/ivf_check.mojo	ivf/checks/sabotage/ivf_5863_filter_ignored.patch

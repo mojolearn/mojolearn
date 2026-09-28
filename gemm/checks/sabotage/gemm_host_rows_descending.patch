@@ -1,0 +1,14 @@
+diff --git a/gemm/host/gemm_host_rows.mojo b/gemm/host/gemm_host_rows.mojo
+index ef15be1af..ddc60d716 100644
+--- a/gemm/host/gemm_host_rows.mojo
++++ b/gemm/host/gemm_host_rows.mojo
+@@ -172,7 +172,8 @@ def ghr_panel_chain(arow: GhrPtr, panel: GhrPtr, pb: Int, pe: Int, dst: GhrPtr,
+     var e1 = em
+     var e2 = em
+     var e3 = em
+-    for p in range(pb, pe):
++    for q in range(pe - pb):  # SABOTAGE (neural-cpu): the panel chain walks p DESCENDING
++        var p = pe - 1 - q
+         var sv = GhrF(arow.unsafe_load(p))
+         var base = p * GHR_G
+         c0 = _step(sv, panel.unsafe_load[width=GHR_FW](base), c0, e0)

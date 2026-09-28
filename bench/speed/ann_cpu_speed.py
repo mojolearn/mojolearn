@@ -108,7 +108,16 @@ def main():
     for a in algos:
         if a == "ivf":
             est = ml.IVFIndex(**common)
-            _, tf = timed(lambda: est.fit(x))
+            if args.fit_only:
+                est.fit(x)
+                import pickle
+                with open(f"{args.fit_only}.{a}.pkl", "wb") as f:
+                    pickle.dump(est, f)
+                continue
+            if args.fit_on_gpu:
+                est, tf = gpu_fit(args, a)
+            else:
+                _, tf = timed(lambda: est.fit(x))
             (d, i), ts = timed(lambda: est.search(q))
             cell(a, fit_s=round(tf, 3), search_s=round(ts, 3), out=digest(d, i))
         elif a in ("ivf_pq", "ivf_sq", "ivf_rabitq", "refine"):

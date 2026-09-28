@@ -77,6 +77,7 @@ from svm.impl.svm_parameter import (
     EPSILON_SVR,
     KERNEL_LINEAR,
     KERNEL_POLYNOMIAL,
+    KERNEL_PRECOMPUTED,
     KERNEL_RBF,
     KERNEL_TANH,
     KernelParams,
@@ -122,7 +123,7 @@ def _kernel_params(
     """`ML::matrix::KernelParams` for the implemented kernels (LINEAR, RBF,
     POLYNOMIAL, TANH). `degree` and `coef0` default to their constructor
     values (3 and 0); POLYNOMIAL reads both, TANH reads coef0."""
-    if kernel != KERNEL_LINEAR and kernel != KERNEL_RBF and kernel != KERNEL_POLYNOMIAL and kernel != KERNEL_TANH:
+    if kernel != KERNEL_LINEAR and kernel != KERNEL_RBF and kernel != KERNEL_POLYNOMIAL and kernel != KERNEL_TANH and kernel != KERNEL_PRECOMPUTED:
         raise Error(
             "svm: kernel=" + String(kernel) + " is not implemented in rung 1;"
             + " only LINEAR (" + String(KERNEL_LINEAR) + ") and RBF ("
@@ -178,6 +179,11 @@ def svc_fit_host(
             + String(n_rows)
         )
     var kp = _kernel_params(kernel, gamma, degree, coef0)
+    if kernel == KERNEL_PRECOMPUTED and n_cols != n_rows:
+        raise Error(
+            "svm: kernel='precomputed' needs the square n x n kernel matrix"
+            " as X, got " + String(n_rows) + " x " + String(n_cols)
+        )
     var param = SvmParameter.default()
     param.C = C
     param.tol = tol
@@ -249,6 +255,11 @@ def svc_fit_host_borrowed(
             + String(n_rows)
         )
     var kp = _kernel_params(kernel, gamma, degree, coef0)
+    if kernel == KERNEL_PRECOMPUTED and n_cols != n_rows:
+        raise Error(
+            "svm: kernel='precomputed' needs the square n x n kernel matrix"
+            " as X, got " + String(n_rows) + " x " + String(n_cols)
+        )
     var param = SvmParameter.default()
     param.C = C
     param.tol = tol
@@ -331,7 +342,15 @@ def svc_predict_host(
             "svc_predict_host: dual_coefs has " + String(len(dual_coefs))
             + " values, n_support is " + String(n_support)
         )
-    if len(support_matrix) != n_support * n_cols:
+    if kernel == KERNEL_PRECOMPUTED:
+        # X IS the n_rows x n_support cross-kernel (the caller gathered the
+        # support columns); no support rows are read.
+        if n_support > 0 and n_cols != n_support:
+            raise Error(
+                "svc_predict_host: kernel='precomputed' needs X with one"
+                " column per support vector"
+            )
+    elif len(support_matrix) != n_support * n_cols:
         raise Error(
             "svc_predict_host: support_matrix has " + String(len(support_matrix))
             + " values, n_support x n_cols is " + String(n_support * n_cols)
@@ -481,6 +500,11 @@ def svr_fit_host(
             + String(n_rows)
         )
     var kp = _kernel_params(kernel, gamma, degree, coef0)
+    if kernel == KERNEL_PRECOMPUTED and n_cols != n_rows:
+        raise Error(
+            "svm: kernel='precomputed' needs the square n x n kernel matrix"
+            " as X, got " + String(n_rows) + " x " + String(n_cols)
+        )
     var param = SvmParameter.default()
     param.C = C
     param.tol = tol
@@ -567,7 +591,15 @@ def svr_predict_host(
             "svr_predict_host: dual_coefs has " + String(len(dual_coefs))
             + " values, n_support is " + String(n_support)
         )
-    if len(support_matrix) != n_support * n_cols:
+    if kernel == KERNEL_PRECOMPUTED:
+        # X IS the n_rows x n_support cross-kernel (the caller gathered the
+        # support columns); no support rows are read.
+        if n_support > 0 and n_cols != n_support:
+            raise Error(
+                "svr_predict_host: kernel='precomputed' needs X with one"
+                " column per support vector"
+            )
+    elif len(support_matrix) != n_support * n_cols:
         raise Error(
             "svr_predict_host: support_matrix has " + String(len(support_matrix))
             + " values, n_support x n_cols is " + String(n_support * n_cols)

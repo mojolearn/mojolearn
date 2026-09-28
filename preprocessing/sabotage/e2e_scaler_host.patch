@@ -1,0 +1,22 @@
+diff --git a/preprocessing/host/scaler_oracle.mojo b/preprocessing/host/scaler_oracle.mojo
+index 65b359f47..14df6ee64 100644
+--- a/preprocessing/host/scaler_oracle.mojo
++++ b/preprocessing/host/scaler_oracle.mojo
+@@ -207,6 +207,8 @@ def host_standard_transform(
+                     value = ftz(ftz(value) - ftz(mp.unsafe_load(c)))
+                 if with_std != 0:
+                     value = ftz(identical_div(ftz(value), ftz(sp.unsafe_load(c))))
++            if value != Float32(0.0) and value == value:  # SABOTAGE e2e: every nonzero host output one ulp up
++                value = bitcast[DType.float32](bitcast[DType.uint32](value) + UInt32(1))
+             op.unsafe_store(i, value)
+ 
+     if tasks == 1:
+@@ -304,6 +306,8 @@ def host_minmax_transform(
+                         value = lower
+                     if value > upper:
+                         value = upper
++            if value != Float32(0.0) and value == value:  # SABOTAGE e2e: every nonzero host output one ulp up
++                value = bitcast[DType.float32](bitcast[DType.uint32](value) + UInt32(1))
+             op.unsafe_store(i, value)
+ 
+     if tasks == 1:

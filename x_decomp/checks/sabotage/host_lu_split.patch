@@ -1,0 +1,13 @@
+diff --git a/x_decomp/host_simd.mojo b/x_decomp/host_simd.mojo
+index a06b9522e..9a9cc1510 100644
+--- a/x_decomp/host_simd.mojo
++++ b/x_decomp/host_simd.mojo
+@@ -334,7 +334,7 @@ def lu_rows(a: F32Ptr, n: Int, k: Int, d: Float32, i0: Int, i1: Int):
+         while j + W <= n:
+             var x = ftz_v[W](rk.unsafe_load[width=W](j))
+             var y = ftz_v[W](ri.unsafe_load[width=W](j))
+-            ri.unsafe_store(j, ftz_v[W](mul_add_v[W](nl, x, y)))
++            ri.unsafe_store(j, ftz_v[W](ftz_v[W](nl * x) + y))  # SABOTAGE (host LU): split FMA
+             j += W
+         while j < n:
+             ri.unsafe_store(j, _ftz1(mul_add_v[1](-l, _ftz1(rk.unsafe_load(j)), _ftz1(ri.unsafe_load(j)))))

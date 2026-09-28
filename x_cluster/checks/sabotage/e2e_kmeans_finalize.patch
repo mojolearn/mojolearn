@@ -1,0 +1,13 @@
+diff --git a/cluster/checks/reduce_by_key.mojo b/cluster/checks/reduce_by_key.mojo
+index 62980d904..b5413b73c 100644
+--- a/cluster/checks/reduce_by_key.mojo
++++ b/cluster/checks/reduce_by_key.mojo
+@@ -576,7 +576,7 @@ def finalize_centroids_kernel(
+             new_centroids.unsafe_store(idx, old_centroids.unsafe_load(idx))
+         else:
+             var s = ftz(Float32(sums_i32.unsafe_load(idx)) / sum_scale_in)
+-            new_centroids.unsafe_store(idx, ftz(s / w))
++            new_centroids.unsafe_store(idx, ftz(s / w) * Float32(1.0000001))  # SABOTAGE: device centroids one ulp up
+ 
+ 
+ comptime SUM_MODE_PLAIN = 0

@@ -55,9 +55,52 @@ Every digest equals the H100 and M3 Ultra records EXCEPT dbscan taxi (below).
    `chain_add` from its saved start. moments_check gains the flag case; arm
    5121_moments_tile regenerated; new arm 5121_moments_flag.
 
-## Requests in flight
+3. b97028944 AffinityPropagation (DEVIATION 5105): the responsibility update one
+   block per row on the device; the row's max and second max, each at its lowest
+   index, from an integer max of `(float order with -0.0 folded onto +0.0, -index)`
+   keys (the row loop's picks for every block shape); the cell update is one spelling
+   (`bodies.ap_r_update`). ap_check gains n = 600 with planted ties; arm
+   5105_ap_rmax_tie; 5105_ap_damping and e2e_device_fold_reversed regenerated.
+4. 6c7a51fbd dense graph index math: the self-loop pass one thread per row (was one
+   per cell with a 64-bit division); 32-bit row/col in fill_indices2 and in the
+   mutual reachability transform.
+5. eb1299ed7 HDBSCAN: `build_sorted_mst[DENSE=True]` computes each column as
+   `e % m` (`mst_kernels._edge_dst`), so the m x m index array (6.4 GB at 40k rows) is
+   neither written nor read; the min-edge scan tests colors before the mst_edge byte
+   (same predicate); mutual reachability in place over the distances (one m x m
+   buffer instead of two). Every other caller keeps the reference path (defaults).
+   Arm e2e_hdbscan_dense_dst proves the lanes reach it.
+6. d744c7cb5 core/spec_chain.mojo: the speculative flushed chain as a shared helper
+   (`ftz_chain_block[U]`, `suspect_sum`); GaussianMixture's nk (mstep) and mean
+   log-likelihood (estep) chains use it; x_cluster moments take `suspect_sum` from it.
+   core/spec_chain_check.mojo (device + host vs the plain flushed chain, planted
+   cancellations / subnormal partial sums / -0.0 / subnormal addends) with arm
+   spec_chain_fallback.patch; e2e_spec_chain_reach proves the gmm lanes reach it.
 
-- identity 1790582025688-cluster-28ab726b31 (18 x-cluster lanes, --pass 2, sabotage
-  ~/mojolearn-evidence/cluster-apple/combined_e2e.patch) on m2pro, m3ultra, m4pro-a, do-amd.
-- speed after (IDENTICAL) 1790582041926 on m4pro-a; before/after pair on m3ultra
-  (1790582043709 at 5b622763d, 1790582046724 at 28ab726b3).
+7. 0ea0b944e AgglomerativeClustering single linkage: the DENSE solver too.
+8. 30c6e9638 x_cluster moments, FAST only: row slices summed per block, the partials
+   added over the slices (the same addends and finals; FAST moves bits, quality by the
+   paired check).
+9. 381f85584 merge of origin/lane/merged (Andrew 2026-09-28). Fix found in the merge:
+   lane/merged's `_ap_noise_kernel` took `m: Int`, which is not DevicePassable, so the
+   x_cluster GPU binding did not instantiate on this toolchain; `m` is Int32 now.
+
+## Policy (Andrew 2026-09-28, ~08:25Z)
+
+No verification in this lane: no identity requests, no sabotage runs. The identity
+request 1790583161949 and the DBSCAN probe were withdrawn before they ran. The
+sabotage arms and checks added above are for the orchestrator's one check on
+lane/apple-merged. Only speed measurements (+ digests for IDENTICAL, paired quality
+for FAST) run here.
+
+## Requests in flight (superseded; see the results section)
+
+- identity 1790583161949-cluster-819df01ee2: 24 lanes (18 x-cluster, hdbscan,
+  hdbscan-leaf, x-cluster-hdbscan-epsilon, agglomerative, gmm, gmm-random-init),
+  --pass 2 (every cluster.checks arm), sabotage
+  ~/mojolearn-evidence/cluster-apple/combined_e2e_v4.patch; m2pro, m3ultra-b, m4pro-b,
+  do-amd.
+- speed after 1790583183566 (m4pro-a) and 1790583186740 (m3ultra, + GMM stage times);
+  m3ultra before 1790582043709 (5b622763d); HDBSCAN/BGMM stage profile 1790583192185
+  (m3ultra, lane/cluster-apple-prof b1afa236c).
+- DBSCAN M4 probe 1790582090404 (m4pro-a, lane/cluster-apple-prof 6a34eb370).

@@ -1,0 +1,13 @@
+diff --git a/x_cluster/host/host_ops.mojo b/x_cluster/host/host_ops.mojo
+index 25df2d3b0..37ae5a94d 100644
+--- a/x_cluster/host/host_ops.mojo
++++ b/x_cluster/host/host_ops.mojo
+@@ -187,7 +187,7 @@ struct HostOps(ClusterOps):
+             var buf = List[UInt32](length=n_cols, fill=UInt32(0))
+             for j in range(n_cols):
+                 buf[j] = bitcast[DType.uint32](pm[t * n_cols + j]) & UInt32(0x7FFFFFFF)
+-            var v = _select_u32(buf, k - 1)
++            var v = _select_u32(buf, k - 1 if k < 2 else k - 2)
+             if v > UInt32(0x7F800000):
+                 v = UInt32(0x7F800000)
+             po[t] = bitcast[DType.float32](v)

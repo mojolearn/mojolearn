@@ -66,7 +66,49 @@ Sanity tests need scikit-learn: on the pod it is in /root/skl
 | CURRENT DIRECTIVES (x_* second GPU call): x_prep/device.mojo now holds ONE process-lifetime DeviceContext (`x_prep_ctx`, the x_cnn `_Global` pattern); python/mojolearn/tests/test_x_prep_twice.py runs 21 estimators' programs twice in one process | (this commit) | new pod lohadbfeo1vnr5 (H100): fresh SAME BITS reference at main f237f1996 (ref-main: the 48 lanes of lanes_p2b.txt, --pass 2, RESULT PASS; ref-main-sc: the 5 binding scaler lanes, PASS); at the branch (run-branch) all 54 AGREE (--pass 2, the 10 seam arms bite) and samebits.py reads SAME BITS on all 53 existing lanes (a perturbed hash reads MOVED: the check can fail); test_x_prep_twice PASS on GPU and CPU |
 | option parity item 5 (scalers): StandardScaler / MinMaxScaler NaN (fit ignores it per feature, n_samples_seen_ a vector when counts differ, a never-seen feature has NaN statistics; transform keeps NaN, refuses inf), StandardScaler sample_weight (scalar or vector, zeros skip), partial_fit for both (first batch == fit bit for bit; MinMax: running extrema, params by the binding's own minmax_fit over [data_min_, data_max_]; Standard: batch stats by fit's own path merged by gnb_merge with K = d, d = 1), copy=False (in place into a writable float32 C-contiguous caller buffer), save/load of a vector or weight-sum n_samples_seen_. A finite unweighted call is unchanged (the binding's standard_fit / minmax_fit / transforms). New x_prep units scaler_stats / std_scale / nan_keep (ops 101-103); gnb_merge KEEP flag (param 11; the naive Bayes callers pad 0, SAME BITS): two exactly constant parts keep their value (FIX at the root: a constant column's merged mean drifted an ulp and the next merge read a 1e-7 scale). New lane x-prep-scaler-options; tests test_x_prep_scaler_options.py | (this commit) | x-prep-scaler-options AGREE (--pass 2, run-branch), DISAGREE under e2e_host_branch and AGREE after reversal (sab-scaler); minmax-scaler, minmax-scaler-clip, standard-scaler, standard-scaler-no-mean, standard-scaler-no-std and every prep lane SAME BITS vs ref-main / ref-main-sc; test_x_prep_scaler_options (9), test_x_prep_scalers, test_x_prep_twice, test_x_prep_parity: 21 passed on GPU and CPU (scikit-learn 1.9.1); test_host_surface 200 passed; test_lane_select OK (H100 pod) |
 
+
+## Session 2026-09-28 ~05Z (resumed after a cutoff)
+- Owed steward request (13 store lanes at the merged main, e2e_store_branch): ALREADY DONE by 1790553231198 (da6c16849,
+  which contains the x_prep_ctx merge 3573c4a0e): PASS on m2pro, m3ultra, m4-a, do-amd. 1790562931735 (33 sum lanes +
+  x-prep-scaler-options, e2e_host_branch): m2pro + m3ultra PASS, m4pro-a + do-amd queued at 04:55Z.
+- RunPod is out of funds (balance negative, 2026-09-28 ~05Z): pod lohadbfeo1vnr5 is gone (404) and a new `up` was refused
+  ("account balance is too low"). The coordinator said: do not retry renting. This session's GPU work runs on the central
+  AMD box (tools/amd_central.sh, tree /root/mojolearn-prep, evidence /root/ev-prep, scikit-learn 1.9.1 + scipy + pytest in
+  /root/skl-prep). THE NVIDIA HALF OF EVERY GATE BELOW IS OWED to the next pod.
+- Step 0 coverage audit (night_plan.md), every prep algorithm:
+  | algorithms | verifier lanes (CPU + GPU arms) | sabotage that bites | state |
+  |---|---|---|---|
+  | the 47 x_prep lanes (every preprocessor, selector, NB, DA; see the tables above) | x-prep-* | e2e_host_branch (33 sum lanes + x-prep-scaler-options) / e2e_store_branch (13 store lanes) | proven H100 + CPU; stewards above |
+  | StandardScaler, MinMaxScaler (binding _mojolearn_preprocessing) | standard-scaler, -no-mean, -no-std, minmax-scaler, -clip | GAP closed: preprocessing/sabotage/e2e_scaler_host.patch (host transform one ulp up) | see the AMD row below; NVIDIA owed |
+  | bootstrap, permutation_test, monte_carlo_integrate, parallel_classical | bootstrap, permutation-test, monte-carlo, par-resample | GAP closed: resample/sabotage/e2e_resample_host.patch (host chunk totals one ulp up; first host resample index one row on) | see the AMD row below; NVIDIA owed |
+  | BCa, paired=False, permutation_type='samples', sklearn.utils.resample (new, item 5) | resample-bca, resample-unpaired, resample-perm-samples, resample-utils | e2e_resample_host.patch | built and checked this session on AMD + CPU; NVIDIA owed |
+
+- This session, on the central AMD box without a GPU slot (`sh`): the resample HOST binding builds; `check-ndtri` host half
+  PASS (certificate ndtri fnv1a 0x368d9ecc8e0fd775, ndtr 0x910accedd0f41cda); on CPU (MOJOLEARN_VENDOR=cpu, scikit-learn
+  1.9.1, scipy 1.18.1) test_resample_bca RESULT PASS (BCa == SciPy's construction for mean / std / diff_means at 0.9 and
+  0.95), test_resample_options RESULT PASS, test_resample_surface GREEN (34 checks).
+- GPU job QUEUED ON THE BOX, not yet run: both central slots were held for hours by decomp and sequence(-cpu).
+  /root/ev-prep/waiter.sh (on-box, detached; the amd_central flock protocol, 16 h deadline) takes the first free slot and runs
+  /root/ev-prep/job.sh (copy: ~/mojolearn-evidence/algos-prep/amd_job.sh): (1) algos_lane_check of bootstrap,
+  permutation-test, monte-carlo, par-resample, resample-bca, resample-unpaired, resample-perm-samples, resample-utils with
+  --sabotage resample/sabotage/e2e_resample_host.patch -> res.log; (2) the three resample tests on GPU and CPU, check-ndtri
+  on the GPU, check-ndtri under seam_5410_ndtri.patch (must FAIL), check-resample, resample-card -> tests.log; (3) the five
+  binding scaler lanes with --sabotage preprocessing/sabotage/e2e_scaler_host.patch -> sc.log; then all.done.
+  `tools/amd_central.sh sh prep 'cat /root/ev-prep/started; ls /root/ev-prep'` shows where it is.
+
 ## Next
+NEXT SESSION, in this order (supersedes the item list further down where they differ):
+1. Read /root/ev-prep on the central AMD box (above). A lane DISAGREE, a sabotage that does not bite, a test FAIL or a
+   check-ndtri that passes under seam_5410 is a fix at the root, then rerun only that part.
+2. The NVIDIA half, once RunPod has funds (do not retry renting before): `tools/dev_pod.sh up prep 480`, then the same job
+   on the pod (lane check + sabotages for the 8 resample and 5 binding scaler lanes, tests on GPU and CPU, check-ndtri with
+   and without the 5410 arm, check-resample) plus test_host_surface and test_lane_select (its inputs changed: new lanes);
+   also samebits vs a fresh main reference for the existing prep lanes (bootstrap, permutation-test, monte-carlo,
+   par-resample and the binding scalers must be SAME BITS: BCa / unpaired / samples / utils are additive). Then merge
+   lane/algos-prep2 to main (push in the same command) and one batched steward request: the resample lanes with
+   e2e_resample_host.patch, the scaler lanes with e2e_scaler_host.patch (two requests, never mixed: a patch must reach
+   every lane in its request).
+3. Then phase C (GPU speed, IDENTICAL then FAST) on every prep algorithm.
 PHASE: option parity (2 in the LANE CHARTER at the top of docs/lanes/ALGORITHM_EXPANSION_PLAN.md), still open:
 only resample/ remains of item 5 (the scalers are merged, see the Pass 2 table).
 - Pod `prep` = lohadbfeo1vnr5 (H100, up 2026-09-28 01:08Z, lease 480 min; `dev_pod.sh extend prep`). Its /root/mojolearn is a git

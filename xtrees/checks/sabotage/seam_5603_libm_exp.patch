@@ -1,14 +1,14 @@
 --- a/xtrees/ops.mojo
 +++ b/xtrees/ops.mojo
-@@ -32,6 +32,7 @@
- """
+@@ -36,6 +36,7 @@ xtrees/checks/glue_check.mojo, one sabotage arm each):
  from std.sys.compile import is_defined
+ from max.algorithm import sync_parallelize
  from checks.numerics import identical_mul64, identical_exp64, identical_log64, identical_pow64
 +from std.math import exp
- 
- #: The host gate's negative control (`-D MOJOLEARN_HOST_SABOTAGE=1`, host builds
- #: only): `scale_f64` divides by a perturbed divisor, so every vote average moves.
-@@ -297,7 +298,7 @@
+ from ensemble.host_layout import (
+     HOST_LAYOUT_BLOCK_ROWS, HOST_LAYOUT_SERIAL_CELLS, colmajor_from_rowmajor_f32,
+ )
+@@ -374,7 +375,7 @@ def samme_step(
      var s: Float64 = 0.0
      if not last:
          # DEVIATION 5603: the pinned exp.

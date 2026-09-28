@@ -277,6 +277,37 @@ def merge_probed_lists(
     return out^
 
 
+def filter_candidate_slots(
+    layout: ListLayout, slots: List[Int32], keep: List[Int32]
+) raises -> List[Int32]:
+    """THE SAMPLE FILTER (DEVIATION 5863; cuVS `bitset_filter` /
+    `search_with_filtering`). `keep` holds one int32 per ORIGINAL row id,
+    0 removing the row. The merged slots whose carried id is removed are
+    dropped, in place order, BEFORE anything is gathered or scored, so a
+    removed row is never scored, never selected and never counted in
+    `n_candidates`. cuVS evaluates its predicate inside the scan, after the
+    probe; the kept set and its order are the same, and here the candidate
+    count is a function of the data, the probes and the mask only.
+
+    An EMPTY `keep` is no filter and returns `slots` unchanged (the path
+    every unfiltered search takes, so its bits cannot move).
+
+    Integer work only: no value is read, no arithmetic is performed."""
+    if len(keep) == 0:
+        return slots.copy()
+    var out = List[Int32](capacity=len(slots))
+    for c in range(len(slots)):
+        var id = Int(layout.list_indices[Int(slots[c])])
+        if id >= len(keep):
+            raise Error(
+                "filter_candidate_slots: row id " + String(id)
+                + " is outside the filter's " + String(len(keep)) + " flags"
+            )
+        if keep[id] != 0:
+            out.append(slots[c])
+    return out^
+
+
 def gather_candidate_vectors(
     layout: ListLayout, slots: List[Int32]
 ) raises -> List[Float32]:

@@ -1,0 +1,13 @@
+diff --git a/sequence/theta.mojo b/sequence/theta.mojo
+index d8776175d..55e355614 100644
+--- a/sequence/theta.mojo
++++ b/sequence/theta.mojo
+@@ -79,7 +79,7 @@ def theta_run(
+         var yi = ld(y, i)
+         st(e, i, sub(yi, m))
+         st(states, r + 4, m)
+-        st(states, r, fma3(alpha, yi, mul(oma, lev)))
++        st(states, r, add(lev, mul(alpha, sub(yi, lev))))
+         var my2 = div(fma3(Float32(i), my, yi), Float32(i + 1))
+         st(states, r + 1, my2)
+         if dyn:

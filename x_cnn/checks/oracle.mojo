@@ -378,6 +378,34 @@ def o_adapt_avg_bwd(g: List[Float32], NC: Int, H: Int, W: Int, OH: Int, OW: Int,
 
 
 # ---------------------------------------------------------------- 5713, 5714
+def o_adapt_max_fwd(x: List[Float32], NC: Int, H: Int, W: Int, OH: Int, OW: Int, alt: Bool) -> List[Float32]:
+    """[out | winner index as float] of adaptive max pooling (torch's
+    windows [floor(o*H/OH), ceil((o+1)*H/OH))), (h, w) ascending, the first
+    maximum wins, a NaN wins (DEVIATION 5706's tie); alt: the last maximum."""
+    var out = List[Float32]()
+    var idx = List[Float32]()
+    for nc in range(NC):
+        for oh in range(OH):
+            var hs = (oh * H) // OH
+            var he = ((oh + 1) * H + OH - 1) // OH
+            for ow in range(OW):
+                var ws = (ow * W) // OW
+                var we = ((ow + 1) * W + OW - 1) // OW
+                var best = Float32(0)
+                var bi = -1
+                for h in range(hs, he):
+                    for w in range(ws, we):
+                        var v = ftz(x[(nc * H + h) * W + w])
+                        var take = (v >= best) if alt else (v > best)
+                        if bi < 0 or take or v != v:
+                            best = v
+                            bi = h * W + w
+                out.append(best)
+                idx.append(Float32(bi))
+    out.extend(idx^)
+    return out^
+
+
 def o_sage_max_bwd(
     h: List[Float32], g: List[Float32], rowptr: List[Int], col: List[Int], n: Int, F: Int, alt: Bool
 ) -> List[Float32]:

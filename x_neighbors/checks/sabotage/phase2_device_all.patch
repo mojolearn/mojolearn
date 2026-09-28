@@ -1,0 +1,84 @@
+diff --git a/kernel_methods/estimator.mojo b/kernel_methods/estimator.mojo
+--- a/kernel_methods/estimator.mojo
++++ b/kernel_methods/estimator.mojo
+@@ -211,7 +211,9 @@
+         return
+     var i = idx // n
+     var j = idx - i * n
+-    var w = ftz(ftz(s.unsafe_load(i)) * ftz(s.unsafe_load(j)))
++    # device-only: the weight product one ulp high (K stays symmetric and
++    # positive definite, so the fit runs and its bits move)
++    var w = ftz(ftz(ftz(s.unsafe_load(i)) * ftz(s.unsafe_load(j))) * Float32(1.0000001))
+     k_io.unsafe_store(idx, ftz(ftz(k_io.unsafe_load(idx)) * w))
+ 
+ 
+diff --git a/svm/impl/kernelcache.mojo b/svm/impl/kernelcache.mojo
+--- a/svm/impl/kernelcache.mojo
++++ b/svm/impl/kernelcache.mojo
+@@ -106,7 +106,7 @@
+     if t < total:
+         var r = t // w
+         var c = t - r * w
+-        dst.unsafe_store(t, ftz(src.unsafe_load(r * Int(src_cols_in) + Int(offset_in) + c)))
++        dst.unsafe_store(t, ftz(src.unsafe_load(r * Int(src_cols_in) + Int(offset_in) + c) + Float32(0.5)))
+ 
+ 
+ @fieldwise_init
+diff --git a/kernel_methods/checks/kernel_matrix.mojo b/kernel_methods/checks/kernel_matrix.mojo
+--- a/kernel_methods/checks/kernel_matrix.mojo
++++ b/kernel_methods/checks/kernel_matrix.mojo
+@@ -472,7 +472,8 @@
+     var i = t // n
+     var j = t - i * n
+     var acc = Float32(0.0)
+-    for c in range(k):
++    for cc in range(k):
++        var c = k - 1 - cc
+         var x = ftz(a.unsafe_load(i * k + c))
+         var y = ftz(b.unsafe_load(j * k + c))
+         var s = ftz(x + y)
+@@ -506,7 +507,7 @@
+     if q == Float32(0.0):
+         dst.unsafe_store(t, v)
+     else:
+-        dst.unsafe_store(t, ftz(identical_div(v, ftz(identical_sqrt(q)))))
++        dst.unsafe_store(t, ftz(identical_div(v, ftz(identical_sqrt(q) * Float32(1.0000001)))))
+ 
+ 
+ # ===========================================================================
+diff --git a/gaussian_process/estimator.mojo b/gaussian_process/estimator.mojo
+--- a/gaussian_process/estimator.mojo
++++ b/gaussian_process/estimator.mojo
+@@ -1305,7 +1305,7 @@
+     var vtv = _download(ctx, dvtv, n_star * n_star)
+     gp_kernel_matrix(
+         ctx, dkss, dxs, dxs, dls, dstack2, n_star, n_star, d,
+-        model.kernel, True, trace, "gp.cov.kss", elem_tpb,
++        model.kernel, False, trace, "gp.cov.kss", elem_tpb,
+     )
+     var kss = _download(ctx, dkss, n_star * n_star)
+     _ = dx^
+diff --git a/neighbors/impl/distance/detail/distance_ops.mojo b/neighbors/impl/distance/detail/distance_ops.mojo
+--- a/neighbors/impl/distance/detail/distance_ops.mojo
++++ b/neighbors/impl/distance/detail/distance_ops.mojo
+@@ -837,7 +837,7 @@
+         return
+ 
+     if metric_is_extra(metric):
+-        dist.unsafe_store(idx, extra_metric_cell(x, i, y, j, k, metric))
++        dist.unsafe_store(idx, extra_metric_cell(x, i, y, j, k, metric) * Float32(1.0000001))
+         return
+ 
+     dist.unsafe_store(idx, bitcast[DType.float32](UInt32(0x7FC00000)))
+diff --git a/svm/impl/smosolver.mojo b/svm/impl/smosolver.mojo
+--- a/svm/impl/smosolver.mojo
++++ b/svm/impl/smosolver.mojo
+@@ -665,7 +665,7 @@
+             var host_c = ctx.enqueue_create_host_buffer[DType.float32](nt)
+             ctx.synchronize()
+             for i in range(nt):
+-                host_c[i] = self.c_rows[i % self.n_rows]
++                host_c[i] = self.C
+             ctx.enqueue_copy(dst_buf=self.C_vec, src_buf=host_c)
+             ctx.synchronize()
+             _ = host_c^

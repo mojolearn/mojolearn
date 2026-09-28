@@ -1,0 +1,15 @@
+diff --git a/sequence/host_gemm.mojo b/sequence/host_gemm.mojo
+index 2e425b8da..1bd889bfe 100644
+--- a/sequence/host_gemm.mojo
++++ b/sequence/host_gemm.mojo
+@@ -66,7 +66,9 @@ def _fma_v[w: Int](
+     a: SIMD[DType.float32, w], b: SIMD[DType.float32, w], c: SIMD[DType.float32, w]
+ ) -> SIMD[DType.float32, w]:
+     """`fma3` lane by lane: `ftz(identical_mul_add(a, b, c))`."""
+-    return _ftz_v[w](identical_mul_add_simd[w](a, b, c))
++    # SABOTAGE (seam 5544): the vector cell rounds the product before the
++    # add (two roundings, not one); every cell this path writes may move.
++    return _ftz_v[w](_ftz_v[w](a * b) + c)
+ 
+ 
+ def host_gemm_pack(a: Args, panel: FP):

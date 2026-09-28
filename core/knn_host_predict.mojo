@@ -150,12 +150,13 @@ what it has shown.
 from std.memory import bitcast
 from std.sys.compile import is_defined
 
-from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 
 from core.host_predict_threads import (
     HostF32Ptr,
     host_list_ptr,
     host_list_ptr_u32,
+    HostU32Ptr,
     host_predict_chunk,
     host_predict_task_count,
 )
@@ -167,7 +168,15 @@ from checks.kernel_matrix import (
     K_LIB_ROW_NORM,
     lib_block_size_for,
 )
-from checks.numerics import ftz, identical_div, identical_mul_add, identical_sqrt
+from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
+    ftz,
+    identical_div,
+    identical_mul_add,
+    identical_mul_add_simd,
+    identical_sqrt,
+)
 from neighbors.impl.distance.detail.distance_ops import (
     DIST_COSINE_EXPANDED,
     DIST_L1,
@@ -175,13 +184,16 @@ from neighbors.impl.distance.detail.distance_ops import (
     DIST_LP_UNEXPANDED,
     cosine_epilog,
     cosine_zero_norm_row,
+    extra_metric_cell,
     inner_product_core,
     l1_core,
     linf_core,
     lp_unexp_core,
     lp_unexp_epilog,
+    metric_is_extra,
     validate_metric_arg,
 )
+from core.host_simd_identical import ftz_v, powf_v, twiddle_v, untwiddle
 from neighbors.impl.ball_cover.common import (
     rbc_cmp_bound,
     rbc_true_dist,
@@ -256,6 +268,7 @@ def host_resolve_metric(metric: Int, is_sqrt: Bool) raises -> Int:
         or metric == DIST_LINF
         or metric == DIST_LP_UNEXPANDED
         or metric == DIST_COSINE_EXPANDED
+        or metric_is_extra(metric)
     ):
         return metric
     raise Error(
@@ -338,6 +351,15 @@ def host_metric_cell_ptr(
     THE SABOTAGE ARM walks the feature chain DESCENDING for L1, Lp and
     cosine (a float fold in the other order), and for Chebyshev, whose
     running max is order-free, returns the next float32 above the maximum."""
+    if metric_is_extra(metric):
+        # the five added metrics: the device's own cell function
+        var cell = extra_metric_cell(
+            rebind[MutPointer[Float32, MutAnyOrigin]](q), row,
+            rebind[MutPointer[Float32, MutAnyOrigin]](y), col, d, metric,
+        )
+        comptime if KNN_HOST_SABOTAGE:
+            cell = host_sabotage_value_flip(cell)
+        return cell
     var acc = Float32(0.0)
     if metric == DIST_LINF:
         for f in range(d):
@@ -507,6 +529,308 @@ def host_select_k(
         out_idx[base + b + 1] = iv
 
 
+#: THE BLOCK ENGINE (lane neighbors-cpu, 2026-09-28). `host_knn_search`
+#: used to spell every cell of a query row as one scalar chain, one row at
+#: a time, into an `n_index` distance row it then scanned. It now computes
+#: KNN_HOST_W index columns at once, one SIMD lane per CELL, for
+#: KNN_HOST_QB query rows at once: lane `l` of accumulator `r` is exactly
+#: the scalar chain of cell (query r, column b0 + l), the feature axis
+#: ascending, every operand `ftz`'d as loaded, the same `fma` / add / abs /
+#: strict-`>` max, the same `ftz` after each step. No fold crosses a lane,
+#: so the vector spelling is the scalar spelling W times over; the ftz is
+#: `core/host_simd_identical.mojo::ftz_v` (measured on all 2^32 words). Operands are
+#: flushed once when packed (ftz is idempotent and pure). The epilogues
+#: that call `identical_sqrt`, `identical_pow` or `identical_div` run per
+#: lane through the scalar functions themselves.
+#:
+#: The selection keeps the carry insertion of `host_select_k` over the
+#: same composite keys, fed column by column ascending; a column whose
+#: twiddled distance exceeds the high half of the current k-th key cannot
+#: enter (its key is strictly larger), so the vector pre-test only skips
+#: columns the insertion would reject. The k survivors' distances are read
+#: back from their keys (the twiddle is a bijection), then the estimator's
+#: sort, verbatim.
+comptime KNN_HOST_W = 8
+comptime KNN_HOST_QB = 4
+comptime KNN_HOST_QCH = 128
+comptime KnnVF = SIMD[DType.float32, KNN_HOST_W]
+comptime KnnVU = SIMD[DType.uint32, KNN_HOST_W]
+
+
+#: The step kinds of the block engine, fixed at compile time per tile so
+#: the feature loop carries no metric test.
+comptime KNN_STEP_IP = 0
+comptime KNN_STEP_L1 = 1
+comptime KNN_STEP_LINF = 2
+comptime KNN_STEP_LP = 3
+comptime KNN_STEP_DIFF2 = 4
+
+
+@always_inline
+def _host_step_kind(metric: Int, ip: Bool) -> Int:
+    if ip:
+        return KNN_STEP_IP
+    if metric == DIST_L1:
+        return KNN_STEP_L1
+    if metric == DIST_LINF:
+        return KNN_STEP_LINF
+    if metric == KNN_HOST_DIST_L2_SQRT_UNEXPANDED:
+        return KNN_STEP_DIFF2
+    return KNN_STEP_LP
+
+
+@always_inline
+def _host_block_step[K: Int](acc: KnnVF, qv: Float32, y: KnnVF, metric_arg: Float32) -> KnnVF:
+    """One feature step of W cells, lane-wise the scalar cores:
+    `inner_product_core`, `l1_core`, `linf_core`, `lp_unexp_core`, and the
+    ball cover's Euclidean `ftz(fma(diff, diff, acc))`."""
+    comptime if K == KNN_STEP_IP:
+        return ftz_v[KNN_HOST_W](identical_mul_add_simd[KNN_HOST_W](KnnVF(qv), y, acc))
+    elif K == KNN_STEP_L1:
+        return ftz_v[KNN_HOST_W](acc + abs(ftz_v[KNN_HOST_W](KnnVF(qv) - y)))
+    elif K == KNN_STEP_LINF:
+        var diff = abs(ftz_v[KNN_HOST_W](KnnVF(qv) - y))
+        return diff.gt(acc).select(diff, acc)
+    elif K == KNN_STEP_DIFF2:
+        var diff = ftz_v[KNN_HOST_W](KnnVF(qv) - y)
+        return ftz_v[KNN_HOST_W](identical_mul_add_simd[KNN_HOST_W](diff, diff, acc))
+    else:
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+            # `lp_unexp_core` lane-wise; `powf_v` is `portable_powf` lane-wise
+            # (core/host_simd_identical_check.mojo).
+            var diff = abs(ftz_v[KNN_HOST_W](KnnVF(qv) - y))
+            return ftz_v[KNN_HOST_W](acc + ftz_v[KNN_HOST_W](powf_v[KNN_HOST_W](diff, metric_arg)))
+        else:
+            var out = acc
+            comptime for l in range(KNN_HOST_W):
+                out[l] = lp_unexp_core(acc[l], qv, y[l], metric_arg)
+            return out
+
+
+def _host_block_tile_k[K: Int, NQ: Int](
+    qf: HostF32Ptr, r0: Int, panel: HostF32Ptr, d: Int, metric_arg: Float32,
+    tile: HostF32Ptr,
+):
+    """NQ query rows x KNN_HOST_W cells, raw accumulators into `tile` (row r
+    at `r * W`). The sabotage arm walks the chain DESCENDING for every kind
+    but Chebyshev, as the scalar cells do."""
+    var a0 = KnnVF(0.0)
+    var a1 = KnnVF(0.0)
+    var a2 = KnnVF(0.0)
+    var a3 = KnnVF(0.0)
+    var q0 = qf + r0 * d
+    var q1 = qf + (r0 + 1) * d
+    var q2 = qf + (r0 + 2) * d
+    var q3 = qf + (r0 + 3) * d
+    for g in range(d):
+        var f = g
+        comptime if KNN_HOST_SABOTAGE and K != KNN_STEP_LINF:
+            f = d - 1 - g
+        var y = panel.unsafe_load[width=KNN_HOST_W](f * KNN_HOST_W)
+        a0 = _host_block_step[K](a0, q0.unsafe_load(f), y, metric_arg)
+        comptime if NQ > 1:
+            a1 = _host_block_step[K](a1, q1.unsafe_load(f), y, metric_arg)
+        comptime if NQ > 2:
+            a2 = _host_block_step[K](a2, q2.unsafe_load(f), y, metric_arg)
+        comptime if NQ > 3:
+            a3 = _host_block_step[K](a3, q3.unsafe_load(f), y, metric_arg)
+    tile.unsafe_store[width=KNN_HOST_W](0, a0)
+    tile.unsafe_store[width=KNN_HOST_W](KNN_HOST_W, a1)
+    tile.unsafe_store[width=KNN_HOST_W](2 * KNN_HOST_W, a2)
+    tile.unsafe_store[width=KNN_HOST_W](3 * KNN_HOST_W, a3)
+
+
+def _host_block_tile_nq[K: Int](
+    qf: HostF32Ptr, r0: Int, nq: Int, panel: HostF32Ptr, d: Int,
+    metric_arg: Float32, tile: HostF32Ptr,
+):
+    if nq >= 4:
+        _host_block_tile_k[K, 4](qf, r0, panel, d, metric_arg, tile)
+    elif nq == 3:
+        _host_block_tile_k[K, 3](qf, r0, panel, d, metric_arg, tile)
+    elif nq == 2:
+        _host_block_tile_k[K, 2](qf, r0, panel, d, metric_arg, tile)
+    else:
+        _host_block_tile_k[K, 1](qf, r0, panel, d, metric_arg, tile)
+
+
+def _host_block_tile_kind(
+    qf: HostF32Ptr, r0: Int, nq: Int, panel: HostF32Ptr, d: Int,
+    kind: Int, metric_arg: Float32, tile: HostF32Ptr,
+):
+    """The raw accumulators of `nq` (<= KNN_HOST_QB) rows x KNN_HOST_W cells
+    into `tile`; the step kind picked once per tile."""
+    if kind == KNN_STEP_IP:
+        _host_block_tile_nq[KNN_STEP_IP](qf, r0, nq, panel, d, metric_arg, tile)
+    elif kind == KNN_STEP_L1:
+        _host_block_tile_nq[KNN_STEP_L1](qf, r0, nq, panel, d, metric_arg, tile)
+    elif kind == KNN_STEP_LINF:
+        _host_block_tile_nq[KNN_STEP_LINF](qf, r0, nq, panel, d, metric_arg, tile)
+    elif kind == KNN_STEP_DIFF2:
+        _host_block_tile_nq[KNN_STEP_DIFF2](qf, r0, nq, panel, d, metric_arg, tile)
+    else:
+        _host_block_tile_nq[KNN_STEP_LP](qf, r0, nq, panel, d, metric_arg, tile)
+
+
+@always_inline
+def _host_block_epilogue(
+    acc: KnnVF, qn: Float32, yn: KnnVF, metric: Int, metric_arg: Float32,
+    l2_pair: Bool, is_sqrt: Bool,
+) -> KnnVF:
+    """The cell epilogues of `host_l2_expanded_cell_ptr` and
+    `host_metric_cell_ptr`, W cells of one query row."""
+    if l2_pair:
+        var s = ftz_v[KNN_HOST_W](KnnVF(ftz(qn)) + ftz_v[KNN_HOST_W](yn))
+        var dist = ftz_v[KNN_HOST_W](identical_mul_add_simd[KNN_HOST_W](KnnVF(-2.0), acc, s))
+        dist = dist.le(KnnVF(0.0)).select(KnnVF(0.0), dist)
+        if is_sqrt:
+            comptime for l in range(KNN_HOST_W):
+                dist[l] = ftz(identical_sqrt(dist[l]))
+        return dist
+    var out = acc
+    if metric == DIST_LINF:
+        comptime if KNN_HOST_SABOTAGE:
+            comptime for l in range(KNN_HOST_W):
+                out[l] = bitcast[DType.float32](bitcast[DType.uint32](acc[l]) + UInt32(1))
+        return out
+    if metric == DIST_L1:
+        out = acc
+    elif metric == DIST_LP_UNEXPANDED:
+        var one_over_p = ftz(identical_div(Float32(1.0), metric_arg))
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+            out = ftz_v[KNN_HOST_W](powf_v[KNN_HOST_W](acc, one_over_p))
+        else:
+            comptime for l in range(KNN_HOST_W):
+                out[l] = lp_unexp_epilog(acc[l], one_over_p)
+    else:
+        comptime for l in range(KNN_HOST_W):
+            out[l] = cosine_epilog(acc[l], ftz(qn), ftz(yn[l]))
+    comptime if KNN_HOST_SABOTAGE:
+        comptime for l in range(KNN_HOST_W):
+            out[l] = host_sabotage_value_flip(out[l])
+    return out
+
+
+@always_inline
+def _host_block_select(
+    dist: KnnVF, b0: Int, wv: Int, best: MutPointer[UInt64, MutUntrackedOrigin], k: Int,
+):
+    """Offer W columns (ascending, the first `wv` real) to one row's
+    carry-insertion list `best[0 .. k)`."""
+    var thr = UInt32(best.unsafe_load(k - 1) >> UInt64(32))
+    var cand = twiddle_v[KNN_HOST_W](dist).le(KnnVU(thr))
+    if not cand.reduce_or():
+        return
+    for l in range(wv):
+        if not cand[l]:
+            continue
+        var pending = host_composite_key(dist[l], UInt32(b0 + l))
+        if pending < best.unsafe_load(k - 1):
+            for slot in range(k):
+                var cur = best.unsafe_load(slot)
+                if pending < cur:
+                    best.unsafe_store(slot, pending)
+                    pending = cur
+
+
+def _host_block_finish(
+    best: MutPointer[UInt64, MutUntrackedOrigin], k: Int, row: Int,
+    odp: HostF32Ptr, oip: HostU32Ptr,
+):
+    """`host_select_k`'s read-out and the estimator's sort, into the
+    caller's `row * k` slots."""
+    var base = row * k
+    for rank in range(k):
+        var key = best.unsafe_load(rank)
+        var selected = UInt32(key & UInt64(4294967295))
+        comptime if KNN_HOST_SABOTAGE:
+            selected = UInt32(0xFFFFFFFF) - selected
+        oip.unsafe_store(base + rank, selected)
+        odp.unsafe_store(base + rank, untwiddle(UInt32(key >> UInt64(32))))
+    for a in range(1, k):
+        var dv = odp.unsafe_load(base + a)
+        var iv = oip.unsafe_load(base + a)
+        var b = a - 1
+        while b >= 0:
+            var db = odp.unsafe_load(base + b)
+            var ib = oip.unsafe_load(base + b)
+            if db < dv or (db == dv and ib <= iv):
+                break
+            odp.unsafe_store(base + b + 1, db)
+            oip.unsafe_store(base + b + 1, ib)
+            b -= 1
+        odp.unsafe_store(base + b + 1, dv)
+        oip.unsafe_store(base + b + 1, iv)
+
+
+def host_pack_index(ip: HostF32Ptr, n_index: Int, d: Int) -> List[Float32]:
+    """Every index column, flushed, feature-major in blocks of KNN_HOST_W
+    (block b, feature f, lane l at `(b * d + f) * W + l`), zero-padded to a
+    whole block. Packed ONCE per call and read by every task: packing per
+    task re-read the whole index once per task (as much traffic as the
+    distances themselves at a few dozen rows per task)."""
+    var nb = (n_index + KNN_HOST_W - 1) // KNN_HOST_W
+    var out = List[Float32](length=nb * d * KNN_HOST_W, fill=Float32(0.0))
+    var op = host_list_ptr(out)
+    for c in range(n_index):
+        var b = c // KNN_HOST_W
+        var l = c % KNN_HOST_W
+        for f in range(d):
+            op.unsafe_store((b * d + f) * KNN_HOST_W + l, ftz(ip.unsafe_load(c * d + f)))
+    return out^
+
+
+def _host_knn_block_rows(
+    pan: HostF32Ptr, n_index: Int, qp: HostF32Ptr, lo: Int, hi: Int, d: Int,
+    k: Int, inp: HostF32Ptr, qnp: HostF32Ptr, mtr: Int, metric_arg: Float32,
+    l2_pair: Bool, is_sqrt: Bool, odp: HostF32Ptr, oip: HostU32Ptr,
+):
+    """Query rows `[lo, hi)` of `host_knn_search`, through the block
+    engine: sub-chunks of KNN_HOST_QCH rows, each against every packed
+    block of KNN_HOST_W index columns."""
+    var ipf = l2_pair or mtr == DIST_COSINE_EXPANDED
+    var qbuf = List[Float32](length=KNN_HOST_QCH * d, fill=Float32(0.0))
+    var tile = List[Float32](length=KNN_HOST_QB * KNN_HOST_W, fill=Float32(0.0))
+    var bestl = List[UInt64](length=KNN_HOST_QCH * k, fill=KNN_HOST_KEY_SENTINEL)
+    var qf = host_list_ptr(qbuf)
+    var tp = host_list_ptr(tile)
+    var bp = rebind[MutPointer[UInt64, MutUntrackedOrigin]](bestl.unsafe_ptr())
+    var s0 = lo
+    while s0 < hi:
+        var rows = min(KNN_HOST_QCH, hi - s0)
+        for r in range(rows):
+            for f in range(d):
+                qf.unsafe_store(r * d + f, ftz(qp.unsafe_load((s0 + r) * d + f)))
+        for i in range(rows * k):
+            bp.unsafe_store(i, KNN_HOST_KEY_SENTINEL)
+        var b0 = 0
+        while b0 < n_index:
+            var wv = min(KNN_HOST_W, n_index - b0)
+            var yn = KnnVF(0.0)
+            for l in range(wv):
+                yn[l] = inp.unsafe_load(b0 + l)
+            var pp = pan + (b0 // KNN_HOST_W) * d * KNN_HOST_W
+            var r0 = 0
+            while r0 < rows:
+                var nq = min(KNN_HOST_QB, rows - r0)
+                _host_block_tile_kind(qf, r0, nq, pp, d, _host_step_kind(mtr, ipf), metric_arg, tp)
+                for r in range(nq):
+                    var acc = tp.unsafe_load[width=KNN_HOST_W](r * KNN_HOST_W)
+                    var dist = _host_block_epilogue(
+                        acc, qnp.unsafe_load(s0 + r0 + r), yn, mtr, metric_arg,
+                        l2_pair, is_sqrt,
+                    )
+                    _host_block_select(dist, b0, wv, bp + (r0 + r) * k, k)
+                r0 += KNN_HOST_QB
+            b0 += KNN_HOST_W
+        for r in range(rows):
+            _host_block_finish(bp + r * k, k, s0 + r, odp, oip)
+        s0 += rows
+    _ = qbuf^
+    _ = tile^
+    _ = bestl^
+
+
 def host_knn_search(
     index: List[Float32], n_index: Int,
     queries: List[Float32], n_queries: Int, d: Int, k: Int,
@@ -585,36 +909,22 @@ def host_knn_search(
     var odp = host_list_ptr(out_dist)
     var oip = host_list_ptr_u32(out_idx)
 
-    def _rows(c: Int) {imm ip, imm qp, imm inp, imm qnp, imm odp, imm oip, imm chunk, imm n_queries, imm n_index, imm d, imm k, imm mtr, imm metric_arg, imm l2_pair, imm is_sqrt}:
-        var dist_row = List[Float32](length=n_index, fill=Float32(0.0))
-        var sel_dist = List[Float32](length=k, fill=Float32(0.0))
-        var sel_idx = List[UInt32](length=k, fill=UInt32(0))
+    var packed = host_pack_index(ip, n_index, d)
+    var pan = host_list_ptr(packed)
+
+    def _rows(c: Int) {imm pan, imm qp, imm inp, imm qnp, imm odp, imm oip, imm chunk, imm n_queries, imm n_index, imm d, imm k, imm mtr, imm metric_arg, imm l2_pair, imm is_sqrt}:
         var lo = c * chunk
         var hi = min(lo + chunk, n_queries)
-        for row in range(lo, hi):
-            var qn = qnp.unsafe_load(row)
-            if l2_pair:
-                for col in range(n_index):
-                    dist_row[col] = host_l2_expanded_cell_ptr(
-                        qp, row, ip, col, d, qn, inp.unsafe_load(col), is_sqrt
-                    )
-            else:
-                for col in range(n_index):
-                    dist_row[col] = host_metric_cell_ptr(
-                        qp, row, ip, col, d, qn, inp.unsafe_load(col), mtr, metric_arg
-                    )
-            host_select_k(dist_row, n_index, k, sel_dist, sel_idx, 0)
-            for rank in range(k):
-                odp.unsafe_store(row * k + rank, sel_dist[rank])
-                oip.unsafe_store(row * k + rank, sel_idx[rank])
-        _ = dist_row^
-        _ = sel_dist^
-        _ = sel_idx^
+        _host_knn_block_rows(
+            pan, n_index, qp, lo, hi, d, k, inp, qnp, mtr, metric_arg,
+            l2_pair, is_sqrt, odp, oip,
+        )
 
     if tasks == 1:
         _rows(0)
     else:
-        sync_parallelize(_rows, tasks)
+        host_parallelize(_rows, tasks)
+    _ = packed^
     _ = index_norm^
     _ = query_norm^
 
@@ -889,6 +1199,141 @@ def host_rbc_cmp_dist(
     return acc
 
 
+#: THE BALL COVER SCANS THROUGH THE BLOCK ENGINE (lane neighbors-cpu,
+#: 2026-09-28): `host_rbc_cmp_dist` for KNN_HOST_QB query rows x KNN_HOST_W
+#: index columns at once, one lane per cell, the same per-lane statements
+#: (and the same sabotage arms) as the scalar function; each row then
+#: consumes its W columns ascending, so counts, CSR fills and the k-NN
+#: insertion see the columns in the scalar order.
+@always_inline
+def _rbc_epilogue(acc: KnnVF, metric: Int, metric_arg: Float32) -> KnnVF:
+    if metric == DIST_LINF:
+        var out = acc
+        comptime if KNN_HOST_SABOTAGE:
+            comptime for l in range(KNN_HOST_W):
+                out[l] = bitcast[DType.float32](bitcast[DType.uint32](acc[l]) + UInt32(1))
+        return out
+    if metric == DIST_LP_UNEXPANDED:
+        var one_over_p = ftz(identical_div(Float32(1.0), metric_arg))
+        var out = acc
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+            out = ftz_v[KNN_HOST_W](powf_v[KNN_HOST_W](acc, one_over_p))
+        else:
+            comptime for l in range(KNN_HOST_W):
+                out[l] = lp_unexp_epilog(acc[l], one_over_p)
+        return out
+    return acc
+
+
+#: What a ball cover scan does with each row's columns.
+comptime RBC_COUNT = 0
+comptime RBC_FILL = 1
+comptime RBC_KNN = 2
+
+
+def _rbc_scan_rows[
+    mode: Int
+](
+    pan: HostF32Ptr, n_index: Int, qp: HostF32Ptr, lo: Int, hi: Int, d: Int,
+    metric: Int, metric_arg: Float32, eps_cmp: Float32, return_sqrt: Bool,
+    k: Int,
+    counts: MutPointer[Int32, MutUntrackedOrigin],
+    indptr: MutPointer[Int32, MutUntrackedOrigin],
+    cols: MutPointer[Int32, MutUntrackedOrigin],
+    dists: HostF32Ptr,
+):
+    """Rows `[lo, hi)` of one ball cover scan: COUNT writes `counts[q]`;
+    FILL writes the row's CSR slice at `indptr[q]` (clamped to it) and the
+    actual count into `counts[q]`; KNN writes `k` indices (`cols`) and TRUE
+    distances (`dists`) at `q * k`, as `host_rbc_knn_row`."""
+    var qbuf = List[Float32](length=KNN_HOST_QCH * d, fill=Float32(0.0))
+    var tile = List[Float32](length=KNN_HOST_QB * KNN_HOST_W, fill=Float32(0.0))
+    var cnt = List[Int](length=KNN_HOST_QCH, fill=0)
+    var cur = List[Int](length=KNN_HOST_QCH, fill=0)
+    var bd = List[Float32](length=KNN_HOST_QCH * max(k, 1), fill=Float32(0.0))
+    var bi = List[Int](length=KNN_HOST_QCH * max(k, 1), fill=-1)
+    var qf = host_list_ptr(qbuf)
+    var tp = host_list_ptr(tile)
+    var s0 = lo
+    while s0 < hi:
+        var rows = min(KNN_HOST_QCH, hi - s0)
+        for r in range(rows):
+            for f in range(d):
+                qf.unsafe_store(r * d + f, ftz(qp.unsafe_load((s0 + r) * d + f)))
+            cnt[r] = 0
+            comptime if mode == RBC_FILL:
+                cur[r] = Int(indptr.unsafe_load(s0 + r))
+        var b0 = 0
+        while b0 < n_index:
+            var wv = min(KNN_HOST_W, n_index - b0)
+            var pp = pan + (b0 // KNN_HOST_W) * d * KNN_HOST_W
+            var r0 = 0
+            while r0 < rows:
+                var nq = min(KNN_HOST_QB, rows - r0)
+                _host_block_tile_kind(qf, r0, nq, pp, d, _host_step_kind(metric, False), metric_arg, tp)
+                for r in range(nq):
+                    var row = r0 + r
+                    var dist = _rbc_epilogue(
+                        tp.unsafe_load[width=KNN_HOST_W](r * KNN_HOST_W), metric, metric_arg
+                    )
+                    comptime if mode == RBC_KNN:
+                        var base = row * k
+                        for l in range(wv):
+                            var dv = dist[l]
+                            var filled = cnt[row]
+                            if filled == k and not (dv < bd[base + k - 1]):
+                                continue
+                            var pos = filled if filled < k else k - 1
+                            while pos > 0 and dv < bd[base + pos - 1]:
+                                if pos < k:
+                                    bd[base + pos] = bd[base + pos - 1]
+                                    bi[base + pos] = bi[base + pos - 1]
+                                pos -= 1
+                            bd[base + pos] = dv
+                            bi[base + pos] = b0 + l
+                            if filled < k:
+                                cnt[row] = filled + 1
+                    else:
+                        var hit = dist.le(KnnVF(eps_cmp))
+                        if not hit.reduce_or():
+                            continue
+                        for l in range(wv):
+                            if not hit[l]:
+                                continue
+                            comptime if mode == RBC_FILL:
+                                var q = s0 + row
+                                if cur[row] < Int(indptr.unsafe_load(q + 1)):
+                                    cols.unsafe_store(cur[row], Int32(b0 + l))
+                                    var reported = dist[l]
+                                    if return_sqrt:
+                                        reported = rbc_true_dist(metric, dist[l])
+                                    comptime if KNN_HOST_SABOTAGE:
+                                        reported = host_sabotage_value_flip(reported)
+                                    dists.unsafe_store(cur[row], reported)
+                                    cur[row] += 1
+                            cnt[row] += 1
+                r0 += KNN_HOST_QB
+            b0 += KNN_HOST_W
+        for r in range(rows):
+            var q = s0 + r
+            comptime if mode == RBC_KNN:
+                for o in range(k):
+                    cols.unsafe_store(q * k + o, Int32(bi[r * k + o]))
+                    var reported = rbc_true_dist(metric, bd[r * k + o])
+                    comptime if KNN_HOST_SABOTAGE:
+                        reported = host_sabotage_value_flip(reported)
+                    dists.unsafe_store(q * k + o, reported)
+            else:
+                counts.unsafe_store(q, Int32(cnt[r]))
+        s0 += rows
+    _ = qbuf^
+    _ = tile^
+    _ = cnt^
+    _ = cur^
+    _ = bd^
+    _ = bi^
+
+
 def host_rbc_radius_row(
     index: List[Float32], n_index: Int, queries: List[Float32], q: Int,
     d: Int, eps: Float32, metric: Int, metric_arg: Float32,
@@ -920,22 +1365,23 @@ def host_rbc_radius_counts(
     tasks = max(1, min(tasks, n_queries))
     var chunk = host_predict_chunk(n_queries, tasks)
     var eps_cmp = rbc_cmp_bound(metric, eps)
-    def _rows(c: Int) {imm index, imm queries, mut counts, imm chunk, imm n_queries, imm n_index, imm d, imm eps_cmp, imm metric, imm metric_arg}:
+    var packed = host_pack_index(host_list_ptr(index), n_index, d)
+    var pan = host_list_ptr(packed)
+    var qp = host_list_ptr(queries)
+    var cp = rebind[MutPointer[Int32, MutUntrackedOrigin]](counts.unsafe_ptr())
+    var fp = host_list_ptr(queries)
+    def _rows(c: Int) {imm pan, imm qp, imm cp, imm fp, imm chunk, imm n_queries, imm n_index, imm d, imm eps_cmp, imm metric, imm metric_arg}:
         var lo = c * chunk
         var hi = min(lo + chunk, n_queries)
-        for q in range(lo, hi):
-            var count = Int32(0)
-            for col in range(n_index):
-                var dist = host_rbc_cmp_dist(
-                    queries, q * d, index, col * d, d, metric, metric_arg
-                )
-                if dist <= eps_cmp:
-                    count += Int32(1)
-            counts[q] = count
+        _rbc_scan_rows[RBC_COUNT](
+            pan, n_index, qp, lo, hi, d, metric, metric_arg, eps_cmp, False, 0,
+            cp, cp, cp, fp,
+        )
     if tasks == 1:
         _rows(0)
     else:
-        sync_parallelize(_rows, tasks)
+        host_parallelize(_rows, tasks)
+    _ = packed^
 
 
 def host_rbc_radius_fill_rows(
@@ -952,36 +1398,28 @@ def host_rbc_radius_fill_rows(
     tasks = max(1, min(tasks, n_queries))
     var chunk = host_predict_chunk(n_queries, tasks)
     var eps_cmp = rbc_cmp_bound(metric, eps)
-    def _rows(c: Int) {imm index, imm queries, imm indptr, mut actual_counts, mut cols, mut dists, imm chunk, imm n_queries, imm n_index, imm d, imm eps_cmp, imm return_sqrt, imm metric, imm metric_arg}:
+    # The count call supplied each row's exact slice; writes are clamped to
+    # it if the caller mutated an input between calls (the binding rejects
+    # the changed count after the join).
+    var packed = host_pack_index(host_list_ptr(index), n_index, d)
+    var pan = host_list_ptr(packed)
+    var qp = host_list_ptr(queries)
+    var acp = rebind[MutPointer[Int32, MutUntrackedOrigin]](actual_counts.unsafe_ptr())
+    var ipp = rebind[MutPointer[Int32, MutUntrackedOrigin]](indptr.unsafe_ptr())
+    var colp = rebind[MutPointer[Int32, MutUntrackedOrigin]](cols.unsafe_ptr())
+    var dp = host_list_ptr(dists)
+    def _rows(c: Int) {imm pan, imm qp, imm acp, imm ipp, imm colp, imm dp, imm chunk, imm n_queries, imm n_index, imm d, imm eps_cmp, imm return_sqrt, imm metric, imm metric_arg}:
         var lo = c * chunk
         var hi = min(lo + chunk, n_queries)
-        for q in range(lo, hi):
-            var out = Int(indptr[q])
-            var out_end = Int(indptr[q + 1])
-            var actual = Int32(0)
-            for col in range(n_index):
-                var cmp_dist = host_rbc_cmp_dist(
-                    queries, q * d, index, col * d, d, metric, metric_arg
-                )
-                if cmp_dist <= eps_cmp:
-                    # The count call supplied this row's exact slice.  Clamp
-                    # writes if the caller mutated an input between calls;
-                    # the binding rejects the changed count after the join.
-                    if out < out_end:
-                        cols[out] = Int32(col)
-                        var reported = cmp_dist
-                        if return_sqrt:
-                            reported = rbc_true_dist(metric, cmp_dist)
-                        comptime if KNN_HOST_SABOTAGE:
-                            reported = host_sabotage_value_flip(reported)
-                        dists[out] = reported
-                        out += 1
-                    actual += Int32(1)
-            actual_counts[q] = actual
+        _rbc_scan_rows[RBC_FILL](
+            pan, n_index, qp, lo, hi, d, metric, metric_arg, eps_cmp,
+            return_sqrt, 0, acp, ipp, colp, dp,
+        )
     if tasks == 1:
         _rows(0)
     else:
-        sync_parallelize(_rows, tasks)
+        host_parallelize(_rows, tasks)
+    _ = packed^
 
 
 def host_rbc_edge_distance(
@@ -1052,15 +1490,20 @@ def host_rbc_knn_search(
         tasks = host_predict_task_count(n_queries)
     tasks = max(1, min(tasks, n_queries))
     var chunk = host_predict_chunk(n_queries, tasks)
-    def _rows(c: Int) {imm index, imm queries, mut out_idx, mut out_dist, imm chunk, imm n_queries, imm n_index, imm d, imm k, imm metric, imm metric_arg}:
+    var packed = host_pack_index(host_list_ptr(index), n_index, d)
+    var pan = host_list_ptr(packed)
+    var qp = host_list_ptr(queries)
+    var oip = rebind[MutPointer[Int32, MutUntrackedOrigin]](out_idx.unsafe_ptr())
+    var odp = host_list_ptr(out_dist)
+    def _rows(c: Int) {imm pan, imm qp, imm oip, imm odp, imm chunk, imm n_queries, imm n_index, imm d, imm k, imm metric, imm metric_arg}:
         var lo = c * chunk
         var hi = min(lo + chunk, n_queries)
-        for q in range(lo, hi):
-            host_rbc_knn_row(
-                index, n_index, queries, q, d, k, metric, metric_arg,
-                out_idx, out_dist,
-            )
+        _rbc_scan_rows[RBC_KNN](
+            pan, n_index, qp, lo, hi, d, metric, metric_arg, Float32(0.0),
+            False, k, oip, oip, oip, odp,
+        )
     if tasks == 1:
         _rows(0)
     else:
-        sync_parallelize(_rows, tasks)
+        host_parallelize(_rows, tasks)
+    _ = packed^

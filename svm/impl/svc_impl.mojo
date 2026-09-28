@@ -47,6 +47,7 @@ from svm.impl.distance.kernel_matrices import (
 from svm.impl.smosolver import SmoSolver, SmoTrace
 from svm.impl.svm_parameter import (
     KERNEL_LINEAR,
+    KERNEL_PRECOMPUTED,
     KERNEL_RBF,
     KernelParams,
     SvmModel,
@@ -476,6 +477,13 @@ def svc_fused_decision(
     return True
 
 
+def _flushed(v: List[Float32]) -> List[Float32]:
+    var out = List[Float32](capacity=len(v))
+    for i in range(len(v)):
+        out.append(ftz(v[i]))
+    return out^
+
+
 def svc_predict(
     ctx: DeviceContext,
     model: SvmModel,
@@ -520,8 +528,13 @@ def svc_predict(
                 preds.append(v)
         return preds^
 
-    var x = upload_f32(ctx, x_host)
-    var sv = upload_f32(ctx, model.support_matrix)
+    var precomputed = kp.kernel == KERNEL_PRECOMPUTED
+    if precomputed and n_cols != n_support:
+        raise Error("svc_predict: kernel='precomputed' needs one X column per support vector")
+    # kernel='precomputed' reads no support rows: X is the cross-kernel,
+    # its subnormal cells flushed here (a computed kernel cell already is).
+    var x = upload_f32(ctx, _flushed(x_host)) if precomputed else upload_f32(ctx, x_host)
+    var sv = upload_f32(ctx, List[Float32](length=1, fill=Float32(0.0))) if precomputed else upload_f32(ctx, model.support_matrix)
     var dual = upload_f32(ctx, model.dual_coefs)
     var d_preds = ctx.enqueue_create_buffer[DType.float32](n_rows)
     # DEVIATION 2493: FAST with no card recording folds the decision inside
@@ -579,10 +592,11 @@ def svc_predict(
             i if kp.kernel == KERNEL_RBF else 0,
             nb if kp.kernel == KERNEL_RBF else 1,
         )
-        kernel_op(ctx, kp, K, xb, sv, nb, n_support, n_cols, l2b, l2_support, ws)
+        if not precomputed:
+            kernel_op(ctx, kp, K, xb, sv, nb, n_support, n_cols, l2b, l2_support, ws)
         var pb = d_preds.create_sub_buffer[DType.float32](i, nb)
         ctx.enqueue_function[decision_kernel](
-            pb.unsafe_ptr(), K.unsafe_ptr(), dual.unsafe_ptr(),
+            pb.unsafe_ptr(), xb.unsafe_ptr() if precomputed else K.unsafe_ptr(), dual.unsafe_ptr(),
             Int32(n_support), Int32(nb), model.b,
             model.unique_labels[0], model.unique_labels[1],
             Int32(1) if predict_class else Int32(0),

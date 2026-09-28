@@ -233,6 +233,50 @@ def sub(a: Float32, b: Float32) -> Float32:
     return ftz(a - b)
 
 
+comptime SUMSQ_STAGE = 64
+comptime SUMSQ_VEC = 4
+
+
+@always_inline
+def sumsq_fold(p: FP, start: Int, n: Int, stride: Int) -> Float32:
+    """sum_{k < n} p[start + k stride]^2, k ascending, one fma per term (the
+    lane's one-thread reduction). The values are LOADED SUMSQ_STAGE at a time
+    before they are folded (contiguous runs as 16-byte vector loads once the
+    address is 16-byte aligned), so a GPU thread keeps many loads in flight
+    instead of waiting out each one; the fold itself is the same chain of
+    fmas in the same order, so the bits are those of the plain loop."""
+    var acc = Float32(0.0)
+    var k = 0
+    if stride == 1:
+        # scalar head up to a 16-byte boundary
+        while k < n and (Int(p + (start + k)) & 15) != 0:
+            var w = ld(p, start + k)
+            acc = fma3(w, w, acc)
+            k += 1
+        while k + SUMSQ_STAGE <= n:
+            var v = SIMD[DType.float32, SUMSQ_STAGE]()
+            comptime for j in range(SUMSQ_STAGE // SUMSQ_VEC):
+                var q = (p + (start + k + j * SUMSQ_VEC)).load[width=SUMSQ_VEC, alignment=16]()
+                comptime for i in range(SUMSQ_VEC):
+                    v[j * SUMSQ_VEC + i] = ftz(q[i])
+            comptime for j in range(SUMSQ_STAGE):
+                acc = fma3(v[j], v[j], acc)
+            k += SUMSQ_STAGE
+    else:
+        while k + SUMSQ_STAGE <= n:
+            var v = SIMD[DType.float32, SUMSQ_STAGE]()
+            comptime for j in range(SUMSQ_STAGE):
+                v[j] = ld(p, start + (k + j) * stride)
+            comptime for j in range(SUMSQ_STAGE):
+                acc = fma3(v[j], v[j], acc)
+            k += SUMSQ_STAGE
+    while k < n:
+        var w = ld(p, start + k * stride)
+        acc = fma3(w, w, acc)
+        k += 1
+    return acc
+
+
 @always_inline
 def sigm(x: Float32) -> Float32:
     return ftz(identical_sigmoid(x))

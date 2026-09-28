@@ -115,4 +115,7 @@ def main() raises:
     _case(40, 65, 2, 25, "5121-fallback")
     # the speculative chain's flagged re-add
     _flag_case()
+    # d = 19: the host's vector lanes (two groups of eight) and its scalar
+    # tail (cluster-cpu lane, 2026-09-28); n large enough to split tasks
+    _case(3000, 19, 3, 17, "host-d19")
     print("PASS x_cluster moments_check")
