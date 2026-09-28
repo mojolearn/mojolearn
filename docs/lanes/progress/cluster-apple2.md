@@ -52,7 +52,7 @@ Standalone `KMeans` (bench/kmeans_apple_probe.py), HIGGS 1M:
 
 | stage (ms) | coarse 1M x 28, k 1024, 10 it | PQ codebook 1M x 2, k 256, 20 it |
 |---|---|---|
-| k-means|| rounds (8) | 898 (16,573 candidates) | 97 (4,145) |
+| k-means-parallel rounds (8) | 898 (16,573 candidates) | 97 (4,145) |
 | step 7 (candidate weights) | 132 | 14 |
 | k-means++ over the candidates | 196 | 47 |
 | step-8 Lloyd (17 it) | 28 | 5 |
