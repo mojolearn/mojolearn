@@ -167,3 +167,18 @@ Raw: ~/mojolearn-evidence/neighbors-apple/1790608308824-speed-neighbors-d7934f99
 | PolynomialCountSketch.transform 200k x 500 (old = per-row item) | IDENTICAL | 2.994 | | 0.511 | 2.992 | | 0.518 |
 | PolynomialCountSketch.transform 200k x 500 | FAST | 2.917 | | 0.506 | 2.904 | | 0.510 |
 | KNNImputer.transform | both | unchanged (0.15 to 0.16) | | | | | |
+
+### Request 1790609418287 (m4pro-a, M4 Pro, c905e9e47), IDENTICAL and FAST, one job
+
+old = `-D MOJOLEARN_XN_SERIAL_GPU` + `MOJOLEARN_XN_OLD_ITEMS=1`, new =
+default; forward and reverse, reps 2; digests equal in every row. Raw:
+~/mojolearn-evidence/neighbors-apple/1790609418287-speed-neighbors-c905e9e471.txt
+
+| case | mode | taxi old | taxi new | HIGGS old | HIGGS new |
+|---|---|---|---|---|---|
+| NearestCentroid.fit 200k | IDENTICAL | 0.160 | 0.060 | 0.163 | 0.061 |
+| NearestCentroid.fit 200k | FAST | 0.150 | 0.049 | 0.151 | 0.054 |
+| SVGP.fit 100k, 64 inducing | IDENTICAL | | | 0.209 | 0.092 |
+| SVGP.fit 100k, 64 inducing | FAST | | | 0.219 | 0.086 |
+| KNNImputer.transform (tiled vs per-cell) | IDENTICAL | 0.160 | 0.150 | 0.160 | 0.147 |
+| KernelPCA.fit 500, SkewedChi2Sampler | both | unchanged | | | |
