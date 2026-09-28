@@ -41,7 +41,7 @@ from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from std.ffi import external_call
+from std.atomic import Ordering, fence
 from std.sys.info import is_apple_gpu
 from std.memory import bitcast
 
@@ -270,11 +270,18 @@ def _dev_barrier():
     """A block barrier that also orders DEVICE memory: `drt` is shared
     through device memory in `lbfgs_dir_kernel`. On NVIDIA and AMD
     `barrier()` already covers global memory within the block; on Apple it is
-    `threadgroup_barrier(mem_threadgroup)`, which does not, so Apple gets
-    `air.wg.barrier(3, 1)` = `threadgroup_barrier(mem_device |
-    mem_threadgroup)` (the x_linear team fix, 2979a9de0)."""
+    `threadgroup_barrier(mem_threadgroup)`, which does not (the x_linear team
+    defect, 2979a9de0). The team's `air.wg.barrier(3, 1)` spelling cannot be
+    used here: this kernel also reaches the stdlib `barrier()` (through
+    `pinned_block_sum`) and the two declarations of `air.wg.barrier`
+    conflict at link. So Apple gets a release fence before the barrier and
+    an acquire fence after it (`std.atomic.fence`, which emits on Metal:
+    memory note of 2026-09-16), ordering every device store before the
+    barrier ahead of every device load after it."""
     comptime if is_apple_gpu():
-        external_call["air.wg.barrier", NoneType](Int32(3), Int32(1))
+        fence[ordering = Ordering.RELEASE]()
+        barrier()
+        fence[ordering = Ordering.ACQUIRE]()
     else:
         barrier()
 
