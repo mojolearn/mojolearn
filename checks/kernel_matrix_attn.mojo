@@ -231,8 +231,10 @@ def attn_default_arm_for[column: Int]() -> Int:
         # m, v, flags) equal across all four. A shipped Apple build compiles
         # both this word and the round 3 word; `fused_attention_arm_from_env`
         # returns this one only after a trainer has shown the kept stashes
-        # fit (`attention_estash_memory_grant`: every layer's stash plus one
-        # layer's backward scratches under 60% of the free device memory),
+        # fit (`attention_estash_memory_grant`: every layer's stash, one
+        # layer's backward scratches and the logits under 35% of the free
+        # device memory; B4 x 12 layers on the 48 GB M4 Pro trained at 7.2 s
+        # a step at a 41 GB footprint and then hung the GPU, so it is refused),
         # and the round 3 word otherwise, so the 16 GB M4 keeps the word that
         # trains at 12 layers. `-D MOJOLEARN_ATTN_APPLE_R3_ONLY=1` restores
         # the round 3 word as the build default.

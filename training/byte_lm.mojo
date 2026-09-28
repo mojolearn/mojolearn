@@ -811,7 +811,8 @@ struct ByteTrainer(Movable):
         # attention word runs only when this trainer's kept stashes fit the
         # free device memory (a schedule choice; the bits are the same).
         _ = attention_estash_memory_grant(
-            ctx, config.n_layers, config.batch, config.length, config.n_heads, config.length
+            ctx, config.n_layers, config.batch, config.length, config.n_heads, config.length,
+            2 * 4 * config.batch * config.length * config.vocab_size,
         )
 
     def validate_device_state(mut self, ctx: DeviceContext, completed: Int) raises:

@@ -1493,10 +1493,14 @@ default before the estash flip (its backward is the shipped
 struct _AttnEstashGate(Defaultable, Movable):
     var granted: Bool
     var denied: Bool
+    var need: Int
+    var free: Int
 
     def __init__(out self):
         self.granted = False
         self.denied = False
+        self.need = 0
+        self.free = 0
 
 
 comptime _ATTN_ESTASH_GATE = _Global[StorageType=_AttnEstashGate,
@@ -1518,28 +1522,67 @@ def attention_estash_granted() -> Bool:
 
 
 def attention_estash_memory_grant(
-    ctx: DeviceContext, n_layers: Int, b: Int, l: Int, nh: Int, s: Int
+    ctx: DeviceContext, n_layers: Int, b: Int, l: Int, nh: Int, s: Int,
+    step_transient_bytes: Int,
 ) raises -> Bool:
     """Called once by a trainer after its persistent buffers exist and before
     its first step: grant the estash word when every layer's kept exp stash
-    (`attention_v1_retained_exp_bytes`) plus one layer's backward y/dy
-    scratches fit under 60% of the device's FREE memory
-    (`DeviceContext.get_memory_info`; on Apple the working-set budget less
-    what is allocated), else refuse it for the rest of the process. Returns
-    whether this process now runs the estash word. A no-op on every build
-    that is not gated."""
+    (`attention_v1_retained_exp_bytes`), one layer's backward y/dy scratches
+    and the caller's other per-step transients (`step_transient_bytes`: the
+    byte LM passes its logits and their gradient) fit under 35% of the
+    device's FREE memory (`DeviceContext.get_memory_info`), else refuse it
+    for the rest of the process. Returns whether this process now runs the
+    estash word. A no-op on every build that is not gated.
+
+    The 35% is measured, not derived: on the 48 GB M4 Pro the T3 shard (B4,
+    12 layers, V 50,257) under the estash word trained at 7.2 s a step with
+    a 41 GB process footprint and then hung the GPU (a command buffer that
+    never completed); that shape needs 14.6 GB here and must be refused,
+    while B1 (3.6 GB) trained cleanly and must be granted."""
     comptime if not ATTN_APPLE_ESTASH_GATED:
         return True
-    var need = n_layers * attention_v1_retained_exp_bytes(b, l, nh, s) + 2 * 4 * b * nh * l * s
+    var need = (
+        n_layers * attention_v1_retained_exp_bytes(b, l, nh, s)
+        + 2 * 4 * b * nh * l * s + step_transient_bytes
+    )
     var mem = ctx.get_memory_info()
     var free = Int(mem[0])
-    var ok = need * 10 <= free * 6
+    var ok = need * 100 <= free * 35
     var g = _ATTN_ESTASH_GATE.get_or_create_ptr()
+    g[].need = need
+    g[].free = free
     if ok:
         g[].granted = True
     else:
         g[].denied = True
     return g[].granted and not g[].denied
+
+
+def attention_estash_gate_state() -> List[Int]:
+    """[gated, granted, denied, need_bytes, free_bytes] of the last grant
+    (all zero when nothing asked), for a run's read-back."""
+    var out = List[Int]()
+    comptime if not ATTN_APPLE_ESTASH_GATED:
+        out.append(0)
+        out.append(0)
+        out.append(0)
+        out.append(0)
+        out.append(0)
+        return out^
+    try:
+        var g = _ATTN_ESTASH_GATE.get_or_create_ptr()
+        out.append(1)
+        out.append(1 if g[].granted else 0)
+        out.append(1 if g[].denied else 0)
+        out.append(g[].need)
+        out.append(g[].free)
+    except:
+        out.append(1)
+        out.append(0)
+        out.append(0)
+        out.append(0)
+        out.append(0)
+    return out^
 
 
 def fused_attention_arm_estash_runs(arm: Int) -> Bool:

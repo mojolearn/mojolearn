@@ -481,6 +481,16 @@ def worker(args):
             del result
         import statistics
         timing_step_seconds = statistics.median(timing_seconds_all)
+    # lane/neural-apple (2026-09-28): the Apple estash memory grant this
+    # process ran under ([gated, granted, denied, need, free] bytes), when the
+    # binding reads it back.
+    try:
+        gate = list(trainer._binding().byte_lm_attention_estash_gate())
+        mode['attention_estash_gate'] = dict(zip(('gated', 'granted', 'denied', 'need_bytes', 'free_bytes'),
+                                                 [int(v) for v in gate]))
+        emit(dict(event='attention_estash_gate', **mode['attention_estash_gate']))
+    except Exception:  # noqa: BLE001 (a binding without the read-back)
+        pass
     sampler.stop()
     trainer.close()
     _write_result(args, shape, steps, limited=False, timing_step_seconds=timing_step_seconds,
@@ -599,6 +609,7 @@ def _write_result(args, shape, steps, limited, timing_step_seconds=None, mode=No
         attention_arm_is_default=mode.get('attention_arm_is_default'),
         attention_arm_resolved_hd64=mode.get('attention_arm_resolved_hd64'),
         attention_arm_trial_build=mode.get('attention_arm_trial_build'),
+        attention_estash_gate=mode.get('attention_estash_gate'),
         gemm_arm=mode.get('gemm_arm'), gemm_plan=mode.get('gemm_plan'),
         # DEVIATION 2648: the step glue arm the binding ran, the raw request
         # and whether the binding was a glue trial build (see `mode`).

@@ -51,6 +51,7 @@ summarize() {
     pixi run -e default python - "$1" <<'PY'
 import json, sys
 r = json.load(open(sys.argv[1]))
+print("STEP estash_gate", r.get("attention_estash_gate"))
 print("STEP first", r.get("first_call_seconds"), "steady", r.get("steady_step_seconds"), "median", r.get("steady_median_seconds"), "tok/s", r.get("steady_median_tokens_per_second"), "attn", r.get("attention_arm"), "gemm", r.get("gemm_plan"), "glue", r.get("step_glue_arm"))
 ct = r.get("component_timing_ms") or {}
 print("STEP component total ms", r.get("component_timing_total_ms"), "step_seconds", r.get("step_seconds"), "covered", r.get("component_timing_covered_fraction"), "timed walls", r.get("component_timing_step_seconds_all"))
