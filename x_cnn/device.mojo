@@ -19,7 +19,7 @@ from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_works
 from gemm.checks.gemm_identical import (
     identical_gemm_with_plan, identical_gemm_workspace_floats, PLAN_SPLIT_32_2X2, PLAN_SPLIT_64_4X4,
     PLAN_SPLIT_16_1X1, PLAN_APPLE_MMA, PLAN_TUNED_32_2X2, PLAN_SPLITK, apple_mma_applies, PLAN_APPLE_MMA_SPLIT,
-    identical_gemm_splitk_fits,
+    identical_gemm_splitk_fits, choose_gemm_plan,
 )
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE
 from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN
@@ -37,6 +37,14 @@ from x_cnn.ops import (
 )
 
 comptime TPB = 256
+#: lane/cnn-apple2: the FAST tier on Apple measures its GEMM plans (the
+#: simdgroup matrix plans among them). `-D MOJOLEARN_XCNN_NO_FAST_TUNE` is
+#: the before arm (round 1's FAST: the 4090 split plans and the dispatcher).
+comptime APPLE_FAST_TUNE = (
+    GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
+    and TARGET_COLUMN == COLUMN_APPLE
+    and not is_defined["MOJOLEARN_XCNN_NO_FAST_TUNE"]()
+)
 
 
 struct _CnnContext(Defaultable, Movable):
@@ -104,19 +112,9 @@ def launch[f: ElemFn](ctx: DeviceContext, a: FP, b: FP, c: FP, d: FP, q: IP, p: 
     ctx.enqueue_function[k](a, b, c, d, q, p, Int32(total), grid_dim=(total + TPB - 1) // TPB, block_dim=TPB)
 
 
-def _apple_tuned_plan(
-    ctx: DeviceContext, mut c: DeviceBuffer[DType.float32], mut a: DeviceBuffer[DType.float32],
-    mut b: DeviceBuffer[DType.float32], m: Int, n: Int, k: Int, op: Int, default: Int,
-) raises -> Int:
-    """The fastest candidate plan for this OP_TN shape on this device, timed
-    once (one run each, after a wait for the entry's earlier work) and cached
-    for the process. Every candidate writes the same words into `c`."""
-    var s = _slots()
-    var i = 0
-    while i + 3 < len(s[].tuned):
-        if s[].tuned[i] == m and s[].tuned[i + 1] == n and s[].tuned[i + 2] == k:
-            return s[].tuned[i + 3]
-        i += 4
+def _apple_tn_candidates(m: Int, n: Int, k: Int, default: Int) -> List[Int]:
+    """The weight/bias-gradient (OP_TN) plans that were ever competitive on
+    an Apple GPU at the x_cnn shapes (lane/cnn-apple sweeps)."""
     var cand = List[Int]()
     cand.append(default)
     if n == 1:
@@ -135,12 +133,30 @@ def _apple_tuned_plan(
         comptime if not is_defined["MOJOLEARN_XCNN_NO_MMA_SPLIT"]():
             if n >= 8 and apple_mma_applies(m, n, k):
                 cand.append(PLAN_APPLE_MMA_SPLIT)
+    return cand^
+
+
+def _apple_tuned_plan(
+    ctx: DeviceContext, mut c: DeviceBuffer[DType.float32], mut a: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32], m: Int, n: Int, k: Int, op: Int, cand: List[Int],
+) raises -> Int:
+    """The fastest of `cand` for this shape and orientation on this device,
+    timed once (one run each, after a wait for the entry's earlier work) and
+    cached for the process. In IDENTICAL every candidate writes the same
+    words into `c` (contract 6.1); in FAST the candidates are the same
+    leaves and fold on different units (the FAST tier's plan choice)."""
+    var s = _slots()
+    var i = 0
+    while i + 4 < len(s[].tuned):
+        if s[].tuned[i] == m and s[].tuned[i + 1] == n and s[].tuned[i + 2] == k and s[].tuned[i + 3] == op:
+            return s[].tuned[i + 4]
+        i += 5
     var need = 0
     for j in range(len(cand)):
         need = max(need, identical_gemm_workspace_floats(m, n, k, cand[j]))
     var wp = ws(ctx, GEMM_WS_SLOT, need)
     ctx.synchronize()
-    var best = default
+    var best = cand[0]
     var best_ns = perf_counter_ns()  # replaced by the first candidate
     for j in range(len(cand)):
         var t0 = perf_counter_ns()
@@ -154,6 +170,7 @@ def _apple_tuned_plan(
     s[].tuned.append(m)
     s[].tuned.append(n)
     s[].tuned.append(k)
+    s[].tuned.append(op)
     s[].tuned.append(best)
     return best
 
@@ -190,11 +207,29 @@ def device_gemm(
             # process among the plans that were ever competitive and cached
             # (`_apple_tuned_plan`). Execution plan only: the partition and
             # the fold come from `k`, so every candidate stores the same bits.
-            plan = _apple_tuned_plan(ctx, c, a, b, m, n, k, op, plan)
+            plan = _apple_tuned_plan(ctx, c, a, b, m, n, k, op, _apple_tn_candidates(m, n, k, plan))
+        comptime if APPLE_FAST_TUNE:
+            # lane/cnn-apple2: the FAST tier measures the same candidates,
+            # the simdgroup matrix plans among them (APPLE_MMA_FAST)
+            plan = _apple_tuned_plan(ctx, c, a, b, m, n, k, op, _apple_tn_candidates(m, n, k, plan))
         var wp = ws(ctx, GEMM_WS_SLOT, identical_gemm_workspace_floats(m, n, k, plan))
         identical_gemm_with_plan(ctx, c, a, b, wp, m, n, k, op, plan)
         _ = wp^
         return
+    comptime if APPLE_FAST_TUNE:
+        # lane/cnn-apple2: FAST on Apple has no simdgroup matrix plan in the
+        # shipped dispatcher (it is IDENTICAL's); where it applies, time it
+        # against the dispatcher's pick once per shape.
+        if m >= 8 and n >= 8 and apple_mma_applies(m, n, k):
+            var fc = List[Int]()
+            fc.append(choose_gemm_plan(m, n, k))
+            if fc[0] != PLAN_APPLE_MMA:
+                fc.append(PLAN_APPLE_MMA)
+            var fplan = _apple_tuned_plan(ctx, c, a, b, m, n, k, op, fc)
+            var fw = ws(ctx, GEMM_WS_SLOT, identical_gemm_workspace_max_floats(m, n, k))
+            identical_gemm_with_plan(ctx, c, a, b, fw, m, n, k, op, fplan)
+            _ = fw^
+            return
     var w = ws(ctx, GEMM_WS_SLOT, identical_gemm_workspace_max_floats(m, n, k))
     identical_gemm_into[False](ctx, c, a, b, w, m, n, k, op)
     _ = w^

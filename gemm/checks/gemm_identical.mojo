@@ -3483,9 +3483,22 @@ comptime _AMMA_M64 = SIMD[DType.float32, 64]
 comptime _AMMA_V2 = SIMD[DType.int64, 2]
 
 
+#: lane/cnn-apple2 (2026-09-28): the simdgroup matrix kernel in the FAST
+#: tier on Apple, for callers that NAME `PLAN_APPLE_MMA` or
+#: `PLAN_APPLE_MMA_SPLIT` (x_cnn's measured plans). Every full window runs
+#: on the matrix path (FAST keeps no rtf seam); no dispatcher picks it.
+#: `-D MOJOLEARN_GEMM_NO_APPLE_MMA_FAST` is the revert arm.
+comptime APPLE_MMA_FAST = (
+    GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
+    and TARGET_COLUMN == COLUMN_APPLE
+    and not is_defined["MOJOLEARN_GEMM_NO_APPLE_MMA"]()
+    and not is_defined["MOJOLEARN_GEMM_NO_APPLE_MMA_FAST"]()
+)
+
+
 def apple_mma_applies(m: Int, n: Int, k: Int) -> Bool:
     """Every leaf a whole number of windows (no short window, no padding)."""
-    comptime if not APPLE_MMA:
+    comptime if not (APPLE_MMA or APPLE_MMA_FAST):
         return False
     if m <= 0 or n <= 0 or k <= 0:
         return False
@@ -3738,6 +3751,8 @@ def identical_gemm_apple_mma_kernel[
             bea = min(bea, wmin[q])
             beb = min(beb, wmin[NSG + q])
         var admitted = exact_ok and chunk == KB and (bea + beb) >= UInt32(APPLE_MMA_ADMIT_EXP_SUM)
+        comptime if APPLE_MMA_FAST:
+            admitted = chunk == KB  # FAST: no seam to keep
         if not admitted:
             exact_ok = False
         if admitted:
@@ -4142,7 +4157,7 @@ def identical_gemm_with_plan(
             ctx, c, a, b, m, n, k, leaf, p_count, st, SWIZZLE_NONE, False
         )
         return
-    comptime if APPLE_MMA:
+    comptime if APPLE_MMA or APPLE_MMA_FAST:
         # Compile-time gated: the kernel calls Apple AIR intrinsics, so no
         # other column may instantiate it (the chooser never names the plan
         # there; a gate naming it falls through to the tuned 64x64 plan).
