@@ -20,6 +20,8 @@ from x_linear.ops import (
     ld, st, ldi, sti, i2f, fill, row_dot, shuffle, axpy_acc, scale_acc, ftzv, par_rows,
 )
 from std.sys.info import is_gpu
+from std.gpu import WARP_SIZE
+from std.gpu.primitives.warp import shuffle_idx
 from x_linear.team import Team
 from checks.numerics import identical_pow
 
@@ -263,6 +265,213 @@ def sgd_one(
     return epochs
 
 
+# ------------------------------------------------ the warp form (lane/linear-apple)
+# One SGD problem on ONE warp instead of one thread, the same words
+# (lane/linear-apple, 2026-09-28). The row pass is serial in the rows and a
+# thread spent it waiting on d dependent loads per row (sgd-clf 100k x 28,
+# 5 epochs: 8.2 s on the M3 Ultra, 30x the host). Here:
+#   * weight j lives in a REGISTER of lane j mod W (chunk j / W), with its
+#     L1 history q; every elementwise step (decay, the axpy, the L1 clip) is
+#     that lane's, with the same expression the thread applied to w[j];
+#   * row i's x is read by the warp at once, x_j in lane j mod W;
+#   * every fold (the row dot, the penalty norms, PA's |x|^2, the finite
+#     check) runs in EVERY lane over j ascending, each x_j / w_j fetched from
+#     its lane with `shuffle_idx` (a register copy): the same fmad sequence,
+#     so every lane holds the thread's scalar and the scalar control flow is
+#     uniform;
+#   * the row order is lane 0's (its Fisher-Yates in `idx`, which only lane 0
+#     reads and writes), broadcast per row with `shuffle_idx`; the target is
+#     computed from the label in every lane (the thread read it from `ys`,
+#     which the loop that filled it computed the same way).
+# No lane reads a device word another lane wrote. `sgd_one` stays the host's
+# and the fallback for d > SGD_WARP_MAX_CHUNKS * W.
+
+comptime SGD_WARP_MAX_CHUNKS = 8
+
+
+@always_inline
+def _sgd_target(k: Int, c: Int, v: Float32) -> Float32:
+    """`sgd_fit`'s `ys[i]` for label v (problem c of k classes)."""
+    if k == 0:
+        return v
+    if k == 1:
+        return Float32(1)
+    if k == 2:
+        return Float32(1) if v == Float32(1) else Float32(-1)
+    return Float32(1) if v == i2f(c) else Float32(-1)
+
+
+def sgd_one_warp[K: Int](
+    lane: Int, x: FP, y: FP, k: Int, c: Int, n: Int, d: Int,
+    loss: Int, penalty: Int, alpha: Float32, l1_ratio_in: Float32,
+    lr: Int, eta0: Float32, power_t: Float32, eps: Float32,
+    fit_intercept: Bool, max_iter: Int, tol: Float32, n_iter_no_change: Int,
+    do_shuffle: Bool, seed: UInt64, one_class: Bool,
+    w: FP, woff: Int, b: FP, boff: Int, idx: IP,
+    swp: FP, has_sw: Bool, wpos: Float32, wneg: Float32, has_cw: Bool,
+) -> Int:
+    """`sgd_one` on the warp of `lane` (see above). d <= K * WARP_SIZE."""
+    comptime W = WARP_SIZE
+    var l1_ratio = l1_ratio_in
+    if penalty == P_L2:
+        l1_ratio = Float32(0)
+    elif penalty == P_L1:
+        l1_ratio = Float32(1)
+    var wr = InlineArray[Float32, K](fill=Float32(0))
+    var qr = InlineArray[Float32, K](fill=Float32(0))
+    var xr = InlineArray[Float32, K](fill=Float32(0))
+    var intercept = Float32(1) if one_class else Float32(0)
+    if lane == 0:
+        for i in range(n):
+            sti(idx, i, i)
+    var rng = seed
+    var eta = eta0
+    var optimal_init = Float32(0)
+    if lr == LR_OPTIMAL:
+        var typw = fsqrt(fd(Float32(1), fsqrt(alpha)))
+        var g0 = sgd_dloss(loss, Float32(1), -typw, eps)
+        var initial_eta0 = fd(typw, fmax(Float32(1), g0))
+        optimal_init = fd(Float32(1), fm(initial_eta0, alpha))
+    var u = Float32(0)
+    var t = 1
+    var best = Float32(3.0e38)
+    var no_improve = 0
+    var decay_factor = fm(fs(Float32(1), l1_ratio), alpha)
+    var epochs = 0
+    for epoch in range(max_iter):
+        epochs = epoch + 1
+        var objective = Float32(0)
+        if do_shuffle and lane == 0:
+            shuffle(idx, n, rng)
+        for r in range(n):
+            var mine = Int32(0)
+            if lane == 0:
+                mine = idx.unsafe_load(r)
+            var i = Int(shuffle_idx(mine, UInt32(0)))
+            var yv = _sgd_target(k, c, ld(y, i))
+            comptime for kk in range(K):
+                var j = lane + kk * W
+                xr[kk] = ld(x, i * d + j) if j < d else Float32(0)
+            var acc = Float32(0)
+            for j in range(d):
+                var src = UInt32(j % W)
+                comptime for kk in range(K):
+                    if j // W == kk:
+                        acc = fmad(shuffle_idx(xr[kk], src), shuffle_idx(wr[kk], src), acc)
+            var p = fa(acc, intercept)
+            if lr == LR_OPTIMAL:
+                eta = fd(Float32(1), fm(alpha, fs(fa(optimal_init, i2f(t)), Float32(1))))
+            elif lr == LR_INVSCALING:
+                eta = fd(eta0, identical_pow(i2f(t), power_t))
+            var cur = sgd_loss(loss, yv, p, eps)
+            objective = fa(objective, cur)
+            if lr != LR_PA1 and lr != LR_PA2:
+                if penalty != P_NONE:
+                    var n2 = Float32(0)
+                    var n1 = Float32(0)
+                    for j in range(d):
+                        var src = UInt32(j % W)
+                        comptime for kk in range(K):
+                            if j // W == kk:
+                                var wj = shuffle_idx(wr[kk], src)
+                                n2 = fmad(wj, wj, n2)
+                                n1 = fa(n1, fabs(wj))
+                    var reg = fa(fm(fm(fs(Float32(1), l1_ratio), Float32(0.5)), n2), fm(l1_ratio, n1))
+                    objective = fa(objective, fm(alpha, reg))
+                if one_class:
+                    objective = fa(objective, fm(intercept, alpha))
+            var update: Float32
+            if lr == LR_PA1 or lr == LR_PA2:
+                var sq = Float32(0)
+                for j in range(d):
+                    var src = UInt32(j % W)
+                    comptime for kk in range(K):
+                        if j // W == kk:
+                            var xj = shuffle_idx(xr[kk], src)
+                            sq = fmad(xj, xj, sq)
+                if lr == LR_PA1:
+                    if sq == 0:
+                        continue
+                    update = fmin(eta0, fd(cur, sq))
+                else:
+                    update = fd(cur, fa(sq, fd(Float32(0.5), eta0)))
+                if loss == L_HINGE:
+                    update = fm(update, yv)
+                elif fs(yv, p) < 0:
+                    update = -update
+            else:
+                var dl = sgd_dloss(loss, yv, p, eps)
+                if dl < Float32(-1e12):
+                    dl = Float32(-1e12)
+                elif dl > Float32(1e12):
+                    dl = Float32(1e12)
+                update = fm(-eta, dl)
+            if has_cw or has_sw:
+                var cw = Float32(1)
+                if has_cw:
+                    cw = wpos if yv > 0 else wneg
+                var swi = ld(swp, i) if has_sw else Float32(1)
+                update = fm(update, fm(cw, swi))
+            if penalty == P_L2 or penalty == P_EN:
+                var scale = fmax(Float32(0), fs(Float32(1), fm(decay_factor, eta)))
+                comptime for kk in range(K):
+                    if lane + kk * W < d:
+                        wr[kk] = fm(wr[kk], scale)
+            if update != 0:
+                comptime for kk in range(K):
+                    if lane + kk * W < d:
+                        wr[kk] = fmad(update, xr[kk], wr[kk])
+            if fit_intercept:
+                var iu = update
+                if one_class:
+                    iu = fs(iu, fm(eta, alpha))
+                if iu != 0:
+                    intercept = fa(intercept, iu)
+            if penalty == P_L1 or penalty == P_EN:
+                u = fa(u, fm(fm(l1_ratio, eta), alpha))
+                comptime for kk in range(K):
+                    if lane + kk * W < d:
+                        var z = wr[kk]
+                        var nz = _clip_one(z, fa(u, qr[kk]), fs(u, qr[kk]))
+                        wr[kk] = nz
+                        qr[kk] = fa(qr[kk], fs(nz, z))
+            t += 1
+        var finite = intercept == intercept and fabs(intercept) < Float32(3.0e38)
+        for j in range(d):
+            var src = UInt32(j % W)
+            comptime for kk in range(K):
+                if j // W == kk:
+                    var wj = shuffle_idx(wr[kk], src)
+                    if not (wj == wj and fabs(wj) < Float32(3.0e38)):
+                        finite = False
+        if not finite:
+            if lane == 0:
+                st(b, boff, Float32(0))
+            comptime for kk in range(K):
+                if lane + kk * W < d:
+                    st(w, woff + lane + kk * W, Float32(0))
+            return -1
+        var mean_obj = fd(objective, i2f(n))
+        if tol > Float32(-3.0e38) and mean_obj > fs(best, tol):
+            no_improve += 1
+        else:
+            no_improve = 0
+        if mean_obj < best:
+            best = mean_obj
+        if no_improve >= n_iter_no_change:
+            if lr == LR_ADAPTIVE and eta > Float32(1e-6):
+                eta = fd(eta, Float32(5))
+                no_improve = 0
+            else:
+                break
+    comptime for kk in range(K):
+        if lane + kk * W < d:
+            st(w, woff + lane + kk * W, wr[kk])
+    if lane == 0:
+        st(b, boff, intercept)
+    return epochs
+
+
 def sgd_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
     """ip: [n_classes, loss, penalty, lr, fit_intercept, max_iter, n_iter_no_change,
     shuffle, seed_lo, seed_hi, sample_weight, class_weight]; with
@@ -302,29 +511,72 @@ def sgd_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
     comptime if is_gpu():
         var q = t.own()
         epr = t.row(2 * problems)
-        for c in range(t.tid, problems, t.nt):
-            var ys = t.row(2 * c)
-            var order = t.row(2 * c + 1).bitcast[Int32]()
-            for i in range(n):
-                var v = ld(y, i)
-                if k == 0:
-                    st(ys, i, v)
-                elif k == 1:
-                    st(ys, i, Float32(1))
-                elif k == 2:
-                    st(ys, i, Float32(1) if v == Float32(1) else Float32(-1))
+        # lane/linear-apple: a problem per WARP (sgd_one_warp) when d fits
+        # the warp's registers; the thread-per-problem form otherwise.
+        var chunks = (d + WARP_SIZE - 1) // WARP_SIZE
+        if chunks <= SGD_WARP_MAX_CHUNKS and t.nt >= WARP_SIZE and t.nt % WARP_SIZE == 0:
+            var lane = t.tid % WARP_SIZE
+            var nw = t.nt // WARP_SIZE
+            for c in range(t.tid // WARP_SIZE, problems, nw):
+                var order = t.row(2 * c + 1).bitcast[Int32]()
+                var cw_pos = ld(fp, 6 + c) if has_cw else Float32(1)
+                var cw_neg = ld(fp, 6 + problems + c) if has_cw else Float32(1)
+                var ep: Int
+                if chunks <= 1:
+                    ep = sgd_one_warp[1](
+                        lane, x, y, k, c, n, d, loss, penalty, alpha, l1r, lr, eta0, power_t, eps,
+                        fit_intercept, max_iter, tol, nic, do_shuffle,
+                        seed + UInt64(1000003) * UInt64(c), k == 1,
+                        res, c * d, res, problems * d + c, order, swp, has_sw, cw_pos, cw_neg, has_cw,
+                    )
+                elif chunks <= 2:
+                    ep = sgd_one_warp[2](
+                        lane, x, y, k, c, n, d, loss, penalty, alpha, l1r, lr, eta0, power_t, eps,
+                        fit_intercept, max_iter, tol, nic, do_shuffle,
+                        seed + UInt64(1000003) * UInt64(c), k == 1,
+                        res, c * d, res, problems * d + c, order, swp, has_sw, cw_pos, cw_neg, has_cw,
+                    )
+                elif chunks <= 4:
+                    ep = sgd_one_warp[4](
+                        lane, x, y, k, c, n, d, loss, penalty, alpha, l1r, lr, eta0, power_t, eps,
+                        fit_intercept, max_iter, tol, nic, do_shuffle,
+                        seed + UInt64(1000003) * UInt64(c), k == 1,
+                        res, c * d, res, problems * d + c, order, swp, has_sw, cw_pos, cw_neg, has_cw,
+                    )
                 else:
-                    st(ys, i, Float32(1) if v == i2f(c) else Float32(-1))
-            var ep = sgd_one(
-                x, ys, n, d, loss, penalty, alpha, l1r, lr, eta0, power_t, eps,
-                fit_intercept, max_iter, tol, nic, do_shuffle,
-                seed + UInt64(1000003) * UInt64(c), k == 1,
-                res, c * d, res, problems * d + c, q, order,
-                swp, has_sw, ld(fp, 6 + c) if has_cw else Float32(1),
-                ld(fp, 6 + problems + c) if has_cw else Float32(1), has_cw,
-            )
-            st(epr, c, i2f(ep))
-        t.sync()
+                    ep = sgd_one_warp[SGD_WARP_MAX_CHUNKS](
+                        lane, x, y, k, c, n, d, loss, penalty, alpha, l1r, lr, eta0, power_t, eps,
+                        fit_intercept, max_iter, tol, nic, do_shuffle,
+                        seed + UInt64(1000003) * UInt64(c), k == 1,
+                        res, c * d, res, problems * d + c, order, swp, has_sw, cw_pos, cw_neg, has_cw,
+                    )
+                if lane == 0:
+                    st(epr, c, i2f(ep))
+            t.sync()
+        else:
+            for c in range(t.tid, problems, t.nt):
+                var ys = t.row(2 * c)
+                var order = t.row(2 * c + 1).bitcast[Int32]()
+                for i in range(n):
+                    var v = ld(y, i)
+                    if k == 0:
+                        st(ys, i, v)
+                    elif k == 1:
+                        st(ys, i, Float32(1))
+                    elif k == 2:
+                        st(ys, i, Float32(1) if v == Float32(1) else Float32(-1))
+                    else:
+                        st(ys, i, Float32(1) if v == i2f(c) else Float32(-1))
+                var ep = sgd_one(
+                    x, ys, n, d, loss, penalty, alpha, l1r, lr, eta0, power_t, eps,
+                    fit_intercept, max_iter, tol, nic, do_shuffle,
+                    seed + UInt64(1000003) * UInt64(c), k == 1,
+                    res, c * d, res, problems * d + c, q, order,
+                    swp, has_sw, ld(fp, 6 + c) if has_cw else Float32(1),
+                    ld(fp, 6 + problems + c) if has_cw else Float32(1), has_cw,
+                )
+                st(epr, c, i2f(ep))
+            t.sync()
     else:
         # one-vs-rest problems are independent (their own targets, q, order and
         # result slots): the host may run them at once (lane linear-cpu)
