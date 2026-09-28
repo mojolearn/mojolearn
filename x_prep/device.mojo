@@ -12,10 +12,8 @@ from x_prep.common import FP, IP, STAGE_INTS
 from x_prep.units import N_OPS, run_unit
 from x_prep.dsort import sort_cols_device, sort_scratch_words
 from x_prep.fastred import TGR, col_stats_fast_kernel, pt_fold_fast_kernel
-from x_prep.dstage import SB, col_stats_staged_kernel, pt_fold_staged_kernel
 
-#: ops folded by a threadgroup per column: FAST by a tree (x_prep/fastred.mojo),
-#: IDENTICAL staged through threadgroup memory, thread 0 in row order (x_prep/dstage.mojo)
+#: FAST only: ops folded by a threadgroup per column (x_prep/fastred.mojo)
 comptime OP_COL_STATS = 1
 comptime OP_PT_FOLD = 106
 
@@ -83,8 +81,6 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     # FAST: MOJOLEARN_XPREP_FAST_FOLDS=0 keeps the row-order units (the A/B arm of
     # bench/x_prep_quality.py and bench/x_prep_speed.py); unset or 1 folds by threadgroup
     var fast_folds = getenv("MOJOLEARN_XPREP_FAST_FOLDS", "1") != "0"
-    # IDENTICAL: MOJOLEARN_XPREP_STAGED=0 keeps the one-thread units (the A/B arm)
-    var staged = getenv("MOJOLEARN_XPREP_STAGED", "1") != "0"
     var ctx = x_prep_ctx()
     var df = ctx.enqueue_create_buffer[DType.float32](arena_len if arena_len > 0 else 1)
     var dw = ctx.enqueue_create_buffer[DType.uint32](scratch)
@@ -111,16 +107,6 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
             sort_cols_device(ctx, df, dw, total, Int(hq[0]), Int(hq[1]), Int(hq[2]),
                              Int(hq[3]), Int(hq[4]))
             continue
-        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-            if staged and op == OP_COL_STATS:
-                var hq = host_q + (s * STAGE_INTS + 2)
-                ctx.enqueue_function[col_stats_staged_kernel](
-                    df.unsafe_ptr(), hq[0], hq[1], hq[2], hq[3], grid_dim=total, block_dim=SB,
-                )
-                continue
-            if staged and op == OP_PT_FOLD:
-                ctx.enqueue_function[pt_fold_staged_kernel](df.unsafe_ptr(), qp, grid_dim=total, block_dim=SB)
-                continue
         comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
             if fast_folds and op == OP_COL_STATS:
                 var hq = host_q + (s * STAGE_INTS + 2)
