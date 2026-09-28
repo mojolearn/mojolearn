@@ -18,7 +18,7 @@ touch is built once and reused by source-closure digest.
 import argparse, json, os, subprocess, sys, time
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
+HERE = Path(__file__).resolve().parent  # job.sh runs a copy outside the tree
 
 
 def now():

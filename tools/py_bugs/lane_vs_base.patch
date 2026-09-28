@@ -1,0 +1,939 @@
+diff --git a/packaging/portable_math/portable_math.c b/packaging/portable_math/portable_math.c
+index 5aad2eb37..54269c323 100644
+--- a/packaging/portable_math/portable_math.c
++++ b/packaging/portable_math/portable_math.c
+@@ -127,6 +127,19 @@ double mojolearn_exp(double x) {
+     y=y*value((uint64_t)(k1+1023)<<52);
+     return y*value((uint64_t)(k2+1023)<<52);
+ }
++/* The scalar exp over n doubles (the Python front door's O(n) links, so they
++   stop paying one ctypes call per element): out[i] = mojolearn_exp(x[i]).
++   Returns how many finite inputs overflowed to +inf, which the Python wrapper
++   raises as the scalar's OverflowError. */
++long mojolearn_exp_f64(const double *x, long n, double *out) {
++    long over=0;
++    for (long i=0;i<n;++i) {
++        double v=x[i], y=mojolearn_exp(v);
++        out[i]=y;
++        if (y>DBL_MAX && v==v && v<=DBL_MAX) ++over;
++    }
++    return over;
++}
+ /* Exact binary decomposition/scaling used by the bundled host runtime. */
+ double mojolearn_frexp(double x, int *exponent) {
+     uint64_t u=bits(x), magnitude=u&UINT64_C(0x7fffffffffffffff);
+diff --git a/python/mojolearn/_expansion_cluster.py b/python/mojolearn/_expansion_cluster.py
+index 200058dc2..3bc942a8a 100644
+--- a/python/mojolearn/_expansion_cluster.py
++++ b/python/mojolearn/_expansion_cluster.py
+@@ -17,6 +17,7 @@ first imported, after the package, so both may rely on every module existing:
+ import math
+ 
+ from . import _backend, _buffer
++from . import _portable_math as _pm
+ from ._array import Array
+ from ._mode import NumericModeMixin
+ 
+@@ -744,7 +745,8 @@ class BayesianGaussianMixture(_XCluster):
+ 
+     def predict_proba(self, X):
+         lr, _, n, k = self._score(X)
+-        return Array._from_flat([math.exp(v) for v in lr], (n, k), "<f4")
++        # DEVIATION 6900: the pinned exp (the fit's E-step exp is pinned too, 5109)
++        return Array._from_flat(_pm.exp_array(lr), (n, k), "<f4")
+ 
+     def score_samples(self, X):
+         _, lpn, n, _ = self._score(X)
+@@ -839,7 +841,7 @@ def _gmm_ext_fit(est, X):
+     est.covariances_ = BayesianGaussianMixture._by_type(f[2], k, d, ct)
+     est.precisions_cholesky_ = BayesianGaussianMixture._by_type(f[3], k, d, ct)
+     est.log_det_chol_ = Array._from_flat(
+-        [sum(math.log(f[3][c * d * d + j * d + j]) for j in range(d)) for c in range(k)], (k,), "<f4")
++        [_pm.nsum(_pm.log(f[3][c * d * d + j * d + j]) for j in range(d)) for c in range(k)], (k,), "<f4")
+     est.n_iter_ = int(s[1])
+     est.converged_ = bool(s[2])
+     est.lower_bound_ = float(s[0])
+@@ -864,7 +866,7 @@ def _gmm_ext_score(est, X):
+     f, _, _ = ext["call"]._call(_E_BGMM_SCORE, x, _f32([vals], "model"), [n, d, k])
+     lr, lpn = f[0], f[1]
+     labels = [max(range(k), key=lambda j: (lr[r * k + j], -j)) for r in range(n)]
+-    return (lr, Array._from_flat(lpn, (n,), "<f4"), Array._from_flat([math.exp(v) for v in lr], (n, k), "<f4"),
++    return (lr, Array._from_flat(lpn, (n,), "<f4"), Array._from_flat(_pm.exp_array(lr), (n, k), "<f4"),
+             Array._from_flat(labels, (n,), "<i4"))
+ 
+ 
+@@ -880,4 +882,4 @@ def _gmm_ext_bic_aic(est, X):
+     k, d = est.means_.shape
+     cov = {"full": k * d * (d + 1) / 2.0, "diag": k * d, "tied": d * (d + 1) / 2.0, "spherical": k}[est.covariance_type]
+     p = int(cov + k * d + k - 1)
+-    return score, -2 * score * n + p * math.log(n), -2 * score * n + 2 * p
++    return score, -2 * score * n + p * _pm.log(n), -2 * score * n + 2 * p
+diff --git a/python/mojolearn/_expansion_cnn.py b/python/mojolearn/_expansion_cnn.py
+index 820495ab1..4c6b05264 100644
+--- a/python/mojolearn/_expansion_cnn.py
++++ b/python/mojolearn/_expansion_cnn.py
+@@ -15,6 +15,7 @@ first imported, after the package, so both may rely on every module existing:
+                                its `_HostBound`; never import it at module level
+ """
+ from . import _backend
++from . import _portable_math as _pm
+ 
+ __all__ = ["Conv2d", "Conv1d", "MaxPool2d", "AvgPool2d", "MaxPool1d", "AvgPool1d", "CNNClassifier", "BatchNorm2d", "BatchNorm1d",
+            "Dropout2d", "AdaptiveAvgPool2d", "AdaptiveMaxPool2d", "BasicBlock",
+@@ -489,12 +490,16 @@ def _adam(binding, param, grad, mv, step, lr, betas, eps, weight_decay, decouple
+ 
+ def _adam_hyper(step, lr, betas, eps, weight_decay, decoupled):
+     """adam_at's hyper block for 1-based step `step` (the scalars in double,
+-    as torch computes them in Python); `_adam` and the resident fit share it."""
+-    import math
++    as torch computes them in Python); `_adam` and the resident fit share it.
++    DEVIATION 6900: torch's `beta ** step` calls the platform pow; here it is
++    `_pm.powi`, correctly rounded (the platform's bits wherever its pow is),
++    the same bits on every host. sqrt is correctly rounded everywhere."""
+     b1, b2 = float(betas[0]), float(betas[1])
+-    bc1 = 1.0 - b1 ** step
+-    bc2 = 1.0 - b2 ** step
+-    return [lr / bc1, 1.0 - b1, b2, 1.0 - b2, float(eps), math.sqrt(bc2), float(weight_decay),
++    if step != int(step):
++        raise ValueError(f"Adam step must be a whole number, got {step!r}")
++    bc1 = 1.0 - _pm.powi(b1, int(step))
++    bc2 = 1.0 - _pm.powi(b2, int(step))
++    return [lr / bc1, 1.0 - b1, b2, 1.0 - b2, float(eps), _pm.sqrt(bc2), float(weight_decay),
+             1.0 if decoupled else 0.0, 1.0 - float(lr) * float(weight_decay)]
+ 
+ 
+@@ -764,7 +769,8 @@ class CNNClassifier(_Layer):
+                                                                             self.optimizer == "adamw"))
+                     epoch.append(loss)
+                 self.losses_.extend(epoch)
+-                self.loss_curve_.append(sum(epoch) / len(epoch))
++                # CPython 3.12+'s sum spelled out: the same bits on every Python (DEVIATION 6901)
++                self.loss_curve_.append(_pm.nsum(epoch) / len(epoch))
+             for (layer, attr, gattr), p_, g_, buf in zip(params, hp, hg, hbuf):
+                 arr = getattr(layer, attr)
+                 setattr(layer, attr, R.get(p_, arr.shape))
+diff --git a/python/mojolearn/_expansion_decomp.py b/python/mojolearn/_expansion_decomp.py
+index b914ea39a..7f564d9b2 100644
+--- a/python/mojolearn/_expansion_decomp.py
++++ b/python/mojolearn/_expansion_decomp.py
+@@ -23,6 +23,7 @@ import math
+ import sys
+ 
+ from . import _backend
++from . import _portable_math as _pm
+ from ._buffer import as_f32_c, as_i32_c, frombytes
+ 
+ __all__ = ["IncrementalPCA", "GaussianRandomProjection", "SparseRandomProjection", "johnson_lindenstrauss_min_dim",
+@@ -859,8 +860,10 @@ def johnson_lindenstrauss_min_dim(n_samples, *, eps=0.1):
+         raise ValueError("The JL bound is defined for eps in ]0, 1[")
+     if n_samples <= 0:
+         raise ValueError("The JL bound is defined for n_samples greater than zero")
+-    denominator = (eps ** 2 / 2) - (eps ** 3 / 3)
+-    return int(4 * math.log(n_samples) / denominator)
++    # DEVIATION 6900: eps ** 2, eps ** 3 correctly rounded and the pinned log,
++    # not the platform pow / log (a host's last bit can move the floor)
++    denominator = (_pm.powi(eps, 2) / 2) - (_pm.powi(eps, 3) / 3)
++    return int(4 * _pm.log(n_samples) / denominator)
+ 
+ 
+ def _seed_of(random_state):
+diff --git a/python/mojolearn/_expansion_linear.py b/python/mojolearn/_expansion_linear.py
+index 9d3f67f28..4e4ee5025 100644
+--- a/python/mojolearn/_expansion_linear.py
++++ b/python/mojolearn/_expansion_linear.py
+@@ -20,6 +20,7 @@ binding and on the device); every score is `x_linear_decision`. Python only
+ validates, encodes labels, assigns CV folds (integers) and unpacks the flat
+ float32 result. NumPy-free (NUMPY_FREE_CONTRACT.md).
+ """
++from . import _portable_math as _pm
+ from ._array import Array
+ from ._buffer import addr, addr_ro, as_f32_c, empty, zeros
+ from ._labels import decode_labels, encode_labels
+@@ -179,9 +180,9 @@ class _LinearRegressorMixin:
+     def score(self, X, y):
+         pred = self.predict(X).tolist()
+         truth = y.tolist() if hasattr(y, "tolist") else list(y)
+-        mean = sum(truth) / len(truth)
+-        ss_res = sum((a - b) ** 2 for a, b in zip(truth, pred))
+-        ss_tot = sum((a - mean) ** 2 for a in truth)
++        mean = _pm.nsum(truth) / len(truth)
++        ss_res = _pm.nsum((a - b) * (a - b) for a, b in zip(truth, pred))
++        ss_tot = _pm.nsum((a - mean) * (a - mean) for a in truth)
+         return 1.0 - ss_res / ss_tot if ss_tot > 0 else 0.0
+ 
+ 
+@@ -1089,7 +1090,8 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
+         kp = 1 if K == 2 else K
+         if isinstance(self.Cs, int) and not isinstance(self.Cs, bool):
+             m = self.Cs
+-            Cs = [10.0 ** (-4 + 8 * i / (m - 1)) for i in range(m)] if m > 1 else [1e-4]
++            # np.logspace(-4, 4, m); 10 ** y through `_pm.powr` (DEVIATION 6900), not the platform pow
++            Cs = [_pm.powr(10.0, -4 + 8 * i / (m - 1)) for i in range(m)] if m > 1 else [1e-4]
+         else:
+             Cs = [float(c) for c in self.Cs]
+         folds = 5 if self.cv is None else self.cv
+@@ -1125,19 +1127,21 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
+         return self
+ 
+     def predict_proba(self, X):
+-        import math
++        # DEVIATION 6900: the pinned exp (was the platform exp) and the
++        # CPython 3.12+ sum spelled out (`_pm.nsum`), the same bits on every host
+         scores = self.decision_function(X).tolist()
+         if len(self.intercept_) == 1:
++            es = _pm.exp_array([-z if z >= 0 else z for z in scores])
+             out = []
+-            for z in scores:
+-                p = 1.0 / (1.0 + math.exp(-z)) if z >= 0 else math.exp(z) / (1.0 + math.exp(z))
++            for z, e in zip(scores, es):
++                p = 1.0 / (1.0 + e) if z >= 0 else e / (1.0 + e)
+                 out.append([1.0 - p, p])
+             return Array.from_list(out, "<f4")
+         out = []
+         for row in scores:
+             m = max(row)
+-            e = [math.exp(v - m) for v in row]
+-            s = sum(e)
++            e = _pm.exp_array([v - m for v in row])
++            s = _pm.nsum(e)
+             out.append([v / s for v in e])
+         return Array.from_list(out, "<f4")
+ 
+diff --git a/python/mojolearn/_expansion_metrics.py b/python/mojolearn/_expansion_metrics.py
+index 9b75f4332..ea5510c1e 100644
+--- a/python/mojolearn/_expansion_metrics.py
++++ b/python/mojolearn/_expansion_metrics.py
+@@ -49,6 +49,13 @@ _PARAMS = 14
+ _NONE = -1
+ 
+ 
++def _sq(v):
++    """v * v: one correctly rounded product. `v ** 2` calls the platform pow,
++    which DEVIATION 6106 does not allow (it is not correctly rounded on every
++    host)."""
++    return v * v
++
++
+ def _fsum(values):
+     """`_portable_math.fsum` (the exact sum, rounded once to nearest/even),
+     by CPython's `math.fsum` whenever that is finite: for finite binary64
+@@ -2038,7 +2045,7 @@ def d2_brier_score(y_true, y_proba, *, sample_weight=None, pos_label=None, label
+     num = _row_mean(S, k, Y, n, "brier", w, numeric_mode, prog=prog)
+     per, total = _class_weights(codes, w, k)
+     freq = [v / total for v in per]
+-    den = _fsum([per[c] * _fsum([((1.0 if j == c else 0.0) - freq[j]) ** 2 for j in range(k)])
++    den = _fsum([per[c] * _fsum([_sq((1.0 if j == c else 0.0) - freq[j]) for j in range(k)])
+                       for c in range(k)]) / total
+     return float(1 - num / den)
+ 
+@@ -2432,7 +2439,7 @@ def calinski_harabasz_score(X, labels, *, numeric_mode=None):
+     sums, counts, gsum = _centroids(Xa, codes, k, numeric_mode)
+     cents = [sums[i * d + c] / counts[i] for i in range(k) for c in range(d)]
+     mean = [v / n for v in gsum]
+-    extra = _fsum([counts[i] * _fsum([(cents[i * d + c] - mean[c]) ** 2 for c in range(d)])
++    extra = _fsum([counts[i] * _fsum([_sq(cents[i * d + c] - mean[c]) for c in range(d)])
+                         for i in range(k)])
+     intra = _fsum(_row_dists(Xa, codes, cents, False, numeric_mode))
+     return float(1.0 if intra == 0.0 else extra * (n - k) / (intra * (k - 1.0)))
+@@ -2446,7 +2453,7 @@ def davies_bouldin_score(X, labels, *, numeric_mode=None):
+     sums, counts, _ = _centroids(Xa, codes, k, numeric_mode)
+     cents = [sums[i * d + c] / counts[i] for i in range(k) for c in range(d)]
+     intra = [v / counts[i] for i, v in enumerate(_row_dists(Xa, codes, cents, True, numeric_mode))]
+-    dist = [[pmath.sqrt(_fsum([(cents[i * d + c] - cents[j * d + c]) ** 2 for c in range(d)]))
++    dist = [[pmath.sqrt(_fsum([_sq(cents[i * d + c] - cents[j * d + c]) for c in range(d)]))
+              for j in range(k)] for i in range(k)]
+     close = lambda v: abs(v) <= 1e-8
+     if all(close(v) for v in intra) or all(close(v) for row in dist for v in row):
+diff --git a/python/mojolearn/_expansion_neighbors.py b/python/mojolearn/_expansion_neighbors.py
+index 1b9fc30ec..a499add41 100644
+--- a/python/mojolearn/_expansion_neighbors.py
++++ b/python/mojolearn/_expansion_neighbors.py
+@@ -1448,7 +1448,8 @@ class SVGP(_XNeighbors):
+         self.jitter = jitter
+ 
+     def _k(self, A, B):
+-        g = 1.0 / (2.0 * float(self.lengthscale) ** 2)
++        ls = float(self.lengthscale)
++        g = 1.0 / (2.0 * (ls * ls))  # ls ** 2 as one product, not the platform pow
+         K = self._kernel(A, B, "rbf", g, 0.0, 0)
+         return self._unary(K, _U_IDENTITY, _f32_scalar(self.kernel_variance), 0.0)
+ 
+diff --git a/python/mojolearn/_expansion_prep.py b/python/mojolearn/_expansion_prep.py
+index f5a1abdf5..9a6db1ffa 100644
+--- a/python/mojolearn/_expansion_prep.py
++++ b/python/mojolearn/_expansion_prep.py
+@@ -32,9 +32,9 @@ import math
+ import numbers
+ import operator
+ import os
+-import statistics
+ 
+ from . import _backend
++from . import _portable_math as _pm
+ from ._array import Array
+ from ._buffer import as_f32_c, addr_ro
+ from ._labels import flatten_labels, sorted_classes, label_kind
+@@ -3278,7 +3278,7 @@ class IterativeImputer(_PrepBase):
+                 v = min(v, 1.0) if v == v else 1e-6
+                 m[a][b] = 0.0 if a == b else max(v, 1e-6)
+         for b in range(dk):
+-            col = sum(m[a][b] for a in range(dk))
++            col = _pm.nsum(m[a][b] for a in range(dk))
+             if col > 0:
+                 for a in range(dk):
+                     m[a][b] /= col
+@@ -3292,7 +3292,7 @@ class IterativeImputer(_PrepBase):
+         chosen = set()
+         for _ in range(int(self.n_nearest_features)):
+             left = [a for a in range(dk) if a not in chosen and w[a] > 0]
+-            tot = sum(w[a] for a in left)
++            tot = _pm.nsum(w[a] for a in left)
+             u = (self._draw() >> 11) * 2.0 ** -53 * tot
+             pick, cum = left[-1], 0.0
+             for a in left:
+@@ -3426,7 +3426,7 @@ class IterativeImputer(_PrepBase):
+                 self._impute_host(Xt, mis, j, nbl, est)
+             done = r + 1
+             if not self.sample_posterior and order and \
+-                    max(sum(abs(a - b) for a, b in zip(ra, rb)) for ra, rb in zip(Xt, prev)) < tol:
++                    max(_pm.nsum(abs(a - b) for a, b in zip(ra, rb)) for ra, rb in zip(Xt, prev)) < tol:
+                 break
+         self.n_iter_ = done if any(orders) else min(1, len(orders))
+         self.imputation_sequence_ = seq
+@@ -3458,23 +3458,25 @@ class IterativeImputer(_PrepBase):
+     def _truncnorm_host(self, mu, sigma, lo, hi):
+         """`_impute_one_feature`'s rule in Python float64: mu beyond a bound
+         -> the bound, sigma <= 0 -> mu, else inversion of the truncated normal
+-        at a 53-bit splitmix64 uniform (statistics.NormalDist)."""
++        at a 53-bit splitmix64 uniform. DEVIATION 6902: statistics.NormalDist's
++        cdf and inv_cdf formulas on the pinned erfc / log (`_pm.normal_cdf`,
++        `_pm.normal_inv_cdf`); NormalDist itself calls the platform erfc and
++        a C accelerator a compiler may contract, so its bits vary by host."""
+         if mu < lo:
+             return lo
+         if mu > hi:
+             return hi
+         if not sigma > 0:
+             return mu
+-        nd = statistics.NormalDist()
+-        pa = 0.0 if lo == -math.inf else nd.cdf((lo - mu) / sigma)
+-        pb = 1.0 if hi == math.inf else nd.cdf((hi - mu) / sigma)
++        pa = 0.0 if lo == -math.inf else _pm.normal_cdf((lo - mu) / sigma)
++        pb = 1.0 if hi == math.inf else _pm.normal_cdf((hi - mu) / sigma)
+         u = ((self._draw() >> 11) + 0.5) * 2.0 ** -53
+         pu = pa + u * (pb - pa)
+         if pu <= 0:
+             return lo
+         if pu >= 1:
+             return hi
+-        return min(max(mu + sigma * nd.inv_cdf(pu), lo), hi)
++        return min(max(mu + sigma * _pm.normal_inv_cdf(pu), lo), hi)
+ 
+     def fit(self, X, y=None):
+         self.fit_transform(X)
+diff --git a/python/mojolearn/_portable_math.py b/python/mojolearn/_portable_math.py
+index e4438ccba..361c2803a 100644
+--- a/python/mojolearn/_portable_math.py
++++ b/python/mojolearn/_portable_math.py
+@@ -8,7 +8,10 @@ primitive's flush-to-zero policy below the smallest normal output. sqrt uses
+ the correctly rounded CPU instruction on the wheel's supported baselines.
+ Integer, classification, sign and scaling operations below require no libm.
+ """
++import array
+ import ctypes
++import decimal
++import functools
+ import operator
+ from pathlib import Path
+ import struct
+@@ -27,7 +30,7 @@ def _float(bits):
+     return struct.unpack("<d", struct.pack("<Q", bits))[0]
+ 
+ 
+-def _native(name, x):
++def _load():
+     global _lib
+     if _lib is None:
+         root = Path(__file__).resolve().parent
+@@ -38,8 +41,16 @@ def _native(name, x):
+             fn = getattr(lib, "mojolearn_" + operation)
+             fn.argtypes = [ctypes.c_double]
+             fn.restype = ctypes.c_double
++        vector = getattr(lib, "mojolearn_exp_f64", None)
++        if vector is not None:
++            vector.argtypes = [ctypes.c_void_p, ctypes.c_long, ctypes.c_void_p]
++            vector.restype = ctypes.c_long
+         _lib = lib
+-    return getattr(_lib, "mojolearn_" + name)(x)
++    return _lib
++
++
++def _native(name, x):
++    return getattr(_load(), "mojolearn_" + name)(x)
+ 
+ 
+ def isfinite(x):
+@@ -174,3 +185,299 @@ def fsum(values):
+     if positive_inf or negative_inf:
+         return inf if positive_inf else -inf
+     return _scaled_integer(total, -1074)
++
++
++def exp_array(values):
++    """`exp` of every value, as an array('d'): the scalar `exp`'s bits (one
++    C loop over the same pinned function, `mojolearn_exp_f64`), with its
++    OverflowError. For the O(n) links of the Python front door, which paid
++    one ctypes call per element (or called the platform exp) before."""
++    src = array.array("d", values)
++    n = len(src)
++    out = array.array("d", bytes(8 * n))
++    vector = getattr(_load(), "mojolearn_exp_f64", None) if n else None
++    if vector is None:
++        for i in range(n):
++            out[i] = exp(src[i])
++        return out
++    if vector(src.buffer_info()[0], n, out.buffer_info()[0]):
++        raise OverflowError("math range error")
++    return out
++
++
++def nsum(values):
++    """CPython 3.12+'s builtin `sum` over floats, spelled out: `0 + x0`
++    (int start, so -0.0 becomes +0.0), then Neumaier's compensated sum in
++    iteration order, the compensation added once at the end when it is
++    nonzero and finite. Python 3.10 and 3.11 `sum` is the plain left-to-right
++    fold, so the builtin's bits depend on the interpreter; this twin gives
++    3.12+'s bits on every supported Python. An empty input gives 0.0."""
++    it = iter(values)
++    for first in it:
++        total = 0.0 + float(first)
++        break
++    else:
++        return 0.0
++    c = 0.0
++    for x in it:
++        x = float(x)
++        t = total + x
++        if abs(total) >= abs(x):
++            c += (total - t) + x
++        else:
++            c += (x - t) + total
++        total = t
++    if c and isfinite(c):
++        total += c
++    return total
++
++
++def _cut(value, shift, bits, up):
++    """value * 2**shift cut to at most `bits` significant bits (+1 when
++    rounding up), toward zero or away from it: (value', shift')."""
++    extra = value.bit_length() - bits
++    if extra <= 0:
++        return value, shift
++    kept = value >> extra
++    if up and (kept << extra) != value:
++        kept += 1
++    return kept, shift + extra
++
++
++def _pow_bound(m, n, bits, up):
++    """A bound on m**n (m, n positive integers) as (v, s) with v * 2**s below
++    (up=False) or above (up=True) it: square-and-multiply, every product cut
++    to `bits` bits in the bound's direction."""
++    acc, acc_s = 1, 0
++    base, base_s = m, 0
++    while n:
++        if n & 1:
++            acc, acc_s = _cut(acc * base, acc_s + base_s, bits, up)
++        n >>= 1
++        if n:
++            base, base_s = _cut(base * base, 2 * base_s, bits, up)
++    return acc, acc_s
++
++
++@functools.lru_cache(maxsize=256)
++def powi(x, n):
++    """`x ** n` for a float x and an integer n >= 0, CORRECTLY ROUNDED
++    (nearest/even), without the platform pow that `x ** n` calls. The exact
++    power lies between two truncated square-and-multiply bounds; when both
++    round to the same binary64 that is the answer, else the precision
++    doubles (and ends exact). Zero, infinite and NaN bases are exact IEEE
++    special cases. Overflow raises OverflowError, as `x ** n` does."""
++    x = float(x)
++    n = operator.index(n)
++    if n < 0:
++        raise ValueError("powi: n must be >= 0")
++    if n == 0:
++        return 1.0
++    if x == 0.0 or not isfinite(x):
++        return x ** n  # exact special values, no rounding
++    num, den = x.as_integer_ratio()
++    negative = num < 0 and n & 1
++    num = abs(num)
++    scale = -(den.bit_length() - 1) * n
++    bits = 128
++    while True:
++        if bits >= num.bit_length() * n + 2:
++            result = _scaled_integer(num ** n, scale)
++            break
++        lo, lo_s = _pow_bound(num, n, bits, False)
++        hi, hi_s = _pow_bound(num, n, bits, True)
++        a = _scaled_integer(lo, lo_s + scale)
++        try:
++            b = _scaled_integer(hi, hi_s + scale)
++        except OverflowError:
++            b = inf
++        if a == b:
++            result = a
++            break
++        bits *= 2
++    return -result if negative else result
++
++
++_POW_CONTEXT = decimal.Context(prec=50, rounding=decimal.ROUND_HALF_EVEN, Emax=999999, Emin=-999999)
++
++
++def powr(x, y):
++    """`x ** y` for a positive finite float x and a finite float y, without
++    the platform pow: Python's decimal module (libmpdec, integer arithmetic,
++    the same result on every host) at 50 significant digits, then one
++    correctly rounded conversion to binary64. Correctly rounded unless the
++    exact power lies within about 1e-49 (relative) of a binary64 halfway
++    point; either way the same bits on every host."""
++    x, y = float(x), float(y)
++    if not (x > 0.0 and isfinite(x) and isfinite(y)):
++        raise ValueError("powr: x must be positive and finite, y finite")
++    value = _POW_CONTEXT.power(decimal.Decimal(x), decimal.Decimal(y))
++    result = float(value)
++    if isinf(result):
++        raise OverflowError("math range error")
++    return result
++
++
++# The standard normal distribution: statistics.NormalDist's formulas on the
++# pinned log / exp above, so a draw is the same on every host. NormalDist.cdf
++# calls the platform erf, and NormalDist.inv_cdf the platform log (or the C
++# `_statistics` accelerator, which a compiler may contract into FMAs).
++
++_ERX = 8.45062911510467529297e-01
++_PP = (1.28379167095512558561e-01, -3.25042107247001499370e-01, -2.84817495755985104766e-02,
++       -5.77027029648944159157e-03, -2.37630166566501626084e-05)
++_QQ = (3.97917223959155352819e-01, 6.50222499887672944485e-02, 5.08130628187576562776e-03,
++       1.32494738004321644526e-04, -3.96022827877536812320e-06)
++_PA = (-2.36211856075265944077e-03, 4.14856118683748331666e-01, -3.72207876035701323847e-01,
++       3.18346619901161753674e-01, -1.10894694282396677476e-01, 3.54783043256182359371e-02,
++       -2.16637559486879084300e-03)
++_QA = (1.06420880400844228286e-01, 5.40397917702171048937e-01, 7.18286544141962662868e-02,
++       1.26171219808761642112e-01, 1.36370839120290507362e-02, 1.19844998467991074170e-02)
++_RA = (-9.86494403484714822705e-03, -6.93858572707181764372e-01, -1.05586262253232909814e+01,
++       -6.23753324503260060396e+01, -1.62396669462573470355e+02, -1.84605092906711035994e+02,
++       -8.12874355063065934246e+01, -9.81432934416914548592e+00)
++_SA = (1.96512716674392571292e+01, 1.37657754143519042600e+02, 4.34565877475229228821e+02,
++       6.45387271733267880336e+02, 4.29008140027567833386e+02, 1.08635005541779435134e+02,
++       6.57024977031928170135e+00, -6.04244152148580987438e-02)
++_RB = (-9.86494292470009928597e-03, -7.99283237680523006574e-01, -1.77579549177547519889e+01,
++       -1.60636384855821916062e+02, -6.37566443368389627722e+02, -1.02509513161107724954e+03,
++       -4.83519191608651397019e+02)
++_SB = (3.03380607434824582924e+01, 3.25792512996573918826e+02, 1.53672958608443695994e+03,
++       3.19985821950859553908e+03, 2.55305040643316442583e+03, 4.74528541206955367215e+02,
++       -2.24409524465858183362e+01)
++
++
++def _horner(c, z):
++    """c[0] + z * (c[1] + z * (... + z * c[-1])), innermost first."""
++    r = c[-1]
++    for v in reversed(c[:-1]):
++        r = v + z * r
++    return r
++
++
++def erfc(x):
++    """The complementary error function: fdlibm's `s_erf.c` erfc (Sun
++    Microsystems, 1993) in binary64: its intervals (chosen on the high
++    word, including its 0x4006DB6D tail split), its rational approximations
++    in its Horner order, its split exp, on the pinned exp above. No
++    platform erfc, so the same bits on every host."""
++    x = float(x)
++    if isnan(x):
++        return x
++    hx = _bits(x) >> 32
++    negative = hx >> 31
++    ix = hx & 0x7fffffff
++    if ix >= 0x7ff00000:                     # erfc(+inf) = 0, erfc(-inf) = 2
++        return 2.0 if negative else 0.0
++    if ix < 0x3feb0000:                      # |x| < 0.84375
++        if ix < 0x3c700000:                  # |x| < 2**-56
++            return 1.0 - x
++        z = x * x
++        y = _horner(_PP, z) / _horner((1.0,) + _QQ, z)
++        if negative or ix < 0x3fd00000:      # x < 1/4
++            return 1.0 - (x + x * y)
++        r = x * y
++        r += (x - 0.5)
++        return 0.5 - r
++    if ix < 0x3ff40000:                      # 0.84375 <= |x| < 1.25
++        s = abs(x) - 1.0
++        p = _horner(_PA, s)
++        q = _horner((1.0,) + _QA, s)
++        if not negative:
++            return (1.0 - _ERX) - p / q
++        return 1.0 + (_ERX + p / q)
++    if ix >= 0x403c0000:                     # |x| >= 28
++        return 2.0 if negative else 0.0
++    ax = abs(x)
++    s = 1.0 / (ax * ax)
++    if ix < 0x4006DB6D:                      # |x| < 1 / 0.35
++        r, q = _horner(_RA, s), _horner((1.0,) + _SA, s)
++    else:
++        if negative and ix >= 0x40180000:    # x <= -6: two - tiny rounds to two
++            return 2.0
++        r, q = _horner(_RB, s), _horner((1.0,) + _SB, s)
++    z = _float(_bits(ax) & 0xffffffff00000000)
++    t = exp(-z * z - 0.5625) * exp((z - ax) * (z + ax) + r / q)
++    return 2.0 - t / ax if negative else t / ax
++
++
++_SQRT2 = 1.4142135623730951  # sqrt(2.0), correctly rounded
++
++
++def normal_cdf(x):
++    """statistics.NormalDist().cdf(x) as Python 3.14 spells it,
++    0.5 * erfc((mu - x) / (sigma * sqrt 2)) with mu 0.0 and sigma 1.0, on
++    the pinned erfc (NormalDist calls the platform erfc; Python 3.10 and 3.11
++    spell it 0.5 * (1 + erf(...)), other bits)."""
++    return 0.5 * erfc((0.0 - float(x)) / (1.0 * _SQRT2))
++
++
++def normal_inv_cdf(p):
++    """statistics.NormalDist().inv_cdf(p) for 0 < p < 1: Wichura's AS241
++    (PPND16), exactly `statistics._normal_dist_inv_cdf`'s operations with mu
++    0.0 and sigma 1.0, on the pinned log and the correctly rounded sqrt."""
++    p = float(p)
++    if not 0.0 < p < 1.0:
++        raise ValueError("normal_inv_cdf: p must be in (0.0, 1.0)")
++    q = p - 0.5
++    if abs(q) <= 0.425:
++        r = 0.180625 - q * q
++        num = (((((((2.5090809287301226727e+3 * r +
++                     3.3430575583588128105e+4) * r +
++                     6.7265770927008700853e+4) * r +
++                     4.5921953931549871457e+4) * r +
++                     1.3731693765509461125e+4) * r +
++                     1.9715909503065514427e+3) * r +
++                     1.3314166789178437745e+2) * r +
++                     3.3871328727963666080e+0) * q
++        den = (((((((5.2264952788528545610e+3 * r +
++                     2.8729085735721942674e+4) * r +
++                     3.9307895800092710610e+4) * r +
++                     2.1213794301586595867e+4) * r +
++                     5.3941960214247511077e+3) * r +
++                     6.8718700749205790830e+2) * r +
++                     4.2313330701600911252e+1) * r +
++                     1.0)
++        return 0.0 + ((num / den) * 1.0)
++    r = p if q <= 0.0 else 1.0 - p
++    r = sqrt(-log(r))
++    if r <= 5.0:
++        r = r - 1.6
++        num = (((((((7.74545014278341407640e-4 * r +
++                     2.27238449892691845833e-2) * r +
++                     2.41780725177450611770e-1) * r +
++                     1.27045825245236838258e+0) * r +
++                     3.64784832476320460504e+0) * r +
++                     5.76949722146069140550e+0) * r +
++                     4.63033784615654529590e+0) * r +
++                     1.42343711074968357734e+0)
++        den = (((((((1.05075007164441684324e-9 * r +
++                     5.47593808499534494600e-4) * r +
++                     1.51986665636164571966e-2) * r +
++                     1.48103976427480074590e-1) * r +
++                     6.89767334985100004550e-1) * r +
++                     1.67638483018380384940e+0) * r +
++                     2.05319162663775882187e+0) * r +
++                     1.0)
++    else:
++        r = r - 5.0
++        num = (((((((2.01033439929228813265e-7 * r +
++                     2.71155556874348757815e-5) * r +
++                     1.24266094738807843860e-3) * r +
++                     2.65321895265761230930e-2) * r +
++                     2.96560571828504891230e-1) * r +
++                     1.78482653991729133580e+0) * r +
++                     5.46378491116411436990e+0) * r +
++                     6.65790464350110377720e+0)
++        den = (((((((2.04426310338993978564e-15 * r +
++                     1.42151175831644588870e-7) * r +
++                     1.84631831751005468180e-5) * r +
++                     7.86869131145613259100e-4) * r +
++                     1.48753612908506148525e-2) * r +
++                     1.36929880922735805310e-1) * r +
++                     5.99832206555887937690e-1) * r +
++                     1.0)
++    x = num / den
++    if q < 0.0:
++        x = -x
++    return 0.0 + (x * 1.0)
+diff --git a/python/mojolearn/_svm_impl.py b/python/mojolearn/_svm_impl.py
+index 45e7331c8..ffc7a29be 100644
+--- a/python/mojolearn/_svm_impl.py
++++ b/python/mojolearn/_svm_impl.py
+@@ -335,6 +335,9 @@ def _splitmix_perm(n, seed):
+     return perm
+ 
+ 
++# DEVIATION 6903 (IDENTITY_PATHS row 253): Platt scaling and the pairwise
++# coupling below are binary64 host arithmetic in libsvm's loop order (Python
++# evaluates no FMA) on the pinned exp / log of `_portable_math`.
+ def _platt_fval(dec, t, a, b):
+     f = 0.0
+     for d, ti in zip(dec, t):
+diff --git a/python/mojolearn/_x_sequence_autoarima.py b/python/mojolearn/_x_sequence_autoarima.py
+index e4f5612c1..52e574e52 100644
+--- a/python/mojolearn/_x_sequence_autoarima.py
++++ b/python/mojolearn/_x_sequence_autoarima.py
+@@ -26,10 +26,10 @@ the reference either; pass `D` as one integer), `method` css / css-ml (this
+ ARIMA fits by `ml`), a `d` option list that is not 0..d_max, `truncate`,
+ `h` other than the default, prediction intervals (`level`)."""
+ import itertools
+-import math
+ 
+ import numpy as np
+ 
++from . import _portable_math as _pm
+ from ._arima_impl import ARIMA
+ from ._tsa_impl import select_d
+ 
+@@ -145,7 +145,7 @@ class AutoARIMA:
+             return base + 2.0 * N
+         if ic == "aicc":
+             return base + 2.0 * N + 2.0 * N * (N + 1.0) / (n - N - 1.0)
+-        return base + math.log(n) * N
++        return base + _pm.log(n) * N  # the pinned log, as ARIMA.bic_ (DEVIATION 6900)
+ 
+     def fit(self, h=1e-8, maxiter=1000, method="ml", truncate=0):
+         if not self.models:
+diff --git a/python/mojolearn/_x_sequence_rnn.py b/python/mojolearn/_x_sequence_rnn.py
+index bcd9a9314..96042ee95 100644
+--- a/python/mojolearn/_x_sequence_rnn.py
++++ b/python/mojolearn/_x_sequence_rnn.py
+@@ -163,15 +163,21 @@ class _RecurrentBase:
+         return X
+ 
+     def _schedule(self, n, rng):
++        """(order, steps): every epoch's row order (int32, one permutation
++        per epoch drawn in epoch order) and each step's (offset, count) pair
++        into it (int32). The order was float32, which refused a schedule of
++        2^24 rows or more (17 epochs at 1M rows); the step offsets bound it
++        now, below 2^31 - 1."""
+         bs = max(1, min(int(self.batch_size), n))
+-        order, steps = [], []
+-        for _ in range(int(self.max_epochs)):
+-            perm = rng.permutation(n) if self.shuffle else np.arange(n)
+-            base = len(order) * n
+-            for s in range(0, n, bs):
+-                steps += [base + s, min(bs, n - s)]
+-            order.append(perm)
+-        order = np.ascontiguousarray(np.concatenate(order), dtype=np.float32)
++        epochs = int(self.max_epochs)
++        if epochs * n >= 2 ** 31 - 1:
++            raise ValueError(f"max_epochs * n_samples must be below 2^31 - 1, got {epochs} * {n}")
++        order = [rng.permutation(n) if self.shuffle else np.arange(n) for _ in range(epochs)]
++        order = np.ascontiguousarray(np.concatenate(order), dtype=np.int32)
++        starts = np.arange(0, n, bs, dtype=np.int64)
++        counts = np.minimum(bs, n - starts)
++        offsets = (np.arange(epochs, dtype=np.int64)[:, None] * n + starts[None, :]).ravel()
++        steps = np.stack([offsets, np.tile(counts, epochs)], axis=1).ravel()
+         return order, np.ascontiguousarray(steps, dtype=np.int32)
+ 
+     def _lrs(self, n_steps):
+diff --git a/python/mojolearn/ensemble.py b/python/mojolearn/ensemble.py
+index f87653e4c..c557eebf4 100644
+--- a/python/mojolearn/ensemble.py
++++ b/python/mojolearn/ensemble.py
+@@ -529,7 +529,7 @@ def _c_round(number, precision):
+     """Their `Round` (`options_helper.cpp:15-18`): `round(number * 10^p) /
+     10^p` with C `round`, which rounds halves AWAY from zero (Python's
+     `round` rounds them to even)."""
+-    multiplier = 10.0 ** precision
++    multiplier = math.powi(10.0, precision)  # exact for 0 <= precision <= 22; no platform pow
+     scaled = number * multiplier
+     rounded = math.floor(abs(scaled) + 0.5)
+     return math.copysign(rounded, scaled) / multiplier
+diff --git a/python/mojolearn/model_selection.py b/python/mojolearn/model_selection.py
+index ab44506cf..237a9464f 100644
+--- a/python/mojolearn/model_selection.py
++++ b/python/mojolearn/model_selection.py
+@@ -899,8 +899,8 @@ class StratifiedGroupKFold(_KFoldBase):
+             perm = _rng(self.random_state).permutation(m)
+             order = [order[j] for j in perm]
+         def std(row):
+-            mu = sum(row) / k
+-            return math.sqrt(sum((v - mu) ** 2 for v in row) / k)
++            mu = sum(row) / k  # integer counts: an exact sum
++            return math.sqrt(math.nsum((v - mu) * (v - mu) for v in row) / k)
+         order = sorted(order, key=lambda gi: -std(dist[gi]))  # stable: equal std keep their order
+         fold_dist = [[0] * k for _ in range(self.n_splits)]
+         fold_groups = [set() for _ in range(self.n_splits)]
+@@ -911,9 +911,9 @@ class StratifiedGroupKFold(_KFoldBase):
+                 std_per_class = []
+                 for c in range(k):
+                     col = [(fold_dist[j][c] if j != f else trial[c]) / counts[c] for j in range(self.n_splits)]
+-                    mu = sum(col) / self.n_splits
+-                    std_per_class.append(math.sqrt(sum((v - mu) ** 2 for v in col) / self.n_splits))
+-                score = sum(std_per_class) / k
++                    mu = math.nsum(col) / self.n_splits
++                    std_per_class.append(math.sqrt(math.nsum((v - mu) * (v - mu) for v in col) / self.n_splits))
++                score = math.nsum(std_per_class) / k
+                 size = sum(fold_dist[f])
+                 if best is None or score < best_std or (score == best_std and size < best_n):
+                     best, best_std, best_n = f, score, size
+@@ -1449,9 +1449,19 @@ def cross_validate(estimator, X, y=None, *, groups=None, scoring=None, cv=None,
+     fit on the training rows, scored on the held-out rows. `scoring` is
+     None (the estimator's score), a scorer name, a callable, or a list /
+     dict of them (keys `test_<name>`). Times are recorded as wall seconds."""
+-    import time
+     _require_serial(n_jobs, error_score, 'cross_validate')
+     X, y, folds = _cv_folds(estimator, X, y, cv, groups)
++    return _cross_validate_folds(estimator, X, y, folds, scoring, return_train_score, return_estimator,
++                                 return_indices, error_score)
++
++
++def _cross_validate_folds(estimator, X, y, folds, scoring, return_train_score=False, return_estimator=False,
++                          return_indices=False, error_score=float('nan')):
++    """`cross_validate` on (X, y, folds) that `_cv_folds` already made: a
++    search or a validation curve draws its folds ONCE and scores every
++    candidate on them, as scikit-learn does (a shuffling splitter with
++    random_state=None would otherwise draw new folds per candidate)."""
++    import time
+     multi = _scorers(scoring)
+     single = None if multi is not None else get_scorer(scoring)
+     names = list(multi) if multi is not None else ['score']
+@@ -1663,6 +1673,9 @@ class _BaseSearch:
+         per = {nm: [] for nm in names}
+         trains = {nm: [] for nm in names}
+         n_splits = None
++        # the folds are drawn ONCE for every candidate (scikit-learn's
++        # evaluate_candidates materializes cv.split once)
++        Xf, yf, folds = _cv_folds(_Pinned(self.estimator), X, y, self.cv, groups)
+         for params in candidates:
+             est = _clone(self.estimator)
+             if hasattr(est, 'set_params'):
+@@ -1671,8 +1684,8 @@ class _BaseSearch:
+                 for k, v in params.items():
+                     setattr(est, k, v)
+             est = _Pinned(est)
+-            cvr = cross_validate(est, X, y, groups=groups, scoring=scoring, cv=self.cv,
+-                                 return_train_score=self.return_train_score, error_score=self.error_score)
++            cvr = _cross_validate_folds(est, Xf, yf, folds, scoring, return_train_score=self.return_train_score,
++                                        error_score=self.error_score)
+             for nm in names:
+                 per[nm].append(cvr[f'test_{nm}'].tolist())
+                 if self.return_train_score:
+@@ -1685,7 +1698,7 @@ class _BaseSearch:
+             for i in range(n_splits):
+                 results[f'split{i}_test_score{suffix}'] = Array.from_list([s[i] for s in per[nm]], '<f8')
+             means = [math.fsum(s) / len(s) for s in per[nm]]
+-            stds = [math.sqrt(math.fsum((v - m) ** 2 for v in s) / len(s)) for s, m in zip(per[nm], means)]
++            stds = [math.sqrt(math.fsum((v - m) * (v - m) for v in s) / len(s)) for s, m in zip(per[nm], means)]
+             results[f'mean_test_score{suffix}'] = Array.from_list(means, '<f8')
+             results[f'std_test_score{suffix}'] = Array.from_list(stds, '<f8')
+             results[f'rank_test_score{suffix}'] = Array.from_list(_rank(means), '<i4')
+@@ -1794,12 +1807,15 @@ def validation_curve(estimator, X, y, *, param_name, param_range, groups=None, c
+                      n_jobs=None, error_score=float('nan')):
+     """scikit-learn 1.9 `validation_curve`: (train_scores, test_scores), each
+     (len(param_range), n_splits)."""
++    _require_serial(n_jobs, error_score, 'validation_curve')
++    # the folds are drawn ONCE for every parameter value, as scikit-learn does
++    Xf, yf, folds = _cv_folds(_Pinned(estimator), X, y, cv, groups)
+     tr, te = [], []
+     for v in param_range:
+         est = _clone(estimator)
+         est.set_params(**{param_name: v})
+-        r = cross_validate(_Pinned(est), X, y, groups=groups, cv=cv, scoring=scoring, n_jobs=n_jobs,
+-                           return_train_score=True, error_score=error_score)
++        r = _cross_validate_folds(_Pinned(est), Xf, yf, folds, scoring, return_train_score=True,
++                                  error_score=error_score)
+         tr.append(r['train_score'].tolist())
+         te.append(r['test_score'].tolist())
+     k = len(tr[0])
+@@ -1823,15 +1839,20 @@ def learning_curve(estimator, X, y, *, groups=None, train_sizes=(0.1, 0.325, 0.5
+                              f'must be within (0, {n_max}], but is within [{a}, {a}].')
+         sizes.append(a)
+     sizes = sorted(set(sizes))
++    # scikit-learn permutes each fold's training rows ONCE (in fold order)
++    # and takes nested prefixes of that one order for every size
+     rng = _rng(random_state) if shuffle else None
++    orders = []
++    for train, _ in folds:
++        tr_idx = train.tolist()
++        if rng is not None:
++            perm = rng.permutation(len(tr_idx))
++            tr_idx = [tr_idx[j] for j in perm]
++        orders.append(tr_idx)
+     tr_s, te_s, ft, st = [], [], [], []
+     for a in sizes:
+         row_tr, row_te, row_ft, row_st = [], [], [], []
+-        for train, test in folds:
+-            tr_idx = train.tolist()
+-            if rng is not None:
+-                perm = rng.permutation(len(tr_idx))
+-                tr_idx = [tr_idx[j] for j in perm]
++        for (train, test), tr_idx in zip(folds, orders):
+             sub = _as_index(tr_idx[:a])
+             est = _clone(estimator)
+             t0 = time.perf_counter()
+diff --git a/sequence/pyapi.mojo b/sequence/pyapi.mojo
+index d17395bfe..7fbaefeb6 100644
+--- a/sequence/pyapi.mojo
++++ b/sequence/pyapi.mojo
+@@ -62,7 +62,7 @@ def opt_of(ip: PythonObject, at: Int, fp: PythonObject, fat: Int) raises -> OptC
+ 
+ 
+ def rnn_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
+-    """addrs = [X, y, order, steps (int32), params (in/out), losses, lrs];
++    """addrs = [X, y, order (int32), steps (int32), params (in/out), losses, lrs];
+     ip = [cell, D, H, L, O, task, N, T, n_order, n_steps, opt_kind, opt_flags];
+     fp = [f1, f2, eps, weight_decay, f7, initial_accumulator]."""
+     if len(addrs) != 7 or len(ip) != 12 or len(fp) != 6:
+@@ -84,8 +84,13 @@ def rnn_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: Py
+         raise Error("rnn_fit: task must be 0 (mse) or 1 (cross-entropy)")
+     if task == TASK_CE and net.O < 2:
+         raise Error("rnn_fit: cross-entropy needs at least two classes")
+-    if N < 1 or T < 1 or n_steps < 1 or n_order < 1 or N >= 16777216 or n_order >= 16777216:
+-        raise Error("rnn_fit: N, T, steps and order must be >= 1 and N, order < 2^24")
++    # The order arrives as int32 (it was float32, which capped the whole
++    # schedule, epochs x N, below 2^24: 16 epochs at 1M rows). Its length is
++    # bounded only by the int32 step offsets; the sample indices it holds
++    # stay below N < 2^24, so the float32 copy the device gathers with is
++    # exact and the bits are the float32 order's.
++    if N < 1 or T < 1 or n_steps < 1 or n_order < 1 or N >= 16777216 or n_order >= 2147483647:
++        raise Error("rnn_fit: N, T, steps and order must be >= 1, N < 2^24 and order < 2^31 - 1")
+     var cfg = opt_of(ip, 10, fp, 0)
+     var steps = iptr(steps_addr, "steps")
+     for k in range(n_steps):
+@@ -93,11 +98,14 @@ def rnn_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: Py
+         var cnt = Int(steps.unsafe_load(2 * k + 1))
+         if cnt < 1 or off < 0 or off + cnt > n_order:
+             raise Error("rnn_fit: step " + String(k) + " reads outside the order")
+-    var order = fptr(order_addr, "order")
++    var order_i = iptr(order_addr, "order")
++    var order_f = List[Float32](capacity=n_order)
+     for i in range(n_order):
+-        var v = Int(order.unsafe_load(i))
+-        if v < 0 or v >= N or Float32(v) != order.unsafe_load(i):
++        var v = Int(order_i.unsafe_load(i))
++        if v < 0 or v >= N:
+             raise Error("rnn_fit: order holds a value that is not a sample index")
++        order_f.append(Float32(v))
++    var order = FP(unsafe_from_address=Int(order_f.unsafe_ptr()))
+     if task == TASK_CE:
+         var y = fptr(y_addr, "y")
+         for i in range(N):
+@@ -107,6 +115,7 @@ def rnn_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: Py
+     rnn_fit(ex, net, task, fptr(x_addr, "X"), fptr(y_addr, "y"), N, T, order, n_order,
+             steps, n_steps, fptr(p_addr, "params"), fptr(losses_addr, "losses"),
+             fptr(lrs_addr, "lrs"), cfg, fval(fp, 5))
++    _ = order_f^
+     return PythonObject(net.n_params())
+ 
+ 
