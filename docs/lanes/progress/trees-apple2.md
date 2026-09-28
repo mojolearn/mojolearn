@@ -76,3 +76,8 @@ cells faster, geomean 0.989), with the Istella depthwise 1.024 noted.
 | same | m4-a | 1790609927653 | adaboost:taxireg | 2339 | 2348 | 1.004 | 160452cbaf288200 |
 | GBDT 1903 deferred copy IDENTICAL (939ea50e9) | m4-a | 1790610574529 | lossguide taxi | 6932 | 6620 | 0.955 | b1761eecc6dfbc73 |
 | same | m4-a | 1790610574529 | depthwise taxi | 3285 | 3266 | 0.994 | 5694af7699036c65 |
+| RF row-major IDENTICAL (c7228df55) | m3ultra-b | 1790603103015 | rf:taxireg | 3437 | 3295 | 0.959 | 58ec783b7afbd7a7 |
+| same | m3ultra-b | 1790603103015 | rf:taxi | 2565 | 2498 | 0.974 | 452a173087f86a9d |
+| same | m3ultra-b | 1790603103015 | dt:taxi / dt:taxireg / bagging / dart:taxireg / adaboost:taxireg | 67 / 69 / 597 / 5700 / 1922 | 68 / 70 / 599 / 5679 / 1922 | 1.01 / 1.00 / 1.00 / 1.00 / 1.00 | all equal |
+| ET narrow row-major, always-on trial arm (88535136f) | m4-a | 1790610860810 | et:taxi | 3904 | 3745 | 0.959 | ac18d5d8a54b1555 |
+| same | m4-a | 1790610860810 | embedding:taxi (k = 1) | 469 | 1086 | **2.317** -> gated on 4k >= n_cols (14706bb29) | 90d1b0749de17d44 |
