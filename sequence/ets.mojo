@@ -132,11 +132,8 @@ def ets_lik(y: FP, n: Int, err: Int, trend: Bool, season: Int, m: Int, ring: FP,
             head = last
             st(ring, head, seas_update(sl, gamma, tt))
         sse = fma3(e, e, sse)
-        # the log term enters the likelihood only under multiplicative
-        # errors: under additive ones it is not computed (it moved no bit)
-        if err == ERR_M:
-            var v = abs(f0)
-            slog = add(slog, _log(v) if v > Float32(0.0) else _log(add(v, Float32(1e-8))))
+        var v = abs(f0)
+        slog = add(slog, _log(v) if v > Float32(0.0) else _log(add(v, Float32(1e-8))))
     var lik: Float32
     if sse > Float32(0.0):
         lik = mul(Float32(n), _log(sse))
