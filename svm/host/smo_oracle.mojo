@@ -198,7 +198,7 @@ comptime SMO_ORACLE_MAX_LEAVES = 1024
 
 
 @always_inline
-def _fold_tree_inplace(buf: UnsafePointer[Float32, MutAnyOrigin], p: Int) -> Float32:
+def _fold_tree_inplace(buf: UnsafePointer[Float32, MutUntrackedOrigin], p: Int) -> Float32:
     """`fold_balanced_tree` over `buf[0 .. p)`, in place: each level writes
     node `q = ftz(ftz(cur[2q]) + ftz(cur[2q+1]))` over slot `q` (never ahead
     of a slot still to be read, since `q <= 2q`), an odd level carries its
