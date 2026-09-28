@@ -1,4 +1,5 @@
 # the cluster lane's per-seam check drivers and their sabotage arms (pass 2; x_cluster/README.md)
+# lane cluster-cpu (2026-09-28): the host fast spellings (selection, moments, gemm_oracle leaves, Prim linkage), each against its oracle
 x_cluster/checks/dist_check.mojo	x_cluster/checks/sabotage/5100_dist_fold.patch
 x_cluster/checks/dist_check.mojo	x_cluster/checks/sabotage/5101_dist_contract.patch
 x_cluster/checks/nearest_check.mojo	x_cluster/checks/sabotage/5102_argmin_tie.patch
@@ -11,3 +12,9 @@ x_cluster/checks/gauss_check.mojo	x_cluster/checks/sabotage/5108_gauss_fold.patc
 x_cluster/checks/gauss_check.mojo	x_cluster/checks/sabotage/5109_lse_order.patch
 x_cluster/checks/moments_check.mojo	x_cluster/checks/sabotage/5110_moments_fold.patch
 x_cluster/checks/pdist_check.mojo	x_cluster/checks/sabotage/5111_pdist_fold.patch
+x_cluster/checks/kth_check.mojo	x_cluster/checks/sabotage/5103_host_select.patch
+x_cluster/checks/moments_check.mojo	x_cluster/checks/sabotage/5110_host_moments_fold.patch
+cluster/checks/host_gemm_check.mojo	cluster/checks/sabotage/host_gemm_leaf_order.patch
+cluster/checks/host_gemm_check.mojo	cluster/checks/sabotage/host_gemm_flush.patch
+hierarchy/checks/linkage_host_check.mojo	hierarchy/checks/sabotage/linkage_host_tie_order.patch
+hierarchy/checks/linkage_host_check.mojo	hierarchy/checks/sabotage/linkage_host_fold_order.patch
