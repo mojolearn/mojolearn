@@ -49,6 +49,23 @@ for a before and an after), or your own `<lane>-amd` box.
 ---
 
 # CURRENT DIRECTIVES: re-read after every merge
+**ONLY THE ORCHESTRATOR PROVISIONS (Andrew, 2026-09-28).** No lane or
+subagent rents, creates, extends or deletes any machine. That covers NVIDIA
+pods, AMD boxes, droplets, VMs and cloud Macs; it does not cover the GPU jobs you
+submit to them. Lanes use only machines the orchestrator hands them: a named
+pod, the shared NVIDIA pods, the central AMD box queue (`tools/amd_central.sh
+submit`), and the Apple/AMD stewards (`tools/apple_steward.py submit`). If you
+need capacity, ask the orchestrator; never call `dev_pod.sh up`,
+`do_amd_steward.sh up`, `cloudmac.sh` provisioning, or a provider API yourself.
+- **Hard caps, enforced in `tools/dev_pod.sh` and a laptop hook.**
+  - At most 3 live RunPod pods.
+  - Leases of at most 240 minutes.
+  - No H100/H200/A100/B200 without Andrew's OK; RTX 4090-class cards do identity work equally well.
+  - Fewer boxes, held and shared, never one per lane.
+- **Apple: no new or extended Macs, ever.** An AWS SCP now enforces this. The
+  six hosts are released on 2026-09-28: m2pro and m3ultra at ~12:40Z, m4pro-a,
+  m4pro-b, m4-a and m3ultra-b at ~21:20Z. After that there is no Apple column.
+
 **ONE CENTRAL AMD BOX (Andrew, 2026-09-28).** Every lane does its AMD
 (gfx942) identity and speed work on ONE shared Hot Aisle box: 2x MI300X
 (dev_pod key `linear-amd`), 2 GPU slots, lease to 2026-09-29T01:09Z. Never
