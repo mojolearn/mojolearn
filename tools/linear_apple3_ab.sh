@@ -45,7 +45,7 @@ for arm in $ARMS; do
     IFS=$oldifs
     name=${arm%%=*}; defs=${arm#*=}
     echo "##### ARM $name defines=[$defs]"
-    build fast "$defs" x_linear || exit 1
+    build fast "$defs" x_linear || { IFS=';'; continue; }
     # the first fit of a process builds the pipelines; 20k rows also checks the GPU column against the host's
     MOJOLEARN_NUMERIC_MODE=fast $P python bench/x_linear_speed.py --rows 20000 --column both --only "$CASES" 2>&1 | sed "s/^/[$name 20000] /"
     eval "rows=\${L3_ROWS_$name:-\$ROWS}"

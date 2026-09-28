@@ -536,6 +536,10 @@ struct XB(Movable):
     def param(mut self, k: Int, v: Float32):
         self.hth.unsafe_ptr().unsafe_store(k, v)
 
+    def push(mut self, ctx: DeviceContext) raises:
+        """The parameters stored with `param`, to the device."""
+        ctx.enqueue_copy(dst_buf=self.dth, src_buf=self.hth)
+
 
 def _host_fp(mut w: List[Float32]) -> FP:
     return FP(unsafe_from_address=Int(w.unsafe_ptr()))

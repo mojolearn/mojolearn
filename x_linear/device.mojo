@@ -58,6 +58,13 @@ comptime X_LINEAR_BLOCKS = (
     and has_apple_gpu_accelerator()
     and is_defined["MOJOLEARN_X_LINEAR_BLOCKS"]()
 )
+#: The same for the fits that work from the centered Gram
+#: (x_linear/blocks_gram.mojo; WIP, opt-in `-D MOJOLEARN_X_LINEAR_BLOCKS_GRAM=1`).
+comptime X_LINEAR_BLOCKS_GRAM = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_X_LINEAR_BLOCKS_GRAM"]()
+)
 
 
 def fit_kernel(
@@ -92,6 +99,13 @@ def fit_device(
 
         if blocks_handles(algo, n):
             blocks_fit(ctx, algo, x, n_x, y, n_y, n, d, ip, fp, n_out, res)
+            return
+    comptime if X_LINEAR_BLOCKS_GRAM:
+        from x_linear.blocks import XB_MIN_ROWS
+        from x_linear.blocks_gram import gram_handles, gram_fit
+
+        if n >= XB_MIN_ROWS and gram_handles(algo):
+            gram_fit(ctx, algo, x, n_x, y, n_y, n, d, ip, fp, n_out, res)
             return
     var dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
     var dy = ctx.enqueue_create_buffer[DType.float32](max(n_y, 1))
