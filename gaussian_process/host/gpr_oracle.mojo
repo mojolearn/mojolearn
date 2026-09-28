@@ -78,9 +78,12 @@ from checks.numerics import (
     identical_exp,
     identical_mul,
     identical_mul_add,
+    identical_mul_add_simd,
     identical_sqrt,
 )
+from core.host_simd_identical import expf_v, ftz_v
 from core.host_predict_threads import (
+    HostF32Ptr,
     host_list_ptr,
     host_predict_chunk,
     host_predict_task_count,
@@ -93,6 +96,7 @@ from cholesky.host.chol_oracle import (
     chol_host_trsm_lower,
 )
 from gemm.host.identical_gemm import OP_TN, gemm_oracle
+from core.host_gemm_simd import host_gemm_identical
 
 #: THE NEGATIVE CONTROL. See this file's header.
 comptime GPR_ORACLE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
@@ -480,6 +484,51 @@ def _scaled_sqdist(
     return ftz(acc)
 
 
+comptime GPR_W = 8
+comptime GprV = SIMD[DType.float32, GPR_W]
+
+
+def _gpr_scaled(
+    x: List[Float32], rows: Int, d: Int, table: List[Float32], ls_off: Int,
+    ls_len: Int,
+) -> List[Float32]:
+    """`_scaled_sqdist`'s per-coordinate operand, once per coordinate:
+    `ftz(identical_div(ftz(x[r, f]), ftz(ls[f])))` (ls[0] when isotropic)."""
+    var out = List[Float32](length=rows * d, fill=Float32(0.0))
+    for f in range(d):
+        var li = f
+        if ls_len == 1:
+            li = 0
+        var lv = ftz(table[ls_off + li])
+        for r in range(rows):
+            out[r * d + f] = ftz(identical_div(ftz(x[r * d + f]), lv))
+    return out^
+
+
+@always_inline
+def _gpr_sqdist_v(xs: HostF32Ptr, yb: HostF32Ptr, d: Int) -> GprV:
+    """GPR_W cells of `_scaled_sqdist` from the pre-scaled operands: the
+    `diff` chain `f` ascending (DESCENDING under the sabotage arm), then
+    the output `ftz`."""
+    var acc = GprV(0.0)
+    for q in range(d):
+        var f = q
+        comptime if GPR_ORACLE_HOST_SABOTAGE:
+            f = d - 1 - q
+        var diff = ftz_v[GPR_W](GprV(xs.unsafe_load(f)) - yb.unsafe_load[width=GPR_W](f * GPR_W))
+        acc = ftz_v[GPR_W](identical_mul_add_simd[GPR_W](diff, diff, acc))
+    return ftz_v[GPR_W](acc)
+
+
+@always_inline
+def _gpr_store(p: HostF32Ptr, at: Int, left: Int, v: GprV):
+    if left >= GPR_W:
+        p.unsafe_store[width=GPR_W](at, v)
+    else:
+        for l in range(left):
+            p.unsafe_store(at + l, v[l])
+
+
 def gpr_host_kernel_matrix(
     x: List[Float32],
     m: Int,
@@ -549,18 +598,35 @@ def gpr_host_kernel_matrix(
             var ln = Int(spec.ls_len[t])
             var tasks = host_predict_task_count(m)
             var chunk = host_predict_chunk(m, tasks)
+            # lane neighbors-cpu (2026-09-28): `_scaled_sqdist`'s operands
+            # `ftz(identical_div(ftz(v), ftz(ls[f])))` are a pure function
+            # of one coordinate and its length scale, so they are formed
+            # ONCE per coordinate (the same division, the same bits)
+            # instead of once per cell; y's are packed flushed and
+            # feature-major, GPR_W columns per block, and GPR_W cells run
+            # as the lanes of one register (the `diff` chain and the
+            # epilogue lane-wise; `expf_v` is measured equal to
+            # `portable_expf` on all 2^32 words; `identical_sqrt` per lane).
+            var xs = _gpr_scaled(x, m, d, spec.length_scales, off, ln)
+            var nbj = (n + GPR_W - 1) // GPR_W
+            var ysp = List[Float32](length=nbj * d * GPR_W, fill=Float32(0.0))
+            var ys = _gpr_scaled(y, n, d, spec.length_scales, off, ln)
+            for j in range(n):
+                for f in range(d):
+                    ysp[((j // GPR_W) * d + f) * GPR_W + j % GPR_W] = ys[j * d + f]
+            var xsp = host_list_ptr(xs)
+            var yspp = host_list_ptr(ysp)
             if kind == GPR_K_RBF:
                 # gp_rbf_kernel
-                def _rbf_rows(c: Int) {imm x, imm y, imm spec, imm slotp, imm off, imm ln, imm chunk, imm m, imm n, imm d}:
+                def _rbf_rows(c: Int) {imm xsp, imm yspp, imm slotp, imm chunk, imm m, imm n, imm d, imm nbj}:
                     var lo = c * chunk
                     var hi = min(lo + chunk, m)
                     for i in range(lo, hi):
-                        for j in range(n):
-                            var d2 = _scaled_sqdist(
-                                x, y, spec.length_scales, off, ln, i, j, d
-                            )
-                            var e = ftz(identical_mul(Float32(-0.5), d2))
-                            slotp.unsafe_store(i * n + j, ftz(identical_exp(e)))
+                        for jb in range(nbj):
+                            var d2 = _gpr_sqdist_v(xsp + i * d, yspp + jb * d * GPR_W, d)
+                            var e = ftz_v[GPR_W](GprV(-0.5) * d2)
+                            _gpr_store(slotp, i * n + jb * GPR_W, n - jb * GPR_W,
+                                       ftz_v[GPR_W](expf_v[GPR_W](e)))
                 if tasks == 1:
                     _rbf_rows(0)
                 else:
@@ -568,33 +634,36 @@ def gpr_host_kernel_matrix(
             else:
                 # gp_matern_kernel, the three closed forms in sklearn's order
                 var nu_sel = _matern_selector(spec.params[t])
-                def _matern_rows(c: Int) {imm x, imm y, imm spec, imm slotp, imm off, imm ln, imm chunk, imm m, imm n, imm d, imm nu_sel, imm sqrt3, imm sqrt5}:
+                def _matern_rows(c: Int) {imm xsp, imm yspp, imm slotp, imm chunk, imm m, imm n, imm d, imm nbj, imm nu_sel, imm sqrt3, imm sqrt5}:
                     var lo = c * chunk
                     var hi = min(lo + chunk, m)
                     for i in range(lo, hi):
-                        for j in range(n):
-                            var d2 = _scaled_sqdist(
-                                x, y, spec.length_scales, off, ln, i, j, d
-                            )
-                            var dist = ftz(identical_sqrt(d2))
+                        for jb in range(nbj):
+                            var d2 = _gpr_sqdist_v(xsp + i * d, yspp + jb * d * GPR_W, d)
+                            var dist = d2
+                            comptime for l in range(GPR_W):
+                                dist[l] = ftz(identical_sqrt(d2[l]))
+                            var val: GprV
                             if nu_sel == 0:
-                                slotp.unsafe_store(i * n + j, ftz(identical_exp(-dist)))
+                                val = ftz_v[GPR_W](expf_v[GPR_W](-dist))
                             elif nu_sel == 1:
-                                var s = ftz(identical_mul(dist, sqrt3))
-                                var pre = ftz(Float32(1.0) + s)
-                                slotp.unsafe_store(i * n + j,
-                                    ftz(identical_mul(pre, ftz(identical_exp(-s)))))
+                                var s = ftz_v[GPR_W](dist * GprV(sqrt3))
+                                var pre = ftz_v[GPR_W](GprV(1.0) + s)
+                                val = ftz_v[GPR_W](pre * ftz_v[GPR_W](expf_v[GPR_W](-s)))
                             else:
-                                var s5 = ftz(identical_mul(dist, sqrt5))
-                                var ss = ftz(identical_mul(s5, s5))
-                                var third = ftz(identical_div(ss, Float32(3.0)))
-                                var pre5 = ftz(ftz(Float32(1.0) + s5) + third)
-                                slotp.unsafe_store(i * n + j,
-                                    ftz(identical_mul(pre5, ftz(identical_exp(-s5)))))
+                                var s5 = ftz_v[GPR_W](dist * GprV(sqrt5))
+                                var ss = ftz_v[GPR_W](s5 * s5)
+                                var third = ftz_v[GPR_W](ftz_v[GPR_W](ss) / GprV(3.0))
+                                var pre5 = ftz_v[GPR_W](ftz_v[GPR_W](GprV(1.0) + s5) + third)
+                                val = ftz_v[GPR_W](pre5 * ftz_v[GPR_W](expf_v[GPR_W](-s5)))
+                            _gpr_store(slotp, i * n + jb * GPR_W, n - jb * GPR_W, val)
                 if tasks == 1:
                     _matern_rows(0)
                 else:
                     host_parallelize(_matern_rows, tasks)
+            _ = xs^
+            _ = ys^
+            _ = ysp^
         stack.append(slot^)
     # gp_copy_kernel: bit for bit, no ftz.
     return stack.pop()
@@ -857,7 +926,7 @@ def gpr_host_predict(
         x_train, n_train, x_star, n_star, n_features, spec, False
     )
     # The mean BEFORE the solve, which overwrites kcross in place.
-    var mean = gemm_oracle(kcross, dual, OP_TN, n_star, 1, n_train)
+    var mean = host_gemm_identical(kcross, dual, OP_TN, n_star, 1, n_train)
 
     var variance = List[Float32]()
     var std = List[Float32]()

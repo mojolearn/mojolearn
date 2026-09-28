@@ -1156,6 +1156,8 @@ check-grow-policy = "mojo run -I . checks/grow_policy_check.mojo"
 check-cd = "mojo run -I . solver/checks/cd_check.mojo"
 cd-main = "mojo run -I . solver/cd_main.mojo"
 check-kde = "mojo run -I . kde/checks/kde_check.mojo"
+check-host-simd-identical = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . core/host_simd_identical_check.mojo"
+check-host-gemm-simd = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . core/host_gemm_simd_check.mojo"
 # THE TOKENIZER LANE, 2026-09-12. Byte-level BPE in the GPT-2 format
 # (`tokenizer/`). mojolearn ships no vocabulary (2026-09-15): the task writes
 # the Unicode class module from unicodedata and a synthetic vocabulary with
