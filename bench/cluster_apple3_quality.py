@@ -59,7 +59,8 @@ def main():
         table = board.cases(ml, seed)
         names = [s for s in a.only.split(",") if s] or list(table)
         for ds in a.dataset.split(","):
-            full = board.load(ds, max(table[nm][0] for nm in names))
+            # the board's own rows: standardized over the board's largest shape
+            full = board.load(ds, max(r for r, _, _ in table.values()))
             for name in names:
                 rows, build, qual = table[name]
                 x = np.ascontiguousarray(full[:rows])

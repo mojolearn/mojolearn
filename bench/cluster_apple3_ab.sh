@@ -9,7 +9,8 @@
 # phases:<list> (MOJOLEARN_XC_PHASES=1 and the other stage timers, reps 1),
 # prof:<list> (cProfile of one fit), quality:<list> (FAST against IDENTICAL,
 # needs the identical bindings: build them with MODE=identical in <bindings>,
-# written as identical/<name>)
+# written as identical/<name>), iboard:<list> and iprobe:<list> (the board and
+# the probe on the IDENTICAL bindings, for the digests)
 tag=$1; defs=$2; binds=$3; cases=$4
 export MOJOLEARN_MOJO_BUILD_FLAGS="$defs"
 for b in $binds; do
@@ -23,6 +24,8 @@ for c in $cases; do
     case $c in
         probe:*) pixi run python bench/kmeans_apple_probe.py --only "${c#probe:}" | sed "s/^KMPROBE/KM_$tag/" ;;
         board:*) pixi run python bench/x_cluster_speed.py --dataset taxi,higgs --reps 2 --only "${c#board:}" | sed "s/^XCSPEED/XC_$tag/" ;;
+        iboard:*) MOJOLEARN_NUMERIC_MODE=identical pixi run python bench/x_cluster_speed.py --dataset taxi,higgs --reps 2 --only "${c#iboard:}" | sed "s/^XCSPEED/XCI_$tag/" ;;
+        iprobe:*) MOJOLEARN_NUMERIC_MODE=identical pixi run python bench/kmeans_apple_probe.py --only "${c#iprobe:}" | sed "s/^KMPROBE/KMI_$tag/" ;;
         dbprobe) pixi run python bench/dbscan_batch_probe.py --budgets 1000000,0,8000,4000 --dataset taxi,higgs | sed "s/^DBPROBE/DB_$tag/" ;;
         gmmphases) MOJOLEARN_GMM_MSTEP_TIMES=1 pixi run python bench/x_cluster_speed.py --dataset taxi --reps 1 --only gmm | awk -F"[ =]" -v t="$tag" '/^GMM_MSTEP/{a[$2]+=$3; n[$2]++; next} END{for(k in a) print t, "GMM_MSTEP_SUM", k, a[k]/1000, "ms over", n[k]}' ;;
         phases:*) MOJOLEARN_XC_PHASES=1 MOJOLEARN_STAGE_TIMES=1 MOJOLEARN_KMEANS_STAGES=1 MOJOLEARN_DBSCAN_PHASES=1 pixi run python bench/x_cluster_speed.py --dataset taxi,higgs --reps 1 --no-quality --only "${c#phases:}" | sed "s/^/PH_$tag /" ;;
