@@ -129,6 +129,21 @@ from gbdt.options.catboost_options import (
 # cache reduces repeated work without changing any leaf's arithmetic.
 comptime SPLIT_COST_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
+comptime DEFER_HIST_COPY_1903 = not SPLIT_COST_IDENTICAL or (
+    has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_GBDT_IDENTICAL_SPLIT_COPY"]()
+)
+"""DEVIATION 1903's schedule (the parent-histogram copy deferred to the
+plan-time pairs that need it, the zero pass over dirty slots only): FAST
+everywhere, and Apple IDENTICAL since trees-apple2 (2026-09-28). Its bit
+argument is schedule-only -- every slot holds the same bytes at every
+read (a deferred copy copies the same untouched parent; an elided zero
+leaves the tree memset's +0.0 where the kernel would write +0.0) -- so it
+holds under IDENTICAL too. The other SPLIT_COST_IDENTICAL arms (1901's
+propagated partition stats, which re-associate; 1904's device fold) stay
+as they were. `-D MOJOLEARN_GBDT_IDENTICAL_SPLIT_COPY` restores the
+split-time copy and the full zero pass on Apple IDENTICAL."""
+
 # Cache unchanged partitions under IDENTICAL without propagating histogram
 # sums (which would change rounding). CatBoost updates only split children
 # in TSplitPointsKernel (split_properties_helper.cpp:918-936); this implementation keeps
@@ -1502,7 +1517,7 @@ def fit_non_symmetric_tree[
         var plan_slots = List[Int]()
         # DEVIATION 1903's deferred copy pairs (FAST arm)
         var n_copy = 0
-        comptime if not SPLIT_COST_IDENTICAL:
+        comptime if DEFER_HIST_COPY_1903:
             if len(plan.subtract_from) > 0:
                 for i in range(len(plan.subtract_from)):
                     if Int(plan.subtract_from[i]) > Int(
@@ -1521,7 +1536,7 @@ def fit_non_symmetric_tree[
         # the ZERO set (DEVIATION 1903: dirty slots only on the FAST arm)
         var zero_count = 0
         if len(plan.compute_ids) > 0:
-            comptime if SPLIT_COST_IDENTICAL:
+            comptime if not DEFER_HIST_COPY_1903:
                 for i in range(len(plan.compute_ids)):
                     h_zero_ids.unsafe_ptr().unsafe_store(
                         i, plan.compute_ids[i]
@@ -1563,7 +1578,7 @@ def fit_non_symmetric_tree[
             # built, copied into or derived), so it can no longer skip the
             # zero pass. Marked conservatively -- a slot that was only
             # zeroed is marked too. (After the ZERO set above, as before.)
-            comptime if not SPLIT_COST_IDENTICAL:
+            comptime if DEFER_HIST_COPY_1903:
                 hist_slot_dirty[id] = True
 
         # `SelectLeavesToVisit` and, when there is something to visit, the
@@ -1639,7 +1654,7 @@ def fit_non_symmetric_tree[
         # tree. IDENTICAL keeps the split-time copy and the full zero pass
         # byte for byte.
         # =======================================================================
-        comptime if not SPLIT_COST_IDENTICAL:
+        comptime if DEFER_HIST_COPY_1903:
             if len(plan.subtract_from) > 0:
                 if n_copy > 0:
                     stage_times.begin(ctx)
@@ -2582,7 +2597,7 @@ def fit_non_symmetric_tree[
             # happens at PLAN time, and only for the pairs whose derived
             # sibling is the right child -- see the block above the zero
             # pass. Same kernels, same bytes, fewer launches.
-            comptime if SPLIT_COST_IDENTICAL:
+            comptime if not DEFER_HIST_COPY_1903:
                 if (hist_cells_per_leaf * stat_count) % 4 == 0:
                     ctx.enqueue_function[copy_histograms_vec4_kernel](
                         d_left.unsafe_ptr(),
