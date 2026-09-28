@@ -622,8 +622,10 @@ def _labels_list(y, name='y'):
 
 
 def _encode_first_seen(values):
-    order = {}
-    return [order.setdefault(v, len(order)) for v in values], len(order)
+    # the first-seen order by dict.fromkeys, the codes by a C map (the same
+    # dict equality as setdefault; lane metrics-apple)
+    index = {v: i for i, v in enumerate(dict.fromkeys(values))}
+    return list(map(index.__getitem__, values)), len(index)
 
 
 def _encode_sorted(values):
