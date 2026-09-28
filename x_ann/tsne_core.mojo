@@ -356,12 +356,10 @@ def ts_repulse_terms(y0: Float32, y1: Float32, yj0: Float32, yj1: Float32) -> SI
     (q, ftz(q^2 (y0 - yj0)), ftz(q^2 (y1 - yj1)), 0)."""
     var d0 = ftz(y0 - yj0)
     var d1 = ftz(y1 - yj1)
-    # lane ann-apple2: the squares, their sum, q and q^2 are +0, positive or
-    # NaN, so their flushes take `ts_ftz_nonneg`; q is `ts_recip_den`
-    var acc = ts_ftz_nonneg(identical_mul_add(d0, d0, Float32(0.0)))
-    acc = ts_ftz_nonneg(identical_mul_add(d1, d1, acc))
-    var q = ts_recip_den(Float32(1.0) + acc)
-    var qq = ts_ftz_nonneg(identical_mul(q, q))
+    var acc = ftz(identical_mul_add(d0, d0, Float32(0.0)))
+    acc = ftz(identical_mul_add(d1, d1, acc))
+    var q = identical_div(Float32(1.0), Float32(1.0) + acc)
+    var qq = ftz(identical_mul(q, q))
     return SIMD[DType.float32, 4](q, ftz(identical_mul(qq, d0)), ftz(identical_mul(qq, d1)), Float32(0.0))
 
 
