@@ -75,6 +75,15 @@ def _prep_binding(mode):
     return _backend.binding("_mojolearn_x_prep", mode)
 
 
+def _optional_prep_entry(binding, name):
+    """Probe optional exports without hiding a missing mandatory host implementation."""
+    binding.x_prep_run  # Load/validate the family before interpreting a refusal as absence.
+    try:
+        return getattr(binding, name)
+    except (AttributeError, ImportError):
+        return None
+
+
 #: the smallest output (words) that `_Prog.output` keeps out of the arena
 _OUT_MIN_WORDS = 2 ** 27
 
@@ -182,16 +191,11 @@ class _Prog:
         # host facades raise ImportError (not AttributeError) for absent exports.
         # A missing host binary or mandatory implementation must still fail.
         run = binding.x_prep_run
-        def optional(name):
-            try:
-                return getattr(binding, name)
-            except (AttributeError, ImportError):
-                return None
-        run_out = optional("x_prep_run_out")
+        run_out = _optional_prep_entry(binding, "x_prep_run_out")
         H, sc, on = self.size, self.scratch_size, self.out_size or 0
         has_out = run_out is not None
         dev_out = has_out and on > 0 and os.environ.get("MOJOLEARN_XPREP_OUT", "1") != "0"
-        run_scratch = optional("x_prep_run_scratch") if sc > 0 and not has_out else None
+        run_scratch = _optional_prep_entry(binding, "x_prep_run_scratch") if sc > 0 and not has_out else None
         dev_scratch = sc > 0 and (has_out or run_scratch is not None)
         if H + sc + on > 2 ** 31 - 1:
             raise ValueError("x_prep: the program exceeds the native Int32 indexing bound")
@@ -981,11 +985,11 @@ def _native_folds(n, n_folds, seed, shuffle, codes=None, n_classes=0):
     halves = (s & 0xFFFFFFFF, s >> 32)
     out = array.array("i", bytes(4 * max(n, 1)))
     if codes is None:
-        if not hasattr(b, "x_prep_kfold_folds"):
+        if _optional_prep_entry(b, "x_prep_kfold_folds") is None:
             return None
         b.x_prep_kfold_folds(out.buffer_info()[0], (n, n_folds, 1 if shuffle else 0), halves)
     else:
-        if not hasattr(b, "x_prep_strat_folds"):
+        if _optional_prep_entry(b, "x_prep_strat_folds") is None:
             return None
         cod = array.array("i", codes)
         if b.x_prep_strat_folds(cod.buffer_info()[0], out.buffer_info()[0],
@@ -1105,7 +1109,7 @@ class TargetEncoder(_PrepBase):
         smo = pr.put_scalar(-1.0 if self.smooth == "auto" else float(self.smooth))
         enc = pr.alloc((F + 1) * d * cmax * T)
         pr.stage("te_global", (F + 1) * T, yo, n, T, fo, meta)
-        if hasattr(_prep_binding(mode), "x_prep_host_column"):
+        if _optional_prep_entry(_prep_binding(mode), "x_prep_host_column") is not None:
             # the host binding groups te_enc its own way (x_prep/host/target.mojo)
             pr.stage("te_enc", (F + 1) * d * cmax * T, codes, n, d, yo, T, fo, cmax, nco, meta, smo, enc)
         else:
@@ -2449,7 +2453,7 @@ class PowerTransformer(_PrepBase):
         xo = pr.put(arr)
         st, lam = pr.alloc(6 * d), pr.alloc(d)
         pr.stage("col_stats", d, xo, n, d, st)
-        if hasattr(_prep_binding(mode), "x_prep_host_column"):
+        if _optional_prep_entry(_prep_binding(mode), "x_prep_host_column") is not None:
             # the host binding: its own pt_fit (x_prep/host/power.mojo), the same words
             pr.stage("pt_fit", d, xo, n, d, method, st, lam)
         else:
