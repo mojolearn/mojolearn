@@ -325,8 +325,8 @@ def check_host_mi(mut card: IdentityTrace) raises:
     the units' terms: mi_cd, mi_dc and mi_cc over 3 columns of 70 points
     whose values repeat (coarse grids: primary ties everywhere), with and
     without secondary words (some zero, some tied), 4 classes of sizes 30,
-    25, 12 and 3 plus a singleton, k = 1, 3 and 5 (above the size-3 class's
-    2), and a column holding an infinity (the fallback to the units)."""
+    25, 12 and 2 plus a singleton, k = 1, 3 and 5 (above the size-2 class's
+    1), and a column holding an infinity (the fallback to the units)."""
     var n = 70
     var d = 3
     var inf = _f(UInt32(0x7F800000))

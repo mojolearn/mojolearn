@@ -167,8 +167,8 @@ def _run_split[F: def(Int) -> None](ref body: F, items: Int):
 
 # ---------------------------------------------------------------- Ross (mi_cd, mi_dc)
 def _cd_column(f: FP, n: Int, zb: Int, zs: Int, sb: Int, lb: Int, ls: Int, cb: Int, k: Int,
-               out: Int, ostride: Int) -> Bool:
-    """`_cd_term` of every point i into f[out + i*ostride]; False (nothing
+               obase: Int, ostride: Int) -> Bool:
+    """`_cd_term` of every point i into f[obase + i*ostride]; False (nothing
     written) when the column holds a non-finite value or secondary word."""
     var xs = List[Float32](capacity=n)
     var ss = List[Float32](capacity=n)
@@ -217,12 +217,11 @@ def _cd_column(f: FP, n: Int, zb: Int, zs: Int, sb: Int, lb: Int, ls: Int, cb: I
         pos[j] = at
     var na = len(all_.x)
 
-    def point(i: Int) {imm f, imm xs, imm ss, imm lab, imm lcnt, imm start, imm byc, imm pos, imm all_, imm na,
-                       imm k, imm out, imm ostride}:
+    def point(i: Int) {imm f, imm xs, imm ss, imm lab, imm lcnt, imm start, imm byc, imm pos, imm all_, imm na, imm k, imm obase, imm ostride}:
         var li = lab[i]
         var cnt = lcnt[li]
         if cnt <= 1:
-            st(f, out + i * ostride, Float32(0))
+            st(f, obase + i * ostride, Float32(0))
             return
         var kl = k if k < cnt - 1 else cnt - 1
         var xi = xs[i]
@@ -258,7 +257,7 @@ def _cd_column(f: FP, n: Int, zb: Int, zs: Int, sb: Int, lb: Int, ls: Int, cb: I
         var rp = bp[kl - 1]
         var rs = bs[kl - 1]
         var mall = _count_within(all_, 0, na, xi, si, rp, rs)
-        st(f, out + i * ostride,
+        st(f, obase + i * ostride,
            sub(sub(digammaf(Float32(kl)), digammaf(Float32(cnt))), digammaf(Float32(mall))))
 
     _run_split(point, n)
@@ -324,8 +323,7 @@ def _cc_column(f: FP, q: IP, c: Int, ys: _Sorted, ysx: List[Float32], yss: List[
         pos[j] = r
     var term = p(q, 5)
 
-    def point(i: Int) {imm f, imm xs, imm sx, imm ysx, imm yss, imm ax, imm ay, imm asy, imm pos, imm ys,
-                       imm n, imm d, imm k, imm c, imm term}:
+    def point(i: Int) {imm f, imm xs, imm sx, imm ysx, imm yss, imm ax, imm ay, imm asy, imm pos, imm ys, imm n, imm d, imm k, imm c, imm term}:
         var xi = xs[i]
         var sxi = sx[i]
         var yi = ysx[i]
