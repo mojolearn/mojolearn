@@ -2388,7 +2388,9 @@ def _pt_spec_depth(n, d):
     evaluates the 2^S - 1 candidate points of the next S golden steps side by
     side. MOJOLEARN_XPREP_PT_SPEC = S (0: one evaluation per fold, the
     staged search); the candidates' transforms (n*d words each) are capped at
-    2^28 words. Every S gives the same lambdas."""
+    2^28 words. Every S gives the same lambdas. IDENTICAL only: FAST keeps the
+    staged search, whose folds FAST runs as threadgroup trees
+    (x_prep/fastred.mojo), already short."""
     try:
         s = int(os.environ.get("MOJOLEARN_XPREP_PT_SPEC", "4"))
     except ValueError:
@@ -2433,7 +2435,7 @@ class PowerTransformer(_PrepBase):
             # the device: pt_fit_unit's golden-section search as stages (x_prep/transform.mojo),
             # each element's logarithm once, the transform of every element at once per
             # evaluation, then the column folds
-            spec = _pt_spec_depth(n, d)
+            spec = _pt_spec_depth(n, d) if mode == "identical" else 0
             if spec:
                 # the search speculated `spec` evaluations deep (transform.mojo pt_spts ..
                 # pt_sres): the same points, values and decisions, fewer dependent folds
