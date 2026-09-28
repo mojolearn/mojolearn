@@ -794,7 +794,7 @@ comptime XN_PRECOMPUTED_KIND = 100
 
 
 @always_inline
-def _p(b: DeviceBuffer[DType.float32]) -> FP:
+def _p(mut b: DeviceBuffer[DType.float32]) -> FP:
     return b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
 
 
@@ -937,14 +937,14 @@ def op_kernel_matmul(
 
 
 def _launch_scaled_rbf(
-    ctx: DeviceContext, q: FP, z: FP, kbuf: FP, out: FP, rows: Int, m: Int, d: Int, gamma: Float32, variance: Float32,
+    ctx: DeviceContext, q: FP, z: FP, kbuf: FP, dst: FP, rows: Int, m: Int, d: Int, gamma: Float32, variance: Float32,
 ) raises:
     """SVGP's `_k`: the rbf kernel (coef0 0, degree 0), then
     `unary(K, identity, variance, 0)`."""
     _launch_kernel(ctx, q, z, kbuf, rows, m, d, K_RBF, 0, gamma, Float32(0))
     var cells = rows * m
     ctx.enqueue_function[unary_kernel](
-        kbuf, out, Int64(cells), Int64(U_IDENTITY), variance, Float32(0),
+        kbuf, dst, Int64(cells), Int64(U_IDENTITY), variance, Float32(0),
         grid_dim=_grid(cells), block_dim=(BLOCK if cells > 1 else 1),
     )
 
