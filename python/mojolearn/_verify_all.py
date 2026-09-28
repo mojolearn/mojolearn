@@ -1456,6 +1456,8 @@ def comparison_context_problems(a, b, keys):
             av, bv = ac.get(field, {}).get(fixture), bc.get(field, {}).get(fixture)
             if not av or av != bv:
                 problems.append(f'{fixture}: different or missing {field} fingerprints')
+        if part == 'batch' and ac.get('batch_revisions', {}).get(lane) != bc.get('batch_revisions', {}).get(lane):
+            problems.append(f'{lane}: different or missing batch revision')
         if part not in ('train', 'infer', 'model', 'file'):
             av, bv = ac.get('protocols', {}).get(part), bc.get('protocols', {}).get(part)
             if not av or av != bv:
@@ -1473,7 +1475,7 @@ def verification_contract(harness, harness_file, data, held, extra_parts):
                 fixtures={f: dict(zip(('X', 'y_clf', 'y_reg'), map(harness._h, values)))
                           for f, values in data.items()},
                 heldout={f: dict(X=harness._h(x)) for f, x in held.items()},
-                protocols=protocols)
+                protocols=protocols, batch_revisions=dict(getattr(harness, "BATCH_REVISIONS", {})))
 
 
 # ----------------------------------------------------------- commit-reveal
@@ -3271,7 +3273,7 @@ def lanes_line(report):
 
 
 
-def judge_rows(raw, table, families=None, unreferenced_lanes=(), device_class=None):
+def judge_rows(raw, table, families=None, unreferenced_lanes=(), device_class=None, batch_revisions=None):
     """Attach state, detail and reference columns to raw result rows."""
     out = []
     for r in raw:
@@ -3279,6 +3281,9 @@ def judge_rows(raw, table, families=None, unreferenced_lanes=(), device_class=No
         ref_part, ref_lane = r.get("reference_part") or (part, lane)
         ent = (None if ref_lane in unreferenced_lanes else
                vref.entry(table, ref_lane, r["fixture"], ref_part, device_class=device_class))
+        revision = (batch_revisions or {}).get(ref_lane)
+        if ref_part == "batch" and revision is not None and table.get("batch_revisions", {}).get(ref_lane) != revision:
+            ent = None
         state, detail = vref.judge(r["value"], ent, r.get("error"))
         out.append(dict(lane=lane, fixture=r["fixture"], part=part, value=r["value"], state=state,
                         detail=detail, reference=(ent or {}).get("ref"),
@@ -3688,7 +3693,8 @@ def cmd_verify_all(args):
             cell = [dict(lane=lane, fixture=f, part=part, value=value, error=error,
                          seconds=cell_seconds[(lane, f)]) for part, (value, error) in parts.items()]
             raw.extend(cell)
-            judged = judge_rows(cell, table, families, unreferenced_lanes=stale, device_class=vclass)
+            judged = judge_rows(cell, table, families, unreferenced_lanes=stale, device_class=vclass,
+                                batch_revisions=getattr(harness, "BATCH_REVISIONS", {}))
             execution["completed_cells"] += 1
             cell_counts = {state: sum(r["state"] == state for r in judged) for state in vref.STATES}
             log(f"    {cell_seconds[(lane, f)]:.1f}s: {detail_line(cell_counts)}")
@@ -3714,7 +3720,8 @@ def cmd_verify_all(args):
         except worker.WorkerFailure as exc:
             execution["interrupted"] = str(exc)
     progress("interrupted" if execution["interrupted"] else "comparison complete")
-    rows = judge_rows(raw + model_rows, table, families, unreferenced_lanes=stale, device_class=vclass)
+    rows = judge_rows(raw + model_rows, table, families, unreferenced_lanes=stale, device_class=vclass,
+                                batch_revisions=getattr(harness, "BATCH_REVISIONS", {}))
     counts = {s: sum(1 for r in rows if r["state"] == s) for s in vref.STATES}
     code, headline = verdict(counts)
     fams = []

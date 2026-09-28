@@ -1016,10 +1016,10 @@ def _prep_batch_label_encoder(ml, e, Xh):
     return [_BatchRows("transform known labels", known, lambda r: (e.transform(r),))]
 
 
-_batch_decl(_prep_batch_label_encoder, "x-prep-label-encoder")
-_batch_decl(_rows_calls("transform", prep=_prep_labels, sl=slice(0, 256)), "x-prep-label-binarizer")
+_batch_decl(_prep_batch_label_encoder, "x-prep-label-encoder", revision="expansion-batch-2026-09-28-v1")
+_batch_decl(_rows_calls("transform", prep=_prep_labels, sl=slice(0, 256)), "x-prep-label-binarizer", revision="expansion-batch-2026-09-28-v1")
 _batch_decl(_rows_calls("transform", prep=lambda X: (X[:256, :4] > 0.3).astype(np.int64)),
-            "x-prep-label-binarizer-multilabel")
+            "x-prep-label-binarizer-multilabel", revision="expansion-batch-2026-09-28-v1")
 
 
 def _prep_batch_multilabel(ml, e, Xh):
@@ -1027,7 +1027,60 @@ def _prep_batch_multilabel(ml, e, Xh):
                        lambda r: (e.transform(_prep_multilabel(r)),))]
 
 
-_batch_decl(_prep_batch_multilabel, "x-prep-multilabel-binarizer")
-_batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-mutual-info")
-_batch_decl(_rows_calls("transform", sl=np.s_[:256, :6]), "x-prep-mi-discrete")
-_batch_decl(_rows_calls("predict_proba", sl=slice(0, 256)), "x-prep-priors")
+_batch_decl(_prep_batch_multilabel, "x-prep-multilabel-binarizer", revision="expansion-batch-2026-09-28-v1")
+_batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-mutual-info", revision="expansion-batch-2026-09-28-v1")
+_batch_decl(_rows_calls("transform", sl=np.s_[:256, :6]), "x-prep-mi-discrete", revision="expansion-batch-2026-09-28-v1")
+_batch_decl(_rows_calls("predict_proba", sl=slice(0, 256)), "x-prep-priors", revision="expansion-batch-2026-09-28-v1")
+
+
+def _prep_batch_bootstrap_variant(paired):
+    def spec(ml, e, Xh):
+        _, target = labels_for(Xh, HELDOUT_SEED)
+        # Small property fixture: the training fixture and its hashes do not
+        # change. Counter-addressed replicate ranges need only 64 observations.
+        x = np.ascontiguousarray(target[:64], dtype=np.float32)
+        y = np.ascontiguousarray(Xh[:48 if not paired else 64, 3], dtype=np.float32)
+        arms = (("mean", x, "mean"), ("std", x, "std"),
+                ("diff", np.column_stack((x, y)), "diff_means")) if paired else (
+                ("unpaired", (x, y), "diff_means"),)
+        return [_range_rows("bootstrap BCa " + name + " distribution", BATCH_RANGE_ROWS,
+                 lambda first, count, data=data, statistic=stat: (np.asarray(ml.resample.bootstrap(
+                     data, statistic=statistic, paired=paired, method="BCa", n_resamples=count,
+                     r_first=first, random_state=5).distribution),),
+                 min_batch=2, refusal=BOOTSTRAP_ONE_REFUSAL) for name, data, stat in arms]
+    return spec
+
+
+_batch_decl(_prep_batch_bootstrap_variant(True), "resample-bca", revision="expansion-batch-2026-09-28-v1")
+_batch_decl(_prep_batch_bootstrap_variant(False), "resample-unpaired", revision="expansion-batch-2026-09-28-v1")
+
+
+def _prep_batch_permutation_samples(ml, e, Xh):
+    _, target = labels_for(Xh, HELDOUT_SEED)
+    x = np.ascontiguousarray(target[:64], dtype=np.float32)
+    y = np.ascontiguousarray(Xh[:64, 3], dtype=np.float32)
+    def run(first, count, sign_flip):
+        result = (ml.resample.permutation_test(x-y, statistic="mean", permutation_type="samples",
+                    n_resamples=count, r_first=first, random_state=6) if sign_flip else
+                  ml.resample.permutation_test(x, y, statistic="diff_means", permutation_type="samples",
+                    n_resamples=count, r_first=first, random_state=6))
+        return (np.asarray(result.null_distribution),)
+    return [_range_rows("paired permutation " + label, BATCH_RANGE_ROWS,
+                        lambda first, count, flip=flip: run(first, count, flip))
+            for label, flip in (("pair", False), ("sign flip", True))]
+
+
+_batch_decl(_prep_batch_permutation_samples, "resample-perm-samples", revision="expansion-batch-2026-09-28-v1")
+
+
+def _prep_batch_resample_utils(ml, e, Xh):
+    _, target = labels_for(Xh, HELDOUT_SEED)
+    values = np.ascontiguousarray(target[:64], dtype=np.float32)
+    return [_BatchPrefix("resample prefix replace=" + str(replace), 64,
+                lambda count, replace=replace: (
+                    np.asarray(ml.resample.resample_indices(64, count, replace=replace, random_state=8)),
+                    np.asarray(ml.resample.resample(values, n_samples=count, replace=replace, random_state=8))), 0)
+            for replace in (True, False)]
+
+
+_batch_decl(_prep_batch_resample_utils, "resample-utils", revision="expansion-batch-2026-09-28-v1")

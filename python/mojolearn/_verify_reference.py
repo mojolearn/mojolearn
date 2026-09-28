@@ -615,6 +615,11 @@ def build_table(record_paths, harness, repo_root, lanes=None, log=None, parts=No
                 continue
             for part in parts:
                 asked += 1
+                batch_revision = getattr(harness, "BATCH_REVISIONS", {}).get(lane)
+                if (part == "batch" and batch_revision is not None
+                        and (j.get("batch_revisions") or {}).get(lane) != batch_revision):
+                    _absent(part, "batch revision differs or is missing")
+                    continue
                 if part != "train" and held.get(fixture) != want_held[fixture]:
                     _absent(part, "held-out bytes differ")
                     continue
@@ -715,6 +720,7 @@ def build_table(record_paths, harness, repo_root, lanes=None, log=None, parts=No
         #: disagreed, and neither one is visible in the cell counts.
         absent_parts={p: dict(sorted(w.items())) for p, w in sorted(absent_total.items())},
         lane_revisions=dict(getattr(harness, "LANE_REVISIONS", {}) or {}),
+        batch_revisions=dict(getattr(harness, "BATCH_REVISIONS", {}) or {}),
         fixtures=want_fix, heldout=want_held,
         records=[records[i] for i in used],
         cells=cells,
@@ -794,6 +800,11 @@ def merge_reference_lanes(base, candidate, lanes):
             revisions[lane] = candidate["lane_revisions"][lane]
         else:
             revisions.pop(lane, None)
+        batch_revisions = result.setdefault("batch_revisions", {})
+        if lane in candidate.get("batch_revisions", {}):
+            batch_revisions[lane] = candidate["batch_revisions"][lane]
+        else:
+            batch_revisions.pop(lane, None)
         result.setdefault("lane_admission", {})[lane] = dict(
             policy=copy.deepcopy(policy), harness_sha256=candidate["harness_sha256"])
     return result

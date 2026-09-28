@@ -331,6 +331,9 @@ def _(ml, X, yc, yr, Xh=None):
     b = ml.SVC(C=0.01, kernel="precomputed", max_iter=200).fit(K, yc[:256])
     m = ml.SVC(C=0.01, kernel="precomputed", max_iter=200, decision_function_shape="ovr").fit(K, y4)
     r = ml.SVR(C=0.01, kernel="precomputed", epsilon=0.1, max_iter=200).fit(K, yr[:256])
+    # Harness-only query context; SVC.save writes an explicit array schema and
+    # does not serialize this attribute. Train/infer/model hashes are unchanged.
+    m._identity_batch_basis = X[:256]
     return _fit(dict(dual=_h(b.dual_coef_), support=_h(b.support_), decision=_h(b.decision_function(Kq)),
                      predict=_h(b.predict(Kq)), multi_dual=_h(m.dual_coef_), multi=_h(m.decision_function(Kq)),
                      svr_dual=_h(r.dual_coef_), svr_predict=_h(r.predict(Kq))),
@@ -441,12 +444,37 @@ _batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "x-ne
             "x-neighbors-svc-sigmoid", "x-neighbors-svc-multiclass")
 _batch_decl(_rows_calls("predict_proba", sl=slice(0, 128)), "x-neighbors-svc-probability")
 
-_batch_decl(_rows_calls("predict", sl=slice(0, 128)), "x-neighbors-metrics")
+_batch_decl(_rows_calls("predict", sl=slice(0, 128)), "x-neighbors-metrics", revision="expansion-batch-2026-09-28-v1")
 _batch_decl("n/a:whole-graph operator (PageRank normalizes transitions and solves over the complete "
             "graph; removing query nodes changes both neighborhoods and the stationary distribution)",
-            "x-neighbors-pagerank")
+            "x-neighbors-pagerank", revision="expansion-batch-2026-09-28-v1")
 _batch_decl("n/a:whole-graph partition (connected components requires edges between all nodes; "
             "a node subset can disconnect the graph and has no held-out prediction API)",
-            "x-neighbors-connected-components")
+            "x-neighbors-connected-components", revision="expansion-batch-2026-09-28-v1")
 _batch_decl("n/a:whole-graph partition (Louvain optimizes graph-wide modularity; node subsets change "
-            "the objective and there is no held-out prediction API)", "x-neighbors-louvain")
+            "the objective and there is no held-out prediction API)", "x-neighbors-louvain", revision="expansion-batch-2026-09-28-v1")
+
+
+def _neighbors_batch_gp_cov(ml, e, Xh):
+    anchors = np.ascontiguousarray(Xh[:64, :4])
+    def evaluate(rows):
+        # Keep the second covariance axis FIXED while slicing the first. A
+        # naive row probe compares n-by-n with 1-by-1 and is not this claim.
+        joined = np.ascontiguousarray(np.concatenate((rows, anchors), axis=0))
+        mean, covariance = e.predict(joined, return_cov=True)
+        mean, covariance = np.asarray(mean), np.asarray(covariance)
+        n = len(rows)
+        return mean[:n], np.diag(covariance)[:n], covariance[:n, n:]
+    return [_BatchRows("posterior mean/variance and covariance against fixed anchors", anchors, evaluate)]
+
+
+_batch_decl(_neighbors_batch_gp_cov, "x-neighbors-gp-cov", revision="expansion-batch-2026-09-28-v1")
+
+
+def _neighbors_batch_svm_precomputed(ml, e, Xh):
+    queries = _neighbors_int_gram(Xh[:128], e._identity_batch_basis)
+    return [_BatchRows(method, queries, lambda rows, method=method: (getattr(e, method)(rows),))
+            for method in ("decision_function", "predict")]
+
+
+_batch_decl(_neighbors_batch_svm_precomputed, "x-neighbors-svm-precomputed", revision="expansion-batch-2026-09-28-v1")

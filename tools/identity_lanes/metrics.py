@@ -295,7 +295,7 @@ def _(ml, X, yc, yr, Xh=None):
 
 _batch_decl("n/a:dataset reduction (classification, regression, ranking and clustering scores/curves "
             "aggregate the supplied observations; a row subset intentionally produces another statistic)",
-            "x-metrics-classification", "x-metrics-regression", "x-metrics-ranking", "x-metrics-cluster")
+            "x-metrics-classification", "x-metrics-regression", "x-metrics-ranking", "x-metrics-cluster", revision="expansion-batch-2026-09-28-v1")
 _batch_decl("n/a:dataset partition (cross-validation splitters assign indices using the full row count, "
-            "labels or groups; slicing input rows changes the folds)", "x-metrics-splitters")
-_batch_decl(_rows_calls("predict", sl=np.s_[:64, :6]), "x-metrics-search")
+            "labels or groups; slicing input rows changes the folds)", "x-metrics-splitters", revision="expansion-batch-2026-09-28-v1")
+_batch_decl(_rows_calls("predict", sl=np.s_[:64, :6]), "x-metrics-search", revision="expansion-batch-2026-09-28-v1")

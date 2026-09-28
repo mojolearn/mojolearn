@@ -8832,13 +8832,18 @@ BATCH_SPLIT = (1, 8)
 BATCH_SABOTAGE_ENV = "MOJOLEARN_IDENTITY_BATCH_SABOTAGE"
 
 BATCH = {}
+# A batch-only revision never invalidates already recorded train/infer/model
+# parts. Records must explicitly witness the revised batch protocol per lane.
+BATCH_REVISIONS = {}
 
 
-def _batch_decl(spec, *names):
+def _batch_decl(spec, *names, revision=None):
     for n in names:
         if n in BATCH:
             raise RuntimeError(f"identity_break: lane {n!r} has two batch declarations")
         BATCH[n] = spec
+        if revision is not None:
+            BATCH_REVISIONS[n] = revision
 
 
 class _PerRow(list):
@@ -9801,6 +9806,21 @@ def _batch_par_causal_lm(ml, e, Xh):
 _batch_decl(_batch_par_causal_lm, "par-causal-lm")
 _batch_decl(_batch_optim_sgd, "optim-sgd")
 _batch_decl(_batch_optim_adam, "optim-adam-clip")
+
+
+def _batch_optim_maximize(ml, e, Xh):
+    # As the existing optim-adam-clip batch arm, coordinate slicing excludes
+    # global clipping (a reduction over every parameter), but retains maximize.
+    T = ml.training
+    return [_batch_optim_rows("maximize " + name + " (without global clip)", "maximize-" + name,
+               lambda p, cls=cls, kw=kw: cls([p], maximize=True, **kw), _two_steps)
+            for name, cls, kw in (
+                ("SGD", T.SGD, dict(lr=1e-2, momentum=0.9, nesterov=True, weight_decay=0.01)),
+                ("Adam", T.Adam, dict(lr=1e-3, weight_decay=0.01)),
+                ("AdamW", T.AdamW, dict(lr=1e-3, weight_decay=0.01)))]
+
+
+_batch_decl(_batch_optim_maximize, "optim-maximize", revision="expansion-batch-2026-09-28-v1")
 _batch_decl("n/a:mean-reduction-fixed-batch (LanguageModelHostTrainer has train_step and loss only, and loss IS a "
             "step, python/mojolearn/_byte_lm_host.py:392-429; one loss and one update from mean cross-entropy "
             "over ids of the profile's fixed (batch, length + 1), so no output belongs to one sequence; the "
@@ -11765,6 +11785,7 @@ def _run_reference(args):
                       rlpair_sabotage=rlpair_sabotage,
                       par_driver_sabotage=par_driver_sabotage,
                       lane_revisions=dict(LANE_REVISIONS),
+                      batch_revisions=dict(BATCH_REVISIONS),
                       # WHICH PARTS THIS COLUMN CARRIES, IN THE COLUMN ITSELF
                       # (2026-09-20). `complete` answers "did the run finish",
                       # never "what did it collect", and for five years of
@@ -12929,7 +12950,7 @@ LANE_FRAGMENTS = {}
 #: The per-lane registries a fragment may add ITS OWN lanes to.
 #: LANE_REVISIONS is not among them: a revision marks input that moved after
 #: a record was taken, and an expansion lane has no record yet.
-_FRAGMENT_REGISTRIES = ("LANES", "BATCH", "BATCHGRAD", "BATCHSCALE", "RAGGED", "STEPFULL", "RLPAIR",
+_FRAGMENT_REGISTRIES = ("LANES", "BATCH", "BATCH_REVISIONS", "BATCHGRAD", "BATCHSCALE", "RAGGED", "STEPFULL", "RLPAIR",
                         "GPU_ONLY_LANES")
 
 
