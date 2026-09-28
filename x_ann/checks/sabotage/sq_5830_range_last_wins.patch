@@ -1,11 +1,13 @@
+diff --git a/x_ann/ivf_sq_core.mojo b/x_ann/ivf_sq_core.mojo
+index a6c7d80c6..96b7243f6 100644
 --- a/x_ann/ivf_sq_core.mojo
 +++ b/x_ann/ivf_sq_core.mojo
-@@ -29,7 +29,7 @@
-     var hi = lo
-     for i in range(1, n):
-         var v = ftz(r.unsafe_load(i * dim + c))
--        if v < lo:
-+        if v <= lo:
-             lo = v
-         if v > hi:
-             hi = v
+@@ -27,7 +27,7 @@ from x_ann.ivf_pq_core import F32P, I32P, ivf_row_removed, pq_inf, pq_insert, pq
+ def sq_lo_takes(v: Float32, lo: Float32) -> Bool:
+     """DEVIATION 5830: a later value replaces the running minimum only when
+     strictly smaller (the first of equal values stays)."""
+-    return v < lo
++    return v <= lo
+ 
+ 
+ @always_inline
