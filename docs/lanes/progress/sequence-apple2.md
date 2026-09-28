@@ -207,9 +207,12 @@ search (SEQ_PROFILE): 14 `arima_fit` calls 8.3 s, 2000 one-series `select_d` cal
 | garch | 0.995 | 0.993 | 1.0x | same | 0.762 | 0.499 | 1.53x | moved |
 
 AutoARIMA's order search now spends only its 14 ARIMA fits (4.5 s of 4.6 s, host
-profile). The ARIMA row is NOT this lane's: 4387772c3 includes the merge of
-lane/apple-merged (393dffbac), whose ARIMA changes the before (068959af0) lacks;
-job 7 isolates this lane's ARIMA change (one context per module).
+profile). No ARIMA source differs between the arms (the apple-merged merge in
+4387772c3 touches no arima/ or tsa/ file); the harness runs AutoARIMA first in the
+same process, and the before arm created 2000 more DeviceContexts there (one per
+select_d call), so the ARIMA row most likely measures that per-process Metal
+residue, not a change to ARIMA. Job 7 measures this lane's ARIMA change (one
+context per module) against 4387772c3.
 
 ## Unproven
 
