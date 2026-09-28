@@ -10,7 +10,6 @@ from std.math import ceildiv as _ceildiv
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
-    NUMERIC_FAST,
     NUMERIC_IDENTICAL,
     ftz,
     portable_log2_64,
@@ -108,11 +107,12 @@ comptime LABELS_SAMPLED_ORDER = True
 # `row_ids` order and its diagnostic trace intentionally differ from the reference.
 # `-D MOJOLEARN_2010_ROWS_SORTED=1` turns it on; off is the shipped default.
 comptime ROWS_SORTED_SAMPLE = is_defined["MOJOLEARN_2010_ROWS_SORTED"]() or (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_RF_ROWS_SORTED_OFF"]()
 )
-"""FAST on Apple: sorted bootstrap rows on WIDE data (`ROWS_SORTED_MIN_COLS`
+"""Apple, FAST since 2026-09-25 and IDENTICAL since 2026-09-28 (the drawn
+multiset and every integer / fixed-point histogram, count and leaf are
+unchanged; only `row_ids` order moves): sorted bootstrap rows on WIDE data (`ROWS_SORTED_MIN_COLS`
 columns and up), where a node's rows then read the row-major bins in
 ascending order. M4 1M rows, same forest hashes: istella 18.0-19.4 ->
 13.0-14.0 s, istellareg 92 -> 88 s; taxi / taxireg (16 columns) are ~7%
