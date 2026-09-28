@@ -288,17 +288,24 @@ def _dev_barrier():
 
 def lbfgs_dir_kernel(
     drt: MutPointer[Float32, MutAnyOrigin],
-    g: MutPointer[Float32, MutAnyOrigin],
+    pseudo: MutPointer[Float32, MutAnyOrigin],
     s_all: MutPointer[Float32, MutAnyOrigin],
     y_all: MutPointer[Float32, MutAnyOrigin],
     yhist: MutPointer[Float32, MutAnyOrigin],
     alpha: MutPointer[Float32, MutAnyOrigin],
     verdict: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    xp: MutPointer[Float32, MutAnyOrigin],
+    grad: MutPointer[Float32, MutAnyOrigin],
+    gradp: MutPointer[Float32, MutAnyOrigin],
+    dg_out: MutPointer[Float32, MutAnyOrigin],
     n_in: Int32,
     m_in: Int32,
     n_vec_in: Int32,
     end_in: Int32,
     neg_one: Float32,
+    use_pseudo: Int32,
+    do_dot: Int32,
 ):
     """lane/linear-apple: ALL of `lbfgs_search_dir` in ONE launch of ONE
     block of STATS_TPB threads (grid 1), with no synchronize.
@@ -316,11 +323,34 @@ def lbfgs_dir_kernel(
     `alpha[j] - beta` are `ieee_div_f32` / `ieee_sub_f32` / negation, the
     host's IEEE words. A barrier separates every write of `drt` from the
     next read of it by another thread. The skip decision is uniform (every
-    thread holds the same `ys`, `yy`), so every barrier is reached by all."""
+    thread holds the same `ys`, `yy`), so every barrier is reached by all.
+
+    lane/linear-apple, launch fusion (Metal pays per launch): the kernel
+    first does the solver's two history updates, `S[end] = -1 * xp + x` and
+    `Y[end] = -1 * gradp + grad` (`axpy_kernel`'s `ftz(identical_mul_add)`),
+    and the NEXT iteration's two saves `xp = x`, `gradp = grad` (each thread
+    its own indices, after reading them). The direction's source `g` is
+    `pseudo` when `use_pseudo` (OWL-QN) else `grad`. With `do_dot` (L-BFGS)
+    it ends with the line search's `dg_init = dot(grad, drt)`
+    (`dot_kernel`'s value) into `dg_out[0]`, skipped pair or not, as the
+    reference computes it either way."""
     var n = Int(n_in)
     var m = Int(m_in)
     var tid = Int(thread_idx.x)
     var end_prev = Int(end_in)
+    var g = pseudo if Int(use_pseudo) != 0 else grad
+    var sw = s_all + end_prev * n
+    var yw = y_all + end_prev * n
+    var i0 = tid
+    while i0 < n:
+        var xi = x.unsafe_load(i0)
+        var gi = grad.unsafe_load(i0)
+        sw.unsafe_store(i0, ftz(identical_mul_add(neg_one, xp.unsafe_load(i0), xi)))
+        yw.unsafe_store(i0, ftz(identical_mul_add(neg_one, gradp.unsafe_load(i0), gi)))
+        xp.unsafe_store(i0, xi)
+        gradp.unsafe_store(i0, gi)
+        i0 += STATS_TPB
+    _dev_barrier()
     var ys = _block_dot_bcast(s_all + end_prev * n, y_all + end_prev * n, n, tid)
     var yv = y_all + end_prev * n
     var yy = _block_dot_bcast(yv, yv, n, tid)
@@ -328,12 +358,39 @@ def lbfgs_dir_kernel(
         if tid == 0:
             verdict.unsafe_store(0, Float32(1.0))
             verdict.unsafe_store(1, ys)
-        return
+    else:
+        _two_loop(drt, g, s_all, y_all, yhist, alpha, verdict, n, m, tid,
+                  end_prev, Int(n_vec_in), neg_one, ys, yy)
+    if Int(do_dot) != 0:
+        var dg = _block_dot_bcast(grad, drt, n, tid)
+        if tid == 0:
+            dg_out.unsafe_store(0, dg)
+
+
+@always_inline
+def _two_loop(
+    drt: MutPointer[Float32, MutAnyOrigin],
+    g: MutPointer[Float32, MutAnyOrigin],
+    s_all: MutPointer[Float32, MutAnyOrigin],
+    y_all: MutPointer[Float32, MutAnyOrigin],
+    yhist: MutPointer[Float32, MutAnyOrigin],
+    alpha: MutPointer[Float32, MutAnyOrigin],
+    verdict: MutPointer[Float32, MutAnyOrigin],
+    n: Int,
+    m: Int,
+    tid: Int,
+    end_prev: Int,
+    n_vec_prev: Int,
+    neg_one: Float32,
+    ys: Float32,
+    yy: Float32,
+):
+    """`lbfgs_dir_kernel`'s not-skipped branch (see there)."""
     if tid == 0:
         verdict.unsafe_store(0, Float32(0.0))
         verdict.unsafe_store(1, ys)
         yhist.unsafe_store(end_prev, ys)
-    var bound = min(m, Int(n_vec_in) + 1)
+    var bound = min(m, n_vec_prev + 1)
     var scale = ieee_div_f32(ys, yy)
     var i = tid
     while i < n:
@@ -384,10 +441,16 @@ def lbfgs_search_dir_enqueue(
     mut s_all: DeviceBuffer[DType.float32],
     mut y_all: DeviceBuffer[DType.float32],
     mut hist: DeviceBuffer[DType.float32],
-    mut g: DeviceBuffer[DType.float32],
+    mut pseudo: DeviceBuffer[DType.float32],
+    use_pseudo: Bool,
     mut drt: DeviceBuffer[DType.float32],
     n: Int,
     mut scalar: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut xp: DeviceBuffer[DType.float32],
+    mut grad: DeviceBuffer[DType.float32],
+    mut gradp: DeviceBuffer[DType.float32],
+    do_dot: Bool,
 ) raises:
     """`lbfgs_search_dir`, `qn_util.cuh:176-241` (`drt = -H g` by the
     two-loop recursion over the `S`, `Y` history), enqueued as ONE launch
@@ -400,10 +463,17 @@ def lbfgs_search_dir_enqueue(
     holds the device yhist (words 0..m-1) and alpha (m..2m-1)."""
     var hist_alpha = hist.create_sub_buffer[DType.float32](param.m, param.m)
     var verdict = scalar.create_sub_buffer[DType.float32](2, 2)
+    # The launch also does the solver's S/Y updates, the next iteration's
+    # xp / gradp saves and (do_dot) the line search's dg_init into scalar
+    # word 0: see lbfgs_dir_kernel. `pseudo` is the direction's source when
+    # use_pseudo (OWL-QN), else any distinct buffer (unread).
     ctx.enqueue_function[lbfgs_dir_kernel](
-        drt.unsafe_ptr(), g.unsafe_ptr(), s_all.unsafe_ptr(), y_all.unsafe_ptr(),
+        drt.unsafe_ptr(), pseudo.unsafe_ptr(), s_all.unsafe_ptr(), y_all.unsafe_ptr(),
         hist.unsafe_ptr(), hist_alpha.unsafe_ptr(), verdict.unsafe_ptr(),
+        x.unsafe_ptr(), xp.unsafe_ptr(), grad.unsafe_ptr(), gradp.unsafe_ptr(),
+        scalar.unsafe_ptr(),
         Int32(n), Int32(param.m), Int32(n_vec), Int32(end_prev), Float32(-1.0),
+        Int32(1) if use_pseudo else Int32(0), Int32(1) if do_dot else Int32(0),
         grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
     )
     _ = hist_alpha^

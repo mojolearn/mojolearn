@@ -264,9 +264,11 @@ def linear_fwd(
                 block_dim=(VEC_ELEM_TPB, 1, 1),
             )
         return
+    # lane/linear-apple: the gemv reads the first `d` words of `w` in place
+    # (the D-float copy into `w_weights` was one more command per
+    # evaluation; the words read are the same).
     var w_head = w.create_sub_buffer[DType.float32](0, d)
-    ctx.enqueue_copy(dst_buf=w_weights, src_buf=w_head)
-    gemv_n(ctx, z, x, w_weights, n_rows, d)
+    gemv_n(ctx, z, x, w_head, n_rows, d)
     if dims.fit_intercept:
         ctx.enqueue_function[add_bias_kernel](
             z.unsafe_ptr(), w.unsafe_ptr(), Int32(d), Int32(n_rows),

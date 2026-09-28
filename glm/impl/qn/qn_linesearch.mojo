@@ -54,6 +54,7 @@ def _dg_init_enqueue(
     n: Int,
     mut scalar: DeviceBuffer[DType.float32],
     mut stage: HostBuffer[DType.float32],
+    dg_ready: Bool,
 ) raises:
     """`dot(u, drt)` (`dense.dot`'s launch and value) into `scalar` word 0
     and the copy of words 0..3 into `stage`, ENQUEUED (lane/linear-apple):
@@ -61,10 +62,11 @@ def _dg_init_enqueue(
     direction's verdict in words 2..3 (`qn_util.lbfgs_search_dir_enqueue`),
     come home with the candidate's loss behind ONE synchronize. The dot is
     enqueued before the step overwrites anything it reads."""
-    ctx.enqueue_function[dot_kernel](
-        scalar.unsafe_ptr(), u.unsafe_ptr(), drt.unsafe_ptr(), Int32(n),
-        grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
-    )
+    if not dg_ready:  # else the direction's launch already wrote it
+        ctx.enqueue_function[dot_kernel](
+            scalar.unsafe_ptr(), u.unsafe_ptr(), drt.unsafe_ptr(), Int32(n),
+            grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
+        )
     var sub = scalar.create_sub_buffer[DType.float32](0, 4)
     ctx.enqueue_copy(dst_ptr=stage.unsafe_ptr(), src_buf=sub)
     _ = sub^
@@ -142,6 +144,7 @@ def ls_backtrack(
     mut stage: HostBuffer[DType.float32],
     mut fresh: Bool,
     mut gradp: DeviceBuffer[DType.float32],
+    dg_ready: Bool,
 ) raises -> Int:
     """`ls_backtrack`, `qn_linesearch.cuh:109-146`. `ls_iters` reports how
     many candidates were evaluated (for the card)."""
@@ -151,7 +154,7 @@ def ls_backtrack(
     # lane/linear-apple: dg_init's dot is enqueued and read home with the
     # first candidate's evaluate (one synchronize for both); see
     # `_dg_init_enqueue`. A positive dg_init undoes the speculative step.
-    _dg_init_enqueue(ctx, grad, drt, n, scalar, stage)
+    _dg_init_enqueue(ctx, grad, drt, n, scalar, stage, dg_ready)
     var dg_init = Float32(0.0)
     var dg_test = Float32(0.0)
     var first = True
@@ -309,6 +312,7 @@ def ls_backtrack_projected(
     mut stage: HostBuffer[DType.float32],
     mut fresh: Bool,
     mut gradp: DeviceBuffer[DType.float32],
+    dg_ready: Bool,
 ) raises -> Int:
     """`ls_backtrack_projected`, `qn_linesearch.cuh:148-197`. `ls_iters`
     reports how many candidates were evaluated (for the card), as
@@ -318,7 +322,7 @@ def ls_backtrack_projected(
     var fx_init = fx
     # `dot(pseudo_grad, drt)`, NOT `dot(grad, drt)`. See the banner.
     # lane/linear-apple: read home with the first candidate (see ls_backtrack).
-    _dg_init_enqueue(ctx, pseudo_grad, drt, n, scalar, stage)
+    _dg_init_enqueue(ctx, pseudo_grad, drt, n, scalar, stage, dg_ready)
     var dg_init = Float32(0.0)
     var dg_test = Float32(0.0)
     var first = True

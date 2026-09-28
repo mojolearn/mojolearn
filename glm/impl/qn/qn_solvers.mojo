@@ -144,6 +144,7 @@ def min_lbfgs(
     var s_all = ctx.enqueue_create_buffer[DType.float32](param.m * n)
     var y_all = ctx.enqueue_create_buffer[DType.float32](param.m * n)
     var hist = ctx.enqueue_create_buffer[DType.float32](2 * param.m)
+    var unused = ctx.enqueue_create_buffer[DType.float32](1)  # lbfgs_dir_kernel's pseudo slot
     var stage = ctx.enqueue_create_host_buffer[DType.float32](4)
     var S = List[DeviceBuffer[DType.float32]]()
     var Y = List[DeviceBuffer[DType.float32]]()
@@ -180,6 +181,7 @@ def min_lbfgs(
         _ = len(s_all)
         _ = len(y_all)
         _ = len(hist)
+        _ = len(unused)
         _ = stage.unsafe_ptr()
         _release(S, Y, xp, grad, gradp, drt, scalar)
         return OPT_SUCCESS
@@ -197,21 +199,28 @@ def min_lbfgs(
     # home with the next line search's dg_init; `end`/`n_vec` are settled
     # then, before anything uses them.
     var dir_pending = False
+    # lane/linear-apple: the direction's launch already saved xp / gradp
+    # (saved) and, L-BFGS, computed dg_init into scalar word 0 (dg_ready).
+    var saved = False
+    var dg_ready = False
     var retcode = OPT_MAX_ITERS_REACHED
     var lsret = LS_SUCCESS
     var ls_iters = 0
     while k <= param.max_iterations:
         # Save the current x and gradient
-        copy_vec(ctx, xp, x)
-        copy_vec(ctx, gradp, grad)
+        if not saved:
+            copy_vec(ctx, xp, x)
+            copy_vec(ctx, gradp, grad)
+        saved = False
         fxp = fx
 
         # Line search to update x, fx and gradient
         var fresh = False
         lsret = ls_backtrack(
             ctx, param, f, fx, x, grad, step, drt, xp, n, scalar, ls_iters,
-            stage, fresh, gradp,
+            stage, fresh, gradp, dg_ready,
         )
+        dg_ready = False
         if dir_pending:
             if not fresh:
                 read_scalars(ctx, scalar, stage, 4)
@@ -235,24 +244,29 @@ def min_lbfgs(
             _ = len(s_all)
             _ = len(y_all)
             _ = len(hist)
+            _ = len(unused)
             _ = stage.unsafe_ptr()
             _release(S, Y, xp, grad, gradp, drt, scalar)
             return retcode
 
         # Update s and y: s_{k+1} = x_{k+1} - x_k, y_{k+1} = g_{k+1} - g_k
-        axpy(ctx, S[end], Float32(-1.0), xp, x, n)
-        axpy(ctx, Y[end], Float32(-1.0), gradp, grad, n)
+        # S[end] = x - xp, Y[end] = grad - gradp, the next xp / gradp saves
+        # (and, L-BFGS, dg_init) are inside the direction's one launch.
         # drt <- -H * g
         lbfgs_search_dir_enqueue(
-            ctx, param, n_vec, end, s_all, y_all, hist, grad, drt, n, scalar
+            ctx, param, n_vec, end, s_all, y_all, hist, unused, False, drt, n,
+            scalar, x, xp, grad, gradp, True,
         )
         dir_pending = True
+        saved = True
+        dg_ready = True
         # step = 1.0 as initial guess
         step = Float32(1.0)
         k += 1
     _ = len(s_all)
     _ = len(y_all)
     _ = len(hist)
+    _ = len(unused)
     _ = stage.unsafe_ptr()
     _release(S, Y, xp, grad, gradp, drt, scalar)
     return OPT_MAX_ITERS_REACHED
@@ -425,20 +439,26 @@ def min_owlqn(
     # home with the next line search's dg_init; `end`/`n_vec` are settled
     # then, before anything uses them.
     var dir_pending = False
+    # lane/linear-apple: the direction's launch already saved xp / gradp
+    # (saved) and, L-BFGS, computed dg_init into scalar word 0 (dg_ready).
+    var saved = False
+    var dg_ready = False
     var retcode = OPT_MAX_ITERS_REACHED
     var lsret = LS_SUCCESS
     var ls_iters = 0
     while k <= param.max_iterations:
         # Save the current x and gradient
-        copy_vec(ctx, xp, x)
-        copy_vec(ctx, gradp, grad)
+        if not saved:
+            copy_vec(ctx, xp, x)
+            copy_vec(ctx, gradp, grad)
+        saved = False
         fxp = fx
 
         # OWL-QN: the PROJECTED line search (`:357-358`).
         var fresh = False
         lsret = ls_backtrack_projected(
             ctx, param, f, fx, x, grad, pseudo, step, drt, xp, l1_penalty,
-            pg_limit, n, scalar, ls_iters, stage, fresh, gradp,
+            pg_limit, n, scalar, ls_iters, stage, fresh, gradp, False,
         )
         if dir_pending:
             if not fresh:
@@ -474,13 +494,15 @@ def min_owlqn(
         # NOTE `grad`, not `pseudo`: the quasi-Newton model is built from the
         # LOSS gradient, which is why `update_pseudo` above is careful not to
         # overwrite it.
-        axpy(ctx, S[end], Float32(-1.0), xp, x, n)
-        axpy(ctx, Y[end], Float32(-1.0), gradp, grad, n)
+        # S[end] = x - xp, Y[end] = grad - gradp, the next xp / gradp saves
+        # (and, L-BFGS, dg_init) are inside the direction's one launch.
         # OWL-QN: `drt <- -H * pseudo`, the PSEUDO gradient (`:388-390`).
         lbfgs_search_dir_enqueue(
-            ctx, param, n_vec, end, s_all, y_all, hist, pseudo, drt, n, scalar
+            ctx, param, n_vec, end, s_all, y_all, hist, pseudo, True, drt, n,
+            scalar, x, xp, grad, gradp, False,
         )
         dir_pending = True
+        saved = True
         # OWL-QN: project the direction onto the orthant of -pseudo (`:393`).
         project_direction(ctx, drt, pseudo, n)
 
