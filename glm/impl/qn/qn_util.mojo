@@ -41,7 +41,6 @@ from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from std.atomic import Ordering, fence
 from std.sys.info import is_apple_gpu
 from std.memory import bitcast
 
@@ -265,25 +264,25 @@ def host_le_eps_times(ys: Float32, yy: Float32) -> Bool:
     return ks <= kp
 
 
+#: Largest L-BFGS memory the fused direction supports (its alpha history
+#: lives in threadgroup memory).
+comptime LBFGS_FUSED_MAX_M = 256
+
+
 @always_inline
 def _dev_barrier():
-    """A block barrier that also orders DEVICE memory: `drt` is shared
-    through device memory in `lbfgs_dir_kernel`. On NVIDIA and AMD
-    `barrier()` already covers global memory within the block; on Apple it is
-    `threadgroup_barrier(mem_threadgroup)`, which does not (the x_linear team
-    defect, 2979a9de0). The team's `air.wg.barrier(3, 1)` spelling cannot be
-    used here: this kernel also reaches the stdlib `barrier()` (through
-    `pinned_block_sum`) and the two declarations of `air.wg.barrier`
-    conflict at link. So Apple gets a release fence before the barrier and
-    an acquire fence after it (`std.atomic.fence`, which emits on Metal:
-    memory note of 2026-09-16), ordering every device store before the
-    barrier ahead of every device load after it."""
-    comptime if is_apple_gpu():
-        fence[ordering = Ordering.RELEASE]()
-        barrier()
-        fence[ordering = Ordering.ACQUIRE]()
-    else:
-        barrier()
+    """The block barrier of `lbfgs_dir_kernel`. It orders THREADGROUP memory
+    only on Apple (`threadgroup_barrier(mem_threadgroup)`), and that is all
+    the kernel needs: no thread reads a DEVICE word another thread of the
+    launch wrote. Every elementwise pass and every dot's strided partial use
+    the same partition (index i belongs to thread i mod STATS_TPB), so `drt`,
+    `S`, `Y`, `x`, `xp`, `grad`, `gradp` are only ever read by the thread that
+    wrote them; the dots cross threads through `pinned_block_sum`'s
+    threadgroup memory; `alpha` is threadgroup memory; `yhist[end]` written
+    here is read from the register `ys`. (A release/acquire fence spelling of
+    a device barrier, 33cd0d549, made Apple's Metal compiler service crash
+    creating the pipeline: XPC_ERROR_CONNECTION_INTERRUPTED, M3 Ultra.)"""
+    barrier()
 
 
 def lbfgs_dir_kernel(
@@ -292,7 +291,7 @@ def lbfgs_dir_kernel(
     s_all: MutPointer[Float32, MutAnyOrigin],
     y_all: MutPointer[Float32, MutAnyOrigin],
     yhist: MutPointer[Float32, MutAnyOrigin],
-    alpha: MutPointer[Float32, MutAnyOrigin],
+    alpha_unused: MutPointer[Float32, MutAnyOrigin],
     verdict: MutPointer[Float32, MutAnyOrigin],
     x: MutPointer[Float32, MutAnyOrigin],
     xp: MutPointer[Float32, MutAnyOrigin],
@@ -359,7 +358,7 @@ def lbfgs_dir_kernel(
             verdict.unsafe_store(0, Float32(1.0))
             verdict.unsafe_store(1, ys)
     else:
-        _two_loop(drt, g, s_all, y_all, yhist, alpha, verdict, n, m, tid,
+        _two_loop(drt, g, s_all, y_all, yhist, verdict, n, m, tid,
                   end_prev, Int(n_vec_in), neg_one, ys, yy)
     if Int(do_dot) != 0:
         var dg = _block_dot_bcast(grad, drt, n, tid)
@@ -374,7 +373,6 @@ def _two_loop(
     s_all: MutPointer[Float32, MutAnyOrigin],
     y_all: MutPointer[Float32, MutAnyOrigin],
     yhist: MutPointer[Float32, MutAnyOrigin],
-    alpha: MutPointer[Float32, MutAnyOrigin],
     verdict: MutPointer[Float32, MutAnyOrigin],
     n: Int,
     m: Int,
@@ -392,6 +390,9 @@ def _two_loop(
         yhist.unsafe_store(end_prev, ys)
     var bound = min(m, n_vec_prev + 1)
     var scale = ieee_div_f32(ys, yy)
+    var alpha = stack_allocation[
+        LBFGS_FUSED_MAX_M, Scalar[DType.float32], address_space=AddressSpace.SHARED
+    ]()
     var i = tid
     while i < n:
         drt.unsafe_store(i, ftz(neg_one * g.unsafe_load(i)))
@@ -401,9 +402,10 @@ def _two_loop(
     for _ in range(bound):
         j = (j + m - 1) % m
         var d = _block_dot_bcast(s_all + j * n, drt, n, tid)
-        var a = ieee_div_f32(d, yhist.unsafe_load(j))
+        var yh = ys if j == end_prev else yhist.unsafe_load(j)
+        var a = ieee_div_f32(d, yh)
         if tid == 0:
-            alpha.unsafe_store(j, a)
+            alpha[j] = a
         var na = -a
         var yj = y_all + j * n
         i = tid
@@ -420,8 +422,9 @@ def _two_loop(
     _dev_barrier()
     for _ in range(bound):
         var d = _block_dot_bcast(y_all + j * n, drt, n, tid)
-        var beta = ieee_div_f32(d, yhist.unsafe_load(j))
-        var c = ieee_sub_f32(alpha.unsafe_load(j), beta)
+        var yh = ys if j == end_prev else yhist.unsafe_load(j)
+        var beta = ieee_div_f32(d, yh)
+        var c = ieee_sub_f32(alpha[j], beta)
         var sj = s_all + j * n
         i = tid
         while i < n:
@@ -461,6 +464,11 @@ def lbfgs_search_dir_enqueue(
     Before this the function synchronized 2 + 2 * min(m, n_vec) times per
     iteration. `S[j]`/`Y[j]` are rows j of `s_all`/`y_all` (m x n); `hist`
     holds the device yhist (words 0..m-1) and alpha (m..2m-1)."""
+    if param.m > LBFGS_FUSED_MAX_M:
+        raise Error(
+            "qn: lbfgs_memory " + String(param.m) + " exceeds the fused "
+            "direction's " + String(LBFGS_FUSED_MAX_M)
+        )
     var hist_alpha = hist.create_sub_buffer[DType.float32](param.m, param.m)
     var verdict = scalar.create_sub_buffer[DType.float32](2, 2)
     # The launch also does the solver's S/Y updates, the next iteration's
