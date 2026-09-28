@@ -66,7 +66,7 @@ _PARAMS = 14
 _NONE = -1
 #: x_prep/transform.mojo PT_EVALS (PT_ITERS + 2) and PT_STATE
 _PT_EVALS = 50
-_PT_STATE = 9
+_PT_STATE = 10
 
 
 def _prep_binding(mode):

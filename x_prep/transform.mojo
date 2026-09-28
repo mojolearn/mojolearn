@@ -15,7 +15,7 @@ refinement) for `scipy.stats.norm.ppf`.
 """
 from std.memory import bitcast
 from checks.numerics import ftz, identical_log1p, identical_erf, _cephes_erfcf_ge1
-from x_prep.common import FP, IP, p, ld, raw, st, is_nan, canonical_nan, RUN, run_block
+from x_prep.common import FP, IP, p, ld, raw, st, ldi, sti, is_nan, canonical_nan, RUN, run_block
 from x_prep.prims import add, acc_add, sub, mul, div, logf, expf, sqrtf, zero_to_one
 
 #: norm.ppf(1e-7 - eps) and its mirror: QuantileTransformer's normal clip.
@@ -328,8 +328,9 @@ def pt_fit_unit(t: Int, f: FP, q: IP):
 
 #: evaluations: the two starting points, then one per iteration
 comptime PT_EVALS = PT_ITERS + 2
-#: per-column search state: a, b, x1, x2, f1, f2, side, skip, sum J
-comptime PT_STATE = 9
+#: per-column search state: a, b, x1, x2, f1, f2, side, skip, sum J, and the
+#: non-NaN row count folded at K = 0 (an int word)
+comptime PT_STATE = 10
 
 
 def pt_init_unit(t: Int, f: FP, q: IP):
@@ -353,6 +354,7 @@ def pt_init_unit(t: Int, f: FP, q: IP):
     f.unsafe_store(S + 6, Float32(0))
     f.unsafe_store(S + 7, Float32(1) if skip else Float32(0))
     f.unsafe_store(S + 8, Float32(0))
+    f.unsafe_store(S + 9, Float32(0))
     f.unsafe_store(p(q, 5) + c, x1)
     if skip:
         st(f, p(q, 3) + c, Float32(1))
@@ -437,6 +439,16 @@ def pt_fold_unit(t: Int, f: FP, q: IP):
         for i in range(full, n):
             _pt_take1(ld(f, X + i * d + c), raw(f, Tc + i), method, True, cnt, sm, sj)
         f.unsafe_store(S + 8, sj)
+        sti(f, S + 9, cnt)
+    elif ldi(f, S + 9) == n:
+        # no NaN row in this column (K = 0 counted n): the same adds, no test
+        cnt = n
+        for i0 in range(0, full, RUN):
+            var bt = run_block[RUN](f, Tc + i0, 1)
+            comptime for u in range(RUN):
+                sm = acc_add(sm, bt[u])
+        for i in range(full, n):
+            sm = acc_add(sm, raw(f, Tc + i))
     else:
         # a row is NaN exactly where its T word is (pt_map_unit)
         for i0 in range(0, full, RUN):
@@ -447,7 +459,17 @@ def pt_fold_unit(t: Int, f: FP, q: IP):
             var tv = raw(f, Tc + i)
             _pt_take1(tv, tv, method, False, cnt, sm, sj)
     var ss = Float32(0)
-    if cnt > 0:
+    if cnt == n and n > 0:
+        var mean = div(sm, Float32(cnt))
+        for i0 in range(0, full, RUN):
+            var bt = run_block[RUN](f, Tc + i0, 1)
+            comptime for u in range(RUN):
+                var e = sub(bt[u], mean)
+                ss = acc_add(ss, mul(e, e))
+        for i in range(full, n):
+            var e = sub(raw(f, Tc + i), mean)
+            ss = acc_add(ss, mul(e, e))
+    elif cnt > 0:
         var mean = div(sm, Float32(cnt))
         for i0 in range(0, full, RUN):
             var bt = run_block[RUN](f, Tc + i0, 1)
