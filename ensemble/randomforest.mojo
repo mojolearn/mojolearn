@@ -1320,6 +1320,51 @@ def ftz_features_kernel(
         x[unsafe_offset=i] = ftz(x[unsafe_offset=i])
 
 
+def gather_rows_colmajor_kernel(
+    src: MutPointer[Float32, MutAnyOrigin],
+    rows: MutPointer[Int32, MutAnyOrigin],
+    dst: MutPointer[Float32, MutAnyOrigin],
+    n_src_rows: Int64,
+    n_sel: Int64,
+    n_cols: Int64,
+):
+    """NOT THEIRS (trees-apple3, the data session's row gather): `dst` is
+    the COLUMN-major matrix of the `n_sel` rows `rows` names, copied from
+    the column-major `src`. A pure copy of float32 bits: the bytes a host
+    gather of the same rows stages."""
+    var i = Int(global_idx.x)
+    if Int64(i) < n_sel * n_cols:
+        var c = i // Int(n_sel)
+        var r = i - c * Int(n_sel)
+        dst[unsafe_offset=i] = src[
+            unsafe_offset = c * Int(n_src_rows) + Int(rows[unsafe_offset=r])
+        ]
+
+
+def launch_gather_rows_colmajor(
+    ctx: DeviceContext,
+    mut src: DeviceBuffer[DType.float32],
+    mut rows: DeviceBuffer[DType.int32],
+    mut dst: DeviceBuffer[DType.float32],
+    n_src_rows: Int,
+    n_sel: Int,
+    n_cols: Int,
+) raises:
+    if n_sel <= 0 or n_cols <= 0:
+        return
+    log_launch_ctx(ctx, "session_gather_rows")
+    ctx.enqueue_function[gather_rows_colmajor_kernel](
+        src.unsafe_ptr(),
+        rows.unsafe_ptr(),
+        dst.unsafe_ptr(),
+        Int64(n_src_rows),
+        Int64(n_sel),
+        Int64(n_cols),
+        grid_dim=_ceildiv(n_sel * n_cols, 256),
+        block_dim=256,
+    )
+
+
 def bootstrap_mask_fill_kernel(
     masks: MutPointer[UInt8, MutAnyOrigin],
     offset: Int64,

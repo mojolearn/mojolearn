@@ -66,6 +66,12 @@ class ForestDataSession:
         return _export_fit_result(self.native, self.native.rf_regressor_fit_session_export(
             self.handle, _addr_ro(y32), params, criterion))
 
+    def fit_regressor_rows(self, rows, y32, params, criterion):
+        """The fit on the rows `rows` of the staged X (int32 ids, repeats
+        allowed), `y32` their labels in that order."""
+        return _export_fit_result(self.native, self.native.rf_regressor_fit_session_rows_export(
+            self.handle, _addr_ro(rows), _addr_ro(y32), params, criterion))
+
     def fit_classifier_weighted(self, y32, params, criterion, weights):
         return _export_fit_result(self.native, self.native.rf_classifier_fit_weighted_session_export(
             self.handle, _addr_ro(y32), params, criterion, _addr_ro(weights)))

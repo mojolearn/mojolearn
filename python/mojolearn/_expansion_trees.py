@@ -416,6 +416,13 @@ def _trees_clone(est, **overrides):
     return type(est)(**params)
 
 
+def _trees_member_native(member):
+    """The forest binding a clone of `member` resolves."""
+    probe = _trees_clone(member)
+    probe._capture_fit_mode()
+    return probe._bind("_mojolearn_rf")
+
+
 def _trees_member_session(member, X, row_major, x_finite=False):
     """The data session (trees-apple3) for the member fits of one boosted
     ensemble, on the forest binding a clone of `member` resolves, or None
@@ -944,11 +951,32 @@ class AdaBoostRegressor(_AdaBoostBase):
         self.estimators_, self.estimator_weights_, self.estimator_errors_ = [], [], []
         b = self._bind()
         m = int(self.n_estimators)
+        # trees-apple3: a best-splitter squared-error DecisionTreeRegressor
+        # member fits rows of the SAME X, staged on the device once; the
+        # member's rows are gathered there (None: gathered on the host and
+        # staged per member, as before)
+        session = None
+        if (type(base) is DecisionTreeRegressor and base.splitter == "best"
+                and base.criterion in ("squared_error", "mse")
+                and hasattr(_trees_member_native(base), "rf_regressor_fit_session_rows_export")):
+            session = _trees_member_session(base, Xa, True)
+        try:
+            self._fit_members(base, seed, m, Xa, y32, w, n, cols, session, b, stats)
+        finally:
+            if session is not None:
+                session.close()
+        self.n_features_in_ = d
+        return self
+
+    def _fit_members(self, base, seed, m, Xa, y32, w, n, cols, session, b, stats):
         for it in range(m):
             rows = empty((n,), "<i4")
             b.x_trees_weighted_sample(addr_ro(w, name="w"), addr(rows, name="rows"), [n, n, seed, it])
             est = _trees_clone(base, random_state=_trees_sub_seed(seed, it))
-            est.fit(self._gather(Xa, rows, cols), self._gather_vec(y32, rows))
+            if session is not None:
+                est._fit_in_session(session, self._gather_vec(y32, rows), rows=rows)
+            else:
+                est.fit(self._gather(Xa, rows, cols), self._gather_vec(y32, rows))
             pred, _ = as_f32_c(est.predict(Xa), ndim=1, name="prediction")
             b.x_trees_r2_step(addr(w, name="w"), addr_ro(pred, name="pred"), addr_ro(y32, name="y"),
                               addr(stats, name="stats"),
@@ -967,8 +995,6 @@ class AdaBoostRegressor(_AdaBoostBase):
                 break
             if it < m - 1:
                 self._scale(w, total)
-        self.n_features_in_ = d
-        return self
 
     def predict(self, X):
         Xa = self._check_X(X)

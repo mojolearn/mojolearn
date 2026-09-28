@@ -98,6 +98,7 @@ from ensemble.randomforest import (
     ForestPrep,
     fit_forest,
     fit_forest_prepared,
+    launch_gather_rows_colmajor,
 )
 
 comptime DT = DType.float32
@@ -802,6 +803,92 @@ def rf_regressor_fit_session_binding(
     return _retain_rf_export(export_trees^)
 
 
+def rf_regressor_fit_session_rows_binding(
+    handle: PythonObject, rows_addr: PythonObject, y_addr: PythonObject,
+    params: PythonObject, criterion: PythonObject,
+) raises -> PythonObject:
+    """`rf_regressor_fit_export` on the rows `rows` (int32 row ids of the
+    session's X, `params[0]` of them, repeats allowed) with `y` their
+    labels in that order: the member fit of a resampling ensemble
+    (AdaBoost.R2). The rows are gathered ON THE DEVICE from the staged X
+    into a fresh column-major matrix, the bytes a host gather of the same
+    rows stages, and the fit is `fit_forest` on it with its own quantile
+    table."""
+    if len(params) != N_RF_FIT_PARAMS:
+        raise Error(
+            "rf_regressor_fit_session_rows: params must hold "
+            + String(N_RF_FIT_PARAMS)
+            + " values, got "
+            + String(len(params))
+        )
+    if Int(py=params[2]) != 0:
+        raise Error("rf_regressor_fit_session_rows: n_classes (slot 2) must be 0")
+    var n_rows = Int(py=params[0])
+    var n_cols = Int(py=params[1])
+    if n_rows <= 0:
+        raise Error("rf_regressor_fit_session_rows: no rows")
+    var rp = _i32_ptr(Int(py=rows_addr))
+    var yp = _f32_ptr(Int(py=y_addr))
+    var crit = Int(py=criterion)
+    _check_criterion("rf_regressor_fit_session_rows", crit, _reg_criteria())
+    var rf_params = _rf_params_from(params, crit)
+    var session_id = Int(py=handle)
+    var reg = RF_SESSIONS.get_or_create_ptr()
+    var si = reg[].find(session_id)
+    var src_rows = reg[].sessions[si].n_rows
+    if reg[].sessions[si].n_cols != n_cols:
+        raise Error("rf_regressor_fit_session_rows: the session holds another column count")
+    for i in range(n_rows):
+        var r = Int(rp[i])
+        if r < 0 or r >= src_rows:
+            raise Error("rf_regressor_fit_session_rows: a row id is outside the session's X")
+
+    var forest: RandomForestMetaData[DT, RLT]
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        var hrows = ctx.enqueue_create_host_buffer[CLT](n_rows)
+        var hy = ctx.enqueue_create_host_buffer[RLT](n_rows)
+        ctx.synchronize()
+        memcpy(dest=hrows.unsafe_ptr(), src=rp, count=n_rows)
+        copy_f32(yp, hy.unsafe_ptr(), n_rows)
+        var drows = ctx.enqueue_create_buffer[CLT](n_rows)
+        ctx.enqueue_copy(dst_buf=drows, src_ptr=hrows.unsafe_ptr())
+        var dy = ctx.enqueue_create_buffer[RLT](n_rows)
+        ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
+        var dsw = ctx.enqueue_create_buffer[DT](1)
+        var dxg = ctx.enqueue_create_buffer[DT](n_rows * n_cols)
+        launch_gather_rows_colmajor(
+            ctx,
+            reg[].sessions[si].dx,
+            drows,
+            dxg,
+            src_rows,
+            n_rows,
+            n_cols,
+        )
+        var mag = Float64(0.0)
+        for i in range(n_rows):
+            var v = Float64(yp[i])
+            mag += v if v >= 0.0 else -v
+        var scales = BinScales(
+            Float32(choose_scale(mag, n_rows)), Float32(1.0)
+        )
+        forest = fit_forest[RegObj](
+            ctx, dxg, dy, dsw, n_rows, n_cols, 1, rf_params, scales,
+        )
+        ctx.synchronize()
+        _ = dxg^
+        _ = drows^
+        _ = dy^
+        _ = dsw^
+        _ = hrows^
+        _ = hy^
+        _ = ctx^
+    var export_trees = forest.trees^
+    forest.trees = RFExportTrees()
+    return _retain_rf_export(export_trees^)
+
+
 def rf_classifier_fit_weighted_session_binding(
     handle: PythonObject, y_addr: PythonObject,
     params: PythonObject, criterion: PythonObject, weights_addr: PythonObject,
@@ -1387,6 +1474,7 @@ def PyInit__mojolearn_rf() abi("C") -> PythonObject:
         m.def_function[rf_data_session_open_binding]("rf_data_session_open")
         m.def_function[rf_data_session_close_binding]("rf_data_session_close")
         m.def_function[rf_regressor_fit_session_binding]("rf_regressor_fit_session_export")
+        m.def_function[rf_regressor_fit_session_rows_binding]("rf_regressor_fit_session_rows_export")
         m.def_function[rf_classifier_fit_weighted_session_binding]("rf_classifier_fit_weighted_session_export")
         m.def_function[rf_classifier_fit_shard_binding]("rf_classifier_fit_shard")
         m.def_function[rf_regressor_fit_shard_binding]("rf_regressor_fit_shard")
