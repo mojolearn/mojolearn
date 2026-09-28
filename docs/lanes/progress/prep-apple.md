@@ -155,4 +155,84 @@ taxi + HIGGS; mean over seeds; lower error is better). Quality never worse; most
 | taxi | simple-imputer-mean | transform_err | 3.68e-05 | 3.1e-08 |
 | taxi | variance-threshold | variances_err | 4.88e-05 | 1.78e-07 |
 
+### FAST round 2: tree folds for class_stats, ii_mean, ii_gram (m3ultra, FAST build at 7073ac4cf, A/B in one job)
+| case | taxi folds0 -> folds1 s | higgs folds0 -> folds1 s |
+|---|---|---|
+| power-transformer | 3.915 -> 0.480 | 4.220 -> 0.494 |
+| maxabs-scaler | 0.199 -> 0.105 | 0.210 -> 0.112 |
+| iterative-imputer | 2.382 -> 0.534 | 1.485 -> 0.365 |
+| gaussian-nb | 0.450 -> 0.229 | 0.467 -> 0.236 |
+| bernoulli-nb | 0.511 -> 0.357 | 0.513 -> 0.359 |
+| lda | 0.560 -> 0.379 | 0.556 -> 0.384 |
+| qda | 0.410 -> 0.336 | 0.414 -> 0.343 |
+| select-f-classif | 0.337 -> 0.276 | 0.357 -> 0.280 |
+| select-chi2 | 0.321 -> 0.159 | 0.317 -> 0.161 |
+| categorical-nb | 0.897 -> 0.540 | - |
+
+Paired quality, round 2 (request 1790592147011 at a90c94403; 5 seeds x 200k rows, mean over seeds; accuracy /
+predict_agree higher is better, errors lower). The fitted means / variances are 40-600x closer to the reference
+with the tree sums; GaussianNB now agrees with scikit-learn on every row. QuadraticDiscriminantAnalysis did NOT
+pass (proba max error 0.0011 -> 0.0014 on HIGGS, 3/5 seeds worse; agreement 0.999768 -> 0.999753): its stage now
+keeps the row-order class sums in FAST (d1e2a411a), so QDA's FAST numbers equal folds0. taxi IterativeImputer
+folds0 = NaN: the row-order FAST fold produced a NaN imputed value on seed 2 (and 0.27 on seed 4); the tree fold
+does not.
+| dataset | case | metric | folds0 (row order) | folds1 (tree) |
+|---|---|---|---|---|
+| higgs | f-classif | scores_err | 0.00024044 | 0.00023096 |
+| higgs | gaussian-nb | accuracy | 0.560529 | 0.560524 |
+| higgs | gaussian-nb | predict_agree | 0.999929 | 1 |
+| higgs | gaussian-nb | proba_err | 0.000200302 | 7.04032e-06 |
+| higgs | gaussian-nb | theta_err | 0.000639654 | 1.06866e-06 |
+| higgs | gaussian-nb | var_err | 0.000640417 | 3.32544e-06 |
+| higgs | iterative-imputer | imputed_err | 2.55895e-05 | 1.3819e-06 |
+| higgs | lda | accuracy | 0.560882 | 0.560887 |
+| higgs | lda | means_err | 0.000639654 | 1.06866e-06 |
+| higgs | lda | predict_agree | 0.999889 | 0.999924 |
+| higgs | lda | proba_err | 0.000115016 | 7.05873e-05 |
+| higgs | maxabs-scaler | transform_err | 2.9802e-08 | 2.9802e-08 |
+| higgs | multinomial-nb | accuracy | 0.554653 | 0.554653 |
+| higgs | multinomial-nb | predict_agree | 0.999992 | 0.999992 |
+| higgs | multinomial-nb | proba_err | 1.84004e-05 | 1.84004e-05 |
+| higgs | power-transformer | lambda_err | 0.0370429 | 0.00374743 |
+| higgs | power-transformer | transform_err | 0.00462897 | 0.000725062 |
+| higgs | qda | accuracy | 0.595458 | 0.595446 |
+| higgs | qda | means_err | 0.000639654 | 1.06866e-06 |
+| higgs | qda | predict_agree | 0.99978 | 0.999752 |
+| higgs | qda | proba_err | 0.00109649 | 0.00142123 |
+| higgs | simple-imputer-mean | transform_err | 0.000123076 | 3.67862e-07 |
+| higgs | variance-threshold | variances_err | 0.00118265 | 4.98626e-06 |
+| taxi | f-classif | scores_err | 0.000747424 | 0.000724972 |
+| taxi | gaussian-nb | accuracy | 0.219562 | 0.219575 |
+| taxi | gaussian-nb | predict_agree | 0.999975 | 1 |
+| taxi | gaussian-nb | proba_err | 0.0566684 | 0.000185795 |
+| taxi | gaussian-nb | theta_err | 4.76206e-05 | 3.68618e-08 |
+| taxi | gaussian-nb | var_err | 0.000217361 | 4.60615e-07 |
+| taxi | iterative-imputer | imputed_err | nan | 0.000281396 |
+| taxi | lda | accuracy | 0.81671 | 0.816707 |
+| taxi | lda | means_err | 4.76206e-05 | 3.68618e-08 |
+| taxi | lda | predict_agree | 0.999859 | 0.999872 |
+| taxi | lda | proba_err | 0.00468055 | 0.00395763 |
+| taxi | maxabs-scaler | transform_err | 2.97382e-08 | 2.97382e-08 |
+| taxi | multinomial-nb | accuracy | 0.774563 | 0.774563 |
+| taxi | multinomial-nb | predict_agree | 0.999999 | 0.999999 |
+| taxi | multinomial-nb | proba_err | 3.45148e-05 | 3.45148e-05 |
+| taxi | power-transformer | lambda_err | 0.943186 | 0.943055 |
+| taxi | power-transformer | transform_err | 0.0138623 | 0.00707759 |
+| taxi | qda | accuracy | 0.217215 | 0.217211 |
+| taxi | qda | means_err | 4.76206e-05 | 3.68618e-08 |
+| taxi | qda | predict_agree | 0.999877 | 0.999879 |
+| taxi | qda | proba_err | 0.0629779 | 0.0632438 |
+| taxi | simple-imputer-mean | transform_err | 3.68163e-05 | 3.0952e-08 |
+| taxi | variance-threshold | variances_err | 4.88425e-05 | 1.78088e-07 |
+
+### mutual_info_classif: sorted neighbour search (x_prep/dmi.mojo), m3ultra, IDENTICAL, 100k rows
+A/B by MOJOLEARN_XPREP_MI_SORTED in one job (request 1790588108842), digests SAME: taxi 4.927 -> 3.556 s,
+HIGGS 4.779 -> 1.595 s (taxi's columns tie heavily; the walk over tied points is the remaining cost).
+
+### Measured and reverted
+- RUN 16 -> 64 (more rows in flight per column thread): 2-4x SLOWER (register spills), reverted (87f517ee9).
+- IDENTICAL folds staged through threadgroup memory, thread 0 folding (dstage): SLOWER (PowerTransformer 6.16 ->
+  9.25 s); the serial fold is bound by its dependent add chain, not by loads once RUN rows are in flight. Reverted.
+- Copying up only the arena's input prefix (dense one-hot output): 1.884 -> 1.844 s, noise. Reverted.
+
 ## Next
