@@ -92,6 +92,14 @@ def ftz(x: Float32) -> Float32:
         ](x, Int32(0x90))
         var zero = bitcast[DType.float32](bitcast[DType.uint32](x) & UInt32(0x80000000))
         return zero if subnormal else x
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_FTZ_FCMP_TRIAL"]() and is_apple_gpu():
+        # lane cluster-apple2 TRIAL arm (opt-in, never a default until an
+        # A/B says so): `|x| < FLT_MIN` holds exactly for the subnormals and
+        # the two zeros (a zero maps to itself), never for a normal, an
+        # infinity or a NaN, so the select returns the same word for every
+        # input as the integer spelling below.
+        var sz = bitcast[DType.float32](bitcast[DType.uint32](x) & UInt32(0x80000000))
+        return sz if abs(x) < Float32(1.17549435082228750797e-38) else x
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
         var b = bitcast[DType.uint32](x)
         if (b & UInt32(0x7F800000)) == UInt32(0) and (

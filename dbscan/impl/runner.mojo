@@ -319,6 +319,45 @@ def border_pull_kernel(
     labels.unsafe_store(global_id, best)
 
 
+def border_gather_kernel(
+    xq: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    idx: MutPointer[Int32, MutAnyOrigin],
+    m_in: Int32,
+    d_in: Int32,
+):
+    """Rows `idx[0..m)` of `x` into `xq`, one thread per cell (a copy)."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var d = Int(d_in)
+    if t >= Int(m_in) * d:
+        return
+    var r = t // d
+    xq.unsafe_store(t, x.unsafe_load(Int(idx.unsafe_load(r)) * d + t % d))
+
+
+def border_pull_indexed_kernel(
+    labels: MutPointer[Int32, MutAnyOrigin],
+    row_ind: MutPointer[Int32, MutAnyOrigin],
+    col_ind: MutPointer[Int32, MutAnyOrigin],
+    core: MutPointer[UInt8, MutAnyOrigin],
+    idx: MutPointer[Int32, MutAnyOrigin],
+    m_in: Int32,
+):
+    """`border_pull_kernel` over a gathered query: CSR row `t` belongs to the
+    NON-core point `idx[t]`."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= Int(m_in):
+        return
+    var best = MAX_LABEL
+    for j in range(Int(row_ind.unsafe_load(t)), Int(row_ind.unsafe_load(t + 1))):
+        var jj = Int(col_ind.unsafe_load(j))
+        if core.unsafe_load(jj) != 0:
+            var lj = labels.unsafe_load(jj)
+            if lj < best:
+                best = lj
+    labels.unsafe_store(Int(idx.unsafe_load(t)), best)
+
+
 def dbscan_fit(
     ctx: DeviceContext,
     mut x: DeviceBuffer[DType.float32],
@@ -946,7 +985,76 @@ their code branches on is this Bool.
     # answer by construction; a one-batch fit skips it (bits unchanged).
     # The last batch's CSR is still resident; every other batch's is
     # rebuilt with the same count and fill loop 2 used.
-    if n_batches > 1:
+    if n_batches > 1 and sparse_rbc_mode:
+        # The ball-cover arm queries only the NON-core rows of every batch
+        # but the resident last one (a gathered query matrix; each query
+        # row's neighbourhood is its own, the same count and fill kernels),
+        # so the pass costs the border and noise rows, not the batches.
+        var t_bq = perf_counter_ns()
+        var nb_last = n_batches - 1
+        var h_core = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
+        ctx.enqueue_copy(dst_ptr=h_core.unsafe_ptr(), src_buf=core)
+        var np_last = min(n_rows - nb_last * batch, batch)
+        ctx.enqueue_function[border_pull_kernel](
+            labels.unsafe_ptr(), ex_scan.unsafe_ptr(), col_ind.unsafe_ptr(),
+            core.unsafe_ptr(), Int32(nb_last * batch), Int32(np_last),
+            Int32(n_rows),
+            grid_dim=((np_last + TPB - 1) // TPB, 1, 1),
+            block_dim=(TPB, 1, 1),
+        )
+        ctx.synchronize()
+        var xq = ctx.enqueue_create_buffer[DType.float32](batch * n_features)
+        var d_idx = ctx.enqueue_create_buffer[DType.int32](batch)
+        var h_idx = ctx.enqueue_create_host_buffer[DType.int32](batch)
+        ctx.synchronize()
+        for bq in range(nb_last):
+            var sb = bq * batch
+            var m_q = 0
+            for r in range(sb, min(n_rows, sb + batch)):
+                if h_core.unsafe_ptr().unsafe_load(r) == 0:
+                    h_idx.unsafe_ptr().unsafe_store(m_q, Int32(r))
+                    m_q += 1
+            if m_q == 0:
+                continue
+            ctx.enqueue_copy(
+                dst_buf=d_idx.create_sub_buffer[DType.int32](0, m_q),
+                src_ptr=h_idx.unsafe_ptr(),
+            )
+            ctx.enqueue_function[border_gather_kernel](
+                xq.unsafe_ptr(), x.unsafe_ptr(), d_idx.unsafe_ptr(),
+                Int32(m_q), Int32(n_features),
+                grid_dim=((m_q * n_features + TPB - 1) // TPB, 1, 1),
+                block_dim=(TPB, 1, 1),
+            )
+            ctx.synchronize()
+            var qg = xq.create_sub_buffer[DType.float32](0, m_q * n_features)
+            var _nnzq = rbc_eps_nn_query_count(
+                ctx, rbc_xr, qg, rbc_r, rbc_ip, rbc_c1, rbc_d1, rbc_rad,
+                ex_scan, vd, m_q, n_features, n_landmarks, eps_radius,
+            )
+            ctx.synchronize()
+            rbc_eps_nn_query_fill(
+                ctx, rbc_xr, qg, rbc_r, rbc_ip, rbc_c1, rbc_d1, rbc_rad,
+                ex_scan, col_ind, m_q, n_features, n_landmarks, eps_radius,
+            )
+            ctx.enqueue_function[border_pull_indexed_kernel](
+                labels.unsafe_ptr(), ex_scan.unsafe_ptr(),
+                col_ind.unsafe_ptr(), core.unsafe_ptr(), d_idx.unsafe_ptr(),
+                Int32(m_q),
+                grid_dim=((m_q + TPB - 1) // TPB, 1, 1),
+                block_dim=(TPB, 1, 1),
+            )
+            ctx.synchronize()
+        _ = xq^
+        _ = d_idx^
+        _ = h_idx^
+        _ = h_core^
+        if phase_timing:
+            print(
+                "PHASE border_pass batches " + String(n_batches) + " rbc "
+                + String(Float64(perf_counter_ns() - t_bq) / 1.0e6)
+            )
+    elif n_batches > 1:
         var t_bp = perf_counter_ns()
         var bb = n_batches - 1
         while bb >= 0:

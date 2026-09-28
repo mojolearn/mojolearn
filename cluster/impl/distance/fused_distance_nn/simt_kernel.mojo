@@ -166,6 +166,7 @@ from std.gpu.primitives.warp import shuffle_xor
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
+from std.sys.compile import is_defined
 
 from checks.numerics import (
     ftz,
@@ -194,6 +195,24 @@ comptime FUSED_NORMAL_TC = 16
 comptime FUSED_SKINNY_KBLK = 8
 comptime FUSED_SKINNY_TR = 8
 comptime FUSED_SKINNY_TC = 8
+
+
+#: lane cluster-apple2 (2026-09-28): the operands are flushed ONCE, when a
+#: k-tile is staged into threadgroup memory, instead of at every multiply-add
+#: that reads them. `ftz` is idempotent, so every accumulator sees the same
+#: operand words and the same fma chain: the same bits, fewer instructions
+#: on the kernel's inner loop (the k-means assignment, IVF quantizer, k-means||
+#: rounds). `-D MOJOLEARN_FUSED_STAGE_FTZ_OFF` flushes at every use again.
+comptime FUSED_STAGE_FTZ = not is_defined["MOJOLEARN_FUSED_STAGE_FTZ_OFF"]()
+
+
+@always_inline
+def _fused_x_lane[w: Int](v: Float32) -> SIMD[DType.float32, w]:
+    """The X operand broadcast to the accumulator row, flushed here only
+    when the staging did not flush it already."""
+    comptime if FUSED_STAGE_FTZ:
+        return SIMD[DType.float32, w](v)
+    return ftz_simd[w](SIMD[DType.float32, w](v))
 
 
 def fused_is_skinny(k: Int) -> Bool:
@@ -359,6 +378,8 @@ def fused_distance_nn_kernel[
                     var vx = SIMD[DType.float32, veclen](0.0)
                     if koff < k and xrow < m:
                         vx = x.unsafe_load[width=veclen](xrow * k + koff)
+                    comptime if FUSED_STAGE_FTZ:
+                        vx = ftz_simd[veclen](vx)
                     sx.unsafe_store(
                         (srowid + li * ldg_rows_x) * smem_stride + scolid, vx
                     )
@@ -368,6 +389,8 @@ def fused_distance_nn_kernel[
                     var vy = SIMD[DType.float32, veclen](0.0)
                     if koff < k and yrow < n:
                         vy = y.unsafe_load[width=veclen](yrow * k + koff)
+                    comptime if FUSED_STAGE_FTZ:
+                        vy = ftz_simd[veclen](vy)
                     sy.unsafe_store(
                         (srowid + li * ldg_rows_y) * smem_stride + scolid, vy
                     )
@@ -406,11 +429,11 @@ def fused_distance_nn_kernel[
                         (acccolid + 3 * tc) * smem_stride + kc * veclen
                     )
                     comptime for v in range(veclen):
-                        var yv = ftz_simd[cpt](
-                            SIMD[DType.float32, cpt](
-                                ry0[v], ry1[v], ry2[v], ry3[v]
-                            )
+                        var yv = SIMD[DType.float32, cpt](
+                            ry0[v], ry1[v], ry2[v], ry3[v]
                         )
+                        comptime if not FUSED_STAGE_FTZ:
+                            yv = ftz_simd[cpt](yv)
                         # `acc += x * y` (`l2_exp.cuh:103-109`) with the
                         # CONTRACTION PINNED under IDENTICAL: one `fma`,
                         # one rounding, the same on Metal, PTX and AMDGPU
@@ -422,36 +445,28 @@ def fused_distance_nn_kernel[
                         # flushes one where CUDA keeps it.
                         acc0 = ftz_simd[cpt](
                             identical_mul_add_simd[cpt](
-                                ftz_simd[cpt](
-                                    SIMD[DType.float32, cpt](rx0[v])
-                                ),
+                                _fused_x_lane[cpt](rx0[v]),
                                 yv,
                                 acc0,
                             )
                         )
                         acc1 = ftz_simd[cpt](
                             identical_mul_add_simd[cpt](
-                                ftz_simd[cpt](
-                                    SIMD[DType.float32, cpt](rx1[v])
-                                ),
+                                _fused_x_lane[cpt](rx1[v]),
                                 yv,
                                 acc1,
                             )
                         )
                         acc2 = ftz_simd[cpt](
                             identical_mul_add_simd[cpt](
-                                ftz_simd[cpt](
-                                    SIMD[DType.float32, cpt](rx2[v])
-                                ),
+                                _fused_x_lane[cpt](rx2[v]),
                                 yv,
                                 acc2,
                             )
                         )
                         acc3 = ftz_simd[cpt](
                             identical_mul_add_simd[cpt](
-                                ftz_simd[cpt](
-                                    SIMD[DType.float32, cpt](rx3[v])
-                                ),
+                                _fused_x_lane[cpt](rx3[v]),
                                 yv,
                                 acc3,
                             )
