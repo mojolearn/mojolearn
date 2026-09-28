@@ -242,7 +242,6 @@ comptime SUMSQ_STAGE = 64
 comptime GEMM_STAGE = 16
 comptime COLSUM_STAGE = 32
 comptime SUMSQ_VEC = 4
-comptime SUMSQ2_STAGE = 32
 
 
 @always_inline
@@ -283,34 +282,6 @@ def sumsq_fold(p: FP, start: Int, n: Int, stride: Int) -> Float32:
         acc = fma3(w, w, acc)
         k += 1
     return acc
-
-
-@always_inline
-def sumsq_fold2(p: FP, q: FP, start: Int, n: Int) -> Tuple[Float32, Float32]:
-    """(sumsq_fold(p, start, n, 1), sumsq_fold(q, start, n, 1)) in ONE loop:
-    each sum is its own chain of fmas in ascending k, exactly sumsq_fold's,
-    so both bits are unchanged; a GPU thread runs the two independent chains
-    side by side instead of one after the other (LAMB's trust ratio)."""
-    var ap = Float32(0.0)
-    var aq = Float32(0.0)
-    var k = 0
-    while k + SUMSQ2_STAGE <= n:
-        var vp = SIMD[DType.float32, SUMSQ2_STAGE]()
-        var vq = SIMD[DType.float32, SUMSQ2_STAGE]()
-        comptime for j in range(SUMSQ2_STAGE):
-            vp[j] = ld(p, start + k + j)
-            vq[j] = ld(q, start + k + j)
-        comptime for j in range(SUMSQ2_STAGE):
-            ap = fma3(vp[j], vp[j], ap)
-            aq = fma3(vq[j], vq[j], aq)
-        k += SUMSQ2_STAGE
-    while k < n:
-        var wp = ld(p, start + k)
-        var wq = ld(q, start + k)
-        ap = fma3(wp, wp, ap)
-        aq = fma3(wq, wq, aq)
-        k += 1
-    return (ap, aq)
 
 
 @always_inline

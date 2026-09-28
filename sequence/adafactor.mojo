@@ -11,7 +11,7 @@ second moment; the update g / sqrt(max(estimate, eps1^2)) scaled by
 thread's ascending loop. torch's norms are sqrt(sum of squares), squared
 back where the reference squares them, and its lerp is torch's two-branch
 formula."""
-from sequence.ops import FP, Args, add, fma3, ld, lerp, mul, st, sub, sumsq_fold, sumsq_fold2
+from sequence.ops import FP, Args, add, fma3, ld, lerp, mul, st, sub, sumsq_fold
 from checks.numerics import ftz, identical_div, identical_rsqrt, identical_sqrt
 
 
@@ -138,11 +138,8 @@ def op_lamb_ratio(t: Int, a: Args):
     when i0 & 1, timm's trust_clip). p0 param, p1 u, p2 offsets."""
     var s = Int(a.p2.unsafe_load(t))
     var e = Int(a.p2.unsafe_load(t + 1))
-    # ||p|| and ||u||: two chains in one loop (ops.mojo::sumsq_fold2, the
-    # same sums bit for bit)
-    var sq = sumsq_fold2(a.p0, a.p1, s, e - s)
-    var wn = ftz(identical_sqrt(sq[0]))
-    var gn = ftz(identical_sqrt(sq[1]))
+    var wn = ftz(identical_sqrt(_sumsq(a.p0, s, e - s, 1)))
+    var gn = ftz(identical_sqrt(_sumsq(a.p1, s, e - s, 1)))
     var r = Float32(1.0)
     if wn > Float32(0.0) and gn > Float32(0.0):
         r = div(wn, gn)
