@@ -70,6 +70,15 @@ def untwiddle(bits: UInt32) -> Float32:
 
 
 @always_inline
+def isnan_v[w: Int](x: SIMD[DType.float32, w]) -> SIMD[DType.bool, w]:
+    """`x != x`, as an integer test on the bits (an all-ones exponent and a
+    nonzero mantissa). MEASURED: `SIMD.ne(x, x)` reads False on a NaN lane
+    (an ordered compare), so it is not the scalar `x != x`."""
+    var b = bitcast[DType.uint32, w](x) & SIMD[DType.uint32, w](0x7FFFFFFF)
+    return b.gt(SIMD[DType.uint32, w](0x7F800000))
+
+
+@always_inline
 def _fma_v[w: Int](
     a: SIMD[DType.float32, w], b: SIMD[DType.float32, w], c: SIMD[DType.float32, w]
 ) -> SIMD[DType.float32, w]:
@@ -83,7 +92,7 @@ def expf_v[w: Int](x: SIMD[DType.float32, w]) -> SIMD[DType.float32, w]:
     comptime V = SIMD[DType.float32, w]
     comptime U = SIMD[DType.uint32, w]
     comptime I = SIMD[DType.int32, w]
-    var is_nan = x.ne(x)
+    var is_nan = isnan_v[w](x)
     var over = x.gt(V(88.722835))
     var under = x.lt(V(-87.33655))
     # Lanes a branch returns from compute on 0.0 instead (discarded below).
@@ -119,7 +128,7 @@ def logf_v[w: Int](x_in: SIMD[DType.float32, w]) -> SIMD[DType.float32, w]:
     comptime V = SIMD[DType.float32, w]
     comptime U = SIMD[DType.uint32, w]
     comptime I = SIMD[DType.int32, w]
-    var is_nan = x_in.ne(x_in)
+    var is_nan = isnan_v[w](x_in)
     var x = abs(x_in).lt(V(1.1754943508222875e-38)).select(V(0.0), x_in)
     var is_zero = x.eq(V(0.0))
     var is_neg = x.lt(V(0.0))
