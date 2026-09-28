@@ -126,6 +126,18 @@ from solver.checks.record_canon import (
 from solver.impl.functions.linear_reg import linear_reg_h
 from glm.impl.preprocess import post_process_data, pre_process_data
 from solver.impl.linalg.axpy import AXPY_TPB, axpy_device_alpha
+from std.os import getenv
+from checks.numerics import identical_mul_add
+from gemm.checks.gemm_identical import (
+    APPLE_LEAF_PREFETCH,
+    CONTRACT_MAX_LEAVES,
+    PLAN_SPLITK,
+    SPLITK_FOLD_TPB,
+    SPLITK_LEAF_LAUNCH_TPB,
+    choose_gemm_plan,
+    contract_partition,
+    identical_gemm_leaf_kernel,
+)
 from solver.impl.linalg.norm import col_norm_l2_squared
 from solver.impl.shuffle import init_shuffle
 from solver.impl.solvers.params import LOSS_SQRD_LOSS, loss_funct_name
@@ -211,6 +223,124 @@ def cd_gram_partial_kernel(
         part[Int(block_idx.x) * p1 * p1 + t] = acc
 
 
+# ===========================================================================
+# lane/linear-apple2: THE IDENTICAL SWEEP IN THREE LAUNCHES PER COORDINATE
+# ===========================================================================
+#
+# Apple only (APPLE_LEAF_PREFETCH, IDENTICAL). A coordinate of the device
+# sweep was six launches: remember, axpy, the profile dot's PLAN_SPLITK leaf
+# and fold, update, axpy. They regroup into three, with every stored word
+# computed by the same expression from the same words:
+#
+#   cd_axpy_pair_kernel   one thread per residual row: the PREVIOUS
+#                         coordinate's closing axpy (alpha conv[0]) and this
+#                         coordinate's opening axpy (alpha coef[ci]), each
+#                         `axpy_device_alpha_kernel`'s
+#                         `ftz(identical_mul_add(ftz(a), ftz(x), ftz(y)))`,
+#                         in that order, one store;
+#   identical_gemm_leaf_kernel   the profile dot's leaves, unchanged
+#                         (the same launch `identical_gemm_with_plan` makes);
+#   cd_fold_update_kernel one block: thread 0 remembers coef[ci] into
+#                         conv[0] (after the pair kernel read the previous
+#                         delta there), the block folds the P partials with
+#                         `identical_gemm_fold_kernel`'s tree (cell 0,
+#                         stride P) into coef[ci], and thread 0 runs
+#                         `cd_update_coef`.
+#
+# Round 1's two-launch form (06ef7f558, reverted) put the axpys inside the
+# leaf chains and lengthened them; here the axpys stay a coalesced
+# elementwise pass. The last coordinate's closing axpy stays its own launch.
+# -D MOJOLEARN_CD_THREE_LAUNCH_OFF=1 restores the six-launch sweep.
+
+comptime CD_THREE_LAUNCH = (
+    APPLE_LEAF_PREFETCH
+    and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not is_defined["MOJOLEARN_CD_THREE_LAUNCH_OFF"]()
+)
+
+
+def cd_axpy_pair_kernel(
+    residual: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    coef: MutPointer[Float32, MutAnyOrigin],
+    conv: MutPointer[Float32, MutAnyOrigin],
+    ci_in: Int32,
+    prev_ci_in: Int32,
+    n_in: Int32,
+):
+    var n = Int(n_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= n:
+        return
+    var prev = Int(prev_ci_in)
+    var r = residual.unsafe_load(i)
+    if prev >= 0:
+        var a0 = ftz(conv.unsafe_load(0))
+        r = ftz(identical_mul_add(a0, ftz(x.unsafe_load(prev * n + i)), ftz(r)))
+    var a1 = ftz(coef.unsafe_load(Int(ci_in)))
+    r = ftz(identical_mul_add(a1, ftz(x.unsafe_load(Int(ci_in) * n + i)), ftz(r)))
+    residual.unsafe_store(i, r)
+
+
+def cd_fold_update_kernel(
+    coef: MutPointer[Float32, MutAnyOrigin],
+    ws: MutPointer[Float32, MutAnyOrigin],
+    squared: MutPointer[Float32, MutAnyOrigin],
+    conv: MutPointer[Float32, MutAnyOrigin],
+    ci_in: Int32,
+    p_in: Int32,
+    l1_alpha: Float32,
+):
+    """Remember, `identical_gemm_fold_kernel`'s non-sabotage body for cell 0
+    at stride P (P partials into threadgroup memory; level by level node q =
+    ftz(ftz(child 2q) + ftz(child 2q + 1)); an odd tail carried bit for bit;
+    the root stored ftz'd by thread 0), then thread 0 runs the update."""
+    var ci = Int(ci_in)
+    var p_count = Int(p_in)
+    var tid = Int(thread_idx.x)
+    var nth = Int(block_dim.x)
+    if tid == 0:
+        conv.unsafe_store(0, coef.unsafe_load(ci))
+    var buf = stack_allocation[
+        2 * CONTRACT_MAX_LEAVES,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var cur = 0
+    var nxt = CONTRACT_MAX_LEAVES
+    var q0 = tid
+    while q0 < p_count:
+        buf[unsafe_offset = cur + q0] = ws.unsafe_load(q0)
+        q0 += nth
+    barrier()
+    var w = p_count
+    while w > 1:
+        var pairs = w // 2
+        var q = tid
+        while q < pairs:
+            buf[unsafe_offset = nxt + q] = ftz(
+                ftz(buf[unsafe_offset = cur + 2 * q])
+                + ftz(buf[unsafe_offset = cur + 2 * q + 1])
+            )
+            q += nth
+        var w_next = pairs
+        if w % 2 == 1:
+            if tid == 0:
+                buf[unsafe_offset = nxt + pairs] = buf[unsafe_offset = cur + w - 1]
+            w_next = pairs + 1
+        barrier()
+        var swap = cur
+        cur = nxt
+        nxt = swap
+        w = w_next
+    if tid == 0:
+        var root = Float32(0.0)
+        if p_count > 0:
+            root = buf[unsafe_offset=cur]
+        coef.unsafe_store(ci, ftz(root))
+        cd_update_coef(coef, ci_in, squared, conv, l1_alpha)
+
+
 @fieldwise_init
 struct CdLaunch(Copyable, Movable, ImplicitlyCopyable):
     """SCHEDULING knobs. `dot_plan < 0` lets the gemm lane's dispatcher pick
@@ -237,6 +367,20 @@ def cd_remember_coef_kernel(
 
 
 def cd_update_coef_kernel(
+    coef: MutPointer[Float32, MutAnyOrigin],
+    ci_in: Int32,
+    squared: MutPointer[Float32, MutAnyOrigin],
+    conv: MutPointer[Float32, MutAnyOrigin],
+    l1_alpha: Float32,
+):
+    """The launch; the body is `cd_update_coef` (lane/linear-apple2: the
+    three-launch coordinate calls the body from its fold kernel; a kernel
+    called from another kernel crashes the Metal AIR pass)."""
+    cd_update_coef(coef, ci_in, squared, conv, l1_alpha)
+
+
+@always_inline
+def cd_update_coef(
     coef: MutPointer[Float32, MutAnyOrigin],
     ci_in: Int32,
     squared: MutPointer[Float32, MutAnyOrigin],
@@ -602,7 +746,59 @@ def cd_fit_traced(
             _ = gext^
             _ = hg^
             _ = hw^
-    while device_sweeps and n_iter < epochs:
+    # lane/linear-apple2: the three-launch coordinate (see
+    # cd_axpy_pair_kernel) where the profile dot is PLAN_SPLITK on one device.
+    var three = False
+    var part = contract_partition(n_rows)
+    comptime if CD_THREE_LAUNCH:
+        var dc = String(getenv("MOJOLEARN_SOLVER_DEVICE_COUNT"))
+        three = (
+            launch.dot_plan < 0
+            and (dc == "" or dc == "1")
+            and part[1] > 0
+            and choose_gemm_plan(1, 1, n_rows) == PLAN_SPLITK
+        )
+    while device_sweeps and three and n_iter < epochs:
+        ctx.enqueue_memset(conv, Float32(0.0))
+        for j in range(n_cols):
+            var ci = ri[j]
+            var prev = ri[j - 1] if j > 0 else -1
+            ctx.enqueue_function[cd_axpy_pair_kernel](
+                residual.unsafe_ptr(), x.unsafe_ptr(), coef.unsafe_ptr(),
+                conv.unsafe_ptr(), Int32(ci), Int32(prev), Int32(n_rows),
+                grid_dim=((n_rows + AXPY_TPB - 1) // AXPY_TPB, 1, 1),
+                block_dim=(AXPY_TPB, 1, 1),
+            )
+            ctx.enqueue_function[identical_gemm_leaf_kernel](
+                ws_rows.unsafe_ptr(), x.unsafe_ptr() + ci * n_rows,
+                residual.unsafe_ptr(),
+                Int32(1), Int32(1), Int32(n_rows), Int32(part[0]), Int32(part[1]),
+                Int32(n_rows), Int32(1), Int32(1), Int32(n_rows), Int32(part[1]),
+                grid_dim=((part[1] + SPLITK_LEAF_LAUNCH_TPB - 1) // SPLITK_LEAF_LAUNCH_TPB, 1, 1),
+                block_dim=(SPLITK_LEAF_LAUNCH_TPB, 1, 1),
+            )
+            ctx.enqueue_function[cd_fold_update_kernel](
+                coef.unsafe_ptr(), ws_rows.unsafe_ptr(), squared.unsafe_ptr(),
+                conv.unsafe_ptr(), Int32(ci), Int32(part[1]), l1_alpha,
+                grid_dim=(1, 1, 1), block_dim=(SPLITK_FOLD_TPB, 1, 1),
+            )
+        # the last coordinate's closing axpy: residual += conv.coef * X[:, ci]
+        axpy_device_alpha(
+            ctx, residual, x, ri[n_cols - 1] * n_rows, conv, 0, n_rows,
+            launch.axpy_tpb, launch.axpy_two_d_grid,
+        )
+        ctx.enqueue_copy(dst_ptr=h_conv.unsafe_ptr(), src_buf=conv)
+        ctx.synchronize()
+        var coef_max = h_conv.unsafe_ptr().unsafe_load(1)
+        var diff_max = h_conv.unsafe_ptr().unsafe_load(2)
+        n_iter += 1
+        var tag = prefix + ".sweep" + _pad3(n_iter - 1)
+        record_device_canon(ctx, trace, tag + ".coef", coef, n_cols, canon_ws)
+        record_device_canon(ctx, trace, tag + ".resid", residual, n_rows, canon_ws)
+        record_device_canon(ctx, trace, tag + ".conv", conv, 3, canon_ws)
+        if coef_max < tol or (diff_max / coef_max) < tol:
+            break
+    while device_sweeps and not three and n_iter < epochs:
         # shuffle=true refused above; ri stays the identity.
         ctx.enqueue_memset(conv, Float32(0.0))
         for j in range(n_cols):
