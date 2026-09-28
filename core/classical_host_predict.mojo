@@ -116,12 +116,11 @@ from checks.numerics import (
     identical_mul,
     identical_mul_add,
 )
+from core.host_fp_env import host_ieee_fp_enter, host_ieee_fp_leave
 from core.host_predict_threads import (
     HostF32Ptr,
     HostF64Ptr,
     HostI64Ptr,
-    host_ieee_fp_enter,
-    host_ieee_fp_leave,
     host_list_ptr,
     host_predict_chunk,
     host_predict_task_count,

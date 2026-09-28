@@ -59,9 +59,8 @@ from glm.impl.linear_model.qn import (
     QNParams,
 )
 from checks.numerics import ftz, identical_exp64
+from core.host_fp_env import host_ieee_fp_enter, host_ieee_fp_leave
 from core.host_predict_threads import (
-    host_ieee_fp_enter,
-    host_ieee_fp_leave,
     host_predict_chunk,
     host_predict_task_count,
 )
