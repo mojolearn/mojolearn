@@ -174,3 +174,11 @@ lane/apple-merged 7483efa40 (891055bff): k-NN 128 rows per threadgroup,
 CAGRA k-NN + prune 828 -> 753 ms IDENTICAL and 664 -> 596 ms FAST (fit
 0.862 -> 0.79 s, 0.69 -> 0.635 s; kept); a 128-row candidate tile on top
 gave it back (829 / 625 ms; reverted).
+
+### A/B 10: m4-a, steward 1790613123514 (da79ccc8f, f544656b7, f77bc34a4)
+
+Same digests. t-SNE at 64 rows per threadgroup: iterations 1040 -> 1052 ms
+(loss). k-NN at 256 rows per threadgroup: CAGRA k-NN + prune 770 -> 744 ms,
+fit 0.803 -> 0.78 s, but a 10k-row t-SNE would get 40 threadgroups on the
+M3 Ultra's 60 cores; not taken. Both reverted (49eac101e: x_ann identical to
+da79ccc8f, the commit of the final M3 Ultra job).
