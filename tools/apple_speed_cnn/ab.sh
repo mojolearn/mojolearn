@@ -65,6 +65,22 @@ if [ -n "${CAB_FASTQ:-}" ]; then
     done
     IFS=$oldifs
 fi
+if [ -n "${CAB_STAGES:-}" ]; then
+    # every launch of the conv blocks alone, per arm (stages.mojo)
+    mf="-D MOJOLEARN_NUMERIC_IDENTICAL=1"
+    [ "$MODE" = fast ] && mf=""
+    IFS=';'
+    for arm in $ARMS; do
+        IFS=$oldifs
+        name=${arm%%=*}; defs=${arm#*=}
+        echo "##### STAGES $name"
+        # shellcheck disable=SC2086
+        pixi run mojo build -j 2 $mf $defs -I . tools/apple_speed_cnn/stages.mojo -o "$keep/stages_$name" \
+            && "$keep/stages_$name" 2>&1 | sed "s/^/[$name] /"
+        IFS=';'
+    done
+    IFS=$oldifs
+fi
 if [ -n "${CAB_PLANS:-}" ]; then
     mf="-D MOJOLEARN_NUMERIC_IDENTICAL=1"
     [ "$MODE" = fast ] && mf=""
