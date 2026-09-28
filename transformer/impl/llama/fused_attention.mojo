@@ -8221,6 +8221,51 @@ def fused_bwd_zdot_stash_amma_kernel[HD: Int](
         zdot.unsafe_store(row, zf)
 
 
+comptime ATTN_SCRATCH_CACHE = (
+    TARGET_COLUMN == COLUMN_APPLE and not is_defined["MOJOLEARN_ATTN_NO_SCRATCH_CACHE"]()
+)
+"""lane/neural-apple2 (2026-09-28): on Apple the attention launchers' big
+`[B, n_heads, L, S]` scratches (the round 3 forward's score/exp stash, the
+backward's y and dy stashes) come from a process cache that grows to the
+largest call and is reused, instead of a fresh allocation per call (per
+layer, per step: about 2.4 GB of fresh pages per layer at the T3 shard).
+Every launcher waits before it returns, so a cached buffer is never in use
+by two calls. Every kernel writes each cell it later reads within the call
+(the fresh buffers were never guaranteed zero on Metal, DEVIATION 2712), so
+no bit moves. `-D MOJOLEARN_ATTN_NO_SCRATCH_CACHE` allocates per call."""
+
+
+struct _AttnScratch(Defaultable, Movable):
+    var bufs: List[DeviceBuffer[DType.float32]]
+    var cells: List[Int]
+
+    def __init__(out self):
+        self.bufs = List[DeviceBuffer[DType.float32]]()
+        self.cells = List[Int]()
+
+
+comptime _ATTN_SCRATCH = _Global[StorageType=_AttnScratch,
+    name="MojolearnAttnScratchV1", init_fn=_AttnScratch.__init__]
+
+
+def _attn_scratch(ctx: DeviceContext, slot: Int, cells: Int) raises -> DeviceBuffer[DType.float32]:
+    """Scratch `slot` (0 forward stash, 1 backward y, 2 backward dy) of at
+    least `cells` floats: the cached buffer (grown when smaller) under
+    ATTN_SCRATCH_CACHE, else a fresh allocation. The caller synchronizes
+    before it returns, as every attention launcher does."""
+    step_count_device_alloc()
+    comptime if not ATTN_SCRATCH_CACHE:
+        return ctx.enqueue_create_buffer[DType.float32](cells)
+    var g = _ATTN_SCRATCH.get_or_create_ptr()
+    while len(g[].bufs) <= slot:
+        g[].bufs.append(ctx.enqueue_create_buffer[DType.float32](1))
+        g[].cells.append(1)
+    if g[].cells[slot] < cells:
+        g[].bufs[slot] = ctx.enqueue_create_buffer[DType.float32](cells)
+        g[].cells[slot] = cells
+    return g[].bufs[slot].create_sub_buffer[DType.float32](0, cells)
+
+
 def _launch_fwd_r2[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool, SWZ: Bool = False](
     ctx: DeviceContext,
     on: Bool,
@@ -8240,8 +8285,7 @@ def _launch_fwd_r2[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool, SWZ: Bool
     `fused_attn_forward_r2_kernel[HD, TQ, QRES, PF, SABN]` at `TQ` rows per
     block. Generic, so a build that never calls it (every shipped build)
     instantiates none of it."""
-    step_count_device_alloc()
-    var sstash = ctx.enqueue_create_buffer[DType.float32](b * nh * l * s)
+    var sstash = _attn_scratch(ctx, 0, b * nh * l * s)
     # No wait after the allocation (lane/neural-apple, 2026-09-28): the
     # kernel below is enqueued on the same in-order `ctx`.
     _attn_tick(ctx, on, tk, "fwd_scratch_alloc")
@@ -8368,10 +8412,8 @@ def _launch_bwd_stash_tiled_pf[HD: Int, ZSAB: Bool](
     them."""
     comptime TQ = FUSED_THREADS // HD
     var cells = b * nh * l * s
-    step_count_device_alloc()
-    var y_st = ctx.enqueue_create_buffer[DType.float32](cells)
-    step_count_device_alloc()
-    var dy_st = ctx.enqueue_create_buffer[DType.float32](cells)
+    var y_st = _attn_scratch(ctx, 1, cells)
+    var dy_st = _attn_scratch(ctx, 2, cells)
     # No wait after the allocations or after the zdot kernel (lane/
     # neural-apple, 2026-09-28): zdot, dq and dk/dv are enqueued on the same
     # in-order `ctx`, so dq and dk/dv read the finished stashes and zdot
@@ -8955,10 +8997,8 @@ def _launch_bwd_estash[HD: Int, DRES: Bool, SABN: Bool, SWZ: Bool = False](
     var y_cells = cells
     comptime if ATTN_V1_ALIAS_Y_ESTASH:
         y_cells = 1
-    step_count_device_alloc()
-    var y_st = ctx.enqueue_create_buffer[DType.float32](y_cells)
-    step_count_device_alloc()
-    var dy_st = ctx.enqueue_create_buffer[DType.float32](cells)
+    var y_st = _attn_scratch(ctx, 1, y_cells)
+    var dy_st = _attn_scratch(ctx, 2, cells)
     step_count_sync()
     ctx.synchronize()
     _attn_tick(ctx, on, tk, "bwd_scratch_alloc")
