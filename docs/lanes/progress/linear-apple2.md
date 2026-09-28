@@ -393,3 +393,65 @@ not found (the FAST arithmetic is fz-free and should be cheaper). 340abc245
 1790619306118: bare one epoch 0.182 vs 0.183 s, digests equal) and was reverted
 (41bb8e0dc).
 
+
+## FINAL (wind-down, 2026-09-28)
+
+### What changed (all on by default unless noted)
+
+- CD (Lasso, ElasticNet; solver/impl/cd.mojo, IDENTICAL on Apple): the SPLITK
+  leaf loads 16 steps ahead (ae036928e, shared gemm file, Apple only), leaf
+  launch 32 threads (62002dea3), three launches per coordinate (9ec0f03f0),
+  then two (210de5ee8 + fix 90bad7fd9: the fold and update of the previous
+  coordinate inside the next axpy launch, coef and conv double-buffered).
+- SGD family (x_linear/sgd.mojo, GPU warp form): next row prefetched, folds
+  interleaved and unrolled, dead norms skipped (6cdbd32ab, 0aff83beb); the
+  next epoch's order shuffled by warp 1 while warp 0 computes (5097d69d4,
+  1d7b8a2a7); the Fisher-Yates draws computed by warp 2's lanes two epochs
+  ahead (9d450625f, splitmix64 skip-ahead).
+- QN (glm/impl/qn): FAST loss sums and bias means unrolled (8721c3d76, FAST
+  words unchanged); FAST X^T dZ through the coalesced chains (90c722752, FAST
+  words change, paired quality matched); loss sum and bias mean chains spread
+  over blocks (1290bedea); strided walks load 32 ahead (c128c4f3e, shared
+  core/strided_walk.mojo, QN users only).
+- x_linear team fits: Huber / Quantile / LogisticRegressionCV lead folds on
+  their own warps (9ef29ffef, 27b180f47, 0a760cd68); Quantile runs the next
+  iteration's A'(y - r - u) chains in this pass (449d0c127).
+- Reverted after measuring (slower or no gain): 6424bab49, acd046151,
+  ca3db4544 (shuffle remainder / load-ahead), c5179e11d (CD axpys inside the
+  leaf chains), 9adb972ea (shuffle hoist), 340abc245 (fz shortcut).
+
+### Shared code (the later integration run must cover these families too)
+
+- gemm/checks/gemm_identical.mojo: APPLE_LEAF_PREFETCH, SPLITK_LEAF_LAUNCH_TPB
+  (every PLAN_SPLITK caller on Apple: 1 x 1 x k dots and m * n <= 24 skinny
+  products: cluster, decomp, neighbors callers of choose_gemm_plan).
+- core/strided_walk.mojo: STRIDED_UNROLL 8 -> 32 and APPLE_FAST_STEP_UNROLL
+  (users today: glm/impl/qn, core/xtdz_coalesced -> ridge, lstsq xty).
+- x_linear/tops.mojo: CHAIN_U_APPLE constant (value unchanged, 32).
+
+### Unproven: owed the integration check (identity gates on Metal, CPU, NVIDIA, AMD)
+
+This lane ran speed jobs with digest comparison only (every IDENTICAL line
+before == after on the M3 Ultra, M4 Pro and M4; SGDDIAG Metal == host bits),
+never the verifier. No commit here has run on NVIDIA, AMD or the M2 Pro:
+
+- ae036928e, 62002dea3 (gemm leaf, shared)
+- 9ec0f03f0, 210de5ee8, 90bad7fd9 (CD sweeps; the trace-enabled path of the
+  two-step sweep records coef from the epoch's output buffer, never run)
+- 6cdbd32ab, 0aff83beb, 5097d69d4, 1d7b8a2a7, 9d450625f (SGD warp form; the
+  WARP_SIZE 64 paths and the pipelined form with fewer than three warps never
+  run)
+- 8721c3d76, 90c722752 (FAST QN; 90c722752 changes FAST words), 1290bedea,
+  c128c4f3e (QN reductions and walks)
+- 9ef29ffef, 27b180f47, 0a760cd68, 449d0c127 (x_linear team fits)
+- reverts: 16eef73f3, 473f26c05, cd7e61dd5, eece18274, 47c5a0f13, 41bb8e0dc
+
+### Known issues / open
+
+- FAST SGD's row pass is slower than IDENTICAL's on the same Mac (cause not found).
+- The SGD shuffle is one lane's serial Fisher-Yates at about 1.5 us a step;
+  with the draws precomputed it no longer bounds the epoch on the M3 Ultra.
+- x_linear team fits whose gradient is one thread's chain per cell over all
+  rows (Huber, LogisticRegressionCV, Poisson/Gamma, Quantile) remain at or
+  slower than one host core at 100k rows: the contract fixes the chain.
+- The M3 Ultra compiler crash (06ef7f558) does not recur at 96a7fe158+.
