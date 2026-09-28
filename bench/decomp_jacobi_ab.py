@@ -174,3 +174,10 @@ if FITS != "0":
     arm(f"Isomap(10nn) {n3}", lambda: (ml.Isomap(n_neighbors=10).fit_transform(X),))
     arm(f"ClassicalMDS {n3}", lambda: (ml.ClassicalMDS().fit_transform(X),))
     arm(f"LocallyLinearEmbedding(10nn) {n3}", lambda: (ml.LocallyLinearEmbedding(n_neighbors=10).fit_transform(X),))
+    # the per-point solves of the other three methods (tiny eigh calls); only when named in FITS
+    n5 = int(os.environ.get("N5", "400"))
+    X5 = X[:n5]
+    if FITS not in ("0", "1"):
+        arm(f"LLE-ltsa(10nn) {n5}", lambda: (ml.LocallyLinearEmbedding(n_neighbors=10, method="ltsa").fit_transform(X5),))
+        arm(f"LLE-modified(10nn) {n5}", lambda: (ml.LocallyLinearEmbedding(n_neighbors=10, method="modified").fit_transform(X5),))
+        arm(f"LLE-hessian(10nn) {n5}", lambda: (ml.LocallyLinearEmbedding(n_neighbors=10, method="hessian").fit_transform(X5),))

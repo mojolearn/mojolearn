@@ -74,6 +74,7 @@ from x_decomp.cells import (
     sqdist_cell,
 )
 from x_decomp.exec_trait import Exec
+from x_decomp.host import HostExec
 from x_decomp.jacobi2 import J2_TPB, jacobi_eigh2_kernel, one_sided_svd2_kernel
 from x_decomp.jacobi_par import (
     PJ_TPB,
@@ -115,6 +116,19 @@ def pj_eigh_min() -> Int:
     x_decomp/jacobi_par.mojo (FAST builds for Metal only; 0 = never).
     MOJOLEARN_XD_PJ_EIGH_MIN overrides it."""
     var v = String(getenv("MOJOLEARN_XD_PJ_EIGH_MIN", "0"))
+    try:
+        return Int(v)
+    except:
+        return 0
+
+
+def host_eigh_max() -> Int:
+    """Largest n whose eigh runs on the host executor inside the GPU binding
+    (FAST builds for Metal only; 0 = never): the same cyclic Jacobi, without
+    the upload, launch, readback and sync a device solve of a few hundred
+    values is made of (`Kit[E, S]`'s rule for the native drivers).
+    MOJOLEARN_XD_HOST_EIGH_MAX overrides it."""
+    var v = String(getenv("MOJOLEARN_XD_HOST_EIGH_MAX", "0"))
     try:
         return Int(v)
     except:
@@ -1156,6 +1170,9 @@ struct DevExec(Exec):
     @staticmethod
     def eigh(a: F32Ptr, w: F32Ptr, v: F32Ptr, n: Int) raises:
         comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and COMPILED_VENDOR == "metal":
+            if n <= host_eigh_max():
+                HostExec.eigh(a, w, v, n)
+                return
             var lo = pj_eigh_min()
             if lo > 0 and n >= lo:
                 if DevExec._eigh_par(a, w, v, n):
