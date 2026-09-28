@@ -102,10 +102,24 @@ torch, on the `mamba/corpus/` pattern, so that the tolerance instrument is
 not our own code twice.
 """
 
+from core.host_lanes import all_finite
+from std.math import min
 from std.memory import bitcast
 
 from core.identity_trace import IdentityTrace
 from gemm.checks.gemm_oracle import OP_NT, gemm_oracle
+from core.host_parallel import host_parallelize
+from core.host_lanes import (
+    host_row_tasks,
+    span_add,
+    span_div,
+    span_exp_shift,
+    span_fmax_fold,
+    span_mul,
+    span_scale,
+    span_silu,
+)
+from gemm.host.gemm_host_rows import GHR_FW, GhrF, gemm_host_rows, ghr_ftz_lanes
 from checks.numerics import (
     ftz,
     identical_cos,
@@ -116,6 +130,7 @@ from checks.numerics import (
     identical_gelu_tanh,
     identical_mul,
     identical_mul_add,
+    identical_mul_add_simd,
     identical_rsqrt,
     identical_silu,
     identical_sin,
@@ -182,6 +197,8 @@ def refuse_nonfinite(name: String, values: List[Float32]) raises:
     NaN would, and this profile does not test for one at every stage. What
     catches it is the card, since a stage hash containing a vendor-shaped
     payload cannot match. That is a detection, not a prevention."""
+    if all_finite(values):
+        return  # the bit test below, as lanes (lane neural-cpu); nothing to refuse
     for i in range(len(values)):
         var au = bitcast[DType.uint32](values[i]) & UInt32(0x7FFFFFFF)
         if au > UInt32(0x7F800000):
@@ -1300,6 +1317,64 @@ def apply_rope_into(
                 out.append(ftz(ftz(pa) + ftz(pb)))
 
 
+def attn_value_sum_lanes(
+    weights: List[Float32],
+    wbase: Int,
+    values: List[Float32],
+    vbase: Int,
+    mut out: List[Float32],
+    obase: Int,
+    s: Int,
+    hd: Int,
+):
+    """S19 for one query row: `out[obase + d]` is the chain
+    `acc = ftz(identical_mul_add(ftz(w[wbase + j]), ftz(v[vbase + j*hd + d]), acc))`
+    over j ascending from `+0.0`, for every d. The `hd` chains advance
+    together, one SIMD lane per d (lane neural-cpu, 2026-09-28); every lane is
+    its own output's chain, so the bits are the scalar walk's."""
+    var wp = weights.unsafe_ptr()
+    var vp = values.unsafe_ptr()
+    var op = out.unsafe_ptr()
+    comptime G = 4 * GHR_FW
+    var d = 0
+    while d + G <= hd:
+        var a0 = GhrF(0.0)
+        var a1 = GhrF(0.0)
+        var a2 = GhrF(0.0)
+        var a3 = GhrF(0.0)
+        for j in range(s):
+            var wv = GhrF(ftz(wp.unsafe_load(wbase + j)))
+            var row = vbase + j * hd + d
+            a0 = ghr_ftz_lanes(identical_mul_add_simd[GHR_FW](
+                wv, ghr_ftz_lanes(vp.unsafe_load[width=GHR_FW](row)), a0))
+            a1 = ghr_ftz_lanes(identical_mul_add_simd[GHR_FW](
+                wv, ghr_ftz_lanes(vp.unsafe_load[width=GHR_FW](row + GHR_FW)), a1))
+            a2 = ghr_ftz_lanes(identical_mul_add_simd[GHR_FW](
+                wv, ghr_ftz_lanes(vp.unsafe_load[width=GHR_FW](row + 2 * GHR_FW)), a2))
+            a3 = ghr_ftz_lanes(identical_mul_add_simd[GHR_FW](
+                wv, ghr_ftz_lanes(vp.unsafe_load[width=GHR_FW](row + 3 * GHR_FW)), a3))
+        op.unsafe_store(obase + d, a0)
+        op.unsafe_store(obase + d + GHR_FW, a1)
+        op.unsafe_store(obase + d + 2 * GHR_FW, a2)
+        op.unsafe_store(obase + d + 3 * GHR_FW, a3)
+        d += G
+    while d + GHR_FW <= hd:
+        var a = GhrF(0.0)
+        for j in range(s):
+            a = ghr_ftz_lanes(identical_mul_add_simd[GHR_FW](
+                GhrF(ftz(wp.unsafe_load(wbase + j))),
+                ghr_ftz_lanes(vp.unsafe_load[width=GHR_FW](vbase + j * hd + d)), a))
+        op.unsafe_store(obase + d, a)
+        d += GHR_FW
+    while d < hd:
+        var acc = Float32(0.0)
+        for j in range(s):
+            acc = ftz(identical_mul_add(
+                ftz(wp.unsafe_load(wbase + j)), ftz(vp.unsafe_load(vbase + j * hd + d)), acc))
+        op.unsafe_store(obase + d, acc)
+        d += 1
+
+
 def _set_at(mut xs: List[Float32], i: Int, v: Float32, size: Int):
     """Write-by-index into a stage list, growing it to `size` zeros first.
 
@@ -1508,9 +1583,9 @@ def transformer_block_oracle(
     # must move `q_proj.out` and it exists because the op numbering is three
     # bare integers (gemm_oracle.mojo:194-198) and a transposed read of a
     # square-ish weight produces a plausible number.
-    st.q_proj_out = gemm_oracle(st.norm1_out, w.w_q, OP_NT, m, qw, dm)
-    st.k_proj_out = gemm_oracle(st.norm1_out, w.w_k, OP_NT, m, kw, dm)
-    st.v_proj_out = gemm_oracle(st.norm1_out, w.w_v, OP_NT, m, kw, dm)
+    st.q_proj_out = gemm_host_rows(st.norm1_out, w.w_q, OP_NT, m, qw, dm)
+    st.k_proj_out = gemm_host_rows(st.norm1_out, w.w_k, OP_NT, m, kw, dm)
+    st.v_proj_out = gemm_host_rows(st.norm1_out, w.w_v, OP_NT, m, kw, dm)
     # DEVIATION 2934, `qkv_bias` (Qwen2's `attention_bias=True`): one plain
     # add per cell AFTER the GEMM, recorded INTO the `*_proj.out` stages so
     # the card keeps its thirty tags.
@@ -1631,12 +1706,18 @@ def transformer_block_oracle(
     # end of the section. Same reason as the norm above: no `mut st.field`
     # at a call site, and no read of a field being written in the same
     # statement.
-    var scores = List[Float32]()
-    var masked = List[Float32]()
-    var amax = List[Float32]()
-    var aexp = List[Float32]()
-    var adenom = List[Float32]()
-    var aweights = List[Float32]()
+    # CPU SPEED (lane neural-cpu, 2026-09-28): every stage list is sized
+    # once and written by index, in the order the appends made it, and the
+    # per-key statements run as lanes (`core/host_lanes.mojo`, each helper
+    # naming the statement it equals). Every stage still completes over the
+    # whole array before the next one reads it, so the plants land where they
+    # did.
+    var scores = List[Float32](length=b * nh * l * s, fill=Float32(0.0))
+    var masked = List[Float32](length=b * nh * l * s, fill=Float32(0.0))
+    var amax = List[Float32](length=b * nh * l, fill=Float32(0.0))
+    var aexp = List[Float32](length=b * nh * l * s, fill=Float32(0.0))
+    var adenom = List[Float32](length=b * nh * l, fill=Float32(0.0))
+    var aweights = List[Float32](length=b * nh * l * s, fill=Float32(0.0))
     var actx = List[Float32]()
 
     var scale = attention_scale(hd)
@@ -1651,7 +1732,11 @@ def transformer_block_oracle(
             for j in range(s):
                 for d in range(hd):
                     kmat.append(st.kv_k_cache[((bb * nkv + kv) * s + j) * hd + d])
-            var cell = gemm_oracle(qmat, kmat, OP_NT, l, s, hd)
+            var cell = gemm_host_rows(qmat, kmat, OP_NT, l, s, hd)
+            var sbase = (bb * nh + h) * l * s
+            if not opts.has_softcap():
+                span_scale(cell, 0, l * s, scale, scores, sbase)
+                continue
             for qi in range(l):
                 for j in range(s):
                     var sc = ftz(identical_mul(ftz(cell[qi * s + j]), scale))
@@ -1668,7 +1753,7 @@ def transformer_block_oracle(
                         var cap = ftz(opts.attn_softcap)
                         var th = ftz(identical_tanh(ftz(identical_div(sc, cap))))
                         sc = ftz(identical_mul(th, cap))
-                    scores.append(sc)
+                    scores[sbase + qi * s + j] = sc
     _apply_plant(scores, plant, PLANT_AT_SCORES)
 
     # ---- S13: the additive causal mask (EAF:205-206) ---------------------
@@ -1712,7 +1797,7 @@ def transformer_block_oracle(
                         mv = mfill
                     if window > 0 and pk <= p - window:
                         mv = mfill
-                    masked.append(ftz(ftz(scores[base + j]) + mv))
+                    masked[base + j] = ftz(ftz(scores[base + j]) + mv)
     _apply_plant(masked, plant, PLANT_AT_MASKED)
 
     # ---- S14 through S18: the softmax (EAF:208) --------------------------
@@ -1725,102 +1810,108 @@ def transformer_block_oracle(
     # is the spelling with one rounding. **That is a stated gap, not a
     # decision made on evidence**, and it is the first thing to check when a
     # PyTorch checkout lands.
-    for bb in range(b):
-        for h in range(nh):
-            for qi in range(l):
-                var base = ((bb * nh + h) * l + qi) * s
+    # The rows (batch, head, query) are independent: row r = (bb*nh + h)*l + qi
+    # owns amax[r], adenom[r] and the s entries at r*s of aexp and aweights,
+    # and reads only masked's row r. They split over host tasks
+    # (`core/host_parallel.mojo`, lane neural-cpu); each row's statements are
+    # the serial walk's.
+    var srows = b * nh * l
+    var stasks = host_row_tasks(srows, s)
+    var schunk = (srows + stasks - 1) // stasks
 
-                # S14, the row maximum, over EVERY element of the row
-                # INCLUDING the masked ones (contract 5.2, and it is not
-                # "the unmasked prefix" -- section 7 rests on that).
-                #
-                # `identical_fmax` (DEVIATION 825), which canonicalizes a
-                # NaN, flushes both operands and then SELECTS ON A TOTAL
-                # ORDER KEY rather than on a float compare. There is no
-                # hardware max instruction in it.
-                #
-                # **`core/pinned_reduce.mojo::pinned_block_max` MAY NOT BE
-                # USED** and that refusal is the trap in this seam, because
-                # it is the deterministic-looking helper already in the
-                # tree. Its fold is a plain `other > red[tid]` compare
-                # (:159-190), which is exactly the spelling IDENTITY_PATHS
-                # row 13 closed everywhere else, and its own block comment
-                # tells a caller whose inputs can carry +-0.0 to say why
-                # before using it. This caller cannot say why. The refusal
-                # is not about determinism; `pinned_block_max` is perfectly
-                # deterministic and computes a different answer.
-                #
-                # **THE FOLD SHAPE IS FREE AND IT IS THE ONLY PLACE IN THIS
-                # PROFILE WHERE AN EXECUTION PLAN MAY CHOOSE ITS OWN TREE**
-                # (contract 5.1), because `identical_fmax` is exactly
-                # commutative and associative over all of Float32 including
-                # both zeros and NaN. Not because the difference is thought
-                # to be small. This oracle folds serial ascending with no
-                # seed because an oracle should be the simplest legal
-                # spelling, and a halving tree over `identical_fmax` on a
-                # device is equally legal.
-                var mx = ftz(masked[base])
-                for j in range(1, s):
-                    mx = identical_fmax(mx, ftz(masked[base + j]))
-                # The trailing `ftz` is contract section 4's preamble
-                # ("every seam's RESULT passes ftz") and is BIT-INERT under
-                # IDENTICAL, because `portable_fmaxf` returns one of its own
-                # already-flushed operands. It is written anyway, because a
-                # seam that skips the checklist unit because the author
-                # reasoned it was inert is exactly how row 10's checklist
-                # stops being a checklist.
-                amax.append(ftz(mx))
+    def _softmax_rows(t: Int) {imm masked, mut amax, mut aexp, mut adenom, mut aweights, imm s, imm srows, imm schunk}:
+        for r in range(t * schunk, min((t + 1) * schunk, srows)):
+            var base = r * s
 
-                # S15 and S16.
-                for j in range(s):
-                    var d0 = ftz(ftz(masked[base + j]) - ftz(mx))
-                    aexp.append(ftz(identical_exp(d0)))
+            # S14, the row maximum, over EVERY element of the row
+            # INCLUDING the masked ones (contract 5.2, and it is not
+            # "the unmasked prefix" -- section 7 rests on that).
+            #
+            # `identical_fmax` (DEVIATION 825), which canonicalizes a
+            # NaN, flushes both operands and then SELECTS ON A TOTAL
+            # ORDER KEY rather than on a float compare. There is no
+            # hardware max instruction in it.
+            #
+            # **`core/pinned_reduce.mojo::pinned_block_max` MAY NOT BE
+            # USED** and that refusal is the trap in this seam, because
+            # it is the deterministic-looking helper already in the
+            # tree. Its fold is a plain `other > red[tid]` compare
+            # (:159-190), which is exactly the spelling IDENTITY_PATHS
+            # row 13 closed everywhere else, and its own block comment
+            # tells a caller whose inputs can carry +-0.0 to say why
+            # before using it. This caller cannot say why. The refusal
+            # is not about determinism; `pinned_block_max` is perfectly
+            # deterministic and computes a different answer.
+            #
+            # **THE FOLD SHAPE IS FREE AND IT IS THE ONLY PLACE IN THIS
+            # PROFILE WHERE AN EXECUTION PLAN MAY CHOOSE ITS OWN TREE**
+            # (contract 5.1), because `identical_fmax` is exactly
+            # commutative and associative over all of Float32 including
+            # both zeros and NaN. Not because the difference is thought
+            # to be small. This oracle folds serial ascending with no
+            # seed because an oracle should be the simplest legal
+            # spelling, and a halving tree over `identical_fmax` on a
+            # device is equally legal.
+            # S14, the row maximum (`span_fmax_fold`: the serial
+            # `identical_fmax` chain, or under IDENTICAL its free-shape
+            # lanes, `fmax_fold_span`).
+            var mx = span_fmax_fold(masked, base, s)
+            # The trailing `ftz` is contract section 4's preamble
+            # ("every seam's RESULT passes ftz") and is BIT-INERT under
+            # IDENTICAL, because `portable_fmaxf` returns one of its own
+            # already-flushed operands. It is written anyway, because a
+            # seam that skips the checklist unit because the author
+            # reasoned it was inert is exactly how row 10's checklist
+            # stops being a checklist.
+            amax[r] = ftz(mx)
+            # S15 and S16.
+            span_exp_shift(masked, base, s, mx, aexp, base)
+            # S17, the denominator: A SERIAL ASCENDING CHAIN over the
+            # ABSOLUTE key index, seeded `+0.0`, plain adds. There is
+            # nothing to fuse because `e[j]` is not a product.
+            #
+            # **`core/pinned_reduce.mojo::pinned_block_sum` MAY NOT BE
+            # USED** (DEVIATION 805), and saying so is the point of the
+            # clause. It is a halving tree; its own docstring says a
+            # halving tree and CUB's warp-then-block shape combine
+            # different partials; and a halving tree is not a serial
+            # ascending chain either. Reaching for the deterministic
+            # block fold BECAUSE it is the deterministic block fold is
+            # the single most likely way to get this wrong, and it would
+            # be wrong in a way that passes every launch-invariance gate,
+            # because the tree is perfectly launch-invariant. It is
+            # simply a different sum. Sabotage `S17_DENOM_HALVING_TREE`
+            # must move `attn.denom` at any kv length of 3 or more.
+            #
+            # The load-bearing reason for the chain is not tidiness. It
+            # is that a tail of exactly-`+0.0` terms is bitwise inert in
+            # a chain seeded `+0.0` and is NOT inert under gemm v1's
+            # leaf-and-tree topology, where `P = f(k)`. That is what
+            # makes decode equal prefill and makes the answer independent
+            # of sequence length. Contract 7.1 and 7.3.
+            #
+            # The price, stated rather than hidden: a row's fold may not
+            # be split across threads, so v1's kv length is bounded by
+            # what one thread will walk. This profile is reference
+            # quality and slow by construction.
+            var acc = Float32(0.0)
+            for j in range(s):
+                acc = ftz(ftz(acc) + ftz(aexp[base + j]))
+            acc = ftz(acc)
+            adenom[r] = acc
+            # S18, ONE DIVISION PER WEIGHT, never a reciprocal
+            # multiplied in (DEVIATION 806). `e * (1/denom)` rounds
+            # twice where `e / denom` rounds once and they differ in the
+            # last bit on ordinary inputs. MAX's `softmax_kernel`
+            # multiplies by a reciprocal, which is evidence about MAX
+            # and not about the reference. Sabotage `S18_RECIPROCAL_MUL`
+            # must move `attn.weights`.
+            span_div(aexp, base, s, acc, aweights, base)
 
-                # S17, the denominator: A SERIAL ASCENDING CHAIN over the
-                # ABSOLUTE key index, seeded `+0.0`, plain adds. There is
-                # nothing to fuse because `e[j]` is not a product.
-                #
-                # **`core/pinned_reduce.mojo::pinned_block_sum` MAY NOT BE
-                # USED** (DEVIATION 805), and saying so is the point of the
-                # clause. It is a halving tree; its own docstring says a
-                # halving tree and CUB's warp-then-block shape combine
-                # different partials; and a halving tree is not a serial
-                # ascending chain either. Reaching for the deterministic
-                # block fold BECAUSE it is the deterministic block fold is
-                # the single most likely way to get this wrong, and it would
-                # be wrong in a way that passes every launch-invariance gate,
-                # because the tree is perfectly launch-invariant. It is
-                # simply a different sum. Sabotage `S17_DENOM_HALVING_TREE`
-                # must move `attn.denom` at any kv length of 3 or more.
-                #
-                # The load-bearing reason for the chain is not tidiness. It
-                # is that a tail of exactly-`+0.0` terms is bitwise inert in
-                # a chain seeded `+0.0` and is NOT inert under gemm v1's
-                # leaf-and-tree topology, where `P = f(k)`. That is what
-                # makes decode equal prefill and makes the answer independent
-                # of sequence length. Contract 7.1 and 7.3.
-                #
-                # The price, stated rather than hidden: a row's fold may not
-                # be split across threads, so v1's kv length is bounded by
-                # what one thread will walk. This profile is reference
-                # quality and slow by construction.
-                var acc = Float32(0.0)
-                for j in range(s):
-                    acc = ftz(ftz(acc) + ftz(aexp[base + j]))
-                acc = ftz(acc)
-                adenom.append(acc)
-
-                # S18, ONE DIVISION PER WEIGHT, never a reciprocal
-                # multiplied in (DEVIATION 806). `e * (1/denom)` rounds
-                # twice where `e / denom` rounds once and they differ in the
-                # last bit on ordinary inputs. MAX's `softmax_kernel`
-                # multiplies by a reciprocal, which is evidence about MAX
-                # and not about the reference. Sabotage `S18_RECIPROCAL_MUL`
-                # must move `attn.weights`.
-                for j in range(s):
-                    aweights.append(
-                        ftz(identical_div(ftz(aexp[base + j]), acc))
-                    )
+    if stasks <= 1:
+        _softmax_rows(0)
+    else:
+        host_parallelize(_softmax_rows, stasks)
 
     # ---- S19: the attention-weighted value sum (EAF:210) -----------------
     # `torch.matmul(attn_weights, value_states)`.
@@ -1850,25 +1941,35 @@ def transformer_block_oracle(
     # FUSED, unlike S10. The reference's matmul contracts and the fold is
     # ours; there is no two-rounding reference spelling to mirror here the
     # way there is at `(q*cos) + (rotate_half(q)*sin)`.
-    for bb in range(b):
-        for h in range(nh):
+    #
+    # CPU SPEED (lane neural-cpu, 2026-09-28): the chains above, `head_dim` of
+    # them per query advanced together down the key axis, one SIMD lane per
+    # output (`attn_value_sum_lanes`). Each lane runs its output's chain: the
+    # same operands, j ascending from `+0.0`, one fused multiply-add and one
+    # flush per step. `actx` is sized once; every cell is written.
+    actx = List[Float32](length=m * qw, fill=Float32(0.0))
+    var vrows = b * nh * l
+    var vtasks = host_row_tasks(vrows, s * hd)
+    var vchunk = (vrows + vtasks - 1) // vtasks
+    var vcache = st.kv_v_cache.copy()
+
+    def _value_rows(t: Int) {imm aweights, imm vcache, mut actx, imm s, imm hd, imm qw, imm l, imm nh, imm nkv, imm n_rep, imm vrows, imm vchunk}:
+        for r in range(t * vchunk, min((t + 1) * vchunk, vrows)):
+            var qi = r % l
+            var h = (r // l) % nh
+            var bb = r // (l * nh)
             var kv = h // n_rep
-            for qi in range(l):
-                var base = ((bb * nh + h) * l + qi) * s
-                for d in range(hd):
-                    var acc = Float32(0.0)
-                    for j in range(s):
-                        var vv = ftz(
-                            st.kv_v_cache[((bb * nkv + kv) * s + j) * hd + d]
-                        )
-                        acc = ftz(
-                            identical_mul_add(
-                                ftz(aweights[base + j]), vv, acc
-                            )
-                        )
-                    _set_at(
-                        actx, (bb * l + qi) * qw + h * hd + d, acc, m * qw
-                    )
+            attn_value_sum_lanes(
+                aweights, r * s,
+                vcache, (bb * nkv + kv) * s * hd,
+                actx, (bb * l + qi) * qw + h * hd, s, hd,
+            )
+
+    if vtasks <= 1:
+        _value_rows(0)
+    else:
+        host_parallelize(_value_rows, vtasks)
+    _ = vcache^
 
     st.attn_scores = scores^
     st.attn_masked = masked^
@@ -1879,7 +1980,7 @@ def transformer_block_oracle(
     st.attn_ctx = actx^
 
     # ---- S5, o_proj (:280). The flatten before it is a COPY (:279). ------
-    st.o_proj_out = gemm_oracle(st.attn_ctx, w.w_o, OP_NT, m, dm, qw)
+    st.o_proj_out = gemm_host_rows(st.attn_ctx, w.w_o, OP_NT, m, dm, qw)
     # DEVIATION 2935, `o_bias`: one plain add per cell after the GEMM.
     if opts.o_bias:
         var ob = st.o_proj_out.copy()
@@ -1922,12 +2023,12 @@ def transformer_block_oracle(
     # the activation of `up_proj.out` and feeds `down_proj` directly.
     var gated = opts.gated()
     if gated:
-        st.gate_proj_out = gemm_oracle(st.norm2_out, w.w_gate, OP_NT, m, inter, dm)
+        st.gate_proj_out = gemm_host_rows(st.norm2_out, w.w_gate, OP_NT, m, inter, dm)
         if opts.mlp_bias:
             var gb = st.gate_proj_out.copy()
             add_bias_into(gb, w.b_gate, m, inter)
             st.gate_proj_out = gb^
-    st.up_proj_out = gemm_oracle(st.norm2_out, w.w_up, OP_NT, m, inter, dm)
+    st.up_proj_out = gemm_host_rows(st.norm2_out, w.w_up, OP_NT, m, inter, dm)
     if opts.mlp_bias:
         var ub = st.up_proj_out.copy()
         add_bias_into(ub, w.b_up, m, inter)
@@ -1938,7 +2039,15 @@ def transformer_block_oracle(
     # roundings and which is what MAX itself spells
     # (`max/kernels/src/nn/activations.mojo:249`). Sabotage
     # `S20_SILU_MUL_SIGMOID` must move `silu.out`.
-    for i in range(m * inter):
+    if opts.act_is_silu():
+        # CPU SPEED (lane neural-cpu): the statement below as lanes.
+        st.silu_out = List[Float32](length=m * inter, fill=Float32(0.0))
+        if gated:
+            span_silu(st.gate_proj_out, 0, m * inter, st.silu_out, 0)
+        else:
+            span_silu(st.up_proj_out, 0, m * inter, st.silu_out, 0)
+    var scalar_act = 0 if opts.act_is_silu() else m * inter
+    for i in range(scalar_act):
         var z: Float32
         if gated:
             z = ftz(st.gate_proj_out[i])
@@ -1953,15 +2062,13 @@ def transformer_block_oracle(
 
     # S21: one product, so `pinned_mul`. Absent under an ungated MLP.
     if gated:
-        for i in range(m * inter):
-            st.mlp_gated.append(
-                ftz(identical_mul(ftz(st.silu_out[i]), ftz(st.up_proj_out[i])))
-            )
-        st.down_proj_out = gemm_oracle(
+        st.mlp_gated = List[Float32](length=m * inter, fill=Float32(0.0))
+        span_mul(st.silu_out, 0, st.up_proj_out, 0, m * inter, st.mlp_gated, 0)
+        st.down_proj_out = gemm_host_rows(
             st.mlp_gated, w.w_down, OP_NT, m, dm, inter
         )
     else:
-        st.down_proj_out = gemm_oracle(
+        st.down_proj_out = gemm_host_rows(
             st.silu_out, w.w_down, OP_NT, m, dm, inter
         )
     if opts.mlp_bias:
@@ -1970,10 +2077,8 @@ def transformer_block_oracle(
         st.down_proj_out = db^
 
     # ---- S23, the second residual (LDL:323) ------------------------------
-    for i in range(m * dm):
-        st.residual2_out.append(
-            ftz(ftz(st.residual1_out[i]) + ftz(st.down_proj_out[i]))
-        )
+    st.residual2_out = List[Float32](length=m * dm, fill=Float32(0.0))
+    span_add(st.residual1_out, 0, st.down_proj_out, 0, m * dm, st.residual2_out, 0)
 
     return st^
 

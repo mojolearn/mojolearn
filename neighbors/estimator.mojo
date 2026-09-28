@@ -146,7 +146,12 @@ from neighbors.impl.selection.distance_weights import (
     host_distance_weights,
 )
 from neighbors.impl.distance.detail.distance_ops import (
+    DIST_BRAY_CURTIS,
+    DIST_CANBERRA,
+    DIST_CORRELATION_EXPANDED,
     DIST_COSINE_EXPANDED,
+    DIST_INNER_PRODUCT,
+    DIST_JENSEN_SHANNON,
     DIST_L1,
     DIST_L2_EXPANDED,
     DIST_L2_SQRT_EXPANDED,
@@ -199,21 +204,22 @@ def knn_metric_from_name(name: String) raises -> Int:
         return DIST_COSINE_EXPANDED
     if name == "minkowski" or name == "lp":
         return DIST_LP_UNEXPANDED
-    if (
-        name == "canberra"
-        or name == "jensenshannon"
-        or name == "correlation"
-        or name == "inner_product"
-        or name == "haversine"
-        or name == "braycurtis"
-    ):
+    if name == "canberra":
+        return DIST_CANBERRA
+    if name == "braycurtis":
+        return DIST_BRAY_CURTIS
+    if name == "correlation":
+        return DIST_CORRELATION_EXPANDED
+    if name == "jensenshannon":
+        return DIST_JENSEN_SHANNON
+    if name == "inner_product":
+        return DIST_INNER_PRODUCT
+    if name == "haversine":
         raise Error(
-            "mojolearn k-NN: metric='"
-            + name
-            + "' is in cuML's VALID_METRICS['brute'] but is NOT IMPLEMENTED"
-            " (neighbors/NOT_IMPLEMENTED.tsv); implemented: euclidean, l2,"
-            " sqeuclidean, l1, cityblock, manhattan, taxicab, chebyshev,"
-            " linf, cosine, minkowski, lp"
+            "mojolearn k-NN: metric='haversine' is in cuML's"
+            " VALID_METRICS['brute'] but is NOT IMPLEMENTED: it needs arcsin,"
+            " and checks/numerics.mojo carries no pinned arcsin (a vendor asin"
+            " is a last-bit vendor choice, IDENTITY_PATHS row 12)"
         )
     raise Error("mojolearn k-NN: unknown metric '" + name + "'")
 from neighbors.checks.radius_distances import rbc_edge_distances

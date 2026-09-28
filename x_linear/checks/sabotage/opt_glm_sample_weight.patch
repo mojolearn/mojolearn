@@ -1,19 +1,12 @@
+diff --git a/x_linear/glm.mojo b/x_linear/glm.mojo
 --- a/x_linear/glm.mojo
 +++ b/x_linear/glm.mojo
-@@ -15,6 +15,7 @@
- constants that do not depend on the coefficients are dropped (the
- minimizer is the same). float32 throughout.
- """
-+from std.sys.info import is_gpu
- from x_linear.ops import (
-     FP, IP, fa, fs, fm, fd, fmad, fexp, flog, fabs, fmax, ld, st, ldi, i2f,
-     fill, copy, row_dot, cholesky, chol_solve, mean_of,
-@@ -121,7 +122,7 @@
-             var e = ld(eta, i)
-             var gi = _unit(power, link, ld(y, i), e, 1)
-             var hi = fmax(Float32(0), _unit(power, link, ld(y, i), e, 2))
--            if sw:
-+            if sw and not is_gpu():  # SABOTAGE option sample_weight: the device drops the weights
-                 gi = fm(ld(y, n + i), gi)
-                 hi = fm(ld(y, n + i), hi)
-             for j in range(d):
+@@ -182,7 +182,7 @@
+                 var e = ld(eta, i)
+                 var gi = _unit(power, link, ld(y, i), e, 1)
+                 var hi = fmax(Float32(0), _unit(power, link, ld(y, i), e, 2))
+-                if sw:
++                if sw and not is_gpu():  # SABOTAGE option sample_weight: the device drops the weights
+                     gi = fm(ld(y, n + i), gi)
+                     hi = fm(ld(y, n + i), hi)
+                 st(gr, i, gi)

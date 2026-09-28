@@ -123,7 +123,76 @@ and push in one command, then ONE batched `apple_steward.py submit`
 (m2pro + do-amd) for those ten lanes with the e2e patch; update the
 tables above (the IVF-Flat row, the repeat test).
 
-### Session B (option parity): committed UNVERIFIED on `lane/algos-ann-b`
+### Session B (option parity): GATE PASSED 2026-09-28, NOT YET ON MAIN
+
+B STATUS 2026-09-28 (resume after cutoff): origin/main merged into
+`lane/algos-ann-b` at 92313095a (pushed). The one conflict,
+tools/test_lane_select.py, was two REMEASURED notes (trees-cpu's
+neural_inference.py 41 -> 40, B's kmeans_oracle 71 -> 75); both kept, the
+pins themselves merged cleanly (75, 51, 86, 50, 40). Files both sides
+touched: IDENTITY_PATHS.md, ann.md, _surface_ann.py (B: lane names; main:
+host_modules gains ann_host_cells.mojo), test_lane_select.py; no Mojo file.
+BUT the merge brings the ann-cpu lane's steps 1-2 (x_ann/host/* rewritten:
+pointer ABI, vector folds, probe cache), which B's gate never ran against.
+B's new lanes (x-ann-tsne-pca, x-ann-cagra-filter, x-ann-refine-euclidean)
+now run their CPU column through that code. p1 IS on main (checked).
+
+NOT MERGED TO MAIN: RunPod balance negative again (-$4.41), every pod gone,
+no renting until Andrew tops up (orchestrator: no merge to main without the
+NVIDIA re-check).
+
+OWED ON AN NVIDIA POD (from lane/algos-ann-b at 92313095a or later):
+1. FIX FIRST: `lane_select --changed-since origin/main` now refuses:
+   "UNATTRIBUTED PATH: tools/classical_host_gate.py" (main's selector rewrite
+   c1d736738 no longer places it; B added ivf-filter to it). Attribute it at
+   the root in tools/lane_select.py (a rule with a reason, plus a test in
+   tools/test_lane_select.py), or ask the tools lane. Then the selection
+   should be the same 15 lanes as B's gate.
+2. `algos_lane_check.sh <those lanes> --pass 2 --sabotage
+   x_ann/checks/sabotage/e2e_ann_and_ivf_host.patch`, plus x-ann-tsne-pca
+   under tsne_5818 and x-ann-refine-euclidean under refine_5851; existing
+   bits compared to B's clean column; pytest test_lane_select +
+   test_host_surface + test_x_ann_repeat.
+3. On PASS: merge B to main and push in one command; one batched steward
+   request (do-amd + Apple while the Macs last) for the 15 lanes.
+Then: Step 0 coverage audit, then phase C (GPU speed).
+
+(history: the gate B passed before this merge)
+
+Gate on the `ann` RTX 4090 pod (EPYC 9254 CPU column), lane/algos-ann-b
+with main merged: `lane_select --changed-since origin/main` = 15 lanes
+(after the tools lane's host_surface fix). `algos_lane_check.sh` on them
+`--pass 2 --sabotage e2e_ann_and_ivf_host.patch`: 27 SEAM lines PASS / FAIL
+/ PASS (5863 included), RESULT: PASS on all 15. Per-lane arms: x-ann-tsne-pca
+under tsne_5818 and x-ann-refine-euclidean under refine_5851: PASS (AGREE,
+DISAGREE, AGREE). Existing bits: session A's and B's clean columns on the
+same pod compared cell by cell for the ten old lanes: train, infer and batch
+unchanged; only the `model` cells of the four save/load classes moved from
+`n/a:no-save` to a hash (146bfbd39, expected). pytest test_lane_select +
+test_host_surface + test_x_ann_repeat: PASS (after the fixes below). The
+ivf-filter classical host gate probe: record on the GPU, check on the host,
+IDENTICAL on 9 fixtures. Sanity TSNE init='pca'/'random' vs sklearn 1.9.1
+(perplexity 20, 500 steps; blobs 800x20 and SIFT 1000x128):
+trustworthiness@10 0.9793/0.9795, 0.9793/0.9792, 0.9537/0.9533,
+0.9511/0.9585 (ours/sklearn): SANITY PASS.
+
+Fixes the gate found (all on B):
+- x-ann-tsne-pca refused on a fresh pod: the selector reads a class imported
+  inside a method (TSNE._init -> PCA) as narrow, so the lane was not
+  declared for _mojolearn_estimators and the lane check never built it. The
+  lane body now names ml.PCA (and hashes the PCA projection). A selector
+  rule "an imported class runs whole" was measured: it widens 322 of 484
+  lanes' declared sets, so it was NOT made (tools-lane question).
+- test_host_surface: ivf-filter added to tools/classical_host_gate.py.
+- test_lane_select: the host_surface replay anchors now carry ivf-filter;
+  kmeans_oracle 71 -> 75 (ivf-filter, x-ann-tsne-pca, x-ann-cagra-filter,
+  x-ann-refine-euclidean).
+- tools/dev_pod.sh sync deleted files the previous patch had added when the
+  merge base moved (x_ann/device_ctx.mojo and three sabotage patches vanished
+  on the pod after p1 merged): the old additions are now removed BEFORE the
+  reset to the new base.
+
+(history below: what B carried)
 
 `lane/algos-ann-b` = p1 + these (each UNVERIFIED, none run on a pod):
 - 660722d16 TSNE init='pca' (sklearn default; the owed bench item), 'random'
@@ -150,6 +219,17 @@ rows: x_ann/NOT_IMPLEMENTED.tsv and ivf/NOT_IMPLEMENTED.tsv. An older
 option-parity WIP (TSNE n_components/exact/two-phase stops, seams
 5816/5817) sits on `lane/algos-ann` (e2593e497), 401 behind main: mine it,
 never merge it as is.
+
+B STATUS 2026-09-28 00:05Z: p1 (with main) merged into `lane/algos-ann-b`
+(cbb8615bd, pushed); the worktree is on lane/algos-ann-b. FINDING for B's
+gate: `lane_select --changed-since origin/main` selects ALL 484 lanes,
+because 2d23b2f07 appends "ivf-filter" to two lane tuples inside
+python/mojolearn/host_surface.py's FAMILIES and the selector reads any
+non-addition edit of that registry as "EVERY LANE, by rule". Fix at the
+root before B's gate (either teach tools/lane_select.py that a new name
+appended to an existing FAMILIES entry's lane tuple is an addition, with a
+test in tools/test_lane_select.py, or ask the tools lane to), so the gate
+runs only the ann/ivf lanes; never run all 484.
 
 ### Then phases C (FAST + IDENTICAL GPU speed) and D (CPU speed).
 
@@ -232,6 +312,44 @@ FINDINGS for other lanes:
 - There is no FAST tier on a CPU-only install (build_host_family.sh builds
   IDENTICAL only; `_backend._cpu_only_binding` refuses 'fast' by name). CPU
   speed here serves the one tier.
+
+Step 3 (threads, branch lane/ann-cpu, NOT MERGED: no NVIDIA pod), 2026-09-28.
+RunPod went negative (balance -$4.41, every pod gone, `up` refused), so this
+step ran on the central Hot Aisle box (tools/amd_central.sh, lane key
+ann-cpu; AMD EPYC, 26 cores SHARED with other lanes, so timings are
+indicative only).
+- e2cce87b7: `ann_tasks` runs on `host_parallelize` (caller's FP env,
+  DEVIATION 5900). `core/host_parallel.mojo` is carried BYTE FOR BYTE from
+  origin/lane/cpu (c4716ec93) until lane/cpu lands; when it lands the file
+  merges clean (identical content).
+- 3cfc52318: `cagra_prune` (x_ann/cagra_core.mojo, host code in BOTH
+  drivers) splits nodes over the same tasks; per-task cnt/rank/stamp
+  scratch; a node short of distinct neighbours sets a flag and the error is
+  raised after the split (same message). Integer work.
+
+| algorithm (shape), EPYC box | threads=1 | threads=3 | default | digests 1/3/default |
+|---|---|---|---|---|
+| CAGRA build (50k x 28) | 26.4 s | 10.0 s | 3.5 s (before prune split) | equal (model 54d696296c9c7c8a, out 45e435db03654b4e) |
+| t-SNE (10k x 28, 300 it) | 49.5 s | 17.5 s | 4.9 s | equal (f31f68ec8bad9247) |
+| CAGRA prune alone (50k x 64 -> 32, synthetic) | 0.51 s | 0.29 s | 0.11 s | graph hash equal, = the serial code's |
+
+OWED (step 3):
+- AMD box job (`/root/ev-ann-cpu/amd_job.sh`, log job.log there): the
+  ten-lane `--pass 2` e2e lane check (MI300X == CPU at default threads),
+  test_x_ann_repeat + test_host_surface, and the bench at threads 1/3/default
+  with `--fit-on-gpu` (IVF family at 1M). Result: see below when recorded.
+  STATE at 05:31Z: both GPU slots busy (decomp, sequence); a Mac-side
+  `amd_central.sh run ann-cpu ...` waiter (120 min cap) was queued to
+  launch it; it exited rc=255 (ssh) without launching, so the job has NOT
+  run. NEXT SESSION: `tools/amd_central.sh sh ann-cpu 'cat
+  /root/ev-ann-cpu/job.log'`; if it is absent, relaunch with
+  `tools/amd_central.sh run ann-cpu 'setsid nohup bash /root/ev-ann-cpu/amd_job.sh > /root/ev-ann-cpu/job.out 2>&1 < /dev/null &'`
+  (box tree already synced at 3cfc52318; do not sync while it runs). The
+  script's copy is ~/mojolearn-evidence/ann-cpu/amd_job.sh.
+- NVIDIA merge gate on a pod once RunPod is funded: `gate.sh` (the ten-lane
+  e2e check + the two test files) plus `cpu_paths_fold_order.patch` on
+  x-ann-tsne, x-ann-cagra, x-ann-ivf-pq, and the bench at threads 1/3/unset
+  (Xeon timings for the table). Then merge to main + push in one command.
 
 NEXT (lane ann-cpu): (1) when `core/host_parallel.mojo` lands on main, switch
 `ann_tasks` to `host_parallelize` (patch ready:

@@ -1,0 +1,22 @@
+diff --git a/bindings/_mojolearn_metrics_host.mojo b/bindings/_mojolearn_metrics_host.mojo
+index 20c4d1776..dbd8e4fa5 100644
+--- a/bindings/_mojolearn_metrics_host.mojo
++++ b/bindings/_mojolearn_metrics_host.mojo
+@@ -666,7 +666,7 @@ def spectral_embedding_dataset_binding(
+         _want(String("spectral_embedding_dataset"), params, 8)
+     var tolerance = Float32(1e-5)
+     if len(params) == 9:
+-        tolerance = Float32(Float64(py=params[8]))
++        tolerance = Float32(Float64(py=params[8])) * Float32(4.0)  # SABOTAGE: the float eigen_tol, CPU column only
+     var n_samples = _index(params[0])
+     var n_features = _index(params[1])
+     var n_lanczos = _index(params[2])
+@@ -717,7 +717,7 @@ def spectral_embedding_graph_binding(
+         _want(String("spectral_embedding_graph"), params, 7)
+     var tolerance = Float32(1e-5)
+     if len(params) == 8:
+-        tolerance = Float32(Float64(py=params[7]))
++        tolerance = Float32(Float64(py=params[7])) * Float32(4.0)  # SABOTAGE: the float eigen_tol, CPU column only
+     var n_samples = _index(params[0])
+     var nnz = _index(params[1])
+     var n_lanczos = _index(params[2])

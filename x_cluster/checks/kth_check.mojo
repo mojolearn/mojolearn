@@ -70,4 +70,25 @@ def main() raises:
         _same("5120 kth host long k=" + String(k), count_diff_f32(run(host, big, rows, cols, k), want))
         var tr = IdentityTrace()
         tr.record_list_f32("x_cluster.kth_long", got)
+    # the host's selection (cluster-cpu lane, 2026-09-28): rows long enough
+    # to split over tasks, ties from duplicated rows
+    var nr = 300
+    var c = seam_fixture(nr, d, 6)
+    for f in range(d):
+        c[(nr - 1) * d + f] = c[f]
+        c[(nr - 2) * d + f] = c[d + f]
+    var mc = oracle_sqdist(c, nr, c, nr, d)
+    mc[3] = Float32(-0.0)
+    var ks2: List[Int] = [1, 3, 10, 150, 299, 300]
+    for k in ks2:
+        var want = oracle_kth(mc, nr, nr, k)
+        var off = oracle_kth(mc, nr, nr, k + 1 if k < nr else k - 1)
+        require_separates("5103 kth n=300 k=" + String(k), count_diff_f32(want, off))
+        var dev = DeviceOps()
+        var got = run(dev, mc, nr, nr, k)
+        _same("5103 kth device n=300 k=" + String(k), count_diff_f32(got, want))
+        var host = HostOps()
+        _same("5103 kth host n=300 k=" + String(k), count_diff_f32(run(host, mc, nr, nr, k), want))
+        var tr = IdentityTrace()
+        tr.record_list_f32("x_cluster.kth_n300", got)
     print("PASS x_cluster kth_check")

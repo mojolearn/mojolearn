@@ -170,7 +170,15 @@ CPU_OPERATIONS = frozenset((
 #: more devices refuse by name. `samba_update` also carries the global norm
 #: clip (par-samba-clip's max_norm), whose host arithmetic the covered
 #: samba-untied-dropout-accum lane already checks.
-CPU_SINGLE_DEVICE_COOPERATIVE = frozenset(('mlp_update', 'samba_update'))
+#: lane/algos-prep2 (2026-09-28) adds `resample`, the one operation the three
+#: `parallel_classical` resampling drivers send: the worker calls the public
+#: `resample.bootstrap` / `permutation_test` / `monte_carlo_integrate`, whose
+#: GPU binding splits global replicate, permutation and chunk ranges only at
+#: MOJOLEARN_RESAMPLE_DEVICE_COUNT above one; at one device it is the plain
+#: path, which `_mojolearn_resample_host` restates entry for entry, so the
+#: CPU column runs par-resample's one-shard driver against the same host
+#: arithmetic the resample lanes check. Two or more devices refuse by name.
+CPU_SINGLE_DEVICE_COOPERATIVE = frozenset(('mlp_update', 'samba_update', 'resample'))
 
 # Every worker's native device group must match its visibility mask. A
 # non-cooperative worker sees one GPU, even when the parent was configured

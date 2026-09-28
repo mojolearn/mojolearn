@@ -29,6 +29,7 @@ from bindings.ivf_index_arrays import (
     ivf_extend_count,
     ivf_read_index_arrays,
     ivf_write_extended_arrays,
+    ivf_read_search_filter,
     ivf_search_extents,
     ivf_write_search_result,
 )
@@ -45,8 +46,10 @@ def _ivf_host_search_arrays(
     GPU binding routes its two names through the same one statement
     (`bindings/_mojolearn_ivf.mojo::_ivf_search_arrays`)."""
     var arrays = ivf_read_index_arrays(
-        addrs, params, String("ivf_flat_search"), partial_storage=partial_storage
+        addrs, params, String("ivf_flat_search"), partial_storage=partial_storage,
+        allow_filter=not partial_storage,
     )
+    var keep = ivf_read_search_filter(addrs, arrays.n_rows)
     var ext = ivf_search_extents(params)
     var m = ext[0]
     var k = ext[1]
@@ -61,7 +64,7 @@ def _ivf_host_search_arrays(
     var idx = List[UInt32]()
     var cand = List[Int32]()
     with GILReleased(Python()):
-        var r = host_ivf_search(index, queries, m, k, n_probes, partial_storage)
+        var r = host_ivf_search(index, queries, m, k, n_probes, partial_storage, keep)
         dist = r.distances.copy()
         idx = r.indices.copy()
         cand = r.n_candidates.copy()

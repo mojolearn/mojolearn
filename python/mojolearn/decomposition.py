@@ -162,15 +162,14 @@ class PCA(NumericModeMixin):
                                 sketch, orthonormalized power iterations, the
                                 exact small SVD); iterated_power,
                                 n_oversamples and random_state are honored
-        svd_solver    honored   'arpack' runs the 'full' arm and keeps the
-                                top n_components (ARPACK converges to that
-                                truncated SVD; decomposition/
-                                NOT_IMPLEMENTED.tsv, DELIBERATELY DIVERGENT);
-                                0 < n_components < min(shape) as scikit-learn
+        svd_solver    refused   'arpack' (scikit-learn's implicitly
+                                restarted Lanczos) is a third algorithm, NOT
+                                IMPLEMENTED; accepting the name and running
+                                an exact arm would be a silent substitution
+                                (decomposition/NOT_IMPLEMENTED.tsv)
         n_components  honored   a float in (0, 1) (the variance fraction) and
                                 'mle' (Minka's MLE, `_infer_dimension`)
-        tol, copy     accepted; tol is ARPACK's and the exact arm needs
-                                none. Both Jacobis run RAFT's own
+        copy          accepted (the input is never written). Both Jacobis run RAFT's own
                                 defaults (tol 1e-7, 15 sweeps; see
                                 decomposition/impl/linalg/detail/pca.mojo)
         n_features > 128 refused UNDER NUMERIC_IDENTICAL ONLY, and only on
@@ -223,20 +222,18 @@ class PCA(NumericModeMixin):
     #: exact small SVD; IDENTITY_PATHS rows 130, 133, 134).
     _RANDOM_SOLVERS = ("randomized",)
 
-    #: 'arpack' (scikit-learn's truncated Lanczos on the centered data)
-    #: runs the 'full' arm and keeps the top n_components: ARPACK converges
-    #: to that truncated SVD within `tol`, and the exact R-SVD IS it
-    #: (decomposition/NOT_IMPLEMENTED.tsv: DELIBERATELY DIVERGENT, the route
-    #: and not the answer). scikit-learn's 0 < n_components < min(shape)
-    #: holds.
-    _ARPACK_SOLVERS = ("arpack",)
-
-    _SOLVERS = _COV_SOLVERS + _DENSE_SOLVERS + _RANDOM_SOLVERS + _ARPACK_SOLVERS
+    #: 'arpack' is NOT one of them: scikit-learn's implicitly restarted
+    #: Lanczos is a third algorithm, and running an exact arm under its name
+    #: would be a silent substitution (decomposition/NOT_IMPLEMENTED.tsv).
+    _SOLVERS = _COV_SOLVERS + _DENSE_SOLVERS + _RANDOM_SOLVERS
 
     def __init__(self, n_components=None, *, copy=True, whiten=False, svd_solver="auto", tol=0.0,
                  iterated_power="auto", n_oversamples=10, power_iteration_normalizer="auto", random_state=None):
         self.n_components = n_components
         self.copy = copy
+        # scikit-learn's tol is ARPACK's convergence tolerance, which only
+        # svd_solver='arpack' reads; that solver is refused, so tol must stay
+        # its default 0.0 (a nonzero tol would ask for an arm that is not here).
         self.tol = tol
         self.whiten = whiten
         self.svd_solver = svd_solver
@@ -319,17 +316,23 @@ class PCA(NumericModeMixin):
     def fit(self, X, y=None):
         if self.svd_solver not in self._SOLVERS:
             raise NotImplementedError(
-                f"mojolearn PCA: svd_solver={self.svd_solver!r} is not one of "
-                f"{self._SOLVERS}"
+                f"mojolearn PCA: svd_solver={self.svd_solver!r} is not "
+                f"implemented; this class runs {self._SOLVERS}. 'arpack' is "
+                "scikit-learn's implicitly restarted Lanczos, a third "
+                "algorithm; accepting the name and running an exact arm "
+                "would be a silent substitution, which is why this raises "
+                "(decomposition/NOT_IMPLEMENTED.tsv)"
+            )
+        if float(self.tol) != 0.0:
+            raise NotImplementedError(
+                "mojolearn PCA: tol is ARPACK's convergence tolerance and "
+                "svd_solver='arpack' is not implemented; leave tol=0.0"
             )
         if self.whiten:
             self._whiten_binding()
         if self.svd_solver in self._RANDOM_SOLVERS:
             return self._fit_randomized(X)
-        arpack = self.svd_solver in self._ARPACK_SOLVERS
-        dense = self.svd_solver in self._DENSE_SOLVERS or arpack
-        if not float(self.tol) >= 0.0:
-            raise ValueError("mojolearn PCA: tol must be >= 0")
+        dense = self.svd_solver in self._DENSE_SOLVERS
         if dense:
             binding = self._dense_binding()
         else:
@@ -360,8 +363,6 @@ class PCA(NumericModeMixin):
             # scikit-learn's Minka MLE (lane/algos-decomp, 2026-09-27): fit
             # every component, keep the rank `_infer_dimension` picks from the
             # full explained-variance spectrum.
-            if arpack:
-                raise ValueError("n_components='mle' cannot be a string with svd_solver='arpack'")
             if x.shape[0] < x.shape[1]:
                 raise ValueError("n_components='mle' is only supported if n_samples >= n_features")
             nc = min(x.shape)
@@ -378,9 +379,6 @@ class PCA(NumericModeMixin):
             nc = _component_count(self.n_components, x.shape)
         if dense and nc > min(x.shape):
             raise ValueError("full SVD n_components cannot exceed min(n_samples, n_features)")
-        if arpack and nc >= min(x.shape):
-            raise ValueError(f"n_components={nc} must be strictly less than min(n_samples, n_features)="
-                             f"{min(x.shape)} with svd_solver='arpack'")
         self.components_ = empty((nc, x.shape[1]), "<f4")
         self.mean_ = empty((x.shape[1],), "<f4")
         self.explained_variance_ = empty((nc,), "<f4")
@@ -599,31 +597,30 @@ class TruncatedSVD(NumericModeMixin):
                                 the device Jacobi, which is what cuML's
                                 `tsvdFit` takes
         algorithm     honored   'randomized' through mojolearn.randomized_svd
-                                (n_iter, n_oversamples, random_state honored)
-                                and 'arpack', which runs the Gram arm
-                                (decomposition/NOT_IMPLEMENTED.tsv,
-                                DELIBERATELY DIVERGENT: the route, not the
-                                answer). NOTE the default is NOT
+                                (n_iter, n_oversamples, random_state
+                                honored). NOTE the default is NOT
                                 scikit-learn's 'randomized'
-        tol           accepted (ARPACK's; the exact arm needs none)
+        algorithm     refused   'arpack' (scipy's svds, implicitly restarted
+                                Lanczos) is NOT IMPLEMENTED: running the Gram
+                                arm under its name would be a silent
+                                substitution (decomposition/
+                                NOT_IMPLEMENTED.tsv)
+        tol           refused unless 0.0 (it is ARPACK's tolerance)
         n_features > 128 refused UNDER NUMERIC_IDENTICAL ONLY, as for PCA
                                 (IDENTITY_PATHS row 27)
 
     Components, singular values, `explained_variance_` and
     `explained_variance_ratio_` are exposed; the two variances are
-    scikit-learn's (and tsvd.cuh's) transformed-data definition, a second
-    pass through the decomp lane's cells.
+    scikit-learn's (and tsvd.cuh's) transformed-data definition, computed
+    in this class's binding (`tsvd_explained`).
     """
 
     #: This family's binding, for `NumericModeMixin._bind`.
     _BINDING = "_mojolearn_estimators"
 
-    #: The two names for the ONE arm this class runs; see `PCA._SOLVERS`.
-    #: 'arpack' (scikit-learn's svds of X) runs that arm too: ARPACK
-    #: converges to the top n_components of the exact decomposition within
-    #: `tol` (decomposition/NOT_IMPLEMENTED.tsv: DELIBERATELY DIVERGENT, the
-    #: route and not the answer), with svds' n_components < min(shape).
-    _ALGORITHMS = ("covariance_eigh", "jacobi", "randomized", "arpack")
+    #: The two names for the ONE exact arm this class runs (see
+    #: `PCA._SOLVERS`) and 'randomized'. 'arpack' is refused by name.
+    _ALGORITHMS = ("covariance_eigh", "jacobi", "randomized")
 
     def __init__(self, n_components=2, *, algorithm="covariance_eigh", n_iter=5, n_oversamples=10,
                  power_iteration_normalizer="auto", random_state=None, tol=0.0):
@@ -636,6 +633,11 @@ class TruncatedSVD(NumericModeMixin):
         self.random_state = random_state
 
     def fit(self, X, y=None):
+        if float(self.tol) != 0.0:
+            raise NotImplementedError(
+                "mojolearn TruncatedSVD: tol is ARPACK's convergence tolerance "
+                "and algorithm='arpack' is not implemented; leave tol=0.0"
+            )
         if self.algorithm == "randomized":
             # scikit-learn `_truncated_svd.py` algorithm='randomized' through
             # `mojolearn.randomized_svd` (lane/algos-decomp, 2026-09-27)
@@ -658,30 +660,35 @@ class TruncatedSVD(NumericModeMixin):
             return self
         if self.algorithm not in self._ALGORITHMS:
             raise NotImplementedError(
-                f"mojolearn TruncatedSVD: algorithm={self.algorithm!r} is not one of "
-                f"{self._ALGORITHMS}"
+                f"mojolearn TruncatedSVD: algorithm={self.algorithm!r} is not "
+                f"implemented; this class runs {self._ALGORITHMS}. 'arpack' is "
+                "scipy's svds (implicitly restarted Lanczos), a different "
+                "algorithm; accepting the name and running the Gram arm would "
+                "be a silent substitution, which is why this raises "
+                "(decomposition/NOT_IMPLEMENTED.tsv)"
             )
         x, self.input_copied_ = as_f32_c(_dense(X), ndim=2, name="X")
         if x.shape[0] < 2 or x.shape[1] < 2:
             raise ValueError("mojolearn TruncatedSVD requires at least 2 rows and 2 features")
         nc = _component_count(self.n_components, x.shape)
-        if self.algorithm == "arpack" and nc >= min(x.shape):
-            raise ValueError(f"n_components={nc} must be strictly less than min(n_samples, n_features)="
-                             f"{min(x.shape)} with algorithm='arpack'")
-        if not float(self.tol) >= 0.0:
-            raise ValueError("mojolearn TruncatedSVD: tol must be >= 0")
         self.components_ = empty((nc, x.shape[1]), "<f4")
         self.singular_values_ = empty((nc,), "<f4")
         self._bind("_mojolearn_estimators").tsvd_fit(
             addr_ro(x, name="x"), addr(self.components_, name="components_"), addr(self.singular_values_, name="singular_values_"),
             [x.shape[0], x.shape[1], nc],
         )
-        # scikit-learn's explained_variance_ / _ratio_ (lane/algos-decomp,
-        # 2026-09-27): from the transformed data, through the decomp lane's
-        # identical cells.
-        from ._expansion_decomp import _tsvd_explained
-        self.explained_variance_, self.explained_variance_ratio_ = _tsvd_explained(
-            x, self.components_, self.numeric_mode_used())
+        # scikit-learn's explained_variance_ / _ratio_ (np.var of X V^T per
+        # column, ddof 0, against the summed column variances of X), in this
+        # class's own binding (`tsvd_explained`, decomposition/estimator.mojo
+        # and its host twin).
+        self.explained_variance_ = empty((nc,), "<f4")
+        self.explained_variance_ratio_ = empty((nc,), "<f4")
+        self._bind("_mojolearn_estimators").tsvd_explained(
+            addr_ro(x, name="x"), addr_ro(self.components_, name="components_"),
+            addr(self.explained_variance_, name="explained_variance_"),
+            addr(self.explained_variance_ratio_, name="explained_variance_ratio_"),
+            [x.shape[0], x.shape[1], nc],
+        )
         self.n_components_ = nc
         self.n_features_in_ = x.shape[1]
         return self

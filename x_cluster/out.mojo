@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """What every cluster-lane entry returns, and the Python boundary both
 bindings share (lane/algos-cluster). Host code; no device."""
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 
 
@@ -51,7 +51,7 @@ def _py_array(arr: PythonObject, code: StaticString, src: Pointer[UInt8, _], nby
     var out = arr.array(PythonObject(code), zero)
     if nbytes > 0:
         var addr = Int(py=out.buffer_info()[0])
-        memcpy(dest=MutPointer[UInt8, MutAnyOrigin](unsafe_from_address=addr), src=src, count=nbytes)
+        unsafe_memcpy(dest=MutPointer[UInt8, MutAnyOrigin](unsafe_from_address=addr), src=src, count=nbytes)
     return out
 
 

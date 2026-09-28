@@ -1,0 +1,20 @@
+--- a/x_cnn/host/ops_host.mojo
++++ b/x_cnn/host/ops_host.mojo
+@@ -225,7 +225,7 @@
+     var C = Int(p[CP_C]); var H = Int(p[CP_H]); var W = Int(p[CP_W])
+     var KH = Int(p[CP_KH]); var KW = Int(p[CP_KW])
+     var OH = Int(p[CP_OH]); var OW = Int(p[CP_OW])
+-    var rev = Int(p[CP_REV]) != 0
++    var rev = True
+     var ckk = C * KH * KW
+     for pl in range(lo, hi):
+         var n = pl // C
+@@ -260,7 +260,7 @@
+     var SH = Int(prm[CP_SH]); var SW = Int(prm[CP_SW])
+     var PH = Int(prm[CP_PH]); var PW = Int(prm[CP_PW])
+     var DH = Int(prm[CP_DH]); var DW = Int(prm[CP_DW])
+-    var rev = Int(prm[CP_REV]) != 0
++    var rev = True
+     # ohs[a * H + h]: the output row gather tap a reads for input row h, or -1
+     var ohs = List[Int32](length=KH * H, fill=Int32(-1))
+     for a in range(KH):

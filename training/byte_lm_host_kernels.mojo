@@ -61,6 +61,15 @@ from checks.numerics import (
     identical_rsqrt,
     identical_silu,
 )
+from core.host_lanes import (
+    _nan_bits,
+    _order_key_scalar,
+    _order_keys,
+    expf_lanes,
+    fmax_fold_span,
+    ftz_lanes,
+    silu_lanes,
+)
 from gemm.host.identical_gemm import contract_leaf_size, leaf_count
 from training.checks.loss_oracle import (
     REDUCTION_MEAN,
@@ -95,20 +104,6 @@ def _identical_build_only():
 
 
 @always_inline
-def ftz_lanes(x: F32V) -> F32V:
-    """`ftz` on every lane, without a branch.
-
-    Under IDENTICAL, `ftz(x)` is the sign bit alone when the exponent field is
-    zero and the mantissa is not, and `x` otherwise. When the exponent field
-    and the mantissa are both zero, `x` already IS its sign bit. Selecting the
-    sign bit whenever the exponent field is zero is therefore the same map on
-    all 2^32 bit patterns."""
-    var bits = bitcast[DType.uint32](x)
-    var subnormal = (bits & U32V(0x7F800000)).eq(U32V(0))
-    return bitcast[DType.float32](subnormal.select(bits & U32V(0x80000000), bits))
-
-
-@always_inline
 def _chain_step(sv: F32V, bv: F32V, acc: F32V, mut exps: U32V) -> F32V:
     """One p step of one SIMD accumulator with the flush DEFERRED: the raw
     `identical_mul_add(a, b, acc)` per lane, while `exps` keeps the lane-wise
@@ -132,123 +127,6 @@ def _chain_step(sv: F32V, bv: F32V, acc: F32V, mut exps: U32V) -> F32V:
 @always_inline
 def _neg_zero_lanes() -> F32V:
     return bitcast[DType.float32](U32V(0x80000000))
-
-
-@always_inline
-def _nan_bits(x: F32V) -> SIMD[DType.bool, HOST_FW]:
-    """NaN lanes by bits: magnitude above the infinity's."""
-    return (bitcast[DType.uint32](x) & U32V(0x7FFFFFFF)).gt(U32V(0x7F800000))
-
-
-@always_inline
-def expf_lanes(x: F32V) -> F32V:
-    """`checks/numerics.mojo::portable_expf` on every lane: the same
-    operations on the same constants in the same order, with the scalar's
-    three early returns (NaN as is, `+inf` above 88.722835, `+0.0` below
-    -87.33655) applied last as masks in the scalar's priority. Special lanes
-    run the arithmetic on `+0.0`, so no lane converts a NaN or an out-of-range
-    value to an integer.
-
-    The NaN lanes are passed through by an INTEGER select on the input's bits.
-    Selected as floats, a signaling NaN came back quieted (0x7f800001 as
-    0x7fc00001, measured on the M4), where the scalar returns it untouched.
-    `training/checks/byte_lm_host_exp_check.mojo` compares this with the
-    scalar over all 2^32 bit patterns."""
-    var nan = _nan_bits(x)
-    var over = x.gt(F32V(88.722835))
-    var under = x.lt(F32V(-87.33655))
-    var xs = (nan | over | under).select(F32V(0.0), x)
-    # ONE rounding, as the default build fused it and as portable_expf spells it (lane/pinned-mul-contract-free)
-    var t = fma(xs, F32V(1.4426950408889634), F32V(0.5))
-    var zf = floor(t)
-    var r = fma(zf, F32V(-0.693359375), xs)
-    r = fma(zf, F32V(2.12194440e-4), r)
-    var q = F32V(1.9875691500e-4)
-    q = fma(q, r, F32V(1.3981999507e-3))
-    q = fma(q, r, F32V(8.3334519073e-3))
-    q = fma(q, r, F32V(4.1665795894e-2))
-    q = fma(q, r, F32V(1.6666665459e-1))
-    q = fma(q, r, F32V(5.0000001201e-1))
-    var r2 = r * r
-    var y = fma(q, r2, r)
-    y = y + F32V(1.0)
-    var k = zf.cast[DType.int32]()
-    var k1 = k >> SIMD[DType.int32, HOST_FW](1)
-    var k2 = k - k1
-    var bias = SIMD[DType.int32, HOST_FW](127)
-    var shift = SIMD[DType.int32, HOST_FW](23)
-    y = y * bitcast[DType.float32](((k1 + bias) << shift).cast[DType.uint32]())
-    y = y * bitcast[DType.float32](((k2 + bias) << shift).cast[DType.uint32]())
-    y = y.lt(F32V(1.1754943508222875e-38)).select(F32V(0.0), y)
-    y = under.select(F32V(0.0), y)
-    y = over.select(bitcast[DType.float32](U32V(0x7F800000)), y)
-    return bitcast[DType.float32](nan.select(bitcast[DType.uint32](x), bitcast[DType.uint32](y)))
-
-
-@always_inline
-def silu_lanes(x: F32V) -> F32V:
-    """`checks/numerics.mojo::portable_siluf` on every lane: NaN as is (by
-    an integer select, as in `expf_lanes`), else
-    `portable_divf(x, portable_expf(-x) + 1.0)`, whose flushes are the
-    unconditional `_ftz_always`, which is `ftz_lanes` on every bit pattern.
-    Compared with the scalar over all 2^32 bit patterns by
-    `training/checks/byte_lm_host_exp_check.mojo`."""
-    var nan = _nan_bits(x)
-    var d = expf_lanes(-x) + F32V(1.0)
-    var quotient = ftz_lanes(ftz_lanes(x) / ftz_lanes(d))
-    return bitcast[DType.float32](nan.select(bitcast[DType.uint32](x), bitcast[DType.uint32](quotient)))
-
-
-@always_inline
-def _order_key_scalar(v: Float32) -> UInt32:
-    """`checks/numerics.mojo::_total_order_key`: negative values map to
-    `~bits`, others to `bits | 0x80000000`, so integer order is float order."""
-    var b = bitcast[DType.uint32](v)
-    if (b & UInt32(0x80000000)) != UInt32(0):
-        return b ^ UInt32(0xFFFFFFFF)
-    return b | UInt32(0x80000000)
-
-
-@always_inline
-def _order_keys(v: F32V) -> U32V:
-    """`_order_key_scalar` on every lane."""
-    var b = bitcast[DType.uint32](v)
-    var negative = (b & U32V(0x80000000)).ne(U32V(0))
-    return negative.select(b ^ U32V(0xFFFFFFFF), b | U32V(0x80000000))
-
-
-def fmax_fold_span(values: List[Float32], base: Int, count: Int) -> Float32:
-    """What `identical_fmax` folds to over `values[base : base + count]`, in
-    ANY fold shape, for `count >= 1` operands of at least one `fmax`.
-
-    `portable_fmaxf(a, b)` (DEVIATION 825) returns the canonical quiet NaN
-    0x7FC00000 when either operand is a NaN, and otherwise the flushed operand
-    of the larger `_total_order_key`, the first on equal keys. Equal keys are
-    equal bits, so it is exactly commutative and associative over all of
-    Float32, which is why the transformer contract (S14) and the loss
-    contract (L1) both name this fold's shape free. Any fold of it is
-    therefore the canonical NaN if any operand is a NaN, and otherwise the
-    flushed operand of the largest key, found here as lanes with no branch on
-    the data. A fold of one value that performs no `fmax` is the caller's."""
-    var p = values.unsafe_ptr()
-    var magnitude = UInt32(0)
-    var best = UInt32(0)
-    var i = 0
-    while i + HOST_FW <= count:
-        var v = p.unsafe_load[width=HOST_FW](base + i)
-        magnitude = max(magnitude, (bitcast[DType.uint32](v) & U32V(0x7FFFFFFF)).reduce_max())
-        best = max(best, _order_keys(ftz_lanes(v)).reduce_max())
-        i += HOST_FW
-    while i < count:
-        var x = p.unsafe_load(base + i)
-        magnitude = max(magnitude, bitcast[DType.uint32](x) & UInt32(0x7FFFFFFF))
-        best = max(best, _order_key_scalar(ftz(x)))
-        i += 1
-    if magnitude > UInt32(0x7F800000):
-        return bitcast[DType.float32](UInt32(0x7FC00000))
-    if (best & UInt32(0x80000000)) != UInt32(0):
-        return bitcast[DType.float32](best & UInt32(0x7FFFFFFF))
-    return bitcast[DType.float32](best ^ UInt32(0xFFFFFFFF))
 
 
 def all_finite_span(values: List[Float32], lo: Int, hi: Int) -> Bool:

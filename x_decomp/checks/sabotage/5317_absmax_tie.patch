@@ -1,13 +1,13 @@
 diff --git a/x_decomp/cells.mojo b/x_decomp/cells.mojo
-index 4b4c2cedf..9fb6367e5 100644
+index 22d3e648d..d03c47803 100644
 --- a/x_decomp/cells.mojo
 +++ b/x_decomp/cells.mojo
-@@ -357,7 +357,7 @@ def absmax_sign_cell(a: F32Ptr, t: Int, n: Int, d: Int, by_col: Bool) -> Float32
-     var cnt = n if by_col else d
-     for q in range(cnt):
+@@ -365,7 +365,7 @@ def absmax_part_cell(
+     var val = Float32(0)
+     for q in range(q0, q1):
          var v = ftz(a.unsafe_load(q * d + t)) if by_col else ftz(a.unsafe_load(t * d + q))
 -        if abs(v) > best:
 +        if abs(v) >= best:  # SABOTAGE 5317: a tie goes to the higher index
              best = abs(v)
              val = v
-     return Float32(-1) if val < Float32(0) else Float32(1)
+     return SIMD[DType.float32, 2](best, val)

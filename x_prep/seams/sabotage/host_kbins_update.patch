@@ -1,0 +1,15 @@
+diff --git a/x_prep/kbins.mojo b/x_prep/kbins.mojo
+index 2346fca64..0d559c87d 100644
+--- a/x_prep/kbins.mojo
++++ b/x_prep/kbins.mojo
+@@ -107,8 +107,8 @@ def _kmeans_update_host(f: FP, S: Int, LAB: Int, CEN: Int, n: Int, nb: Int) -> F
+     var hc = List[Int](length=nb, fill=0)
+     for i in range(n):
+         var k = Int(ld(f, LAB + i))
+-        if k >= 0 and k < nb:
+-            hs[k] = add(hs[k], ld(f, S + i))
++        if k >= 0 and k < nb:  # SABOTAGE host kbins: each label's rows folded from the top
++            hs[k] = add(hs[k], ld(f, S + n - 1 - i))
+             hc[k] += 1
+     var shift = Float32(0)
+     for k in range(nb):

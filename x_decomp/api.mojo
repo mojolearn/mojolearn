@@ -348,6 +348,58 @@ def qr_r_py[E: Exec](a: PythonObject, r: PythonObject, p: PythonObject) raises -
     return PythonObject(n)
 
 
+def geqrf_py[E: Exec](a: PythonObject, tau: PythonObject, p: PythonObject) raises -> PythonObject:
+    """In place: a (m x n, row major) becomes geqrf's factored form, tau
+    (min(m, n)) its scalars."""
+    var m = _n(p, 0)
+    var n = _n(p, 1)
+    if m <= 0 or n <= 0:
+        raise Error("x_decomp: geqrf needs m, n >= 1")
+    var pa = _f(a)
+    var pt = _f(tau)
+    with GILReleased(Python()):
+        E.geqrf(pa, pt, m, n)
+    return PythonObject(m if m < n else n)
+
+
+def orgqr_py[E: Exec](h: PythonObject, tau: PythonObject, q: PythonObject, p: PythonObject) raises -> PythonObject:
+    """q (m x qc) = the first qc columns of H_0 ... H_{kk-1} from geqrf's
+    factored h (m x n) and tau (kk)."""
+    var m = _n(p, 0)
+    var n = _n(p, 1)
+    var kk = _n(p, 2)
+    var qc = _n(p, 3)
+    if m <= 0 or n <= 0 or kk > m or kk > n or qc > m or qc <= 0:
+        raise Error("x_decomp: orgqr needs 1 <= qc <= m and kk <= min(m, n)")
+    var ph = _f(h)
+    var pt = _f(tau)
+    var pq = _f(q)
+    with GILReleased(Python()):
+        E.orgqr(ph, pt, pq, m, n, kk, qc)
+    return PythonObject(qc)
+
+
+def als_cg_rows_py[E: Exec](
+    c: PythonObject, y: PythonObject, yty: PythonObject, x: PythonObject, steps: PythonObject, p: PythonObject,
+    reg: PythonObject,
+) raises -> PythonObject:
+    """implicit's conjugate-gradient half-sweep: x (n x f) is the start and
+    the result."""
+    var n = _n(p, 0)
+    var m = _n(p, 1)
+    var f = _n(p, 2)
+    var cg = _n(p, 3)
+    var r = Float32(Float64(py=reg))
+    var pc = _f(c)
+    var py_ = _f(y)
+    var pg = _f(yty)
+    var px = _f(x)
+    var ps = _f(steps)
+    with GILReleased(Python()):
+        E.als_cg_rows(pc, py_, pg, px, ps, n, m, f, r, cg)
+    return PythonObject(n)
+
+
 def numeric_mode_py() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 

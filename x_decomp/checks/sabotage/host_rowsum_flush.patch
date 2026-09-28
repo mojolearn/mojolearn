@@ -1,0 +1,13 @@
+diff --git a/x_decomp/host_simd.mojo b/x_decomp/host_simd.mojo
+index c2d88c0ea..589117f0e 100644
+--- a/x_decomp/host_simd.mojo
++++ b/x_decomp/host_simd.mojo
+@@ -330,7 +330,7 @@ def rowsum_rows(a: F32Ptr, dst: F32Ptr, d: Int, r0: Int, r1: Int):
+         var acc = V(0)
+         var row0 = a.unsafe_offset(i * d)
+         for j in range(d):
+-            acc = ftz_v[W](acc + ftz_v[W](row0.unsafe_offset(j).strided_load[width=W](d)))
++            acc = acc + ftz_v[W](row0.unsafe_offset(j).strided_load[width=W](d))  # SABOTAGE 5304 (host rowsum): the partial not flushed
+         dst.unsafe_store(i, acc)
+         i += W
+     while i < r1:

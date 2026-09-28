@@ -1,0 +1,26 @@
+diff --git a/x_prep/host/dense.mojo b/x_prep/host/dense.mojo
+index b5de75c30..0c70c40a3 100644
+--- a/x_prep/host/dense.mojo
++++ b/x_prep/host/dense.mojo
+@@ -61,10 +61,10 @@ def matmul_host_row(i: Int, f: FP, q: IP):
+                 acc[jj] = add(acc[jj], mul(a, ld(f, brow + jj * sb1)))
+         for jj in range(w):
+             var v = acc[jj]
++            if p(q, 9) >= 0:  # SABOTAGE host dense: the bias before the scale
++                v = add(v, ld(f, p(q, 9) + j0 + jj))
+             if p(q, 10) >= 0:
+                 v = mul(v, ld(f, p(q, 10)))
+-            if p(q, 9) >= 0:
+-                v = add(v, ld(f, p(q, 9) + j0 + jj))
+             st(f, p(q, 6) + i * nc + j0 + jj, v)
+         j0 += w
+ 
+@@ -179,6 +179,6 @@ def qda_dec_host_unit(t: Int, f: FP, q: IP):
+         for r in range(d):
+             s[r] = add(s[r], mul(e, ld(f, rrow + r)))
+     var norm2 = Float32(0)
+-    for r in range(d):
+-        norm2 = add(norm2, mul(s[r], s[r]))
++    for r in range(d):  # SABOTAGE host dense: the projections folded descending
++        norm2 = add(norm2, mul(s[d - 1 - r], s[d - 1 - r]))
+     st(f, p(q, 7) + t, sub(ld(f, p(q, 5) + k), mul(Float32(0.5), norm2)))

@@ -78,7 +78,7 @@ struct Prog(Movable):
             self.prog.append(v)
         self.stages += 1
 
-    def run(self, device: Bool, legacy: Bool = False) raises -> List[Float32]:
+    def run(self, device: Bool, legacy: Bool = False, threads: Int = 0) raises -> List[Float32]:
         var f = self.arena.copy()
         var q = self.prog.copy()
         var fp = f.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
@@ -87,7 +87,7 @@ struct Prog(Movable):
             comptime if has_accelerator():
                 run_program_device_ptr(fp, len(f), qp, self.stages, legacy)
         else:
-            run_program_host_ptr(fp, len(f), qp, self.stages, legacy)
+            run_program_host_ptr(fp, len(f), qp, self.stages, legacy, threads)
         _ = len(q)
         return f^
 
@@ -406,6 +406,11 @@ def check_parallel_schedules(mut card: IdentityTrace) raises:
             moved += 1
     _require(moved > n, "VACUOUS schedule fixture: the program wrote almost nothing")
     var runs = _both(p)
+    # THE HOST THREAD COUNT (phase 5, x_metrics/host/program.mojo): the
+    # planned program on 1, 2, 3 and 8 host tasks writes the same arena.
+    var counts: List[Int] = [1, 2, 3, 8]
+    for c in counts:
+        runs.append(p.run(False, False, c))
     for r in runs:
         _require(len(r) == len(want), "schedules: arena length")
         for i in range(len(want)):
@@ -413,7 +418,7 @@ def check_parallel_schedules(mut card: IdentityTrace) raises:
                 _require(False, "schedules: planned arena word " + String(i) + " is " + String(r[i]) + ", the sequential units wrote " + String(want[i]))
     var rec: List[Int32] = [_arena_digest(want)]
     card.record_list_i32("plan.arena", rec)
-    print("PASS planner: the parallel schedules write the sequential units' arena word for word (" + String(moved) + " words written)")
+    print("PASS planner: the parallel schedules write the sequential units' arena word for word, host at 1, 2, 3 and 8 tasks (" + String(moved) + " words written)")
 
 
 def main() raises:

@@ -82,8 +82,9 @@ ols,ridge --require-columns 4`) is the measurement.
 """
 from std.memory import bitcast
 
-from checks.numerics import ftz, identical_mul_add, identical_sqrt
+from checks.numerics import ftz, identical_mul_add, identical_mul_add_simd, identical_sqrt
 from core.classical_host_predict import host_gemm_nt
+from core.host_predict_threads import HostF32Ptr, host_list_ptr
 from decomposition.host.pca_oracle import (
     JACOBI_SWEEPS,
     JACOBI_TOL,
@@ -103,20 +104,44 @@ comptime RIDGE_SMALL_THRESH = Float32(1.0e-10)
 comptime DIV_SKIP_ZERO_THRESH = Float32(1.0e-10)
 
 
+comptime _XTY_LANES = 8
+
+
+@always_inline
+def host_fma_row_into(acc: HostF32Ptr, x: HostF32Ptr, s: Float32, count: Int):
+    """acc[k] = identical_mul_add(x[k], s, acc[k]) for k in [0, count):
+    count independent accumulators, one term each, so the vector form is
+    the scalar loop bit for bit (lane linear-cpu)."""
+    var sv = SIMD[DType.float32, _XTY_LANES](s)
+    var k = 0
+    while k + _XTY_LANES <= count:
+        acc.unsafe_store[width=_XTY_LANES](k, identical_mul_add_simd[_XTY_LANES](
+            x.unsafe_load[width=_XTY_LANES](k), sv, acc.unsafe_load[width=_XTY_LANES](k)))
+        k += _XTY_LANES
+    while k < count:
+        acc.unsafe_store(k, identical_mul_add(x.unsafe_load(k), s, acc.unsafe_load(k)))
+        k += 1
+
+
 def host_xty(
     x: List[Float32], y: List[Float32], n_rows: Int, n_cols: Int,
 ) -> List[Float32]:
-    """`xty_kernel`: `A^T b`, one STATS_TPB block per column."""
+    """`xty_kernel`: `A^T b`, one STATS_TPB block per column. Lane t of
+    column c folds rows t, t + STATS_TPB, ... ascending, then the halving
+    tree. Walked row by row (lane linear-cpu): row r feeds lane r mod
+    STATS_TPB of EVERY column, each (lane, column) its own accumulator, so
+    every accumulator sees the same terms in the same order as the
+    column-by-column walk, in one pass over the rows."""
     var out = List[Float32](length=n_cols, fill=Float32(0.0))
+    var part = List[Float32](length=STATS_TPB * n_cols, fill=Float32(0.0))
+    var pp = host_list_ptr(part)
+    var xp = host_list_ptr(x)
+    for r in range(n_rows):
+        host_fma_row_into(pp + (r % STATS_TPB) * n_cols, xp + r * n_cols, y[r], n_cols)
+    var partials = List[Float32](length=STATS_TPB, fill=Float32(0.0))
     for col in range(n_cols):
-        var partials = List[Float32](length=STATS_TPB, fill=Float32(0.0))
         for t in range(STATS_TPB):
-            var acc = Float32(0.0)
-            var r = t
-            while r < n_rows:
-                acc = identical_mul_add(x[r * n_cols + col], y[r], acc)
-                r += STATS_TPB
-            partials[t] = acc
+            partials[t] = part[t * n_cols + col]
         out[col] = ftz(host_halving_sum(partials))
     return out^
 
