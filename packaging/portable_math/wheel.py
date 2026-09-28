@@ -83,6 +83,37 @@ OPTIONAL_LAZY_IMPORTS = {"sklearn"}  # scikit-learn protocol hooks; each falls b
 SOURCE_TREE_LAZY_IMPORTS = {"mojolearn/_identity_break.py": {"lane_applicability"}}
 
 
+def sparse_output_adapter_imports(tree, relative):
+    """The caller supplied sparse data; only its CSR return adapter needs SciPy.
+
+    This is deliberately narrower than allowing lazy SciPy across the package:
+    dense paths and all arithmetic must remain independent of SciPy.
+    """
+    if relative != "mojolearn/_expansion_neighbors.py":
+        return set()
+    allowed = set()
+    for cls in tree.body:
+        if not isinstance(cls, ast.ClassDef) or cls.name != "AdditiveChi2Sampler":
+            continue
+        for fn in cls.body:
+            if not isinstance(fn, ast.FunctionDef) or fn.name != "transform":
+                continue
+            for branch in fn.body:
+                if not isinstance(branch, ast.If):
+                    continue
+                guard = branch.test
+                if not (isinstance(guard, ast.Compare) and isinstance(guard.left, ast.Name)
+                        and guard.left.id == "sparse" and len(guard.ops) == 1
+                        and isinstance(guard.ops[0], ast.IsNot) and len(guard.comparators) == 1
+                        and isinstance(guard.comparators[0], ast.Constant)
+                        and guard.comparators[0].value is None):
+                    continue
+                for node in branch.body:
+                    if isinstance(node, ast.Import) and all(a.name == "scipy.sparse" for a in node.names):
+                        allowed.add(id(node))
+    return allowed
+
+
 def dependency_errors(path, relative):
     """A shipped .py importing anything but the standard library and mojolearn
     (NumPy is judged by numpy_errors; an optional interop package only lazily)."""
@@ -92,6 +123,7 @@ def dependency_errors(path, relative):
     allowed = set(sys.stdlib_module_names) | {"mojolearn", "numpy", "__future__"}
     errors = []
     tree = ast.parse(path.read_bytes(), filename=relative)
+    sparse_adapters = sparse_output_adapter_imports(tree, relative)
     lazy = set()
     for fn in ast.walk(tree):
         if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
@@ -108,6 +140,8 @@ def dependency_errors(path, relative):
             if top in allowed or top.startswith("_mojolearn"):
                 continue
             if top in OPTIONAL_LAZY_IMPORTS and id(node) in lazy:
+                continue
+            if id(node) in sparse_adapters:
                 continue
             if top in SOURCE_TREE_LAZY_IMPORTS.get(relative, ()) and id(node) in lazy:
                 continue

@@ -902,9 +902,10 @@ class AdditiveChi2Sampler(_XNeighbors):
         out = empty((n, d * (2 * steps - 1)), "<f4")
         self._op("achi2", [(X, 0), (out, 1)], (n, d, steps), (_f32_scalar(self._interval()),))
         if sparse is not None:
-            import numpy as np
+            # Preserve the caller's sparse container type; dense inputs need
+            # neither SciPy nor NumPy. SciPy owns this optional format conversion.
             import scipy.sparse as sp
-            m = sp.csr_matrix(np.asarray(out.tolist(), dtype=np.float32))
+            m = sp.csr_matrix(out.tolist(), dtype="float32")
             m.eliminate_zeros()
             return m
         return out
