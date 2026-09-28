@@ -73,6 +73,31 @@ train hash on every fixture. It compares nothing, says so in the RESULT line,
 and is never a DISAGREE under `--sabotage`. Any other refusal, a mix of
 refused and hashed CPU cells, or a GPU refusal still fails.
 
-## Evidence
+## Evidence (at e395c3fa7)
 
-(filled in as the runs land)
+- Builds: all 19 touched bindings (16 GPU families, x_decomp, trees_host,
+  svm_host) built on nvc1 (CUDA sm_89), then on m2pro inside the proof.
+- m2pro, steward 1790608504728 (`tools/devctx_lifetime_proof.sh`, Metal API
+  validation on): PASS. 52 lane checks AGREE (knn x4, kmeans x2, arima x2,
+  pca, tsvd, ols, ridge, logistic, dbscan, kde x2, gbdt x5, hdbscan, ivf x2,
+  linalg x3, cholesky, metrics x3, spectral x2, umap, rf x2, et x2, lasso,
+  elasticnet, agglomerative, holtwinters, kpss, select-d, iforest, svc,
+  mamba2, scalers x2, bootstrap, permutation-test, monte-carlo); par-gp and
+  par-logistic KNOWN REFUSAL (CPU arm by design). STRESS: those 52 lanes,
+  every fixture, 3 repeats, in ONE process: exit 0 (no MOVED, no refusal).
+  Scan: 0 "Failed to create Metal command queue", 0 "kernel threadgroup size
+  limit". AGREE against the unchanged host bindings means no IDENTICAL bit moved.
+- NVIDIA nvc1-0019: the same proof script (see below for its verdict).
+- AMD: the central box (linear-amd) ran the first six lane checks (knn x4,
+  kmeans x2: AGREE), then began refusing ssh (publickey), so its verdict is
+  unread. AMD is OWED.
+
+## Merge with main e264ecfc4 / 188ba665b
+
+Main (lane/apple-merged) removed gaussian_process/gp_context.mojo and puts
+GP, GPC, KernelRidge and SVM on `neural_ctx[_FAMILY_CTX]` (the same slot
+function; `-D MOJOLEARN_FAMILY_CTX_PER_CALL` is its diagnostic per-call arm,
+off by default). The merge was clean; isolation_forest now spells the SVM
+binding's FAST slot as main does ("MojoSvmContextOther"), so the SVM .so keeps
+one context per tier. A re-audit after the merge finds no per-call
+`DeviceContext()` reachable from a binding outside that diagnostic arm.

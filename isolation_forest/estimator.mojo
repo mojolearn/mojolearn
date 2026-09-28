@@ -40,7 +40,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTIC
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojoSvmContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoSvmContextFast"
+comptime _DEVCTX_SLOT = "MojoSvmContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoSvmContextOther"
 
 
 from core.identity_trace import IdentityTrace
