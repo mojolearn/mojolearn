@@ -2072,7 +2072,7 @@ FAMILIES = (
         classes=("SVC", "IsolationForest", "SVR"),
         display="SVC and the isolation forest",
         host_modules=(
-            "svm/host/smo_oracle.mojo", "gemm/host/gemm_oracle.mojo",
+            "svm/host/smo_oracle.mojo", "svm/host/svc_proba.mojo", "gemm/host/gemm_oracle.mojo",
             "isolation_forest/checks/if_oracle.mojo",
             "isolation_forest/impl/rng/xorwow.mojo",
         ),
@@ -2080,6 +2080,7 @@ FAMILIES = (
             "svm_host_numeric_mode", "svm_host_vendor", "svm_host_column",
             "svm_host_sabotage", "svm_vendor", "svm_numeric_mode", "svc_fit",
             "svc_predict", "svr_fit", "svr_predict", "iforest_run",
+            "svc_pair_epilogue", "svc_platt_train", "svc_splitmix_perm", "svc_portable_math",
         ),
         gate="tools/identity_break.py and tools/classical_host_gate.py (cpu-identity-gate.yml)",
         wheel_note=(
