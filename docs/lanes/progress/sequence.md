@@ -113,3 +113,74 @@ NEXT (a fresh session starts here), per the LANE CHARTER (one phase per session)
    sequence/, arima/, holtwinters/, tsa/ NOT_IMPLEMENTED.tsv. Each option:
    AGREE, a sabotage for a numeric change, existing bits unchanged; merge each.
 3. Then phase 3 FAST speed, 4 IDENTICAL speed, 5 CPU speed.
+
+## PHASE 5: CPU speed (lane sequence-cpu, branch lane/sequence-cpu, 2026-09-28)
+
+Pod `sequence-cpu` (RunPod H100 box, Intel Xeon Platinum 8470, cgroup quota
+22.1 CPUs). What changed, all bit-identical by construction and proven so:
+
+1. **`sequence/exec.mojo::HostExec.launch` splits a launch's elements across
+   `core/host_parallel.mojo::host_parallelize`** (the caller's FP environment,
+   DEVIATION 5900). An element is a GPU thread (no element reads another's
+   write), so which thread runs it moves no bit. Task count:
+   `core/host_predict_threads.mojo` (MOJOLEARN_CPU_THREADS, else one per
+   physical core), cut so a task keeps `HOST_LAUNCH_GRAIN` (2^15) units of
+   `_element_weight` work; small recurrent launches stay on the caller.
+   Covers all 22 x_sequence lanes' host paths.
+2. **`sequence/host_gemm.mojo`**: OP_GEMM on the host computes op_gemm's cells
+   a native vector of columns x 4 rows at a time (one IEEE fma per lane, the
+   bitwise flush `_ftz_v`, k ascending; B with n stride != 1 is copied into a
+   flushed [K, N] panel first), rows split across threads. Seam **5540**
+   (`seams_check.mojo`, oracle alternative `o_gemm_split`, arm
+   `seam_5540_host_gemm_unfused.patch`, IDENTITY_PATHS row 150 amended,
+   sequence/README.md table). The host sabotage (k descending) is honored.
+3. **`arima/host/arima_oracle.mojo::_kalman`**: the matrices/initial-state
+   loop and the filter loop run series ranges on host_parallelize (pointers
+   only; the Lists they reach are kept alive to the join).
+4. **`holtwinters/host/hw_oracle.mojo::_oracle_estimate`** (the public
+   default, `initialization_method="estimated"`): series ranges on
+   host_parallelize, one scratch per task.
+5. **Optimizer step in place on the host** (`Exec.bind`: HostExec returns the
+   caller's pointer, DeviceExec allocates and uploads; `download` skips a
+   self-copy) and `_SeqOptimizer.step` skips the Python pack/unpack for one
+   C-contiguous float32 param.
+6. e2e host sabotage patches regenerated against the new `exec.mojo`.
+
+`core/host_parallel.mojo` is carried on this branch at lane/cpu's bytes
+(41f60919d) until lane/cpu lands it on main. **This branch merges only after
+that** (brief: never parallelize a host loop without it on main).
+
+### Timings (seconds, fit + forecast/predict, one run each; bench board shapes)
+
+Data: taxi-hourly from R2 (`gbm-bench/taxi/taxi_speed.npz`, 64 busiest zones x
+1392 fit hours; `tsi` intermittent zones, `tsr` log-return diffs), windows of
+24 for the recurrent models (87,552 windows, 1 epoch, hidden 64, batch 256),
+MLP 64,000 x 32 (256, 256) 1 epoch, LayerNorm (4096, 1024) fwd+bwd, MoE
+(512, 1024) E 8 F 2816 top 2 forward, optimizers 16.7M params x 10 steps.
+Script: ~/mojolearn-evidence/sequence-cpu/seq_time.py. "before" = origin/main
+host bindings (serial); "after" at the default thread count and at 3.
+
+| algorithm | before | after (default) | after (T=3) |
+|---|---|---|---|
+| LSTM (reg) | 258.0 | 8.68 | 21.4 |
+| GRU (reg) | 158.7 | 6.52 | 13.2 |
+| RNN (reg) | 55.5 | 3.00 | 7.36 |
+| MLPClassifier | 82.3 | 0.94 | 2.88 |
+| MoE forward | 16.2 | 1.00 | 5.21 |
+| GARCH(1,1) | 17.6 | 1.87 | 6.03 |
+| ARIMA(1,1,1) | 13.1 | 1.23 | 4.68 |
+| AutoARIMA (p,q 0..1, d 0..1) | 6.16 | 0.79 | 5.63 (before the task-count fix) |
+| Prophet | 3.79 | 0.24 | 1.29 |
+| STL robust | 4.69 | 0.22 | 1.53 |
+| STL | 0.66 | 0.08 | 0.26 |
+| OptimizedTheta | 3.35 | 0.63 | 1.56 |
+| Theta | 2.34 | 0.35 | 1.11 |
+| ETS (AAdN) | 1.46 | 0.26 | 0.68 |
+| ExponentialSmoothing (HW, estimated) | 1.79 | 0.17 | 0.64 |
+| LayerNorm fwd+bwd | 0.25 | 0.08 | 0.13 |
+| RMSprop / Adagrad / Adamax / NAdam / Lion (10 steps) | 1.58 / 1.50 / 1.18 / 2.26 / 0.80 | 0.56 / 0.57 / 0.56 / 0.64 / 0.41 (before item 5) | |
+| Adafactor / LAMB | 2.02 / 2.30 | 0.76 / 0.90 | |
+| VAR, KPSS, Croston | 0.017 / 0.015 / 0.012 | 0.007 / 0.013 / 0.002 | |
+
+**Bits:** every one of the 27 cases' output sha256 at MOJOLEARN_CPU_THREADS=1,
+3 and the default EQUALS the serial origin/main digest.
