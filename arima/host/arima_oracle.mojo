@@ -834,6 +834,18 @@ def _kalman(
     # count. `_series_tasks` keeps small batches on the calling thread.
     var tasks = _series_tasks(batch_size, nobs * rd2)
     var chunk = host_predict_chunk(batch_size, tasks)
+    # Every List and struct the closures read is handed over as an
+    # untracked pointer or a plain Int: a task captures values only.
+    var ma_p = host_list_ptr(t.ma)
+    var sma_p = host_list_ptr(t.sma)
+    var ar_p = host_list_ptr(t.ar)
+    var sar_p = host_list_ptr(t.sar)
+    var sigma2_p = host_list_ptr(t.sigma2)
+    var mu_p = host_list_ptr(t.mu)
+    var ys_p = host_list_ptr(ys)
+    var obs_p = host_list_ptr(obs)
+    var obs_fut_p = host_list_ptr(obs_fut)
+    var k_trend = order.k
     var T_all_p = host_list_ptr(T_all)
     var RQR_all_p = host_list_ptr(RQR_all)
     var P_all_p = host_list_ptr(P_all)
@@ -850,15 +862,15 @@ def _kalman(
                 var idx = i + 1
                 var idx1 = idx // s if s != 0 else 0
                 var idx0 = idx - s * idx1
-                var c0 = _param_to_poly(False, t.ma[bid * q + idx0 - 1] if (idx0 != 0 and idx0 <= q) else Float32(0.0), idx0, q)
-                var c1 = _param_to_poly(False, t.sma[bid * Q + idx1 - 1] if (idx1 != 0 and idx1 <= Q) else Float32(0.0), idx1, Q)
+                var c0 = _param_to_poly(False, ma_p[bid * q + idx0 - 1] if (idx0 != 0 and idx0 <= q) else Float32(0.0), idx0, q)
+                var c1 = _param_to_poly(False, sma_p[bid * Q + idx1 - 1] if (idx1 != 0 and idx1 <= Q) else Float32(0.0), idx1, Q)
                 R[n_diff + i + 1] = _reduced_polynomial(False, c0, c1)
             for i in range(n_phi):
                 var idx = i + 1
                 var idx1 = idx // s if s != 0 else 0
                 var idx0 = idx - s * idx1
-                var c0 = _param_to_poly(True, t.ar[bid * p + idx0 - 1] if (idx0 != 0 and idx0 <= p) else Float32(0.0), idx0, p)
-                var c1 = _param_to_poly(True, t.sar[bid * P + idx1 - 1] if (idx1 != 0 and idx1 <= P) else Float32(0.0), idx1, P)
+                var c0 = _param_to_poly(True, ar_p[bid * p + idx0 - 1] if (idx0 != 0 and idx0 <= p) else Float32(0.0), idx0, p)
+                var c1 = _param_to_poly(True, sar_p[bid * P + idx1 - 1] if (idx1 != 0 and idx1 <= P) else Float32(0.0), idx1, P)
                 T[n_diff * (rd + 1) + i] = _reduced_polynomial(True, c0, c1)
             for i in range(r - 1):
                 T[(n_diff + i + 1) * rd + n_diff + i] = Float32(1.0)
@@ -873,7 +885,7 @@ def _kalman(
             var RQR = InlineArray[Float32, AH_RD2_MAX](fill=Float32(0.0))
             var Pm = InlineArray[Float32, AH_RD2_MAX](fill=Float32(0.0))
             var alpha = InlineArray[Float32, AH_RD_MAX](fill=Float32(0.0))
-            var sigma2 = ftz(t.sigma2[bid])
+            var sigma2 = ftz(sigma2_p[bid])
             for i in range(rd):
                 RQ[i] = ftz(ftz(R[i]) * sigma2)
             for j in range(rd):
@@ -915,7 +927,7 @@ def _kalman(
                 for j in range(r):
                     for i in range(r):
                         Pm[(i + n_diff) + (j + n_diff) * rd] = xloc[i + j * r]
-            if order.k != 0:
+            if k_trend != 0:
                 var imt = InlineArray[Float32, AH_KRON_MAX](fill=Float32(0.0))
                 var imt_inv = InlineArray[Float32, AH_KRON_MAX](fill=Float32(0.0))
                 for j in range(r):
@@ -932,7 +944,7 @@ def _kalman(
                 var inf2 = _lu_inverse(imt, imt_inv, r)
                 if inf2 != Int32(0) and info == Int32(0):
                     info = inf2
-                var mu = ftz(t.mu[bid])
+                var mu = ftz(mu_p[bid])
                 if inf2 == Int32(0):
                     for i in range(r):
                         alpha[i + n_diff] = ftz(ftz(imt_inv[i]) * mu)
@@ -989,15 +1001,15 @@ def _kalman(
             var n_obs_ll = 0
             var info = Int32(0)
             var b_ys = bid * nobs
-            var mu = ftz(t.mu[bid]) if order.k != 0 else Float32(0.0)
+            var mu = ftz(mu_p[bid]) if k_trend != 0 else Float32(0.0)
             for it in range(nobs):
                 # 1. v = y - Z*alpha
                 var pred = Float32(0.0)
                 if has_exog:
-                    pred = ftz(pred + ftz(obs[b_ys + it]))
+                    pred = ftz(pred + ftz(obs_p[b_ys + it]))
                 pred = ftz(pred + l_alpha[0])
                 pred_p[b_ys + it] = pred
-                var yt = ftz(ys[b_ys + it])
+                var yt = ftz(ys_p[b_ys + it])
                 var vs_it = ftz(yt - pred)
                 # 2. F = Z*P*Z'
                 var _Fs = l_P[0]
@@ -1039,7 +1051,7 @@ def _kalman(
             for it in range(fc_steps):
                 var pred = Float32(0.0)
                 if has_exog:
-                    pred = ftz(pred + ftz(obs_fut[b_fc + it]))
+                    pred = ftz(pred + ftz(obs_fut_p[b_fc + it]))
                 pred = ftz(pred + l_alpha[0])
                 fc_p[b_fc + it] = pred
                 _mv(rd, Float32(1.0), l_T, l_alpha, l_v)
@@ -1051,6 +1063,14 @@ def _kalman(
         _loop_series(0)
     else:
         host_parallelize(_loop_series, tasks)
+    # The Lists the tasks reached only through pointers live to the join
+    # (Mojo ends a value at its last use, and a pointer is not a use).
+    _ = T_all^
+    _ = RQR_all^
+    _ = P_all^
+    _ = alpha_all^
+    _ = obs^
+    _ = obs_fut^
 
     for b in range(batch_size):
         if info1[b] > Int32(0):
