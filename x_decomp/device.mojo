@@ -536,28 +536,45 @@ struct DevExec(Exec):
 
     @staticmethod
     def orth(a: F32Ptr, m: Int, l: Int) raises:
-        for _ in range(2):
-            var w = List[Float32](capacity=m * l)
-            for t in range(m * l):
-                w.append(a.unsafe_load(t))
-            var r = device_qr_r(xd_ctx(), w, m, l)
+        """Two passes of: R of the matrix (`qr_factor` on a device copy, as
+        `device_qr_r`), the rank guard on the host, then A R^-1 by rows
+        (`trsm_kernel`). The matrix stays on the device between the passes:
+        one upload, one download (it had been uploaded twice and downloaded
+        once per pass; the same values reach every kernel)."""
+        var ctx = xd_ctx()
+        var cells = m * l if m * l > 0 else 1
+        var da = _up(ctx, a, m * l)
+        var dq = ctx.enqueue_create_buffer[DType.float32](cells)
+        var dw = ctx.enqueue_create_buffer[DType.float32](cells)
+        var scratch = ctx.enqueue_create_buffer[DType.float32](qr_slice_count(m, l) * l * l if l > 0 else 1)
+        var r_buf = ctx.enqueue_create_buffer[DType.float32](l * l if l > 0 else 1)
+        var r = List[Float32](length=l * l if l > 0 else 1, fill=Float32(0))
+        for p in range(2):
+            var src = da if p == 0 else dq
+            var dst = dq if p == 0 else da
+            ctx.enqueue_copy(dst_buf=dw, src_buf=src)
+            ctx.synchronize()
+            _ = qr_factor(ctx, dw, scratch, r_buf, m, l)
+            _down(ctx, r_buf, F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())), l * l)
+            ctx.synchronize()
             orth_rank_guard(F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())), l)
-            var ctx = xd_ctx()
-            var da = _up(ctx, F32Ptr(unsafe_from_address=Int(w.unsafe_ptr())), m * l)
-            var dr = _up(ctx, F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())), l * l)
-            var dq = ctx.enqueue_create_buffer[DType.float32](m * l if m * l > 0 else 1)
+            ctx.enqueue_copy(dst_buf=r_buf.create_sub_buffer[DType.float32](0, l * l), src_ptr=F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())))
             ctx.enqueue_function[trsm_kernel](
-                da.unsafe_ptr(), dr.unsafe_ptr(), dq.unsafe_ptr(), Int32(m), Int32(l), grid_dim=_blocks(m), block_dim=TPB
+                src.unsafe_ptr(), r_buf.unsafe_ptr(), dst.unsafe_ptr(), Int32(m), Int32(l), grid_dim=_blocks(m), block_dim=TPB
             )
-            _down(ctx, dq, a, m * l)
             ctx.synchronize()
-            _ = da^
-            _ = dr^
-            _ = dq^
-            ctx.synchronize()
-            _ = ctx^
-            _ = r^
-            _ = w^
+            _ = src^
+            _ = dst^
+        _down(ctx, da, a, m * l)
+        ctx.synchronize()
+        _ = da^
+        _ = dq^
+        _ = dw^
+        _ = scratch^
+        _ = r_buf^
+        ctx.synchronize()
+        _ = ctx^
+        _ = r^
 
     @staticmethod
     def svd(a: F32Ptr, m: Int, n: Int, s: F32Ptr, v: F32Ptr) raises:
