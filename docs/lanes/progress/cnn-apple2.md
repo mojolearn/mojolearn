@@ -87,14 +87,56 @@ output digests): blobs acc 1.0 x5, stripes 0.9570 / 0.9775 / 0.9980 /
 0.9326 / 0.9971, conv max rel err 1.95e-7 to 3.29e-7. FAST quality cannot
 have moved: the words did not.
 
+### m4pro-a (Apple M4 Pro), job 1790607883094, commit 5021979ab (a quiet box)
+
+base = every lane/cnn-apple2 change off (`-D MOJOLEARN_XCNN_NO_MMA_SPLIT
+-D MOJOLEARN_XCNN_NO_RES_POOL -D MOJOLEARN_XCNN_NO_TILED_LAYOUT` + legacy);
+notile = all but the tiled layout; all = default. Median of two rounds, ms.
+
+IDENTICAL:
+| shape | base | notile | all |
+|---|---|---|---|
+| Conv2d 3->64 fwd / bwd | 29.8 / 12.6 | 30.0 / 11.2 | 28.9 / 8.5 |
+| Conv2d 64->64 fwd / bwd | 51.7 / 122.0 | 52.0 / 81.5 | 50.8 / 80.0 |
+| Conv2d 64->128 fwd / bwd | 21.3 / 28.8 | 21.3 / 28.9 | 20.7 / 28.3 |
+| fit 2048 / 8192 | 226.3 / 864.0 | 166.7 / 659.7 | 162.4 / 648.1 (-28% / -25%) |
+| predict 2048 / 8192 | 106.0 / 357.1 | 72.2 / 270.8 | 66.3 / 247.3 (-37% / -31%) |
+Digests equal in every row of every arm (the same as m4-a and round 1).
+Plan sweep: 64x288x65536 APPLE_MMA_SPLIT_BIG 1.90 ms (x_cnn's old pick
+11.1); 64x576x262144 10.95 (72.7); 128x576x65536 5.78 (9.27).
+
+FAST (base = `-D MOJOLEARN_XCNN_NO_FAST_TUNE -D MOJOLEARN_XCNN_NO_RES_POOL
+-D MOJOLEARN_XCNN_NO_TILED_LAYOUT` + legacy):
+| shape | base | all |
+|---|---|---|
+| Conv2d 3->64 fwd / bwd | 29.0 / 17.0 | 27.6 / 11.7 |
+| Conv2d 64->64 fwd / bwd | 57.1 / 106.6 | 48.5 / 74.0 |
+| Conv2d 64->128 fwd / bwd | 24.4 / 38.9 | 19.7 / 26.2 |
+| fit 2048 / 8192 | 217.6 / 822.4 | 140.0 / 555.9 (-36% / -32%) |
+| predict 2048 / 8192 | 100.7 / 354.6 | 53.6 / 197.8 (-47% / -44%) |
+FAST digests base == all in every row; fastq.py 20 rows identical row for
+row (the same values as on m4-a).
+
+Stage profile (stages.mojo, M4 Pro, all arm, ms per launch; the layout
+kernels here are still the one-thread-per-element ones): block 1 forward
+GEMM (262144 x 32 x 27, TUNED) 2.62, pooled backward rows 1.44, bias
+gradient 0.96, conv_out 0.89, im2col 0.77, weight gradient 0.70 (MMA
+split); block 2 im2col 1.95, weight gradient 1.90, input gradient 1.75,
+col2im 1.22, forward GEMM 1.45. In the notile arm the tuner had picked a
+split plan for 32x27x262144 (2.30 ms) on a first-use run: fixed in
+d3d5ce0e7 (one untimed run per candidate).
+
 ## Unproven
 
-- 93cf24571 (PLAN_APPLE_MMA_SPLIT_BIG): job 1790606977177 (m4pro-a) pending.
-- No M3 Ultra or M4 Pro number yet for any change.
+- d3d5ce0e7 (APPLE_MMA one-leaf ragged k, bias MMA split, warm tuning):
+  job 1790609365361 (m3ultra-b) pending.
+- No M3 Ultra number yet for any change.
 
 ## Shared code touched (the integration run must cover)
 
 - gemm/checks/gemm_identical.mojo: PLAN_APPLE_MMA_SPLIT (21), the GROUPED
   APPLE_MMA kernel (one extra Int32 argument on the shipped APPLE_MMA
   launches), APPLE_MMA_FAST (`apple_mma_applies` answers in FAST on Apple;
-  no dispatcher reads it there).
+  no dispatcher reads it there), PLAN_APPLE_MMA_SPLIT_BIG (22),
+  `apple_mma_applies_one_leaf` and the kernel's `wpl` for P == 1 (the
+  same value wherever L % KB == 0, the only case the dispatchers send).
