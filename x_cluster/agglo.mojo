@@ -78,6 +78,65 @@ def _row_min(
     md[i] = bv
 
 
+comptime _RW = 8  # SIMD width of the unconstrained row scan
+
+
+@always_inline
+def _rescan(
+    i: Int, n: Int, live: List[Bool], adj: List[Bool], constrained: Bool, dm: List[Float32],
+    mut nn: List[Int], mut md: List[Float32],
+):
+    if constrained:
+        _row_min(i, n, live, adj, constrained, dm, nn, md)
+    else:
+        _row_min_open(i, n, live, dm, nn, md)
+
+
+def _row_min_open(
+    i: Int, n: Int, live: List[Bool], dm: List[Float32], mut nn: List[Int], mut md: List[Float32],
+):
+    """`_row_min` without a connectivity graph, on a matrix whose DEAD rows
+    and columns hold +inf: the minimum of the row's tail by a SIMD reduction
+    (a minimum is order-free and exact), then the FIRST column holding a
+    value equal to it, which is the lowest j on a tie, exactly what
+    `_row_min`'s strict `<` scan returns (a -0.0 and a +0.0 compare equal
+    there as here; the value kept is the one AT that column). A tail whose
+    minimum is +inf, or that holds a NaN, takes `_row_min` itself: there a
+    dead +inf could tie a live one, and a NaN orders differently."""
+    var lo = i + 1
+    if lo >= n:
+        nn[i] = -1
+        md[i] = Float32.MAX * Float32(2)
+        return
+    var p = dm.unsafe_ptr() + i * n
+    var inf = Float32.MAX * Float32(2)
+    var vmin = SIMD[DType.float32, _RW](inf)
+    var nan = False
+    var j = lo
+    while j + _RW <= n:
+        var v = p.load[width=_RW](j)
+        nan = nan or (v != v).reduce_or()
+        vmin = min(vmin, v)
+        j += _RW
+    var m = vmin.reduce_min()
+    while j < n:
+        var v = p[j]
+        if v != v:
+            nan = True
+        if v < m:
+            m = v
+        j += 1
+    if nan or not (m < inf):
+        var none = List[Bool]()
+        _row_min(i, n, live, none, False, dm, nn, md)
+        return
+    for q in range(lo, n):
+        if p[q] == m:
+            nn[i] = q
+            md[i] = p[q]
+            return
+
+
 def agglo_tree[O: ClusterOps](
     mut ops: O, x: List[Float32], n: Int, d: Int, linkage: Int, metric: Int, p: Float32,
     edges: List[Float32], n_edges: Int, n_merges: Int,
@@ -165,7 +224,7 @@ def agglo_tree[O: ClusterOps](
     var md = List[Float32](length=n, fill=inf)
 
     for i in range(n):
-        _row_min(i, n, live, adj, constrained, dm, nn, md)
+        _rescan(i, n, live, adj, constrained, dm, nn, md)
     children = List[Int32](capacity=2 * n_merges)
     dist = List[Float32](capacity=n_merges)
     for step in range(n_merges):
@@ -203,12 +262,18 @@ def agglo_tree[O: ClusterOps](
         nn[b] = -1
         size[a] = na + nb
         node[a] = n + step
-        _row_min(a, n, live, adj, constrained, dm, nn, md)
+        if not constrained:
+            # the dead cluster's row and column read +inf from here on
+            # (`_row_min_open`); nothing reads a dead slot's value
+            for k in range(n):
+                dm[k * n + b] = inf
+                dm[b * n + k] = inf
+        _rescan(a, n, live, adj, constrained, dm, nn, md)
         for i in range(b):
             if not live[i] or i == a:
                 continue
             if nn[i] == a or nn[i] == b:
-                _row_min(i, n, live, adj, constrained, dm, nn, md)
+                _rescan(i, n, live, adj, constrained, dm, nn, md)
             elif i < a and (not constrained or adj[i * n + a]):
                 var v = dm[i * n + a]
                 if nn[i] < 0 or v < md[i] or (v == md[i] and a < nn[i]):
