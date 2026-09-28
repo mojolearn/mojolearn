@@ -214,6 +214,19 @@ select_d call), so the ARIMA row most likely measures that per-process Metal
 residue, not a change to ARIMA. Job 7 measures this lane's ARIMA change (one
 context per module) against 4387772c3.
 
+### Job 7: m4-a, steward 1790611237406, before 4387772c3, after f05b9231a (one context per module)
+
+| algo | IDENTICAL before | after | x | FAST before | after | x | bits |
+|---|---|---|---|---|---|---|---|
+| autoarima | 4.585 | 4.513 | 1.02x | 3.915 | 3.929 | 1.0x | same |
+| arima | 1.298 | 1.318 | 0.99x | 1.270 | 1.290 | 0.99x | same |
+| hw | 1.430 | 1.431 | 1.0x | 0.591 | 0.591 | 1.0x | same |
+| kpss | 0.008 | 0.008 | 1.0x | 0.008 | 0.008 | 1.0x | same |
+
+No gain, so f05b9231a is REVERTED (brief: default on only with a gain). It remains
+a candidate for the M2 Pro command-queue limit (the a5f27d9c2 pattern) if the
+combined run finds ARIMA, KPSS or Holt-Winters affected there.
+
 ## Unproven
 
 (pending)
