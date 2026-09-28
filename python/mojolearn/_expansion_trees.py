@@ -956,7 +956,8 @@ class AdaBoostRegressor(_AdaBoostBase):
         # member's rows are gathered there (None: gathered on the host and
         # staged per member, as before)
         session = None
-        if (type(base) is DecisionTreeRegressor and base.splitter == "best"
+        if (forest_data_session_choice(None) is not None
+                and type(base) is DecisionTreeRegressor and base.splitter == "best"
                 and base.criterion in ("squared_error", "mse")
                 and hasattr(_trees_member_native(base), "rf_regressor_fit_session_rows_export")):
             session = _trees_member_session(base, Xa, True)

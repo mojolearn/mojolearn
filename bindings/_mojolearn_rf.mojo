@@ -712,12 +712,12 @@ def rf_data_session_close_binding(handle: PythonObject) raises -> PythonObject:
 
 
 def _session_shape_check(
-    name: StaticString, session_rows: Int, session_cols: Int,
+    name: String, session_rows: Int, session_cols: Int,
     n_rows: Int, n_cols: Int,
 ) raises:
     if session_rows != n_rows or session_cols != n_cols:
         raise Error(
-            String(name)
+            name
             + ": params name "
             + String(n_rows)
             + " x "
