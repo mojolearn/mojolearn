@@ -76,9 +76,24 @@ def fd(a: Float32, b: Float32) -> Float32:
 
 
 @always_inline
+def xmad(a: Float32, b: Float32, c: Float32) -> Float32:
+    """`identical_mul_add`, except FAST in code compiled FOR an Apple GPU
+    with `-D MOJOLEARN_X_LINEAR_FAST_FMA=1` (lane/linear-apple3, WIP,
+    opt-in): ONE fused multiply-add instead of FAST's product and sum. A GPU
+    thread pays per instruction, and the fits' chains are one multiply-add
+    per term. FAST words change (one rounding per term, IDENTICAL's);
+    IDENTICAL takes the first branch of `identical_mul_add` as before."""
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and is_apple_gpu() and is_defined["MOJOLEARN_X_LINEAR_FAST_FMA"]():
+        from std.math import fma
+
+        return fma(a, b, c)
+    return identical_mul_add(a, b, c)
+
+
+@always_inline
 def fmad(a: Float32, b: Float32, c: Float32) -> Float32:
     """a * b + c, one rounding under IDENTICAL."""
-    return fz(identical_mul_add(fz(a), fz(b), fz(c)))
+    return fz(xmad(fz(a), fz(b), fz(c)))
 
 
 @always_inline

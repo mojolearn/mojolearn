@@ -11,7 +11,8 @@ from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, ld, st, i2f
 from x_linear.team import Team
 from std.sys.info import is_amd_gpu, is_apple_gpu, is_nvidia_gpu
 from x_linear.ops import fz as _fz
-from checks.numerics import identical_mul_add, identical_mul
+from x_linear.ops import xmad
+from checks.numerics import identical_mul
 
 
 @always_inline
@@ -25,7 +26,7 @@ def _acc_fa(acc: Float32, b: Float32) -> Float32:
 @always_inline
 def _acc_fmad(a: Float32, b: Float32, acc: Float32) -> Float32:
     """fmad(a, b, acc) for an already flushed acc (see _acc_fa)."""
-    return _fz(identical_mul_add(_fz(a), _fz(b), acc))
+    return _fz(xmad(_fz(a), _fz(b), acc))
 
 
 @always_inline

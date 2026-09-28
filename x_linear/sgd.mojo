@@ -17,9 +17,8 @@ by five) and the loss classes at the top of that file. Differences, named:
 """
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fsqrt, fexp, flog, fabs, fmax, fmin,
-    ld, st, ldi, sti, i2f, fill, row_dot, shuffle, axpy_acc, scale_acc, ftzv, par_rows, fz,
+    ld, st, ldi, sti, i2f, fill, row_dot, shuffle, axpy_acc, scale_acc, ftzv, par_rows, fz, xmad,
 )
-from checks.numerics import identical_mul_add
 from std.sys.info import is_gpu
 from std.gpu import WARP_SIZE
 from std.gpu.primitives.warp import shuffle_idx
@@ -306,7 +305,7 @@ def _sgd_target(k: Int, c: Int, v: Float32) -> Float32:
 def _fmad_flushed(a: Float32, b: Float32, c: Float32) -> Float32:
     """`fmad` for operands that are already flushed words (fz is idempotent:
     fz(fz(v)) == fz(v)), so the chain does not flush its accumulator twice."""
-    return fz(identical_mul_add(a, b, c))
+    return fz(xmad(a, b, c))
 
 
 @always_inline

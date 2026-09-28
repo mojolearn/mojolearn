@@ -8,7 +8,7 @@ numeric mode, and on the CPU host binding (the reference column), and both
 are scored on the held-out rows. Run once per arm (each arm's binding built
 in turn); the arms are compared seed by seed, each against the reference.
 
-    python bench/linear_apple3_quality.py --arm <label> [--seeds 0,1,2]
+    python bench/linear_apple3_quality.py --arm <label> [--seeds 0,1,2,3,4]
         [--train 100000] [--test 100000] [--cases poisson,...] [--no-host]
 
 Lines: `QUAL3 <arm> <case> <column> seed=<s> <metric>=<v> ... n_iter=<k> fit=<s>`.
@@ -65,7 +65,7 @@ def _logloss(p, y):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--arm", required=True)
-    ap.add_argument("--seeds", default="0,1,2")
+    ap.add_argument("--seeds", default="0,1,2,3,4")
     ap.add_argument("--train", type=int, default=100_000)
     ap.add_argument("--test", type=int, default=100_000)
     ap.add_argument("--cases", default="")
@@ -102,6 +102,30 @@ def main():
                           ("acc", float(np.mean(_arr(m.predict(X)) == y))),
                           ("C", float(m.C_[0]))]),
     ]
+    acc = lambda m, X, y: [("acc", float(np.mean(_arr(m.predict(X)) == y)))]
+    r2 = lambda m, X, y: [("r2", _r2(y, _arr(m.predict(X))))]
+    iso = np.ascontiguousarray(tx[:, 0])
+    table += [
+        ("sgd-clf", lambda: lm.SGDClassifier(max_iter=5, tol=None, random_state=0), hx, hy, acc),
+        ("sgd-reg", lambda: lm.SGDRegressor(max_iter=5, tol=None, random_state=0), tx, fare, r2),
+        ("perceptron", lambda: lm.Perceptron(max_iter=5, tol=None, random_state=0), hx, hy, acc),
+        ("pa-clf", lambda: lm.PassiveAggressiveClassifier(max_iter=5, tol=None, random_state=0), hx, hy, acc),
+        ("pa-reg", lambda: lm.PassiveAggressiveRegressor(max_iter=5, tol=None, random_state=0), tx, fare, r2),
+        ("sgd-ocsvm", lambda: lm.SGDOneClassSVM(max_iter=5, tol=None, random_state=0), tx, None,
+         lambda m, X, y: [("inliers", float(np.mean(_arr(m.predict(X)) > 0)))]),
+        ("bayes-ridge", lambda: lm.BayesianRidge(), tx, fare, r2),
+        ("ard", lambda: lm.ARDRegression(max_iter=50), tx, fare, r2),
+        ("lars", lambda: lm.Lars(), tx, fare, r2),
+        ("lasso-lars", lambda: lm.LassoLars(alpha=0.01), tx, fare, r2),
+        ("ridge-clf", lambda: lm.RidgeClassifier(), hx, hy, acc),
+        ("ridge-cv", lambda: lm.RidgeCV(), tx, fare,
+         lambda m, X, y: [("r2", _r2(y, _arr(m.predict(X)))), ("alpha", float(m.alpha_))]),
+        ("lasso-cv", lambda: lm.LassoCV(cv=3, n_alphas=10), tx, fare,
+         lambda m, X, y: [("r2", _r2(y, _arr(m.predict(X)))), ("alpha", float(m.alpha_))]),
+        ("enet-cv", lambda: lm.ElasticNetCV(cv=3, n_alphas=10, l1_ratio=[0.5, 0.9]), tx, fare,
+         lambda m, X, y: [("r2", _r2(y, _arr(m.predict(X)))), ("alpha", float(m.alpha_))]),
+        ("isotonic", lambda: lm.IsotonicRegression(), iso, fare, r2),
+    ]
     cols = ["gpu"] if a.no_host else ["gpu", "host"]
     for seed in [int(s) for s in a.seeds.split(",")]:
         rng = np.random.default_rng(seed)
@@ -111,12 +135,13 @@ def main():
             if only and name not in only:
                 continue
             Xtr, Xte = np.ascontiguousarray(X[tr]), np.ascontiguousarray(X[te])
-            ytr, yte = y[tr], np.asarray(y[te], dtype=np.float64)
+            ytr = None if y is None else y[tr]
+            yte = None if y is None else np.asarray(y[te], dtype=np.float64)
             for col in cols:
                 try:
                     est = _pin(make(), _modules(col))
                     t0 = time.perf_counter()
-                    est.fit(Xtr, ytr)
+                    est.fit(Xtr) if ytr is None else est.fit(Xtr, ytr)
                     t1 = time.perf_counter()
                     ms = " ".join(f"{k}={v:.7f}" for k, v in score(est, Xte, yte))
                     print(f"QUAL3 {a.arm} {name} {col} seed={seed} {ms} "
