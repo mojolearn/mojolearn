@@ -71,12 +71,17 @@ def _search_rows_per_thread() -> Int:
         return 2
     if is_defined["MOJOLEARN_ET_SEARCH_RPT_1"]():
         return 1
-    # APPLE FAST: 16. Apple M4, 1M rows, 100 trees, alternating processes,
-    # same model hash in every arm (2026-09-25): taxi 1 -> 16 0.766,
-    # 16 -> 8 0.978, 16 -> 32 0.995, 1 -> 64 0.811; Istella-S 1 -> 16
-    # 0.585. Metal pays far more per search block than the RTX 4090 above
-    # did. `_1=1` restores one row per thread on Apple for an A/B.
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
+    # APPLE: 16, FAST since 2026-09-25 and IDENTICAL since 2026-09-28. Apple
+    # M4, 1M rows, 100 trees, alternating processes, same model hash in every
+    # arm (2026-09-25, FAST): taxi 1 -> 16 0.766, 16 -> 8 0.978, 16 -> 32
+    # 0.995, 1 -> 64 0.811; Istella-S 1 -> 16 0.585. Metal pays far more per
+    # search block than the RTX 4090 above did. IDENTICAL had stayed at 1 on
+    # Apple (ExtraTreesRegressor Istella-S 27.0 s on the M3 Ultra, the H100's
+    # 28.6 s at 1 below); the width is bit-inert (integer sums, the key-space
+    # range fold, draws keyed by (seed, tree, node, feature)), which is why
+    # NVIDIA and AMD run IDENTICAL at 64. `_1=1` restores one row per thread
+    # on Apple for an A/B.
+    comptime if has_apple_gpu_accelerator():
         return 16
     # NVIDIA AND AMD: 64, both modes (lane trees speed pass, 2026-09-28).
     # 1M rows, 100 trees depth 12, IDENTICAL, one process per arm, the same

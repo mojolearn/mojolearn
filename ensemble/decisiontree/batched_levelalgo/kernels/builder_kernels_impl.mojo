@@ -2501,11 +2501,10 @@ def build_histograms_kernel[
 
 
 comptime HIST_SIMD_AGG_DEFAULT = (
-    BUILD_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_RF_HIST_SIMD_AGG_OFF"]()
 )
-"""FAST on Apple: in the column-tile histogram, the lanes of a SIMD group
+"""Apple, FAST since 2026-09-25 and IDENTICAL since 2026-09-28: in the column-tile histogram, the lanes of a SIMD group
 whose bin equals lane 0's bin add their contributions with one SIMD sum and
 lane 0 issues ONE threadgroup atomic for them; the other lanes add as
 before. Skewed columns (Istella: the median column holds 74% of its rows in
