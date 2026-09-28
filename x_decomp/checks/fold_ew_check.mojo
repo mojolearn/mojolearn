@@ -56,6 +56,13 @@ def ew_inputs() -> List[Float32]:
     return v^
 
 
+def first_column(x: List[Float32], r: Int, c: Int) -> List[Float32]:
+    var out = List[Float32](capacity=r)
+    for i in range(r):
+        out.append(x[i * c])
+    return out^
+
+
 def main() raises:
     var tr = IdentityTrace()
     tr.header("x_decomp fold_ew_check (DEVIATIONS 5300-5306)")
@@ -106,7 +113,7 @@ def main() raises:
         HostExec.gemm(ptr(A), ptr(B), ptr(hst), hm, hk, hn, ta, tb)
         same("5300 host-tile gemm host arm " + String(arm), count_diff_f32(hst, want))
     # a narrow C (n 1, the matrix-vector products), which the host computes as C^T
-    var nv = seam_fixture(hk, 1, 39)
+    var nv = first_column(seam_fixture(hk, 3, 39), hk, 3)  # (a one-column fixture is its all-zero column)
     var nvt = seam_fixture(1, hk, 40)
     for arm in range(4):
         var ta = arm == 1 or arm == 3
@@ -114,13 +121,15 @@ def main() raises:
         var A = hat.copy() if ta else ha.copy()
         var B = nvt.copy() if tb else nv.copy()
         var want = oracle_gemm(A, B, hm, hk, 1, ta, tb)
+        require_separates("5300 host-tile narrow gemm fold order", count_diff_f32(want, oracle_gemm(A, B, hm, hk, 1, ta, tb, 1)))
         var hst = zeros(hm)
         HostExec.gemm(ptr(A), ptr(B), ptr(hst), hm, hk, 1, ta, tb)
         same("5300 host-tile narrow gemm host arm " + String(arm), count_diff_f32(hst, want))
     var rdk = 9000
     var rda = seam_fixture(hm, rdk, 41)
-    var rdv = seam_fixture(rdk, 1, 42)
+    var rdv = first_column(seam_fixture(rdk, 3, 42), rdk, 3)
     var wrd = oracle_gemm(rda, rdv, hm, rdk, 1, False, False)
+    require_separates("5300 host-tile blocked narrow gemm vs one sequential fold", count_diff_f32(wrd, oracle_gemm(rda, rdv, hm, rdk, 1, False, False, 3)))
     var hrd = zeros(hm)
     HostExec.gemm(ptr(rda), ptr(rdv), ptr(hrd), hm, rdk, 1, False, False)
     same("5300 host-tile blocked narrow gemm host", count_diff_f32(hrd, wrd))
