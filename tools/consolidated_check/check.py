@@ -288,12 +288,38 @@ def clean(out, shard, cpu_threads, fixtures="base", arm_timeout=120):
     return 1 if bad else 0
 
 
+def radix(out, timeout):
+    if timeout <= 0:
+        raise ValueError("arm timeout must be positive")
+    evidence = out / "radix-public.json"
+    evidence.unlink(missing_ok=True)
+    log = out / "radix-public.log"
+    cmd = [sys.executable, "-u", str(ROOT / "tools/check_radix_public.py"),
+           "--json-out", str(evidence)]
+    with log.open("w") as fh:
+        proc = subprocess.Popen(cmd, cwd=ROOT, env=alc.arm_env("gpu"),
+                                stdout=fh, stderr=subprocess.STDOUT, start_new_session=True)
+        try:
+            rc = proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            fh.write(f"\nTIMEOUT after {timeout}s; killing radix process group\n")
+            print(f"RADIX FAILED: timed out after {timeout}s; log {log}", flush=True)
+            return 1
+        finally:
+            kill_group(proc)
+    if rc or not evidence.is_file():
+        print(f"RADIX FAILED: exit {rc}; log {log}", flush=True)
+        return 1
+    print(f"RADIX PASS: {evidence}", flush=True)
+    return 0
+
+
 def main():
     def terminated(signum, frame):
         raise SystemExit(128 + signum)
     signal.signal(signal.SIGTERM, terminated)
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=("plan", "build", "clean"))
+    ap.add_argument("cmd", choices=("plan", "build", "clean", "radix"))
     ap.add_argument("--out", required=True)
     ap.add_argument("--jobs", type=int, default=4)
     ap.add_argument("--shard", default="0/1")
@@ -312,6 +338,8 @@ def main():
             return 0
         if a.cmd == "build":
             return build(out, a.jobs)
+        if a.cmd == "radix":
+            return radix(out, a.arm_timeout)
         if a.cmd == "clean":
             return clean(out, a.shard, a.cpu_threads.split(","), a.fixtures, a.arm_timeout)
         raise ValueError("unknown command")
