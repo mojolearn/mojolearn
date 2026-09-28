@@ -1,8 +1,8 @@
 diff --git a/sequence/garch.mojo b/sequence/garch.mojo
-index 1b6d6ff67..043d6acdb 100644
+index 9fb68332d..5f9ab2dfd 100644
 --- a/sequence/garch.mojo
 +++ b/sequence/garch.mojo
-@@ -96,7 +96,7 @@ def garch_sigma2(par: FP, r: FP, n: Int, p: Int, o: Int, q: Int, backcast: Float
+@@ -91,7 +91,7 @@ def garch_sigma2(par: FP, r: FP, n: Int, p: Int, o: Int, q: Int, backcast: Float
                  v = fma3(ld(par, loc), backcast, v)
              else:
                  var x = ld(r, t - 1 - j)
@@ -11,12 +11,12 @@ index 1b6d6ff67..043d6acdb 100644
              loc += 1
          for j in range(o):
              if t - 1 - j < 0:
-@@ -111,7 +111,7 @@ def garch_sigma2(par: FP, r: FP, n: Int, p: Int, o: Int, q: Int, backcast: Float
+@@ -105,7 +105,7 @@ def garch_sigma2(par: FP, r: FP, n: Int, p: Int, o: Int, q: Int, backcast: Float
+             if t - 1 - j < 0:
                  v = fma3(ld(par, loc), backcast, v)
              else:
-                 var sv = prev if j == 0 else ld(s2, t - 1 - j)
--                v = fma3(ld(par, loc), sv, v)
-+                v = add(v, mul(ld(par, loc), sv))
+-                v = fma3(ld(par, loc), ld(s2, t - 1 - j), v)
++                v = add(v, mul(ld(par, loc), ld(s2, t - 1 - j)))
              loc += 1
          var lo = ld(vb, 2 * t)
          var hi = ld(vb, 2 * t + 1)
