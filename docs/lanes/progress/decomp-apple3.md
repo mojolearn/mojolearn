@@ -33,9 +33,9 @@ kernel of the merged tree. Job 1 measures both.
 
 | # | steward id | Mac | commit | what |
 |---|---|---|---|---|
-| 1 | 1790626766529 | m4-a | 0097b3d0c | builds IDENTICAL and FAST x_decomp; eigh A/B in both modes, arms d (tree default: device_eigh), 2 (jacobi2 unroll 4), 3 (jacobi2 unroll 1), with float64 quality columns; MinCovDet, Isomap, ClassicalMDS at 1000 rows; FAST Lanczos quality (N = 600, 2 seeds); out_digest default against MOJOLEARN_XD_JACOBI=2 |
-
-| 2 | 1790628127426 | m4-a | 8c02dd401 | first build of the round-robin solvers (x_decomp/jacobi_par.mojo); FAST eigh A/B (device_eigh, jacobi2, round robin) to n = 800, FAST svd A/B to 800 x 800, LLE / Isomap / ClassicalMDS quality at 500 rows, IDENTICAL out_digest |
+| 1 | 1790626766529 | m4-a | 0097b3d0c | PASS. Builds IDENTICAL and FAST x_decomp; eigh A/B in both modes, arms d (tree default: device_eigh), 2 (jacobi2 unroll 4), 3 (jacobi2 unroll 1), with float64 quality columns; MinCovDet, Isomap, ClassicalMDS at 1000 rows; FAST Lanczos quality (N = 600, 2 seeds); out_digest default against MOJOLEARN_XD_JACOBI=2 |
+| 2 | 1790628127426 | m4-a | 8c02dd401 | FAIL at the build, nothing timed: x_decomp/jacobi_par.mojo did not parse (`out` is a convention word, not an argument name). Fixed in 745c09be4. |
+| 3 | 1790628717124 | m3ultra-b | 745c09be4 | first build of the round-robin solvers. FAST eigh A/B (device_eigh, jacobi2, round robin) to n = 1500, FAST svd A/B to 1500 x 1500, Isomap / ClassicalMDS / LLE at 1500 rows, FAST quality (Lanczos, round robin, before arm) at 1000 rows, FAST speed table on HIGGS and taxi at 1M rows, IDENTICAL eigh A/B and out_digest. Command: docs/lanes/progress/decomp-apple3-cmds/cmd3.txt |
 
 ## Results
 
