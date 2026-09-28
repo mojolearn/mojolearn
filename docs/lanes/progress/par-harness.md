@@ -45,7 +45,8 @@ Branch lane/par-harness from origin/main 243f74dc7. Not merged to main.
 
 ## Job
 
-(pending)
+nvc1-0022 (2 GPU slots, nvc1 2x A40), submitted 2026-09-28 ~21:52Z behind 0016, 0018, 0019, 0020, 0021 in the FIFO.
+Script: tools/par_harness/job.sh (clean on the 10 lanes, par-arima sabotage, unit tests).
 
 ## Verdicts (2-GPU box, base fixture)
 
