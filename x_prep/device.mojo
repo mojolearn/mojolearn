@@ -8,7 +8,7 @@ from std.ffi import _Global
 from std.memory import memcpy
 from std.os import getenv
 from std.time import perf_counter_ns
-from max.gpu.host import DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_prep.common import FP, IP, STAGE_INTS
 from x_prep.units import N_OPS, run_unit
@@ -107,6 +107,21 @@ def run_program_device_ranges(arena_addr: Int, arena_len: Int, prog_addr: Int, s
     )
 
 
+def run_program_device_nocopy(block_addr: Int, block_len: Int, arena_len: Int, prog_addr: Int, stages: Int,
+                              scratch_len: Int, out_len: Int) raises:
+    """EXPERIMENT (lane prep-apple3, opt-in MOJOLEARN_XPREP_NOCOPY=1, Apple's
+    unified memory): the device arena IS the host block at block_addr
+    (page aligned, block_len words, a whole number of pages, of which
+    arena_len + scratch_len + out_len are used: the host arena with its
+    inputs in place, then the scratch, then the output, every other word
+    zero). Nothing is uploaded, zeroed or downloaded; the stages write the
+    host's pages. Where a word lives moves no bit."""
+    run_program_device_ptr(
+        FP(unsafe_from_address=block_addr), arena_len, IP(unsafe_from_address=prog_addr), stages, scratch_len,
+        block_addr, out_len, 0, -1, 0, -1, block_len,
+    )
+
+
 #: words per task of the threaded host copy (16 MB)
 comptime DIRECT_CHUNK = 1 << 22
 comptime HP = MutPointer[Float32, MutUntrackedOrigin]
@@ -159,7 +174,7 @@ def run_program_device(arena_addr: Int, arena_len: Int, prog_addr: Int, stages: 
 
 def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, scratch_len: Int = 0,
                            out_addr: Int = 0, out_len: Int = 0, ins_addr: Int = 0, nins: Int = -1,
-                           outs_addr: Int = 0, nouts: Int = -1) raises:
+                           outs_addr: Int = 0, nouts: Int = -1, wrap_len: Int = 0) raises:
     """scratch_len (lane prep-apple2): words of DEVICE-ONLY arena after the
     host's arena_len words (offsets arena_len ..); they never cross to or
     from the host and start undefined, so a program writes each scratch word
@@ -238,7 +253,15 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     var out_n = out_len if out_addr != 0 and out_len > 0 else 0
     var out_at = arena_len + max(scratch_len, 0)
     var dev_len = out_at + out_n
-    var df = ctx.enqueue_create_buffer[DType.float32](dev_len if dev_len > 0 else 1)
+    var wrap = wrap_len > 0
+    if wrap and wrap_len < dev_len:
+        raise Error("x_prep: the host block is shorter than the program's arena")
+    var df: DeviceBuffer[DType.float32]
+    if wrap:
+        # the host block itself (run_program_device_nocopy)
+        df = DeviceBuffer[DType.float32](ctx, host_f, wrap_len, owning=False)
+    else:
+        df = ctx.enqueue_create_buffer[DType.float32](dev_len if dev_len > 0 else 1)
     var dw = ctx.enqueue_create_buffer[DType.uint32](scratch)
     var dq = ctx.enqueue_create_buffer[DType.int32](stages * STAGE_INTS if stages > 0 else 1)
     if prof:
@@ -247,14 +270,16 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
         print("XPPHASE alloc us", (now - t_last) // 1000, "arena", arena_len, "scratch", max(scratch_len, 0), "out", out_n,
               "sort", scratch)
         t_last = now
-    if nins >= 0:
+    if wrap:
+        pass
+    elif nins >= 0:
         upload_ranges(ctx, df, host_f, arena_len, ins_addr, nins, X_PREP_STORE.get_or_create_ptr()[])
     elif arena_len > 0:
         if dev_len > arena_len:
             ctx.enqueue_copy(dst_buf=df.create_sub_buffer[DType.float32](0, arena_len), src_ptr=host_f)
         else:
             ctx.enqueue_copy(dst_buf=df, src_ptr=host_f)
-    if out_n > 0:
+    if out_n > 0 and not wrap:
         ctx.enqueue_memset(df.create_sub_buffer[DType.float32](out_at, out_n), Float32(0))
     if stages > 0:
         ctx.enqueue_copy(dst_buf=dq, src_ptr=host_q)
@@ -370,7 +395,9 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
         for k in range(nouts):
             if Int(oq.unsafe_load(4 * k + 2)) >= 0:
                 plain = False
-    if dl_mode > 0 and plain:
+    if wrap:
+        pass
+    elif dl_mode > 0 and plain:
         ctx.synchronize()
         var dbase = Int(df.unsafe_ptr())
         var hbase = Int(host_f)
@@ -391,7 +418,7 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
             ctx.enqueue_copy(dst_ptr=host_f, src_buf=df.create_sub_buffer[DType.float32](0, arena_len))
         else:
             ctx.enqueue_copy(dst_ptr=host_f, src_buf=df)
-    if out_n > 0 and not (dl_mode > 0 and plain):
+    if out_n > 0 and not wrap and not (dl_mode > 0 and plain):
         ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=out_addr), src_buf=df.create_sub_buffer[DType.float32](out_at, out_n))
     ctx.synchronize()
     if prof:
