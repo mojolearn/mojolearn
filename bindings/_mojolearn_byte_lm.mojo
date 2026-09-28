@@ -111,7 +111,12 @@ def byte_lm_attention_arm_binding() raises -> PythonObject:
     kernel-matrix row (`attn_default_arm_for`); `trial_build` is 1 under
     `-D MOJOLEARN_ATTN_ARM_TRIAL=1`; `resolved_hd64` is the arm with its
     geometry resolved as the launchers resolve it at head_dim 64 on this
-    build. Reads constants and the environment only; no GPU operation."""
+    build. Reads constants and the environment only; no GPU operation.
+    On a shipped Apple build (lane/neural-apple, 2026-09-28) the default is
+    an estash word gated by memory: `arm` reads the round 3 word until a
+    trainer in this process has been granted the estash word
+    (`attention_estash_memory_grant`), so a read-back taken before the first
+    trainer exists names the fallback."""
     var arm = fused_attention_arm_from_env()
     var resolved = fused_attention_arm_forward_resolved(arm) | fused_attention_arm_backward_resolved(arm)
     var out = Python.list()
