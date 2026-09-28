@@ -117,9 +117,5 @@ TRAINING_LANE_NAMES = {
     "x-lasso-cv-pos": "LassoCV (positive)",
 }
 PUBLIC_PENDING_LANES = {
-    "x-glm-poisson": "no reference",
-    "x-glm-gamma": "no reference",
-    "x-glm-tweedie": "no reference",
     "x-isotonic": "no reference",
-    "x-glm-poisson-sw": "no reference",
     }

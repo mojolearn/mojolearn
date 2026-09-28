@@ -123,6 +123,4 @@ TRAINING_LANE_NAMES = {
     "trees-shap-permutation": "PermutationExplainer",
 }
 PUBLIC_PENDING_LANES = {
-    "trees-dart-options": "no reference",
-    "trees-shap-tree": "no reference",
     }
