@@ -382,17 +382,24 @@ class DBSCAN(NumericModeMixin):
     def _store_core(self, x, labels, core):
         """Keep the core rows, their training indices and their labels, in
         ascending training index, from the fit's own core mask."""
-        flags = core.tolist()
-        if any(f not in (0, 1) for f in flags):
+        # the same three arrays as the per-row Python loops this replaces
+        # (lane cluster-apple3), every walk inside the interpreter's C
+        # iterators: `compress` keeps the items whose flag byte is nonzero
+        from itertools import compress
+        flags = bytes(core.tobytes())
+        n = len(flags)
+        if flags.count(0) + flags.count(1) != n:
             raise RuntimeError("mojolearn DBSCAN: the fit's core mask holds a value other than 0 or 1")
-        idx = [i for i, f in enumerate(flags) if f]
-        lab = labels.tolist()
+        idx = list(compress(range(n), flags))
         d = int(x.shape[1])
         raw = bytes(x.tobytes())
         width = 4 * d
+        rows = map(slice, compress(range(0, n * width, width), flags),
+                   compress(range(width, (n + 1) * width, width), flags))
         self.core_sample_indices_ = Array.from_list(idx, "<i4") if idx else empty((0,), "<i4")
-        self.components_ = frombytes(b"".join(raw[i * width:(i + 1) * width] for i in idx), "<f4", (len(idx), d))
-        self._core_labels = Array.from_list([lab[i] for i in idx], "<i4") if idx else empty((0,), "<i4")
+        self.components_ = frombytes(b"".join(map(raw.__getitem__, rows)), "<f4", (len(idx), d))
+        self._core_labels = (Array.from_list(list(compress(labels.tolist(), flags)), "<i4")
+                             if idx else empty((0,), "<i4"))
 
     def fit_predict(self, X, y=None, sample_weight=None):
         return self.fit(X, y=y, sample_weight=sample_weight).labels_

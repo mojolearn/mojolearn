@@ -14,8 +14,6 @@ first imported, after the package, so both may rely on every module existing:
                                import `_classical_host` INSIDE it and subclass
                                its `_HostBound`; never import it at module level
 """
-import math
-
 from . import _backend, _buffer
 from . import _portable_math as _pm
 from ._array import Array
@@ -31,7 +29,10 @@ def _f32(X, name="X"):
     x, _ = _buffer.as_f32_c(X, ndim=2, name=name)
     if x.shape[0] < 1 or x.shape[1] < 1:
         raise ValueError(f"mojolearn: {name} must be a non-empty 2-D array, got shape {x.shape}")
-    if not all(map(math.isfinite, memoryview(x).cast("B").cast("f"))):
+    # the base binding's native scan (`_buffer.all_finite`), the same answer
+    # as the Python `all(map(math.isfinite, ...))` it replaces (lane
+    # cluster-apple3: 0.069 s of every 1M x 8 fit, predict and score on an M4 Pro)
+    if not _buffer.all_finite(x):
         raise ValueError(f"mojolearn: {name} contains NaN or infinity")
     return x
 
