@@ -10,7 +10,7 @@ from std.python import PythonObject
 from std.math import sqrt
 from checks.numerics import ftz, identical_div, identical_mul, identical_mul_add, identical_pow64, identical_sqrt
 from sequence.exec import Exec
-from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_ROW, OP_AF_COL, OP_AF_RMEAN, OP_AF_UPDATE_MAT, OP_AF_VEC, OP_AF_DENOM, OP_AF_ALPHA_DENOM, OP_AF_APPLY, OP_SEG_SUMSQ, OP_LAMB_UPD, OP_LAMB_RATIO, OP_LAMB_APPLY, OP_LN_FWD, OP_LN_BWD_X, OP_LN_BWD_W, OP_THETA, OP_CROSTON, OP_ETS, OP_GARCH, OP_PROPHET_FEATURES, OP_PROPHET_FIT, OP_PROPHET_PREDICT, OP_MOE_ROUTE, OP_MOE_HIDDEN, OP_MOE_OUT, OP_DIVS, OP_FILL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD, OPT_NADAM
+from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_ROW, OP_AF_COL, OP_AF_RMEAN, OP_AF_UPDATE_MAT, OP_AF_VEC, OP_AF_DENOM, OP_AF_APPLY, OP_SEG_SUMSQ, OP_LAMB_UPD, OP_LAMB_RATIO, OP_LAMB_APPLY, OP_LN_FWD, OP_LN_BWD_X, OP_LN_BWD_W, OP_THETA, OP_CROSTON, OP_ETS, OP_GARCH, OP_PROPHET_FEATURES, OP_PROPHET_FIT, OP_PROPHET_PREDICT, OP_MOE_ROUTE, OP_MOE_HIDDEN, OP_MOE_OUT, OP_DIVS, OP_FILL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD, OPT_NADAM
 from sequence.recurrent import gemm
 from sequence.mlp_fit import MLPNet, mlp_fit, mlp_predict
 from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, opt_scalars, opt_step, rnn_fit, rnn_predict
@@ -443,10 +443,7 @@ def adafactor_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject,
     a.i0 = n
     a.f0 = fval(fp, 3)
     a.f1 = rho
-    # without weight decay p is the same at the end: alpha is folded with
-    # the denominator (OP_AF_ALPHA_DENOM, the same bits, one launch)
-    if wd != Float32(0.0):
-        ex.launch[OP_AF_ALPHA](a, 1)
+    ex.launch[OP_AF_ALPHA](a, 1)
     if wd != Float32(0.0):
         var s = Args()
         s.p0 = P
@@ -489,23 +486,12 @@ def adafactor_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject,
         v.f0 = w
         v.f1 = eps1sq
         ex.launch[OP_AF_VEC](v, n)
-    if wd != Float32(0.0):
-        var d = Args()
-        d.p0 = U
-        d.p1 = sc
-        d.i0 = n
-        d.f0 = fval(fp, 4)
-        ex.launch[OP_AF_DENOM](d, 1)
-    else:
-        var d = Args()
-        d.p0 = P
-        d.p1 = sc
-        d.p2 = U
-        d.i0 = n
-        d.f0 = fval(fp, 3)
-        d.f1 = rho
-        d.f2 = fval(fp, 4)
-        ex.launch[OP_AF_ALPHA_DENOM](d, 1)
+    var d = Args()
+    d.p0 = U
+    d.p1 = sc
+    d.i0 = n
+    d.f0 = fval(fp, 4)
+    ex.launch[OP_AF_DENOM](d, 1)
     var ap = Args()
     ap.p0 = P
     ap.p1 = U

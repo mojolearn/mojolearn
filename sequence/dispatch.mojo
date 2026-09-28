@@ -14,7 +14,6 @@ from sequence.ops import (
     OP_GEMM_EPI,
     OP_COLSUM_DIV,
     OP_GEMM_EPI_TAIL,
-    OP_AF_ALPHA_DENOM,
     OP_GATHER_SEQ,
     OP_GATHER_ROWS,
     OP_MSE,
@@ -85,7 +84,7 @@ from sequence.ops import (
     op_seq_out,
     op_softmax,
 )
-from sequence.adafactor import op_af_alpha, op_af_alpha_denom, op_af_row, op_af_col, op_af_rmean, op_af_update_mat, op_af_vec, op_af_denom, op_af_apply, op_seg_sumsq, op_lamb_upd, op_lamb_ratio, op_lamb_apply
+from sequence.adafactor import op_af_alpha, op_af_row, op_af_col, op_af_rmean, op_af_update_mat, op_af_vec, op_af_denom, op_af_apply, op_seg_sumsq, op_lamb_upd, op_lamb_ratio, op_lamb_apply
 from sequence.layernorm import op_ln_bwd_w, op_ln_bwd_x, op_ln_fwd
 from sequence.mlp import op_act, op_act_bwd, op_colsum_div, op_divs, op_gemm_epi, op_gemm_epi_tail, op_l2grad, op_mlp_bloss, op_mlp_rowloss, op_sumsq
 from sequence.stl import op_stl
@@ -120,8 +119,6 @@ def apply[OP: Int](t: Int, a: Args):
         op_colsum_div(t, a)
     elif OP == OP_GEMM_EPI_TAIL:
         op_gemm_epi_tail(t, a)
-    elif OP == OP_AF_ALPHA_DENOM:
-        op_af_alpha_denom(t, a)
     elif OP == OP_GATHER_SEQ:
         op_gather_seq(t, a)
     elif OP == OP_GATHER_ROWS:

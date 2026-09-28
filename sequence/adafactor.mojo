@@ -103,22 +103,6 @@ def op_af_denom(t: Int, a: Args):
     st(a.p1, 3, div(-ld(a.p1, 1), den))
 
 
-def op_af_alpha_denom(t: Int, a: Args):
-    """`op_af_alpha` and then `op_af_denom` in ONE thread, their two sums of
-    squares (||p||, ||U||) folded side by side (ops.mojo::sumsq_fold2, each
-    chain unchanged): the same statements, the same bits. Only when p does
-    not change between them (no weight decay). p0 param, p1 scalars,
-    p2 U; i0 numel; f0 eps2, f1 rho, f2 d."""
-    var n = a.i0
-    var sq = sumsq_fold2(a.p0, a.p2, 0, n)
-    var rms = div(ftz(identical_sqrt(sq[0])), ftz(identical_sqrt(Float32(n))))
-    var m = max(rms, a.f0)
-    st(a.p1, 1, mul(m, a.f1))
-    var r = div(ftz(identical_sqrt(sq[1])), mul(ftz(identical_sqrt(Float32(n))), a.f2))
-    var den = max(r, Float32(1.0))
-    st(a.p1, 3, div(-ld(a.p1, 1), den))
-
-
 def op_af_apply(t: Int, a: Args):
     """p0[t] += p1[t] p2[3]."""
     st(a.p0, t, fma3(ld(a.p1, t), ld(a.p2, 3), ld(a.p0, t)))
