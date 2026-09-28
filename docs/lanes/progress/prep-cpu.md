@@ -49,6 +49,21 @@ baseline and every thread count). base = origin/main f237f1996, serial.
 ## Gate
 (filled below)
 
+## Session 2026-09-28 ~04:55Z (resume): BLOCKED, nothing merged
+- Step 0 coverage audit (reading only): every algorithm in the Lane 5 table and its 2026-09-27
+  additions has an x-prep-* lane in tools/identity_lanes/prep.py (CPU and GPU arms) and a biting
+  sabotage recorded in docs/lanes/progress/prep.md (e2e_host_branch for the summing lanes,
+  e2e_store_branch for the store lanes, seams 5400-5409, and this lane's six host arms). No gap found.
+- Branch gate state (pod uk8yx8d9ajdnd1, before it died): the 48 prep lanes SAME BITS at threads
+  1 / 3 / default vs base; kbins lanes AGREE at 1 / 3 / default; e2e_host_branch AGREE, DISAGREE,
+  AGREE. OWED: test_host_surface (the pod's default env has no pytest: run it in the test env),
+  the before -> after table, merge.
+- Blocker 1: the pod is gone and `dev_pod.sh up prep-cpu` refuses: RunPod "account balance is too
+  low to rent a pod". The RunPod pod listing is EMPTY (every lane's pod is gone).
+- Blocker 2: this branch imports core/host_parallel.mojo, which is still only on lane/cpu
+  (15 commits ahead of main). Merging lane/prep-cpu before lane/cpu merges would break main's
+  x_prep host build. Merge order: lane/cpu first, then this branch (re-run the gate on main's copy).
+
 ## Next
 - Python overhead now dominates many fits at 1M rows (the arena copy in `_Prog.run` / `get`,
   0.1-0.5 s; TargetEncoder's shuffled fold assignment in Python, ~1 s; LabelEncoder /
