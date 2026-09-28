@@ -220,7 +220,7 @@ the reference's by construction.
 | board kmeans taxi / higgs | 0.0834 / 0.1423 | 0.0829 / 0.1434 | 0.0857 / 0.1483 | equal |
 
 The X-resident trial (X row tile kept in threadgroup memory across the column sweep) is
-slower on the coarse fit and was removed (a6f3... see git log).
+slower on the coarse fit and was removed (db0c815ec).
 
 Merged origin/lane/apple-merged at a3e8ed8ea (10 commits: M2 Pro fixes, one process-lifetime
 DeviceContext for the SVM/GMM/Cholesky/GP bindings); no conflicts.
