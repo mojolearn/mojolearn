@@ -63,6 +63,17 @@ def sti(f: FP, i: Int, v: Int):
 
 
 @always_inline
+def ldu(f: FP, i: Int) -> UInt32:
+    """A UInt32 word (a sort key half) stored as its bits."""
+    return bitcast[DType.uint32](f.unsafe_load(i))
+
+
+@always_inline
+def stu(f: FP, i: Int, v: UInt32):
+    f.unsafe_store(i, bitcast[DType.float32](v))
+
+
+@always_inline
 def is_nan(x: Float32) -> Bool:
     return x != x
 
@@ -84,6 +95,17 @@ def key(x: Float32) -> UInt32:
 def fadd(a: Float32, b: Float32) -> Float32:
     """One flushed add: the only way two partial sums meet."""
     return ftz(ftz(a) + ftz(b))
+
+
+@always_inline
+def leaf_add(leaf: Float32, v: Float32) -> Float32:
+    """One add inside a PairSum leaf (the sequential part of the fold). The
+    parallel fold (x_metrics/par.mojo) and PairSum both add through here, so
+    the host sabotage moves both."""
+    comptime if X_METRICS_HOST_SABOTAGE:
+        return fadd(leaf, v) + Float32(1.1920929e-07) * abs(leaf)
+    else:
+        return fadd(leaf, v)
 
 
 struct PairSum(Movable):
@@ -108,10 +130,7 @@ struct PairSum(Movable):
 
     @always_inline
     def add(mut self, v: Float32):
-        comptime if X_METRICS_HOST_SABOTAGE:
-            self.leaf = fadd(self.leaf, v) + Float32(1.1920929e-07) * abs(self.leaf)
-        else:
-            self.leaf = fadd(self.leaf, v)
+        self.leaf = leaf_add(self.leaf, v)
         self.nleaf += 1
         if self.nleaf == LEAF:
             self._push(self.leaf)

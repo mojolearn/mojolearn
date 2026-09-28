@@ -1,14 +1,14 @@
-diff --git a/x_metrics/group.mojo b/x_metrics/group.mojo
-index 24c1c4d75..1b77b985c 100644
---- a/x_metrics/group.mojo
-+++ b/x_metrics/group.mojo
-@@ -33,7 +33,8 @@ def group_sort_unit(t: Int, f: FP, q: IP):
-     for g in range(m):
-         sti(f, OFF + g + 1, ldi(f, OFF + g + 1) + ldi(f, OFF + g))
-     # place: OFF[g] is the cursor of group g while placing
--    for r in range(n):
-+    for r0 in range(n):
-+        var r = n - 1 - r0  # SABOTAGE 6102
+diff --git a/x_metrics/par.mojo b/x_metrics/par.mojo
+index 4e441ae51..5beffb94e 100644
+--- a/x_metrics/par.mojo
++++ b/x_metrics/par.mojo
+@@ -107,7 +107,8 @@ def cs_place_unit(t: Int, f: FP, q: IP):
+     var ORD = p(q, 7)
+     var lo = t * CH
+     var hi = min(lo + CH, n)
+-    for r in range(lo, hi):
++    for r0 in range(lo, hi):
++        var r = lo + hi - 1 - r0  # SABOTAGE 6102
          var k = ldi(f, K + r)
          if k >= 0 and k < m:
-             var pos = ldi(f, OFF + k)
+             var a = H + k * C + t
