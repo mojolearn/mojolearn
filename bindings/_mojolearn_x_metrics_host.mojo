@@ -9,6 +9,7 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from std.memory import bitcast
 from x_metrics.epilogue import binary_auc, binary_ap, roc_arrays, expected_mi, row_sum_range
+from x_metrics.epilogue import scatter_rows
 from x_metrics.epilogue import (
     pr_arrays, det_arrays, ndcg_mean, class_sums, auc_xy, mi_contingency, centroids_f32, ch_extra,
     db_score,
@@ -87,6 +88,13 @@ def expected_mi_binding(a: PythonObject, na: PythonObject, b: PythonObject, nb: 
 def row_sum_range_binding(s: PythonObject, n: PythonObject, k: PythonObject, out_addr: PythonObject) raises -> PythonObject:
     """x_metrics/epilogue.mojo row_sum_range (lane metrics-apple2)."""
     row_sum_range(Int(py=s), Int(py=n), Int(py=k), Int(py=out_addr))
+    return PythonObject(0)
+
+
+def scatter_rows_binding(src: PythonObject, dst: PythonObject, idx: PythonObject, n: PythonObject,
+                         n_dst: PythonObject, row_bytes: PythonObject) raises -> PythonObject:
+    """x_metrics/epilogue.mojo scatter_rows (lane metrics-apple3)."""
+    scatter_rows(Int(py=src), Int(py=dst), Int(py=idx), Int(py=n), Int(py=n_dst), Int(py=row_bytes))
     return PythonObject(0)
 
 
@@ -190,6 +198,7 @@ def PyInit__mojolearn_x_metrics_host() abi("C") -> PythonObject:
         m.def_function[curve_roc_binding]("x_metrics_curve_roc")
         m.def_function[expected_mi_binding]("x_metrics_expected_mi")
         m.def_function[row_sum_range_binding]("x_metrics_row_sum_range")
+        m.def_function[scatter_rows_binding]("x_metrics_scatter_rows")
         m.def_function[curve_pr_binding]("x_metrics_curve_pr")
         m.def_function[curve_det_binding]("x_metrics_curve_det")
         m.def_function[ndcg_mean_binding]("x_metrics_ndcg_mean")
