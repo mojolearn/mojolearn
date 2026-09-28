@@ -1,11 +1,13 @@
---- a/x_ann/ivf_sq_core.mojo
-+++ b/x_ann/ivf_sq_core.mojo
-@@ -81,7 +81,7 @@
-         prev_d = best_d
-         for slot in range(Int(offsets.unsafe_load(best_l)), Int(offsets.unsafe_load(best_l + 1))):
-             var row = Int(list_indices.unsafe_load(slot))
--            if mask.unsafe_load(row) == 0:
-+            if mask.unsafe_load(row) < 0:
-                 continue
-             var acc = Float32(0.0)
-             for c in range(dim):
+diff --git a/x_ann/ivf_pq_core.mojo b/x_ann/ivf_pq_core.mojo
+index b9155ab06..261b183dc 100644
+--- a/x_ann/ivf_pq_core.mojo
++++ b/x_ann/ivf_pq_core.mojo
+@@ -131,7 +131,7 @@ def pq_probe_takes(d: Float32, l: Int, prev_d: Float32, prev_l: Int, best_d: Flo
+ def ivf_row_removed(mask: I32P, row: Int) -> Bool:
+     """The sample filter (DEVIATION 5855): `mask[row] == 0` removes the row
+     before it is scored or counted. Every IVF quantized search reads it here."""
+-    return mask.unsafe_load(row) == 0
++    return mask.unsafe_load(row) < 0
+ 
+ 
+ @always_inline
