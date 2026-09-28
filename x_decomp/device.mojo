@@ -1049,7 +1049,10 @@ struct DevExec(Exec):
         var dinfo = ctx.enqueue_create_buffer[DType.float32](3)
         enqueue_fill(ctx, dinfo, JACOBI_INFO_UNWRITTEN)
         var dvt = ctx.enqueue_create_buffer[DType.float32](n * n)
-        if String(getenv("MOJOLEARN_XD_J2_U", "4")) == "1":
+        # unroll 1 is the default: m4pro-b 1790619265077, eigh 1500 46.3 s
+        # at unroll 1 against 82.7 s at 4 and 98.6 s for the old kernel,
+        # every digest equal (MOJOLEARN_XD_J2_U=4 keeps the other one)
+        if String(getenv("MOJOLEARN_XD_J2_U", "1")) != "4":
             ctx.enqueue_function[jacobi_eigh2_kernel[1]](
                 da.unsafe_ptr(), dv.unsafe_ptr(), dinfo.unsafe_ptr(), dvt.unsafe_ptr(), Int32(n), Int32(JACOBI_SWEEPS), Float32(JACOBI_TOL),
                 grid_dim=(1, 1, 1), block_dim=(J2_TPB, 1, 1),
