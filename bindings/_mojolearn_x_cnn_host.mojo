@@ -389,13 +389,27 @@ def sgd_binding(w_addr: PythonObject, g_addr: PythonObject, v_addr: PythonObject
     """In place: w and the momentum buffer v. hyper = [lr, momentum,
     weight_decay, dampening, nesterov (0/1), first step (0/1)]; the last
     three default to 0."""
-    var n = _count(params)
     var h = List[Float32]()
     var nh = Int(py=len(hyper))
     if nh < 3 or nh > 6:
         raise Error("x_cnn sgd: hyper is [lr, momentum, weight_decay(, dampening, nesterov, first)]")
     for k in range(6):
         h.append(Float32(Float64(py=hyper[k])) if k < nh else Float32(0))
+    if _is_list(w_addr):
+        # lane/cnn-apple2: the list form (one handle per parameter), the
+        # per-parameter entry in the caller's order
+        var cnt = _list_counts(w_addr, g_addr, v_addr, params)
+        for j in range(len(cnt)):
+            var qw = fp(w_addr[j])
+            var qg = fp(g_addr[j])
+            var qv = fp(v_addr[j])
+            var nj = cnt[j]
+            with GILReleased(Python()):
+                sgd_into(qw, qg, qv, h, nj)
+                out_f32(qw, nj)
+                out_f32(qv, nj)
+        return PythonObject(len(cnt))
+    var n = _count(params)
     var pw = fp(w_addr)
     var pg = fp(g_addr)
     var pv = fp(v_addr)
@@ -657,12 +671,25 @@ def adam_binding(w_addr: PythonObject, g_addr: PythonObject, mv_addr: PythonObje
     """In place: w and mv = [m (n) | v (n)]. hyper = [step_size, 1 - beta1,
     beta2, 1 - beta2, eps, sqrt(bias_correction2), weight_decay, adamw (0/1),
     1 - lr * weight_decay] (x_cnn/ops.mojo adam_at)."""
-    var n = _count(params)
     if Int(py=len(hyper)) != 9:
         raise Error("x_cnn adam: hyper has 9 entries")
     var h = List[Float32]()
     for k in range(9):
         h.append(Float32(Float64(py=hyper[k])))
+    if _is_list(w_addr):
+        # lane/cnn-apple2: the list form (one handle per parameter)
+        var cnt = _list_counts(w_addr, g_addr, mv_addr, params)
+        for j in range(len(cnt)):
+            var qw = fp(w_addr[j])
+            var qg = fp(g_addr[j])
+            var qm = fp(mv_addr[j])
+            var nj = cnt[j]
+            with GILReleased(Python()):
+                adam_into(qw, qg, qm, h, nj)
+                out_f32(qw, nj)
+                out_f32(qm, 2 * nj)
+        return PythonObject(len(cnt))
+    var n = _count(params)
     var pw = fp(w_addr)
     var pg = fp(g_addr)
     var pm = fp(mv_addr)
@@ -744,9 +771,39 @@ def conv_block_backward_r_binding(
     return conv_block_backward_binding(x_addr, w_addr, b_addr, g_addr, idx_addr, outs, conv_prm, pool_prm)
 
 
+def _is_list(o: PythonObject) raises -> Bool:
+    var bi = Python.import_module("builtins")
+    return Bool(py=bi.isinstance(o, bi.list))
+
+
+def _list_counts(a: PythonObject, b: PythonObject, c: PythonObject, params: PythonObject) raises -> List[Int]:
+    var k = Int(py=len(params))
+    if Int(py=len(a)) != k or Int(py=len(b)) != k or Int(py=len(c)) != k:
+        raise Error("x_cnn optimizer: one handle per parameter in each list and one count each")
+    var out = List[Int]()
+    for j in range(k):
+        var nj = Int(py=params[j])
+        if nj <= 0:
+            raise Error("x_cnn: a positive element count is required")
+        out.append(nj)
+    return out^
+
+
 def res_gather_binding(dst: PythonObject, src: PythonObject, rows_addr: PythonObject, params: PythonObject) raises -> PythonObject:
-    """dst rows = src rows[r] (int32 host indices), `row` 4-byte words each."""
+    """dst rows = src rows[r] (int32 host indices), `row` 4-byte words each.
+    lane/cnn-apple2: the pair form [dst, dst2], [src, src2], [n, row, row2]."""
     var n = Int(py=params[0])
+    if _is_list(dst):
+        if Int(py=len(dst)) != 2 or Int(py=len(src)) != 2 or Int(py=len(params)) != 3:
+            raise Error("x_cnn res_gather: the pair form is [dst, dst2], [src, src2], [n, row, row2]")
+        var rq = i32_ptr(Int(py=rows_addr))
+        for t in range(2):
+            var d2 = f32_ptr(Int(py=dst[t]))
+            var s2 = f32_ptr(Int(py=src[t]))
+            var rw = Int(py=params[1 + t])
+            for r in range(n):
+                memcpy(dest=d2 + r * rw, src=s2 + Int(rq[r]) * rw, count=rw)
+        return PythonObject(n)
     var row = Int(py=params[1])
     var d = f32_ptr(Int(py=dst))
     var sr = f32_ptr(Int(py=src))

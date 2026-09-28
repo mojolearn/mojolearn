@@ -23,6 +23,10 @@ from mojolearn import _expansion_cnn as xc  # noqa: E402
 
 mode = sys.argv[1]
 only = set(a for a in sys.argv[3:])
+if "legacy" in only:  # lane/cnn-apple2: the before arm's Python side
+    xc._LEGACY_STEP = True
+    only.discard("legacy")
+print(f"XCNN-ARM legacy_step={xc._LEGACY_STEP} predict_rows={xc._PREDICT_ROWS}", flush=True)
 
 
 def t(f, reps):

@@ -57,12 +57,16 @@ struct _CnnContext(Defaultable, Movable):
     #: Apple IDENTICAL (DEVIATION 5720): (m, n, k, plan) quads, the measured
     #: fastest weight/bias-gradient plan per shape.
     var tuned: List[Int]
+    #: lane/cnn-apple2: freed resident arrays kept for reuse by `res_alloc`
+    #: (at most `RES_POOL_MAX_FLOATS` in all).
+    var pool: List[DeviceBuffer[DType.float32]]
 
     def __init__(out self):
         self.ctx = Optional[DeviceContext]()
         self.ws = List[DeviceBuffer[DType.float32]]()
         self.res = List[DeviceBuffer[DType.float32]]()
         self.tuned = List[Int]()
+        self.pool = List[DeviceBuffer[DType.float32]]()
 
 
 comptime _CTX_NAME = "MojoXCnnContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXCnnContextFast"
@@ -364,10 +368,34 @@ def fetch_i[resident: Bool](ctx: DeviceContext, buf: DeviceBuffer[DType.int32], 
         down_i(ctx, buf, dst, n)
 
 
+#: lane/cnn-apple2: the most freed resident storage kept for reuse (floats;
+#: 256 MB). `-D MOJOLEARN_XCNN_NO_RES_POOL` is the before arm (no pool).
+comptime RES_POOL_MAX_FLOATS = 64 * 1024 * 1024
+comptime RES_POOL = not is_defined["MOJOLEARN_XCNN_NO_RES_POOL"]()
+
+
 def res_alloc(n: Int) raises -> Int:
     """A resident array of `n` floats (4-byte words), zero filled; its device address."""
     var ctx = cnn_ctx()
-    var b = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
+    var need = n if n > 0 else 1
+    # lane/cnn-apple2: a freed array of at least `need` and at most twice
+    # it (the smallest such) instead of a new allocation; zero filled the
+    # same way, so the caller sees the same words.
+    comptime if RES_POOL:
+        var s = _slots()
+        var pick = -1
+        for j in range(len(s[].pool)):
+            var ln = len(s[].pool[j])
+            if ln >= need and ln <= 2 * need and (pick < 0 or ln < len(s[].pool[pick])):
+                pick = j
+        if pick >= 0:
+            var pb = s[].pool.pop(pick)
+            pb.enqueue_fill(Float32(0))
+            var paddr = Int(pb.unsafe_ptr())
+            s[].res.append(pb^)
+            _ = ctx^
+            return paddr
+    var b = ctx.enqueue_create_buffer[DType.float32](need)
     b.enqueue_fill(Float32(0))
     # No wait (lane/cnn-apple): the fill is ordered before every later use
     # on the one in-order context, and every host read (res_download) waits.
@@ -385,7 +413,17 @@ def res_free(addr: Int) raises:
     var s = _slots()
     for k in range(len(s[].res)):
         if Int(s[].res[k].unsafe_ptr()) == addr:
-            _ = s[].res.pop(k)
+            var b = s[].res.pop(k)
+            comptime if RES_POOL:
+                # keep it for reuse while the pool stays under its cap
+                # (the wait above ended every use of it)
+                var held = len(b)
+                for j in range(len(s[].pool)):
+                    held += len(s[].pool[j])
+                if held <= RES_POOL_MAX_FLOATS:
+                    s[].pool.append(b^)
+                    return
+            _ = b^
             return
     raise Error("x_cnn: res_free of an address res_alloc did not return")
 
@@ -1104,6 +1142,67 @@ def adam_device(w: List[Float32], g: List[Float32], mv: List[Float32], hyper: Li
     sw.extend(sm^)
     _ = sg^
     return sw^
+
+
+def opt_many_resident[adam: Bool](
+    ws_: List[Int], gs: List[Int], bs: List[Int], ns: List[Int], hyper: List[Float32]
+) raises:
+    """lane/cnn-apple2: one optimizer step over EVERY parameter of a trainer
+    step in one entry (one wait instead of one per parameter): per parameter
+    `j` the same launch `sgd_into` / `adam_into` makes (`sgd_at` / `adam_at`
+    on resident w, g and buffer, the step's one hyper block, p[0] = n_j), in
+    the caller's order. Each launch touches only its own parameter's arrays,
+    so the words are the per-parameter entries' words."""
+    var ctx = cnn_ctx()
+    var dh = put_hyper(ctx, 3, hyper)
+    var prm = List[Int32]()
+    for j in range(len(ns)):
+        prm.append(Int32(ns[j]))
+    var dp = put_prm(ctx, 4, prm)
+    var pp = ip(dp)
+    for j in range(len(ns)):
+        var pw = FP(unsafe_from_address=ws_[j])
+        var pg = FP(unsafe_from_address=gs[j])
+        var pb = FP(unsafe_from_address=bs[j])
+        comptime if adam:
+            launch[adam_at](ctx, pw, pg, pb, fp(dh), pp + j, pp + j, ns[j])
+        else:
+            launch[sgd_at](ctx, pw, pg, pb, fp(dh), pp + j, pp + j, ns[j])
+    ctx.synchronize()
+    _ = prm^
+    _ = dh^
+    _ = dp^
+    _ = ctx^
+
+
+def res_gather_pair(
+    dst_addr: Int, src_addr: Int, row: Int, dst2_addr: Int, src2_addr: Int, row2: Int, rows: IP, n: Int
+) raises:
+    """lane/cnn-apple2: `res_gather` twice on the same host rows (the batch
+    and its labels) in one entry, one upload of the rows and one wait; the
+    same `gather_rows_at` launches on the same words."""
+    if n <= 0:
+        return
+    var ctx = cnn_ctx()
+    var di = put_i[False](ctx, 0, rows, n)
+    var prm: List[Int32] = [Int32(row), Int32(row2)]
+    var dp = put_prm(ctx, 1, prm)
+    var pp = ip(dp)
+    if row > 0:
+        launch[gather_rows_at](
+            ctx, FP(unsafe_from_address=src_addr), FP(unsafe_from_address=dst_addr),
+            FP(unsafe_from_address=dst_addr), FP(unsafe_from_address=dst_addr), ip(di), pp, n * row,
+        )
+    if row2 > 0:
+        launch[gather_rows_at](
+            ctx, FP(unsafe_from_address=src2_addr), FP(unsafe_from_address=dst2_addr),
+            FP(unsafe_from_address=dst2_addr), FP(unsafe_from_address=dst2_addr), ip(di), pp + 1, n * row2,
+        )
+    ctx.synchronize()
+    _ = prm^
+    _ = di^
+    _ = dp^
+    _ = ctx^
 
 
 # ------------------------------------------------------------ the conv block
