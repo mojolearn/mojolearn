@@ -87,7 +87,7 @@ from std.sys.compile import is_defined
 
 from core.column_stats import STATS_TPB
 from core.pinned_reduce import pinned_block_sum
-from core.strided_walk import APPLE_IDENTICAL_STEP_UNROLL, strided_ftz_sum
+from core.strided_walk import APPLE_IDENTICAL_STEP_UNROLL, APPLE_FAST_STEP_UNROLL, strided_ftz_sum
 from checks.numerics import (
     ftz,
     identical_exp,
@@ -263,7 +263,7 @@ def mean_rows_multi_kernel(
     var c = Int(block_idx.x)
     var tid = Int(thread_idx.x)
     var acc = Float32(0.0)
-    comptime if APPLE_IDENTICAL_STEP_UNROLL:
+    comptime if APPLE_IDENTICAL_STEP_UNROLL or APPLE_FAST_STEP_UNROLL:
         acc = strided_ftz_sum[STATS_TPB](dz, C, c, n, tid, acc)
     else:
         var i = tid

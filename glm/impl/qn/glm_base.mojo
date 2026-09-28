@@ -62,7 +62,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from core.column_stats import STATS_TPB, xty_kernel
 from core.gemm import gemm_nt, gemv_n
 from core.pinned_reduce import pinned_block_sum
-from core.strided_walk import APPLE_IDENTICAL_STEP_UNROLL, strided_ftz_sum
+from core.strided_walk import APPLE_IDENTICAL_STEP_UNROLL, APPLE_FAST_STEP_UNROLL, strided_ftz_sum
 from core.xtdz_coalesced import (
     xtdz_coalesced,
     xtdz_coalesced_applies,
@@ -189,7 +189,7 @@ def sum_terms_kernel(
     var n = Int(n_in)
     var tid = Int(thread_idx.x)
     var acc = Float32(0.0)
-    comptime if APPLE_IDENTICAL_STEP_UNROLL:
+    comptime if APPLE_IDENTICAL_STEP_UNROLL or APPLE_FAST_STEP_UNROLL:
         acc = strided_ftz_sum[STATS_TPB](terms, 1, 0, n, tid, acc)
     else:
         var i = tid
@@ -212,7 +212,7 @@ def mean_kernel(
     var n = Int(n_in)
     var tid = Int(thread_idx.x)
     var acc = Float32(0.0)
-    comptime if APPLE_IDENTICAL_STEP_UNROLL:
+    comptime if APPLE_IDENTICAL_STEP_UNROLL or APPLE_FAST_STEP_UNROLL:
         acc = strided_ftz_sum[STATS_TPB](v, 1, 0, n, tid, acc)
     else:
         var i = tid
