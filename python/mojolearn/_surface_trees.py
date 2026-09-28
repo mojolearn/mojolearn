@@ -88,6 +88,7 @@ FAMILIES = (
             "x_trees_expected_value", "x_trees_mask_expand", "x_trees_block_mean", "x_trees_kernel_solve",
             "x_trees_leaf_newton_rows", "x_trees_logit", "x_trees_accumulate_rows",
             "x_trees_check_weights_f32", "x_trees_mul_f32",
+            "x_trees_exact_sum_f32", "x_trees_margin2",
         ),
         gate="tools/algos_lane_check.sh",
         wheel_note="Ships: the trees expansion lane's ensemble glue (pass 1, PENDING).",
