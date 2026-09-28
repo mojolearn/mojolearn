@@ -32,3 +32,38 @@ this driver does not relabel stress-sized inputs as newly reduced fixtures.
 Physical multi-device lanes need a separate multi-device proof; select applicable
 lanes explicitly with `LANES` and preserve the omitted lane names/reasons in the
 release record. A CPU refusal is never counted as AGREE by this driver.
+
+## Saved GPU cross-vendor comparison
+
+Local GPU/CPU agreement does not establish agreement between vendors. Compare
+completed raw GPU records against the entire selected plan without running
+any fits or importing native bindings:
+
+```sh
+python tools/consolidated_check/compare.py --plan RUN/plan.json \
+  --column metal=APPLE_RECORDS --column hip=AMD_RECORDS \
+  --fixtures base --json-out crossvendor.json
+```
+
+Directories contain `<lane>.gpu.json`; adjacent CPU records are ignored.
+Add `--column cuda=NVIDIA_RECORDS` when that column is required. All named
+columns must cover every planned lane and requested fixture. To monitor a
+partial snapshot add `--progress`; it still reports INCOMPLETE and exits 2
+until complete. AGREE exits 0; numerical differences or unstable repeats exit
+1. Missing/refused records, undeclared checks, mismatched inputs, protocols,
+commits or backend provenance cannot pass. Entirely N/A cells cannot pass.
+
+Repeat a backend with a second directory to overlay targeted follow-up
+records explicitly, for example `--column metal=APPLE_FIX_RECORDS` and
+`--column hip=AMD_FIX_RECORDS` after the base directories. A later directory
+replaces a whole lane record. Its commit must match the other columns for
+that lane, while unrelated lanes can retain earlier commits. An invalid
+replacement never silently falls back to older evidence. Duplicate lane
+records within one directory are refused as ambiguous.
+
+The JSON records each original file SHA-256 and source commit, the plan
+SHA-256, compared numeric/NA/missing counts, and precise per-part differences.
+It compares train/infer/model/reload and all recorded property hashes, never
+timings. The harness omits sampler/trainer (`rlpair`) fields for lanes without
+that probe; this is counted explicitly as UNRECORDED, not numeric coverage.
+No reference table or manifest is changed by this tool.

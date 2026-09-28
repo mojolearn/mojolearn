@@ -98,6 +98,12 @@ def _recurse(
 ):
     """`tree_shap_recursive` with condition 0. `phi[phioff + f * k + j]`
     receives feature f's share of output j, times `scale`."""
+    # Neither the background nor the explained row can reach this path.
+    # Its contribution is exactly zero. Visiting a repeated feature here
+    # would unwind a (zero, zero) path fraction through 0 / 0, producing
+    # architecture-dependent NaN signs instead of a finite explanation.
+    if pzero == 0 and pone == 0:
+        return
     var depth = depth_in
     var b = parent_b + depth + 1
     for j in range(depth + 1):

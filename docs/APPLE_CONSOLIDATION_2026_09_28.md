@@ -1,12 +1,17 @@
 # Apple consolidation, 2026-09-28
 
-The integration branch `fix/apple-consolidated-verifier` starts at
-`lane/apple-merged` (`7483efa40`) and includes all eleven original Apple
-branches, all eleven `apple2` branches, and `devctx-lifetime` (`e395c3fa7`).
-The last moving tips included in this snapshot are cluster `809eccd629`,
-linear `c128c4f3e8`, neighbors `9aa0952285`, and prep `2c713f92f1`.
-Consolidation preceded execution of checks. Later branch changes require a
-new integration snapshot and evidence.
+The Apple work was consolidated first and then merged into `main`, following
+Andrew's instruction to merge everything before one coordinated validation.
+The consolidation includes all eleven original Apple branches, all eleven
+`apple2` branches, and the device-context lifetime repair. The integration
+worktree remains useful for preparing fixes; promotion to `main` is no longer
+conditional on finishing the native sweep. Release qualification remains a
+separate requirement.
+
+Later main updates include `apple-merged-owed` repairs and M2 evidence, the
+resample manifest correction `79559ad0f`, and the neighbors final evidence
+`75ddcae2e`. The broad native run is deliberately frozen at `308878e80`;
+subsequent fixes receive targeted checks rather than restarting that sweep.
 
 ## Repairs
 
@@ -27,7 +32,7 @@ new integration snapshot and evidence.
   evidence, and fingerprints the committed source, native libraries, and
   execution settings before resuming.
 
-## Validation scope
+## Validation scope and outstanding work
 
 The consolidated inventory has 504 configurations. The default source-tree
 comparison selects 445 single-device configurations and explicitly records
@@ -43,19 +48,35 @@ run; it is not the installed verifier's normal workload.
 
 Python/controller tests use published 0.8.24 CPU bindings for imports and
 bounded CPU parity where needed. They do not establish correctness of the
-newly merged native source. Native builds and CPU/GPU comparisons must use
-the exact committed integration snapshot before promotion to main/release.
+newly merged native source. Native evidence must identify the exact committed source and built binaries.
+The broad `308878e80` run on Apple M4 and AMD covers the 445 base-fixture
+comparisons plus the separate radix regression. Its results do not by
+themselves qualify later source changes or other fixtures. Completion and
+cross-vendor agreement have not yet been established for the final main tree.
+
+Two cross-platform problems found in historical records now have source fixes:
+GLM target generation used platform-dependent NumPy `exp`; TreeSHAP traversed
+unreachable zero-cover paths and produced differently signed NaNs. CPU-only
+probes established both causes. Portable GLM targets match across Arm/x86, and
+an isolated native TreeSHAP replay produces 512 identical finite values with
+additivity. End-to-end validation is targeted at the four GLM lanes and two
+TreeSHAP lanes, including the negative TreeSHAP fixture. Direct comparison of
+Apple and AMD records is required: local GPU/CPU agreement alone is insufficient.
 
 ## Reference evidence still owed
 
-At this snapshot 230 configurations have no shipped reference cells;
+The initial consolidated audit found 230 configurations with no shipped reference cells;
 `gmm`, `gmm-sample`, and `par-gmm` have stale references. These are distinct
 from structural hardware inapplicability and remain visibly unverified.
 A same-commit CPU/GPU comparison can validate fresh results independently of
 the reference table. Reference admission is a separate step requiring the
 specified independent, complete evidence; never replace references merely
-to make a mismatch pass. The existing current-revision GMM artifacts are
-partial and insufficient to admit all nine fixtures.
+to make a mismatch pass. The initial current-revision GMM artifacts were partial and insufficient to
+admit all nine fixtures. A separate recovery of historical records produced a
+172-lane reference candidate; it has not been promoted into the shipped table.
+The four GLM and two TreeSHAP lanes now carry new revisions, so pre-fix records
+cannot establish their current references. See
+[CONSOLIDATED_REFERENCE_AUDIT.md](CONSOLIDATED_REFERENCE_AUDIT.md).
 
 The published byte-LM host mismatch was a stale 0.8.24 reference following a
 weight-decay default change. Existing outputs for all nine fixtures (18

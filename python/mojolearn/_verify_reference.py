@@ -356,7 +356,7 @@ def _declared_part_gap(j):
     return None
 
 
-def admit(j, path, par_axis=False):
+def admit(j, path, par_axis=False, *, known_lanes=()):
     """None when the column is admissible, else the reason it is not.
 
     `par_axis=True` admits a column recorded on MORE THAN ONE DEVICE, and is
@@ -395,7 +395,27 @@ def admit(j, path, par_axis=False):
     if "/2026-09-15_gp-sample-y/metal-transient/" in normalized:
         return "quarantined Metal incident (2026-09-15_gp-sample-y/README.md)"
     base = os.path.basename(low)
-    if any(tok in low for tok in _EXCLUDED_PATH_TOKENS) or any(
+    name_for_markers = base
+    # A lane's API name can legitimately contain "partial" (partial_fit).
+    # Exempt only the exact, registered one-lane filename emitted by the
+    # lane runner, backed by its bound scope and enforced backend metadata.
+    # Directory markers and record partial/sabotage flags still reject it.
+    if isinstance(j, dict) and isinstance(j.get("cells"), dict):
+        scope = {key.split("/", 1)[0] for key in j["cells"] if isinstance(key, str)}
+        signature = j.get("resume_signature") or {}
+        options = signature.get("options", {}) if isinstance(signature, dict) else {}
+        if len(scope) == 1 and isinstance(options, dict):
+            lane = next(iter(scope))
+            suffix = base[len(lane) + 1:] if base.startswith(lane + ".") else ""
+            backend = options.get("require_backend")
+            runner_name = ((suffix == "gpu.json" and backend in ("metal", "cuda", "hip"))
+                           or (re.fullmatch(r"cpu(?:default|[1-9][0-9]*)\.json", suffix)
+                               and backend == "cpu"))
+            if (lane in known_lanes and options.get("lanes") == lane
+                    and runner_name and record_device_class(j, path)[1] is None):
+                name_for_markers = suffix
+    path_for_markers = os.path.join(os.path.dirname(low), name_for_markers)
+    if any(tok in path_for_markers for tok in _EXCLUDED_PATH_TOKENS) or any(
             tok in base for tok in _EXCLUDED_BASENAME_TOKENS):
         return "sabotage, partial, probe, unfixed or smoke run (by name)"
     if not isinstance(j, dict) or not isinstance(j.get("cells"), dict):
@@ -544,7 +564,7 @@ def build_table(record_paths, harness, repo_root, lanes=None, log=None, parts=No
         except (OSError, ValueError) as exc:
             log(f"skip {path}: unreadable ({exc})")
             continue
-        why = admit(j, path)
+        why = admit(j, path, known_lanes=harness.LANES)
         if why:
             log(f"skip {path}: {why}")
             continue
@@ -595,6 +615,11 @@ def build_table(record_paths, harness, repo_root, lanes=None, log=None, parts=No
                 continue
             for part in parts:
                 asked += 1
+                batch_revision = getattr(harness, "BATCH_REVISIONS", {}).get(lane)
+                if (part == "batch" and batch_revision is not None
+                        and (j.get("batch_revisions") or {}).get(lane) != batch_revision):
+                    _absent(part, "batch revision differs or is missing")
+                    continue
                 if part != "train" and held.get(fixture) != want_held[fixture]:
                     _absent(part, "held-out bytes differ")
                     continue
@@ -695,6 +720,7 @@ def build_table(record_paths, harness, repo_root, lanes=None, log=None, parts=No
         #: disagreed, and neither one is visible in the cell counts.
         absent_parts={p: dict(sorted(w.items())) for p, w in sorted(absent_total.items())},
         lane_revisions=dict(getattr(harness, "LANE_REVISIONS", {}) or {}),
+        batch_revisions=dict(getattr(harness, "BATCH_REVISIONS", {}) or {}),
         fixtures=want_fix, heldout=want_held,
         records=[records[i] for i in used],
         cells=cells,
@@ -774,6 +800,11 @@ def merge_reference_lanes(base, candidate, lanes):
             revisions[lane] = candidate["lane_revisions"][lane]
         else:
             revisions.pop(lane, None)
+        batch_revisions = result.setdefault("batch_revisions", {})
+        if lane in candidate.get("batch_revisions", {}):
+            batch_revisions[lane] = candidate["batch_revisions"][lane]
+        else:
+            batch_revisions.pop(lane, None)
         result.setdefault("lane_admission", {})[lane] = dict(
             policy=copy.deepcopy(policy), harness_sha256=candidate["harness_sha256"])
     return result
