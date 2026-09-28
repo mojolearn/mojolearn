@@ -49,10 +49,11 @@ def team_work(n: Int, bufs: Int, per_thread: Int) -> Int:
 struct Team(ImplicitlyCopyable, Movable):
     var tid: Int
     var nt: Int
-    var slot: FP  # TEAM_SLOTS float32 words for broadcasts
-    var rw: FP  # row buffers of n words: row(k) = rw + k * n
+    # addresses, not pointers (a struct field cannot carry AnyOrigin)
+    var slot_at: Int  # TEAM_SLOTS float32 words for broadcasts
+    var rows_at: Int  # row buffers of n words: row(k)
     var n: Int
-    var own: FP  # this thread's private words (team_work's per_thread)
+    var own_at: Int  # this thread's private words (team_work's per_thread)
 
     @always_inline
     def lead(self) -> Bool:
@@ -69,10 +70,11 @@ struct Team(ImplicitlyCopyable, Movable):
         """The lead thread's `v` in every thread (slot k)."""
         if self.nt == 1:
             return v
+        var slot = FP(unsafe_from_address=self.slot_at)
         if self.lead():
-            self.slot.unsafe_store(k, v)
+            slot.unsafe_store(k, v)
         self.sync()
-        var r = self.slot.unsafe_load(k)
+        var r = slot.unsafe_load(k)
         self.sync()
         return r
 
@@ -85,14 +87,18 @@ struct Team(ImplicitlyCopyable, Movable):
 
     @always_inline
     def row(self, k: Int) -> FP:
-        return self.rw + k * self.n
+        return FP(unsafe_from_address=self.rows_at) + k * self.n
+
+    @always_inline
+    def own(self) -> FP:
+        return FP(unsafe_from_address=self.own_at)
 
 
 def team_at(tid: Int, nt: Int, scratch: FP, n: Int, bufs: Int, per_thread: Int) -> Team:
     """The team over `scratch` (team_work(n, bufs, per_thread) words)."""
     var rw = scratch + TEAM_SLOTS
     var own = rw + max(bufs, TEAM_ROW_BUFS) * n + tid * per_thread
-    return Team(tid, nt, scratch, rw, n, own)
+    return Team(tid, nt, Int(scratch), Int(rw), n, Int(own))
 
 
 def device_team(scratch: FP, n: Int, bufs: Int, per_thread: Int) -> Team:

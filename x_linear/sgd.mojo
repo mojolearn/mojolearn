@@ -304,7 +304,7 @@ def sgd_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
     var has_cw = ldi(ip, 11) != 0
     var swp = y + n
     var problems = k if k > 2 else 1
-    var q = t.own
+    var q = t.own()
     var epr = t.row(2 * problems)
     for c in range(t.tid, problems, t.nt):
         var ys = t.row(2 * c)

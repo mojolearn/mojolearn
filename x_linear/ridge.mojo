@@ -106,7 +106,7 @@ def ridge_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw
     var best_err = Float32(0)
     if a_n > 1:
         var lr = t.row(0)
-        var zz = t.own
+        var zz = t.own()
         for a in range(a_n):
             var alpha = ld(fp, a)
             if t.lead():
