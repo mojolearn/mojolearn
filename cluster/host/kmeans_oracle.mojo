@@ -152,7 +152,7 @@ tools/identity_break.py on the kmeans lane is the measurement.
 """
 from std.math import fma
 from std.math import ceil, log
-from std.memory import bitcast
+from std.memory import bitcast, stack_allocation
 from std.os import getenv
 from std.sys.compile import is_defined
 
@@ -233,6 +233,8 @@ comptime SUM_PARTIAL_BLOCKS = 256
 
 #: `fused_distance_nn_kernel`'s identity element and clamp precision.
 comptime FUSED_MAX = Float32(3.4028234663852886e38)
+#: Rows per task in `host_accumulate` (lane cluster-cpu).
+comptime ACCUMULATE_CHUNK = 8192
 comptime FUSED_CLAMP_PRECISION = Float32(1.0e-6)
 
 comptime SUM_MODE_PLAIN = 0
@@ -389,8 +391,10 @@ def _halving[block: Int](mut red: List[Float32]) -> Float32:
 def host_row_norm(
     a: List[Float32], row: Int, d: Int, take_sqrt: Bool
 ) -> Float32:
-    """`row_norm_kernel` for one row (module docstring)."""
-    var red = List[Float32](length=NORM_TPB, fill=Float32(0.0))
+    """`row_norm_kernel` for one row (module docstring). The NORM_TPB lane
+    partials live on the stack (no allocation per row); the halving tree is
+    `_halving`'s, pair for pair."""
+    var red = stack_allocation[NORM_TPB, Float32]()
     for t in range(NORM_TPB):
         var acc = Float32(0.0)
         var col = t
@@ -399,7 +403,12 @@ def host_row_norm(
             acc = ftz(identical_mul_add(v, v, acc))
             col += NORM_TPB
         red[t] = acc
-    var total = ftz(_halving[NORM_TPB](red))
+    var step = NORM_TPB // 2
+    while step > 0:
+        for t in range(step):
+            red[t] = red[t] + red[t + step]
+        step //= 2
+    var total = ftz(red[0])
     if take_sqrt:
         if total <= Float32(0.0):
             total = Float32(0.0)
@@ -1133,27 +1142,46 @@ def host_accumulate(
     Every label is checked against `k` before it addresses a cell
     (`host_checked_label`), so a row with no nearest centroid raises a
     Python-visible error instead of aborting the process."""
+    var uk = UInt32(k)
     for row in range(n):
-        _ = host_checked_label(labels, row, k)
-    for c in range(k * d):
+        if labels[row] >= uk:
+            _ = host_checked_label(labels, row, k)
+    # Integer sums wrap modulo 2^32 like the device's atomic adds, so any
+    # grouping of the rows gives the same words: row chunks accumulate into
+    # their own partial arrays (tasks), then the partials are added.
+    var cd = k * d
+    var n_chunks = (n + ACCUMULATE_CHUNK - 1) // ACCUMULATE_CHUNK
+    var part = List[Int32](length=n_chunks * (cd + k) if n_chunks > 0 else 1, fill=Int32(0))
+    var pp = part.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+
+    def _chunk(c: Int) {imm x, imm labels, imm weights, imm pp, imm n, imm d, imm k, imm cd, imm sum_scale, imm weight_scale}:
+        var base = pp + c * (cd + k)
+        var r0 = c * ACCUMULATE_CHUNK
+        var r1 = min(r0 + ACCUMULATE_CHUNK, n)
+        for row in range(r0, r1):
+            var label = Int(labels[row])
+            var w = weights[row]
+            for f in range(d):
+                var q = Int32(x[row * d + f] * w * sum_scale)
+                comptime if KMEANS_ORACLE_HOST_SABOTAGE:
+                    # THE SABOTAGE ARM: one extra unit per cell. Wrong on
+                    # purpose; see KMEANS_ORACLE_HOST_SABOTAGE.
+                    q = q + Int32(1)
+                base[label * d + f] = base[label * d + f] + q
+            var qw = Int32(w * weight_scale)
+            base[cd + label] = base[cd + label] + qw
+
+    host_cells(_chunk, n_chunks, 4 * ACCUMULATE_CHUNK * (d + 1))
+    for c in range(cd):
         sums_i32[c] = Int32(0)
     for c in range(k):
         weight_i32[c] = Int32(0)
-    for gid in range(n * d):
-        var row = gid // d
-        var f = gid - row * d
-        var label = Int(labels[row])
-        var w = weights[row]
-        var q = Int32(x[gid] * w * sum_scale)
-        comptime if KMEANS_ORACLE_HOST_SABOTAGE:
-            # THE SABOTAGE ARM: one extra unit per cell. Wrong on purpose;
-            # see KMEANS_ORACLE_HOST_SABOTAGE.
-            q = q + Int32(1)
-        sums_i32[label * d + f] = sums_i32[label * d + f] + q
-    for row in range(n):
-        var label = Int(labels[row])
-        var q = Int32(weights[row] * weight_scale)
-        weight_i32[label] = weight_i32[label] + q
+    for ch in range(n_chunks):
+        var off = ch * (cd + k)
+        for c in range(cd):
+            sums_i32[c] = sums_i32[c] + part[off + c]
+        for c in range(k):
+            weight_i32[c] = weight_i32[c] + part[off + cd + c]
 
 
 @fieldwise_init
