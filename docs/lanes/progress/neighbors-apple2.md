@@ -26,6 +26,8 @@ environment, forward then reverse, IDENTICAL and FAST in one job).
 | a898eb9c2 | Cholesky multi-RHS forward sweep: 256 threads, later rows four at a time (after DEVIATION 6150 moved the chains into b cells, GPC.predict_proba went 0.26 -> 1.05 s) | both (Apple) | same chains | default; `-D MOJOLEARN_CHOL_MR_ROWWISE` arm |
 | 9866b507f | x_neighbors large downloads through 64 MB host staging, copied over the host cores | both | a copy | default; `-D MOJOLEARN_XN_PLAIN_DOWN` arm |
 | b7bec306c | label propagation stopping sum folded on the host (same item); PCS convolution one row per block in threadgroup memory | both | same statements | default; `-D MOJOLEARN_XN_LP_DEVICE_FOLD`, `-D MOJOLEARN_XN_PCS_CELL` arms |
+| a1bb804fb | label propagation / spreading: the graph product over G's nonzero entries (CSR built once on the host), exact by the fma-with-zero argument; dense kernel when an x is non-finite | both | host check (signed values, -0.0): 0 words differ | default; `-D MOJOLEARN_XN_LP_DENSE` arm |
+| d7934f99f | x_neighbors k-NN with y rows staged per block in threadgroup memory (`knn_sq_tiled`; LOF, label propagation) | both | the item's statements, same candidate order | default; `MOJOLEARN_XN_OLD_ITEMS=1` arm |
 | da21bc669 | REVERTED the identical radix device barrier: `air.wg.barrier` failed to legalize in the IDENTICAL build.sh / build_metrics.sh (request 1790604321269) | - | - | - |
 | b89ad2efa | KNNImputer.transform: one GPU thread per MISSING cell (`knn_impute_cells`, the same item per cell) | both | same statements per cell | default; `MOJOLEARN_XN_UNCOMPACT_IMPUTE=1` arm |
 
