@@ -343,16 +343,40 @@ def pcs_conv_row_kernel(acc: FP, sk: FP, res: FP, n_: Int64, nc_: Int64, degree_
         sr[q] = sk.unsafe_load((r * degree + p) * nc + q)
         q += PCS_ROW_TPB
     barrier()
-    var h = tid
-    while h < nc:
-        var s = Float32(0)
+    # Four consecutive components per thread per pass: ar[a] is read once
+    # for four independent chains; each chain is the item's, a ascending.
+    var h0 = tid * 4
+    while h0 < nc:
+        var s0 = Float32(0)
+        var s1 = Float32(0)
+        var s2 = Float32(0)
+        var s3 = Float32(0)
         for a in range(nc):
-            var b = h - a
+            var av = ar[a]
+            var b = h0 - a
             if b < 0:
                 b += nc
-            s = ftz(identical_mul_add(ar[a], sr[b], s))
-        res.unsafe_store(r * nc + h, s)
-        h += PCS_ROW_TPB
+            s0 = ftz(identical_mul_add(av, sr[b], s0))
+            b += 1
+            if b == nc:
+                b = 0
+            s1 = ftz(identical_mul_add(av, sr[b], s1))
+            b += 1
+            if b == nc:
+                b = 0
+            s2 = ftz(identical_mul_add(av, sr[b], s2))
+            b += 1
+            if b == nc:
+                b = 0
+            s3 = ftz(identical_mul_add(av, sr[b], s3))
+        res.unsafe_store(r * nc + h0, s0)
+        if h0 + 1 < nc:
+            res.unsafe_store(r * nc + h0 + 1, s1)
+        if h0 + 2 < nc:
+            res.unsafe_store(r * nc + h0 + 2, s2)
+        if h0 + 3 < nc:
+            res.unsafe_store(r * nc + h0 + 3, s3)
+        h0 += PCS_ROW_TPB * 4
 
 
 def op_pcs_resident(
