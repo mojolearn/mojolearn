@@ -48,6 +48,7 @@ def main():
     ap.add_argument("--seeds", type=int, default=5)
     ap.add_argument("--rows", type=int, default=200_000)
     ap.add_argument("--dataset", default="taxi,higgs")
+    ap.add_argument("--only", default="", help="comma separated cases (default: all)")
     a = ap.parse_args()
     import mojolearn as ml
     import sklearn.preprocessing as skp
@@ -97,6 +98,9 @@ def main():
                 ours.fit(Xb, y)
                 ref.fit(Xb.astype(np.float64), y)
                 out(name, "proba_err", _err(ours.predict_proba(Xb), ref.predict_proba(Xb.astype(np.float64))))
+                for attr in ("means_", "theta_", "var_"):
+                    if hasattr(ref, attr) and getattr(ours, attr, None) is not None:
+                        out(name, attr.rstrip("_") + "_err", _err(getattr(ours, attr), getattr(ref, attr)))
                 out(name, "predict_agree", float(np.mean(_np(ours.predict(Xb)) == ref.predict(Xb.astype(np.float64)))))
                 out(name, "accuracy", float(np.mean(_np(ours.predict(Xb)) == y)))
 
