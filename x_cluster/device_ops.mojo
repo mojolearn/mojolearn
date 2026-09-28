@@ -1169,11 +1169,11 @@ struct DeviceOps(ClusterOps):
                 self._fp(s), self._fp(a), self._fp(r), Int32(n), damping, grid_dim=n if n > 0 else 1,
                 block_dim=AP_TPB,
             )
-            self._ph1("ap_r")
-            return
-        self.ctx.enqueue_function[_ap_r_kernel](
-            self._fp(s), self._fp(a), self._fp(r), Int32(n), damping, grid_dim=n if n > 0 else 1, block_dim=AP_TPB,
-        )
+        else:
+            self.ctx.enqueue_function[_ap_r_kernel](
+                self._fp(s), self._fp(a), self._fp(r), Int32(n), damping, grid_dim=n if n > 0 else 1,
+                block_dim=AP_TPB,
+            )
         self._ph1("ap_r")
 
     def ap_a(mut self, r: Int, a: Int, n: Int, damping: Float32) raises:
