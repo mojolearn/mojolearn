@@ -320,7 +320,7 @@ from cholesky.checks.chol_sabotage import (
     sabotage_panel_factor_kernel,
     sabotage_trsm_panel_kernel,
 )
-from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_panel_kernel
+from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_panel_kernel, trsm_panel_guarded_kernel
 from gemm.checks.gemm_identical import (
     APPLE_MMA,
     APPLE_MMA_ADMIT_EXP_SUM,
@@ -707,7 +707,33 @@ def jitter_diag_kernel(
     a.unsafe_store(i * n + i, ftz(d + jitter))
 
 
+def panel_factor_guarded_kernel(
+    a: MutPointer[Float32, MutAnyOrigin],
+    info: MutPointer[Int32, MutAnyOrigin],
+    n_in: Int32,
+    j0_in: Int32,
+    nb_in: Int32,
+):
+    """`panel_factor_kernel`, returning at once (the whole block, before
+    any barrier) when an earlier panel already wrote `info`
+    (CHOL_DEFER_INFO)."""
+    if info[0] != Int32(0):
+        return
+    _panel_factor_body(a, info, n_in, j0_in, nb_in)
+
+
 def panel_factor_kernel(
+    a: MutPointer[Float32, MutAnyOrigin],
+    info: MutPointer[Int32, MutAnyOrigin],
+    n_in: Int32,
+    j0_in: Int32,
+    nb_in: Int32,
+):
+    _panel_factor_body(a, info, n_in, j0_in, nb_in)
+
+
+@always_inline
+def _panel_factor_body(
     a: MutPointer[Float32, MutAnyOrigin],
     info: MutPointer[Int32, MutAnyOrigin],
     n_in: Int32,
@@ -1029,6 +1055,18 @@ right-looking one. Only without a trace, a sabotage or a multi-GPU owner
 set, at the pinned NB = 32. `-D MOJOLEARN_CHOL_APPLE_LEFT_OFF` reverts."""
 
 
+#: lane/neighbors-apple (2026-09-28): in the Apple left-looking mode the
+#: factor no longer drains once per panel to read `info` (DEVIATION 1634's
+#: round trip, ~4 ms per panel on Metal: 313 panels at n = 10,000). Every
+#: panel's kernels return at once when `info` is already set, so after a
+#: failing panel nothing more is written -- the matrix is exactly what the
+#: per-panel read stopped at -- and `info` is read ONCE after the loop, which
+#: then runs the same partial-factor completion for the failing panel. Same
+#: kernels, same order, same words. `-D MOJOLEARN_CHOL_DEFER_INFO_OFF` keeps
+#: the per-panel read.
+comptime CHOL_DEFER_INFO = CHOL_APPLE_LEFT and not is_defined["MOJOLEARN_CHOL_DEFER_INFO_OFF"]()
+
+
 #: The left-looking update in pairs of column blocks (see `potrf_lower`):
 #: half the reads of the panels' rows. `-D MOJOLEARN_CHOL_LEFT_LOOKAHEAD_OFF`
 #: updates one column block at a time.
@@ -1049,7 +1087,7 @@ comptime CHOL_LEFT_KB = 32 if is_defined["MOJOLEARN_CHOL_LEFT_KB32"]() else 16
 comptime CHOL_LEFT_CELL_ADMIT = not is_defined["MOJOLEARN_CHOL_LEFT_BLOCK_ADMIT"]()
 
 
-def chol_left_update_amma_kernel[BN: Int](
+def chol_left_update_amma_kernel[BN: Int, GUARD: Bool = False](
     a: MutPointer[Float32, MutAnyOrigin],
     n_in: Int32,
     j0_in: Int32,
@@ -1057,9 +1095,15 @@ def chol_left_update_amma_kernel[BN: Int](
     np_in: Int32,
     row_lo_in: Int32,
     p_lo_in: Int32,
+    stop: MutPointer[Int32, MutAnyOrigin],
 ):
     """Rows [row_lo + 64 * block, +64) x columns [j0, j0 + w), w <= BN:
-    apply panels p_lo .. np-1 in order to every lower cell (j <= i)."""
+    apply panels p_lo .. np-1 in order to every lower cell (j <= i).
+    GUARD: return at once (the whole block, before any barrier) when
+    `stop[0] != 0` -- an earlier panel's factor failed (CHOL_DEFER_INFO)."""
+    comptime if GUARD:
+        if stop[0] != Int32(0):
+            return
     # One simdgroup per 16 rows x 32 columns: BN = 64 takes 8 simdgroups,
     # so each thread keeps the 8 fragments of the 32-wide tile.
     comptime SGN = BN // 32
@@ -1310,17 +1354,40 @@ def _chol_left_update(
     comptime if CHOL_APPLE_LEFT:
         if np <= p_lo or w <= 0:
             return
+        # The unguarded kernel never reads its stop word (compiled out).
+        var unused = ctx.enqueue_create_buffer[DType.int32](1)
+        _chol_left_launch[False](ctx, a, unused, n, j0, w, np, p_lo)
+        _ = unused^
+
+
+def _chol_left_update_guarded(
+    ctx: DeviceContext, mut a: DeviceBuffer[DType.float32], mut stop: DeviceBuffer[DType.int32],
+    n: Int, j0: Int, w: Int, np: Int, p_lo: Int = 0,
+) raises:
+    """`_chol_left_update` whose blocks return when `stop[0] != 0`
+    (CHOL_DEFER_INFO: the factor's `info` word)."""
+    comptime if CHOL_APPLE_LEFT:
+        if np <= p_lo or w <= 0:
+            return
+        _chol_left_launch[True](ctx, a, stop, n, j0, w, np, p_lo)
+
+
+def _chol_left_launch[GUARD: Bool](
+    ctx: DeviceContext, mut a: DeviceBuffer[DType.float32], mut stop: DeviceBuffer[DType.int32],
+    n: Int, j0: Int, w: Int, np: Int, p_lo: Int,
+) raises:
+    comptime if CHOL_APPLE_LEFT:
         var rows = n - j0
         if w > 32:
-            ctx.enqueue_function[chol_left_update_amma_kernel[64]](
+            ctx.enqueue_function[chol_left_update_amma_kernel[64, GUARD]](
                 a.unsafe_ptr(), Int32(n), Int32(j0), Int32(w), Int32(np), Int32(j0),
-                Int32(p_lo),
+                Int32(p_lo), stop.unsafe_ptr(),
                 grid_dim=((rows + 63) // 64, 1, 1), block_dim=(256, 1, 1),
             )
         else:
-            ctx.enqueue_function[chol_left_update_amma_kernel[32]](
+            ctx.enqueue_function[chol_left_update_amma_kernel[32, GUARD]](
                 a.unsafe_ptr(), Int32(n), Int32(j0), Int32(w), Int32(np), Int32(j0),
-                Int32(p_lo),
+                Int32(p_lo), stop.unsafe_ptr(),
                 grid_dim=((rows + 63) // 64, 1, 1), block_dim=(128, 1, 1),
             )
 
@@ -1673,6 +1740,11 @@ def potrf_lower(
             sabotage == CHOL_SAB_NONE and not trace.enabled
             and chol_device_count() == 1 and nb == 32
         )
+    # CHOL_DEFER_INFO: only in the left-looking mode (no trace, no
+    # sabotage, one owner) and not under MOJOLEARN_CHOL_TIMING.
+    var defer = False
+    comptime if CHOL_DEFER_INFO:
+        defer = left_mode and not ctim
     var tf = 0
     var ts = 0
     var tt = 0
@@ -1698,11 +1770,20 @@ def potrf_lower(
                 comptime LW = CHOL_LEFT_GROUP
                 var r = p % LW
                 if r == 0:
-                    _chol_left_update(ctx, a, n, j0, min(LW * nb, n - j0), p)
+                    if defer:
+                        _chol_left_update_guarded(ctx, a, dinfo, n, j0, min(LW * nb, n - j0), p)
+                    else:
+                        _chol_left_update(ctx, a, n, j0, min(LW * nb, n - j0), p)
                 else:
-                    _chol_left_update(ctx, a, n, j0, w, p, p - r)
+                    if defer:
+                        _chol_left_update_guarded(ctx, a, dinfo, n, j0, w, p, p - r)
+                    else:
+                        _chol_left_update(ctx, a, n, j0, w, p, p - r)
             else:
-                _chol_left_update(ctx, a, n, j0, w, p)
+                if defer:
+                    _chol_left_update_guarded(ctx, a, dinfo, n, j0, w, p)
+                else:
+                    _chol_left_update(ctx, a, n, j0, w, p)
             if ctim:
                 ctx.synchronize()
                 tu += Int(perf_counter_ns()) - tk
@@ -1725,6 +1806,16 @@ def potrf_lower(
                 ctx, a, dinfo, n, j0, w, inv_linv, inv_praw, inv_pk,
                 inv_shape, panel_tpb, elem_tpb,
             )
+        elif defer:
+            ctx.enqueue_function[panel_factor_guarded_kernel](
+                a.unsafe_ptr(),
+                dinfo.unsafe_ptr(),
+                Int32(n),
+                Int32(j0),
+                Int32(w),
+                grid_dim=(1, 1, 1),
+                block_dim=(panel_tpb, 1, 1),
+            )
         else:
             ctx.enqueue_function[panel_factor_kernel](
                 a.unsafe_ptr(),
@@ -1739,13 +1830,15 @@ def potrf_lower(
             ctx, chol_panel_tag("chol", p, "factored"), a, n * n
         )
 
-        # DEVIATION 1634: read `info` back and stop. One drain per panel.
-        ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
-        ctx.synchronize()
+        # DEVIATION 1634: read `info` back and stop. One drain per panel
+        # (CHOL_DEFER_INFO: once, after the loop).
+        if not defer:
+            ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
+            ctx.synchronize()
+            info = Int(hinfo.unsafe_ptr().unsafe_load(0))
         if ctim:
             tf += Int(perf_counter_ns()) - tk
             tk = Int(perf_counter_ns())
-        info = Int(hinfo.unsafe_ptr().unsafe_load(0))
         if info != 0:
             if left_mode:
                 # The right-looking partial factor: every later column block
@@ -1807,6 +1900,17 @@ def potrf_lower(
                     a.unsafe_ptr(), Int32(n), Int32(j0), Int32(w), Int32(n_trail),
                     grid_dim=((n_trail * 32 + 255) // 256, 1, 1),
                     block_dim=(256, 1, 1),
+                )
+            elif defer:
+                ctx.enqueue_function[trsm_panel_guarded_kernel](
+                    a.unsafe_ptr(),
+                    dinfo.unsafe_ptr(),
+                    Int32(n),
+                    Int32(j0),
+                    Int32(w),
+                    Int32(n_trail),
+                    grid_dim=(solve_grid, 1, 1),
+                    block_dim=(solve_tpb, 1, 1),
                 )
             else:
                 ctx.enqueue_function[trsm_panel_kernel](
@@ -1960,6 +2064,30 @@ def potrf_lower(
 
         p += 1
         j0 += nb
+
+    if defer:
+        # CHOL_DEFER_INFO: the one read of `info`. After a failing panel pf
+        # every later kernel returned at once, so the matrix is what the
+        # per-panel read stopped at; complete the partial factor exactly as
+        # the loop's `info != 0` branch does for that panel.
+        ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
+        ctx.synchronize()
+        info = Int(hinfo.unsafe_ptr().unsafe_load(0))
+        if info != 0:
+            var pf = (info - 1) // nb
+            var q0 = pf * nb + nb
+            var qb = pf + 1
+            while q0 < n:
+                var have = 0
+                comptime if CHOL_LEFT_LOOKAHEAD:
+                    var g0 = (pf // CHOL_LEFT_GROUP) * CHOL_LEFT_GROUP
+                    if qb < g0 + CHOL_LEFT_GROUP and g0 > 0:
+                        have = g0
+                _chol_left_update(ctx, a, n, q0, min(nb, n - q0), pf, have)
+                q0 += nb
+                qb += 1
+            ctx.synchronize()
+            p = pf + 1
 
     if ctim:
         print("CHOL_TIMING n=" + String(n) + " nb=" + String(nb) + " left_update_ms=" + String(Float64(tu) / 1e6) + " factor+info_sync_ms=" + String(Float64(tf) / 1e6)

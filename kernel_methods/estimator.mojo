@@ -46,8 +46,30 @@ and the card use.
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
 from bindings.hostptr import copy_f32
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
+from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL
+from core.neural_context import neural_ctx
+from std.time import perf_counter_ns
+from std.os import getenv
+from std.sys.compile import is_defined
+# ONE PROCESS-LIFETIME DeviceContext per binding and tier (CURRENT DIRECTIVES;
+# lane/neighbors-apple 2026-09-28): a new context per entry is a new Metal
+# queue and a pipeline load per call. Same kernels, same launches, same order
+# on one stream, and every entry still synchronizes before it returns, so no
+# bit moves. This module is compiled into ONE GPU binding, so the slot name
+# (per module and tier) is that binding's own.
+comptime _FAMILY_CTX = "MojoKernelMethodsContextIdentical" if _CTX_MODE == _CTX_IDENTICAL else "MojoKernelMethodsContextOther"
+
+
+def _family_ctx() raises -> DeviceContext:
+    """The binding's process-lifetime context; `-D MOJOLEARN_FAMILY_CTX_PER_CALL`
+    restores a new context per entry (the A/B arm)."""
+    comptime if is_defined["MOJOLEARN_FAMILY_CTX_PER_CALL"]():
+        return DeviceContext()
+    return neural_ctx[_FAMILY_CTX]()
 
 from cholesky.checks.potrf import (
     CHOL_ELEM_TPB,
@@ -126,6 +148,59 @@ def _upload(
     ctx.synchronize()
     _ = host^
     return buf^
+
+
+#: lane/neighbors-apple (2026-09-28): a device result bound for the CALLER'S
+#: memory goes through a reused pinned staging buffer in 64 MB chunks and a
+#: host copy, instead of one `enqueue_copy` into unregistered memory, which
+#: ran at about 2.2 GB/s on the M3 Ultra (RBFSampler 1M x 500: 905 of the
+#: transform's 1,140 ms). Same words. `-D MOJOLEARN_KM_DIRECT_OUT` keeps the
+#: direct copy.
+comptime KM_OUT_CHUNK = 16 * 1024 * 1024
+
+
+def _download_into[out_origin: MutOrigin, //](
+    ctx: DeviceContext,
+    mut src: DeviceBuffer[DType.float32],
+    output: MutPointer[Float32, out_origin],
+    n: Int,
+) raises:
+    comptime if is_defined["MOJOLEARN_KM_DIRECT_OUT"]():
+        ctx.enqueue_copy(dst_ptr=output, src_buf=src)
+        ctx.synchronize()
+        return
+    if n <= 0:
+        return
+    var c = min(n, KM_OUT_CHUNK)
+    var h = ctx.enqueue_create_host_buffer[DType.float32](c)
+    var off = 0
+    while off < n:
+        var m = min(c, n - off)
+        var sub = src.create_sub_buffer[DType.float32](off, m)
+        ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=sub)
+        ctx.synchronize()
+        # The first touch of the caller's fresh pages dominates this copy;
+        # split it over the host cores (a copy: no arithmetic, no FP env).
+        var src_p = rebind[MutPointer[Float32, MutUntrackedOrigin]](h.unsafe_ptr())
+        var dst_p = rebind[MutPointer[Float32, MutUntrackedOrigin]](output.unsafe_offset(off))
+        var tasks = host_predict_task_count(m)
+        if m < 262144:
+            tasks = 1
+        var part = host_predict_chunk(m, tasks)
+
+        def _part(task: Int) {imm src_p, imm dst_p, imm m, imm part}:
+            var lo = task * part
+            var hi = min(lo + part, m)
+            if hi > lo:
+                copy_f32(src_p.unsafe_offset(lo), dst_p.unsafe_offset(lo), hi - lo)
+
+        if tasks == 1:
+            _part(0)
+        else:
+            host_parallelize(_part, tasks)
+        _ = sub^
+        off += m
+    _ = h^
 
 
 def _download(
@@ -312,7 +387,7 @@ def kernel_ridge_fit_host(
             " on data that is perfectly well conditioned. DEVIATION 1686"
         )
 
-    var ctx = DeviceContext()
+    var ctx = _family_ctx()
 
     # DEVIATION 2487: self-kernel operands share one uploaded allocation.
     var xa = _upload(ctx, x)
@@ -428,7 +503,7 @@ def kernel_ridge_predict_host(
     var d = model.n_features
     var t = model.n_targets
 
-    var ctx = DeviceContext()
+    var ctx = _family_ctx()
     var dq = _upload(ctx, x_new)
     var dfit = _upload(ctx, model.x_fit)
     var ddual = _upload(ctx, model.dual_coef)
@@ -671,7 +746,7 @@ def nystroem_fit_host(
         for f in range(n_features):
             comp.append(x[srow * n_features + f])
 
-    var ctx = DeviceContext()
+    var ctx = _family_ctx()
     var ca = _upload(ctx, comp)
     var dk = ctx.enqueue_create_buffer[DType.float32](q * q)
     var na = ctx.enqueue_create_buffer[DType.float32](q)
@@ -989,7 +1064,7 @@ def nystroem_transform_host(
     var q = model.n_components
     var d = model.n_features
 
-    var ctx = DeviceContext()
+    var ctx = _family_ctx()
     var dx = _upload(ctx, x)
     var dc = _upload(ctx, model.components)
     var dnorm = _upload(ctx, model.normalization)
@@ -1047,7 +1122,7 @@ def nystroem_transform_host_into[out_origin: MutOrigin, //](
     var kp = nystroem_params(model)
     var q = model.n_components
     var d = model.n_features
-    var ctx = DeviceContext()
+    var ctx = _family_ctx()
     var dx = _upload(ctx, x)
     var dc = _upload(ctx, model.components)
     var dnorm = _upload(ctx, model.normalization)
@@ -1073,8 +1148,7 @@ def nystroem_transform_host_into[out_origin: MutOrigin, //](
     identical_gemm_into(ctx, demb, dk, dnorm, gws, n_rows, q, q, op)
     ctx.synchronize()
     trace.record_device(ctx, "nys.embedding", demb, n_rows * q)
-    ctx.enqueue_copy(dst_ptr=output, src_buf=demb)
-    ctx.synchronize()
+    _download_into(ctx, demb, output, n_rows * q)
     _ = dx^
     _ = dc^
     _ = dnorm^
@@ -1166,7 +1240,7 @@ def rbf_sampler_fit_host(
     var sigma = km_weight_sigma(gamma)
     var scale = km_feature_scale(n_components)
 
-    var ctx = DeviceContext()
+    var ctx = _family_ctx()
     var dw = ctx.enqueue_create_buffer[DType.float32](
         n_features * n_components
     )
@@ -1223,7 +1297,7 @@ def rbf_sampler_transform_host(
     var d = model.n_features
     var dd = model.n_components
 
-    var ctx = DeviceContext()
+    var ctx = _family_ctx()
     var dx = _upload(ctx, x)
     var dw = _upload(ctx, model.random_weights)
     var db = _upload(ctx, model.random_offset)
@@ -1267,7 +1341,9 @@ def rbf_sampler_transform_host_into[out_origin: MutOrigin, //](
     km_validate_matrix(x, n_rows, model.n_features, "rbf_sampler transform X")
     var d = model.n_features
     var dd = model.n_components
-    var ctx = DeviceContext()
+    var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
+    var t0 = Int(perf_counter_ns())
+    var ctx = _family_ctx()
     var dx = _upload(ctx, x)
     var dw = _upload(ctx, model.random_weights)
     var db = _upload(ctx, model.random_offset)
@@ -1276,16 +1352,22 @@ def rbf_sampler_transform_host_into[out_origin: MutOrigin, //](
         identical_gemm_workspace_max_floats(n_rows, dd, d)
     )
     ctx.synchronize()
+    var t1 = Int(perf_counter_ns())
     identical_gemm_into(ctx, dp, dx, dw, gws, n_rows, dd, d, OP_NN)
     ctx.synchronize()
+    var t2 = Int(perf_counter_ns())
     trace.record_device(ctx, "rf.projection", dp, n_rows * dd)
     km_feature_map_epilogue(
         ctx, dp, db, n_rows, dd, model.scale, tpb, sabotage
     )
     ctx.synchronize()
+    var t3 = Int(perf_counter_ns())
     trace.record_device(ctx, "rf.feature_map", dp, n_rows * dd)
-    ctx.enqueue_copy(dst_ptr=output, src_buf=dp)
-    ctx.synchronize()
+    _download_into(ctx, dp, output, n_rows * dd)
+    if st_on:
+        print("RBF_TRANSFORM_STAGES rows=" + String(n_rows) + " alloc_upload_ms=" + String((t1 - t0) // 1000000)
+              + " gemm_ms=" + String((t2 - t1) // 1000000) + " epilogue_ms=" + String((t3 - t2) // 1000000)
+              + " copy_out_ms=" + String((Int(perf_counter_ns()) - t3) // 1000000))
     _ = dx^
     _ = dw^
     _ = db^

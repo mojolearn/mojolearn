@@ -1389,7 +1389,10 @@ def knn_selector_specialize_common_for[column: Int, identical: Bool]() -> Bool:
         return True
     if column == COLUMN_CPU:
         return False  # NVIDIA's schedule, never the host's
-    return column == COLUMN_NVIDIA
+    # Apple M4 Pro 2026-09-28 (lane/neighbors-apple, bench/x_neighbors_ab.sh,
+    # 200k x 10k x d8, k 10, taxi and HIGGS, forward and reverse): request
+    # 0.49 -> 0.37 s, every digest equal.
+    return column == COLUMN_NVIDIA or column == COLUMN_APPLE
 
 
 def knn_selector_shuffle_for[column: Int, identical: Bool]() -> Bool:
@@ -1411,9 +1414,14 @@ def knn_selector_warpbound_guard_for[column: Int, identical: Bool]() -> Bool:
         return False
     comptime if not column_lane_width_is_fixed(column):
         return False
+    # A/B arm for the owed Apple and AMD timings (lane/neighbors-apple).
+    comptime if is_defined["MOJOLEARN_EXPERIMENTAL_KNN_WARPBOUND_GUARD"]():
+        return True
     if column == COLUMN_CPU:
         return False  # NVIDIA's schedule, never the host's
-    return column == COLUMN_NVIDIA
+    # Apple M4 Pro 2026-09-28 (lane/neighbors-apple, forward and reverse
+    # arms): request 0.49 -> 0.46-0.48 s, every digest equal.
+    return column == COLUMN_NVIDIA or column == COLUMN_APPLE
 
 
 def umap_device_optimizer_for[column: Int, identical: Bool]() -> Bool:

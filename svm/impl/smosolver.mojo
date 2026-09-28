@@ -127,8 +127,18 @@ comptime SMO_MAX_INNER_ITER = 10000
 #: delta_alpha values scatter through the offsets the index select just
 #: scanned from the same flags instead of scanning them again.
 #: `-D MOJOLEARN_SVM_FAST_SYNCS_OFF` restores both.
+#: Also under IDENTICAL on Apple (lane/neighbors-apple, 2026-09-28): all
+#: three are bit-preserving by construction. The ranked permutation is the
+#: host sort's (distinct indices); the scatter reuses the offsets the index
+#: select scanned from the SAME flags over the SAME n; and the NaN flag is
+#: still checked before any output is returned (one iteration later, and at
+#: the loop's exit), so a NaN fit raises exactly as before and a finite fit
+#: runs the same arithmetic in the same order.
 comptime FAST_SMO_SYNCS = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or (
+        GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        and not is_defined["MOJOLEARN_SVM_IDENTICAL_SYNCS_OFF"]()
+    ))
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_SVM_FAST_SYNCS_OFF"]()
 )
@@ -142,7 +152,7 @@ comptime FAST_SMO_SYNCS = (
 comptime FAST_EPT = 4 if is_defined["MOJOLEARN_SVM_FAST_EPT4"]() else (
     8 if is_defined["MOJOLEARN_SVM_FAST_EPT8"]() else 2
 )
-comptime SVM_FUSED_UPDATE_F = FAST_SMO_SYNCS and not is_defined[
+comptime SVM_FUSED_UPDATE_F = FAST_SMO_SYNCS and GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined[
     "MOJOLEARN_SVM_FUSED_UPDATE_F_OFF"
 ]()
 """FAST on Apple: the gradient update computes each kernel value where it
@@ -167,8 +177,11 @@ def fold_order_rank_kernel(
     order: MutPointer[Int32, MutAnyOrigin],
 ):
     """One block of `SMO_WS_SIZE` threads: `order[rank(p)] = p`, rank by
-    training index (distinct within a working set), `fold_order_for` on
-    the device."""
+    (training index, position), `fold_order_for` on the device. The
+    position breaks ties: EPSILON_SVR's projected indices repeat (rows i
+    and i + n of one working set both project to i), and a rank by index
+    alone gave two positions one slot and left another unwritten
+    (lane/neighbors-apple, 2026-09-28: SVR DIVERGENT on the M3 Ultra)."""
     var n = Int(n_in)
     var sh = stack_allocation[
         SVM_WS_MAX, Scalar[DType.int32], address_space = AddressSpace.SHARED
@@ -183,7 +196,8 @@ def fold_order_rank_kernel(
         var mine = sh[t]
         var r = 0
         for q in range(n):
-            if sh[q] < mine:
+            var other = sh[q]
+            if other < mine or (other == mine and q < t):
                 r += 1
         order.unsafe_store(r, Int32(t))
         t += Int(block_dim.x)
