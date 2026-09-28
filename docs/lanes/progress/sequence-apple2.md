@@ -295,6 +295,13 @@ against 11.5 / 21.8 s in jobs 5 and 6: its spread is wide, the ratio is not.
 prophet (32768) IDENTICAL 39.12 -> 40.31 s (0.97x), FAST 0.166 -> 0.164 s; stl,
 croston unchanged; digests equal. Reverted.
 
+### Job 10: m4-a, steward 1790615359608, Theta stall stop (opt-in) sweep
+
+AutoTheta (10000 series, fit 100, holdout 12) runs 39 Nelder-Mead iterations on
+average: it converges, so no stall setting changes its time (0.25 to 0.29 s across
+the sweep) and all but 20/1e-6 leave the output bit for bit. The opt-in was
+reverted (59f463814 -> its revert); theta, ets, garch, stl timings unchanged.
+
 ## Unproven (no identity, sabotage or lane-check run on any of these; the combined run owes them)
 
 Measured on Apple only (m4-a M4, m4pro-b M4 Pro): speed, IDENTICAL digests before ==
