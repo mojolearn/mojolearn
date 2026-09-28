@@ -269,10 +269,31 @@ Median of two rounds, ms.
 Bits: IDENTICAL 9 digest lines (BatchNorm2d's added) equal in all 4 runs;
 FAST 9 digest lines equal in all 4 runs and 20/20 fastq.py rows equal.
 
+### m3ultra-b (Apple M3 Ultra), job 1790615497573, commit 2144a9548
+
+base = round 1's code (every define above + legacy); all = default.
+Median of two rounds, ms.
+
+| shape | IDENTICAL base | IDENTICAL all | FAST base | FAST all |
+|---|---|---|---|---|
+| Conv2d 3->64 fwd / bwd | 28.5 / 6.5 | 25.5 / 4.5 | 27.9 / 8.2 | 26.2 / 4.3 |
+| Conv2d 64->64 fwd / bwd | 39.3 / 73.0 | 34.2 / 44.8 | 41.2 / 60.0 | 33.3 / 42.5 |
+| Conv2d 64->128 fwd / bwd | 18.9 / 20.2 | 17.5 / 18.9 | 20.7 / 21.0 | 16.8 / 17.0 |
+| CNNClassifier fit 2048 | 148.2 | 74.5 (2.0x) | 127.2 | 68.3 (1.9x) |
+| CNNClassifier fit 8192 | 545.6 | 294.9 (1.9x) | 461.2 | 267.1 (1.7x) |
+| predict_proba 2048 | 58.4 | 23.2 (2.5x) | 54.0 | 20.5 (2.6x) |
+| predict_proba 8192 | 206.5 | 72.0 (2.9x) | 212.0 | 58.5 (3.6x) |
+| BasicBlock fwd / fwd+bwd | 79.4 / 174.8 | 65.2 / 131.3 | 79.2 / 160.9 | 59.7 / 120.8 |
+| BatchNorm2d fwd / bwd | 21.9 / 17.1 | 14.4 / 11.0 | 20.6 / 15.2 | 12.4 / 9.4 |
+| MaxPool2d fwd / bwd | 11.6 / 29.1 | 11.4 / 27.5 | 11.9 / 27.9 | 11.9 / 27.3 |
+| GCNConv fwd / bwd | 520.7 / 31.5 | 49.0 / 29.4 | 533.0 / 30.4 | 48.6 / 29.1 |
+| SAGEConv fwd / bwd | 495.1 / 56.8 | 58.8 / 53.4 | 493.9 / 55.4 | 59.3 / 53.5 |
+
+Bits: IDENTICAL 9 digest lines equal in all 4 runs; FAST 9 digest lines
+equal in all 4 runs and 20/20 fastq.py rows equal.
+
 ## Unproven
 
-- 2144a9548 on the M3 Ultra (BatchNorm threadgroup folds, graph reuse):
-  job 1790615497573 (m3ultra-b) pending.
 - The regenerated seam 5702 sabotage patch: applies, not yet run.
 
 ## Shared code touched (the integration run must cover)
