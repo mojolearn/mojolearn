@@ -38,7 +38,7 @@ def quantile_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, 
     With sample_weight, y = targets n | weights n and the loss is
     (1/sum w) sum w_i rho_q(r_i) (theirs: sum w rho + alpha sum(w) |w|_1).
     res: coef d, intercept, n_iter, converged.
-    fw: M m*m | beta m | rhs m | r n | u n | ab n | tmp n | z d | v d."""
+    fw: M m*m | beta m | rhs m | r n | u n | ab n | tmp n | z d | v d | next rhs m."""
     var max_iter = ldi(ip, 0)
     var fi = ldi(ip, 1) != 0
     var q = ld(fp, 0)
@@ -61,6 +61,8 @@ def quantile_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, 
     var tmp = ab + n
     var z = tmp + n
     var v = z + d
+    var nrhs = v + d
+    var rhs_ready = False
     # M = A'A + E, rows ascending: each entry of the lower triangle is its
     # own accumulator (lane linear-cpu: one pass over the rows, not one per entry)
     fill(fw, mm, m * m, Float32(0))
@@ -98,12 +100,16 @@ def quantile_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, 
     for it in range(max_iter):
         iters = it + 1
         # beta-update: the m sums of A'(y - r - u), rows ascending, one pass
-        fill(fw, rhs, m, Float32(0))
-        for i in range(n):
-            var t = fs(fs(ld(y, i), ld(fw, r + i)), ld(fw, u + i))
-            axpy_acc(fw, rhs, t, x, i * d, d)
-            if fi:
-                st(fw, rhs + d, fmad(Float32(1), t, ld(fw, rhs + d)))
+        # (already folded by the previous iteration's pass unless u was rescaled)
+        if rhs_ready:
+            copy(fw, rhs, fw, nrhs, m)
+        else:
+            fill(fw, rhs, m, Float32(0))
+            for i in range(n):
+                var t = fs(fs(ld(y, i), ld(fw, r + i)), ld(fw, u + i))
+                axpy_acc(fw, rhs, t, x, i * d, d)
+                if fi:
+                    st(fw, rhs + d, fmad(Float32(1), t, ld(fw, rhs + d)))
         for j in range(d):
             st(fw, rhs + j, fa(ld(fw, rhs + j), fs(ld(fw, z + j), ld(fw, v + j))))
         chol_solve(fw, mm, m, fw, rhs)
@@ -141,11 +147,33 @@ def quantile_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, 
                 st(fwp, r + i, nr)
 
         par_rows(rows_map, n)
+        # ONE fold pass (lane linear-cpu): every accumulator below is its own,
+        # rows ascending, as the separate passes had them: |A beta|^2, |r|^2,
+        # the primal residual's row part and the dual update u, |u|^2's row
+        # part, A' dr (into rhs, free now) and next iteration's A'(y - r - u)
+        var prim = Float32(0)
+        var un = Float32(0)
+        fill(fw, rhs, m, Float32(0))
+        fill(fw, nrhs, m, Float32(0))
         for i in range(n):
             var abi = ld(fw, ab + i)
             abn = fmad(abi, abi, abn)
             var nr = ld(fw, r + i)
             rn = fmad(nr, nr, rn)
+            var yi = ld(y, i)
+            var pr = fs(fa(abi, nr), yi)
+            prim = fmad(pr, pr, prim)
+            var ui = fa(ld(fw, u + i), pr)
+            st(fw, u + i, ui)
+            un = fmad(ui, ui, un)
+            var ti = ld(fw, tmp + i)
+            axpy_acc(fw, rhs, ti, x, i * d, d)
+            var t2 = fs(fs(yi, nr), ui)
+            axpy_acc(fw, nrhs, t2, x, i * d, d)
+            if fi:
+                st(fw, rhs + d, fmad(Float32(1), ti, ld(fw, rhs + d)))
+                st(fw, nrhs + d, fmad(Float32(1), t2, ld(fw, nrhs + d)))
+        rhs_ready = True
         # z-update
         var zdiff = Float32(0)
         var wn = Float32(0)
@@ -159,25 +187,14 @@ def quantile_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, 
             zdiff = fmad(dz, dz, zdiff)
             st(fw, z + j, nz)
             zn = fmad(nz, nz, zn)
-        # dual updates and the primal residual
-        var prim = Float32(0)
-        for i in range(n):
-            var pr = fs(fa(ld(fw, ab + i), ld(fw, r + i)), ld(y, i))
-            prim = fmad(pr, pr, prim)
-            st(fw, u + i, fa(ld(fw, u + i), pr))
+        # dual updates and the primal residual (the row parts folded above)
         for j in range(d):
             var pr = fs(ld(fw, beta + j), ld(fw, z + j))
             prim = fmad(pr, pr, prim)
             st(fw, v + j, fa(ld(fw, v + j), pr))
         # dual residual rho * || [A' dr ; dz] ||
         var dual = zdiff
-        # the m sums of A' dr, rows ascending, one pass (rhs is free: beta holds it)
-        fill(fw, rhs, m, Float32(0))
-        for i in range(n):
-            var ti = ld(fw, tmp + i)
-            axpy_acc(fw, rhs, ti, x, i * d, d)
-            if fi:
-                st(fw, rhs + d, fmad(Float32(1), ti, ld(fw, rhs + d)))
+        # the m sums of A' dr were folded above into rhs
         for j in range(m):
             var acc = ld(fw, rhs + j)
             dual = fmad(acc, acc, dual)
@@ -185,9 +202,6 @@ def quantile_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, 
         var dual_n = fm(rho, fsqrt(dual))
         var scale_p = fmax(fmax(fsqrt(abn), fsqrt(rn)), fmax(ynorm, fmax(fsqrt(wn), fsqrt(zn))))
         var eps_p = fa(fm(eps_abs, fsqrt(i2f(n + d))), fm(eps_rel, scale_p))
-        var un = Float32(0)
-        for i in range(n):
-            un = fmad(ld(fw, u + i), ld(fw, u + i), un)
         for j in range(d):
             un = fmad(ld(fw, v + j), ld(fw, v + j), un)
         var eps_d = fa(fm(eps_abs, fsqrt(i2f(m))), fm(fm(eps_rel, rho), fsqrt(un)))
@@ -205,6 +219,7 @@ def quantile_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, 
                 var inv = fd(Float32(1), factor)
                 for i in range(n):
                     st(fw, u + i, fm(ld(fw, u + i), inv))
+                rhs_ready = False
                 for j in range(d):
                     st(fw, v + j, fm(ld(fw, v + j), inv))
     copy(res, 0, fw, z, d)
