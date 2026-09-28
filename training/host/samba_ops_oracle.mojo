@@ -92,6 +92,7 @@ from gemm.host.identical_gemm import (
     gemm_oracle,
     GEMM_ORACLE_HOST_SABOTAGE,
 )
+from gemm.host.gemm_host_rows import gemm_host_rows
 from training.checks.optimizer_oracle import microbatch_split_is_identical
 
 
@@ -314,7 +315,7 @@ def host_samba_rms_norm_backward(
     else:
         host_parallelize(_rows, tasks)
     var ones = List[Float32](length=m, fill=Float32(1.0))
-    var dw = gemm_oracle(ones, dprod, OP_NN, 1, dm, m)
+    var dw = gemm_host_rows(ones, dprod, OP_NN, 1, dm, m)
     _ = dh^
     return (dx^, dw^)
 
@@ -331,7 +332,7 @@ def host_samba_linear_forward(
         raise Error("mojolearn samba ops: linear shape must be positive")
     host_samba_refuse_nonfinite("linear input", a)
     host_samba_refuse_nonfinite("linear weight", w)
-    return gemm_oracle(a, w, OP_NT, m, n, k)
+    return gemm_host_rows(a, w, OP_NT, m, n, k)
 
 
 def _gemm_by_call(
@@ -340,8 +341,8 @@ def _gemm_by_call(
     call: Tuple[Int, Int, Int, Int, Int],
 ) -> List[Float32]:
     if call[4] == BWD_DC_LEFT:
-        return gemm_oracle(dc, other, call[0], call[1], call[2], call[3])
-    return gemm_oracle(other, dc, call[0], call[1], call[2], call[3])
+        return gemm_host_rows(dc, other, call[0], call[1], call[2], call[3])
+    return gemm_host_rows(other, dc, call[0], call[1], call[2], call[3])
 
 
 def host_samba_linear_backward(

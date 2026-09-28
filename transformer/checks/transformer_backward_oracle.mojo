@@ -138,6 +138,7 @@ from gemm.checks.gemm_backward import (
     gemm_backward_b_call,
 )
 from gemm.checks.gemm_oracle import OP_NN, OP_NT, gemm_oracle
+from gemm.host.gemm_host_rows import gemm_host_rows
 from checks.numerics import (
     ftz,
     identical_div,
@@ -218,8 +219,8 @@ def _gemm_bwd_a(
     """
     var call = gemm_backward_a_call(op, m, n, k)
     if call[4] == BWD_DC_LEFT:
-        return gemm_oracle(dc, other, call[0], call[1], call[2], call[3])
-    return gemm_oracle(other, dc, call[0], call[1], call[2], call[3])
+        return gemm_host_rows(dc, other, call[0], call[1], call[2], call[3])
+    return gemm_host_rows(other, dc, call[0], call[1], call[2], call[3])
 
 
 def _gemm_bwd_b(
@@ -243,8 +244,8 @@ def _gemm_bwd_b(
     """
     var call = gemm_backward_b_call(op, m, n, k)
     if call[4] == BWD_DC_LEFT:
-        return gemm_oracle(dc, other, call[0], call[1], call[2], call[3])
-    return gemm_oracle(other, dc, call[0], call[1], call[2], call[3])
+        return gemm_host_rows(dc, other, call[0], call[1], call[2], call[3])
+    return gemm_host_rows(other, dc, call[0], call[1], call[2], call[3])
 
 
 def _ones(n: Int) -> List[Float32]:
@@ -1238,7 +1239,7 @@ def transformer_block_backward_oracle(
         prod2,
     )
     st.norm2_dot = dot2^
-    st.dw_norm2 = gemm_oracle(ones_m, prod2, OP_NN, 1, dm, m)
+    st.dw_norm2 = gemm_host_rows(ones_m, prod2, OP_NN, 1, dm, m)
     st.norm2_dx = dx2^
     _ = prod2^
 
@@ -1306,7 +1307,7 @@ def transformer_block_backward_oracle(
                     v_head.append(
                         fwd.kv_v_cache[(bb * nkv + kv) * s * hd + j * hd + d]
                     )
-            var cell = gemm_oracle(dctx_head, v_head, OP_NT, l, s, hd)
+            var cell = gemm_host_rows(dctx_head, v_head, OP_NT, l, s, hd)
             for i in range(l * s):
                 st.d_attn_weights.append(cell[i])
             _ = dctx_head^
@@ -1582,7 +1583,7 @@ def transformer_block_backward_oracle(
         prod1,
     )
     st.norm1_dot = dot1^
-    st.dw_norm1 = gemm_oracle(ones_m, prod1, OP_NN, 1, dm, m)
+    st.dw_norm1 = gemm_host_rows(ones_m, prod1, OP_NN, 1, dm, m)
     st.norm1_dx = dx1^
     _ = prod1^
 

@@ -126,6 +126,7 @@ from gemm.checks.gemm_oracle import (
     gemm_oracle,
     gemm_oracle_right_zero_padded,
 )
+from gemm.host.gemm_host_rows import gemm_host_rows, gemm_host_rows_right_zero_padded
 from mamba.checks.mamba_oracle import refuse_nonfinite
 from mamba.checks.mamba3_fixture import (
     BITS_POS_INF,
@@ -444,7 +445,7 @@ def mamba3_block_oracle(
 
     # ---- S4: in_proj (mamba3.py:176; Linear, bias=False), gemm v1
     #      OP_NT, k = d_model. Columns z|x|B|C|dd_dt|dd_A|trap|angle.
-    st.in_proj = gemm_oracle(st.norm_out, w.w_in, OP_NT, m, dip, dm)
+    st.in_proj = gemm_host_rows(st.norm_out, w.w_in, OP_NT, m, dip, dm)
 
     # ---- S5 (data-dependent A, clamped) + S6 (dt, NO clamp) per
     #      (token, head).
@@ -926,7 +927,7 @@ def mamba3_block_oracle(
                         ]
                     # padded rows: v is exact +0.0, so the fold sees
                     # exact zeros (contract section 3).
-                var inc = gemm_oracle_right_zero_padded(
+                var inc = gemm_host_rows_right_zero_padded(
                     vs, ks, OP_TN, p_dim, n_state, q, real
                 )
                 var scale_c = ftz(identical_exp(dl))
@@ -985,7 +986,7 @@ def mamba3_block_oracle(
                 # Padded output rows are never consumed. Keep the logical
                 # columns and contraction unchanged, but produce only the
                 # real row prefix.
-                var smat = gemm_oracle(
+                var smat = gemm_host_rows(
                     qmat, kmat, OP_NT, real, q, n_state
                 )
                 var lbase = (((bb * nc + c) * nh + hh) * q) * q
@@ -998,7 +999,7 @@ def mamba3_block_oracle(
                                 ftz(st.seg_l[lbase + i * q + j]),
                             )
                         )
-                var yint = gemm_oracle(
+                var yint = gemm_host_rows(
                     m_mat, vmat, OP_NN, real, p_dim, q
                 )
                 # state read-out: (q_rot . h_entering^T) then * exp(da_cs)
@@ -1006,7 +1007,7 @@ def mamba3_block_oracle(
                 var pbase = (((bb * nc + c) * nh + hh) * p_dim) * n_state
                 for i in range(p_dim * n_state):
                     h_in[i] = st.pass_states[pbase + i]
-                var ch = gemm_oracle(
+                var ch = gemm_host_rows(
                     qmat, h_in, OP_NT, real, p_dim, n_state
                 )
                 for i in range(real):
@@ -1104,7 +1105,7 @@ def mamba3_block_oracle(
 
     # ---- S4: out_proj (mamba3.py:277), gemm v1 OP_NT, k = d_inner.
     #      The gate output IS the [M, d_inner] row (d = h*P + p, a copy).
-    st.out_proj = gemm_oracle(st.gate_out, w.w_out, OP_NT, m, dm, di)
+    st.out_proj = gemm_host_rows(st.gate_out, w.w_out, OP_NT, m, dm, di)
 
     # ---- S23: residual (block.py:52/:67), mamba2 S22 VERBATIM.
     for i in range(m * dm):

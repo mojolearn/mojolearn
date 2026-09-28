@@ -3,6 +3,7 @@
 """The IDENTICAL FP32 optimizer step, written out, on the host. This file's own `opt_refuse_bad_inputs` is now what the device entry point calls, so both sides fail with the same name (DEVIATION 1496)."""
 
 from gemm.checks.gemm_oracle import OP_NT, contract_leaf_size, gemm_oracle
+from gemm.host.gemm_host_rows import gemm_host_rows
 from checks.numerics import (
     ftz,
     identical_div,
@@ -208,7 +209,7 @@ def clip_tensor_sumsq_oracle(
 ) -> Float32:
     """DEVIATION 1178, contract clause 3.2. There `P == 1`, the tree has no arithmetic node, and the v1 answer IS the serial ascending chain, so a hand-written serial fold passes."""
     var g = _slice(grads, begin, count)
-    var out = gemm_oracle(g, g, OP_NT, 1, 1, count)
+    var out = gemm_host_rows(g, g, OP_NT, 1, 1, count)
     if len(out) == 0:
         return Float32(0.0)
     return out[0]
@@ -248,7 +249,7 @@ def clip_grad_norm_oracle(
         norm_out.append(ftz(identical_sqrt(s)))
 
     var norms_copy = _slice(norm_out, 0, len(norm_out))
-    var tot = gemm_oracle(norms_copy, norms_copy, OP_NT, 1, 1, j_count)
+    var tot = gemm_host_rows(norms_copy, norms_copy, OP_NT, 1, 1, j_count)
     var total_sumsq = Float32(0.0)
     if len(tot) > 0:
         total_sumsq = ftz(tot[0])
