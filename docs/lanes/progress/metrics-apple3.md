@@ -66,7 +66,27 @@ approximation was added, so the paired quality numbers are unchanged.
    - cross_val_predict: partition test by `check_indices_i64`, assembly by
      `scatter_rows`, widened as the definition widens.
 
-SHARED CODE: none outside x_metrics and model_selection.py so far. The
+5. Integer labels (x_metrics/epilogue.mojo `encode_small_i64`,
+   `first_rows_i32`; python `_metrics_impl._encode_small_native`,
+   `model_selection._first_seen_native`): labels that span fewer than 65536
+   values are encoded by host tasks (the span, a seen-byte per value, one
+   table load per row) instead of the core encoder's binary search per row
+   on one thread; the same ascending classes and ranks. StratifiedKFold reads
+   its first-seen codes from them (each class's first row ranks the classes)
+   instead of a Python object per row. A wider span, too many classes or an
+   older binary takes the core encoder as before.
+6. The host arena of a program of 65536 words or more is an anonymous zero
+   mapping (`_expansion_metrics._Arena`): the same zeros, but only the pages
+   the inputs and outputs live in are ever touched
+   (`array.array("f", bytes(4 * size))` wrote every page twice).
+7. tools/apple_speed_metrics/epilogue3_words.mojo: changes 1, 2, 3 and 5
+   against their sequential definitions at 1, 2, 3 and 8 host tasks.
+
+Changes 4, 5 (the Python side) and 6 share the before arm
+`MOJOLEARN_MSEL3_BEFORE=1`.
+
+SHARED CODE: none outside x_metrics, `_metrics_impl.py`, `_expansion_metrics.py`
+and model_selection.py so far. The
 epilogue now imports core/host_parallel.mojo and core/host_predict_threads.mojo
 (read only, not edited).
 
