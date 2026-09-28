@@ -31,6 +31,8 @@ order, default rebuilt at the end).
 | 0e481b572 | Cholesky panel factor + panel solve on Apple: diagonal block in threadgroup memory, rows in registers (`-D MOJOLEARN_CHOL_PANEL_STAGE_OFF`, `-D MOJOLEARN_CHOL_PANEL_SOLVE_STAGE_OFF`) | both on Apple | same chains |
 | 0dcb77d80 | transform output copy split over the host cores | both | same words |
 | efd02268a, 9ec71f7a4 | MOJOLEARN_STAGE_TIMES=1 walls for GPC fit, KRR solve, RBFSampler transform (timing only) | - | - |
+| 0e481b572 -> be86ece38 | Cholesky panel staging: measured neutral, REVERTED (no code left on the branch) | - | - |
+| 395bc882a | GPC fit: Laplace Newton loop keeps K, B and the factor on the device, B by `gpc_b_matrix_kernel` (`-D MOJOLEARN_GPC_HOST_NEWTON` keeps the host round trips) | IDENTICAL and FAST GPC fit | same arithmetic by construction; digests equal |
 | 38c9834dd | `build_gp.sh` smoke: return_cov is honored now (the stale refusal assert failed every FAST GP build on Apple after the merge) | FAST build | - |
 
 ## Speed requests
@@ -143,3 +145,83 @@ recall@10, mean log density). Raw: ~/mojolearn-evidence/neighbors-apple/quality_
 | KernelDensity mean log density | 0 / 0 | 0 / 0 |
 
 FAST quality holds against the reference arithmetic on every case.
+
+## FINAL (wind-down, 2026-09-28)
+
+The lane is closed. Branch tip holds no half-done work: the working tree was
+clean, no `refs/wip/*neighbors-apple*` snapshot exists on origin, and the last
+code commit (395bc882a) was already built and A/B-measured by the previous
+agent before the usage limit (results recorded below). Nothing new was
+submitted in the wind-down.
+
+### Results read in the wind-down (m4pro-b, arms in one job, forward and reverse)
+
+Raw: `~/mojolearn-evidence/neighbors-apple/<request>.txt`.
+
+| request | commit | arm | case | default | arm (old path) | digests |
+|---|---|---|---|---|---|---|
+| 1790594682975 | 395bc882a | `MOJOLEARN_GPC_HOST_NEWTON` | IDENTICAL GPC.fit taxi / HIGGS 3k | 0.825 / 0.456 s | 1.352 / 0.889 s | equal (fc039349.. / 0de2f247..) |
+| 1790594566171 | be86ece38 | `MOJOLEARN_KM_DIRECT_OUT` | IDENTICAL RBFSampler.transform 1M x 500 taxi / HIGGS | 0.545 / 0.537 s | 1.061 / 1.057 s | equal |
+| 1790594566171 | be86ece38 | `MOJOLEARN_KM_DIRECT_OUT` | IDENTICAL Nystroem.transform 100k x 300 taxi / HIGGS | 0.060 / 0.051 s | 0.090 / 0.073 s | equal |
+| 1790588737156 | e1e90ed59 | all old arms (MULTI_RHS_OFF, KM_DIRECT_OUT, JACOBI_FAST_NARROW, FAMILY_CTX_PER_CALL) | FAST Nystroem.fit taxi / HIGGS 4k | 0.711 / 0.537 s | 2.532 / 1.901 s | equal |
+| 1790588737156 | e1e90ed59 | same | FAST GPC.predict_proba taxi / HIGGS 3k | 0.239 / 0.234 s | 1.286 / 1.285 s | equal |
+
+Host-Newton GPC profile (taxi, 6 steps): B matrix 105 ms, factor 883 ms,
+matvec 59 ms, solve 230 ms; the device loop removes the B build, the L
+round trips and the K re-uploads.
+
+### Default vs opt-in
+
+Default ON (the speed paths): certified simdgroup-matrix k-NN (5a56ce5c3),
+k=10/15 selector + warp guard (d022f6d6a), SMO sync removal in IDENTICAL
+(9765af975) with the fold-order fix (c81d6a3b2), process-lifetime family
+context (b2ab8d372), deferred Cholesky info (0979a063c), 8-RHS trsm sweep
+(59e15eef3), back-substitution ring v2 (593ce0826), pinned staging for kernel
+transforms (312b5da1a), multi-core output copy (0dcb77d80), Jacobi 256 wide in
+FAST (fd048ed6a), GPC device Newton loop (395bc882a).
+
+Opt-out defines (A/B arms, each restores the old path):
+`MOJOLEARN_KNN_CERTIFIED_MMA_OFF`, `MOJOLEARN_FAMILY_CTX_PER_CALL`,
+`MOJOLEARN_SVM_IDENTICAL_SYNCS_OFF`, `MOJOLEARN_CHOL_DEFER_INFO_OFF`,
+`MOJOLEARN_CHOL_MULTI_RHS_OFF`, `MOJOLEARN_CHOL_BACK_RING_OFF`,
+`MOJOLEARN_KM_DIRECT_OUT`, `MOJOLEARN_JACOBI_FAST_NARROW`,
+`MOJOLEARN_GPC_HOST_NEWTON`. Opt-in arm only:
+`MOJOLEARN_EXPERIMENTAL_KNN_WARPBOUND_GUARD`.
+
+### Unproven: needs the integration identity check
+
+Every change above has speed evidence with digests equal between arms on one
+Mac, but NO identity-lane check passed on this branch (request
+1790581787983 was withdrawn by Andrew on 2026-09-28 and is still listed
+PENDING in the steward; it only covered fc211b48e). The integration lane
+must run the identity lanes (svc*, svr*, x-neighbors*, kernel-ridge*,
+nystroem*, rbf-sampler, gp*, gpc*, knn / nearest-neighbors / radius / KDE)
+against these default-changing commits:
+
+- 9765af975 SMO IDENTICAL syncs on Apple
+- b2ab8d372 process-lifetime DeviceContext
+- c81d6a3b2 SMO fold_order_rank_kernel (index, position) ranking
+- d022f6d6a k-NN k=10/15 selector + warp guard
+- 5a56ce5c3 certified simdgroup-matrix k-NN
+- 0979a063c deferred Cholesky info
+- 59e15eef3 trsm 8-RHS sweep
+- fd048ed6a Jacobi FAST 256 wide
+- 593ce0826 back-substitution ring v2
+- 312b5da1a pinned staging transform output
+- 0dcb77d80 multi-core transform copy
+- 395bc882a GPC device Newton loop (newest; built and timed only on m4pro-b)
+- 38c9834dd build_gp.sh smoke fix (build only)
+
+### Known issues
+
+- SpectralEmbedding with a knn affinity fails at 20k rows in neighbors
+  `select_radix` (k > 1024); found by the decomp-apple lane. NOT fixed here;
+  the integration lane should reproduce it on the merged tree and fix or
+  refuse it by name.
+- Certified k-NN on heavily tied data (the tied grid case) sends most
+  queries to the tiled fallback: +25 ms on taxi on the M4 Pro versus the old
+  tiled path (0.141 vs 0.115 s); correct, slower on that shape only.
+- Older steward FAILs for `neighbors-b09e62fd87` / `neighbors-8cecb1f247`
+  (x-neighbors-svc-sigmoid, svm-weights, gamma-scale, svc-multiclass gpu
+  arm on m3ultra-b / m2pro) predate this lane's final state and were not
+  re-examined; the integration check supersedes them.
