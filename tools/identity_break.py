@@ -1035,6 +1035,7 @@ LANES = {}
 #: next record instead of DIVERGENT on a user's machine. `umap` also joins
 #: host_surface.PUBLIC_PENDING_LANES as `stale reference` until that record.
 LANE_REVISIONS = {
+    "x-metrics-regression": "metrics-undefined-weighted-score-1",
     "trees-dart-options": "tree-shap-zero-cover-path-1",
     "trees-shap-tree": "tree-shap-zero-cover-path-1",
 
@@ -1185,6 +1186,7 @@ def lane_floors():
 #: key lands here with a sentence saying what moved. An entry whose key does
 #: name a size is refused by name, so this cannot become a way of opting out.
 NON_SIZE_REVISIONS = {
+    "x-metrics-regression": "2026-09-28: undefined variance-weighted scores return explicit NaN before zero-times-infinity; platform NaN sign removed at API arithmetic, fixture sizes unchanged",
     "trees-dart-options": "2026-09-28: arithmetic, not input: TreeSHAP skips unreachable zero-cover paths before zero-over-zero unwinding; old NaN output hashes are not valid references; fixture sizes unchanged",
     "trees-shap-tree": "2026-09-28: arithmetic, not input: TreeSHAP skips unreachable zero-cover paths before zero-over-zero unwinding; old NaN output hashes are not valid references; fixture sizes unchanged",
 
