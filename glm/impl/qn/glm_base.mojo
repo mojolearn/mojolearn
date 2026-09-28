@@ -76,7 +76,7 @@ from glm.impl.qn.glm_linear import (
 )
 from glm.impl.qn.glm_logistic import logistic_loss_dz_kernel
 from glm.impl.qn.multi_gpu import gradient_columns
-from glm.impl.qn.fast_xtdz import fast_xtdz, fast_xtdz_applies
+from glm.impl.qn.fast_xtdz import fast_xtdz, fast_xtdz_applies, fast_xtdz_into, fast_xtdz_workspace_floats
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.info import has_apple_gpu_accelerator
 from std.sys.compile import is_defined
@@ -303,7 +303,7 @@ def linear_bwd(
         var fast_done = False
         comptime if QN_FAST_XTDZ:
             if not distributed and fast_xtdz_applies(d, dims.C):
-                fast_xtdz(ctx, xtdz, x, dz, n_rows, d, dims.C)
+                fast_xtdz_into(ctx, xtdz, x, dz, xtdz_ws, n_rows, d, dims.C)
                 fast_done = True
         # Apple IDENTICAL: the same chains and fold, row-coalesced
         # (`core/xtdz_coalesced.mojo`); a no-op test on every other column.
@@ -332,7 +332,7 @@ def linear_bwd(
     var fast_done1 = False
     comptime if QN_FAST_XTDZ:
         if not distributed and fast_xtdz_applies(d, 1):
-            fast_xtdz(ctx, xtdz, x, dz, n_rows, d, 1)
+            fast_xtdz_into(ctx, xtdz, x, dz, xtdz_ws, n_rows, d, 1)
             fast_done1 = True
     if not distributed and xtdz_coalesced_applies(d, 1):
         xtdz_coalesced(ctx, xtdz, x, dz, xtdz_ws, n_rows, d, 1)
@@ -417,10 +417,16 @@ struct GLMWithData(Movable):
         self.z = ctx.enqueue_create_buffer[DType.float32](dims.C * n_rows)
         self.loss_terms = ctx.enqueue_create_buffer[DType.float32](n_rows)
         self.xtdz = ctx.enqueue_create_buffer[DType.float32](dims.C * dims.D)
-        self.xtdz_ws = ctx.enqueue_create_buffer[DType.float32](
+        var ws_floats = (
             xtdz_coalesced_workspace_floats(dims.D, dims.C)
             if xtdz_coalesced_applies(dims.D, dims.C) else 1
         )
+        # lane/linear-apple: FAST on Apple's fast_xtdz partials live here
+        # too, so an evaluation allocates nothing.
+        comptime if QN_FAST_XTDZ:
+            if fast_xtdz_applies(dims.D, dims.C):
+                ws_floats = max(ws_floats, fast_xtdz_workspace_floats(n_rows, dims.D, dims.C))
+        self.xtdz_ws = ctx.enqueue_create_buffer[DType.float32](ws_floats)
         self.w_weights = ctx.enqueue_create_buffer[DType.float32](dims.C * dims.D)
         self.scalar = ctx.enqueue_create_buffer[DType.float32](1)
         self.n_evals = 0

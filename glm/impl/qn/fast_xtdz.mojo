@@ -102,6 +102,12 @@ def fx_fold_kernel(
     out_v[cell] = s
 
 
+def fast_xtdz_workspace_floats(n_rows: Int, d: Int, c: Int) -> Int:
+    """The per-block partials `fast_xtdz_into` needs (lane/linear-apple)."""
+    var n_blocks = min(256, max(1, (n_rows + 2047) // 2048))
+    return n_blocks * d * c
+
+
 def fast_xtdz(
     ctx: DeviceContext,
     mut out_v: DeviceBuffer[DType.float32],
@@ -112,11 +118,32 @@ def fast_xtdz(
     c: Int,
 ) raises:
     """`out_v[c + C * j] = sum_r x[r, j] * dz[r, c]` (`x` `N x D`, `dz`
-    `N x C`, both row-major). Requires `fast_xtdz_applies(d, c)`."""
+    `N x C`, both row-major). Requires `fast_xtdz_applies(d, c)`. Allocates
+    its partials; `fast_xtdz_into` takes them from the caller."""
+    var partial = ctx.enqueue_create_buffer[DType.float32](
+        fast_xtdz_workspace_floats(n_rows, d, c)
+    )
+    fast_xtdz_into(ctx, out_v, x, dz, partial, n_rows, d, c)
+    _ = partial^
+
+
+def fast_xtdz_into(
+    ctx: DeviceContext,
+    mut out_v: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut dz: DeviceBuffer[DType.float32],
+    mut partial: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    d: Int,
+    c: Int,
+) raises:
+    """`fast_xtdz` on a caller-owned `partial` of at least
+    `fast_xtdz_workspace_floats(n_rows, d, c)` floats (lane/linear-apple: the
+    QN solver calls this once per evaluation, and a buffer allocation per
+    call is a Metal cost). The same launches and arithmetic."""
     var cells = d * c
     var n_blocks = min(256, max(1, (n_rows + 2047) // 2048))
     var chunk = (n_rows + n_blocks - 1) // n_blocks
-    var partial = ctx.enqueue_create_buffer[DType.float32](n_blocks * cells)
     ctx.enqueue_function[fx_partial_kernel](
         partial.unsafe_ptr(), x.unsafe_ptr(), dz.unsafe_ptr(),
         Int32(n_rows), Int32(d), Int32(c), Int32(chunk),
@@ -127,4 +154,3 @@ def fast_xtdz(
         Int32(cells),
         grid_dim=((cells + 255) // 256, 1, 1), block_dim=(256, 1, 1),
     )
-    _ = partial^
