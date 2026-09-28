@@ -36,6 +36,10 @@ bindings rebuilt in turn). Job scripts: ~/mojolearn-evidence/linear-apple2/.
 | ca3db4544 | x_linear GPU shuffle: the draw's remainder from float32 quotient estimates (exact) | both | REVERTED: slower (0.974 vs 0.898 s sgd-clf, m4-a 1790608464376) | - |
 | 9ef29ffef | x_linear Huber and Quantile (GPU team form): the lead's n-row folds run on other threads beside the gradient / A' dr cells | both | on | no |
 | 27b180f47 | x_linear LogisticRegressionCV (GPU team form): the lead's loss and weight folds beside the gradient cells | both | on | no |
+| 0a760cd68 | Huber / Quantile / LogisticRegressionCV: each moved fold leads its own warp (27b180f47's same-warp placement was slower) | both | on | no |
+| 449d0c127 | Quantile: the next iteration's A'(y - r - u) chains run in this iteration's A' dr pass | both | on (pending measurement) | no |
+| 9d450625f | SGD pipelined shuffle: draws computed by a third warp's lanes (splitmix64 skip-ahead), two epochs ahead | both | on (pending measurement) | no |
+| ea80a9110 | x_linear chains: CHAIN_U_APPLE constant (32; A/B of 64 and 128 pending) | both | no-op | x_linear/tops.mojo |
 | 90c722752 | FAST QN on Apple: X^T dZ through xtdz_coalesced where D * C <= 1024 | FAST (words change: paired quality job) | on (`-D MOJOLEARN_QN_FAST_COALESCED_OFF=1`) | glm/impl/qn only |
 
 ## Jobs
@@ -251,4 +255,21 @@ pa-clf 0.202, pa-reg 0.117, sgd-ocsvm 0.123: the SGD family on Metal is now
 4.5x to 8x the one-core host (was 20x to 30x). Huber / Quantile /
 LogisticRegressionCV changes (9ef29ffef .. 449d0c127) are measured separately
 below.
+
+### x_linear lead folds moved off the lead (m4pro-a, steward 1790612208745), IDENTICAL, 100k
+
+x_linear/{huber,quantile,logcv}.mojo of each arm, GPU binding rebuilt in the
+same job:
+
+| case | 037daa353 | 27b180f47 (fold threads in the chains' warp) | 0a760cd68 (a warp each) | host | digest (all arms) |
+|---|---|---|---|---|---|
+| huber | 1.223 | 1.571 | 1.113 | 0.209 | da0468c16003f25a |
+| quantile | 71.03 | 67.77 | 49.04 | (18.4 on m3ultra-b) | c7ebb6da53934bf3 |
+| logistic-cv | 6.315 | 6.963 | 5.194 | 3.914 | 109ec619e258087b |
+
+A fold thread that shares a warp with the gradient chains runs after them
+(the warp executes both branches); on a warp of its own it runs beside them.
+These fits stay slower than one host core: every gradient cell is ONE
+thread's ascending chain over all rows (the contract), and a GPU thread's
+chain step is slower than a CPU core's.
 
