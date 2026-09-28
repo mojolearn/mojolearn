@@ -76,6 +76,7 @@ distances are two separate closures and row 11 needed both.
 
 from std.atomic import Atomic
 from std.gpu import block_idx, thread_idx
+from std.sys.info import is_apple_gpu
 from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceContext
 from max.gpu.memory import AddressSpace
@@ -212,7 +213,10 @@ def _radix_topk_identical_body[RANK_CAPACITY: Int](
     `2 * buf_len` pairs per row and the survivors ping-pong between the two
     halves. Pass 0 and pass 1 read the original row; from pass 2 the
     survivors carry their ORIGINAL indices with them, which is what makes
-    the composite key computable at every pass.
+    the composite key computable at every pass. Apple instead scans the
+    immutable original row each pass, because its block barrier does not
+    order device-memory survivor writes. Apple also keeps winners in
+    threadgroup memory until ranked and published.
     """
     var tid = Int(thread_idx.x)
     var batch = Int(block_idx.x)
@@ -299,6 +303,15 @@ def _radix_topk_identical_body[RANK_CAPACITY: Int](
             read_from_input = True
             previous_len = length
         var writes_buffer = current_len <= buf_len and pass_id > 0
+        comptime if is_apple_gpu():
+            # Metal barrier() orders threadgroup memory, not the device
+            # survivor buffers. Re-scan immutable input instead of reading
+            # another thread's device stores in this launch. Prefix tests
+            # below select the same survivors without changing any key.
+            in_ptr = in_base
+            read_from_input = True
+            previous_len = length
+            writes_buffer = False
 
         hist[tid] = Int32(0)
         if tid == 0:
@@ -349,8 +362,12 @@ def _radix_topk_identical_body[RANK_CAPACITY: Int](
                         )
                     )
                     if pos < k:
-                        o_val.unsafe_store(pos, value)
-                        o_idx.unsafe_store(pos, src)
+                        comptime if is_apple_gpu():
+                            s_val[pos] = value
+                            s_idx[pos] = src
+                        else:
+                            o_val.unsafe_store(pos, value)
+                            o_idx.unsafe_store(pos, src)
             i += SELECT_BLOCK
         barrier()
 
@@ -407,22 +424,26 @@ def _radix_topk_identical_body[RANK_CAPACITY: Int](
                         )
                     )
                     if pos < k:
-                        o_val.unsafe_store(pos, value)
-                        o_idx.unsafe_store(pos, src)
+                        comptime if is_apple_gpu():
+                            s_val[pos] = value
+                            s_idx[pos] = src
+                        else:
+                            o_val.unsafe_store(pos, value)
+                            o_idx.unsafe_store(pos, src)
                 j += SELECT_BLOCK
             barrier()
             break
 
     # ---- DEVIATION 501: the rank pass -----------------------------------
-    # The k winners are in `o_val` / `o_idx` in an order no one chose. Stage
-    # them, rank each against the others under the same total order, and
-    # write each to its rank. Distinct keys means distinct ranks, so the
-    # permutation is exact and every slot is written exactly once.
+    # Apple wrote winners directly into threadgroup staging; its barrier
+    # cannot order device-memory stores between threads. Other backends
+    # retain their original device-output staging path.
     var slot = tid
-    while slot < k:
-        s_val[slot] = o_val.unsafe_load(slot)
-        s_idx[slot] = o_idx.unsafe_load(slot)
-        slot += SELECT_BLOCK
+    comptime if not is_apple_gpu():
+        while slot < k:
+            s_val[slot] = o_val.unsafe_load(slot)
+            s_idx[slot] = o_idx.unsafe_load(slot)
+            slot += SELECT_BLOCK
     barrier()
     slot = tid
     while slot < k:

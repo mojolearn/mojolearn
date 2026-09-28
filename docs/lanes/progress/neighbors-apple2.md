@@ -310,3 +310,17 @@ lane ran on this branch. The integration run must cover:
 - a898eb9c2 Cholesky multi-RHS sweep (gp*, gpc*, kernel-ridge*, cholesky
   lanes; m2pro dispatch).
 - f71bfda90 k-NN host order pass (every knn lane, every column).
+
+
+### Consolidation follow-up: radix device-memory communication
+
+Source correction authored after the lane merge: Apple radix selection now
+rescans the immutable input at each pass instead of communicating survivors
+through device buffers within one kernel. Winners go directly to the existing
+threadgroup rank staging on Apple; global output is written only
+once, after the shared-memory barrier and rank calculation. This avoids the
+previously rejected `air.wg.barrier` intrinsic and retains the composite key,
+tie break, round boundaries and final order. The Apple radix path trades
+survivor compaction for at most eight input scans; small-k selector paths are
+unchanged, as are the non-Apple paths. No validation ran before consolidation. A consolidated native
+build and selector tests (ties, k=1024 and wider rounds) are still required.
