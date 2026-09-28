@@ -103,6 +103,10 @@ def main(argv=None):
     p.add_argument("--warm-rows", type=int, default=20000)
     p.add_argument("--score-rows", type=int, default=200000)
     p.add_argument("--label", default="")
+    p.add_argument("--n-estimators", type=int, default=0,
+                   help="override the member count (profiling runs)")
+    p.add_argument("--profile", action="store_true",
+                   help="cProfile the LAST timed fit; print the top 40 by cumulative time")
     a = p.parse_args(argv)
     import speed_gbdt_arm as spec
     import mojolearn
@@ -117,6 +121,8 @@ def main(argv=None):
                task=data.task, label=a.label,
                mode=os.environ.get("MOJOLEARN_NUMERIC_MODE", "unset"), vendor=mojolearn.vendor())
     warm = _make(a.est, data.task)
+    if a.n_estimators:
+        warm.n_estimators = a.n_estimators
     t0 = time.perf_counter()
     if a.est == "iforest" or a.est == "embedding":
         warm.fit(x[:a.warm_rows])
@@ -125,13 +131,22 @@ def main(argv=None):
     rec["warm_ms"] = round((time.perf_counter() - t0) * 1000.0, 1)
     del warm
     ms, digests, model = [], [], None
-    for _ in range(a.rounds):
+    prof = None
+    for r in range(a.rounds):
         model = _make(a.est, data.task)
+        if a.n_estimators:
+            model.n_estimators = a.n_estimators
+        if a.profile and r == a.rounds - 1:
+            import cProfile
+            prof = cProfile.Profile()
+            prof.enable()
         t0 = time.perf_counter()
         if a.est == "iforest" or a.est == "embedding":
             model.fit(x)
         else:
             model.fit(x, y)
+        if prof is not None:
+            prof.disable()
         ms.append(round((time.perf_counter() - t0) * 1000.0, 1))
         t1 = time.perf_counter()
         outs = _outputs(model, a.est, xt)
@@ -147,6 +162,10 @@ def main(argv=None):
     else:
         rec["quality"] = dict(accuracy=float(np.mean(pred.astype(np.int64) == yt.astype(np.int64))))
     print("TAP " + json.dumps(rec), flush=True)
+    if prof is not None:
+        import pstats
+        pstats.Stats(prof, stream=sys.stdout).sort_stats("cumulative").print_stats(40)
+        pstats.Stats(prof, stream=sys.stdout).sort_stats("tottime").print_stats(25)
     return 0
 
 

@@ -46,6 +46,18 @@ for cell in ${TAP_CELLS:-}; do
             e=${rest%%:*}; d=${rest#*:}
             $PY bench/speed/trees_apple_profile.py --est "$e" --dataset "$d" --rows "$ROWS" \
                 --rounds "$ROUNDS" 2>&1 | grep -E '^TAP|Error|error|Traceback' ;;
+        xtprof)
+            # xtprof:<est>:<dataset>:<n_estimators>  cProfile of one fit
+            e=${rest%%:*}; r2=${rest#*:}; d=${r2%%:*}; n=${r2#*:}
+            $PY bench/speed/trees_apple_profile.py --est "$e" --dataset "$d" --rows "$ROWS" \
+                --rounds 1 --n-estimators "$n" --profile 2>&1 | grep -v -E '^\s*$' | head -n 120 ;;
+        rfclock)
+            # rfclock:<lane>:<dataset>  RF_LAUNCH_LOG launch clock of one fit (a SPLIT)
+            l=${rest%%:*}; d=${rest#*:}
+            RF_LAUNCH_LOG="$OUT/rfclock_${l}_${d}.log" RF_LAUNCH_CLOCK=1 MOJOLEARN_STAGE_TIMES=1 \
+                $PY tools/forest_train_ab.py fit --lane "$l" --dataset "$d" --rows "$ROWS" \
+                --rounds 1 --label clock --json "$OUT/rfclock_${l}_${d}.json" 2>&1 | tail -n 80
+            test -f "$OUT/rfclock_${l}_${d}.log" && awk -F'\t' 'NF==2{s[$1]+=$2; c[$1]++; t+=$2} END{for(k in s) printf "RFCLOCK %-48s n=%d ms=%.1f\n", k, c[k], s[k]/1e6; printf "RFCLOCK TOTAL ms=%.1f\n", t/1e6}' "$OUT/rfclock_${l}_${d}.log" | sort -t= -k3 -rn | head -n 60 ;;
         *) echo "unknown cell $cell" ;;
     esac
     echo "=== $cell wall_s=$(( $(date +%s) - t0 ))"
