@@ -166,3 +166,15 @@ non-finite guard 49 ms, MST 222 ms (was 310; min-edge pass 20 ms, was 34).
 6ab7a64e0 then drops the DENSE solver's per-edge flag array (m*m bytes).
 9ae0985b6: GaussianMixture's IDENTICAL precision Cholesky loses four drains per
 component per iteration (A/B pending).
+
+## Results: M3 Ultra, IDENTICAL, A/B of the late changes (digests equal both ways)
+
+| change | case | before (eaf6c2a3f) -> after (s) taxi | higgs |
+|---|---|---|---|
+| 8cab8284c agglo dead mask | agglomerative-ward 10k | 2.1511 -> 1.1835 (orig. base 1.5637) | 2.1621 -> 1.2417 (base 1.6538) |
+| 6ab7a64e0 DENSE no flag array | agglomerative single 10k | 0.0687 -> 0.0602 | 0.0647 -> 0.0576 |
+| 6ab7a64e0 DENSE no flag array | hdbscan 40k | 1.6108 -> 1.5305 | 1.6111 -> 1.5297 |
+| 9ae0985b6 GMM Cholesky drains | gmm 1M | 2.5724 -> 2.4305 | 2.4191 -> 2.2975 |
+
+GMM_STAGE_TIMES after 9ae0985b6 (taxi, 22 iterations): E-step 695 ms, M-step 1218 ms,
+Cholesky 204 ms (was 317 ms at 819df01ee).
