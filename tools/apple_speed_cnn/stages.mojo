@@ -14,7 +14,9 @@ from x_cnn.ops import (
     FP, IP, conv_params, pool_params, CP_LEN, im2col_at, conv_out_at, relu_maxpool_fwd_at,
     pool_relu_rows_bwd_at, fill_one_at, col2im_at,
 )
-from x_cnn.device import cnn_ctx, launch, fp, ip, device_gemm
+from x_cnn.device import (
+    cnn_ctx, launch, fp, ip, device_gemm, _conv_out, TILED_LAYOUT, rows_bwd_tiled_kernel, _tiled_grid, _LT, _LR,
+)
 
 
 def fill_kernel(p: FP, n: Int32, salt: UInt32):
@@ -93,11 +95,18 @@ def block(ctx: DeviceContext, name: String, N: Int, C: Int, H: Int, OC: Int) rai
                 elif s == 1:
                     device_gemm(ctx, y2, cols, w, rows, OC, ckk, OP_NT)
                 elif s == 2:
-                    launch[conv_out_at](ctx, fp(y2), fp(bias), fp(yconv), fp(yconv), ip(dp), ip(dp), ny)
+                    _conv_out(ctx, y2, bias, yconv, dp, N, OH * OH, OC)
                 elif s == 3:
                     launch[relu_maxpool_fwd_at](ctx, fp(yconv), fp(pout), fp(pout), fp(pout), ip(di), ip(dpp), no)
                 elif s == 4:
-                    launch[pool_relu_rows_bwd_at](ctx, fp(g), fp(yconv), fp(grow), fp(grow), ip(di), ip(dpb), ny)
+                    comptime if TILED_LAYOUT:
+                        var tg = _tiled_grid(N, OH * OH, OC)
+                        ctx.enqueue_function[rows_bwd_tiled_kernel](
+                            fp(g), fp(yconv), fp(grow), ip(di), ip(dpb), Int32(OH * OH), Int32(OC),
+                            grid_dim=(tg[0], tg[1], tg[2]), block_dim=(_LT, _LR, 1),
+                        )
+                    else:
+                        launch[pool_relu_rows_bwd_at](ctx, fp(g), fp(yconv), fp(grow), fp(grow), ip(di), ip(dpb), ny)
                 elif s == 5:
                     launch[fill_one_at](ctx, fp(ones), fp(ones), fp(ones), fp(ones), ip(dp), ip(dp), rows)
                 elif s == 6:
