@@ -11,7 +11,7 @@ from max.gpu.sync import barrier
 from max.gpu.host import DeviceBuffer, DeviceContext
 from x_ann.device_ctx import x_ann_ctx
 from x_ann.stage_timer import AnnStages
-from x_ann.switches import ANN3_HOST_PASSES, ANN3_PQ_SEED
+from x_ann.switches import ANN3_HOST_PASSES, ANN3_PQ_HOST_RESIDUALS, ANN3_PQ_SEED
 from x_ann.kpp_seed import kpp_seed
 from std.sys.info import has_apple_gpu_accelerator
 from x_ann.ivf_scan_device import ivf_scan_search
@@ -259,9 +259,30 @@ def ivf_pq_build_device(
         Int32(rot_dim), dr.unsafe_ptr(), grid_dim=_grid(n * rot_dim), block_dim=TPB,
     )
     ctx.synchronize()
-    var r = download_f32(ctx, dr, n * rot_dim)
-    st.host("residuals")
-    var codebooks = _codebooks(r, n, rot_dim, pq_dim, pq_len, n_codes, pq_iters, seed)
+    # FAST, OPT-IN (lane ann-apple3, `ANN3_PQ_HOST_RESIDUALS`): when the
+    # codebooks train on a sample, the sampled rows' residuals are formed
+    # here (FAST's `pq_residual_cell` is one subtraction) in the sample's
+    # row order, which is what `_codebooks` gathers from the whole matrix
+    # otherwise; the matrix stays on the device for the encode.
+    var host_sample = False
+    comptime if PQ_FAST_TRAINSET and ANN3_PQ_HOST_RESIDUALS:
+        host_sample = n > PQ_FAST_ROWS_PER_CODE * n_codes
+    var codebooks = List[Float32]()
+    if host_sample:
+        var n_train = PQ_FAST_ROWS_PER_CODE * n_codes
+        var rows = ivf_trainset_rows(n, n_train, UInt64(seed))
+        var rs = List[Float32](length=n_train * rot_dim, fill=Float32(0.0))
+        for i in range(n_train):
+            var row = rows[i]
+            var l = Int(labels[row])
+            for c in range(dim):
+                rs[i * rot_dim + c] = x[row * dim + c] - centers[l * dim + c]
+        st.host("residuals")
+        codebooks = _codebooks(rs, n_train, rot_dim, pq_dim, pq_len, n_codes, pq_iters, seed)
+    else:
+        var r = download_f32(ctx, dr, n * rot_dim)
+        st.host("residuals")
+        codebooks = _codebooks(r, n, rot_dim, pq_dim, pq_len, n_codes, pq_iters, seed)
     st.host("codebooks")
     var dcb = upload_f32(ctx, codebooks)
     var dcodes = ctx.enqueue_create_buffer[DType.int32](n * pq_dim)

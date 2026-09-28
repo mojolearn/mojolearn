@@ -56,6 +56,11 @@ A/B script builds an arm as `<commit>+<DEFINE>[+<DEFINE>]`.
 
 | (this commit) | FAST seeding of the PQ codebooks and of the coarse quantizer (`x_ann/kpp_seed.mojo`) | FAST, Apple | OFF; `-D MOJOLEARN_ANN3_PQ_SEED`, `-D MOJOLEARN_ANN3_COARSE_SEED` | UNBUILT, UNMEASURED; moves FAST bits, owes the paired recall check |
 
+| (this commit) | FAST IVF-PQ: the codebook sample's residuals formed on the host, the 1M x 28 residual matrix not downloaded | FAST | OFF; `-D MOJOLEARN_ANN3_PQ_HOST_RESIDUALS` | UNBUILT, UNMEASURED; expected to move no bit (FAST's residual is one subtraction) |
+
+The quality bench has an IVF-Flat row now (`--algos ivf`): the coarse
+seeding moves IVF-Flat's FAST results too.
+
 `MOJOLEARN_ANN3_PQ_SEED` / `MOJOLEARN_ANN3_COARSE_SEED` (FAST on Apple
 only): cluster/'s k-means seeds with scalable k-means|| and, at the ann
 shapes, the seeding costs more than the Lloyd iterations (cluster-apple3's

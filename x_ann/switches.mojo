@@ -36,3 +36,9 @@ comptime ANN3_PQ_SEED = is_defined["MOJOLEARN_ANN3_PQ_SEED"]()
 #: FAST on Apple: the same for the IVF coarse quantizer (all four IVF
 #: indexes). Moves FAST bits: paired recall check.
 comptime ANN3_COARSE_SEED = is_defined["MOJOLEARN_ANN3_COARSE_SEED"]()
+
+#: FAST: when the PQ codebooks train on a sample, the sampled rows'
+#: residuals are formed on the host (one subtraction each, the device
+#: kernel's statement) and the n x rot_dim residual matrix is not downloaded;
+#: it stays on the device for the encode. Expected to move no bit.
+comptime ANN3_PQ_HOST_RESIDUALS = is_defined["MOJOLEARN_ANN3_PQ_HOST_RESIDUALS"]()
