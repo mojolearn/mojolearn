@@ -31,6 +31,7 @@ comptime OP_GROUP_SUM = 1
 comptime OP_REG_TERM = 3
 comptime OP_COL_SORT = 4
 comptime OP_WPERCENTILE = 5
+comptime OP_COL_MAX = 6
 comptime OP_BIN_CURVE = 7
 comptime OP_PERMUTE = 10
 
@@ -365,6 +366,16 @@ def check_parallel_schedules(mut card: IdentityTrace) raises:
     var CD = len(arena)
     for _ in range(3 * ns):
         arena.append(0)
+    # the same columns unweighted (the parallel CDF, lane metrics-apple)
+    var PO2 = len(arena)
+    for _ in range(3):
+        arena.append(0)
+    var CD2 = len(arena)
+    for _ in range(3 * ns):
+        arena.append(0)
+    var MX = len(arena)
+    for _ in range(3):
+        arena.append(0)
     # bin_curve: 2 problems (scores n x 2 row-major, ties), weighted and not
     var nc = 20011
     var S = len(arena)
@@ -393,6 +404,8 @@ def check_parallel_schedules(mut card: IdentityTrace) raises:
     p.stage(OP_GROUP_SUM, 2, [OFF1, ORD1, V, 2, W, OUT1, 2])
     p.stage(OP_COL_SORT, 3, [CV, ns, 3, CO])
     p.stage(OP_WPERCENTILE, 3, [CV, ns, 3, CO, W, R, 1, PO, CD])
+    p.stage(OP_WPERCENTILE, 3, [CV, ns, 3, CO, -1, R, 0, PO2, CD2])
+    p.stage(OP_COL_MAX, 3, [CV, ns, 3, MX])
     for k in range(2):
         var b = cur[k]
         var N = 2 * nc

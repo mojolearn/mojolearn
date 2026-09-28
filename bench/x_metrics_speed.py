@@ -156,17 +156,38 @@ def train_test(S, d):
     return [np.asarray(a)[:10], np.asarray(b)[:10]]
 
 
+def _profile(name, fn, top):
+    import cProfile
+    import io
+    import pstats
+    pr = cProfile.Profile()
+    pr.enable()
+    fn()
+    pr.disable()
+    buf = io.StringIO()
+    pstats.Stats(pr, stream=buf).sort_stats("cumulative").print_stats(top)
+    for line in buf.getvalue().splitlines():
+        if line.strip():
+            print("XMPROFILE %s | %s" % (name, line), flush=True)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--rows", type=int, default=1_000_000)
     ap.add_argument("--reps", type=int, default=3)
     ap.add_argument("--only", default="")
+    ap.add_argument("--cprofile", type=int, default=0,
+                    help="after timing, profile each case once and print its top N functions by cumulative time")
     a = ap.parse_args()
     t0 = time.time()
     d = data(a.rows)
     print("XMSPEED-DATA rows=%d load_s=%.2f mode=%s vendor=%s cpu_threads=%s" % (
         a.rows, time.time() - t0, os.environ.get("MOJOLEARN_NUMERIC_MODE", "default"),
         os.environ.get("MOJOLEARN_VENDOR", "auto"), os.environ.get("MOJOLEARN_CPU_THREADS", "cores")), flush=True)
+    # the inputs' digests: a case digest that differs between two boxes is a
+    # defect only when these agree (the inputs use numpy lstsq and exp)
+    for k in sorted(d):
+        print("XMSPEED-INPUT %-6s %s" % (k, _digest(d[k])), flush=True)
     only = set(x for x in a.only.split(",") if x)
     total = 0.0
     for name, fn in cases(d):
@@ -181,6 +202,8 @@ def main():
                 best = min(best, time.perf_counter() - t)
             total += best
             print("XMSPEED %-28s %9.4f %s" % (name, best, _digest(v)), flush=True)
+            if a.cprofile:
+                _profile(name, fn, a.cprofile)
         except Exception as e:  # a case that fails is reported, never hidden
             print("XMSPEED %-28s   FAILED %s: %s" % (name, type(e).__name__, str(e)[:160]), flush=True)
     print("XMSPEED-TOTAL %.4f" % total, flush=True)

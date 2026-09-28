@@ -3,7 +3,7 @@
 """THE PLANNER (lane/metrics phase C): a caller's program of units in, the
 program both runners execute out. Every stage whose unit is one thread
 walking all n rows (group_sort, group_sum, col_sort, wpercentile, bin_curve,
-permute) is replaced by the wide stages of x_metrics/par.mojo, which return
+permute, col_max) is replaced by the wide stages of x_metrics/par.mojo, which return
 the same bits (par.mojo's header says why for each); every other stage is
 passed through. The replacement stages address SCRATCH slots past the
 caller's arena (`arena_len` onward); the runners allocate arena + scratch,
@@ -43,6 +43,20 @@ comptime OP_WPCT_PREFIX = 25
 comptime OP_WPCT_SELECT = 26
 comptime OP_CURVE_EMIT = 27
 comptime OP_COPY = 28
+comptime OP_CM_CHUNK = 29
+comptime OP_CM_FINAL = 30
+comptime OP_COL_MAX = 6
+#: rows per chunk of the column maximum
+comptime CM_CHUNK = 512
+comptime OP_WPCT_IOTA = 31
+comptime OP_CURVE_CNT = 32
+comptime OP_CURVE_OFF = 33
+comptime OP_CURVE_FILL = 34
+comptime OP_CURVE_KEEP = 35
+#: rows per chunk of the unweighted curve counts
+comptime CURVE_CHUNK = 1024
+#: the unweighted CDF is Float32(i + 1) only while it stays exact
+comptime IOTA_EXACT = 1 << 24
 #: HOST STAGES: a stage whose unit is one sequential walk of a Float32
 #: prefix (DEVIATION 6107 keeps it sequential, so no wide schedule returns
 #: its bits). The device runner runs it on the host, over a copy of the
@@ -130,6 +144,14 @@ def _a(r: IP, k: Int) -> Int:
     return Int(r.unsafe_load(2 + k))
 
 
+def _plan_keep(mut pl: Plan, r: IP, n: Int, total: Int):
+    """bin_curve params 10 and 11 (lane metrics-apple): with KEEP (10) and
+    the flag (11) == 1 on an unweighted curve, the collinear-drop flags of
+    every slot follow the curve (x_metrics/par.mojo curve_keep_unit)."""
+    if _a(r, 3) < 0 and _a(r, 11) == 1 and n > 0:
+        pl.emit(OP_CURVE_KEEP, n * total, [n, _a(r, 6), _a(r, 7), _a(r, 9), _a(r, 10)])
+
+
 def plan_program(q: IP, stages: Int, arena_len: Int) raises -> Plan:
     var pl = Plan(arena_len)
     for s in range(stages):
@@ -205,7 +227,10 @@ def plan_program(q: IP, stages: Int, arena_len: Int) raises -> Plan:
             var N = n * total
             var G = pl.alloc(2 * N)
             pl.emit(OP_WPCT_GATHER, N, [n, _a(r, 3), _a(r, 4), G])
-            pl.emit(OP_WPCT_PREFIX, total, [n, G, G + N, 0, 0, 0, 0, 0, 0, 0, G, G + N, G + N, G + 2 * N])
+            if _a(r, 4) < 0 and n <= IOTA_EXACT:
+                pl.emit(OP_WPCT_IOTA, N, [n, G + N])
+            else:
+                pl.emit(OP_WPCT_PREFIX, total, [n, G, G + N, 0, 0, 0, 0, 0, 0, 0, G, G + N, G + N, G + 2 * N])
             pl.emit(OP_COPY, N, [G + N, _a(r, 8)])
             var sel = List[Int]()
             for k in range(9):
@@ -215,13 +240,22 @@ def plan_program(q: IP, stages: Int, arena_len: Int) raises -> Plan:
             var n = _a(r, 4)
             if n <= 1 or not pl.fits(12 * n * total + total):
                 pl.copy_stage(q, s)
+                _plan_keep(pl, r, n, total)
                 continue
             var N = n * total
             var B = pl.sort(KEY_CURVE, n, total, _a(r, 0), _a(r, 1), _a(r, 3))
             var G = pl.alloc(6 * N + total)
             pl.emit(OP_CURVE_GATHER, N, [n, B, N, _a(r, 0), _a(r, 1), _a(r, 2), _a(r, 3), G, _a(r, 5)])
-            pl.emit(OP_CURVE_PREFIX, total, [n, G, N, _a(r, 3), 0, 0, 0, 0, 0, 0, G, G + 3 * N, G + 3 * N, G + 6 * N + total])
+            if _a(r, 3) < 0 and pl.fits(12 * n * total + total + 3 * total * ((n + CURVE_CHUNK - 1) // CURVE_CHUNK)):
+                var C = (n + CURVE_CHUNK - 1) // CURVE_CHUNK
+                var S = pl.alloc(3 * C * total)
+                pl.emit(OP_CURVE_CNT, C * total, [n, G, N, S, C, CURVE_CHUNK])
+                pl.emit(OP_CURVE_OFF, total, [G, N, S, C])
+                pl.emit(OP_CURVE_FILL, C * total, [n, G, N, S, C, CURVE_CHUNK])
+            else:
+                pl.emit(OP_CURVE_PREFIX, total, [n, G, N, _a(r, 3), 0, 0, 0, 0, 0, 0, G, G + 3 * N, G + 3 * N, G + 6 * N + total])
             pl.emit(OP_CURVE_EMIT, N, [n, G, N, _a(r, 6), _a(r, 7), _a(r, 8), _a(r, 9)])
+            _plan_keep(pl, r, n, total)
         elif op == OP_PERMUTE:
             var n = _a(r, 0)
             if n <= 1 or not pl.fits(6 * n):
@@ -229,6 +263,17 @@ def plan_program(q: IP, stages: Int, arena_len: Int) raises -> Plan:
                 continue
             var B = pl.sort(KEY_PERM, n, 1, _a(r, 2), _a(r, 3), 0)
             pl.emit(OP_SORT_EMIT, n, [B, n, _a(r, 1)])
+        elif op == OP_COL_MAX:
+            var V = _a(r, 0)
+            var n = _a(r, 1)
+            var D = _a(r, 2)
+            var C = (n + CM_CHUNK - 1) // CM_CHUNK
+            if n <= 1 or D != total or not pl.fits(2 * C * total):
+                pl.copy_stage(q, s)
+                continue
+            var S = pl.alloc(2 * C * total)
+            pl.emit(OP_CM_CHUNK, C * total, [V, n, D, S, C, CM_CHUNK])
+            pl.emit(OP_CM_FINAL, total, [V, D, S, C, _a(r, 3)])
         else:
             pl.copy_stage(q, s)
     return pl^

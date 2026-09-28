@@ -11,7 +11,8 @@ from max.gpu.host import DeviceContext, DeviceBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_metrics.common import FP, IP, STAGE_INTS
 from x_metrics.units import N_OPS, run_unit
-from x_metrics.plan import Plan, plan_program, N_USER_OPS, is_host_op, HOST_RD, HOST_WR
+from x_metrics.plan import Plan, plan_program, N_USER_OPS, is_host_op, HOST_RD, HOST_WR, OP_SORT_MERGE
+from x_metrics.par import sort_merge_path_unit, merge_path_chunks
 
 comptime BLOCK = 128
 
@@ -44,6 +45,12 @@ def metrics_kernel[OP: Int](f: FP, q: IP, total: Int32):
         run_unit[OP](t, f, q)
 
 
+def metrics_merge_path_kernel(f: FP, q: IP, total: Int32):
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t < Int(total):
+        sort_merge_path_unit(t, f, q)
+
+
 def run_program_device(arena_addr: Int, arena_len: Int, prog_addr: Int, stages: Int) raises:
     run_program_device_ptr(
         FP(unsafe_from_address=arena_addr), arena_len, IP(unsafe_from_address=prog_addr), stages
@@ -67,6 +74,8 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
         pl = plan_program(host_q, stages, arena_len)
     var nst = pl.stages
     var keep = List[List[Float32]]()
+    var prof = getenv("MOJOLEARN_XMETRICS_PROFILE") != ""
+    var t_setup = perf_counter_ns()
     var ctx = metrics_ctx()
     var df = ctx.enqueue_create_buffer[DType.float32](pl.size if pl.size > 0 else 1)
     var dq = ctx.enqueue_create_buffer[DType.int32](nst * STAGE_INTS if nst > 0 else 1)
@@ -74,11 +83,11 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
         ctx.enqueue_copy(dst_buf=df.create_sub_buffer[DType.float32](0, arena_len), src_ptr=host_f)
     if nst > 0:
         ctx.enqueue_copy(dst_buf=dq, src_ptr=pl.rows.unsafe_ptr())
-    var prof = getenv("MOJOLEARN_XMETRICS_PROFILE") != ""
     var t_last = perf_counter_ns()
     if prof:
         ctx.synchronize()
         t_last = perf_counter_ns()
+        print("XMPROF setup plan+alloc+upload us", (t_last - t_setup) // 1000, "floats", pl.size)
     for s in range(nst):
         var op = Int(pl.rows[s * STAGE_INTS])
         var total = Int(pl.rows[s * STAGE_INTS + 1])
@@ -93,6 +102,14 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
             _host_stage(ctx, df, pl, s, op, total, keep)
             continue
         var qp = dq.unsafe_ptr() + (s * STAGE_INTS + 2)
+        if op == OP_SORT_MERGE and not legacy:
+            # the device's merge schedule: one thread per MERGE_CHUNK outputs
+            var chunks = merge_path_chunks(total, Int(pl.rows[s * STAGE_INTS + 2]))
+            ctx.enqueue_function[metrics_merge_path_kernel](
+                df.unsafe_ptr(), qp, Int32(chunks),
+                grid_dim=(chunks + BLOCK - 1) // BLOCK, block_dim=BLOCK,
+            )
+            continue
         comptime for k in range(N_OPS):
             if op == k:
                 ctx.enqueue_function[metrics_kernel[k]](
@@ -102,9 +119,12 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     if prof and nst > 0:
         ctx.synchronize()
         print("XMPROF stage", nst - 1, "op", Int(pl.rows[(nst - 1) * STAGE_INTS]), "us", (perf_counter_ns() - t_last) // 1000)
+        t_last = perf_counter_ns()
     if arena_len > 0:
         ctx.enqueue_copy(dst_ptr=host_f, src_buf=df.create_sub_buffer[DType.float32](0, arena_len))
     ctx.synchronize()
+    if prof:
+        print("XMPROF download us", (perf_counter_ns() - t_last) // 1000)
     _ = len(keep)
     _ = len(pl.rows)
     _ = dq^

@@ -347,6 +347,63 @@ def sort_merge_unit(t: Int, f: FP, q: IP):
     sti(f, DST + 2 * N + d, x)
 
 
+#: outputs per thread of the device merge-path schedule (a power of two
+#: that divides 2 * RUN, so a chunk never crosses a run pair)
+comptime MERGE_CHUNK = 8
+
+
+def merge_path_chunks(total: Int, n: Int) -> Int:
+    """Threads of `sort_merge_path_unit` for a merge stage of `total` = P*n."""
+    return (total // n) * ((n + MERGE_CHUNK - 1) // MERGE_CHUNK)
+
+
+def sort_merge_path_unit(t: Int, f: FP, q: IP):
+    """q = [n, w, SRC, DST, N]; t = chunk of MERGE_CHUNK merged outputs (the
+    Apple-speed device schedule of a merge pass, lane metrics-apple): one
+    binary search on the merge diagonal finds how many of the chunk's
+    predecessors come from each run, then a two-pointer merge writes the
+    chunk. The order is strict (6101), so this writes the unique merged
+    order, the same words as `sort_merge_unit` and `sort_merge_pair_unit`."""
+    var n = p(q, 0)
+    var w = p(q, 1)
+    var SRC = p(q, 2)
+    var DST = p(q, 3)
+    var N = p(q, 4)
+    var cpp = (n + MERGE_CHUNK - 1) // MERGE_CHUNK
+    var pp = t // cpp
+    var o0 = (t - pp * cpp) * MERGE_CHUNK
+    var seg = pp * n
+    var base = (o0 // (2 * w)) * (2 * w)
+    var mid = min(base + w, n)
+    var end = min(base + 2 * w, n)
+    var o = o0 - base
+    var lo = max(0, o - (end - mid))
+    var hi = min(o, mid - base)
+    while lo < hi:
+        var md = (lo + hi) // 2
+        var bi = seg + mid + (o - md - 1)
+        if _before_at(f, SRC, N, seg + base + md, ldu(f, SRC + bi), ldu(f, SRC + N + bi), ldi(f, SRC + 2 * N + bi)):
+            lo = md + 1
+        else:
+            hi = md
+    var a = base + lo
+    var b = mid + (o - lo)
+    var out = o0
+    var stop = min(o0 + MERGE_CHUNK, end)
+    while out < stop:
+        var take_a = b >= end
+        if a < mid and b < end:
+            take_a = _before_at(f, SRC, N, seg + a, ldu(f, SRC + seg + b), ldu(f, SRC + N + seg + b),
+                                ldi(f, SRC + 2 * N + seg + b))
+        if take_a:
+            _move(f, SRC, DST, N, seg + a, seg + out)
+            a += 1
+        else:
+            _move(f, SRC, DST, N, seg + b, seg + out)
+            b += 1
+        out += 1
+
+
 @always_inline
 def _move(f: FP, SRC: Int, DST: Int, N: Int, a: Int, b: Int):
     stu(f, DST + b, ldu(f, SRC + a))
@@ -560,3 +617,207 @@ def wpct_prefix_unit(t: Int, f: FP, q: IP):
 def copy_unit(t: Int, f: FP, q: IP):
     """q = [SRC, DST]; t = element: a word copy."""
     f.unsafe_store(p(q, 1) + t, f.unsafe_load(p(q, 0) + t))
+
+
+# ---------------------------------------------------------------------------
+# The column maximum (col_max, lane metrics-apple)
+# ---------------------------------------------------------------------------
+# `col_max_unit` keeps m = the column's first value and replaces it by each
+# later value v with v > m: a first NaN is the answer; otherwise NaNs never
+# win and the answer is the EARLIEST of the values equal to the largest
+# (-0.0 and +0.0 compare equal, so the earlier one's bits stay). A chunk
+# keeps its earliest largest non-NaN value; the chunks meet left to right
+# by the same `>`, so the earliest one wins again: the same word.
+
+def cm_chunk_unit(t: Int, f: FP, q: IP):
+    """q = [V, n, D, S, C, CH]; t = column * C + chunk: S[2t] = the chunk's
+    earliest largest non-NaN value, S[2t+1] = 1 when it has one."""
+    var V = p(q, 0)
+    var n = p(q, 1)
+    var D = p(q, 2)
+    var S = p(q, 3)
+    var C = p(q, 4)
+    var CH = p(q, 5)
+    var col = t // C
+    var c = t - col * C
+    var m = Float32(0)
+    var found = 0
+    for r in range(c * CH, min(n, c * CH + CH)):
+        var v = ld(f, V + r * D + col)
+        if v == v:  # not NaN
+            if found == 0:
+                m = v
+                found = 1
+            elif v > m:
+                m = v
+    st(f, S + 2 * t, m)
+    sti(f, S + 2 * t + 1, found)
+
+
+def cm_final_unit(t: Int, f: FP, q: IP):
+    """q = [V, D, S, C, OUT]; t = column: col_max_unit's word."""
+    var V = p(q, 0)
+    var D = p(q, 1)
+    var S = p(q, 2)
+    var C = p(q, 3)
+    var v0 = ld(f, V + t)
+    var m = v0
+    if v0 == v0:  # not NaN
+        var found = 0
+        for c in range(C):
+            var k = S + 2 * (t * C + c)
+            if ldi(f, k + 1) != 0:
+                var s = ld(f, k)
+                if found == 0:
+                    m = s
+                    found = 1
+                elif s > m:
+                    m = s
+    st(f, p(q, 4) + t, m)
+
+
+# ---------------------------------------------------------------------------
+# Unweighted prefixes in parallel (lane metrics-apple)
+# ---------------------------------------------------------------------------
+# Without weights the two sequential prefixes are INTEGER counts: the
+# percentile CDF adds 1.0 per row (exact while it stays below 2^24, so its
+# i-th word is Float32(i + 1)), and the curve walk counts positives,
+# negatives and distinct-score ends in Int. Integers do not depend on the
+# order they are added in, so these schedules write the sequential units'
+# words exactly, and the device needs no host round trip for them.
+
+def wpct_iota_unit(t: Int, f: FP, q: IP):
+    """q = [n, P]; t = element c*n + i: P[t] = Float32(i + 1), the
+    unweighted `wpct_prefix_unit` word (n <= 2^24, the planner's guard)."""
+    var n = p(q, 0)
+    st(f, p(q, 1) + t, Float32(t - (t // n) * n + 1))
+
+
+@always_inline
+def _curve_last(f: FP, G: Int, N: Int, n: Int, i: Int, e: Int) -> Bool:
+    """curve_prefix_unit's end-of-distinct-score test for kept row e = pp*n + i."""
+    if i == n - 1:
+        return True
+    if ldi(f, G + e + 1) < 0:
+        return True
+    return ld(f, G + 2 * N + e + 1) != ld(f, G + 2 * N + e)
+
+
+def curve_cnt_unit(t: Int, f: FP, q: IP):
+    """q = [n, G, N, S, C, CH]; t = problem * C + chunk: the chunk's kept
+    positives, kept negatives and distinct-score ends at S[3t .. 3t+2]."""
+    var n = p(q, 0)
+    var G = p(q, 1)
+    var N = p(q, 2)
+    var S = p(q, 3)
+    var C = p(q, 4)
+    var CH = p(q, 5)
+    var pp = t // C
+    var c = t - pp * C
+    var tp = 0
+    var fp = 0
+    var ends = 0
+    for i in range(c * CH, min(n, c * CH + CH)):
+        var e = pp * n + i
+        var pos = ldi(f, G + e)
+        if pos < 0:
+            continue
+        if pos == 1:
+            tp += 1
+        else:
+            fp += 1
+        if _curve_last(f, G, N, n, i, e):
+            ends += 1
+    sti(f, S + 3 * t, tp)
+    sti(f, S + 3 * t + 1, fp)
+    sti(f, S + 3 * t + 2, ends)
+
+
+def curve_off_unit(t: Int, f: FP, q: IP):
+    """q = [G, N, S, C]; t = problem: the chunks' counts become exclusive
+    offsets in place, and G+6N+t = the problem's slot count."""
+    var G = p(q, 0)
+    var N = p(q, 1)
+    var S = p(q, 2)
+    var C = p(q, 3)
+    var tp = 0
+    var fp = 0
+    var ends = 0
+    for c in range(C):
+        var k = S + 3 * (t * C + c)
+        var a = ldi(f, k)
+        var b = ldi(f, k + 1)
+        var d = ldi(f, k + 2)
+        sti(f, k, tp)
+        sti(f, k + 1, fp)
+        sti(f, k + 2, ends)
+        tp += a
+        fp += b
+        ends += d
+    sti(f, G + 6 * N + t, ends)
+
+
+def curve_fill_unit(t: Int, f: FP, q: IP):
+    """q = [n, G, N, S, C, CH]; t = problem * C + chunk: the unweighted
+    `curve_prefix_unit` words of the chunk's rows (TP, FP at G+3N, G+4N;
+    IDX at G+5N), started from the chunk's offsets. A dropped row's TP and
+    FP words are 0, as the zero-filled host copy of the sequential stage
+    leaves them."""
+    var n = p(q, 0)
+    var G = p(q, 1)
+    var N = p(q, 2)
+    var S = p(q, 3)
+    var C = p(q, 4)
+    var CH = p(q, 5)
+    var pp = t // C
+    var c = t - pp * C
+    var tp = ldi(f, S + 3 * t)
+    var fp = ldi(f, S + 3 * t + 1)
+    var cnt = ldi(f, S + 3 * t + 2)
+    for i in range(c * CH, min(n, c * CH + CH)):
+        var e = pp * n + i
+        var pos = ldi(f, G + e)
+        if pos < 0:
+            st(f, G + 3 * N + e, Float32(0))
+            st(f, G + 4 * N + e, Float32(0))
+            sti(f, G + 5 * N + e, -1)
+            continue
+        if pos == 1:
+            tp += 1
+        else:
+            fp += 1
+        st(f, G + 3 * N + e, Float32(tp))
+        st(f, G + 4 * N + e, Float32(fp))
+        if _curve_last(f, G, N, n, i, e):
+            sti(f, G + 5 * N + e, cnt)
+            cnt += 1
+        else:
+            sti(f, G + 5 * N + e, -1)
+
+
+def curve_keep_unit(t: Int, f: FP, q: IP):
+    """q = [n, FPS, TPS, CNT, KEEP]; t = element pp*n + i of an UNWEIGHTED
+    curve (lane metrics-apple): KEEP[t] = 1 when Python's `_drop_collinear`
+    keeps slot i of the problem's CNT[pp] slots (the first, the last, and
+    every slot where the fps or tps step changes), else 0; slots past the
+    count are not written. The counts are integer-valued Float32 words, so
+    their binary64 differences in Python are exact integers: Int
+    differences decide the same way."""
+    var n = p(q, 0)
+    var pp = t // n
+    var i = t - pp * n
+    var c = ldi(f, p(q, 3) + pp)
+    if i >= c:
+        return
+    var keep = 1
+    if i > 0 and i < c - 1:
+        var F = p(q, 1) + pp * n + i
+        var T = p(q, 2) + pp * n + i
+        var f0 = Int(ld(f, F - 1))
+        var f1 = Int(ld(f, F))
+        var f2 = Int(ld(f, F + 1))
+        var t0 = Int(ld(f, T - 1))
+        var t1 = Int(ld(f, T))
+        var t2 = Int(ld(f, T + 1))
+        keep = 1 if (f2 - f1 != f1 - f0) or (t2 - t1 != t1 - t0) else 0
+    sti(f, p(q, 4) + t, keep)

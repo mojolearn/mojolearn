@@ -6,6 +6,7 @@ scikit-learn pipelines and splitters remain optional interoperability surfaces.
 Fold indices are host metadata; all learning stays with the GPU estimator.
 """
 import array
+import collections
 import copy
 import hashlib
 import itertools
@@ -621,8 +622,10 @@ def _labels_list(y, name='y'):
 
 
 def _encode_first_seen(values):
-    order = {}
-    return [order.setdefault(v, len(order)) for v in values], len(order)
+    # the first-seen order by dict.fromkeys, the codes by a C map (the same
+    # dict equality as setdefault; lane metrics-apple)
+    index = {v: i for i, v in enumerate(dict.fromkeys(values))}
+    return list(map(index.__getitem__, values)), len(index)
 
 
 def _encode_sorted(values):
@@ -633,8 +636,28 @@ def _encode_sorted(values):
 
 
 def _as_index(values):
-    store = array.array('q', map(int, values))
+    store = None
+    if isinstance(values, (list, range)):
+        # ints (and bools) go in as they are, in C; anything array('q')
+        # refuses keeps the int() path (lane metrics-apple)
+        try:
+            store = array.array('q', values)
+        except TypeError:
+            store = None
+    if store is None:
+        store = array.array('q', map(int, values))
     return Array._owned(store, (len(store),), '<i8', 'C')
+
+
+def _rows_of(mask, n):
+    """The ascending rows whose mask byte is 1 (ints from range, in C)."""
+    store = array.array('q', itertools.compress(range(n), mask))
+    return Array._owned(store, (len(store),), '<i8', 'C')
+
+
+class _Mask(bytes):
+    """A test-row mask (1 = test) a splitter's `_test_folds` may yield in
+    place of the row list; `split` uses it as the mask (lane metrics-apple)."""
 
 
 #: bytes.translate table flipping a 0/1 mask
@@ -664,12 +687,14 @@ class _Splitter:
     def split(self, X, y=None, groups=None):
         n = _n_samples(X)
         for test in self._test_folds(X, y, groups):
-            mask = bytearray(n)
-            for i in test:
-                mask[i] = 1
+            if isinstance(test, _Mask):
+                mask = test
+            else:
+                mask = bytearray(n)
+                # mask[i] = 1 for every test row, iterated in C
+                collections.deque(map(mask.__setitem__, test, itertools.repeat(1)), maxlen=0)
             # ascending train and test rows, selected in C (itertools.compress)
-            yield (_as_index(itertools.compress(range(n), mask.translate(_FLIP))),
-                   _as_index(itertools.compress(range(n), mask)))
+            yield _rows_of(mask.translate(_FLIP), n), _rows_of(mask, n)
 
 
 def _check_splits(n_splits):
@@ -723,33 +748,44 @@ class StratifiedKFold(_KFoldBase):
         n = len(labels)
         enc, k = _encode_first_seen(labels)
         counts = [0] * k
-        for c in enc:
-            counts[c] += 1
+        for c, m in collections.Counter(enc).items():
+            counts[c] = m
         if max(counts) < self.n_splits:
             raise ValueError(f'n_splits={self.n_splits} cannot be greater than the number of members in '
                              'each class.')
         if min(counts) < self.n_splits:
             warnings.warn(f'The least populated class in y has only {min(counts)} members, which is less '
                           f'than n_splits={self.n_splits}.', UserWarning, stacklevel=3)
-        y_order = sorted(enc)
-        alloc = [[0] * k for _ in range(self.n_splits)]
-        for i in range(self.n_splits):
-            for c in y_order[i::self.n_splits]:
-                alloc[i][c] += 1
+        # alloc[i][c] = the positions p of class c in sorted(enc) (the run
+        # [s, e)) with p % n_splits == i, counted by floor division instead
+        # of slicing the sorted labels (lane metrics-apple)
+        K = self.n_splits
+        alloc = [[0] * k for _ in range(K)]
+        s = 0
+        for c in range(k):
+            e = s + counts[c]
+            for i in range(K):
+                alloc[i][c] = (e - 1 - i) // K - (s - 1 - i) // K
+            s = e
         rng = _rng(self.random_state) if self.shuffle else None
         per_class = []
         for c in range(k):
-            per_class.append([f for f in range(self.n_splits) for _ in range(alloc[f][c])])
+            per_class.append(list(itertools.chain.from_iterable(
+                itertools.repeat(f, alloc[f][c]) for f in range(K))))
         if rng is not None:
             perms = rng.permutations([len(v) for v in per_class])
-            per_class = [[v[j] for j in perm] for v, perm in zip(per_class, perms)]
-        test_folds = [0] * n
-        cursor = [0] * k
-        for r, c in enumerate(enc):
-            test_folds[r] = per_class[c][cursor[c]]
-            cursor[c] += 1
-        for f in range(self.n_splits):
-            yield [r for r in range(n) if test_folds[r] == f]
+            per_class = [list(map(v.__getitem__, perm)) for v, perm in zip(per_class, perms)]
+        # row r takes the next fold of its class's list, in C
+        its = [iter(v) for v in per_class]
+        test_folds = list(map(next, map(its.__getitem__, enc)))
+        if K <= 256:
+            # each fold's test mask straight from the fold bytes
+            folds = bytes(test_folds)
+            for f in range(K):
+                yield _Mask(folds.translate(bytes(int(j == f) for j in range(256))))
+            return
+        for f in range(K):
+            yield list(itertools.compress(range(n), map(f.__eq__, test_folds)))
 
 
 class GroupKFold(_KFoldBase):
