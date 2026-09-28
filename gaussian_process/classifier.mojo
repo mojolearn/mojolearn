@@ -148,42 +148,6 @@ def _gpc_kernel_self(
     return k_host^
 
 
-def _gpc_kernel_self_dev(
-    ctx: DeviceContext, x: List[Float32], n_train: Int, n_features: Int, kernel: GPKernelSpec
-) raises -> DeviceBuffer[DType.float32]:
-    """`_gpc_kernel_self` with K left on the device."""
-    var trace = IdentityTrace()
-    var dx = _upload(ctx, x)
-    var dls = _upload(ctx, _length_scale_table(kernel))
-    var dk = ctx.enqueue_create_buffer[DType.float32](n_train * n_train)
-    var dstack = ctx.enqueue_create_buffer[DType.float32](
-        gp_kernel_stack_floats(n_train, n_train)
-    )
-    ctx.synchronize()
-    gp_kernel_matrix(
-        ctx,
-        dk,
-        dx,
-        dx,
-        dls,
-        dstack,
-        n_train,
-        n_train,
-        n_features,
-        kernel,
-        True,
-        trace,
-        "gpc.kernel",
-        GP_ELEM_TPB,
-        GP_SAB_NONE,
-    )
-    ctx.synchronize()
-    _ = dx^
-    _ = dls^
-    _ = dstack^
-    return dk^
-
-
 def _gpc_matvec(k: List[Float32], v: List[Float32], n: Int) raises -> List[Float32]:
     """`K v` through the pinned gemm at `OP_TN` (`K` is symmetric by bits,
     so `K^T v` is `K v`), the host oracle's `gemm_oracle(k, v, OP_TN, n, 1,
@@ -295,6 +259,8 @@ def _gpc_fit_binary_device(
     var ctx = _family_ctx()
     var dk: DeviceBuffer[DType.float32]
     comptime if GPC_RESIDENT_K:
+        from gaussian_process.gpc_resident_k import _gpc_kernel_self_dev
+
         dk = _gpc_kernel_self_dev(ctx, x, n_train, n_features, kernel)
     else:
         var k = _gpc_kernel_self(x, n_train, n_features, kernel)
