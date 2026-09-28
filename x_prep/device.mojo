@@ -16,6 +16,8 @@ from x_prep.fastred import (
     ii_gram_fast_kernel,
 )
 from x_prep.dmi import mi_cd_device, mi_w_words, mi_scratch_words
+from core.arena_io import check_in_ranges, check_out_ranges, upload_ranges, download_ranges
+from core.device_store import DeviceStore
 
 #: op 69 (`mi_cd`) runs as the sorted neighbour search of x_prep/dmi.mojo
 #: (the host's argument, x_prep/host/mutual_info.mojo: the same words)
@@ -62,6 +64,29 @@ def x_prep_ctx() raises -> DeviceContext:
     return slot[].ctx.value().copy()
 
 
+#: The binding's resident input store (core/device_store.mojo; lane
+#: py-shared): `x_prep_dev_put` / `_free` / `_live`, one per tier.
+comptime _STORE_NAME = "MojoXPrepStoreIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXPrepStoreFast"
+comptime X_PREP_STORE = _Global[StorageType=DeviceStore, name=_STORE_NAME, init_fn=DeviceStore.__init__]
+
+
+def run_program_device_ranges(arena_addr: Int, arena_len: Int, prog_addr: Int, stages: Int, scratch_len: Int,
+                              out_addr: Int, out_len: Int, ins_addr: Int, nins: Int, outs_addr: Int,
+                              nouts: Int) raises:
+    """`run_program_device` whose host arena crosses by RANGES (lane
+    py-shared, core/arena_io.mojo): only the `nins` input triples go up
+    (every other arena word starts zero on the device, as the host's do;
+    src >= 0 copies a resident `x_prep_dev_put` slot), and only the `nouts`
+    output quads of the host arena come back. The scratch and the output
+    region behave as in `run_program_device`."""
+    check_in_ranges(ins_addr, nins, arena_len)
+    check_out_ranges(outs_addr, nouts, arena_len)
+    run_program_device_ptr(
+        FP(unsafe_from_address=arena_addr), arena_len, IP(unsafe_from_address=prog_addr), stages, scratch_len,
+        out_addr, out_len, ins_addr, nins, outs_addr, nouts,
+    )
+
+
 def prep_kernel[OP: Int](f: FP, q: IP, total: Int32):
     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if t < Int(total):
@@ -77,7 +102,8 @@ def run_program_device(arena_addr: Int, arena_len: Int, prog_addr: Int, stages: 
 
 
 def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, scratch_len: Int = 0,
-                           out_addr: Int = 0, out_len: Int = 0) raises:
+                           out_addr: Int = 0, out_len: Int = 0, ins_addr: Int = 0, nins: Int = -1,
+                           outs_addr: Int = 0, nouts: Int = -1) raises:
     """scratch_len (lane prep-apple2): words of DEVICE-ONLY arena after the
     host's arena_len words (offsets arena_len ..); they never cross to or
     from the host and start undefined, so a program writes each scratch word
@@ -116,7 +142,9 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     var df = ctx.enqueue_create_buffer[DType.float32](dev_len if dev_len > 0 else 1)
     var dw = ctx.enqueue_create_buffer[DType.uint32](scratch)
     var dq = ctx.enqueue_create_buffer[DType.int32](stages * STAGE_INTS if stages > 0 else 1)
-    if arena_len > 0:
+    if nins >= 0:
+        upload_ranges(ctx, df, host_f, arena_len, ins_addr, nins, X_PREP_STORE.get_or_create_ptr()[])
+    elif arena_len > 0:
         if dev_len > arena_len:
             ctx.enqueue_copy(dst_buf=df.create_sub_buffer[DType.float32](0, arena_len), src_ptr=host_f)
         else:
@@ -166,7 +194,9 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                     df.unsafe_ptr(), qp, Int32(total),
                     grid_dim=(total + BLOCK - 1) // BLOCK, block_dim=BLOCK,
                 )
-    if arena_len > 0:
+    if nouts >= 0:
+        download_ranges(ctx, df, host_f, outs_addr, nouts)
+    elif arena_len > 0:
         if dev_len > arena_len:
             ctx.enqueue_copy(dst_ptr=host_f, src_buf=df.create_sub_buffer[DType.float32](0, arena_len))
         else:

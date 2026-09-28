@@ -12,7 +12,9 @@ from std.memory import bitcast
 from x_metrics.epilogue import binary_auc, binary_ap, roc_arrays, expected_mi, row_sum_range
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from x_metrics.device import run_program_device, run_program_device_out
+from x_metrics.device import (
+    run_program_device, run_program_device_out, run_program_device_ranges, metrics_ctx, X_METRICS_STORE,
+)
 
 
 def run_binding(arena_addr: PythonObject, arena_len: PythonObject, prog_addr: PythonObject,
@@ -44,6 +46,48 @@ def run_out_binding(arena_addr: PythonObject, arena_len: PythonObject, prog_addr
     with GILReleased(Python()):
         run_program_device_out(fa, n, qa, s, oa, no)
     return PythonObject(s)
+
+
+def run_ranges_binding(arena_addr: PythonObject, prog_addr: PythonObject, sizes: PythonObject,
+                       ins_addr: PythonObject, outs_addr: PythonObject) raises -> PythonObject:
+    """`x_metrics_run_out` that also uploads only the input ranges (lane
+    py-shared, core/arena_io.mojo). sizes = (arena_len, stages, nins,
+    nouts); `nins` Int32 triples [lo, hi, src] at ins_addr, `nouts` quads
+    [lo, hi, CNT, mult] at outs_addr."""
+    var fa = Int(py=arena_addr)
+    var qa = Int(py=prog_addr)
+    var n = Int(py=sizes[0])
+    var s = Int(py=sizes[1])
+    var ni = Int(py=sizes[2])
+    var no = Int(py=sizes[3])
+    var ia = Int(py=ins_addr)
+    var oa = Int(py=outs_addr)
+    if fa == 0 or qa == 0 or n < 0 or s < 0 or ni < 0 or no < 0:
+        raise Error("x_metrics: invalid program buffers")
+    with GILReleased(Python()):
+        run_program_device_ranges(fa, n, qa, s, ia, ni, oa, no)
+    return PythonObject(s)
+
+
+def dev_put_binding(addr: PythonObject, n_words: PythonObject) raises -> PythonObject:
+    """A resident copy of n_words host words (core/device_store.mojo); its id."""
+    var a = Int(py=addr)
+    var n = Int(py=n_words)
+    var id: Int
+    with GILReleased(Python()):
+        id = X_METRICS_STORE.get_or_create_ptr()[].put(metrics_ctx(), a, n)
+    return PythonObject(id)
+
+
+def dev_free_binding(id: PythonObject) raises -> PythonObject:
+    var i = Int(py=id)
+    with GILReleased(Python()):
+        X_METRICS_STORE.get_or_create_ptr()[].free(metrics_ctx(), i)
+    return PythonObject(None)
+
+
+def dev_live_binding() raises -> PythonObject:
+    return PythonObject(X_METRICS_STORE.get_or_create_ptr()[].live)
 
 
 def curve_auc_binding(arena: PythonObject, fps: PythonObject, tps: PythonObject, keep: PythonObject,
@@ -94,6 +138,10 @@ def PyInit__mojolearn_x_metrics() abi("C") -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_x_metrics")
         m.def_function[run_binding]("x_metrics_run")
         m.def_function[run_out_binding]("x_metrics_run_out")
+        m.def_function[run_ranges_binding]("x_metrics_run_ranges")
+        m.def_function[dev_put_binding]("x_metrics_dev_put")
+        m.def_function[dev_free_binding]("x_metrics_dev_free")
+        m.def_function[dev_live_binding]("x_metrics_dev_live")
         m.def_function[curve_auc_binding]("x_metrics_curve_auc")
         m.def_function[curve_ap_binding]("x_metrics_curve_ap")
         m.def_function[curve_roc_binding]("x_metrics_curve_roc")
