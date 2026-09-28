@@ -187,6 +187,9 @@ e2e_device_fold.patch; the 17 existing + qn lanes with a host sabotage
 column dot); 15 lanes again at MOJOLEARN_CPU_THREADS=1 and 3;
 test_x_linear_repeat + test_host_surface; test_lane_select; the other
 families' lanes that import glm/solver host as clean controls.
+At 05:5xZ both slots were busy (decomp, sequence); an on-box waiter
+(amd_central run, 240-min wait) starts the gate when a slot frees. Results:
+/root/ev-linear-cpu/{g1,g3,g3t1,g3t3,g4}.log, g5_*.log, gate.done.
 
 OWED (pod steps, not done): the NVIDIA column of the same gate on a RunPod
 pod `linear-cpu` once RunPod has money; the merge to main waits for it
