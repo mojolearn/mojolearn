@@ -277,3 +277,22 @@ Quantile, the next iteration's chains in this pass (m4-a, Apple M4, steward
 1790613464286): 0a760cd68 46.04 s -> 449d0c127 34.78 s at 100k, digest
 c7ebb6da53934bf3 both arms.
 
+### FINAL before / after on the M4 Pro (m4pro-b, steward 1790610281005)
+
+The same job as the M3 Ultra's (six files at 037daa353 vs c18895ecc), second run
+shown; digests equal before vs after on every line except the FAST QN rows.
+
+| mode | case | before s | after s | speedup |
+|---|---|---|---|---|
+| IDENTICAL | lasso / elasticnet | 0.209 / 0.200 | 0.086 / 0.082 | 2.4x / 2.4x |
+| IDENTICAL | lasso per epoch | 9.01 ms | 2.82 ms | 3.2x |
+| IDENTICAL | sgd-clf / sgd-reg / perceptron | 4.444 / 3.104 / 2.734 | 0.892 / 0.867 / 0.859 | 5.0x / 3.6x / 3.2x |
+| IDENTICAL | pa-clf / pa-reg / sgd-ocsvm | 4.049 / 2.823 / 2.991 | 0.862 / 0.857 / 0.852 | 4.7x / 3.3x / 3.5x |
+| IDENTICAL | ols, ridge, logistic, linear-svc, linear-svr | 0.057, 0.051, 0.266, 0.212, 0.160 | 0.056, 0.049, 0.261, 0.223, 0.160 | noise (untouched) |
+| FAST | logistic / linear-svc / linear-svr | 0.789 / 0.480 / 0.647 | 0.299 / 0.226 / 0.159 | 2.6x / 2.1x / 4.1x (words change, quality matched) |
+| FAST | logistic / linear-svr per iteration | 7.34 / 9.68 ms | 2.32 / 2.76 ms | 3.2x / 3.5x |
+| FAST | sgd family | 4.134 / 2.968 / 2.819 / 4.096 / 2.967 / 2.946 | 0.976 / 0.906 / 0.911 / 0.917 / 0.915 / 0.904 | 3.2x to 4.5x, digests equal |
+
+Host (one core): sgd-clf 0.178, sgd-reg 0.087, perceptron 0.110, pa-clf 0.172,
+pa-reg 0.095, sgd-ocsvm 0.088.
+
