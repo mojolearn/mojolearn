@@ -8,9 +8,9 @@ from std.gpu import block_idx, block_dim, thread_idx
 from max.gpu.host import DeviceContext
 from x_ann.device_ctx import x_ann_ctx
 from x_ann.stage_timer import AnnStages
+from x_ann.knn_device import knn_enqueue
 
 from metrics.checks.device_io import upload_f32, upload_i32, download_f32, download_i32
-from x_ann.tsne_core import ts_knn_cell
 from x_ann.cagra_core import F32P, I32P, cagra_prune, cagra_reverse_merge, cg_search_cell
 
 comptime TPB = 64
@@ -22,12 +22,6 @@ def _tid() -> Int:
 
 def _grid(count: Int) -> Int:
     return (count + TPB - 1) // TPB
-
-
-def cg_knn_kernel(n: Int32, x: F32P, d: Int32, nn: Int32, nn_d: F32P, nn_i: I32P):
-    var i = _tid()
-    if i < Int(n):
-        ts_knn_cell(i, x, Int(n), Int(d), Int(nn), nn_d, nn_i)
 
 
 def cg_search_kernel(
@@ -48,8 +42,7 @@ def cagra_build_device(x: List[Float32], n: Int, d: Int, kdeg: Int, deg: Int) ra
     st.mark(ctx, "upload")
     var dnd = ctx.enqueue_create_buffer[DType.float32](n * kdeg)
     var dni = ctx.enqueue_create_buffer[DType.int32](n * kdeg)
-    ctx.enqueue_function[cg_knn_kernel](Int32(n), dx.unsafe_ptr(), Int32(d), Int32(kdeg), dnd.unsafe_ptr(),
-                                        dni.unsafe_ptr(), grid_dim=_grid(n), block_dim=TPB)
+    knn_enqueue(ctx, dx, n, d, kdeg, dnd, dni)
     ctx.synchronize()
     st.host("knn")
     var knn = download_i32(ctx, dni, n * kdeg)

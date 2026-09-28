@@ -52,26 +52,39 @@ def ts_knn_cell(i: Int, x: F32P, n: Int, d: Int, nn: Int, nn_d: F32P, nn_i: I32P
     for j in range(n):
         if j == i:
             continue
-        var dist = ts_sqdist(x, i, j, d)
-        if filled == nn:
-            var ld = nn_d.unsafe_load(base + nn - 1)
-            var li = Int(nn_i.unsafe_load(base + nn - 1))
-            if not (dist < ld or (dist == ld and j < li)):
-                continue
+        filled = ts_knn_offer(ts_sqdist(x, i, j, d), j, base, nn, filled, nn_d, nn_i)
+
+
+@always_inline
+def ts_knn_beats(dist: Float32, j: Int, ld: Float32, li: Int) -> Bool:
+    """(dist, j) is before (ld, li) in the order (squared distance, index)."""
+    return dist < ld or (dist == ld and j < li)
+
+
+@always_inline
+def ts_knn_offer(dist: Float32, j: Int, base: Int, nn: Int, filled: Int, nn_d: F32P, nn_i: I32P) -> Int:
+    """Offer candidate (dist, j) to the sorted list nn_d/nn_i[base : base + nn]
+    holding `filled` entries; returns the new fill (DEVIATION 5810). The
+    cell and the tiled device k-NN (`x_ann/knn_device.mojo`) both call it."""
+    var f = filled
+    if f == nn:
+        if not ts_knn_beats(dist, j, nn_d.unsafe_load(base + nn - 1), Int(nn_i.unsafe_load(base + nn - 1))):
+            return f
+    else:
+        f += 1
+    var s = f - 1
+    while s > 0:
+        var pd = nn_d.unsafe_load(base + s - 1)
+        var pi = Int(nn_i.unsafe_load(base + s - 1))
+        if dist < pd or (dist == pd and j < pi):
+            nn_d.unsafe_store(base + s, pd)
+            nn_i.unsafe_store(base + s, Int32(pi))
+            s -= 1
         else:
-            filled += 1
-        var s = filled - 1
-        while s > 0:
-            var pd = nn_d.unsafe_load(base + s - 1)
-            var pi = Int(nn_i.unsafe_load(base + s - 1))
-            if dist < pd or (dist == pd and j < pi):
-                nn_d.unsafe_store(base + s, pd)
-                nn_i.unsafe_store(base + s, Int32(pi))
-                s -= 1
-            else:
-                break
-        nn_d.unsafe_store(base + s, dist)
-        nn_i.unsafe_store(base + s, Int32(j))
+            break
+    nn_d.unsafe_store(base + s, dist)
+    nn_i.unsafe_store(base + s, Int32(j))
+    return f
 
 
 @always_inline

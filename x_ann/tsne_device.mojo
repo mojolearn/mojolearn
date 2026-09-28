@@ -7,11 +7,12 @@ from std.gpu import block_idx, block_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from x_ann.device_ctx import x_ann_ctx
 from x_ann.stage_timer import AnnStages
+from x_ann.knn_device import knn_enqueue
 
 from metrics.checks.device_io import upload_f32, upload_i32, download_f32, download_i32
 from checks.numerics import identical_log
 from x_ann.tsne_core import (
-    F32P, I32P, ts_kl_cell, ts_knn_cell, ts_perplexity_cell, ts_repulse_cell, ts_step_cell,
+    F32P, I32P, ts_kl_cell, ts_perplexity_cell, ts_repulse_cell, ts_step_cell,
     ts_sum_cell, tsne_nn, tsne_symmetrize, tsne_validate,
 )
 
@@ -24,12 +25,6 @@ def _tid() -> Int:
 
 def _grid(count: Int) -> Int:
     return (count + TPB - 1) // TPB
-
-
-def knn_kernel(n: Int32, x: F32P, d: Int32, nn: Int32, nn_d: F32P, nn_i: I32P):
-    var i = _tid()
-    if i < Int(n):
-        ts_knn_cell(i, x, Int(n), Int(d), Int(nn), nn_d, nn_i)
 
 
 def perplexity_kernel(n: Int32, nn_d: F32P, nn: Int32, log_perp: Float32, p: F32P):
@@ -107,8 +102,7 @@ def tsne_fit_device(
     var dnd = ctx.enqueue_create_buffer[DType.float32](n * nn)
     var dni = ctx.enqueue_create_buffer[DType.int32](n * nn)
     var dp = ctx.enqueue_create_buffer[DType.float32](n * nn)
-    ctx.enqueue_function[knn_kernel](Int32(n), dx.unsafe_ptr(), Int32(d), Int32(nn), dnd.unsafe_ptr(),
-                                     dni.unsafe_ptr(), grid_dim=_grid(n), block_dim=TPB)
+    knn_enqueue(ctx, dx, n, d, nn, dnd, dni)
     ctx.enqueue_function[perplexity_kernel](Int32(n), dnd.unsafe_ptr(), Int32(nn), identical_log(perplexity),
                                             dp.unsafe_ptr(), grid_dim=_grid(n), block_dim=TPB)
     ctx.synchronize()
