@@ -126,19 +126,6 @@ from solver.checks.record_canon import (
 from solver.impl.functions.linear_reg import linear_reg_h
 from glm.impl.preprocess import post_process_data, pre_process_data
 from solver.impl.linalg.axpy import AXPY_TPB, axpy_device_alpha
-from std.os import getenv
-from checks.numerics import identical_mul_add
-from checks.rtf_seam import rtf_mul_add
-from gemm.checks.gemm_identical import (
-    PLAN_SPLITK,
-    SPLITK_FOLD_TPB,
-    SPLITK_LEAF_TPB,
-    _leaf_at,
-    _leaf_bounds,
-    choose_gemm_plan,
-    contract_partition,
-    CONTRACT_MAX_LEAVES,
-)
 from solver.impl.linalg.norm import col_norm_l2_squared
 from solver.impl.shuffle import init_shuffle
 from solver.impl.solvers.params import LOSS_SQRD_LOSS, loss_funct_name
@@ -224,141 +211,6 @@ def cd_gram_partial_kernel(
         part[Int(block_idx.x) * p1 * p1 + t] = acc
 
 
-# ===========================================================================
-# lane/linear-apple: THE IDENTICAL SWEEP IN TWO LAUNCHES PER COORDINATE
-# ===========================================================================
-#
-# Metal pays per launch (~0.3 ms enqueue on the M4, measured 2026-09-16) and a
-# coordinate of the device sweep was six launches: remember, axpy, the
-# profile dot's leaf and fold (PLAN_SPLITK), update, axpy. The words each one
-# stores are elementwise or a fixed tree, so they regroup into two launches
-# with nothing recomputed differently:
-#
-#   cd_col_leaf_kernel    one thread per contract leaf t (the gemm lane's
-#                         `_leaf_bounds(_leaf_at(t, P), L, k)`, contract 6):
-#                         for each of its rows ascending, the PREVIOUS
-#                         coordinate's closing axpy (alpha = conv[0]), this
-#                         coordinate's opening axpy (alpha = coef[ci]), both
-#                         `axpy_device_alpha_kernel`'s
-#                         `ftz(identical_mul_add(ftz(a), ftz(x), ftz(y)))`,
-#                         the residual stored, then the leaf chain
-#                         `rtf_mul_add(ftz(x_ci[p]), ftz(r[p]), acc)` exactly as
-#                         `identical_gemm_leaf_kernel` reads `a = x_ci`,
-#                         `b = residual` at OP_NT strides (1, 1), partial
-#                         `ftz(acc)` at `ws[t]`;
-#   cd_col_fold_update_kernel  one block: thread 0 remembers `coef[ci]` into
-#                         conv[0], the block runs `identical_gemm_fold_kernel`
-#                         itself (cell 0, stride P) into `coef[ci]`, and thread 0
-#                         (the thread that stored the root) runs
-#                         `cd_update_coef_kernel`.
-#
-# The last coordinate's closing axpy stays its own launch, before the epoch's
-# conv read. Per coordinate each residual row sees the same two axpys in the
-# same order, the dot reads the same stored residual word, and conv[0] is read
-# as the previous coordinate's delta before this coordinate's remember writes
-# it (the leaf launch precedes the fold launch).
-
-
-def cd_col_leaf_kernel(
-    ws: MutPointer[Float32, MutAnyOrigin],
-    x: MutPointer[Float32, MutAnyOrigin],
-    residual: MutPointer[Float32, MutAnyOrigin],
-    coef: MutPointer[Float32, MutAnyOrigin],
-    conv: MutPointer[Float32, MutAnyOrigin],
-    ci_in: Int32,
-    prev_ci_in: Int32,
-    n_rows_in: Int32,
-    leaf_in: Int32,
-    p_in: Int32,
-):
-    var p_count = Int(p_in)
-    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if t >= p_count:
-        return
-    var n = Int(n_rows_in)
-    var ci = Int(ci_in)
-    var prev = Int(prev_ci_in)
-    var bounds = _leaf_bounds(_leaf_at(t, p_count), Int(leaf_in), n)
-    var xc = x + ci * n
-    var a1 = ftz(coef.unsafe_load(ci))
-    var acc = Float32(0.0)
-    if prev >= 0:
-        var xq = x + prev * n
-        var a0 = ftz(conv.unsafe_load(0))
-        for p in range(bounds[0], bounds[1]):
-            var r = ftz(identical_mul_add(a0, ftz(xq.unsafe_load(p)), ftz(residual.unsafe_load(p))))
-            r = ftz(identical_mul_add(a1, ftz(xc.unsafe_load(p)), ftz(r)))
-            residual.unsafe_store(p, r)
-            acc = rtf_mul_add(ftz(xc.unsafe_load(p)), ftz(r), acc)
-    else:
-        for p in range(bounds[0], bounds[1]):
-            var r = ftz(identical_mul_add(a1, ftz(xc.unsafe_load(p)), ftz(residual.unsafe_load(p))))
-            residual.unsafe_store(p, r)
-            acc = rtf_mul_add(ftz(xc.unsafe_load(p)), ftz(r), acc)
-    ws.unsafe_store(t, ftz(acc))
-
-
-def cd_col_fold_update_kernel(
-    coef: MutPointer[Float32, MutAnyOrigin],
-    ws: MutPointer[Float32, MutAnyOrigin],
-    squared: MutPointer[Float32, MutAnyOrigin],
-    conv: MutPointer[Float32, MutAnyOrigin],
-    ci_in: Int32,
-    p_in: Int32,
-    l1_alpha: Float32,
-):
-    """Remember, the PLAN_SPLITK fold of one cell, update. The fold is
-    `identical_gemm_fold_kernel`'s non-sabotage body for cell 0, stride P,
-    line for line (calling that kernel from this one crashes the Metal AIR
-    pass): P partials into threadgroup memory, then level by level node q =
-    ftz(ftz(child 2q) + ftz(child 2q + 1)), an odd tail carried bit for bit,
-    the root stored ftz'd by thread 0, which then runs the update."""
-    var ci = Int(ci_in)
-    var p_count = Int(p_in)
-    var tid = Int(thread_idx.x)
-    var nth = Int(block_dim.x)
-    if tid == 0:
-        conv.unsafe_store(0, coef.unsafe_load(ci))
-    var buf = stack_allocation[
-        2 * CONTRACT_MAX_LEAVES,
-        Scalar[DType.float32],
-        address_space = AddressSpace.SHARED,
-    ]()
-    var cur = 0
-    var nxt = CONTRACT_MAX_LEAVES
-    var q0 = tid
-    while q0 < p_count:
-        buf[unsafe_offset = cur + q0] = ws.unsafe_load(q0)
-        q0 += nth
-    barrier()
-    var w = p_count
-    while w > 1:
-        var pairs = w // 2
-        var q = tid
-        while q < pairs:
-            buf[unsafe_offset = nxt + q] = ftz(
-                ftz(buf[unsafe_offset = cur + 2 * q])
-                + ftz(buf[unsafe_offset = cur + 2 * q + 1])
-            )
-            q += nth
-        var w_next = pairs
-        if w % 2 == 1:
-            if tid == 0:
-                buf[unsafe_offset = nxt + pairs] = buf[unsafe_offset = cur + w - 1]
-            w_next = pairs + 1
-        barrier()
-        var swap = cur
-        cur = nxt
-        nxt = swap
-        w = w_next
-    if tid == 0:
-        var root = Float32(0.0)
-        if p_count > 0:
-            root = buf[unsafe_offset=cur]
-        coef.unsafe_store(ci, ftz(root))
-        cd_update_coef(coef, ci_in, squared, conv, l1_alpha)
-
-
 @fieldwise_init
 struct CdLaunch(Copyable, Movable, ImplicitlyCopyable):
     """SCHEDULING knobs. `dot_plan < 0` lets the gemm lane's dispatcher pick
@@ -385,20 +237,6 @@ def cd_remember_coef_kernel(
 
 
 def cd_update_coef_kernel(
-    coef: MutPointer[Float32, MutAnyOrigin],
-    ci_in: Int32,
-    squared: MutPointer[Float32, MutAnyOrigin],
-    conv: MutPointer[Float32, MutAnyOrigin],
-    l1_alpha: Float32,
-):
-    """The launch; the body is `cd_update_coef` (lane/linear-apple: a kernel
-    called from another kernel crashes the Metal AIR pass, so the fused
-    coordinate calls the body)."""
-    cd_update_coef(coef, ci_in, squared, conv, l1_alpha)
-
-
-@always_inline
-def cd_update_coef(
     coef: MutPointer[Float32, MutAnyOrigin],
     ci_in: Int32,
     squared: MutPointer[Float32, MutAnyOrigin],
@@ -764,53 +602,7 @@ def cd_fit_traced(
             _ = gext^
             _ = hg^
             _ = hw^
-    # lane/linear-apple: the two-launch coordinate (see cd_col_leaf_kernel)
-    # where the profile dot would be PLAN_SPLITK on one device.
-    var fused = False
-    var part = contract_partition(n_rows)
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        var dc = String(getenv("MOJOLEARN_SOLVER_DEVICE_COUNT"))
-        fused = (
-            not is_defined["MOJOLEARN_CD_FUSED_OFF"]()
-            and launch.dot_plan < 0
-            and (dc == "" or dc == "1")
-            and part[1] > 0
-            and choose_gemm_plan(1, 1, n_rows) == PLAN_SPLITK
-        )
-    while device_sweeps and fused and n_iter < epochs:
-        ctx.enqueue_memset(conv, Float32(0.0))
-        for j in range(n_cols):
-            var ci = ri[j]
-            var prev = ri[j - 1] if j > 0 else -1
-            ctx.enqueue_function[cd_col_leaf_kernel](
-                ws_rows.unsafe_ptr(), x.unsafe_ptr(), residual.unsafe_ptr(),
-                coef.unsafe_ptr(), conv.unsafe_ptr(), Int32(ci), Int32(prev),
-                Int32(n_rows), Int32(part[0]), Int32(part[1]),
-                grid_dim=((part[1] + SPLITK_LEAF_TPB - 1) // SPLITK_LEAF_TPB, 1, 1),
-                block_dim=(SPLITK_LEAF_TPB, 1, 1),
-            )
-            ctx.enqueue_function[cd_col_fold_update_kernel](
-                coef.unsafe_ptr(), ws_rows.unsafe_ptr(), squared.unsafe_ptr(),
-                conv.unsafe_ptr(), Int32(ci), Int32(part[1]), l1_alpha,
-                grid_dim=(1, 1, 1), block_dim=(SPLITK_FOLD_TPB, 1, 1),
-            )
-        # the last coordinate's closing axpy: residual += conv.coef * X[:, ci]
-        axpy_device_alpha(
-            ctx, residual, x, ri[n_cols - 1] * n_rows, conv, 0, n_rows,
-            launch.axpy_tpb, launch.axpy_two_d_grid,
-        )
-        ctx.enqueue_copy(dst_ptr=h_conv.unsafe_ptr(), src_buf=conv)
-        ctx.synchronize()
-        var coef_max = h_conv.unsafe_ptr().unsafe_load(1)
-        var diff_max = h_conv.unsafe_ptr().unsafe_load(2)
-        n_iter += 1
-        var tag = prefix + ".sweep" + _pad3(n_iter - 1)
-        record_device_canon(ctx, trace, tag + ".coef", coef, n_cols, canon_ws)
-        record_device_canon(ctx, trace, tag + ".resid", residual, n_rows, canon_ws)
-        record_device_canon(ctx, trace, tag + ".conv", conv, 3, canon_ws)
-        if coef_max < tol or (diff_max / coef_max) < tol:
-            break
-    while device_sweeps and not fused and n_iter < epochs:
+    while device_sweeps and n_iter < epochs:
         # shuffle=true refused above; ri stays the identity.
         ctx.enqueue_memset(conv, Float32(0.0))
         for j in range(n_cols):
