@@ -22,6 +22,18 @@ ONE binding entry, `x_prep_run`, which runs a PROGRAM of units
 install) runs the same units in a loop. Python here only lays out the arena,
 lists the stages and reads results back; the only arithmetic it does is
 integer bookkeeping and IEEE basic operations on scalar parameters.
+
+EXCEPTIONS, named (python_work_audit prep; each is host float64 Python today
+and none is covered by a ledger row yet): KBinsDiscretizer's cumulative sample
+weights and 53-bit uniform scaling (`_draw`-driven subsample); IterativeImputer's
+`_truncnorm_host` (statistics.NormalDist, a libm erf/log per missing entry,
+sample_posterior with a user estimator only) and the O(d^2) `_abs_corr` /
+`_neighbours` normalisation (n_nearest_features). IterativeImputer with a
+user `estimator` otherwise runs its data-sized plumbing in
+x_prep/user_host.mojo (row 221, DEVIATION 5411: row selection, gathers, the
+clipped float32 store and the float64 convergence twin); `_fit_host` and
+`_impute_host` stay the Python reference (`_II_NATIVE = False` or
+MOJOLEARN_HOTPATH=python).
 """
 import array
 import bisect

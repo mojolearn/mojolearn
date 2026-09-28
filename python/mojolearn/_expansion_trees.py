@@ -16,8 +16,16 @@ first imported, after the package, so both may rely on every module existing:
 
 PASS 1 (2026-09-27): every class here fits its trees through the EXISTING
 forest entry points (the rf and gbdt bindings), which carry the
-identical contract on the GPU and on their CPU host bindings; the numeric glue
-between fits (weights, votes, drops) is host arithmetic in fixed order.
+identical contract on the GPU and on their CPU host bindings. The numeric glue
+between fits (votes, weights, drops, calibration) runs in `xtrees/ops.mojo`
+(rows 160-169); Python keeps only O(estimators) scalars in fixed order.
+NOT YET TRUE, owed to the trees family (python_work_audit trees items 3, 9,
+10), and NOT covered by any ledger row: Kernel/PermutationExplainer's per-row
+coalition weights and marginals, Bagging's oob R^2 (`_portable_math.fsum` over
+n) and AdaBoost's sample_weight normalization are still binary64 Python over
+rows. CalibratedClassifierCV's per-class epilogue moved to xtrees on lane
+py-misc-prep (strided platt/isotonic apply, `complement_pairs`, native class
+columns and 0/1 targets); `_CAL_NATIVE = False` is its Python reference.
 """
 import numbers
 import os
