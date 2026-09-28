@@ -57,7 +57,7 @@ comptime APPLE_FAST_STEP_UNROLL = (
     and not is_defined["MOJOLEARN_APPLE_FAST_STEP_UNROLL_OFF"]()
 )
 
-comptime STRIDED_UNROLL = 8
+comptime STRIDED_UNROLL = 32
 
 
 @always_inline
