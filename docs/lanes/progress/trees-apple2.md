@@ -291,6 +291,16 @@ lazy zero reach FAST too (M4 FAST table above: SymmetricTree taxi 0.923,
 Lossguide 0.915, Depthwise 0.984, ET taxi 0.971; the 10-tree digests of all
 three GBDT policies equal across arms).
 
+FAST at the tip on the M4 Pro (m4pro-b, steward 1790618497398, 27fdd02c4;
+before = `-D MOJOLEARN_2031_SYM_RIDX_SPLITS_OFF -D
+MOJOLEARN_GBDT_ID_UPLOADS_SEPARATE -D MOJOLEARN_ET_RM_NARROW_OFF`):
+SymmetricTree taxi 924 -> 832 ms (0.900, digest 388959920a036d2d both),
+Lossguide taxi 4076 -> 3803 (0.933), Depthwise taxi 1534 -> 1518 (0.990),
+ExtraTreesClassifier taxi 1944 -> 1891 (0.972, same hash),
+RandomTreesEmbedding 330 -> 332 (1.007). FAST Depthwise/Lossguide 100-tree
+digests vary inside each arm on this Mac (pre-existing); the 10-tree
+Lossguide and SymmetricTree digests are equal across arms.
+
 Opt-in only (measured, not flipped): `MOJOLEARN_2580_LEVEL_QUANT` (M4
 SymmetricTree taxi 1.018); `MOJOLEARN_RF_TRIAL_COLS20` (superseded by 40).
 
