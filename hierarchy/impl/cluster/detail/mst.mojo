@@ -62,7 +62,7 @@ def connect_knn_graph(
     )
 
 
-def build_sorted_mst(
+def build_sorted_mst[DENSE: Bool = False](
     ctx: DeviceContext,
     mut indptr: DeviceBuffer[DType.int32],
     mut indices: DeviceBuffer[DType.int32],
@@ -79,10 +79,12 @@ def build_sorted_mst(
     sabotage: Int32 = LINK_SAB_NONE,
 ) raises -> Int:
     """`mst.cuh:276-343`. Returns the Boruvka round count (for the card).
+    DENSE: the graph is `pairwise_distances`'s complete one and `indices`
+    is not read (it may be a one-cell placeholder; `mst_kernels._edge_dst`).
     `reduction_op` and `metric` are arguments of the fix-up loop only and
     have no role until rung 2."""
     # `:296-298` We want to have MST initialize colors on first call.
-    var mst_coo = mst(
+    var mst_coo = mst[DENSE](
         ctx, indptr, indices, pw_dists, m, nnz, color,
         symmetrize_output=False, initialize_colors=True, iterations=0,
         tpb=mst_tpb, sabotage=sabotage,

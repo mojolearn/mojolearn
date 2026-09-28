@@ -11,7 +11,7 @@ from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
 
 from x_cluster.bodies import (
     FPtr,
@@ -31,7 +31,7 @@ from x_cluster.bodies import (
     xk_cell,
     ap_availability_col,
     ap_exemplar_cell,
-    ap_responsibility_row,
+    ap_r_update,
     meanshift_seed,
     nearest_row,
     sqdist_cell,
@@ -138,10 +138,72 @@ def _meanshift_kernel(
         meanshift_seed(x, Int(n), Int(d), bw, stop, Int(max_iter), centers, scratch, intensity, iters, t)
 
 
+comptime AP_TPB = 256
+
+
+@always_inline
+def _ap_key(v: Float32, k: Int) -> UInt64:
+    """An integer whose order is `ap_responsibility_row`'s pick: the float's
+    order in the high word (-0.0 folded onto +0.0, which `>` treats as
+    equal), the LOWER index winning in the low word. The row's max and its
+    lowest index come from one integer max, never a float compare."""
+    var b = bitcast[DType.uint32](v)
+    if b == UInt32(0x80000000):
+        b = UInt32(0)
+    var ok = (b ^ UInt32(0x80000000)) if (b & UInt32(0x80000000)) == UInt32(0) else ~b
+    return (UInt64(ok) << 32) | UInt64(UInt32(0xFFFFFFFF) - UInt32(k))
+
+
+@always_inline
+def _ap_key_index(key: UInt64) -> Int:
+    return Int(UInt32(0xFFFFFFFF) - UInt32(key & UInt64(0xFFFFFFFF)))
+
+
 def _ap_r_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
-    var t = _tid()
-    if t < Int(n):
-        ap_responsibility_row(s, a, r, Int(n), damping, t)
+    """`ap_responsibility_row` for row `block_idx.x` on one block: the max
+    of `ftz(A + S)` with its lowest index, then the second max over the
+    other columns with ITS lowest index (each an integer max of `_ap_key`,
+    so exactly the row loop's picks, whatever the block's fold shape), then
+    every cell's `ap_r_update`. Coalesced reads where the row-per-thread
+    kernel strode by `n`."""
+    var i = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var N = Int(n)
+    var red = stack_allocation[AP_TPB, Scalar[DType.uint64], address_space = AddressSpace.SHARED]()
+    var mine = UInt64(0)
+    for k in range(tid, N, AP_TPB):
+        mine = max(mine, _ap_key(ftz(a[i * N + k] + s[i * N + k]), k))
+    red[tid] = mine
+    barrier()
+    var off = AP_TPB // 2
+    while off > 0:
+        if tid < off:
+            red[tid] = max(red[tid], red[tid + off])
+        barrier()
+        off //= 2
+    var arg = _ap_key_index(red[0])
+    barrier()
+    var mine2 = UInt64(0)
+    for k in range(tid, N, AP_TPB):
+        if k != arg:
+            mine2 = max(mine2, _ap_key(ftz(a[i * N + k] + s[i * N + k]), k))
+    red[tid] = mine2
+    barrier()
+    off = AP_TPB // 2
+    while off > 0:
+        if tid < off:
+            red[tid] = max(red[tid], red[tid + off])
+        barrier()
+        off //= 2
+    var top2 = red[0]
+    var first = ftz(a[i * N + arg] + s[i * N + arg])
+    var second = Float32(-3.4028234663852886e38)
+    if N > 1:
+        var a2 = _ap_key_index(top2)
+        second = ftz(a[i * N + a2] + s[i * N + a2])
+    var one_minus = ftz(Float32(1) - damping)
+    for k in range(tid, N, AP_TPB):
+        ap_r_update(s, r, N, damping, one_minus, i, k, first, second, arg)
 
 
 def _ap_a_kernel(r: FPtr, a: FPtr, n: Int32, damping: Float32):
@@ -560,7 +622,7 @@ struct DeviceOps(ClusterOps):
 
     def ap_r(mut self, s: Int, a: Int, r: Int, n: Int, damping: Float32) raises:
         self.ctx.enqueue_function[_ap_r_kernel](
-            self._fp(s), self._fp(a), self._fp(r), Int32(n), damping, grid_dim=_grid(n), block_dim=TPB,
+            self._fp(s), self._fp(a), self._fp(r), Int32(n), damping, grid_dim=n if n > 0 else 1, block_dim=AP_TPB,
         )
 
     def ap_a(mut self, r: Int, a: Int, n: Int, damping: Float32) raises:

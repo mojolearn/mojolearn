@@ -90,7 +90,7 @@ def _read_scalar(
     return Int(h_scalar.unsafe_ptr().unsafe_load(0))
 
 
-struct MST_solver(Movable):
+struct MST_solver[DENSE: Bool = False](Movable):
     """`mst_solver.cuh:31-90` + `mst_solver_inl.cuh`.
 
     `max_blocks` / `max_threads` / `sm_count` (`:89-91`) come from the
@@ -154,7 +154,14 @@ struct MST_solver(Movable):
         tpb: Int = 256,
         sabotage: Int32 = LINK_SAB_NONE,
     ) raises:
-        """`mst_solver_inl.cuh:54-106`."""
+        """`mst_solver_inl.cuh:54-106`. DENSE (lane/cluster-apple): the
+        graph is the complete `v x v` row-major one, `indices` is never read
+        (every destination is `e % v`, `mst_kernels._edge_dst`)."""
+        comptime if Self.DENSE:
+            if symmetrize_output:
+                raise Error("mst: the DENSE solver has no symmetrized output (add_reverse_edge reads indices)")
+            if e != v * v:
+                raise Error("mst: the DENSE solver needs e == v * v")
         self.v = v
         self.e = e
         self.symmetrize_output = symmetrize_output
@@ -281,7 +288,7 @@ struct MST_solver(Movable):
         while not done:
             # done.set_value_async(true)
             ctx.enqueue_memset(self.done, Int32(1))
-            ctx.enqueue_function[min_pair_colors](
+            ctx.enqueue_function[min_pair_colors[Self.DENSE]](
                 Int32(self.v),
                 self.indices.unsafe_ptr(),
                 self.new_mst_edge.unsafe_ptr(),
@@ -342,7 +349,7 @@ struct MST_solver(Movable):
             block_dim=(MST_FILL_TPB, 1, 1),
         )
         # `:287`, `:295`: n_threads = 32, grid v -- one warp per row
-        ctx.enqueue_function[kernel_min_edge_per_vertex](
+        ctx.enqueue_function[kernel_min_edge_per_vertex[Self.DENSE]](
             self.offsets.unsafe_ptr(),
             self.indices.unsafe_ptr(),
             self.weights.unsafe_ptr(),
@@ -357,7 +364,7 @@ struct MST_solver(Movable):
             block_dim=(MST_WARP, 1, 1),
         )
         var blocks = _blocks(self.v, self.tpb)
-        ctx.enqueue_function[min_edge_lo_per_color](
+        ctx.enqueue_function[min_edge_lo_per_color[Self.DENSE]](
             self.offsets.unsafe_ptr(),
             self.indices.unsafe_ptr(),
             self.weights.unsafe_ptr(),
@@ -371,7 +378,7 @@ struct MST_solver(Movable):
             grid_dim=(blocks, 1, 1),
             block_dim=(self.tpb, 1, 1),
         )
-        ctx.enqueue_function[min_edge_hi_per_color](
+        ctx.enqueue_function[min_edge_hi_per_color[Self.DENSE]](
             self.offsets.unsafe_ptr(),
             self.indices.unsafe_ptr(),
             self.weights.unsafe_ptr(),
@@ -397,7 +404,7 @@ struct MST_solver(Movable):
             grid_dim=(_blocks(2 * self.v, MST_FILL_TPB), 1, 1),
             block_dim=(MST_FILL_TPB, 1, 1),
         )
-        ctx.enqueue_function[min_edge_per_supervertex](
+        ctx.enqueue_function[min_edge_per_supervertex[Self.DENSE]](
             self.color.unsafe_ptr(),
             self.color_index.unsafe_ptr(),
             self.new_mst_edge.unsafe_ptr(),
@@ -458,7 +465,7 @@ struct MST_solver(Movable):
         )
 
 
-def mst(
+def mst[DENSE: Bool = False](
     ctx: DeviceContext,
     offsets: DeviceBuffer[DType.int32],
     indices: DeviceBuffer[DType.int32],
@@ -474,7 +481,7 @@ def mst(
 ) raises -> Graph_COO:
     """`raft/sparse/solver/mst.cuh:37-62`. Returns the MST (or MSF) edges;
     `Graph_COO.n_rounds` carries the round count for the card."""
-    var solver = MST_solver(
+    var solver = MST_solver[DENSE](
         ctx, offsets, indices, weights, v, e, color,
         symmetrize_output, initialize_colors, iterations, tpb, sabotage,
     )

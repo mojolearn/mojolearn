@@ -176,13 +176,15 @@ def build_mr_linkage(
     # on the matrix before it returns.
     var nnz = 1 if use_fast else m * m
     var indptr = ctx.enqueue_create_buffer[DType.int32](m + 1)
-    var indices = ctx.enqueue_create_buffer[DType.int32](nnz)
+    # the column of cell e is e % m: the solver computes it (DENSE), so the
+    # m * m index array is neither written nor read (lane/cluster-apple)
+    var indices = ctx.enqueue_create_buffer[DType.int32](1)
     var pw_dists = ctx.enqueue_create_buffer[DType.float32](nnz)
     var norms = ctx.enqueue_create_buffer[DType.float32](m)
     if not use_fast:
         pairwise_distances(
             ctx, x, m, n, metric, indptr, indices, pw_dists, norms,
-            tile_tpb, LINK_SAB_NONE,
+            tile_tpb, LINK_SAB_NONE, fill_indices=False,
         )
     prof_mark(ctx, "hdb.pairwise", _pt)
 
@@ -190,7 +192,10 @@ def build_mr_linkage(
     # theirs is, through `identical_div` (row 49's seam). At the shipped
     # alpha = 1.0 the quotient is exactly 1.0 in both modes.
     var inv_alpha = identical_div(Float32(1.0), alpha)
-    var mr = ctx.enqueue_create_buffer[DType.float32](nnz)
+    # IN PLACE over the distances (a view: one thread reads cell idx of
+    # `pw_dists` and writes cell idx of `mr`, nothing else reads it after),
+    # one m * m allocation instead of two (lane/cluster-apple)
+    var mr = pw_dists.create_sub_buffer[DType.float32](0, nnz)
     if not use_fast:
         mutual_reachability_dense(
             ctx, mr, pw_dists, core_dists, m, inv_alpha, mr_tpb, sabotage
@@ -219,7 +224,7 @@ def build_mr_linkage(
             inv_alpha=inv_alpha,
         )
     else:
-        rounds = build_sorted_mst(
+        rounds = build_sorted_mst[DENSE=True](
             ctx, indptr, indices, mr, m, n,
             mst_rows, mst_cols, mst_weights, color, nnz,
             max_iter=10, mst_tpb=mst_tpb, sabotage=LINK_SAB_NONE,
@@ -318,9 +323,9 @@ def build_mr_linkage(
     _ = knn_inds^
     _ = indptr^
     _ = indices^
+    _ = mr^
     _ = pw_dists^
     _ = norms^
-    _ = mr^
     _ = color^
     _ = h_src^
     _ = h_dst^

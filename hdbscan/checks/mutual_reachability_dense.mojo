@@ -169,8 +169,10 @@ def mutual_reachability_dense_kernel(
     var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if idx >= m * m:
         return
-    var row = idx // m
-    var col = idx % m
+    # 32-bit unsigned row/col (m * m < 2^31 under PAIRWISE_MAX_ROWS): the
+    # 64-bit division per cell is a long emulated sequence on every GPU
+    var row = Int(UInt32(idx) // UInt32(m))
+    var col = idx - row * m
     if row == col:
         mr.unsafe_store(idx, FLOAT32_MAX)
         return
