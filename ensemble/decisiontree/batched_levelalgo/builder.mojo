@@ -6,6 +6,7 @@ from std.gpu import WARP_SIZE
 from std.sys.compile import is_defined
 from std.math import ceildiv
 from std.sys.info import has_apple_gpu_accelerator, size_of
+
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 from checks.kernel_matrix import TARGET_COLUMN, column_shared_limit
@@ -88,6 +89,9 @@ comptime TPB_DEFAULT = 128
 # histogram launch and one split launch per 10 columns, each re-reading
 # every row of the batch; the workspace grows 4x (168 MB at 4096 nodes x
 # 128 bins, 8-byte bins). `-D MOJOLEARN_RF_COLS10` keeps 10.
+# NOT IDENTICAL (measured 2026-09-28, trees-apple): the same 40 under
+# IDENTICAL kept the forest bytes (hash 3a5e8c09dd0d5fc7) but made
+# RandomForestRegressor Istella-S SLOWER on the M4 Pro, 60.8 s -> 91.0 s.
 comptime N_BLKS_FOR_COLS = 40 if (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()

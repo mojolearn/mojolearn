@@ -10,13 +10,14 @@ from std.python.bindings import PythonModuleBuilder
 
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr
 from checks.numerics import identical_log64
+from std.python import Python
 from xtrees.shap import node_cover, tree_shap, expected_value, mask_expand, block_mean, kernel_solve
 from xtrees.ops import (
     sample_indices, weighted_sample, gather_f32, gather_i32, accumulate,
     accumulate_onehot, accumulate_cols, accumulate_rows, argmax_rows, argmax_rows_f32, scale_f64, softmax_rows, scale_to_f32, put_f32,
     check_weights_f32, mul_f32,
     samme_step, r2_step, weighted_median, apply_trees, gradients, leaf_newton, leaf_newton_rows, tree_score_add, uniform,
-    onehot_leaves, transpose_f32, normalize_rows, logit, scatter, platt_fit, platt_apply, isotonic_fit,
+    onehot_leaves, transpose_f32, normalize_rows, exact_sum_f32, EXACT_SUM_LIMBS, logit, scatter, platt_fit, platt_apply, isotonic_fit,
     isotonic_predict,
 )
 
@@ -154,6 +155,52 @@ def scale_to_f32_binding(x: PythonObject, res: PythonObject, params: PythonObjec
     var n = _count(_i(params, 0), "x_trees_scale_to_f32")
     if n > 0:
         scale_to_f32(f64_ptr(Int(py=x)), n, _f(params, 1), f32_ptr(Int(py=res)))
+    return PythonObject(n)
+
+
+def exact_sum_f32_binding(x: PythonObject, params: PythonObject) raises -> PythonObject:
+    """The exact sum of a float32 buffer as `EXACT_SUM_LIMBS` integer places
+    (`xtrees.ops.exact_sum_f32`), or None when it holds a NaN or an infinity;
+    params = [n]."""
+    _need(params, 1, "x_trees_exact_sum_f32")
+    var n = _count(_i(params, 0), "x_trees_exact_sum_f32")
+    var limbs = List[Int64](length=EXACT_SUM_LIMBS, fill=0)
+    if not exact_sum_f32(f32_ptr(Int(py=x)), n, limbs):
+        return PythonObject(None)
+    var out = Python.list()
+    for i in range(EXACT_SUM_LIMBS):
+        out.append(PythonObject(Int(limbs[i])))
+    return out
+
+
+def margin2_binding(acc: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
+    """Two-class vote rows (n x 2, float64) to the SAMME margin
+    d = acc[2i+1] - acc[2i], one IEEE binary64 subtraction per row, the
+    value the Python `v[2*i+1] - v[2*i]` computed. params = [n, mode]:
+    mode 0 writes d (float64, n); mode 1 writes the int32 code
+    `1 if d > 0 else 0` (a NaN gives 0, as `>` did); mode 2 writes the
+    float64 pairs (-(d/2), d/2) (n x 2), the rows `predict_proba` softmaxes."""
+    _need(params, 2, "x_trees_margin2")
+    var n = _count(_i(params, 0), "x_trees_margin2")
+    var mode = _i(params, 1)
+    var a = f64_ptr(Int(py=acc))
+    if mode == 0:
+        var o = f64_ptr(Int(py=dst))
+        for i in range(n):
+            o[unsafe_offset=i] = a[unsafe_offset=2 * i + 1] - a[unsafe_offset=2 * i]
+    elif mode == 1:
+        var o = i32_ptr(Int(py=dst))
+        for i in range(n):
+            var d = a[unsafe_offset=2 * i + 1] - a[unsafe_offset=2 * i]
+            o[unsafe_offset=i] = Int32(1) if d > 0 else Int32(0)
+    elif mode == 2:
+        var o = f64_ptr(Int(py=dst))
+        for i in range(n):
+            var h = (a[unsafe_offset=2 * i + 1] - a[unsafe_offset=2 * i]) / 2
+            o[unsafe_offset=2 * i] = -h
+            o[unsafe_offset=2 * i + 1] = h
+    else:
+        raise Error("x_trees_margin2: mode must be 0, 1 or 2")
     return PythonObject(n)
 
 
@@ -532,6 +579,8 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[softmax_rows_binding]("x_trees_softmax_rows")
     m.def_function[scale_to_f32_binding]("x_trees_scale_to_f32")
     m.def_function[put_f32_binding]("x_trees_put_f32")
+    m.def_function[exact_sum_f32_binding]("x_trees_exact_sum_f32")
+    m.def_function[margin2_binding]("x_trees_margin2")
     m.def_function[samme_step_binding]("x_trees_samme_step")
     m.def_function[r2_step_binding]("x_trees_r2_step")
     m.def_function[weighted_median_binding]("x_trees_weighted_median")

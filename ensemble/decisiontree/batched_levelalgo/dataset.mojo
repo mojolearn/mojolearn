@@ -73,12 +73,16 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 
 
+
 comptime RF_BINS_ROW_MAJOR = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_RF_BINS_COLUMN_MAJOR"]()
 )
-"""Apple FAST only (measured there alone): a forest whose rows' bins fit one 64-byte line
+"""Apple FAST only. NOT IDENTICAL (measured 2026-09-28, trees-apple, M3
+Ultra, the same forest bytes either way): with the IDENTICAL histogram
+arms it made RandomForestRegressor Istella-S 19.99 -> 25.65 s and
+DecisionTreeRegressor Istella-S 0.44 -> 0.56 s. For FAST: a forest whose rows' bins fit one 64-byte line
 (`n_cols <= 64`) or whose trees sample at least half the features
 (`2k >= n_cols`) stores DEVIATION 314's uint8 bins ROW-major
 (`row * n_cols + col`, `DatasetView.bins_row_major`), so the histogram

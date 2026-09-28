@@ -110,6 +110,25 @@ def _trees_weighted_rows(sample_weight, class_weight, classes, codes, est=None):
     return out
 
 
+def _trees_fsum_f32(b, arr):
+    """`math.fsum(arr.tolist())` of a float32 Array, bit for bit: the binding
+    returns the EXACT sum as integer places of 2^-149 and this rounds it once
+    with `_portable_math`'s own rounding (`_scaled_integer`, the last step of
+    its `fsum`), so no value can differ. A NaN or infinity takes the Python
+    fsum, which owns those cases. DARTRegressor/Classifier spent 1.3 s of a
+    2.6 s 20-tree fit in the Python fsum at 1,000,000 rows (M3 Ultra,
+    2026-09-28, trees-apple profile)."""
+    from ._portable_math import _scaled_integer
+    arr, _ = as_f32_c(arr, ndim=1, name="y")
+    limbs = b.x_trees_exact_sum_f32(addr_ro(arr, name="y"), [arr.size])
+    if limbs is None:
+        return math.fsum(arr.tolist())
+    total = 0
+    for i, v in enumerate(limbs):
+        total += int(v) << (32 * i)
+    return _scaled_integer(total, -149)
+
+
 # ----------------------------------------------------------- decision trees
 # Reference: scikit-learn `sklearn/tree/_classes.py` (DecisionTreeClassifier
 # :716, DecisionTreeRegressor :1100, BaseDecisionTree.fit :230). The learner
@@ -809,8 +828,9 @@ class AdaBoostClassifier(_AdaBoostBase):
         n, k = Xa.shape[0], self.n_classes_
         acc = self._decision(Xa)
         if k == 2:
-            v = acc.tolist()
-            return Array.from_list([v[2 * i + 1] - v[2 * i] for i in range(n)], "<f8")
+            d = empty((n,), "<f8")
+            self._bind().x_trees_margin2(addr_ro(acc, name="votes"), addr(d, name="margin"), [n, 0])
+            return d
         return acc.reshape((n, k))
 
     def predict_proba(self, X):
@@ -818,9 +838,9 @@ class AdaBoostClassifier(_AdaBoostBase):
         n, k = Xa.shape[0], self.n_classes_
         acc = self._decision(Xa)
         if k == 2:
-            v = acc.tolist()
-            d = [(v[2 * i + 1] - v[2 * i]) / 2 for i in range(n)]
-            acc = Array.from_list([x for di in d for x in (-di, di)], "<f8")
+            pairs = empty((n * 2,), "<f8")
+            self._bind().x_trees_margin2(addr_ro(acc, name="votes"), addr(pairs, name="pairs"), [n, 2])
+            acc = pairs
         else:
             self._scale(acc, k - 1)
         self._bind().x_trees_softmax_rows(addr(acc, name="proba"), [n, k])
@@ -831,8 +851,8 @@ class AdaBoostClassifier(_AdaBoostBase):
         n, k = Xa.shape[0], self.n_classes_
         acc = self._decision(Xa)
         if k == 2:
-            v = acc.tolist()
-            codes = Array.from_list([1 if v[2 * i + 1] - v[2 * i] > 0 else 0 for i in range(n)], "<i4")
+            codes = empty((n,), "<i4")
+            self._bind().x_trees_margin2(addr_ro(acc, name="votes"), addr(codes, name="codes"), [n, 1])
         else:
             codes = self._argmax(acc, n, k)
         return decode_labels(self.classes_, codes)
@@ -1021,21 +1041,21 @@ class _DARTBase(_TreesEnsembleBase):
         b = self._bind()
         seed = _trees_seed(self.random_state)
         drop_seed = _trees_seed(self.drop_seed)
-        yv = y32.tolist()
         if self._KIND == 0:
-            inits = [math.fsum(yv) / n]
+            inits = [_trees_fsum_f32(b, y32) / n]
         elif self._KIND == 1:
-            p = math.fsum(yv) / n
+            p = _trees_fsum_f32(b, y32) / n
             if not 0.0 < p < 1.0:
                 raise ValueError("y must hold both classes")
             inits = [float(b.x_trees_log64(p / (1.0 - p)))]
         else:
             counts = [0] * K
-            for v in yv:
+            for v in y32.tolist():
                 counts[int(v)] += 1
             inits = [float(b.x_trees_log64(max(1e-15, cnt / n))) for cnt in counts]
         self.init_score_ = inits[0] if K == 1 else inits
-        score = Array.from_list([v for v in inits for _ in range(n)], "<f8")
+        score = (full((n,), inits[0], "<f8") if K == 1
+                 else Array.from_list([v for v in inits for _ in range(n)], "<f8"))
         g, h, target = empty((K * n,), "<f8"), empty((K * n,), "<f8"), empty((K * n,), "<f4")
         lr = float(self.learning_rate)
         l1, mds, lam = float(self.reg_alpha), float(self.max_delta_step), float(self.reg_lambda)

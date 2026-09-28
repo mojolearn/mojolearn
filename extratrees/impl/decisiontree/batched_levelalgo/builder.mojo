@@ -3306,20 +3306,24 @@ FLIPPED: Apple M4 1M rows, same hashes, taxi 0.979, Istella-S 1.010, taxireg
 1.024 -- a wash."""
 
 comptime ET_PART_FLAGS = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or has_apple_gpu_accelerator())
     and PART_ROWS_PER_THREAD == 1
     and not is_defined["MOJOLEARN_ET_PART_FLAGS_OFF"]()
 )
-"""FAST: the partition's count pass stores each row's direction as one byte
+"""FAST, and IDENTICAL on Apple since 2026-09-28 (the same directions, so the
+same partition: a data movement, bit-inert): the partition's count pass
+stores each row's direction as one byte
 (`LevelWorkspace.d_part_flags`) and the scatter pass reads it instead of
 gathering the split column again. Same directions, same partition.
 `-D MOJOLEARN_ET_PART_FLAGS_OFF` restores the second gather."""
 
 comptime ET_STAGE_LIVE_PREFIX = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or has_apple_gpu_accelerator())
     and not is_defined["MOJOLEARN_ET_STAGE_FULL_CAPACITY"]()
 )
-"""FAST only: `stage_batch` compares, snapshots and uploads each staging
+"""FAST, and IDENTICAL on Apple since 2026-09-28 (only the live prefix is
+ever read, so moving less is bit-inert): `stage_batch` compares, snapshots
+and uploads each staging
 slot's LIVE prefix (the batch's nodes and workload blocks) instead of the
 workspace's full capacity. At the Apple FAST batch width (32768 nodes, about
 40k workload blocks at 1M rows) the full-capacity path moved every slot's
