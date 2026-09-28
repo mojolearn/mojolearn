@@ -8,7 +8,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from std.memory import bitcast
-from x_metrics.epilogue import binary_auc, binary_ap, roc_arrays
+from x_metrics.epilogue import binary_auc, binary_ap, roc_arrays, expected_mi
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_metrics.common import X_METRICS_HOST_SABOTAGE, IP
@@ -73,6 +73,12 @@ def curve_roc_binding(arena: PythonObject, offs: PythonObject, c: PythonObject, 
     ))
 
 
+def expected_mi_binding(a: PythonObject, na: PythonObject, b: PythonObject, nb: PythonObject,
+                        n: PythonObject) raises -> PythonObject:
+    """x_metrics/epilogue.mojo expected_mi (lane metrics-apple2)."""
+    return PythonObject(expected_mi(Int(py=a), Int(py=na), Int(py=b), Int(py=nb), Int(py=n)))
+
+
 def x_metrics_host_numeric_mode_binding() raises -> PythonObject:
     return PythonObject(GLOBAL_NUMERIC_MODE)
 
@@ -111,6 +117,7 @@ def PyInit__mojolearn_x_metrics_host() abi("C") -> PythonObject:
         m.def_function[curve_auc_binding]("x_metrics_curve_auc")
         m.def_function[curve_ap_binding]("x_metrics_curve_ap")
         m.def_function[curve_roc_binding]("x_metrics_curve_roc")
+        m.def_function[expected_mi_binding]("x_metrics_expected_mi")
         m.def_function[x_metrics_numeric_mode_binding]("x_metrics_numeric_mode")
         m.def_function[x_metrics_vendor_binding]("x_metrics_vendor")
         return m.finalize()

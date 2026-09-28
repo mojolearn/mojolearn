@@ -216,3 +216,156 @@ def roc_arrays(a: Int, fps: Int, tps: Int, thr: Int, keep: Int, c: Int, drop: Bo
         pt[j + 1] = _w(a, tps + ks[j]) / T
         ph[j + 1] = _w(a, thr + ks[j])
     return len(ks) + 1
+
+
+# ---------------------------------------------------------------------------
+# The expected mutual information (adjusted_mutual_info_score)
+# ---------------------------------------------------------------------------
+
+@always_inline
+def _fm(a: Float64, b: Float64, c: Float64) -> Float64:
+    from std.math import fma
+    return fma(a, b, c)
+
+
+@always_inline
+def _mul(a: Float64, b: Float64) -> Float64:
+    return pinned_mul_f64(a, b)
+
+
+def _log_fraction(x_in: Float64, mut e: Int, mut frac: Float64) -> Float64:
+    """packaging/portable_math/portable_math.c `log_fraction`, operation
+    for operation (its products unfused, its fm sites fma)."""
+    var input = x_in
+    var u = bitcast[DType.uint64](input)
+    e = 0
+    if (u >> 52) == UInt64(0):
+        input = _mul(input, 18014398509481984.0)
+        u = bitcast[DType.uint64](input)
+        e = -54
+    e += Int((u >> 52) & UInt64(0x7FF)) - 1022
+    var m = bitcast[DType.float64]((u & UInt64(0x000FFFFFFFFFFFFF)) | UInt64(0x3FE0000000000000))
+    var z: Float64
+    var y: Float64
+    var x: Float64
+    if e > 2 or e < -2:
+        if m < 0.70710678118654752440:
+            e -= 1
+            z = m - 0.5
+            y = _fm(0.5, z, 0.5)
+        else:
+            z = m - 0.5
+            z = z - 0.5
+            y = _fm(0.5, m, 0.5)
+        x = z / y
+        z = _mul(x, x)
+        var r = _fm(-7.89580278884799154124e-1, z, 1.63866645699558079767e1)
+        r = _fm(r, z, -6.41409952958715622951e1)
+        var q = z + -3.56722798256324312549e1
+        q = _fm(q, z, 3.12093766372244180303e2)
+        q = _fm(q, z, -7.69691943550460008604e2)
+        y = _mul(x, _mul(z, r) / q)
+    else:
+        if m < 0.70710678118654752440:
+            e -= 1
+            x = _fm(2.0, m, -1.0)
+        else:
+            x = m - 1.0
+        z = _mul(x, x)
+        var p = _fm(1.01875663804580931796e-4, x, 4.97494994976747001425e-1)
+        p = _fm(p, x, 4.70579119878881725854e0)
+        p = _fm(p, x, 1.44989225341610930846e1)
+        p = _fm(p, x, 1.79368678507819816313e1)
+        p = _fm(p, x, 7.70838733755885391666e0)
+        var q = x + 1.12873587189167450590e1
+        q = _fm(q, x, 4.52279145837532221105e1)
+        q = _fm(q, x, 8.29875266912776603211e1)
+        q = _fm(q, x, 7.11544750618563894466e1)
+        q = _fm(q, x, 2.31251620126765340583e1)
+        y = _mul(x, _mul(z, p) / q)
+    frac = x
+    return y
+
+
+def portable_log_c(input: Float64) -> Float64:
+    """packaging/portable_math/portable_math.c `mojolearn_log` (what
+    `mojolearn._portable_math.log` calls), operation for operation, for a
+    finite positive input (the only kind the callers below pass)."""
+    var u = bitcast[DType.uint64](input)
+    var raw_e = 0
+    if (u >> 52) == UInt64(0):
+        u = bitcast[DType.uint64](_mul(input, 18014398509481984.0))
+        raw_e = -54
+    raw_e += Int((u >> 52) & UInt64(0x7FF)) - 1022
+    var e = 0
+    var x: Float64 = 0.0
+    var y = _log_fraction(input, e, x)
+    y = _fm(Float64(e), -2.121944400546905827679e-4, y)
+    if not (raw_e > 2 or raw_e < -2):
+        y = _fm(_mul(x, x), -0.5, y)
+    y = y + x
+    return _fm(Float64(e), 0.693359375, y)
+
+
+def expected_mi(a_addr: Int, na: Int, b_addr: Int, nb: Int, n: Int) raises -> Float64:
+    """python/mojolearn/_expansion_metrics.py `_expected_mi` for na, nb >= 2
+    (Int64 class counts at the two addresses): the same integer bounds and
+    mode, the same binary64 ratio walks from the mode (each stops at the
+    first exact 0), the same pmf normalization by fsum, the same terms
+    (nij / n) * (log(n nij) - log a - log b) * pr, fsum-ed. Python's
+    int -> float conversions and int / int division are correctly rounded,
+    as Float64(Int) and Float64 division are for these magnitudes."""
+    var A = MutPointer[Int64, MutAnyOrigin](unsafe_from_address=a_addr)
+    var B = MutPointer[Int64, MutAnyOrigin](unsafe_from_address=b_addr)
+    if n <= 0 or n >= (1 << 31):
+        raise Error("x_metrics epilogue: expected MI size goes the Python way")
+    var fn = Float64(n)
+    var terms = List[Float64]()
+    for i in range(na):
+        var a = Int(A[i])
+        var la = portable_log_c(Float64(a))
+        for j in range(nb):
+            var b = Int(B[j])
+            var lb = portable_log_c(Float64(b))
+            var lo = max(0, a + b - n)
+            var hi = min(a, b)
+            var mode = min(max(((a + 1) * (b + 1)) // (n + 2), lo), hi)
+            var up = List[Float64]()
+            up.append(1.0)
+            var x = mode
+            var v: Float64 = 1.0
+            while x < hi:
+                v = _mul(v, Float64((a - x) * (b - x))) / Float64((x + 1) * (n - a - b + x + 1))
+                if v == 0.0:
+                    break
+                up.append(v)
+                x += 1
+            var down = List[Float64]()
+            x = mode
+            v = 1.0
+            while x > lo:
+                v = _mul(v, Float64(x * (n - a - b + x))) / Float64((a - x + 1) * (b - x + 1))
+                if v == 0.0:
+                    break
+                down.append(v)
+                x -= 1
+            var all = List[Float64](capacity=len(up) + len(down))
+            for k in range(len(up)):
+                all.append(up[k])
+            for k in range(len(down)):
+                all.append(down[k])
+            var z = fsum(all)
+            var first = mode - len(down)
+            var nd = len(down)
+            for k in range(nd + len(up)):
+                var nij = first + k
+                var u = down[nd - 1 - k] if k < nd else up[k - nd]
+                if nij < 1:
+                    continue
+                var pr = u / z
+                if pr == 0.0:
+                    continue
+                var q = Float64(nij) / fn
+                var d = (portable_log_c(Float64(n * nij)) - la) - lb
+                terms.append(_mul(_mul(q, d), pr))
+    return fsum(terms)

@@ -106,6 +106,15 @@ def main():
                 cases.append(("ovr_w_" + tag, lambda yc=yc, P=P, w=w: M.roc_auc_score(yc, P, multi_class="ovr", sample_weight=w)))
                 cases.append(("ovo_" + tag, lambda yc=yc, P=P: M.roc_auc_score(yc, P, multi_class="ovo")))
                 cases.append(("ap_ovr_" + tag, lambda yc=yc, P=P: M.average_precision_score(np.eye(4)[yc].astype(np.int64), P)))
+    # the expected MI (adjusted_mutual_info_score): balanced, skewed, many classes
+    for n in (7, 100, 5000, 100003, 1000000):
+        for ka, kb in ((2, 2), (5, 5), (3, 20), (40, 7)):
+            a = rs.randint(0, ka, n)
+            b = (a + rs.randint(0, 2, n) * rs.randint(0, kb, n)) % kb
+            sk = (rs.rand(n) ** 3 * ka).astype(np.int64)
+            for avg in ("arithmetic", "geometric", "max"):
+                cases.append(("ami_%d_%d_%d_%s" % (n, ka, kb, avg), lambda a=a, b=b, m=avg: M.adjusted_mutual_info_score(a, b, average_method=m)))
+            cases.append(("ami_skew_%d_%d_%d" % (n, ka, kb), lambda a=sk, b=b: M.adjusted_mutual_info_score(a, b)))
     for name, fn in cases:
         try:
             print("EQ %s %s" % (name, dig(fn())), flush=True)

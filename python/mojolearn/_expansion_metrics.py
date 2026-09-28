@@ -2250,7 +2250,7 @@ def normalized_mutual_info_score(labels_true, labels_pred, *, average_method="ar
     return float(mi / _generalized_average(ht, hp, average_method))
 
 
-def _expected_mi(a_counts, b_counts, n):
+def _expected_mi(a_counts, b_counts, n, numeric_mode=None):
     """E[MI] under the permutation model (Vinh, Epps and Bailey 2010), the sum
     scikit-learn's `expected_mutual_information` evaluates through gammaln.
     Here each hypergeometric pmf is built by its ratio recurrence from the
@@ -2258,6 +2258,18 @@ def _expected_mi(a_counts, b_counts, n):
     of large log-gamma values, portable binary64 log / exp only."""
     if len(a_counts) == 1 or len(b_counts) == 1:
         return 0.0
+    # the same walks and terms in the binding's host binary64, the log the
+    # C of mojolearn._portable_math.log (x_metrics/epilogue.mojo
+    # expected_mi; lane metrics-apple2)
+    from ._buffer import hotpath_enabled
+    fn = getattr(_binding(numeric_mode), "x_metrics_expected_mi", None) if hotpath_enabled() else None
+    if fn is not None and 0 < n < (1 << 31):
+        A = array.array("q", a_counts)
+        B = array.array("q", b_counts)
+        try:
+            return float(fn(A.buffer_info()[0], len(A), B.buffer_info()[0], len(B), n))
+        except Exception:
+            pass
     # Each walk away from the mode stops at the first u that is exactly 0:
     # every later u is that 0 times a finite ratio, so it adds nothing to z
     # (an exact sum) and its term is skipped as pr == 0 (the same bits as
@@ -2318,7 +2330,7 @@ def adjusted_mutual_info_score(labels_true, labels_pred, *, average_method="arit
     mi = _mi_from_contingency(C)
     rows = [sum(r) for r in C]
     cols = [sum(C[i][j] for i in range(len(C))) for j in range(len(cb))]
-    emi = _expected_mi(rows, cols, n)
+    emi = _expected_mi(rows, cols, n, numeric_mode)
     norm = _generalized_average(_entropy_counts(rows), _entropy_counts(cols), average_method)
     eps = 2.220446049250313e-16
     den = norm - emi
