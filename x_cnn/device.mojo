@@ -11,12 +11,14 @@ The host twin is x_cnn/host/ops_host.mojo: the same element functions in a
 loop and `gemm_oracle` for the contractions."""
 from std.gpu import block_idx, block_dim, thread_idx
 from std.ffi import _Global
+from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.checks.gemm_identical import (
     identical_gemm_with_plan, identical_gemm_workspace_floats, PLAN_SPLIT_32_2X2, PLAN_SPLIT_64_4X4,
-    PLAN_SPLIT_16_1X1, PLAN_APPLE_MMA, PLAN_TUNED_32_2X2, apple_mma_applies,
+    PLAN_SPLIT_16_1X1, PLAN_APPLE_MMA, PLAN_TUNED_32_2X2, PLAN_SPLITK, apple_mma_applies,
+    identical_gemm_splitk_fits,
 )
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE
 from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN
@@ -51,11 +53,15 @@ struct _CnnContext(Defaultable, Movable):
     #: The resident arrays (DEVIATION 5718): owning buffers the caller holds
     #: by device address between entries (`res_alloc` / `res_free`).
     var res: List[DeviceBuffer[DType.float32]]
+    #: Apple IDENTICAL (DEVIATION 5720): (m, n, k, plan) quads, the measured
+    #: fastest weight/bias-gradient plan per shape.
+    var tuned: List[Int]
 
     def __init__(out self):
         self.ctx = Optional[DeviceContext]()
         self.ws = List[DeviceBuffer[DType.float32]]()
         self.res = List[DeviceBuffer[DType.float32]]()
+        self.tuned = List[Int]()
 
 
 comptime _CTX_NAME = "MojoXCnnContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXCnnContextFast"
@@ -93,6 +99,54 @@ def launch[f: ElemFn](ctx: DeviceContext, a: FP, b: FP, c: FP, d: FP, q: IP, p: 
     ctx.enqueue_function[k](a, b, c, d, q, p, Int32(total), grid_dim=(total + TPB - 1) // TPB, block_dim=TPB)
 
 
+def _apple_tuned_plan(
+    ctx: DeviceContext, mut c: DeviceBuffer[DType.float32], mut a: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32], m: Int, n: Int, k: Int, op: Int, default: Int,
+) raises -> Int:
+    """The fastest candidate plan for this OP_TN shape on this device, timed
+    once (one run each, after a wait for the entry's earlier work) and cached
+    for the process. Every candidate writes the same words into `c`."""
+    var s = _slots()
+    var i = 0
+    while i + 3 < len(s[].tuned):
+        if s[].tuned[i] == m and s[].tuned[i + 1] == n and s[].tuned[i + 2] == k:
+            return s[].tuned[i + 3]
+        i += 4
+    var cand = List[Int]()
+    cand.append(default)
+    if n == 1:
+        cand.append(PLAN_SPLIT_16_1X1)
+        if m * n <= 4096 and identical_gemm_splitk_fits(m, n, k):
+            cand.append(PLAN_SPLITK)
+    else:
+        cand.append(PLAN_SPLIT_16_1X1)
+        if n >= 64:
+            cand.append(PLAN_TUNED_32_2X2)
+            if apple_mma_applies(m, n, k):
+                cand.append(PLAN_APPLE_MMA)
+    var need = 0
+    for j in range(len(cand)):
+        need = max(need, identical_gemm_workspace_floats(m, n, k, cand[j]))
+    var wp = ws(ctx, GEMM_WS_SLOT, need)
+    ctx.synchronize()
+    var best = default
+    var best_ns = perf_counter_ns()  # replaced by the first candidate
+    for j in range(len(cand)):
+        var t0 = perf_counter_ns()
+        identical_gemm_with_plan(ctx, c, a, b, wp, m, n, k, op, cand[j])
+        ctx.synchronize()
+        var dt = perf_counter_ns() - t0
+        if j == 0 or dt < best_ns:
+            best_ns = dt
+            best = cand[j]
+    _ = wp^
+    s[].tuned.append(m)
+    s[].tuned.append(n)
+    s[].tuned.append(k)
+    s[].tuned.append(best)
+    return best
+
+
 def device_gemm(
     ctx: DeviceContext, mut c: DeviceBuffer[DType.float32], mut a: DeviceBuffer[DType.float32],
     mut b: DeviceBuffer[DType.float32], m: Int, n: Int, k: Int, op: Int,
@@ -114,24 +168,18 @@ def device_gemm(
     if op == OP_TN and m * n <= 65536:
         var plan = PLAN_SPLIT_64_4X4 if (m >= 64 and n >= 64) else PLAN_SPLIT_32_2X2
         comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE:
-            # DEVIATION 5720 (lane/cnn-apple, M4 forced-plan sweep, every plan
+            # DEVIATION 5720 (lane/cnn-apple, forced-plan sweeps, every plan
             # bit-equal, tools/apple_speed_cnn/gemm_plans.mojo): on Apple the
-            # split plans above lose to the simdgroup matrix plan wherever the
-            # weight gradient is wide (64 x 288 x 65536: 24.0 -> 14.0 ms;
-            # 64 x 576 x 262144: 130.6 -> 52.4 ms; 10 x 4096 x 256: 0.54 ->
-            # 0.19 ms), and the bias gradient (n == 1) runs best on SPLIT
-            # 16x16 (32 x 1 x 262144: 3.26 -> 1.80 ms). A narrow gradient
-            # (n < 64, e.g. 32 x 27 x 262144) keeps its split plan: the
-            # matrix plan is 16x slower there. Execution plan only.
-            # A small wide gradient (64 x 288 x 65536: 5 matrix tiles for
-            # the whole GPU) runs faster on the 32x32 register tile (14.0 ->
-            # 11.0 ms).
-            if n == 1:
-                plan = PLAN_SPLIT_16_1X1
-            elif n >= 64 and m * n <= 32768 and k <= 131072:
-                plan = PLAN_TUNED_32_2X2
-            elif n >= 64 and apple_mma_applies(m, n, k):
-                plan = PLAN_APPLE_MMA
+            # fastest weight/bias-gradient plan depends on the GPU's size.
+            # The M4 (10 cores) wants the simdgroup matrix or the 32x32
+            # register tile (64 x 576 x 262144: SPLIT 64x64 130.6, MMA 52.4
+            # ms; 64 x 288 x 65536: 24.0 vs TUNED 32x32 11.0 ms); the M3
+            # Ultra wants the split plans (the same two: 26.6 vs 68.6 ms and
+            # 4.4 vs 9.3 ms). So the plan is MEASURED once per shape per
+            # process among the plans that were ever competitive and cached
+            # (`_apple_tuned_plan`). Execution plan only: the partition and
+            # the fold come from `k`, so every candidate stores the same bits.
+            plan = _apple_tuned_plan(ctx, c, a, b, m, n, k, op, plan)
         var wp = ws(ctx, GEMM_WS_SLOT, identical_gemm_workspace_floats(m, n, k, plan))
         identical_gemm_with_plan(ctx, c, a, b, wp, m, n, k, op, plan)
         _ = wp^

@@ -40,14 +40,10 @@ def mismatch_kernel(a: MutPointer[Float32, MutAnyOrigin], b: MutPointer[Float32,
 
 
 def cnn_pick(m: Int, n: Int, k: Int, op: Int) -> Int:
-    """x_cnn/device.mojo `device_gemm`'s choice on Apple IDENTICAL (-1 = the shipped dispatcher)."""
+    """x_cnn/device.mojo `device_gemm`'s DEFAULT (the split plan tuned on the
+    RTX 4090; -1 = the shipped dispatcher). On Apple IDENTICAL device_gemm
+    measures its candidates per shape (`_apple_tuned_plan`)."""
     if op == OP_TN and m * n <= 65536:
-        if n == 1:
-            return PLAN_SPLIT_16_1X1
-        if n >= 64 and m * n <= 32768 and k <= 131072:
-            return PLAN_TUNED_32_2X2
-        if n >= 64 and apple_mma_applies(m, n, k):
-            return PLAN_APPLE_MMA
         return PLAN_SPLIT_64_4X4 if (m >= 64 and n >= 64) else PLAN_SPLIT_32_2X2
     return -1
 
