@@ -55,6 +55,28 @@ def _grid(count: Int) -> Int:
 def _buf(ctx: DeviceContext, addr: Int, count: Int, upload: Bool) raises -> DeviceBuffer[DType.float32]:
     var buf = ctx.enqueue_create_buffer[DType.float32](count if count > 0 else 1)
     if upload and count > 0:
+        comptime if is_defined["MOJOLEARN_XN_MAPPED_UP"]():
+            # lane neighbors-apple3, OPT-IN: a large input copied into the
+            # mapped device buffer over the host cores. A copy.
+            if count >= XN_STAGED_MIN:
+                ctx.synchronize()
+                with buf.map_to_host() as hm:
+                    var mdst = rebind[MutPointer[Float32, MutUntrackedOrigin]](hm.unsafe_ptr())
+                    var msrc = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr)
+                    var mtasks = host_predict_task_count(count)
+                    var mpart = host_predict_chunk(count, mtasks)
+
+                    def _mpart(task: Int) {imm msrc, imm mdst, imm count, imm mpart}:
+                        var lo = task * mpart
+                        var hi = min(lo + mpart, count)
+                        if hi > lo:
+                            copy_f32(msrc.unsafe_offset(lo), mdst.unsafe_offset(lo), hi - lo)
+
+                    if mtasks == 1:
+                        _mpart(0)
+                    else:
+                        host_parallelize(_mpart, mtasks)
+                return buf^
         ctx.enqueue_copy(dst_buf=buf, src_ptr=FP(unsafe_from_address=addr))
     return buf^
 
