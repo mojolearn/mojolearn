@@ -1,0 +1,18 @@
+--- a/ivf/checks/list_layout.mojo
++++ b/ivf/checks/list_layout.mojo
+@@ -395,13 +395,13 @@
+     var out_data = List[Float32](length=total * dim, fill=Float32(0.0))
+     var cursor = List[Int32](capacity=n_lists)
+     for l in range(n_lists):
+-        var dst = Int(new_offsets[l])
++        var dst = Int(new_offsets[l]) + Int(added[l])  # SABOTAGE 5862: new rows go to the FRONT
+         for s in range(Int(offsets[l]), Int(offsets[l + 1])):
+             out_indices[dst] = list_indices[s]
+             for f in range(dim):
+                 out_data[dst * dim + f] = list_data[s * dim + f]
+             dst += 1
+-        cursor.append(Int32(dst))
++        cursor.append(new_offsets[l])
+     for j in range(n_new):
+         var l = Int(new_labels[j])
+         var slot = Int(cursor[l])
