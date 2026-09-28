@@ -95,14 +95,55 @@ decomp_speed, synth N=200k (N2 20k, N3 1500, N4 20k), seconds:
 
 | request | what |
 |---|---|
-| 1790582024178-speed-decomp-fb281eb88d (m4pro-a) | AFTER all five: eigh widths, micro, decomp_speed (same sizes), out digests GPU + CPU |
-| 1790583099651-speed-decomp-06752fa5ff (m4pro-a) | after items 1-3 only (the before of items 4-5): micro, decomp_speed |
+| 1790583099651-speed-decomp-06752fa5ff (m4pro-a) | items 1-3 only (the before of item 4); algorithms without the old-code manifold runs |
+| 1790586709302-speed-decomp-712cdc7d46 (m4pro-a) | AFTER everything kept (items 1-4, pool classes, 2^14 threshold, 128-buffer cap): decomp_speed, out digests GPU + CPU |
 
-## Before -> after (per algorithm, IDENTICAL, m4pro-a)
+## Before -> after, round C (m4pro-a, IDENTICAL, synth 200k x 28; C = 1790582024178 at fb281eb88)
 
-(pending)
+C carried items 1-5 without the pool fixes (wide eigh, since reverted, ran
+in its Isomap/ClassicalMDS). Digests at C: all 27 algorithms of
+bench/decomp_out_digest.py print the SAME hash on the Metal column and the
+CPU column (and the CPU hashes equal the laptop host run).
+
+| algorithm | before s | C s | speedup |
+|---|---|---|---|
+| PCA(randomized,5) | 0.264 | 0.164 | 1.61x |
+| TruncatedSVD(randomized,5) | 0.320 | 0.207 | 1.55x |
+| IncrementalPCA | 0.077 | 0.045 | 1.71x |
+| GaussianRandomProjection | 0.036 | 0.010 | 3.60x |
+| SparseRandomProjection | 0.035 | 0.011 | 3.18x |
+| NMF mu | 0.467 | 0.225 | 2.08x |
+| NMF cd | 0.429 | 0.338 | 1.27x |
+| FastICA | 0.323 | 0.088 | 3.67x |
+| FactorAnalysis | 0.312 | 0.196 | 1.59x |
+| lstsq | 0.131 | 0.084 | 1.56x |
+| randomized_svd | 0.260 | 0.148 | 1.76x |
+| PLSRegression | 0.481 | 0.145 | 3.32x |
+| CCA | 0.572 | 0.218 | 2.62x |
+| linalg.qr | 8.855 | 1.674 | 5.29x |
+| linalg.svd | 8.911 | 1.840 | 4.84x |
+| SparsePCA | 0.363 | 0.237 | 1.53x |
+| LatentDirichletAllocation | 0.503 | 0.425 | 1.18x |
+| MDS (5 it) | 0.207 | 0.054 | 3.83x |
+| Isomap shortest paths (1500) | 3.703 | 0.115 | 32x (the fit is its 1500 x 1500 eigh) |
+| MinCovDet | 46.98 | 67.68 | 0.69x REGRESSED -> fixed in 712cdc7d4 (pending) |
+| MiniBatchDictionaryLearning | 1.668 | 2.582 | 0.65x REGRESSED -> same fix |
+| DictionaryLearning | 0.375 | 0.451 | 0.83x REGRESSED -> same fix |
+| solve(512), TruncatedSVD full, UMAP | 0.146 / 0.014 / 0.236 | 0.306 / 0.023 / 0.297 | slowed after MinCovDet filled the pool (their code did not change) -> same fix |
+| ALS, ALS cg, LLE, ClassicalMDS, Isomap fit | unchanged within noise | | row cells / n x n Jacobi |
+
+Tried and reverted: a 1024-wide launch of jacobi_eigh_kernel (launch-width
+invariant, same hash at 256/512/1024): n=400 1.59 -> 1.21 s, but n=800 10.9
+-> 12.4 s and n=1500 slower too (c948ca1bb).
+
+Walls left (IDENTICAL cannot reorder them): the n x n cyclic Jacobi eigh
+(ClassicalMDS / Isomap at 1500 rows: ~70-100 s) and the one-sided Jacobi
+SVD of a 1500 x 1500 (LocallyLinearEmbedding: 429 s); each rotation is
+serial in the pinned order. ALS's als_rows (one thread per user, a dense
+32 x 32 solve each).
 
 ## FAST
 
-x_decomp's FAST build runs the IDENTICAL cells (`_sets/identical` is
-loaded in fast mode); no FAST-only path exists yet.
+x_decomp's FAST mode loads the IDENTICAL binding (`_sets/identical`), so
+every change above reaches FAST as-is with the same bits; this lane made no
+FAST-only change, so there is no quality delta to pair.
