@@ -390,9 +390,16 @@ def trsm_lower_multi_rhs_kernel(
 #: suffices as before. 256 threads keeps the 32-float register tile far
 #: below every Apple pipeline limit (the M2 Pro's 1024-thread drop was the
 #: 1024-wide launch). Every element's chain is the same terms in the same
-#: order. `-D MOJOLEARN_CHOL_MR_ROWWISE` keeps the 1024-thread row-by-row
-#: kernel.
-comptime CHOL_MR4 = not is_defined["MOJOLEARN_CHOL_MR_ROWWISE"]()
+#: order.
+#:
+#: OPT-IN SINCE 2026-09-28 18:10Z (`-D MOJOLEARN_CHOL_MR4`): after
+#: lane/apple-merged moved the row-by-row kernel itself to 256 threads, the
+#: row-by-row kernel is the faster one on both Macs measured, with equal
+#: digests: GPC.predict_proba 3k x 3k 0.215 vs 0.245 s IDENTICAL, 0.188 vs
+#: 0.213 FAST on the M4 Pro (request 1790618304592), 0.195 vs 0.209 /
+#: 0.160 vs 0.174 on the M3 Ultra (1790614983391). The regression this was
+#: written for (1.05 s) was the 1024-thread launch, which the merge removed.
+comptime CHOL_MR4 = is_defined["MOJOLEARN_CHOL_MR4"]()
 comptime CHOL_MR4_NT = 256
 comptime CHOL_MR4_G = 4
 
