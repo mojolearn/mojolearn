@@ -17,8 +17,9 @@ by five) and the loss classes at the top of that file. Differences, named:
 """
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fsqrt, fexp, flog, fabs, fmax, fmin,
-    ld, st, ldi, sti, i2f, fill, row_dot, shuffle, axpy_acc, scale_acc, ftzv, par_rows,
+    ld, st, ldi, sti, i2f, fill, row_dot, shuffle, axpy_acc, scale_acc, ftzv, par_rows, fz,
 )
+from checks.numerics import identical_mul_add
 from std.sys.info import is_gpu
 from std.gpu import WARP_SIZE
 from std.gpu.primitives.warp import shuffle_idx
@@ -301,6 +302,42 @@ def _sgd_target(k: Int, c: Int, v: Float32) -> Float32:
     return Float32(1) if v == i2f(c) else Float32(-1)
 
 
+@always_inline
+def _fmad_flushed(a: Float32, b: Float32, c: Float32) -> Float32:
+    """`fmad` for operands that are already flushed words (fz is idempotent:
+    fz(fz(v)) == fz(v)), so the chain does not flush its accumulator twice."""
+    return fz(identical_mul_add(a, b, c))
+
+
+@always_inline
+def _warp_row_folds[K: Int, NORMS: Bool, SQ: Bool](
+    xr: InlineArray[Float32, K], wr: InlineArray[Float32, K], d: Int,
+) -> Tuple[Float32, Float32, Float32, Float32]:
+    """One row's folds over j ascending in every lane (x_j, w_j fetched from
+    lane j mod W): the row dot, and when asked the penalty norms (sum w_j^2,
+    sum |w_j|) and PA's |x|^2. Each is its own chain with the thread's
+    expressions; running them in one loop only interleaves independent
+    chains. xr and wr hold flushed words."""
+    comptime W = WARP_SIZE
+    var acc = Float32(0)
+    var n2 = Float32(0)
+    var n1 = Float32(0)
+    var sq = Float32(0)
+    for j in range(d):
+        var src = UInt32(j % W)
+        comptime for kk in range(K):
+            if j // W == kk:
+                var xj = shuffle_idx(xr[kk], src)
+                var wj = shuffle_idx(wr[kk], src)
+                acc = _fmad_flushed(xj, wj, acc)
+                comptime if NORMS:
+                    n2 = _fmad_flushed(wj, wj, n2)
+                    n1 = fa(n1, fabs(wj))
+                comptime if SQ:
+                    sq = _fmad_flushed(xj, xj, sq)
+    return (acc, n2, n1, sq)
+
+
 def sgd_one_warp[K: Int](
     lane: Int, x: FP, y: FP, k: Int, c: Int, n: Int, d: Int,
     loss: Int, penalty: Int, alpha: Float32, l1_ratio_in: Float32,
@@ -338,57 +375,70 @@ def sgd_one_warp[K: Int](
     var no_improve = 0
     var decay_factor = fm(fs(Float32(1), l1_ratio), alpha)
     var epochs = 0
+    # lane/linear-apple2: the penalty norms feed only the objective, and the
+    # objective only the stopping test; with tol None (-3e38) nothing reads
+    # them, so they are not folded.
+    var need_obj = tol > Float32(-3.0e38)
+    var pa = lr == LR_PA1 or lr == LR_PA2
+    var fold_norms = need_obj and not pa and penalty != P_NONE
     for epoch in range(max_iter):
         epochs = epoch + 1
         var objective = Float32(0)
         if do_shuffle and lane == 0:
             shuffle(idx, n, rng)
+        # lane/linear-apple2: row r + 1's index, target and x are loaded while
+        # row r is computed (row r + 2's index one step earlier still), so a
+        # row no longer waits on its own loads. x is flushed once, as the row
+        # starts (not at the load, which would wait for it).
+        var raw_next = Int32(0)
+        if lane == 0:
+            raw_next = idx.unsafe_load(0)
+        var ci = Int(shuffle_idx(raw_next, UInt32(0)))
+        var cx = InlineArray[Float32, K](fill=Float32(0))
+        comptime for kk in range(K):
+            var j = lane + kk * W
+            cx[kk] = ld(x, ci * d + j) if j < d else Float32(0)
+        var cy = ld(y, ci)
+        if lane == 0 and n > 1:
+            raw_next = idx.unsafe_load(1)
         for r in range(n):
-            var mine = Int32(0)
-            if lane == 0:
-                mine = idx.unsafe_load(r)
-            var i = Int(shuffle_idx(mine, UInt32(0)))
-            var yv = _sgd_target(k, c, ld(y, i))
+            var i = ci
             comptime for kk in range(K):
-                var j = lane + kk * W
-                xr[kk] = ld(x, i * d + j) if j < d else Float32(0)
-            var acc = Float32(0)
-            for j in range(d):
-                var src = UInt32(j % W)
+                xr[kk] = fz(cx[kk])
+            var yv = _sgd_target(k, c, cy)
+            if r + 1 < n:
+                ci = Int(shuffle_idx(raw_next, UInt32(0)))
                 comptime for kk in range(K):
-                    if j // W == kk:
-                        acc = fmad(shuffle_idx(xr[kk], src), shuffle_idx(wr[kk], src), acc)
-            var p = fa(acc, intercept)
+                    var j = lane + kk * W
+                    cx[kk] = ld(x, ci * d + j) if j < d else Float32(0)
+                cy = ld(y, ci)
+                if lane == 0 and r + 2 < n:
+                    raw_next = idx.unsafe_load(r + 2)
+            var folds: Tuple[Float32, Float32, Float32, Float32]
+            if fold_norms:
+                folds = _warp_row_folds[K, True, False](xr, wr, d)
+            elif pa:
+                folds = _warp_row_folds[K, False, True](xr, wr, d)
+            else:
+                folds = _warp_row_folds[K, False, False](xr, wr, d)
+            var p = fa(folds[0], intercept)
             if lr == LR_OPTIMAL:
                 eta = fd(Float32(1), fm(alpha, fs(fa(optimal_init, i2f(t)), Float32(1))))
             elif lr == LR_INVSCALING:
                 eta = fd(eta0, identical_pow(i2f(t), power_t))
             var cur = sgd_loss(loss, yv, p, eps)
             objective = fa(objective, cur)
-            if lr != LR_PA1 and lr != LR_PA2:
+            if not pa and need_obj:
                 if penalty != P_NONE:
-                    var n2 = Float32(0)
-                    var n1 = Float32(0)
-                    for j in range(d):
-                        var src = UInt32(j % W)
-                        comptime for kk in range(K):
-                            if j // W == kk:
-                                var wj = shuffle_idx(wr[kk], src)
-                                n2 = fmad(wj, wj, n2)
-                                n1 = fa(n1, fabs(wj))
+                    var n2 = folds[1]
+                    var n1 = folds[2]
                     var reg = fa(fm(fm(fs(Float32(1), l1_ratio), Float32(0.5)), n2), fm(l1_ratio, n1))
                     objective = fa(objective, fm(alpha, reg))
                 if one_class:
                     objective = fa(objective, fm(intercept, alpha))
             var update: Float32
-            if lr == LR_PA1 or lr == LR_PA2:
-                var sq = Float32(0)
-                for j in range(d):
-                    var src = UInt32(j % W)
-                    comptime for kk in range(K):
-                        if j // W == kk:
-                            var xj = shuffle_idx(xr[kk], src)
-                            sq = fmad(xj, xj, sq)
+            if pa:
+                var sq = folds[3]
                 if lr == LR_PA1:
                     if sq == 0:
                         continue
