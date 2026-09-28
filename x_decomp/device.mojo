@@ -71,6 +71,18 @@ from x_decomp.cells import (
     sqdist_cell,
 )
 from x_decomp.exec_trait import Exec
+from x_decomp.jacobi2 import J2_TPB, jacobi_eigh2_kernel, one_sided_svd2_kernel
+from std.os import getenv
+from core.device_zero import enqueue_fill
+from decomposition.checks.jacobi_eigh_device import JACOBI_INFO_UNWRITTEN, JACOBI_SWEEPS, JACOBI_TOL
+from decomposition.host.linalg_public import eigh_ascending
+from decomposition.impl.linalg.detail.pca import SIGNFLIP_TPB, sign_flip_kernel
+
+
+def jacobi2_on() -> Bool:
+    """MOJOLEARN_XD_JACOBI=1 selects the shipped-before Jacobi kernels
+    (timing A/B only: `x_decomp/jacobi2.mojo` stores the same bits)."""
+    return String(getenv("MOJOLEARN_XD_JACOBI", "2")) != "1"
 
 
 struct _XdContext(Defaultable, Movable):
@@ -579,6 +591,46 @@ def _p(buf: DeviceBuffer[DType.float32]) -> F32Ptr:
     return F32Ptr(unsafe_from_address=Int(buf.unsafe_ptr()))
 
 
+def _svd2_of_r(
+    ctx: DeviceContext,
+    mut r: DeviceBuffer[DType.float32],
+    mut v: DeviceBuffer[DType.float32],
+    mut s: DeviceBuffer[DType.float32],
+    n: Int,
+) raises:
+    """`svd_of_r` (x_decomp's sweeps and tolerance) with
+    `one_sided_svd2_kernel`: same outputs, same refusal."""
+    var info = ctx.enqueue_create_buffer[DType.float32](3)
+    var rt = ctx.enqueue_create_buffer[DType.float32](n * n)
+    var vt = ctx.enqueue_create_buffer[DType.float32](n * n)
+    ctx.enqueue_function[one_sided_svd2_kernel](
+        r.unsafe_ptr(), v.unsafe_ptr(), s.unsafe_ptr(), info.unsafe_ptr(), rt.unsafe_ptr(), vt.unsafe_ptr(), Int32(n),
+        Int32(X_DECOMP_SVD_SWEEPS), X_DECOMP_SVD_TOL,
+        grid_dim=(1, 1, 1), block_dim=(J2_TPB, 1, 1),
+    )
+    var h_info = ctx.enqueue_create_host_buffer[DType.float32](3)
+    ctx.enqueue_copy(dst_ptr=h_info.unsafe_ptr(), src_buf=info)
+    ctx.synchronize()
+    if h_info.unsafe_ptr().unsafe_load(0) == Float32(0.0):
+        raise Error(
+            "the one-sided Jacobi SVD did not converge in "
+            + String(X_DECOMP_SVD_SWEEPS)
+            + " sweeps at n_cols = "
+            + String(n)
+            + ": the last sweep still performed "
+            + String(h_info.unsafe_ptr().unsafe_load(2))
+            + " rotations against a tolerance of "
+            + String(X_DECOMP_SVD_TOL)
+            + ". The remedy is more sweeps, the same one cuSOLVER's syevj"
+            " has. An unconverged decomposition is not returned as if it"
+            " were one; see DEVIATION 590."
+        )
+    _ = info^
+    _ = h_info^
+    _ = rt^
+    _ = vt^
+
+
 def gemm_scratch(m: Int, k: Int, n: Int) -> Int:
     """Floats of partial-sum scratch `launch_gemm` needs (0: none)."""
     var nb = (k + FOLD_BLOCK - 1) // FOLD_BLOCK
@@ -884,6 +936,9 @@ struct DevExec(Exec):
 
     @staticmethod
     def eigh(a: F32Ptr, w: F32Ptr, v: F32Ptr, n: Int) raises:
+        if jacobi2_on():
+            DevExec._eigh2(a, w, v, n)
+            return
         var m = List[Float32](capacity=n * n)
         for i in range(n * n):
             m.append(a.unsafe_load(i))
@@ -892,6 +947,69 @@ struct DevExec(Exec):
             w.unsafe_store(i, got.w[i])
         for i in range(n * n):
             v.unsafe_store(i, got.v[i])
+
+    @staticmethod
+    def _eigh2(a: F32Ptr, w: F32Ptr, v: F32Ptr, n: Int) raises:
+        """`device_eigh` with `jacobi_eigh2_kernel` in place of
+        `jacobi_eigh_kernel`: same launch pair (the sweep, then
+        `sign_flip_kernel`), same refusals, same ascending permutation."""
+        var ctx = xd_ctx()
+        var da = _up(ctx, a, n * n)
+        var dv = ctx.enqueue_create_buffer[DType.float32](n * n)
+        var dinfo = ctx.enqueue_create_buffer[DType.float32](3)
+        enqueue_fill(ctx, dinfo, JACOBI_INFO_UNWRITTEN)
+        ctx.enqueue_function[jacobi_eigh2_kernel](
+            da.unsafe_ptr(), dv.unsafe_ptr(), dinfo.unsafe_ptr(), Int32(n), Int32(JACOBI_SWEEPS), Float32(JACOBI_TOL),
+            grid_dim=(1, 1, 1), block_dim=(J2_TPB, 1, 1),
+        )
+        ctx.enqueue_function[sign_flip_kernel](dv.unsafe_ptr(), Int32(n), grid_dim=(n, 1, 1), block_dim=(SIGNFLIP_TPB, 1, 1))
+        var hinfo = ctx.enqueue_create_host_buffer[DType.float32](3)
+        var hwork = ctx.enqueue_create_host_buffer[DType.float32](n * n)
+        ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
+        ctx.enqueue_copy(dst_ptr=hwork.unsafe_ptr(), src_buf=da.create_sub_buffer[DType.float32](0, n * n))
+        _down(ctx, dv, v, n * n)
+        ctx.synchronize()
+        var i0 = hinfo.unsafe_ptr().unsafe_load(0)
+        var i1 = hinfo.unsafe_ptr().unsafe_load(1)
+        var i2 = hinfo.unsafe_ptr().unsafe_load(2)
+        if i0 == JACOBI_INFO_UNWRITTEN:
+            raise Error(
+                "eigh: the device Jacobi eigensolver DID NOT WRITE its info"
+                " buffer, so it never ran or its launch failed. This is NOT a"
+                " convergence failure and must not be reported as one: -1.0 is a"
+                " value the kernel never stores. Check that the binding is built"
+                " for this device."
+            )
+        if i0 == Float32(0.0):
+            raise Error(
+                "eigh: the Jacobi eigensolver did not converge in "
+                + String(JACOBI_SWEEPS)
+                + " sweeps at n = "
+                + String(n)
+                + ": ||offdiag(A)||_F / ||A||_F is still "
+                + String(i1)
+                + ". An unconverged decomposition is not returned as if it were"
+                " one; see DEVIATION 590. The remedy is more sweeps, the same one"
+                " cuSOLVER's syevj has"
+            )
+        var diag = List[Float32](capacity=n)
+        for i in range(n):
+            diag.append(hwork.unsafe_ptr().unsafe_load(i * n + i))
+        var vecs = List[Float32](capacity=n * n)
+        for i in range(n * n):
+            vecs.append(v.unsafe_load(i))
+        var got = eigh_ascending(diag, vecs, n, True, Int(i2))
+        for i in range(n):
+            w.unsafe_store(i, got.w[i])
+        for i in range(n * n):
+            v.unsafe_store(i, got.v[i])
+        _ = da^
+        _ = dv^
+        _ = dinfo^
+        _ = hinfo^
+        _ = hwork^
+        ctx.synchronize()
+        _ = ctx^
 
     @staticmethod
     def cd_rows(w: F32Ptr, hht: F32Ptr, xht: F32Ptr, perm: I32Ptr, viol: F32Ptr, n: Int, k: Int) raises:
@@ -941,7 +1059,10 @@ struct DevExec(Exec):
         var s_buf = ctx.enqueue_create_buffer[DType.float32](n)
         ctx.synchronize()
         _ = qr_factor(ctx, da, scratch, r_buf, m, n)
-        svd_of_r(ctx, r_buf, v_buf, s_buf, n, X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL)
+        if jacobi2_on():
+            _svd2_of_r(ctx, r_buf, v_buf, s_buf, n)
+        else:
+            svd_of_r(ctx, r_buf, v_buf, s_buf, n, X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL)
         _down(ctx, s_buf, s, n)
         _down(ctx, v_buf, v, n * n)
         ctx.synchronize()
