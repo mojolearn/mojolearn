@@ -194,6 +194,7 @@ from gbdt.targets.kernel.pointwise_targets import (
     OBJECTIVE_LOGLOSS,
     OBJECTIVE_MULTICLASS,
     OBJECTIVE_MULTICLASS_OVA,
+    OBJECTIVE_MULTIRMSE,
     OBJECTIVE_PAIR_LOGIT,
     OBJECTIVE_QUERY_RMSE,
     OBJECTIVE_YETI_RANK,
@@ -821,6 +822,11 @@ def train(
     # `cuda/train_lib/train.cpp:115-118`); read by Ordered only
     fold_len_multiplier: Float64 = 2.0,
     fold_permutation_block: Int = 0,
+    # THE TARGET DIMENSION (lane/algos-trees, 2026-09-27): 1 for every loss
+    # but MultiRMSE, whose `y` is `target_dim` DIM-MAJOR planes of `n_rows`
+    # (`y[dim * n_rows + row]`), the layout their device target is stored in
+    # (`multilogit.cu:514`, `targets + idx + dim * targetAlignSize`).
+    target_dim: Int = 1,
 ) raises -> TrainedModel:
     """Borders -> device quantization -> fit, one call.
 
@@ -1059,7 +1065,15 @@ def train(
         x_src = rebind[MutPointer[Float32, MutUntrackedOrigin]](
             x_colmajor.unsafe_ptr()
         )
-    if len(y) != n_rows:
+    if target_dim < 1:
+        raise Error("target_dim must be positive, got " + String(target_dim))
+    if target_dim != 1 and loss != "MultiRMSE":
+        raise Error(
+            "a multi-dimensional target (target_dim=" + String(target_dim)
+            + ") is read only by loss='MultiRMSE'; loss='" + loss
+            + "' takes one target per row"
+        )
+    if len(y) != n_rows * target_dim:
         raise Error("y size mismatch")
     # ---- the pool grouping (`group_sizes`) and the querywise gate ----
     # QueryRMSE is the one loss here that reads the grouping; CatBoost's
@@ -1074,6 +1088,43 @@ def train(
     var is_querywise = (
         objective_code == OBJECTIVE_QUERY_RMSE or is_pair_logit or is_yeti_rank
     )
+    # ---- MultiRMSE: what this implementation carries, and what it refuses
+    # BY NAME (lane/algos-trees, 2026-09-27). The fit is their
+    # `TMultiClassificationTargets` with `NumClasses = GetTargetDimension()`
+    # (`multiclass_targets.h:155-156`) on the greedy SymmetricTree searcher,
+    # Plain boosting, numeric features, no held-out set.
+    var is_multi_rmse = objective_code == OBJECTIVE_MULTIRMSE
+    if is_multi_rmse:
+        if target_dim < 2:
+            # `CB_ENSURE(NumClasses > 1, ...)` (`multiclass_targets.h:167`)
+            raise Error(
+                "Only one class found, can't learn multiclass objective"
+                " (MultiRMSE needs a target dimension >= 2,"
+                " multiclass_targets.h:167); got target_dim="
+                + String(target_dim)
+            )
+        for i in range(n_rows * target_dim):
+            if not isfinite(y[i]):
+                raise Error("MultiRMSE targets must be finite")
+        if boosting_type == "Ordered":
+            raise Error(
+                "boosting_type='Ordered' with loss='MultiRMSE' is not carried"
+                " here: the Ordered arm (gbdt/methods/ordered_boosting.mojo)"
+                " is one-dimensional"
+            )
+        for f in range(len(cat_features)):
+            if cat_features[f]:
+                raise Error(
+                    "loss='MultiRMSE' with cat_features is not carried here:"
+                    " the CTR target binarization reads one target per row"
+                )
+        if len(eval_y) > 0 or len(eval_x_colmajor) > 0:
+            raise Error(
+                "loss='MultiRMSE' with eval_set is not carried here: the"
+                " held-out arm's target is one value per row"
+            )
+        if len(class_weights) > 0:
+            raise Error("class_weights do not apply to loss='MultiRMSE'")
     # ---- `boosting_type`, and what an Ordered fit refuses BY NAME ----
     # (lane/catboost-parity; `gbdt/methods/ordered_boosting.mojo` carries
     # the account). Decided here, before a border is computed.
@@ -1414,6 +1465,10 @@ def train(
                 if cat_features[f]:
                     ctr_prep_wanted = True
                     break
+    if target_dim != 1:
+        # MultiRMSE refuses cat_features above; the CTR target reads one
+        # target per row and is never built from a multi-dimensional one
+        ctr_prep_wanted = False
     if len(dependent_configs) > 0 and ctr_prep_wanted:
         var target_borders = build_target_borders(
             y, cat_params.target_binarization
@@ -1737,9 +1792,10 @@ def train(
             "class weights take effect only with a classification loss,"
             " their option check's words (catboost_options.cpp:617)"
         )
-    var targets = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    # `target_dim` planes for MultiRMSE, dim-major; one for every other loss
+    var targets = ctx.enqueue_create_buffer[DType.float32](n_rows * target_dim)
     var weights = ctx.enqueue_create_buffer[DType.float32](n_rows)
-    var ht = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
+    var ht = ctx.enqueue_create_host_buffer[DType.float32](n_rows * target_dim)
     var hw = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
 
     # THEIR COMBINATION IS A PRODUCT (`private/libs/target/
@@ -1796,6 +1852,9 @@ def train(
                 cls = 1 if y[r] > Float32(0.5) else 0
             w = w * class_weights[cls]
         hw.unsafe_ptr().unsafe_store(r, w)
+    # MultiRMSE's planes past the first, in the caller's dim-major order
+    for i in range(n_rows, n_rows * target_dim):
+        ht.unsafe_ptr().unsafe_store(i, y[i])
     if is_pair_logit:
         # `InitPairLogit` (`targets/querywise_targets_impl.h:326-346`): the
         # target weights become the per-row sums of the pair weights, folded
@@ -1836,6 +1895,16 @@ def train(
     # until their constant (CalcSampleQuantile) existed; it does now
     # (`gbdt/metrics/sample_quantile.mojo`), so they take their rule.
     var bfa: Bool
+    if boost_from_average == 1 and objective == OBJECTIVE_MULTIRMSE:
+        # on their list (`catboost_options.cpp:705-709`), with a PER-DIMENSION
+        # start (`optimal_const_for_loss.h:230-239`) this model's one-value
+        # bias does not carry
+        raise Error(
+            "boost_from_average=True with loss MultiRMSE is not carried here:"
+            " its StartingPoint is per-dimension"
+            " (optimal_const_for_loss.h:230-239) and this model's bias is one"
+            " value"
+        )
     if boost_from_average == 1:
         if not (
             objective == OBJECTIVE_RMSE
@@ -1850,13 +1919,18 @@ def train(
             raise Error(
                 "You can use boost_from_average only for these loss"
                 " functions now: RMSE, Logloss, CrossEntropy, Quantile, MAE,"
-                " MAPE (catboost_options.cpp:705-709; their MultiQuantile,"
-                " MultiRMSE and RMSPE are not trained here)."
+                " MAPE (catboost_options.cpp:705-709; their MultiQuantile"
+                " and RMSPE are not trained here, and MultiRMSE's"
+                " per-dimension start is refused above)."
             )
         bfa = True
     elif boost_from_average == 0:
         bfa = False
     elif boost_from_average == -1:
+        # DEVIATION 5951: their rule sets TRUE for MultiRMSE too
+        # (`options_helper.cpp:367`); its per-dimension start is not carried
+        # (the refusal above), so an unset option resolves FALSE here and the
+        # cursor starts at zero, as it does for MultiClass.
         bfa = (
             objective == OBJECTIVE_RMSE
             or objective == OBJECTIVE_QUANTILE
@@ -1907,6 +1981,9 @@ def train(
                 "the multiclass family needs at least two classes; the"
                 " labels reach only " + String(num_classes)
             )
+    elif objective == OBJECTIVE_MULTIRMSE:
+        # `NumClasses = GetTargetDimension()` (`multiclass_targets.h:155-156`)
+        num_classes = target_dim
     var estimation = set_leaves_estimation_default(
         loss_desc,
         method_override=leaf_estimation_method,
@@ -2066,6 +2143,8 @@ def train(
     if objective == OBJECTIVE_MULTICLASS:
         approx_dim = num_classes - 1
     elif objective == OBJECTIVE_MULTICLASS_OVA:
+        approx_dim = num_classes
+    elif objective == OBJECTIVE_MULTIRMSE:
         approx_dim = num_classes
 
     var test_arm = make_test_arm(

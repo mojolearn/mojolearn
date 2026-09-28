@@ -1,0 +1,20 @@
+diff --git a/gbdt/host/gbdt_oracle_multiclass.mojo b/gbdt/host/gbdt_oracle_multiclass.mojo
+--- a/gbdt/host/gbdt_oracle_multiclass.mojo
++++ b/gbdt/host/gbdt_oracle_multiclass.mojo
+@@ -65,6 +65,7 @@
+ tools/identity_break.py on the two lanes is the measurement.
+ """
+ from std.math import exp, fma, isfinite, log
++from std.sys.compile import is_defined
+ from gbdt.data.permutation import TRandom
+ from gbdt.gpu_util.kernel.random_gen import advance_seed_k, next_normal_f
+ 
+@@ -258,6 +259,8 @@
+                         var diff = target - approx
+                         sum_dim_errors = fma(diff * diff, weight, sum_dim_errors)
+                         var dd = diff * weight
++                        comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
++                            dd = dd * Float32(1.001)  # MULTIRMSE DER SABOTAGE: the CPU column only
+                         der[(plane_base + d) * n_rows + idx] = dd
+                         var ad = abs(dd)
+                         if ad > max_abs:

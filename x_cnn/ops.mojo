@@ -192,6 +192,16 @@ def fill_one_at(i: Int, dst: FP, f1: FP, f2: FP, f3: FP, q: IP, p: IP):
     dst.unsafe_store(i, Float32(1))
 
 
+@always_inline
+def gather_rows_at(i: Int, src: FP, dst: FP, f2: FP, f3: FP, q: IP, p: IP):
+    """dst[i] = src[q[i // row] * row + i % row], row = p[0]: a 4-byte word
+    copy (no float arithmetic touches it), the batch rows of a resident X."""
+    var row = Int(p.unsafe_load(0))
+    var r = i // row
+    var j = Int(q.unsafe_load(r)) * row + (i - r * row)
+    dst.bitcast[Int32]().unsafe_store(i, src.bitcast[Int32]().unsafe_load(j))
+
+
 # ---------------------------------------------------------------- pooling
 # The Int32 block of a pooling layer (pool_params fills 12 and 13):
 comptime PP_N = 0

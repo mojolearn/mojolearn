@@ -19,6 +19,7 @@ from x_cnn.device import (
     linear_forward_into, linear_backward_into, softmax_xent_into, sgd_into, adam_into,
     batchnorm_forward_into, batchnorm_backward_into, dropout2d_into, spmm_into, pad2d_forward_into,
     pad2d_backward_into, conv_block_forward_into, conv_block_backward_into,
+    res_alloc, res_free, res_upload, res_download, res_gather,
 )
 from x_cnn.device import graph_op_device as graph_op_impl
 from x_cnn.device import adaptive_pool_device as adaptive_pool_impl
@@ -99,7 +100,7 @@ def _block_prms(conv_params_obj: PythonObject, pool_params_obj: PythonObject) ra
     return (cprm^, pprm^, pool)
 
 
-def conv_block_forward_binding(
+def conv_block_forward_binding[resident: Bool = False](
     x_addr: PythonObject, w_addr: PythonObject, b_addr: PythonObject, out_addr: PythonObject, idx_addr: PythonObject,
     conv_prm: PythonObject, pool_prm: PythonObject,
 ) raises -> PythonObject:
@@ -112,11 +113,38 @@ def conv_block_forward_binding(
     var po = _fp(out_addr)
     var pi = _ip(idx_addr)
     with GILReleased(Python()):
-        conv_block_forward_into(x, w, b, t[0], t[1], t[2], po, pi)
+        conv_block_forward_into[resident](x, w, b, t[0], t[1], t[2], po, pi)
     return PythonObject(0)
 
 
-def conv_block_backward_binding(
+def _saved(saved: PythonObject) raises -> Tuple[Int, Int]:
+    """[cols address, conv output address] of a resident block, or [] for none."""
+    if Int(py=len(saved)) == 0:
+        return (0, 0)
+    if Int(py=len(saved)) != 2:
+        raise Error("x_cnn conv block: saved is [] or [cols, conv output]")
+    return (Int(py=saved[0]), Int(py=saved[1]))
+
+
+def conv_block_forward_r_binding(
+    x_addr: PythonObject, w_addr: PythonObject, b_addr: PythonObject, out_addr: PythonObject, idx_addr: PythonObject,
+    conv_prm: PythonObject, pool_prm: PythonObject, saved: PythonObject,
+) raises -> PythonObject:
+    """The resident block forward; `saved` = [cols, conv output] resident
+    arrays the backward reads (DEVIATION 5718), or []."""
+    var t = _block_prms(conv_prm, pool_prm)
+    var sv = _saved(saved)
+    var x = _fp(x_addr)
+    var w = _fp(w_addr)
+    var b = _fp(b_addr)
+    var po = _fp(out_addr)
+    var pi = _ip(idx_addr)
+    with GILReleased(Python()):
+        conv_block_forward_into[True](x, w, b, t[0], t[1], t[2], po, pi, sv[0], sv[1])
+    return PythonObject(0)
+
+
+def conv_block_backward_binding[resident: Bool = False](
     x_addr: PythonObject, w_addr: PythonObject, b_addr: PythonObject, g_addr: PythonObject, idx_addr: PythonObject,
     outs: PythonObject, conv_prm: PythonObject, pool_prm: PythonObject,
 ) raises -> PythonObject:
@@ -137,7 +165,30 @@ def conv_block_backward_binding(
     var pdw = _fp(dw_addr)
     var pdb = _fp(db_addr)
     with GILReleased(Python()):
-        conv_block_backward_into(x, w, b, g, pi, t[0], t[1], t[2], want, pdx, pdw, pdb)
+        conv_block_backward_into[resident](x, w, b, g, pi, t[0], t[1], t[2], want, pdx, pdw, pdb)
+    return PythonObject(0)
+
+
+def conv_block_backward_r_binding(
+    x_addr: PythonObject, w_addr: PythonObject, b_addr: PythonObject, g_addr: PythonObject, idx_addr: PythonObject,
+    outs: PythonObject, conv_prm: PythonObject, pool_prm: PythonObject,
+) raises -> PythonObject:
+    """The resident block backward: outs = [dx (0: none), dW, db] or [dx, dW,
+    db, cols, conv output] with the forward's saved arrays."""
+    var t = _block_prms(conv_prm, pool_prm)
+    var sv = (Int(py=outs[3]), Int(py=outs[4])) if Int(py=len(outs)) == 5 else (0, 0)
+    var dx_addr = outs[0]
+    var want = Int(py=dx_addr) != 0
+    var x = _fp(x_addr)
+    var w = _fp(w_addr)
+    var b = _fp(b_addr)
+    var g = _fp(g_addr)
+    var pi = _ip(idx_addr)
+    var pdx = _fp(dx_addr) if want else _fp(outs[2])
+    var pdw = _fp(outs[1])
+    var pdb = _fp(outs[2])
+    with GILReleased(Python()):
+        conv_block_backward_into[True](x, w, b, g, pi, t[0], t[1], t[2], want, pdx, pdw, pdb, sv[0], sv[1])
     return PythonObject(0)
 
 
@@ -247,18 +298,18 @@ def _lin(params: PythonObject) raises -> Tuple[Int, Int, Int]:
     return (n, d_in, d_out)
 
 
-def linear_forward_binding(x_addr: PythonObject, w_addr: PythonObject, b_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+def linear_forward_binding[resident: Bool = False](x_addr: PythonObject, w_addr: PythonObject, b_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
     var s = _lin(params)
     var x = _fp(x_addr)
     var w = _fp(w_addr)
     var b = _fp(b_addr)
     var po = _fp(out_addr)
     with GILReleased(Python()):
-        linear_forward_into(x, w, b, s[0], s[1], s[2], po)
+        linear_forward_into[resident](x, w, b, s[0], s[1], s[2], po)
     return PythonObject(s[0] * s[2])
 
 
-def linear_backward_binding(
+def linear_backward_binding[resident: Bool = False](
     x_addr: PythonObject, w_addr: PythonObject, g_addr: PythonObject, dx_addr: PythonObject,
     dw_addr: PythonObject, db_addr: PythonObject, params: PythonObject,
 ) raises -> PythonObject:
@@ -270,11 +321,11 @@ def linear_backward_binding(
     var pdw = _fp(dw_addr)
     var pdb = _fp(db_addr)
     with GILReleased(Python()):
-        linear_backward_into(x, w, g, s[0], s[1], s[2], pdx, pdw, pdb)
+        linear_backward_into[resident](x, w, g, s[0], s[1], s[2], pdx, pdw, pdb)
     return PythonObject(s[0])
 
 
-def softmax_xent_binding(
+def softmax_xent_binding[resident: Bool = False](
     logits_addr: PythonObject, labels_addr: PythonObject, grad_addr: PythonObject, proba_addr: PythonObject,
     params: PythonObject,
 ) raises -> PythonObject:
@@ -284,19 +335,20 @@ def softmax_xent_binding(
     if n <= 0 or k <= 0:
         raise Error("x_cnn softmax: positive rows and classes required")
     var py_labels = _ip(labels_addr)
-    for i in range(n):
-        if Int(py_labels[i]) >= k:
-            raise Error("x_cnn softmax: a label is not a class index")
+    comptime if not resident:  # a resident label array is on the device; its caller checked it
+        for i in range(n):
+            if Int(py_labels[i]) >= k:
+                raise Error("x_cnn softmax: a label is not a class index")
     var logits = _fp(logits_addr)
     var pg = _fp(grad_addr)
     var pp = _fp(proba_addr)
     var loss = Float32(0)
     with GILReleased(Python()):
-        loss = softmax_xent_into(logits, py_labels, n, k, pg, pp)
+        loss = softmax_xent_into[resident](logits, py_labels, n, k, pg, pp)
     return PythonObject(Float64(loss))
 
 
-def sgd_binding(w_addr: PythonObject, g_addr: PythonObject, v_addr: PythonObject, params: PythonObject, hyper: PythonObject) raises -> PythonObject:
+def sgd_binding[resident: Bool = False](w_addr: PythonObject, g_addr: PythonObject, v_addr: PythonObject, params: PythonObject, hyper: PythonObject) raises -> PythonObject:
     """In place: w and the momentum buffer v. hyper = [lr, momentum,
     weight_decay, dampening, nesterov (0/1), first step (0/1)]; the last
     three default to 0."""
@@ -311,7 +363,7 @@ def sgd_binding(w_addr: PythonObject, g_addr: PythonObject, v_addr: PythonObject
     var g = _fp(g_addr)
     var pv = _fp(v_addr)
     with GILReleased(Python()):
-        sgd_into(pw, g, pv, h, n)
+        sgd_into[resident](pw, g, pv, h, n)
     return PythonObject(n)
 
 
@@ -547,7 +599,7 @@ def graph_op_binding(
     return PythonObject(n * F)
 
 
-def adam_binding(w_addr: PythonObject, g_addr: PythonObject, mv_addr: PythonObject, params: PythonObject, hyper: PythonObject) raises -> PythonObject:
+def adam_binding[resident: Bool = False](w_addr: PythonObject, g_addr: PythonObject, mv_addr: PythonObject, params: PythonObject, hyper: PythonObject) raises -> PythonObject:
     """In place: w and mv = [m (n) | v (n)]. hyper = [step_size, 1 - beta1,
     beta2, 1 - beta2, eps, sqrt(bias_correction2), weight_decay, adamw (0/1),
     1 - lr * weight_decay] (x_cnn/ops.mojo adam_at)."""
@@ -561,8 +613,53 @@ def adam_binding(w_addr: PythonObject, g_addr: PythonObject, mv_addr: PythonObje
     var g = _fp(g_addr)
     var pm = _fp(mv_addr)
     with GILReleased(Python()):
-        adam_into(pw, g, pm, h, n)
+        adam_into[resident](pw, g, pm, h, n)
     return PythonObject(n)
+
+
+# DEVIATION 5718: resident arrays. A handle is a device address the caller
+# keeps between the `_r` entries (the same entries, reading and writing those
+# addresses instead of uploading and downloading host arrays).
+
+
+def res_alloc_binding(n: PythonObject) raises -> PythonObject:
+    return PythonObject(res_alloc(Int(py=n)))
+
+
+def res_free_binding(h: PythonObject) raises -> PythonObject:
+    res_free(Int(py=h))
+    return PythonObject(0)
+
+
+def res_upload_binding(h: PythonObject, src_addr: PythonObject, n: PythonObject) raises -> PythonObject:
+    """n 4-byte words (float32 or int32) from a host array into the resident array."""
+    var src = _fp(src_addr)
+    var nn = Int(py=n)
+    var hh = Int(py=h)
+    with GILReleased(Python()):
+        res_upload(hh, src, nn)
+    return PythonObject(nn)
+
+
+def res_gather_binding(dst: PythonObject, src: PythonObject, rows_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    """Resident dst rows = resident src rows[r] (int32 host indices); params = [n, row words]."""
+    var n = Int(py=params[0])
+    var row = Int(py=params[1])
+    var d = Int(py=dst)
+    var sr = Int(py=src)
+    var rp = _ip(rows_addr)
+    with GILReleased(Python()):
+        res_gather(d, sr, rp, n, row)
+    return PythonObject(n)
+
+
+def res_download_binding(h: PythonObject, dst_addr: PythonObject, n: PythonObject) raises -> PythonObject:
+    var dst = _fp(dst_addr)
+    var nn = Int(py=n)
+    var hh = Int(py=h)
+    with GILReleased(Python()):
+        res_download(hh, dst, nn)
+    return PythonObject(nn)
 
 
 def numeric_mode_binding() raises -> PythonObject:
@@ -581,8 +678,8 @@ def PyInit__mojolearn_x_cnn() abi("C") -> PythonObject:
         m.def_function[conv2d_forward_binding]("x_cnn_conv2d_forward")
         m.def_function[conv2d_backward_binding]("x_cnn_conv2d_backward")
         m.def_function[conv_shape_binding]("x_cnn_conv_shape")
-        m.def_function[conv_block_forward_binding]("x_cnn_conv_block_forward")
-        m.def_function[conv_block_backward_binding]("x_cnn_conv_block_backward")
+        m.def_function[conv_block_forward_binding[False]]("x_cnn_conv_block_forward")
+        m.def_function[conv_block_backward_binding[False]]("x_cnn_conv_block_backward")
         m.def_function[pool_shape_binding]("x_cnn_pool_shape")
         m.def_function[maxpool2d_forward_binding]("x_cnn_maxpool2d_forward")
         m.def_function[maxpool2d_backward_binding]("x_cnn_maxpool2d_backward")
@@ -591,11 +688,11 @@ def PyInit__mojolearn_x_cnn() abi("C") -> PythonObject:
         m.def_function[relu_forward_binding]("x_cnn_relu_forward")
         m.def_function[relu_backward_binding]("x_cnn_relu_backward")
         m.def_function[add_binding]("x_cnn_add")
-        m.def_function[linear_forward_binding]("x_cnn_linear_forward")
-        m.def_function[linear_backward_binding]("x_cnn_linear_backward")
-        m.def_function[softmax_xent_binding]("x_cnn_softmax_xent")
-        m.def_function[sgd_binding]("x_cnn_sgd")
-        m.def_function[adam_binding]("x_cnn_adam")
+        m.def_function[linear_forward_binding[False]]("x_cnn_linear_forward")
+        m.def_function[linear_backward_binding[False]]("x_cnn_linear_backward")
+        m.def_function[softmax_xent_binding[False]]("x_cnn_softmax_xent")
+        m.def_function[sgd_binding[False]]("x_cnn_sgd")
+        m.def_function[adam_binding[False]]("x_cnn_adam")
         m.def_function[batchnorm_forward_binding]("x_cnn_batchnorm_forward")
         m.def_function[batchnorm_backward_binding]("x_cnn_batchnorm_backward")
         m.def_function[dropout2d_binding]("x_cnn_dropout2d")
@@ -608,6 +705,18 @@ def PyInit__mojolearn_x_cnn() abi("C") -> PythonObject:
         m.def_function[graph_op_binding]("x_cnn_graph_op")
         m.def_function[numeric_mode_binding]("x_cnn_numeric_mode")
         m.def_function[vendor_binding]("x_cnn_vendor")
+        m.def_function[res_alloc_binding]("x_cnn_res_alloc")
+        m.def_function[res_free_binding]("x_cnn_res_free")
+        m.def_function[res_upload_binding]("x_cnn_res_upload")
+        m.def_function[res_download_binding]("x_cnn_res_download")
+        m.def_function[conv_block_forward_r_binding]("x_cnn_conv_block_forward_r")
+        m.def_function[conv_block_backward_r_binding]("x_cnn_conv_block_backward_r")
+        m.def_function[res_gather_binding]("x_cnn_res_gather")
+        m.def_function[linear_forward_binding[True]]("x_cnn_linear_forward_r")
+        m.def_function[linear_backward_binding[True]]("x_cnn_linear_backward_r")
+        m.def_function[softmax_xent_binding[True]]("x_cnn_softmax_xent_r")
+        m.def_function[sgd_binding[True]]("x_cnn_sgd_r")
+        m.def_function[adam_binding[True]]("x_cnn_adam_r")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_cnn: ", e))

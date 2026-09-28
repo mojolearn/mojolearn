@@ -34,6 +34,7 @@ def _log(x: Float32) -> Float32:
     return ftz(identical_log(x))
 
 
+@always_inline
 def ets_lik(y: FP, n: Int, err: Int, trend: Bool, alpha: Float32, beta: Float32, phi: Float32,
             l0: Float32, b0: Float32) -> Tuple[Float32, Float32, Float32]:
     """(lik, final level, final trend) of Calc for the non-seasonal models."""
@@ -83,6 +84,7 @@ struct EtsObj(Objective):
     var beta: Float32
     var phi: Float32
 
+    @always_inline
     def __init__(out self, y: FP, n: Int, err: Int, trend: Bool, oa: Bool, ob: Bool, op: Bool,
                  alpha: Float32, beta: Float32, phi: Float32):
         self.y = y
@@ -96,6 +98,7 @@ struct EtsObj(Objective):
         self.beta = beta
         self.phi = phi
 
+    @always_inline
     def unpack(self, x: FP) -> Tuple[Float32, Float32, Float32, Float32, Float32]:
         var j = 0
         var a = self.alpha
@@ -114,6 +117,7 @@ struct EtsObj(Objective):
         var b0 = ld(x, j + 1) if self.trend else Float32(0.0)
         return (a, b, p, l0, b0)
 
+    @always_inline
     def eval(mut self, x: FP) -> Float32:
         var u = self.unpack(x)
         var r = ets_lik(self.y, self.n, self.err, self.trend, u[0], u[1], u[2], u[3], u[4])

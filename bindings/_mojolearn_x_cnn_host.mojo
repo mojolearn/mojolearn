@@ -8,6 +8,7 @@ from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from std.memory import alloc, memcpy, memset_zero
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_cnn.ops import CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW, conv_params
@@ -673,6 +674,67 @@ def x_cnn_host_sabotage_binding() raises -> PythonObject:
     return PythonObject(X_CNN_HOST_SABOTAGE)
 
 
+# DEVIATION 5718: resident arrays. On the CPU a resident array is a host
+# allocation and its handle is its address, so the `_r` entries are the
+# ordinary entries (the GPU binding's `_r` entries read device addresses).
+
+
+def res_alloc_binding(n: PythonObject) raises -> PythonObject:
+    var nn = Int(py=n)
+    var p = alloc[Float32](nn if nn > 0 else 1)
+    memset_zero(p, nn if nn > 0 else 1)
+    return PythonObject(Int(p))
+
+
+def res_free_binding(h: PythonObject) raises -> PythonObject:
+    f32_ptr(Int(py=h)).free()
+    return PythonObject(0)
+
+
+def res_upload_binding(h: PythonObject, src_addr: PythonObject, n: PythonObject) raises -> PythonObject:
+    """n 4-byte words (float32 or int32) from a host array into the resident array."""
+    var nn = Int(py=n)
+    if nn > 0:
+        memcpy(dest=f32_ptr(Int(py=h)), src=f32_ptr(Int(py=src_addr)), count=nn)
+    return PythonObject(nn)
+
+
+def res_download_binding(h: PythonObject, dst_addr: PythonObject, n: PythonObject) raises -> PythonObject:
+    var nn = Int(py=n)
+    if nn > 0:
+        memcpy(dest=f32_ptr(Int(py=dst_addr)), src=f32_ptr(Int(py=h)), count=nn)
+    return PythonObject(nn)
+
+
+def conv_block_forward_r_binding(
+    x_addr: PythonObject, w_addr: PythonObject, b_addr: PythonObject, out_addr: PythonObject, idx_addr: PythonObject,
+    conv_prm: PythonObject, pool_prm: PythonObject, saved: PythonObject,
+) raises -> PythonObject:
+    """The GPU binding's resident block forward: `saved` only spares the
+    device a recomputation, so the CPU twin runs its ordinary entry."""
+    return conv_block_forward_binding(x_addr, w_addr, b_addr, out_addr, idx_addr, conv_prm, pool_prm)
+
+
+def conv_block_backward_r_binding(
+    x_addr: PythonObject, w_addr: PythonObject, b_addr: PythonObject, g_addr: PythonObject, idx_addr: PythonObject,
+    outs: PythonObject, conv_prm: PythonObject, pool_prm: PythonObject,
+) raises -> PythonObject:
+    """outs may carry the GPU binding's two saved arrays after [dx, dW, db]; the CPU twin recomputes."""
+    return conv_block_backward_binding(x_addr, w_addr, b_addr, g_addr, idx_addr, outs, conv_prm, pool_prm)
+
+
+def res_gather_binding(dst: PythonObject, src: PythonObject, rows_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    """dst rows = src rows[r] (int32 host indices), `row` 4-byte words each."""
+    var n = Int(py=params[0])
+    var row = Int(py=params[1])
+    var d = f32_ptr(Int(py=dst))
+    var sr = f32_ptr(Int(py=src))
+    var rp = i32_ptr(Int(py=rows_addr))
+    for r in range(n):
+        memcpy(dest=d + r * row, src=sr + Int(rp[r]) * row, count=row)
+    return PythonObject(n)
+
+
 def numeric_mode_binding() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 
@@ -720,6 +782,18 @@ def PyInit__mojolearn_x_cnn_host() abi("C") -> PythonObject:
         m.def_function[graph_op_binding]("x_cnn_graph_op")
         m.def_function[numeric_mode_binding]("x_cnn_numeric_mode")
         m.def_function[vendor_binding]("x_cnn_vendor")
+        m.def_function[res_alloc_binding]("x_cnn_res_alloc")
+        m.def_function[res_free_binding]("x_cnn_res_free")
+        m.def_function[res_upload_binding]("x_cnn_res_upload")
+        m.def_function[res_download_binding]("x_cnn_res_download")
+        m.def_function[conv_block_forward_r_binding]("x_cnn_conv_block_forward_r")
+        m.def_function[conv_block_backward_r_binding]("x_cnn_conv_block_backward_r")
+        m.def_function[res_gather_binding]("x_cnn_res_gather")
+        m.def_function[linear_forward_binding]("x_cnn_linear_forward_r")
+        m.def_function[linear_backward_binding]("x_cnn_linear_backward_r")
+        m.def_function[softmax_xent_binding]("x_cnn_softmax_xent_r")
+        m.def_function[sgd_binding]("x_cnn_sgd_r")
+        m.def_function[adam_binding]("x_cnn_adam_r")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_cnn_host: ", e))
