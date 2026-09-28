@@ -342,7 +342,33 @@ def trsm_upper_staged_kernel(
             b.unsafe_store(i * nrhs + j, ftz(identical_div(t, ftz(l.unsafe_load(i * ld + i)))))
 
 
+def trsm_panel_guarded_kernel(
+    a: MutPointer[Float32, MutAnyOrigin],
+    stop: MutPointer[Int32, MutAnyOrigin],
+    n_in: Int32,
+    j0_in: Int32,
+    nb_in: Int32,
+    n_trail_in: Int32,
+):
+    """`trsm_panel_kernel`, returning at once when `stop[0] != 0` (the
+    factor's `info`; `potrf.mojo`'s CHOL_DEFER_INFO)."""
+    if stop[0] != Int32(0):
+        return
+    _trsm_panel_body(a, n_in, j0_in, nb_in, n_trail_in)
+
+
 def trsm_panel_kernel(
+    a: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    j0_in: Int32,
+    nb_in: Int32,
+    n_trail_in: Int32,
+):
+    _trsm_panel_body(a, n_in, j0_in, nb_in, n_trail_in)
+
+
+@always_inline
+def _trsm_panel_body(
     a: MutPointer[Float32, MutAnyOrigin],
     n_in: Int32,
     j0_in: Int32,
