@@ -1151,11 +1151,14 @@ def host_accumulate(
     # their own partial arrays (tasks), then the partials are added.
     var cd = k * d
     var n_chunks = (n + ACCUMULATE_CHUNK - 1) // ACCUMULATE_CHUNK
-    var part = List[Int32](length=n_chunks * (cd + k) if n_chunks > 0 else 1, fill=Int32(0))
+    # each chunk's region padded to whole cache lines plus one, so no two
+    # tasks write the same line
+    var stride = ((cd + k + 15) // 16) * 16 + 16
+    var part = List[Int32](length=n_chunks * stride if n_chunks > 0 else 1, fill=Int32(0))
     var pp = part.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
 
-    def _chunk(c: Int) {imm x, imm labels, imm weights, imm pp, imm n, imm d, imm k, imm cd, imm sum_scale, imm weight_scale}:
-        var base = pp + c * (cd + k)
+    def _chunk(c: Int) {imm x, imm labels, imm weights, imm pp, imm n, imm d, imm k, imm cd, imm stride, imm sum_scale, imm weight_scale}:
+        var base = pp + c * stride
         var r0 = c * ACCUMULATE_CHUNK
         var r1 = min(r0 + ACCUMULATE_CHUNK, n)
         for row in range(r0, r1):
@@ -1177,7 +1180,7 @@ def host_accumulate(
     for c in range(k):
         weight_i32[c] = Int32(0)
     for ch in range(n_chunks):
-        var off = ch * (cd + k)
+        var off = ch * stride
         for c in range(cd):
             sums_i32[c] = sums_i32[c] + part[off + c]
         for c in range(k):
