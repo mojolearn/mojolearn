@@ -15,8 +15,14 @@ same loop over the items (`x_neighbors/iter_host.mojo`).
 """
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
+from std.gpu import block_idx, thread_idx
+from std.memory import stack_allocation
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
+from checks.numerics import ftz, identical_mul_add
 
-from x_neighbors.items import FP, IP
+from std.sys.compile import is_defined
+from x_neighbors.items import FP, IP, absdiff_sum_item
 from x_neighbors.device_ops import (
     xn_ctx, _buf, _buf_i, _down, _down_i, _grid, BLOCK,
     absdiff_sum_kernel, matmul_kernel, lp_clamp_kernel, ls_clamp_kernel,
@@ -50,13 +56,36 @@ def op_lp_iterate(
     var cur_is_a = True
     var n_iter = 0
     var converged = False
+    # The stopping sum's ONE-ITEM fold over n * c values ran on ONE GPU
+    # thread every iteration (1.5 ms at n = 5,000 with many classes). By
+    # default the host folds it: the current distributions come back each
+    # iteration (they are what the step just wrote), the previous ones are
+    # the host copy from the iteration before, and `absdiff_sum_item` runs
+    # its same statements on them. `-D MOJOLEARN_XN_LP_DEVICE_FOLD` keeps
+    # the device fold.
+    var hc = List[Float32](length=nc if nc > 0 else 1, fill=Float32(0))
+    var hp = List[Float32](length=nc if nc > 0 else 1, fill=Float32(0))
     for it in range(max_iter):
         n_iter = it
-        ctx.enqueue_function[absdiff_sum_kernel](
-            cur, prev, d_s.unsafe_ptr(), Int64(nc), grid_dim=1, block_dim=1,
-        )
-        ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=d_s)
-        ctx.synchronize()
+        comptime if is_defined["MOJOLEARN_XN_LP_DEVICE_FOLD"]():
+            ctx.enqueue_function[absdiff_sum_kernel](
+                cur, prev, d_s.unsafe_ptr(), Int64(nc), grid_dim=1, block_dim=1,
+            )
+            ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=d_s)
+            ctx.synchronize()
+        else:
+            if cur_is_a:
+                ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=d_a)
+            else:
+                ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=d_b)
+            ctx.synchronize()
+            absdiff_sum_item(
+                0, FP(unsafe_from_address=Int(hc.unsafe_ptr())),
+                FP(unsafe_from_address=Int(hp.unsafe_ptr())),
+                FP(unsafe_from_address=Int(hs.unsafe_ptr())), nc,
+            )
+            for q in range(nc):
+                hp[q] = hc[q]
         if Float64(hs[0]) < tol:
             converged = True
             break
@@ -91,6 +120,8 @@ def op_lp_iterate(
     inf.unsafe_store(0, Int32(n_iter))
     inf.unsafe_store(1, Int32(1 if converged else 0))
     _ = hs^
+    _ = hc^
+    _ = hp^
     _ = d_g^
     _ = d_a^
     _ = d_b^
@@ -214,6 +245,40 @@ def op_cc_iterate(a: Int, lab: Int, info: Int, n: Int) raises:
     _ = ctx^
 
 
+comptime PCS_ROW_TPB = 256
+comptime PCS_ROW_MAX_NC = 2048
+
+
+def pcs_conv_row_kernel(acc: FP, sk: FP, res: FP, n_: Int64, nc_: Int64, degree_: Int64, p_: Int64):
+    """`pcs_conv_item` for one ROW per block: the row's running product and
+    its degree-p sketch staged in threadgroup memory (read-only after one
+    barrier), then each thread folds its components' convolutions with the
+    item's statements, a ascending. nc <= PCS_ROW_MAX_NC."""
+    var nc = Int(nc_)
+    var degree = Int(degree_)
+    var p = Int(p_)
+    var r = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var ar = stack_allocation[PCS_ROW_MAX_NC, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var sr = stack_allocation[PCS_ROW_MAX_NC, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var q = tid
+    while q < nc:
+        ar[q] = acc.unsafe_load(r * nc + q)
+        sr[q] = sk.unsafe_load((r * degree + p) * nc + q)
+        q += PCS_ROW_TPB
+    barrier()
+    var h = tid
+    while h < nc:
+        var s = Float32(0)
+        for a in range(nc):
+            var b = h - a
+            if b < 0:
+                b += nc
+            s = ftz(identical_mul_add(ar[a], sr[b], s))
+        res.unsafe_store(r * nc + h, s)
+        h += PCS_ROW_TPB
+
+
 def op_pcs_resident(
     x: Int, hidx: Int, hbit: Int, res: Int,
     n: Int, d_in: Int, nf: Int, nc: Int, degree: Int, gamma: Float32, coef0: Float32,
@@ -245,10 +310,19 @@ def op_pcs_resident(
     var nxt: FP = d_b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
     var cur_is_a = True
     for p in range(1, degree):
-        ctx.enqueue_function[pcs_conv_kernel](
-            cur, d_sk.unsafe_ptr(), nxt, Int64(n), Int64(nc), Int64(degree), Int64(p),
-            grid_dim=_grid(cells), block_dim=(BLOCK if cells > 1 else 1),
-        )
+        var row_kernel = nc <= PCS_ROW_MAX_NC
+        comptime if is_defined["MOJOLEARN_XN_PCS_CELL"]():
+            row_kernel = False
+        if row_kernel:
+            ctx.enqueue_function[pcs_conv_row_kernel](
+                cur, d_sk.unsafe_ptr(), nxt, Int64(n), Int64(nc), Int64(degree), Int64(p),
+                grid_dim=n, block_dim=PCS_ROW_TPB,
+            )
+        else:
+            ctx.enqueue_function[pcs_conv_kernel](
+                cur, d_sk.unsafe_ptr(), nxt, Int64(n), Int64(nc), Int64(degree), Int64(p),
+                grid_dim=_grid(cells), block_dim=(BLOCK if cells > 1 else 1),
+            )
         var t = cur
         cur = nxt
         nxt = t
