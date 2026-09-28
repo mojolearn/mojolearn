@@ -11,7 +11,7 @@
 # runs every arm and tier once (arms alternate), and a last pass prints the
 # stage split (MOJOLEARN_ANN_STAGES=1). Every bench line carries its digests.
 # Env: ANN_AB_MODES (default "identical fast"), ANN_AB_BENCH_ARGS (extra
-# bench/speed/ann_cpu_speed.py flags), ANN_AB_STAGES (default 1).
+# bench/speed/ann_cpu_speed.py flags), ANN_AB_STAGES (default 1), ANN_AB_QUALITY.
 set -eu
 befores=$1
 algos=$2
@@ -62,5 +62,15 @@ done
 if [ "${ANN_AB_STAGES:-1}" = 1 ]; then
     for mode in $modes; do
         for a in $arms; do run "${a%%=*}" "${a#*=}" "$mode" 1; done
+    done
+fi
+# ANN_AB_QUALITY: ann_fast_quality.py flags; run FAST on the first and the last arm
+if [ -n "${ANN_AB_QUALITY:-}" ]; then
+    first=$(echo $arms | cut -d' ' -f1)
+    for a in $first after=$after_wt; do
+        echo "== quality ${a%%=*}"
+        (cd "${a#*=}" && PYTHONPATH="${a#*=}/python" MOJOLEARN_NUMERIC_MODE=fast \
+            pixi run -e default python -u bench/speed/ann_fast_quality.py $ANN_AB_QUALITY 2>&1 \
+            | grep ANN-QUALITY | sed "s/^/[${a%%=*} fast] /")
     done
 fi
