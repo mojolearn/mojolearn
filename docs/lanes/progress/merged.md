@@ -224,3 +224,103 @@ origin/main 9a8f9e390, lane sets diffed:
   merged host modules). None dropped.
 - gbdt_host_predict 51, forest_inference 50, neural_inference.py 41: unchanged.
 - Registry: 504 lanes on lane/merged.
+
+## Build (step 3)
+
+- Every binding the 504 registered lanes run (75: GPU + host families) built
+  on the central AMD box (gfx942) at ce54c30f9 except one:
+  **_mojolearn_x_cluster** — `_ap_noise_kernel(m: Int)`; the pinned toolchain
+  refuses Int as a device argument ("Int and UInt do not conform to
+  DevicePassable"). Owner: algos-cluster (WIP 649b55f7b). FIXED on lane/merged
+  (003ea19ba: Int64 for the call, same cells; e2e_device_fold_reversed.patch
+  context follows). After it: 75/75 built on gfx942. NVIDIA (sm_89, nvc1):
+  75/75 built at 003ea19ba. x_linear's merged team/host dispatch compiles on
+  both.
+
+## Global check (step 4): how it runs
+
+- Exposed lanes = host_surface.covered_lanes(): **465** of 504 registered.
+  The other 39 (par-* multi-GPU drivers, cross-val-folds, resample-bca,
+  resample-perm-samples, resample-unpaired, resample-utils) have no CPU route;
+  their CPU arms refuse by design ("no CPU implementation of the cooperative
+  multi-GPU driver ..."). Not counted as failures. NOTE for prep: the four
+  new resample-* lanes are not in host_surface's covered set.
+- Driver: tools/merged_check/merged_check.py (untracked, synced to the boxes;
+  reuses algos_lane_check's needed_bindings / build+stamp / run_arm /
+  compare). clean = GPU arm once, CPU arm per thread setting, each CPU column
+  diffed cell for cell with the GPU column.
+- NVIDIA nvc1 (2x RTX 4090): clean in 4 resumable shards, CPU column at
+  MOJOLEARN_CPU_THREADS=1, 3 and default; e2e sabotage sequence (46 family
+  patch lines, tools/merged_check/sab_plan.tsv) in a separate tree
+  (/root/mojolearn-merged-sab); tests job (test_host_surface,
+  test_lane_select, every test_x_*_repeat at threads 1/3/default).
+- AMD central (MI300X): clean in 4 shards (CPU default), tests job.
+- Apple + do-amd (MI325X): 24 clean shards via apple_steward speed jobs at
+  003ea19ba, each on m2pro, m3ultra-b, do-amd and one M4 (rotating
+  m4pro-a/m4pro-b/m4-a); a build job first on each. m3ultra drained.
+
+## Failures found (step 5)
+
+- **x-decomp-* (every x_decomp estimator), GPU and CPU**: `TypeError: a
+  bytes-like object is required` in `_expansion_decomp._M.from_input`
+  (array.frombytes given the Array's 2-D float32 memoryview). Owner:
+  algos-decomp (2f2c2891b, "an input reaches the x_decomp store in one copy").
+  Not from the integration (_array/_buffer equal algos-decomp's). FIXED on
+  lane/merged b90431acf (`mv.cast("B")`, same bytes, as _array.Array does);
+  the decomp lanes are re-run after the shards.
+- **kmeans, kmeans-random, kmeans-sqrt: CPU arm REFUSED** on x86 (Xeon 8470
+  and EPYC): `transform(X)[i, labels_[i]] and transform(X).min(axis=1)
+  differ: 77306 bytes of 80000`. Reproduced on a pure origin/lane/cluster-cpu
+  tree (ec159b796): 10933 of 80000. Owner: cluster-cpu (host KMeans rewrite:
+  8f9a54482 / a8cf410cf / d9a4453ec / 778f2e677). kmeans_oracle.mojo on
+  lane/merged is byte-identical to cluster-cpu's. Fix in progress on
+  lane/merged-kmeans-fix (root cause, then same bits as main's host path).
+
+## The MI300X column is OWED (2026-09-28 ~09:10Z)
+
+Hot Aisle terminated the central AMD box (MI300X) at about 09:10Z (account
+balance -$54). Its lane/merged clean shards (0015-0018) and tests job (0019)
+were lost mid-run. What they had recorded before the box went: shards 0 and 1
+were running; shard 1 finished 126 lanes (every exposed lane AGREE except the
+kmeans and x-decomp failures above). The AMD column of the global check is
+do-amd (MI325X, gfx942) through the steward shards. **The MI300X column is
+owed until Hot Aisle is topped up.**
+
+## Seam arms (found by the first Apple/do-amd shards at 003ea19ba)
+
+algos_lane_check runs every family's .checks seam arms at the clean stage and
+stops the whole run at the first arm that fails, so the first 22 shard runs
+reached no lane. What they found:
+- **ann.checks:11 cagra_5820_prune_high_rank.patch did not apply** (16 runs):
+  cut by algos-ann-b before ann-cpu moved CAGRA prune into host tasks
+  (3cfc52318). INTEGRATION: re-cut on lane/merged (8ab426638), same edit.
+- **trees.checks seam_5601_fused / seam_5603_libm_exp did not apply**: my own
+  xtrees/ops.mojo import change (sync_parallelize -> host_parallelize) was in
+  their context. INTEGRATION: fixed in 8ab426638. Every .checks patch of every
+  family now passes `git apply --check`.
+- **x_decomp/checks/sabotage/host_ew_onemsq_fused.patch NOT SEEN** by
+  fold_ew_check.mojo on m3ultra-b and m4-a (Arm): the host `1 - x*x` spelled
+  fused is not separated from the pinned unfused spelling there. Owner:
+  decomp-cpu (its host arm). If the Arm host compiler contracts the pinned
+  spelling, the decomp lanes' Apple CPU column will show it.
+- **x_cluster/checks/sabotage/5103_kth.patch NOT SEEN** by kth_check.mojo on
+  m4-a (4 runs). Owner: algos-cluster.
+The Apple/do-amd shards were withdrawn (70 queued copies, my own) and
+resubmitted at the lane/merged tip with the seam step skipped (lane verdicts
+only; seam arms are not part of the global check's lane comparison), one lane
+at a time so one failing arm cannot stop a shard.
+
+### kmeans CPU fix (merged from lane/merged-kmeans-fix, d57f6b123)
+
+Root cause: `cluster/host/kmeans_oracle.mojo::host_kmeans_transform` (the
+row-task form from lane/cluster-cpu) read `x_norm` / `c_norm` through
+untracked pointers after their last tracked use, so Mojo freed both lists
+before `host_cells(_row, ...)` ran and every transform cell read freed memory
+(labels_/predict were fine: host_assign holds its norms as arguments). Fix:
+`_ = x_norm^` and `_ = c_norm^` after the join (no arithmetic change). Evidence
+(nvc1 EPYC CPU arm): kmeans, kmeans-random, kmeans-sqrt, kmeans-array,
+kmeans-classic-pp, kmeans-weighted pass at MOJOLEARN_CPU_THREADS 1/3/default,
+and `--diff` against origin/main's CPU build is IDENTICAL on every cell;
+removing the two lines brings back the exact 59264/80000 refusal. Owner of the
+bug: cluster-cpu. Open: no kmeans host sabotage switch is wired into
+cluster.checks.
