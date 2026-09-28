@@ -48,6 +48,7 @@ CASES = [
     ("svgp", 100_000, 100_000),
     ("spectral-knn", 20_000, 0),
     ("nn-k2000", 20_000, 2_000),
+    ("nn-k2000-tiled", 100_000, 500),
 ]
 GAMMA = 0.125
 
@@ -138,7 +139,7 @@ def run_case(ml, name, x, yc, yr, xq, ycq, yrq):
         def fit():
             st["m"] = ml.SpectralEmbedding(n_components=2, affinity="nearest_neighbors", random_state=0).fit(x)
         return fit, (lambda: st["m"].embedding_), (lambda o: float(np.abs(_np(o)).mean()))
-    if name == "nn-k2000":
+    if name in ("nn-k2000", "nn-k2000-tiled"):
         def fit():
             st["m"] = ml.NearestNeighbors(n_neighbors=2000).fit(x)
 
@@ -146,10 +147,18 @@ def run_case(ml, name, x, yc, yr, xq, ycq, yrq):
             return st["m"].kneighbors(xq)
 
         def qual(o):
-            # the first 1,024 slots must be the k = 1,024 answer, slot for slot
+            # every row ascending by (distance, index) with distinct indices,
+            # and its first 1,024 slots the k = 1,024 answer slot for slot;
+            # -1 when a row is out of order or repeats an index
+            d, i = _np(o[0]), _np(o[1])
+            for r in range(len(i)):
+                if len(set(i[r].tolist())) != i.shape[1]:
+                    return -1.0
+                keys = list(zip(d[r].tolist(), i[r].tolist()))
+                if keys != sorted(keys):
+                    return -1.0
             d2, i2 = ml.NearestNeighbors(n_neighbors=1024).fit(x).kneighbors(xq)
-            i1 = _np(o[1])[:, :1024]
-            return float((i1 == _np(i2)).mean())
+            return float((i[:, :1024] == _np(i2)).mean() * (d[:, :1024] == _np(d2)).mean())
         return fit, pred, qual
     raise SystemExit(f"unknown case {name}")
 
