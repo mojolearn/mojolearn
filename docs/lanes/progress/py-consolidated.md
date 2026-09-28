@@ -94,7 +94,11 @@ ivf, x-ann-ivf-pq; py-dn-kern fused chain on x-neighbors-kpca); the lanes' in-bu
 arms; one small interleaved timing pass (GPU base head head base, CPU base head). py-sequence's
 /root/ps-base was NOT reused: it is a 0a11b50c7 tree, not this base.
 
-Job: nvc1-0018 (submitted 20:10:18Z behind apple2-merged 0006 to 0009 and 0016).
+Job: first queued as nvc1-0018 (20:10:18Z); moved with Andrew's approval to the second shared pod
+nvc2 (2x RTX 4090): synced as lane py-consolidated-b (landed on nvc2 before anything was
+cancelled), own nvc1-0018 cancelled while still queued, resubmitted as nvc2-0001 (started 22:12:10Z).
+Apple: m4-a and m4pro-a copies were lost when those Macs were released (21:16Z) and m3ultra-b
+was retired at 21:20Z; the Apple result is the M2 column (m2pro 1790629861325) only.
 
 ## Apple: one light job per Mac (submitted 21:1xZ, Andrew's 20:59Z change)
 
