@@ -13,6 +13,9 @@ from x_ann.ivf_scan_device import ivf_scan_search
 from cluster.estimator import kmeans_fit
 from cluster.impl.kmeans_params import INIT_KMEANS_PLUS_PLUS, METRIC_L2_EXPANDED
 from ivf.estimator import ivf_flat_build_host
+from ivf.impl.neighbors.ivf_flat.ivf_flat_build import ivf_trainset_rows
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from std.sys.compile import is_defined
 from metrics.checks.device_io import upload_f32, upload_i32, download_f32, download_i32
 from x_ann.refine_core import refine_cell
 from x_ann.ivf_rabitq_core import rq_encode_cell, rq_pow2, rq_scale
@@ -23,6 +26,16 @@ from x_ann.ivf_pq_core import (
 )
 
 comptime TPB = 128
+
+comptime PQ_FAST_TRAINSET = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined["MOJOLEARN_PQ_FAST_TRAINSET_OFF"]()
+"""FAST (lane ann-apple, 2026-09-28): each subspace codebook trains on at
+most `PQ_FAST_ROWS_PER_CODE` rows per code, a seeded uniform sample of the
+residuals (FAISS's `max_points_per_centroid` rule; the coarse quantizer
+already samples the same way under FAST on Apple, `IVF_FAST_TRAINSET`). Every
+row is still encoded against the trained codebooks. IDENTICAL trains on every
+row. Quality: bench/speed/ann_fast_quality.py, recorded in
+docs/lanes/progress/ann-apple.md."""
+comptime PQ_FAST_ROWS_PER_CODE = 256
 
 
 def _tid() -> Int:
@@ -74,15 +87,25 @@ def _codebooks(
     columns; the host twin is `host_kmeans_fit`."""
     var codebooks = List[Float32](capacity=pq_dim * n_codes * pq_len)
     var ctx = x_ann_ctx()
-    for j in range(pq_dim):
-        var sub = List[Float32](capacity=n * pq_len)
+    var n_train = n
+    comptime if PQ_FAST_TRAINSET:
+        if n > PQ_FAST_ROWS_PER_CODE * n_codes:
+            n_train = PQ_FAST_ROWS_PER_CODE * n_codes
+    var rows = List[Int]()
+    if n_train < n:
+        rows = ivf_trainset_rows(n, n_train, UInt64(seed))
+    else:
         for i in range(n):
+            rows.append(i)
+    for j in range(pq_dim):
+        var sub = List[Float32](capacity=n_train * pq_len)
+        for i in range(n_train):
             for t in range(pq_len):
-                sub.append(r[i * rot_dim + j * pq_len + t])
+                sub.append(r[rows[i] * rot_dim + j * pq_len + t])
         var cb = List[Float32](length=n_codes * pq_len, fill=Float32(0.0))
-        var lab = List[UInt32](length=n, fill=UInt32(0))
+        var lab = List[UInt32](length=n_train, fill=UInt32(0))
         _ = kmeans_fit(
-            ctx, sub.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), n, pq_len, n_codes,
+            ctx, sub.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), n_train, pq_len, n_codes,
             cb.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
             lab.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
             sub.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), 0,
