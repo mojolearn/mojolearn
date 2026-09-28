@@ -48,6 +48,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.hardware_matrix import threadgroup_limit_for
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
+from checks.kernel_matrix import knn_auto_follows_their_dispatch_for
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 from core.row_norms import NORM_TPB, row_norm_kernel
@@ -1154,6 +1155,11 @@ def check_dispatch_takes_fused() raises:
     var apple_arm = _apple_fast_arm_takes(FCHK_FEATURES, kf)
     if apple_arm:
         want_fused_small = True
+    # DEVIATION 1923: on a column whose FAST AUTO restores cuVS's dispatch
+    # unconditionally (NVIDIA), every `k <= 64` row-major L2 call is FUSED,
+    # x-split included; the geometry gate above is not this column's.
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and knn_auto_follows_their_dispatch_for[TARGET_COLUMN, False]():
+        want_fused_small = True
     if (not want_fused_small) and untouched3 != FCHK_QUERIES * kf:
         raise Error(
             "DEFAULT DISPATCH at k=8 on the (53 x 4,093) fixture wrote"
@@ -1176,7 +1182,7 @@ def check_dispatch_takes_fused() raises:
             # Whichever arm ran wrote its own output buffer: the tiled arm
             # fills `out_idx32` and the fused arm `out_idx`.
             var got3 = Int(got_i.unsafe_ptr().unsafe_load(i * kf + s3))
-            if apple_arm:
+            if want_fused_small:
                 got3 = Int(got_u.unsafe_ptr().unsafe_load(i * kf + s3))
             var found3 = False
             for t in range(FCHK_MAX_K):
@@ -1262,7 +1268,12 @@ def check_dispatch_takes_fused() raises:
         # "1,920 queries = minGridSize" is the M4's number; on this column
         # the expectation is whatever its own launch computation says.
         var g_big = fused_l2_knn_grid(big_q, FCHK_INDEX)
-        if g_big[0] == 1:
+        # DEVIATION 1923: this column's FAST AUTO is cuVS's own dispatch,
+        # fused at every grid, so the grid_x == 1 expectation applies.
+        comptime follows_theirs = knn_auto_follows_their_dispatch_for[
+            TARGET_COLUMN, False
+        ]()
+        if follows_theirs or g_big[0] == 1:
             if fused_wrote != big_q * kf or tiled_untouched != big_q * kf:
                 raise Error(
                     "DEFAULT DISPATCH at k=8 with 1,920 queries: expected"

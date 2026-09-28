@@ -392,9 +392,36 @@ def check_knn_search_arms_agree() raises:
             methods[m],
         )
         var wrong = 0
+        var first = String("")
         for t in range(CHK_QUERIES * CHK_K):
             if Int(h_idx.unsafe_ptr().unsafe_load(t)) != truth[t]:
                 wrong += 1
+                if wrong == 1:
+                    var qi = t // CHK_K
+                    var gj = Int(h_idx.unsafe_ptr().unsafe_load(t))
+                    var tj = truth[t]
+                    var dg = Float64(0.0)
+                    var dt = Float64(0.0)
+                    for f in range(CHK_FEATURES):
+                        var q = Float64(
+                            h_query.unsafe_ptr().unsafe_load(qi * CHK_FEATURES + f)
+                        )
+                        var a = q - Float64(
+                            h_index.unsafe_ptr().unsafe_load(gj * CHK_FEATURES + f)
+                        )
+                        var b = q - Float64(
+                            h_index.unsafe_ptr().unsafe_load(tj * CHK_FEATURES + f)
+                        )
+                        dg += a * a
+                        dt += b * b
+                    first = (
+                        "; first at query " + String(qi) + " slot "
+                        + String(t % CHK_K) + ": got index " + String(gj)
+                        + " (exact d2 " + String(dg) + ", returned "
+                        + String(h_dist.unsafe_ptr().unsafe_load(t))
+                        + "), want " + String(tj) + " (exact d2 "
+                        + String(dt) + ")"
+                    )
         if wrong != 0:
             raise Error(
                 "check_knn_search_arms_agree: arm "
@@ -404,6 +431,7 @@ def check_knn_search_arms_agree() raises:
                 + " of "
                 + String(CHK_QUERIES * CHK_K)
                 + " neighbours out of order or wrong"
+                + first
             )
 
     print(
