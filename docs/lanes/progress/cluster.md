@@ -248,3 +248,60 @@ Still open in phase B after that: MeanShift estimate_bandwidth(n_samples)
 subsampling; OPTICS metrics beyond the tsv's carried set; BisectingKMeans
 callable init (refused: per bisection inside the Mojo loop);
 AgglomerativeClustering connectivity='knn'.
+
+## Session 5 (2026-09-28 ~01-03Z): gate + speed round 1, merged 271a2eb1e
+
+(Recorded in session 6 from ~/mojolearn-evidence/algos-cluster/gate_s5b.log
+and the speed logs; session 5 was cut off before writing it.)
+- The session-4 owed NVIDIA gate ran on the H100 pod and passed: all 20
+  x-cluster lanes AGREE / DISAGREE under e2e_device_fold_reversed / AGREE
+  (seam arms included); x-cluster-kmeans-init with its own patch PASS; the
+  existing agglomerative, spectral, spectral-embedding, spectral-precomputed,
+  x-decomp-spectral-rbf CLEAN AGREE (x_decomp arms 5318/5319 bite). Merged
+  as 271a2eb1e with speed round 1: device kth by block radix select
+  (DEVIATION 5120), moments as form-then-add tiles (5121), no sync per
+  kernel in DeviceOps, outputs as array.array (one memcpy).
+- Speed, IDENTICAL, H100, digests unchanged before -> after (bench/x_cluster_speed.py):
+
+| case | rows | taxi before -> after (s) | higgs before -> after (s) |
+|---|---|---|---|
+| minibatch-kmeans | 1M | 0.598 -> 0.353 | 0.704 -> 0.419 |
+| bisecting-kmeans | 1M | 0.727 -> 0.464 | 0.733 -> 0.461 |
+| bayesian-gmm | 100k | 2.836 -> 0.942 | 3.716 -> 1.251 |
+| optics | 10k | 0.763 -> 0.646 | 0.799 -> 0.733 |
+| affinity-prop | 5k | 70.84 -> 4.67 | 70.19 -> 3.85 |
+| kmeans, gmm, dbscan, agglomerative, spectral, meanshift | | unchanged | unchanged |
+
+- Base (before) on the other vendors: Apple M3 Ultra (steward
+  1790563149699, commit 31adcffb1) and AMD MI300X (central box, tree at
+  fd405e35, no x_cluster/mixture/cluster difference from 31adcffb1).
+
+## Session 6 (2026-09-28 ~05Z): RunPod out of money again, no NVIDIA pod
+
+1. Owed Agglomerative/Spectral NVIDIA gate: DONE in session 5 (271a2eb1e).
+2. x-cluster-hdbscan-epsilon GPU FAIL on m2pro and m3ultra (requests
+   f2b0b051e0 / 6e54f880b5, every cell REFUSED with `Failed to create compute
+   pipeline state ... XPC_ERROR_CONNECTION_INTERRUPTED`). Root cause from the
+   Mac's crash report (/Library/Logs/DiagnosticReports/MTLCompilerService-
+   2026-09-27-231405.ips): SIGSEGV in AGXCompilerCore `AGCSimdMatrix::
+   buildLoad` / `SimdMatrixPass`, i.e. Metal's backend compiling a simdgroup-
+   matrix load emitted in the wrong AIR spelling. HDBSCAN's kNN reaches
+   `neighbors/checks/apple_mma_distance.mojo` (Apple IDENTICAL, aabbd6723),
+   whose `_amma_load_t` chose the spelling by GPU family: macOS 26 on M2/M3
+   targets `metal:2-metal4`/`metal:3-metal4`. Already fixed at the root on main
+   by b360667aa (`core/apple_air.simdgroup_load_legacy_air`, the AIR version
+   decides), which postdates both failing requests; M4 targets never matched,
+   so m4pro-a/b passed. The next request (271a2eb1e) never reached a lane:
+   every Mac failed `bindings/build_x_cluster.sh`'s Darwin-only gate,
+   `assert f[0] == [5.0, 0.0]` against the new array.array output. Fixed
+   (1221395fd, `list(f[0])`), merged to main.
+   Resubmitted: steward request **1790566005596-cluster-468af3718** (all 20
+   x-cluster lanes, --pass 2, sabotage ~/mojolearn-evidence/algos-cluster/
+   cluster_combined_468af3718.patch) on m2pro, m3ultra-b, m4-a, do-amd.
+   RESULT: (pending at this write)
+3. MAIN HYGIENE: fast-forwarding main to the lane (fc6cd020e) also carried
+   the ungated speed WIP 649b55f7b (AP tie noise by counter on the device,
+   DEVIATION 5122; SIMD agglomerative row scan). Reverted on main
+   (468af3718); the lane keeps it (c37595651 merges main with the lane's
+   tree). Owed: its NVIDIA + CPU gate before it merges again.
+4. Step 0 coverage audit (night plan): see the table below.
