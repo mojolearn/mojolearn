@@ -49,11 +49,48 @@ arrays, the gradient arrays included).
 
 ## Results
 
-(pending: steward jobs 1790604402501 on m4-a)
+### m4-a (Apple M4), job 1790604402501, commit 3eead70b3, arms interleaved A B A B
+
+The Mac was contended during this job (the 1-launch floor read 1.03 ms
+against 0.20 ms in round 1), so every absolute number is about 2.4x round
+1's; both arms saw the same box. Medians of the two rounds, ms.
+
+IDENTICAL (base = `-D MOJOLEARN_XCNN_NO_MMA_SPLIT -D MOJOLEARN_XCNN_NO_RES_POOL`
++ `legacy`; mma = the split plan only; all = default):
+| shape | base | mma | all |
+|---|---|---|---|
+| Conv2d 3->64 fwd / bwd | 40.0 / 46.3 | 39.9 / 40.5 | 39.5 / 33.0 |
+| Conv2d 64->64 fwd / bwd | 144.7 / 262.9 | 143.5 / 240.8 | 141.8 / 239.9 |
+| Conv2d 64->128 fwd / bwd | 48.3 / 95.9 | 48.6 / 93.5 | 48.6 / 93.9 |
+| fit 2048 / 8192 | 935.1 / 3650.0 | 854.1 / 3336.5 | 782.5 / 3156.0 |
+| predict 2048 / 8192 | 271.0 / 1095.9 | 272.5 / 1069.0 | 256.0 / 984.9 |
+Digests equal in every row of every arm (fit weights d1bb646f6a0f113c /
+66e7cc1839d709b9, proba 4c7b4f51477eeb51 / 138f69bae45669cb, conv y and bwd
+as round 1). Calls per fit 252 -> 204; res_alloc 15.2 -> 3.7 ms.
+Plan sweep (same job, every plan 0 mismatches): 64x288x65536 APPLE_MMA 13.3,
+TUNED 32x32 23.7, APPLE_MMA_SPLIT 8.2 ms; 32x27x262144 SPLIT 32x32 8.7 ->
+MMA_SPLIT 3.0; 64x576x262144 MMA 77.0 -> MMA_SPLIT 61.7; 64x27x262144
+16.7 -> 4.8; 128x576x65536 36.9 -> 30.7.
+
+FAST (base = `-D MOJOLEARN_XCNN_NO_FAST_TUNE -D MOJOLEARN_XCNN_NO_RES_POOL` + legacy):
+| shape | base | all |
+|---|---|---|
+| Conv2d 3->64 fwd / bwd | 33.5 / 67.7 | 32.1 / 48.1 (31.0, 65.1: rounds differ) |
+| Conv2d 64->64 fwd / bwd | 161.8 / 318.7 | 130.5 / 219.9 |
+| Conv2d 64->128 fwd / bwd | 60.0 / 129.5 | 46.4 / 81.1 |
+| fit 2048 / 8192 | 928.0 / 3610.1 | 744.0 / 2919.5 |
+| predict 2048 / 8192 | 264.6 / 1043.9 | 206.5 / 799.5 |
+FAST digests: base == all in every row (fit 2048 weights 9d12d28efad9d75e,
+8192 d995f35c642015a0; conv y/bwd equal to IDENTICAL's). The paired quality
+set (fastq.py, 20 rows) is identical row for row (same probability and
+output digests): blobs acc 1.0 x5, stripes 0.9570 / 0.9775 / 0.9980 /
+0.9326 / 0.9971, conv max rel err 1.95e-7 to 3.29e-7. FAST quality cannot
+have moved: the words did not.
 
 ## Unproven
 
-Everything above until its A/B lands.
+- 93cf24571 (PLAN_APPLE_MMA_SPLIT_BIG): job 1790606977177 (m4pro-a) pending.
+- No M3 Ultra or M4 Pro number yet for any change.
 
 ## Shared code touched (the integration run must cover)
 
