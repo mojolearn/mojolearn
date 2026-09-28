@@ -206,6 +206,10 @@ Before = `-D MOJOLEARN_2031_SYM_RIDX_SPLITS_OFF -D MOJOLEARN_GBDT_ID_UPLOADS_SEP
 | same | m4-a | 1790617267667 | dart:taxireg / adaboost:taxireg / adaboost:taxi | 6184 / 2327 / 3400 | 6190 / 2323 / 3454 | 1.001 / 0.998 / 1.016 | equal |
 
 | AdaBoostClassifier: member labels encoded once (cee41f3e2; before = `MOJOLEARN_ADABOOST_REENCODE=1`) | m4pro-a | 1790618579520 | adaboost:taxi | 2905 | 2729 | 0.939 | e8529a04f218dbab |
+| split features in the arena too (0e5a27c47; before = one copy per slot, which here is MORE uploads than the old code: read the ratio as an upper bound) | m4-a | 1790618626723 | lossguide taxi | 7709 | 6306 | 0.818 | b1761eecc6dfbc73 |
+| same | m4-a | 1790618626723 | depthwise taxi | 3332 | 3208 | 0.963 | 5694af7699036c65 |
+
+Cross-job on m4-a (same Mac, different jobs): IDENTICAL Lossguide taxi after-arm 6620 ms at 939ea50e9 -> 6306 ms at 0e5a27c47 (split bins and features joined the split pair's copy).
 
 ## FINAL (tip 27fdd02c4 plus progress notes; 2026-09-28)
 
