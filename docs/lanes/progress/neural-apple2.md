@@ -13,6 +13,7 @@ digests, byte LM final witness and loss digests).
 
 | steward id | Mac | commit | what |
 |---|---|---|---|
+| 1790613514889 | m3ultra-b | 6740d5c54 | AFTER profile on the M3 Ultra (every bench lane, T3 step; BEFORE = job 1 on the same Mac) + Mamba-3 backward per-stage walls (MOJOLEARN_MAMBA_TIMING) |
 | 1790611567835 | m4pro-a | 4e2df9e4f | A/B base=35d08f9ca vs mid=cd59badeb vs new=4e2df9e4f (samba-train-step, samba-forward, mamba3-forward, lm-train-step, transformer-forward, gemm; 2 alternations) + byte LM step A/B at T3 (denied on 48 GB: round 3 word) and at B1 12L (granted: estash word), 2 alternations each, witness + loss digests + GEMM small-tile window check on the M4 Pro (default, SMALL_KB 16, no small tile) |
 | 1790603073363 | m3ultra-b | 35d08f9ca | profile (every bench lane, T3 shard step, census with attention per-kernel timers; the M3 Ultra grants the estash word at T3, so the recompute change below cannot run there), Samba train step cProfile, attention arms at T3 (granted, FORCE_DENY + NO_ERECOMP = the old denied path, FORCE_DENY = recompute), GEMM geometry sweep (default, KB_WIDE 32, GROUP_M 16, DB, KB_WIDE 32 x SGM 4, no small tile, SPLIT 2048, SPLIT 4096, SPLIT 2048 x KB_WIDE 32), mamba1/mamba2/transformer forward A/B b11745d8e vs 30497d57e vs ca692c7e2 |
 
