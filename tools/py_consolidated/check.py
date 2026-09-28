@@ -5,8 +5,10 @@
 record, LIGHT (build once per tree, one GPU arm and one CPU arm per lane, the
 py-bugs probe once per column). The GPU arms run one at a time; the CPU arms
 run beside them, CPU_ARMS (default 4) at once, each on one thread
-(OMP_NUM_THREADS=1) with its own log. A `par-*` lane's CPU arm may end in the
-declared by-design refusal (algos_lane_check.known_cpu_refusal).
+(OMP_NUM_THREADS=1) with its own log. This driver is explicitly single-device:
+physical par-* lanes are declared excluded before building or launching any
+arm, even when more GPUs are visible. It never puts GPU reference arms into
+the CPU worker pool.
 
     check.py arms  --tree T --out D --lanes a,b     build T's bindings for the lanes, run each
                                                     lane's GPU and CPU arm (GPU == CPU verdict
@@ -29,6 +31,38 @@ def now():
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
+def single_device_plan(tree, lanes):
+    """Use the checked tree's manifest; never infer applicability from errors."""
+    import importlib.util
+    if not lanes or len(lanes) != len(set(lanes)):
+        raise ValueError("empty or duplicate requested lanes")
+    spec = importlib.util.spec_from_file_location("py_job_host_surface", Path(tree) / "python/mojolearn/host_surface.py")
+    surface = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(surface)
+    excluded = {lane: row["reason"] for lane, row in surface.lane_exposure(lanes, "cpu").items()
+                if row["status"] == surface.LANE_NOT_APPLICABLE}
+    selected = [lane for lane in lanes if lane not in excluded]
+    # A newer tree must not silently turn this CPU pool into GPU references.
+    if any(lane.startswith("par-") for lane in selected):
+        raise ValueError("physical par lanes need an explicit separate device-axis job")
+    return selected, excluded
+
+
+def declared_exclusion(directory, lane, row):
+    """Only explicit saved selection permits omission in a cross comparison."""
+    path = directory / "coverage.json"
+    if not path.is_file():
+        return None
+    plan = json.loads(path.read_text())
+    reason = plan.get("excluded", {}).get(lane)
+    if (plan.get("scope") == "single-device" and reason
+            and lane in plan.get("requested", []) and lane not in plan.get("selected", [])
+            and row.get("excluded") is True and row.get("gpu_vs_cpu") == "NOT APPLICABLE"
+            and row.get("reason") == reason):
+        return reason
+    return None
+
+
 def arms(tree, out, lanes):
     tree = Path(tree).resolve()
     sys.path.insert(0, str(tree / "tools"))
@@ -36,8 +70,15 @@ def arms(tree, out, lanes):
     assert Path(alc.ROOT).resolve() == tree, (alc.ROOT, tree)
     out.mkdir(parents=True, exist_ok=True)
     log = out / "arms.log"
-    alc.ensure_portable_math(out / "portable_math.log")
-    needed, rows = {}, {}
+    requested = list(lanes)
+    lanes, excluded = single_device_plan(tree, lanes)
+    coverage = dict(scope="single-device", requested=requested, selected=lanes, excluded=excluded)
+    (out / "coverage.json").write_text(json.dumps(coverage, indent=1))
+    print(f"COVERAGE requested={len(requested)} selected={len(lanes)} excluded={len(excluded)}; physical multi-device claims not checked", flush=True)
+    needed, rows = {}, {lane: dict(gpu_vs_cpu="NOT APPLICABLE", excluded=True, reason=reason)
+                        for lane, reason in excluded.items()}
+    if lanes:
+        alc.ensure_portable_math(out / "portable_math.log")
     for lane in lanes:
         try:
             needed.update(alc.needed_bindings([lane]))
@@ -46,7 +87,8 @@ def arms(tree, out, lanes):
     lanes = [l for l in lanes if l in needed]
     allb = sorted(set().union(*needed.values()))
     t0 = time.time()
-    alc.ensure_built(set(allb), out / "build.log", publish=True)
+    if allb:
+        alc.ensure_built(set(allb), out / "build.log", publish=True)
     print(f"{now()} {tree.name}: {len(allb)} bindings ready in {time.time() - t0:.0f} s", flush=True)
     ib = alc.load_harness()
     backend = alc.gpu_backend()
@@ -87,8 +129,12 @@ def arms(tree, out, lanes):
         print(f"{now()} {lane}: {row}", flush=True)
     pool.shutdown()
     (out / "lanes.json").write_text(json.dumps(rows, indent=1))
-    bad = not rows or any(row.get("gpu_vs_cpu") != "AGREE" for row in rows.values())
-    if os.environ.get("NO_PROBE"):
+    bad = not rows or any(row.get("gpu_vs_cpu") != "AGREE"
+                          for lane, row in rows.items() if lane not in excluded)
+    coverage["compared"] = sum(row.get("gpu_vs_cpu") == "AGREE" for row in rows.values())
+    coverage["incomplete"] = sum(row.get("gpu_vs_cpu") != "AGREE" for lane, row in rows.items() if lane not in excluded)
+    (out / "coverage.json").write_text(json.dumps(coverage, indent=1))
+    if os.environ.get("NO_PROBE") or not lanes:
         return 1 if bad else 0
     probe = HERE / "probe.py"
     for col in ("gpu", "cpu"):
@@ -147,11 +193,24 @@ def compare_records(A, B, lane):
 
 
 def cross(base, new, lanes):
+    if not lanes or len(lanes) != len(set(lanes)):
+        raise ValueError("empty or duplicate requested lanes")
     bad = 0
+    excluded_count = 0
     print(f"{'lane':34s} {'col':4s} {'cells':>5s}  verdict   (base s / new s)")
     lb = json.loads((base / "lanes.json").read_text())
     ln = json.loads((new / "lanes.json").read_text())
     for lane in lanes:
+        ex_base = declared_exclusion(base, lane, lb.get(lane, {}))
+        ex_new = declared_exclusion(new, lane, ln.get(lane, {}))
+        if ex_base or ex_new:
+            if ex_base and ex_new:
+                print(f"{lane:34s} EXCLUDED (NOT APPLICABLE): base={ex_base}; new={ex_new}; no numerical comparison")
+                excluded_count += 1
+            else:
+                print(f"{lane:34s} INCOMPLETE: selection applicability differs between arms")
+                bad += 2
+            continue
         for col in ("gpu", "cpu"):
             a, b = base / f"{lane}.{col}.json", new / f"{lane}.{col}.json"
             if not (a.is_file() and b.is_file()):
@@ -171,7 +230,7 @@ def cross(base, new, lanes):
         result = subprocess.run([sys.executable, str(HERE / "probe.py"), "--diff", str(base / f"probe.{col}.json"),
                         str(new / f"probe.{col}.json")])
         bad += result.returncode != 0
-    print(f"\n{now()} CROSS RESULT: {bad} lane column(s) not SAME")
+    print(f"\n{now()} CROSS RESULT: {bad} lane column(s) not SAME; {excluded_count} lanes explicitly excluded (not numeric passes)")
     return 1 if bad else 0
 
 
