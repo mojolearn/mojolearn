@@ -14,6 +14,10 @@
 #   rf:<dataset> / et:<dataset>  tools/forest_train_ab.py fit, TAP_ROWS rows, TAP_ROUNDS rounds
 #   xt:<est>:<dataset>           bench/speed/trees_apple_profile.py (dt, bagging, adaboost,
 #                                dart, embedding, iforest)
+#   lgq:<datasets>:<seeds>       bench/speed/trees_apple3_lg_quality.py (Lossguide test metrics)
+#   mq:<ests>:<datasets>:<seeds> bench/speed/trees_apple3_member_quality.py (DART, AdaBoost)
+#   xtstage:<est>:<dataset>:<n>  the same fit with n estimators under MOJOLEARN_STAGE_TIMES=1
+#   rfstage:<lane>:<dataset>     a forest fit under MOJOLEARN_STAGE_TIMES=1 (no launch clock)
 # Datasets are the board's (taxi, taxireg, istella, istellareg) from
 # ~/datasets/gbm-bench, staged from R2 (tools/dataset_store.sh stage).
 set -u
@@ -55,6 +59,30 @@ for cell in ${TAP_CELLS:-}; do
             e=${rest%%:*}; r2=${rest#*:}; d=${r2%%:*}; n=${r2#*:}
             $PY "$PROFILE" --est "$e" --dataset "$d" --rows "$ROWS" \
                 --rounds 1 --n-estimators "$n" --profile 2>&1 | grep -v -E '^\s*$' | head -n 120 ;;
+        lgq)
+            # lgq:<datasets,comma>:<seeds>  Lossguide quality where the leaf budget binds
+            # (300 trees, max_leaves 31, max_depth 10, 300k-row subsets paired by seed)
+            # lgq:<datasets>:<seeds>[:<policy>]  policy Lossguide (default) or Depthwise
+            d=${rest%%:*}; r2=${rest#*:}; n=${r2%%:*}; pol=Lossguide
+            case "$r2" in *:*) pol=${r2#*:} ;; esac
+            $PY bench/speed/trees_apple3_lg_quality.py "${TAP_LABEL:-arm}" "$d" "$n" "$pol" 2>&1 \
+                | grep -E '^LGQ|Error|error|Traceback' ;;
+        mq)
+            # mq:<ests,comma>:<datasets,comma>:<seeds>  boosted-member quality, paired by seed
+            e=${rest%%:*}; r2=${rest#*:}; d=${r2%%:*}; n=${r2#*:}
+            $PY bench/speed/trees_apple3_member_quality.py "${TAP_LABEL:-arm}" "$e" "$d" "$n" 2>&1 \
+                | grep -E '^MQ|Error|error|Traceback' ;;
+        xtstage)
+            # xtstage:<est>:<dataset>:<n_estimators>  one fit under MOJOLEARN_STAGE_TIMES=1
+            # without the launch clock (a SPLIT: stage ends drain, never a timing)
+            e=${rest%%:*}; r2=${rest#*:}; d=${r2%%:*}; n=${r2#*:}
+            MOJOLEARN_STAGE_TIMES=1 $PY "$PROFILE" --est "$e" --dataset "$d" --rows "$ROWS" \
+                --rounds 1 --n-estimators "$n" 2>&1 | grep -v -E '^\s*$' | tail -n "${TAP_STAGE_TAIL:-150}" ;;
+        rfstage)
+            # rfstage:<lane>:<dataset>  one forest fit under MOJOLEARN_STAGE_TIMES=1, no launch clock
+            l=${rest%%:*}; d=${rest#*:}
+            MOJOLEARN_STAGE_TIMES=1 $PY tools/forest_train_ab.py fit --lane "$l" --dataset "$d" --rows "$ROWS" \
+                --rounds 1 --label stage --json "$OUT/rfstage_${l}_${d}.json" 2>&1 | tail -n 80 ;;
         rfclock)
             # rfclock:<lane>:<dataset>  RF_LAUNCH_LOG launch clock of one fit (a SPLIT)
             l=${rest%%:*}; d=${rest#*:}

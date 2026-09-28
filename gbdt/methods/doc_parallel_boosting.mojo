@@ -74,6 +74,7 @@ from gbdt.ctrs.ctr_binarization import TBinarizationOptions
 # `pointwise_non_symmetric.cpp:7-29` registers for every single-target
 # pointwise loss under `EGrowPolicy::Depthwise` and `Lossguide`
 from gbdt.methods.greedy_subsets_searcher.greedy_search_helper_depthwise import (
+    NS_INHERIT_PARTITION,
     TDepthwiseWorkspace,
     fit_non_symmetric_tree,
 )
@@ -2644,7 +2645,25 @@ def fit_with_test(
                 var pv = List[Float32]()
                 var t_bins = loop_times.start()
                 var part: LeafPartition
-                if device_leaf_partition:
+                # NS_INHERIT_PARTITION (trees-apple3): the permutation the
+                # tree was grown on inherits the searcher's partition
+                var inherit = False
+                comptime if NS_INHERIT_PARTITION:
+                    inherit = (
+                        perm_count == 1
+                        and p == learn_p
+                        and len(dws) == 1
+                        and dws[0].final_ready
+                        and len(dws[0].final_sizes) == n_bins
+                    )
+                if inherit:
+                    part = LeafPartition(
+                        row_index.copy(),
+                        dws[0].final_offsets.copy(),
+                        dws[0].final_sizes.copy(),
+                    )
+                    loop_times.stop_host("iter_bins_for_model", t_bins)
+                elif device_leaf_partition:
                     ref lp = leaf_parts[0]
                     if p == learn_p:
                         compute_non_symmetric_bins_for_model(

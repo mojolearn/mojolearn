@@ -783,6 +783,34 @@ class RandomForestRegressor(_RandomForestBase):
     def fit(self, X, y):
         return self._fit_with_tree_start(X, y)
 
+    def _fit_in_session(self, session, y, rows=None):
+        """`fit(X, y)` for the X a `ForestDataSession` holds (trees-apple3):
+        the squared-error member fit of a boosted ensemble. Same params,
+        same entry underneath, minus the per-member staging of X (whose
+        finite scan the session ran once). With `rows` (int32 row ids,
+        repeats allowed) the fit is `fit(X[rows], y)`, the rows gathered on
+        the device."""
+        self._refresh_config()
+        self._capture_fit_mode()
+        y32, _ = as_f32_c(y, ndim=1, name="y")
+        code = self._cfg["criterion"]
+        if code != _REG_CRITERIA["squared_error"]:
+            raise ValueError("a forest data session fits squared_error members")
+        n_rows, n_features = session.shape
+        if rows is not None:
+            n_rows = len(rows)
+        if len(y32) != n_rows:
+            raise ValueError(f"y has {len(y32)} rows, X has {n_rows}")
+        params = self._fit_params(n_rows, n_features, 0)
+        out = (session.fit_regressor(y32, params, code) if rows is None
+               else session.fit_regressor_rows(rows, y32, params, code))
+        (self._offsets, self._colid, self._quesval, self._left_child,
+         self._leaves, meta) = _forest_fit_arrays(out)
+        self.n_features_in_ = int(n_features)
+        self._n_trees = int(meta[0])
+        self._num_outputs = int(meta[1])
+        return self
+
     def _fit_with_tree_start(self, X, y, tree_start=None):
         self._refresh_config()
         self._capture_fit_mode()

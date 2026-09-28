@@ -36,7 +36,8 @@ from ._array import Array
 from ._buffer import _materialize, addr, addr_ro, all_finite, as_f32_c, as_f32_colmajor, as_f64_c, as_i32_c, empty, full, zeros
 from ._labels import decode_labels, encode_labels, is_bool
 from ._mode import NumericModeMixin
-from ._forest_protocol import forest_estimator, _forest_fit_arrays, _forest_fit_function
+from ._forest_protocol import (forest_estimator, _forest_fit_arrays, _forest_fit_function,
+                               forest_data_session_choice, open_forest_data_session)
 from .extratrees import ExtraTreesRegressor, ExtraTreesClassifier as _ET_CLS
 from .randomforest import (
     RandomForestClassifier, RandomForestRegressor, _class_weight_rows, _refuse,
@@ -232,13 +233,15 @@ class DecisionTreeClassifier(RandomForestClassifier):
             return self._fit_with_tree_start(X, y)
         return self._fit_weighted(_trees_colmajor(X, self), y, sample_weight)
 
-    def _fit_weighted(self, Xcm, y, sample_weight, x_finite=False, encoded=None):
+    def _fit_weighted(self, Xcm, y, sample_weight, x_finite=False, encoded=None, session=None):
         """The weighted fit on a column-major float32 X. AdaBoost calls it
         with ONE transposed, once-checked X for all of its members
         (`x_finite=True` skips the per-member finite scan of the same
         bytes) and, trees-apple2, ONE `encode_labels(y)` of the same codes
         (`encoded`, the pair this call would compute); every input the fit
-        entry sees is what `fit` hands it."""
+        entry sees is what `fit` hands it. trees-apple3: `session` is a
+        `ForestDataSession` that already holds this X on the device, so the
+        member stages only its labels and weights."""
         self._refresh_config()
         self._capture_fit_mode()
         self.classes_, y32 = encoded if encoded is not None else encode_labels(y)
@@ -247,6 +250,13 @@ class DecisionTreeClassifier(RandomForestClassifier):
             raise ValueError("y has fewer than 2 classes")
         weights = _trees_weighted_rows(sample_weight, self.class_weight, self.classes_, y32, self)
         binding = self._bind("_mojolearn_rf")
+        if session is not None:
+            if tuple(session.shape) != tuple(Xcm.shape):
+                raise ValueError("the forest data session holds another X")
+
+            def session_fit(x_addr, y_addr, params, criterion):
+                return session.fit_classifier_weighted(y32, params, criterion, weights)
+            return self._fit_colmajor_checked(Xcm, y32, session_fit)
         weighted_fit = _forest_fit_function(binding, "rf_classifier_fit_weighted")
 
         def fit_fn(x_addr, y_addr, params, criterion):
@@ -404,6 +414,31 @@ def _trees_clone(est, **overrides):
         if k in params:
             params[k] = v
     return type(est)(**params)
+
+
+def _trees_member_native(member):
+    """The forest binding a clone of `member` resolves."""
+    probe = _trees_clone(member)
+    probe._capture_fit_mode()
+    return probe._bind("_mojolearn_rf")
+
+
+def _trees_member_session(member, X, row_major, x_finite=False):
+    """The data session (trees-apple3) for the member fits of one boosted
+    ensemble, on the forest binding a clone of `member` resolves, or None
+    (the choice is off, or the binary has no session entry). The session
+    stands in for every member's finite scan of X, so X is scanned here
+    unless the caller already did (`x_finite`)."""
+    if forest_data_session_choice(None) is None or not hasattr(member, "_capture_fit_mode"):
+        return None
+    probe = _trees_clone(member)
+    probe._capture_fit_mode()
+    native = probe._bind("_mojolearn_rf")
+    if not callable(getattr(native, "rf_data_session_open", None)):
+        return None
+    if not x_finite and not all_finite(X):
+        raise ValueError("X contains NaN or infinity; the forest has no missing-value arm")
+    return open_forest_data_session(native, X, row_major=row_major, mode=probe._effective_mode())
 
 
 def _trees_arange(n):
@@ -805,10 +840,25 @@ class AdaBoostClassifier(_AdaBoostBase):
             # A/B arm)
             if os.environ.get("MOJOLEARN_ADABOOST_REENCODE") != "1":
                 member_enc = encode_labels(codes)
+        # trees-apple3: every member fits the SAME X, staged on the device
+        # once for all of them (None: each member stages it, as before)
+        session = None
+        if Xcm is not None:
+            session = _trees_member_session(base, Xcm, False, x_finite=True)
+        try:
+            self._fit_members(base, seed, m, Xa, Xcm, codes, w, n, k, member_enc, session, b, stats)
+        finally:
+            if session is not None:
+                session.close()
+        self.n_features_in_ = Xa.shape[1]
+        return self
+
+    def _fit_members(self, base, seed, m, Xa, Xcm, codes, w, n, k, member_enc, session, b, stats):
         for it in range(m):
             est = _trees_clone(base, random_state=_trees_sub_seed(seed, it))
             if Xcm is not None:
-                est._fit_weighted(Xcm, codes, self._w32(w, n), x_finite=True, encoded=member_enc)
+                est._fit_weighted(Xcm, codes, self._w32(w, n), x_finite=True, encoded=member_enc,
+                                  session=session)
             else:
                 est.fit(Xa, codes, sample_weight=self._w32(w, n))
             pred = as_i32_c(est.predict(Xa), ndim=1, name="predicted codes")[0]
@@ -828,8 +878,6 @@ class AdaBoostClassifier(_AdaBoostBase):
                 break
             if it < m - 1:
                 self._scale(w, total)
-        self.n_features_in_ = Xa.shape[1]
-        return self
 
     def _decision(self, Xa):
         n, k = Xa.shape[0], self.n_classes_
@@ -903,11 +951,33 @@ class AdaBoostRegressor(_AdaBoostBase):
         self.estimators_, self.estimator_weights_, self.estimator_errors_ = [], [], []
         b = self._bind()
         m = int(self.n_estimators)
+        # trees-apple3: a best-splitter squared-error DecisionTreeRegressor
+        # member fits rows of the SAME X, staged on the device once; the
+        # member's rows are gathered there (None: gathered on the host and
+        # staged per member, as before)
+        session = None
+        if (forest_data_session_choice(None) is not None
+                and type(base) is DecisionTreeRegressor and base.splitter == "best"
+                and base.criterion in ("squared_error", "mse")
+                and hasattr(_trees_member_native(base), "rf_regressor_fit_session_rows_export")):
+            session = _trees_member_session(base, Xa, True)
+        try:
+            self._fit_members(base, seed, m, Xa, y32, w, n, cols, session, b, stats)
+        finally:
+            if session is not None:
+                session.close()
+        self.n_features_in_ = d
+        return self
+
+    def _fit_members(self, base, seed, m, Xa, y32, w, n, cols, session, b, stats):
         for it in range(m):
             rows = empty((n,), "<i4")
             b.x_trees_weighted_sample(addr_ro(w, name="w"), addr(rows, name="rows"), [n, n, seed, it])
             est = _trees_clone(base, random_state=_trees_sub_seed(seed, it))
-            est.fit(self._gather(Xa, rows, cols), self._gather_vec(y32, rows))
+            if session is not None:
+                est._fit_in_session(session, self._gather_vec(y32, rows), rows=rows)
+            else:
+                est.fit(self._gather(Xa, rows, cols), self._gather_vec(y32, rows))
             pred, _ = as_f32_c(est.predict(Xa), ndim=1, name="prediction")
             b.x_trees_r2_step(addr(w, name="w"), addr_ro(pred, name="pred"), addr_ro(y32, name="y"),
                               addr(stats, name="stats"),
@@ -926,8 +996,6 @@ class AdaBoostRegressor(_AdaBoostBase):
                 break
             if it < m - 1:
                 self._scale(w, total)
-        self.n_features_in_ = d
-        return self
 
     def predict(self, X):
         Xa = self._check_X(X)
@@ -1083,6 +1151,29 @@ class _DARTBase(_TreesEnsembleBase):
         sum_w = 0.0
         max_depth = None if self.max_depth is None or int(self.max_depth) <= 0 else int(self.max_depth)
         all_cols = _trees_arange(d)
+        # trees-apple3: members that fit every row and column of X share ONE
+        # staged copy of it (a bagged or column-sampled member gathers its
+        # own X and fits as before)
+        session = None
+        if not (float(self.subsample) < 1.0 and int(self.subsample_freq) > 0) \
+                and not float(self.colsample_bytree) < 1.0:
+            session = _trees_member_session(
+                RandomForestRegressor(n_estimators=1, numeric_mode=self.numeric_mode), Xa, True)
+        try:
+            self._boost_loop(Xa, y32, K, b, seed, drop_seed, score, g, h, target, lr, l1, mds, lam,
+                             max_depth, all_cols, session)
+        finally:
+            if session is not None:
+                session.close()
+        self._bag_at = None
+        self.n_features_in_ = d
+        return self
+
+    def _boost_loop(self, Xa, y32, K, b, seed, drop_seed, score, g, h, target, lr, l1, mds, lam,
+                    max_depth, all_cols, session):
+        n, d = Xa.shape
+        train_nodes = []
+        sum_w = 0.0
         for it in range(int(self.n_estimators)):
             t = len(self.tree_weights_)
             u = empty((1 + t,), "<f8")
@@ -1131,7 +1222,11 @@ class _DARTBase(_TreesEnsembleBase):
                     n_estimators=1, bootstrap=False, max_features=1.0, max_depth=max_depth,
                     max_leaves=int(self.num_leaves), min_samples_leaf=int(self.min_child_samples),
                     n_bins=int(self.max_bin), random_state=_trees_sub_seed(seed, j), n_streams=1,
-                    numeric_mode=self.numeric_mode).fit(Xf, yf)
+                    numeric_mode=self.numeric_mode)
+                if session is not None and Xf is Xa:
+                    tree._fit_in_session(session, yf)
+                else:
+                    tree.fit(Xf, yf)
                 if cols is not None:
                     cl = cols.tolist()
                     tree._colid = Array.from_list([cl[v] if v >= 0 else v for v in tree._colid.tolist()], "<i4")
@@ -1164,9 +1259,6 @@ class _DARTBase(_TreesEnsembleBase):
                     self.tree_weights_[i] *= factor
             self.tree_weights_.append(shrink)
             sum_w += shrink
-        self._bag_at = None
-        self.n_features_in_ = d
-        return self
 
     def _raw(self, X):
         """Class-major raw scores (K * n) float64; K = 1 is (n,)."""
