@@ -323,18 +323,26 @@ def _warp_row_folds[K: Int, NORMS: Bool, SQ: Bool](
     var n2 = Float32(0)
     var n1 = Float32(0)
     var sq = Float32(0)
-    for j in range(d):
-        var src = UInt32(j % W)
-        comptime for kk in range(K):
-            if j // W == kk:
-                var xj = shuffle_idx(xr[kk], src)
-                var wj = shuffle_idx(wr[kk], src)
-                acc = _fmad_flushed(xj, wj, acc)
-                comptime if NORMS:
-                    n2 = _fmad_flushed(wj, wj, n2)
-                    n1 = fa(n1, fabs(wj))
-                comptime if SQ:
-                    sq = _fmad_flushed(xj, xj, sq)
+    # Fully unrolled over the K * W slots (lane/linear-apple2): every
+    # shuffle's source lane is a constant and the fetches do not wait on the
+    # chain. A slot j >= d computes and is not taken (an integer select, so
+    # the chain is the same fmad sequence over j < d, ascending).
+    comptime for kk in range(K):
+        comptime for l in range(W):
+            comptime j = kk * W + l
+            var live = j < d
+            var xj = shuffle_idx(xr[kk], UInt32(l))
+            var wj = shuffle_idx(wr[kk], UInt32(l))
+            var a2 = _fmad_flushed(xj, wj, acc)
+            acc = a2 if live else acc
+            comptime if NORMS:
+                var b2 = _fmad_flushed(wj, wj, n2)
+                var c2 = fa(n1, fabs(wj))
+                n2 = b2 if live else n2
+                n1 = c2 if live else n1
+            comptime if SQ:
+                var s2 = _fmad_flushed(xj, xj, sq)
+                sq = s2 if live else sq
     return (acc, n2, n1, sq)
 
 
