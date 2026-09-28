@@ -205,13 +205,6 @@ comptime FUSED_SKINNY_TC = 8
 #: rounds). `-D MOJOLEARN_FUSED_STAGE_FTZ_OFF` flushes at every use again.
 comptime FUSED_STAGE_FTZ = not is_defined["MOJOLEARN_FUSED_STAGE_FTZ_OFF"]()
 
-#: lane cluster-apple2 TRIAL (opt-in): under Policy4x4Skinny (k < 32, so at
-#: most four 8-wide k-tiles) the block's X row tile stays in threadgroup
-#: memory for the whole column sweep: it is staged once, on the first column
-#: tile, and every later column tile loads only its Y page. The operand
-#: words and every accumulator's fma order are unchanged.
-comptime FUSED_X_RESIDENT_TRIAL = is_defined["MOJOLEARN_FUSED_X_RESIDENT_TRIAL"]()
-
 
 @always_inline
 def _fused_x_lane[w: Int](v: Float32) -> SIMD[DType.float32, w]:
@@ -329,10 +322,8 @@ def fused_distance_nn_kernel[
     var accrowid = tid // tc
     var acccolid = tid % tc
 
-    comptime x_resident = FUSED_X_RESIDENT_TRIAL and kblk == FUSED_SKINNY_KBLK
-    comptime x_pages = 4 if x_resident else 1
     var sx = stack_allocation[
-        page_x * x_pages,
+        page_x,
         Scalar[DType.float32],
         address_space = AddressSpace.SHARED,
     ]()
@@ -382,24 +373,16 @@ def fused_distance_nn_kernel[
                 # out of bounds exactly where theirs is. `koff < k` never
                 # splits a vector: `k % veclen == 0` by selection.
                 var koff = kt + scolid
-                var xpage = 0
-                var stage_x = True
-                comptime if x_resident:
-                    xpage = (kt // kblk) * page_x
-                    stage_x = tile_n == grid_offset_n
-                if stage_x:
-                    comptime for li in range(ldg_per_th_x):
-                        var xrow = tile_m + srowid + li * ldg_rows_x
-                        var vx = SIMD[DType.float32, veclen](0.0)
-                        if koff < k and xrow < m:
-                            vx = x.unsafe_load[width=veclen](xrow * k + koff)
-                        comptime if FUSED_STAGE_FTZ:
-                            vx = ftz_simd[veclen](vx)
-                        sx.unsafe_store(
-                            xpage + (srowid + li * ldg_rows_x) * smem_stride
-                            + scolid,
-                            vx,
-                        )
+                comptime for li in range(ldg_per_th_x):
+                    var xrow = tile_m + srowid + li * ldg_rows_x
+                    var vx = SIMD[DType.float32, veclen](0.0)
+                    if koff < k and xrow < m:
+                        vx = x.unsafe_load[width=veclen](xrow * k + koff)
+                    comptime if FUSED_STAGE_FTZ:
+                        vx = ftz_simd[veclen](vx)
+                    sx.unsafe_store(
+                        (srowid + li * ldg_rows_x) * smem_stride + scolid, vx
+                    )
                 # --- ldgY + stsY (`contractions.cuh:225-259, 271-278`).
                 comptime for li in range(ldg_per_th_y):
                     var yrow = tile_n + srowid + li * ldg_rows_y
@@ -422,16 +405,16 @@ def fused_distance_nn_kernel[
                 # cell sums its k terms in the same order at every veclen.
                 comptime for kc in range(kblk // veclen):
                     var rx0 = sx.unsafe_load[width=veclen](
-                        xpage + (accrowid + 0 * tr) * smem_stride + kc * veclen
+                        (accrowid + 0 * tr) * smem_stride + kc * veclen
                     )
                     var rx1 = sx.unsafe_load[width=veclen](
-                        xpage + (accrowid + 1 * tr) * smem_stride + kc * veclen
+                        (accrowid + 1 * tr) * smem_stride + kc * veclen
                     )
                     var rx2 = sx.unsafe_load[width=veclen](
-                        xpage + (accrowid + 2 * tr) * smem_stride + kc * veclen
+                        (accrowid + 2 * tr) * smem_stride + kc * veclen
                     )
                     var rx3 = sx.unsafe_load[width=veclen](
-                        xpage + (accrowid + 3 * tr) * smem_stride + kc * veclen
+                        (accrowid + 3 * tr) * smem_stride + kc * veclen
                     )
                     var ry0 = sy.unsafe_load[width=veclen](
                         (acccolid + 0 * tc) * smem_stride + kc * veclen

@@ -17,6 +17,7 @@ for c in $cases; do
         probe:*) pixi run python bench/kmeans_apple_probe.py --only "${c#probe:}" | sed "s/^KMPROBE/KM_$tag/" ;;
         board:*) pixi run python bench/x_cluster_speed.py --dataset taxi,higgs --reps 2 --only "${c#board:}" | sed "s/^XCSPEED/XC_$tag/" ;;
         dbprobe) pixi run python bench/dbscan_batch_probe.py --budgets 1000000,0,8000,4000 --dataset taxi,higgs | sed "s/^DBPROBE/DB_$tag/" ;;
+        gmmphases) MOJOLEARN_GMM_MSTEP_TIMES=1 pixi run python bench/x_cluster_speed.py --dataset taxi --reps 1 --only gmm | awk -F"[ =]" -v t="$tag" '/^GMM_MSTEP/{a[$2]+=$3; n[$2]++; next} END{for(k in a) print t, "GMM_MSTEP_SUM", k, a[k]/1000, "ms over", n[k]}' ;;
         gmmstages) MOJOLEARN_STAGE_TIMES=1 pixi run python bench/x_cluster_speed.py --dataset taxi --reps 1 --only gmm | grep GMM_STAGE | sed "s/^/${tag} /" ;;
     esac
 done
