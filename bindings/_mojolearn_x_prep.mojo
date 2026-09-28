@@ -9,9 +9,7 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from x_prep.device import (
-    run_program_device, run_program_device_ranges, run_program_device_nocopy, x_prep_ctx, X_PREP_STORE,
-)
+from x_prep.device import run_program_device, run_program_device_ranges, x_prep_ctx, X_PREP_STORE
 from x_prep.folds import I32P, kfold_folds, strat_folds
 from x_prep.user_host import F32P, F64P, ii_rows, ii_gather, ii_scatter, ii_conv
 
@@ -84,25 +82,6 @@ def run_ranges_binding(arena_addr: PythonObject, prog_addr: PythonObject, out_ad
         raise Error("x_prep: invalid program buffers")
     with GILReleased(Python()):
         run_program_device_ranges(fa, n, qa, s, sc, oa, on, ia, ni, ra, no)
-    return PythonObject(s)
-
-
-def run_nocopy_binding(block_addr: PythonObject, prog_addr: PythonObject, sizes: PythonObject) raises -> PythonObject:
-    """EXPERIMENT (lane prep-apple3): x_prep_run on the host block itself
-    (x_prep/device.mojo run_program_device_nocopy). sizes = (arena_len,
-    scratch_len, out_len, stages, block_len); the block is page aligned and
-    block_len words, a whole number of pages."""
-    var fa = Int(py=block_addr)
-    var qa = Int(py=prog_addr)
-    var n = Int(py=sizes[0])
-    var sc = Int(py=sizes[1])
-    var on = Int(py=sizes[2])
-    var s = Int(py=sizes[3])
-    var bl = Int(py=sizes[4])
-    if fa == 0 or qa == 0 or n < 0 or sc < 0 or on < 0 or s < 0 or bl < n + sc + on:
-        raise Error("x_prep: invalid program buffers")
-    with GILReleased(Python()):
-        run_program_device_nocopy(fa, bl, n, qa, s, sc, on)
     return PythonObject(s)
 
 
@@ -245,7 +224,6 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
         m.def_function[run_scratch_binding]("x_prep_run_scratch")
         m.def_function[run_out_binding]("x_prep_run_out")
         m.def_function[run_ranges_binding]("x_prep_run_ranges")
-        m.def_function[run_nocopy_binding]("x_prep_run_nocopy")
         m.def_function[dev_put_binding]("x_prep_dev_put")
         m.def_function[dev_free_binding]("x_prep_dev_free")
         m.def_function[dev_live_binding]("x_prep_dev_live")

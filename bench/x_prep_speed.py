@@ -239,6 +239,9 @@ def main():
     ap.add_argument("--skip", default="")
     ap.add_argument("--profile", action="store_true")
     ap.add_argument("--budget", type=float, default=20.0, help="--profile: seconds a program's prefix sum may take")
+    ap.add_argument("--touch", action="store_true",
+                    help="read one word of every page of every output inside the timed region (lane prep-apple3: "
+                         "an output that is a view of mapped or device-shared memory pays its first read here)")
     a = ap.parse_args()
     import mojolearn as ml
     from mojolearn import _expansion_prep as xp
@@ -265,6 +268,11 @@ def main():
                     spy.reset()
                     t0 = time.perf_counter()
                     out = fn(b)
+                    if a.touch:
+                        for o in out:
+                            v = _np(o)
+                            if v is not None and v.size:
+                                v.reshape(-1)[::1024].sum()
                     t = time.perf_counter() - t0
                     if best is None or t < best[0]:
                         best = (t, spy.binding_s, len(spy.progs))

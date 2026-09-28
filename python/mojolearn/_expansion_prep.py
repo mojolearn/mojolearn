@@ -137,8 +137,14 @@ _OUT_MIN_WORDS = 2 ** 27
 #:   label_buffers   LabelEncoder / LabelBinarizer / MultiLabelBinarizer take
 #:                   numeric labels as buffers (native casts, one exactness
 #:                   test), not as Python lists
-_R3_NAMES = ("imputer_nosort", "mapped", "view", "work", "te_arrays", "label_buffers")
-_R3_DEFAULT = ()
+#:   work2           the same for PowerTransformer's logarithms and transforms
+#:                   and the encoders' category codes when Python never reads
+#:                   them (TargetEncoder, OneHotEncoder, the label binarizers)
+#: Default since request 1790627886703 (M3 Ultra, FAST and IDENTICAL digests
+#: equal): imputer_nosort, mapped, view, work, te_arrays. OPT-IN until their
+#: A/B is recorded: label_buffers, work2.
+_R3_NAMES = ("imputer_nosort", "mapped", "view", "work", "te_arrays", "label_buffers", "work2")
+_R3_DEFAULT = ("imputer_nosort", "mapped", "view", "work", "te_arrays")
 #: the smallest block (words) that is mapped, and the smallest read that is a view
 _MAP_MIN_WORDS = 2 ** 18
 _VIEW_MIN_WORDS = 2 ** 20
@@ -236,12 +242,12 @@ class _Prog:
         self.scratch_size += max(int(n), 0)
         return _Scratch(off)
 
-    def work(self, n):
+    def work(self, n, name="work"):
         """n words that ONE stage writes whole before any stage reads them and
-        that Python never reads (lane prep-apple3, `work`): device scratch,
-        so they neither cross the bus nor touch host memory. Arena words
-        when the change is off."""
-        return self.scratch(n) if _r3("work") else self.alloc(n)
+        that Python never reads (lane prep-apple3, `work` / `work2`): device
+        scratch, so they neither cross the bus nor touch host memory. Arena
+        words when the change is off."""
+        return self.scratch(n) if _r3(name) else self.alloc(n)
 
     def output(self, n, code="f"):
         """The program's output: n words that arrive zeroed (as `alloc`'s),
@@ -673,14 +679,15 @@ def _category_block(pr, categories):
     return pr.put_list(block), kmax
 
 
-def _codes(pr, arr, categories):
+def _codes(pr, arr, categories, work=False):
     """Stages that write each element's category index (or -1) and each
-    column's unknown count. Returns (codes offset, unknown-count offset)."""
+    column's unknown count. Returns (codes offset, unknown-count offset).
+    work: Python never reads the codes (lane prep-apple3, `work2`)."""
     n, d = arr.shape
     xo = pr.put(arr)
     uo, kmax = _category_block(pr, categories)
     co = pr.put_list([c.size for c in categories])
-    codes = pr.alloc(n * d)
+    codes = pr.work(n * d, "work2") if work else pr.alloc(n * d)
     neg = pr.alloc(d)
     pr.stage("lookup", n * d, xo, n, d, uo, kmax, co, codes)
     pr.stage("count_neg", d, codes, n, d, neg)
@@ -1069,7 +1076,7 @@ class OneHotEncoder(_PrepBase):
         starts = [sum(widths[:j]) for j in range(d)]
         W = sum(widths)
         pr = _Prog()
-        codes, neg = _codes(pr, arr, self.categories_)
+        codes, neg = _codes(pr, arr, self.categories_, work=True)
         if self._grouping is not None:
             unk = self._unknown_to()
             codes = _remap(pr, codes, n, d, _grouping_table(pr, self._grouping),
@@ -1303,7 +1310,7 @@ class TargetEncoder(_PrepBase):
         cmax = max(c.size for c in cats)
         F = n_folds
         pr = _Prog()
-        codes, _neg = _codes(pr, arr, cats)
+        codes, _neg = _codes(pr, arr, cats, work=True)
         if binary is None:
             yo = pr.put_list(yflat)
             fo = pr.put_list(folds if folds is not None else [-1] * n)
@@ -1425,7 +1432,7 @@ class TargetEncoder(_PrepBase):
         n, d = arr.shape
         T, cmax = self._T, self._cmax
         pr = _Prog()
-        codes, _neg = _codes(pr, arr, self.categories_)
+        codes, _neg = _codes(pr, arr, self.categories_, work=True)
         enc = pr.put(self._enc)
         meta = pr.put(self._meta)
         out = pr.output(n * d * T)
@@ -2714,7 +2721,8 @@ class PowerTransformer(_PrepBase):
                     pr.stage("pt_sres", d, state, leval, m, vals, k0, steps, lam)
                     k0 += steps
             else:
-                state, leval, tv, lg = pr.alloc(_PT_STATE * d), pr.alloc(d), pr.alloc(n * d), pr.alloc(n * d)
+                state, leval = pr.alloc(_PT_STATE * d), pr.alloc(d)
+                tv, lg = pr.work(n * d, "work2"), pr.work(n * d, "work2")
                 pr.stage("pt_init", d, method, st, d, lam, state, leval)
                 pr.stage("pt_log", n * d, xo, n, d, method, lg)
                 for k in range(_PT_EVALS):
@@ -2722,7 +2730,7 @@ class PowerTransformer(_PrepBase):
                     pr.stage("pt_fold", d, xo, n, d, method, tv, k, state, leval, lam)
         mean, scale = pr.alloc(d), pr.alloc(d)
         if self.standardize:
-            tx, st2 = pr.alloc(n * d), pr.alloc(6 * d)
+            tx, st2 = pr.work(n * d, "work2"), pr.alloc(6 * d)
             pr.stage("pt_apply", n * d, xo, n, d, lam, method, _NONE, _NONE, tx)
             pr.stage("col_stats", d, tx, n, d, st2)
             pr.stage("std_params", d, st2, d, mean, scale)
@@ -3178,11 +3186,11 @@ def _label_classes(mode, values):
     return classes, cats
 
 
-def _label_codes(pr, values, cats):
+def _label_codes(pr, values, cats, work=False):
     """Stages: each label's index among `cats` (or -1). Returns the codes
     offset and the unknown-count offset."""
     arr = Array._from_flat([float(v) for v in values], (len(values), 1), "<f4")
-    return _codes(pr, arr, [cats])
+    return _codes(pr, arr, [cats], work=work)
 
 
 def _classes_array(classes):
@@ -3354,12 +3362,12 @@ class LabelBinarizer(_PrepBase):
         W = 1 if binary else K
         pr = _Prog()
         if lb is not None:
-            codes, _neg = _codes(pr, lb[0], [self._cats])
+            codes, _neg = _codes(pr, lb[0], [self._cats], work=True)
         elif self._cats is None or _numeric_labels(values) is None:
             index = {c: i for i, c in enumerate(self._classes)}
             codes = pr.put_list([index.get(v, -1) for v in values])
         else:
-            codes, _neg = _label_codes(pr, values, self._cats)
+            codes, _neg = _label_codes(pr, values, self._cats, work=True)
         if K == 1:
             codes = pr.put_list([-1] * n)
         out = pr.output(n * W, "i")
@@ -3456,7 +3464,7 @@ class MultiLabelBinarizer(_PrepBase):
         pr = _Prog()
         if lb is not None:
             # the labels and their rows as buffers (lane prep-apple3): the same codes and rows
-            codes, _neg = _codes(pr, lb[0], [self._cats])
+            codes, _neg = _codes(pr, lb[0], [self._cats], work=True)
             ro = pr.put_codes(fl[1])
             m = fl[0].size
         else:
@@ -3470,7 +3478,7 @@ class MultiLabelBinarizer(_PrepBase):
                 index = {c: i for i, c in enumerate(self._classes)}
                 codes = pr.put_list([index.get(v, -1) for v in flat])
             else:
-                codes, _neg = _label_codes(pr, flat, self._cats)
+                codes, _neg = _label_codes(pr, flat, self._cats, work=True)
             ro = pr.put_list(owner)
             m = len(flat)
         out = pr.output(n * max(K, 1), "i")

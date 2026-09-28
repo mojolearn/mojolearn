@@ -1,0 +1,220 @@
+"""Builds x_prep/device.mojo in stages from job 2's file: 0 flips, 1 +fastexact, 2 +direct download, 3 +nocopy."""
+import sys
+stage = int(sys.argv[1])
+S = sys.argv[2]
+s = open(S + "/device_job2.mojo").read()
+def rep(a, b):
+    global s
+    assert s.count(a) == 1, (a, s.count(a))
+    s = s.replace(a, b)
+
+# ---- stage 0: the radix sort default on, 1024 positions per chunk
+rep('''    # FAST on Apple (lane prep-apple3): MOJOLEARN_XPREP_SORT_RADIX=1 sorts by radix (x_prep/dradix.mojo,
+    # the same words); OPT-IN until its A/B is recorded. MOJOLEARN_XPREP_SORT_CHUNK = positions per chunk.
+    var radix = False
+    var radix_rows = 2048
+    comptime if RADIX_SORT:
+        radix = getenv("MOJOLEARN_XPREP_SORT_RADIX", "0") == "1"
+        radix_rows = max(1, _env_int("MOJOLEARN_XPREP_SORT_CHUNK", 2048))
+''', '''    # FAST on Apple (lane prep-apple3): sort_cols by radix (x_prep/dradix.mojo, the same words).
+    # Default since request 1790627886703 (M3 Ultra, 16 columns x 1M: RobustScaler 0.141 -> 0.070 s,
+    # digests equal); MOJOLEARN_XPREP_SORT_RADIX=0 is the bitonic sort, MOJOLEARN_XPREP_SORT_CHUNK the
+    # positions per chunk (512 / 1024 / 2048 / 4096 / 16384 measured: 1024).
+    var radix = False
+    var radix_rows = 1024
+    comptime if RADIX_SORT:
+        radix = getenv("MOJOLEARN_XPREP_SORT_RADIX", "1") != "0"
+        radix_rows = max(1, _env_int("MOJOLEARN_XPREP_SORT_CHUNK", 1024))
+''')
+
+if stage >= 1:
+    rep('''from x_prep.dradix import RADIX_SORT, RADIX_MIN_ROWS, radix_sort_cols_device, radix_scratch_words
+''', '''from x_prep.dradix import RADIX_SORT, RADIX_MIN_ROWS, radix_sort_cols_device, radix_scratch_words
+from x_prep.fastexact import (
+    FAST_EXACT, XTG, XBS, EXACT_MIN_ROWS, exact_chunks, cat_table_words, count_neg_fast_kernel,
+    uniq_count_kernel, uniq_prefix_kernel, uniq_write_kernel, cat_hist_kernel, cat_sum_kernel,
+    te_global_fast_kernel, ii_gram_sym_fast_kernel,
+)
+''')
+    rep('''comptime OP_SORT_COLS = 0
+
+comptime BLOCK = 128
+''', '''comptime OP_SORT_COLS = 0
+
+#: FAST on Apple (x_prep/fastexact.mojo): counts and moves in parallel (the same words), and the
+#: TargetEncoder target fold by a tree (a FAST fold)
+comptime OP_UNIQUE_COLS = 5
+comptime OP_COUNT_NEG = 8
+comptime OP_TE_GLOBAL = 20
+comptime OP_CAT_COUNTS = 92
+
+comptime BLOCK = 128
+
+
+def _xblocks(total: Int) -> Int:
+    return (total + XBS - 1) // XBS
+''')
+    rep('''    # MOJOLEARN_XPREP_PROFILE=1: XPPHASE lines''', '''    # FAST on Apple (lane prep-apple3), OPT-IN until their A/B is recorded:
+    # MOJOLEARN_XPREP_EXACT=1 runs count_neg, unique_cols and the unweighted cat_counts in parallel
+    # (x_prep/fastexact.mojo, the same words); MOJOLEARN_XPREP_TE_FAST=1 folds te_global by a tree
+    # (a FAST fold: the bits may change; MOJOLEARN_XPREP_FAST_FOLDS=0 turns it off with the others);
+    # MOJOLEARN_XPREP_II_SYM=1 folds ii_gram over the pairs a <= b only (the same FAST words)
+    var exact = False
+    var te_fast = False
+    var ii_sym = False
+    comptime if FAST_EXACT:
+        exact = getenv("MOJOLEARN_XPREP_EXACT", "0") == "1"
+        te_fast = getenv("MOJOLEARN_XPREP_TE_FAST", "0") == "1"
+        ii_sym = getenv("MOJOLEARN_XPREP_II_SYM", "0") == "1"
+    # MOJOLEARN_XPREP_PROFILE=1: XPPHASE lines''')
+    rep('''            if radix and Int(sq[1]) >= RADIX_MIN_ROWS:
+                scratch = max(scratch, radix_scratch_words(Int(sq[1]), units, radix_rows))
+''', '''            if radix and Int(sq[1]) >= RADIX_MIN_ROWS:
+                scratch = max(scratch, radix_scratch_words(Int(sq[1]), units, radix_rows))
+        if exact and Int(host_q.unsafe_load(s * STAGE_INTS)) == OP_UNIQUE_COLS:
+            var uq = host_q + (s * STAGE_INTS + 2)
+            scratch = max(scratch, Int(host_q.unsafe_load(s * STAGE_INTS + 1)) * exact_chunks(Int(uq[1])))
+        if exact and Int(host_q.unsafe_load(s * STAGE_INTS)) == OP_CAT_COUNTS:
+            var cq = host_q + (s * STAGE_INTS + 2)
+            scratch = max(scratch, cat_table_words(Int(cq[1]), Int(cq[2]), Int(cq[4]), Int(cq[6])))
+''')
+    full = open(S + "/device_full.mojo").read()
+    a = full.index("        comptime if FAST_EXACT:\n            var hx")
+    b = full.index("        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:\n            if fast_folds and op == OP_COL_STATS:")
+    block = full[a:b]
+    rep('''        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+            if fast_folds and op == OP_COL_STATS:''', block + '''        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+            if fast_folds and op == OP_COL_STATS:''')
+
+if stage >= 2:
+    rep('''from std.os import getenv
+''', '''from std.memory import memcpy
+from std.os import getenv
+''')
+    rep('''from core.device_store import DeviceStore
+''', '''from core.device_store import DeviceStore
+from core.host_parallel import host_parallelize
+''')
+    rep('''def _env_int(name: String, default: Int) -> Int:''', '''#: words per task of the threaded host copy (16 MB)
+comptime DIRECT_CHUNK = 1 << 22
+comptime HP = MutPointer[Float32, MutUntrackedOrigin]
+
+
+def _direct_copy(src_addr: Int, dst_addr: Int, n: Int, threads: Bool):
+    """n words at src_addr to dst_addr on the host: one memcpy, or 16 MB
+    chunks across the host pool. A byte move."""
+    if n <= 0:
+        return
+    var sp = HP(unsafe_from_address=src_addr)
+    var dp = HP(unsafe_from_address=dst_addr)
+    if not threads or n <= DIRECT_CHUNK:
+        memcpy(dest=dp, src=sp, count=n)
+        return
+    var chunks = (n + DIRECT_CHUNK - 1) // DIRECT_CHUNK
+
+    def _chunk(k: Int) {imm sp, imm dp, imm n}:
+        var i0 = k * DIRECT_CHUNK
+        var i1 = min(i0 + DIRECT_CHUNK, n)
+        memcpy(dest=dp + i0, src=sp + i0, count=i1 - i0)
+
+    host_parallelize(_chunk, chunks)
+
+
+def _env_int(name: String, default: Int) -> Int:''')
+    rep('''    # MOJOLEARN_XPREP_PROFILE=1: XPPHASE lines''', '''    # EXPERIMENT (FAST on Apple, opt-in): MOJOLEARN_XPREP_DOWNLOAD=memcpy reads the device arena's
+    # words from the host after the wait (Apple's buffers are shared memory), =threads the same in
+    # 16 MB chunks across the host pool. A byte move either way.
+    var dl_mode = 0
+    comptime if RADIX_SORT:
+        var dl = String(getenv("MOJOLEARN_XPREP_DOWNLOAD"))
+        if dl == "memcpy":
+            dl_mode = 1
+        elif dl == "threads":
+            dl_mode = 2
+    # MOJOLEARN_XPREP_PROFILE=1: XPPHASE lines''')
+    rep('''    if nouts >= 0:
+        download_ranges(ctx, df, host_f, outs_addr, nouts)
+    elif arena_len > 0:''', '''    # the quads of x_prep are whole ranges (CNT < 0); a counted one takes the shared download
+    var plain = True
+    if nouts > 0:
+        var oq = IP(unsafe_from_address=outs_addr)
+        for k in range(nouts):
+            if Int(oq.unsafe_load(4 * k + 2)) >= 0:
+                plain = False
+    if dl_mode > 0 and plain:
+        ctx.synchronize()
+        var dbase = Int(df.unsafe_ptr())
+        var hbase = Int(host_f)
+        if nouts >= 0:
+            var oq = IP(unsafe_from_address=outs_addr)
+            for k in range(nouts):
+                var lo = Int(oq.unsafe_load(4 * k))
+                var hi = Int(oq.unsafe_load(4 * k + 1))
+                _direct_copy(dbase + 4 * lo, hbase + 4 * lo, hi - lo, dl_mode == 2)
+        elif arena_len > 0:
+            _direct_copy(dbase, hbase, arena_len, dl_mode == 2)
+        if out_n > 0:
+            _direct_copy(dbase + 4 * out_at, out_addr, out_n, dl_mode == 2)
+    elif nouts >= 0:
+        download_ranges(ctx, df, host_f, outs_addr, nouts)
+    elif arena_len > 0:''')
+    rep('''    if out_n > 0:
+        ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=out_addr), src_buf=df.create_sub_buffer[DType.float32](out_at, out_n))
+''', '''    if out_n > 0 and not (dl_mode > 0 and plain):
+        ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=out_addr), src_buf=df.create_sub_buffer[DType.float32](out_at, out_n))
+''')
+
+if stage >= 3:
+    rep('''from max.gpu.host import DeviceContext
+''', '''from max.gpu.host import DeviceBuffer, DeviceContext
+''')
+    rep('''#: words per task of the threaded host copy (16 MB)''', '''def run_program_device_nocopy(block_addr: Int, block_len: Int, arena_len: Int, prog_addr: Int, stages: Int,
+                              scratch_len: Int, out_len: Int) raises:
+    """EXPERIMENT (lane prep-apple3, opt-in MOJOLEARN_XPREP_NOCOPY=1, Apple's
+    unified memory): the device arena IS the host block at block_addr
+    (page aligned, block_len words, a whole number of pages, of which
+    arena_len + scratch_len + out_len are used: the host arena with its
+    inputs in place, then the scratch, then the output, every other word
+    zero). Nothing is uploaded, zeroed or downloaded; the stages write the
+    host's pages. Where a word lives moves no bit."""
+    run_program_device_ptr(
+        FP(unsafe_from_address=block_addr), arena_len, IP(unsafe_from_address=prog_addr), stages, scratch_len,
+        block_addr, out_len, 0, -1, 0, -1, block_len,
+    )
+
+
+#: words per task of the threaded host copy (16 MB)''')
+    rep('''                           outs_addr: Int = 0, nouts: Int = -1) raises:
+''', '''                           outs_addr: Int = 0, nouts: Int = -1, wrap_len: Int = 0) raises:
+''')
+    rep('''    var df = ctx.enqueue_create_buffer[DType.float32](dev_len if dev_len > 0 else 1)
+    var dw''', '''    var wrap = wrap_len > 0
+    if wrap and wrap_len < dev_len:
+        raise Error("x_prep: the host block is shorter than the program's arena")
+    var df: DeviceBuffer[DType.float32]
+    if wrap:
+        # the host block itself (run_program_device_nocopy)
+        df = DeviceBuffer[DType.float32](ctx, host_f, wrap_len, owning=False)
+    else:
+        df = ctx.enqueue_create_buffer[DType.float32](dev_len if dev_len > 0 else 1)
+    var dw''')
+    rep('''    if nins >= 0:
+        upload_ranges(ctx, df, host_f, arena_len, ins_addr, nins, X_PREP_STORE.get_or_create_ptr()[])
+    elif arena_len > 0:''', '''    if wrap:
+        pass
+    elif nins >= 0:
+        upload_ranges(ctx, df, host_f, arena_len, ins_addr, nins, X_PREP_STORE.get_or_create_ptr()[])
+    elif arena_len > 0:''')
+    rep('''    if out_n > 0:
+        ctx.enqueue_memset(df.create_sub_buffer[DType.float32](out_at, out_n), Float32(0))
+''', '''    if out_n > 0 and not wrap:
+        ctx.enqueue_memset(df.create_sub_buffer[DType.float32](out_at, out_n), Float32(0))
+''')
+    rep('''    if dl_mode > 0 and plain:
+        ctx.synchronize()''', '''    if wrap:
+        pass
+    elif dl_mode > 0 and plain:
+        ctx.synchronize()''')
+    rep('''    if out_n > 0 and not (dl_mode > 0 and plain):''', '''    if out_n > 0 and not wrap and not (dl_mode > 0 and plain):''')
+open("x_prep/device.mojo", "w").write(s)
+print("stage", stage, "written", len(s))
