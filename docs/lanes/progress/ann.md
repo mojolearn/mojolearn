@@ -123,7 +123,42 @@ and push in one command, then ONE batched `apple_steward.py submit`
 (m2pro + do-amd) for those ten lanes with the e2e patch; update the
 tables above (the IVF-Flat row, the repeat test).
 
-### Session B (option parity): committed UNVERIFIED on `lane/algos-ann-b`
+### Session B (option parity): GATE PASSED 2026-09-28, MERGED TO MAIN
+
+Gate on the `ann` RTX 4090 pod (EPYC 9254 CPU column), lane/algos-ann-b
+with main merged: `lane_select --changed-since origin/main` = 15 lanes
+(after the tools lane's host_surface fix). `algos_lane_check.sh` on them
+`--pass 2 --sabotage e2e_ann_and_ivf_host.patch`: 27 SEAM lines PASS / FAIL
+/ PASS (5863 included), RESULT: PASS on all 15. Per-lane arms: x-ann-tsne-pca
+under tsne_5818 and x-ann-refine-euclidean under refine_5851: PASS (AGREE,
+DISAGREE, AGREE). Existing bits: session A's and B's clean columns on the
+same pod compared cell by cell for the ten old lanes: train, infer and batch
+unchanged; only the `model` cells of the four save/load classes moved from
+`n/a:no-save` to a hash (146bfbd39, expected). pytest test_lane_select +
+test_host_surface + test_x_ann_repeat: PASS (after the fixes below). The
+ivf-filter classical host gate probe: record on the GPU, check on the host,
+IDENTICAL on 9 fixtures. Sanity TSNE init='pca'/'random' vs sklearn 1.9.1
+(perplexity 20, 500 steps; blobs 800x20 and SIFT 1000x128):
+trustworthiness@10 0.9793/0.9795, 0.9793/0.9792, 0.9537/0.9533,
+0.9511/0.9585 (ours/sklearn): SANITY PASS.
+
+Fixes the gate found (all on B):
+- x-ann-tsne-pca refused on a fresh pod: the selector reads a class imported
+  inside a method (TSNE._init -> PCA) as narrow, so the lane was not
+  declared for _mojolearn_estimators and the lane check never built it. The
+  lane body now names ml.PCA (and hashes the PCA projection). A selector
+  rule "an imported class runs whole" was measured: it widens 322 of 484
+  lanes' declared sets, so it was NOT made (tools-lane question).
+- test_host_surface: ivf-filter added to tools/classical_host_gate.py.
+- test_lane_select: the host_surface replay anchors now carry ivf-filter;
+  kmeans_oracle 71 -> 75 (ivf-filter, x-ann-tsne-pca, x-ann-cagra-filter,
+  x-ann-refine-euclidean).
+- tools/dev_pod.sh sync deleted files the previous patch had added when the
+  merge base moved (x_ann/device_ctx.mojo and three sabotage patches vanished
+  on the pod after p1 merged): the old additions are now removed BEFORE the
+  reset to the new base.
+
+(history below: what B carried)
 
 `lane/algos-ann-b` = p1 + these (each UNVERIFIED, none run on a pod):
 - 660722d16 TSNE init='pca' (sklearn default; the owed bench item), 'random'
