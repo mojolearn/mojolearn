@@ -59,6 +59,7 @@ class GARCH:
         pick = (lambda a: a[0]) if self._one else (lambda a: a)
         self.params_ = pick(params)
         self.loglikelihood_ = pick(info[:, 0])
+        self.n_iter_ = pick(info[:, 1].astype(np.int64))  # Nelder-Mead iterations, both runs
         self.conditional_volatility_ = pick(sigma)
         self._fc = fc
         return self

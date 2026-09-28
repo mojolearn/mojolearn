@@ -209,7 +209,14 @@ def case_ts(ml, X, y, name, big, B_big, n_len):
             flat.extend(np.asarray(v) for _, v in sorted(vars(o).items()) if isinstance(v, np.ndarray))
         else:
             flat.append(np.asarray(o))
-    return dict(shape=f"{B} series x {n_len}", fit_s=s, digest=digest(*flat))
+    rec = dict(shape=f"{B} series x {n_len}", fit_s=s, digest=digest(*flat))
+    if name == "garch" and hasattr(m, "n_iter_"):
+        it = np.asarray(m.n_iter_)
+        # the work a GPU does: every 32-series simdgroup runs its slowest member
+        g = it[: len(it) // 32 * 32].reshape(-1, 32).max(1)
+        rec["iters"] = dict(mean=float(it.mean()), max=int(it.max()), p50=float(np.median(it)),
+                            simd_max_mean=float(g.mean()), capped=int((it >= 4000).sum()))
+    return rec
 
 
 TS = dict(stl=(10000, 100), theta=(10000, 100), croston=(10000, 100), ets=(10000, 100),
