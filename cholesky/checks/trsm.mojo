@@ -184,7 +184,8 @@ def trsm_upper_kernel(
 # Forward: row i's chain is `t = ftz(fma(-ftz(L[i][k]), x_k, t))` for k
 # ascending, and x_k exists as soon as row k finishes -- so every row can
 # take its step k the moment x_k is known. `trsm_lower_sweep_kernel` keeps
-# every row's t in a register of one 1024-thread block; per 32-column block
+# every row's t in its own b cell, owned by one thread of a 1024-thread
+# block (DEVIATION 6150); per 32-column block
 # one simdgroup finishes the 32 diagonal rows (lane r divides, broadcasts
 # x, lanes below step), then every later row takes those 32 steps in order.
 # Each row's chain is the original's, term for term.
@@ -201,7 +202,6 @@ comptime CHOL_SWEEP_SOLVES = (
     and not is_defined["MOJOLEARN_CHOL_SWEEP_SOLVES_OFF"]()
 )
 comptime CHOL_SWEEP_NT = 1024
-comptime CHOL_SWEEP_SLOTS = 32
 comptime CHOL_BACK_NT = 256
 comptime CHOL_BACK_CH = 2048
 #: Operands of this many back-substitution steps are loaded before the
@@ -230,9 +230,19 @@ def trsm_lower_sweep_kernel(
     ld_in: Int32,
 ):
     """`trsm_lower_kernel`'s arithmetic as a blocked column sweep; one block
-    per right-hand-side column, n <= CHOL_SWEEP_NT * CHOL_SWEEP_SLOTS."""
+    per right-hand-side column, any n.
+
+    DEVIATION 6150 (2026-09-28): each row's running t lives in its own `b`
+    cell, not in a per-thread register array. Row i belongs to thread
+    `i % NT` for the whole sweep (the diagonal simdgroup's lane r IS row
+    k0 + r's owner), so no other thread reads or writes that cell and no
+    ordering is needed beyond program order. With a 32-float register array
+    the 1024-thread pipeline's `maxTotalThreadsPerThreadgroup` fell below
+    1024 on the M2 Pro (no Dynamic Caching) and the dispatch was dropped
+    with no error: GP alpha, KernelRidge and the cholesky lane moved on M2
+    Metal only. NO BIT MOVES: every row's chain is the same terms in the
+    same order; `ftz` of an already flushed value is itself."""
     comptime NT = CHOL_SWEEP_NT
-    comptime SL = CHOL_SWEEP_SLOTS
     var n = Int(n_in)
     var nrhs = Int(nrhs_in)
     var ld = Int(ld_in)
@@ -241,22 +251,15 @@ def trsm_lower_sweep_kernel(
     var lane = tid % 32
     var sg = tid // 32
     var xs = stack_allocation[32, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var t = SIMD[DType.float32, SL](0.0)
-    comptime for s in range(SL):
-        var i = tid + s * NT
-        if i < n:
-            t[s] = ftz(b.unsafe_load(i * nrhs + j))
     var nb = (n + 31) // 32
     for kb in range(nb):
         var k0 = kb * 32
-        var sd = k0 // NT
         var sgd = (k0 % NT) // 32
         if sg == sgd:
             var ri = k0 + lane
             var tv = Float32(0.0)
-            comptime for s in range(SL):
-                if s == sd:
-                    tv = t[s]
+            if ri < n:
+                tv = ftz(b.unsafe_load(ri * nrhs + j))
             for r in range(32):
                 if k0 + r < n:
                     var x = Float32(0.0)
@@ -267,18 +270,16 @@ def trsm_lower_sweep_kernel(
                     x = shuffle_idx(x, UInt32(r))
                     if lane > r and ri < n:
                         tv = ftz(identical_mul_add(-ftz(l.unsafe_load(ri * ld + k0 + r)), x, tv))
-            comptime for s in range(SL):
-                if s == sd:
-                    t[s] = tv
         barrier()
         var kc = min(32, n - k0)
-        comptime for s in range(SL):
-            var i = tid + s * NT
-            if i >= k0 + 32 and i < n:
-                var tv = t[s]
+        var i = tid
+        while i < n:
+            if i >= k0 + 32:
+                var tv = ftz(b.unsafe_load(i * nrhs + j))
                 for r in range(kc):
                     tv = ftz(identical_mul_add(-ftz(l.unsafe_load(i * ld + k0 + r)), xs[r], tv))
-                t[s] = tv
+                b.unsafe_store(i * nrhs + j, tv)
+            i += NT
         barrier()
 
 
@@ -470,12 +471,11 @@ def trsm_lower(
     else:
         var swept = False
         comptime if CHOL_SWEEP_SOLVES:
-            if n <= CHOL_SWEEP_NT * CHOL_SWEEP_SLOTS:
-                swept = True
-                ctx.enqueue_function[trsm_lower_sweep_kernel](
-                    l.unsafe_ptr(), b.unsafe_ptr(), Int32(n), Int32(nrhs), Int32(lda),
-                    grid_dim=(nrhs, 1, 1), block_dim=(CHOL_SWEEP_NT, 1, 1),
-                )
+            swept = True
+            ctx.enqueue_function[trsm_lower_sweep_kernel](
+                l.unsafe_ptr(), b.unsafe_ptr(), Int32(n), Int32(nrhs), Int32(lda),
+                grid_dim=(nrhs, 1, 1), block_dim=(CHOL_SWEEP_NT, 1, 1),
+            )
         if not swept:
             ctx.enqueue_function[trsm_lower_kernel](
                 l.unsafe_ptr(),
