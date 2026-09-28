@@ -49,9 +49,14 @@ Round 2 left nothing opt-in in the tree. Its unproven commits are the consolidat
 |---|---|---|---|---|---|
 | 1790626681580 | m4pro-b | fast | 8241f61dc | base FAST board, probes, cProfile, the existing stage timers | PASS |
 | 1790627893200 | m4pro-a | fast | c55df5b59 | before (base x_cluster) / phase tables / ward rounds + quality | PASS |
-| 1790628511800 | m3ultra-b | fast + identical boards | 057e55f6e | before (base sources) / after (ward rounds, GMM init fill, Python door), phases, quality | claimed about 21:19Z; m3ultra-b stopped answering ssh at about 21:26Z (reported to the orchestrator, nothing touched) |
+| 1790628511800 | m3ultra-b | fast + identical boards | 057e55f6e | before (base sources) / after (ward rounds, GMM init fill, Python door), phases, quality | LOST: claimed about 21:19Z, m3ultra-b's instance was terminated at 21:20Z by an old scheduled release (orchestrator's finding); no output |
 
 Outputs are kept in ~/mojolearn-evidence/cluster-apple3/.
+
+Machines after 21:20Z (brief, UPDATE 21:25Z): the three M4 cloud Macs and m3ultra-b are gone.
+What is left is the LAPTOP M4 (10 GPU cores, 16 GB; builds and fits only through
+tools/mac_slot.py, MAC_SLOTS=2, one Metal job at a time, bench/cluster_apple3_local.sh) and
+m2pro when its steward shows 0 working and 0 queued. No M3 Ultra number exists for this round.
 
 ## Where the FAST time goes (M4 Pro, m4pro-b 1790626681580 and m4pro-a 1790627893200)
 
