@@ -1,11 +1,13 @@
+diff --git a/x_ann/cagra_core.mojo b/x_ann/cagra_core.mojo
+index 47f4b3de5..78406fa13 100644
 --- a/x_ann/cagra_core.mojo
 +++ b/x_ann/cagra_core.mojo
-@@ -55,7 +55,7 @@
-         for i in range(deg):
-             var best = -1
-             for k in range(kdeg):
--                if cnt[k] < 0xFFFF and (best < 0 or cnt[k] < cnt[best]):
-+                if cnt[k] < 0xFFFF and (best < 0 or cnt[k] <= cnt[best]):
-                     best = k
-             if best < 0:
-                 raise Error("CAGRA: the k-NN graph has too few distinct neighbors for graph_degree")
+@@ -56,7 +56,7 @@ def cagra_prune_cell(a: Int, kdeg: Int, knn: I32P, deg: Int, out: I32P, cnt: I32
+         var best = -1
+         for k in range(kdeg):
+             var ck = Int(cnt.unsafe_load(c_off + k))
+-            if ck < 0xFFFF and (best < 0 or ck < Int(cnt.unsafe_load(c_off + best))):
++            if ck < 0xFFFF and (best < 0 or ck <= Int(cnt.unsafe_load(c_off + best))):
+                 best = k
+         if best < 0:
+             return False

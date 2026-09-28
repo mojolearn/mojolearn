@@ -6,6 +6,7 @@ symmetrization is the shared host function (`tsne_symmetrize`)."""
 from std.gpu import block_idx, block_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from x_ann.device_ctx import x_ann_ctx
+from x_ann.knn_device import knn_graph_device
 
 from metrics.checks.device_io import upload_f32, upload_i32, download_f32, download_i32
 from checks.numerics import identical_log
@@ -104,8 +105,7 @@ def tsne_fit_device(
     var dnd = ctx.enqueue_create_buffer[DType.float32](n * nn)
     var dni = ctx.enqueue_create_buffer[DType.int32](n * nn)
     var dp = ctx.enqueue_create_buffer[DType.float32](n * nn)
-    ctx.enqueue_function[knn_kernel](Int32(n), dx.unsafe_ptr(), Int32(d), Int32(nn), dnd.unsafe_ptr(),
-                                     dni.unsafe_ptr(), grid_dim=_grid(n), block_dim=TPB)
+    knn_graph_device(ctx, dx, n, d, nn, dnd, dni)
     ctx.enqueue_function[perplexity_kernel](Int32(n), dnd.unsafe_ptr(), Int32(nn), identical_log(perplexity),
                                             dp.unsafe_ptr(), grid_dim=_grid(n), block_dim=TPB)
     ctx.synchronize()

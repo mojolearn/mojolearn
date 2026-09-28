@@ -35,12 +35,48 @@ comptime I32P = MutPointer[Int32, MutAnyOrigin]
 
 
 @always_inline
+def ts_sq_step(a: Float32, b: Float32, acc: Float32) -> Float32:
+    """One coordinate of the squared distance: acc + (a - b)^2, fused, every
+    operand flushed. `ts_sqdist` and the tiled k-NN kernel both step through
+    it, so the two are one instruction sequence per pair."""
+    var diff = ftz(ftz(a) - ftz(b))
+    return ftz(identical_mul_add(diff, diff, acc))
+
+
+@always_inline
 def ts_sqdist(x: F32P, i: Int, j: Int, d: Int) -> Float32:
     var acc = Float32(0.0)
     for c in range(d):
-        var diff = ftz(ftz(x.unsafe_load(i * d + c)) - ftz(x.unsafe_load(j * d + c)))
-        acc = ftz(identical_mul_add(diff, diff, acc))
+        acc = ts_sq_step(x.unsafe_load(i * d + c), x.unsafe_load(j * d + c), acc)
     return acc
+
+
+@always_inline
+def ts_knn_offer(base: Int, filled: Int, nn: Int, dist: Float32, j: Int, nn_d: F32P, nn_i: I32P) -> Int:
+    """Offer candidate j (distance dist) to row's sorted list at `base`
+    holding `filled` entries; returns the new fill (DEVIATION 5810: the
+    order (distance, index))."""
+    var f = filled
+    if f == nn:
+        var ld = nn_d.unsafe_load(base + nn - 1)
+        var li = Int(nn_i.unsafe_load(base + nn - 1))
+        if not (dist < ld or (dist == ld and j < li)):
+            return f
+    else:
+        f += 1
+    var s = f - 1
+    while s > 0:
+        var pd = nn_d.unsafe_load(base + s - 1)
+        var pi = Int(nn_i.unsafe_load(base + s - 1))
+        if dist < pd or (dist == pd and j < pi):
+            nn_d.unsafe_store(base + s, pd)
+            nn_i.unsafe_store(base + s, Int32(pi))
+            s -= 1
+        else:
+            break
+    nn_d.unsafe_store(base + s, dist)
+    nn_i.unsafe_store(base + s, Int32(j))
+    return f
 
 
 @always_inline
@@ -52,26 +88,7 @@ def ts_knn_cell(i: Int, x: F32P, n: Int, d: Int, nn: Int, nn_d: F32P, nn_i: I32P
     for j in range(n):
         if j == i:
             continue
-        var dist = ts_sqdist(x, i, j, d)
-        if filled == nn:
-            var ld = nn_d.unsafe_load(base + nn - 1)
-            var li = Int(nn_i.unsafe_load(base + nn - 1))
-            if not (dist < ld or (dist == ld and j < li)):
-                continue
-        else:
-            filled += 1
-        var s = filled - 1
-        while s > 0:
-            var pd = nn_d.unsafe_load(base + s - 1)
-            var pi = Int(nn_i.unsafe_load(base + s - 1))
-            if dist < pd or (dist == pd and j < pi):
-                nn_d.unsafe_store(base + s, pd)
-                nn_i.unsafe_store(base + s, Int32(pi))
-                s -= 1
-            else:
-                break
-        nn_d.unsafe_store(base + s, dist)
-        nn_i.unsafe_store(base + s, Int32(j))
+        filled = ts_knn_offer(base, filled, nn, ts_sqdist(x, i, j, d), j, nn_d, nn_i)
 
 
 @always_inline

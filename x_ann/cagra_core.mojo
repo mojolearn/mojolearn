@@ -36,34 +36,51 @@ comptime F32P = MutPointer[Float32, MutAnyOrigin]
 comptime I32P = MutPointer[Int32, MutAnyOrigin]
 
 
-def cagra_prune(n: Int, kdeg: Int, knn: List[Int32], deg: Int) raises -> List[Int32]:
-    """`kern_prune`: per node, detour counts over its k-NN list, then the
-    `deg` edges of smallest (count, rank) (DEVIATION 5820)."""
-    var out = List[Int32](length=n * deg, fill=Int32(0))
-    var cnt = List[Int](length=kdeg, fill=0)
-    for a in range(n):
+@always_inline
+def cagra_prune_cell(a: Int, kdeg: Int, knn: I32P, deg: Int, out: I32P, cnt: I32P, c_off: Int) -> Bool:
+    """`kern_prune` for node a: detour counts over its k-NN list (in
+    cnt[c_off : c_off + kdeg]), then the `deg` edges of smallest (count,
+    rank) (DEVIATION 5820). False when the list has too few distinct
+    neighbours. Integer work: one node per GPU thread, or the host loop."""
+    for k in range(kdeg):
+        cnt.unsafe_store(c_off + k, Int32(kdeg) if Int(knn.unsafe_load(a * kdeg + k)) == a else Int32(0))
+    for kad in range(kdeg - 1):
+        var d = Int(knn.unsafe_load(a * kdeg + kad))
+        for kdb in range(kdeg):
+            var cand = knn.unsafe_load(d * kdeg + kdb)
+            for kab in range(kad + 1, kdeg):
+                if knn.unsafe_load(a * kdeg + kab) == cand:
+                    cnt.unsafe_store(c_off + kab, cnt.unsafe_load(c_off + kab) + 1)
+                    break
+    for i in range(deg):
+        var best = -1
         for k in range(kdeg):
-            cnt[k] = kdeg if Int(knn[a * kdeg + k]) == a else 0
-        for kad in range(kdeg - 1):
-            var d = Int(knn[a * kdeg + kad])
-            for kdb in range(kdeg):
-                var cand = Int(knn[d * kdeg + kdb])
-                for kab in range(kad + 1, kdeg):
-                    if Int(knn[a * kdeg + kab]) == cand:
-                        cnt[kab] += 1
-                        break
-        for i in range(deg):
-            var best = -1
-            for k in range(kdeg):
-                if cnt[k] < 0xFFFF and (best < 0 or cnt[k] < cnt[best]):
-                    best = k
-            if best < 0:
-                raise Error("CAGRA: the k-NN graph has too few distinct neighbors for graph_degree")
-            var sel = knn[a * kdeg + best]
-            for k in range(kdeg):
-                if knn[a * kdeg + k] == sel:
-                    cnt[k] = 0xFFFF
-            out[a * deg + i] = sel
+            var ck = Int(cnt.unsafe_load(c_off + k))
+            if ck < 0xFFFF and (best < 0 or ck < Int(cnt.unsafe_load(c_off + best))):
+                best = k
+        if best < 0:
+            return False
+        var sel = knn.unsafe_load(a * kdeg + best)
+        for k in range(kdeg):
+            if knn.unsafe_load(a * kdeg + k) == sel:
+                cnt.unsafe_store(c_off + k, Int32(0xFFFF))
+        out.unsafe_store(a * deg + i, sel)
+    return True
+
+
+def cagra_prune(n: Int, kdeg: Int, knn_in: List[Int32], deg: Int) raises -> List[Int32]:
+    """The host loop over `cagra_prune_cell`."""
+    var knn = knn_in.copy()
+    var out = List[Int32](length=n * deg, fill=Int32(0))
+    var cnt = List[Int32](length=kdeg, fill=Int32(0))
+    var kp = knn.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var op = out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var cp = cnt.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    for a in range(n):
+        if not cagra_prune_cell(a, kdeg, kp, deg, op, cp, 0):
+            raise Error("CAGRA: the k-NN graph has too few distinct neighbors for graph_degree")
+    _ = knn^
+    _ = cnt^
     return out^
 
 

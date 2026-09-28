@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""CAGRA on the device: the exact k-NN graph and the search, one thread per
-cell of `x_ann/cagra_core.mojo` / `x_ann/tsne_core.mojo`; pruning and the
-reverse-edge merge are the shared host functions."""
+"""CAGRA on the device: the exact k-NN graph (tiled, `x_ann/knn_device.mojo`),
+the prune (`cagra_prune_cell`, one node per thread) and the search, one
+thread per cell of `x_ann/cagra_core.mojo` / `x_ann/tsne_core.mojo`; the
+reverse-edge merge is the shared host function."""
 
 from std.gpu import block_idx, block_dim, thread_idx
 from max.gpu.host import DeviceContext
@@ -10,7 +11,8 @@ from x_ann.device_ctx import x_ann_ctx
 
 from metrics.checks.device_io import upload_f32, upload_i32, download_f32, download_i32
 from x_ann.tsne_core import ts_knn_cell
-from x_ann.cagra_core import F32P, I32P, cagra_prune, cagra_reverse_merge, cg_search_cell
+from x_ann.cagra_core import F32P, I32P, cagra_reverse_merge, cg_search_cell
+from x_ann.knn_device import cagra_prune_device, knn_graph_device
 
 comptime TPB = 64
 
@@ -45,15 +47,12 @@ def cagra_build_device(x: List[Float32], n: Int, d: Int, kdeg: Int, deg: Int) ra
     var dx = upload_f32(ctx, x)
     var dnd = ctx.enqueue_create_buffer[DType.float32](n * kdeg)
     var dni = ctx.enqueue_create_buffer[DType.int32](n * kdeg)
-    ctx.enqueue_function[cg_knn_kernel](Int32(n), dx.unsafe_ptr(), Int32(d), Int32(kdeg), dnd.unsafe_ptr(),
-                                        dni.unsafe_ptr(), grid_dim=_grid(n), block_dim=TPB)
-    ctx.synchronize()
-    var knn = download_i32(ctx, dni, n * kdeg)
+    knn_graph_device(ctx, dx, n, d, kdeg, dnd, dni)
+    var pruned = cagra_prune_device(ctx, dni, n, kdeg, deg)
     _ = dni^
     _ = dnd^
     _ = dx^
     _ = ctx^
-    var pruned = cagra_prune(n, kdeg, knn, deg)
     return cagra_reverse_merge(n, deg, pruned)
 
 
