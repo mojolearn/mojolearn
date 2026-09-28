@@ -41,6 +41,7 @@ import bisect
 import copy
 import ctypes
 import inspect
+import itertools
 import math
 import mmap
 import numbers
@@ -52,6 +53,7 @@ from . import _backend
 from . import _portable_math as _pm
 from ._array import Array
 from ._buffer import as_f32_c, addr_ro
+from . import _buffer
 from . import _labels
 from . import _arena_io
 from ._labels import flatten_labels, sorted_classes, label_kind
@@ -132,7 +134,10 @@ _OUT_MIN_WORDS = 2 ** 27
 #:                   (the sorted columns, LDA's centered rows) are device
 #:                   scratch
 #:   te_arrays       TargetEncoder hands targets and folds over as arrays
-_R3_NAMES = ("imputer_nosort", "mapped", "view", "work", "te_arrays")
+#:   label_buffers   LabelEncoder / LabelBinarizer / MultiLabelBinarizer take
+#:                   numeric labels as buffers (native casts, one exactness
+#:                   test), not as Python lists
+_R3_NAMES = ("imputer_nosort", "mapped", "view", "work", "te_arrays", "label_buffers")
 _R3_DEFAULT = ()
 #: the smallest block (words) that is mapped, and the smallest read that is a view
 _MAP_MIN_WORDS = 2 ** 18
@@ -3101,6 +3106,65 @@ def _numeric_labels(values):
     return out
 
 
+def _label_buffer(y):
+    """(the labels as a float32 (n, 1) Array, whether they are integers) when
+    y is a numeric BUFFER (an int32 / int64 / float32 / float64 Array,
+    ndarray or other buffer, one label per row) whose every label float32
+    holds exactly: the casts are native and the test is one comparison of
+    the labels with their float32 values cast back (lane prep-apple3,
+    `label_buffers`). None when the list route must decide: a list, another
+    dtype (bool, str), a NaN or an infinity, a label float32 cannot hold.
+    The same float32 words `_numeric_labels` gives."""
+    if not _r3("label_buffers") or isinstance(y, (list, tuple, str, bytes)):
+        return None
+    try:
+        if not isinstance(y, Array) and not _buffer._has_buffer(y):
+            return None
+        arr, _ = _buffer._materialize(y, "y")
+    except (TypeError, ValueError):
+        return None
+    if arr.dtype not in ("<i4", "<i8", "<f4", "<f8") or arr.size == 0 or arr.size != max(arr.shape):
+        return None
+    ints = arr.dtype in ("<i4", "<i8")
+    try:
+        if not ints and not _buffer.all_finite(arr):
+            return None
+        f32 = arr if arr.dtype == "<f4" else arr.astype("<f4")
+        if arr.dtype != "<f4" and _labels.flat_view(f32.astype(arr.dtype)) != _labels.flat_view(arr):
+            return None
+    except (OverflowError, ValueError, TypeError, ImportError):
+        return None
+    return Array._view_of(f32, (arr.size, 1), "C"), ints
+
+
+def _flat_labels(rows):
+    """(every row's labels in order as an int64 or float64 Array, each
+    label's row as an int32 Array) when every label is exactly an int or
+    exactly a float, built at C speed (lane prep-apple3, `label_buffers`);
+    None otherwise (the list route)."""
+    if not _r3("label_buffers"):
+        return None
+    kinds = set(map(type, itertools.chain.from_iterable(rows)))
+    if kinds == _INT_ONLY:
+        code, dtype = "q", "<i8"
+    elif kinds == _FLOAT_ONLY:
+        code, dtype = "d", "<f8"
+    else:
+        return None
+    try:
+        flat = array.array(code, itertools.chain.from_iterable(rows))
+    except (OverflowError, TypeError):
+        return None
+    owner = array.array("i", itertools.chain.from_iterable(map(itertools.repeat, range(len(rows)), map(len, rows))))
+    return Array._owned(flat, (len(flat),), dtype, "C"), Array._owned(owner, (len(owner),), "<i4", "C")
+
+
+def _buffer_classes(mode, col, ints):
+    """`_label_classes` for a `_label_buffer` column."""
+    cats = _fit_categories(mode, col)[0]
+    return [int(c) if ints else float(c) for c in cats.tolist()], cats
+
+
 def _label_classes(mode, values):
     """(classes list in the reference's order, device categories Array or
     None). Numeric labels: a device sort and run scan; else sorted()."""
@@ -3169,8 +3233,12 @@ class LabelEncoder(_PrepBase):
 
     def fit(self, y):
         self.numeric_mode_ = _mode()
-        values = flatten_labels(y)
-        self._classes, self._cats = _label_classes(self.numeric_mode_, values)
+        lb = _label_buffer(y)
+        if lb is not None:
+            self._classes, self._cats = _buffer_classes(self.numeric_mode_, lb[0], lb[1])
+        else:
+            values = flatten_labels(y)
+            self._classes, self._cats = _label_classes(self.numeric_mode_, values)
         self.classes_ = _classes_array(self._classes)
         return self
 
@@ -3183,18 +3251,22 @@ class LabelEncoder(_PrepBase):
 
     def transform(self, y):
         self._check_fitted()
-        values = flatten_labels(y)
-        if not values:
-            return Array((0,), "<i4")
-        if self._cats is None or _numeric_labels(values) is None:
-            index = {c: i for i, c in enumerate(self._classes)}
-            missing = [v for v in values if v not in index]
-            if missing:
-                raise ValueError(f"mojolearn: y contains previously unseen labels: {missing[:5]}")
-            return Array.from_list([index[v] for v in values], "<i4")
-        n = len(values)
+        lb = _label_buffer(y) if self._cats is not None else None
+        if lb is None:
+            values = flatten_labels(y)
+            if not values:
+                return Array((0,), "<i4")
+            if self._cats is None or _numeric_labels(values) is None:
+                index = {c: i for i, c in enumerate(self._classes)}
+                missing = [v for v in values if v not in index]
+                if missing:
+                    raise ValueError(f"mojolearn: y contains previously unseen labels: {missing[:5]}")
+                return Array.from_list([index[v] for v in values], "<i4")
+            n = len(values)
+        else:
+            n = lb[0].shape[0]
         pr = _Prog()
-        codes, neg = _label_codes(pr, values, self._cats)
+        codes, neg = _codes(pr, lb[0], [self._cats]) if lb is not None else _label_codes(pr, values, self._cats)
         out = pr.alloc(n)
         pr.stage("f2i", n, codes, out)
         pr.run(self.numeric_mode_)
@@ -3241,8 +3313,12 @@ class LabelBinarizer(_PrepBase):
             self.classes_ = Array.from_list(self._classes, "<i8")
             self.y_type_ = "multilabel-indicator"
             return self
-        values = flatten_labels(y)
-        self._classes, self._cats = _label_classes(self.numeric_mode_, values)
+        lb = _label_buffer(y)
+        if lb is not None:
+            self._classes, self._cats = _buffer_classes(self.numeric_mode_, lb[0], lb[1])
+        else:
+            values = flatten_labels(y)
+            self._classes, self._cats = _label_classes(self.numeric_mode_, values)
         self.classes_ = _classes_array(self._classes)
         self.y_type_ = "binary" if len(self._classes) <= 2 else "multiclass"
         return self
@@ -3271,12 +3347,15 @@ class LabelBinarizer(_PrepBase):
                      out)
             pr.run(self.numeric_mode_)
             return pr.get_i32(out, (n, K))
-        values = flatten_labels(y)
-        n, K = len(values), len(self._classes)
+        lb = _label_buffer(y) if self._cats is not None else None
+        values = flatten_labels(y) if lb is None else None
+        n, K = (len(values) if lb is None else lb[0].shape[0]), len(self._classes)
         binary = K <= 2
         W = 1 if binary else K
         pr = _Prog()
-        if self._cats is None or _numeric_labels(values) is None:
+        if lb is not None:
+            codes, _neg = _codes(pr, lb[0], [self._cats])
+        elif self._cats is None or _numeric_labels(values) is None:
             index = {c: i for i, c in enumerate(self._classes)}
             codes = pr.put_list([index.get(v, -1) for v in values])
         else:
@@ -3348,14 +3427,20 @@ class MultiLabelBinarizer(_PrepBase):
             self._given = True
             self._cats = None
         else:
-            flat = [v for row in y for v in row]
-            self._classes, self._cats = _label_classes(self.numeric_mode_, flat) if flat else ([], None)
+            rows = [r if type(r) in (list, tuple) else list(r) for r in y]
+            fl = _flat_labels(rows)
+            lb = _label_buffer(fl[0]) if fl is not None and fl[0].size else None
+            if lb is not None:
+                self._classes, self._cats = _buffer_classes(self.numeric_mode_, lb[0], lb[1])
+            else:
+                flat = [v for row in rows for v in row]
+                self._classes, self._cats = _label_classes(self.numeric_mode_, flat) if flat else ([], None)
             self._given = False
         self.classes_ = _classes_array(self._classes)
         return self
 
     def fit_transform(self, y):
-        y = [list(row) for row in y]
+        y = [r if type(r) in (list, tuple) else list(r) for r in y]
         return self.fit(y).transform(y)
 
     def _check_fitted(self):
@@ -3364,23 +3449,32 @@ class MultiLabelBinarizer(_PrepBase):
 
     def transform(self, y):
         self._check_fitted()
-        rows = [list(r) for r in y]
+        rows = [r if type(r) in (list, tuple) else list(r) for r in y]
         n, K = len(rows), len(self._classes)
-        flat = [v for r in rows for v in r]
-        owner = [i for i, r in enumerate(rows) for _ in r]
+        fl = _flat_labels(rows) if self._cats is not None else None
+        lb = _label_buffer(fl[0]) if fl is not None and fl[0].size else None
         pr = _Prog()
-        if not flat:
-            out = pr.alloc(n * max(K, 1))
-            pr.run(self.numeric_mode_)
-            return pr.get_i32(out, (n, K))
-        if self._cats is None or _numeric_labels(flat) is None:
-            index = {c: i for i, c in enumerate(self._classes)}
-            codes = pr.put_list([index.get(v, -1) for v in flat])
+        if lb is not None:
+            # the labels and their rows as buffers (lane prep-apple3): the same codes and rows
+            codes, _neg = _codes(pr, lb[0], [self._cats])
+            ro = pr.put_codes(fl[1])
+            m = fl[0].size
         else:
-            codes, _neg = _label_codes(pr, flat, self._cats)
-        ro = pr.put_list(owner)
+            flat = [v for r in rows for v in r]
+            owner = [i for i, r in enumerate(rows) for _ in r]
+            if not flat:
+                out = pr.alloc(n * max(K, 1))
+                pr.run(self.numeric_mode_)
+                return pr.get_i32(out, (n, K))
+            if self._cats is None or _numeric_labels(flat) is None:
+                index = {c: i for i, c in enumerate(self._classes)}
+                codes = pr.put_list([index.get(v, -1) for v in flat])
+            else:
+                codes, _neg = _label_codes(pr, flat, self._cats)
+            ro = pr.put_list(owner)
+            m = len(flat)
         out = pr.output(n * max(K, 1), "i")
-        pr.stage("scatter_ones", len(flat), codes, ro, K, out)
+        pr.stage("scatter_ones", m, codes, ro, K, out)
         pr.run(self.numeric_mode_)
         return pr.get_i32(out, (n, K))
 
