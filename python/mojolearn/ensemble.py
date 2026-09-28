@@ -2386,7 +2386,15 @@ class GradientBoosting(NumericModeMixin):
         self.loss_curve_ = _f64_list(out[3])
         self.test_loss_curve_ = _f64_list(out[4]) if n_eval_rows else None
         self.n_features_in_ = n_features
-        self.approx_dim_ = self._bind("_mojolearn_gbdt").gbdt_model_dim(self.model_)
+        dim_binding = self._bind("_mojolearn_gbdt")
+        if _has_ctr_records(self.model_) and _binding_vendor(dim_binding) == "cpu":
+            # a CPU fit with CTR categoricals (gbdt/host/gbdt_oracle_ctr.mojo):
+            # the host binding's parser refuses CTR records by name, so the
+            # dim comes from HostGBDT's parse, the reader `predict` uses
+            from ._gbdt_host import parse_model_text
+            self.approx_dim_ = int(parse_model_text(self.model_)["dim"])
+        else:
+            self.approx_dim_ = dim_binding.gbdt_model_dim(self.model_)
         # MULTICLASS DROPS A CLASS AND ONEVSALL DOES NOT. `dim` is
         # `n_classes - 1` for the first (the last class's approx is pinned
         # at zero and not stored) and `n_classes` for the second, whose
