@@ -2062,10 +2062,10 @@ def check_bca_interval() raises:
        at or below its high end.
     """
     var B = 1001
-    var sorted = List[Float32]()
+    var sd = List[Float32]()
     for i in range(B):
-        sorted.append(Float32(i))
-    var e = bca_interval(sorted, B, Float32(0.025), Float32(0.6), Float32(0.1))
+        sd.append(Float32(i))
+    var e = bca_interval(sd, B, Float32(0.025), Float32(0.6), Float32(0.1))
     if abs(Float64(e.alpha_1) - 0.11420295403892616) > 1e-6 or abs(Float64(e.alpha_2) - 0.9990185075970077) > 1e-6:
         raise Error(
             "check_bca_interval: levels " + String(e.alpha_1) + ", " + String(e.alpha_2)
@@ -2076,7 +2076,7 @@ def check_bca_interval() raises:
             "check_bca_interval: endpoints " + String(e.interval.low) + ", " + String(e.interval.high)
             + " are not 1000 alpha_1, 1000 alpha_2"
         )
-    var p = bca_interval(sorted, B, Float32(0.025), Float32(0.5), Float32(0.0))
+    var p = bca_interval(sd, B, Float32(0.025), Float32(0.5), Float32(0.0))
     if abs(Float64(p.alpha_1) - 0.025) > 2e-7 or abs(Float64(p.alpha_2) - 0.975) > 2e-7:
         raise Error(
             "check_bca_interval: z0p = 1/2, a_hat = 0 must give the percentile levels; got "

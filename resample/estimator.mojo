@@ -1558,7 +1558,9 @@ def permutation_samples_host(
     var key = resample_key(seed, RESAMPLE_KIND_PERM_SAMPLES)
     var ctx = DeviceContext()
     var dx = _upload(ctx, x)
-    var dy = _upload(ctx, y if two else x)
+    var dy = _upload(ctx, x)
+    if two:
+        dy = _upload(ctx, y)
     var null_buf = ctx.enqueue_create_buffer[DType.float32](n_resamples)
     ctx.synchronize()
     if tpb != 256 and tpb != 128 and tpb != 64:
