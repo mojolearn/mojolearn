@@ -74,6 +74,10 @@ arrays, the gradient arrays included).
 11. d6e3cbd4a merge of origin/lane/apple-merged (no file in common).
 12. 209bdc3b4 GCNConv/SAGEConv reuse the graph built for the same content
    key (n, edge_index bytes, edge_weight bytes, flags); DC_MAXW 2048.
+14. 93e40eaf2 Dropout2d and SpMM entries on the cached workspace slots.
+15. 770c1be66 / 2846f96a6 BatchNorm fold form measured once per shape per
+   process (`_bn_use_block`: element or threadgroup, both the same words),
+   the threadgroup fold reading eight staged words ahead.
 13. df6386e7d BatchNorm per-channel folds through threadgroup memory (one
    threadgroup per channel; thread 0 folds in the same order;
    `-D MOJOLEARN_XCNN_NO_BN_BLOCK`). The mean's image order now reads
