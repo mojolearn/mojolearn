@@ -371,6 +371,10 @@ def _native_sigmoid_train(binding, dec, labels):
 # estimator runs their Mojo transcription (svm/host/svc_proba.mojo) through
 # the svm bindings. They stay as the reference that transcription is held to
 # bit for bit, and as the libsvm reading the tests exercise.
+# DEVIATION 6903 (IDENTITY_PATHS row 253, lane py-bugs): Platt scaling and the
+# pairwise coupling are binary64 arithmetic in libsvm's loop order with no FMA
+# on the pinned exp / log (`_portable_math` here, `pm_exp` / `pm_log` in the
+# Mojo transcription, lane py-dn-svm).
 def _platt_fval(dec, t, a, b):
     f = 0.0
     for d, ti in zip(dec, t):

@@ -529,7 +529,7 @@ def _c_round(number, precision):
     """Their `Round` (`options_helper.cpp:15-18`): `round(number * 10^p) /
     10^p` with C `round`, which rounds halves AWAY from zero (Python's
     `round` rounds them to even)."""
-    multiplier = 10.0 ** precision
+    multiplier = math.powi(10.0, precision)  # exact for 0 <= precision <= 22; no platform pow
     scaled = number * multiplier
     rounded = math.floor(abs(scaled) + 0.5)
     return math.copysign(rounded, scaled) / multiplier

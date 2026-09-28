@@ -15,6 +15,7 @@ first imported, after the package, so both may rely on every module existing:
                                its `_HostBound`; never import it at module level
 """
 from . import _backend
+from . import _portable_math as _pm
 
 __all__ = ["Conv2d", "Conv1d", "MaxPool2d", "AvgPool2d", "MaxPool1d", "AvgPool1d", "CNNClassifier", "BatchNorm2d", "BatchNorm1d",
            "Dropout2d", "AdaptiveAvgPool2d", "AdaptiveMaxPool2d", "BasicBlock",
@@ -489,12 +490,16 @@ def _adam(binding, param, grad, mv, step, lr, betas, eps, weight_decay, decouple
 
 def _adam_hyper(step, lr, betas, eps, weight_decay, decoupled):
     """adam_at's hyper block for 1-based step `step` (the scalars in double,
-    as torch computes them in Python); `_adam` and the resident fit share it."""
-    import math
+    as torch computes them in Python); `_adam` and the resident fit share it.
+    DEVIATION 6900: torch's `beta ** step` calls the platform pow; here it is
+    `_pm.powi`, correctly rounded (the platform's bits wherever its pow is),
+    the same bits on every host. sqrt is correctly rounded everywhere."""
     b1, b2 = float(betas[0]), float(betas[1])
-    bc1 = 1.0 - b1 ** step
-    bc2 = 1.0 - b2 ** step
-    return [lr / bc1, 1.0 - b1, b2, 1.0 - b2, float(eps), math.sqrt(bc2), float(weight_decay),
+    if step != int(step):
+        raise ValueError(f"Adam step must be a whole number, got {step!r}")
+    bc1 = 1.0 - _pm.powi(b1, int(step))
+    bc2 = 1.0 - _pm.powi(b2, int(step))
+    return [lr / bc1, 1.0 - b1, b2, 1.0 - b2, float(eps), _pm.sqrt(bc2), float(weight_decay),
             1.0 if decoupled else 0.0, 1.0 - float(lr) * float(weight_decay)]
 
 
@@ -752,7 +757,8 @@ class CNNClassifier(_Layer):
                     step += nsteps
                     epoch = losses.tolist()
                     self.losses_.extend(epoch)
-                    self.loss_curve_.append(sum(epoch) / len(epoch))
+                    # the same `_pm.nsum` as the step loop below (DEVIATION 6901; py-consolidated)
+                    self.loss_curve_.append(_pm.nsum(epoch) / len(epoch))
                     continue
                 epoch = []
                 for s in range(0, n, self.batch_size):
@@ -805,7 +811,8 @@ class CNNClassifier(_Layer):
                                                                             self.optimizer == "adamw"))
                     epoch.append(loss)
                 self.losses_.extend(epoch)
-                self.loss_curve_.append(sum(epoch) / len(epoch))
+                # CPython 3.12+'s sum spelled out: the same bits on every Python (DEVIATION 6901)
+                self.loss_curve_.append(_pm.nsum(epoch) / len(epoch))
             for (layer, attr, gattr), p_, g_, buf in zip(params, hp, hg, hbuf):
                 arr = getattr(layer, attr)
                 setattr(layer, attr, R.get(p_, arr.shape))

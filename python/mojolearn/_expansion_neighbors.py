@@ -1476,7 +1476,8 @@ class SVGP(_XNeighbors):
         self.jitter = jitter
 
     def _gamma_value(self):
-        return 1.0 / (2.0 * float(self.lengthscale) ** 2)
+        ls = float(self.lengthscale)
+        return 1.0 / (2.0 * (ls * ls))  # ls ** 2 as one product, not the platform pow
 
     def _k(self, A, B):
         g = self._gamma_value()

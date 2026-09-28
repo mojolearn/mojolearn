@@ -127,6 +127,19 @@ double mojolearn_exp(double x) {
     y=y*value((uint64_t)(k1+1023)<<52);
     return y*value((uint64_t)(k2+1023)<<52);
 }
+/* The scalar exp over n doubles (the Python front door's O(n) links, so they
+   stop paying one ctypes call per element): out[i] = mojolearn_exp(x[i]).
+   Returns how many finite inputs overflowed to +inf, which the Python wrapper
+   raises as the scalar's OverflowError. */
+long mojolearn_exp_f64(const double *x, long n, double *out) {
+    long over=0;
+    for (long i=0;i<n;++i) {
+        double v=x[i], y=mojolearn_exp(v);
+        out[i]=y;
+        if (y>DBL_MAX && v==v && v<=DBL_MAX) ++over;
+    }
+    return over;
+}
 /* Exact binary decomposition/scaling used by the bundled host runtime. */
 double mojolearn_frexp(double x, int *exponent) {
     uint64_t u=bits(x), magnitude=u&UINT64_C(0x7fffffffffffffff);

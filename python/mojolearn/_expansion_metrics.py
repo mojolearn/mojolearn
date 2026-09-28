@@ -57,8 +57,17 @@ _NONE = -1
 
 
 #: `_portable_math.fsum` carries the `math.fsum` fast path this module
-#: made first (lane py-shared moved it there, so every caller gains it).
+#: made first (lane py-shared moved it there, so every caller gains it; the
+#: same bits as lane py-bugs' local `_fsum`: `math.fsum` when finite, +0.0
+#: for a zero sum, the exact portable sum otherwise).
 _fsum = pmath.fsum
+
+
+def _sq(v):
+    """v * v: one correctly rounded product. `v ** 2` calls the platform pow,
+    which DEVIATION 6106 does not allow (it is not correctly rounded on every
+    host). Lanes py-bugs and py-misc-metrics both made this change."""
+    return v * v
 
 
 def _binding(numeric_mode):
@@ -2082,12 +2091,6 @@ def _proba(y_true, y_proba, labels, pos_label, caller):
         raise ValueError(f"mojolearn {caller}: y_proba " + {1: "must be finite", 2: "must lie in [0, 1]",
                          3: "rows must sum to one within sqrt(float32 eps)"}.get(code, "failed validation"))
     return codes, (packed if binary else a), k, binary
-
-
-def _sq(v):
-    """v * v: one correctly rounded product (DEVIATION 6106 allows + - * /
-    and sqrt; `v ** 2` called libm pow, lane py-misc-metrics)."""
-    return v * v
 
 
 def _class_sums_native(codes, w, k, numeric_mode):

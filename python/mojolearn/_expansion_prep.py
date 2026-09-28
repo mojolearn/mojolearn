@@ -26,8 +26,9 @@ integer bookkeeping and IEEE basic operations on scalar parameters.
 EXCEPTIONS, named (python_work_audit prep; each is host float64 Python today
 and none is covered by a ledger row yet): KBinsDiscretizer's cumulative sample
 weights and 53-bit uniform scaling (`_draw`-driven subsample); IterativeImputer's
-`_truncnorm_host` (statistics.NormalDist, a libm erf/log per missing entry,
-sample_posterior with a user estimator only) and the O(d^2) `_abs_corr` /
+`_truncnorm_host` (binary64 per missing entry, sample_posterior with a user
+estimator only; its normal cdf / inverse cdf are the pinned `_portable_math`
+twins since lane py-bugs, DEVIATION 6902, row 252) and the O(d^2) `_abs_corr` /
 `_neighbours` normalisation (n_nearest_features). IterativeImputer with a
 user `estimator` otherwise runs its data-sized plumbing in
 x_prep/user_host.mojo (row 221, DEVIATION 5411: row selection, gathers, the
@@ -44,9 +45,9 @@ import math
 import numbers
 import operator
 import os
-import statistics
 
 from . import _backend
+from . import _portable_math as _pm
 from ._array import Array
 from ._buffer import as_f32_c, addr_ro
 from . import _labels
@@ -3341,7 +3342,7 @@ class IterativeImputer(_PrepBase):
                 v = min(v, 1.0) if v == v else 1e-6
                 m[a][b] = 0.0 if a == b else max(v, 1e-6)
         for b in range(dk):
-            col = sum(m[a][b] for a in range(dk))
+            col = _pm.nsum(m[a][b] for a in range(dk))
             if col > 0:
                 for a in range(dk):
                     m[a][b] /= col
@@ -3355,7 +3356,7 @@ class IterativeImputer(_PrepBase):
         chosen = set()
         for _ in range(int(self.n_nearest_features)):
             left = [a for a in range(dk) if a not in chosen and w[a] > 0]
-            tot = sum(w[a] for a in left)
+            tot = _pm.nsum(w[a] for a in left)
             u = (self._draw() >> 11) * 2.0 ** -53 * tot
             pick, cum = left[-1], 0.0
             for a in left:
@@ -3490,7 +3491,7 @@ class IterativeImputer(_PrepBase):
                 self._impute_host(Xt, mis, j, nbl, est)
             done = r + 1
             if not self.sample_posterior and order and \
-                    max(sum(abs(a - b) for a, b in zip(ra, rb)) for ra, rb in zip(Xt, prev)) < tol:
+                    max(_pm.nsum(abs(a - b) for a, b in zip(ra, rb)) for ra, rb in zip(Xt, prev)) < tol:
                 break
         self.n_iter_ = done if any(orders) else min(1, len(orders))
         self.imputation_sequence_ = seq
@@ -3506,7 +3507,6 @@ class IterativeImputer(_PrepBase):
         estimator sees the same float32 blocks in the same order; its fit and
         predict are the only Python per feature. `_fit_host` stays the
         reference (MOJOLEARN_HOTPATH=python, `_II_NATIVE = False`)."""
-        import sys
         n, d = arr.shape
         dk = len(self._keep)
         b = _prep_binding(_mode())
@@ -3514,7 +3514,10 @@ class IterativeImputer(_PrepBase):
         Xt = as_f32_c(Xf, name="X")[0].copy()
         obs = array.array("i", bytes(4 * n))
         mis = array.array("i", bytes(4 * n))
-        comp = 1 if sys.version_info >= (3, 12) else 0
+        # The Python reference sums with `_pm.nsum` (lane py-bugs, DEVIATION
+        # 6901): CPython 3.12+'s compensated order on every interpreter, so
+        # the twin is always the compensated spelling (py-consolidated).
+        comp = 1
         seq = []
         done = 0
         for r, order in enumerate(orders):
@@ -3557,8 +3560,9 @@ class IterativeImputer(_PrepBase):
 
     def _impute_native(self, b, Xt, rows, m, j, nbl, est):
         """`_impute_host` on the float32 block: predict on the gathered rows,
-        then the clip (or the truncated normal draw, still Python float64 and
-        statistics.NormalDist) and the float32 store natively."""
+        then the clip (or the truncated normal draw, still Python float64 on
+        the pinned normal cdf / inverse cdf, DEVIATION 6902) and the float32
+        store natively."""
         if not m:
             return
         dk = Xt.shape[1]
@@ -3621,23 +3625,25 @@ class IterativeImputer(_PrepBase):
     def _truncnorm_host(self, mu, sigma, lo, hi):
         """`_impute_one_feature`'s rule in Python float64: mu beyond a bound
         -> the bound, sigma <= 0 -> mu, else inversion of the truncated normal
-        at a 53-bit splitmix64 uniform (statistics.NormalDist)."""
+        at a 53-bit splitmix64 uniform. DEVIATION 6902: statistics.NormalDist's
+        cdf and inv_cdf formulas on the pinned erfc / log (`_pm.normal_cdf`,
+        `_pm.normal_inv_cdf`); NormalDist itself calls the platform erfc and
+        a C accelerator a compiler may contract, so its bits vary by host."""
         if mu < lo:
             return lo
         if mu > hi:
             return hi
         if not sigma > 0:
             return mu
-        nd = statistics.NormalDist()
-        pa = 0.0 if lo == -math.inf else nd.cdf((lo - mu) / sigma)
-        pb = 1.0 if hi == math.inf else nd.cdf((hi - mu) / sigma)
+        pa = 0.0 if lo == -math.inf else _pm.normal_cdf((lo - mu) / sigma)
+        pb = 1.0 if hi == math.inf else _pm.normal_cdf((hi - mu) / sigma)
         u = ((self._draw() >> 11) + 0.5) * 2.0 ** -53
         pu = pa + u * (pb - pa)
         if pu <= 0:
             return lo
         if pu >= 1:
             return hi
-        return min(max(mu + sigma * nd.inv_cdf(pu), lo), hi)
+        return min(max(mu + sigma * _pm.normal_inv_cdf(pu), lo), hi)
 
     def fit(self, X, y=None):
         self.fit_transform(X)

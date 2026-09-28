@@ -17,6 +17,7 @@ first imported, after the package, so both may rely on every module existing:
 import math
 
 from . import _backend, _buffer
+from . import _portable_math as _pm
 from ._array import Array
 from ._mode import NumericModeMixin
 
@@ -744,7 +745,8 @@ class BayesianGaussianMixture(_XCluster):
 
     def predict_proba(self, X):
         lr, _, n, k = self._score(X)
-        return Array._from_flat([math.exp(v) for v in lr], (n, k), "<f4")
+        # DEVIATION 6900: the pinned exp (the fit's E-step exp is pinned too, 5109)
+        return Array._from_flat(_pm.exp_array(lr), (n, k), "<f4")
 
     def score_samples(self, X):
         _, lpn, n, _ = self._score(X)
@@ -839,7 +841,7 @@ def _gmm_ext_fit(est, X):
     est.covariances_ = BayesianGaussianMixture._by_type(f[2], k, d, ct)
     est.precisions_cholesky_ = BayesianGaussianMixture._by_type(f[3], k, d, ct)
     est.log_det_chol_ = Array._from_flat(
-        [sum(math.log(f[3][c * d * d + j * d + j]) for j in range(d)) for c in range(k)], (k,), "<f4")
+        [_pm.nsum(_pm.log(f[3][c * d * d + j * d + j]) for j in range(d)) for c in range(k)], (k,), "<f4")
     est.n_iter_ = int(s[1])
     est.converged_ = bool(s[2])
     est.lower_bound_ = float(s[0])
@@ -864,7 +866,7 @@ def _gmm_ext_score(est, X):
     f, _, _ = ext["call"]._call(_E_BGMM_SCORE, x, _f32([vals], "model"), [n, d, k])
     lr, lpn = f[0], f[1]
     labels = [max(range(k), key=lambda j: (lr[r * k + j], -j)) for r in range(n)]
-    return (lr, Array._from_flat(lpn, (n,), "<f4"), Array._from_flat([math.exp(v) for v in lr], (n, k), "<f4"),
+    return (lr, Array._from_flat(lpn, (n,), "<f4"), Array._from_flat(_pm.exp_array(lr), (n, k), "<f4"),
             Array._from_flat(labels, (n,), "<i4"))
 
 
@@ -880,4 +882,4 @@ def _gmm_ext_bic_aic(est, X):
     k, d = est.means_.shape
     cov = {"full": k * d * (d + 1) / 2.0, "diag": k * d, "tied": d * (d + 1) / 2.0, "spherical": k}[est.covariance_type]
     p = int(cov + k * d + k - 1)
-    return score, -2 * score * n + p * math.log(n), -2 * score * n + 2 * p
+    return score, -2 * score * n + p * _pm.log(n), -2 * score * n + 2 * p
