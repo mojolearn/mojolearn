@@ -177,3 +177,19 @@ origin's merged with main. Every later branch is merged from its origin/ ref.
     base tracks); ann's reorder is the same fix in another spelling.
   - tools/test_lane_select.py: both REMEASURED notes kept; pin provisional.
 - origin/lane/ann-cpu: clean.
+
+### lane/algos-sequence, lane/sequence-cpu
+
+- origin/lane/algos-sequence: clean.
+- origin/lane/sequence-cpu:
+  - DEVIATION number collision: 5540 was algos-sequence's LR schedulers seam
+    (sched_check.py, seam_5540_sched_exact_round.patch) and sequence-cpu's
+    host GEMM vector cells (sequence/host_gemm.mojo). Renumbered the later
+    one (host GEMM) to **5544**: IDENTITY_PATHS row 150 (DEVIATION and the
+    biting-arms list), sequence/README.md (table row + header),
+    sequence/checks/oracle.mojo, sequence/checks/seams_check.mojo (check
+    "5544_host_gemm_vector"; PASS line now 27 seams), the patch renamed to
+    sequence/checks/sabotage/seam_5544_host_gemm_unfused.patch (its comment
+    too), tools/identity_lanes/sequence.checks, docs/lanes/progress/sequence.md.
+    All 44 listed sequence patches apply.
+  - tools/dev_pod.sh: the same sync fix again; main's form kept.
