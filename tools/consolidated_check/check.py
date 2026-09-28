@@ -12,7 +12,7 @@ run_arm, compare) so every verdict means what a lane gate's verdict means.
 Resume accepts only the same committed sources, native bytes and execution settings.
 Failures, missing evidence and incomplete selections never pass.
 """
-import argparse, fcntl, hashlib, importlib.util, json, os, subprocess, sys, time, traceback
+import argparse, fcntl, hashlib, importlib.util, json, os, signal, subprocess, sys, time, traceback
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -153,6 +153,48 @@ def build(out, jobs):
     return 1 if fails or still else 0
 
 
+def kill_group(proc):
+    # Workers may outlive the harness parent, including after a normal exit.
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    proc.wait()
+
+
+def run_arm(kind, lane, backend, fixtures, out, log, timeout):
+    cmd = [sys.executable, "-u", str(alc.HARNESS), "--lanes", lane,
+           "--repeats", "1", "--fail-on-refused", "--json", str(out)]
+    if fixtures:
+        cmd += ["--fixtures", fixtures]
+    cmd += (["--require-cpu", "--require-backend", "cpu"] if kind == "cpu"
+            else ["--require-backend", backend])
+    out.unlink(missing_ok=True)
+    arm_log = out.with_suffix(".log")
+    with arm_log.open("w") as fh:
+        fh.write(f"$ {' '.join(cmd)}\n")
+        fh.flush()
+        proc = subprocess.Popen(cmd, cwd=ROOT, env=alc.arm_env(kind),
+                                stdout=fh, stderr=subprocess.STDOUT,
+                                start_new_session=True)
+        try:
+            rc = proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            kill_group(proc)
+            fh.write(f"\nTIMEOUT after {timeout}s; killed entire arm process group\n")
+            fh.flush()
+            tail = arm_log.read_text(errors="replace").splitlines()
+            last = next((line for line in reversed(tail) if line.startswith("# START")), "(no cell started)")
+            raise RuntimeError(f"{lane} {kind} timed out after {timeout}s; {last}; log {arm_log}") from None
+        finally:
+            kill_group(proc)
+    with Path(log).open("a") as fh:
+        fh.write(f"{lane} {kind}: exit {rc}; log {arm_log}\n")
+    if rc or not out.is_file():
+        raise RuntimeError(f"{lane} {kind} arm failed (exit {rc}); log {arm_log}")
+    return 0
+
+
 def clean(out, shard, cpu_threads, fixtures="base", arm_timeout=120):
     p = load_plan(out)
     i, n = (int(x) for x in shard.split("/"))
@@ -212,7 +254,7 @@ def clean(out, shard, cpu_threads, fixtures="base", arm_timeout=120):
             if sb:
                 raise RuntimeError(f"binding not built: {','.join(sb)}")
             gj = d / f"{lane}.gpu.json"
-            alc.run_arm("gpu", lane, backend, fixtures, gj, log)
+            run_arm("gpu", lane, backend, fixtures, gj, log, arm_timeout)
             for t in cpu_threads:
                 os.environ.clear()
                 os.environ.update(base_env)
@@ -221,7 +263,7 @@ def clean(out, shard, cpu_threads, fixtures="base", arm_timeout=120):
                 else:
                     os.environ["MOJOLEARN_CPU_THREADS"] = t
                 cj = d / f"{lane}.cpu{t}.json"
-                alc.run_arm("cpu", lane, backend, fixtures, cj, log)
+                run_arm("cpu", lane, backend, fixtures, cj, log, arm_timeout)
                 verdict, detail = alc.compare(ib, lane, gj, cj, fixtures, log, backend)
                 row.append(f"cpu{t}={verdict}")
                 row.append(str(detail)[:200].replace("\t", " "))
@@ -247,6 +289,9 @@ def clean(out, shard, cpu_threads, fixtures="base", arm_timeout=120):
 
 
 def main():
+    def terminated(signum, frame):
+        raise SystemExit(128 + signum)
+    signal.signal(signal.SIGTERM, terminated)
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=("plan", "build", "clean"))
     ap.add_argument("--out", required=True)

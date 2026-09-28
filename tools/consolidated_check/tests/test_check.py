@@ -66,6 +66,22 @@ class CheckTests(unittest.TestCase):
                 self.assertNotEqual(first, second)
                 self.assertNotEqual(second, driver.fingerprint(plan, ['a'], ['3'], 'metal'))
 
+    def test_timeout_kills_arm_process_group_and_names_last_cell(self):
+        driver = load_driver()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            harness = root / 'harness.py'
+            harness.write_text("import time\nprint('# START fixture/base', flush=True)\ntime.sleep(30)\n")
+            driver.ROOT = root
+            driver.alc = types.SimpleNamespace(HARNESS=harness, arm_env=lambda _: dict(os.environ))
+            original = driver.os.killpg
+            with patch.object(driver.os, 'killpg', wraps=original) as killed:
+                with self.assertRaisesRegex(RuntimeError, 'fixture/base'):
+                    driver.run_arm('gpu', 'fixture', 'metal', 'base', root/'out.json', root/'log', .15)
+                self.assertTrue(killed.called)
+                self.assertEqual(killed.call_args[0][1], driver.signal.SIGKILL)
+            self.assertIn('killed entire arm process group', (root/'out.log').read_text())
+
     def test_wrapper_propagates_build_and_clean_failures(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
