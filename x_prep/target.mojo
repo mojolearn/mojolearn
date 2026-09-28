@@ -155,6 +155,97 @@ def te_bucket_unit(t: Int, f: FP, q: IP):
     sti(f, S, 0)
 
 
+# ------------------------------------------------ te_bucket in parallel (lane prep-apple2)
+# te_bucket is one thread per column walking every row twice (0.26 s of a
+# 1M row TargetEncoder on the M4 Pro). The same START and ROWS as a stable
+# counting sort by chunks: each (column, chunk) counts its categories
+# (te_hist), each (column, category) turns its chunk counts into offsets
+# (te_hsum), each column lays out the category starts (te_hstart), and each
+# (column, chunk) places its rows at their offsets in row order
+# (te_hscatter). Chunks are consecutive row ranges, so every bucket lists its
+# rows ascending, as te_bucket's single walk does.
+
+
+@always_inline
+def _te_chunk(n: Int, ch_n: Int, ch: Int, mut lo: Int, mut hi: Int):
+    var cs = (n + ch_n - 1) // ch_n
+    lo = min(ch * cs, n)
+    hi = min(lo + cs, n)
+
+
+def te_hist_unit(t: Int, f: FP, q: IP):
+    """q = [CODES, n, d, CMAX, CH, H]; t = j*CH + ch: H[t*CMAX + c] = how many
+    rows of chunk ch have code c in column j (int words)."""
+    var n = p(q, 1)
+    var d = p(q, 2)
+    var cmax = p(q, 3)
+    var ch_n = p(q, 4)
+    var j = t // ch_n
+    var ch = t % ch_n
+    var Hb = p(q, 5) + t * cmax
+    for c in range(cmax):
+        sti(f, Hb + c, 0)
+    var lo = 0
+    var hi = 0
+    _te_chunk(n, ch_n, ch, lo, hi)
+    for i in range(lo, hi):
+        var code = Int(ld(f, p(q, 0) + i * d + j))
+        if code >= 0 and code < cmax:
+            sti(f, Hb + code, ldi(f, Hb + code) + 1)
+
+
+def te_hsum_unit(t: Int, f: FP, q: IP):
+    """q = [CMAX, CH, H, TOT]; t = j*CMAX + c: category c's chunk counts
+    become the rows of c before each chunk; TOT[t] = c's total."""
+    var cmax = p(q, 0)
+    var ch_n = p(q, 1)
+    var j = t // cmax
+    var c = t % cmax
+    var run = 0
+    for ch in range(ch_n):
+        var at = p(q, 2) + (j * ch_n + ch) * cmax + c
+        var v = ldi(f, at)
+        sti(f, at, run)
+        run += v
+    sti(f, p(q, 3) + t, run)
+
+
+def te_hstart_unit(t: Int, f: FP, q: IP):
+    """q = [CMAX, START, TOT]; t = column j: START[j*(CMAX+1) + c] = the rows
+    of categories below c (te_bucket's START)."""
+    var cmax = p(q, 0)
+    var S = p(q, 1) + t * (cmax + 1)
+    var acc = 0
+    for c in range(cmax):
+        sti(f, S + c, acc)
+        acc += ldi(f, p(q, 2) + t * cmax + c)
+    sti(f, S + cmax, acc)
+
+
+def te_hscatter_unit(t: Int, f: FP, q: IP):
+    """q = [CODES, n, d, CMAX, CH, H, START, ROWS]; t = j*CH + ch: the rows of
+    chunk ch in row order, each at its category's start plus the rows of that
+    category before it (te_bucket's ROWS)."""
+    var n = p(q, 1)
+    var d = p(q, 2)
+    var cmax = p(q, 3)
+    var ch_n = p(q, 4)
+    var j = t // ch_n
+    var ch = t % ch_n
+    var Hb = p(q, 5) + t * cmax
+    var S = p(q, 6) + j * (cmax + 1)
+    var R = p(q, 7) + j * n
+    var lo = 0
+    var hi = 0
+    _te_chunk(n, ch_n, ch, lo, hi)
+    for i in range(lo, hi):
+        var code = Int(ld(f, p(q, 0) + i * d + j))
+        if code >= 0 and code < cmax:
+            var k = ldi(f, Hb + code)
+            sti(f, R + ldi(f, S + code) + k, i)
+            sti(f, Hb + code, k + 1)
+
+
 def te_enc_unit(t: Int, f: FP, q: IP):
     """q = [CODES, n, d, Y, T, FOLD, CMAX, NCAT, META, SMOOTH, ENC, BK, ROWS, GB];
     t = ((fi*d + j)*CMAX + cat)*T + tt. SMOOTH < 0: the empirical Bayes
