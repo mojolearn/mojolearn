@@ -36,8 +36,12 @@ Branch `lane/py-dn-ann`, cut from `lane/py-decomp-nbrs`. Scope: audit ann rows 1
 
 ## Proof and timing
 
-PENDING (the shared NVIDIA pod went down at 19:19Z with the base job nvc1-0031 queued; see the table below once
-it is back).
+PENDING. Compiled on the new nvc1 (2x A40): `_mojolearn_ivf`, `_mojolearn_x_ann`, `_mojolearn_ivf_host`,
+`_mojolearn_ivf_search_host`, `_mojolearn_x_ann_host` all build (exit 0). The proof job nvc1-0017
+(/root/ev-py-dn-ann/job.sh: head lane checks against the base columns, the resident sabotage on
+ivf,x-ann-ivf-pq,x-ann-cagra, then base vs head timing with /root/ev-py-dn-ann/bench_ann.py) was cancelled
+while queued at 19:53Z, together with the base job nvc1-0014 and every other py-* job, by someone other than
+this lane. Resubmit both when told to.
 
 | machine | column | what | base s | head s | base sha | head sha | job |
 |---|---|---|---|---|---|---|---|
