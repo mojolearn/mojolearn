@@ -992,3 +992,18 @@ def _(ml, X, yc, yr, Xh=None):
             parts[tag + "-" + alt] = _h(r.null_distribution, np.asarray([r.statistic, r.pvalue], dtype=np.float64),
                                         np.asarray([r.count_less, r.count_greater], dtype=np.int64))
     return _fit(parts)
+
+
+@lane("resample-utils")
+def _(ml, X, yc, yr, Xh=None):
+    """resample.resample / resample_indices (sklearn.utils.resample): with
+    and without replacement, the default n_samples and a smaller one, over
+    the fixture's rows; the indices and the gathered yr are hashed."""
+    rs = ml.resample
+    n = int(X.shape[0])
+    parts = {}
+    for name, rep, ns in (("rep", True, None), ("rep-half", True, n // 2), ("perm", False, None),
+                          ("perm-third", False, n // 3)):
+        idx = np.asarray(rs.resample_indices(n, ns, replace=rep, random_state=8), dtype=np.int32)
+        parts[name] = _h(idx, np.asarray(rs.resample(yr, replace=rep, n_samples=ns, random_state=8), dtype=np.float32))
+    return _fit(parts)

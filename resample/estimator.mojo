@@ -61,6 +61,10 @@ from resample.checks.index_map import (
     RESAMPLE_KIND_BOOTSTRAP_SECOND,
     RESAMPLE_KIND_MONTE_CARLO,
     RESAMPLE_KIND_PERM_SAMPLES,
+    RESAMPLE_KIND_UTILS_PERMUTE,
+    RESAMPLE_KIND_UTILS_REPLACE,
+    utils_first_by_key,
+    utils_validate,
     RESAMPLE_KIND_PERMUTATION,
     bootstrap_index_kernel,
     key_hi,
@@ -114,6 +118,7 @@ from resample.checks.statistics import (
     stat_needs_sort,
     trim_count,
     perm_samples_kernel,
+    utils_draw_kernel,
 )
 
 
@@ -1787,3 +1792,49 @@ def mc_closed_form_for[
     """The hand-derived exact integral; re-exported so a caller (and
     `resample_main.mojo`) does not have to import `statistics.mojo`."""
     return mc_closed_form[f_id](lower, upper)
+
+
+# ===========================================================================
+# ENTRY POINT: sklearn.utils.resample's row indices (2026-09-28)
+# ===========================================================================
+
+
+def resample_indices_host(
+    n: Int, count: Int, replace: Bool, seed: UInt64, tpb: Int = 256
+) raises -> List[Int32]:
+    """The `count` row indices `sklearn.utils.resample(..., replace=...,
+    n_samples=count, random_state=seed)` gathers: replace=True position `i`
+    is `draw_row_index(key6, 0, i, n)` on the device; replace=False the
+    device draws every position's 64-bit key (kind 7) and the host keeps the
+    first `count` positions of the total order (`utils_first_by_key`)."""
+    utils_validate(n, count, replace)
+    var key = resample_key(
+        seed, RESAMPLE_KIND_UTILS_REPLACE if replace else RESAMPLE_KIND_UTILS_PERMUTE
+    )
+    var m = count if replace else n
+    var ctx = DeviceContext()
+    var rows = ctx.enqueue_create_buffer[DType.int32](m if replace else 1)
+    var keys = ctx.enqueue_create_buffer[DType.uint64](1 if replace else m)
+    ctx.enqueue_function[utils_draw_kernel](
+        rows.unsafe_ptr(), keys.unsafe_ptr(), key_lo(key), key_hi(key),
+        Int32(n), Int32(m), Int32(1) if replace else Int32(0),
+        grid_dim=(ceildiv(m, tpb), 1, 1), block_dim=(tpb, 1, 1),
+    )
+    ctx.synchronize()
+    var out: List[Int32]
+    if replace:
+        out = _download_i32(ctx, rows, m)
+    else:
+        var host = ctx.enqueue_create_host_buffer[DType.uint64](m)
+        ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=keys)
+        ctx.synchronize()
+        var kl = List[UInt64](capacity=m)
+        for q in range(m):
+            kl.append(host.unsafe_ptr().unsafe_load(q))
+        _ = host^
+        out = utils_first_by_key(kl, n, count)
+    _ = rows^
+    _ = keys^
+    # DEVIATION 1946: the context dies LAST.
+    _ = ctx^
+    return out^

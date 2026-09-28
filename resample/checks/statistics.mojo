@@ -630,6 +630,30 @@ def materialize_resample_kernel(
     )
 
 
+def utils_draw_kernel(
+    rows: MutPointer[Int32, MutAnyOrigin],
+    keys: MutPointer[UInt64, MutAnyOrigin],
+    lo_bits: Int32,
+    hi_bits: Int32,
+    n_in: Int32,
+    count_in: Int32,
+    replace_in: Int32,
+):
+    """`sklearn.utils.resample`'s draws, one thread per position:
+    replace: `rows[i] = draw_row_index(key, 0, i, n)` for i < count;
+    otherwise `keys[j] = draw_permutation_key(key, 0, j)` for j < count (= n),
+    the order the host ranks. Integer only, so the same on every vendor by
+    construction."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(count_in):
+        return
+    var key = key_join(lo_bits, hi_bits)
+    if replace_in != Int32(0):
+        rows.unsafe_store(i, draw_row_index(key, 0, i, n_in))
+    else:
+        keys.unsafe_store(i, draw_permutation_key(key, 0, i))
+
+
 def order_stat_kernel[stat: Int, tpb: Int](
     theta: MutPointer[Float32, MutAnyOrigin],
     sorted_vals: MutPointer[Float32, MutAnyOrigin],

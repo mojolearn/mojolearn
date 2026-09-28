@@ -25,7 +25,7 @@ more devices refuse by name before reaching this module.
 """
 
 from std.os import abort
-from bindings.hostptr import f32_ptr, f64_ptr, copy_f32, read_f32
+from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, copy_f32, read_f32
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -46,6 +46,7 @@ from resample.host.resample_host import (
     host_monte_carlo_integrate,
     host_permutation_samples,
     host_permutation_test,
+    host_resample_indices,
 )
 
 
@@ -405,6 +406,26 @@ def permutation_samples_binding(
     return PythonObject(0)
 
 
+def resample_indices_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """`sklearn.utils.resample`'s row indices (`host_resample_indices`, 2026-09-28).
+    `addrs`: 0 idx_out (n_samples int32, WRITTEN). `params`: 0 n, 1
+    n_samples, 2 replace (0/1), 3 seed. Returns 0."""
+    if len(addrs) != 1 or len(params) != 4:
+        raise Error("resample: addrs must hold 1 address and params 4 values (n, n_samples, replace, seed)")
+    var op = i32_ptr(Int(py=addrs[0]))
+    var n = Int(py=params[0])
+    var count = Int(py=params[1])
+    var replace = Int(py=params[2]) != 0
+    var seed = UInt64(Int(py=params[3]))
+    with GILReleased(Python()):
+        var idx = host_resample_indices(n, count, replace, seed)
+        for i in range(count):
+            op.unsafe_store(i, idx[i])
+    return PythonObject(0)
+
+
 def _mc_run(
     f_id: Int,
     lower: List[Float32],
@@ -520,6 +541,7 @@ def PyInit__mojolearn_resample_host() abi("C") -> PythonObject:
         m.def_function[bootstrap_unpaired_binding]("bootstrap_unpaired")
         m.def_function[permutation_test_binding]("permutation_test")
         m.def_function[permutation_samples_binding]("permutation_samples")
+        m.def_function[resample_indices_binding]("resample_indices")
         m.def_function[monte_carlo_integrate_binding]("monte_carlo_integrate")
         return m.finalize()
     except e:

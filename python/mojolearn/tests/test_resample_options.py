@@ -94,6 +94,29 @@ def main():
         print("FAIL pairings was not refused"); bad += 1
     except ValueError as e:
         print("PASS pairings refused by name:", str(e)[:60])
+    # sklearn.utils.resample
+    n = 5000
+    i1 = np.asarray(rs.resample_indices(n, replace=False, random_state=1))
+    ok = sorted(i1.tolist()) == list(range(n))
+    i2 = np.asarray(rs.resample_indices(n, 1200, replace=False, random_state=1))
+    ok = ok and len(set(i2.tolist())) == 1200 and np.array_equal(i2, i1[:1200])
+    print(f"{'PASS' if ok else 'FAIL'} resample replace=False: a permutation, and n_samples keeps its prefix")
+    bad += not ok
+    i3 = np.asarray(rs.resample_indices(n, 20000, replace=True, random_state=1))
+    cnt = np.bincount(i3, minlength=n)
+    ok = i3.min() >= 0 and i3.max() < n and abs(cnt.mean() - 4.0) < 1e-9 and cnt.std() < 2.3
+    print(f"{'PASS' if ok else 'FAIL'} resample replace=True: in range, counts mean {cnt.mean():.2f} sd {cnt.std():.2f} (Poisson 2.0)")
+    bad += not ok
+    xa, ya = rs.resample(np.arange(10.0), list("abcdefghij"), random_state=4)
+    ok = [chr(ord("a") + int(v)) for v in xa] == list(ya)
+    print(f"{'PASS' if ok else 'FAIL'} resample gathers every array by the same rows")
+    bad += not ok
+    for kw in (dict(stratify=[0] * 10), dict(sample_weight=[1.0] * 10), dict(replace=False, n_samples=11)):
+        try:
+            rs.resample(np.arange(10.0), **kw)
+            print("FAIL resample", kw, "was not refused"); bad += 1
+        except Exception as e:  # noqa: BLE001
+            print("PASS resample refused", list(kw)[0], ":", str(e)[:60])
     print("RESULT", "PASS" if not bad else f"FAIL ({bad})")
     return 1 if bad else 0
 

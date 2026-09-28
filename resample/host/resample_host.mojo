@@ -77,6 +77,10 @@ from resample.checks.index_map import (
     RESAMPLE_KIND_BOOTSTRAP_SECOND,
     RESAMPLE_KIND_MONTE_CARLO,
     RESAMPLE_KIND_PERM_SAMPLES,
+    RESAMPLE_KIND_UTILS_PERMUTE,
+    RESAMPLE_KIND_UTILS_REPLACE,
+    utils_first_by_key,
+    utils_validate,
     draw_pair_flip,
     RESAMPLE_KIND_PERMUTATION,
     draw_permutation_key,
@@ -1078,3 +1082,21 @@ def host_monte_carlo_integrate[
     var integral = mc_finish_host(partials, n_chunks, n_samples, volume)
     var mean = _mean_of_sum(host_fold_partials(partials, n_chunks), n_samples)
     return HostMonteCarloResult(integral, mean, volume)
+
+
+def host_resample_indices(n: Int, count: Int, replace: Bool, seed: UInt64) raises -> List[Int32]:
+    """`estimator.mojo::resample_indices_host` without the device: the same
+    draws position by position, the same host order."""
+    utils_validate(n, count, replace)
+    var key = resample_key(
+        seed, RESAMPLE_KIND_UTILS_REPLACE if replace else RESAMPLE_KIND_UTILS_PERMUTE
+    )
+    if replace:
+        var out = List[Int32](capacity=count)
+        for i in range(count):
+            out.append(draw_row_index(key, 0, i, Int32(n)))
+        return out^
+    var kl = List[UInt64](capacity=n)
+    for j in range(n):
+        kl.append(draw_permutation_key(key, 0, j))
+    return utils_first_by_key(kl, n, count)

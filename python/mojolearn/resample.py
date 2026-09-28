@@ -308,6 +308,56 @@ def monte_carlo_integrate(integrand, lower, upper, n_samples, random_state=0, i_
     return MonteCarloResult(float(scalars[0]), float(scalars[1]), float(scalars[2]), float(scalars[3]))
 
 
-__all__ = ["bootstrap", "permutation_test", "monte_carlo_integrate",
+def resample_indices(n, n_samples=None, replace=True, random_state=0, numeric_mode=None):
+    """The row indices `sklearn.utils.resample` gathers, as an int32 Array:
+    replace=True position i draws a row by the Philox position map (kind 6),
+    replace=False keeps the first n_samples positions of a keyed total order
+    (kind 7, `rng.permutation(n)[:n_samples]`'s positional spelling). Integer
+    only, so the same indices on every vendor and on the CPU."""
+    where = "resample"
+    n = _int(n, "n", where)
+    count = n if n_samples is None else _int(n_samples, "n_samples", where)
+    idx = empty((max(count, 0),), "<i4")
+    _extension(numeric_mode).resample_indices(
+        # ORDER MATCHES bindings/_mojolearn_resample.mojo::resample_indices_binding.
+        [addr(idx, name="indices")],
+        [n, count, 1 if replace else 0, _int(random_state, "random_state", where)],
+    )
+    return idx
+
+
+def _take(a, idx):
+    if hasattr(a, "__array__") and hasattr(a, "shape"):
+        import numpy as np
+        return np.asarray(a)[np.asarray(idx, dtype=np.intp)]
+    return [a[int(i)] for i in idx]
+
+
+def resample(*arrays, replace=True, n_samples=None, random_state=0, stratify=None,
+             sample_weight=None, numeric_mode=None):
+    """`sklearn.utils.resample(*arrays, replace=..., n_samples=...,
+    random_state=...)`: every array indexed by the same `resample_indices`
+    rows (first axis). One array returns it, several a list, as scikit-learn.
+    `stratify` and `sample_weight` are REFUSED BY NAME (resample/NOT_IMPLEMENTED.tsv)."""
+    where = "resample"
+    if stratify is not None:
+        raise ValueError(f"mojolearn {where}: stratify= is refused by name (resample/NOT_IMPLEMENTED.tsv): "
+                         "scikit-learn's per-class allocation (_approximate_mode) breaks ties with its RNG stream")
+    if sample_weight is not None:
+        raise ValueError(f"mojolearn {where}: sample_weight= is refused by name (resample/NOT_IMPLEMENTED.tsv): "
+                         "a weighted draw is an inverse-CDF lookup over a float cumulative sum not yet pinned")
+    if not arrays:
+        return None
+    n = len(arrays[0])
+    for a in arrays[1:]:
+        if len(a) != n:
+            raise ValueError(f"mojolearn {where}: Found input variables with inconsistent numbers of samples: "
+                             f"{[len(x) for x in arrays]}")
+    idx = resample_indices(n, n_samples, replace, random_state, numeric_mode)
+    out = [_take(a, idx) for a in arrays]
+    return out[0] if len(out) == 1 else out
+
+
+__all__ = ["bootstrap", "permutation_test", "monte_carlo_integrate", "resample", "resample_indices",
            "BootstrapResult", "PermutationTestResult", "MonteCarloResult",
            "STATISTICS", "METHODS", "ALTERNATIVES", "INTEGRANDS"]
