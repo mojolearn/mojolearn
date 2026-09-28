@@ -402,6 +402,10 @@ def group_mean_kernel(x: FP, labels: IP, res: FP, n_: Int64, d_: Int64, g_: Int6
 
 
 def op_group_mean(x: Int, labels: Int, res: Int, n: Int, d: Int, g: Int) raises:
+    comptime if not is_defined["MOJOLEARN_XN_SERIAL_GPU"]():
+        for t in range(g * d):
+            group_mean_item(t, _f(x), _i(labels), _f(res), n, d, g)
+        return
     var ctx = xn_ctx()
     var d_x = _buf(ctx, x, n * d, True)
     var d_labels = _buf_i(ctx, labels, n, True)
@@ -478,6 +482,10 @@ def variance_kernel(x: FP, res: FP, count_: Int64):
 
 
 def op_variance(x: Int, res: Int, count: Int) raises:
+    comptime if not is_defined["MOJOLEARN_XN_SERIAL_GPU"]():
+        for t in range(1):
+            variance_item(t, _f(x), _f(res), count)
+        return
     var ctx = xn_ctx()
     var d_x = _buf(ctx, x, count, True)
     var d_res = _buf(ctx, res, 1, False)
@@ -695,6 +703,10 @@ def nc_std_kernel(x: FP, lab: IP, cent: FP, std: FP, n_: Int64, d_: Int64, n_cla
 
 
 def op_nc_std(x: Int, lab: Int, cent: Int, std: Int, n: Int, d: Int, n_classes: Int) raises:
+    comptime if not is_defined["MOJOLEARN_XN_SERIAL_GPU"]():
+        for t in range(d):
+            nc_std_item(t, _f(x), _i(lab), _f(cent), _f(std), n, d, n_classes)
+        return
     var ctx = xn_ctx()
     var d_x = _buf(ctx, x, n * d, True)
     var d_lab = _buf_i(ctx, lab, n, True)
@@ -942,6 +954,10 @@ def absdiff_sum_kernel(a: FP, b: FP, res: FP, count_: Int64):
 
 
 def op_absdiff_sum(a: Int, b: Int, res: Int, count: Int) raises:
+    comptime if not is_defined["MOJOLEARN_XN_SERIAL_GPU"]():
+        for t in range(1):
+            absdiff_sum_item(t, _f(a), _f(b), _f(res), count)
+        return
     var ctx = xn_ctx()
     var d_a = _buf(ctx, a, count, True)
     var d_b = _buf(ctx, b, count, True)
@@ -1429,6 +1445,18 @@ def svgp_kernel(kuu: FP, bmat: FP, b: FP, y: FP, alpha: FP, cmat: FP, qmu: FP, q
 
 
 def op_svgp(kuu: Int, bmat: Int, b: Int, y: Int, alpha: Int, cmat: Int, qmu: Int, qsqrt: Int, info: Int, m: Int, n: Int, noise: Float32, jitter: Float32, kdiag: Float32) raises:
+    comptime if not is_defined["MOJOLEARN_XN_SERIAL_GPU"]():
+        var s_luu = List[Float32](length=(m * m) if (m * m) > 0 else 1, fill=Float32(0))
+        var s_ls = List[Float32](length=(m * m) if (m * m) > 0 else 1, fill=Float32(0))
+        var s_e = List[Float32](length=(m) if (m) > 0 else 1, fill=Float32(0))
+        var s_col = List[Float32](length=(m) if (m) > 0 else 1, fill=Float32(0))
+        for t in range(1):
+            svgp_item(t, _f(kuu), _f(bmat), _f(b), _f(y), _f(alpha), _f(cmat), _f(qmu), _f(qsqrt), _f(info), FP(unsafe_from_address=Int(s_luu.unsafe_ptr())), FP(unsafe_from_address=Int(s_ls.unsafe_ptr())), FP(unsafe_from_address=Int(s_e.unsafe_ptr())), FP(unsafe_from_address=Int(s_col.unsafe_ptr())), m, n, noise, jitter, kdiag)
+        _ = s_luu^
+        _ = s_ls^
+        _ = s_e^
+        _ = s_col^
+        return
     var ctx = xn_ctx()
     var d_kuu = _buf(ctx, kuu, m * m, True)
     var d_bmat = _buf(ctx, bmat, m * m, True)

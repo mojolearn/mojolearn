@@ -184,6 +184,14 @@ CUSTOM_OPS = [
 #: launch.
 HOST_RUN = {
     "louvain": "MOJOLEARN_XN_LOUVAIN_GPU",
+    # a handful of long serial folds (one item per class x feature, per
+    # feature, or one item): NearestCentroid's group means and std, the
+    # variance, SVGP's m x m solve, the one-item absolute-difference sum
+    "group_mean": "MOJOLEARN_XN_SERIAL_GPU",
+    "nc_std": "MOJOLEARN_XN_SERIAL_GPU",
+    "variance": "MOJOLEARN_XN_SERIAL_GPU",
+    "svgp": "MOJOLEARN_XN_SERIAL_GPU",
+    "absdiff_sum": "MOJOLEARN_XN_SERIAL_GPU",
 }
 
 BLOCK_OPS = {
