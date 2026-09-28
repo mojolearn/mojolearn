@@ -30,6 +30,9 @@ from std.ffi import external_call
 from std.memory import bitcast
 from x_linear.ops import FP
 
+#: A team's stored pointers (x_linear/team.mojo `Team`).
+comptime TP = MutPointer[Float32, MutUntrackedOrigin]
+
 #: Threads per block of a team fit on the device.
 comptime LINEAR_TPB = 256
 #: Broadcast slots of a team.
@@ -71,11 +74,18 @@ def team_barrier():
 struct Team(ImplicitlyCopyable, Movable):
     var tid: Int
     var nt: Int
-    # addresses, not pointers (a struct field cannot carry AnyOrigin)
-    var slot_at: Int  # TEAM_SLOTS float32 words for broadcasts
-    var rows_at: Int  # row buffers of n words: row(k)
+    # POINTERS, not integer addresses (lane/linear-apple, 2026-09-28): a
+    # pointer rebuilt from an integer (`FP(unsafe_from_address=...)`) is an
+    # inttoptr into the GENERIC address space, which Metal's AIR does not
+    # have; there every team row, slot and private word read or wrote the
+    # wrong memory, and every x_linear team fit's Metal column disagreed
+    # (SGD included, whose single problem runs on thread 0 alone). Kernel
+    # pointer arguments keep their device address space through `+`.
+    # (MutUntrackedOrigin: a struct field cannot expose AnyOrigin.)
+    var slot_at: TP  # TEAM_SLOTS float32 words for broadcasts
+    var rows_at: TP  # row buffers of n words: row(k)
     var n: Int
-    var own_at: Int  # this thread's private words (team_work's per_thread)
+    var own_at: TP  # this thread's private words (team_work's per_thread)
 
     @always_inline
     def lead(self) -> Bool:
@@ -92,7 +102,7 @@ struct Team(ImplicitlyCopyable, Movable):
         """The lead thread's `v` in every thread (slot k)."""
         if self.nt == 1:
             return v
-        var slot = FP(unsafe_from_address=self.slot_at)
+        var slot = self.slot_at.unsafe_origin_cast[MutAnyOrigin]()
         if self.lead():
             slot.unsafe_store(k, v)
         self.sync()
@@ -109,18 +119,22 @@ struct Team(ImplicitlyCopyable, Movable):
 
     @always_inline
     def row(self, k: Int) -> FP:
-        return FP(unsafe_from_address=self.rows_at) + k * self.n
+        return self.rows_at.unsafe_origin_cast[MutAnyOrigin]() + k * self.n
 
     @always_inline
     def own(self) -> FP:
-        return FP(unsafe_from_address=self.own_at)
+        return self.own_at.unsafe_origin_cast[MutAnyOrigin]()
 
 
 def team_at(tid: Int, nt: Int, scratch: FP, n: Int, bufs: Int, per_thread: Int) -> Team:
     """The team over `scratch` (team_work(n, bufs, per_thread) words)."""
     var rw = scratch + TEAM_SLOTS
     var own = rw + max(bufs, TEAM_ROW_BUFS) * n + tid * per_thread
-    return Team(tid, nt, Int(scratch), Int(rw), n, Int(own))
+    return Team(
+        tid, nt, scratch.unsafe_origin_cast[MutUntrackedOrigin](),
+        rw.unsafe_origin_cast[MutUntrackedOrigin](), n,
+        own.unsafe_origin_cast[MutUntrackedOrigin](),
+    )
 
 
 def device_team(scratch: FP, n: Int, bufs: Int, per_thread: Int) -> Team:
