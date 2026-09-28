@@ -130,3 +130,25 @@ origin's merged with main. Every later branch is merged from its origin/ ref.
     decomp-cpu added fast host QR/Jacobi/LU equal to the serial replay; both
     claim the serial bits, so they must agree; dense_check and the decomp
     lanes prove it.
+
+### lane/algos-cluster, lane/cluster-cpu
+
+- origin/lane/algos-cluster: IDENTITY_PATHS.md. Its new row 202 (AP tie
+  noise, `x_cluster/bodies.mojo::ap_noise_cell`, DEVIATION 5122) collided with
+  neural's row 202 (maximize=). Renumbered to **230**, range **230-239**
+  registered to cluster; next free row 240. No other file cited "row 202" for
+  it (cluster.checks names the DEVIATION, not the row).
+- origin/lane/cluster-cpu: mixture/host/gmm_host_oracle.mojo. Main split the
+  E-step's Mahalanobis over components (host_parallelize); cluster-cpu
+  splits over rows (host_cells) with host_gemm_oracle. Took cluster-cpu's
+  row split (it states the old component split no longer changes anything).
+- FIX AT THE ROOT (integration): check_host_parallel_sites FAILED after this
+  point on resample/host/resample_host.mojo lines 454/687/797 — three
+  `sync_parallelize` calls that algos-prep2's new resample paths added and
+  that prep-cpu's rewrite (which moved the other two to host_parallelize)
+  never saw. Now host_parallelize; the check PASSES.
+- OWED (not done here, behaviour change needing its own check):
+  cluster/host/host_cells.mojo and x_linear/ops.mojo::par_rows still run
+  their tasks serially "until core/host_parallel.mojo is on main". It is on
+  lane/merged now; threading them is the owning families' next step
+  (cluster, linear).
