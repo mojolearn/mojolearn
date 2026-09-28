@@ -609,6 +609,134 @@ def _select_ws[
         ws.ws_idx_save[p] = ws.idx[p]
 
 
+#: THE BLOCK SOLVE'S SCANS, W LANES AT A TIME (lane neighbors-cpu,
+#: 2026-09-28, float32 only). Each scan of `_block_solve` keeps the element
+#: that is BEST under `(v, key)`: a strictly smaller (or, for the two max
+#: scans, larger) `v`, or an equal `v` and a smaller training index. Keys
+#: are distinct and a NaN `v` can never displace the incumbent (both
+#: compares are false), and the incumbent starts at (+-inf, INT_MAX) which
+#: no NaN reaches, so the serial scan returns the unique best element of a
+#: strict total order: its minimum. A lane-wise running best followed by
+#: the same rule over the lanes and the ragged tail returns that same
+#: element. `v` itself is computed lane-wise with the scalar statements.
+comptime SMO_SCAN_MIN_UPPER = 0
+comptime SMO_SCAN_MAX_LOWER = 1
+comptime SMO_SCAN_MAX_GAIN = 2
+comptime SmoVI = SIMD[DType.int64, SMO_W]
+comptime SmoVB = SIMD[DType.bool, SMO_W]
+comptime SmoIntPtr = UnsafePointer[Int, MutUntrackedOrigin]
+
+
+@always_inline
+def _smo_upper_v(a: SmoVF, y: SmoVF, C: SmoVF) -> SmoVB:
+    return (y.lt(SmoVF(0.0)) & a.gt(SmoVF(0.0))) | (y.gt(SmoVF(0.0)) & a.lt(C))
+
+
+@always_inline
+def _smo_lower_v(a: SmoVF, y: SmoVF, C: SmoVF) -> SmoVB:
+    return (y.lt(SmoVF(0.0)) & a.lt(C)) | (y.gt(SmoVF(0.0)) & a.gt(SmoVF(0.0)))
+
+
+@always_inline
+def _smo_gain(f_u: Float32, ft: Float32, kdt: Float32, kdu: Float32, kui: Float32, eta_eps: Float32) -> Float32:
+    var eta_ui = ftz(ftz(kdt + kdu) - ftz(Float32(2) * kui))
+    if eta_ui < eta_eps:
+        eta_ui = eta_eps
+    var d = ftz(f_u - ft)
+    return ftz(ftz(d * d) / eta_ui)
+
+
+def _smo_scan[
+    mode: Int
+](
+    fp: HostF32Ptr, ap: HostF32Ptr, yp: HostF32Ptr, cp: HostF32Ptr,
+    keyp: SmoIntPtr, n: Int, f_u: Float32, kdp: HostF32Ptr, kdu: Float32,
+    trow: HostF32Ptr, eta_eps: Float32,
+) -> Tuple[Float32, Int]:
+    """One scan of `_block_solve` over `t in [0, n)`: returns (best v, t)."""
+    comptime is_min = mode == SMO_SCAN_MIN_UPPER
+    var init = inf[DType.float32]() if is_min else -inf[DType.float32]()
+    var bv = SmoVF(init)
+    var bk = SmoVI(2147483647)
+    var bt = SmoVI(-1)
+    var lanes = SmoVI(0, 1, 2, 3, 4, 5, 6, 7)
+    var whole = (n // SMO_W) * SMO_W
+    var t0 = 0
+    while t0 < whole:
+        var f = fp.unsafe_load[width=SMO_W](t0)
+        var a = ap.unsafe_load[width=SMO_W](t0)
+        var y = yp.unsafe_load[width=SMO_W](t0)
+        var C = cp.unsafe_load[width=SMO_W](t0)
+        var key = SmoVI(0)
+        comptime for l in range(SMO_W):
+            key[l] = Int64(keyp[t0 + l])
+        var v: SmoVF
+        comptime if mode == SMO_SCAN_MIN_UPPER:
+            v = _smo_upper_v(a, y, C).select(f, SmoVF(init))
+        elif mode == SMO_SCAN_MAX_LOWER:
+            v = _smo_lower_v(a, y, C).select(f, SmoVF(init))
+        else:
+            var kd = kdp.unsafe_load[width=SMO_W](t0)
+            var kui = trow.unsafe_load[width=SMO_W](t0)
+            var eta = ftz_v[SMO_W](
+                ftz_v[SMO_W](kd + SmoVF(kdu)) - ftz_v[SMO_W](SmoVF(2.0) * kui)
+            )
+            eta = eta.lt(SmoVF(eta_eps)).select(SmoVF(eta_eps), eta)
+            var d = ftz_v[SMO_W](SmoVF(f_u) - f)
+            var g = ftz_v[SMO_W](ftz_v[SMO_W](d * d) / eta)
+            var ok = SmoVF(f_u).lt(f) & _smo_lower_v(a, y, C)
+            v = ok.select(g, SmoVF(init))
+        var better: SmoVB
+        comptime if is_min:
+            better = v.lt(bv) | (v.eq(bv) & key.lt(bk))
+        else:
+            better = v.gt(bv) | (v.eq(bv) & key.lt(bk))
+        bv = better.select(v, bv)
+        bk = better.select(key, bk)
+        bt = better.select(lanes + SmoVI(t0), bt)
+        t0 += SMO_W
+    var best_v = init
+    var best_k = 2147483647
+    var best_t = -1
+    for l in range(SMO_W):
+        var v = bv[l]
+        var k = Int(bk[l])
+        var ok: Bool
+        comptime if is_min:
+            ok = v < best_v or (v == best_v and k < best_k)
+        else:
+            ok = v > best_v or (v == best_v and k < best_k)
+        if ok:
+            best_v = v
+            best_k = k
+            best_t = Int(bt[l])
+    for t in range(whole, n):
+        var a = ap[t]
+        var y = yp[t]
+        var C = cp[t]
+        var v = init
+        comptime if mode == SMO_SCAN_MIN_UPPER:
+            if in_upper_g[DType.float32](a, y, C):
+                v = fp[t]
+        elif mode == SMO_SCAN_MAX_LOWER:
+            if in_lower_g[DType.float32](a, y, C):
+                v = fp[t]
+        else:
+            if f_u < fp[t] and in_lower_g[DType.float32](a, y, C):
+                v = _smo_gain(f_u, fp[t], kdp[t], kdu, trow[t], eta_eps)
+        var k = keyp[t]
+        var ok: Bool
+        comptime if is_min:
+            ok = v < best_v or (v == best_v and k < best_k)
+        else:
+            ok = v > best_v or (v == best_v and k < best_k)
+        if ok:
+            best_v = v
+            best_k = k
+            best_t = t
+    return (best_v, best_t)
+
+
 def _block_solve[
     dt: DType
 ](
@@ -655,12 +783,23 @@ def _block_solve[
         var f_u = pos_inf
         var u = -1
         var u_key = 2147483647
-        for t in range(n_ws):
-            var v = f[t] if in_upper_g[dt](a[t], y[t], C[t]) else pos_inf
-            if v < f_u or (v == f_u and key[t] < u_key):
-                f_u = v
-                u = t
-                u_key = key[t]
+        comptime if dt == DType.float32:
+            var r = _smo_scan[SMO_SCAN_MIN_UPPER](
+                rebind[HostF32Ptr](f.unsafe_ptr()), rebind[HostF32Ptr](a.unsafe_ptr()),
+                rebind[HostF32Ptr](y.unsafe_ptr()), rebind[HostF32Ptr](C.unsafe_ptr()),
+                rebind[SmoIntPtr](key.unsafe_ptr()), n_ws, Float32(0.0),
+                rebind[HostF32Ptr](Kd.unsafe_ptr()), Float32(0.0),
+                rebind[HostF32Ptr](Kd.unsafe_ptr()), Float32(0.0),
+            )
+            f_u = rebind[Scalar[dt]](r[0])
+            u = r[1]
+        else:
+            for t in range(n_ws):
+                var v = f[t] if in_upper_g[dt](a[t], y[t], C[t]) else pos_inf
+                if v < f_u or (v == f_u and key[t] < u_key):
+                    f_u = v
+                    u = t
+                    u_key = key[t]
         if u < 0:
             u = 0
         # f_max over lower: DEVIATION 635, the same key-tied argmax as `u`
@@ -668,11 +807,21 @@ def _block_solve[
         # only a +0.0/-0.0 pair can tie with different bits, row 39)
         var f_max = neg_inf
         var fmax_key = 2147483647
-        for t in range(n_ws):
-            var v = f[t] if in_lower_g[dt](a[t], y[t], C[t]) else neg_inf
-            if v > f_max or (v == f_max and key[t] < fmax_key):
-                f_max = v
-                fmax_key = key[t]
+        comptime if dt == DType.float32:
+            var r = _smo_scan[SMO_SCAN_MAX_LOWER](
+                rebind[HostF32Ptr](f.unsafe_ptr()), rebind[HostF32Ptr](a.unsafe_ptr()),
+                rebind[HostF32Ptr](y.unsafe_ptr()), rebind[HostF32Ptr](C.unsafe_ptr()),
+                rebind[SmoIntPtr](key.unsafe_ptr()), n_ws, Float32(0.0),
+                rebind[HostF32Ptr](Kd.unsafe_ptr()), Float32(0.0),
+                rebind[HostF32Ptr](Kd.unsafe_ptr()), Float32(0.0),
+            )
+            f_max = rebind[Scalar[dt]](r[0])
+        else:
+            for t in range(n_ws):
+                var v = f[t] if in_lower_g[dt](a[t], y[t], C[t]) else neg_inf
+                if v > f_max or (v == f_max and key[t] < fmax_key):
+                    f_max = v
+                    fmax_key = key[t]
         var diff = _flush[dt](f_max - f_u)
         if n_iter == 0:
             diff0 = diff
@@ -684,19 +833,31 @@ def _block_solve[
         var best = neg_inf
         var l = -1
         var l_key = 2147483647
-        for t in range(n_ws):
-            var v = neg_inf
-            if f_u < f[t] and in_lower_g[dt](a[t], y[t], C[t]):
-                var Kui = tile[u * n_ws + t]
-                var eta_ui = _flush[dt](_flush[dt](Kd[t] + Kd[u]) - _flush[dt](Scalar[dt](2) * Kui))
-                if eta_ui < eta_eps:
-                    eta_ui = eta_eps
-                var d = _flush[dt](f_u - f[t])
-                v = _flush[dt](_flush[dt](d * d) / eta_ui)
-            if v > best or (v == best and key[t] < l_key):
-                best = v
-                l = t
-                l_key = key[t]
+        comptime if dt == DType.float32:
+            var r = _smo_scan[SMO_SCAN_MAX_GAIN](
+                rebind[HostF32Ptr](f.unsafe_ptr()), rebind[HostF32Ptr](a.unsafe_ptr()),
+                rebind[HostF32Ptr](y.unsafe_ptr()), rebind[HostF32Ptr](C.unsafe_ptr()),
+                rebind[SmoIntPtr](key.unsafe_ptr()), n_ws, rebind[Float32](f_u),
+                rebind[HostF32Ptr](Kd.unsafe_ptr()), rebind[Float32](Kd[u]),
+                rebind[HostF32Ptr](tile.unsafe_ptr()) + u * n_ws,
+                rebind[Float32](eta_eps),
+            )
+            best = rebind[Scalar[dt]](r[0])
+            l = r[1]
+        else:
+            for t in range(n_ws):
+                var v = neg_inf
+                if f_u < f[t] and in_lower_g[dt](a[t], y[t], C[t]):
+                    var Kui = tile[u * n_ws + t]
+                    var eta_ui = _flush[dt](_flush[dt](Kd[t] + Kd[u]) - _flush[dt](Scalar[dt](2) * Kui))
+                    if eta_ui < eta_eps:
+                        eta_ui = eta_eps
+                    var d = _flush[dt](f_u - f[t])
+                    v = _flush[dt](_flush[dt](d * d) / eta_ui)
+                if v > best or (v == best and key[t] < l_key):
+                    best = v
+                    l = t
+                    l_key = key[t]
         if l < 0:
             l = 0
         # update
@@ -713,7 +874,19 @@ def _block_solve[
         # the default build's fused ops (lane/pinned-mul-contract-free)
         a[u] = _flush[dt](fma(q, y[u], a[u]))
         a[l] = _flush[dt](fma(-q, y[l], a[l]))
-        for t in range(n_ws):
+        var t_done = 0
+        comptime if dt == DType.float32:
+            var fq = rebind[HostF32Ptr](f.unsafe_ptr())
+            var tu = rebind[HostF32Ptr](tile.unsafe_ptr()) + u * n_ws
+            var tl = rebind[HostF32Ptr](tile.unsafe_ptr()) + l * n_ws
+            var qv = SmoVF(rebind[Float32](q))
+            while t_done + SMO_W <= n_ws:
+                var dk = ftz_v[SMO_W](tu.unsafe_load[width=SMO_W](t_done) - tl.unsafe_load[width=SMO_W](t_done))
+                fq.unsafe_store(t_done, ftz_v[SMO_W](identical_mul_add_simd[SMO_W](
+                    qv, dk, fq.unsafe_load[width=SMO_W](t_done)
+                )))
+                t_done += SMO_W
+        for t in range(t_done, n_ws):
             var Kui = tile[u * n_ws + t]
             var Kli = tile[l * n_ws + t]
             f[t] = _flush[dt](_mad[dt](q, _flush[dt](Kui - Kli), f[t]))
