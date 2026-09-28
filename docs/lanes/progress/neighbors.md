@@ -235,6 +235,18 @@ a. DONE. `fused_slot_merge_check.mojo` under IDENTICAL: first compile of
      DEVIATION 2631 (DEFAULT_QUERY_TILE 4096 > the fixture's 4000 queries,
      the query clamp answers 4000); knn_main is a FAST check task.
 
+b. Seam arms (NVIDIA H100, merged tree 9f2d2b120 + branch): 22/22 bite
+   (PASS, FAIL under the arm, PASS after reversal), INCLUDING 5219
+   (fused_slot_merge_check under 5219_slot_merge_drops_last_block.patch).
+   First GPU-arm runs of the phase-2 lanes found and fixed: chi2_cell_kernel's
+   `out` parameter (a Mojo 1.0 keyword; the kernel_methods binding did not
+   parse); krr-options' scalar-weight fit on a linear K (indefinite in
+   float32 on a large-magnitude fixture: now rbf); km-kernels' additive_chi2
+   rows brought to [0, 1] (not PD); the svm HOST binding's kernel guard
+   lacked KERNEL_PRECOMPUTED (the CPU arm refused); the lane check now builds
+   the narrow bindings a lane's Python calls (gp-cov's normalize_y ->
+   _mojolearn_preprocessing).
+
 ## NEXT (a fresh session starts here)
 
 Bring a pod up only after the RunPod balance is topped up; run OWED a-e
