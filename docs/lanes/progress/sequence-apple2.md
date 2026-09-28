@@ -194,6 +194,23 @@ its x_sequence use did not change, so read that row as noise. Host profile of th
 search (SEQ_PROFILE): 14 `arima_fit` calls 8.3 s, 2000 one-series `select_d` calls
 2.4 s (batched in 4387772c3, job 6).
 
+### Job 6: m4-a, steward 1790610743926, before 068959af0, after 4387772c3 (batched select_d)
+
+| algo | IDENTICAL before | after | x | bits | FAST before | after | x | bits |
+|---|---|---|---|---|---|---|---|---|
+| autoarima (2000 series) | 11.48 | 4.60 | 2.50x | same | 10.84 | 3.96 | 2.74x | same |
+| arima (10000 series, (1,1,1)) | 1.721 | 1.339 | 1.28x | same | 1.816 | 1.301 | 1.40x | same |
+| kpss | 0.009 | 0.008 | 1.07x | same | 0.009 | 0.008 | 1.06x | same |
+| lamb | 1.875 | 1.391 | 1.35x | same | 1.084 | 0.262 | 4.14x | moved |
+| adafactor | 1.064 | 0.871 | 1.22x | same | 0.614 | 0.127 | 4.84x | moved |
+| var | 0.582 | 0.465 | 1.25x | same | 0.555 | 0.408 | 1.36x | moved |
+| garch | 0.995 | 0.993 | 1.0x | same | 0.762 | 0.499 | 1.53x | moved |
+
+AutoARIMA's order search now spends only its 14 ARIMA fits (4.5 s of 4.6 s, host
+profile). The ARIMA row is NOT this lane's: 4387772c3 includes the merge of
+lane/apple-merged (393dffbac), whose ARIMA changes the before (068959af0) lacks;
+job 7 isolates this lane's ARIMA change (one context per module).
+
 ## Unproven
 
 (pending)
