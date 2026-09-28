@@ -80,3 +80,21 @@ alternating A/B (`ab.sh`) before anything is concluded.
 The estash word is 13% faster per step on the M4 Pro with every witness equal. It
 keeps a `[B, nh, L, S]` exp stash per layer, which ran out of memory at 12 layers on
 the 16 GB M4 (Sep 26), so it is not flipped yet.
+
+### Estash word by memory (16b924fe1, orchestrator's rule)
+
+The Apple row of `attn_default_arm_for` is now NVIDIA's pre-bswz estash word
+`stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32`, GATED AT RUN TIME:
+- a shipped Apple build compiles both the estash word and the round 3 word;
+- `fused_attention_arm_from_env` returns the estash word only after a trainer's
+  `attention_estash_memory_grant`. The byte LM trainer calls it once, after its
+  persistent buffers exist. The grant requires every layer's kept exp stash plus
+  one layer's y/dy scratches (4 bytes x b x nh x l x s each) to fit under 60% of
+  `DeviceContext.get_memory_info()` free memory;
+- a refusal is sticky for the process;
+- with no grant (TransformerBlock, Samba, any process without a byte LM trainer,
+  a Mac without the memory) it runs the round 3 word, exactly the old path.
+
+Bits: every final witness is equal across the words (table above). Gain at
+B1 12L on the M4 Pro: 13% per step. `-D MOJOLEARN_ATTN_APPLE_R3_ONLY=1` restores
+the old build default.
