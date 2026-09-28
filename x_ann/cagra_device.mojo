@@ -14,7 +14,7 @@ from x_ann.device_ctx import x_ann_ctx
 from x_ann.stage_timer import AnnStages
 from x_ann.knn_device import knn_enqueue
 
-from metrics.checks.device_io import upload_f32, upload_i32, download_f32, download_i32
+from x_ann.io import upload_f32, upload_i32, download_f32, download_i32
 from x_ann.cagra_core import F32P, I32P, cagra_prune, cagra_reverse_merge, cg_search_cell
 
 comptime TPB = 64

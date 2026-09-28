@@ -19,7 +19,7 @@ from ivf.estimator import ivf_flat_build_host
 from ivf.impl.neighbors.ivf_flat.ivf_flat_build import ivf_trainset_rows
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
 from std.sys.compile import is_defined
-from metrics.checks.device_io import upload_f32, upload_i32, download_f32, download_i32
+from x_ann.io import upload_f32, upload_i32, download_f32, download_i32
 from x_ann.refine_core import refine_cell
 from x_ann.ivf_rabitq_core import rq_encode_cell, rq_pow2, rq_scale
 from x_ann.ivf_sq_core import sq_encode_cell, sq_hi_takes, sq_lo_takes, sq_range_finish
