@@ -373,3 +373,19 @@ block solve (512 thr), fws_walk_kernel (1024), _frs_scan_kernel (1024), the
 MOJOLEARN_SVM_FAST_EPT4 / EPT_OFF / WS_SELECT_OFF / SORT_OFF and
 MOJOLEARN_CHOL_SWEEP_SOLVES_OFF arms) is in the neighbors-fix agent's report
 (relayed to the orchestrator).
+
+## e2e sabotage (NVIDIA nvc1, running)
+
+- DRIVER BUG (mine, fixed): two plan lines share the file name
+  e2e_existing_device.patch (glm/ and x_neighbors/); the resumable driver
+  keyed verdict dirs by stem, so the neighbors one (47 lanes) reused glm's
+  "done" verdict. Keys are now the patch's repo path; the neighbors
+  e2e_existing_device sabotage re-runs in the recheck job (nvc1-0007).
+- **x_neighbors/checks/sabotage/phase2_device_all.patch does not bite
+  x-neighbors-metrics** (6/7 DISAGREE; x-neighbors-metrics NOTHING COMPARED):
+  under it the CPU arm REFUSES (knn weights='distance' normalizer check,
+  DEVIATION 555), because the patched `extra_metric_cell`
+  (neighbors/impl/distance/detail/distance_ops.mojo) is also the HOST path's
+  cell (core/knn_host_predict.mojo) — already so on origin/lane/algos-neighbors,
+  so the patch was never device-only for this lane. Owner: neighbors (the
+  family's phase-2 arm was only ever steward-submitted, never verified).
