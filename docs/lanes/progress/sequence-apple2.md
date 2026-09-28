@@ -227,6 +227,49 @@ No gain, so f05b9231a is REVERTED (brief: default on only with a gain). It remai
 a candidate for the M2 Pro command-queue limit (the a5f27d9c2 pattern) if the
 combined run finds ARIMA, KPSS or Holt-Winters affected there.
 
+### Job 8: THE FINAL TABLE. m4-a (Apple M4), steward 1790612337740, before 068959af0 (= 037daa353 sequence sources), after 602351663
+
+Every algorithm, both modes, two alternating runs per arm, best shown (fit s; "fit /
+infer" for the networks). Records: ~/mojolearn-evidence/sequence-apple2/j8.
+
+| algo | IDENTICAL before | after | x | bits | FAST before | after | x | bits |
+|---|---|---|---|---|---|---|---|---|
+| lstm | 1.706 / 0.570 | 1.705 / 0.569 | 1.00x | same | 1.573 / 0.507 | 1.570 / 0.505 | 1.00x | same |
+| gru | 1.360 / 0.445 | 1.359 / 0.450 | 1.00x | same | 1.256 / 0.397 | 1.253 / 0.396 | 1.00x | same |
+| rnn | 0.611 / 0.185 | 0.611 / 0.183 | 1.00x | same | 0.574 / 0.168 | 0.571 / 0.166 | 1.00x | same |
+| mlp | 1.107 / 0.313 | 1.084 / 0.313 | 1.02x | same | 0.981 / 0.303 | 0.959 / 0.300 | 1.02x | same |
+| moe | 0.404 | 0.364 | 1.11x | same | 0.393 | 0.348 | 1.13x | same |
+| layernorm | 0.532 | 0.219 | 2.43x | same | 0.520 | 0.164 | 3.18x | moved |
+| rmsprop | 0.418 | 0.209 | 1.99x | same | 0.418 | 0.209 | 2.00x | same |
+| adagrad | 0.414 | 0.208 | 1.99x | same | 0.414 | 0.209 | 1.98x | same |
+| lion | 0.416 | 0.209 | 1.99x | same | 0.415 | 0.207 | 2.00x | same |
+| adamax | 0.417 | 0.212 | 1.97x | same | 0.419 | 0.211 | 1.98x | same |
+| nadam | 0.419 | 0.212 | 1.98x | same | 0.417 | 0.212 | 1.97x | same |
+| lamb | 1.836 | 1.384 | 1.33x | same | 1.067 | 0.260 | 4.11x | moved |
+| adafactor | 1.078 | 0.826 | 1.31x | same | 0.621 | 0.127 | 4.89x | moved |
+| stl | 0.455 | 0.456 | 1.00x | same | 0.372 | 0.372 | 1.00x | same |
+| theta | 0.592 | 0.598 | 0.99x | same | 0.475 | 0.473 | 1.00x | same |
+| croston | 0.004 | 0.004 | 0.97x | same | 0.004 | 0.004 | 0.97x | same |
+| ets | 1.592 | 1.592 | 1.00x | same | 1.744 | 1.726 | 1.01x | same |
+| garch | 1.046 | 1.048 | 1.00x | same | 0.766 | 0.492 | 1.56x | moved |
+| var | 0.579 | 0.463 | 1.25x | same | 0.554 | 0.408 | 1.36x | moved |
+| prophet | 38.877 | 39.019 | 1.00x | same | 12.903 | 0.166 | 77.75x | moved |
+| arima | 1.357 | 1.292 | 1.05x | same | 1.293 | 1.282 | 1.01x | same |
+| hw | 1.425 | 1.431 | 1.00x | same | 0.590 | 0.592 | 1.00x | same |
+| kpss | 0.008 | 0.008 | 0.99x | same | 0.008 | 0.008 | 0.99x | same |
+| autoarima | 7.828 | 4.488 | 1.74x | same | 7.173 | 3.936 | 1.82x | same |
+
+IDENTICAL: every digest equal before and after. FAST: digests move exactly where a
+FAST change applies (layernorm, lamb, adafactor, garch, var, prophet). CPU column
+(x_sequence host binding, IDENTICAL, same job): rmsprop, lamb, adafactor, layernorm,
+var, garch, ets and moe digests equal before and after, and equal to the Apple GPU
+IDENTICAL digests. FAST quality in this job: identical to jobs 2 and 4 (lamb max abs
+err 3.65e-6 -> 1.26e-7, adafactor 7.20e-5 -> 1.09e-7, layernorm dw 9.5e-6 -> 2.4e-7,
+var 0.0444 -> 0.000475, garch loglik -138.314873 -> -138.314814 and QLIKE 1.085557 ->
+1.085543, prophet 65536 objective -170422.72 -> -170422.28 with RMSE 0.9932792 ->
+0.9932782; prophet 1M FAST 0.350 s). AutoARIMA's before arm ran 7.8 / 8.8 s here
+against 11.5 / 21.8 s in jobs 5 and 6: its spread is wide, the ratio is not.
+
 ## Unproven
 
 (pending)
