@@ -1,0 +1,29 @@
+diff --git a/glm/estimator.mojo b/glm/estimator.mojo
+index 97800a66c..5a57c2ea0 100644
+--- a/glm/estimator.mojo
++++ b/glm/estimator.mojo
+@@ -42,9 +42,11 @@ from core.gemm import gemv_n
+ from core.identity_trace import IdentityTrace
+ from glm.impl.ols import (
+     OLS_ALGO_EIG,
++    OLS_ELEM_TPB,
+     ols_fit_traced,
+     ols_fit_weighted_traced,
+ )
++from glm.impl.linalg.detail.lstsq import lstsq_eig_traced  # SABOTAGE 527
+ from glm.impl.qn.qn import qn_decision_function, qn_fit_x
+ from glm.impl.ridge import RIDGE_ALGO_EIG, ridge_fit_traced
+ from glm.impl.linear_model.qn import (
+@@ -127,9 +129,10 @@ def ols_fit_host(
+             String("ols n=") + String(n_rows) + " d=" + String(n_features)
+             + " algo=" + String(OLS_ALGO_EIG)
+         )
+-    ols_fit_traced(
++    # SABOTAGE 527: the host surface calls lstsq_eig AROUND olsFit's dispatch
++    lstsq_eig_traced(
+         ctx, x, y, w, cov, q, qs, s, ab, inv, xa, xa2,
+-        n_rows, n_features, trace, OLS_ALGO_EIG,
++        n_rows, n_features, OLS_ELEM_TPB, trace,
+     )
+     var hw = ctx.enqueue_create_host_buffer[DType.float32](n_features)
+     ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=w)

@@ -22,7 +22,7 @@ and every helper the Nelder-Mead forecasters (Theta, ETS, GARCH) call is
 `@always_inline`, because Apple's `air-lld` segfaults
 (`LazyLinker::LinkDefinition`) linking those as separate functions.
 
-## Seams (IDENTITY_PATHS.md rows 150-159)
+## Seams (IDENTITY_PATHS.md rows 150-159; 5517-5518 in row 159)
 
 Each seam's host oracle is in `checks/oracle.mojo`, written from the reference
 semantics, not from this directory; `checks/seams_check.mojo` requires the
@@ -49,6 +49,8 @@ oracle and host == oracle bit for bit. One sabotage arm per seam,
 | 5514 | MoE top-k routing | strict `>`, ties to the lower expert | ties to the higher expert |
 | 5515 | LayerNorm statistics | mean columns ascending, then centred squares | mean columns descending |
 | 5516 | SES recursion (Croston) | `alpha x + (1 - alpha) f`, one fma | `f + alpha (x - f)` |
+| 5517 | ETS seasonal update (`ets.mojo::seas_update`) | `old_s + gamma (t - old_s)`, one fma (statsforecast Update) | `(1 - gamma) old_s + gamma t` |
+| 5518 | ETS initial seasons: the decomposition's centred moving average (`ets.mojo::_moving_average`) | taps ascending, half-weight ends as `0.5 x`, one division by m | every tap times its weight `w / m` |
 
 ## ARIMA, ExponentialSmoothing (Holt-Winters) and KPSS
 

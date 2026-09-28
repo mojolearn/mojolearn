@@ -1,0 +1,24 @@
+diff --git a/x_ann/host/ivf_pq_host.mojo b/x_ann/host/ivf_pq_host.mojo
+index 8af7348cb..03439ef43 100644
+--- a/x_ann/host/ivf_pq_host.mojo
++++ b/x_ann/host/ivf_pq_host.mojo
+@@ -337,7 +337,8 @@ def ivf_pq_search_host(
+                         if nb == 0:
+                             break
+                         var total = SIMD[DType.float32, PQ_W](0.0)
+-                        for j in range(pq_dim):
++                        for jr in range(pq_dim):
++                            var j = pq_dim - 1 - jr  # SABOTAGE (never shipped)
+                             var ent = SIMD[DType.float32, PQ_W](0.0)
+                             for r in range(nb):
+                                 var code = Int(codes.unsafe_load(Int(rb.unsafe_load(r)) * pq_dim + j))
+@@ -358,7 +359,8 @@ def ivf_pq_search_host(
+                     if mask.unsafe_load(row) == 0:
+                         continue
+                     var total = Float32(0.0)
+-                    for j in range(pq_dim):
++                    for jr in range(pq_dim):
++                        var j = pq_dim - 1 - jr  # SABOTAGE (never shipped): the CPU code sum walks j descending
+                         var code = Int(codes.unsafe_load(row * pq_dim + j))
+                         var e = j * n_codes + code
+                         if sp.unsafe_load(e) != g:

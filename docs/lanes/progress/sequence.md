@@ -100,16 +100,81 @@ e2e patches in one).
 Batched steward request (all 30 family lanes, e2e_family_host_bits.patch) at
 3607aa10e: 1790537359124-sequence-3607aa10ee on m2pro, m3ultra, m4pro-a, do-amd.
 
-NEXT (a fresh session starts here), per the LANE CHARTER (one phase per session):
-1. Read `python3 tools/apple_steward.py status | grep sequence-3607aa10ee`.
-   PASS on every Mac and do-amd closes PHASE 1. A FAIL is a fix commit at
-   the root (fetch the log with `tools/cloudmac.sh ssh <mac> ...` from
-   ~/mojolearn-evidence/apple-steward/done/<id>/check/lane_check.log; the
-   M2 Pro has a compile-only scratch tree ~/seqdbg with bisect.sh/probe.sh),
-   re-proven on the A40, merged, one batched resubmission.
-2. PHASE 2, option parity, whole family including ARIMA, ExponentialSmoothing
-   and KPSS: seasonal ETS FIRST (the bench race needs it), MoE backward,
-   forecaster prediction intervals, then every NOT IMPLEMENTED row of
-   sequence/, arima/, holtwinters/, tsa/ NOT_IMPLEMENTED.tsv. Each option:
-   AGREE, a sabotage for a numeric change, existing bits unchanged; merge each.
-3. Then phase 3 FAST speed, 4 IDENTICAL speed, 5 CPU speed.
+### Steward verdict on 3607aa10e (read 2026-09-27 evening)
+
+1790537359124-sequence-3607aa10ee: do-amd PASS; m2pro, m3ultra, m4pro-a FAIL
+on ONE lane, `clean: sequence-adafactor DISAGREE` (every other family lane
+AGREE on Metal, every arm bites). The Metal cells: `plain_state` and
+`moved_state` (row_var / col_var / variance) EQUAL the CPU column; `plain`
+and `moved` (the params) differ in all nine fixtures, and Metal's params are
+the SAME for `base` and `dupes`, which share rows 0..40 (the initial params)
+and differ only in g1 (columns 14, 15). So on Metal the matrix update does
+not reach the params (U = 0, or the one-thread scalars sc[1..3] are lost);
+the vector arm's grad is column 1, equal in both fixtures, so it says nothing.
+Logs pulled to ~/mojolearn-evidence/sequence/adafactor_metal/{cpu,gpu}.json.
+
+Probe: `sequence/checks/af_probe.mojo` (99a1467ec) runs one step, matrix
+32x8 and vector 8, DeviceExec vs HostExec, the scalars / row_var / U / params
+after every launch (synced) and once more with a single sync at the end
+(an ordering bug would hide behind the syncs). Host vs host is clean on the
+laptop CPU (mac_slot, 1 core). NOTE for probes: `FP(unsafe_from_address=...)`
+carries no origin, so a List whose last use is `_fp(l)` is freed BEFORE the
+copy that reads it (ASAP destruction); the probe keeps `g` alive with `_ = g^`.
+Queued on m2pro as speed request 1790553926253-speed-sequence-99a1467ec8
+(`python3 tools/apple_steward.py status | grep speed-sequence`; stdout in the
+verdict's speed.stdout on the Mac).
+
+### Session 2026-09-28 (owed gates)
+
+Pod: dev_pod `sequence` back up (RunPod H100 80GB HBM3, f0ouvpsfix31kz).
+
+**Adafactor on Metal: FIXED at the root** (commit "alpha's max(eps2, rms) spelled max()").
+The stage probe (1790553926253 m2pro, 1790557727991 m4pro-a) named OP_AF_ALPHA: sc[1] = 0 on
+Metal, every other stage equal. Then on m3ultra-b (all logs in
+~/mojolearn-evidence/sequence/adafactor_metal/): `af_alpha_probe.mojo` showed the store NEVER
+lands (a 7-filled slot stays 7); `af_order_probe.mojo` showed it is not launch order (RMEAN
+always lands, ALPHA never, in any order); throwaway prefix ops of the body showed the kernel
+runs up to `rms` and dies (no store lands, not even an entry marker) as soon as a float
+compare-and-select takes `rms` (portable_sqrtf over the _sumsq loop): `rms if rms > f0 else f0`,
+`f0 >= rms ? f0 : rms` and `sqrt(sumsq) > f0 ? ..` all die; `max(rms, f0)`, a negated compare
+and an integer compare run. An Apple Metal compiler fault on that pattern. Fix: `max(rms, eps2)`
+(exact; torch's max(eps2, rms) incl. NaN -> eps2). Verified on the M3 Ultra: every stage of
+af_probe.mojo (matrix and vector, staged and unsynced) == CPU, every launch order == CPU.
+(The custom-kernel harness `af_kb/` lost even a constant store on Metal for a separate reason,
+an out-of-line Args-returning helper, and crashed Apple's compiler on DENOM; not used for the
+conclusion.)
+
+**Seasonal ETS: DONE.** statsforecast 2.1.1 sanity on the H100 over 40 cases (m 4, 7, 12, 24;
+AAA, AAAd, ANA, MAM, MNM, MAMd, MNA, MAA; scripts ~/mojolearn-evidence/sequence/ets_init/):
+initial states == `initstate` to 2.2e-5; likelihood at our parameters == Calc to 1e-4;
+Nelder-Mead identical in steps and constants. Where the reference converges (m 4, most m 7)
+forecasts agree to <= 1.6e-3. At m 12 and 24 the REFERENCE ALSO stops at its 1000-iteration
+cap (captured from `_ets.optimize`), so both return unconverged iterates; the float64 path is
+stable under 6e-8 input perturbation, the float32 path ends elsewhere (max forecast diff
+4.4e-2, MNM n=200 m=24), and our -2loglik is lower than the reference's in about half the cases
+(net sum of differences -4 over 40). Same nature as Theta's float32 NM rows.
+Seams 5517 (seasonal update) and 5518 (decomposition moving average): host oracles
+`o_ets_calc` / `o_ets_init` (from the reference, explicit shifted state vector), seams_check
+blocks through OP_ETS_LIK / OP_ETS_INIT (separate 53 / 44 cells), arms
+`seam_5517_ets_seasonal_update.patch`, `seam_5518_ets_decompose_ma.patch`, README rows,
+IDENTITY_PATHS row 159 extended. sequence-ets gained aaa (+info, states), mamd, ana30 (Fourier
+init), mnm5 cells.
+Gate on the H100 (`--pass 2`, all 22 sequence lanes): every arm PASS / FAIL / PASS incl. 5517
+and 5518; all 22 CLEAN AGREE; existing bits vs the merge base (same lane check at f237f1996):
+21 lanes' hashes identical, sequence-ets's 72 existing part hashes identical (only new parts).
+
+Merge gate for both (H100, after merging origin/main): sequence-adafactor + sequence-ets
+`--pass 2` AGREE, every arm bites (5507 incl.); sequence-adafactor hashes == the merge base on
+both columns (max is exact); test_host_surface 200 passed; tools/test_lane_select.py OK,
+0 failures (sequence.py / sequence.checks are its inputs). MERGED to main.
+Post-merge: ONE batched steward identity request of the 30 family lanes
+(e2e_family_host_bits.patch): 1790564279351-sequence-ee26312f08 on m2pro, m3ultra-b, m4-a,
+do-amd, at main ee26312f0 (queued 2026-09-28 ~02:58Z).
+
+NEXT (a fresh session starts here): read the verdict of 1790564279351-sequence-ee26312f08;
+a FAIL is a fix commit at the root. Then per the brief, GPU speed (FAST and IDENTICAL) for
+every sequence algorithm on NVIDIA, AMD and Apple, largest real-world cost first, profile
+(sum the stage timings) before changing code, judge at 1M+ rows (R2 data). Remaining option
+parity (MoE backward, prediction intervals, NOT_IMPLEMENTED rows) waits behind speed per
+the 2026-09-28 brief. Apple: m2pro / m3ultra released ~12:35Z Sep 28, m4pro-a/b, m4-a,
+m3ultra-b ~21:15Z Sep 28; submit Apple speed requests early and batched.
