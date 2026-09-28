@@ -20,6 +20,7 @@ def div(a: Float32, b: Float32) -> Float32:
     return ftz(identical_div(a, b))
 
 
+@always_inline
 def _sumsq(p: FP, start: Int, n: Int, stride: Int) -> Float32:
     var acc = Float32(0.0)
     for k in range(n):
