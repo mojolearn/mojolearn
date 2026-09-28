@@ -61,6 +61,7 @@ from sequence.ops import (
     OP_PROPHET_FEATURES,
     OP_PROPHET_FIT,
     OP_PROPHET_PREDICT,
+    OP_PROPHET_FG_PART,
     OP_CHOLSOLVE,
     OP_VAR_FORECAST,
     OP_MOE_ROUTE,
@@ -102,7 +103,7 @@ def _element_weight[OP: Int](a: Args) -> Int:
         OP == OP_CE or OP == OP_SOFTMAX or OP == OP_MLP_ROWLOSS
         or OP == OP_AF_ROW or OP == OP_AF_COL or OP == OP_LN_FWD or OP == OP_CHUNK_SUMSQ
         or OP == OP_LN_BWD_X or OP == OP_PROPHET_FEATURES
-        or OP == OP_PROPHET_PREDICT or OP == OP_MOE_ROUTE
+        or OP == OP_PROPHET_PREDICT or OP == OP_MOE_ROUTE or OP == OP_PROPHET_FG_PART
         or OP == OP_MOE_HIDDEN or OP == OP_MOE_OUT
     ):
         return 256

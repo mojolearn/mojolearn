@@ -103,6 +103,8 @@ comptime OP_COLSUM_DIV = 61
 comptime OP_GEMM_EPI_TAIL = 62
 comptime OP_CHUNK_SUMSQ = 63
 comptime OP_GEMM_SPLITK = 64
+comptime OP_PROPHET_FG_PART = 65
+comptime OP_PROPHET_FG_SUM = 66
 
 # ------------------------------------------------------------------ cells
 comptime CELL_RNN_TANH = 0

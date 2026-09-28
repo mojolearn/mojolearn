@@ -74,21 +74,20 @@ struct ProphetData:
         self.mult = mult
 
 
-def prophet_fg(d: ProphetData, y: FP, th: FP, g: FP) -> Float32:
-    """-log posterior (up to a constant) at th and its gradient into g.
-    th = [k, m, delta (S), log sigma, beta (K)]."""
+@always_inline
+def _fg_data(d: ProphetData, y: FP, th: FP, g: FP, lo: Int, hi: Int) -> Float32:
+    """The likelihood's points lo .. hi - 1 (ascending): their gradient terms
+    folded into g (the caller zeroes it) and their sum of squared residuals
+    (returned, from zero)."""
     var S = d.S
     var K = d.K
-    var P = 3 + S + K
     var k = ld(th, 0)
     var m = ld(th, 1)
     var u = ld(th, 2 + S)
     var sigma = ftz(identical_exp(u))
     var s2 = mul(sigma, sigma)
-    for j in range(P):
-        st(g, j, Float32(0.0))
     var sse = Float32(0.0)
-    for i in range(d.N):
+    for i in range(lo, hi):
         var ti = ld(d.t, i)
         var tr = fma3(k, ti, m)
         for j in range(S):
@@ -116,7 +115,20 @@ def prophet_fg(d: ProphetData, y: FP, th: FP, g: FP) -> Float32:
         var wb = mul(w, tr) if d.mult else w
         for q in range(K):
             st(g, 3 + S + q, fma3(wb, ld(d.X, i * K + q), ld(g, 3 + S + q)))
-    # priors
+    return sse
+
+
+@always_inline
+def _fg_prior(d: ProphetData, th: FP, g: FP, sse: Float32) -> Float32:
+    """The priors and the sigma terms on top of the likelihood's gradient in
+    g and its sse; returns the objective."""
+    var S = d.S
+    var K = d.K
+    var k = ld(th, 0)
+    var m = ld(th, 1)
+    var u = ld(th, 2 + S)
+    var sigma = ftz(identical_exp(u))
+    var s2 = mul(sigma, sigma)
     var f = add(div(mul(k, k), Float32(50.0)), div(mul(m, m), Float32(50.0)))
     st(g, 0, add(ld(g, 0), div(k, Float32(25.0))))
     st(g, 1, add(ld(g, 1), div(m, Float32(25.0))))
@@ -140,6 +152,46 @@ def prophet_fg(d: ProphetData, y: FP, th: FP, g: FP) -> Float32:
     f = add(f, div(sse, mul(Float32(2.0), s2)))
     st(g, 2 + S, add(sub(add(div(s2, Float32(0.25)), Float32(d.N)), div(sse, s2)), Float32(0.0)))
     return f
+
+
+def prophet_fg(d: ProphetData, y: FP, th: FP, g: FP) -> Float32:
+    """-log posterior (up to a constant) at th and its gradient into g.
+    th = [k, m, delta (S), log sigma, beta (K)]. (apple2: the likelihood
+    loop and the priors are two inlined helpers, the same operations in the
+    same order, so FAST's parallel likelihood can share them.)"""
+    var P = 3 + d.S + d.K
+    for j in range(P):
+        st(g, j, Float32(0.0))
+    var sse = _fg_data(d, y, th, g, 0, d.N)
+    return _fg_prior(d, th, g, sse)
+
+
+# ------------------------------------------------------------------ FAST
+def op_prophet_fg_part(t: Int, a: Args):
+    """FAST (apple2): chunk t of i4 chunks of the likelihood. p0 scaled y
+    [N]; p1 t; p2 X; p3 changepoints; p4 prior scales; p5 th [P]; p6 parts
+    [i4, P + 1] out (the chunk's gradient terms, then its sse). i0 N, i1 K,
+    i2 S, i3 multiplicative; f0 tau."""
+    var N = a.i0
+    var P = 3 + a.i2 + a.i1
+    var C = a.i4
+    var ch = (N + C - 1) // C
+    var lo = t * ch
+    var hi = min(N, lo + ch)
+    var row = a.p6 + t * (P + 1)
+    for j in range(P):
+        st(row, j, Float32(0.0))
+    var d = ProphetData(a.p1, a.p2, a.p3, a.p4, N, a.i1, a.i2, a.f0, a.i3 != 0)
+    var sse = _fg_data(d, a.p0, a.p5, row, lo, hi) if lo < hi else Float32(0.0)
+    st(row, P, sse)
+
+
+def op_prophet_fg_sum(t: Int, a: Args):
+    """FAST: p7[t] = sum over the i4 chunks of p6[c, t], in order; i5 = P + 1."""
+    var s = Float32(0.0)
+    for c in range(a.i4):
+        s = add(s, ld(a.p6, c * a.i5 + t))
+    st(a.p7, t, s)
 
 
 @always_inline

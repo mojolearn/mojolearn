@@ -128,6 +128,20 @@ def q_garch(ml, X, stall=None):
                 iters_mean=float(np.asarray(m.n_iter_).mean()))
 
 
+def q_prophet(ml, X, n=65536):
+    tt = np.arange(n, dtype=np.float64) / 24.0
+    yy = np.ascontiguousarray(X[:n, 0] + np.float32(10.0))
+    m = ml.ProphetForecaster()
+    t0 = time.perf_counter()
+    m.fit(tt, yy)
+    secs = time.perf_counter() - t0
+    yh = np.asarray(m.predict(tt), dtype=np.float64)
+    yh = yh[0] if yh.ndim > 1 else yh
+    info = np.asarray(m.info_, dtype=np.float64)
+    return dict(n=n, fit_s=secs, objective=float(info[0, 1]), iters=float(info[0, 2]),
+                rmse=float(np.sqrt(np.mean((yh - yy.astype(np.float64)) ** 2))))
+
+
 def q_layernorm(ml, X):
     x = np.ascontiguousarray(X)
     D = x.shape[1]
@@ -167,7 +181,7 @@ def main():
         try:
             if w in ("lamb", "adafactor"):
                 r = q_optim(ml, w)
-            elif w in ("ets", "garch", "layernorm", "var"):
+            elif w in ("ets", "garch", "layernorm", "var", "prophet"):
                 if X is None:
                     X, _ = load(a.data, 1_000_000)
                 if w in ("ets", "garch"):
@@ -183,7 +197,7 @@ def main():
                         print("QUAL", json.dumps(dict(case=w, mode=os.environ.get("MOJOLEARN_NUMERIC_MODE", ""), **r)),
                               flush=True)
                     continue
-                r = (q_layernorm if w == "layernorm" else q_var)(ml, X)
+                r = dict(layernorm=q_layernorm, var=q_var, prophet=q_prophet)[w](ml, X)
             else:
                 raise KeyError(w)
         except Exception as e:

@@ -63,6 +63,8 @@ from sequence.ops import (
     OP_PROPHET_FEATURES,
     OP_PROPHET_FIT,
     OP_PROPHET_PREDICT,
+    OP_PROPHET_FG_PART,
+    OP_PROPHET_FG_SUM,
     OP_MOE_ROUTE,
     OP_MOE_HIDDEN,
     OP_MOE_OUT,
@@ -96,7 +98,7 @@ from sequence.croston import op_croston
 from sequence.ets import op_ets, op_ets_init, op_ets_lik
 from sequence.garch import op_garch
 from sequence.moe import op_moe_hidden, op_moe_out, op_moe_route
-from sequence.prophet import op_prophet_features, op_prophet_fit, op_prophet_predict
+from sequence.prophet import op_prophet_features, op_prophet_fit, op_prophet_predict, op_prophet_fg_part, op_prophet_fg_sum
 from sequence.vecar import op_cholsolve, op_colscale, op_rowscale, op_scale, op_sub, op_var_design, op_var_forecast
 
 
@@ -222,6 +224,10 @@ def apply[OP: Int](t: Int, a: Args):
         op_prophet_features(t, a)
     elif OP == OP_PROPHET_FIT:
         op_prophet_fit(t, a)
+    elif OP == OP_PROPHET_FG_PART:
+        op_prophet_fg_part(t, a)
+    elif OP == OP_PROPHET_FG_SUM:
+        op_prophet_fg_sum(t, a)
     elif OP == OP_PROPHET_PREDICT:
         op_prophet_predict(t, a)
     elif OP == OP_MOE_ROUTE:

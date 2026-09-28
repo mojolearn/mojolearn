@@ -204,7 +204,9 @@ def case_ts(ml, X, y, name, big, B_big, n_len):
         outs = (r.params, r.sigma_u)
         B, n_len = Yv.shape[1], Yv.shape[0]
     elif name == "prophet":
-        n = min(len(X), 1_000_000) if big else 2000
+        # SEQ_PROPHET_N: the A/B's shape (the 1M-point IDENTICAL fit is one
+        # GPU thread, ~25 minutes on an M4 Pro)
+        n = min(len(X), int(os.environ.get("SEQ_PROPHET_N", 1_000_000))) if big else 2000
         tt = np.arange(n, dtype=np.float64) / 24.0
         yy = np.ascontiguousarray(X[:n, 0] + np.float32(10.0))
         m = ml.ProphetForecaster().fit(tt, yy)
