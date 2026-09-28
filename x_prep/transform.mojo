@@ -360,8 +360,25 @@ def pt_init_unit(t: Int, f: FP, q: IP):
         st(f, p(q, 3) + c, Float32(1))
 
 
+def pt_log_unit(t: Int, f: FP, q: IP):
+    """q = [X, n, d, METHOD, LG]; t = element i*d + c. LG[c*n + i] =
+    power_log(x) of the flushed x, the lambda-free logarithm every
+    evaluation's transform is built on (x_prep/host/power.mojo's observation:
+    power(x, lam) IS power_from_log(power_log(x), x >= 0, lam)); a NaN
+    element writes the canonical NaN."""
+    var n = p(q, 1)
+    var d = p(q, 2)
+    var c = t % d
+    var i = t // d
+    var x = ld(f, p(q, 0) + t)
+    if is_nan(x):
+        f.unsafe_store(p(q, 4) + c * n + i, canonical_nan())
+        return
+    f.unsafe_store(p(q, 4) + c * n + i, power_log(x, p(q, 3)))
+
+
 def pt_map_unit(t: Int, f: FP, q: IP):
-    """q = [X, n, d, METHOD, LEVAL, T]; t = element i*d + c. T[c*n + i] =
+    """q = [X, n, d, METHOD, LEVAL, T, LG1]; t = element i*d + c. T[c*n + i] =
     power(x, LEVAL[c]) of the flushed x (`_neg_llf`'s value), COLUMN MAJOR so
     the fold reads each column contiguously; a NaN element writes the
     canonical NaN (the fold skips it by that word: `power` of a non-NaN x is
@@ -375,7 +392,13 @@ def pt_map_unit(t: Int, f: FP, q: IP):
     if is_nan(x):
         f.unsafe_store(p(q, 5) + c * n + i, canonical_nan())
         return
-    f.unsafe_store(p(q, 5) + c * n + i, power(x, raw(f, p(q, 4) + c), p(q, 3)))
+    var lam = raw(f, p(q, 4) + c)
+    if p(q, 6) > 0:
+        # LG1 = pt_log's offset + 1: the logarithm kept across evaluations
+        var lg = raw(f, p(q, 6) - 1 + c * n + i)
+        f.unsafe_store(p(q, 5) + c * n + i, power_from_log(lg, x >= Float32(0), lam, p(q, 3)))
+        return
+    f.unsafe_store(p(q, 5) + c * n + i, power(x, lam, p(q, 3)))
 
 
 @always_inline

@@ -60,7 +60,7 @@ _OPS = dict(
     da_shrink=81, da_pool=82, sym_fn=83, da_intercept=84, evr=85, class_stats_w=86,
     indicator=87, code_counts=88, remap_codes=89, add_arrays=90, gnb_merge=91, cat_counts=92, cat_flp=93,
     mi_dc=94, mi_dd=95, kbins_gw=96, kbins_wq=97, kbins_wkm=98, ii_sigma=99, ii_post=100,
-    scaler_stats=101, std_scale=102, nan_keep=103, pt_init=104, pt_map=105, pt_fold=106, ii_rowabs=107, te_bucket=108,
+    scaler_stats=101, std_scale=102, nan_keep=103, pt_init=104, pt_map=105, pt_fold=106, ii_rowabs=107, te_bucket=108, pt_log=109,
 )
 _PARAMS = 14
 _NONE = -1
@@ -2277,13 +2277,19 @@ class PowerTransformer(_PrepBase):
         xo = pr.put(arr)
         st, lam = pr.alloc(6 * d), pr.alloc(d)
         pr.stage("col_stats", d, xo, n, d, st)
-        # pt_fit_unit's golden-section search as stages (x_prep/transform.mojo):
-        # the transform of every element at once, then the column folds
-        state, leval, tv = pr.alloc(_PT_STATE * d), pr.alloc(d), pr.alloc(n * d)
-        pr.stage("pt_init", d, method, st, d, lam, state, leval)
-        for k in range(_PT_EVALS):
-            pr.stage("pt_map", n * d, xo, n, d, method, leval, tv)
-            pr.stage("pt_fold", d, xo, n, d, method, tv, k, state, leval, lam)
+        if hasattr(_prep_binding(mode), "x_prep_host_column"):
+            # the host binding: its own pt_fit (x_prep/host/power.mojo), the same words
+            pr.stage("pt_fit", d, xo, n, d, method, st, lam)
+        else:
+            # the device: pt_fit_unit's golden-section search as stages (x_prep/transform.mojo),
+            # each element's logarithm once, the transform of every element at once per
+            # evaluation, then the column folds
+            state, leval, tv, lg = pr.alloc(_PT_STATE * d), pr.alloc(d), pr.alloc(n * d), pr.alloc(n * d)
+            pr.stage("pt_init", d, method, st, d, lam, state, leval)
+            pr.stage("pt_log", n * d, xo, n, d, method, lg)
+            for k in range(_PT_EVALS):
+                pr.stage("pt_map", n * d, xo, n, d, method, leval, tv, lg + 1)
+                pr.stage("pt_fold", d, xo, n, d, method, tv, k, state, leval, lam)
         mean, scale = pr.alloc(d), pr.alloc(d)
         if self.standardize:
             tx, st2 = pr.alloc(n * d), pr.alloc(6 * d)

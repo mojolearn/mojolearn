@@ -23,7 +23,7 @@ from naive_bayes.nb import (
 )
 from x_prep.transform import (
     qt_apply_unit, pt_fit_unit, pt_apply_unit, std_params_unit, normalize_unit, poly_unit, robust_uv_unit,
-    qt_inverse_unit, pt_inverse_unit, pt_init_unit, pt_map_unit, pt_fold_unit,
+    qt_inverse_unit, pt_inverse_unit, pt_init_unit, pt_map_unit, pt_fold_unit, pt_log_unit,
 )
 from x_prep.spline import spline_knots_unit, spline_apply_unit
 from x_prep.iterative import (
@@ -37,7 +37,7 @@ from naive_bayes.da import (
     da_shrink_unit, da_pool_unit, sym_fn_unit, da_intercept_unit, evr_unit,
 )
 
-comptime N_OPS = 109
+comptime N_OPS = 110
 
 
 @always_inline
@@ -260,3 +260,5 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
         ii_rowabs_unit(t, f, q)
     comptime if OP == 108:
         te_bucket_unit(t, f, q)
+    comptime if OP == 109:
+        pt_log_unit(t, f, q)
