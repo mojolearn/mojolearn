@@ -1,0 +1,16 @@
+diff --git a/resample/host/resample_host.mojo b/resample/host/resample_host.mojo
+index 4a2fe2443..b4c9cf21e 100644
+--- a/resample/host/resample_host.mojo
++++ b/resample/host/resample_host.mojo
+@@ -184,7 +184,10 @@ def host_chunk_partials(values: List[Float32], n: Int) -> List[Float32]:
+             for t in range(step):
+                 slab[t] = ftz(slab[t] + slab[t + step])
+             step //= 2
+-        partials.append(slab[0])
++        var sab = slab[0]  # SABOTAGE e2e: every nonzero host chunk total one ulp up
++        if sab != Float32(0.0) and sab == sab:
++            sab = bitcast[DType.float32](bitcast[DType.uint32](sab) + UInt32(1))
++        partials.append(sab)
+     return partials^
+ 
+ 
