@@ -59,7 +59,7 @@ change (7298ebd92) trims.
 | same | m4pro-a | 1790608373786 | lossguide istella | 6015 | 5996 | 0.997 | eb0d9510ee08a16f |
 | same | m4pro-a | 1790608373786 | depthwise taxi | 1768 | 1713 | 0.969 | 5694af7699036c65 |
 | same | m4pro-a | 1790608373786 | depthwise istella | 3587 | 3673 | **1.024 (slower)** | e9c0f7e913af5a8a |
-| GBDT id arena IDENTICAL (7298ebd92) | m4-a | 1790608353263 | lossguide taxi | 7354 | 6865 | 0.933 | b1761eecc6dfbc73 |
+| GBDT id arena IDENTICAL (7298ebd92) | m4-a | 1790608353263 | lossguide taxi | 7435 | 6865 | 0.923 | b1761eecc6dfbc73 |
 | same | m4-a | 1790608353263 | depthwise taxi | 3317 | 3266 | 0.985 | 5694af7699036c65 |
 | FAST GBDT 2031 sym ridx (define arm, e314b925d) | m4pro-b | 1790608403999 | symmetric taxi | 919 | 835 | 0.909 | 388959920a036d2d |
 | FAST GBDT id arena (e314b925d; before = ids separate) | m4pro-b | 1790608403999 | lossguide taxi | 4102 | 3820 | 0.931 | FAST lossguide/depthwise digests vary run to run in BOTH arms (not deterministic in FAST), so no digest comparison |
@@ -85,6 +85,7 @@ cells faster, geomean 0.989), with the Istella depthwise 1.024 noted.
 | same | m4-a | 1790611318000 | embedding:taxi | 467 | 466 | 0.997 | 90d1b0749de17d44 |
 | GBDT ridx-only IDENTICAL (206ca2e53) | m3ultra-b | 1790606770142 | depthwise taxi / istella | 1704 / 2894 | 1667 / 2899 | 0.978 / 1.002 | 5694af7699036c65 / e9c0f7e913af5a8a |
 | same | m3ultra-b | 1790606770142 | lossguide istella | 6753 | 6714 | 0.994 | eb0d9510ee08a16f |
+| same | m3ultra-b | 1790606770142 | lossguide taxi | 5362 | 5210 | 0.972 | b1761eecc6dfbc73 |
 | GBDT 2031 sym ridx IDENTICAL, ungated (bfc552c67) | m4pro-a | 1790609918603 | symmetric taxi | 1024 | 941 | 0.919 | 8e760782efae56c8 |
 | same | m4pro-a | 1790609918603 | symmetric istella | 2813 | 2992 | **1.064 (slower)** -> gated to <= 64 features (63a38c138) | d5571c2a35ea06c8 |
 | FAST combined: 2031 + id arena + ET narrow off vs on (63a38c138) | m4-a | 1790611979532 | FAST symmetric taxi | 1706 | 1575 | 0.923 | 8f160400c1defdf5 |
@@ -115,7 +116,7 @@ Before = every opt-out define of this lane (`-D MOJOLEARN_RF_BINS_COLUMN_MAJOR -
 | gbdt-depthwise:istella | 2912 | 2890 | 0.992 | e9c0f7e913af5a8a |
 | gbdt-depthwise:taxi | 1734 | 1653 | 0.953 | 5694af7699036c65 |
 | gbdt-lossguide:istella | 6948 | 6523 | 0.939 | eb0d9510ee08a16f |
-| gbdt-lossguide:taxi | 5396 | 4852 | 0.899 | b1761eecc6dfbc73 |
+| gbdt-lossguide:taxi | 5382 | 4875 | 0.906 | b1761eecc6dfbc73 |
 | gbdt-symmetric:istella | 2001 | 2042 | 1.021 | d5571c2a35ea06c8 |
 | gbdt-symmetric:taxi | 730 | 700 | 0.959 | 8e760782efae56c8 |
 | iforest:taxi | 68 | 68 | 1.000 | 96ff7aa1dfcef11e |
@@ -138,7 +139,7 @@ Same arms as the M3 Ultra table (10 RF columns per pass in both arms; 2031 alrea
 | et:taxi | 3875 | 3757 | 0.969 | ac18d5d8a54b1555 |
 | et:taxireg | 16346 | 4250 | 0.260 | ec62616c8e02c60b |
 | gbdt-depthwise:taxi | 3513 | 3261 | 0.928 | 5694af7699036c65 |
-| gbdt-lossguide:taxi | 7496 | 6591 | 0.879 | b1761eecc6dfbc73 |
+| gbdt-lossguide:taxi | 7462 | 6591 | 0.883 | b1761eecc6dfbc73 |
 | gbdt-symmetric:taxi | 1726 | 1553 | 0.900 | 8e760782efae56c8 |
 | iforest:taxi | 69 | 70 | 1.013 | 96ff7aa1dfcef11e |
 | rf:taxi | 6283 | 5632 | 0.896 | 452a173087f86a9d |
