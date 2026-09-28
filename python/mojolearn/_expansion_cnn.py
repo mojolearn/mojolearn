@@ -543,8 +543,9 @@ _LEGACY_STEP = False
 #: lane/py-misc (2026-09-28): with X resident, fit runs each epoch's steps in
 #: ONE binding call (`x_cnn_fit_epoch_r`: the same entries' work in the same
 #: order, looped in Mojo). False is the measurement arm's before side (the
-#: Python step loop); never cleared in production.
-_EPOCH_ENTRY = True
+#: Python step loop, also `MOJOLEARN_XCNN_PY_STEPS=1` for a whole-process
+#: arm such as the identity harness); never cleared in production.
+_EPOCH_ENTRY = __import__("os").environ.get("MOJOLEARN_XCNN_PY_STEPS", "") != "1"
 
 
 class CNNClassifier(_Layer):
