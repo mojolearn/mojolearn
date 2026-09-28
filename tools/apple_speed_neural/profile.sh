@@ -12,6 +12,9 @@
 #   NEURAL_ROUNDS  timed rounds per lane (default 5)
 #   NEURAL_STEP    0 skips the byte LM component step
 #   NEURAL_STEP_SHAPE  B L DM H KV HD FF LAYERS VOCAB (default the T3 shard)
+#   NEURAL_CENSUS  1 also builds a byte LM copy under
+#                  -D MOJOLEARN_STEP_PHASE_TIMERS=1 (a copy of the package in
+#                  $OUT/census) and prints its per-step launch/sync counts
 set -u
 OUT=${NEURAL_OUT:-$HOME/mojolearn-evidence/neural-apple-speed/$(git rev-parse --short HEAD)-$(date -u +%H%M%S)}
 LANES=${NEURAL_LANES:-"lm-train-step lm-forward gemm transformer-forward mamba1-forward mamba2-forward mamba3-forward samba-train-step samba-forward mlp-train-step"}
@@ -39,6 +42,38 @@ for l in $LANES; do
     grep -E '^NEURAL-ROUND ' "$OUT/race-$l.log" | awk '{print $4, $5, $6}' | tr '\n' ' '; echo
     echo "LANE-WALL $l $(( $(date +%s) - t0 )) s"
 done
+summarize() {
+    pixi run -e default python - "$1" <<'PY'
+import json, sys
+r = json.load(open(sys.argv[1]))
+print("STEP first", r.get("first_call_seconds"), "steady", r.get("steady_step_seconds"), "median", r.get("steady_median_seconds"), "tok/s", r.get("steady_median_tokens_per_second"), "attn", r.get("attention_arm"), "gemm", r.get("gemm_plan"), "glue", r.get("step_glue_arm"))
+ct = r.get("component_timing_ms") or {}
+print("STEP component total ms", r.get("component_timing_total_ms"), "step_seconds", r.get("step_seconds"), "covered", r.get("component_timing_covered_fraction"), "timed walls", r.get("component_timing_step_seconds_all"))
+for k, v in sorted(ct.items(), key=lambda kv: -(kv[1] if isinstance(kv[1], (int, float)) else 0))[:60]:
+    print("COMP %-48s %s" % (k, v))
+cc = r.get("component_counts") or {}
+for k, v in sorted(cc.items(), key=lambda kv: -(kv[1] if isinstance(kv[1], (int, float)) else 0))[:60]:
+    print("COUNT %-48s %s" % (k, v))
+for k in ("final_witness", "step_witnesses", "component_timing_witnesses"):
+    if k in r:
+        print("WITNESS", k, json.dumps(r[k])[:800])
+PY
+}
+if [ "${NEURAL_CENSUS:-0}" = 1 ]; then
+    rm -rf "$OUT/census"; mkdir -p "$OUT/census"
+    cp -R python/mojolearn "$OUT/census/mojolearn"
+    rm -f "$OUT/census/mojolearn/identical/_mojolearn_byte_lm.so"
+    MOJOLEARN_BYTE_LM_OUTDIR="$OUT/census/mojolearn/identical" \
+        MOJOLEARN_BUILD_EXTRA_DEFINES="-D MOJOLEARN_STEP_PHASE_TIMERS=1" \
+        pixi run -e default sh bindings/build_byte_lm.sh > "$OUT/census.build.log" 2>&1 || echo "CENSUS-BUILD FAILED"
+    # shellcheck disable=SC2086
+    set -- ${NEURAL_STEP_SHAPE:-4 2048 768 12 12 64 2048 12 50257}
+    PYTHONPATH="$OUT/census" pixi run -e default python tools/lm_step_memory_probe.py --out "$OUT/census_step" \
+        --shape "$@" --steps 2 --resident-lean --component-timing --component-timing-steps 2 \
+        --budget-seconds 3000 > "$OUT/census_step.log" 2>&1 || rc=1
+    echo "CENSUS (timers inflate every time below; the counts are exact)"
+    summarize "$OUT/census_step/result.json" | sed 's/^/CENSUS /'
+fi
 if [ "${NEURAL_STEP:-1}" != 0 ]; then
     # shellcheck disable=SC2086
     set -- ${NEURAL_STEP_SHAPE:-4 2048 768 12 12 64 2048 12 50257}
@@ -46,18 +81,6 @@ if [ "${NEURAL_STEP:-1}" != 0 ]; then
         --steps 4 --resident-lean --component-timing --component-timing-steps 3 \
         --budget-seconds 3000 > "$OUT/step.log" 2>&1 || rc=1
     grep -v '^ ' "$OUT/step.log" | tail -15
-    pixi run -e default python - "$OUT/step/result.json" <<'PY'
-import json, sys
-r = json.load(open(sys.argv[1]))
-print("STEP first", r.get("first_call_seconds"), "steady", r.get("steady_step_seconds"), "median", r.get("steady_median_seconds"), "tok/s", r.get("steady_median_tokens_per_second"), "attn", r.get("attention_arm"), "gemm", r.get("gemm_plan"), "glue", r.get("step_glue_arm"))
-ct = r.get("component_timing_ms") or {}
-tot = r.get("component_timing_total_ms")
-print("STEP component total ms", tot, "step_seconds", r.get("step_seconds"), "covered", r.get("component_timing_covered_fraction"), "timed walls", r.get("component_timing_step_seconds_all"))
-for k, v in sorted(ct.items(), key=lambda kv: -(kv[1] if isinstance(kv[1], (int, float)) else 0))[:45]:
-    print("COMP %-48s %s" % (k, v))
-for k in ("final_witness", "step_witnesses"):
-    if k in r:
-        print("WITNESS", k, json.dumps(r[k])[:600])
-PY
+    summarize "$OUT/step/result.json"
 fi
 exit $rc

@@ -2033,6 +2033,98 @@ def device_absmax(
     return Float64(m)
 
 
+def _absmax_blocks(n: Int) -> Int:
+    if n <= 0:
+        return 0
+    var blocks = (n + ABSMAX_TPB - 1) // ABSMAX_TPB
+    if blocks > ABSMAX_BLOCKS:
+        blocks = ABSMAX_BLOCKS
+    return blocks
+
+
+def device_absmax4(
+    ctx: DeviceContext,
+    b0_p: MutPointer[Float32, MutAnyOrigin], n0: Int,
+    b1_p: MutPointer[Float32, MutAnyOrigin], n1: Int,
+    b2_p: MutPointer[Float32, MutAnyOrigin], n2: Int,
+    b3_p: MutPointer[Float32, MutAnyOrigin], n3: Int,
+) raises -> StaticTuple[Float64, 4]:
+    """`device_absmax` of up to four buffers with ONE wait (lane/neural-apple,
+    2026-09-28). Each buffer's partials are the same `absmax_partial_kernel`
+    launch at the same grid as `device_absmax` gives it, written to its own
+    slice of one partial buffer; one copy brings every slice home and the
+    host folds each slice exactly as `device_absmax` does. `max` of the
+    same partials is the same value, so every result equals the four
+    separate calls bit for bit (a regime BOUND; nothing reaches the card).
+    `device_absmax` spends four waits per buffer (allocation, kernel, host
+    allocation, copy); on Apple a wait with pending work is the step's
+    dominant cost (memory: metal-cost-is-syncs-not-launches). A buffer with
+    `n <= 0` reads 0.0 and launches nothing, as `device_absmax` returns."""
+    var k0 = _absmax_blocks(n0)
+    var k1 = _absmax_blocks(n1)
+    var k2 = _absmax_blocks(n2)
+    var k3 = _absmax_blocks(n3)
+    var total = k0 + k1 + k2 + k3
+    var out = StaticTuple[Float64, 4](0.0, 0.0, 0.0, 0.0)
+    if total == 0:
+        return out
+    step_count_device_alloc()
+    var part = ctx.enqueue_create_buffer[DType.float32](total)
+    step_count_host_alloc()
+    var host = ctx.enqueue_create_host_buffer[DType.float32](total)
+    var off = 0
+    if k0 > 0:
+        step_count_launch()
+        ctx.enqueue_function[absmax_partial_kernel](
+            part.unsafe_ptr() + off, b0_p, Int32(n0),
+            grid_dim=(k0, 1, 1), block_dim=(ABSMAX_TPB, 1, 1),
+        )
+    off += k0
+    if k1 > 0:
+        step_count_launch()
+        ctx.enqueue_function[absmax_partial_kernel](
+            part.unsafe_ptr() + off, b1_p, Int32(n1),
+            grid_dim=(k1, 1, 1), block_dim=(ABSMAX_TPB, 1, 1),
+        )
+    off += k1
+    if k2 > 0:
+        step_count_launch()
+        ctx.enqueue_function[absmax_partial_kernel](
+            part.unsafe_ptr() + off, b2_p, Int32(n2),
+            grid_dim=(k2, 1, 1), block_dim=(ABSMAX_TPB, 1, 1),
+        )
+    off += k2
+    if k3 > 0:
+        step_count_launch()
+        ctx.enqueue_function[absmax_partial_kernel](
+            part.unsafe_ptr() + off, b3_p, Int32(n3),
+            grid_dim=(k3, 1, 1), block_dim=(ABSMAX_TPB, 1, 1),
+        )
+    step_count_d2h()
+    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=part)
+    step_count_sync()
+    ctx.synchronize()
+    var lo = 0
+    for which in range(4):
+        var kb = k0
+        if which == 1:
+            kb = k1
+        elif which == 2:
+            kb = k2
+        elif which == 3:
+            kb = k3
+        var m = Float32(0.0)
+        for i in range(lo, lo + kb):
+            var v = host.unsafe_ptr().unsafe_load(i)
+            if v > m:
+                m = v
+        out[which] = Float64(m)
+        lo += kb
+    _ = host^
+    _ = part^
+    return out
+
+
 # DEVIATION 2514 step 1 (2026-09-11): `NONFINITE_NONE`,
 # `nonfinite_partial_kernel` and `device_first_nonfinite` MOVED to
 # `core/device_scan.mojo` so the training lane can scan without importing
@@ -6796,10 +6888,12 @@ def fused_bwd_zdot_estash_kernel[HD: Int, TQ: Int, DRES: Bool, SABN: Bool, SWZ: 
 def _read_flags(
     ctx: DeviceContext, mut flag: DeviceBuffer[DType.float32]
 ) raises -> Tuple[Bool, Int]:
+    # One wait (lane/neural-apple, 2026-09-28): the host buffer's creation,
+    # the copy and the kernels that wrote `flag` are in stream order on
+    # `ctx`, so the wait after the copy covers them all. The wait that sat
+    # between the creation and the copy was a second full round trip.
     step_count_host_alloc()
     var host = ctx.enqueue_create_host_buffer[DType.float32](len(flag))
-    step_count_sync()
-    ctx.synchronize()
     step_count_d2h()
     ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=flag)
     step_count_sync()
@@ -6823,8 +6917,9 @@ def _zero_flag(ctx: DeviceContext) raises -> DeviceBuffer[DType.float32]:
     var f = ctx.enqueue_create_buffer[DType.float32](3 if ATTN_REPAIR_MASKED_TAIL else 1)
     step_count_launch()
     f.enqueue_fill(Float32(0.0))
-    step_count_sync()
-    ctx.synchronize()
+    # No wait (lane/neural-apple, 2026-09-28): every kernel that reads or
+    # writes the flag is enqueued on `ctx` after this fill, in stream order,
+    # and the host reads it only through `_read_flags`, which waits.
     return f^
 
 
@@ -6926,9 +7021,14 @@ def fused_forward_launch_ran(
         return FUSED_REFUSED_REGIME
     var ton = _attn_timer_on()
     var tk = Int(perf_counter_ns())
-    var qmax = device_absmax(ctx, q_rope, b * l * nh * hd)
-    var kmax = device_absmax(ctx, k_cache, b * nkv * s * hd)
-    var vmax = device_absmax(ctx, v_cache, b * nkv * s * hd)
+    var amx = device_absmax4(
+        ctx, q_rope.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * l * nh * hd, k_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        b * nkv * s * hd, v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * nkv * s * hd,
+        v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 0,
+    )
+    var qmax = amx[0]
+    var kmax = amx[1]
+    var vmax = amx[2]
     if not regime_product_ok(hd, qmax, kmax) or not regime_finite(vmax):
         return FUSED_REFUSED_REGIME
     _attn_tick(ctx, ton, tk, "fwd_regime_scan")
@@ -8988,10 +9088,15 @@ def fused_backward_launch_ran_report(
         )
     var ton = _attn_timer_on()
     var tk = Int(perf_counter_ns())
-    var qmax = device_absmax(ctx, q_rope, b * l * nh * hd)
-    var kmax = device_absmax(ctx, k_cache, b * nkv * s * hd)
-    var vmax = device_absmax(ctx, v_cache, b * nkv * s * hd)
-    var dmax = device_absmax(ctx, dctx, b * l * nh * hd)
+    var amx = device_absmax4(
+        ctx, q_rope.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * l * nh * hd, k_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        b * nkv * s * hd, v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * nkv * s * hd,
+        dctx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * l * nh * hd,
+    )
+    var qmax = amx[0]
+    var kmax = amx[1]
+    var vmax = amx[2]
+    var dmax = amx[3]
     if not regime_product_ok(hd, qmax, kmax):
         return FUSED_REFUSED_REGIME
     if not regime_product_ok(hd, dmax, vmax):
@@ -9404,9 +9509,14 @@ def fused_forward_launch_estash_ran(
                 return FUSED_REFUSED_REGIME
             var ton = _attn_timer_on()
             var tk = Int(perf_counter_ns())
-            var qmax = device_absmax(ctx, q_rope, b * l * nh * hd)
-            var kmax = device_absmax(ctx, k_cache, b * nkv * s * hd)
-            var vmax = device_absmax(ctx, v_cache, b * nkv * s * hd)
+            var amx = device_absmax4(
+                ctx, q_rope.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * l * nh * hd, k_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                b * nkv * s * hd, v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * nkv * s * hd,
+                v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 0,
+            )
+            var qmax = amx[0]
+            var kmax = amx[1]
+            var vmax = amx[2]
             if not regime_product_ok(hd, qmax, kmax) or not regime_finite(vmax):
                 return FUSED_REFUSED_REGIME
             _attn_tick(ctx, ton, tk, "fwd_regime_scan")
@@ -9573,10 +9683,15 @@ def fused_backward_launch_estash_report(
                 )
             var ton = _attn_timer_on()
             var tk = Int(perf_counter_ns())
-            var qmax = device_absmax(ctx, q_rope, b * l * nh * hd)
-            var kmax = device_absmax(ctx, k_cache, b * nkv * s * hd)
-            var vmax = device_absmax(ctx, v_cache, b * nkv * s * hd)
-            var dmax = device_absmax(ctx, dctx, b * l * nh * hd)
+            var amx = device_absmax4(
+                ctx, q_rope.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * l * nh * hd, k_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                b * nkv * s * hd, v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * nkv * s * hd,
+                dctx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * l * nh * hd,
+            )
+            var qmax = amx[0]
+            var kmax = amx[1]
+            var vmax = amx[2]
+            var dmax = amx[3]
             if not regime_product_ok(hd, qmax, kmax):
                 return FUSED_REFUSED_REGIME
             if not regime_product_ok(hd, dmax, vmax):
