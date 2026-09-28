@@ -25,7 +25,7 @@ an undefined conversion). THE MEASUREMENT is `core/host_simd_identical_
 check.mojo` (`pixi run check-host-simd-identical`): every one of the 2^32
 float32 bit patterns through `expf_v`, `logf_v` and `ftz_v` against the
 scalar seam, bit for bit, plus a sabotage arm (`-D
-MOJOLEARN_HOST_SIMD_SABOTAGE`: one polynomial coefficient of `expf_v` moved
+MOJOLEARN_HOST_SIMD_SABOTAGE`: the r^2 coefficient of `expf_v` moved
 one unit) that must FAIL.
 
 This is not a numeric row: it changes how many cells one instruction
@@ -103,13 +103,14 @@ def expf_v[w: Int](x: SIMD[DType.float32, w]) -> SIMD[DType.float32, w]:
     var r = _fma_v[w](zf, V(-0.693359375), xc)
     r = _fma_v[w](zf, V(2.12194440e-4), r)
     var q = V(1.9875691500e-4)
-    comptime if HOST_SIMD_SABOTAGE:
-        q = bitcast[DType.float32, w](bitcast[DType.uint32, w](q) + U(1))
     q = _fma_v[w](q, r, V(1.3981999507e-3))
     q = _fma_v[w](q, r, V(8.3334519073e-3))
     q = _fma_v[w](q, r, V(4.1665795894e-2))
     q = _fma_v[w](q, r, V(1.6666665459e-1))
-    q = _fma_v[w](q, r, V(5.0000001201e-1))
+    var c2 = V(5.0000001201e-1)
+    comptime if HOST_SIMD_SABOTAGE:
+        c2 = bitcast[DType.float32, w](bitcast[DType.uint32, w](c2) + U(1))
+    q = _fma_v[w](q, r, c2)
     var r2 = r * r
     var y = _fma_v[w](q, r2, r)
     y = y + V(1.0)
