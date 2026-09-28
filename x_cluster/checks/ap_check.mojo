@@ -68,4 +68,31 @@ def main() raises:
     _same("5105/5106 AP host", count_diff_f32(run(host, s, n, 6), want))
     var tr = IdentityTrace()
     tr.record_list_f32("x_cluster.ap_a_r", got)
+    _block_case()
     print("PASS x_cluster ap_check")
+
+
+def _block_case() raises:
+    """The device's block-per-row responsibility kernel past one block's
+    width (n = 600 > 256 threads, strided) with PLANTED TIES: rows 2, 5 and
+    300 copy row 1, so row 1's max and second max are each a tie among
+    exact duplicates (-0.0 distances), and the lowest index must win."""
+    var n = 600
+    var d = 3
+    var x = seam_fixture(n, d, 11)
+    for r in [2, 5, 300]:
+        for f in range(d):
+            x[r * d + f] = x[1 * d + f]
+    var s = oracle_sqdist(x, n, x, n, d)
+    for t in range(n * n):
+        s[t] = -s[t]
+    for i in range(n):
+        s[i * n + i] = Float32(-2.5e5)
+    var want = oracle_run(s, n, 3, 0)
+    var dev = DeviceOps()
+    var got = run(dev, s, n, 3)
+    _same("5105 AP block-per-row device (ties, n > block)", count_diff_f32(got, want))
+    var host = HostOps()
+    _same("5105 AP block-per-row host", count_diff_f32(run(host, s, n, 3), want))
+    var tr = IdentityTrace()
+    tr.record_list_f32("x_cluster.ap_a_r.block", got)
