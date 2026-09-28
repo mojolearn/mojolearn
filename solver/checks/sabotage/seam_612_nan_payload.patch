@@ -1,0 +1,13 @@
+diff --git a/solver/checks/record_canon.mojo b/solver/checks/record_canon.mojo
+index 1f2dd7d3b..f43645848 100644
+--- a/solver/checks/record_canon.mojo
++++ b/solver/checks/record_canon.mojo
+@@ -107,7 +107,7 @@ def canon_nan_kernel(v: MutPointer[Float32, MutAnyOrigin], n_in: Int32):
+     if i < Int(n_in):
+         var x = v.unsafe_load(i)
+         if x != x:
+-            v.unsafe_store(i, bitcast[DType.float32](CANON_NAN_BITS))
++            v.unsafe_store(i, bitcast[DType.float32](CANON_NAN_BITS | 1))  # SABOTAGE 612
+ 
+ 
+ def record_device_canon(

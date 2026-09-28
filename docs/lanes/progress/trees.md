@@ -191,6 +191,137 @@ SESSION A (verification), 2026-09-27 evening. DONE, merged:
   gbdt_host_predict 51, forest_host_predict 86 (x-metrics-search from
   the metrics lane reaches both).
 
+SESSION C, 2026-09-28 ~00:20Z (RunPod balance negative: every RunPod pod,
+the trees H100 included, is gone and `dev_pod.sh up` is refused; work ran on
+the Hot Aisle MI300X `trees-amd` only). STOPPED at this checkpoint by the
+coordinator.
+- STEWARD 1790536790720 (the 5611 RF fix, 26 lanes): m3ultra-b PASS (THE M3
+  DIVERGENCE IS FIXED), do-amd PASS, m4-a working, m2pro FAIL: clean
+  trees-gbdt-multirmse DISAGREE (8 of 9 fixtures, `ties` IDENTICAL; parts
+  differ: predict, infer, model, batch). The M2 Pro METAL column is the odd
+  one: its CPU column, the M3 Ultra Metal and CPU columns and the M4 Pro
+  (1790542307842) all read 4226ed22.. on base; M2 Metal reads 5ae37033..
+  Built from source at the commit (not a seeded binding). Every other lane
+  in the request AGREES on the M2. Unknown yet whether ANY gbdt lane agrees
+  on the M2 (no gbdt lane has run there before). DIAGNOSTIC QUEUED:
+  speed request 1790553780797-speed-trees-b23b38412e on m2pro: lane check
+  (pass 1) of gbdt-symmetric, gbdt-rmse, gbdt-multiclass, gbdt-onevsall,
+  trees-gbdt-multirmse, then ~/mojolearn-evidence/trees/diag_m2_multirmse.py
+  (Metal vs CPU model text at n_estimators 1, 2, 3, 6, 12 on base and ties,
+  MultiRMSE and RMSE; prints the first differing lines). The script reads
+  all IDENTICAL on the MI300X (HIP vs CPU). Read it with
+  `apple_steward.py status` / `cloudmac.sh ssh m2pro 'cat
+  ~/mojolearn-evidence/apple-steward/done/1790553780797-speed-trees-b23b38412e/*'`.
+  FIX AT ROOT BEFORE ANY B ITEM once it says where the M2 first moves.
+- trees-oob-cv-link: its only M3 verdict (1790536798209, m3ultra FAIL) is
+  from b771caee9, BEFORE the 5611 fix; it was not in 1790536790720. Owed:
+  put it in the next identity submit (M3 re-run).
+- DONE ON THE BRANCH (lane/algos-trees, NOT merged: the NVIDIA gate is
+  owed): gbdt-tensor-ctr-tables trains on the CPU column. The host
+  FeatureFreq oracle (gbdt/host/gbdt_oracle_feature_freq.mojo) no longer
+  refuses a level winner on the tensor column: `persist_synchronized_mixed_path`
+  restated (the winning level's table at model column n_features + k, its
+  split history remapped to an earlier tensor winner's stable column), the
+  canonical `TFeatureTensor.get_hash` restated on the host (the device module
+  imports the CTR bin builder), `tensor_ctr_registry` / `feature_freq_tensor`
+  records and `type tensor_ctr` columns in the text. On this lane BOTH
+  levels win on the tensor column (registry 6 2). Lane body: fits on both
+  columns (`_ctr_saved_or_fit` dropped for this lane). GradientBoosting.load
+  on a CPU install reads a CTR model's dim through HostGBDT's parser (the
+  host binding's gbdt_model_dim refuses CTR records; it was the only
+  refusal left, on the model part). Sabotage
+  gbdt/checks/sabotage/tensor_ctr_count_cpu_only.patch (row 0 counted in the
+  neighbouring key; a doubled count is refused by the reader instead).
+  Evidence, MI300X (trees-amd, cpu-intel-r-xeon-r-platinum-8470):
+  `--pass 2 --sabotage tensor_ctr_count_cpu_only.patch` on
+  gbdt-tensor-ctr-tables: AGREE (batch/infer/model/train 9), DISAGREE (model
+  DIVERGENT 9/9), AGREE after reversal: PASS. gbdt-feature-freq,
+  gbdt-categorical-ctr, saved-model-host-infer, gbdt-symmetric AGREE.
+  OWED ON AN NVIDIA POD before merge (the gate): `sh tools/algos_lane_check.sh
+  gbdt-tensor-ctr-tables --pass 2 --sabotage
+  gbdt/checks/sabotage/tensor_ctr_count_cpu_only.patch`; `algos_lane_check.sh
+  gbdt-feature-freq,gbdt-categorical-ctr,saved-model-host-infer` AGREE; the
+  CUDA cells of gbdt-tensor-ctr-tables and gbdt-feature-freq unchanged vs
+  main (GPU code untouched: host oracle, lane body, a CPU-only load branch);
+  test_host_surface; test_lane_select (its inputs changed: ensemble.py,
+  identity_break.py lane body, the gbdt host oracle). Then merge + push, then
+  one steward identity submit: gbdt-tensor-ctr-tables with that sabotage,
+  plus trees-oob-cv-link (M3 re-run).
+- NOT STARTED: gbdt-categorical-ctr-tables (multi-permutation CPU boosting,
+  map below); type B; the ExtraTrees FAST Apple mutex-merge quality check
+  (bpn > 1 blocks under FAST still fold through the mutex).
+- NOTE from the cpu lane (DEVIATION 5900): GBDT's small-fit border search
+  runs serially under IEEE on the CPU but on FTZ+DAZ workers on the device.
+- MY ERROR this session: `dev_pod.sh extend trees 0` (a probe for the ssh
+  target) set a zero-minute lease on the H100; the balance deletion took
+  every RunPod pod at the same time, so the pod was gone either way, but
+  never pass 0 to extend.
+
+SESSION trees-cpu (the trees CPU-speed lane, branch lane/trees-cpu, pod
+`trees-cpu` RunPod H100, cpu-intel-r-xeon-r-platinum-8480), 2026-09-28:
+- DONE: gbdt-categorical-ctr-tables TRAINS ON THE CPU COLUMN (item 2 of the
+  list below). New gbdt/host/gbdt_oracle_ctr.mojo restates train's CTR
+  prelude and column loop: the default GPU simple CTRs (Borders at three
+  priors, ParamId 0, Uniform 15; FeatureFreq (0,1), MinEntropy 15), the
+  target grid, one CTR order per permutation
+  (`ctrs_estimation_permutation(n, p).fill_order()`), the FeatureFreq column
+  (`TWeightedBinFreqCalcer`) and the ORDERED Borders columns per permutation
+  (`THistoryBasedCtrCalcerGpu`: integer counts before the row in the
+  permutation's stable category order, one Float32 divide), permutation 0's
+  values deciding a dependent column's grid, one compressed index per
+  permutation, `build_ctr_tables` (reused, host code on the device path)
+  and the CTR model text. gbdt/host/gbdt_oracle.mojo's boosting loop is now
+  `gbdt_host_boost` over one index and one cursor per permutation: the learn
+  permutation draw (`TRandom(iteration + seed)`, `Advance(10)`, their
+  `% (learnPermutationCount - 1)`), the structure searched on the learn
+  permutation's index and cursor, every permutation estimating the same
+  structure on its own cursor (the learn one over the searcher's partition,
+  the others over `compute_bins_for_model` + the stable `partition_from_bins`),
+  the in-loop learn loss from the learn cursor, the final loss from the
+  estimation cursor. One permutation is the old loop statement for statement.
+  Binding: the flags arm dispatches to the CTR arm when a categorical column
+  is above one_hot_max_size (eval_set with CTR columns refused by name);
+  `GradientBoosting.fit`/`.load` on a CPU install read a CTR model's dim
+  through HostGBDT's parser (the load hunk is lane/algos-trees' own, same
+  text). Lane body: fits on both columns (`_ctr_saved_or_fit` no longer used
+  by this lane). test_trees_repeat gains a CTR fit.
+  Evidence (H100 pod): `algos_lane_check.sh gbdt-categorical-ctr-tables
+  --pass 2 --sabotage gbdt/checks/sabotage/ctr_ordered_cpu_only.patch` (the
+  host ordered statistic counts the row's own target): AGREE (batch, infer,
+  model, train 9 each), DISAGREE (every part), AGREE after reversal: PASS.
+  A direct fit (1500 rows, 20 depth-6 trees, 8 CTR columns, 4 permutations)
+  wrote a CPU model text byte-identical to the CUDA one on the first run.
+- DONE: DEVIATION 5900's GBDT item (the cpu lane's note 4). `train`'s phase
+  B border search now asks `calc_quantization(..., flush_subnormals=True)`,
+  whose `best_split` flushes by bits exactly as the host oracle's
+  `_best_split_phase_b` (values flushed on entry, both halves and their sum
+  flushed, no fma), so the device borders no longer depend on whether the
+  task runs on an FTZ+DAZ `sync_parallelize` worker or an IEEE
+  `host_parallelize` task. The oracle's small serial fits were already
+  env-independent (explicit ftz everywhere). This also closes the
+  unmeasured arm where the fused `0.5*a + 0.5*b` kept a subnormal half the
+  oracle flushed. gbdt/resident_model.mojo's `sync_parallelize` predict
+  tasks are NOT pinned (owed, if the cpu lane moves them to host_parallelize).
+- EXISTING BITS: the 36 non-par lanes lane_select attributes to the branch,
+  fitted on main f237f1996 and on the branch (merged with main 9f2d2b120,
+  which brought no gbdt change): every
+  CUDA and CPU cell IDENTICAL (71 of 72 column files; the 72nd is the CTR
+  lane's CPU column, which refused before), 35 lanes AGREE after
+  (gbdt-tensor-ctr-tables was NOTHING COMPARED on both sides: lane/algos-trees'
+  CPU arm was not on main yet; after merging it, see below). The 15 par-* lanes need two GPUs and were not run (the
+  phase-B pin is inert on every recorded fixture).
+- AFTER MERGING MAIN (lane/algos-trees' tensor CTR CPU arm, 276990727):
+  gbdt-categorical-ctr-tables, gbdt-tensor-ctr-tables, gbdt-feature-freq,
+  gbdt-symmetric, gbdt-categorical-ctr, saved-model-host-infer AGREE.
+  test_host_surface then found `host_model` with NO lane (both CTR table
+  lanes had reached it through `_ctr_saved_or_fit`); the CTR tables lane
+  now checks `ml.host_model(<saved file>)` answers exactly what the fitted
+  estimator answers, as a raise and not a part (its cells unchanged on both
+  columns, identity_break --diff IDENTICAL). test_lane_select pin
+  neural_inference.py 41 -> 40 (gbdt-tensor-ctr-tables no longer reaches
+  it). test_host_surface + test_trees_repeat 201 passed; test_lane_select
+  82 passed.
+
 NEXT SESSION: FIRST the CTR-table CPU paths (main's request 2026-09-27),
 then type B (features).
 1. gbdt-tensor-ctr-tables: the CPU column fits
@@ -245,3 +376,26 @@ NEXT (option parity continues; this phase is not finished):
    checks/multilogit_check.mojo.
 2. the xtrees `not yet` rows above.
 Then phase (d) FAST GPU speed, (e) IDENTICAL GPU speed, (f) CPU speed.
+
+SESSION D, 2026-09-28 ~01:05Z (RunPod funded; NVIDIA pod `trees` H100
+vgv1hkkbm9comp; AMD `trees-amd` Hot Aisle MI300X kept to ~01:10Z Sep 29).
+- GATE DONE, MERGED: gbdt-tensor-ctr-tables CPU training. H100: `--pass 2
+  --sabotage gbdt/checks/sabotage/tensor_ctr_count_cpu_only.patch` AGREE
+  (batch/infer/model/train 9), DISAGREE (model DIVERGENT 9/9), AGREE after
+  reversal: PASS. Every other lane lane_select names (34, par-* excluded)
+  AGREE on CUDA == CPU; gbdt-categorical-ctr-tables reads NOTHING COMPARED
+  (the CPU column refuses CTR categoricals: item 2 of the CTR list) and reads
+  the same on the merge base with the lane patch reversed, so it is not this
+  change. test_host_surface 200 passed; test_lane_select OK (0 failures).
+  MI300X: the same lane set incl. gbdt-tensor-ctr-tables AGREE (RC 0).
+- trees-oob-cv-link M3 RE-RUN: 1790558067096 m3ultra-b PASS, m4pro-a PASS
+  (at aefdd7f9f, after the 5611 fix). OWED ITEM 3 CLOSED.
+- M2 DIAGNOSTIC (1790553780797) READ: NOT MultiRMSE. On the M2 Pro Metal
+  column EVERY gbdt lane checked DISAGREES (gbdt-symmetric, gbdt-rmse,
+  gbdt-multiclass, gbdt-onevsall, trees-gbdt-multirmse) on the non-integer
+  fixtures; `ties` (6 distinct values, <= 5 borders) is IDENTICAL. The model
+  header (borders) is identical; the Metal tree is `depth 1`, `split 0 0 0
+  0` (feature 0, bin 0: the first candidate, i.e. every score equal) where
+  the CPU grows depth 6. So the fault is in the split search on 128-border
+  (one-byte) features on Apple8 (M2) only; M3/M4 agree. Kernel checks
+  queued: m2pro 1790558473013, control m4pro-a 1790558481928.
