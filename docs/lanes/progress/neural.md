@@ -161,6 +161,64 @@ clip_grad_norm_). Bindings `_mojolearn_{training,mamba,transformer,embedding}`
    `~/mojolearn-evidence/neural/bitcheck.py`).
 5. Then merge lane/neural to main and push in the same command.
 
+## Session 3 (2026-09-28): owed gate, one context per binding, steward findings
+
+NVIDIA box: RunPod H100 80GB `mbbvzsw1kgzr7r` (key `neural`). AMD: the central
+box (`tools/amd_central.sh`, slot per job, tree /root/mojolearn-neural).
+
+### Landed
+
+- **core/neural_context.mojo + the five bindings** (training, transformer,
+  mamba, embedding, byte LM): ONE process-lifetime DeviceContext per binding
+  and tier (`_Global`, x_cnn pattern), replacing 31 per-entry/per-session
+  `DeviceContext()` (the byte LM's opt-in DEVIATION 2513 keeper is kept).
+  Same kernels, same order, every entry still synchronizes: bit-inert.
+  Test: `python/mojolearn/tests/test_neural_repeat.py` (all eleven lanes in
+  ONE process per column, `--repeats 2`, GPU and CPU, then the diff).
+- **tools/algos_lane_check.py `needed_bindings`**: builds every GPU binding a
+  lane CALLS (`binding_use` exports) and its CPU route, not only the families
+  it is declared for. samba alone REFUSED every cell (`_mojolearn_mamba.so`
+  not built); in multi-lane runs other lanes built it. 0 lanes refuse after.
+- **test_lane_select**: `neural_inference.py` pin 41 -> 42 (optim-maximize).
+- **Family sabotage** `~/mojolearn-evidence/neural/session3/neural_family_e2e.patch`:
+  session 2's patch with a new embedding arm (every contribution x (1+2^-23),
+  carry-consistent). The descending-fold arm tripped the lane's own
+  carried-vs-unsplit dW check, so every sabotaged embedding cell REFUSED and
+  m4pro-b read NOTHING COMPARED.
+
+### Proof (NVIDIA H100)
+
+- `algos_lane_check.py` (11 lanes, `--pass 2`, the session 3 patch, with the
+  context change in the tree): 8 seam drivers PASS/FAIL/PASS; CLEAN AGREE,
+  SABOTAGED DISAGREE, RESTORED AGREE on transformer, mamba1-3, embedding,
+  samba, training-primitives, optim-adam-clip, optim-maximize, mlp, byte-lm.
+  RESULT: PASS.
+- Existing bits, test_host_surface, test_lane_select, test_neural_repeat: see
+  the gate line below.
+
+### Steward findings (coordinator request)
+
+- **do-amd hang, request 1790542263165 (aea8614db9):** stuck 3 h 40 min at
+  `sabotaged samba/negative ragged`. gdb: main thread in `sched_yield`
+  (libamdhip64) under `DeviceBuffer::~DeviceBuffer` in
+  `fused_attention.device_absmax`. rocm-smi: CU occupancy 0, GFX activity flat,
+  so no kernel was resident and the host waited on a completion that never came.
+  A decomp request (1790542727482) hung in the SAME frame (`lanczos._dot` ->
+  DeviceBuffer release) within the same minute (log mtimes 21:41 / 21:42Z).
+  **Not reproduced**: the same lane + patch on the pre-fix tree (per-call
+  contexts) on the central MI300X ran clean/sabotaged/restored through
+  every fixture with no stall. Reading: a device/driver event on the do-amd
+  MI325X droplet that took down two unrelated lanes at once, not a neural bug.
+  Both hung processes still need killing by the steward owner.
+- **m2pro / m3ultra `training-primitives batchgrad` REFUSED** with
+  `XPC_ERROR_CONNECTION_INTERRUPTED` (Metal compiler service): one
+  `linear_backward` per row, each on a fresh context. Addressed by the
+  one-context change; to be confirmed by the next steward request.
+- **m4-a on aea8614db9:** sabotage AGREE on the seven lanes the Adam-lerp patch
+  cannot reach, as expected; CLEAN AGREE on all nine on Metal.
+- **m4pro-b on 1790553937999:** every lane DISAGREEd under the family patch
+  except embedding (NOTHING COMPARED, fixed above).
+
 ## Next phases (one per session)
 
 1. **Verification (charter phase 1) for the existing lanes:** a biting

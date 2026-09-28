@@ -1667,8 +1667,8 @@ def test_the_public_door_a_name_is_bound_from_is_in_the_map():
         wide = sorted(lanes - naming)
         assert not wide, (f"{rel} answers {len(lanes)} lanes and {wide[:5]} name nothing it "
                           f"binds ({sorted(bound)}); the door rule has gone wide")
-    assert len(rev.get("python/mojolearn/neural_inference.py", ())) == 41, \
-        "the re-export rule moved neural_inference.py off its measured 41 lanes (40 + hf-checkpoint, 2026-09-23)"
+    assert len(rev.get("python/mojolearn/neural_inference.py", ())) == 42, \
+        "the re-export rule moved neural_inference.py off its measured 42 lanes (40 + hf-checkpoint 2026-09-23 + optim-maximize 2026-09-28)"
 
     # THE FAILING SIDE: with no public rebindings the lane each door is
     # checked for loses it. Held per LANE and not per file since 2026-09-21:
