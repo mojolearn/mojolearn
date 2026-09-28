@@ -193,3 +193,20 @@ origin's merged with main. Every later branch is merged from its origin/ ref.
     too), tools/identity_lanes/sequence.checks, docs/lanes/progress/sequence.md.
     All 44 listed sequence patches apply.
   - tools/dev_pod.sh: the same sync fix again; main's form kept.
+  - FOUND AFTER THE MERGE (global duplicate-row scan): algos-sequence's new
+    IDENTITY_PATHS row 199 (forecasters, DEVIATIONS 5541-5543) duplicated
+    cluster's row 199 on main. Renumbered to **240**, range **240-249**
+    registered to sequence, next free row **250**; sequence/README.md fixed.
+    After this, neither IDENTITY_PATHS rows nor any README DEVIATION table
+    number repeats anywhere in the tree (scan of every `| NNNN |` row).
+
+### lane/neural-cpu, lane/neural-cpu-threads, lane/algos-cnn, lane/metrics
+
+- All four merged with no textual conflict.
+- FIX AT THE ROOT (integration): algos-cnn (x_cnn/host/gemm_host.mojo 5
+  sites, x_cnn/host/ops_host.mojo 7) and metrics (x_metrics/host/program.mojo
+  1) called sync_parallelize directly; lane/cpu's rule routes every non-GBDT
+  host split through host_parallelize (caller's FP environment, DEVIATION
+  5900). Converted (import + call); check_host_parallel_sites PASS over
+  1773 files. RISK: bits move only if a subnormal met a pool worker; the CPU
+  column at MOJOLEARN_CPU_THREADS 1/3/default in the global check decides.
