@@ -266,7 +266,10 @@ Family sabotage for this session: `~/mojolearn-evidence/neural/session4/neural_f
 ### Gate
 
 - **test_host_surface** (central box, CPU, pixi `test` env): 200 passed.
-- **test_lane_select**: see the gate line below. The six "REFUSING:
+- **test_lane_select** (central box, CPU, override below): 81 passed, 1
+  failed on main's own pin (`kmeans_oracle.mojo` answers 75 lanes, not 71:
+  the x-cluster/x-ann/x-decomp lanes; no neural lane), repinned to 75 and
+  that test rerun PASS. The six "REFUSING:
   python/mojolearn/host_surface.py has uncommitted changes" failures are the
   patch-synced tree, overridden with `MOJOLEARN_LANE_SELECT_TEST_FORCE=1`.
 - **Existing bits** (session 3, H100, 43-lane column before/after the
@@ -274,7 +277,15 @@ Family sabotage for this session: `~/mojolearn-evidence/neural/session4/neural_f
   five host-only lanes, as in session 1 (`session3/before_after_diff.txt`).
 - **Family lane check, 12 lanes, session 4 patch, --pass 2, gfx942 vs CPU**
   (central box, `/root/ev-neural/s4/gate.log`) and **test_neural_repeat** on
-  the same slot (`rep.log`): see the gate line below.
+  the same slot (`rep.log`): QUEUED for a GPU slot at 05:00Z (both slots held
+  by decomp and sequence; the waiter gives up at ~07:00Z with exit 75). Read
+  those two logs next session (`tools/amd_central.sh sh neural 'tail
+  /root/ev-neural/s4/gate.log /root/ev-neural/s4/rep.log'`); if absent,
+  rerun the same command (it is in the OWED list, with the AMD box in place
+  of the pod).
+- **MERGED to main** at ae87c4a1d (NVIDIA family gate PASS and existing bits
+  unchanged from session 3, test_host_surface and test_lane_select green;
+  the two new arms are sabotage patches only, no production code moved).
 - **Stewards:** 1790571339823-neural-77e7272dbf (m2pro, m3ultra, m4-a,
   do-amd; --pass 2, the session 3 family patch, 11 lanes) resubmits
   aea8614db9's lanes at the merged tree.
