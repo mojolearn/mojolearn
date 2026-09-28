@@ -389,9 +389,7 @@ from std.gpu import (
 from std.sys.info import (
     has_apple_gpu_accelerator,
     has_nvidia_gpu_accelerator,
-    is_apple_gpu,
 )
-from std.ffi import external_call
 from std.math import ceildiv
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
@@ -461,19 +459,6 @@ comptime TPB_DEFAULT = 128
 # the global.
 comptime BUILD_MODE = GLOBAL_NUMERIC_MODE
 
-
-@always_inline
-def _device_barrier():
-    """A block barrier that also orders DEVICE memory (x_linear/team.mojo
-    `team_barrier`): on Apple `barrier()` is `air.wg.barrier(2, 1)`,
-    `threadgroup_barrier(mem_threadgroup)`, which leaves device loads and
-    stores of different threads unordered; `air.wg.barrier(3, 1)` adds
-    `mem_device`. NVIDIA `bar.sync` and AMD `s_barrier` with its fences
-    already order global memory within the block."""
-    comptime if is_apple_gpu():
-        external_call["air.wg.barrier", NoneType](Int32(3), Int32(1))
-    else:
-        barrier()
 comptime SPLIT_REDUCE_PINNED_DEFAULT = BUILD_MODE == NUMERIC_IDENTICAL
 
 comptime SAMPLE_PER_NODE_DEFAULT = (
@@ -544,8 +529,8 @@ comptime HIST_ZERO_AFTER_READ_DEFAULT = (
     and not is_defined["MOJOLEARN_RF_FAST_HIST_ZERO_OFF"]()
 )
 """FAST, and Apple IDENTICAL since trees-apple2 (2026-09-28; zeros are
-zeros, so no bit of a forest can move; the block kernel's zero now waits
-on a DEVICE-scope barrier on Apple, `_device_barrier`): `find_best_splits_kernel` re-zeroes the histogram cells it
+zeros, so no bit of a forest can move; see the ordering note at the zero
+in `find_best_splits_kernel`): `find_best_splits_kernel` re-zeroes the histogram cells it
 consumed, so the builder zeroes the histogram workspace ONCE and every later
 sampling round skips its `hist_zero` launch. On Metal each launch is its own
 command buffer (about 0.2 ms of GPU timeline at 1M rows on the M4), and the
@@ -3177,15 +3162,23 @@ def find_best_splits_kernel[
     # barrier; nothing after this kernel reads them before the next
     # round's histogram accumulates into them.
     comptime if zero_after:
-        # every thread's reads of these DEVICE cells come before any
-        # thread's zero: on Apple `barrier()` orders threadgroup memory
-        # only (see `_device_barrier`)
-        _device_barrier()
-        var z = Int(thread_idx.x)
-        var cells = Int(n_bins) * Int(n_classes)
-        while z < cells:
-            histogram[unsafe_offset=z] = O.BinT()
-            z += TPB
+        # WHY `barrier()` IS ENOUGH HERE, ON APPLE TOO (whose `barrier()`
+        # orders threadgroup memory only; an `air.wg.barrier(3, 1)` call
+        # conflicts with the stdlib's declaration in this module). The zero
+        # is a WRITE after READS, never a read of another thread's store:
+        # every thread's loads of these cells fed the split it computed and
+        # the reduce before this point, so each load had returned before its
+        # thread arrived here. The only earlier STORES to these cells are
+        # `pdf_to_cdf`'s in-place cdf writes:
+        # class `c`'s cell `c * n_bins + tix` is written there by thread
+        # `tix mod TPB`, and the loop below gives each cell to that SAME
+        # thread (program order), per class.
+        barrier()
+        for c in range(Int(n_classes)):
+            var z = Int(thread_idx.x)
+            while z < Int(n_bins):
+                histogram[unsafe_offset = c * Int(n_bins) + z] = O.BinT()
+                z += TPB
 
 
 def small_node_split_kernel[
