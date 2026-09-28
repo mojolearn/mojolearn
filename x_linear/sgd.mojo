@@ -17,7 +17,7 @@ by five) and the loss classes at the top of that file. Differences, named:
 """
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fsqrt, fexp, flog, fabs, fmax, fmin,
-    ld, st, ldi, sti, i2f, fill, row_dot, shuffle, axpy_acc, scale_acc, ftzv,
+    ld, st, ldi, sti, i2f, fill, row_dot, shuffle, axpy_acc, scale_acc, ftzv, par_rows,
 )
 from std.sys.info import is_gpu
 from checks.numerics import identical_pow
@@ -271,7 +271,7 @@ def sgd_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: I
     fp: [alpha, l1_ratio, eta0, power_t, epsilon, tol].
     y: labels as 0..K-1 (classification) or targets. res: coef (P*d),
     intercept (P), n_iter (1), status (1: 0 ok, -1 non-finite).
-    fw: n (targets) + d (q); iw: n (order)."""
+    fw: per problem n (targets) + d (q), then P (epochs run); iw: per problem n (order)."""
     var k = ldi(ip, 0)
     var loss = ldi(ip, 1)
     var penalty = ldi(ip, 2)
@@ -291,29 +291,43 @@ def sgd_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: I
     var has_cw = ldi(ip, 11) != 0
     var swp = y + n
     var problems = k if k > 2 else 1
-    var ys = fw
-    var q = fw + n
+    # one-vs-rest problems are independent (their own targets, q, order and
+    # result slots): the host may run them at once (lane linear-cpu)
+    var eps_run = fw + problems * (n + d)  # epochs run per problem
+
+    def run_problems(lo: Int, hi: Int) {imm x, imm y, imm n, imm d, imm k, imm fw, imm iw, imm res, imm problems,
+                                        imm loss, imm penalty, imm alpha, imm l1r, imm lr, imm eta0, imm power_t,
+                                        imm eps, imm fit_intercept, imm max_iter, imm tol, imm nic, imm do_shuffle,
+                                        imm seed, imm swp, imm has_sw, imm has_cw, imm fp, imm eps_run}:
+        for c in range(lo, hi):
+            var ys = fw + c * (n + d)
+            var q = ys + n
+            var idx = iw + c * n
+            for i in range(n):
+                var v = ld(y, i)
+                if k == 0:
+                    st(ys, i, v)
+                elif k == 1:
+                    st(ys, i, Float32(1))
+                elif k == 2:
+                    st(ys, i, Float32(1) if v == Float32(1) else Float32(-1))
+                else:
+                    st(ys, i, Float32(1) if v == i2f(c) else Float32(-1))
+            var ep = sgd_one(
+                x, ys, n, d, loss, penalty, alpha, l1r, lr, eta0, power_t, eps,
+                fit_intercept, max_iter, tol, nic, do_shuffle,
+                seed + UInt64(1000003) * UInt64(c), k == 1,
+                res, c * d, res, problems * d + c, q, idx,
+                swp, has_sw, ld(fp, 6 + c) if has_cw else Float32(1),
+                ld(fp, 6 + problems + c) if has_cw else Float32(1), has_cw,
+            )
+            st(eps_run, c, i2f(ep))
+
+    par_rows(run_problems, problems, 1)
     var max_epochs = 0
     var status = 0
     for c in range(problems):
-        for i in range(n):
-            var v = ld(y, i)
-            if k == 0:
-                st(ys, i, v)
-            elif k == 1:
-                st(ys, i, Float32(1))
-            elif k == 2:
-                st(ys, i, Float32(1) if v == Float32(1) else Float32(-1))
-            else:
-                st(ys, i, Float32(1) if v == i2f(c) else Float32(-1))
-        var ep = sgd_one(
-            x, ys, n, d, loss, penalty, alpha, l1r, lr, eta0, power_t, eps,
-            fit_intercept, max_iter, tol, nic, do_shuffle,
-            seed + UInt64(1000003) * UInt64(c), k == 1,
-            res, c * d, res, problems * d + c, q, iw,
-            swp, has_sw, ld(fp, 6 + c) if has_cw else Float32(1),
-            ld(fp, 6 + problems + c) if has_cw else Float32(1), has_cw,
-        )
+        var ep = Int(ld(eps_run, c))
         if ep < 0:
             status = -1
         elif ep > max_epochs:

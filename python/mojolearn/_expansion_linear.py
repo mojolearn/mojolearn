@@ -257,7 +257,7 @@ def _sgd_fit(est, X, y, n_classes, loss_code, penalty, lr, alpha, l1_ratio, eta0
         fp += pos + neg
         has_cw = 1
     ip += [has_sw, has_cw]
-    vals = _run(est, ALGO_SGD, a, n, d, y, ip, fp, problems * d + problems + 2, n + d, n)
+    vals = _run(est, ALGO_SGD, a, n, d, y, ip, fp, problems * d + problems + 2, problems * (n + d + 1), problems * n)
     if vals[-1] != 0:
         raise ValueError("Floating-point under-/overflow occurred. Scaling input data with "
                          "StandardScaler or MinMaxScaler might help.")

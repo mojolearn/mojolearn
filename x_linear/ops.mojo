@@ -286,16 +286,17 @@ def scale_acc(g: FP, goff: Int, s: Float32, count: Int):
 comptime ROW_CHUNK = 2048
 
 
-def par_rows[F: def(Int, Int) -> None](ref f: F, n: Int):
-    """Runs f(lo, hi) over row blocks covering [0, n). f must write only
-    slots owned by its own rows, so the block split (and, on the host, the
-    thread count) cannot move a bit. The device runs one block."""
+def par_rows[F: def(Int, Int) -> None](ref f: F, n: Int, grain: Int = ROW_CHUNK):
+    """Runs f(lo, hi) over blocks of at most `grain` units covering [0, n).
+    f must write only slots owned by its own units, so the block split
+    (and, on the host, the thread count) cannot move a bit. The device runs
+    one block."""
     comptime if is_gpu():
         f(0, n)
     else:
         var lo = 0
         while lo < n:
-            var hi = lo + ROW_CHUNK
+            var hi = lo + grain
             if hi > n:
                 hi = n
             f(lo, hi)
