@@ -112,3 +112,35 @@ Earlier queue (superseded):
 base lane/merged 003ea19ba (also the x_linear board, 100k, both columns),
 step 1 8a38e574d, step 2 10eab0721 (with the Metal IEEE check); FAST base
 and step 2 as well.
+
+
+### Within-job before/after (M3 Ultra, steward 1790588163184 and 1790588226739)
+
+One job at 1a5f45e6a timed each arm with glm/ of that arm checked out and
+rebuilt in the same tree, IDENTICAL and FAST, 1M rows, gpu column, two runs:
+
+| mode | case | base 003ea19ba | 10eab0721 | 1a5f45e6a | digest (all arms) |
+|---|---|---|---|---|---|
+| IDENTICAL | logistic | 0.632 / 0.626 | 0.330 / 0.321 | 0.313 / 0.310 | 270ffb405d8c6a64 |
+| IDENTICAL | linear-svc | 0.391 / 0.390 | 0.250 / 0.246 | 0.239 / 0.240 | bf851fa5a9479b6c |
+| IDENTICAL | linear-svr | 0.380 / 0.382 | 0.209 / 0.207 | 0.201 / 0.194 | 29bbbb73d7b93520 |
+| FAST | logistic | 1.202 / 1.237 | 0.891 / 0.895 | 0.882 / 0.886 | c13471c2a06967db |
+| FAST | linear-svc | 0.719 / 0.721 | 0.552 / 0.554 | 0.555 / 0.549 | 5255746bf9706738 |
+| FAST | linear-svr | 1.015 / 1.024 | 0.742 / 0.735 | 0.753 / 0.726 | 740abbad894c93a9 |
+
+FAST bits are unchanged by the sync work (same digests), so no quality run is
+owed for it. Per-iteration cost (bench/linear_apple_profile.py, iteration caps
+1..32 at tol 1e-12, slope): logistic 6.82 -> 3.30 ms, linear-svr 7.84 ->
+3.86 ms; Lasso 9.06 ms per epoch (16 coordinates, ~0.57 ms each: launch
+bound), untouched by the QN work.
+
+Found on the way: on Apple `barrier()` orders threadgroup memory only; the
+x_linear team fits broke on Metal (the orchestrator fixed it on lane/merged,
+2979a9de0). lbfgs_dir_kernel shares `drt` through device memory too: it now
+fences around its barriers on Apple (33cd0d549; the team's air.wg.barrier
+spelling conflicts with the stdlib barrier the same kernel reaches).
+
+Next commits, measured by the queued jobs: 90129fdd4 (the direction's launch
+also does S/Y, the xp/gradp saves and dg_init; the gemv reads w in place: five
+fewer launches per iteration) and 06ef7f558 (the CD coordinate in two
+launches instead of six).
