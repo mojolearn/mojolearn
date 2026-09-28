@@ -142,6 +142,7 @@ from resample.checks.intervals import (
     basic_interval,
     bca_acceleration,
     bca_bias_percentile,
+    bca_interval,
     method_from_name,
     percentile_interval,
     permutation_pvalue,
@@ -788,12 +789,12 @@ def check_resample_refusals() raises:
     except e:
         named += 1
 
-    # (7) BCa under BOTH modes (DEVIATION 1699).
+    # (7) BCa for a statistic with no jackknife arm (DEVIATION 1699).
     try:
         var _r5 = bootstrap_host(
-            x, n, d, STAT_MEAN, 16, CHECK_SEED, METHOD_BCA
+            x, n, d, STAT_QUANTILE, 16, CHECK_SEED, METHOD_BCA
         )
-        missed += "BCa "
+        missed += "BCa-quantile "
     except e:
         named += 1
 
@@ -2038,8 +2039,66 @@ def check_jackknife_and_bca() raises:
         " decreasing from 5.0 to 4.0; the acceleration of a symmetric sample"
         " is "
         + _hex32(a_hat)
-        + " (analytically 0). BCa's INTERVAL stays refused -- ndtri"
-        " (DEVIATION 1699)"
+        + " (analytically 0)."
+    )
+
+
+def check_bca_interval() raises:
+    """DEVIATION 1699's endpoints, closed by DEVIATION 5410, against a
+    HAND-WORKED example and two properties.
+
+    1. z0p = 0.6, a_hat = 0.1, alpha = 0.025, worked in float64 (SciPy's
+       `_bca_interval` expressions with scipy.special ndtri / ndtr):
+       alpha_1 = 0.11420295403892616, alpha_2 = 0.9990185075970077. The
+       float32 levels must be within 1e-6 (the seam's certified accuracy,
+       ndtri 8 ulps and ndtr 1.5e-7, carried through four operations), and
+       over the sorted distribution 0, 1, ..., 1000 the endpoints are
+       1000 alpha_1 and 1000 alpha_2 to within 1e-3.
+    2. z0p = 1/2 and a_hat = 0 is the percentile interval: the levels are
+       ndtr(ndtri(alpha)) and ndtr(-ndtri(alpha)), alpha and 1 - alpha to
+       within 2e-7.
+    3. The device bootstrap through METHOD_BCA on the analytic fixture
+       returns an interval inside the distribution's range and its low end
+       at or below its high end.
+    """
+    var B = 1001
+    var sorted = List[Float32]()
+    for i in range(B):
+        sorted.append(Float32(i))
+    var e = bca_interval(sorted, B, Float32(0.025), Float32(0.6), Float32(0.1))
+    if abs(Float64(e.alpha_1) - 0.11420295403892616) > 1e-6 or abs(Float64(e.alpha_2) - 0.9990185075970077) > 1e-6:
+        raise Error(
+            "check_bca_interval: levels " + String(e.alpha_1) + ", " + String(e.alpha_2)
+            + " are not the hand-worked 0.11420295403892616, 0.9990185075970077"
+        )
+    if abs(Float64(e.interval.low) - 114.20295403892616) > 1e-3 or abs(Float64(e.interval.high) - 999.0185075970077) > 1e-3:
+        raise Error(
+            "check_bca_interval: endpoints " + String(e.interval.low) + ", " + String(e.interval.high)
+            + " are not 1000 alpha_1, 1000 alpha_2"
+        )
+    var p = bca_interval(sorted, B, Float32(0.025), Float32(0.5), Float32(0.0))
+    if abs(Float64(p.alpha_1) - 0.025) > 2e-7 or abs(Float64(p.alpha_2) - 0.975) > 2e-7:
+        raise Error(
+            "check_bca_interval: z0p = 1/2, a_hat = 0 must give the percentile levels; got "
+            + String(p.alpha_1) + ", " + String(p.alpha_2)
+        )
+    var x = build_sample(FIX_HASHED)
+    var n = fixture_n(FIX_HASHED)
+    var d = fixture_d(FIX_HASHED)
+    var res = bootstrap_host(x, n, d, STAT_MEAN, 2048, CHECK_SEED, METHOD_BCA)
+    var lo = res.sorted_distribution[0]
+    var hi = res.sorted_distribution[2047]
+    if not (res.interval.low >= lo and res.interval.high <= hi and res.interval.low <= res.interval.high):
+        raise Error(
+            "check_bca_interval: the device BCa interval [" + String(res.interval.low) + ", "
+            + String(res.interval.high) + "] is not an ordered interval inside [" + String(lo)
+            + ", " + String(hi) + "]"
+        )
+    print(
+        "check_bca_interval OK [" + _mode_name() + "]: hand-worked levels "
+        + String(e.alpha_1) + ", " + String(e.alpha_2) + " (float64 0.1142029540, 0.9990185076);"
+        " z0p = 1/2, a_hat = 0 reads the percentile levels; the device BCa interval ["
+        + String(res.interval.low) + ", " + String(res.interval.high) + "]"
     )
 
 
@@ -2590,6 +2649,7 @@ def main() raises:
     check_permutation_null_is_uniform()
     check_monte_carlo_vs_closed_form()
     check_jackknife_and_bca()
+    check_bca_interval()
     check_launch_invariance()
     check_card_is_emitted()
     check_resample_sabotages()

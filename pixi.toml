@@ -806,6 +806,7 @@ check-lane-minimum = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . neighbors/c
 # certificate line (the same number on every column); the hardware rsqrt
 # intrinsic RECORDED, not used. Run on every column beside check-ieee-arith.
 check-division = "mojo run -I . checks/division_check.mojo"
+check-ndtri = "mojo run -I . checks/ndtri_check.mojo"
 
 # IDENTITY_PATHS rows 50-54 (DEVIATIONS 741-745): the neural-block
 # primitives rsqrt / log1p / sigmoid / silu / softplus -- accuracy vs a

@@ -77,7 +77,8 @@ from resample.checks.intervals import (
     basic_interval,
     bca_acceleration,
     bca_bias_percentile,
-    bca_refuse,
+    bca_interval,
+    bca_validate,
     distribution_standard_error,
     jackknife_stat_kernel,
     narrow_for_alternative,
@@ -1024,7 +1025,7 @@ def bootstrap_host(
             + String(confidence_level)
         )
     if method == METHOD_BCA:
-        bca_refuse()
+        bca_validate(statistic, n)
     if stat_needs_sort(statistic):
         if n_resamples * n > RESAMPLE_MAX_SORT_CELLS:
             raise Error(
@@ -1126,10 +1127,38 @@ def bootstrap_host(
     var theta_hat = point_estimate_host(x, n, n_features, statistic, q_or_prop)
     trace.record_scalar_f32("resample.point", theta_hat)
 
+    # BCa (DEVIATION 1699, closed by 5410) needs the bias percentile and the
+    # jackknife BEFORE the interval; the diagnostics record the same values
+    # below, where they always were on the card.
+    var need_jack = with_bca_diagnostics or method == METHOD_BCA
+    var jack = ctx.enqueue_create_buffer[DType.float32](n if need_jack else 1)
+    var jack_h = List[Float32]()
+    var z0p = Float32(0.0)
+    var ahat = Float32(0.0)
+    if need_jack:
+        z0p = bca_bias_percentile(sorted_dist, n_resamples, theta_hat)
+        ctx.synchronize()
+        if tpb == 256:
+            _launch_jackknife_at[256](ctx, jack, dx, n, n_features, statistic)
+        elif tpb == 128:
+            _launch_jackknife_at[128](ctx, jack, dx, n, n_features, statistic)
+        else:
+            _launch_jackknife_at[64](ctx, jack, dx, n, n_features, statistic)
+        ctx.synchronize()
+        jack_h = _download_f32(ctx, jack, n)
+        ahat = bca_acceleration(jack_h, n)
+
     var alpha = alpha_for(confidence_level, alternative)
     var interval: Interval
+    var lvl_lo = alpha
+    var lvl_hi = ftz(Float32(1.0) - alpha)
     if method == METHOD_BASIC:
         interval = basic_interval(sorted_dist, n_resamples, alpha, theta_hat)
+    elif method == METHOD_BCA:
+        var ends = bca_interval(sorted_dist, n_resamples, alpha, z0p, ahat)
+        interval = ends.interval
+        lvl_lo = ends.alpha_1
+        lvl_hi = ends.alpha_2
     else:
         interval = percentile_interval(sorted_dist, n_resamples, alpha)
     interval = narrow_for_alternative(interval, alternative)
@@ -1138,8 +1167,8 @@ def bootstrap_host(
     # cross-vendor difference in an endpoint is either a different position
     # or a different value at the same position, and those have different
     # causes and different fixes.
-    var h_lo = Float32(n_resamples - 1) * alpha
-    var h_hi = Float32(n_resamples - 1) * ftz(Float32(1.0) - alpha)
+    var h_lo = Float32(n_resamples - 1) * lvl_lo
+    var h_hi = Float32(n_resamples - 1) * lvl_hi
     var pos_lo = Int(h_lo)
     var pos_hi = Int(h_hi)
     var pos_words: List[Int32] = [Int32(pos_lo), Int32(pos_hi)]
@@ -1149,28 +1178,17 @@ def bootstrap_host(
     trace.record_scalar_f32("resample.se", se)
     var ends: List[Float32] = [interval.low, interval.high]
     trace.record_list_f32("resample.interval", ends)
+    if method == METHOD_BCA:
+        var levels: List[Float32] = [lvl_lo, lvl_hi]
+        trace.record_list_f32("resample.bca.levels", levels)
 
     if with_bca_diagnostics:
-        # DEVIATION 1699's identical half: computed and RECORDED even though
-        # the method is refused, so the construction is gated rather than
-        # dead and the closure is one function away.
-        var z0p = bca_bias_percentile(sorted_dist, n_resamples, theta_hat)
+        # DEVIATION 1699's diagnostics: the bias percentile, the jackknife
+        # and the acceleration, recorded for every statistic with an arm.
         trace.record_scalar_f32("resample.bca.z0p", z0p)
-        var jack = ctx.enqueue_create_buffer[DType.float32](n)
-        ctx.synchronize()
-        if tpb == 256:
-            _launch_jackknife_at[256](ctx, jack, dx, n, n_features, statistic)
-        elif tpb == 128:
-            _launch_jackknife_at[128](ctx, jack, dx, n, n_features, statistic)
-        else:
-            _launch_jackknife_at[64](ctx, jack, dx, n, n_features, statistic)
-        ctx.synchronize()
         trace.record_device(ctx, "resample.jackknife", jack, n)
-        var jack_h = _download_f32(ctx, jack, n)
-        trace.record_scalar_f32(
-            "resample.bca.ahat", bca_acceleration(jack_h, n)
-        )
-        _ = jack^
+        trace.record_scalar_f32("resample.bca.ahat", ahat)
+    _ = jack^
 
     _ = dx^
     _ = idx_buf^

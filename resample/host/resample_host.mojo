@@ -91,7 +91,10 @@ from resample.checks.intervals import (
     PValue,
     alpha_for,
     basic_interval,
-    bca_refuse,
+    bca_acceleration,
+    bca_bias_percentile,
+    bca_interval,
+    bca_validate,
     distribution_standard_error,
     narrow_for_alternative,
     percentile_interval,
@@ -387,6 +390,63 @@ def host_point_estimate(
     return _mean_of_sum(host_tree_sum(keptv, kept), kept)
 
 
+def host_jackknife_one(
+    x: List[Float32], n: Int, n_features: Int, stat: Int, left_out: Int
+) -> Float32:
+    """`jackknife_stat_kernel[stat]`'s `theta_i[left_out]` (intervals.mojo,
+    DEVIATION 1700): slot `left_out` of the ordinary `chunk_count(n)` chunking
+    holds `+0.0`, the divisor is `n - 1`, the same tree as every fold here."""
+    var a = List[Float32](length=n, fill=Float32(0.0))
+    for i in range(n):
+        if i != left_out:
+            a[i] = ftz(x[i * n_features])
+    var m = n - 1
+    var value: Float32
+    if stat == STAT_MEAN:
+        value = _mean_of_sum(host_kernel_fold(a, n), m)
+    elif stat == STAT_DIFF_MEANS:
+        var b = List[Float32](length=n, fill=Float32(0.0))
+        for i in range(n):
+            if i != left_out:
+                b[i] = ftz(x[i * n_features + 1])
+        value = ftz(
+            _mean_of_sum(host_kernel_fold(a, n), m)
+            - _mean_of_sum(host_kernel_fold(b, n), m)
+        )
+    else:
+        var mb = _mean_of_sum(host_kernel_fold(a, n), m)
+        var sq = List[Float32](length=n, fill=Float32(0.0))
+        for i in range(n):
+            if i != left_out:
+                var dv = ftz(ftz(x[i * n_features]) - mb)
+                sq[i] = ftz(identical_mul(dv, dv))
+        value = ftz(identical_sqrt(ftz(identical_div(host_kernel_fold(sq, n), Float32(m - 1)))))
+    return canonicalize_nan(value)
+
+
+def host_jackknife(
+    x: List[Float32], n: Int, n_features: Int, stat: Int
+) -> List[Float32]:
+    """The `n` leave-one-out statistics, `jackknife_stat_kernel`'s output.
+    Each owns one slot, so splitting the range over tasks changes nothing."""
+    var out = List[Float32](length=n, fill=Float32(0.0))
+    var op = out.unsafe_ptr()
+    var tasks = host_predict_task_count(n)
+    var chunk = host_predict_chunk(n, tasks)
+
+    def _rows(c: Int) {imm x, imm op, imm chunk, imm n, imm n_features, imm stat}:
+        var lo = c * chunk
+        var hi = min(lo + chunk, n)
+        for i in range(lo, hi):
+            op.unsafe_store(i, host_jackknife_one(x, n, n_features, stat, i))
+
+    if tasks == 1:
+        _rows(0)
+    else:
+        sync_parallelize(_rows, tasks)
+    return out^
+
+
 def host_bootstrap(
     x: List[Float32],
     n: Int,
@@ -448,7 +508,7 @@ def host_bootstrap(
             + String(confidence_level)
         )
     if method == METHOD_BCA:
-        bca_refuse()
+        bca_validate(statistic, n)
     if stat_needs_sort(statistic):
         if n_resamples * n > RESAMPLE_MAX_SORT_CELLS:
             raise Error(
@@ -518,14 +578,25 @@ def host_bootstrap(
     var theta_hat = host_point_estimate(x, n, n_features, statistic, q_or_prop)
     var alpha = alpha_for(confidence_level, alternative)
     var interval: Interval
+    var lvl_lo = alpha
+    var lvl_hi = ftz(Float32(1.0) - alpha)
     if method == METHOD_BASIC:
         interval = basic_interval(sorted_dist, n_resamples, alpha, theta_hat)
+    elif method == METHOD_BCA:
+        var z0p = bca_bias_percentile(sorted_dist, n_resamples, theta_hat)
+        var jack = host_jackknife(x, n, n_features, statistic)
+        var ends = bca_interval(
+            sorted_dist, n_resamples, alpha, z0p, bca_acceleration(jack, n)
+        )
+        interval = ends.interval
+        lvl_lo = ends.alpha_1
+        lvl_hi = ends.alpha_2
     else:
         interval = percentile_interval(sorted_dist, n_resamples, alpha)
     interval = narrow_for_alternative(interval, alternative)
-    var h_lo = Float32(n_resamples - 1) * alpha
+    var h_lo = Float32(n_resamples - 1) * lvl_lo
     var pos_lo = Int(h_lo)
-    var h_hi = Float32(n_resamples - 1) * ftz(Float32(1.0) - alpha)
+    var h_hi = Float32(n_resamples - 1) * lvl_hi
     var pos_hi = Int(h_hi)
     var se = distribution_standard_error(dist, n_resamples)
     return HostBootstrapResult(

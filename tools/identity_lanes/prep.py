@@ -929,3 +929,24 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_prep_scaler_nan), "x-prep-scaler-options")
+
+
+@lane("resample-bca")
+def _(ml, X, yc, yr, Xh=None):
+    """resample.bootstrap(method='BCa') (DEVIATION 1699, closed by the
+    DEVIATION 5410 ndtri / ndtr seam): the three statistics with a jackknife
+    arm, each alternative, on the bootstrap lane's first 2048 values of yr
+    (a paired two-column sample for diff_means). The distribution, the
+    interval and the two order positions at the adjusted levels are hashed."""
+    rs = ml.resample
+    x = np.ascontiguousarray(yr[:2048])
+    two = np.ascontiguousarray(np.stack([yr[:2048], X[:2048, 3]], 1).astype(np.float32))
+    parts = {}
+    for name, data, stat, alt in (("mean", x, "mean", "two-sided"), ("mean-less", x, "mean", "less"),
+                                  ("std", x, "std", "greater"), ("diff", two, "diff_means", "two-sided")):
+        b = rs.bootstrap(data, statistic=stat, n_resamples=1024, method="BCa", random_state=5,
+                         alternative=alt, confidence_level=0.9)
+        parts[name] = _h(b.distribution, np.asarray([b.point_estimate, b.standard_error, b.confidence_interval[0],
+                                                     b.confidence_interval[1]], dtype=np.float64),
+                         np.asarray([b.order_low, b.order_high], dtype=np.int64))
+    return _fit(parts)

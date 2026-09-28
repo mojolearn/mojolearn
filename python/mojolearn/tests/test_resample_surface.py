@@ -83,7 +83,7 @@ def arm_monte_carlo(rep):
 
 def arm_refusals(rep):
     x = _x(32)
-    rep.raises("REFUSE", ValueError, "bca", "method='bca' by name (DEVIATION 1699)", rs.bootstrap, x, method="bca", n_resamples=8)
+    rep.raises("REFUSE", Exception, "BCa", "method='BCa' for an order statistic, by name on the Mojo host (DEVIATION 1699)", rs.bootstrap, x, method="BCa", statistic="quantile", q_or_prop=0.5, n_resamples=8)
     rep.raises("REFUSE", ValueError, "statistic", "an unknown statistic", rs.bootstrap, x, statistic="median", n_resamples=8)
     rep.raises("REFUSE", ValueError, "alternative", "an unknown alternative", rs.bootstrap, x, alternative="both", n_resamples=8)
     rep.raises("REFUSE", ValueError, "1-D or 2-D", "a 3-D sample", rs.bootstrap, np.zeros((2, 2, 2), np.float32), n_resamples=8)

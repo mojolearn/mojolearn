@@ -12,8 +12,10 @@ standard error and the p-value are host scalars over the same pinned tree
 (`metrics/checks/pinned_sum.mojo::host_tree_sum`), with no libm call.
 
 WHAT IS REFUSED, AND WHERE. Here by name: an unknown statistic, method,
-alternative or integrand SPELLING, a sample that is not 1-D or 2-D, and
-`method='bca'` (DEVIATION 1699, refused on the Mojo host too). On the Mojo
+alternative or integrand SPELLING and a sample that is not 1-D or 2-D.
+`method='BCa'` (any case, as SciPy) ships for mean, std and diff_means
+(DEVIATION 1699, closed by DEVIATION 5410) and is refused by name on the
+Mojo host for the other statistics and a degenerate interval. On the Mojo
 host by name: `n_resamples` outside the positions the index map can
 address (`validate_positions`), a pooled size the permutation map cannot
 address, a non-finite cell, a `confidence_level` outside (0, 1), a
@@ -136,8 +138,10 @@ def bootstrap(data, statistic="mean", n_resamples=9999, confidence_level=0.95,
     `data` is `(n,)` or `(n, 2)` float32; a two-column sample keeps its row
     pairing (SciPy's `paired=True`), which `pearson` and `diff_means` read.
     `q_or_prop` is `q` for `quantile` and `proportiontocut` for
-    `trimmed_mean`, unread otherwise. `method='bca'` is refused by name
-    (DEVIATION 1699).
+    `trimmed_mean`, unread otherwise. `method` is 'percentile', 'basic' or
+    'BCa' (case-insensitive, as SciPy); BCa ships for mean, std and
+    diff_means (DEVIATION 1699) and `order_low` / `order_high` are then the
+    positions at its adjusted levels.
     """
     where = "bootstrap"
     x, _ = as_f32_c(data, ndim=None, name="data")
@@ -148,12 +152,7 @@ def bootstrap(data, statistic="mean", n_resamples=9999, confidence_level=0.95,
     else:
         raise ValueError(f"mojolearn {where}: data must be 1-D or 2-D, got {x.ndim}-D")
     stat = _code(STATISTICS, statistic, "statistic", where)
-    meth = _code(METHODS, method, "method", where)
-    if meth == METHODS["bca"]:
-        raise ValueError(
-            f"mojolearn {where}: method='bca' is refused by name (DEVIATION 1699); "
-            "resample/README.md carries the reason. Use 'percentile' or 'basic'."
-        )
+    meth = _code(METHODS, method.lower() if isinstance(method, str) else method, "method", where)
     alt = _code(ALTERNATIVES, alternative, "alternative", where)
     r = _int(n_resamples, "n_resamples", where)
     rf = _int(r_first, "r_first", where)

@@ -5,7 +5,8 @@
 the way `check-division` certifies `portable_divf`.
 
     tools/with_identical_mode.sh pixi run mojo run -I . checks/ndtri_check.mojo
-    (pixi run check-ndtri)
+    (tools/with_identical_mode.sh pixi run check-ndtri; a FAST build is refused:
+    its ops are the stdlib's, which differ by vendor by design)
 
 ## 2^20 hashed inputs per function, in classes (lane i's class is a function
 ## of i, so every column sees the same inputs)
@@ -28,9 +29,8 @@ ndtr, x:   0 uniform [-6, 6]   1 [-1, 1]   2 the tails [-14, -5] and [5, 14]
      steps on `0.5 erfc(-x / sqrt 2)` (host libm float64, an oracle only,
      never shipped), per class: the largest ulp distance of ndtri in (0, 1)
      and the largest absolute error of ndtr. Bounded: ndtri <= NDTRI_ULP_BOUND
-     ulps where |ndtri| >= 2^-10 (the relative-error regime) and <= 2^-33
-     absolute nearer 0 (q = p - 1/2 is exact there, PPND7's relative
-     accuracy carries), ndtr <= NDTR_ABS_BOUND absolute. A wrong coefficient,
+     ulps everywhere (near p = 1/2 too: q = p - 1/2 is exact there and
+     PPND7's relative accuracy carries), ndtr <= NDTR_ABS_BOUND absolute. A wrong coefficient,
      a swapped branch or a lost term leaves these bounds by orders of
      magnitude (the sabotage arm x_prep/seams/sabotage/seam_5410_ndtri.patch
      moves one PPND7 coefficient by one part in 10^3 and FAILS here).
@@ -48,15 +48,13 @@ from std.os import getenv
 from std.sys import has_accelerator
 from max.gpu.host import DeviceContext
 
-from checks.numerics import identical_ndtr, identical_ndtri, numeric_mode_name
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, identical_ndtr, identical_ndtri, numeric_mode_name
 from core.identity_trace import IdentityTrace
 
 comptime N = 1 << 20
 comptime BLOCK = 256
-comptime NDTRI_ULP_BOUND = 16
-comptime NDTR_ABS_BOUND = Float64(3.0e-7)
-comptime NEAR_ZERO = Float64(0.0009765625)  # 2^-10
-comptime NEAR_ZERO_ABS = Float64(1.1641532182693481e-10)  # 2^-33
+comptime NDTRI_ULP_BOUND = 8
+comptime NDTR_ABS_BOUND = Float64(1.5e-7)
 
 
 def ndtri_kernel(
@@ -208,6 +206,9 @@ def _require(ok: Bool, what: String) raises:
 
 def main() raises:
     print("ndtri check (DEVIATION 5410, IDENTITY_PATHS row 200); build mode", numeric_mode_name())
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        raise Error("ndtri check: build under NUMERIC_IDENTICAL (tools/with_identical_mode.sh); this build is "
+                    + numeric_mode_name())
     var card = IdentityTrace.to_path(getenv("MOJOLEARN_NDTRI_CARD", "/tmp/ndtri_check.card"))
     card.header("ndtri / ndtr seam (DEVIATION 5410)")
 
@@ -262,15 +263,11 @@ def main() raises:
             var o = _oracle_ndtri(Float64(pv))
             var got = host_q[i]
             judged += 1
-            if abs(o) >= NEAR_ZERO:
-                var u = _ulps(got, Float32(o))
-                if u > worst_ulp[i % 6]:
-                    worst_ulp[i % 6] = u
-                _require(u <= NDTRI_ULP_BOUND, "ndtri(" + String(pv) + ") = " + String(got) + ", oracle "
-                         + String(o) + ": " + String(u) + " ulps > " + String(NDTRI_ULP_BOUND))
-            else:
-                _require(abs(Float64(got) - o) <= NEAR_ZERO_ABS, "ndtri(" + String(pv) + ") = " + String(got)
-                         + " is " + String(abs(Float64(got) - o)) + " from the oracle near 0")
+            var u = _ulps(got, Float32(o))
+            if u > worst_ulp[i % 6]:
+                worst_ulp[i % 6] = u
+            _require(u <= NDTRI_ULP_BOUND, "ndtri(" + String(pv) + ") = " + String(got) + ", oracle "
+                     + String(o) + ": " + String(u) + " ulps > " + String(NDTRI_ULP_BOUND))
         var xv = hx[i]
         if xv == xv and abs(xv) < Float32(3.0e38):
             var e = abs(Float64(host_c[i]) - _ndtr64(Float64(xv)))
