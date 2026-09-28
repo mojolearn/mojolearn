@@ -25,9 +25,12 @@ None of these is a numeric row. Each host-only spelling has a check driver
 against its oracle and a sabotage patch that bites, listed in
 `tools/identity_lanes/cluster.checks`.
 
-`core/host_parallel.mojo` is lane/cpu's file (41f60919d), carried on this
-branch; **merge only after lane/cpu lands it on main** (then take main's
-copy).
+`core/host_parallel.mojo` is lane/cpu's file and is NOT on main yet. As of
+2026-09-28 ~04:50Z the branch no longer carries it: `host_cells` runs its
+tasks in order on the calling thread (the ann-cpu pattern), so the branch
+can merge on its SIMD and algorithmic wins alone. When the module lands on
+main, apply ~/mojolearn-evidence/cluster-cpu/threaded.patch (one call site),
+prove bits at MOJOLEARN_CPU_THREADS=1, 3, unset, and time it.
 
 ## What changed (host files)
 
@@ -47,4 +50,20 @@ copy).
 process, sha256 of every fitted array), timeit.sh, matrix.sh. The sha
 column must match before/after (it does on every row below).
 
-(filled in below)
+No timings recorded yet: the first pod (ffzsjdfo4dxvc5) reached its
+240-minute lease and was deleted before the BGMM baseline came back, and
+every earlier result on it was lost with it.
+
+## State 2026-09-28 ~04:55Z: BLOCKED ON RUNPOD BALANCE
+
+- Branch merged with origin/main (b8610dbd4; kth/moments checks resolved by
+  keeping main's 5120/5121 cases and adding the host shapes, cluster.checks
+  unioned), host_cells serial, pushed.
+- `tools/dev_pod.sh up cluster-cpu 480` refused: "Your account balance is
+  too low to rent a pod". The RunPod account lists ZERO pods (every lane's
+  pod is gone), so this is fleet-wide, not this lane.
+- OWED once a pod exists: build the host bindings (solver, cluster, x_cluster,
+  mixture, dbscan), run the family lanes on NVIDIA + CPU (lanes.txt, CPU ==
+  GPU, bits unchanged vs main), every arm in cluster.checks bites,
+  test_host_surface, the timing matrix (cpu_time.py, main vs branch, threads
+  1/3/default, sha equal), then merge to main.
