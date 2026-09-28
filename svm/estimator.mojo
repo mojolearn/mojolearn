@@ -67,6 +67,20 @@ that ran them, and no cross-vendor card has been diffed for this header.
 """
 
 from max.gpu.host import DeviceContext
+from core.neural_context import neural_ctx
+from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL
+
+#: ONE process-lifetime DeviceContext for every device entry of this binding
+#: (`core/neural_context.mojo`). A context per call ran the M2 Pro out of Metal
+#: command queues: later calls in a process REFUSED or returned output the
+#: device never wrote (x-neighbors-svc-multiclass BATCH_MOVED, gp-optimize,
+#: steward 1790601762837). Same kernels, same order, each entry still
+#: synchronizes before it returns, so no bit moves.
+comptime _CTX_NAME = "MojoSvmContextIdentical" if _CTX_MODE == _CTX_IDENTICAL else "MojoSvmContextFast"
+
+
+def _binding_ctx() raises -> DeviceContext:
+    return neural_ctx[_CTX_NAME]()
 
 from core.identity_trace import IdentityTrace
 from svm.impl.smosolver import SmoTrace
@@ -196,7 +210,7 @@ def svc_fit_host(
     param.verbosity = 0
     check_rung1_scope(param, kp, False)
 
-    var ctx = DeviceContext()
+    var ctx = _binding_ctx()
     var card = IdentityTrace()
     card.header(
         "svc_fit_host: n_rows=" + String(n_rows) + " n_cols=" + String(n_cols)
@@ -272,7 +286,7 @@ def svc_fit_host_borrowed(
     param.verbosity = 0
     check_rung1_scope(param, kp, False)
 
-    var ctx = DeviceContext()
+    var ctx = _binding_ctx()
     var card = IdentityTrace()
     card.header(
         "svc_fit_host: n_rows=" + String(n_rows) + " n_cols=" + String(n_cols)
@@ -375,7 +389,7 @@ def svc_predict_host(
     model.unique_labels.append(label1)
     model.n_iter = 0
 
-    var ctx = DeviceContext()
+    var ctx = _binding_ctx()
     var card = IdentityTrace()
     card.header(
         "svc_predict_host: n_rows=" + String(n_rows) + " n_cols=" + String(n_cols)
@@ -517,7 +531,7 @@ def svr_fit_host(
     param.verbosity = 0
     check_rung1_scope(param, kp, False)
 
-    var ctx = DeviceContext()
+    var ctx = _binding_ctx()
     var card = IdentityTrace()
     card.header(
         "svr_fit_host: n_rows=" + String(n_rows) + " n_cols=" + String(n_cols)
@@ -623,7 +637,7 @@ def svr_predict_host(
     model.unique_labels = dummy_labels^
     model.n_iter = 0
 
-    var ctx = DeviceContext()
+    var ctx = _binding_ctx()
     var card = IdentityTrace()
     card.header(
         "svr_predict_host: n_rows=" + String(n_rows) + " n_cols=" + String(n_cols)

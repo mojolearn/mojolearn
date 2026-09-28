@@ -48,6 +48,20 @@ and the card use.
 from bindings.hostptr import copy_f32
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
+from core.neural_context import neural_ctx
+from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL
+
+#: ONE process-lifetime DeviceContext for every device entry of this binding
+#: (`core/neural_context.mojo`). A context per call ran the M2 Pro out of Metal
+#: command queues: later calls in a process REFUSED or returned output the
+#: device never wrote (x-neighbors-svc-multiclass BATCH_MOVED, gp-optimize,
+#: steward 1790601762837). Same kernels, same order, each entry still
+#: synchronizes before it returns, so no bit moves.
+comptime _CTX_NAME = "MojoKernelMethodsContextIdentical" if _CTX_MODE == _CTX_IDENTICAL else "MojoKernelMethodsContextFast"
+
+
+def _binding_ctx() raises -> DeviceContext:
+    return neural_ctx[_CTX_NAME]()
 
 from cholesky.checks.potrf import (
     CHOL_ELEM_TPB,
@@ -312,7 +326,7 @@ def kernel_ridge_fit_host(
             " on data that is perfectly well conditioned. DEVIATION 1686"
         )
 
-    var ctx = DeviceContext()
+    var ctx = _binding_ctx()
 
     # DEVIATION 2487: self-kernel operands share one uploaded allocation.
     var xa = _upload(ctx, x)
@@ -428,7 +442,7 @@ def kernel_ridge_predict_host(
     var d = model.n_features
     var t = model.n_targets
 
-    var ctx = DeviceContext()
+    var ctx = _binding_ctx()
     var dq = _upload(ctx, x_new)
     var dfit = _upload(ctx, model.x_fit)
     var ddual = _upload(ctx, model.dual_coef)
@@ -671,7 +685,7 @@ def nystroem_fit_host(
         for f in range(n_features):
             comp.append(x[srow * n_features + f])
 
-    var ctx = DeviceContext()
+    var ctx = _binding_ctx()
     var ca = _upload(ctx, comp)
     var dk = ctx.enqueue_create_buffer[DType.float32](q * q)
     var na = ctx.enqueue_create_buffer[DType.float32](q)
@@ -989,7 +1003,7 @@ def nystroem_transform_host(
     var q = model.n_components
     var d = model.n_features
 
-    var ctx = DeviceContext()
+    var ctx = _binding_ctx()
     var dx = _upload(ctx, x)
     var dc = _upload(ctx, model.components)
     var dnorm = _upload(ctx, model.normalization)
@@ -1047,7 +1061,7 @@ def nystroem_transform_host_into[out_origin: MutOrigin, //](
     var kp = nystroem_params(model)
     var q = model.n_components
     var d = model.n_features
-    var ctx = DeviceContext()
+    var ctx = _binding_ctx()
     var dx = _upload(ctx, x)
     var dc = _upload(ctx, model.components)
     var dnorm = _upload(ctx, model.normalization)
@@ -1166,7 +1180,7 @@ def rbf_sampler_fit_host(
     var sigma = km_weight_sigma(gamma)
     var scale = km_feature_scale(n_components)
 
-    var ctx = DeviceContext()
+    var ctx = _binding_ctx()
     var dw = ctx.enqueue_create_buffer[DType.float32](
         n_features * n_components
     )
@@ -1223,7 +1237,7 @@ def rbf_sampler_transform_host(
     var d = model.n_features
     var dd = model.n_components
 
-    var ctx = DeviceContext()
+    var ctx = _binding_ctx()
     var dx = _upload(ctx, x)
     var dw = _upload(ctx, model.random_weights)
     var db = _upload(ctx, model.random_offset)
@@ -1267,7 +1281,7 @@ def rbf_sampler_transform_host_into[out_origin: MutOrigin, //](
     km_validate_matrix(x, n_rows, model.n_features, "rbf_sampler transform X")
     var d = model.n_features
     var dd = model.n_components
-    var ctx = DeviceContext()
+    var ctx = _binding_ctx()
     var dx = _upload(ctx, x)
     var dw = _upload(ctx, model.random_weights)
     var db = _upload(ctx, model.random_offset)
