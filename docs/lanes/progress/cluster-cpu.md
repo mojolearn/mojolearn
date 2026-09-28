@@ -62,6 +62,18 @@ every earlier result on it was lost with it.
 - `tools/dev_pod.sh up cluster-cpu 480` refused: "Your account balance is
   too low to rent a pod". The RunPod account lists ZERO pods (every lane's
   pod is gone), so this is fleet-wide, not this lane.
+- Done without a pod, on the central Hot Aisle box's CPU (no GPU slot,
+  tree /root/mojolearn-cluster-cpu at 3a6516c8c): the solver, mixture and
+  x_cluster host bindings build with the serial host_cells (exit 0 each);
+  the four host-only arms (host_gemm_leaf_order, host_gemm_flush,
+  linkage_host_tie_order, linkage_host_fold_order) each PASS clean, FAIL
+  sabotaged, PASS restored on x86 (log:
+  ~/mojolearn-evidence/cluster-cpu/arms_amdbox_cpu.log).
+- The family lane check on an AMD slot (CPU == MI300X, every .checks arm)
+  was queued but both slots were held by long decomp/sequence jobs; not run.
+  Command: `tools/amd_central.sh run cluster-cpu "cd /root/mojolearn-cluster-cpu
+  && sh tools/algos_lane_check.sh $(cat ~/mojolearn-evidence/cluster-cpu/lanes.txt)
+  --pass 2 --out /root/ev-cluster-cpu/lc1"`.
 - OWED once a pod exists: build the host bindings (solver, cluster, x_cluster,
   mixture, dbscan), run the family lanes on NVIDIA + CPU (lanes.txt, CPU ==
   GPU, bits unchanged vs main), every arm in cluster.checks bites,
