@@ -282,6 +282,95 @@ def trsm_lower_sweep_kernel(
         barrier()
 
 
+#: lane/neighbors-apple (2026-09-28): `trsm_lower_sweep_kernel` with RB
+#: right-hand-side columns per block. Each thread loads its row's L value
+#: once per step and applies it to RB chains, so L is read nrhs / RB times
+#: instead of nrhs times (GaussianProcessClassifier.predict_proba solves
+#: n_train x n_star at once). Every element's chain is the sweep's, term for
+#: term, in both numeric modes (the arithmetic is `trsm_lower_kernel`'s,
+#: which FAST's serial column solve also runs), so no word moves. Apple;
+#: `-D MOJOLEARN_CHOL_MULTI_RHS_OFF` keeps one column per block.
+comptime CHOL_MULTI_RHS = (
+    has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_CHOL_MULTI_RHS_OFF"]()
+)
+comptime CHOL_MR_NT = 1024
+comptime CHOL_MR_SLOTS = 4
+comptime CHOL_MR_RB = 8
+
+
+def trsm_lower_multi_rhs_kernel(
+    l: MutPointer[Float32, MutAnyOrigin],
+    b: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    nrhs_in: Int32,
+    ld_in: Int32,
+):
+    """`trsm_lower_sweep_kernel`'s schedule for columns [RB * block, +RB),
+    n <= CHOL_MR_NT * CHOL_MR_SLOTS; columns past nrhs are neither read
+    nor written."""
+    comptime NT = CHOL_MR_NT
+    comptime SL = CHOL_MR_SLOTS
+    comptime RB = CHOL_MR_RB
+    var n = Int(n_in)
+    var nrhs = Int(nrhs_in)
+    var ld = Int(ld_in)
+    var j0 = Int(block_idx.x) * RB
+    var tid = Int(thread_idx.x)
+    var lane = tid % 32
+    var sg = tid // 32
+    var xs = stack_allocation[32 * RB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var t = SIMD[DType.float32, SL * RB](0.0)
+    comptime for s in range(SL):
+        var i = tid + s * NT
+        if i < n:
+            comptime for c in range(RB):
+                if j0 + c < nrhs:
+                    t[s * RB + c] = ftz(b.unsafe_load(i * nrhs + j0 + c))
+    var nb = (n + 31) // 32
+    for kb in range(nb):
+        var k0 = kb * 32
+        var sd = k0 // NT
+        var sgd = (k0 % NT) // 32
+        if sg == sgd:
+            var ri = k0 + lane
+            var tv = SIMD[DType.float32, RB](0.0)
+            comptime for s in range(SL):
+                if s == sd:
+                    comptime for c in range(RB):
+                        tv[c] = t[s * RB + c]
+            for r in range(32):
+                if k0 + r < n:
+                    var x = SIMD[DType.float32, RB](0.0)
+                    if lane == r:
+                        var dg = ftz(l.unsafe_load((k0 + r) * ld + k0 + r))
+                        comptime for c in range(RB):
+                            x[c] = ftz(identical_div(tv[c], dg))
+                            xs[r * RB + c] = x[c]
+                            if j0 + c < nrhs:
+                                b.unsafe_store((k0 + r) * nrhs + j0 + c, x[c])
+                    comptime for c in range(RB):
+                        x[c] = shuffle_idx(x[c], UInt32(r))
+                    if lane > r and ri < n:
+                        var lv = ftz(l.unsafe_load(ri * ld + k0 + r))
+                        comptime for c in range(RB):
+                            tv[c] = ftz(identical_mul_add(-lv, x[c], tv[c]))
+            comptime for s in range(SL):
+                if s == sd:
+                    comptime for c in range(RB):
+                        t[s * RB + c] = tv[c]
+        barrier()
+        var kc = min(32, n - k0)
+        comptime for s in range(SL):
+            var i = tid + s * NT
+            if i >= k0 + 32 and i < n:
+                for r in range(kc):
+                    var lv = ftz(l.unsafe_load(i * ld + k0 + r))
+                    comptime for c in range(RB):
+                        t[s * RB + c] = ftz(identical_mul_add(-lv, xs[r * RB + c], t[s * RB + c]))
+        barrier()
+
+
 def trsm_upper_staged_kernel(
     l: MutPointer[Float32, MutAnyOrigin],
     b: MutPointer[Float32, MutAnyOrigin],
@@ -495,8 +584,16 @@ def trsm_lower(
         )
     else:
         var swept = False
+        comptime if CHOL_MULTI_RHS:
+            if nrhs >= CHOL_MR_RB and n <= CHOL_MR_NT * CHOL_MR_SLOTS:
+                swept = True
+                ctx.enqueue_function[trsm_lower_multi_rhs_kernel](
+                    l.unsafe_ptr(), b.unsafe_ptr(), Int32(n), Int32(nrhs), Int32(lda),
+                    grid_dim=((nrhs + CHOL_MR_RB - 1) // CHOL_MR_RB, 1, 1),
+                    block_dim=(CHOL_MR_NT, 1, 1),
+                )
         comptime if CHOL_SWEEP_SOLVES:
-            if n <= CHOL_SWEEP_NT * CHOL_SWEEP_SLOTS:
+            if not swept and n <= CHOL_SWEEP_NT * CHOL_SWEEP_SLOTS:
                 swept = True
                 ctx.enqueue_function[trsm_lower_sweep_kernel](
                     l.unsafe_ptr(), b.unsafe_ptr(), Int32(n), Int32(nrhs), Int32(lda),
