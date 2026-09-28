@@ -2,11 +2,11 @@
  "arms": [
   {
    "name": "qstep",
-   "defines": "-D MOJOLEARN_X_LINEAR_BLOCKS=1 -D MOJOLEARN_X_LINEAR_QUANTILE_STEP=1",
+   "defines": "-D MOJOLEARN_X_LINEAR_BLOCKS=1 -D MOJOLEARN_X_LINEAR_QUANTILE_STEP=1 -D MOJOLEARN_X_LINEAR_FINITE_SIMD=1",
    "builds": [
     "x_linear"
    ],
-   "cases": "quantile",
+   "cases": "quantile,poisson,gamma,tweedie,huber,logistic-cv",
    "warm_column": "both",
    "rows": [
     100000,
@@ -22,7 +22,7 @@
    "builds": [
     "x_linear"
    ],
-   "cases": "quantile",
+   "cases": "quantile,poisson,gamma,tweedie,huber,logistic-cv",
    "rows": [
     100000,
     1000000

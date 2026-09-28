@@ -15,6 +15,7 @@ from std.python.bindings import PythonModuleBuilder
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from std.sys.info import has_apple_gpu_accelerator
+from std.sys.compile import is_defined
 from x_linear.ops import FP
 from x_linear.device import fit_device, decision_device
 
@@ -27,8 +28,8 @@ def _fp(addr: Int) raises -> FP:
 
 def _finite(p: FP, count: Int, name: String) raises:
     """The input check both columns run before a fit: NaN or infinity is refused by name."""
-    comptime if has_apple_gpu_accelerator():
-        # lane/linear-apple3: sixteen values at a time. v - v is 0 for a
+    comptime if has_apple_gpu_accelerator() and is_defined["MOJOLEARN_X_LINEAR_FINITE_SIMD"]():
+        # lane/linear-apple3 (WIP, opt-in): sixteen values at a time. v - v is 0 for a
         # finite v and NaN for an infinity or a NaN, so the running sum of
         # v - v is NaN exactly when some value is not finite: the scalar
         # test's verdict (the scalar walk was 16M branches on the host
