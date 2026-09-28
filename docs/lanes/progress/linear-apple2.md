@@ -38,8 +38,8 @@ bindings rebuilt in turn). Job scripts: ~/mojolearn-evidence/linear-apple2/.
 | 27b180f47 | x_linear LogisticRegressionCV (GPU team form): the lead's loss and weight folds beside the gradient cells | both | on | no |
 | 0a760cd68 | Huber / Quantile / LogisticRegressionCV: each moved fold leads its own warp (27b180f47's same-warp placement was slower) | both | on | no |
 | 449d0c127 | Quantile: the next iteration's A'(y - r - u) chains run in this iteration's A' dr pass | both | on (m4-a: 46.0 -> 34.8 s, digest equal) | no |
-| 9d450625f | SGD pipelined shuffle: draws computed by a third warp's lanes (splitmix64 skip-ahead), two epochs ahead | both | on (pending measurement) | no |
-| ea80a9110 | x_linear chains: CHAIN_U_APPLE constant (32; A/B of 64 and 128 pending) | both | no-op | x_linear/tops.mojo |
+| 9d450625f | SGD pipelined shuffle: draws computed by a third warp's lanes (splitmix64 skip-ahead), two epochs ahead | both | on (M3 Ultra sgd-clf 1.037 -> 0.652 s) | no |
+| ea80a9110 | x_linear chains: CHAIN_U_APPLE constant (stays 32: 64 and 128 are slower) | both | no-op | x_linear/tops.mojo |
 | 90c722752 | FAST QN on Apple: X^T dZ through xtdz_coalesced where D * C <= 1024 | FAST (words change: paired quality job) | on (`-D MOJOLEARN_QN_FAST_COALESCED_OFF=1`) | glm/impl/qn only |
 
 ## Jobs
@@ -295,4 +295,30 @@ shown; digests equal before vs after on every line except the FAST QN rows.
 
 Host (one core): sgd-clf 0.178, sgd-reg 0.087, perceptron 0.110, pa-clf 0.172,
 pa-reg 0.095, sgd-ocsvm 0.088.
+
+### M3 Ultra: SGD draws and the x_linear lead folds (m3ultra-b, steward 1790613661510), IDENTICAL, 100k
+
+| case | before | after | digest (both) |
+|---|---|---|---|
+| sgd-clf (1d7b8a2a7 -> 9d450625f) | 1.037 | 0.652 | 80a3e27c5f39e888 |
+| sgd-reg | 1.011 | 0.696 | 7bec4f09522835b9 |
+| perceptron | 0.998 | 0.612 | ba1036f6edb77567 |
+| pa-clf | 1.006 | 0.635 | 7e0871d9f01a9ea2 |
+| pa-reg | 1.000 | 0.646 | 052ced201ee4fe05 |
+| sgd-ocsvm | 0.994 | 0.615 | beccac368d85da21 |
+| huber (037daa353 -> 449d0c127 files) | 1.392 | 1.231 | da0468c16003f25a |
+| quantile | 82.87 | 33.90 | c7ebb6da53934bf3 |
+| logistic-cv | 7.318 | 5.954 | 109ec619e258087b |
+
+SGDDIAG 36 of 36 same bits at both SGD arms. With the draws precomputed the
+shuffle no longer bounds the epoch (sgd-clf 0.652 s with shuffle, 0.589 s
+without): the SGD family on the M3 Ultra is 5.1 s -> 0.65 s over the round
+(7.8x), 2.9x to 5.5x the one-core host.
+
+### Chain load block (m4pro-a, steward 1790614359866), IDENTICAL, 100k
+
+CHAIN_U_APPLE 32 / 64 / 128 (source edit per arm, GPU x_linear rebuilt),
+digests equal across arms: 64 and 128 are slower everywhere (logistic-cv
+5.15 / 12.35 / 19.22 s, poisson 2.46 / 2.70 / 2.90, huber 1.11 / 1.38 / 1.44):
+more registers per chain thread. Stays 32.
 
