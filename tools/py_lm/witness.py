@@ -96,9 +96,11 @@ def samba(ml, out):
     probe = Array.from_list([_ids(16, 7, 0, 256), _ids(16, 8, 0, 256)], "<i4")
     out["samba/steps"] = dict(loss=_h(b"".join(losses)), params=_h(m.flat), logits=_h(m.forward(probe)))
     m2 = ml.SambaStack(cfg, generator=T.Generator(2), lr=1e-3, accumulation_steps=2)
-    raw = _ids(4 * 17, 55, 0, 256)
-    x = Array.from_list([raw[r * 17:r * 17 + 16] for r in range(4)], "<i4")
-    y = Array.from_list([raw[r * 17 + 1:r * 17 + 17] for r in range(4)], "<i4")
+    # T=256, A=2: each 128-token piece is one complete contract leaf.
+    # The old T=64 fixture was correctly refused, so proved no accumulation.
+    raw = _ids(16 * 17, 55, 0, 256)
+    x = Array.from_list([raw[r * 17:r * 17 + 16] for r in range(16)], "<i4")
+    y = Array.from_list([raw[r * 17 + 1:r * 17 + 17] for r in range(16)], "<i4")
     try:
         loss = m2.train_step(x, y)["loss"]
         out["samba/accum2"] = dict(loss=_h(struct.pack("<d", float(loss))), params=_h(m2.flat))

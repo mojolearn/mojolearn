@@ -2031,6 +2031,15 @@ def linear_forward(a, weight, numeric_mode=None):
     return c.reshape(a.shape[:-1] + (n,))
 
 
+def _optional_samba_head(binding):
+    """Resolve the fused optimization only after validating the unfused entry."""
+    binding.linear_forward
+    try:
+        return getattr(binding, "samba_head_loss", None)
+    except (AttributeError, ImportError):
+        return None
+
+
 def samba_head_loss(a, weight, targets, num_items, numeric_mode=None):
     """`(loss, da, dweight)` of `linear_forward(a, weight)` -> `cross_entropy
     (reduction="sum", num_items=num_items, return_grad=True)` ->
@@ -2041,7 +2050,7 @@ def samba_head_loss(a, weight, targets, num_items, numeric_mode=None):
     three-call reference arm); the caller then runs the three calls."""
     from ._buffer import hotpath_enabled
     binding = _load(numeric_mode)
-    fn = getattr(binding, "samba_head_loss", None)
+    fn = _optional_samba_head(binding)
     if fn is None or not hotpath_enabled():
         return None
     a = _c32(a, "a", "samba_head_loss")

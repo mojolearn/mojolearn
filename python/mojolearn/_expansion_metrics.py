@@ -70,6 +70,15 @@ def _sq(v):
     return v * v
 
 
+def _optional_metrics_entry(binding, name):
+    """Optional optimizations may be absent on an otherwise complete CPU facade."""
+    binding.x_metrics_run  # Do not conceal a missing mandatory family binding.
+    try:
+        return getattr(binding, name)
+    except (AttributeError, ImportError):
+        return None
+
+
 def _binding(numeric_mode):
     if numeric_mode is not None and (
         not isinstance(numeric_mode, str)
@@ -279,7 +288,7 @@ def _execute(prog, numeric_mode):
     stages = array.array("i", [v for s in prog._stages for v in s] or [0])
     b = _binding(numeric_mode)
     merged = prog._download()
-    run_ranges = getattr(b, "x_metrics_run_ranges", None) if _arena_io.ranges_enabled() else None
+    run_ranges = _optional_metrics_entry(b, "x_metrics_run_ranges") if _arena_io.ranges_enabled() else None
     spans = []
     for off, arr in prog._inputs:
         if not arr.size:
@@ -292,7 +301,7 @@ def _execute(prog, numeric_mode):
             continue
         ctypes.memmove(base + 4 * off, addr_ro(arr, name="input"), 4 * arr.size)
         spans.append((off, off + arr.size, -1))
-    run_out = getattr(b, "x_metrics_run_out", None) if merged is not None else None
+    run_out = _optional_metrics_entry(b, "x_metrics_run_out") if merged is not None else None
     if run_ranges is not None:
         # the shared ranges runner (lane py-shared, core/arena_io.mojo): only
         # the inputs go up, only the outputs come back
@@ -1453,7 +1462,7 @@ class _DevCurve:
         from ._buffer import hotpath_enabled
         if self.c <= 0 or not hotpath_enabled():
             return None
-        fn = getattr(_binding(self.numeric_mode), name, None)
+        fn = _optional_metrics_entry(_binding(self.numeric_mode), name)
         if fn is not None:
             p = self.prog
             p._check(self.fps, self.c)
@@ -1487,7 +1496,7 @@ def _epilogue(name, numeric_mode):
     from ._buffer import hotpath_enabled
     if not hotpath_enabled() or os.environ.get("MOJOLEARN_METRICS_EPILOGUE", "").strip().lower() == "python":
         return None
-    return getattr(_binding(numeric_mode), name, None)
+    return _optional_metrics_entry(_binding(numeric_mode), name)
 
 
 def _dev_epilogue(dev, name):
@@ -1923,10 +1932,10 @@ def _rows_sum_to_one(s, k, numeric_mode=None):
     so the largest and smallest sums decide every row (lane metrics-apple)."""
     from ._buffer import hotpath_enabled
     n = s.size // k if k else 0
-    fn = getattr(_binding(numeric_mode), "x_metrics_row_sum_range", None) if hotpath_enabled() else None
+    fn = _optional_metrics_entry(_binding(numeric_mode), "x_metrics_row_sum_range") if hotpath_enabled() else None
     if fn is not None and _lane3():
         # each row by an exact running sum, rows as host tasks (lane metrics-apple3, opt-in)
-        fn = getattr(_binding(numeric_mode), "x_metrics_row_sum_range_tasks", None) or fn
+        fn = _optional_metrics_entry(_binding(numeric_mode), "x_metrics_row_sum_range_tasks") or fn
     if fn is not None and n > 0 and s.dtype == "<f4" and s._has_order("C"):
         # the same row fsums, in the binding (x_metrics/epilogue.mojo
         # row_sum_range; lane metrics-apple2)
@@ -2013,8 +2022,8 @@ def _ovo_native(true, index, s, n, k, numeric_mode):
         b = _binding(numeric_mode)
     except Exception:
         return None
-    pair = getattr(b, "x_metrics_ovo_pair", None)
-    sums = getattr(b, "x_metrics_class_sums", None)
+    pair = _optional_metrics_entry(b, "x_metrics_ovo_pair")
+    sums = _optional_metrics_entry(b, "x_metrics_class_sums")
     if pair is None or sums is None or not isinstance(s, Array) or s.dtype != "<f4" or not s._has_order("C"):
         return None
     codes = _label_map(true, lambda v: index[v])
@@ -2699,10 +2708,10 @@ def _expected_mi(a_counts, b_counts, n, numeric_mode=None):
     # C of mojolearn._portable_math.log (x_metrics/epilogue.mojo
     # expected_mi; lane metrics-apple2)
     from ._buffer import hotpath_enabled
-    fn = getattr(_binding(numeric_mode), "x_metrics_expected_mi", None) if hotpath_enabled() else None
+    fn = _optional_metrics_entry(_binding(numeric_mode), "x_metrics_expected_mi") if hotpath_enabled() else None
     if fn is not None and _lane3():
         # the cells as host tasks (lane metrics-apple3, opt-in)
-        fn = getattr(_binding(numeric_mode), "x_metrics_expected_mi_tasks", None) or fn
+        fn = _optional_metrics_entry(_binding(numeric_mode), "x_metrics_expected_mi_tasks") or fn
     if fn is not None and 0 < n < (1 << 31):
         A = array.array("q", a_counts)
         B = array.array("q", b_counts)
