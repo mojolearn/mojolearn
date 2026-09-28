@@ -135,7 +135,10 @@ comptime SMO_MAX_INNER_ITER = 10000
 #: the loop's exit), so a NaN fit raises exactly as before and a finite fit
 #: runs the same arithmetic in the same order.
 comptime FAST_SMO_SYNCS = (
-    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
+    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or (
+        GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        and not is_defined["MOJOLEARN_SVM_IDENTICAL_SYNCS_OFF"]()
+    ))
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_SVM_FAST_SYNCS_OFF"]()
 )
