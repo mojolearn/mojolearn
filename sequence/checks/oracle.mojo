@@ -34,6 +34,9 @@ Seams (DEVIATION numbers, lane sequence 5500-5599):
   5515 LayerNorm statistics: the mean folded columns ascending,
        then the centred squares                                     alt: mean descending
   5516 SES recursion (Croston): alpha x + (1 - alpha) f, one fma    alt: f + alpha (x - f)
+  5517 ETS seasonal update: s + gamma (t - s), one fma             alt: (1 - gamma) s + gamma t
+  5518 ETS decomposition moving average: taps ascending, 0.5 x
+       ends, ONE division by m                                      alt: every tap times w / m
 """
 from std.memory import bitcast
 
@@ -747,4 +750,196 @@ def o_croston(y: List[Float32], B: Int, n: Int, variant: Int, alt: Bool) -> List
             if variant == 2:
                 mean = _m(mean, Float32(0.95))
         out.append(mean)
+    return out^
+
+
+# ---------------------------------------------------------------- 5517 ETS seasonal update
+def _ets_seas(s_old: Float32, gamma: Float32, t: Float32, alt: Bool) -> Float32:
+    """statsforecast Update: s[0] = old_s[m-1] + gamma (t - old_s[m-1])."""
+    if alt:
+        return _a(_m(_s(Float32(1.0), gamma), s_old), _m(gamma, t))
+    return _f(gamma, _s(t, s_old), s_old)
+
+
+def o_ets_calc(y: List[Float32], B: Int, n: Int, err: Int, trend: Bool, season: Int, m: Int,
+               par: List[Float32], alt: Bool) -> List[Float32]:
+    """statsforecast Calc per series from its initial state (the layout of
+    sequence OP_ETS_LIK): par [B, 6 + m] = alpha, beta, gamma, phi, l0, b0,
+    s[0..m-1] (s[m-1] the oldest, used first); out [B, 3 + m] = lik, the
+    final level, the final trend, the final s[0..m-1]. The seasonal vector
+    is shifted explicitly (s[1:] = old_s[:-1]) as in the reference.
+    err 0 A, 1 M; season 0 N, 1 A, 2 M."""
+    var out = List[Float32]()
+    var mm = m if season != 0 else 1
+    for sr in range(B):
+        var pr = sr * (6 + mm)
+        var alpha = par[pr]
+        var beta = par[pr + 1]
+        var gamma = par[pr + 2]
+        var phi = par[pr + 3]
+        var l = _z(par[pr + 4])
+        var b = _z(par[pr + 5]) if trend else Float32(0.0)
+        var s = List[Float32]()
+        for j in range(mm):
+            s.append(_z(par[pr + 6 + j]))
+        var sse = Float32(0.0)
+        var slog = Float32(0.0)
+        var ba = _d(beta, alpha)
+        for i in range(n):
+            var yi = _z(y[sr * n + i])
+            var old_l = l
+            var old_b = b
+            var phib = _m(phi, old_b) if trend else Float32(0.0)
+            var q = _a(old_l, phib)
+            var so = s[mm - 1] if season != 0 else Float32(0.0)
+            var f0 = q
+            if season == 1:
+                f0 = _a(q, so)
+            elif season == 2:
+                f0 = _m(q, so)
+            var e: Float32
+            if err == 0:
+                e = _s(yi, f0)
+            else:
+                var fd = _a(f0, Float32(1e-10)) if abs(f0) < Float32(1e-10) else f0
+                e = _d(_s(yi, f0), fd)
+            var p = yi
+            if season == 1:
+                p = _s(yi, so)
+            elif season == 2:
+                p = Float32(1e10) if abs(so) < Float32(1e-10) else _d(yi, so)
+            l = _f(alpha, _s(p, q), q)
+            if trend:
+                b = _f(ba, _s(_s(l, old_l), phib), phib)
+            if season != 0:
+                var t: Float32
+                if season == 1:
+                    t = _s(yi, q)
+                else:
+                    t = Float32(1e10) if abs(q) < Float32(1e-10) else _d(yi, q)
+                var s0 = _ets_seas(so, gamma, t, alt)
+                var j = mm - 1
+                while j > 0:
+                    s[j] = s[j - 1]
+                    j -= 1
+                s[0] = s0
+            sse = _f(e, e, sse)
+            var v = abs(f0)
+            slog = _a(slog, _z(identical_log(v)) if v > Float32(0.0) else _z(identical_log(_a(v, Float32(1e-8)))))
+        var lik: Float32
+        if sse > Float32(0.0):
+            lik = _m(Float32(n), _z(identical_log(sse)))
+        else:
+            lik = _m(Float32(n), _z(identical_log(_a(sse, Float32(1e-8)))))
+        if err == 1:
+            lik = _f(Float32(2.0), slog, lik)
+        out.append(lik)
+        out.append(l)
+        out.append(b)
+        for j in range(mm):
+            out.append(s[j] if season != 0 else Float32(0.0))
+    return out^
+
+
+# ---------------------------------------------------------------- 5518 ETS initstate (decomposition)
+def _ets_ma(y: List[Float32], base: Int, i: Int, m: Int, alt: Bool) -> Float32:
+    """statsmodels' centred moving average at i: filter [0.5, 1, ..., 1, 0.5] / m
+    (even m) or ones / m (odd m). Pinned: taps ascending, the half-weight ends
+    as 0.5 x, ONE division by m. alt: every tap times its weight w / m."""
+    var half = m // 2
+    var even = m % 2 == 0
+    if alt:
+        var w = _d(Float32(1.0), Float32(m))
+        var hw = _d(Float32(0.5), Float32(m))
+        var acc = _m(hw if even else w, y[base + i - half])
+        for k in range(1, m):
+            acc = _f(w, y[base + i - half + k], acc)
+        if even:
+            acc = _f(hw, y[base + i + half], acc)
+        return acc
+    var acc: Float32
+    if even:
+        acc = _m(Float32(0.5), y[base + i - half])
+        for k in range(1, m):
+            acc = _a(acc, y[base + i - half + k])
+        acc = _f(Float32(0.5), y[base + i + half], acc)
+    else:
+        acc = _z(y[base + i - half])
+        for k in range(1, m):
+            acc = _a(acc, y[base + i - half + k])
+    return _d(acc, Float32(m))
+
+
+def o_ets_init(y: List[Float32], B: Int, n: Int, trend: Bool, season: Int, m: Int, alt: Bool) -> List[Float32]:
+    """statsforecast initstate for n >= 3m (seasonal_decompose): out [B, 1 + m]
+    = l0, b0 (0 without a trend), the m - 1 free seasonal states
+    seasonal[m-1], ..., seasonal[1]. season 1 A, 2 M."""
+    var out = List[Float32]()
+    var half = m // 2
+    for sr in range(B):
+        var base = sr * n
+        # period averages of the detrended series where the trend exists
+        var pa = List[Float32]()
+        for p in range(m):
+            var acc = Float32(0.0)
+            var cnt = 0
+            for i in range(half, n - half):
+                if i % m != p:
+                    continue
+                var tr = _ets_ma(y, base, i, m, alt)
+                var yi = _z(y[base + i])
+                acc = _a(acc, _s(yi, tr) if season == 1 else _d(yi, tr))
+                cnt += 1
+            pa.append(_d(acc, Float32(cnt)))
+        var mean = Float32(0.0)
+        for p in range(m):
+            mean = _a(mean, pa[p])
+        mean = _d(mean, Float32(m))
+        for p in range(m):
+            pa[p] = _s(pa[p], mean) if season == 1 else _d(pa[p], mean)
+        var init = List[Float32]()
+        for k in range(1, m):
+            init.append(pa[m - k])
+        if season == 2:
+            var sm = Float32(0.0)
+            for k in range(m - 1):
+                init[k] = init[k] if init[k] > Float32(1e-2) else Float32(1e-2)
+                sm = _a(sm, init[k])
+            if sm > Float32(m):
+                var den = Float32(0.0)
+                for k in range(m - 1):
+                    den = _a(den, _a(init[k], Float32(1e-2)))
+                for k in range(m - 1):
+                    init[k] = _d(init[k], den)
+        var mx = 2 * m if 2 * m > 10 else 10
+        var maxn = mx if mx < n else n
+        var ysa = List[Float32]()
+        for i in range(maxn):
+            var sv = pa[i % m]
+            var yi = _z(y[base + i])
+            ysa.append(_s(yi, sv) if season == 1 else _d(yi, sv if sv > Float32(1e-2) else Float32(1e-2)))
+        var sy = Float32(0.0)
+        for i in range(maxn):
+            sy = _a(sy, ysa[i])
+        var ybar = _d(sy, Float32(maxn))
+        var l0 = ybar
+        var b0 = Float32(0.0)
+        if trend:
+            # the least-squares line through (t, ysa), t = 1..maxn, centred sums
+            var tbar = _d(Float32(maxn + 1), Float32(2.0))
+            var sxy = Float32(0.0)
+            var sxx = Float32(0.0)
+            for i in range(maxn):
+                var dt = _s(Float32(i + 1), tbar)
+                sxy = _f(dt, _s(ysa[i], ybar), sxy)
+                sxx = _f(dt, dt, sxx)
+            b0 = _d(sxy, sxx) if sxx > Float32(0.0) else Float32(0.0)
+            l0 = _s(ybar, _m(b0, tbar))
+            if abs(_a(l0, b0)) < Float32(1e-8):
+                l0 = _m(l0, Float32(1.001))
+                b0 = _m(b0, Float32(0.999))
+        out.append(l0)
+        out.append(b0)
+        for k in range(m - 1):
+            out.append(init[k])
     return out^

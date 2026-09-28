@@ -76,15 +76,25 @@ def ann_span(c: Int, tasks: Int, n: Int) -> Tuple[Int, Int]:
 
 
 @always_inline
+def _flush_bits[w: Int](x: SIMD[DType.float32, w]) -> SIMD[DType.float32, w]:
+    """A zero exponent field becomes the signed zero, every other word is
+    returned unchanged: `ftz`'s rule, spelled without a compare or a select
+    (a vector select of a bool mask lowered ten times slower than the
+    arithmetic around it, measured on the Xeon 8470, 2026-09-28). With
+    e = bits & 0x7F800000, `(e + 0x7FFFFFFF) >> 31` is 1 exactly when e != 0
+    (no wrap: e <= 0x7F800000), so `0 - that` is the all-ones keep mask."""
+    var b = bitcast[DType.uint32, w](x)
+    var e = b & SIMD[DType.uint32, w](0x7F800000)
+    var keep = SIMD[DType.uint32, w](0) - ((e + SIMD[DType.uint32, w](0x7FFFFFFF)) >> SIMD[DType.uint32, w](31))
+    return bitcast[DType.float32, w](b & (keep | SIMD[DType.uint32, w](0x80000000)))
+
+
+@always_inline
 def ftz_v[w: Int](x: SIMD[DType.float32, w]) -> SIMD[DType.float32, w]:
-    """`ftz`, lane by lane, as one vector select."""
+    """`ftz`, lane by lane (a zero or a subnormal becomes its signed zero,
+    which for a zero is itself)."""
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        var b = bitcast[DType.uint32, w](x)
-        var e = b & SIMD[DType.uint32, w](0x7F800000)
-        var m = b & SIMD[DType.uint32, w](0x007FFFFF)
-        var sub = e.eq(SIMD[DType.uint32, w](0)) & m.ne(SIMD[DType.uint32, w](0))
-        var z = bitcast[DType.float32, w](b & SIMD[DType.uint32, w](0x80000000))
-        return sub.select(z, x)
+        return _flush_bits[w](x)
     return x
 
 
@@ -102,12 +112,17 @@ def mul_add_v[w: Int](
 def mul_v[w: Int](a: SIMD[DType.float32, w], b: SIMD[DType.float32, w]) -> SIMD[DType.float32, w]:
     """`identical_mul`, lane by lane: the host `pinned_mul_f32` (an
     arithmetic fence around the product, so no neighbor add fuses with it).
-    Eight lanes, the one width the ann host paths use."""
-    comptime assert w == 8, "mul_v: the fence is spelled for 8 lanes"
+    Spelled for 8 and 16 lanes."""
+    comptime assert w == 8 or w == 16, "mul_v: the fence is spelled for 8 or 16 lanes"
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        return rebind[SIMD[DType.float32, w]](llvm_intrinsic[
-            "llvm.arithmetic.fence.v8f32", SIMD[DType.float32, 8], has_side_effect=False
-        ](rebind[SIMD[DType.float32, 8]](a * b)))
+        comptime if w == 8:
+            return rebind[SIMD[DType.float32, w]](llvm_intrinsic[
+                "llvm.arithmetic.fence.v8f32", SIMD[DType.float32, 8], has_side_effect=False
+            ](rebind[SIMD[DType.float32, 8]](a * b)))
+        else:
+            return rebind[SIMD[DType.float32, w]](llvm_intrinsic[
+                "llvm.arithmetic.fence.v16f32", SIMD[DType.float32, 16], has_side_effect=False
+            ](rebind[SIMD[DType.float32, 16]](a * b)))
     return a * b
 
 
@@ -122,8 +137,5 @@ def div_v[w: Int](a: SIMD[DType.float32, w], b: SIMD[DType.float32, w]) -> SIMD[
 @always_inline
 def _ftz_always_v[w: Int](x: SIMD[DType.float32, w]) -> SIMD[DType.float32, w]:
     """`checks/numerics.mojo::_ftz_always`, lane by lane: exponent field
-    zero becomes the signed zero."""
-    var b = bitcast[DType.uint32, w](x)
-    var e = b & SIMD[DType.uint32, w](0x7F800000)
-    var z = bitcast[DType.float32, w](b & SIMD[DType.uint32, w](0x80000000))
-    return e.eq(SIMD[DType.uint32, w](0)).select(z, x)
+    zero becomes the signed zero, in every mode."""
+    return _flush_bits[w](x)

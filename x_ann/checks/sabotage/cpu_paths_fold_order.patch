@@ -1,0 +1,52 @@
+diff --git a/x_ann/host/tsne_host.mojo b/x_ann/host/tsne_host.mojo
+index 41659c880..6f5314c28 100644
+--- a/x_ann/host/tsne_host.mojo
++++ b/x_ann/host/tsne_host.mojo
+@@ -40,7 +40,8 @@ def _repulse_span[masked: Bool](
+     comptime W = REP_W
+     var one = SIMD[DType.float32, W](1.0)
+     var zero = SIMD[DType.float32, W](0.0)
+-    for j in range(j0, j1):
++    for jr in range(j1 - j0):
++        var j = j1 - 1 - jr  # SABOTAGE (never shipped): the CPU fold walks j descending
+         var bj0 = SIMD[DType.float32, W](yf0.unsafe_load(j))
+         var bj1 = SIMD[DType.float32, W](yf1.unsafe_load(j))
+         var d0 = ftz_v[W](yi0 - bj0)
+diff --git a/x_ann/host/cagra_host.mojo b/x_ann/host/cagra_host.mojo
+index 20b303da1..7d5f2f820 100644
+--- a/x_ann/host/cagra_host.mojo
++++ b/x_ann/host/cagra_host.mojo
+@@ -47,7 +47,8 @@ def knn_rows_host(x: F32P, n: Int, d: Int, nn: Int, nn_d: F32P, nn_i: I32P):
+             var jb = 0
+             while jb < n_pad:
+                 var acc = InlineArray[SIMD[DType.float32, W], R](fill=SIMD[DType.float32, W](0.0))
+-                for c in range(d):
++                for cr in range(d):
++                    var c = d - 1 - cr  # SABOTAGE (never shipped): the CPU k-NN fold walks c descending
+                     var b = tp.load[width=W](c * n_pad + jb)
+                     comptime for r in range(R):
+                         if r < rows:
+diff --git a/x_ann/host/ivf_pq_host.mojo b/x_ann/host/ivf_pq_host.mojo
+index 8af7348cb..03439ef43 100644
+--- a/x_ann/host/ivf_pq_host.mojo
++++ b/x_ann/host/ivf_pq_host.mojo
+@@ -337,7 +337,8 @@ def ivf_pq_search_host(
+                         if nb == 0:
+                             break
+                         var total = SIMD[DType.float32, PQ_W](0.0)
+-                        for j in range(pq_dim):
++                        for jr in range(pq_dim):
++                            var j = pq_dim - 1 - jr  # SABOTAGE (never shipped)
+                             var ent = SIMD[DType.float32, PQ_W](0.0)
+                             for r in range(nb):
+                                 var code = Int(codes.unsafe_load(Int(rb.unsafe_load(r)) * pq_dim + j))
+@@ -358,7 +359,8 @@ def ivf_pq_search_host(
+                     if mask.unsafe_load(row) == 0:
+                         continue
+                     var total = Float32(0.0)
+-                    for j in range(pq_dim):
++                    for jr in range(pq_dim):
++                        var j = pq_dim - 1 - jr  # SABOTAGE (never shipped): the CPU code sum walks j descending
+                         var code = Int(codes.unsafe_load(row * pq_dim + j))
+                         var e = j * n_codes + code
+                         if sp.unsafe_load(e) != g:
