@@ -964,7 +964,7 @@ def _enetcv_fit(est, X, y, l1_ratios):
     fp = [est.eps, est.tol] + [float(r) for r in l1_ratios] + (values if explicit else [])
     ip = [est.max_iter, int(bool(est.fit_intercept)), grid, folds, L, int(explicit), int(bool(est.positive))]
     vals = _run(est, ALGO_ENETCV, a, n, d, yy, ip, fp, d + 4 + L * grid + L * grid * folds,
-                d * d + 4 * d + 3, 1)
+                d * d + 4 * d + 3 + grid * (d + 2), 1)
     est.coef_ = Array.from_list(vals[:d], "<f4")
     est.intercept_ = float(vals[d])
     est.alpha_ = float(vals[d + 1])

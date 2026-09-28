@@ -25,6 +25,7 @@ precompute=False for the refit; the same minimizer). float32 throughout.
 """
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fabs, fmax, fexp, flog, fsign, ld, st, ldi, i2f, fill, copy,
+    add_acc, axpy_centered,
 )
 
 
@@ -114,46 +115,40 @@ def _gap(fw: FP, q: Int, qw: Int, w: Int, d: Int, ynorm2: Float32, l1: Float32, 
 def _prep(x: FP, y: FP, n: Int, d: Int, fid: FP, fold: Int, fi: Bool,
           fw: FP, xm: Int, gg: Int, q: Int, sc: Int):
     """Centers the rows whose fold id != `fold` (all rows when fold < 0):
-    x means, Gram, X'y; fw[sc:sc+3] = (y mean, |yc|^2, rows)."""
+    x means, Gram, X'y; fw[sc:sc+3] = (y mean, |yc|^2, rows). Each mean,
+    Gram entry and X'y entry is its own accumulator folded rows ascending,
+    walked as one row pass per stage (lane linear-cpu)."""
     var rows = 0
+    var ym = Float32(0)
+    var yacc = Float32(0)
+    fill(fw, xm, d, Float32(0))
     for i in range(n):
         if fold < 0 or Int(ld(fid, i)) != fold:
             rows += 1
-    var ym = Float32(0)
-    for j in range(d):
-        var acc = Float32(0)
-        if fi:
-            for i in range(n):
-                if fold < 0 or Int(ld(fid, i)) != fold:
-                    acc = fa(acc, ld(x, i * d + j))
-            acc = fd(acc, i2f(rows))
-        st(fw, xm + j, acc)
+            if fi:
+                add_acc(fw, xm, x, i * d, d)
+                yacc = fa(yacc, ld(y, i))
     if fi:
-        var acc = Float32(0)
-        for i in range(n):
-            if fold < 0 or Int(ld(fid, i)) != fold:
-                acc = fa(acc, ld(y, i))
-        ym = fd(acc, i2f(rows))
+        for j in range(d):
+            st(fw, xm + j, fd(ld(fw, xm + j), i2f(rows)))
+        ym = fd(yacc, i2f(rows))
     var yn = Float32(0)
     for i in range(n):
         if fold < 0 or Int(ld(fid, i)) != fold:
             var r = fs(ld(y, i), ym)
             yn = fmad(r, r, yn)
     for j in range(d):
-        var mj = ld(fw, xm + j)
-        for k in range(j, d):
-            var mk = ld(fw, xm + k)
-            var acc = Float32(0)
-            for i in range(n):
-                if fold < 0 or Int(ld(fid, i)) != fold:
-                    acc = fmad(fs(ld(x, i * d + j), mj), fs(ld(x, i * d + k), mk), acc)
-            st(fw, gg + j * d + k, acc)
-            st(fw, gg + k * d + j, acc)
-        var acc = Float32(0)
-        for i in range(n):
-            if fold < 0 or Int(ld(fid, i)) != fold:
-                acc = fmad(fs(ld(x, i * d + j), mj), fs(ld(y, i), ym), acc)
-        st(fw, q + j, acc)
+        fill(fw, gg + j * d + j, d - j, Float32(0))
+    fill(fw, q, d, Float32(0))
+    for i in range(n):
+        if fold < 0 or Int(ld(fid, i)) != fold:
+            for j in range(d):
+                var a = fs(ld(x, i * d + j), ld(fw, xm + j))
+                axpy_centered(fw, gg + j * d + j, a, x, i * d + j, fw, xm + j, d - j)
+            axpy_centered(fw, q, fs(ld(y, i), ym), x, i * d, fw, xm, d)
+    for j in range(d):
+        for k in range(j + 1, d):
+            st(fw, gg + k * d + j, ld(fw, gg + j * d + k))
     st(fw, sc, ym)
     st(fw, sc + 1, yn)
     st(fw, sc + 2, i2f(rows))
@@ -164,7 +159,7 @@ def enetcv_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw
     fp: [eps, tol, l1_ratios (L), explicit alphas (A, descending) if given].
     y: targets n | fold ids n (as float32).
     res: coef d | intercept | alpha_ | l1_ratio_ | n_iter | alphas L*A | mse L*A*F.
-    fw: xm d | G d*d | q d | Qw d | w d | scalars 3."""
+    fw: xm d | G d*d | q d | Qw d | w d | scalars 3 | path A*(d+1) | path errors A."""
     var max_iter = ldi(ip, 0)
     var fi = ldi(ip, 1) != 0
     var a_n = ldi(ip, 2)
@@ -181,6 +176,8 @@ def enetcv_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw
     var qw = q + d
     var w = qw + d
     var sc = w + d
+    var pb = sc + 3
+    var pacc = pb + a_n * (d + 1)
     var alphas = d + 4
     var mse = alphas + l_n * a_n
     # the grids, on all rows
@@ -219,15 +216,22 @@ def enetcv_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw
                 var b = ym
                 for j in range(d):
                     b = fs(b, fm(ld(fw, xm + j), ld(fw, w + j)))
-                var acc = Float32(0)
-                for i in range(n):
-                    if Int(ld(fid, i)) == f:
-                        var p = b
+                copy(fw, pb + k * (d + 1), fw, w, d)
+                st(fw, pb + k * (d + 1) + d, b)
+            # the held-out squared errors of the whole path, one row pass:
+            # alpha k's sum is its own accumulator, rows ascending
+            fill(fw, pacc, a_n, Float32(0))
+            for i in range(n):
+                if Int(ld(fid, i)) == f:
+                    for k in range(a_n):
+                        var o = pb + k * (d + 1)
+                        var p = ld(fw, o + d)
                         for j in range(d):
-                            p = fmad(ld(x, i * d + j), ld(fw, w + j), p)
+                            p = fmad(ld(x, i * d + j), ld(fw, o + j), p)
                         var r = fs(p, ld(y, i))
-                        acc = fmad(r, r, acc)
-                st(res, mse + (l * a_n + k) * f_n + f, fd(acc, i2f(n_te)) if n_te > 0 else Float32(0))
+                        st(fw, pacc + k, fmad(r, r, ld(fw, pacc + k)))
+            for k in range(a_n):
+                st(res, mse + (l * a_n + k) * f_n + f, fd(ld(fw, pacc + k), i2f(n_te)) if n_te > 0 else Float32(0))
     # the choice: the smallest mean over folds, first on a tie
     var best_l = 0
     var best_k = 0
