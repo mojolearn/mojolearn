@@ -51,16 +51,16 @@ A/B script builds an arm as `<commit>+<DEFINE>[+<DEFINE>]`.
 | commit | what | tier | default | state |
 |---|---|---|---|---|
 | 1479e0c53 | stage marks inside `ivf_flat_build`, the x_ann coarse conversion, the PQ codebook loop, the build bindings, the IVF-Flat prepare binding; bench second search; A/B stage pass sets MOJOLEARN_KMEANS_STAGES | both | marks off unless MOJOLEARN_ANN_STAGES | diagnostic |
-| fd948718d, then gated | IVF build host passes (below) | both | OFF; `-D MOJOLEARN_ANN3_HOST_PASSES` turns it on | UNMEASURED |
-| 171bbcdba, d20eb2129, then gated | index preparation (below) | both | OFF; `-D MOJOLEARN_ANN3_PREPARE` turns it on | UNMEASURED |
-
+| fd948718d, gated c9b127107, on (this commit) | IVF build host passes (below) | both | ON; `-D MOJOLEARN_ANN3_HOST_PASSES_OFF` reverts | MEASURED job 2: equal digests in both tiers, gain |
+| 171bbcdba, d20eb2129, gated c9b127107, on (this commit) | index preparation (below) | both | ON; `-D MOJOLEARN_ANN3_PREPARE_OFF` reverts | MEASURED job 2: equal digests in both tiers, gain |
 | (this commit) | FAST seeding of the PQ codebooks and of the coarse quantizer (`x_ann/kpp_seed.mojo`) | FAST, Apple | OFF; `-D MOJOLEARN_ANN3_PQ_SEED`, `-D MOJOLEARN_ANN3_COARSE_SEED` | UNBUILT, UNMEASURED; moves FAST bits, owes the paired recall check |
 
 | (this commit) | FAST IVF-PQ: the codebook sample's residuals formed on the host, the 1M x 28 residual matrix not downloaded | FAST | OFF; `-D MOJOLEARN_ANN3_PQ_HOST_RESIDUALS` | UNBUILT, UNMEASURED; expected to move no bit (FAST's residual is one subtraction) |
 
 | (this commit) | FAST t-SNE repulsion at 32 or 64 rows per threadgroup (128 by default) | FAST, Apple | OFF; `-D MOJOLEARN_ANN3_TSNE_RB32` or `-D MOJOLEARN_ANN3_TSNE_RB64` | UNBUILT, UNMEASURED; moves no bit by construction |
 
-| (this commit) | IVF-PQ / IVF-SQ builds download their codes straight into the caller's arrays | both | OFF; `-D MOJOLEARN_ANN3_DIRECT_OUT` | UNBUILT, UNMEASURED; plain copies |
+| (this commit) | the coarse quantizer's FAST training sample gathered by memcpy | FAST (the sample is FAST's) | OFF; `-D MOJOLEARN_ANN3_TRAINSET_COPY` | UNBUILT, UNMEASURED; plain copies |
+| 7a9bb0aeb | IVF-PQ / IVF-SQ builds download their codes straight into the caller's arrays | both | OFF; `-D MOJOLEARN_ANN3_DIRECT_OUT` | UNBUILT, UNMEASURED; plain copies |
 
 t-SNE, why the threadgroup size: FAST iterations are 753 ms on the M4 (job
 1) and 470 to 620 ms on the M3 Ultra (round 2), a ratio of 1.2 to 1.6,
@@ -142,11 +142,68 @@ type, which refuses `y[:, None, :]`), so job 1 has no t-SNE and no taxi
 quality rows. The bench now reads the embedding and the search ids as numpy
 arrays.
 
-### Job 2: m3ultra-b, steward 1790627848135, 7c401de42: default against `+MOJOLEARN_ANN3_HOST_PASSES` against `+MOJOLEARN_ANN3_HOST_PASSES+MOJOLEARN_ANN3_PREPARE`
+### Job 2: m3ultra-b (Apple M3 Ultra), steward 1790627848135, 7c401de42: default against `+MOJOLEARN_ANN3_HOST_PASSES` against `+MOJOLEARN_ANN3_HOST_PASSES+MOJOLEARN_ANN3_PREPARE`
 
-Queued 20:37Z Sep 28. Three arms built from one commit, two reps and the
-stage pass (the first stage split inside `ivf_flat_build`, with cluster/'s
-k-means marks). Result: PENDING.
+PASS. Three arms built from one commit, arms alternated, three runs per
+cell (two reps and the stage pass). EVERY digest is equal in every arm, in
+both tiers, and every second search returns the first search's digest. Raw:
+`~/mojolearn-evidence/ann-apple3/job2_m3ultra-b_1790627848135.txt`
+(tabulated: `job2_tab.txt`, by `tools/ann_apple3_tab.py --stages`).
+
+FAST (s; the first IVF-Flat fit of a process carries a warmup):
+
+| cell | default | + host passes | + host passes + prepare |
+|---|---|---|---|
+| IVF-Flat fit | 0.980/0.586/0.579 | 0.842/0.489/0.506 | 0.827/0.489/0.484 |
+| IVF-Flat first search | 0.067/0.068/0.070 | 0.047/0.047/0.047 | 0.043/0.042/0.042 |
+| IVF-Flat second search | 0.0113/0.0114/0.0111 | 0.0107/0.0108/0.0106 | 0.0106/0.0105/0.0109 |
+| IVF-PQ fit | 1.758/1.779/1.788 | 1.749/1.729/1.696 | 1.691/1.729/1.752 |
+| IVF-PQ first / second search | 0.027 / 0.0200, 0.0196 | 0.027 / 0.0196, 0.0198 | 0.027 / 0.0171, 0.0170 |
+| IVF-SQ fit | 0.607/0.612/0.614 | 0.531/0.527/0.515 | 0.516/0.525/0.533 |
+| IVF-SQ first / second search | 0.033 / 0.0199, 0.0199 | 0.032 / 0.0200, 0.0200 | 0.033 / 0.0154, 0.0155 |
+| IVF-RaBitQ fit | 0.515/0.530/0.529 | 0.459/0.463/0.457 | 0.454/0.466/0.463 |
+| IVF-RaBitQ first / second search | 0.016 / 0.0129, 0.0131 | 0.016 / 0.0131, 0.0135 | 0.016 / 0.0124, 0.0126 |
+| refine (top-40) first / second search | 0.039 / 0.0315, 0.0315 | 0.039 / 0.0316, 0.0321 | 0.039 / 0.0292, 0.0297 |
+| CAGRA fit; first / second search | 0.148; 0.022 / 0.0196 | 0.148; 0.023 / 0.0196 | 0.146; 0.022 / 0.0196 |
+| t-SNE fit | 0.541/0.541/0.540 | 0.569/0.538/0.542 | 0.540/0.540/0.543 |
+
+IDENTICAL (s): IVF-Flat fit 1.013 -> 0.903, first search 0.067 -> 0.041;
+IVF-PQ fit 3.41 -> 3.20; IVF-SQ fit 1.05 -> 0.95, second search 0.0200 ->
+0.0155; IVF-RaBitQ fit 0.97 -> 0.88; refine second search 0.0317 -> 0.0293;
+CAGRA and t-SNE flat (not touched).
+
+KEPT, both default on now (`-D MOJOLEARN_ANN3_HOST_PASSES_OFF`,
+`-D MOJOLEARN_ANN3_PREPARE_OFF` revert).
+
+Stage split of ONE IVF build, FAST, M3 Ultra (ms; the stage pass drains at
+every mark, so the sums run above the timed fits):
+
+| phase of `ivf_flat_build` | default | + host passes |
+|---|---|---|
+| data check | 18 | 7 |
+| training sample + quantizer scale | 25 | 25 to 30 |
+| upload | 17 | 11 |
+| row norms | 5 | 7 |
+| cluster/ k-means (coarse, 262,144 rows, k 1024, 10 iterations) | 368 | 358 |
+| cluster/ predict (1M rows) | 16 | 16 |
+| downloads | 6 | 2 |
+| list layout | 47 | 5 |
+| index (copies) | 4 | 0 |
+| binding copy out | 23 to 26 | 2 to 3 |
+
+cluster/'s own marks over the FAST stage pass (5 coarse fits and 28
+codebook fits): seeding 3596 ms (of it the sequential k-means++ over the
+candidates 2705 ms, the k-means|| rounds 503 ms, the candidates' Lloyd 329
+ms), the Lloyd iterations of the fits 358 ms. IDENTICAL: seeding 5872 ms
+(k-means++ 2757, rounds 2398), Lloyd 1800 ms. So about 90% of the FAST
+k-means time of an IVF build is SEEDING, and the k-means is 80 to 95% of
+every IVF fit. One PQ codebook fit is 80 ms (14 per IVF-PQ build: 1126 ms of
+the 1.73 s fit).
+
+IVF scan, per search of 1000 queries (ms): the list-order gather 4.6 -> 0
+with the prepared index; score 8.1, select 8.6, probe 3.1, coarse 1.2.
+CAGRA search 19 (one thread per query, 16 threadgroups of 64). t-SNE
+iterations 472.
 
 ## SHARED CODE touched (for the consolidation's check)
 
@@ -156,5 +213,9 @@ k-means marks). Result: PENDING.
 
 ## Unproven
 
-Both switches until their A/B is recorded here. Nothing unproven is on in a
-default build.
+- `MOJOLEARN_ANN3_HOST_PASSES` and `MOJOLEARN_ANN3_PREPARE` (default on):
+  Metal digests only (m3ultra-b, both tiers). No NVIDIA, AMD or CPU run yet;
+  the host code is compiled on every vendor (the Apple upload is comptime
+  Apple only). The NaN and non-finite refusal of `ivf_validate_data`'s first
+  pass was not exercised on a device.
+- Every other switch is OFF in a default build and unmeasured.

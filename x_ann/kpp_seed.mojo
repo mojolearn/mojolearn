@@ -15,7 +15,9 @@ iterations over the same training rows. cluster/ is not edited.
 The seeding is k-means++ (Arthur and Vassilvitskii 2007: the first seed
 uniform, every next one drawn with probability proportional to its squared
 distance to the nearest seed so far) over a stride sample of the training
-rows, `KPP_ROWS_PER_SEED` rows per seed. The training rows are already a
+rows, `rows_per_seed` rows per seed (the caller's: 16 for the 2-wide PQ
+subspaces, 8 for the coarse quantizer, whose 1024 seeds over 28 features
+cost 1024 x 8192 distances on one host core). The training rows are already a
 seeded uniform sample, so a stride over them is one too. The draws come from
 cluster/'s `HostRng` (splitmix64), so one seed gives one index.
 
@@ -24,25 +26,25 @@ check is recall at k against exact search (bench/speed/ann_fast_quality.py),
 recorded in docs/lanes/progress/ann-apple3.md."""
 from cluster.impl.detail.kmeans import HostRng
 
-#: training rows the seeding reads, per seed
-comptime KPP_ROWS_PER_SEED = 16
 #: lanes of one distance step
 comptime KPP_W = 4
 
 
-def kpp_seed_rows(n: Int, k: Int) -> Int:
+def kpp_seed_rows(n: Int, k: Int, rows_per_seed: Int) -> Int:
     """How many training rows the seeding reads."""
-    var ns = KPP_ROWS_PER_SEED * k
+    var ns = rows_per_seed * k
     return ns if ns < n else n
 
 
-def kpp_seed(x: List[Float32], n: Int, d: Int, k: Int, seed: UInt64, mut seeds: List[Float32]):
+def kpp_seed(
+    x: List[Float32], n: Int, d: Int, k: Int, seed: UInt64, rows_per_seed: Int, mut seeds: List[Float32],
+):
     """`seeds` (k x d, already that long) filled with k rows of `x` (n x d,
     row-major) chosen by k-means++ over rows 0, step, 2 step, ... (`step =
-    n // kpp_seed_rows(n, k)`). Needs n >= k >= 1 and d >= 1; the caller
+    n // kpp_seed_rows(n, k, rows_per_seed)`). Needs n >= k >= 1 and d >= 1; the caller
     checks. When every sampled row coincides with a seed (fewer distinct rows
     than k), the remaining seeds are uniform draws."""
-    var ns = kpp_seed_rows(n, k)
+    var ns = kpp_seed_rows(n, k, rows_per_seed)
     var step = n // ns
     var rng = HostRng(seed)
     var xp = x.unsafe_ptr()

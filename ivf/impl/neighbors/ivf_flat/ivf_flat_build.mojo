@@ -88,7 +88,7 @@ from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from std.memory import memcpy
 from x_ann.stage_timer import AnnStages
-from x_ann.switches import ANN3_COARSE_SEED, ANN3_HOST_PASSES
+from x_ann.switches import ANN3_COARSE_SEED, ANN3_HOST_PASSES, ANN3_TRAINSET_COPY
 from x_ann.kpp_seed import kpp_seed
 
 comptime IVF_FAST_TRAINSET = (
@@ -370,11 +370,17 @@ def ivf_flat_build(
     var xt = List[Float32]()
     if n_train < n_rows:
         var rows = ivf_trainset_rows(n_rows, n_train, UInt64(params.seed))
-        xt = List[Float32](capacity=n_train * dim)
-        for r in range(n_train):
-            var b = rows[r] * dim
-            for c in range(dim):
-                xt.append(x[b + c])
+        comptime if ANN3_TRAINSET_COPY:
+            # lane ann-apple3, OPT-IN: one memcpy per sampled row
+            xt = List[Float32](length=n_train * dim, fill=Float32(0.0))
+            for r in range(n_train):
+                memcpy(dest=xt.unsafe_ptr() + r * dim, src=x.unsafe_ptr() + rows[r] * dim, count=dim)
+        else:
+            xt = List[Float32](capacity=n_train * dim)
+            for r in range(n_train):
+                var b = rows[r] * dim
+                for c in range(dim):
+                    xt.append(x[b + c])
 
     var sum_scale: Float64
     if n_train < n_rows:
@@ -426,9 +432,9 @@ def ivf_flat_build(
         if not trace.enabled and n_train >= n_lists:
             var seeds = List[Float32](length=n_lists * dim, fill=Float32(0.0))
             if n_train < n_rows:
-                kpp_seed(xt, n_train, dim, n_lists, params.seed, seeds)
+                kpp_seed(xt, n_train, dim, n_lists, params.seed, 8, seeds)
             else:
-                kpp_seed(x, n_rows, dim, n_lists, params.seed, seeds)
+                kpp_seed(x, n_rows, dim, n_lists, params.seed, 8, seeds)
             ctx.enqueue_copy(dst_buf=centroids, src_ptr=seeds.unsafe_ptr())
             ctx.synchronize()
             _ = seeds^

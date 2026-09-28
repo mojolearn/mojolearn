@@ -213,7 +213,7 @@ def _codebooks(
             if n_train >= n_codes:
                 kpp_seed(
                     sub, n_train, pq_len, n_codes,
-                    UInt64(seed) ^ (UInt64(j + 1) * UInt64(0x9E3779B97F4A7C15)), cb,
+                    UInt64(seed) ^ (UInt64(j + 1) * UInt64(0x9E3779B97F4A7C15)), 16, cb,
                 )
                 init_kind = INIT_ARRAY
                 cbs.host("seed")

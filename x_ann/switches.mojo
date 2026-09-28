@@ -5,9 +5,9 @@
 A change that has not been measured yet sits behind an OPT-IN define and is
 off in a default build. When its A/B shows a gain with equal digests (or,
 for a FAST change that moves bits, a paired quality check that matches or
-beats the before arm), its line here flips to `not is_defined[..._OFF]`, so
-the define that turned it on becomes the define that reverts it. The state
-of every switch is recorded in docs/lanes/progress/ann-apple3.md.
+beats the before arm), its line here flips to `not is_defined[..._OFF]`: on
+by default, and `-D <name>_OFF` reverts it. The state of every switch is
+recorded in docs/lanes/progress/ann-apple3.md.
 
 Build an arm with `MOJOLEARN_MOJO_BUILD_FLAGS="-D <name>"` (every
 bindings/build_*.sh passes it to `mojo build`); tools/ann_apple2_ab.sh takes
@@ -19,13 +19,21 @@ from std.sys.compile import is_defined
 #: and output copies by memcpy, the quantizer scale in one row pass, the
 #: data check without an exit first, Apple uploads from the caller's list.
 #: Host code, no arithmetic changed.
-comptime ANN3_HOST_PASSES = is_defined["MOJOLEARN_ANN3_HOST_PASSES"]()
+#: ON since job 2 (m3ultra-b 1790627848135): every digest equal in both
+#: tiers; FAST fits IVF-Flat 0.58 -> 0.49 s, IVF-SQ 0.61 -> 0.52, IVF-RaBitQ
+#: 0.53 -> 0.46, IVF-PQ 1.78 -> 1.73. `-D MOJOLEARN_ANN3_HOST_PASSES_OFF`
+#: reverts.
+comptime ANN3_HOST_PASSES = not is_defined["MOJOLEARN_ANN3_HOST_PASSES_OFF"]()
 
 #: Index preparation: the IVF-Flat prepare moves the admitted arrays and
 #: copies the host layout only when a per-query search needs it; a resident
 #: IVF-PQ / SQ / RaBitQ index gathers its codes into list order once.
 #: No arithmetic changed.
-comptime ANN3_PREPARE = is_defined["MOJOLEARN_ANN3_PREPARE"]()
+#: ON since job 2 (m3ultra-b 1790627848135): every digest equal in both
+#: tiers; FAST second search IVF-PQ 0.0198 -> 0.0170 s, IVF-SQ 0.0199 ->
+#: 0.0155, refine 0.0315 -> 0.0295; IVF-Flat first search 0.047 -> 0.042.
+#: `-D MOJOLEARN_ANN3_PREPARE_OFF` reverts.
+comptime ANN3_PREPARE = not is_defined["MOJOLEARN_ANN3_PREPARE_OFF"]()
 
 #: FAST on Apple: the IVF-PQ subspace codebooks are seeded by this family's
 #: host k-means++ (x_ann/kpp_seed.mojo) and handed to cluster/'s k-means as
@@ -54,3 +62,8 @@ comptime ANN3_TSNE_RB64 = is_defined["MOJOLEARN_ANN3_TSNE_RB64"]()
 #: n x dim int32) straight into the caller's arrays, instead of a host
 #: buffer, then a list, then the caller's array. Plain copies: no bit moves.
 comptime ANN3_DIRECT_OUT = is_defined["MOJOLEARN_ANN3_DIRECT_OUT"]()
+
+#: The coarse quantizer's FAST training sample is gathered row by row with
+#: memcpy into a list made by length (one append per float otherwise).
+#: Plain copies: no bit moves.
+comptime ANN3_TRAINSET_COPY = is_defined["MOJOLEARN_ANN3_TRAINSET_COPY"]()
