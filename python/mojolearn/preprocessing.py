@@ -532,8 +532,9 @@ class StandardScaler(_ScalerProtocol):
         feature, by x_prep `gnb_merge` (n = n_past + n_new; mean =
         (n_new mu_new + n_past mu) / n; var = (n_past var + n_new var_new +
         n_new n_past / n (mu - mu_new)^2) / n; a feature the batch never saw
-        keeps its values), then the scale by `std_scale`. A fresh scaler's
-        first batch is fit, bit for bit."""
+        keeps its values; two exactly constant parts with the same value
+        keep it exactly, KEEP = 1), then the scale by `std_scale`. A fresh
+        scaler's first batch is fit, bit for bit."""
         _require_training(self)
         if not self.__sklearn_is_fitted__():
             return self.fit(X, y, sample_weight=sample_weight)
@@ -559,7 +560,7 @@ class StandardScaler(_ScalerProtocol):
         ov = pr.put(self.var_) if self.var_ is not None else pr.put_list(zeros_d)
         bv = pr.put(batch.var_) if batch.var_ is not None else pr.put_list(zeros_d)
         cnt, mean, var, scale = pr.alloc(d), pr.alloc(d), pr.alloc(d), pr.alloc(d)
-        pr.stage("gnb_merge", d, oc, om, ov, bc, bm, bv, d, 1, cnt, mean, var)
+        pr.stage("gnb_merge", d, oc, om, ov, bc, bm, bv, d, 1, cnt, mean, var, 1)
         pr.stage("std_scale", d, var, scale)
         pr.run(self.numeric_mode_)
         if weighted:
