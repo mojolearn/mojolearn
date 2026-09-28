@@ -63,6 +63,7 @@ _OPS = dict(
     mi_dc=94, mi_dd=95, kbins_gw=96, kbins_wq=97, kbins_wkm=98, ii_sigma=99, ii_post=100,
     scaler_stats=101, std_scale=102, nan_keep=103, pt_init=104, pt_map=105, pt_fold=106, ii_rowabs=107, te_bucket=108, pt_log=109,
     pt_spts=110, pt_smap=111, pt_sfold=112, pt_sres=113, te_gather=114,
+    te_hist=115, te_hsum=116, te_hstart=117, te_hscatter=118,
 )
 _PARAMS = 14
 _NONE = -1
@@ -1100,7 +1101,16 @@ class TargetEncoder(_PrepBase):
         else:
             # each category's rows, ascending (te_bucket): te_enc walks one bucket, not every row
             bstart, brows = pr.alloc(d * (cmax + 1)), pr.alloc(n * d)
-            pr.stage("te_bucket", d, codes, n, d, cmax, bstart, brows)
+            if os.environ.get("MOJOLEARN_XPREP_TE_PBUCKET", "1") != "0":
+                # the buckets by chunks in parallel (te_hist .. te_hscatter): te_bucket's START and ROWS
+                ch = max(1, min(256, (n + 4095) // 4096))
+                hh, tot = pr.scratch(d * ch * cmax), pr.scratch(d * cmax)
+                pr.stage("te_hist", d * ch, codes, n, d, cmax, ch, hh)
+                pr.stage("te_hsum", d * cmax, cmax, ch, hh, tot)
+                pr.stage("te_hstart", d, cmax, bstart, tot)
+                pr.stage("te_hscatter", d * ch, codes, n, d, cmax, ch, hh, bstart, brows)
+            else:
+                pr.stage("te_bucket", d, codes, n, d, cmax, bstart, brows)
             if os.environ.get("MOJOLEARN_XPREP_TE_GATHER", "1") != "0":
                 # each bucket's folds and targets in bucket order (te_gather): te_enc streams them
                 gb = pr.scratch(n * d * (1 + T))
