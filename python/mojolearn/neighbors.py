@@ -14,7 +14,7 @@ from . import _portable_math as math
 from . import _mojolearn, _serialize
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_f32_dense_c, as_i64_c, empty
-from ._labels import sorted_classes
+from ._labels import encode_labels, sorted_classes
 from ._mode import NumericModeMixin
 from .linear_model import (
     _check_saved_by, _dtype_name, _is_integer_labels, _restore_mode,
@@ -990,7 +990,7 @@ class KNeighborsClassifier(NearestNeighbors):
         counts = _serialize.exact(arrays, "class_counts", "<i8").tolist()
         if len(counts) != n_out or sum(counts) != len(classes):
             raise ValueError(f"mojolearn: {path!r} classes and class_counts disagree with n_outputs")
-        rebuilt = [sorted_classes(y_cols[i].tolist())[0] for i in range(n_out)]
+        rebuilt = [encode_labels(y_cols[i].tolist())[0] for i in range(n_out)]
         off = 0
         for i, count in enumerate(counts):
             saved = [int(c) for c in classes[off:off + count]]
@@ -1045,7 +1045,7 @@ class KNeighborsClassifier(NearestNeighbors):
         # `np.unique` per column, under the package-wide classes_ ORDER
         # RULE (`_labels.sorted_classes`, DEVIATION 2340): a Python list
         # per output; int labels, so a sort by value.
-        self._classes_list = [sorted_classes(col)[0] for col in cols]
+        self._classes_list = [encode_labels(col)[0] for col in cols]
         return self
 
     @property

@@ -37,6 +37,7 @@ import statistics
 from . import _backend
 from ._array import Array
 from ._buffer import as_f32_c, addr_ro
+from . import _labels
 from ._labels import flatten_labels, sorted_classes, label_kind
 
 __all__ = ["f_classif", "f_regression", "r_regression", "chi2", "mutual_info_classif", "mutual_info_regression", "RobustScaler", "MaxAbsScaler", "OrdinalEncoder", "OneHotEncoder", "TargetEncoder", "SimpleImputer", "KBinsDiscretizer",
@@ -264,25 +265,19 @@ def _mode():
 
 
 def encode_labels(y):
-    """(classes, int32 codes) under `_labels`' order rule, in Python: the
-    base binding's native encoder is not on the CPU route of this lane."""
-    classes, codes = sorted_classes(flatten_labels(y))
-    return classes, Array.from_list(codes, "<i4")
+    """(classes, int32 codes) under `_labels`' order rule: `_labels.encode_labels`,
+    the native encoder (the base binding, or `_mojolearn_core_host` on a
+    CPU-only install) with `sorted_classes(flatten_labels(y))` as its
+    definition and fallback (lane py-shared; this module used to run the
+    Python routine always)."""
+    return _labels.encode_labels(y)
 
 
 def decode_labels(classes, codes):
     """Codes back to labels: int classes an int64 Array, real classes a
-    float64 Array, anything else a list (`_labels.decode_labels`' contract)."""
-    values = [classes[int(c)] for c in codes.tolist()]
-    kind = label_kind(classes)
-    try:
-        if kind == "int":
-            return Array.from_list([int(v) for v in values], "<i8")
-        if kind == "float":
-            return Array.from_list([float(v) for v in values], "<f8")
-    except (OverflowError, TypeError):
-        pass
-    return values
+    float64 Array, anything else a list: `_labels.decode_labels` (the native
+    gather for int and float classes; lane py-shared)."""
+    return _labels.decode_labels(classes, codes)
 
 
 def _x2d(X, name="X"):
