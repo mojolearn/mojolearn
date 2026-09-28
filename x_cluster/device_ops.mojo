@@ -267,7 +267,6 @@ comptime MOM_SMEM = 4096  # floats: 16 KB, inside Apple's 32 KB threadgroup memo
 comptime MOM_MAX_D = 64
 comptime MOM_ROWS = 256  # rows per tile at most
 comptime MOM_COV_CPB = 16  # covariance chains per block
-comptime MOM_EPT = MOM_SMEM // MOM_TPB  # addends per thread per tile, at most
 comptime MOM_UNROLL = 8  # addends read ahead of the (still ascending) adds
 
 
@@ -325,47 +324,21 @@ def _moments_pass_kernel(
         var m = N - r0
         if m > T:
             m = T
-        # every load of the thread's (at most MOM_EPT) addends issued first,
-        # then the addends formed (lane/cluster-apple): the loop that loaded
-        # and formed one addend at a time waited on each load in turn. The
-        # same `*_term` of the same operands, stored to the same cell.
-        var tot = m * cpb
-        var cq = SIMD[DType.int32, MOM_EPT](-1)
-        var rr = SIMD[DType.float32, MOM_EPT]()
-        var xa = SIMD[DType.float32, MOM_EPT]()
-        var xb = SIMD[DType.float32, MOM_EPT]()
-        var ma = SIMD[DType.float32, MOM_EPT]()
-        var mb = SIMD[DType.float32, MOM_EPT]()
-        comptime for u in range(MOM_EPT):
-            var e = tid + u * MOM_TPB
-            if e < tot:
-                var j = e // cpb
-                var c = c0 + (e - j * cpb)
-                var i = r0 + j
-                cq[u] = Int32(c)
-                rr[u] = resp[i * K + k]
-                if c < nch:
-                    if cov_pass == Int32(0):
-                        if c != D:
-                            xa[u] = x[i * D + c]
-                    else:
-                        var a = c // D
-                        var b = c - a * D
-                        xa[u] = x[i * D + a]
-                        xb[u] = x[i * D + b]
-                        ma[u] = means[k * D + a]
-                        mb[u] = means[k * D + b]
-        comptime for u in range(MOM_EPT):
-            var e = tid + u * MOM_TPB
-            if e < tot:
-                var c = Int(cq[u])
-                var t = Float32(0)
-                if c < nch:
-                    if cov_pass == Int32(0):
-                        t = rr[u] if c == D else xk_term(rr[u], xa[u])
-                    else:
-                        t = cov_term(rr[u], xa[u], xb[u], ma[u], mb[u])
-                terms[e] = t
+        for e in range(tid, m * cpb, MOM_TPB):
+            var j = e // cpb
+            var q = e - j * cpb
+            var c = c0 + q
+            var i = r0 + j
+            var r = resp[i * K + k]
+            var t = Float32(0)
+            if c < nch:
+                if cov_pass == Int32(0):
+                    t = r if c == D else xk_term(r, x[i * D + c])
+                else:
+                    var a = c // D
+                    var b = c - a * D
+                    t = cov_term(r, x[i * D + a], x[i * D + b], means[k * D + a], means[k * D + b])
+            terms[e] = t
         barrier()
         if mine:
             var j0 = 0
