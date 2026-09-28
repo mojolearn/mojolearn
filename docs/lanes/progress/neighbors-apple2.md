@@ -260,3 +260,53 @@ vary run to run inside each arm, as before). KNN_PHASE_TIMERS sort_ms at
 | NearestNeighbors(k=2000).kneighbors 100k x 500 | FAST | 0.084 | 0.037 | 0.083 | 0.037 |
 | kneighbors / kNN classifier / regressor, k = 10, 20 (round-one board) | IDENTICAL | unchanged (0.05 to 0.13 s), digests = round one's | | | |
 | SpectralEmbedding(knn).fit 20k | both | unchanged (0.77 IDENTICAL, 0.26 FAST) | | | |
+
+## FINAL (draft; updated when the M3 Ultra request lands)
+
+### Default vs opt-in
+
+Default ON, every one with an A/B arm that restores the old path:
+
+| commit | default path | arm restoring the old path |
+|---|---|---|
+| ddc2f96ad | IDENTICAL k-NN k > 1024 in rounds + wide merge (was a refusal) | none (the old path refused) |
+| eb1a0a257, d7934f99f | x_neighbors fused, tiled k-NN (`knn_sq_tiled`) | `MOJOLEARN_XN_UNFUSED_KNN=1`, `MOJOLEARN_XN_OLD_ITEMS=1` |
+| 6f24c1d8b | OneClassSVM SMO over a threadgroup | `-D MOJOLEARN_XN_SERIAL_SMO` |
+| df27366e9, 4c4e5978d, b7bec306c, a1bb804fb | resident label propagation / spreading (host stopping fold, sparse product), PageRank, connected components | `MOJOLEARN_XN_HOST_LOOPS=1`, `-D MOJOLEARN_XN_LP_DEVICE_FOLD`, `-D MOJOLEARN_XN_LP_DENSE` |
+| b89ad2efa, c905e9e47, 0e1394f6a | KNNImputer: compact missing cells, staged fit rows, split donor scan | `MOJOLEARN_XN_UNCOMPACT_IMPUTE=1`, `MOJOLEARN_XN_OLD_ITEMS=1`, `-D MOJOLEARN_XN_IMPUTE_NO_SPLIT` |
+| d0a0aeeae, b7bec306c, 4a8539a34 | PCS per-cell / per-row convolution, LabelSpreading degrees once, PageRank dangling on device, Louvain on the host | `MOJOLEARN_XN_OLD_ITEMS=1`, `-D MOJOLEARN_XN_PCS_CELL`, `-D MOJOLEARN_XN_LOUVAIN_GPU` |
+| ff625ac0c | NearestCentroid / variance / SVGP / absdiff folds on the host | `-D MOJOLEARN_XN_SERIAL_GPU` |
+| 9866b507f | x_neighbors large downloads staged over the host cores | `-D MOJOLEARN_XN_PLAIN_DOWN` |
+| a898eb9c2 | Cholesky multi-RHS sweep, 4-row groups at 256 threads | `-D MOJOLEARN_CHOL_MR_ROWWISE` |
+| f71bfda90 | k-NN host order pass over the host cores | `-D MOJOLEARN_KNN_SERIAL_ORDER` |
+
+Nothing is left opt-in only; nothing is half done. Reverted: the device
+barrier in the identical radix select (da21bc669: `air.wg.barrier` does not
+legalize in the `_mojolearn` / metrics builds), so that kernel's
+device-memory-across-`barrier()` hazard on Apple (the x_linear team one) is
+OPEN, as it was before this lane.
+
+### Unproven: needs the integration identity check (m2pro, NVIDIA, AMD, CPU)
+
+Every change has one-Mac evidence (M4 Pro; M3 Ultra pending) with digests
+equal old vs new in both modes, and host checks where stated, but NO identity
+lane ran on this branch. The integration run must cover:
+
+- ddc2f96ad IDENTICAL k-NN k > 1024 (rounds, wide merge): a NEW identical
+  path; cross-vendor equality is by construction only (compares of the
+  composite key). knn lanes, spectral lanes with knn affinity at k > 1024.
+- eb1a0a257, d7934f99f x_neighbors fused / tiled k-NN (x-neighbors-lof*, label
+  propagation lanes).
+- 6f24c1d8b OneClassSVM threadgroup SMO (x-neighbors ocsvm lanes); uses
+  `air.wg.barrier(3, 1)` (builds and runs on the M4 Pro in both modes; m2pro
+  must confirm the 256-thread dispatch).
+- df27366e9, 4c4e5978d, b7bec306c, a1bb804fb resident loops, host stopping
+  fold, sparse product (label propagation / spreading, PageRank, cc lanes).
+- b89ad2efa, c905e9e47, 0e1394f6a KNNImputer (x-neighbors knn-imputer lanes).
+- d0a0aeeae, 4a8539a34 PCS, LabelSpreading laplacian, PageRank dangling,
+  Louvain on host (their lanes).
+- ff625ac0c host-run folds (NearestCentroid, SVGP, OneClassSVM gamma='scale').
+- 9866b507f staged downloads (every x_neighbors op with a >= 16 MB output).
+- a898eb9c2 Cholesky multi-RHS sweep (gp*, gpc*, kernel-ridge*, cholesky
+  lanes; m2pro dispatch).
+- f71bfda90 k-NN host order pass (every knn lane, every column).
