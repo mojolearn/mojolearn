@@ -344,8 +344,8 @@ def pair_epilogue(
                 var q = List[Float64](length=k * k, fill=0.0)
                 var qp = List[Float64](length=k, fill=0.0)
                 for r in range(lo, hi):
-                    _row_proba(dec, n, n_pairs, k, pi, ab, r, m.unsafe_ptr(), q.unsafe_ptr(),
-                               qp.unsafe_ptr(), o + r * k)
+                    _row_proba(dec, n, n_pairs, k, pi, ab, r, rebind[F64Ptr](m.unsafe_ptr()),
+                               rebind[F64Ptr](q.unsafe_ptr()), rebind[F64Ptr](qp.unsafe_ptr()), o + r * k)
                     if mode == EPI_LOG_PROBA:
                         for c2 in range(k):
                             var v = o[r * k + c2]
@@ -395,7 +395,7 @@ def sigmoid_train(dec: F64Ptr, labels: F64Ptr, n: Int) raises -> Tuple[Float64, 
     var t = List[Float64](length=n, fill=0.0)
     for i in range(n):
         t[i] = hi_t if labels[i] > 0.0 else lo_t
-    var tp = t.unsafe_ptr()
+    var tp = rebind[F64Ptr](t.unsafe_ptr())
     var a = 0.0
     var bl = _div(prior0 + 1.0, prior1 + 1.0)
     if bl <= 0.0:
