@@ -21,6 +21,10 @@ from checks.numerics import ftz, identical_mul
 from x_cluster.ops import ClusterOps
 
 
+comptime AP_BATCH = 16
+"""AffinityPropagation iterations enqueued per host read of the stop state."""
+
+
 def affinity_fit[O: ClusterOps](
     mut ops: O, x: List[Float32], n: Int, d: Int, precomputed: Bool, pref_mode: Int,
     pref_scalar: Float32, pref_array: List[Float32], damping: Float32, max_iter: Int,
@@ -120,31 +124,27 @@ def affinity_fit[O: ClusterOps](
     var a_s = ops.zeros(n * n)
     var r_s = ops.zeros(n * n)
     var e_s = ops.zeros_i(n)
-    var ring = List[Int32](length=n * conv_iter, fill=Int32(0))
-    var e = List[Int32]()
+    # the convergence window lives beside the matrices (`ops.ap_iterate`):
+    # AP_BATCH iterations per host read of the stop state, the iteration
+    # that converges freezing everything after it, so `it`, `e`, A and R are
+    # the one-read-per-iteration loop's (lane/cluster-apple: on Metal each
+    # read was a drain with pending work)
+    var ring_s = ops.zeros_i(n * conv_iter if n * conv_iter > 0 else 1)
+    var st_s = ops.zeros_i(2)
     var it = 0
     var never_converged = True
     while it < max_iter:
-        ops.ap_r(ss, a_s, r_s, n, damping)
-        ops.ap_a(r_s, a_s, n, damping)
-        ops.ap_e(a_s, r_s, n, e_s)
-        e = ops.get_i(e_s, n)
-        var K = 0
-        for i in range(n):
-            ring[i * conv_iter + it % conv_iter] = e[i]
-            K += Int(e[i])
-        if it >= conv_iter:
-            var settled = 0
-            for i in range(n):
-                var se = 0
-                for c in range(conv_iter):
-                    se += Int(ring[i * conv_iter + c])
-                if se == conv_iter or se == 0:
-                    settled += 1
-            if settled == n and K > 0:
-                never_converged = False
-                break
-        it += 1
+        var count = max_iter - it
+        if count > AP_BATCH:
+            count = AP_BATCH
+        ops.ap_iterate(ss, a_s, r_s, e_s, ring_s, st_s, n, damping, conv_iter, it, count)
+        var st = ops.get_i(st_s, 2)
+        if st[0] != Int32(0):
+            it = Int(st[1])
+            never_converged = False
+            break
+        it += count
+    var e = ops.get_i(e_s, n)
     var a_fin = ops.get(a_s, n * n)
     var r_fin = ops.get(r_s, n * n)
     ar_diag = List[Float32](capacity=2 * n)

@@ -79,6 +79,18 @@ trait ClusterOps(Movable):
         """The tie noise on the first m cells of S (`bodies.ap_noise_cell`)."""
         ...
 
+    def ap_iterate(
+        mut self, s: Int, a: Int, r: Int, e: Int, ring: Int, st: Int, n: Int, damping: Float32,
+        conv_iter: Int, it0: Int, count: Int,
+    ) raises:
+        """Iterations it0 .. it0 + count - 1 of the AffinityPropagation loop
+        (`affinity.affinity_fit`): R, A, the exemplar flags `e`, then the
+        convergence window on the int slot `ring` (n x conv_iter). The first
+        iteration that converges writes int slot `st` = [1, it] and every
+        later one is a no-op, so the state stops exactly where the one-read-
+        per-iteration loop stopped."""
+        ...
+
     def ap_e(mut self, a: Int, r: Int, n: Int, e: Int) raises:
         """e[i] = A[i, i] + R[i, i] > 0 (`bodies.ap_exemplar_cell`)."""
         ...
