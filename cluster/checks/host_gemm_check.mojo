@@ -39,8 +39,10 @@ def _fill(n: Int, salt: Int) -> List[Float32]:
 
 
 def _one(name: String, op: Int, m: Int, n: Int, k: Int, want_sep: Bool) raises:
-    var a = _fill(m * k, 3 + m)
-    var b = _fill(k * n, 5 + n)
+    _cmp(name, _fill(m * k, 3 + m), _fill(k * n, 5 + n), op, m, n, k, want_sep)
+
+
+def _cmp(name: String, a: List[Float32], b: List[Float32], op: Int, m: Int, n: Int, k: Int, want_sep: Bool) raises:
     var want = gemm_oracle(a, b, op, m, n, k)
     var got = host_gemm_oracle(a, b, op, m, n, k)
     if len(got) != len(want):
@@ -72,4 +74,14 @@ def main() raises:
     _one("TN capped leaf", OP_TN, 9, 11, 140000, True)
     _one("TN tail only", OP_TN, 6, 5, 3000, True)
     _one("NT cell path", OP_NT, 30, 17, 500, True)
+    # Subnormal operands against large ones: a flush left out of any seam
+    # moves the product from 0 to about 1e-25 (the flush separates).
+    var big = List[Float32](capacity=13 * 40)
+    for t in range(13 * 40):
+        big.append(Float32(1.0e20) if t % 3 != 0 else Float32(-3.0e19))
+    var sub = List[Float32](capacity=40 * 17)
+    for t in range(40 * 17):
+        sub.append(bitcast[DType.float32](UInt32(0x00000100 + t)) if t % 2 == 0 else Float32(0.0))
+    _cmp("NN subnormal right operand", big, sub, OP_NN, 13, 17, 40, False)
+    _cmp("NN subnormal left operand", sub, big, OP_NN, 17, 13, 40, False)
     print("PASS cluster host_gemm_check")
