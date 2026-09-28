@@ -284,8 +284,15 @@ def test_a_one_kernel_change_selects_only_its_lanes():
     assert not sel["unattributed"] and not sel["every_rules"]
     # 47 since 2026-09-23 (measured; see test_lane_select.py): the lanes whose
     # own doors call `kmeans_fit`, k-means being gmm's, ivf's, hdbscan's and
-    # spectral's initialization or quantizer; never a GLM, a forest or a mamba
-    assert "kmeans" in sel["lanes"] and "ols" not in sel["lanes"] and len(sel["lanes"]) < 60, sel["lanes"]
+    # spectral's initialization or quantizer; never a GLM, a forest or a mamba.
+    # 71 of 480 on 2026-09-27 (the same on main before lane/lane-select-registry):
+    # the x-cluster and x-ann expansion lanes added since (bisecting and
+    # minibatch k-means, BGMM's k-means init, the ANN quantizers) run it too.
+    # The bound is a fraction of the registry, which doubled, and the claim
+    # that matters is spelled out lane by lane.
+    assert "kmeans" in sel["lanes"] and len(sel["lanes"]) < sel["total"] // 5, sel["lanes"]
+    for foreign in ("ols", "logistic", "mamba1", "transformer", "gbdt-rmse", "rf-clf"):
+        assert foreign not in sel["lanes"], f"a k-means oracle edit selected {foreign}"
     assert sel["by_path"]["cluster/host/kmeans_oracle.mojo"] == sel["lanes"]
 
 
