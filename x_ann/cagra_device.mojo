@@ -6,6 +6,7 @@ reverse-edge merge are the shared host functions."""
 
 from std.gpu import block_idx, block_dim, thread_idx
 from std.memory import stack_allocation
+from std.atomic import Atomic
 from std.sys.compile import is_defined
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -78,19 +79,39 @@ def prune_kernel(n: Int32, kdeg: Int32, deg: Int32, knn: I32P, pruned: I32P, bad
         if t == 0:
             bad.unsafe_store(a, Int32(1))
         return
-    # the kdeg neighbor rows staged once (kdeg^2 words), then every thread's
-    # count reads threadgroup memory (lane ann-apple2)
-    var nb = stack_allocation[PRUNE_KMAX * PRUNE_KMAX, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
-    for e in range(t, k * k, PRUNE_KMAX):
-        nb[e] = knn.unsafe_load(Int(ids[e // k]) * k + e % k)
-    barrier()
+    # lane ann-apple2: row a's ids sorted (distinct: position = #smaller)
+    # with their ranks; thread kad walks row knn[a, kad] once, finds each
+    # candidate's rank kab by binary search and adds 1 to cnt[kab] when kab >
+    # kad (threadgroup integer atomics: the sum of the same ones in any
+    # order is the same integer)
+    var sid = stack_allocation[PRUNE_KMAX, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    var srk = stack_allocation[PRUNE_KMAX, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
     if t < k:
-        var target = ids[t]
-        var c = k if Int(target) == a else 0
-        for e in range(t * k):
-            if nb[e] == target:
-                c += 1
-        cnt[t] = Int32(c)
+        var mine_id = ids[t]
+        var pos = 0
+        for u in range(k):
+            if ids[u] < mine_id:
+                pos += 1
+        sid[pos] = mine_id
+        srk[pos] = Int32(t)
+        cnt[t] = Int32(k) if Int(mine_id) == a else Int32(0)
+    barrier()
+    if t < k - 1:
+        var d = Int(ids[t])
+        for kdb in range(k):
+            var cand = knn.unsafe_load(d * k + kdb)
+            var lo = 0
+            var hi = k
+            while lo < hi:
+                var mid = (lo + hi) // 2
+                if sid[mid] < cand:
+                    lo = mid + 1
+                else:
+                    hi = mid
+            if lo < k and sid[lo] == cand:
+                var kab = Int(srk[lo])
+                if kab > t:
+                    _ = Atomic.fetch_add(cnt + kab, Int32(1))
     barrier()
     if t < k:
         var mine = cnt[t]
