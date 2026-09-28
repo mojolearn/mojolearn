@@ -45,12 +45,12 @@ def ii_rows(mask: F32P, n: Int, dk: Int, j: Int, missing: Bool, rows: I32P) -> I
     return m
 
 
-def ii_gather(x: F32P, dk: Int, rows: I32P, m: Int, cols: I32P, nc: Int, j: Int, out: F32P, y: F32P):
-    """out[r, c] = x[rows[r], cols[c]]; y[r] = x[rows[r], j] when j >= 0."""
+def ii_gather(x: F32P, dk: Int, rows: I32P, m: Int, cols: I32P, nc: Int, j: Int, dst: F32P, y: F32P):
+    """dst[r, c] = x[rows[r], cols[c]]; y[r] = x[rows[r], j] when j >= 0."""
     for r in range(m):
         var base = Int(rows[r]) * dk
         for c in range(nc):
-            out[r * nc + c] = x[base + Int(cols[c])]
+            dst[r * nc + c] = x[base + Int(cols[c])]
         if j >= 0:
             y[r] = x[base + j]
 
