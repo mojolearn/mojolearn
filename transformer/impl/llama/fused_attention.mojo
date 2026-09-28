@@ -8044,8 +8044,8 @@ def _launch_fwd_r2[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool, SWZ: Bool
     instantiates none of it."""
     step_count_device_alloc()
     var sstash = ctx.enqueue_create_buffer[DType.float32](b * nh * l * s)
-    step_count_sync()
-    ctx.synchronize()
+    # No wait after the allocation (lane/neural-apple, 2026-09-28): the
+    # kernel below is enqueued on the same in-order `ctx`.
     _attn_tick(ctx, on, tk, "fwd_scratch_alloc")
     step_count_launch()
     comptime if ATTN_FWD_APPLE_MMA and HD == 64 and TQ == 32 and PF and not SABN:
@@ -8174,8 +8174,11 @@ def _launch_bwd_stash_tiled_pf[HD: Int, ZSAB: Bool](
     var y_st = ctx.enqueue_create_buffer[DType.float32](cells)
     step_count_device_alloc()
     var dy_st = ctx.enqueue_create_buffer[DType.float32](cells)
-    step_count_sync()
-    ctx.synchronize()
+    # No wait after the allocations or after the zdot kernel (lane/
+    # neural-apple, 2026-09-28): zdot, dq and dk/dv are enqueued on the same
+    # in-order `ctx`, so dq and dk/dv read the finished stashes and zdot
+    # without a host round trip. The wait before the stashes' last use
+    # stays.
     _attn_tick(ctx, on, tk, "bwd_scratch_alloc")
     step_count_launch()
     comptime if ATTN_BWD_STASH_ZDOT_AMMA and HD == 64 and not ZSAB:
@@ -8200,8 +8203,6 @@ def _launch_bwd_stash_tiled_pf[HD: Int, ZSAB: Bool](
             grid_dim=(b * nh * ((l + TQ - 1) // TQ), 1, 1),
             block_dim=(FUSED_THREADS, 1, 1),
         )
-    step_count_sync()
-    ctx.synchronize()
     _attn_tick(ctx, on, tk, "bwd_zdot_stash_pf")
     var dq_blocks = b * nh * ((l + 63) // 64)
     var kv_blocks = b * nkv * ((s + 63) // 64)
