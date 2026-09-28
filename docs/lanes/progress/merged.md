@@ -389,3 +389,12 @@ MOJOLEARN_CHOL_SWEEP_SOLVES_OFF arms) is in the neighbors-fix agent's report
   cell (core/knn_host_predict.mojo) — already so on origin/lane/algos-neighbors,
   so the patch was never device-only for this lane. Owner: neighbors (the
   family's phase-2 arm was only ever steward-submitted, never verified).
+- CORRECTION (orchestrator, from the linear-apple lane): 2979a9de0's
+  team_barrier does NOT fix the x_linear Metal column. On the M3 Ultra at a
+  branch containing it (steward 1790591499027) the Metal digests are unchanged
+  (sgd-clf / perceptron / pa-clf ea6946b9aa1d795c; sgd-reg / pa-reg
+  1fa2a30e74a6f5ea), and binary SGD runs on thread 0 alone, so the fault is
+  elsewhere in the team form (t.own()/t.row() scratch addressing or the
+  256-thread launch). The linear-apple lane owns the root cause on Metal; its
+  fix commit is merged here when it lands. The 517a035ee x_linear
+  resubmissions were withdrawn where still queued. **BLOCKS the merge to main.**
