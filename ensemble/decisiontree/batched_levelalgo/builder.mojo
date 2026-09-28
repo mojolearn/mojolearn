@@ -96,7 +96,12 @@ comptime N_BLKS_FOR_COLS = 40 if (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_RF_COLS10"]()
-) else 10
+) else (
+    # trial arms (trees-apple2): the columns per pass under IDENTICAL
+    20 if is_defined["MOJOLEARN_RF_TRIAL_COLS20"]() else (
+        40 if is_defined["MOJOLEARN_RF_TRIAL_COLS40"]() else 10
+    )
+)
 
 comptime SMALL_NODE_SLOTS = 2048
 """Shared bins `small_node_split_kernel` holds per block."""
