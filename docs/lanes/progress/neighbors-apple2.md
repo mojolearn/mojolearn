@@ -145,3 +145,23 @@ Large k, IDENTICAL (same job; did not run before this lane: refused):
 Round-one IDENTICAL k-NN digests at this head (nn, nn-k20, nn-ties, taxi
 and HIGGS) equal round one's record (9ff75469.., a29e4118.., 34a8923f..,
 f8814dc5.., 52412ee0.., 575ce1bc..).
+
+### Request 1790608308824 (m4pro-a, M4 Pro, d7934f99f), IDENTICAL and FAST, one job
+
+Arms: old = `-D MOJOLEARN_XN_LP_DEVICE_FOLD -D MOJOLEARN_XN_PCS_CELL
+-D MOJOLEARN_XN_LP_DENSE` + `MOJOLEARN_XN_OLD_ITEMS=1` (the head of the
+previous request), dense = `-D MOJOLEARN_XN_LP_DENSE`, new = default; each
+forward and reverse, reps 2. DIGESTS EQUAL across all arms in every row.
+Raw: ~/mojolearn-evidence/neighbors-apple/1790608308824-speed-neighbors-d7934f99fe.txt
+
+| case | mode | taxi old | taxi dense | taxi new | HIGGS old | HIGGS dense | HIGGS new |
+|---|---|---|---|---|---|---|---|
+| LabelPropagation.fit 5k | IDENTICAL | 2.303 | 1.662 | 0.308 | 0.432 | 0.309 | 0.113 |
+| LabelPropagation.fit 5k | FAST | 2.068 | 1.355 | 0.225 | 0.393 | 0.275 | 0.102 |
+| LabelSpreading.fit 5k (old = per-cell degrees) | IDENTICAL | 2.337 | 0.089 | 0.091 | 2.342 | 0.089 | 0.091 |
+| LocalOutlierFactor.fit 20k (old = untiled knn_sq) | IDENTICAL | 0.534 | | 0.095 | 0.280 | | 0.088 |
+| LocalOutlierFactor.fit 20k | FAST | 0.439 | | 0.082 | 0.241 | | 0.077 |
+| LocalOutlierFactor.score_samples 5k | IDENTICAL | 0.141 | | 0.053 | 0.120 | | 0.041 |
+| PolynomialCountSketch.transform 200k x 500 (old = per-row item) | IDENTICAL | 2.994 | | 0.511 | 2.992 | | 0.518 |
+| PolynomialCountSketch.transform 200k x 500 | FAST | 2.917 | | 0.506 | 2.904 | | 0.510 |
+| KNNImputer.transform | both | unchanged (0.15 to 0.16) | | | | | |
