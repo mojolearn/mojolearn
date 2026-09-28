@@ -53,6 +53,32 @@ change is OWED to py-misc-msel or py-bugs.
   The data-length sorts, Isomap reconstruction error and MDS diagonal are
   OWED moves (lane py-decomp-nbrs).
 
-## Proof (one light job, tools/py_misc/metrics_job.sh)
+## Proof: NOT RUN (stopped by the orchestrator, 2026-09-28)
 
-PENDING (see below).
+Built on nvc1 (RTX 4090 pod, since deleted): `_mojolearn_x_metrics_host`
+and `_mojolearn_x_metrics` (identical) both compile. On the replacement A40
+pod a small CPU smoke (20k rows, host binding only) ran `auc()` native and
+Python with EQUAL bits (7.8x); the other cases need the core host bindings
+the lane check builds, so they did not run there.
+
+The one light job (`tools/py_misc/metrics_job.sh`: lane check on
+x-metrics-ranking, -cluster, -classification with GPU vs CPU; the same
+harness with `MOJOLEARN_METRICS_EPILOGUE=python` in the same build, both
+columns; native vs python digests cell for cell; 1M timing on the GPU
+binding and the x86 host binding via `tools/py_misc/metrics_time.py`) was
+submitted as nvc1-0004. It was cancelled while queued (the orchestrator
+reordered the queue), then a STOP ORDER from Andrew ended all pod work.
+py-consolidated runs one global check.
+
+UNPROVEN, all of it:
+- native == Python reference digests on GPU and CPU for every moved epilogue
+  (the x-metrics-ranking and x-metrics-cluster lanes cover PR, DET, ovr
+  weighted support, d2_log_loss/d2_brier, ndcg, auc, NMI/AMI, CH, DB);
+- GPU == CPU AGREE on those lanes after the change;
+- the before/after seconds at 1M (no table yet);
+- whether `v * v` moved any bit against the old `** 2` in CH, DB and
+  d2_brier (pow(x, 2) is correctly rounded on glibc for these inputs as far
+  as known; the lanes' before hashes decide it).
+
+How to run it: `tools/nvidia_central.sh submit <lane> --gpus 1
+/root/mojolearn-<lane>/tools/py_misc/metrics_job.sh`, one job.
