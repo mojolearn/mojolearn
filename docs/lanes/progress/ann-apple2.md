@@ -294,7 +294,7 @@ not merged anywhere. Every change below is default on and measured with
 equal digests (Metal only); reverted trials are listed in the table above.
 
 Default path, both tiers unless noted: 74d074090 + 3634e4645 + 78b605c31 +
-3dca15c1a + fbe131bd8 + be5bf4205's parent (IVF scan: threadgroup probe
+3dca15c1a + fbe131bd8 + 15498e277 (IVF scan: threadgroup probe
 walk, split top-k with a tree join, list-order gather, staged SQ/RaBitQ
 score); bc3c22c03 (Apple ftz spelling, IDENTICAL); c3841ce42 (t-SNE and
 k-NN nonnegative flushes, IDENTICAL); 95101d105 (t-SNE symmetrize); 782ad9a09
@@ -316,7 +316,7 @@ SHARED CODE (the integration run must cover other families):
 
 UNPROVEN (only Metal digests on m4pro-a/b, m4-a, m3ultra-b were taken; no
 NVIDIA, AMD or CPU identity run, no sabotage run):
-- 74d074090, 3634e4645, 78b605c31, 3dca15c1a, fbe131bd8, be5bf4205^ (IVF
+- 74d074090, 3634e4645, 78b605c31, 3dca15c1a, fbe131bd8, 15498e277 (IVF
   scan), 782ad9a09, 7c195b32c (device prune, integer atomics), 399de4811,
   b9cc59dcf, 7b51e91e5, 10292edc0, c3841ce42: cross-vendor + CPU identity
   (these kernels run on every GPU vendor).
