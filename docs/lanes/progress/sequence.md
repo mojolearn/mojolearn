@@ -168,9 +168,10 @@ Merge gate for both (H100, after merging origin/main): sequence-adafactor + sequ
 both columns (max is exact); test_host_surface 200 passed; tools/test_lane_select.py OK,
 0 failures (sequence.py / sequence.checks are its inputs). MERGED to main.
 Post-merge: ONE batched steward identity request of the 30 family lanes
-(e2e_family_host_bits.patch), recorded below.
+(e2e_family_host_bits.patch): 1790564279351-sequence-ee26312f08 on m2pro, m3ultra-b, m4-a,
+do-amd, at main ee26312f0 (queued 2026-09-28 ~02:58Z).
 
-NEXT (a fresh session starts here): read the steward verdict of the batched request below;
+NEXT (a fresh session starts here): read the verdict of 1790564279351-sequence-ee26312f08;
 a FAIL is a fix commit at the root. Then per the brief, GPU speed (FAST and IDENTICAL) for
 every sequence algorithm on NVIDIA, AMD and Apple, largest real-world cost first, profile
 (sum the stage timings) before changing code, judge at 1M+ rows (R2 data). Remaining option
