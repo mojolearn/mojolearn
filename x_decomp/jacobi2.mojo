@@ -44,23 +44,21 @@ svd (one-sided):
 
 The eigh kernel's lanes DO hand device words to each other (a cell is
 written by lane i in a column stage and by lane j in a row stage), exactly
-as `jacobi_eigh_kernel`'s do. On Apple `barrier()` is `air.wg.barrier(2, 1)`
-(threadgroup memory only), so the eigh kernel uses `dev_barrier` for EVERY
-barrier it reaches: `air.wg.barrier(3, 1)` (device | threadgroup, x_linear's
-`team_barrier`) on Apple, `barrier()` elsewhere (lane/apple2-merged,
-2026-09-28). `air.wg.barrier` through `external_call` conflicts with the
-stdlib's own declaration ("existing function with conflicting attributes")
-when one kernel reaches both spellings, so the kernel's sum-and-broadcast is
-`_fold_wide_j2` here (the body of `_fold_lead_lanes_and_broadcast`'s wide arm,
-same adds in the same order) instead of the shared helper, and no path of
-the kernel calls `barrier()` on Apple. An atomic fence before the plain
-barrier compiled to AIR but Metal's pipeline creation refused the kernel
+as `jacobi_eigh_kernel`'s do. Its rotation barrier is `dev_barrier`: on
+Apple `llvm.air.wg.barrier(3, 1)`, Metal's
+`threadgroup_barrier(mem_device | mem_threadgroup)`, because `barrier()` there
+is `llvm.air.wg.barrier(2, 1)` and orders threadgroup memory only (the
+x_linear team defect, 2979a9de0); `barrier()` on NVIDIA and AMD
+(lane/apple2-merged, 2026-09-28). It is spelled through `llvm_intrinsic`,
+the stdlib's own spelling of `barrier()` (max/gpu/sync), so both calls share
+one declaration: `external_call["air.wg.barrier"]` conflicts with it
+("existing function with conflicting attributes") in any binding that also
+calls `barrier()`, and an atomic fence made Metal refuse the pipeline
 (m4pro-b, 1790606245923). The svd kernel needs no device ordering at all.
 """
-from std.bit import log2_floor
-from std.ffi import external_call
 from std.gpu import thread_idx
 from std.memory import stack_allocation
+from std.sys import llvm_intrinsic
 from std.sys.info import is_apple_gpu
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -68,6 +66,7 @@ from max.gpu.sync import barrier
 from checks.numerics import ftz, identical_mul_add, identical_sqrt
 from decomposition.checks.jacobi_eigh_device import (
     JACOBI_TPB,
+    _fold_lead_lanes_and_broadcast,
     _rot_add,
     _rot_sub,
     jacobi_rotation_cs,
@@ -85,51 +84,11 @@ comptime S2_V = J2_TPB - S2_R
 @always_inline
 def dev_barrier():
     """A block barrier that also orders DEVICE memory (x_linear/team.mojo
-    `team_barrier`): `threadgroup_barrier(mem_device | mem_threadgroup)` on
-    Apple, `barrier()` elsewhere (NVIDIA `bar.sync` and AMD's fenced
-    `s_barrier` already order global memory within the block)."""
+    `team_barrier`'s mem flags, the stdlib's `llvm_intrinsic` spelling)."""
     comptime if is_apple_gpu():
-        external_call["air.wg.barrier", NoneType](Int32(3), Int32(1))
+        llvm_intrinsic["llvm.air.wg.barrier", NoneType](Int32(3), Int32(1))
     else:
         barrier()
-
-
-def _fold_wide_j2[fold_w: Int, rot_tpb: Int](value: Float32) -> Float32:
-    """`_fold_lead_lanes_and_broadcast[fold_w, rot_tpb]`'s wide arm
-    (decomposition/checks/jacobi_eigh_device.mojo, DEVIATION 2680), the same
-    slab, adds and order, with `dev_barrier` in place of `barrier()` so the
-    eigh kernel reaches ONE barrier spelling on Apple."""
-    comptime assert fold_w > 0 and (fold_w & (fold_w - 1)) == 0, (
-        "the halving tree needs a power-of-two fold width"
-    )
-    comptime assert rot_tpb > fold_w, "a launch narrower than the fold cannot supply its partials"
-    comptime P = 16 if fold_w > 16 else fold_w
-    comptime G = fold_w // P
-    var tid = Int(thread_idx.x)
-    var red = stack_allocation[fold_w, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    if tid < fold_w:
-        red[tid] = value
-    dev_barrier()
-    if tid < P:
-        var v = InlineArray[Float32, G](fill=Float32(0.0))
-        comptime for j in range(G):
-            v[j] = red[tid + j * P]
-        comptime for k in range(log2_floor(G)):
-            comptime S = G >> (k + 1)
-            comptime for j in range(S):
-                v[j] = v[j] + v[j + S]
-        red[tid] = v[0]
-    dev_barrier()
-    var w = InlineArray[Float32, P](fill=Float32(0.0))
-    comptime for t in range(P):
-        w[t] = red[t]
-    comptime for k in range(log2_floor(P)):
-        comptime S = P >> (k + 1)
-        comptime for t in range(S):
-            w[t] = w[t] + w[t + S]
-    var total = w[0]
-    dev_barrier()
-    return total
 
 
 @always_inline
@@ -207,7 +166,7 @@ def jacobi_eigh2_kernel[U: Int = J2_U](
             var fv = ftz(a.unsafe_load(fe))
             local_f = ftz(identical_mul_add(fv, fv, local_f))
             fe += JACOBI_TPB
-    var fro2 = _fold_wide_j2[JACOBI_TPB, J2_TPB](local_f)
+    var fro2 = _fold_lead_lanes_and_broadcast[JACOBI_TPB, J2_TPB](local_f)
     var limit = ftz(ftz(tol_in * tol_in) * fro2)
 
     var executed = 0
@@ -225,7 +184,7 @@ def jacobi_eigh2_kernel[U: Int = J2_U](
                     var av = ftz(a.unsafe_load(e))
                     local_off = ftz(identical_mul_add(av, av, local_off))
                 e += JACOBI_TPB
-        var off = _fold_wide_j2[JACOBI_TPB, J2_TPB](local_off)
+        var off = _fold_lead_lanes_and_broadcast[JACOBI_TPB, J2_TPB](local_off)
         last_off = off
         if Float32(2.0) * off <= limit:
             converged = True
@@ -239,7 +198,7 @@ def jacobi_eigh2_kernel[U: Int = J2_U](
             stash[0] = a.unsafe_load(0)
             stash[1] = a.unsafe_load(n + 1)
             stash[2] = a.unsafe_load(1)
-        dev_barrier()
+        barrier()
 
         for p in range(n):
             for q in range(p + 1, n):
