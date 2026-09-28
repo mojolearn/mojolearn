@@ -72,6 +72,8 @@ from gemm.host.identical_gemm import (
     leaf_end,
 )
 from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
     ftz,
     identical_exp,
     identical_mul,
@@ -346,6 +348,10 @@ def _kernel_cell[
 #: mojo), and `identical_tanh` runs per lane. The b operands come from a
 #: feature-major panel of FLUSHED values (`c * stride + l`); ftz is
 #: idempotent, so flushing at pack time is flushing at load time.
+#: The cell block and the vector scans run in IDENTICAL builds (every host
+#: binding); a FAST build of the checks keeps the scalar oracle, whose
+#: `identical_exp` is the stdlib's there and not `expf_v`'s arithmetic.
+comptime SMO_HOST_VECTOR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime SMO_W = 8
 comptime SmoVF = SIMD[DType.float32, SMO_W]
 
@@ -783,7 +789,7 @@ def _block_solve[
         var f_u = pos_inf
         var u = -1
         var u_key = 2147483647
-        comptime if dt == DType.float32:
+        comptime if dt == DType.float32 and SMO_HOST_VECTOR:
             var r = _smo_scan[SMO_SCAN_MIN_UPPER](
                 rebind[HostF32Ptr](f.unsafe_ptr()), rebind[HostF32Ptr](a.unsafe_ptr()),
                 rebind[HostF32Ptr](y.unsafe_ptr()), rebind[HostF32Ptr](C.unsafe_ptr()),
@@ -807,7 +813,7 @@ def _block_solve[
         # only a +0.0/-0.0 pair can tie with different bits, row 39)
         var f_max = neg_inf
         var fmax_key = 2147483647
-        comptime if dt == DType.float32:
+        comptime if dt == DType.float32 and SMO_HOST_VECTOR:
             var r = _smo_scan[SMO_SCAN_MAX_LOWER](
                 rebind[HostF32Ptr](f.unsafe_ptr()), rebind[HostF32Ptr](a.unsafe_ptr()),
                 rebind[HostF32Ptr](y.unsafe_ptr()), rebind[HostF32Ptr](C.unsafe_ptr()),
@@ -833,7 +839,7 @@ def _block_solve[
         var best = neg_inf
         var l = -1
         var l_key = 2147483647
-        comptime if dt == DType.float32:
+        comptime if dt == DType.float32 and SMO_HOST_VECTOR:
             var r = _smo_scan[SMO_SCAN_MAX_GAIN](
                 rebind[HostF32Ptr](f.unsafe_ptr()), rebind[HostF32Ptr](a.unsafe_ptr()),
                 rebind[HostF32Ptr](y.unsafe_ptr()), rebind[HostF32Ptr](C.unsafe_ptr()),
@@ -875,7 +881,7 @@ def _block_solve[
         a[u] = _flush[dt](fma(q, y[u], a[u]))
         a[l] = _flush[dt](fma(-q, y[l], a[l]))
         var t_done = 0
-        comptime if dt == DType.float32:
+        comptime if dt == DType.float32 and SMO_HOST_VECTOR:
             var fq = rebind[HostF32Ptr](f.unsafe_ptr())
             var tu = rebind[HostF32Ptr](tile.unsafe_ptr()) + u * n_ws
             var tl = rebind[HostF32Ptr](tile.unsafe_ptr()) + l * n_ws
@@ -990,7 +996,7 @@ def smo_oracle_fit[
     var nrm = List[Float32](length=n_rows + SMO_W, fill=Float32(0.0))
     var wst = List[Float32]()
     var wsn = List[Float32](length=n_ws + SMO_W, fill=Float32(0.0))
-    comptime if dt == DType.float32:
+    comptime if dt == DType.float32 and SMO_HOST_VECTOR:
         xt = List[Float32](length=n_rows * k, fill=Float32(0.0))
         for i in range(n_rows):
             for c in range(k):
@@ -1031,7 +1037,7 @@ def smo_oracle_fit[
         # `getSquareTileWithoutCaching` extracts rows of X by
         # `ws_idx_mod` = the PROJECTED indices, so the tile is
         # `K(x[ws%n], x[ws%n])`; under SVR a row can appear TWICE in it.
-        comptime if dt == DType.float32:
+        comptime if dt == DType.float32 and SMO_HOST_VECTOR:
             for t in range(n_ws):
                 var it = _vec_index(Int(ws.idx[t]), n_rows, is_svr)
                 for c in range(k):
@@ -1105,7 +1111,7 @@ def smo_oracle_fit[
                 var lo = task * update_chunk
                 var hi = min(lo + update_chunk, n_rows)
                 var i0 = lo
-                comptime if dt == DType.float32:
+                comptime if dt == DType.float32 and SMO_HOST_VECTOR:
                     # The cell block over W training rows; the fold over the
                     # nonzero deltas stays in `order`, lane-wise.
                     while i0 + SMO_W <= hi:

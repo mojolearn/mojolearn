@@ -165,3 +165,28 @@ def logf_v[w: Int](x_in: SIMD[DType.float32, w]) -> SIMD[DType.float32, w]:
     r = is_neg.select(bitcast[DType.float32, w](U(0x7FC00000)), r)
     r = is_zero.select(bitcast[DType.float32, w](U(0xFF800000)), r)
     return is_nan.select(x_in, r)
+
+
+def powf_v[w: Int](x: SIMD[DType.float32, w], p: Float32) -> SIMD[DType.float32, w]:
+    """`portable_powf(x, p)`, lane by lane, one exponent for every lane:
+    the same branches in the same priority (p == 0, a NaN, x < 0, x == 0),
+    else `portable_expf(p * portable_logf(x))` through `expf_v` / `logf_v`
+    (the product is an fma MULTIPLICAND inside `expf_v`, never an addend, so
+    no contraction can reach it)."""
+    comptime V = SIMD[DType.float32, w]
+    comptime U = SIMD[DType.uint32, w]
+    var qnan = bitcast[DType.float32, w](U(0x7FC00000))
+    if p == Float32(0.0):
+        return V(1.0)
+    if p != p:
+        return qnan
+    var is_nan = isnan_v[w](x)
+    var neg = x.lt(V(0.0))
+    var zero = x.eq(V(0.0))
+    var special = is_nan | neg | zero
+    var xc = special.select(V(1.0), x)
+    var r = expf_v[w](V(p) * logf_v[w](xc))
+    var zval = V(0.0) if p > Float32(0.0) else bitcast[DType.float32, w](U(0x7F800000))
+    r = zero.select(zval, r)
+    r = neg.select(qnan, r)
+    return is_nan.select(qnan, r)

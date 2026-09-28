@@ -82,7 +82,7 @@ from checks.numerics import (
     identical_pow,
     identical_sqrt,
 )
-from core.host_simd_identical import expf_v, ftz_v, logf_v
+from core.host_simd_identical import expf_v, ftz_v, logf_v, powf_v
 
 
 #: THE NEGATIVE CONTROL OF THE CPU IDENTITY GATE (the CPU training lane,
@@ -426,11 +426,8 @@ def _kde_step[M: Int](acc: KdeV, qv: Float32, t: KdeV, metric_arg: Float32) -> K
         var diff = abs(ftz_v[KDE_W](KdeV(qv) - t))
         return diff.gt(acc).select(diff, acc)
     else:
-        var out = acc
-        comptime for l in range(KDE_W):
-            var diff = abs(ftz(qv - t[l]))
-            out[l] = ftz(acc[l] + ftz(identical_pow(diff, metric_arg)))
-        return out
+        var diff = abs(ftz_v[KDE_W](KdeV(qv) - t))
+        return ftz_v[KDE_W](acc + ftz_v[KDE_W](powf_v[KDE_W](diff, metric_arg)))
 
 
 def _kde_tile_m[M: Int](
@@ -479,10 +476,7 @@ def _kde_epilogue(acc: KdeV, qn: Float32, tn: KdeV, metric: Int, metric_arg: Flo
         return ftz_v[KDE_W](KdeV(1.0) - ftz_v[KDE_W](ratio))
     if metric == DIST_LP_UNEXPANDED:
         var one_over_p = ftz(identical_div(Float32(1.0), metric_arg))
-        var out = acc
-        comptime for l in range(KDE_W):
-            out[l] = ftz(identical_pow(acc[l], one_over_p))
-        return out
+        return ftz_v[KDE_W](powf_v[KDE_W](acc, one_over_p))
     if metric == DIST_L2_SQRT_UNEXPANDED:
         var out = acc
         comptime for l in range(KDE_W):

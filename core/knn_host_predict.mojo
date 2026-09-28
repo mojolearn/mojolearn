@@ -169,6 +169,8 @@ from checks.kernel_matrix import (
     lib_block_size_for,
 )
 from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
     ftz,
     identical_div,
     identical_mul_add,
@@ -189,7 +191,7 @@ from neighbors.impl.distance.detail.distance_ops import (
     lp_unexp_epilog,
     validate_metric_arg,
 )
-from core.host_simd_identical import ftz_v, twiddle_v, untwiddle
+from core.host_simd_identical import ftz_v, powf_v, twiddle_v, untwiddle
 from neighbors.impl.ball_cover.common import (
     rbc_cmp_bound,
     rbc_true_dist,
@@ -581,10 +583,16 @@ def _host_block_step[K: Int](acc: KnnVF, qv: Float32, y: KnnVF, metric_arg: Floa
         var diff = ftz_v[KNN_HOST_W](KnnVF(qv) - y)
         return ftz_v[KNN_HOST_W](identical_mul_add_simd[KNN_HOST_W](diff, diff, acc))
     else:
-        var out = acc
-        comptime for l in range(KNN_HOST_W):
-            out[l] = lp_unexp_core(acc[l], qv, y[l], metric_arg)
-        return out
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+            # `lp_unexp_core` lane-wise; `powf_v` is `portable_powf` lane-wise
+            # (core/host_simd_identical_check.mojo).
+            var diff = abs(ftz_v[KNN_HOST_W](KnnVF(qv) - y))
+            return ftz_v[KNN_HOST_W](acc + ftz_v[KNN_HOST_W](powf_v[KNN_HOST_W](diff, metric_arg)))
+        else:
+            var out = acc
+            comptime for l in range(KNN_HOST_W):
+                out[l] = lp_unexp_core(acc[l], qv, y[l], metric_arg)
+            return out
 
 
 def _host_block_tile_k[K: Int, NQ: Int](
@@ -677,8 +685,11 @@ def _host_block_epilogue(
         out = acc
     elif metric == DIST_LP_UNEXPANDED:
         var one_over_p = ftz(identical_div(Float32(1.0), metric_arg))
-        comptime for l in range(KNN_HOST_W):
-            out[l] = lp_unexp_epilog(acc[l], one_over_p)
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+            out = ftz_v[KNN_HOST_W](powf_v[KNN_HOST_W](acc, one_over_p))
+        else:
+            comptime for l in range(KNN_HOST_W):
+                out[l] = lp_unexp_epilog(acc[l], one_over_p)
     else:
         comptime for l in range(KNN_HOST_W):
             out[l] = cosine_epilog(acc[l], ftz(qn), ftz(yn[l]))
@@ -1193,8 +1204,11 @@ def _rbc_epilogue(acc: KnnVF, metric: Int, metric_arg: Float32) -> KnnVF:
     if metric == DIST_LP_UNEXPANDED:
         var one_over_p = ftz(identical_div(Float32(1.0), metric_arg))
         var out = acc
-        comptime for l in range(KNN_HOST_W):
-            out[l] = lp_unexp_epilog(acc[l], one_over_p)
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+            out = ftz_v[KNN_HOST_W](powf_v[KNN_HOST_W](acc, one_over_p))
+        else:
+            comptime for l in range(KNN_HOST_W):
+                out[l] = lp_unexp_epilog(acc[l], one_over_p)
         return out
     return acc
 
