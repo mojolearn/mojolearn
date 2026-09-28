@@ -555,6 +555,11 @@ def run_models(harness, ml, table, pkg_dir=None, log=None, repeats=1, host_only=
                 batch, berr = harness._probe_batch(fit, lane, ml, held_cache[fixture].copy(), harness.BATCH_ALONE, False)
             except Exception as exc:
                 batch, berr = None, _error_text(harness, None, exc)
+            from ._verify_worker import unhealthy
+            if unhealthy(berr):
+                rows.append(dict(lane=key, fixture=fixture, part="batch", value=None, error=berr,
+                                 reference_part=("batch", lane)))
+                return rows
             values.append(batch)
             if berr:
                 errors.append(berr)
@@ -1016,6 +1021,9 @@ def self_test(harness, ml, table, log=None):
         for arm, data in (("clean", (X, yc, yr)), ("perturbed", (Xp, yc, yr))):
             parts = run_cell(harness, ml, lane, fixture, data, held, 1)
             value, error = parts["train"]
+            from ._verify_worker import unhealthy
+            if unhealthy(parts):
+                raise CannotRun(f"self-test unhealthy device: {error or parts}")
             rows.append(dict(lane=lane, fixture=fixture, part="train", value=value, error=error, arm=arm))
             log(f"  {arm:<10} {lane}/{fixture} train -> {value}")
 
@@ -3751,8 +3759,6 @@ def cmd_verify_all(args):
         sfix = "base" if "base" in harness.FIXTURES else harness.FIXTURES[0]
         log(f"# smoke: {len(smokeable)} lane(s) this box can run but cannot judge, "
             f"on {sfix}, two full fits each")
-        sdata = data.get(sfix) or harness.fixture(sfix)
-        sheld = held.get(sfix) if held.get(sfix) is not None else harness.heldout(sfix)
         smoke = {}
         for lane in smokeable:
             try:
