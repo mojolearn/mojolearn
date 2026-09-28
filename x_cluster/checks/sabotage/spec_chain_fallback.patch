@@ -1,0 +1,10 @@
+diff --git a/core/spec_chain.mojo b/core/spec_chain.mojo
+--- a/core/spec_chain.mojo
++++ b/core/spec_chain.mojo
+@@ -47,5 +47,5 @@
+     if flag != UInt32(0):
+         y = acc
+         comptime for u in range(U):
+-            y = ftz(y + ftz(v[u]))
++            y = ftz(y + ftz(v[U - 1 - u]))
+     return y
