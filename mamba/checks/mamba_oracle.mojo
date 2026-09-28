@@ -32,6 +32,7 @@ from checks.numerics import (
     identical_softplus,
 )
 from gemm.checks.gemm_oracle import OP_NT, gemm_oracle
+from gemm.host.gemm_host_rows import gemm_host_rows
 from mamba.checks.mamba_fixture import (
     D_CONV,
     D_STATE,
@@ -251,7 +252,7 @@ def mamba_block_oracle(
     # ---- in_proj (MM:371; Linear no bias, use_bias False MC:75) ----------
     # GEMM v1 OP_NT: [M, dm] . [2di, dm]^T. k = dm <= 128 so P == 1: the
     # serial ascending chain, gemm contract section 7.1.
-    st.in_proj = gemm_oracle(st.norm_out, w.w_in, OP_NT, m, 2 * di, dm)
+    st.in_proj = gemm_host_rows(st.norm_out, w.w_in, OP_NT, m, 2 * di, dm)
 
     # ---- A = -exp(A_log) (MM:373) ----------------------------------------
     for i in range(di * D_STATE):
@@ -304,7 +305,7 @@ def mamba_block_oracle(
     st.conv_win = new_win^
 
     # ---- x_proj (MM:422-427; Linear no bias) -----------------------------
-    st.x_proj = gemm_oracle(st.silu_out, w.w_x, OP_NT, m, xr, di)
+    st.x_proj = gemm_host_rows(st.silu_out, w.w_x, OP_NT, m, xr, di)
 
     # ---- split (torch.split, MM:422; bit-exact copies, not a stage) ------
     var dt_low = List[Float32]()
@@ -322,7 +323,7 @@ def mamba_block_oracle(
     # k = dt_rank (1 here): GEMM v1's one-fma leaf, seeded +0.0 -- v1
     # section 9.2(a) launders a -0.0 product to +0.0 at this stage, an
     # inherited clause, recorded in the contract.
-    st.dt_proj = gemm_oracle(dt_low, w.w_dt, OP_NT, m, di, r)
+    st.dt_proj = gemm_host_rows(dt_low, w.w_dt, OP_NT, m, di, r)
 
     # ---- delta = softplus(dt + bias) (MM:178-181 in mamba_selective_scan;
     #      selective_scan_ref:145-148) ------------------------------------
@@ -357,7 +358,7 @@ def mamba_block_oracle(
             )
 
     # ---- out_proj (MM:476; Linear no bias) -------------------------------
-    st.out_proj = gemm_oracle(st.gate_out, w.w_out, OP_NT, m, dm, di)
+    st.out_proj = gemm_host_rows(st.gate_out, w.w_out, OP_NT, m, dm, di)
 
     # ---- residual (MM:521-527: `hidden = residual + mixer(norm(residual))`)
     for i in range(m * dm):

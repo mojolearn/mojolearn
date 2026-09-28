@@ -11,6 +11,7 @@ from checks.numerics import (
     identical_mul,
 )
 from gemm.checks.gemm_oracle import OP_NN, gemm_oracle
+from gemm.host.gemm_host_rows import gemm_host_rows
 
 
 
@@ -181,7 +182,7 @@ def ce_fold(
     var row = List[Float32]()
     for t in range(count):
         row.append(values[base + t])
-    var out = gemm_oracle(row, ones, OP_NN, 1, 1, count)
+    var out = gemm_host_rows(row, ones, OP_NN, 1, 1, count)
     return out[0]
 
 

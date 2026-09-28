@@ -326,13 +326,23 @@ def gemm_host_rows_into(
 def gemm_host_rows(
     a: List[Float32], b: List[Float32], op: Int, m: Int, n: Int, k: Int,
     force_redo: Bool = False,
-) raises -> List[Float32]:
-    """`gemm_oracle(a, b, op, m, n, k)`'s List door over `gemm_host_rows_into`."""
-    if len(a) < m * k or len(b) < n * k:
-        raise Error("gemm_host_rows: an operand shorter than its extents")
+) -> List[Float32]:
+    """`gemm_oracle(a, b, op, m, n, k)`, bit for bit, at CPU speed: the drop-in
+    for every host caller of the oracle. It never raises: an unknown op, a
+    negative extent or an operand shorter than its extents is handed to
+    `gemm_oracle` itself, so such a call fails (or not) exactly as it did."""
+    if (
+        (op != OP_NN and op != OP_NT and op != OP_TN)
+        or m < 0 or n < 0 or k < 0
+        or len(a) < m * k or len(b) < n * k
+    ):
+        return gemm_oracle(a, b, op, m, n, k)
     var c = List[Float32](length=m * n, fill=Float32(0.0))
-    gemm_host_rows_into(
-        rebind[GhrPtr](a.unsafe_ptr()), rebind[GhrPtr](b.unsafe_ptr()),
-        rebind[GhrPtr](c.unsafe_ptr()), op, m, n, k, force_redo,
-    )
+    try:
+        gemm_host_rows_into(
+            rebind[GhrPtr](a.unsafe_ptr()), rebind[GhrPtr](b.unsafe_ptr()),
+            rebind[GhrPtr](c.unsafe_ptr()), op, m, n, k, force_redo,
+        )
+    except:
+        return gemm_oracle(a, b, op, m, n, k)
     return c^

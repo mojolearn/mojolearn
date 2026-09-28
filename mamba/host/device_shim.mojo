@@ -25,6 +25,7 @@ from std.memory import memcpy
 from std.sys import size_of
 
 from gemm.host.identical_gemm import OP_TN, gemm_oracle
+from gemm.host.gemm_host_rows import gemm_host_rows
 # the device GEMM file's host-safe fold helpers, lifted verbatim
 from mamba.host.gen.gemm_identical_parts import (
     GEMM_FOLD_LEVELS,
@@ -149,7 +150,7 @@ def identical_gemm_into[allow_vendor: Bool = True](
 ) raises:
     """`C[m x n] = op(A) . op(B)`: A holds m*k values (k*m under OP_TN), B
     n*k, both row-major, exactly as `gemm_oracle` reads them."""
-    var out = gemm_oracle(_read(a, m * k), _read(b, n * k), op, m, n, k)
+    var out = gemm_host_rows(_read(a, m * k), _read(b, n * k), op, m, n, k)
     if len(c) < m * n:
         raise Error("mamba host: a GEMM output buffer shorter than m * n")
     if m * n > 0:

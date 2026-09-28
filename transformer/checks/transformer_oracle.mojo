@@ -106,6 +106,7 @@ from std.memory import bitcast
 
 from core.identity_trace import IdentityTrace
 from gemm.checks.gemm_oracle import OP_NT, gemm_oracle
+from gemm.host.gemm_host_rows import gemm_host_rows
 from checks.numerics import (
     ftz,
     identical_cos,
@@ -1508,9 +1509,9 @@ def transformer_block_oracle(
     # must move `q_proj.out` and it exists because the op numbering is three
     # bare integers (gemm_oracle.mojo:194-198) and a transposed read of a
     # square-ish weight produces a plausible number.
-    st.q_proj_out = gemm_oracle(st.norm1_out, w.w_q, OP_NT, m, qw, dm)
-    st.k_proj_out = gemm_oracle(st.norm1_out, w.w_k, OP_NT, m, kw, dm)
-    st.v_proj_out = gemm_oracle(st.norm1_out, w.w_v, OP_NT, m, kw, dm)
+    st.q_proj_out = gemm_host_rows(st.norm1_out, w.w_q, OP_NT, m, qw, dm)
+    st.k_proj_out = gemm_host_rows(st.norm1_out, w.w_k, OP_NT, m, kw, dm)
+    st.v_proj_out = gemm_host_rows(st.norm1_out, w.w_v, OP_NT, m, kw, dm)
     # DEVIATION 2934, `qkv_bias` (Qwen2's `attention_bias=True`): one plain
     # add per cell AFTER the GEMM, recorded INTO the `*_proj.out` stages so
     # the card keeps its thirty tags.
@@ -1651,7 +1652,7 @@ def transformer_block_oracle(
             for j in range(s):
                 for d in range(hd):
                     kmat.append(st.kv_k_cache[((bb * nkv + kv) * s + j) * hd + d])
-            var cell = gemm_oracle(qmat, kmat, OP_NT, l, s, hd)
+            var cell = gemm_host_rows(qmat, kmat, OP_NT, l, s, hd)
             for qi in range(l):
                 for j in range(s):
                     var sc = ftz(identical_mul(ftz(cell[qi * s + j]), scale))
@@ -1879,7 +1880,7 @@ def transformer_block_oracle(
     st.attn_ctx = actx^
 
     # ---- S5, o_proj (:280). The flatten before it is a COPY (:279). ------
-    st.o_proj_out = gemm_oracle(st.attn_ctx, w.w_o, OP_NT, m, dm, qw)
+    st.o_proj_out = gemm_host_rows(st.attn_ctx, w.w_o, OP_NT, m, dm, qw)
     # DEVIATION 2935, `o_bias`: one plain add per cell after the GEMM.
     if opts.o_bias:
         var ob = st.o_proj_out.copy()
@@ -1922,12 +1923,12 @@ def transformer_block_oracle(
     # the activation of `up_proj.out` and feeds `down_proj` directly.
     var gated = opts.gated()
     if gated:
-        st.gate_proj_out = gemm_oracle(st.norm2_out, w.w_gate, OP_NT, m, inter, dm)
+        st.gate_proj_out = gemm_host_rows(st.norm2_out, w.w_gate, OP_NT, m, inter, dm)
         if opts.mlp_bias:
             var gb = st.gate_proj_out.copy()
             add_bias_into(gb, w.b_gate, m, inter)
             st.gate_proj_out = gb^
-    st.up_proj_out = gemm_oracle(st.norm2_out, w.w_up, OP_NT, m, inter, dm)
+    st.up_proj_out = gemm_host_rows(st.norm2_out, w.w_up, OP_NT, m, inter, dm)
     if opts.mlp_bias:
         var ub = st.up_proj_out.copy()
         add_bias_into(ub, w.b_up, m, inter)
@@ -1957,11 +1958,11 @@ def transformer_block_oracle(
             st.mlp_gated.append(
                 ftz(identical_mul(ftz(st.silu_out[i]), ftz(st.up_proj_out[i])))
             )
-        st.down_proj_out = gemm_oracle(
+        st.down_proj_out = gemm_host_rows(
             st.mlp_gated, w.w_down, OP_NT, m, dm, inter
         )
     else:
-        st.down_proj_out = gemm_oracle(
+        st.down_proj_out = gemm_host_rows(
             st.silu_out, w.w_down, OP_NT, m, dm, inter
         )
     if opts.mlp_bias:
