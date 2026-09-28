@@ -25,7 +25,7 @@ while [ "$r" -lt "$ROUNDS" ]; do
         name=${arm%%=*}; defs=${arm#*=}
         echo "##### ARM $name round=$r defines=[$defs]"
         for b in $BUILDS; do
-            MOJOLEARN_EXTRA_DEFINES="$defs" sh "bindings/build_$b.sh" >"/tmp/tab_build_$b.log" 2>&1 \
+            MOJOLEARN_EXTRA_DEFINES="$defs" pixi run -e default sh "bindings/build_$b.sh" >"/tmp/tab_build_$b.log" 2>&1 \
                 || { echo "ARM $name build_$b FAILED"; tail -n 40 "/tmp/tab_build_$b.log"; exit 1; }
         done
         TAP_ROUNDS=1 sh tools/trees_apple_speed.sh 2>&1 | sed "s/^/[$name] /"
