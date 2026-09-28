@@ -105,6 +105,11 @@ SUBSTITUTIONS = (
     # CPU SPEED (lane neural-cpu, 2026-09-28): the S16 q/k/v backward launch
     # runs mamba/host/mamba3_s16_host.mojo, the kernel's per-cell arithmetic
     # as lanes over n (d_q, d_k) and p (d_v), rows split over host tasks.
+    # lane/neural-apple2: the host takes the naive S16 launch below (its
+    # host restatement), never the shared-memory d_v split.
+    ("mamba/impl/modules/mamba3_backward.mojo",
+     r'comptime M3_S16_V_SHARED = not is_defined\["MOJOLEARN_MAMBA3_S16_V_NAIVE"\]\(\)',
+     "comptime M3_S16_V_SHARED = False"),
     ("mamba/impl/modules/mamba3_backward.mojo",
      r"ctx\.enqueue_function\[mamba3_s16_qkv_backward_kernel\]\(",
      "mamba3_s16_qkv_backward_host("),
