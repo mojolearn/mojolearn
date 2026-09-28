@@ -217,3 +217,9 @@ put back to 7483efa40) is queued on m3ultra-b to find it.
 
 After the scan work the M3 Ultra's IVF search is select 19 ms + score 11
 ms + probe 4 ms per search (the partial top-k join is one thread per query).
+
+### A/B 11: m4pro-a, steward 1790615170989 (e51105038 -> 3634e4645)
+
+Same digests. IVF scan select (IVF-PQ, SQ, RaBitQ, refine searches summed)
+71 -> 50 ms IDENTICAL, 74 -> 52 ms FAST; searches (s): PQ 0.050 -> 0.048,
+SQ 0.055 -> 0.055, RaBitQ 0.029 -> 0.026, refine 0.081 -> 0.068.
