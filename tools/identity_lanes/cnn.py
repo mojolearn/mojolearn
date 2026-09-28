@@ -347,3 +347,22 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("predict_proba", sl=np.s_[:256, :16]), "x-cnn-trainer-options")
+
+
+def _cnn_batch_dropout_eval(ml, e, Xh):
+    # Training intentionally advances a random-mask stream between calls. The
+    # public evaluation mode is the row-wise identity map; preserve its mode.
+    def evaluate(rows):
+        previous = e.training
+        try:
+            e.eval()
+            return (e.transform(rows),)
+        finally:
+            e.train(previous)
+    return [_BatchRows("transform eval (training masks are stochastic)", Xh[:256, :16], evaluate)]
+
+
+_batch_decl(_cnn_batch_dropout_eval, "x-cnn-dropout2d")
+_batch_decl("n/a:whole-graph message passing (GCN/SAGE read neighboring nodes through a shared edge "
+            "index; slicing node rows removes dependencies and is not an independent graph batch)",
+            "x-cnn-gcn", "x-cnn-sage", "x-cnn-gnn-options")

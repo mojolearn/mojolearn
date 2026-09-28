@@ -362,3 +362,5 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-lasso-cv-pos")
+
+_batch_decl(_rows_calls("predict", prep=lambda X: X[:256, 3] * np.float32(1.5)), "x-isotonic")

@@ -1007,3 +1007,27 @@ def _(ml, X, yc, yr, Xh=None):
         idx = np.asarray(rs.resample_indices(n, ns, replace=rep, random_state=8), dtype=np.int32)
         parts[name] = _h(idx, np.asarray(rs.resample(yr, replace=rep, n_samples=ns, random_state=8), dtype=np.float32))
     return _fit(parts)
+
+# Prepare categorical inputs ONCE before slicing; row-local construction for
+# multilabel inputs is deferred until each query because the list is ragged.
+def _prep_batch_label_encoder(ml, e, Xh):
+    labels = _prep_labels(Xh)
+    known = labels[np.isin(labels, np.asarray(e.classes_))][:256]
+    return [_BatchRows("transform known labels", known, lambda r: (e.transform(r),))]
+
+
+_batch_decl(_prep_batch_label_encoder, "x-prep-label-encoder")
+_batch_decl(_rows_calls("transform", prep=_prep_labels, sl=slice(0, 256)), "x-prep-label-binarizer")
+_batch_decl(_rows_calls("transform", prep=lambda X: (X[:256, :4] > 0.3).astype(np.int64)),
+            "x-prep-label-binarizer-multilabel")
+
+
+def _prep_batch_multilabel(ml, e, Xh):
+    return [_BatchRows("transform multilabel rows", Xh[:256],
+                       lambda r: (e.transform(_prep_multilabel(r)),))]
+
+
+_batch_decl(_prep_batch_multilabel, "x-prep-multilabel-binarizer")
+_batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-mutual-info")
+_batch_decl(_rows_calls("transform", sl=np.s_[:256, :6]), "x-prep-mi-discrete")
+_batch_decl(_rows_calls("predict_proba", sl=slice(0, 256)), "x-prep-priors")

@@ -289,4 +289,13 @@ def _(ml, X, yc, yr, Xh=None):
     parts["grid_mean"] = _h(np.asarray(gs.cv_results_["mean_test_score"]), np.asarray(gs.cv_results_["rank_test_score"]))
     parts["grid_best"] = _h(np.asarray([gs.best_index_], dtype=np.int64), np.float64(gs.best_score_),
                             np.asarray(gs.predict(Xs[:64])))
-    return _fit(parts)
+    # Keep the already-fitted refit estimator for row-wise batch checks. The
+    # default non-callable inference probe preserves existing infer/model hashes.
+    return _fit(parts, gs)
+
+_batch_decl("n/a:dataset reduction (classification, regression, ranking and clustering scores/curves "
+            "aggregate the supplied observations; a row subset intentionally produces another statistic)",
+            "x-metrics-classification", "x-metrics-regression", "x-metrics-ranking", "x-metrics-cluster")
+_batch_decl("n/a:dataset partition (cross-validation splitters assign indices using the full row count, "
+            "labels or groups; slicing input rows changes the folds)", "x-metrics-splitters")
+_batch_decl(_rows_calls("predict", sl=np.s_[:64, :6]), "x-metrics-search")

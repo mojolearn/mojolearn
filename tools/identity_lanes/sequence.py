@@ -409,3 +409,17 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(ya=_h(ya), la=_h(a.router_logits_), sa=_h(a.selected_experts_), wa=_h(a.routing_weights_),
                      yb=_h(yb), sb=_h(b.selected_experts_), wb=_h(b.routing_weights_)),
                 a, lambda e: (e(np.ascontiguousarray(Xh[:256, :16], dtype=np.float32)),))
+
+# Batch declarations describe the returned estimator's public inference axis.
+# Training minibatches are a separate property and are not inferred from these.
+_batch_decl(_rows_calls("predict", "hidden_sequence", prep=_sequence_seq),
+            "sequence-lstm", "sequence-gru", "sequence-rnn")
+_batch_decl(_rows_calls("predict", sl=np.s_[:256, :10]), "sequence-mlp")
+_batch_decl(_rows_calls("forward", sl=np.s_[:256, :16]), "sequence-layernorm")
+_batch_decl(_rows_calls("__call__", sl=np.s_[:256, :16]), "sequence-moe")
+_batch_decl("n/a:parameter-coupled optimizer (Adafactor factors second moments across tensor rows and "
+            "columns and scales updates by tensor RMS; splitting parameter rows changes the algorithm)",
+            "sequence-adafactor")
+_batch_decl("n/a:parameter-coupled optimizer (LAMB uses tensor norms for its trust ratio and global "
+            "gradient clipping; a sliced parameter registry is a different optimization problem)",
+            "sequence-lamb")

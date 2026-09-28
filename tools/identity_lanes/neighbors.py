@@ -440,3 +440,13 @@ _batch_decl(_rows_calls("predict", sl=slice(0, 128)), "x-neighbors-krr-options",
 _batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "x-neighbors-gamma-scale", "x-neighbors-svm-weights",
             "x-neighbors-svc-sigmoid", "x-neighbors-svc-multiclass")
 _batch_decl(_rows_calls("predict_proba", sl=slice(0, 128)), "x-neighbors-svc-probability")
+
+_batch_decl(_rows_calls("predict", sl=slice(0, 128)), "x-neighbors-metrics")
+_batch_decl("n/a:whole-graph operator (PageRank normalizes transitions and solves over the complete "
+            "graph; removing query nodes changes both neighborhoods and the stationary distribution)",
+            "x-neighbors-pagerank")
+_batch_decl("n/a:whole-graph partition (connected components requires edges between all nodes; "
+            "a node subset can disconnect the graph and has no held-out prediction API)",
+            "x-neighbors-connected-components")
+_batch_decl("n/a:whole-graph partition (Louvain optimizes graph-wide modularity; node subsets change "
+            "the objective and there is no held-out prediction API)", "x-neighbors-louvain")

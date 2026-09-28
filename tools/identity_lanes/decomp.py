@@ -368,3 +368,11 @@ def _(ml, X, yc, yr, Xh=None):
     parts["t_man"] = _h(runs["man"].transform(X[384:448, :8]))
     parts["t_c5"] = _h(runs["c5"].transform(X[384:448, :8]))
     return _fit(parts, runs["c5"], lambda e: (e.transform(Xh[:64, :8]),))
+
+_batch_decl(_batch_umap, "x-decomp-umap-options")
+_batch_decl("n/a:transductive eigensystem (spectral embedding solves the full affinity matrix; "
+            "subsetting rows changes the eigenproblem and no transform is exposed)", "x-decomp-spectral-rbf")
+_batch_decl("n/a:matrix factorization (LU, triangular solves and eigendecompositions consume complete "
+            "matrices; removing rows changes the operator rather than batching independent queries)", "x-decomp-lu")
+_batch_decl("n/a:matrix factorization (least squares and randomized SVD depend on all matrix rows; "
+            "this lane has no fitted out-of-sample estimator)", "x-decomp-lstsq-rsvd")
