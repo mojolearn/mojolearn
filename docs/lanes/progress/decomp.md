@@ -284,3 +284,136 @@ State on lane/algos-decomp (pushed, NOT merged to main):
 3. Speed (phase 1 IDENTICAL, then FAST): Isomap dijkstra_rows, ALS als_rows,
    the per-call uploads (device-resident matrices), Jacobi eigh fixed cost;
    AMD and Apple before/after tables per algorithm.
+
+1. UMAP option parity (umap-learn + cuML; `python/mojolearn/_umap_impl.py`
+   refuses them in `_parameters`): init 'random' / 'pca' / an array (route: a
+   `umap_fit_transform` variant that takes the initial embedding; 'random' is
+   umap-learn's uniform(-10, 10) on a Philox stream, 'pca' the x_decomp PCA
+   scaled to 10 plus noise); metric (the pdist_cell kinds, DEVIATION 5319,
+   into umap/graph.mojo's kNN); local_connectivity != 1 (the rho
+   interpolation in smooth_knn_dist); n_components > 3 (the optimizer is
+   2D/3D only); supervised y (target_metric / target_weight); a, b given
+   directly; densmap (refuse by name if not written).
+2. linalg Q: numpy.linalg.qr mode 'reduced' / 'complete' / 'raw' and
+   numpy.linalg.svd (U, S, Vt): a Householder QR that keeps its reflectors
+   (geqrf's (h, tau) = 'raw') and an orgqr; svd's U = Q U_R. Wide inputs
+   (LQ of the transpose). Rows in decomposition/NOT_IMPLEMENTED.tsv.
+3. SpectralEmbedding eigen_tol float: one more params entry into
+   spectral_embedding_graph / _dataset (bindings/_mojolearn_metrics.mojo),
+   the Lanczos config SpectralClustering already exposes.
+4. AlternatingLeastSquares use_cg=True: implicit's 3 CG steps per row from the
+   previous factors, a row cell beside als_row (new DEVIATION + arm).
+5. Then PHASE 3 (FAST speed on NVIDIA / AMD / Apple), per the LANE CHARTER.
+
+## CPU lane (lane/decomp-cpu), phases 3 + 4: CPU speed (sessions 2026-09-28)
+
+Branch `lane/decomp-cpu` (pushed, NOT merged: the NVIDIA + CPU gate is
+owed, below). Every change keeps IDENTICAL bits: the cells' arithmetic in
+the cells' order, only WHICH outputs advance together changes (SIMD lanes
+are different outputs, never pieces of one sum), and every loop over
+independent outputs is an `xd_parallel` task cut by the shape only.
+
+What changed (each with a host arm in `tools/identity_lanes/decomp.checks`):
+- gemm / sqdist SIMD across outputs, packed, blocked (host_simd.mojo; arms
+  5300_host_gemm_order, 5302_host_sqdist_order, 5300_host_rowdot_order);
+  narrow gemm as C^T; one-column gemm as row chains.
+- Householder QR slices SIMD (host_qr.mojo; host_qr_dot_fold); one-sided
+  Jacobi SVD on the transposed R and V (host_jacobi.mojo;
+  host_svd_fold_order); two-sided Jacobi eigh with rows and V as vectors
+  (host_eigh_col_split); LU row eliminations SIMD (host_lu_split).
+- shortest paths on a heap over the listed edges (host_graph.mojo;
+  5314_host_edge_weight); colsum SIMD across columns; `_M` buffer pool.
+- this session: LDA document update, folds' lanes across words then
+  topics (host_lda.mojo; host_lda_topic_fold); the elementwise cell as
+  vectors for 28 of its 36 op codes, op a compile-time parameter,
+  broadcasts read in place (host_ew.mojo; host_ew_onemsq_fused; the
+  transcendental ops stay on ew_cell; an 8/16-lane build only, a 4-lane
+  build such as apple-m1 keeps ew_cell); row sums W rows at once
+  (host_simd.rowsum_rows; host_rowsum_flush).
+
+Bits, this session (host only, x86-64-v3, the AMD central box's CPU):
+host LDA == `lda_doc_row` at k 1/5/10/19/33/50, v 9..300, 6..100
+iterations (zero rows, subnormal counts); host ew == `ew_cell` on 2880
+cases (36 ops x 16 broadcast-mode pairs x 5 shapes with tails, specials);
+host rowsum == `rowsum_cell` up to 1M x 28. Each new arm makes its test
+DIFFER (ew: op 12 on every mode; LDA: 232 words; rowsum: 8 rows). The
+checks (rows_check, fold_ew_check) carry the same fixtures for the gate.
+Scripts: ~/mojolearn-evidence/decomp-cpu/t/{lda_t,ew_t,rowsum_t}.mojo.
+
+Before -> after, CPU host binding, MOJOLEARN_CPU_THREADS=1 (the host is
+serial until core/host_parallel.mojo is on main), Intel Xeon Platinum 8470
+of the SHARED AMD central box (load ~10, so +-15%), seconds wall, year
+515k x 90 / higgs from R2, `prof.py` shapes
+(~/mojolearn-evidence/decomp-cpu/prof.py; logs in prof_amdbox/). Base =
+origin/main 3fa29cd1f; after = this branch before the rowsum change:
+
+| algorithm | before | after | top cost after |
+|---|---|---|---|
+| IncrementalPCA (515k, 10 comp.) | 13.10 | 2.15 | gemm 0.89 |
+| Gaussian / Sparse RP | 3.72 / 3.69 | 1.39 / 1.32 | rowsum (now vectorized) |
+| NMF cd / mu (100k, 50 it) | 41.46 / 19.81 | 7.33 / 3.79 | gemm, cd_rows 2.3 |
+| FastICA (1M higgs) | 9.82 | 3.80 | ew (tanh, scalar) 2.0 |
+| FactorAnalysis | 15.31 | 4.01 | qr_r 2.8 |
+| PLSRegression / CCA | 7.99 / 17.75 | 3.53 / 4.98 | gemm |
+| DictionaryLearning / MiniBatch / SparsePCA | 2.34 / 0.73 / 0.24 | 1.87 / 0.50 / 0.07 | lasso_rows 1.75 |
+| LDA (20k, 10 topics) | 53.92 | 22.10 | lda_rows (digamma/exp scalar) |
+| MinCovDet (100k x 28) | 288.2 | 105.6 | 32730 eigh + 108k gemm calls (per-call cost) |
+| lstsq / randomized_svd / solve | 24.27 / 33.70 / 0.62 | 5.00 / 8.78 / 0.18 | svd 2.7 / orth 5.3 |
+| ALS | 3.26 | 3.90 | als_rows (unchanged, noise) |
+| Isomap / ClassicalMDS (n 1000) | 60.81 / 43.28 | 31.64 / 24.18 | eigh 31 / 24 (n x n Jacobi) |
+| MDS (n 500) / LLE (n 660) | 0.89 / 21.63 | 0.57 / 4.06 | ew / svd |
+
+FAST on the CPU: there is no FAST tier on a CPU host binding
+(`build_host_family.sh` builds IDENTICAL only; `_backend._cpu_only_binding`
+refuses 'fast' by name; ann found the same). A FAST CPU eigh (tridiagonal
++ QL, the manifold algorithms' cost) would have no caller until a host
+FAST tier exists: that is a cross-lane change (the cpu lane's build and
+`_backend`), not this lane's. CPU speed here serves IDENTICAL.
+
+Coverage (step 0): the 17 x-decomp lanes each have a CPU and a GPU arm in
+the lane check and bite under `e2e_host_all.patch` on the CPU column (s7 /
+p2d evidence above); the pre-expansion decomp lanes (pca*, tsvd, umap,
+spectral*, linalg-*, cholesky) are the decomp GPU lane's audit.
+
+OWED (no NVIDIA pod: RunPod balance negative, every pod gone, 05:00Z):
+1. THE GATE, on a RunPod NVIDIA pod once funded: `tools/algos_lane_check.sh
+   <the 44 lanes of ~/mojolearn-evidence/decomp-cpu/gate_lanes.txt +
+   x-cluster-spectral-affinities> --pass 2` (every seam and host arm
+   builds, runs, bites), the same lanes on origin/main for
+   `oldbits.py <new> <old>` (0 MOVED), and the 17 x-decomp lanes at
+   MOJOLEARN_CPU_THREADS=1 and 3; test_host_surface. Then merge + push.
+2. Meanwhile the same gate against the AMD column is queued on the central
+   box: `/root/ev-decomp-cpu/gate.sh` (tree /root/mojolearn-decomp-cpu,
+   base /root/decomp-cpu-base, results /root/ev-decomp-cpu/gate.status,
+   old/new/t1/t3 logs). If gate.status does not exist, the slot wait timed
+   out: `tools/amd_central.sh sync decomp-cpu ~/mojolearn-wt/decomp-cpu`
+   then `tools/amd_central.sh run decomp-cpu 'setsid nohup bash
+   /root/ev-decomp-cpu/gate.sh > /root/ev-decomp-cpu/gate.log 2>&1 <
+   /dev/null &'`. AMD + CPU AGREE does not replace the NVIDIA gate.
+3. Apple / AMD steward request for the merged tree (one batched request).
+
+NEXT (CPU speed, IDENTICAL):
+- threads: when core/host_parallel.mojo (lane/cpu) is on main, xd_parallel
+  runs its groups through it; prove bits at MOJOLEARN_CPU_THREADS 1, 3,
+  unset and time. Every hot loop above is already a task.
+- Jacobi eigh (Isomap / ClassicalMDS / LLE at n >= 1000): the column
+  update is a stride-n scalar walk (~2/3 of a rotation). Column p is only
+  touched by the column update and the 2 x 2 block during the whole q loop
+  of a fixed p, so it can live in a contiguous buffer for that loop (same
+  words); A is NOT bitwise symmetric after a block (apq and aqp round
+  differently), so the rows cannot stand in for the columns.
+- LDA: digamma / exp per topic dominate now; a lane-by-lane vector
+  portable_expf / portable_logf provable over all 2^32 inputs would let
+  the Dirichlet step run across topics.
+- MinCovDet: 500k small kit calls (7-20 us each at the binding boundary);
+  fusing a C-step into one entry keeps the bits and removes the calls.
+
+## OWED (orchestrator, 2026-09-28, from Andrew)
+
+- Isomap hangs/stalls at 10k rows on AMD (MI300X), bench/decomp_speed.py;
+  find and fix. The "before" speed bench on the central AMD box sat in
+  Isomap(10nn) at N3=10000 from 02:38Z, 100% CPU for 4.5 h with no output,
+  and was killed on Andrew's order. It is a BUG to fix at the root, not a
+  slow run. Before-numbers come from records already taken: never re-measure
+  old code, never run Isomap at that size, never resubmit that bench.
+  (Re-added on lane/merged from the unpushed local commit 08ba64ec6.)

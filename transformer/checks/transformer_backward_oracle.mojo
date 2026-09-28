@@ -129,8 +129,11 @@ RISK: WHAT IS LEAST LIKELY TO COMPILE
     is `^`.
 """
 
+from std.math import min
 from std.memory import bitcast
 
+from core.host_lanes import F32V, HOST_FW, ftz_lanes, host_row_tasks, lanes_are_identical
+from core.host_parallel import host_parallelize
 from core.identity_trace import IdentityTrace
 from gemm.checks.gemm_backward import (
     BWD_DC_LEFT,
@@ -138,11 +141,13 @@ from gemm.checks.gemm_backward import (
     gemm_backward_b_call,
 )
 from gemm.checks.gemm_oracle import OP_NN, OP_NT, gemm_oracle
+from gemm.host.gemm_host_rows import gemm_host_rows
 from checks.numerics import (
     ftz,
     identical_div,
     identical_mul,
     identical_mul_add,
+    identical_mul_add_simd,
     identical_rsqrt,
     identical_sigmoid,
 )
@@ -218,8 +223,8 @@ def _gemm_bwd_a(
     """
     var call = gemm_backward_a_call(op, m, n, k)
     if call[4] == BWD_DC_LEFT:
-        return gemm_oracle(dc, other, call[0], call[1], call[2], call[3])
-    return gemm_oracle(other, dc, call[0], call[1], call[2], call[3])
+        return gemm_host_rows(dc, other, call[0], call[1], call[2], call[3])
+    return gemm_host_rows(other, dc, call[0], call[1], call[2], call[3])
 
 
 def _gemm_bwd_b(
@@ -243,8 +248,8 @@ def _gemm_bwd_b(
     """
     var call = gemm_backward_b_call(op, m, n, k)
     if call[4] == BWD_DC_LEFT:
-        return gemm_oracle(dc, other, call[0], call[1], call[2], call[3])
-    return gemm_oracle(other, dc, call[0], call[1], call[2], call[3])
+        return gemm_host_rows(dc, other, call[0], call[1], call[2], call[3])
+    return gemm_host_rows(other, dc, call[0], call[1], call[2], call[3])
 
 
 def _ones(n: Int) -> List[Float32]:
@@ -1000,6 +1005,115 @@ def softmax_backward_into(
 # ===========================================================================
 
 
+def _bwd_attention_chains(
+    dqk: List[Float32],
+    kcache: List[Float32],
+    qrope: List[Float32],
+    aw: List[Float32],
+    dctx: List[Float32],
+    mut d_q: List[Float32],
+    mut d_k: List[Float32],
+    mut d_v: List[Float32],
+    b: Int, l: Int, s: Int, nh: Int, nkv: Int, n_rep: Int, hd: Int, qw: Int,
+):
+    """The d_q_rope, d_k_cache and d_v_cache chains (see the call site), as
+    `head_dim` SIMD lanes per row, rows over host tasks (lane neural-cpu)."""
+    var dqkp = dqk.unsafe_ptr()
+    var kp = kcache.unsafe_ptr()
+    var qp = qrope.unsafe_ptr()
+    var awp = aw.unsafe_ptr()
+    var dcp = dctx.unsafe_ptr()
+    var dqp = d_q.unsafe_ptr()
+    var dkp = d_k.unsafe_ptr()
+    var dvp = d_v.unsafe_ptr()
+    var vec_hd = 0
+    comptime if lanes_are_identical:
+        vec_hd = hd - hd % HOST_FW
+
+    # d_q: rows (bb, qi, h), terms j ascending.
+    var qrows = b * l * nh
+    var qtasks = host_row_tasks(qrows, s * hd)
+    var qchunk = (qrows + qtasks - 1) // qtasks
+
+    def _q_rows(t: Int) {imm dqkp, imm kp, imm dqp, imm b, imm l, imm s, imm nh, imm nkv, imm n_rep, imm hd, imm qw, imm qrows, imm qchunk, imm vec_hd}:
+        for r in range(t * qchunk, min((t + 1) * qchunk, qrows)):
+            var h = r % nh
+            var qi = (r // nh) % l
+            var bb = r // (nh * l)
+            var kv = h // n_rep
+            var wbase = ((bb * nh + h) * l + qi) * s
+            var vbase = (bb * nkv + kv) * s * hd
+            var obase = (bb * l + qi) * qw + h * hd
+            var d = 0
+            while d < vec_hd:
+                var acc = F32V(0.0)
+                for j in range(s):
+                    acc = ftz_lanes(identical_mul_add_simd[HOST_FW](
+                        F32V(ftz(dqkp.unsafe_load(wbase + j))),
+                        ftz_lanes(kp.unsafe_load[width=HOST_FW](vbase + j * hd + d)), acc))
+                dqp.unsafe_store(obase + d, acc)
+                d += HOST_FW
+            while d < hd:
+                var acc_s = Float32(0.0)
+                for j in range(s):
+                    acc_s = ftz(identical_mul_add(ftz(dqkp.unsafe_load(wbase + j)), ftz(kp.unsafe_load(vbase + j * hd + d)), acc_s))
+                dqp.unsafe_store(obase + d, acc_s)
+                d += 1
+
+    if qtasks <= 1:
+        _q_rows(0)
+    else:
+        host_parallelize(_q_rows, qtasks)
+
+    # d_k and d_v: rows (bb, kv, j), terms (hh, t) ascending.
+    var krows = b * nkv * s
+    var ktasks = host_row_tasks(krows, 2 * n_rep * l * hd)
+    var kchunk = (krows + ktasks - 1) // ktasks
+
+    def _kv_rows(t: Int) {imm dqkp, imm qp, imm awp, imm dcp, imm dkp, imm dvp, imm l, imm s, imm nh, imm nkv, imm n_rep, imm hd, imm qw, imm krows, imm kchunk, imm vec_hd}:
+        for r in range(t * kchunk, min((t + 1) * kchunk, krows)):
+            var j = r % s
+            var kv = (r // s) % nkv
+            var bb = r // (s * nkv)
+            var obase = r * hd
+            var d = 0
+            while d < vec_hd:
+                var ak = F32V(0.0)
+                var av = F32V(0.0)
+                for hh in range(n_rep):
+                    var h = kv * n_rep + hh
+                    for tt in range(l):
+                        var wbase = ((bb * nh + h) * l + tt) * s
+                        var rowq = (bb * l + tt) * qw + h * hd + d
+                        ak = ftz_lanes(identical_mul_add_simd[HOST_FW](
+                            F32V(ftz(dqkp.unsafe_load(wbase + j))),
+                            ftz_lanes(qp.unsafe_load[width=HOST_FW](rowq)), ak))
+                        av = ftz_lanes(identical_mul_add_simd[HOST_FW](
+                            F32V(ftz(awp.unsafe_load(wbase + j))),
+                            ftz_lanes(dcp.unsafe_load[width=HOST_FW](rowq)), av))
+                dkp.unsafe_store(obase + d, ak)
+                dvp.unsafe_store(obase + d, av)
+                d += HOST_FW
+            while d < hd:
+                var ak_s = Float32(0.0)
+                var av_s = Float32(0.0)
+                for hh in range(n_rep):
+                    var h = kv * n_rep + hh
+                    for tt in range(l):
+                        var wbase = ((bb * nh + h) * l + tt) * s
+                        var rowq = (bb * l + tt) * qw + h * hd + d
+                        ak_s = ftz(identical_mul_add(ftz(dqkp.unsafe_load(wbase + j)), ftz(qp.unsafe_load(rowq)), ak_s))
+                        av_s = ftz(identical_mul_add(ftz(awp.unsafe_load(wbase + j)), ftz(dcp.unsafe_load(rowq)), av_s))
+                dkp.unsafe_store(obase + d, ak_s)
+                dvp.unsafe_store(obase + d, av_s)
+                d += 1
+
+    if ktasks <= 1:
+        _kv_rows(0)
+    else:
+        host_parallelize(_kv_rows, ktasks)
+
+
 def transformer_block_backward_oracle(
     w: TransformerWeights,
     fwd: TransformerStages,
@@ -1238,7 +1352,7 @@ def transformer_block_backward_oracle(
         prod2,
     )
     st.norm2_dot = dot2^
-    st.dw_norm2 = gemm_oracle(ones_m, prod2, OP_NN, 1, dm, m)
+    st.dw_norm2 = gemm_host_rows(ones_m, prod2, OP_NN, 1, dm, m)
     st.norm2_dx = dx2^
     _ = prod2^
 
@@ -1306,7 +1420,7 @@ def transformer_block_backward_oracle(
                     v_head.append(
                         fwd.kv_v_cache[(bb * nkv + kv) * s * hd + j * hd + d]
                     )
-            var cell = gemm_oracle(dctx_head, v_head, OP_NT, l, s, hd)
+            var cell = gemm_host_rows(dctx_head, v_head, OP_NT, l, s, hd)
             for i in range(l * s):
                 st.d_attn_weights.append(cell[i])
             _ = dctx_head^
@@ -1396,24 +1510,6 @@ def transformer_block_backward_oracle(
     # write-by-index helper is needed. Loop order is free here because every
     # output cell owns its own chain.
     # =====================================================================
-    for bb in range(b):
-        for qi in range(l):
-            for h in range(nh):
-                var kv = h // n_rep
-                var wbase = ((bb * nh + h) * l + qi) * s
-                var vbase = (bb * nkv + kv) * s * hd
-                for d in range(hd):
-                    var acc = Float32(0.0)
-                    for j in range(s):
-                        acc = ftz(
-                            identical_mul_add(
-                                ftz(st.d_qk_cell[wbase + j]),
-                                ftz(fwd.kv_k_cache[vbase + j * hd + d]),
-                                acc,
-                            )
-                        )
-                    st.d_q_rope.append(acc)
-
     # =====================================================================
     # STAGE 23. `dk_cache`. NEW ARITHMETIC. DEVIATIONS 1403, 1424, 1417.
     #
@@ -1442,35 +1538,13 @@ def transformer_block_backward_oracle(
     # DECODE-EQUALS-PREFILL DOES NOT TRANSFER TO THIS OUTPUT AND THIS LANE
     # DOES NOT PRETEND IT DOES.**
     # =====================================================================
-    for bb in range(b):
-        for kv in range(nkv):
-            for j in range(s):
-                for d in range(hd):
-                    var acc = Float32(0.0)
-                    for hh in range(n_rep):
-                        var h = kv * n_rep + hh
-                        for t in range(l):
-                            var wbase = ((bb * nh + h) * l + t) * s
-                            # The other operand is the FORWARD's rotated
-                            # query, `q_rope.out`, token-major [M, qw]. NOT
-                            # `q_proj.out`: the QK product reads the ROTATED
-                            # q, so its derivative does too, and reading the
-                            # pre-rotation activation here would produce a
-                            # plausible gradient that is wrong by one
-                            # rotation.
-                            acc = ftz(
-                                identical_mul_add(
-                                    ftz(st.d_qk_cell[wbase + j]),
-                                    ftz(
-                                        fwd.q_rope_out[
-                                            (bb * l + t) * qw + h * hd + d
-                                        ]
-                                    ),
-                                    acc,
-                                )
-                            )
-                    st.d_k_cache.append(acc)
-
+    # The other operand is the FORWARD's rotated
+    # query, `q_rope.out`, token-major [M, qw]. NOT
+    # `q_proj.out`: the QK product reads the ROTATED
+    # q, so its derivative does too, and reading the
+    # pre-rotation activation here would produce a
+    # plausible gradient that is wrong by one
+    # rotation.
     # =====================================================================
     # STAGE 24. `dv_cache`. NEW ARITHMETIC. DEVIATION 1404, the mirror of
     # contract DEVIATION 807.
@@ -1489,27 +1563,24 @@ def transformer_block_backward_oracle(
     # too -- which is why `dv` for a key slot does not depend on how many
     # PADDING keys were in the launch, only on how many QUERIES were.
     # =====================================================================
-    for bb in range(b):
-        for kv in range(nkv):
-            for j in range(s):
-                for d in range(hd):
-                    var acc = Float32(0.0)
-                    for hh in range(n_rep):
-                        var h = kv * n_rep + hh
-                        for t in range(l):
-                            var wbase = ((bb * nh + h) * l + t) * s
-                            acc = ftz(
-                                identical_mul_add(
-                                    ftz(fwd.attn_weights[wbase + j]),
-                                    ftz(
-                                        st.d_attn_ctx[
-                                            (bb * l + t) * qw + h * hd + d
-                                        ]
-                                    ),
-                                    acc,
-                                )
-                            )
-                    st.d_v_cache.append(acc)
+    #
+    # CPU SPEED (lane neural-cpu, 2026-09-28): the three chains below, as the
+    # serial walk writes them, with the `head_dim` outputs of one row advanced
+    # together as SIMD lanes (each lane its own output's chain: the same
+    # operands, the same ascending order, one fused multiply-add and one flush
+    # per step) and the rows split over host tasks. Each list is sized once
+    # and every entry written, in the layout the appends produced:
+    #   d_q_rope[(bb*l + qi)*qw + h*hd + d]     = chain over j of dqk[j] * k[j, d]
+    #   d_k_cache[((bb*nkv + kv)*s + j)*hd + d] = chain over (hh, t) of dqk[t, j] * q[t, d]
+    #   d_v_cache[((bb*nkv + kv)*s + j)*hd + d] = chain over (hh, t) of w[t, j] * dctx[t, d]
+    st.d_q_rope = List[Float32](length=b * l * nh * hd, fill=Float32(0.0))
+    st.d_k_cache = List[Float32](length=b * nkv * s * hd, fill=Float32(0.0))
+    st.d_v_cache = List[Float32](length=b * nkv * s * hd, fill=Float32(0.0))
+    _bwd_attention_chains(
+        st.d_qk_cell, fwd.kv_k_cache, fwd.q_rope_out, fwd.attn_weights,
+        st.d_attn_ctx, st.d_q_rope, st.d_k_cache, st.d_v_cache,
+        b, l, s, nh, nkv, n_rep, hd, qw,
+    )
 
     # =====================================================================
     # STAGE 25-26. The KV append's backward: a SLICE, no arithmetic. This
@@ -1582,7 +1653,7 @@ def transformer_block_backward_oracle(
         prod1,
     )
     st.norm1_dot = dot1^
-    st.dw_norm1 = gemm_oracle(ones_m, prod1, OP_NN, 1, dm, m)
+    st.dw_norm1 = gemm_host_rows(ones_m, prod1, OP_NN, 1, dm, m)
     st.norm1_dx = dx1^
     _ = prod1^
 

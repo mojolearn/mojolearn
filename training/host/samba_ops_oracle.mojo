@@ -63,11 +63,12 @@ pairwise addition has no fold-order fault (addition commutes), and the public
 ordered-shard reduction reaches no GEMM. Its independent oracle must catch
 the changed native result, including the cancellation fixture ending at three.
 """
+from core.host_lanes import all_finite
 from std.math import isfinite
 from std.sys.compile import is_defined
 from std.sys.info import num_physical_cores
 
-from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 
 from checks.numerics import (
     ftz,
@@ -92,6 +93,7 @@ from gemm.host.identical_gemm import (
     gemm_oracle,
     GEMM_ORACLE_HOST_SABOTAGE,
 )
+from gemm.host.gemm_host_rows import gemm_host_rows
 from training.checks.optimizer_oracle import microbatch_split_is_identical
 
 
@@ -117,6 +119,8 @@ def _host_rms_tasks(m: Int, dm: Int) -> Int:
 
 def host_samba_refuse_nonfinite(name: String, values: List[Float32]) raises:
     """`_refuse_nonfinite`, `samba_ops.mojo:53`, in its words."""
+    if all_finite(values):
+        return  # the bit test below, as lanes (lane neural-cpu); nothing to refuse
     for i in range(len(values)):
         if not isfinite(values[i]):
             raise Error(
@@ -189,7 +193,7 @@ def host_rms_row_sumsq(x: List[Float32], m: Int, dm: Int) -> List[Float32]:
     if tasks == 1:
         _rows(0)
     else:
-        sync_parallelize(_rows, tasks)
+        host_parallelize(_rows, tasks)
     return sumsq^
 
 
@@ -228,7 +232,7 @@ def host_samba_rms_norm_forward(
     if tasks == 1:
         _rows(0)
     else:
-        sync_parallelize(_rows, tasks)
+        host_parallelize(_rows, tasks)
     return y^
 
 
@@ -312,9 +316,9 @@ def host_samba_rms_norm_backward(
     if tasks == 1:
         _rows(0)
     else:
-        sync_parallelize(_rows, tasks)
+        host_parallelize(_rows, tasks)
     var ones = List[Float32](length=m, fill=Float32(1.0))
-    var dw = gemm_oracle(ones, dprod, OP_NN, 1, dm, m)
+    var dw = gemm_host_rows(ones, dprod, OP_NN, 1, dm, m)
     _ = dh^
     return (dx^, dw^)
 
@@ -331,7 +335,7 @@ def host_samba_linear_forward(
         raise Error("mojolearn samba ops: linear shape must be positive")
     host_samba_refuse_nonfinite("linear input", a)
     host_samba_refuse_nonfinite("linear weight", w)
-    return gemm_oracle(a, w, OP_NT, m, n, k)
+    return gemm_host_rows(a, w, OP_NT, m, n, k)
 
 
 def _gemm_by_call(
@@ -340,8 +344,8 @@ def _gemm_by_call(
     call: Tuple[Int, Int, Int, Int, Int],
 ) -> List[Float32]:
     if call[4] == BWD_DC_LEFT:
-        return gemm_oracle(dc, other, call[0], call[1], call[2], call[3])
-    return gemm_oracle(other, dc, call[0], call[1], call[2], call[3])
+        return gemm_host_rows(dc, other, call[0], call[1], call[2], call[3])
+    return gemm_host_rows(other, dc, call[0], call[1], call[2], call[3])
 
 
 def host_samba_linear_backward(

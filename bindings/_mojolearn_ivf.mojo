@@ -37,6 +37,7 @@ from bindings.ivf_index_arrays import (
     ivf_extend_count,
     ivf_write_extended_arrays,
     ivf_read_index_arrays,
+    ivf_read_search_filter,
     ivf_search_extents,
     ivf_write_index_arrays,
     ivf_write_search_result,
@@ -241,7 +242,10 @@ def _ivf_search_arrays(
 ) raises -> PythonObject:
     """`ivf_flat::search` over a built index handed back as five arrays and
     admitted by `ivf_validate_index_arrays`. Returns 0."""
-    var arrays = ivf_read_index_arrays(addrs, params, String("ivf_flat_search"), partial_storage=partial_storage)
+    var arrays = ivf_read_index_arrays(
+        addrs, params, String("ivf_flat_search"), partial_storage=partial_storage, allow_filter=not partial_storage
+    )
+    var keep = ivf_read_search_filter(addrs, arrays.n_rows)
     var ext = ivf_search_extents(params)
     var m = ext[0]
     var k = ext[1]
@@ -259,7 +263,7 @@ def _ivf_search_arrays(
         arrays.list_indices.copy(), arrays.list_data.copy(), labels^,
     )
     var ctx = DeviceContext()
-    var r = ivf_flat_search_host(ctx, index, queries, m, k, n_probes, partial_storage=partial_storage)
+    var r = ivf_flat_search_host(ctx, index, queries, m, k, n_probes, partial_storage=partial_storage, keep=keep)
     ctx.synchronize()
     ivf_write_search_result(addrs, r.distances, r.indices, r.n_candidates, m, k)
     _ = r^

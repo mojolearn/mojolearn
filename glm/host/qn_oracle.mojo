@@ -141,7 +141,8 @@ from core.classical_host_predict import (
     host_qn_decision_multi,
 )
 from decomposition.host.pca_oracle import STATS_TPB, host_halving_sum
-from glm.host.glm_oracle import host_xty
+from glm.host.glm_oracle import host_xty, host_fma_row_into
+from core.host_predict_threads import host_list_ptr
 
 
 #: The gate's negative control (see THE NEGATIVE CONTROL above).
@@ -470,17 +471,29 @@ struct HostGLM(Movable):
             var C = self.c
             var D = self.d
             var cd = C * D
+            # Output b = j*C + cc, lane t folds rows t, t + STATS_TPB, ...
+            # ascending, then the halving tree. Walked row by row (lane
+            # linear-cpu): row r feeds lane r mod STATS_TPB of every output,
+            # each (lane, class, feature) its own accumulator held at
+            # part[(t*C + cc)*D + j], so each sees the same terms in the
+            # same order, in one pass over the rows.
+            var part = List[Float32](length=STATS_TPB * cd, fill=Float32(0.0))
+            var bpart = List[Float32](length=STATS_TPB * C, fill=Float32(0.0))
+            var pp = host_list_ptr(part)
+            var xp = host_list_ptr(self.x)
+            for r in range(n):
+                var t = r % STATS_TPB
+                for cc in range(C):
+                    var zc = self.z[cc + C * r]
+                    host_fma_row_into(pp + (t * C + cc) * D, xp + r * D, zc, D)
+                    if self.fit_intercept:
+                        bpart[t * C + cc] = ftz(bpart[t * C + cc] + zc)
+            var partials = List[Float32](length=STATS_TPB, fill=Float32(0.0))
             for b in range(cd):
                 var cc = b % C
                 var j = b // C
-                var partials = List[Float32](length=STATS_TPB, fill=Float32(0.0))
                 for t in range(STATS_TPB):
-                    var acc = Float32(0.0)
-                    var r = t
-                    while r < n:
-                        acc = identical_mul_add(self.x[r * D + j], self.z[cc + C * r], acc)
-                        r += STATS_TPB
-                    partials[t] = acc
+                    partials[t] = part[(t * C + cc) * D + j]
                 var prod = ftz(host_halving_sum(partials))
                 var sc = ftz(alpha * prod)
                 if set_zero:
@@ -490,14 +503,8 @@ struct HostGLM(Movable):
             if self.fit_intercept:
                 var ratio = Float32(1.0) / Float32(n)
                 for cc in range(C):
-                    var partials = List[Float32](length=STATS_TPB, fill=Float32(0.0))
                     for t in range(STATS_TPB):
-                        var acc = Float32(0.0)
-                        var i = t
-                        while i < n:
-                            acc = ftz(acc + self.z[cc + C * i])
-                            i += STATS_TPB
-                        partials[t] = acc
+                        partials[t] = bpart[t * C + cc]
                     var s0 = ftz(host_halving_sum(partials))
                     g[cd + cc] = ftz(s0 * ratio)
             return

@@ -53,10 +53,31 @@ class _SeqOptimizer:
                 raise TypeError(f"{type(self).__name__}: float64 {what} are refused")
         return np.ascontiguousarray(np.concatenate([np.asarray(a, dtype=np.float32).ravel() for a in arrays]))
 
+    def _flat_view(self, a):
+        """`a` itself, flat, when it already IS the packed buffer (one
+        C-contiguous float32 array of the param's shape): no copy in or out
+        (lane sequence-cpu)."""
+        if len(self.params) != 1:
+            return None
+        if isinstance(a, (list, tuple)):
+            if len(a) != 1:
+                return None
+            a = a[0]
+        if (isinstance(a, np.ndarray) and a.dtype == np.float32 and a.flags.c_contiguous
+                and a.shape == self.params[0].shape):
+            return a.reshape(-1)
+        return None
+
     def step(self, grads):
         """One update of every param from `grads` (same shapes, same order)."""
-        g = self._pack(grads, "grads")
-        flat = self._pack(self.params, "params")
+        flat = self._flat_view(self.params)
+        g = self._flat_view(grads)
+        if flat is None or g is None or not flat.flags.writeable or np.shares_memory(flat, g):
+            flat = None
+            g = self._pack(grads, "grads")
+        in_place = flat is not None
+        if not in_place:
+            flat = self._pack(self.params, "params")
         self.t += 1
         if getattr(self, "lr_schedule", None) is not None:
             self.lr = float(self.lr_schedule.lr_at(self.t))
@@ -64,10 +85,11 @@ class _SeqOptimizer:
         b.optimizer_step([flat.ctypes.data, g.ctypes.data] + [s.ctypes.data for s in self.state],
                          [self.n_total, self._kind, self._flags, self.t],
                          [self.lr] + [float(v) for v in self._fp[:5]])
-        off = 0
-        for p in self.params:
-            p.ravel()[:] = flat[off:off + p.size]
-            off += p.size
+        if not in_place:
+            off = 0
+            for p in self.params:
+                p.ravel()[:] = flat[off:off + p.size]
+                off += p.size
         return self
 
     def state_dict(self):

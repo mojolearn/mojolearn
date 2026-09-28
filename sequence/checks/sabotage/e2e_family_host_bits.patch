@@ -1,19 +1,19 @@
 diff --git a/sequence/exec.mojo b/sequence/exec.mojo
-index 91e8cba49..00b8b8ef4 100644
+index 2442f6024..aec4d66df 100644
 --- a/sequence/exec.mojo
 +++ b/sequence/exec.mojo
-@@ -6,7 +6,7 @@ import) runs each operation as an ascending host loop over its elements and
- `DeviceExec` (`sequence/exec_device.mojo`) as one GPU thread per element.
- The element body is the same function (`sequence/ops.mojo::apply`), so the
- two agree bit for bit by construction."""
--from std.memory import memcpy
-+from std.memory import bitcast, memcpy
+@@ -21,7 +21,7 @@ task gets at least `HOST_LAUNCH_GRAIN` units of work (`_element_weight`),
+ so the many tiny launches of a small recurrent step stay on the calling
+ thread. A single task runs on the calling thread without touching the
+ pool."""
+-from std.memory import memcpy, memset_zero
++from std.memory import bitcast, memcpy, memset_zero
  
- from sequence.dispatch import apply
- from sequence.ops import FP, Args
-@@ -59,6 +59,11 @@ struct HostExec(Exec):
+ from core.host_parallel import host_parallelize
+ from core.host_predict_threads import host_predict_chunk, host_predict_task_count
+@@ -183,6 +183,11 @@ struct HostExec(Exec):
      def download(mut self, dst: FP, src: FP, n: Int) raises:
-         if n > 0:
+         if n > 0 and Int(dst) != Int(src):
              memcpy(dest=dst, src=src, count=n)
 +        # SABOTAGE (end to end): every word the CPU column downloads has its
 +        # low bit flipped (a function of the value alone, so only the
@@ -21,8 +21,8 @@ index 91e8cba49..00b8b8ef4 100644
 +        for i in range(n):
 +            dst.unsafe_store(i, bitcast[DType.float32](bitcast[DType.uint32](dst.unsafe_load(i)) ^ UInt32(1)))
  
-     def launch[OP: Int](mut self, a: Args, n: Int) raises:
-         for t in range(n):
+     def bind(mut self, src: FP, n: Int) raises -> FP:
+         return src
 diff --git a/bindings/_mojolearn_arima_host.mojo b/bindings/_mojolearn_arima_host.mojo
 index 7d986c4dd..018c862d2 100644
 --- a/bindings/_mojolearn_arima_host.mojo

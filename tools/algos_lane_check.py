@@ -158,6 +158,13 @@ def needed_bindings(lanes):
         # route, and the forest and byte LM host loaders arm_env points at.
         ubiq = set(why[lane].get("ubiquitous", ()))
         declared |= {b for b in BASE_BINDINGS if b in ubiq}
+        # A NARROW binding the lane's Python CALLS (an export it names, e.g.
+        # GaussianProcessRegressor(normalize_y=True) -> _mojolearn_preprocessing
+        # standard_fit) is imported by the fit too; unbuilt, the arm dies with
+        # an ImportError (neighbors lane, 2026-09-28, x-neighbors-gp-cov).
+        for b, use in why[lane].get("binding_use", {}).items():
+            if use.get("exports") and b not in BASE_BINDINGS and (ROOT / "bindings" / script_for(b)).is_file():
+                declared.add(b)
         declared.add("_mojolearn_core_host")     # the base binding's CPU route, on every CPU arm
         # EVERY GPU BINDING THE LANE CALLS, AND ITS CPU ROUTE (lane/neural,
         # 2026-09-28). `declared` is the families a lane BELONGS to; a binding

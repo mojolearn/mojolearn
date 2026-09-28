@@ -1,0 +1,12 @@
+diff --git a/neighbors/impl/distance/detail/distance_ops.mojo b/neighbors/impl/distance/detail/distance_ops.mojo
+--- a/neighbors/impl/distance/detail/distance_ops.mojo
++++ b/neighbors/impl/distance/detail/distance_ops.mojo
+@@ -837,7 +837,7 @@
+         return
+ 
+     if metric_is_extra(metric):
+-        dist.unsafe_store(idx, extra_metric_cell(x, i, y, j, k, metric))
++        dist.unsafe_store(idx, extra_metric_cell(x, i, y, j, k, metric) * Float32(1.0000001))
+         return
+ 
+     dist.unsafe_store(idx, bitcast[DType.float32](UInt32(0x7FC00000)))

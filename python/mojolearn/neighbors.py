@@ -13,7 +13,7 @@ from . import _portable_math as math
 
 from . import _mojolearn, _serialize
 from ._array import Array
-from ._buffer import addr, addr_ro, as_f32_c, as_i64_c, empty
+from ._buffer import addr, addr_ro, as_f32_c, as_f32_dense_c, as_i64_c, empty
 from ._labels import sorted_classes
 from ._mode import NumericModeMixin
 from .linear_model import (
@@ -137,8 +137,13 @@ _DIST_L2_SQRT_EXPANDED = 1
 _DIST_COSINE_EXPANDED = 2
 _DIST_L1 = 3
 _DIST_L2_SQRT_UNEXPANDED = 5
+_DIST_INNER_PRODUCT = 6
 _DIST_LINF = 7
+_DIST_CANBERRA = 8
 _DIST_LP_UNEXPANDED = 9
+_DIST_CORRELATION_EXPANDED = 10
+_DIST_BRAY_CURTIS = 14
+_DIST_JENSEN_SHANNON = 15
 
 #: THE BALL COVER'S OWN TABLE, and it is NOT `_METRIC_TABLE`.
 #:
@@ -193,19 +198,38 @@ _METRIC_TABLE = {
     "cosine": _DIST_COSINE_EXPANDED,
     "minkowski": _DIST_LP_UNEXPANDED,
     "lp": _DIST_LP_UNEXPANDED,
+    # 2026-09-27 (lane x-neighbors-metrics): distance_ops.mojo::
+    # extra_metric_cell, one thread per cell on the device and the same
+    # function on the host.
+    "canberra": _DIST_CANBERRA,
+    "braycurtis": _DIST_BRAY_CURTIS,
+    "correlation": _DIST_CORRELATION_EXPANDED,
+    "jensenshannon": _DIST_JENSEN_SHANNON,
+    "inner_product": _DIST_INNER_PRODUCT,
 }
 
 #: Names in cuML's `VALID_METRICS["brute"]` (`neighbors/__init__.py:27-48`)
 #: that this tree does not compute. Refused BY NAME so a caller learns the
-#: metric is UNIMPLEMENTED rather than unknown.
+#: metric is UNIMPLEMENTED rather than unknown. haversine needs arcsin, and
+#: `checks/numerics.mojo` carries no pinned arcsin: a vendor asin is a
+#: last-bit vendor choice (IDENTITY_PATHS row 12), so it cannot be one
+#: arithmetic on every column.
 _UNSUPPORTED_METRICS = (
-    "canberra",
-    "jensenshannon",
-    "correlation",
-    "inner_product",
     "haversine",
-    "braycurtis",
 )
+
+#: The metrics that need X >= 0 (their logarithms), refused on negative
+#: input as scipy's jensenshannon is undefined there.
+_NONNEGATIVE_METRICS = frozenset({_DIST_JENSEN_SHANNON})
+
+
+def _check_metric_input(cls_name, value, x):
+    """Refuse input a metric is undefined on, before any device work."""
+    if value in _NONNEGATIVE_METRICS and x.size and float(x.min()) < 0.0:
+        raise ValueError(
+            f"mojolearn {cls_name}: metric='jensenshannon' needs X >= 0 "
+            "(it takes logarithms of the coordinates)"
+        )
 
 _WEIGHTS_UNIFORM = 0
 _WEIGHTS_DISTANCE = 1
@@ -394,6 +418,14 @@ def _resolve_rbc_metric(cls_name, metric, p):
             "VALID_METRICS['brute'] but is NOT IMPLEMENTED "
             "(neighbors/NOT_IMPLEMENTED.tsv)"
         )
+    if key in _METRIC_TABLE and key not in _RBC_METRIC_TABLE:
+        raise ValueError(
+            f"mojolearn {cls_name}: metric={metric!r} is computed by brute "
+            "force only (NearestNeighbors(algorithm='brute')). The random "
+            "ball cover's pruning is the triangle inequality on its "
+            "landmark radii and its kernels carry the Minkowski family; "
+            "cuML's own VALID_METRICS['rbc'] is {euclidean, haversine, l2}"
+        )
     if key not in _RBC_METRIC_TABLE:
         raise ValueError(
             f"mojolearn {cls_name}: unknown metric {metric!r}. The random "
@@ -581,6 +613,14 @@ class NearestNeighbors(NumericModeMixin):
                 "NearestNeighbors(algorithm='rbc').kneighbors and vote on "
                 "the result, or leave this at 'brute'."
             )
+        if (getattr(self, "weights", None) == "distance"
+                and isinstance(self.metric, str) and self.metric.lower() == "inner_product"):
+            raise ValueError(
+                f"mojolearn {type(self).__name__}: weights='distance' is refused "
+                "with metric='inner_product': it weighs a neighbour by 1 / d, "
+                "and an inner product is a similarity (larger is nearer, and "
+                "it can be zero or negative), not a distance"
+            )
         if self.algorithm == "rbc":
             # The INDEXED arm resolves against the cover's own table, which
             # refuses two rows the brute-force table accepts. Resolving here
@@ -685,7 +725,9 @@ class NearestNeighbors(NumericModeMixin):
         # and a new array of the same shape can land at a freed address, so
         # a key match after a refit would serve the old bytes.
         self._release_resident_index()
-        idx, _ = as_f32_c(X, ndim=2, name="X")
+        idx, _ = as_f32_dense_c(X, ndim=2, name="X")
+        if self.algorithm != "rbc":
+            _check_metric_input(type(self).__name__, _resolve_metric(type(self).__name__, self.metric, self.p)[0], idx)
         # Held on the instance so the memory outlives this call: the Mojo side
         # borrows the address at `kneighbors` time and owns nothing.
         self._index = idx
@@ -721,7 +763,9 @@ class NearestNeighbors(NumericModeMixin):
         if self._index is None:
             raise ValueError("mojolearn: call fit before kneighbors")
         k = self.n_neighbors if n_neighbors is None else n_neighbors
-        q, _ = as_f32_c(X, ndim=2, name="X")
+        q, _ = as_f32_dense_c(X, ndim=2, name="X")
+        if self.algorithm != "rbc":
+            _check_metric_input(type(self).__name__, self._dist_params()[0], q)
         if q.shape[1] != self.n_features_in_:
             raise ValueError(
                 f"mojolearn: X has {q.shape[1]} features, index has "
@@ -806,6 +850,10 @@ class NearestNeighbors(NumericModeMixin):
             )
 
         if return_distance:
+            if self._dist_params()[0] == _DIST_INNER_PRODUCT:
+                # the kernel selected the smallest NEGATED products; hand
+                # back the products themselves (a negation, exact)
+                dist = Array.from_list([[-v for v in row] for row in dist.tolist()], "<f4")
             return dist, ind.astype("<i8")
         return ind.astype("<i8")
 
@@ -1010,7 +1058,8 @@ class KNeighborsClassifier(NearestNeighbors):
     def _predict(self, X, want_proba):
         if self._index is None or self._y_cols is None:
             raise ValueError("mojolearn: call fit before predict")
-        q, _ = as_f32_c(X, ndim=2, name="X")
+        q, _ = as_f32_dense_c(X, ndim=2, name="X")
+        _check_metric_input(type(self).__name__, self._dist_params()[0], q)
         if q.shape[1] != self.n_features_in_:
             raise ValueError(
                 f"mojolearn: X has {q.shape[1]} features, index has "
@@ -1237,7 +1286,8 @@ class KNeighborsRegressor(NearestNeighbors):
         `(n_queries, n_outputs)` for a 2-D `y`. float32."""
         if self._index is None or self._y_cols is None:
             raise ValueError("mojolearn: call fit before predict")
-        q, _ = as_f32_c(X, ndim=2, name="X")
+        q, _ = as_f32_dense_c(X, ndim=2, name="X")
+        _check_metric_input(type(self).__name__, self._dist_params()[0], q)
         if q.shape[1] != self.n_features_in_:
             raise ValueError(
                 f"mojolearn: X has {q.shape[1]} features, index has "
@@ -1398,7 +1448,7 @@ class RadiusNeighbors(NumericModeMixin):
         in. `neighbors/estimator.mojo`'s RADIUS NEIGHBOURS banner records it.
         """
         self._check_refusals()
-        idx, _ = as_f32_c(X, ndim=2, name="X")
+        idx, _ = as_f32_dense_c(X, ndim=2, name="X")
         self._index = idx
         self.n_samples_fit_ = idx.shape[0]
         self.n_features_in_ = idx.shape[1]
@@ -1499,7 +1549,7 @@ class RadiusNeighbors(NumericModeMixin):
         if X is None:
             q = idx
         else:
-            q, _ = as_f32_c(X, ndim=2, name="X")
+            q, _ = as_f32_dense_c(X, ndim=2, name="X")
             if q.shape[1] != idx.shape[1]:
                 raise ValueError(
                     f"mojolearn RadiusNeighbors: X has {q.shape[1]} features "

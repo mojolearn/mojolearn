@@ -16,7 +16,7 @@ lands on the card."""
 from std.memory import bitcast
 
 from core.identity_trace import IdentityTrace
-from x_decomp.cells import F32Ptr, FOLD_BLOCK
+from x_decomp.cells import F32Ptr, FOLD_BLOCK, bidx, ew_cell
 from x_decomp.checks.xd_oracles import (
     oracle_absmax_sign,
     oracle_colsum,
@@ -56,6 +56,13 @@ def ew_inputs() -> List[Float32]:
     return v^
 
 
+def first_column(x: List[Float32], r: Int, c: Int) -> List[Float32]:
+    var out = List[Float32](capacity=r)
+    for i in range(r):
+        out.append(x[i * c])
+    return out^
+
+
 def main() raises:
     var tr = IdentityTrace()
     tr.header("x_decomp fold_ew_check (DEVIATIONS 5300-5306)")
@@ -83,6 +90,56 @@ def main() raises:
         HostExec.gemm(ptr(A), ptr(B), ptr(hst), m, k, n, ta, tb)
         same("5300 gemm host arm " + String(arm), count_diff_f32(hst, want))
         tr.record_list_f32("x_decomp.gemm." + String(arm), dev)
+    # ---- 5300 the host's SIMD spelling (x_decomp/host_simd.mojo): shapes that
+    # reach full register tiles, the row and column tails, several KC chunks
+    # (k 600), two MC row panels (m 70) and two NC column panels (n 300), every
+    # transposition arm
+    var hm = 70
+    var hk = 600
+    var hn = 300
+    var ha = seam_fixture(hm, hk, 31)
+    var hb = seam_fixture(hk, hn, 32)
+    var hat = seam_fixture(hk, hm, 33)
+    var hbt = seam_fixture(hn, hk, 34)
+    for arm in range(4):
+        var ta = arm == 1 or arm == 3
+        var tb = arm >= 2
+        var A = hat.copy() if ta else ha.copy()
+        var B = hbt.copy() if tb else hb.copy()
+        var want = oracle_gemm(A, B, hm, hk, hn, ta, tb)
+        if arm == 0:
+            require_separates("5300 host-tile gemm fold order", count_diff_f32(want, oracle_gemm(A, B, hm, hk, hn, ta, tb, 1)))
+        var hst = zeros(hm * hn)
+        HostExec.gemm(ptr(A), ptr(B), ptr(hst), hm, hk, hn, ta, tb)
+        same("5300 host-tile gemm host arm " + String(arm), count_diff_f32(hst, want))
+    # a narrow C (n 1, the matrix-vector products), which the host computes as C^T
+    var nv = first_column(seam_fixture(hk, 3, 39), hk, 3)  # (a one-column fixture is its all-zero column)
+    var nvt = seam_fixture(1, hk, 40)
+    for arm in range(4):
+        var ta = arm == 1 or arm == 3
+        var tb = arm >= 2
+        var A = hat.copy() if ta else ha.copy()
+        var B = nvt.copy() if tb else nv.copy()
+        var want = oracle_gemm(A, B, hm, hk, 1, ta, tb)
+        require_separates("5300 host-tile narrow gemm fold order", count_diff_f32(want, oracle_gemm(A, B, hm, hk, 1, ta, tb, 1)))
+        var hst = zeros(hm)
+        HostExec.gemm(ptr(A), ptr(B), ptr(hst), hm, hk, 1, ta, tb)
+        same("5300 host-tile narrow gemm host arm " + String(arm), count_diff_f32(hst, want))
+    var rdk = 9000
+    var rda = seam_fixture(hm, rdk, 41)
+    var rdv = first_column(seam_fixture(rdk, 3, 42), rdk, 3)
+    var wrd = oracle_gemm(rda, rdv, hm, rdk, 1, False, False)
+    require_separates("5300 host-tile blocked narrow gemm vs one sequential fold", count_diff_f32(wrd, oracle_gemm(rda, rdv, hm, rdk, 1, False, False, 3)))
+    var hrd = zeros(hm)
+    HostExec.gemm(ptr(rda), ptr(rdv), ptr(hrd), hm, rdk, 1, False, False)
+    same("5300 host-tile blocked narrow gemm host", count_diff_f32(hrd, wrd))
+    var tbk = 9000
+    var tba = seam_fixture(hm, tbk, 35)
+    var tbb = seam_fixture(tbk, 19, 36)
+    var wtb = oracle_gemm(tba, tbb, hm, tbk, 19, False, False)
+    var htb = zeros(hm * 19)
+    HostExec.gemm(ptr(tba), ptr(tbb), ptr(htb), hm, tbk, 19, False, False)
+    same("5300 host-tile blocked gemm host", count_diff_f32(htb, wtb))
     # ---- 5300/5301 past FOLD_BLOCK: the blocked two-stage fold
     var kb = 9000
     var ab = seam_fixture(3, kb, 21)
@@ -154,6 +211,21 @@ def main() raises:
     var fhs = zeros(2)
     HostExec.colsum(ptr(fz), ptr(fhs), 3, 2)
     same("5304 flushed colsum host", count_diff_f32(fhs, wf))
+    # the host row sums run W rows at once (host_simd.rowsum_rows): 19 rows
+    # (a vector block and a tail), even rows summing to a subnormal partial
+    var fr = seam_fixture(19, 3, 44)
+    for r in range(0, 19, 2):
+        fr[r * 3] = Float32(1.5e-38)
+        fr[r * 3 + 1] = Float32(-1.4e-38)
+        fr[r * 3 + 2] = Float32(0)
+    var wfr = oracle_rowsum(fr, 19, 3)
+    var plain = zeros(19)
+    for r in range(19):
+        plain[r] = (fr[r * 3] + fr[r * 3 + 1]) + fr[r * 3 + 2]
+    require_separates("5304 subnormal row partial flushed", count_diff_f32(wfr, plain))
+    var fhr = zeros(19)
+    HostExec.rowsum(ptr(fr), ptr(fhr), 19, 3)
+    same("5304 flushed rowsum host (vector rows)", count_diff_f32(fhr, wfr))
     tr.record_list_f32("x_decomp.rowsum", drs)
     # ---- 5302 squared distance
     var d = 13
@@ -169,6 +241,13 @@ def main() raises:
     HostExec.sqdist(ptr(qa), ptr(qb), ptr(hs), 17, 11, d)
     same("5302 sqdist host", count_diff_f32(hs, ws))
     tr.record_list_f32("x_decomp.sqdist", ds)
+    var sqa = seam_fixture(37, d, 37)
+    var sqb = seam_fixture(77, d, 38)
+    var wsq = oracle_sqdist(sqa, 37, sqb, 77, d)
+    require_separates("5302 host-tile sqdist fold order", count_diff_f32(wsq, oracle_sqdist(sqa, 37, sqb, 77, d, 1)))
+    var hsq = zeros(37 * 77)
+    HostExec.sqdist(ptr(sqa), ptr(sqb), ptr(hsq), 37, 77, d)
+    same("5302 host-tile sqdist host", count_diff_f32(hsq, wsq))
     # ---- 5319 the non-Euclidean distances (manhattan, chebyshev, minkowski 3, cosine)
     # minkowski's root exp(log(sum) / p) compresses a one-ulp fold difference,
     # so its fixture is wider (97 features) and its p 1.5
@@ -229,6 +308,34 @@ def main() raises:
         HostExec.ew(op, ptr(xs), ptr(ys), ne, 0, ptr(zs), ne, 0, ptr(hst), ne, ne, s)
         same("5303-5305 ew op " + String(op) + " host", count_diff_f32(hst, want))
         tr.record_list_f32("x_decomp.ew." + String(op), dev)
+    # the host spelling (x_decomp/host_ew.mojo) on every broadcast mode of
+    # both operands, rows longer and shorter than a vector with a tail:
+    # HostExec.ew == ew_cell element by element, every op code
+    var bshapes: List[Int] = [7, 21, 40, 3, 1, 16]
+    var bdiff = 0
+    for sh in range(len(bshapes) // 2):
+        var rows = bshapes[2 * sh]
+        var bd = bshapes[2 * sh + 1]
+        var cnt = rows * bd
+        var ba = zeros(cnt)
+        var bb = zeros(cnt)
+        var bc = zeros(cnt)
+        var sa = seam_fixture(rows, bd, 51)
+        for t in range(cnt):
+            ba[t] = xs[t % ne] if t % 3 == 0 else sa[t]
+            bb[t] = ys[(t * 5) % ne] if t % 4 == 1 else sa[(t * 7) % cnt]
+            bc[t] = zs[(t * 3) % ne] if t % 2 == 0 else sa[(t * 11) % cnt]
+        for op in ops:
+            var s = Float32(0) if op == 10 else Float32(0.5)
+            for bm in range(4):
+                for cm in range(4):
+                    var want = zeros(cnt)
+                    for i in range(cnt):
+                        want[i] = ew_cell(op, ba[i], bb[bidx(bm, i, bd)], bc[bidx(cm, i, bd)], s)
+                    var got = zeros(cnt)
+                    HostExec.ew(op, ptr(ba), ptr(bb), cnt, bm, ptr(bc), cnt, cm, ptr(got), cnt, bd, s)
+                    bdiff += count_diff_f32(got, want)
+    same("5303-5305 ew host, every broadcast mode", bdiff)
     require_separates("5303 zero guards and clamps (Clause B)", sep_guard)
     require_separates("5304 subnormal flush of an add", sep_ftz)
     require_separates("5305 digamma/lgamma recurrence", sep_series)

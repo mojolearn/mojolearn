@@ -36,7 +36,7 @@ from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
-from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 
 from bindings.hostptr import f32_ptr, f64_ptr
 from core.host_predict_threads import (
@@ -424,7 +424,7 @@ def probability_rows_f32_binding(
         if tasks == 1:
             _rows(0)
         else:
-            sync_parallelize(_rows, tasks)
+            host_parallelize(_rows, tasks)
         for task in range(tasks):
             combined |= flags[task]
     if (combined & UInt32(1)) != 0:

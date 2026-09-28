@@ -134,12 +134,18 @@ from checks.kernel_matrix import (
 )
 from checks.numerics import ftz, identical_mul_add, identical_sqrt
 from core.cosine_rows import cosine_unit_rows
+from core.host_predict_threads import host_list_ptr
+from cluster.host.host_cells import ftz_v, host_cells, mul_add_v
+from core.host_predict_threads import HostF32Ptr
 
 
 comptime DBSCAN_ORACLE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
 #: `RBC_LANES` (`registers.mojo:170`), the chunk of the member scan.
 comptime RBC_LANES = lib_lane_width_for[TARGET_COLUMN]()
+
+#: Pairs per vector in the host distance scans (lane cluster-cpu).
+comptime EPS_W = 8
 
 #: `WVD_TPB` (`dbscan/impl/vertexdeg/algo.mojo`), the weighted degree's
 #: stride and fold width, through the same accessor.
@@ -168,6 +174,18 @@ def host_eps_dist_sq(
         var diff = ftz(ftz(a[a_off + i]) - ftz(b[b_off + i]))
         sum_sq = ftz(identical_mul_add(diff, diff, sum_sq))
     return sum_sq
+
+
+@always_inline
+def _eps_dists8(xt: HostF32Ptr, mp: Int, q: HostF32Ptr, d: Int, pos0: Int) -> SIMD[DType.float32, EPS_W]:
+    """`host_eps_dist_sq` of the query against members pos0 .. pos0+7 of the
+    reordered set, one per lane, each lane the pair's own chain over the
+    features ascending (`cluster/host/host_cells.mojo`)."""
+    var acc = SIMD[DType.float32, EPS_W](0)
+    for f in range(d):
+        var diff = ftz_v[EPS_W](SIMD[DType.float32, EPS_W](q.unsafe_load(f)) - (xt + f * mp + pos0).load[width=EPS_W]())
+        acc = ftz_v[EPS_W](mul_add_v[EPS_W](diff, diff, acc))
+    return acc
 
 
 def host_rbc_n_landmarks(m: Int) -> Int:
@@ -218,6 +236,10 @@ struct RBCHostIndex(Movable):
     var r_1nn_cols: List[Int32]
     var r_1nn_dists: List[Float32]
     var r_radius: List[Float32]
+    var x_rt: List[Float32]
+    """`x_reordered` feature-major, `x_rt[f * rt_stride + pos]`, flushed
+    (lane cluster-cpu: eight members' distances per vector)."""
+    var rt_stride: Int
 
 
 def host_rbc_build(x: List[Float32], m: Int, n_cols: Int) -> RBCHostIndex:
@@ -232,7 +254,10 @@ def host_rbc_build(x: List[Float32], m: Int, n_cols: Int) -> RBCHostIndex:
     # rbc_landmark_1nn_kernel
     var nearest = List[Int](length=m, fill=0)
     var nearest_dist = List[Float32](length=m, fill=Float32(0.0))
-    for i in range(m):
+    var np_ = nearest.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var ndp = host_list_ptr(nearest_dist)
+
+    def _nn(i: Int) {imm x, imm r, imm np_, imm ndp, imm n_landmarks, imm n_cols}:
         var best = RBC_FLT_MAX
         var best_k = 0
         for k in range(n_landmarks):
@@ -240,8 +265,10 @@ def host_rbc_build(x: List[Float32], m: Int, n_cols: Int) -> RBCHostIndex:
             if d < best:
                 best = d
                 best_k = k
-        nearest[i] = best_k
-        nearest_dist[i] = identical_sqrt(best)
+        np_[i] = best_k
+        ndp.unsafe_store(i, identical_sqrt(best))
+
+    host_cells(_nn, m, 3 * n_landmarks * n_cols)
     # counts, the exclusive scan, the slots
     var counts = List[Int](length=n_landmarks, fill=0)
     for i in range(m):
@@ -263,7 +290,11 @@ def host_rbc_build(x: List[Float32], m: Int, n_cols: Int) -> RBCHostIndex:
         cursor[k] += 1
         slot_cols[pos] = Int32(i)
         slot_dists[pos] = nearest_dist[i]
-    for k in range(n_landmarks):
+    var rdp = host_list_ptr(r_1nn_dists)
+    var rcp = r_1nn_cols.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+
+    # A landmark's ranks land in its own [s, e) slots only.
+    def _rank(k: Int) {imm r_indptr, imm slot_dists, imm slot_cols, imm rdp, imm rcp}:
         var s = r_indptr[k]
         var e = r_indptr[k + 1]
         for p in range(s, e):
@@ -276,8 +307,10 @@ def host_rbc_build(x: List[Float32], m: Int, n_cols: Int) -> RBCHostIndex:
                     rank += 1
                 elif dq == dp and slot_cols[q] < ip:
                     rank += 1
-            r_1nn_dists[s + rank] = dp
-            r_1nn_cols[s + rank] = ip
+            rdp.unsafe_store(s + rank, dp)
+            rcp[s + rank] = ip
+
+    host_cells(_rank, n_landmarks, 4 * (m // n_landmarks + 1) * (m // n_landmarks + 1))
     var x_reordered = List[Float32](length=m * n_cols, fill=Float32(0.0))
     for pos in range(m):
         var src = Int(r_1nn_cols[pos])
@@ -291,9 +324,14 @@ def host_rbc_build(x: List[Float32], m: Int, n_cols: Int) -> RBCHostIndex:
             r_radius[k] = Float32(0.0)
         else:
             r_radius[k] = r_1nn_dists[e - 1]
+    var rt_stride = m + EPS_W
+    var x_rt = List[Float32](length=n_cols * rt_stride, fill=Float32(0.0))
+    for pos in range(m):
+        for c in range(n_cols):
+            x_rt[c * rt_stride + pos] = ftz(x_reordered[pos * n_cols + c])
     return RBCHostIndex(
         n_landmarks, r^, x_reordered^, r_indptr^, r_1nn_cols^, r_1nn_dists^,
-        r_radius^,
+        r_radius^, x_rt^, rt_stride,
     )
 
 
@@ -302,9 +340,17 @@ def host_rbc_eps_row(
 ) -> List[Int32]:
     """`block_rbc_kernel_eps_csr_pass` for one query row, the neighbors in
     the kernel's write order."""
+    comptime assert RBC_LANES % EPS_W == 0, "dbscan host: the member scan's lane chunk must be a multiple of EPS_W"
     var out = List[Int32]()
     var x_base = n_cols * q
     var eps_cmp = eps * eps
+    var qf = List[Float32](length=n_cols, fill=Float32(0.0))
+    for c in range(n_cols):
+        qf[c] = ftz(x[x_base + c])
+    var qp = host_list_ptr(qf)
+    var xtp = host_list_ptr(idx.x_rt)
+    var mp = idx.rt_stride
+    var dist8 = SIMD[DType.float32, EPS_W](0)
     var cur_k0 = 0
     while cur_k0 < idx.n_landmarks:
         # The lane group: every admitted landmark of the group, ascending.
@@ -327,9 +373,9 @@ def host_rbc_eps_row(
             for lid in range(RBC_LANES):
                 var i = limit + lid
                 if i < r_size:
-                    var dist = host_eps_dist_sq(
-                        x, x_base, idx.x_reordered, (r_start + i) * n_cols, n_cols
-                    )
+                    if lid % EPS_W == 0:
+                        dist8 = _eps_dists8(xtp, mp, qp, n_cols, r_start + i)
+                    var dist = dist8[lid % EPS_W]
                     if dist <= eps_cmp:
                         out.append(idx.r_1nn_cols[r_start + i])
             var i0 = limit
@@ -339,19 +385,21 @@ def host_rbc_eps_row(
                 i0 -= RBC_LANES
                 var min_warp_dist2 = idx.r_1nn_dists[r_start + i0]
                 for lid in range(RBC_LANES):
-                    var dist2 = host_eps_dist_sq(
-                        x, x_base, idx.x_reordered, (r_start + i0 + lid) * n_cols, n_cols
-                    )
+                    if lid % EPS_W == 0:
+                        dist8 = _eps_dists8(xtp, mp, qp, n_cols, r_start + i0 + lid)
+                    var dist2 = dist8[lid % EPS_W]
                     if dist2 <= eps_cmp:
                         out.append(idx.r_1nn_cols[r_start + i0 + lid])
                 if cur_r_dist - min_warp_dist2 > eps:
                     i0 = 0
         cur_k0 += RBC_LANES
+    _ = qf^
     return out^
 
 
 def host_brute_eps_row(
     x: List[Float32], q: Int, n_rows: Int, n_cols: Int, thresh: Float32, metric: Int,
+    xt: List[Float32] = List[Float32](),
 ) -> List[Int32]:
     """`eps_unexp_neigh_kernel` for one query row against every row."""
     var out = List[Int32]()
@@ -362,6 +410,27 @@ def host_brute_eps_row(
         for j in range(n_rows):
             if x[x_base + j] <= thresh:
                 out.append(Int32(j))
+        return out^
+    if len(xt) > 0:
+        # Eight rows per vector (`xt` feature-major, flushed, stride
+        # `n_rows + EPS_W`): each lane the pair's own chain, in the order
+        # below; rows appended in ascending order as before.
+        var xtp = host_list_ptr(xt)
+        var mp = n_rows + EPS_W
+        var j0 = 0
+        while j0 < n_rows:
+            var acc = SIMD[DType.float32, EPS_W](0)
+            for k in range(n_cols):
+                var qv = SIMD[DType.float32, EPS_W](x[x_base + k])
+                var diff = ftz_v[EPS_W](qv - (xtp + k * mp + j0).load[width=EPS_W]())
+                if metric == DBSCAN_METRIC_L1:
+                    acc = ftz_v[EPS_W](acc + abs(diff))
+                else:
+                    acc = ftz_v[EPS_W](mul_add_v[EPS_W](diff, diff, acc))
+            for l in range(EPS_W):
+                if j0 + l < n_rows and acc[l] <= thresh:
+                    out.append(Int32(j0 + l))
+            j0 += EPS_W
         return out^
     for j in range(n_rows):
         var acc = Float32(0.0)
@@ -519,6 +588,14 @@ def host_sorted_row(row: List[Int32]) -> List[Int32]:
     return out^
 
 
+def _empty_rows(n: Int) -> List[List[Int32]]:
+    """`n` empty neighbor rows, one slot per query row for the row tasks."""
+    var rows = List[List[Int32]](capacity=n)
+    for _ in range(n):
+        rows.append(List[Int32]())
+    return rows^
+
+
 @fieldwise_init
 struct DBSCANHostFit(Movable):
     var labels: List[Int32]
@@ -609,14 +686,23 @@ def host_dbscan_fit(
     if sparse_rbc_mode:
         var index = host_rbc_build(x, n_rows, n_features)
         var eps_radius = Float32(eps)
-        for q in range(n_rows):
+        # Every query row is independent: rows run as tasks into their own
+        # slots, then the CSR is laid out in row order as before.
+        var rows = _empty_rows(n_rows)
+        var rows_p = rows.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        wght_sum = List[Float32](length=n_rows if has_weights else 0, fill=Float32(0.0))
+        var wp = wght_sum.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+
+        def _rbc_row(q: Int) {imm index, imm x, imm weights, imm rows_p, imm wp, imm n_features, imm eps_radius, imm has_weights, imm n_rows}:
             var row = host_rbc_eps_row(index, x, q, n_features, eps_radius)
             if has_weights:
-                wght_sum.append(
-                    host_weighted_degree(host_sorted_row(row), weights, False, n_rows)
-                )
-            for p in range(len(row)):
-                col_ind.append(row[p])
+                wp[q] = host_weighted_degree(host_sorted_row(row), weights, False, n_rows)
+            rows_p[q] = row^
+
+        host_cells(_rbc_row, n_rows, 8 * n_features * (host_rbc_n_landmarks(n_rows) + 64))
+        for q in range(n_rows):
+            for p in range(len(rows[q])):
+                col_ind.append(rows[q][p])
             row_ptr[q + 1] = len(col_ind)
         if len(col_ind) > Int(MAX_LABEL):
             raise Error(
@@ -631,12 +717,28 @@ def host_dbscan_fit(
         var thresh = host_metric_threshold(metric, eps)
         # DEVIATION 5113: the device's unit rows, by the same host code.
         var xs = cosine_unit_rows(x, n_rows, n_features, "dbscan_fit") if metric == DBSCAN_METRIC_COSINE else x.copy()
-        for q in range(n_rows):
-            var row = host_brute_eps_row(xs, q, n_rows, n_features, thresh, metric)
+        var rows = _empty_rows(n_rows)
+        var rows_p = rows.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        wght_sum = List[Float32](length=n_rows if has_weights else 0, fill=Float32(0.0))
+        var wp = wght_sum.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var xt = List[Float32]()
+        if metric != DBSCAN_METRIC_PRECOMPUTED:
+            var mp = n_rows + EPS_W
+            xt = List[Float32](length=n_features * mp, fill=Float32(0.0))
+            for j in range(n_rows):
+                for k in range(n_features):
+                    xt[k * mp + j] = ftz(xs[j * n_features + k])
+
+        def _brute_row(q: Int) {imm xs, imm xt, imm weights, imm rows_p, imm wp, imm n_rows, imm n_features, imm thresh, imm metric, imm has_weights}:
+            var row = host_brute_eps_row(xs, q, n_rows, n_features, thresh, metric, xt)
             if has_weights:
-                wght_sum.append(host_weighted_degree(row, weights, True, n_rows))
-            for p in range(len(row)):
-                col_ind.append(row[p])
+                wp[q] = host_weighted_degree(row, weights, True, n_rows)
+            rows_p[q] = row^
+
+        host_cells(_brute_row, n_rows, 3 * n_rows * n_features)
+        for q in range(n_rows):
+            for p in range(len(rows[q])):
+                col_ind.append(rows[q][p])
             row_ptr[q + 1] = len(col_ind)
 
     # core_points_kernel: vd >= min_pts, vd the row's neighbor count (the

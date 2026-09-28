@@ -1,0 +1,15 @@
+diff --git a/x_decomp/host_jacobi.mojo b/x_decomp/host_jacobi.mojo
+index 8b73ab13d..3224127a8 100644
+--- a/x_decomp/host_jacobi.mojo
++++ b/x_decomp/host_jacobi.mojo
+@@ -157,7 +157,9 @@ def fast_one_sided_jacobi_svd(r: List[Float32], n: Int, max_sweeps: Int, tol: Fl
+                 _fold3(rp, rq, n, lp, lq, lpq)
+                 var app = _halving(lp)
+                 var aqq = _halving(lq)
+-                var apq = _halving(lpq)
++                var apq = Float32(0)  # SABOTAGE (host SVD): the apq lanes added serially ascending
++                for tt in range(SVD_TPB):
++                    apq = apq + lpq.unsafe_load(tt)
+                 var np_ = ftz(identical_sqrt(app))
+                 var nq_ = ftz(identical_sqrt(aqq))
+                 var thresh = ftz(tol * ftz(np_ * nq_))

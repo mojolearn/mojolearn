@@ -16,7 +16,7 @@ from core.host_predict_threads import (
     host_predict_chunk,
     host_predict_task_count,
 )
-from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 from umap.graph import _finite, _sigma_fast, _sigma_identical
 
 
@@ -173,7 +173,7 @@ def sparse_fuzzy_simplicial_graph(
     if tasks == 1:
         _sigma_rows(0)
     else:
-        sync_parallelize(_sigma_rows, tasks)
+        host_parallelize(_sigma_rows, tasks)
     for task in range(tasks):
         if failed[task] != 0:
             raise Error("UMAP sigma search did not bracket its target")

@@ -37,6 +37,15 @@ Seams (DEVIATION numbers, lane sequence 5500-5599):
   5517 ETS seasonal update: s + gamma (t - s), one fma             alt: (1 - gamma) s + gamma t
   5518 ETS decomposition moving average: taps ascending, 0.5 x
        ends, ONE division by m                                      alt: every tap times w / m
+  5536 RMSprop centered variance: v - ga*ga, two roundings          alt: fma(-ga, ga, v)
+  5537 Adagrad accumulator: sum + g*g, one fma                      alt: g*g rounded, then the add
+  5538 Lion momentum: b2 m + (1 - b2) g, one fma                    alt: both products rounded
+  5539 LAMB trust ratio: sqrt(sum p^2) / sqrt(sum u^2)              alt: sqrt(sum p^2 / sum u^2)
+  5540 LR schedulers: exact rational, ONE rounding to float32       alt: float64 closed form, rounded
+       (python/mojolearn/_x_sequence_sched.py; its own driver sequence/checks/sched_check.py)
+  5541 Theta level: alpha y + (1 - alpha) level, one fma            alt: level + alpha (y - level)
+  5542 GARCH variance recursion: each term one fma, in order        alt: product rounded, then the add
+  5543 Prophet Fourier argument: (2 pi i) frac                      alt: 2 pi (i frac)
 """
 from std.memory import bitcast
 
@@ -48,7 +57,9 @@ from checks.numerics import (
     identical_mul,
     identical_mul_add,
     identical_rsqrt,
+    identical_cos,
     identical_sigmoid,
+    identical_sin,
     identical_sqrt,
     identical_tanh,
 )
@@ -95,6 +106,20 @@ def o_gemm(A: List[Float32], B: List[Float32], C0: List[Float32], M: Int, N: Int
             for kk in range(K):
                 var k = K - 1 - kk if alt else kk
                 acc = _f(A[m * K + k], B[k * N + n], acc)
+            out.append(acc)
+    return out^
+
+
+# ---------------------------------------------------------------- 5544
+def o_gemm_split(A: List[Float32], B: List[Float32], C0: List[Float32], M: Int, N: Int, K: Int) -> List[Float32]:
+    """5544's alternative: `o_gemm`'s cells with the product rounded before
+    the add (two roundings per term instead of the one fused rounding)."""
+    var out = List[Float32](capacity=M * N)
+    for m in range(M):
+        for n in range(N):
+            var acc = _z(C0[m * N + n])
+            for k in range(K):
+                acc = _a(_m(A[m * K + k], B[k * N + n]), acc)
             out.append(acc)
     return out^
 
@@ -942,4 +967,338 @@ def o_ets_init(y: List[Float32], B: Int, n: Int, trend: Bool, season: Int, m: In
         out.append(b0)
         for k in range(m - 1):
             out.append(init[k])
+    return out^
+
+
+# ---------------------------------------------------------------- 5507 (NAdam, Adafactor)
+def o_nadam(
+    p: List[Float32], g: List[Float32], m0: List[Float32], v0: List[Float32],
+    b1: Float32, b2: Float32, eps: Float32, bc2: Float32, c1: Float32, c2: Float32, alt: Bool,
+) -> List[Float32]:
+    """[p', m', v'] of torch.optim.NAdam (no weight decay): m.lerp_(g, 1 - b1),
+    v = b2 v + (1 - b2) g^2, den = sqrt(v / bc2) + eps, p += c1 g / den, then
+    p += c2 m / den; bc2, c1, c2 are the caller's host scalars."""
+    var n = len(p)
+    var ps = List[Float32]()
+    var ms = List[Float32]()
+    var vs = List[Float32]()
+    for i in range(n):
+        var gi = _z(g[i])
+        var m = o_lerp(_z(m0[i]), gi, _s(Float32(1.0), b1), alt)
+        var v = _f(b2, v0[i], _m(_m(_s(Float32(1.0), b2), gi), gi))
+        var den = _a(_z(identical_sqrt(_d(v, bc2))), eps)
+        var p1 = _f(c1, _d(gi, den), p[i])
+        ps.append(_f(c2, _d(m, den), p1))
+        ms.append(m)
+        vs.append(v)
+    for i in range(n):
+        ps.append(ms[i])
+    for i in range(n):
+        ps.append(vs[i])
+    return ps^
+
+
+def o_af_vec(g: List[Float32], v0: List[Float32], w: Float32, eps1sq: Float32, alt: Bool) -> List[Float32]:
+    """[v', u] of torch's Adafactor on a vector: v.lerp_(g^2, w), u = g /
+    sqrt(max(v, eps1^2)) (torch: grad * rsqrt of the clamped estimate)."""
+    var n = len(g)
+    var vs = List[Float32]()
+    var us = List[Float32]()
+    for i in range(n):
+        var gi = _z(g[i])
+        var v = o_lerp(_z(v0[i]), _m(gi, gi), w, alt)
+        vs.append(v)
+        var c = max(v, eps1sq)
+        us.append(_m(_z(identical_rsqrt(c)), gi))
+    for i in range(n):
+        vs.append(us[i])
+    return vs^
+
+
+# ---------------------------------------------------------------- 5536
+def o_rmsprop(
+    p: List[Float32], g: List[Float32], buf0: List[Float32], v0: List[Float32], ga0: List[Float32],
+    lr: Float32, alpha: Float32, eps: Float32, wd: Float32, mu: Float32, alt: Bool,
+) -> List[Float32]:
+    """[p', buf', v', gavg'] of torch.optim.RMSprop, centered, with momentum
+    mu > 0 and L2 weight decay. torch's `square_avg.addcmul(grad_avg,
+    grad_avg, value=-1)` is v - ga*ga, two roundings (alt: one fma). A
+    negative difference (rounding only) is taken as 0, never a NaN sqrt."""
+    var n = len(p)
+    var ps = List[Float32]()
+    var bs = List[Float32]()
+    var vs = List[Float32]()
+    var gs = List[Float32]()
+    var oma = _s(Float32(1.0), alpha)
+    for i in range(n):
+        var gi = _z(g[i])
+        if wd != Float32(0.0):
+            gi = _f(wd, p[i], gi)
+        var v = _f(alpha, v0[i], _m(_m(oma, gi), gi))
+        var ga = _f(alpha, ga0[i], _m(oma, gi))
+        var var_: Float32
+        if alt:
+            var_ = _f(-ga, ga, v)
+        else:
+            var_ = _s(v, _m(ga, ga))
+        if var_ < Float32(0.0):
+            var_ = Float32(0.0)
+        var avg = _a(_z(identical_sqrt(var_)), eps)
+        var b = _f(mu, buf0[i], _d(gi, avg))
+        ps.append(_f(-lr, b, p[i]))
+        bs.append(b)
+        vs.append(v)
+        gs.append(ga)
+    for i in range(n):
+        ps.append(bs[i])
+    for i in range(n):
+        ps.append(vs[i])
+    for i in range(n):
+        ps.append(gs[i])
+    return ps^
+
+
+# ---------------------------------------------------------------- 5537
+def o_adagrad(p: List[Float32], g: List[Float32], s0: List[Float32], clr: Float32, eps: Float32, wd: Float32, alt: Bool) -> List[Float32]:
+    """[p', sum'] of torch.optim.Adagrad: sum += g^2 (pinned one fma, alt
+    g*g then the add), p -= clr g / (sqrt(sum) + eps); clr = lr / (1 + (t -
+    1) lr_decay) is the caller's scalar."""
+    var n = len(p)
+    var ps = List[Float32]()
+    var ss = List[Float32]()
+    for i in range(n):
+        var gi = _z(g[i])
+        if wd != Float32(0.0):
+            gi = _f(wd, p[i], gi)
+        var s: Float32
+        if alt:
+            s = _a(s0[i], _m(gi, gi))
+        else:
+            s = _f(gi, gi, s0[i])
+        var std = _a(_z(identical_sqrt(s)), eps)
+        ps.append(_f(-clr, _d(gi, std), p[i]))
+        ss.append(s)
+    for i in range(n):
+        ps.append(ss[i])
+    return ps^
+
+
+# ---------------------------------------------------------------- 5538
+def o_lion(p: List[Float32], g: List[Float32], m0: List[Float32], lr: Float32, b1: Float32, b2: Float32, wd: Float32, alt: Bool) -> List[Float32]:
+    """[p', m'] of Lion (lion-pytorch): p *= 1 - lr wd; p -= lr sign(b1 m +
+    (1 - b1) g); m = b2 m + (1 - b2) g, pinned one fma (alt: two products
+    and an add)."""
+    var n = len(p)
+    var ps = List[Float32]()
+    var ms = List[Float32]()
+    var shrink = _s(Float32(1.0), _m(lr, wd))
+    for i in range(n):
+        var gi = _z(g[i])
+        var mi = _z(m0[i])
+        var pd = _m(p[i], shrink)
+        var c = _f(b1, mi, _m(_s(Float32(1.0), b1), gi))
+        var u = Float32(0.0)
+        if c > Float32(0.0):
+            u = Float32(1.0)
+        elif c < Float32(0.0):
+            u = Float32(-1.0)
+        ps.append(_f(-lr, u, pd))
+        if alt:
+            ms.append(_a(_m(b2, mi), _m(_s(Float32(1.0), b2), gi)))
+        else:
+            ms.append(_f(b2, mi, _m(_s(Float32(1.0), b2), gi)))
+    for i in range(n):
+        ps.append(ms[i])
+    return ps^
+
+
+# ---------------------------------------------------------------- 5539
+def _o_sumsq(x: List[Float32], s: Int, e: Int) -> Float32:
+    var acc = Float32(0.0)
+    for k in range(s, e):
+        acc = _f(x[k], x[k], acc)
+    return acc
+
+
+def o_lamb_ratio(p: List[Float32], u: List[Float32], offs: List[Int], clip: Bool, alt: Bool) -> List[Float32]:
+    """timm Lamb's trust ratio per parameter tensor (segment): ||p|| / ||u||,
+    each norm sqrt of its ascending sum of squares (alt: sqrt of the
+    quotient of the two sums); 1 when either norm is 0; at most 1 under
+    trust_clip."""
+    var out = List[Float32]()
+    for s in range(len(offs) - 1):
+        var sw = _o_sumsq(p, offs[s], offs[s + 1])
+        var sg = _o_sumsq(u, offs[s], offs[s + 1])
+        var wn = _z(identical_sqrt(sw))
+        var gn = _z(identical_sqrt(sg))
+        var r = Float32(1.0)
+        if wn > Float32(0.0) and gn > Float32(0.0):
+            if alt:
+                r = _z(identical_sqrt(_d(sw, sg)))
+            else:
+                r = _d(wn, gn)
+        if clip and r > Float32(1.0):
+            r = Float32(1.0)
+        out.append(r)
+    return out^
+
+
+# ---------------------------------------------------------------- 5541
+def o_theta_run(y: List[Float32], model: Int, level0: Float32, alpha: Float32, theta: Float32, alt: Bool) -> List[Float32]:
+    """statsforecast theta.cpp `init_state` + `update` over the sample and
+    `calc`'s objective: [states (n x 5: level, meany, A, B, mu), e (n),
+    sum(e[3:]^2) / max(mean|y|, 1e-10)]. Models 0 STM, 1 OTM (fixed A, B
+    from the OLS line), 2 DSTM, 3 DOTM (A, B updated each step). The level
+    is `alpha y + (1 - alpha) level`, one fma (alt: level + alpha (y -
+    level)); (1 - alpha)^i a running product."""
+    var n = len(y)
+    var dyn = model >= 2
+    var k = _s(Float32(1.0), _d(Float32(1.0), theta))
+    var y0 = _z(y[0])
+    var A: Float32
+    var B: Float32
+    var mu: Float32
+    if dyn:
+        A = y0
+        B = Float32(0.0)
+        mu = y0
+    else:
+        var s = Float32(0.0)
+        var w = Float32(0.0)
+        for i in range(n):
+            s = _a(s, y[i])
+            w = _f(y[i], Float32(i + 1), w)
+        var ym = _d(s, Float32(n))
+        var wa = _d(w, Float32(n))
+        B = _d(_m(Float32(6.0), _s(_m(Float32(2.0), wa), _m(Float32(n + 1), ym))), Float32(n * n - 1))
+        A = _s(ym, _d(_m(Float32(n + 1), B), Float32(2.0)))
+        mu = _f(k, _a(A, B), level0)
+    var oma = _s(Float32(1.0), alpha)
+    var lev: Float32
+    if alt:
+        lev = _a(level0, _m(alpha, _s(y0, level0)))
+    else:
+        lev = _f(alpha, y0, _m(oma, level0))
+    var st = List[Float32]()
+    var e = List[Float32]()
+    st.append(lev); st.append(y0); st.append(A); st.append(B); st.append(mu)
+    e.append(_s(y0, mu))
+    var pw = oma
+    for i in range(1, n):
+        var r0 = (i - 1) * 5
+        var levp = st[r0]
+        var my = st[r0 + 1]
+        var An = st[r0 + 2]
+        var Bn = st[r0 + 3]
+        var pw1 = _m(pw, oma)
+        var m = _f(k, _a(_m(An, pw), _d(_m(Bn, _s(Float32(1.0), pw1)), alpha)), levp)
+        var yi = _z(y[i])
+        e.append(_s(yi, m))
+        var nl: Float32
+        if alt:
+            nl = _a(levp, _m(alpha, _s(yi, levp)))
+        else:
+            nl = _f(alpha, yi, _m(oma, levp))
+        var my2 = _d(_f(Float32(i), my, yi), Float32(i + 1))
+        var A2 = An
+        var B2 = Bn
+        if dyn:
+            B2 = _d(_a(_m(Float32(i - 1), Bn), _d(_m(Float32(6.0), _s(yi, my)), Float32(i + 1))), Float32(i + 2))
+            A2 = _s(my2, _d(_m(B2, Float32(i + 2)), Float32(2.0)))
+        st.append(nl); st.append(my2); st.append(A2); st.append(B2); st.append(m)
+        pw = pw1
+    var sa = Float32(0.0)
+    for i in range(n):
+        sa = _a(sa, abs(_z(y[i])))
+    var mean_y = _d(sa, Float32(n))
+    if mean_y < Float32(1e-10):
+        mean_y = Float32(1e-10)
+    var sse = Float32(0.0)
+    for i in range(3, n):
+        sse = _f(e[i], e[i], sse)
+    for i in range(n):
+        st.append(e[i])
+    st.append(_d(sse, mean_y))
+    return st^
+
+
+# ---------------------------------------------------------------- 5542
+def o_garch_sigma2(
+    par: List[Float32], r: List[Float32], p: Int, o: Int, q: Int, backcast: Float32, vb: List[Float32], alt: Bool,
+) -> List[Float32]:
+    """arch's `garch_recursion` (power 2) with `bounds_check`: sigma2[t] =
+    omega + sum alpha_j r[t-1-j]^2 + sum gamma_j r[t-1-j]^2 [r < 0] + sum
+    beta_j sigma2[t-1-j], the backcast (half of it for gamma) before the
+    sample; every term folded in that order, pinned one fma each (alt: the
+    product rounded, then the add). Below the lower bound: the bound;
+    above the upper: hi + log(v / hi); a NaN: hi."""
+    var n = len(r)
+    var s2 = List[Float32]()
+    for t in range(n):
+        var v = _z(par[0])
+        var loc = 1
+        for j in range(p + o + q):
+            var term: Float32
+            var take = True
+            if j < p:
+                if t - 1 - j < 0:
+                    term = backcast
+                else:
+                    term = _m(r[t - 1 - j], r[t - 1 - j])
+            elif j < p + o:
+                var jj = j - p
+                if t - 1 - jj < 0:
+                    term = _m(Float32(0.5), backcast)
+                else:
+                    var x = _z(r[t - 1 - jj])
+                    term = _m(x, x)
+                    take = x < Float32(0.0)
+            else:
+                var jj = j - p - o
+                if t - 1 - jj < 0:
+                    term = backcast
+                else:
+                    term = s2[t - 1 - jj]
+            if take:
+                if alt:
+                    v = _a(v, _m(par[loc], term))
+                else:
+                    v = _f(par[loc], term, v)
+            loc += 1
+        var lo = _z(vb[2 * t])
+        var hi = _z(vb[2 * t + 1])
+        if not (v == v):
+            v = hi
+        if v < lo:
+            v = lo
+        elif v > hi:
+            v = _a(hi, _z(identical_log(_d(v, hi))))
+        s2.append(v)
+    return s2^
+
+
+# ---------------------------------------------------------------- 5543
+comptime _TWO_PI: Float32 = 6.283185307179586
+
+
+def o_prophet_features(frac: List[Float32], orders: List[Int], hol: List[Float32], N: Int, nh: Int, alt: Bool) -> List[Float32]:
+    """Prophet's Fourier design rows: for each seasonality s and i in 1 ..
+    order_s, sin and cos of 2 pi i frac[t, s] (frac = t / period, the phase
+    in [0, 1)); then the holiday columns. The argument pinned (2 pi i) frac
+    (alt: 2 pi (i frac))."""
+    var ns = len(orders)
+    var out = List[Float32]()
+    for t in range(N):
+        for s in range(ns):
+            var f = _z(frac[t * ns + s])
+            for i in range(orders[s]):
+                var c: Float32
+                if alt:
+                    c = _m(_TWO_PI, _m(Float32(i + 1), f))
+                else:
+                    c = _m(_m(_TWO_PI, Float32(i + 1)), f)
+                out.append(_z(identical_sin(c)))
+                out.append(_z(identical_cos(c)))
+        for h in range(nh):
+            out.append(_z(hol[t * nh + h]))
     return out^

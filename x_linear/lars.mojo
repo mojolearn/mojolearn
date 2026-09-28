@@ -21,15 +21,18 @@ alpha <= alpha_min with linear interpolation, the degenerate-regressor skip
 """
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fsqrt, fabs, fmin, fsign, ld, st, ldi, sti, i2f,
-    fill, copy, cholesky, chol_solve, centered_gram,
+    fill, copy, cholesky, chol_solve, centered_gram, centered_xty, add_acc,
 )
+from std.sys.info import is_gpu
+from x_linear.team import Team
+from x_linear.tops import t_col_means, t_mean, t_centered_gram, t_centered_xty
 
 comptime BIG = Float32(3.0e38)
 comptime TINY32 = Float32(1.1754944e-38)
 comptime EQ_TOL = Float32(1.1920929e-07)
 
 
-def lars_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
+def lars_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
     """ip: [max_iter, fit_intercept, lasso, positive]; fp: [alpha_min].
     res: coef d, intercept, n_iter, alpha, n_active, active d.
     fw: xm d | G d*d | xty d | prev d | cov d | L d*d | ls d | sgn d | corr d.
@@ -50,26 +53,37 @@ def lars_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: 
     var corr = sgn + d
     var state = 0
     var act = d
+    # Team form: the row passes (means, Gram, X'y) across the team
+    # (x_linear/tops.mojo); the path itself (d x d) on the lead.
     var ym = Float32(0)
-    if fi:
-        for j in range(d):
+    comptime if is_gpu():
+        if fi:
+            t_col_means(t, x, n, d, fw, xm)
+            ym = t_mean(t, y, n, 1)
+        else:
+            if t.lead():
+                fill(fw, xm, d, Float32(0))
+            t.sync()
+        t_centered_gram(t, x, n, d, fw, xm, fw, gg)
+        t_centered_xty(t, x, y, n, d, fw, xm, ym, fw, xty)
+    else:
+        # the host: one row pass per statistic, vector accumulators (lane linear-cpu)
+        if fi:
+            fill(fw, xm, d, Float32(0))
+            for i in range(n):
+                add_acc(fw, xm, x, i * d, d)
+            for j in range(d):
+                st(fw, xm + j, fd(ld(fw, xm + j), i2f(n)))
             var acc = Float32(0)
             for i in range(n):
-                acc = fa(acc, ld(x, i * d + j))
-            st(fw, xm + j, fd(acc, i2f(n)))
-        var acc = Float32(0)
-        for i in range(n):
-            acc = fa(acc, ld(y, i))
-        ym = fd(acc, i2f(n))
-    else:
-        fill(fw, xm, d, Float32(0))
-    centered_gram(x, n, d, fw, xm, fw, gg)
-    for j in range(d):
-        var acc = Float32(0)
-        var mj = ld(fw, xm + j)
-        for i in range(n):
-            acc = fmad(fs(ld(x, i * d + j), mj), fs(ld(y, i), ym), acc)
-        st(fw, xty + j, acc)
+                acc = fa(acc, ld(y, i))
+            ym = fd(acc, i2f(n))
+        else:
+            fill(fw, xm, d, Float32(0))
+        centered_gram(x, n, d, fw, xm, fw, gg)
+        centered_xty(x, y, n, d, fw, xm, ym, fw, xty)
+    if not t.lead():
+        return
     fill(res, 0, d, Float32(0))
     fill(fw, prev, d, Float32(0))
     for j in range(d):

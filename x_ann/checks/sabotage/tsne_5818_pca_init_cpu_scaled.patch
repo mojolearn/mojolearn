@@ -1,0 +1,12 @@
+--- a/python/mojolearn/_expansion_ann.py
++++ b/python/mojolearn/_expansion_ann.py
+@@ -204,6 +204,9 @@
+             col = [float(v) for v in emb[:, 0]]
+             mean = math.fsum(col) / n
+             std = math.sqrt(math.fsum((v - mean) * (v - mean) for v in col) / n)
++            import os
++            if os.environ.get("MOJOLEARN_VENDOR") == "cpu":
++                std = std * 1.0000003  # SABOTAGE (never shipped): the CPU column's PCA start is scaled differently
+             if not std > 0.0:
+                 raise ValueError("mojolearn TSNE: init='pca' gave a constant first component; pass init='random'")
+             return np.ascontiguousarray((emb / np.float32(std)) * np.float32(1e-4), dtype=np.float32)

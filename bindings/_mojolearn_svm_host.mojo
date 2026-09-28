@@ -92,6 +92,7 @@ from svm.impl.svm_parameter import (
     EPSILON_SVR,
     KERNEL_LINEAR,
     KERNEL_POLYNOMIAL,
+    KERNEL_PRECOMPUTED,
     KERNEL_RBF,
     KERNEL_TANH,
     KernelParams,
@@ -165,7 +166,7 @@ def _kernel_params(
     """`svm/estimator.mojo::_kernel_params`, the same refusal and the same
     constructor defaults (degree 3, coef0 0, read by no implemented
     kernel)."""
-    if kernel != KERNEL_LINEAR and kernel != KERNEL_RBF and kernel != KERNEL_POLYNOMIAL and kernel != KERNEL_TANH:
+    if kernel != KERNEL_LINEAR and kernel != KERNEL_RBF and kernel != KERNEL_POLYNOMIAL and kernel != KERNEL_TANH and kernel != KERNEL_PRECOMPUTED:
         raise Error(
             "svm: kernel=" + String(kernel) + " is not implemented in rung 1;"
             + " only LINEAR (" + String(KERNEL_LINEAR) + ") and RBF ("
@@ -378,6 +379,14 @@ def svc_predict_binding(
             raise Error("svc_predict_host: n_rows must be at least one")
         if n_cols <= 0:
             raise Error("svc_predict_host: n_cols must be at least one")
+        if kernel == KERNEL_PRECOMPUTED:
+            # X IS the n_rows x n_support cross-kernel (the caller gathered
+            # the support columns); no support rows are read.
+            if n_support > 0 and n_cols != n_support:
+                raise Error(
+                    "svc_predict_host: kernel='precomputed' needs X with one"
+                    " column per support vector"
+                )
         if not (buffer_mib > 0.0):
             raise Error(
                 "svc_predict_host: the predict buffer (cache_size) must be a"
@@ -581,6 +590,14 @@ def svr_predict_binding(
             raise Error("svr_predict_host: n_rows must be at least one")
         if n_cols <= 0:
             raise Error("svr_predict_host: n_cols must be at least one")
+        if kernel == KERNEL_PRECOMPUTED:
+            # X IS the n_rows x n_support cross-kernel (the caller gathered
+            # the support columns); no support rows are read.
+            if n_support > 0 and n_cols != n_support:
+                raise Error(
+                    "svr_predict_host: kernel='precomputed' needs X with one"
+                    " column per support vector"
+                )
         if not (buffer_mib > 0.0):
             raise Error(
                 "svr_predict_host: the predict buffer (cache_size) must be a"

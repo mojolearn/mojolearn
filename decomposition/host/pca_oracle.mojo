@@ -145,7 +145,7 @@ from std.math import fma
 from std.math import sqrt
 from std.sys.compile import is_defined
 
-from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 
 from checks.kernel_matrix import (
     K_LIB_COLUMN_STATS,
@@ -298,7 +298,7 @@ def host_gram_splitk(
     if tasks == 1:
         _chunks(0)
     else:
-        sync_parallelize(_chunks, tasks)
+        host_parallelize(_chunks, tasks)
     var z = List[Float32](length=mn, fill=Float32(0.0))
     for cell in range(mn):
         var acc = Float32(0.0)

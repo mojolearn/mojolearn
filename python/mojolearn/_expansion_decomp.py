@@ -18,7 +18,9 @@ correctly rounded on every platform. So the CPU column and every GPU column
 run the same arithmetic in the same order, and the result is the same bits.
 """
 import array
+import ctypes
 import math
+import sys
 
 from . import _backend
 from ._buffer import as_f32_c, as_i32_c, frombytes
@@ -69,6 +71,63 @@ class _DevBuf:
             pass
 
 
+# THE BUFFER POOL (lane decomp-cpu, 2026-09-28). Every cell call writes a
+# fresh output matrix, and a large fresh `array.array` is fresh pages from the
+# OS: on a 10M-element elementwise op the page faults cost more than the
+# threaded cell itself. A large store whose last holder (an `_M`) is dropped
+# goes back here instead, and `_M.zeros` of the same length takes it and
+# zeroes it (one memset). Data movement only: a pooled store is handed out
+# only when nothing else references it (its reference count says so), and
+# it is zeroed exactly as a fresh one is. Bounded: stores of at least
+# _POOL_MIN elements, at most _POOL_PER_SIZE per length, _POOL_CAP bytes held.
+_POOL = {}
+_POOL_HELD = [0]
+_POOL_MIN = 1 << 18
+_POOL_PER_SIZE = 8
+_POOL_CAP = 512 << 20
+
+
+def _pool_take(n):
+    got = _POOL.get(n)
+    if not got:
+        return None
+    s = got.pop()
+    _POOL_HELD[0] -= 4 * n
+    ctypes.memset(s.buffer_info()[0], 0, 4 * n)
+    return s
+
+
+def _pool_give(s):
+    n = len(s)
+    if n < _POOL_MIN or _POOL_HELD[0] + 4 * n > _POOL_CAP:
+        return
+    got = _POOL.setdefault(n, [])
+    if len(got) < _POOL_PER_SIZE:
+        got.append(s)
+        _POOL_HELD[0] += 4 * n
+
+
+def _holders(s):
+    return sys.getrefcount(s)
+
+
+class _Probe:
+    """Measures, once, what `_holders(self.s)` reads inside `__del__` when
+    the dying object is the store's only holder (the count differs between
+    Python versions, so it is measured, never assumed)."""
+    __slots__ = ("s",)
+    seen = []
+
+    def __del__(self):
+        _Probe.seen.append(_holders(self.s))
+
+
+_p = _Probe()
+_p.s = array.array("f")
+del _p
+_SOLE_HOLDER = _Probe.seen[0] if _Probe.seen else -1
+
+
 class _M:
     """A row-major float32 matrix held in an `array.array('f')`, or on the
     device (lane decomp-apple): a GPU kit's elementwise, product, fold and
@@ -93,7 +152,10 @@ class _M:
     def s(self):
         if self._s is None:
             d = self._d
-            a = array.array("f", [0.0]) * (self.r * self.c)
+            n = self.r * self.c
+            a = _pool_take(n) if n >= _POOL_MIN else None
+            if a is None:
+                a = array.array("f", [0.0]) * n
             if len(a):
                 d.b.x_decomp_dev_download(d.id, a.buffer_info()[0], len(a))
             self._s = a
@@ -111,9 +173,17 @@ class _M:
         self._s, self.r, self.c = st
         self._d = None
 
+    def __del__(self):
+        try:        # the host store only (a device-resident matrix frees its buffer through _DevBuf)
+            if self._s is not None and len(self._s) >= _POOL_MIN and _holders(self._s) == _SOLE_HOLDER:
+                _pool_give(self._s)
+        except Exception:
+            pass
+
     @classmethod
     def zeros(cls, r, c):
-        return cls(array.array("f", [0.0]) * (r * c), r, c)
+        s = _pool_take(r * c) if r * c >= _POOL_MIN else None
+        return cls(s if s is not None else array.array("f", [0.0]) * (r * c), r, c)
 
     @classmethod
     def of(cls, values, r, c):

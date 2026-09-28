@@ -79,7 +79,7 @@ from gaussian_process.host.gpr_oracle import (
     GPHostKernelSpec,
     gpr_host_fit,
 )
-from gaussian_process.host.sample_y_oracle import gpr_host_sample_y
+from gaussian_process.host.sample_y_oracle import gpr_host_predict_cov, gpr_host_sample_y
 # Gaussian process classification (lane/gaussian-process-classifier,
 # 2026-09-15): the GPU binding's gpc_fit and gpc_predict, same contract.
 from gaussian_process.host.gpc_oracle import gpc_host_fit
@@ -282,6 +282,54 @@ def gpr_sample_y_binding(
 # (bindings/_mojolearn_gp.mojo::gpc_fit_binding and gpc_predict_binding,
 # their address and params orders word for word).
 # ===========================================================================
+
+
+def gpr_predict_cov_binding(
+    addrs: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`predict(X, return_cov=True)` on the host, the GPU binding's name and
+    contract (`gpr_host_predict_cov`): `addrs` 0 xtrain, 1 l, 2 dual,
+    3 xstar, 4 kinds, 5 kparams, 6 ls_len, 7 ls, 8 mean_out, 9 cov_out;
+    `params` 0 n_train, 1 n_features, 2 n_star, 3 n_nodes, 4 n_ls, 5 info.
+    Returns n_star."""
+    if len(addrs) != 10:
+        raise Error("gpr_predict_cov: addrs must contain 10 addresses, got " + String(len(addrs)))
+    if len(params) != 6:
+        raise Error("gpr_predict_cov: params must contain 6 values, got " + String(len(params)))
+    var mp = f32_ptr(Int(py=addrs[8]))
+    var cp = f32_ptr(Int(py=addrs[9]))
+    var n_train = Int(py=params[0])
+    var n_features = Int(py=params[1])
+    var n_star = Int(py=params[2])
+    var n_nodes = Int(py=params[3])
+    var n_ls = Int(py=params[4])
+    var info = Int(py=params[5])
+    var spec = _rebuild_kernel_spec(
+        Int(py=addrs[4]), Int(py=addrs[5]), Int(py=addrs[6]), Int(py=addrs[7]),
+        n_nodes, n_ls, String("gpr_predict_cov"),
+    )
+    var xt = read_f32(Int(py=addrs[0]), max(0, n_train * n_features))
+    var l = read_f32(Int(py=addrs[1]), max(0, n_train * n_train))
+    var dual = read_f32(Int(py=addrs[2]), max(0, n_train))
+    var x_star = read_f32(Int(py=addrs[3]), max(0, n_star * n_features))
+    with GILReleased(Python()):
+        var mean = List[Float32]()
+        var cov = gpr_host_predict_cov(
+            xt, l, dual, n_train, n_features, spec, info, x_star, n_star, mean
+        )
+        for i in range(n_star):
+            mp.unsafe_store(i, mean[i])
+        for i in range(n_star * n_star):
+            cp.unsafe_store(i, cov[i])
+        _ = mean^
+        _ = cov^
+    _ = xt^
+    _ = l^
+    _ = dual^
+    _ = x_star^
+    _ = spec^
+    return PythonObject(n_star)
 
 
 def _gpc_fit_run(
@@ -557,6 +605,7 @@ def PyInit__mojolearn_gp_host() abi("C") -> PythonObject:
         module.def_function[gpr_fit_binding]("gpr_fit")
         module.def_function[gpr_predict_binding]("gpr_predict")
         module.def_function[gpr_sample_y_binding]("gpr_sample_y")
+        module.def_function[gpr_predict_cov_binding]("gpr_predict_cov")
         module.def_function[gpr_lml_grad_binding]("gpr_lml_grad")
         module.def_function[gp_log64_binding]("gp_log64")
         module.def_function[gp_theta_params_binding]("gp_theta_params")

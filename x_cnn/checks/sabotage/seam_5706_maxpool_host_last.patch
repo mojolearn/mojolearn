@@ -1,0 +1,11 @@
+--- a/x_cnn/host/ops_host.mojo
++++ b/x_cnn/host/ops_host.mojo
+@@ -503,7 +503,7 @@
+                         if w < 0 or w >= W:
+                             continue
+                         var v = ftz(base.unsafe_load(h * W + w))
+-                        if bi < 0 or v > best or v != v:
++                        if bi < 0 or v >= best or v != v:
+                             best = v
+                             bi = h * W + w
+                 dst.unsafe_store(o, best)
