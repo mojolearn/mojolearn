@@ -39,6 +39,23 @@ from holtwinters.impl.runner import (
 from holtwinters.impl.tsa.holtwinters_params import seasonal_from_name
 
 
+from core.neural_context import neural_ctx
+from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL
+
+#: ONE process-lifetime DeviceContext for this module's binding entries
+#: (lane/sequence-apple2, the pattern of a5f27d9c2 / core/neural_context.mojo).
+#: A context per call paid Metal's context and pipeline setup on every call
+#: (AutoARIMA's search makes 14 ARIMA fits) and can run the M2 Pro out of
+#: command queues. Same kernels, same order; each entry synchronizes before it
+#: returns, so no bit moves.
+comptime _CTX_NAME = "MojoHoltWintersEstimatorContextIdentical" if _CTX_MODE == _CTX_IDENTICAL else "MojoHoltWintersEstimatorContextFast"
+
+
+def _binding_ctx() raises -> DeviceContext:
+    return neural_ctx[_CTX_NAME]()
+
+
+
 struct HWFit(Movable):
     """Everything `fit` produced, on the host. `level`/`trend`/`season` are
     time-major (`components_len = (n - frequency) * batch_size`; series `s`
@@ -222,7 +239,7 @@ def holtwinters_fit_host(
 ) raises -> HWFit:
     """The bindings entry: the environment's trace (`MOJOLEARN_IDENTITY_TRACE`),
     their block widths, no padding."""
-    var ctx = DeviceContext()
+    var ctx = _binding_ctx()
     var trace = IdentityTrace()
     return holtwinters_fit_host_traced(
         ctx, data, n, batch_size, frequency, start_periods, seasonal, eps, trace,
@@ -255,7 +272,7 @@ def holtwinters_forecast_host_traced(
 
 
 def holtwinters_forecast_host(fitted: HWFit, h: Int) raises -> List[Float32]:
-    var ctx = DeviceContext()
+    var ctx = _binding_ctx()
     var trace = IdentityTrace()
     return holtwinters_forecast_host_traced(ctx, fitted, h, trace)
 
