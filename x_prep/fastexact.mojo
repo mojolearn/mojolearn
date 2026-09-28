@@ -20,6 +20,11 @@ units write, bit for bit (no float arithmetic on the data):
                over the chunks; the unit tests every row once per class and
                category
 
+`ii_gram_sym_fast_kernel` is x_prep/fastred.mojo's `ii_gram_fast_kernel` on
+the pairs a <= b only, each sum written to G[a, b] and G[b, a]: the product
+of two floats does not depend on their order, so the two sums the full
+kernel folds are the same word and the FAST bits do not move.
+
 `te_global_fast_kernel` is a FAST fold (the bits may change): the target's
 mean and variance over a fold's rows by a threadgroup tree, as
 x_prep/fastred.mojo folds the columns. It is held to the paired quality rule
@@ -267,3 +272,40 @@ def te_global_fast_kernel(f: FP, q: IP):
             var_ = div(sh_s[0], Float32(total))
         st(f, p(q, 4) + 2 * t, mean)
         st(f, p(q, 4) + 2 * t + 1, var_)
+
+
+def ii_gram_sym_fast_kernel(f: FP, q: IP):
+    """`ii_gram_fast_kernel` (q = [X, n, d, MASK, j, MEANS, G, FLAG];
+    t = block_idx.x = a*d + b) for a <= b, written to both halves."""
+    var t = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    if f[p(q, 7)] != Float32(0):
+        return
+    var X = p(q, 0)
+    var nn = p(q, 1)
+    var dd = p(q, 2)
+    var M = p(q, 3)
+    var j = p(q, 4)
+    var a = t // dd
+    var b = t % dd
+    if a > b:
+        return
+    var ma = f[p(q, 5) + a]
+    var mb = f[p(q, 5) + b]
+    var sh_s = stack_allocation[XTG, Float32, address_space = AddressSpace.SHARED]()
+    var s = Float32(0)
+    for i in range(tid, nn, XTG):
+        if f[M + i * dd + j] != Float32(0):
+            continue
+        s = add(s, mul(sub(f[X + i * dd + a], ma), sub(f[X + i * dd + b], mb)))
+    sh_s[tid] = s
+    barrier()
+    var w = XTG // 2
+    while w >= 1:
+        if tid < w:
+            sh_s[tid] = add(sh_s[tid], sh_s[tid + w])
+        barrier()
+        w //= 2
+    if tid == 0:
+        f[p(q, 6) + t] = sh_s[0]
+        f[p(q, 6) + b * dd + a] = sh_s[0]

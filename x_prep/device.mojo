@@ -16,7 +16,7 @@ from x_prep.dradix import RADIX_SORT, RADIX_MIN_ROWS, radix_sort_cols_device, ra
 from x_prep.fastexact import (
     FAST_EXACT, XTG, XBS, EXACT_MIN_ROWS, exact_chunks, cat_table_words, count_neg_fast_kernel,
     uniq_count_kernel, uniq_prefix_kernel, uniq_write_kernel, cat_hist_kernel, cat_sum_kernel,
-    te_global_fast_kernel,
+    te_global_fast_kernel, ii_gram_sym_fast_kernel,
 )
 from x_prep.fastred import (
     TGR, col_stats_fast_kernel, pt_fold_fast_kernel, class_stats_fast_kernel, ii_mean_fast_kernel,
@@ -172,11 +172,14 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     # MOJOLEARN_XPREP_EXACT=1 runs count_neg, unique_cols and the unweighted cat_counts in parallel
     # (x_prep/fastexact.mojo, the same words); MOJOLEARN_XPREP_TE_FAST=1 folds te_global by a tree
     # (a FAST fold: the bits may change; MOJOLEARN_XPREP_FAST_FOLDS=0 turns it off with the others)
+    # MOJOLEARN_XPREP_II_SYM=1 folds ii_gram over the pairs a <= b only (the same FAST words)
     var exact = False
     var te_fast = False
+    var ii_sym = False
     comptime if FAST_EXACT:
         exact = getenv("MOJOLEARN_XPREP_EXACT", "0") == "1"
         te_fast = getenv("MOJOLEARN_XPREP_TE_FAST", "0") == "1"
+        ii_sym = getenv("MOJOLEARN_XPREP_II_SYM", "0") == "1"
     # MOJOLEARN_XPREP_PROFILE=1: XPPHASE lines (a wait after every phase; timing only)
     var prof = getenv("MOJOLEARN_XPREP_PROFILE", "0") == "1"
     var t_last = perf_counter_ns()
@@ -310,6 +313,9 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                         grid_dim=_xblocks(total), block_dim=XBS,
                     )
                     continue
+            if ii_sym and fast_folds and op == OP_II_GRAM:
+                ctx.enqueue_function[ii_gram_sym_fast_kernel](df.unsafe_ptr(), qp, grid_dim=total, block_dim=XTG)
+                continue
             if te_fast and fast_folds and rows >= EXACT_MIN_ROWS and op == OP_TE_GLOBAL:
                 ctx.enqueue_function[te_global_fast_kernel](df.unsafe_ptr(), qp, grid_dim=total, block_dim=XTG)
                 continue
