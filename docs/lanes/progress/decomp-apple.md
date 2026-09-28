@@ -37,15 +37,16 @@ buffers, synced twice and downloaded its output.
    launch sequence (DevExec now calls the same launch_* helpers). Python
    plumbing proven on the host with a fake resident binding over the host
    kit: 22 algorithms bit-equal to the plain host path, no buffer leaked
-   (mock_resident.py).
+   (mock_resident.py). orth and absmax_sign followed (0456bf309): DevExec
+   and the resident entries call the same orth_on_device / launch_absmax.
 
 ## Requests in flight
 
 | request | what |
 |---|---|
 | 1790581691613-speed-decomp-112ef9d1c7 (m4pro-a) | BEFORE: micro, decomp_speed at N=200k (N2 20k, N3 1500, N4 20k), digests |
-| 1790581670956-speed-decomp-edca711112 (m4pro-a) | AFTER: the same |
-| 1790581701484-decomp-12f28c7ed5 | identity, 16 x-decomp lanes, e2e_host_all |
+| 1790582024177-speed-decomp-0456bf3095 (m4pro-a) | AFTER (resident ew/gemm/folds/sqdist + orth + absmax, heap Dijkstra): the same |
+| 1790581701485-decomp-0456bf3095 | identity, 16 x-decomp lanes, e2e_host_all |
 | 1790581750691-decomp-df79910175 | identity, x-decomp-spectral-rbf, e2e_host_sqdist |
 | 1790581760634-decomp-df79910175 | identity, x-decomp-umap-options, e2e_p2b_options |
 
