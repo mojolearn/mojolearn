@@ -2,7 +2,7 @@
 # lane/py-bugs: the before/after bit record on one shared NVIDIA pod (x86 CPU
 # column and NVIDIA column), LIGHT: each tree built once, each lane's GPU and
 # CPU arm once, the probe once per column, then base vs new part by part.
-# BASE is lane py-bugs-base's tree (0a11b50c7, lane/apple2-merged), NEW this lane's.
+# BASE is lane py-bugs-base's tree (lane/apple2-merged at the merge), NEW this lane's.
 set -u
 NEW=/root/mojolearn-py-bugs
 BASE=${BASE:-/root/mojolearn-py-bugs-base}

@@ -1,7 +1,7 @@
 # lane/py-bugs progress
 
 Brief: ~/mojolearn-evidence/py_work_brief.md; audit: ~/mojolearn-evidence/python_work_audit.md.
-Base: lane/apple2-merged 0a11b50c7. Scope: the Python front door's correctness bugs.
+Base: lane/apple2-merged 0a11b50c7, merged forward to bd6af0c4b (the before column is bd6af0c4b). Scope: the Python front door's correctness bugs.
 
 ## Changes
 
