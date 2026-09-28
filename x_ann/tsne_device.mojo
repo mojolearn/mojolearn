@@ -12,8 +12,9 @@ from x_ann.device_ctx import x_ann_ctx
 from x_ann.stage_timer import AnnStages
 from x_ann.knn_device import knn_enqueue
 
-from metrics.checks.device_io import upload_f32, upload_i32, download_f32, download_i32
-from checks.numerics import ftz, identical_log
+from x_ann.io import upload_f32, upload_i32, download_f32, download_i32
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_log
+from std.sys.compile import is_defined
 from x_ann.tsne_core import (
     F32P, I32P, ts_kl_cell, ts_perplexity_cell, ts_repulse_fold, ts_repulse_pair, ts_repulse_terms, ts_step_cell,
     ts_sum_cell, tsne_nn, tsne_symmetrize, tsne_validate,
@@ -102,6 +103,198 @@ def repulse_tiled_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P):
         rep.unsafe_store(2 * i + 1, r1)
 
 
+comptime TSNE_FAST_SPLIT = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_TSNE_FAST_SPLIT"]()
+"""FAST (lane ann-apple2): the repulsion of each row is folded as S partial
+sums over contiguous candidate spans (one thread per (row, span), S about
+128k / n) and the partials joined in span order, so a 10k-row fit runs ~14x
+the threads. Only the summation order moves; quality is checked by
+bench/speed/ann_fast_quality.py (docs/lanes/progress/ann-apple2.md).
+OPT-IN (`-D MOJOLEARN_TSNE_FAST_SPLIT`): measured no faster on the M4 Pro
+(m4pro-b 1790604321939: FAST fit 0.624 -> 0.645 s), so the default is the
+one-thread-per-row fold."""
+comptime SPLIT_THREADS = 131072
+
+
+def tsne_split_spans(n: Int) -> Int:
+    """The number of candidate spans S, each a whole number of RTJ tiles."""
+    var s = (SPLIT_THREADS + n - 1) // n
+    var tiles = (n + RTJ - 1) // RTJ
+    if s > tiles:
+        s = tiles
+    if s < 1:
+        s = 1
+    var per = (tiles + s - 1) // s
+    return (tiles + per - 1) // per
+
+
+def repulse_split_kernel(n: Int32, spans: Int32, y: F32P, part: F32P):
+    """FAST: row i's repulsion over span c's candidates (c = block_idx.y),
+    tiled as `repulse_tiled_kernel`; part[(c * n + i) * 3 + {0, 1, 2}] =
+    (z, r0, r1) of the span."""
+    var t = Int(thread_idx.x)
+    var nr = Int(n)
+    var i = Int(block_idx.x) * RTB + t
+    var c = Int(block_idx.y)
+    var tiles = (nr + RTJ - 1) // RTJ
+    var per = (tiles + Int(spans) - 1) // Int(spans)
+    var jb = c * per * RTJ
+    var je = jb + per * RTJ
+    if je > nr:
+        je = nr
+    var tile = stack_allocation[2 * RTJ, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var live = i < nr
+    var y0 = Float32(0.0)
+    var y1 = Float32(0.0)
+    if live:
+        y0 = y.unsafe_load(2 * i)
+        y1 = y.unsafe_load(2 * i + 1)
+    var z = Float32(0.0)
+    var r0 = Float32(0.0)
+    var r1 = Float32(0.0)
+    var j0 = jb
+    while j0 < je:
+        for e in range(t, 2 * RTJ, RTB):
+            var v = Float32(0.0)
+            if 2 * j0 + e < 2 * je:
+                v = y.unsafe_load(2 * j0 + e)
+            tile[e] = v
+        barrier()
+        if live:
+            var jn = RTJ if je - j0 > RTJ else je - j0
+            for r in range(jn):
+                if j0 + r != i:
+                    ts_repulse_pair(y0, y1, tile[2 * r], tile[2 * r + 1], z, r0, r1)
+        barrier()
+        j0 += RTJ
+    if live:
+        var o = (c * nr + i) * 3
+        part.unsafe_store(o, z)
+        part.unsafe_store(o + 1, r0)
+        part.unsafe_store(o + 2, r1)
+
+
+def repulse_join_kernel(n: Int32, spans: Int32, part: F32P, row_z: F32P, rep: F32P):
+    """FAST: row i's span partials joined in span order."""
+    var i = _tid()
+    if i < Int(n):
+        var nr = Int(n)
+        var z = Float32(0.0)
+        var r0 = Float32(0.0)
+        var r1 = Float32(0.0)
+        for c in range(Int(spans)):
+            var o = (c * nr + i) * 3
+            z = z + part.unsafe_load(o)
+            r0 = r0 + part.unsafe_load(o + 1)
+            r1 = r1 + part.unsafe_load(o + 2)
+        row_z.unsafe_store(i, z)
+        rep.unsafe_store(2 * i, r0)
+        rep.unsafe_store(2 * i + 1, r1)
+
+
+def _repulse(
+    ctx: DeviceContext, mut y: DeviceBuffer[DType.float32], n: Int, mut drz: DeviceBuffer[DType.float32],
+    mut drep: DeviceBuffer[DType.float32], mut dpart: DeviceBuffer[DType.float32],
+) raises:
+    comptime if TSNE_FAST_SPLIT:
+        var spans = tsne_split_spans(n)
+        if spans > 1:
+            ctx.enqueue_function[repulse_split_kernel](Int32(n), Int32(spans), y.unsafe_ptr(), dpart.unsafe_ptr(),
+                                                       grid_dim=((n + RTB - 1) // RTB, spans), block_dim=RTB)
+            ctx.enqueue_function[repulse_join_kernel](Int32(n), Int32(spans), dpart.unsafe_ptr(), drz.unsafe_ptr(),
+                                                      drep.unsafe_ptr(), grid_dim=_grid(n), block_dim=TPB)
+            return
+    comptime if is_defined["MOJOLEARN_TSNE_ONE_ROW"]():
+        ctx.enqueue_function[repulse_tiled_kernel](Int32(n), y.unsafe_ptr(), drz.unsafe_ptr(), drep.unsafe_ptr(),
+                                                   grid_dim=(n + RTB - 1) // RTB, block_dim=RTB)
+    else:
+        ctx.enqueue_function[repulse_tiled2_kernel](Int32(n), y.unsafe_ptr(), drz.unsafe_ptr(), drep.unsafe_ptr(),
+                                                    grid_dim=(n + 2 * RTB - 1) // (2 * RTB), block_dim=RTB)
+
+
+def repulse_tiled2_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P):
+    """`repulse_tiled_kernel` with two rows per thread (lane ann-apple2):
+    thread t of block b holds rows i0 = 2 RTB b + t and i1 = i0 + RTB, each
+    folding j = 0, 1, ..., n - 1 through the cell's own statements in the
+    cell's order (its own z, r0, r1), so each row's sums are the same words;
+    the two independent folds share every staged tile read."""
+    var t = Int(thread_idx.x)
+    var nr = Int(n)
+    var i0 = Int(block_idx.x) * 2 * RTB + t
+    var i1 = i0 + RTB
+    var tile = stack_allocation[2 * RTJ, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var live0 = i0 < nr
+    var live1 = i1 < nr
+    var a0 = Float32(0.0)
+    var a1 = Float32(0.0)
+    var b0 = Float32(0.0)
+    var b1 = Float32(0.0)
+    if live0:
+        a0 = ftz(y.unsafe_load(2 * i0))
+        a1 = ftz(y.unsafe_load(2 * i0 + 1))
+    if live1:
+        b0 = ftz(y.unsafe_load(2 * i1))
+        b1 = ftz(y.unsafe_load(2 * i1 + 1))
+    var za = Float32(0.0)
+    var ra0 = Float32(0.0)
+    var ra1 = Float32(0.0)
+    var zb = Float32(0.0)
+    var rb0 = Float32(0.0)
+    var rb1 = Float32(0.0)
+    var j0 = 0
+    while j0 < nr:
+        for e in range(t, 2 * RTJ, RTB):
+            var v = Float32(0.0)
+            if 2 * j0 + e < 2 * nr:
+                v = ftz(y.unsafe_load(2 * j0 + e))
+            tile[e] = v
+        barrier()
+        if live0:
+            var jn = RTJ if nr - j0 > RTJ else nr - j0
+            var r = 0
+            while r + 2 <= jn:
+                var ja = j0 + r
+                var ya0 = tile[2 * r]
+                var ya1 = tile[2 * r + 1]
+                var yb0 = tile[2 * r + 2]
+                var yb1 = tile[2 * r + 3]
+                if (i0 >= ja and i0 < ja + 2) or (i1 >= ja and i1 < ja + 2):
+                    if ja != i0:
+                        ts_repulse_pair(a0, a1, ya0, ya1, za, ra0, ra1)
+                    if ja + 1 != i0:
+                        ts_repulse_pair(a0, a1, yb0, yb1, za, ra0, ra1)
+                    if ja != i1:
+                        ts_repulse_pair(b0, b1, ya0, ya1, zb, rb0, rb1)
+                    if ja + 1 != i1:
+                        ts_repulse_pair(b0, b1, yb0, yb1, zb, rb0, rb1)
+                else:
+                    var p0 = ts_repulse_terms(a0, a1, ya0, ya1)
+                    var p1 = ts_repulse_terms(a0, a1, yb0, yb1)
+                    var q0 = ts_repulse_terms(b0, b1, ya0, ya1)
+                    var q1 = ts_repulse_terms(b0, b1, yb0, yb1)
+                    ts_repulse_fold(p0, za, ra0, ra1)
+                    ts_repulse_fold(p1, za, ra0, ra1)
+                    ts_repulse_fold(q0, zb, rb0, rb1)
+                    ts_repulse_fold(q1, zb, rb0, rb1)
+                r += 2
+            while r < jn:
+                var j = j0 + r
+                if j != i0:
+                    ts_repulse_pair(a0, a1, tile[2 * r], tile[2 * r + 1], za, ra0, ra1)
+                if j != i1:
+                    ts_repulse_pair(b0, b1, tile[2 * r], tile[2 * r + 1], zb, rb0, rb1)
+                r += 1
+        barrier()
+        j0 += RTJ
+    if live0:
+        row_z.unsafe_store(i0, za)
+        rep.unsafe_store(2 * i0, ra0)
+        rep.unsafe_store(2 * i0 + 1, ra1)
+    if live1:
+        row_z.unsafe_store(i1, zb)
+        rep.unsafe_store(2 * i1, rb0)
+        rep.unsafe_store(2 * i1 + 1, rb1)
+
+
 def sum_kernel(n: Int32, row_z: F32P, z: F32P):
     if _tid() == 0:
         ts_sum_cell(row_z, Int(n), z)
@@ -127,10 +320,9 @@ def _ts_iter(
     mut dptr: DeviceBuffer[DType.int32], mut dind: DeviceBuffer[DType.int32], mut dval: DeviceBuffer[DType.float32],
     mut drz: DeviceBuffer[DType.float32], mut drep: DeviceBuffer[DType.float32], mut dz: DeviceBuffer[DType.float32],
     mut dupd: DeviceBuffer[DType.float32], mut dgain: DeviceBuffer[DType.float32], ex: Float32, mom: Float32,
-    lr: Float32,
+    lr: Float32, mut dpart: DeviceBuffer[DType.float32],
 ) raises:
-    ctx.enqueue_function[repulse_tiled_kernel](Int32(n), ycur.unsafe_ptr(), drz.unsafe_ptr(), drep.unsafe_ptr(),
-                                               grid_dim=(n + RTB - 1) // RTB, block_dim=RTB)
+    _repulse(ctx, ycur, n, drz, drep, dpart)
     ctx.enqueue_function[sum_kernel](Int32(n), drz.unsafe_ptr(), dz.unsafe_ptr(), grid_dim=1, block_dim=1)
     ctx.enqueue_function[step_kernel](
         Int32(2 * n), ycur.unsafe_ptr(), ynext.unsafe_ptr(), dptr.unsafe_ptr(), dind.unsafe_ptr(),
@@ -143,9 +335,9 @@ def _ts_kl(
     ctx: DeviceContext, mut y: DeviceBuffer[DType.float32], n: Int, mut dptr: DeviceBuffer[DType.int32],
     mut dind: DeviceBuffer[DType.int32], mut dval: DeviceBuffer[DType.float32], mut drz: DeviceBuffer[DType.float32],
     mut drep: DeviceBuffer[DType.float32], mut dz: DeviceBuffer[DType.float32], mut dkl: DeviceBuffer[DType.float32],
+    mut dpart: DeviceBuffer[DType.float32],
 ) raises:
-    ctx.enqueue_function[repulse_tiled_kernel](Int32(n), y.unsafe_ptr(), drz.unsafe_ptr(), drep.unsafe_ptr(),
-                                               grid_dim=(n + RTB - 1) // RTB, block_dim=RTB)
+    _repulse(ctx, y, n, drz, drep, dpart)
     ctx.enqueue_function[sum_kernel](Int32(n), drz.unsafe_ptr(), dz.unsafe_ptr(), grid_dim=1, block_dim=1)
     ctx.enqueue_function[kl_kernel](Int32(n), y.unsafe_ptr(), dptr.unsafe_ptr(), dind.unsafe_ptr(),
                                     dval.unsafe_ptr(), dz.unsafe_ptr(), dkl.unsafe_ptr(), grid_dim=_grid(n),
@@ -189,19 +381,23 @@ def tsne_fit_device(
     var drep = ctx.enqueue_create_buffer[DType.float32](2 * n)
     var dz = ctx.enqueue_create_buffer[DType.float32](1)
     var dkl = ctx.enqueue_create_buffer[DType.float32](n)
+    var n_part = 1
+    comptime if TSNE_FAST_SPLIT:
+        n_part = 3 * n * tsne_split_spans(n)
+    var dpart = ctx.enqueue_create_buffer[DType.float32](n_part)
     st.mark(ctx, "upload_graph")
     for it in range(max_iter):
         var ex = exaggeration if it < exploration else Float32(1.0)
         var mom = Float32(0.5) if it < exploration else Float32(0.8)
         if it % 2 == 0:
-            _ts_iter(ctx, dy, dy2, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom, learning_rate)
+            _ts_iter(ctx, dy, dy2, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom, learning_rate, dpart)
         else:
-            _ts_iter(ctx, dy2, dy, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom, learning_rate)
+            _ts_iter(ctx, dy2, dy, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom, learning_rate, dpart)
     st.mark(ctx, "iterations")
     if max_iter % 2 == 0:
-        _ts_kl(ctx, dy, n, dptr, dind, dval, drz, drep, dz, dkl)
+        _ts_kl(ctx, dy, n, dptr, dind, dval, drz, drep, dz, dkl, dpart)
     else:
-        _ts_kl(ctx, dy2, n, dptr, dind, dval, drz, drep, dz, dkl)
+        _ts_kl(ctx, dy2, n, dptr, dind, dval, drz, drep, dz, dkl, dpart)
     ctx.synchronize()
     if max_iter % 2 == 0:
         y_out = download_f32(ctx, dy, 2 * n)
@@ -213,6 +409,7 @@ def tsne_fit_device(
         total = total + kl[i]
     kl_out = total
     st.host("kl_download")
+    _ = dpart^
     _ = dkl^
     _ = dz^
     _ = drep^
