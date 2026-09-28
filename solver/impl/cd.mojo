@@ -946,8 +946,7 @@ def cd_fit_traced(
             break
     if two and not in_a:
         ctx.enqueue_copy(dst_buf=coef, src_buf=coef_b)
-    three = three and not two
-    while device_sweeps and three and n_iter < epochs:
+    while device_sweeps and three and not two and n_iter < epochs:
         ctx.enqueue_memset(conv, Float32(0.0))
         for j in range(n_cols):
             var ci = ri[j]
@@ -987,7 +986,7 @@ def cd_fit_traced(
         record_device_canon(ctx, trace, tag + ".conv", conv, 3, canon_ws)
         if coef_max < tol or (diff_max / coef_max) < tol:
             break
-    while device_sweeps and not three and n_iter < epochs:
+    while device_sweeps and not three and not two and n_iter < epochs:
         # shuffle=true refused above; ri stays the identity.
         ctx.enqueue_memset(conv, Float32(0.0))
         for j in range(n_cols):
