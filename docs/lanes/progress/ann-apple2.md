@@ -252,9 +252,12 @@ queued (1790618698345).
 The whole lane at its tip against the lane/apple-merged tip it merged, one
 job, arms alternated, three runs per cell. Digests equal before and after
 in EVERY cell of BOTH tiers. Raw: `final_m4pro-b_1790618893516.txt`. (The
-same job at the tip is queued on m3ultra-b as 1790618883122; the earlier
-M3 Ultra final at da79ccc8f is above, with the t-SNE driver regression
-that 2c209a63f removed; the probe shows the fixed t-SNE there.)
+same job at the tip was queued on m3ultra-b as 1790618883122 and withdrawn
+unrun at the 18:41Z freeze; the earlier M3 Ultra final at da79ccc8f is
+above, with the t-SNE driver regression that 2c209a63f removed; the probe
+shows the fixed t-SNE on the M3 Ultra. So the M3 Ultra has no run of the
+tip: the tree join 3634e4645 and the probe-tree change 15498e277 were timed
+on M4 Pros only.)
 
 | cell (s) | IDENTICAL before | IDENTICAL after | FAST before | FAST after |
 |---|---|---|---|---|
@@ -289,8 +292,9 @@ spelling (bc3c22c03) is what moved it here.
 
 ## FINAL (2026-09-28)
 
-Branch lane/ann-apple2, tip be5bf4205 plus this note; working tree clean;
-not merged anywhere. Every change below is default on and measured with
+Frozen by the orchestrator at 18:41Z (no new submissions). Branch
+lane/ann-apple2, tip be5bf4205 plus progress notes; working tree clean; not
+merged anywhere (lane/apple2-merged consolidates it). Every change below is default on and measured with
 equal digests (Metal only); reverted trials are listed in the table above.
 
 Default path, both tiers unless noted: 74d074090 + 3634e4645 + 78b605c31 +
