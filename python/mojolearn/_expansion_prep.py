@@ -968,11 +968,15 @@ class TargetEncoder(_PrepBase):
         smo = pr.put_scalar(-1.0 if self.smooth == "auto" else float(self.smooth))
         enc = pr.alloc((F + 1) * d * cmax * T)
         pr.stage("te_global", (F + 1) * T, yo, n, T, fo, meta)
-        # each category's rows, ascending (te_bucket): te_enc walks one bucket, not every row
-        bstart, brows = pr.alloc(d * (cmax + 1)), pr.alloc(n * d)
-        pr.stage("te_bucket", d, codes, n, d, cmax, bstart, brows)
-        pr.stage("te_enc", (F + 1) * d * cmax * T, codes, n, d, yo, T, fo, cmax, nco, meta, smo, enc,
-                 bstart + 1, brows)
+        if hasattr(_prep_binding(mode), "x_prep_host_column"):
+            # the host binding groups te_enc its own way (x_prep/host/target.mojo)
+            pr.stage("te_enc", (F + 1) * d * cmax * T, codes, n, d, yo, T, fo, cmax, nco, meta, smo, enc)
+        else:
+            # each category's rows, ascending (te_bucket): te_enc walks one bucket, not every row
+            bstart, brows = pr.alloc(d * (cmax + 1)), pr.alloc(n * d)
+            pr.stage("te_bucket", d, codes, n, d, cmax, bstart, brows)
+            pr.stage("te_enc", (F + 1) * d * cmax * T, codes, n, d, yo, T, fo, cmax, nco, meta, smo, enc,
+                     bstart + 1, brows)
         out = _NONE
         if apply_rows_folds:
             out = pr.alloc(n * d * T)
