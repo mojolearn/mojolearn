@@ -20,7 +20,7 @@ THE FIXED-ORDER DESIGN
 
 from std.math import trunc
 from checks.numerics import ftz, identical_div, identical_mul, identical_mul_add
-from x_ann.ivf_pq_core import F32P, I32P, pq_inf, pq_insert, pq_next_probe
+from x_ann.ivf_pq_core import F32P, I32P, pq_inf, pq_insert, pq_next_probe, pq_row_removed
 
 
 @always_inline
@@ -57,6 +57,24 @@ def sq_encode_cell(e: Int, r: F32P, dim: Int, vmin: F32P, delta: F32P, codes: I3
 
 
 @always_inline
+def sq_row_score(
+    queries: F32P, q_off: Int, centers: F32P, l: Int, dim: Int, codes: I32P, row: Int, vmin: F32P, delta: F32P,
+) -> Float32:
+    """One stored row's squared distance to the query residual of list l:
+    the decode is one fused step per coordinate (DEVIATION 5832), the sum
+    ascending. The per-query cell and the block scan both score through it."""
+    var acc = Float32(0.0)
+    for c in range(dim):
+        var qr = ftz(ftz(queries.unsafe_load(q_off + c)) - ftz(centers.unsafe_load(l * dim + c)))
+        var dec = ftz(identical_mul_add(
+            Float32(Int(codes.unsafe_load(row * dim + c))), delta.unsafe_load(c), vmin.unsafe_load(c)
+        ))
+        var diff = ftz(qr - dec)
+        acc = ftz(identical_mul_add(diff, diff, acc))
+    return acc
+
+
+@always_inline
 def sq_search_cell(
     qi: Int, queries: F32P, dim: Int, centers: F32P, n_lists: Int, offsets: I32P,
     list_indices: I32P, codes: I32P, vmin: F32P, delta: F32P, k: Int, n_probes: Int,
@@ -81,16 +99,9 @@ def sq_search_cell(
         prev_d = best_d
         for slot in range(Int(offsets.unsafe_load(best_l)), Int(offsets.unsafe_load(best_l + 1))):
             var row = Int(list_indices.unsafe_load(slot))
-            if mask.unsafe_load(row) == 0:
+            if pq_row_removed(mask, row):
                 continue
-            var acc = Float32(0.0)
-            for c in range(dim):
-                var qr = ftz(ftz(queries.unsafe_load(q_off + c)) - ftz(centers.unsafe_load(best_l * dim + c)))
-                var dec = ftz(identical_mul_add(
-                    Float32(Int(codes.unsafe_load(row * dim + c))), delta.unsafe_load(c), vmin.unsafe_load(c)
-                ))
-                var diff = ftz(qr - dec)
-                acc = ftz(identical_mul_add(diff, diff, acc))
-            pq_insert(k, base, acc, Int32(row), out_d, out_i)
+            pq_insert(k, base, sq_row_score(queries, q_off, centers, best_l, dim, codes, row, vmin, delta),
+                      Int32(row), out_d, out_i)
             n_cand += 1
     out_n.unsafe_store(qi, Int32(n_cand))

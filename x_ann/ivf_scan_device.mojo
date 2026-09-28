@@ -22,7 +22,7 @@ value is computed by the SAME core function as before:
      the per-query cell forms it (the IVF-PQ code sum in ascending subspace
      order from the lookup-table entry `pq_lut_entry` returns, now read from
      a table the block fills once per probe; SQ and RaBitQ inline, unchanged);
-     each thread keeps its own top-k under the total order (distance, row id).
+     each thread keeps its own top-k through `pq_insert`'s order (`pq_better`).
   4. the block merge: k rounds, each taking the least head under (distance,
      row id) over every thread's list.
 
@@ -50,14 +50,16 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from checks.numerics import ftz, identical_div, identical_mul, identical_mul_add
-from x_ann.ivf_pq_core import F32P, I32P, pq_coarse_dist, pq_inf, pq_lut_entry, pq_select_probes
-from x_ann.ivf_rabitq_core import rq_rotate
+from checks.numerics import ftz, identical_mul_add
+from x_ann.ivf_pq_core import (
+    F32P, I32P, pq_better, pq_coarse_dist, pq_inf, pq_lut_entry, pq_row_removed, pq_select_probes,
+)
+from x_ann.ivf_sq_core import sq_row_score
+from x_ann.ivf_rabitq_core import rq_rotate, rq_row_estimate
 
 comptime SCAN_TPB = 128
 comptime LUT_TILE = 4096
 comptime SCAN_MAX_K = 256
-comptime _EMPTY_ID = Int32(2147483647)
 
 
 def _gid() -> Int:
@@ -80,19 +82,13 @@ def probes_kernel(count: Int32, dist: F32P, n_lists: Int32, n_probes: Int32, pro
 
 
 @always_inline
-def _before(d: Float32, id: Int32, sd: Float32, sid: Int32) -> Bool:
-    """(d, id) strictly before (sd, sid); the empty slot is (+inf, INT_MAX),
-    which every real row (id < INT_MAX) precedes, as `pq_better` has an
-    empty slot (sid < 0) lose to anything."""
-    return d < sd or (d == sd and id < sid)
-
-
-@always_inline
 def _tk_insert[KM: Int](k: Int, d: Float32, id: Int32, mut td: InlineArray[Float32, KM], mut ti: InlineArray[Int32, KM]):
-    if not _before(d, id, td[k - 1], ti[k - 1]):
+    """`pq_insert` on a thread's own list: the same `pq_better` order (an
+    empty slot, id -1, loses to any row)."""
+    if not pq_better(d, id, td[k - 1], ti[k - 1]):
         return
     var s = k - 1
-    while s > 0 and _before(d, id, td[s - 1], ti[s - 1]):
+    while s > 0 and pq_better(d, id, td[s - 1], ti[s - 1]):
         td[s] = td[s - 1]
         ti[s] = ti[s - 1]
         s -= 1
@@ -121,15 +117,15 @@ def _block_merge[KM: Int](
             hi[tid] = ti[head]
         else:
             hd[tid] = pq_inf()
-            hi[tid] = _EMPTY_ID
+            hi[tid] = Int32(-1)
         barrier()
         if tid == 0:
-            var bt = 0
-            for t in range(1, SCAN_TPB):
-                if _before(hd[t], hi[t], hd[bt], hi[bt]):
+            var bt = -1
+            for t in range(SCAN_TPB):
+                if hi[t] >= 0 and (bt < 0 or pq_better(hd[t], hi[t], hd[bt], hi[bt])):
                     bt = t
             win[0] = Int32(bt)
-            if hi[bt] == _EMPTY_ID:
+            if bt < 0:
                 out_d.unsafe_store(qi * k + r, pq_inf())
                 out_i.unsafe_store(qi * k + r, Int32(-1))
             else:
@@ -164,7 +160,7 @@ def pq_scan_kernel[KM: Int](
     var lut = stack_allocation[LUT_TILE, Float32, address_space=AddressSpace.SHARED]()
     var pbase = Int(block_idx.x) * Int(max_list)
     var td = InlineArray[Float32, KM](fill=pq_inf())
-    var ti = InlineArray[Int32, KM](fill=_EMPTY_ID)
+    var ti = InlineArray[Int32, KM](fill=Int32(-1))
     var n_cand = 0
     for p in range(np):
         var l = Int(probes.unsafe_load(qi * np + p))
@@ -184,7 +180,7 @@ def pq_scan_kernel[KM: Int](
             var slot = start + tid
             while slot < stop:
                 var row = Int(list_indices.unsafe_load(slot))
-                if mask.unsafe_load(row) != 0:
+                if not pq_row_removed(mask, row):
                     var total = Float32(0.0)
                     if j0 > 0:
                         total = partial.unsafe_load(pbase + slot - start)
@@ -214,7 +210,7 @@ def sq_scan_kernel[KM: Int](
     var np = Int(n_probes)
     var q_off = qi * d
     var td = InlineArray[Float32, KM](fill=pq_inf())
-    var ti = InlineArray[Int32, KM](fill=_EMPTY_ID)
+    var ti = InlineArray[Int32, KM](fill=Int32(-1))
     var n_cand = 0
     for p in range(np):
         var l = Int(probes.unsafe_load(qi * np + p))
@@ -224,16 +220,9 @@ def sq_scan_kernel[KM: Int](
         var stop = Int(offsets.unsafe_load(l + 1))
         while slot < stop:
             var row = Int(list_indices.unsafe_load(slot))
-            if mask.unsafe_load(row) != 0:
-                var acc = Float32(0.0)
-                for c in range(d):
-                    var qr = ftz(ftz(queries.unsafe_load(q_off + c)) - ftz(centers.unsafe_load(l * d + c)))
-                    var dec = ftz(identical_mul_add(
-                        Float32(Int(codes.unsafe_load(row * d + c))), delta.unsafe_load(c), vmin.unsafe_load(c)
-                    ))
-                    var diff = ftz(qr - dec)
-                    acc = ftz(identical_mul_add(diff, diff, acc))
-                _tk_insert[KM](kk, acc, Int32(row), td, ti)
+            if not pq_row_removed(mask, row):
+                _tk_insert[KM](kk, sq_row_score(queries, q_off, centers, l, d, codes, row, vmin, delta),
+                               Int32(row), td, ti)
                 n_cand += 1
             slot += SCAN_TPB
     _block_merge[KM](kk, qi, n_cand, td, ti, out_d, out_i, out_n)
@@ -275,7 +264,7 @@ def rq_scan_kernel[KM: Int](
     var kk = Int(k)
     var np = Int(n_probes)
     var td = InlineArray[Float32, KM](fill=pq_inf())
-    var ti = InlineArray[Int32, KM](fill=_EMPTY_ID)
+    var ti = InlineArray[Int32, KM](fill=Int32(-1))
     var n_cand = 0
     for p in range(np):
         var l = Int(probes.unsafe_load(qi * np + p))
@@ -287,22 +276,9 @@ def rq_scan_kernel[KM: Int](
         var stop = Int(offsets.unsafe_load(l + 1))
         while slot < stop:
             var row = Int(list_indices.unsafe_load(slot))
-            if mask.unsafe_load(row) != 0:
-                var est: Float32
-                var ip = ips.unsafe_load(row)
-                var norm = norms.unsafe_load(row)
-                if ip > Float32(0.0):
-                    var dot = Float32(0.0)
-                    for j in range(DD):
-                        var v = ws.unsafe_load(wb + j)
-                        var bit = (codes.unsafe_load(row * w + j // 32) >> Int32(j % 32)) & Int32(1)
-                        dot = ftz(dot + (v if bit != 0 else -v))
-                    var xq = ftz(identical_div(ftz(identical_mul(dot, scale)), ip))
-                    var nn = ftz(identical_mul(norm, norm))
-                    est = ftz(ftz(nn + q2) - ftz(identical_mul(Float32(2.0), ftz(identical_mul(norm, xq)))))
-                else:
-                    est = q2
-                _tk_insert[KM](kk, est, Int32(row), td, ti)
+            if not pq_row_removed(mask, row):
+                _tk_insert[KM](kk, rq_row_estimate(ws, wb, q2, codes, row, w, DD, scale, norms, ips),
+                               Int32(row), td, ti)
                 n_cand += 1
             slot += SCAN_TPB
     _block_merge[KM](kk, qi, n_cand, td, ti, out_d, out_i, out_n)

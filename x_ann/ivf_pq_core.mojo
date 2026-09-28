@@ -101,6 +101,24 @@ def pq_coarse_dist(q: F32P, q_off: Int, centers: F32P, l: Int, dim: Int) -> Floa
 
 
 @always_inline
+def pq_row_removed(mask: I32P, row: Int) -> Bool:
+    """DEVIATION 5855, THE ONE STATEMENT OF THE SAMPLE FILTER: `mask[row] ==
+    0` removes the row before it is scored. Every IVF scan (PQ, SQ, RaBitQ;
+    the per-query cells and the block scans) asks it."""
+    return mask.unsafe_load(row) == 0
+
+
+@always_inline
+def pq_probe_takes(d: Float32, l: Int, prev_d: Float32, prev_l: Int, best_d: Float32, best_l: Int) -> Bool:
+    """DEVIATION 5804, THE ONE STATEMENT OF THE PROBE ORDER: list l (coarse
+    distance d) comes after the previous probe (prev_d, prev_l) in the total
+    order (distance, list id) and before the best candidate so far. Both
+    probe walks (`pq_next_probe`, `pq_select_probes`) decide through it."""
+    var after = prev_l < 0 or d > prev_d or (d == prev_d and l > prev_l)
+    return after and (best_l < 0 or d < best_d or (d == best_d and l < best_l))
+
+
+@always_inline
 def pq_next_probe(
     queries: F32P, q_off: Int, centers: F32P, n_lists: Int, dim: Int, prev_d: Float32, prev_l: Int,
     mut best_d: Float32,
@@ -111,8 +129,7 @@ def pq_next_probe(
     var best_l = -1
     for l in range(n_lists):
         var d = pq_coarse_dist(queries, q_off, centers, l, dim)
-        var after = prev_l < 0 or d > prev_d or (d == prev_d and l > prev_l)
-        if after and (best_l < 0 or d < best_d or (d == best_d and l < best_l)):
+        if pq_probe_takes(d, l, prev_d, prev_l, best_d, best_l):
             best_l = l
             best_d = d
     return best_l
@@ -130,8 +147,7 @@ def pq_select_probes(dist: F32P, d_off: Int, n_lists: Int, n_probes: Int, probes
         var best_d = Float32(0.0)
         for l in range(n_lists):
             var d = dist.unsafe_load(d_off + l)
-            var after = prev_l < 0 or d > prev_d or (d == prev_d and l > prev_l)
-            if after and (best_l < 0 or d < best_d or (d == best_d and l < best_l)):
+            if pq_probe_takes(d, l, prev_d, prev_l, best_d, best_l):
                 best_l = l
                 best_d = d
         probes.unsafe_store(p_off + p, Int32(best_l))
@@ -211,7 +227,7 @@ def pq_search_cell(
         var stop = Int(offsets.unsafe_load(best_l + 1))
         for slot in range(start, stop):
             var row = Int(list_indices.unsafe_load(slot))
-            if mask.unsafe_load(row) == 0:
+            if pq_row_removed(mask, row):
                 continue
             var total = Float32(0.0)
             for j in range(pq_dim):
