@@ -203,6 +203,17 @@ comptime MOM_UNROLL = 8  # addends read ahead of the (still ascending) adds
 # DEVIATION 5121 (the device M-step moments: the addends of a row tile formed
 # in parallel into shared memory, then every fold one thread's register chain
 # over them in ascending row order). Row 201; moments_check (5121 arm).
+@always_inline
+def _suspect_sum(y: Float32, t: Float32, s: Float32) -> UInt32:
+    """1 when `s = y + t` has a zero exponent field (zero or subnormal) and
+    an operand is nonzero: the only sums `ftz` could change."""
+    var sb = bitcast[DType.uint32](s)
+    var ops_nz = (bitcast[DType.uint32](y) | bitcast[DType.uint32](t)) & UInt32(0x7FFFFFFF)
+    var zero_exp = UInt32(1) if (sb & UInt32(0x7F800000)) == UInt32(0) else UInt32(0)
+    var nz = UInt32(1) if ops_nz != UInt32(0) else UInt32(0)
+    return zero_exp & nz
+
+
 def _moments_pass_kernel(
     resp: FPtr, x: FPtr, n: Int32, d: Int32, kc: Int32, reg: Float32, nk: FPtr, means: FPtr, cov: FPtr,
     cov_pass: Int32,
@@ -271,16 +282,38 @@ def _moments_pass_kernel(
             terms[e] = t
         barrier()
         if mine:
+            # THE SPECULATIVE CHAIN (Apple speed lane): the tile's adds run as
+            # plain `y + t`, and a flag OFF the chain notes every sum whose
+            # exponent field is zero from a nonzero operand (a subnormal,
+            # or an exact cancellation to zero). Only such a sum can differ
+            # from `chain_add`'s `ftz(y + t)`; when the flag is clear every
+            # ftz was the identity and the tile's result is `chain_add`'s,
+            # bit for bit; when set, the tile is re-added through
+            # `chain_add` from its saved start. Integer tests on the bits,
+            # never a float compare on the running sum.
+            var start = acc
+            var y = acc
+            var flag = UInt32(0)
             var j0 = 0
             while j0 + MOM_UNROLL <= m:
                 var v = SIMD[DType.float32, MOM_UNROLL]()
                 comptime for u in range(MOM_UNROLL):
                     v[u] = terms[(j0 + u) * cpb + tid]
                 comptime for u in range(MOM_UNROLL):
-                    acc = chain_add(acc, v[u])
+                    var nxt = y + v[u]
+                    flag |= _suspect_sum(y, v[u], nxt)
+                    y = nxt
                 j0 += MOM_UNROLL
             for j in range(j0, m):
-                acc = chain_add(acc, terms[j * cpb + tid])
+                var t = terms[j * cpb + tid]
+                var nxt = y + t
+                flag |= _suspect_sum(y, t, nxt)
+                y = nxt
+            if flag != UInt32(0):
+                y = start
+                for j in range(m):
+                    y = chain_add(y, terms[j * cpb + tid])
+            acc = y
         barrier()
         r0 += m
     var c = c0 + tid
