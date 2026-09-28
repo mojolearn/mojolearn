@@ -18,7 +18,9 @@ correctly rounded on every platform. So the CPU column and every GPU column
 run the same arithmetic in the same order, and the result is the same bits.
 """
 import array
+import ctypes
 import math
+import sys
 
 from . import _backend
 from ._buffer import as_f32_c, as_i32_c, frombytes
@@ -53,6 +55,63 @@ def _is_sparse(X):
     return hasattr(X, "toarray") and hasattr(X, "nnz") and hasattr(X, "format")
 
 
+# THE BUFFER POOL (lane decomp-cpu, 2026-09-28). Every cell call writes a
+# fresh output matrix, and a large fresh `array.array` is fresh pages from the
+# OS: on a 10M-element elementwise op the page faults cost more than the
+# threaded cell itself. A large store whose last holder (an `_M`) is dropped
+# goes back here instead, and `_M.zeros` of the same length takes it and
+# zeroes it (one memset). Data movement only: a pooled store is handed out
+# only when nothing else references it (its reference count says so), and
+# it is zeroed exactly as a fresh one is. Bounded: stores of at least
+# _POOL_MIN elements, at most _POOL_PER_SIZE per length, _POOL_CAP bytes held.
+_POOL = {}
+_POOL_HELD = [0]
+_POOL_MIN = 1 << 18
+_POOL_PER_SIZE = 4
+_POOL_CAP = 256 << 20
+
+
+def _pool_take(n):
+    got = _POOL.get(n)
+    if not got:
+        return None
+    s = got.pop()
+    _POOL_HELD[0] -= 4 * n
+    ctypes.memset(s.buffer_info()[0], 0, 4 * n)
+    return s
+
+
+def _pool_give(s):
+    n = len(s)
+    if n < _POOL_MIN or _POOL_HELD[0] + 4 * n > _POOL_CAP:
+        return
+    got = _POOL.setdefault(n, [])
+    if len(got) < _POOL_PER_SIZE:
+        got.append(s)
+        _POOL_HELD[0] += 4 * n
+
+
+def _holders(s):
+    return sys.getrefcount(s)
+
+
+class _Probe:
+    """Measures, once, what `_holders(self.s)` reads inside `__del__` when
+    the dying object is the store's only holder (the count differs between
+    Python versions, so it is measured, never assumed)."""
+    __slots__ = ("s",)
+    seen = []
+
+    def __del__(self):
+        _Probe.seen.append(_holders(self.s))
+
+
+_p = _Probe()
+_p.s = array.array("f")
+del _p
+_SOLE_HOLDER = _Probe.seen[0] if _Probe.seen else -1
+
+
 class _M:
     """A row-major float32 matrix held in an `array.array('f')`."""
     __slots__ = ("s", "r", "c")
@@ -62,9 +121,17 @@ class _M:
             raise ValueError("x_decomp: matrix store does not match its shape")
         self.s, self.r, self.c = s, r, c
 
+    def __del__(self):
+        try:
+            if len(self.s) >= _POOL_MIN and _holders(self.s) == _SOLE_HOLDER:
+                _pool_give(self.s)
+        except Exception:
+            pass
+
     @classmethod
     def zeros(cls, r, c):
-        return cls(array.array("f", [0.0]) * (r * c), r, c)
+        s = _pool_take(r * c) if r * c >= _POOL_MIN else None
+        return cls(s if s is not None else array.array("f", [0.0]) * (r * c), r, c)
 
     @classmethod
     def of(cls, values, r, c):
