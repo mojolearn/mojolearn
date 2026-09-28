@@ -48,6 +48,10 @@ def fz(x: Float32) -> Float32:
     branchless spelling was 1.8x slower). The same word either way."""
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and (is_nvidia_gpu() or is_amd_gpu() or is_apple_gpu()):
         return fz_branchless(x)
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        # lane/linear-apple2: ftz is the identity outside IDENTICAL; return
+        # the word here rather than through ftz's call
+        return x
     return ftz(x)
 
 
