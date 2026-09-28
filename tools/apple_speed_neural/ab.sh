@@ -81,5 +81,15 @@ PY
     done
     done < "$OUT/step_shapes.txt"
 fi
+# AB_PYPROF=1 (lane/neural-apple2): this tree's pyprof.py (the Samba train
+# step: walls, losses, the loss and parameter digests) against each variant.
+if [ "${AB_PYPROF:-0}" = 1 ]; then
+    for rep in $(seq 1 "${AB_REPS:-3}"); do
+        for label in $labels; do
+            PYPROF_STEPS=${AB_PYPROF_STEPS:-3} PYTHONPATH="$OUT/wt-$label/python" pixi run -e default python tools/apple_speed_neural/pyprof.py 2>&1 < /dev/null \
+                | grep -E "^PYPROF samba (step|params)" | sed "s/^/AB-PYPROF rep=$rep variant=$label /"
+        done
+    done
+fi
 for v in $AB_VARIANTS; do git worktree remove --force "$OUT/wt-${v%%=*}" > /dev/null 2>&1; done
 exit 0
