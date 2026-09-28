@@ -29,7 +29,9 @@ digests, byte LM final witness and loss digests).
 | 0678acea6 | Mamba-3 backward: scratch allocations without a wait each | DEFAULT | in the same 1% (job 2) |
 | 691144783 | Apple attention matrix kernels: the estash zdot drops the barrier after warp 0's z fold; the forward's pass 2 alternates its exp tile between two pages and drops the barrier after the denominator fold (`-D MOJOLEARN_ATTN_ZDOT_AMMA_FOLD_BARRIER`, `-D MOJOLEARN_ATTN_FWD_AMMA_P2_BARRIER` restore) | DEFAULT | PROVEN (speed + witness, job 2) |
 | 4e2df9e4f | Apple attention: the `[B, nh, L, S]` scratches (round 3 forward stash, backward y/dy) from a process cache instead of a fresh allocation per call (`ATTN_SCRATCH_CACHE`, `-D MOJOLEARN_ATTN_NO_SCRATCH_CACHE` reverts) | DEFAULT | PROVEN (speed + witness, job 2) |
-| fec0f64f5 | Apple round 3 zdot (`fused_bwd_zdot_stash_pf_kernel`, the denied path): no barrier after the z fold on Apple (`-D MOJOLEARN_ATTN_ZDOT_STASH_FOLD_BARRIER` restores; other columns unchanged) | DEFAULT | measuring (job 3) |
+| fec0f64f5 | Apple round 3 zdot (`fused_bwd_zdot_stash_pf_kernel`, the denied path): no barrier after the z fold on Apple (`-D MOJOLEARN_ATTN_ZDOT_STASH_FOLD_BARRIER` restores; other columns unchanged) | DEFAULT | measuring (job 3 arms) |
+| 32634c4b2 | Mamba-3 backward S16: the d_v half computes each q . k dot once per row into shared memory (`mamba3_s16_v_shared_kernel`; `-D MOJOLEARN_MAMBA3_S16_V_NAIVE` reverts; host restatement keeps the naive kernel) | DEFAULT | measuring (job 4) |
+| fbde1272e | Mamba-3 backward S17: the chunk-end `add` chain staged in shared memory, folded by one thread in the naive order (`mamba3_s17_tail_shared_kernel`; `-D MOJOLEARN_MAMBA3_S17_TAIL_NAIVE` reverts) | DEFAULT | measuring (job 4) |
 | 815db5956 | Apple attention: a process DENIED the kept exp stashes recomputes one layer's stash in the backward (estash forward into scratch + estash backward) instead of the round 3 zdot | opt-in since 07b658ab3 (`-D MOJOLEARN_ATTN_APPLE_ERECOMP`) | REJECTED as a default: witness equal but 3.619 s vs 3.537 s (round 3 backward) at T3 on the M3 Ultra |
 
 Shared code note: the GEMM arms touch `gemm/checks/gemm_identical.mojo`
@@ -119,3 +121,27 @@ GEMM small tile on the M4 Pro (ms, KB 32 default / KB 16 / no small tile; hashes
 equal): proj_dB 4.95 / 6.79 / 6.45, gateup_dA 11.87 / 15.37 / 11.52, gateup_dB
 12.23 / 16.73 / 14.39, down_fwd 11.87 / 15.37 / 11.53, down_dB 12.35 / 16.77 /
 14.85, head_dA 335.2 / 466.0 / 346.3.
+
+## Job 3 results (m3ultra-b, M3 Ultra, steward 1790613514889, commit fec0f64f5)
+
+AFTER vs job 1's BEFORE on the same Mac (bench_board_neural `full`, median ms;
+digests equal to job 1 in every lane):
+lm-train-step 278.2 -> **208.2**, lm-forward 222.4 -> 221.4, gemm 80.8 -> 76.6,
+transformer-forward 23.7 -> 21.2, mamba1-forward 20.1 -> 19.7, mamba2-forward
+29.2 -> 31.5, mamba3-forward 25.0 -> 24.9, samba-train-step 889.9 -> 884.0
+(losses equal), samba-forward 54.2 -> 54.0, mlp-train-step 8.1 -> 8.0.
+
+Byte LM T3 shard (estash granted): **2.917 -> 2.128 s a step** (2808 -> 3850
+tok/s, -27%). Final witness gradients ab96db5b..., parameters ecaba3f7..., m
+de07d03c..., v c30882c0..., loss digests 676298da afc46227 34fe4c49 50902bed:
+EQUAL to BEFORE.
+
+Census (timers on): the Apple estash zdot 733 -> 135 ms a step (one barrier
+per key block removed, 691144783); the other attention kernels flat
+(forward 274 -> 272, dk/dv 149 -> 143, dq 121 -> 119); GEMMs 1.6 -> 1.35 s
+(small-tile KB 32).
+
+Mamba-3 backward per stage (MOJOLEARN_MAMBA_TIMING, Samba full shape, one
+call, ms): block forward 19, S16 (q/k/v) **200.6**, S17 operands **105.3**,
+every other stage 0.3-3.9. S16 and S17 are the two changes 32634c4b2 and
+fbde1272e.
