@@ -110,7 +110,7 @@ transform where marked). Raw:
 | SVGP.fit 100k (64 inducing) | FAST | | | 0.254 | 0.077 |
 | KernelPCA.fit 500 (host Jacobi, untouched) | IDENTICAL | 1.874 | 1.883 | 1.281 | 1.277 |
 | KernelPCA.transform 10k | IDENTICAL | 0.025 | 0.017 | 0.025 | 0.017 |
-| GaussianProcessClassifier.predict_proba 3k x 3k | IDENTICAL | 1.130 to 1.255 | 0.259 to 0.265 | 1.147 to 1.215 | 0.256 to 0.259 |
+| GaussianProcessClassifier.predict_proba 3k x 3k (lane base; the head of this request ran a898eb9c2, now opt-in: the merged 256-thread kernel is 0.215 s, see FINAL) | IDENTICAL | 1.130 to 1.255 | 0.259 to 0.265 | 1.147 to 1.215 | 0.256 to 0.259 |
 | GaussianProcessClassifier.predict_proba 3k x 3k | FAST | 1.038 to 1.040 | 0.225 to 0.227 | 0.991 to 1.040 | 0.228 to 0.230 |
 | SpectralEmbedding(knn).fit 20k | IDENTICAL | REFUSED (k > 1024) | 0.769 | REFUSED | 0.784 |
 | NearestNeighbors(k=2000) 20k x 2k | IDENTICAL | REFUSED | 0.186 | REFUSED | 0.189 |
