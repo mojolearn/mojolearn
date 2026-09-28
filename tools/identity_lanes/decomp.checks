@@ -25,3 +25,4 @@ x_decomp/checks/fold_ew_check.mojo	x_decomp/checks/sabotage/5319_pdist_order.pat
 x_decomp/checks/fold_ew_check.mojo	x_decomp/checks/sabotage/5300_host_gemm_order.patch
 x_decomp/checks/fold_ew_check.mojo	x_decomp/checks/sabotage/5302_host_sqdist_order.patch
 x_decomp/checks/fold_ew_check.mojo	x_decomp/checks/sabotage/5300_host_rowdot_order.patch
+x_decomp/checks/graph_check.mojo	x_decomp/checks/sabotage/5314_host_edge_weight.patch
