@@ -689,8 +689,25 @@ def _host_block_finish(
         oip.unsafe_store(base + b + 1, iv)
 
 
+def host_pack_index(ip: HostF32Ptr, n_index: Int, d: Int) -> List[Float32]:
+    """Every index column, flushed, feature-major in blocks of KNN_HOST_W
+    (block b, feature f, lane l at `(b * d + f) * W + l`), zero-padded to a
+    whole block. Packed ONCE per call and read by every task: packing per
+    task re-read the whole index once per task (as much traffic as the
+    distances themselves at a few dozen rows per task)."""
+    var nb = (n_index + KNN_HOST_W - 1) // KNN_HOST_W
+    var out = List[Float32](length=nb * d * KNN_HOST_W, fill=Float32(0.0))
+    var op = host_list_ptr(out)
+    for c in range(n_index):
+        var b = c // KNN_HOST_W
+        var l = c % KNN_HOST_W
+        for f in range(d):
+            op.unsafe_store((b * d + f) * KNN_HOST_W + l, ftz(ip.unsafe_load(c * d + f)))
+    return out^
+
+
 def _host_knn_block_rows(
-    ip: HostF32Ptr, n_index: Int, qp: HostF32Ptr, lo: Int, hi: Int, d: Int,
+    pan: HostF32Ptr, n_index: Int, qp: HostF32Ptr, lo: Int, hi: Int, d: Int,
     k: Int, inp: HostF32Ptr, qnp: HostF32Ptr, mtr: Int, metric_arg: Float32,
     l2_pair: Bool, is_sqrt: Bool, odp: HostF32Ptr, oip: HostU32Ptr,
 ):
@@ -699,11 +716,9 @@ def _host_knn_block_rows(
     block of KNN_HOST_W index columns."""
     var ipf = l2_pair or mtr == DIST_COSINE_EXPANDED
     var qbuf = List[Float32](length=KNN_HOST_QCH * d, fill=Float32(0.0))
-    var panel = List[Float32](length=KNN_HOST_W * d, fill=Float32(0.0))
     var tile = List[Float32](length=KNN_HOST_QB * KNN_HOST_W, fill=Float32(0.0))
     var bestl = List[UInt64](length=KNN_HOST_QCH * k, fill=KNN_HOST_KEY_SENTINEL)
     var qf = host_list_ptr(qbuf)
-    var pp = host_list_ptr(panel)
     var tp = host_list_ptr(tile)
     var bp = rebind[MutPointer[UInt64, MutUntrackedOrigin]](bestl.unsafe_ptr())
     var s0 = lo
@@ -718,14 +733,9 @@ def _host_knn_block_rows(
         while b0 < n_index:
             var wv = min(KNN_HOST_W, n_index - b0)
             var yn = KnnVF(0.0)
-            for l in range(KNN_HOST_W):
-                if l < wv:
-                    for f in range(d):
-                        pp.unsafe_store(f * KNN_HOST_W + l, ftz(ip.unsafe_load((b0 + l) * d + f)))
-                    yn[l] = inp.unsafe_load(b0 + l)
-                else:
-                    for f in range(d):
-                        pp.unsafe_store(f * KNN_HOST_W + l, Float32(0.0))
+            for l in range(wv):
+                yn[l] = inp.unsafe_load(b0 + l)
+            var pp = pan + (b0 // KNN_HOST_W) * d * KNN_HOST_W
             var r0 = 0
             while r0 < rows:
                 var nq = min(KNN_HOST_QB, rows - r0)
@@ -743,7 +753,6 @@ def _host_knn_block_rows(
             _host_block_finish(bp + r * k, k, s0 + r, odp, oip)
         s0 += rows
     _ = qbuf^
-    _ = panel^
     _ = tile^
     _ = bestl^
 
@@ -826,11 +835,14 @@ def host_knn_search(
     var odp = host_list_ptr(out_dist)
     var oip = host_list_ptr_u32(out_idx)
 
-    def _rows(c: Int) {imm ip, imm qp, imm inp, imm qnp, imm odp, imm oip, imm chunk, imm n_queries, imm n_index, imm d, imm k, imm mtr, imm metric_arg, imm l2_pair, imm is_sqrt}:
+    var packed = host_pack_index(ip, n_index, d)
+    var pan = host_list_ptr(packed)
+
+    def _rows(c: Int) {imm pan, imm qp, imm inp, imm qnp, imm odp, imm oip, imm chunk, imm n_queries, imm n_index, imm d, imm k, imm mtr, imm metric_arg, imm l2_pair, imm is_sqrt}:
         var lo = c * chunk
         var hi = min(lo + chunk, n_queries)
         _host_knn_block_rows(
-            ip, n_index, qp, lo, hi, d, k, inp, qnp, mtr, metric_arg,
+            pan, n_index, qp, lo, hi, d, k, inp, qnp, mtr, metric_arg,
             l2_pair, is_sqrt, odp, oip,
         )
 
@@ -838,6 +850,7 @@ def host_knn_search(
         _rows(0)
     else:
         sync_parallelize(_rows, tasks)
+    _ = packed^
     _ = index_norm^
     _ = query_norm^
 
@@ -1176,19 +1189,6 @@ def _rbc_epilogue(acc: KnnVF, metric: Int, metric_arg: Float32) -> KnnVF:
     return acc
 
 
-@always_inline
-def _pack_panel(ip: HostF32Ptr, b0: Int, wv: Int, d: Int, pp: HostF32Ptr):
-    """Index columns `[b0, b0 + wv)`, flushed, feature-major, zero-padded to
-    KNN_HOST_W lanes."""
-    for l in range(KNN_HOST_W):
-        if l < wv:
-            for f in range(d):
-                pp.unsafe_store(f * KNN_HOST_W + l, ftz(ip.unsafe_load((b0 + l) * d + f)))
-        else:
-            for f in range(d):
-                pp.unsafe_store(f * KNN_HOST_W + l, Float32(0.0))
-
-
 #: What a ball cover scan does with each row's columns.
 comptime RBC_COUNT = 0
 comptime RBC_FILL = 1
@@ -1198,7 +1198,7 @@ comptime RBC_KNN = 2
 def _rbc_scan_rows[
     mode: Int
 ](
-    ip: HostF32Ptr, n_index: Int, qp: HostF32Ptr, lo: Int, hi: Int, d: Int,
+    pan: HostF32Ptr, n_index: Int, qp: HostF32Ptr, lo: Int, hi: Int, d: Int,
     metric: Int, metric_arg: Float32, eps_cmp: Float32, return_sqrt: Bool,
     k: Int,
     counts: MutPointer[Int32, MutUntrackedOrigin],
@@ -1211,14 +1211,12 @@ def _rbc_scan_rows[
     actual count into `counts[q]`; KNN writes `k` indices (`cols`) and TRUE
     distances (`dists`) at `q * k`, as `host_rbc_knn_row`."""
     var qbuf = List[Float32](length=KNN_HOST_QCH * d, fill=Float32(0.0))
-    var panel = List[Float32](length=KNN_HOST_W * d, fill=Float32(0.0))
     var tile = List[Float32](length=KNN_HOST_QB * KNN_HOST_W, fill=Float32(0.0))
     var cnt = List[Int](length=KNN_HOST_QCH, fill=0)
     var cur = List[Int](length=KNN_HOST_QCH, fill=0)
     var bd = List[Float32](length=KNN_HOST_QCH * max(k, 1), fill=Float32(0.0))
     var bi = List[Int](length=KNN_HOST_QCH * max(k, 1), fill=-1)
     var qf = host_list_ptr(qbuf)
-    var pp = host_list_ptr(panel)
     var tp = host_list_ptr(tile)
     var s0 = lo
     while s0 < hi:
@@ -1232,7 +1230,7 @@ def _rbc_scan_rows[
         var b0 = 0
         while b0 < n_index:
             var wv = min(KNN_HOST_W, n_index - b0)
-            _pack_panel(ip, b0, wv, d, pp)
+            var pp = pan + (b0 // KNN_HOST_W) * d * KNN_HOST_W
             var r0 = 0
             while r0 < rows:
                 var nq = min(KNN_HOST_QB, rows - r0)
@@ -1291,7 +1289,6 @@ def _rbc_scan_rows[
                 counts.unsafe_store(q, Int32(cnt[r]))
         s0 += rows
     _ = qbuf^
-    _ = panel^
     _ = tile^
     _ = cnt^
     _ = cur^
@@ -1330,21 +1327,23 @@ def host_rbc_radius_counts(
     tasks = max(1, min(tasks, n_queries))
     var chunk = host_predict_chunk(n_queries, tasks)
     var eps_cmp = rbc_cmp_bound(metric, eps)
-    var ip = host_list_ptr(index)
+    var packed = host_pack_index(host_list_ptr(index), n_index, d)
+    var pan = host_list_ptr(packed)
     var qp = host_list_ptr(queries)
     var cp = rebind[MutPointer[Int32, MutUntrackedOrigin]](counts.unsafe_ptr())
     var fp = host_list_ptr(queries)
-    def _rows(c: Int) {imm ip, imm qp, imm cp, imm fp, imm chunk, imm n_queries, imm n_index, imm d, imm eps_cmp, imm metric, imm metric_arg}:
+    def _rows(c: Int) {imm pan, imm qp, imm cp, imm fp, imm chunk, imm n_queries, imm n_index, imm d, imm eps_cmp, imm metric, imm metric_arg}:
         var lo = c * chunk
         var hi = min(lo + chunk, n_queries)
         _rbc_scan_rows[RBC_COUNT](
-            ip, n_index, qp, lo, hi, d, metric, metric_arg, eps_cmp, False, 0,
+            pan, n_index, qp, lo, hi, d, metric, metric_arg, eps_cmp, False, 0,
             cp, cp, cp, fp,
         )
     if tasks == 1:
         _rows(0)
     else:
         sync_parallelize(_rows, tasks)
+    _ = packed^
 
 
 def host_rbc_radius_fill_rows(
@@ -1364,23 +1363,25 @@ def host_rbc_radius_fill_rows(
     # The count call supplied each row's exact slice; writes are clamped to
     # it if the caller mutated an input between calls (the binding rejects
     # the changed count after the join).
-    var ip = host_list_ptr(index)
+    var packed = host_pack_index(host_list_ptr(index), n_index, d)
+    var pan = host_list_ptr(packed)
     var qp = host_list_ptr(queries)
     var acp = rebind[MutPointer[Int32, MutUntrackedOrigin]](actual_counts.unsafe_ptr())
     var ipp = rebind[MutPointer[Int32, MutUntrackedOrigin]](indptr.unsafe_ptr())
     var colp = rebind[MutPointer[Int32, MutUntrackedOrigin]](cols.unsafe_ptr())
     var dp = host_list_ptr(dists)
-    def _rows(c: Int) {imm ip, imm qp, imm acp, imm ipp, imm colp, imm dp, imm chunk, imm n_queries, imm n_index, imm d, imm eps_cmp, imm return_sqrt, imm metric, imm metric_arg}:
+    def _rows(c: Int) {imm pan, imm qp, imm acp, imm ipp, imm colp, imm dp, imm chunk, imm n_queries, imm n_index, imm d, imm eps_cmp, imm return_sqrt, imm metric, imm metric_arg}:
         var lo = c * chunk
         var hi = min(lo + chunk, n_queries)
         _rbc_scan_rows[RBC_FILL](
-            ip, n_index, qp, lo, hi, d, metric, metric_arg, eps_cmp,
+            pan, n_index, qp, lo, hi, d, metric, metric_arg, eps_cmp,
             return_sqrt, 0, acp, ipp, colp, dp,
         )
     if tasks == 1:
         _rows(0)
     else:
         sync_parallelize(_rows, tasks)
+    _ = packed^
 
 
 def host_rbc_edge_distance(
@@ -1451,18 +1452,20 @@ def host_rbc_knn_search(
         tasks = host_predict_task_count(n_queries)
     tasks = max(1, min(tasks, n_queries))
     var chunk = host_predict_chunk(n_queries, tasks)
-    var ip = host_list_ptr(index)
+    var packed = host_pack_index(host_list_ptr(index), n_index, d)
+    var pan = host_list_ptr(packed)
     var qp = host_list_ptr(queries)
     var oip = rebind[MutPointer[Int32, MutUntrackedOrigin]](out_idx.unsafe_ptr())
     var odp = host_list_ptr(out_dist)
-    def _rows(c: Int) {imm ip, imm qp, imm oip, imm odp, imm chunk, imm n_queries, imm n_index, imm d, imm k, imm metric, imm metric_arg}:
+    def _rows(c: Int) {imm pan, imm qp, imm oip, imm odp, imm chunk, imm n_queries, imm n_index, imm d, imm k, imm metric, imm metric_arg}:
         var lo = c * chunk
         var hi = min(lo + chunk, n_queries)
         _rbc_scan_rows[RBC_KNN](
-            ip, n_index, qp, lo, hi, d, metric, metric_arg, Float32(0.0),
+            pan, n_index, qp, lo, hi, d, metric, metric_arg, Float32(0.0),
             False, k, oip, oip, oip, odp,
         )
     if tasks == 1:
         _rows(0)
     else:
         sync_parallelize(_rows, tasks)
+    _ = packed^
