@@ -23,7 +23,16 @@ Brief: ~/mojolearn-evidence/py_work_brief.md; findings: ~/mojolearn-evidence/pyt
 
 Job: `bench/py_sequence/job.sh` on the shared NVIDIA pod (both trees in one job: BASE =
 0a11b50c7 worktree, NEW = this branch; GPU column and x86 CPU column).
-PENDING: the shared pod was down when the lane was ready (19:3xZ); no pod, no numbers yet.
+NOT RUN: job nvc1-0010 was cancelled by the orchestrator (Andrew's order, about 20:00Z: stop all
+checking; py-consolidated runs ONE global check). What did run: a no-GPU build-only pass on nvc1
+(A40 pod, Xeon Gold 6342): `_mojolearn_x_sequence` and `_mojolearn_x_sequence_host` BUILD in both
+trees (BASE and NEW, 0 failed), so the Mojo edits compile for CUDA and the x86 host.
+Local (one core, pure Python, stub import): `sched_check.py` PASS (9 separating steps);
+fast vs `_exact_lr_at` 0 differences over 17 schedules (up to 400 steps each, incl. negative
+base/gamma, gamma = 0.5, 1.0, the near-midpoint fixtures, three-phase, linear); micro timings
+ExponentialLR 24 us cold at t = 31,250 (was 5.6 s), 1.6 us per sequential step; OneCycle cos
+16 us per step (was 3.7 ms); StepLR 0.16 us per step. RNN step table and the parallel
+forecasting gather/scatter: byte-equal to the old code on small shapes.
 
 ## DEVIATION changes
 
@@ -43,3 +52,19 @@ PENDING: the shared pod was down when the lane was ready (19:3xZ); no pod, no nu
 - AutoARIMA candidate batching (IC and argmin in Mojo).
 - ARIMA aic_/bic_ into the binding (DEVIATION 991); CPU `select_d` host export.
 - SmallMLPTrainer fused step (audit row 4), MoE resident weights (row 14).
+
+## FINAL (2026-09-28, ~20:00Z)
+
+Stopped on the orchestrator's order; all code committed and pushed on lane/py-sequence.
+Changed: the 11 items in the table above (schedules, optimizer scalars carried + used slots only,
+LAMB scalars, RNN step table and order cap, LayerNorm backward, Theta/ETS, Prophet, AutoARIMA log,
+Holt-Winters components and index slices, KPSS cast, parallel forecasting copies).
+DEVIATION rows touched: 5540 (contract kept, Python Fraction implementation off the hot path),
+2421, 2422 (docstring text in `_tsa_impl.py`). 991 untouched.
+UNPROVEN (for py-consolidated's global check): every before == after digest on CPU and NVIDIA
+(nothing ran on a GPU); the lane identity cells (`bench/py_sequence/job.sh` stage `lanes` is ready:
+BASE vs NEW, both columns, `compare_trees.py`); the before/after seconds (`ab.py`, stage `bench`);
+the pytest files (stage `tests`). Behavior changes to check there: Prophet refuses NaN in t;
+`state_dict()` of the sequence optimizers gains `scalars`; Theta/ETS fit keeps a private copy of y.
+Not done: device-resident optimizer state (py-shared API not ready), Adafactor multi-tensor,
+AutoARIMA batching, ARIMA aic/bic native (991), CPU select_d export, SmallMLPTrainer, MoE.
