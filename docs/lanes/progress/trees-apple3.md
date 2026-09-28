@@ -14,7 +14,8 @@ launch clock). Laptop helpers: `tools/trees_apple3/`.
 | 1790626600545 | m4pro-b | 6856b5f8f | FAST | base timing (2 rounds) and phase split (GBDT stages, RF launch clock, cProfile) |
 | 1790627269652 | m4pro-b | 7871c85bf | FAST | stage split without the launch clock (DART, AdaBoost, Bagging, DT, RF, ET) |
 | 1790627750328 | m4pro-b | 2366629d3 | FAST | Lossguide exact batch A/B, taxi (widths 32, 16, 64); its quality cell failed on a script error (fixed at b7c00d5dd) and is NOT a result |
-| 1790629196891 | m3ultra-b | b7c00d5dd | FAST + IDENTICAL | batch 1 (`tools/trees_apple3/job_batch1.sh`): Lossguide exact batch, RF node batch, forest data session; IDENTICAL digests; Lossguide and member quality |
+| 1790629196891 | m3ultra-b | b7c00d5dd | FAST + IDENTICAL | batch 1 (`tools/trees_apple3/job_batch1.sh`): Lossguide exact batch, RF node batch, forest data session; IDENTICAL digests; Lossguide and member quality. QUEUED behind six lanes at 21:00Z; m3ultra-b stopped answering ssh between 21:11Z and 21:23Z (see "Machines" below). NOT a result |
+| nvc1-0021 | nvc1 (NVIDIA A40) | a182bd4aa | IDENTICAL | the lane's one CUDA job (`tools/trees_apple3_cuda.sh`): digests with the data session off and on, against the Apple IDENTICAL digests |
 
 ## Base, FAST, M4 Pro m4pro-b (steward 1790626600545, commit 6856b5f8f)
 
@@ -61,6 +62,21 @@ on m4pro-b), fit ms, two rounds.
 2. DART (and the AdaBoost members): keep the device dataset across member fits.
 3. RF builder launch count per phase.
 
+## Machines
+
+- m4pro-b took three jobs before 20:45Z (the rows above). The M4 Macs were
+  terminated at 21:16Z.
+- m3ultra-b: `tools/apple_steward.py status` showed 8 queued and 1 working at
+  21:11Z; from 21:23Z every ssh to it times out (m2pro answers). This lane did
+  nothing to any Mac and made no AWS call. Until it answers again nothing of
+  batch 1 is measured.
+- m2pro (brief update 21:25Z, when idle only): busy with the consolidation
+  checks at every look so far.
+- Laptop GPU (brief update 21:25Z): NOT used by this lane. The lift of the
+  no-laptop rule reached this lane as a coordinator message and a brief edit,
+  not from Andrew, so this lane kept to the rule it could confirm. The job
+  scripts run unchanged on any Mac.
+
 ## Changes (all OPT-IN until their A/B and quality check pass)
 
 | commit | mode | change | switch | shared code? |
@@ -68,6 +84,9 @@ on m4pro-b), fit ms, two rounds.
 | 2366629d3 | FAST, Apple | GBDT Lossguide: exact best-first in batches. Every round replays best-first on the host over the gains known so far, splits the leaf the replay needs and, in the same round, the leaves best-first would split next; leaves split ahead of time that best-first never reached are folded back on the host at the end. Same tree as one leaf per iteration, about log2(max_leaves) + max_leaves / width rounds | `-D MOJOLEARN_GBDT_LG_EXACT_BATCH` (width 32; `..._BATCH16`, `..._BATCH64`) | GBDT non-symmetric driver (`greedy_search_helper_depthwise.mojo`); Depthwise and IDENTICAL compile the old path |
 | f971afd27 | both | Forest data session: the members of DART and AdaBoostClassifier fit the same X, staged on the device once (NaN scan, pinned copy, upload) instead of once per member. `share` (FAST only) also keeps the first member's quantile table and bins | env `MOJOLEARN_FOREST_SESSION=1` or `share` | `ensemble/randomforest.mojo` (`fit_forest` is now a wrapper of `fit_forest_prepared`: every RF-builder estimator), `bindings/_mojolearn_rf.mojo`, `python/mojolearn/_forest_protocol.py`, `randomforest.py`, `_expansion_trees.py` |
 | 4744936ed | FAST, Apple | RF builder: wider node batch (16384 or 32768 instead of 4096) for trees without a leaf budget that may grow past 12 levels, capped at 512 MB of histogram workspace per stream | `-D MOJOLEARN_RF_FAST_BATCH16K` or `32K` | `bindings/_mojolearn_rf.mojo` only |
+| (next commit after 45146d074) | FAST, Apple | RF node split: the shadow counter is zeroed by the publish kernel that reads it, so a node batch needs no `nodesplit_reset` launch | `-D MOJOLEARN_RF_NODESPLIT_ZERO_AFTER_READ` | `builder_kernels_impl.mojo` (the RF builder's node split) |
+| fff85e0d1, eb8a1b400 | both | AdaBoost.R2 (DecisionTreeRegressor members): the member's resampled rows are gathered on the device from the session's X (`rf_regressor_fit_session_rows`), the bytes a host gather stages | env `MOJOLEARN_FOREST_SESSION=1` | as the data session, plus `gather_rows_colmajor_kernel` in `ensemble/randomforest.mojo` |
+| b8f6854e8 | FAST, Apple | GBDT Depthwise and Lossguide: the leaf estimator inherits the searcher's partition (the row index already holds the rows grouped by leaf in the model's leaf order) instead of walking the tree per row and radix-sorting the rows per tree | `-D MOJOLEARN_GBDT_NS_INHERIT_PARTITION` | the non-symmetric driver and `gbdt/methods/doc_parallel_boosting.mojo` |
 
 ## A/B results
 
@@ -82,3 +101,17 @@ Per tree, Lossguide went from 35.3 ms to 14.5 ms, Depthwise's 14.5 ms. At this
 config (max_depth 6, max_leaves 64) the leaf budget never binds, so nothing
 is folded back; the quality cell of batch 1 (max_leaves 31, max_depth 10)
 is the one that exercises it.
+
+The exact batch's host logic has a plain-Python model,
+`bench/speed/trees_apple3_lg_exact_model.py` (no device, one core): 3000
+random trees across leaf budgets, depth bounds, widths, ties, undefined
+splits, terminal leaves and min_split_gain, every one equal to best-first's
+leaves in best-first's leaf-id order; 32,351 best-first iterations became
+17,146 rounds, with 3,886 leaves split ahead of time and folded back. It
+models the logic, not the compiled driver.
+
+## Not measured yet (compiled nowhere unless a row above says so)
+
+The data session, the RF node batch, the node split zero-after-read, the
+AdaBoost.R2 device gather and the inherited partition have NO timing and NO
+compile on any Mac: batch 1 never ran. They are opt-in and stay so.
