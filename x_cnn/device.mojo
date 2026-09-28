@@ -241,7 +241,9 @@ def _im2col(
 # weights sit flushed in threadgroup memory; the NCHW store is
 # `conv_out_val` of that cell. No GEMM launch, no y2 round trip, no
 # conv_out launch. `-D MOJOLEARN_XCNN_NO_DIRECT_CONV` is the before arm.
-comptime DIRECT_CONV = not is_defined["MOJOLEARN_XCNN_NO_DIRECT_CONV"]()
+#: Apple only: measured there (the other columns keep their GEMM path until
+#: their own runs time it).
+comptime DIRECT_CONV = TARGET_COLUMN == COLUMN_APPLE and not is_defined["MOJOLEARN_XCNN_NO_DIRECT_CONV"]()
 comptime DC_MAXK = 32
 comptime DC_MAXW = 4096
 comptime DC_TPB = 256
