@@ -65,6 +65,8 @@ from hierarchy.impl.cluster.detail.connectivities import (
     DISTANCE_L2_SQRT_EXPANDED,
 )
 from neighbors.checks.pinned_distance_tile import PINNED_TILE_TPB
+from std.os import getenv
+from std.time import perf_counter_ns
 
 
 comptime GRAPH_BUILD_BRUTE_FORCE_KNN = 0
@@ -289,6 +291,8 @@ def fit_hdbscan(
     var sizes = ctx.enqueue_create_buffer[DType.int32](n_edges)
     ctx.synchronize()
 
+    var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
+    var st_t = Int(perf_counter_ns())
     # `:120-133` helpers::build_linkage(..., mutual_reachability_params)
     var rounds = build_mr_linkage(
         ctx, trace, x_host, x, m, n, k, params.alpha, metric,
@@ -296,6 +300,11 @@ def fit_hdbscan(
         tile_tpb, mst_tpb, mr_tpb, core_tpb, sabotage,
     )
 
+    if st_on:
+        ctx.synchronize()
+        var now = Int(perf_counter_ns())
+        print("HDB_STAGE linkage_ms=" + String(Float64(now - st_t) / 1.0e6))
+        st_t = now
     # `:172-181` Condense branches of tree according to min cluster size
     var tree = build_condensed_hierarchy(
         ctx, children, deltas, sizes, params.min_cluster_size, m, sabotage
@@ -305,6 +314,11 @@ def fit_hdbscan(
     trace.record_list_f32("hdbscan.condensed.lambdas", tree.lambdas)
     trace.record_list_i32("hdbscan.condensed.sizes", tree.sizes)
 
+    if st_on:
+        ctx.synchronize()
+        var now = Int(perf_counter_ns())
+        print("HDB_STAGE condense_ms=" + String(Float64(now - st_t) / 1.0e6))
+        st_t = now
     # `:183-204` Extract labels from stability
     var ext = extract_clusters(
         ctx, tree, m, params.cluster_selection_method,
@@ -315,6 +329,11 @@ def fit_hdbscan(
     trace.record_list_i32("hdbscan.selected", ext.is_cluster)
     trace.record_list_i32("hdbscan.raw_labels", ext.labels)
 
+    if st_on:
+        ctx.synchronize()
+        var now = Int(perf_counter_ns())
+        print("HDB_STAGE extract_ms=" + String(Float64(now - st_t) / 1.0e6))
+        st_t = now
     # `:208-210` max_lambda = *thrust::max_element(lambdas)
     var max_lambda = max_lambda_of(tree)
 

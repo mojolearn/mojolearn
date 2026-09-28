@@ -73,6 +73,8 @@ from hierarchy.impl.cluster.detail.single_linkage import (
 )
 from checks.numerics import identical_div
 from neighbors.checks.pinned_distance_tile import PINNED_TILE_TPB
+from std.os import getenv
+from std.time import perf_counter_ns
 
 
 def build_mr_linkage(
@@ -156,6 +158,10 @@ def build_mr_linkage(
     # `:64-79` mutual_reachability_graph, DEVIATION 1600's two halves.
     #
     # Half one: the k-NN and the core distances, which ARE theirs.
+    # MOJOLEARN_STAGE_TIMES=1 (a diagnostic, lane cluster-apple3): drain and
+    # print the wall time of each part. Off, nothing changes.
+    var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
+    var st_t = Int(perf_counter_ns())
     var knn_dists = ctx.enqueue_create_buffer[DType.float32](m * min_samples)
     var knn_inds = ctx.enqueue_create_buffer[DType.int32](m * min_samples)
     compute_core_dists(
@@ -163,6 +169,11 @@ def build_mr_linkage(
         knn_dists, knn_inds, core_tpb, sabotage,
     )
     trace.record_device[DType.float32](ctx, "hdbscan.core_dists", core_dists, m)
+    if st_on:
+        ctx.synchronize()
+        var now = Int(perf_counter_ns())
+        print("HDB_STAGE core_dists_ms=" + String(Float64(now - st_t) / 1.0e6))
+        st_t = now
 
     # Half two: the DENSE graph in place of their sparse COO. `indptr`,
     # `indices` and `pw_dists` are the PAIRWISE connectivity
@@ -223,6 +234,11 @@ def build_mr_linkage(
             max_iter=10, mst_tpb=mst_tpb, sabotage=LINK_SAB_NONE,
         )
 
+    if st_on:
+        ctx.synchronize()
+        var now = Int(perf_counter_ns())
+        print("HDB_STAGE mst_ms=" + String(Float64(now - st_t) / 1.0e6) + " rounds=" + String(rounds))
+        st_t = now
     var n_edges = m - 1
     var h_src = ctx.enqueue_create_host_buffer[DType.int32](n_edges)
     var h_dst = ctx.enqueue_create_host_buffer[DType.int32](n_edges)
@@ -296,6 +312,11 @@ def build_mr_linkage(
         ctx, "hdbscan.mst.weights", mst_weights, n_edges
     )
 
+    if st_on:
+        ctx.synchronize()
+        var now = Int(perf_counter_ns())
+        print("HDB_STAGE edges_ms=" + String(Float64(now - st_t) / 1.0e6))
+        st_t = now
     # `:107-117` Perform hierarchical labeling.
     build_dendrogram_host(
         ctx, mst_rows, mst_cols, mst_weights, n_edges,
@@ -311,6 +332,10 @@ def build_mr_linkage(
         ctx, "hdbscan.dendrogram.sizes", out_sizes, n_edges
     )
 
+    if st_on:
+        ctx.synchronize()
+        var now = Int(perf_counter_ns())
+        print("HDB_STAGE dendrogram_ms=" + String(Float64(now - st_t) / 1.0e6))
     _ = knn_dists^
     _ = knn_inds^
     _ = indptr^
