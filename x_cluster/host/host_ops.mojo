@@ -8,8 +8,18 @@ same indices, so the arithmetic of the two columns is one source.
 
 THE NEGATIVE CONTROL. `-D MOJOLEARN_HOST_SABOTAGE=1` walks every distance's
 feature fold descending (`bodies.sq_dist_rows[REV=True]`), which moves the low
-bits of distances and so the fitted centers."""
+bits of distances and so the fitted centers.
+
+THE THREAD SPLIT (lane cluster-cpu, 2026-09-28). Every primitive walks
+independent indices: each index writes only its own output cells and reads
+inputs no other index writes in the same primitive. `host_cells` splits the
+index range into contiguous tasks (`cluster/host/host_cells.mojo`: the
+caller's floating-point environment, DEVIATION 5900). An index's arithmetic is the serial walk's, in
+the same order, so the bits are the same at every thread count; it is not a
+numeric row."""
 from std.sys.compile import is_defined
+
+from cluster.host.host_cells import host_cells
 
 from x_cluster.bodies import (
     FPtr,
@@ -36,6 +46,7 @@ from cluster.impl.kmeans_params import METRIC_L2_EXPANDED
 from x_cluster.ops import ClusterOps
 
 comptime X_CLUSTER_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
+
 
 
 struct HostOps(ClusterOps):
@@ -92,27 +103,39 @@ struct HostOps(ClusterOps):
         var pa = self._fp(a)
         var pb = self._fp(b)
         var po = self._fp(dst)
-        for t in range(na * nb):
+
+        def body(t: Int) {imm pa, imm pb, imm po, imm na, imm nb, imm d}:
             sqdist_cell[X_CLUSTER_HOST_SABOTAGE](pa, na, pb, nb, d, po, t)
+
+        host_cells(body, na * nb, 3 * d)
 
     def nearest(mut self, a: Int, na: Int, b: Int, nb: Int, d: Int, labels: Int, dist: Int) raises:
         var pa = self._fp(a)
         var pb = self._fp(b)
         var pl = self._ip(labels)
         var pd = self._fp(dist)
-        for t in range(na):
+
+        def body(t: Int) {imm pa, imm pb, imm pl, imm pd, imm nb, imm d}:
             nearest_row[X_CLUSTER_HOST_SABOTAGE](pa, pb, nb, d, pl, pd, t)
+
+        host_cells(body, na, 3 * d * nb)
 
     def sqrt(mut self, x: Int, n: Int) raises:
         var px = self._fp(x)
-        for t in range(n):
+
+        def body(t: Int) {imm px}:
             sqrt_cell(px, t)
+
+        host_cells(body, n, 4)
 
     def kth(mut self, m: Int, n_rows: Int, n_cols: Int, k: Int, dst: Int) raises:
         var pm = self._fp(m)
         var po = self._fp(dst)
-        for t in range(n_rows):
+
+        def body(t: Int) {imm pm, imm po, imm n_cols, imm k}:
             kth_smallest_row(pm, n_cols, k, po, t)
+
+        host_cells(body, n_rows, 32 * n_cols)
 
     def meanshift(
         mut self, x: Int, n: Int, d: Int, bw: Float32, stop: Float32, max_iter: Int,
@@ -123,36 +146,51 @@ struct HostOps(ClusterOps):
         var ps = self._fp(scratch)
         var pi = self._ip(intensity)
         var pt = self._ip(iters)
-        for t in range(ns):
+
+        def body(t: Int) {imm px, imm pc, imm ps, imm pi, imm pt, imm n, imm d, imm bw, imm stop, imm max_iter}:
             meanshift_seed[X_CLUSTER_HOST_SABOTAGE](px, n, d, bw, stop, max_iter, pc, ps, pi, pt, t)
+
+        host_cells(body, ns, 3 * n * d)
 
     def ap_r(mut self, s: Int, a: Int, r: Int, n: Int, damping: Float32) raises:
         var ps = self._fp(s)
         var pa = self._fp(a)
         var pr = self._fp(r)
-        for t in range(n):
+
+        def body(t: Int) {imm ps, imm pa, imm pr, imm n, imm damping}:
             ap_responsibility_row(ps, pa, pr, n, damping, t)
+
+        host_cells(body, n, 6 * n)
 
     def ap_a(mut self, r: Int, a: Int, n: Int, damping: Float32) raises:
         var pr = self._fp(r)
         var pa = self._fp(a)
-        for t in range(n):
+
+        def body(t: Int) {imm pr, imm pa, imm n, imm damping}:
             ap_availability_col[X_CLUSTER_HOST_SABOTAGE](pr, pa, n, damping, t)
+
+        host_cells(body, n, 6 * n)
 
     def ap_e(mut self, a: Int, r: Int, n: Int, e: Int) raises:
         var pa = self._fp(a)
         var pr = self._fp(r)
         var pe = self._ip(e)
-        for t in range(n):
+
+        def body(t: Int) {imm pa, imm pr, imm pe, imm n}:
             ap_exemplar_cell(pa, pr, n, pe, t)
+
+        host_cells(body, n, 2)
 
     def descend(mut self, x: Int, n: Int, d: Int, centers: Int, nodes: Int, labels: Int) raises:
         var px = self._fp(x)
         var pc = self._fp(centers)
         var pn = self._ip(nodes)
         var pl = self._ip(labels)
-        for t in range(n):
+
+        def body(t: Int) {imm px, imm pc, imm pn, imm pl, imm d}:
             tree_descend[X_CLUSTER_HOST_SABOTAGE](px, d, pc, pn, pl, t)
+
+        host_cells(body, n, 24 * d)
 
     def kmeans(
         mut self, x: List[Float32], n: Int, d: Int, k: Int, max_iter: Int, tol: Float64,
@@ -175,21 +213,30 @@ struct HostOps(ClusterOps):
         var pm = self._fp(means)
         var pp = self._fp(pchol)
         var pd = self._fp(dst)
-        for t in range(n * kc):
+
+        def body(t: Int) {imm px, imm pm, imm pp, imm pd, imm d, imm kc}:
             gauss_q_cell[X_CLUSTER_HOST_SABOTAGE](px, d, pm, pp, kc, pd, t)
+
+        host_cells(body, n * kc, 2 * d * d)
 
     def resp(mut self, q: Int, c: Int, n: Int, kc: Int, lpn: Int) raises:
         var pq = self._fp(q)
         var pc = self._fp(c)
         var pl = self._fp(lpn)
-        for t in range(n):
+
+        def body(t: Int) {imm pq, imm pc, imm pl, imm kc}:
             resp_row(pq, pc, kc, pl, t)
+
+        host_cells(body, n, 40 * kc)
 
     def exp(mut self, src: Int, dst: Int, n: Int) raises:
         var ps = self._fp(src)
         var pd = self._fp(dst)
-        for t in range(n):
+
+        def body(t: Int) {imm ps, imm pd}:
             exp_cell(ps, pd, t)
+
+        host_cells(body, n, 30)
 
     def moments(
         mut self, resp: Int, x: Int, n: Int, d: Int, kc: Int, reg: Float32, nk: Int, means: Int, cov: Int
@@ -199,12 +246,21 @@ struct HostOps(ClusterOps):
         var pn = self._fp(nk)
         var pm = self._fp(means)
         var pc = self._fp(cov)
-        for t in range(kc):
+
+        def nk_body(t: Int) {imm pr, imm pn, imm n, imm kc}:
             nk_cell(pr, n, kc, pn, t)
-        for t in range(kc * d):
+
+        host_cells(nk_body, kc, 2 * n)
+
+        def xk_body(t: Int) {imm pr, imm px, imm pn, imm pm, imm n, imm d, imm kc}:
             xk_cell(pr, px, n, d, kc, pn, pm, t)
-        for t in range(kc * d * d):
+
+        host_cells(xk_body, kc * d, 4 * n)
+
+        def cov_body(t: Int) {imm pr, imm px, imm pm, imm pn, imm pc, imm n, imm d, imm kc, imm reg}:
             cov_cell(pr, px, n, d, kc, pm, pn, reg, pc, t)
+
+        host_cells(cov_body, kc * d * d, 7 * n)
 
     def pdist(
         mut self, a: Int, na: Int, b: Int, nb: Int, d: Int, metric: Int, p: Float32, dst: Int
@@ -212,5 +268,8 @@ struct HostOps(ClusterOps):
         var pa = self._fp(a)
         var pb = self._fp(b)
         var pd = self._fp(dst)
-        for t in range(na * nb):
+
+        def body(t: Int) {imm pa, imm pb, imm pd, imm na, imm nb, imm d, imm metric, imm p}:
             pdist_cell[X_CLUSTER_HOST_SABOTAGE](pa, na, pb, nb, d, metric, p, pd, t)
+
+        host_cells(body, na * nb, 4 * d)

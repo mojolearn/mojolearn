@@ -134,6 +134,8 @@ from checks.kernel_matrix import (
 )
 from checks.numerics import ftz, identical_mul_add, identical_sqrt
 from core.cosine_rows import cosine_unit_rows
+from core.host_predict_threads import host_list_ptr
+from cluster.host.host_cells import host_cells
 
 
 comptime DBSCAN_ORACLE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
@@ -232,7 +234,10 @@ def host_rbc_build(x: List[Float32], m: Int, n_cols: Int) -> RBCHostIndex:
     # rbc_landmark_1nn_kernel
     var nearest = List[Int](length=m, fill=0)
     var nearest_dist = List[Float32](length=m, fill=Float32(0.0))
-    for i in range(m):
+    var np_ = nearest.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var ndp = host_list_ptr(nearest_dist)
+
+    def _nn(i: Int) {imm x, imm r, imm np_, imm ndp, imm n_landmarks, imm n_cols}:
         var best = RBC_FLT_MAX
         var best_k = 0
         for k in range(n_landmarks):
@@ -240,8 +245,10 @@ def host_rbc_build(x: List[Float32], m: Int, n_cols: Int) -> RBCHostIndex:
             if d < best:
                 best = d
                 best_k = k
-        nearest[i] = best_k
-        nearest_dist[i] = identical_sqrt(best)
+        np_[i] = best_k
+        ndp.unsafe_store(i, identical_sqrt(best))
+
+    host_cells(_nn, m, 3 * n_landmarks * n_cols)
     # counts, the exclusive scan, the slots
     var counts = List[Int](length=n_landmarks, fill=0)
     for i in range(m):
@@ -263,7 +270,11 @@ def host_rbc_build(x: List[Float32], m: Int, n_cols: Int) -> RBCHostIndex:
         cursor[k] += 1
         slot_cols[pos] = Int32(i)
         slot_dists[pos] = nearest_dist[i]
-    for k in range(n_landmarks):
+    var rdp = host_list_ptr(r_1nn_dists)
+    var rcp = r_1nn_cols.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+
+    # A landmark's ranks land in its own [s, e) slots only.
+    def _rank(k: Int) {imm r_indptr, imm slot_dists, imm slot_cols, imm rdp, imm rcp}:
         var s = r_indptr[k]
         var e = r_indptr[k + 1]
         for p in range(s, e):
@@ -276,8 +287,10 @@ def host_rbc_build(x: List[Float32], m: Int, n_cols: Int) -> RBCHostIndex:
                     rank += 1
                 elif dq == dp and slot_cols[q] < ip:
                     rank += 1
-            r_1nn_dists[s + rank] = dp
-            r_1nn_cols[s + rank] = ip
+            rdp.unsafe_store(s + rank, dp)
+            rcp[s + rank] = ip
+
+    host_cells(_rank, n_landmarks, 4 * (m // n_landmarks + 1) * (m // n_landmarks + 1))
     var x_reordered = List[Float32](length=m * n_cols, fill=Float32(0.0))
     for pos in range(m):
         var src = Int(r_1nn_cols[pos])
@@ -519,6 +532,14 @@ def host_sorted_row(row: List[Int32]) -> List[Int32]:
     return out^
 
 
+def _empty_rows(n: Int) -> List[List[Int32]]:
+    """`n` empty neighbor rows, one slot per query row for the row tasks."""
+    var rows = List[List[Int32]](capacity=n)
+    for _ in range(n):
+        rows.append(List[Int32]())
+    return rows^
+
+
 @fieldwise_init
 struct DBSCANHostFit(Movable):
     var labels: List[Int32]
@@ -609,14 +630,23 @@ def host_dbscan_fit(
     if sparse_rbc_mode:
         var index = host_rbc_build(x, n_rows, n_features)
         var eps_radius = Float32(eps)
-        for q in range(n_rows):
+        # Every query row is independent: rows run as tasks into their own
+        # slots, then the CSR is laid out in row order as before.
+        var rows = _empty_rows(n_rows)
+        var rows_p = rows.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        wght_sum = List[Float32](length=n_rows if has_weights else 0, fill=Float32(0.0))
+        var wp = wght_sum.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+
+        def _rbc_row(q: Int) {imm index, imm x, imm weights, imm rows_p, imm wp, imm n_features, imm eps_radius, imm has_weights, imm n_rows}:
             var row = host_rbc_eps_row(index, x, q, n_features, eps_radius)
             if has_weights:
-                wght_sum.append(
-                    host_weighted_degree(host_sorted_row(row), weights, False, n_rows)
-                )
-            for p in range(len(row)):
-                col_ind.append(row[p])
+                wp[q] = host_weighted_degree(host_sorted_row(row), weights, False, n_rows)
+            rows_p[q] = row^
+
+        host_cells(_rbc_row, n_rows, 8 * n_features * (host_rbc_n_landmarks(n_rows) + 64))
+        for q in range(n_rows):
+            for p in range(len(rows[q])):
+                col_ind.append(rows[q][p])
             row_ptr[q + 1] = len(col_ind)
         if len(col_ind) > Int(MAX_LABEL):
             raise Error(
@@ -631,12 +661,21 @@ def host_dbscan_fit(
         var thresh = host_metric_threshold(metric, eps)
         # DEVIATION 5113: the device's unit rows, by the same host code.
         var xs = cosine_unit_rows(x, n_rows, n_features, "dbscan_fit") if metric == DBSCAN_METRIC_COSINE else x.copy()
-        for q in range(n_rows):
+        var rows = _empty_rows(n_rows)
+        var rows_p = rows.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        wght_sum = List[Float32](length=n_rows if has_weights else 0, fill=Float32(0.0))
+        var wp = wght_sum.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+
+        def _brute_row(q: Int) {imm xs, imm weights, imm rows_p, imm wp, imm n_rows, imm n_features, imm thresh, imm metric, imm has_weights}:
             var row = host_brute_eps_row(xs, q, n_rows, n_features, thresh, metric)
             if has_weights:
-                wght_sum.append(host_weighted_degree(row, weights, True, n_rows))
-            for p in range(len(row)):
-                col_ind.append(row[p])
+                wp[q] = host_weighted_degree(row, weights, True, n_rows)
+            rows_p[q] = row^
+
+        host_cells(_brute_row, n_rows, 3 * n_rows * n_features)
+        for q in range(n_rows):
+            for p in range(len(rows[q])):
+                col_ind.append(rows[q][p])
             row_ptr[q + 1] = len(col_ind)
 
     # core_points_kernel: vd >= min_pts, vd the row's neighbor count (the

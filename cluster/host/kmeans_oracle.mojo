@@ -169,6 +169,8 @@ from checks.kernel_matrix import (
 )
 from checks.numerics import ftz, identical_mul_add, identical_sqrt
 from core.classical_host_predict import host_gemm_nt
+from core.host_predict_threads import HostF32Ptr, host_list_ptr, host_list_ptr_u32
+from cluster.host.host_cells import ftz_v, host_cells, mul_add_v
 from cluster.impl.kmeans_params import weighted_sum_scale_cap
 
 
@@ -409,8 +411,12 @@ def host_row_norms(
     a: List[Float32], n_rows: Int, d: Int, take_sqrt: Bool
 ) -> List[Float32]:
     var out = List[Float32](length=n_rows, fill=Float32(0.0))
-    for row in range(n_rows):
-        out[row] = host_row_norm(a, row, d, take_sqrt)
+    var op = host_list_ptr(out)
+
+    def _row(row: Int) {imm a, imm op, imm d, imm take_sqrt}:
+        op.unsafe_store(row, host_row_norm(a, row, d, take_sqrt))
+
+    host_cells(_row, n_rows, 2 * d + 64)
     return out^
 
 
@@ -445,6 +451,63 @@ def host_metric_is_sqrt(metric: Int) -> Bool:
     return metric != METRIC_L2_EXPANDED
 
 
+@always_inline
+def _assign_dist(acc: Float32, xn: Float32, yn: Float32) -> Float32:
+    """The fused kernel's clamped expanded distance of one cell."""
+    var dist = ftz(
+        identical_mul_add(
+            Float32(-2.0), ftz(acc), ftz(ftz(xn) + ftz(yn))
+        )
+    )
+    if dist <= Float32(0.0) or (
+        dist * dist < FUSED_CLAMP_PRECISION and xn == yn
+    ):
+        dist = Float32(0.0)
+    return dist
+
+
+#: Centroids per SIMD group in `host_assign` and `host_kmeans_transform`.
+comptime ASSIGN_W = 8
+
+
+def host_ftz_transpose(c: List[Float32], k: Int, d: Int) -> List[Float32]:
+    """`ct[p * k + col] = ftz(c[col * d + p])`: the centroids feature-major,
+    already flushed (`ftz` is idempotent, so the cell reads the same value
+    it flushed inline before)."""
+    var ct = List[Float32](length=k * d if k * d > 0 else 1, fill=Float32(0.0))
+    for col in range(k):
+        for p in range(d):
+            ct[p * k + col] = ftz(c[col * d + p])
+    return ct^
+
+
+@always_inline
+def host_cell_dots[W: Int](
+    xp: HostF32Ptr, row: Int, d: Int, ctp: HostF32Ptr, k: Int, col0: Int
+) -> SIMD[DType.float32, W]:
+    """The dot products of row `row` with centroids col0 .. col0+W-1, one
+    per lane, each the cell's own chain `acc = ftz(fma(ftz(x_p), ftz(c_p),
+    acc))` over p ascending (`cluster/host/host_cells.mojo`: the lanes are
+    independent cells, never a split fold)."""
+    var acc = SIMD[DType.float32, W](0)
+    for p in range(d):
+        var xv = SIMD[DType.float32, W](ftz(xp.unsafe_load(row * d + p)))
+        var cv = (ctp + p * k + col0).load[width=W]()
+        acc = ftz_v[W](mul_add_v[W](xv, cv, acc))
+    return acc
+
+
+@always_inline
+def host_cell_dot(
+    xp: HostF32Ptr, row: Int, d: Int, ctp: HostF32Ptr, k: Int, col: Int
+) -> Float32:
+    """`host_cell_dots` for one centroid."""
+    var acc = Float32(0.0)
+    for p in range(d):
+        acc = ftz(identical_mul_add(ftz(xp.unsafe_load(row * d + p)), ctp.unsafe_load(p * k + col), acc))
+    return acc
+
+
 def host_assign(
     x: List[Float32],
     n: Int,
@@ -458,27 +521,37 @@ def host_assign(
     mut min_dist: List[Float32],
 ):
     """`min_cluster_and_distance_compute` through the fused kernel (module
-    docstring): `labels[row]`, `min_dist[row]` for every row."""
-    for row in range(n):
+    docstring): `labels[row]`, `min_dist[row]` for every row.
+
+    Rows run as independent tasks (`host_cells`); within a row, ASSIGN_W
+    centroids' chains run in the lanes of one vector, each lane the cell's
+    own ascending fold, and the argmin then walks the columns in order
+    under the kernel's strict `<` with the lower index on a tie."""
+    var ct = host_ftz_transpose(c, k, d)
+    var xp = host_list_ptr(x)
+    var ctp = host_list_ptr(ct)
+    var xnp = host_list_ptr(x_norm)
+    var cnp = host_list_ptr(c_norm)
+    var lp = host_list_ptr_u32(labels)
+    var mp = host_list_ptr(min_dist)
+
+    def _row(row: Int) {imm xp, imm ctp, imm xnp, imm cnp, imm lp, imm mp, imm k, imm d, imm is_sqrt}:
         var val = FUSED_MAX
         var key = UInt32(0xFFFFFFFF)
-        var xn = x_norm[row]
-        for col in range(k):
-            var acc = Float32(0.0)
-            for p in range(d):
-                acc = ftz(
-                    identical_mul_add(ftz(x[row * d + p]), ftz(c[col * d + p]), acc)
-                )
-            var yn = c_norm[col]
-            var dist = ftz(
-                identical_mul_add(
-                    Float32(-2.0), ftz(acc), ftz(ftz(xn) + ftz(yn))
-                )
-            )
-            if dist <= Float32(0.0) or (
-                dist * dist < FUSED_CLAMP_PRECISION and xn == yn
-            ):
-                dist = Float32(0.0)
+        var xn = xnp.unsafe_load(row)
+        var col0 = 0
+        while col0 + ASSIGN_W <= k:
+            var acc = host_cell_dots[ASSIGN_W](xp, row, d, ctp, k, col0)
+            comptime for l in range(ASSIGN_W):
+                var col = col0 + l
+                var dist = _assign_dist(acc[l], xn, cnp.unsafe_load(col))
+                if dist < val or (dist == val and UInt32(col) < key):
+                    val = dist
+                    key = UInt32(col)
+            col0 += ASSIGN_W
+        for col in range(col0, k):
+            var acc = host_cell_dot(xp, row, d, ctp, k, col)
+            var dist = _assign_dist(acc, xn, cnp.unsafe_load(col))
             if dist < val or (dist == val and UInt32(col) < key):
                 val = dist
                 key = UInt32(col)
@@ -487,8 +560,12 @@ def host_assign(
             # host libm root is correctly rounded too, so this moves no bit;
             # it keeps the host spelling the same as the kernel's.
             val = identical_sqrt(val)
-        min_dist[row] = val
-        labels[row] = key
+        mp.unsafe_store(row, val)
+        lp.unsafe_store(row, key)
+
+    host_cells(_row, n, 3 * k * d)
+    # The owners the row tasks read through untracked pointers live past the join.
+    _ = ct^
 
 
 def host_checked_label(labels: List[UInt32], row: Int, k: Int) raises -> Int:
@@ -762,17 +839,28 @@ def host_kmeans_plus_plus(
         var z = host_gemm_nt(x, candidates, n, n_trials, d)
         # candidate_cost_kernel: one block per trial, lanes stride the rows.
         var cost = List[Float32](length=n_trials, fill=Float32(0.0))
+        # Each (trial, lane) chain is independent: one task per chain, its
+        # own ascending stride, then the halving tree per trial in order.
+        var red_all = List[Float32](length=n_trials * PLUS_PLUS_TPB, fill=Float32(0.0))
+        var rp = host_list_ptr(red_all)
+
+        def _lane(tl: Int) {imm z, imm x_norm, imm cand_norm, imm min_dist, imm rp, imm n, imm n_trials}:
+            var t = tl // PLUS_PLUS_TPB
+            var lane = tl - t * PLUS_PLUS_TPB
+            var acc = Float32(0.0)
+            var i = lane
+            while i < n:
+                var dd = _candidate_distance(z, i, n_trials, t, x_norm, cand_norm[t])
+                var cur = min_dist[i]
+                acc = ftz(acc + (dd if dd < cur else cur))
+                i += PLUS_PLUS_TPB
+            rp.unsafe_store(tl, acc)
+
+        host_cells(_lane, n_trials * PLUS_PLUS_TPB, 8 * (n // PLUS_PLUS_TPB + 1))
         for t in range(n_trials):
             var red = List[Float32](length=PLUS_PLUS_TPB, fill=Float32(0.0))
             for lane in range(PLUS_PLUS_TPB):
-                var acc = Float32(0.0)
-                var i = lane
-                while i < n:
-                    var dd = _candidate_distance(z, i, n_trials, t, x_norm, cand_norm[t])
-                    var cur = min_dist[i]
-                    acc = ftz(acc + (dd if dd < cur else cur))
-                    i += PLUS_PLUS_TPB
-                red[lane] = acc
+                red[lane] = red_all[t * PLUS_PLUS_TPB + lane]
             cost[t] = _halving[PLUS_PLUS_TPB](red)
         # Step 4, the greedy argmin on the host, in Float64.
         var best = 0
@@ -1433,28 +1521,25 @@ def host_kmeans_transform(
     var x_norm = host_row_norms(x, n, d, host_norms_take_sqrt(metric))
     var c_norm = host_row_norms(centroids, k, d, host_norms_take_sqrt(metric))
     var is_sqrt = host_metric_is_sqrt(metric)
-    for row in range(n):
-        var xn = x_norm[row]
+    var ct = host_ftz_transpose(centroids, k, d)
+    var xp = host_list_ptr(x)
+    var ctp = host_list_ptr(ct)
+    var xnp = host_list_ptr(x_norm)
+    var cnp = host_list_ptr(c_norm)
+    var op = host_list_ptr(dist_out)
+
+    def _row(row: Int) {imm xp, imm ctp, imm xnp, imm cnp, imm op, imm k, imm d, imm is_sqrt}:
+        var xn = xnp.unsafe_load(row)
         for col in range(k):
-            var acc = Float32(0.0)
-            for p in range(d):
-                acc = ftz(
-                    identical_mul_add(ftz(x[row * d + p]), ftz(centroids[col * d + p]), acc)
-                )
-            var yn = c_norm[col]
-            var dist = ftz(
-                identical_mul_add(
-                    Float32(-2.0), ftz(acc), ftz(ftz(xn) + ftz(yn))
-                )
-            )
-            if dist <= Float32(0.0) or (
-                dist * dist < FUSED_CLAMP_PRECISION and xn == yn
-            ):
-                dist = Float32(0.0)
+            var acc = host_cell_dot(xp, row, d, ctp, k, col)
+            var dist = _assign_dist(acc, xn, cnp.unsafe_load(col))
             if is_sqrt:
                 dist = identical_sqrt(dist)
             comptime if KMEANS_TRANSFORM_HOST_SABOTAGE:
                 # THE SABOTAGE ARM: one unit into every cell. Wrong on
                 # purpose; see KMEANS_TRANSFORM_HOST_SABOTAGE.
                 dist = dist + Float32(1.0)
-            dist_out[row * k + col] = dist
+            op.unsafe_store(row * k + col, dist)
+
+    host_cells(_row, n, 3 * k * d)
+    _ = ct^
