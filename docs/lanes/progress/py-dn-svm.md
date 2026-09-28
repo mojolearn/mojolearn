@@ -48,6 +48,34 @@ not add a duplicate. For that row: the arithmetic now runs in Mojo
 (`svm/host/svc_proba.mojo`), the Python implementation is retired from the
 runtime and kept as the reference only.
 
-## Proof and timing
+## Proof and timing: UNPROVEN (checking stopped by Andrew's order, 2026-09-28)
 
-PENDING (see below).
+Checking stopped on Andrew's order before any lane check or timing ran;
+py-consolidated merges this branch and runs one global check. What did run,
+on the shared pod nvc1 (2x A40, x86-64, CPU only, `sh`, no GPU):
+
+- `_mojolearn_svm_host` and `_mojolearn_svm` BUILD (host rebuilt after the
+  last source change; the GPU binding was built one commit earlier and is
+  stale by stamp).
+- `svc_equal.py` on the HOST binding (MOJOLEARN_VENDOR=cpu), EQUAL RESULT PASS:
+  `pm_exp` and `pm_log` equal `mojolearn_exp` / `mojolearn_log` (portable_math.c
+  through `_portable_math._native`) on 1,000,025 inputs each, including the
+  overflow and underflow cutoffs, subnormals, infinities, NaN and inputs next
+  to the exp reduction boundary (0 differ); `svc_splitmix_perm` equals
+  `_splitmix_perm` at n = 1, 2, 50, 1000, 4097, 100000; `svc_platt_train`
+  equals `_sigmoid_train` bit for bit in 60 random trials (n 1 to 5000,
+  one class only included); epilogue modes ovo, ovr, votes, proba, log proba
+  equal the Python reference at K = 2, 3, 4, 7, 10 (3000 rows, decisions with
+  exact 0.0, -0.0 and integer ties); binary codes equal.
+- One bug the check caught and the branch fixes: `sigmoid_train` read its
+  target list through a pointer after the List's last use (Mojo destroys it
+  there); it is now kept alive to the end.
+
+Not run (owed to the global check): the lanes
+x-neighbors-svc-probability, x-neighbors-svc-multiclass, svc, svc-linear,
+svc-poly, x-neighbors-svc-sigmoid, x-neighbors-svm-precomputed,
+x-neighbors-svm-weights, par-svm (GPU == CPU and SAME against the base
+columns), `svc_equal.py` on the GPU binding, and every timing (job scripts
+~/mojolearn-evidence/py-dn-svm/job_a.sh, job_b.sh, svc_bench.py,
+svc_micro.py; copies on the pod in /root/ev-py-dn-svm/). Job nvc1-0013
+(job_a.sh) was queued before the order and was left queued, not cancelled.
