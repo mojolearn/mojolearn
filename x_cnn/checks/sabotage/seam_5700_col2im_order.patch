@@ -1,11 +1,11 @@
---- a/x_cnn/ops.mojo	2026-09-27 12:16:05
-+++ b/x_cnn/ops.mojo	2026-09-27 12:16:05
-@@ -167,7 +167,7 @@
+--- a/x_cnn/ops.mojo
++++ b/x_cnn/ops.mojo
+@@ -185,7 +185,7 @@
      var ckk = C * KH * KW
      var acc = Float32(0)
      for a in range(KH):
 -        var kh = KH - 1 - a if _g(p, CP_REV) != 0 else a
 +        var kh = KH - 1 - a
          var th = h + PH - kh * DH
-         if th < 0 or th % SH != 0:
+         if th < 0 or _um(th, SH) != 0:
              continue

@@ -1,9 +1,9 @@
---- a/x_cnn/ops.mojo	2026-09-27 12:16:05
-+++ b/x_cnn/ops.mojo	2026-09-27 12:16:05
-@@ -264,7 +264,7 @@
-             if w < 0 or w >= W:
-                 continue
+--- a/x_cnn/ops.mojo
++++ b/x_cnn/ops.mojo
+@@ -326,7 +326,7 @@
              var v = ftz(x.unsafe_load(base + h * W + w))
+             comptime if RELU:
+                 v = relu_val(v)
 -            if bi < 0 or v > best or v != v:
 +            if bi < 0 or v >= best or v != v:
                  best = v
