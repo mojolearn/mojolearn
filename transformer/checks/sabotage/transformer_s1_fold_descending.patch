@@ -1,0 +1,13 @@
+diff --git a/transformer/impl/llama/modeling_llama.mojo b/transformer/impl/llama/modeling_llama.mojo
+index eb7cd922f..beffc189d 100644
+--- a/transformer/impl/llama/modeling_llama.mojo
++++ b/transformer/impl/llama/modeling_llama.mojo
+@@ -1793,7 +1793,7 @@ def llama_rms_norm_kernel(
+     # +0.0 seed is contract section 8's clause -- an all-zero row sums to
+     # +0.0 on every vendor because IEEE says (+0) + (-0) = +0.
+     var acc = Float32(0.0)
+-    comptime if SAB_S1_FOLD_DESCENDING:
++    comptime if True:  # SABOTAGE (neural seam arm): SAB_S1_FOLD_DESCENDING at its use site
+         for jj in range(dm):
+             var jd = dm - 1 - jj
+             var xd = ftz(x.unsafe_load(t * dm + jd))

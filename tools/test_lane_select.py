@@ -1574,13 +1574,24 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
                                      CPU too (gbdt/host/gbdt_oracle_ctr.mojo)
                                      and keeps the edge: its body checks the
                                      public `host_model` on its saved model;
-                                     no other lane moved"""
+                                     no other lane moved
+    REMEASURED 2026-09-28 (lane/neural):
+      neural_inference.py  40 -> 41  optim-maximize (SGD/Adam/AdamW
+                                     maximize=, DEVIATION 6200), through the
+                                     same optimizer route as optim-adam-clip
+                                     and optim-sgd; no old lane moved
+      kmeans_oracle        71 -> 75  measured on lane/neural over main
+                                     468af3718; the 75 include the x-cluster,
+                                     x-ann and x-decomp expansion lanes merged
+                                     2026-09-27/28, and no neural or linear
+                                     .core lane is among them (main's own
+                                     change, found red after the merge)"""
     rev = lane_select.reverse_map()
-    for rel, want in (("cluster/host/kmeans_oracle.mojo", 71),
+    for rel, want in (("cluster/host/kmeans_oracle.mojo", 75),
                       ("core/gbdt_host_predict.mojo", 51),
                       ("core/forest_host_predict.mojo", 86),
                       ("core/forest_inference.mojo", 50),
-                      ("python/mojolearn/neural_inference.py", 40)):
+                      ("python/mojolearn/neural_inference.py", 41)):
         got = len(rev.get(rel, set()))
         assert got == want, f"{rel} answers {got} lanes, not {want}"
     lanes = len(lane_select.all_lanes())
@@ -1673,9 +1684,10 @@ def test_the_public_door_a_name_is_bound_from_is_in_the_map():
         wide = sorted(lanes - naming)
         assert not wide, (f"{rel} answers {len(lanes)} lanes and {wide[:5]} name nothing it "
                           f"binds ({sorted(bound)}); the door rule has gone wide")
-    assert len(rev.get("python/mojolearn/neural_inference.py", ())) == 40, \
-        ("the re-export rule moved neural_inference.py off its measured 40 lanes (40 + hf-checkpoint,"
-         " 2026-09-23; minus gbdt-tensor-ctr-tables, which fits on the CPU since 2026-09-28)")
+    assert len(rev.get("python/mojolearn/neural_inference.py", ())) == 41, \
+        ("the re-export rule moved neural_inference.py off its measured 41 lanes (40 + hf-checkpoint,"
+         " 2026-09-23; minus gbdt-tensor-ctr-tables, which fits on the CPU since 2026-09-28;"
+         " plus optim-maximize, 2026-09-28)")
 
     # THE FAILING SIDE: with no public rebindings the lane each door is
     # checked for loses it. Held per LANE and not per file since 2026-09-21:

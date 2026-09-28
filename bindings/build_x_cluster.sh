@@ -73,7 +73,7 @@ assert b.x_cluster_numeric_mode() == int(sys.argv[2])
 x = np.array([[0, 0], [3, 4]], dtype=np.float32)
 c = np.array([[3, 4]], dtype=np.float32)
 f, i, s = b.x_cluster_call(1, x.ctypes.data, 4, c.ctypes.data, 2, [2, 1, 2], [])
-assert f[0] == [5.0, 0.0], f
+assert list(f[0]) == [5.0, 0.0], f  # array.array since the outputs became one memcpy (cb9c67d57)
 print('PASS x_cluster native ABI', b.x_cluster_numeric_mode(), b.x_cluster_vendor())
 PY
 mkdir -p "$outdir"

@@ -4762,7 +4762,7 @@ def seam_check_lanes(path):
             if line and not line.startswith("#"):
                 listed.append(line.split("\t")[0].strip())
         if path in _mojo_closure(listed):
-            hits |= set(expansion_fragment_lanes(fid))
+            hits |= set(expansion_fragment_lanes(fid)) | set(core_listing_lanes(fid))
             drivers.append(name)
     if not drivers:
         return None
@@ -4783,6 +4783,18 @@ def generator_lanes(path, rev):
     if not outs:
         return None
     return set().union(*[rev.get(o, set()) for o in outs]), outs
+
+
+def core_listing_lanes(fid):
+    """The lanes `tools/identity_lanes/<fid>.core` lists (one name per line,
+    tools/algos_lane_check.core_lanes, same rule): a family whose EXISTING
+    identity lanes live in the harness itself runs its seam drivers before
+    them, so a driver or what it imports moves them too."""
+    try:
+        text = _read(os.path.join(IDENTITY_FRAGMENTS, fid + ".core"))
+    except OSError:
+        return ()
+    return tuple(n for n in (ln.split("#", 1)[0].strip() for ln in text.splitlines()) if n)
 
 
 def expansion_fragment_lanes(fid):

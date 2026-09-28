@@ -1,0 +1,15 @@
+# their_thing	status	why / where it would go
+# torch.optim.SGD / Adam / AdamW, torch.nn.functional.cross_entropy, torch.nn.utils.clip_grad_norm_, torch.optim.lr_scheduler. Neural family lane option parity (docs/lanes/progress/neural.md). Surface: python/mojolearn/_training_impl.py; kernels training/checks/optimizer.mojo, loss.mojo; oracles optimizer_oracle.mojo, loss_oracle.mojo.
+torch.optim.SGD/Adam/AdamW maximize	IMPLEMENTED 2026-09-27 (DEVIATION 6200, IDENTITY_PATHS row 200)	the sign-bit flip of the gradient before the step (training/maximize.mojo), both bindings; lane optim-maximize, seam driver training/checks/maximize_check.mojo
+torch.optim.Adam/AdamW amsgrad	NOT IMPLEMENTED (next)	needs a third state buffer max_exp_avg_sq (checkpoint schema, OptimizerConfig, both bindings, byte-LM optimizer pool untouched) and max(v_max, v) through identical_fmax (DEVIATION 825), whose total order settles the -0.0/+0.0 selection the old refusal named; v is a sum of squares and never -0.0, so the hazard is closed by construction and by the selector
+torch.optim.SGD/Adam/AdamW foreach, fused, capturable	REFUSED BY NAME (execution knobs)	one launch over the flat buffer; the schedule is the profile's. torch's fused Adam is a different arithmetic
+torch.optim differentiable	REFUSED BY NAME	no autograd in this library
+torch.optim param_groups (per-group options)	REFUSED BY NAME	one OptimizerConfig and one clip registry per optimizer: the clip coefficient is a function of every gradient in its registry (optimizer contract 3.5), so two groups are not two calls
+torch.optim.Adam/AdamW decoupled_weight_decay (torch 2.6+ Adam flag)	NOT IMPLEMENTED	equals AdamW; would be an alias with a refusal of the conflicting combination
+torch.optim.SGD/Adam sparse gradients, float16/bfloat16, float64	REFUSED BY NAME	dense float32 only; no float64 on a Metal device
+torch.nn.functional.cross_entropy weight=	NOT IMPLEMENTED (next)	the weighted mean's denominator sum_i w[y_i] is a float fold: pin it ascending over kept rows beside the numerator fold, per-row product w[y_i]*loss_i rounded before the fold (no FMA); label_smoothing's per-class weighted term needs its own clause
+torch.nn.functional.cross_entropy probability (soft) targets	NOT IMPLEMENTED	a (N, C) target is a second fold per row (sum_c -p_c log q_c), ascending over c; shares the log-softmax row
+torch.nn.utils.clip_grad_norm_ norm_type inf / 1 / p	NOT IMPLEMENTED	L-inf is a max-reduction with its own -0.0 selection (identical_fmax); L1 is an ascending |g| fold; general p needs identical_pow
+torch.nn.utils.clip_grad_norm_ foreach	REFUSED BY NAME (execution knob)	
+torch.nn.utils.clip_grad_value_	NOT IMPLEMENTED	elementwise clamp, value-first (Clause A); exact
+torch.optim.lr_scheduler StepLR, MultiStepLR, ExponentialLR, LinearLR, PolynomialLR, CosineAnnealingLR, OneCycleLR, SequentialLR	NOT IMPLEMENTED	host scalars like ConstantLR / WarmupLinearLR / WarmupCosineLR (_Schedule, _decide_f32): a pure function of (step, config) decided to float32 on the host, the same on every column

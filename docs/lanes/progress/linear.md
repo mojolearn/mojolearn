@@ -140,3 +140,23 @@ column EPYC 7542, tree 42b29f691 = 7325a0415 + origin/main):
 Merged to main with bench/x_linear_speed.py (the speed board). Phase 1 is
 CLOSED. Post-merge: ONE batched steward submit (Apple + do-amd) for the 17
 existing lanes, sabotage e2e_existing_device.patch (ids below).
+- 2026-09-28 steward 1790561256037-linear-fd405e35a: m2pro, m3ultra, m4-a PASS; do-amd still working at 05:20Z.
+
+## Step 0 coverage audit (session 6, 2026-09-28)
+
+Audited list (every public linear-family estimator; lane = CPU arm + GPU arm
+in tools/identity_break.py or tools/identity_lanes/linear.py; sabotage = a
+source edit that bites):
+
+| estimators | lanes | sabotage that bites |
+|---|---|---|
+| the 21 x_linear estimators (SGDClassifier/Regressor, Poisson/Gamma/Tweedie, Huber, BayesianRidge, ARD, Lars, LassoLars, Quantile, Perceptron, PassiveAggressive C/R, SGDOneClassSVM, RidgeClassifier, RidgeCV, LassoCV, ElasticNetCV, LogisticRegressionCV) + 11 option lanes | the 31 x-* lanes of linear.py but x-isotonic | x_linear/checks/sabotage/e2e_device_fold.patch (NVIDIA pass-2 gate, steward 1790535754001) |
+| IsotonicRegression | x-isotonic | e2e_device_pava.patch (steward 1790535762888) |
+| LinearRegression, Ridge, Lasso, ElasticNet, LogisticRegression, LinearSVC, LinearSVR | the 17 lanes of linear.core | glm/checks/sabotage/e2e_existing_device.patch (NVIDIA gate session 5) |
+| QNRegressor | qn-squared, qn-absolute | e2e_existing_device.patch (DISAGREE on both, AMD gate session 4) |
+
+GAP FIXED: QNRegressor (python/mojolearn/linear_model.py) had lanes but no
+family owner: qn-squared and qn-absolute are now in linear.core, so checking
+them runs linear.checks (its glm/checks/qn_losses_check.mojo arms 707, 708,
+714 are QN's seams). tools/test_lane_select.py: OK, 0 failure(s) (central
+AMD box CPU, 2026-09-28).
