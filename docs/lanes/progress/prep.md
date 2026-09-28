@@ -75,7 +75,10 @@ only resample/ remains of item 5 (the scalers are merged, see the Pass 2 table).
   remove /root/skl/numpy*; the pixi env has no pip). SAME BITS references on the pod: /root/mojolearn-evidence/algos-prep/run-branch
   (all 54 lanes, the merged state). NEVER `pkill -f <name>` through `dev_pod.sh run` when <name> is in the command itself: it kills
   the ssh shell first (it did, twice, this session); kill by PID.
-- Steward (post-merge, one request per lane per hour): STEWARD_PLACEHOLDER
+- Steward (post-merge, one request per lane per hour): 1790562931735 (main 3573c4a0e: the 33 sum lanes + x-prep-scaler-options, e2e_host_branch; covers the new lane and
+  the x_prep_ctx change on the sum lanes) queued on m2pro, m3ultra, m4pro-a, do-amd; 1790553231197 (store lanes at b23b38412,
+  e2e_store_branch) m3ultra-b, m2pro, m4-a PASS, do-amd queued. OWED next hour: the 13 store lanes at the merged main (x_prep_ctx
+  on the device path) under e2e_store_branch, one request. Check `apple_steward.py status`; a FAIL is a fix commit at the root.
   Earlier FAILs, both closed: 1790526554859 (310afeee0) ran all 29 lanes under e2e_host_branch, which cannot reach the 8 store lanes
   it named; those lanes are re-proved under e2e_store_branch by 1790553231197 (m3ultra-b, m2pro, m4-a PASS; do-amd queued) and the
   sum lanes by 1790549984236 (PASS on all four). 1790537100517 was the coalescing fault fixed at b23b38412. RULE: a request's patch
