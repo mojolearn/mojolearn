@@ -146,3 +146,54 @@ k-NN (float64), random_state = seed.
 
 Mean recall rises on both datasets (+0.006 HIGGS, +0.017 taxi); 9 of 10
 pairs rise, taxi seed 4 falls 0.004 (inside the seed spread). KEPT.
+
+## M4 Pro (m4pro-b), t-SNE + CAGRA after 9b271c465, 90e0bc9d0, c0509d856
+
+Requests 1790592048291 (IDENTICAL) and 1790592051079 (FAST), both at
+c0509d856; FAST before is 1790589752121 (t-SNE only, at lane/merged
+cf09575cf). Two runs per cell; digests equal to the earlier rows (IDENTICAL
+t-SNE 2bb1d3d75ffa1885, CAGRA 54d696296c9c7c8a / 45e435db03654b4e; FAST t-SNE
+ca01838ecfb9306d, same as lane/merged).
+
+| cell (s) | before | after c0509d856 |
+|---|---|---|
+| IDENTICAL t-SNE fit | 1.767 (8ce6266d7) | 1.049, 0.939 |
+| IDENTICAL CAGRA fit | 1.050 (8ce6266d7) | 0.645, 0.657 |
+| IDENTICAL CAGRA search | 0.052 | 0.063, 0.021 |
+| FAST t-SNE fit | 1.003, 0.929 (cf09575cf) | 0.731, 0.653 |
+| FAST CAGRA fit | 0.936 (8ce6266d7) | 0.434, 0.462 |
+
+IDENTICAL stage split at c0509d856 (ms): t-SNE k-NN + perplexity 45,
+symmetrize 103, 300 iterations 769 (was 1472); CAGRA k-NN 478 (was 862),
+prune 105, reverse merge 27, search 17.
+
+## FINAL (wind-down, 2026-09-28)
+
+Branch tip c0509d856 plus this note. Working tree clean; no refs/wip
+snapshot on origin; nothing half done.
+
+Default path (IDENTICAL, same bits by construction, Metal digests equal):
+changes 1-4 above plus 9b271c465 (three no-op flushes left out of
+ts_repulse_pair), 90e0bc9d0 (four j terms formed, folded in ascending j) and
+c0509d856 (k-NN tile staged with 4-wide loads). FAST default: 5d218f95d IVF-PQ
+codebook sample (`-D MOJOLEARN_PQ_FAST_TRAINSET_OFF` reverts; quality table
+above, KEPT). Opt-in only: `MOJOLEARN_ANN_STAGES=1` stage timings.
+
+Measured on record (M4 Pro, IDENTICAL, fit/search s): t-SNE 2.476 -> ~1.0;
+CAGRA fit 13.627 -> ~0.65; IVF-SQ / RaBitQ / PQ search 0.53 / 0.60 / 0.76 ->
+0.37 / 0.38 / 0.37. FAST IVF-PQ fit 11.79 -> 3.70.
+
+Unproven, need the integration check (only Metal digests on m4pro-b and
+m3ultra were taken; no NVIDIA, AMD or CPU identity run, no sabotage run):
+- 34d98b186, 6b357b96f, 3a9830f63, 4316f3eb3, 5035df694, 9b271c465,
+  90e0bc9d0, c0509d856: cross-vendor + CPU identity (the kernels are shared
+  by every GPU vendor).
+- Sabotage arms f3957cf8f (5804/5832/5842/5855), 5ca05a51a (5810),
+  768c30454 + 0f4ad9841 (5813), 8ce6266d7 (5830): not yet shown to apply
+  and flip at the tip.
+- 5d218f95d FAST codebook sample: quality checked on Apple only.
+
+Known issues: the IVF fits are dominated by cluster/ k-means (coarse
+k-means++ at k = 1024 and the 14 PQ codebook k-means, about 7x slower on the
+M4 Pro than on the M3 Ultra); not this lane's code, not addressed. First
+CAGRA search in a process includes ~40 ms warmup (0.063 vs 0.021).
