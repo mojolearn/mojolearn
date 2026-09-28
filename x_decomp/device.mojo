@@ -42,6 +42,8 @@ from x_decomp.cells import (
     orgqr_init_elem,
     orgqr_update_elem,
     barycenter_row,
+    dijkstra_arc_count,
+    dijkstra_arcs,
     dijkstra_row,
     gamma_cell,
     lasso_row,
@@ -87,6 +89,8 @@ def xd_ctx() raises -> DeviceContext:
     return slot[].ctx.value().copy()
 
 comptime TPB = 128
+#: rows of shortest paths per launch (the heap scratch is DIJKSTRA_ROWS x n ints)
+comptime DIJKSTRA_ROWS = 4096
 
 
 def gemm_kernel(a: F32Ptr, b: F32Ptr, c: F32Ptr, m: Int32, k: Int32, n: Int32, ta: Int32, tb: Int32):
@@ -292,10 +296,16 @@ def lda_rows_kernel(
         its.unsafe_store(i, lda_doc_row(x, ew, d, e, s, i, Int(k), Int(v), prior, Int(max_iter), tol))
 
 
-def dijkstra_kernel(w: F32Ptr, dist: F32Ptr, done: F32Ptr, reached: F32Ptr, n: Int32):
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i < Int(n):
-        reached.unsafe_store(i, dijkstra_row(w, dist, done, i, Int(n)))
+def dijkstra_kernel(
+    rp: I32Ptr, adj: I32Ptr, wa: F32Ptr, wb: F32Ptr, dist: F32Ptr, heap: I32Ptr, pos: I32Ptr, reached: F32Ptr,
+    n: Int32, row0: Int32, rows: Int32,
+):
+    """Rows row0 .. row0 + rows - 1; pos and dist are the full n x n, heap
+    is `rows` x n (slot t = i - row0)."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t < Int(rows):
+        var i = Int(row0) + t
+        reached.unsafe_store(i, dijkstra_row(rp, adj, wa, wb, dist, heap, pos, i, Int(n), t * Int(n)))
 
 
 def barycenter_kernel(
@@ -408,6 +418,86 @@ def _down_i(ctx: DeviceContext, buf: DeviceBuffer[DType.int32], p: I32Ptr, n: In
         ctx.enqueue_copy(dst_ptr=p, src_buf=buf.create_sub_buffer[DType.int32](0, n))
 
 
+def _p(buf: DeviceBuffer[DType.float32]) -> F32Ptr:
+    """A device buffer's address as the cells' pointer type."""
+    return F32Ptr(unsafe_from_address=Int(buf.unsafe_ptr()))
+
+
+def gemm_scratch(m: Int, k: Int, n: Int) -> Int:
+    """Floats of partial-sum scratch `launch_gemm` needs (0: none)."""
+    var nb = (k + FOLD_BLOCK - 1) // FOLD_BLOCK
+    return nb * m * n if nb > 1 else 0
+
+
+def launch_gemm(
+    ctx: DeviceContext, a: F32Ptr, b: F32Ptr, c: F32Ptr, p: F32Ptr, m: Int, k: Int, n: Int, ta: Bool, tb: Bool
+) raises:
+    """C = op(A) op(B) on device pointers, enqueued (no sync): FOLD_BLOCK
+    partial sums then the fold past one block (DEVIATIONS 5300/5301)."""
+    var nb = (k + FOLD_BLOCK - 1) // FOLD_BLOCK
+    if nb > 1:
+        ctx.enqueue_function[gemm_part_kernel](
+            a, b, p, Int32(m), Int32(k), Int32(n),
+            Int32(1 if ta else 0), Int32(1 if tb else 0), Int32(nb), grid_dim=_blocks(nb * m * n), block_dim=TPB,
+        )
+        ctx.enqueue_function[fold_kernel](p, c, Int32(m * n), Int32(nb), grid_dim=_blocks(m * n), block_dim=TPB)
+    else:
+        ctx.enqueue_function[gemm_kernel](
+            a, b, c, Int32(m), Int32(k), Int32(n),
+            Int32(1 if ta else 0), Int32(1 if tb else 0), grid_dim=_blocks(m * n), block_dim=TPB,
+        )
+
+
+def launch_ew(
+    ctx: DeviceContext, op: Int, a: F32Ptr, b: F32Ptr, bm: Int, c: F32Ptr, cm: Int, dst: F32Ptr,
+    count: Int, d: Int, s: Float32,
+) raises:
+    ctx.enqueue_function[ew_kernel](
+        Int32(op), a, b, Int32(bm), c, Int32(cm), dst, Int32(count), Int32(d), s,
+        grid_dim=_blocks(count), block_dim=TPB,
+    )
+
+
+def colsum_scratch(n: Int, d: Int) -> Int:
+    var nb = (n + FOLD_BLOCK - 1) // FOLD_BLOCK
+    return nb * d if nb > 1 else 0
+
+
+def launch_colsum(ctx: DeviceContext, a: F32Ptr, dst: F32Ptr, p: F32Ptr, n: Int, d: Int) raises:
+    var nb = (n + FOLD_BLOCK - 1) // FOLD_BLOCK
+    if nb > 1:
+        ctx.enqueue_function[colsum_part_kernel](
+            a, p, Int32(n), Int32(d), Int32(nb), grid_dim=_blocks(nb * d), block_dim=TPB
+        )
+        ctx.enqueue_function[fold_kernel](p, dst, Int32(d), Int32(nb), grid_dim=_blocks(d), block_dim=TPB)
+    else:
+        ctx.enqueue_function[colsum_kernel](a, dst, Int32(n), Int32(d), grid_dim=_blocks(d), block_dim=TPB)
+
+
+def rowsum_scratch(n: Int, d: Int) -> Int:
+    var nb = (d + FOLD_BLOCK - 1) // FOLD_BLOCK
+    return nb * n if nb > 1 else 0
+
+
+def launch_rowsum(ctx: DeviceContext, a: F32Ptr, dst: F32Ptr, p: F32Ptr, n: Int, d: Int) raises:
+    var nb = (d + FOLD_BLOCK - 1) // FOLD_BLOCK
+    if nb > 1:
+        ctx.enqueue_function[rowsum_part_kernel](
+            a, p, Int32(n), Int32(d), Int32(nb), grid_dim=_blocks(nb * n), block_dim=TPB
+        )
+        ctx.enqueue_function[fold_kernel](p, dst, Int32(n), Int32(nb), grid_dim=_blocks(n), block_dim=TPB)
+    else:
+        ctx.enqueue_function[rowsum_kernel](a, dst, Int32(n), Int32(d), grid_dim=_blocks(n), block_dim=TPB)
+
+
+def launch_sqdist(
+    ctx: DeviceContext, a: F32Ptr, b: F32Ptr, dst: F32Ptr, na: Int, nb: Int, d: Int, kind: Int, pw: Float32
+) raises:
+    ctx.enqueue_function[sqdist_kernel](
+        a, b, dst, Int32(na), Int32(nb), Int32(d), Int32(kind), pw, grid_dim=_blocks(na * nb), block_dim=TPB,
+    )
+
+
 @fieldwise_init
 struct DevExec(Exec):
     @staticmethod
@@ -416,21 +506,9 @@ struct DevExec(Exec):
         var da = _up(ctx, a, m * k)
         var db = _up(ctx, b, k * n)
         var dc = ctx.enqueue_create_buffer[DType.float32](m * n if m * n > 0 else 1)
-        var nb = (k + FOLD_BLOCK - 1) // FOLD_BLOCK
-        var dp = ctx.enqueue_create_buffer[DType.float32](nb * m * n if nb > 1 else 1)
-        if nb > 1:
-            ctx.enqueue_function[gemm_part_kernel](
-                da.unsafe_ptr(), db.unsafe_ptr(), dp.unsafe_ptr(), Int32(m), Int32(k), Int32(n),
-                Int32(1 if ta else 0), Int32(1 if tb else 0), Int32(nb), grid_dim=_blocks(nb * m * n), block_dim=TPB,
-            )
-            ctx.enqueue_function[fold_kernel](
-                dp.unsafe_ptr(), dc.unsafe_ptr(), Int32(m * n), Int32(nb), grid_dim=_blocks(m * n), block_dim=TPB
-            )
-        else:
-            ctx.enqueue_function[gemm_kernel](
-                da.unsafe_ptr(), db.unsafe_ptr(), dc.unsafe_ptr(), Int32(m), Int32(k), Int32(n),
-                Int32(1 if ta else 0), Int32(1 if tb else 0), grid_dim=_blocks(m * n), block_dim=TPB,
-            )
+        var ns = gemm_scratch(m, k, n)
+        var dp = ctx.enqueue_create_buffer[DType.float32](ns if ns > 0 else 1)
+        launch_gemm(ctx, _p(da), _p(db), _p(dc), _p(dp), m, k, n, ta, tb)
         _down(ctx, dc, c, m * n)
         ctx.synchronize()
         _ = da^
@@ -450,10 +528,7 @@ struct DevExec(Exec):
         var db = _up(ctx, b, lb)
         var dc = _up(ctx, c, lc)
         var dout = ctx.enqueue_create_buffer[DType.float32](count if count > 0 else 1)
-        ctx.enqueue_function[ew_kernel](
-            Int32(op), da.unsafe_ptr(), db.unsafe_ptr(), Int32(bm), dc.unsafe_ptr(), Int32(cm),
-            dout.unsafe_ptr(), Int32(count), Int32(d), s, grid_dim=_blocks(count), block_dim=TPB,
-        )
+        launch_ew(ctx, op, _p(da), _p(db), bm, _p(dc), cm, _p(dout), count, d, s)
         _down(ctx, dout, dst, count)
         ctx.synchronize()
         _ = da^
@@ -468,17 +543,9 @@ struct DevExec(Exec):
         var ctx = xd_ctx()
         var da = _up(ctx, a, n * d)
         var dout = ctx.enqueue_create_buffer[DType.float32](d if d > 0 else 1)
-        var nb = (n + FOLD_BLOCK - 1) // FOLD_BLOCK
-        var dp = ctx.enqueue_create_buffer[DType.float32](nb * d if nb > 1 else 1)
-        if nb > 1:
-            ctx.enqueue_function[colsum_part_kernel](
-                da.unsafe_ptr(), dp.unsafe_ptr(), Int32(n), Int32(d), Int32(nb), grid_dim=_blocks(nb * d), block_dim=TPB
-            )
-            ctx.enqueue_function[fold_kernel](dp.unsafe_ptr(), dout.unsafe_ptr(), Int32(d), Int32(nb), grid_dim=_blocks(d), block_dim=TPB)
-        else:
-            ctx.enqueue_function[colsum_kernel](
-                da.unsafe_ptr(), dout.unsafe_ptr(), Int32(n), Int32(d), grid_dim=_blocks(d), block_dim=TPB
-            )
+        var ns = colsum_scratch(n, d)
+        var dp = ctx.enqueue_create_buffer[DType.float32](ns if ns > 0 else 1)
+        launch_colsum(ctx, _p(da), _p(dout), _p(dp), n, d)
         _down(ctx, dout, dst, d)
         ctx.synchronize()
         _ = da^
@@ -492,17 +559,9 @@ struct DevExec(Exec):
         var ctx = xd_ctx()
         var da = _up(ctx, a, n * d)
         var dout = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
-        var nb = (d + FOLD_BLOCK - 1) // FOLD_BLOCK
-        var dp = ctx.enqueue_create_buffer[DType.float32](nb * n if nb > 1 else 1)
-        if nb > 1:
-            ctx.enqueue_function[rowsum_part_kernel](
-                da.unsafe_ptr(), dp.unsafe_ptr(), Int32(n), Int32(d), Int32(nb), grid_dim=_blocks(nb * n), block_dim=TPB
-            )
-            ctx.enqueue_function[fold_kernel](dp.unsafe_ptr(), dout.unsafe_ptr(), Int32(n), Int32(nb), grid_dim=_blocks(n), block_dim=TPB)
-        else:
-            ctx.enqueue_function[rowsum_kernel](
-                da.unsafe_ptr(), dout.unsafe_ptr(), Int32(n), Int32(d), grid_dim=_blocks(n), block_dim=TPB
-            )
+        var ns = rowsum_scratch(n, d)
+        var dp = ctx.enqueue_create_buffer[DType.float32](ns if ns > 0 else 1)
+        launch_rowsum(ctx, _p(da), _p(dout), _p(dp), n, d)
         _down(ctx, dout, dst, n)
         ctx.synchronize()
         _ = da^
@@ -517,10 +576,7 @@ struct DevExec(Exec):
         var da = _up(ctx, a, na * d)
         var db = _up(ctx, b, nb * d)
         var dout = ctx.enqueue_create_buffer[DType.float32](na * nb if na * nb > 0 else 1)
-        ctx.enqueue_function[sqdist_kernel](
-            da.unsafe_ptr(), db.unsafe_ptr(), dout.unsafe_ptr(), Int32(na), Int32(nb), Int32(d), Int32(kind), pw,
-            grid_dim=_blocks(na * nb), block_dim=TPB,
-        )
+        launch_sqdist(ctx, _p(da), _p(db), _p(dout), na, nb, d, kind, pw)
         _down(ctx, dout, dst, na * nb)
         ctx.synchronize()
         _ = da^
@@ -803,23 +859,54 @@ struct DevExec(Exec):
 
     @staticmethod
     def dijkstra_rows(w: F32Ptr, dist: F32Ptr, reached: F32Ptr, n: Int) raises:
-        var ctx = xd_ctx()
-        var dw = _up(ctx, w, n * n)
-        var dd = ctx.enqueue_create_buffer[DType.float32](n * n if n > 0 else 1)
-        var dn = ctx.enqueue_create_buffer[DType.float32](n * n if n > 0 else 1)
-        var dr = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
-        ctx.enqueue_function[dijkstra_kernel](
-            dw.unsafe_ptr(), dd.unsafe_ptr(), dn.unsafe_ptr(), dr.unsafe_ptr(), Int32(n), grid_dim=_blocks(n), block_dim=TPB
+        # the compressed arcs are built on the host (data movement only),
+        # then every row runs on the device, DIJKSTRA_ROWS rows a launch so
+        # the heap scratch stays small
+        var ne = dijkstra_arc_count(w, n)
+        var rp = List[Int32](length=n + 1, fill=Int32(0))
+        var adj = List[Int32](length=ne if ne > 0 else 1, fill=Int32(0))
+        var wa = List[Float32](length=ne if ne > 0 else 1, fill=Float32(0))
+        var wb = List[Float32](length=ne if ne > 0 else 1, fill=Float32(0))
+        dijkstra_arcs(
+            w, n, I32Ptr(unsafe_from_address=Int(rp.unsafe_ptr())), I32Ptr(unsafe_from_address=Int(adj.unsafe_ptr())),
+            F32Ptr(unsafe_from_address=Int(wa.unsafe_ptr())), F32Ptr(unsafe_from_address=Int(wb.unsafe_ptr())),
         )
+        var ctx = xd_ctx()
+        var drp = _up_i(ctx, I32Ptr(unsafe_from_address=Int(rp.unsafe_ptr())), n + 1)
+        var dadj = _up_i(ctx, I32Ptr(unsafe_from_address=Int(adj.unsafe_ptr())), ne)
+        var dwa = _up(ctx, F32Ptr(unsafe_from_address=Int(wa.unsafe_ptr())), ne)
+        var dwb = _up(ctx, F32Ptr(unsafe_from_address=Int(wb.unsafe_ptr())), ne)
+        var dd = ctx.enqueue_create_buffer[DType.float32](n * n if n > 0 else 1)
+        var dpos = ctx.enqueue_create_buffer[DType.int32](n * n if n > 0 else 1)
+        var chunk = max(1, min(n, DIJKSTRA_ROWS))
+        var dh = ctx.enqueue_create_buffer[DType.int32](chunk * n if n > 0 else 1)
+        var dr = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
+        var r0 = 0
+        while r0 < n:
+            var rows = min(chunk, n - r0)
+            ctx.enqueue_function[dijkstra_kernel](
+                drp.unsafe_ptr(), dadj.unsafe_ptr(), dwa.unsafe_ptr(), dwb.unsafe_ptr(), dd.unsafe_ptr(),
+                dh.unsafe_ptr(), dpos.unsafe_ptr(), dr.unsafe_ptr(), Int32(n), Int32(r0), Int32(rows),
+                grid_dim=_blocks(rows), block_dim=TPB,
+            )
+            r0 += rows
         _down(ctx, dd, dist, n * n)
         _down(ctx, dr, reached, n)
         ctx.synchronize()
-        _ = dw^
+        _ = drp^
+        _ = dadj^
+        _ = dwa^
+        _ = dwb^
         _ = dd^
-        _ = dn^
+        _ = dpos^
+        _ = dh^
         _ = dr^
         ctx.synchronize()
         _ = ctx^
+        _ = rp^
+        _ = adj^
+        _ = wa^
+        _ = wb^
 
     @staticmethod
     def barycenter_rows(

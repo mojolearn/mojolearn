@@ -53,14 +53,63 @@ def _is_sparse(X):
     return hasattr(X, "toarray") and hasattr(X, "nnz") and hasattr(X, "format")
 
 
+class _DevBuf:
+    """A device-resident matrix of the GPU binding (x_decomp/resident.mojo):
+    a pooled buffer id, returned to the pool when this object dies."""
+    __slots__ = ("b", "id", "n")
+
+    def __init__(self, b, n):
+        self.b, self.n = b, n
+        self.id = b.x_decomp_dev_alloc(max(n, 1))
+
+    def __del__(self):
+        try:
+            self.b.x_decomp_dev_free(self.id)
+        except Exception:     # interpreter shutdown: the pool dies with the process
+            pass
+
+
 class _M:
-    """A row-major float32 matrix held in an `array.array('f')`."""
-    __slots__ = ("s", "r", "c")
+    """A row-major float32 matrix held in an `array.array('f')`, or on the
+    device (lane decomp-apple): a GPU kit's elementwise, product, fold and
+    distance results stay in a device buffer (`_d`) until Python reads `s`
+    (or `addr`), which downloads them once and makes the host store the
+    matrix again. A host matrix handed to those entries is uploaded once
+    and MOVES to the device (its value is the one at upload)."""
+    __slots__ = ("_s", "r", "c", "_d")
 
     def __init__(self, s, r, c):
         if len(s) != r * c:
             raise ValueError("x_decomp: matrix store does not match its shape")
-        self.s, self.r, self.c = s, r, c
+        self._s, self.r, self.c, self._d = s, r, c, None
+
+    @classmethod
+    def _on_device(cls, d, r, c):
+        m = cls.__new__(cls)
+        m._s, m.r, m.c, m._d = None, r, c, d
+        return m
+
+    @property
+    def s(self):
+        if self._s is None:
+            d = self._d
+            a = array.array("f", [0.0]) * (self.r * self.c)
+            if len(a):
+                d.b.x_decomp_dev_download(d.id, a.buffer_info()[0], len(a))
+            self._s = a
+        self._d = None        # the host store may now change
+        return self._s
+
+    @s.setter
+    def s(self, v):
+        self._s, self._d = v, None
+
+    def __getstate__(self):
+        return (self.s, self.r, self.c)
+
+    def __setstate__(self, st):
+        self._s, self.r, self.c = st
+        self._d = None
 
     @classmethod
     def zeros(cls, r, c):
@@ -81,7 +130,9 @@ class _M:
         mv = getattr(a, "_mv", None)
         # one copy: the Array's own buffer straight into the store (its
         # tobytes() was a second full copy of every input)
-        s.frombytes(mv if isinstance(mv, memoryview) and mv.c_contiguous else a.tobytes())
+        # (a typed memoryview is refused by array.frombytes on some CPython
+        # versions: its bytes are taken as unsigned chars, the same copy)
+        s.frombytes(mv.cast("B") if isinstance(mv, memoryview) and mv.c_contiguous else a.tobytes())
         m = cls(s, a.shape[0], a.shape[1])
         m._check_finite(name)
         return m
@@ -164,6 +215,23 @@ class _M:
 
 
 _M._one = _M(array.array("f", [0.0]), 1, 1)
+_DEV_ONE = {}
+
+
+def _dev_one(kit):
+    """The unused broadcast operand (_M._one, a 0) on the device, one per
+    binding, never moved off the host `_M._one`."""
+    raw = kit._raw()
+    d = _DEV_ONE.get(id(raw))
+    if d is None or d.b is not raw:
+        d = _DevBuf(raw, 1)
+        z = array.array("f", [0.0])
+        kit.b.x_decomp_dev_upload(d.id, z.buffer_info()[0], 1)
+        _DEV_ONE[id(raw)] = d
+    return d.id
+
+
+_M._dev_one = staticmethod(_dev_one)
 
 
 def _any_negative(M):
@@ -200,6 +268,29 @@ class _Kit:
         self.mode = mode
         self.b = _backend.binding("_mojolearn_x_decomp", mode) if binding is None else binding
 
+    # ---- device-resident path (GPU binding only; x_decomp/resident.mojo)
+    def _raw(self):
+        return getattr(self.b, "_b", self.b)        # through bench/decomp_speed.py's profiler proxy
+
+    def _res(self):
+        return hasattr(self._raw(), "x_decomp_dev_ew")
+
+    def _did(self, M):
+        """M's device id on this binding, uploading a host matrix (it moves)."""
+        raw = self._raw()
+        d = M._d
+        if d is not None and d.b is raw:
+            return d.id
+        a = M.s
+        d = _DevBuf(raw, len(a))
+        if len(a):
+            self.b.x_decomp_dev_upload(d.id, a.buffer_info()[0], len(a))
+        M._s, M._d = None, d
+        return d.id
+
+    def _dout(self, r, c):
+        return _M._on_device(_DevBuf(self._raw(), r * c), r, c)
+
     # ---- elementwise
     def ew(self, op, A, B=None, C=None, s=0.0):
         def mode_of(X):
@@ -216,6 +307,14 @@ class _Kit:
             raise ValueError(f"x_decomp: cannot broadcast {X.r}x{X.c} against {A.r}x{A.c}")
         Bm, bm = mode_of(B)
         Cm, cm = mode_of(C)
+        if A.r * A.c and self._res():
+            out = self._dout(A.r, A.c)
+            one = _M._dev_one(self) if (Bm is _M._one or Cm is _M._one) else None
+            ib = one if Bm is _M._one else self._did(Bm)
+            ic = one if Cm is _M._one else self._did(Cm)
+            self.b.x_decomp_dev_ew(self._did(A), ib, ic, out._d.id,
+                                   [_OP[op], A.r * A.c, A.c, Bm.r * Bm.c, bm, Cm.r * Cm.c, cm], float(s))
+            return out
         out = _M.zeros(A.r, A.c)
         if A.r * A.c:
             self.b.x_decomp_ew(A.addr, Bm.addr, Cm.addr, out.addr,
@@ -231,17 +330,29 @@ class _Kit:
         k2, n = (B.c, B.r) if tb else (B.r, B.c)
         if k != k2:
             raise ValueError(f"x_decomp: gemm inner dimensions {k} and {k2} differ")
+        if m * n and m * k and k * n and self._res():
+            out = self._dout(m, n)
+            self.b.x_decomp_dev_gemm(self._did(A), self._did(B), out._d.id, [m, k, n, int(ta), int(tb)])
+            return out
         out = _M.zeros(m, n)
         if m * n:
             self.b.x_decomp_gemm(A.addr, B.addr, out.addr, [m, k, n, int(ta), int(tb)])
         return out
 
     def colsum(self, A):
+        if A.r * A.c and self._res():
+            out = self._dout(1, A.c)
+            self.b.x_decomp_dev_colsum(self._did(A), out._d.id, [A.r, A.c])
+            return out
         out = _M.zeros(1, A.c)
         self.b.x_decomp_colsum(A.addr, out.addr, [A.r, A.c])
         return out
 
     def rowsum(self, A):
+        if A.r * A.c and self._res():
+            out = self._dout(A.r, 1)
+            self.b.x_decomp_dev_rowsum(self._did(A), out._d.id, [A.r, A.c])
+            return out
         out = _M.zeros(A.r, 1)
         self.b.x_decomp_rowsum(A.addr, out.addr, [A.r, A.c])
         return out
@@ -251,6 +362,10 @@ class _Kit:
         return self.colsum(self.rowsum(A))
 
     def sqdist(self, A, B):
+        if A.r * B.r and A.c and self._res():
+            out = self._dout(A.r, B.r)
+            self.b.x_decomp_dev_sqdist(self._did(A), self._did(B), out._d.id, [A.r, B.r, A.c])
+            return out
         out = _M.zeros(A.r, B.r)
         self.b.x_decomp_sqdist(A.addr, B.addr, out.addr, [A.r, B.r, A.c])
         return out
@@ -259,6 +374,10 @@ class _Kit:
         """A non-Euclidean distance matrix (x_decomp/cells.mojo pdist_cell,
         DEVIATION 5319): kind 1 manhattan, 2 chebyshev, 3 minkowski pw,
         4 cosine."""
+        if A.r * B.r and A.c and self._res():
+            out = self._dout(A.r, B.r)
+            self.b.x_decomp_dev_sqdist(self._did(A), self._did(B), out._d.id, [A.r, B.r, A.c, int(kind), float(pw)])
+            return out
         out = _M.zeros(A.r, B.r)
         self.b.x_decomp_sqdist(A.addr, B.addr, out.addr, [A.r, B.r, A.c, int(kind), float(pw)])
         return out
@@ -2662,10 +2781,13 @@ def _top_eig(k, A, nc):
     return w, V.neg_cols(k.absmax_flags(V, True))
 
 
-def _fix_components(k, X, Wg, kind=0, pw=2.0):
+def _fix_components(k, X, Wg, kind=0, pw=2.0, adj=None):
     """sklearn `utils/graph.py::_fix_connected_components` on a dense graph:
     for every pair of connected components (i < j, labels by lowest member),
-    the closest pair of points between them gets an edge of their distance."""
+    the closest pair of points between them gets an edge of their distance.
+    `adj` (optional): each node's neighbors in either direction, the nonzero
+    entries of Wg's row and column; the components are walked over it
+    (O(edges), not O(n^2) in Python). The labels do not depend on the walk."""
     n = Wg.r
     labels = [-1] * n
     comp = 0
@@ -2676,8 +2798,8 @@ def _fix_components(k, X, Wg, kind=0, pw=2.0):
         labels[s0] = comp
         while stack:
             u = stack.pop()
-            for v in range(n):
-                if labels[v] < 0 and (Wg.s[u * n + v] != 0 or Wg.s[v * n + u] != 0):
+            for v in (adj[u] if adj is not None else range(n)):
+                if labels[v] < 0 and (adj is not None or Wg.s[u * n + v] != 0 or Wg.s[v * n + u] != 0):
                     labels[v] = comp
                     stack.append(v)
         comp += 1
@@ -2744,6 +2866,7 @@ class Isomap(_Base):
         M = _M.from_input(X)
         n = M.r
         Wg = _M.zeros(n, n)
+        adj = [[] for _ in range(n)]      # neighbors either way, for the component walk
         if self.radius is not None:
             r = _f32(float(self.radius))
             D = _dist(k, M, M, kind, pw, same=True)
@@ -2752,6 +2875,8 @@ class Isomap(_Base):
                     v = D.s[i * n + j]
                     if j != i and v <= r:
                         Wg.s[i * n + j] = v if v != 0 else 1e-10   # scipy drops explicit zeros; keep the edge
+                        adj[i].append(j)
+                        adj[j].append(i)
             nn = None
         else:
             nn = int(self.n_neighbors)
@@ -2763,7 +2888,9 @@ class Isomap(_Base):
                 for a, j in enumerate(idx[i]):
                     v = sq.s[i * nn + a]
                     Wg.s[i * n + j] = v if v != 0 else 1e-10   # scipy drops explicit zeros; keep the edge
-        Wg, self.n_connected_components_ = _fix_components(k, M, Wg, kind, pw)
+                    adj[i].append(j)
+                    adj[j].append(i)
+        Wg, self.n_connected_components_ = _fix_components(k, M, Wg, kind, pw, adj)
         D = k.dijkstra(Wg)
         self.dist_matrix_m_ = D
         self.dist_matrix_ = D.out()

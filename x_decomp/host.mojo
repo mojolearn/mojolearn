@@ -31,6 +31,8 @@ from x_decomp.cells import (
     geqrf_serial,
     orgqr_col,
     barycenter_row,
+    dijkstra_arc_count,
+    dijkstra_arcs,
     dijkstra_row,
     gamma_cell,
     lasso_row,
@@ -211,11 +213,28 @@ struct HostExec(Exec):
 
     @staticmethod
     def dijkstra_rows(w: F32Ptr, dist: F32Ptr, reached: F32Ptr, n: Int) raises:
-        var done = List[Float32](length=n * n, fill=Float32(0))
-        var pd = F32Ptr(unsafe_from_address=Int(done.unsafe_ptr()))
+        var ne = dijkstra_arc_count(w, n)
+        var rp = List[Int32](length=n + 1, fill=Int32(0))
+        var adj = List[Int32](length=ne if ne > 0 else 1, fill=Int32(0))
+        var wa = List[Float32](length=ne if ne > 0 else 1, fill=Float32(0))
+        var wb = List[Float32](length=ne if ne > 0 else 1, fill=Float32(0))
+        var prp = I32Ptr(unsafe_from_address=Int(rp.unsafe_ptr()))
+        var padj = I32Ptr(unsafe_from_address=Int(adj.unsafe_ptr()))
+        var pwa = F32Ptr(unsafe_from_address=Int(wa.unsafe_ptr()))
+        var pwb = F32Ptr(unsafe_from_address=Int(wb.unsafe_ptr()))
+        dijkstra_arcs(w, n, prp, padj, pwa, pwb)
+        var heap = List[Int32](length=n if n > 0 else 1, fill=Int32(0))
+        var pos = List[Int32](length=n * n if n > 0 else 1, fill=Int32(0))
+        var ph = I32Ptr(unsafe_from_address=Int(heap.unsafe_ptr()))
+        var pp = I32Ptr(unsafe_from_address=Int(pos.unsafe_ptr()))
         for i in range(n):
-            reached.unsafe_store(i, dijkstra_row(w, dist, pd, i, n))
-        _ = done^
+            reached.unsafe_store(i, dijkstra_row(prp, padj, pwa, pwb, dist, ph, pp, i, n, 0))
+        _ = rp^
+        _ = adj^
+        _ = wa^
+        _ = wb^
+        _ = heap^
+        _ = pos^
 
     @staticmethod
     def barycenter_rows(

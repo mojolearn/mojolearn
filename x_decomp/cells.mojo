@@ -747,42 +747,125 @@ def lda_doc_row(
 
 # DEVIATION 5314 (PIN; row 137): an undirected edge weighs the smaller nonzero
 # of W[u, v] and W[v, u]; the visiting order cannot reach a distance (each is
-# the exact minimum of sums formed alike); arm 5314_edge_weight.
-def dijkstra_row(W: F32Ptr, dist: F32Ptr, done: F32Ptr, i: Int, n: Int) -> Float32:
-    """Single-source shortest paths from node i on a dense UNDIRECTED graph
-    (scipy `shortest_path(directed=False)`): W (n x n) holds edge weights,
-    0 meaning no edge, and edge u-v weighs the smaller nonzero of W[u, v] and
-    W[v, u]. Dijkstra with the next node the unfinished one of least
-    distance, ties to the LOWER index; an unreachable node keeps -1 (never
-    inf). dist and done are row i of n x n outputs/scratch. Returns the
-    number of nodes reached."""
+# the exact minimum of sums formed alike); arm 5314_edge_weight. Speed (lane
+# decomp-apple): the rows walk compressed arcs with a (distance, index) heap,
+# the dense scan's pick, so O(E log n) a row instead of O(n^2) (Isomap at
+# 10k rows ran for hours on AMD).
+def dijkstra_arc_count(W: F32Ptr, n: Int) -> Int:
+    """The number of arcs `dijkstra_arcs` writes: ordered pairs (u, v) where
+    W[u, v] or W[v, u] is nonzero."""
+    var e = 0
+    for u in range(n):
+        for v in range(n):
+            if W.unsafe_load(u * n + v) != Float32(0) or W.unsafe_load(v * n + u) != Float32(0):
+                e += 1
+    return e
+
+
+def dijkstra_arcs(W: F32Ptr, n: Int, rp: I32Ptr, adj: I32Ptr, wa: F32Ptr, wb: F32Ptr):
+    """The arcs of the dense graph W (n x n, 0 = no edge) in compressed rows,
+    for `dijkstra_row`: node u's arcs are rp[u] .. rp[u + 1] - 1, each to
+    adj[e] (ascending) with the RAW weights wa[e] = W[u, v] and wb[e] =
+    W[v, u]; the cell applies the undirected rule. Serial, the host side of
+    both executors (data movement, no arithmetic)."""
+    var e = 0
+    for u in range(n):
+        rp.unsafe_store(u, Int32(e))
+        for v in range(n):
+            var x = W.unsafe_load(u * n + v)
+            var y = W.unsafe_load(v * n + u)
+            if x != Float32(0) or y != Float32(0):
+                adj.unsafe_store(e, Int32(v))
+                wa.unsafe_store(e, x)
+                wb.unsafe_store(e, y)
+                e += 1
+    rp.unsafe_store(n, Int32(e))
+
+
+@always_inline
+def _dj_less(dist: F32Ptr, base: Int, a: Int, b: Int) -> Bool:
+    """Heap order: the smaller distance, ties to the LOWER index (the dense
+    scan's pick)."""
+    var da = dist.unsafe_load(base + a)
+    var db = dist.unsafe_load(base + b)
+    return da < db or (da == db and a < b)
+
+
+def _dj_up(heap: I32Ptr, pos: I32Ptr, dist: F32Ptr, base: Int, hb: Int, at: Int):
+    var k = at
+    var x = Int(heap.unsafe_load(hb + k))
+    while k > 0:
+        var p = (k - 1) // 2
+        var y = Int(heap.unsafe_load(hb + p))
+        if not _dj_less(dist, base, x, y):
+            break
+        heap.unsafe_store(hb + k, Int32(y))
+        pos.unsafe_store(base + y, Int32(k))
+        k = p
+    heap.unsafe_store(hb + k, Int32(x))
+    pos.unsafe_store(base + x, Int32(k))
+
+
+def _dj_down(heap: I32Ptr, pos: I32Ptr, dist: F32Ptr, base: Int, hb: Int, size: Int):
+    var k = 0
+    var x = Int(heap.unsafe_load(hb))
+    while True:
+        var c = 2 * k + 1
+        if c >= size:
+            break
+        var cy = Int(heap.unsafe_load(hb + c))
+        if c + 1 < size:
+            var c2 = Int(heap.unsafe_load(hb + c + 1))
+            if _dj_less(dist, base, c2, cy):
+                c = c + 1
+                cy = c2
+        if not _dj_less(dist, base, cy, x):
+            break
+        heap.unsafe_store(hb + k, Int32(cy))
+        pos.unsafe_store(base + cy, Int32(k))
+        k = c
+    heap.unsafe_store(hb + k, Int32(x))
+    pos.unsafe_store(base + x, Int32(k))
+
+
+def dijkstra_row(
+    rp: I32Ptr, adj: I32Ptr, wa: F32Ptr, wb: F32Ptr, dist: F32Ptr, heap: I32Ptr, pos: I32Ptr,
+    i: Int, n: Int, hb: Int,
+) -> Float32:
+    """Single-source shortest paths from node i on an UNDIRECTED graph
+    (scipy `shortest_path(directed=False)`), the arcs of `dijkstra_arcs`:
+    edge u-v weighs the smaller nonzero of W[u, v] and W[v, u] (0 = no
+    edge). Dijkstra with the next node the unfinished one of least
+    distance, ties to the LOWER index (a binary heap on (distance, index):
+    the same pick as a scan over every node); an unreachable node keeps -1
+    (never inf). dist is row i of the n x n output; pos is row i of an
+    n x n int scratch (-1 not queued, -2 finished, else the heap slot);
+    heap is n ints from hb. Returns the number of nodes reached."""
     var base = i * n
     for v in range(n):
         dist.unsafe_store(base + v, Float32(-1))
-        done.unsafe_store(base + v, Float32(0))
+        pos.unsafe_store(base + v, Int32(-1))
     dist.unsafe_store(base + i, Float32(0))
+    heap.unsafe_store(hb, Int32(i))
+    pos.unsafe_store(base + i, Int32(0))
+    var size = 1
     var reached = 0
-    for _ in range(n):
-        var u = -1
-        var best = Float32(0)
-        for v in range(n):
-            if done.unsafe_load(base + v) != Float32(0):
-                continue
-            var dv = dist.unsafe_load(base + v)
-            if dv < Float32(0):
-                continue
-            if u < 0 or dv < best:
-                u = v
-                best = dv
-        if u < 0:
-            break
-        done.unsafe_store(base + u, Float32(1))
+    while size > 0:
+        var u = Int(heap.unsafe_load(hb))
+        size -= 1
+        pos.unsafe_store(base + u, Int32(-2))
+        if size > 0:
+            heap.unsafe_store(hb, heap.unsafe_load(hb + size))
+            _dj_down(heap, pos, dist, base, hb, size)
         reached += 1
-        for v in range(n):
-            if done.unsafe_load(base + v) != Float32(0):
+        var best = dist.unsafe_load(base + u)
+        for e in range(Int(rp.unsafe_load(u)), Int(rp.unsafe_load(u + 1))):
+            var v = Int(adj.unsafe_load(e))
+            var pv = Int(pos.unsafe_load(base + v))
+            if pv == -2:
                 continue
-            var a = ftz(W.unsafe_load(u * n + v))
-            var b = ftz(W.unsafe_load(v * n + u))
+            var a = ftz(wa.unsafe_load(e))
+            var b = ftz(wb.unsafe_load(e))
             var w = a
             if w == Float32(0) or (b != Float32(0) and b < w):
                 w = b
@@ -792,6 +875,13 @@ def dijkstra_row(W: F32Ptr, dist: F32Ptr, done: F32Ptr, i: Int, n: Int) -> Float
             var dv = dist.unsafe_load(base + v)
             if dv < Float32(0) or nd < dv:
                 dist.unsafe_store(base + v, nd)
+                if pv == -1:
+                    heap.unsafe_store(hb + size, Int32(v))
+                    pos.unsafe_store(base + v, Int32(size))
+                    size += 1
+                    _dj_up(heap, pos, dist, base, hb, size - 1)
+                else:
+                    _dj_up(heap, pos, dist, base, hb, pv)
     return Float32(reached)
 
 

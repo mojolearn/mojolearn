@@ -14,6 +14,10 @@ from x_decomp.api import (
     rowsum_py, sqdist_py, vendor_py,
 )
 from x_decomp.device import DevExec
+from x_decomp.resident import (
+    dev_alloc_py, dev_colsum_py, dev_download_py, dev_ew_py, dev_free_py, dev_gemm_py, dev_rowsum_py,
+    dev_sqdist_py, dev_upload_py,
+)
 
 
 @export
@@ -45,6 +49,16 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         m.def_function[geqrf_py[DevExec]]("x_decomp_geqrf")
         m.def_function[orgqr_py[DevExec]]("x_decomp_orgqr")
         m.def_function[als_cg_rows_py[DevExec]]("x_decomp_als_cg_rows")
+        # device-resident matrices (x_decomp/resident.mojo; GPU binding only)
+        m.def_function[dev_alloc_py]("x_decomp_dev_alloc")
+        m.def_function[dev_free_py]("x_decomp_dev_free")
+        m.def_function[dev_upload_py]("x_decomp_dev_upload")
+        m.def_function[dev_download_py]("x_decomp_dev_download")
+        m.def_function[dev_ew_py]("x_decomp_dev_ew")
+        m.def_function[dev_gemm_py]("x_decomp_dev_gemm")
+        m.def_function[dev_colsum_py]("x_decomp_dev_colsum")
+        m.def_function[dev_rowsum_py]("x_decomp_dev_rowsum")
+        m.def_function[dev_sqdist_py]("x_decomp_dev_sqdist")
         m.def_function[numeric_mode_py]("x_decomp_numeric_mode")
         m.def_function[vendor_py[DevExec]]("x_decomp_vendor")
         return m.finalize()
