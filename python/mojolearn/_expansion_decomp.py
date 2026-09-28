@@ -67,8 +67,8 @@ def _is_sparse(X):
 _POOL = {}
 _POOL_HELD = [0]
 _POOL_MIN = 1 << 18
-_POOL_PER_SIZE = 4
-_POOL_CAP = 256 << 20
+_POOL_PER_SIZE = 8
+_POOL_CAP = 512 << 20
 
 
 def _pool_take(n):
