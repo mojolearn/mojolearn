@@ -519,10 +519,6 @@ def trsm_panel_guarded_kernel(
     factor's `info`; `potrf.mojo`'s CHOL_DEFER_INFO)."""
     if stop[0] != Int32(0):
         return
-    comptime if CHOL_PANEL_SOLVE_STAGE:
-        if Int(nb_in) == 32:
-            _trsm_panel_staged(a, n_in, j0_in, n_trail_in)
-            return
     _trsm_panel_body(a, n_in, j0_in, nb_in, n_trail_in)
 
 
@@ -533,57 +529,7 @@ def trsm_panel_kernel(
     nb_in: Int32,
     n_trail_in: Int32,
 ):
-    comptime if CHOL_PANEL_SOLVE_STAGE:
-        if Int(nb_in) == 32:
-            _trsm_panel_staged(a, n_in, j0_in, n_trail_in)
-            return
     _trsm_panel_body(a, n_in, j0_in, nb_in, n_trail_in)
-
-
-#: lane/neighbors-apple (2026-09-28): on Apple the panel solve stages L11
-#: (32 x 32) in threadgroup memory and keeps each thread's row in registers,
-#: so no step of a row's chains waits on a global load. The same flushed
-#: operands, steps and order; the row is stored once at the end.
-#: `-D MOJOLEARN_CHOL_PANEL_SOLVE_STAGE_OFF` keeps the global form.
-comptime CHOL_PANEL_SOLVE_STAGE = has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_CHOL_PANEL_SOLVE_STAGE_OFF"]()
-
-
-@always_inline
-def _trsm_panel_staged(
-    a: MutPointer[Float32, MutAnyOrigin],
-    n_in: Int32,
-    j0_in: Int32,
-    n_trail_in: Int32,
-):
-    comptime NB = 32
-    comptime LD = 33
-    var n = Int(n_in)
-    var j0 = Int(j0_in)
-    var n_trail = Int(n_trail_in)
-    var tid = Int(thread_idx.x)
-    var width = Int(block_dim.x)
-    var l11 = stack_allocation[NB * LD, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var e = tid
-    while e < NB * NB:
-        var r = e // NB
-        var cc = e - r * NB
-        l11[r * LD + cc] = a.unsafe_load((j0 + r) * n + j0 + cc)
-        e += width
-    barrier()
-    var idx = Int(block_idx.x) * width + tid
-    if idx >= n_trail:
-        return
-    var r = j0 + NB + idx
-    var y = SIMD[DType.float32, NB](0.0)
-    comptime for c in range(NB):
-        y[c] = a.unsafe_load(r * n + j0 + c)
-    comptime for c in range(NB):
-        var t = ftz(y[c])
-        comptime for k in range(c):
-            t = ftz(identical_mul_add(-ftz(y[k]), ftz(l11[c * LD + k]), t))
-        y[c] = ftz(identical_div(t, ftz(l11[c * LD + c])))
-    comptime for c in range(NB):
-        a.unsafe_store(r * n + j0 + c, y[c])
 
 
 @always_inline
