@@ -9,3 +9,4 @@ x_prep/seams/prep_check.mojo	x_prep/seams/sabotage/seam_5406_rng_mapping.patch
 x_prep/seams/prep_check.mojo	x_prep/seams/sabotage/seam_5407_radius.patch
 x_prep/seams/prep_check.mojo	x_prep/seams/sabotage/seam_5408_operand_ftz.patch
 x_prep/seams/prep_check.mojo	x_prep/seams/sabotage/seam_5409_lerp.patch
+x_prep/seams/prep_check.mojo	x_prep/seams/sabotage/seam_5402_host_sort.patch
