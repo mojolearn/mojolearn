@@ -431,7 +431,7 @@ def build_parser():
                         "committed column each reference came from) to PATH")
     v.add_argument("--reference-table", dest="reference_table", metavar="PATH",
                    default=None,
-                   help="with --all: compare against this table instead of "
+                   help="with --all or --par: compare against this table instead of "
                         "the one shipped in the wheel; with --emit-reference "
                         "and --lanes, update only those lanes in this base table")
     v.add_argument("--records", action="append", metavar="DIR", default=None,

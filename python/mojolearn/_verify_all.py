@@ -3520,9 +3520,8 @@ def cmd_verify_all(args):
     if getattr(args, "cross_check", None):
         return _cmd_cross_check(args, ml)
     if getattr(args, "par", None) or getattr(args, "par_self_test", False):
-        # The two-device column against the one-device column, both produced
-        # on this box. It needs no reference table, so it dispatches BEFORE
-        # the table is loaded, like --self-test and --cross-check.
+        # The parallel command owns loading the selected one-device table
+        # and witnessing the live two-device column.
         from ._verify_par import cmd_par_check
         return cmd_par_check(args, ml)
 
