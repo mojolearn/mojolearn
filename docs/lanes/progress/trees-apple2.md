@@ -87,3 +87,8 @@ cells faster, geomean 0.989), with the Istella depthwise 1.024 noted.
 | same | m3ultra-b | 1790606770142 | lossguide istella | 6753 | 6714 | 0.994 | eb0d9510ee08a16f |
 | GBDT 2031 sym ridx IDENTICAL, ungated (bfc552c67) | m4pro-a | 1790609918603 | symmetric taxi | 1024 | 941 | 0.919 | 8e760782efae56c8 |
 | same | m4pro-a | 1790609918603 | symmetric istella | 2813 | 2992 | **1.064 (slower)** -> gated to <= 64 features (63a38c138) | d5571c2a35ea06c8 |
+| FAST combined: 2031 + id arena + ET narrow off vs on (63a38c138) | m4-a | 1790611979532 | FAST symmetric taxi | 1706 | 1575 | 0.923 | 8f160400c1defdf5 |
+| same | m4-a | 1790611979532 | FAST lossguide taxi | 7054 | 6385 | 0.905 | FAST lossguide is not deterministic run to run (two digests inside EACH arm); the changes are schedule-only |
+| same | m4-a | 1790611979532 | FAST depthwise taxi | 3118 | 3080 | 0.988 | 4e615891dc42e914 |
+| same | m4-a | 1790611979532 | FAST et:taxi | 3860 | 3728 | 0.966 | ac18d5d8a54b1555 (accuracy 0.759845 both) |
+| same | m4-a | 1790611979532 | FAST embedding:taxi | 467 | 466 | 0.999 | 90d1b0749de17d44 |
