@@ -20,9 +20,14 @@ OUT=${NEURAL_OUT:-$HOME/mojolearn-evidence/neural-apple-speed/$(git rev-parse --
 LANES=${NEURAL_LANES:-"lm-train-step lm-forward gemm transformer-forward mamba1-forward mamba2-forward mamba3-forward samba-train-step samba-forward mlp-train-step"}
 ROUNDS=${NEURAL_ROUNDS:-5}
 mkdir -p "$OUT"
-# build_byte_lm.sh refuses an existing output; the steward seeds it from its
-# build store when the source closure is unchanged, so build only when absent.
-[ -f python/mojolearn/identical/_mojolearn_byte_lm.so ] || pixi run -e default sh bindings/build_byte_lm.sh > "$OUT/byte_lm.build.log" 2>&1 || echo "BYTE-LM-BUILD FAILED"
+# The byte LM binding is ALWAYS rebuilt at this commit: a steward worktree
+# keeps untracked files between requests, so a binding left by an earlier
+# request would otherwise be timed as this commit's (it happened: 30497d57e's
+# step line timed b11745d8e's binding). build_byte_lm.sh refuses an existing
+# output, hence the rm.
+rm -f python/mojolearn/identical/_mojolearn_byte_lm.so
+pixi run -e default sh bindings/build_byte_lm.sh > "$OUT/byte_lm.build.log" 2>&1 || echo "BYTE-LM-BUILD FAILED"
+echo "BYTE-LM $(shasum -a 256 python/mojolearn/identical/_mojolearn_byte_lm.so 2>/dev/null | cut -c1-16) built at $(git rev-parse --short HEAD)"
 echo "OUT $OUT commit $(git rev-parse --short HEAD) host $(hostname) $(sysctl -n machdep.cpu.brand_string 2>/dev/null)"
 export MOJOLEARN_NUMERIC_MODE=${MOJOLEARN_NUMERIC_MODE:-identical}
 # The source tree is the package (the conductor's byte stream and the step
