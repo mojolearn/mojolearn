@@ -16,7 +16,7 @@ refinement) for `scipy.stats.norm.ppf`.
 from std.memory import bitcast
 from checks.numerics import ftz, identical_log1p, identical_erf, _cephes_erfcf_ge1
 from x_prep.common import FP, IP, p, ld, raw, st, is_nan, canonical_nan, RUN, run_block
-from x_prep.prims import add, sub, mul, div, logf, expf, sqrtf, zero_to_one
+from x_prep.prims import add, acc_add, sub, mul, div, logf, expf, sqrtf, zero_to_one
 
 #: norm.ppf(1e-7 - eps) and its mirror: QuantileTransformer's normal clip.
 comptime QT_CLIP = Float32(5.1993375)
@@ -382,7 +382,7 @@ def _pt_take1(x: Float32, tv: Float32, method: Int, first: Bool, mut cnt: Int, m
     """One row of `_neg_llf`'s first pass (x flushed, tv its transform)."""
     if is_nan(x):
         return
-    s = add(s, tv)
+    s = acc_add(s, tv)
     if first:
         if method == 1:
             sj = add(sj, logf(x))
@@ -399,7 +399,7 @@ def _pt_take2(x: Float32, tv: Float32, mean: Float32, mut ss: Float32):
     if is_nan(x):
         return
     var e = sub(tv, mean)
-    ss = add(ss, mul(e, e))
+    ss = acc_add(ss, mul(e, e))
 
 
 def pt_fold_unit(t: Int, f: FP, q: IP):

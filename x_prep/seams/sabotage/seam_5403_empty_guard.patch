@@ -1,6 +1,6 @@
 --- a/x_prep/prims.mojo
 +++ b/x_prep/prims.mojo
-@@ -136,7 +136,7 @@
+@@ -150,7 +150,7 @@
          _cs_take(ld(f, X + i * d + c), cnt, s, lo, hi, ma)
      var mean = Float32(0)
      var var_ = Float32(0)

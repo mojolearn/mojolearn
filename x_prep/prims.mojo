@@ -11,6 +11,7 @@ Normalizer, `_handle_zeros_in_scale`), `preprocessing/_encoders.py`
 linear percentile) for the quantile unit.
 """
 from std.memory import bitcast
+from std.sys.info import is_gpu
 from checks.numerics import ftz, identical_mul, identical_div, identical_sqrt, identical_exp, identical_log
 from x_prep.common import FP, IP, p, ld, raw, st, ldi, sti, is_nan, canon, canonical_nan, key, heap_sort, X_PREP_HOST_SABOTAGE, RUN, run_block
 
@@ -26,6 +27,19 @@ def add(a: Float32, b: Float32) -> Float32:
             return bitcast[DType.float32](bitcast[DType.uint32](r) + UInt32(1))
         return r
     return ftz(ftz(a) + ftz(b))
+
+
+@always_inline
+def acc_add(acc: Float32, b: Float32) -> Float32:
+    """`add` for an ACCUMULATOR, a word that is already flushed (0, or the
+    result of `add` / `acc_add`), so ftz(acc) == acc (lane prep-apple). On the
+    device a serial fold is bound by this dependent chain, and the flush of
+    acc is one step of it; the device skips it. The host calls `add`, so the
+    host sabotage (X_PREP_HOST_SABOTAGE, e2e_host_branch) still reaches every
+    sum. The same word either way."""
+    comptime if is_gpu():
+        return ftz(acc + ftz(b))
+    return add(acc, b)
 
 
 @always_inline
@@ -98,7 +112,7 @@ def _cs_take(v: Float32, mut cnt: Int, mut s: Float32, mut lo: Float32, mut hi: 
             hi = v
     if abs(v) > ma:
         ma = abs(v)
-    s = add(s, v)
+    s = acc_add(s, v)
     cnt += 1
 
 
@@ -108,7 +122,7 @@ def _ss_take(v: Float32, mean: Float32, mut ss: Float32):
     if is_nan(v):
         return
     var e = sub(v, mean)
-    ss = add(ss, mul(e, e))
+    ss = acc_add(ss, mul(e, e))
 
 
 def col_stats_unit(t: Int, f: FP, q: IP):
@@ -452,7 +466,7 @@ def class_stats_unit(t: Int, f: FP, q: IP):
         var bx = run_block[RUN](f, X + i0 * d + c, d)
         comptime for u in range(RUN):
             if Int(ftz(by[u])) == k:
-                s = add(s, ftz(bx[u]))
+                s = acc_add(s, ftz(bx[u]))
                 cnt += 1
     for i in range(full, n):
         if Int(ld(f, Y + i)) != k:
@@ -470,7 +484,7 @@ def class_stats_unit(t: Int, f: FP, q: IP):
                 comptime for u in range(RUN):
                     if Int(ftz(by[u])) == k:
                         var e = sub(ftz(bx[u]), mean)
-                        ss = add(ss, mul(e, e))
+                        ss = acc_add(ss, mul(e, e))
             for i in range(full, n):
                 if Int(ld(f, Y + i)) != k:
                     continue

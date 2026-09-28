@@ -1,6 +1,6 @@
 --- a/x_prep/prims.mojo
 +++ b/x_prep/prims.mojo
-@@ -180,7 +180,7 @@
+@@ -194,7 +194,7 @@
          var a = ld(f, S + c * n + lo)
          var b = ld(f, S + c * n + hi_i)
          var diff = sub(b, a)

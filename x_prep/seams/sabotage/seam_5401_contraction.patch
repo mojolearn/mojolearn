@@ -1,6 +1,6 @@
 --- a/x_prep/prims.mojo
 +++ b/x_prep/prims.mojo
-@@ -353,7 +353,8 @@
+@@ -367,7 +367,8 @@
  def mm_step(acc: Float32, a: Float32, b: Float32) -> Float32:
      """One term of matmul's contraction: the product rounded, then added
      (DEVIATION 5401: never contracted into an FMA)."""

@@ -1,6 +1,6 @@
 --- a/x_prep/prims.mojo
 +++ b/x_prep/prims.mojo
-@@ -131,9 +131,9 @@
+@@ -145,9 +145,9 @@
      for i0 in range(0, full, RUN):
          var blk = run_block[RUN](f, X + i0 * d + c, d)
          comptime for u in range(RUN):
