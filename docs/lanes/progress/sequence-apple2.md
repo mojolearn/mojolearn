@@ -129,6 +129,31 @@ Prophet FAST chunked fit at 65536 points (quality run, fit seconds): 118.4 s -> 
 objective -170422.72 -> -170422.28 (relative 2.6e-6 higher), in-sample RMSE
 0.9932792 -> 0.9932782 (lower), 47 -> 41 L-BFGS iterations.
 
+### Job 4: m4-a, steward 1790608297476, before 068959af0, after f455bf9f5 (adds the coop folds)
+
+Two alternating runs per arm, best shown. Records: ~/mojolearn-evidence/sequence-apple2/j4.
+
+| algo | IDENTICAL before | after | x | bits | FAST before | after | x | bits |
+|---|---|---|---|---|---|---|---|---|
+| lamb | 1.842 | 1.393 | 1.32x | same | 1.065 | 0.262 | 4.07x | moved |
+| adafactor | 1.079 | 0.865 | 1.25x | same | 0.620 | 0.127 | 4.89x | moved |
+| var | 0.582 | 0.462 | 1.26x | same | 0.555 | 0.408 | 1.36x | moved |
+| layernorm | 0.536 | 0.221 | 2.42x | same | 0.520 | 0.164 | 3.17x | moved |
+| garch | 1.008 | 0.996 | 1.0x | same | 0.757 | 0.499 | 1.52x | moved |
+| prophet (32768) | 38.94 | 38.99 | 1.0x | same | 12.86 | 0.166 | 77x | moved |
+| hw (Holt-Winters) | 1.447 | 1.435 | 1.0x | same | 0.588 | 0.591 | 1.0x | same |
+| kpss | 0.008 | 0.008 | 1.0x | same | 0.008 | 0.008 | 1.0x | same |
+| mlp | 1.101 | 1.078 | 1.02x | same | 0.977 | 0.959 | 1.02x | same |
+| moe | 0.421 | 0.369 | 1.14x | same | 0.396 | 0.365 | 1.08x | same |
+
+The coop folds (IDENTICAL, bits unchanged) take LAMB, Adafactor and VAR 1.25-1.32x.
+ARIMA and AutoARIMA did not run (the variant worktree lacked libMojolearnMath; the
+conductor builds it now with SAB_MATH=1). FAST quality in this job: as job 2 for
+lamb, adafactor, var; GARCH at the new default 50/1e-5: loglik -138.314814 (no stop:
+-138.314873), QLIKE 1.085543 (no stop: 1.085557), 212 mean iterations (1703).
+Prophet FAST at 1M points: 0.354 s, 30 L-BFGS iterations (the IDENTICAL fit took
+1470 s on this Mac in job 1).
+
 ## Unproven
 
 (pending)
