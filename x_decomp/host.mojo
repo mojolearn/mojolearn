@@ -29,10 +29,8 @@ from x_decomp.cells import (
     X_DECOMP_SVD_SWEEPS,
     X_DECOMP_SVD_TOL,
     I32Ptr,
-    bidx,
     cd_row,
     chol_serial,
-    ew_cell,
     als_row,
     barycenter_row,
     gamma_cell,
@@ -48,6 +46,7 @@ from x_decomp.cells import (
 from x_decomp.exec_trait import Exec
 from x_decomp.host_jacobi import fast_jacobi_eigh, fast_one_sided_jacobi_svd
 from x_decomp.host_qr import fast_qr_finish, qr_slice, qr_slices
+from x_decomp.host_ew import ew_range
 from x_decomp.host_lda import lda_doc_row_host, lda_pack_t
 from x_decomp.host_graph import EdgeList, dijkstra_heap_row
 from x_decomp.host_simd import (
@@ -173,12 +172,9 @@ struct HostExec(Exec):
         op: Int, a: F32Ptr, b: F32Ptr, lb: Int, bm: Int, c: F32Ptr, lc: Int, cm: Int,
         dst: F32Ptr, count: Int, d: Int, s: Float32,
     ) raises:
+        # ew_cell's statements, lanes across elements (x_decomp/host_ew.mojo)
         def chunk(t: Int) {imm op, imm a, imm b, imm bm, imm c, imm cm, imm dst, imm count, imm d, imm s}:
-            for i in range(t * EW_CHUNK, min(count, (t + 1) * EW_CHUNK)):
-                dst.unsafe_store(
-                    i,
-                    ew_cell(op, a.unsafe_load(i), b.unsafe_load(bidx(bm, i, d)), c.unsafe_load(bidx(cm, i, d)), s),
-                )
+            ew_range(op, a, b, bm, c, cm, dst, t * EW_CHUNK, min(count, (t + 1) * EW_CHUNK), d, s)
 
         xd_parallel(chunk, (count + EW_CHUNK - 1) // EW_CHUNK)
 

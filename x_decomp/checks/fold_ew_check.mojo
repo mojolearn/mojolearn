@@ -16,7 +16,7 @@ lands on the card."""
 from std.memory import bitcast
 
 from core.identity_trace import IdentityTrace
-from x_decomp.cells import F32Ptr
+from x_decomp.cells import F32Ptr, bidx, ew_cell
 from x_decomp.checks.xd_oracles import (
     oracle_absmax_sign,
     oracle_colsum,
@@ -293,6 +293,34 @@ def main() raises:
         HostExec.ew(op, ptr(xs), ptr(ys), ne, 0, ptr(zs), ne, 0, ptr(hst), ne, ne, s)
         same("5303-5305 ew op " + String(op) + " host", count_diff_f32(hst, want))
         tr.record_list_f32("x_decomp.ew." + String(op), dev)
+    # the host spelling (x_decomp/host_ew.mojo) on every broadcast mode of
+    # both operands, rows longer and shorter than a vector with a tail:
+    # HostExec.ew == ew_cell element by element, every op code
+    var bshapes: List[Int] = [7, 21, 40, 3, 1, 16]
+    var bdiff = 0
+    for sh in range(len(bshapes) // 2):
+        var rows = bshapes[2 * sh]
+        var bd = bshapes[2 * sh + 1]
+        var cnt = rows * bd
+        var ba = zeros(cnt)
+        var bb = zeros(cnt)
+        var bc = zeros(cnt)
+        var sa = seam_fixture(rows, bd, 51)
+        for t in range(cnt):
+            ba[t] = xs[t % ne] if t % 3 == 0 else sa[t]
+            bb[t] = ys[(t * 5) % ne] if t % 4 == 1 else sa[(t * 7) % cnt]
+            bc[t] = zs[(t * 3) % ne] if t % 2 == 0 else sa[(t * 11) % cnt]
+        for op in ops:
+            var s = Float32(0) if op == 10 else Float32(0.5)
+            for bm in range(4):
+                for cm in range(4):
+                    var want = zeros(cnt)
+                    for i in range(cnt):
+                        want[i] = ew_cell(op, ba[i], bb[bidx(bm, i, bd)], bc[bidx(cm, i, bd)], s)
+                    var got = zeros(cnt)
+                    HostExec.ew(op, ptr(ba), ptr(bb), cnt, bm, ptr(bc), cnt, cm, ptr(got), cnt, bd, s)
+                    bdiff += count_diff_f32(got, want)
+    same("5303-5305 ew host, every broadcast mode", bdiff)
     require_separates("5303 zero guards and clamps (Clause B)", sep_guard)
     require_separates("5304 subnormal flush of an add", sep_ftz)
     require_separates("5305 digamma/lgamma recurrence", sep_series)
