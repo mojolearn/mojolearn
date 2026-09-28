@@ -337,7 +337,10 @@ def _validate_state(value):
     m = _array(value['m'], (shape.n_total,), 'm')
     v = _array(value['v'], (shape.n_total,), 'v')
     flags = _array(value['flags'], (shape.n_tensors,), 'flags', '<i4')
-    if any(x < 0 for x in flat_view(v, 'f')) or any(x not in (0, 1) for x in flat_view(flags, 'i')):
+    # Native min/max (reduce_stat, DEVIATION 3101) over buffers `_array`
+    # already proved finite: `min < 0` is `any(x < 0)` exactly, and an int32
+    # flag vector is binary iff min >= 0 and max <= 1.
+    if v.min() < 0 or flags.min() < 0 or flags.max() > 1:
         raise ValueError('Byte-LM requires nonnegative second moments and binary flags')
     value = dict(value)
     if 'model_shape' in value:
@@ -872,7 +875,7 @@ class SmallByteLanguageModelTrainer:
         clock = [time.perf_counter()]
         n4 = shape.n_total * 4
         tokens = _array(ids, (shape.batch, shape.length + 1), 'ids', '<i4')
-        if any(x < 0 or x >= shape.vocab_size for x in flat_view(tokens, 'i')):
+        if tokens.min() < 0 or tokens.max() >= shape.vocab_size:
             raise ValueError(f'Byte-LM IDs must be in [0, {shape.vocab_size})')
         _tick(ton, clock, 'step.py_tokens', tokens.nbytes)
         if self._resident:
@@ -992,7 +995,7 @@ class SmallByteLanguageModelTrainer:
         if not train:
             return float(out_loss[0])
         new_flags = _array(out_flags, (shape.n_tensors,), 'flags', '<i4')
-        if any(x not in (0, 1) for x in flat_view(new_flags, 'i')):
+        if new_flags.min() < 0 or new_flags.max() > 1:
             raise RuntimeError('Byte-LM returned non-binary momentum flags')
         _tick(ton, clock, 'step.py_flags', new_flags.nbytes)
         result = dict(loss=float(out_loss[0]), step=expected, completed_steps=expected,

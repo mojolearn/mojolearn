@@ -96,6 +96,11 @@ def _refuse_ids(tokens, vocab, batch, width, target_column):
     `target_column` is set, that column of each row feeds only the loss as a
     target and may also hold `_IGNORE_INDEX`, exactly what the native loss
     admits; every other position is a model input."""
+    # Native min/max (reduce_stat) admits the common case in one pass; the
+    # Python scan below runs only to name the first offending id (and to
+    # admit `_IGNORE_INDEX` in the target column).
+    if tokens.size and tokens.min() >= 0 and tokens.max() < vocab:
+        return
     flat = flat_view(tokens, 'i')
     for r in range(batch):
         base = r * width

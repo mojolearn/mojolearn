@@ -168,9 +168,9 @@ class ParallelByteLanguageModelTrainer:
         """The four state arrays of one replica, freshly downloaded, as
         `{'parameters', 'm', 'v', 'flags'}` with NO admission pass. For
         hashing and streaming a checkpoint at scale: `state_dict()` runs
-        `_validate_state`, whose per-element Python scan of `v` and `flags`
-        costs about 16 s at 162M parameters, which a per-step hash chain
-        cannot pay. What comes back is bytes for a digest or a file, not a
+        `_validate_state`, which copies and scans every state array (the scans
+        are native since lane/py-lm, but the copies remain), which a per-step
+        hash chain need not pay. What comes back is bytes for a digest or a file, not a
         state that anything may train from; a restore still enters through
         `_validate_state`.
 

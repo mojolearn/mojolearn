@@ -45,7 +45,10 @@ WHAT IS RESTATED FROM THE DEVICE SIDE, and nothing more:
   the refusals         the GPU binding's admission of addresses, action,
                        step bound, optimizer, flags, state and ids, in its
                        words where the Python class does not already refuse
-                       first.
+                       first. The element scans behind them are native
+                       (`all_finite`, and min/max through reduce_stat,
+                       DEVIATION 3101); Python never loops over parameters,
+                       moments, logits or ids here.
 
 ABSENT, SO THEY REFUSE BY NAME (an AttributeError naming the entry and this
 file, so `getattr(binding, name, None)` and `hasattr` still read absent): the
@@ -61,8 +64,8 @@ import operator
 import struct
 
 from . import _backend
-from ._bufcheck import flat_view, memcopy
-from ._buffer import addr, addr_ro, frombytes, zeros
+from ._bufcheck import memcopy
+from ._buffer import addr, addr_ro, all_finite, frombytes, zeros
 from ._byte_lm_config import ByteLanguageModelConfig
 
 HOST_BASENAME = "_mojolearn_byte_lm_host"
@@ -98,10 +101,6 @@ def _read_i32(address, n):
     return frombytes(ctypes.string_at(int(address), 4 * n), "<i4", (n,))
 
 
-def _words(array, code):
-    return flat_view(array, code)
-
-
 def _optimizer(params):
     """`OptimizerConfig` from params[2:12] and `byte_validate_optimizer`:
     AdamW, positive lr and eps, betas in [0, 1), nonnegative weight decay,
@@ -125,21 +124,21 @@ def _validate_state(p, m, v, flags, completed, cfg):
     """`byte_validate_state`."""
     if not 0 <= completed < 1000000:
         raise ValueError("byte LM: completed step outside admitted bound")
+    # Native `all_finite` and min/max (reduce_stat) over the whole buffer,
+    # in the same refusal order the per-element scans had.
     for name, arr in (("parameters", p), ("m", m), ("v", v)):
-        for x in _words(arr, "f"):
-            if not math.isfinite(x):
-                raise ValueError(f"byte LM: nonfinite {name}")
-    if any(x < 0 for x in _words(v, "f")):
+        if not all_finite(arr):
+            raise ValueError(f"byte LM: nonfinite {name}")
+    if v.size and v.min() < 0:
         raise ValueError("byte LM: second moments must be nonnegative")
-    if any(x not in (0, 1) for x in _words(flags, "i")):
+    if flags.size and (flags.min() < 0 or flags.max() > 1):
         raise ValueError("byte LM: momentum flags must be exactly 0 or 1")
 
 
 def _validate_tokens(ids, cfg):
     """`byte_validate_tokens`: every id in [0, vocab)."""
-    for x in _words(ids, "i"):
-        if not 0 <= x < cfg.vocab_size:
-            raise ValueError("byte LM: token id outside [0, vocab)")
+    if ids.size and (ids.min() < 0 or ids.max() >= cfg.vocab_size):
+        raise ValueError("byte LM: token id outside [0, vocab)")
 
 
 def _addresses(addresses, count, n_inputs, what):
@@ -286,9 +285,8 @@ class _HostTrainerBinding:
                                                      list(cfg.native_shape), 0, 1))
         if written != b * l * cfg.vocab_size:
             raise ValueError("byte LM logits: wrong logits length")
-        for x in _words(frombytes(ctypes.string_at(out_addr, 4 * written), "<f4", (written,)), "f"):
-            if not math.isfinite(x):
-                raise ValueError("byte LM logits: nonfinite logit")
+        if not all_finite(frombytes(ctypes.string_at(out_addr, 4 * written), "<f4", (written,))):
+            raise ValueError("byte LM logits: nonfinite logit")
         return written
 
     def byte_lm_logits(self, addresses, dims, shape):
@@ -298,9 +296,8 @@ class _HostTrainerBinding:
         p = _read_f32(a[0], cfg.n_total)
         ids = _read_i32(a[1], b * l)
         _validate_tokens(ids, cfg)
-        for x in _words(p, "f"):
-            if not math.isfinite(x):
-                raise ValueError("byte LM logits: nonfinite parameters")
+        if not all_finite(p):
+            raise ValueError("byte LM logits: nonfinite parameters")
         return self._logits(cfg, addr_ro(p, name="p"), addr_ro(ids, name="ids"), a[2], b, l)
 
     # ---- the resident session ---------------------------------------------
@@ -444,9 +441,8 @@ class _HostTrainerBinding:
             raise ValueError("byte LM: resident model shape mismatch")
         if st["grad_step"] < 0 or st["grad_step"] != st["completed"]:
             raise ValueError("byte LM: no gradient to export; complete a step first")
-        for x in _words(st["grad"], "f"):
-            if not math.isfinite(x):
-                raise ValueError("byte LM: nonfinite returned gradient")
+        if not all_finite(st["grad"]):
+            raise ValueError("byte LM: nonfinite returned gradient")
         memcopy(a[0], addr_ro(st["grad"], name="grad"), 4 * cfg.n_total)
         return st["grad_step"]
 
