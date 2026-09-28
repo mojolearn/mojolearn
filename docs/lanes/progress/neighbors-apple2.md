@@ -261,6 +261,50 @@ vary run to run inside each arm, as before). KNN_PHASE_TIMERS sort_ms at
 | kneighbors / kNN classifier / regressor, k = 10, 20 (round-one board) | IDENTICAL | unchanged (0.05 to 0.13 s), digests = round one's | | | |
 | SpectralEmbedding(knn).fit 20k | both | unchanged (0.77 IDENTICAL, 0.26 FAST) | | | |
 
+### M3 ULTRA: lane base vs head, request 1790614983391 (m3ultra-b, 4a4415b41), one job
+
+Same arms as the M4 Pro summary plus `-D MOJOLEARN_KNN_SERIAL_ORDER` in old.
+Forward and reverse; every IDENTICAL digest equal old vs new; FAST equal
+except the k = 2,000 k-NN / spectral rows whose FAST digests vary run to run
+inside each arm (unpinned FAST ties, same code both arms). Raw:
+~/mojolearn-evidence/neighbors-apple/1790614983391-speed-neighbors-4a4415b41c.txt
+
+| algorithm | mode | taxi before | taxi after | HIGGS before | HIGGS after |
+|---|---|---|---|---|---|
+| LabelPropagation.fit 5k (knn) | IDENTICAL | 11.134 | 0.386 | 1.801 | 0.125 |
+| LabelPropagation.fit 5k (knn) | FAST | 10.672 | 0.323 | 1.768 | 0.114 |
+| LabelSpreading.fit 5k (knn) | IDENTICAL | 1.119 | 0.091 | 1.114 | 0.091 |
+| Louvain.fit 1k | IDENTICAL | 2.746 | 0.092 | 4.351 | 0.100 |
+| Louvain.fit 1k | FAST | 2.707 | 0.046 | 4.318 | 0.053 |
+| OneClassSVM.fit 3k | IDENTICAL | 1.231 | 0.020 | 1.327 | 0.022 |
+| OneClassSVM.fit 3k | FAST | 1.224 | 0.020 | 1.312 | 0.022 |
+| LocalOutlierFactor.fit 20k | IDENTICAL | 1.010 | 0.060 | 1.005 | 0.049 |
+| LocalOutlierFactor.fit 20k | FAST | 1.010 | 0.054 | 1.010 | 0.043 |
+| LocalOutlierFactor.score_samples 5k | IDENTICAL | 0.265 | 0.057 | 0.258 | 0.043 |
+| PolynomialCountSketch.transform 200k x 500 | IDENTICAL | 1.156 | 0.175 | 1.156 | 0.171 |
+| PolynomialCountSketch.transform 200k x 500 | FAST | 1.163 | 0.162 | 1.168 | 0.159 |
+| SkewedChi2Sampler.transform 1M x 500 | IDENTICAL | 1.149 | 0.380 | 1.160 | 0.389 |
+| SkewedChi2Sampler.transform 1M x 500 | FAST | 1.138 | 0.373 | 1.149 | 0.381 |
+| AdditiveChi2Sampler.transform 1M | IDENTICAL | 0.056 | 0.023 | 0.056 | 0.022 |
+| PageRank.fit 5k | IDENTICAL | 0.580 | 0.056 | 0.576 | 0.055 |
+| KNNImputer.transform 5k x 50k | IDENTICAL | 0.204 | 0.033 | 0.209 | 0.033 |
+| KNNImputer.transform 5k x 50k | FAST | 0.171 | 0.028 | 0.174 | 0.030 |
+| connected_components 5k | IDENTICAL | 0.207 | 0.065 | 0.098 | 0.034 |
+| NearestCentroid.fit 200k | IDENTICAL | 0.198 | 0.084 | 0.194 | 0.075 |
+| SVGP.fit 100k | IDENTICAL | | | 0.244 | 0.086 |
+| KernelPCA.fit 500 (host Jacobi, untouched) | IDENTICAL | 2.371 | 2.373 | 1.609 | 1.613 |
+| NearestNeighbors(k=2000) 20k x 2k | IDENTICAL | 0.180 (order pass serial; refused before ddc2f96ad) | 0.102 | 0.180 | 0.102 |
+| NearestNeighbors(k=2000) 20k x 2k | FAST | 0.264 | 0.062 | 0.266 | 0.060 |
+| NearestNeighbors(k=2000) 100k x 500 | IDENTICAL | 0.082 | 0.066 | 0.083 | 0.067 |
+| SpectralEmbedding(knn).fit 20k | IDENTICAL | refused before ddc2f96ad | 0.315 | refused | 0.367 |
+
+GPC.predict_proba 3k x 3k on the M3 Ultra (same job), a898eb9c2's 4-row
+kernel vs `-D MOJOLEARN_CHOL_MR_ROWWISE` (after the merge the row-by-row
+kernel runs at 256 threads too): IDENTICAL 0.210 / 0.208 vs 0.197 / 0.192;
+FAST 0.174 / 0.174 vs 0.160 / 0.160 (taxi / HIGGS). On the M3 Ultra the
+256-thread row-by-row kernel is 7% FASTER than the 4-row kernel; the M4 Pro
+comparison at the merged head is request 1790618304592.
+
 ## FINAL (draft; updated when the M3 Ultra request lands)
 
 ### Default vs opt-in
