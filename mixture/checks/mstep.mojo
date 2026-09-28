@@ -151,6 +151,7 @@ from mixture.checks.gmm_sabotage import (
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_FAST,
+    NUMERIC_IDENTICAL,
     ftz,
     identical_div,
     identical_exp,
@@ -241,10 +242,64 @@ def resp_exp_kernel(
 #: Operands of this many `nk_kernel` steps are loaded before the steps run
 #: (execution only). `-D MOJOLEARN_GMM_NK_AHEAD_OFF` = 1.
 comptime GMM_NK_AHEAD = 1 if is_defined["MOJOLEARN_GMM_NK_AHEAD_OFF"]() else 32
-#: lane cluster-apple2 (2026-09-28): the one-thread chains (nk here,
-#: the mean log-likelihood in estep.mojo) load block b + 1 before adding
-#: block b. `-D MOJOLEARN_GMM_CHAIN_PIPE_OFF=1` reverts.
-comptime GMM_CHAIN_PIPE = not is_defined["MOJOLEARN_GMM_CHAIN_PIPE_OFF"]()
+#: lane cluster-apple2 (2026-09-28), IDENTICAL on Apple: nk's chains read
+#: a transposed copy of `resp` (K x n, `resp_transpose_kernel`), so each
+#: component's thread takes its operands in contiguous vector loads; the
+#: adds and their order are `nk_kernel`'s. `-D MOJOLEARN_GMM_NK_T_OFF=1`
+#: reverts.
+comptime GMM_NK_T = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_GMM_NK_T_OFF"]()
+)
+
+
+def resp_transpose_kernel(
+    resp: MutPointer[Float32, MutAnyOrigin],
+    resp_t: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    ncomp_in: Int32,
+):
+    """`resp_t[k][i] = resp[i][k]` (a copy)."""
+    var n = Int(n_in)
+    var ncomp = Int(ncomp_in)
+    var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if idx >= n * ncomp:
+        return
+    var k = idx // n
+    var i = idx % n
+    resp_t.unsafe_store(idx, resp.unsafe_load(i * ncomp + k))
+
+
+def nk_t_kernel(
+    resp_t: MutPointer[Float32, MutAnyOrigin],
+    nk: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    ncomp_in: Int32,
+    ten_eps: Float32,
+):
+    """`nk_kernel` over the transposed copy: the same adds in the same order
+    (samples ascending, one thread per component, `ftz` at every seam)."""
+    var n = Int(n_in)
+    var ncomp = Int(ncomp_in)
+    var k = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if k >= ncomp:
+        return
+    var row = resp_t.unsafe_offset(k * n)
+    var acc = Float32(0.0)
+    comptime U = 32
+    var i = 0
+    while i + U <= n:
+        var v = SIMD[DType.float32, U](0.0)
+        comptime for u in range(U):
+            v[u] = row.unsafe_load(i + u)
+        comptime for u in range(U):
+            acc = ftz(acc + ftz(v[u]))
+        i += U
+    while i < n:
+        acc = ftz(acc + ftz(row.unsafe_load(i)))
+        i += 1
+    nk.unsafe_store(k, ftz(acc + ten_eps))
 
 
 def nk_kernel(
@@ -285,35 +340,13 @@ def nk_kernel(
         # are loaded first so the chain waits on the add, not on each load.
         comptime U = GMM_NK_AHEAD
         var i = 0
-        comptime if GMM_CHAIN_PIPE:
-            # lane cluster-apple2: the NEXT block's operands are loaded
-            # before this block's adds, so a block's loads are in flight
-            # while the previous block's chain runs. Same adds, same order.
-            var have = i + U <= n
-            var cur = SIMD[DType.float32, U](0.0)
-            if have:
-                comptime for u in range(U):
-                    cur[u] = resp.unsafe_load((i + u) * ncomp + k)
-            while have:
-                var ni = i + U
-                var nhave = ni + U <= n
-                var nxt = SIMD[DType.float32, U](0.0)
-                if nhave:
-                    comptime for u in range(U):
-                        nxt[u] = resp.unsafe_load((ni + u) * ncomp + k)
-                comptime for u in range(U):
-                    acc = ftz(acc + ftz(cur[u]))
-                cur = nxt
-                i = ni
-                have = nhave
-        else:
-            while i + U <= n:
-                var v = SIMD[DType.float32, U](0.0)
-                comptime for u in range(U):
-                    v[u] = resp.unsafe_load((i + u) * ncomp + k)
-                comptime for u in range(U):
-                    acc = ftz(acc + ftz(v[u]))
-                i += U
+        while i + U <= n:
+            var v = SIMD[DType.float32, U](0.0)
+            comptime for u in range(U):
+                v[u] = resp.unsafe_load((i + u) * ncomp + k)
+            comptime for u in range(U):
+                acc = ftz(acc + ftz(v[u]))
+            i += U
         while i < n:
             acc = ftz(acc + ftz(resp.unsafe_load(i * ncomp + k)))
             i += 1
@@ -1396,6 +1429,20 @@ def gmm_m_step(
             grid_dim=(grid_comp, 1, 1),
             block_dim=(comp_tpb, 1, 1),
         )
+    elif GMM_NK_T:
+        var resp_t = ctx.enqueue_create_buffer[DType.float32](n * ncomp)
+        ctx.enqueue_function[resp_transpose_kernel](
+            resp.unsafe_ptr(), resp_t.unsafe_ptr(), Int32(n), Int32(ncomp),
+            grid_dim=((n * ncomp + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+        )
+        ctx.enqueue_function[nk_t_kernel](
+            resp_t.unsafe_ptr(), nk.unsafe_ptr(), Int32(n), Int32(ncomp),
+            gmm_ten_eps(),
+            grid_dim=(grid_comp, 1, 1),
+            block_dim=(comp_tpb, 1, 1),
+        )
+        ctx.synchronize()
+        _ = resp_t^
     else:
         ctx.enqueue_function[nk_kernel](
             resp.unsafe_ptr(),
