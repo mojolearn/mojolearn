@@ -106,3 +106,33 @@ linear.checks, lane_select attributes `.core`), then:
   process-lifetime context (`linear_ctx`); python/mojolearn/tests/
   test_x_linear_repeat.py fits all 21 estimators twice per binding in one
   process, GPU == host.
+
+Gate at 0bda3a368+progress (RunPod balance went negative mid-session: the
+RTX 4090 pod was deleted and `dev_pod.sh up` is refused, so this ran on the
+lane's Hot Aisle MI300X box `linear-amd`, CPU column Xeon Platinum 8470):
+- `algos_lane_check.sh <17 core lanes>,pca,pca-whiten,pca-full-whiten,tsvd,
+  qn-squared,qn-absolute --pass 2 --sabotage glm/checks/sabotage/
+  e2e_existing_device.patch`: every seam arm in linear.checks FAILS under
+  its patch and PASSES after reversal; ALL 23 clean lanes AGREE (hip vs
+  CPU), logistic-unpenalized-no-intercept included; the e2e device
+  sabotage DISAGREEs on all 17 linear lanes + qn-squared/qn-absolute and
+  every lane AGREEs again after reversal. RESULT: FAIL only because the
+  glm sabotage does not reach pca/pca-whiten/pca-full-whiten/tsvd (they
+  are in the run as unchanged-bits controls for classical_host_predict,
+  not as sabotage targets): expected, not a defect.
+- test_x_linear_repeat + test_host_surface: 201 passed (hip + host).
+- tools/test_lane_select.py: OK, 0 failure(s) (inputs changed: new
+  core/host_fp_env.mojo, linear.core, lane_select.py).
+
+OWED BEFORE MERGE (needs a RunPod NVIDIA pod once the balance is topped up):
+1. `tools/dev_pod.sh up linear 240`, sync this worktree, then
+   `tools/algos_lane_check.sh <the 17 lanes in tools/identity_lanes/linear.core>
+   --pass 2 --sabotage glm/checks/sabotage/e2e_existing_device.patch`
+   (all clean AGREE, sabotage DISAGREE then AGREE) plus the same with
+   `pca,pca-whiten,pca-full-whiten,tsvd,qn-squared,qn-absolute` as clean
+   controls (no sabotage), and test_x_linear_repeat on cuda.
+2. Merge origin/main, merge to main and push in one command.
+3. ONE batched steward submit (Apple + do-amd) for the 17 existing lanes,
+   sabotage e2e_existing_device.patch.
+Then phase 1 is closed; next session is phase 2 (option parity, the
+NOT_IMPLEMENTED rows above).
