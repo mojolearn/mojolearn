@@ -81,3 +81,9 @@ cells faster, geomean 0.989), with the Istella depthwise 1.024 noted.
 | same | m3ultra-b | 1790603103015 | dt:taxi / dt:taxireg / bagging / dart:taxireg / adaboost:taxireg | 67 / 69 / 597 / 5700 / 1922 | 68 / 70 / 599 / 5679 / 1922 | 1.01 / 1.00 / 1.00 / 1.00 / 1.00 | all equal |
 | ET narrow row-major, always-on trial arm (88535136f) | m4-a | 1790610860810 | et:taxi | 3904 | 3745 | 0.959 | ac18d5d8a54b1555 |
 | same | m4-a | 1790610860810 | embedding:taxi (k = 1) | 469 | 1086 | **2.317** -> gated on 4k >= n_cols (14706bb29) | 90d1b0749de17d44 |
+| ET narrow row-major gated 4k >= n (14706bb29) | m4-a | 1790611318000 | et:taxi | 3880 | 3756 | 0.968 | ac18d5d8a54b1555 |
+| same | m4-a | 1790611318000 | embedding:taxi | 467 | 466 | 0.997 | 90d1b0749de17d44 |
+| GBDT ridx-only IDENTICAL (206ca2e53) | m3ultra-b | 1790606770142 | depthwise taxi / istella | 1704 / 2894 | 1667 / 2899 | 0.978 / 1.002 | 5694af7699036c65 / e9c0f7e913af5a8a |
+| same | m3ultra-b | 1790606770142 | lossguide istella | 6753 | 6714 | 0.994 | eb0d9510ee08a16f |
+| GBDT 2031 sym ridx IDENTICAL, ungated (bfc552c67) | m4pro-a | 1790609918603 | symmetric taxi | 1024 | 941 | 0.919 | 8e760782efae56c8 |
+| same | m4pro-a | 1790609918603 | symmetric istella | 2813 | 2992 | **1.064 (slower)** -> gated to <= 64 features (63a38c138) | d5571c2a35ea06c8 |
