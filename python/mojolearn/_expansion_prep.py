@@ -31,6 +31,7 @@ import inspect
 import math
 import numbers
 import operator
+import os
 import statistics
 
 from . import _backend
@@ -61,6 +62,7 @@ _OPS = dict(
     indicator=87, code_counts=88, remap_codes=89, add_arrays=90, gnb_merge=91, cat_counts=92, cat_flp=93,
     mi_dc=94, mi_dd=95, kbins_gw=96, kbins_wq=97, kbins_wkm=98, ii_sigma=99, ii_post=100,
     scaler_stats=101, std_scale=102, nan_keep=103, pt_init=104, pt_map=105, pt_fold=106, ii_rowabs=107, te_bucket=108, pt_log=109,
+    pt_spts=110, pt_smap=111, pt_sfold=112, pt_sres=113, te_gather=114,
 )
 _PARAMS = 14
 _NONE = -1
@@ -73,11 +75,26 @@ def _prep_binding(mode):
     return _backend.binding("_mojolearn_x_prep", mode)
 
 
+class _Scratch:
+    """An offset into a program's DEVICE-ONLY scratch (lane prep-apple2): it
+    resolves to the host arena's size plus `off` when the program runs, and
+    never crosses to or from the host on a device binding (the host binding
+    gets it as plain arena words). Only stages read it; `get` never does."""
+    __slots__ = ("off",)
+
+    def __init__(self, off):
+        self.off = off
+
+    def __add__(self, k):
+        return _Scratch(self.off + int(k))
+
+
 class _Prog:
     """One program: an arena layout, the inputs copied into it, and stages."""
 
     def __init__(self):
         self.size = 0
+        self.scratch_size = 0
         self._inputs = []
         self._stages = []
         self.arena = None
@@ -86,6 +103,12 @@ class _Prog:
         off = self.size
         self.size += max(int(n), 0)
         return off
+
+    def scratch(self, n):
+        """n device-only words that a stage writes before any stage reads them."""
+        off = self.scratch_size
+        self.scratch_size += max(int(n), 0)
+        return _Scratch(off)
 
     def put(self, arr):
         """A float32 C-contiguous Array (or anything as_f32_c takes) -> offset."""
@@ -121,16 +144,28 @@ class _Prog:
     def stage(self, op, total, *params):
         if len(params) > _PARAMS:
             raise ValueError("x_prep: too many stage parameters")
-        self._stages.append([_OPS[op], int(total)] + [int(v) for v in params] + [0] * (_PARAMS - len(params)))
+        self._stages.append([_OPS[op], int(total)] + [v if isinstance(v, _Scratch) else int(v) for v in params]
+                            + [0] * (_PARAMS - len(params)))
 
     def run(self, mode):
-        arena = array.array("f", bytes(4 * max(self.size, 1)))
+        binding = _prep_binding(mode)
+        sc = self.scratch_size
+        device_scratch = sc > 0 and hasattr(binding, "x_prep_run_scratch")
+        host_words = self.size if device_scratch or not sc else self.size + sc
+        if self.size + sc > 2 ** 31 - 1:
+            raise ValueError("x_prep: the program exceeds the native Int32 indexing bound")
+        arena = array.array("f", bytes(4 * max(host_words, 1)))
         base = arena.buffer_info()[0]
         for off, arr, _ in self._inputs:
             if arr.size:
                 ctypes.memmove(base + 4 * off, addr_ro(arr, name="input"), 4 * arr.size)
-        prog = array.array("i", [v for s in self._stages for v in s] or [0])
-        _prep_binding(mode).x_prep_run(base, self.size, prog.buffer_info()[0], len(self._stages))
+        H = self.size
+        prog = array.array("i", [H + v.off if isinstance(v, _Scratch) else v
+                                 for s in self._stages for v in s] or [0])
+        if device_scratch:
+            binding.x_prep_run_scratch(base, H, sc, prog.buffer_info()[0], len(self._stages))
+        else:
+            binding.x_prep_run(base, host_words, prog.buffer_info()[0], len(self._stages))
         self.arena = arena
         return self
 
@@ -975,8 +1010,15 @@ class TargetEncoder(_PrepBase):
             # each category's rows, ascending (te_bucket): te_enc walks one bucket, not every row
             bstart, brows = pr.alloc(d * (cmax + 1)), pr.alloc(n * d)
             pr.stage("te_bucket", d, codes, n, d, cmax, bstart, brows)
-            pr.stage("te_enc", (F + 1) * d * cmax * T, codes, n, d, yo, T, fo, cmax, nco, meta, smo, enc,
-                     bstart + 1, brows)
+            if os.environ.get("MOJOLEARN_XPREP_TE_GATHER", "1") != "0":
+                # each bucket's folds and targets in bucket order (te_gather): te_enc streams them
+                gb = pr.scratch(n * d * (1 + T))
+                pr.stage("te_gather", n * d, brows, n, d, yo, T, fo, gb)
+                pr.stage("te_enc", (F + 1) * d * cmax * T, codes, n, d, yo, T, fo, cmax, nco, meta, smo, enc,
+                         bstart + 1, brows, gb + 1)
+            else:
+                pr.stage("te_enc", (F + 1) * d * cmax * T, codes, n, d, yo, T, fo, cmax, nco, meta, smo, enc,
+                         bstart + 1, brows)
         out = _NONE
         if apply_rows_folds:
             out = pr.alloc(n * d * T)
@@ -2254,6 +2296,22 @@ class QuantileTransformer(_PrepBase):
         return self._apply(X, "qt_inverse")
 
 
+def _pt_spec_depth(n, d):
+    """The device search's speculation depth (lane prep-apple2): each round
+    evaluates the 2^S - 1 candidate points of the next S golden steps side by
+    side. MOJOLEARN_XPREP_PT_SPEC = S (0: one evaluation per fold, the
+    staged search); the candidates' transforms (n*d words each) are capped at
+    2^28 words. Every S gives the same lambdas."""
+    try:
+        s = int(os.environ.get("MOJOLEARN_XPREP_PT_SPEC", "4"))
+    except ValueError:
+        s = 4
+    s = max(0, min(s, 6))
+    while s > 1 and (2 ** s - 1) * n * d > 2 ** 28:
+        s -= 1
+    return s
+
+
 class PowerTransformer(_PrepBase):
     """sklearn.preprocessing.PowerTransformer: 'yeo-johnson' (default) or
     'box-cox' (strictly positive input), then StandardScaler when
@@ -2288,12 +2346,32 @@ class PowerTransformer(_PrepBase):
             # the device: pt_fit_unit's golden-section search as stages (x_prep/transform.mojo),
             # each element's logarithm once, the transform of every element at once per
             # evaluation, then the column folds
-            state, leval, tv, lg = pr.alloc(_PT_STATE * d), pr.alloc(d), pr.alloc(n * d), pr.alloc(n * d)
-            pr.stage("pt_init", d, method, st, d, lam, state, leval)
-            pr.stage("pt_log", n * d, xo, n, d, method, lg)
-            for k in range(_PT_EVALS):
-                pr.stage("pt_map", n * d, xo, n, d, method, leval, tv, lg + 1)
-                pr.stage("pt_fold", d, xo, n, d, method, tv, k, state, leval, lam)
+            spec = _pt_spec_depth(n, d)
+            if spec:
+                # the search speculated `spec` evaluations deep (transform.mojo pt_spts ..
+                # pt_sres): the same points, values and decisions, fewer dependent folds
+                mmax = 2 ** spec - 1
+                state, leval = pr.alloc(_PT_STATE * d), pr.alloc(d)
+                spl, vals = pr.alloc(d * mmax), pr.alloc(d * mmax)
+                lg, tv = pr.scratch(n * d), pr.scratch(n * d * mmax)
+                pr.stage("pt_init", d, method, st, d, lam, state, leval)
+                pr.stage("pt_log", n * d, xo, n, d, method, lg)
+                k0 = 0
+                while k0 <= _PT_EVALS - 2:
+                    steps = 2 if k0 == 0 else min(spec, _PT_EVALS - 1 - k0)
+                    m = 2 if k0 == 0 else 2 ** steps - 1
+                    pr.stage("pt_spts", d, state, leval, spl, m, k0)
+                    pr.stage("pt_smap", m * n * d, xo, n, d, method, spl, m, tv, lg)
+                    pr.stage("pt_sfold", d * m, xo, n, d, method, tv, m, state, spl, vals, 1 if k0 == 0 else 0)
+                    pr.stage("pt_sres", d, state, leval, m, vals, k0, steps, lam)
+                    k0 += steps
+            else:
+                state, leval, tv, lg = pr.alloc(_PT_STATE * d), pr.alloc(d), pr.alloc(n * d), pr.alloc(n * d)
+                pr.stage("pt_init", d, method, st, d, lam, state, leval)
+                pr.stage("pt_log", n * d, xo, n, d, method, lg)
+                for k in range(_PT_EVALS):
+                    pr.stage("pt_map", n * d, xo, n, d, method, leval, tv, lg + 1)
+                    pr.stage("pt_fold", d, xo, n, d, method, tv, k, state, leval, lam)
         mean, scale = pr.alloc(d), pr.alloc(d)
         if self.standardize:
             tx, st2 = pr.alloc(n * d), pr.alloc(6 * d)
@@ -2645,11 +2723,26 @@ class Binarizer(_PrepBase):
 _F32_EXACT = 2 ** 24
 
 
+_INT_FLOAT = frozenset((int, float))
+_FLOAT_ONLY = frozenset((float,))
+_INT_ONLY = frozenset((int,))
+
+
 def _numeric_labels(values):
     """The labels as floats when every one is a real number that float32
     holds exactly (so the device's categories are the labels themselves),
     else None (str labels, ints beyond 2**24: the Python route)."""
     import struct
+    kinds = set(map(type, values))
+    if kinds and kinds <= _INT_FLOAT:
+        # the whole list at C speed (lane prep-apple2): the same answer as the
+        # loop below, which a list this test cannot settle still takes
+        try:
+            fl = list(map(float, values)) if kinds != _FLOAT_ONLY else list(values)
+            if not any(map(math.isnan, fl)) and array.array("f", fl).tolist() == fl:
+                return fl
+        except OverflowError:
+            pass
     out = []
     for v in values:
         if isinstance(v, bool) or not isinstance(v, numbers.Real):
@@ -2668,8 +2761,8 @@ def _label_classes(mode, values):
     if nums is None or not nums:
         classes, _ = sorted_classes(values)
         return classes, None
-    cats = _fit_categories(mode, Array.from_list([[v] for v in nums], "<f4"))[0]
-    ints = all(isinstance(v, numbers.Integral) for v in values)
+    cats = _fit_categories(mode, Array._from_flat(nums, (len(nums), 1), "<f4"))[0]
+    ints = set(map(type, values)) == _INT_ONLY or all(isinstance(v, numbers.Integral) for v in values)
     classes = [int(c) if ints else float(c) for c in cats.tolist()]
     return classes, cats
 
@@ -2677,7 +2770,7 @@ def _label_classes(mode, values):
 def _label_codes(pr, values, cats):
     """Stages: each label's index among `cats` (or -1). Returns the codes
     offset and the unknown-count offset."""
-    arr = Array.from_list([[float(v)] for v in values], "<f4")
+    arr = Array._from_flat([float(v) for v in values], (len(values), 1), "<f4")
     return _codes(pr, arr, [cats])
 
 

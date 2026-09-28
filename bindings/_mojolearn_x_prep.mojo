@@ -25,6 +25,21 @@ def run_binding(arena_addr: PythonObject, arena_len: PythonObject, prog_addr: Py
     return PythonObject(s)
 
 
+def run_scratch_binding(arena_addr: PythonObject, arena_len: PythonObject, scratch_len: PythonObject,
+                        prog_addr: PythonObject, stages: PythonObject) raises -> PythonObject:
+    """x_prep_run with scratch_len device-only words after the arena (lane prep-apple2)."""
+    var fa = Int(py=arena_addr)
+    var n = Int(py=arena_len)
+    var sc = Int(py=scratch_len)
+    var qa = Int(py=prog_addr)
+    var s = Int(py=stages)
+    if fa == 0 or qa == 0 or n < 0 or sc < 0 or s < 0:
+        raise Error("x_prep: invalid program buffers")
+    with GILReleased(Python()):
+        run_program_device(fa, n, qa, s, sc)
+    return PythonObject(s)
+
+
 def numeric_mode_binding() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 
@@ -38,6 +53,7 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_x_prep")
         m.def_function[run_binding]("x_prep_run")
+        m.def_function[run_scratch_binding]("x_prep_run_scratch")
         m.def_function[numeric_mode_binding]("x_prep_numeric_mode")
         m.def_function[vendor_binding]("x_prep_vendor")
         return m.finalize()

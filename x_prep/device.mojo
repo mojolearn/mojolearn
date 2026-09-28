@@ -68,13 +68,17 @@ def prep_kernel[OP: Int](f: FP, q: IP, total: Int32):
         run_unit[OP](t, f, q)
 
 
-def run_program_device(arena_addr: Int, arena_len: Int, prog_addr: Int, stages: Int) raises:
+def run_program_device(arena_addr: Int, arena_len: Int, prog_addr: Int, stages: Int, scratch_len: Int = 0) raises:
     run_program_device_ptr(
-        FP(unsafe_from_address=arena_addr), arena_len, IP(unsafe_from_address=prog_addr), stages
+        FP(unsafe_from_address=arena_addr), arena_len, IP(unsafe_from_address=prog_addr), stages, scratch_len
     )
 
 
-def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int) raises:
+def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, scratch_len: Int = 0) raises:
+    """scratch_len (lane prep-apple2): words of DEVICE-ONLY arena after the
+    host's arena_len words (offsets arena_len ..); they never cross to or
+    from the host and start undefined, so a program writes each scratch word
+    before it reads it. Where a word lives moves no bit."""
     for s in range(stages):
         var op = Int(host_q.unsafe_load(s * STAGE_INTS))
         if op < 0 or op >= N_OPS:
@@ -98,11 +102,15 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int) 
     var ctx = x_prep_ctx()
     var dmw = ctx.enqueue_create_buffer[DType.uint64](mi_w if mi_sorted else 1)
     var dmu = ctx.enqueue_create_buffer[DType.uint32](mi_u if mi_sorted else 1)
-    var df = ctx.enqueue_create_buffer[DType.float32](arena_len if arena_len > 0 else 1)
+    var dev_len = arena_len + max(scratch_len, 0)
+    var df = ctx.enqueue_create_buffer[DType.float32](dev_len if dev_len > 0 else 1)
     var dw = ctx.enqueue_create_buffer[DType.uint32](scratch)
     var dq = ctx.enqueue_create_buffer[DType.int32](stages * STAGE_INTS if stages > 0 else 1)
     if arena_len > 0:
-        ctx.enqueue_copy(dst_buf=df, src_ptr=host_f)
+        if dev_len > arena_len:
+            ctx.enqueue_copy(dst_buf=df.create_sub_buffer[DType.float32](0, arena_len), src_ptr=host_f)
+        else:
+            ctx.enqueue_copy(dst_buf=df, src_ptr=host_f)
     if stages > 0:
         ctx.enqueue_copy(dst_buf=dq, src_ptr=host_q)
     for s in range(stages):
@@ -146,7 +154,10 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int) 
                     grid_dim=(total + BLOCK - 1) // BLOCK, block_dim=BLOCK,
                 )
     if arena_len > 0:
-        ctx.enqueue_copy(dst_ptr=host_f, src_buf=df)
+        if dev_len > arena_len:
+            ctx.enqueue_copy(dst_ptr=host_f, src_buf=df.create_sub_buffer[DType.float32](0, arena_len))
+        else:
+            ctx.enqueue_copy(dst_ptr=host_f, src_buf=df)
     ctx.synchronize()
     _ = dw^
     _ = dmw^

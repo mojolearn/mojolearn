@@ -12,7 +12,8 @@ linear percentile) for the quantile unit.
 """
 from std.memory import bitcast
 from std.sys.info import is_gpu
-from checks.numerics import ftz, identical_mul, identical_div, identical_sqrt, identical_exp, identical_log
+from std.sys.compile import is_defined
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul, identical_div, identical_sqrt, identical_exp, identical_log
 from x_prep.common import FP, IP, p, ld, raw, st, ldi, sti, is_nan, canon, canonical_nan, key, heap_sort, X_PREP_HOST_SABOTAGE, RUN, run_block
 
 #: float32 machine epsilon; `_handle_zeros_in_scale` maps scale < 10 * eps to 1.
@@ -38,8 +39,31 @@ def acc_add(acc: Float32, b: Float32) -> Float32:
     host sabotage (X_PREP_HOST_SABOTAGE, e2e_host_branch) still reaches every
     sum. The same word either way."""
     comptime if is_gpu():
-        return ftz(acc + ftz(b))
+        comptime if X_PREP_FTZ_INT:
+            return ftz(acc + ftz(b))
+        return ftz_chain(acc + ftz(b))
     return add(acc, b)
+
+
+#: the revert arm of `ftz_chain` (-D MOJOLEARN_XPREP_FTZ_INT=1): the sum's
+#: flush spelled as `ftz` (integer tests of the exponent and mantissa)
+comptime X_PREP_FTZ_INT = is_defined["MOJOLEARN_XPREP_FTZ_INT"]()
+#: the smallest normal float32
+comptime F32_MIN_NORMAL = Float32(1.1754943508222875e-38)
+
+
+@always_inline
+def ftz_chain(x: Float32) -> Float32:
+    """`ftz` spelled for a DEPENDENT chain (lane prep-apple2): |x| < the
+    smallest normal (x subnormal or zero) is x's signed zero, anything else
+    (NaN included: every comparison with NaN is false) is x. The same word
+    as `ftz` for every input, whether or not the target's compare flushes a
+    subnormal operand (a flushed |x| is 0, still below the bound); one
+    compare and a select after the add instead of the integer tests."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        var z = bitcast[DType.float32](bitcast[DType.uint32](x) & UInt32(0x80000000))
+        return z if abs(x) < F32_MIN_NORMAL else x
+    return x
 
 
 @always_inline
