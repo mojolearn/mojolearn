@@ -994,6 +994,12 @@ their code branches on is this Bool.
         var nb_last = n_batches - 1
         var h_core = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
         ctx.enqueue_copy(dst_ptr=h_core.unsafe_ptr(), src_buf=core)
+        # A non-core row still at MAX_LABEL after the merges has no core
+        # neighbour at all (its own batch's pass pulls from every core
+        # neighbour, the core mask being global), so it is noise in every
+        # batching and needs no query.
+        var h_lab = ctx.enqueue_create_host_buffer[DType.int32](n_rows)
+        ctx.enqueue_copy(dst_ptr=h_lab.unsafe_ptr(), src_buf=labels)
         var np_last = min(n_rows - nb_last * batch, batch)
         ctx.enqueue_function[border_pull_kernel](
             labels.unsafe_ptr(), ex_scan.unsafe_ptr(), col_ind.unsafe_ptr(),
@@ -1011,7 +1017,10 @@ their code branches on is this Bool.
             var sb = bq * batch
             var m_q = 0
             for r in range(sb, min(n_rows, sb + batch)):
-                if h_core.unsafe_ptr().unsafe_load(r) == 0:
+                if (
+                    h_core.unsafe_ptr().unsafe_load(r) == 0
+                    and h_lab.unsafe_ptr().unsafe_load(r) != MAX_LABEL
+                ):
                     h_idx.unsafe_ptr().unsafe_store(m_q, Int32(r))
                     m_q += 1
             if m_q == 0:
@@ -1049,6 +1058,7 @@ their code branches on is this Bool.
         _ = d_idx^
         _ = h_idx^
         _ = h_core^
+        _ = h_lab^
         if phase_timing:
             print(
                 "PHASE border_pass batches " + String(n_batches) + " rbc "
