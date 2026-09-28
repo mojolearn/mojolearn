@@ -32,6 +32,13 @@ CPU host binding, one thread. Digests equal gpu vs host on every line.
 | lars | 4.972 | 0.120 | 41x |
 | lasso-lars | 4.970 | 0.119 | 42x |
 
+NVIDIA reference (RTX 4090, the linear lane's pass-2 board,
+~/mojolearn-evidence/linear/before.log, same 100k rows): the same one-thread
+fits take 0.55x to 0.7x of the Apple time (sgd-clf 3.526 s, poisson
+124.525 s, huber 14.087 s, lars 2.235 s) and print the SAME digests as the
+Metal column (80a3e27c5f39e888, cf55b32452bb72e8, ...): one thread is one
+thread, the M4 Pro's is slower.
+
 Where Apple is slow: on main every x_linear fit is ONE device thread
 (x_linear/device.mojo `fit_kernel`, pass 1's design), so the Metal column is
 a single GPU thread against one CPU core: 22x to 54x slower. The same is true
@@ -79,7 +86,29 @@ Changes (glm/impl/qn only, no moves):
 - Syncs per iteration now: 1 (dg_init, carrying the direction's verdict) +
   1 per line-search step.
 
-Speed jobs queued on m4pro-a (IDENTICAL; core models at 1M rows, gpu column):
+Measured, IDENTICAL, 1M rows, gpu column (the Metal binding), fit seconds;
+base = lane/merged 21be273e9 (glm identical to 003ea19ba), after =
+10eab0721; digests equal base vs after on every line:
+
+| Mac | case | base | after | speedup | digest |
+|---|---|---|---|---|---|
+| m3ultra | logistic | 0.611 | 0.404 | 1.51x | 270ffb405d8c6a64 |
+| m3ultra | linear-svc | 0.404 | 0.257 | 1.57x | bf851fa5a9479b6c |
+| m3ultra | linear-svr | 0.391 | 0.213 | 1.84x | 29bbbb73d7b93520 |
+| m3ultra | ols / ridge / lasso / elasticnet (untouched) | 0.054 / 0.032 / 0.208 / 0.200 | 0.049 / 0.035 / 0.201 / 0.199 | noise | equal |
+| m4pro-a | logistic / linear-svc / linear-svr, step 1 only (8a38e574d) | (base below) | 0.415 / 0.238 / 0.204 | | equal to m3ultra's |
+
+(steward 1790586887244 / 1790586889113 on m3ultra; 1790584997484 on
+m4pro-a.) The Metal run of qn_scalar_ieee_check PASSES on the M3 Ultra, and
+the raw hardware words differed from the host's on 9521 of the divisions and
+43059 of the subtractions: this GPU flushes subnormal results, so the
+integer paths are what keep those words equal.
+
+Queued: one m4pro-a job and one m3ultra job at 10eab0721 that time after
+and base (glm/ of 003ea19ba checked out and rebuilt in the same job),
+IDENTICAL and FAST, core twice each, plus the x_linear board at lane/merged.
+
+Earlier queue (superseded):
 base lane/merged 003ea19ba (also the x_linear board, 100k, both columns),
 step 1 8a38e574d, step 2 10eab0721 (with the Metal IEEE check); FAST base
 and step 2 as well.
