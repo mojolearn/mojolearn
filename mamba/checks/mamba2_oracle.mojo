@@ -255,10 +255,7 @@ struct Mamba2Stages(Movable):
 
 
 def _zeros(n: Int) -> List[Float32]:
-    var out = List[Float32]()
-    for _ in range(n):
-        out.append(0.0)
-    return out^
+    return List[Float32](length=n, fill=Float32(0.0))
 
 
 # ===========================================================================

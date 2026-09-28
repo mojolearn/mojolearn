@@ -21,6 +21,7 @@ double precision. It is a TOLERANCE instrument (is the FP32 answer near the
 real number), never a bitwise one.
 """
 
+from core.host_lanes import all_finite
 from checks.numerics import (
     identical_mul,
     ftz,
@@ -51,6 +52,8 @@ def refuse_nonfinite(name: String, values: List[Float32]) raises:
     never contain a computed NaN. Tested BY BITS, not by compares: Metal
     flushes COMPARE operands (row 49's measurement), so a bit test is the
     only spelling with one meaning on every column."""
+    if all_finite(values):
+        return  # the bit test below, as lanes (lane neural-cpu); nothing to refuse
     from std.memory import bitcast
 
     for i in range(len(values)):

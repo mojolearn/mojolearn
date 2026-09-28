@@ -2,6 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The IDENTICAL FP32 optimizer step, written out, on the host. This file's own `opt_refuse_bad_inputs` is now what the device entry point calls, so both sides fail with the same name (DEVIATION 1496)."""
 
+from core.host_lanes import all_finite
 from gemm.checks.gemm_oracle import OP_NT, contract_leaf_size, gemm_oracle
 from gemm.host.gemm_host_rows import gemm_host_rows
 from checks.numerics import (
@@ -65,6 +66,8 @@ def opt_nonfinite_message(name: String, index: Int, is_nan: Bool) -> String:
 
 def refuse_nonfinite(name: String, values: List[Float32]) raises:
     """Row 39. A NaN or infinity in a gradient, a parameter or a state is REFUSED BY NAME before any recorded stage. The message is `opt_nonfinite_message`'s (DEVIATION 2514)."""
+    if all_finite(values):
+        return  # the bit test below, as lanes (lane neural-cpu); nothing to refuse
     from std.memory import bitcast
 
     for i in range(len(values)):

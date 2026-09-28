@@ -129,6 +129,31 @@ def main() raises:
         if _same(gemm_oracle(a, b, op, 2, 33, 5000), gemm_host_rows(a, b, op, 2, 33, 5000)) != 0:
             failed += 1
             print("DIFFER long k op", op)
+    # Products large enough to split across threads (gemm_host_rows.mojo's
+    # GHR_SERIAL_FMAS): rows split (m large) and panels split (m small), every
+    # op, one and many leaves, plain and padded. Run under
+    # MOJOLEARN_CPU_THREADS=1, 3 and unset: every count must equal the oracle.
+    var big: List[Int] = [300, 2]
+    for oi in range(len(ops)):
+        var op = ops[oi]
+        for bi in range(len(big)):
+            var m = big[bi]
+            var n = 333 if m > 2 else 2100
+            for kk in range(2):
+                var k = 97 if kk == 0 else 300
+                var kind = KIND_SUBNORMAL if (oi + kk) % 2 == 0 else KIND_RELU
+                var a = _fill(m * k, kind, 700 + op * 10 + kk, True)
+                var b = _fill(n * k, kind, 800 + op * 10 + kk, False)
+                cases += 1
+                if _same(gemm_oracle(a, b, op, m, n, k), gemm_host_rows(a, b, op, m, n, k)) != 0:
+                    failed += 1
+                    print("DIFFER threaded op", op, "m", m, "n", n, "k", k)
+                cases += 1
+                var real = k // 2 + 1
+                if _same(gemm_oracle_right_zero_padded(a, b, op, m, n, k, real),
+                         gemm_host_rows_right_zero_padded(a, b, op, m, n, k, real)) != 0:
+                    failed += 1
+                    print("DIFFER threaded padded op", op, "m", m, "n", n, "k", k)
     # The right-zero-padded door against its oracle: real_k at 0, 1, the
     # middle, k - 1 and k; the operands beyond real_k are left as filled
     # (garbage the compression must never read) or zeroed (the caller's
