@@ -380,7 +380,7 @@ class _GLMBase(_LinearRegressorMixin, NumericModeMixin):
         m = d + 1
         yv, has_sw = _with_weights(yv, sample_weight, n)
         vals = _run(self, ALGO_GLM, a, n, d, yv, [self.max_iter, int(bool(self.fit_intercept)), link, has_sw],
-                    [self._power_value(), self.alpha, self.tol], d + 3, n + m * m + 3 * m, 1)
+                    [self._power_value(), self.alpha, self.tol], d + 3, 3 * n + m * m + 3 * m, 1)
         self.coef_ = Array.from_list(vals[:d], "<f4")
         self.intercept_ = float(vals[d])
         self.n_iter_ = int(vals[d + 1])

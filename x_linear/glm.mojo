@@ -17,7 +17,7 @@ minimizer is the same). float32 throughout.
 """
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fexp, flog, fabs, fmax, ld, st, ldi, i2f,
-    fill, copy, row_dot, cholesky, chol_solve, mean_of,
+    fill, copy, row_dot, cholesky, chol_solve, mean_of, axpy_acc, par_rows,
 )
 
 comptime GLM_LINK_IDENTITY = 0
@@ -60,16 +60,24 @@ def _unit(power: Float32, link: Int, y: Float32, eta: Float32, what: Int) -> Flo
 
 
 def _objective(x: FP, y: FP, n: Int, d: Int, fi: Bool, power: Float32, link: Int, alpha: Float32,
-               theta: FP, toff: Int, eta: FP, sw: Bool, den: Float32) -> Float32:
+               theta: FP, toff: Int, eta: FP, sw: Bool, den: Float32, ls: FP) -> Float32:
+    """Map (eta and each row's loss term into `ls`), then fold rows ascending."""
     var b = ld(theta, toff + d) if fi else Float32(0)
+
+    def rows_map(lo: Int, hi: Int) {imm x, imm y, imm n, imm d, imm power, imm link, imm theta,
+                                     imm toff, imm eta, imm sw, imm ls, imm b}:
+        for i in range(lo, hi):
+            var e = fa(row_dot(x, i, d, theta, toff), b)
+            st(eta, i, e)
+            var l = _unit(power, link, ld(y, i), e, 0)
+            if sw:
+                l = fm(ld(y, n + i), l)
+            st(ls, i, l)
+
+    par_rows(rows_map, n)
     var acc = Float32(0)
     for i in range(n):
-        var e = fa(row_dot(x, i, d, theta, toff), b)
-        st(eta, i, e)
-        var l = _unit(power, link, ld(y, i), e, 0)
-        if sw:
-            l = fm(ld(y, n + i), l)
-        acc = fa(acc, l)
+        acc = fa(acc, ld(ls, i))
     var reg = Float32(0)
     for j in range(d):
         var w = ld(theta, toff + j)
@@ -82,7 +90,7 @@ def glm_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: I
     With sample_weight, y = targets n | weights n and the objective is
     (1 / sum w) sum w_i loss_i + alpha/2 |w|^2 (theirs, glm.py).
     res: coef d, intercept 1, n_iter 1, converged 1.
-    fw: eta n | grad m | H m*m | step m | trial m (m = d + 1)."""
+    fw: eta n | grad m | H m*m | step m | trial m | s1 n | s2 n (m = d + 1)."""
     var max_iter = ldi(ip, 0)
     var fi = ldi(ip, 1) != 0
     var link = ldi(ip, 2)
@@ -101,6 +109,8 @@ def glm_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: I
     var h = g + m
     var step = h + m * m
     var trial = step + m
+    var s1 = trial + m
+    var s2 = s1 + n
     fill(res, 0, d + 3, Float32(0))
     if fi:
         var ym = mean_of(y, n)
@@ -112,28 +122,36 @@ def glm_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: I
         st(res, d, flog(ym) if link == GLM_LINK_LOG else ym)
     var iters = 0
     var converged = False
-    var f = _objective(x, y, n, d, fi, power, link, alpha, res, 0, eta, sw, den)
+    var f = _objective(x, y, n, d, fi, power, link, alpha, res, 0, eta, sw, den, s1)
     for it in range(max_iter):
         # gradient and Hessian at res (eta holds the current linear predictor)
         fill(g, 0, m, Float32(0))
         fill(h, 0, m * m, Float32(0))
+        var gp = g
+        var hp = h
+
+        def rows_gh(lo: Int, hi: Int) {imm y, imm n, imm power, imm link, imm eta, imm sw, imm s1, imm s2}:
+            for i in range(lo, hi):
+                var e = ld(eta, i)
+                var gi = _unit(power, link, ld(y, i), e, 1)
+                var hi_ = fmax(Float32(0), _unit(power, link, ld(y, i), e, 2))
+                if sw:
+                    gi = fm(ld(y, n + i), gi)
+                    hi_ = fm(ld(y, n + i), hi_)
+                st(s1, i, gi)
+                st(s2, i, hi_)
+
+        par_rows(rows_gh, n)
+        # every entry of g and of H's lower triangle is its own accumulator
         for i in range(n):
-            var e = ld(eta, i)
-            var gi = _unit(power, link, ld(y, i), e, 1)
-            var hi = fmax(Float32(0), _unit(power, link, ld(y, i), e, 2))
-            if sw:
-                gi = fm(ld(y, n + i), gi)
-                hi = fm(ld(y, n + i), hi)
+            var gi = ld(s1, i)
+            var hi = ld(s2, i)
+            axpy_acc(gp, 0, gi, x, i * d, d)
             for j in range(d):
-                var xj = ld(x, i * d + j)
-                st(g, j, fmad(gi, xj, ld(g, j)))
-                var hx = fm(hi, xj)
-                for k in range(j + 1):
-                    st(h, j * m + k, fmad(hx, ld(x, i * d + k), ld(h, j * m + k)))
+                axpy_acc(hp, j * m, fm(hi, ld(x, i * d + j)), x, i * d, j + 1)
             if fi:
                 st(g, d, fa(ld(g, d), gi))
-                for k in range(d):
-                    st(h, d * m + k, fmad(hi, ld(x, i * d + k), ld(h, d * m + k)))
+                axpy_acc(hp, d * m, hi, x, i * d, d)
                 st(h, d * m + d, fa(ld(h, d * m + d), hi))
         var inv_n = fd(Float32(1), den)
         var gmax = Float32(0)
@@ -169,7 +187,7 @@ def glm_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: I
         for _ in range(40):
             for j in range(m):
                 st(trial, j, fmad(t, ld(step, j), ld(res, j)))
-            var ft = _objective(x, y, n, d, fi, power, link, alpha, trial, 0, eta, sw, den)
+            var ft = _objective(x, y, n, d, fi, power, link, alpha, trial, 0, eta, sw, den, s1)
             if ft == ft and ft <= fa(f, fm(fm(Float32(1e-4), t), slope)):
                 copy(res, 0, trial, 0, m)
                 f = ft
@@ -178,7 +196,7 @@ def glm_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: I
             t = fm(t, Float32(0.5))
         if not accepted:
             # no decrease at float32 resolution: the fit has converged as far as it can
-            f = _objective(x, y, n, d, fi, power, link, alpha, res, 0, eta, sw, den)
+            f = _objective(x, y, n, d, fi, power, link, alpha, res, 0, eta, sw, den, s1)
             break
     if not fi:
         st(res, d, Float32(0))
