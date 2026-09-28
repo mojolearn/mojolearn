@@ -28,8 +28,28 @@ order); no finite input reaches one.
 
 ## Proof and timing
 
-PENDING: the shared NVIDIA pod went down at 19:19Z with the base-columns job
-(nvc1-0031) queued; nothing is built or proven yet.
+STOPPED by order (2026-09-28 ~19:53Z: all py-* checking stopped, jobs cancelled;
+py-consolidated merges the Python lanes and runs ONE global check). What exists:
+
+- Both x_decomp bindings (`_mojolearn_x_decomp`, `_mojolearn_x_decomp_host`)
+  BUILD on nvc1 (x86, 2x A40) at this branch.
+- CPU column, native entry vs its Python reference arm in ONE tree (pod nvc1,
+  `sh`, `MOJOLEARN_VENDOR=cpu`, ~/mojolearn-evidence/py-decomp-nbrs/tools/ab_arms.py),
+  output sha256 of the fitted attributes:
+
+| case | native | python arm | verdict | native s | python s |
+|---|---|---|---|---|---|
+| MinCovDet 400x6 (n <= 500 path) | f63fea263810a423 | f63fea263810a423 | SAME | 0.19 | 0.22 |
+| EllipticEnvelope 400x6 | b84bfe654140796f | b84bfe654140796f | SAME | 0.07 | 0.12 |
+| MinCovDet 1200x5 (n < 1500 path) | e665ffdd95fb745a | e665ffdd95fb745a | SAME | 0.32 | 1.98 |
+| MinCovDet 5000x8 (full path) | fedc98556e0495ff | fedc98556e0495ff | SAME | 0.82 | 5.65 |
+| LDA online 3000x200 | d8ebf4c7c3321695 | d8ebf4c7c3321695 | SAME | 2.23 | 2.19 |
+| LDA partial_fit x2 | a22d384d8394fe7b | a22d384d8394fe7b | SAME | 0.18 | 0.21 |
+| MDS non-metric 300x4, 15 it | abcef8fcd816cf84 | abcef8fcd816cf84 | SAME | 0.61 | 3.78 |
+
+NOT RUN: the GPU column, base-vs-head lane digests (x-decomp-* lanes,
+par-queries-*), GPU == CPU lane checks, the dev_lda_rows sabotage arm, and
+large-shape timing (bench_decomp.py). ParallelQueries is unproven.
 
 ## DEVIATION changes
 
@@ -39,4 +59,6 @@ PENDING: the shared NVIDIA pod went down at 19:19Z with the base-columns job
 
 ## Unproven
 
-Everything above until the pod job reports.
+Everything except the CPU same-tree SAME rows above. Branches to merge
+(py-consolidated): lane/py-decomp-nbrs, lane/py-dn-svm, lane/py-dn-ann,
+lane/py-dn-kern (each unproven; see their progress files).
