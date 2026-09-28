@@ -972,14 +972,18 @@ def partition_chunks_sm_for[identical: Bool](device_sm: Int) -> Int:
 #: The Apple cap on the shared-Int32 hist_2 block (2026-09-28). At 512
 #: threads the M2 Pro's hist_2 one-byte DISPATCH arm wrote NOTHING (every
 #: cell 0.0, so every tree was `depth 1`, `split 0 0 0 0`; steward probe
-#: 1790561718113), while the M3 and M4 ran the same kernel correctly. 512 x
-#: 64 bytes is exactly Metal's 32 KB, and a Metal pipeline's
-#: `maxTotalThreadsPerThreadgroup` is a per-pipeline property the dispatch
-#: does not check for us (Mojo cannot read it on Metal: "Attributes not
-#: supported in Metal"); a dispatch above it is dropped with no error. 256
-#: (16 KB) is the block steward probe 1790571345780 arm (c) checks. The
-#: accumulation is Int32 fixed point and the flush adds Int32 cells, so the
-#: histogram does not depend on the block: no bit moves, only the grid.
+#: 1790561718113), while the M3 and M4 ran the same kernel correctly. It is
+#: NOT the threadgroup budget or the block as such: on the same M2 a
+#: synthetic kernel runs blocks 256..1024 with the full 32 KB of Int32
+#: threadgroup memory correctly, and the PASS one-byte family is exact at
+#: 512 (probe 1790571345780). The likely limit (INFERRED, not read: Mojo
+#: cannot read pipeline attributes on Metal) is this pipeline's
+#: `maxTotalThreadsPerThreadgroup`, which on a part without Dynamic Caching
+#: (M2 and older) falls with register use; Metal drops a dispatch above it
+#: with no error. At 256 (16 KB) the same probe's hist2_check reads 0 wrong
+#: cells on every arm it printed (bits 5 and 6). The accumulation is Int32 fixed point and the flush adds
+#: Int32 cells, so the histogram does not depend on the block: no bit
+#: moves, only the grid (proved on the MI300X by forcing 256 everywhere).
 comptime APPLE_HIST2_SHARED_I32_BLOCK_CAP = 256
 
 
