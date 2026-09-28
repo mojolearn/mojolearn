@@ -336,9 +336,9 @@ def check_hardware_matrix() raises:
         HIST_SMEM_SHARED2_I32,
     )
     _pin(
-        "apple hist2 block (512 fills Metal's 32 KB)",
+        "apple hist2 block (256: 512 dispatched nothing on the M2 Pro)",
         hist2_block_size_for[COLUMN_APPLE, HIST_SMEM_SHARED2_I32](),
-        512,
+        256,
     )
     # MODE-AWARE since 2026-08-22 (found by the E1 Mac bootstrap): under an
     # IDENTICAL build `block_size_for`'s identity gate caps the one-byte
