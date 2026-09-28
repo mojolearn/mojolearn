@@ -1,14 +1,14 @@
 diff --git a/mamba/host/mamba3_s16_host.mojo b/mamba/host/mamba3_s16_host.mojo
-index db2a0a6c2..38378f2c9 100644
+index 4f6d0b57a..405e0f643 100644
 --- a/mamba/host/mamba3_s16_host.mojo
 +++ b/mamba/host/mamba3_s16_host.mojo
-@@ -84,7 +84,8 @@ def _s16_row(
-                         var kv = ftz_lanes(k.unsafe_load[width=HOST_FW](((bb * l + tj) * nh + h) * M3_D_STATE + n0))
-                         var vv = ftz(v.unsafe_load(((bb * l + tj) * nh + h) * M3_HEADDIM + p))
-                         dq = _qk_term_lanes(kv, lv, vv, dy_i, dq)
+@@ -102,7 +102,8 @@ def _s16_row(
+                         var t = ftz_lanes(pinned_mul_lanes(tqp.unsafe_load[width=HOST_FW](j * M3_D_STATE + n0), vv))
+                         dq = ftz_lanes(identical_mul_add_simd[HOST_FW](dy_i, t, dq))
+                 var vv2 = F32V(ftz(v.unsafe_load(((bb * l + token) * nh + h) * M3_HEADDIM + p)))
 -                for i in range(inner + 1, qs):
 +                for iq in range(qs - inner - 1):  # SABOTAGE (neural-cpu): the dk lanes walk i DESCENDING
 +                    var i = qs - 1 - iq
                      var ti = chunk * qs + i
                      if ti < l:
-                         var dy = ftz(d_y.unsafe_load(((bb * l + ti) * nh + h) * M3_HEADDIM + p))
+                         var dy = F32V(ftz(d_y.unsafe_load(((bb * l + ti) * nh + h) * M3_HEADDIM + p)))
