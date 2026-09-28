@@ -85,7 +85,7 @@ case "$NV_GPUS" in *H100*|*H200*|*A100*|*B200*)
     [ "${MOJOLEARN_DEVPOD_ALLOW_BIG_GPU:-0}" = 1 ] || { echo "dev_pod: $NV_GPUS includes an H100/H200/A100/B200; refused without Andrew's OK (MOJOLEARN_DEVPOD_ALLOW_BIG_GPU=1)" >&2; exit 2; } ;;
 esac
 # At most this many live RunPod pods on the account, counted from the API at every up.
-MAX_RUNPOD_PODS="${MOJOLEARN_DEVPOD_MAX_PODS:-3}"
+MAX_RUNPOD_PODS="${MOJOLEARN_DEVPOD_MAX_PODS:-2}"
 # No lease longer than this many minutes; a lane that needs more extends, visibly.
 MAX_LEASE_MIN="${MOJOLEARN_DEVPOD_MAX_LEASE_MIN:-240}"
 NV_IMAGE="${MOJOLEARN_DEVPOD_IMAGE:-runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04}"
