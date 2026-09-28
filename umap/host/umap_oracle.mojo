@@ -94,7 +94,6 @@ from checks.numerics import (
     identical_pow,
     identical_pow64,
 )
-from core.host_predict_threads import HostF32Ptr, host_list_ptr, host_predict_chunk, host_predict_task_count
 from core.knn_host_predict import KNN_HOST_METRIC_FROM_IS_SQRT, host_knn_search
 from spectral.host.spectral_oracle import oracle_embedding
 from spectral.impl.sparse.coo import CooGraph
@@ -327,11 +326,11 @@ def _csr_weight_at(
 
 
 def host_umap_vertex[C: Int](
-    source: HostF32Ptr,
+    source: List[Float32],
     row_offsets: List[UInt32],
     tails: List[UInt32],
     scaled: List[Float32],
-    destination: HostF32Ptr,
+    mut destination: List[Float32],
     v: Int,
     n: Int,
     epoch: Int,
@@ -358,7 +357,7 @@ def host_umap_vertex[C: Int](
     var x = SIMD[DType.float32, 4](0.0)
     var acc = SIMD[DType.float32, 4](0.0)
     comptime for c in range(C):
-        x[c] = source.unsafe_load(v * C + c)
+        x[c] = source[v * C + c]
     var begin = Int(row_offsets[v])
     var end = Int(row_offsets[v + 1])
     for e in range(begin, end):
@@ -369,7 +368,7 @@ def host_umap_vertex[C: Int](
         var delta = SIMD[DType.float32, 4](0.0)
         var d2 = Float32(0.0)
         comptime for c in range(C):
-            delta[c] = ftz(x[c] - source.unsafe_load(u * C + c))
+            delta[c] = ftz(x[c] - source[u * C + c])
             d2 = ftz(identical_mul_add(delta[c], delta[c], d2))
         if d2 > Float32(0.0):
             var dp = identical_pow(d2, b)
@@ -407,7 +406,7 @@ def host_umap_vertex[C: Int](
             var nd = SIMD[DType.float32, 4](0.0)
             var n2 = Float32(0.0)
             comptime for c in range(C):
-                nd[c] = ftz(x[c] - source.unsafe_load(other * C + c))
+                nd[c] = ftz(x[c] - source[other * C + c])
                 n2 = ftz(identical_mul_add(nd[c], nd[c], n2))
             if n2 > Float32(0.0):
                 var np_ = identical_pow(n2, b)
@@ -424,7 +423,7 @@ def host_umap_vertex[C: Int](
                     else:
                         acc[c] = ftz(acc[c] + ftz(identical_mul(alpha, _clip(ftz(identical_mul(coeff, nd[c]))))))
     comptime for c in range(C):
-        destination.unsafe_store(v * C + c, ftz(x[c] + acc[c]))
+        destination[v * C + c] = ftz(x[c] + acc[c])
 
 
 def host_optimize_csr_layout(
@@ -463,35 +462,31 @@ def host_optimize_csr_layout(
     for i in range(len(initial)):
         first.append(ftz(initial[i]))
     var second = List[Float32](length=len(initial), fill=Float32(0.0))
-    # Each vertex reads the previous epoch's buffer and writes only its own
-    # row of the other one (the device's snapshot fold), so the vertices of
-    # one epoch are independent tasks: contiguous ranges under the host
-    # thread policy (core/host_predict_threads.mojo), the bits of the serial
-    # walk at every thread count (lane decomp-cpu, 2026-09-28).
-    var pf = host_list_ptr(first)
-    var ps = host_list_ptr(second)
-    var tasks = host_predict_task_count(n_samples)
-    var chunk = host_predict_chunk(n_samples, tasks)
     for epoch in range(n_epochs):
         var alpha = learning_rate * Float32(Float64(n_epochs - epoch) / Float64(n_epochs))
-        var src = pf if epoch % 2 == 0 else ps
-        var dst = ps if epoch % 2 == 0 else pf
-
-        def rows(t: Int) {imm src, imm dst, imm row_offsets, imm tails, imm scaled, imm chunk, imm n_samples, imm n_components, imm epoch, imm alpha, imm negative_rate, imm neg2ab, imm rep2b, imm a, imm b, imm seed}:
-            for v in range(t * chunk, min(n_samples, (t + 1) * chunk)):
+        for v in range(n_samples):
+            if epoch % 2 == 0:
                 if n_components == 2:
                     host_umap_vertex[2](
-                        src, row_offsets, tails, scaled, dst, v, n_samples,
+                        first, row_offsets, tails, scaled, second, v, n_samples,
                         epoch, alpha, negative_rate, neg2ab, rep2b, a, b, seed,
                     )
                 else:
                     host_umap_vertex[3](
-                        src, row_offsets, tails, scaled, dst, v, n_samples,
+                        first, row_offsets, tails, scaled, second, v, n_samples,
                         epoch, alpha, negative_rate, neg2ab, rep2b, a, b, seed,
                     )
-
-        for t in range(tasks):
-            rows(t)
+            else:
+                if n_components == 2:
+                    host_umap_vertex[2](
+                        second, row_offsets, tails, scaled, first, v, n_samples,
+                        epoch, alpha, negative_rate, neg2ab, rep2b, a, b, seed,
+                    )
+                else:
+                    host_umap_vertex[3](
+                        second, row_offsets, tails, scaled, first, v, n_samples,
+                        epoch, alpha, negative_rate, neg2ab, rep2b, a, b, seed,
+                    )
     if n_epochs % 2 == 0:
         return first^
     return second^
