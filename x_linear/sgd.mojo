@@ -354,8 +354,17 @@ def sgd_one_warp[K: Int](
     do_shuffle: Bool, seed: UInt64, one_class: Bool,
     w: FP, woff: Int, b: FP, boff: Int, idx: IP,
     swp: FP, has_sw: Bool, wpos: Float32, wneg: Float32, has_cw: Bool,
+    pipe: Bool, t_team: Team, warp: Int, idx_b: IP,
 ) -> Int:
-    """`sgd_one` on the warp of `lane` (see above). d <= K * WARP_SIZE."""
+    """`sgd_one` on the warp of `lane` (see above). d <= K * WARP_SIZE.
+
+    `pipe` (lane/linear-apple2; one problem, shuffle on, every thread of the
+    block calls this): warp 0 computes, warp 1's lane 0 shuffles the NEXT
+    epoch's order (a copy of this epoch's, then Fisher-Yates on the same
+    draws in the same sequence) into the other of `idx` / `idx_b` while
+    warp 0 runs this epoch; every warp meets at one broadcast per epoch
+    (warp 0's stop verdict). The orders and every word computed from them
+    are the ones the serial form produced."""
     comptime W = WARP_SIZE
     var l1_ratio = l1_ratio_in
     if penalty == P_L2:
@@ -366,10 +375,19 @@ def sgd_one_warp[K: Int](
     var qr = InlineArray[Float32, K](fill=Float32(0))
     var xr = InlineArray[Float32, K](fill=Float32(0))
     var intercept = Float32(1) if one_class else Float32(0)
-    if lane == 0:
-        for i in range(n):
-            sti(idx, i, i)
     var rng = seed
+    var is_comp = (not pipe) or warp == 0
+    var is_shuf = pipe and warp == 1
+    if not pipe:
+        if lane == 0:
+            for i in range(n):
+                sti(idx, i, i)
+    else:
+        if is_shuf and lane == 0:
+            for i in range(n):
+                sti(idx, i, i)
+            shuffle(idx, n, rng)
+        t_team.sync()
     var eta = eta0
     var optimal_init = Float32(0)
     if lr == LR_OPTIMAL:
@@ -389,139 +407,159 @@ def sgd_one_warp[K: Int](
     var need_obj = tol > Float32(-3.0e38)
     var pa = lr == LR_PA1 or lr == LR_PA2
     var fold_norms = need_obj and not pa and penalty != P_NONE
+    var stop = 0
     for epoch in range(max_iter):
-        epochs = epoch + 1
-        var objective = Float32(0)
-        if do_shuffle and lane == 0:
-            shuffle(idx, n, rng)
-        # lane/linear-apple2: row r + 1's index, target and x are loaded while
-        # row r is computed (row r + 2's index one step earlier still), so a
-        # row no longer waits on its own loads. x is flushed once, as the row
-        # starts (not at the load, which would wait for it).
-        var raw_next = Int32(0)
-        if lane == 0:
-            raw_next = idx.unsafe_load(0)
-        var ci = Int(shuffle_idx(raw_next, UInt32(0)))
-        var cx = InlineArray[Float32, K](fill=Float32(0))
-        comptime for kk in range(K):
-            var j = lane + kk * W
-            cx[kk] = ld(x, ci * d + j) if j < d else Float32(0)
-        var cy = ld(y, ci)
-        if lane == 0 and n > 1:
-            raw_next = idx.unsafe_load(1)
-        for r in range(n):
-            var i = ci
-            comptime for kk in range(K):
-                xr[kk] = fz(cx[kk])
-            var yv = _sgd_target(k, c, cy)
-            if r + 1 < n:
-                ci = Int(shuffle_idx(raw_next, UInt32(0)))
-                comptime for kk in range(K):
-                    var j = lane + kk * W
-                    cx[kk] = ld(x, ci * d + j) if j < d else Float32(0)
-                cy = ld(y, ci)
-                if lane == 0 and r + 2 < n:
-                    raw_next = idx.unsafe_load(r + 2)
-            var folds: Tuple[Float32, Float32, Float32, Float32]
-            if fold_norms:
-                folds = _warp_row_folds[K, True, False](xr, wr, d)
-            elif pa:
-                folds = _warp_row_folds[K, False, True](xr, wr, d)
-            else:
-                folds = _warp_row_folds[K, False, False](xr, wr, d)
-            var p = fa(folds[0], intercept)
-            if lr == LR_OPTIMAL:
-                eta = fd(Float32(1), fm(alpha, fs(fa(optimal_init, i2f(t)), Float32(1))))
-            elif lr == LR_INVSCALING:
-                eta = fd(eta0, identical_pow(i2f(t), power_t))
-            var cur = sgd_loss(loss, yv, p, eps)
-            objective = fa(objective, cur)
-            if not pa and need_obj:
-                if penalty != P_NONE:
-                    var n2 = folds[1]
-                    var n1 = folds[2]
-                    var reg = fa(fm(fm(fs(Float32(1), l1_ratio), Float32(0.5)), n2), fm(l1_ratio, n1))
-                    objective = fa(objective, fm(alpha, reg))
-                if one_class:
-                    objective = fa(objective, fm(intercept, alpha))
-            var update: Float32
-            if pa:
-                var sq = folds[3]
-                if lr == LR_PA1:
-                    if sq == 0:
-                        continue
-                    update = fmin(eta0, fd(cur, sq))
-                else:
-                    update = fd(cur, fa(sq, fd(Float32(0.5), eta0)))
-                if loss == L_HINGE:
-                    update = fm(update, yv)
-                elif fs(yv, p) < 0:
-                    update = -update
-            else:
-                var dl = sgd_dloss(loss, yv, p, eps)
-                if dl < Float32(-1e12):
-                    dl = Float32(-1e12)
-                elif dl > Float32(1e12):
-                    dl = Float32(1e12)
-                update = fm(-eta, dl)
-            if has_cw or has_sw:
-                var cw = Float32(1)
-                if has_cw:
-                    cw = wpos if yv > 0 else wneg
-                var swi = ld(swp, i) if has_sw else Float32(1)
-                update = fm(update, fm(cw, swi))
-            if penalty == P_L2 or penalty == P_EN:
-                var scale = fmax(Float32(0), fs(Float32(1), fm(decay_factor, eta)))
-                comptime for kk in range(K):
-                    if lane + kk * W < d:
-                        wr[kk] = fm(wr[kk], scale)
-            if update != 0:
-                comptime for kk in range(K):
-                    if lane + kk * W < d:
-                        wr[kk] = fmad(update, xr[kk], wr[kk])
-            if fit_intercept:
-                var iu = update
-                if one_class:
-                    iu = fs(iu, fm(eta, alpha))
-                if iu != 0:
-                    intercept = fa(intercept, iu)
-            if penalty == P_L1 or penalty == P_EN:
-                u = fa(u, fm(fm(l1_ratio, eta), alpha))
-                comptime for kk in range(K):
-                    if lane + kk * W < d:
-                        var z = wr[kk]
-                        var nz = _clip_one(z, fa(u, qr[kk]), fs(u, qr[kk]))
-                        wr[kk] = nz
-                        qr[kk] = fa(qr[kk], fs(nz, z))
-            t += 1
-        var finite = intercept == intercept and fabs(intercept) < Float32(3.0e38)
-        for j in range(d):
-            var src = UInt32(j % W)
-            comptime for kk in range(K):
-                if j // W == kk:
-                    var wj = shuffle_idx(wr[kk], src)
-                    if not (wj == wj and fabs(wj) < Float32(3.0e38)):
-                        finite = False
-        if not finite:
+        var order = idx
+        if pipe:
+            if epoch % 2 == 1:
+                order = idx_b
+            if is_shuf and lane == 0 and epoch + 1 < max_iter:
+                var nxt = idx_b if epoch % 2 == 0 else idx
+                for i in range(n):
+                    nxt.unsafe_store(i, order.unsafe_load(i))
+                shuffle(nxt, n, rng)
+        if is_comp:
+            epochs = epoch + 1
+            var objective = Float32(0)
+            if do_shuffle and lane == 0 and not pipe:
+                shuffle(idx, n, rng)
+            # lane/linear-apple2: row r + 1's index, target and x are loaded while
+            # row r is computed (row r + 2's index one step earlier still), so a
+            # row no longer waits on its own loads. x is flushed once, as the row
+            # starts (not at the load, which would wait for it).
+            var raw_next = Int32(0)
             if lane == 0:
-                st(b, boff, Float32(0))
+                raw_next = order.unsafe_load(0)
+            var ci = Int(shuffle_idx(raw_next, UInt32(0)))
+            var cx = InlineArray[Float32, K](fill=Float32(0))
             comptime for kk in range(K):
-                if lane + kk * W < d:
-                    st(w, woff + lane + kk * W, Float32(0))
-            return -1
-        var mean_obj = fd(objective, i2f(n))
-        if tol > Float32(-3.0e38) and mean_obj > fs(best, tol):
-            no_improve += 1
-        else:
-            no_improve = 0
-        if mean_obj < best:
-            best = mean_obj
-        if no_improve >= n_iter_no_change:
-            if lr == LR_ADAPTIVE and eta > Float32(1e-6):
-                eta = fd(eta, Float32(5))
-                no_improve = 0
-            else:
-                break
+                var j = lane + kk * W
+                cx[kk] = ld(x, ci * d + j) if j < d else Float32(0)
+            var cy = ld(y, ci)
+            if lane == 0 and n > 1:
+                raw_next = order.unsafe_load(1)
+            for r in range(n):
+                var i = ci
+                comptime for kk in range(K):
+                    xr[kk] = fz(cx[kk])
+                var yv = _sgd_target(k, c, cy)
+                if r + 1 < n:
+                    ci = Int(shuffle_idx(raw_next, UInt32(0)))
+                    comptime for kk in range(K):
+                        var j = lane + kk * W
+                        cx[kk] = ld(x, ci * d + j) if j < d else Float32(0)
+                    cy = ld(y, ci)
+                    if lane == 0 and r + 2 < n:
+                        raw_next = order.unsafe_load(r + 2)
+                var folds: Tuple[Float32, Float32, Float32, Float32]
+                if fold_norms:
+                    folds = _warp_row_folds[K, True, False](xr, wr, d)
+                elif pa:
+                    folds = _warp_row_folds[K, False, True](xr, wr, d)
+                else:
+                    folds = _warp_row_folds[K, False, False](xr, wr, d)
+                var p = fa(folds[0], intercept)
+                if lr == LR_OPTIMAL:
+                    eta = fd(Float32(1), fm(alpha, fs(fa(optimal_init, i2f(t)), Float32(1))))
+                elif lr == LR_INVSCALING:
+                    eta = fd(eta0, identical_pow(i2f(t), power_t))
+                var cur = sgd_loss(loss, yv, p, eps)
+                objective = fa(objective, cur)
+                if not pa and need_obj:
+                    if penalty != P_NONE:
+                        var n2 = folds[1]
+                        var n1 = folds[2]
+                        var reg = fa(fm(fm(fs(Float32(1), l1_ratio), Float32(0.5)), n2), fm(l1_ratio, n1))
+                        objective = fa(objective, fm(alpha, reg))
+                    if one_class:
+                        objective = fa(objective, fm(intercept, alpha))
+                var update: Float32
+                if pa:
+                    var sq = folds[3]
+                    if lr == LR_PA1:
+                        if sq == 0:
+                            continue
+                        update = fmin(eta0, fd(cur, sq))
+                    else:
+                        update = fd(cur, fa(sq, fd(Float32(0.5), eta0)))
+                    if loss == L_HINGE:
+                        update = fm(update, yv)
+                    elif fs(yv, p) < 0:
+                        update = -update
+                else:
+                    var dl = sgd_dloss(loss, yv, p, eps)
+                    if dl < Float32(-1e12):
+                        dl = Float32(-1e12)
+                    elif dl > Float32(1e12):
+                        dl = Float32(1e12)
+                    update = fm(-eta, dl)
+                if has_cw or has_sw:
+                    var cw = Float32(1)
+                    if has_cw:
+                        cw = wpos if yv > 0 else wneg
+                    var swi = ld(swp, i) if has_sw else Float32(1)
+                    update = fm(update, fm(cw, swi))
+                if penalty == P_L2 or penalty == P_EN:
+                    var scale = fmax(Float32(0), fs(Float32(1), fm(decay_factor, eta)))
+                    comptime for kk in range(K):
+                        if lane + kk * W < d:
+                            wr[kk] = fm(wr[kk], scale)
+                if update != 0:
+                    comptime for kk in range(K):
+                        if lane + kk * W < d:
+                            wr[kk] = fmad(update, xr[kk], wr[kk])
+                if fit_intercept:
+                    var iu = update
+                    if one_class:
+                        iu = fs(iu, fm(eta, alpha))
+                    if iu != 0:
+                        intercept = fa(intercept, iu)
+                if penalty == P_L1 or penalty == P_EN:
+                    u = fa(u, fm(fm(l1_ratio, eta), alpha))
+                    comptime for kk in range(K):
+                        if lane + kk * W < d:
+                            var z = wr[kk]
+                            var nz = _clip_one(z, fa(u, qr[kk]), fs(u, qr[kk]))
+                            wr[kk] = nz
+                            qr[kk] = fa(qr[kk], fs(nz, z))
+                t += 1
+            var finite = intercept == intercept and fabs(intercept) < Float32(3.0e38)
+            for j in range(d):
+                var src = UInt32(j % W)
+                comptime for kk in range(K):
+                    if j // W == kk:
+                        var wj = shuffle_idx(wr[kk], src)
+                        if not (wj == wj and fabs(wj) < Float32(3.0e38)):
+                            finite = False
+            if not finite:
+                if lane == 0:
+                    st(b, boff, Float32(0))
+                comptime for kk in range(K):
+                    if lane + kk * W < d:
+                        st(w, woff + lane + kk * W, Float32(0))
+                stop = 2
+            if stop == 0:
+                var mean_obj = fd(objective, i2f(n))
+                if tol > Float32(-3.0e38) and mean_obj > fs(best, tol):
+                    no_improve += 1
+                else:
+                    no_improve = 0
+                if mean_obj < best:
+                    best = mean_obj
+                if no_improve >= n_iter_no_change:
+                    if lr == LR_ADAPTIVE and eta > Float32(1e-6):
+                        eta = fd(eta, Float32(5))
+                        no_improve = 0
+                    else:
+                        stop = 1
+        if pipe:
+            stop = t_team.bcast_int(stop)
+        if stop != 0:
+            break
+    if not is_comp:
+        return 0
+    if stop == 2:
+        return -1
     comptime for kk in range(K):
         if lane + kk * W < d:
             st(w, woff + lane + kk * W, wr[kk])
@@ -575,7 +613,14 @@ def sgd_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
         if chunks <= SGD_WARP_MAX_CHUNKS and t.nt >= WARP_SIZE and t.nt % WARP_SIZE == 0:
             var lane = t.tid % WARP_SIZE
             var nw = t.nt // WARP_SIZE
-            for c in range(t.tid // WARP_SIZE, problems, nw):
+            # lane/linear-apple2: one problem with a shuffle: every warp takes
+            # part (warp 0 computes, warp 1 shuffles the next epoch's order).
+            var pipe = problems == 1 and do_shuffle and nw >= 2
+            var warp = t.tid // WARP_SIZE
+            var idx_b = t.row(2 * problems + 1).bitcast[Int32]()
+            var first = 0 if pipe else warp
+            var step = 1 if pipe else nw
+            for c in range(first, problems, step):
                 var order = t.row(2 * c + 1).bitcast[Int32]()
                 var cw_pos = ld(fp, 6 + c) if has_cw else Float32(1)
                 var cw_neg = ld(fp, 6 + problems + c) if has_cw else Float32(1)
@@ -586,6 +631,7 @@ def sgd_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
                         fit_intercept, max_iter, tol, nic, do_shuffle,
                         seed + UInt64(1000003) * UInt64(c), k == 1,
                         res, c * d, res, problems * d + c, order, swp, has_sw, cw_pos, cw_neg, has_cw,
+                        pipe, t, warp, idx_b,
                     )
                 elif chunks <= 2:
                     ep = sgd_one_warp[2](
@@ -593,6 +639,7 @@ def sgd_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
                         fit_intercept, max_iter, tol, nic, do_shuffle,
                         seed + UInt64(1000003) * UInt64(c), k == 1,
                         res, c * d, res, problems * d + c, order, swp, has_sw, cw_pos, cw_neg, has_cw,
+                        pipe, t, warp, idx_b,
                     )
                 elif chunks <= 4:
                     ep = sgd_one_warp[4](
@@ -600,6 +647,7 @@ def sgd_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
                         fit_intercept, max_iter, tol, nic, do_shuffle,
                         seed + UInt64(1000003) * UInt64(c), k == 1,
                         res, c * d, res, problems * d + c, order, swp, has_sw, cw_pos, cw_neg, has_cw,
+                        pipe, t, warp, idx_b,
                     )
                 else:
                     ep = sgd_one_warp[SGD_WARP_MAX_CHUNKS](
@@ -607,8 +655,9 @@ def sgd_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
                         fit_intercept, max_iter, tol, nic, do_shuffle,
                         seed + UInt64(1000003) * UInt64(c), k == 1,
                         res, c * d, res, problems * d + c, order, swp, has_sw, cw_pos, cw_neg, has_cw,
+                        pipe, t, warp, idx_b,
                     )
-                if lane == 0:
+                if lane == 0 and (not pipe or warp == 0):
                     st(epr, c, i2f(ep))
             t.sync()
         else:
@@ -728,7 +777,8 @@ def _l1_clip(w: FP, woff: Int, q: FP, u: Float32, d: Int):
 
 
 def sgd_team_rows(ip: IP) -> Int:
-    """Row buffers an SGD fit needs: targets and order per problem, the epochs."""
+    """Row buffers an SGD fit needs: targets and order per problem, the
+    epochs, and the warp form's second order buffer."""
     var k = ldi(ip, 0)
     var problems = k if k > 2 else 1
-    return 2 * problems + 1
+    return 2 * problems + 2  # + the second order buffer (lane/linear-apple2)
