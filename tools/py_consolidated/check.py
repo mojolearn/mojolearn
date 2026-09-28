@@ -87,6 +87,8 @@ def arms(tree, out, lanes):
         print(f"{now()} {lane}: {row}", flush=True)
     pool.shutdown()
     (out / "lanes.json").write_text(json.dumps(rows, indent=1))
+    if os.environ.get("NO_PROBE"):
+        return
     probe = HERE / "probe.py"
     for col in ("gpu", "cpu"):
         print(f"{now()} probe {col}", flush=True)
@@ -132,7 +134,7 @@ def cross(base, new, lanes):
             ts = f"({lb.get(lane, {}).get(col + '_s')} / {ln.get(lane, {}).get(col + '_s')})"
             print(f"{lane:34s} {col:4s} {len(keys):5d}  {v:8s}  {ts}" + (f"  {moved[:6]}" if moved else ""))
         print(f"{'':34s} gpu==cpu base {lb.get(lane, {}).get('gpu_vs_cpu')}, new {ln.get(lane, {}).get('gpu_vs_cpu')}")
-    for col in ("gpu", "cpu"):
+    for col in () if os.environ.get("NO_PROBE") else ("gpu", "cpu"):
         print(f"\n== probe, {col} column, base -> new")
         subprocess.run([sys.executable, str(HERE / "probe.py"), "--diff", str(base / f"probe.{col}.json"),
                         str(new / f"probe.{col}.json")])
