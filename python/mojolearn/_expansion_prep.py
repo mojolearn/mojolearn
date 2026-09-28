@@ -42,6 +42,7 @@ import copy
 import ctypes
 import inspect
 import math
+import mmap
 import numbers
 import operator
 import os
@@ -117,6 +118,70 @@ def _optional_prep_entry(binding, name):
 #: the smallest output (words) that `_Prog.output` keeps out of the arena
 _OUT_MIN_WORDS = 2 ** 27
 
+#: lane prep-apple3: host-side changes, each with a name. A name in
+#: _R3_DEFAULT is on; MOJOLEARN_XPREP_R3_ON / MOJOLEARN_XPREP_R3_OFF (names
+#: joined by "+" or ",", or "all") switch names on and off for an A/B arm. None
+#: of them moves a bit: they change where words live and which stages run.
+#:   imputer_nosort  SimpleImputer sorts only for median / most_frequent
+#:   mapped          a large host arena or output is an anonymous mapping
+#:                   (zero pages arrive when first written; nothing is
+#:                   touched to allocate it)
+#:   view            a large read is a view of the mapped block, not a copy
+#:   work            blocks a stage writes whole and Python never reads
+#:                   (the sorted columns, LDA's centered rows) are device
+#:                   scratch
+#:   te_arrays       TargetEncoder hands targets and folds over as arrays
+_R3_NAMES = ("imputer_nosort", "mapped", "view", "work", "te_arrays")
+_R3_DEFAULT = ()
+#: the smallest block (words) that is mapped, and the smallest read that is a view
+_MAP_MIN_WORDS = 2 ** 18
+_VIEW_MIN_WORDS = 2 ** 20
+
+
+def _r3(name):
+    """Whether the lane prep-apple3 change `name` is on."""
+    def names(var):
+        v = [t.strip() for t in os.environ.get(var, "").replace("+", ",").split(",") if t.strip()]
+        return set(_R3_NAMES) if "all" in v else set(v)
+    off = names("MOJOLEARN_XPREP_R3_OFF")
+    if name in off:
+        return False
+    return name in _R3_DEFAULT or name in names("MOJOLEARN_XPREP_R3_ON")
+
+
+def _zero_words(n, code="f"):
+    """(store, address) of n zeroed 4-byte words: an array.array, or for a
+    large block (`mapped`) a memoryview of an anonymous mapping."""
+    n = max(int(n), 1)
+    if n >= _MAP_MIN_WORDS and _r3("mapped"):
+        m = mmap.mmap(-1, 4 * n)
+        return memoryview(m).cast(code), ctypes.addressof(ctypes.c_char.from_buffer(m))
+    a = array.array(code, bytes(4 * n))
+    return a, a.buffer_info()[0]
+
+
+def _take(store, off, n, shape, code):
+    """The n words of `store` at off as an Array of 4-byte `code` items
+    ("f" or "i"): the whole array.array itself, a view of a large mapped
+    block (`view`), else a copy."""
+    dtype = "<f4" if code == "f" else "<i4"
+    if isinstance(store, memoryview):
+        part = store[off:off + n]
+        if part.format != code:
+            part = part.cast("B").cast(code)
+        if n >= _VIEW_MIN_WORDS and _r3("view"):
+            return Array._view_of(Array.from_buffer(part), shape, "C")
+        out = array.array(code)
+        out.frombytes(part.cast("B"))
+        return Array._owned(out, shape, dtype, "C")
+    if store.typecode == code:
+        if off == 0 and n == len(store):
+            return Array._owned(store, shape, dtype, "C")
+        return Array._owned(store[off:off + n], shape, dtype, "C")
+    out = array.array(code)
+    out.frombytes(store[off:off + n].tobytes())
+    return Array._owned(out, shape, dtype, "C")
+
 
 class _Scratch:
     """An offset past a program's host arena (lane prep-apple2). Kind "s":
@@ -162,6 +227,13 @@ class _Prog:
         off = self.scratch_size
         self.scratch_size += max(int(n), 0)
         return _Scratch(off)
+
+    def work(self, n):
+        """n words that ONE stage writes whole before any stage reads them and
+        that Python never reads (lane prep-apple3, `work`): device scratch,
+        so they neither cross the bus nor touch host memory. Arena words
+        when the change is off."""
+        return self.scratch(n) if _r3("work") else self.alloc(n)
 
     def output(self, n, code="f"):
         """The program's output: n words that arrive zeroed (as `alloc`'s),
@@ -240,8 +312,7 @@ class _Prog:
         ha = H + (0 if dev_out else on)
         sbase, obase = ha, (ha + sc if dev_out else H)
         host_words = ha + (0 if dev_scratch else sc)
-        arena = array.array("f", bytes(4 * max(host_words, 1)))
-        base = arena.buffer_info()[0]
+        arena, base = _zero_words(host_words)
         run_ranges = (_optional_prep_entry(binding, "x_prep_run_ranges")
                       if (dev_scratch or sc == 0) and _arena_io.ranges_enabled() else None)
         spans = []
@@ -270,15 +341,14 @@ class _Prog:
             ins = _arena_io.input_ranges(spans)
             outs = _arena_io.output_ranges(_arena_io.complement(ins, ha) + [list(s) for s in self._inout])
             ia, oa = _arena_io.pack_ins(ins), _arena_io.pack_outs(outs)
-            out = array.array(self._out_code, bytes(4 * on)) if dev_out else None
-            run_ranges(base, prog.buffer_info()[0], 0 if out is None else out.buffer_info()[0],
+            out, out_addr = _zero_words(on, self._out_code) if dev_out else (None, 0)
+            run_ranges(base, prog.buffer_info()[0], out_addr,
                        (ha, sc if dev_scratch else 0, on if dev_out else 0, nst),
                        (ia.buffer_info()[0], len(ins), oa.buffer_info()[0], len(outs)))
             self._out = out
         elif dev_out:
-            out = array.array(self._out_code, bytes(4 * on))
-            run_out(base, prog.buffer_info()[0], out.buffer_info()[0],
-                                   (ha, sc if dev_scratch else 0, on, nst))
+            out, out_addr = _zero_words(on, self._out_code)
+            run_out(base, prog.buffer_info()[0], out_addr, (ha, sc if dev_scratch else 0, on, nst))
             self._out = out
         elif dev_scratch:
             if has_out:
@@ -300,54 +370,31 @@ class _Prog:
                 raise AssertionError(f"x_prep: arena [{off}, {off + n}) was read but is an input, "
                                      "which never comes back")
 
-    def get(self, off, shape):
+    def _read(self, off, shape, code):
         shape = tuple(shape) if isinstance(shape, (tuple, list)) else (int(shape),)
         n = 1
         for s in shape:
             n *= s
-        if not isinstance(off, _Scratch):
-            self._check(off, n)
         if isinstance(off, _Scratch):
             if off.kind != "o":
                 raise ValueError("x_prep: scratch words never reach the host")
-            if self._out is not None and self._out.typecode == "f":
-                if off.off == 0 and n == len(self._out):
-                    return Array._owned(self._out, shape, "<f4", "C")
-                return Array._owned(self._out[off.off:off.off + n], shape, "<f4", "C")
             if self._out is not None:
-                store = array.array("f")
-                store.frombytes(self._out[off.off:off.off + n].tobytes())
-                return Array._owned(store, shape, "<f4", "C")
+                return _take(self._out, off.off, n, shape, code)
             off = self._out_at + off.off
-        return Array._owned(self.arena[off:off + n], shape, "<f4", "C")
+        else:
+            self._check(off, n)
+        return _take(self.arena, off, n, shape, code)
+
+    def get(self, off, shape):
+        return self._read(off, shape, "f")
 
     def get_i32(self, off, shape):
-        shape = tuple(shape) if isinstance(shape, (tuple, list)) else (int(shape),)
-        n = 1
-        for s in shape:
-            n *= s
-        if not isinstance(off, _Scratch):
-            self._check(off, n)
-        if isinstance(off, _Scratch):
-            if off.kind != "o":
-                raise ValueError("x_prep: scratch words never reach the host")
-            if self._out is not None and self._out.typecode == "i":
-                if off.off == 0 and n == len(self._out):
-                    return Array._owned(self._out, shape, "<i4", "C")
-                return Array._owned(self._out[off.off:off.off + n], shape, "<i4", "C")
-            if self._out is not None:
-                store = array.array("i")
-                store.frombytes(self._out[off.off:off.off + n].tobytes())
-                return Array._owned(store, shape, "<i4", "C")
-            off = self._out_at + off.off
-        store = array.array("i")
-        store.frombytes(self.arena[off:off + n].tobytes())
-        return Array._owned(store, shape, "<i4", "C")
+        return self._read(off, shape, "i")
 
     def values(self, off, n):
         """Python floats of n arena entries (for integer bookkeeping)."""
         self._check(off, n)
-        return list(self.arena[off:off + n])
+        return self.arena[off:off + n].tolist()
 
 
 def _mode():
@@ -448,7 +495,7 @@ class RobustScaler(_PrepBase):
         mode = _mode()
         pr = _Prog()
         xo = pr.put(arr)
-        so = pr.alloc(n * d)
+        so = pr.work(n * d)
         st = pr.alloc(6 * d)
         qf = pr.put_list([lo / 100.0, 0.5, hi / 100.0])
         q = pr.alloc(3 * d)
@@ -518,7 +565,7 @@ def _fit_categories(mode, arr):
     n, d = arr.shape
     pr = _Prog()
     xo = pr.put(arr)
-    so = pr.alloc(n * d)
+    so = pr.work(n * d)
     uo = pr.alloc(n * d)
     co = pr.alloc(d)
     pr.stage("sort_cols", d, xo, n, d, so, 1)
@@ -1046,9 +1093,10 @@ def _kfold_assignment(n, n_folds, seed, shuffle=True):
     return fold
 
 
-def _native_folds(n, n_folds, seed, shuffle, codes=None, n_classes=0):
+def _native_folds(n, n_folds, seed, shuffle, codes=None, n_classes=0, as_array=False):
     """The fold assignment through the binding's host entry (x_prep/folds.mojo,
-    the same integers), or None when the binding has none."""
+    the same integers), or None when the binding has none. `codes` is a list
+    or an int32 Array; as_array returns the folds as an int32 Array."""
     if os.environ.get("MOJOLEARN_XPREP_NATIVE_FOLDS", "1") == "0":
         return None
     b = _prep_binding(_mode())
@@ -1062,10 +1110,16 @@ def _native_folds(n, n_folds, seed, shuffle, codes=None, n_classes=0):
     else:
         if _optional_prep_entry(b, "x_prep_strat_folds") is None:
             return None
-        cod = array.array("i", codes)
-        if b.x_prep_strat_folds(cod.buffer_info()[0], out.buffer_info()[0],
+        if isinstance(codes, Array) and codes.dtype == "<i4" and codes._has_order("C") and codes.size == n:
+            cod, cod_addr = codes, addr_ro(codes, name="codes")
+        else:
+            cod = array.array("i", codes)
+            cod_addr = cod.buffer_info()[0]
+        if b.x_prep_strat_folds(cod_addr, out.buffer_info()[0],
                                 (n, n_classes, n_folds, 1 if shuffle else 0), halves) != 0:
             raise ValueError(f"mojolearn: n_splits={n_folds} cannot be greater than the number of members in each class")
+    if as_array:
+        return Array._owned(out, (len(out),), "<i4", "C")
     return out[:n].tolist()
 
 
@@ -1106,6 +1160,18 @@ def _stratified_assignment(codes, n_folds, seed, shuffle=True):
         for r, f in zip(rows[k], block):
             fold[r] = f
     return fold
+
+
+def _target_binary_codes(y, target_type):
+    """(classes, int32 codes Array) of an explicit binary target, the label
+    pass native (lane prep-apple3, `te_arrays`); None when `_target_kind`
+    must run (any other target_type, or the change off)."""
+    if target_type != "binary" or not _r3("te_arrays"):
+        return None
+    classes, codes = encode_labels(y)
+    if not (isinstance(codes, Array) and codes.dtype == "<i4"):
+        return None
+    return classes, codes
 
 
 def _target_kind(y, target_type):
@@ -1161,10 +1227,19 @@ class TargetEncoder(_PrepBase):
         if isinstance(self.cv, numbers.Integral) and self.cv < 2:
             raise ValueError("mojolearn: TargetEncoder cv must be an integer >= 2, a splitter or an iterable")
 
-    def _run(self, arr, y, folds, n_folds, apply_rows_folds):
+    def _run(self, arr, y, folds, n_folds, apply_rows_folds, binary=None):
+        """binary (lane prep-apple3, `te_arrays`): (classes, int32 codes) of an
+        explicit binary target, with `folds` an int32 Array: both cross as
+        int32 words and become floats on the device (i2f), the same words the
+        lists gave."""
         n, d = arr.shape
-        kind, classes, yflat, T = _target_kind(y, self.target_type)
-        if len(yflat) != n * T:
+        if binary is None:
+            kind, classes, yflat, T = _target_kind(y, self.target_type)
+            rows = len(yflat)
+        else:
+            kind, classes, yflat, T = "binary", binary[0], None, 1
+            rows = binary[1].size
+        if rows != n * T:
             raise ValueError("mojolearn: X and y have different numbers of rows")
         mode = _mode()
         cats = (_fit_categories(mode, arr) if _is_auto(self.categories) else
@@ -1173,8 +1248,12 @@ class TargetEncoder(_PrepBase):
         F = n_folds
         pr = _Prog()
         codes, _neg = _codes(pr, arr, cats)
-        yo = pr.put_list(yflat)
-        fo = pr.put_list(folds if folds is not None else [-1] * n)
+        if binary is None:
+            yo = pr.put_list(yflat)
+            fo = pr.put_list(folds if folds is not None else [-1] * n)
+        else:
+            yo = pr.put_codes(binary[1])
+            fo = pr.put_codes(folds)
         nco = pr.put_list([c.size for c in cats])
         meta = pr.alloc(2 * (F + 1) * T)
         smo = pr.put_scalar(-1.0 if self.smooth == "auto" else float(self.smooth))
@@ -1186,9 +1265,10 @@ class TargetEncoder(_PrepBase):
         else:
             # each category's rows, ascending (te_bucket): te_enc walks one bucket, not every row
             bstart, brows = pr.alloc(d * (cmax + 1)), pr.alloc(n * d)
-            if os.environ.get("MOJOLEARN_XPREP_TE_PBUCKET", "0") == "1":
-                # OPT-IN, never measured (the 19:30Z freeze withdrew its job): the buckets by chunks
-                # in parallel (te_hist .. te_hscatter), te_bucket's START and ROWS by construction
+            if os.environ.get("MOJOLEARN_XPREP_TE_PBUCKET", "1") != "0":
+                # the buckets by chunks in parallel (te_hist .. te_hscatter), te_bucket's START and
+                # ROWS by construction. Default since lane prep-apple3 (M4, request 1790626651574:
+                # FAST taxi 1.204 -> 0.961 s, IDENTICAL 1.292 -> 1.017 s, digests equal)
                 ch = max(1, min(256, (n + 4095) // 4096))
                 hh, tot = pr.scratch(d * ch * cmax), pr.scratch(d * cmax)
                 pr.stage("te_hist", d * ch, codes, n, d, cmax, ch, hh)
@@ -1260,6 +1340,13 @@ class TargetEncoder(_PrepBase):
         if n < cv:
             raise ValueError(f"mojolearn: cv={cv} folds need at least {cv} rows")
         seed = 0 if self.random_state is None else int(self.random_state)
+        binary = _target_binary_codes(y, self.target_type)
+        if binary is not None:
+            if binary[1].size != n:
+                raise ValueError("mojolearn: X and y have different numbers of rows")
+            folds = _native_folds(n, cv, seed, bool(self.shuffle), binary[1], len(binary[0]), as_array=True)
+            if folds is not None:
+                return self._run(arr, y, folds, cv, True, binary=binary)
         kind, _classes, _yflat, _T = _target_kind(y, self.target_type)
         if kind == "continuous":
             folds = _native_folds(n, cv, seed, bool(self.shuffle))
@@ -1347,12 +1434,15 @@ class SimpleImputer(_PrepBase):
         pr = _Prog()
         x_in = pr.put(arr)
         xo = _mark_missing(pr, x_in, n * d, self.missing_values)
-        so = pr.alloc(n * d)
+        # only the median and the mode read the sorted columns (lane prep-apple3, `imputer_nosort`)
+        sorts = self.strategy in ("median", "most_frequent") or not _r3("imputer_nosort")
+        so = (pr.work(n * d) if self.strategy in ("median", "most_frequent") else pr.alloc(n * d)) if sorts else 0
         st = pr.alloc(6 * d)
         med = pr.alloc(d)
         mf = pr.alloc(d)
         half = pr.put_list([0.5])
-        pr.stage("sort_cols", d, xo, n, d, so, 0)
+        if sorts:
+            pr.stage("sort_cols", d, xo, n, d, so, 0)
         pr.stage("col_stats", d, xo, n, d, st)
         if self.strategy == "median":
             pr.stage("quantile", d, so, n, d, half, 1, med, st)
@@ -1529,7 +1619,7 @@ class KBinsDiscretizer(_PrepBase):
         mode = _mode()
         pr = _Prog()
         xo = pr.put(arr)
-        so = pr.alloc(n * d)
+        so = pr.work(n * d) if w is None else pr.alloc(n * d)
         st = pr.alloc(6 * d)
         nbo = pr.put_list(nb)
         edges = pr.alloc(d * (nbmax + 1))
@@ -2140,7 +2230,7 @@ class LinearDiscriminantAnalysis(_Classifier):
         xo = pr.put(arr)
         yo = pr.put_codes(codes)
         cnt, mean, priors, xbar = pr.alloc(K), pr.alloc(K * d), pr.alloc(K), pr.alloc(d)
-        z, stz, std, w, z2 = pr.alloc(n * d), pr.alloc(6 * d), pr.alloc(d), pr.alloc(d), pr.alloc(n * d)
+        z, stz, std, w, z2 = pr.work(n * d), pr.alloc(6 * d), pr.alloc(d), pr.alloc(d), pr.work(n * d)
         g, e1, v1 = pr.alloc(d * d), pr.alloc(d), pr.alloc(d * d)
         meta = pr.put_list([self.tol, 0.0, 0.0], inout=True)        # lda_stage2 writes the ranks into it
         scal1, g2, ms = pr.alloc(d * d), pr.alloc(d * d), pr.alloc(K * d)
@@ -2460,7 +2550,7 @@ class QuantileTransformer(_PrepBase):
         # the references are an input no stage writes: the fitted attribute is
         # the array that went up (the same float32 words the arena held)
         refs_arr = Array._from_flat([float(v) for v in refs], (nq,), "<f4")
-        so, st, qf = pr.alloc(n * d), pr.alloc(6 * d), pr.put(refs_arr)
+        so, st, qf = pr.work(n * d), pr.alloc(6 * d), pr.put(refs_arr)
         qo = pr.alloc(nq * d)
         pr.stage("sort_cols", d, xo, n, d, so, 0)
         pr.stage("col_stats", d, xo, n, d, st)
@@ -2733,7 +2823,7 @@ def _weighted_groups(pr, arr, w, n, d):
     into 0.0, NaN last) and their summed weights: UG[c*n :] and UG[n*d + c*n :],
     their count UCNT[c]. Returns (UG, UCNT)."""
     xo = pr.put(arr)
-    so, ug, ucnt, codes = pr.alloc(n * d), pr.alloc(2 * n * d), pr.alloc(d), pr.alloc(n * d)
+    so, ug, ucnt, codes = pr.work(n * d), pr.alloc(2 * n * d), pr.alloc(d), pr.alloc(n * d)
     pr.stage("sort_cols", d, xo, n, d, so, 1)
     pr.stage("unique_cols", d, so, n, d, ug, ucnt)
     pr.stage("lookup", n * d, xo, n, d, ug, n, ucnt, codes)
@@ -2832,7 +2922,8 @@ class SplineTransformer(_PrepBase):
         mode = _mode()
         pr = _Prog()
         xo = pr.put(arr)
-        so, st = pr.alloc(n * d), pr.alloc(6 * d)
+        sorts = not given and self.knots == "quantile" and w is None
+        so, st = (pr.work(n * d) if sorts else pr.alloc(n * d)), pr.alloc(6 * d)
         knots = pr.alloc(d * (nk + 2 * k))
         pr.stage("col_stats", d, xo, n, d, st)
         uniform, kst = 0, st
