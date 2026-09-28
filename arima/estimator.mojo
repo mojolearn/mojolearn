@@ -103,23 +103,6 @@ from arima.impl.tsa.arima_common import (
 )
 
 
-from core.neural_context import neural_ctx
-from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL
-
-#: ONE process-lifetime DeviceContext for this module's binding entries
-#: (lane/sequence-apple2, the pattern of a5f27d9c2 / core/neural_context.mojo).
-#: A context per call paid Metal's context and pipeline setup on every call
-#: (AutoARIMA's search makes 14 ARIMA fits) and can run the M2 Pro out of
-#: command queues. Same kernels, same order; each entry synchronizes before it
-#: returns, so no bit moves.
-comptime _CTX_NAME = "MojoArimaEstimatorContextIdentical" if _CTX_MODE == _CTX_IDENTICAL else "MojoArimaEstimatorContextFast"
-
-
-def _binding_ctx() raises -> DeviceContext:
-    return neural_ctx[_CTX_NAME]()
-
-
-
 # ---------------------------------------------------------------------------
 # the log-likelihood method, as an integer (DEVIATION 992)
 # ---------------------------------------------------------------------------
@@ -417,7 +400,7 @@ def arima_fit_ptr_host(
     var N = order.complexity()
     var exog_host = exog_filter_layout(exog_address, batch_size, n_obs, order.n_exog, "exog")
 
-    var ctx = _binding_ctx()
+    var ctx = DeviceContext()
     var trace = IdentityTrace()
     trace.header(
         "arima_fit_ptr_host: batch_size=" + String(batch_size)
@@ -492,7 +475,7 @@ def _predict_into(
         exog_fut_address, batch_size, num_steps, order.n_exog, "exog (future values)"
     )
 
-    var ctx = _binding_ctx()
+    var ctx = DeviceContext()
 
     # Stage the four immutable inputs as one upload batch.  The generic
     # helpers synchronize before returning because their host allocations

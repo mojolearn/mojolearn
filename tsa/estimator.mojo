@@ -48,23 +48,6 @@ from tsa.impl.auto_arima import select_d
 from tsa.impl.stationarity import kpss_test
 
 
-from core.neural_context import neural_ctx
-from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL
-
-#: ONE process-lifetime DeviceContext for this module's binding entries
-#: (lane/sequence-apple2, the pattern of a5f27d9c2 / core/neural_context.mojo).
-#: A context per call paid Metal's context and pipeline setup on every call
-#: (AutoARIMA's search makes 14 ARIMA fits) and can run the M2 Pro out of
-#: command queues. Same kernels, same order; each entry synchronizes before it
-#: returns, so no bit moves.
-comptime _CTX_NAME = "MojoTsaEstimatorContextIdentical" if _CTX_MODE == _CTX_IDENTICAL else "MojoTsaEstimatorContextFast"
-
-
-def _binding_ctx() raises -> DeviceContext:
-    return neural_ctx[_CTX_NAME]()
-
-
-
 def _upload_f32(
     ctx: DeviceContext, ptr: MutPointer[Float32, MutUntrackedOrigin], n: Int
 ) raises -> DeviceBuffer[DType.float32]:
@@ -121,7 +104,7 @@ def kpss_test_host(
     to their `pvalue = 0.10` and therefore to their decision.
     """
     _refuse_empty_shape(batch_size, n_obs, "kpss_test")
-    var ctx = _binding_ctx()
+    var ctx = DeviceContext()
     var y = _upload_f32(ctx, y_ptr, batch_size * n_obs)
     var res = kpss_test(
         ctx, y, batch_size, n_obs, d, D, s, pval_threshold, KPSS_ELEM_TPB
@@ -157,7 +140,7 @@ def select_d_host(
     STL on the host and is not implemented (`tsa/NOT_IMPLEMENTED.tsv`).
     """
     _refuse_empty_shape(batch_size, n_obs, "select_d")
-    var ctx = _binding_ctx()
+    var ctx = DeviceContext()
     var y = _upload_f32(ctx, y_ptr, batch_size * n_obs)
     var chosen = select_d(ctx, y, batch_size, n_obs, D, s, d_max, pval_threshold)
     for b in range(batch_size):
