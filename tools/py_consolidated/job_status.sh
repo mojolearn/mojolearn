@@ -18,3 +18,10 @@ job_finish() {
     fi
     echo 'JOB PASS: all selected required commands completed'
 }
+
+# Required timing execution is bounded; its producer output still flows into
+# each driver's full raw log. A timeout remains incomplete, not a slow result.
+JOB_BOUNDED=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/bounded.py
+benchmark() {
+    python3 "$JOB_BOUNDED" --seconds "${BENCH_TIMEOUT:-120}" -- "$@"
+}

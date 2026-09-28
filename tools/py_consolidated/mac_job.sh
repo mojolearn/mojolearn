@@ -10,6 +10,8 @@
 #   cross base vs head per lane and column; the py-lm witness base vs head (GPT-3 guard)
 #   timing one small interleaved pass on the Metal GPU: base head head base
 # The unique base worktree and complete logs are retained for diagnosis.
+# KERN_SCALE=full opts into original performance shapes; BENCH_TIMEOUT=300
+# may extend the default 120-second bound per timing command explicitly.
 set -u
 H=$(pwd)
 BASE_REV=${BASE_REV:-a374c8c08}
@@ -70,11 +72,11 @@ done
 echo "== TIMING (Metal): base head head base"
 for tag in base head head base; do
   T=$H; [ $tag = base ] && T=$B
-  for s in "timing.py" "kern_bench.py SCALE=cpu" "svc_bench.py NB=10000 NM=3000 K=10 NQ=20000" \
+  for s in "timing.py" "kern_bench.py SCALE=${KERN_SCALE:-light}" "svc_bench.py NB=10000 NM=3000 K=10 NQ=20000" \
            "bench_decomp.py ONLY=mcd-20k,lda-online-20kx500,mds-nm-1500"; do
     set -- $s
     f=$1; shift
-    (cd "$T" && env $(col_env "$T" gpu) "$@" $PIXI run -e default python -u "$EV/$f" 2>&1) \
+    (cd "$T" && benchmark env $(col_env "$T" gpu) "$@" $PIXI run -e default python -u "$EV/$f" 2>&1) \
       | tee -a "$EV/phases.raw.log" | grep -E '^(TIME|BENCH)|FAILED|ERROR' | sed "s/^/T $tag ${f%.py} /"
   done
 done

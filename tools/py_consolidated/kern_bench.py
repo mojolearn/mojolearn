@@ -1,6 +1,7 @@
 """kern_bench.py: py-dn-kern before/after timings with output digests.
 Run with PYTHONPATH=<tree>/python; MOJOLEARN_VENDOR=cpu for the CPU column.
-env SCALE=cpu shrinks the query counts (the old host paths are serial)."""
+The default/light (including legacy SCALE=cpu) bounds setup and spectral
+matrices too. SCALE=full explicitly requests the original performance shapes."""
 import hashlib, os, sys, time
 import numpy as np
 import mojolearn as ml
@@ -9,7 +10,10 @@ from mojolearn._spectral_impl import SpectralEmbedding
 failures = []
 
 col = "cpu" if os.environ.get("MOJOLEARN_VENDOR") == "cpu" else "gpu"
-small = os.environ.get("SCALE") == "cpu"
+scale = os.environ.get("SCALE", "light")
+if scale not in ("light", "cpu", "full"):
+    raise ValueError("SCALE must be light, cpu (legacy light), or full")
+small = scale != "full"
 rng = np.random.default_rng(7)
 
 
@@ -28,21 +32,22 @@ def run(name, f):
         print(f"BENCH {col} {name} FAILED {type(e).__name__}: {str(e)[:200]}", flush=True)
 
 
-nf, d = 5000, 16
+nf, d = (512 if small else 5000), 16
+nq = 1024 if small else 200000
+ns = 2048 if small else 200000
+n = 512 if small else 10000
+print(f"BENCH SHAPE column={col} scale={scale} fit_rows={nf} features={d} query_rows={nq} svgp_rows={ns} spectral_rows={n}; light timings are not full-scale throughput", flush=True)
 Xf = rng.standard_normal((nf, d)).astype(np.float32)
-nq = 20000 if small else 200000
 Q = rng.standard_normal((nq, d)).astype(np.float32)
 kp = ml.KernelPCA(n_components=8, kernel="rbf").fit(Xf)
 run(f"kpca_transform_{nq}x{nf}", lambda: kp.transform(Q))
 oc = ml.OneClassSVM(kernel="rbf", nu=0.2).fit(Xf[:3000])
 run(f"ocsvm_score_{nq}", lambda: oc.score_samples(Q))
-ns = 20000 if small else 200000
 Xs = rng.standard_normal((ns, d)).astype(np.float32)
 ys = rng.standard_normal(ns).astype(np.float32)
 sv = ml.SVGP(n_inducing=64)
 run(f"svgp_fit_{ns}", lambda: sv.fit(Xs, ys).q_mu_)
 run(f"svgp_predict_{ns}", lambda: sv.predict_f(Xs))
-n = 4000 if small else 10000
 Xe = rng.standard_normal((n, 8)).astype(np.float32)
 run(f"spectral_embedding_rbf_{n}", lambda: SpectralEmbedding(n_components=2, affinity="rbf", random_state=0).fit(Xe).embedding_)
 D = np.abs(rng.standard_normal((n, n))).astype(np.float32)

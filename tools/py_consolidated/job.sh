@@ -20,6 +20,8 @@
 #         index, py-dn-kern fused chains), inside this job.
 # The patch is re-applied on every exit path; build outputs and the base
 # snapshot are retained as evidence. PHASES=a,b,... runs a subset.
+# KERN_SCALE=full opts into original performance shapes; BENCH_TIMEOUT=300
+# may extend the default 120-second bound per timing command explicitly.
 set -u
 T=$(cd "$(dirname "$0")/../.." && pwd)   # the lane tree this script sits in (py-consolidated or py-consolidated-b)
 EV=${EV:-/root/ev-py-consolidated/$(date -u +%m%d-%H%M)}
@@ -141,24 +143,24 @@ fi
 if has ab; then
   echo "== IN-BUILD REFERENCE ARMS (head build; each prints before, after and whether the answers agree)"
   G=$(col_env "$T/python" gpu); C=$(col_env "$T/python" cpu)
-  env $G $P bench/py_shared_micro.py --n 1000000 --reps 3 2>&1 | tee -a "$EV/phases.raw.log" | grep -E 'PYSHARED|Error'
+  benchmark env $G $P bench/py_shared_micro.py --n 1000000 --reps 3 2>&1 | tee -a "$EV/phases.raw.log" | grep -E 'PYSHARED|Error'
   for arm in 0 1 1 0; do
-    env $G MOJOLEARN_ARENA_RANGES=$arm $P bench/x_prep_speed.py --rows 1000000 --reps 1 2>&1 | tee -a "$EV/phases.raw.log" | grep -E '^XPSPEED|Error' | sed "s/^/RANGES=$arm /"
-    env $G MOJOLEARN_ARENA_RANGES=$arm $P bench/x_metrics_speed.py --rows 1000000 --reps 1 2>&1 | tee -a "$EV/phases.raw.log" | grep -E '^XMSPEED|Error' | sed "s/^/RANGES=$arm /"
+    benchmark env $G MOJOLEARN_ARENA_RANGES=$arm $P bench/x_prep_speed.py --rows 1000000 --reps 1 2>&1 | tee -a "$EV/phases.raw.log" | grep -E '^XPSPEED|Error' | sed "s/^/RANGES=$arm /"
+    benchmark env $G MOJOLEARN_ARENA_RANGES=$arm $P bench/x_metrics_speed.py --rows 1000000 --reps 1 2>&1 | tee -a "$EV/phases.raw.log" | grep -E '^XMSPEED|Error' | sed "s/^/RANGES=$arm /"
   done
-  env $G $P "$EV/metrics_time.py" gpu 2>&1 | tee -a "$EV/phases.raw.log" | tail -20 | sed 's/^/METRICS gpu /'
-  env $C $P "$EV/metrics_time.py" cpu 2>&1 | tee -a "$EV/phases.raw.log" | tail -20 | sed 's/^/METRICS cpu /'
+  benchmark env $G $P "$EV/metrics_time.py" gpu 2>&1 | tee -a "$EV/phases.raw.log" | tail -20 | sed 's/^/METRICS gpu /'
+  benchmark env $C $P "$EV/metrics_time.py" cpu 2>&1 | tee -a "$EV/phases.raw.log" | tail -20 | sed 's/^/METRICS cpu /'
   (cd "$T" && env $G $P tools/py_misc_prep/ab.py bits 2>&1 | tee -a "$EV/phases.raw.log" | tail -6 | sed 's/^/PREP bits gpu /'
             env $C $P tools/py_misc_prep/ab.py bits 2>&1 | tee -a "$EV/phases.raw.log" | tail -6 | sed 's/^/PREP bits cpu /'
-            env $G $P tools/py_misc_prep/ab.py time 2>&1 | tee -a "$EV/phases.raw.log" | tail -10 | sed 's/^/PREP time gpu /'
-            env $C $P tools/py_misc_prep/ab.py time 2>&1 | tee -a "$EV/phases.raw.log" | tail -10 | sed 's/^/PREP time cpu /')
+            benchmark env $G $P tools/py_misc_prep/ab.py time 2>&1 | tee -a "$EV/phases.raw.log" | tail -10 | sed 's/^/PREP time gpu /'
+            benchmark env $C $P tools/py_misc_prep/ab.py time 2>&1 | tee -a "$EV/phases.raw.log" | tail -10 | sed 's/^/PREP time cpu /')
   env $G $P tools/py_misc_msel/check.py equal 2>&1 | tee -a "$EV/phases.raw.log" | tail -6 | sed 's/^/MSEL equal gpu /'
   env $C $P tools/py_misc_msel/check.py equal 2>&1 | tee -a "$EV/phases.raw.log" | tail -6 | sed 's/^/MSEL equal cpu /'
   env $G $P "$EV/ab_arms.py" 2>&1 | tee -a "$EV/phases.raw.log" | grep -E '^ARM'
   env $C $P "$EV/ab_arms.py" 2>&1 | tee -a "$EV/phases.raw.log" | grep -E '^ARM'
   env $G $P "$EV/svc_equal.py" 2>&1 | tee -a "$EV/phases.raw.log" | grep -E 'FAIL|EQUAL RESULT' | tail -6 | sed 's/^/SVC_EQUAL gpu /'
-  env $G $P tools/py_misc/cnn_epoch.py "$T" 20000 1 2>&1 | tee -a "$EV/phases.raw.log" | grep -E 'PYMISC-(SAME|TIME)' | sed 's/^/CNN gpu /'
-  env $C $P tools/py_misc/cnn_epoch.py "$T" 2000 1 2>&1 | tee -a "$EV/phases.raw.log" | grep -E 'PYMISC-(SAME|TIME)' | sed 's/^/CNN cpu /'
+  benchmark env $G $P tools/py_misc/cnn_epoch.py "$T" 20000 1 2>&1 | tee -a "$EV/phases.raw.log" | grep -E 'PYMISC-(SAME|TIME)' | sed 's/^/CNN gpu /'
+  benchmark env $C $P tools/py_misc/cnn_epoch.py "$T" 2000 1 2>&1 | tee -a "$EV/phases.raw.log" | grep -E 'PYMISC-(SAME|TIME)' | sed 's/^/CNN cpu /'
 fi
 
 if has timing; then
@@ -167,19 +169,19 @@ if has timing; then
   bench() {  # bench <tree tag> <gpu|cpu> <script> [ENV=V ...]
     local dir=$T/python; [ "$1" = base ] && dir=$EV/base_py
     local tag=$1 col=$2 s=$3; shift 3
-    env $(col_env "$dir" $col) "$@" $PIXI run -e default python -u "$EV/$s" 2>&1 \
+    benchmark env $(col_env "$dir" $col) "$@" $PIXI run -e default python -u "$EV/$s" 2>&1 \
       | tee -a "$EV/phases.raw.log" | grep -E '^(TIME|BENCH|probA)|FAILED|ERROR' | sed "s/^/T $tag $(basename $s .py) /"
   }
   for tag in base head head base; do
     bench $tag gpu timing.py
-    bench $tag gpu kern_bench.py SCALE=cpu
+    bench $tag gpu kern_bench.py SCALE=${KERN_SCALE:-light}
     bench $tag gpu svc_bench.py NB=20000 NM=5000 K=10 NQ=50000
     bench $tag gpu bench_decomp.py ONLY=mcd-20k,lda-online-20kx500,lda-batch-100kx1000,mds-nm-1500
     bench $tag gpu bench_ann.py SIZE=200000 DIM=128 BATCHES=10 BQ=500
   done
   for tag in base head; do
     bench $tag cpu timing.py
-    bench $tag cpu kern_bench.py SCALE=cpu
+    bench $tag cpu kern_bench.py SCALE=${KERN_SCALE:-light}
     bench $tag cpu svc_bench.py NB=5000 NM=2000 K=10 NQ=10000
     bench $tag cpu bench_decomp.py ONLY=mcd-20k,lda-online-20kx500
     bench $tag cpu bench_ann.py SIZE=200000 DIM=128 BATCHES=10 BQ=500 WHAT=flat,dist DEVICES=0
