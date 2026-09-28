@@ -86,8 +86,9 @@ fi
 if [ "${AB_PYPROF:-0}" = 1 ]; then
     for rep in $(seq 1 "${AB_REPS:-3}"); do
         for label in $labels; do
-            PYPROF_STEPS=${AB_PYPROF_STEPS:-3} PYTHONPATH="$OUT/wt-$label/python" pixi run -e default python tools/apple_speed_neural/pyprof.py 2>&1 < /dev/null \
-                | grep -E "^PYPROF samba (step|params)" | sed "s/^/AB-PYPROF rep=$rep variant=$label /"
+            PYPROF_STEPS=${AB_PYPROF_STEPS:-3} PYTHONPATH="$OUT/wt-$label/python" pixi run -e default python tools/apple_speed_neural/pyprof.py > "$OUT/pyprof-$label-$rep.log" 2>&1 < /dev/null
+            grep -E "^PYPROF samba (step|params)" "$OUT/pyprof-$label-$rep.log" | sed "s/^/AB-PYPROF rep=$rep variant=$label /"
+            grep -qE "^PYPROF samba params" "$OUT/pyprof-$label-$rep.log" || { echo "AB-PYPROF rep=$rep variant=$label FAILED:"; tail -5 "$OUT/pyprof-$label-$rep.log"; }
         done
     done
 fi
