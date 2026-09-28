@@ -154,6 +154,46 @@ lamb, adafactor, var; GARCH at the new default 50/1e-5: loglik -138.314814 (no s
 Prophet FAST at 1M points: 0.354 s, 30 L-BFGS iterations (the IDENTICAL fit took
 1470 s on this Mac in job 1).
 
+### Job 5: THE FULL TABLE. m4pro-b (Apple M4 Pro), steward 1790609073203, before 068959af0, after 166f46d17
+
+Every algorithm of the family, both modes, two alternating runs per arm (best shown;
+fit s, "fit / infer" for the networks). IDENTICAL digests equal before and after for
+every algorithm; FAST digests move only where a FAST change applies. Prophet at
+32768 points (the IDENTICAL 1M fit is one GPU thread, ~25 min). Records:
+~/mojolearn-evidence/sequence-apple2/j5.
+
+| algo | IDENTICAL before | after | x | bits | FAST before | after | x | bits |
+|---|---|---|---|---|---|---|---|---|
+| lstm | 0.917 / 0.295 | 0.920 / 0.298 | 1.00x | same | 0.854 / 0.265 | 0.856 / 0.268 | 1.00x | same |
+| gru | 0.749 / 0.232 | 0.749 / 0.235 | 1.00x | same | 0.692 / 0.208 | 0.694 / 0.211 | 1.00x | same |
+| rnn | 0.379 / 0.102 | 0.380 / 0.103 | 1.00x | same | 0.354 / 0.092 | 0.357 / 0.095 | 0.99x | same |
+| mlp | 0.871 / 0.165 | 0.853 / 0.167 | 1.02x | same | 0.738 / 0.160 | 0.727 / 0.161 | 1.02x | same |
+| moe | 0.253 | 0.212 | 1.20x | same | 0.247 | 0.203 | 1.22x | same |
+| layernorm | 0.583 | 0.180 | 3.24x | same | 0.567 | 0.124 | 4.56x | moved |
+| rmsprop | 0.323 | 0.220 | 1.47x | same | 0.324 | 0.215 | 1.50x | same |
+| adagrad | 0.352 | 0.223 | 1.58x | same | 0.347 | 0.224 | 1.54x | same |
+| lion | 0.368 | 0.228 | 1.62x | same | 0.370 | 0.228 | 1.63x | same |
+| adamax | 0.367 | 0.223 | 1.65x | same | 0.368 | 0.224 | 1.64x | same |
+| nadam | 0.371 | 0.230 | 1.61x | same | 0.367 | 0.223 | 1.64x | same |
+| lamb | 1.784 | 1.245 | 1.43x | same | 1.126 | 0.294 | 3.83x | moved |
+| adafactor | 1.078 | 0.756 | 1.43x | same | 0.669 | 0.131 | 5.09x | moved |
+| stl | 0.232 | 0.232 | 1.00x | same | 0.188 | 0.188 | 1.00x | same |
+| theta | 0.296 | 0.295 | 1.00x | same | 0.207 | 0.206 | 1.00x | same |
+| croston | 0.004 | 0.004 | 1.02x | same | 0.004 | 0.004 | 0.98x | same |
+| ets | 0.544 | 0.543 | 1.00x | same | 0.421 | 0.419 | 1.00x | same |
+| garch | 0.548 | 0.549 | 1.00x | same | 0.410 | 0.256 | 1.60x | moved |
+| var | 0.663 | 0.506 | 1.31x | same | 0.631 | 0.466 | 1.35x | moved |
+| prophet | 39.831 | 39.644 | 1.00x | same | 13.063 | 0.160 | 81.69x | moved |
+| arima | 1.044 | 1.048 | 1.00x | same | 1.048 | 1.045 | 1.00x | same |
+| hw | 1.112 | 1.109 | 1.00x | same | 0.327 | 0.331 | 0.99x | same |
+| kpss | 0.010 | 0.009 | 1.03x | same | 0.009 | 0.009 | 0.96x | same |
+| autoarima | 21.794 | 17.167 | 1.27x | same | 11.524 | 11.948 | 0.96x | same |
+
+AutoARIMA's run-to-run spread is wide (IDENTICAL before 21.8 / 22.8, after 17.2 / 19.3):
+its x_sequence use did not change, so read that row as noise. Host profile of the
+search (SEQ_PROFILE): 14 `arima_fit` calls 8.3 s, 2000 one-series `select_d` calls
+2.4 s (batched in 4387772c3, job 6).
+
 ## Unproven
 
 (pending)
