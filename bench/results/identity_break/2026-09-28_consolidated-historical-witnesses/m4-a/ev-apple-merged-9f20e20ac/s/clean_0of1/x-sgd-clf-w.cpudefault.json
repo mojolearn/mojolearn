@@ -1,0 +1,1652 @@
+{
+ "mode": "identical",
+ "repeats": 1,
+ "platform": "macOS-26.7-arm64-arm-64bit-Mach-O",
+ "vendor": "cpu-apple-m4",
+ "commit": "9f20e20ac80a773b4bfc4f5d7ac3c5ffe0faff0a",
+ "commit_source": "git rev-parse HEAD",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "hashed": {
+   "X": "c93497b26fe65cda",
+   "y_clf": "d104ead2f62bdd03",
+   "y_reg": "ce4959d8070bb069"
+  },
+  "wide": {
+   "X": "35f6a8481e649eb8",
+   "y_clf": "276ebacc29267948",
+   "y_reg": "611fc5dd6367bef5"
+  },
+  "denormal": {
+   "X": "752323c375a1cbf5",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "denormal_ftz": {
+   "X": "34c156b0d0e8a891",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "dupes": {
+   "X": "9d9d9db7c7785a14",
+   "y_clf": "d390ee2944b13e1d",
+   "y_reg": "135ce10f2a0817fe"
+  },
+  "odd": {
+   "X": "93d9611a09107bb9",
+   "y_clf": "273a388a705a4f40",
+   "y_reg": "25f3d126c81ca0ec"
+  },
+  "negative": {
+   "X": "08106ffff3256313",
+   "y_clf": "294ce4d7dadaf0bb",
+   "y_reg": "ce1914d5f78f5707"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  },
+  "hashed": {
+   "X": "9dc786ade4574aff"
+  },
+  "wide": {
+   "X": "d52a1af18a3c2f1c"
+  },
+  "denormal": {
+   "X": "5061056b118d07d0"
+  },
+  "denormal_ftz": {
+   "X": "a8c3d1a560b5cabb"
+  },
+  "dupes": {
+   "X": "e4b16c115962dfcd"
+  },
+  "odd": {
+   "X": "32ea0bbed60b8e6c"
+  },
+  "negative": {
+   "X": "45b539a3f66ce25d"
+  }
+ },
+ "cells": {
+  "x-sgd-clf-w/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f440e14d6d41f8bb"
+   ],
+   "parts": [
+    {
+     "coef": "f92373cc64a99994",
+     "intercept": "cee2f434bf972980",
+     "decision": "01fd4f685222c63b"
+    }
+   ],
+   "infer": [
+    "241cbbc5b64930aa"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "a2ad0c74bbe8034d"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.008031500001379754,
+    "stages": {
+     "repeat=1/train": 0.0066430419974494725,
+     "repeat=1/infer-save-reload": 0.0002852909965440631,
+     "repeat=1/batch": 0.0009242079977411777,
+     "repeat=1/batchgrad": 2.3790998966433108e-05,
+     "repeat=1/batchscale": 1.9665996660478413e-05,
+     "repeat=1/ragged": 1.879199407994747e-05,
+     "repeat=1/stepfull": 1.8208003893960267e-05
+    }
+   }
+  },
+  "x-sgd-clf-w/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "cd43ee17d9568aff"
+   ],
+   "parts": [
+    {
+     "coef": "89ba64faa8726807",
+     "intercept": "7257c8d4e224e513",
+     "decision": "bd4c4bdc6b446be1"
+    }
+   ],
+   "infer": [
+    "94a89e32963a0e61"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "c6afb079315a3a87"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.007696583001234103,
+    "stages": {
+     "repeat=1/train": 0.006330749994958751,
+     "repeat=1/infer-save-reload": 0.00025304200244136155,
+     "repeat=1/batch": 0.0009484170004725456,
+     "repeat=1/batchgrad": 2.4333006876986474e-05,
+     "repeat=1/batchscale": 2.2042004275135696e-05,
+     "repeat=1/ragged": 2.1624997316394e-05,
+     "repeat=1/stepfull": 2.145900361938402e-05
+    }
+   }
+  },
+  "x-sgd-clf-w/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c339edc5cdbe35e1"
+   ],
+   "parts": [
+    {
+     "coef": "539568c53990bf47",
+     "intercept": "1f9641a2b0fd51d9",
+     "decision": "05b1ae1e9e20c8ff"
+    }
+   ],
+   "infer": [
+    "662bbc57e4c9288f"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "6fe943c7dc0f2577"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.0072943330014823005,
+    "stages": {
+     "repeat=1/train": 0.0060613329987972975,
+     "repeat=1/infer-save-reload": 0.00023820900241844356,
+     "repeat=1/batch": 0.0008441249956376851,
+     "repeat=1/batchgrad": 2.2416003048419952e-05,
+     "repeat=1/batchscale": 2.149999636458233e-05,
+     "repeat=1/ragged": 2.1292005840223283e-05,
+     "repeat=1/stepfull": 2.129199856426567e-05
+    }
+   }
+  },
+  "x-sgd-clf-w/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b6898753be9d0932"
+   ],
+   "parts": [
+    {
+     "coef": "49aebc26a35d9475",
+     "intercept": "5981619a71c392da",
+     "decision": "0a68b9a46789fec5"
+    }
+   ],
+   "infer": [
+    "dde8163de0c2e29b"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "bfbdf1ac03387bd2"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.00749266600178089,
+    "stages": {
+     "repeat=1/train": 0.006281041998590808,
+     "repeat=1/infer-save-reload": 0.00023720799799775705,
+     "repeat=1/batch": 0.0008322499998030253,
+     "repeat=1/batchgrad": 2.2000000171829015e-05,
+     "repeat=1/batchscale": 2.1332998585421592e-05,
+     "repeat=1/ragged": 2.120799763360992e-05,
+     "repeat=1/stepfull": 2.116700488841161e-05
+    }
+   }
+  },
+  "x-sgd-clf-w/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "cc92037869c02f5e"
+   ],
+   "parts": [
+    {
+     "coef": "9e0a6a9c6970b27c",
+     "intercept": "b1a7e2cb894db659",
+     "decision": "dc18b36b60bebbe0"
+    }
+   ],
+   "infer": [
+    "14ad57ab920402c1"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "96dcb3b01d893c18"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.007261833998200018,
+    "stages": {
+     "repeat=1/train": 0.006047499999112915,
+     "repeat=1/infer-save-reload": 0.00023754200083203614,
+     "repeat=1/batch": 0.0008275829968624748,
+     "repeat=1/batchgrad": 2.195900015067309e-05,
+     "repeat=1/batchscale": 2.120799763360992e-05,
+     "repeat=1/ragged": 2.1083993487991393e-05,
+     "repeat=1/stepfull": 2.104200393659994e-05
+    }
+   }
+  },
+  "x-sgd-clf-w/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "cc92037869c02f5e"
+   ],
+   "parts": [
+    {
+     "coef": "9e0a6a9c6970b27c",
+     "intercept": "b1a7e2cb894db659",
+     "decision": "dc18b36b60bebbe0"
+    }
+   ],
+   "infer": [
+    "14ad57ab920402c1"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "96dcb3b01d893c18"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.007260000005771872,
+    "stages": {
+     "repeat=1/train": 0.006055459001800045,
+     "repeat=1/infer-save-reload": 0.00023687499924562871,
+     "repeat=1/batch": 0.0008298750035464764,
+     "repeat=1/batchgrad": 2.2042004275135696e-05,
+     "repeat=1/batchscale": 2.1166997612453997e-05,
+     "repeat=1/ragged": 2.1084000763949007e-05,
+     "repeat=1/stepfull": 2.099999983329326e-05
+    }
+   }
+  },
+  "x-sgd-clf-w/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9c5b342bae34793e"
+   ],
+   "parts": [
+    {
+     "coef": "6bed1d6ec2ad80c5",
+     "intercept": "dcee59fa2d9df309",
+     "decision": "bb3833ebcac95df0"
+    }
+   ],
+   "infer": [
+    "53da4f3a01590ad1"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "883cde76fce50df5"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.007248583002365194,
+    "stages": {
+     "repeat=1/train": 0.006021583001711406,
+     "repeat=1/infer-save-reload": 0.00023904199770186096,
+     "repeat=1/batch": 0.0008374169992748648,
+     "repeat=1/batchgrad": 2.183399919886142e-05,
+     "repeat=1/batchscale": 2.1249994460958987e-05,
+     "repeat=1/ragged": 2.1166000806260854e-05,
+     "repeat=1/stepfull": 2.7209003746975213e-05
+    }
+   }
+  },
+  "x-sgd-clf-w/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "e84179ac28303977"
+   ],
+   "parts": [
+    {
+     "coef": "d43ed3c091e328b9",
+     "intercept": "6f08fcc18236b849",
+     "decision": "dc748ade775dc57b"
+    }
+   ],
+   "infer": [
+    "501d52f6e389a8b3"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "e93f6680fbfb9dc0"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.007550541995442472,
+    "stages": {
+     "repeat=1/train": 0.0063545840021106414,
+     "repeat=1/infer-save-reload": 0.00024612500419607386,
+     "repeat=1/batch": 0.0008376670011784881,
+     "repeat=1/batchgrad": 1.579099625814706e-05,
+     "repeat=1/batchscale": 1.5083001926541328e-05,
+     "repeat=1/ragged": 1.4958000974729657e-05,
+     "repeat=1/stepfull": 1.4707999071106315e-05
+    }
+   }
+  },
+  "x-sgd-clf-w/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "12c4add43e0767cb"
+   ],
+   "parts": [
+    {
+     "coef": "59152d9a8dac3261",
+     "intercept": "e3bd8ff6d6af1cdb",
+     "decision": "0b0c47944a22d9ff"
+    }
+   ],
+   "infer": [
+    "e86b50cf8f126526"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "d122eca8372304c3"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.0073355830027139746,
+    "stages": {
+     "repeat=1/train": 0.006107916000473779,
+     "repeat=1/infer-save-reload": 0.0002327920010429807,
+     "repeat=1/batch": 0.0008433330003754236,
+     "repeat=1/batchgrad": 2.1958003344479948e-05,
+     "repeat=1/batchscale": 2.091700298478827e-05,
+     "repeat=1/ragged": 2.9041999368928373e-05,
+     "repeat=1/stepfull": 2.0791994757018983e-05
+    }
+   }
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "par_driver_sabotage": false,
+ "lane_revisions": {
+  "par-arima": "trend-metadata-1",
+  "tokenizer": "synthetic-vocab-1",
+  "gbdt-parametric-losses": "rows-1500-1",
+  "gbdt-nan-modes": "rows-1500-nan-in-split-columns-2",
+  "gbdt-lossguide-newtoncosine": "rows-1500-1",
+  "gbdt-pair-logit": "rows-1500-1",
+  "hdbscan": "rows-4000-1",
+  "hdbscan-leaf": "rows-2000-1",
+  "spectral": "rows-512-1",
+  "holtwinters": "obs-128-estimated-init-2",
+  "holtwinters-multiplicative": "estimated-init-1",
+  "par-holtwinters": "estimated-init-1",
+  "par-forecast-holtwinters": "estimated-init-1",
+  "byte-lm": "steps-2-1",
+  "byte-lm-host-train": "weight-decay-default-0.01-1",
+  "byte-lm-resident": "shape-l1-d16-ff32-1",
+  "samba": "steps-1-1",
+  "samba-untied-dropout-accum": "steps-3-1",
+  "mamba2-dtlimit": "seqlen-8-dtlimit-straddle-2",
+  "mamba3": "norms-near-one-1",
+  "transformer": "norms-near-one-1",
+  "transformer-window": "norms-near-one-1",
+  "umap": "transform-row-separable-1",
+  "par-graph-umap": "transform-row-separable-1",
+  "gmm": "classic-kmeanspp-init-1",
+  "gmm-sample": "classic-kmeanspp-init-1",
+  "par-gmm": "classic-kmeanspp-init-1"
+ },
+ "parts_collected": [
+  "batch",
+  "batchgrad",
+  "batchscale",
+  "ragged",
+  "rlpair",
+  "stepfull"
+ ],
+ "parts_omitted": [],
+ "partial_column": false,
+ "batchgrad_protocol": {
+  "rows": {
+   "alone": 16,
+   "split": [
+    1,
+    8,
+    "n"
+   ]
+  },
+  "accum_splits": [
+   2,
+   4,
+   8
+  ],
+  "uneven_split": "n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+  "carry_splits": [
+   [
+    1,
+    8,
+    "n"
+   ],
+   "every 16"
+  ],
+  "seq": [
+   8,
+   64
+  ]
+ },
+ "batchgrad_sabotage": false,
+ "batchscale_protocol": {
+  "batches": [
+   1,
+   17,
+   64,
+   256
+  ],
+  "whole": 1024,
+  "long_l": 1024,
+  "prefixes": [
+   1,
+   7,
+   63,
+   64,
+   65,
+   127,
+   128,
+   129,
+   255,
+   256,
+   257,
+   511,
+   512,
+   513,
+   1023
+  ]
+ },
+ "batchscale_sabotage": false,
+ "ragged_protocol": {
+  "lengths": [
+   16,
+   1,
+   7,
+   9,
+   16,
+   3,
+   12,
+   15
+  ],
+  "long_lengths": [
+   300,
+   1,
+   65,
+   129,
+   257,
+   128
+  ],
+  "padding": "nan/vocab+7"
+ },
+ "ragged_sabotage": false,
+ "stepfull_protocol": {
+  "rows": 2,
+  "length": 16,
+  "full": "forward(x) from a zero state, one pass",
+  "stepped": "allocate_state then step(x_t, state) at every position",
+  "compared": "bitwise, position by position"
+ },
+ "stepfull_sabotage": false,
+ "host": {
+  "cpu_model": "Apple M4",
+  "arch": "arm64",
+  "target_cpu": "unrecorded",
+  "mojo_version": "unrecorded",
+  "python": "3.13.15",
+  "column": "cpu",
+  "routed": {
+   "_mojolearn": "_mojolearn_core_host",
+   "_mojolearn_linalg": "_mojolearn_linalg_host",
+   "_mojolearn_estimators": "_mojolearn_estimators_host",
+   "_mojolearn_metrics": "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing": "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa": "_mojolearn_tsa_host",
+   "_mojolearn_solver": "_mojolearn_solver_host",
+   "_mojolearn_svm": "_mojolearn_svm_host",
+   "_mojolearn_trees": "_mojolearn_trees_host",
+   "_mojolearn_rf": "_mojolearn_rf_host",
+   "_mojolearn_gp": "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods": "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture": "_mojolearn_mixture_host",
+   "_mojolearn_hdbscan": "_mojolearn_hdbscan_host",
+   "_mojolearn_gbdt": "_mojolearn_gbdt_host",
+   "_mojolearn_training": "_mojolearn_training_host",
+   "_mojolearn_resample": "_mojolearn_resample_host",
+   "_mojolearn_mamba": "_mojolearn_mamba_host",
+   "_mojolearn_arima": "_mojolearn_arima_host",
+   "_mojolearn_embedding": "_mojolearn_embedding_host",
+   "_mojolearn_ivf": "_mojolearn_ivf_host",
+   "_mojolearn_transformer": "_mojolearn_transformer_host",
+   "_mojolearn_x_linear": "_mojolearn_x_linear_host",
+   "_mojolearn_x_cluster": "_mojolearn_x_cluster_host",
+   "_mojolearn_x_neighbors": "_mojolearn_x_neighbors_host",
+   "_mojolearn_x_decomp": "_mojolearn_x_decomp_host",
+   "_mojolearn_x_prep": "_mojolearn_x_prep_host",
+   "_mojolearn_x_sequence": "_mojolearn_x_sequence_host",
+   "_mojolearn_x_trees": "_mojolearn_x_trees_host",
+   "_mojolearn_x_cnn": "_mojolearn_x_cnn_host",
+   "_mojolearn_x_ann": "_mojolearn_x_ann_host",
+   "_mojolearn_x_metrics": "_mojolearn_x_metrics_host"
+  },
+  "surface": "python/mojolearn/host_surface.py",
+  "declared": [
+   "_mojolearn_byte_lm_host",
+   "_mojolearn_forest_host",
+   "_mojolearn_tokenizer_host",
+   "_mojolearn_neural_host",
+   "_mojolearn_core_host",
+   "_mojolearn_linalg_host",
+   "_mojolearn_estimators_host",
+   "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa_host",
+   "_mojolearn_solver_host",
+   "_mojolearn_svm_host",
+   "_mojolearn_trees_host",
+   "_mojolearn_rf_host",
+   "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture_host",
+   "_mojolearn_mixture_infer_host",
+   "_mojolearn_hdbscan_host",
+   "_mojolearn_gp_infer_host",
+   "_mojolearn_hdbscan_infer_host",
+   "_mojolearn_gbdt_host",
+   "_mojolearn_training_host",
+   "_mojolearn_resample_host",
+   "_mojolearn_mamba_host",
+   "_mojolearn_arima_host",
+   "_mojolearn_embedding_host",
+   "_mojolearn_embedding_infer_host",
+   "_mojolearn_ivf_host",
+   "_mojolearn_ivf_search_host",
+   "_mojolearn_forecast_host",
+   "_mojolearn_transformer_host",
+   "_mojolearn_x_linear_host",
+   "_mojolearn_x_cluster_host",
+   "_mojolearn_x_neighbors_host",
+   "_mojolearn_x_decomp_host",
+   "_mojolearn_x_prep_host",
+   "_mojolearn_x_sequence_host",
+   "_mojolearn_x_trees_host",
+   "_mojolearn_x_cnn_host",
+   "_mojolearn_x_ann_host",
+   "_mojolearn_x_metrics_host"
+  ],
+  "covered_lanes": [
+   "kernel-ridge-poly",
+   "kernel-ridge-sigmoid",
+   "kernel-ridge-laplacian",
+   "nystroem-poly",
+   "nystroem-sigmoid",
+   "nystroem-laplacian",
+   "par-rbf-sampler",
+   "select-d",
+   "gemm-pinned",
+   "kde",
+   "holtwinters",
+   "lasso",
+   "elasticnet",
+   "svc",
+   "agglomerative",
+   "et-clf",
+   "et-reg",
+   "iforest",
+   "knn",
+   "knn-clf",
+   "knn-reg",
+   "pca",
+   "pca-whiten",
+   "tsvd",
+   "ols",
+   "ridge",
+   "dbscan",
+   "kmeans",
+   "metrics",
+   "spectral",
+   "standard-scaler",
+   "minmax-scaler",
+   "logistic",
+   "rf-clf",
+   "rf-reg",
+   "kmeans-random",
+   "kmeans-array",
+   "kmeans-weighted",
+   "standard-scaler-no-mean",
+   "standard-scaler-no-std",
+   "minmax-scaler-clip",
+   "spectral-precomputed",
+   "spectral-embedding",
+   "gp",
+   "gp-matern12",
+   "gp-matern32",
+   "gp-matern52-ard",
+   "gp-normalize-y",
+   "gp-optimize",
+   "gp-optimize-restarts",
+   "gpc",
+   "gpc-multiclass",
+   "par-gpc-fit",
+   "par-gpc-predict",
+   "mamba1-decode-session",
+   "transformer-decode-session",
+   "par-causal-lm",
+   "par-cross-val",
+   "knn-sqeuclidean",
+   "knn-clf-distance",
+   "knn-reg-distance",
+   "gemm-transposed",
+   "linalg-qr",
+   "linalg-eigh",
+   "linalg-svdvals",
+   "dbscan-brute-l1",
+   "kde-tophat-sqeuclidean",
+   "kde-epanechnikov-l1",
+   "kde-exponential-chebyshev",
+   "kde-linear-cosine",
+   "kde-cosine-minkowski",
+   "kde-weighted",
+   "ols-no-intercept",
+   "ols-weighted",
+   "ridge-no-intercept",
+   "logistic-unpenalized-no-intercept",
+   "elasticnet-l2end-no-intercept",
+   "holtwinters-multiplicative",
+   "svc-linear",
+   "svc-poly",
+   "iforest-tuned",
+   "knn-manhattan",
+   "knn-chebyshev",
+   "knn-cosine",
+   "knn-minkowski-p3",
+   "knn-rbc",
+   "radius",
+   "radius-manhattan",
+   "radius-chebyshev",
+   "radius-minkowski-p3",
+   "dbscan-weighted",
+   "logistic-l1",
+   "logistic-elasticnet",
+   "logistic-multiclass",
+   "linear-svc",
+   "linear-svc-squared-hinge",
+   "linear-svr",
+   "linear-svr-squared",
+   "qn-squared",
+   "qn-absolute",
+   "kpss",
+   "svr",
+   "svr-linear",
+   "pca-full-whiten",
+   "pca-inverse",
+   "pca-whiten-inverse",
+   "tsvd-inverse",
+   "metrics-classification",
+   "metrics-fowlkes-mallows",
+   "metrics-homogeneity-completeness",
+   "gbdt-adapter-score-weighted",
+   "rf-score-weighted",
+   "mlp",
+   "gbdt-symmetric",
+   "gbdt-rmse",
+   "gbdt-depthwise",
+   "gbdt-lossguide",
+   "gbdt-nan-modes",
+   "gbdt-adapter-clf",
+   "gbdt-adapter-reg",
+   "gbdt-parametric-losses",
+   "gbdt-exact-mae",
+   "gbdt-lossguide-newtoncosine",
+   "gbdt-multiclass",
+   "gbdt-multiclass-defaults",
+   "gbdt-onevsall",
+   "gbdt-ordered-rmse",
+   "gbdt-border-types",
+   "gbdt-ordered",
+   "gbdt-ordered-bayesian-noise",
+   "gbdt-binary-columns",
+   "gbdt-bfa-quantile",
+   "gbdt-catboost-defaults",
+   "gbdt-stochastic-arms",
+   "gbdt-symmetric-eval",
+   "gbdt-feature-freq",
+   "gbdt-pointwise-l2-bayesian-eval",
+   "gbdt-categorical-ctr",
+   "gbdt-ranking-defaults",
+   "gbdt-query-rmse",
+   "gbdt-pair-logit",
+   "gbdt-yeti-rank",
+   "arima",
+   "arima-011",
+   "arima-seasonal-c",
+   "arima-exog",
+   "arima-exog-seasonal",
+   "umap",
+   "kmeans-sqrt",
+   "kmeans-classic-pp",
+   "cross-val",
+   "bootstrap",
+   "permutation-test",
+   "monte-carlo",
+   "optim-sgd",
+   "optim-adam-clip",
+   "optim-maximize",
+   "cross-entropy-arms",
+   "training-primitives",
+   "ordered-gradient-sum",
+   "cholesky",
+   "rbf-sampler",
+   "kernel-ridge",
+   "nystroem",
+   "gmm",
+   "gmm-random-init",
+   "hdbscan",
+   "hdbscan-leaf",
+   "rf-clf-entropy-log2-noboot",
+   "rf-clf-balanced-parallel",
+   "rf-reg-poisson",
+   "rf-reg-gamma-ig",
+   "et-clf-entropy-bestfirst",
+   "et-reg-bootstrap-parallel",
+   "mamba2",
+   "mamba2-dtlimit",
+   "mamba1",
+   "mamba3",
+   "transformer",
+   "transformer-window",
+   "samba",
+   "samba-untied-dropout-accum",
+   "byte-lm-host-infer",
+   "byte-lm-host-infer-threaded",
+   "byte-lm-host-train",
+   "language-model-config",
+   "par-scaler",
+   "par-scaler-minmax",
+   "par-arima",
+   "par-holtwinters",
+   "par-forecast-arima",
+   "par-forecast-holtwinters",
+   "par-queries-knn",
+   "par-queries-nn",
+   "par-queries-radius",
+   "par-queries-kde",
+   "par-reference-knn",
+   "par-reference-knn-reg",
+   "par-forest",
+   "par-forest-et",
+   "par-forest-et-clf",
+   "par-forest-reg",
+   "par-mlp",
+   "par-samba",
+   "par-samba-clip",
+   "embedding",
+   "embedding-sort",
+   "ivf",
+   "ivf-euclidean",
+   "par-ivf",
+   "ivf-extend",
+   "byte-lm",
+   "byte-lm-resident",
+   "gmm-sample",
+   "gmm-random-init-sample",
+   "gp-sample-y",
+   "gp-sample-y-normalize",
+   "tokenizer",
+   "bpe-trainer",
+   "bpe-vocabulary",
+   "tokenized-corpus",
+   "hf-checkpoint",
+   "hf-tokenizer",
+   "hf-causal-lm",
+   "gbdt-categorical-ctr-tables",
+   "gbdt-tensor-ctr-tables",
+   "gemm-bf16",
+   "gemm-int8",
+   "transformer-bf16w",
+   "transformer-int8w",
+   "mamba1-bf16w",
+   "mamba1-int8w",
+   "mamba2-bf16w",
+   "mamba2-int8w",
+   "mamba3-bf16w",
+   "mamba3-int8w",
+   "mlp-bf16w",
+   "mlp-int8w",
+   "samba-bf16w",
+   "samba-int8w",
+   "saved-model-host-infer",
+   "lowbit-conversions",
+   "grad-accumulation",
+   "x-sgd-clf",
+   "x-sgd-reg",
+   "x-glm-poisson",
+   "x-glm-gamma",
+   "x-glm-tweedie",
+   "x-huber",
+   "x-bayes-ridge",
+   "x-ard",
+   "x-lars",
+   "x-lasso-lars",
+   "x-quantile",
+   "x-perceptron",
+   "x-pa-clf",
+   "x-pa-reg",
+   "x-sgd-ocsvm",
+   "x-ridge-clf",
+   "x-ridge-cv",
+   "x-lasso-cv",
+   "x-enet-cv",
+   "x-logistic-cv",
+   "x-isotonic",
+   "x-glm-poisson-sw",
+   "x-huber-sw",
+   "x-quantile-sw",
+   "x-sgd-clf-w",
+   "x-sgd-reg-sw",
+   "x-ridge-clf-w",
+   "x-ridge-cv-sw",
+   "x-bayes-ridge-sw",
+   "x-logistic-cv-w",
+   "x-lasso-lars-pos",
+   "x-lasso-cv-pos",
+   "x-cluster-minibatch-kmeans",
+   "x-cluster-bisecting-kmeans",
+   "x-cluster-meanshift",
+   "x-cluster-optics",
+   "x-cluster-affinity-propagation",
+   "x-cluster-bgmm",
+   "x-cluster-minibatch-options",
+   "x-cluster-bisecting-options",
+   "x-cluster-meanshift-binned",
+   "x-cluster-optics-metrics",
+   "x-cluster-ap-precomputed",
+   "x-cluster-bgmm-inits",
+   "x-cluster-bgmm-covtypes",
+   "x-cluster-minibatch-partial",
+   "x-cluster-gmm-options",
+   "x-cluster-dbscan-metrics",
+   "x-cluster-hdbscan-epsilon",
+   "x-cluster-kmeans-init",
+   "x-cluster-agglo-linkages",
+   "x-cluster-agglo-connectivity",
+   "x-cluster-spectral-affinities",
+   "x-neighbors-lof",
+   "x-neighbors-nearest-centroid",
+   "x-neighbors-ocsvm",
+   "x-neighbors-kpca",
+   "x-neighbors-poly-sketch",
+   "x-neighbors-additive-chi2",
+   "x-neighbors-skewed-chi2",
+   "x-neighbors-label-propagation",
+   "x-neighbors-label-spreading",
+   "x-neighbors-knn-imputer",
+   "x-neighbors-pagerank",
+   "x-neighbors-connected-components",
+   "x-neighbors-louvain",
+   "x-neighbors-svgp",
+   "x-neighbors-gamma-scale",
+   "x-neighbors-svm-weights",
+   "x-neighbors-svc-sigmoid",
+   "x-neighbors-svr-kernels",
+   "x-neighbors-svc-multiclass",
+   "x-neighbors-krr-options",
+   "x-neighbors-svm-precomputed",
+   "x-neighbors-km-kernels",
+   "x-neighbors-gp-cov",
+   "x-neighbors-metrics",
+   "x-neighbors-svc-probability",
+   "x-decomp-umap-options",
+   "x-decomp-pca-randomized",
+   "x-decomp-als",
+   "x-decomp-robust-cov",
+   "x-decomp-manifold",
+   "x-decomp-lda",
+   "x-decomp-sparse-pca",
+   "x-decomp-dict-learning",
+   "x-decomp-pls",
+   "x-decomp-lstsq-rsvd",
+   "x-decomp-lu",
+   "x-decomp-spectral-rbf",
+   "x-decomp-factor-analysis",
+   "x-decomp-fastica",
+   "x-decomp-nmf",
+   "x-decomp-ipca",
+   "x-decomp-grp",
+   "x-decomp-srp",
+   "x-prep-robust-scaler",
+   "x-prep-maxabs-scaler",
+   "x-prep-ordinal-encoder",
+   "x-prep-onehot-encoder",
+   "x-prep-target-encoder",
+   "x-prep-simple-imputer",
+   "x-prep-kbins",
+   "x-prep-gaussian-nb",
+   "x-prep-multinomial-nb",
+   "x-prep-bernoulli-nb",
+   "x-prep-lda",
+   "x-prep-qda",
+   "x-prep-quantile-transformer",
+   "x-prep-power-transformer",
+   "x-prep-normalizer",
+   "x-prep-polynomial-features",
+   "x-prep-spline-transformer",
+   "x-prep-binarizer",
+   "x-prep-label-encoder",
+   "x-prep-label-binarizer",
+   "x-prep-multilabel-binarizer",
+   "x-prep-iterative-imputer",
+   "x-prep-variance-threshold",
+   "x-prep-select-kbest",
+   "x-prep-mutual-info",
+   "x-prep-rfe",
+   "x-prep-complement-nb",
+   "x-prep-categorical-nb",
+   "x-prep-priors",
+   "x-prep-robust-scaler-unit-variance",
+   "x-prep-simple-imputer-indicator",
+   "x-prep-inverse-transforms",
+   "x-prep-encoder-options",
+   "x-prep-da-solvers",
+   "x-prep-nb-weights",
+   "x-prep-encoder-categories",
+   "x-prep-user-objects",
+   "x-prep-label-binarizer-multilabel",
+   "x-prep-infrequent",
+   "x-prep-nb-partial",
+   "x-prep-kbins-methods",
+   "x-prep-score-edges",
+   "x-prep-mi-discrete",
+   "x-prep-kbins-weights",
+   "x-prep-spline-options",
+   "x-prep-iterative-options",
+   "x-prep-scaler-options",
+   "sequence-lstm",
+   "sequence-gru",
+   "sequence-rmsprop",
+   "sequence-adagrad",
+   "sequence-autoarima",
+   "sequence-stl",
+   "sequence-var",
+   "sequence-mlp",
+   "sequence-rnn",
+   "sequence-lion",
+   "sequence-adafactor",
+   "sequence-lamb",
+   "sequence-adamax",
+   "sequence-nadam",
+   "sequence-lr-schedulers",
+   "sequence-layernorm",
+   "sequence-theta",
+   "sequence-croston",
+   "sequence-ets",
+   "sequence-garch",
+   "sequence-prophet",
+   "sequence-moe",
+   "trees-dt-clf",
+   "trees-dt-reg",
+   "trees-dt-random",
+   "trees-rf-weighted",
+   "trees-et-deviance",
+   "trees-gbdt-multirmse",
+   "trees-bagging-clf",
+   "trees-bagging-reg",
+   "trees-adaboost-clf",
+   "trees-adaboost-reg",
+   "trees-dart-reg",
+   "trees-dart-clf",
+   "trees-dart-options",
+   "trees-random-embedding",
+   "trees-voting-clf",
+   "trees-voting-reg",
+   "trees-stacking-clf",
+   "trees-stacking-reg",
+   "trees-multioutput",
+   "trees-onevsrest",
+   "trees-calibrated",
+   "trees-oob-cv-link",
+   "trees-shap-tree",
+   "trees-shap-kernel",
+   "trees-shap-permutation",
+   "x-cnn-conv2d",
+   "x-cnn-conv1d",
+   "x-cnn-pool",
+   "x-cnn-trainer",
+   "x-cnn-batchnorm",
+   "x-cnn-dropout2d",
+   "x-cnn-globalpool",
+   "x-cnn-resnet-block",
+   "x-cnn-gcn",
+   "x-cnn-sage",
+   "x-cnn-conv-options",
+   "x-cnn-pool-options",
+   "x-cnn-bn-options",
+   "x-cnn-gnn-options",
+   "x-cnn-trainer-options",
+   "x-ann-ivf-pq",
+   "x-ann-tsne",
+   "x-ann-tsne-pca",
+   "x-ann-cagra",
+   "x-ann-ivf-sq",
+   "x-ann-refine",
+   "x-ann-filter",
+   "x-ann-ivf-rabitq",
+   "ivf-filter",
+   "x-ann-cagra-filter",
+   "x-ann-refine-euclidean",
+   "x-metrics-classification",
+   "x-metrics-regression",
+   "x-metrics-ranking",
+   "x-metrics-cluster",
+   "x-metrics-splitters",
+   "x-metrics-search"
+  ],
+  "families": {
+   "_mojolearn_arima_host": {
+    "column": "cpu",
+    "sha256": "65cf20d8fe32af8bcae6e11d320216dda873f0eb5dc351191cf13ec31e04a4e2",
+    "size": 426568,
+    "sabotage": false
+   },
+   "_mojolearn_byte_lm_host": {
+    "column": "cpu",
+    "sha256": "28312c19f6c290c29b30adf0a779f301a50bd44e3c9183483fbc8ac678bccb26",
+    "size": 667384,
+    "sabotage": false
+   },
+   "_mojolearn_core_host": {
+    "column": "cpu",
+    "sha256": "829d41466a8b9d52e173763f8782c0e5304549a6c67d5e1127e20eee2d398dac",
+    "size": 1142504,
+    "sabotage": false
+   },
+   "_mojolearn_embedding_host": {
+    "column": "cpu",
+    "sha256": "bae13b56e425c21a64e177ffc06e8e1f5c33cafe8efc3ba359cc53de10068345",
+    "size": 229344,
+    "sabotage": false
+   },
+   "_mojolearn_embedding_infer_host": {
+    "column": "cpu",
+    "sha256": "6c43d15d4103ff6fd39826b401dc17d0464c81ea8e6ed254afc9269a9a3b0f37",
+    "size": 209184,
+    "sabotage": false
+   },
+   "_mojolearn_estimators_host": {
+    "column": "cpu",
+    "sha256": "fdbf376ccb5b7ed3452677556d89d6d308b2a337359a118a53f78e0d0c81c848",
+    "size": 790816,
+    "sabotage": false
+   },
+   "_mojolearn_forecast_host": {
+    "column": "cpu",
+    "sha256": "7dd91c161ccfd32d19c571b0d0f81f4e0a2b29fb3d88d37e722a91bd73e20ce5",
+    "size": 397240,
+    "sabotage": false
+   },
+   "_mojolearn_forest_host": {
+    "column": "cpu",
+    "sha256": "6c327d4dadb056a02408e07dad3e9f245ea802bbf8b06d583c40274f54e97693",
+    "size": 545304,
+    "sabotage": false
+   },
+   "_mojolearn_gbdt_host": {
+    "column": "cpu",
+    "sha256": "9f0e4581be712f9c865ae1771f5451554661a3679e9b9cc8b670750ad478f11a",
+    "size": 1628600,
+    "sabotage": false
+   },
+   "_mojolearn_gp_host": {
+    "column": "cpu",
+    "sha256": "2b57f47374853765770aa99c85aed904a6bc5d596d22fbb9ab960d8eec5bd7cd",
+    "size": 514104,
+    "sabotage": false
+   },
+   "_mojolearn_gp_infer_host": {
+    "column": "cpu",
+    "sha256": "cb5a2dbaf91aec7e00be285e11903d9a5dced2c3ae36f43aea3c6d6c9793808a",
+    "size": 346952,
+    "sabotage": false
+   },
+   "_mojolearn_hdbscan_host": {
+    "column": "cpu",
+    "sha256": "70b4e2f87493a35f058adb108d1798bed5435f1dcf71d4a23a0fb386167d23cb",
+    "size": 500360,
+    "sabotage": false
+   },
+   "_mojolearn_hdbscan_infer_host": {
+    "column": "cpu",
+    "sha256": "50b64d0c719af7ff28a2d8aee7025cc3fa7153993b58ca6eb5b39f9bbf6fc980",
+    "size": 337248,
+    "sabotage": false
+   },
+   "_mojolearn_ivf_host": {
+    "column": "cpu",
+    "sha256": "85919f0f406e7bbf280f5425eb8cf14b1e8affca573cd15e7917e798fe591021",
+    "size": 477880,
+    "sabotage": false
+   },
+   "_mojolearn_ivf_search_host": {
+    "column": "cpu",
+    "sha256": "37aa1ce910cdef8aa3a54dda4876272124f3592aa1d17bdcda51c07d784f109d",
+    "size": 309600,
+    "sabotage": false
+   },
+   "_mojolearn_kernel_methods_host": {
+    "column": "cpu",
+    "sha256": "6e26e03ca5e27a3222ec4a778bdd12d82f14617af5889feb8c4969897f50c6ec",
+    "size": 400960,
+    "sabotage": false
+   },
+   "_mojolearn_linalg_host": {
+    "column": "cpu",
+    "sha256": "74506a9ddc884bb6094e0429feb399bf9fe63e29262cf5bdb6740c8b433c0b4a",
+    "size": 349816,
+    "sabotage": false
+   },
+   "_mojolearn_mamba_host": {
+    "column": "cpu",
+    "sha256": "6026a270e6387a8a84351e00d8e7d98657c53c10c64961576ae355c96e290f44",
+    "size": 3274776,
+    "sabotage": false
+   },
+   "_mojolearn_metrics_host": {
+    "column": "cpu",
+    "sha256": "be9f1b20477e1f717a8468bbdd614c456890532b0d883b19922c30d73a06b984",
+    "size": 945000,
+    "sabotage": false
+   },
+   "_mojolearn_mixture_host": {
+    "column": "cpu",
+    "sha256": "a85f8b5e9be2d65006b665b31e3281c52b75e26bdae33476e5b33e7f46c887c8",
+    "size": 439960,
+    "sabotage": false
+   },
+   "_mojolearn_mixture_infer_host": {
+    "column": "cpu",
+    "sha256": "11b1840654a3305fe4e1fc1e54c6c521d5d9a97665d35181778e3544b0fed82a",
+    "size": 270592,
+    "sabotage": false
+   },
+   "_mojolearn_neural_host": {
+    "column": "cpu",
+    "sha256": "3d638bc9f2ad32e4d963f1a21793505f113f50a654a62ea8805d4d2f478923fd",
+    "size": 721256,
+    "sabotage": false
+   },
+   "_mojolearn_preprocessing_host": {
+    "column": "cpu",
+    "sha256": "002ad828759a23b98de8d3ddd07a49f79a32ae9de8305be8b629e0ed75aab3ed",
+    "size": 272176,
+    "sabotage": false
+   },
+   "_mojolearn_resample_host": {
+    "column": "cpu",
+    "sha256": "508f81751e309f6b2e47516e4269d2ab3d2b047a19bac3c8510a8cd579884647",
+    "size": 452840,
+    "sabotage": false
+   },
+   "_mojolearn_rf_host": {
+    "column": "cpu",
+    "sha256": "722428932a1146dea6b2eaf2ab631e99e1fffb57778d99079f87cbacc7c8b0d9",
+    "size": 628088,
+    "sabotage": false
+   },
+   "_mojolearn_solver_host": {
+    "column": "cpu",
+    "sha256": "c7a583dff76a129453ac5cc1f0d188e586be3b78f1a5f7799ee3e8167861fc33",
+    "size": 308536,
+    "sabotage": false
+   },
+   "_mojolearn_svm_host": {
+    "column": "cpu",
+    "sha256": "dd23fc76cdce726548e8b00444e2f44a463de630835799b96677f77b23e1f3ea",
+    "size": 470056,
+    "sabotage": false
+   },
+   "_mojolearn_tokenizer_host": {
+    "column": "cpu",
+    "sha256": "2cbdad3484404608d580cdd51efad59c9021e1970bd0c2f36d3cf664ec7ad725",
+    "size": 484512,
+    "sabotage": false
+   },
+   "_mojolearn_training_host": {
+    "column": "cpu",
+    "sha256": "bf464451cb47bab767d1a8db0eef10e8fe6a977825f14b6a96cec73a2884f8c6",
+    "size": 537784,
+    "sabotage": false
+   },
+   "_mojolearn_transformer_host": {
+    "column": "cpu",
+    "sha256": "a87db26ce5281dd769918cef3c4de13de7e330787bcfa5c73e4e74082b9b5eaf",
+    "size": 537584,
+    "sabotage": false
+   },
+   "_mojolearn_trees_host": {
+    "column": "cpu",
+    "sha256": "3fa88bcac262ccd4e8f57181b98e4e613edc35f78ef36d0abe6fab5c77e1b7f4",
+    "size": 588104,
+    "sabotage": false
+   },
+   "_mojolearn_tsa_host": {
+    "column": "cpu",
+    "sha256": "4fb19c219c9185c8af2fa63f784261b8a46555a7126d109550bf139371f86d5e",
+    "size": 377928,
+    "sabotage": false
+   },
+   "_mojolearn_x_ann_host": {
+    "column": "cpu",
+    "sha256": "df2f20b09cf6e99d4678380ecab90270f7c636585dd79bd3cb46a1580cfd2be1",
+    "size": 681064,
+    "sabotage": false
+   },
+   "_mojolearn_x_cluster_host": {
+    "column": "cpu",
+    "sha256": "106aff7337076599061d2424a9eb3844bd0aa1c408bd0ed262814f0c7636eaa6",
+    "size": 688064,
+    "sabotage": false
+   },
+   "_mojolearn_x_cnn_host": {
+    "column": "cpu",
+    "sha256": "7d253efe27aa508492846937331aabe169f556e86c16334d7bbaa9ac7d9cb4f8",
+    "size": 1172776,
+    "sabotage": false
+   },
+   "_mojolearn_x_decomp_host": {
+    "column": "cpu",
+    "sha256": "fb7d4c48c704df95da1e405fc7c14968541c962a4f2df64e6c03d11e63ee657e",
+    "size": 447816,
+    "sabotage": false
+   },
+   "_mojolearn_x_linear_host": {
+    "column": "cpu",
+    "sha256": "9da9415bcd8c97372b9c1ab9773c218e62cbb565e7a78a6a63bd33fb47feb194",
+    "size": 361608,
+    "sabotage": false
+   },
+   "_mojolearn_x_metrics_host": {
+    "column": "cpu",
+    "sha256": "4e9edb23516ddf92d28ac184466bab177be9a915f4fd662caf143b587b00755d",
+    "size": 270528,
+    "sabotage": false
+   },
+   "_mojolearn_x_neighbors_host": {
+    "column": "cpu",
+    "sha256": "a1b3b68055511d16255c4ca4e0b306f1a5c178c718603d8cefb8fa79a5dfcc4e",
+    "size": 409552,
+    "sabotage": false
+   },
+   "_mojolearn_x_prep_host": {
+    "column": "cpu",
+    "sha256": "353018be83fe0e3b717cc58f3b330473df742abb5b3c648b3c81168f40411d25",
+    "size": 1501000,
+    "sabotage": false
+   },
+   "_mojolearn_x_sequence_host": {
+    "column": "cpu",
+    "sha256": "b760089bca3955d056013ce1e49d707c8d978178bc773c3f3d5b7812958ca9f6",
+    "size": 1364544,
+    "sabotage": false
+   },
+   "_mojolearn_x_trees_host": {
+    "column": "cpu",
+    "sha256": "1d79b0d07f36ccdde258e3059697590973168e43615ec9da1bba9e46b302e81a",
+    "size": 519816,
+    "sabotage": false
+   }
+  }
+ },
+ "package": {
+  "version": "0.8.24",
+  "package_dir": "/Users/ec2-user/mojolearn-wt/steward-m4-a/python/mojolearn",
+  "numpy": "2.5.2",
+  "python": "3.13.15",
+  "par_devices": "0",
+  "bindings": []
+ },
+ "resume_signature": {
+  "schema": 1,
+  "source_sha256": "7f27800e31578c4302be4d2d3a21589b8170dde9abc210d77fcdf84f45c14af1",
+  "options": {
+   "require_backend": "cpu",
+   "require_cpu": true,
+   "fail_on_refused": true,
+   "jobs": 1,
+   "lanes": "x-sgd-clf-w",
+   "skip": "",
+   "fixtures": "",
+   "repeats": 1,
+   "vendor": null,
+   "allow_fast": false,
+   "batch_alone": 16,
+   "partial_column": "",
+   "no_batch": false,
+   "no_rlpair": false,
+   "batch_grad": false,
+   "batch_scale": false,
+   "ragged": false,
+   "step_full": false,
+   "diff": null,
+   "require_columns": null,
+   "owed_json": "",
+   "merge": null,
+   "allow_separate_builds": false
+  },
+  "environment_sha256": "67e33cb63197ad26df479d3457dc5694053a62b8e9f3269cfe8f70b22134c90c",
+  "provenance": {
+   "commit": "9f20e20ac80a773b4bfc4f5d7ac3c5ffe0faff0a",
+   "mode": "identical",
+   "vendor": "cpu-apple-m4",
+   "platform": "macOS-26.7-arm64-arm-64bit-Mach-O",
+   "python": "3.13.15",
+   "numpy": "2.5.2",
+   "fixtures": {
+    "base": {
+     "X": "b5b0a0005efa3788",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "308c22120b664e5b"
+    },
+    "ties": {
+     "X": "186fe2109fc34ad5",
+     "y_clf": "f33cf521f758ae3c",
+     "y_reg": "047d4652a4d56bc3"
+    },
+    "hashed": {
+     "X": "c93497b26fe65cda",
+     "y_clf": "d104ead2f62bdd03",
+     "y_reg": "ce4959d8070bb069"
+    },
+    "wide": {
+     "X": "35f6a8481e649eb8",
+     "y_clf": "276ebacc29267948",
+     "y_reg": "611fc5dd6367bef5"
+    },
+    "denormal": {
+     "X": "752323c375a1cbf5",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "denormal_ftz": {
+     "X": "34c156b0d0e8a891",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "dupes": {
+     "X": "9d9d9db7c7785a14",
+     "y_clf": "d390ee2944b13e1d",
+     "y_reg": "135ce10f2a0817fe"
+    },
+    "odd": {
+     "X": "93d9611a09107bb9",
+     "y_clf": "273a388a705a4f40",
+     "y_reg": "25f3d126c81ca0ec"
+    },
+    "negative": {
+     "X": "08106ffff3256313",
+     "y_clf": "294ce4d7dadaf0bb",
+     "y_reg": "ce1914d5f78f5707"
+    }
+   },
+   "heldout": {
+    "base": {
+     "X": "d4de6b4eb682c465"
+    },
+    "ties": {
+     "X": "d1ba686494256660"
+    },
+    "hashed": {
+     "X": "9dc786ade4574aff"
+    },
+    "wide": {
+     "X": "d52a1af18a3c2f1c"
+    },
+    "denormal": {
+     "X": "5061056b118d07d0"
+    },
+    "denormal_ftz": {
+     "X": "a8c3d1a560b5cabb"
+    },
+    "dupes": {
+     "X": "e4b16c115962dfcd"
+    },
+    "odd": {
+     "X": "32ea0bbed60b8e6c"
+    },
+    "negative": {
+     "X": "45b539a3f66ce25d"
+    }
+   }
+  }
+ }
+}
