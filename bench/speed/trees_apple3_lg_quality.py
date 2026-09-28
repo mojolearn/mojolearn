@@ -36,7 +36,7 @@ def main(argv):
     policy = argv[4] if len(argv) > 4 else "Lossguide"
     trees = int(os.environ.get("LGQ_TREES", "300"))
     for ds in datasets:
-        d = spec.load_with_fallback(ds, "shipped", 2_000_000)
+        d = spec.load_with_fallback(ds, "shipped", int(os.environ.get("TQ_LOAD_ROWS", "2000000")))
         if not d.tag.startswith(ds.replace("reg", "")) and not d.tag.startswith(ds):
             raise SystemExit("LGQ FATAL: asked for %r, the loader produced %r" % (ds, d.tag))
         x_all = np.asarray(d.X_train, dtype=np.float32)

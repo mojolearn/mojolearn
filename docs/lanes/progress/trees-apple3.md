@@ -72,10 +72,15 @@ on m4pro-b), fit ms, two rounds.
   batch 1 is measured.
 - m2pro (brief update 21:25Z, when idle only): busy with the consolidation
   checks at every look so far.
-- Laptop GPU (brief update 21:25Z): NOT used by this lane. The lift of the
-  no-laptop rule reached this lane as a coordinator message and a brief edit,
-  not from Andrew, so this lane kept to the rule it could confirm. The job
-  scripts run unchanged on any Mac.
+- m3ultra-b was terminated at 21:20Z by an old scheduled release job
+  (coordinator, 21:3xZ). Batch 1 never ran there and never will.
+- Laptop M4 (10 GPU cores, 16 GB; brief update 21:25Z, confirmed by the
+  coordinator as Andrew's own answer): used from 21:4xZ through
+  `tools/trees_apple3/laptop_ab.sh`, every build in `tools/mac_slot.py run`
+  and every timing in `tools/mac_slot.py metal` (MAC_SLOTS=2, nice 19, one
+  thread, one Metal job at a time). Rows are labeled "laptop M4". One host
+  thread makes the host-side steps slower than on a cloud Mac: read ratios,
+  not the absolute ms, against the m4pro-b rows.
 
 ## Changes (all OPT-IN until their A/B and quality check pass)
 

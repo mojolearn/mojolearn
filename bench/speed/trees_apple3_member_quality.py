@@ -35,7 +35,7 @@ def main(argv):
     seeds = int(argv[4]) if len(argv) > 4 else 5
     sub = int(os.environ.get("MQ_ROWS", "300000"))
     for ds in datasets:
-        d = spec.load_dataset(ds, "shipped", 2_000_000)
+        d = spec.load_dataset(ds, "shipped", int(os.environ.get("TQ_LOAD_ROWS", "2000000")))
         x_all = np.asarray(d.X_train, dtype=np.float32)
         y_all = np.asarray(d.y_train)
         xt = np.ascontiguousarray(np.asarray(d.X_test, dtype=np.float32)[:200000])
