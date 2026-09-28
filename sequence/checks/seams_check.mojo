@@ -26,7 +26,7 @@ from sequence.exec import Exec, HostExec
 from sequence.exec_device import DeviceExec
 from sequence.ops import (
     FP, Args, OP_GEMM, OP_COLSUM, OP_CELL_FWD, OP_CE, OP_OPT, OP_MLP_ROWLOSS, OP_COLSCALE, OP_CHOLSOLVE,
-    OP_MOE_ROUTE, OP_LN_FWD, OP_CROSTON, CELL_LSTM, CELL_GRU, OPT_ADAM, OPT_ADAMAX,
+    OP_MOE_ROUTE, OP_LN_FWD, OP_CROSTON, OP_ETS_LIK, OP_ETS_INIT, CELL_LSTM, CELL_GRU, OPT_ADAM, OPT_ADAMAX,
 )
 from sequence.mlp import LOSS_BINARY_LOG, SplitMix, fisher_yates
 from sequence.stl import stl_rwts
@@ -35,6 +35,7 @@ from sequence.recurrent import Net, Work, forward, head, backward
 from sequence.checks.oracle import (
     o_gemm, o_colsum, o_lstm, o_gru, o_bptt_dw, o_ce, o_adam, o_adamax, o_binary_logloss, o_shuffle,
     o_stl_rwts, o_colscale, o_cholsolve, o_nm_quantized, quant_obj, o_moe_route, o_layer_norm, o_croston,
+    o_ets_calc, o_ets_init,
 )
 
 
@@ -483,6 +484,64 @@ def main() raises:
         host16 = _cat(host16, cr.host[1])
     _check("5516_ses_recursion", want16, alt16, dev16, host16, tr)
 
+    # ---- 5517 ETS seasonal update through Calc (OP_ETS_LIK): 4 series of 36, m 5,
+    #      (A error, A season, trend), (M, M, trend), (M, A, no trend); lik, final l, b, s.
+    var B17 = 4; var n17 = 36; var m17 = 5
+    var raw17 = _signed(B17 * n17, 171, 3.0)
+    var wav17 = _signed(m17, 172, 4.0)
+    var y17 = List[Float32]()
+    for i in range(B17 * n17):
+        y17.append(Float32(30.0) + wav17[(i % n17) % m17] + raw17[i])
+    var ps17 = _signed(B17 * 8, 173, 1.0)
+    var want17 = List[Float32](); var alt17 = List[Float32](); var dev17 = List[Float32](); var host17 = List[Float32]()
+    for cfg in range(3):
+        var err17 = 0 if cfg == 0 else 1
+        var seas17 = 2 if cfg == 1 else 1
+        var tr17 = cfg != 2
+        var par17 = List[Float32]()
+        for s in range(B17):
+            par17.append(Float32(0.3) + Float32(0.2) * ps17[8 * s])                 # alpha
+            par17.append(Float32(0.05) + Float32(0.04) * ps17[8 * s + 1])           # beta
+            par17.append(Float32(0.2) + Float32(0.15) * ps17[8 * s + 2])            # gamma
+            par17.append(Float32(0.9) + Float32(0.05) * ps17[8 * s + 3])            # phi
+            par17.append(Float32(30.0) + ps17[8 * s + 4])                           # l0
+            par17.append(Float32(0.1) * ps17[8 * s + 5])                            # b0
+            for j in range(m17):
+                var w = wav17[(m17 - 1 - j) % m17]
+                par17.append(Float32(1.0) + Float32(0.02) * w if seas17 == 2 else w)
+        var ec = _both[OP_ETS_LIK](hx, dx, [y17.copy(), par17.copy(), List[Float32](length=B17 * (3 + m17), fill=Float32(0.0)),
+                                            List[Float32](length=B17 * m17, fill=Float32(0.0))],
+                                   [n17, 0, err17, 1 if tr17 else 0, 0, 0, seas17, m17], List[Float32](), B17)
+        want17 = _cat(want17, o_ets_calc(y17, B17, n17, err17, tr17, seas17, m17, par17, False))
+        alt17 = _cat(alt17, o_ets_calc(y17, B17, n17, err17, tr17, seas17, m17, par17, True))
+        dev17 = _cat(dev17, ec.dev[2])
+        host17 = _cat(host17, ec.host[2])
+    _check("5517_ets_seasonal_update", want17, alt17, dev17, host17, tr)
+
+    # ---- 5518 ETS initstate by decomposition (OP_ETS_INIT, n >= 3m): 3 series of 40,
+    #      m 6 (even, half-weight ends) and m 5, additive and multiplicative, with a trend.
+    var B18 = 3; var n18 = 40
+    var raw18 = _signed(B18 * n18, 181, 5.0)
+    var want18 = List[Float32](); var alt18 = List[Float32](); var dev18 = List[Float32](); var host18 = List[Float32]()
+    for cfg in range(4):
+        var m18 = 6 if cfg < 2 else 5
+        var seas18 = 1 if cfg % 2 == 0 else 2
+        var wav18 = _signed(m18, 182 + UInt64(cfg), 6.0)
+        var y18 = List[Float32]()
+        for i in range(B18 * n18):
+            var t = i % n18
+            y18.append(Float32(40.0) + Float32(0.25) * Float32(t) + wav18[t % m18] + raw18[i])
+        var st18 = 6 * n18 + 8
+        var ic = _both[OP_ETS_INIT](hx, dx, [y18.copy(), List[Float32](length=B18 * (1 + m18), fill=Float32(0.0)),
+                                             List[Float32](length=1, fill=Float32(0.0)),
+                                             List[Float32](length=B18 * st18, fill=Float32(0.0))],
+                                    [n18, 0, 0, 1, 0, 0, seas18, m18, st18], List[Float32](), B18)
+        want18 = _cat(want18, o_ets_init(y18, B18, n18, True, seas18, m18, False))
+        alt18 = _cat(alt18, o_ets_init(y18, B18, n18, True, seas18, m18, True))
+        dev18 = _cat(dev18, ic.dev[1])
+        host18 = _cat(host18, ic.host[1])
+    _check("5518_ets_decompose_ma", want18, alt18, dev18, host18, tr)
+
     _ = dx^
     _ = hx^
-    print("PASS sequence seams (17 seams: 5500-5516)")
+    print("PASS sequence seams (19 seams: 5500-5518)")
