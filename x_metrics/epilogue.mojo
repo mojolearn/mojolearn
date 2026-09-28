@@ -237,12 +237,12 @@ def _mul(a: Float64, b: Float64) -> Float64:
 def _log_fraction(x_in: Float64, mut e: Int, mut frac: Float64) -> Float64:
     """packaging/portable_math/portable_math.c `log_fraction`, operation
     for operation (its products unfused, its fm sites fma)."""
-    var input = x_in
-    var u = bitcast[DType.uint64](input)
+    var xv = x_in
+    var u = bitcast[DType.uint64](xv)
     e = 0
     if (u >> 52) == UInt64(0):
-        input = _mul(input, 18014398509481984.0)
-        u = bitcast[DType.uint64](input)
+        xv = _mul(xv, 18014398509481984.0)
+        u = bitcast[DType.uint64](xv)
         e = -54
     e += Int((u >> 52) & UInt64(0x7FF)) - 1022
     var m = bitcast[DType.float64]((u & UInt64(0x000FFFFFFFFFFFFF)) | UInt64(0x3FE0000000000000))
@@ -288,19 +288,19 @@ def _log_fraction(x_in: Float64, mut e: Int, mut frac: Float64) -> Float64:
     return y
 
 
-def portable_log_c(input: Float64) -> Float64:
+def portable_log_c(xv: Float64) -> Float64:
     """packaging/portable_math/portable_math.c `mojolearn_log` (what
     `mojolearn._portable_math.log` calls), operation for operation, for a
-    finite positive input (the only kind the callers below pass)."""
-    var u = bitcast[DType.uint64](input)
+    finite positive xv (the only kind the callers below pass)."""
+    var u = bitcast[DType.uint64](xv)
     var raw_e = 0
     if (u >> 52) == UInt64(0):
-        u = bitcast[DType.uint64](_mul(input, 18014398509481984.0))
+        u = bitcast[DType.uint64](_mul(xv, 18014398509481984.0))
         raw_e = -54
     raw_e += Int((u >> 52) & UInt64(0x7FF)) - 1022
     var e = 0
     var x: Float64 = 0.0
-    var y = _log_fraction(input, e, x)
+    var y = _log_fraction(xv, e, x)
     y = _fm(Float64(e), -2.121944400546905827679e-4, y)
     if not (raw_e > 2 or raw_e < -2):
         y = _fm(_mul(x, x), -0.5, y)
@@ -350,12 +350,12 @@ def expected_mi(a_addr: Int, na: Int, b_addr: Int, nb: Int, n: Int) raises -> Fl
                     break
                 down.append(v)
                 x -= 1
-            var all = List[Float64](capacity=len(up) + len(down))
+            var zs = List[Float64](capacity=len(up) + len(down))
             for k in range(len(up)):
-                all.append(up[k])
+                zs.append(up[k])
             for k in range(len(down)):
-                all.append(down[k])
-            var z = fsum(all)
+                zs.append(down[k])
+            var z = fsum(zs)
             var first = mode - len(down)
             var nd = len(down)
             for k in range(nd + len(up)):
