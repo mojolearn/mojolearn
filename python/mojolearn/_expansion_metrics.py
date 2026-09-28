@@ -1659,13 +1659,23 @@ def _ovr(y_true, y_score, sample_weight, labels, caller, numeric_mode, keep_flag
 _LITTLE = array.array("i", [1]).tobytes()[0] == 1
 
 
-def _rows_sum_to_one(s, k):
+def _rows_sum_to_one(s, k, numeric_mode=None):
     """No row's correctly rounded sum is farther than 1e-8 + 1e-5 from 1
     (scikit-learn's check; the scores are finite float32). Each row's
     `math.fsum` is `_fsum`'s value (finite float32 terms never overflow
     binary64; a zero sum only differs in its sign, which |s - 1| drops),
     the rows iterated in C; |fl(s - 1)| is monotone on either side of 1,
     so the largest and smallest sums decide every row (lane metrics-apple)."""
+    from ._buffer import hotpath_enabled
+    n = s.size // k if k else 0
+    fn = getattr(_binding(numeric_mode), "x_metrics_row_sum_range", None) if hotpath_enabled() else None
+    if fn is not None and n > 0 and s.dtype == "<f4" and s._has_order("C"):
+        # the same row fsums, in the binding (x_metrics/epilogue.mojo
+        # row_sum_range; lane metrics-apple2)
+        out = array.array("d", [0.0, 0.0])
+        fn(addr_ro(s, name="y_score"), n, k, out.buffer_info()[0])
+        tol = 1e-8 + 1e-5
+        return not (abs(out[0] - 1) > tol or abs(out[1] - 1) > tol)
     flat = array.array("f")
     flat.frombytes(s.tobytes())
     if not _LITTLE:
@@ -1725,7 +1735,7 @@ def roc_auc_options(y_true, y_score, average, sample_weight, max_fpr, multi_clas
                          "'sample_weight' must be None in this case.")
     s_check = _scores(y_score, len(true), "roc_auc_score", ndim=2)
     k = s_check.shape[1]
-    if not _rows_sum_to_one(s_check, k):
+    if not _rows_sum_to_one(s_check, k, numeric_mode):
         raise ValueError("Target scores need to be probabilities for multiclass roc_auc, i.e. they "
                          "should sum up to 1.0 over classes")
     if multi_class == "ovr":

@@ -369,3 +369,25 @@ def expected_mi(a_addr: Int, na: Int, b_addr: Int, nb: Int, n: Int) raises -> Fl
                 var d = (portable_log_c(Float64(n * nij)) - la) - lb
                 terms.append(_mul(_mul(q, d), pr))
     return fsum(terms)
+
+
+def row_sum_range(s_addr: Int, n: Int, k: Int, out_addr: Int):
+    """`_rows_sum_to_one`'s two numbers: the largest and the smallest row
+    `math.fsum` of the n x k finite Float32 scores (row major) at s_addr,
+    at out_addr[0] and [1]. Each row's sum is `fsum` above (a zero sum is
+    +0.0 where math.fsum may give -0.0; the caller takes |s - 1|)."""
+    var S = FP(unsafe_from_address=s_addr)
+    var out = MutPointer[Float64, MutAnyOrigin](unsafe_from_address=out_addr)
+    var row = List[Float64](length=k, fill=0.0)
+    var hi: Float64 = 0.0
+    var lo: Float64 = 0.0
+    for r in range(n):
+        for c in range(k):
+            row[c] = Float64(S.unsafe_load(r * k + c))
+        var v = fsum(row)
+        if r == 0 or v > hi:
+            hi = v
+        if r == 0 or v < lo:
+            lo = v
+    out[0] = hi
+    out[1] = lo

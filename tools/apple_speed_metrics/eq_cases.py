@@ -104,6 +104,12 @@ def main():
                 for avg in ("macro", "weighted"):
                     cases.append(("ovr_%s_" % avg + tag, lambda yc=yc, P=P, a=avg: M.roc_auc_score(yc, P, multi_class="ovr", average=a)))
                 cases.append(("ovr_w_" + tag, lambda yc=yc, P=P, w=w: M.roc_auc_score(yc, P, multi_class="ovr", sample_weight=w)))
+                Pb = P.copy()
+                Pb[n // 2, 0] += np.float32(2e-5)
+                cases.append(("ovr_badsum_" + tag, lambda yc=yc, P=Pb: M.roc_auc_score(yc, P, multi_class="ovr")))
+                Pc = P.copy()
+                Pc[n // 3, 1] += np.float32(5e-6)
+                cases.append(("ovr_nearsum_" + tag, lambda yc=yc, P=Pc: M.roc_auc_score(yc, P, multi_class="ovr")))
                 cases.append(("ovo_" + tag, lambda yc=yc, P=P: M.roc_auc_score(yc, P, multi_class="ovo")))
                 cases.append(("ap_ovr_" + tag, lambda yc=yc, P=P: M.average_precision_score(np.eye(4)[yc].astype(np.int64), P)))
     # the expected MI (adjusted_mutual_info_score): balanced, skewed, many classes
