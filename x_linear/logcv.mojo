@@ -103,7 +103,18 @@ def _logistic_objective_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: 
                     r = fm(wi, r)
                 st(t.row(k), i, r)
     t.sync()
-    for o in range(t.tid, p, t.nt):
+    # lane/linear-apple2: the lead's two row folds (the loss terms, the
+    # weight total) run beside the gradient cells, on threads p and p + 1,
+    # each the same one-thread fold; team slots 8 and 9 carry them.
+    var sl = t.slot_at.unsafe_origin_cast[MutAnyOrigin]()
+    for o in range(t.tid, p + 2, t.nt):
+        if o == p:
+            st(sl, 8, fold_fa_ix(lt, ix, cnt) if fold >= 0 else fold_fa(lt, 0, 1, n))
+            continue
+        if o == p + 1:
+            if sw:
+                st(sl, 9, fold_fa_ix(y, ix, cnt, 2 * n) if fold >= 0 else fold_fa(y, 2 * n, 1, n))
+            continue
         var k = o // stride
         var j = o - k * stride
         var rk = t.row(k)
@@ -122,16 +133,8 @@ def _logistic_objective_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: 
     t.sync()
     var out = Float32(0)
     if t.lead():
-        var wrows = Float32(0)
-        var acc: Float32
-        if fold >= 0:
-            if sw:
-                wrows = fold_fa_ix(y, ix, cnt, 2 * n)
-            acc = fold_fa_ix(lt, ix, cnt)
-        else:
-            if sw:
-                wrows = fold_fa(y, 2 * n, 1, n)
-            acc = fold_fa(lt, 0, 1, n)
+        var wrows = ld(sl, 9) if sw else Float32(0)
+        var acc = ld(sl, 8)
         var cntf = wrows if sw else i2f(cnt)
         var inv_n = fd(Float32(1), cntf)
         var lam = fd(Float32(1), fm(c, cntf))
