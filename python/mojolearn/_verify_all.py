@@ -21,7 +21,8 @@ from the committed records). Each part reads IDENTICAL, DIVERGENT, OWED (no
 record carries it yet), REFUSED (the lane or probe raised; the sentence is
 printed) or N/A (the estimator has no such output).
 
-ON A GPU INSTALL every lane the harness defines runs. ON A CPU-ONLY INSTALL
+ON A GPU INSTALL applicable lanes run; single-device parallel-driver
+claims stay visible as NOT APPLICABLE and run only when explicitly selected. ON A CPU-ONLY INSTALL
 the lanes the manifest lists as public reference checks run
 (`host_surface.public_reference_lanes()`), and the portable models run on
 every install: small models trained on a GPU and saved, whose file bytes
@@ -197,7 +198,14 @@ def select_lanes(harness, table, vendor_class, depth, asked, include_pending=Fal
         allowed = [l for l in harness.LANES if l in eligible
                    and (include_pending or not l.startswith(surface.PUBLIC_INAPPLICABLE_PREFIXES))]
     else:
-        allowed = all_lanes
+        # This command fixes the parallel device set at (0,). Executing a
+        # parallel driver cannot establish its cross-device claim, even on
+        # multi-GPU hardware. Keep explicit --lanes requests as diagnostics.
+        # Filter only structural inapplicability, never missing references
+        # or broken applicable paths. Every skipped lane stays in accounting.
+        exposure = host_surface().lane_exposure(all_lanes, vendor_class)
+        allowed = [lane for lane in all_lanes if asked or
+                   exposure[lane]["status"] != LANE_NOT_APPLICABLE]
     if asked:
         unknown = [l for l in asked if l not in harness.LANES]
         if unknown:
@@ -644,10 +652,10 @@ def smokeable_lanes(harness, surface, exposure, device_class, run_lanes=()):
     Three conditions, and the third is the one that keeps the tier cheap and
     honest. A lane the run ALREADY RAN is not left with nothing: its result is
     kept in `ran_state` beside the NOT APPLICABLE verdict, and fitting it two
-    more times would buy a weaker version of what the run already has. On a
-    GPU install `verify --all` runs every `par-*` lane at one device, so the
-    smoke set there is empty and the flag costs nothing. On a CPU-only install
-    the drivers are not selected, and that is where the tier earns its keep.
+    more times would buy a weaker version of what the run already has. Both
+    GPU and CPU default sweeps skip single-device parallel drivers. Opting
+    into --smoke executes their local behavior without certifying a
+    cross-device identity claim.
 
     A lane with no CPU route at all is not smokeable on a CPU install -- it
     refuses by name, which is a fact about the box rather than a defect to

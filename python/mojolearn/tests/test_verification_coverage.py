@@ -422,3 +422,14 @@ def test_a_whole_column_reports_no_absence_at_all(tmp_path, monkeypatch):
     assert f'{len(parts)} of {len(parts)} cell parts' in use, use
     assert 'absent' not in use, use
     assert table['absent_parts'] == {}
+
+
+def test_gpu_parallel_coverage_does_not_claim_default_execution():
+    h = va.load_harness()
+    report = coverage.inventory(h, vr.load_table(), 'apple')
+    for name, lane in report['lanes'].items():
+        if name.startswith('par-'):
+            assert lane['status'] == 'not_applicable'
+            assert not lane['execution']['run_by_default']
+            assert all(not prop['run_by_default'] for prop in lane['properties'].values())
+    assert set(report['lanes']) == set(h.LANES)
