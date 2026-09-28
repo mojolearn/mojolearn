@@ -4775,7 +4775,14 @@ def fused_bwd_zdot_stash_pf_kernel[HD: Int, TQ: Int, SABN: Bool](
                         ys.unsafe_load(tr * ESTRIDE + jj),
                         z,
                     )
-        barrier()
+        # lane/neural-apple2 (2026-09-28): on Apple no barrier here. The fold
+        # reads only `ys` and `dys`; the next block rewrites them only after
+        # its staging barrier, which the folding threads reach only once
+        # their fold is done, and the staging writes `ks` / `vs`, whose last
+        # readers passed the barrier above. Synchronization only.
+        # `-D MOJOLEARN_ATTN_ZDOT_STASH_FOLD_BARRIER` restores it.
+        comptime if TARGET_COLUMN != COLUMN_APPLE or is_defined["MOJOLEARN_ATTN_ZDOT_STASH_FOLD_BARRIER"]():
+            barrier()
     if valid and lane == 0:
         var zf = ftz(z)
         if bitcast[DType.uint32](zf) == NEG_ZERO_BITS and j_hi < s - 1:
