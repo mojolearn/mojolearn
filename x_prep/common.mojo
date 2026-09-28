@@ -68,7 +68,7 @@ def run_block[B: Int](f: FP, base: Int, stride: Int) -> SIMD[DType.float32, B]:
     a run of rows first overlaps those latencies. The fold still takes the
     words one at a time in ascending order, so no operation moves: the same
     bits on every target."""
-    var v = SIMD[DType.float32, B]()
+    var v = SIMD[DType.float32, B](0)
     comptime for u in range(B):
         v[u] = f.unsafe_load(base + u * stride)
     return v
