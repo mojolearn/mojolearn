@@ -11,7 +11,7 @@ second moment; the update g / sqrt(max(estimate, eps1^2)) scaled by
 thread's ascending loop. torch's norms are sqrt(sum of squares), squared
 back where the reference squares them, and its lerp is torch's two-branch
 formula."""
-from sequence.ops import FP, Args, add, fma3, ld, lerp, mul, st, sub
+from sequence.ops import FP, Args, add, fma3, ld, lerp, mul, st, sub, sumsq_fold
 from checks.numerics import ftz, identical_div, identical_rsqrt, identical_sqrt
 
 
@@ -20,12 +20,9 @@ def div(a: Float32, b: Float32) -> Float32:
     return ftz(identical_div(a, b))
 
 
+@always_inline
 def _sumsq(p: FP, start: Int, n: Int, stride: Int) -> Float32:
-    var acc = Float32(0.0)
-    for k in range(n):
-        var v = ld(p, start + k * stride)
-        acc = fma3(v, v, acc)
-    return acc
+    return sumsq_fold(p, start, n, stride)
 
 
 def op_af_alpha(t: Int, a: Args):
