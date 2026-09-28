@@ -85,10 +85,11 @@ def main() raises:
         tr.record_list_f32("x_decomp.gemm." + String(arm), dev)
     # ---- 5300 the host's SIMD spelling (x_decomp/host_simd.mojo): shapes that
     # reach full register tiles, the row and column tails, several KC chunks
-    # (k 600) and two MC row panels (m 70), every transposition arm
+    # (k 600), two MC row panels (m 70) and two NC column panels (n 300), every
+    # transposition arm
     var hm = 70
     var hk = 600
-    var hn = 77
+    var hn = 300
     var ha = seam_fixture(hm, hk, 31)
     var hb = seam_fixture(hk, hn, 32)
     var hat = seam_fixture(hk, hm, 33)

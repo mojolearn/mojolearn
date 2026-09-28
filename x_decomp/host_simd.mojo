@@ -41,6 +41,7 @@ comptime NV = 2  # vectors per row in a register tile
 comptime NR = NV * W
 comptime KC = 256  # the p chunk packed at once (inside one FOLD_BLOCK)
 comptime MC = 64  # rows per gemm task
+comptime NC = 256  # columns per gemm task (a multiple of NR)
 
 
 @always_inline
@@ -79,8 +80,8 @@ def gemm_swapped(m: Int, n: Int) -> Bool:
     return swapped < direct
 
 
-def gemm_task_count(m: Int, k: Int) -> Int:
-    return ceildiv(k, FOLD_BLOCK) * ceildiv(m, MC)
+def gemm_task_count(m: Int, k: Int, n: Int) -> Int:
+    return ceildiv(k, FOLD_BLOCK) * ceildiv(m, MC) * ceildiv(n, NC)
 
 
 def gemm_prepare(c: F32Ptr, m: Int, k: Int, n: Int) -> List[Float32]:
@@ -93,63 +94,66 @@ def gemm_prepare(c: F32Ptr, m: Int, k: Int, n: Int) -> List[Float32]:
 def gemm_task(
     t: Int, a: F32Ptr, b: F32Ptr, c: F32Ptr, part: F32Ptr, m: Int, k: Int, n: Int, ta: Bool, tb: Bool
 ):
-    """Task t: fold block t // panels, rows [MC * (t % panels), +MC)."""
+    """Task t: one fold block, rows [i0, i0 + MC), columns [j0, j0 + NC)."""
     var nb = ceildiv(k, FOLD_BLOCK)
-    var panels = ceildiv(m, MC)
-    var blk = t // panels
-    var i0 = (t % panels) * MC
+    var rpanels = ceildiv(m, MC)
+    var cpanels = ceildiv(n, NC)
+    var blk = t // (rpanels * cpanels)
+    var rest = t % (rpanels * cpanels)
+    var i0 = (rest // cpanels) * MC
+    var jb = (rest % cpanels) * NC
     var mi = min(MC, m - i0)
+    var nj = min(NC, n - jb)
     var p0 = blk * FOLD_BLOCK
     var p1 = min(k, p0 + FOLD_BLOCK)
     var dst = c if nb == 1 else part.unsafe_offset(blk * m * n)
-    var np = ceildiv(n, NR) * NR
+    var np = ceildiv(nj, NR) * NR
     var mp = ceildiv(mi, MR) * MR
-    var bp_buf = List[Float32](length=KC * np, fill=Float32(0))
-    var ap_buf = List[Float32](length=KC * mp, fill=Float32(0))
+    var kcm = min(KC, p1 - p0)
+    var bp_buf = List[Float32](length=kcm * np, fill=Float32(0))
+    var ap_buf = List[Float32](length=kcm * mp, fill=Float32(0))
     var bp = F32Ptr(unsafe_from_address=Int(bp_buf.unsafe_ptr()))
     var ap = F32Ptr(unsafe_from_address=Int(ap_buf.unsafe_ptr()))
     var pc = p0
     while pc < p1:
         var kc = min(KC, p1 - pc)
-        # B chunk: kc x np, row p holds op(B)[pc + p, 0..n), flushed, zero padded
-        for p in range(kc):
-            var row = bp.unsafe_offset(p * np)
-            if tb:
-                for j in range(n):
-                    row.unsafe_store(j, _ftz1(b.unsafe_load(j * k + pc + p)))
-            else:
-                var src = b.unsafe_offset((pc + p) * n)
+        # B chunk: kc x np, row p holds op(B)[pc + p, jb..jb + nj), flushed;
+        # the padding columns stay zero (never overwritten)
+        if tb:
+            for j in range(nj):
+                var src = b.unsafe_offset((jb + j) * k + pc)
+                for p in range(kc):
+                    bp.unsafe_store(p * np + j, _ftz1(src.unsafe_load(p)))
+        else:
+            for p in range(kc):
+                var row = bp.unsafe_offset(p * np)
+                var src = b.unsafe_offset((pc + p) * n + jb)
                 var j = 0
-                while j + W <= n:
+                while j + W <= nj:
                     row.unsafe_store(j, ftz_v[W](src.unsafe_load[width=W](j)))
                     j += W
-                while j < n:
+                while j < nj:
                     row.unsafe_store(j, _ftz1(src.unsafe_load(j)))
                     j += 1
-            for j in range(n, np):
-                row.unsafe_store(j, Float32(0))
-        # A chunk: per MR-row tile, p-major (MR values per p), flushed, zero padded
-        for ir in range(0, mp, MR):
-            var tile = ap.unsafe_offset(ir * kc)
-            for r in range(MR):
-                var i = i0 + ir + r
-                if ir + r < mi:
-                    if ta:
-                        for p in range(kc):
-                            tile.unsafe_store(p * MR + r, _ftz1(a.unsafe_load((pc + p) * m + i)))
-                    else:
-                        var src = a.unsafe_offset(i * k + pc)
-                        for p in range(kc):
-                            tile.unsafe_store(p * MR + r, _ftz1(src.unsafe_load(p)))
-                else:
-                    for p in range(kc):
-                        tile.unsafe_store(p * MR + r, Float32(0))
+        # A chunk: per MR-row tile, p-major (MR values per p), flushed; the
+        # padding rows stay zero
+        if ta:
+            for p in range(kc):
+                var src = a.unsafe_offset((pc + p) * m + i0)
+                for r in range(mi):
+                    ap.unsafe_store((r // MR) * MR * kc + p * MR + r % MR, _ftz1(src.unsafe_load(r)))
+        else:
+            for r in range(mi):
+                var src = a.unsafe_offset((i0 + r) * k + pc)
+                var tile = ap.unsafe_offset((r // MR) * MR * kc)
+                for p in range(kc):
+                    tile.unsafe_store(p * MR + r % MR, _ftz1(src.unsafe_load(p)))
         var first = pc == p0
         for ir in range(0, mp, MR):
             var rows = min(MR, mi - ir)
             var j0 = 0
-            while j0 < n:
-                _gemm_micro(ap.unsafe_offset(ir * kc), bp.unsafe_offset(j0), kc, np, dst, i0 + ir, j0, rows, min(NR, n - j0), n, first)
+            while j0 < nj:
+                _gemm_micro(ap.unsafe_offset(ir * kc), bp.unsafe_offset(j0), kc, np, dst, i0 + ir, jb + j0, rows, min(NR, nj - j0), n, first)
                 j0 += NR
         pc += kc
     _ = bp_buf^

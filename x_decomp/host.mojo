@@ -84,7 +84,7 @@ struct HostExec(Exec):
         var nb = (k + FOLD_BLOCK - 1) // FOLD_BLOCK
         var part = gemm_prepare(c, m, k, n)
         var pp = F32Ptr(unsafe_from_address=Int(part.unsafe_ptr()))
-        for t in range(gemm_task_count(m, k)):
+        for t in range(gemm_task_count(m, k, n)):
             gemm_task(t, a, b, c, pp, m, k, n, ta, tb)
         if nb > 1:
             for i in range(m):
