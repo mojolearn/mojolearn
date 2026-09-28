@@ -326,6 +326,8 @@ def ivf_sq_build_host(
 
 #: SQ codes are bytes: the decode table holds one entry per (column, code).
 comptime SQ_CODES = 256
+#: Candidate rows whose SQ distance chains run side by side.
+comptime SQ_W = 8
 
 
 def ivf_sq_search_host(
@@ -354,9 +356,11 @@ def ivf_sq_search_host(
         var coarse = List[Float32](length=n_lists, fill=Float32(0.0))
         var probes = List[Int32](length=n_probes, fill=Int32(0))
         var qres = List[Float32](length=dim, fill=Float32(0.0))
+        var rows_buf = List[Int32](length=SQ_W, fill=Int32(0))
         var cp = fp(coarse)
         var pp = ip(probes)
         var qr = fp(qres)
+        var rb = ip(rows_buf)
         for qi in range(span[0], span[1]):
             var base = qi * k
             var q_off = qi * dim
@@ -367,26 +371,42 @@ def ivf_sq_search_host(
                 var l = Int(pp.unsafe_load(p))
                 for c in range(dim):
                     qr.unsafe_store(c, ftz(ftz(queries.unsafe_load(q_off + c)) - ftz(centers.unsafe_load(l * dim + c))))
-                for slot in range(Int(offsets.unsafe_load(l)), Int(offsets.unsafe_load(l + 1))):
-                    var row = Int(list_indices.unsafe_load(slot))
-                    if mask.unsafe_load(row) == 0:
-                        continue
-                    var acc = Float32(0.0)
+                # rows in slot order, SQ_W at a time: lane r is row rb[r]'s
+                # fused square chain over c ascending, the decoded value read
+                # from the table (or decoded in place for a code outside it)
+                var start = Int(offsets.unsafe_load(l))
+                var stop = Int(offsets.unsafe_load(l + 1))
+                var slot = start
+                while slot < stop:
+                    var nb = 0
+                    while slot < stop and nb < SQ_W:
+                        var row = Int(list_indices.unsafe_load(slot))
+                        slot += 1
+                        if mask.unsafe_load(row) == 0:
+                            continue
+                        rb.unsafe_store(nb, Int32(row))
+                        nb += 1
+                    if nb == 0:
+                        break
+                    var acc = SIMD[DType.float32, SQ_W](0.0)
                     for c in range(dim):
-                        var code = Int(codes.unsafe_load(row * dim + c))
-                        var dv: Float32
-                        if code >= 0 and code < SQ_CODES:
-                            dv = decp.unsafe_load(c * SQ_CODES + code)
-                        else:
-                            dv = ftz(identical_mul_add(Float32(code), delta.unsafe_load(c), vmin.unsafe_load(c)))
-                        var diff = ftz(qr.unsafe_load(c) - dv)
-                        acc = ftz(identical_mul_add(diff, diff, acc))
-                    pq_insert(k, base, acc, Int32(row), out_d, out_i)
-                    n_cand += 1
+                        var dv = SIMD[DType.float32, SQ_W](0.0)
+                        for r in range(nb):
+                            var code = Int(codes.unsafe_load(Int(rb.unsafe_load(r)) * dim + c))
+                            if code >= 0 and code < SQ_CODES:
+                                dv[r] = decp.unsafe_load(c * SQ_CODES + code)
+                            else:
+                                dv[r] = ftz(identical_mul_add(Float32(code), delta.unsafe_load(c), vmin.unsafe_load(c)))
+                        var diff = ftz_v[SQ_W](SIMD[DType.float32, SQ_W](qr.unsafe_load(c)) - dv)
+                        acc = ftz_v[SQ_W](mul_add_v[SQ_W](diff, diff, acc))
+                    for r in range(nb):
+                        pq_insert(k, base, acc[r], rb.unsafe_load(r), out_d, out_i)
+                        n_cand += 1
             out_n.unsafe_store(qi, Int32(n_cand))
         _ = coarse^
         _ = probes^
         _ = qres^
+        _ = rows_buf^
 
     ann_tasks(task, tasks)
     _ = dec^
