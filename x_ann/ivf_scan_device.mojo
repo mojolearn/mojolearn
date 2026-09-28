@@ -237,7 +237,9 @@ def pq_score_kernel(
                 v = lut[j * nc + code]
             else:
                 v = pq_lut_entry(queries, q_off, centers, l, Int(dim), cb, j, code, Int(pq_len), nc)
-            total = ftz(total + v)
+            # lane ann-apple2: entries are sums of squares from +0, so the
+            # running sum is +0, positive or NaN: `ts_ftz_nonneg` (same word)
+            total = ts_ftz_nonneg(total + v)
         cand.unsafe_store(base + slot, total)
 
 
