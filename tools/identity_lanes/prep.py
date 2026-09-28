@@ -879,3 +879,53 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_prep_nan_first_six), "x-prep-iterative-options")
+
+
+def _prep_scaler_nan(X):
+    """The first six columns, every 7th entry missing, and column 5 missing
+    from row 256 on (a per-feature count; the batch rows see none of it)."""
+    Xm = np.array(X[:, :6], dtype=np.float32)
+    Xm.reshape(-1)[::7] = np.nan
+    Xm[256:, 5] = np.nan
+    return Xm
+
+
+@lane("x-prep-scaler-options")
+def _(ml, X, yc, yr, Xh=None):
+    """StandardScaler / MinMaxScaler item 5: NaN in fit and transform,
+    StandardScaler sample_weight (with zero weights), partial_fit of both
+    over three uneven batches (weighted and NaN ones too), an exactly
+    constant column, and copy=False into the caller's buffer."""
+    Xs = np.array(X[:3000, :6], dtype=np.float32)
+    Xs[:, 2] = np.float32(1.75)
+    Xn = _prep_scaler_nan(Xs)
+    n = Xs.shape[0]
+    w = ((np.arange(n) * 7919) % 13 / 3.0).astype(np.float32)
+    cuts = ((0, 400), (400, 1700), (1700, n))
+    parts = {}
+    for name, data, sw in (("nan", Xn, None), ("w", Xs, w), ("nan_w", Xn, w)):
+        m = ml.StandardScaler().fit(data, sample_weight=sw)
+        parts["std_" + name] = _h(m.mean_, m.var_, m.scale_, np.asarray(m.n_samples_seen_, dtype=np.float32),
+                                  m.transform(Xn[:256]), m.inverse_transform(Xn[:256]))
+    for name, data, sw in (("plain", Xs, None), ("nan", Xn, None), ("w", Xs, w)):
+        m = ml.StandardScaler()
+        for a, b in cuts:
+            m.partial_fit(data[a:b], sample_weight=None if sw is None else sw[a:b])
+        parts["std_partial_" + name] = _h(m.mean_, m.var_, m.scale_, np.asarray(m.n_samples_seen_, dtype=np.float32),
+                                          m.transform(Xn[:256]))
+    for rng_ in ((0, 1), (-3, 2)):
+        m = ml.MinMaxScaler(feature_range=rng_, clip=True).fit(Xn)
+        parts[f"mm_nan{rng_}"] = _h(m.data_min_, m.data_max_, m.scale_, m.min_, m.transform(Xn[:256]),
+                                    m.inverse_transform(Xn[:256]))
+    m = ml.MinMaxScaler()
+    for a, b in cuts:
+        m.partial_fit(Xn[a:b])
+    parts["mm_partial"] = _h(m.data_min_, m.data_max_, m.scale_, m.min_, m.transform(Xn[:256]))
+    buf = Xn[:256].copy()
+    ml.StandardScaler(copy=False).fit(Xs, sample_weight=w).transform(buf)
+    parts["copy_false"] = _h(buf)
+    s = ml.StandardScaler().fit(Xn, sample_weight=w)
+    return _fit(parts, s, lambda e: (e.transform(_prep_scaler_nan(Xh[:256])),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_prep_scaler_nan), "x-prep-scaler-options")

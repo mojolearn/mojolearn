@@ -190,6 +190,12 @@ from gbdt.data.ordered_plan import (
     ordered_permutation_block_size,
 )
 from gbdt.host.gbdt_oracle_pointwise import gbdt_pointwise_host_fit
+from gbdt.host.gbdt_oracle_ctr import (
+    gbdt_ctr_column_kinds,
+    gbdt_ctr_host_fit,
+    gbdt_ctr_host_model_text,
+    gbdt_has_ctr_columns,
+)
 from gbdt.host.gbdt_oracle_onehot import (
     gbdt_host_model_text_one_hot,
     gbdt_resolve_one_hot,
@@ -1368,11 +1374,15 @@ def gbdt_fit_binding(
         raise Error(
             "Permutation count should be positive, got " + String(perm_count)
         )
+    # ONE permutation unless a categorical column builds CTRs (`train`'s
+    # Plain collapse, `gbdt/train.mojo:1433-1434`); the CTR arm below
+    # (gbdt/host/gbdt_oracle_ctr.mojo) resolves the count and checks the
+    # estimation permutation itself, because only the columns can say
     perm_count = 1
     var est_perm = ctr_permutation_id
     if est_perm == -1:
         est_perm = perm_count - 1
-    if est_perm < 0 or est_perm >= perm_count:
+    if n_flags == 0 and (est_perm < 0 or est_perm >= perm_count):
         raise Error(
             "ctr_estimation_permutation_id " + String(est_perm)
             + " is outside the " + String(perm_count)
@@ -1569,9 +1579,35 @@ def gbdt_fit_binding(
             losses = fit.model.losses.copy()
             best_iteration = fit.model.best_iteration
             stopped_early = fit.model.stopped_early
+        elif grow_code == 0 and len(flags) != 0 and gbdt_has_ctr_columns(
+            gbdt_ctr_column_kinds(flags, x, n_rows, n_features)
+        ):
+            # the CTR categorical arm (gbdt-categorical-ctr-tables):
+            # gbdt/host/gbdt_oracle_ctr.mojo, every permutation
+            if n_eval_rows != 0:
+                raise Error(
+                    "no CPU implementation of _mojolearn_gbdt.gbdt_fit for"
+                    " eval_set with a CTR categorical column (the held-out"
+                    " rows need the CTR tables applied; not restated on the"
+                    " host)"
+                )
+            var ctr_fit = gbdt_ctr_host_fit(
+                x, y, n_rows, n_features, p, flags, permutation_count,
+                ctr_permutation_id,
+            )
+            text = gbdt_ctr_host_model_text(ctr_fit)
+            losses = ctr_fit.fit.model.losses.copy()
+            best_iteration = ctr_fit.fit.eval.best_iteration
+            stopped_early = ctr_fit.fit.eval.stopped_early
         elif grow_code == 0 and len(flags) != 0:
             # the one-hot categorical arm (gbdt-categorical-ctr):
             # gbdt/host/gbdt_oracle_onehot.mojo
+            if est_perm < 0 or est_perm >= perm_count:
+                raise Error(
+                    "ctr_estimation_permutation_id " + String(est_perm)
+                    + " is outside the " + String(perm_count)
+                    + " permutations this fit builds"
+                )
             var one_hot = gbdt_resolve_one_hot(flags, x, n_rows, n_features)
             var ev = _gbdt_host_eval_arm(
                 eval_x_address, eval_y_address, n_eval_rows, n_features,

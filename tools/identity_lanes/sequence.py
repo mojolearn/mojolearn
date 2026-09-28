@@ -327,7 +327,10 @@ def _(ml, X, yc, yr, Xh=None):
     """Four series of 80 observations (a trend plus a fixture column, a
     random walk, a positive level series, a fixture column): damped
     ETS(A,Ad,N), ETS(M,Ad,N) on the positive rows, undamped AAN and simple
-    ANN; 12-step forecasts."""
+    ANN; 12-step forecasts. Seasonal (period 12, a fixed wave added): AAA
+    and damped MAM on 80 observations (decomposition initial states), ANA
+    on the first 30 (the Fourier initial states), MNM with period 5 on the
+    positive rows."""
     t = np.arange(80, dtype=np.float32)
     c = np.ascontiguousarray(X[:80, 9], dtype=np.float32)
     y = np.stack([np.float32(5.0) + np.float32(0.3) * t + c, np.cumsum(c, dtype=np.float32),
@@ -337,6 +340,16 @@ def _(ml, X, yc, yr, Xh=None):
                mult=_h(ml.DampedETS(error="M").fit(pos).predict(12)["mean"]),
                aan=_h(ml.ETS(model="AAN", damped=False).fit(y).predict(12)["mean"]),
                ann=_h(ml.ETS(model="ANN", damped=False).fit(y).predict(12)["mean"]))
+    wave = (np.float32(3.0) * np.sin(np.float32(2.0 * np.pi / 12.0) * t)).astype(np.float32)
+    ys = (y + wave).astype(np.float32)
+    ps = (np.float32(20.0) + np.abs(y) + wave).astype(np.float32)
+    p5 = (np.float32(20.0) + np.abs(y) + np.float32(2.0) * np.cos(np.float32(2.0 * np.pi / 5.0) * t)).astype(np.float32)
+    aaa = ml.ETS(season_length=12, model="AAA", damped=False).fit(ys)
+    out.update(aaa=_h(aaa.predict(12)["mean"], aaa.info_, aaa.seasonal_states_),
+               mamd=_h(ml.ETS(season_length=12, model="MAM", damped=True).fit(ps).predict(12)["mean"]),
+               ana30=_h(ml.ETS(season_length=12, model="ANA", damped=False).fit(
+                   np.ascontiguousarray(ys[:, :30])).predict(12)["mean"]),
+               mnm5=_h(ml.ETS(season_length=5, model="MNM", damped=False).fit(p5).predict(12)["mean"]))
     return _fit(out)
 
 

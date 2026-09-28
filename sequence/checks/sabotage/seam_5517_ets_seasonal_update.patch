@@ -1,0 +1,13 @@
+diff --git a/sequence/ets.mojo b/sequence/ets.mojo
+index fcd56c3aa..6f4fd8584 100644
+--- a/sequence/ets.mojo
++++ b/sequence/ets.mojo
+@@ -77,7 +77,7 @@ def ets_scratch(n: Int, m: Int) -> Int:
+ @always_inline
+ def seas_update(sl: Float32, gamma: Float32, tt: Float32) -> Float32:
+     """5517: s0 = s_old + gamma (t - s_old), one fma."""
+-    return fma3(gamma, sub(tt, sl), sl)
++    return add(mul(sub(Float32(1.0), gamma), sl), mul(gamma, tt))
+ 
+ 
+ @always_inline

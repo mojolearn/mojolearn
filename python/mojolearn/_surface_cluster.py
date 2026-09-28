@@ -22,7 +22,7 @@ FAMILIES = (
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=("x-cluster-minibatch-kmeans", "x-cluster-bisecting-kmeans", "x-cluster-meanshift", "x-cluster-optics", "x-cluster-affinity-propagation", "x-cluster-bgmm",
-                        "x-cluster-minibatch-options", "x-cluster-bisecting-options", "x-cluster-meanshift-binned", "x-cluster-optics-metrics", "x-cluster-ap-precomputed", "x-cluster-bgmm-inits", "x-cluster-bgmm-covtypes", "x-cluster-minibatch-partial", "x-cluster-gmm-options", "x-cluster-dbscan-metrics", "x-cluster-hdbscan-epsilon", "x-cluster-kmeans-init"),
+                        "x-cluster-minibatch-options", "x-cluster-bisecting-options", "x-cluster-meanshift-binned", "x-cluster-optics-metrics", "x-cluster-ap-precomputed", "x-cluster-bgmm-inits", "x-cluster-bgmm-covtypes", "x-cluster-minibatch-partial", "x-cluster-gmm-options", "x-cluster-dbscan-metrics", "x-cluster-hdbscan-epsilon", "x-cluster-kmeans-init", "x-cluster-agglo-linkages", "x-cluster-agglo-connectivity", "x-cluster-spectral-affinities"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("MiniBatchKMeans", "BisectingKMeans", "MeanShift", "OPTICS", "AffinityPropagation", "BayesianGaussianMixture"),
@@ -30,7 +30,7 @@ FAMILIES = (
         host_modules=(
             "x_cluster/host/host_ops.mojo", "x_cluster/bodies.mojo", "x_cluster/ops.mojo",
             "x_cluster/common.mojo", "x_cluster/entries.mojo", "x_cluster/out.mojo",
-            "x_cluster/minibatch.mojo", "x_cluster/bisect.mojo", "x_cluster/meanshift.mojo", "x_cluster/optics.mojo", "x_cluster/affinity.mojo", "x_cluster/bgmm.mojo",
+            "x_cluster/minibatch.mojo", "x_cluster/bisect.mojo", "x_cluster/meanshift.mojo", "x_cluster/optics.mojo", "x_cluster/affinity.mojo", "x_cluster/bgmm.mojo", "x_cluster/agglo.mojo", "x_cluster/spectral_assign.mojo",
         ),
         exports=(
             "x_cluster_host_numeric_mode", "x_cluster_host_vendor", "x_cluster_host_column",
@@ -58,7 +58,10 @@ TRAINING_LANE_NAMES = {"x-cluster-minibatch-kmeans": "MiniBatchKMeans",
                        "x-cluster-gmm-options": "GaussianMixture options",
                        "x-cluster-dbscan-metrics": "DBSCAN cosine and precomputed metrics",
                        "x-cluster-hdbscan-epsilon": "HDBSCAN cluster_selection_epsilon",
-                       "x-cluster-kmeans-init": "KMeans array and callable init"}
+                       "x-cluster-kmeans-init": "KMeans array and callable init",
+                       "x-cluster-agglo-linkages": "AgglomerativeClustering linkages and metrics",
+                       "x-cluster-agglo-connectivity": "AgglomerativeClustering connectivity",
+                       "x-cluster-spectral-affinities": "SpectralClustering affinities and assign_labels"}
 PUBLIC_PENDING_LANES = {"x-cluster-minibatch-kmeans": "no reference",
                         "x-cluster-bisecting-kmeans": "no reference",
                         "x-cluster-meanshift": "no reference",
@@ -76,4 +79,7 @@ PUBLIC_PENDING_LANES = {"x-cluster-minibatch-kmeans": "no reference",
                         "x-cluster-gmm-options": "no reference",
                         "x-cluster-dbscan-metrics": "no reference",
                         "x-cluster-hdbscan-epsilon": "no reference",
-                        "x-cluster-kmeans-init": "no reference"}
+                        "x-cluster-kmeans-init": "no reference",
+                        "x-cluster-agglo-linkages": "no reference",
+                        "x-cluster-agglo-connectivity": "no reference",
+                        "x-cluster-spectral-affinities": "no reference"}
