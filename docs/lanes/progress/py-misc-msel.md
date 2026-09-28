@@ -32,10 +32,48 @@ sabotage control, or when a helper is missing. `MOJOLEARN_MSEL_BEFORE=1`
 | 2 (part) | `check_cv` stratify test | `flatten_labels` + two Python `all` scans per call | numeric 1-D buffer: dtype, or `reduce_stat` integral test |
 | 2 | GridSearch / RandomizedSearch / validation_curve per-candidate setup | | NOT TOUCHED: blocked on py-bugs (owns the fold-redraw fix; lane/py-bugs had no commits at 19:15Z). `_cross_validate_on` (cross_validate's loop over validated folds) is now a separate function py-bugs can reuse. |
 
-## Verification (one light job, tools/py_misc_msel/job.sh)
+## Verification: job nvc1-0001 (NVIDIA A40 pod ayjqqutlqcebzt, Xeon Gold 6342; 19:36 to 20:05Z, exit 0)
 
-PENDING: no shared NVIDIA pod was up at 19:19Z (nvidia_central: only the
-orchestrator brings pods up).
+Tree 308878e8 (this branch). Evidence on the pod: /root/ev-py-misc-msel/20260928T193611Z.
+
+- Before == after, identity lanes x-metrics-splitters + x-metrics-search
+  (identity_break, --repeats 1, before arm MOJOLEARN_MSEL_BEFORE=1):
+  GPU 18 of 18 cells identical hashes, CPU (host bindings) 18 of 18. PASS.
+- Equality script (tools/py_misc_msel/check.py equal: 15 splitters x 4 label
+  and group kinds x 3 sizes, iterable cv, check_cv decisions, 4 binary proba
+  scorers on f4 / f8 / F-order proba with a NaN, permutation_test_score over
+  7 cv/group/y-kind combinations plus GaussianNB): GPU 257 of 257 byte-equal,
+  CPU 257 of 257. PASS.
+- GPU == CPU lane check (tools/algos_lane_check.py): RESULT FAIL before the
+  diff, NOT from this lane: metrics.checks line 7's sabotage patch
+  x_metrics/seams/sabotage/seam_6105_contraction.patch does not apply to
+  x_metrics/par.mojo on the lane/py-misc base either (checked with
+  `git apply --check` on 342469dae). The GPU and CPU identity JSONs of this
+  job were not cross-diffed (stop order); py-consolidated's global check owns
+  GPU == CPU.
+
+Timing, 1,000,000 rows, one process, before then after (seconds):
+
+| case | GPU arm before | GPU arm after | x | CPU arm before | CPU arm after | x |
+|---|---|---|---|---|---|---|
+| LeaveOneGroupOut, 1000 groups | 218.690 | 14.273 | 15.3 | 88.547 | 8.682 | 10.2 |
+| LeavePGroupsOut(2), 30 groups | 44.033 | 4.951 | 8.9 | 42.218 | 5.098 | 8.3 |
+| GroupKFold(5), 1000 groups | 0.780 | 0.066 | 11.9 | 0.784 | 0.077 | 10.2 |
+| GroupKFold(5, shuffle) | 0.774 | 0.075 | 10.4 | 0.700 | 0.065 | 10.8 |
+| StratifiedGroupKFold(5), 100 groups | 0.826 | 0.199 | 4.2 | 0.750 | 0.208 | 3.6 |
+| GroupShuffleSplit(10), 1000 groups | 1.216 | 0.123 | 9.9 | 1.215 | 0.133 | 9.1 |
+| StratifiedShuffleSplit(10) | 3.975 | 0.425 | 9.4 | 6.578 | 2.346 | 2.8 |
+| PredefinedSplit, 5 folds | 0.558 | 0.123 | 4.5 | 0.670 | 0.162 | 4.1 |
+| KFold(5) unshuffled | 0.385 | 0.044 | 8.7 | 0.479 | 0.066 | 7.3 |
+| iterable cv, 5 pairs | 0.331 | 0.042 | 7.9 | 0.406 | 0.073 | 5.6 |
+| check_cv stratify test (float y) | 0.658 | 0.003 | 207 | 0.807 | 0.005 | 172 |
+| scorer roc_auc column, (n, 2) f4 | 0.264 | 0.023 | 11.5 | 0.344 | 0.083 | 4.1 |
+| permutation_test_score 10 perms, KFold(5) | 6.018 | 1.022 | 5.9 | 8.126 | 2.175 | 3.7 |
+| permutation_test_score 10 perms, cv=5 (stratified) | 7.805 | 2.799 | 2.8 | 10.027 | 4.372 | 2.3 |
+| permutation_test_score 3 perms, 1000 groups, GroupKFold(5) | 83.077 | 1.039 | 80.0 | 85.106 | 0.919 | 92.6 |
+
+Every row: the digest of the before and after results is the same ("same yes").
+The permutation cases use a trivial hash estimator, so they time the plumbing only.
 
 ## DEVIATION changes
 
@@ -44,7 +82,9 @@ every new route keeps the 256-row floor.
 
 ## Unproven / not done
 
-- Everything above until the job runs.
+- GPU == CPU for the two lanes on this tree (the lane check stopped at the
+  pre-existing seam_6105 patch failure; left to py-consolidated).
+- Apple: not run (m2pro only after 21:16Z; stop order).
 - StratifiedGroupKFold still encodes y first-seen and fills the group x class
   table in Python (O(n)); its `** 2` std (audit conformance gap) unchanged.
 - cross_val_predict (item 9), split_descriptor (21), learning_curve (py-bugs).
