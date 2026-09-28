@@ -406,3 +406,20 @@ MOJOLEARN_CHOL_SWEEP_SOLVES_OFF arms) is in the neighbors-fix agent's report
   same digests as main and the RTX 4090. Not taken: 06ef7f558 (reverted by
   84cff1857), the QN speed commits a45361dbc..96a7fe158 and b05f9a501 (later
   Apple round). The team_barrier (device|threadgroup on Apple) stays.
+- e2e sabotage on the OLD sab tree (built at 003ea19ba, before the decomp and
+  kmeans fixes) could not run the decomp and kmeans lanes (their arms REFUSED
+  both before and under the patch: NOTHING COMPARED, not a failed bite). Those
+  lines re-run on the fixed tree: nvc1-0008 (x_decomp e2e_host_all,
+  e2e_p2b_options, e2e_eigen_tol, e2e_host_sqdist; x_cluster e2e_kmeans_init,
+  e2e_kmeans_finalize) and nvc1-0010 (x-cluster-spectral-affinities under
+  e2e_device_fold_reversed; x-cluster-dbscan-metrics under its own
+  e2e_dbscan_metrics.patch and x-cluster-hdbscan-epsilon under its own
+  e2e_hdbscan_epsilon.patch: under e2e_device_fold_reversed both read AGREE
+  on the merged tree, i.e. that combined patch (regenerated for speed WIP
+  649b55f7b) no longer reaches them; cluster.md's gate used their own arms).
+- m4pro-a shard 18 (1790587516869) hung (identity_break at 0% CPU behind a
+  9-hour-old stale decomp_speed.py bench); the orchestrator killed both.
+  Resubmitted at bdf3b1010 to m4pro-b (1790595438355).
+- m2pro also fails gmm and gmm-random-init (Metal, M2 only so far): likely the
+  same pre-existing M2 Cholesky class; to be confirmed against main's m2pro
+  record.
