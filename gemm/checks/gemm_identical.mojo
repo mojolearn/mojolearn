@@ -511,6 +511,10 @@ comptime APPLE_LEAF_PREFETCH = (
     and not is_defined["MOJOLEARN_APPLE_LEAF_PREFETCH_OFF"]()
 )
 comptime LEAF_PREFETCH = 16
+#: The SPLITK leaf launch's block size: 32 on Apple (lane/linear-apple2), so a
+#: 1 x 1 x 1M dot's 1024 leaf chains spread over 32 GPU cores instead of 8.
+#: SCHEDULING only (the leaf index comes from the flat work index).
+comptime SPLITK_LEAF_LAUNCH_TPB = 32 if APPLE_LEAF_PREFETCH else SPLITK_LEAF_TPB
 #: Threads per block for the SPLITK fold kernel: one BLOCK per output cell,
 #: cooperating over the nodes of one tree level. The level WIDTHS come from
 #: `P` alone (contract 7.2.2); this number only decides how the nodes of a
@@ -3969,11 +3973,11 @@ def identical_gemm_with_plan(
             Int32(st[3]),
             Int32(stride),
             grid_dim=(
-                (m * n * p_count + SPLITK_LEAF_TPB - 1) // SPLITK_LEAF_TPB,
+                (m * n * p_count + SPLITK_LEAF_LAUNCH_TPB - 1) // SPLITK_LEAF_LAUNCH_TPB,
                 1,
                 1,
             ),
-            block_dim=(SPLITK_LEAF_TPB, 1, 1),
+            block_dim=(SPLITK_LEAF_LAUNCH_TPB, 1, 1),
         )
         if not staged:
             step_count_launch()
