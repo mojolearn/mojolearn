@@ -1,0 +1,14 @@
+diff --git a/glm/impl/qn/glm_softmax.mojo b/glm/impl/qn/glm_softmax.mojo
+index a67144abf..8b3751488 100644
+--- a/glm/impl/qn/glm_softmax.mojo
++++ b/glm/impl/qn/glm_softmax.mojo
+@@ -273,4 +273,8 @@ def mean_rows_multi_kernel(
+     var s0 = ftz(pinned_block_sum[STATS_TPB](acc))
+     if tid == 0:
+         var ratio = Float32(1.0) / Float32(n)
+-        out_v.unsafe_store(c, ftz(s0 * ratio))
++        # SABOTAGE 706: the per-class bias gradient folded serially
++        var q = Float32(0.0)
++        for k in range(n):
++            q = ftz(q + dz.unsafe_load(c + C * k))
++        out_v.unsafe_store(c, ftz(q * ratio) + s0 * Float32(0.0))
