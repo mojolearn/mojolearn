@@ -145,6 +145,7 @@ class _Prog:
         self.scratch_size = 0
         self.out_size = None
         self._inputs = []
+        self._inout = []
         self._stages = []
         self.arena = None
         self._out = None
@@ -177,17 +178,22 @@ class _Prog:
         self._out_code = code
         return _Scratch(0, "o")
 
-    def put(self, arr):
-        """A float32 C-contiguous Array (or anything as_f32_c takes) -> offset."""
+    def put(self, arr, inout=False):
+        """A float32 C-contiguous Array (or anything as_f32_c takes) -> offset.
+        inout (lane prep-apple3): a stage writes these words and Python reads
+        them after the run, so they come back from the device (a plain input
+        never does, and a read of one is refused)."""
         if not (isinstance(arr, Array) and arr.dtype == "<f4" and arr._has_order("C")):
             arr = as_f32_c(arr, ndim=None, name="input")[0]
         off = self.alloc(arr.size)
         self._inputs.append((off, arr, "f"))
+        if inout and arr.size:
+            self._inout.append((off, off + arr.size))
         return off
 
-    def put_list(self, values):
+    def put_list(self, values, inout=False):
         flat = [float(v) for v in values] or [0.0]
-        return self.put(Array._from_flat(flat, (len(flat),), "<f4"))
+        return self.put(Array._from_flat(flat, (len(flat),), "<f4"), inout=inout)
 
     def put_scalar(self, value):
         return self.put_list([value])
@@ -242,7 +248,9 @@ class _Prog:
         for off, arr, _ in self._inputs:
             if not arr.size:
                 continue
-            cache = _arena_io.active_cache(binding, "x_prep", arr.size) if run_ranges is not None else None
+            inout = (off, off + arr.size) in self._inout
+            cache = (_arena_io.active_cache(binding, "x_prep", arr.size)
+                     if run_ranges is not None and not inout else None)
             if cache is not None:
                 # resident (lane py-shared): copied from the store on the device;
                 # the host words stay zero and `_check` refuses a read of them
@@ -250,7 +258,7 @@ class _Prog:
                 continue
             ctypes.memmove(base + 4 * off, addr_ro(arr, name="input"), 4 * arr.size)
             spans.append((off, off + arr.size, -1))
-        self._in_spans = [(lo, hi) for lo, hi, _ in spans]
+        self._in_spans = [(lo, hi) for lo, hi, _ in spans if (lo, hi) not in self._inout]
         prog = array.array("i", [(v.off + (sbase if v.kind == "s" else obase)) if isinstance(v, _Scratch) else v
                                  for s in self._stages for v in s] or [0])
         nst = len(self._stages)
@@ -260,7 +268,7 @@ class _Prog:
             # the inputs go up, the rest of the host arena starts zero on the
             # device, and everything but the inputs comes back
             ins = _arena_io.input_ranges(spans)
-            outs = _arena_io.output_ranges(_arena_io.complement(ins, ha))
+            outs = _arena_io.output_ranges(_arena_io.complement(ins, ha) + [list(s) for s in self._inout])
             ia, oa = _arena_io.pack_ins(ins), _arena_io.pack_outs(outs)
             out = array.array(self._out_code, bytes(4 * on)) if dev_out else None
             run_ranges(base, prog.buffer_info()[0], 0 if out is None else out.buffer_info()[0],
@@ -1337,7 +1345,8 @@ class SimpleImputer(_PrepBase):
         n, d = arr.shape
         mode = _mode()
         pr = _Prog()
-        xo = _mark_missing(pr, pr.put(arr), n * d, self.missing_values)
+        x_in = pr.put(arr)
+        xo = _mark_missing(pr, x_in, n * d, self.missing_values)
         so = pr.alloc(n * d)
         st = pr.alloc(6 * d)
         med = pr.alloc(d)
@@ -1353,7 +1362,8 @@ class SimpleImputer(_PrepBase):
         counts = [int(v) for v in pr.values(st, d)]
         empty = [c == 0 for c in counts]
         if callable(self.strategy):
-            return self._fit_callable(pr.get(xo, (n, d)), counts, mode)
+            # missing_values NaN: the marked block is the input itself, which never comes back
+            return self._fit_callable(arr if xo == x_in else pr.get(xo, (n, d)), counts, mode)
         if self.strategy == "constant":
             fv = 0.0 if self.fill_value is None else float(self.fill_value)
             stats = [fv] * d
@@ -2132,7 +2142,7 @@ class LinearDiscriminantAnalysis(_Classifier):
         cnt, mean, priors, xbar = pr.alloc(K), pr.alloc(K * d), pr.alloc(K), pr.alloc(d)
         z, stz, std, w, z2 = pr.alloc(n * d), pr.alloc(6 * d), pr.alloc(d), pr.alloc(d), pr.alloc(n * d)
         g, e1, v1 = pr.alloc(d * d), pr.alloc(d), pr.alloc(d * d)
-        meta = pr.put_list([self.tol, 0.0, 0.0])
+        meta = pr.put_list([self.tol, 0.0, 0.0], inout=True)        # lda_stage2 writes the ranks into it
         scal1, g2, ms = pr.alloc(d * d), pr.alloc(d * d), pr.alloc(K * d)
         e2, v2 = pr.alloc(d), pr.alloc(d * d)
         scal, coef, inter, evr, tmp = pr.alloc(d * d), pr.alloc(K * d), pr.alloc(K), pr.alloc(d), pr.alloc(K * d)
@@ -2447,7 +2457,10 @@ class QuantileTransformer(_PrepBase):
         mode = _mode()
         pr = _Prog()
         xo = pr.put(arr)
-        so, st, qf = pr.alloc(n * d), pr.alloc(6 * d), pr.put_list(refs)
+        # the references are an input no stage writes: the fitted attribute is
+        # the array that went up (the same float32 words the arena held)
+        refs_arr = Array._from_flat([float(v) for v in refs], (nq,), "<f4")
+        so, st, qf = pr.alloc(n * d), pr.alloc(6 * d), pr.put(refs_arr)
         qo = pr.alloc(nq * d)
         pr.stage("sort_cols", d, xo, n, d, so, 0)
         pr.stage("col_stats", d, xo, n, d, st)
@@ -2456,7 +2469,7 @@ class QuantileTransformer(_PrepBase):
         self._q = pr.get(qo, nq * d)
         flat = pr.values(qo, nq * d)
         self.quantiles_ = Array.from_list([[flat[c * nq + j] for c in range(d)] for j in range(nq)], "<f4")
-        self.references_ = pr.get(qf, nq)
+        self.references_ = refs_arr
         self.n_quantiles_, self.numeric_mode_, self.n_features_in_ = nq, mode, d
         return self
 
@@ -3298,12 +3311,13 @@ class IterativeImputer(_PrepBase):
         lo, hi = per(self.min_value), per(self.max_value)
         return [v for pair in zip(lo, hi) for v in pair]
 
-    def _prepare(self, pr, arr, Xf):
-        """Arena: the filled block, its missing mask, the per-column bounds."""
+    def _prepare(self, pr, arr, Xf, inout=False):
+        """Arena: the filled block, its missing mask, the per-column bounds.
+        inout: the program imputes the filled block in place and returns it."""
         n, d = arr.shape
         dk = len(self._keep)
         xo = _mark_missing(pr, pr.put(arr), n * d, self.missing_values)
-        fo = pr.put(Xf)
+        fo = pr.put(Xf, inout=inout)
         ko = pr.put_list(self._keep)
         mo = pr.alloc(n * dk)
         pr.stage("nan_mask", n * dk, xo, n, d, ko, dk, mo)
@@ -3418,7 +3432,7 @@ class IterativeImputer(_PrepBase):
             fit = self._fit_native if _ii_native(mode) else self._fit_host
             return self._with_indicator(arr, fit(arr, Xf, orders, corr, float(self.tol) * scale))
         pr = _Prog()
-        fo, mo, bo = self._prepare(pr, arr, Xf)
+        fo, mo, bo = self._prepare(pr, arr, Xf, inout=True)
         tol = pr.put_scalar(float(self.tol) * scale)
         flag, niter = pr.alloc(1), pr.alloc(1)
         prev = pr.alloc(n * dk)
@@ -3688,7 +3702,7 @@ class IterativeImputer(_PrepBase):
                 self._impute_host(Xt, [i for i in range(n) if mask[i][j]], j, nbl, est)
             return self._with_indicator(arr, Array.from_list(Xt, "<f4"))
         pr = _Prog()
-        fo, mo, bo = self._prepare(pr, arr, Xf)
+        fo, mo, bo = self._prepare(pr, arr, Xf, inout=True)
         seed = self._rng & 0x7FFFFFFF
         for s, (j, coef, inter) in enumerate(self.imputation_sequence_):
             co, io = pr.put(coef), pr.put(inter)
