@@ -28,6 +28,7 @@ refusal of classification itself, is closed by DEVIATION 2830.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host.dim import Dim
 from std.gpu import block_idx, thread_idx
 from checks.numerics import ftz, identical_mul
 from checks.numerics import NUMERIC_FAST as _NUMERIC_FAST
@@ -296,7 +297,8 @@ def _gpc_fit_binary_device(
         ctx.enqueue_copy(dst_buf=dwsr, src_ptr=hwsr.unsafe_ptr())
         ctx.enqueue_function[gpc_b_matrix_kernel](
             db.unsafe_ptr(), dk.unsafe_ptr(), dwsr.unsafe_ptr(), Int32(n),
-            grid_dim=((n * n + GPC_B_TPB - 1) // GPC_B_TPB, 1, 1), block_dim=(GPC_B_TPB, 1, 1),
+            grid_dim=Dim((n * n + GPC_B_TPB - 1) // GPC_B_TPB, 1, 1),
+            block_dim=Dim(GPC_B_TPB, 1, 1),
         )
         add_jitter(ctx, db, n, Float32(0.0), CHOL_ELEM_TPB)
         if st_on:
