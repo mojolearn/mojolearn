@@ -40,14 +40,20 @@ def test_refusals():
 
 
 @pytest.mark.parametrize("metric", ["canberra", "braycurtis", "correlation", "jensenshannon"])
-def test_matches_scikit_learn(metric):
-    skn = pytest.importorskip("sklearn.neighbors")
+def test_matches_scipy(metric):
+    # The metric's DEFINITION is scipy's (cuVS computes the same cells):
+    # scikit-learn's own DistanceMetric spells braycurtis with
+    # sum(|u| + |v|) in the denominator, which differs from scipy's
+    # sum(|u + v|) on signed data, and it accepts no 'jensenshannon' name;
+    # both are scipy.spatial.distance.cdist here, stable-sorted.
+    sd = pytest.importorskip("scipy.spatial.distance")
     x = _data(positive=(metric == "jensenshannon"))
     q = x[:30]
     nn = _nn_or_skip(metric, x)
     d, i = nn.kneighbors(q)
-    rd, ri = skn.NearestNeighbors(n_neighbors=5, metric=metric, algorithm="brute").fit(
-        x.astype(np.float64)).kneighbors(q.astype(np.float64))
+    full = sd.cdist(q.astype(np.float64), x.astype(np.float64), metric=metric)
+    ri = np.argsort(full, axis=1, kind="stable")[:, :5]
+    rd = np.take_along_axis(full, ri, axis=1)
     np.testing.assert_allclose(np.asarray(d), rd, rtol=2e-4, atol=2e-5)
     assert (np.asarray(i) == ri).mean() >= 0.97
     d2, i2 = nn.kneighbors(q)

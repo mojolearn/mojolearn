@@ -20,7 +20,7 @@ FAMILIES = (
             "x-neighbors-gamma-scale", "x-neighbors-svm-weights", "x-neighbors-svc-sigmoid", "x-neighbors-svc-multiclass",
             "x-neighbors-krr-options", "x-neighbors-svm-precomputed", "x-neighbors-km-kernels",
             "x-neighbors-gp-cov", "x-neighbors-metrics",
-            "x-neighbors-svr-kernels",
+            "x-neighbors-svr-kernels", "x-neighbors-svc-probability",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -109,6 +109,7 @@ TRAINING_LANE_NAMES = {
     "x-neighbors-km-kernels": "KernelRidge / Nystroem cosine, chi2, additive_chi2",
     "x-neighbors-gp-cov": "GaussianProcessRegressor predict(return_cov=True)",
     "x-neighbors-metrics": "k-NN canberra, braycurtis, correlation, jensenshannon, inner_product",
+    "x-neighbors-svc-probability": "SVC probability=True (libsvm Platt, seeded 5-fold CV)",
 }
 PUBLIC_PENDING_LANES = {
     "x-neighbors-lof": "no reference",
@@ -135,4 +136,5 @@ PUBLIC_PENDING_LANES = {
     "x-neighbors-km-kernels": "no reference",
     "x-neighbors-gp-cov": "no reference",
     "x-neighbors-metrics": "no reference",
+    "x-neighbors-svc-probability": "no reference",
 }

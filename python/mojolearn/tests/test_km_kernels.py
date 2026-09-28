@@ -46,7 +46,11 @@ def test_kernel_ridge_matches_scikit_learn(kernel, gamma, alpha):
     sk = pytest.importorskip("sklearn.kernel_ridge")
     x, y = _data()
     m = _fit_or_skip(KernelRidge(alpha=alpha, kernel=kernel, gamma=gamma), x, y)
-    r = sk.KernelRidge(alpha=alpha, kernel=kernel, gamma=gamma).fit(x.astype(np.float64), y)
+    # scikit-learn 1.9's KernelRidge passes gamma=None through to chi2_kernel,
+    # whose `K *= gamma` then fails on an object array; chi2_kernel's own
+    # default (the value gamma=None means here) is 1.0
+    sk_gamma = 1.0 if (kernel == "chi2" and gamma is None) else gamma
+    r = sk.KernelRidge(alpha=alpha, kernel=kernel, gamma=sk_gamma).fit(x.astype(np.float64), y)
     np.testing.assert_allclose(np.asarray(m.predict(x)), r.predict(x.astype(np.float64)), rtol=2e-3, atol=2e-3)
     again = KernelRidge(alpha=alpha, kernel=kernel, gamma=gamma).fit(x, y)
     assert np.asarray(again.dual_coef_).tobytes() == np.asarray(m.dual_coef_).tobytes()
