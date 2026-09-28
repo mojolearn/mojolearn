@@ -60,3 +60,29 @@ merged; every such local ref was a strict superset of its origin ref.
     on any GPU target. The first NVIDIA, AMD or Apple build of
     _mojolearn_x_linear must show that they compile, and the lane's identity
     gate must show the bits did not move.
+
+### Note on lane/algos-linear's ref (orchestrator, 2026-09-28)
+
+lane/algos-linear was merged from the LOCAL ref eeff40047 before the
+instruction to use origin refs arrived. eeff40047 = origin/lane/algos-linear
+(6a0d37701) plus one local `Merge origin/main` whose remerge-diff is empty
+(a clean auto-merge, no hand resolution), so the content is the same as
+origin's merged with main. Every later branch is merged from its origin/ ref.
+
+### lane/algos-neighbors, lane/neighbors-cpu
+
+- origin/lane/algos-neighbors: clean.
+- origin/lane/neighbors-cpu: 4 conflicted files.
+  - core/knn_host_predict.mojo (4 sites), gaussian_process/host/gpr_oracle.mojo
+    (1): neighbors-cpu's `sync_parallelize(...)` + `_ = <buf>^` lifetime pins vs
+    lane/cpu's `host_parallelize(...)`. Kept host_parallelize (the one split,
+    DEVIATION 5900) AND the lifetime pins. check_host_parallel_sites: PASS.
+  - kernel_methods/host/km_host_oracle.mojo: algos-neighbors added the
+    chi2 / additive-chi2 / cosine kernel paths before the dot; neighbors-cpu
+    replaced `gemm_oracle` with `host_gemm_identical` for the dot. Kept both:
+    the new kernel paths as algos-neighbors wrote them (cosine still on
+    gemm_oracle, as it was gated), the plain dot on host_gemm_identical.
+  - svm/host/smo_oracle.mojo: algos-neighbors added the KERNEL_PRECOMPUTED
+    branch with a List workspace; neighbors-cpu moved the workspace to
+    stack_allocation. Kept the stack workspace and the precomputed branch
+    (its `_ = partials^` dropped: nothing to keep alive on the stack).
