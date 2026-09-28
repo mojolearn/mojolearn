@@ -59,6 +59,12 @@ from isolation_forest.estimator import (
     iforest_run_host,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from svm.host.svc_proba import (
+    svc_pair_epilogue_binding,
+    svc_platt_train_binding,
+    svc_portable_math_binding,
+    svc_splitmix_perm_binding,
+)
 from svm.estimator import (
     SvcFitOutputs,
     SvrFitOutputs,
@@ -597,6 +603,10 @@ def PyInit__mojolearn_svm() abi("C") -> PythonObject:
         m.def_function[svm_numeric_mode_binding]("svm_numeric_mode")
         m.def_function[svc_fit_binding]("svc_fit")
         m.def_function[svc_predict_binding]("svc_predict")
+        m.def_function[svc_pair_epilogue_binding]("svc_pair_epilogue")
+        m.def_function[svc_platt_train_binding]("svc_platt_train")
+        m.def_function[svc_splitmix_perm_binding]("svc_splitmix_perm")
+        m.def_function[svc_portable_math_binding]("svc_portable_math")
         m.def_function[svr_fit_binding]("svr_fit")
         m.def_function[svr_predict_binding]("svr_predict")
         m.def_function[iforest_run_binding]("iforest_run")
