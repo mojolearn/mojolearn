@@ -1,6 +1,6 @@
 --- a/x_prep/prims.mojo
 +++ b/x_prep/prims.mojo
-@@ -330,9 +330,10 @@
+@@ -350,9 +350,10 @@
      var nc = p(q, 7)
      var i = t // nc
      var j = t % nc

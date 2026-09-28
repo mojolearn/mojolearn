@@ -12,7 +12,7 @@ linear percentile) for the quantile unit.
 """
 from std.memory import bitcast
 from checks.numerics import ftz, identical_mul, identical_div, identical_sqrt, identical_exp, identical_log
-from x_prep.common import FP, IP, p, ld, raw, st, ldi, sti, is_nan, canon, canonical_nan, key, heap_sort, X_PREP_HOST_SABOTAGE
+from x_prep.common import FP, IP, p, ld, raw, st, ldi, sti, is_nan, canon, canonical_nan, key, heap_sort, X_PREP_HOST_SABOTAGE, RUN, run_block
 
 #: float32 machine epsilon; `_handle_zeros_in_scale` maps scale < 10 * eps to 1.
 comptime F32_EPS = Float32(1.1920929e-07)
@@ -83,11 +83,40 @@ def sort_cols_unit(t: Int, f: FP, q: IP):
     heap_sort(f, S + c * n, n)
 
 
+@always_inline
+def _cs_take(v: Float32, mut cnt: Int, mut s: Float32, mut lo: Float32, mut hi: Float32, mut ma: Float32):
+    """One row of col_stats' first pass (v already flushed)."""
+    if is_nan(v):
+        return
+    if cnt == 0:
+        lo = v
+        hi = v
+    else:
+        if v < lo:
+            lo = v
+        if v > hi:
+            hi = v
+    if abs(v) > ma:
+        ma = abs(v)
+    s = add(s, v)
+    cnt += 1
+
+
+@always_inline
+def _ss_take(v: Float32, mean: Float32, mut ss: Float32):
+    """One row of col_stats' second pass (v already flushed)."""
+    if is_nan(v):
+        return
+    var e = sub(v, mean)
+    ss = add(ss, mul(e, e))
+
+
 def col_stats_unit(t: Int, f: FP, q: IP):
     """q = [X, n, d, OUT]; t = column. OUT rows of d: count, mean, var
     (population), min, max, maxabs, over the non-NaN entries; an empty column
     writes zeros (no 0/0). DEVIATION 5400 (rows fold ascending), 5403 (the
-    empty-column guard), 5408 (operands flushed by `ld`)."""
+    empty-column guard), 5408 (operands flushed by `ld`). Rows are loaded
+    RUN at a time (`run_block`) and folded one by one in the same order."""
     var X = p(q, 0)
     var n = p(q, 1)
     var d = p(q, 2)
@@ -98,33 +127,24 @@ def col_stats_unit(t: Int, f: FP, q: IP):
     var lo = Float32(0)
     var hi = Float32(0)
     var ma = Float32(0)
-    for i in range(n):
-        var v = ld(f, X + i * d + c)
-        if is_nan(v):
-            continue
-        if cnt == 0:
-            lo = v
-            hi = v
-        else:
-            if v < lo:
-                lo = v
-            if v > hi:
-                hi = v
-        if abs(v) > ma:
-            ma = abs(v)
-        s = add(s, v)
-        cnt += 1
+    var full = n - n % RUN
+    for i0 in range(0, full, RUN):
+        var blk = run_block[RUN](f, X + i0 * d + c, d)
+        comptime for u in range(RUN):
+            _cs_take(ftz(blk[u]), cnt, s, lo, hi, ma)
+    for i in range(full, n):
+        _cs_take(ld(f, X + i * d + c), cnt, s, lo, hi, ma)
     var mean = Float32(0)
     var var_ = Float32(0)
     if cnt > 0:
         mean = div(s, Float32(cnt))
         var ss = Float32(0)
-        for i in range(n):
-            var v = ld(f, X + i * d + c)
-            if is_nan(v):
-                continue
-            var e = sub(v, mean)
-            ss = add(ss, mul(e, e))
+        for i0 in range(0, full, RUN):
+            var blk = run_block[RUN](f, X + i0 * d + c, d)
+            comptime for u in range(RUN):
+                _ss_take(ftz(blk[u]), mean, ss)
+        for i in range(full, n):
+            _ss_take(ld(f, X + i * d + c), mean, ss)
         var_ = div(ss, Float32(cnt))
     st(f, O + c, Float32(cnt))
     st(f, O + d + c, mean)

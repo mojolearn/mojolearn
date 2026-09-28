@@ -9,6 +9,12 @@ from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_prep.common import FP, IP, STAGE_INTS
 from x_prep.units import N_OPS, run_unit
+from x_prep.dsort import sort_cols_device, sort_scratch_words
+
+#: op 0 (`sort_cols`) runs as the device sort of x_prep/dsort.mojo, not as
+#: one heapsort thread per column: the same words (a sort under a total
+#: order has one answer), at every thread of the GPU.
+comptime OP_SORT_COLS = 0
 
 comptime BLOCK = 128
 
@@ -56,8 +62,14 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int) 
         var op = Int(host_q.unsafe_load(s * STAGE_INTS))
         if op < 0 or op >= N_OPS:
             raise Error(String("x_prep: unknown op ", op))
+    var scratch = 1
+    for s in range(stages):
+        if Int(host_q.unsafe_load(s * STAGE_INTS)) == OP_SORT_COLS:
+            var sq = host_q + (s * STAGE_INTS + 2)
+            scratch = max(scratch, sort_scratch_words(Int(sq[1]), Int(host_q.unsafe_load(s * STAGE_INTS + 1))))
     var ctx = x_prep_ctx()
     var df = ctx.enqueue_create_buffer[DType.float32](arena_len if arena_len > 0 else 1)
+    var dw = ctx.enqueue_create_buffer[DType.uint32](scratch)
     var dq = ctx.enqueue_create_buffer[DType.int32](stages * STAGE_INTS if stages > 0 else 1)
     if arena_len > 0:
         ctx.enqueue_copy(dst_buf=df, src_ptr=host_f)
@@ -69,6 +81,11 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int) 
         if total <= 0:
             continue
         var qp = dq.unsafe_ptr() + (s * STAGE_INTS + 2)
+        if op == OP_SORT_COLS:
+            var hq = host_q + (s * STAGE_INTS + 2)
+            sort_cols_device(ctx, df.unsafe_ptr(), dw.unsafe_ptr(), total, Int(hq[0]), Int(hq[1]), Int(hq[2]),
+                             Int(hq[3]), Int(hq[4]))
+            continue
         comptime for k in range(N_OPS):
             if op == k:
                 ctx.enqueue_function[prep_kernel[k]](
@@ -78,6 +95,7 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int) 
     if arena_len > 0:
         ctx.enqueue_copy(dst_ptr=host_f, src_buf=df)
     ctx.synchronize()
+    _ = dw^
     _ = dq^
     _ = df^
     _ = ctx^

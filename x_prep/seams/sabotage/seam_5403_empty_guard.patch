@@ -1,11 +1,11 @@
 --- a/x_prep/prims.mojo
 +++ b/x_prep/prims.mojo
-@@ -116,7 +116,7 @@
-         cnt += 1
+@@ -136,7 +136,7 @@
+         _cs_take(ld(f, X + i * d + c), cnt, s, lo, hi, ma)
      var mean = Float32(0)
      var var_ = Float32(0)
 -    if cnt > 0:
 +    if True:  # SABOTAGE 5403
          mean = div(s, Float32(cnt))
          var ss = Float32(0)
-         for i in range(n):
+         for i0 in range(0, full, RUN):

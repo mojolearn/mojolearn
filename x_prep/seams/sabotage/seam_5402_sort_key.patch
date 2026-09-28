@@ -1,14 +1,11 @@
 --- a/x_prep/common.mojo
 +++ b/x_prep/common.mojo
-@@ -124,9 +124,9 @@
-         var child = 2 * root + 1
-         if child >= n:
-             return
--        if child + 1 < n and key(f.unsafe_load(base + child)) < key(f.unsafe_load(base + child + 1)):
-+        if child + 1 < n and f.unsafe_load(base + child) < f.unsafe_load(base + child + 1):  # SABOTAGE 5402
-             child += 1
--        if key(f.unsafe_load(base + root)) < key(f.unsafe_load(base + child)):
-+        if f.unsafe_load(base + root) < f.unsafe_load(base + child):
-             var tmp = f.unsafe_load(base + root)
-             f.unsafe_store(base + root, f.unsafe_load(base + child))
-             f.unsafe_store(base + child, tmp)
+@@ -129,7 +129,7 @@
+     var k: UInt32
+     if (b & UInt32(0x7FFFFFFF)) > UInt32(0x7F800000):
+         k = UInt32(0xFFFFFFFF)
+-    elif (b & UInt32(0x80000000)) != UInt32(0):
++    elif (b & UInt32(0x80000000)) != UInt32(0) and b != UInt32(0x80000000):  # SABOTAGE 5402
+         k = ~b
+     else:
+         k = b | UInt32(0x80000000)
