@@ -6,7 +6,6 @@ from std.gpu import WARP_SIZE
 from std.sys.compile import is_defined
 from std.math import ceildiv
 from std.sys.info import has_apple_gpu_accelerator, size_of
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 from checks.kernel_matrix import TARGET_COLUMN, column_shared_limit
 
@@ -83,14 +82,21 @@ comptime TPB_DEFAULT = 128
 
 # `builder.cuh:203` -- "number of blocks used to parallelize column-wise
 # computations". A plain member initialised to 10 and never reassigned.
-# FAST on Apple: 40 columns per histogram/best-split pass. A forest that
-# samples every feature (regression, max_features=1.0) otherwise spends one
-# histogram launch and one split launch per 10 columns, each re-reading
-# every row of the batch; the workspace grows 4x (168 MB at 4096 nodes x
-# 128 bins, 8-byte bins). `-D MOJOLEARN_RF_COLS10` keeps 10.
+# Apple (FAST since 2026-09-25, IDENTICAL since 2026-09-28): 40 columns per
+# histogram/best-split pass. A forest that samples every feature
+# (regression, max_features=1.0) otherwise spends one histogram launch and
+# one split launch (plus a zero and a merge) per 10 columns, each re-reading
+# every row of the batch; on Metal each launch costs far more than on CUDA
+# (RF istellareg IDENTICAL on the M3 Ultra: 726 histogram passes per tree).
+# The workspace grows 4x (168 MB at 4096 nodes x 128 bins, 8-byte bins).
+# NO BIT MOVES in either mode: the histogram is integer accumulation per
+# (node, column) and a column's cells never span two passes, and the node's
+# split is folded from the passes' candidates with `Split.update`, a total
+# order over (gain, colid), so which pass a column lands in cannot change
+# the winner (`merge_split_candidates_kernel`, DEVIATION 5611).
+# `-D MOJOLEARN_RF_COLS10` keeps 10.
 comptime N_BLKS_FOR_COLS = 40 if (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_RF_COLS10"]()
 ) else 10
 

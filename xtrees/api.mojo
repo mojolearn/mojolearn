@@ -5,7 +5,7 @@
 (`bindings/_mojolearn_x_trees_host.mojo`): one spelling, two registrations.
 Every buffer is a caller-owned address; `params` is a Python list of ints and
 floats. Nothing is retained."""
-from std.python import PythonObject
+from std.python import Python, PythonObject
 from std.python.bindings import PythonModuleBuilder
 
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr
@@ -16,7 +16,7 @@ from xtrees.ops import (
     accumulate_onehot, accumulate_cols, accumulate_rows, argmax_rows, argmax_rows_f32, scale_f64, softmax_rows, scale_to_f32, put_f32,
     check_weights_f32, mul_f32,
     samme_step, r2_step, weighted_median, apply_trees, gradients, leaf_newton, leaf_newton_rows, tree_score_add, uniform,
-    onehot_leaves, transpose_f32, normalize_rows, logit, scatter, platt_fit, platt_apply, isotonic_fit,
+    onehot_leaves, transpose_f32, normalize_rows, exact_sum_f32, EXACT_SUM_LIMBS, logit, scatter, platt_fit, platt_apply, isotonic_fit,
     isotonic_predict,
 )
 
@@ -155,6 +155,21 @@ def scale_to_f32_binding(x: PythonObject, res: PythonObject, params: PythonObjec
     if n > 0:
         scale_to_f32(f64_ptr(Int(py=x)), n, _f(params, 1), f32_ptr(Int(py=res)))
     return PythonObject(n)
+
+
+def exact_sum_f32_binding(x: PythonObject, params: PythonObject) raises -> PythonObject:
+    """The exact sum of a float32 buffer as `EXACT_SUM_LIMBS` integer places
+    (`xtrees.ops.exact_sum_f32`), or None when it holds a NaN or an infinity;
+    params = [n]."""
+    _need(params, 1, "x_trees_exact_sum_f32")
+    var n = _count(_i(params, 0), "x_trees_exact_sum_f32")
+    var limbs = List[Int64](length=EXACT_SUM_LIMBS, fill=0)
+    if not exact_sum_f32(f32_ptr(Int(py=x)), n, limbs):
+        return PythonObject(None)
+    var out = Python.list()
+    for i in range(EXACT_SUM_LIMBS):
+        out.append(PythonObject(Int(limbs[i])))
+    return out
 
 
 def put_f32_binding(dst: PythonObject, src: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -532,6 +547,7 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[softmax_rows_binding]("x_trees_softmax_rows")
     m.def_function[scale_to_f32_binding]("x_trees_scale_to_f32")
     m.def_function[put_f32_binding]("x_trees_put_f32")
+    m.def_function[exact_sum_f32_binding]("x_trees_exact_sum_f32")
     m.def_function[samme_step_binding]("x_trees_samme_step")
     m.def_function[r2_step_binding]("x_trees_r2_step")
     m.def_function[weighted_median_binding]("x_trees_weighted_median")

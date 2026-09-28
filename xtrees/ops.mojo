@@ -34,6 +34,7 @@ xtrees/checks/glue_check.mojo, one sabotage arm each):
   DEVIATION 5605  a zero row normalises to uniform 1 / k, never 0 / 0.
 """
 from std.sys.compile import is_defined
+from std.memory import bitcast
 from max.algorithm import sync_parallelize
 from checks.numerics import identical_mul64, identical_exp64, identical_log64, identical_pow64
 from ensemble.host_layout import (
@@ -116,19 +117,40 @@ def weighted_sample(
     if not (total > 0.0):
         raise Error("x_trees weighted_sample: weights must have a positive total")
     var base = stream_base(seed, stream)
-    for k in range(n_draw):
-        var u = identical_mul64(unit(draw(base, k)), total)
-        var lo = 0
-        var hi = n - 1
-        while lo < hi:
-            var mid = (lo + hi) // 2
-            if cdf[mid] > u:
-                hi = mid
-            else:
-                lo = mid + 1
-        while lo > 0 and w[unsafe_offset=lo] == 0.0:  # u landed on a flat step at the end
-            lo -= 1
-        res[unsafe_offset=k] = Int32(lo)
+    # DEVIATION 5607: the draws run across the host pool in blocks. Draw k is
+    # a pure function of (base, k, cdf, w) written to res[k] alone (no
+    # arithmetic crosses two draws), so the indices are the serial loop's
+    # whatever order the blocks run in. The cdf above stays one sequential
+    # sum. AdaBoostRegressor spent 81 ms of each 1,000,000-row member here
+    # on the M3 Ultra (2026-09-28, trees-apple profile).
+    var cp = cdf.unsafe_ptr()
+    var wp = w
+    var rp = res
+
+    def _block(b: Int) {imm cp, imm wp, imm rp, imm base, imm total, imm n, imm n_draw}:
+        var k0 = b * HOST_LAYOUT_BLOCK_ROWS
+        var k1 = min(k0 + HOST_LAYOUT_BLOCK_ROWS, n_draw)
+        for k in range(k0, k1):
+            var u = identical_mul64(unit(draw(base, k)), total)
+            var lo = 0
+            var hi = n - 1
+            while lo < hi:
+                var mid = (lo + hi) // 2
+                if cp[mid] > u:
+                    hi = mid
+                else:
+                    lo = mid + 1
+            while lo > 0 and wp[unsafe_offset=lo] == 0.0:  # u landed on a flat step at the end
+                lo -= 1
+            rp[unsafe_offset=k] = Int32(lo)
+
+    var n_blocks = (n_draw + HOST_LAYOUT_BLOCK_ROWS - 1) // HOST_LAYOUT_BLOCK_ROWS
+    if n_blocks <= 1 or n_draw < HOST_LAYOUT_BLOCK_ROWS * 4:
+        for b in range(n_blocks):
+            _block(b)
+    else:
+        sync_parallelize(_block, n_blocks)
+    _ = cdf^
 
 
 def gather_f32(
@@ -285,6 +307,50 @@ def scale_to_f32(
     """dst[i] = Float32(x[i] * factor): one binary64 product, one rounding."""
     for i in range(n):
         dst[unsafe_offset=i] = Float32(identical_mul64(x[unsafe_offset=i], factor))
+
+
+#: limbs of `exact_sum_f32`: 32-bit places 0..9 cover the 277 bits a float32
+#: magnitude spans in units of 2^-149 (the smallest subnormal).
+comptime EXACT_SUM_LIMBS = 10
+
+
+def exact_sum_f32(
+    x: MutPointer[Float32, MutUntrackedOrigin], n: Int, mut limbs: List[Int64],
+) -> Bool:
+    """The EXACT sum of n float32 values as an integer count of 2^-149,
+    returned in `EXACT_SUM_LIMBS` signed 32-bit places (limb i weighs
+    2^(32 i); limbs may be negative or exceed 32 bits, the caller adds
+    `limb_i << 32 i` as exact integers). No rounding happens anywhere, so the
+    order of the adds cannot matter; the caller rounds ONCE (`_portable_math.
+    _scaled_integer(total, -149)`, the rounding `_portable_math.fsum` does).
+    Returns False, leaving the limbs partial, when an entry is NaN or
+    infinite or n exceeds 2^30 (a limb could then reach 2^63): the caller
+    takes the Python fsum, which owns those cases."""
+    limbs = List[Int64](length=EXACT_SUM_LIMBS, fill=0)
+    if n > (1 << 30):
+        return False
+    for i in range(n):
+        var bits = bitcast[DType.uint32](x[unsafe_offset=i])
+        var e = Int((bits >> 23) & 0xFF)
+        if e == 0xFF:
+            return False
+        var m = UInt64(bits & 0x7FFFFF)
+        var shift = 0
+        if e != 0:
+            m |= UInt64(1) << 23
+            shift = e - 1
+        if m == 0:
+            continue
+        var v = m << UInt64(shift % 32)
+        var k = shift // 32
+        var lo = Int64(v & 0xFFFFFFFF)
+        var hi = Int64(v >> 32)
+        if (bits >> 31) != 0:
+            lo = -lo
+            hi = -hi
+        limbs[k] += lo
+        limbs[k + 1] += hi
+    return True
 
 
 def put_f32(
