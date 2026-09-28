@@ -206,3 +206,21 @@ The DBSCAN fix reaches FAST: the probe at budgets 8000 and 4000 moves from 83a2d
 / 5a03789628c7946c to e10f0627f89268ce, the one-batch labels (default budget and one batch
 unchanged). A FAST batched fit now returns exactly the one-batch labels, so its quality is
 the reference's by construction.
+
+## M4 Pro (m4pro-a), IDENTICAL, 1790615622690: 493ddcc37 sources -> 4174d14d2 (stacked E-step default) + X-resident trial
+
+| case | 493ddcc37 | 4174d14d2 | X-resident trial | digests |
+|---|---|---|---|---|
+| gmm taxi 1M | 3.0005 | **2.5452** | - | 301203207f510506 both |
+| gmm higgs 1M | 2.8692 | **2.4597** | - | cb2f51dc4f8bb1a7 both |
+| GMM E-step (22 it) | 1099 ms | 651 ms | - | |
+| KMeans coarse | 1.7067 | 1.7092 | 1.8123 | c34e005aeb912d5d all |
+| KMeans PQ codebook | 0.3276 | 0.3247 | 0.3093 | 794c582742428b14 all |
+| IVF-SQ fit | 2.05 | 2.04 | 2.18 | - |
+| board kmeans taxi / higgs | 0.0834 / 0.1423 | 0.0829 / 0.1434 | 0.0857 / 0.1483 | equal |
+
+The X-resident trial (X row tile kept in threadgroup memory across the column sweep) is
+slower on the coarse fit and was removed (a6f3... see git log).
+
+Merged origin/lane/apple-merged at a3e8ed8ea (10 commits: M2 Pro fixes, one process-lifetime
+DeviceContext for the SVM/GMM/Cholesky/GP bindings); no conflicts.
