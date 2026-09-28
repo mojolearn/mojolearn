@@ -262,6 +262,8 @@ def reset_caches():
     _INCLUDE_ROOTS = None
     _GRAPH_REVERSE = None
     _HOST_CLASS_ROUTES = None
+    global _HOOK_CLASSES
+    _HOOK_CLASSES = None
     if "lane_map_import_graph" in sys.modules:
         sys.modules["lane_map_import_graph"]._DERIVED = None
         sys.modules["lane_map_import_graph"]._CLOSURES.clear()
@@ -1262,22 +1264,76 @@ def binding_additions(ref, path):
     ob, nb = _mojo_blocks(old), _mojo_blocks(new)
 
     def prelude(text):
+        # The text before the first def, WITHOUT its prose: a module docstring
+        # (a leading triple-quoted string) and `#` comment lines cannot move a
+        # bit, and lane/algos-decomp's host binding reworded its docstring in
+        # the same diff that added one export.
         m = re.search(r"^(?:fn|def)\s+[A-Za-z0-9_]+", text, re.M)
-        return text[:m.start()] if m else text
-    if prelude(old) != prelude(new) or not set(ob) <= set(nb):
+        head = text[:m.start()] if m else text
+        head = re.sub(r'\A(\s*(#[^\n]*)?\n)*\s*("""|\'\'\')(.|\n)*?\3', "", head, count=1)
+        return "\n".join(line for line in head.splitlines() if not line.lstrip().startswith("#"))
+    if not set(ob) <= set(nb):
         return None
+    # THE PRELUDE MAY ONLY GAIN IMPORTED NAMES (2026-09-27). lane/algos-decomp
+    # imported `geqrf_py, orgqr_py, als_cg_rows_py` for three new exports and
+    # lane/algos-neighbors `gpr_predict_cov_host` for one, each as one more
+    # line inside an existing parenthesized `from ... import (...)`. A line of
+    # bare NEW names inside an open import list, or a whole
+    # `from pkg.mod import a, b` line of new names, binds names nothing old
+    # can resolve to; anything else in the prelude is a real change.
+    pold, pnew = prelude(old).splitlines(), prelude(new).splitlines()
+    imported, open_import, j = set(), False, 0
+    one_line = re.compile(r"^from\s+([\w.]+)\s+import\s+(([A-Za-z_]\w*\s*,\s*)*[A-Za-z_]\w*)$")
+    for line in pnew:
+        stripped = line.strip()
+        now = one_line.match(stripped)
+        was = one_line.match(pold[j].strip()) if j < len(pold) else None
+        now_names = {n.strip() for n in now.group(2).split(",")} if now else set()
+        was_names = {n.strip() for n in was.group(2).split(",")} if was else set()
+        if j < len(pold) and line == pold[j]:
+            j += 1                           # an old line, in order
+        elif now and was and now.group(1) == was.group(1) and was_names < now_names:
+            # `from m import a` became `from m import b, a`: the same module,
+            # every old name kept, the rest new names.
+            imported |= now_names - was_names
+            j += 1
+        elif stripped:
+            names_line = re.match(r"^([A-Za-z_]\w*\s*,\s*)*[A-Za-z_]\w*\s*,?$", stripped)
+            from_line = re.match(r"^from\s+[\w.]+\s+import\s+(([A-Za-z_]\w*\s*,\s*)*[A-Za-z_]\w*)$",
+                                 stripped)
+            if open_import and names_line:
+                imported |= {n.strip() for n in stripped.rstrip(",").split(",")}
+            elif not open_import and from_line:
+                imported |= {n.strip() for n in from_line.group(1).split(",")}
+            else:
+                return None                  # a prelude line that is not new imported names
+        if re.match(r"^from\s+[\w.]+\s+import\s*\($", stripped):
+            open_import = True
+        elif open_import and ")" in stripped:
+            open_import = False
+    if j != len(pold):
+        return None                          # an old prelude line changed or moved
     added = set(nb) - set(ob)
-    for name in added:
+    for name in added | imported:
         if re.search(r"\b%s\b" % re.escape(name), old):
             return None
+    def trimmed(body):
+        # A block runs to the next top-level def, so the comment banner that
+        # FOLLOWED a block moves to whatever block is inserted after it.
+        # Trailing blank and comment lines are not the block's code.
+        lines = body.rstrip().splitlines()
+        while lines and (not lines[-1].strip() or lines[-1].lstrip().startswith("#")):
+            lines.pop()
+        return "\n".join(lines)
+
     exports = set()
     for name, body in ob.items():
-        if nb[name].rstrip() == body.rstrip():
+        if trimmed(nb[name]) == trimmed(body):
             continue
         if not name.startswith("PyInit_"):
             return None
-        olines = body.rstrip().splitlines()
-        nlines = nb[name].rstrip().splitlines()
+        olines = trimmed(body).splitlines()
+        nlines = trimmed(nb[name]).splitlines()
         it = iter(nlines)
         if not all(any(line == cand for cand in it) for line in olines):
             return None                      # an old line changed or moved
@@ -1285,12 +1341,19 @@ def binding_additions(ref, path):
         for line in olines:
             extra.remove(line)
         for line in extra:
-            m = re.match(r"^\s*module\.def_function\[\s*([A-Za-z0-9_]+)\s*\]\s*\(\s*\"([A-Za-z0-9_]+)\"\s*\)\s*$", line)
+            # `module.def_function[f]("x")`, `m.def_function[f]("x")` and the
+            # parametric `m.def_function[f[DevExec]]("x")`; `f` must be a
+            # block this diff added or a name its prelude newly imported, and
+            # "x" must not have been an export already.
+            m = re.match(r"^\s*[A-Za-z_]\w*\.def_function\[\s*([A-Za-z0-9_]+)\s*(\[[\w\s,]*\])?\s*\]"
+                         r"\s*\(\s*\"([A-Za-z0-9_]+)\"\s*\)\s*$", line)
             if not line.strip():
                 continue
-            if not m or m.group(1) not in added:
+            if not m or m.group(1) not in added | imported:
                 return None
-            exports.add(m.group(2))
+            if re.search(r"\"%s\"" % re.escape(m.group(3)), old):
+                return None
+            exports.add(m.group(3))
     return exports
 
 
@@ -2711,6 +2774,17 @@ def _stmt_key(node):
     return ("stmt", ast.dump(node))
 
 
+def _occurrence_keys(body):
+    """`_stmt_key` of each statement plus its occurrence number, so a name
+    bound twice at top level has two distinct, ordered keys."""
+    seen, out = {}, []
+    for node in body:
+        key = _stmt_key(node)
+        seen[key] = seen.get(key, -1) + 1
+        out.append(key + (seen[key],))
+    return out
+
+
 def _container_delta(old, new):
     """The elements ADDED to, and CHANGED in, a container literal, or None when
     the change is not of that shape.
@@ -2843,41 +2917,77 @@ def registry_lanes(ref, path, sources=None):
     and in order, either byte for byte or as the same assignment whose
     container literal only GREW or whose value changed under an unchanged key.
     Everything else, including a removal, a reorder, an edited function body or
-    a new bare statement, returns None."""
+    a new bare statement, returns None.
+
+    PER ROW SINCE 2026-09-27: an edit to an existing row of a keyed table
+    (`FAMILIES`) and a membership change of a lane list are attributed too
+    (`_row_table_lanes`, `_membership_delta`). A None leaves its reason in
+    `REGISTRY_WHY[f"{ref}:{path}"]`, and `select` refuses the path by name."""
     if sources is None:
         sources, _ = lane_sources()
     rev = reverse_map(sources)
+    every = set(sources)
+    why_key = f"{ref}:{path}"
+    REGISTRY_WHY.pop(why_key, None)
+
+    def refuse(why):
+        REGISTRY_WHY[why_key] = why
+        return None
+
     old_text = _git_show(ref, path)
     if old_text is None:
-        return None
+        return refuse(f"{path} does not exist at {ref}")
     try:
         old_tree = _strip_docstrings(ast.parse(old_text))
         new_tree = _strip_docstrings(ast.parse(_read(path)))
     except (OSError, SyntaxError):
-        return None
-    old_keys = [_stmt_key(n) for n in old_tree.body]
-    new_keys = [_stmt_key(n) for n in new_tree.body]
-    if len(set(old_keys)) != len(old_keys) or len(set(new_keys)) != len(new_keys):
-        return None                         # a repeated key cannot be aligned honestly
+        return refuse("it does not parse at one of the two revisions")
+    # A NAME BOUND MORE THAN ONCE is aligned by occurrence: host_surface binds
+    # `FAMILIES = (...)` and then `FAMILIES = _merge_expansion("FAMILIES",
+    # FAMILIES)`. A rebinding inserted or removed shifts the occurrences, so
+    # the statements compared no longer match and the diff refuses; it never
+    # pairs two different statements into a narrower answer.
+    old_keys = _occurrence_keys(old_tree.body)
+    new_keys = _occurrence_keys(new_tree.body)
     kept = [k for k in new_keys if k in set(old_keys)]
     if kept != old_keys:
-        return None                         # something was removed or reordered
+        gone = [k[1] for k in old_keys if k not in set(new_keys)]
+        return refuse("top-level statements were removed or reordered"
+                      + (f" ({', '.join(str(g)[:60] for g in gone[:3])})" if gone else ""))
     old_by_key = dict(zip(old_keys, old_tree.body))
-    touched = []
+    touched, direct, placed = [], set(), False
     for key, node in zip(new_keys, new_tree.body):
         if key not in old_by_key:
-            if not _admissible_addition(node, set(old_keys), set(rev)):
-                return None
+            if not _admissible_addition(node, {k[:2] for k in old_keys}, set(rev)) \
+                    or getattr(node, "name", None) in _module_bound_names(old_tree):
+                return refuse(f"a new top-level statement at line {node.lineno} is not a plain "
+                              "def, class or import of reached code")
             touched.append(node)
             continue
         before = old_by_key[key]
         if ast.dump(before) == ast.dump(node):
             continue
         if key[0] != "assign":
-            return None                     # an edited body reaches anything
+            # An edited body reaches anything.
+            return refuse(f"the body of `{key[1]}` changed (line {node.lineno})")
+        # A TABLE OF KEYED ROWS is attributed row by row (see REGISTRY_ROW_KEYS).
+        rows, why_rows = _row_table_lanes(before.value, node.value, every, rev)
+        if rows is not None:
+            direct |= rows
+            placed = True
+            continue
+        # A PLAIN LANE LIST that gained or lost lane names selects those lanes.
+        members = _membership_delta(before.value, node.value)
+        if members is not None and (members[0] or members[1]) \
+                and set(members[0]) | set(members[1]) <= every:
+            direct |= set(members[0]) | set(members[1])
+            placed = True
+            continue
         delta = _container_delta(before.value, node.value)
         if delta is None:
-            return None
+            detail = f": {why_rows}" if _row_table(before.value) is not None else ""
+            return refuse(f"`{key[1]}` (line {node.lineno}) changed other than by an addition, a "
+                          f"per-row edit or a lane-list membership change{detail}")
         added, changed = delta
         for element_key, value in added + changed:
             touched.append(value)
@@ -2886,7 +2996,16 @@ def registry_lanes(ref, path, sources=None):
                 # says which lane an entry is about more directly than its
                 # value does.
                 touched.append(_key_node(before, node, element_key))
-    return _lanes_named_by([t for t in touched if t is not None], sources, rev)
+    named = set()
+    touched = [t for t in touched if t is not None]
+    if touched:
+        named = _lanes_named_by(touched, sources, rev)
+        if named is None:
+            return refuse("an addition names nothing a lane reaches")
+    lanes = set(named) | direct
+    if not lanes and not placed:
+        return refuse("the diff changed code and names no lane")
+    return sorted(lanes)
 
 
 def _key_node(before, after, dumped_key):
@@ -2898,6 +3017,797 @@ def _key_node(before, after, dumped_key):
             if ast.dump(k) == dumped_key:
                 return k
     return None
+
+
+# ------------------------------------------------- registry entries, per row
+#
+# A REGISTRY IS A TABLE OF ROWS, AND AN EDIT TO ONE ROW IS ABOUT THAT ROW
+# (2026-09-27). `host_surface.FAMILIES` is a tuple of `dict(family=..., ...)`
+# rows, one per binding family. Until this date any edit to an existing row
+# failed the "additions only" test and selected every lane: lane/algos-ann-b
+# put "ivf-filter" into the ivf family's two lane lists and got 484 of 484,
+# lane/algos-neighbors added one export name to the gp family and got 487 of
+# 487. Both edits say exactly which rows moved. Old and new are now aligned
+# row by row by the row's own key (`family=`), and each changed row is
+# attributed by what changed in it:
+#   * a lane-name list that only gained or lost lane names (order of the rest
+#     kept) selects exactly those lane names: the other lanes of the row read
+#     the same row they read before;
+#   * any other field change selects the row's lanes: every lane the row
+#     names, and every lane that loads a binding the row names;
+#   * a row that names no lane and no binding a lane loads is NOT placed, and
+#     the registry refuses by name (`REGISTRY_WHY` says which row), never
+#     every lane.
+
+#: Keys that identify a registry row, in the order they are tried.
+REGISTRY_ROW_KEYS = ("family", "name", "binding", "lane")
+
+#: Fields of a row whose string values are binding names (bindings/<v>.mojo).
+REGISTRY_BINDING_FIELDS = ("binding", "routes")
+
+#: Row fields that list NAMES CODE CALLS (a binding's exports). A membership
+#: change there selects the lanes reaching a package file that names the moved
+#: name (`_lanes_reaching_a_file_naming`), not the whole row. Nothing at run
+#: time reads `exports`; the package tests do.
+REGISTRY_NAME_FIELDS = ("exports",)
+
+
+def _lanes_reaching_a_file_naming(names, rev, skip=()):
+    """The lanes that reach a package Python file whose text names any of
+    `names` as a whole word. Text, not syntax, so a getattr by string counts."""
+    words = [re.compile(r"\b%s\b" % re.escape(n)) for n in names]
+    out = set()
+    for rel in _python_files():
+        if rel in skip or not rev.get(rel):
+            continue
+        try:
+            text = _read(rel)
+        except OSError:
+            continue
+        if any(w.search(text) for w in words):
+            out |= rev[rel]
+    return out
+
+
+#: `f"{ref}:{path}"` -> why `registry_lanes` could not place the change.
+REGISTRY_WHY = {}
+
+
+def _row_fields(node):
+    """A registry row's fields as {name: value node}, for `dict(k=v, ...)` and
+    `{"k": v, ...}`; None for anything else (a `**spread` hides its fields)."""
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "dict" \
+            and not node.args and all(kw.arg is not None for kw in node.keywords):
+        names = [kw.arg for kw in node.keywords]
+        return None if len(set(names)) != len(names) else {kw.arg: kw.value for kw in node.keywords}
+    if isinstance(node, ast.Dict) and all(isinstance(k, ast.Constant) and isinstance(k.value, str)
+                                          for k in node.keys):
+        names = [k.value for k in node.keys]
+        return None if len(set(names)) != len(names) else dict(zip(names, node.values))
+    return None
+
+
+def _row_key(fields):
+    for key in REGISTRY_ROW_KEYS:
+        value = fields.get(key)
+        if isinstance(value, ast.Constant) and isinstance(value.value, str):
+            return (key, value.value)
+    return None
+
+
+def _row_table(node):
+    """[(row key, fields, row node)] for a tuple or list whose every element is
+    a keyed row with a distinct key, else None."""
+    if not isinstance(node, (ast.Tuple, ast.List)) or not node.elts:
+        return None
+    rows = []
+    for elt in node.elts:
+        fields = _row_fields(elt)
+        key = _row_key(fields) if fields is not None else None
+        if key is None:
+            return None
+        rows.append((key, fields, elt))
+    keys = [k for k, _, _ in rows]
+    return rows if len(set(keys)) == len(keys) else None
+
+
+def _string_elts(node):
+    """The strings of a tuple/list/set of string literals, in order, else None."""
+    if isinstance(node, (ast.Tuple, ast.List, ast.Set)) and all(
+            isinstance(e, ast.Constant) and isinstance(e.value, str) for e in node.elts):
+        return [e.value for e in node.elts]
+    return None
+
+
+def _membership_delta(old, new):
+    """(gained, lost) strings of a string list whose surviving members kept
+    their order and did not repeat; None when the change is not that shape."""
+    o, n = _string_elts(old), _string_elts(new)
+    if o is None or n is None or len(set(o)) != len(o) or len(set(n)) != len(n):
+        return None
+    if [x for x in n if x in o] != [x for x in o if x in n]:
+        return None                              # a reorder is not a membership change
+    return [x for x in n if x not in o], [x for x in o if x not in n]
+
+
+def binding_users(name, exports=None):
+    """The lanes that RUN binding `name` (a basename under bindings/): a lane
+    declared for it, a lane whose door runs it whole, and a lane that calls
+    one of `exports` through it (any export at all when `exports` is None).
+
+    A HOST BINDING has no `binding_use` row of its own: a lane records the GPU
+    binding its door resolves, and `_backend` routes that to the host one on a
+    CPU-only install. So a host binding is judged through every GPU binding
+    routed to it. Before 2026-09-27 a host binding's users were read under its
+    own name, found nothing, and a grown host binding selected NO lane."""
+    _, why_map = lane_sources()
+    via = {name} | {g for g, hosts in host_routes().items() if name in hosts}
+    out = set()
+    for lane, ev in why_map.items():
+        if name in ev.get("declared", ()):
+            out.add(lane)
+            continue
+        for b in via:
+            use = ev.get("binding_use", {}).get(b)
+            if not use:
+                continue
+            called = set(use.get("exports", ()))
+            if use.get("wide") in (True, "whole") or (called if exports is None else called & set(exports)):
+                out.add(lane)
+                break
+    return out
+
+
+def _row_lanes(fields_list, every, rev):
+    """The lanes one registry row is about: every lane name any of its string
+    literals spells exactly, every lane that RUNS a binding it names
+    (`binding_users`; the binding SOURCE is in every lane's map, so its reach
+    would be every lane), and every lane that reaches a file it names by
+    path."""
+    lanes = set()
+    for fields in fields_list:
+        for field, value in fields.items():
+            for sub in ast.walk(value):
+                if not (isinstance(sub, ast.Constant) and isinstance(sub.value, str)):
+                    continue
+                text = sub.value
+                if text in every:
+                    lanes.add(text)
+                if field in REGISTRY_BINDING_FIELDS and \
+                        os.path.isfile(os.path.join(ROOT, "bindings", text + ".mojo")):
+                    lanes |= binding_users(text)
+                if os.sep in text and os.path.isfile(os.path.join(ROOT, text)):
+                    lanes |= rev.get(text, set())
+    return lanes & set(every)
+
+
+def _changed_row_lanes(old_fields, new_fields, every, rev):
+    """The lanes an edit to one existing row selects, or None when it cannot be
+    placed. Membership edits of lane lists select the lanes that moved; any
+    other field edit selects the whole row's lanes."""
+    lanes, whole = set(), False
+    for field in sorted(set(old_fields) | set(new_fields)):
+        old, new = old_fields.get(field), new_fields.get(field)
+        if old is not None and new is not None and ast.dump(old) == ast.dump(new):
+            continue
+        delta = _membership_delta(old, new) if old is not None and new is not None else None
+        if delta is not None and (delta[0] or delta[1]) and set(delta[0]) | set(delta[1]) <= set(every):
+            lanes |= set(delta[0]) | set(delta[1])
+            continue
+        if delta is not None and field in REGISTRY_NAME_FIELDS and (delta[0] or delta[1]):
+            # AN EXPORT NAME IS A DECLARATION (only tests read `exports`); the
+            # lanes it concerns are the lanes whose code calls that export.
+            lanes |= _lanes_reaching_a_file_naming(
+                delta[0] + delta[1], rev, skip=enumerator_files() | {MANIFEST}) & set(every)
+            continue
+        whole = True
+    if whole:
+        row = _row_lanes([old_fields, new_fields], every, rev)
+        if not row:
+            return None
+        lanes |= row
+    return lanes
+
+
+def _row_table_lanes(before, after, every, rev):
+    """(lanes, None) for an edit to a table of keyed rows that kept every old
+    row in order, or (None, why) when it cannot be placed. A removed or
+    reordered row, or a row that names nothing a lane loads, is not placed."""
+    old_rows, new_rows = _row_table(before), _row_table(after)
+    if old_rows is None or new_rows is None:
+        return None, "not a table of keyed rows"
+    old_keys = [k for k, _, _ in old_rows]
+    new_keys = [k for k, _, _ in new_rows]
+    if [k for k in new_keys if k in old_keys] != old_keys:
+        return None, "a row was removed or the rows were reordered"
+    old_by_key = {k: f for k, f, _ in old_rows}
+    lanes = set()
+    for key, fields, _ in new_rows:
+        if key not in old_by_key:
+            row = _row_lanes([fields], every, rev)
+            if not row:
+                return None, f"the added row {key[0]}={key[1]!r} names no lane and no binding a lane loads"
+            lanes |= row
+            continue
+        got = _changed_row_lanes(old_by_key[key], fields, every, rev)
+        if got is None:
+            return None, (f"the row {key[0]}={key[1]!r} changed and names no lane and no binding "
+                          "a lane loads")
+        lanes |= got
+    return lanes, None
+
+
+def _module_bound_names(tree):
+    """Every name a module binds at top level (defs, classes, assignments,
+    imports, loop and with targets), for telling a NEW name from a shadowing one."""
+    out = set()
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            out.add(node.name)
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            for alias in node.names:
+                out.add((alias.asname or alias.name).split(".")[0])
+        else:
+            for sub in ast.walk(node):
+                if isinstance(sub, ast.Name) and isinstance(sub.ctx, ast.Store):
+                    out.add(sub.id)
+                elif isinstance(sub, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                    out.add(sub.name)
+    return out
+
+
+#: Builtins a new class body may call at definition (`Q = property(lambda
+#: self: self[0])`): they wrap or build a value and run none of the package.
+PURE_DEFINITION_BUILTINS = frozenset({"property", "staticmethod", "classmethod", "tuple", "frozenset"})
+
+
+def _calls_only_pure_builtins(node):
+    """True when every call this expression makes AT EVALUATION is one of
+    PURE_DEFINITION_BUILTINS with plain arguments. A lambda's body does not run
+    when the lambda is made, so calls inside one do not count."""
+    lambdas = [sub for sub in ast.walk(node) if isinstance(sub, ast.Lambda)]
+    inside = {id(x) for lam in lambdas for x in ast.walk(lam.body)}
+    for sub in ast.walk(node):
+        if id(sub) in inside:
+            continue
+        if isinstance(sub, (ast.Await, ast.Yield, ast.NamedExpr)):
+            return False
+        if isinstance(sub, ast.Call) and not (isinstance(sub.func, ast.Name)
+                                              and sub.func.id in PURE_DEFINITION_BUILTINS):
+            return False
+    return True
+
+
+def _runs_nothing_when_defined(node):
+    """True for an undecorated def or class whose DEFINITION executes no call:
+    default values, annotations and class bases are evaluated at import, and a
+    class body runs, so none of them may contain a call."""
+    if node.decorator_list:
+        return False
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        a = node.args
+        evaluated = list(a.defaults) + [d for d in a.kw_defaults if d is not None] + [node.returns]
+        evaluated += [x.annotation for x in a.posonlyargs + a.args + a.kwonlyargs + [a.vararg, a.kwarg]
+                      if x is not None]
+        return not any(isinstance(sub, (ast.Call, ast.Lambda, ast.NamedExpr, ast.Await, ast.Yield))
+                       for e in evaluated if e is not None for sub in ast.walk(e))
+    if isinstance(node, ast.ClassDef):
+        for e in node.bases + [k.value for k in node.keywords]:
+            if any(isinstance(sub, ast.Call) for sub in ast.walk(e)):
+                return False
+        for item in node.body:
+            if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if not _runs_nothing_when_defined(item):
+                    return False
+            elif isinstance(item, ast.Pass):
+                continue
+            elif isinstance(item, ast.Assign) and all(isinstance(t, ast.Name) for t in item.targets) \
+                    and _calls_only_pure_builtins(item.value):
+                continue
+            else:
+                return False
+        return True
+    return False
+
+
+def _py_row_key(node):
+    """A top-level statement's identity for `python_edit_lanes`: defs and
+    classes by name, a single-name assignment by its target, a `from m import`
+    by its module (so an import that gained a name is the same statement),
+    anything else by its code."""
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        return ("def", node.name)
+    if isinstance(node, (ast.Assign, ast.AnnAssign)):
+        targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+        if len(targets) == 1 and isinstance(targets[0], ast.Name):
+            return ("assign", targets[0].id)
+    if isinstance(node, ast.ImportFrom) and not any(a.name == "*" for a in node.names):
+        return ("from", node.level, node.module or "")
+    return ("stmt", ast.dump(node))
+
+
+def _runs_code(node):
+    """True when evaluating this expression can call something. Arithmetic
+    and subscripts on literals alone (`2.0 ** -20`) run nothing; on a name
+    they may run an overloaded operator."""
+    if node is None:
+        return False
+    for sub in ast.walk(node):
+        if isinstance(sub, (ast.Call, ast.Lambda, ast.NamedExpr, ast.Await, ast.Yield, ast.ListComp,
+                            ast.SetComp, ast.DictComp, ast.GeneratorExp)):
+            return True
+        if isinstance(sub, (ast.Subscript, ast.BinOp, ast.UnaryOp, ast.Compare, ast.BoolOp)) and any(
+                isinstance(x, (ast.Name, ast.Attribute)) for x in ast.walk(sub)):
+            return True
+    return False
+
+
+def _header_change_is_inert(old, new):
+    """A changed def header that runs nothing new at import: the decorators
+    are identical, and for a class the bases and keywords too (a new base runs
+    its `__init_subclass__`); a function's new defaults and annotations call
+    nothing but PURE_DEFINITION_BUILTINS. `qr(a, mode="r")` becoming
+    `qr(a, mode="reduced")` is about qr's callers, not about import."""
+    dump = lambda parts: [ast.dump(p) for p in parts]          # noqa: E731
+    if dump(old.decorator_list) != dump(new.decorator_list):
+        return False
+    if isinstance(new, ast.ClassDef):
+        return dump(old.bases) == dump(new.bases) and dump(k.value for k in old.keywords) == \
+            dump(k.value for k in new.keywords) and [k.arg for k in old.keywords] == \
+            [k.arg for k in new.keywords]
+    a = new.args
+    parts = list(a.defaults) + [d for d in a.kw_defaults if d is not None] + [new.returns]
+    parts += [x.annotation for x in a.posonlyargs + a.args + a.kwonlyargs + [a.vararg, a.kwarg]
+              if x is not None]
+    return all(_calls_only_pure_builtins(p) for p in parts if p is not None)
+
+
+def _header_runs(node, affected, runs, classes):
+    """The affected name a def or class header RUNS at import, or None.
+    Decorators run; a base runs its `__init_subclass__`; a metaclass or class
+    keyword runs; a default or annotation runs only what it calls."""
+    def loads(expr):
+        return [sub.id for sub in ast.walk(expr)
+                if isinstance(sub, ast.Name) and isinstance(sub.ctx, ast.Load) and sub.id in affected]
+    for dec in node.decorator_list:
+        hit = loads(dec)
+        if hit:
+            return hit[0]
+    if isinstance(node, ast.ClassDef):
+        for k in node.keywords:
+            hit = loads(k.value)
+            if hit:
+                return hit[0]
+        for base in node.bases:
+            for name in loads(base):
+                cls = classes.get(name)
+                if cls is None:
+                    # IMPORTED: defining a subclass runs the base's hook, if
+                    # it has one (`_subclass_hook_classes`), and nothing else.
+                    if name in _subclass_hook_classes():
+                        return name
+                    continue
+                defines = {m.name for m in cls.body if isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef))}
+                if "__init_subclass__" in defines and name in runs:
+                    return name
+        return None
+    a = node.args
+    parts = list(a.defaults) + [d for d in a.kw_defaults if d is not None] + [node.returns]
+    parts += [x.annotation for x in a.posonlyargs + a.args + a.kwonlyargs + [a.vararg, a.kwarg]
+              if x is not None]
+    for part in parts:
+        if part is not None and not _calls_only_pure_builtins(part) and loads(part):
+            return loads(part)[0]
+    return None
+
+
+def _import_names(node):
+    return [(a.asname or a.name) for a in node.names]
+
+
+#: `f"{ref}:{path}"` -> why `python_edit_lanes` kept the module's whole map.
+PYTHON_EDIT_WHY = {}
+
+
+def python_edit_lanes(ref, path, sources=None, rev=None, why_map=None):
+    """(affected names, lanes) when a package module's diff against `ref` is
+    confined to NAMED DEFINITIONS, else None (the file's whole map stands).
+
+    A module every lane reaches (`_buffer.py`, and everything `__init__.py`
+    imports such as `linalg.py` and `_expansion_decomp.py`) is in every lane's
+    map, so any edit to it selected every lane: lane/algos-neighbors added one
+    helper to `_buffer.py` and got 487 of 487; lane/algos-decomp edited
+    `svd`, `qr`, `Isomap` and friends and got 481 of 481. A function body
+    runs only where it is called, so an edit to one is about its callers.
+
+    ROWS. Old and new top-level statements are aligned by `_py_row_key` and
+    must keep their order. Allowed, each naming what it affects:
+      * a def or class that was added, removed, or whose BODY changed (its
+        header, the decorators, defaults, annotations and bases, runs at
+        import and must be unchanged, and a new one must run nothing);
+      * a single-name assignment added or changed whose value runs no code
+        (`_TOL = 1e-6`, `__all__ = [...]`; for a string list the names that
+        moved in or out are what it affects);
+      * a `from m import ...` of a module the old file already imported from,
+        that gained or lost names.
+    Anything else (a changed bare statement, an import of a new module, a
+    value that calls something) keeps the whole map.
+
+    CALLERS. The affected set is closed over the module: a def whose source
+    names an affected name is affected; a top-level statement that EVALUATES
+    one (a Name, not a string) at import keeps the whole map. The lanes are
+    the lanes that reach any other package file whose text names an affected
+    name (`_lanes_reaching_a_file_naming`; text, so a getattr string counts),
+    plus the lanes whose harness seeds name one. A name the harness text
+    carries that no lane's seeds hold cannot be placed and keeps the whole map,
+    as does a package file that star-imports the module or a registry that
+    names an affected name."""
+    key = f"{ref}:{path}"
+    PYTHON_EDIT_WHY.pop(key, None)
+
+    def keep(why):
+        PYTHON_EDIT_WHY[key] = why
+        return None
+
+    if sources is None or why_map is None:
+        sources, why_map = lane_sources()
+    if rev is None:
+        rev = reverse_map(sources)
+    old_text = _git_show(ref, path)
+    if old_text is None:
+        return keep("no old revision")
+    try:
+        old_tree = _strip_docstrings(ast.parse(old_text))
+        new_tree = _strip_docstrings(ast.parse(_read(path)))
+    except (OSError, SyntaxError):
+        return keep("does not parse")
+    old_keys, new_keys = _occurrence_keys_by(old_tree.body), _occurrence_keys_by(new_tree.body)
+    old_by = dict(zip(old_keys, old_tree.body))
+    new_by = dict(zip(new_keys, new_tree.body))
+    if [k for k in new_keys if k in old_by] != [k for k in old_keys if k in new_by]:
+        return keep("top-level statements were reordered")
+    old_modules = {(n.level, n.module) for n in old_tree.body if isinstance(n, ast.ImportFrom)}
+    affected = set()
+    for k in old_keys:
+        if k in new_by:
+            continue
+        node = old_by[k]
+        if k[0] == "def":
+            affected.add(node.name)               # removed: its callers break
+        else:
+            return keep(f"a top-level statement was removed (line {node.lineno})")
+    for k in new_keys:
+        node = new_by[k]
+        old = old_by.get(k)
+        if old is not None and ast.dump(old) == ast.dump(node):
+            continue
+        if k[0] == "def":
+            if old is None:
+                if not _runs_nothing_when_defined(node):
+                    return keep(f"the new `{node.name}` runs code when it is defined")
+            elif type(old) is not type(node) or not _header_change_is_inert(old, node):
+                return keep(f"the header of `{node.name}` (decorators, defaults, bases) changed")
+            affected.add(node.name)
+        elif k[0] == "assign":
+            if _runs_code(node.value):
+                return keep(f"`{k[1]}` (line {node.lineno}) is assigned a value that runs code")
+            if k[1] == "__all__":
+                # `__init__.py` binds `mojolearn.<name>` for each name a door's
+                # `__all__` lists, so a membership change is about the names
+                # that moved; any other change to `__all__` is not placed.
+                moved = _membership_delta(old.value, node.value) if old is not None else None
+                if moved is None:
+                    return keep("`__all__` changed other than by names moving in or out")
+                affected |= set(moved[0]) | set(moved[1])
+            else:
+                affected.add(k[1])
+        elif k[0] == "from":
+            if (node.level, node.module) not in old_modules:
+                return keep(f"line {node.lineno} imports from a module the old file did not")
+            before = set(_import_names(old)) if old is not None else set()
+            after = set(_import_names(node))
+            affected |= before ^ after
+        else:
+            return keep(f"a bare top-level statement changed (line {node.lineno})")
+    if not affected:
+        return keep("nothing named changed")
+    # CLOSE OVER THE MODULE, then over every file that takes an affected name
+    # from it (`_module_closure`, `_uses_of`), and stop at the harness: the
+    # lanes are the lanes whose seeds name an affected name anywhere on the
+    # way, plus the whole reach of any file whose import-time code runs one.
+    stem = os.path.splitext(os.path.basename(path))[0]
+    star = re.compile(r"from\s+[.\w]*\b%s\s+import\s+\*" % re.escape(stem))
+    for rel in _python_files():
+        if rel != path and star.search(_read(rel)):
+            return keep(f"{rel} star-imports it")
+    closed = _module_closure(path, new_tree, affected)
+    if isinstance(closed, str):
+        return keep(closed)
+    closed, runs = closed
+    lanes, all_names, why_wide = set(), set(closed), []
+    done = {path: set(closed)}
+    queue = [(path, set(closed), set(runs))]
+    while queue:
+        rel, names, rel_runs = queue.pop()
+        for user in _python_files():
+            if user == rel or rel not in _python_imports(user):
+                continue
+            used = _uses_of(user, {rel}, names)
+            if not used:
+                continue
+            tree = _parse(user)
+            got = _module_closure(user, _strip_docstrings(tree) if tree else None, used,
+                                  runs=used & rel_runs)
+            if isinstance(got, str):
+                # Its import-time code runs changed code: every lane that
+                # loads it, by the map.
+                lanes |= rev.get(user, set())
+                why_wide.append(f"{user}: {got}")
+                continue
+            got, got_runs = got
+            all_names |= got
+            if got - done.get(user, set()):
+                done.setdefault(user, set()).update(got)
+                queue.append((user, set(got), set(got_runs)))
+    lanes |= {n for n in sources if all_names & set(why_map.get(n, {}).get("symbols", ()))}
+    PYTHON_EDIT_WHY[key] = "; ".join(why_wide)
+    # NEVER WIDER THAN THE MAP: a lane that does not reach this file cannot
+    # run its code, whatever the walk above met on the way.
+    return sorted(affected), lanes & set(sources) & rev.get(path, set())
+
+
+def _module_closure(rel, tree, names, runs=None):
+    """The names of file `rel` that reach `names`: the names themselves, every
+    top-level def or class whose source names one, every top-level assignment
+    whose value names one (an alias or a table holding it), to a fixpoint.
+
+    A string instead, when import-time code RUNS changed code: then every lane
+    that loads the file is reached. Running is tracked apart from naming
+    (`_run_closure`): `_classical_host.py` calls `_merge_expansion_doors()` at
+    import, which NAMES the decomp host classes and runs none of their
+    changed methods. `runs` is the subset of `names` whose execution can run
+    changed code (all of them when None)."""
+    if tree is None:
+        return f"{rel} does not parse"
+    source = _read(rel)
+    affected = set(names)
+    classes = {n.name: n for n in tree.body if isinstance(n, ast.ClassDef)}
+    changed = True
+    while changed:
+        changed = False
+        words = re.compile(r"\b(%s)\b" % "|".join(re.escape(n) for n in sorted(affected)))
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                if node.name in affected:
+                    continue
+                seg = ast.get_source_segment(source, node) or ast.dump(node)
+                if words.search(seg):
+                    affected.add(node.name)
+                    changed = True
+                continue
+            if isinstance(node, (ast.Import, ast.ImportFrom)) or _is_main_guard(node):
+                continue
+            # `__all__` names what `__init__.py` re-exports as strings; the
+            # re-exported objects' users are found through the harness seeds.
+            if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "__all__"
+                                                    for t in node.targets):
+                continue
+            seg = ast.get_source_segment(source, node) or ""
+            if words.search(seg):
+                for sub in ast.walk(node):
+                    if isinstance(sub, ast.Name) and isinstance(sub.ctx, ast.Store) \
+                            and sub.id not in affected:
+                        affected.add(sub.id)
+                        changed = True
+    run_names, run_methods = _run_closure(tree, set(names) if runs is None else set(runs), classes)
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            bad = _header_runs(node, affected, run_names, classes)
+            if bad:
+                return f"the header of `{node.name}` runs `{bad}` at import"
+        elif not isinstance(node, (ast.Import, ast.ImportFrom)):
+            bad = _import_time_hits(node, affected, run_names, run_methods)
+            if bad:
+                return f"line {node.lineno} runs `{bad}` at import"
+    return affected, run_names
+
+
+def _calls_in(node):
+    """(called names, called attribute names, string literals) in a subtree."""
+    names, attrs, strings = set(), set(), set()
+    for sub in ast.walk(node):
+        if isinstance(sub, ast.Call):
+            if isinstance(sub.func, ast.Name):
+                names.add(sub.func.id)
+            elif isinstance(sub.func, ast.Attribute):
+                attrs.add(sub.func.attr)
+        elif isinstance(sub, ast.Constant) and isinstance(sub.value, str):
+            strings.add(sub.value)
+    return names, attrs, strings
+
+
+def _run_closure(tree, runs, classes):
+    """(names whose execution can run changed code, method names likewise).
+
+    Seeded with `runs`. A def joins when its body CALLS one (`f(...)`,
+    `x.f(...)`) or carries it as a string (a getattr dispatch); a class
+    joins when a base is in the set or its `__init__`/`__new__`/class body
+    does; a method that calls one puts its NAME in the method set, and a call
+    of an attribute of that name anywhere counts. A class in the seed puts all
+    its method names in the method set (which method changed is not known
+    here). An alias assignment (`_f = f`) joins too. Over-approximate on
+    purpose: this decides only when import-time code keeps a file's whole map."""
+    run_names, run_methods = set(runs), set()
+    for name in runs:
+        if name in classes:
+            run_methods |= {m.name for m in classes[name].body
+                            if isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    changed = True
+    while changed:
+        changed = False
+        hot = run_names | run_methods
+
+        def calls_hot(node):
+            names, attrs, strings = _calls_in(node)
+            return bool(names & run_names or attrs & hot or strings & hot)
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if node.name not in run_names and calls_hot(node):
+                    run_names.add(node.name)
+                    changed = True
+            elif isinstance(node, ast.ClassDef):
+                for m in node.body:
+                    if isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef)) and m.name not in run_methods \
+                            and calls_hot(m):
+                        run_methods.add(m.name)
+                        changed = True
+                if node.name in run_names:
+                    continue
+                bases = {b.id for b in node.bases if isinstance(b, ast.Name)}
+                ctor = [m for m in node.body if isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef))
+                        and m.name in ("__init__", "__new__", "__post_init__", "__call__")]
+                body = [m for m in node.body if not isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef))]
+                if bases & run_names or any(calls_hot(m) for m in ctor + body):
+                    run_names.add(node.name)
+                    changed = True
+            elif isinstance(node, ast.Assign) and not _is_main_guard(node):
+                loads = {x.id for x in ast.walk(node.value)
+                         if isinstance(x, ast.Name) and isinstance(x.ctx, ast.Load)}
+                if loads & run_names:
+                    for t in node.targets:
+                        for x in ast.walk(t):
+                            if isinstance(x, ast.Name) and x.id not in run_names:
+                                run_names.add(x.id)
+                                changed = True
+    return run_names, run_methods
+
+
+def _import_time_hits(node, affected, runs, run_methods):
+    """For a top-level statement that is not a def or class: what it RUNS at
+    import that can run changed code, or None.
+
+    Only a CALL runs code. Counted: a call of a name in `runs` (`f(...)`,
+    `Cls(...)`), a call of an attribute in `run_methods` or of a `runs` name's
+    attribute (`Cls.of(...)`), and an AFFECTED name handed to a call other than
+    a pure builtin (the callee may call what it is given; `tuple(_FORMATS)`
+    does not). Inside a compound statement (a module-level loop can call what
+    it iterates) any affected name next to any non-builtin call counts. A
+    plain load that stores or reads (`_ALIASES = (f, g)`, `_M._one = ...`)
+    runs nothing. The `if __name__ == "__main__":` block does not run on
+    import at all."""
+    if _is_main_guard(node):
+        return None
+    hot_names = runs
+    for sub in ast.walk(node):
+        if isinstance(sub, ast.Call):
+            if isinstance(sub.func, ast.Name) and sub.func.id in hot_names:
+                return sub.func.id
+            if isinstance(sub.func, ast.Attribute) and (
+                    sub.func.attr in run_methods or sub.func.attr in hot_names
+                    or isinstance(sub.func.value, ast.Name) and sub.func.value.id in hot_names):
+                return sub.func.attr
+            pure = isinstance(sub.func, ast.Name) and sub.func.id in PURE_CALL_BUILTINS
+            if not pure:
+                for arg in list(sub.args) + [k.value for k in sub.keywords]:
+                    for x in ast.walk(arg):
+                        if isinstance(x, ast.Name) and isinstance(x.ctx, ast.Load) and x.id in affected:
+                            return x.id
+    if isinstance(node, (ast.For, ast.AsyncFor, ast.While, ast.If, ast.With, ast.AsyncWith, ast.Try)):
+        loads = {x.id for x in ast.walk(node) if isinstance(x, ast.Name) and isinstance(x.ctx, ast.Load)}
+        calls = [c for c in ast.walk(node) if isinstance(c, ast.Call) and not (
+            isinstance(c.func, ast.Name) and c.func.id in PURE_CALL_BUILTINS)]
+        if loads & affected and calls:
+            return sorted(loads & affected)[0]
+    return None
+
+
+#: Builtins that, handed a value at import, run none of its code: they build
+#: or measure a container (`CLASSICAL_FORMATS = tuple(_FORMATS)`).
+PURE_CALL_BUILTINS = PURE_DEFINITION_BUILTINS | frozenset(
+    {"len", "sorted", "list", "dict", "set", "isinstance", "issubclass", "id", "type", "repr", "str"})
+
+
+_HOOK_CLASSES = None
+
+
+def _subclass_hook_classes():
+    """Names of package classes whose DEFINITION runs code in their
+    subclasses' definitions: they define `__init_subclass__` or take a
+    metaclass. Today that is `_mode.py`'s estimator base alone, and its hook
+    wraps the subclass's own methods, so a class is a hazard as a BASE only
+    when it is one of these and is itself affected."""
+    global _HOOK_CLASSES
+    if _HOOK_CLASSES is None:
+        out = set()
+        for rel in _python_files():
+            tree = _parse(rel)
+            for node in ast.walk(tree) if tree else ():
+                if isinstance(node, ast.ClassDef) and (
+                        any(isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef)) and m.name in (
+                            "__init_subclass__", "__set_name__") for m in node.body)
+                        or any(k.arg == "metaclass" for k in node.keywords)):
+                    out.add(node.name)
+        _HOOK_CLASSES = out
+    return _HOOK_CLASSES
+
+
+def _uses_of(rel, exposing, names):
+    """The set of `names` file `rel` takes FROM a module in `exposing`. Read
+    by syntax: `from .E import N` (function-local imports too), `A.N` where
+    `A` is bound to E by `import`/`from . import E as A`, and a string literal
+    "N" in a file that imports E at all (`getattr(E, "N")`). A bare word does
+    not count: `state.solve(...)` on some object and `for _door in ...`
+    binding a variable of the same spelling are not uses of the module's
+    `solve` or `_door`."""
+    tree = _parse(rel)
+    if tree is None:
+        return set()
+    found = set()
+    listing = set(_python_files())
+    aliases, imports_it = set(), False
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            dotted = _import_dotted(rel, node)
+            if dotted is None:
+                continue
+            from_exposing = bool(node.module) and bool(_module_paths(dotted, listing) & exposing)
+            for alias in node.names:
+                sub = _module_paths(".".join(p for p in (dotted, alias.name) if p), listing)
+                if sub & exposing:
+                    aliases.add(alias.asname or alias.name)
+                    imports_it = True
+                elif from_exposing:
+                    imports_it = True
+                    if alias.name in names:
+                        found.add(alias.name)
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name.startswith("mojolearn.") and \
+                        _module_paths(alias.name[len("mojolearn."):], listing) & exposing:
+                    aliases.add(alias.asname or alias.name)
+                    imports_it = True
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute) and node.attr in names:
+            base, dotted = node.value, []
+            while isinstance(base, ast.Attribute):
+                dotted.append(base.attr)
+                base = base.value
+            if isinstance(base, ast.Name) and (base.id in aliases
+                                               or ".".join([base.id] + dotted[::-1]) in aliases):
+                found.add(node.attr)
+        elif imports_it and isinstance(node, ast.Constant) and node.value in names:
+            found.add(node.value)
+    return found
+
+
+def _occurrence_keys_by(body):
+    """`_py_row_key` plus occurrence number, as `_occurrence_keys`."""
+    seen, out = {}, []
+    for node in body:
+        key = _py_row_key(node)
+        seen[key] = seen.get(key, -1) + 1
+        out.append(key + (seen[key],))
+    return out
 
 
 def _harness_segments(text):
@@ -4231,13 +5141,21 @@ def select(paths, ref=None, sources=None, backend=None):
             if added is not None:
                 lanes.update(added)
                 by_path[path] = set(added)
-                reasons[path] = (f"a whole-surface registry, but the diff only ADDS to it: every "
-                                 f"existing statement is present and in order, and what was added "
-                                 f"names {len(added)} lane(s)")
+                reasons[path] = (f"a whole-surface registry, but the diff only adds to it or edits "
+                                 f"named rows (every existing statement is present and in order): "
+                                 f"what was added or edited names {len(added)} lane(s)")
+                continue
+            if ref:
+                # NEVER EVERY LANE FOR A DIFF (2026-09-27). With a ref the
+                # change is readable, and one this cannot place is refused by
+                # name like any other unattributed path.
+                unattributed.append(path)
+                reasons[path] = ("a registry of the whole binding surface changed in a way that cannot "
+                                 "be attributed to named rows or lanes: "
+                                 + REGISTRY_WHY.get(f"{ref}:{path}", "no reason recorded"))
                 continue
             all_lanes_by_rule(path, "a registry of the whole binding surface (it loads, lists or dispatches "
-                                    "every family) changed other than by an addition"
-                                    + ("" if ref else "; with no ref an addition cannot be read"))
+                                    "every family); with no ref an addition cannot be read")
             continue
         hit = rev.get(path)
         if hit and ref and path.startswith("bindings" + os.sep) and path.endswith(".mojo"):
@@ -4245,13 +5163,29 @@ def select(paths, ref=None, sources=None, backend=None):
             if added is not None:
                 name = os.path.basename(path)[:-5]
                 _, why_map = lane_sources()
-                users = {n for n in hit if n in why_map and (
-                    why_map[n].get("binding_use", {}).get(name, {}).get("wide") in (True, "whole")
-                    or set(why_map[n].get("binding_use", {}).get(name, {}).get("exports", ())) & added)}
+                # A HOST BINDING has no `binding_use` row of its own: a lane
+                # records the GPU binding its door resolves, and `_backend`
+                # routes that to the host one on a CPU-only install. So a host
+                # binding is judged through every GPU binding routed to it, and
+                # a lane declared for it (`declared`) always counts. Before
+                # 2026-09-27 a host binding's users were read under its own
+                # name, found nothing, and a grown host binding selected NO lane.
+                users = binding_users(name, exports=added) & set(hit)
                 lanes.update(users)
                 by_path[path] = set(users)
                 reasons[path] = (f"a binding that only GAINED exports ({', '.join(sorted(added)) or 'none'}): "
                                  f"the {len(users)} lane(s) that really use it, of the {len(hit)} that load it")
+                continue
+        if hit and ref and path.endswith(".py") and path.startswith(PKG + os.sep):
+            edited = python_edit_lanes(ref, path, sources, rev)
+            if edited is not None:
+                names, users = edited
+                lanes.update(users)
+                by_path[path] = set(users)
+                shown = ", ".join(names[:6]) + (f" and {len(names) - 6} more" if len(names) > 6 else "")
+                reasons[path] = (f"a module whose diff is confined to named definitions ({shown}): the "
+                                 f"{len(users)} lane(s) that reach a file or harness seed naming them, of "
+                                 f"the {len(hit)} that reach it")
                 continue
         if hit:
             lanes.update(hit)

@@ -6,6 +6,7 @@ reverse-edge merge are the shared host functions."""
 
 from std.gpu import block_idx, block_dim, thread_idx
 from max.gpu.host import DeviceContext
+from x_ann.device_ctx import x_ann_ctx
 
 from metrics.checks.device_io import upload_f32, upload_i32, download_f32, download_i32
 from x_ann.tsne_core import ts_knn_cell
@@ -40,7 +41,7 @@ def cg_search_kernel(
 
 
 def cagra_build_device(x: List[Float32], n: Int, d: Int, kdeg: Int, deg: Int) raises -> List[Int32]:
-    var ctx = DeviceContext()
+    var ctx = x_ann_ctx()
     var dx = upload_f32(ctx, x)
     var dnd = ctx.enqueue_create_buffer[DType.float32](n * kdeg)
     var dni = ctx.enqueue_create_buffer[DType.int32](n * kdeg)
@@ -62,7 +63,7 @@ def cagra_search_device(
     mut out_d: List[Float32], mut out_i: List[Int32],
 ) raises:
     var words = (n + 31) // 32
-    var ctx = DeviceContext()
+    var ctx = x_ann_ctx()
     var dx = upload_f32(ctx, x)
     var dg = upload_i32(ctx, graph)
     var dq = upload_f32(ctx, queries)
