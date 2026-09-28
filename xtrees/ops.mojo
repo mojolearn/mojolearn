@@ -34,7 +34,6 @@ xtrees/checks/glue_check.mojo, one sabotage arm each):
   DEVIATION 5605  a zero row normalises to uniform 1 / k, never 0 / 0.
 """
 from std.sys.compile import is_defined
-from std.memory import bitcast
 from max.algorithm import sync_parallelize
 from checks.numerics import identical_mul64, identical_exp64, identical_log64, identical_pow64
 from ensemble.host_layout import (
@@ -308,6 +307,8 @@ def scale_to_f32(
     for i in range(n):
         dst[unsafe_offset=i] = Float32(identical_mul64(x[unsafe_offset=i], factor))
 
+
+from std.memory import bitcast
 
 #: limbs of `exact_sum_f32`: 32-bit places 0..9 cover the 277 bits a float32
 #: magnitude spans in units of 2^-149 (the smallest subnormal).

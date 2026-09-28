@@ -5,11 +5,12 @@
 (`bindings/_mojolearn_x_trees_host.mojo`): one spelling, two registrations.
 Every buffer is a caller-owned address; `params` is a Python list of ints and
 floats. Nothing is retained."""
-from std.python import Python, PythonObject
+from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr
 from checks.numerics import identical_log64
+from std.python import Python
 from xtrees.shap import node_cover, tree_shap, expected_value, mask_expand, block_mean, kernel_solve
 from xtrees.ops import (
     sample_indices, weighted_sample, gather_f32, gather_i32, accumulate,
