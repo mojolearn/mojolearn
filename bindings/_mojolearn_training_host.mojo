@@ -89,6 +89,7 @@ from training.checks.loss_oracle import (
     ce_backward_oracle,
     ce_forward_oracle,
 )
+from training.maximize import maximize_negate
 from training.checks.optimizer_oracle import (
     OPT_ADAM,
     OPT_ADAMW,
@@ -254,12 +255,15 @@ def optimizer_step_binding(
     """One step of `mojolearn.identical.optimizer.fp32.v1` on the host.
     Returns `N = offsets[J]`. `params`: `0 n_tensors, 1 kind, 2 t, 3 nesterov,
     4 lr, 5 beta1, 6 beta2, 7 eps, 8 weight_decay, 9 momentum, 10 dampening,
-    11 max_norm` (the GPU binding's list, word for word)."""
-    if len(params) != 12:
+    11 max_norm, 12 maximize (optional)` (the GPU binding's list, word for
+    word; maximize reads the sign-flipped gradient, training/maximize.mojo,
+    DEVIATION 6200)."""
+    if len(params) != 12 and len(params) != 13:
         raise Error(
-            "optimizer_step: params must contain 12 values, got "
+            "optimizer_step: params must contain 12 or 13 values, got "
             + String(len(params))
         )
+    var maximize = len(params) == 13 and _index(params[12]) != 0
     var pp = f32_ptr(_index(param_addr))
     var gp = f32_ptr(_index(grad_addr))
     var mp = f32_ptr(_index(m_addr))
@@ -308,7 +312,7 @@ def optimizer_step_binding(
         var v_state = List[Float32](length=n_total, fill=Float32(0.0))
         for i in range(n_total):
             param[i] = pp[i]
-            grad[i] = gp[i]
+            grad[i] = maximize_negate(gp[i]) if maximize else gp[i]
             m_state[i] = mp[i]
             v_state[i] = vp[i]
         var buf_initialized = List[Bool]()
@@ -323,7 +327,7 @@ def optimizer_step_binding(
             vp[i] = v_state[i]
         if max_norm > Float32(0.0):
             for i in range(n_total):
-                gp[i] = grad[i]
+                gp[i] = maximize_negate(grad[i]) if maximize else grad[i]
         for j in range(n_tensors):
             ip[j] = Int32(1) if buf_initialized[j] else Int32(0)
         fp[0] = Float32(0.0)

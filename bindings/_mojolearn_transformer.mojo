@@ -136,6 +136,9 @@ from checks.kernel_matrix import COLUMN_NVIDIA, TARGET_COLUMN
 
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from core.neural_context import neural_ctx
+# One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
+comptime _NEURAL_CTX = "MojoNeuralTransformerContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralTransformerContextFast"
 from checks.vendor import COMPILED_VENDOR
 from gemm.checks.gemm_backward import ANY_BWD_SABOTAGE as GEMM_ANY_BWD_SABOTAGE
 from gemm.checks.gemm_identical import ANY_SABOTAGE as GEMM_ANY_SABOTAGE
@@ -673,7 +676,7 @@ def _transformer_run_session(
     if window < 0:
         raise Error("transformer: window must be >= 0 (0 = full causal)")
     if not session.ctx:
-        session.ctx = DeviceContext()
+        session.ctx = neural_ctx[_NEURAL_CTX]()
         session.contexts += 1
     ref ctx = session.ctx.value()
     var ton = String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
@@ -840,7 +843,7 @@ def _transformer_run[discard_cache: Bool = False](
         cap = window
     var cache_n = b * nkv * cap * hd
 
-    var ctx = DeviceContext()
+    var ctx = neural_ctx[_NEURAL_CTX]()
     var ton = String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
     var tk = Int(perf_counter_ns())
     # Host weights THROUGH the lane's own struct (its length table is the
@@ -1249,7 +1252,7 @@ def _session_open_run(
     if window > 0:
         cap = window
     var cache_n = b * nkv * cap * hd
-    s.ctx = DeviceContext()
+    s.ctx = neural_ctx[_NEURAL_CTX]()
     s.w = _load_transformer_weights(s.ctx.value(), dims, a, opts, _tail_of(a, 13))
     var kv = LlamaKVCache(s.ctx.value(), b, dims, smax, window, opts.max_positions)
     kv.k = _upload_addr(s.ctx.value(), a[10], cache_n)
@@ -1583,7 +1586,7 @@ def _transformer_backward_run(
     var qw = dims.q_width()
     var kw = dims.kv_width()
     var m = b * l
-    var ctx = DeviceContext()
+    var ctx = neural_ctx[_NEURAL_CTX]()
     var ton = String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
     var tk = Int(perf_counter_ns())
     var w = _load_transformer_weights(ctx, dims, a)

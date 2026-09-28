@@ -77,7 +77,17 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 STATE_ROOT="${MOJOLEARN_DEVPOD_STATE:-$HOME/mojolearn-evidence/devpods}"
 # Comma-separated; RunPod places the pod on whichever of these has stock.
 # Identity needs any NVIDIA; speed is judged before/after on the SAME pod.
-NV_GPUS="${MOJOLEARN_DEVPOD_GPUS:-NVIDIA GeForce RTX 4090,NVIDIA L40S,NVIDIA RTX 6000 Ada Generation,NVIDIA RTX A6000,NVIDIA A40,NVIDIA H100 PCIe,NVIDIA H100 80GB HBM3}"
+# Andrew 2026-09-28: 13 H100s at $3.49/h emptied the account in four hours. Identity work
+# needs no H100: the default list stops at the cheap cards, and an H100/H200/A100/B200 in
+# MOJOLEARN_DEVPOD_GPUS is refused unless MOJOLEARN_DEVPOD_ALLOW_BIG_GPU=1 (Andrew's OK only).
+NV_GPUS="${MOJOLEARN_DEVPOD_GPUS:-NVIDIA GeForce RTX 4090,NVIDIA L40S,NVIDIA RTX 6000 Ada Generation,NVIDIA RTX A6000,NVIDIA A40}"
+case "$NV_GPUS" in *H100*|*H200*|*A100*|*B200*)
+    [ "${MOJOLEARN_DEVPOD_ALLOW_BIG_GPU:-0}" = 1 ] || { echo "dev_pod: $NV_GPUS includes an H100/H200/A100/B200; refused without Andrew's OK (MOJOLEARN_DEVPOD_ALLOW_BIG_GPU=1)" >&2; exit 2; } ;;
+esac
+# At most this many live RunPod pods on the account, counted from the API at every up.
+MAX_RUNPOD_PODS="${MOJOLEARN_DEVPOD_MAX_PODS:-3}"
+# No lease longer than this many minutes; a lane that needs more extends, visibly.
+MAX_LEASE_MIN="${MOJOLEARN_DEVPOD_MAX_LEASE_MIN:-240}"
 NV_IMAGE="${MOJOLEARN_DEVPOD_IMAGE:-runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04}"
 AMD_GPUS="${MOJOLEARN_DEVPOD_AMD_GPUS:-AMD Instinct MI300X OAM}"
 AMD_IMAGE="${MOJOLEARN_DEVPOD_AMD_IMAGE:-rocm/dev-ubuntu-22.04:6.4.1-complete}"
@@ -136,7 +146,7 @@ if [ "$cmd" = up ]; then
         case "$1" in
             --vendor) VENDOR="${2:?--vendor nvidia|amd}"; shift 2 ;;
             --base) BASE_REF="${2:?--base <commit>}"; shift 2 ;;
-            [0-9]*) minutes="$1"; shift ;;
+            [0-9]*) minutes="$1"; shift; [ "$minutes" -le "$MAX_LEASE_MIN" ] || { echo "dev_pod: lease $minutes min is over the $MAX_LEASE_MIN-min cap (MOJOLEARN_DEVPOD_MAX_LEASE_MIN)" >&2; exit 2; } ;;
             *) die "up: unknown argument $1" ;;
         esac
     done
@@ -419,6 +429,12 @@ host)
     ;;
 up)
     [ ! -f "$D/state.env" ] || die "$KEY already has a box ($D/state.env); down it first"
+    if [ "$VENDOR" != amd ]; then
+        _live=$(curl -s -m 20 -H "Content-Type: application/json" -H "Authorization: Bearer $(cat "$HOME/.mojolearn_runpod_key" 2>/dev/null)" https://api.runpod.io/graphql \
+            -d '{"query":"query { myself { pods { id } } }"}' | python3 -c 'import sys,json; print(len(json.load(sys.stdin)["data"]["myself"]["pods"]))' 2>/dev/null)
+        [ -n "$_live" ] || die "could not count live RunPod pods; refusing to rent (cap $MAX_RUNPOD_PODS)"
+        [ "$_live" -lt "$MAX_RUNPOD_PODS" ] || die "$_live RunPod pods are live and the cap is $MAX_RUNPOD_PODS (MOJOLEARN_DEVPOD_MAX_PODS); share a pod or bring one down"
+    fi
     if [ "$VENDOR" = amd ] && [ -f "$HD/state.env" ] && [ "${MOJOLEARN_DEVPOD_NO_HOST:-0}" != 1 ]; then
         mkdir -p "$HD/slots"
         if SLOT=$(take_slot "$KEY"); then

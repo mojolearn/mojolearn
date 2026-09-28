@@ -33,7 +33,10 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from checks.numerics import GLOBAL_NUMERIC_MODE
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from core.neural_context import neural_ctx
+# One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
+comptime _NEURAL_CTX = "MojoNeuralEmbeddingContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralEmbeddingContextFast"
 from checks.vendor import COMPILED_VENDOR
 from embedding.checks.embedding_identical import (
     identical_embedding_backward_into,
@@ -140,7 +143,7 @@ def _forward_run(
     var cells = n_positions * cfg.width
     if cells <= 0:
         return
-    var ctx = DeviceContext()
+    var ctx = neural_ctx[_NEURAL_CTX]()
     var d_w = _upload_f32(ctx, weight)
     var d_ids = _upload_i32(ctx, ids)
     var d_y = ctx.enqueue_create_buffer[DType.float32](cells)
@@ -166,7 +169,7 @@ def _backward_run(
     var cells = cfg.vocab * cfg.width
     if cells <= 0:
         return
-    var ctx = DeviceContext()
+    var ctx = neural_ctx[_NEURAL_CTX]()
     var d_dw = _upload_f32(ctx, dw_start)
     var d_dy = _upload_f32(ctx, dy)
     var d_ids = _upload_i32(ctx, ids)
