@@ -14,6 +14,8 @@
 #   rf:<dataset> / et:<dataset>  tools/forest_train_ab.py fit, TAP_ROWS rows, TAP_ROUNDS rounds
 #   xt:<est>:<dataset>           bench/speed/trees_apple_profile.py (dt, bagging, adaboost,
 #                                dart, embedding, iforest)
+#   xtstage:<est>:<dataset>:<n>  the same fit with n estimators under MOJOLEARN_STAGE_TIMES=1
+#   rfstage:<lane>:<dataset>     a forest fit under MOJOLEARN_STAGE_TIMES=1 (no launch clock)
 # Datasets are the board's (taxi, taxireg, istella, istellareg) from
 # ~/datasets/gbm-bench, staged from R2 (tools/dataset_store.sh stage).
 set -u
@@ -55,6 +57,17 @@ for cell in ${TAP_CELLS:-}; do
             e=${rest%%:*}; r2=${rest#*:}; d=${r2%%:*}; n=${r2#*:}
             $PY "$PROFILE" --est "$e" --dataset "$d" --rows "$ROWS" \
                 --rounds 1 --n-estimators "$n" --profile 2>&1 | grep -v -E '^\s*$' | head -n 120 ;;
+        xtstage)
+            # xtstage:<est>:<dataset>:<n_estimators>  one fit under MOJOLEARN_STAGE_TIMES=1
+            # without the launch clock (a SPLIT: stage ends drain, never a timing)
+            e=${rest%%:*}; r2=${rest#*:}; d=${r2%%:*}; n=${r2#*:}
+            MOJOLEARN_STAGE_TIMES=1 $PY "$PROFILE" --est "$e" --dataset "$d" --rows "$ROWS" \
+                --rounds 1 --n-estimators "$n" 2>&1 | grep -v -E '^\s*$' | tail -n "${TAP_STAGE_TAIL:-150}" ;;
+        rfstage)
+            # rfstage:<lane>:<dataset>  one forest fit under MOJOLEARN_STAGE_TIMES=1, no launch clock
+            l=${rest%%:*}; d=${rest#*:}
+            MOJOLEARN_STAGE_TIMES=1 $PY tools/forest_train_ab.py fit --lane "$l" --dataset "$d" --rows "$ROWS" \
+                --rounds 1 --label stage --json "$OUT/rfstage_${l}_${d}.json" 2>&1 | tail -n 80 ;;
         rfclock)
             # rfclock:<lane>:<dataset>  RF_LAUNCH_LOG launch clock of one fit (a SPLIT)
             l=${rest%%:*}; d=${rest#*:}
