@@ -96,6 +96,8 @@ comptime OP_MOE_HIDDEN = 54
 comptime OP_MOE_OUT = 55
 comptime OP_ETS_LIK = 56
 comptime OP_ETS_INIT = 57
+comptime OP_CELL_FWD_H = 58
+comptime OP_CELL_BWD_H = 59
 
 # ------------------------------------------------------------------ cells
 comptime CELL_RNN_TANH = 0
@@ -288,6 +290,24 @@ def tanh_(x: Float32) -> Float32:
 
 
 # ------------------------------------------------------------------ bodies
+@always_inline
+def gemm_dot(pa: FP, abase: Int, sak: Int, pb: FP, bbase: Int, sbk: Int, K: Int, acc0: Float32) -> Float32:
+    """THE GEMM REDUCTION: acc0 + sum_k pa[abase + k sak] pb[k sbk + bbase],
+    k ascending, one fused multiply-add per term. `op_gemm` and the fused
+    recurrent steps (`op_cell_fwd_h`, `op_cell_bwd_h`) all fold through it, so
+    one seam (5500) holds every GEMM of the lane."""
+    var acc = acc0
+    comptime if SEQUENCE_HOST_SABOTAGE:
+        var k = K - 1
+        while k >= 0:
+            acc = fma3(ld(pa, abase + k * sak), ld(pb, k * sbk + bbase), acc)
+            k -= 1
+    else:
+        for k in range(K):
+            acc = fma3(ld(pa, abase + k * sak), ld(pb, k * sbk + bbase), acc)
+    return acc
+
+
 def op_gemm(t: Int, a: Args):
     """C[m, n] (row stride i8) = (i7 ? C[m, n] : 0) + sum_k A(m, k) B(k, n),
     k ascending, one fused multiply-add per term. A(m, k) = p0[m*i3 + k*i4],
@@ -301,14 +321,7 @@ def op_gemm(t: Int, a: Args):
         acc = ld(a.p2, ci)
     var abase = m * a.i3
     var bbase = n * a.i6
-    comptime if SEQUENCE_HOST_SABOTAGE:
-        var k = a.i2 - 1
-        while k >= 0:
-            acc = fma3(ld(a.p0, abase + k * a.i4), ld(a.p1, k * a.i5 + bbase), acc)
-            k -= 1
-    else:
-        for k in range(a.i2):
-            acc = fma3(ld(a.p0, abase + k * a.i4), ld(a.p1, k * a.i5 + bbase), acc)
+    acc = gemm_dot(a.p0, abase, a.i4, a.p1, bbase, a.i5, a.i2, acc)
     st(a.p2, ci, acc)
 
 
@@ -441,6 +454,46 @@ def op_cell_bwd(t: Int, a: Args):
         st(a.p9, row + H + u, daz)
         st(a.p9, row + 2 * H + u, mul(dan, r))
         st(a.p10, t, mul(dh, z))
+
+
+def op_cell_fwd_h(t: Int, a: Args):
+    """ONE LAUNCH PER TIME STEP (Apple speed, 2026-09-28): the step's hidden
+    projection, its bias and the cell, which were three launches (`op_gemm`
+    of h_prev @ W_hh^T into GH, `op_bias` of b_hh, `op_cell_fwd`). Element
+    t = b*H + u computes GH[b, g*H + u] for its own G gates with the same
+    fold (`gemm_dot`, k ascending from 0) and the same bias add, stores them
+    where the GEMM did, then runs `op_cell_fwd` verbatim, which reads only
+    those G columns. Same arithmetic in the same order: the same bits.
+    Args as `op_cell_fwd`, plus p7 W_hh [G*H, H], p8 b_hh [G*H]."""
+    var H = a.i2
+    var GH = gates_of(a.i0) * H
+    var b = t // H
+    var u = t - b * H
+    for g in range(gates_of(a.i0)):
+        var n = g * H + u
+        var acc = gemm_dot(a.p3, b * H, 1, a.p7, n * H, 1, H, Float32(0.0))
+        st(a.p1, b * GH + n, add(ftz(acc), ld(a.p8, n)))
+    op_cell_fwd(t, a)
+
+
+def op_cell_bwd_h(t: Int, a: Args):
+    """ONE LAUNCH PER TIME STEP of the backward: the previous (later) step's
+    recurrent GEMM dh[b, u] += sum_k dGH_{s+1}[b, k] W_hh[k, u] (which was a
+    launch of its own after every `op_cell_bwd`) folded into the start of
+    this step's cell backward. Element t = b*H + u owns dh[t]: it folds the
+    same terms in the same order (`gemm_dot`, k ascending, from the direct
+    part the later step stored), stores the sum where the GEMM did, then runs
+    `op_cell_bwd` verbatim. Args as `op_cell_bwd`, plus p11 W_hh, i3 = 1 when
+    a later step exists (0 at s = T - 1, where dh is the zero fill), i4 the
+    offset of dGH_{s+1} from p9 (B*G*H)."""
+    if a.i3 != 0:
+        var H = a.i2
+        var GH = gates_of(a.i0) * H
+        var b = t // H
+        var u = t - b * H
+        var acc = gemm_dot(a.p9 + a.i4, b * GH, 1, a.p11, u, H, GH, ld(a.p5, t))
+        st(a.p5, t, acc)
+    op_cell_bwd(t, a)
 
 
 def op_gather_seq(t: Int, a: Args):
