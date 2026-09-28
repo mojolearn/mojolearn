@@ -449,7 +449,7 @@ def laplacian_epilogue_kernel(
 
 
 def chi2_cell_kernel(
-    out: MutPointer[Float32, MutAnyOrigin],
+    out_k: MutPointer[Float32, MutAnyOrigin],
     a: MutPointer[Float32, MutAnyOrigin],
     b: MutPointer[Float32, MutAnyOrigin],
     m_in: Int32,
@@ -480,9 +480,9 @@ def chi2_cell_kernel(
             var d = ftz(x - y)
             acc = ftz(acc + ftz(identical_div(ftz(identical_mul(d, d)), s)))
     if exp_it != 0:
-        out.unsafe_store(t, ftz(identical_exp(ftz(identical_mul(gain, acc)))))
+        out_k.unsafe_store(t, ftz(identical_exp(ftz(identical_mul(gain, acc)))))
     else:
-        out.unsafe_store(t, -acc)
+        out_k.unsafe_store(t, -acc)
 
 
 def cosine_rows_kernel(
