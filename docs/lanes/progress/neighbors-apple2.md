@@ -24,6 +24,8 @@ environment, forward then reverse, IDENTICAL and FAST in one job).
 | 4c4e5978d | PageRank / connected_components: resident `pr_iterate` / `cc_iterate` | both | same kernels, same order; host check equal | default; same arm |
 | d0a0aeeae | PolynomialCountSketch split per cell (`pcs_resident`), LabelSpreading degrees once (`col_degree` + `ls_laplacian_deg`), PageRank dangling rows on the device (`row_all_zero`), Louvain's item on the host in the GPU binding (gen.py HOST_RUN) | both | host checks 0 differ (PCS degrees 1 to 3, laplacian) | default; `MOJOLEARN_XN_OLD_ITEMS=1`, `-D MOJOLEARN_XN_LOUVAIN_GPU` arms |
 | a898eb9c2 | Cholesky multi-RHS forward sweep: 256 threads, later rows four at a time (after DEVIATION 6150 moved the chains into b cells, GPC.predict_proba went 0.26 -> 1.05 s) | both (Apple) | same chains | default; `-D MOJOLEARN_CHOL_MR_ROWWISE` arm |
+| 9866b507f | x_neighbors large downloads through 64 MB host staging, copied over the host cores | both | a copy | default; `-D MOJOLEARN_XN_PLAIN_DOWN` arm |
+| b7bec306c | label propagation stopping sum folded on the host (same item); PCS convolution one row per block in threadgroup memory | both | same statements | default; `-D MOJOLEARN_XN_LP_DEVICE_FOLD`, `-D MOJOLEARN_XN_PCS_CELL` arms |
 | da21bc669 | REVERTED the identical radix device barrier: `air.wg.barrier` failed to legalize in the IDENTICAL build.sh / build_metrics.sh (request 1790604321269) | - | - | - |
 | b89ad2efa | KNNImputer.transform: one GPU thread per MISSING cell (`knn_impute_cells`, the same item per cell) | both | same statements per cell | default; `MOJOLEARN_XN_UNCOMPACT_IMPUTE=1` arm |
 
@@ -84,3 +86,60 @@ Round-one family profile (MOJOLEARN_STAGE_TIMES, same job): SVC taxi fit
 HIGGS, cho_solve 0.36 s; GPC.predict_proba 1.05-1.09 s in BOTH modes (0.26 s
 at 395bc882a: the regression a898eb9c2 addresses); RBFSampler 1M x 500 copy
 out 0.25 s.
+
+### Request 1790605992789 (m4pro-a, M4 Pro, 9866b507f), IDENTICAL and FAST, one job
+
+old = `-D MOJOLEARN_XN_SERIAL_SMO -D MOJOLEARN_XN_LOUVAIN_GPU
+-D MOJOLEARN_XN_PLAIN_DOWN` + `MOJOLEARN_XN_UNFUSED_KNN=1
+MOJOLEARN_XN_HOST_LOOPS=1 MOJOLEARN_XN_UNCOMPACT_IMPUTE=1
+MOJOLEARN_XN_OLD_ITEMS=1` (every x_neighbors path before this lane); new =
+default. Forward and reverse. DIGESTS EQUAL old vs new in every row of both
+modes. Raw: ~/mojolearn-evidence/neighbors-apple/1790605992789-speed-neighbors-9866b507f5.txt
+
+| case | mode | taxi old | taxi new | HIGGS old | HIGGS new |
+|---|---|---|---|---|---|
+| OneClassSVM.fit 3k | IDENTICAL | 1.155 | 0.026 | 1.179 | 0.026 |
+| OneClassSVM.fit 3k | FAST | 1.069 | 0.025 | 1.234 | 0.027 |
+| Louvain.fit 1k | IDENTICAL | 2.614 | 0.085 | 4.001 | 0.091 |
+| Louvain.fit 1k | FAST | 2.491 | 0.044 | 4.137 | 0.052 |
+| PageRank.fit 5k | IDENTICAL | 0.547 | 0.054 | 0.549 | 0.052 |
+| PageRank.fit 5k | FAST | 0.539 | 0.052 | 0.564 | 0.051 |
+| LabelSpreading.fit 5k | IDENTICAL | 2.466 | 0.163 | 2.451 | 0.154 |
+| LabelSpreading.fit 5k | FAST | 2.236 | 0.143 | 2.251 | 0.146 |
+| LabelPropagation.fit 5k | IDENTICAL | 9.696 | 2.316 | 1.555 | 0.445 |
+| LabelPropagation.fit 5k | FAST | 9.188 | 2.076 | 1.567 | 0.418 |
+| PolynomialCountSketch.transform 200k x 500 | IDENTICAL | 3.102 | 0.759 | 3.083 | 0.753 |
+| PolynomialCountSketch.transform 200k x 500 | FAST | 3.065 | 0.754 | 3.076 | 0.739 |
+| SkewedChi2Sampler.transform 1M x 500 | IDENTICAL | 1.090 | 0.569 | 1.086 | 0.571 |
+| SkewedChi2Sampler.transform 1M x 500 | FAST | 1.081 | 0.552 | 1.068 | 0.552 |
+| AdditiveChi2Sampler.transform 1M | IDENTICAL | 0.053 | 0.032 | 0.049 | 0.025 |
+| LocalOutlierFactor.fit 20k | IDENTICAL | 0.960 | 0.527 | 0.938 | 0.280 |
+| LocalOutlierFactor.fit 20k | FAST | 0.925 | 0.439 | 0.988 | 0.239 |
+| LocalOutlierFactor.score_samples 5k | IDENTICAL | 0.240 | 0.140 | 0.230 | 0.123 |
+| KNNImputer.transform 5k x 50k | IDENTICAL | 0.407 | 0.162 | 0.406 | 0.166 |
+| KNNImputer.transform 5k x 50k | FAST | 0.332 | 0.148 | 0.335 | 0.152 |
+| connected_components 5k | IDENTICAL | 0.185 | 0.066 | 0.084 | 0.033 |
+| NearestCentroid.predict 50k | IDENTICAL | 0.026 | 0.009 | 0.027 | 0.009 |
+| KernelPCA.fit 500 (host Jacobi) | IDENTICAL | 1.874 | 1.934 | 1.279 | 1.274 |
+| SVGP.fit 100k (HIGGS; taxi refuses: not PD at these hyperparameters) | IDENTICAL | | | 0.233 | 0.251 |
+
+GPC / GP / KRR sweep arms (same job; base vs `-D MOJOLEARN_CHOL_MR_ROWWISE`,
+forward and reverse, digests equal):
+
+| case | mode | taxi rowwise | taxi a898eb9c2 | HIGGS rowwise | HIGGS a898eb9c2 |
+|---|---|---|---|---|---|
+| GaussianProcessClassifier.predict_proba 3k x 3k | IDENTICAL | 0.972 / 0.949 | 0.259 / 0.257 | 0.960 / 1.038 | 0.260 / 0.261 |
+| GaussianProcessClassifier.predict_proba 3k x 3k | FAST | 0.907 / 0.966 | 0.225 / 0.228 | 1.007 / 0.994 | 0.228 / 0.224 |
+| KRR / GPR fit, GPC fit | both | unchanged | unchanged | unchanged | unchanged |
+
+Large k, IDENTICAL (same job; did not run before this lane: refused):
+
+| case | taxi | HIGGS | check |
+|---|---|---|---|
+| SpectralEmbedding(affinity=nearest_neighbors).fit 20k (n_neighbors 2,000) | 0.769 s | 0.784 s | forward == reverse digest |
+| NearestNeighbors(k=2000).kneighbors 20k x 2k | 0.188 s | 0.190 s | rows ascending, distinct; first 1,024 slots == the k = 1,024 answer on 100% of slots (indices and distances) |
+| NearestNeighbors(k=2000).kneighbors 100k x 500 (two index tiles, wide merge) | 0.072 s | 0.072 s | same, 100% |
+
+Round-one IDENTICAL k-NN digests at this head (nn, nn-k20, nn-ties, taxi
+and HIGGS) equal round one's record (9ff75469.., a29e4118.., 34a8923f..,
+f8814dc5.., 52412ee0.., 575ce1bc..).
