@@ -296,11 +296,16 @@ comptime IDS_SLOT_ALL = 4
 comptime IDS_SLOT_VISIT = 5
 comptime IDS_SLOT_SUB_LEFT = 6
 comptime IDS_SLOT_SUB_RIGHT = 7
-comptime IDS_SLOT_SP_BINS = 8
-comptime IDS_SLOT_LEFT = 9
-comptime IDS_SLOT_RIGHT = 10
-comptime IDS_SLOT_WIN = 11
-comptime IDS_SLOTS = 12
+# the split features (`CFeature` records, their `splitsFeatures`) take
+# `IDS_FEAT_SLOTS` slots: one record per splitting leaf is
+# `CFEATURE_BYTES / 4` words
+comptime IDS_FEAT_SLOTS = CFEATURE_BYTES // 4
+comptime IDS_SLOT_SP_FEATS = 8
+comptime IDS_SLOT_SP_BINS = IDS_SLOT_SP_FEATS + IDS_FEAT_SLOTS
+comptime IDS_SLOT_LEFT = IDS_SLOT_SP_BINS + 1
+comptime IDS_SLOT_RIGHT = IDS_SLOT_SP_BINS + 2
+comptime IDS_SLOT_WIN = IDS_SLOT_SP_BINS + 3
+comptime IDS_SLOTS = IDS_SLOT_SP_BINS + 4
 
 comptime ID_UPLOAD_COALESCE = not is_defined[
     "MOJOLEARN_GBDT_ID_UPLOADS_SEPARATE"
@@ -457,6 +462,10 @@ struct TDepthwiseWorkspace(Movable):
     # `sp_bins` is not used here
     var d_sp_bins: DeviceBuffer[DType.uint32]
     var h_sp_bins: HostBuffer[DType.uint32]
+    # the split features, likewise (`IDS_FEAT_SLOTS` slots, read by the
+    # kernels through a `CFeature` bitcast)
+    var d_sp_feats: DeviceBuffer[DType.uint32]
+    var h_sp_feats: HostBuffer[DType.uint32]
     # DEVIATION 1904 (wired): the device-resident winner fold's planes.
     # The four `TBinFeatureTable` columns (feature, clamp-raw bin, one-hot
     # flag, fold count -- each `hist_cells` long, their own staging pairs
@@ -545,6 +554,9 @@ struct TDepthwiseWorkspace(Movable):
         self.h_region_bin = ctx.enqueue_create_host_buffer[DType.uint32](
             records
         )
+        comptime assert (
+            CFEATURE_BYTES % 4 == 0
+        ), "the id arena holds CFeature records as whole 32-bit words"
         var arena = ctx.enqueue_create_buffer[DType.uint32](
             IDS_SLOTS * max_leaves
         )
@@ -565,6 +577,12 @@ struct TDepthwiseWorkspace(Movable):
         )
         self.h_sp_bins = ctx.enqueue_create_host_buffer[DType.uint32](
             max_leaves
+        )
+        self.d_sp_feats = arena.create_sub_buffer[DType.uint32](
+            IDS_SLOT_SP_FEATS * max_leaves, IDS_FEAT_SLOTS * max_leaves
+        )
+        self.h_sp_feats = ctx.enqueue_create_host_buffer[DType.uint32](
+            IDS_FEAT_SLOTS * max_leaves
         )
         self.h_visit = ctx.enqueue_create_host_buffer[DType.uint32](
             max_leaves
@@ -1187,8 +1205,8 @@ def fit_non_symmetric_tree[
     ref flat_first = ws[0].flat_first
     ref flat_folds = ws[0].flat_folds
     ref flat_one_hot = ws[0].flat_one_hot
-    ref sp_feats = ws[0].sp_feats
-    ref sp_feats_h = ws[0].sp_feats_h
+    ref sp_feats = dws[0].d_sp_feats
+    ref sp_feats_h = dws[0].h_sp_feats
     ref sp_bins = dws[0].d_sp_bins
     ref sp_bins_h = dws[0].h_sp_bins
     ref dense_ids = ws[0].dense_ids
@@ -1234,6 +1252,12 @@ def fit_non_symmetric_tree[
     ids_host.append(h_visit.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]())
     ids_host.append(h_left.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]())
     ids_host.append(h_right.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]())
+    for fs in range(IDS_FEAT_SLOTS):
+        ids_host.append(
+            sp_feats_h.unsafe_ptr()
+            .unsafe_offset(fs * max_leaves)
+            .unsafe_origin_cast[MutUntrackedOrigin]()
+        )
     ids_host.append(sp_bins_h.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]())
     ids_host.append(h_left.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]())
     ids_host.append(h_right.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]())
@@ -2544,10 +2568,11 @@ def fit_non_symmetric_tree[
                 hist_slot_dirty.append(False)
 
             var n_split = len(to_split)
-            ctx.enqueue_copy(dst_buf=sp_feats, src_ptr=sp_feats_h.unsafe_ptr())
             # the split bins, the split pair (and, FAST, DEVIATION 1901's
             # winning cells) in one arena copy (ID_UPLOAD_COALESCE)
             var split_slots = List[Int]()
+            for fs in range(IDS_FEAT_SLOTS):
+                split_slots.append(IDS_SLOT_SP_FEATS + fs)
             split_slots.append(IDS_SLOT_SP_BINS)
             split_slots.append(IDS_SLOT_LEFT)
             split_slots.append(IDS_SLOT_RIGHT)
