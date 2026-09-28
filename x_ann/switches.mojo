@@ -94,3 +94,10 @@ comptime ANN3_TSNE_ZSUM = is_defined["MOJOLEARN_ANN3_TSNE_ZSUM"]()
 #: coordinate; FAST pins no contraction, so the digest decides whether a bit
 #: moved.
 comptime ANN3_TSNE_STEP_ROWS = is_defined["MOJOLEARN_ANN3_TSNE_STEP_ROWS"]()
+
+#: FAST on Apple: the CAGRA search runs one threadgroup of 32 threads per
+#: query (one thread per query otherwise, 16 threadgroups for 1000 queries):
+#: the threads form a parent's neighbor distances side by side, thread 0
+#: keeps the cell's walk (the itopk list in threadgroup memory, the same
+#: insertions in the same order). Expected to move no bit.
+comptime ANN3_CAGRA_TEAM = is_defined["MOJOLEARN_ANN3_CAGRA_TEAM"]()
