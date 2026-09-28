@@ -270,10 +270,23 @@ class _Kit:
 
     # ---- device-resident path (GPU binding only; x_decomp/resident.mojo)
     def _raw(self):
-        return getattr(self.b, "_b", self.b)        # through bench/decomp_speed.py's profiler proxy
+        try:        # through bench/decomp_speed.py's profiler proxy (never the binding's own __getattr__)
+            return object.__getattribute__(self.b, "_b")
+        except AttributeError:
+            return self.b
 
     def _res(self):
-        return hasattr(self._raw(), "x_decomp_dev_ew")
+        """Whether this binding has the resident entries (the GPU binding; a
+        missing name on the host binding's proxy raises ImportError)."""
+        r = self.__dict__.get("_res_ok")
+        if r is None:
+            try:
+                getattr(self._raw(), "x_decomp_dev_ew")
+                r = True
+            except Exception:
+                r = False
+            self._res_ok = r
+        return r
 
     def _did(self, M):
         """M's device id on this binding, uploading a host matrix (it moves)."""
