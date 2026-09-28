@@ -14,7 +14,7 @@ Float32 throughout (the reference is float64); every sum runs in ascending
 index order inside one unit.
 """
 from checks.numerics import ftz
-from x_prep.common import FP, IP, p, ld, st
+from x_prep.common import FP, IP, p, ld, st, RUN, run_block
 from x_prep.prims import add, sub, mul, div, logf, expf
 
 #: 2 * pi, float32 (0x40C90FDB)
@@ -248,8 +248,23 @@ def cat_counts_unit(t: Int, f: FP, q: IP):
     var W = p(q, 7)
     var m = 0
     var cw = Float32(0)
-    for i in range(n):
-        if Int(ld(f, p(q, 3) + i)) == k and Int(ld(f, p(q, 0) + i * d + j)) == v:
+    var Y = p(q, 3)
+    var X = p(q, 0) + j
+    var i0 = 0
+    if W < 0:
+        # a count is an integer, but the rows still go in order: RUN rows'
+        # class and value words are loaded before any is tested (lane
+        # prep-apple2; the scan paid a memory latency per row)
+        var full = n - n % RUN
+        while i0 < full:
+            var by = run_block[RUN](f, Y + i0, 1)
+            var bx = run_block[RUN](f, X + i0 * d, d)
+            comptime for u in range(RUN):
+                if Int(ftz(by[u])) == k and Int(ftz(bx[u])) == v:
+                    m += 1
+            i0 += RUN
+    for i in range(i0, n):
+        if Int(ld(f, Y + i)) == k and Int(ld(f, X + i * d)) == v:
             if W >= 0:
                 cw = add(cw, ld(f, W + i))
             else:
