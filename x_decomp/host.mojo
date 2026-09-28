@@ -17,6 +17,7 @@ from std.sys.compile import is_defined
 from decomposition.checks.jacobi_eigh_device import JACOBI_SWEEPS, JACOBI_TOL
 from decomposition.host.linalg_public import host_eigh, host_qr_r
 from decomposition.host.pca_full_oracle import host_one_sided_jacobi_svd
+from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from x_decomp.cells import (
     F32Ptr,
     absmax_sign_cell,
@@ -72,11 +73,21 @@ comptime ROW_CHUNK = 1024
 
 def xd_parallel[FuncType: def(Int) -> None](ref func: FuncType, n: Int):
     """THE ONE THREAD SPLIT of the decomp host column: tasks 0..n-1, each
-    writing only its own outputs. Serial until core/host_parallel.mojo
-    (lane cpu: `sync_parallelize` in the caller's floating-point
-    environment, DEVIATION 5900) is on main; then `host_parallelize(func, n)`."""
-    for i in range(n):
-        func(i)
+    writing only its own outputs, run in `host_predict_task_count(n)`
+    contiguous groups (MOJOLEARN_CPU_THREADS is the ceiling; 1 is serial).
+    Which thread runs a task never changes what it computes. The groups
+    run through core/host_parallel.mojo once it is on main (lane cpu:
+    `sync_parallelize` in the caller's floating-point environment,
+    DEVIATION 5900); until then they run on the calling thread."""
+    var groups = host_predict_task_count(n)
+    var chunk = host_predict_chunk(n, groups)
+
+    def group(g: Int) {imm func, imm n, imm chunk}:
+        for i in range(g * chunk, min(n, (g + 1) * chunk)):
+            func(i)
+
+    for g in range(groups):
+        group(g)
 
 
 @fieldwise_init
