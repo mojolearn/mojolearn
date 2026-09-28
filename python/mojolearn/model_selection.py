@@ -655,6 +655,11 @@ def _rows_of(mask, n):
     return Array._owned(store, (len(store),), '<i8', 'C')
 
 
+class _Mask(bytes):
+    """A test-row mask (1 = test) a splitter's `_test_folds` may yield in
+    place of the row list; `split` uses it as the mask (lane metrics-apple)."""
+
+
 #: bytes.translate table flipping a 0/1 mask
 _FLIP = bytes([1, 0]) + bytes(254)
 
@@ -682,9 +687,12 @@ class _Splitter:
     def split(self, X, y=None, groups=None):
         n = _n_samples(X)
         for test in self._test_folds(X, y, groups):
-            mask = bytearray(n)
-            # mask[i] = 1 for every test row, iterated in C
-            collections.deque(map(mask.__setitem__, test, itertools.repeat(1)), maxlen=0)
+            if isinstance(test, _Mask):
+                mask = test
+            else:
+                mask = bytearray(n)
+                # mask[i] = 1 for every test row, iterated in C
+                collections.deque(map(mask.__setitem__, test, itertools.repeat(1)), maxlen=0)
             # ascending train and test rows, selected in C (itertools.compress)
             yield _rows_of(mask.translate(_FLIP), n), _rows_of(mask, n)
 
@@ -748,22 +756,35 @@ class StratifiedKFold(_KFoldBase):
         if min(counts) < self.n_splits:
             warnings.warn(f'The least populated class in y has only {min(counts)} members, which is less '
                           f'than n_splits={self.n_splits}.', UserWarning, stacklevel=3)
-        y_order = sorted(enc)
-        alloc = [[0] * k for _ in range(self.n_splits)]
-        for i in range(self.n_splits):
-            for c, m in collections.Counter(y_order[i::self.n_splits]).items():
-                alloc[i][c] += m
+        # alloc[i][c] = the positions p of class c in sorted(enc) (the run
+        # [s, e)) with p % n_splits == i, counted by floor division instead
+        # of slicing the sorted labels (lane metrics-apple)
+        K = self.n_splits
+        alloc = [[0] * k for _ in range(K)]
+        s = 0
+        for c in range(k):
+            e = s + counts[c]
+            for i in range(K):
+                alloc[i][c] = (e - 1 - i) // K - (s - 1 - i) // K
+            s = e
         rng = _rng(self.random_state) if self.shuffle else None
         per_class = []
         for c in range(k):
-            per_class.append([f for f in range(self.n_splits) for _ in range(alloc[f][c])])
+            per_class.append(list(itertools.chain.from_iterable(
+                itertools.repeat(f, alloc[f][c]) for f in range(K))))
         if rng is not None:
             perms = rng.permutations([len(v) for v in per_class])
-            per_class = [[v[j] for j in perm] for v, perm in zip(per_class, perms)]
-        # row r takes the next fold of its class's list, in C (lane metrics-apple)
+            per_class = [list(map(v.__getitem__, perm)) for v, perm in zip(per_class, perms)]
+        # row r takes the next fold of its class's list, in C
         its = [iter(v) for v in per_class]
         test_folds = list(map(next, map(its.__getitem__, enc)))
-        for f in range(self.n_splits):
+        if K <= 256:
+            # each fold's test mask straight from the fold bytes
+            folds = bytes(test_folds)
+            for f in range(K):
+                yield _Mask(folds.translate(bytes(int(j == f) for j in range(256))))
+            return
+        for f in range(K):
             yield list(itertools.compress(range(n), map(f.__eq__, test_folds)))
 
 
