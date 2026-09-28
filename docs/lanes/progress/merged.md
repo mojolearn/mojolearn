@@ -423,3 +423,11 @@ MOJOLEARN_CHOL_SWEEP_SOLVES_OFF arms) is in the neighbors-fix agent's report
 - m2pro also fails gmm and gmm-random-init (Metal, M2 only so far): likely the
   same pre-existing M2 Cholesky class; to be confirmed against main's m2pro
   record.
+- **x_cluster/checks/sabotage/e2e_dbscan_radius.patch bites only
+  dbscan-brute-l1** (1/3; dbscan and dbscan-weighted AGREE under it): it
+  widens the radius in `eps_unexp_neigh_kernel` (the unexpanded-distance
+  path), which the default-metric dbscan lanes do not reach. Owner: cluster
+  (Step 0 audit arm 9263469bf, never run before this check). Not from the
+  integration. e2e_kmeans_init 1/1 and e2e_kmeans_finalize 6/6 DISAGREE (on the
+  old tree; kmeans' CPU refusal there made the diff DISAGREE regardless, so
+  kmeans_finalize is re-run on the fixed tree in nvc1-0008).
