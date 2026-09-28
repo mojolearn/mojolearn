@@ -14,7 +14,7 @@
 # PHASES (default lanes,tests,bench) picks the parts; SKIP_BASE=1 re-uses the
 # base tree an earlier job made.
 set -u
-OUT=${1:?out}; mkdir -p "$OUT"
+OUT=${1:-/root/ev-py-shared/ab-$(date -u +%m%dT%H%M)}; mkdir -p "$OUT"; echo "OUT $OUT"
 PHASES=${PHASES:-lanes,tests,bench}
 has() { case ",$PHASES," in *",$1,"*) return 0 ;; esac; return 1; }
 H=$(cd "$(dirname "$0")/../.." && pwd); B=${H}-base
