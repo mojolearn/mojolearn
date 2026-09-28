@@ -70,7 +70,7 @@ def main(argv):
             rec["digest"] = spec.hash_predictions(np.asarray(p, dtype=np.float64))
             rec["fit_s"] = round(fit_s, 3)
             rec["tag"] = tag
-            rec["mode"] = m.numeric_mode_used()
+            rec["mode"] = os.environ.get("MOJOLEARN_NUMERIC_MODE", "unset")
             print("LGQ " + json.dumps(rec, sort_keys=True), flush=True)
 
 
