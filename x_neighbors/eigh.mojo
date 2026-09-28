@@ -6,11 +6,24 @@ ascending by (value, index), every column's sign pinned by DEVIATION 770),
 called through its entry point. THE HOST IS PART OF THE NUMERICAL PLAN: both
 of the lane's bindings run this same host routine, so the eigenproblem is a
 pure function of the input bits on every column."""
+from std.sys.compile import is_defined
+
 from spectral.checks.symmetric_eig_host import symmetric_eig_host
+from x_neighbors.fast_eigh import symmetric_eig_rows
 from x_neighbors.items import FP
+
+#: lane neighbors-apple3 (2026-09-28): the same Jacobi with its rotations as
+#: vectors over contiguous rows (x_neighbors/fast_eigh.mojo). OPT-IN until
+#: its A/B and quality check pass: `-D MOJOLEARN_XN_EIGH_ROWS` (any mode: the
+#: IDENTICAL arm shows whether its words are the scalar routine's).
+comptime XN_EIGH_ROWS = is_defined["MOJOLEARN_XN_EIGH_ROWS"]()
 
 
 def op_eigh(a: Int, n: Int, evals: Int, evecs: Int) raises -> Int:
+    comptime if XN_EIGH_ROWS:
+        return symmetric_eig_rows(
+            FP(unsafe_from_address=a), n, FP(unsafe_from_address=evals), FP(unsafe_from_address=evecs)
+        )
     var src = FP(unsafe_from_address=a)
     var m = List[Float32](capacity=n * n)
     for i in range(n * n):
