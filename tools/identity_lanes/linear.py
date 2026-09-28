@@ -49,7 +49,12 @@ def _linear_pos_target(X, yr):
     """A positive count-like target from the fixture's regression target:
     exp of a scaled copy, so the GLM lanes see y > 0 on every fixture."""
     z = (yr - yr.mean()) / (yr.std() + np.float32(1e-6))
-    return np.exp(np.clip(z, -4, 4) * np.float32(0.5)).astype(np.float32)
+    # NumPy dispatches exp to different Arm/x86 SIMD approximations: the
+    # same 2,000 float32 arguments differed in 791 target words on M4/EPYC.
+    # Use the repository's shared portable polynomial, then round to f32.
+    from mojolearn import _portable_math
+    arg = np.clip(z, -4, 4) * np.float32(0.5)
+    return np.asarray([_portable_math.exp(float(v)) for v in arg], dtype=np.float32)
 
 
 @lane("x-glm-poisson")

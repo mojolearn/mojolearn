@@ -1033,6 +1033,11 @@ LANES = {}
 #: next record instead of DIVERGENT on a user's machine. `umap` also joins
 #: host_surface.PUBLIC_PENDING_LANES as `stale reference` until that record.
 LANE_REVISIONS = {
+    "x-glm-poisson": "portable-positive-target-exp-1",
+    "x-glm-gamma": "portable-positive-target-exp-1",
+    "x-glm-tweedie": "portable-positive-target-exp-1",
+    "x-glm-poisson-sw": "portable-positive-target-exp-1",
+
     "par-arima": "trend-metadata-1",
     "tokenizer": "synthetic-vocab-1",
     # rows: these lanes fitted the full 20,000 x 16 fixture
@@ -1175,6 +1180,11 @@ def lane_floors():
 #: key lands here with a sentence saying what moved. An entry whose key does
 #: name a size is refused by name, so this cannot become a way of opting out.
 NON_SIZE_REVISIONS = {
+    "x-glm-poisson": "derived target exp now uses repository portable arithmetic instead of platform NumPy SIMD exp; fixture sizes unchanged",
+    "x-glm-gamma": "derived target exp now uses repository portable arithmetic instead of platform NumPy SIMD exp; fixture sizes unchanged",
+    "x-glm-tweedie": "derived target exp now uses repository portable arithmetic instead of platform NumPy SIMD exp; fixture sizes unchanged",
+    "x-glm-poisson-sw": "derived target exp now uses repository portable arithmetic instead of platform NumPy SIMD exp; fixture sizes unchanged",
+
     "byte-lm-host-train": (
         "arithmetic, not input: 06073dba5 (0.8.14) moved LanguageModelHostTrainer's default "
         "weight_decay 0.0 -> 0.01 to match the GPU trainer (revision recorded 2026-09-27, "
