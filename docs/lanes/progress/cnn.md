@@ -345,13 +345,13 @@ CPU work under `sh`, no GPU slot), tree = the audit commit (includes 77aa9bc5d):
 - gemm_host_check at MOJOLEARN_CPU_THREADS=1, 3 and unset: PASS (648 cases equal gemm_oracle).
 - CPU bits (q5.py, 197 arrays, MOJOLEARN_VENDOR=cpu): main's x_cnn (/root/before-cnn, t1) == this branch at
   t1, t3 and default, and main t1 == main default: 197/197 every pair. So 77aa9bc5d moves no CPU bit.
-- QUEUED at session end, waiting for a GPU slot (both held by decomp/sequence): seams_check clean, then each
-  arm (the 3 new + 5700/5706 device arms) must FAIL with its own line and PASS after reversal:
-  `/root/ev-cnn/seam_arms.log` (script /root/ev-cnn/seam_arms.sh). Read it first next session.
+- NOT RUN: the seam-arm job (seams_check clean, then each arm, the 3 new + the 5700/5706 device arms, must
+  FAIL with its own line and PASS after reversal; script /root/ev-cnn/seam_arms.sh) waited the full 120 min
+  for a GPU slot (both held by decomp / sequence-cpu until at least 06:51Z) and never started. No log exists.
 
 OWED before merge (next session, in order):
-1. Read /root/ev-cnn/seam_arms.log on the central box (AMD + CPU proof of the three new arms); rerun
-   `tools/amd_central.sh run cnn 'bash /root/ev-cnn/seam_arms.sh > /root/ev-cnn/seam_arms.log 2>&1'` if empty.
+1. Run the seam-arm job (AMD + CPU proof of the three new arms):
+   `tools/amd_central.sh run cnn 'bash /root/ev-cnn/seam_arms.sh > /root/ev-cnn/seam_arms.log 2>&1'`.
 2. NVIDIA gate (needs a RunPod pod once the balance is topped up: `tools/dev_pod.sh up cnn-cpu`):
    `algos_lane_check.sh <15 x-cnn lanes> --pass 2 --sabotage x_cnn/checks/sabotage/e2e_host_output_bit.patch`
    (22 seam arms each FAIL with its own line and PASS after reversal; 15 lanes AGREE, DISAGREE under e2e,
