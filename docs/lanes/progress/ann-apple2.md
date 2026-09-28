@@ -32,7 +32,9 @@ on ONE Mac and alternates the arms, then prints a stage split
 | 3dca15c1a, fbe131bd8 | IVF-SQ / RaBitQ score inputs staged; PQ code-sum nonneg flush | both | on (A/B 6: score 114 -> 95 ms on the M4 Pro; flat on the M4) |
 | 7c195b32c | CAGRA device prune: binary search + threadgroup integer atomics | both | on (A/B 6: equal to the unstaged scan, 80 ms better than e0d2ff366) |
 | 78b605c31 | IVF scan: codes/mask/norms/factors gathered into list order per search | both | on (A/B 6: score 95 -> 55 ms) |
-| c347aeae7 | CAGRA reverse-edge merge split over host tasks | both | on (host code; timing in the final run) |
+| c347aeae7 | CAGRA reverse-edge merge split over host tasks | both | on (A/B 7: 32 -> 15 ms on the M4) |
+| dabbfa9c3 | t-SNE q = 1/den by Newton + neighbour pick (exhaustively checked, same digests) | both, Apple | REVERTED (d01317e6e): slower, iterations 1021 -> 1273 ms |
+| 26158096f | t-SNE repulsion two rows per thread | both | trial, A/B 8 |
 
 ## Measurements
 
@@ -165,3 +167,12 @@ cell and tier. Raw: `ab6_m4pro-a_1790609801944.txt`.
 
 (The first search in a process carries a warmup: the 0.08-0.09 s first
 values.) IVF fits unchanged across these arms, as expected.
+
+### A/B 7: m4-a, steward 1790610986336 (c347aeae7 -> dabbfa9c3)
+
+The Newton reciprocal gave the same digests in both tiers (t-SNE
+2bb1d3d75ffa1885 / ca01838ecfb9306d; the exhaustive host check,
+`~/mojolearn-evidence/ann-apple2/recip_exhaustive_check.mojo`, 0 of
+1,056,964,608 words differ) but t-SNE fit 1.15 -> 1.41 s IDENTICAL and
+0.86 -> 1.12 s FAST: reverted. Same job: CAGRA reverse_merge 32 -> 15 ms
+(host split, c347aeae7), t-SNE symmetrize 41 ms IDENTICAL / 32 ms FAST.
