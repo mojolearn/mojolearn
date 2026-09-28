@@ -6,7 +6,6 @@ compiled into the CPU host binding."""
 from std.memory import bitcast
 from std.sys.compile import is_defined
 
-from checks.numerics import ftz, identical_mul_add
 from decomposition.checks.jacobi_eigh_device import JACOBI_SWEEPS, JACOBI_TOL
 from decomposition.host.linalg_public import host_eigh, host_qr_r
 from decomposition.host.pca_full_oracle import host_one_sided_jacobi_svd, host_qr_factor
@@ -120,15 +119,11 @@ struct HostExec(Exec):
     def sqdist(a: F32Ptr, b: F32Ptr, dst: F32Ptr, na: Int, nb: Int, d: Int, kind: Int = 0, pw: Float32 = Float32(2)) raises:
         if kind == 0:
             # the cell's arithmetic and order, SIMD across outputs (x_decomp/host_simd.mojo)
-            # SABOTAGE (end to end): features DESCENDING on the host column only
-            for i in range(na):
-                for j in range(nb):
-                    var acc = Float32(0)
-                    for pp in range(d):
-                        var p = d - 1 - pp
-                        var t = ftz(ftz(a.unsafe_load(i * d + p)) - ftz(b.unsafe_load(j * d + p)))
-                        acc = ftz(identical_mul_add(t, t, acc))
-                    dst.unsafe_store(i * nb + j, acc)
+            var bt = sqdist_prepare(b, nb, d)
+            var pbt = F32Ptr(unsafe_from_address=Int(bt.unsafe_ptr()))
+            for t in range(sqdist_task_count(na)):
+                sqdist_task(t, a, pbt, dst, na, nb, d)
+            _ = bt^
             return
         for i in range(na):
             for j in range(nb):
