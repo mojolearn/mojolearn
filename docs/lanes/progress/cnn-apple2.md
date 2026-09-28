@@ -245,12 +245,35 @@ conv), weight gradient 0.94 -> 0.35; block 2 weight gradient 4.59 -> 0.88
 Plan sweep: 64x288x65536 4.68 -> 0.88 ms, 64x576x262144 26.6 -> 4.25 ms
 (APPLE_MMA_SPLIT_BIG, 0 mismatches).
 
+### m4pro-a (Apple M4 Pro), job 1790614006220, commit 2144a9548 (retargeted in place before it started)
+
+base = every change off (all the defines above plus `-D
+MOJOLEARN_XCNN_NO_BN_BLOCK`, + legacy) = round 1's code; all = default.
+Median of two rounds, ms.
+
+| shape | IDENTICAL base | IDENTICAL all | FAST base | FAST all |
+|---|---|---|---|---|
+| Conv2d 3->64 fwd / bwd | 29.8 / 12.7 | 29.0 / 7.0 | 29.6 / 17.0 | 27.3 / 6.5 |
+| Conv2d 64->64 fwd / bwd | 51.7 / 102.0 | 40.6 / 66.9 | 57.7 / 107.1 | 38.5 / 60.5 |
+| Conv2d 64->128 fwd / bwd | 21.4 / 28.8 | 18.2 / 25.8 | 24.2 / 38.8 | 17.1 / 23.6 |
+| CNNClassifier fit 2048 | 225.9 | 125.1 (1.8x) | 215.1 | 108.1 (2.0x) |
+| CNNClassifier fit 8192 | 855.5 | 494.4 (1.7x) | 821.0 | 427.6 (1.9x) |
+| predict_proba 2048 | 105.1 | 43.9 (2.4x) | 101.2 | 34.8 (2.9x) |
+| predict_proba 8192 | 350.1 | 157.9 (2.2x) | 340.5 | 121.8 (2.8x) |
+| BasicBlock fwd / fwd+bwd | 96.3 / 197.2 | 72.7 / 152.9 | 89.2 / 198.8 | 67.0 / 138.8 |
+| BatchNorm2d fwd / bwd | 22.9 / 16.4 | 16.1 / 12.9 | 19.3 / 15.3 | 14.1 / 10.9 |
+| MaxPool2d fwd / bwd | 13.8 / 27.8 | 13.7 / 26.9 | 13.7 / 27.5 | 13.8 / 26.9 |
+| GCNConv fwd / bwd | 499.9 / 38.1 | 50.2 / 34.7 | 490.0 / 34.3 | 49.6 / 34.0 |
+| SAGEConv fwd / bwd | 468.4 / 63.1 | 58.9 / 56.6 | 469.4 / 58.5 | 58.7 / 57.0 |
+
+Bits: IDENTICAL 9 digest lines (BatchNorm2d's added) equal in all 4 runs;
+FAST 9 digest lines equal in all 4 runs and 20/20 fastq.py rows equal.
+
 ## Unproven
 
-- 209bdc3b4 (graph reuse by content key, DC_MAXW 2048): job
-  1790614006220 (m4pro-a) pending.
-- The direct conv (985673313) and the pool backward step (4afd3f1ec) are
-  measured on the M3 Ultra only so far.
+- 2144a9548 on the M3 Ultra (BatchNorm threadgroup folds, graph reuse):
+  job 1790615497573 (m3ultra-b) pending.
+- The regenerated seam 5702 sabotage patch: applies, not yet run.
 
 ## Shared code touched (the integration run must cover)
 
