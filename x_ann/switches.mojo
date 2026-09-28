@@ -73,3 +73,11 @@ comptime ANN3_TRAINSET_COPY = is_defined["MOJOLEARN_ANN3_TRAINSET_COPY"]()
 #: thread per cell (28 M threads at 1M x 28). Each cell is the same statement
 #: on the same words: no bit moves.
 comptime ANN3_ROW_THREADS = is_defined["MOJOLEARN_ANN3_ROW_THREADS"]()
+
+#: FAST on Apple: the IVF scan's top-k (k <= 16) is one launch per chunk of
+#: queries: each thread keeps its partial top-k in registers, the threadgroup
+#: joins the 128 partial lists in threadgroup memory and thread 0 writes the
+#: result (nine launches per chunk otherwise: the partial lists in device
+#: memory, seven pair joins, the merge). (distance, row id) is a total order,
+#: so the k least are the same entries: expected to move no bit.
+comptime ANN3_SCAN_SELECT = is_defined["MOJOLEARN_ANN3_SCAN_SELECT"]()

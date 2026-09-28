@@ -30,7 +30,9 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from checks.numerics import ftz, identical_mul_add
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
+from std.sys.info import has_apple_gpu_accelerator
+from x_ann.switches import ANN3_SCAN_SELECT
 from x_ann.ivf_pq_core import (
     F32P, I32P, ivf_row_removed, pq_better, pq_coarse_dist, pq_inf, pq_insert, pq_lut_entry, pq_probe_takes,
 )
@@ -543,6 +545,117 @@ def select_merge_kernel(
         out_n.unsafe_store(qi, Int32(n_cand))
 
 
+#: the widest k of the one-launch top-k (16 KB of threadgroup memory)
+comptime SEL_KM = 16
+comptime SCAN_SELECT_GROUP = (
+    ANN3_SCAN_SELECT and GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+)
+
+
+def select_group_kernel(
+    q0: Int32, n_probes: Int32, offsets: I32P, list_indices: I32P, mask: I32P, probes: I32P, pstart: I32P,
+    stride: Int32, cand: F32P, k: Int32, out_d: F32P, out_i: I32P, out_n: I32P,
+):
+    """FAST on Apple, OPT-IN (lane ann-apple3): `select_part_kernel`, the
+    tree join and `select_merge_kernel` in ONE launch, for k <= SEL_KM. One
+    threadgroup per query. Thread t keeps the top-k of the candidates at
+    slots t, t + SEL_T, ... of every probe in registers (`pq_insert`'s
+    statements on a register list); the lists go to threadgroup memory; each
+    level of the join merges lists 2p and 2p + 1 into list p
+    (`select_pair_kernel`'s statements: a thread reads its two lists, the
+    threadgroup meets at a barrier, the thread writes the merged list);
+    thread 0 writes list 0 and the summed count. Row ids are distinct, so
+    `pq_better` is a strict total order and the k least are the entries the
+    cell keeps. A NaN candidate sends the query to the cell's sequential
+    insertion (`_select_seq`), as `select_merge_kernel` does."""
+    var lq = Int(block_idx.x)
+    var t = Int(thread_idx.x)
+    var np = Int(n_probes)
+    var kk = Int(k)
+    var sd = stack_allocation[SEL_T * SEL_KM, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var si = stack_allocation[SEL_T * SEL_KM, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    var sn = stack_allocation[SEL_T, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    var ld = InlineArray[Float32, SEL_KM](fill=pq_inf())
+    var li = InlineArray[Int32, SEL_KM](fill=Int32(-1))
+    var n_cand = 0
+    var has_nan = False
+    for p in range(np):
+        var l = Int(probes.unsafe_load(lq * np + p))
+        if l < 0:
+            break
+        var start = Int(offsets.unsafe_load(l))
+        var stop = Int(offsets.unsafe_load(l + 1))
+        var cbase = lq * Int(stride) + Int(pstart.unsafe_load(lq * np + p)) - start
+        for slot in range(start + t, stop, SEL_T):
+            var row = Int(list_indices.unsafe_load(slot))
+            if ivf_row_removed(mask, row):
+                continue
+            var v = cand.unsafe_load(cbase + slot)
+            if _nan_bits(v):
+                has_nan = True
+            n_cand += 1
+            if pq_better(v, Int32(row), ld[kk - 1], li[kk - 1]):
+                var s = kk - 1
+                while s > 0 and pq_better(v, Int32(row), ld[s - 1], li[s - 1]):
+                    ld[s] = ld[s - 1]
+                    li[s] = li[s - 1]
+                    s -= 1
+                ld[s] = v
+                li[s] = Int32(row)
+    for s in range(kk):
+        sd[t * SEL_KM + s] = ld[s]
+        si[t * SEL_KM + s] = li[s]
+    sn[t] = Int32(-1) if has_nan else Int32(n_cand)
+    barrier()
+    var lists = SEL_T
+    while lists > 1:
+        var pairs = lists // 2
+        if t < pairs:
+            var xa = 2 * t * SEL_KM
+            var xb = xa + SEL_KM
+            var u = 0
+            var w = 0
+            for s in range(kk):
+                var ud = sd[xa + u]
+                var ui = si[xa + u]
+                var vd = sd[xb + w]
+                var vi = si[xb + w]
+                # take u's entry when it is first (an empty slot is last)
+                if ui >= 0 and (vi < 0 or pq_better(ud, ui, vd, vi)):
+                    ld[s] = ud
+                    li[s] = ui
+                    u += 1
+                else:
+                    ld[s] = vd
+                    li[s] = vi
+                    w += 1
+        barrier()
+        if t < pairs:
+            for s in range(kk):
+                sd[t * SEL_KM + s] = ld[s]
+                si[t * SEL_KM + s] = li[s]
+        barrier()
+        lists = pairs
+    if t == 0:
+        var qi = Int(q0) + lq
+        var any_nan = False
+        var total = 0
+        for u in range(SEL_T):
+            var c = Int(sn[u])
+            if c < 0:
+                any_nan = True
+            else:
+                total += c
+        if any_nan:
+            _select_seq(lq, qi, np, offsets, list_indices, mask, probes, pstart, Int(stride), cand, kk,
+                        out_d, out_i, out_n)
+        else:
+            for s in range(kk):
+                out_d.unsafe_store(qi * kk + s, sd[s])
+                out_i.unsafe_store(qi * kk + s, si[s])
+            out_n.unsafe_store(qi, Int32(total))
+
+
 def scan_stride(offsets: List[Int32], n_lists: Int, n_probes: Int) -> Int:
     """The longest candidate row a query can have: the n_probes longest
     lists, summed (at least 1)."""
@@ -619,11 +732,18 @@ def ivf_scan_search[KIND: Int](
     var dws = ctx.enqueue_create_buffer[DType.float32]((mc * np * D) if KIND == 2 else 1)
     var dqn = ctx.enqueue_create_buffer[DType.float32]((mc * np) if KIND == 2 else 1)
     comptime SERIAL = is_defined["MOJOLEARN_ANN_SERIAL_SCAN"]()
-    var dpd = ctx.enqueue_create_buffer[DType.float32](1 if SERIAL else mc * SEL_T * k)
-    var dpi = ctx.enqueue_create_buffer[DType.int32](1 if SERIAL else mc * SEL_T * k)
-    var dpn = ctx.enqueue_create_buffer[DType.int32](1 if SERIAL else mc * SEL_T)
-    var dpd2 = ctx.enqueue_create_buffer[DType.float32](1 if SERIAL else mc * SEL_T * k)
-    var dpi2 = ctx.enqueue_create_buffer[DType.int32](1 if SERIAL else mc * SEL_T * k)
+    # lane ann-apple3, FAST on Apple, OPT-IN: the top-k of a chunk in one
+    # launch when k fits (`select_group_kernel`); the partial lists then live
+    # in threadgroup memory and these device buffers are one word
+    var grouped = False
+    comptime if SCAN_SELECT_GROUP:
+        grouped = k <= SEL_KM
+    var no_parts = SERIAL or grouped
+    var dpd = ctx.enqueue_create_buffer[DType.float32](1 if no_parts else mc * SEL_T * k)
+    var dpi = ctx.enqueue_create_buffer[DType.int32](1 if no_parts else mc * SEL_T * k)
+    var dpn = ctx.enqueue_create_buffer[DType.int32](1 if no_parts else mc * SEL_T)
+    var dpd2 = ctx.enqueue_create_buffer[DType.float32](1 if no_parts else mc * SEL_T * k)
+    var dpi2 = ctx.enqueue_create_buffer[DType.int32](1 if no_parts else mc * SEL_T * k)
     var use_lut = 1 if pq_dim * n_codes <= LUT_MAX else 0
     var st = AnnStages("ivf_scan")
     # lane ann-apple2: codes, mask (and RaBitQ's norms and factors) gathered
@@ -710,34 +830,41 @@ def ivf_scan_search[KIND: Int](
                 dd, di, dn, grid_dim=_grid(c), block_dim=TPB,
             )
         else:
-            ctx.enqueue_function[select_part_kernel](
-                Int32(np), doff, dli, dmask, dprobes.unsafe_ptr(), dpstart.unsafe_ptr(), Int32(stride),
-                dcand.unsafe_ptr(), Int32(k), dpd.unsafe_ptr(), dpi.unsafe_ptr(), dpn.unsafe_ptr(),
-                grid_dim=c, block_dim=SEL_T,
-            )
-            # the tree join (lane ann-apple2): SEL_T lists -> 1, ping-pong
-            var ad = rebind[F32P](dpd.unsafe_ptr())
-            var ai = rebind[I32P](dpi.unsafe_ptr())
-            var bd = rebind[F32P](dpd2.unsafe_ptr())
-            var bi = rebind[I32P](dpi2.unsafe_ptr())
-            var lists = SEL_T
-            while lists > 1:
-                var pairs = lists // 2
-                ctx.enqueue_function[select_pair_kernel](
-                    Int32(c * pairs), Int32(pairs), Int32(k), ad, ai, bd, bi, grid_dim=_grid(c * pairs), block_dim=TPB,
+            comptime if SCAN_SELECT_GROUP:
+                if grouped:
+                    ctx.enqueue_function[select_group_kernel](
+                        Int32(q0), Int32(np), doff, dli, dmask, dprobes.unsafe_ptr(), dpstart.unsafe_ptr(),
+                        Int32(stride), dcand.unsafe_ptr(), Int32(k), dd, di, dn, grid_dim=c, block_dim=SEL_T,
+                    )
+            if not grouped:
+                ctx.enqueue_function[select_part_kernel](
+                    Int32(np), doff, dli, dmask, dprobes.unsafe_ptr(), dpstart.unsafe_ptr(), Int32(stride),
+                    dcand.unsafe_ptr(), Int32(k), dpd.unsafe_ptr(), dpi.unsafe_ptr(), dpn.unsafe_ptr(),
+                    grid_dim=c, block_dim=SEL_T,
                 )
-                var td = ad
-                var ti = ai
-                ad = bd
-                ai = bi
-                bd = td
-                bi = ti
-                lists = pairs
-            ctx.enqueue_function[select_merge_kernel](
-                Int32(c), Int32(q0), Int32(np), doff, dli, dmask,
-                dprobes.unsafe_ptr(), dpstart.unsafe_ptr(), Int32(stride), dcand.unsafe_ptr(), Int32(k),
-                ad, ai, dpn.unsafe_ptr(), dd, di, dn, Int32(1), grid_dim=_grid(c), block_dim=TPB,
-            )
+                # the tree join (lane ann-apple2): SEL_T lists -> 1, ping-pong
+                var ad = rebind[F32P](dpd.unsafe_ptr())
+                var ai = rebind[I32P](dpi.unsafe_ptr())
+                var bd = rebind[F32P](dpd2.unsafe_ptr())
+                var bi = rebind[I32P](dpi2.unsafe_ptr())
+                var lists = SEL_T
+                while lists > 1:
+                    var pairs = lists // 2
+                    ctx.enqueue_function[select_pair_kernel](
+                        Int32(c * pairs), Int32(pairs), Int32(k), ad, ai, bd, bi, grid_dim=_grid(c * pairs), block_dim=TPB,
+                    )
+                    var td = ad
+                    var ti = ai
+                    ad = bd
+                    ai = bi
+                    bd = td
+                    bi = ti
+                    lists = pairs
+                ctx.enqueue_function[select_merge_kernel](
+                    Int32(c), Int32(q0), Int32(np), doff, dli, dmask,
+                    dprobes.unsafe_ptr(), dpstart.unsafe_ptr(), Int32(stride), dcand.unsafe_ptr(), Int32(k),
+                    ad, ai, dpn.unsafe_ptr(), dd, di, dn, Int32(1), grid_dim=_grid(c), block_dim=TPB,
+                )
         st.mark(ctx, "select")
         q0 += c
     ctx.synchronize()
