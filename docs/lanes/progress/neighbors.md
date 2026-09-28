@@ -247,7 +247,62 @@ b. Seam arms (NVIDIA H100, merged tree 9f2d2b120 + branch): 22/22 bite
    the narrow bindings a lane's Python calls (gp-cov's normalize_y ->
    _mojolearn_preprocessing).
 
+## Session 2026-09-28 04:50Z (RunPod balance -$4.41, every pod gone; no NVIDIA)
+
+- Merged origin/main (lane_select fix) into the branch: 1ad6deaf5.
+- 43bb48ba1: the svm HOST binding's svc/svr predict now carry
+  svc_predict_host's kernel='precomputed' guard (X has one column per
+  support vector; no support rows read), mirroring the GPU binding.
+- Apple FAIL of the three merged option lanes (requests 1790543082631 /
+  091585 / 098464, m2pro + m3ultra[-b]: every 512-row SVC fit refused with
+  "Failed to create compute pipeline state ... XPC_ERROR_CONNECTION_INTERRUPTED"):
+  diagnostic 1790571858668 on m3ultra-b at 43bb48ba1 fitted SVC rbf /
+  linear / sigmoid / poly, weighted SVC and SVR at d in {16,17,8,32,15,4}
+  x n in {256,512,1024,2000}: ALL OK, 0 FAIL. The refusal did not
+  reproduce (the Metal compiler service interrupted, not our kernel);
+  resubmitted as identity below.
+- STEP 0 COVERAGE AUDIT. The 14 new algorithms: lanes with CPU + GPU arms and
+  e2e_device_only.patch (bites, NVIDIA + CPU, recorded above). The phase-c
+  option lanes: their own arms. The EXISTING family had verifier lanes but
+  NO source-edit sabotage: GAP. Fixed (8cecb1f24):
+  `tools/identity_lanes/neighbors.core` (the 47 existing lanes: knn*, radius*,
+  kde*, svc/svr*, kernel-ridge*, nystroem*, rbf-sampler, gp*, gpc*) and
+  `x_neighbors/checks/sabotage/e2e_existing_device.patch` (device-only
+  edits E1-E10: kNN output distances, rbc output, vote / mean kernels,
+  distance weights, radius distance, KDE bandwidth, SVC/SVR decision glue,
+  km_kernel_matrix gamma, RBFSampler scale, gp_const_kernel). UNPROVEN:
+  it must DISAGREE on all 47 on a GPU.
+- Apple/AMD steward: 1790573093101-neighbors-8cecb1f247 (m2pro, m3ultra-b,
+  m4pro-b, do-amd): the 3 merged option lanes + the 7 phase-2 lanes (+ seam
+  arms incl. 5219 by pass 2), sabotage phase2_device_all + svc_sigmoid_gain +
+  870 combined (~/mojolearn-evidence/neighbors/steward_combo.patch).
+- AMD + CPU gate QUEUED on the central box (waiting for a slot; launcher
+  nohup'd on the Mac, log ~/mojolearn-evidence/neighbors/amd_gate_launch.log):
+  /root/ev-neighbors/amd_gate.sh in /root/mojolearn-neighbors (tree 8cecb1f24):
+  (1) lane check on the 325 lanes lane_select picks (minus par-*) --pass 2;
+  (2) each phase-2 lane under its device arm; (3) the 47 existing lanes
+  --sabotage e2e_existing_device.patch; (4) pytest (host_surface,
+  svc_multiclass, svc_probability, krr_options, km_kernels, gp_return_cov,
+  neighbors_sparse_input, knn_metrics, svc_poly, host_model_svm,
+  x_neighbors_repeat); (5) tools/test_lane_select.py. Progress lines in
+  /root/ev-neighbors/gate.status (`tools/amd_central.sh sh neighbors 'cat
+  /root/ev-neighbors/gate.status'`), GATEDONE at the end.
+
 ## NEXT (a fresh session starts here)
+
+1. Read /root/ev-neighbors/gate.status on the central AMD box; fix what failed.
+2. OWED ON NVIDIA (when RunPod is funded; a pod named `neighbors`): the same
+   gate as the AMD job (lane check on `lane_select --changed-since
+   origin/main` minus par-*, --pass 2; the phase-2 device arms; the 47
+   existing lanes under e2e_existing_device.patch; the pytest list;
+   test_lane_select). Then merge to main + push in one command.
+3. Read steward 1790573093101; a FAIL comes back as a fix commit. Then one
+   steward submit for the 47 existing lanes with e2e_existing_device.patch
+   once AMD/NVIDIA proves it bites (m3ultra-b until ~21:15Z Sep 28).
+4. Then GPU speed (IDENTICAL, then FAST) per the speed brief.
+
+## (previous) NEXT
+
 
 Bring a pod up only after the RunPod balance is topped up; run OWED a-e
 above in order, fix what fails, merge. Then the PHASE 1 AUDIT listed under
