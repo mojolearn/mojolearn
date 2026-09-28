@@ -1,0 +1,94 @@
+{
+ "no_restore": true,
+ "arms": [
+  {
+   "name": "tree",
+   "defines": "-D MOJOLEARN_SGD_FAST_TREE=1",
+   "builds": [
+    "x_linear"
+   ],
+   "cases": "sgd-clf,sgd-reg,perceptron,pa-clf,pa-reg,sgd-ocsvm",
+   "warm_rows": 20000,
+   "rows": [
+    100000
+   ],
+   "qual": "sgd-clf,sgd-reg,perceptron,pa-clf,pa-reg,sgd-ocsvm",
+   "host_ref": true,
+   "seeds": "0,1",
+   "train": 50000,
+   "test": 50000
+  },
+  {
+   "name": "before",
+   "defines": "",
+   "builds": [
+    "x_linear"
+   ],
+   "cases": "sgd-clf,sgd-reg,perceptron,pa-clf,pa-reg,sgd-ocsvm",
+   "warm_rows": 20000,
+   "rows": [
+    100000
+   ],
+   "qual": "sgd-clf,sgd-reg,perceptron,pa-clf,pa-reg,sgd-ocsvm",
+   "seeds": "0,1",
+   "train": 50000,
+   "test": 50000
+  },
+  {
+   "name": "fma",
+   "defines": "-D MOJOLEARN_X_LINEAR_FAST_FMA=1",
+   "builds": [
+    "x_linear"
+   ],
+   "cases": "sgd-clf,sgd-reg,perceptron,pa-clf,pa-reg,sgd-ocsvm",
+   "warm_rows": 20000,
+   "rows": [
+    100000
+   ],
+   "qual": "sgd-clf,sgd-reg,perceptron,pa-clf,pa-reg,sgd-ocsvm",
+   "seeds": "0,1",
+   "train": 50000,
+   "test": 50000
+  },
+  {
+   "name": "treefma",
+   "defines": "-D MOJOLEARN_SGD_FAST_TREE=1 -D MOJOLEARN_X_LINEAR_FAST_FMA=1",
+   "builds": [
+    "x_linear"
+   ],
+   "cases": "sgd-clf,sgd-reg,perceptron,pa-clf,pa-reg,sgd-ocsvm",
+   "warm_rows": 20000,
+   "rows": [
+    100000
+   ],
+   "qual": "sgd-clf,sgd-reg,perceptron,pa-clf,pa-reg,sgd-ocsvm",
+   "seeds": "0,1",
+   "train": 50000,
+   "test": 50000
+  },
+  {
+   "name": "before",
+   "defines": "",
+   "builds": [
+    "x_linear"
+   ],
+   "cases": "sgd-clf,sgd-reg,perceptron,pa-clf,pa-reg,sgd-ocsvm",
+   "warm_rows": 20000,
+   "rows": [
+    100000
+   ]
+  },
+  {
+   "name": "tree",
+   "defines": "-D MOJOLEARN_SGD_FAST_TREE=1",
+   "builds": [
+    "x_linear"
+   ],
+   "cases": "sgd-clf,sgd-reg,perceptron,pa-clf,pa-reg,sgd-ocsvm",
+   "warm_rows": 20000,
+   "rows": [
+    100000
+   ]
+  }
+ ]
+}
