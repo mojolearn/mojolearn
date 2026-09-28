@@ -263,15 +263,14 @@ def scan_chunk(m: Int, stride: Int) -> Int:
 
 # KIND: 0 = IVF-PQ, 1 = IVF-SQ, 2 = IVF-RaBitQ
 def ivf_scan_search[KIND: Int](
-    ctx: DeviceContext, dq: DeviceBuffer[DType.float32], dc: DeviceBuffer[DType.float32],
-    doff: DeviceBuffer[DType.int32], dli: DeviceBuffer[DType.int32], dcodes: DeviceBuffer[DType.int32],
-    dmask: DeviceBuffer[DType.int32], fa: DeviceBuffer[DType.float32], fb: DeviceBuffer[DType.float32],
+    ctx: DeviceContext, dq: F32P, dc: F32P, doff: I32P, dli: I32P, dcodes: I32P, dmask: I32P, fa: F32P, fb: F32P,
     offsets: List[Int32], n_lists: Int, dim: Int, m: Int, k: Int, n_probes: Int,
     pq_dim: Int, pq_len: Int, n_codes: Int, D: Int, words: Int, seed: Int, scale: Float32,
-    dd: DeviceBuffer[DType.float32], di: DeviceBuffer[DType.int32], dn: DeviceBuffer[DType.int32],
+    dd: F32P, di: I32P, dn: I32P,
 ) raises:
-    """Enqueue the whole search (no sync). fa/fb: PQ codebooks (fb unused);
-    SQ vmin, delta; RaBitQ norms, ips."""
+    """Run the whole search and synchronize. The pointers are device
+    buffers'. fa/fb: PQ codebooks (fb unused); SQ vmin, delta; RaBitQ norms,
+    ips."""
     var np = n_probes if n_probes < n_lists else n_lists
     var stride = scan_stride(offsets, n_lists, np)
     var mc = scan_chunk(m, stride)
@@ -286,43 +285,43 @@ def ivf_scan_search[KIND: Int](
     while q0 < m:
         var c = mc if m - q0 > mc else m - q0
         ctx.enqueue_function[coarse_kernel](
-            Int32(c * n_lists), Int32(q0), dq.unsafe_ptr(), Int32(dim), dc.unsafe_ptr(), Int32(n_lists),
+            Int32(c * n_lists), Int32(q0), dq, Int32(dim), dc, Int32(n_lists),
             dcd.unsafe_ptr(), grid_dim=_grid(c * n_lists), block_dim=TPB,
         )
         ctx.enqueue_function[probe_kernel](
-            Int32(c), dcd.unsafe_ptr(), Int32(n_lists), Int32(np), doff.unsafe_ptr(), dprobes.unsafe_ptr(),
+            Int32(c), dcd.unsafe_ptr(), Int32(n_lists), Int32(np), doff, dprobes.unsafe_ptr(),
             dpstart.unsafe_ptr(), grid_dim=_grid(c), block_dim=TPB,
         )
         comptime if KIND == 0:
             ctx.enqueue_function[pq_score_kernel](
-                Int32(q0), Int32(np), dq.unsafe_ptr(), Int32(dim), dc.unsafe_ptr(), doff.unsafe_ptr(),
-                dli.unsafe_ptr(), dcodes.unsafe_ptr(), fa.unsafe_ptr(), Int32(pq_dim), Int32(pq_len),
+                Int32(q0), Int32(np), dq, Int32(dim), dc, doff,
+                dli, dcodes, fa, Int32(pq_dim), Int32(pq_len),
                 Int32(n_codes), Int32(use_lut), dprobes.unsafe_ptr(), dpstart.unsafe_ptr(), Int32(stride),
-                dmask.unsafe_ptr(), dcand.unsafe_ptr(), grid_dim=c * np, block_dim=STPB,
+                dmask, dcand.unsafe_ptr(), grid_dim=c * np, block_dim=STPB,
             )
         elif KIND == 1:
             ctx.enqueue_function[sq_score_kernel](
-                Int32(q0), Int32(np), dq.unsafe_ptr(), Int32(dim), dc.unsafe_ptr(), doff.unsafe_ptr(),
-                dli.unsafe_ptr(), dcodes.unsafe_ptr(), fa.unsafe_ptr(), fb.unsafe_ptr(), dprobes.unsafe_ptr(),
-                dpstart.unsafe_ptr(), Int32(stride), dmask.unsafe_ptr(), dcand.unsafe_ptr(),
+                Int32(q0), Int32(np), dq, Int32(dim), dc, doff,
+                dli, dcodes, fa, fb, dprobes.unsafe_ptr(),
+                dpstart.unsafe_ptr(), Int32(stride), dmask, dcand.unsafe_ptr(),
                 grid_dim=c * np, block_dim=STPB,
             )
         else:
             ctx.enqueue_function[rq_rotate_kernel](
-                Int32(c * np), Int32(q0), Int32(np), dq.unsafe_ptr(), Int32(dim), dc.unsafe_ptr(),
+                Int32(c * np), Int32(q0), Int32(np), dq, Int32(dim), dc,
                 dprobes.unsafe_ptr(), Int32(D), Int32(seed), scale, dws.unsafe_ptr(), dqn.unsafe_ptr(),
                 grid_dim=_grid(c * np), block_dim=TPB,
             )
             ctx.enqueue_function[rq_score_kernel](
-                Int32(np), doff.unsafe_ptr(), dli.unsafe_ptr(), dcodes.unsafe_ptr(), fa.unsafe_ptr(),
-                fb.unsafe_ptr(), Int32(D), Int32(words), scale, dprobes.unsafe_ptr(), dpstart.unsafe_ptr(),
-                Int32(stride), dmask.unsafe_ptr(), dws.unsafe_ptr(), dqn.unsafe_ptr(), dcand.unsafe_ptr(),
+                Int32(np), doff, dli, dcodes, fa,
+                fb, Int32(D), Int32(words), scale, dprobes.unsafe_ptr(), dpstart.unsafe_ptr(),
+                Int32(stride), dmask, dws.unsafe_ptr(), dqn.unsafe_ptr(), dcand.unsafe_ptr(),
                 grid_dim=c * np, block_dim=STPB,
             )
         ctx.enqueue_function[select_kernel](
-            Int32(c), Int32(q0), Int32(np), doff.unsafe_ptr(), dli.unsafe_ptr(), dmask.unsafe_ptr(),
+            Int32(c), Int32(q0), Int32(np), doff, dli, dmask,
             dprobes.unsafe_ptr(), dpstart.unsafe_ptr(), Int32(stride), dcand.unsafe_ptr(), Int32(k),
-            dd.unsafe_ptr(), di.unsafe_ptr(), dn.unsafe_ptr(), grid_dim=_grid(c), block_dim=TPB,
+            dd, di, dn, grid_dim=_grid(c), block_dim=TPB,
         )
         q0 += c
     ctx.synchronize()

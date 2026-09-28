@@ -54,6 +54,11 @@ def assign_kernel(count: Int32, r: F32P, cb: F32P, pq_dim: Int32, rot_dim: Int32
         pq_assign_cell(e, r, cb, Int(pq_dim), Int(rot_dim), Int(pq_len), Int(n_codes), codes)
 
 
+def _dp[dt: DType](mut b: DeviceBuffer[dt]) -> MutPointer[Scalar[dt], MutAnyOrigin]:
+    """A device buffer's address as the kernels' pointer type."""
+    return b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+
+
 def _grid(count: Int) -> Int:
     return (count + TPB - 1) // TPB
 
@@ -189,8 +194,10 @@ def ivf_pq_search_device(
     var dn = ctx.enqueue_create_buffer[DType.int32](m)
     # lane ann-apple: the split scan (x_ann/ivf_scan_device.mojo), the same
     # bits as the old one thread per query running `pq_search_cell`
-    ivf_scan_search[0](ctx, dq, dc, doff, dli, dcodes, dmask, dcb, dcb, offsets, n_lists, dim, m, k, n_probes,
-                       pq_dim, pq_len, n_codes, 1, 1, 0, Float32(1.0), dd, di, dn)
+    ivf_scan_search[0](
+        ctx, _dp(dq), _dp(dc), _dp(doff), _dp(dli), _dp(dcodes), _dp(dmask), _dp(dcb), _dp(dcb),
+        offsets, n_lists, dim, m, k, n_probes, pq_dim, pq_len, n_codes, 1, 1, 0, Float32(1.0), _dp(dd), _dp(di), _dp(dn),
+    )
     out_d = download_f32(ctx, dd, m * k)
     out_i = download_i32(ctx, di, m * k)
     out_n = download_i32(ctx, dn, m)
@@ -281,8 +288,10 @@ def ivf_sq_search_device(
     var dd = ctx.enqueue_create_buffer[DType.float32](m * k)
     var di = ctx.enqueue_create_buffer[DType.int32](m * k)
     var dn = ctx.enqueue_create_buffer[DType.int32](m)
-    ivf_scan_search[1](ctx, dq, dc, doff, dli, dcodes, dmask, dvmin, ddelta, offsets, n_lists, dim, m, k, n_probes,
-                       1, 1, 1, 1, 1, 0, Float32(1.0), dd, di, dn)
+    ivf_scan_search[1](
+        ctx, _dp(dq), _dp(dc), _dp(doff), _dp(dli), _dp(dcodes), _dp(dmask), _dp(dvmin), _dp(ddelta),
+        offsets, n_lists, dim, m, k, n_probes, 1, 1, 1, 1, 1, 0, Float32(1.0), _dp(dd), _dp(di), _dp(dn),
+    )
     out_d = download_f32(ctx, dd, m * k)
     out_i = download_i32(ctx, di, m * k)
     out_n = download_i32(ctx, dn, m)
@@ -402,8 +411,10 @@ def ivf_rabitq_search_device(
     var dd = ctx.enqueue_create_buffer[DType.float32](m * k)
     var di = ctx.enqueue_create_buffer[DType.int32](m * k)
     var dn = ctx.enqueue_create_buffer[DType.int32](m)
-    ivf_scan_search[2](ctx, dq, dc, doff, dli, dcodes, dmask, dnorm, dip, offsets, n_lists, dim, m, k, n_probes,
-                       1, 1, 1, D, words, seed, scale, dd, di, dn)
+    ivf_scan_search[2](
+        ctx, _dp(dq), _dp(dc), _dp(doff), _dp(dli), _dp(dcodes), _dp(dmask), _dp(dnorm), _dp(dip),
+        offsets, n_lists, dim, m, k, n_probes, 1, 1, 1, D, words, seed, scale, _dp(dd), _dp(di), _dp(dn),
+    )
     out_d = download_f32(ctx, dd, m * k)
     out_i = download_i32(ctx, di, m * k)
     out_n = download_i32(ctx, dn, m)

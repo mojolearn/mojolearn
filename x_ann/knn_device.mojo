@@ -90,8 +90,8 @@ def knn_tiled_kernel[MAXD: Int](n: Int32, x: F32P, d: Int32, nn: Int32, nn_d: F3
 
 
 def knn_enqueue(
-    ctx: DeviceContext, dx: DeviceBuffer[DType.float32], n: Int, d: Int, nn: Int,
-    dnd: DeviceBuffer[DType.float32], dni: DeviceBuffer[DType.int32],
+    ctx: DeviceContext, mut dx: DeviceBuffer[DType.float32], n: Int, d: Int, nn: Int,
+    mut dnd: DeviceBuffer[DType.float32], mut dni: DeviceBuffer[DType.int32],
 ) raises:
     """Enqueue the k-NN graph of the n x d rows in dx (no sync)."""
     var blocks = (n + KTB - 1) // KTB

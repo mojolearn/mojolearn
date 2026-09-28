@@ -14,7 +14,7 @@ from max.gpu.host import DeviceContext
 struct AnnStages(Movable):
     var on: Bool
     var name: String
-    var t: UInt
+    var t: Int
 
     def __init__(out self, name: String):
         self.on = String(getenv("MOJOLEARN_ANN_STAGES")) != ""
