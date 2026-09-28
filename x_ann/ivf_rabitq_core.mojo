@@ -131,10 +131,17 @@ def rq_candidate_est(
             var v = ws.unsafe_load(w_off + j)
             var bit = (codes.unsafe_load(row * words + j // 32) >> Int32(j % 32)) & Int32(1)
             dot = ftz(dot + (v if bit != 0 else -v))
-        var xq = ftz(identical_div(ftz(identical_mul(dot, scale)), ip))
-        var nn = ftz(identical_mul(norm, norm))
-        return ftz(ftz(nn + qn2) - ftz(identical_mul(Float32(2.0), ftz(identical_mul(norm, xq)))))
+        return rq_est_tail(dot, qn2, norm, ip, scale)
     return qn2
+
+
+@always_inline
+def rq_est_tail(dot: Float32, qn2: Float32, norm: Float32, ip: Float32, scale: Float32) -> Float32:
+    """`rq_candidate_est`'s estimate from the signed dot (ip > 0): shared
+    with the staged device score (lane ann-apple2)."""
+    var xq = ftz(identical_div(ftz(identical_mul(dot, scale)), ip))
+    var nn = ftz(identical_mul(norm, norm))
+    return ftz(ftz(nn + qn2) - ftz(identical_mul(Float32(2.0), ftz(identical_mul(norm, xq)))))
 
 
 @always_inline

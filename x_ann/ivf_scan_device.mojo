@@ -35,7 +35,8 @@ from x_ann.ivf_pq_core import (
     F32P, I32P, ivf_row_removed, pq_better, pq_coarse_dist, pq_inf, pq_insert, pq_lut_entry, pq_probe_takes,
 )
 from x_ann.ivf_sq_core import sq_candidate_dist
-from x_ann.ivf_rabitq_core import rq_candidate_est, rq_rotate
+from x_ann.ivf_rabitq_core import rq_candidate_est, rq_est_tail, rq_rotate
+from x_ann.tsne_core import ts_ftz_nonneg
 from x_ann.stage_timer import AnnStages
 
 comptime TPB = 128
@@ -240,18 +241,38 @@ def pq_score_kernel(
         cand.unsafe_store(base + slot, total)
 
 
+#: widest row the staged SQ / RaBitQ score keeps in threadgroup memory
+comptime SCORE_DIM_MAX = 512
+
+
 def sq_score_kernel(
     q0: Int32, n_probes: Int32, queries: F32P, dim: Int32, centers: F32P, offsets: I32P, list_indices: I32P,
     codes: I32P, vmin: F32P, delta: F32P, probes: I32P, pstart: I32P, stride: Int32, mask: I32P, cand: F32P,
 ):
+    """`sq_candidate_dist` per candidate. Lane ann-apple2: when dim <=
+    SCORE_DIM_MAX the query residual `ftz(ftz(q) - ftz(center))`, delta and
+    vmin are formed once per threadgroup into threadgroup memory (the same
+    expressions on the same words), and each candidate runs the cell's decode,
+    difference and fused square sum over them (the sum of squares from +0 is
+    flushed by `ts_ftz_nonneg`, the same word): the same distance."""
     var b = Int(block_idx.x)
     var t = Int(thread_idx.x)
     var lq = b // Int(n_probes)
     var l = Int(probes.unsafe_load(b))
+    var qr = stack_allocation[SCORE_DIM_MAX, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var dl = stack_allocation[SCORE_DIM_MAX, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var vm = stack_allocation[SCORE_DIM_MAX, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
     if l < 0:
         return
     var d = Int(dim)
     var q_off = (Int(q0) + lq) * d
+    var staged = d <= SCORE_DIM_MAX
+    if staged:
+        for c in range(t, d, STPB):
+            qr[c] = ftz(ftz(queries.unsafe_load(q_off + c)) - ftz(centers.unsafe_load(l * d + c)))
+            dl[c] = delta.unsafe_load(c)
+            vm[c] = vmin.unsafe_load(c)
+    barrier()
     var start = Int(offsets.unsafe_load(l))
     var stop = Int(offsets.unsafe_load(l + 1))
     var base = lq * Int(stride) + Int(pstart.unsafe_load(b)) - start
@@ -259,7 +280,15 @@ def sq_score_kernel(
         var row = Int(list_indices.unsafe_load(slot))
         if ivf_row_removed(mask, row):
             continue
-        cand.unsafe_store(base + slot, sq_candidate_dist(queries, q_off, centers, l, d, codes, row, vmin, delta))
+        if staged:
+            var acc = Float32(0.0)
+            for c in range(d):
+                var dec = ftz(identical_mul_add(Float32(Int(codes.unsafe_load(row * d + c))), dl[c], vm[c]))
+                var diff = ftz(qr[c] - dec)
+                acc = ts_ftz_nonneg(identical_mul_add(diff, diff, acc))
+            cand.unsafe_store(base + slot, acc)
+        else:
+            cand.unsafe_store(base + slot, sq_candidate_dist(queries, q_off, centers, l, d, codes, row, vmin, delta))
 
 
 def rq_rotate_kernel(
@@ -289,14 +318,25 @@ def rq_score_kernel(
     words: Int32, scale: Float32, probes: I32P, pstart: I32P, stride: Int32, mask: I32P, ws: F32P, qn: F32P,
     cand: F32P,
 ):
+    """`rq_candidate_est` per candidate. Lane ann-apple2: when D <=
+    SCORE_DIM_MAX the rotated query residual is staged in threadgroup memory
+    and each code word is loaded once for its 32 bits; the dot is the cell's
+    fold (j ascending, `ftz(dot +- v)`) on the same words and the estimate
+    is the cell's own tail (`rq_est_tail`): the same distance."""
     var b = Int(block_idx.x)
     var t = Int(thread_idx.x)
     var lq = b // Int(n_probes)
     var l = Int(probes.unsafe_load(b))
+    var wv = stack_allocation[SCORE_DIM_MAX, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
     if l < 0:
         return
     var dd = Int(D)
     var w = Int(words)
+    var staged = dd <= SCORE_DIM_MAX
+    if staged:
+        for j in range(t, dd, STPB):
+            wv[j] = ws.unsafe_load(b * dd + j)
+    barrier()
     var qn2 = qn.unsafe_load(b)
     var start = Int(offsets.unsafe_load(l))
     var stop = Int(offsets.unsafe_load(l + 1))
@@ -305,7 +345,23 @@ def rq_score_kernel(
         var row = Int(list_indices.unsafe_load(slot))
         if ivf_row_removed(mask, row):
             continue
-        cand.unsafe_store(base + slot, rq_candidate_est(ws, b * dd, qn2, codes, row, w, dd, norms, ips, scale))
+        if staged:
+            var est = qn2
+            var ip = ips.unsafe_load(row)
+            if ip > Float32(0.0):
+                var dot = Float32(0.0)
+                for wi in range(w):
+                    var cw = codes.unsafe_load(row * w + wi)
+                    var j0 = wi * 32
+                    var jn = dd - j0 if dd - j0 < 32 else 32
+                    for u in range(jn):
+                        var v = wv[j0 + u]
+                        var bit = (cw >> Int32(u)) & Int32(1)
+                        dot = ftz(dot + (v if bit != 0 else -v))
+                est = rq_est_tail(dot, qn2, norms.unsafe_load(row), ip, scale)
+            cand.unsafe_store(base + slot, est)
+        else:
+            cand.unsafe_store(base + slot, rq_candidate_est(ws, b * dd, qn2, codes, row, w, dd, norms, ips, scale))
 
 
 @always_inline
