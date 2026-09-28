@@ -103,6 +103,64 @@ clip_grad_norm_). Bindings `_mojolearn_{training,mamba,transformer,embedding}`
   Mac). m4-a, m3ultra and do-amd were still queued/working at merge;
   the next session reads them.
 
+## Session 2 (2026-09-27): per-seam sabotage for the family. ON BRANCH, GATE OWED ON A POD
+
+### What landed on lane/neural (pushed, NOT merged)
+
+- **Seam drivers + arms** (`tools/identity_lanes/neural.checks`, `# lanes:` line
+  names transformer, mamba1..3, embedding, samba, training-primitives,
+  optim-adam-clip, optim-maximize, mlp, byte-lm): transformer, mamba1, mamba2,
+  mamba3, embedding, optimizer, loss and maximize drivers, each with a patch
+  that flips the DEVICE switch at its USE site. `tools/algos_lane_check.py`
+  and `tools/lane_select.py` read the `# lanes:` line (families whose lanes
+  live in identity_break itself).
+- **maximize=** on SGD/Adam/AdamW (DEVIATION 6200, IDENTITY_PATHS row 200,
+  lane `optim-maximize`, `training/maximize.mojo`, seam test
+  `python/mojolearn/tests/test_optim_maximize_seam.py`).
+- **Fix (6a5a8d67a):** the optim-maximize lane planted its zeros with the
+  wrong nesting (`gs` is one tensor list per step), so every GPU arm REFUSED
+  with `'list' object has no attribute 'reshape'`.
+
+### Proof so far (NVIDIA A40 pod px7kqp3w26mli8, before its deletion)
+
+- All eight seam drivers: PASS clean, FAIL under their patch, PASS after
+  reversal (`/root/s2_family2.out`).
+- CLEAN AGREE (cuda vs cpu-intel-xeon-gold-6342, every part compared):
+  transformer, mamba1, mamba2, mamba3, embedding, samba, training-primitives,
+  optim-adam-clip. optim-maximize REFUSED on the planting bug above (fixed).
+- The family-wide sabotage `~/mojolearn-evidence/neural/session2/neural_family_e2e.patch`
+  (transformer + mamba RMSNorm fold descending, mamba2 + mamba3 segsum
+  descending, embedding backward fold descending, Adam moment lerp) was
+  launched at 6a5a8d67a (`/root/s2_family3`); the pod was DELETED (RunPod
+  balance negative) before it reported. No result exists.
+
+### Stewards
+
+- 1790542263165-neural-aea8614db9 (Adam-lerp patch, --pass 1): **m4-a**
+  CLEAN AGREE on all nine lanes on Metal (its FAIL lists only the seven lanes
+  that one patch cannot reach, as expected). **m2pro** FAIL = infrastructure
+  (`XPC_ERROR_CONNECTION_INTERRUPTED`, Metal compiler service), not a verdict.
+  do-amd and m3ultra had not reported.
+- Resubmitted as ONE batched request **1790553937999-neural-6a5a8d67ae**
+  (m2pro, m3ultra, m4pro-b, do-amd; --pass 2) at 6a5a8d67a with the family
+  patch on transformer, mamba1..3, embedding, samba, training-primitives,
+  optim-adam-clip, optim-maximize, mlp. Read it next session.
+
+### OWED ON A POD (exact steps, NVIDIA)
+
+1. `python3 tools/algos_lane_check.py transformer,mamba1,mamba2,mamba3,embedding,samba,training-primitives,optim-adam-clip,optim-maximize,mlp,byte-lm --sabotage ~/mojolearn-evidence/neural/session2/neural_family_e2e.patch --pass 2`
+   must read CLEAN AGREE, SABOTAGED DISAGREE, RESTORED AGREE on every lane.
+   byte-lm may not be reached by that patch (its binding does not import
+   those kernels); if it AGREEs under it, add a byte-lm arm (a seam in
+   training/byte_lm*.mojo) and rerun that lane.
+2. `python3 -m pytest -x -q tools/test_lane_select.py` (lane_select.py
+   changed; the earlier 1 failure was the stale 49-vs-51 count, main now
+   says 51, merged in 588afc1c4).
+3. `python3 -m pytest -q python/mojolearn/tests/test_host_surface.py`.
+4. Existing bits unchanged: the 43-lane before/after column (session 1 tool
+   `~/mojolearn-evidence/neural/bitcheck.py`).
+5. Then merge lane/neural to main and push in the same command.
+
 ## Next phases (one per session)
 
 1. **Verification (charter phase 1) for the existing lanes:** a biting
