@@ -27,7 +27,7 @@ and any doubt raises so the caller falls back to its Python path.
 """
 from std.memory import bitcast
 from checks.numerics import pinned_mul_f64
-from x_metrics.common import FP
+from x_metrics.common import FP, IP
 
 
 @always_inline
@@ -697,10 +697,10 @@ def ch_extra(a: Int, sums: Int, gsum: Int, counts_addr: Int, k: Int, d: Int, n: 
     mean = gsum / n."""
     var cs = _cents(a, sums, counts_addr, k, d)
     var Q = _qp(counts_addr)
-    var fn = Float64(n)
+    var fnn = Float64(n)
     var mean = List[Float64](capacity=d)
     for c in range(d):
-        mean.append(_w(a, gsum + c) / fn)
+        mean.append(_w(a, gsum + c) / fnn)
     var outer = List[Float64](capacity=k)
     var inner = List[Float64](length=d, fill=0.0)
     for i in range(k):

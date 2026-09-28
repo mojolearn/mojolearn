@@ -17,12 +17,18 @@ thread per unit, the host binding (`_mojolearn_x_metrics_host`, what
 loop. Python lays out the arena, lists the stages and reads the per-class /
 per-column Float32 results back.
 
-THE EPILOGUE (DEVIATION 6106). What is left after the O(n) folds is O(classes)
-arithmetic on those Float32 results: ratios, averages, a square root. It runs
-here, in IEEE binary64 with ONLY + - * / and sqrt, each correctly rounded on
-every host Python runs on, in a fixed left-to-right order (and `_portable_math`
-for the rare logarithm). That is bitwise the same on every machine by the
-IEEE standard, and it is scikit-learn's own precision for the same step.
+THE EPILOGUE (DEVIATION 6106, narrowed 2026-09-28). What is left after the
+O(n) folds is O(classes) arithmetic on those Float32 results: ratios,
+averages, a square root. It runs here, in IEEE binary64 with ONLY + - * / and
+sqrt, each correctly rounded on every host Python runs on, in a fixed
+left-to-right order (and `_portable_math` for the rare logarithm), and only on
+O(classes), O(outputs) or O(candidates x folds) scalars; `**`, `pow` and libm
+transcendentals are not allowed. Any epilogue whose term count scales with
+rows, curve points, contingency cells or k^2 * d runs in
+x_metrics/epilogue.mojo under the same operation rules; its Python spelling
+here is only the fallback and the MOJOLEARN_METRICS_EPILOGUE=python reference
+arm. That is bitwise the same on every machine by the IEEE standard, and it
+is scikit-learn's own precision for the same step.
 """
 import array
 import ctypes
