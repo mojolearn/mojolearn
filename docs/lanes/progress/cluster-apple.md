@@ -274,3 +274,11 @@ eaf6c2a3f IDENTICAL (digests equal to every IDENTICAL column).
 
 FAST after is at or above the reference on all 10 pairs (+0.0006 to +0.0019): quality
 not lower. Speed 3.5x (taxi) / 3.7x (HIGGS) on the M3 Ultra.
+
+## 4928e9c4f AffinityPropagation: 16 iterations per host read (measurement pending on m4pro-a)
+
+`ops.ap_iterate`: R, A, the exemplar flags and the convergence window (`_ap_conv_kernel`,
+integer sums) enqueued per iteration, one read of the stop state per 16 iterations; the
+converging iteration writes st = [1, it] and every later kernel returns at once, so it,
+e, A and R equal the one-read-per-iteration loop's. m4pro-a request 1790595068119 (full
+IDENTICAL board at 4928e9c4f) is the after for everything since eaf6c2a3f.
