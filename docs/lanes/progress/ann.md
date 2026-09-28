@@ -195,6 +195,34 @@ reversal) on the H100 pod (Xeon 8470 CPU column); test_x_ann_repeat +
 test_host_surface 201 passed. CPU-path arms kept for the next gate:
 `x_ann/checks/sabotage/cpu_{tsne_repulsion,knn_fold,pq_lut_sum}_descending.patch`.
 
+Step 2 (serial, merged at eafe4572b): vector work across independent cells.
+- IVF-SQ / IVF-RaBitQ / IVF-PQ (long lists: the table filled, then) scans
+  run eight candidate rows' chains side by side, rows in slot order.
+- Coarse distances eight lists per vector step (centres column-major once
+  per call); probe order by a bounded insertion under (distance, list id),
+  the walk's answer when no distance is NaN (a NaN takes the walk).
+- `ftz_v` is branch-free bit arithmetic (the select form lowered ~10x slower
+  than the arithmetic around it on the Xeon 8470). t-SNE repulsion runs
+  sixteen rows per step and leaves out two flushes whose input is provably
+  never subnormal (`ftz(1 + acc)` with acc >= 0, `ftz(z + q)` with z, q >= 0
+  and each zero or normal).
+
+| algorithm (shape, serial) | before lane | after step 2 | bits |
+|---|---|---|---|
+| IVF-PQ search (1M x 28, 1024 lists, 32 probes, 1000 queries; index fit on the GPU, `--fit-on-gpu`) | 8.64 s | 2.74 s | equal |
+| IVF-SQ search (same) | 10.27 s | 3.66 s | equal |
+| IVF-RaBitQ search (same) | 11.27 s | 2.43 s | equal |
+| refine (1M dataset, 1000 x 40 candidates) | 0.107 s | 0.010-0.036 s | equal |
+| CAGRA build (50k x 28) | 187.0 s | 20.1 s | equal |
+| t-SNE (10k x 28, 300 iterations) | 246.2 s | 38.5 s | equal |
+
+Gate (step 2): the same ten-lane `--pass 2` e2e run, RESULT: PASS; 201
+passed; plus `x_ann/checks/sabotage/cpu_paths_fold_order.patch` (the three
+CPU-path fold-order arms in one) on x-ann-tsne, x-ann-cagra, x-ann-ivf-pq:
+RESULT: PASS (AGREE, DISAGREE on all three, AGREE). Steward requests:
+1790562278524-ann-2769907278 (step 1: m4-a, m3ultra-b, m2pro PASS; do-amd
+queued), 1790562278525-ann-271a2eb1e2 (step 2).
+
 FINDINGS for other lanes:
 - The IVF family's BUILD time is cluster/'s host k-means (`host_fit_main`,
   `host_kmeans_fit`; the cluster-cpu lane's files): 50k x 28 rows, 64 lists,
