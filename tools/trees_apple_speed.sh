@@ -15,6 +15,7 @@
 #   xt:<est>:<dataset>           bench/speed/trees_apple_profile.py (dt, bagging, adaboost,
 #                                dart, embedding, iforest)
 #   lgq:<datasets>:<seeds>       bench/speed/trees_apple3_lg_quality.py (Lossguide test metrics)
+#   mq:<ests>:<datasets>:<seeds> bench/speed/trees_apple3_member_quality.py (DART, AdaBoost)
 #   xtstage:<est>:<dataset>:<n>  the same fit with n estimators under MOJOLEARN_STAGE_TIMES=1
 #   rfstage:<lane>:<dataset>     a forest fit under MOJOLEARN_STAGE_TIMES=1 (no launch clock)
 # Datasets are the board's (taxi, taxireg, istella, istellareg) from
@@ -64,6 +65,11 @@ for cell in ${TAP_CELLS:-}; do
             d=${rest%%:*}; n=${rest#*:}
             $PY bench/speed/trees_apple3_lg_quality.py "${TAP_LABEL:-arm}" "$d" "$n" 2>&1 \
                 | grep -E '^LGQ|Error|error|Traceback' ;;
+        mq)
+            # mq:<ests,comma>:<datasets,comma>:<seeds>  boosted-member quality, paired by seed
+            e=${rest%%:*}; r2=${rest#*:}; d=${r2%%:*}; n=${r2#*:}
+            $PY bench/speed/trees_apple3_member_quality.py "${TAP_LABEL:-arm}" "$e" "$d" "$n" 2>&1 \
+                | grep -E '^MQ|Error|error|Traceback' ;;
         xtstage)
             # xtstage:<est>:<dataset>:<n_estimators>  one fit under MOJOLEARN_STAGE_TIMES=1
             # without the launch clock (a SPLIT: stage ends drain, never a timing)
