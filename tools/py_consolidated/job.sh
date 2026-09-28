@@ -3,7 +3,7 @@
 # (docs/lanes/progress/py-consolidated.md), one NVIDIA queue job on one shared
 # pod, the pod's x86 CPU as the CPU column. ONE tree (the pod disks are shared):
 #   base  `git apply -R tools/py_consolidated/base.patch` (lane/apple2-merged's
-#         code), every selected lane's GPU and CPU arm once (tools/py_bugs/check.py
+#         code), every selected lane's GPU and CPU arm once (tools/py_consolidated/check.py
 #         arms: build once, GPU == CPU per lane, the py-bugs probe per column),
 #         the py-lm witness on both columns, then a snapshot of the base package
 #         (python/mojolearn with its built .so) for the timing pass;
@@ -24,7 +24,7 @@ set -u
 T=/root/mojolearn-py-consolidated
 EV=${EV:-/root/ev-py-consolidated/$(date -u +%m%d-%H%M)}
 PATCH=$T/tools/py_consolidated/base.patch
-PHASES=${PHASES:-base,head,cross,tests,ab,timing,sabotage}
+PHASES=${PHASES:-base,head,cross,tests,sabotage,ab,timing}
 has() { case ",$PHASES," in *",$1,"*) return 0 ;; esac; return 1; }
 mkdir -p "$EV"; touch "$EV/.start"
 export MOJOLEARN_BUILD_LOCK_HELD=1 MOJOLEARN_COMPILE_JOBS=${MOJOLEARN_COMPILE_JOBS:-6}
@@ -40,7 +40,7 @@ PIXI=$(command -v pixi || echo ~/.pixi/bin/pixi)
 $PIXI install -e default > "$EV/pixi.log" 2>&1 || { echo "PIXI INSTALL FAIL"; tail -5 "$EV/pixi.log"; exit 1; }
 $PIXI install -e test > "$EV/pixi_test.log" 2>&1 || echo "PIXI TEST ENV INSTALL FAIL"
 # the drivers run from copies outside the tree (the base patch does not carry them)
-cp tools/py_bugs/check.py tools/py_bugs/probe.py tools/py_lm/witness.py tools/py_dn_ann/bench_ann.py \
+cp tools/py_bugs/probe.py tools/py_lm/witness.py tools/py_dn_ann/bench_ann.py \
    tools/py_misc/metrics_time.py tools/py_consolidated/*.py "$EV/"
 P="$PIXI run -e default python -u"
 
@@ -128,6 +128,14 @@ if has tests; then
   echo "pytest (CPU) exit $?"; tail -8 "$EV/pytest.cpu.log"
 fi
 
+if has sabotage; then
+  echo "== SABOTAGE, one arm per new device path (clean AGREE, sabotaged DISAGREE, restored AGREE)"
+  PIXI=$PIXI sh tools/algos_lane_check.sh ivf,x-ann-ivf-pq --sabotage x_ann/checks/sabotage/resident_index_py_dn_ann.patch \
+    --out "$EV/sab_ann" 2>&1 | grep -E 'RESULT|CLEAN:|SABOTAGED:|RESTORED:' | sed 's/^/SAB ann /'
+  PIXI=$PIXI sh tools/algos_lane_check.sh x-neighbors-kpca --sabotage x_neighbors/checks/sabotage/fused_chain_device.patch \
+    --out "$EV/sab_kern" 2>&1 | grep -E 'RESULT|CLEAN:|SABOTAGED:|RESTORED:' | sed 's/^/SAB kern /'
+fi
+
 if has ab; then
   echo "== IN-BUILD REFERENCE ARMS (head build; each prints before, after and whether the answers agree)"
   G=$(col_env "$T/python" gpu); C=$(col_env "$T/python" cpu)
@@ -177,13 +185,6 @@ if has timing; then
   done
 fi
 
-if has sabotage; then
-  echo "== SABOTAGE, one arm per new device path (clean AGREE, sabotaged DISAGREE, restored AGREE)"
-  PIXI=$PIXI sh tools/algos_lane_check.sh ivf,x-ann-ivf-pq --sabotage x_ann/checks/sabotage/resident_index_py_dn_ann.patch \
-    --out "$EV/sab_ann" 2>&1 | grep -E 'RESULT|CLEAN:|SABOTAGED:|RESTORED:' | sed 's/^/SAB ann /'
-  PIXI=$PIXI sh tools/algos_lane_check.sh x-neighbors-kpca --sabotage x_neighbors/checks/sabotage/fused_chain_device.patch \
-    --out "$EV/sab_kern" 2>&1 | grep -E 'RESULT|CLEAN:|SABOTAGED:|RESTORED:' | sed 's/^/SAB kern /'
-fi
 
 # small footprint: the build outputs this job made and the base snapshot
 find python/mojolearn -newer "$EV/.start" \( -name '*.so' -o -name '*.dylib' -o -name '*.lanecheck-stamp' -o -name '*.stamp.json' \) -delete 2>/dev/null
