@@ -293,9 +293,16 @@ def count_neg_unit(t: Int, f: FP, q: IP):
     """q = [CODES, n, d, OUT]; t = column: how many codes are negative."""
     var n = p(q, 1)
     var d = p(q, 2)
+    var C = p(q, 0)
     var k = 0
-    for i in range(n):
-        if ld(f, p(q, 0) + i * d + t) < Float32(0):
+    var full = n - n % RUN
+    for i0 in range(0, full, RUN):
+        var bc = run_block[RUN](f, C + i0 * d + t, d)
+        comptime for u in range(RUN):
+            if ftz(bc[u]) < Float32(0):
+                k += 1
+    for i in range(full, n):
+        if ld(f, C + i * d + t) < Float32(0):
             k += 1
     st(f, p(q, 3) + t, Float32(k))
 
@@ -410,7 +417,8 @@ def class_stats_unit(t: Int, f: FP, q: IP):
     """q = [X, n, d, Y, K, CNT, MEAN, VAR, SUM]; t = k*d + c. Over the rows
     whose class code Y[i] == k, ascending: the sum, mean and population
     variance of column c (and, for c == 0, the row count). Offsets < 0 are not
-    written; an empty class writes zeros."""
+    written; an empty class writes zeros. Rows are loaded RUN at a time
+    (`run_block`) and folded one by one in the same order."""
     var X = p(q, 0)
     var n = p(q, 1)
     var d = p(q, 2)
@@ -419,7 +427,15 @@ def class_stats_unit(t: Int, f: FP, q: IP):
     var c = t % d
     var cnt = 0
     var s = Float32(0)
-    for i in range(n):
+    var full = n - n % RUN
+    for i0 in range(0, full, RUN):
+        var by = run_block[RUN](f, Y + i0, 1)
+        var bx = run_block[RUN](f, X + i0 * d + c, d)
+        comptime for u in range(RUN):
+            if Int(ftz(by[u])) == k:
+                s = add(s, ftz(bx[u]))
+                cnt += 1
+    for i in range(full, n):
         if Int(ld(f, Y + i)) != k:
             continue
         s = add(s, ld(f, X + i * d + c))
@@ -429,7 +445,14 @@ def class_stats_unit(t: Int, f: FP, q: IP):
     if cnt > 0:
         mean = div(s, Float32(cnt))
         if p(q, 7) >= 0:
-            for i in range(n):
+            for i0 in range(0, full, RUN):
+                var by = run_block[RUN](f, Y + i0, 1)
+                var bx = run_block[RUN](f, X + i0 * d + c, d)
+                comptime for u in range(RUN):
+                    if Int(ftz(by[u])) == k:
+                        var e = sub(ftz(bx[u]), mean)
+                        ss = add(ss, mul(e, e))
+            for i in range(full, n):
                 if Int(ld(f, Y + i)) != k:
                     continue
                 var e = sub(ld(f, X + i * d + c), mean)
