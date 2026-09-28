@@ -1,0 +1,14 @@
+diff --git a/x_decomp/host_lda.mojo b/x_decomp/host_lda.mojo
+index 1703bef72..caeda8815 100644
+--- a/x_decomp/host_lda.mojo
++++ b/x_decomp/host_lda.mojo
+@@ -94,7 +94,8 @@ def lda_doc_row_host(
+         while tb0 < kp:
+             var nb = min(TB, (kp - tb0) // W)
+             var acc = InlineArray[V, TB](fill=V(0))
+-            for j in range(nnz):
++            for jq in range(nnz):
++                var j = nnz - 1 - jq  # SABOTAGE 5313 (host LDA): the topic fold's words descending
+                 var rv = V(_ftz1(r[j]))
+                 var row = EWt + nz[j] * kp + tb0
+                 comptime for b in range(TB):
