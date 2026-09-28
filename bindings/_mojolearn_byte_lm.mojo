@@ -39,6 +39,9 @@ from core.step_phase import (
     step_counts_report,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from core.neural_context import neural_ctx
+# One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
+comptime _NEURAL_CTX = "MojoNeuralByteLMContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralByteLMContextFast"
 from checks.vendor import COMPILED_VENDOR
 from gemm.checks.gemm_identical import TUNED_STAGE_FTZ, GEMM_REUSE_GROUP_WS
 from training.checks.optimizer_oracle import OptimizerConfig
@@ -422,7 +425,7 @@ def _byte_lm_run(addresses: PythonObject, params: PythonObject, shape: ByteConfi
                     # after the first creating call. Off: this branch is
                     # not entered and nothing below changes.
                     BYTE_LM_CONTEXT_KEEPER.get_or_create_ptr()[].ensure()
-                session.ctx = DeviceContext()
+                session.ctx = neural_ctx[_NEURAL_CTX]()
                 session.trainer = ByteTrainer(session.ctx.value(), initial_p, initial_m,
                     initial_v, flags, completed, cfg, shape)
             ref ctx = session.ctx.value()
@@ -821,7 +824,7 @@ def byte_lm_session_open_binding(session: PythonObject, addresses: PythonObject,
             if keep_context:
                 # DEVIATION 2513: the same keeper the per-call path uses.
                 BYTE_LM_CONTEXT_KEEPER.get_or_create_ptr()[].ensure()
-            owner[].ctx = DeviceContext()
+            owner[].ctx = neural_ctx[_NEURAL_CTX]()
             owner[].trainer = ByteTrainer(owner[].ctx.value(), initial_p, initial_m,
                 initial_v, flags, completed, cfg, cfg_shape)
             owner[].ctx.value().synchronize()
@@ -1225,7 +1228,7 @@ def byte_lm_logits_binding(addresses: PythonObject, dims: PythonObject,
             if keep_context:
                 # DEVIATION 2513: the same keeper the other per-call path uses.
                 BYTE_LM_CONTEXT_KEEPER.get_or_create_ptr()[].ensure()
-            session.ctx = DeviceContext()
+            session.ctx = neural_ctx[_NEURAL_CTX]()
             logits = byte_logits_from_params(session.ctx.value(), params, ids, bl[0], bl[1], cfg)
             session.ctx.value().synchronize()
             session.ctx = None

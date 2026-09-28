@@ -1,0 +1,22 @@
+diff --git a/mamba/impl/modules/ssd_minimal.mojo b/mamba/impl/modules/ssd_minimal.mojo
+index 75f4b70a4..9789c6bf2 100644
+--- a/mamba/impl/modules/ssd_minimal.mojo
++++ b/mamba/impl/modules/ssd_minimal.mojo
+@@ -244,7 +244,7 @@ def m2_chunk_cumsum_kernel(
+     for i in range(qv):
+         if i < real:
+             var v = ftz(da.unsafe_load(((bb * t_work) + (c0 + i)) * nh + hh))
+-            comptime if SAB_SEGSUM_DESCENDING:
++            comptime if True:  # SABOTAGE (neural seam arm): SAB_SEGSUM_DESCENDING at its use site
+                 # SABOTAGE: rebuild THIS prefix by a descending fold --
+                 # the fold order clause undone, one variable.
+                 var acc = Float32(0.0)
+@@ -311,7 +311,7 @@ def m2_seg_l_kernel(
+     seg_l.unsafe_store(lbase + j * qv + j, ftz(identical_exp(acc)))
+     for i in range(j + 1, qv):
+         if i < real:
+-            comptime if SAB_SEGSUM_DESCENDING:
++            comptime if True:  # SABOTAGE (neural seam arm): SAB_SEGSUM_DESCENDING at its use site
+                 var a2 = Float32(0.0)
+                 var k = i
+                 while k > j:

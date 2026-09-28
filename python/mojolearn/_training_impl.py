@@ -612,6 +612,8 @@ class _Optimizer(NumericModeMixin):
         #     10  dampening       (float; SGD only)
         #     11  max_norm        (float; <= 0 turns the gradient-norm clip
         #                          OFF)
+        #     12  maximize        0 or 1: the step reads the sign-flipped
+        #                          gradient (training/maximize.mojo)
         #
         # A silent reorder here is a WRONG ANSWER and not a crash: swap
         # `beta1` and `beta2` and every step still returns a full buffer of
@@ -630,6 +632,7 @@ class _Optimizer(NumericModeMixin):
             float(cfg["momentum"]),
             float(cfg["dampening"]),
             max_norm_f,
+            1 if getattr(self, "maximize", False) else 0,
         ]
 
         # `_load` and not `self._bind()`: the two resolve the same
@@ -753,10 +756,13 @@ class SGD(_Optimizer):
         max_norm        honored   on `step`, not on the constructor, because
                                   it is a property of the step and the
                                   reference spells it as a separate call
-        maximize        refused   `torch.optim.SGD`'s sign flip is not in
-                                  `OptimizerConfig` and has no clause, no
-                                  fixture and no sabotage
-                                  (python/mojolearn/_training_impl.py)
+        maximize        honored   torch's `-grad` at the top of the step,
+                                  before the coupled decay and the momentum
+                                  buffer: the sign bit flipped
+                                  (training/maximize.mojo, DEVIATION 6200).
+                                  The caller's gradient is never negated;
+                                  with `max_norm` on, it receives the same
+                                  clipped values as `maximize=False`
         foreach         refused   an EXECUTION knob in torch. This surface is
                                   one launch over the whole flat buffer for
                                   Adam and one per tensor for SGD, and the
@@ -781,7 +787,7 @@ class SGD(_Optimizer):
 
     def __init__(self, params, lr=1e-3, momentum=0.0, dampening=0.0,
                  weight_decay=0.0, nesterov=False, lr_schedule=None,
-                 accumulation_steps=1, **kwargs):
+                 accumulation_steps=1, maximize=False, **kwargs):
         _refuse_unknown(kwargs, "SGD")
         super().__init__(params, "SGD", lr_schedule, accumulation_steps)
         if nesterov and (momentum == 0.0 or dampening != 0.0):
@@ -801,6 +807,7 @@ class SGD(_Optimizer):
         self.dampening = float(dampening)
         self.weight_decay = float(weight_decay)
         self.nesterov = bool(nesterov)
+        self.maximize = _maximize_flag(maximize, "SGD")
 
     def _config(self):
         return {
@@ -880,8 +887,13 @@ class Adam(_Optimizer):
                                   of two equal-comparing values survives.
                                   Refused by name in
                                   python/mojolearn/_training_impl.py
-        maximize        refused   not in `OptimizerConfig`; no clause, no
-                                  fixture, no sabotage
+        maximize        honored   torch's `-grad` at the top of the step,
+                                  before the coupled decay (Adam) and the
+                                  moments; AdamW's decay reads the parameter: the sign bit flipped
+                                  (training/maximize.mojo, DEVIATION 6200).
+                                  The caller's gradient is never negated;
+                                  with `max_norm` on, it receives the same
+                                  clipped values as `maximize=False`
         foreach         refused   an EXECUTION knob; Adam here is ONE launch
         fused           refused   over the whole flat buffer and the choice
         capturable      refused   is not the caller's
@@ -897,7 +909,7 @@ class Adam(_Optimizer):
 
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8,
                  weight_decay=0.0, lr_schedule=None, accumulation_steps=1,
-                 **kwargs):
+                 maximize=False, **kwargs):
         _refuse_unknown(kwargs, type(self).__name__)
         super().__init__(params, type(self).__name__, lr_schedule,
                          accumulation_steps)
@@ -913,6 +925,7 @@ class Adam(_Optimizer):
         self.betas = (float(b1), float(b2))
         self.eps = float(eps)
         self.weight_decay = float(weight_decay)
+        self.maximize = _maximize_flag(maximize, type(self).__name__)
 
     def _config(self):
         return {
@@ -951,10 +964,11 @@ class AdamW(Adam):
 
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8,
                  weight_decay=0.01, lr_schedule=None, accumulation_steps=1,
-                 **kwargs):
+                 maximize=False, **kwargs):
         super().__init__(params, lr=lr, betas=betas, eps=eps,
                          weight_decay=weight_decay, lr_schedule=lr_schedule,
-                         accumulation_steps=accumulation_steps, **kwargs)
+                         accumulation_steps=accumulation_steps,
+                         maximize=maximize, **kwargs)
 
 
 #: torch parameter names this surface does not have, and the reason each is
@@ -969,12 +983,6 @@ _REFUSED_KWARGS = {
         "equal-comparing values survives (optimizer contract 8c, and "
         "clip_coefficient's docstring in "
         "training/checks/optimizer_oracle.mojo)"
-    ),
-    "maximize": (
-        "torch's sign flip is not a field of `OptimizerConfig` "
-        "(training/checks/optimizer_oracle.mojo) and has no contract clause, "
-        "no fixture and no sabotage. Negate your gradients yourself and leave "
-        "the extra step visible in your source"
     ),
     "foreach": (
         "an EXECUTION knob. Adam here is ONE launch over the whole flat "
@@ -1031,6 +1039,17 @@ _REFUSED_KWARGS = {
     "world_size": None,
     "rank": None,
 }
+
+
+def _maximize_flag(maximize, where):
+    """`maximize` as a strict bool: torch reads it as a bool, and a string
+    or a number here is a caller who meant something else."""
+    if not isinstance(maximize, bool):
+        raise TypeError(
+            "mojolearn.%s: maximize must be True or False, got %r "
+            "(python/mojolearn/_training_impl.py)" % (where, maximize)
+        )
+    return maximize
 
 
 def _refuse_unknown(kwargs, where):

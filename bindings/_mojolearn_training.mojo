@@ -67,12 +67,16 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from core.neural_context import neural_ctx
+# One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
+comptime _NEURAL_CTX = "MojoNeuralTrainingContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralTrainingContextFast"
 from checks.vendor import COMPILED_VENDOR
 from max.gpu.host import DeviceContext
 
 from training.clip_multi_gpu import parallel_clip_grad_norm_host, clip_pool_fault_available
 from training.accumulate_multi_gpu import parallel_accumulate_host, accumulate_pool_fault_available
 from training.optimizer_multi_gpu import parallel_optimizer_step_host
+from training.maximize import maximize_negate, maximize_negated_copy
 from training.estimator import (
     identical_ce_loss_host,
     identical_clip_grad_norm_host,
@@ -182,6 +186,10 @@ def optimizer_step_binding(
         9   momentum        (float; SGD only)
         10  dampening       (float; SGD only)
         11  max_norm        (float; <= 0 turns the gradient-norm clip OFF)
+        12  maximize        0 or 1, OPTIONAL (a 12-value list is 0). 1 runs
+                            the step on the sign-flipped gradient,
+                            training/maximize.mojo (DEVIATION 6200); the
+                            caller's gradient is never left negated
 
     SLOT 2 IS THE TRAP IN THIS LIST. `t` is the OPTIMIZER's step counter and
     it is one-based, so a caller looping `for t in range(n)` and passing `t`
@@ -219,13 +227,14 @@ def optimizer_step_binding(
     clip not running, and the oracle draws the same distinction by leaving
     its `clip.*` stages empty rather than filling them with a 1.
     """
-    if len(params) != 12:
+    if len(params) != 12 and len(params) != 13:
         raise Error(
-            "optimizer_step: params must contain 12 values, got "
+            "optimizer_step: params must contain 12 or 13 values, got "
             + String(len(params))
         )
     var pp = _f32_ptr(Int(py=param_addr))
     var gp = _f32_ptr(Int(py=grad_addr))
+    var maximize = len(params) == 13 and Int(py=params[12]) != 0
     var mp = _f32_ptr(Int(py=m_addr))
     var vp = _f32_ptr(Int(py=v_addr))
     var op = _i32_ptr(Int(py=offsets_addr))
@@ -245,12 +254,30 @@ def optimizer_step_binding(
     var max_norm = Float32(Float64(py=params[11]))
     var n_total = 0
     with GILReleased(Python()):
-        var ctx = DeviceContext()
-        n_total = parallel_optimizer_step_host(
-            ctx, pp, gp, mp, vp, op, ip, fp, n_tensors, kind, t, nesterov,
-            lr, beta1, beta2, eps, weight_decay, momentum, dampening,
-            max_norm,
-        )
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        if maximize:
+            # The step reads a negated COPY, so the caller's gradient is never
+            # negated, not even for the length of the call; a clipped
+            # gradient is written back through the same sign flip.
+            if n_tensors < 1 or op[n_tensors] < Int32(0):
+                raise Error("optimizer_step: maximize needs a registry with offsets[J] >= 0")
+            var n_flat = Int(op[n_tensors])
+            var neg = maximize_negated_copy(gp, n_flat)
+            var np_ = neg.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+            n_total = parallel_optimizer_step_host(
+                ctx, pp, np_, mp, vp, op, ip, fp, n_tensors, kind, t, nesterov,
+                lr, beta1, beta2, eps, weight_decay, momentum, dampening,
+                max_norm,
+            )
+            if max_norm > Float32(0.0):
+                for i in range(n_flat):
+                    gp[i] = maximize_negate(neg[i])
+        else:
+            n_total = parallel_optimizer_step_host(
+                ctx, pp, gp, mp, vp, op, ip, fp, n_tensors, kind, t, nesterov,
+                lr, beta1, beta2, eps, weight_decay, momentum, dampening,
+                max_norm,
+            )
     return PythonObject(n_total)
 
 
@@ -299,7 +326,7 @@ def clip_grad_norm_binding(
     var max_norm = Float32(Float64(py=params[1]))
     var n_total = 0
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = neural_ctx[_NEURAL_CTX]()
         n_total = parallel_clip_grad_norm_host(
             ctx, gp, op, fp, n_tensors, max_norm,
         )
@@ -375,7 +402,7 @@ def ce_loss_binding(
     var label_smoothing = Float32(Float64(py=params[6]))
     var count = 0
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = neural_ctx[_NEURAL_CTX]()
         count = identical_ce_loss_host(
             ctx, lp, rp, dp, xp, tp, n_rows, vocab, ignore_index, reduction,
             num_items, want_grad, label_smoothing,
@@ -405,7 +432,7 @@ def mlp_bias_activation_binding(
     var op = _f32_ptr(Int(py=out_addr))
     var count = 0
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = neural_ctx[_NEURAL_CTX]()
         count = mlp_bias_activation_host(ctx, xp, bp, op, rows, cols, relu_flag)
     return PythonObject(count)
 
@@ -429,7 +456,7 @@ def mlp_relu_backward_binding(
     var op = _f32_ptr(Int(py=out_addr))
     var count = 0
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = neural_ctx[_NEURAL_CTX]()
         count = mlp_relu_backward_host(ctx, ap, gp, op, rows, cols)
     return PythonObject(count)
 
@@ -450,7 +477,7 @@ def mlp_sum_rows_binding(
     var op = _f32_ptr(Int(py=out_addr))
     var count = 0
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = neural_ctx[_NEURAL_CTX]()
         count = mlp_sum_rows_host(ctx, xp, op, rows, cols)
     return PythonObject(count)
 
@@ -498,7 +525,7 @@ def embedding_forward_binding(
     var width = Int(py=params[2])
     var count = 0
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = neural_ctx[_NEURAL_CTX]()
         count = samba_embedding_forward_host(
             ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), _i32_ptr(a[2]),
             n_positions, vocab, width,
@@ -518,7 +545,7 @@ def embedding_backward_binding(
     var width = Int(py=params[2])
     var count = 0
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = neural_ctx[_NEURAL_CTX]()
         count = samba_embedding_backward_host(
             ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), _i32_ptr(a[2]),
             n_positions, vocab, width,
@@ -538,7 +565,7 @@ def rms_norm_forward_binding(
     var eps = Float32(Float64(py=params[2]))
     var count = 0
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = neural_ctx[_NEURAL_CTX]()
         count = samba_rms_norm_forward_host(
             ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), _f32_ptr(a[2]), m, dm, eps,
         )
@@ -557,7 +584,7 @@ def rms_norm_backward_binding(
     var eps = Float32(Float64(py=params[2]))
     var count = 0
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = neural_ctx[_NEURAL_CTX]()
         count = samba_rms_norm_backward_host(
             ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), _f32_ptr(a[2]),
             _f32_ptr(a[3]), _f32_ptr(a[4]), m, dm, eps,
@@ -577,7 +604,7 @@ def linear_forward_binding(
     var k = Int(py=params[2])
     var count = 0
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = neural_ctx[_NEURAL_CTX]()
         count = samba_linear_forward_host(
             ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), _f32_ptr(a[2]), m, n, k,
         )
@@ -596,7 +623,7 @@ def linear_backward_binding(
     var k = Int(py=params[2])
     var count = 0
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = neural_ctx[_NEURAL_CTX]()
         count = samba_linear_backward_host(
             ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), _f32_ptr(a[2]),
             _f32_ptr(a[3]), _f32_ptr(a[4]), m, n, k,
@@ -618,7 +645,7 @@ def accumulate_binding(
     var t_tokens = Int(py=params[2])
     var count = 0
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = neural_ctx[_NEURAL_CTX]()
         count = parallel_accumulate_host(
             ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), n, steps, t_tokens,
         )
@@ -656,7 +683,7 @@ def neural_rng_binding(
     var pb = Float32(Float64(py=params[7]))
     var count = 0
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = neural_ctx[_NEURAL_CTX]()
         count = neural_rng_host(
             ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), n, offset, seed_lo, seed_hi,
             stream_id, kind, pa, pb,
@@ -676,7 +703,7 @@ def chunked_lm_head_v2_loss_binding(
     var width = Int(py=params[2])
     var count = 0
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = neural_ctx[_NEURAL_CTX]()
         count = chunked_lm_head_v2_loss_host(
             ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), _f32_ptr(a[2]),
             _f32_ptr(a[3]), _f32_ptr(a[4]), _i32_ptr(a[5]),
@@ -696,7 +723,7 @@ def chunked_lm_head_v2_train_binding(
     var width = Int(py=params[2])
     var count = 0
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = neural_ctx[_NEURAL_CTX]()
         count = chunked_lm_head_v2_train_host(
             ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), _f32_ptr(a[2]),
             _f32_ptr(a[3]), _f32_ptr(a[4]), _f32_ptr(a[5]),

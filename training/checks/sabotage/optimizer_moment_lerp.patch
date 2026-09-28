@@ -1,0 +1,13 @@
+diff --git a/training/checks/optimizer.mojo b/training/checks/optimizer.mojo
+index 3dff4557b..3c967cee4 100644
+--- a/training/checks/optimizer.mojo
++++ b/training/checks/optimizer.mojo
+@@ -577,7 +577,7 @@ def adam_update_kernel(
+ 
+     # O5 and O6, a PRODUCT then an FMA. Contract 7.2a.
+     var m = Float32(0.0)
+-    comptime if SAB_MOMENT_LERP:
++    comptime if True:  # SABOTAGE (neural seam arm): SAB_MOMENT_LERP at its use site
+         # SABOTAGE: the `lerp_` spelling, `m + c1*(g - m)`.
+         var d = ftz(g - mp)
+         m = ftz(identical_mul_add(c1, d, mp))

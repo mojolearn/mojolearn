@@ -1,0 +1,13 @@
+diff --git a/training/checks/loss.mojo b/training/checks/loss.mojo
+index 6cc124f9a..accc00e2a 100644
+--- a/training/checks/loss.mojo
++++ b/training/checks/loss.mojo
+@@ -661,7 +661,7 @@ def ce_shift_exp_kernel(
+     var row = cell // vocab
+     var s = ftz(ftz(logits.unsafe_load(cell)) - ftz(max_in.unsafe_load(row)))
+     shift.unsafe_store(cell, s)
+-    comptime if SAB_EXP_STDLIB:
++    comptime if True:  # SABOTAGE (neural seam arm): SAB_EXP_STDLIB at its use site
+         # SABOTAGE: the vendor's own exp. INERT under FAST and at `s == 0`.
+         expo.unsafe_store(cell, exp(s))
+         return

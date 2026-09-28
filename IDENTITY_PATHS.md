@@ -600,8 +600,9 @@ sized to the count that lane asked for:
 | algorithm expansion `cnn` | -- | **170-179** | 10 |
 | algorithm expansion `ann` | -- | **180-189** | 10 |
 | algorithm expansion `metrics` (2026-09-27, lane/metrics) | -- | **190-199** | 10 |
+| family lane `neural` (2026-09-27, lane/neural; DEVIATIONS 6200-6299) | -- | **200-209** | 10 |
 
-Next free row after this table is **200** (97-99 are unassigned; the
+Next free row after this table is **210** (200-209 went to the neural family lane on 2026-09-27) (97-99 are unassigned; the
 expansion ranges start at 100 so the nine lanes of
 docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md never meet anyone already writing
 at 97). Each expansion lane writes its rows ONLY in its own section of
@@ -829,3 +830,17 @@ binding (`_mojolearn_metrics`) and its rows are unchanged.
 | 199 | **the cluster lane's agglomerative tree and spectral label assignment** (`x_cluster/bodies.mojo::lance_williams` DEVIATION 5117, `x_cluster/agglo.mojo::agglo_tree` merge order DEVIATION 5118, `x_cluster/spectral_assign.mojo::jacobi_svd` DEVIATION 5119) | scipy/scikit-learn's reciprocal Lance-Williams spelling and FMA contraction; the order of tied merges; LAPACK's SVD (vendor BLAS, blocked, not bitwise portable) | PIN: ward/average as pinned products summed left to right and one quotient; the lowest live pair with the lowest i then j on a tie; a one-sided Jacobi SVD, pairs in row order, column sums rows ascending, pinned products, float64; all host code, one source in both bindings | `agglo_check.mojo` (arms 5117, 5118), `spectral_assign_check.mojo` (arm 5119 bites, CPU, 2026-09-28); lanes x-cluster-agglo-linkages / -connectivity / -spectral-affinities: NVIDIA, AMD, Apple OWED |
 | 200 | **the cluster lane's device order statistic** (`x_cluster/device_ops.mojo::_kth_kernel`, DEVIATION 5120; OPTICS core distances, the MeanShift bandwidth, the AffinityPropagation median) | a bitonic sort or a float compare-based select moves ties, -0.0 and NaN per vendor | REPLACE: one block per row, four 8-bit radix passes over the masked float bits (most significant first), 256-bin shared integer histograms (atomic integer adds: every interleaving gives the same counts), the result clamped to +inf exactly as 5103's bisection | `kth_check.mojo` long rows (arm 5120 bites); NVIDIA == CPU; AMD, Apple OWED |
 | 201 | **the cluster lane's device M-step moments** (`x_cluster/device_ops.mojo::_moments_pass_kernel`, DEVIATION 5121; BayesianGaussianMixture's nk, means and covariances) | a tree or atomic reduction over the rows reassociates the float32 sums per launch shape and vendor | REPLACE: the addends of a row tile formed by every thread into shared memory (`bodies.xk_term` / `cov_term`: independent of the chain), then every fold ONE thread's register chain over them, rows ascending, through the same `chain_add` and finals as the host cells (5110); pass 1 (nk + means) one block per component, pass 2 sixteen covariance chains per block; d > 64 keeps the one-thread-per-cell kernels | `moments_check.mojo` (multi-tile, > 256 chains, fallback; arm 5121 bites); NVIDIA == CPU; AMD, Apple OWED |
+
+### `neural`: rows 202-209
+
+The neural family lane's option-parity seams (transformer, Mamba-1/2/3,
+Samba, MLP, embedding, byte LM, the training primitives). Its seam drivers
+and one sabotage patch per seam are listed in
+`tools/identity_lanes/neural.checks`; `tools/identity_lanes/neural.core`
+names the existing identity lanes they run before (those lanes live in
+tools/identity_break.py, not in a fragment). Rows 200 and 201 went to the
+cluster lane first.
+
+| row | pathway | what moves bits | move | status |
+|---|---|---|---|---|
+| 202 | **`maximize=True`** on SGD, Adam and AdamW (`training/maximize.mojo`, both optimizer bindings) | the gradient's negation has two exact spellings, `-g` (the sign bit) and `0.0 - g`, which differ at `g = +0.0`; the zero's sign reaches SGD's copied momentum buffer and `fma(-lr, g, -0.0)` | PIN, DEVIATION 6200: the sign-bit flip (torch's `-grads[i]`, first statement of the step), on a negated COPY so the caller's gradient is never negated; a clipped gradient is written back through the same flip | `training/checks/maximize_check.mojo` (fixture separates the spellings, else VACUOUS; production flip == restatement through `optimizer_step_oracle` for SGD, Adam, AdamW, clip on and off), arm `maximize_6200_subtract_from_zero.patch` bites; lane `optim-maximize` |

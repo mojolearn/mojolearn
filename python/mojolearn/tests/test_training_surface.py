@@ -431,9 +431,9 @@ def arm_refusals(rep):
     rep.raises("REFUSALS", TypeError, "amsgrad",
                "Adam(amsgrad=True) is refused by name",
                T.Adam, p, amsgrad=True)
-    rep.raises("REFUSALS", TypeError, "maximize",
-               "Adam(maximize=True) is refused by name",
-               T.Adam, p, maximize=True)
+    rep.raises("REFUSALS", TypeError, "maximize must be True or False",
+               "Adam(maximize=1) is refused by name (maximize=True is honored, DEVIATION 6200)",
+               T.Adam, p, maximize=1)
     rep.raises("REFUSALS", TypeError, "foreach",
                "Adam(foreach=True) is refused by name",
                T.Adam, p, foreach=True)
