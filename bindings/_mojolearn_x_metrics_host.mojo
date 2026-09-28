@@ -80,9 +80,9 @@ def expected_mi_binding(a: PythonObject, na: PythonObject, b: PythonObject, nb: 
     return PythonObject(expected_mi(Int(py=a), Int(py=na), Int(py=b), Int(py=nb), Int(py=n)))
 
 
-def row_sum_range_binding(s: PythonObject, n: PythonObject, k: PythonObject, out: PythonObject) raises -> PythonObject:
+def row_sum_range_binding(s: PythonObject, n: PythonObject, k: PythonObject, dst: PythonObject) raises -> PythonObject:
     """x_metrics/epilogue.mojo row_sum_range (lane metrics-apple2)."""
-    row_sum_range(Int(py=s), Int(py=n), Int(py=k), Int(py=out))
+    row_sum_range(Int(py=s), Int(py=n), Int(py=k), Int(py=dst))
     return PythonObject(0)
 
 
