@@ -21,7 +21,7 @@
 # The patch is re-applied on every exit path; build outputs and the base
 # snapshot are deleted at the end. PHASES=a,b,... runs a subset.
 set -u
-T=/root/mojolearn-py-consolidated
+T=$(cd "$(dirname "$0")/../.." && pwd)   # the lane tree this script sits in (py-consolidated or py-consolidated-b)
 EV=${EV:-/root/ev-py-consolidated/$(date -u +%m%d-%H%M)}
 PATCH=$T/tools/py_consolidated/base.patch
 PHASES=${PHASES:-base,head,cross,tests,sabotage,ab,timing}
