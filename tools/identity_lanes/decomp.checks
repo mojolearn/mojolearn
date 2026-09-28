@@ -29,3 +29,4 @@ x_decomp/checks/graph_check.mojo	x_decomp/checks/sabotage/5314_host_edge_weight.
 x_decomp/checks/dense_check.mojo	x_decomp/checks/sabotage/host_qr_dot_fold.patch
 x_decomp/checks/dense_check.mojo	x_decomp/checks/sabotage/host_svd_fold_order.patch
 x_decomp/checks/dense_check.mojo	x_decomp/checks/sabotage/host_eigh_col_split.patch
+x_decomp/checks/dense_check.mojo	x_decomp/checks/sabotage/host_lu_split.patch
