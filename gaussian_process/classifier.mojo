@@ -29,7 +29,9 @@ refusal of classification itself, is closed by DEVIATION 2830.
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_idx, thread_idx
-from checks.numerics import ftz, identical_mul
+from checks.numerics import ftz, identical_mul, identical_mul_add
+from checks.numerics import NUMERIC_FAST as _NUMERIC_FAST
+from std.sys.info import has_apple_gpu_accelerator
 from cholesky.checks.potrf import (
     CHOL_ELEM_TPB,
     CHOL_NB_PINNED,
@@ -146,6 +148,42 @@ def _gpc_kernel_self(
     return k_host^
 
 
+def _gpc_kernel_self_dev(
+    ctx: DeviceContext, x: List[Float32], n_train: Int, n_features: Int, kernel: GPKernelSpec
+) raises -> DeviceBuffer[DType.float32]:
+    """`_gpc_kernel_self` with K left on the device."""
+    var trace = IdentityTrace()
+    var dx = _upload(ctx, x)
+    var dls = _upload(ctx, _length_scale_table(kernel))
+    var dk = ctx.enqueue_create_buffer[DType.float32](n_train * n_train)
+    var dstack = ctx.enqueue_create_buffer[DType.float32](
+        gp_kernel_stack_floats(n_train, n_train)
+    )
+    ctx.synchronize()
+    gp_kernel_matrix(
+        ctx,
+        dk,
+        dx,
+        dx,
+        dls,
+        dstack,
+        n_train,
+        n_train,
+        n_features,
+        kernel,
+        True,
+        trace,
+        "gpc.kernel",
+        GP_ELEM_TPB,
+        GP_SAB_NONE,
+    )
+    ctx.synchronize()
+    _ = dx^
+    _ = dls^
+    _ = dstack^
+    return dk^
+
+
 def _gpc_matvec(k: List[Float32], v: List[Float32], n: Int) raises -> List[Float32]:
     """`K v` through the pinned gemm at `OP_TN` (`K` is symmetric by bits,
     so `K^T v` is `K v`), the host oracle's `gemm_oracle(k, v, OP_TN, n, 1,
@@ -182,6 +220,64 @@ def _gpc_matvec(k: List[Float32], v: List[Float32], n: Int) raises -> List[Float
 #: `-D MOJOLEARN_GPC_HOST_NEWTON` keeps the host round trips.
 comptime GPC_DEVICE_NEWTON = not is_defined["MOJOLEARN_GPC_HOST_NEWTON"]()
 comptime GPC_B_TPB = 256
+
+
+#: lane neighbors-apple3 (2026-09-28), FAST on Apple, OPT-IN until its A/B
+#: and quality check pass (`-D MOJOLEARN_GPC_DEVICE_VAR`): the latent
+#: variance stays on the device. `gpc_scale_rows` and `gpc_latent_var` as
+#: kernels (their statements, the fold over i ascending, one thread per
+#: column), so the n_train x n_star cross covariance is not read back,
+#: scaled on the host, uploaded, read back again and folded on the host.
+comptime GPC_DEVICE_VAR = (
+    _CTX_MODE == _NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_GPC_DEVICE_VAR"]()
+)
+#: OPT-IN (`-D MOJOLEARN_GPC_RESIDENT_K`): the device Newton loop takes K
+#: from the kernel launch's own buffer, not from a download and an upload.
+comptime GPC_RESIDENT_K = (
+    _CTX_MODE == _NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_GPC_RESIDENT_K"]()
+)
+
+
+def gpc_scale_rows_kernel(
+    out: MutPointer[Float32, MutAnyOrigin],
+    kcross: MutPointer[Float32, MutAnyOrigin],
+    wsr: MutPointer[Float32, MutAnyOrigin],
+    n_train_in: Int32,
+    n_star_in: Int32,
+):
+    """`gpc_scale_rows`, one thread per cell."""
+    var n_train = Int(n_train_in)
+    var n_star = Int(n_star_in)
+    var e = Int(block_idx.x) * GPC_B_TPB + Int(thread_idx.x)
+    if e >= n_train * n_star:
+        return
+    var i = e // n_star
+    var sc = ftz(wsr[unsafe_offset = i])
+    out[unsafe_offset = e] = ftz(identical_mul(sc, ftz(kcross[unsafe_offset = e])))
+
+
+def gpc_latent_var_kernel(
+    out: MutPointer[Float32, MutAnyOrigin],
+    v: MutPointer[Float32, MutAnyOrigin],
+    n_train_in: Int32,
+    n_star_in: Int32,
+    kss: Float32,
+):
+    """`gpc_latent_var`, one thread per column: the fold over i ascending."""
+    var n_train = Int(n_train_in)
+    var n_star = Int(n_star_in)
+    var t = Int(block_idx.x) * GPC_B_TPB + Int(thread_idx.x)
+    if t >= n_star:
+        return
+    var acc = Float32(0.0)
+    for i in range(n_train):
+        var vv = ftz(v[unsafe_offset = i * n_star + t])
+        acc = ftz(identical_mul_add(vv, vv, acc))
+    out[unsafe_offset = t] = ftz(ftz(kss) - acc)
 
 
 def gpc_b_matrix_kernel(
@@ -229,10 +325,24 @@ def _gpc_fit_binary_device(
     kernel: GPKernelSpec,
     max_iter_predict: Int,
 ) raises -> GPCBinaryFit:
-    var k = _gpc_kernel_self(x, n_train, n_features, kernel)
+    # MOJOLEARN_STAGE_TIMES=1: wall per phase (every phase drains on its
+    # own), printed once. Timing only.
+    var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
+    var t_k0 = Int(perf_counter_ns())
     var n = n_train
     var ctx = _family_ctx()
-    var dk = _upload(ctx, k)
+    var dk: DeviceBuffer[DType.float32]
+    comptime if GPC_RESIDENT_K:
+        dk = _gpc_kernel_self_dev(ctx, x, n_train, n_features, kernel)
+    else:
+        var k = _gpc_kernel_self(x, n_train, n_features, kernel)
+        dk = _upload(ctx, k)
+    var t_kernel = Int(perf_counter_ns()) - t_k0
+    var t_b = 0
+    var t_f = 0
+    var t_ld = 0
+    var t_mv = 0
+    var t_s = 0
     var db = ctx.enqueue_create_buffer[DType.float32](n * n)
     var dwsr = ctx.enqueue_create_buffer[DType.float32](n)
     var hwsr = ctx.enqueue_create_host_buffer[DType.float32](n)
@@ -250,6 +360,7 @@ def _gpc_fit_binary_device(
     var last_wsr = List[Float32]()
     var nb = 0
     for it in range(max_iter_predict):
+        var s0 = Int(perf_counter_ns())
         var wt = gpc_weights(f)
         for i in range(n):
             hwsr.unsafe_ptr().unsafe_store(i, wt.wsr[i])
@@ -259,9 +370,15 @@ def _gpc_fit_binary_device(
             grid_dim=((n * n + GPC_B_TPB - 1) // GPC_B_TPB, 1, 1), block_dim=(GPC_B_TPB, 1, 1),
         )
         add_jitter(ctx, db, n, Float32(0.0), CHOL_ELEM_TPB)
+        if st_on:
+            ctx.synchronize()
+        var s1 = Int(perf_counter_ns())
         var run = potrf_lower(
             ctx, db, ws, n, trace, chol_default_nb_hint(), CHOL_PANEL_TPB, CHOL_ELEM_TPB
         )
+        var s2 = Int(perf_counter_ns())
+        t_b += s1 - s0
+        t_f += s2 - s1
         if run.info != 0:
             raise Error(
                 "gpc_fit_host: the factorization of B = I + W_sr K W_sr failed"
@@ -273,8 +390,12 @@ def _gpc_fit_binary_device(
                 " matrix, so this means a non-finite latent value"
             )
         var logdet = chol_logdet(ctx, db, dwork, n, trace, CHOL_ELEM_TPB)
+        var s3 = Int(perf_counter_ns())
         var bvec = gpc_newton_rhs(wt.w, f, y, wt.pi)
         var kb = _gpc_matvec_dev(ctx, dk, bvec, n)
+        var s4 = Int(perf_counter_ns())
+        t_ld += s3 - s2
+        t_mv += s4 - s3
         var c = gpc_scale(wt.wsr, kb)
         for i in range(n):
             var v = c[i]
@@ -290,8 +411,11 @@ def _gpc_fit_binary_device(
         ctx.synchronize()
         var xs = _download(ctx, dc, n)
         _ = dc^
+        var s5 = Int(perf_counter_ns())
         var a = gpc_a_vector(bvec, wt.wsr, xs)
         f = _gpc_matvec_dev(ctx, dk, a, n)
+        t_s += s5 - s4
+        t_mv += Int(perf_counter_ns()) - s5
         var lml = gpc_lml(a, f, y, logdet)
         n_iter = it + 1
         last_pi = wt.pi.copy()
@@ -300,7 +424,14 @@ def _gpc_fit_binary_device(
         if gpc_stop(lml, previous):
             break
         previous = lml
+    var t_l0 = Int(perf_counter_ns())
     var last_l = _download(ctx, db, n * n)
+    if st_on:
+        print("GPC_FIT_DEVICE_STAGES iters=" + String(n_iter) + " kernel_ms=" + String(t_kernel // 1000000)
+              + " b_matrix_ms=" + String(t_b // 1000000) + " factor_ms=" + String(t_f // 1000000)
+              + " logdet_ms=" + String(t_ld // 1000000) + " matvec_host_ms=" + String(t_mv // 1000000)
+              + " solve_ms=" + String(t_s // 1000000)
+              + " read_l_ms=" + String((Int(perf_counter_ns()) - t_l0) // 1000000))
     _ = dk^
     _ = db^
     _ = dwsr^
@@ -490,16 +621,43 @@ def gpc_predict_binary_host(
     identical_gemm_into(ctx, dmean, dkc, dr, dws, n_star, 1, n_train, OP_TN)
     var mean = _download(ctx, dmean, n_star)
     var variance = List[Float32]()
+    var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
+    var t_v0 = Int(perf_counter_ns())
     if want_variance:
-        var kc = _download(ctx, dkc, n_train * n_star)
-        var scaled = gpc_scale_rows(kc, wsr, n_train, n_star)
-        var dv = _upload(ctx, scaled)
-        var dl = _upload(ctx, l)
-        trsm_lower(ctx, dl, dv, n_train, n_star, trace, "gpc.v", CHOL_SOLVE_TPB)
-        var v = _download(ctx, dv, n_train * n_star)
-        variance = gpc_latent_var(v, n_train, n_star, kss)
-        _ = dv^
-        _ = dl^
+        comptime if GPC_DEVICE_VAR:
+            var dwv = _upload(ctx, wsr)
+            var dv2 = ctx.enqueue_create_buffer[DType.float32](n_train * n_star)
+            var dvar = ctx.enqueue_create_buffer[DType.float32](n_star)
+            ctx.enqueue_function[gpc_scale_rows_kernel](
+                dv2.unsafe_ptr(), dkc.unsafe_ptr(), dwv.unsafe_ptr(), Int32(n_train), Int32(n_star),
+                grid_dim=((n_train * n_star + GPC_B_TPB - 1) // GPC_B_TPB, 1, 1),
+                block_dim=(GPC_B_TPB, 1, 1),
+            )
+            var dl2 = _upload(ctx, l)
+            trsm_lower(ctx, dl2, dv2, n_train, n_star, trace, "gpc.v", CHOL_SOLVE_TPB)
+            ctx.enqueue_function[gpc_latent_var_kernel](
+                dvar.unsafe_ptr(), dv2.unsafe_ptr(), Int32(n_train), Int32(n_star), kss,
+                grid_dim=((n_star + GPC_B_TPB - 1) // GPC_B_TPB, 1, 1),
+                block_dim=(GPC_B_TPB, 1, 1),
+            )
+            variance = _download(ctx, dvar, n_star)
+            _ = dwv^
+            _ = dv2^
+            _ = dvar^
+            _ = dl2^
+        else:
+            var kc = _download(ctx, dkc, n_train * n_star)
+            var scaled = gpc_scale_rows(kc, wsr, n_train, n_star)
+            var dv = _upload(ctx, scaled)
+            var dl = _upload(ctx, l)
+            trsm_lower(ctx, dl, dv, n_train, n_star, trace, "gpc.v", CHOL_SOLVE_TPB)
+            var v = _download(ctx, dv, n_train * n_star)
+            variance = gpc_latent_var(v, n_train, n_star, kss)
+            _ = dv^
+            _ = dl^
+    if st_on:
+        print("GPC_PREDICT_STAGES n_star=" + String(n_star) + " variance_ms="
+              + String((Int(perf_counter_ns()) - t_v0) // 1000000))
     _ = dx^
     _ = dxs^
     _ = dls^

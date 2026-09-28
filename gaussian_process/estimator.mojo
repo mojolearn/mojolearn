@@ -542,6 +542,17 @@ def _download(
     var h = ctx.enqueue_create_host_buffer[DType.float32](n)
     ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=buf)
     ctx.synchronize()
+    comptime if is_defined["MOJOLEARN_GP_BULK_DOWNLOAD"]():
+        # lane neighbors-apple3, OPT-IN: one vector copy into a list of the
+        # final length, not n appends into a growing one. A copy.
+        var bulk = List[Float32](length=n, fill=Float32(0.0))
+        copy_f32(
+            rebind[MutPointer[Float32, MutUntrackedOrigin]](h.unsafe_ptr()),
+            MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(bulk.unsafe_ptr())),
+            n,
+        )
+        _ = h^
+        return bulk^
     var out = List[Float32]()
     for i in range(n):
         out.append(h.unsafe_ptr().unsafe_load(i))
