@@ -1,3 +1,16 @@
+diff --git a/sequence/exec_device.mojo b/sequence/exec_device.mojo
+index 71b4b80ea..06fa7422c 100644
+--- a/sequence/exec_device.mojo
++++ b/sequence/exec_device.mojo
+@@ -18,7 +18,7 @@ from sequence.coop import COOP_W, apply_coop
+ from std.sys.info import has_apple_gpu_accelerator
+ 
+ #: the simdgroup-cooperative long folds (sequence/coop.mojo): Apple only
+-comptime SEQ_COOP = has_apple_gpu_accelerator()
++comptime SEQ_COOP = False
+ 
+ comptime TPB = 128
+ 
 diff --git a/sequence/ops.mojo b/sequence/ops.mojo
 index 9a3058c50..7f80be42c 100644
 --- a/sequence/ops.mojo
