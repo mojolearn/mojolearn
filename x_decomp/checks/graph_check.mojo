@@ -36,6 +36,31 @@ def main() raises:
     var dh = zeros(n * n)
     HostExec.dijkstra_rows(ptr(W), ptr(dh), ptr(rr), n)
     same("5314 dijkstra host", count_diff_f32(dh, want))
+    var rh = zeros(n)
+    DevExec.dijkstra_rows(ptr(W), ptr(dd), ptr(rr), n)
+    HostExec.dijkstra_rows(ptr(W), ptr(dh), ptr(rh), n)
+    same("5314 dijkstra reached counts host", count_diff_f32(rh, rr))
+    # the host's heap spelling (x_decomp/host_graph.mojo) on a larger graph
+    # with EXACT distance ties (integer weights, many equal-length paths)
+    # and two components
+    var n2 = 150
+    var W2 = zeros(n2 * n2)
+    var st2 = UInt64(11)
+    for i in range(n2):
+        for j in range(n2):
+            var u = lcg_unit(st2)
+            if i != j and (i < 100) == (j < 100) and u < Float32(0.06):
+                W2[i * n2 + j] = Float32(1 + Int(u * Float32(50)) % 3)
+    var want2 = oracle_dijkstra(W2, n2)
+    var d2 = zeros(n2 * n2)
+    var r2 = zeros(n2)
+    DevExec.dijkstra_rows(ptr(W2), ptr(d2), ptr(r2), n2)
+    same("5314 dijkstra (ties) device", count_diff_f32(d2, want2))
+    var h2 = zeros(n2 * n2)
+    var hr2 = zeros(n2)
+    HostExec.dijkstra_rows(ptr(W2), ptr(h2), ptr(hr2), n2)
+    same("5314 dijkstra (ties) host", count_diff_f32(h2, want2))
+    same("5314 dijkstra (ties) reached counts host", count_diff_f32(hr2, r2))
     tr.record_list_f32("x_decomp.dijkstra", dd)
     # ---- 5315 barycenter weights
     var nq = 13

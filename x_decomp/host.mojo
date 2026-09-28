@@ -26,7 +26,6 @@ from x_decomp.cells import (
     ew_cell,
     als_row,
     barycenter_row,
-    dijkstra_row,
     gamma_cell,
     lasso_row,
     lda_doc_row,
@@ -40,6 +39,7 @@ from x_decomp.cells import (
     pdist_cell,
 )
 from x_decomp.exec_trait import Exec
+from x_decomp.host_graph import EdgeList, dijkstra_heap_row
 from x_decomp.host_simd import (
     gemm_fold_rows,
     gemm_prepare,
@@ -244,11 +244,11 @@ struct HostExec(Exec):
 
     @staticmethod
     def dijkstra_rows(w: F32Ptr, dist: F32Ptr, reached: F32Ptr, n: Int) raises:
-        var done = List[Float32](length=n * n, fill=Float32(0))
-        var pd = F32Ptr(unsafe_from_address=Int(done.unsafe_ptr()))
+        # the same distances on a heap over the listed edges (x_decomp/host_graph.mojo)
+        var g = EdgeList(w, n)
         for i in range(n):
-            reached.unsafe_store(i, dijkstra_row(w, dist, pd, i, n))
-        _ = done^
+            reached.unsafe_store(i, dijkstra_heap_row(g, dist, i, n))
+        _ = g^
 
     @staticmethod
     def barycenter_rows(
