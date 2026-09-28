@@ -291,3 +291,16 @@ merges only after it lands.
 4. test_host_surface; test_lane_select only if its inputs changed.
 5. Re-time AutoARIMA at T=3 (after the task-count fix) and the optimizers
    (after the in-place step) with ~/mojolearn-evidence/sequence-cpu/seq_time.py.
+
+**AMD central box (queued 2026-09-28 ~05:05Z, partial gate while no NVIDIA pod):**
+tree /root/mojolearn-sequence-cpu at d9b966c63 + worktree, host bindings
+prebuilt (`/root/ev-sequence-cpu/hostbuild.log`). Job
+`/root/ev-sequence-cpu/amd_gate.sh` (copy: ~/mojolearn-evidence/sequence-cpu/amd_gate.sh):
+the 30 lanes `--pass 2` (CPU == hip, every arm) at default threads, then
+pass 1 at MOJOLEARN_CPU_THREADS=1 and 3. Both slots were busy; the Mac-side
+waiter (nohup, log ~/mojolearn-evidence/sequence-cpu/amd_gate_launch.log)
+starts it when a slot frees (it gives up after 120 min: exit 75, relaunch
+the same command). Results: `/root/ev-sequence-cpu/gate.status`, `p2.log`,
+`t1.log`, `t3.log`; read them first next session
+(`tools/amd_central.sh sh sequence-cpu 'cat /root/ev-sequence-cpu/gate.status'`).
+It does not replace the owed NVIDIA steps above.
