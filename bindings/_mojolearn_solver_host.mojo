@@ -34,6 +34,11 @@ epilogue through `identical_mul_add` / `ftz` / `identical_sqrt`),
 hi)` the device's Boruvka uses; the MST is unique under a total order, so
 the edge set is the device's), `host_dendrogram` (the `children` rows over
 a union-find) and `host_extract_flattened_clusters` (cuVS's cut, serial).
+Since 2026-09-28 (lane cluster-cpu) the matrix, Kruskal and the dendrogram
+run as `hierarchy/host/linkage_host.mojo` (Prim's walk under the same total
+order, threaded, O(m) memory): the same edges in the same order and the
+same `children` rows, checked against the oracle by
+`hierarchy/checks/linkage_host_check.mojo`.
 The guards are the device path's in the device path's order and words
 (`linkage_fit_host`, `cuvs single_linkage`, `get_distance_graph`,
 `pairwise_distances`). ONE ATTRIBUTE IS DEVICE-ONLY: `info[0]`, the
@@ -60,12 +65,8 @@ from gemm.host.identical_gemm import (
     OP_TN,
     gemm_oracle,
 )
-from hierarchy.checks.linkage_oracle import (
-    host_dendrogram,
-    host_extract_flattened_clusters,
-    host_kruskal,
-    host_pinned_distance_matrix,
-)
+from hierarchy.checks.linkage_oracle import host_extract_flattened_clusters
+from hierarchy.host.linkage_host import host_dendrogram_fast, host_prim_mst
 from hierarchy.impl.cluster.detail.connectivities import (
     DISTANCE_L2_EXPANDED,
     DISTANCE_L2_SQRT_EXPANDED,
@@ -372,16 +373,17 @@ def linkage_fit_binding(
             )
         var x = read_f32(x_address, n_rows * n_cols)
         # THE FIT: the oracle's four stages, in the oracle's order.
-        var dists = host_pinned_distance_matrix(
-            x, n_rows, n_cols, metric == DISTANCE_L2_SQRT_EXPANDED
-        )
-        var mst = host_kruskal(dists, n_rows)
-        if len(mst[0]) != n_rows - 1:
+        # lane cluster-cpu (2026-09-28): the oracle's matrix + Kruskal +
+        # dendrogram, as Prim's walk under the same total order
+        # (hierarchy/host/linkage_host.mojo; same edges, same order, same
+        # children, checked by hierarchy/checks/linkage_host_check.mojo).
+        var mst = host_prim_mst(x, n_rows, n_cols, metric == DISTANCE_L2_SQRT_EXPANDED)
+        if len(mst.lo) != n_rows - 1:
             raise Error(
-                "linkage_fit: the host MST has " + String(len(mst[0]))
+                "linkage_fit: the host MST has " + String(len(mst.lo))
                 + " edges, not n_rows - 1; nothing written"
             )
-        var children = host_dendrogram(mst[0], mst[1], n_rows)
+        var children = host_dendrogram_fast(mst.lo, mst.hi, n_rows)
         var labels = host_extract_flattened_clusters(children, n_clusters, n_rows)
         if len(children) != (n_rows - 1) * 2 or len(labels) != n_rows:
             raise Error("linkage_fit: the host dendrogram or labels have an unexpected length; nothing written")
