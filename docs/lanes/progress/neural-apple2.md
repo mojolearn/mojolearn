@@ -13,4 +13,4 @@ digests, byte LM final witness and loss digests).
 
 | steward id | Mac | commit | what |
 |---|---|---|---|
-| 1790603073363 | m3ultra-b | 037daa353 | BEFORE profile (every bench lane, T3 shard step, census) + mamba1/mamba2/transformer forward A/B b11745d8e vs 30497d57e vs 037daa353 |
+| 1790603073363 | m3ultra-b | ca692c7e2 (default path = 037daa353) | BEFORE profile (every bench lane, T3 shard step, census with attention per-kernel timers), Samba train step cProfile, GEMM geometry sweep (default, KB 32, GROUP_M 16, DB, KB 32 x SGM 4, no small tile), mamba1/mamba2/transformer forward A/B b11745d8e vs 30497d57e vs ca692c7e2 |
