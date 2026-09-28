@@ -2601,7 +2601,7 @@ struct DeviceDataset(Movable):
         # also takes the row-major copy, whatever k is.
         var narrow = False
         comptime if ET_RM_NARROW:
-            narrow = Int(self.n_cols) * 4 <= 64
+            narrow = Int(self.n_cols) * 4 <= 64 and 4 * k >= Int(self.n_cols)
         if 2 * k < Int(self.n_cols) and not narrow:
             return
         var nr = Int(self.n_rows)
@@ -3311,10 +3311,18 @@ comptime ET_RM_DATA = ET_ROW_MAJOR or ET_RANGE_TILED or ET_SCORE_TILED
 whose grids put the feature slot on the fast axis so the blocks reading
 one row chunk's features run together and share its cache lines."""
 
-comptime ET_RM_NARROW = is_defined["MOJOLEARN_ET_RM_NARROW"]()
-"""Trial arm (trees-apple2): `ensure_row_major` also builds the row-major
-copy when one row's floats fit a 64-byte line (`n_cols <= 16`), so a
-classifier sampling k = 4 of 16 (taxi) takes the tiled range kernel."""
+comptime ET_RM_NARROW = is_defined["MOJOLEARN_ET_RM_NARROW"]() or (
+    has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_ET_RM_NARROW_OFF"]()
+)
+"""Apple, both modes (trees-apple2, 2026-09-28): `ensure_row_major` also
+builds the row-major copy when one row's floats fit a 64-byte line
+(`n_cols <= 16`) and the fit samples at least a quarter of the features,
+so a classifier sampling k = 4 of 16 (taxi) takes the tiled range kernel.
+The range kernel's cells are the same min/max/NaN counts either way.
+M4 IDENTICAL (steward 1790610860810, always-on arm): ExtraTreesClassifier
+taxi 3904 -> 3745 ms, same hash; RandomTreesEmbedding (k = 1) 469 -> 1086
+ms, hence the quarter gate. `-D MOJOLEARN_ET_RM_NARROW_OFF` turns it off."""
 
 
 @always_inline
