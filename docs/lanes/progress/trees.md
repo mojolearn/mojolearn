@@ -350,12 +350,16 @@ SESSION trees-cpu 2 (2026-09-28 ~04:50Z; RunPod balance negative again, the
   rf_reg 120.1, et_clf 12.5, et_reg 66.5, iforest 0.30, gbdt_logloss 21.0,
   gbdt_rmse 13.1, gbdt_multiclass 21.4, gbdt_ctr 56.8, dt_clf 5.6, dt_reg
   6.6, bagging_clf 14.8 (bench/speed/trees_cpu_speed.py, on the branch).
-- GATE: queued on the central AMD box (tools/amd_central.sh, tree
+- GATE NOT RUN (owed): the launcher waiting for a central AMD slot was
+  killed with the session before a slot freed (decomp held slot 0 from
+  02:21Z, sequence then sequence-cpu slot 1); nothing ran. To run it:
+  the central AMD box (tools/amd_central.sh, tree
   /root/mojolearn-trees-cpu, logs /root/ev-trees-cpu): the 36 non-par
   lanes lane_select names (~/mojolearn-evidence/trees-cpu/lanes2.txt)
   `--pass 2 --sabotage xtrees/checks/sabotage/column_cpu_only.patch`
   (HIP column vs CPU column), then test_host_surface + test_trees_repeat.
-  Read lc.log / hs.log there; gate.done marks the end.
+  Script: ~/mojolearn-evidence/trees-cpu/gate_amd.sh (tree already synced
+  and pixi-installed at /root/mojolearn-trees-cpu).
 - OWED (pod steps, when RunPod is funded): the NVIDIA half of the merge
   gate for the RF/ET step (same lane list and sabotage on CUDA vs CPU),
   then merge + push + one steward submit. Then continue CPU speed: rf_reg /
