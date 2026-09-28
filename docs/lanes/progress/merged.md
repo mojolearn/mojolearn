@@ -398,3 +398,11 @@ MOJOLEARN_CHOL_SWEEP_SOLVES_OFF arms) is in the neighbors-fix agent's report
   256-thread launch). The linear-apple lane owns the root cause on Metal; its
   fix commit is merged here when it lands. The 517a035ee x_linear
   resubmissions were withdrawn where still queued. **BLOCKS the merge to main.**
+- x_linear Metal ROOT FIX (orchestrator: proven on M3 Ultra, steward
+  1790594257141): cherry-picked ONLY 64c57a692 from origin/lane/linear-apple
+  (x_linear/team.mojo: Team stores pointers (MutUntrackedOrigin), not Int
+  addresses, which Metal cannot rebuild as device pointers). 2000x8
+  diagnostic bit-identical to host on 6/6; 100k board Metal == host on 14/14,
+  same digests as main and the RTX 4090. Not taken: 06ef7f558 (reverted by
+  84cff1857), the QN speed commits a45361dbc..96a7fe158 and b05f9a501 (later
+  Apple round). The team_barrier (device|threadgroup on Apple) stays.
