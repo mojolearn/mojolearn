@@ -1,23 +1,22 @@
-diff --git a/x_metrics/group.mojo b/x_metrics/group.mojo
-index 24c1c4d75..235c4e728 100644
---- a/x_metrics/group.mojo
-+++ b/x_metrics/group.mojo
-@@ -12,6 +12,7 @@ them exactly as integers when there is neither a value nor a weight.
- """
- from x_metrics.common import FP, IP, PairSum, p, ld, st, ldi, sti
+diff --git a/x_metrics/par.mojo b/x_metrics/par.mojo
+index 4e441ae51..2743f6b2c 100644
+--- a/x_metrics/par.mojo
++++ b/x_metrics/par.mojo
+@@ -35,6 +35,7 @@ from std.memory import bitcast
+ from x_metrics.common import FP, IP, p, ld, st, ldi, sti, ldu, stu, key, fadd, leaf_add, LEAF
  from checks.numerics import identical_mul
+ from checks.fixture_rng import splitmix_pair
 +from std.math import fma  # SABOTAGE 6105
  
- 
- def group_sort_unit(t: Int, f: FP, q: IP):
-@@ -71,7 +72,9 @@ def group_sum_unit(t: Int, f: FP, q: IP):
-         var r = ldi(f, ORD + i)
+ #: The sort's initial run length (insertion sorted by one thread).
+ comptime RUN = 16
+@@ -162,7 +163,8 @@ def fold_leaf_unit(t: Int, f: FP, q: IP):
+         var r = ldi(f, ORD + pos)
          var v = Float32(1) if V < 0 else ld(f, V + r * VS + c)
          if W >= 0:
 -            v = identical_mul(v, ld(f, W + r))
-+            acc.leaf = fma(v, ld(f, W + r), acc.leaf)  # SABOTAGE 6105
-+            acc.nleaf += 1
++            leaf = fma(v, ld(f, W + r), leaf)  # SABOTAGE 6105
 +            continue
-         acc.add(v)
-     st(f, OUT + t, acc.result())
+         leaf = leaf_add(leaf, v)
+     f.unsafe_store(S + t, leaf)
  
