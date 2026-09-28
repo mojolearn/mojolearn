@@ -25,6 +25,8 @@ variance) it is IEEE double arithmetic on float32 inputs, rounded once to
 float32, which is the same on every box.
 """
 import math
+import os
+import struct
 
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty
@@ -120,6 +122,21 @@ def _class_array(classes, codes):
     return vals
 
 
+#: A/B arm (lane neighbors-apple2): the k-NN primitive as the two ops it
+#: fuses, `sqdist` then `knn_select` through an n x m matrix. Same bits.
+_UNFUSED_KNN = os.environ.get("MOJOLEARN_XN_UNFUSED_KNN", "") == "1"
+#: A/B arm (lane neighbors-apple2): the fit loops of label propagation /
+#: spreading, PageRank and connected_components in Python, one op per step,
+#: instead of the resident `lp_iterate` / `pr_iterate` / `cc_iterate`.
+_HOST_LOOP_LP = os.environ.get("MOJOLEARN_XN_HOST_LOOPS", "") == "1"
+#: A/B arm: KNNImputer.transform over every cell instead of the missing ones.
+_UNCOMPACT_IMPUTE = os.environ.get("MOJOLEARN_XN_UNCOMPACT_IMPUTE", "") == "1"
+#: A/B arm: the one-item forms these replaced (PolynomialCountSketch's
+#: per-row `pcs`, LabelSpreading's per-cell-degree `ls_laplacian`, PageRank's
+#: dangling rows in Python).
+_OLD_ITEMS = os.environ.get("MOJOLEARN_XN_OLD_ITEMS", "") == "1"
+
+
 class _XNeighbors(NumericModeMixin):
     """The primitives, one method each. Every buffer is an owned Array held
     in a local for the duration of the call (the `_buffer` contract)."""
@@ -204,10 +221,25 @@ class _XNeighbors(NumericModeMixin):
         self._op("variance", [(X, 0), (out, 1)], (X.size,))
         return out.tolist()[0]
 
+    def _knn_sq(self, Q, R, k, exclude_self):
+        """(squared distances, indices) of the k nearest rows of R to each row
+        of Q, ascending by (value, index): `knn_select(sqdist(Q, R))` without
+        the n x m matrix (the fused `knn_sq` item runs the same statements;
+        MOJOLEARN_XN_UNFUSED_KNN=1 restores the two ops, an A/B arm)."""
+        if _UNFUSED_KNN:
+            return self._knn_select(self._sqdist(Q, R), k, exclude_self)
+        n, d = Q.shape
+        m = R.shape[0]
+        dist = empty((n, k), "<f4")
+        idx = empty((n, k), "<i4")
+        self._op("knn_sq" if _OLD_ITEMS else "knn_sq_tiled", [(Q, 0), (R, 0), (dist, 1), (idx, 1)],
+                 (n, m, d, k, 1 if exclude_self else 0))
+        return dist, idx
+
     def _knn(self, Q, R, k, exclude_self):
         """Exact k-NN, euclidean: (distances, indices), ascending by (distance,
         index)."""
-        sq, idx = self._knn_select(self._sqdist(Q, R), k, exclude_self)
+        sq, idx = self._knn_sq(Q, R, k, exclude_self)
         return self._unary(sq, _U_SQRT), idx
 
 
@@ -817,7 +849,8 @@ class PolynomialCountSketch(_XNeighbors):
         nf = self.indexHash_.shape[1]
         nc, deg = int(self.n_components), int(self.degree)
         out = empty((n, nc), "<f4")
-        self._op("pcs", [(X, 0), (self.indexHash_, 0), (self.bitHash_, 0), (out, 1)],
+        self._op("pcs" if _OLD_ITEMS else "pcs_resident",
+                 [(X, 0), (self.indexHash_, 0), (self.bitHash_, 0), (out, 1)],
                  (n, d, nf, nc, deg), (_f32_scalar(self.gamma), _f32_scalar(self.coef0)))
         return out
 
@@ -955,7 +988,7 @@ class _LabelPropagationBase(_XNeighbors):
             return self._kernel(X, X, "rbf", self.gamma, 0.0, 0)
         if self.kernel == "knn":
             k = min(int(self.n_neighbors), n)
-            _, idx = self._knn_select(self._sqdist(X, X), k, False)
+            _, idx = self._knn_sq(X, X, k, False)
             g = empty((n, n), "<f4")
             self._op("knn_graph", [(idx, 0), (g, 1)], (n, n, k))
             return g
@@ -981,6 +1014,18 @@ class _LabelPropagationBase(_XNeighbors):
         ld = Array.from_list(ld0, "<f4")
         ystatic = Array.from_list(ys, "<f4")
         unlabeled = _i32(unl, "unlabeled")
+        if not _HOST_LOOP_LP:
+            # The loop below as ONE resident op (x_neighbors/iter_device.mojo):
+            # the same items in the same order, the graph uploaded once, tol
+            # passed as its float64 bits so the stopping test is Python's.
+            info = empty((2,), "<i4")
+            tol_bits = struct.unpack("<Q", struct.pack("<d", float(self.tol)))[0]
+            self._op("lp_iterate", [(G, 0), (ld, 1), (ystatic, 0), (unlabeled, 0), (info, 1)],
+                     (n, C, int(self.max_iter), 0 if self._variant == "propagation" else 1,
+                      tol_bits >> 32, tol_bits & 0xFFFFFFFF),
+                     (_f32_scalar(self.alpha) if self._variant != "propagation" else 0.0,))
+            n_iter = int(info.tolist()[0])
+            return self._finish_fit(X, classes, ld, n, C, n_iter)
         prev = empty((n, C), "<f4")
         s = empty((1,), "<f4")
         n_iter = 0
@@ -1001,6 +1046,9 @@ class _LabelPropagationBase(_XNeighbors):
             ld = out
         if not converged:
             n_iter += 1
+        return self._finish_fit(X, classes, ld, n, C, n_iter)
+
+    def _finish_fit(self, X, classes, ld, n, C, n_iter):
         final = empty((n, C), "<f4")
         self._op("row_normalize", [(ld, 0), (final, 1)], (n, C))
         self.X_ = X
@@ -1017,7 +1065,7 @@ class _LabelPropagationBase(_XNeighbors):
         n = self.X_.shape[0]
         if self.kernel == "knn":
             k = min(int(self.n_neighbors), n)
-            _, idx = self._knn_select(self._sqdist(Q, self.X_), k, False)
+            _, idx = self._knn_sq(Q, self.X_, k, False)
             W = empty((nq, n), "<f4")
             self._op("knn_graph", [(idx, 0), (W, 1)], (nq, n, k))
         else:
@@ -1078,7 +1126,12 @@ class LabelSpreading(_LabelPropagationBase):
         A = self._graph_affinity(X)
         n = A.shape[0]
         G = empty((n, n), "<f4")
-        self._op("ls_laplacian", [(A, 0), (G, 1)], (n,))
+        if _OLD_ITEMS:
+            self._op("ls_laplacian", [(A, 0), (G, 1)], (n,))
+        else:
+            deg = empty((n,), "<f4")
+            self._op("col_degree", [(A, 0), (deg, 1)], (n,))
+            self._op("ls_laplacian_deg", [(A, 0), (deg, 0), (G, 1)], (n,))
         return G
 
 
@@ -1148,8 +1201,19 @@ class KNNImputer(_XNeighbors):
         k = int(self.n_neighbors)
         if k < 1:
             raise ValueError("n_neighbors must be >= 1")
-        self._op("knn_impute", [(X, 0), (self._fit_X, 0), (out, 1)],
-                 (n, m, d, k, 1 if self.weights == "distance" else 0))
+        if _UNCOMPACT_IMPUTE:
+            self._op("knn_impute", [(X, 0), (self._fit_X, 0), (out, 1)],
+                     (n, m, d, k, 1 if self.weights == "distance" else 0))
+        else:
+            # one GPU thread per MISSING cell (`knn_impute_cells`): the same
+            # item statements; a present cell keeps x, as the item stores it
+            flat = X.reshape((n * d,)).tolist()
+            cells = [i for i, v in enumerate(flat) if v != v]
+            out = Array.from_list(flat, "<f4").reshape((n, d))
+            if cells:
+                self._op("knn_impute_cells" if _OLD_ITEMS else "knn_impute_tiled",
+                         [(_i32(cells, "cells"), 0), (X, 0), (self._fit_X, 0), (out, 1)],
+                         (n, m, d, k, 1 if self.weights == "distance" else 0, len(cells)))
         keep = [f for f in range(d) if self._valid[f]]
         if self.keep_empty_features:
             empty_cols = [f for f in range(d) if not self._valid[f]]
@@ -1233,13 +1297,31 @@ class PageRank(_XNeighbors):
             A = Array.from_list([[1.0 if v != 0 else 0.0 for v in r] for r in A.tolist()], "<f4")
         Q = empty((n, n), "<f4")
         self._op("row_normalize", [(A, 0), (Q, 1)], (n, n))
-        dangling = _i32([1 if all(v == 0 for v in r) else 0 for r in A.tolist()], "dangling")
+        if _OLD_ITEMS:
+            dangling = _i32([1 if all(v == 0 for v in r) else 0 for r in A.tolist()], "dangling")
+        else:
+            dangling = empty((n,), "<i4")
+            self._op("row_all_zero", [(A, 0), (dangling, 1)], (n, n))
         if self.personalization is None:
             p = Array.from_list([1.0 / n] * n, "<f4")
         else:
             p = self._unit(self.personalization, n, "personalization")
         dw = p if self.dangling is None else self._unit(self.dangling, n, "dangling")
         x = Array.from_list([1.0 / n] * n, "<f4") if self.nstart is None else self._unit(self.nstart, n, "nstart")
+        if not _HOST_LOOP_LP:
+            # The loop below as ONE resident op (x_neighbors/iter_device.mojo),
+            # Q uploaded once; n * tol passed as its float64 bits.
+            info = empty((2,), "<i4")
+            thr = struct.unpack("<Q", struct.pack("<d", n * float(self.tol)))[0]
+            x = Array.from_list(x.tolist(), "<f4")
+            self._op("pr_iterate", [(Q, 0), (x, 1), (p, 0), (dw, 0), (dangling, 0), (info, 1)],
+                     (n, int(self.max_iter), thr >> 32, thr & 0xFFFFFFFF), (_f32_scalar(self.alpha),))
+            it, ok = info.tolist()
+            if ok:
+                self.pagerank_ = x
+                self.n_iter_ = int(it)
+                return self
+            raise RuntimeError(f"PageRank: power iteration failed to converge within {self.max_iter} iterations")
         s = empty((1,), "<f4")
         for it in range(int(self.max_iter)):
             nxt = empty((n,), "<f4")
@@ -1272,7 +1354,11 @@ def connected_components(A, directed=True, connection="weak", return_labels=True
     A = _adjacency(A)
     n = A.shape[0]
     lab = _i32(list(range(n)), "labels")
-    while True:
+    if not _HOST_LOOP_LP:
+        # the loop below as ONE resident op, A uploaded once
+        info = empty((1,), "<i4")
+        est._op("cc_iterate", [(A, 0), (lab, 1), (info, 1)], (n,))
+    while _HOST_LOOP_LP:
         nxt = empty((n,), "<i4")
         est._op("cc_step", [(A, 0), (lab, 0), (nxt, 1)], (n,))
         if nxt.tolist() == lab.tolist():
