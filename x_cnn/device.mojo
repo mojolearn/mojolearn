@@ -1288,11 +1288,12 @@ def batchnorm_backward_into(x: FP, g: FP, aux: FP, prm: List[Int32], training: B
 
 def dropout2d_into(x: FP, n: Int, prm: List[Int32], hyper: List[Float32], y_out: FP, mask_out: FP) raises:
     var ctx = cnn_ctx()
-    var dx = up(ctx, x, n)
-    var dp = upload_i32(ctx, prm)
-    var dh = upload_f32(ctx, hyper)
-    var mask = ctx.enqueue_create_buffer[DType.float32](n)
-    var dout = ctx.enqueue_create_buffer[DType.float32](n)
+    # lane/cnn-apple2: the cached workspace slots, not fresh buffers per call
+    var dx = put[False](ctx, 0, x, n)
+    var dp = put_prm(ctx, 1, prm)
+    var dh = put_hyper(ctx, 2, hyper)
+    var mask = ws(ctx, 3, n)
+    var dout = ws(ctx, 4, n)
     launch[dropout2d_at](ctx, fp(dx), fp(mask), fp(dout), fp(dh), ip(dp), ip(dp), n)
     down(ctx, dout, y_out, n)
     down(ctx, mask, mask_out, n)
@@ -1319,11 +1320,13 @@ def dropout2d_device(x: List[Float32], prm: List[Int32], hyper: List[Float32]) r
 def spmm_into(vals: FP, nvals: Int, h: FP, csr: List[Int32], prm: List[Int32], dst: FP) raises:
     var total = Int(prm[0]) * Int(prm[1])
     var ctx = cnn_ctx()
-    var dv = up(ctx, vals, nvals)
-    var dh = up(ctx, h, total)
-    var dq = upload_i32(ctx, csr)
-    var dp = upload_i32(ctx, prm)
-    var dout = ctx.enqueue_create_buffer[DType.float32](total)
+    # lane/cnn-apple2: the cached workspace slots (one copy of each input,
+    # no staging list), not fresh buffers per call
+    var dv = put[False](ctx, 0, vals, nvals)
+    var dh = put[False](ctx, 1, h, total)
+    var dq = put_prm(ctx, 2, csr)
+    var dp = put_prm(ctx, 3, prm)
+    var dout = ws(ctx, 4, total)
     launch[spmm_at](ctx, fp(dv), fp(dh), fp(dout), fp(dout), ip(dq), ip(dp), total)
     down(ctx, dout, dst, total)
     ctx.synchronize()
