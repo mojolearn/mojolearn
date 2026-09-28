@@ -32,7 +32,7 @@ from std.memory import bitcast
 from std.sys.info import simd_width_of
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from x_decomp.cells import F32Ptr, FOLD_BLOCK, fold_cell
+from x_decomp.cells import F32Ptr, FOLD_BLOCK, add, fold_cell
 
 comptime W = simd_width_of[DType.float32]()
 comptime V = SIMD[DType.float32, W]
@@ -193,6 +193,57 @@ def _gemm_micro(
         for r in range(rows):
             for q in range(cols):
                 dst.unsafe_store((i + r) * n + j + q, acc[r * NV + q // W][q % W])
+
+
+# ------------------------------------------------ gemm, a single column C
+comptime RB = 256  # rows per row-dot task
+comptime RI = 8  # rows whose chains advance together
+
+
+def gemm_rowdot(m: Int, n: Int, ta: Bool) -> Bool:
+    """C is one column and each of its outputs reads one contiguous row of
+    A (A x v, or a dot product): the rows' own chains, RI at a time."""
+    return n == 1 and (not ta or m == 1)
+
+
+def rowdot_task_count(m: Int) -> Int:
+    return ceildiv(m, RB)
+
+
+def rowdot_task(t: Int, a: F32Ptr, b: F32Ptr, c: F32Ptr, m: Int, k: Int):
+    """Rows [RB * t, +RB) of C = A v (A m x k row major, v k long): per row
+    the cell's chain in each FOLD_BLOCK, then `fold_cell`'s ascending adds
+    from +0 when there is more than one block."""
+    var nb = ceildiv(k, FOLD_BLOCK)
+    var i0 = t * RB
+    var i1 = min(m, i0 + RB)
+    var i = i0
+    while i < i1:
+        var rows = min(RI, i1 - i)
+        var tot = InlineArray[Float32, RI](fill=Float32(0))
+        for blk in range(nb):
+            var p0 = blk * FOLD_BLOCK
+            var p1 = min(k, p0 + FOLD_BLOCK)
+            var acc = InlineArray[Float32, RI](fill=Float32(0))
+            if rows == RI:
+                for p in range(p0, p1):
+                    var y = _ftz1(b.unsafe_load(p))
+                    comptime for r in range(RI):
+                        acc[r] = _ftz1(mul_add_v[1](_ftz1(a.unsafe_load((i + r) * k + p)), y, acc[r]))
+            else:
+                for r in range(rows):
+                    var s = Float32(0)
+                    for p in range(p0, p1):
+                        s = _ftz1(mul_add_v[1](_ftz1(a.unsafe_load((i + r) * k + p)), _ftz1(b.unsafe_load(p)), s))
+                    acc[r] = s
+            for r in range(rows):
+                if nb == 1:
+                    tot[r] = acc[r]
+                else:
+                    tot[r] = add(tot[r], acc[r])  # fold_cell's add
+        for r in range(rows):
+            c.unsafe_store(i + r, tot[r])
+        i += rows
 
 
 def gemm_fold_rows(t: Int, c: F32Ptr, part: F32Ptr, m: Int, n: Int, nb: Int):

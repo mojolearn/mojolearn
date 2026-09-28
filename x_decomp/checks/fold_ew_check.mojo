@@ -117,6 +117,13 @@ def main() raises:
         var hst = zeros(hm)
         HostExec.gemm(ptr(A), ptr(B), ptr(hst), hm, hk, 1, ta, tb)
         same("5300 host-tile narrow gemm host arm " + String(arm), count_diff_f32(hst, want))
+    var rdk = 9000
+    var rda = seam_fixture(hm, rdk, 41)
+    var rdv = seam_fixture(rdk, 1, 42)
+    var wrd = oracle_gemm(rda, rdv, hm, rdk, 1, False, False)
+    var hrd = zeros(hm)
+    HostExec.gemm(ptr(rda), ptr(rdv), ptr(hrd), hm, rdk, 1, False, False)
+    same("5300 host-tile blocked narrow gemm host", count_diff_f32(hrd, wrd))
     var tbk = 9000
     var tba = seam_fixture(hm, tbk, 35)
     var tbb = seam_fixture(tbk, 19, 36)

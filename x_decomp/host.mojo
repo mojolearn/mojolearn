@@ -43,6 +43,9 @@ from x_decomp.exec_trait import Exec
 from x_decomp.host_simd import (
     gemm_fold_rows,
     gemm_prepare,
+    gemm_rowdot,
+    rowdot_task,
+    rowdot_task_count,
     gemm_swapped,
     gemm_task,
     gemm_task_count,
@@ -59,7 +62,10 @@ struct HostExec(Exec):
     @staticmethod
     def gemm(a: F32Ptr, b: F32Ptr, c: F32Ptr, m: Int, k: Int, n: Int, ta: Bool, tb: Bool) raises:
         # the cell's arithmetic and order, SIMD across outputs (x_decomp/host_simd.mojo)
-        if gemm_swapped(m, n):
+        if gemm_rowdot(m, n, ta):
+            for t in range(rowdot_task_count(m)):
+                rowdot_task(t, a, b, c, m, k)
+        elif gemm_swapped(m, n):
             # a narrow C (a matrix-vector product): C^T = op(B)^T op(A)^T fills
             # the vector lanes; each output's chain is the same (fma(x, y, acc)
             # == fma(y, x, acc) exactly), then C^T is transposed back
