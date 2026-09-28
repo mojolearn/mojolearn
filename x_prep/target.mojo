@@ -149,7 +149,7 @@ def te_enc_unit(t: Int, f: FP, q: IP):
             i = ldi(f, R + k)
         if Int(ld(f, p(q, 5) + i)) == fi:
             continue
-        if Int(ld(f, p(q, 0) + i * d + j)) != cat:
+        if bk == 0 and Int(ld(f, p(q, 0) + i * d + j)) != cat:
             continue
         s = add(s, ld(f, p(q, 3) + i * T + tt))
         cnt += 1
@@ -164,7 +164,7 @@ def te_enc_unit(t: Int, f: FP, q: IP):
                 i = ldi(f, R + k)
             if Int(ld(f, p(q, 5) + i)) == fi:
                 continue
-            if Int(ld(f, p(q, 0) + i * d + j)) != cat:
+            if bk == 0 and Int(ld(f, p(q, 0) + i * d + j)) != cat:
                 continue
             var e = sub(ld(f, p(q, 3) + i * T + tt), mean)
             ssd = add(ssd, mul(e, e))
