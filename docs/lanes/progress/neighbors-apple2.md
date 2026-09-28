@@ -23,7 +23,7 @@ environment, forward then reverse, IDENTICAL and FAST in one job).
 | df27366e9 | LabelPropagation / LabelSpreading fit: the iteration as one resident op `lp_iterate` (the n x n graph uploaded once, not per iteration) | both | same kernels, same order; host check: iterations and every word equal | default; `MOJOLEARN_XN_HOST_LOOPS=1` arm |
 | 4c4e5978d | PageRank / connected_components: resident `pr_iterate` / `cc_iterate` | both | same kernels, same order; host check equal | default; same arm |
 | d0a0aeeae | PolynomialCountSketch split per cell (`pcs_resident`), LabelSpreading degrees once (`col_degree` + `ls_laplacian_deg`), PageRank dangling rows on the device (`row_all_zero`), Louvain's item on the host in the GPU binding (gen.py HOST_RUN) | both | host checks 0 differ (PCS degrees 1 to 3, laplacian) | default; `MOJOLEARN_XN_OLD_ITEMS=1`, `-D MOJOLEARN_XN_LOUVAIN_GPU` arms |
-| a898eb9c2 | Cholesky multi-RHS forward sweep: 256 threads, later rows four at a time (after DEVIATION 6150 moved the chains into b cells, GPC.predict_proba went 0.26 -> 1.05 s) | both (Apple) | same chains | default; `-D MOJOLEARN_CHOL_MR_ROWWISE` arm |
+| a898eb9c2 | Cholesky multi-RHS forward sweep: 256 threads, later rows four at a time (after DEVIATION 6150 moved the chains into b cells, GPC.predict_proba went 0.26 -> 1.05 s) | both (Apple) | same chains | OPT-IN since 6c98b94af (`-D MOJOLEARN_CHOL_MR4`): after the merge put the row-by-row kernel at 256 threads it is faster |
 | 9866b507f | x_neighbors large downloads through 64 MB host staging, copied over the host cores | both | a copy | default; `-D MOJOLEARN_XN_PLAIN_DOWN` arm |
 | b7bec306c | label propagation stopping sum folded on the host (same item); PCS convolution one row per block in threadgroup memory | both | same statements | default; `-D MOJOLEARN_XN_LP_DEVICE_FOLD`, `-D MOJOLEARN_XN_PCS_CELL` arms |
 | a1bb804fb | label propagation / spreading: the graph product over G's nonzero entries (CSR built once on the host), exact by the fma-with-zero argument; dense kernel when an x is non-finite | both | host check (signed values, -0.0): 0 words differ | default; `-D MOJOLEARN_XN_LP_DENSE` arm |
@@ -45,10 +45,9 @@ environment, forward then reverse, IDENTICAL and FAST in one job).
   by `ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo`. Device-scope barrier
   on Apple; the round kernel is new.
 - `bindings/build_x_neighbors.sh` now passes MOJOLEARN_BUILD_EXTRA_DEFINES.
-- `cholesky/checks/trsm.mojo` (a898eb9c2): every Apple multi-RHS forward
-  sweep (GP, GPC, KernelRidge with matrix y, the cholesky lane). It is a
-  256-thread kernel holding a 4 x 8 float register tile per thread: m2pro
-  must confirm it dispatches (the M2 dropped the 1024-thread sweeps).
+- `cholesky/checks/trsm.mojo` (a898eb9c2): a 4-row multi-RHS sweep kernel,
+  OPT-IN only (`-D MOJOLEARN_CHOL_MR4`, 6c98b94af); the default is the merged
+  tree's kernel.
 - `neighbors/estimator.mojo` (f71bfda90): the k-NN host order pass, every
   k-NN result on every column.
 - `x_neighbors/gen.py`: BLOCK_OPS (threadgroup GPU form of a sequential
@@ -321,10 +320,13 @@ Default ON, every one with an A/B arm that restores the old path:
 | d0a0aeeae, b7bec306c, 4a8539a34 | PCS per-cell / per-row convolution, LabelSpreading degrees once, PageRank dangling on device, Louvain on the host | `MOJOLEARN_XN_OLD_ITEMS=1`, `-D MOJOLEARN_XN_PCS_CELL`, `-D MOJOLEARN_XN_LOUVAIN_GPU` |
 | ff625ac0c | NearestCentroid / variance / SVGP / absdiff folds on the host | `-D MOJOLEARN_XN_SERIAL_GPU` |
 | 9866b507f | x_neighbors large downloads staged over the host cores | `-D MOJOLEARN_XN_PLAIN_DOWN` |
-| a898eb9c2 | Cholesky multi-RHS sweep, 4-row groups at 256 threads | `-D MOJOLEARN_CHOL_MR_ROWWISE` |
 | f71bfda90 | k-NN host order pass over the host cores | `-D MOJOLEARN_KNN_SERIAL_ORDER` |
 
-Nothing is left opt-in only; nothing is half done. Reverted: the device
+Opt-in only: `-D MOJOLEARN_CHOL_MR4` (a898eb9c2, the 4-row multi-RHS
+sweep): it fixed the 1.05 s GPC.predict_proba regression at the lane's base,
+but the merged tree's own fix (the row-by-row kernel at 256 threads) is
+7 to 14% faster on both Macs, so the default stays the merged kernel
+(6c98b94af). Nothing is half done. Reverted: the device
 barrier in the identical radix select (da21bc669: `air.wg.barrier` does not
 legalize in the `_mojolearn` / metrics builds), so that kernel's
 device-memory-across-`barrier()` hazard on Apple (the x_linear team one) is
@@ -351,6 +353,4 @@ lane ran on this branch. The integration run must cover:
   Louvain on host (their lanes).
 - ff625ac0c host-run folds (NearestCentroid, SVGP, OneClassSVM gamma='scale').
 - 9866b507f staged downloads (every x_neighbors op with a >= 16 MB output).
-- a898eb9c2 Cholesky multi-RHS sweep (gp*, gpc*, kernel-ridge*, cholesky
-  lanes; m2pro dispatch).
 - f71bfda90 k-NN host order pass (every knn lane, every column).
