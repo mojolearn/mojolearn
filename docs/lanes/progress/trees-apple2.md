@@ -92,3 +92,5 @@ cells faster, geomean 0.989), with the Istella depthwise 1.024 noted.
 | same | m4-a | 1790611979532 | FAST depthwise taxi | 3118 | 3080 | 0.988 | 4e615891dc42e914 |
 | same | m4-a | 1790611979532 | FAST et:taxi | 3860 | 3728 | 0.966 | ac18d5d8a54b1555 (accuracy 0.759845 both) |
 | same | m4-a | 1790611979532 | FAST embedding:taxi | 467 | 466 | 0.999 | 90d1b0749de17d44 |
+| GBDT 2031 gated to <= 64 features, IDENTICAL (63a38c138) | m4pro-a | 1790611947758 | symmetric taxi | 1026 | 935 | 0.911 | 8e760782efae56c8 |
+| same | m4pro-a | 1790611947758 | symmetric istella | 2827 | 2819 | 0.997 | d5571c2a35ea06c8 |
