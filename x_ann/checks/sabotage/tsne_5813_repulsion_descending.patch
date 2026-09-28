@@ -1,6 +1,8 @@
+diff --git a/x_ann/tsne_core.mojo b/x_ann/tsne_core.mojo
+index 7123234e6..b379e322a 100644
 --- a/x_ann/tsne_core.mojo
 +++ b/x_ann/tsne_core.mojo
-@@ -189,7 +189,8 @@
+@@ -314,7 +314,8 @@ def ts_repulse_cell(i: Int, y: F32P, n: Int, row_z: F32P, rep: F32P):
      var r1 = Float32(0.0)
      var y0 = ftz(y.unsafe_load(2 * i))
      var y1 = ftz(y.unsafe_load(2 * i + 1))
@@ -9,4 +11,36 @@
 +        var j = n - 1 - jj
          if j == i:
              continue
-         var q = ts_q(y, i, j)
+         ts_repulse_pair(y0, y1, ftz(y.unsafe_load(2 * j)), ftz(y.unsafe_load(2 * j + 1)), z, r0, r1)
+diff --git a/x_ann/tsne_device.mojo b/x_ann/tsne_device.mojo
+index 2b2ccf1d7..78f931d80 100644
+--- a/x_ann/tsne_device.mojo
++++ b/x_ann/tsne_device.mojo
+@@ -60,8 +60,8 @@ def repulse_tiled_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P):
+     var z = Float32(0.0)
+     var r0 = Float32(0.0)
+     var r1 = Float32(0.0)
+-    var j0 = 0
+-    while j0 < nr:
++    var j0 = ((nr - 1) // RTJ) * RTJ
++    while j0 >= 0:
+         for e in range(t, 2 * RTJ, RTB):
+             var v = Float32(0.0)
+             if 2 * j0 + e < 2 * nr:
+@@ -70,13 +70,14 @@ def repulse_tiled_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P):
+         barrier()
+         if live:
+             var jn = RTJ if nr - j0 > RTJ else nr - j0
+-            for r in range(jn):
++            for rr in range(jn):
++                var r = jn - 1 - rr
+                 var j = j0 + r
+                 if j == i:
+                     continue
+                 ts_repulse_pair(y0, y1, tile[2 * r], tile[2 * r + 1], z, r0, r1)
+         barrier()
+-        j0 += RTJ
++        j0 -= RTJ
+     if live:
+         row_z.unsafe_store(i, z)
+         rep.unsafe_store(2 * i, r0)
