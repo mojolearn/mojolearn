@@ -223,6 +223,58 @@ def cd_gram_partial_kernel(
         part[Int(block_idx.x) * p1 * p1 + t] = acc
 
 
+#: lane/linear-apple3 (WIP, opt-in `-D MOJOLEARN_CD_GRAM_BLOCKS=1`): the
+#: CD_FAST_GRAM product from blocks of CD_GB_ROWS rows and CD_GB_TPB
+#: threads, one thread per cell of the UPPER triangle of [X ; y]^T [X ; y],
+#: read straight from x (column-major) and the labels: no (p + 1) x n copy,
+#: no staging in threadgroup memory, a quarter of the partials to read
+#: back, and no block of 1024 threads (the M2 Pro drops a dispatch above its
+#: pipeline limit with no error). The partition is fixed by n_rows alone.
+comptime CD_GRAM_BLOCKS = CD_FAST_GRAM and is_defined["MOJOLEARN_CD_GRAM_BLOCKS"]()
+comptime CD_GB_ROWS = 1024
+comptime CD_GB_TPB = 256
+
+
+def cd_gram_blocks_kernel(
+    x: MutPointer[Float32, MutAnyOrigin],
+    y: MutPointer[Float32, MutAnyOrigin],
+    part: MutPointer[Float32, MutAnyOrigin],
+    p_in: Int32,
+    n_in: Int32,
+):
+    """Block k's float32 partial of every upper-triangle cell (a, b), b >= a,
+    row by row, of [X ; y]^T [X ; y] over rows [k * CD_GB_ROWS, ...)."""
+    var p = Int(p_in)
+    var n = Int(n_in)
+    var p1 = p + 1
+    var cells = p1 * (p1 + 1) // 2
+    var blk = Int(block_idx.x)
+    var r0 = blk * CD_GB_ROWS
+    var r1 = r0 + CD_GB_ROWS
+    if r1 > n:
+        r1 = n
+    var c = Int(thread_idx.x)
+    while c < cells:
+        var a = 0
+        var q = c
+        while q >= p1 - a:
+            q -= p1 - a
+            a += 1
+        var bb = a + q
+        var acc = Float32(0)
+        if bb < p:
+            for i in range(r0, r1):
+                acc += x[a * n + i] * x[bb * n + i]
+        elif a < p:
+            for i in range(r0, r1):
+                acc += x[a * n + i] * y[i]
+        else:
+            for i in range(r0, r1):
+                acc += y[i] * y[i]
+        part[blk * cells + c] = acc
+        c += CD_GB_TPB
+
+
 # ===========================================================================
 # lane/linear-apple2: THE IDENTICAL SWEEP IN THREE LAUNCHES PER COORDINATE
 # ===========================================================================
@@ -790,40 +842,73 @@ def cd_fit_traced(
             device_sweeps = False
             var p = n_cols
             var p1 = p + 1
-            # B = [X^T rows | y] as (p + 1) x n_rows row-major: X is column-
-            # major, so its columns are already the first p rows.
-            var bmat = ctx.enqueue_create_buffer[DType.float32](p1 * n_rows)
-            ctx.enqueue_copy(
-                dst_buf=bmat.create_sub_buffer[DType.float32](0, p * n_rows),
-                src_buf=x.create_sub_buffer[DType.float32](0, p * n_rows),
-            )
-            ctx.enqueue_copy(
-                dst_buf=bmat.create_sub_buffer[DType.float32](p * n_rows, n_rows),
-                src_buf=labels.create_sub_buffer[DType.float32](0, n_rows),
-            )
             var gsum = List[Float64](capacity=p1 * p1)
             for _ in range(p1 * p1):
                 gsum.append(0.0)
-            var n_parts = (n_rows + CD_GRAM_ROWS - 1) // CD_GRAM_ROWS
-            var gext = ctx.enqueue_create_buffer[DType.float32](
-                p1 * p1 if p1 * p1 > CD_GRAM_CELLS else n_parts * p1 * p1
-            )
-            var bview = bmat.create_sub_buffer[DType.float32](0, p1 * n_rows)
-            var hg = ctx.enqueue_create_host_buffer[DType.float32](len(gext))
-            if p1 * p1 > CD_GRAM_CELLS:
-                gemm_nt(ctx, gext, bmat, bview, p1, p1, n_rows)
-                n_parts = 1
-            else:
-                ctx.enqueue_function[cd_gram_partial_kernel](
-                    bmat.unsafe_ptr(), gext.unsafe_ptr(), Int32(p1),
-                    Int32(n_rows), grid_dim=(n_parts, 1, 1),
-                    block_dim=(CD_GRAM_CELLS, 1, 1),
+            var blocks_done = False
+            comptime if CD_GRAM_BLOCKS:
+                if p1 * p1 <= CD_GRAM_CELLS:
+                    # lane/linear-apple3: the upper triangle straight from x
+                    # and the labels, CD_GB_ROWS rows a block (no staged copy)
+                    blocks_done = True
+                    var gcells = p1 * (p1 + 1) // 2
+                    var gnb = (n_rows + CD_GB_ROWS - 1) // CD_GB_ROWS
+                    var gp = ctx.enqueue_create_buffer[DType.float32](gnb * gcells)
+                    var hgp = ctx.enqueue_create_host_buffer[DType.float32](gnb * gcells)
+                    ctx.enqueue_function[cd_gram_blocks_kernel](
+                        x.unsafe_ptr(), labels.unsafe_ptr(), gp.unsafe_ptr(), Int32(p),
+                        Int32(n_rows), grid_dim=(gnb, 1, 1),
+                        block_dim=(CD_GB_TPB, 1, 1),
+                    )
+                    ctx.enqueue_copy(dst_buf=hgp, src_buf=gp)
+                    ctx.synchronize()
+                    var gc = 0
+                    for a in range(p1):
+                        for bb in range(a, p1):
+                            var acc = 0.0
+                            for k in range(gnb):
+                                acc += Float64(hgp.unsafe_ptr().unsafe_load(k * gcells + gc))
+                            gsum[a * p1 + bb] = acc
+                            gsum[bb * p1 + a] = acc
+                            gc += 1
+                    _ = gp^
+                    _ = hgp^
+            if not blocks_done:
+                # B = [X^T rows | y] as (p + 1) x n_rows row-major: X is column-
+                # major, so its columns are already the first p rows.
+                var bmat = ctx.enqueue_create_buffer[DType.float32](p1 * n_rows)
+                ctx.enqueue_copy(
+                    dst_buf=bmat.create_sub_buffer[DType.float32](0, p * n_rows),
+                    src_buf=x.create_sub_buffer[DType.float32](0, p * n_rows),
                 )
-            ctx.enqueue_copy(dst_buf=hg, src_buf=gext)
-            ctx.synchronize()
-            for k in range(n_parts):
-                for q in range(p1 * p1):
-                    gsum[q] += Float64(hg.unsafe_ptr().unsafe_load(k * p1 * p1 + q))
+                ctx.enqueue_copy(
+                    dst_buf=bmat.create_sub_buffer[DType.float32](p * n_rows, n_rows),
+                    src_buf=labels.create_sub_buffer[DType.float32](0, n_rows),
+                )
+                var n_parts = (n_rows + CD_GRAM_ROWS - 1) // CD_GRAM_ROWS
+                var gext = ctx.enqueue_create_buffer[DType.float32](
+                    p1 * p1 if p1 * p1 > CD_GRAM_CELLS else n_parts * p1 * p1
+                )
+                var bview = bmat.create_sub_buffer[DType.float32](0, p1 * n_rows)
+                var hg = ctx.enqueue_create_host_buffer[DType.float32](len(gext))
+                if p1 * p1 > CD_GRAM_CELLS:
+                    gemm_nt(ctx, gext, bmat, bview, p1, p1, n_rows)
+                    n_parts = 1
+                else:
+                    ctx.enqueue_function[cd_gram_partial_kernel](
+                        bmat.unsafe_ptr(), gext.unsafe_ptr(), Int32(p1),
+                        Int32(n_rows), grid_dim=(n_parts, 1, 1),
+                        block_dim=(CD_GRAM_CELLS, 1, 1),
+                    )
+                ctx.enqueue_copy(dst_buf=hg, src_buf=gext)
+                ctx.synchronize()
+                for k in range(n_parts):
+                    for q in range(p1 * p1):
+                        gsum[q] += Float64(hg.unsafe_ptr().unsafe_load(k * p1 * p1 + q))
+                _ = bview^
+                _ = bmat^
+                _ = gext^
+                _ = hg^
             var G = List[Float64](capacity=p * p)
             var c = List[Float64](capacity=p)
             for a in range(p):
@@ -870,10 +955,6 @@ def cd_fit_traced(
                 hw.unsafe_ptr().unsafe_store(j, Float32(w[j]))
             ctx.enqueue_copy(dst_buf=coef, src_buf=hw)
             ctx.synchronize()
-            _ = bview^
-            _ = bmat^
-            _ = gext^
-            _ = hg^
             _ = hw^
     # lane/linear-apple2: the three-launch coordinate (see
     # cd_axpy_pair_kernel) where the profile dot is PLAN_SPLITK on one device.

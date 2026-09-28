@@ -1,0 +1,34 @@
+{
+  "arms": [
+    {"name": "blocks", "defines": "-D MOJOLEARN_X_LINEAR_BLOCKS=1", "builds": ["x_linear"],
+     "cases": "poisson,gamma,tweedie,huber,quantile,logistic-cv", "warm_column": "both",
+     "rows": [100000, 1000000],
+     "qual": "poisson,gamma,tweedie,huber,huber-200,quantile,quantile-l1,logistic-cv,logistic-cv-taxi", "host_ref": true},
+    {"name": "gram", "defines": "-D MOJOLEARN_X_LINEAR_BLOCKS_GRAM=1", "builds": ["x_linear"],
+     "cases": "bayes-ridge,ard,lars,lasso-lars,ridge-clf,ridge-cv,lasso-cv,enet-cv", "warm_column": "both",
+     "rows": [100000, 1000000],
+     "qual": "bayes-ridge,ard,lars,lasso-lars,ridge-clf,ridge-cv,lasso-cv,enet-cv"},
+    {"name": "fma", "defines": "-D MOJOLEARN_X_LINEAR_FAST_FMA=1", "builds": ["x_linear"],
+     "cases": "sgd-clf,sgd-reg,perceptron,pa-clf,pa-reg,sgd-ocsvm,isotonic",
+     "rows": [100000, 1000000],
+     "qual": "sgd-clf,sgd-reg,perceptron,pa-clf,pa-reg,sgd-ocsvm,isotonic"},
+    {"name": "before", "defines": "", "builds": ["x_linear"],
+     "cases": "sgd-clf,sgd-reg,perceptron,pa-clf,pa-reg,sgd-ocsvm,poisson,gamma,tweedie,huber,bayes-ridge,ard,lars,lasso-lars,quantile,ridge-clf,ridge-cv,lasso-cv,enet-cv,logistic-cv,isotonic",
+     "rows": [100000, 1000000],
+     "qual": "poisson,gamma,tweedie,huber,huber-200,quantile,quantile-l1,logistic-cv,logistic-cv-taxi,bayes-ridge,ard,lars,lasso-lars,ridge-clf,ridge-cv,lasso-cv,enet-cv,sgd-clf,sgd-reg,perceptron,pa-clf,pa-reg,sgd-ocsvm,isotonic"},
+    {"name": "cdgram", "defines": "-D MOJOLEARN_CD_GRAM_BLOCKS=1", "builds": ["estimators", "solver"],
+     "cases": "lasso,elasticnet,ols,ridge", "warm_rows": 2000, "rows": [1000000, 2000000], "reps": 2},
+    {"name": "cdbefore", "defines": "", "builds": ["estimators", "solver"],
+     "cases": "lasso,elasticnet,ols,ridge", "warm_rows": 2000, "rows": [1000000, 2000000], "reps": 2}
+  ],
+  "base": {
+    "commit": "origin/lane/apple3-merged",
+    "files": ["x_linear/device.mojo", "x_linear/ops.mojo", "x_linear/sgd.mojo", "x_linear/tops.mojo",
+              "solver/impl/cd.mojo"],
+    "builds": ["x_linear", "estimators", "solver"],
+    "modes": ["identical", "fast"],
+    "runs": [["sgd-clf,sgd-reg,perceptron,pa-clf,pa-reg,sgd-ocsvm,poisson,tweedie,huber,bayes-ridge,ard,lars,lasso-lars,ridge-clf,ridge-cv,lasso-cv,enet-cv,logistic-cv,isotonic", 100000],
+             ["ols,ridge,lasso,elasticnet,logistic,linear-svc,linear-svr", 1000000]],
+    "qual": "poisson,gamma,tweedie,huber,huber-200,quantile,quantile-l1,logistic-cv,logistic-cv-taxi,bayes-ridge,ard,lars,lasso-lars,ridge-clf,ridge-cv,lasso-cv,enet-cv,sgd-clf,sgd-reg,perceptron,pa-clf,pa-reg,sgd-ocsvm,isotonic"
+  }
+}
