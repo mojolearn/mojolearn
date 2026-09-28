@@ -322,11 +322,25 @@ def mahal_kernel(
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i >= n:
         return
+    mahal.unsafe_store(
+        i * ncomp + kc, mahal_fold(y.unsafe_offset(i * d), murow, d)
+    )
+
+
+@always_inline
+def mahal_fold(
+    y_row: MutPointer[Float32, MutAnyOrigin],
+    murow: MutPointer[Float32, MutAnyOrigin],
+    d: Int,
+) -> Float32:
+    """`sum_j (y_row[j] - murow[j])^2`, j ascending, one pinned multiply-add
+    per term, every seam flushed: THE fold of DEVIATION 1728, shared by
+    `mahal_kernel` and `mahal_stacked_kernel` so one spelling serves both."""
     var acc = Float32(0.0)
     for j in range(d):
-        var t = ftz(ftz(y.unsafe_load(i * d + j)) - ftz(murow.unsafe_load(j)))
+        var t = ftz(ftz(y_row.unsafe_load(j)) - ftz(murow.unsafe_load(j)))
         acc = ftz(identical_mul_add(t, t, acc))
-    mahal.unsafe_store(i * ncomp + kc, acc)
+    return acc
 
 
 def weighted_log_prob_kernel(
@@ -784,19 +798,25 @@ def gmm_estep_scratch_floats(n: Int, d: Int) -> Int:
     return n * d + d
 
 
-#: lane cluster-apple2 TRIAL (opt-in): the E-step's per-component products
-#: in ONE launch each. `X . [P_1 .. P_K]` (n x Kd, k = d) and
+#: lane cluster-apple2 (2026-09-28), IDENTICAL on Apple, default on: the
+#: E-step's per-component products in ONE launch each. `X . [P_1 .. P_K]` (n x Kd, k = d) and
 #: `[mu_1 .. mu_K]^T . [P_1 .. P_K]` (K x Kd, k = d) instead of K pairs of
 #: `X . P_k` and `mu_k . P_k`: a cell of the identical GEMM is a function of
 #: its A row, its B column and k alone (every plan takes (L, P) from
 #: `contract_partition(k)`), so the cells used are the per-component
 #: products' words; then one Mahalanobis launch over (sample, component)
-#: with `mahal_kernel`'s fold.
-comptime GMM_ESTEP_STACK_TRIAL = (
+#: with `mahal_kernel`'s fold. m4pro-b 1790610090438, digests equal:
+#: GaussianMixture 1M taxi 2.865 -> 2.434 s, HIGGS 2.723 -> 2.352 s (E-step
+#: 1047 -> 620 ms over 22 iterations). The stacked operand is n x Kd floats,
+#: so it is taken only up to GMM_ESTEP_STACK_MAX_FLOATS (1 GiB); larger
+#: shapes keep the per-component loop. `-D MOJOLEARN_GMM_ESTEP_STACK_OFF=1`
+#: reverts.
+comptime GMM_ESTEP_STACK = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_GMM_ESTEP_STACK_TRIAL"]()
+    and not is_defined["MOJOLEARN_GMM_ESTEP_STACK_OFF"]()
 )
+comptime GMM_ESTEP_STACK_MAX_FLOATS = 1 << 28
 
 
 def stack_prec_kernel(
@@ -837,14 +857,14 @@ def mahal_stacked_kernel(
         return
     var i = t // ncomp
     var kc = t % ncomp
-    var acc = Float32(0.0)
-    for j in range(d):
-        var tv = ftz(
-            ftz(ystack.unsafe_load(i * kd + kc * d + j))
-            - ftz(mstack.unsafe_load(kc * kd + kc * d + j))
-        )
-        acc = ftz(identical_mul_add(tv, tv, acc))
-    mahal.unsafe_store(i * ncomp + kc, acc)
+    mahal.unsafe_store(
+        i * ncomp + kc,
+        mahal_fold(
+            ystack.unsafe_offset(i * kd + kc * d),
+            mstack.unsafe_offset(kc * kd + kc * d),
+            d,
+        ),
+    )
 
 
 def gmm_e_step(
@@ -987,8 +1007,12 @@ def gmm_e_step(
                 grid_dim=(fe_grid, 1, 1), block_dim=(FE_TPB, 1, 1),
             )
     var stacked = False
-    comptime if GMM_ESTEP_STACK_TRIAL:
-        stacked = not fused and sabotage == GMM_SAB_NONE
+    comptime if GMM_ESTEP_STACK:
+        stacked = (
+            not fused
+            and sabotage == GMM_SAB_NONE
+            and n * ncomp * d <= GMM_ESTEP_STACK_MAX_FLOATS
+        )
     if stacked:
         var kd = ncomp * d
         var pstack = ctx.enqueue_create_buffer[DType.float32](d * kd)
