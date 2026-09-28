@@ -1,0 +1,229 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+"""`_expansion_decomp._Kit` in Mojo (lane/py-decomp-nbrs, 2026-09-28): the
+same executor calls Python's `_Kit` makes, with the same operands,
+broadcast modes (`mode_of`) and float32 scalars, for drivers that used to
+loop in Python (x_decomp/mcd.mojo, x_decomp/lda_online.mojo).
+
+TWO EXECUTORS. `Kit[E, S]` sends a call whose largest operand has at least
+`dev` elements to `E` and every smaller one to `S`. The GPU binding
+instantiates `[DevExec, HostExec]` (a call on a few hundred values costs
+more in launches than in arithmetic), the CPU binding
+`[HostExec, HostExec]`. The two executors run the same cells to the same
+bits (every x-decomp lane's GPU == CPU claim), so `dev` is timing only;
+`dev = 1` sends every call to `E` (Python passes
+MOJOLEARN_XD_RES_DEV_MIN, default 65536)."""
+from x_decomp.cells import F32Ptr, I32Ptr
+from x_decomp.exec_trait import Exec
+
+# x_decomp/cells.mojo op codes (`_OP` in _expansion_decomp.py)
+comptime OP_ADD = 0
+comptime OP_SUB = 1
+comptime OP_MUL = 2
+comptime OP_DIV = 3
+comptime OP_EXP = 9
+comptime OP_LOGS = 10
+comptime OP_ABS = 13
+comptime OP_SCALE = 14
+comptime OP_RECIP = 16
+comptime OP_ADDS = 22
+comptime OP_DIGAMMA = 24
+
+
+struct Mat(Copyable, Movable):
+    """A row-major float32 matrix (`_M`'s store). Never empty in memory: a
+    0-element matrix keeps one slot so its address is valid."""
+    var d: List[Float32]
+    var r: Int
+    var c: Int
+
+    def __init__(out self, r: Int, c: Int):
+        self.d = List[Float32](length=max(r * c, 1), fill=Float32(0))
+        self.r = r
+        self.c = c
+
+    def p(self) -> F32Ptr:
+        return F32Ptr(unsafe_from_address=Int(self.d.unsafe_ptr()))
+
+    def n(self) -> Int:
+        return self.r * self.c
+
+
+def mat_from(ptr: F32Ptr, r: Int, c: Int) -> Mat:
+    var m = Mat(r, c)
+    for i in range(r * c):
+        m.d[i] = ptr.unsafe_load(i)
+    return m^
+
+
+def mat_const(v: Float64, r: Int, c: Int) -> Mat:
+    """`_M.of([v] * (r * c), r, c)`: v rounded once to float32."""
+    var m = Mat(r, c)
+    var f = Float32(v)
+    for i in range(r * c):
+        m.d[i] = f
+    return m^
+
+
+def mat_rows(X: Mat, a: Int, b: Int) -> Mat:
+    """`_M.rows(a, b)`: an exact copy of rows a..b-1."""
+    var out = Mat(b - a, X.c)
+    var off = a * X.c
+    for i in range((b - a) * X.c):
+        out.d[i] = X.d[off + i]
+    return out^
+
+
+def take_rows(X: Mat, sel: List[Int]) -> Mat:
+    """`_M.take_rows`: the rows of X in the order of `sel` (exact copies)."""
+    var out = Mat(len(sel), X.c)
+    var c = X.c
+    for a in range(len(sel)):
+        var src = sel[a] * c
+        for j in range(c):
+            out.d[a * c + j] = X.d[src + j]
+    return out^
+
+
+struct Kit[E: Exec, S: Exec](Movable):
+    var one: Mat
+    var dev: Int
+
+    def __init__(out self, dev: Int):
+        self.one = Mat(1, 1)
+        self.dev = dev
+
+    def big(self, count: Int) -> Bool:
+        return self.dev > 0 and count >= self.dev
+
+    @staticmethod
+    def mode(X: Mat, A: Mat) raises -> Int:
+        """`_Kit.ew`'s `mode_of`, in its order."""
+        if X.r == A.r and X.c == A.c:
+            return 0
+        if X.r == 1 and X.c == A.c:
+            return 1
+        if X.c == 1 and X.r == A.r:
+            return 2
+        if X.r == 1 and X.c == 1:
+            return 3
+        raise Error("x_decomp: cannot broadcast")
+
+    def ew1(self, op: Int, A: Mat, s: Float64) raises -> Mat:
+        """`ew(op, A, s=s)`: B and C the unused 0 broadcast operand."""
+        var out = Mat(A.r, A.c)
+        if A.n() == 0:
+            return out^
+        if self.big(A.n()):
+            Self.E.ew(op, A.p(), self.one.p(), 1, 3, self.one.p(), 1, 3, out.p(), A.n(), A.c, Float32(s))
+        else:
+            Self.S.ew(op, A.p(), self.one.p(), 1, 3, self.one.p(), 1, 3, out.p(), A.n(), A.c, Float32(s))
+        return out^
+
+    def ew2(self, op: Int, A: Mat, B: Mat) raises -> Mat:
+        """`ew(op, A, B)` (s = 0)."""
+        var bm = Self.mode(B, A)
+        var out = Mat(A.r, A.c)
+        if A.n() == 0:
+            return out^
+        if self.big(max(A.n(), B.n())):
+            Self.E.ew(op, A.p(), B.p(), B.n(), bm, self.one.p(), 1, 3, out.p(), A.n(), A.c, Float32(0))
+        else:
+            Self.S.ew(op, A.p(), B.p(), B.n(), bm, self.one.p(), 1, 3, out.p(), A.n(), A.c, Float32(0))
+        return out^
+
+    def mm(self, A: Mat, B: Mat, ta: Bool, tb: Bool) raises -> Mat:
+        var m = A.c if ta else A.r
+        var k = A.r if ta else A.c
+        var k2 = B.c if tb else B.r
+        var n = B.r if tb else B.c
+        if k != k2:
+            raise Error("x_decomp: gemm inner dimensions differ")
+        var out = Mat(m, n)
+        if m * n == 0:
+            return out^
+        if self.big(max(A.n(), B.n(), m * n)):
+            Self.E.gemm(A.p(), B.p(), out.p(), m, k, n, ta, tb)
+        else:
+            Self.S.gemm(A.p(), B.p(), out.p(), m, k, n, ta, tb)
+        return out^
+
+    def colsum(self, A: Mat) raises -> Mat:
+        var out = Mat(1, A.c)
+        if self.big(A.n()):
+            Self.E.colsum(A.p(), out.p(), A.r, A.c)
+        else:
+            Self.S.colsum(A.p(), out.p(), A.r, A.c)
+        return out^
+
+    def rowsum(self, A: Mat) raises -> Mat:
+        var out = Mat(A.r, 1)
+        if self.big(A.n()):
+            Self.E.rowsum(A.p(), out.p(), A.r, A.c)
+        else:
+            Self.S.rowsum(A.p(), out.p(), A.r, A.c)
+        return out^
+
+    def total(self, A: Mat) raises -> Mat:
+        """`_Kit.total`: colsum(rowsum(A))."""
+        return self.colsum(self.rowsum(A))
+
+    def colmean(self, A: Mat) raises -> Mat:
+        return self.ew1(OP_SCALE, self.colsum(A), 1.0 / Float64(A.r))
+
+    def eigh(self, A: Mat, mut w: Mat, mut v: Mat) raises:
+        if self.big(A.n()):
+            Self.E.eigh(A.p(), w.p(), v.p(), A.r)
+        else:
+            Self.S.eigh(A.p(), w.p(), v.p(), A.r)
+
+    def lu(self, mut lu: Mat, mut piv: List[Int32], mut info: Mat) raises:
+        """`_Kit.lu` on a copy the caller made (in place)."""
+        var pp = I32Ptr(unsafe_from_address=Int(piv.unsafe_ptr()))
+        if self.big(lu.n()):
+            Self.E.lu(lu.p(), pp, info.p(), lu.r)
+        else:
+            Self.S.lu(lu.p(), pp, info.p(), lu.r)
+
+    def rand(self, r: Int, c: Int, seed: Int, stream: Int, kind: Int) raises -> Mat:
+        var out = Mat(r, c)
+        if r * c == 0:
+            return out^
+        var sd = UInt32(seed & 0xFFFFFFFF)
+        var st = UInt32(stream & 0xFFFFFFFF)
+        if self.big(r * c):
+            Self.E.rand(out.p(), r * c, sd, st, kind)
+        else:
+            Self.S.rand(out.p(), r * c, sd, st, kind)
+        return out^
+
+    def rand_gamma(self, r: Int, c: Int, seed: Int, stream: Int, shape: Float64) raises -> Mat:
+        var out = Mat(r, c)
+        if r * c == 0:
+            return out^
+        var a = Float32(shape)
+        if not (a >= Float32(1)):
+            raise Error("x_decomp: the gamma sampler takes shape >= 1")
+        var sd = UInt32(seed & 0xFFFFFFFF)
+        var st = UInt32(stream & 0xFFFFFFFF)
+        if self.big(r * c):
+            Self.E.rand_gamma(out.p(), r * c, sd, st, a)
+        else:
+            Self.S.rand_gamma(out.p(), r * c, sd, st, a)
+        return out^
+
+    def lda_rows(
+        self, X: Mat, EW: Mat, mut Dt: Mat, mut Et: Mat, prior: Float64, max_iter: Int, tol: Float64
+    ) raises:
+        """`_Kit.lda_rows`: Dt and Et (n x k) updated in place."""
+        var n = X.r
+        var k = EW.r
+        var v = X.c
+        var its = Mat(n, 1)
+        var s = List[Float32](length=n * (v + k) if n > 0 else 1, fill=Float32(0))
+        var ps = F32Ptr(unsafe_from_address=Int(s.unsafe_ptr()))
+        if self.big(max(X.n(), EW.n())):
+            Self.E.lda_rows(X.p(), EW.p(), Dt.p(), Et.p(), ps, its.p(), n, k, v, Float32(prior), max_iter, Float32(tol))
+        else:
+            Self.S.lda_rows(X.p(), EW.p(), Dt.p(), Et.p(), ps, its.p(), n, k, v, Float32(prior), max_iter, Float32(tol))
+        _ = s^

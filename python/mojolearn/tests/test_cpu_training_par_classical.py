@@ -61,7 +61,7 @@ LANES = {"par-scaler": "preprocessing", "par-arima": "arima", "par-holtwinters":
 DRIVERS = {
     "python/mojolearn/parallel_preprocessing.py": ("scaler_fit", "scaler_transform"),
     "python/mojolearn/parallel_classical.py": ("arima_fit", "holtwinters_fit", "rbf_sampler_rows"),
-    "python/mojolearn/parallel_neighbors.py": ("neighbor_query",),
+    "python/mojolearn/parallel_neighbors.py": ("neighbor_state", "neighbor_query"),
     "python/mojolearn/parallel_neighbors_reference.py": ("neighbor_reference", "neighbor_vote"),
     "python/mojolearn/parallel_ensemble.py": ("forest_fit",),
 }

@@ -10,13 +10,14 @@ from std.python.bindings import PythonModuleBuilder
 
 from x_decomp.api import (
     cd_rows_py, chol_py, colsum_py, eigh_py, ew_py, gemm_py, lu_py, lu_solve_py, numeric_mode_py, orth_py, rand_py, svd_py, lasso_rows_py, omp_rows_py, rand_gamma_py, lda_rows_py, dijkstra_rows_py, barycenter_rows_py, als_rows_py, absmax_sign_py, qr_r_py,
-    geqrf_py, orgqr_py, als_cg_rows_py,
+    geqrf_py, orgqr_py, als_cg_rows_py, mcd_py, lda_online_py, gather_py, scatter_py, triu_nonzero_py, argsort_f32_py, iso_order_py,
     rowsum_py, sqdist_py, vendor_py,
 )
 from x_decomp.device import DevExec
+from x_decomp.host import HostExec
 from x_decomp.resident import (
     dev_alloc_py, dev_colsum_py, dev_download_py, dev_ew_py, dev_free_py, dev_gemm_py, dev_rowsum_py,
-    dev_sqdist_py, dev_upload_py, dev_absmax_py, dev_orth_py,
+    dev_sqdist_py, dev_upload_py, dev_absmax_py, dev_orth_py, dev_lda_rows_py,
 )
 
 
@@ -49,6 +50,15 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         m.def_function[geqrf_py[DevExec]]("x_decomp_geqrf")
         m.def_function[orgqr_py[DevExec]]("x_decomp_orgqr")
         m.def_function[als_cg_rows_py[DevExec]]("x_decomp_als_cg_rows")
+        # MinCovDet's fast_mcd: calls of at least `dev` elements on the GPU,
+        # smaller ones on the host executor (the same cells, the same bits)
+        m.def_function[mcd_py[DevExec, HostExec]]("x_decomp_mcd")
+        m.def_function[lda_online_py[DevExec, HostExec]]("x_decomp_lda_online")
+        m.def_function[gather_py]("x_decomp_gather")
+        m.def_function[scatter_py]("x_decomp_scatter")
+        m.def_function[triu_nonzero_py]("x_decomp_triu_nonzero")
+        m.def_function[argsort_f32_py]("x_decomp_argsort_f32")
+        m.def_function[iso_order_py]("x_decomp_iso_order")
         # device-resident matrices (x_decomp/resident.mojo; GPU binding only)
         m.def_function[dev_alloc_py]("x_decomp_dev_alloc")
         m.def_function[dev_free_py]("x_decomp_dev_free")
@@ -61,6 +71,7 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         m.def_function[dev_sqdist_py]("x_decomp_dev_sqdist")
         m.def_function[dev_absmax_py]("x_decomp_dev_absmax")
         m.def_function[dev_orth_py]("x_decomp_dev_orth")
+        m.def_function[dev_lda_rows_py]("x_decomp_dev_lda_rows")
         m.def_function[numeric_mode_py]("x_decomp_numeric_mode")
         m.def_function[vendor_py[DevExec]]("x_decomp_vendor")
         return m.finalize()
