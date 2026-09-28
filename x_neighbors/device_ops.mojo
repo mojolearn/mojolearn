@@ -7,7 +7,7 @@ from std.ffi import _Global
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from x_neighbors.items import FP, IP, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, group_mean_item, take_rows_item, take_cols_item, variance_item, ocsvm_smo_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_sum_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item, pagerank_step_item, cc_step_item, louvain_item, svgp_item, svgp_var_item
+from x_neighbors.items import FP, IP, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, group_mean_item, take_rows_item, take_cols_item, variance_item, ocsvm_smo_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_sum_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item, knn_impute_cell_item, pagerank_step_item, cc_step_item, louvain_item, svgp_item, svgp_var_item
 from x_neighbors.block_ops import ocsvm_smo_block, OCSVM_TPB
 
 comptime BLOCK = 128
@@ -1048,6 +1048,41 @@ def op_knn_impute(x: Int, fx: Int, res: Int, n: Int, m: Int, d: Int, k: Int, wei
     )
     _down(ctx, d_res, res, n * d)
     ctx.synchronize()
+    _ = d_x^
+    _ = d_fx^
+    _ = d_best_d^
+    _ = d_best_i^
+    _ = d_res^
+    _ = ctx^
+
+
+def knn_impute_cells_kernel(cells: IP, x: FP, fx: FP, best_d: FP, best_i: IP, res: FP, n_: Int64, m_: Int64, d_: Int64, k_: Int64, weights_: Int64, nc_: Int64):
+    var n = Int(n_)
+    var m = Int(m_)
+    var d = Int(d_)
+    var k = Int(k_)
+    var weights = Int(weights_)
+    var nc = Int(nc_)
+    var t = _tid()
+    if t < nc:
+        knn_impute_cell_item(t, cells, x, fx, best_d, best_i, res, n, m, d, k, weights, nc)
+
+
+def op_knn_impute_cells(cells: Int, x: Int, fx: Int, res: Int, n: Int, m: Int, d: Int, k: Int, weights: Int, nc: Int) raises:
+    var ctx = xn_ctx()
+    var d_cells = _buf_i(ctx, cells, nc, True)
+    var d_x = _buf(ctx, x, n * d, True)
+    var d_fx = _buf(ctx, fx, m * d, True)
+    var d_best_d = _buf(ctx, 0, n * d * k, False)
+    var d_best_i = _buf_i(ctx, 0, n * d * k, False)
+    var d_res = _buf(ctx, res, n * d, True)
+    ctx.enqueue_function[knn_impute_cells_kernel](
+        d_cells.unsafe_ptr(), d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_best_d.unsafe_ptr(), d_best_i.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n), Int64(m), Int64(d), Int64(k), Int64(weights), Int64(nc),
+        grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
+    )
+    _down(ctx, d_res, res, n * d)
+    ctx.synchronize()
+    _ = d_cells^
     _ = d_x^
     _ = d_fx^
     _ = d_best_d^

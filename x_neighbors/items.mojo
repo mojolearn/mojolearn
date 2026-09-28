@@ -967,6 +967,18 @@ def knn_impute_item(
     res.unsafe_store(t, ftz(identical_div(num, den)))
 
 
+def knn_impute_cell_item(
+    t: Int, cells: IP, x: FP, fx: FP, best_d: FP, best_i: IP, res: FP,
+    n: Int, m: Int, d: Int, k: Int, weights: Int, nc: Int,
+):
+    """`knn_impute_item` for the t-th MISSING cell of a compact list (cell
+    ids ascending): the same statements for that cell, so a GPU thread per
+    missing cell instead of one per cell, most of which return at once. The
+    caller seeds `res` with x, which is what the item stores for a present
+    cell."""
+    knn_impute_item(Int(cells.unsafe_load(t)), x, fx, best_d, best_i, res, n, m, d, k, weights)
+
+
 # ------------------------------------------------------------------ graphs
 # DEVIATION 5216 (row 129)
 def pagerank_step_item(t: Int, q: FP, x: FP, p: FP, dw: FP, dangling: IP, res: FP, n: Int, alpha: Float32):

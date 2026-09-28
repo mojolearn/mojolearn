@@ -70,6 +70,7 @@ FAMILIES = (
             "xn_ls_laplacian",
             "xn_knn_graph",
             "xn_knn_impute",
+            "xn_knn_impute_cells",
             "xn_pagerank_step",
             "xn_cc_step",
             "xn_louvain",

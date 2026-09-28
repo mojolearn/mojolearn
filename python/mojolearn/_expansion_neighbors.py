@@ -129,6 +129,8 @@ _UNFUSED_KNN = os.environ.get("MOJOLEARN_XN_UNFUSED_KNN", "") == "1"
 #: spreading, PageRank and connected_components in Python, one op per step,
 #: instead of the resident `lp_iterate` / `pr_iterate` / `cc_iterate`.
 _HOST_LOOP_LP = os.environ.get("MOJOLEARN_XN_HOST_LOOPS", "") == "1"
+#: A/B arm: KNNImputer.transform over every cell instead of the missing ones.
+_UNCOMPACT_IMPUTE = os.environ.get("MOJOLEARN_XN_UNCOMPACT_IMPUTE", "") == "1"
 
 
 class _XNeighbors(NumericModeMixin):
@@ -1188,8 +1190,18 @@ class KNNImputer(_XNeighbors):
         k = int(self.n_neighbors)
         if k < 1:
             raise ValueError("n_neighbors must be >= 1")
-        self._op("knn_impute", [(X, 0), (self._fit_X, 0), (out, 1)],
-                 (n, m, d, k, 1 if self.weights == "distance" else 0))
+        if _UNCOMPACT_IMPUTE:
+            self._op("knn_impute", [(X, 0), (self._fit_X, 0), (out, 1)],
+                     (n, m, d, k, 1 if self.weights == "distance" else 0))
+        else:
+            # one GPU thread per MISSING cell (`knn_impute_cells`): the same
+            # item statements; a present cell keeps x, as the item stores it
+            flat = X.reshape((n * d,)).tolist()
+            cells = [i for i, v in enumerate(flat) if v != v]
+            out = Array.from_list(flat, "<f4").reshape((n, d))
+            if cells:
+                self._op("knn_impute_cells", [(_i32(cells, "cells"), 0), (X, 0), (self._fit_X, 0), (out, 1)],
+                         (n, m, d, k, 1 if self.weights == "distance" else 0, len(cells)))
         keep = [f for f in range(d) if self._valid[f]]
         if self.keep_empty_features:
             empty_cols = [f for f in range(d) if not self._valid[f]]
