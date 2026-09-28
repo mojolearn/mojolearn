@@ -92,3 +92,28 @@ The IVF-SQ fit (coarse quantizer inside the x_ann binding) takes 3.0 s at the ba
 M4 Pro, not the 8.6 s the ann lane recorded at 5b622763d: lane/apple-merged's k-means
 changes (incremental k-means|| init under IDENTICAL, the no-sync k-means++) already
 removed most of it.
+
+## m4pro-b, IDENTICAL, 1790608687723: before (037daa353 sources) / after b2033132c / trial arms
+
+| case | before s | after s | trial | digests |
+|---|---|---|---|---|
+| KMeans coarse 1M x 28 k 1024 10 it | 2.1260 | 1.7323 | FCMP 1.5001; Policy4x4 2.3477 | c34e005aeb912d5d all |
+| KMeans PQ codebook 1M x 2 k 256 20 it | 0.3388 | 0.3003 | | 794c582742428b14 |
+| IVF-SQ fit (x_ann) | 2.448 | 2.041 | Policy4x4 2.678 | - |
+| board kmeans taxi / higgs | 0.0800 / 0.1397 | 0.0761 / 0.1294 | FCMP 0.0744 / 0.1243 | equal |
+| board gmm taxi / higgs | 2.9654 / 2.8338 | 2.9586 / 2.8222 | FCMP 2.8710 / 2.7267 | 301203207f510506 / cb2f51dc4f8bb1a7 |
+| board bayesian-gmm taxi / higgs | 1.5501 / 2.0549 | 1.5477 / 2.0570 | FCMP 1.5190 / 2.0137 | c1ae8cc386159e19 / 6bc026b1942c517f |
+| GMM stages (E / M / Chol ms, 22 it) | 1115 / 1441 / 130 | 1115 / 1440 / 130 | FCMP 1044 / 1435 / 129 | |
+
+FCMP (`ftz` as an `|x| < FLT_MIN` select on Apple GPUs) is default on since 493ddcc37;
+the Policy4x4 tile for 16 <= d < 32 on Apple was slower and is removed.
+
+**The gathered-query border pass (5169bb4e4 + b2033132c) was WRONG on this Mac**: board
+taxi dbscan and the default-budget probe raised "the fit's core mask holds a value other
+than 0 or 1", budget 4000 returned 9,955 noise points instead of 5,907, HIGGS moved to
+2c304d651e03c887. (On m4pro-a, 1790607145653, 5169bb4e4 alone had given the right labels
+at every budget.) Root cause not found in the time left: the gathered query ran the RBC
+count and fill over a compact matrix of non-core rows. a1674e9bb goes back to the proven
+whole-batch rebuild (ab82a8c3b) and only skips a batch whose non-core rows are all still
+MAX_LABEL after the merges. FLAG for the neighbors lane: an RBC eps query over a query
+matrix that is not a slice of the indexed data may be unsafe.
