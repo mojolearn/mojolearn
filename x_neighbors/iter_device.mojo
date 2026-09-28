@@ -21,6 +21,7 @@ from x_neighbors.device_ops import (
     xn_ctx, _buf, _buf_i, _down, _down_i, _grid, BLOCK,
     absdiff_sum_kernel, matmul_kernel, lp_clamp_kernel, ls_clamp_kernel,
     pagerank_step_kernel, cc_step_kernel,
+    pcs_sketch_kernel, pcs_conv_kernel, pcs_copy0_kernel,
 )
 
 
@@ -210,4 +211,57 @@ def op_cc_iterate(a: Int, lab: Int, info: Int, n: Int) raises:
     _ = d_a^
     _ = d_l0^
     _ = d_l1^
+    _ = ctx^
+
+
+def op_pcs_resident(
+    x: Int, hidx: Int, hbit: Int, res: Int,
+    n: Int, d_in: Int, nf: Int, nc: Int, degree: Int, gamma: Float32, coef0: Float32,
+) raises:
+    """PolynomialCountSketch.transform: `pcs_item` (one thread per ROW, the
+    convolution O(nc^2) per row) as three kernels over the same statements:
+    one sketch per (row, degree), then per degree p >= 1 one thread per
+    output cell folding the convolution in the same ascending order, the
+    running product ping-ponging on the device."""
+    var ctx = xn_ctx()
+    var d_x = _buf(ctx, x, n * d_in, True)
+    var d_hi = _buf_i(ctx, hidx, degree * nf, True)
+    var d_hb = _buf_i(ctx, hbit, degree * nf, True)
+    var d_sk = _buf(ctx, 0, n * degree * nc, False)
+    var d_a = _buf(ctx, 0, n * nc, False)
+    var d_b = _buf(ctx, 0, n * nc, False)
+    var nd = n * degree
+    var cells = n * nc
+    ctx.enqueue_function[pcs_sketch_kernel](
+        d_x.unsafe_ptr(), d_hi.unsafe_ptr(), d_hb.unsafe_ptr(), d_sk.unsafe_ptr(),
+        Int64(n), Int64(d_in), Int64(nf), Int64(nc), Int64(degree), gamma, coef0,
+        grid_dim=_grid(nd), block_dim=(BLOCK if nd > 1 else 1),
+    )
+    ctx.enqueue_function[pcs_copy0_kernel](
+        d_sk.unsafe_ptr(), d_a.unsafe_ptr(), Int64(n), Int64(nc), Int64(degree),
+        grid_dim=_grid(cells), block_dim=(BLOCK if cells > 1 else 1),
+    )
+    var cur: FP = d_a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var nxt: FP = d_b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var cur_is_a = True
+    for p in range(1, degree):
+        ctx.enqueue_function[pcs_conv_kernel](
+            cur, d_sk.unsafe_ptr(), nxt, Int64(n), Int64(nc), Int64(degree), Int64(p),
+            grid_dim=_grid(cells), block_dim=(BLOCK if cells > 1 else 1),
+        )
+        var t = cur
+        cur = nxt
+        nxt = t
+        cur_is_a = not cur_is_a
+    if cur_is_a:
+        _down(ctx, d_a, res, cells)
+    else:
+        _down(ctx, d_b, res, cells)
+    ctx.synchronize()
+    _ = d_x^
+    _ = d_hi^
+    _ = d_hb^
+    _ = d_sk^
+    _ = d_a^
+    _ = d_b^
     _ = ctx^

@@ -7,7 +7,7 @@ from std.ffi import _Global
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from x_neighbors.items import FP, IP, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, group_mean_item, take_rows_item, take_cols_item, variance_item, ocsvm_smo_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_sum_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item, knn_impute_cell_item, pagerank_step_item, cc_step_item, louvain_item, svgp_item, svgp_var_item
+from x_neighbors.items import FP, IP, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, group_mean_item, take_rows_item, take_cols_item, variance_item, ocsvm_smo_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_sum_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item, col_degree_item, ls_laplacian_deg_item, row_all_zero_item, pcs_sketch_item, pcs_conv_item, pcs_copy0_item, knn_impute_cell_item, pagerank_step_item, cc_step_item, louvain_item, svgp_item, svgp_var_item
 from x_neighbors.block_ops import ocsvm_smo_block, OCSVM_TPB
 
 comptime BLOCK = 128
@@ -71,6 +71,16 @@ def _down(ctx: DeviceContext, buf: DeviceBuffer[DType.float32], addr: Int, count
 def _down_i(ctx: DeviceContext, buf: DeviceBuffer[DType.int32], addr: Int, count: Int) raises:
     if count > 0:
         ctx.enqueue_copy(dst_ptr=IP(unsafe_from_address=addr), src_buf=buf)
+
+
+@always_inline
+def _f(addr: Int) -> FP:
+    return FP(unsafe_from_address=addr)
+
+
+@always_inline
+def _i(addr: Int) -> IP:
+    return IP(unsafe_from_address=addr)
 
 
 def sqdist_kernel(x: FP, y: FP, res: FP, n_: Int64, m_: Int64, d_: Int64):
@@ -1056,6 +1066,158 @@ def op_knn_impute(x: Int, fx: Int, res: Int, n: Int, m: Int, d: Int, k: Int, wei
     _ = ctx^
 
 
+def col_degree_kernel(a: FP, res: FP, n_: Int64):
+    var n = Int(n_)
+    var t = _tid()
+    if t < n:
+        col_degree_item(t, a, res, n)
+
+
+def op_col_degree(a: Int, res: Int, n: Int) raises:
+    var ctx = xn_ctx()
+    var d_a = _buf(ctx, a, n * n, True)
+    var d_res = _buf(ctx, res, n, False)
+    ctx.enqueue_function[col_degree_kernel](
+        d_a.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n),
+        grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
+    )
+    _down(ctx, d_res, res, n)
+    ctx.synchronize()
+    _ = d_a^
+    _ = d_res^
+    _ = ctx^
+
+
+def ls_laplacian_deg_kernel(a: FP, deg: FP, res: FP, n_: Int64):
+    var n = Int(n_)
+    var t = _tid()
+    if t < n * n:
+        ls_laplacian_deg_item(t, a, deg, res, n)
+
+
+def op_ls_laplacian_deg(a: Int, deg: Int, res: Int, n: Int) raises:
+    var ctx = xn_ctx()
+    var d_a = _buf(ctx, a, n * n, True)
+    var d_deg = _buf(ctx, deg, n, True)
+    var d_res = _buf(ctx, res, n * n, False)
+    ctx.enqueue_function[ls_laplacian_deg_kernel](
+        d_a.unsafe_ptr(), d_deg.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n),
+        grid_dim=_grid(n * n), block_dim=(BLOCK if n * n > 1 else 1),
+    )
+    _down(ctx, d_res, res, n * n)
+    ctx.synchronize()
+    _ = d_a^
+    _ = d_deg^
+    _ = d_res^
+    _ = ctx^
+
+
+def row_all_zero_kernel(a: IP, res: IP, n_: Int64, m_: Int64):
+    var n = Int(n_)
+    var m = Int(m_)
+    var t = _tid()
+    if t < n:
+        row_all_zero_item(t, a, res, n, m)
+
+
+def op_row_all_zero(a: Int, res: Int, n: Int, m: Int) raises:
+    var ctx = xn_ctx()
+    var d_a = _buf_i(ctx, a, n * m, True)
+    var d_res = _buf_i(ctx, res, n, False)
+    ctx.enqueue_function[row_all_zero_kernel](
+        d_a.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n), Int64(m),
+        grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
+    )
+    _down_i(ctx, d_res, res, n)
+    ctx.synchronize()
+    _ = d_a^
+    _ = d_res^
+    _ = ctx^
+
+
+def pcs_sketch_kernel(x: FP, hidx: IP, hbit: IP, sk: FP, n_: Int64, d_in_: Int64, nf_: Int64, nc_: Int64, degree_: Int64, gamma_: Float32, coef0_: Float32):
+    var n = Int(n_)
+    var d_in = Int(d_in_)
+    var nf = Int(nf_)
+    var nc = Int(nc_)
+    var degree = Int(degree_)
+    var gamma = gamma_
+    var coef0 = coef0_
+    var t = _tid()
+    if t < n * degree:
+        pcs_sketch_item(t, x, hidx, hbit, sk, n, d_in, nf, nc, degree, gamma, coef0)
+
+
+def op_pcs_sketch(x: Int, hidx: Int, hbit: Int, sk: Int, n: Int, d_in: Int, nf: Int, nc: Int, degree: Int, gamma: Float32, coef0: Float32) raises:
+    var ctx = xn_ctx()
+    var d_x = _buf(ctx, x, n * d_in, True)
+    var d_hidx = _buf_i(ctx, hidx, degree * nf, True)
+    var d_hbit = _buf_i(ctx, hbit, degree * nf, True)
+    var d_sk = _buf(ctx, sk, n * degree * nc, False)
+    ctx.enqueue_function[pcs_sketch_kernel](
+        d_x.unsafe_ptr(), d_hidx.unsafe_ptr(), d_hbit.unsafe_ptr(), d_sk.unsafe_ptr(), Int64(n), Int64(d_in), Int64(nf), Int64(nc), Int64(degree), gamma, coef0,
+        grid_dim=_grid(n * degree), block_dim=(BLOCK if n * degree > 1 else 1),
+    )
+    _down(ctx, d_sk, sk, n * degree * nc)
+    ctx.synchronize()
+    _ = d_x^
+    _ = d_hidx^
+    _ = d_hbit^
+    _ = d_sk^
+    _ = ctx^
+
+
+def pcs_conv_kernel(acc: FP, sk: FP, res: FP, n_: Int64, nc_: Int64, degree_: Int64, p_: Int64):
+    var n = Int(n_)
+    var nc = Int(nc_)
+    var degree = Int(degree_)
+    var p = Int(p_)
+    var t = _tid()
+    if t < n * nc:
+        pcs_conv_item(t, acc, sk, res, n, nc, degree, p)
+
+
+def op_pcs_conv(acc: Int, sk: Int, res: Int, n: Int, nc: Int, degree: Int, p: Int) raises:
+    var ctx = xn_ctx()
+    var d_acc = _buf(ctx, acc, n * nc, True)
+    var d_sk = _buf(ctx, sk, n * degree * nc, True)
+    var d_res = _buf(ctx, res, n * nc, False)
+    ctx.enqueue_function[pcs_conv_kernel](
+        d_acc.unsafe_ptr(), d_sk.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n), Int64(nc), Int64(degree), Int64(p),
+        grid_dim=_grid(n * nc), block_dim=(BLOCK if n * nc > 1 else 1),
+    )
+    _down(ctx, d_res, res, n * nc)
+    ctx.synchronize()
+    _ = d_acc^
+    _ = d_sk^
+    _ = d_res^
+    _ = ctx^
+
+
+def pcs_copy0_kernel(sk: FP, res: FP, n_: Int64, nc_: Int64, degree_: Int64):
+    var n = Int(n_)
+    var nc = Int(nc_)
+    var degree = Int(degree_)
+    var t = _tid()
+    if t < n * nc:
+        pcs_copy0_item(t, sk, res, n, nc, degree)
+
+
+def op_pcs_copy0(sk: Int, res: Int, n: Int, nc: Int, degree: Int) raises:
+    var ctx = xn_ctx()
+    var d_sk = _buf(ctx, sk, n * degree * nc, True)
+    var d_res = _buf(ctx, res, n * nc, False)
+    ctx.enqueue_function[pcs_copy0_kernel](
+        d_sk.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n), Int64(nc), Int64(degree),
+        grid_dim=_grid(n * nc), block_dim=(BLOCK if n * nc > 1 else 1),
+    )
+    _down(ctx, d_res, res, n * nc)
+    ctx.synchronize()
+    _ = d_sk^
+    _ = d_res^
+    _ = ctx^
+
+
 def knn_impute_cells_kernel(cells: IP, x: FP, fx: FP, best_d: FP, best_i: IP, res: FP, n_: Int64, m_: Int64, d_: Int64, k_: Int64, weights_: Int64, nc_: Int64):
     var n = Int(n_)
     var m = Int(m_)
@@ -1157,6 +1319,26 @@ def louvain_kernel(a: FP, labels: IP, info: FP, w: FP, w2: FP, comm: IP, node_of
 
 
 def op_louvain(a: Int, labels: Int, info: Int, n: Int, max_level: Int, resolution: Float32, threshold: Float32) raises:
+    comptime if not is_defined["MOJOLEARN_XN_LOUVAIN_GPU"]():
+        var s_w = List[Float32](length=(n * n) if (n * n) > 0 else 1, fill=Float32(0))
+        var s_w2 = List[Float32](length=(n * n) if (n * n) > 0 else 1, fill=Float32(0))
+        var s_comm = List[Int32](length=(n) if (n) > 0 else 1, fill=Int32(0))
+        var s_node_of = List[Int32](length=(n) if (n) > 0 else 1, fill=Int32(0))
+        var s_deg = List[Float32](length=(n) if (n) > 0 else 1, fill=Float32(0))
+        var s_stot = List[Float32](length=(n) if (n) > 0 else 1, fill=Float32(0))
+        var s_k2c = List[Float32](length=(n) if (n) > 0 else 1, fill=Float32(0))
+        var s_tmp = List[Float32](length=(n) if (n) > 0 else 1, fill=Float32(0))
+        for t in range(1):
+            louvain_item(t, _f(a), _i(labels), _f(info), FP(unsafe_from_address=Int(s_w.unsafe_ptr())), FP(unsafe_from_address=Int(s_w2.unsafe_ptr())), IP(unsafe_from_address=Int(s_comm.unsafe_ptr())), IP(unsafe_from_address=Int(s_node_of.unsafe_ptr())), FP(unsafe_from_address=Int(s_deg.unsafe_ptr())), FP(unsafe_from_address=Int(s_stot.unsafe_ptr())), FP(unsafe_from_address=Int(s_k2c.unsafe_ptr())), FP(unsafe_from_address=Int(s_tmp.unsafe_ptr())), n, max_level, resolution, threshold)
+        _ = s_w^
+        _ = s_w2^
+        _ = s_comm^
+        _ = s_node_of^
+        _ = s_deg^
+        _ = s_stot^
+        _ = s_k2c^
+        _ = s_tmp^
+        return
     var ctx = xn_ctx()
     var d_a = _buf(ctx, a, n * n, True)
     var d_labels = _buf_i(ctx, labels, n, False)

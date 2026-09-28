@@ -751,6 +751,55 @@ def pcs_item(
         res.unsafe_store(t * nc + h, acc_row.unsafe_load(h))
 
 
+def pcs_sketch_item(
+    t: Int, x: FP, hidx: IP, hbit: IP, sk: FP,
+    n: Int, d_in: Int, nf: Int, nc: Int, degree: Int, gamma: Float32, coef0: Float32,
+):
+    """`pcs_item`'s count sketch of degree p = t % degree for row t // degree,
+    into sk[t * nc ..]: the same statements, features ascending."""
+    var r = t // degree
+    var p = t - r * degree
+    var sg = ftz(identical_sqrt(gamma))
+    var sc = ftz(identical_sqrt(coef0))
+    var o = sk + t * nc
+    for h in range(nc):
+        o.unsafe_store(h, Float32(0))
+    for j in range(nf):
+        var v: Float32
+        if j < d_in:
+            v = ftz(identical_mul(sg, ftz(x.unsafe_load(r * d_in + j))))
+        else:
+            v = sc
+        if Int(hbit.unsafe_load(p * nf + j)) < 0:
+            v = -v
+        var h = Int(hidx.unsafe_load(p * nf + j))
+        o.unsafe_store(h, _add(o.unsafe_load(h), v))
+
+
+def pcs_conv_item(t: Int, acc: FP, sk: FP, res: FP, n: Int, nc: Int, degree: Int, p: Int):
+    """One cell (row t // nc, component t % nc) of `pcs_item`'s circular
+    convolution of the running product `acc` (n x nc) with the row's degree-p
+    sketch (sk, rows of degree * nc): the same fold, a ascending."""
+    var r = t // nc
+    var h = t - r * nc
+    var ar = acc + r * nc
+    var sr = sk + (r * degree + p) * nc
+    var s = Float32(0)
+    for a in range(nc):
+        var b = h - a
+        if b < 0:
+            b += nc
+        s = ftz(identical_mul_add(ar.unsafe_load(a), sr.unsafe_load(b), s))
+    res.unsafe_store(t, s)
+
+
+def pcs_copy0_item(t: Int, sk: FP, res: FP, n: Int, nc: Int, degree: Int):
+    """res row r = the row's degree-0 sketch (`pcs_item`'s p == 0 copy)."""
+    var r = t // nc
+    var h = t - r * nc
+    res.unsafe_store(t, sk.unsafe_load(r * degree * nc + h))
+
+
 comptime PI_F32 = Float32(3.14159265358979323846)
 
 
@@ -866,6 +915,46 @@ def ls_laplacian_item(t: Int, a: FP, res: FP, n: Int):
     var wj = ftz(identical_sqrt(dj)) if dj != Float32(0) else Float32(1)
     var v = ftz(identical_div(ftz(a.unsafe_load(t)), wj))
     res.unsafe_store(t, ftz(identical_div(v, wi)))
+
+
+def col_degree_item(t: Int, a: FP, res: FP, n: Int):
+    """`ls_laplacian_item`'s in-degree of node t: column t of A summed over
+    the rows k != t, ascending, the same `_add` chain."""
+    var dt = Float32(0)
+    for k in range(n):
+        if k != t:
+            dt = _add(dt, a.unsafe_load(k * n + t))
+    res.unsafe_store(t, dt)
+
+
+def ls_laplacian_deg_item(t: Int, a: FP, deg: FP, res: FP, n: Int):
+    """`ls_laplacian_item` with the two degrees read from `col_degree_item`'s
+    output instead of refolded per cell (O(n^2) instead of O(n^3); every
+    stored value the same)."""
+    var i = t // n
+    var j = t - i * n
+    if i == j:
+        res.unsafe_store(t, Float32(0))
+        return
+    var di = deg.unsafe_load(i)
+    var dj = deg.unsafe_load(j)
+    var wi = ftz(identical_sqrt(di)) if di != Float32(0) else Float32(1)
+    var wj = ftz(identical_sqrt(dj)) if dj != Float32(0) else Float32(1)
+    var v = ftz(identical_div(ftz(a.unsafe_load(t)), wj))
+    res.unsafe_store(t, ftz(identical_div(v, wi)))
+
+
+def row_all_zero_item(t: Int, a: IP, res: IP, n: Int, m: Int):
+    """1 when every entry of row t of the float32 matrix (read as its bit
+    patterns) is +0.0 or -0.0, i.e. Python's `all(v == 0 for v in row)`
+    (a NaN is not zero), else 0."""
+    var z = 1
+    for j in range(m):
+        var b = bitcast[DType.uint32](a.unsafe_load(t * m + j)) & UInt32(0x7FFFFFFF)
+        if b != UInt32(0):
+            z = 0
+            break
+    res.unsafe_store(t, Int32(z))
 
 
 def knn_graph_item(t: Int, idx: IP, res: FP, n: Int, m: Int, k: Int):

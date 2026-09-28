@@ -131,6 +131,10 @@ _UNFUSED_KNN = os.environ.get("MOJOLEARN_XN_UNFUSED_KNN", "") == "1"
 _HOST_LOOP_LP = os.environ.get("MOJOLEARN_XN_HOST_LOOPS", "") == "1"
 #: A/B arm: KNNImputer.transform over every cell instead of the missing ones.
 _UNCOMPACT_IMPUTE = os.environ.get("MOJOLEARN_XN_UNCOMPACT_IMPUTE", "") == "1"
+#: A/B arm: the one-item forms these replaced (PolynomialCountSketch's
+#: per-row `pcs`, LabelSpreading's per-cell-degree `ls_laplacian`, PageRank's
+#: dangling rows in Python).
+_OLD_ITEMS = os.environ.get("MOJOLEARN_XN_OLD_ITEMS", "") == "1"
 
 
 class _XNeighbors(NumericModeMixin):
@@ -844,7 +848,8 @@ class PolynomialCountSketch(_XNeighbors):
         nf = self.indexHash_.shape[1]
         nc, deg = int(self.n_components), int(self.degree)
         out = empty((n, nc), "<f4")
-        self._op("pcs", [(X, 0), (self.indexHash_, 0), (self.bitHash_, 0), (out, 1)],
+        self._op("pcs" if _OLD_ITEMS else "pcs_resident",
+                 [(X, 0), (self.indexHash_, 0), (self.bitHash_, 0), (out, 1)],
                  (n, d, nf, nc, deg), (_f32_scalar(self.gamma), _f32_scalar(self.coef0)))
         return out
 
@@ -1120,7 +1125,12 @@ class LabelSpreading(_LabelPropagationBase):
         A = self._graph_affinity(X)
         n = A.shape[0]
         G = empty((n, n), "<f4")
-        self._op("ls_laplacian", [(A, 0), (G, 1)], (n,))
+        if _OLD_ITEMS:
+            self._op("ls_laplacian", [(A, 0), (G, 1)], (n,))
+        else:
+            deg = empty((n,), "<f4")
+            self._op("col_degree", [(A, 0), (deg, 1)], (n,))
+            self._op("ls_laplacian_deg", [(A, 0), (deg, 0), (G, 1)], (n,))
         return G
 
 
@@ -1285,7 +1295,11 @@ class PageRank(_XNeighbors):
             A = Array.from_list([[1.0 if v != 0 else 0.0 for v in r] for r in A.tolist()], "<f4")
         Q = empty((n, n), "<f4")
         self._op("row_normalize", [(A, 0), (Q, 1)], (n, n))
-        dangling = _i32([1 if all(v == 0 for v in r) else 0 for r in A.tolist()], "dangling")
+        if _OLD_ITEMS:
+            dangling = _i32([1 if all(v == 0 for v in r) else 0 for r in A.tolist()], "dangling")
+        else:
+            dangling = empty((n,), "<i4")
+            self._op("row_all_zero", [(A, 0), (dangling, 1)], (n, n))
         if self.personalization is None:
             p = Array.from_list([1.0 / n] * n, "<f4")
         else:

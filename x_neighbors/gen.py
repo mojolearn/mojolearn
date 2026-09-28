@@ -115,6 +115,21 @@ OPS = [
     ("knn_impute", "items", "knn_impute_item", "n * d",
      [("x", "fin", "n * d"), ("fx", "fin", "m * d"), ("best_d", "fscr", "n * d * k"), ("best_i", "iscr", "n * d * k"),
       ("res", "fout", "n * d"), ("n", "int"), ("m", "int"), ("d", "int"), ("k", "int"), ("weights", "int")]),
+    ("col_degree", "items", "col_degree_item", "n",
+     [("a", "fin", "n * n"), ("res", "fout", "n"), ("n", "int")]),
+    ("ls_laplacian_deg", "items", "ls_laplacian_deg_item", "n * n",
+     [("a", "fin", "n * n"), ("deg", "fin", "n"), ("res", "fout", "n * n"), ("n", "int")]),
+    ("row_all_zero", "items", "row_all_zero_item", "n",
+     [("a", "iin", "n * m"), ("res", "iout", "n"), ("n", "int"), ("m", "int")]),
+    ("pcs_sketch", "items", "pcs_sketch_item", "n * degree",
+     [("x", "fin", "n * d_in"), ("hidx", "iin", "degree * nf"), ("hbit", "iin", "degree * nf"),
+      ("sk", "fout", "n * degree * nc"), ("n", "int"), ("d_in", "int"), ("nf", "int"), ("nc", "int"),
+      ("degree", "int"), ("gamma", "float"), ("coef0", "float")]),
+    ("pcs_conv", "items", "pcs_conv_item", "n * nc",
+     [("acc", "fin", "n * nc"), ("sk", "fin", "n * degree * nc"), ("res", "fout", "n * nc"), ("n", "int"),
+      ("nc", "int"), ("degree", "int"), ("p", "int")]),
+    ("pcs_copy0", "items", "pcs_copy0_item", "n * nc",
+     [("sk", "fin", "n * degree * nc"), ("res", "fout", "n * nc"), ("n", "int"), ("nc", "int"), ("degree", "int")]),
     ("knn_impute_cells", "items", "knn_impute_cell_item", "nc",
      [("cells", "iin", "nc"), ("x", "fin", "n * d"), ("fx", "fin", "m * d"), ("best_d", "fscr", "n * d * k"),
       ("best_i", "iscr", "n * d * k"), ("res", "finout", "n * d"), ("n", "int"), ("m", "int"), ("d", "int"),
@@ -149,6 +164,10 @@ CUSTOM_OPS = [
      [("q", "fin", "n * n"), ("x", "finout", "n"), ("p", "fin", "n"), ("dw", "fin", "n"), ("dangling", "iin", "n"),
       ("info", "iout", "2"), ("n", "int"), ("max_iter", "int"), ("thr_hi", "int"), ("thr_lo", "int"),
       ("alpha", "float")]),
+    ("pcs_resident",
+     [("x", "fin", "n * d_in"), ("hidx", "iin", "degree * nf"), ("hbit", "iin", "degree * nf"), ("res", "fout", "n * nc"),
+      ("n", "int"), ("d_in", "int"), ("nf", "int"), ("nc", "int"), ("degree", "int"), ("gamma", "float"),
+      ("coef0", "float")]),
     ("cc_iterate",
      [("a", "fin", "n * n"), ("lab", "iinout", "n"), ("info", "iout", "1"), ("n", "int")]),
 ]
@@ -156,6 +175,14 @@ CUSTOM_OPS = [
 #: Ops whose GPU driver runs a threadgroup form of the (sequential) item
 #: instead of one thread: op -> (module, function, threads constant, the
 #: define that restores the one-thread item). The host driver keeps the item.
+#: Ops whose GPU binding runs the item loop on the HOST (a sequential solve
+#: that one GPU thread runs far slower than one CPU core; the host column is
+#: the same statements): op -> the define that restores the one-thread GPU
+#: launch.
+HOST_RUN = {
+    "louvain": "MOJOLEARN_XN_LOUVAIN_GPU",
+}
+
 BLOCK_OPS = {
     "ocsvm": ("block_ops", "ocsvm_smo_block", "OCSVM_TPB", "MOJOLEARN_XN_SERIAL_SMO"),
 }
@@ -253,6 +280,16 @@ def _down(ctx: DeviceContext, buf: DeviceBuffer[DType.float32], addr: Int, count
 def _down_i(ctx: DeviceContext, buf: DeviceBuffer[DType.int32], addr: Int, count: Int) raises:
     if count > 0:
         ctx.enqueue_copy(dst_ptr=IP(unsafe_from_address=addr), src_buf=buf)
+
+
+@always_inline
+def _f(addr: Int) -> FP:
+    return FP(unsafe_from_address=addr)
+
+
+@always_inline
+def _i(addr: Int) -> IP:
+    return IP(unsafe_from_address=addr)
 """]
     for name, mod, item, count, params in OPS:
         bufs, scal = split(params)
@@ -272,6 +309,14 @@ def _down_i(ctx: DeviceContext, buf: DeviceBuffer[DType.int32], addr: Int, count
         dp = [f"{b[0]}: Int" for b in bufs if b[1] not in ("fscr", "iscr")]
         dp += [f"{p[0]}: {'Int' if p[1] == 'int' else 'Float32'}" for p in scal]
         body = "    var ctx = xn_ctx()\n"
+        if name in HOST_RUN:
+            hb = host_loop(item, count, bufs, scal)
+            for b in bufs:
+                if b[1] in ("fscr", "iscr"):
+                    hb += f"    _ = s_{b[0]}^\n"
+            body = (f"    comptime if not is_defined[\"{HOST_RUN[name]}\"]():\n"
+                    + "".join("    " + ln + "\n" for ln in hb.rstrip("\n").split("\n"))
+                    + "        return\n" + body)
         for b in bufs:
             up = "True" if b[1] in ("fin", "finout", "iin", "iinout") else "False"
             addr = "0" if b[1] in ("fscr", "iscr") else b[0]
@@ -317,6 +362,22 @@ def _i(addr: Int) -> IP:
         bufs, scal = split(params)
         dp = [f"{b[0]}: Int" for b in bufs if b[1] not in ("fscr", "iscr")]
         dp += [f"{p[0]}: {'Int' if p[1] == 'int' else 'Float32'}" for p in scal]
+        body = host_loop(item, count, bufs, scal)
+        outs = [b for b in bufs if b[1] in ("fout", "finout")]
+        if outs:
+            b = outs[0]
+            body += f"    comptime if X_NEIGHBORS_HOST_SABOTAGE:\n        if ({b[2]}) > 0:\n            _f({b[0]}).unsafe_store(0, _f({b[0]}).unsafe_load(0) + Float32(1e-3))\n"
+        for b in bufs:
+            if b[1] in ("fscr", "iscr"):
+                body += f"    _ = s_{b[0]}^\n"
+        s.append(f"\n\ndef op_{name}({', '.join(dp)}) raises:\n{body}")
+    return "".join(s)
+
+
+def host_loop(item, count, bufs, scal):
+    """The host driver's body up to the loop: scratch Lists, then the item
+    over every t (shared by the host drivers and HOST_RUN device drivers)."""
+    if True:
         body = ""
         for b in bufs:
             if b[1] == "fscr":
@@ -333,15 +394,7 @@ def _i(addr: Int) -> IP:
                 ptrs.append(f"_i({b[0]})" if is_int_buf(b[1]) else f"_f({b[0]})")
         call = ", ".join(["t"] + ptrs + [p[0] for p in scal])
         body += f"    for t in range({count}):\n        {item}({call})\n"
-        outs = [b for b in bufs if b[1] in ("fout", "finout")]
-        if outs:
-            b = outs[0]
-            body += f"    comptime if X_NEIGHBORS_HOST_SABOTAGE:\n        if ({b[2]}) > 0:\n            _f({b[0]}).unsafe_store(0, _f({b[0]}).unsafe_load(0) + Float32(1e-3))\n"
-        for b in bufs:
-            if b[1] in ("fscr", "iscr"):
-                body += f"    _ = s_{b[0]}^\n"
-        s.append(f"\n\ndef op_{name}({', '.join(dp)}) raises:\n{body}")
-    return "".join(s)
+        return body
 
 
 def wrappers():

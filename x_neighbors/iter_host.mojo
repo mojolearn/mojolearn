@@ -7,7 +7,7 @@ from std.sys.compile import is_defined
 
 from x_neighbors.items import (
     FP, IP, absdiff_sum_item, matmul_item, lp_clamp_item, ls_clamp_item,
-    pagerank_step_item, cc_step_item,
+    pagerank_step_item, cc_step_item, pcs_item,
 )
 
 comptime _SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
@@ -142,3 +142,19 @@ def op_cc_iterate(a: Int, lab: Int, info: Int, n: Int) raises:
     IP(unsafe_from_address=info).unsafe_store(0, Int32(steps))
     _ = l0^
     _ = l1^
+
+
+def op_pcs_resident(
+    x: Int, hidx: Int, hbit: Int, res: Int,
+    n: Int, d_in: Int, nf: Int, nc: Int, degree: Int, gamma: Float32, coef0: Float32,
+) raises:
+    """The CPU column: `pcs_item` itself (the GPU's split runs its statements)."""
+    var scr = List[Float32](length=n * 2 * nc if n * nc > 0 else 1, fill=Float32(0))
+    var ps = FP(unsafe_from_address=Int(scr.unsafe_ptr()))
+    for t in range(n):
+        pcs_item(t, FP(unsafe_from_address=x), IP(unsafe_from_address=hidx), IP(unsafe_from_address=hbit),
+                 FP(unsafe_from_address=res), ps, n, d_in, nf, nc, degree, gamma, coef0)
+    comptime if _SABOTAGE:
+        if n * nc > 0:
+            FP(unsafe_from_address=res).unsafe_store(0, FP(unsafe_from_address=res).unsafe_load(0) + Float32(1e-3))
+    _ = scr^
