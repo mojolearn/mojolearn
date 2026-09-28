@@ -19,7 +19,9 @@ from x_decomp.checks.seam_util import (
     seam_fixture,
     zeros,
 )
-from decomposition.host.pca_full_oracle import host_qr_factor
+from decomposition.host.pca_full_oracle import host_one_sided_jacobi_svd, host_qr_factor
+from x_decomp.cells import X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL
+from x_decomp.host_jacobi import fast_one_sided_jacobi_svd
 from x_decomp.device import DevExec
 from x_decomp.host_qr import fast_qr_factor
 from x_decomp.host import HostExec
@@ -74,6 +76,19 @@ def main() raises:
         var want_r = host_qr_factor(qa2, qm, qn)
         var got_r = fast_qr_factor(ptr(qa), qm, qn)
         same("host QR slices " + String(qm) + " x " + String(qn), count_diff_f32(got_r, want_r))
+    # ---- the host's transposed one-sided Jacobi SVD (x_decomp/host_jacobi.mojo)
+    # == host_one_sided_jacobi_svd: values, V and the sweep count
+    var svd_ns = [9, 40, 300]
+    for sh in range(len(svd_ns)):
+        var sn = svd_ns[sh]
+        var sa = seam_fixture(sn, sn, UInt64(70 + sh))
+        var sa2 = sa.copy()
+        var want = host_one_sided_jacobi_svd(sa2, sn, X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL)
+        var got = fast_one_sided_jacobi_svd(sa, sn, X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL)
+        same("host Jacobi SVD values n " + String(sn), count_diff_f32(got.s, want.s))
+        same("host Jacobi SVD vectors n " + String(sn), count_diff_f32(got.v, want.v))
+        if got.executed != want.executed or got.converged != want.converged:
+            raise Error("host Jacobi SVD sweep count differs at n " + String(sn))
     # ---- 5307 the pivot
     var n = 9
     var a = tie_matrix(n)

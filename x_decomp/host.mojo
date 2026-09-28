@@ -16,7 +16,6 @@ from std.sys.compile import is_defined
 
 from decomposition.checks.jacobi_eigh_device import JACOBI_SWEEPS, JACOBI_TOL
 from decomposition.host.linalg_public import host_eigh, host_qr_r
-from decomposition.host.pca_full_oracle import host_one_sided_jacobi_svd
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from x_decomp.cells import (
     F32Ptr,
@@ -47,6 +46,7 @@ from x_decomp.cells import (
     pdist_cell,
 )
 from x_decomp.exec_trait import Exec
+from x_decomp.host_jacobi import fast_one_sided_jacobi_svd
 from x_decomp.host_qr import fast_qr_finish, qr_slice, qr_slices
 from x_decomp.host_graph import EdgeList, dijkstra_heap_row
 from x_decomp.host_simd import (
@@ -299,7 +299,7 @@ struct HostExec(Exec):
         m >= n), then the one-sided Jacobi SVD of R. Unordered values, V in
         columns: the host replay of DevExec.svd."""
         var r = HostExec._qr_r(a, m, n)
-        var got = host_one_sided_jacobi_svd(r, n, X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL)
+        var got = fast_one_sided_jacobi_svd(r, n, X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL)
         if not got.converged:
             raise Error("x_decomp svd: the one-sided Jacobi SVD did not converge")
         for i in range(n):
