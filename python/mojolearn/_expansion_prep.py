@@ -2450,6 +2450,8 @@ class PowerTransformer(_PrepBase):
                 # the search speculated `spec` evaluations deep (transform.mojo pt_spts ..
                 # pt_sres): the same points, values and decisions, fewer dependent folds
                 mmax = 2 ** spec - 1
+                # the candidates' transforms: contiguous per candidate (0) or one row's side by side (1)
+                il = 1 if os.environ.get("MOJOLEARN_XPREP_PT_INTERLEAVE", "0") == "1" else 0
                 state, leval = pr.alloc(_PT_STATE * d), pr.alloc(d)
                 spl, vals = pr.alloc(d * mmax), pr.alloc(d * mmax)
                 lg, tv = pr.scratch(n * d), pr.scratch(n * d * mmax)
@@ -2460,8 +2462,8 @@ class PowerTransformer(_PrepBase):
                     steps = 2 if k0 == 0 else min(spec, _PT_EVALS - 1 - k0)
                     m = 2 if k0 == 0 else 2 ** steps - 1
                     pr.stage("pt_spts", d, state, leval, spl, m, k0)
-                    pr.stage("pt_smap", m * n * d, xo, n, d, method, spl, m, tv, lg)
-                    pr.stage("pt_sfold", d * m, xo, n, d, method, tv, m, state, spl, vals, 1 if k0 == 0 else 0)
+                    pr.stage("pt_smap", m * n * d, xo, n, d, method, spl, m, tv, lg, il)
+                    pr.stage("pt_sfold", d * m, xo, n, d, method, tv, m, state, spl, vals, 1 if k0 == 0 else 0, il)
                     pr.stage("pt_sres", d, state, leval, m, vals, k0, steps, lam)
                     k0 += steps
             else:
