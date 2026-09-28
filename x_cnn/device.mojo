@@ -1373,12 +1373,11 @@ def batchnorm_backward_into(x: FP, g: FP, aux: FP, prm: List[Int32], training: B
 
 def dropout2d_into(x: FP, n: Int, prm: List[Int32], hyper: List[Float32], y_out: FP, mask_out: FP) raises:
     var ctx = cnn_ctx()
-    # lane/cnn-apple2: the cached workspace slots, not fresh buffers per call
-    var dx = put[False](ctx, 0, x, n)
-    var dp = put_prm(ctx, 1, prm)
-    var dh = put_hyper(ctx, 2, hyper)
-    var mask = ws(ctx, 3, n)
-    var dout = ws(ctx, 4, n)
+    var dx = up(ctx, x, n)
+    var dp = upload_i32(ctx, prm)
+    var dh = upload_f32(ctx, hyper)
+    var mask = ctx.enqueue_create_buffer[DType.float32](n)
+    var dout = ctx.enqueue_create_buffer[DType.float32](n)
     launch[dropout2d_at](ctx, fp(dx), fp(mask), fp(dout), fp(dh), ip(dp), ip(dp), n)
     down(ctx, dout, y_out, n)
     down(ctx, mask, mask_out, n)
