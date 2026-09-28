@@ -1562,9 +1562,15 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
     REMEASURED 2026-09-27 (lane/algos-trees, found red after merging main):
       gbdt_host_predict    50 -> 51  x-metrics-search (the metrics lane's
       forest_host_predict  85 -> 86  model_selection search fits GBDT and
-                                     forest estimators); no old lane moved"""
+                                     forest estimators); no old lane moved
+
+    REMEASURED 2026-09-28 (lane/algos-decomp):
+      kmeans_oracle        71 -> 72  x-decomp-umap-options (UMAP option
+                                     parity), through the metrics binding the
+                                     umap lane already reaches it by; no old
+                                     lane moved"""
     rev = lane_select.reverse_map()
-    for rel, want in (("cluster/host/kmeans_oracle.mojo", 71),
+    for rel, want in (("cluster/host/kmeans_oracle.mojo", 72),
                       ("core/gbdt_host_predict.mojo", 51),
                       ("core/forest_host_predict.mojo", 86),
                       ("core/forest_inference.mojo", 50),
