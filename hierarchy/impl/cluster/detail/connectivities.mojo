@@ -143,11 +143,15 @@ def pairwise_distances(
     mut norms: DeviceBuffer[DType.float32],
     tile_tpb: Int = PINNED_TILE_TPB,
     sabotage: Int32 = LINK_SAB_NONE,
+    fill_indices: Bool = True,
 ) raises:
     """`connectivities.cuh:133-176`. `norms` is the caller's `m`-long
     scratch for the row norms (theirs lives inside `cuvs::distance`);
     `tile_tpb` is the IDENTICAL tile's block size, a scheduling knob the
-    check varies to show the bytes do not move."""
+    check varies to show the bytes do not move. `fill_indices=False`
+    (lane/cluster-apple) leaves `indices` untouched, for a caller whose
+    solver computes every column as `e % m` (`build_sorted_mst[DENSE=True]`);
+    `indices` may then be a one-cell placeholder."""
     if m < 2:
         raise Error(
             "hierarchy.pairwise_distances: n_rows=" + String(m)
@@ -171,13 +175,14 @@ def pairwise_distances(
     var nnz = m * m
 
     # `:147-148`
-    ctx.enqueue_function[fill_indices2](
-        indices.unsafe_ptr(),
-        Int32(m),
-        Int32(nnz),
-        grid_dim=((nnz + CONN_TPB - 1) // CONN_TPB, 1, 1),
-        block_dim=(CONN_TPB, 1, 1),
-    )
+    if fill_indices:
+        ctx.enqueue_function[fill_indices2](
+            indices.unsafe_ptr(),
+            Int32(m),
+            Int32(nnz),
+            grid_dim=((nnz + CONN_TPB - 1) // CONN_TPB, 1, 1),
+            block_dim=(CONN_TPB, 1, 1),
+        )
     # `:150-152`
     ctx.enqueue_function[indptr_sequence_kernel](
         indptr.unsafe_ptr(),

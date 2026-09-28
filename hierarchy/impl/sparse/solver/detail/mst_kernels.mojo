@@ -55,12 +55,27 @@ still runs one 32-thread block per row, and so does ours."""
 
 
 @always_inline
+def _edge_dst[DENSE: Bool](
+    indices: MutPointer[Int32, MutAnyOrigin], edge_idx: Int, v_in: Int32
+) -> Int32:
+    """The destination vertex of edge `edge_idx`. DENSE (lane/cluster-apple):
+    the complete `v x v` graph `pairwise_distances` lays out row-major, whose
+    `indices[e]` is `e % v` (`fill_indices2`), computed instead of loaded, so
+    the dense caller never writes or reads the `v * v` index array. 32-bit:
+    `v * v < 2^31` under PAIRWISE_MAX_ROWS."""
+    comptime if DENSE:
+        return Int32(UInt32(edge_idx) % UInt32(v_in))
+    else:
+        return indices.unsafe_load(edge_idx)
+
+
+@always_inline
 def get_1D_idx() -> Int:
     """`mst_utils.cuh:18-21`."""
     return Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
 
 
-def kernel_min_edge_per_vertex(
+def kernel_min_edge_per_vertex[DENSE: Bool = False](
     offsets: MutPointer[Int32, MutAnyOrigin],
     indices: MutPointer[Int32, MutAnyOrigin],
     weights: MutPointer[Float32, MutAnyOrigin],
@@ -115,10 +130,17 @@ def kernel_min_edge_per_vertex(
         var row_end = Int(offsets.unsafe_load(warp_id + 1))
         var e = row_start + lane_id
         while e < row_end:
-            var successor = indices.unsafe_load(e)
+            var successor: Int32
+            comptime if DENSE:
+                # row `warp_id` starts at warp_id * v: the column is e - start
+                successor = Int32(e - row_start)
+            else:
+                successor = indices.unsafe_load(e)
             var successor_color_idx = color_index.unsafe_load(Int(successor))
             var successor_color = color.unsafe_load(Int(successor_color_idx))
-            if mst_edge.unsafe_load(e) == 0 and self_color != successor_color:
+            # the color test first: the same predicate, and an edge inside
+            # one color never loads its `mst_edge` byte
+            if self_color != successor_color and mst_edge.unsafe_load(e) == 0:
                 var wk = weight_order_key(weights.unsafe_load(e))
                 var lh = sabotaged_lo_hi(
                     sabotage,
@@ -168,7 +190,7 @@ def kernel_min_edge_per_vertex(
             )
 
 
-def min_edge_lo_per_color(
+def min_edge_lo_per_color[DENSE: Bool = False](
     offsets_row_of_edge: MutPointer[Int32, MutAnyOrigin],
     indices: MutPointer[Int32, MutAnyOrigin],
     weights: MutPointer[Float32, MutAnyOrigin],
@@ -191,14 +213,14 @@ def min_edge_lo_per_color(
             var c = color.unsafe_load(Int(color_index.unsafe_load(tid)))
             var wk = weight_order_key(weights.unsafe_load(Int(edge_idx)))
             if wk == min_edge_color.unsafe_load(Int(c)):
-                var dst = indices.unsafe_load(Int(edge_idx))
+                var dst = _edge_dst[DENSE](indices, Int(edge_idx), v_in)
                 var lh = sabotaged_lo_hi(
                     sabotage, edge_lo(Int32(tid), dst), edge_hi(Int32(tid), dst)
                 )
                 _ = Atomic.min(min_edge_color_lo.unsafe_offset(Int(c)), lh[0])
 
 
-def min_edge_hi_per_color(
+def min_edge_hi_per_color[DENSE: Bool = False](
     offsets_row_of_edge: MutPointer[Int32, MutAnyOrigin],
     indices: MutPointer[Int32, MutAnyOrigin],
     weights: MutPointer[Float32, MutAnyOrigin],
@@ -219,7 +241,7 @@ def min_edge_hi_per_color(
         if edge_idx != EDGE_SENTINEL:
             var c = color.unsafe_load(Int(color_index.unsafe_load(tid)))
             var wk = weight_order_key(weights.unsafe_load(Int(edge_idx)))
-            var dst = indices.unsafe_load(Int(edge_idx))
+            var dst = _edge_dst[DENSE](indices, Int(edge_idx), v_in)
             var lh = sabotaged_lo_hi(
                 sabotage, edge_lo(Int32(tid), dst), edge_hi(Int32(tid), dst)
             )
@@ -231,7 +253,8 @@ def min_edge_hi_per_color(
 
 
 @always_inline
-def _edge_is_color_min(
+def _edge_is_color_min[DENSE: Bool = False](
+    v_in: Int32,
     src: Int32,
     edge_idx: Int32,
     c: Int32,
@@ -244,7 +267,7 @@ def _edge_is_color_min(
 ) -> Bool:
     """Their `min_edge_color[color] == altered_weights[edge_idx]`
     (`mst_kernels.cuh:127`, `:140`) on the triple."""
-    var dst = indices.unsafe_load(Int(edge_idx))
+    var dst = _edge_dst[DENSE](indices, Int(edge_idx), v_in)
     var wk = weight_order_key(weights.unsafe_load(Int(edge_idx)))
     var lh = sabotaged_lo_hi(sabotage, edge_lo(src, dst), edge_hi(src, dst))
     return (
@@ -254,7 +277,7 @@ def _edge_is_color_min(
     )
 
 
-def min_edge_per_supervertex(
+def min_edge_per_supervertex[DENSE: Bool = False](
     color: MutPointer[Int32, MutAnyOrigin],
     color_index: MutPointer[Int32, MutAnyOrigin],
     new_mst_edge: MutPointer[Int32, MutAnyOrigin],
@@ -284,13 +307,13 @@ def min_edge_per_supervertex(
 
         if edge_idx != EDGE_SENTINEL:
             var add_edge = False
-            if _edge_is_color_min(
-                Int32(tid), edge_idx, vertex_color, indices, weights,
+            if _edge_is_color_min[DENSE](
+                v_in, Int32(tid), edge_idx, vertex_color, indices, weights,
                 min_edge_color, min_edge_color_lo, min_edge_color_hi,
                 sabotage,
             ):
                 add_edge = True
-                var dst = indices.unsafe_load(Int(edge_idx))
+                var dst = _edge_dst[DENSE](indices, Int(edge_idx), v_in)
                 if symmetrize_output == 0:
                     var dst_edge_idx = new_mst_edge.unsafe_load(Int(dst))
                     var dst_color = color.unsafe_load(
@@ -301,9 +324,9 @@ def min_edge_per_supervertex(
                     # is the min edge of dst's color.
                     if (
                         dst_edge_idx != EDGE_SENTINEL
-                        and indices.unsafe_load(Int(dst_edge_idx)) == Int32(tid)
-                        and _edge_is_color_min(
-                            dst, dst_edge_idx, dst_color, indices, weights,
+                        and _edge_dst[DENSE](indices, Int(dst_edge_idx), v_in) == Int32(tid)
+                        and _edge_is_color_min[DENSE](
+                            v_in, dst, dst_edge_idx, dst_color, indices, weights,
                             min_edge_color, min_edge_color_lo,
                             min_edge_color_hi, sabotage,
                         )
@@ -357,7 +380,7 @@ def add_reverse_edge(
                 temp_weights.unsafe_store(tid + v, weights.unsafe_load(Int(edge_idx)))
 
 
-def min_pair_colors(
+def min_pair_colors[DENSE: Bool = False](
     v_in: Int32,
     indices: MutPointer[Int32, MutAnyOrigin],
     new_mst_edge: MutPointer[Int32, MutAnyOrigin],
@@ -371,7 +394,7 @@ def min_pair_colors(
     if i < Int(v_in):
         var edge_idx = new_mst_edge.unsafe_load(i)
         if edge_idx != EDGE_SENTINEL:
-            var neighbor_vertex = indices.unsafe_load(Int(edge_idx))
+            var neighbor_vertex = _edge_dst[DENSE](indices, Int(edge_idx), v_in)
             var self_color_idx = color_index.unsafe_load(i)
             var self_color = color.unsafe_load(Int(self_color_idx))
             var neighbor_color_idx = color_index.unsafe_load(Int(neighbor_vertex))
