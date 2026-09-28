@@ -126,10 +126,55 @@ col2im 1.22, forward GEMM 1.45. In the notile arm the tuner had picked a
 split plan for 32x27x262144 (2.30 ms) on a first-use run: fixed in
 d3d5ce0e7 (one untimed run per candidate).
 
+### m4pro-a (Apple M4 Pro), job 1790609769289, commit 39f622a4d
+
+base = every change off (`-D MOJOLEARN_XCNN_NO_MMA_SPLIT -D
+MOJOLEARN_XCNN_NO_RES_POOL -D MOJOLEARN_XCNN_NO_TILED_LAYOUT -D
+MOJOLEARN_XCNN_NO_NT_TUNE -D MOJOLEARN_XCNN_NO_IM2COL_TAPS` + legacy);
+mid = 5021979ab's set; all = default. Median of two rounds, ms.
+
+IDENTICAL:
+| shape | base | mid | all |
+|---|---|---|---|
+| Conv2d 3->64 fwd / bwd | 29.9 / 12.8 | 29.5 / 7.4 | 28.3 / 7.0 |
+| Conv2d 64->64 fwd / bwd | 52.3 / 100.5 | 50.7 / 77.1 | 40.3 / 68.0 |
+| Conv2d 64->128 fwd / bwd | 21.3 / 28.8 | 20.7 / 28.2 | 18.2 / 25.8 |
+| fit 2048 / 8192 | 225.7 / 858.0 | 160.0 / 632.7 | 144.4 / 571.6 (-36% / -33%) |
+| predict 2048 / 8192 | 103.2 / 353.5 | 66.4 / 247.7 | 52.5 / 192.5 (-49% / -46%) |
+| BasicBlock 64 N64 H32 fwd / fwd+bwd | 96.7 / 201.8 | 94.2 / 194.1 | 92.2 / 184.5 |
+| BatchNorm2d fwd / bwd | 23.9 / 19.6 | 23.3 / 19.0 | 24.4 / 19.3 (unchanged: no GEMM) |
+| MaxPool2d fwd / bwd | 13.8 / 27.8 | 13.7 / 27.4 | 13.8 / 28.0 (unchanged) |
+| GCNConv 100k/1M fwd / bwd | 503 / 37.9 | 490 / 34.0 | 491 / 33.5 |
+| SAGEConv 100k/1M fwd / bwd | 470 / 63.8 | 481 / 57.0 | 469 / 56.8 |
+Every digest line (Conv2d y/bwd, fit weights/losses/proba, BasicBlock,
+GCNConv, SAGEConv) equal in all six runs.
+
+FAST (base = `-D MOJOLEARN_XCNN_NO_FAST_TUNE -D MOJOLEARN_XCNN_NO_RES_POOL
+-D MOJOLEARN_XCNN_NO_TILED_LAYOUT -D MOJOLEARN_XCNN_NO_IM2COL_TAPS` + legacy):
+| shape | base | all |
+|---|---|---|
+| Conv2d 3->64 fwd / bwd | 29.2 / 17.0 | 26.4 / 6.5 |
+| Conv2d 64->64 fwd / bwd | 57.5 / 110.6 | 38.2 / 59.5 |
+| Conv2d 64->128 fwd / bwd | 24.3 / 38.9 | 17.0 / 23.5 |
+| fit 2048 / 8192 | 215.4 / 822.2 | 117.7 / 465.6 (-45% / -43%) |
+| predict 2048 / 8192 | 105.1 / 348.5 | 34.9 / 123.7 (-67% / -65%) |
+| BasicBlock fwd / fwd+bwd | 92.8 / 201.3 | 80.3 / 162.9 |
+| GCNConv / SAGEConv fwd | 490 / 471 | 494 / 480 |
+FAST: every digest line and all 20 fastq.py rows equal between the arms.
+
+Stages (all arm): im2col 0.75 -> 0.29 (block 1), 1.96 -> 0.70 (block 2);
+conv_out tiled 0.89 -> 0.37, 0.44 -> 0.19; the TILED pooled backward rows
+were SLOWER (1.44 -> 1.73, 0.75 -> 0.96): taken back to the element kernel
+in 1e79c8b4c (opt-in `-D MOJOLEARN_XCNN_TILED_ROWS`). Block 1's forward
+GEMM (262144 x 32 x 27) stayed 2.61 ms with the one-leaf MMA candidate.
+GCNConv / SAGEConv forward is host NumPy (two lexsorts of 1.1M edges,
+np.add.at): 1e79c8b4c builds the same CSR with one stable int64 argsort
+per view and bincount (0.24 -> 0.09 s per order on the laptop, same order).
+
 ## Unproven
 
-- d3d5ce0e7 (APPLE_MMA one-leaf ragged k, bias MMA split, warm tuning):
-  job 1790609365361 (m3ultra-b) pending.
+- 1e79c8b4c (rows back on the element kernel, GCN/SAGE host CSR):
+  job 1790610432497 (m3ultra-b, commit f9dab4da4) pending.
 - No M3 Ultra number yet for any change.
 
 ## Shared code touched (the integration run must cover)
