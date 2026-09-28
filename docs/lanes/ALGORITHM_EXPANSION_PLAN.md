@@ -12,7 +12,7 @@ records as passed.
 | **A. Verification** | it has a verifier lane with CPU and GPU paths; each numeric seam has a host oracle, a separating fixture, a sabotage that builds, runs and bites, a DEVIATION and a card stage; it AGREEs on NVIDIA (pod), AMD and Apple (stewards, post-merge); and every entry point survives repeated calls in one process |
 | **B. Features** | every option its reference and bench opponents have is implemented, or refused by name for an identity reason; verified the same way on all three vendors |
 | **C. GPU speed, FAST and IDENTICAL** | it is faster on NVIDIA, AMD and Apple. FAST: quality never worse (a paired check at 5+ seeds on 2+ datasets). IDENTICAL: the same bits, re-proven on every column. If a family is large, split C into C-FAST and C-IDENTICAL sessions |
-| **D. CPU speed, FAST and IDENTICAL** | the CPU path is faster (threads, SIMD, cache blocking) under both modes, with IDENTICAL bits identical at every thread count and equal to the GPU |
+| **D. CPU speed, IDENTICAL only** | the CPU path is faster (threads, SIMD, cache blocking) with bits identical at every thread count and equal to the GPU. No CPU FAST tier (Andrew 2026-09-28): the CPU is the bitwise witness and the no-GPU path |
 
 **EVERY session covers all three GPU vendors (NVIDIA, AMD, Apple) plus
 CPU:**
