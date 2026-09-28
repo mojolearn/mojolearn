@@ -13,7 +13,7 @@ host FP-environment unification.
 |---|---|
 | d49fb66b + 059d3661f | `PCA(whiten=False).inverse_transform` and `TruncatedSVD.inverse_transform` on every CPU-only install (`core/classical_host_predict.mojo::host_inverse_transform_into`); lanes `pca-inverse`, `tsvd-inverse`, `pca-whiten-inverse` (PENDING "no reference"). Sabotage arms bit in session 1 (patches in ~/mojolearn-evidence/cpu/patches/). |
 | 762f811cc, 81b443e9e | DEVIATION 5900, `core/host_parallel.mojo::host_parallelize` (tasks run in the caller's MXCSR/FPCR; Mojo's workers run FTZ+DAZ). |
-| 41f60919d | **ONE module.** `core/host_parallel.mojo` is the only host thread split and absorbs lane/algos-linear's `core/host_fp_env.mojo` (never on main; must not land). `host_parallelize` everywhere, now also svm_parameter's finite scan, the byte LM host rows and its exp check, and the multi-GPU drivers' per-device tasks. `host_parallelize_pool_env` (= the worker's FTZ/DAZ) for the GBDT fit's host regions only (gbdt/train.mojo, gbdt/resident_model.mojo, gbdt/host/gbdt_oracle.mojo): their recorded columns carry the pool's bits. `tools/check_host_parallel_sites.py` refuses a raw `sync_parallelize` anywhere else and runs first in `pixi run check-host-parallel`. IDENTITY_PATHS row 199. |
+| 41f60919d | **ONE module.** `core/host_parallel.mojo` is the only host thread split and absorbs lane/algos-linear's `core/host_fp_env.mojo` (it reached main at 0b7b6d5c1; the merge of lane/cpu removed it and its ten `host_ieee_fp_enter/leave` lines in classical_host_predict and glm/estimator, which were inert inside `host_parallelize`: the caller's environment is already IEEE). `host_parallelize` everywhere, now also svm_parameter's finite scan, the byte LM host rows and its exp check, and the multi-GPU drivers' per-device tasks. `host_parallelize_pool_env` (= the worker's FTZ/DAZ) for the GBDT fit's host regions only (gbdt/train.mojo, gbdt/resident_model.mojo, gbdt/host/gbdt_oracle.mojo): their recorded columns carry the pool's bits. `tools/check_host_parallel_sites.py` refuses a raw `sync_parallelize` anywhere else and runs first in `pixi run check-host-parallel`. IDENTITY_PATHS row 199. |
 
 **Proof on the H100 pod (dpse0qp7knpu44), session 2.** Two trees built from
 scratch: `/root/base` = merge base f237f1996 (main), `/root/mojolearn` =
@@ -46,10 +46,10 @@ columns include par-*, the CUDA column excludes them). Records in
   differs from its merge base, which is the lane's own change; the manifest
   was byte-identical after the run).
 
-**For lane/algos-linear:** rebase onto main and drop `core/host_fp_env.mojo`
-and its `host_ieee_fp_enter/leave` calls; `core/classical_host_predict.mojo`
-and `glm/estimator.mojo::qn_softmax_host` already split through
-`host_parallelize` on main.
+**For lane/algos-linear:** merge main. `core/host_fp_env.mojo` is gone;
+`core/classical_host_predict.mojo` and `glm/estimator.mojo::qn_softmax_host`
+split through `host_parallelize`. Any new host loop uses it; the site check
+refuses anything else.
 
 ## Next session, in order
 

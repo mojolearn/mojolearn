@@ -6,10 +6,11 @@ EVERY host thread split in the tree goes through this module.
 `tools/check_host_parallel_sites.py` (run by `pixi run check-host-parallel`)
 refuses any `.mojo` file outside it that calls `sync_parallelize` directly.
 This module also absorbs lane/algos-linear's `core/host_fp_env.mojo`
-(`host_ieee_fp_enter` / `host_ieee_fp_leave` around each task body): that
-file never reached main, `host_parallelize` below does the same job at the
-split rather than inside each body, and no second environment module is
-ever added.
+(`host_ieee_fp_enter` / `host_ieee_fp_leave` around each task body, main
+0b7b6d5c1): `host_parallelize` below does the same job at the split rather
+than inside each body, so that file and its calls in
+`core/classical_host_predict.mojo` and `glm/estimator.mojo` were removed
+when the two merged, and no second environment module is ever added.
 
 MEASURED, NOT ASSUMED. On an x86 RunPod box (AMD EPYC 7352, the pinned
 toolchain) the calling thread's MXCSR reads 0x1fa0 (the IEEE default) and

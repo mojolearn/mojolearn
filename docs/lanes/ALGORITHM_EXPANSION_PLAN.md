@@ -92,8 +92,8 @@ messaging lanes. Newest items are at the top.
    in the caller's FP environment); `host_parallelize_pool_env` is for the
    GBDT fit's host regions only. `pixi run check-host-parallel` fails on a
    raw `sync_parallelize` anywhere else. Never add another environment
-   module: lane/algos-linear rebases onto main and drops
-   `core/host_fp_env.mojo`.
+   module: `core/host_fp_env.mojo` (lane/algos-linear) was absorbed and
+   removed; that lane merges main and uses `host_parallelize`.
 0000. **Fixture RNG and scaffolding are shared (lane consolidate, main
    4618ca187).** New check and binding code uses checks/fixture_rng.mojo,
    checks/scaffold.mojo and the binding prelude (checks/binding_prelude.mojo);
