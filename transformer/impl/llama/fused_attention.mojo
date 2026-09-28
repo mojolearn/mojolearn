@@ -7706,6 +7706,16 @@ def fused_attn_forward_r2_amma_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SA
                     mpart[u] = identical_fmax(mpart[u], masked)
                     var cell = _estash_cell[ATTN_V1_PACKED_ESTASH](bb, h, t, j, l, nh, s, pos0, key_lo, window)
                     sstash.unsafe_store(cell, masked)
+        # lane/neural-apple2 (2026-09-28): no barrier here. The next block's
+        # staging writes `kv` and `emin`, whose readers (the matrix step and
+        # the admission read) all passed the barrier above; its matrix step
+        # rewrites `tile` only after its staging barrier, which every thread
+        # reaches after its row phase. One barrier after the loop guards the
+        # row-maximum store into `tile` below. Synchronization only;
+        # `-D MOJOLEARN_ATTN_FWD_AMMA_P1_BARRIER` restores the per-block barrier.
+        comptime if is_defined["MOJOLEARN_ATTN_FWD_AMMA_P1_BARRIER"]():
+            barrier()
+    comptime if not is_defined["MOJOLEARN_ATTN_FWD_AMMA_P1_BARRIER"]():
         barrier()
     comptime for u in range(RPT):
         tile.unsafe_store((tr + u * 16) * 16 + tc, mpart[u])
