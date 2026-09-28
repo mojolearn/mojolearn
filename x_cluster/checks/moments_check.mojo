@@ -40,7 +40,7 @@ def run[O: ClusterOps](mut ops: O, resp: List[Float32], x: List[Float32], n: Int
     return out^
 
 
-def _shape(n: Int, d: Int, kc: Int, sx: Int, su: Int) raises:
+def _shape(n: Int, d: Int, kc: Int, sx: UInt64, su: UInt64) raises:
     var x = seam_fixture(n, d, sx)
     var u = seam_fixture(n, kc, su)
     var resp = List[Float32](capacity=n * kc)
