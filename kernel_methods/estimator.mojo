@@ -1259,6 +1259,9 @@ def nystroem_transform_host_into[out_origin: MutOrigin, //](
     var kp = nystroem_params(model)
     var q = model.n_components
     var d = model.n_features
+    # MOJOLEARN_STAGE_TIMES=1: wall per phase (each phase already drains).
+    var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
+    var t0 = Int(perf_counter_ns())
     var ctx = _family_ctx()
     var dx = _upload(ctx, x)
     var dc = _upload(ctx, model.components)
@@ -1274,18 +1277,25 @@ def nystroem_transform_host_into[out_origin: MutOrigin, //](
         identical_gemm_workspace_max_floats(n_rows, q, q)
     )
     ctx.synchronize()
+    var t1 = Int(perf_counter_ns())
     km_kernel_matrix(
         ctx, kp, dk, dx, dc, n_rows, q, d, na, nb, kws, elem_tpb, sabotage
     )
     ctx.synchronize()
+    var t2 = Int(perf_counter_ns())
     trace.record_device(ctx, "nys.cross_kernel", dk, n_rows * q)
     var op = OP_NT
     if sabotage == KMSAB_EMBED_OP_NN:
         op = OP_NN
     identical_gemm_into(ctx, demb, dk, dnorm, gws, n_rows, q, q, op)
     ctx.synchronize()
+    var t3 = Int(perf_counter_ns())
     trace.record_device(ctx, "nys.embedding", demb, n_rows * q)
     _download_into(ctx, demb, output, n_rows * q)
+    if st_on:
+        print("NYS_TRANSFORM_STAGES rows=" + String(n_rows) + " alloc_upload_ms=" + String((t1 - t0) // 1000000)
+              + " kernel_ms=" + String((t2 - t1) // 1000000) + " gemm_ms=" + String((t3 - t2) // 1000000)
+              + " copy_out_ms=" + String((Int(perf_counter_ns()) - t3) // 1000000))
     _ = dx^
     _ = dc^
     _ = dnorm^
