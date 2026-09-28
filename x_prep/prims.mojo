@@ -243,11 +243,27 @@ def unique_cols_unit(t: Int, f: FP, q: IP):
     var U = p(q, 3)
     var c = t
     var k = 0
-    for i in range(n):
-        var v = raw(f, S + c * n + i)
-        if k == 0 or key(v) != key(raw(f, U + c * n + k - 1)):
+    var last = UInt32(0)
+    var Sc = S + c * n
+    var full = n - n % RUN
+    # rows loaded RUN at a time; the last distinct key is kept in a register
+    # (it is the key of the word just stored at U[k - 1])
+    for i0 in range(0, full, RUN):
+        var blk = run_block[RUN](f, Sc + i0, 1)
+        comptime for u in range(RUN):
+            var v = blk[u]
+            var kv = key(v)
+            if k == 0 or kv != last:
+                f.unsafe_store(U + c * n + k, v)
+                k += 1
+                last = kv
+    for i in range(full, n):
+        var v = raw(f, Sc + i)
+        var kv = key(v)
+        if k == 0 or kv != last:
             f.unsafe_store(U + c * n + k, v)
             k += 1
+            last = kv
     st(f, p(q, 4) + c, Float32(k))
 
 
