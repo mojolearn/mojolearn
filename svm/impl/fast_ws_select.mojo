@@ -29,9 +29,15 @@ from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
+from std.sys.info import has_apple_gpu_accelerator
 from svm.impl.smo_sets import in_lower, in_upper
 
-comptime FWS_T = 1024
+#: SCHEDULING (the walk's selection is ranked over the whole sorted list, so
+#: the chunk width moves no bit). 256 on Apple: at 1024 the M2 Pro's
+#: pipeline limit for `fws_walk_kernel` is 832 threads (Metal validation,
+#: steward 1790601522115), no Dynamic Caching, and the over-limit dispatch
+#: is dropped with no error: svc / svr moved on M2 Metal only.
+comptime FWS_T = 256 if has_apple_gpu_accelerator() else 1024
 comptime FWS_WARPS = FWS_T // 32
 comptime FWS_MAX_WS = 2048
 
