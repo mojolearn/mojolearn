@@ -1,0 +1,14 @@
+diff --git a/glm/estimator.mojo b/glm/estimator.mojo
+index 97800a66c..09a814c9f 100644
+--- a/glm/estimator.mojo
++++ b/glm/estimator.mojo
+@@ -520,7 +520,8 @@ def qn_sigmoid_host(
+     are. `1 - p` for class 0 is one subtraction."""
+     for i in range(n_rows):
+         var z = Float64(scores_ptr.unsafe_load(i))
+-        var p = 1.0 / (1.0 + identical_exp64(-z))
++        var e = identical_exp64(z)
++        var p = e / (1.0 + e)  # SABOTAGE 549: another spelling of the sigmoid
+         out_ptr.unsafe_store(2 * i, 1.0 - p)
+         out_ptr.unsafe_store(2 * i + 1, p)
+ 

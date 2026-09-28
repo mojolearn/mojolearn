@@ -21,3 +21,6 @@ x_ann/checks/ivf_quant_check.mojo	x_ann/checks/sabotage/rq_5841_zero_unguarded.p
 x_ann/checks/ivf_quant_check.mojo	x_ann/checks/sabotage/rq_5842_estimate_reassociated.patch
 x_ann/checks/ivf_quant_check.mojo	x_ann/checks/sabotage/refine_5850_repeats_kept.patch
 x_ann/checks/ivf_quant_check.mojo	x_ann/checks/sabotage/filter_5855_ignored.patch
+ivf/checks/ivf_check.mojo	ivf/checks/sabotage/ivf_5860_slot_sort_tie_high.patch
+ivf/checks/ivf_check.mojo	ivf/checks/sabotage/ivf_5861_merge_high_first.patch
+ivf/checks/ivf_check.mojo	ivf/checks/sabotage/ivf_5862_extend_new_rows_first.patch

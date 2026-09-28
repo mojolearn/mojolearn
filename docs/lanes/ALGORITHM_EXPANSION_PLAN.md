@@ -49,6 +49,16 @@ for a before and an after), or your own `<lane>-amd` box.
 ---
 
 # CURRENT DIRECTIVES: re-read after every merge
+**ONE CENTRAL AMD BOX (Andrew, 2026-09-28).** Every lane does its AMD
+(gfx942) identity and speed work on ONE shared Hot Aisle box: 2x MI300X
+(dev_pod key `linear-amd`), 2 GPU slots, lease to 2026-09-29T01:09Z. Never
+rent a per-lane AMD box. From your worktree after merging origin/main:
+`tools/amd_central.sh sync <lane> <worktree>`, then
+`tools/amd_central.sh run <lane> '<cmd>'` (takes a free GPU slot, waits for
+one; `--gpus 2` for two-device checks), `sh` for no-GPU commands, `fetch` for
+results, `status` for slots. Your tree is `/root/mojolearn-<lane>`. Do not
+extend or down the box. Full usage: `~/mojolearn-evidence/amd_central.md`.
+
 **CHECK NOW, every lane with an `x_*` binding (cpu lane finding,
 2026-09-27):** x_cluster and x_neighbors hang on the SECOND GPU call in a
 process, because each call builds a new `DeviceContext` whose buffers

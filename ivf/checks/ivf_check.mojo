@@ -122,6 +122,7 @@ from ivf.checks.ivf_oracle import (
 from ivf.checks.list_layout import (
     ListLayout,
     build_list_layout,
+    extend_list_layout,
     gather_candidate_indices,
     merge_probed_lists,
 )
@@ -2126,11 +2127,78 @@ def check_ivf_sabotages() raises:
     )
 
 
+def check_extend_matches_build() raises:
+    """`extend_list_layout` over a built layout is `build_list_layout` over the
+    concatenated rows and labels, slot for slot (DEVIATION 1783: every list
+    stays ascending in the original id, new ids at the end). The fixture
+    sends new rows to every list, several to the same list, so a new row
+    placed anywhere but the END of its list moves a slot."""
+    comptime N_OLD = 37
+    comptime N_NEW = 23
+    comptime D = 3
+    comptime L = 5
+    var labels = List[UInt32]()
+    var x = List[Float32]()
+    for i in range(N_OLD + N_NEW):
+        labels.append(UInt32((i * 7 + i // 3) % L))
+        for f in range(D):
+            x.append(Float32(i * D + f) * Float32(0.25) - Float32(3.0))
+    var old_labels = List[UInt32]()
+    var old_x = List[Float32]()
+    var new_labels = List[UInt32]()
+    var new_x = List[Float32]()
+    for i in range(N_OLD + N_NEW):
+        if i < N_OLD:
+            old_labels.append(labels[i])
+        else:
+            new_labels.append(labels[i])
+        for f in range(D):
+            if i < N_OLD:
+                old_x.append(x[i * D + f])
+            else:
+                new_x.append(x[i * D + f])
+    var whole = build_list_layout(labels, x, N_OLD + N_NEW, D, L)
+    var base = build_list_layout(old_labels, old_x, N_OLD, D, L)
+    var ext = extend_list_layout(
+        base.offsets, base.list_indices, base.list_data, N_OLD, D, L,
+        new_labels, new_x, N_NEW,
+    )
+    # SEPARATION: the fixture must put at least two new rows into some list
+    # that already has rows, or "appended at the end" and "prepended" agree.
+    var shared = 0
+    for l in range(L):
+        var olds = Int(base.offsets[l + 1] - base.offsets[l])
+        var news = 0
+        for j in range(N_NEW):
+            if Int(new_labels[j]) == l:
+                news += 1
+        if olds > 0 and news >= 2:
+            shared += 1
+    if shared == 0:
+        raise Error("check_extend_matches_build: VACUOUS fixture (no list gets two new rows beside old ones)")
+    for l in range(L + 1):
+        if ext.offsets[l] != whole.offsets[l]:
+            raise Error("check_extend_matches_build: FAIL offsets[" + String(l) + "]")
+    for s in range(N_OLD + N_NEW):
+        if ext.list_indices[s] != whole.list_indices[s]:
+            raise Error(
+                "check_extend_matches_build: FAIL slot " + String(s) + " holds id "
+                + String(ext.list_indices[s]) + ", build over the whole set holds "
+                + String(whole.list_indices[s])
+            )
+        for f in range(D):
+            if bitcast[DType.uint32](ext.list_data[s * D + f]) != bitcast[DType.uint32](whole.list_data[s * D + f]):
+                raise Error("check_extend_matches_build: FAIL slot " + String(s) + " feature " + String(f))
+    print("  OK check_extend_matches_build: " + String(N_OLD) + " + " + String(N_NEW)
+          + " rows, " + String(shared) + " lists take new rows beside old ones")
+
+
 def main() raises:
     print("ivf_check mode=" + _mode_name())
     check_nprobe_equals_nlists_is_brute_force()
     check_ivf_refusals()
     check_list_layout_and_index_carry()
+    check_extend_matches_build()
     check_empty_list()
     check_assignment_ties()
     check_quantizer_is_reproducible()

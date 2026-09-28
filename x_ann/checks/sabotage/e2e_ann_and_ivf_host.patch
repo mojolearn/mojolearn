@@ -1,0 +1,84 @@
+--- a/bindings/_mojolearn_x_ann_host.mojo
++++ b/bindings/_mojolearn_x_ann_host.mojo
+@@ -10,7 +10,29 @@ from std.python import Python, PythonObject
+ from std.python._cpython import GILReleased
+ from std.python.bindings import PythonModuleBuilder
+ from checks.numerics import GLOBAL_NUMERIC_MODE
+-from x_ann.abi import check_search, in_f32, in_i32, out_f32, out_i32, p_int, ptr_f32, ptr_i32
++from x_ann.abi import check_search, in_f32, in_i32, p_int, ptr_f32, ptr_i32
++from x_ann.abi import out_f32 as _out_f32, out_i32 as _out_i32
++from x_ann.ivf_pq_core import F32P
++
++
++def out_f32(values: List[Float32], addrs: PythonObject, i: Int) raises:
++    # THE END-TO-END SABOTAGE (never shipped): the CPU column nudges EVERY float
++    # output element the same way, so a row computed alone moves exactly as it
++    # does inside a batch (batch invariance holds; only the cross-column hash moves)
++    var v = values.copy()
++    for e in range(len(v)):
++        v[e] = v[e] * Float32(1.0000002) + Float32(1.0e-20)
++    _out_f32(v, addrs, i)
++
++
++def out_i32(values: List[Int32], addrs: PythonObject, i: Int) raises:
++    _out_i32(values, addrs, i)
++
++
++def nudge(p: F32P, count: Int):
++    # the same nudge for the distances a search writes in place
++    for e in range(count):
++        p.unsafe_store(e, p.unsafe_load(e) * Float32(1.0000002) + Float32(1.0e-20))
+ from x_ann.ivf_pq_core import pq_len_of
+ from x_ann.host.cagra_host import cagra_build_host, cagra_search_host
+ from x_ann.host.tsne_host import tsne_fit_host
+@@ -69,6 +91,7 @@ def ivf_pq_search_binding(addrs: PythonObject, params: PythonObject) raises -> P
+     with GILReleased(Python()):
+         ivf_pq_search_host(centers, offsets, list_indices, cb, codes, mask, n_lists, dim, pq_dim, pq_bits,
+                            queries, m, k, n_probes, od, oi, on)
++    nudge(od, m * k)
+     return PythonObject(m)
+ 
+ 
+@@ -133,6 +156,7 @@ def cagra_search_binding(addrs: PythonObject, params: PythonObject) raises -> Py
+     var oi = ptr_i32(addrs, 4)
+     with GILReleased(Python()):
+         cagra_search_host(x, n, d, g, deg, q, m, k, L, width, max_iter, n_seeds, od, oi)
++    nudge(od, m * k)
+     return PythonObject(m)
+ 
+ 
+@@ -187,6 +211,7 @@ def ivf_sq_search_binding(addrs: PythonObject, params: PythonObject) raises -> P
+     with GILReleased(Python()):
+         ivf_sq_search_host(centers, offsets, list_indices, vmin, delta, codes, mask, n_lists, dim, queries, m, k,
+                            n_probes, od, oi, on)
++    nudge(od, m * k)
+     return PythonObject(m)
+ 
+ 
+@@ -207,6 +232,7 @@ def refine_binding(addrs: PythonObject, params: PythonObject) raises -> PythonOb
+     var oi = ptr_i32(addrs, 4)
+     with GILReleased(Python()):
+         refine_host(x, n, d, q, m, cand, k0, k, od, oi)
++    nudge(od, m * k)
+     return PythonObject(m)
+ 
+ 
+@@ -267,6 +293,7 @@ def ivf_rabitq_search_binding(addrs: PythonObject, params: PythonObject) raises
+     with GILReleased(Python()):
+         ivf_rabitq_search_host(centers, offsets, list_indices, codes, norms, ips, mask, n_lists, dim, seed,
+                                queries, m, k, n_probes, od, oi, on)
++    nudge(od, m * k)
+     return PythonObject(m)
+ 
+ 
+--- a/ivf/host/ivf_host.mojo
++++ b/ivf/host/ivf_host.mojo
+@@ -440,7 +440,7 @@
+                 # THE VALUE ARM (THE NEGATIVE CONTROL above), after the root.
+                 out_dist.append(ivf_sabotage_value_flip(sel_dist[i]))
+             else:
+-                out_dist.append(sel_dist[i])
++                out_dist.append(ivf_sabotage_value_flip(sel_dist[i]))  # THE END-TO-END SABOTAGE (never shipped): the value arm without the flag the loader refuses
+             out_idx.append(sel_orig[i])
+         for _pad in range(selected, k):
+             out_dist.append(Float32(0))
