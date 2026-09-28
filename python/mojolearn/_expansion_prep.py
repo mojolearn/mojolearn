@@ -37,6 +37,8 @@ import statistics
 from . import _backend
 from ._array import Array
 from ._buffer import as_f32_c, addr_ro
+from . import _labels
+from . import _arena_io
 from ._labels import flatten_labels, sorted_classes, label_kind
 
 __all__ = ["f_classif", "f_regression", "r_regression", "chi2", "mutual_info_classif", "mutual_info_regression", "RobustScaler", "MaxAbsScaler", "OrdinalEncoder", "OneHotEncoder", "TargetEncoder", "SimpleImputer", "KBinsDiscretizer",
@@ -206,14 +208,38 @@ class _Prog:
         host_words = ha + (0 if dev_scratch else sc)
         arena = array.array("f", bytes(4 * max(host_words, 1)))
         base = arena.buffer_info()[0]
+        run_ranges = (getattr(binding, "x_prep_run_ranges", None)
+                      if (dev_scratch or sc == 0) and _arena_io.ranges_enabled() else None)
+        spans = []
         for off, arr, _ in self._inputs:
-            if arr.size:
-                ctypes.memmove(base + 4 * off, addr_ro(arr, name="input"), 4 * arr.size)
+            if not arr.size:
+                continue
+            cache = _arena_io.active_cache(binding, "x_prep", arr.size) if run_ranges is not None else None
+            if cache is not None:
+                # resident (lane py-shared): copied from the store on the device;
+                # the host words stay zero and `_check` refuses a read of them
+                spans.append((off, off + arr.size, cache.id_of(arr)))
+                continue
+            ctypes.memmove(base + 4 * off, addr_ro(arr, name="input"), 4 * arr.size)
+            spans.append((off, off + arr.size, -1))
+        self._in_spans = [(lo, hi) for lo, hi, _ in spans]
         prog = array.array("i", [(v.off + (sbase if v.kind == "s" else obase)) if isinstance(v, _Scratch) else v
                                  for s in self._stages for v in s] or [0])
         nst = len(self._stages)
         self._out, self._out_at = None, obase
-        if dev_out:
+        if run_ranges is not None:
+            # the shared ranges runner (lane py-shared, core/arena_io.mojo):
+            # the inputs go up, the rest of the host arena starts zero on the
+            # device, and everything but the inputs comes back
+            ins = _arena_io.input_ranges(spans)
+            outs = _arena_io.output_ranges(_arena_io.complement(ins, ha))
+            ia, oa = _arena_io.pack_ins(ins), _arena_io.pack_outs(outs)
+            out = array.array(self._out_code, bytes(4 * on)) if dev_out else None
+            run_ranges(base, prog.buffer_info()[0], 0 if out is None else out.buffer_info()[0],
+                       (ha, sc if dev_scratch else 0, on if dev_out else 0, nst),
+                       (ia.buffer_info()[0], len(ins), oa.buffer_info()[0], len(outs)))
+            self._out = out
+        elif dev_out:
             out = array.array(self._out_code, bytes(4 * on))
             binding.x_prep_run_out(base, prog.buffer_info()[0], out.buffer_info()[0],
                                    (ha, sc if dev_scratch else 0, on, nst))
@@ -228,11 +254,23 @@ class _Prog:
         self.arena = arena
         return self
 
+    def _check(self, off, n):
+        """An input's words never come back from the device (the ranges
+        runner, lane py-shared): a read of one is refused on every backend,
+        so a program that reads an input after a stage wrote it fails loudly
+        instead of reading the host's stale copy."""
+        for lo, hi in getattr(self, "_in_spans", ()):
+            if off < hi and lo < off + n:
+                raise AssertionError(f"x_prep: arena [{off}, {off + n}) was read but is an input, "
+                                     "which never comes back")
+
     def get(self, off, shape):
         shape = tuple(shape) if isinstance(shape, (tuple, list)) else (int(shape),)
         n = 1
         for s in shape:
             n *= s
+        if not isinstance(off, _Scratch):
+            self._check(off, n)
         if isinstance(off, _Scratch):
             if off.kind != "o":
                 raise ValueError("x_prep: scratch words never reach the host")
@@ -252,6 +290,8 @@ class _Prog:
         n = 1
         for s in shape:
             n *= s
+        if not isinstance(off, _Scratch):
+            self._check(off, n)
         if isinstance(off, _Scratch):
             if off.kind != "o":
                 raise ValueError("x_prep: scratch words never reach the host")
@@ -270,6 +310,7 @@ class _Prog:
 
     def values(self, off, n):
         """Python floats of n arena entries (for integer bookkeeping)."""
+        self._check(off, n)
         return list(self.arena[off:off + n])
 
 
@@ -278,25 +319,19 @@ def _mode():
 
 
 def encode_labels(y):
-    """(classes, int32 codes) under `_labels`' order rule, in Python: the
-    base binding's native encoder is not on the CPU route of this lane."""
-    classes, codes = sorted_classes(flatten_labels(y))
-    return classes, Array.from_list(codes, "<i4")
+    """(classes, int32 codes) under `_labels`' order rule: `_labels.encode_labels`,
+    the native encoder (the base binding, or `_mojolearn_core_host` on a
+    CPU-only install) with `sorted_classes(flatten_labels(y))` as its
+    definition and fallback (lane py-shared; this module used to run the
+    Python routine always)."""
+    return _labels.encode_labels(y)
 
 
 def decode_labels(classes, codes):
     """Codes back to labels: int classes an int64 Array, real classes a
-    float64 Array, anything else a list (`_labels.decode_labels`' contract)."""
-    values = [classes[int(c)] for c in codes.tolist()]
-    kind = label_kind(classes)
-    try:
-        if kind == "int":
-            return Array.from_list([int(v) for v in values], "<i8")
-        if kind == "float":
-            return Array.from_list([float(v) for v in values], "<f8")
-    except (OverflowError, TypeError):
-        pass
-    return values
+    float64 Array, anything else a list: `_labels.decode_labels` (the native
+    gather for int and float classes; lane py-shared)."""
+    return _labels.decode_labels(classes, codes)
 
 
 def _x2d(X, name="X"):
@@ -2620,6 +2655,7 @@ class PolynomialFeatures(_PrepBase):
         pr.stage("poly", n * nout, xo, n, d, io, so, nout, out)
         pr.run(self.numeric_mode_)
         if self.order == "F":
+            pr._check(out, n * nout)
             seg = pr.arena[out:out + n * nout]
             store = array.array("f")
             for j in range(nout):
@@ -2630,6 +2666,7 @@ class PolynomialFeatures(_PrepBase):
 
 def _f_order(pr, off, n, w):
     """An (n, w) arena block as a Fortran-ordered Array (the same words)."""
+    pr._check(off, n * w)
     seg = pr.arena[off:off + n * w]
     store = array.array("f")
     for j in range(w):
