@@ -152,3 +152,28 @@ origin's merged with main. Every later branch is merged from its origin/ ref.
   their tasks serially "until core/host_parallel.mojo is on main". It is on
   lane/merged now; threading them is the owning families' next step
   (cluster, linear).
+
+### lane/algos-trees, lane/trees-cpu
+
+- Both merged with no textual conflict (origin refs at merge time:
+  algos-trees dc27fe36d, trees-cpu 390f24b03). algos-trees may get one more
+  push (the M2 GBDT hist kernel fix); origin/lane/algos-trees is merged again
+  right before the build.
+- FIX AT THE ROOT (integration): trees-cpu's RF (ensemble/host/rf_oracle.mojo)
+  and ExtraTrees (extratrees/impl/randomforest/randomforest.mojo) host fits
+  imported `core.host_fp_env` (host_ieee_fp_enter/leave in each tree task),
+  a file lane/cpu deleted; and they plus xtrees/ops.mojo called
+  sync_parallelize directly (check_host_parallel_sites FAIL, 3 sites).
+  Converted to host_parallelize (caller's environment in every task, which is
+  what host_ieee_fp_enter installed), the same conversion lane/cpu made for
+  linear; their comments now cite core/host_parallel.mojo. Check: PASS.
+
+### lane/algos-ann-b, lane/ann-cpu
+
+- origin/lane/algos-ann-b:
+  - tools/dev_pod.sh: both sides fixed the same patch-sync bug (a file the
+    previous patch added, tracked by the new base, deleted from the box).
+    Kept main's form (reset, then remove old additions except what the new
+    base tracks); ann's reorder is the same fix in another spelling.
+  - tools/test_lane_select.py: both REMEASURED notes kept; pin provisional.
+- origin/lane/ann-cpu: clean.
