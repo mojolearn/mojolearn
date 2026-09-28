@@ -95,3 +95,18 @@ after ring v2. GPC fit taxi, 6 Newton steps: factor 990 ms, solve 270 ms,
 B matrix (host) 123 ms, matvec 67 ms. RBFSampler 1M x 500 transform: gemm
 70 ms, epilogue 39 ms, copy into the caller's array 905 ms (fixed by
 312b5da1a, measurement pending).
+
+HOME MAC (m4pro-b, M4 Pro), request 1790584533292 at d022f6d6a, arms in one
+job (forward and reverse), digests equal in every pair. Raw:
+~/mojolearn-evidence/neighbors-apple/job3_m4prob.txt
+
+| algorithm | shape | old tiled (before) | tiled + k=10 selector + warp guard | certified (after) |
+|---|---|---|---|---|
+| NearestNeighbors.kneighbors | taxi 200k x 10k, k 10 | 0.497 | 0.432 | 0.100 |
+| NearestNeighbors.kneighbors | HIGGS 200k x 10k, k 10 | 0.491 | 0.435 | 0.088 |
+| KNeighborsClassifier.predict | taxi / HIGGS | 0.504 / 0.497 | 0.440 / 0.440 | 0.112 / 0.097 |
+| KNeighborsRegressor.predict | taxi / HIGGS | 0.497 / 0.491 | 0.435 / 0.436 | 0.106 / 0.092 |
+| kneighbors k=20 | taxi / HIGGS | 1.085 / 1.087 | 1.121 / 1.084 | 0.234 / 0.188 |
+| kneighbors, tied grid data | taxi / HIGGS 100k x 5k | 0.129 / 0.129 | 0.115 / 0.115 | 0.141 / 0.100 (most queries fall back: +25 ms on taxi) |
+| SVC.fit (SMO sync + EPT arm) | taxi / HIGGS 10k | 2.831 / 0.287 | | 0.888 / 0.131 |
+| SVR.fit (same arm) | taxi / HIGGS 10k | 0.313 / 0.344 | | 0.121 / 0.153 |
