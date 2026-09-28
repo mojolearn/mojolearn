@@ -36,6 +36,7 @@ from std.memory import bitcast
 from x_metrics.common import FP, IP, p, ld, st, ldi, sti, ldu, stu, key, fadd, leaf_add, LEAF
 from checks.numerics import identical_mul
 from checks.fixture_rng import splitmix_pair
+from x_metrics.split import fold_of_position, st_row64
 
 #: The sort's initial run length (insertion sorted by one thread).
 comptime RUN = 16
@@ -821,3 +822,123 @@ def curve_keep_unit(t: Int, f: FP, q: IP):
         var t2 = Int(ld(f, T + 1))
         keep = 1 if (f2 - f1 != f1 - f0) or (t2 - t1 != t1 - t0) else 0
     sti(f, p(q, 4) + t, keep)
+
+
+# ---------------------------------------------------------------------------
+# K-fold rows (fold_rows, lane metrics-apple2)
+# ---------------------------------------------------------------------------
+
+def fr_scatter_unit(t: Int, f: FP, q: IP):
+    """q = [n, K, CODE, ORD]; t = position: CODE[ORD[t]] = t's contiguous
+    fold. ORD is a permutation, so no two units write one word."""
+    var n = p(q, 0)
+    sti(f, p(q, 2) + ldi(f, p(q, 3) + t), fold_of_position(t, n, p(q, 1)))
+
+
+def fr_cnt_unit(t: Int, f: FP, q: IP):
+    """q = [n, K, CODE, S, C, CH]; t = fold * C + chunk: the chunk's rows
+    of that fold at S[t] (exact integers)."""
+    var n = p(q, 0)
+    var CODE = p(q, 2)
+    var C = p(q, 4)
+    var CH = p(q, 5)
+    var fo = t // C
+    var c = t - fo * C
+    var k = 0
+    for i in range(c * CH, min(n, c * CH + CH)):
+        if ldi(f, CODE + i) == fo:
+            k += 1
+    sti(f, p(q, 3) + t, k)
+
+
+def fr_off_unit(t: Int, f: FP, q: IP):
+    """q = [S, C, SZ]; t = fold: the chunk counts become exclusive offsets
+    in place, and SZ[t] = the fold's test count."""
+    var S = p(q, 0)
+    var C = p(q, 1)
+    var acc = 0
+    for c in range(C):
+        var k = S + t * C + c
+        var v = ldi(f, k)
+        sti(f, k, acc)
+        acc += v
+    sti(f, p(q, 2) + t, acc)
+
+
+def fr_fill_unit(t: Int, f: FP, q: IP):
+    """q = [n, K, CODE, S, C, CH, OUT, SZ]; t = fold * C + chunk: the
+    chunk's rows go, in ascending order, after the fold's test rows of the
+    earlier chunks (a test row) or after its test rows and the earlier
+    chunks' train rows (a train row): `fold_rows_unit`'s words."""
+    var n = p(q, 0)
+    var CODE = p(q, 2)
+    var C = p(q, 4)
+    var CH = p(q, 5)
+    var fo = t // C
+    var c = t - fo * C
+    var base = p(q, 6) + 2 * n * fo
+    var a = ldi(f, p(q, 3) + t)
+    var b = ldi(f, p(q, 7) + fo) + c * CH - a
+    for i in range(c * CH, min(n, c * CH + CH)):
+        if ldi(f, CODE + i) == fo:
+            st_row64(f, base + 2 * a, i)
+            a += 1
+        else:
+            st_row64(f, base + 2 * b, i)
+            b += 1
+
+
+# ---------------------------------------------------------------------------
+# Curve compaction (bin_curve params 12, 13; lane metrics-apple2)
+# ---------------------------------------------------------------------------
+
+def ck_cnt_unit(t: Int, f: FP, q: IP):
+    """q = [n, KEEP, CNT, S, C, CH]; t = problem * C + chunk: the chunk's
+    kept slots (KEEP == 1 among the problem's CNT slots) at S[t]."""
+    var n = p(q, 0)
+    var C = p(q, 4)
+    var CH = p(q, 5)
+    var pp = t // C
+    var c = t - pp * C
+    var cnt = ldi(f, p(q, 2) + pp)
+    var k = 0
+    for i in range(c * CH, min(cnt, c * CH + CH)):
+        if ldi(f, p(q, 1) + pp * n + i) != 0:
+            k += 1
+    sti(f, p(q, 3) + t, k)
+
+
+def ck_off_unit(t: Int, f: FP, q: IP):
+    """q = [S, C, CM]; t = problem: exclusive offsets in place, CM[t] = the
+    problem's kept count."""
+    var S = p(q, 0)
+    var C = p(q, 1)
+    var acc = 0
+    for c in range(C):
+        var k = S + t * C + c
+        var v = ldi(f, k)
+        sti(f, k, acc)
+        acc += v
+    sti(f, p(q, 2) + t, acc)
+
+
+def ck_fill_unit(t: Int, f: FP, q: IP):
+    """q = [n, KEEP, CNT, S, C, CH, FPS, TPS, THR, CF, N]; t = problem * C
+    + chunk: each kept slot's fps, tps and threshold words, copied bit for
+    bit, to its rank among the problem's kept slots."""
+    var n = p(q, 0)
+    var C = p(q, 4)
+    var CH = p(q, 5)
+    var N = p(q, 10)
+    var pp = t // C
+    var c = t - pp * C
+    var cnt = ldi(f, p(q, 2) + pp)
+    var j = ldi(f, p(q, 3) + t)
+    var CF = p(q, 9) + pp * n
+    for i in range(c * CH, min(cnt, c * CH + CH)):
+        if ldi(f, p(q, 1) + pp * n + i) != 0:
+            var e = pp * n + i
+            f.unsafe_store(CF + j, f.unsafe_load(p(q, 6) + e))
+            f.unsafe_store(CF + N + j, f.unsafe_load(p(q, 7) + e))
+            f.unsafe_store(CF + 2 * N + j, f.unsafe_load(p(q, 8) + e))
+            j += 1

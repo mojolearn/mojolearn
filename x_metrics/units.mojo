@@ -6,7 +6,7 @@ from x_metrics.common import FP, IP
 from x_metrics.group import group_sort_unit, group_sum_unit, pair_key_unit
 from x_metrics.ranking import bin_curve_unit, row_metric_unit
 from x_metrics.cluster import row_centroid_dist_unit
-from x_metrics.split import permute_unit
+from x_metrics.split import permute_unit, fold_rows_unit, rows64_unit, strat_codes_unit
 from x_metrics.regression import reg_term_unit, col_sort_unit, wpercentile_unit, col_max_unit, wpct_select
 from x_metrics.par import (
     cs_hist_unit, cs_scan_rows_unit, cs_scan_groups_unit, cs_place_unit,
@@ -14,12 +14,14 @@ from x_metrics.par import (
     sort_key_unit, sort_runs_unit, sort_merge_unit, sort_emit_unit,
     curve_gather_unit, curve_prefix_unit, curve_emit_unit, wpct_gather_unit, wpct_prefix_unit, copy_unit,
     cm_chunk_unit, cm_final_unit, wpct_iota_unit, curve_cnt_unit, curve_off_unit, curve_fill_unit,
-    curve_keep_unit,
+    curve_keep_unit, fr_scatter_unit, fr_cnt_unit, fr_off_unit, fr_fill_unit,
+    ck_cnt_unit, ck_off_unit, ck_fill_unit,
 )
 
-#: ops 0..10 are the caller's (x_metrics/plan.mojo N_USER_OPS); 11.. are the
-#: planner's parallel schedules (x_metrics/par.mojo)
-comptime N_OPS = 36
+#: ops 0..10, 36 (fold_rows), 41 (rows64) and 45 (strat_codes) (lane metrics-apple2) are the caller's
+#: (x_metrics/plan.mojo `is_user_op`); the others are the planner's
+#: parallel schedules (x_metrics/par.mojo)
+comptime N_OPS = 46
 
 
 @always_inline
@@ -96,3 +98,23 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
         curve_fill_unit(t, f, q)
     comptime if OP == 35:
         curve_keep_unit(t, f, q)
+    comptime if OP == 36:
+        fold_rows_unit(t, f, q)
+    comptime if OP == 37:
+        fr_scatter_unit(t, f, q)
+    comptime if OP == 38:
+        fr_cnt_unit(t, f, q)
+    comptime if OP == 39:
+        fr_off_unit(t, f, q)
+    comptime if OP == 40:
+        fr_fill_unit(t, f, q)
+    comptime if OP == 41:
+        rows64_unit(t, f, q)
+    comptime if OP == 42:
+        ck_cnt_unit(t, f, q)
+    comptime if OP == 43:
+        ck_off_unit(t, f, q)
+    comptime if OP == 44:
+        ck_fill_unit(t, f, q)
+    comptime if OP == 45:
+        strat_codes_unit(t, f, q)
