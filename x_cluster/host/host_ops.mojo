@@ -23,7 +23,6 @@ from x_cluster.bodies import (
     xk_cell,
     ap_availability_col,
     ap_exemplar_cell,
-    ap_noise_cell,
     ap_responsibility_row,
     kth_smallest_row,
     meanshift_seed,
@@ -139,11 +138,6 @@ struct HostOps(ClusterOps):
         var pa = self._fp(a)
         for t in range(n):
             ap_availability_col[X_CLUSTER_HOST_SABOTAGE](pr, pa, n, damping, t)
-
-    def ap_noise(mut self, s: Int, m: Int, seed: UInt64) raises:
-        var ps = self._fp(s)
-        for t in range(m):
-            ap_noise_cell(ps, seed, t)
 
     def ap_e(mut self, a: Int, r: Int, n: Int, e: Int) raises:
         var pa = self._fp(a)

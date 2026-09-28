@@ -19,9 +19,7 @@ descending, which moves the low bits of every distance.
 """
 from std.memory import bitcast
 
-from std.bit import count_leading_zeros
-
-from checks.numerics import ftz, identical_cos, identical_div, identical_exp, identical_log, identical_mul, identical_mul64, identical_pow, identical_sqrt
+from checks.numerics import ftz, identical_div, identical_exp, identical_log, identical_mul, identical_mul64, identical_pow, identical_sqrt
 
 comptime FPtr = MutPointer[Float32, MutAnyOrigin]
 comptime IPtr = MutPointer[Int32, MutAnyOrigin]
@@ -139,64 +137,6 @@ def meanshift_seed[REV: Bool = False](
         completed += 1
     intensity[s] = Int32(within)
     iters[s] = Int32(completed)
-
-
-# DEVIATION 5122 (the AffinityPropagation tie noise by its COUNTER: draw j of
-# the lane's splitmix64 stream is mix(seed + j * gamma), and the float32 of
-# its unit double is rounded from the integer, so a cell needs no stream
-# position and no Float64). Row 202; ap_noise_check.
-comptime SPLITMIX_GAMMA = UInt64(0x9E3779B97F4A7C15)
-
-
-@always_inline
-def splitmix_at(seed: UInt64, j: UInt64) -> UInt64:
-    """Draw `j` (1-based) of `SplitMix64(seed)`: its state after j steps is
-    seed + j * gamma (wrapping), and `next` mixes that state."""
-    var z = seed + j * SPLITMIX_GAMMA
-    z = (z ^ (z >> 30)) * UInt64(0xBF58476D1CE4E5B9)
-    z = (z ^ (z >> 27)) * UInt64(0x94D049BB133111EB)
-    return z ^ (z >> 31)
-
-
-@always_inline
-def unit_f32[TRUNC: Bool = False](v: UInt64) -> Float32:
-    """`Float32(SplitMix64.unit())` for the draw `v`, without a Float64
-    (Apple GPUs have none): the unit double is the 53-bit integer
-    `v >> 11` times 2^-53, EXACT, so its float32 is that integer rounded to
-    24 significant bits, to nearest, a tie to even, then scaled by an exact
-    power of two (the result is a normal float32 or 0)."""
-    var m = v >> 11
-    if m == UInt64(0):
-        return Float32(0)
-    var p = 64 - Int(count_leading_zeros(m))
-    var e = -53
-    if p > 24:
-        var sh = UInt64(p - 24)
-        var q = m >> sh
-        comptime if not TRUNC:
-            var rem = m & ((UInt64(1) << sh) - UInt64(1))
-            var half = UInt64(1) << (sh - UInt64(1))
-            if rem > half or (rem == half and (q & UInt64(1)) == UInt64(1)):
-                q += UInt64(1)
-        m = q
-        e += Int(sh)
-    return Float32(UInt32(m)) * bitcast[DType.float32](UInt32(127 + e) << 23)
-
-
-@always_inline
-def ap_noise_cell[TRUNC: Bool = False](s_m: FPtr, seed: UInt64, t: Int):
-    """sklearn's tie noise on cell `t` of S (`S += (eps * S + tiny * 100) *
-    z`), z the Box-Muller normal of draws 2t + 1 (u1) and 2t + 2 (u2): the
-    cosine branch, u1 in (0, 1], the portable log, cos and sqrt."""
-    var u1 = Float32(1) - unit_f32[TRUNC](splitmix_at(seed, UInt64(2 * t + 1)))
-    if u1 <= Float32(0):
-        u1 = Float32(1.1754944e-38)
-    var u2 = unit_f32[TRUNC](splitmix_at(seed, UInt64(2 * t + 2)))
-    var rad = identical_sqrt(ftz(identical_mul(Float32(-2), identical_log(u1))))
-    var ang = identical_mul(Float32(6.2831855), u2)
-    var z = ftz(identical_mul(rad, identical_cos(ang)))
-    var scale = ftz(ftz(identical_mul(Float32(1.1920929e-07), s_m[t])) + Float32(1.1754944e-36))
-    s_m[t] = ftz(s_m[t] + ftz(identical_mul(scale, z)))
 
 
 # DEVIATION 5105 (damping as two pinned products and one add). Row 114;

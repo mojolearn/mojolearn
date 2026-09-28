@@ -64,10 +64,6 @@ trait ClusterOps(Movable):
     def ap_a(mut self, r: Int, a: Int, n: Int, damping: Float32) raises:
         ...
 
-    def ap_noise(mut self, s: Int, m: Int, seed: UInt64) raises:
-        """The tie noise on the first m cells of S (`bodies.ap_noise_cell`)."""
-        ...
-
     def ap_e(mut self, a: Int, r: Int, n: Int, e: Int) raises:
         """e[i] = A[i, i] + R[i, i] > 0 (`bodies.ap_exemplar_cell`)."""
         ...

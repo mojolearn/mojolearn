@@ -9,16 +9,26 @@ precomputed matrix); the default preference is the median of S, taken as the
 device's exact order statistic of the n^2 distances. THE TIE NOISE is
 sklearn's formula `S += (eps * S + tiny * 100) * z`, z standard normal, but
 z comes from the lane's seeded splitmix64 stream through a Box-Muller with
-the portable log, cos and sqrt, not NumPy's generator (NOT_IMPLEMENTED.tsv);
-cell t reads draws 2t + 1 and 2t + 2 by their counter, on the device
-(`bodies.ap_noise_cell`, DEVIATION 5122).
+the portable log, cos and sqrt, not NumPy's generator (NOT_IMPLEMENTED.tsv).
 Each iteration is two device kernels over the resident S, R and A (a row per
 thread for the responsibilities, a column per thread for the availabilities,
 every fold ascending, the lowest index on an argmax tie) and one for the
 exemplar flags; the convergence window, the exemplar refinement and the
 labels are the reference's host logic from one source."""
-from checks.numerics import ftz, identical_mul
+from checks.numerics import ftz, identical_cos, identical_log, identical_mul, identical_sqrt
+from x_cluster.bodies import SplitMix64
 from x_cluster.ops import ClusterOps
+
+
+def _std_normal(mut rng: SplitMix64) -> Float32:
+    """Box-Muller, the cosine branch: u1 in (0, 1], u2 in [0, 1)."""
+    var u1 = Float32(1) - Float32(rng.unit())
+    if u1 <= Float32(0):
+        u1 = Float32(1.1754944e-38)
+    var u2 = Float32(rng.unit())
+    var rad = identical_sqrt(ftz(identical_mul(Float32(-2), identical_log(u1))))
+    var ang = identical_mul(Float32(6.2831855), u2)
+    return ftz(identical_mul(rad, identical_cos(ang)))
 
 
 def affinity_fit[O: ClusterOps](
@@ -110,13 +120,15 @@ def affinity_fit[O: ClusterOps](
         return
     for i in range(n):
         s_m[i * n + i] = pref[i]
-    # the tie noise, row-major order of the draws (cell t reads draws 2t + 1
-    # and 2t + 2 of the seeded stream, `bodies.ap_noise_cell`, DEVIATION
-    # 5122), on the column that holds S; the host keeps a copy for the
-    # exemplar refinement below
+    # the tie noise, row-major order of the draws
+    var rng = SplitMix64(seed)
+    var eps32 = Float32(1.1920929e-07)
+    var tiny100 = Float32(1.1754944e-36)
+    for t in range(n * n):
+        var z = _std_normal(rng)
+        var scale = ftz(ftz(identical_mul(eps32, s_m[t])) + tiny100)
+        s_m[t] = ftz(s_m[t] + ftz(identical_mul(scale, z)))
     var ss = ops.put(s_m)
-    ops.ap_noise(ss, n * n, seed)
-    s_m = ops.get(ss, n * n)
     var a_s = ops.zeros(n * n)
     var r_s = ops.zeros(n * n)
     var e_s = ops.zeros_i(n)

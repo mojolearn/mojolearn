@@ -35,7 +35,6 @@ updates) is one source compiled into both bindings. Entries are in
 | 5119 | SpectralClustering discretize / cluster_qr: a one-sided Jacobi SVD (column sums rows ascending, pinned products) for LAPACK's (host code) | `spectral_assign.mojo::jacobi_svd` | `checks/spectral_assign_check.mojo` |
 | 5120 | the device row order statistic: a four-pass radix select on the bits, one block per row, integer histograms (the same value as 5103's bisection) | `device_ops.mojo::_kth_kernel` | `checks/kth_check.mojo` (long rows) |
 | 5121 | the device M-step moments: a row tile's addends formed by every thread into shared memory, then each fold one thread's register chain over them rows ascending (the `*_term` / `chain_add` / final functions of 5110) | `device_ops.mojo::_moments_pass_kernel` | `checks/moments_check.mojo` (tiles, chains, fallback) |
-| 5122 | AffinityPropagation's tie noise by the draw's counter (draw j = mix(seed + j * gamma)), one cell per thread, the float32 of the unit draw rounded to nearest-even from the 53-bit integer (no Float64: Apple GPUs have none) | `bodies.ap_noise_cell`, `splitmix_at`, `unit_f32` | `checks/ap_noise_check.mojo` |
 
 Each check first shows its fixture SEPARATES the pinned spelling from the
 alternative (VACUOUS otherwise), then holds the device and the CPU column to
