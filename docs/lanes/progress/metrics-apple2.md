@@ -110,4 +110,7 @@ case digest is equal base vs head in both modes.
   (bounded downloads + curve compaction), cf20f1062 (StratifiedKFold
   device program), 204e3c81d, 78a1f9a03. Request 1790604342204 (m4pro-b)
   failed at the build (`out` is a keyword and cannot name an argument);
-  fixed in 78a1f9a03 and resubmitted as 1790619175919 on m4pro-a.
+  1790619175919 (m4pro-a, 78a1f9a03) failed at the build too (`fn` local
+  in epilogue.mojo). main carried both renames (ca5c76ace, db92af88c);
+  origin/main merged into the lane, both bindings and the word tests built
+  locally on one core, resubmitted as 1790619894321 on m4pro-a.
