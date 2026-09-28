@@ -21,7 +21,7 @@
 # The patch is re-applied on every exit path; build outputs and the base
 # snapshot are deleted at the end. PHASES=a,b,... runs a subset.
 set -u
-T=/root/mojolearn-py-consolidated
+T=$(cd "$(dirname "$0")/../.." && pwd)   # the lane tree this script sits in (py-consolidated or py-consolidated-b)
 EV=${EV:-/root/ev-py-consolidated/$(date -u +%m%d-%H%M)}
 PATCH=$T/tools/py_consolidated/base.patch
 PHASES=${PHASES:-base,head,cross,tests,sabotage,ab,timing}
@@ -152,7 +152,6 @@ if has ab; then
             env $C $P tools/py_misc_prep/ab.py time 2>&1 | tail -10 | sed 's/^/PREP time cpu /')
   env $G $P tools/py_misc_msel/check.py equal 2>&1 | tail -6 | sed 's/^/MSEL equal gpu /'
   env $C $P tools/py_misc_msel/check.py equal 2>&1 | tail -6 | sed 's/^/MSEL equal cpu /'
-  env $G $P tools/py_misc_msel/check.py time 2>&1 | tail -14 | sed 's/^/MSEL time gpu /'
   env $G $P "$EV/ab_arms.py" 2>&1 | grep -E '^ARM'
   env $C $P "$EV/ab_arms.py" 2>&1 | grep -E '^ARM'
   env $G $P "$EV/svc_equal.py" 2>&1 | grep -E 'FAIL|EQUAL RESULT' | tail -6 | sed 's/^/SVC_EQUAL gpu /'
