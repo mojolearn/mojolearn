@@ -1042,28 +1042,35 @@ def smo_oracle_fit[
         # `getSquareTileWithoutCaching` extracts rows of X by
         # `ws_idx_mod` = the PROJECTED indices, so the tile is
         # `K(x[ws%n], x[ws%n])`; under SVR a row can appear TWICE in it.
+        # kernel='precomputed' takes the scalar cells: `x` IS the kernel
+        # matrix and a cell is a copy of it, which the cell block (a dot of
+        # two feature rows) does not compute.
+        var cell_block = False
         comptime if dt == DType.float32 and SMO_HOST_VECTOR:
-            for t in range(n_ws):
-                var it = _vec_index(Int(ws.idx[t]), n_rows, is_svr)
-                for c in range(k):
-                    wstp.unsafe_store(c * n_ws + t, xtp.unsafe_load(c * n_rows + it))
-                wsnp.unsafe_store(t, nrmp.unsafe_load(it))
-            var tp = rebind[HostF32Ptr](tile.unsafe_ptr())
-            for u in range(n_ws):
-                var iu = _vec_index(Int(ws.idx[u]), n_rows, is_svr)
-                var t0 = 0
-                while t0 + SMO_W <= n_ws:
-                    var cells = _kernel_cells_v(
-                        kp, xp + iu * k, nrmp.unsafe_load(iu), wstp + t0, n_ws,
-                        wsnp.unsafe_load[width=SMO_W](t0), k,
-                    )
-                    tp.unsafe_store[width=SMO_W](u * n_ws + t0, cells)
-                    t0 += SMO_W
-                for t in range(t0, n_ws):
+            cell_block = kp.kernel != KERNEL_PRECOMPUTED
+        if cell_block:
+            comptime if dt == DType.float32 and SMO_HOST_VECTOR:
+                for t in range(n_ws):
                     var it = _vec_index(Int(ws.idx[t]), n_rows, is_svr)
-                    tile[u * n_ws + t] = _kernel_cell[dt](
-                        kp, x, norms, iu, x, norms, it, n_rows, n_rows, k
-                    )
+                    for c in range(k):
+                        wstp.unsafe_store(c * n_ws + t, xtp.unsafe_load(c * n_rows + it))
+                    wsnp.unsafe_store(t, nrmp.unsafe_load(it))
+                var tp = rebind[HostF32Ptr](tile.unsafe_ptr())
+                for u in range(n_ws):
+                    var iu = _vec_index(Int(ws.idx[u]), n_rows, is_svr)
+                    var t0 = 0
+                    while t0 + SMO_W <= n_ws:
+                        var cells = _kernel_cells_v(
+                            kp, xp + iu * k, nrmp.unsafe_load(iu), wstp + t0, n_ws,
+                            wsnp.unsafe_load[width=SMO_W](t0), k,
+                        )
+                        tp.unsafe_store[width=SMO_W](u * n_ws + t0, cells)
+                        t0 += SMO_W
+                    for t in range(t0, n_ws):
+                        var it = _vec_index(Int(ws.idx[t]), n_rows, is_svr)
+                        tile[u * n_ws + t] = _kernel_cell[dt](
+                            kp, x, norms, iu, x, norms, it, n_rows, n_rows, k
+                        )
         else:
             for u in range(n_ws):
                 var iu = _vec_index(Int(ws.idx[u]), n_rows, is_svr)
@@ -1112,14 +1119,16 @@ def smo_oracle_fit[
             # ascending nonzero-delta fold within each row while scheduling
             # medium and large UpdateF batches across the host pool.
             var fvp = rebind[HostF32Ptr](f.unsafe_ptr())
-            def _update_f(task: Int) {imm kp, imm x, imm norms, imm nz_idx, imm nz_da, imm order, mut f, imm update_chunk, imm n_rows, imm nnz, imm k, imm is_svr, imm xp, imm xtp, imm nrmp, imm fvp}:
+            def _update_f(task: Int) {imm kp, imm x, imm norms, imm nz_idx, imm nz_da, imm order, mut f, imm update_chunk, imm n_rows, imm nnz, imm k, imm is_svr, imm xp, imm xtp, imm nrmp, imm fvp, imm cell_block}:
                 var lo = task * update_chunk
                 var hi = min(lo + update_chunk, n_rows)
                 var i0 = lo
                 comptime if dt == DType.float32 and SMO_HOST_VECTOR:
                     # The cell block over W training rows; the fold over the
-                    # nonzero deltas stays in `order`, lane-wise.
-                    while i0 + SMO_W <= hi:
+                    # nonzero deltas stays in `order`, lane-wise. Not for
+                    # kernel='precomputed' (`cell_block` is False): its cell
+                    # is a copy of `x`, the scalar loop below.
+                    while cell_block and i0 + SMO_W <= hi:
                         var nb = nrmp.unsafe_load[width=SMO_W](i0)
                         var acc = SmoVF(0.0)
                         for rr in range(nnz):
