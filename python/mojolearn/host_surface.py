@@ -3569,12 +3569,9 @@ PUBLIC_PENDING_LANES = {
     # lane/neural (2026-09-28): a covered lane whose CPU and NVIDIA columns
     # agree (algos_lane_check, nine fixtures), with no release record yet, so
     # the shipped table has no cell for it. It leaves at the next record.
-    "optim-maximize": "no reference",
     # lane/prep (merged by lane/merged, 2026-09-28): covered resample option
     # lanes; CPU and NVIDIA agree (lane/apple-merged), no release record yet.
-    "resample-perm-samples": "no reference",
-    "resample-utils": "no reference",
-}
+    }
 # The expansion lanes' pending lanes (`_surface_<lane>.py`; see EXPANSION_LANES).
 PUBLIC_PENDING_LANES = _merge_expansion("PUBLIC_PENDING_LANES", PUBLIC_PENDING_LANES)
 

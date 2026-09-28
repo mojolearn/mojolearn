@@ -40,4 +40,4 @@ FAMILIES = (
 )
 TRAINING_LANE_NAMES = {"x-decomp-umap-options": "UMAP options", "x-decomp-pca-randomized": "PCA/TruncatedSVD randomized", "x-decomp-als": "AlternatingLeastSquares", "x-decomp-robust-cov": "MinCovDet", "x-decomp-manifold": "Isomap", "x-decomp-lda": "LatentDirichletAllocation", "x-decomp-sparse-pca": "SparsePCA", "x-decomp-dict-learning": "DictionaryLearning", "x-decomp-pls": "PLSRegression", "x-decomp-lstsq-rsvd": "lstsq", "x-decomp-lu": "lu_factor", "x-decomp-spectral-rbf": "SpectralEmbedding", "x-decomp-factor-analysis": "FactorAnalysis", "x-decomp-fastica": "FastICA", "x-decomp-nmf": "NMF", "x-decomp-ipca": "IncrementalPCA", "x-decomp-grp": "GaussianRandomProjection",
                        "x-decomp-srp": "SparseRandomProjection"}
-PUBLIC_PENDING_LANES = {"x-decomp-umap-options": "no reference", "x-decomp-als": "no reference", "x-decomp-lstsq-rsvd": "no reference", "x-decomp-lu": "no reference", "x-decomp-spectral-rbf": "no reference", }
+PUBLIC_PENDING_LANES = {}

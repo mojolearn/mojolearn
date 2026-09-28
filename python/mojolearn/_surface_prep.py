@@ -152,11 +152,4 @@ TRAINING_LANE_NAMES = {
     "x-prep-scaler-options": "StandardScaler / MinMaxScaler NaN, sample_weight, partial_fit, copy=False",
 }
 PUBLIC_PENDING_LANES = {
-    "x-prep-label-encoder": "no reference",
-    "x-prep-label-binarizer": "no reference",
-    "x-prep-multilabel-binarizer": "no reference",
-    "x-prep-mutual-info": "no reference",
-    "x-prep-priors": "no reference",
-    "x-prep-label-binarizer-multilabel": "no reference",
-    "x-prep-mi-discrete": "no reference",
     }

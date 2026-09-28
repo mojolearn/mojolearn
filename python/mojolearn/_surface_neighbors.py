@@ -126,10 +126,4 @@ TRAINING_LANE_NAMES = {
     "x-neighbors-svc-probability": "SVC probability=True (libsvm Platt, seeded 5-fold CV)",
 }
 PUBLIC_PENDING_LANES = {
-    "x-neighbors-pagerank": "no reference",
-    "x-neighbors-connected-components": "no reference",
-    "x-neighbors-louvain": "no reference",
-    "x-neighbors-svm-precomputed": "no reference",
-    "x-neighbors-gp-cov": "no reference",
-    "x-neighbors-metrics": "no reference",
     }

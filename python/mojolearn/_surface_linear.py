@@ -117,5 +117,4 @@ TRAINING_LANE_NAMES = {
     "x-lasso-cv-pos": "LassoCV (positive)",
 }
 PUBLIC_PENDING_LANES = {
-    "x-isotonic": "no reference",
     }
