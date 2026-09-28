@@ -103,13 +103,15 @@ def repulse_tiled_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P):
         rep.unsafe_store(2 * i + 1, r1)
 
 
-comptime TSNE_FAST_SPLIT = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined["MOJOLEARN_TSNE_FAST_SPLIT_OFF"]()
+comptime TSNE_FAST_SPLIT = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_TSNE_FAST_SPLIT"]()
 """FAST (lane ann-apple2): the repulsion of each row is folded as S partial
 sums over contiguous candidate spans (one thread per (row, span), S about
 128k / n) and the partials joined in span order, so a 10k-row fit runs ~14x
 the threads. Only the summation order moves; quality is checked by
 bench/speed/ann_fast_quality.py (docs/lanes/progress/ann-apple2.md).
-`-D MOJOLEARN_TSNE_FAST_SPLIT_OFF` restores the one-thread-per-row fold."""
+OPT-IN (`-D MOJOLEARN_TSNE_FAST_SPLIT`): measured no faster on the M4 Pro
+(m4pro-b 1790604321939: FAST fit 0.624 -> 0.645 s), so the default is the
+one-thread-per-row fold."""
 comptime SPLIT_THREADS = 131072
 
 
