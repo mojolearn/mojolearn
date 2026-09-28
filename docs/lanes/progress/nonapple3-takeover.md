@@ -81,3 +81,24 @@ lane/sequence-apple2 9d77a29d098967d8dcd6cd7037e8c721a382e332
 lane/trees-apple b8b0b04e7bd1fc3841135f480a2776a202d2a637
 lane/trees-apple2 8b382db2b1b6a50a5a6294c992ccb53d7102b135
 ```
+
+## Saved M2 phase re-evaluation (no new execution)
+
+The completed 47-lane, two-column snapshot `takeover/0928-2137` was
+re-evaluated locally with the strict numerical-part parser. Archive SHA256:
+`15a679f8374b128d0fd0e6793f3fbe81ccf0fdf21a0d5da452c1628c0565375a`.
+There are 2,124 matching numeric parts and 3,123 precise N/A parts; no
+successful corresponding numeric part differs. Only 53 of 94 columns have
+complete comparison coverage. The other 41 contain 369 issues, comprising
+171 undeclared batch-property gaps and 198 refused/error cells. These are
+not successful identity checks. The original comparator's 94 differences
+included timing dictionaries, but removing timing does not make failed
+execution or missing coverage acceptable.
+
+The head's real execution failures are Samba CPU (optional samba_head_loss),
+six metrics CPU columns (optional x_metrics_run_ranges), ten prep CPU columns
+(optional x_prep_run_ranges), and five prep GPU columns (iterative-imputer,
+iterative-options, LDA, quantile-transformer, user-objects) reading input arena
+words rejected by the new ranges protocol. Each affects nine fixtures.
+The takeover prep optional-export merge resolves that specific CPU lookup;
+other fixes and new execution evidence remain owed. Raw records are unchanged.
