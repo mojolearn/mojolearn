@@ -15,6 +15,7 @@ from metrics.checks.device_io import upload_f32, upload_i32, download_f32, downl
 from x_ann.refine_core import refine_cell
 from x_ann.ivf_rabitq_core import rq_encode_cell, rq_pow2, rq_scale, rq_search_cell
 from x_ann.ivf_sq_core import sq_encode_cell, sq_range_cell, sq_search_cell
+from x_ann.ivf_scan_device import SCAN_MAX_K, pq_scan, rq_scan, sq_scan
 from x_ann.ivf_pq_core import (
     F32P, I32P, IvfPqIndex, pq_assign_cell, pq_labels_from_lists,
     pq_len_of, pq_residual_cell, pq_search_cell, pq_validate,
@@ -170,13 +171,19 @@ def ivf_pq_search_device(
     var dd = ctx.enqueue_create_buffer[DType.float32](m * k)
     var di = ctx.enqueue_create_buffer[DType.int32](m * k)
     var dn = ctx.enqueue_create_buffer[DType.int32](m)
-    ctx.enqueue_function[search_kernel](
-        Int32(m), dq.unsafe_ptr(), Int32(dim), dc.unsafe_ptr(), Int32(n_lists), doff.unsafe_ptr(),
-        dli.unsafe_ptr(), dcodes.unsafe_ptr(), dcb.unsafe_ptr(), Int32(pq_dim), Int32(pq_len),
-        Int32(n_codes), Int32(k), Int32(n_probes), dmask.unsafe_ptr(), dd.unsafe_ptr(), di.unsafe_ptr(),
-        dn.unsafe_ptr(),
-        grid_dim=_grid(m), block_dim=TPB,
-    )
+    if k <= SCAN_MAX_K and m > 0:
+        # the parallel search, same bits (x_ann/ivf_scan_device.mojo)
+        pq_scan(ctx, m, dq.unsafe_ptr(), dim, dc.unsafe_ptr(), n_lists, offsets, doff.unsafe_ptr(), dli.unsafe_ptr(),
+                dcodes.unsafe_ptr(), dcb.unsafe_ptr(), pq_dim, pq_len, n_codes, k, n_probes, dq, dc,
+                dmask.unsafe_ptr(), dd.unsafe_ptr(), di.unsafe_ptr(), dn.unsafe_ptr())
+    else:
+        ctx.enqueue_function[search_kernel](
+            Int32(m), dq.unsafe_ptr(), Int32(dim), dc.unsafe_ptr(), Int32(n_lists), doff.unsafe_ptr(),
+            dli.unsafe_ptr(), dcodes.unsafe_ptr(), dcb.unsafe_ptr(), Int32(pq_dim), Int32(pq_len),
+            Int32(n_codes), Int32(k), Int32(n_probes), dmask.unsafe_ptr(), dd.unsafe_ptr(), di.unsafe_ptr(),
+            dn.unsafe_ptr(),
+            grid_dim=_grid(m), block_dim=TPB,
+        )
     ctx.synchronize()
     out_d = download_f32(ctx, dd, m * k)
     out_i = download_i32(ctx, di, m * k)
@@ -274,12 +281,17 @@ def ivf_sq_search_device(
     var dd = ctx.enqueue_create_buffer[DType.float32](m * k)
     var di = ctx.enqueue_create_buffer[DType.int32](m * k)
     var dn = ctx.enqueue_create_buffer[DType.int32](m)
-    ctx.enqueue_function[sq_search_kernel](
-        Int32(m), dq.unsafe_ptr(), Int32(dim), dc.unsafe_ptr(), Int32(n_lists), doff.unsafe_ptr(),
-        dli.unsafe_ptr(), dcodes.unsafe_ptr(), dvmin.unsafe_ptr(), ddelta.unsafe_ptr(), Int32(k),
-        Int32(n_probes), dmask.unsafe_ptr(), dd.unsafe_ptr(), di.unsafe_ptr(), dn.unsafe_ptr(),
-        grid_dim=_grid(m), block_dim=TPB,
-    )
+    if k <= SCAN_MAX_K and m > 0:
+        sq_scan(ctx, m, dq.unsafe_ptr(), dim, dc.unsafe_ptr(), n_lists, doff.unsafe_ptr(), dli.unsafe_ptr(),
+                dcodes.unsafe_ptr(), dvmin.unsafe_ptr(), ddelta.unsafe_ptr(), k, n_probes, dq, dc, dmask.unsafe_ptr(),
+                dd.unsafe_ptr(), di.unsafe_ptr(), dn.unsafe_ptr())
+    else:
+        ctx.enqueue_function[sq_search_kernel](
+            Int32(m), dq.unsafe_ptr(), Int32(dim), dc.unsafe_ptr(), Int32(n_lists), doff.unsafe_ptr(),
+            dli.unsafe_ptr(), dcodes.unsafe_ptr(), dvmin.unsafe_ptr(), ddelta.unsafe_ptr(), Int32(k),
+            Int32(n_probes), dmask.unsafe_ptr(), dd.unsafe_ptr(), di.unsafe_ptr(), dn.unsafe_ptr(),
+            grid_dim=_grid(m), block_dim=TPB,
+        )
     ctx.synchronize()
     out_d = download_f32(ctx, dd, m * k)
     out_i = download_i32(ctx, di, m * k)
@@ -409,12 +421,17 @@ def ivf_rabitq_search_device(
     var dd = ctx.enqueue_create_buffer[DType.float32](m * k)
     var di = ctx.enqueue_create_buffer[DType.int32](m * k)
     var dn = ctx.enqueue_create_buffer[DType.int32](m)
-    ctx.enqueue_function[rq_search_kernel](
-        Int32(m), dq.unsafe_ptr(), Int32(dim), dc.unsafe_ptr(), Int32(n_lists), doff.unsafe_ptr(),
-        dli.unsafe_ptr(), dcodes.unsafe_ptr(), dnorm.unsafe_ptr(), dip.unsafe_ptr(), Int32(D), Int32(words),
-        Int32(seed), scale, Int32(k), Int32(n_probes), dmask.unsafe_ptr(), dws.unsafe_ptr(), dd.unsafe_ptr(),
-        di.unsafe_ptr(), dn.unsafe_ptr(), grid_dim=_grid(m), block_dim=TPB,
-    )
+    if k <= SCAN_MAX_K and m > 0:
+        rq_scan(ctx, m, dq.unsafe_ptr(), dim, dc.unsafe_ptr(), n_lists, doff.unsafe_ptr(), dli.unsafe_ptr(),
+                dcodes.unsafe_ptr(), dnorm.unsafe_ptr(), dip.unsafe_ptr(), D, words, seed, scale, k, n_probes, dq, dc,
+                dmask.unsafe_ptr(), dd.unsafe_ptr(), di.unsafe_ptr(), dn.unsafe_ptr())
+    else:
+        ctx.enqueue_function[rq_search_kernel](
+            Int32(m), dq.unsafe_ptr(), Int32(dim), dc.unsafe_ptr(), Int32(n_lists), doff.unsafe_ptr(),
+            dli.unsafe_ptr(), dcodes.unsafe_ptr(), dnorm.unsafe_ptr(), dip.unsafe_ptr(), Int32(D), Int32(words),
+            Int32(seed), scale, Int32(k), Int32(n_probes), dmask.unsafe_ptr(), dws.unsafe_ptr(), dd.unsafe_ptr(),
+            di.unsafe_ptr(), dn.unsafe_ptr(), grid_dim=_grid(m), block_dim=TPB,
+        )
     ctx.synchronize()
     out_d = download_f32(ctx, dd, m * k)
     out_i = download_i32(ctx, di, m * k)

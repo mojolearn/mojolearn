@@ -119,6 +119,28 @@ def pq_next_probe(
 
 
 @always_inline
+def pq_select_probes(dist: F32P, d_off: Int, n_lists: Int, n_probes: Int, probes: I32P, p_off: Int):
+    """`pq_next_probe` n_probes times over coarse distances already computed
+    by `pq_coarse_dist` (dist[d_off + l]): the same rule on the same values,
+    so the same list sequence; a probe past the last list is -1."""
+    var prev_d = Float32(0.0)
+    var prev_l = -1
+    for p in range(n_probes):
+        var best_l = -1
+        var best_d = Float32(0.0)
+        for l in range(n_lists):
+            var d = dist.unsafe_load(d_off + l)
+            var after = prev_l < 0 or d > prev_d or (d == prev_d and l > prev_l)
+            if after and (best_l < 0 or d < best_d or (d == best_d and l < best_l)):
+                best_l = l
+                best_d = d
+        probes.unsafe_store(p_off + p, Int32(best_l))
+        if best_l >= 0:
+            prev_l = best_l
+            prev_d = best_d
+
+
+@always_inline
 def pq_lut_entry(
     q: F32P, q_off: Int, centers: F32P, l: Int, dim: Int, cb: F32P, j: Int,
     code: Int, pq_len: Int, n_codes: Int,
