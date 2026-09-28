@@ -431,7 +431,7 @@ struct GLMWithData(Movable):
 
     def get_loss_and_dz(mut self, ctx: DeviceContext) raises -> Float32:
         """The loss into `scalar`, read back (one synchronize)."""
-        self.enqueue_loss_and_dz(ctx, self.scalar.unsafe_ptr())
+        self.enqueue_loss_and_dz(ctx, self.scalar.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
         return _read_scalar(ctx, self.scalar)
 
     def enqueue_loss_and_dz(
@@ -561,7 +561,7 @@ struct GLMWithData(Movable):
         var s3 = self.slots.create_sub_buffer[DType.float32](3, 1)
         if self.l2 == Float32(0.0):
             linear_fwd(ctx, self.z, self.x, w, self.w_weights, self.n_rows, self.dims)
-            self.enqueue_loss_and_dz(ctx, self.slots.unsafe_ptr())
+            self.enqueue_loss_and_dz(ctx, self.slots.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
             linear_bwd(ctx, g, self.x, self.z, self.xtdz, self.xtdz_ws, self.n_rows, self.dims, True)
         else:
             ctx.enqueue_memset(g, Float32(0.0))
@@ -575,7 +575,7 @@ struct GLMWithData(Movable):
                 grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
             )
             linear_fwd(ctx, self.z, self.x, w, self.w_weights, self.n_rows, self.dims)
-            self.enqueue_loss_and_dz(ctx, self.slots.unsafe_ptr())
+            self.enqueue_loss_and_dz(ctx, self.slots.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
             linear_bwd(ctx, g, self.x, self.z, self.xtdz, self.xtdz_ws, self.n_rows, self.dims, False)
         # `grad_norm`'s reduction of this `g`, speculatively
         var np = self.dims.n_param
