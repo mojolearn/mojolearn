@@ -102,3 +102,22 @@ def test_full_remote_small_reference_and_identical_repeat():
                  'explained_variance_ratio_', 'singular_values_'):
         assert getattr(a, name).tobytes() == getattr(b, name).tobytes()
     assert x.tobytes() == original
+
+
+@pytest.mark.parametrize("kwargs", [dict(svd_solver="arpack"), dict(tol=1e-4)])
+def test_pca_refuses_arpack_by_name(kwargs):
+    """svd_solver='arpack' is a third algorithm (implicitly restarted
+    Lanczos); running an exact arm under its name would be a silent
+    substitution, so it raises before any binding is touched, and so does
+    its tolerance (merge review, 2026-09-27)."""
+    x = np.arange(24, dtype=np.float32).reshape(8, 3)
+    with pytest.raises(NotImplementedError, match="arpack|ARPACK"):
+        PCA(2, **kwargs).fit(x)
+
+
+@pytest.mark.parametrize("kwargs", [dict(algorithm="arpack"), dict(tol=1e-4)])
+def test_truncated_svd_refuses_arpack_by_name(kwargs):
+    from mojolearn import TruncatedSVD
+    x = np.arange(24, dtype=np.float32).reshape(8, 3)
+    with pytest.raises(NotImplementedError, match="arpack|ARPACK"):
+        TruncatedSVD(2, **kwargs).fit(x)

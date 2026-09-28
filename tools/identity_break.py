@@ -1862,7 +1862,10 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("tsvd")
 def _(ml, X, yc, yr, Xh=None):
     m = ml.TruncatedSVD(n_components=4).fit(X)
-    return _fit(dict(components=_h(m.components_), transform=_h(m.transform(X[:256]))),
+    # explained_variance_ / _ratio_ in the class's own binding
+    # (`tsvd_explained`, lane/algos-decomp 2026-09-27): a new part
+    return _fit(dict(components=_h(m.components_), transform=_h(m.transform(X[:256])),
+                     explained=_h(m.explained_variance_, m.explained_variance_ratio_)),
                 m, lambda e: (e.transform(Xh[:256]),))
 
 
@@ -4619,9 +4622,9 @@ def _(ml, X, yc, yr, Xh=None):
     tall = np.ascontiguousarray(X[:48, :5]).astype(np.float32)
     small = np.ascontiguousarray(X[:16, :4]).astype(np.float32)
     dup = np.ascontiguousarray(X[:48, [0, 1, 1, 2]]).astype(np.float32)
-    return _fit(dict(two_slice=_h(ml.linalg.qr(tall)),
-                     one_slice=_h(ml.linalg.qr(small)),
-                     rank_deficient=_h(ml.linalg.qr(dup))))
+    return _fit(dict(two_slice=_h(ml.linalg.qr(tall, mode="r")),
+                     one_slice=_h(ml.linalg.qr(small, mode="r")),
+                     rank_deficient=_h(ml.linalg.qr(dup, mode="r"))))
 
 
 @lane("linalg-eigh")

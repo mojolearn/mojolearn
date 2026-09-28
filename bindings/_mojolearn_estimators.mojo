@@ -35,6 +35,7 @@ from decomposition.estimator import (
     pca_transform_host,
     pca_whiten_transform_host,
     pca_whiten_inverse_transform_host,
+    tsvd_explained_host,
     tsvd_fit_host,
     tsvd_transform_host,
 )
@@ -402,6 +403,30 @@ def tsvd_fit_binding(
     with GILReleased(Python()):
         var ctx = DeviceContext()
         tsvd_fit_host(ctx, xp, cp, sp, nr, nf, nc)
+    return PythonObject(0)
+
+
+def tsvd_explained_binding(
+    x_addr: PythonObject,
+    components_addr: PythonObject,
+    explained_addr: PythonObject,
+    ratio_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """TruncatedSVD's explained_variance_ and explained_variance_ratio_
+    (`tsvd_explained_host`): params `n_rows, n_features, n_components`."""
+    if len(params) != 3:
+        raise Error("tsvd_explained: params must contain 3 values")
+    var xp = _f32_ptr(Int(py=x_addr))
+    var cp = _f32_ptr(Int(py=components_addr))
+    var ep = _f32_ptr(Int(py=explained_addr))
+    var rp = _f32_ptr(Int(py=ratio_addr))
+    var nr = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var nc = Int(py=params[2])
+    with GILReleased(Python()):
+        var ctx = DeviceContext()
+        tsvd_explained_host(ctx, xp, cp, ep, rp, nr, nf, nc)
     return PythonObject(0)
 
 
@@ -833,6 +858,7 @@ def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
         m.def_function[pca_whiten_inverse_transform_binding]("pca_whiten_inverse_transform")
         m.def_function[tsvd_fit_binding]("tsvd_fit")
         m.def_function[tsvd_transform_binding]("tsvd_transform")
+        m.def_function[tsvd_explained_binding]("tsvd_explained")
         m.def_function[inverse_transform_binding]("inverse_transform")
         m.def_function[ols_fit_binding]("ols_fit")
         m.def_function[ols_predict_binding]("ols_predict")

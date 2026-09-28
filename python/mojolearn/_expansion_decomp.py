@@ -78,7 +78,10 @@ class _M:
         if a.ndim != 2 or min(a.shape) == 0:
             raise ValueError(f"{name}: a nonempty two-dimensional input is required")
         s = array.array("f")
-        s.frombytes(a.tobytes())
+        mv = getattr(a, "_mv", None)
+        # one copy: the Array's own buffer straight into the store (its
+        # tobytes() was a second full copy of every input)
+        s.frombytes(mv if isinstance(mv, memoryview) and mv.c_contiguous else a.tobytes())
         m = cls(s, a.shape[0], a.shape[1])
         m._check_finite(name)
         return m
@@ -367,6 +370,35 @@ class _Kit:
         YtY = self.mm(Y, Y, ta=True)
         X, flags = _M.zeros(n, f), _M.zeros(n, 1)
         self.b.x_decomp_als_rows(C.addr, Y.addr, YtY.addr, X.addr, flags.addr, [n, C.c, f], float(reg))
+        return X
+
+    def geqrf(self, A):
+        """(h, tau): LAPACK geqrf's factored form of A (m x n, any shape): R on
+        and above the diagonal, the reflectors' tails below it, tau
+        (1 x min(m, n)) their scalars (x_decomp/cells.mojo `geqrf_serial`,
+        DEVIATION 5320)."""
+        h = A.copy()
+        kk = min(A.r, A.c)
+        tau = _M.zeros(1, kk)
+        self.b.x_decomp_geqrf(h.addr, tau.addr, [A.r, A.c])
+        return h, tau
+
+    def orgqr(self, h, tau, qc):
+        """The first qc columns of Q = H_0 ... H_{k-1} (m x qc) from geqrf's
+        (h, tau), one column per thread (`orgqr_col`)."""
+        Q = _M.zeros(h.r, qc)
+        self.b.x_decomp_orgqr(h.addr, tau.addr, Q.addr, [h.r, h.c, tau.c, qc])
+        return Q
+
+    def als_cg(self, C, Y, X0, reg, cg_steps):
+        """implicit's `_least_squares_cg` half-sweep: every row of X0 (n x f)
+        moved by cg_steps conjugate-gradient steps (x_decomp/cells.mojo
+        `als_cg_row`, DEVIATION 5321); returns the new factors."""
+        n, f = C.r, Y.c
+        YtY = self.mm(Y, Y, ta=True)
+        X, steps = X0.copy(), _M.zeros(n, 1)
+        self.b.x_decomp_als_cg_rows(C.addr, Y.addr, YtY.addr, X.addr, steps.addr, [n, C.c, f, int(cg_steps)],
+                                    float(reg))
         return X
 
     def qr_r(self, A):
@@ -1459,21 +1491,18 @@ class FactorAnalysis(_Base):
 
 
 # ================================================================ TruncatedSVD explained variance
-def _tsvd_explained(x, components, mode):
-    """scikit-learn TruncatedSVD's explained_variance_ (np.var of X @ V^T per
-    column, ddof 0) and its ratio against the summed column variances of X,
-    through the cells (colmean, squared differences, column sums): the
-    Gram / arpack arm computes neither in its kernel. A tier the decomp
-    binding does not ship (FAST, DETERMINISTIC: phase 3) reads them through
-    the IDENTICAL cells, which are exact to float32 on every column."""
-    k = _Kit(mode if _backend._offers(_BINDING, mode) else "identical")
-    M = _M.from_input(x)
-    V = _M.from_input(components, "components")
-    n = M.r
-    Xt = k.mm(M, V, tb=True)
-    ev = k.ew("scale", k.colsum(k.ew("sqdiff", Xt, k.colmean(Xt))), s=1.0 / n)
-    full = k.total(k.ew("scale", k.colsum(k.ew("sqdiff", M, k.colmean(M))), s=1.0 / n))
-    return ev.out((ev.c,)), k.ew("div", ev, full).out((ev.c,))
+def _exact_eigen_solver(name, who):
+    """Isomap's and LLE's eigen_solver: 'auto' and 'dense' name an exact
+    solve, which is what runs. 'arpack' (a Lanczos) is a different algorithm
+    and is refused by name rather than run as the exact solve (a silent
+    substitution; x_decomp/NOT_IMPLEMENTED.tsv)."""
+    if name == "arpack":
+        raise NotImplementedError(
+            f"{who}: eigen_solver='arpack' is not implemented; the exact solve "
+            "runs for 'auto' and 'dense', and running it under ARPACK's name "
+            "would be a silent substitution (x_decomp/NOT_IMPLEMENTED.tsv)")
+    if name not in ("auto", "dense"):
+        raise ValueError(f"{who}: eigen_solver must be 'auto', 'dense' or 'arpack', got {name!r}")
 
 
 # ================================================================ PCA n_components='mle'
@@ -1949,7 +1978,12 @@ def _sparse_encode(k, X, D, algorithm, alpha=None, n_nonzero_coefs=None, init=No
     else:
         reg = alpha if alpha is not None else 1.0
     if algorithm == "lars":
-        from ._expansion_linear import Lars
+        # The linear lane's Lars, imported as a MODULE: the lane selector
+        # reads a module import as a door the lane runs whole, so the x_linear
+        # binding is declared for every x_decomp lane and a clean box builds
+        # it (a name import left it undeclared: 1790542293472 on m4pro-a).
+        from . import _expansion_linear as _xlin
+        Lars = _xlin.Lars
         Dt = D.T.out()
         code = _M.zeros(n, kc)
         for i in range(n):
@@ -2703,6 +2737,7 @@ class Isomap(_Base):
             raise ValueError("Isomap: radius must be >= 0")
         if self.path_method not in ("auto", "FW", "D"):
             raise ValueError("path_method must be 'auto', 'FW' or 'D'")
+        _exact_eigen_solver(self.eigen_solver, "Isomap")
         kind, pw = _metric_spec(self.metric, self.p, self.metric_params, "Isomap")
         self._kind, self._pw = kind, pw
         k = self._kit()
@@ -2885,7 +2920,8 @@ class MDS(_Base):
             # themselves, later ones IsotonicRegression(out_of_bounds='clip')
             # of the distances on the dissimilarities (the linear lane's
             # x_linear PAVA, fitted on (x, y)-sorted rows).
-            from ._expansion_linear import IsotonicRegression
+            from . import _expansion_linear as _xlin    # a module import: see _sparse_encode
+            IsotonicRegression = _xlin.IsotonicRegression
             pos = [i * n + j for i in range(n) for j in range(i + 1, n) if Dis.s[i * n + j] != 0]
             dis_w = [Dis.s[q] for q in pos]
             ir = IsotonicRegression(out_of_bounds="clip", numeric_mode=self.numeric_mode_)
@@ -2978,6 +3014,7 @@ class LocallyLinearEmbedding(_Base):
         self.numeric_mode_ = _mode(self.numeric_mode)
         if self.method not in ("standard", "hessian", "modified", "ltsa"):
             raise ValueError(f"LocallyLinearEmbedding: unrecognized method {self.method!r}")
+        _exact_eigen_solver(self.eigen_solver, "LocallyLinearEmbedding")
         k = self._kit()
         M = _M.from_input(X)
         n = M.r
@@ -3511,18 +3548,20 @@ class AlternatingLeastSquares(_Base):
     c_ui (1 - x_u . y_i)^2, over the rest of (x_u . y_i)^2, plus
     regularization (|X|^2 + |Y|^2), divided by (total confidence + the
     unobserved count) (implicit's calculate_loss), through the cells.
-    REFUSED BY NAME: use_cg=True's conjugate-gradient solver (implicit runs
-    3 CG steps from the previous factors, which is not the exact solve)."""
-    _parameters = ("factors", "regularization", "alpha", "iterations", "calculate_training_loss", "random_state",
-                   "numeric_mode")
+    use_cg=True (implicit's default) is implicit's conjugate-gradient solver
+    (`_least_squares_cg`): each half-sweep moves every row from its previous
+    factor by `cg_steps` (3) CG steps, stopping when r.r < 1e-20
+    (x_decomp/cells.mojo `als_cg_row`, DEVIATION 5321); use_cg=False is the
+    exact Cholesky solve. OUR DEFAULT STAYS use_cg=False, the exact solve,
+    so existing fits keep their bits."""
+    _parameters = ("factors", "regularization", "alpha", "iterations", "use_cg", "cg_steps",
+                   "calculate_training_loss", "random_state", "numeric_mode")
 
     def __init__(self, factors=100, regularization=0.01, alpha=1.0, iterations=15, use_cg=False,
-                 calculate_training_loss=False, random_state=None, numeric_mode=None):
-        if use_cg:
-            raise NotImplementedError("AlternatingLeastSquares: use_cg=True is not carried; the exact solve runs")
+                 calculate_training_loss=False, random_state=None, numeric_mode=None, cg_steps=3):
         self.factors, self.regularization, self.alpha, self.iterations = factors, regularization, alpha, iterations
         self.use_cg, self.calculate_training_loss = use_cg, calculate_training_loss
-        self.random_state, self.numeric_mode = random_state, numeric_mode
+        self.random_state, self.numeric_mode, self.cg_steps = random_state, numeric_mode, cg_steps
 
     def fit(self, user_items, show_progress=False):
         self.numeric_mode_ = _mode(self.numeric_mode)
@@ -3536,9 +3575,15 @@ class AlternatingLeastSquares(_Base):
         X = k.ew("scale", k.rand(n, f, seed, 80, 0), s=0.01)
         Y = k.ew("scale", k.rand(m, f, seed, 81, 0), s=0.01)
         losses = []
+        if self.use_cg and int(self.cg_steps) < 1:
+            raise ValueError("AlternatingLeastSquares: cg_steps must be >= 1")
         for _ in range(int(self.iterations)):
-            X = k.als(C, Y, self.regularization)
-            Y = k.als(Ct, X, self.regularization)
+            if self.use_cg:
+                X = k.als_cg(C, Y, X, self.regularization, self.cg_steps)
+                Y = k.als_cg(Ct, X, Y, self.regularization, self.cg_steps)
+            else:
+                X = k.als(C, Y, self.regularization)
+                Y = k.als(Ct, X, self.regularization)
             if self.calculate_training_loss:
                 losses.append(self._loss(k, C, X, Y))
         if self.calculate_training_loss:

@@ -1564,6 +1564,14 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
       forest_host_predict  85 -> 86  model_selection search fits GBDT and
                                      forest estimators); no old lane moved
 
+    REMEASURED 2026-09-28 (lane/algos-decomp):
+      kmeans_oracle        75 -> 76  x-decomp-umap-options (UMAP option
+                                     parity), through the metrics binding the
+                                     umap lane already reaches it by; no old
+                                     lane moved (origin/main at this merge
+                                     already answered 75 while its test still
+                                     read 71: lanes merged since reach it)
+
     REMEASURED 2026-09-28 (lane/trees-cpu):
       neural_inference.py  41 -> 40  gbdt-tensor-ctr-tables now FITS on the
                                      CPU column (lane/algos-trees) instead of
@@ -1587,7 +1595,7 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
                                      .core lane is among them (main's own
                                      change, found red after the merge)"""
     rev = lane_select.reverse_map()
-    for rel, want in (("cluster/host/kmeans_oracle.mojo", 75),
+    for rel, want in (("cluster/host/kmeans_oracle.mojo", 76),
                       ("core/gbdt_host_predict.mojo", 51),
                       ("core/forest_host_predict.mojo", 86),
                       ("core/forest_inference.mojo", 50),

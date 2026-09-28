@@ -672,7 +672,7 @@ def _names_in_nodes(nodes):
     return out
 
 
-def _own_walk(seeds, stop):
+def _own_walk(seeds, stop, follow=frozenset()):
     """file -> the names a lane reaches it for (None: whole file), walking
     the symbol-level import graph from `seeds` and entering, not following,
     the files in `stop`. A file that subclasses or patches a class reached
@@ -686,7 +686,16 @@ def _own_walk(seeds, stop):
             wanted[rel] = None if names is None else set(names)
         elif wanted[rel] is not None:
             wanted[rel] = None if names is None else wanted[rel] | names
-        if not first or rel in stop:
+        # A LANE'S OWN DOOR IS FOLLOWED EVEN WHEN EVERY LANE REACHES IT
+        # (2026-09-28). `_expansion_decomp.py` is in every closure
+        # (`_linalg_impl.py` imports its kit), so as a seed it was entered and
+        # not followed, and what the lane's own door imports was lost:
+        # DictionaryLearning's transform runs the linear lane's Lars, the
+        # x_linear binding was never named for x-decomp-dict-learning, and a
+        # clean steward Mac never built it (every cell REFUSED, request
+        # 1790542293472 on m4pro-a). A registry seed (`__init__.py`) is still
+        # entered only: `_own_walk(seeds, stop, follow=seeds - sinks)`.
+        if not first or (rel in stop and rel not in follow):
             continue
         for f, n in _import_edges(rel).items():
             stack.append((f, n))
@@ -1780,7 +1789,7 @@ def lane_sources():
         declared for the forest host; `byte-lm` reaches it from its own door
         and is."""
         if lane not in own_cache:
-            walk = _own_walk(seeds_of[lane], sinks | ubiquitous_py)
+            walk = _own_walk(seeds_of[lane], sinks | ubiquitous_py, follow=seeds_of[lane] - sinks)
             declared, whole, used = set(), set(), set()
             for rel, wanted in walk.items():
                 if rel in sinks:

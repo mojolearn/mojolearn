@@ -54,6 +54,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from max.gpu.host import DeviceContext
 from std.math import isfinite
 from umap.estimator import fit_transform as umap_fit_transform
+from umap.sparse_estimator import sparse_fit_transform
 from umap.transform import transform as umap_transform
 from umap.params import UMAPParams
 
@@ -840,8 +841,14 @@ def spectral_embedding_dataset_binding(
         5  norm_laplacian (0 or 1)
         6  drop_first     (0 or 1)
         7  seed
+        8  eigen_tol      (optional float, the Lanczos tolerance; absent
+                           means cuVS's 1e-5)
     """
-    _want(String("spectral_embedding_dataset"), params, 8)
+    if len(params) != 9:
+        _want(String("spectral_embedding_dataset"), params, 8)
+    var tolerance = Float32(1e-5)
+    if len(params) == 9:
+        tolerance = Float32(Float64(py=params[8]))
     var n_samples = Int(py=params[0])
     var n_features = Int(py=params[1])
     var n_lanczos = Int(py=params[2])
@@ -857,7 +864,7 @@ def spectral_embedding_dataset_binding(
     with GILReleased(Python()):
         n_out = spectral_embedding_dataset_host(
             x, n_samples, n_features, n_lanczos, n_neighbors, norm_laplacian,
-            drop_first, seed, embedding,
+            drop_first, seed, embedding, tolerance,
         )
     _guard_embedding_output(embedding, n_samples, n_out, n_cols)
     for i in range(len(embedding)):
@@ -885,8 +892,14 @@ def spectral_embedding_graph_binding(
         4  norm_laplacian (0 or 1)
         5  drop_first     (0 or 1)
         6  seed
+        7  eigen_tol      (optional float, the Lanczos tolerance; absent
+                           means cuVS's 1e-5)
     """
-    _want(String("spectral_embedding_graph"), params, 7)
+    if len(params) != 8:
+        _want(String("spectral_embedding_graph"), params, 7)
+    var tolerance = Float32(1e-5)
+    if len(params) == 8:
+        tolerance = Float32(Float64(py=params[7]))
     var n_samples = Int(py=params[0])
     var nnz = Int(py=params[1])
     var n_lanczos = Int(py=params[2])
@@ -903,7 +916,7 @@ def spectral_embedding_graph_binding(
     with GILReleased(Python()):
         n_out = spectral_embedding_graph_host(
             rows, cols, vals, n_samples, n_lanczos, norm_laplacian,
-            drop_first, seed, embedding,
+            drop_first, seed, embedding, tolerance,
         )
     _guard_embedding_output(embedding, n_samples, n_out, n_cols)
     for i in range(len(embedding)):
@@ -1129,6 +1142,76 @@ def umap_fit_transform_binding(
     return PythonObject(config.n_components)
 
 
+def umap_fit_transform_ex_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """UMAP fit with the option-parity controls (lane/algos-decomp,
+    2026-09-27). Addresses: X, embedding (out), initial embedding (0: the
+    spectral initialization), supervised target (0: none). Scalars: the 13
+    of `umap_fit_transform`, then 13 metric (a cuVS DistanceType, -1
+    euclidean), 14 metric_arg (minkowski p), 15 a, 16 b (0, 0: fitted), 17
+    target_kind (0 none, 1 categorical, 2 continuous euclidean), 18
+    target_dims, 19 target_n_neighbors (0: n_neighbors), 20 target_weight."""
+    _want(String("umap_fit_transform_ex addresses"), addrs, 4)
+    _want(String("umap_fit_transform_ex"), params, 21)
+    var n = Int(py=params[0])
+    var d = Int(py=params[1])
+    var seed = Int(py=params[9])
+    if d < 1 or seed < 0:
+        raise Error("UMAP requires positive features and a nonnegative seed")
+    var config = UMAPParams(
+        n_neighbors=Int(py=params[2]), n_components=Int(py=params[3]),
+        n_epochs=Int(py=params[4]), min_dist=Float32(Float64(py=params[5])),
+        spread=Float32(Float64(py=params[6])),
+        set_op_mix_ratio=Float32(Float64(py=params[7])),
+        local_connectivity=Float32(Float64(py=params[8])),
+        random_seed=UInt64(seed),
+        learning_rate=Float32(Float64(py=params[10])),
+        repulsion_strength=Float32(Float64(py=params[11])),
+        negative_sample_rate=Int(py=params[12]),
+        metric=Int(py=params[13]),
+        metric_arg=Float32(Float64(py=params[14])),
+        curve_a=Float32(Float64(py=params[15])),
+        curve_b=Float32(Float64(py=params[16])),
+    )
+    config.validate(n)
+    var tkind = Int(py=params[17])
+    var tdims = Int(py=params[18])
+    var tk = Int(py=params[19])
+    var tw = Float32(Float64(py=params[20]))
+    var init_addr = Int(py=addrs[2])
+    var target_addr = Int(py=addrs[3])
+    if config.n_components < 1 or config.n_components > 32:
+        raise Error("UMAP supports 1 to 32 output dimensions")
+    if init_addr == 0 and n < 2 * config.n_components + 4:
+        raise Error("UMAP has too few samples for spectral init")
+    if tkind < 0 or tkind > 2 or (tkind != 0 and (target_addr == 0 or tdims < 1)):
+        raise Error("UMAP supervised target is malformed")
+    if tk < 0 or tk > n or not (tw >= Float32(0.0) and tw <= Float32(1.0)):
+        raise Error("UMAP target_n_neighbors or target_weight is out of range")
+    var x = _load_f32(Int(py=addrs[0]), n * d)
+    var init = List[Float32]()
+    if init_addr != 0:
+        init = _load_f32(init_addr, n * config.n_components)
+        for value in init:
+            if not isfinite(value):
+                raise Error("UMAP initial embedding must be finite")
+    var target = List[Float32]()
+    if tkind != 0:
+        target = _load_f32(target_addr, n * tdims)
+    var output = _f32_ptr(Int(py=addrs[1]))
+    var embedding = List[Float32]()
+    with GILReleased(Python()):
+        with DeviceContext() as ctx:
+            embedding = sparse_fit_transform(ctx, x, n, d, config, init, target, tkind, tdims, tk, tw)
+    if len(embedding) != n * config.n_components:
+        raise Error("UMAP returned an unexpected embedding shape")
+    for value in embedding:
+        if not isfinite(value):
+            raise Error("UMAP returned a non-finite embedding")
+    for i in range(len(embedding)):
+        output.unsafe_store(i, embedding[i])
+    return PythonObject(config.n_components)
+
+
 def umap_transform_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """Addresses: training X, frozen embedding, query X, output.
 
@@ -1137,7 +1220,7 @@ def umap_transform_binding(addrs: PythonObject, params: PythonObject) raises -> 
     The training arrays are read-only; only output is written.
     """
     _want(String("umap_transform addresses"), addrs, 4)
-    if len(params) != 11:
+    if len(params) != 11 and len(params) != 18:
         _want(String("umap_transform parameters"), params, 14)
     var n = Int(py=params[0])
     var rows = Int(py=params[1])
@@ -1152,13 +1235,19 @@ def umap_transform_binding(addrs: PythonObject, params: PythonObject) raises -> 
         set_op_mix_ratio=Float32(Float64(py=params[8])),
         local_connectivity=Float32(Float64(py=params[9])), random_seed=UInt64(seed),
     )
-    if len(params) == 14:
+    if len(params) >= 14:
         config.learning_rate = Float32(Float64(py=params[11]))
         config.repulsion_strength = Float32(Float64(py=params[12]))
         config.negative_sample_rate = Int(py=params[13])
+    if len(params) == 18:
+        # lane/algos-decomp option parity: metric, metric_arg, a, b
+        config.metric = Int(py=params[14])
+        config.metric_arg = Float32(Float64(py=params[15]))
+        config.curve_a = Float32(Float64(py=params[16]))
+        config.curve_b = Float32(Float64(py=params[17]))
     config.validate(n)
-    if config.n_components != 2 and config.n_components != 3:
-        raise Error("UMAP transform supports only 2D or 3D")
+    if config.n_components < 1 or config.n_components > 32:
+        raise Error("UMAP transform supports 1 to 32 output dimensions")
     var training = _load_f32(Int(py=addrs[0]), n * d)
     var fitted = _load_f32(Int(py=addrs[1]), n * config.n_components)
     var queries = _load_f32(Int(py=addrs[2]), rows * d)
@@ -1200,6 +1289,7 @@ def PyInit__mojolearn_metrics() abi("C") -> PythonObject:
         m.def_function[metrics_vendor_binding]("metrics_vendor")
         m.def_function[umap_fit_transform_binding]("umap_fit_transform")
         m.def_function[umap_transform_binding]("umap_transform")
+        m.def_function[umap_fit_transform_ex_binding]("umap_fit_transform_ex")
         m.def_function[umap_numeric_mode_binding]("umap_numeric_mode")
         m.def_function[accuracy_score_binding]("accuracy_score")
         m.def_function[rand_score_binding]("rand_score")

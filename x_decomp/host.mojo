@@ -27,6 +27,9 @@ from x_decomp.cells import (
     ew_cell,
     gemm_cell,
     als_row,
+    als_cg_row,
+    geqrf_serial,
+    orgqr_col,
     barycenter_row,
     dijkstra_row,
     gamma_cell,
@@ -236,6 +239,23 @@ struct HostExec(Exec):
     def absmax_sign(a: F32Ptr, dst: F32Ptr, n: Int, d: Int, by_col: Bool) raises:
         for t in range(d if by_col else n):
             dst.unsafe_store(t, absmax_sign_cell(a, t, n, d, by_col))
+
+    @staticmethod
+    def geqrf(a: F32Ptr, tau: F32Ptr, m: Int, n: Int) raises:
+        geqrf_serial(a, tau, m, n)
+
+    @staticmethod
+    def orgqr(h: F32Ptr, tau: F32Ptr, q: F32Ptr, m: Int, n: Int, kk: Int, qc: Int) raises:
+        for j in range(qc):
+            orgqr_col(h, tau, q, j, m, n, kk, qc)
+
+    @staticmethod
+    def als_cg_rows(c: F32Ptr, y: F32Ptr, yty: F32Ptr, x: F32Ptr, steps: F32Ptr, n: Int, m: Int, f: Int, reg: Float32, cg: Int) raises:
+        var s = List[Float32](length=n * 3 * f if n * f > 0 else 1, fill=Float32(0))
+        var ps = F32Ptr(unsafe_from_address=Int(s.unsafe_ptr()))
+        for u in range(n):
+            steps.unsafe_store(u, als_cg_row(c, y, yty, x, ps, u, m, f, reg, cg))
+        _ = s^
 
     @staticmethod
     def qr_r(a: F32Ptr, m: Int, n: Int, r: F32Ptr) raises:

@@ -108,5 +108,17 @@ trait Exec:
         ...
 
     @staticmethod
+    def geqrf(a: F32Ptr, tau: F32Ptr, m: Int, n: Int) raises:
+        ...
+
+    @staticmethod
+    def orgqr(h: F32Ptr, tau: F32Ptr, q: F32Ptr, m: Int, n: Int, kk: Int, qc: Int) raises:
+        ...
+
+    @staticmethod
+    def als_cg_rows(c: F32Ptr, y: F32Ptr, yty: F32Ptr, x: F32Ptr, steps: F32Ptr, n: Int, m: Int, f: Int, reg: Float32, cg: Int) raises:
+        ...
+
+    @staticmethod
     def vendor() -> String:
         ...

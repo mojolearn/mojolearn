@@ -953,15 +953,18 @@ class SpectralEmbedding:
     identical cells, lane/algos-decomp 2026-09-27), `random_state`, `n_neighbors` (None means
     `max(n_samples // 10, 1)`, the reference's rule). `random_state=None`
     means seed 0 and is deterministic (DEVIATION 891). The eigensolver
-    tolerance is cuVS's struct default `1e-5` and is not a parameter, as in
-    the reference.
+    tolerance defaults to cuVS's struct default `1e-5` (`eigen_tol`, below).
 
     'precomputed_nearest_neighbors' (a distance graph, sparse or dense: the
-    n_neighbors nearest per row, symmetrized 0.5 (C + C^T)). eigen_solver
-    'arpack' / 'lobpcg' / 'amg' run the Lanczos (the route, not the answer);
-    eigen_tol 'auto', n_jobs and verbose are accepted and change nothing.
-    REFUSED BY NAME: a callable `affinity`, `gamma` without 'rbf', a float
-    `eigen_tol`. A precomputed affinity with a repeated
+    n_neighbors nearest per row, symmetrized 0.5 (C + C^T)). `eigen_tol`:
+    'auto' (or None) is cuVS's 1e-5; a positive float is the thick-restart
+    Lanczos tolerance (lane/algos-decomp, 2026-09-27). n_jobs and verbose are
+    accepted and change nothing.
+    REFUSED BY NAME: a callable `affinity`, `gamma` without 'rbf', every
+    `eigen_solver` other than None ('arpack', 'lobpcg' and 'amg' are other
+    algorithms, and running the Lanczos under their names would be a silent
+    substitution; spectral/NOT_IMPLEMENTED.tsv), an `eigen_tol` <= 0 (it
+    disables the Lanczos convergence test, DEVIATION 890). A precomputed affinity with a repeated
     `(row, col)` entry, a negative entry or a non-finite entry is refused;
     its diagonal entries are dropped, as the reference drops them.
 
@@ -999,23 +1002,28 @@ class SpectralEmbedding:
             )
         if gamma is not None and not float(gamma) > 0:
             raise ValueError("mojolearn SpectralEmbedding: gamma must be positive")
-        # scikit-learn's eigen_solver names ('arpack', 'lobpcg', 'amg') all
-        # run the one solver here, RAFT's thick-restart Lanczos: each
-        # converges to the same smallest eigenvectors of the normalized
-        # Laplacian within its tolerance (spectral/NOT_IMPLEMENTED.tsv,
-        # DELIBERATELY DIVERGENT: the route, not the answer).
-        if eigen_solver not in (None, "arpack", "lobpcg", "amg"):
-            raise ValueError(
-                f"mojolearn SpectralEmbedding: eigen_solver={eigen_solver!r} "
-                "must be None, 'arpack', 'lobpcg' or 'amg'"
-            )
-        if eigen_tol not in (None, "auto"):
+        if eigen_solver is not None:
             raise NotImplementedError(
-                f"mojolearn SpectralEmbedding: eigen_tol={eigen_tol!r} is "
-                "refused; the tolerance is cuVS's struct default "
-                f"{DEFAULT_EIGEN_TOL} ('auto'), which the embedding binding "
-                "does not take as a parameter"
+                f"mojolearn SpectralEmbedding: eigen_solver={eigen_solver!r} "
+                "is refused; there is one solver here, RAFT's thick-restart "
+                "Lanczos. scikit-learn's 'arpack', 'lobpcg' and 'amg' are "
+                "other algorithms, and running the Lanczos under their names "
+                "would be a silent substitution (spectral/NOT_IMPLEMENTED.tsv)"
             )
+        if isinstance(eigen_tol, str):
+            if eigen_tol != "auto":
+                raise ValueError(
+                    f"mojolearn SpectralEmbedding: eigen_tol={eigen_tol!r} "
+                    "must be 'auto' or a positive float"
+                )
+        elif eigen_tol is not None:
+            tol = float(eigen_tol)
+            if not tol > 0.0 or tol != tol or tol == float("inf"):
+                raise ValueError(
+                    "mojolearn SpectralEmbedding: eigen_tol must be a positive "
+                    f"finite float or 'auto', got {eigen_tol!r} (0 disables the "
+                    "Lanczos convergence test, DEVIATION 890)"
+                )
         # n_jobs sizes scikit-learn's neighbor search; the kNN graph here is
         # exact, so the value changes no result. verbose prints nothing.
         self.eigen_solver, self.eigen_tol, self.n_jobs, self.verbose = eigen_solver, eigen_tol, n_jobs, verbose
@@ -1103,7 +1111,7 @@ class SpectralEmbedding:
             # ORDER MATCHES bindings/_mojolearn_metrics.mojo::
             # spectral_embedding_graph_binding.
             params = [n, int(vals.shape[0]), n_lanczos, k,
-                      int(norm_laplacian), int(drop_first), self._seed]
+                      int(norm_laplacian), int(drop_first), self._seed] + self._tol_param()
             n_out = int(_get_binding().spectral_embedding_graph(
                 addr_ro(rows, name="rows"), addr_ro(cols, name="cols"),
                 addr_ro(vals, name="vals"), addr(embedding, name="embedding"),
@@ -1128,7 +1136,7 @@ class SpectralEmbedding:
             # ORDER MATCHES bindings/_mojolearn_metrics.mojo::
             # spectral_embedding_dataset_binding.
             params = [n, int(x.shape[1]), n_lanczos, k, n_neighbors,
-                      int(norm_laplacian), int(drop_first), self._seed]
+                      int(norm_laplacian), int(drop_first), self._seed] + self._tol_param()
             n_out = int(_get_binding().spectral_embedding_dataset(
                 addr_ro(x, name="x"), addr(embedding, name="embedding"), params,
             ))
@@ -1140,6 +1148,14 @@ class SpectralEmbedding:
             )
         self.embedding_ = embedding
         return self
+
+    def _tol_param(self):
+        """The optional trailing `eigen_tol` of the two embedding bindings:
+        absent for None / 'auto' (the legacy params list, cuVS's 1e-5), else
+        the float, which the binding rounds to float32 once."""
+        if self.eigen_tol is None or isinstance(self.eigen_tol, str):
+            return []
+        return [float(self.eigen_tol)]
 
     def _precomputed_knn_affinity(self, X):
         """scikit-learn's affinity='precomputed_nearest_neighbors':

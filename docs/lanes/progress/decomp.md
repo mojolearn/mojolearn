@@ -1,5 +1,9 @@
 # decomp: progress
 
+> **AWAITING ANDREW: the `linalg.qr(a)` default changed from `'r'` (R alone) to numpy's
+> `'reduced'` ((Q, R)). This is a breaking change to a public call. It is kept on the lane and
+> recorded as BREAKING in CHANGELOG.md "Changed"; revert it if Andrew says no.**
+
 Design (pass 1): every float operation is a cell in `x_decomp/cells.mojo`, run
 by `x_decomp/device.mojo` (GPU binding `_mojolearn_x_decomp`, one thread per
 output) or `x_decomp/host.mojo` (host binding, same cell in a loop); the entry
@@ -164,31 +168,119 @@ x-decomp lanes). Steward request 1790542293472-decomp-3266b66bb0 (17 lanes,
 e2e_host_all) queued on m2pro, m3ultra, m4pro-a, do-amd: a post-merge release
 gate; a FAIL comes back as a fix at the root.
 
-## NEXT: PHASE 2 REMAINDER (start here; the rows above are done, never re-run)
+## PHASE 2 REMAINDER, session 5 (2026-09-27): CODE DONE, HOST-PROVEN, POD GATE OWED
 
-Each item gets the gate: lane AGREE on the pod (`tools/algos_lane_check.sh`,
-only the lanes `lane_select.py --changed-since origin/main` names), a
-sabotage for a numeric change, old part hashes unchanged
-(`/root/oldbits.py <new out> <old out>` on the pod), test_host_surface;
-merge each as it passes (directive 0000b), one batched steward request per
-hour.
+The RunPod account balance went negative: every pod was deleted (the decomp
+A40 4phrsbddlgcd5a included) and `dev_pod.sh up` is refused ("balance too
+low"). Do NOT rent until Andrew tops up. Everything below is committed and
+pushed on lane/algos-decomp (NOT merged: the NVIDIA + CPU gate has not run).
 
-1. UMAP option parity (umap-learn + cuML; `python/mojolearn/_umap_impl.py`
-   refuses them in `_parameters`): init 'random' / 'pca' / an array (route: a
-   `umap_fit_transform` variant that takes the initial embedding; 'random' is
-   umap-learn's uniform(-10, 10) on a Philox stream, 'pca' the x_decomp PCA
-   scaled to 10 plus noise); metric (the pdist_cell kinds, DEVIATION 5319,
-   into umap/graph.mojo's kNN); local_connectivity != 1 (the rho
-   interpolation in smooth_knn_dist); n_components > 3 (the optimizer is
-   2D/3D only); supervised y (target_metric / target_weight); a, b given
-   directly; densmap (refuse by name if not written).
-2. linalg Q: numpy.linalg.qr mode 'reduced' / 'complete' / 'raw' and
-   numpy.linalg.svd (U, S, Vt): a Householder QR that keeps its reflectors
-   (geqrf's (h, tau) = 'raw') and an orgqr; svd's U = Q U_R. Wide inputs
-   (LQ of the transpose). Rows in decomposition/NOT_IMPLEMENTED.tsv.
-3. SpectralEmbedding eigen_tol float: one more params entry into
-   spectral_embedding_graph / _dataset (bindings/_mojolearn_metrics.mojo),
-   the Lanczos config SpectralClustering already exposes.
-4. AlternatingLeastSquares use_cg=True: implicit's 3 CG steps per row from the
-   previous factors, a row cell beside als_row (new DEVIATION + arm).
-5. Then PHASE 3 (FAST speed on NVIDIA / AMD / Apple), per the LANE CHARTER.
+Done in code (commits 386898fe0, a6fc1ea56, 3bc50cd85, b27e071d7, cb64532b6,
+114b1eacb and after):
+
+| item | route |
+|---|---|
+| merge review: solver names | PCA svd_solver='arpack', TruncatedSVD algorithm='arpack', a nonzero tol, SpectralEmbedding eigen_solver other than None, Isomap/LLE eigen_solver='arpack' REFUSED BY NAME (3bc50cd85); none is aliased to another algorithm |
+| merge review: TruncatedSVD's x_decomp dependency | ROOT FIX: explained_variance_ / _ratio_ in TruncatedSVD's own binding, `tsvd_explained` (decomposition/estimator.mojo `tsvd_explained_host`: gemm_nt, column_mean_kernel, shift, pinned square; host twin pca_oracle.mojo `host_tsvd_explained`; IDENTITY_PATHS 139d). The default fit no longer loads _mojolearn_x_decomp (only algorithm='randomized', an x_decomp algorithm, does). New part `explained` on the `tsvd` lane |
+| merge review: linalg.eigh one triangle | numpy's semantics kept (reads the UPLO triangle); CHANGELOG "Changed" entry + test (3bc50cd85); symmetric inputs keep their bits |
+| linalg.qr every numpy mode, linalg.svd (U, S, Vh) | geqrf + orgqr cells (DEVIATION 5320); qr(a) now defaults to 'reduced' (numpy) -- CHANGELOG; mode='r' keeps its TSQR bits (its rows may differ in sign from qr(a)[1], documented); svd's U = the Householder re-orthonormalization of A v / s (orthonormal to float32 at any condition); QRResult/SVDResult private as in numpy |
+| AlternatingLeastSquares use_cg | als_cg_row (DEVIATION 5321) |
+| SpectralEmbedding eigen_tol float | e2e_eigen_tol.patch (a6fc1ea56) |
+| UMAP option parity | n_components 1-32 (run-time-dimension kernel + host twin, DEVIATION 5322; 2/3 keep the comptime kernel), local_connectivity (DEVIATION 5323), metrics sqeuclidean/cosine/manhattan/chebyshev/minkowski p (the k-NN lane's arms), init random/pca/array, a/b, supervised categorical + l2 targets (DEVIATION 5324); densmap, output_metric, other metrics/target metrics REFUSED BY NAME. New entry `umap_fit_transform_ex` (GPU + host); transform takes the metric/a/b; save/load carries them. Lane `x-decomp-umap-options` |
+
+Host-only proof (Mac, one core, tools/mac_slot.py; ~/mojolearn-evidence/algos-decomp/hostbuild):
+the metrics, estimators, x_decomp, core, linalg HOST bindings build clean and
+also build under `x_decomp/checks/sabotage/e2e_p2b_options.patch`; TruncatedSVD
+explained vs sklearn 3e-7; qr/svd vs numpy 4e-7 / 2e-6; every UMAP option
+fits finite (sanity_p2b.py); the p2b sabotage moves every new part on the host
+(tsvd_ev, umap_c5, umap_cat, umap_man, qr, als_cg); test_host_surface,
+test_linalg_decompositions, test_umap_options, test_x_decomp_repeat (now
+with geqrf/orgqr/als_cg_rows), test_spectral_embedding, test_pca_full_surface:
+all pass on the host. The GPU bindings have NOT been compiled.
+
+## NEXT (start here, on a pod once RunPod is funded)
+
+1. `tools/dev_pod.sh up decomp`, `MOJOLEARN_DEVPOD_ALLOW_SELF=1 tools/dev_pod.sh sync decomp <worktree>`.
+   Build every GPU binding the lanes run (metrics, estimators, x_decomp,
+   linalg): the GPU side of umap_identical_epoch_kernel_rt, tsvd_explained_host
+   and the 5320/5321 cells has never compiled. Fix what fails.
+2. Seam arms: `tools/algos_lane_check.sh x-decomp-lu --pass 2` runs every
+   decomp.checks driver; 5320_householder_order and 5321_als_cg_order must
+   BUILD, RUN, FAIL, PASS after reversal (never proven yet).
+3. Lane checks (lane_select names all 481 because the x_decomp binding and
+   host_surface.py changed; the lanes that carry the new code are):
+   `x-decomp-umap-options,x-decomp-als,x-decomp-pca-randomized,x-decomp-lstsq-rsvd,tsvd,linalg-qr,umap,spectral-embedding`
+   with `--pass 2 --sabotage x_decomp/checks/sabotage/e2e_p2b_options.patch`
+   (AGREE, DISAGREE, AGREE), then the other x-decomp lanes clean.
+4. Old part hashes unchanged (`/root/oldbits.py <new> <old>` against the
+   p2d-* outputs): every old part of every lane above; EXPECTED to move: none
+   (tsvd's `explained` and x-decomp-pca-randomized's `ta` are the explained
+   variance through a new summation order; `ta` was never on a release record).
+5. Sanity on the pod: UMAP options vs umap-learn (trustworthiness / the
+   supervised graph's rho, sigmas, weights for lc=1.5, categorical, l2);
+   ALS use_cg vs implicit's _least_squares_cg.
+6. test_host_surface + test_lane_select, merge to main and push in one
+   command, ONE batched steward request (e2e_p2b_options + e2e_host_all over
+   the decomp lanes), progress file. Then PHASE 3 (FAST speed).
+
+## SESSION 7 (2026-09-28 ~05Z): RunPod out of money again; no pod
+
+State on lane/algos-decomp (pushed, NOT merged to main):
+- Session 6 (a pod, RTX 4090 ukollon8nsl8oz, down 2026-09-28 00:00Z) ran part
+  of the phase-2-remainder gate; what it proved is in IDENTITY_PATHS rows
+  139a-139e (x-decomp-umap-options and tsvd `explained` AGREE on the 4090,
+  DISAGREE under e2e_p2b_options.patch, AGREE restored; UMAP option sanity vs
+  umap-learn). Its IDENTICAL speed commits (orth on the device across passes,
+  geqrf/orgqr and getrf on the device in parallel steps, absmax in FOLD_BLOCK
+  slices DEVIATION 5317 + arms 5317/5317b, one-copy input, 5307 arm vs
+  lu_pivot) have NO recorded NVIDIA + CPU gate: treat them as unproven.
+- Steward 1790542727482-decomp-3c73fcee93 (x-decomp-spectral-rbf,
+  e2e_host_sqdist): do-amd FAIL = timeout (exit 124) in the wide/train cell;
+  taken as a do-amd hang (neural's same-minute hang did not reproduce on Hot
+  Aisle). RESUBMITTED to do-amd only as 1790571228173-decomp-3c73fcee93
+  (Apple already PASS on m4pro-a / m2pro via 3266b66bb0).
+- Steward 1790542293472-decomp-3266b66bb0: m4pro-a FAIL was NOT our numerics:
+  every x-decomp-dict-learning cell REFUSED because _mojolearn_x_linear.so was
+  never built on a clean Mac (DictionaryLearning's lars transform and MDS
+  non-metric run the linear lane's Lars / IsotonicRegression). Root cause in
+  tools/lane_select.py: a lane's own seed that every lane also reaches
+  (`_expansion_decomp.py`, via `_linalg_impl.py`) was entered and not
+  followed, so its imports were lost, and a class imported by name leaves its
+  binding narrow (never built by the lane check). FIX (this session):
+  `_own_walk(..., follow=seeds - sinks)` follows a lane's own non-registry
+  seeds; `_expansion_decomp.py` imports `_expansion_linear` as a module.
+  Measured: declared bindings change for 7 unrelated lanes (bootstrap,
+  byte-lm*, metrics-classification: bindings they already load) and every
+  x-decomp lane + cholesky gains x_linear(+host); source sets grow for the
+  x-linear lanes (57 -> 133 files: their own door's imports now count),
+  gemm/linalg/lowbit lanes (90 -> 139), sequence and cnn lanes (+3 to +5).
+- AMD central box: our IDENTICAL "before" remainder (bench/decomp_speed.py,
+  /root/ev-decomp/speed_before_identical_rest.log) has held slot 0 since
+  02:21Z; linalg.qr / svd (geqrf 217 s, orgqr 15 s at 1M x 28: the one-thread
+  cells, before 3eb5dd554), solve(512) 7.1 s (lu one thread, before
+  5cc491ca8), ALS 10.4 s (als_rows 9.7 s), ALS cg 2.7 s are recorded; it has
+  sat in Isomap(10nn) at N3=10000 since 02:38Z (python 100% CPU, GPU0 100%).
+  Not cancelled (owed run rule). Isomap at 10k rows is the next speed target
+  (dijkstra_rows); the bench's N3 must drop (or Isomap be fixed) before the
+  "after" run.
+- Apple speed 1790562095893 / 1790562097205 (m4pro-b / m4pro-a) run commit
+  32bf8cbb80, whose bench fits MinCovDet on 1M rows (the fix 3638c5c29 came
+  after): they will likely hit the steward's timing timeout like
+  1790558492260 / 1790558501645 did. Resubmit at a commit with the fixed bench
+  and ONLY= lists, BEFORE the Macs go (m2pro/m3ultra ~12:35Z, the rest
+  ~21:15Z Sep 28).
+
+## NEXT (start here)
+
+1. Pod (once RunPod is funded): gate every commit since 069bf7678 on NVIDIA
+   + CPU: `tools/algos_lane_check.sh <every x-decomp lane> --pass 2 --sabotage
+   x_decomp/checks/sabotage/e2e_host_all.patch` (all seam arms incl. 5317b,
+   5320, 5321 BUILD/RUN/FAIL/PASS), old part hashes unchanged vs the p2d-*
+   outputs (oldbits.py), test_host_surface, test_lane_select (its inputs
+   changed). Then merge to main + push in one command and ONE batched steward
+   request (e2e_p2b_options + e2e_host_all over the decomp lanes).
+2. Until then, the central AMD box can carry the same lane check for gfx942
+   (tools/amd_central.sh run decomp ...), but the merge gate is NVIDIA + CPU.
+3. Speed (phase 1 IDENTICAL, then FAST): Isomap dijkstra_rows, ALS als_rows,
+   the per-call uploads (device-resident matrices), Jacobi eigh fixed cost;
+   AMD and Apple before/after tables per algorithm.

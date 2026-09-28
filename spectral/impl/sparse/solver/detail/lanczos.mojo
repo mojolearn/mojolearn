@@ -159,7 +159,7 @@ from std.gpu import block_dim, block_idx, thread_idx
 from std.gpu.primitives.warp import sum as _fl_warp_sum
 from std.memory import stack_allocation
 from std.math import sqrt as _fl_sqrt
-from std.sys.info import has_apple_gpu_accelerator
+from std.sys.info import has_accelerator, has_apple_gpu_accelerator
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.sys.compile import is_defined
@@ -1049,7 +1049,10 @@ def lanczos_restart_fast(
 # ---------------------------------------------------------------------------
 
 
-#: IDENTICAL on Apple (untraced): `lanczos_aux` with alpha / beta in device
+#: IDENTICAL on every GPU (Apple first, 2026-09-26; NVIDIA and AMD from
+#: lane/algos-decomp 2026-09-28, where the host-driven step's per-dot
+#: buffer create / free / drain was most of a SpectralEmbedding fit):
+#: `lanczos_aux` with alpha / beta in device
 #: arrays and every reduction still the pinned `identical_gemm` (through
 #: `identical_gemm_into` on one caller-owned workspace). The host scalar
 #: seams (`alpha + uu_i`, the clamps, `identical_sqrt`, the normalize's
@@ -1058,7 +1061,7 @@ def lanczos_restart_fast(
 #: `-D MOJOLEARN_LANCZOS_ID_DEV_OFF` keeps the host-driven step.
 comptime LANCZOS_ID_DEV = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and has_apple_gpu_accelerator()
+    and has_accelerator()
     and not is_defined["MOJOLEARN_LANCZOS_ID_DEV_OFF"]()
 )
 #: LANCZOS_ID_DEV with the per-element launches of a step fused (the same

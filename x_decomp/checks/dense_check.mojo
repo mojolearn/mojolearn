@@ -1,13 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Seams DEVIATION 5307-5309 of the decomp lane: the LU pivot and its tie
-(5307), the substitution folds of getrs and of the Cholesky (5308), and the
-two-pass modified Gram-Schmidt (5309).
+"""Seams DEVIATION 5307-5309 and 5320 of the decomp lane: the LU pivot and
+its tie (5307), the substitution folds of getrs and of the Cholesky (5308),
+the two-pass modified Gram-Schmidt (5309), and the Householder QR that keeps
+its reflectors with its explicit Q (geqrf + orgqr, 5320).
 
     tools/with_identical_mode.sh pixi run mojo run -I . x_decomp/checks/dense_check.mojo
 """
 from core.identity_trace import IdentityTrace
-from x_decomp.checks.xd_oracles import oracle_chol, oracle_lu, oracle_lu_solve, oracle_lu_solve_t, oracle_orth
+from x_decomp.checks.xd_oracles import (
+    oracle_chol, oracle_geqrf, oracle_lu, oracle_lu_solve, oracle_lu_solve_t, oracle_orgqr, oracle_orth,
+)
 from x_decomp.checks.seam_util import (
     count_diff_f32,
     count_diff_i32,
@@ -59,7 +62,7 @@ def spd(n: Int) -> List[Float32]:
 
 def main() raises:
     var tr = IdentityTrace()
-    tr.header("x_decomp dense_check (DEVIATIONS 5307-5309)")
+    tr.header("x_decomp dense_check (DEVIATIONS 5307-5309, 5320)")
     # ---- 5307 the pivot
     var n = 9
     var a = tie_matrix(n)
@@ -134,4 +137,38 @@ def main() raises:
     HostExec.orth(ptr(qh), mm, l)
     same("5309 orth host", count_diff_f32(qh, wq))
     tr.record_list_f32("x_decomp.orth", qd)
+    # ---- 5320 geqrf + orgqr, a tall, a wide and a rank-deficient matrix
+    for shape in range(3):
+        var gm = 23 if shape != 1 else 5
+        var gn = 6 if shape != 1 else 9
+        var ga = seam_fixture(gm, gn, UInt64(31 + shape))
+        for t in range(len(ga)):
+            if abs(ga[t]) > Float32(100):
+                ga[t] = ga[t] * Float32(1e-6)
+        if shape == 2:
+            for t in range(gm):
+                ga[t * gn + 3] = ga[t * gn + 1]          # a duplicated column
+        var kk = gm if gm < gn else gn
+        var want_f = oracle_geqrf(ga, gm, gn)
+        require_separates("5320 geqrf fold order", count_diff_f32(want_f[0], oracle_geqrf(ga, gm, gn, 1)[0]))
+        var hd = ga.copy()
+        var td = zeros(kk)
+        DevExec.geqrf(ptr(hd), ptr(td), gm, gn)
+        same("5320 geqrf device h", count_diff_f32(hd, want_f[0]))
+        same("5320 geqrf device tau", count_diff_f32(td, want_f[1]))
+        var hh = ga.copy()
+        var th = zeros(kk)
+        HostExec.geqrf(ptr(hh), ptr(th), gm, gn)
+        same("5320 geqrf host h", count_diff_f32(hh, want_f[0]))
+        same("5320 geqrf host tau", count_diff_f32(th, want_f[1]))
+        var want_q = oracle_orgqr(want_f[0], want_f[1], gm, gn, kk, gm)
+        require_separates("5320 orgqr fold order", count_diff_f32(want_q, oracle_orgqr(want_f[0], want_f[1], gm, gn, kk, gm, 1)))
+        var qgd = zeros(gm * gm)
+        DevExec.orgqr(ptr(want_f[0]), ptr(want_f[1]), ptr(qgd), gm, gn, kk, gm)
+        same("5320 orgqr device", count_diff_f32(qgd, want_q))
+        var qgh = zeros(gm * gm)
+        HostExec.orgqr(ptr(want_f[0]), ptr(want_f[1]), ptr(qgh), gm, gn, kk, gm)
+        same("5320 orgqr host", count_diff_f32(qgh, want_q))
+        tr.record_list_f32("x_decomp.geqrf", hd)
+        tr.record_list_f32("x_decomp.orgqr", qgd)
     print("PASS x_decomp dense_check")
