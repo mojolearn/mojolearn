@@ -4,7 +4,7 @@
 
 from . import _mojolearn_estimators, _serialize
 from ._array import Array
-from ._buffer import addr, addr_ro, all_finite, as_f32_c, empty, frombytes, full, zeros
+from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_f32_dense_c, empty, frombytes, full, zeros
 from ._mode import NumericModeMixin
 from .linear_model import _check_saved_by, _restore_mode, _saved_mode, _shape_of
 
@@ -759,7 +759,7 @@ class KernelDensity(NumericModeMixin):
         # A refit drops the device copy of the previous fit set HERE, as
         # NearestNeighbors.fit does (DEVIATION 2921's key rule).
         self._release_resident_fit()
-        x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
+        x, self.input_copied_ = as_f32_dense_c(X, ndim=2, name="X")
         if not all_finite(x):
             # DEVIATION 604 refuses a non-finite fit set at the first
             # score_samples; refusing it here as well names the input at the
@@ -797,7 +797,7 @@ class KernelDensity(NumericModeMixin):
     def score_samples(self, X):
         if not hasattr(self, "_x"):
             raise ValueError("mojolearn KernelDensity: call fit() first")
-        q, _ = as_f32_c(X, ndim=2, name="X")
+        q, _ = as_f32_dense_c(X, ndim=2, name="X")
         if q.shape[1] != self.n_features_in_:
             raise ValueError(
                 f"mojolearn KernelDensity: X has {q.shape[1]} features, "

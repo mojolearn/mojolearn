@@ -13,6 +13,7 @@ from checks.numerics import (
     identical_silu,
 )
 from gemm.checks.gemm_oracle import OP_NN, OP_TN, gemm_oracle
+from gemm.host.gemm_host_rows import gemm_host_rows
 from mamba.checks.mamba_fixture import (
     D_CONV,
     D_STATE,
@@ -410,9 +411,9 @@ def mamba_block_backward_oracle(
     for i in range(m * dm):
         bst.dres.append(dres[i])
 
-    bst.dg = gemm_oracle(bst.dres, w.w_out, OP_NN, m, di, dm)
+    bst.dg = gemm_host_rows(bst.dres, w.w_out, OP_NN, m, di, dm)
 
-    bst.dw_out = gemm_oracle(bst.dres, st.gate_out, OP_TN, dm, di, m)
+    bst.dw_out = gemm_host_rows(bst.dres, st.gate_out, OP_TN, dm, di, m)
 
     var silu_z = _zeros(m * di)
     for t in range(m):
@@ -479,8 +480,8 @@ def mamba_block_backward_oracle(
             for n in range(D_STATE):
                 h_slab.append(_h_at(bst.h_ckpt, bb, li, d, l, di, n))
                 dh_slab.append(bst.dh[(t * di + d) * D_STATE + n])
-        var cm_row = gemm_oracle(dy_row, h_slab, OP_NN, 1, D_STATE, di)
-        var bm_row = gemm_oracle(w_row, dh_slab, OP_NN, 1, D_STATE, di)
+        var cm_row = gemm_host_rows(dy_row, h_slab, OP_NN, 1, D_STATE, di)
+        var bm_row = gemm_host_rows(w_row, dh_slab, OP_NN, 1, D_STATE, di)
         for n in range(D_STATE):
             bst.dcm.append(cm_row[n])
             bst.dbm.append(bm_row[n])
@@ -539,8 +540,8 @@ def mamba_block_backward_oracle(
             else:
                 bst.ddtp.append(g)
 
-    var ddtl = gemm_oracle(bst.ddtp, w.w_dt, OP_NN, m, r, di)
-    bst.dw_dt = gemm_oracle(bst.ddtp, dt_low, OP_TN, di, r, m)
+    var ddtl = gemm_host_rows(bst.ddtp, w.w_dt, OP_NN, m, r, di)
+    bst.dw_dt = gemm_host_rows(bst.ddtp, dt_low, OP_TN, di, r, m)
     var dxp = List[Float32]()
     for t in range(m):
         for j in range(r):
@@ -550,8 +551,8 @@ def mamba_block_backward_oracle(
         for n in range(D_STATE):
             dxp.append(bst.dcm[t * D_STATE + n])
 
-    var du_x = gemm_oracle(dxp, w.w_x, OP_NN, m, di, xr)
-    bst.dw_x = gemm_oracle(dxp, st.silu_out, OP_TN, xr, di, m)
+    var du_x = gemm_host_rows(dxp, w.w_x, OP_NN, m, di, xr)
+    bst.dw_x = gemm_host_rows(dxp, st.silu_out, OP_TN, xr, di, m)
 
     var du_d = _zeros(m * di)
     for t in range(m):
@@ -591,8 +592,8 @@ def mamba_block_backward_oracle(
             dp.append(bst.dhin[t * di + d])
         for d in range(di):
             dp.append(bst.dz[t * di + d])
-    bst.dnrm = gemm_oracle(dp, w.w_in, OP_NN, m, dm, 2 * di)
-    bst.dw_in = gemm_oracle(dp, st.norm_out, OP_TN, 2 * di, dm, m)
+    bst.dnrm = gemm_host_rows(dp, w.w_in, OP_NN, m, dm, 2 * di)
+    bst.dw_in = gemm_host_rows(dp, st.norm_out, OP_TN, 2 * di, dm, m)
 
     var dinner = _zeros(m * dm)
     for t in range(m):
@@ -662,9 +663,9 @@ def mamba_block_backward_oracle(
                     ftz(bst.dsk[t * di + d]), ftz(st.silu_out[t * di + d])
                 )
             )
-    bst.dd_skip = gemm_oracle(ones, p_d, OP_NN, 1, di, m)
+    bst.dd_skip = gemm_host_rows(ones, p_d, OP_NN, 1, di, m)
 
-    bst.db_dt = gemm_oracle(ones, bst.ddtp, OP_NN, 1, di, m)
+    bst.db_dt = gemm_host_rows(ones, bst.ddtp, OP_NN, 1, di, m)
 
     bst.dcw = _zeros(di * D_CONV)
     for k in range(D_CONV):
@@ -685,11 +686,11 @@ def mamba_block_backward_oracle(
                             ftz(bst.dconv[(bb * l + li) * di + d]), ftz(hv)
                         )
                     )
-        var tap = gemm_oracle(ones, p_cw, OP_NN, 1, di, m)
+        var tap = gemm_host_rows(ones, p_cw, OP_NN, 1, di, m)
         for d in range(di):
             bst.dcw[d * D_CONV + k] = tap[d]
 
-    bst.dcb = gemm_oracle(ones, bst.dconv, OP_NN, 1, di, m)
+    bst.dcb = gemm_host_rows(ones, bst.dconv, OP_NN, 1, di, m)
 
     var p_w = _zeros(m * dm)
     for t in range(m):
@@ -699,7 +700,7 @@ def mamba_block_backward_oracle(
             p_w[t * dm + j] = ftz(
                 identical_mul(ftz(bst.dnrm[t * dm + j]), inner)
             )
-    bst.dw_norm = gemm_oracle(ones, p_w, OP_NN, 1, dm, m)
+    bst.dw_norm = gemm_host_rows(ones, p_w, OP_NN, 1, dm, m)
 
     return bst^
 

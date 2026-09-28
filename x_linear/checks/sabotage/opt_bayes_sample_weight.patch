@@ -1,19 +1,13 @@
+diff --git a/x_linear/bayes.mojo b/x_linear/bayes.mojo
 --- a/x_linear/bayes.mojo
 +++ b/x_linear/bayes.mojo
-@@ -17,6 +17,7 @@
- Centering (fit_intercept) is their `_preprocess_data`: column means and the
- target mean, rows ascending. float32 throughout.
- """
-+from std.sys.info import is_gpu
- from x_linear.ops import (
-     FP, IP, fa, fs, fm, fd, fmad, fabs, fmax, ld, st, ldi, sti, i2f, fill, copy,
-     cholesky, chol_solve, jacobi_eig, centered_gram, centered_xty, mean_of,
-@@ -137,7 +138,7 @@
-         var mj = ld(fw, xm + j)
-         for i in range(n):
-             var xc = fs(ld(x, i * d + j), mj)
--            if sw:
-+            if sw and not is_gpu():  # SABOTAGE option sample_weight: the device drops the weights in X'y
-                 xc = fm(ld(y, n + i), xc)
-             acc = fmad(xc, fs(ld(y, i), yc), acc)
-         st(fw, xty + j, acc)
+@@ -205,7 +205,8 @@
+             if sw:
+                 for i in range(n):
+                     var xc = fs(ld(x, i * d + j), mj)
+-                    xc = fm(ld(y, n + i), xc)
++                    if not is_gpu():  # SABOTAGE option sample_weight: the device drops the weights in X'y
++                        xc = fm(ld(y, n + i), xc)
+                     acc = fmad(xc, fs(ld(y, i), yc), acc)
+             else:
+                 acc = chain_cfmad(x, j, d, mj, y, 0, 1, yc, n)

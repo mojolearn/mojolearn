@@ -66,7 +66,7 @@ FAMILIES = (
         ),
         display="the linear expansion lane (SGD, GLMs, Huber, Bayesian, LARS, quantile, CV, isotonic)",
         host_modules=(
-            "x_linear/ops.mojo", "x_linear/dispatch.mojo", "x_linear/sgd.mojo",
+            "x_linear/ops.mojo", "x_linear/team.mojo", "x_linear/tops.mojo", "x_linear/dispatch.mojo", "x_linear/sgd.mojo",
             "x_linear/glm.mojo", "x_linear/lbfgs.mojo", "x_linear/huber.mojo",
             "x_linear/bayes.mojo", "x_linear/lars.mojo",
             "x_linear/quantile.mojo", "x_linear/ridge.mojo",

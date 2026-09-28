@@ -24,7 +24,10 @@ because the generated serial loop spells only the first axis.
 from std.memory import memcpy
 from std.sys import size_of
 
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import host_predict_task_count
 from gemm.host.identical_gemm import OP_TN, gemm_oracle
+from gemm.host.gemm_host_rows import gemm_host_rows
 # the device GEMM file's host-safe fold helpers, lifted verbatim
 from mamba.host.gen.gemm_identical_parts import (
     GEMM_FOLD_LEVELS,
@@ -44,6 +47,31 @@ def launch_count(grid: Tuple[Int, Int, Int], block: Tuple[Int, Int, Int]) raises
             " has no serial restatement here (tools/mamba_host_gen.py)"
         )
     return grid[0] * block[0]
+
+
+def host_launch[F: def(Int) -> None](ref f: F, n: Int):
+    """A one-axis launch of `n` thread indices on the host (lane neural-cpu,
+    2026-09-28): contiguous index ranges over `core/host_predict_threads.
+    mojo`'s task count (MOJOLEARN_CPU_THREADS, or one per physical core),
+    each range walked ascending on one task, every task in the caller's
+    floating-point environment (`core/host_parallel.mojo`). A device kernel
+    is correct in any schedule of its grid, so the split moves no bit; a
+    one-task launch is the serial loop the generator used to write."""
+    if n <= 0:
+        return
+    var tasks = host_predict_task_count(n)
+    if tasks <= 1:
+        for gid in range(n):
+            f(gid)
+        return
+    var chunk = (n + tasks - 1) // tasks
+
+    def _range(t: Int) {imm f, imm chunk, imm n}:
+        var hi = min((t + 1) * chunk, n)
+        for gid in range(t * chunk, hi):
+            f(gid)
+
+    host_parallelize(_range, tasks)
 
 
 struct DeviceBuffer[dtype: DType](Movable, Sized):
@@ -149,7 +177,7 @@ def identical_gemm_into[allow_vendor: Bool = True](
 ) raises:
     """`C[m x n] = op(A) . op(B)`: A holds m*k values (k*m under OP_TN), B
     n*k, both row-major, exactly as `gemm_oracle` reads them."""
-    var out = gemm_oracle(_read(a, m * k), _read(b, n * k), op, m, n, k)
+    var out = gemm_host_rows(_read(a, m * k), _read(b, n * k), op, m, n, k)
     if len(c) < m * n:
         raise Error("mamba host: a GEMM output buffer shorter than m * n")
     if m * n > 0:

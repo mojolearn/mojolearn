@@ -45,7 +45,7 @@ from std.math import cos, exp, lgamma, log, pi, sqrt
 from std.memory import bitcast
 from std.sys.compile import is_defined
 
-from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 
 from core.host_predict_threads import (
     HostF32Ptr,
@@ -78,9 +78,11 @@ from checks.numerics import (
     identical_log,
     identical_mul,
     identical_mul_add,
+    identical_mul_add_simd,
     identical_pow,
     identical_sqrt,
 )
+from core.host_simd_identical import expf_v, ftz_v, logf_v, powf_v
 
 
 #: THE NEGATIVE CONTROL OF THE CPU IDENTITY GATE (the CPU training lane,
@@ -389,6 +391,166 @@ def oracle_score_samples(
     return KdeOracleStages(dists^, logk^, rowmax^, lse^, scores^, log_sw, norm)
 
 
+#: THE BLOCK ENGINE (lane neighbors-cpu, 2026-09-28): the scoring path of
+#: `oracle_score_samples_into` computes KDE_W training columns of KDE_QB
+#: query rows at once, one SIMD lane per CELL. Lane `l` of a register is the
+#: scalar statement sequence of `oracle_distance_ptr` for cell (q, j0 + l)
+#: (the feature axis ascending, each operand flushed; the training operand
+#: flushed once when packed), then `oracle_log_kernel` and the weight's
+#: log, lane by lane; `ftz_v` / `logf_v` / `expf_v` are measured equal to
+#: `ftz` / `portable_logf` / `portable_expf` on all 2^32 words
+#: (core/host_simd_identical_check.mojo), `identical_div` is `ftz(ftz(a) /
+#: ftz(b))` (portable_divf), and `identical_sqrt`, `identical_pow` and
+#: `identical_cos` run per lane through the scalar seam. The row's
+#: log-sum-exp keeps `oracle_logsumexp_row` exactly: the strict-`>` max scan
+#: ascending, then the shifted exponentials (computed W at a time) summed
+#: one by one in the same order, the sabotage arm's descending walk from
+#: one unit included.
+comptime KDE_W = 8
+comptime KDE_QB = 4
+comptime KdeV = SIMD[DType.float32, KDE_W]
+
+
+@always_inline
+def _kde_step[M: Int](acc: KdeV, qv: Float32, t: KdeV, metric_arg: Float32) -> KdeV:
+    """One feature step of W cells of `oracle_distance_ptr`, the metric
+    fixed at compile time (see `_kde_tile`)."""
+    comptime if M == DIST_COSINE_EXPANDED or M == DIST_L2_EXPANDED:
+        return ftz_v[KDE_W](identical_mul_add_simd[KDE_W](KdeV(qv), t, acc))
+    elif M == DIST_L2_SQRT_UNEXPANDED:
+        var diff = ftz_v[KDE_W](KdeV(qv) - t)
+        return ftz_v[KDE_W](identical_mul_add_simd[KDE_W](diff, diff, acc))
+    elif M == DIST_L1:
+        return ftz_v[KDE_W](acc + abs(ftz_v[KDE_W](KdeV(qv) - t)))
+    elif M == DIST_LINF:
+        var diff = abs(ftz_v[KDE_W](KdeV(qv) - t))
+        return diff.gt(acc).select(diff, acc)
+    else:
+        var diff = abs(ftz_v[KDE_W](KdeV(qv) - t))
+        return ftz_v[KDE_W](acc + ftz_v[KDE_W](powf_v[KDE_W](diff, metric_arg)))
+
+
+def _kde_tile_m[M: Int](
+    qbp: HostF32Ptr, pb: HostF32Ptr, d: Int, metric_arg: Float32, res: HostF32Ptr,
+):
+    """KDE_QB query rows (at `qbp`, row r at `r * d`) x KDE_W training
+    columns (the packed block `pb`), raw accumulators into `res`."""
+    var a0 = KdeV(0.0)
+    var a1 = KdeV(0.0)
+    var a2 = KdeV(0.0)
+    var a3 = KdeV(0.0)
+    for f in range(d):
+        var tv = pb.unsafe_load[width=KDE_W](f * KDE_W)
+        a0 = _kde_step[M](a0, qbp.unsafe_load(f), tv, metric_arg)
+        a1 = _kde_step[M](a1, qbp.unsafe_load(d + f), tv, metric_arg)
+        a2 = _kde_step[M](a2, qbp.unsafe_load(2 * d + f), tv, metric_arg)
+        a3 = _kde_step[M](a3, qbp.unsafe_load(3 * d + f), tv, metric_arg)
+    res.unsafe_store[width=KDE_W](0, a0)
+    res.unsafe_store[width=KDE_W](KDE_W, a1)
+    res.unsafe_store[width=KDE_W](2 * KDE_W, a2)
+    res.unsafe_store[width=KDE_W](3 * KDE_W, a3)
+
+
+def _kde_tile(
+    qbp: HostF32Ptr, pb: HostF32Ptr, d: Int, metric: Int, metric_arg: Float32,
+    res: HostF32Ptr,
+):
+    if metric == DIST_COSINE_EXPANDED or metric == DIST_L2_EXPANDED:
+        _kde_tile_m[DIST_L2_EXPANDED](qbp, pb, d, metric_arg, res)
+    elif metric == DIST_L2_SQRT_UNEXPANDED:
+        _kde_tile_m[DIST_L2_SQRT_UNEXPANDED](qbp, pb, d, metric_arg, res)
+    elif metric == DIST_L1:
+        _kde_tile_m[DIST_L1](qbp, pb, d, metric_arg, res)
+    elif metric == DIST_LINF:
+        _kde_tile_m[DIST_LINF](qbp, pb, d, metric_arg, res)
+    else:
+        _kde_tile_m[DIST_LP_UNEXPANDED](qbp, pb, d, metric_arg, res)
+
+
+@always_inline
+def _kde_epilogue(acc: KdeV, qn: Float32, tn: KdeV, metric: Int, metric_arg: Float32) -> KdeV:
+    """The epilogues of `oracle_distance_ptr`, W cells of one query row."""
+    if metric == DIST_COSINE_EXPANDED:
+        var denom = ftz_v[KDE_W](KdeV(qn) * tn)
+        var ratio = ftz_v[KDE_W](ftz_v[KDE_W](acc) / ftz_v[KDE_W](denom))
+        return ftz_v[KDE_W](KdeV(1.0) - ftz_v[KDE_W](ratio))
+    if metric == DIST_LP_UNEXPANDED:
+        var one_over_p = ftz(identical_div(Float32(1.0), metric_arg))
+        return ftz_v[KDE_W](powf_v[KDE_W](acc, one_over_p))
+    if metric == DIST_L2_SQRT_UNEXPANDED:
+        var out = acc
+        comptime for l in range(KDE_W):
+            out[l] = ftz(identical_sqrt(acc[l]))
+        return out
+    if metric == DIST_L1 or metric == DIST_LINF:
+        return acc
+    var dist = ftz_v[KDE_W](identical_mul_add_simd[KDE_W](
+        KdeV(-2.0), acc, ftz_v[KDE_W](KdeV(qn) + tn)
+    ))
+    return dist.le(KdeV(0.0)).select(KdeV(0.0), dist)
+
+
+@always_inline
+def _kde_log_kernel_v(x: KdeV, h: Float32, kernel: Int) -> KdeV:
+    """`oracle_log_kernel`, lane by lane."""
+    var fmin = KdeV(bitcast[DType.float32](ORACLE_FLOAT32_MIN_BITS))
+    if kernel == KDE_KERNEL_GAUSSIAN:
+        var num = -ftz_v[KDE_W](x * x)
+        var den = ftz(ftz(Float32(2.0) * h) * h)
+        return ftz_v[KDE_W](num / KdeV(den))
+    if kernel == KDE_KERNEL_EXPONENTIAL:
+        return ftz_v[KDE_W]((-x) / KdeV(h))
+    var outside = x.ge(KdeV(h))
+    if kernel == KDE_KERNEL_TOPHAT:
+        return outside.select(fmin, KdeV(0.0) * fmin)
+    var z: KdeV
+    if kernel == KDE_KERNEL_EPANECHNIKOV:
+        var hsq = ftz(h * h)
+        z = ftz_v[KDE_W](KdeV(1.0) - ftz_v[KDE_W](ftz_v[KDE_W](x * x) / KdeV(hsq)))
+    elif kernel == KDE_KERNEL_LINEAR:
+        z = ftz_v[KDE_W](KdeV(1.0) - ftz_v[KDE_W](x / KdeV(h)))
+    else:
+        var arg = ftz_v[KDE_W](ftz_v[KDE_W](KdeV(Float32(1.5707963267948966)) * x) / KdeV(h))
+        z = arg
+        comptime for l in range(KDE_W):
+            z[l] = ftz(identical_cos(arg[l]))
+    z = z.lt(KdeV(ORACLE_LOG_FLOOR)).select(KdeV(ORACLE_LOG_FLOOR), z)
+    return outside.select(fmin, ftz_v[KDE_W](logf_v[KDE_W](z)))
+
+
+def _kde_lse_row(row: HostF32Ptr, n_train: Int) -> Tuple[Float32, Float32]:
+    """`oracle_logsumexp_row` over one row buffer (see the block engine)."""
+    var max_exp = row.unsafe_load(0)
+    for j in range(1, n_train):
+        var v = row.unsafe_load(j)
+        if v > max_exp:
+            max_exp = v
+    if max_exp == bitcast[DType.float32](UInt32(0xFF800000)):
+        return (max_exp, max_exp)
+    var nb = (n_train + KDE_W - 1) // KDE_W
+    var s = Float32(0.0)
+    comptime if KDE_ORACLE_HOST_SABOTAGE:
+        s = Float32(1.0)
+        for bb in range(nb):
+            var b = nb - 1 - bb
+            var e = ftz_v[KDE_W](expf_v[KDE_W](ftz_v[KDE_W](
+                row.unsafe_load[width=KDE_W](b * KDE_W) - KdeV(max_exp)
+            )))
+            for ll in range(KDE_W):
+                var l = KDE_W - 1 - ll
+                if b * KDE_W + l < n_train:
+                    s = ftz(s + e[l])
+    else:
+        for b in range(nb):
+            var e = ftz_v[KDE_W](expf_v[KDE_W](ftz_v[KDE_W](
+                row.unsafe_load[width=KDE_W](b * KDE_W) - KdeV(max_exp)
+            )))
+            var cnt = min(KDE_W, n_train - b * KDE_W)
+            for l in range(cnt):
+                s = ftz(s + e[l])
+    return (max_exp, ftz(identical_log(s) + max_exp))
+
+
 def oracle_score_samples_into(
     train: HostF32Ptr,
     query: HostF32Ptr,
@@ -451,44 +613,78 @@ def oracle_score_samples_into(
         t = n_query
     var chunk = host_predict_chunk(n_query, t)
     var qnp = host_list_ptr(q_norms)
-    var tnp = host_list_ptr(t_norms)
-    var lwp = host_list_ptr(logw)
     var failed = List[Int](length=t, fill=0)
     var fp = failed.unsafe_ptr()
 
-    def _rows(c: Int) {imm train, imm query, imm qnp, imm tnp, imm lwp, imm scores, imm fp, imm chunk, imm n_query, imm n_train, imm d, imm h, imm kernel, imm metric, imm metric_arg, imm has_weights, imm use_norms, imm log_sw, imm norm}:
+    # The training operand, flushed, feature-major in blocks of KDE_W
+    # columns (block jb, feature f, lane l at (jb*d + f)*W + l), its norms
+    # and log weights padded to whole blocks. Read-only for every task.
+    var nbk = (n_train + KDE_W - 1) // KDE_W
+    var pan = List[Float32](length=nbk * d * KDE_W, fill=Float32(0.0))
+    var tnpad = List[Float32](length=nbk * KDE_W, fill=Float32(0.0))
+    var lwpad = List[Float32](length=nbk * KDE_W, fill=Float32(0.0))
+    for j in range(n_train):
+        var jb = j // KDE_W
+        var l = j % KDE_W
+        for f in range(d):
+            pan[(jb * d + f) * KDE_W + l] = ftz(train.unsafe_load(j * d + f))
+        tnpad[j] = t_norms[j]
+        lwpad[j] = logw[j]
+    var panp = host_list_ptr(pan)
+    var tnpp = host_list_ptr(tnpad)
+    var lwpp = host_list_ptr(lwpad)
+
+    def _rows(c: Int) {imm query, imm qnp, imm panp, imm tnpp, imm lwpp, imm scores, imm fp, imm chunk, imm n_query, imm n_train, imm nbk, imm d, imm h, imm kernel, imm metric, imm metric_arg, imm has_weights, imm log_sw, imm norm}:
         try:
-            var logk = List[Float32](length=n_train, fill=Float32(0.0))
+            var rowbuf = List[Float32](length=KDE_QB * nbk * KDE_W, fill=Float32(0.0))
+            var qbuf = List[Float32](length=KDE_QB * d, fill=Float32(0.0))
+            var tl = List[Float32](length=KDE_QB * KDE_W, fill=Float32(0.0))
+            var rbp = host_list_ptr(rowbuf)
+            var qbp = host_list_ptr(qbuf)
+            var tlp = host_list_ptr(tl)
+            var rstride = nbk * KDE_W
             var lo = c * chunk
             var hi = min(lo + chunk, n_query)
-            for q in range(lo, hi):
-                for j in range(n_train):
-                    var qn = Float32(0.0)
-                    var tn = Float32(0.0)
-                    if use_norms:
-                        qn = qnp.unsafe_load(q)
-                        tn = tnp.unsafe_load(j)
-                    var dist = oracle_distance_ptr(
-                        query, train, q, j, d, metric, qn, tn, metric_arg
-                    )
-                    var v = oracle_log_kernel(ftz(dist), h, kernel)
-                    if has_weights:
-                        v = ftz(v + lwp.unsafe_load(j))
-                    logk[j] = v
-                var mm = oracle_logsumexp_row(logk, 0, n_train)
-                var a = ftz(mm[1] - log_sw)
-                scores.unsafe_store(q, ftz(a - norm))
-            _ = logk^
+            var q0 = lo
+            while q0 < hi:
+                var nq = min(KDE_QB, hi - q0)
+                for r in range(KDE_QB):
+                    var src = q0 + (r if r < nq else 0)
+                    for f in range(d):
+                        qbp.unsafe_store(r * d + f, ftz(query.unsafe_load(src * d + f)))
+                for jb in range(nbk):
+                    var pb = panp + jb * d * KDE_W
+                    _kde_tile(qbp, pb, d, metric, metric_arg, tlp)
+                    var tn = tnpp.unsafe_load[width=KDE_W](jb * KDE_W)
+                    var lw = lwpp.unsafe_load[width=KDE_W](jb * KDE_W)
+                    for r in range(nq):
+                        var acc = tlp.unsafe_load[width=KDE_W](r * KDE_W)
+                        var dist = _kde_epilogue(acc, qnp.unsafe_load(q0 + r), tn, metric, metric_arg)
+                        var v = _kde_log_kernel_v(ftz_v[KDE_W](dist), h, kernel)
+                        if has_weights:
+                            v = ftz_v[KDE_W](v + lw)
+                        rbp.unsafe_store(r * rstride + jb * KDE_W, v)
+                for r in range(nq):
+                    var mm = _kde_lse_row(rbp + r * rstride, n_train)
+                    var a = ftz(mm[1] - log_sw)
+                    scores.unsafe_store(q0 + r, ftz(a - norm))
+                q0 += KDE_QB
+            _ = rowbuf^
+            _ = qbuf^
+            _ = tl^
         except:
             fp.unsafe_store(c, 1)
 
     if t == 1:
         _rows(0)
     else:
-        sync_parallelize(_rows, t)
+        host_parallelize(_rows, t)
     _ = q_norms^
     _ = t_norms^
     _ = logw^
+    _ = pan^
+    _ = tnpad^
+    _ = lwpad^
     for c in range(t):
         if failed[c] != 0:
             raise Error("kde host: score row chunk " + String(c) + " raised")

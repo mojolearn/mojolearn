@@ -81,6 +81,7 @@ from gemm.checks.gemm_oracle import (
     gemm_oracle,
     gemm_oracle_right_zero_padded,
 )
+from gemm.host.gemm_host_rows import gemm_host_rows, gemm_host_rows_right_zero_padded
 from mamba.checks.mamba_oracle import refuse_nonfinite
 from mamba.checks.mamba2_fixture import (
     M2_CHUNK_SIZE,
@@ -254,10 +255,7 @@ struct Mamba2Stages(Movable):
 
 
 def _zeros(n: Int) -> List[Float32]:
-    var out = List[Float32]()
-    for _ in range(n):
-        out.append(0.0)
-    return out^
+    return List[Float32](length=n, fill=Float32(0.0))
 
 
 # ===========================================================================
@@ -421,7 +419,7 @@ def ssd_core_oracle(
             # OP_NT (`_a_at`/`_b_at`) and the leaf size is a function of
             # `k` alone, so the real block's cells are character for
             # character the cells of the Q x Q call.
-            var g_small = gemm_oracle(cmat, bmat, OP_NT, real, real, n_state)
+            var g_small = gemm_host_rows(cmat, bmat, OP_NT, real, real, n_state)
             var g_mat = _zeros(q * q)
             for i in range(real):
                 for j in range(real):
@@ -456,7 +454,7 @@ def ssd_core_oracle(
                 # `m` is not read by an OP_NN cell and the k = Q fold is
                 # untouched, so these are the first `real` rows of the
                 # Q-row product, bit for bit.
-                var ydiag = gemm_oracle(m_mat, xd_chunk, OP_NN, real, p_dim, q)
+                var ydiag = gemm_host_rows(m_mat, xd_chunk, OP_NN, real, p_dim, q)
                 for i in range(real):
                     var t = c0 + i
                     for p in range(p_dim):
@@ -503,7 +501,7 @@ def ssd_core_oracle(
 
                 # ---- S16: chunk_states = B_decay^T . X_d over chunk
                 #      positions (k = Q = 256), output [P, N] per (b,c,h).
-                var cstate = gemm_oracle_right_zero_padded(
+                var cstate = gemm_host_rows_right_zero_padded(
                     xd_chunk, bd, OP_TN, p_dim, n_state, q, real
                 )
                 var cbase = (((bb * nc + c) * nh + hh) * p_dim) * n_state
@@ -532,7 +530,7 @@ def ssd_core_oracle(
                 # runs to `real`). OP_NT reads no `m`, so the first
                 # `real` rows are the first `real` rows of the Q-row
                 # product, bit for bit.
-                var ch = gemm_oracle(cmat, h_prev, OP_NT, real, p_dim, n_state)
+                var ch = gemm_host_rows(cmat, h_prev, OP_NT, real, p_dim, n_state)
                 for i in range(real):
                     var t = c0 + i
                     var dacs_i = st.dacs_out[((bb * nh + hh) * nc + c) * q + i]
@@ -631,7 +629,7 @@ def mamba2_block_oracle(
 
     # ---- in_proj (mamba2.py:211; Linear, bias=False), S4: gemm v1 OP_NT,
     #      k = d_model. Columns z | xBC | dt_raw (:211-215 order).
-    st.in_proj = gemm_oracle(st.norm_out, w.w_in, OP_NT, m, dip, dm)
+    st.in_proj = gemm_host_rows(st.norm_out, w.w_in, OP_NT, m, dip, dm)
 
     # ---- A = -exp(A_log) (mamba2.py:182), S5. PER HEAD.
     for hh in range(nh):
@@ -819,7 +817,7 @@ def mamba2_block_oracle(
             st.gnorm_out.append(ftz(identical_mul(ftz(w.gnorm_w[j]), inner)))
 
     # ---- out_proj (mamba2.py:275), S4: gemm v1 OP_NT, k = d_inner.
-    st.out_proj = gemm_oracle(st.gnorm_out, w.w_out, OP_NT, m, dm, di)
+    st.out_proj = gemm_host_rows(st.gnorm_out, w.w_out, OP_NT, m, dm, di)
 
     # ---- S22: residual (HF :630).
     for i in range(m * dm):

@@ -1,0 +1,13 @@
+diff --git a/x_decomp/host_graph.mojo b/x_decomp/host_graph.mojo
+index 27e895a43..dae13cac3 100644
+--- a/x_decomp/host_graph.mojo
++++ b/x_decomp/host_graph.mojo
+@@ -48,7 +48,7 @@ struct EdgeList(Movable):
+                 var a = ftz(W.unsafe_load(u * n + v))
+                 var b = ftz(W.unsafe_load(v * n + u))
+                 var w = a
+-                if w == Float32(0) or (b != Float32(0) and b < w):
++                if w == Float32(0) or (b != Float32(0) and b > w):  # SABOTAGE 5314 (host): the LARGER weight
+                     w = b
+                 if w == Float32(0):
+                     continue

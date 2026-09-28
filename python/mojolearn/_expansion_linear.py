@@ -257,7 +257,7 @@ def _sgd_fit(est, X, y, n_classes, loss_code, penalty, lr, alpha, l1_ratio, eta0
         fp += pos + neg
         has_cw = 1
     ip += [has_sw, has_cw]
-    vals = _run(est, ALGO_SGD, a, n, d, y, ip, fp, problems * d + problems + 2, n + d, n)
+    vals = _run(est, ALGO_SGD, a, n, d, y, ip, fp, problems * d + problems + 2, problems * (n + d + 1), problems * n)
     if vals[-1] != 0:
         raise ValueError("Floating-point under-/overflow occurred. Scaling input data with "
                          "StandardScaler or MinMaxScaler might help.")
@@ -380,7 +380,7 @@ class _GLMBase(_LinearRegressorMixin, NumericModeMixin):
         m = d + 1
         yv, has_sw = _with_weights(yv, sample_weight, n)
         vals = _run(self, ALGO_GLM, a, n, d, yv, [self.max_iter, int(bool(self.fit_intercept)), link, has_sw],
-                    [self._power_value(), self.alpha, self.tol], d + 3, n + m * m + 3 * m, 1)
+                    [self._power_value(), self.alpha, self.tol], d + 3, 3 * n + m * m + 3 * m, 1)
         self.coef_ = Array.from_list(vals[:d], "<f4")
         self.intercept_ = float(vals[d])
         self.n_iter_ = int(vals[d + 1])
@@ -493,7 +493,7 @@ class HuberRegressor(_LinearRegressorMixin, NumericModeMixin):
         p = d + 2 if self.fit_intercept else d + 1
         yw, has_sw = _with_weights(yv, sample_weight, n)
         vals = _run(self, ALGO_HUBER, a, n, d, yw, [self.max_iter, int(bool(self.fit_intercept)), has_sw],
-                    [self.epsilon, self.alpha, self.tol], d + 4 + p, _lbfgs_work(p), 1)
+                    [self.epsilon, self.alpha, self.tol], d + 4 + p, _lbfgs_work(p) + n, 1)
         self.coef_ = Array.from_list(vals[:d], "<f4")
         self.intercept_ = float(vals[d])
         self.scale_ = float(vals[d + 1])
@@ -537,7 +537,7 @@ class BayesianRidge(_LinearRegressorMixin, NumericModeMixin):
                     [self.tol, self.alpha_1, self.alpha_2, self.lambda_1, self.lambda_2,
                      -1.0 if self.alpha_init is None else self.alpha_init,
                      -1.0 if self.lambda_init is None else self.lambda_init],
-                    d + 4, 3 * d * d + 5 * d, 1)
+                    d + 4, 3 * d * d + 5 * d + n, 1)
         self.coef_ = Array.from_list(vals[:d], "<f4")
         self.intercept_ = float(vals[d])
         self.alpha_, self.lambda_ = float(vals[d + 1]), float(vals[d + 2])
@@ -571,7 +571,7 @@ class ARDRegression(_LinearRegressorMixin, NumericModeMixin):
         yv = _vector(y, n)
         vals = _run(self, ALGO_ARD, a, n, d, yv, [self.max_iter, int(bool(self.fit_intercept))],
                     [self.tol, self.alpha_1, self.alpha_2, self.lambda_1, self.lambda_2, self.threshold_lambda],
-                    2 * d + 4, 3 * d * d + 4 * d, 2 * d)
+                    2 * d + 4, 3 * d * d + 4 * d + n, 2 * d)
         self.coef_ = Array.from_list(vals[:d], "<f4")
         self.intercept_ = float(vals[d])
         self.alpha_ = float(vals[d + 1])
@@ -668,7 +668,7 @@ class QuantileRegressor(_LinearRegressorMixin, NumericModeMixin):
         yv, has_sw = _with_weights(yv, sample_weight, n)
         vals = _run(self, ALGO_QUANTILE, a, n, d, yv, [self.max_iter, int(bool(self.fit_intercept)), has_sw],
                     [self.quantile, self.alpha, self.tol / 100.0, self.tol], d + 3,
-                    m * m + 2 * m + 4 * n + 2 * d, 1)
+                    m * m + 3 * m + 4 * n + 2 * d, 1)
         self.coef_ = Array.from_list(vals[:d], "<f4")
         self.intercept_ = float(vals[d])
         self.n_iter_ = int(vals[d + 1])
@@ -839,7 +839,7 @@ def _ridge_run(est, a, n, d, Y, T, alphas, sample_weight=None):
         Y = Array.from_list(Y.tolist() + w, "<f4")
         has_sw = 1
     return _run(est, ALGO_RIDGE, a, n, d, Y, [T, int(bool(est.fit_intercept)), A, has_sw], list(alphas),
-                T * d + T + 2 + A, 3 * d * d + 3 * d + T + d * T, 1)
+                T * d + T + 2 + A, 3 * d * d + 3 * d + T + d * T + 2 * n, 1)
 
 
 def _ridge_refuse(est):
@@ -964,7 +964,7 @@ def _enetcv_fit(est, X, y, l1_ratios):
     fp = [est.eps, est.tol] + [float(r) for r in l1_ratios] + (values if explicit else [])
     ip = [est.max_iter, int(bool(est.fit_intercept)), grid, folds, L, int(explicit), int(bool(est.positive))]
     vals = _run(est, ALGO_ENETCV, a, n, d, yy, ip, fp, d + 4 + L * grid + L * grid * folds,
-                d * d + 4 * d + 3, 1)
+                d * d + 4 * d + 3 + grid * (d + 2), 1)
     est.coef_ = Array.from_list(vals[:d], "<f4")
     est.intercept_ = float(vals[d])
     est.alpha_ = float(vals[d + 1])
@@ -1109,7 +1109,7 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
         p = kp * (d + 1)
         nc = len(Cs)
         vals = _run(self, ALGO_LOGCV, a, n, d, yy, [self.max_iter, int(bool(self.fit_intercept)), kp, nc, folds, has_sw],
-                    [self.tol] + Cs, kp * d + kp + 2 + folds * nc, p + 1 + _lbfgs_work(p), 4)
+                    [self.tol] + Cs, kp * d + kp + 2 + folds * nc, p + 1 + n * (kp + 1) + _lbfgs_work(p), 5)
         self.classes_ = classes
         self.coef_ = Array.from_list(_rows(vals, kp, d), "<f4")
         self.intercept_ = Array.from_list(vals[kp * d:kp * d + kp], "<f4")

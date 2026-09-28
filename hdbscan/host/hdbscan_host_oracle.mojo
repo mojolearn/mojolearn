@@ -57,7 +57,7 @@ distance, and with it the whole graph, differs.
 """
 
 from std.sys.compile import is_defined
-from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 
 from core.knn_host_predict import KNN_HOST_METRIC_FROM_IS_SQRT, host_knn_search
 from core.host_predict_threads import (
@@ -607,7 +607,7 @@ def hdbh_mutual_reachability(
     if tasks == 1:
         _rows(0)
     else:
-        sync_parallelize(_rows, tasks)
+        host_parallelize(_rows, tasks)
     # Keep the owner alive while untracked pointers are consumed by row tasks.
     _ = norms^
     var n_nan = 0
@@ -694,7 +694,7 @@ def hdbh_boruvka(mr: List[Float32], m: Int) raises -> HdbscanHostMst:
             cmin_lo[c] = Int32(0x7FFFFFFF)
             cmin_hi[c] = Int32(0x7FFFFFFF)
         if tasks > 1:
-            sync_parallelize(_vertex_min, tasks)
+            host_parallelize(_vertex_min, tasks)
         else:
             _vertex_min(0)
         # Preserve min_edge_per_color's original ascending-vertex fold.  The

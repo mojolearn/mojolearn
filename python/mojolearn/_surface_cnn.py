@@ -31,7 +31,7 @@ FAMILIES = (
         classes=("Conv2d", "Conv1d", "MaxPool2d", "AvgPool2d", "MaxPool1d", "AvgPool1d", "CNNClassifier", "BatchNorm2d", "BatchNorm1d", "Dropout2d",
                  "AdaptiveAvgPool2d", "AdaptiveMaxPool2d", "BasicBlock", "GCNConv", "SAGEConv"),
         display="the CNN layers (conv, pooling, normalization) and the small CNN trainer",
-        host_modules=("x_cnn/ops.mojo", "x_cnn/host/ops_host.mojo"),
+        host_modules=("x_cnn/ops.mojo", "x_cnn/host/ops_host.mojo", "x_cnn/host/gemm_host.mojo"),
         exports=(
             "x_cnn_host_numeric_mode", "x_cnn_host_vendor", "x_cnn_host_column", "x_cnn_host_sabotage",
             "x_cnn_gemm", "x_cnn_conv2d_forward", "x_cnn_conv2d_backward", "x_cnn_conv_shape",

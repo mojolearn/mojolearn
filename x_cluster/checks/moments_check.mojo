@@ -69,4 +69,7 @@ def main() raises:
     _case(700, 5, 3, 21, "5121-tiles")
     _case(600, 17, 2, 23, "5121-chains")
     _case(40, 65, 2, 25, "5121-fallback")
+    # d = 19: the host's vector lanes (two groups of eight) and its scalar
+    # tail (cluster-cpu lane, 2026-09-28); n large enough to split tasks
+    _case(3000, 19, 3, 17, "host-d19")
     print("PASS x_cluster moments_check")

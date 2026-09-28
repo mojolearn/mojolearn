@@ -43,6 +43,7 @@ from core.identity_trace import IdentityTrace
 from core.segmented_sort import SORT_BLOCK, segmented_sort_keys_f32
 from metrics.checks.pinned_sum import (
     PINNED_SUM_W,
+    canonicalize_nan,
     chunk_count,
     host_fold_partials,
     host_tree_sum,
@@ -57,7 +58,13 @@ from checks.numerics import (
 )
 from resample.checks.index_map import (
     RESAMPLE_KIND_BOOTSTRAP,
+    RESAMPLE_KIND_BOOTSTRAP_SECOND,
     RESAMPLE_KIND_MONTE_CARLO,
+    RESAMPLE_KIND_PERM_SAMPLES,
+    RESAMPLE_KIND_UTILS_PERMUTE,
+    RESAMPLE_KIND_UTILS_REPLACE,
+    utils_first_by_key,
+    utils_validate,
     RESAMPLE_KIND_PERMUTATION,
     bootstrap_index_kernel,
     key_hi,
@@ -76,8 +83,10 @@ from resample.checks.intervals import (
     alpha_for,
     basic_interval,
     bca_acceleration,
+    bca_acceleration_two,
     bca_bias_percentile,
-    bca_refuse,
+    bca_interval,
+    bca_validate,
     distribution_standard_error,
     jackknife_stat_kernel,
     narrow_for_alternative,
@@ -108,6 +117,8 @@ from resample.checks.statistics import (
     stat_name,
     stat_needs_sort,
     trim_count,
+    perm_samples_kernel,
+    utils_draw_kernel,
 )
 
 
@@ -1024,7 +1035,7 @@ def bootstrap_host(
             + String(confidence_level)
         )
     if method == METHOD_BCA:
-        bca_refuse()
+        bca_validate(statistic, n)
     if stat_needs_sort(statistic):
         if n_resamples * n > RESAMPLE_MAX_SORT_CELLS:
             raise Error(
@@ -1126,10 +1137,38 @@ def bootstrap_host(
     var theta_hat = point_estimate_host(x, n, n_features, statistic, q_or_prop)
     trace.record_scalar_f32("resample.point", theta_hat)
 
+    # BCa (DEVIATION 1699, closed by 5410) needs the bias percentile and the
+    # jackknife BEFORE the interval; the diagnostics record the same values
+    # below, where they always were on the card.
+    var need_jack = with_bca_diagnostics or method == METHOD_BCA
+    var jack = ctx.enqueue_create_buffer[DType.float32](n if need_jack else 1)
+    var jack_h = List[Float32]()
+    var z0p = Float32(0.0)
+    var ahat = Float32(0.0)
+    if need_jack:
+        z0p = bca_bias_percentile(sorted_dist, n_resamples, theta_hat)
+        ctx.synchronize()
+        if tpb == 256:
+            _launch_jackknife_at[256](ctx, jack, dx, n, n_features, statistic)
+        elif tpb == 128:
+            _launch_jackknife_at[128](ctx, jack, dx, n, n_features, statistic)
+        else:
+            _launch_jackknife_at[64](ctx, jack, dx, n, n_features, statistic)
+        ctx.synchronize()
+        jack_h = _download_f32(ctx, jack, n)
+        ahat = bca_acceleration(jack_h, n)
+
     var alpha = alpha_for(confidence_level, alternative)
     var interval: Interval
+    var lvl_lo = alpha
+    var lvl_hi = ftz(Float32(1.0) - alpha)
     if method == METHOD_BASIC:
         interval = basic_interval(sorted_dist, n_resamples, alpha, theta_hat)
+    elif method == METHOD_BCA:
+        var ends = bca_interval(sorted_dist, n_resamples, alpha, z0p, ahat)
+        interval = ends.interval
+        lvl_lo = ends.alpha_1
+        lvl_hi = ends.alpha_2
     else:
         interval = percentile_interval(sorted_dist, n_resamples, alpha)
     interval = narrow_for_alternative(interval, alternative)
@@ -1138,8 +1177,8 @@ def bootstrap_host(
     # cross-vendor difference in an endpoint is either a different position
     # or a different value at the same position, and those have different
     # causes and different fixes.
-    var h_lo = Float32(n_resamples - 1) * alpha
-    var h_hi = Float32(n_resamples - 1) * ftz(Float32(1.0) - alpha)
+    var h_lo = Float32(n_resamples - 1) * lvl_lo
+    var h_hi = Float32(n_resamples - 1) * lvl_hi
     var pos_lo = Int(h_lo)
     var pos_hi = Int(h_hi)
     var pos_words: List[Int32] = [Int32(pos_lo), Int32(pos_hi)]
@@ -1149,31 +1188,162 @@ def bootstrap_host(
     trace.record_scalar_f32("resample.se", se)
     var ends: List[Float32] = [interval.low, interval.high]
     trace.record_list_f32("resample.interval", ends)
+    if method == METHOD_BCA:
+        var levels: List[Float32] = [lvl_lo, lvl_hi]
+        trace.record_list_f32("resample.bca.levels", levels)
 
     if with_bca_diagnostics:
-        # DEVIATION 1699's identical half: computed and RECORDED even though
-        # the method is refused, so the construction is gated rather than
-        # dead and the closure is one function away.
-        var z0p = bca_bias_percentile(sorted_dist, n_resamples, theta_hat)
+        # DEVIATION 1699's diagnostics: the bias percentile, the jackknife
+        # and the acceleration, recorded for every statistic with an arm.
         trace.record_scalar_f32("resample.bca.z0p", z0p)
-        var jack = ctx.enqueue_create_buffer[DType.float32](n)
-        ctx.synchronize()
-        if tpb == 256:
-            _launch_jackknife_at[256](ctx, jack, dx, n, n_features, statistic)
-        elif tpb == 128:
-            _launch_jackknife_at[128](ctx, jack, dx, n, n_features, statistic)
-        else:
-            _launch_jackknife_at[64](ctx, jack, dx, n, n_features, statistic)
-        ctx.synchronize()
         trace.record_device(ctx, "resample.jackknife", jack, n)
-        var jack_h = _download_f32(ctx, jack, n)
-        trace.record_scalar_f32(
-            "resample.bca.ahat", bca_acceleration(jack_h, n)
-        )
-        _ = jack^
+        trace.record_scalar_f32("resample.bca.ahat", ahat)
+    _ = jack^
 
     _ = dx^
     _ = idx_buf^
+    _ = theta^
+    _ = sorted_buf^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
+    return BootstrapResult(
+        theta_hat, dist^, sorted_dist^, se, interval, pos_lo, pos_hi
+    )
+
+
+def _unpaired_validate(
+    x: List[Float32], n_x: Int, y: List[Float32], n_y: Int, n_resamples: Int,
+    method: Int, confidence_level: Float32, r_first: Int,
+) raises:
+    """`bootstrap_unpaired_host`'s refusals, shared word for word with the
+    host twin (`resample/host/resample_host.mojo`)."""
+    validate_positions(n_resamples, n_x)
+    validate_positions(n_resamples, n_y)
+    if r_first < 0:
+        raise Error(
+            "bootstrap: r_first must be non-negative; got " + String(r_first)
+        )
+    validate_positions(r_first + n_resamples, n_x)
+    validate_positions(r_first + n_resamples, n_y)
+    if len(x) < n_x or len(y) < n_y:
+        raise Error("bootstrap: paired=False: a sample holds fewer values than its n")
+    for k in range(2):
+        var m = n_x if k == 0 else n_y
+        for i in range(m):
+            var v = x[i] if k == 0 else y[i]
+            if v != v or v > Float32(3.4e38) or v < Float32(-3.4e38):
+                raise Error(
+                    "bootstrap: sample " + String(k) + " contains NaN or"
+                    " infinity at position " + String(i) + " (refused before"
+                    " any launch, IDENTITY_PATHS row 39 FACT 2)"
+                )
+    if confidence_level <= Float32(0.0) or confidence_level >= Float32(1.0):
+        raise Error(
+            "bootstrap: confidence_level must be in (0, 1); got "
+            + String(confidence_level)
+        )
+    if method == METHOD_BCA and (n_x < 2 or n_y < 2):
+        raise Error(
+            "bootstrap: method='BCa' needs at least 2 observations in each"
+            " sample (each leave-one-out sample must itself have a mean); got"
+            " n_x=" + String(n_x) + ", n_y=" + String(n_y)
+        )
+
+
+def bootstrap_unpaired_host(
+    x: List[Float32],
+    n_x: Int,
+    y: List[Float32],
+    n_y: Int,
+    n_resamples: Int,
+    seed: UInt64,
+    method: Int,
+    confidence_level: Float32 = Float32(0.95),
+    alternative: Int = ALT_TWO_SIDED,
+    r_first: Int = 0,
+    tpb: Int = RESAMPLE_TPB,
+) raises -> BootstrapResult:
+    """`scipy.stats.bootstrap((x, y), diff_means, paired=False, ...)`: the
+    two samples resampled INDEPENDENTLY (2026-09-28), each by its own map --
+    sample 0 under kind 1 (so its replicate is exactly the one-sample
+    bootstrap's), sample 1 under kind 4 -- and `theta[r] = mean(x*_r) -
+    mean(y*_r)`, each mean the pinned tree of the one-sample `mean` arm, the
+    difference one flushed subtraction (the paired `diff_means` spelling).
+    BCa uses SciPy's multi-sample acceleration (`bca_acceleration_two`)
+    over each sample's leave-one-out means with the other sample whole."""
+    _unpaired_validate(x, n_x, y, n_y, n_resamples, method, confidence_level, r_first)
+    var kx = resample_key(seed, RESAMPLE_KIND_BOOTSTRAP)
+    var ky = resample_key(seed, RESAMPLE_KIND_BOOTSTRAP_SECOND)
+    var ctx = DeviceContext()
+    var dxb = _upload(ctx, x)
+    var dyb = _upload(ctx, y)
+    var tx = ctx.enqueue_create_buffer[DType.float32](n_resamples)
+    var ty = ctx.enqueue_create_buffer[DType.float32](n_resamples)
+    ctx.synchronize()
+    _launch_bootstrap_stat(ctx, tx, dxb, kx, r_first, n_resamples, n_x, n_x, 1, STAT_MEAN, tpb)
+    _launch_bootstrap_stat(ctx, ty, dyb, ky, r_first, n_resamples, n_y, n_y, 1, STAT_MEAN, tpb)
+    ctx.synchronize()
+    var hx = _download_f32(ctx, tx, n_resamples)
+    var hy = _download_f32(ctx, ty, n_resamples)
+    var dist = List[Float32](capacity=n_resamples)
+    for i in range(n_resamples):
+        dist.append(canonicalize_nan(ftz(hx[i] - hy[i])))
+    var theta = _upload(ctx, dist)
+    var sorted_buf = ctx.enqueue_create_buffer[DType.float32](n_resamples)
+    ctx.synchronize()
+    _sort_segments(ctx, theta, sorted_buf, 1, n_resamples)
+    var sorted_dist = _download_f32(ctx, sorted_buf, n_resamples)
+
+    var mx = point_estimate_host(x, n_x, 1, STAT_MEAN, Float32(0.5))
+    var my = point_estimate_host(y, n_y, 1, STAT_MEAN, Float32(0.5))
+    var theta_hat = ftz(mx - my)
+    var alpha = alpha_for(confidence_level, alternative)
+    var interval: Interval
+    var lvl_lo = alpha
+    var lvl_hi = ftz(Float32(1.0) - alpha)
+    if method == METHOD_BASIC:
+        interval = basic_interval(sorted_dist, n_resamples, alpha, theta_hat)
+    elif method == METHOD_BCA:
+        var z0p = bca_bias_percentile(sorted_dist, n_resamples, theta_hat)
+        var jx = ctx.enqueue_create_buffer[DType.float32](n_x)
+        var jy = ctx.enqueue_create_buffer[DType.float32](n_y)
+        ctx.synchronize()
+        if tpb == 256:
+            _launch_jackknife_at[256](ctx, jx, dxb, n_x, 1, STAT_MEAN)
+            _launch_jackknife_at[256](ctx, jy, dyb, n_y, 1, STAT_MEAN)
+        elif tpb == 128:
+            _launch_jackknife_at[128](ctx, jx, dxb, n_x, 1, STAT_MEAN)
+            _launch_jackknife_at[128](ctx, jy, dyb, n_y, 1, STAT_MEAN)
+        else:
+            _launch_jackknife_at[64](ctx, jx, dxb, n_x, 1, STAT_MEAN)
+            _launch_jackknife_at[64](ctx, jy, dyb, n_y, 1, STAT_MEAN)
+        ctx.synchronize()
+        var jxh = _download_f32(ctx, jx, n_x)
+        var jyh = _download_f32(ctx, jy, n_y)
+        var j0 = List[Float32](capacity=n_x)
+        for i in range(n_x):
+            j0.append(ftz(jxh[i] - my))
+        var j1 = List[Float32](capacity=n_y)
+        for i in range(n_y):
+            j1.append(ftz(mx - jyh[i]))
+        var ends = bca_interval(
+            sorted_dist, n_resamples, alpha, z0p, bca_acceleration_two(j0, n_x, j1, n_y)
+        )
+        interval = ends.interval
+        lvl_lo = ends.alpha_1
+        lvl_hi = ends.alpha_2
+        _ = jx^
+        _ = jy^
+    else:
+        interval = percentile_interval(sorted_dist, n_resamples, alpha)
+    interval = narrow_for_alternative(interval, alternative)
+    var pos_lo = Int(Float32(n_resamples - 1) * lvl_lo)
+    var pos_hi = Int(Float32(n_resamples - 1) * lvl_hi)
+    var se = distribution_standard_error(dist, n_resamples)
+    _ = dxb^
+    _ = dyb^
+    _ = tx^
+    _ = ty^
     _ = theta^
     _ = sorted_buf^
     # DEVIATION 1946: the context dies LAST, after every value built on it.
@@ -1337,6 +1507,100 @@ def permutation_test_host(
     trace.record_scalar_f32("resample.pvalue", pv.p)
 
     _ = dpool^
+    _ = null_buf^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
+    return PermutationResult(observed, null_dist^, pv)
+
+
+def perm_samples_validate(
+    x: List[Float32], y: List[Float32], two: Bool, n_resamples: Int, r_first: Int
+) raises:
+    """`permutation_samples_host`'s refusals (shared word for word by the
+    host twin)."""
+    var n = len(x)
+    if n <= 0:
+        raise Error("permutation_test(permutation_type='samples'): the sample is empty")
+    if two and len(y) != n:
+        raise Error(
+            "permutation_test(permutation_type='samples'): the two samples"
+            " must be PAIRED, the same length; got n_x=" + String(n)
+            + ", n_y=" + String(len(y))
+        )
+    validate_positions(n_resamples, n)
+    if r_first < 0:
+        raise Error("permutation_test: r_first must be non-negative; got " + String(r_first))
+    validate_positions(r_first + n_resamples, n)
+    for k in range(2 if two else 1):
+        for i in range(n):
+            var v = x[i] if k == 0 else y[i]
+            if v != v or v > Float32(3.4e38) or v < Float32(-3.4e38):
+                raise Error(
+                    "permutation_test: sample " + String(k) + " contains NaN"
+                    " or infinity at position " + String(i) + " (refused"
+                    " before any launch, IDENTITY_PATHS row 39 FACT 2)"
+                )
+
+
+def permutation_samples_host(
+    x: List[Float32],
+    y: List[Float32],
+    two: Bool,
+    n_resamples: Int,
+    seed: UInt64,
+    alternative: Int,
+    r_first: Int = 0,
+    tpb: Int = RESAMPLE_TPB,
+) raises -> PermutationResult:
+    """`scipy.stats.permutation_test(data, statistic,
+    permutation_type='samples', ...)` (2026-09-28): `two` is `(x, y)` with
+    `diff_means`, else `(x,)` with `mean` (SciPy's sign-flip convention).
+    `perm_samples_kernel` draws each pair's coin at its own Philox position
+    (kind 5); the observed statistic is the identity arrangement, the pinned
+    tree on the host; the p-value is `permutation_pvalue` (DEVIATION 1702)."""
+    perm_samples_validate(x, y, two, n_resamples, r_first)
+    var n = len(x)
+    var key = resample_key(seed, RESAMPLE_KIND_PERM_SAMPLES)
+    var ctx = DeviceContext()
+    var dx = _upload(ctx, x)
+    var dy = _upload(ctx, x)
+    if two:
+        dy = _upload(ctx, y)
+    var null_buf = ctx.enqueue_create_buffer[DType.float32](n_resamples)
+    ctx.synchronize()
+    if tpb != 256 and tpb != 128 and tpb != 64:
+        raise Error("permutation_test: threads-per-block must be 64, 128 or 256; got " + String(tpb))
+    comptime for t in range(3):
+        comptime width = 256 if t == 0 else (128 if t == 1 else 64)
+        if tpb == width:
+            if two:
+                comptime k2 = perm_samples_kernel[True, width]
+                ctx.enqueue_function[k2](
+                    null_buf.unsafe_ptr(), dx.unsafe_ptr(), dy.unsafe_ptr(), key_lo(key), key_hi(key),
+                    Int32(r_first), Int32(n_resamples), Int32(n),
+                    grid_dim=(n_resamples, 1, 1), block_dim=(width, 1, 1),
+                )
+            else:
+                comptime k1 = perm_samples_kernel[False, width]
+                ctx.enqueue_function[k1](
+                    null_buf.unsafe_ptr(), dx.unsafe_ptr(), dy.unsafe_ptr(), key_lo(key), key_hi(key),
+                    Int32(r_first), Int32(n_resamples), Int32(n),
+                    grid_dim=(n_resamples, 1, 1), block_dim=(width, 1, 1),
+                )
+    ctx.synchronize()
+    var null_dist = _download_f32(ctx, null_buf, n_resamples)
+    var vx = List[Float32](capacity=n)
+    for i in range(n):
+        vx.append(ftz(x[i]))
+    var observed = _mean_of_sum(host_tree_sum(vx, n), n)
+    if two:
+        var vy = List[Float32](capacity=n)
+        for i in range(n):
+            vy.append(ftz(y[i]))
+        observed = ftz(observed - _mean_of_sum(host_tree_sum(vy, n), n))
+    var pv = permutation_pvalue(null_dist, n_resamples, observed, alternative)
+    _ = dx^
+    _ = dy^
     _ = null_buf^
     # DEVIATION 1946: the context dies LAST, after every value built on it.
     _ = ctx^
@@ -1528,3 +1792,49 @@ def mc_closed_form_for[
     """The hand-derived exact integral; re-exported so a caller (and
     `resample_main.mojo`) does not have to import `statistics.mojo`."""
     return mc_closed_form[f_id](lower, upper)
+
+
+# ===========================================================================
+# ENTRY POINT: sklearn.utils.resample's row indices (2026-09-28)
+# ===========================================================================
+
+
+def resample_indices_host(
+    n: Int, count: Int, replace: Bool, seed: UInt64, tpb: Int = 256
+) raises -> List[Int32]:
+    """The `count` row indices `sklearn.utils.resample(..., replace=...,
+    n_samples=count, random_state=seed)` gathers: replace=True position `i`
+    is `draw_row_index(key6, 0, i, n)` on the device; replace=False the
+    device draws every position's 64-bit key (kind 7) and the host keeps the
+    first `count` positions of the total order (`utils_first_by_key`)."""
+    utils_validate(n, count, replace)
+    var key = resample_key(
+        seed, RESAMPLE_KIND_UTILS_REPLACE if replace else RESAMPLE_KIND_UTILS_PERMUTE
+    )
+    var m = count if replace else n
+    var ctx = DeviceContext()
+    var rows = ctx.enqueue_create_buffer[DType.int32](m if replace else 1)
+    var keys = ctx.enqueue_create_buffer[DType.uint64](1 if replace else m)
+    ctx.enqueue_function[utils_draw_kernel](
+        rows.unsafe_ptr(), keys.unsafe_ptr(), key_lo(key), key_hi(key),
+        Int32(n), Int32(m), Int32(1) if replace else Int32(0),
+        grid_dim=(ceildiv(m, tpb), 1, 1), block_dim=(tpb, 1, 1),
+    )
+    ctx.synchronize()
+    var out: List[Int32]
+    if replace:
+        out = _download_i32(ctx, rows, m)
+    else:
+        var host = ctx.enqueue_create_host_buffer[DType.uint64](m)
+        ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=keys)
+        ctx.synchronize()
+        var kl = List[UInt64](capacity=m)
+        for q in range(m):
+            kl.append(host.unsafe_ptr().unsafe_load(q))
+        _ = host^
+        out = utils_first_by_key(kl, n, count)
+    _ = rows^
+    _ = keys^
+    # DEVIATION 1946: the context dies LAST.
+    _ = ctx^
+    return out^

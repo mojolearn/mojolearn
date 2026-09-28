@@ -1,0 +1,13 @@
+diff --git a/x_prep/host/power.mojo b/x_prep/host/power.mojo
+index 9cf3cc783..c8c28e7ff 100644
+--- a/x_prep/host/power.mojo
++++ b/x_prep/host/power.mojo
+@@ -40,7 +40,7 @@ struct _Column(Movable):
+                 continue
+             var l = power_log(x, method)
+             var nn = x >= Float32(0)
+-            if method == 1 or nn:
++            if True:  # SABOTAGE host power: the Jacobian's negative-side sign
+                 self.sj = add(self.sj, l)
+             else:
+                 self.sj = sub(self.sj, l)
