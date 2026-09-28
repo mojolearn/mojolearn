@@ -9,6 +9,7 @@ pair: link(b_c + sum_j x_ij w_cj), j ascending, the intercept added last.
 """
 from x_linear.ops import FP, IP, fa, fmad, fexp, ld, st, row_dot
 from checks.numerics import identical_sigmoid, ftz
+from x_linear.team import Team, TEAM_ROW_BUFS
 from x_linear.sgd import sgd_fit
 from x_linear.glm import glm_fit
 from x_linear.huber import huber_fit
@@ -17,7 +18,7 @@ from x_linear.lars import lars_fit
 from x_linear.quantile import quantile_fit
 from x_linear.ridge import ridge_fit
 from x_linear.cd import enetcv_fit
-from x_linear.logcv import logcv_fit
+from x_linear.logcv import logcv_fit, logcv_team_rows
 from x_linear.isotonic import isotonic_fit, isotonic_predict
 
 comptime ALGO_SGD = 1
@@ -38,13 +39,28 @@ comptime LINK_EXP = 1
 comptime LINK_SIGMOID = 2
 
 
-def fit_dispatch(algo: Int, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
+def team_fit(algo: Int) -> Bool:
+    """The fits that run on a whole team (x_linear/team.mojo); the device
+    runs every other fit on thread 0 alone."""
+    return algo == ALGO_GLM or algo == ALGO_HUBER or algo == ALGO_LOGCV
+
+
+def team_rows(algo: Int, ip: IP) -> Int:
+    """Row buffers of n words the fit's team scratch holds."""
+    if algo == ALGO_LOGCV:
+        return logcv_team_rows(ip)
+    return TEAM_ROW_BUFS
+
+
+def fit_dispatch(t: Team, algo: Int, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
+    """`t` is the team the fit runs on (a team of one for a fit that
+    `team_fit` does not name)."""
     if algo == ALGO_SGD:
         sgd_fit(x, y, n, d, ip, fp, res, fw, iw)
     elif algo == ALGO_GLM:
-        glm_fit(x, y, n, d, ip, fp, res, fw, iw)
+        glm_fit(t, x, y, n, d, ip, fp, res, fw, iw)
     elif algo == ALGO_HUBER:
-        huber_fit(x, y, n, d, ip, fp, res, fw, iw)
+        huber_fit(t, x, y, n, d, ip, fp, res, fw, iw)
     elif algo == ALGO_BAYES:
         bayes_ridge_fit(x, y, n, d, ip, fp, res, fw, iw)
     elif algo == ALGO_ARD:
@@ -58,7 +74,7 @@ def fit_dispatch(algo: Int, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: F
     elif algo == ALGO_ENETCV:
         enetcv_fit(x, y, n, d, ip, fp, res, fw, iw)
     elif algo == ALGO_LOGCV:
-        logcv_fit(x, y, n, d, ip, fp, res, fw, iw)
+        logcv_fit(t, x, y, n, d, ip, fp, res, fw, iw)
     elif algo == ALGO_ISOTONIC:
         isotonic_fit(x, y, n, d, ip, fp, res, fw, iw)
     elif algo == ALGO_ISOTONIC_PREDICT:

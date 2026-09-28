@@ -4,6 +4,9 @@
 
 Pass 1: every fit is x_linear/dispatch.mojo's `fit_dispatch`, run by ONE
 device thread, so the GPU executes the host's exact sequence of operations.
+Speed phase: a fit `team_fit` names runs on ONE BLOCK of LINEAR_TPB threads
+(x_linear/team.mojo): each stored value still comes from one thread's
+one-thread sequence, so the bits are the host's.
 Scoring is one thread per (row, output) pair. A parallel fit schedule with
 the same fold order is pass 2's speed work.
 
@@ -18,7 +21,8 @@ from std.ffi import _Global
 from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_linear.ops import FP, IP
-from x_linear.dispatch import fit_dispatch, decision_one
+from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows
+from x_linear.team import LINEAR_TPB, team_work, device_team, solo
 
 
 struct _LinearContext(Defaultable, Movable):
@@ -43,10 +47,14 @@ def linear_ctx() raises -> DeviceContext:
 
 
 def fit_kernel(
-    algo: Int32, x: FP, y: FP, n: Int32, d: Int32, ip: IP, fp: FP, res: FP, fw: FP, iw: IP,
+    algo: Int32, x: FP, y: FP, n: Int32, d: Int32, ip: IP, fp: FP, res: FP, fw: FP, iw: IP, tw: FP,
 ):
-    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
-        fit_dispatch(Int(algo), x, y, Int(n), Int(d), ip, fp, res, fw, iw)
+    """ONE block. A team fit runs on every thread of it; any other fit on
+    thread 0 alone, as a team of one (x_linear/team.mojo)."""
+    if team_fit(Int(algo)):
+        fit_dispatch(device_team(tw, Int(n)), Int(algo), x, y, Int(n), Int(d), ip, fp, res, fw, iw)
+    elif Int(thread_idx.x) == 0:
+        fit_dispatch(solo(tw, Int(n)), Int(algo), x, y, Int(n), Int(d), ip, fp, res, fw, iw)
 
 
 def decision_kernel(x: FP, wb: FP, n: Int32, d: Int32, k: Int32, link: Int32, res: FP):
@@ -70,6 +78,8 @@ def fit_device(
     var dfw = ctx.enqueue_create_buffer[DType.float32](max(n_fw, 1))
     var diw = ctx.enqueue_create_buffer[DType.int32](max(n_iw, 1))
     var hip = ip.copy()
+    var dtw = ctx.enqueue_create_buffer[DType.float32](
+        team_work(n, team_rows(algo, IP(unsafe_from_address=Int(hip.unsafe_ptr())))))
     var hfp = fp.copy()
     if n_x > 0:
         ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
@@ -82,10 +92,12 @@ def fit_device(
     dout.enqueue_fill(Float32(0))
     dfw.enqueue_fill(Float32(0))
     diw.enqueue_fill(Int32(0))
+    dtw.enqueue_fill(Float32(0))
     ctx.enqueue_function[fit_kernel](
         Int32(algo), dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d),
         dip.unsafe_ptr(), dfp.unsafe_ptr(), dout.unsafe_ptr(), dfw.unsafe_ptr(), diw.unsafe_ptr(),
-        grid_dim=1, block_dim=1,
+        dtw.unsafe_ptr(),
+        grid_dim=1, block_dim=LINEAR_TPB if team_fit(algo) else 1,
     )
     if n_out > 0:
         ctx.enqueue_copy(dst_ptr=res, src_buf=dout)
@@ -99,6 +111,7 @@ def fit_device(
     _ = dout^
     _ = dfw^
     _ = diw^
+    _ = dtw^
     _ = ctx^
 
 
