@@ -899,8 +899,8 @@ class StratifiedGroupKFold(_KFoldBase):
             perm = _rng(self.random_state).permutation(m)
             order = [order[j] for j in perm]
         def std(row):
-            mu = sum(row) / k
-            return math.sqrt(sum((v - mu) ** 2 for v in row) / k)
+            mu = sum(row) / k  # integer counts: an exact sum
+            return math.sqrt(math.nsum((v - mu) * (v - mu) for v in row) / k)
         order = sorted(order, key=lambda gi: -std(dist[gi]))  # stable: equal std keep their order
         fold_dist = [[0] * k for _ in range(self.n_splits)]
         fold_groups = [set() for _ in range(self.n_splits)]
@@ -911,9 +911,9 @@ class StratifiedGroupKFold(_KFoldBase):
                 std_per_class = []
                 for c in range(k):
                     col = [(fold_dist[j][c] if j != f else trial[c]) / counts[c] for j in range(self.n_splits)]
-                    mu = sum(col) / self.n_splits
-                    std_per_class.append(math.sqrt(sum((v - mu) ** 2 for v in col) / self.n_splits))
-                score = sum(std_per_class) / k
+                    mu = math.nsum(col) / self.n_splits
+                    std_per_class.append(math.sqrt(math.nsum((v - mu) * (v - mu) for v in col) / self.n_splits))
+                score = math.nsum(std_per_class) / k
                 size = sum(fold_dist[f])
                 if best is None or score < best_std or (score == best_std and size < best_n):
                     best, best_std, best_n = f, score, size
@@ -1449,9 +1449,19 @@ def cross_validate(estimator, X, y=None, *, groups=None, scoring=None, cv=None, 
     fit on the training rows, scored on the held-out rows. `scoring` is
     None (the estimator's score), a scorer name, a callable, or a list /
     dict of them (keys `test_<name>`). Times are recorded as wall seconds."""
-    import time
     _require_serial(n_jobs, error_score, 'cross_validate')
     X, y, folds = _cv_folds(estimator, X, y, cv, groups)
+    return _cross_validate_folds(estimator, X, y, folds, scoring, return_train_score, return_estimator,
+                                 return_indices, error_score)
+
+
+def _cross_validate_folds(estimator, X, y, folds, scoring, return_train_score=False, return_estimator=False,
+                          return_indices=False, error_score=float('nan')):
+    """`cross_validate` on (X, y, folds) that `_cv_folds` already made: a
+    search or a validation curve draws its folds ONCE and scores every
+    candidate on them, as scikit-learn does (a shuffling splitter with
+    random_state=None would otherwise draw new folds per candidate)."""
+    import time
     multi = _scorers(scoring)
     single = None if multi is not None else get_scorer(scoring)
     names = list(multi) if multi is not None else ['score']
@@ -1663,6 +1673,9 @@ class _BaseSearch:
         per = {nm: [] for nm in names}
         trains = {nm: [] for nm in names}
         n_splits = None
+        # the folds are drawn ONCE for every candidate (scikit-learn's
+        # evaluate_candidates materializes cv.split once)
+        Xf, yf, folds = _cv_folds(_Pinned(self.estimator), X, y, self.cv, groups)
         for params in candidates:
             est = _clone(self.estimator)
             if hasattr(est, 'set_params'):
@@ -1671,8 +1684,8 @@ class _BaseSearch:
                 for k, v in params.items():
                     setattr(est, k, v)
             est = _Pinned(est)
-            cvr = cross_validate(est, X, y, groups=groups, scoring=scoring, cv=self.cv,
-                                 return_train_score=self.return_train_score, error_score=self.error_score)
+            cvr = _cross_validate_folds(est, Xf, yf, folds, scoring, return_train_score=self.return_train_score,
+                                        error_score=self.error_score)
             for nm in names:
                 per[nm].append(cvr[f'test_{nm}'].tolist())
                 if self.return_train_score:
@@ -1685,7 +1698,7 @@ class _BaseSearch:
             for i in range(n_splits):
                 results[f'split{i}_test_score{suffix}'] = Array.from_list([s[i] for s in per[nm]], '<f8')
             means = [math.fsum(s) / len(s) for s in per[nm]]
-            stds = [math.sqrt(math.fsum((v - m) ** 2 for v in s) / len(s)) for s, m in zip(per[nm], means)]
+            stds = [math.sqrt(math.fsum((v - m) * (v - m) for v in s) / len(s)) for s, m in zip(per[nm], means)]
             results[f'mean_test_score{suffix}'] = Array.from_list(means, '<f8')
             results[f'std_test_score{suffix}'] = Array.from_list(stds, '<f8')
             results[f'rank_test_score{suffix}'] = Array.from_list(_rank(means), '<i4')
@@ -1794,12 +1807,15 @@ def validation_curve(estimator, X, y, *, param_name, param_range, groups=None, c
                      n_jobs=None, error_score=float('nan')):
     """scikit-learn 1.9 `validation_curve`: (train_scores, test_scores), each
     (len(param_range), n_splits)."""
+    _require_serial(n_jobs, error_score, 'validation_curve')
+    # the folds are drawn ONCE for every parameter value, as scikit-learn does
+    Xf, yf, folds = _cv_folds(_Pinned(estimator), X, y, cv, groups)
     tr, te = [], []
     for v in param_range:
         est = _clone(estimator)
         est.set_params(**{param_name: v})
-        r = cross_validate(_Pinned(est), X, y, groups=groups, cv=cv, scoring=scoring, n_jobs=n_jobs,
-                           return_train_score=True, error_score=error_score)
+        r = _cross_validate_folds(_Pinned(est), Xf, yf, folds, scoring, return_train_score=True,
+                                  error_score=error_score)
         tr.append(r['train_score'].tolist())
         te.append(r['test_score'].tolist())
     k = len(tr[0])
@@ -1823,15 +1839,20 @@ def learning_curve(estimator, X, y, *, groups=None, train_sizes=(0.1, 0.325, 0.5
                              f'must be within (0, {n_max}], but is within [{a}, {a}].')
         sizes.append(a)
     sizes = sorted(set(sizes))
+    # scikit-learn permutes each fold's training rows ONCE (in fold order)
+    # and takes nested prefixes of that one order for every size
     rng = _rng(random_state) if shuffle else None
+    orders = []
+    for train, _ in folds:
+        tr_idx = train.tolist()
+        if rng is not None:
+            perm = rng.permutation(len(tr_idx))
+            tr_idx = [tr_idx[j] for j in perm]
+        orders.append(tr_idx)
     tr_s, te_s, ft, st = [], [], [], []
     for a in sizes:
         row_tr, row_te, row_ft, row_st = [], [], [], []
-        for train, test in folds:
-            tr_idx = train.tolist()
-            if rng is not None:
-                perm = rng.permutation(len(tr_idx))
-                tr_idx = [tr_idx[j] for j in perm]
+        for (train, test), tr_idx in zip(folds, orders):
             sub = _as_index(tr_idx[:a])
             est = _clone(estimator)
             t0 = time.perf_counter()

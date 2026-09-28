@@ -1448,7 +1448,8 @@ class SVGP(_XNeighbors):
         self.jitter = jitter
 
     def _k(self, A, B):
-        g = 1.0 / (2.0 * float(self.lengthscale) ** 2)
+        ls = float(self.lengthscale)
+        g = 1.0 / (2.0 * (ls * ls))  # ls ** 2 as one product, not the platform pow
         K = self._kernel(A, B, "rbf", g, 0.0, 0)
         return self._unary(K, _U_IDENTITY, _f32_scalar(self.kernel_variance), 0.0)
 

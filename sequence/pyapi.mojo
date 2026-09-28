@@ -62,7 +62,7 @@ def opt_of(ip: PythonObject, at: Int, fp: PythonObject, fat: Int) raises -> OptC
 
 
 def rnn_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    """addrs = [X, y, order, steps (int32), params (in/out), losses, lrs];
+    """addrs = [X, y, order (int32), steps (int32), params (in/out), losses, lrs];
     ip = [cell, D, H, L, O, task, N, T, n_order, n_steps, opt_kind, opt_flags];
     fp = [f1, f2, eps, weight_decay, f7, initial_accumulator]."""
     if len(addrs) != 7 or len(ip) != 12 or len(fp) != 6:
@@ -84,8 +84,13 @@ def rnn_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: Py
         raise Error("rnn_fit: task must be 0 (mse) or 1 (cross-entropy)")
     if task == TASK_CE and net.O < 2:
         raise Error("rnn_fit: cross-entropy needs at least two classes")
-    if N < 1 or T < 1 or n_steps < 1 or n_order < 1 or N >= 16777216 or n_order >= 16777216:
-        raise Error("rnn_fit: N, T, steps and order must be >= 1 and N, order < 2^24")
+    # The order arrives as int32 (it was float32, which capped the whole
+    # schedule, epochs x N, below 2^24: 16 epochs at 1M rows). Its length is
+    # bounded only by the int32 step offsets; the sample indices it holds
+    # stay below N < 2^24, so the float32 copy the device gathers with is
+    # exact and the bits are the float32 order's.
+    if N < 1 or T < 1 or n_steps < 1 or n_order < 1 or N >= 16777216 or n_order >= 2147483647:
+        raise Error("rnn_fit: N, T, steps and order must be >= 1, N < 2^24 and order < 2^31 - 1")
     var cfg = opt_of(ip, 10, fp, 0)
     var steps = iptr(steps_addr, "steps")
     for k in range(n_steps):
@@ -93,11 +98,14 @@ def rnn_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: Py
         var cnt = Int(steps.unsafe_load(2 * k + 1))
         if cnt < 1 or off < 0 or off + cnt > n_order:
             raise Error("rnn_fit: step " + String(k) + " reads outside the order")
-    var order = fptr(order_addr, "order")
+    var order_i = iptr(order_addr, "order")
+    var order_f = List[Float32](capacity=n_order)
     for i in range(n_order):
-        var v = Int(order.unsafe_load(i))
-        if v < 0 or v >= N or Float32(v) != order.unsafe_load(i):
+        var v = Int(order_i.unsafe_load(i))
+        if v < 0 or v >= N:
             raise Error("rnn_fit: order holds a value that is not a sample index")
+        order_f.append(Float32(v))
+    var order = FP(unsafe_from_address=Int(order_f.unsafe_ptr()))
     if task == TASK_CE:
         var y = fptr(y_addr, "y")
         for i in range(N):
@@ -107,6 +115,7 @@ def rnn_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: Py
     rnn_fit(ex, net, task, fptr(x_addr, "X"), fptr(y_addr, "y"), N, T, order, n_order,
             steps, n_steps, fptr(p_addr, "params"), fptr(losses_addr, "losses"),
             fptr(lrs_addr, "lrs"), cfg, fval(fp, 5))
+    _ = order_f^
     return PythonObject(net.n_params())
 
 

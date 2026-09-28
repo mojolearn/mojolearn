@@ -335,6 +335,9 @@ def _splitmix_perm(n, seed):
     return perm
 
 
+# DEVIATION 6903 (IDENTITY_PATHS row 253): Platt scaling and the pairwise
+# coupling below are binary64 host arithmetic in libsvm's loop order (Python
+# evaluates no FMA) on the pinned exp / log of `_portable_math`.
 def _platt_fval(dec, t, a, b):
     f = 0.0
     for d, ti in zip(dec, t):

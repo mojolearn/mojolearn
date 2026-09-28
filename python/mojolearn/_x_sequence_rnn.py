@@ -163,15 +163,21 @@ class _RecurrentBase:
         return X
 
     def _schedule(self, n, rng):
+        """(order, steps): every epoch's row order (int32, one permutation
+        per epoch drawn in epoch order) and each step's (offset, count) pair
+        into it (int32). The order was float32, which refused a schedule of
+        2^24 rows or more (17 epochs at 1M rows); the step offsets bound it
+        now, below 2^31 - 1."""
         bs = max(1, min(int(self.batch_size), n))
-        order, steps = [], []
-        for _ in range(int(self.max_epochs)):
-            perm = rng.permutation(n) if self.shuffle else np.arange(n)
-            base = len(order) * n
-            for s in range(0, n, bs):
-                steps += [base + s, min(bs, n - s)]
-            order.append(perm)
-        order = np.ascontiguousarray(np.concatenate(order), dtype=np.float32)
+        epochs = int(self.max_epochs)
+        if epochs * n >= 2 ** 31 - 1:
+            raise ValueError(f"max_epochs * n_samples must be below 2^31 - 1, got {epochs} * {n}")
+        order = [rng.permutation(n) if self.shuffle else np.arange(n) for _ in range(epochs)]
+        order = np.ascontiguousarray(np.concatenate(order), dtype=np.int32)
+        starts = np.arange(0, n, bs, dtype=np.int64)
+        counts = np.minimum(bs, n - starts)
+        offsets = (np.arange(epochs, dtype=np.int64)[:, None] * n + starts[None, :]).ravel()
+        steps = np.stack([offsets, np.tile(counts, epochs)], axis=1).ravel()
         return order, np.ascontiguousarray(steps, dtype=np.int32)
 
     def _lrs(self, n_steps):

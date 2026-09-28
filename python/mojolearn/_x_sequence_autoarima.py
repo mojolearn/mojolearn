@@ -26,10 +26,10 @@ the reference either; pass `D` as one integer), `method` css / css-ml (this
 ARIMA fits by `ml`), a `d` option list that is not 0..d_max, `truncate`,
 `h` other than the default, prediction intervals (`level`)."""
 import itertools
-import math
 
 import numpy as np
 
+from . import _portable_math as _pm
 from ._arima_impl import ARIMA
 from ._tsa_impl import select_d
 
@@ -145,7 +145,7 @@ class AutoARIMA:
             return base + 2.0 * N
         if ic == "aicc":
             return base + 2.0 * N + 2.0 * N * (N + 1.0) / (n - N - 1.0)
-        return base + math.log(n) * N
+        return base + _pm.log(n) * N  # the pinned log, as ARIMA.bic_ (DEVIATION 6900)
 
     def fit(self, h=1e-8, maxiter=1000, method="ml", truncate=0):
         if not self.models:

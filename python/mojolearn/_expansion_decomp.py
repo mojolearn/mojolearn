@@ -23,6 +23,7 @@ import math
 import sys
 
 from . import _backend
+from . import _portable_math as _pm
 from ._buffer import as_f32_c, as_i32_c, frombytes
 
 __all__ = ["IncrementalPCA", "GaussianRandomProjection", "SparseRandomProjection", "johnson_lindenstrauss_min_dim",
@@ -859,8 +860,10 @@ def johnson_lindenstrauss_min_dim(n_samples, *, eps=0.1):
         raise ValueError("The JL bound is defined for eps in ]0, 1[")
     if n_samples <= 0:
         raise ValueError("The JL bound is defined for n_samples greater than zero")
-    denominator = (eps ** 2 / 2) - (eps ** 3 / 3)
-    return int(4 * math.log(n_samples) / denominator)
+    # DEVIATION 6900: eps ** 2, eps ** 3 correctly rounded and the pinned log,
+    # not the platform pow / log (a host's last bit can move the floor)
+    denominator = (_pm.powi(eps, 2) / 2) - (_pm.powi(eps, 3) / 3)
+    return int(4 * _pm.log(n_samples) / denominator)
 
 
 def _seed_of(random_state):

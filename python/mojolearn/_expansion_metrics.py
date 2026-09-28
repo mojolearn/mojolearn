@@ -49,6 +49,13 @@ _PARAMS = 14
 _NONE = -1
 
 
+def _sq(v):
+    """v * v: one correctly rounded product. `v ** 2` calls the platform pow,
+    which DEVIATION 6106 does not allow (it is not correctly rounded on every
+    host)."""
+    return v * v
+
+
 def _fsum(values):
     """`_portable_math.fsum` (the exact sum, rounded once to nearest/even),
     by CPython's `math.fsum` whenever that is finite: for finite binary64
@@ -2038,7 +2045,7 @@ def d2_brier_score(y_true, y_proba, *, sample_weight=None, pos_label=None, label
     num = _row_mean(S, k, Y, n, "brier", w, numeric_mode, prog=prog)
     per, total = _class_weights(codes, w, k)
     freq = [v / total for v in per]
-    den = _fsum([per[c] * _fsum([((1.0 if j == c else 0.0) - freq[j]) ** 2 for j in range(k)])
+    den = _fsum([per[c] * _fsum([_sq((1.0 if j == c else 0.0) - freq[j]) for j in range(k)])
                       for c in range(k)]) / total
     return float(1 - num / den)
 
@@ -2432,7 +2439,7 @@ def calinski_harabasz_score(X, labels, *, numeric_mode=None):
     sums, counts, gsum = _centroids(Xa, codes, k, numeric_mode)
     cents = [sums[i * d + c] / counts[i] for i in range(k) for c in range(d)]
     mean = [v / n for v in gsum]
-    extra = _fsum([counts[i] * _fsum([(cents[i * d + c] - mean[c]) ** 2 for c in range(d)])
+    extra = _fsum([counts[i] * _fsum([_sq(cents[i * d + c] - mean[c]) for c in range(d)])
                         for i in range(k)])
     intra = _fsum(_row_dists(Xa, codes, cents, False, numeric_mode))
     return float(1.0 if intra == 0.0 else extra * (n - k) / (intra * (k - 1.0)))
@@ -2446,7 +2453,7 @@ def davies_bouldin_score(X, labels, *, numeric_mode=None):
     sums, counts, _ = _centroids(Xa, codes, k, numeric_mode)
     cents = [sums[i * d + c] / counts[i] for i in range(k) for c in range(d)]
     intra = [v / counts[i] for i, v in enumerate(_row_dists(Xa, codes, cents, True, numeric_mode))]
-    dist = [[pmath.sqrt(_fsum([(cents[i * d + c] - cents[j * d + c]) ** 2 for c in range(d)]))
+    dist = [[pmath.sqrt(_fsum([_sq(cents[i * d + c] - cents[j * d + c]) for c in range(d)]))
              for j in range(k)] for i in range(k)]
     close = lambda v: abs(v) <= 1e-8
     if all(close(v) for v in intra) or all(close(v) for row in dist for v in row):
