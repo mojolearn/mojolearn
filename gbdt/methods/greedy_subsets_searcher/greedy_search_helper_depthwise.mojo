@@ -4,6 +4,7 @@
 
 from gbdt.options.child_hessian import child_hessian_threshold
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+from std.gpu import block_dim, block_idx, thread_idx
 from core.device_zero import enqueue_fill
 
 from checks.fixed_point import choose_scale
@@ -786,6 +787,25 @@ def _leaf_records(
             )
         )
     return out^
+
+
+def _stats_through_index_kernel(
+    stats: MutPointer[Float32, MutAnyOrigin],
+    row_index: MutPointer[UInt32, MutAnyOrigin],
+    out: MutPointer[Float32, MutAnyOrigin],
+    n_rows: Int32,
+    stat_count: Int32,
+):
+    """`out[s * n + p] = stats[s * n + row_index[p]]`: the permuted plane a
+    ridx-only build does not keep, for the identity trace only."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var n = Int(n_rows)
+    if i < n * Int(stat_count):
+        var s = i // n
+        var p = i - s * n
+        out[unsafe_offset=i] = stats[
+            unsafe_offset = s * n + Int(row_index[unsafe_offset=p])
+        ]
 
 
 def fit_non_symmetric_tree[
@@ -1711,11 +1731,22 @@ def fit_non_symmetric_tree[
                     ctx.enqueue_copy(
                         dst_buf=d_all_ids, src_ptr=h_all_ids.unsafe_ptr()
                     )
-                    compute_partition_stats(
-                        ctx, reduce_count, n_rows, stat_count, n_rows,
-                        d_all_ids, p_off, p_sz, stats, stat_partials, part_stats,
-                        sm_count=sm_count,
-                    )
+                    comptime if RIDX_ONLY_SPLITS:
+                        # the stat plane is stationary (DEVIATION 1902);
+                        # the FAST arm runs this sweep only at iteration 1,
+                        # where the index is the identity, the IDENTICAL
+                        # arm (Apple) at every iteration
+                        compute_partition_stats_gather(
+                            ctx, reduce_count, n_rows, stat_count, n_rows,
+                            d_all_ids, p_off, p_sz, stats, row_index,
+                            stat_partials, part_stats, sm_count=sm_count,
+                        )
+                    else:
+                        compute_partition_stats(
+                            ctx, reduce_count, n_rows, stat_count, n_rows,
+                            d_all_ids, p_off, p_sz, stats, stat_partials,
+                            part_stats, sm_count=sm_count,
+                        )
                     mgr.stream_kernel()
                 stage_times.end(ctx, "partstats")
             trace.record_device(
@@ -2474,9 +2505,27 @@ def fit_non_symmetric_tree[
             # did, so nothing is lost by dropping the two scratch planes --
             # and the ladder stops lying.
             trace.record_device(ctx, d_tag + "rowindex", row_index, n_rows)
-            trace.record_device(
-                ctx, d_tag + "stats", stats, stat_count * n_rows
-            )
+            comptime if RIDX_ONLY_SPLITS and SPLIT_COST_IDENTICAL:
+                # the plane the permuting arm would hold, gathered through
+                # the index into the unused reorder scratch, so the ladder
+                # records the same bytes on every column
+                if trace.enabled:
+                    ctx.enqueue_function[_stats_through_index_kernel](
+                        stats.unsafe_ptr(),
+                        row_index.unsafe_ptr(),
+                        new_stats.unsafe_ptr(),
+                        Int32(n_rows),
+                        Int32(stat_count),
+                        grid_dim=((stat_count * n_rows + 255) // 256, 1, 1),
+                        block_dim=(256, 1, 1),
+                    )
+                trace.record_device(
+                    ctx, d_tag + "stats", new_stats, stat_count * n_rows
+                )
+            else:
+                trace.record_device(
+                    ctx, d_tag + "stats", stats, stat_count * n_rows
+                )
             trace.record_device(
                 ctx, d_tag + "parts.off", p_off, len(leaves)
             )
