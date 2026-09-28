@@ -2031,6 +2031,42 @@ def linear_forward(a, weight, numeric_mode=None):
     return c.reshape(a.shape[:-1] + (n,))
 
 
+def samba_head_loss(a, weight, targets, num_items, numeric_mode=None):
+    """`(loss, da, dweight)` of `linear_forward(a, weight)` -> `cross_entropy
+    (reduction="sum", num_items=num_items, return_grad=True)` ->
+    `linear_backward`, in ONE binding call whose logits and logit gradient
+    stay on the device (lane/py-lm, 2026-09-28). The same kernels on the same
+    operands in the same order, so the same bits. None when the loaded
+    binding predates the entry (or `MOJOLEARN_HOTPATH=python` asks for the
+    three-call reference arm); the caller then runs the three calls."""
+    from ._buffer import hotpath_enabled
+    binding = _load(numeric_mode)
+    fn = getattr(binding, "samba_head_loss", None)
+    if fn is None or not hotpath_enabled():
+        return None
+    a = _c32(a, "a", "samba_head_loss")
+    w = _c32(weight, "weight", "samba_head_loss")
+    m, k = a.reshape((-1, a.shape[-1])).shape
+    n, k2 = w.shape
+    if k != k2:
+        raise ValueError(
+            "mojolearn.linear_forward: a has K=%d, weight has K=%d" % (k, k2))
+    y, _ = as_i32_c(targets, ndim=1, name="targets")
+    if y.shape[0] != m:
+        raise ValueError(
+            "mojolearn.cross_entropy: logits has %d rows and targets has %d "
+            "(python/mojolearn/_training_impl.py)" % (m, y.shape[0]))
+    loss_out = zeros((1,), "<f4")
+    row_out = empty((m,), "<f4")
+    da = _buffers.empty((m, k), '<f4')
+    dw = _buffers.empty((n, k), '<f4')
+    fn([_addr(loss_out), _addr(row_out), _addr(da), _addr(dw),
+        _addr_ro(a), _addr_ro(w), _addr_ro(y)],
+       [int(m), int(n), int(k), int(_IGNORE_INDEX_DEFAULT), 1,
+        int(0 if num_items is None else num_items), 0.0])
+    return float(loss_out[0]), da, dw
+
+
 def linear_backward(dc, a, weight, numeric_mode=None):
     """`(da, dweight)` of `linear_forward`. `dweight`'s contraction is over
     the M tokens, the clause 9.2 contraction."""

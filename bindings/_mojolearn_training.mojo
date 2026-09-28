@@ -94,6 +94,7 @@ from training.samba_ops import (
     samba_accumulate_host,
     samba_embedding_backward_host,
     samba_embedding_forward_host,
+    samba_head_loss_host,
     samba_linear_backward_host,
     samba_linear_forward_host,
     samba_rms_norm_backward_host,
@@ -631,6 +632,35 @@ def linear_backward_binding(
     return PythonObject(count)
 
 
+def samba_head_loss_binding(
+    addresses: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """`linear_forward`, `ce_loss` with a gradient and `linear_backward` in
+    ONE call (lane/py-lm), the logits and their gradient kept on the device.
+    addresses = [loss (1 f32, written), row_loss (m f32, written), da (m*k,
+    written), dw (n*k, written), a (m*k), w (n*k), targets (m i32)];
+    params = [m, n, k, ignore_index, reduction (1 sum, 2 mean), num_items,
+    label_smoothing (float)]. Returns `count`, as `ce_loss` does."""
+    var a = _addrs(addresses, 7, "samba_head_loss")
+    _params(params, 7, "samba_head_loss")
+    var m = Int(py=params[0])
+    var n = Int(py=params[1])
+    var k = Int(py=params[2])
+    var ignore_index = Int(py=params[3])
+    var reduction = Int(py=params[4])
+    var num_items = Int(py=params[5])
+    var label_smoothing = Float32(Float64(py=params[6]))
+    var count = 0
+    with GILReleased(Python()):
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        count = samba_head_loss_host(
+            ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), _f32_ptr(a[2]), _f32_ptr(a[3]),
+            _f32_ptr(a[4]), _f32_ptr(a[5]), _i32_ptr(a[6]),
+            m, n, k, ignore_index, reduction, num_items, label_smoothing,
+        )
+    return PythonObject(count)
+
+
 def accumulate_binding(
     addresses: PythonObject, params: PythonObject
 ) raises -> PythonObject:
@@ -770,6 +800,7 @@ def PyInit__mojolearn_training() abi("C") -> PythonObject:
         m.def_function[rms_norm_backward_binding]("rms_norm_backward")
         m.def_function[linear_forward_binding]("linear_forward")
         m.def_function[linear_backward_binding]("linear_backward")
+        m.def_function[samba_head_loss_binding]("samba_head_loss")
         m.def_function[accumulate_binding]("accumulate")
         m.def_function[accumulation_is_aligned_binding]("accumulation_is_aligned")
         m.def_function[neural_rng_binding]("neural_rng")
