@@ -1109,6 +1109,190 @@ def host_rbc_cmp_dist(
     return acc
 
 
+#: THE BALL COVER SCANS THROUGH THE BLOCK ENGINE (lane neighbors-cpu,
+#: 2026-09-28): `host_rbc_cmp_dist` for KNN_HOST_QB query rows x KNN_HOST_W
+#: index columns at once, one lane per cell, the same per-lane statements
+#: (and the same sabotage arms) as the scalar function; each row then
+#: consumes its W columns ascending, so counts, CSR fills and the k-NN
+#: insertion see the columns in the scalar order.
+def _rbc_tile(
+    qf: HostF32Ptr, r0: Int, nq: Int, panel: HostF32Ptr, d: Int,
+    metric: Int, metric_arg: Float32, tile: HostF32Ptr,
+):
+    var a0 = KnnVF(0.0)
+    var a1 = KnnVF(0.0)
+    var a2 = KnnVF(0.0)
+    var a3 = KnnVF(0.0)
+    var q0 = qf + r0 * d
+    var q1 = qf + (r0 + (1 if nq > 1 else 0)) * d
+    var q2 = qf + (r0 + (2 if nq > 2 else 0)) * d
+    var q3 = qf + (r0 + (3 if nq > 3 else 0)) * d
+    var descend = False
+    comptime if KNN_HOST_SABOTAGE:
+        descend = metric != DIST_LINF
+    for g in range(d):
+        var f = g
+        if descend:
+            f = d - 1 - g
+        var y = panel.unsafe_load[width=KNN_HOST_W](f * KNN_HOST_W)
+        a0 = _rbc_step(a0, q0.unsafe_load(f), y, metric, metric_arg)
+        a1 = _rbc_step(a1, q1.unsafe_load(f), y, metric, metric_arg)
+        a2 = _rbc_step(a2, q2.unsafe_load(f), y, metric, metric_arg)
+        a3 = _rbc_step(a3, q3.unsafe_load(f), y, metric, metric_arg)
+    tile.unsafe_store(0, _rbc_epilogue(a0, metric, metric_arg))
+    tile.unsafe_store(KNN_HOST_W, _rbc_epilogue(a1, metric, metric_arg))
+    tile.unsafe_store(2 * KNN_HOST_W, _rbc_epilogue(a2, metric, metric_arg))
+    tile.unsafe_store(3 * KNN_HOST_W, _rbc_epilogue(a3, metric, metric_arg))
+
+
+@always_inline
+def _rbc_step(acc: KnnVF, qv: Float32, y: KnnVF, metric: Int, metric_arg: Float32) -> KnnVF:
+    if metric == KNN_HOST_DIST_L2_SQRT_UNEXPANDED:
+        var diff = ftz_v[KNN_HOST_W](KnnVF(qv) - y)
+        return ftz_v[KNN_HOST_W](identical_mul_add_simd[KNN_HOST_W](diff, diff, acc))
+    return _host_block_step(acc, qv, y, metric, metric_arg, False)
+
+
+@always_inline
+def _rbc_epilogue(acc: KnnVF, metric: Int, metric_arg: Float32) -> KnnVF:
+    if metric == DIST_LINF:
+        var out = acc
+        comptime if KNN_HOST_SABOTAGE:
+            comptime for l in range(KNN_HOST_W):
+                out[l] = bitcast[DType.float32](bitcast[DType.uint32](acc[l]) + UInt32(1))
+        return out
+    if metric == DIST_LP_UNEXPANDED:
+        var one_over_p = ftz(identical_div(Float32(1.0), metric_arg))
+        var out = acc
+        comptime for l in range(KNN_HOST_W):
+            out[l] = lp_unexp_epilog(acc[l], one_over_p)
+        return out
+    return acc
+
+
+@always_inline
+def _pack_panel(ip: HostF32Ptr, b0: Int, wv: Int, d: Int, pp: HostF32Ptr):
+    """Index columns `[b0, b0 + wv)`, flushed, feature-major, zero-padded to
+    KNN_HOST_W lanes."""
+    for l in range(KNN_HOST_W):
+        if l < wv:
+            for f in range(d):
+                pp.unsafe_store(f * KNN_HOST_W + l, ftz(ip.unsafe_load((b0 + l) * d + f)))
+        else:
+            for f in range(d):
+                pp.unsafe_store(f * KNN_HOST_W + l, Float32(0.0))
+
+
+#: What a ball cover scan does with each row's columns.
+comptime RBC_COUNT = 0
+comptime RBC_FILL = 1
+comptime RBC_KNN = 2
+
+
+def _rbc_scan_rows[
+    mode: Int
+](
+    ip: HostF32Ptr, n_index: Int, qp: HostF32Ptr, lo: Int, hi: Int, d: Int,
+    metric: Int, metric_arg: Float32, eps_cmp: Float32, return_sqrt: Bool,
+    k: Int,
+    counts: MutPointer[Int32, MutUntrackedOrigin],
+    indptr: MutPointer[Int32, MutUntrackedOrigin],
+    cols: MutPointer[Int32, MutUntrackedOrigin],
+    dists: HostF32Ptr,
+):
+    """Rows `[lo, hi)` of one ball cover scan: COUNT writes `counts[q]`;
+    FILL writes the row's CSR slice at `indptr[q]` (clamped to it) and the
+    actual count into `counts[q]`; KNN writes `k` indices (`cols`) and TRUE
+    distances (`dists`) at `q * k`, as `host_rbc_knn_row`."""
+    var qbuf = List[Float32](length=KNN_HOST_QCH * d, fill=Float32(0.0))
+    var panel = List[Float32](length=KNN_HOST_W * d, fill=Float32(0.0))
+    var tile = List[Float32](length=KNN_HOST_QB * KNN_HOST_W, fill=Float32(0.0))
+    var cnt = List[Int](length=KNN_HOST_QCH, fill=0)
+    var cur = List[Int](length=KNN_HOST_QCH, fill=0)
+    var bd = List[Float32](length=KNN_HOST_QCH * max(k, 1), fill=Float32(0.0))
+    var bi = List[Int](length=KNN_HOST_QCH * max(k, 1), fill=-1)
+    var qf = host_list_ptr(qbuf)
+    var pp = host_list_ptr(panel)
+    var tp = host_list_ptr(tile)
+    var s0 = lo
+    while s0 < hi:
+        var rows = min(KNN_HOST_QCH, hi - s0)
+        for r in range(rows):
+            for f in range(d):
+                qf.unsafe_store(r * d + f, ftz(qp.unsafe_load((s0 + r) * d + f)))
+            cnt[r] = 0
+            comptime if mode == RBC_FILL:
+                cur[r] = Int(indptr.unsafe_load(s0 + r))
+        var b0 = 0
+        while b0 < n_index:
+            var wv = min(KNN_HOST_W, n_index - b0)
+            _pack_panel(ip, b0, wv, d, pp)
+            var r0 = 0
+            while r0 < rows:
+                var nq = min(KNN_HOST_QB, rows - r0)
+                _rbc_tile(qf, r0, nq, pp, d, metric, metric_arg, tp)
+                for r in range(nq):
+                    var row = r0 + r
+                    var dist = tp.unsafe_load[width=KNN_HOST_W](r * KNN_HOST_W)
+                    comptime if mode == RBC_KNN:
+                        var base = row * k
+                        for l in range(wv):
+                            var dv = dist[l]
+                            var filled = cnt[row]
+                            if filled == k and not (dv < bd[base + k - 1]):
+                                continue
+                            var pos = filled if filled < k else k - 1
+                            while pos > 0 and dv < bd[base + pos - 1]:
+                                if pos < k:
+                                    bd[base + pos] = bd[base + pos - 1]
+                                    bi[base + pos] = bi[base + pos - 1]
+                                pos -= 1
+                            bd[base + pos] = dv
+                            bi[base + pos] = b0 + l
+                            if filled < k:
+                                cnt[row] = filled + 1
+                    else:
+                        var hit = dist.le(KnnVF(eps_cmp))
+                        if not hit.reduce_or():
+                            continue
+                        for l in range(wv):
+                            if not hit[l]:
+                                continue
+                            comptime if mode == RBC_FILL:
+                                var q = s0 + row
+                                if cur[row] < Int(indptr.unsafe_load(q + 1)):
+                                    cols.unsafe_store(cur[row], Int32(b0 + l))
+                                    var reported = dist[l]
+                                    if return_sqrt:
+                                        reported = rbc_true_dist(metric, dist[l])
+                                    comptime if KNN_HOST_SABOTAGE:
+                                        reported = host_sabotage_value_flip(reported)
+                                    dists.unsafe_store(cur[row], reported)
+                                    cur[row] += 1
+                            cnt[row] += 1
+                r0 += KNN_HOST_QB
+            b0 += KNN_HOST_W
+        for r in range(rows):
+            var q = s0 + r
+            comptime if mode == RBC_KNN:
+                for o in range(k):
+                    cols.unsafe_store(q * k + o, Int32(bi[r * k + o]))
+                    var reported = rbc_true_dist(metric, bd[r * k + o])
+                    comptime if KNN_HOST_SABOTAGE:
+                        reported = host_sabotage_value_flip(reported)
+                    dists.unsafe_store(q * k + o, reported)
+            else:
+                counts.unsafe_store(q, Int32(cnt[r]))
+        s0 += rows
+    _ = qbuf^
+    _ = panel^
+    _ = tile^
+    _ = cnt^
+    _ = cur^
+    _ = bd^
+    _ = bi^
+
+
 def host_rbc_radius_row(
     index: List[Float32], n_index: Int, queries: List[Float32], q: Int,
     d: Int, eps: Float32, metric: Int, metric_arg: Float32,
@@ -1140,18 +1324,17 @@ def host_rbc_radius_counts(
     tasks = max(1, min(tasks, n_queries))
     var chunk = host_predict_chunk(n_queries, tasks)
     var eps_cmp = rbc_cmp_bound(metric, eps)
-    def _rows(c: Int) {imm index, imm queries, mut counts, imm chunk, imm n_queries, imm n_index, imm d, imm eps_cmp, imm metric, imm metric_arg}:
+    var ip = host_list_ptr(index)
+    var qp = host_list_ptr(queries)
+    var cp = rebind[MutPointer[Int32, MutUntrackedOrigin]](counts.unsafe_ptr())
+    var fp = host_list_ptr(queries)
+    def _rows(c: Int) {imm ip, imm qp, imm cp, imm fp, imm chunk, imm n_queries, imm n_index, imm d, imm eps_cmp, imm metric, imm metric_arg}:
         var lo = c * chunk
         var hi = min(lo + chunk, n_queries)
-        for q in range(lo, hi):
-            var count = Int32(0)
-            for col in range(n_index):
-                var dist = host_rbc_cmp_dist(
-                    queries, q * d, index, col * d, d, metric, metric_arg
-                )
-                if dist <= eps_cmp:
-                    count += Int32(1)
-            counts[q] = count
+        _rbc_scan_rows[RBC_COUNT](
+            ip, n_index, qp, lo, hi, d, metric, metric_arg, eps_cmp, False, 0,
+            cp, cp, cp, fp,
+        )
     if tasks == 1:
         _rows(0)
     else:
@@ -1172,32 +1355,22 @@ def host_rbc_radius_fill_rows(
     tasks = max(1, min(tasks, n_queries))
     var chunk = host_predict_chunk(n_queries, tasks)
     var eps_cmp = rbc_cmp_bound(metric, eps)
-    def _rows(c: Int) {imm index, imm queries, imm indptr, mut actual_counts, mut cols, mut dists, imm chunk, imm n_queries, imm n_index, imm d, imm eps_cmp, imm return_sqrt, imm metric, imm metric_arg}:
+    # The count call supplied each row's exact slice; writes are clamped to
+    # it if the caller mutated an input between calls (the binding rejects
+    # the changed count after the join).
+    var ip = host_list_ptr(index)
+    var qp = host_list_ptr(queries)
+    var acp = rebind[MutPointer[Int32, MutUntrackedOrigin]](actual_counts.unsafe_ptr())
+    var ipp = rebind[MutPointer[Int32, MutUntrackedOrigin]](indptr.unsafe_ptr())
+    var colp = rebind[MutPointer[Int32, MutUntrackedOrigin]](cols.unsafe_ptr())
+    var dp = host_list_ptr(dists)
+    def _rows(c: Int) {imm ip, imm qp, imm acp, imm ipp, imm colp, imm dp, imm chunk, imm n_queries, imm n_index, imm d, imm eps_cmp, imm return_sqrt, imm metric, imm metric_arg}:
         var lo = c * chunk
         var hi = min(lo + chunk, n_queries)
-        for q in range(lo, hi):
-            var out = Int(indptr[q])
-            var out_end = Int(indptr[q + 1])
-            var actual = Int32(0)
-            for col in range(n_index):
-                var cmp_dist = host_rbc_cmp_dist(
-                    queries, q * d, index, col * d, d, metric, metric_arg
-                )
-                if cmp_dist <= eps_cmp:
-                    # The count call supplied this row's exact slice.  Clamp
-                    # writes if the caller mutated an input between calls;
-                    # the binding rejects the changed count after the join.
-                    if out < out_end:
-                        cols[out] = Int32(col)
-                        var reported = cmp_dist
-                        if return_sqrt:
-                            reported = rbc_true_dist(metric, cmp_dist)
-                        comptime if KNN_HOST_SABOTAGE:
-                            reported = host_sabotage_value_flip(reported)
-                        dists[out] = reported
-                        out += 1
-                    actual += Int32(1)
-            actual_counts[q] = actual
+        _rbc_scan_rows[RBC_FILL](
+            ip, n_index, qp, lo, hi, d, metric, metric_arg, eps_cmp,
+            return_sqrt, 0, acp, ipp, colp, dp,
+        )
     if tasks == 1:
         _rows(0)
     else:
@@ -1272,14 +1445,17 @@ def host_rbc_knn_search(
         tasks = host_predict_task_count(n_queries)
     tasks = max(1, min(tasks, n_queries))
     var chunk = host_predict_chunk(n_queries, tasks)
-    def _rows(c: Int) {imm index, imm queries, mut out_idx, mut out_dist, imm chunk, imm n_queries, imm n_index, imm d, imm k, imm metric, imm metric_arg}:
+    var ip = host_list_ptr(index)
+    var qp = host_list_ptr(queries)
+    var oip = rebind[MutPointer[Int32, MutUntrackedOrigin]](out_idx.unsafe_ptr())
+    var odp = host_list_ptr(out_dist)
+    def _rows(c: Int) {imm ip, imm qp, imm oip, imm odp, imm chunk, imm n_queries, imm n_index, imm d, imm k, imm metric, imm metric_arg}:
         var lo = c * chunk
         var hi = min(lo + chunk, n_queries)
-        for q in range(lo, hi):
-            host_rbc_knn_row(
-                index, n_index, queries, q, d, k, metric, metric_arg,
-                out_idx, out_dist,
-            )
+        _rbc_scan_rows[RBC_KNN](
+            ip, n_index, qp, lo, hi, d, metric, metric_arg, Float32(0.0),
+            False, k, oip, oip, oip, odp,
+        )
     if tasks == 1:
         _rows(0)
     else:
