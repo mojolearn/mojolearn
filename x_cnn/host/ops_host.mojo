@@ -16,7 +16,7 @@ allocate their scratch uninitialized; the List entries below are their
 doors for the seam check."""
 from std.memory import alloc
 from std.sys.compile import is_defined
-from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 from gemm.host.identical_gemm import OP_NN, OP_NT, OP_TN
 from x_cnn.host.gemm_host import gemm_host_into, parallel_tasks
 from checks.numerics import ftz
@@ -68,7 +68,7 @@ def run[f: ElemFn](a: FP, b: FP, c: FP, d: FP, q: IP, p: IP, total: Int):
         for i in range(lo, hi):
             f(i, a, b, c, d, q, p)
 
-    sync_parallelize(_part, tasks)
+    host_parallelize(_part, tasks)
 
 
 def zeros(n: Int) -> List[Float32]:
@@ -160,7 +160,7 @@ def im2col_host(x: FP, cols: FP, mut prm: List[Int32]):
     if tasks <= 1:
         _part(0)
     else:
-        sync_parallelize(_part, tasks)
+        host_parallelize(_part, tasks)
 
 
 def _conv_out_planes(y2: FP, bias: FP, dst: FP, p: IP, lo: Int, hi: Int):
@@ -192,7 +192,7 @@ def conv_out_host(y2: FP, bias: FP, dst: FP, mut prm: List[Int32]):
     if tasks <= 1:
         _part(0)
     else:
-        sync_parallelize(_part, tasks)
+        host_parallelize(_part, tasks)
 
 
 def _dout_rows_images(dout: FP, g: FP, p: IP, lo: Int, hi: Int):
@@ -218,7 +218,7 @@ def dout_rows_host(dout: FP, g: FP, mut prm: List[Int32]):
     if tasks <= 1:
         _part(0)
     else:
-        sync_parallelize(_part, tasks)
+        host_parallelize(_part, tasks)
 
 
 def _col2im_planes(dcols: FP, dx: FP, p: IP, po: IP, pw: IP, lo: Int, hi: Int):
@@ -288,7 +288,7 @@ def col2im_host(dcols: FP, dx: FP, mut prm: List[Int32]):
     if tasks <= 1:
         _part(0)
     else:
-        sync_parallelize(_part, tasks)
+        host_parallelize(_part, tasks)
     _ = ohs^
     _ = ows^
 
@@ -524,7 +524,7 @@ def maxpool_fwd_host(x: FP, dst: FP, idx: IP, prm: List[Int32]):
     if tasks <= 1:
         _part(0)
     else:
-        sync_parallelize(_part, tasks)
+        host_parallelize(_part, tasks)
     _ = ps^
 
 
@@ -590,7 +590,7 @@ def maxpool_bwd_host(dout: FP, idx: IP, dx: FP, prm: List[Int32]):
     if tasks <= 1:
         _part(0)
     else:
-        sync_parallelize(_part, tasks)
+        host_parallelize(_part, tasks)
     _ = ps^
     _ = ohs^
     _ = ows^

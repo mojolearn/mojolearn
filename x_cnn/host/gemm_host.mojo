@@ -56,7 +56,7 @@ from std.math import min
 from std.memory import bitcast
 from std.sys.info import simd_width_of
 
-from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 
 from checks.numerics import ftz, identical_mul_add, identical_mul_add_simd
 from core.host_predict_threads import host_predict_task_count
@@ -152,7 +152,7 @@ def _has_subnormal(p: FP, n: Int) -> Bool:
     if tasks == 1:
         _scan(0)
     else:
-        sync_parallelize(_scan, tasks)
+        host_parallelize(_scan, tasks)
     var any = False
     for c in range(tasks):
         if flags[c] != 0:
@@ -180,7 +180,7 @@ def _flush_copy(src: FP, dst: FP, n: Int):
     if tasks == 1:
         _cp(0)
     else:
-        sync_parallelize(_cp, tasks)
+        host_parallelize(_cp, tasks)
 
 
 def _transpose_flush(src: FP, dst: FP, rows: Int, cols: Int):
@@ -206,7 +206,7 @@ def _transpose_flush(src: FP, dst: FP, rows: Int, cols: Int):
     if tasks == 1:
         _tp(0)
     else:
-        sync_parallelize(_tp, tasks)
+        host_parallelize(_tp, tasks)
 
 
 # ------------------------------------------------------------------ one leaf
@@ -394,7 +394,7 @@ def _rows_mode(a: FP, b: FP, c: FP, m: Int, n: Int, k: Int, tasks: Int):
     if tasks <= 1:
         _task(0)
     else:
-        sync_parallelize(_task, tasks)
+        host_parallelize(_task, tasks)
 
 
 def _leaves_mode(a: FP, b: FP, c: FP, m: Int, n: Int, k: Int, tasks: Int):
@@ -430,7 +430,7 @@ def _leaves_mode(a: FP, b: FP, c: FP, m: Int, n: Int, k: Int, tasks: Int):
         _ = stack^
         _ = part^
 
-    sync_parallelize(_task, chunks)
+    host_parallelize(_task, chunks)
     if chunks == 1:
         for x in range(mn):
             c.unsafe_store(x, rp.unsafe_load(x))

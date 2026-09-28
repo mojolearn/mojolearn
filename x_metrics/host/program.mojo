@@ -24,7 +24,7 @@ fixture of five rows never wakes the pool. The sequential Float32 prefixes
 (DEVIATION 6107) stay one unit per problem.
 """
 from std.memory import memcpy
-from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count, host_predict_chunk
 from x_metrics.common import FP, IP, STAGE_INTS, LEAF
 from x_metrics.units import N_OPS, run_unit
@@ -131,4 +131,4 @@ def _run(f: FP, qbase: IP, stages: Int, threads: Int):
         if tasks == 1:
             _range(0)
         else:
-            sync_parallelize(_range, tasks)
+            host_parallelize(_range, tasks)
