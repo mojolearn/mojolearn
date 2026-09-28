@@ -174,8 +174,11 @@ def fold_order_rank_kernel(
     order: MutPointer[Int32, MutAnyOrigin],
 ):
     """One block of `SMO_WS_SIZE` threads: `order[rank(p)] = p`, rank by
-    training index (distinct within a working set), `fold_order_for` on
-    the device."""
+    (training index, position), `fold_order_for` on the device. The
+    position breaks ties: EPSILON_SVR's projected indices repeat (rows i
+    and i + n of one working set both project to i), and a rank by index
+    alone gave two positions one slot and left another unwritten
+    (lane/neighbors-apple, 2026-09-28: SVR DIVERGENT on the M3 Ultra)."""
     var n = Int(n_in)
     var sh = stack_allocation[
         SVM_WS_MAX, Scalar[DType.int32], address_space = AddressSpace.SHARED
@@ -190,7 +193,8 @@ def fold_order_rank_kernel(
         var mine = sh[t]
         var r = 0
         for q in range(n):
-            if sh[q] < mine:
+            var other = sh[q]
+            if other < mine or (other == mine and q < t):
                 r += 1
         order.unsafe_store(r, Int32(t))
         t += Int(block_dim.x)
