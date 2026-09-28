@@ -364,11 +364,44 @@ def rng_next(mut s: UInt64) -> UInt64:
     return z ^ (z >> 31)
 
 
+@always_inline
+def _mod32_small(x: UInt32, m: UInt32, rm: Float32) -> UInt32:
+    """x mod m for x < m * 2^11, m < 2^21, rm ~ 1/m: the quotient is below
+    2^11, so a float32 estimate is within one of it; one correction step
+    makes the remainder exact."""
+    var q = UInt32(Float32(x) * rm)
+    var r = Int32(x - q * m)
+    if r < 0:
+        r += Int32(m)
+    elif r >= Int32(m):
+        r -= Int32(m)
+    return UInt32(r)
+
+
+@always_inline
+def mod_draw(z: UInt64, m: Int) -> Int:
+    """`z mod m`, exact. On a GPU with m < 2^21 (lane/linear-apple2): six
+    remainders of 11-bit chunks of z, top first (each partial is below
+    m * 2^11 < 2^32), each from a float32 quotient estimate and one integer
+    correction; a GPU has no 64-bit (or 32-bit) divide instruction and the
+    software remainder was most of a Fisher-Yates step. The same integer."""
+    comptime if is_gpu():
+        if m < (1 << 21):
+            var mm = UInt32(m)
+            var rm = Float32(1) / Float32(m)
+            var r = _mod32_small(UInt32(z >> 55), mm, rm)
+            comptime for k in range(5):
+                comptime sh = 44 - 11 * k
+                r = _mod32_small((r << 11) | UInt32((z >> UInt64(sh)) & UInt64(0x7FF)), mm, rm)
+            return Int(r)
+    return Int(z % UInt64(m))
+
+
 def shuffle(idx: IP, n: Int, mut s: UInt64):
     """Fisher-Yates, i descending, j = draw mod (i + 1)."""
     var i = n - 1
     while i > 0:
-        var j = Int(rng_next(s) % UInt64(i + 1))
+        var j = mod_draw(rng_next(s), i + 1)
         var t = ldi(idx, i)
         sti(idx, i, ldi(idx, j))
         sti(idx, j, t)
