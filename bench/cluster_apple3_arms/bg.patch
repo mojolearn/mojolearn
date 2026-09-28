@@ -1,8 +1,8 @@
 diff --git a/x_cluster/bgmm.mojo b/x_cluster/bgmm.mojo
-index 23b49d108..ed3e8e469 100644
+index 23b49d108..2e39e5aa8 100644
 --- a/x_cluster/bgmm.mojo
 +++ b/x_cluster/bgmm.mojo
-@@ -18,13 +18,22 @@ its triangular inverse, digamma and log-gamma (series on the portable
+@@ -18,13 +18,25 @@ its triangular inverse, digamma and log-gamma (series on the portable
  `identical_mul64`. The k-means start is this library's KMeans through
  `ClusterOps.kmeans`. Only covariance_type='full' (NOT_IMPLEMENTED.tsv)."""
  from std.math import sqrt
@@ -22,11 +22,14 @@ index 23b49d108..ed3e8e469 100644
 +# formed the n K Float64 products itself. Another rounding of the same sum.
 +comptime BGMM_ENT = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_BGMM_ENT"]()
 +comptime BGMM_ENT_G = 4
++# `-D MOJOLEARN_BGMM_ESTEP1=1` (FAST, the GPU binding): the E-step's three
++# kernels as one launch, a row per thread (`ops.estep`; the same values).
++comptime BGMM_ESTEP1 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_BGMM_ESTEP1"]()
 +
  comptime LOG2 = 0.6931471805599453
  comptime LOG_2PI = 1.8378770664093453
  
-@@ -353,12 +362,17 @@ def bgmm_constants(pr: BgmmPriors, st: BgmmState) -> List[Float32]:
+@@ -353,12 +365,17 @@ def bgmm_constants(pr: BgmmPriors, st: BgmmState) -> List[Float32]:
  
  
  def _lower_bound(pr: BgmmPriors, st: BgmmState, resp: List[Float32], lr: List[Float32], n: Int) -> Float64:
@@ -47,19 +50,35 @@ index 23b49d108..ed3e8e469 100644
      var ld = _log_det_pchol(st, kc, d)
      var log_wishart = Float64(0)
      for k in range(kc):
-@@ -446,6 +460,11 @@ def bgmm_fit[O: ClusterOps](
+@@ -446,6 +463,14 @@ def bgmm_fit[O: ClusterOps](
      var ms = ops.zeros(kc * d)
      var ps = ops.zeros(kc * d * d)
      var cs = ops.zeros(kc)
 +    var ent_dev = False
 +    comptime if BGMM_ENT:
 +        ent_dev = pr.variational and ops.fast_device()
++    var estep1 = False
++    comptime if BGMM_ESTEP1:
++        estep1 = ops.fast_device()
 +    var n_ent = (n * kc + BGMM_ENT_G - 1) // BGMM_ENT_G
 +    var es = ops.zeros(n_ent if ent_dev else 1)
      var max_lb = Float64(0)
      var have_best = False
      var best_iter = 0
-@@ -534,12 +553,20 @@ def bgmm_fit[O: ClusterOps](
+@@ -527,19 +552,30 @@ def bgmm_fit[O: ClusterOps](
+             ops.set(ms, _f32(st.means))
+             ops.set(ps, _f32(st.pchol))
+             ops.set(cs, bgmm_constants(pr, st))
+-            ops.gauss_q(xs, n, d, ms, ps, kc, qs)
+-            ops.resp(qs, cs, n, kc, lpn)
+-            ops.exp(qs, rs, n * kc)
++            if estep1:
++                ops.estep(xs, n, d, ms, ps, cs, kc, qs, rs, lpn)
++            else:
++                ops.gauss_q(xs, n, d, ms, ps, kc, qs)
++                ops.resp(qs, cs, n, kc, lpn)
++                ops.exp(qs, rs, n * kc)
+             # M-step
              ops.moments(rs, xs, n, d, kc, reg, nks, xks, sks)
              # one wait per iteration: the moments and what the bound reads
              var mo: List[List[Float32]]
@@ -83,7 +102,7 @@ index 23b49d108..ed3e8e469 100644
              else:
                  # sklearn GaussianMixture: the mean log-likelihood of THIS E-step
 diff --git a/x_cluster/device_ops.mojo b/x_cluster/device_ops.mojo
-index f3be6d0f6..4dbe12fe3 100644
+index f3be6d0f6..f4f2e0919 100644
 --- a/x_cluster/device_ops.mojo
 +++ b/x_cluster/device_ops.mojo
 @@ -7,13 +7,14 @@ launch shape can move a bit. Only the GPU binding imports this file."""
@@ -102,10 +121,26 @@ index f3be6d0f6..4dbe12fe3 100644
  
  from x_cluster.bodies import (
      FPtr,
-@@ -460,6 +461,116 @@ def _momf_final_kernel(
+@@ -460,6 +461,132 @@ def _momf_final_kernel(
          cov[k * nch + c] = cov_final(acc, nk[k], reg, a == b)
  
  
++def _estep_row_kernel(
++    x: FPtr, n: Int32, d: Int32, means: FPtr, pchol: FPtr, c: FPtr, kc: Int32, q: FPtr, r: FPtr, lpn: FPtr,
++):
++    """Lane cluster-apple3: row i's whole E-step on its one thread, the three
++    bodies in the order the three kernels ran them."""
++    var i = _tid()
++    if i >= Int(n):
++        return
++    var K = Int(kc)
++    for k in range(K):
++        gauss_q_cell(x, Int(d), means, pchol, K, q, i * K + k)
++    resp_row(q, c, K, lpn, i)
++    for k in range(K):
++        exp_cell(q, r, i * K + k)
++
++
 +def _dot_groups_kernel(a: FPtr, b: FPtr, n: Int32, g: Int32, parts: FPtr):
 +    """FAST (lane cluster-apple3): thread q sums a * b over its run of `g`
 +    consecutive cells."""
@@ -219,7 +254,7 @@ index f3be6d0f6..4dbe12fe3 100644
  def _pdist_kernel(a: FPtr, na: Int32, b: FPtr, nb: Int32, d: Int32, metric: Int32, p: Float32, dst: FPtr):
      var t = _tid()
      if t < Int(na) * Int(nb):
-@@ -899,6 +1010,26 @@ struct DeviceOps(ClusterOps):
+@@ -899,6 +1026,26 @@ struct DeviceOps(ClusterOps):
          if kc <= 0:
              self._ph1("moments")
              return
@@ -246,7 +281,7 @@ index f3be6d0f6..4dbe12fe3 100644
          comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
              if d <= MOM_MAX_D and n > 0:
                  var S = (n + MOMF_ROWS - 1) // MOMF_ROWS
-@@ -967,3 +1098,12 @@ struct DeviceOps(ClusterOps):
+@@ -967,3 +1114,22 @@ struct DeviceOps(ClusterOps):
              grid_dim=l, block_dim=WNN_TPB,
          )
          self._ph1("ward_nn")
@@ -259,11 +294,21 @@ index f3be6d0f6..4dbe12fe3 100644
 +                grid_dim=_grid((n + g - 1) // g), block_dim=TPB,
 +            )
 +        self._ph1("dot_groups")
++
++    def estep(
++        mut self, x: Int, n: Int, d: Int, means: Int, pchol: Int, c: Int, kc: Int, q: Int, r: Int, lpn: Int
++    ) raises:
++        self._ph0()
++        self.ctx.enqueue_function[_estep_row_kernel](
++            self._fp(x), Int32(n), Int32(d), self._fp(means), self._fp(pchol), self._fp(c), Int32(kc),
++            self._fp(q), self._fp(r), self._fp(lpn), grid_dim=_grid(n), block_dim=TPB,
++        )
++        self._ph1("estep")
 diff --git a/x_cluster/host/host_ops.mojo b/x_cluster/host/host_ops.mojo
-index 5ada0fc72..3cd2606a4 100644
+index 5ada0fc72..8584f5824 100644
 --- a/x_cluster/host/host_ops.mojo
 +++ b/x_cluster/host/host_ops.mojo
-@@ -577,3 +577,20 @@ struct HostOps(ClusterOps):
+@@ -577,3 +577,27 @@ struct HostOps(ClusterOps):
          var pm = self._fp(md)
          for p in range(l):
              ward_nn_row(pc, ps, l, d, pn, pm, p)
@@ -284,11 +329,18 @@ index 5ada0fc72..3cd2606a4 100644
 +            po[q] = acc
 +            q += 1
 +            t0 = t1
++
++    def estep(
++        mut self, x: Int, n: Int, d: Int, means: Int, pchol: Int, c: Int, kc: Int, q: Int, r: Int, lpn: Int
++    ) raises:
++        self.gauss_q(x, n, d, means, pchol, kc, q)
++        self.resp(q, c, n, kc, lpn)
++        self.exp(q, r, n * kc)
 diff --git a/x_cluster/ops.mojo b/x_cluster/ops.mojo
-index 1f01b7060..c71090870 100644
+index 1f01b7060..8adfd1879 100644
 --- a/x_cluster/ops.mojo
 +++ b/x_cluster/ops.mojo
-@@ -133,3 +133,8 @@ trait ClusterOps(Movable):
+@@ -133,3 +133,16 @@ trait ClusterOps(Movable):
          (centroids c, l x d; sizes sz) at the lowest `bodies.ward_cell`, the
          lowest q on a tie."""
          ...
@@ -296,4 +348,12 @@ index 1f01b7060..c71090870 100644
 +    def dot_groups(mut self, a: Int, b: Int, n: Int, g: Int, parts: Int) raises:
 +        """FAST: parts[q] = the sum of a[t] * b[t] over the q-th run of `g`
 +        consecutive cells of the first n (ceil(n / g) values)."""
++        ...
++
++    def estep(
++        mut self, x: Int, n: Int, d: Int, means: Int, pchol: Int, c: Int, kc: Int, q: Int, r: Int, lpn: Int
++    ) raises:
++        """`gauss_q`, `resp` and `exp` of one E-step as ONE primitive: row i's
++        kc Mahalanobis squares, its log-sum-exp and its responsibilities by
++        the same bodies in the same order (the same values)."""
 +        ...
