@@ -58,7 +58,7 @@ def main() raises:
     big[5] = Float32.MAX * Float32(2)
     for j in range(100, 400):
         big[cols + j] = Float32(0.5)
-    var lks: List[Int] = [1, 2, 150, cols // 2, cols // 2 + 1, cols - 1, cols]
+    var lks: List[Int] = [60, 150, 400, cols // 2, cols // 2 + 1, cols - 1, cols]
     for k in lks:
         var want = oracle_kth(big, rows, cols, k)
         var off = oracle_kth(big, rows, cols, k + 1 if k < cols else k - 1)

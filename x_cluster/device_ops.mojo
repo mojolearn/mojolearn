@@ -17,7 +17,13 @@ from x_cluster.bodies import (
     FPtr,
     IPtr,
     cov_cell,
+    chain_add,
+    cov_final,
+    cov_term,
     exp_cell,
+    mean_final,
+    nk_final,
+    xk_term,
     gauss_q_cell,
     nk_cell,
     pdist_cell,
@@ -184,6 +190,112 @@ def _cov_kernel(resp: FPtr, x: FPtr, n: Int32, d: Int32, kc: Int32, means: FPtr,
     var t = _tid()
     if t < Int(kc) * Int(d) * Int(d):
         cov_cell(resp, x, Int(n), Int(d), Int(kc), means, nk, reg, dst, t)
+
+
+comptime MOM_TPB = 256
+comptime MOM_SMEM = 4096  # floats: 16 KB, inside Apple's 32 KB threadgroup memory
+comptime MOM_MAX_D = 64
+comptime MOM_ROWS = 256  # rows per tile at most
+comptime MOM_COV_CPB = 16  # covariance chains per block
+comptime MOM_UNROLL = 8  # addends read ahead of the (still ascending) adds
+
+
+# DEVIATION 5121 (the device M-step moments: the addends of a row tile formed
+# in parallel into shared memory, then every fold one thread's register chain
+# over them in ascending row order). Row 201; moments_check (5121 arm).
+def _moments_pass_kernel(
+    resp: FPtr, x: FPtr, n: Int32, d: Int32, kc: Int32, reg: Float32, nk: FPtr, means: FPtr, cov: FPtr,
+    cov_pass: Int32,
+):
+    """The SAME folds as `bodies.nk_cell`, `xk_cell` and `cov_cell` (their
+    `*_term`, `chain_add` and `*_final` functions, rows ascending), split
+    between the threads that FORM the addends and the one thread per chain
+    that ADDS them. The addend of a row does not depend on the chain, so
+    forming a tile of them first, by every thread of the block, moves no
+    bit; the adds stay one register chain per output in row order.
+
+    Pass 1 (`cov_pass` 0; one block per component k): chains 0..d-1 are the
+    mean sums of feature a, chain d the nk sum; the means divide by the
+    FINAL nk, as `xk_cell` does. Pass 2 (`cov_pass` 1; blocks k * G + g):
+    MOM_COV_CPB covariance chains per block against pass 1's means.
+
+    The one-thread-per-cell kernels this replaces ran each chain straight
+    from global memory, one dependent load and a dozen dependent ops per row
+    on a handful of warps (31 ms of a 37 ms BayesianGaussianMixture
+    iteration at 100,000 x 8, 8 components, H100)."""
+    var tid = Int(thread_idx.x)
+    var N = Int(n)
+    var D = Int(d)
+    var K = Int(kc)
+    var nch: Int
+    var cpb: Int
+    var k: Int
+    var c0: Int
+    if cov_pass == Int32(0):
+        k = Int(block_idx.x)
+        nch = D + 1
+        cpb = D + 1
+        c0 = 0
+    else:
+        var g_per_k = (D * D + MOM_COV_CPB - 1) // MOM_COV_CPB
+        k = Int(block_idx.x) // g_per_k
+        nch = D * D
+        cpb = MOM_COV_CPB
+        c0 = (Int(block_idx.x) - k * g_per_k) * MOM_COV_CPB
+    var T = MOM_SMEM // cpb
+    if T > MOM_ROWS:
+        T = MOM_ROWS
+    var terms = stack_allocation[MOM_SMEM, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var fin = stack_allocation[1, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var acc = Float32(0)
+    var mine = tid < cpb and c0 + tid < nch
+    var r0 = 0
+    while r0 < N:
+        var m = N - r0
+        if m > T:
+            m = T
+        for e in range(tid, m * cpb, MOM_TPB):
+            var j = e // cpb
+            var q = e - j * cpb
+            var c = c0 + q
+            var i = r0 + j
+            var r = resp[i * K + k]
+            var t = Float32(0)
+            if c < nch:
+                if cov_pass == Int32(0):
+                    t = r if c == D else xk_term(r, x[i * D + c])
+                else:
+                    var a = c // D
+                    var b = c - a * D
+                    t = cov_term(r, x[i * D + a], x[i * D + b], means[k * D + a], means[k * D + b])
+            terms[e] = t
+        barrier()
+        if mine:
+            var j0 = 0
+            while j0 + MOM_UNROLL <= m:
+                var v = SIMD[DType.float32, MOM_UNROLL]()
+                comptime for u in range(MOM_UNROLL):
+                    v[u] = terms[(j0 + u) * cpb + tid]
+                comptime for u in range(MOM_UNROLL):
+                    acc = chain_add(acc, v[u])
+                j0 += MOM_UNROLL
+            for j in range(j0, m):
+                acc = chain_add(acc, terms[j * cpb + tid])
+        barrier()
+        r0 += m
+    var c = c0 + tid
+    if cov_pass == Int32(0):
+        if mine and c == D:
+            var v = nk_final(acc)
+            fin[0] = v
+            nk[k] = v
+        barrier()
+        if mine and c < D:
+            means[k * D + c] = mean_final(acc, fin[0])
+    elif mine:
+        var a = c // D
+        var b = c - a * D
+        cov[k * nch + c] = cov_final(acc, nk[k], reg, a == b)
 
 
 def _pdist_kernel(a: FPtr, na: Int32, b: FPtr, nb: Int32, d: Int32, metric: Int32, p: Float32, dst: FPtr):
@@ -400,6 +512,19 @@ struct DeviceOps(ClusterOps):
     def moments(
         mut self, resp: Int, x: Int, n: Int, d: Int, kc: Int, reg: Float32, nk: Int, means: Int, cov: Int
     ) raises:
+        if kc <= 0:
+            return
+        if d <= MOM_MAX_D:
+            self.ctx.enqueue_function[_moments_pass_kernel](
+                self._fp(resp), self._fp(x), Int32(n), Int32(d), Int32(kc), reg, self._fp(nk), self._fp(means),
+                self._fp(cov), Int32(0), grid_dim=kc, block_dim=MOM_TPB,
+            )
+            var g_per_k = (d * d + MOM_COV_CPB - 1) // MOM_COV_CPB
+            self.ctx.enqueue_function[_moments_pass_kernel](
+                self._fp(resp), self._fp(x), Int32(n), Int32(d), Int32(kc), reg, self._fp(nk), self._fp(means),
+                self._fp(cov), Int32(1), grid_dim=kc * g_per_k, block_dim=MOM_TPB,
+            )
+            return
         self.ctx.enqueue_function[_nk_kernel](
             self._fp(resp), Int32(n), Int32(kc), self._fp(nk), grid_dim=_grid(kc), block_dim=TPB,
         )

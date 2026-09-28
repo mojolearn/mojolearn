@@ -1,7 +1,7 @@
 diff --git a/x_cluster/device_ops.mojo b/x_cluster/device_ops.mojo
 --- a/x_cluster/device_ops.mojo
 +++ b/x_cluster/device_ops.mojo
-@@ -106,7 +106,7 @@
+@@ -112,7 +112,7 @@
              var chosen = -1
              for b in range(256):
                  var c = Int(hist[b])

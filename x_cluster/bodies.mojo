@@ -302,14 +302,72 @@ def exp_cell(src: FPtr, dst: FPtr, t: Int):
 
 
 # DEVIATION 5110 (the M-step moments nk, means, covariances: every fold over
-# the rows ascending, one quotient). Row 119; moments_check.
+# the rows ascending, one quotient). Row 119; moments_check. The per-row
+# steps and the finals below are the ONE spelling: the cells here (the host
+# column) and the device's tiled kernel (`device_ops._moments_kernel`,
+# DEVIATION 5121) both call them, in the same row order.
+@always_inline
+def chain_add(acc: Float32, t: Float32) -> Float32:
+    """One link of every moments chain: the addend onto the running sum."""
+    return ftz(acc + t)
+
+
+@always_inline
+def nk_step(acc: Float32, r: Float32) -> Float32:
+    return chain_add(acc, r)
+
+
+@always_inline
+def nk_final(acc: Float32) -> Float32:
+    """+ 10 * FLT_EPSILON (sklearn, float32 input)."""
+    return ftz(acc + Float32(1.1920929e-06))
+
+
+@always_inline
+def xk_term(r: Float32, xa: Float32) -> Float32:
+    """One row's addend of a mean chain (independent of the chain, so a
+    kernel may form several ahead of the adds without moving a bit)."""
+    return ftz(identical_mul(r, ftz(xa)))
+
+
+@always_inline
+def xk_step(acc: Float32, r: Float32, xa: Float32) -> Float32:
+    return chain_add(acc, xk_term(r, xa))
+
+
+@always_inline
+def mean_final(acc: Float32, nkv: Float32) -> Float32:
+    return ftz(identical_div(acc, nkv))
+
+
+@always_inline
+def cov_term(r: Float32, xa: Float32, xb: Float32, ma: Float32, mb: Float32) -> Float32:
+    """One row's addend of a covariance chain (independent of the chain)."""
+    var da = ftz(ftz(xa) - ma)
+    var db = ftz(ftz(xb) - mb)
+    return ftz(identical_mul(r, ftz(identical_mul(da, db))))
+
+
+@always_inline
+def cov_step(acc: Float32, r: Float32, xa: Float32, xb: Float32, ma: Float32, mb: Float32) -> Float32:
+    return chain_add(acc, cov_term(r, xa, xb, ma, mb))
+
+
+@always_inline
+def cov_final(acc: Float32, nkv: Float32, reg: Float32, diag: Bool) -> Float32:
+    var v = ftz(identical_div(acc, nkv))
+    if diag:
+        v = ftz(v + reg)
+    return v
+
+
 @always_inline
 def nk_cell(resp: FPtr, n: Int, kc: Int, dst: FPtr, k: Int):
     """nk = sum_i resp[i, k] + 10 * FLT_EPSILON (sklearn, float32 input)."""
     var acc = Float32(0)
     for i in range(n):
-        acc = ftz(acc + resp[i * kc + k])
-    dst[k] = ftz(acc + Float32(1.1920929e-06))
+        acc = nk_step(acc, resp[i * kc + k])
+    dst[k] = nk_final(acc)
 
 
 @always_inline
@@ -319,8 +377,8 @@ def xk_cell(resp: FPtr, x: FPtr, n: Int, d: Int, kc: Int, nk: FPtr, dst: FPtr, c
     var a = cell - k * d
     var acc = Float32(0)
     for i in range(n):
-        acc = ftz(acc + ftz(identical_mul(resp[i * kc + k], ftz(x[i * d + a]))))
-    dst[cell] = ftz(identical_div(acc, nk[k]))
+        acc = xk_step(acc, resp[i * kc + k], x[i * d + a])
+    dst[cell] = mean_final(acc, nk[k])
 
 
 @always_inline
@@ -335,13 +393,8 @@ def cov_cell(
     var b = r - a * d
     var acc = Float32(0)
     for i in range(n):
-        var da = ftz(ftz(x[i * d + a]) - means[k * d + a])
-        var db = ftz(ftz(x[i * d + b]) - means[k * d + b])
-        acc = ftz(acc + ftz(identical_mul(resp[i * kc + k], ftz(identical_mul(da, db)))))
-    var v = ftz(identical_div(acc, nk[k]))
-    if a == b:
-        v = ftz(v + reg)
-    dst[cell] = v
+        acc = cov_step(acc, resp[i * kc + k], x[i * d + a], x[i * d + b], means[k * d + a], means[k * d + b])
+    dst[cell] = cov_final(acc, nk[k], reg, a == b)
 
 
 # ------------------------------------------------------------------ host RNG
