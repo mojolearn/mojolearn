@@ -178,10 +178,21 @@ class _Prog:
 
     def run(self, mode):
         binding = _prep_binding(mode)
+        # Resolve the mandatory entry before probing optional GPU optimizations:
+        # host facades raise ImportError (not AttributeError) for absent exports.
+        # A missing host binary or mandatory implementation must still fail.
+        run = binding.x_prep_run
+        def optional(name):
+            try:
+                return getattr(binding, name)
+            except (AttributeError, ImportError):
+                return None
+        run_out = optional("x_prep_run_out")
         H, sc, on = self.size, self.scratch_size, self.out_size or 0
-        has_out = hasattr(binding, "x_prep_run_out")
+        has_out = run_out is not None
         dev_out = has_out and on > 0 and os.environ.get("MOJOLEARN_XPREP_OUT", "1") != "0"
-        dev_scratch = sc > 0 and (has_out or hasattr(binding, "x_prep_run_scratch"))
+        run_scratch = optional("x_prep_run_scratch") if sc > 0 and not has_out else None
+        dev_scratch = sc > 0 and (has_out or run_scratch is not None)
         if H + sc + on > 2 ** 31 - 1:
             raise ValueError("x_prep: the program exceeds the native Int32 indexing bound")
         # layout: the host arena, then (host) the output unless the device keeps it,
@@ -200,16 +211,16 @@ class _Prog:
         self._out, self._out_at = None, obase
         if dev_out:
             out = array.array(self._out_code, bytes(4 * on))
-            binding.x_prep_run_out(base, prog.buffer_info()[0], out.buffer_info()[0],
+            run_out(base, prog.buffer_info()[0], out.buffer_info()[0],
                                    (ha, sc if dev_scratch else 0, on, nst))
             self._out = out
         elif dev_scratch:
             if has_out:
-                binding.x_prep_run_out(base, prog.buffer_info()[0], 0, (ha, sc, 0, nst))
+                run_out(base, prog.buffer_info()[0], 0, (ha, sc, 0, nst))
             else:
-                binding.x_prep_run_scratch(base, ha, sc, prog.buffer_info()[0], nst)
+                run_scratch(base, ha, sc, prog.buffer_info()[0], nst)
         else:
-            binding.x_prep_run(base, host_words, prog.buffer_info()[0], nst)
+            run(base, host_words, prog.buffer_info()[0], nst)
         self.arena = arena
         return self
 
