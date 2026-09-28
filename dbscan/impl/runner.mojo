@@ -287,6 +287,38 @@ def relabel_for_skl_kernel(
             labels.unsafe_store(tid, labels.unsafe_load(tid) - Int32(1))
 
 
+def border_pull_kernel(
+    labels: MutPointer[Int32, MutAnyOrigin],
+    row_ind: MutPointer[Int32, MutAnyOrigin],
+    col_ind: MutPointer[Int32, MutAnyOrigin],
+    core: MutPointer[UInt8, MutAnyOrigin],
+    start_vertex_id_in: Int32,
+    batch_size_in: Int32,
+    n_in: Int32,
+):
+    """DEVIATION 5130, the border pass: every NON-core row of the batch takes
+    the smallest label among its CORE neighbours (`MAX_LABEL`, noise, when it
+    has none). Reads core labels only and writes non-core labels only, so no
+    thread reads what another writes, and the result is independent of the
+    launch order."""
+    var tid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var global_id = tid + Int(start_vertex_id_in)
+    if tid >= Int(batch_size_in) or global_id >= Int(n_in):
+        return
+    if core.unsafe_load(global_id) != 0:
+        return
+    var best = MAX_LABEL
+    var start = Int(row_ind.unsafe_load(tid))
+    var end = Int(row_ind.unsafe_load(tid + 1))
+    for j in range(start, end):
+        var jj = Int(col_ind.unsafe_load(j))
+        if core.unsafe_load(jj) != 0:
+            var lj = labels.unsafe_load(jj)
+            if lj < best:
+                best = lj
+    labels.unsafe_store(global_id, best)
+
+
 def dbscan_fit(
     ctx: DeviceContext,
     mut x: DeviceBuffer[DType.float32],
@@ -898,6 +930,84 @@ their code branches on is this Bool.
                     + String(n_batches) + " "
                     + String(Float64(perf_counter_ns() - t_ml) / 1.0e6)
                 )
+
+    # --- the border pass (DEVIATION 5130, lane cluster-apple2) -------------
+    # A BATCHED fit's border labels depended on the batch count. After the
+    # merges every CORE label is the fixed point of the whole graph (the
+    # merge unions the per-batch components over core points), but a border
+    # point's label was the smallest RAW label among its core neighbours in
+    # each per-batch labelling, resolved through `R` only afterwards: the
+    # raw minimum can come from a component whose resolved label is not the
+    # smallest, and `reassign` cannot undo that. One batch has no such step
+    # (its border label is the minimum over the final labels of its core
+    # neighbours), so the 48 GB M4 Pro's two-batch taxi 100k fit gave labels
+    # no one-batch column gives. This pass recomputes every border label of
+    # a batched fit from the final core labels, which is the one-batch
+    # answer by construction; a one-batch fit skips it (bits unchanged).
+    # The last batch's CSR is still resident; every other batch's is
+    # rebuilt with the same count and fill loop 2 used.
+    if n_batches > 1:
+        var t_bp = perf_counter_ns()
+        var bb = n_batches - 1
+        while bb >= 0:
+            var start_b = bb * batch
+            var np_b = min(n_rows - start_b, batch)
+            if np_b > 0 and bb < n_batches - 1:
+                if sparse_rbc_mode:
+                    var qbb = x.create_sub_buffer[DType.float32](
+                        start_b * n_features, np_b * n_features
+                    )
+                    if keep_counts:
+                        ctx.enqueue_copy(
+                            dst_buf=vd.create_sub_buffer[DType.int32](0, np_b),
+                            src_buf=vd_all.create_sub_buffer[DType.int32](
+                                start_b, np_b
+                            ),
+                        )
+                        ctx.enqueue_function[rbc_exclusive_scan_kernel](
+                            ex_scan.unsafe_ptr(), vd.unsafe_ptr(),
+                            Int32(np_b),
+                            grid_dim=(1, 1, 1), block_dim=(RBC_SCAN_TPB, 1, 1),
+                        )
+                    else:
+                        var _nnzb = rbc_eps_nn_query_count(
+                            ctx, rbc_xr, qbb, rbc_r, rbc_ip, rbc_c1, rbc_d1,
+                            rbc_rad, ex_scan, vd, np_b, n_features,
+                            n_landmarks, eps_radius,
+                        )
+                    ctx.synchronize()
+                    rbc_eps_nn_query_fill(
+                        ctx, rbc_xr, qbb, rbc_r, rbc_ip, rbc_c1, rbc_d1,
+                        rbc_rad, ex_scan, col_ind, np_b, n_features,
+                        n_landmarks, eps_radius,
+                    )
+                    ctx.synchronize()
+                else:
+                    vertex_deg_dispatch(
+                        ctx, adj, vd, x, start_b, np_b, n_rows, n_features,
+                        eps, metric,
+                    )
+                    ctx.synchronize()
+                    adj_graph_run(
+                        ctx, adj, vd, ex_scan, col_ind, block_sums, np_b,
+                        n_rows,
+                    )
+                    ctx.synchronize()
+            if np_b > 0:
+                ctx.enqueue_function[border_pull_kernel](
+                    labels.unsafe_ptr(), ex_scan.unsafe_ptr(),
+                    col_ind.unsafe_ptr(), core.unsafe_ptr(), Int32(start_b),
+                    Int32(np_b), Int32(n_rows),
+                    grid_dim=((np_b + TPB - 1) // TPB, 1, 1),
+                    block_dim=(TPB, 1, 1),
+                )
+                ctx.synchronize()
+            bb -= 1
+        if phase_timing:
+            print(
+                "PHASE border_pass batches " + String(n_batches) + " "
+                + String(Float64(perf_counter_ns() - t_bp) / 1.0e6)
+            )
 
     # --- THE STAGE HASHES (`core/identity_trace.mojo`) --------------------
     # THREE RECORDS, AND THE CHOICE OF THREE IS THE WHOLE POINT.
