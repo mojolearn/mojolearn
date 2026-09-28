@@ -67,3 +67,10 @@ change (7298ebd92) trims.
 
 Decision on IDENTICAL ridx for the non-symmetric driver: kept on (3 of 4
 cells faster, geomean 0.989), with the Istella depthwise 1.024 noted.
+| RF row-major bins IDENTICAL n_cols <= 64 (c7228df55; tip bfc552c67) | m4-a | 1790609927653 | rf:taxireg | 16485 | 10177 | 0.617 | 58ec783b7afbd7a7 |
+| same | m4-a | 1790609927653 | rf:taxi | 6217 | 5594 | 0.900 | 452a173087f86a9d |
+| same | m4-a | 1790609927653 | dt:taxireg | 188 | 143 | 0.760 | e735a53b7d74025a |
+| same | m4-a | 1790609927653 | dt:taxi | 146 | 129 | 0.880 | 86b6487420c736c8 |
+| same | m4-a | 1790609927653 | bagging:taxi | 1129 | 969 | 0.858 | 16aaba82631a5774 |
+| same | m4-a | 1790609927653 | dart:taxireg | 6600 | 6356 | 0.963 | 86f40254833745ec |
+| same | m4-a | 1790609927653 | adaboost:taxireg | 2339 | 2348 | 1.004 | 160452cbaf288200 |
