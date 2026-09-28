@@ -24,6 +24,26 @@ from std.gpu import thread_idx
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
+from std.sys import llvm_intrinsic
+from std.sys.info import is_apple_gpu
+
+
+@always_inline
+def _jacobi_device_barrier():
+    """The rotation kernel's block barrier, which must also order DEVICE
+    memory: lanes hand `a` and `v` cells to each other through device
+    buffers (tid 0 reads the (p, q) block the lane owning p and the lane
+    owning q' wrote; the basis init strides by launch width). On Apple
+    `barrier()` is `llvm.air.wg.barrier(2, 1)`, threadgroup memory only, so
+    Apple gets flags 3 (mem_device | mem_threadgroup, x_linear's
+    `team_barrier`), in the stdlib's own `llvm_intrinsic` spelling so the
+    declaration never conflicts with `barrier()`'s (lane/apple2-merged,
+    2026-09-28). NVIDIA and AMD keep `barrier()`, which already orders
+    global memory within the block. Same stores, same order: no bit moves."""
+    comptime if is_apple_gpu():
+        llvm_intrinsic["llvm.air.wg.barrier", NoneType](Int32(3), Int32(1))
+    else:
+        barrier()
 
 
 comptime JACOBI_TPB = lib_block_size_for[K_LIB_JACOBI_EIGH, TARGET_COLUMN]()
@@ -340,7 +360,7 @@ def jacobi_eigh_kernel[rot_tpb: Int = JACOBI_ROT_TPB](
         var cc = idx % n
         v.unsafe_store(idx, Float32(1.0) if r == cc else Float32(0.0))
         idx += rot_tpb
-    barrier()
+    _jacobi_device_barrier()
 
     # THE FOLD STRIDES BY `JACOBI_TPB`, NOT BY THE LAUNCH WIDTH, and only the
     # first `JACOBI_TPB` lanes carry a partial. That is the whole reason the
@@ -395,7 +415,7 @@ def jacobi_eigh_kernel[rot_tpb: Int = JACOBI_ROT_TPB](
                     )
                     rot[0] = cs[0]
                     rot[1] = cs[1]
-                barrier()
+                _jacobi_device_barrier()
 
                 var c = rot[0]
                 var s = rot[1]
@@ -418,7 +438,7 @@ def jacobi_eigh_kernel[rot_tpb: Int = JACOBI_ROT_TPB](
                     v.unsafe_store(k * n + p, _rot_sub(c, vkp, s, vkq))
                     v.unsafe_store(k * n + q, _rot_add(s, vkp, c, vkq))
                     k += rot_tpb
-                barrier()
+                _jacobi_device_barrier()
 
     if tid == 0:
         info_out.unsafe_store(0, Float32(1.0) if converged else Float32(0.0))

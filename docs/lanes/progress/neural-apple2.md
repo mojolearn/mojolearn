@@ -33,7 +33,7 @@ digests, byte LM final witness and loss digests).
 | 691144783 | Apple attention matrix kernels: the estash zdot drops the barrier after warp 0's z fold; the forward's pass 2 alternates its exp tile between two pages and drops the barrier after the denominator fold (`-D MOJOLEARN_ATTN_ZDOT_AMMA_FOLD_BARRIER`, `-D MOJOLEARN_ATTN_FWD_AMMA_P2_BARRIER` restore) | DEFAULT | PROVEN (speed + witness, job 2) |
 | 4e2df9e4f | Apple attention: the `[B, nh, L, S]` scratches (round 3 forward stash, backward y/dy) from a process cache instead of a fresh allocation per call (`ATTN_SCRATCH_CACHE`, `-D MOJOLEARN_ATTN_NO_SCRATCH_CACHE` reverts) | DEFAULT | PROVEN (speed + witness, job 2) |
 | fec0f64f5 | Apple round 3 zdot (`fused_bwd_zdot_stash_pf_kernel`, the denied path): no barrier after the z fold on Apple (`-D MOJOLEARN_ATTN_ZDOT_STASH_FOLD_BARRIER` restores; other columns unchanged) | DEFAULT | PROVEN: M3 Ultra T3 forced denied 2.640 -> 2.623 s, witness equal (small) |
-| 32634c4b2 | Mamba-3 backward S16: the d_v half computes each q . k dot once per row into shared memory (`mamba3_s16_v_shared_kernel`; `-D MOJOLEARN_MAMBA3_S16_V_NAIVE` reverts; host restatement keeps the naive kernel) | DEFAULT | measured with fbde1272e: Samba train step 1460 -> 1273 ms (M4 Pro), losses equal; parameter digests owed (job 5) |
+| 32634c4b2 | Mamba-3 backward S16: the d_v half computes each q . k dot once per row into shared memory (`mamba3_s16_v_shared_kernel`; `-D MOJOLEARN_MAMBA3_S16_V_NAIVE` reverts; host restatement keeps the naive kernel) | DEFAULT | PROVEN with fbde1272e (speed + digests): Samba train step 1460 -> 1273 ms (M4 Pro), 888 -> 691 ms (M3 Ultra); parameters after 4 steps 5170727144a51f38 in both variants (job 6) |
 | fbde1272e | Mamba-3 backward S17: the chunk-end `add` chain staged in shared memory, folded by one thread in the naive order (`mamba3_s17_tail_shared_kernel`; `-D MOJOLEARN_MAMBA3_S17_TAIL_NAIVE` reverts) | DEFAULT | see 32634c4b2 |
 | 30d8fbe81 | Apple matrix forward pass 1: one barrier per key block fewer (`-D MOJOLEARN_ATTN_FWD_AMMA_P1_BARRIER` restores) | DEFAULT | in job 4's final A/B (witness equal); not isolated |
 | 815db5956 | Apple attention: a process DENIED the kept exp stashes recomputes one layer's stash in the backward (estash forward into scratch + estash backward) instead of the round 3 zdot | opt-in since 07b658ab3 (`-D MOJOLEARN_ATTN_APPLE_ERECOMP`) | REJECTED as a default: witness equal but 3.619 s vs 3.537 s (round 3 backward) at T3 on the M3 Ultra |
@@ -198,3 +198,108 @@ unless noted; every digest equal between base and new in every race.
 The AB_PYPROF Samba runs failed in both variants (the generator's initializers
 dlopen libMojolearnMath, which a bindings-only tree does not build); pyprof
 now uses numpy weights (1818eda64) and job 6 repeats the parameter digests.
+
+## Job 6: Samba parameter digests (m4pro-b, steward 1790619788903)
+
+base = 35d08f9ca, new = 1818eda64, 2 alternations. samba-train-step 1460.0 /
+1458.8 -> 1272.7 / 1272.7 ms (-12.8%). pyprof (numpy weights, 1 warm-up + 3
+profiled steps): losses 5.598386, 5.607141, 5.610144, 5.635735 in both
+variants, loss digest 6ff76ef49ec57349 and PARAMETER digest 5170727144a51f38
+in both variants and both reps. The Mamba-3 backward changes (S16, S17,
+context, waits) move no bit of the Samba training state.
+
+## FINAL (freeze, 2026-09-28 19:05Z)
+
+The lane is closed at the orchestrator's FREEZE. Nothing is half done; the
+working tree is clean; nothing is queued on any Mac.
+
+### Before -> after (IDENTICAL; every digest equal between base and after)
+
+base = 35d08f9ca (the fork point 037daa353's default path; the commits
+between are opt-in arms only). after = the lane's head (library path of
+30d8fbe81 plus tooling).
+
+| workload | M3 Ultra (m3ultra-b) | M4 Pro (m4pro-b) |
+|---|---|---|
+| byte LM T3 shard step, B4 L2048 d768 12L V50257 (s) | 2.911 / 2.929 -> **2.117 / 2.117** (-27.5%; estash granted) | 7.016 / 7.014 -> **5.926 / 5.925** (-15.5%; estash denied) |
+| byte LM B1 L2048 d768 12L step (s) | not run | 1.586 / 1.586 -> **1.350 / 1.350** (-14.9%) |
+| lm-train-step (ms) | 291.6 / 280.4 -> **207.1 / 210.9** (-27%) | 379.0 / 379.6 -> **329.2 / 328.9** (-13%) |
+| samba-train-step (ms) | 889.9 / 887.4 -> **690.7 / 690.6** (-22%) | 1459.6 / 1462.3 -> **1274.6 / 1272.4** (-13%) |
+| transformer-forward (ms) | 23.9 / 25.1 -> 20.8 / 24.8 | 30.6 / 30.6 -> **25.0 / 25.3** (-18%) |
+| lm-forward, gemm, mamba1/2/3-forward, samba-forward | flat (within 5%) | flat |
+| mlp-train-step (ms) | 7.84 / 7.97 -> 8.12 / 8.27 | 8.06 / 7.84 -> 9.10 / 8.95 (+1 ms, see Known issues) |
+
+Byte LM witnesses: T3 final witness gradients ab96db5b..., parameters
+ecaba3f7..., m de07d03c..., v c30882c0..., loss digests 676298da afc46227
+34fe4c49 50902bed on BOTH Macs, before and after, equal to round 1's
+BEFORE (b11745d8e): the IDENTICAL neural bits GPT-3 route B depends on did not
+move. B1: 6c66669b... / 611d6d50... / 32fd1a48... / 77c7e27d..., losses
+7755ecd0 0a5f8f7a e6e4e8e3 73cb5352. Samba: parameters 5170727144a51f38.
+
+### Default path (every change below is ON by default; each has a revert define)
+
+| commit | change | reaches |
+|---|---|---|
+| 26f39f2cd | Apple matrix GEMM: the small tile (< 2048 default tiles) walks k in 32-step windows when the leaf allows (`-D MOJOLEARN_APPLE_MMA_SMALL_KB=16` reverts) | SHARED: every Apple IDENTICAL GEMM with fewer than 2048 default tiles, classical families included |
+| 691144783 | Apple estash zdot matrix kernel: no barrier after warp 0's z fold (733 -> 135 ms a T3 step on the M3 Ultra); matrix forward pass 2 two-page exp tile (`MOJOLEARN_ATTN_ZDOT_AMMA_FOLD_BARRIER`, `MOJOLEARN_ATTN_FWD_AMMA_P2_BARRIER` restore) | Apple fused attention (byte LM, TransformerBlock, Samba attention) |
+| 30d8fbe81 | Apple matrix forward pass 1: one barrier per key block fewer (`MOJOLEARN_ATTN_FWD_AMMA_P1_BARRIER`) | same |
+| fec0f64f5 | Apple round 3 zdot (the denied path): no barrier after the z fold (other columns unchanged; `MOJOLEARN_ATTN_ZDOT_STASH_FOLD_BARRIER`) | Apple fused attention without the estash grant |
+| 4e2df9e4f | Apple attention `[B, nh, L, S]` scratches from a process cache (`MOJOLEARN_ATTN_NO_SCRATCH_CACHE`) | Apple fused attention |
+| 68077a9d9 | Mamba-1/2/3 backward bindings: the binding's process-lifetime context | mamba bindings (Samba) |
+| 0678acea6 | Mamba-3 backward: scratch allocations without a wait each | mamba binding |
+| 32634c4b2 | Mamba-3 backward S16: d_v dots once per row in shared memory (`MOJOLEARN_MAMBA3_S16_V_NAIVE`) | mamba binding; the host restatement keeps the naive kernel |
+| fbde1272e | Mamba-3 backward S17: chunk-end add chain staged in shared memory (`MOJOLEARN_MAMBA3_S17_TAIL_NAIVE`) | same |
+
+### Opt-in only (measured, not a default)
+
+- ca692c7e2 `MOJOLEARN_APPLE_MMA_DB` (double-buffered GEMM pages): 1.5-2x SLOWER.
+- 0d5d08027 `MOJOLEARN_APPLE_MMA_KB_WIDE=32`: faster on small-tile calls (taken
+  by 26f39f2cd), slower on default-tile calls.
+- 35d08f9ca `MOJOLEARN_APPLE_MMA_SPLIT_BLOCKS=<n>` (leaf-group split): hashes
+  equal, no better than the small-tile KB 32 default overall.
+- 815db5956 / 07b658ab3 `MOJOLEARN_ATTN_APPLE_ERECOMP` (denied process
+  recomputes the estash): witness equal, 3.619 s vs 3.537 s: slower.
+- 6740d5c54 `MOJOLEARN_MAMBA_TIMING=1`: per-stage walls, measurement only.
+- Tools: tools/apple_speed_neural/{profile.sh, ab.sh, attn_arms.sh,
+  gemm_geom.sh, pyprof.py}; tools/lm_step_memory_probe.py reads a sixth gate
+  field (recompute).
+
+### Unproven: needs the integration run (m2pro, NVIDIA, AMD, CPU)
+
+No verifier, identity sweep, lane check or sabotage ran on any commit of this
+lane (by instruction). Evidence is speed-job digests on the M3 Ultra and the
+M4 Pro only. The integration run must cover:
+- 26f39f2cd (SHARED GEMM): only the T3 neural calls, the byte LM step and the
+  bench lanes were digested. Every classical Apple IDENTICAL GEMM with fewer
+  than 2048 default tiles now runs KB 32 windows; the M2 Pro was never timed
+  or digested with it.
+- 691144783, 30d8fbe81, fec0f64f5: barrier removals in Apple attention
+  kernels. Argued safe (threadgroup memory only; every removed barrier's
+  hazards are covered by the next staging barrier) and digests equal on M3
+  and M4, but the Metal barrier hazard (barrier() does not order device
+  memory) makes the M2 Pro and the identity sweep the real proof; the
+  kernel_matrix_attn checks and the transformer fused check must run.
+- 4e2df9e4f: attention scratch cache (relies on every kernel writing every
+  cell it reads; true for the digested shapes; windowed / ragged / decode
+  shapes and the eager fallback were not digested).
+- 32634c4b2, fbde1272e, 68077a9d9, 0678acea6: Mamba-3 backward (Samba
+  parameters equal over 4 steps at one shape; the mamba identity lanes, the
+  mamba3 backward tail dump gate, other shapes, and the CPU host restatement
+  (regenerated, `--check` clean, compiled only) need the run).
+- The M2 Pro: nothing in this lane ran there.
+
+### Known issues
+
+- mlp-train-step (8->16->3 toy, launch bound) is 0.3-1 ms slower after on both
+  Macs (losses equal). Not investigated; no change in this lane targets its
+  path directly, so the integration run should re-time it before reading it
+  as a regression.
+- FAST mode: the neural bindings are IDENTICAL only (their FAST tier is owed
+  to the orchestrator, ALGORITHM_EXPANSION_PLAN R7), so this lane had no FAST
+  path to speed up.
+- mamba1-forward (round 1's open item): RESOLVED as no regression (job 1:
+  b11745d8e 20.3 / 20.5 / 20.3 ms, 30497d57e 21.9 / 19.8 / 19.9, 35d08f9ca
+  20.5 / 19.5 / 19.9 on the M3 Ultra, digest dfe79ab628aa17cf everywhere).
+- Remaining big costs at T3 (M3 Ultra census after): GEMMs about 1.35 s,
+  attention forward 272 ms, dk/dv 143, dq 119, zdot 135. The M4 Pro T3 runs
+  the round 3 backward (estash denied under the 35% rule).

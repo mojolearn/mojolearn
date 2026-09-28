@@ -44,15 +44,21 @@ svd (one-sided):
 
 The eigh kernel's lanes DO hand device words to each other (a cell is
 written by lane i in a column stage and by lane j in a row stage), exactly
-as `jacobi_eigh_kernel`'s do; its rotation barrier is the block barrier,
-the one `jacobi_eigh_kernel` uses between rotations (its Metal column is
-proven equal to the CPU's). An atomic fence before it compiled to AIR but
-Metal's pipeline creation refused the kernel (m4pro-b, 1790606245923);
-`air.wg.barrier(3, 1)` through `external_call` does not link in a module
-that also calls `barrier()`; `threadfence` is NVIDIA-only. The svd kernel needs no device ordering at all.
+as `jacobi_eigh_kernel`'s do. Its rotation barrier is `dev_barrier`: on
+Apple `llvm.air.wg.barrier(3, 1)`, Metal's
+`threadgroup_barrier(mem_device | mem_threadgroup)`, because `barrier()` there
+is `llvm.air.wg.barrier(2, 1)` and orders threadgroup memory only (the
+x_linear team defect, 2979a9de0); `barrier()` on NVIDIA and AMD
+(lane/apple2-merged, 2026-09-28). It is spelled through `llvm_intrinsic`,
+the stdlib's own spelling of `barrier()` (max/gpu/sync), so both calls share
+one declaration: `external_call["air.wg.barrier"]` conflicts with it
+("existing function with conflicting attributes") in any binding that also
+calls `barrier()`, and an atomic fence made Metal refuse the pipeline
+(m4pro-b, 1790606245923). The svd kernel needs no device ordering at all.
 """
 from std.gpu import thread_idx
 from std.memory import stack_allocation
+from std.sys import llvm_intrinsic
 from std.sys.info import is_apple_gpu
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -77,8 +83,12 @@ comptime S2_V = J2_TPB - S2_R
 
 @always_inline
 def dev_barrier():
-    """A block barrier that also orders DEVICE memory (x_linear/team.mojo)."""
-    barrier()
+    """A block barrier that also orders DEVICE memory (x_linear/team.mojo
+    `team_barrier`'s mem flags, the stdlib's `llvm_intrinsic` spelling)."""
+    comptime if is_apple_gpu():
+        llvm_intrinsic["llvm.air.wg.barrier", NoneType](Int32(3), Int32(1))
+    else:
+        barrier()
 
 
 @always_inline
