@@ -37,9 +37,7 @@ IDENTICAL-exact (same arithmetic, same order; both modes; digests equal in every
    cells of at most 1024 over K >= 32768 (VAR). NVIDIA, AMD and the host keep the
    one-thread op. SHARED: `DeviceExec.launch` routes these ops.
 5. AutoARIMA: `select_d` over the whole batch in one call (4387772c3).
-6. Prophet likelihood gradient folds over 16-point blocks with the running value in
-   a register (778a78ef1; job 9).
-7. `prophet_fg` split into two inlined helpers, the same operations (29a290cf6).
+6. `prophet_fg` split into two inlined helpers, the same operations (29a290cf6).
 
 FAST only (compiled out of IDENTICAL builds; each has a paired quality check that
 matches or beats FAST before):
@@ -58,7 +56,10 @@ matches or beats FAST before):
 
 Tried and reverted: 48-deep staging of long-K GEMM folds (VAR IDENTICAL 0.59 ->
 1.04 s; 61b479c9f); one DeviceContext per module for ARIMA, KPSS and Holt-Winters
-(no gain, job 7; reverted in 602351663).
+(no gain, job 7; reverted in 602351663); Prophet likelihood gradient folds over
+16-point blocks with the running values in registers (778a78ef1; job 9 on m4-a:
+IDENTICAL 39.12 -> 40.31 s at 32768 points, digests equal; the fit is compute
+bound, not memory bound; reverted).
 
 ## Before / after
 
@@ -288,6 +289,11 @@ var 0.0444 -> 0.000475, garch loglik -138.314873 -> -138.314814 and QLIKE 1.0855
 1.085543, prophet 65536 objective -170422.72 -> -170422.28 with RMSE 0.9932792 ->
 0.9932782; prophet 1M FAST 0.350 s). AutoARIMA's before arm ran 7.8 / 8.8 s here
 against 11.5 / 21.8 s in jobs 5 and 6: its spread is wide, the ratio is not.
+
+### Job 9: m4-a, steward 1790614025858, before 602351663, after 778a78ef1 (Prophet blocks)
+
+prophet (32768) IDENTICAL 39.12 -> 40.31 s (0.97x), FAST 0.166 -> 0.164 s; stl,
+croston unchanged; digests equal. Reverted.
 
 ## Unproven
 
