@@ -24,7 +24,7 @@ THE FIXED-ORDER DESIGN
 """
 
 from checks.numerics import ftz, identical_div, identical_mul, identical_mul_add, identical_sqrt
-from x_ann.ivf_pq_core import F32P, I32P, pq_inf, pq_insert, pq_next_probe
+from x_ann.ivf_pq_core import F32P, I32P, ivf_row_removed, pq_inf, pq_insert, pq_next_probe
 
 
 @always_inline
@@ -115,6 +115,29 @@ def rq_encode_row(
 
 
 @always_inline
+def rq_candidate_est(
+    ws: F32P, w_off: Int, qn2: Float32, codes: I32P, row: Int, words: Int, D: Int, norms: F32P, ips: F32P,
+    scale: Float32,
+) -> Float32:
+    """One candidate's estimated distance from the rotated query residual at
+    ws[w_off:] (squared norm qn2) and the row's bits, norm and factor
+    (DEVIATIONS 5841, 5842). The cell and the device scan (`rq_score_kernel`)
+    both call it."""
+    var ip = ips.unsafe_load(row)
+    var norm = norms.unsafe_load(row)
+    if ip > Float32(0.0):
+        var dot = Float32(0.0)
+        for j in range(D):
+            var v = ws.unsafe_load(w_off + j)
+            var bit = (codes.unsafe_load(row * words + j // 32) >> Int32(j % 32)) & Int32(1)
+            dot = ftz(dot + (v if bit != 0 else -v))
+        var xq = ftz(identical_div(ftz(identical_mul(dot, scale)), ip))
+        var nn = ftz(identical_mul(norm, norm))
+        return ftz(ftz(nn + qn2) - ftz(identical_mul(Float32(2.0), ftz(identical_mul(norm, xq)))))
+    return qn2
+
+
+@always_inline
 def rq_search_cell(
     qi: Int, queries: F32P, dim: Int, centers: F32P, n_lists: Int, offsets: I32P,
     list_indices: I32P, codes: I32P, norms: F32P, ips: F32P, D: Int, words: Int, seed: Int,
@@ -142,22 +165,9 @@ def rq_search_cell(
             qn2 = ftz(identical_mul_add(v, v, qn2))
         for slot in range(Int(offsets.unsafe_load(best_l)), Int(offsets.unsafe_load(best_l + 1))):
             var row = Int(list_indices.unsafe_load(slot))
-            if mask.unsafe_load(row) == 0:
+            if ivf_row_removed(mask, row):
                 continue
-            var est: Float32
-            var ip = ips.unsafe_load(row)
-            var norm = norms.unsafe_load(row)
-            if ip > Float32(0.0):
-                var dot = Float32(0.0)
-                for j in range(D):
-                    var v = ws.unsafe_load(qi * D + j)
-                    var bit = (codes.unsafe_load(row * words + j // 32) >> Int32(j % 32)) & Int32(1)
-                    dot = ftz(dot + (v if bit != 0 else -v))
-                var xq = ftz(identical_div(ftz(identical_mul(dot, scale)), ip))
-                var nn = ftz(identical_mul(norm, norm))
-                est = ftz(ftz(nn + qn2) - ftz(identical_mul(Float32(2.0), ftz(identical_mul(norm, xq)))))
-            else:
-                est = qn2
+            var est = rq_candidate_est(ws, qi * D, qn2, codes, row, words, D, norms, ips, scale)
             pq_insert(k, base, est, Int32(row), out_d, out_i)
             n_cand += 1
     out_n.unsafe_store(qi, Int32(n_cand))

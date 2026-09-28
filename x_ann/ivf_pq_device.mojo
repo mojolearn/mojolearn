@@ -8,17 +8,18 @@ from std.gpu import block_idx, block_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from x_ann.device_ctx import x_ann_ctx
 from x_ann.stage_timer import AnnStages
+from x_ann.ivf_scan_device import ivf_scan_search
 
 from cluster.estimator import kmeans_fit
 from cluster.impl.kmeans_params import INIT_KMEANS_PLUS_PLUS, METRIC_L2_EXPANDED
 from ivf.estimator import ivf_flat_build_host
 from metrics.checks.device_io import upload_f32, upload_i32, download_f32, download_i32
 from x_ann.refine_core import refine_cell
-from x_ann.ivf_rabitq_core import rq_encode_cell, rq_pow2, rq_scale, rq_search_cell
-from x_ann.ivf_sq_core import sq_encode_cell, sq_range_cell, sq_search_cell
+from x_ann.ivf_rabitq_core import rq_encode_cell, rq_pow2, rq_scale
+from x_ann.ivf_sq_core import sq_encode_cell, sq_range_cell
 from x_ann.ivf_pq_core import (
     F32P, I32P, IvfPqIndex, pq_assign_cell, pq_labels_from_lists,
-    pq_len_of, pq_residual_cell, pq_search_cell, pq_validate,
+    pq_len_of, pq_residual_cell, pq_validate,
 )
 
 comptime TPB = 128
@@ -38,19 +39,6 @@ def assign_kernel(count: Int32, r: F32P, cb: F32P, pq_dim: Int32, rot_dim: Int32
     var e = _tid()
     if e < Int(count):
         pq_assign_cell(e, r, cb, Int(pq_dim), Int(rot_dim), Int(pq_len), Int(n_codes), codes)
-
-
-def search_kernel(
-    count: Int32, queries: F32P, dim: Int32, centers: F32P, n_lists: Int32, offsets: I32P,
-    list_indices: I32P, codes: I32P, cb: F32P, pq_dim: Int32, pq_len: Int32, n_codes: Int32,
-    k: Int32, n_probes: Int32, mask: I32P, out_d: F32P, out_i: I32P, out_n: I32P,
-):
-    var e = _tid()
-    if e < Int(count):
-        pq_search_cell(
-            e, queries, Int(dim), centers, Int(n_lists), offsets, list_indices, codes, cb,
-            Int(pq_dim), Int(pq_len), Int(n_codes), Int(k), Int(n_probes), mask, out_d, out_i, out_n,
-        )
 
 
 def _grid(count: Int) -> Int:
@@ -176,14 +164,10 @@ def ivf_pq_search_device(
     var dd = ctx.enqueue_create_buffer[DType.float32](m * k)
     var di = ctx.enqueue_create_buffer[DType.int32](m * k)
     var dn = ctx.enqueue_create_buffer[DType.int32](m)
-    ctx.enqueue_function[search_kernel](
-        Int32(m), dq.unsafe_ptr(), Int32(dim), dc.unsafe_ptr(), Int32(n_lists), doff.unsafe_ptr(),
-        dli.unsafe_ptr(), dcodes.unsafe_ptr(), dcb.unsafe_ptr(), Int32(pq_dim), Int32(pq_len),
-        Int32(n_codes), Int32(k), Int32(n_probes), dmask.unsafe_ptr(), dd.unsafe_ptr(), di.unsafe_ptr(),
-        dn.unsafe_ptr(),
-        grid_dim=_grid(m), block_dim=TPB,
-    )
-    ctx.synchronize()
+    # lane ann-apple: the split scan (x_ann/ivf_scan_device.mojo), the same
+    # bits as the old one thread per query running `pq_search_cell`
+    ivf_scan_search[0](ctx, dq, dc, doff, dli, dcodes, dmask, dcb, dcb, offsets, n_lists, dim, m, k, n_probes,
+                       pq_dim, pq_len, n_codes, 1, 1, 0, Float32(1.0), dd, di, dn)
     out_d = download_f32(ctx, dd, m * k)
     out_i = download_i32(ctx, di, m * k)
     out_n = download_i32(ctx, dn, m)
@@ -210,17 +194,6 @@ def sq_encode_kernel(count: Int32, r: F32P, dim: Int32, vmin: F32P, delta: F32P,
     var e = _tid()
     if e < Int(count):
         sq_encode_cell(e, r, Int(dim), vmin, delta, codes)
-
-
-def sq_search_kernel(
-    count: Int32, queries: F32P, dim: Int32, centers: F32P, n_lists: Int32, offsets: I32P,
-    list_indices: I32P, codes: I32P, vmin: F32P, delta: F32P, k: Int32, n_probes: Int32, mask: I32P,
-    out_d: F32P, out_i: I32P, out_n: I32P,
-):
-    var e = _tid()
-    if e < Int(count):
-        sq_search_cell(e, queries, Int(dim), centers, Int(n_lists), offsets, list_indices, codes, vmin,
-                       delta, Int(k), Int(n_probes), mask, out_d, out_i, out_n)
 
 
 def ivf_sq_build_device(
@@ -285,13 +258,8 @@ def ivf_sq_search_device(
     var dd = ctx.enqueue_create_buffer[DType.float32](m * k)
     var di = ctx.enqueue_create_buffer[DType.int32](m * k)
     var dn = ctx.enqueue_create_buffer[DType.int32](m)
-    ctx.enqueue_function[sq_search_kernel](
-        Int32(m), dq.unsafe_ptr(), Int32(dim), dc.unsafe_ptr(), Int32(n_lists), doff.unsafe_ptr(),
-        dli.unsafe_ptr(), dcodes.unsafe_ptr(), dvmin.unsafe_ptr(), ddelta.unsafe_ptr(), Int32(k),
-        Int32(n_probes), dmask.unsafe_ptr(), dd.unsafe_ptr(), di.unsafe_ptr(), dn.unsafe_ptr(),
-        grid_dim=_grid(m), block_dim=TPB,
-    )
-    ctx.synchronize()
+    ivf_scan_search[1](ctx, dq, dc, doff, dli, dcodes, dmask, dvmin, ddelta, offsets, n_lists, dim, m, k, n_probes,
+                       1, 1, 1, 1, 1, 0, Float32(1.0), dd, di, dn)
     out_d = download_f32(ctx, dd, m * k)
     out_i = download_i32(ctx, di, m * k)
     out_n = download_i32(ctx, dn, m)
@@ -347,17 +315,6 @@ def rq_encode_kernel(
     var i = _tid()
     if i < Int(n):
         rq_encode_cell(i, x, centers, labels, Int(dim), Int(D), Int(seed), scale, ws, Int(words), codes, norms, ips)
-
-
-def rq_search_kernel(
-    m: Int32, queries: F32P, dim: Int32, centers: F32P, n_lists: Int32, offsets: I32P, list_indices: I32P,
-    codes: I32P, norms: F32P, ips: F32P, D: Int32, words: Int32, seed: Int32, scale: Float32, k: Int32,
-    n_probes: Int32, mask: I32P, ws: F32P, out_d: F32P, out_i: I32P, out_n: I32P,
-):
-    var q = _tid()
-    if q < Int(m):
-        rq_search_cell(q, queries, Int(dim), centers, Int(n_lists), offsets, list_indices, codes, norms, ips,
-                       Int(D), Int(words), Int(seed), scale, Int(k), Int(n_probes), mask, ws, out_d, out_i, out_n)
 
 
 def ivf_rabitq_build_device(
@@ -419,24 +376,17 @@ def ivf_rabitq_search_device(
     var dnorm = upload_f32(ctx, norms)
     var dip = upload_f32(ctx, ips)
     var dmask = upload_i32(ctx, mask)
-    var dws = ctx.enqueue_create_buffer[DType.float32](m * D)
     var dd = ctx.enqueue_create_buffer[DType.float32](m * k)
     var di = ctx.enqueue_create_buffer[DType.int32](m * k)
     var dn = ctx.enqueue_create_buffer[DType.int32](m)
-    ctx.enqueue_function[rq_search_kernel](
-        Int32(m), dq.unsafe_ptr(), Int32(dim), dc.unsafe_ptr(), Int32(n_lists), doff.unsafe_ptr(),
-        dli.unsafe_ptr(), dcodes.unsafe_ptr(), dnorm.unsafe_ptr(), dip.unsafe_ptr(), Int32(D), Int32(words),
-        Int32(seed), scale, Int32(k), Int32(n_probes), dmask.unsafe_ptr(), dws.unsafe_ptr(), dd.unsafe_ptr(),
-        di.unsafe_ptr(), dn.unsafe_ptr(), grid_dim=_grid(m), block_dim=TPB,
-    )
-    ctx.synchronize()
+    ivf_scan_search[2](ctx, dq, dc, doff, dli, dcodes, dmask, dnorm, dip, offsets, n_lists, dim, m, k, n_probes,
+                       1, 1, 1, D, words, seed, scale, dd, di, dn)
     out_d = download_f32(ctx, dd, m * k)
     out_i = download_i32(ctx, di, m * k)
     out_n = download_i32(ctx, dn, m)
     _ = dn^
     _ = di^
     _ = dd^
-    _ = dws^
     _ = dmask^
     _ = dip^
     _ = dnorm^
