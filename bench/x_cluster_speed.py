@@ -14,7 +14,7 @@ The row counts follow tools/bench_board_algos.py: the linear-cost fits at
 1M rows, the quadratic ones at the board's `quad` (10,000) and `tiny` (5,000)
 shapes, BayesianGaussianMixture at its `mid` (100,000).
 
-    python bench/x_cluster_speed.py [--dataset taxi,higgs] [--reps 3] [--only name,...] [--scale 1.0]
+    python bench/x_cluster_speed.py [--dataset taxi,higgs] [--reps 3] [--only name,...] [--scale 1.0] [--column gpu|cpu]
 
 Data: GBM_BENCH_DATA (default ~/datasets/gbm-bench), staged from R2 with
 `tools/dataset_store.sh stage` (taxi/taxi_speed.npz, higgs/higgs_speed.npz).
@@ -129,8 +129,18 @@ def main():
     ap.add_argument("--scale", type=float, default=1.0, help="multiply every row count")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--no-quality", action="store_true")
+    ap.add_argument("--column", choices=("gpu", "cpu"), default="gpu",
+                    help="cpu: every binding call goes to its host binding (the CPU column), "
+                         "for a GPU-vs-CPU digest at the timed shape")
     a = ap.parse_args()
     import mojolearn as ml
+    if a.column == "cpu":
+        from mojolearn import _backend
+
+        def _host_binding(name, mode=None):
+            return _backend.load_host_module(_backend._HOST_MODULES[name])
+
+        _backend.binding = _host_binding
     table = cases(ml, a.seed)
     names = [s for s in a.only.split(",") if s] or list(table)
     for ds in a.dataset.split(","):
@@ -154,7 +164,8 @@ def main():
                         break
                 dg = _digest(_np(est.labels_) if hasattr(est, "labels_") else est.predict(x), centers)
                 q = float("nan") if a.no_quality else qual(x, est)
-                print(f"XCSPEED {ds} {name} {len(x)} {best:.4f} {dg} {q:.6g}", flush=True)
+                tag = "" if a.column == "gpu" else " cpu"
+                print(f"XCSPEED{tag} {ds} {name} {len(x)} {best:.4f} {dg} {q:.6g}", flush=True)
             except Exception as e:  # one broken case never hides the others
                 print(f"XCSPEED {ds} {name} {len(x)} ERROR {type(e).__name__}: {str(e)[:200]}", flush=True)
 
