@@ -1,0 +1,12 @@
+diff --git a/hierarchy/impl/sparse/solver/detail/mst_kernels.mojo b/hierarchy/impl/sparse/solver/detail/mst_kernels.mojo
+--- a/hierarchy/impl/sparse/solver/detail/mst_kernels.mojo
++++ b/hierarchy/impl/sparse/solver/detail/mst_kernels.mojo
+@@ -64,7 +64,7 @@
+     the dense caller never writes or reads the `v * v` index array. 32-bit:
+     `v * v < 2^31` under PAIRWISE_MAX_ROWS."""
+     comptime if DENSE:
+-        return Int32(UInt32(edge_idx) % UInt32(v_in))
++        return Int32((UInt32(edge_idx) + 1) % UInt32(v_in))  # SABOTAGE: the DENSE column one off
+     else:
+         return indices.unsafe_load(edge_idx)
+ 

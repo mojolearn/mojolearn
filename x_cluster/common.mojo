@@ -33,8 +33,7 @@ def nearest_all[O: ClusterOps](
     var ls = ops.zeros_i(n)
     var ds = ops.zeros(n)
     ops.nearest(xs, n, cs, k, d, ls, ds)
-    labels = ops.get_i(ls, n)
-    dist = ops.get(ds, n)
+    ops.get_if(ls, n, ds, n, labels, dist)
 
 
 def distances_to[O: ClusterOps](

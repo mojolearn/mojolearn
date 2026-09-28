@@ -290,13 +290,18 @@ lab = m.predict(x); assert lab.shape == (64,)
 pr = m.predict_proba(x[:4]); assert pr.shape == (4, 2)
 ll = m.score_samples(x[:4]); assert ll.shape == (4,) and np.isfinite(np.asarray(ll)).all()
 assert np.isfinite(m.bic(x)) and np.isfinite(m.aic(x))
+# 'diag' is served by the x_cluster route since the cluster lane's option
+# parity (x-cluster-gmm-options); where that binding is not built it must be
+# refused BY NAME. Either way it never reaches this binary's 'full' path.
 try:
-    mx.GaussianMixture(n_components=2, covariance_type="diag").fit(x)
+    md = mx.GaussianMixture(n_components=2, covariance_type="diag").fit(x)
 except Exception as exc:
-    assert "diag" in str(exc), exc
+    assert "diag" in str(exc) or "x_cluster" in str(exc), exc
+    diag_note = "'diag' refused by name"
 else:
-    raise AssertionError("covariance_type='diag' was ACCEPTED")
-print("  smoke: GaussianMixture fit/predict/predict_proba/score_samples/bic/aic on two planted blobs, 'diag' refused by name")
+    assert np.asarray(md.covariances_).shape == (2, 2), np.asarray(md.covariances_).shape
+    diag_note = "'diag' served by the x_cluster route"
+print("  smoke: GaussianMixture fit/predict/predict_proba/score_samples/bic/aic on two planted blobs, " + diag_note)
 shutil.rmtree(tmp, ignore_errors=True)
 PY
 

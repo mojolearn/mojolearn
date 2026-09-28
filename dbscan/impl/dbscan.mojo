@@ -44,7 +44,7 @@ the dataset, takes 80% of what is left, and divides by a per-row estimate.
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 
 from dbscan.impl.adjgraph.algo import scan_blocks_needed
 from dbscan.impl.runner import EPS_NN_BRUTE_FORCE, EPS_NN_RBC, dbscan_fit
@@ -260,13 +260,15 @@ def dbscan_fit_impl_weighted(
             + String(batch)
         )
 
-    # FAST on Apple: the sparse RBC arm (the runner's `sparse_rbc_mode`,
-    # same test) emits CSR and never reads the dense `batch x n_rows`
-    # adjacency, which is 2 GB at 50,000 rows; it gets one byte.
-    # `-D MOJOLEARN_DBSCAN_FAST_DENSE_ADJ` keeps the full allocation.
+    # On Apple (FAST, and IDENTICAL since lane/cluster-apple): the sparse
+    # RBC arm (the runner's `sparse_rbc_mode`, same test) emits CSR and
+    # never reads the dense `batch x n_rows` adjacency, which is 2 GB at
+    # 50,000 rows and 10 GB at 100,000; it gets one byte. No kernel reads
+    # it, so no bit moves. `-D MOJOLEARN_DBSCAN_FAST_DENSE_ADJ` keeps the
+    # full allocation.
     var adj_len = batch * n_rows
     comptime if (
-        GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+        (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
         and has_apple_gpu_accelerator()
         and not is_defined["MOJOLEARN_DBSCAN_FAST_DENSE_ADJ"]()
     ):

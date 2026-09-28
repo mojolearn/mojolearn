@@ -287,13 +287,16 @@ x = np.ascontiguousarray(np.concatenate([a, b]).astype(np.float32))
 m = hd.HDBSCAN(min_cluster_size=5).fit(x)
 assert m.labels_.shape == (80,) and m.core_distances_.shape == (80,)
 assert m.n_clusters_ >= 1, m.n_clusters_
+# probabilities_ is answered since DEVIATION 5116 (extract.mojo::
+# get_probabilities_host, the cluster lane); a build without it must still
+# refuse by name (DEVIATION 1610), never answer something else.
 try:
-    m.probabilities_
+    pr = np.asarray(m.probabilities_)
 except AttributeError as exc:
     assert "1610" in str(exc), exc
 else:
-    raise AssertionError("probabilities_ was ANSWERED")
-print("  smoke: HDBSCAN fit on two planted blobs, labels and core distances shaped, probabilities_ refused by name")
+    assert pr.shape == (80,) and np.isfinite(pr).all() and (pr >= 0).all() and (pr <= 1).all(), pr
+print("  smoke: HDBSCAN fit on two planted blobs, labels and core distances shaped, probabilities_ answered in [0, 1] or refused by name")
 shutil.rmtree(tmp, ignore_errors=True)
 PY
 

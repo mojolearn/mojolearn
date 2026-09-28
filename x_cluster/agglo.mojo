@@ -84,16 +84,17 @@ comptime _RW = 8  # SIMD width of the unconstrained row scan
 @always_inline
 def _rescan(
     i: Int, n: Int, live: List[Bool], adj: List[Bool], constrained: Bool, dm: List[Float32],
-    mut nn: List[Int], mut md: List[Float32],
+    dead: List[Float32], mut nn: List[Int], mut md: List[Float32],
 ):
     if constrained:
         _row_min(i, n, live, adj, constrained, dm, nn, md)
     else:
-        _row_min_open(i, n, live, dm, nn, md)
+        _row_min_open(i, n, live, dm, dead, nn, md)
 
 
 def _row_min_open(
-    i: Int, n: Int, live: List[Bool], dm: List[Float32], mut nn: List[Int], mut md: List[Float32],
+    i: Int, n: Int, live: List[Bool], dm: List[Float32], dead: List[Float32], mut nn: List[Int],
+    mut md: List[Float32],
 ):
     """`_row_min` without a connectivity graph, on a matrix whose DEAD rows
     and columns hold +inf: the minimum of the row's tail by a SIMD reduction
@@ -109,29 +110,35 @@ def _row_min_open(
         md[i] = Float32.MAX * Float32(2)
         return
     var p = dm.unsafe_ptr() + i * n
+    var dp = dead.unsafe_ptr()
     var inf = Float32.MAX * Float32(2)
     var vmin = SIMD[DType.float32, _RW](inf)
     var nan = False
     var j = lo
+    # `dead[j]` is -inf for a live column (max(v, -inf) is v, bit for bit,
+    # -0.0 included) and +inf for a dead one (lane/cluster-apple: a mask
+    # read contiguously, where writing +inf down the dead column strode by
+    # n through the matrix at every merge)
     while j + _RW <= n:
         var v = p.load[width=_RW](j)
         nan = nan or v.ne(v).reduce_or()
-        vmin = min(vmin, v)
+        vmin = min(vmin, max(v, dp.load[width=_RW](j)))
         j += _RW
     var m = vmin.reduce_min()
     while j < n:
         var v = p[j]
         if v != v:
             nan = True
-        if v < m:
-            m = v
+        var vm = max(v, dp[j])
+        if vm < m:
+            m = vm
         j += 1
     if nan or not (m < inf):
         var none = List[Bool]()
         _row_min(i, n, live, none, False, dm, nn, md)
         return
     for q in range(lo, n):
-        if p[q] == m:
+        if live[q] and p[q] == m:
             nn[i] = q
             md[i] = p[q]
             return
@@ -222,9 +229,10 @@ def agglo_tree[O: ClusterOps](
         node.append(i)
     var nn = List[Int](length=n, fill=-1)
     var md = List[Float32](length=n, fill=inf)
+    var dead = List[Float32](length=n, fill=-inf)
 
     for i in range(n):
-        _rescan(i, n, live, adj, constrained, dm, nn, md)
+        _rescan(i, n, live, adj, constrained, dm, dead, nn, md)
     children = List[Int32](capacity=2 * n_merges)
     dist = List[Float32](capacity=n_merges)
     for step in range(n_merges):
@@ -262,18 +270,15 @@ def agglo_tree[O: ClusterOps](
         nn[b] = -1
         size[a] = na + nb
         node[a] = n + step
-        if not constrained:
-            # the dead cluster's row and column read +inf from here on
-            # (`_row_min_open`); nothing reads a dead slot's value
-            for k in range(n):
-                dm[k * n + b] = inf
-                dm[b * n + k] = inf
-        _rescan(a, n, live, adj, constrained, dm, nn, md)
+        # the dead cluster's column reads +inf in `_row_min_open` through
+        # the mask; nothing reads a dead slot's value
+        dead[b] = inf
+        _rescan(a, n, live, adj, constrained, dm, dead, nn, md)
         for i in range(b):
             if not live[i] or i == a:
                 continue
             if nn[i] == a or nn[i] == b:
-                _rescan(i, n, live, adj, constrained, dm, nn, md)
+                _rescan(i, n, live, adj, constrained, dm, dead, nn, md)
             elif i < a and (not constrained or adj[i * n + a]):
                 var v = dm[i * n + a]
                 if nn[i] < 0 or v < md[i] or (v == md[i] and a < nn[i]):

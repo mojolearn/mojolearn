@@ -225,10 +225,22 @@ def ap_responsibility_row(s_m: FPtr, a_m: FPtr, r_m: FPtr, n: Int, damping: Floa
             second = v
             have_second = True
     for k in range(n):
-        var sub = second if k == arg else first
-        var new = ftz(s_m[i * n + k] - sub)
-        var old = r_m[i * n + k]
-        r_m[i * n + k] = ftz(ftz(identical_mul(old, damping)) + ftz(identical_mul(new, one_minus)))
+        ap_r_update(s_m, r_m, n, damping, one_minus, i, k, first, second, arg)
+
+
+@always_inline
+def ap_r_update(
+    s_m: FPtr, r_m: FPtr, n: Int, damping: Float32, one_minus: Float32, i: Int, k: Int,
+    first: Float32, second: Float32, arg: Int,
+):
+    """Row `i`, cell `k` of the responsibility update, given the row's max
+    `first` (at `arg`) and second max: `R_new = S - max` (`S - second` at
+    the argmax), `R = R * damping + R_new * (1 - damping)`. One spelling for
+    `ap_responsibility_row` and the device's block-per-row kernel."""
+    var sub = second if k == arg else first
+    var new = ftz(s_m[i * n + k] - sub)
+    var old = r_m[i * n + k]
+    r_m[i * n + k] = ftz(ftz(identical_mul(old, damping)) + ftz(identical_mul(new, one_minus)))
 
 
 # DEVIATION 5106 (the availability column fold ascending, the clamp at 0

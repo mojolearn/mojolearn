@@ -11,7 +11,7 @@ from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
 
 from x_cluster.bodies import (
     FPtr,
@@ -32,7 +32,7 @@ from x_cluster.bodies import (
     ap_availability_col,
     ap_exemplar_cell,
     ap_noise_cell,
-    ap_responsibility_row,
+    ap_r_update,
     meanshift_seed,
     nearest_row,
     sqdist_cell,
@@ -139,10 +139,72 @@ def _meanshift_kernel(
         meanshift_seed(x, Int(n), Int(d), bw, stop, Int(max_iter), centers, scratch, intensity, iters, t)
 
 
+comptime AP_TPB = 256
+
+
+@always_inline
+def _ap_key(v: Float32, k: Int) -> UInt64:
+    """An integer whose order is `ap_responsibility_row`'s pick: the float's
+    order in the high word (-0.0 folded onto +0.0, which `>` treats as
+    equal), the LOWER index winning in the low word. The row's max and its
+    lowest index come from one integer max, never a float compare."""
+    var b = bitcast[DType.uint32](v)
+    if b == UInt32(0x80000000):
+        b = UInt32(0)
+    var ok = (b ^ UInt32(0x80000000)) if (b & UInt32(0x80000000)) == UInt32(0) else ~b
+    return (UInt64(ok) << 32) | UInt64(UInt32(0xFFFFFFFF) - UInt32(k))
+
+
+@always_inline
+def _ap_key_index(key: UInt64) -> Int:
+    return Int(UInt32(0xFFFFFFFF) - UInt32(key & UInt64(0xFFFFFFFF)))
+
+
 def _ap_r_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
-    var t = _tid()
-    if t < Int(n):
-        ap_responsibility_row(s, a, r, Int(n), damping, t)
+    """`ap_responsibility_row` for row `block_idx.x` on one block: the max
+    of `ftz(A + S)` with its lowest index, then the second max over the
+    other columns with ITS lowest index (each an integer max of `_ap_key`,
+    so exactly the row loop's picks, whatever the block's fold shape), then
+    every cell's `ap_r_update`. Coalesced reads where the row-per-thread
+    kernel strode by `n`."""
+    var i = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var N = Int(n)
+    var red = stack_allocation[AP_TPB, Scalar[DType.uint64], address_space = AddressSpace.SHARED]()
+    var mine = UInt64(0)
+    for k in range(tid, N, AP_TPB):
+        mine = max(mine, _ap_key(ftz(a[i * N + k] + s[i * N + k]), k))
+    red[tid] = mine
+    barrier()
+    var off = AP_TPB // 2
+    while off > 0:
+        if tid < off:
+            red[tid] = max(red[tid], red[tid + off])
+        barrier()
+        off //= 2
+    var arg = _ap_key_index(red[0])
+    barrier()
+    var mine2 = UInt64(0)
+    for k in range(tid, N, AP_TPB):
+        if k != arg:
+            mine2 = max(mine2, _ap_key(ftz(a[i * N + k] + s[i * N + k]), k))
+    red[tid] = mine2
+    barrier()
+    off = AP_TPB // 2
+    while off > 0:
+        if tid < off:
+            red[tid] = max(red[tid], red[tid + off])
+        barrier()
+        off //= 2
+    var top2 = red[0]
+    var first = ftz(a[i * N + arg] + s[i * N + arg])
+    var second = Float32(-3.4028234663852886e38)
+    if N > 1:
+        var a2 = _ap_key_index(top2)
+        second = ftz(a[i * N + a2] + s[i * N + a2])
+    var one_minus = ftz(Float32(1) - damping)
+    for k in range(tid, N, AP_TPB):
+        ap_r_update(s, r, N, damping, one_minus, i, k, first, second, arg)
 
 
 def _ap_a_kernel(r: FPtr, a: FPtr, n: Int32, damping: Float32):
@@ -305,6 +367,96 @@ def _moments_pass_kernel(
         cov[k * nch + c] = cov_final(acc, nk[k], reg, a == b)
 
 
+# FAST ONLY (lane/cluster-apple): the moments split over row slices. Each
+# block (k, slice) sums its rows' addends per chain in a fixed thread layout
+# and writes one partial per chain; a second kernel adds the partials over
+# the slices. The same addends and finals as 5110/5121, another summation
+# order: bits move, quality is the paired check's (progress file).
+comptime MOMF_ROWS = 2048  # rows per slice
+
+
+@always_inline
+def _momf_term(resp: FPtr, x: FPtr, i: Int, D: Int, K: Int, k: Int, c: Int, cov_pass: Int32, means: FPtr) -> Float32:
+    var r = resp[i * K + k]
+    if cov_pass == Int32(0):
+        return r if c == D else xk_term(r, x[i * D + c])
+    var a = c // D
+    var b = c - a * D
+    return cov_term(r, x[i * D + a], x[i * D + b], means[k * D + a], means[k * D + b])
+
+
+def _momf_partial_kernel(
+    resp: FPtr, x: FPtr, n: Int32, d: Int32, kc: Int32, means: FPtr, part: FPtr, n_slices: Int32, cov_pass: Int32,
+):
+    var tid = Int(thread_idx.x)
+    var N = Int(n)
+    var D = Int(d)
+    var K = Int(kc)
+    var S = Int(n_slices)
+    var k = Int(block_idx.x) // S
+    var sl = Int(block_idx.x) - k * S
+    var nch = D + 1 if cov_pass == Int32(0) else D * D
+    var r0 = sl * MOMF_ROWS
+    var r1 = r0 + MOMF_ROWS
+    if r1 > N:
+        r1 = N
+    var red = stack_allocation[MOM_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var c0 = 0
+    while c0 < nch:
+        var cc = nch - c0
+        if cc > MOM_TPB:
+            cc = MOM_TPB
+        var groups = MOM_TPB // cc
+        var mine = tid < groups * cc
+        var g = tid // cc
+        var c = c0 + (tid - g * cc)
+        var acc = Float32(0)
+        if mine:
+            var i = r0 + g
+            while i < r1:
+                acc = acc + _momf_term(resp, x, i, D, K, k, c, cov_pass, means)
+                i += groups
+        red[tid] = acc
+        barrier()
+        if mine and g == 0:
+            var tot = Float32(0)
+            for gg in range(groups):
+                tot = tot + red[gg * cc + tid]
+            part[(k * S + sl) * nch + c] = tot
+        barrier()
+        c0 += cc
+
+
+def _momf_final_kernel(
+    part: FPtr, n_slices: Int32, d: Int32, kc: Int32, reg: Float32, nk: FPtr, means: FPtr, cov: FPtr, cov_pass: Int32,
+):
+    var t = _tid()
+    var D = Int(d)
+    var K = Int(kc)
+    var S = Int(n_slices)
+    var nch = D + 1 if cov_pass == Int32(0) else D * D
+    if t >= K * nch:
+        return
+    var k = t // nch
+    var c = t - k * nch
+    var acc = Float32(0)
+    for sl in range(S):
+        acc = acc + part[(k * S + sl) * nch + c]
+    if cov_pass == Int32(0):
+        var nkacc = Float32(0)
+        for sl in range(S):
+            nkacc = nkacc + part[(k * S + sl) * nch + D]
+        var nkv = nk_final(nkacc)
+        if c == D:
+            nk[k] = nkv
+        else:
+            means[k * D + c] = mean_final(acc, nkv)
+    else:
+        var a = c // D
+        var b = c - a * D
+        cov[k * nch + c] = cov_final(acc, nk[k], reg, a == b)
+
+
 def _pdist_kernel(a: FPtr, na: Int32, b: FPtr, nb: Int32, d: Int32, metric: Int32, p: Float32, dst: FPtr):
     var t = _tid()
     if t < Int(na) * Int(nb):
@@ -350,19 +502,49 @@ def x_cluster_ctx() raises -> DeviceContext:
     return slot[].ctx.value().copy()
 
 
+# An upload of at least this many values synchronizes instead of keeping a
+# host copy alive (the one-off upload of X at a fit's start); smaller uploads
+# and every `zeros` (a device memset) enqueue without a synchronize.
+comptime _PUT_SYNC_MIN = 1 << 20
+
+
 struct DeviceOps(ClusterOps):
-    """Kernels are only ENQUEUED: the stream runs them in order, and the one
-    synchronize is where the host reads (`get`, `get_i`) or where a host
-    List is the copy's source (`put`, `set`). A sync per kernel cost a
-    host round trip each (on Metal the dominant cost, 4 ms per sync)."""
+    """Kernels and uploads are only ENQUEUED: the stream runs them in order,
+    and the one synchronize is where the host reads (`get`, `get_i`, `gets`,
+    `get_if`). An upload's source is a COPY held in `pend_f` / `pend_i` until
+    that synchronize, so the caller's List may change or die at once; `zeros`
+    is a device memset. A sync per call cost a host round trip each (on Metal
+    the dominant cost: about 4 ms per sync with pending work on the M4).
+    Scheduling only: every kernel sees the same bytes in the same order."""
     var ctx: DeviceContext
     var f: List[DeviceBuffer[DType.float32]]
     var i: List[DeviceBuffer[DType.int32]]
+    var pend_f: List[List[Float32]]
+    var pend_i: List[List[Int32]]
+    var mpart: DeviceBuffer[DType.float32]
+    """FAST moments' per-slice partials, grown once per fit."""
+    var mpart_n: Int
 
     def __init__(out self) raises:
         self.ctx = x_cluster_ctx()
         self.f = List[DeviceBuffer[DType.float32]]()
         self.i = List[DeviceBuffer[DType.int32]]()
+        self.pend_f = List[List[Float32]]()
+        self.pend_i = List[List[Int32]]()
+        self.mpart = self.ctx.enqueue_create_buffer[DType.float32](1)
+        self.mpart_n = 1
+
+    def __del__(deinit self):
+        # the buffers and the pending sources die with this value: drain first
+        try:
+            self.ctx.synchronize()
+        except:
+            pass
+
+    def _sync(mut self) raises:
+        self.ctx.synchronize()
+        self.pend_f = List[List[Float32]]()
+        self.pend_i = List[List[Int32]]()
 
     def _fp(mut self, slot: Int) -> FPtr:
         return self.f[slot].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
@@ -370,52 +552,107 @@ struct DeviceOps(ClusterOps):
     def _ip(mut self, slot: Int) -> IPtr:
         return self.i[slot].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
 
+    def _upload(mut self, buf: DeviceBuffer[DType.float32], v: List[Float32]) raises:
+        var n = len(v)
+        if n == 0:
+            return
+        if n >= _PUT_SYNC_MIN:
+            self.ctx.enqueue_copy(dst_buf=buf, src_ptr=v.unsafe_ptr())
+            self._sync()
+            return
+        self.pend_f.append(v.copy())
+        self.ctx.enqueue_copy(dst_buf=buf, src_ptr=self.pend_f[len(self.pend_f) - 1].unsafe_ptr())
+
+    def _upload_i(mut self, buf: DeviceBuffer[DType.int32], v: List[Int32]) raises:
+        var n = len(v)
+        if n == 0:
+            return
+        if n >= _PUT_SYNC_MIN:
+            self.ctx.enqueue_copy(dst_buf=buf, src_ptr=v.unsafe_ptr())
+            self._sync()
+            return
+        self.pend_i.append(v.copy())
+        self.ctx.enqueue_copy(dst_buf=buf, src_ptr=self.pend_i[len(self.pend_i) - 1].unsafe_ptr())
+
     def put(mut self, v: List[Float32]) raises -> Int:
         var n = len(v)
         var buf = self.ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
-        if n > 0:
-            self.ctx.enqueue_copy(dst_buf=buf, src_ptr=v.unsafe_ptr())
-        self.ctx.synchronize()
+        self._upload(buf, v)
         self.f.append(buf^)
         return len(self.f) - 1
 
     def put_i(mut self, v: List[Int32]) raises -> Int:
         var n = len(v)
         var buf = self.ctx.enqueue_create_buffer[DType.int32](n if n > 0 else 1)
-        if n > 0:
-            self.ctx.enqueue_copy(dst_buf=buf, src_ptr=v.unsafe_ptr())
-        self.ctx.synchronize()
+        self._upload_i(buf, v)
         self.i.append(buf^)
         return len(self.i) - 1
 
     def zeros(mut self, n: Int) raises -> Int:
-        return self.put(List[Float32](length=n, fill=Float32(0)))
+        var buf = self.ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
+        self.ctx.enqueue_memset(buf, Float32(0))
+        self.f.append(buf^)
+        return len(self.f) - 1
 
     def zeros_i(mut self, n: Int) raises -> Int:
-        return self.put_i(List[Int32](length=n, fill=Int32(0)))
+        var buf = self.ctx.enqueue_create_buffer[DType.int32](n if n > 0 else 1)
+        self.ctx.enqueue_memset(buf, Int32(0))
+        self.i.append(buf^)
+        return len(self.i) - 1
 
-    def get(mut self, slot: Int, n: Int) raises -> List[Float32]:
-        var out = List[Float32](length=n, fill=Float32(0))
+    def _enq_get(mut self, slot: Int, n: Int, mut out: List[Float32]) raises:
+        out = List[Float32](length=n, fill=Float32(0))
         if n > 0:
             var view = self.f[slot].create_sub_buffer[DType.float32](0, n)
             self.ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=view)
-        self.ctx.synchronize()
-        return out^
 
-    def get_i(mut self, slot: Int, n: Int) raises -> List[Int32]:
-        var out = List[Int32](length=n, fill=Int32(0))
+    def _enq_get_i(mut self, slot: Int, n: Int, mut out: List[Int32]) raises:
+        out = List[Int32](length=n, fill=Int32(0))
         if n > 0:
             var view = self.i[slot].create_sub_buffer[DType.int32](0, n)
             self.ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=view)
-        self.ctx.synchronize()
+
+    def get(mut self, slot: Int, n: Int) raises -> List[Float32]:
+        var out = List[Float32]()
+        self._enq_get(slot, n, out)
+        self._sync()
         return out^
+
+    def get_i(mut self, slot: Int, n: Int) raises -> List[Int32]:
+        var out = List[Int32]()
+        self._enq_get_i(slot, n, out)
+        self._sync()
+        return out^
+
+    def gets(mut self, slots: List[Int], ns: List[Int]) raises -> List[List[Float32]]:
+        var outs = List[List[Float32]](capacity=len(slots))
+        for q in range(len(slots)):
+            outs.append(List[Float32](length=ns[q], fill=Float32(0)))
+        for q in range(len(slots)):
+            if ns[q] > 0:
+                var view = self.f[slots[q]].create_sub_buffer[DType.float32](0, ns[q])
+                self.ctx.enqueue_copy(dst_ptr=outs[q].unsafe_ptr(), src_buf=view)
+        self._sync()
+        return outs^
+
+    def get_if(
+        mut self, islot: Int, ni: Int, fslot: Int, nf: Int, mut oi: List[Int32], mut of: List[Float32]
+    ) raises:
+        self._enq_get_i(islot, ni, oi)
+        self._enq_get(fslot, nf, of)
+        self._sync()
 
     def set(mut self, slot: Int, v: List[Float32]) raises:
         var n = len(v)
-        if n > 0:
-            var view = self.f[slot].create_sub_buffer[DType.float32](0, n)
+        if n == 0:
+            return
+        var view = self.f[slot].create_sub_buffer[DType.float32](0, n)
+        if n >= _PUT_SYNC_MIN:
             self.ctx.enqueue_copy(dst_buf=view, src_ptr=v.unsafe_ptr())
-        self.ctx.synchronize()
+            self._sync()
+            return
+        self.pend_f.append(v.copy())
+        self.ctx.enqueue_copy(dst_buf=view, src_ptr=self.pend_f[len(self.pend_f) - 1].unsafe_ptr())
 
     def sqdist(mut self, a: Int, na: Int, b: Int, nb: Int, d: Int, dst: Int) raises:
         self.ctx.enqueue_function[_sqdist_kernel](
@@ -454,7 +691,7 @@ struct DeviceOps(ClusterOps):
 
     def ap_r(mut self, s: Int, a: Int, r: Int, n: Int, damping: Float32) raises:
         self.ctx.enqueue_function[_ap_r_kernel](
-            self._fp(s), self._fp(a), self._fp(r), Int32(n), damping, grid_dim=_grid(n), block_dim=TPB,
+            self._fp(s), self._fp(a), self._fp(r), Int32(n), damping, grid_dim=n if n > 0 else 1, block_dim=AP_TPB,
         )
 
     def ap_a(mut self, r: Int, a: Int, n: Int, damping: Float32) raises:
@@ -526,6 +763,25 @@ struct DeviceOps(ClusterOps):
     ) raises:
         if kc <= 0:
             return
+        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+            if d <= MOM_MAX_D and n > 0:
+                var S = (n + MOMF_ROWS - 1) // MOMF_ROWS
+                var need = kc * S * (d * d if d * d > d + 1 else d + 1)
+                if need > self.mpart_n:
+                    self.mpart = self.ctx.enqueue_create_buffer[DType.float32](need)
+                    self.mpart_n = need
+                var pp = self.mpart.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+                for cp in range(2):
+                    var nch = d + 1 if cp == 0 else d * d
+                    self.ctx.enqueue_function[_momf_partial_kernel](
+                        self._fp(resp), self._fp(x), Int32(n), Int32(d), Int32(kc), self._fp(means), pp,
+                        Int32(S), Int32(cp), grid_dim=kc * S, block_dim=MOM_TPB,
+                    )
+                    self.ctx.enqueue_function[_momf_final_kernel](
+                        pp, Int32(S), Int32(d), Int32(kc), reg, self._fp(nk), self._fp(means), self._fp(cov),
+                        Int32(cp), grid_dim=_grid(kc * nch), block_dim=TPB,
+                    )
+                return
         if d <= MOM_MAX_D:
             self.ctx.enqueue_function[_moments_pass_kernel](
                 self._fp(resp), self._fp(x), Int32(n), Int32(d), Int32(kc), reg, self._fp(nk), self._fp(means),

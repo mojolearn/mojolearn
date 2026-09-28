@@ -499,7 +499,8 @@ def bgmm_fit[O: ClusterOps](
         else:
             ops.set(rs, resp0)
             ops.moments(rs, xs, n, d, kc, reg, nks, xks, sks)
-            _m_step_host(pr, ops.get(nks, kc), ops.get(xks, kc * d), ops.get(sks, kc * d * d), st, Float64(reg))
+            var mo = ops.gets([nks, xks, sks], [kc, kc * d, kc * d * d])
+            _m_step_host(pr, mo[0], mo[1], mo[2], st, Float64(reg))
             # sklearn GaussianMixture._initialize: weights_init, means_init and
             # precisions_init replace what the start responsibilities gave
             if len(w_init) > 0:
@@ -531,12 +532,18 @@ def bgmm_fit[O: ClusterOps](
             ops.exp(qs, rs, n * kc)
             # M-step
             ops.moments(rs, xs, n, d, kc, reg, nks, xks, sks)
-            _m_step_host(pr, ops.get(nks, kc), ops.get(xks, kc * d), ops.get(sks, kc * d * d), st, Float64(reg))
+            # one wait per iteration: the moments and what the bound reads
+            var mo: List[List[Float32]]
             if pr.variational:
-                lb = _lower_bound(pr, st, ops.get(rs, n * kc), ops.get(qs, n * kc), n)
+                mo = ops.gets([nks, xks, sks, rs, qs], [kc, kc * d, kc * d * d, n * kc, n * kc])
+            else:
+                mo = ops.gets([nks, xks, sks, lpn], [kc, kc * d, kc * d * d, n])
+            _m_step_host(pr, mo[0], mo[1], mo[2], st, Float64(reg))
+            if pr.variational:
+                lb = _lower_bound(pr, st, mo[3], mo[4], n)
             else:
                 # sklearn GaussianMixture: the mean log-likelihood of THIS E-step
-                var lp = ops.get(lpn, n)
+                var lp = mo[3].copy()
                 var acc = Float64(0)
                 for t in range(n):
                     acc = acc + Float64(lp[t])
