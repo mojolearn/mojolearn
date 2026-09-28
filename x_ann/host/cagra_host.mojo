@@ -37,7 +37,7 @@ def cagra_search_host(
     out_i = List[Int32](length=m * k, fill=Int32(0))
     for q in range(m):
         cg_search_cell(q, fp(queries), fp(x), n, d, ip(graph), deg, k, L, width, max_iter, n_seeds,
-                       fp(bd), ip(bi), ip(bx), ip(vis), words, fp(out_d), ip(out_i))
+                       fp(bd), ip(bi), ip(bx), ip(vis), words, fp(out_d), ip(out_i), q)
     _ = x^
     _ = graph^
     _ = queries^

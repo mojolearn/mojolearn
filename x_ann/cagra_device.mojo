@@ -32,14 +32,14 @@ def cg_knn_kernel(n: Int32, x: F32P, d: Int32, nn: Int32, nn_d: F32P, nn_i: I32P
 
 
 def cg_search_kernel(
-    m: Int32, queries: F32P, x: F32P, n: Int32, d: Int32, graph: I32P, deg: Int32, k: Int32,
+    m: Int32, q0: Int32, queries: F32P, x: F32P, n: Int32, d: Int32, graph: I32P, deg: Int32, k: Int32,
     L: Int32, width: Int32, max_iter: Int32, n_seeds: Int32, bd: F32P, bi: I32P, bx: I32P,
     visited: I32P, words: Int32, out_d: F32P, out_i: I32P,
 ):
-    var q = _tid()
-    if q < Int(m):
-        cg_search_cell(q, queries, x, Int(n), Int(d), graph, Int(deg), Int(k), Int(L), Int(width),
-                       Int(max_iter), Int(n_seeds), bd, bi, bx, visited, Int(words), out_d, out_i)
+    var t = _tid()
+    if t < Int(m):
+        cg_search_cell(Int(q0) + t, queries, x, Int(n), Int(d), graph, Int(deg), Int(k), Int(L), Int(width),
+                       Int(max_iter), Int(n_seeds), bd, bi, bx, visited, Int(words), out_d, out_i, t)
 
 
 def cagra_build_device(x: List[Float32], n: Int, d: Int, kdeg: Int, deg: Int) raises -> List[Int32]:
@@ -66,18 +66,29 @@ def cagra_search_device(
     var dx = upload_f32(ctx, x)
     var dg = upload_i32(ctx, graph)
     var dq = upload_f32(ctx, queries)
-    var bd = ctx.enqueue_create_buffer[DType.float32](m * L)
-    var bi = ctx.enqueue_create_buffer[DType.int32](m * L)
-    var bx = ctx.enqueue_create_buffer[DType.int32](m * L)
-    var vis = ctx.enqueue_create_buffer[DType.int32](m * words)
+    # the queries in chunks over a bounded scratch (the visited set is n bits
+    # per query in flight: 1.25 GB for 10k queries over 1M rows at once)
+    var chunk = (1 << 26) // (words + 3 * L)
+    if chunk < 1:
+        chunk = 1
+    if chunk > m:
+        chunk = m
+    var bd = ctx.enqueue_create_buffer[DType.float32](chunk * L)
+    var bi = ctx.enqueue_create_buffer[DType.int32](chunk * L)
+    var bx = ctx.enqueue_create_buffer[DType.int32](chunk * L)
+    var vis = ctx.enqueue_create_buffer[DType.int32](chunk * words)
     var od = ctx.enqueue_create_buffer[DType.float32](m * k)
     var oi = ctx.enqueue_create_buffer[DType.int32](m * k)
-    ctx.enqueue_function[cg_search_kernel](
-        Int32(m), dq.unsafe_ptr(), dx.unsafe_ptr(), Int32(n), Int32(d), dg.unsafe_ptr(), Int32(deg), Int32(k),
-        Int32(L), Int32(width), Int32(max_iter), Int32(n_seeds), bd.unsafe_ptr(), bi.unsafe_ptr(),
-        bx.unsafe_ptr(), vis.unsafe_ptr(), Int32(words), od.unsafe_ptr(), oi.unsafe_ptr(),
-        grid_dim=_grid(m), block_dim=TPB,
-    )
+    var q0 = 0
+    while q0 < m:
+        var c = chunk if q0 + chunk <= m else m - q0
+        ctx.enqueue_function[cg_search_kernel](
+            Int32(c), Int32(q0), dq.unsafe_ptr(), dx.unsafe_ptr(), Int32(n), Int32(d), dg.unsafe_ptr(), Int32(deg),
+            Int32(k), Int32(L), Int32(width), Int32(max_iter), Int32(n_seeds), bd.unsafe_ptr(), bi.unsafe_ptr(),
+            bx.unsafe_ptr(), vis.unsafe_ptr(), Int32(words), od.unsafe_ptr(), oi.unsafe_ptr(),
+            grid_dim=_grid(c), block_dim=TPB,
+        )
+        q0 += c
     ctx.synchronize()
     out_d = download_f32(ctx, od, m * k)
     out_i = download_i32(ctx, oi, m * k)

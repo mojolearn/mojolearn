@@ -169,12 +169,15 @@ def cg_insert(L: Int, base: Int, d: Float32, id: Int32, bd: F32P, bi: I32P, bx: 
 def cg_search_cell(
     qi: Int, queries: F32P, x: F32P, n: Int, d: Int, graph: I32P, deg: Int, k: Int,
     L: Int, width: Int, max_iter: Int, n_seeds: Int, bd: F32P, bi: I32P, bx: I32P,
-    visited: I32P, words: Int, out_d: F32P, out_i: I32P,
+    visited: I32P, words: Int, out_d: F32P, out_i: I32P, slot: Int,
 ):
     # DEVIATION 5824: seeds (t * n) // n_seeds; DEVIATION 5823: parents are the
-    # search_width best unexpanded entries, scanned front to back.
-    var base = qi * L
-    var vbase = qi * words
+    # search_width best unexpanded entries, scanned front to back. `slot`
+    # indexes the scratch (itopk buffer, visited set), so a driver may run
+    # the queries in chunks over a bounded scratch; qi indexes the query and
+    # its outputs.
+    var base = slot * L
+    var vbase = slot * words
     var q_off = qi * d
     for s in range(L):
         bd.unsafe_store(base + s, Float32(0.0))
