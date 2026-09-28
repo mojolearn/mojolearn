@@ -102,11 +102,14 @@ torch, on the `mamba/corpus/` pattern, so that the tolerance instrument is
 not our own code twice.
 """
 
+from std.math import min
 from std.memory import bitcast
 
 from core.identity_trace import IdentityTrace
 from gemm.checks.gemm_oracle import OP_NT, gemm_oracle
+from core.host_parallel import host_parallelize
 from core.host_lanes import (
+    host_row_tasks,
     span_add,
     span_div,
     span_exp_shift,
@@ -1804,95 +1807,108 @@ def transformer_block_oracle(
     # is the spelling with one rounding. **That is a stated gap, not a
     # decision made on evidence**, and it is the first thing to check when a
     # PyTorch checkout lands.
-    for bb in range(b):
-        for h in range(nh):
-            for qi in range(l):
-                var base = ((bb * nh + h) * l + qi) * s
+    # The rows (batch, head, query) are independent: row r = (bb*nh + h)*l + qi
+    # owns amax[r], adenom[r] and the s entries at r*s of aexp and aweights,
+    # and reads only masked's row r. They split over host tasks
+    # (`core/host_parallel.mojo`, lane neural-cpu); each row's statements are
+    # the serial walk's.
+    var srows = b * nh * l
+    var stasks = host_row_tasks(srows, s)
+    var schunk = (srows + stasks - 1) // stasks
 
-                # S14, the row maximum, over EVERY element of the row
-                # INCLUDING the masked ones (contract 5.2, and it is not
-                # "the unmasked prefix" -- section 7 rests on that).
-                #
-                # `identical_fmax` (DEVIATION 825), which canonicalizes a
-                # NaN, flushes both operands and then SELECTS ON A TOTAL
-                # ORDER KEY rather than on a float compare. There is no
-                # hardware max instruction in it.
-                #
-                # **`core/pinned_reduce.mojo::pinned_block_max` MAY NOT BE
-                # USED** and that refusal is the trap in this seam, because
-                # it is the deterministic-looking helper already in the
-                # tree. Its fold is a plain `other > red[tid]` compare
-                # (:159-190), which is exactly the spelling IDENTITY_PATHS
-                # row 13 closed everywhere else, and its own block comment
-                # tells a caller whose inputs can carry +-0.0 to say why
-                # before using it. This caller cannot say why. The refusal
-                # is not about determinism; `pinned_block_max` is perfectly
-                # deterministic and computes a different answer.
-                #
-                # **THE FOLD SHAPE IS FREE AND IT IS THE ONLY PLACE IN THIS
-                # PROFILE WHERE AN EXECUTION PLAN MAY CHOOSE ITS OWN TREE**
-                # (contract 5.1), because `identical_fmax` is exactly
-                # commutative and associative over all of Float32 including
-                # both zeros and NaN. Not because the difference is thought
-                # to be small. This oracle folds serial ascending with no
-                # seed because an oracle should be the simplest legal
-                # spelling, and a halving tree over `identical_fmax` on a
-                # device is equally legal.
-                # S14, the row maximum (`span_fmax_fold`: the serial
-                # `identical_fmax` chain, or under IDENTICAL its free-shape
-                # lanes, `fmax_fold_span`).
-                var mx = span_fmax_fold(masked, base, s)
-                # The trailing `ftz` is contract section 4's preamble
-                # ("every seam's RESULT passes ftz") and is BIT-INERT under
-                # IDENTICAL, because `portable_fmaxf` returns one of its own
-                # already-flushed operands. It is written anyway, because a
-                # seam that skips the checklist unit because the author
-                # reasoned it was inert is exactly how row 10's checklist
-                # stops being a checklist.
-                amax[(bb * nh + h) * l + qi] = ftz(mx)
-                # S15 and S16.
-                span_exp_shift(masked, base, s, mx, aexp, base)
-                # S17, the denominator: A SERIAL ASCENDING CHAIN over the
-                # ABSOLUTE key index, seeded `+0.0`, plain adds. There is
-                # nothing to fuse because `e[j]` is not a product.
-                #
-                # **`core/pinned_reduce.mojo::pinned_block_sum` MAY NOT BE
-                # USED** (DEVIATION 805), and saying so is the point of the
-                # clause. It is a halving tree; its own docstring says a
-                # halving tree and CUB's warp-then-block shape combine
-                # different partials; and a halving tree is not a serial
-                # ascending chain either. Reaching for the deterministic
-                # block fold BECAUSE it is the deterministic block fold is
-                # the single most likely way to get this wrong, and it would
-                # be wrong in a way that passes every launch-invariance gate,
-                # because the tree is perfectly launch-invariant. It is
-                # simply a different sum. Sabotage `S17_DENOM_HALVING_TREE`
-                # must move `attn.denom` at any kv length of 3 or more.
-                #
-                # The load-bearing reason for the chain is not tidiness. It
-                # is that a tail of exactly-`+0.0` terms is bitwise inert in
-                # a chain seeded `+0.0` and is NOT inert under gemm v1's
-                # leaf-and-tree topology, where `P = f(k)`. That is what
-                # makes decode equal prefill and makes the answer independent
-                # of sequence length. Contract 7.1 and 7.3.
-                #
-                # The price, stated rather than hidden: a row's fold may not
-                # be split across threads, so v1's kv length is bounded by
-                # what one thread will walk. This profile is reference
-                # quality and slow by construction.
-                var acc = Float32(0.0)
-                for j in range(s):
-                    acc = ftz(ftz(acc) + ftz(aexp[base + j]))
-                acc = ftz(acc)
-                adenom[(bb * nh + h) * l + qi] = acc
-                # S18, ONE DIVISION PER WEIGHT, never a reciprocal
-                # multiplied in (DEVIATION 806). `e * (1/denom)` rounds
-                # twice where `e / denom` rounds once and they differ in the
-                # last bit on ordinary inputs. MAX's `softmax_kernel`
-                # multiplies by a reciprocal, which is evidence about MAX
-                # and not about the reference. Sabotage `S18_RECIPROCAL_MUL`
-                # must move `attn.weights`.
-                span_div(aexp, base, s, acc, aweights, base)
+    def _softmax_rows(t: Int) {imm masked, mut amax, mut aexp, mut adenom, mut aweights, imm s, imm srows, imm schunk}:
+        for r in range(t * schunk, min((t + 1) * schunk, srows)):
+            var base = r * s
+
+            # S14, the row maximum, over EVERY element of the row
+            # INCLUDING the masked ones (contract 5.2, and it is not
+            # "the unmasked prefix" -- section 7 rests on that).
+            #
+            # `identical_fmax` (DEVIATION 825), which canonicalizes a
+            # NaN, flushes both operands and then SELECTS ON A TOTAL
+            # ORDER KEY rather than on a float compare. There is no
+            # hardware max instruction in it.
+            #
+            # **`core/pinned_reduce.mojo::pinned_block_max` MAY NOT BE
+            # USED** and that refusal is the trap in this seam, because
+            # it is the deterministic-looking helper already in the
+            # tree. Its fold is a plain `other > red[tid]` compare
+            # (:159-190), which is exactly the spelling IDENTITY_PATHS
+            # row 13 closed everywhere else, and its own block comment
+            # tells a caller whose inputs can carry +-0.0 to say why
+            # before using it. This caller cannot say why. The refusal
+            # is not about determinism; `pinned_block_max` is perfectly
+            # deterministic and computes a different answer.
+            #
+            # **THE FOLD SHAPE IS FREE AND IT IS THE ONLY PLACE IN THIS
+            # PROFILE WHERE AN EXECUTION PLAN MAY CHOOSE ITS OWN TREE**
+            # (contract 5.1), because `identical_fmax` is exactly
+            # commutative and associative over all of Float32 including
+            # both zeros and NaN. Not because the difference is thought
+            # to be small. This oracle folds serial ascending with no
+            # seed because an oracle should be the simplest legal
+            # spelling, and a halving tree over `identical_fmax` on a
+            # device is equally legal.
+            # S14, the row maximum (`span_fmax_fold`: the serial
+            # `identical_fmax` chain, or under IDENTICAL its free-shape
+            # lanes, `fmax_fold_span`).
+            var mx = span_fmax_fold(masked, base, s)
+            # The trailing `ftz` is contract section 4's preamble
+            # ("every seam's RESULT passes ftz") and is BIT-INERT under
+            # IDENTICAL, because `portable_fmaxf` returns one of its own
+            # already-flushed operands. It is written anyway, because a
+            # seam that skips the checklist unit because the author
+            # reasoned it was inert is exactly how row 10's checklist
+            # stops being a checklist.
+            amax[r] = ftz(mx)
+            # S15 and S16.
+            span_exp_shift(masked, base, s, mx, aexp, base)
+            # S17, the denominator: A SERIAL ASCENDING CHAIN over the
+            # ABSOLUTE key index, seeded `+0.0`, plain adds. There is
+            # nothing to fuse because `e[j]` is not a product.
+            #
+            # **`core/pinned_reduce.mojo::pinned_block_sum` MAY NOT BE
+            # USED** (DEVIATION 805), and saying so is the point of the
+            # clause. It is a halving tree; its own docstring says a
+            # halving tree and CUB's warp-then-block shape combine
+            # different partials; and a halving tree is not a serial
+            # ascending chain either. Reaching for the deterministic
+            # block fold BECAUSE it is the deterministic block fold is
+            # the single most likely way to get this wrong, and it would
+            # be wrong in a way that passes every launch-invariance gate,
+            # because the tree is perfectly launch-invariant. It is
+            # simply a different sum. Sabotage `S17_DENOM_HALVING_TREE`
+            # must move `attn.denom` at any kv length of 3 or more.
+            #
+            # The load-bearing reason for the chain is not tidiness. It
+            # is that a tail of exactly-`+0.0` terms is bitwise inert in
+            # a chain seeded `+0.0` and is NOT inert under gemm v1's
+            # leaf-and-tree topology, where `P = f(k)`. That is what
+            # makes decode equal prefill and makes the answer independent
+            # of sequence length. Contract 7.1 and 7.3.
+            #
+            # The price, stated rather than hidden: a row's fold may not
+            # be split across threads, so v1's kv length is bounded by
+            # what one thread will walk. This profile is reference
+            # quality and slow by construction.
+            var acc = Float32(0.0)
+            for j in range(s):
+                acc = ftz(ftz(acc) + ftz(aexp[base + j]))
+            acc = ftz(acc)
+            adenom[r] = acc
+            # S18, ONE DIVISION PER WEIGHT, never a reciprocal
+            # multiplied in (DEVIATION 806). `e * (1/denom)` rounds
+            # twice where `e / denom` rounds once and they differ in the
+            # last bit on ordinary inputs. MAX's `softmax_kernel`
+            # multiplies by a reciprocal, which is evidence about MAX
+            # and not about the reference. Sabotage `S18_RECIPROCAL_MUL`
+            # must move `attn.weights`.
+            span_div(aexp, base, s, acc, aweights, base)
+
+    if stasks <= 1:
+        _softmax_rows(0)
+    else:
+        host_parallelize(_softmax_rows, stasks)
 
     # ---- S19: the attention-weighted value sum (EAF:210) -----------------
     # `torch.matmul(attn_weights, value_states)`.
@@ -1929,15 +1945,28 @@ def transformer_block_oracle(
     # same operands, j ascending from `+0.0`, one fused multiply-add and one
     # flush per step. `actx` is sized once; every cell is written.
     actx = List[Float32](length=m * qw, fill=Float32(0.0))
-    for bb in range(b):
-        for h in range(nh):
+    var vrows = b * nh * l
+    var vtasks = host_row_tasks(vrows, s * hd)
+    var vchunk = (vrows + vtasks - 1) // vtasks
+    var vcache = st.kv_v_cache.copy()
+
+    def _value_rows(t: Int) {imm aweights, imm vcache, mut actx, imm s, imm hd, imm qw, imm l, imm nh, imm nkv, imm n_rep, imm vrows, imm vchunk}:
+        for r in range(t * vchunk, min((t + 1) * vchunk, vrows)):
+            var qi = r % l
+            var h = (r // l) % nh
+            var bb = r // (l * nh)
             var kv = h // n_rep
-            for qi in range(l):
-                attn_value_sum_lanes(
-                    aweights, ((bb * nh + h) * l + qi) * s,
-                    st.kv_v_cache, (bb * nkv + kv) * s * hd,
-                    actx, (bb * l + qi) * qw + h * hd, s, hd,
-                )
+            attn_value_sum_lanes(
+                aweights, r * s,
+                vcache, (bb * nkv + kv) * s * hd,
+                actx, (bb * l + qi) * qw + h * hd, s, hd,
+            )
+
+    if vtasks <= 1:
+        _value_rows(0)
+    else:
+        host_parallelize(_value_rows, vtasks)
+    _ = vcache^
 
     st.attn_scores = scores^
     st.attn_masked = masked^

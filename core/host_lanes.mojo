@@ -23,6 +23,8 @@ from std.sys.info import simd_width_of
 
 from std.sys import llvm_intrinsic
 
+from core.host_predict_threads import host_predict_task_count
+
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
@@ -295,3 +297,18 @@ def span_add(a: List[Float32], ab: Int, b: List[Float32], bb: Int, n: Int, mut d
     while j < n:
         dp.unsafe_store(db + j, ftz(ftz(ap.unsafe_load(ab + j)) + ftz(bp.unsafe_load(bb + j))))
         j += 1
+
+
+#: Scalar operations below which a row split is not worth a thread fork.
+comptime HOST_ROW_TASK_MIN_WORK = 1 << 16
+
+
+def host_row_tasks(rows: Int, work_per_row: Int) -> Int:
+    """Tasks for a split of `rows` independent rows of about `work_per_row`
+    operations each: the host thread policy (`core/host_predict_threads.mojo`)
+    capped so every task gets at least HOST_ROW_TASK_MIN_WORK operations. A
+    schedule knob: it moves no bit."""
+    var work = rows * max(work_per_row, 1)
+    if rows <= 1 or work < 2 * HOST_ROW_TASK_MIN_WORK:
+        return 1
+    return max(1, min(host_predict_task_count(rows), work // HOST_ROW_TASK_MIN_WORK))
