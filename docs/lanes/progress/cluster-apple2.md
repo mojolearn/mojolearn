@@ -251,3 +251,91 @@ equal before and after (35 of 35).**
 | IVF-SQ fit (x_ann, probe) | | 1.535 -> 1.241 | |
 
 GMM stages (taxi, 22 it): E-step 706 -> 579 ms, M-step 1222 -> 1238 ms.
+
+## M4 Pro (m4pro-a), IDENTICAL, 1790619556058: GMM chains off -> on (b21e70b6b's successor af2ab4778)
+
+Arms in one job: `-D MOJOLEARN_GMM_NK_T_OFF=1 -D MOJOLEARN_GMM_MEANLL_PIPE_OFF=1` vs default.
+
+| case | off | on | digest (both) |
+|---|---|---|---|
+| gmm taxi 1M | 2.5319 | **2.1509** | 301203207f510506 |
+| gmm higgs 1M | 2.4381 | **2.0880** | cb2f51dc4f8bb1a7 |
+| nk phase (46 M-steps) | 1397 ms | 798 ms | |
+| E-step (22 it) | 649 ms | 584 ms | |
+
+(The earlier block pipeline on nk's strided loads, 1790618856303, was slower, 1399 -> 1540 ms;
+nk reads a transposed copy instead. The stacked covariance trial, 1790618154317, doubled the
+M-step, 2.53 -> 5.14 s, and was removed.)
+
+## FINAL (2026-09-28, freeze at ~18:40Z)
+
+### Before/after, IDENTICAL, lane base 037daa353 -> this branch (same job, same Mac per row)
+
+| case | M4 Pro before -> after (s) | M3 Ultra before -> after (s) | digests |
+|---|---|---|---|
+| KMeans 1M x 28, k 1024, 10 it (IVF coarse shape) | 2.126 -> 1.506 (m4pro-b) | 1.147 -> 0.852 | equal |
+| KMeans 1M x 2, k 256, 20 it (IVF-PQ codebook shape) | 0.337 -> 0.273 | 0.216 -> 0.194 | equal |
+| IVF-SQ fit 1M x 28, 1024 lists (x_ann) | 2.43 -> 1.82 | 1.53 -> 1.24 | - |
+| board kmeans taxi / higgs 1M | 0.0804 / 0.1399 -> 0.0744 / 0.1256 | 0.0590 / 0.0917 -> 0.0555 / 0.0844 | equal |
+| board gmm taxi 1M | 2.951 -> 2.151 (m4pro-b 2.951 -> 2.865 at 493ddcc37, then m4pro-a 3.001 -> 2.545 stacked E-step, 2.532 -> 2.151 chains) | 2.451 -> 2.302 (stacked E-step; chains not measured here) | equal |
+| board gmm higgs 1M | 2.828 -> 2.088 (same chain of A/Bs) | 2.346 -> 2.202 | equal |
+| board bayesian-gmm taxi / higgs 100k | 1.547 / 2.049 -> 1.518 / 2.024 | 1.755 / 2.331 -> 1.722 / 2.284 | equal |
+| board dbscan taxi 100k | 0.304 (2c9624c0d0cf42d4, WRONG) -> 0.400 (9c8ea257cb04e118) | 0.166 -> 0.161 | M4 Pro now equals every column |
+| every other board case (13 x 2) | flat | flat | equal |
+
+FAST (M3 Ultra, 1790613748972): no FAST-only change; every FAST digest equal and times flat;
+DBSCAN batched fits (explicit small budgets) now return the one-batch labels in FAST too.
+
+### Leads
+
+1. **k-means 7x on the M4 Pro**: not reproducible at this base (1.9x vs the M3 Ultra, below
+   the 4x core ratio); the 7x was at 5b622763d, removed by lane/apple-merged's k-means work.
+   The remaining time is the fused distance/argmin kernel (k-means|| rounds + Lloyd); it is
+   27% faster on both Macs from this lane (staging-time `ftz`, the cheaper `ftz`).
+2. **DBSCAN batch count moved labels**: ROOT-CAUSED AND FIXED (DEVIATION 5130, below).
+3. **GMM 1M 3% slower on the M4 Pro**: noise-level; the M4 Pro GMM is now 27% faster (the
+   stacked E-step, the one-thread chains).
+
+### Default path changes (all UNPROVEN by identity lanes; board/probe digests equal)
+
+- ab82a8c3b + a1674e9bb DBSCAN border pass (DEVIATION 5130, IDENTITY_PATHS row 231,
+  `check_dbscan_batching_shared_border` new in dbscan_main): batched fits recompute border
+  labels from the final core labels. All modes and columns. Changes bits ONLY of batched fits
+  (to the one-batch answer). Costs one CSR rebuild per earlier batch (M4 Pro taxi 0.30 ->
+  0.40 s).
+- 5169bb4e4 (fused kernel part) `FUSED_STAGE_FTZ`: operands flushed once at threadgroup
+  staging (`cluster/impl/distance/fused_distance_nn/simt_kernel.mojo`). Reaches every
+  k-means assignment, IVF quantizer, x_ann IVF fits.
+- 493ddcc37 **SHARED** `checks/numerics.mojo::ftz` on Apple GPUs (IDENTICAL): an
+  `|x| < FLT_MIN` select. Reaches every family's Apple IDENTICAL kernels; the later
+  integration run must cover all of them. Argument: same word for every input (subnormals and
+  zeros -> signed zero, everything else unchanged); relies on the compiler not assuming
+  no-NaN for the compare. `-D MOJOLEARN_FTZ_FCMP_OFF=1` reverts.
+- 4174d14d2 GMM E-step stacked products (`mixture/checks/estep.mojo`, IDENTICAL Apple,
+  n*K*d <= 2^28): one `X . [P_1..P_K]`, one `M . [P_1..P_K]`, one Mahalanobis launch
+  (`mahal_fold` shared with `mahal_kernel`). Relies on the identical GEMM's per-cell
+  contract (a cell depends on its operand columns and k only). NOTE for the sabotage run:
+  the GMM_SAB_* arms route to the per-component loop, so the stacked path's reach needs its
+  own arm.
+- af2ab4778 (the commit after b21e70b6b) GMM nk over a transposed `resp`
+  (`nk_t_kernel`, a second spelling of the nk chain: the nk sabotage arm GMM_SAB_NK_DESCENDING
+  keeps its own kernel, so the reach of nk_t_kernel needs an arm) and the mean
+  log-likelihood block pipeline. M4 Pro measured only.
+- 44bd98824 / 6edc81863 `MOJOLEARN_KMEANS_STAGES=1` stage timer (diagnostic; off, no-op).
+- bench: kmeans_apple_probe.py, dbscan_batch_probe.py, cluster_apple2_ab.sh (tooling).
+
+### Measured and removed (net zero in the tree)
+
+Apple Policy4x4 tile for 16 <= d < 32 (slower), X-resident fused tile (slower), the NVIDIA
+row-block accumulator on Apple (flat), GMM M-step PLAN_SPLIT_16_1X1 (flat), stacked
+covariance GEMM (2x slower), nk block pipeline on strided loads (slower), the gathered
+non-core DBSCAN border query (WRONG labels on m4pro-b, root cause not found; flag for the
+neighbors lane: an RBC eps query over a query matrix that is not a slice of the indexed data
+may be unsafe). No opt-in trial define is left in the tree.
+
+### Unproven commits (need the integration identity + sabotage run)
+
+ab82a8c3b, a1674e9bb (DBSCAN 5130 + check), 5169bb4e4 (fused staging ftz; its DBSCAN part
+was superseded by a1674e9bb), 493ddcc37 (shared ftz), 4174d14d2 (stacked E-step),
+af2ab4778 (nk transposed, meanll pipeline), 44bd98824 + 6edc81863 (timer). Merge of
+origin/lane/apple-merged at a3e8ed8ea.
