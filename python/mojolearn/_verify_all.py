@@ -319,6 +319,7 @@ def run_cell(harness, ml, lane, fixture, data, held, repeats, extra_parts=()):
     stepfull). The order is load bearing: every part after the first runs on
     its OWN copy of the held-out rows and after the parts it must not move, so
     no hash a record already carries can change because a part was added."""
+    from ._verify_worker import unhealthy
     X, yc, yr = data
     parts = tuple(vref.PARTS) + tuple(extra_parts)
     vals = {p: [] for p in parts}
@@ -335,6 +336,8 @@ def run_cell(harness, ml, lane, fixture, data, held, repeats, extra_parts=()):
             return {p: (None, text) for p in parts}
         vals["train"].append(harness._train_hash(fit))
         infer, model, reload, err = harness._probe_fit(fit, lane)
+        if unhealthy(err):
+            return {p: (None, str(err)) for p in parts}
         if err:
             stage = err.split(":", 1)[0]
             err = _capped(harness, err)
@@ -346,11 +349,15 @@ def run_cell(harness, ml, lane, fixture, data, held, repeats, extra_parts=()):
         vals["infer"].append(infer)
         vals["model"].append(model)
         batch, berr = harness._probe_batch(fit, lane, ml, held.copy(), harness.BATCH_ALONE, False)
+        if unhealthy(berr):
+            return {p: (None, str(berr)) for p in parts}
         if berr:
             errs["batch"].append(_capped(harness, berr))
         vals["batch"].append(batch)
         # the decode part last, for the same reason the batch part is not first
         step, serr = _probe_stepfull(harness, fit, lane, ml, held)
+        if unhealthy(serr):
+            return {p: (None, str(serr)) for p in parts}
         if serr:
             errs[STEPFULL].append(_capped(harness, serr))
         vals[STEPFULL].append(step)
@@ -368,6 +375,8 @@ def run_cell(harness, ml, lane, fixture, data, held, repeats, extra_parts=()):
                         part, fit, lane, ml, held.copy(), harness.BATCH_ALONE, "")
             except Exception as exc:
                 value, error = None, _error_text(harness, part, exc)
+            if unhealthy(error):
+                return {p: (None, str(error)) for p in parts}
             vals[part].append(value)
             if error:
                 errs[part].append(error)
@@ -3595,7 +3604,7 @@ def cmd_verify_all(args):
 
     families = family_map(lanes)
     raw = []
-    from ._cpu_reference import reference_training
+    from . import _verify_worker as worker
     # Wall time per lane and per cell. Weak evidence alone, but cheap, and a
     # fit reported at zero milliseconds did not happen, so a fabricated run is
     # obvious in the document (lane/expose-inference-surface, 2026-09-16).
@@ -3604,20 +3613,99 @@ def cmd_verify_all(args):
     if not getattr(args, "no_models", False) and 'base' not in contract_data:
         contract_data['base'], contract_held['base'] = harness.fixture('base'), harness.heldout('base')
     contract = verification_contract(harness, harness_file, contract_data, contract_held, extra_parts)
+    timeout = getattr(args, "cell_timeout", 120.0)
+    if not isinstance(timeout, (int, float)) or not 0 < timeout < float("inf"):
+        return _finish(args, EXIT_USAGE, "USAGE", "--cell-timeout must be finite and positive")
     lane_seconds, cell_seconds = {}, {}
-    with reference_training():
+    execution = dict(mode="fresh-process-per-cell", timeout_s=timeout, completed_cells=0,
+                     total_cells=len(lanes) * len(fixtures), interrupted=None)
+    worker_bindings = {}
+    checkpoint = getattr(args, "json_out", None)
+    progress_path = str(checkpoint) + ".progress.json" if checkpoint else None
+    journal_path = str(checkpoint) + ".cells.jsonl" if checkpoint else None
+    if journal_path:
+        with open(journal_path, "w", encoding="utf-8"):
+            pass
+        log(f"# incremental evidence: {journal_path}; progress: {progress_path}")
+
+    def progress(stage, judged=()):
+        if journal_path and judged:
+            with open(journal_path, "a", encoding="utf-8") as stream:
+                for row in judged:
+                    stream.write(json.dumps(row, sort_keys=True) + "\n")
+                stream.flush()
+        if progress_path:
+            worker.atomic_json(progress_path, dict(
+                format="mojolearn.verify-progress.v1", complete=False, stage=stage,
+                elapsed_s=round(time.time() - started, 2), execution=execution,
+                cells_journal=journal_path, harness_sha256=contract.get("harness_sha256"),
+                lanes=lanes, fixtures=fixtures))
+
+    def isolated(action, **kwargs):
+        progress(action)
+        result = worker.run(dict(action=action, harness=os.path.abspath(harness_file),
+                                 table=os.path.abspath(table_file), **kwargs), timeout, log)
+        for binding in result.get("bindings", []):
+            worker_bindings[(binding["module"], binding["sha256"])] = binding
+        return result["value"]
+
+    preflight = dict(passed=None, ran=False,
+                     reason="models-only does not train; run verify --self-test separately")
+    if not models_only:
+        log("# comparator self-test preflight (fresh process)")
+        try:
+            preflight = isolated("self-test")
+            if preflight.get("passed") is not True:
+                execution["interrupted"] = "comparator self-test did not pass"
+        except worker.WorkerFailure as exc:
+            preflight = dict(passed=None, error=str(exc))
+            execution["interrupted"] = str(exc)
+    for lane in lanes:
+        t0 = time.monotonic()
+        for f in fixtures:
+            if execution["interrupted"]:
+                break
+            c0 = time.monotonic()
+            log(f"  [{execution['completed_cells'] + 1}/{execution['total_cells']}] {lane}/{f}")
+            try:
+                X, yc, yr = data[f]
+                parts = isolated("cell", lane=lane, fixture=f, repeats=repeats,
+                                 extra_parts=extra_parts,
+                                 fixture_hashes=dict(X=harness._h(X), y_clf=harness._h(yc),
+                                                     y_reg=harness._h(yr), held=harness._h(held[f])))
+            except worker.WorkerFailure as exc:
+                execution["interrupted"] = str(exc)
+                parts = {p: (None, str(exc)) for p in tuple(vref.PARTS) + tuple(extra_parts)}
+            cell_seconds[(lane, f)] = round(time.monotonic() - c0, 4)
+            cell = [dict(lane=lane, fixture=f, part=part, value=value, error=error,
+                         seconds=cell_seconds[(lane, f)]) for part, (value, error) in parts.items()]
+            raw.extend(cell)
+            judged = judge_rows(cell, table, families, unreferenced_lanes=stale, device_class=vclass)
+            execution["completed_cells"] += 1
+            cell_counts = {state: sum(r["state"] == state for r in judged) for state in vref.STATES}
+            log(f"    {cell_seconds[(lane, f)]:.1f}s: {detail_line(cell_counts)}")
+            progress(f"{lane}/{f}", judged)
+        lane_seconds[lane] = round(time.monotonic() - t0, 3)
+        if execution["interrupted"]:
+            break
+    # Unfinished cells are explicit refusals; they cannot disappear from a
+    # subset's denominator or turn an aborted run into a successful comparison.
+    if execution["interrupted"]:
+        log(f"# STOPPED: {execution['interrupted']}")
         for lane in lanes:
-            t0 = time.time()
             for f in fixtures:
-                c0 = time.time()
-                parts = run_cell(harness, ml, lane, f, data[f], held[f], repeats, extra_parts=extra_parts)
-                cell_seconds[(lane, f)] = round(time.time() - c0, 4)
-                for part, (value, error) in parts.items():
-                    raw.append(dict(lane=lane, fixture=f, part=part, value=value, error=error,
-                                    seconds=cell_seconds[(lane, f)]))
-            lane_seconds[lane] = round(time.time() - t0, 3)
-            log(f"  {lane:<34} {families[lane]:<16} {lane_seconds[lane]:6.1f}s")
-    model_rows = [] if getattr(args, "no_models", False) else run_models(harness, ml, table, log=log, repeats=repeats, host_only=models_only)
+                if (lane, f) not in cell_seconds:
+                    raw.extend(dict(lane=lane, fixture=f, part=part, value=None,
+                                    error="not run after interruption: " + execution["interrupted"], seconds=0)
+                               for part in tuple(vref.PARTS) + tuple(extra_parts))
+    model_rows = []
+    if not getattr(args, "no_models", False) and not execution["interrupted"]:
+        try:
+            model_rows = isolated("models", repeats=repeats, host_only=models_only)
+            progress("models", judge_rows(model_rows, table, families, device_class=vclass))
+        except worker.WorkerFailure as exc:
+            execution["interrupted"] = str(exc)
+    progress("interrupted" if execution["interrupted"] else "comparison complete")
     rows = judge_rows(raw + model_rows, table, families, unreferenced_lanes=stale, device_class=vclass)
     counts = {s: sum(1 for r in rows if r["state"] == s) for s in vref.STATES}
     code, headline = verdict(counts)
@@ -3653,7 +3741,7 @@ def cmd_verify_all(args):
     harness_lanes = list(harness.LANES)
     exposure = surface.lane_exposure(harness_lanes, vclass)
     smoke = None
-    if getattr(args, "smoke", False):
+    if getattr(args, "smoke", False) and not execution["interrupted"]:
         # TWO FULL FITS PER LANE, so it is opt-in rather than weakened. The
         # base fixture only, for the same reason: the tier exists to say more
         # than nothing, not to double the cost of every run.
@@ -3665,7 +3753,14 @@ def cmd_verify_all(args):
             f"on {sfix}, two full fits each")
         sdata = data.get(sfix) or harness.fixture(sfix)
         sheld = held.get(sfix) if held.get(sfix) is not None else harness.heldout(sfix)
-        smoke = run_smoke(harness, ml, smokeable, sfix, sdata, sheld, log=log)
+        smoke = {}
+        for lane in smokeable:
+            try:
+                smoke.update(isolated("smoke", lane=lane, fixture=sfix))
+            except worker.WorkerFailure as exc:
+                execution["interrupted"] = str(exc)
+                smoke[lane] = dict(ok=False, checks=[], why=str(exc))
+                break
     accounting = lane_accounting(harness_lanes, exposure, lanes, rows, stale=stale, smoke=smoke)
     if models_only:
         verdict_scope = []                     # judged by the portable models, not by lanes
@@ -3714,7 +3809,7 @@ def cmd_verify_all(args):
                    records=len(table["records"]), harness_sha256=table.get("harness_sha256")),
         counts=counts, families=fams, cells=rows,
         lane_accounting=accounting, smoke=smoke,
-        lane_seconds=lane_seconds,
+        lane_seconds=lane_seconds, execution=execution,
         coverage=coverage_report, scope_gaps=scope_gaps, verification_contract=contract,
         selection=dict(include_pending=include_pending, models_only=models_only,
                        cpu_logical_shard_lanes=[name for name in lanes if vclass == "cpu" and name.startswith("par-")]),
@@ -3747,14 +3842,17 @@ def cmd_verify_all(args):
     # drift into describing different runs.
     report["lanes_summary"] = lane_counts(rows, lanes, stale)
     report["reference_evidence"] = reference_evidence(rows)
-    try:
-        report["self_test"] = (dict(passed=None, ran=False,
-            reason="models-only does not train; run verify --self-test separately")
-            if models_only else self_test(harness, ml, table))
-    except Exception as exc:
-        report["self_test"] = dict(passed=None, error=f"{type(exc).__name__}: {exc}"[:200])
-
-    if report["self_test"].get("passed") is False:
+    report["self_test"] = preflight
+    # Native bindings actually used in workers are part of the evidence even
+    # though the controller deliberately did not load those bindings itself.
+    for binding in report.get("bindings", []):
+        worker_bindings[(binding["module"], binding["sha256"])] = binding
+    report["bindings"] = list(worker_bindings.values())
+    if execution["interrupted"]:
+        code, headline = EXIT_CANNOT_RUN, "CANNOT RUN"
+        report.update(exit=code, verdict=headline,
+                      detail=report["detail"] + "; stopped: " + execution["interrupted"])
+    if preflight.get("passed") is False:
         code, headline = EXIT_MISMATCH, "MISMATCH"
         report.update(exit=code, verdict=headline,
                       detail=report["detail"] + "; comparator self-test failed")
@@ -3785,15 +3883,17 @@ def cmd_verify_all(args):
                 "`python -m mojolearn verify --cross-check` to compare this machine's GPU "
                 "against its CPU; on a CPU-only install that will say so rather than skip."))
 
+    progress("finished")
     if json_out:
         _emit(json.dumps(report, indent=1, sort_keys=True))
     else:
         _emit(format_human(report))
     out_path = getattr(args, "json_out", None)
     if out_path:
-        with open(out_path, "w", encoding="utf-8") as fh:
-            json.dump(report, fh, indent=1, sort_keys=True)
-            fh.write("\n")
+        worker.atomic_json(out_path, report)
+        worker.atomic_json(progress_path, dict(format="mojolearn.verify-progress.v1",
+                           complete=True, execution=execution, verdict=headline,
+                           exit=code, evidence=out_path, cells_journal=journal_path))
         _emit(f"# evidence written to {out_path}", sys.stderr if json_out else sys.stdout)
     return code
 
