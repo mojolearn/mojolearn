@@ -46,6 +46,8 @@ else
   cp tools/py_lm/to_base.patch "$PATCH"   # made on the Mac: git diff HEAD <base> -- bindings training python
 fi
 if [ ! -s "$PATCH" ]; then echo "NO BASE PATCH"; exit 1; fi
+FILES=$(grep -E '^(\+\+\+|---) [ab]/' "$PATCH" | cut -c7- | sort -u)
+BEFORE=$(cat $FILES 2>/dev/null | sha256sum)
 git apply "$PATCH" || { echo "BASE PATCH DOES NOT APPLY"; exit 1; }
 rm -f python/mojolearn/identical/_mojolearn_transformer.so python/mojolearn/identical/_mojolearn_training.so
 build_needed 2>&1 | tail -4
@@ -54,7 +56,7 @@ rm -rf "$OUT/base_py"; mkdir -p "$OUT/base_py"
 mkdir -p "$OUT/base_so"
 cp python/mojolearn/identical/_mojolearn_transformer.so python/mojolearn/identical/_mojolearn_training.so "$OUT/base_so/"
 git apply -R "$PATCH" || { echo "PATCH REVERSAL FAILED"; exit 1; }
-git diff --quiet HEAD -- bindings training python || { echo "TREE NOT BACK AT THE LANE"; git status --short | head; exit 1; }
+[ "$(cat $FILES 2>/dev/null | sha256sum)" = "$BEFORE" ] || { echo "TREE NOT BACK AT THE LANE"; exit 1; }
 
 # ---- lane
 rm -f python/mojolearn/identical/_mojolearn_transformer.so python/mojolearn/identical/_mojolearn_training.so
