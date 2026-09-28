@@ -277,8 +277,10 @@ Family sabotage for this session: `~/mojolearn-evidence/neural/session4/neural_f
   five host-only lanes, as in session 1 (`session3/before_after_diff.txt`).
 - **Family lane check, 12 lanes, session 4 patch, --pass 2, gfx942 vs CPU**
   (central box, `/root/ev-neural/s4/gate.log`) and **test_neural_repeat** on
-  the same slot (`rep.log`): QUEUED for a GPU slot at 05:00Z (both slots held
-  by decomp and sequence; the waiter gives up at ~07:00Z with exit 75). Read
+  the same slot (`rep.log`): QUEUED. Two `amd_central.sh run` waiters died
+  on "Connection closed by remote host" while both slots were held, so the
+  wait now runs ON the box, detached (`/root/ev-neural/s4/wait_gate.sh`, the
+  same flock protocol, no time limit; `slot.txt` records when it got one). Read
   those two logs next session (`tools/amd_central.sh sh neural 'tail
   /root/ev-neural/s4/gate.log /root/ev-neural/s4/rep.log'`); if absent,
   rerun the same command (it is in the OWED list, with the AMD box in place
