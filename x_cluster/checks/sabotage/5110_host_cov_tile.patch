@@ -1,13 +1,13 @@
 diff --git a/x_cluster/host/host_ops.mojo b/x_cluster/host/host_ops.mojo
-index 305b2f393..f6b286b23 100644
+index 5e30fdcb2..dd4dcf8f5 100644
 --- a/x_cluster/host/host_ops.mojo
 +++ b/x_cluster/host/host_ops.mojo
-@@ -434,6 +434,8 @@ struct HostOps(ClusterOps):
+@@ -442,6 +442,8 @@ struct HostOps(ClusterOps):
                      var da = ftz(ftz(xrow[a]) - pm[k * d + a])
                      var dav = SIMD[DType.float32, MOMENTS_W](da)
                      for q in range(n_vec):
 +                        if i == 0:
 +                            continue
-                         var prod = ftz_v[MOMENTS_W](mul_v[MOMENTS_W](dav, dbv[q]))
-                         accv[aa * n_vec + q] = ftz_v[MOMENTS_W](accv[aa * n_vec + q] + ftz_v[MOMENTS_W](mul_v[MOMENTS_W](rv, prod)))
-                     for q in range(tail):
+                         var slot = accv + (aa * n_vec + q) * MOMENTS_W
+                         var prod = ftz_v[MOMENTS_W](mul_v[MOMENTS_W](dav, (db + q * MOMENTS_W).load[width=MOMENTS_W]()))
+                         slot.store(ftz_v[MOMENTS_W](slot.load[width=MOMENTS_W]() + ftz_v[MOMENTS_W](mul_v[MOMENTS_W](rv, prod))))
