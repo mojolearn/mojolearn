@@ -100,6 +100,9 @@ from extratrees.impl.decisiontree.batched_levelalgo.dataset import Dataset
 from extratrees.checks.pcg_rng import row_sample_seed
 from core.philox import RNG_STRIDE, uniform_int_host
 from max.gpu.host import DeviceContext
+from max.algorithm import sync_parallelize
+from core.host_fp_env import host_ieee_fp_enter, host_ieee_fp_leave
+from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 
 
 comptime BOOTSTRAP_DEFAULT = False
@@ -522,34 +525,73 @@ def fit_forest_exact(
     var n_sampled = resolve_n_sampled_rows(n_rows, bootstrap, n_sampled_rows)
     var forest = Forest(num_outputs)
     var labels_q_p = labels_q.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
-    for tree_id in range(Int(n_trees)):
-        var row_ids = row_sample_for(
-            n_rows, bootstrap, n_sampled, seed, Int32(tree_start + tree_id)
-        )
-        var dataset = Dataset(
-            rebind[MutPointer[Float32, MutUntrackedOrigin]](
-                x_col_major.unsafe_ptr()
-            ),
-            rebind[MutPointer[Float32, MutUntrackedOrigin]](
-                labels.unsafe_ptr()
-            ),
-            n_rows,
-            n_cols,
-            n_sampled,
-            n_cols,
-            rebind[MutPointer[Int32, MutUntrackedOrigin]](
-                row_ids.unsafe_ptr()
-            ),
-            num_outputs,
-        )
-        forest.trees.append(
-            train_tree_exact(
-                dataset, labels_q_p, params, Int32(tree_start + tree_id), seed,
-                is_classification, Int(num_outputs), inv_scale,
-            )
-        )
-        _ = row_ids.unsafe_ptr()
+    var x_p = rebind[MutPointer[Float32, MutUntrackedOrigin]](x_col_major.unsafe_ptr())
+    var labels_p = rebind[MutPointer[Float32, MutUntrackedOrigin]](labels.unsafe_ptr())
+    # THE TREES, ONE TASK PER CONTIGUOUS TREE RANGE (lane/trees-cpu,
+    # 2026-09-28). A tree reads X, the label planes and its own seed and
+    # writes only its own `TreeMetaDataNode`, so trees may run on different
+    # threads with every statement of a tree in its serial order; each task
+    # runs in the calling thread's IEEE environment (`core/host_fp_env.mojo`;
+    # the pool's FTZ+DAZ is DEVIATION 5900), and the trees are appended in
+    # tree order after the join: the forest is the serial walk's bytes at
+    # every MOJOLEARN_CPU_THREADS.
+    var n = Int(n_trees)
+    var slots = List[Optional[TreeMetaDataNode[DType.float32]]](capacity=n)
+    for _ in range(n):
+        slots.append(None)
+    var tasks = host_predict_task_count(n)
+    var chunk = host_predict_chunk(n, tasks)
+    var failed = List[Bool](length=tasks, fill=False)
+    var messages = List[String](length=tasks, fill=String(""))
+
+    def _tree_task(task: Int) {mut slots, mut failed, mut messages, imm x_p, imm labels_p, imm labels_q_p, imm n_rows, imm n_cols, imm n_sampled, imm bootstrap, imm seed, imm tree_start, imm num_outputs, imm params, imm is_classification, imm inv_scale, imm chunk, imm n, imm tasks}:
+        var env = UInt64(0)
+        if tasks > 1:
+            env = host_ieee_fp_enter()
+        var lo = task * chunk
+        var hi = min(lo + chunk, n)
+        try:
+            for tree_id in range(lo, hi):
+                var row_ids = row_sample_for(
+                    n_rows, bootstrap, n_sampled, seed, Int32(tree_start + tree_id)
+                )
+                var dataset = Dataset(
+                    x_p,
+                    labels_p,
+                    n_rows,
+                    n_cols,
+                    n_sampled,
+                    n_cols,
+                    rebind[MutPointer[Int32, MutUntrackedOrigin]](
+                        row_ids.unsafe_ptr()
+                    ),
+                    num_outputs,
+                )
+                slots[tree_id] = train_tree_exact(
+                    dataset, labels_q_p, params, Int32(tree_start + tree_id), seed,
+                    is_classification, Int(num_outputs), inv_scale,
+                )
+                _ = row_ids.unsafe_ptr()
+        except e:
+            failed[task] = True
+            messages[task] = String(e)
+        if tasks > 1:
+            host_ieee_fp_leave(env)
+
+    if tasks <= 1:
+        _tree_task(0)
+    else:
+        sync_parallelize(_tree_task, tasks)
+    _ = x_col_major.unsafe_ptr()
+    _ = labels.unsafe_ptr()
     _ = labels_q.unsafe_ptr()
+    # the serial walk raised its first failing tree's error; the lowest
+    # failing task holds the lowest trees and stopped at its first
+    for k in range(tasks):
+        if failed[k]:
+            raise Error(messages[k])
+    for t in range(n):
+        forest.trees.append(slots[t].take())
     forest.n_trees = n_trees
     return forest^
 
