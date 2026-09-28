@@ -47,6 +47,18 @@ Tools (steward speed jobs, `--builds bindings/build_x_cnn.sh`):
    the new context (5706 now sits in the shared `_maxpool_fwd` body, so it
    bites the fused path and the plain one).
 3. c78359e22: the FAST quality script. 31d27e477: merge of origin/lane/merged.
+4. 37e50ac45: the fixed Apple dW/db rule of (1)-(2) was measured on the M4
+   only and made the M3 Ultra's Conv2d 64->64 backward SLOWER (95.7 -> 114.2
+   ms): the Ultra's 60 cores want the split plans (m3ultra sweep: 64x576x262144
+   SPLIT 64x64 26.6 vs MMA 68.6 ms; 64x288x65536 SPLIT 64x64 4.4 vs TUNED
+   9.3 vs MMA 17.6 ms), the M4's 10 cores want MMA/TUNED. Now
+   `_apple_tuned_plan` times the candidates that were ever competitive (the
+   default split plan, SPLIT 16x16, and for n >= 64 TUNED 32x32 and
+   APPLE_MMA; for n == 1 SPLITK when it fits) once per shape per process
+   (one run each, after a wait) and caches the fastest. Every candidate
+   stores the same bits (contract 6.1: the execution plan may look at the
+   device). The M4 numbers are unchanged by it; the Ultra's regression is
+   gone.
 
 ## Results (median ms; before = 33917d8bb = main's x_cnn; digests before == after in every row)
 
@@ -68,7 +80,18 @@ M4 (m4-a), FAST, before -> after (c78359e22, the same GPU code):
 | CNNClassifier fit 2048 / 8192 rows | 724.5 / 2845.3 | 344.5 / 1330.9 (2.1x) |
 | predict_proba 2048 / 8192 | 383.1 / 1627.7 | 130.2 / 537.9 (2.9-3.0x) |
 
-M3 Ultra (m3ultra), before -> after (e0380cc28):
+M3 Ultra (m3ultra), IDENTICAL, before -> after (37e50ac45, the measured plan):
+| shape | before | after |
+|---|---|---|
+| Conv2d N256 3->64 32x32 fwd / bwd | 34.8 / 10.0 | 30.2 / 6.6 |
+| Conv2d N256 64->64 32x32 fwd / bwd | 60.1 / 95.7 | 41.2 / 73.8 |
+| Conv2d N256 64->128 16x16 fwd / bwd | 24.6 / 36.4 | 19.0 / 30.8 |
+| CNNClassifier fit 2048 / 8192 | 229.7 / 870.6 | 144.3 / 527.4 (1.6x) |
+| predict_proba 2048 / 8192 | 97.8 / 399.4 | 51.8 / 194.1 (1.9-2.1x) |
+M4 (m4-a) at 37e50ac45: the same as e0380cc28 within noise (fit 386.9 / 1500.9,
+predict 134.2 / 580.1, Conv2d 64->64 bwd 148.6).
+
+M3 Ultra (m3ultra), before -> after (e0380cc28, the fixed M4 rule; superseded for IDENTICAL):
 | shape | IDENTICAL before -> after | FAST before -> after |
 |---|---|---|
 | Conv2d N256 3->64 32x32 fwd / bwd | 34.8 / 10.0 -> 30.0 / 7.3 | 33.9 / 10.7 -> 28.0 / 9.1 |
