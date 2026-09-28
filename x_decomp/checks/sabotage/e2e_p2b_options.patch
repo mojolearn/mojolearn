@@ -12,18 +12,27 @@ index 90ea10089..e062ace3f 100644
  
  
 diff --git a/umap/host/umap_oracle.mojo b/umap/host/umap_oracle.mojo
-index 9924cd2ae..d3f3b37c2 100644
+index 9924cd2ae..a48b91feb 100644
 --- a/umap/host/umap_oracle.mojo
 +++ b/umap/host/umap_oracle.mojo
-@@ -110,7 +110,7 @@ from umap.sparse_graph import (
- 
- #: The gate's negative control (module docstring). Read back by
- #: `metrics_host_sabotage`.
--comptime UMAP_ORACLE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
-+comptime UMAP_ORACLE_HOST_SABOTAGE = True  # SABOTAGE (end to end, p2b): the host UMAP draws a late epoch
- 
- #: `UMAP_IDENTICAL_GRAD_CLIP`, `optimizer_identical_device.mojo:71`, and
- #: `UMAP_GRAD_CLIP`, `umap/optimizer.mojo:16` (both 4).
+@@ -353,7 +353,7 @@ def host_umap_vertex[C: Int](
+     `optimizer_identical_device.mojo:116-237`, in the same statement order."""
+     var epoch_f = Float32(epoch)
+     var next_f = Float32(epoch + 1)
+-    var draw_epoch = epoch
++    var draw_epoch = epoch + 1  # SABOTAGE (end to end, p2b): the host UMAP draws a late epoch
+     comptime if UMAP_ORACLE_HOST_SABOTAGE:
+         # THE SABOTAGE ARM: every negative draw keyed one epoch late. Wrong
+         # on purpose; see UMAP_ORACLE_HOST_SABOTAGE.
+@@ -456,7 +456,7 @@ def host_umap_vertex_rt(
+     arrays of UMAP_RT_WIDTH."""
+     var epoch_f = Float32(epoch)
+     var next_f = Float32(epoch + 1)
+-    var draw_epoch = epoch
++    var draw_epoch = epoch + 1  # SABOTAGE (end to end, p2b): the host UMAP draws a late epoch
+     comptime if UMAP_ORACLE_HOST_SABOTAGE:
+         # THE SABOTAGE ARM: every negative draw keyed one epoch late. Wrong
+         # on purpose; see UMAP_ORACLE_HOST_SABOTAGE.
 diff --git a/x_decomp/host.mojo b/x_decomp/host.mojo
 index 024f4c157..cca139efa 100644
 --- a/x_decomp/host.mojo
